@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+	<!DOCTYPE VNCLASS SYSTEM "vn_class-3.dtd">
+<VNCLASS ID="advise-37.9" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="vn_schema-3.xsd">
+	<MEMBERS>
+    <MEMBER name="may" wn="" grouping=""/>
+    <MEMBER name="shall" wn="" grouping=""/>
+    <MEMBER name="will" wn="" grouping=""/>
+    <MEMBER name="can" wn="" grouping=""/>
+    <MEMBER name="could" wn="" grouping=""/>
+    <MEMBER name="should" wn="" grouping=""/>
+    <MEMBER name="might" wn="" grouping=""/>
+    <MEMBER name="ought" wn="" grouping=""/>
+    <MEMBER name="would" wn="" grouping=""/>
+    <MEMBER name="mayn't" wn="" grouping=""/>
+    <MEMBER name="shan't" wn="" grouping=""/>
+    <MEMBER name="won't" wn="" grouping=""/>
+    <MEMBER name="can't" wn="" grouping=""/>
+    <MEMBER name="couldn't" wn="" grouping=""/>
+    <MEMBER name="shouldn't" wn="" grouping=""/>
+    <MEMBER name="mightn't" wn="" grouping=""/>
+    <MEMBER name="oughtn't" wn="" grouping=""/>
+    <MEMBER name="wouldn't" wn="" grouping=""/>
+  </MEMBERS>
+	<NO_PHYSICAL_ACTION/>
+	<META_BELIEF/>
+	<THEMROLES/>
+	<FRAMES/>
+	<SUBCLASSES/>
+</VNCLASS>

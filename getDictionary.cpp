@@ -1,0 +1,2107 @@
+#include <errno.h>
+#include <windows.h>
+#include "WinInet.h"
+#define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
+#include <io.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <stdio.h>
+#include "errno.h"
+#include "word.h"
+#include "time.h"
+#include <direct.h>
+#include "profile.h"
+#include "paice.h"
+#include "mysqldb.h"
+
+int bandwidthControl=1; // minimum seconds between requests   // initialized before threads
+
+void removeRedundantSpace(wstring &buffer)
+{ LFS
+	wstring tmpstr;
+	for (unsigned int I=0; I<buffer.size(); I++)
+		if (!iswspace(buffer[I]) || I==0 || !iswspace(buffer[I-1]))
+			tmpstr+=buffer[I];
+	buffer=tmpstr;
+}
+
+void distributeToSubDirectories(wchar_t *fullPath,int pathlen,bool createDirs)
+{ LFS
+	wchar_t *path=fullPath+pathlen;
+	if (path[1] && path[2] && path[1]!=' ' && path[2]!=' ')
+	{
+		memmove(path+4,path,(wcslen(path)+1)*sizeof(path[0]));
+		path[0]=path[5];
+		path[1]='\\';
+		if (createDirs)
+		{
+			path[2]=0;
+			_wmkdir(fullPath);
+		}
+		path[2]=path[6];
+		path[3]='\\';
+		if (createDirs)
+		{
+			wchar_t savech=path[4];
+			path[4]=0;
+			_wmkdir(fullPath);
+			path[4]=savech;
+		}
+	}
+}
+
+int takeLastMatch(wstring &buffer,wstring beginString,wstring endString,wstring &match,bool include_begin_and_end)
+{ LFS
+	size_t beginPos=wstring::npos,pos=0,endPos;
+	while (pos!=wstring::npos)
+	{
+		pos=buffer.find(beginString,(beginPos==wstring::npos) ? 0 : beginPos+beginString.length());
+		if (pos!=wstring::npos && (endPos=buffer.find(endString,pos+beginString.length()))==wstring::npos) break;
+		if (pos!=wstring::npos) beginPos=pos;
+	}
+	if (beginPos==wstring::npos)
+	{
+		//  wprintf(L"begin expression %s not found.",beginString.c_str());
+		return TAKE_LAST_MATCH_BEGIN_NOT_FOUND;
+	}
+	endPos=buffer.find(endString,beginPos+beginString.length());
+	if (endPos==wstring::npos)
+	{
+		// wprintf(L"end expression %s not found.",beginString.c_str());
+		return TAKE_LAST_MATCH_END_NOT_FOUND;
+	}
+	int len=endPos-beginPos+endString.length();
+	match=buffer.substr(beginPos+((include_begin_and_end) ? 0 : beginString.length()),len-((include_begin_and_end) ? 0 : (endString.length()+beginString.length())));
+	if (len>=1)
+		buffer.erase(beginPos,len);
+	while (buffer.length() && buffer[buffer.length()-1]==' ')
+		buffer.erase(buffer.length()-1);
+	return beginPos;
+}
+
+int firstMatch(wstring &buffer, wstring beginString, wstring endString, size_t &beginPos, wstring &match, bool include_begin_and_end)
+{
+	LFS
+		beginPos = buffer.find(beginString, (beginPos == wstring::npos) ? 0 : beginPos);
+	int endPos;
+	if (beginPos != wstring::npos && (endPos = buffer.find(endString, beginPos + beginString.length())) != wstring::npos)
+	{
+		int len = endPos - beginPos + endString.length();
+		match = buffer.substr(beginPos + ((include_begin_and_end) ? 0 : beginString.length()), len - ((include_begin_and_end) ? 0 : (endString.length() + beginString.length())));
+		if (len >= 1)
+			buffer.erase(beginPos, len);
+		return beginPos;
+	}
+	return beginPos = wstring::npos;
+}
+
+int firstMatch(string &buffer, string beginString, string endString, size_t &beginPos, string &match, bool include_begin_and_end)
+{
+	LFS
+	beginPos = buffer.find(beginString, (beginPos == string::npos) ? 0 : beginPos);
+	int endPos;
+	if (beginPos != string::npos && (endPos = buffer.find(endString, beginPos + beginString.length())) != string::npos)
+	{
+		int len = endPos - beginPos + endString.length();
+		match = buffer.substr(beginPos + ((include_begin_and_end) ? 0 : beginString.length()), len - ((include_begin_and_end) ? 0 : (endString.length() + beginString.length())));
+		if (len >= 1)
+			buffer.erase(beginPos, len);
+		return beginPos;
+	}
+	return beginPos = string::npos;
+}
+
+wchar_t *firstMatch(wchar_t *buffer, wchar_t *beginString, wchar_t *endString)
+{
+	LFS
+		wchar_t *beginPos = wcsstr(buffer, beginString), *endPos;
+	if (beginPos != NULL)
+	{
+		beginPos += wcslen(beginString);
+		if ((endPos = wcsstr(beginPos, endString)) != NULL)
+		{
+			*endPos = 0;
+			return beginPos;
+		}
+	}
+	return NULL;
+}
+
+char *firstMatch(char *buffer, char *beginString, char *endString)
+{
+	LFS
+	char *beginPos = strstr(buffer, beginString), *endPos;
+	if (beginPos != NULL)
+	{
+		beginPos += strlen(beginString);
+		if ((endPos = strstr(beginPos, endString)) != NULL)
+		{
+			*endPos = 0;
+			return beginPos;
+		}
+	}
+	return NULL;
+}
+
+// if there is an embedded beginString/endString within the beginString/endString, only take the larger one.
+int firstMatchNonEmbedded(wstring &buffer,wstring beginString,wstring endString,size_t &beginPos,wstring &match,bool include_begin_and_end)
+{ LFS
+	beginPos=buffer.find(beginString,(beginPos==wstring::npos) ? 0 : beginPos);
+	int endPos,lastEmbeddedEnd=beginPos+beginString.length();
+	while (beginPos!=wstring::npos && (endPos=buffer.find(endString,lastEmbeddedEnd))!=wstring::npos)
+	{
+		size_t embeddedPos=buffer.find(beginString,lastEmbeddedEnd);
+		if (embeddedPos!=wstring::npos && embeddedPos<endPos)
+		{
+			lastEmbeddedEnd=endPos+endString.length();
+			continue;
+		}
+		int len=endPos-beginPos+endString.length();
+		match=buffer.substr(beginPos+((include_begin_and_end) ? 0 : beginString.length()),len-((include_begin_and_end) ? 0 : (endString.length()+beginString.length())));
+		if (len>=1)
+			buffer.erase(beginPos,len);
+		return beginPos;
+	}
+	return beginPos=-1;
+}
+
+int nextMatch(wstring &buffer,wstring beginString,wstring endString,size_t &beginPos,wstring &match,bool include_begin_and_end)
+{ LFS
+	size_t pos=0;
+	pos=buffer.find(beginString,(beginPos==wstring::npos) ? 0 : beginPos);
+	if (pos==wstring::npos)
+	{
+		//  wprintf(L"begin expression %s not found.",beginString.c_str());
+		return NEXT_MATCH_BEGIN_NOT_FOUND;
+	}
+	size_t endPos=buffer.find(endString,pos+beginString.length());
+	if (endPos==wstring::npos)
+	{
+		// wprintf(L"end expression %s not found.",beginString.c_str());
+		return NEXT_MATCH_END_NOT_FOUND;
+	}
+	int len=endPos-pos+endString.length();
+	match=buffer.substr(pos+((include_begin_and_end) ? 0 : beginString.length()),len-((include_begin_and_end) ? 0 : (endString.length()+beginString.length())));
+	beginPos=endPos+endString.length();
+	return 0;
+}
+
+/*
+Name            Syntax      Description
+Aacute          &Aacute;    Capital A, acute accent
+Agrave          &Agrave;    Capital A, grave accent
+Acirc           &Acirc;     Capital A, circumflex accent
+Atilde          &Atilde;    Capital A, tilde
+Aring           &Aring;     Capital A, ring
+Auml            &Auml;      Capital A, dieresis or umlaut mark
+AElig           &AElig;     Capital AE dipthong (ligature)
+Ccedil          &Ccedil;    Capital C, cedilla
+Eacute          &Eacute;    Capital E, acute accent
+Egrave          &Egrave;    Capital E, grave accent
+Ecirc           &Ecirc;     Capital E, circumflex accent
+Euml            &Euml;      Capital E, dieresis or umlaut mark
+Iacute          &Iacute;    Capital I, acute accent
+Igrave          &Igrave;    Capital I, grave accent
+Icirc           &Icirc;     Capital I, circumflex accent
+Iuml            &Iuml;      Capital I, dieresis or umlaut mark
+ETH             &ETH;       Capital Eth, Icelandic
+Ntilde          &Ntilde;    Capital N, tilde
+Oacute          &Oacute;    Capital O, acute accent
+Ograve          &Ograve;    Capital O, grave accent
+Ocirc           &Ocirc;     Capital O, circumflex accent
+Otilde          &Otilde;    Capital O, tilde
+Ouml            &Ouml;      Capital O, dieresis or umlaut mark
+Oslash          &Oslash;    Capital O, slash
+Uacute          &Uacute;    Capital U, acute accent
+Ugrave          &Ugrave;    Capital U, grave accent
+Ucirc           &Ucirc;     Capital U, circumflex accent
+Uuml            &Uuml;      Capital U, dieresis or umlaut mark
+Yacute          &Yacute;    Capital Y, acute accent
+
+THORN           &THORN;     Capital THORN, Icelandic
+szlig           &szlig;     Small sharp s, German (sz ligature)
+
+aacute          &aacute;    Small a, acute accent
+agrave          &agrave;    Small a, grave accent
+acirc           &acirc;     Small a, circumflex accent
+atilde          &atilde;    Small a, tilde
+atilde          &atilde;    Small a, tilde
+auml            &auml;      Small a, dieresis or umlaut mark
+aelig           &aelig;     Small ae dipthong (ligature)
+ccedil          &ccedil;    Small c, cedilla
+eacute          &eacute;    Small e, acute accent
+egrave          &egrave;    Small e, grave accent
+ecirc           &ecirc;     Small e, circumflex accent
+euml            &euml;      Small e, dieresis or umlaut mark
+iacute          &iacute;    Small i, acute accent
+igrave          &igrave;    Small i, grave accent
+icirc           &icirc;     Small i, circumflex accent
+iuml            &iuml;      Small i, dieresis or umlaut mark
+eth             &eth;       Small eth, Icelandic
+ntilde          &ntilde;    Small n, tilde
+oacute          &oacute;    Small o, acute accent
+ograve          &ograve;    Small o, grave accent
+ocirc           &ocirc;     Small o, circumflex accent
+otilde          &otilde;    Small o, tilde
+ouml            &ouml;      Small o, dieresis or umlaut mark
+oslash          &oslash;    Small o, slash
+uacute          &uacute;    Small u, acute accent
+ugrave          &ugrave;    Small u, grave accent
+ucirc           &ucirc;     Small u, circumflex accent
+uuml            &uuml;      Small u, dieresis or umlaut mark
+yacute          &yacute;    Small y, acute accent
+thorn           &thorn;     Small thorn, Icelandic
+yuml            &yuml;      Small y, dieresis or umlaut mark
+
+SYMBOLS
+&nbsp;      non-breaking space
+¡               &iexcl;     inverted exclamation mark
+¤               &curren;    currency
+¢               &cent;      cent
+£               &pound;     pound
+¥               &yen;       yen
+¦               &brvbar;    broken vertical bar
+§               &sect;      section
+¨               &uml;       spacing diaeresis
+©               &copy;      copyright
+ª               &ordf;      feminine ordinal indicator
+«               &laquo;     angle quotation mark (left)
+¬               &not;       negation
+­               &shy;       soft hyphen
+®               &reg;       registered trademark
+™               &trade;     trademark
+¯               &macr;      spacing macron
+°               &deg;       degree
+±               &plusmn;    plus-or-minus
+²               &sup2;      superscript 2
+³               &sup3;      superscript 3
+´               &acute;     spacing acute
+µ               &micro;     micro
+¶               &para;      paragraph
+·               &middot;    middle dot
+¸               &cedil;     spacing cedilla
+¹               &sup1;      superscript 1
+º               &ordm;      masculine ordinal indicator
+»               &raquo;     angle quotation mark (right)
+¼               &frac14;    fraction 1/4
+½               &frac12;    fraction 1/2
+¾               &frac34;    fraction 3/4
+¿               &iquest;    inverted question mark
+×               &times;     multiplication
+÷               &divide;    division
+
+*/
+void eliminateHTMLCharacterEntities(wstring &buffer)
+{ LFS
+	// all begin with & and end with ;
+	wchar_t *ce[]={
+		L"Aacute",L"Agrave",L"Acirc",L"Atilde",L"Aring",L"Auml",L"AElig",L"Ccedil",L"Eacute",L"Egrave",L"Ecirc",L"Euml",L"Iacute",L"Igrave",L"Icirc",L"Iuml",L"ETH",L"Ntilde",
+		L"Oacute",L"Ograve",L"Ocirc",L"Otilde",L"Ouml",L"Oslash",L"Uacute",L"Ugrave",L"Ucirc",L"Uuml",L"Yacute",L"THORN",L"szlig",L"aacute",L"agrave",L"acirc",L"atilde",
+		L"atilde",L"auml",L"aelig",L"ccedil",L"eacute",L"egrave",L"ecirc",L"euml",L"iacute",L"igrave",L"icirc",L"iuml",L"eth",L"ntilde",L"oacute",L"ograve",L"ocirc",
+		L"otilde",L"ouml",L"oslash",L"uacute",L"ugrave",L"ucirc",L"uuml",L"yacute",L"thorn",L"yuml", // &amp; and other XML special characters are taken care of while parsing
+		NULL
+	};
+
+	wchar_t *sym[]={
+		L"nbsp",L"iexcl",L"curren",L"cent",L"pound",L"yen",L"brvbar",L"sect",L"uml",L"copy",L"ordf",L"laquo",L"not",L"shy",L"reg",L"trade",L"macr",L"deg",L"plusmn",L"sup2",L"sup3",
+		L"acute",L"micro",L"para",L"middot",L"cedil",L"sup1",L"ordm",L"raquo",L"frac14",L"frac12",L"frac34",L"iquest",L"times",L"divide",
+		NULL
+	};
+	int pos;
+	if ((pos=buffer.find('&'))==wstring::npos || (!iswalpha(buffer[pos+1]) && buffer[pos+1]!=L'#')) return;
+	while (true)
+	{
+		if (buffer[pos+1]==L'#')
+		{
+			int end=pos+2;
+			while (iswdigit(buffer[end]))
+				end++;
+			buffer.erase(pos,end-pos+1);
+			pos=-1;
+		}
+		if (pos!=-1)
+			for (unsigned int I=0; ce[I]; I++)
+				if (!wcsncmp(buffer.c_str()+pos+1,ce[I],wcslen(ce[I])) && buffer[pos+1+wcslen(ce[I])]==';')
+				{
+					buffer.erase(pos,wcslen(ce[I])+1);
+					buffer[pos]=ce[I][0];
+					pos=-1;
+					break;
+				}
+		if (pos!=-1)
+			for (unsigned int I=0; sym[I]; I++)
+				if (!wcsncmp(buffer.c_str()+pos+1,sym[I],wcslen(sym[I])) && buffer[pos+1+wcslen(sym[I])]==';')
+				{
+					buffer.erase(pos,wcslen(sym[I])+2);
+					pos=-1;
+					break;
+				}
+		if ((pos=buffer.find('&',pos+1))==wstring::npos || (!iswalpha(buffer[pos+1]) && buffer[pos+1]!=L'#')) return;
+	}
+}
+
+void removeDots(wstring &str)
+{ LFS
+	int dot;
+	while ((dot=str.find('·'))>=0)
+		str.erase(dot,1);
+	eliminateHTMLCharacterEntities(str);
+}
+
+/* examples
+-ed/-ing/-s
+*/
+int getInflection(wstring sWord,wstring form,wstring mainEntry,wstring iform,vector <wstring> &allInflections)
+{ LFS
+	wchar_t *ch=(wchar_t *)iform.c_str();
+	int inflection=1,chosenInflection=0;
+	while (true)
+	{
+		wchar_t *next=wcschr(ch+1,'/'),extension[100];
+		if (next) *next=0;
+		wcscpy(extension,ch+((*ch=='-') ? 1 : 0));
+		if (!wcscmp(extension,sWord.c_str()+sWord.length()-wcslen(extension))) chosenInflection=inflection;
+		inflection++;
+		wstring Inflection=mainEntry;
+		if (chosenInflection)
+		{
+			if ((Inflection+extension)!=sWord)
+			{
+				Inflection=Inflection+Inflection[Inflection.length()-1];
+				if ((Inflection+extension)!=sWord) Inflection=mainEntry;
+				else
+					lplog(LOG_DICTIONARY,L"Doubled letter in use of matching extension to word=%s MainEntry %s extension %s.",
+					sWord.c_str(),mainEntry.c_str(),extension);
+			}
+		}
+		if (extension[0]=='e' && mainEntry[mainEntry.length()-1]=='e')
+			Inflection+=extension+1;
+		// this doesn't always work (example: enjoy, enjoyed) - but sometimes does (bloomy,bloomier)
+		else if (extension[0]=='e' && mainEntry[mainEntry.length()-1]=='y')
+		{
+			Inflection[Inflection.length()-1]='i';
+			Inflection+=extension;
+			if (sWord!=Inflection)
+				Inflection=mainEntry+extension;
+		}
+		// also Lady -> Ladies
+		else if (!wcscmp(extension,L"s") && mainEntry[mainEntry.length()-1]==L'y')
+		{
+			Inflection[Inflection.length()-1]=L'i';
+			Inflection+=L"es";
+			if (sWord!=Inflection)
+				Inflection=mainEntry+extension;
+		}
+		else if (extension[0]==L'i' && mainEntry[mainEntry.length()-1]==L'e')
+		{
+			if (sWord!=Inflection+extension)
+				Inflection.erase(Inflection.length()-1,Inflection.length());
+			Inflection=Inflection+extension;
+		}
+		else if (!wcscmp(extension,L"s") && mainEntry[mainEntry.length()-1]==L's')
+		{
+			Inflection=Inflection+L"es";
+		}
+		else if (!wcscmp(extension,L"s") && (mainEntry[mainEntry.length()-1]==L'o' || mainEntry[mainEntry.length()-1]==L'h'))
+		{
+			Inflection+=L"es";
+			if (sWord!=Inflection)
+				Inflection=mainEntry+extension;
+		}
+		else
+			Inflection+=extension;
+		allInflections.push_back(Inflection);
+		if (form==L"verb" && allInflections.size()==1) allInflections.push_back(Inflection); // past==past_participle
+		if (!next) return chosenInflection;  // normal form?
+		ch=next+1;
+	}
+	return chosenInflection;
+}
+
+/*
+Regular plural Nouns
+A noun that has only a regular English plural formed by adding the suffix -s or the suffix -es or by
+changing a final -y to -i- and adding the suffix -es is indicated by an -s or -es on the Inflected Form line:
+
+Main Entry: 1bird . . .
+Function: noun
+Inflected Form: -s . . .
+
+Irregular plurals
+If a plural is irregular in any way, the full form is given in boldface:
+
+Main Entry: 1man . . .
+Function: noun
+Inflected Form: plural men . . .
+
+Variant plurals
+If a noun has two or more plurals, all are written out in full and joined by or or also to indicate
+whether the forms are equal variants or secondary variants:
+
+Main Entry: 1fish . . .
+Function: noun
+Inflected Form: plural fish or fishes . . .
+
+Main Entry: 1court-martial . . .
+Function: noun
+Inflected Form: plural courts-martial also court-martials . . .
+
+Nouns that are plural in form and that are regularly used in plural construction are labeled noun
+plural (without a comma):
+
+Main Entry: en·vi·rons
+Function: noun plural . . .
+
+If the plural form is not always construed as a plural, the compactLabel continues with an applicable qualification:
+
+Main Entry: ge·net·ics . . .
+Function: noun plural but singular in construction . . .
+
+Main Entry: pol·i·tics . . .
+Function: noun plural but singular or plural in construction
+
+Main Entry: math·e·mat·ics . . .
+Function: noun plural but usually singular in construction
+
+The phrase singular in construction indicates that the entry word takes a singular verb.
+
+Compound plurals
+Plurals are usually omitted for compound nouns containing a terminal element that corresponds to a whole
+English word whose plural is regular and is shown at its own place. For example, the plurals for blackbird,
+arrow grass, cake-eater, and bioecology are omitted because they can be found at bird, grass, eater, and ecology.
+
+At words (as bioecology) that may be unfamiliar, an etymology consisting of the elements of the compound
+words shows the element at which an omitted plural can be looked up. Plurals are often not indicated at
+nonstandard terms. At compounds with doubtful irregular plurals, the plural forms are written out in full.
+
+Plurals entered at their own place
+A plural form that is spelled quite differently from the singular form or which would fall more than five
+inches from the singular form in the printed dictionary will have its own entry, which will cross-reference
+to the singular form:
+
+Main Entry: mice . . .
+plural of MOUSE
+
+Main Entry: geni·i . . .
+plural of GENIUS
+
+Such an entry does not specify whether it is the only plural; it simply tells where to look for relevant
+information. At genius the variant plurals geniuses and genii are shown. The plural geniuses is not a main entry
+because it is alphabetically close to the main entry of genius.
+
+Regular verbs
+Verbs are considered regular when their past is simply formed by adding a terminal -ed with no other
+change except dropping a final -e or changing a final -y to -i-.
+
+The principal parts for these verbs are indicated by adding -es/-ing/-s or -ed/-ing/-es to represent
+the past and past participle endings (-ed), the present participle ending (-ing), and the present 3rd
+singular ending (-s or -es):
+
+Main Entry: 1bark . . .
+Function: verb
+Inflected Form: -ed/-ing/-s
+
+Main Entry: 1wish . . .
+Function: verb
+Inflected Form: -ed/-ing/-es
+
+Irregular verbs
+The four principal parts of verbs appear in the order past, the past participle, the present participle,
+and the present 3rd singular and are shown in full in boldface whenever any one of them has an irregular
+or unexpected combination of letters:
+
+Main Entry: 1make . . .
+Function: verb
+Inflected Form: made . . . ; made ; making ; makes
+
+Main Entry: 2dye . . .
+Function: verb
+Inflected Form: dyed ; dyed ; dyeing ; dyes
+
+Whenever any of those four parts has a variant, all parts are written out in full:
+
+Main Entry: 3ring . . .
+Function: verb
+Inflected Form: rang . . . ; also rung . . . ; rung ; ringing ; rings
+
+Main Entry: 1show . . .
+Function: verb
+Inflected Form: showed ; shown . . . or showed ; showing ; shows
+
+If the four spaces usually occupied by inflectional forms cannot (for lack of evidence) all be filled, the
+surviving forms that can be given are identified by an italic compactLabel:
+
+Main Entry: aby
+Variant: or abye . . .
+Function: verb
+Inflected Form: past or past participle abought
+
+Principal parts of compound verbs
+Principal parts of verbs are usually omitted at compounds containing a terminal element or related homograph
+whose principal parts are regular and are shown at the entry for that terminal element or related homograph.
+For example, the principal parts of freewheel, overdrive, and unwrap are not given at those entries because
+they can be found at wheel, drive, and wrap.
+
+An etymology consisting of the elements of a compound verb shows the elements at which omitted principal parts
+can be looked up. Principal parts are often not given at nonstandard terms or at verbs of relatively low frequency.
+
+Principal parts of verbs entered at their own place
+A principal verb part that is spelled quite differently from the infinitive or which would fall more than five
+inches from the main entry in the printed dictionary will have its own entry, which will cross-reference the
+infinitive:
+
+Main Entry: burned
+past of BURN
+
+Main Entry: denies
+present third singular of DENY
+
+Comparatives and superlatives of adjectives and adverbs
+All adjectives and adverbs that have comparatives and superlatives with the suffixes -er and -est have these
+forms explicitly or implicitly shown in this dictionary. In some cases, they are written out in full in the
+entry; in others, cutback forms are used. The following paragraphs explain how the principal parts of adjectives
+and adverbs are depicted in the dictionary.
+
+Showing -er and -est forms does not imply anything more about the use of more and most with a simple adjective
+or adverb than that the comparative and superlative degrees can often be expressed in either way (luckier or
+more lucky, smoothest or most smooth).
+
+Regular comparatives and superlatives
+When comparatives or superlatives are formed by simply adding -er and -est with no change except dropping of
+final -e or changing of final -y to -i-, those forms are indicated by -er/-est following the Inflected Form(s)
+compactLabel:
+
+Main Entry: 1green . . .
+Function: adjective
+Inflected Form(s): -er/-est
+
+
+Irregular comparatives and superlatives
+Comparatives and superlatives are written out in full in boldface when they are irregular or when they double a
+final consonant:
+
+Main Entry: 1red . . .
+Function: adjective
+Inflected Form(s): redder; reddest
+
+Comparatives and superlatives of compounds
+Comparatives and superlatives are usually omitted at compounds containing a constituent element whose
+inflection is shown at its own entry. Comparatives and superlatives of words such as kinderhearted and
+unluckiest are omitted because-er and -est are shown at kind and at lucky. Similarly the comparatives and
+superlatives of adverbs are often omitted when an adjective homograph shows them, as at flat and hot.
+
+Comparatives and superlatives entered at their own place
+
+Comparatives and superlatives that are spelled quite differently from their base form or which would fall
+more than five inches from the main entry in the printed dictionary will have their own entries, which will
+cross-reference the base entry:
+
+Main Entry: hotter
+comparative of HOT
+
+Main Entry: hottest
+superlative of HOT
+
+*/
+/* examples
+<b>-ed/-ing/-s</b>
+<b>ran</b> \
+\; <i>or nonstandard</i> <b>run</b>; <b>run</b>; <b>running</b>; <b>runs</b>
+*/
+/*
+Nouns:
+Inflected Form: -s . . .
+Inflected Form: plural men . . .
+Inflected Form: plural fish or fishes . . .
+Verbs:
+Inflected Form: -ed/-ing/-s
+Inflected Form: dyed ; dyed ; dyeing ; dyes
+Adjectives&Adverbs
+Inflected Form(s): -er/-est
+Inflected Form(s): redder; reddest
+*/
+// "<i>also dialect</i>","<i>also chiefly","<i>also dialect",
+// "<i>or nonstandard</i>","<i>or dialect","<i>or archaic</i>","<i>or chiefly"
+wchar_t *alternates[]={
+	L"<i>also",L"<i>or",L"<i>chiefly in",
+};
+
+bool equivalentIfIgnoreDashSpaceCase(wstring sWord,wstring sWord2)
+{ LFS
+	// convert acute
+	int pos;
+	if ((pos=sWord.find(L"&eacute;"))!=wstring::npos)
+		sWord.replace(pos,8,L"e");
+	int iW=0,iW2=0;
+	while (true)
+	{
+		if (iW>0)
+		{
+			while (sWord[iW]==L'-' || sWord[iW]==L' ') iW++;
+			while (sWord2[iW2]==L'-' || sWord2[iW2]==L' ') iW2++;
+		}
+		if (towlower(sWord[iW])!=towlower(sWord2[iW2])) return false;
+		if (!sWord[iW]) return true;
+		iW++; iW2++;
+	}
+	return false;
+}
+
+int WordClass::checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,wstring sForm,int inflection,int derivationRules,wstring definitionEntry,int sourceId)
+{ LFS
+	int iForm;
+	vector <FormClass *>::iterator ifc,ifcend=Forms.end();
+	for (iForm=0,ifc=Forms.begin(); ifc!=ifcend && (*ifc)->name!=sForm; ifc++,iForm++);
+	if (ifc==ifcend)
+	{
+		unsigned int chi;
+		if (sForm.find(L"adjective")!=wstring::npos)
+			sForm=L"adjective";
+		else if (sForm.find(L"adverb")!=wstring::npos)
+			sForm=L"adverb";
+		else if ((chi=sForm.find(L"verb"))!=wstring::npos && (!sForm[chi+4] || iswspace(sForm[chi+4])))
+			sForm=L"verb";
+		else if (sForm.find(L"past part")!=wstring::npos)
+			sForm=L"verb";
+		else if (sForm.find(L"plural in construction")!=wstring::npos)
+			sForm=L"noun";
+		else if (sForm.find(L"exclamation")!=wstring::npos)  // from Cambridge
+			sForm=L"interjection";
+		else if (sForm.find(L"definite article")!=wstring::npos)
+			sForm=L"determiner";
+		else if (sForm.find(L"indefinite article")!=wstring::npos)
+			sForm=L"quantifier";
+		else if (sForm.find(L"verbal auxiliary")!=wstring::npos)
+		{
+			lplog(LOG_DICTIONARY,L"Form %s rejected!",sForm.c_str());
+			return 0;
+		}
+	}
+	while (sWord[sWord.length()-1]==' ') // strangely, all multi-word words in MW seem to have a space at the end
+		sWord.erase(sWord.length()-1);
+	while (definitionEntry[definitionEntry.length()-1]==' ') // crow
+		definitionEntry.erase(definitionEntry.length()-1);
+	wstring inflectionName;
+	if (hasFormInflection(iWord,sForm,inflection)==WMM.end())
+	{
+		bool added;
+		tIWMM saveIWord=iWord;
+		iForm=addWordToForm(sWord,iWord,flags,sForm,sForm,inflection,derivationRules,definitionEntry,sourceId,added);
+		if (saveIWord!=WMM.end()) iWord=saveIWord;
+		if (added)
+		{
+			lplog(LOG_DICTIONARY,L"(%s) word %s: Added Inflection%s (Form %s, definitionEntry %s)",fromWhere,sWord.c_str(),getInflectionName(inflection,iForm,inflectionName),sForm.c_str(),definitionEntry.c_str());
+			return 0;
+		}
+	}
+	iForm=FormsClass::findForm(sForm);
+	if (iForm<0)
+	{
+		lplog(LOG_DICTIONARY,L"form %s is not found!",sForm.c_str());
+		return -1;
+	}
+	lplog(LOG_DICTIONARY,L"(%s) word %s: (Already) Added Inflection%s (Form %s, definitionEntry %s)",fromWhere,sWord.c_str(),getInflectionName(inflection,iForm,inflectionName),sForm.c_str(),definitionEntry.c_str());
+	return 0;
+}
+
+// this was changed from standard read
+// because Microsoft version of _read had a bug in it
+int getPath(const wchar_t *pathname,void *buffer,int maxlen,int &actualLen)
+{ LFS
+	HANDLE hFile = CreateFile(pathname,    // file to open
+		GENERIC_READ,          // open for reading
+		FILE_SHARE_READ,       // share for reading
+		NULL,                  // default security
+		OPEN_EXISTING,         // existing file only
+		FILE_ATTRIBUTE_NORMAL, // normal file
+		NULL);                 // no attr. template
+
+	if (hFile == INVALID_HANDLE_VALUE)
+	{
+		wstring bcct;
+		if (GetLastError()!=ERROR_PATH_NOT_FOUND && GetLastError()!=ERROR_FILE_NOT_FOUND)
+			lplog(LOG_ERROR,L"GetPath cannot open path %s - %s",pathname,getLastErrorMessage(bcct));
+		return GETPATH_CANNOT_OPEN_PATH;
+	}
+	actualLen=GetFileSize(hFile,NULL);
+	if (actualLen<0)
+	{
+		lplog(LOG_ERROR,L"ERROR:filelength of file %s yields an invalid filelength (%d).",pathname,actualLen);
+		CloseHandle(hFile);
+		return GETPATH_INVALID_FILELENGTH1;
+	}
+	if (actualLen==0)
+	{
+		CloseHandle(hFile);
+		return 0;
+	}
+	if (actualLen+1>=maxlen)
+	{
+		lplog(LOG_ERROR,L"ERROR:filelength of file %s (%d) is greater than the maximum allowed (%d).",pathname,actualLen+1,maxlen);
+		CloseHandle(hFile);
+		return GETPATH_INVALID_FILELENGTH2;
+	}
+	DWORD lenRead=0;
+	if (!ReadFile(hFile,buffer,actualLen,&lenRead,NULL) || actualLen!=lenRead)
+	{
+		lplog(LOG_ERROR,L"ERROR:read error of file %s.",pathname);
+		CloseHandle(hFile);
+		return GETPATH_INVALID_FILELENGTH2;
+	}
+	((char *)buffer)[lenRead]=0;
+	((char *)buffer)[lenRead+1]=0;
+	CloseHandle(hFile);
+	return 0;
+}
+
+/*
+int WordClass::standardEnding(tIWMM iWord,wstring sWord,int sourceId)
+{ LFS
+wchar_t *standard_ending[]={"ing","ed","s","er","est",NULL};
+int len;
+if (!wcscmp(standard_ending[0],sWord.c_str()+(len=sWord.length()-wcslen(standard_ending[0]))))
+checkAdd(L"SE",iWord,sWord,0,"verb",VERB_PRESENT_PARTICIPLE,0,sWord.substr(0,len),sourceId);
+else if (!wcscmp(standard_ending[1],sWord.c_str()+(len=sWord.length()-wcslen(standard_ending[1]))))
+checkAdd(L"SE",iWord,sWord,0,"verb",VERB_PAST,0,sWord.substr(0,len),sourceId);
+else if (!wcscmp(standard_ending[2],sWord.c_str()+(len=sWord.length()-wcslen(standard_ending[2]))))
+checkAdd(L"SE",iWord,sWord,0,"noun",PLURAL,0,sWord.substr(0,len),sourceId);
+else if (!wcscmp(standard_ending[3],sWord.c_str()+(len=sWord.length()-wcslen(standard_ending[3]))))
+{ LFS
+checkAdd(L"SE",iWord,sWord,0,"adjective",ADJECTIVE_COMPARATIVE,0,sWord.substr(0,len),sourceId);
+checkAdd(L"SE",iWord,sWord,0,"adverb",ADVERB_COMPARATIVE,0,sWord.substr(0,len),sourceId);
+}
+else if (!wcscmp(standard_ending[4],sWord.c_str()+(len=sWord.length()-wcslen(standard_ending[4]))))
+{ LFS
+checkAdd(L"SE",iWord,sWord,0,"adjective",ADJECTIVE_SUPERLATIVE,0,sWord.substr(0,len),sourceId);
+checkAdd(L"SE",iWord,sWord,0,"adverb",ADVERB_SUPERLATIVE,0,sWord.substr(0,len),sourceId);
+}
+else
+{ LFS
+lplog(LOG_DICTIONARY,L"** ERROR:Word %s did not have standard ending.\n",sWord.c_str());
+return WORD_NOT_FOUND;
+}
+return 0;
+}
+*/
+
+boolean WordClass::findWordInDB(MYSQL *mysql, wstring sWord, tIWMM &iWord)
+{
+	if (mysql == NULL)
+		return false;
+	if (!myquery(mysql, L"LOCK TABLES words READ,wordforms READ")) return true;
+	wchar_t qt[query_buffer_len_overflow];
+	_snwprintf(qt, query_buffer_len, L"select w.id,wf.formId,w.inflectionFlags,w.flags,w.timeFlags,w.derivationRules,w.sourceId from words w,wordForms wf where word=%s", sWord.c_str());
+	MYSQL_RES *result = NULL;
+	if (!myquery(mysql, qt, result))
+	{
+		myquery(mysql, L"UNLOCK TABLES");
+		return true;
+	}
+	__int64 numRows = mysql_num_rows(result);
+	MYSQL_ROW sqlrow;
+	iWord = WMM.end();
+	while ((sqlrow = mysql_fetch_row(result)) != NULL)
+	{
+		int wordId = atoi(sqlrow[0]);
+		int iForm = atoi(sqlrow[1]), iInflectionFlags = atoi(sqlrow[2]), iFlags = atoi(sqlrow[3]), iTimeFlags = atoi(sqlrow[4]), iDerivationRules = atoi(sqlrow[5]), iSourceId = atoi(sqlrow[6]);
+		if (iWord == WMM.end())
+		{
+			pair< tIWMM, bool > pr;
+			pr = WMM.insert(tWFIMap(sWord, tFI(iForm, iInflectionFlags, iFlags, iTimeFlags, iDerivationRules, wNULL, -1)));
+			if (Forms[iForm]->isTopLevel)
+				pr.first->second.flags |= tFI::topLevelSeparator;
+			iWord = pr.first;
+		}
+		else
+		{
+			iWord->second.addForm(iForm, sWord);
+		}
+	}
+	mysql_free_result(result);
+	if (!myquery(mysql, L"UNLOCK TABLES words,wordForms"))
+		return false;
+	return true;
+}
+
+int WordClass::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int dashLocation,int sourceId)
+{ LFS
+	if (sWord.length()<5) return -1;
+	if (dashLocation>0)
+	{
+		wstring firstWord=sWord.substr(0,dashLocation);
+		wstring secondWord=sWord.substr(dashLocation+1,sWord.length()-dashLocation);
+		tIWMM firstQIWord=WMM.end(),secondQIWord=WMM.end();
+		if (((firstQIWord=Words.query(firstWord))!=WMM.end() || findWordInDB(mysql, firstWord,firstQIWord) || !getForms(firstQIWord,firstWord,sourceId)) &&
+			((secondQIWord=Words.query(secondWord))!=WMM.end() || findWordInDB(mysql, secondWord,secondQIWord) || !getForms(secondQIWord,secondWord,sourceId)))
+		{
+			// (SW) word bone-cracking( main: verb present part)
+			// (SW) word white-maned(main: verb past)
+			// (SW) word micro-electric( main: adjective)
+			// (SW) word half-wittingly(main: adverb)
+			// (SW) word arms-sales(main: noun)
+			iWord=end();
+			if (secondQIWord->second.query(verbForm)>=0)
+				checkAdd(L"SW",iWord,sWord,0,L"verb",secondQIWord->second.inflectionFlags,0,secondWord,sourceId);
+			if (secondQIWord->second.query(nounForm)>=0)
+				checkAdd(L"SW",iWord,sWord,0,L"noun",secondQIWord->second.inflectionFlags,0,secondWord,sourceId);
+			if (secondQIWord->second.query(adjectiveForm)>=0)
+				checkAdd(L"SW",iWord,sWord,0,L"adjective",secondQIWord->second.inflectionFlags,0,secondWord,sourceId);
+			if (secondQIWord->second.query(adverbForm)>=0)
+				checkAdd(L"SW",iWord,sWord,0,L"adverb",secondQIWord->second.inflectionFlags,0,secondWord,sourceId);
+			if (iWord==end()) return -1;
+			checkAdd(L"SW",iWord,sWord,0,COMBINATION_FORM,0,dashLocation,secondWord,sourceId);
+			return 0;
+		}
+	}
+	for (unsigned int I=2; I<sWord.length()-2; I++)
+	{
+		wstring firstWord=sWord.substr(0,I);
+		wstring secondWord=sWord.substr(I,sWord.length()-I);
+		tIWMM firstIWord=WMM.end(),secondIWord=WMM.end(),firstQIWord=WMM.end(),secondQIWord=WMM.end();
+		if (((firstQIWord = Words.query(firstWord)) != WMM.end() || findWordInDB(mysql, firstWord, firstQIWord)) &&
+			((secondQIWord = Words.query(secondWord)) != WMM.end() || findWordInDB(mysql, secondWord, secondQIWord)))
+		{
+			iWord=end();
+			if (secondQIWord->second.query(verbForm)>=0)
+				checkAdd(L"SW",iWord,sWord,0,L"verb",secondQIWord->second.inflectionFlags,0,secondWord,sourceId);
+			if (secondQIWord->second.query(nounForm)>=0)
+				checkAdd(L"SW",iWord,sWord,0,L"noun",secondQIWord->second.inflectionFlags,0,secondWord,sourceId);
+			if (secondQIWord->second.query(adjectiveForm)>=0)
+				checkAdd(L"SW",iWord,sWord,0,L"adjective",secondQIWord->second.inflectionFlags,0,secondWord,sourceId);
+			if (secondQIWord->second.query(adverbForm)>=0)
+				checkAdd(L"SW",iWord,sWord,0,L"adverb",secondQIWord->second.inflectionFlags,0,secondWord,sourceId);
+			if (iWord==end()) return -1;
+			checkAdd(L"SW",iWord,sWord,0,COMBINATION_FORM,0,dashLocation,secondWord,sourceId);
+			return 0;
+		}
+	}
+	return -1;
+}
+
+bool loosesort( const wchar_t *s1, const wchar_t *s2 )
+{ LFS
+	if (*s1 && *s2) return wcscmp(s1,s2)<0;
+	if (*s1) 
+		return wcsncmp(s1,s2+1,wcslen(s1))<0;
+	return wcsncmp(s1+1,s2,wcslen(s2))<0;
+}
+
+int parseMerriamWebsterDictionaryAPI(tIWMM &iWord, wstring sWord, int sourceId)
+{
+	sourceId = 0;
+	if (iWord!=Words.end())
+			
+	sWord = L"";
+
+	return WORD_NOT_FOUND;
+}
+
+// this routine should look up words from wiktionary or some other dictionary
+int WordClass::getForms(tIWMM &iWord, wstring sWord, int sourceId)
+{
+	LFS
+	changedWords=true;
+	return parseMerriamWebsterDictionaryAPI(iWord, sWord, sourceId);
+	//return WORD_NOT_FOUND;
+}
+
+HINTERNET hINet;
+const wchar_t *getLastErrorMessage(wstring &out)
+{ LFS
+	wchar_t msg[10000]; 
+	DWORD dw = GetLastError();
+	FormatMessage( 
+		FORMAT_MESSAGE_FROM_SYSTEM 
+		| FORMAT_MESSAGE_IGNORE_INSERTS // don't process inserts
+    | FORMAT_MESSAGE_FROM_HMODULE,  // retrieve message from specified DLL
+		GetModuleHandle(L"wininet.dll"),dw,MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),(LPTSTR) &msg,10000, NULL );
+	int len;
+	if (msg[len=wcslen(msg)-1]=='\n') msg[len]=0;
+	if (msg[len=wcslen(msg)-1]=='\r') msg[len]=0;
+	if (dw==ERROR_INTERNET_EXTENDED_ERROR)
+	{
+		len=wcslen(msg);
+		DWORD remainingBufferLen=10000-len;
+		InternetGetLastResponseInfo(&dw,msg+len,&remainingBufferLen);
+	}
+	out=msg;
+	return out.c_str();
+}
+
+
+bool InternetReadFile_Wait( HINTERNET RequestHandle,char *buffer,int bufsize,DWORD *dwRead);
+
+int readPage(const wchar_t *str, wstring &buffer)
+{ LFS
+	wstring headers;
+	return readPage(str,buffer,headers);
+}
+
+bool InetOption(bool global,int option,wchar_t *description,unsigned long value)
+{ LFS
+	HINTERNET hI=(global) ? 0 : hINet;
+	unsigned long qValue=value;
+	DWORD len=sizeof(qValue);
+	wstring inett;
+	if (!InternetQueryOption(hI,option,&qValue,&len))
+		lplog(LOG_ERROR,L"ERROR:InternetQueryOption of (%s) Failed - %s",description,getLastErrorMessage(inett));
+	if (value!=qValue)
+	{
+		lplog(LOG_INFO,L"%s set to %d from %d.",description,value,qValue);
+		qValue=value;
+		if (!InternetSetOption(hI,option,&qValue,sizeof(qValue)))
+			lplog(LOG_ERROR,L"ERROR:InternetSetOption of (%s) Failed - %s",description,getLastErrorMessage(inett));
+	}
+	return true;
+}
+
+boolean LPInternetOpen(int timer)
+{
+	if (!hINet)
+	{
+		hINet = InternetOpen(L"InetURL/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+		DWORD dwFlags;
+		InternetGetConnectedState(&dwFlags, 0); // BOOL connState=
+		if (dwFlags&INTERNET_CONNECTION_CONFIGURED)
+			lplog(LOG_INFO, L"Local system has a valid connection to the Internet, but it might or might not be currently connected.");
+		if (dwFlags&INTERNET_CONNECTION_LAN)
+			lplog(LOG_INFO, L"Local system uses a local area network to connect to the Internet.");
+		if (dwFlags&INTERNET_CONNECTION_MODEM)
+			lplog(LOG_INFO, L"Local system uses a modem to connect to the Internet.");
+		if (dwFlags&INTERNET_CONNECTION_MODEM_BUSY)
+			lplog(LOG_INFO, L"No longer used.");
+		if (dwFlags&INTERNET_CONNECTION_OFFLINE)
+			lplog(LOG_INFO, L"Local system is in offline mode.");
+		if (dwFlags&INTERNET_CONNECTION_PROXY)
+			lplog(LOG_INFO, L"Local system uses a proxy server to connect to the Internet.");
+		if (dwFlags&INTERNET_RAS_INSTALLED)
+			lplog(LOG_INFO, L"Local system has RAS installed.");
+		InetOption(true, INTERNET_OPTION_MAX_CONNS_PER_1_0_SERVER, L"Maximum connections per 1.0 server", 100);
+		InetOption(true, INTERNET_OPTION_MAX_CONNS_PER_PROXY, L"Maximum connections per proxy", 100);
+		InetOption(true, INTERNET_OPTION_MAX_CONNS_PER_SERVER, L"Maximum connections per server", 100);
+	}
+	wstring ioe;
+	if (!hINet)
+	{
+		lplog(LOG_ERROR, L"ERROR:InternetOpen Failed - %s", getLastErrorMessage(ioe));
+		AcquireSRWLockExclusive(&cProfile::networkTimeSRWLock);
+		cProfile::accumulationNetworkProfileTimer += (clock() - timer);
+		ReleaseSRWLockExclusive(&cProfile::networkTimeSRWLock);
+		return false;
+	}
+	InetOption(false, INTERNET_OPTION_CONNECT_TIMEOUT, L"Connect Timeout", 6000000);
+	return true;
+}
+
+#define MAX_BUF 200000
+int readPage(const wchar_t *str, wstring &buffer,wstring &headers)
+{ LFS
+	int timer=clock();
+ 	AcquireSRWLockShared(&cProfile::networkTimeSRWLock);
+	if (clock()-cProfile::lastNetClock<bandwidthControl)
+	{
+		int timeWait=(bandwidthControl-(clock()-cProfile::lastNetClock));
+	 	ReleaseSRWLockShared(&cProfile::networkTimeSRWLock);
+		AcquireSRWLockExclusive(&totalInternetTimeWaitBandwidthControlSRWLock);
+		cProfile::totalInternetTimeWaitBandwidthControl+=timeWait;
+		ReleaseSRWLockExclusive(&totalInternetTimeWaitBandwidthControlSRWLock);
+		Sleep(timeWait);
+	}
+	else
+	 	ReleaseSRWLockShared(&cProfile::networkTimeSRWLock);
+	int errors=0;
+ 	AcquireSRWLockExclusive(&cProfile::networkTimeSRWLock);
+	cProfile::lastNetClock=clock();
+ 	ReleaseSRWLockExclusive(&cProfile::networkTimeSRWLock);
+	char cBuffer[MAX_BUF+4];
+	if (!LPInternetOpen(timer))
+		return INTERNET_OPEN_FAILED;
+	wstring ioe;
+
+	//INTERNET_OPTION_CONNECT_RETRIES
+#define MAX_ERRORS 3
+	extern bool readTimeoutError;
+	while (errors<MAX_ERRORS)
+	{
+		LPVOID hFile;
+		if (hFile = InternetOpenUrl( hINet, str, headers.c_str(), headers.length(), 0, INTERNET_FLAG_NO_CACHE_WRITE))
+		{
+			if (log_net) lplog(L"Successfully opened URL %s.",str);
+			DWORD dwRead;
+			readTimeoutError=false;
+			// does InternetReadFile in a child process to prevent lock
+			while ( InternetReadFile_Wait( hFile, cBuffer, MAX_BUF, &dwRead ) )
+			{
+				if ( dwRead == 0 )
+					break;
+				cBuffer[dwRead] = 0;
+				wstring wb;
+				buffer+=mTW(cBuffer,wb);
+			}
+			InternetCloseHandle( hFile );
+			if (!readTimeoutError)
+			{
+				cProfile::accumulateNetworkTime(str,timer,cProfile::lastNetClock);
+				return 0;
+			}
+			errors++;
+			lplog(LOG_ERROR,L"ERROR:%d:Timeout reading URL %s.",errors,str);
+			if (!InternetCheckConnection(str,FLAG_ICC_FORCE_CONNECTION,0))
+				lplog(LOG_ERROR,L"ERROR:Cannot force URL %s - %s.\r",str,getLastErrorMessage(ioe));
+			lplog(LOG_ERROR,NULL);
+		}
+		else
+		{
+			errors++;
+			int lastError=GetLastError();
+			lplog(LOG_ERROR,L"ERROR:%d:Cannot open URL %s - %s (%d).\r",errors,str,getLastErrorMessage(ioe),lastError);
+			if (wcsstr(str, L"sparql"))
+			{
+				wprintf(L"\n\nrestart virtuoso\n");
+				Sleep(30000);
+				return readPage(str, buffer, headers);
+			}
+			if (lastError == ERROR_NO_UNICODE_TRANSLATION)
+				break;
+			if (!InternetCheckConnection(str,FLAG_ICC_FORCE_CONNECTION,0))
+				lplog(LOG_ERROR,L"ERROR:Cannot force URL %s - %s.\r",str,getLastErrorMessage(ioe));
+			InternetCloseHandle(hINet);
+			hINet = InternetOpen(L"InetURL/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0 );
+			lplog(LOG_ERROR,NULL);
+			Sleep(2000);
+		 	AcquireSRWLockExclusive(&cProfile::networkTimeSRWLock);
+			cProfile::lastNetClock=clock();
+		 	ReleaseSRWLockExclusive(&cProfile::networkTimeSRWLock);
+		}
+	}
+	if (errors == MAX_ERRORS)
+		lplog(LOG_ERROR,L"ERROR:%d:Terminating because we cannot read URL %s - %s.",errors,str,getLastErrorMessage(ioe)); // TMP DEBUG
+	cProfile::accumulateNetworkTime(str,timer,cProfile::lastNetClock);
+	return (errors) ? WORD_NOT_FOUND : 0;
+}
+
+int WordClass::readBinaryPage(wchar_t *str, int destfile,int &total)
+{ LFS
+ 	AcquireSRWLockShared(&cProfile::networkTimeSRWLock);
+	if (clock()-cProfile::lastNetClock<bandwidthControl)
+	{
+	 	ReleaseSRWLockShared(&cProfile::networkTimeSRWLock);
+		int timeWait=(bandwidthControl-(clock()-cProfile::lastNetClock));
+		AcquireSRWLockExclusive(&totalInternetTimeWaitBandwidthControlSRWLock);
+		cProfile::totalInternetTimeWaitBandwidthControl+=timeWait;
+		ReleaseSRWLockExclusive(&totalInternetTimeWaitBandwidthControlSRWLock);
+		Sleep(timeWait);
+	}
+	else
+	 	ReleaseSRWLockShared(&cProfile::networkTimeSRWLock);
+ 	AcquireSRWLockShared(&cProfile::networkTimeSRWLock);
+	cProfile::lastNetClock=clock();
+ 	ReleaseSRWLockShared(&cProfile::networkTimeSRWLock);
+	char cBuffer[MAX_BUF+4];
+	wstring ioe;
+	if (!hINet) hINet = InternetOpen(L"InetURL/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0 );
+	if ( !hINet )
+	{
+		lplog(LOG_ERROR,L"ERROR:InternetOpen Failed - %s",getLastErrorMessage(ioe));
+		return INTERNET_OPEN_FAILED;
+	}
+	while (true)
+	{
+		HANDLE hFile;
+		if (hFile = InternetOpenUrl( hINet, str, NULL, 0, 0, INTERNET_FLAG_NO_CACHE_WRITE ))
+		{
+			if (log_net) lplog(L"Successfully opened URL %s.",str);
+			DWORD dwRead;
+			while ( InternetReadFile( hFile, cBuffer, MAX_BUF, &dwRead ) )
+			{
+				if ( dwRead == 0 )
+					break;
+				total+=dwRead;
+				::write(destfile,cBuffer,dwRead);
+			}
+			InternetCloseHandle( hFile );
+			return 0;
+		}
+		else
+		{
+			lplog(LOG_ERROR,L"ERROR:Cannot open URL %s - %s.",str,getLastErrorMessage(ioe));
+			lplog(LOG_ERROR,NULL);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+bool WordClass::eliminate(wchar_t *input,int &len,wchar_t *begin,wchar_t *end,bool keepBegin)
+{ LFS
+	wchar_t *ch=wcsstr(input,begin);
+	if (!ch) return false;
+	wchar_t *ch2=wcsstr(ch,end);
+	if (!ch2) return false;
+	ch2+=wcslen(end);
+	if (keepBegin) ch+=wcslen(begin);
+	int beginlen=(int)(ch-input);
+	int movelen=len-(beginlen+((int)(ch2-ch)));
+	if (movelen<0)
+	{
+		int p=1;
+		wprintf(L"Problem!");
+		while (p) Sleep(10000);
+		return false;
+	}
+	memmove(ch,ch2,movelen);
+	len-=(int)(ch2-ch);
+	input[len]=0;
+	return true;
+}
+
+bool WordClass::eliminate(wchar_t *input,int &len,wchar_t *pat)
+{ LFS
+	wchar_t *ch=wcsstr(input,pat);
+	if (!ch) return false;
+	int beginlen=(int)(ch-input);
+	int movelen=len-(beginlen+wcslen(pat));
+	memmove(ch,ch+wcslen(pat),movelen);
+	if (movelen<0)
+	{
+		int p=1;
+		wprintf(L"Problem!");
+		while (p) Sleep(10000);
+		return false;
+	}
+	len-=wcslen(pat);
+	input[len]=0;
+	return true;
+}
+
+void WordClass::tableEliminateIf(wchar_t *input,int &len, wchar_t *txt,bool embeddedOK)
+{ LFS
+	wchar_t *offset=input;
+	int end;
+	while (true)
+	{
+		wchar_t *ch=wcsstr(offset,L"<table");
+		if (!ch) return;
+		offset=ch+wcslen(L"<table");
+		int start=(int)(ch-input);
+		int embedded=0,I;
+		bool txtSeen=false;
+		for (I=start+wcslen(L"<table"); I<len; I++)
+		{
+			if (!wcsncmp(input+I,L"</table>",8))
+			{
+				if (embedded==0) break;
+				embedded--;
+			}
+			if (!wcsncmp(input+I,L"<table",6))
+			{
+				embedded++;
+				if (!embeddedOK) break;
+			}
+			if (!wcsncmp(input+I,txt,wcslen(txt))) txtSeen=true;
+		}
+		if (I==len) return;
+		if (embedded) continue;
+		end=I+wcslen(L"</table>");
+		if (txtSeen)
+		{
+			//int beginlen=start;
+			int movelen=len-end;
+			if (movelen<0)
+			{
+				int p=1;
+				wprintf(L"Problem!");
+				while (p) Sleep(10000);
+				return;
+			}
+			memmove(input+start,input+end,movelen);
+			len-=(end-start);
+			input[len]=0;
+			return;
+		}
+	}
+}
+
+bool WordClass::reduceCambridgeDictionaryPage(wstring sWord,wstring &buffer)
+{ LFS
+	wchar_t *input=wcsdup(buffer.c_str());
+	int len=buffer.length();
+	if (wcsstr(input,L"</span> was not found in the <span class='dictname'>") ||
+		wcsstr(input,L"was not found in the <a class='dictname'"))
+	{
+		if (!unknownCDWords.size())
+			readUnknownWords(unknownCD,unknownCDWords);
+		vector <wstring>::iterator ip=lower_bound(unknownCDWords.begin(),unknownCDWords.end(),sWord);
+		wcslwr((wchar_t *)sWord.c_str());
+		changedWords=true;
+		unknownCDWords.insert(ip,sWord);
+		free(input);
+		return false;
+	}
+	eliminate(input,len,L"<head>",L"</head>",false);
+	eliminate(input,len,L"<!-- BeginLibraryItem",L"<!-- EndLibraryItem -->",false);
+	eliminate(input,len,L"<!-- BeginLibraryItem \"/Library/seealso.lbi\" -->",L"<!-- EndLibraryItem -->",true);
+	while (eliminate(input,len,L"<img",L">",false));
+	while (eliminate(input,len,L"<IMG",L">",false));
+	eliminate(input,len,L"<A HREF",L"</A>",false);
+	tableEliminateIf(input,len,L"Get help with ordering, searching, contacts, etc.",true);
+	tableEliminateIf(input,len,L"people learning English all around the world",false);
+	tableEliminateIf(input,len,L"French / English",false);
+	tableEliminateIf(input,len,L"Look it up",false);
+	tableEliminateIf(input,len,L"University Press 2004.",false);
+	tableEliminateIf(input,len,L"Buy this dictionary",false);
+	eliminate(input,len,L"<!-- resources -->",L"<!-- ask jeeves -->",false);
+	eliminate(input,len,L"<!-- right 1 - navigation and Ask Jeeves -->",L"<!-- right 2 - banner advertising -->",false);
+	input[len]=0;
+	buffer=input;
+	free(input);
+	return true;
+}
+
+bool WordClass::closeConnection(void)
+{ LFS
+	if( hINet ) InternetCloseHandle( hINet );
+	return true;
+}
+
+int WordClass::processIrregularForms(wstring match,wstring entry,size_t beginPos,wstring form,size_t nextDefinition,tIWMM &iWord,wstring sWord,int sourceId)
+{ LFS
+	if (form!=L"verb") return -1;
+	vector <wstring> irregularVerbs;
+	wstring irregular,inflectionName;
+	size_t irregularPos=beginPos;
+	while (!nextMatch(match,L"<span class='def-irreg'>",L"</span>",irregularPos,irregular,false))
+	{
+		if (irregularPos>nextDefinition && nextDefinition!=wstring::npos) break;
+		if (irregular[0]!=L'-') irregularVerbs.push_back(irregular);  // reject suffix or prefix suggestions
+	}
+	/* for 5 forms:from Cambridge main entry bid: bidding, bid, bid, bade, bidden */
+	/* for 5 forms:from Websters main entry bid: bade;bidden;bidding;bids */
+	if (irregularVerbs.size()==3 || irregularVerbs.size()==5)
+	{
+		irregularVerbs.push_back(irregularVerbs[0]);
+		irregularVerbs.erase(irregularVerbs.begin());
+		int inflection;
+		unsigned int f;
+		for (f=(irregularVerbs.size()==5) ? 2 : 0; f<irregularVerbs.size(); f++)
+		{
+			inflection=1<<(f+4);
+			if (equivalentIfIgnoreDashSpaceCase(sWord,irregularVerbs[f]))
+				checkAdd(L"CAM irrVerb3",iWord,sWord,0,form,inflection,0,entry,sourceId);
+			else
+				lplog(LOG_DICTIONARY,L"MainEntry %s: Detected Inflection (CAM irrim)%s (%s) (Form %s)",sWord.c_str(),getInflectionName(inflection,verbInflectionMap,inflectionName),irregularVerbs[f].c_str(),form.c_str());
+		}
+		// VERB_PRESENT_THIRD_SINGULAR is unknown, unlisted and is skipped
+		f=4;
+		inflection=1<<(f+4);
+		if (equivalentIfIgnoreDashSpaceCase(sWord,entry))
+			checkAdd(L"CAM irrVerb3",iWord,sWord,0,form,inflection,0,entry,sourceId);
+		else
+			lplog(LOG_DICTIONARY,L"MainEntry %s: Detected Inflection (CAM irrVerb3)%s (%s) (Form %s)",sWord.c_str(),getInflectionName(inflection,verbInflectionMap,inflectionName),entry.c_str(),form.c_str());
+		return 0;
+	}
+	// 2 forms are past and past participle?
+	else if (irregularVerbs.size()==2)
+	{
+		if (entry[entry.length()-1]==L'e' && sWord!=entry+L"ing")
+			irregularVerbs.push_back(entry.substr(0,entry.length()-1)+L"ing");
+		else
+			irregularVerbs.push_back(entry+L"ing");
+		irregularVerbs.push_back(entry+L"s");
+		irregularVerbs.push_back(entry);
+		int inflection;
+		unsigned int f;
+		for (f=0; f<irregularVerbs.size(); f++)
+		{
+			inflection=1<<(f+4);
+			if (equivalentIfIgnoreDashSpaceCase(sWord,irregularVerbs[f]))
+				checkAdd(L"CAM irrVerb2",iWord,sWord,0,form,inflection,0,entry,sourceId);
+			else
+				lplog(LOG_DICTIONARY,L"MainEntry %s: Detected Inflection (CAM irrVerb2)%s (%s) (Form %s)",sWord.c_str(),getInflectionName(inflection,verbInflectionMap,inflectionName),irregularVerbs[f].c_str(),form.c_str());
+		}
+		return 0;
+	}
+	else if (irregularVerbs.size())
+	{
+		lplog(LOG_DICTIONARY,L"Irregular verb block for word %s has illegal # of words: %d",sWord.c_str(),irregularVerbs.size());
+		return UNPARSABLE_PAGE;
+	}
+	return -1; //  no irregular forms
+}
+
+int WordClass::checkAddInflections(vector <wstring> &allInflections,tIWMM &iWord,wstring sWord,wstring form,wstring mainEntry,int sourceId,bool medical)
+{ LFS
+	bool illegal=false,oneAdded=false;
+	int formClass=4;
+	tInflectionMap *inflectionMap= nounInflectionMap;
+	if (form==L"noun") formClass=0;
+	else if (form==L"verb") formClass=1;
+	else if (form==L"adjective") formClass=2;
+	else if (form==L"adverb") formClass=3;
+	for (unsigned int f=0; f<allInflections.size(); f++)
+	{
+		int inflection=0;
+		switch (formClass)
+		{
+		case 0:illegal=(inflection=1<<(f))>PLURAL_OWNER; inflectionMap=nounInflectionMap; break;
+		case 1:illegal=(inflection=1<<(f+4))>VERB_PRESENT_PLURAL; inflectionMap=verbInflectionMap; break;
+		case 2:illegal=(inflection=1<<(f+13))>ADJECTIVE_SUPERLATIVE; inflectionMap=adjectiveInflectionMap; break;
+		case 3:illegal=(inflection=1<<(f+16))>ADVERB_SUPERLATIVE; inflectionMap=adverbInflectionMap; break;
+		}
+		if (illegal) lplog(LOG_DICTIONARY,L"Word %s of form %s has too many inflections - %d",sWord.c_str(),form.c_str(),f);
+		wstring inflectionName;
+		int pos;
+		wchar_t ch;
+		// if medical, just make sure that the entry has the word in it, delimited by spaces or nothing
+		if (equivalentIfIgnoreDashSpaceCase(sWord,allInflections[f]) || 
+				(medical && (pos=allInflections[f].find(sWord))!=wstring::npos && ((ch=allInflections[f][pos+sWord.length()])==0 || ch==L' ')))
+		{
+			checkAdd(L"gI",iWord,sWord,0,form,inflection,0,mainEntry,sourceId);
+			oneAdded=true;
+		}
+		else
+			lplog(LOG_DICTIONARY,L"mainEntry %s: Detected mismatched inflection (pm)%s (%s) (Form %s) definitionEntry %s",sWord.c_str(),(formClass<4) ? getInflectionName(inflection,inflectionMap,inflectionName) : L" ",allInflections[f].c_str(),form.c_str(),mainEntry.c_str());
+	}
+	/*
+	if (!oneAdded && mainEntry.find(' ')!=wstring::npos && mainEntry.find(sWord)!=wstring::npos)
+	{
+		wcslwr((wchar_t *)mainEntry.c_str());
+		tIWMM iWordVariant=query(mainEntry);
+		if (iWordVariant==WMM.end() || (iWordVariant->second.flags&tFI::queryOnAnyAppearance))
+		{
+			wstring buffer;
+			int ret;
+			vector <wstring> pastPages;
+			// prevent infinite loops by having two undefined variants refer to each other.
+			if (query(sWord)==WMM.end())
+				pair < tIWMM, bool > pr=WMM.insert(tWFIMap(sWord,tFI()));
+			if (ret=getWebsterDictionaryPage(mainEntry,L"",buffer,false)) return ret;
+			if (parseMerriamWebsterDictionaryPage(buffer,iWordVariant,mainEntry,L"",pastPages,false,sourceId) || iWordVariant==WMM.end()) return 0;
+			iWordVariant->second.flags&=~tFI::queryOnAnyAppearance;
+		}
+		bool added;
+		if (iWordVariant->second.query(UNDEFINED_FORM_NUM)<0)
+			iWord=addCopy(sWord,iWordVariant,added);
+			else
+				lplog(LOG_DICTIONARY,L"Rejected unknown word %s.",iWordVariant->first.c_str());
+	}
+	*/
+	return 0;
+}
+
+//             sWord ornithischians, possibleWord (derivationBase) ornithischian, mainEntry ornithischia, 
+int WordClass::inflectionMatch(wstring &form,tIWMM &iWord,wstring sWord,wstring derivationBase,int sourceId,wstring mainEntry)
+{ LFS
+	if (form!=L"verb" && form!=L"noun" && form!=L"plural noun" && form!=L"adjective" && form!=L"adverb")
+	{
+		if (sWord==mainEntry)
+		{
+			checkAdd(L"CAM im verb",iWord,sWord,0,form,0,0,mainEntry,sourceId);
+			return 0;
+		}
+		return -1;
+	}
+	if (form==L"plural noun")
+	{
+		if (equivalentIfIgnoreDashSpaceCase(sWord,mainEntry))
+		{
+			checkAdd(L"CAM im PN",iWord,sWord,0,L"noun",PLURAL,0,mainEntry,sourceId);
+			return 0;
+		}
+		return -1;
+	}
+	vector <wstring> allInflections;
+	wstring sInflections;
+	if (form==L"noun") sInflections=L"-s";
+	else if (form==L"adjective" || form==L"adverb") sInflections=L"-er/-est";
+	else if (form.find(L"verb")!=wstring::npos) sInflections=L"-ed/-ing/-s";
+	if (form!=L"verb") allInflections.push_back(derivationBase);
+	getInflection(sWord,form,derivationBase,sInflections,allInflections);
+	if (form==L"verb") allInflections.push_back(derivationBase);
+	checkAddInflections(allInflections,iWord,sWord,form,mainEntry,sourceId,false);
+	return 0;
+}
+
+bool WordClass::inflectionMatchNationality(wstring match,wstring form,tIWMM &iWord,wstring sWord,size_t beginPos,size_t nextDefinition,int sourceId,wchar_t *nationality,wchar_t *wordType)
+{ LFS
+	size_t nationalityPos=beginPos;
+	wstring alternate;
+	wchar_t lookFor[1024];
+	wsprintf(lookFor,L"<span class='def-label'>%s</span> <span class='cald-%s'>",nationality,wordType);
+	if (!nextMatch(match,lookFor,L"</span>",nationalityPos,alternate,false) && (nextDefinition==wstring::npos || nextDefinition>nationalityPos))
+	{
+		inflectionMatch(form,iWord,sWord,alternate,sourceId,alternate);
+		return true;
+	}
+	return false;
+}
+
+void WordClass::inflectionMatchAlternateNationality(wstring match,wstring form,tIWMM &iWord,wstring sWord,size_t beginPos,size_t nextDefinition,int sourceId)
+{ LFS
+	wchar_t *nationalities[]={L"US",L"UK",L"UK USUALLY",NULL};
+	for (unsigned int n=0; nationalities[n]; n++)
+	{
+		if (inflectionMatchNationality(match,form,iWord,sWord,beginPos,nextDefinition,sourceId,nationalities[n],L"word")) return;
+		if (inflectionMatchNationality(match,form,iWord,sWord,beginPos,nextDefinition,sourceId,nationalities[n],L"hword")) return;
+	}
+}
+
+//  <span class='def-classification'>adjective</span>
+int WordClass::parseCambridgeLearnersDictionaryPage(wstring buffer,tIWMM &iWord,wstring sWord,vector <wstring> &pastPages,bool recursive,int sourceId)
+{ LFS
+	if (log_net)
+		lplog(L"CL:begin parse ****\n%s\n****\n",buffer.c_str());
+	size_t beginPos=-1;
+	if (buffer.find(L"</span> was not found in the <span class='dictname'>")!=wstring::npos ||
+		buffer.find(L" was not found in the <a class='dictname'>")!=wstring::npos) return WORD_NOT_FOUND;
+	wstring match,entry;
+	bool definition=
+		(!nextMatch(buffer,L"<!-- Begin results area -->",L"<!-- End results area -->",beginPos,match,false) ||
+		 !nextMatch(buffer,L"<h3>Definition</h3>",L"<!-- BeginLibraryItem",beginPos,match,false));
+	if (definition)
+	{
+		beginPos=-1;
+		if (nextMatch(match,L"<span class='cald-hword'>",L"</span>",beginPos,entry,false) &&
+			nextMatch(match,L"<span class='cald-word'>",L"</span>",beginPos,entry,false))
+		{
+			//lplog(LOG_ERROR,L"ERROR:cambridge entry for word %s has no definitions listed.",sWord.c_str());
+			definition=false;
+		}
+	}
+	if (definition)
+	{
+		// can't set beginPos to -1 or the same entry will be reread.
+		wstring entry2;
+		nextMatch(match,L"<span class='cald-hword'>",L"</span>",beginPos,entry2,false); // alternate word?
+		// <span class='cald-definition'><a href='results.asp?searchword=buy'>buy</a></span>
+		if (match.find(L"<i>plural of</i>")!=wstring::npos)
+		{
+			checkAdd(L"CAM p",iWord,sWord,0,L"noun",PLURAL,0,entry,sourceId);
+			return 0;
+		}
+		else if (match.find(L"<i>past simple of</i>")!=wstring::npos)
+		{
+			checkAdd(L"CAM p",iWord,sWord,0,L"verb",VERB_PAST,0,entry,sourceId);
+			return 0;
+		}
+		else if (match.find(L"<i>past participle of</i>")!=wstring::npos)
+		{
+			checkAdd(L"CAM p",iWord,sWord,0,L"verb",VERB_PAST_PARTICIPLE,0,entry,sourceId);
+			return 0;
+		}
+		//<i>past simple and past participle of</i> <span class='cald-definition'><a href='results.asp?searchword=buy'>buy</a></span>
+		else if (match.find(L"<i>past simple and past participle of</i>")!=wstring::npos)
+		{
+			checkAdd(L"CAM p",iWord,sWord,0,L"verb",VERB_PAST,0,entry,sourceId);
+			checkAdd(L"CAM p",iWord,sWord,0,L"verb",VERB_PAST_PARTICIPLE,0,entry,sourceId);
+			return 0;
+		}
+		int saveAltNatBegin=beginPos;  // this alternate form occurs BETWEEN cald-word and the def-classification
+		//<span class='def-compactLabel'>WRITTEN ABBREVIATION FOR</span>    <span class='cald-definition'>Thursday</span>
+		wstring label;
+		while (!nextMatch(match,L"<span class='def-label'>",L"</span>",beginPos,label,false))
+		{
+			for (unsigned int I=0; I<label.length(); I++) label[I]=towlower(label[I]);
+			if (label.find(L"abbreviation")!=wstring::npos)
+			{
+				wstring mainEntry;
+				if (!nextMatch(match,L"<span class='cald-definition'>",L"</span>",beginPos,mainEntry,false))
+				{
+					// only true abbreviations will have one word, other formats will have a definition which shouldn't go in here.
+					if (mainEntry.find(' ')==wstring::npos)
+						checkAdd(L"CAM abb",iWord,sWord,0,L"abbreviation",0,0,mainEntry,sourceId);
+				}
+			}
+		}
+		beginPos=saveAltNatBegin;  
+		wstring form;
+		if (nextMatch(match,L"<span class='def-classification'>",L"</span>",beginPos,form,false))
+		{
+			lplog(LOG_DICTIONARY,L"ERROR: Could not find classification of word %s in web page.",sWord.c_str());
+			return WORD_NOT_FOUND;
+		}
+		size_t nextDefinition=match.find(L"<br><br><span class='cald-word'>",beginPos);
+		// catch irregularly formed verbs
+		if (processIrregularForms(match,entry,beginPos,form,nextDefinition,iWord,sWord,sourceId))
+			inflectionMatch(form,iWord,sWord,entry,sourceId,entry);
+		if (entry2[0]) inflectionMatch(form,iWord,sWord,entry2,sourceId,entry2);
+		//(<span class='def-compactLabel'>US</span> <span class='cald-word'>neighbor</span>) check for alternate nationality
+		inflectionMatchAlternateNationality(match,form,iWord,sWord,saveAltNatBegin,nextDefinition,sourceId);
+		while (!nextMatch(match,L"<br><br><span class='cald-word'>",L"</span>",beginPos,entry,false))
+		{
+			saveAltNatBegin=beginPos;  // this alternate form occurs BETWEEN cald-word and the def-classification
+			nextDefinition=match.find(L"<br><br><span class='cald-word'>",beginPos);
+			if (nextMatch(match,L"<span class='def-classification'>",L"</span>",beginPos,form,false))
+			{
+				lplog(LOG_DICTIONARY,L"ERROR: Could not find classification of word %s in web page.",sWord.c_str());
+				return WORD_NOT_FOUND;
+			}
+			inflectionMatchAlternateNationality(match,form,iWord,sWord,saveAltNatBegin,nextDefinition,sourceId);
+			if (processIrregularForms(match,entry,beginPos,form,nextDefinition,iWord,sWord,sourceId))
+				inflectionMatch(form,iWord,sWord,entry,sourceId,entry);
+		}
+		return 0;
+	}
+	else if (nextMatch(buffer,L"<ul>",L"</ul>",beginPos,match,false)==0)
+	{
+		if (recursive) return 0;
+		bool mainEntryHasSpace=sWord.find(L" ")!=wstring::npos,mainEntryHasDash=sWord.find(L"-")!=wstring::npos;
+		beginPos=-1;
+		int list_limit=0;
+		while (!nextMatch(match,L"<li>",L"</li>",beginPos,entry,false))
+		{
+			size_t entry_pos=-1;
+			wstring key,entryWord;
+			if (nextMatch(entry,L"key=",L"&",entry_pos,key,false) ||
+				nextMatch(entry,L"CALD'>",L"</a>",entry_pos,entryWord,false))
+			{
+				// Incorrect Cambridge Dictionary listing entry found for zum:<a href="http://dictionary.cambridge.org/linktous.asp" title="Link to us"><img src="images-new/strip_linktous.gif" alt="Link to us" width="73" height="20" /></a>
+				// Incorrect Cambridge Dictionary listing entry found for zum:<a href="http://www.cambridge.org/uk/catalogue/viewBasket.asp" title="View the contents of your basket or place your order"><img src="images-new/strip_basket.gif" alt="View basket" width="32" height="20" /></a>
+				// Incorrect Cambridge Dictionary listing entry found for zum:<a href="http://dictionary.cambridge.org/help/" title="Get help with ordering, searching, contacts, etc."><img src="images-new/strip_help.gif" alt="Help" width="47" height="20" /></a>
+				if (logDatabaseDetails && entry.find(L"alt=\"Link to us\"")==wstring::npos && entry.find(L"alt=\"View basket\"")==wstring::npos && entry.find(L"alt=\"Help\"")==wstring::npos)
+					lplog(LOG_DICTIONARY,L"Incorrect Cambridge Dictionary listing entry found for %s:%s",sWord.c_str(),entry.c_str());
+				continue;
+			}
+			int parens=entryWord.find(L"(");
+			if (parens!=wstring::npos && parens>0) entryWord.erase(parens-1,entryWord.length()-parens+1);
+			bool entryHasSpace=entryWord.find(L" ")!=wstring::npos,entryHasDash=entryWord.find(L"-")!=wstring::npos;
+			// a word with dashes and spaces is unlikly to match the original unless it matches exactly
+			if (!equivalentIfIgnoreDashSpaceCase(sWord,entryWord) &&
+				(entryHasSpace!=mainEntryHasSpace || entryHasDash!=mainEntryHasDash || sWord[0]!=entryWord[0])) continue;
+			wstring listBuffer;
+			unsigned int p;
+			for (p=0; p<pastPages.size() && pastPages[p]!=key; p++);
+			if (p<pastPages.size()) continue;
+			pastPages.push_back(key);
+			//if (!getCambridgeLearnersDictionaryPage(key,listBuffer,true))
+			//	parseCambridgeLearnersDictionaryPage(listBuffer,iWord,sWord,pastPages,true,sourceId);
+			if (list_limit++>15) break;
+		}
+		return 0;
+	}
+	else if (buffer.length())
+	{
+		removeRedundantSpace(buffer);
+		lplog(LOG_DICTIONARY,L"ERROR CL:** Word %s resulted in an unparsable page.",sWord.c_str());
+		if (logDatabaseDetails)
+			lplog(LOG_DICTIONARY,L"ERROR CL:** page:\n%s\n",buffer.c_str());
+	}
+	return UNPARSABLE_PAGE;
+}
+
+#ifdef CHECK_WORD_CACHE
+
+int WordClass::checkWord(WordClass &Words2,tIWMM originalIWord,tIWMM newWord,int ret)
+{ LFS
+	int wait=0;
+	if (ret==WORD_NOT_FOUND || newWord==WMM.end()) return WORD_NOT_FOUND;
+	if (ret)
+		while (wait) Sleep(1000);
+	// check for mainEntry
+	if (originalIWord->first==newWord->first && originalIWord->second==newWord->second)
+	{
+		unsigned int *forms=newWord->second.forms();
+		int count=newWord->second.formsSize(),I=0;
+		for (; I<count && !Forms[forms[I]]->inflectionsClass.length(); I++);
+		if (I==count || (I<count && newWord->second.mainEntry!=(tIWMM) NULL)) return 0;
+		lplog(L"Word %s has a NULL main entry.",newWord->first.c_str());
+	}
+	lplog(L"name %s differs.",originalIWord->first.c_str());
+	while (wait) Sleep(1000);
+	return 0;
+}
+
+//#define TEST_SPECIFIC
+wchar_t *unknowns[]={L"countermarches",NULL,
+ "ageist", 
+NULL };
+
+void reconfigure(void);
+bool endStringMatch(const wchar_t *str,wchar_t *endMatch)
+{ LFS
+	return !wcscmp(str+wcslen(str)-wcslen(endMatch),endMatch);
+}
+
+#include "wn.h"
+bool checkexist(wchar_t *word,int wordClass);
+
+bool getWNForms(wstring w,vector <int> &WNForms)
+{ LFS
+		if (checkexist((wchar_t *)w.c_str(),NOUN)) WNForms.push_back(nounForm);
+		if (checkexist((wchar_t *)w.c_str(),VERB))  WNForms.push_back(verbForm);
+		if (checkexist((wchar_t *)w.c_str(),ADJ))  WNForms.push_back(adjectiveForm);
+		if (checkexist((wchar_t *)w.c_str(),ADV)) WNForms.push_back(adverbForm);
+		return WNForms.size()>0;
+}
+
+// reverse main entry map
+map <wstring, vector < wstring > > rMEMap; 
+void WordClass::testWordCacheFileRoutines(void)
+{ LFS
+	wcscpy(cacheDir,CACHEDIR);
+	mkdir(cacheDir);
+	wchar_t pageDacheDir[1024];
+	sprintf(pageCacheDir,"%s\\%s",cacheDir,L"\\pagecache")
+	mkdir(pageCacheDir);
+	/*
+	for (unsigned int iForm=0; iForm<Forms.size(); iForm++)
+		lplog(L"hasInflections=%d form=%s shortForm=%s inflectionsClass=%s.",
+					Forms[iForm]->hasInflections,Forms[iForm]->name.c_str(),Forms[iForm]->shortName.c_str(),Forms[iForm]->inflectionsClass.c_str());
+					*/
+	log_net=false;
+	logCache=40;
+	vector <wstring> allWords;
+	int wordsProcessed=0,numTotalWords=0,numUndefined=0,numCombo=0,numIllegal=0,numNumber=0,numSpaces=0;
+	for (tIWMM w=Words.begin(),wEnd=Words.end(); w!=wEnd; w++)
+	{
+		w->second.sourceId=-1;
+		int len=w->first.length(),I=0;
+		const wchar_t *cw=w->first.c_str();
+		for (; I<len && !iswdigit(cw[I]); I++);
+		if (cw[I]) 
+		{
+			numNumber++;
+			continue;
+		}
+		if (wcschr(cw,' '))
+		{
+			numSpaces++;
+			continue;
+		}
+		if (cw[1]==0)
+			continue;
+		if (!cw[0] || cw[0]==13 || wcsstr(cw,"...") || wcschr(cw,'\'') ||	!wcscmp(cw,"..txt") ||  !wcscmp(cw,"_..txt"))
+		{
+			//lplog(L"%s is illegal!",cw);
+			numIllegal++;
+			continue;
+		}
+		if (w->second.query(UNDEFINED_FORM_NUM)>=0)
+		{
+			numUndefined++;
+			continue;
+		}
+		if (w->second.query(COMBINATION_FORM_NUM)>=0)	
+		{
+			numCombo++;
+			continue;
+		}
+		// never encountered in a lower case
+		if (w->second.flags&(tFI::queryOnLowerCase|tFI::queryOnAnyAppearance))
+		{
+			continue;
+		}
+		if (w->second.query(nounForm)<0 && w->second.query(verbForm)<0 && 
+				w->second.query(adjectiveForm)<0 && w->second.query(adverbForm)<0)
+			continue;
+		allWords.push_back(cw);
+		if (w->second.mainEntry!=Words.end() && w->second.mainEntry!=wNULL)
+			rMEMap[w->second.mainEntry->first].push_back(w->first);
+		w->second.sourceId=0;
+	}
+	int numMatchingWords=0,numWordsNotFound=0,nullMainEntry=0,differentMainEntry=0,differentInflectionFlags=0,differentDerivationRules=0,numDifferentForms=0;
+#ifdef TEST_SPECIFIC
+	allWords.clear();
+	for (unsigned int I=0; unknowns[I]; I++)
+		allWords.push_back(unknowns[I]);
+	log_net=true;
+	logCache=0;
+#endif
+	int incorrectOriginalMainEntry=0,incorrectOriginalForms=0;
+	if (commonProfessionForm<0) commonProfessionForm=FormsClass::gFindForm("commonProfession");
+	if (moneyForm<0) moneyForm=FormsClass::gFindForm("money");
+	if (webAddressForm<0) webAddressForm=FormsClass::gFindForm("webAddress");
+	if (interrogativeDeterminerForm<0) interrogativeDeterminerForm=FormsClass::gFindForm("interrogative_determiner");
+	if (interjectionForm<0) interjectionForm=FormsClass::gFindForm("interjection");
+	if (futureModalAuxiliaryForm<0) futureModalAuxiliaryForm=FormsClass::gFindForm("future_modal_auxiliary");
+	if (negationModalAuxiliaryForm<0) negationModalAuxiliaryForm=FormsClass::gFindForm("negation_modal_auxiliary");
+	if (negationFutureModalAuxiliaryForm<0) negationFutureModalAuxiliaryForm=FormsClass::gFindForm("negation_future_modal_auxiliary");
+	if (modalAuxiliaryForm<0)  modalAuxiliaryForm=FormsClass::gFindForm("modal_auxiliary");
+	if (abbreviationForm<0) abbreviationForm=FormsClass::gFindForm("abbreviation");
+	for (unsigned int I=0; I<Forms.size(); I++)
+			if (I==PROPER_NOUN_FORM_NUM ||	I==commonProfessionForm || Forms[I]->name=="think" ||	I==interrogativeDeterminerForm || I==COMBINATION_FORM_NUM ||	
+					I==interjectionForm || I==modalAuxiliaryForm ||	I==futureModalAuxiliaryForm ||	I==negationModalAuxiliaryForm || I==abbreviationForm ||
+					I==negationFutureModalAuxiliaryForm ||	Forms[I]->name=="interrogative_pronoun" ||	Forms[I]->name=="timeUnit" ||	Forms[I]->name=="dayUnit" ||
+					I==indefinitePronounForm || I==doesForm || I==possessivePronounForm || Forms[I]->name=="verbal_auxiliary" || Forms[I]->name=="sectionheader" || 
+					Forms[I]->name=="verbverb" || Forms[I]->name=="past_verbal_auxiliary" || Forms[I]->name=="street_address" || Forms[I]->name=="negation_verb_contraction" || 
+					Forms[I]->name=="daysOfWeek" || Forms[I]->name=="street_address"  || Forms[I]->name=="season"  || Forms[I]->name=="numeral_ordinal"  ||  
+					Forms[I]->name=="startquestion" || Forms[I]->name=="simultaneousUnit" || Forms[I]->name=="measurement_abbreviation"  || 
+					Forms[I]->name=="polite_inserts" || Forms[I]->name=="month" ||  Forms[I]->name=="verbalPreposition" ||  Forms[I]->name=="trademark" ||  Forms[I]->name=="symbol" ||  
+					Forms[I]->name=="indefinite_pronoun" || Forms[I]->name=="honorific" || Forms[I]->name=="possessive_pronoun" ||  Forms[I]->name=="personal_pronoun" ||  
+					I==quantifierForm || I==verbverbForm || Forms[I]->name=="relativizer" || Forms[I]->name=="predeterminer") 
+				Forms[I]->formCheck=true;
+	numTotalWords=allWords.size();
+	for (vector <wstring>::iterator w=allWords.begin(),wEnd=allWords.end(); w!=wEnd; w++)
+	{
+		wprintf(L"words processed=%02d%%:%06d out of %06d.\r",100*wordsProcessed/numTotalWords,wordsProcessed++,numTotalWords);
+		lplog(L"%d:PROCESSING: %s",wordsProcessed-1,w->c_str());
+		tIWMM iWord=Words.query(*w); 
+		if (iWord==Words.end())
+		{
+			lplog(L"%d:NOT FOUND: %s",wordsProcessed-1,w->c_str());
+			return;
+		}
+		// treatment of abbreviations
+		if (w->find('.')!=wstring::npos)
+		{
+			lplog(L"Word %s rejected because it is an abbreviation.",w->c_str());
+			numMatchingWords++;
+			continue;
+		}
+		if (iWord->second.flags&(tFI::queryOnLowerCase|tFI::queryOnAnyAppearance))
+		{
+			numMatchingWords++;
+			continue;
+		}
+		vector <int> originalForms;
+		for (unsigned int I=0,*f=iWord->second.forms(); I<iWord->second.formsSize(); I++,f++)
+			if (!Forms[*f]->formCheck && Forms[*f]->name!=*w) 
+				originalForms.push_back(*f);
+			//trademark
+			//symbol
+		tIWMM mainEntry=iWord->second.mainEntry;
+		wstring saveMainEntry;
+		if (mainEntry!=wNULL && mainEntry!=Words.end() && mainEntry->first.c_str()!=NULL)
+			saveMainEntry=mainEntry->first;
+		int saveInflectionFlags=iWord->second.inflectionFlags;
+		bool incorrectOriginalForm=false;
+		if (find(originalForms.begin(),originalForms.end(),adverbForm)==originalForms.end())
+		{
+			if (saveInflectionFlags&(ADVERB_NORMATIVE|ADVERB_COMPARATIVE|ADVERB_SUPERLATIVE))
+				incorrectOriginalForm=true;
+			saveInflectionFlags&=~(ADVERB_NORMATIVE|ADVERB_COMPARATIVE|ADVERB_SUPERLATIVE);
+		}
+		if (find(originalForms.begin(),originalForms.end(),adjectiveForm)==originalForms.end())
+		{
+			if (saveInflectionFlags&(ADJECTIVE_NORMATIVE|ADJECTIVE_COMPARATIVE|ADJECTIVE_SUPERLATIVE))
+				incorrectOriginalForm=true;
+			saveInflectionFlags&=~(ADJECTIVE_NORMATIVE|ADJECTIVE_COMPARATIVE|ADJECTIVE_SUPERLATIVE);
+		}
+		if (find(originalForms.begin(),originalForms.end(),nounForm)==originalForms.end())
+		{
+			if (saveInflectionFlags&(SINGULAR|PLURAL))
+				incorrectOriginalForm=true;
+			saveInflectionFlags&=~(SINGULAR|PLURAL);
+		}
+		if (find(originalForms.begin(),originalForms.end(),verbForm)==originalForms.end())
+		{
+			if (saveInflectionFlags&(VERB_PAST|VERB_PAST_PARTICIPLE|VERB_PRESENT_PARTICIPLE|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_FIRST_SINGULAR|VERB_PAST_THIRD_SINGULAR|VERB_PAST_PLURAL|VERB_PRESENT_PLURAL|VERB_PRESENT_SECOND_SINGULAR))
+				incorrectOriginalForm=true;
+			saveInflectionFlags&=~(VERB_PAST|VERB_PAST_PARTICIPLE|VERB_PRESENT_PARTICIPLE|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_FIRST_SINGULAR|VERB_PAST_THIRD_SINGULAR|VERB_PAST_PLURAL|VERB_PRESENT_PLURAL|VERB_PRESENT_SECOND_SINGULAR);
+		}
+		if (incorrectOriginalForm)
+			incorrectOriginalForms++;
+		int saveDerivationRules=iWord->second.derivationRules;
+		tIWMM saveEntry=iWord;
+		Words.remove(*w);
+		iWord=Words.end();
+		int ret=getForms(iWord,*w,false, sourceId);
+		if (iWord==Words.end() || (ret==(int)WORD_NOT_FOUND || ret==(int)NO_FORMS_FOUND))
+		{
+			if (ret=attemptDisInclination(mysql, iWord,*w,false,-4))
+			{
+				if (ret==WORD_NOT_FOUND || ret==NO_FORMS_FOUND)
+					ret=splitWord(iWord,*w,-1,-4);
+			}
+			if (ret || iWord==Words.end())
+			{
+				lplog(L"Word %s not found.",w->c_str());
+				numWordsNotFound++;
+				continue;
+			}
+		}
+		if (saveEntry!=iWord && rMEMap.find(*w)!=rMEMap.end())
+			for (vector <wstring>::iterator w2=rMEMap[*w].begin(),w2End=rMEMap[*w].end(); w2!=w2End; w2++)
+			{
+				tIWMM w3=Words.query(*w2);
+				if (w3!=Words.end())
+					w3->second.mainEntry=iWord;
+			}
+		if (saveEntry!=iWord)
+			for (tIWMM w4=Words.begin(),w4End=Words.end(); w4!=w4End; w4++)
+				if (w4->second.mainEntry==saveEntry && !w4->second.sourceId)
+				{
+					lplog(L"Word %s has %s as mainEntry!",w4->first.c_str(),w->c_str());
+					w4->second.mainEntry=iWord;
+				}
+		vector <int> secondaryForms;
+		for (unsigned int I=0,*f=iWord->second.forms(); I<iWord->second.formsSize(); I++,f++)
+		{
+			if (*f==PROPER_NOUN_FORM_NUM ||	*f==interrogativeDeterminerForm || *f==COMBINATION_FORM_NUM ||
+					*f==interjectionForm || *f==modalAuxiliaryForm ||	*f==futureModalAuxiliaryForm ||	*f==negationModalAuxiliaryForm || *f==abbreviationForm ||
+					*f==negationFutureModalAuxiliaryForm ||	Forms[*f]->name=="interrogative_pronoun"  ||	Forms[*f]->name=="short form" || 
+					 Forms[*f]->name=="foreign term" ||	Forms[*f]->name=="geographical name" ||  Forms[*f]->name=="biographical name" || Forms[*f]->formCheck) continue; 
+			secondaryForms.push_back(*f);
+		}
+		bool formDiff=false;
+		for (unsigned int f=0; f<secondaryForms.size(); f++)
+			if (find(originalForms.begin(),originalForms.end(),secondaryForms[f])==originalForms.end())
+				formDiff=true;	
+		vector <int> WNForms;
+		bool gotWN;
+		if (!(gotWN=getWNForms(*w,WNForms)))
+			WNForms=originalForms;
+		bool WNFormDiff=false;
+		for (unsigned int f=0; f<secondaryForms.size(); f++)
+			if (find(WNForms.begin(),WNForms.end(),secondaryForms[f])==WNForms.end())
+				WNFormDiff=true;	
+		bool ignoreInflectionFlagsDiff=(formDiff && !WNFormDiff);
+		if ((formDiff && WNFormDiff) || iWord->first!=*w || (secondaryForms.size()!=originalForms.size() && secondaryForms.size()!=WNForms.size()))
+		{
+			wstring list="original ";
+			for (unsigned int f=0; f<originalForms.size(); f++)
+				list+=Forms[originalForms[f]]->name+" ";
+			list+="!=";
+			for (unsigned int f=0; f<secondaryForms.size(); f++)
+				list+=Forms[secondaryForms[f]]->name+" ";
+			lplog(L"Forms disagreement: \"%s\", \n%s",w->c_str(),list.c_str());
+			numDifferentForms++;
+		}
+		else if (saveMainEntry.length() && iWord->second.mainEntry==wNULL)
+		{
+			lplog(L"Word %s has an NULL mainEntry.",w->c_str());
+			nullMainEntry++;
+		}
+		else if (saveMainEntry.length() && saveMainEntry!=iWord->second.mainEntry->first)
+		{
+			numMatchingWords++;
+			if (iWord->second.mainEntry!=Words.end() && iWord->second.mainEntry!=wNULL)
+				rMEMap[iWord->second.mainEntry->first].push_back(iWord->first);
+			if (saveMainEntry==*w && (find(originalForms.begin(),originalForms.end(),nounForm)!=originalForms.end()) && (iWord->second.inflectionFlags&PLURAL))
+				incorrectOriginalMainEntry++;
+			else if (saveMainEntry==*w && (find(originalForms.begin(),originalForms.end(),verbForm)!=originalForms.end()) && (iWord->second.inflectionFlags&(VERB_PRESENT_PARTICIPLE|VERB_PAST)))
+				incorrectOriginalMainEntry++;
+			else if (saveMainEntry==*w && (find(originalForms.begin(),originalForms.end(),adjectiveForm)!=originalForms.end()) && (iWord->second.inflectionFlags&(ADJECTIVE_NORMATIVE)) &&
+				*w==iWord->second.mainEntry->first+L"y")
+				incorrectOriginalMainEntry++;
+			else if (!(endStringMatch(saveMainEntry.c_str(),"ise") && endStringMatch(iWord->second.mainEntry->first.c_str(),"ize")))
+			{
+				lplog(L"Word %s has a different mainEntry (%s!=%s).",w->c_str(),saveMainEntry.c_str(),iWord->second.mainEntry->first.c_str());
+				differentMainEntry++;
+				numMatchingWords--;
+			}
+		}
+		else if ((saveInflectionFlags&(ADVERB_SUPERLATIVE-1))!=iWord->second.inflectionFlags && !ignoreInflectionFlagsDiff)
+		{
+			lplog(L"Word %s has different inflectionFlags (%d=%d).",w->c_str(),saveInflectionFlags&(ADVERB_SUPERLATIVE-1),iWord->second.inflectionFlags);
+			differentInflectionFlags++;
+		}
+		else if (saveDerivationRules!=iWord->second.derivationRules)
+		{
+			lplog(L"Word %s has different derivationRules (%d=%d).",w->c_str(),saveDerivationRules,iWord->second.derivationRules);
+			differentDerivationRules++;
+		}
+		else
+			numMatchingWords++;
+	}
+	lplog(L"words matched=%02d%%:%06d out of %06d \n(numUndefined=%d numCombo=%d numSingleQuotes=%d nullMainEntry=%d differentDerivationRules=%d)",
+				100*numMatchingWords/numTotalWords,numMatchingWords,numTotalWords,numUndefined,numCombo,numIllegal,nullMainEntry,differentDerivationRules);
+	lplog(L"numNumber=%d numSpaces=%d incorrectOriginalMainEntry=%d incorrectOriginalForms=%d",
+				numNumber,numSpaces,incorrectOriginalMainEntry,incorrectOriginalForms);
+	lplog(L"differentMainEntry=%d differentInflectionFlags=%d numWordsNotFound=%d numDifferentForms=%d",
+		differentMainEntry,differentInflectionFlags,numWordsNotFound,numDifferentForms);
+}
+
+#endif
+// convert all files to unicode
+void convertAllToUnicode(void)
+{ LFS
+	WIN32_FIND_DATA FindFileData;
+	HANDLE hFind;
+	wchar_t original[4096];
+	for (char f='a'; f<='z'; f++)
+		for (char f2='a'; f2<='z'; f2++)
+		{
+			_snwprintf(original,4096,L"%s\\pagecache\\%c\\%c\\*.*",cacheDir,f,f2);
+			hFind = FindFirstFile(original, &FindFileData);
+			if (hFind == INVALID_HANDLE_VALUE) 
+			{
+				wprintf (L"FindFirstFile failed on directory %s (%d)\r", original,(int)GetLastError());
+				continue;
+			}
+			do
+			{
+				if (FindFileData.cFileName[0]=='.' || wcsstr(FindFileData.cFileName,L"UTF8")) continue;
+				_snwprintf(original,4096,L"%s\\pagecache\\%c\\%c\\%s",cacheDir,f,f2,FindFileData.cFileName);
+				wchar_t final[4096];
+				wcscpy(final,original);
+				wcscat(final,L".UTF8");
+				if (!_waccess(final,0)) continue;
+				int fd=_wopen(original,O_RDONLY|O_BINARY);
+				if (fd<0) 
+					return;
+				int bufferlen=filelength(fd);
+				char *buffer=(char *)tmalloc(bufferlen+10);
+				::read(fd,buffer,bufferlen);
+				close(fd);
+				wstring wide;
+				mTW(buffer,wide);
+				fd=_wopen(final,O_CREAT|O_RDWR|O_BINARY,_S_IREAD | _S_IWRITE );
+				if (fd<0)
+				{
+					lplog(LOG_ERROR,L"ERROR:Cannot create path %s - %S (3).",final,sys_errlist[errno]);
+					wprintf(L"ERROR:Cannot create path %s - %S (4).\n",final,sys_errlist[errno]);
+					continue;
+				}
+				_write(fd,wide.c_str(),wide.length()*sizeof(wide[0]));
+				wprintf(L"Wrote %s with length %zu               \r",final,wide.length()*sizeof(wide[0]));
+				_close(fd);
+			} while (FindNextFile(hFind, &FindFileData) != 0);
+			FindClose(hFind);
+		}
+}
+
+void redistributeFilesAlphabetically(wchar_t *dir)
+{ LFS
+	WIN32_FIND_DATA FindFileData;
+	HANDLE hFind;
+	int numFiles=0,lastProgressPercent=-1,where;
+
+	wchar_t original[4096],dir1[4096],dir2[4096],final[4096];
+	_snwprintf(original,4096,L"%s\\*",dir);
+	hFind = FindFirstFile(original, &FindFileData);
+	_snwprintf(original,4096,L"%s\\",dir);
+	_snwprintf(dir1,4096,L"%s\\a",dir);
+	_snwprintf(dir2,4096,L"%s\\a\\a",dir);
+	_snwprintf(final,4096,L"%s\\a\\a\\",dir);
+	int len=wcslen(dir1)-1;
+	if (hFind == INVALID_HANDLE_VALUE) 
+	{
+		printf ("FindFirstFile failed (%d)\n", (int)GetLastError());
+		return;
+	}
+	do
+	{
+    if ((where=numFiles++*100/2000000)>lastProgressPercent)
+    {
+      wprintf(L"PROGRESS: %03d%% [%d] files processed with %04d seconds elapsed \r",where,numFiles,clocksec());
+      lastProgressPercent=where;
+    }
+		if (FindFileData.cFileName[0]=='.') continue;
+		if (FindFileData.cFileName[wcslen(FindFileData.cFileName)-2]==L'.' && 
+			  FindFileData.cFileName[wcslen(FindFileData.cFileName)-1]==L'2')
+		{
+			wcscpy(original+len,FindFileData.cFileName);
+			_wremove(original);
+			continue;
+		}
+		//if ((!iswalpha(FindFileData.cFileName[1]) || !iswalpha(FindFileData.cFileName[2])) && 
+		//		FindFileData.cFileName[2]!=' ' && 
+		//		FindFileData.dwFileAttributes!=FILE_ATTRIBUTE_DIRECTORY)
+		//{
+		//	wcscpy(original+len,FindFileData.cFileName);
+		//	_wremove(original);
+		//	continue;
+		//}
+		if (FindFileData.dwFileAttributes==FILE_ATTRIBUTE_DIRECTORY) continue;
+		dir1[len]=dir2[len]=final[len]=FindFileData.cFileName[1];
+		dir2[len+2]=final[len+2]=FindFileData.cFileName[2];
+		if (FindFileData.cFileName[1]==L' ' || FindFileData.cFileName[2]==L' ')
+			continue;
+		if (dir1[len] && dir2[len+2])
+		{
+			_wmkdir(dir1);
+			_wmkdir(dir2);
+			wcscpy(original+len,FindFileData.cFileName);
+			wcscpy(final+len+4,FindFileData.cFileName);
+			wstring lem;
+			if (!MoveFile(original,final))
+				wprintf(L"Failed to move %s to %s - %s\n",original,final,getLastErrorMessage(lem));
+		}
+	} while (FindNextFile(hFind, &FindFileData) != 0);
+	FindClose(hFind);
+}
+
+// if the program runs while not being logged into webster, this will result in bad results.
+void tempRemoveBadWebsterPages(void)
+{ LFS
+	WIN32_FIND_DATA FindFileData;
+	HANDLE hFind;
+	wchar_t original[4096];
+	for (wchar_t f=1; f<65535; f++)
+		for (wchar_t f2=1; f2<65535; f2++)
+		{
+			if (iswspace(f) || iswspace(f2)) continue;
+			_snwprintf(original,4096,L"%s\\pagecache\\%c\\%c\\*.*",cacheDir,f,f2);
+			hFind = FindFirstFile(original, &FindFileData);
+			if (hFind == INVALID_HANDLE_VALUE) 
+			{
+				wprintf (L"FindFirstFile failed on directory %s (%d)\r", original, (int)GetLastError());
+				continue;
+			}
+		  wprintf(L"%s\r",original);
+			do
+			{
+				if (FindFileData.cFileName[0]=='.') continue;
+				_snwprintf(original,4096,L"%s\\pagecache\\%c\\%c\\%s",cacheDir,f,f2,FindFileData.cFileName);
+				struct _stati64 s;
+				s.st_size=0;
+				if (_wstati64(original,&s)==0 && s.st_size==11522)
+				{
+					if (_wremove(original)==0)
+						wprintf(L"removed file %s.\n",original);
+					else
+						wprintf(L"could not remove file %s.\n",original);
+				}
+			} while (FindNextFile(hFind, &FindFileData) != 0);
+			FindClose(hFind);
+		}
+}
+
+// filter out everything but nouns
+// filter out all {{ links }}
+// filter out any entry having nothing but a {{ link }} after the # sign
+// delete left and right brackets
+// English	zymosterol	Noun	# {{biochemistry}} A [[cholesterol]] [[intermediate]].
+// create table wiktionaryNouns  ( noun char(56) COLLATE utf8_bin NOT NULL,definition TEXT(1024) COLLATE utf8_bin NOT NULL ) ENGINE=MyISAM AUTO_INCREMENT=798922 DEFAULT CHARSET=utf8 COLLATE=utf8_bin
+// LOAD DATA INFILE MAINDIR+'\\Linguistics information\\TEMP-E20120211.nounsOnly.tsv' INTO TABLE wiktionaryNouns FIELDS TERMINATED BY ',' ENCLOSED BY '"' LINES TERMINATED BY '\n';
+void extractFromWiktionary(wchar_t *filename)
+{ LFS
+	FILE *listfile=_wfopen(filename,L"rb"); // binary mode reads unicode
+	wchar_t outputName[2048];
+	wcscpy(outputName,filename);
+	wcscat(outputName,L".tsv");
+	unsigned int maxNoun=0,maxDefinition=0;
+	FILE *outputFile=_wfopen(outputName,L"wb"); // binary mode reads unicode
+	if (listfile)
+	{
+		char url[2048];
+		while (fgets(url,2047,listfile))
+		{
+			if (url[strlen(url)-1]==L'\n') url[strlen(url)-1]=0;
+			if (url[strlen(url)-1]==L'\r') url[strlen(url)-1]=0;
+			char *ch=strchr(url,'#'),*e=strstr(url,"English"),*n=strstr(url,"Noun");
+			if (!ch || !e || !n || e>n || n>ch || e>ch) continue;
+			for (e+=strlen("English"); isspace((unsigned char)*e); e++);
+			for (n--; n>e && isspace((unsigned char)*n); n--);
+			n[1]=0;
+			if (strlen(e)<2) continue;
+			string word=e;
+			int I=0,J=(int)(ch+1-url);
+			while (isspace((unsigned char)url[J])) J++;
+			for (; url[J]; J++)
+			{
+				if (url[J]=='{')
+				{
+					while (url[J]!='}' && url[J])
+						J++;
+					if (url[J]=='}') J++;
+					if (url[J]=='}') J++;
+				}
+				if (url[J]=='[' || url[J]==']' || (isspace((unsigned char)url[J]) && isspace((unsigned char)url[J+1]))) continue;
+				if (url[J]=='"') url[J]='\'';
+				if (J>I) url[I++]=url[J];
+			}
+			url[I]=0;
+			if (!url[0] || (isspace((unsigned char)url[0]) && !url[1])) continue;
+			fprintf(outputFile,"\"%s\",\"%s\"\n",word.c_str(),isspace((unsigned char)url[0]) ? url+1:url);
+			maxNoun=max(maxNoun,word.length()+2);
+			maxDefinition=max(maxDefinition,strlen(url+2));
+		}
+		fclose(listfile);
+		fclose(outputFile);
+		exit(0);
+	}
+}
+

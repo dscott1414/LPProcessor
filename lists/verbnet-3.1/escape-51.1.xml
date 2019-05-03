@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+	<!DOCTYPE VNCLASS SYSTEM "vn_class-3.dtd">
+<VNCLASS ID="escape-51.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="vn_schema-3.xsd">
+	<!--each verb specifies the Prep_Dir that is its default-->
+	<MEMBERS/>
+	<THEMROLES>
+		<THEMROLE type="Theme">
+			<SELRESTRS>
+				<SELRESTR Value="+" type="concrete"/>
+			</SELRESTRS>
+		</THEMROLE>
+		<THEMROLE type="Location">
+			<SELRESTRS>
+				<SELRESTR Value="+" type="concrete"/>
+			</SELRESTRS>
+		</THEMROLE>
+	</THEMROLES>
+	<FRAMES>
+		<FRAME>
+			<DESCRIPTION descriptionNumber="0.1" primary="NP V" secondary="Basic Intransitive" xtag="0.1"/>
+			<!-- each verb specifies the Prep_Dir (and sometimes                the Oblique) that is it's default-->
+			<EXAMPLES>
+				<EXAMPLE>The prisoners advanced.</EXAMPLE>
+			</EXAMPLES>
+			<SYNTAX>
+				<NP value="Theme">
+					<SYNRESTRS/>
+				</NP>
+				<VERB/>
+			</SYNTAX>
+			<SEMANTICS>
+				<PRED value="motion">
+					<ARGS>
+						<ARG type="Event" value="during(E)"/>
+						<ARG type="ThemRole" value="Theme"/>
+					</ARGS>
+				</PRED>
+				<PRED value="direction">
+					<ARGS>
+						<ARG type="Event" value="during(E)"/>
+						<ARG type="VerbSpecific" value="Prep_Dir"/>
+						<ARG type="ThemRole" value="Theme"/>
+						<ARG type="ThemRole" value="?Oblique"/>
+					</ARGS>
+				</PRED>
+			</SEMANTICS>
+		</FRAME>
+	</FRAMES>
+	<SUBCLASSES>
+		<VNSUBCLASS ID="escape-51.1-1">
+			<MEMBERS>
+				<MEMBER name="cross" wn="cross%2:38:00" grouping="cross.01"/>
+			</MEMBERS>
+			<THEMROLES/>
+			<FRAMES>
+				<FRAME>
+					<DESCRIPTION descriptionNumber="0.1" primary="NP V PP.oblique" secondary="PPpath-PP" xtag=""/>
+					<EXAMPLES>
+						<EXAMPLE>The prisoners  advanced across the                    field.</EXAMPLE>
+					</EXAMPLES>
+					<SYNTAX>
+						<NP value="Theme">
+							<SYNRESTRS/>
+						</NP>
+						<VERB/>
+						<PREP>
+							<SELRESTRS>
+								<SELRESTR Value="+" type="path"/>
+							</SELRESTRS>
+						</PREP>
+						<NP value="Oblique">
+							<SELRESTRS/>
+						</NP>
+					</SYNTAX>
+					<SEMANTICS>
+						<PRED value="motion">
+							<ARGS>
+								<ARG type="Event" value="during(E)"/>
+								<ARG type="ThemRole" value="Theme"/>
+							</ARGS>
+						</PRED>
+						<PRED value="direction">
+							<ARGS>
+								<ARG type="Event" value="during(E)"/>
+								<ARG type="VerbSpecific" value="Prep_Dir"/>
+								<ARG type="ThemRole" value="Theme"/>
+								<ARG type="ThemRole" value="Oblique"/>
+							</ARGS>
+						</PRED>
+					</SEMANTICS>
+				</FRAME>
+				<FRAME>
+					<DESCRIPTION descriptionNumber="0.1" primary="NP V NP" secondary="Locative Preposition Drop" xtag=""/>
+					<EXAMPLES>
+						<EXAMPLE>The convict escaped the                            prison.</EXAMPLE>
+					</EXAMPLES>
+					<SYNTAX>
+						<NP value="Theme">
+							<SYNRESTRS/>
+						</NP>
+						<VERB/>
+						<NP value="Location">
+							<SYNRESTRS/>
+						</NP>
+					</SYNTAX>
+					<SEMANTICS>
+						<PRED value="motion">
+							<ARGS>
+								<ARG type="Event" value="during(E)"/>
+								<ARG type="ThemRole" value="Theme"/>
+							</ARGS>
+						</PRED>
+						<PRED value="direction">
+							<ARGS>
+								<ARG type="Event" value="during(E)"/>
+								<ARG type="VerbSpecific" value="Prep_Dir"/>
+								<ARG type="ThemRole" value="Theme"/>
+								<ARG type="ThemRole" value="Location"/>
+							</ARGS>
+						</PRED>
+					</SEMANTICS>
+				</FRAME>
+			</FRAMES>
+			<SUBCLASSES>
+				<VNSUBCLASS ID="escape-51.1-2">
+					<MEMBERS>
+						<MEMBER name="emerge" wn="" grouping=""/>
+						<MEMBER name="make_it" wn="" grouping=""/>
+					</MEMBERS>
+					<THEMROLES/>
+					<FRAMES>
+						<FRAME>
+							<DESCRIPTION descriptionNumber="" primary="NP V PP.oblique" secondary="PPin-PP" xtag=""/>
+							<EXAMPLES>
+								<EXAMPLE>He arrived in the U.S.</EXAMPLE>
+							</EXAMPLES>
+							<SYNTAX>
+								<NP value="Theme">
+									<SYNRESTRS/>
+								</NP>
+								<VERB/>
+								<PREP value="in">
+									<SELRESTRS/>
+								</PREP>
+								<NP value="Oblique">
+									<SELRESTRS/>
+								</NP>
+							</SYNTAX>
+							<SEMANTICS>
+								<PRED value="motion">
+									<ARGS>
+										<ARG type="Event" value="during(E)"/>
+										<ARG type="ThemRole" value="Theme"/>
+									</ARGS>
+								</PRED>
+								<PRED value="location">
+									<ARGS>
+										<ARG type="Event" value="end(E)"/>
+										<ARG type="ThemRole" value="Theme"/>
+										<ARG type="ThemRole" value="Oblique"/>
+									</ARGS>
+								</PRED>
+							</SEMANTICS>
+						</FRAME>
+					</FRAMES>
+					<SUBCLASSES/>
+				</VNSUBCLASS>
+			</SUBCLASSES>
+		</VNSUBCLASS>
+	</SUBCLASSES>
+</VNCLASS>

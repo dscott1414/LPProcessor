@@ -1,0 +1,147 @@
+﻿
+Renamed 'K' to 'tagSize':
+-------------------------
+F:\lp\source\hmm.cpp(153, 6)
+F:\lp\source\hmm.cpp(154, 28)
+F:\lp\source\hmm.cpp(154, 38)
+F:\lp\source\hmm.cpp(156, 22)
+F:\lp\source\hmm.cpp(158, 23)
+F:\lp\source\hmm.cpp(168, 60)
+
+Renamed 'tagSize' to 'tagsSize':
+--------------------------------
+F:\lp\source\hmm.cpp(153, 6)
+F:\lp\source\hmm.cpp(154, 28)
+F:\lp\source\hmm.cpp(154, 44)
+F:\lp\source\hmm.cpp(156, 22)
+F:\lp\source\hmm.cpp(158, 23)
+F:\lp\source\hmm.cpp(168, 60)
+
+Renamed 'K' to 'tagsSize':
+--------------------------
+F:\lp\source\hmm.cpp(178, 6)
+F:\lp\source\hmm.cpp(180, 28)
+F:\lp\source\hmm.cpp(182, 22)
+
+Renamed 'N' to 'vocabSize':
+---------------------------
+F:\lp\source\hmm.cpp(174, 72)
+F:\lp\source\hmm.cpp(179, 6)
+F:\lp\source\hmm.cpp(180, 45)
+F:\lp\source\hmm.cpp(184, 23)
+F:\lp\source\hmm.cpp(194, 56)
+
+Renamed 'B' to 'wordTagProbabilityMatrix':
+------------------------------------------
+F:\lp\source\hmm.cpp(181, 26)
+F:\lp\source\hmm.cpp(195, 4)
+F:\lp\source\hmm.cpp(198, 9)
+F:\lp\source\hmm.cpp(205, 4)
+
+Renamed 'A' to 'tagTransitionProbabilityMatrix':
+------------------------------------------------
+F:\lp\source\hmm.cpp(155, 26)
+F:\lp\source\hmm.cpp(169, 4)
+F:\lp\source\hmm.cpp(172, 9)
+F:\lp\source\hmm.cpp(204, 4)
+
+Renamed 'I' to 'previousTagIndex':
+----------------------------------
+F:\lp\source\hmm.cpp(157, 11)
+F:\lp\source\hmm.cpp(157, 18)
+F:\lp\source\hmm.cpp(157, 32)
+F:\lp\source\hmm.cpp(161, 27)
+F:\lp\source\hmm.cpp(169, 35)
+
+Renamed 'J' to 'currentTagIndex':
+---------------------------------
+F:\lp\source\hmm.cpp(159, 12)
+F:\lp\source\hmm.cpp(159, 19)
+F:\lp\source\hmm.cpp(159, 33)
+F:\lp\source\hmm.cpp(162, 23)
+F:\lp\source\hmm.cpp(169, 53)
+
+Renamed 'I' to 'tagIndex':
+--------------------------
+F:\lp\source\hmm.cpp(183, 11)
+F:\lp\source\hmm.cpp(183, 18)
+F:\lp\source\hmm.cpp(183, 32)
+F:\lp\source\hmm.cpp(187, 23)
+F:\lp\source\hmm.cpp(195, 29)
+
+Renamed 'J' to 'vocabIndex':
+----------------------------
+F:\lp\source\hmm.cpp(185, 12)
+F:\lp\source\hmm.cpp(185, 19)
+F:\lp\source\hmm.cpp(185, 34)
+F:\lp\source\hmm.cpp(188, 25)
+F:\lp\source\hmm.cpp(195, 39)
+
+Renamed 'count' to 'wordTagCount':
+----------------------------------
+F:\lp\source\hmm.cpp(190, 8)
+F:\lp\source\hmm.cpp(193, 5)
+F:\lp\source\hmm.cpp(195, 54)
+
+Renamed 'count' to 'tagTransitionCount':
+----------------------------------------
+F:\lp\source\hmm.cpp(164, 8)
+F:\lp\source\hmm.cpp(167, 5)
+F:\lp\source\hmm.cpp(169, 73)
+
+Renamed 'i' to 'tagIndex':
+--------------------------
+F:\lp\source\hmm.cpp(228, 11)
+F:\lp\source\hmm.cpp(228, 18)
+F:\lp\source\hmm.cpp(228, 31)
+F:\lp\source\hmm.cpp(230, 45)
+F:\lp\source\hmm.cpp(232, 22)
+F:\lp\source\hmm.cpp(233, 15)
+F:\lp\source\hmm.cpp(237, 22)
+F:\lp\source\hmm.cpp(237, 72)
+F:\lp\source\hmm.cpp(237, 107)
+F:\lp\source\hmm.cpp(238, 15)
+
+Renamed 's_idx' to 'startTagIndex':
+-----------------------------------
+F:\lp\source\hmm.cpp(226, 6)
+F:\lp\source\hmm.cpp(230, 38)
+F:\lp\source\hmm.cpp(237, 72)
+
+Renamed 'transitionCount' to 'tagTransitionCount':
+--------------------------------------------------
+F:\lp\source\hmm.cpp(490, 9)
+F:\lp\source\hmm.cpp(493, 6)
+F:\lp\source\hmm.cpp(502, 29)
+
+Renamed 'emissionCount' to 'wordTagCount':
+------------------------------------------
+F:\lp\source\hmm.cpp(495, 9)
+F:\lp\source\hmm.cpp(498, 6)
+F:\lp\source\hmm.cpp(504, 29)
+
+Renamed 'previousTagOfHighestProbabilities' to 'currentTagOfHighestProbabilities':
+----------------------------------------------------------------------------------
+F:\lp\source\hmm.cpp(459, 21)
+F:\lp\source\hmm.cpp(474, 6)
+F:\lp\source\hmm.cpp(479, 140)
+F:\lp\source\hmm.cpp(515, 137)
+
+Renamed 'generateStatistics' to 'generateFormStatistics':
+---------------------------------------------------------
+F:\lp\source\DB.cpp(1272, 19)
+F:\lp\source\DBUtility.cpp(236, 17)
+F:\lp\source\main.cpp(892, 55)
+F:\lp\source\main.cpp(910, 33)
+F:\lp\source\main.cpp(911, 4)
+F:\lp\source\main.cpp(965, 30)
+F:\lp\source\source.cpp(2915, 61)
+F:\lp\source\source.cpp(2971, 41)
+F:\lp\source\source.cpp(2973, 41)
+F:\lp\source\source.h(1828, 54)
+F:\lp\source\word.h(729, 8)
+
+Renamed 'statistics' to 'generateFormStatistics':
+-------------------------------------------------
+F:\lp\source\DB.cpp(1156, 83)
+F:\lp\source\DB.cpp(1272, 7)

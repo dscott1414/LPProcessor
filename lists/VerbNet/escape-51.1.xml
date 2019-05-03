@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="UTF-8"?>
+	<!DOCTYPE VNCLASS SYSTEM "vn_class-3.dtd">
+<VNCLASS ID="escape-51.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="vn_schema-3.xsd">
+	<!--each verb specifies the Prep_Dir that is its default-->
+	<MEMBERS/>
+	<THEMROLES>
+		<THEMROLE type="Theme">
+			<SELRESTRS>
+				<SELRESTR Value="+" type="concrete"/>
+			</SELRESTRS>
+		</THEMROLE>
+	</THEMROLES>
+	<FRAMES/>
+	<SUBCLASSES>
+		<VNSUBCLASS ID="escape-51.1-1">
+			<MEMBERS>
+				<!-- removed because these verbs are split between exiting and entering               but the thematic 
+roles may become useful.          <MEMBER name="ascend" wn="ascend%2:38:02 ascend%2:38:04 ascend%2:38:01 
+ascend%2:38:03"/>          <MEMBER name="climb" wn="climb%2:38:00"/>          <MEMBER name="cross" wn="cross%2:38:00"/>          
+<MEMBER name="depart" wn="depart%2:38:04 depart%2:38:01"/>          <MEMBER name="descend" wn="descend%2:38:00"/>          
+<MEMBER name="disembark" wn=""/>          <MEMBER name="enter" wn="enter%2:38:00 enter%2:36:00"/>          
+<MEMBER name="escape" wn="escape%2:38:00"/>          <MEMBER name="exit" wn="exit%2:38:00"/>          
+<MEMBER name="flee" wn="flee%2:38:00"/>          <MEMBER name="leave" wn="leave%2:38:01 leave%2:38:00"/>          
+<MEMBER name="vacate" wn="vacate%2:38:00"/>          -->
+			</MEMBERS>
+			<THEMROLES>
+				<THEMROLE type="Location">
+					<SELRESTRS>
+						<SELRESTR Value="+" type="concrete"/>
+					</SELRESTRS>
+				</THEMROLE>
+			</THEMROLES>
+			<FRAMES>
+				<FRAME>
+					<DESCRIPTION descriptionNumber="0.1" primary="Basic Intransitive" secondary="" xtag="0.1"/>
+				</FRAME>
+			</FRAMES>
+			<SUBCLASSES/>
+		</VNSUBCLASS>
+		<VNSUBCLASS ID="escape-51.1-2">
+			<MEMBERS>
+				<!-- <MEMBER name="fall" wn="fall%2:38:03 fall%2:38:15 fall%2:38:14"/> ignore -->
+			</MEMBERS>
+			<THEMROLES/>
+			<FRAMES>
+				<FRAME>
+					<DESCRIPTION descriptionNumber="0.1" primary="Basic Intransitive" secondary="" xtag="0.1"/>
+					<!-- each verb specifies the Prep_Dir (and sometimes the Oblique) that is it's default-->
+					<EXAMPLES>
+						<EXAMPLE>The prisoners advanced.</EXAMPLE>
+					</EXAMPLES>
+					<SYNTAX>
+						<NP value="Theme">
+							<SYNRESTRS/>
+						</NP>
+						<VERB/>
+					</SYNTAX>
+					<SEMANTICS>
+						<PRED value="motion">
+							<ARGS>
+								<ARG type="Event" value="during(E)"/>
+								<ARG type="ThemRole" value="Theme"/>
+							</ARGS>
+						</PRED>
+						<PRED value="direction">
+							<ARGS>
+								<ARG type="Event" value="during(E)"/>
+								<ARG type="VerbSpecific" value="Prep_Dir"/>
+								<ARG type="ThemRole" value="Theme"/>
+								<ARG type="ThemRole" value="?Oblique"/>
+							</ARGS>
+						</PRED>
+					</SEMANTICS>
+				</FRAME>
+				<FRAME>
+					<DESCRIPTION descriptionNumber="0.1" primary="PP" secondary="path-PP" xtag=""/>
+					<EXAMPLES>
+						<EXAMPLE>The prisoners  advanced across the field.</EXAMPLE>
+					</EXAMPLES>
+					<SYNTAX>
+						<NP value="Theme">
+							<SYNRESTRS/>
+						</NP>
+						<VERB/>
+						<PREP>
+							<SELRESTRS>
+								<SELRESTR Value="+" type="path"/>
+							</SELRESTRS>
+						</PREP>
+						<NP value="Oblique">
+							<SELRESTRS/>
+						</NP>
+					</SYNTAX>
+					<SEMANTICS>
+						<PRED value="motion">
+							<ARGS>
+								<ARG type="Event" value="during(E)"/>
+								<ARG type="ThemRole" value="Theme"/>
+							</ARGS>
+						</PRED>
+						<PRED value="direction">
+							<ARGS>
+								<ARG type="Event" value="during(E)"/>
+								<ARG type="VerbSpecific" value="Prep_Dir"/>
+								<ARG type="ThemRole" value="Theme"/>
+								<ARG type="ThemRole" value="Oblique"/>
+							</ARGS>
+						</PRED>
+					</SEMANTICS>
+				</FRAME>
+				<FRAME>
+					<DESCRIPTION descriptionNumber="0.1" primary="NP V NP" secondary="Locative Preposition Drop" xtag=""/>
+					<EXAMPLES>
+						<EXAMPLE>The convict escaped the                            prison.</EXAMPLE>
+					</EXAMPLES>
+					<SYNTAX>
+						<NP value="Theme">
+							<SYNRESTRS/>
+						</NP>
+						<VERB/>
+						<NP value="Location">
+							<SYNRESTRS/>
+						</NP>
+					</SYNTAX>
+					<SEMANTICS>
+						<PRED value="motion">
+							<ARGS>
+								<ARG type="Event" value="during(E)"/>
+								<ARG type="ThemRole" value="Theme"/>
+							</ARGS>
+						</PRED>
+						<PRED value="direction">
+							<ARGS>
+								<ARG type="Event" value="during(E)"/>
+								<ARG type="VerbSpecific" value="Prep_Dir"/>
+								<ARG type="ThemRole" value="Theme"/>
+								<ARG type="ThemRole" value="Location"/>
+							</ARGS>
+						</PRED>
+					</SEMANTICS>
+				</FRAME>
+			</FRAMES>
+			<SUBCLASSES>
+				<VNSUBCLASS ID="escape-51.1-2-1">
+					<MEMBERS/>
+					<THEMROLES/>
+					<FRAMES>
+						<FRAME>
+							<DESCRIPTION descriptionNumber="" primary="PP" secondary="in-PP" xtag=""/>
+							<EXAMPLES>
+								<EXAMPLE>He arrived in the U.S.</EXAMPLE>
+							</EXAMPLES>
+							<SYNTAX>
+								<NP value="Theme">
+									<SYNRESTRS/>
+								</NP>
+								<VERB/>
+								<PREP value="in">
+									<SELRESTRS/>
+								</PREP>
+								<NP value="Oblique">
+									<SELRESTRS/>
+								</NP>
+							</SYNTAX>
+							<SEMANTICS>
+								<PRED value="motion">
+									<ARGS>
+										<ARG type="Event" value="during(E)"/>
+										<ARG type="ThemRole" value="Theme"/>
+									</ARGS>
+								</PRED>
+								<PRED value="location">
+									<ARGS>
+										<ARG type="Event" value="end(E)"/>
+										<ARG type="ThemRole" value="Theme"/>
+										<ARG type="ThemRole" value="Oblique"/>
+									</ARGS>
+								</PRED>
+							</SEMANTICS>
+						</FRAME>
+					</FRAMES>
+					<SUBCLASSES/>
+				</VNSUBCLASS>
+			</SUBCLASSES>
+		</VNSUBCLASS>
+		<VNSUBCLASS ID="escape-51.1-3">
+			<MEMBERS>
+				<MEMBER name="exit" wn="ascend%2:38:02 ascend%2:38:04 ascend%2:38:01 ascend%2:38:03"/>
+				<MEMBER name="disembark" wn=""/>
+				<MEMBER name="depart" wn="depart%2:38:04 depart%2:38:01"/>
+				<MEMBER name="leave" wn="leave%2:38:01 leave%2:38:00"/>
+				<MEMBER name="vacate" wn="vacate%2:38:00"/>
+				<MEMBER name="flee" wn="flee%2:38:00"/>
+				<MEMBER name="escape" wn="escape%2:38:00"/>
+				<MEMBER name="go" wn="go%2:38:00 go%2:38:01"/>
+				<MEMBER name="set_forth" wn=""/>
+				<MEMBER name="sally_forth" wn=""/>
+				<MEMBER name="set_out" wn=""/>
+				<MEMBER name="take_leave" wn=""/>
+				<MEMBER name="go_back" wn="go_back%2:30:00"/>
+				<MEMBER name="betook" wn=""/>
+				<MEMBER name="recede" wn="recede%2:38:01 recede%2:33:00 recede%2:30:00"/>
+				<MEMBER name="plunge" wn="plunge%2:38:05 plunge%2:38:00"/>
+				<MEMBER name="tumble" wn="tumble%2:38:00 tumble%2:38:04"/>
+				<MEMBER name="retreat" wn="" grouping=""/>
+				<MEMBER name="skedaddle" wn="" grouping=""/>
+				<MEMBER name="vamoose" wn="" grouping=""/>
+				<MEMBER name="withdraw" wn="" grouping=""/>
+				<MEMBER name="set_off" wn="" grouping=""/>
+				<MEMBER name="bolt" wn="" grouping=""/>
+						<MEMBER name="emigrate" wn="" grouping=""/>
+			</MEMBERS>
+			<EXIT/>
+			<THEMROLES/>
+			<FRAMES/>
+			<SUBCLASSES/>
+		</VNSUBCLASS>
+		<VNSUBCLASS ID="escape-51.1-4">
+			<MEMBERS>
+				<MEMBER name="enter" wn="enter%2:38:00 enter%2:36:00"/>
+				<MEMBER name="approach" wn="approach%2:38:00"/>
+				<MEMBER name="come" wn="come%2:38:00 come%2:38:04"/>
+        <MEMBER name="arrive" wn="arrive%2:38:00"/>
+        <MEMBER name="arrive" wn="arrive%2:38:00"/>
+        <MEMBER name="get_in" wn=""/>
+        <MEMBER name="attend" wn="" grouping=""/>
+        <!-- He attended church -->
+        <MEMBER name="induct" wn="" grouping=""/> 
+        <!--<MEMBER name="rise" wn="rise%2:38:00 rise%2:38:05 rise%2:38:04 rise%2:29:08 rise%2:38:08"/> 'He rose' is simply a change in position -->
+			</MEMBERS>
+			<ENTER/>
+			<THEMROLES/>
+			<FRAMES/>
+			<SUBCLASSES/>
+		</VNSUBCLASS>
+		<VNSUBCLASS ID="escape-51.1-5">
+			<!-- like escape 1-4, except if it has an object, then it means the object is moving, not the subject. -->
+			<MEMBERS>
+				<MEMBER name="bear" wn=""/>				<!-- a huge bus bearing down on us NOT bear it-->
+				<MEMBER name="advance" wn="advance%2:38:00"/>				<!-- NOT advance it -->
+				<MEMBER name="return" wn="return%2:38:00"/>				<!-- NOT return it -->
+				<MEMBER name="be_round" wn=""/>				<!-- NOT round it -->
+				<MEMBER name="be_back" wn=""/>				<!-- NOT back it -->
+				<MEMBER name="call_round" wn=""/>				<!-- NOT round it -->
+				<MEMBER name="repair" wn=""/>				<!-- NOT repair it -->
+				<MEMBER name="get_out" wn=""/>				<!-- NOT get it -->
+			</MEMBERS>
+			<ENTER/>
+			<THEMROLES/>
+			<FRAMES/>
+			<SUBCLASSES/>
+		</VNSUBCLASS>
+	</SUBCLASSES>
+</VNCLASS>

@@ -1,0 +1,5 @@
+C:\lp\processGutenbergRDFtoSQL\obj\x86\Debug\ResolveAssemblyReference.cache
+C:\lp\processGutenbergRDFtoSQL\bin\Debug\processGutenbergRDFtoSQL.exe
+C:\lp\processGutenbergRDFtoSQL\bin\Debug\processGutenbergRDFtoSQL.pdb
+C:\lp\processGutenbergRDFtoSQL\obj\x86\Debug\processGutenbergRDFtoSQL.exe
+C:\lp\processGutenbergRDFtoSQL\obj\x86\Debug\processGutenbergRDFtoSQL.pdb

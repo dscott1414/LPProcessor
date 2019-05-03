@@ -1,0 +1,700 @@
+#pragma warning (disable: 4503)
+#pragma warning (disable: 4996)
+#undef _STLP_USE_EXCEPTIONS // STLPORT 4.6.1
+#include <algorithm>
+#include <string>
+#include <vector>
+#include <map>
+#include <unordered_map>
+#include <unordered_set>
+#include <set>
+using namespace std;
+#include "logging.h"
+#include "mysql.h"
+#include "general.h"
+#include "relationTypes.h"
+#include <stdio.h>
+
+extern wchar_t *cacheDir;
+#define DBNAME "lp"
+#define LDBNAME L"lp"
+#define MAX_WORD_LENGTH 32
+
+// STLPort 4.6.2 yields 3254 without ACCUMULATE, 5.0.2 yields 7539!
+//#define ACCUMULATE_GROUPS 3686-3254
+// without WORD_RELATIONS, yields 209 bytes/word
+// with individually allocated relation maps, 402/word.
+extern int memoryAllocated;
+extern bool exitNow;
+
+#define LOG_BUFFER_SIZE 65536
+#define READLEN 128
+#define UNDEFINED_FORM L"Undefined"
+#define UNDEFINED_SHORT_FORM L"Undef"
+#define UNDEFINED_FORM_NUM 0
+#define SECTION_FORM L"Section"
+#define SECTION_SHORT_FORM L"Sec"
+#define SECTION_FORM_NUM 1
+#define COMBINATION_FORM L"Combination"
+#define COMBINATION_SHORT_FORM L"Comb"
+#define COMBINATION_FORM_NUM 2
+#define PROPER_NOUN_FORM L"Proper_Noun"
+#define PROPER_NOUN_SHORT_FORM L"Prop"
+#define PROPER_NOUN_FORM_NUM 3
+#define NUMBER_FORM L"Number"
+#define NUMBER_SHORT_FORM L"Num"
+#define NUMBER_FORM_NUM 4
+#define HONORIFIC_FORM_NUM 5
+
+// different subobject roles
+#define SENTENCE_IN_ALT_REL_ROLE ((unsigned __int64) IN_COMMAND_OBJECT_ROLE<<1)
+#define IN_COMMAND_OBJECT_ROLE ((unsigned __int64) THINK_ENCLOSING_ROLE<<1)
+#define THINK_ENCLOSING_ROLE ((unsigned __int64) NOT_ENCLOSING_ROLE<<1)
+#define NOT_ENCLOSING_ROLE ((unsigned __int64) EXTENDED_ENCLOSING_ROLE<<1)
+#define EXTENDED_ENCLOSING_ROLE ((unsigned __int64) NONPAST_ENCLOSING_ROLE<<1)
+#define NONPAST_ENCLOSING_ROLE ((unsigned __int64) NONPRESENT_ENCLOSING_ROLE<<1)
+#define NONPRESENT_ENCLOSING_ROLE ((unsigned __int64) POSSIBLE_ENCLOSING_ROLE<<1)
+#define POSSIBLE_ENCLOSING_ROLE ((unsigned __int64) NO_PP_PREP_ROLE<<1)
+#define NO_PP_PREP_ROLE ((unsigned __int64) IN_QUOTE_REFERRING_AUDIENCE_ROLE<<1)
+#define IN_QUOTE_REFERRING_AUDIENCE_ROLE ((unsigned __int64) PP_OBJECT_ROLE<<1)
+#define PP_OBJECT_ROLE ((unsigned __int64) EXTENDED_OBJECT_ROLE<<1)
+#define EXTENDED_OBJECT_ROLE ((unsigned __int64) IN_EMBEDDED_STORY_OBJECT_ROLE<<1)
+#define IN_EMBEDDED_STORY_OBJECT_ROLE ((unsigned __int64) IN_SECONDARY_QUOTE_ROLE<<1)
+#define IN_SECONDARY_QUOTE_ROLE ((unsigned __int64) NOT_OBJECT_ROLE<<1)
+#define NOT_OBJECT_ROLE ((unsigned __int64) IN_PRIMARY_QUOTE_ROLE<<1)
+#define IN_PRIMARY_QUOTE_ROLE ((unsigned __int64) FOCUS_EVALUATED<<1)
+#define FOCUS_EVALUATED ((unsigned __int64) DELAYED_RECEIVER_ROLE<<1)
+#define DELAYED_RECEIVER_ROLE ((unsigned __int64) PRIMARY_SPEAKER_ROLE<<1)
+#define PRIMARY_SPEAKER_ROLE ((unsigned __int64) SECONDARY_SPEAKER_ROLE<<1)
+#define SECONDARY_SPEAKER_ROLE ((unsigned __int64) MNOUN_ROLE<<1)
+#define MNOUN_ROLE ((unsigned __int64) POV_OBJECT_ROLE<<1)
+#define POV_OBJECT_ROLE ((unsigned __int64) PASSIVE_SUBJECT_ROLE<<1)
+#define PASSIVE_SUBJECT_ROLE ((unsigned __int64) SENTENCE_IN_REL_ROLE<<1)
+#define SENTENCE_IN_REL_ROLE ((unsigned __int64) UNRESOLVABLE_FROM_IMPLICIT_OBJECT_ROLE<<1)
+#define UNRESOLVABLE_FROM_IMPLICIT_OBJECT_ROLE ((unsigned __int64) IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE<<1)
+#define IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE ((unsigned __int64) SUBJECT_PLEONASTIC_ROLE<<1) // mark speakers referring to themselves within quotes
+#define SUBJECT_PLEONASTIC_ROLE ((unsigned __int64) NON_MOVEMENT_PREP_OBJECT_ROLE<<1)
+#define NON_MOVEMENT_PREP_OBJECT_ROLE ((unsigned __int64) 262144)
+#define MOVEMENT_PREP_OBJECT_ROLE 131072
+#define PLACE_OBJECT_ROLE 65536
+#define NONPRESENT_OBJECT_ROLE 32768
+#define IS_ADJ_OBJECT_ROLE 16384
+#define NO_ALT_RES_SPEAKER_ROLE 8192 // Jill asked.  ", Tom said.  " said Jill.  Ignore these as subjects for alternate resolution
+#define ID_SENTENCE_TYPE 4096 // set at sentence beginning if containing an "IS" verb
+#define NONPAST_OBJECT_ROLE 2048 // used to determine speaker status
+#define IS_OBJECT_ROLE 1024 // used to determine speaker status
+#define RE_OBJECT_ROLE 512
+#define PREP_OBJECT_ROLE 256
+#define IOBJECT_ROLE 128
+
+#define HAIL_ROLE 64 // speakers referred to in a quote from someone else
+#define MPLURAL_ROLE 32 // multiple subjects & objects
+#define META_NAME_EQUIVALENCE 16
+#define OBJECT_ROLE 8
+#define SUBJECT_ROLE 4
+#define SUBOBJECT_ROLE 2
+#define NO_ROLE 0
+
+#define unknownWD L"source\\lists\\unknownWords.Websters.txt"
+#define unknownCD L"source\\lists\\unknownWords.Cambridge.txt"
+
+#define NOUN_INFLECTIONS_MASK (SINGULAR|PLURAL|SINGULAR_OWNER|PLURAL_OWNER|MALE_GENDER|FEMALE_GENDER|NEUTER_GENDER|FIRST_PERSON|SECOND_PERSON|THIRD_PERSON)
+#define VERB_INFLECTIONS_MASK (VERB_PAST|VERB_PAST_PARTICIPLE|VERB_PRESENT_PARTICIPLE|VERB_PRESENT_THIRD_SINGULAR|\
+                               VERB_PRESENT_FIRST_SINGULAR|VERB_PAST_THIRD_SINGULAR|VERB_PAST_PLURAL|VERB_PRESENT_PLURAL|\
+                               VERB_PRESENT_SECOND_SINGULAR)
+#define ADJECTIVE_INFLECTIONS_MASK (ADJECTIVE_NORMATIVE|ADJECTIVE_COMPARATIVE|ADVERB_SUPERLATIVE)
+#define ADVERB_INFLECTIONS_MASK (ADVERB_NORMATIVE|ADVERB_COMPARATIVE|ADVERB_SUPERLATIVE)
+#define INFLECTIONS_MASK (OPEN_INFLECTION|CLOSE_INFLECTION)
+
+unsigned int findTagSet(wchar_t *tagSet);
+
+typedef struct {
+  int num;
+  wchar_t *name;
+} tInflectionMap;
+
+tInflectionMap nounInflectionMap[],verbInflectionMap[],adjectiveInflectionMap[],adverbInflectionMap[];
+const wchar_t *getInflectionName(int inflection,int form,wstring &temp);
+const wchar_t *getInflectionName(int inflection,tInflectionMap *map,wstring &temp);
+
+const wchar_t *getLastErrorMessage(wstring &out);
+
+typedef struct
+{
+  wchar_t word[64];
+  int inflection;
+} Inflections;
+
+typedef struct
+{
+  wchar_t word[64];
+  int inflection;
+  wchar_t mainEntry[64];
+} InflectionsRoot;
+
+#include "intarray.h"
+
+enum NET_ERR {
+  TAKE_LAST_MATCH_BEGIN_NOT_FOUND=-1,TAKE_LAST_MATCH_END_NOT_FOUND=-2,
+  INFLECTION_PROCESSING_FAILED=-3,PARSE_OPTION_FAILED=-4,GETPATH_INVALID_FILELENGTH1=-5,
+  GETPATH_INVALID_FILELENGTH2=-6,GETPATH_CANNOT_OPEN_PATH=-7,GETPATH_GENERAL=-8,
+  GETFORMS_CANNOT_OPEN_PATH=-9,GETFORMS_CANNOT_WRITE=-10,WORD_NOT_FOUND=-11,
+  UNPARSABLE_PAGE=-12,INTERNET_OPEN_FAILED=-13,INTERNET_OPEN_URL_FAILED=-14,
+  GETPAGE_CANNOT_CREATE=-15,
+
+  PARSE_EOF=-16,
+  PARSE_END_WORD=-17,
+  PARSE_END_SENTENCE=-18,
+  PARSE_END_PARAGRAPH=-19,
+  PARSE_END_SECTION=-20,
+  PARSE_END_BOOK=-21,
+  PARSE_DATE=-22,
+  PARSE_TIME=-23,
+  PARSE_NUM=-24,
+  PARSE_ORD_NUM=-25,
+  PARSE_ADVERB_NUM=-26,
+  PARSE_PLURAL_NUM=-27,
+  PARSE_TELEPHONE_NUMBER=-28,
+	PARSE_MONEY_NUM=-29,
+
+  WORD_NOT_FOUND_IN_FORMS=-30,FORMS_NUM_INFLECTIONS_NUM_DIFFERENT=-31,FORM_NOT_FOUND=-32,NO_FORMS_FOUND=-33,
+  SUFFIX_HAS_NO_FORM=-34,SUFFIX_HAS_NO_INFLECTION=-35,
+  SUFFIX_RULES_PARSE_ERROR=-36,PREFIX_RULES_PARSE_ERROR=-37,NO_PREFIX_RULES_FILE=-38,NO_SUFFIX_RULES_FILE=-39,
+  NEXT_MATCH_BEGIN_NOT_FOUND=-40,NEXT_MATCH_END_NOT_FOUND=-41,BAD_CLD_DEFINITION=-42,
+	PARSE_DUMP_LOCAL_OBJECTS=-43,PARSE_PATTERN=-44,
+
+	PARSE_WEB_ADDRESS=-45
+};
+
+// in flags of WordMatch
+//enum formsAdjustmentFlags { flagNounOwner=(1<<31), flagAddProperNoun=(1<<30), flagOnlyConsiderProperNounForms=(1<<29),
+//                            flagAllCaps=(1<<28), flagTopLevelPattern=(1<<27), flagPossiblePluralNounOwner=(1<<26),
+//                            flagNotMatched=(1<<25)};
+
+class FormClass
+{
+public:
+  wstring name;
+  wstring shortName;
+  wstring inflectionsClass;
+  bool hasInflections;
+  // classes that have this set: month, all place forms
+  // this means that even though it is capitalized, and not seen uncapitalized, words having this form will not be considered
+  // as ONLY a proper noun.  It will have a Proper_Noun as well as the form.
+  bool properNounSubClass;
+  bool isTopLevel;
+	bool isIgnore;
+	bool isCommonForm;
+	bool verbForm;
+  // only honorific.  So if this word is capitalized, it will not be recogized as a Proper_Noun at all.
+  bool blockProperNounRecognition;
+	bool formCheck; // used only when checking dictionary entries
+  int index; // to DB
+	bool write(void *buffer,int &where,int limit)
+	{
+    if (!copy(buffer,name,where,limit)) return false;
+    if (!copy(buffer,shortName,where,limit)) return false;
+    if (!copy(buffer,inflectionsClass,where,limit)) return false;
+    if (!copy(buffer,(short)hasInflections,where,limit)) return false;
+    if (!copy(buffer,(short)properNounSubClass,where,limit)) return false;
+    if (!copy(buffer,(short)isTopLevel,where,limit)) return false;
+    if (!copy(buffer,(short)isIgnore,where,limit)) return false;
+    if (!copy(buffer,(short)verbForm,where,limit)) return false;
+    if (!copy(buffer,(short)blockProperNounRecognition,where,limit)) return false;
+    if (!copy(buffer,(short)formCheck,where,limit)) return false;
+		return true;
+	}
+	FormClass(int indexIn,wstring nameIn,wstring shortNameIn,wstring inflectionsClassIn,bool hasInflectionsIn,
+										 bool properNounSubClassIn=false,bool isTopLevelIn=false,bool isIgnoreIn=false,bool verbFormIn=false,bool blockProperNounRecognitionIn=false,bool formCheckI=false);
+
+	//FormClass(int indexIn,wstring newForm,wstring shortForm,bool setInflections,wstring inflectionsClassIn=L"",bool properNounSubClass,bool isTopLevel=false,bool blockProperNounRecognition=false);
+};
+
+extern vector <FormClass *> Forms;
+extern int commaForm,periodForm,reflexiveForm,nomForm,accForm;
+extern int nounForm,quoteForm,dashForm,bracketForm,conjunctionForm,demonstrativeDeterminerForm,possessiveDeterminerForm,interrogativeDeterminerForm;
+extern int indefinitePronounForm,reciprocalPronounForm,pronounForm,numeralCardinalForm,numeralOrdinalForm,romanNumeralForm,adverbForm,adjectiveForm;
+extern int verbForm,thinkForm,honorificForm,honorificAbbreviationForm,demonymForm,relativeForm,commonProfessionForm,businessForm,friendForm,internalStateForm;
+extern int determinerForm,doesForm,doesNegationForm,possessivePronounForm,quantifierForm,dateForm,timeForm,telephoneNumberForm,coordinatorForm;
+extern int verbverbForm,abbreviationForm,numberForm,beForm,haveForm,haveNegationForm,doForm,doNegationForm,interjectionForm,personalPronounForm,letterForm;
+extern int isForm,isNegationForm,prepositionForm,telenumForm,sa_abbForm,toForm,relativizerForm,moneyForm,particleForm,webAddressForm;
+extern int doForm,doNegationForm,monthForm,letterForm,modalAuxiliaryForm,futureModalAuxiliaryForm,negationModalAuxiliaryForm,negationFutureModalAuxiliaryForm;
+
+
+class FormsClass
+{
+public:
+  static int findForm(wstring form);
+  static int gFindForm(wstring form);
+  static int addNewForm(wstring sForm,wstring shortForm,bool message,bool properNounSubClass=false);
+	static int createForm(wstring sForm,wstring shortName,bool inflectionsFlag,wstring inflectionsClass,bool properNounSubClass);
+  static bool changedForms;
+	static unordered_map <wstring ,int > formMap;
+};
+
+class WordClass;
+extern WordClass Words;
+extern tInflectionMap shortNounInflectionMap[];
+extern tInflectionMap shortVerbInflectionMap[];
+extern tInflectionMap shortAdjectiveInflectionMap[];
+extern tInflectionMap shortAdverbInflectionMap[];
+class tFI;
+typedef unordered_map <wstring,tFI>::iterator tIWMM;
+extern tIWMM wNULL;
+wchar_t *firstMatch(wchar_t *buffer, wchar_t *beginString, wchar_t *endString);
+char *firstMatch(char *buffer, char *beginString, char *endString);
+
+class tFI
+{
+friend class WordClass;
+public:
+  struct wordSetCompare
+  {
+    bool operator()(const tIWMM &lhs, const tIWMM &rhs) const
+    {
+      return lhs->first<rhs->first;
+    }
+  };
+  class cRMap
+  {
+  public:
+    class tRelation
+    {
+    public:
+      int frequency;
+      int deltaFrequency;
+      //int index; // index into relations table in DB
+      short sourceId; // index into sources
+			int rlastWhere;
+      // if fromDB is true, then this relation is being read from the database.
+      // if not, it is generated from the text.
+			tRelation(short _sourceId,int _lastWhere,int iFrequency,bool fromDB)
+      {
+        if (fromDB)
+        {
+          deltaFrequency=0;
+          frequency=iFrequency;
+        }
+        else
+        {
+          deltaFrequency=iFrequency;
+          frequency=iFrequency;
+        }
+        //index=-1;
+				sourceId=_sourceId;
+				rlastWhere=_lastWhere;
+      };
+			void increaseCount(short _sourceId,int _lastWhere,int count,bool fromDB)
+      {
+        if (fromDB)
+          frequency=count+deltaFrequency;
+        else
+        {
+          frequency+=count;
+          deltaFrequency+=count;
+        }
+				sourceId=_sourceId;
+				rlastWhere=_lastWhere;
+      }
+      tRelation(void)
+      {
+        //index=-1;
+        deltaFrequency=frequency=0;
+      };
+    };
+    struct wordMapCompare
+    {
+      bool operator()(const tIWMM &lhs, const tIWMM &rhs) const
+      {
+        return lhs->first<rhs->first;
+      }
+    };
+    typedef map<tIWMM,tRelation,wordMapCompare>::iterator tIcRMap;
+    typedef map<tIWMM,tRelation,wordMapCompare> tcRMap;
+    tcRMap r;
+    struct mapSequenceCompare
+    {
+      bool operator()(const tIcRMap &lhs, const tIcRMap &rhs) const
+      {
+        return lhs->second.frequency<rhs->second.frequency;
+      }
+    };
+    //set <tIcRMap,mapSequenceCompare> bySequence; // constantly maintained map of most frequent relations - not currently used
+		tIcRMap addRelation(int sourceId,int lastWhere,tIWMM toWord,bool &isNew,int count,bool fromDB);
+		//tIcRMap addRelation(int sourceId,int lastWhere,tIWMM toWord,bool &isNew,int count,bool fromDB);
+		void clear()
+		{
+			r.clear();
+		}
+  };
+
+  static const int MAX_FORM_USAGE_PATTERNS=8;
+	// up to 32 bits
+  enum eWordFlags { topLevelSeparator=1, ignoreFlag=2, queryOnLowerCase=4, queryOnAnyAppearance=8, updateMainInfo=32, updateMainEntry=64,
+                    insertNewForms=128, isMainEntry=256, intersectionGroup=512, wordIndexRead=1024, wordRelationsRefreshed=1024, newWordFlag=2048, inSourceFlag=4096, 
+										alreadyTaken=8192*256, physicalObjectByWN=8192*512, notPhysicalObjectByWN=8192*1024,uncertainPhysicalObjectByWN=notPhysicalObjectByWN<<1,
+										genericGenderIgnoreMatch=uncertainPhysicalObjectByWN<<1,prepMoveType=genericGenderIgnoreMatch<<1,
+										genericAgeGender=prepMoveType<<1,stateVerb=genericAgeGender<<1,possibleStateVerb=stateVerb<<1,mainEntryErrorNoted=possibleStateVerb<<1,
+										lastWordFlag=mainEntryErrorNoted<<1
+  };
+  static const int resetFlagsOnRead=updateMainInfo|insertNewForms|wordIndexRead|newWordFlag|inSourceFlag;
+  static const int VERB_AFTER_VERB_COST_FLAG=65536;
+  enum eUsagePatterns {
+    TRANSFER_COUNT=MAX_FORM_USAGE_PATTERNS,
+    SINGULAR_NOUN_HAS_DETERMINER,SINGULAR_NOUN_HAS_NO_DETERMINER,
+    VERB_HAS_0_OBJECTS,VERB_HAS_1_OBJECTS,VERB_HAS_2_OBJECTS,
+    LOWER_CASE_USAGE_PATTERN,PROPER_NOUN_USAGE_PATTERN,
+    LAST_USAGE_PATTERN,
+    MAX_USAGE_PATTERNS=16
+  };
+  static const int patternFormNumOffset=32750;
+  static const int HIGHEST_COST_OF_INCORRECT_NOUN_DET_USAGE=4;
+  static const int HIGHEST_COST_OF_INCORRECT_VERB_USAGE=4;
+  static const int HIGHEST_COST_OF_INCORRECT_VERB_AFTER_VERB_USAGE=6;
+  static const int COST_OF_INCORRECT_PROPER_NOUN=10;
+  static const int COST_OF_INCORRECT_VERBAL_NOUN=10;
+  int inflectionFlags;
+  int flags;
+	int timeFlags;
+  int index; // to DB
+  int sourceId; // where the word came from
+  unsigned char usagePatterns[tFI::MAX_USAGE_PATTERNS]; // usage counts for every class of this word
+  unsigned char usageCosts[tFI::MAX_USAGE_PATTERNS];
+  unsigned char deltaUsagePatterns[tFI::MAX_USAGE_PATTERNS];
+	int numProperNounUsageAsAdjective;
+  int derivationRules;
+  tIWMM mainEntry;
+	vector <int> relatedSubTypes;
+	vector <int> relatedSubTypeObjects;
+  void allocateMap(int relationType);
+  cRMap *relationMaps[numRelationWOTypes];
+  #ifdef ACCUMULATE_GROUPS
+    vector <int> groupList[numRelationWOTypes];
+  #endif
+  int tmpMainEntryWordId; // stores main entry temporarily for DB routines
+  bool changedSinceLastWordRelationFlush;
+  bool operator==(tFI &other) const;
+
+  unsigned int *forms()
+  {
+    return formsArray+formsOffset;
+  }
+  void eraseForms(void);
+  FormClass *Form(unsigned int offset);
+	int getFormNum(unsigned int offset);
+  unsigned int formsSize()
+  {
+    return count;
+  }
+	void clearRelationMaps()
+	{
+		for (int I=0; I<numRelationWOTypes; I++)
+			if (relationMaps[I]) 
+			{
+				relationMaps[I]->clear();
+			}
+	}
+	bool illegal(int f,int maxForms,tIWMM word)
+	{
+		if (index<=0 || Form(f)->index<=0 || Form(f)->index>(signed)maxForms)
+		{
+      ::lplog(LOG_ERROR,L"Illegal index for word %s has index %d with form #%d having index %d (form offset %d)!",
+          word->first.c_str(),index,f,Form(f)->index,forms()[f]);
+			return true;
+		}
+		return false;
+	}
+  tFI(int iForm,int iInflectionFlags,int iFlags,int iTimeFlags,int derivationRules,tIWMM iMainEntry,int sourceId);
+  tFI(char *buffer,int &where,int limit,wstring &ME,int sourceId);
+  bool updateFromDisk(char *buffer,int &where,int limit,wstring &ME);
+	bool write(void *buffer,int &where,int limit);
+  // MYSQL database
+  tFI(unsigned int *forms,unsigned int iCount,int iInflectionFlags,int iFlags,int iTimeFlags,int mainEntryWordId,int iDerivationRules,int sourceId,int formNum,wstring &word);
+  tFI(void);
+
+  bool costEquivalentSubClass(int subclassForm,int parentForm);
+	bool toLowestCost(int form);
+	bool setCost(int form,int cost);
+	int getLowestCost(void);
+  int getLowestTopLevelCost(void);
+  void mainEntryCheck(const wstring first,int where);
+  void lplog(void);
+  void transferFormsAndUsage(unsigned int *forms,unsigned int &iCount,int formNum,wstring &word);
+  void transferDBUsagePatternsToUsagePattern(int highestCost,int *DBUsagePatterns,unsigned int upStart,unsigned int upLength);
+  bool updateFromDB(int wordId,unsigned int *forms,unsigned int iCount,int iInflectionFlags,int iFlags,int iTimeFlags,int mainEntryWordId,int iDerivationRules,int iSourceId,int formNum,wstring &word);
+  bool isProperNounSubClass(void);
+  bool blockProperNounRecognition(void);
+  int query(int form);
+	bool hasWinnerVerbForm(int winnerForms);
+  int query(wstring form);
+  int lowestSeparatorCost();
+    bool isLowestCost(int form);
+  int queryForSeparator(void);
+  bool remove(int form);
+  bool remove(wchar_t *formName);
+  int addForm(int form,const wstring &word);
+  int adjustFormsInflections(wstring originalWord,unsigned __int64 &flags,bool isFirstWord,int nounOwner,bool allCaps,bool firstLetterCapitalized);
+  bool isUnknown(void);
+  bool isCommonWord(void);
+	void setTopLevel(void);
+  bool isSeparator(void);
+	void removeIllegalForms(void);
+	void setIgnore(void);
+  bool isIgnore(void);
+  bool isRareWord(void);
+  void preferVerbPresentParticiple(void);
+  bool notCostable(wstring word,int flags);
+  void logFormUsageCosts(wstring w);
+  void createGroup(relationWOTypes relationType,tIWMM toWord);
+	tFI::cRMap::tIcRMap addRelation(int where,int rType,tIWMM word);
+  bool intersect(relationWOTypes relationType,tIWMM word,tIWMM self,tIWMM &fromWord,tIWMM &toWord);
+  void transferUsagePatternsToCosts(int highestCost,unsigned int upStart,unsigned int upLength);
+  void transferFormUsagePatternsToCosts(int sameNameForm,int properNounForm,int iCount);
+
+protected:
+  static unsigned int *formsArray; // must not change after initialization or this must be protected by SRWLock
+  static unsigned int allocated; // must not change after initialization or this must be protected by SRWLock
+  static unsigned int fACount; // must not change after initialization or this must be protected by SRWLock
+  int formsOffset;
+private:
+  unsigned int count;
+  static int uniqueNewIndex; // use to insure every word has a unique index, even though it hasn't been consigned to the database yet.  
+  // must not change after initialization or this must be protected by SRWLock 
+};
+
+extern tFI::cRMap::tIcRMap tNULL;
+
+bool loosesort( const wchar_t *s1, const wchar_t *s2 );
+
+bool equivalentIfIgnoreDashSpaceCase(wstring sWord,wstring word2);
+void removeDots(wstring &str);
+int processInflections(wstring sWord,wstring mainEntry,wstring Form,wstring sInflections,vector<wstring> &allInflections);
+int findFunction(wstring sInflection,wstring &Form);
+int takeLastMatch(wstring &buffer,wstring begin_string,wstring end_string,wstring &match,bool include_begin_and_end);
+int firstMatch(wstring &buffer,wstring begin_string,wstring end_string,size_t &beginPos,wstring &match,bool include_begin_and_end);
+int firstMatchNonEmbedded(wstring &buffer,wstring beginString,wstring endString,size_t &beginPos,wstring &match,bool include_begin_and_end);
+int findMainEntry(wstring &match,wstring &mainEntry);
+int getInflection(wstring sWord,wstring form,wstring mainEntry,wstring iform,vector <wstring> &allInflections);
+int nextMatch(wstring &buffer,wstring begin_string,wstring end_string,size_t &begin_pos,wstring &match,bool include_begin_and_end);
+void transformList(bool hasSpace,bool hasDash,wstring oldList,wstring &newList);
+int getPath(const wchar_t *pathname,void *buffer,int maxlen,int &actualLen);
+int parseOption(wstring option,wstring &newWord,wstring &form,wstring &jump);
+bool spaceSame(wstring sWord,wstring option);
+int readPage(const wchar_t *str, wstring &buffer);
+int readPage(const wchar_t *str, wstring &buffer,wstring &headers);
+
+class WordClass
+{
+  friend class tFI;
+
+public:
+  WordClass(void);
+  void initialize();
+	void initializeChangeStateVerbs();
+  ~WordClass();
+  tIWMM sectionWord; // special word only for section breaks
+  tIWMM PPN; // special word only for personal/gendered proper nouns (relations)
+  tIWMM TELENUM; // special word only for telephone numbers
+  tIWMM NUM; // special word only for numbers (relations)
+  tIWMM DATE; // special word only for dates (relations)
+  tIWMM TIME; // special word only for times (relations)
+	tIWMM LOCATION; // special word only for locations
+	tIWMM TABLE; // used to start the table section which is extracted from <table> and table-like constructions in HTML
+	tIWMM END_COLUMN; // used to end each column string which is extracted from <table> and table-like constructions in HTML
+	tIWMM END_COLUMN_HEADERS; // used to end the column header section in the table section which is extracted from <table> and table-like constructions in HTML
+	tIWMM MISSING_COLUMN; // used to mark missing columns in the table section which is extracted from <table> and table-like constructions in HTML
+  tIWMM begin(void)
+  {
+    return WMM.begin();
+  }
+  tIWMM end(void)
+  {
+    return WMM.end();
+  }
+	map <tIWMM, vector <tIWMM>,tFI::cRMap::wordMapCompare> mainEntryMap;
+  tIWMM query(wstring sWord);
+  tIWMM gquery(wstring sWord);
+    bool parseMetaCommands(wchar_t *buffer,int &endSymbol,sTrace &t);
+  int readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocation,wstring &sWord,int &nounOwner,bool scanForSection,bool webScrapeParse,sTrace &t);
+  int processFootnote(wchar_t *buffer,__int64 bufferLen,__int64 &cp);
+	int parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord);
+	int attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId);
+	int parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLetterCapitalized, int nounOwner, int sourceId);
+  tIWMM addNewOrModify(MYSQL *mysql,wstring sWord,int flags,int form,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added); // only used for adding a name
+  // generic utilities
+  bool isAllUpper(wstring &sWord);
+	int readPageWinHTTP(wchar_t *str, wstring &buffer);
+  int readBinaryPage(wchar_t *str, int destfile,int &total);
+  bool remove(wstring sWord);
+	int readFormsCache(char *buffer,int bufferlen,int &numReadForms);
+  int readWords(wstring oPath,int sourceId);
+	int writeFormsCache(int fd);
+  void writeWords(wstring oPath);
+  bool removeFlag(wstring sWord,int flag);				
+
+  // MYSQL database
+  int lastReadfromDBTime;
+  int flushNewMainEntryWords(MYSQL &mysql,vector <tIWMM> &queryWords,bool justQuery);
+  int flushNewWords(MYSQL &mysql,vector <tIWMM> &queryWords,bool justQuery);
+	void writeWordMap();
+	void updateWordRelationIndexesFromDB(MYSQL &mysql,int lastReadfromDBTime,int sourceId);
+  int getNumWordRelationsToWrite(void);
+  int updateDBWordRelations(MYSQL &mysql,int totalWordRelationsToWrite);
+  int flushWordRelations(MYSQL &mysql);
+  int flushGroups();
+  int updateWordMainInfoToDB(MYSQL &mysql,int &numUpdates);
+  int updateWordFormsToDB(MYSQL &mysql);
+  int flushForms(MYSQL &mysql);
+  void updateUsages(MYSQL &mysql);
+	int insertWordIds(MYSQL &mysql,wchar_t *qt);
+	int refreshWordIdsFromDB(MYSQL &mysql,vector <tIWMM> &queryWords);
+	int updateOnlyMainEntryIndexToDB(MYSQL &mysql,vector <tIWMM> &queryWords);
+	int readWordIndexesFromDB(MYSQL &mysql);
+	int writeWordsToDB(MYSQL &mysql);
+  int readWithLock(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics, bool printProgress);
+  void readForms(MYSQL &mysql, wchar_t *qt);
+  void assign(int wordId,tIWMM iWord);
+  tIWMM *idToMap;
+  int idsAllocated;
+  bool acquireLock(MYSQL &mysql,bool persistent);
+  void releaseLock(MYSQL &mysql);
+
+  size_t numWords(void) { return WMM.size(); }
+  // if word is a new word discovered since last flush, the index in tFI will be -1.
+	bool readWordsOfMultiWordObjects(vector < vector < tmWS > > &multiWordStrings,vector < vector < vector <tIWMM> > > &multiWordObjects);
+	void addMultiWordObjects(vector < vector < tmWS > > &multiWordStrings,vector < vector < vector <tIWMM> > > &multiWordObjects);
+  int wordCheck(void);
+  int createWordCategories();
+
+  void createHolidays(void);
+  void addTimeFlag(int flag,Inflections words[]);
+  void addTimeFlag(int flag,wchar_t *words[]);
+  void usageCostToNoun(Inflections words[], wchar_t *subnounClass);
+  void usageCostToNoun(wchar_t *words[], wchar_t *subnounClass);
+  // the following are only used temporarily in BNCC and should be moved back to private usage
+  int predefineVerbsFromFile(wstring form,wstring shortForm,wchar_t *path,int flags);
+  int predefineWords(Inflections words[],wstring form,wstring shortForm,wstring inflectionsClass=L"",int flags=0,bool properNounSubClass=false);
+  int predefineWords(wchar_t *words[],wstring form,wstring shortForm,int flags=0,bool properNounSubClass=false);
+  tIWMM predefineWord(const wchar_t *word,int flags=0);
+	int predefineHolidays();
+  void testWordCacheFileRoutines(void);
+	static int processTime(wstring sWord, char &hour, char &minute);
+	static int processDate(wstring sWord, short &year, char &month, char &dayOfMonth);
+
+protected:
+  bool appendToUnknownWordsMode;
+  void moveFormOffsets(int formsOffset)
+  {
+    for (tIWMM I=WMM.begin(),WMMEnd=WMM.end(); I!=WMMEnd; I++)
+      if (I->second.formsOffset>=formsOffset)
+        I->second.formsOffset++;
+  }
+
+private:
+  typedef pair <wstring, tFI> tWFIMap;
+  static int lastWordWrittenClock;
+	int getNewWordsIds(MYSQL &mysql,int sourceId,wchar_t *newWordsQT,wchar_t *qt,tIWMM &startUpdateScan);
+	int readWordFormsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,int maxWordId,wchar_t *qt,int *words,int *counts,int &numWordForms,unsigned int * &wordForms, bool printProgress);
+  int readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics,int &numWordsInserted,int &numWordsModified, bool printProgress);
+  int lastModifiedTime;
+  int minimumLastWordWrittenClockDiff;
+  bool changedWords;
+  bool inCreateDictionaryPhase;
+  vector <wstring> unknownWDWords;
+  vector <wstring> unknownCDWords;
+  void readUnknownWords(wchar_t *fileName,vector <wstring> &unknownWords);
+  void writeUnknownWords(wchar_t *fileName,vector <wstring> &unknownWords);
+  int writeWord(tIWMM iWord,void *buffer,int &where,int limit);
+  int write(void);
+
+  // initialized
+  vector <wchar_t *> multiElementWords;
+  vector <wchar_t *> quotedWords;
+  vector <wchar_t *> periodWords;
+  //vector <const char *> dashWords;
+  //bool loosesort( const char *s1, const char *s2 );
+  unordered_map <wstring, tFI> WMM;
+  //HINTERNET hSession; // WinHTTP only
+  //HINTERNET hConnect;
+  // filled during program execution
+	int disinclinationRecursionCount;
+
+  bool evaluateIncludedSingleQuote(wchar_t *buffer,__int64 cp,__int64 begincp);
+  //typedef allocator<wstring>::reference reference;
+  //typedef allocator<wstring>::const_reference const_reference;
+  int addGenderedNouns(wchar_t *genPath,int inflectionFlags,int wordForm);
+	int addDemonyms(wchar_t *demPath);
+	bool readVerbClasses(void);
+	bool readVerbClassNames(void);
+  bool addPlaces(wstring pPath,vector <tmWS > &objects);
+	void addTimeFlags();
+  void createTimeCategories(bool normalize);
+  int getForms(tIWMM &iWord,wstring sWord,int sourceId);
+  tIWMM addCopy(wstring sWord,tIWMM iWord,bool &added);
+  tIWMM query(wstring sWord,int form,int inflection,int &offset);
+  bool addFlag(wstring sWord,int flag);
+  tIWMM hasFormInflection(tIWMM iWord,wstring sForm,int inflection);
+  bool handleExtendedParseWords(wchar_t *word);
+  int continueParse(wchar_t *buffer,__int64 begincp,__int64 bufferLen,vector<wchar_t *> &multiWords);
+  int addWordToForm(wstring sWord,tIWMM &iWord,int flags,wstring sForm,wstring shortForm,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added);
+  int predefineWords(InflectionsRoot words[],wstring form,wstring shortForm,wstring inflectionsClass=L"",int flags=0,bool properNounSubClass=false);
+  bool closeConnection(void);
+  wchar_t *httpError(void);
+  int getResults(LPVOID hRequest,wstring &buffer);
+  int checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,wstring sForm,int inflection,int derivationRules,wstring mainEntry,int sourceId);
+  bool processNamedForms(wstring sWord,wstring mainEntry,wstring Form,tIWMM &iWord,wstring sInflections,int sourceId);
+  int processAlternateForms(wstring sWord,wstring mainEntry,wstring sForm,tIWMM &iWord,int sourceId);
+  int generateInflections(wstring sWord,wstring mainEntry,wstring Form,tIWMM &iWord,wstring sInflection,wstring temp,int sourceId,bool medical);
+  bool processInflectedFunction(wstring sWord,wstring mainEntry,wstring temp,wstring Form,tIWMM &iWord,int sourceId);
+  int processMainEntryBlock(tIWMM &iWord,wstring sWord,wstring match,wstring desiredForm,vector <wstring> &pastPages,wstring &mainEntry,int sourceId);
+  int processSelectBlock(tIWMM &iWord,wstring sWord,wstring match,wstring lastSelectBlock,vector <wstring> &pastPages);
+  int parseMerriamWebsterDictionaryPage(wstring buffer,tIWMM &iWord,wstring sWord,wstring desiredForm,vector <wstring> &pastPages,bool recursive,int sourceId);
+	bool inflectionMatchNationality(wstring match,wstring form,tIWMM &iWord,wstring sWord,size_t beginPos,size_t nextDefinition,int sourceId,wchar_t *nationality,wchar_t *wordType);
+  void inflectionMatchAlternateNationality(wstring match,wstring form,tIWMM &iWord,wstring sWord,size_t beginPos,size_t nextDefinition,int sourceId);
+  int parseCambridgeLearnersDictionaryPage(wstring buffer,tIWMM &iWord,wstring sWord,vector <wstring> &pastPages,bool recursive,int sourceId);
+
+  #ifdef CHECK_WORD_CACHE
+    // test routines
+    int checkWord(WordClass &Words2,tIWMM originalIWord,tIWMM newWord,int ret);
+    int getWebstersDictionaryWord(WordClass &Words2,tIWMM originalIWord);
+    int getCambridgeDictionaryWord(WordClass &Words2,tIWMM originalIWord);
+  #endif
+
+  bool setOptions(LPVOID  hRequest);
+  int processOptionsList(tIWMM &iWord,wstring sWord,wstring match,wstring lastOptionsList,vector <wstring> &pastPages,int sourceId);
+  int getWebsterDictionaryPage(wstring sWord,wstring form,wstring &buffer,bool wordIsAddress);
+  int getCambridgeLearnersDictionaryPage(wstring sWord,wstring &buffer,bool listkey);
+  int inflectionMatch(wstring &form,tIWMM &iWord,wstring sWord,wstring derivationBase,int sourceId,wstring original);
+  bool processInstruction(tIWMM &iWord,wstring sWord,wstring newWord,wstring aForm,wstring instruction,int sourceId);
+  int processIrregularForms(wstring match,wstring entry,size_t beginPos,wstring form,size_t nextDefinition,tIWMM &iWord,wstring sWord,int sourceId);
+  int addProperNamesFile(wstring path);
+  void addNickNames(wchar_t *filePath);
+  int getProperNameForm(tIWMM &iWord,wstring properNoun);
+  int standardEnding(tIWMM iWord,wstring sWord,int sourceId);
+  int splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int dashLocation,int sourceId);
+	boolean findWordInDB(MYSQL *mysql, wstring word, tIWMM &iWord);
+	int markWordUndefined(tIWMM &iWord,wstring sWord,int flags,bool firstWordCapitalized,int nounOwner,int sourceId);
+  void generateFormStatistics(void);
+  int checkAddInflections(vector <wstring> &allInflections,tIWMM &iWord,wstring sWord,wstring form,wstring mainEntry,int sourceId,bool medical);
+  //bool contains(vector<const char *> &words,const char *word);
+  int processDate(wstring &sWord, wchar_t *buffer,__int64 &cp,__int64 &bufferScanLocation);
+	int processTime(wstring &sWord, wchar_t *buffer, __int64 &cp, __int64 &bufferScanLocation);
+	int processWebAddress(wstring &sWord, wchar_t *buffer, __int64 &cp, __int64 bufferLen);
+	bool eliminate(wchar_t *input, int &len, wchar_t *begin, wchar_t *end, bool keepBegin);
+  bool eliminate(wchar_t *input,int &len,wchar_t *pat);
+  void tableEliminateIf(wchar_t *input,int &len, wchar_t *txt,bool embeddedOK);
+  bool reduceDanielWebsterPage(wstring sWord,wstring &buffer);
+  bool reduceCambridgeDictionaryPage(wstring sWord,wstring &buffer);
+  void reduceDanielWebsterListwordPage(wstring &buffer);
+  void eliminateHTMLCharacterEntities(wstring &buffer);
+  void processEndForm(tIWMM &iWord,wstring sWord,wstring lastDitch,wstring mainEntry,int sourceId);
+};
+
+#include "pattern.h"
+
+class WordMatch;
+
+#include "patternElementMatchArray.h"
+#include "patternMatchArray.h"
+
+extern wchar_t *OCSubTypeStrings[];

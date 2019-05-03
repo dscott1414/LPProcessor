@@ -1,0 +1,7 @@
+; activity places are locations that are designated by activity, 
+;   that are/were/will be held at a specific location
+; use +print at end to check
+; table +HYPO -tabular_array -secretary 
+; province +COORDS(state)
+lunch +COORDS(meal)
+party +COORDS(affair)
