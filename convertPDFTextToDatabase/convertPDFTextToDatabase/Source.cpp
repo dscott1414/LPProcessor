@@ -26,8 +26,8 @@
 using namespace std;
 #include "mysql.h"
 #include "wn.h"
-#include "..\..\source\word.h"
-#include "..\..\source\source.h"
+#include "..\..\word.h"
+#include "..\..\source.h"
 void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition> &d);
 
 

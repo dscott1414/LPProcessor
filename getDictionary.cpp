@@ -14,6 +14,9 @@
 #include "profile.h"
 #include "paice.h"
 #include "mysqldb.h"
+#include <sstream>
+#include <iostream>
+#include <vector>
 
 int bandwidthControl=1; // minimum seconds between requests   // initialized before threads
 
@@ -789,26 +792,24 @@ boolean WordClass::findWordInDB(MYSQL *mysql, wstring sWord, tIWMM &iWord)
 {
 	if (mysql == NULL)
 		return false;
-	if (!myquery(mysql, L"LOCK TABLES words READ,wordforms READ")) return true;
+	if (!myquery(mysql, L"LOCK TABLES words w READ,wordforms wf READ")) return true;
 	wchar_t qt[query_buffer_len_overflow];
-	_snwprintf(qt, query_buffer_len, L"select w.id,wf.formId,w.inflectionFlags,w.flags,w.timeFlags,w.derivationRules,w.sourceId from words w,wordForms wf where word=%s", sWord.c_str());
+	_snwprintf(qt, query_buffer_len, L"select w.id,wf.formId,w.inflectionFlags,w.flags,w.timeFlags,w.derivationRules,w.sourceId from words w,wordForms wf where wf.wordId=w.id and word=\"%s\"", sWord.c_str());
 	MYSQL_RES *result = NULL;
 	if (!myquery(mysql, qt, result))
 	{
 		myquery(mysql, L"UNLOCK TABLES");
-		return true;
+		return false;
 	}
-	__int64 numRows = mysql_num_rows(result);
 	MYSQL_ROW sqlrow;
 	iWord = WMM.end();
 	while ((sqlrow = mysql_fetch_row(result)) != NULL)
 	{
-		int wordId = atoi(sqlrow[0]);
 		int iForm = atoi(sqlrow[1]), iInflectionFlags = atoi(sqlrow[2]), iFlags = atoi(sqlrow[3]), iTimeFlags = atoi(sqlrow[4]), iDerivationRules = atoi(sqlrow[5]), iSourceId = atoi(sqlrow[6]);
 		if (iWord == WMM.end())
 		{
 			pair< tIWMM, bool > pr;
-			pr = WMM.insert(tWFIMap(sWord, tFI(iForm, iInflectionFlags, iFlags, iTimeFlags, iDerivationRules, wNULL, -1)));
+			pr = WMM.insert(tWFIMap(sWord, tFI(iForm, iInflectionFlags, iFlags, iTimeFlags, iDerivationRules, wNULL, iSourceId)));
 			if (Forms[iForm]->isTopLevel)
 				pr.first->second.flags |= tFI::topLevelSeparator;
 			iWord = pr.first;
@@ -819,62 +820,69 @@ boolean WordClass::findWordInDB(MYSQL *mysql, wstring sWord, tIWMM &iWord)
 		}
 	}
 	mysql_free_result(result);
-	if (!myquery(mysql, L"UNLOCK TABLES words,wordForms"))
+	if (!myquery(mysql, L"UNLOCK TABLES"))
 		return false;
-	return true;
+	return iWord != WMM.end();
 }
 
-int WordClass::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int dashLocation,int sourceId)
+vector<wstring> WordClass::splitString(wstring str,wchar_t wc)
+{
+	vector<wstring> strings;
+	wistringstream f(str);
+	wstring s;
+	while (std::getline(f, s, wc)) 
+		strings.push_back(s);
+	return strings;
+}
+
+tIWMM WordClass::fullQuery(MYSQL *mysql, wstring word,int sourceId)
+{
+	tIWMM iWord = WMM.end();
+	if ((iWord = Words.query(word)) == WMM.end() && !findWordInDB(mysql, word, iWord))
+		getForms(iWord, word, sourceId);
+	return iWord;
+}
+
+int WordClass::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId)
 { LFS
 	if (sWord.length()<5) return -1;
-	if (dashLocation>0)
+	vector <wstring> components = splitString(sWord, '-');
+	tIWMM iWordComponent=WMM.end();
+	for (wstring w : components)
+		if ((iWordComponent = fullQuery(mysql, w, sourceId)) == WMM.end())
+			break;
+	// don't split a word with a dash in it
+	if (components.size()==1 && (iWordComponent == WMM.end() || iWordComponent->second.query(UNDEFINED_FORM_NUM) >= 0)) // not found or unknown
 	{
-		wstring firstWord=sWord.substr(0,dashLocation);
-		wstring secondWord=sWord.substr(dashLocation+1,sWord.length()-dashLocation);
-		tIWMM firstQIWord=WMM.end(),secondQIWord=WMM.end();
-		if (((firstQIWord=Words.query(firstWord))!=WMM.end() || findWordInDB(mysql, firstWord,firstQIWord) || !getForms(firstQIWord,firstWord,sourceId)) &&
-			((secondQIWord=Words.query(secondWord))!=WMM.end() || findWordInDB(mysql, secondWord,secondQIWord) || !getForms(secondQIWord,secondWord,sourceId)))
+		for (unsigned int I = 2; I < sWord.length() - 2; I++)
 		{
-			// (SW) word bone-cracking( main: verb present part)
-			// (SW) word white-maned(main: verb past)
-			// (SW) word micro-electric( main: adjective)
-			// (SW) word half-wittingly(main: adverb)
-			// (SW) word arms-sales(main: noun)
-			iWord=end();
-			if (secondQIWord->second.query(verbForm)>=0)
-				checkAdd(L"SW",iWord,sWord,0,L"verb",secondQIWord->second.inflectionFlags,0,secondWord,sourceId);
-			if (secondQIWord->second.query(nounForm)>=0)
-				checkAdd(L"SW",iWord,sWord,0,L"noun",secondQIWord->second.inflectionFlags,0,secondWord,sourceId);
-			if (secondQIWord->second.query(adjectiveForm)>=0)
-				checkAdd(L"SW",iWord,sWord,0,L"adjective",secondQIWord->second.inflectionFlags,0,secondWord,sourceId);
-			if (secondQIWord->second.query(adverbForm)>=0)
-				checkAdd(L"SW",iWord,sWord,0,L"adverb",secondQIWord->second.inflectionFlags,0,secondWord,sourceId);
-			if (iWord==end()) return -1;
-			checkAdd(L"SW",iWord,sWord,0,COMBINATION_FORM,0,dashLocation,secondWord,sourceId);
-			return 0;
+			components.clear();
+			wstring firstWord = sWord.substr(0, I);
+			components.push_back(sWord.substr(I, sWord.length() - I));
+			tIWMM firstQIWord = WMM.end();
+			if ((firstQIWord = fullQuery(mysql, firstWord, sourceId)) != WMM.end() && (iWordComponent = fullQuery(mysql, components[components.size() - 1], sourceId)) != WMM.end())
+				break;
 		}
 	}
-	for (unsigned int I=2; I<sWord.length()-2; I++)
+	if (iWordComponent != WMM.end() && iWordComponent->second.query(UNDEFINED_FORM_NUM) < 0)
 	{
-		wstring firstWord=sWord.substr(0,I);
-		wstring secondWord=sWord.substr(I,sWord.length()-I);
-		tIWMM firstIWord=WMM.end(),secondIWord=WMM.end(),firstQIWord=WMM.end(),secondQIWord=WMM.end();
-		if (((firstQIWord = Words.query(firstWord)) != WMM.end() || findWordInDB(mysql, firstWord, firstQIWord)) &&
-			((secondQIWord = Words.query(secondWord)) != WMM.end() || findWordInDB(mysql, secondWord, secondQIWord)))
-		{
-			iWord=end();
-			if (secondQIWord->second.query(verbForm)>=0)
-				checkAdd(L"SW",iWord,sWord,0,L"verb",secondQIWord->second.inflectionFlags,0,secondWord,sourceId);
-			if (secondQIWord->second.query(nounForm)>=0)
-				checkAdd(L"SW",iWord,sWord,0,L"noun",secondQIWord->second.inflectionFlags,0,secondWord,sourceId);
-			if (secondQIWord->second.query(adjectiveForm)>=0)
-				checkAdd(L"SW",iWord,sWord,0,L"adjective",secondQIWord->second.inflectionFlags,0,secondWord,sourceId);
-			if (secondQIWord->second.query(adverbForm)>=0)
-				checkAdd(L"SW",iWord,sWord,0,L"adverb",secondQIWord->second.inflectionFlags,0,secondWord,sourceId);
-			if (iWord==end()) return -1;
-			checkAdd(L"SW",iWord,sWord,0,COMBINATION_FORM,0,dashLocation,secondWord,sourceId);
-			return 0;
-		}
+		// (SW) word bone-cracking( main: verb present part)
+		// (SW) word white-maned(main: verb past)
+		// (SW) word micro-electric( main: adjective)
+		// (SW) word half-wittingly(main: adverb)
+		// (SW) word arms-sales(main: noun)
+		iWord=end();
+		if (iWordComponent->second.query(verbForm) >= 0)
+			checkAdd(L"SW", iWord, sWord, 0, L"verb", iWordComponent->second.inflectionFlags, 0, components[components.size()-1], sourceId);
+		if (iWordComponent->second.query(nounForm)>=0)
+			checkAdd(L"SW",iWord,sWord,0,L"noun", iWordComponent->second.inflectionFlags,0, components[components.size() - 1],sourceId);
+		if (iWordComponent->second.query(adjectiveForm)>=0)
+			checkAdd(L"SW",iWord,sWord,0,L"adjective", iWordComponent->second.inflectionFlags,0, components[components.size() - 1],sourceId);
+		if (iWordComponent->second.query(adverbForm)>=0)
+			checkAdd(L"SW",iWord,sWord,0,L"adverb", iWordComponent->second.inflectionFlags,0, components[components.size() - 1],sourceId);
+		if (iWord==end()) return -1;
+		checkAdd(L"SW",iWord,sWord,0,COMBINATION_FORM,0,0, components[components.size() - 1],sourceId);
+		return 0;
 	}
 	return -1;
 }
@@ -1133,461 +1141,10 @@ int WordClass::readBinaryPage(wchar_t *str, int destfile,int &total)
 	return 0;
 }
 
-bool WordClass::eliminate(wchar_t *input,int &len,wchar_t *begin,wchar_t *end,bool keepBegin)
-{ LFS
-	wchar_t *ch=wcsstr(input,begin);
-	if (!ch) return false;
-	wchar_t *ch2=wcsstr(ch,end);
-	if (!ch2) return false;
-	ch2+=wcslen(end);
-	if (keepBegin) ch+=wcslen(begin);
-	int beginlen=(int)(ch-input);
-	int movelen=len-(beginlen+((int)(ch2-ch)));
-	if (movelen<0)
-	{
-		int p=1;
-		wprintf(L"Problem!");
-		while (p) Sleep(10000);
-		return false;
-	}
-	memmove(ch,ch2,movelen);
-	len-=(int)(ch2-ch);
-	input[len]=0;
-	return true;
-}
-
-bool WordClass::eliminate(wchar_t *input,int &len,wchar_t *pat)
-{ LFS
-	wchar_t *ch=wcsstr(input,pat);
-	if (!ch) return false;
-	int beginlen=(int)(ch-input);
-	int movelen=len-(beginlen+wcslen(pat));
-	memmove(ch,ch+wcslen(pat),movelen);
-	if (movelen<0)
-	{
-		int p=1;
-		wprintf(L"Problem!");
-		while (p) Sleep(10000);
-		return false;
-	}
-	len-=wcslen(pat);
-	input[len]=0;
-	return true;
-}
-
-void WordClass::tableEliminateIf(wchar_t *input,int &len, wchar_t *txt,bool embeddedOK)
-{ LFS
-	wchar_t *offset=input;
-	int end;
-	while (true)
-	{
-		wchar_t *ch=wcsstr(offset,L"<table");
-		if (!ch) return;
-		offset=ch+wcslen(L"<table");
-		int start=(int)(ch-input);
-		int embedded=0,I;
-		bool txtSeen=false;
-		for (I=start+wcslen(L"<table"); I<len; I++)
-		{
-			if (!wcsncmp(input+I,L"</table>",8))
-			{
-				if (embedded==0) break;
-				embedded--;
-			}
-			if (!wcsncmp(input+I,L"<table",6))
-			{
-				embedded++;
-				if (!embeddedOK) break;
-			}
-			if (!wcsncmp(input+I,txt,wcslen(txt))) txtSeen=true;
-		}
-		if (I==len) return;
-		if (embedded) continue;
-		end=I+wcslen(L"</table>");
-		if (txtSeen)
-		{
-			//int beginlen=start;
-			int movelen=len-end;
-			if (movelen<0)
-			{
-				int p=1;
-				wprintf(L"Problem!");
-				while (p) Sleep(10000);
-				return;
-			}
-			memmove(input+start,input+end,movelen);
-			len-=(end-start);
-			input[len]=0;
-			return;
-		}
-	}
-}
-
-bool WordClass::reduceCambridgeDictionaryPage(wstring sWord,wstring &buffer)
-{ LFS
-	wchar_t *input=wcsdup(buffer.c_str());
-	int len=buffer.length();
-	if (wcsstr(input,L"</span> was not found in the <span class='dictname'>") ||
-		wcsstr(input,L"was not found in the <a class='dictname'"))
-	{
-		if (!unknownCDWords.size())
-			readUnknownWords(unknownCD,unknownCDWords);
-		vector <wstring>::iterator ip=lower_bound(unknownCDWords.begin(),unknownCDWords.end(),sWord);
-		wcslwr((wchar_t *)sWord.c_str());
-		changedWords=true;
-		unknownCDWords.insert(ip,sWord);
-		free(input);
-		return false;
-	}
-	eliminate(input,len,L"<head>",L"</head>",false);
-	eliminate(input,len,L"<!-- BeginLibraryItem",L"<!-- EndLibraryItem -->",false);
-	eliminate(input,len,L"<!-- BeginLibraryItem \"/Library/seealso.lbi\" -->",L"<!-- EndLibraryItem -->",true);
-	while (eliminate(input,len,L"<img",L">",false));
-	while (eliminate(input,len,L"<IMG",L">",false));
-	eliminate(input,len,L"<A HREF",L"</A>",false);
-	tableEliminateIf(input,len,L"Get help with ordering, searching, contacts, etc.",true);
-	tableEliminateIf(input,len,L"people learning English all around the world",false);
-	tableEliminateIf(input,len,L"French / English",false);
-	tableEliminateIf(input,len,L"Look it up",false);
-	tableEliminateIf(input,len,L"University Press 2004.",false);
-	tableEliminateIf(input,len,L"Buy this dictionary",false);
-	eliminate(input,len,L"<!-- resources -->",L"<!-- ask jeeves -->",false);
-	eliminate(input,len,L"<!-- right 1 - navigation and Ask Jeeves -->",L"<!-- right 2 - banner advertising -->",false);
-	input[len]=0;
-	buffer=input;
-	free(input);
-	return true;
-}
-
 bool WordClass::closeConnection(void)
 { LFS
 	if( hINet ) InternetCloseHandle( hINet );
 	return true;
-}
-
-int WordClass::processIrregularForms(wstring match,wstring entry,size_t beginPos,wstring form,size_t nextDefinition,tIWMM &iWord,wstring sWord,int sourceId)
-{ LFS
-	if (form!=L"verb") return -1;
-	vector <wstring> irregularVerbs;
-	wstring irregular,inflectionName;
-	size_t irregularPos=beginPos;
-	while (!nextMatch(match,L"<span class='def-irreg'>",L"</span>",irregularPos,irregular,false))
-	{
-		if (irregularPos>nextDefinition && nextDefinition!=wstring::npos) break;
-		if (irregular[0]!=L'-') irregularVerbs.push_back(irregular);  // reject suffix or prefix suggestions
-	}
-	/* for 5 forms:from Cambridge main entry bid: bidding, bid, bid, bade, bidden */
-	/* for 5 forms:from Websters main entry bid: bade;bidden;bidding;bids */
-	if (irregularVerbs.size()==3 || irregularVerbs.size()==5)
-	{
-		irregularVerbs.push_back(irregularVerbs[0]);
-		irregularVerbs.erase(irregularVerbs.begin());
-		int inflection;
-		unsigned int f;
-		for (f=(irregularVerbs.size()==5) ? 2 : 0; f<irregularVerbs.size(); f++)
-		{
-			inflection=1<<(f+4);
-			if (equivalentIfIgnoreDashSpaceCase(sWord,irregularVerbs[f]))
-				checkAdd(L"CAM irrVerb3",iWord,sWord,0,form,inflection,0,entry,sourceId);
-			else
-				lplog(LOG_DICTIONARY,L"MainEntry %s: Detected Inflection (CAM irrim)%s (%s) (Form %s)",sWord.c_str(),getInflectionName(inflection,verbInflectionMap,inflectionName),irregularVerbs[f].c_str(),form.c_str());
-		}
-		// VERB_PRESENT_THIRD_SINGULAR is unknown, unlisted and is skipped
-		f=4;
-		inflection=1<<(f+4);
-		if (equivalentIfIgnoreDashSpaceCase(sWord,entry))
-			checkAdd(L"CAM irrVerb3",iWord,sWord,0,form,inflection,0,entry,sourceId);
-		else
-			lplog(LOG_DICTIONARY,L"MainEntry %s: Detected Inflection (CAM irrVerb3)%s (%s) (Form %s)",sWord.c_str(),getInflectionName(inflection,verbInflectionMap,inflectionName),entry.c_str(),form.c_str());
-		return 0;
-	}
-	// 2 forms are past and past participle?
-	else if (irregularVerbs.size()==2)
-	{
-		if (entry[entry.length()-1]==L'e' && sWord!=entry+L"ing")
-			irregularVerbs.push_back(entry.substr(0,entry.length()-1)+L"ing");
-		else
-			irregularVerbs.push_back(entry+L"ing");
-		irregularVerbs.push_back(entry+L"s");
-		irregularVerbs.push_back(entry);
-		int inflection;
-		unsigned int f;
-		for (f=0; f<irregularVerbs.size(); f++)
-		{
-			inflection=1<<(f+4);
-			if (equivalentIfIgnoreDashSpaceCase(sWord,irregularVerbs[f]))
-				checkAdd(L"CAM irrVerb2",iWord,sWord,0,form,inflection,0,entry,sourceId);
-			else
-				lplog(LOG_DICTIONARY,L"MainEntry %s: Detected Inflection (CAM irrVerb2)%s (%s) (Form %s)",sWord.c_str(),getInflectionName(inflection,verbInflectionMap,inflectionName),irregularVerbs[f].c_str(),form.c_str());
-		}
-		return 0;
-	}
-	else if (irregularVerbs.size())
-	{
-		lplog(LOG_DICTIONARY,L"Irregular verb block for word %s has illegal # of words: %d",sWord.c_str(),irregularVerbs.size());
-		return UNPARSABLE_PAGE;
-	}
-	return -1; //  no irregular forms
-}
-
-int WordClass::checkAddInflections(vector <wstring> &allInflections,tIWMM &iWord,wstring sWord,wstring form,wstring mainEntry,int sourceId,bool medical)
-{ LFS
-	bool illegal=false,oneAdded=false;
-	int formClass=4;
-	tInflectionMap *inflectionMap= nounInflectionMap;
-	if (form==L"noun") formClass=0;
-	else if (form==L"verb") formClass=1;
-	else if (form==L"adjective") formClass=2;
-	else if (form==L"adverb") formClass=3;
-	for (unsigned int f=0; f<allInflections.size(); f++)
-	{
-		int inflection=0;
-		switch (formClass)
-		{
-		case 0:illegal=(inflection=1<<(f))>PLURAL_OWNER; inflectionMap=nounInflectionMap; break;
-		case 1:illegal=(inflection=1<<(f+4))>VERB_PRESENT_PLURAL; inflectionMap=verbInflectionMap; break;
-		case 2:illegal=(inflection=1<<(f+13))>ADJECTIVE_SUPERLATIVE; inflectionMap=adjectiveInflectionMap; break;
-		case 3:illegal=(inflection=1<<(f+16))>ADVERB_SUPERLATIVE; inflectionMap=adverbInflectionMap; break;
-		}
-		if (illegal) lplog(LOG_DICTIONARY,L"Word %s of form %s has too many inflections - %d",sWord.c_str(),form.c_str(),f);
-		wstring inflectionName;
-		int pos;
-		wchar_t ch;
-		// if medical, just make sure that the entry has the word in it, delimited by spaces or nothing
-		if (equivalentIfIgnoreDashSpaceCase(sWord,allInflections[f]) || 
-				(medical && (pos=allInflections[f].find(sWord))!=wstring::npos && ((ch=allInflections[f][pos+sWord.length()])==0 || ch==L' ')))
-		{
-			checkAdd(L"gI",iWord,sWord,0,form,inflection,0,mainEntry,sourceId);
-			oneAdded=true;
-		}
-		else
-			lplog(LOG_DICTIONARY,L"mainEntry %s: Detected mismatched inflection (pm)%s (%s) (Form %s) definitionEntry %s",sWord.c_str(),(formClass<4) ? getInflectionName(inflection,inflectionMap,inflectionName) : L" ",allInflections[f].c_str(),form.c_str(),mainEntry.c_str());
-	}
-	/*
-	if (!oneAdded && mainEntry.find(' ')!=wstring::npos && mainEntry.find(sWord)!=wstring::npos)
-	{
-		wcslwr((wchar_t *)mainEntry.c_str());
-		tIWMM iWordVariant=query(mainEntry);
-		if (iWordVariant==WMM.end() || (iWordVariant->second.flags&tFI::queryOnAnyAppearance))
-		{
-			wstring buffer;
-			int ret;
-			vector <wstring> pastPages;
-			// prevent infinite loops by having two undefined variants refer to each other.
-			if (query(sWord)==WMM.end())
-				pair < tIWMM, bool > pr=WMM.insert(tWFIMap(sWord,tFI()));
-			if (ret=getWebsterDictionaryPage(mainEntry,L"",buffer,false)) return ret;
-			if (parseMerriamWebsterDictionaryPage(buffer,iWordVariant,mainEntry,L"",pastPages,false,sourceId) || iWordVariant==WMM.end()) return 0;
-			iWordVariant->second.flags&=~tFI::queryOnAnyAppearance;
-		}
-		bool added;
-		if (iWordVariant->second.query(UNDEFINED_FORM_NUM)<0)
-			iWord=addCopy(sWord,iWordVariant,added);
-			else
-				lplog(LOG_DICTIONARY,L"Rejected unknown word %s.",iWordVariant->first.c_str());
-	}
-	*/
-	return 0;
-}
-
-//             sWord ornithischians, possibleWord (derivationBase) ornithischian, mainEntry ornithischia, 
-int WordClass::inflectionMatch(wstring &form,tIWMM &iWord,wstring sWord,wstring derivationBase,int sourceId,wstring mainEntry)
-{ LFS
-	if (form!=L"verb" && form!=L"noun" && form!=L"plural noun" && form!=L"adjective" && form!=L"adverb")
-	{
-		if (sWord==mainEntry)
-		{
-			checkAdd(L"CAM im verb",iWord,sWord,0,form,0,0,mainEntry,sourceId);
-			return 0;
-		}
-		return -1;
-	}
-	if (form==L"plural noun")
-	{
-		if (equivalentIfIgnoreDashSpaceCase(sWord,mainEntry))
-		{
-			checkAdd(L"CAM im PN",iWord,sWord,0,L"noun",PLURAL,0,mainEntry,sourceId);
-			return 0;
-		}
-		return -1;
-	}
-	vector <wstring> allInflections;
-	wstring sInflections;
-	if (form==L"noun") sInflections=L"-s";
-	else if (form==L"adjective" || form==L"adverb") sInflections=L"-er/-est";
-	else if (form.find(L"verb")!=wstring::npos) sInflections=L"-ed/-ing/-s";
-	if (form!=L"verb") allInflections.push_back(derivationBase);
-	getInflection(sWord,form,derivationBase,sInflections,allInflections);
-	if (form==L"verb") allInflections.push_back(derivationBase);
-	checkAddInflections(allInflections,iWord,sWord,form,mainEntry,sourceId,false);
-	return 0;
-}
-
-bool WordClass::inflectionMatchNationality(wstring match,wstring form,tIWMM &iWord,wstring sWord,size_t beginPos,size_t nextDefinition,int sourceId,wchar_t *nationality,wchar_t *wordType)
-{ LFS
-	size_t nationalityPos=beginPos;
-	wstring alternate;
-	wchar_t lookFor[1024];
-	wsprintf(lookFor,L"<span class='def-label'>%s</span> <span class='cald-%s'>",nationality,wordType);
-	if (!nextMatch(match,lookFor,L"</span>",nationalityPos,alternate,false) && (nextDefinition==wstring::npos || nextDefinition>nationalityPos))
-	{
-		inflectionMatch(form,iWord,sWord,alternate,sourceId,alternate);
-		return true;
-	}
-	return false;
-}
-
-void WordClass::inflectionMatchAlternateNationality(wstring match,wstring form,tIWMM &iWord,wstring sWord,size_t beginPos,size_t nextDefinition,int sourceId)
-{ LFS
-	wchar_t *nationalities[]={L"US",L"UK",L"UK USUALLY",NULL};
-	for (unsigned int n=0; nationalities[n]; n++)
-	{
-		if (inflectionMatchNationality(match,form,iWord,sWord,beginPos,nextDefinition,sourceId,nationalities[n],L"word")) return;
-		if (inflectionMatchNationality(match,form,iWord,sWord,beginPos,nextDefinition,sourceId,nationalities[n],L"hword")) return;
-	}
-}
-
-//  <span class='def-classification'>adjective</span>
-int WordClass::parseCambridgeLearnersDictionaryPage(wstring buffer,tIWMM &iWord,wstring sWord,vector <wstring> &pastPages,bool recursive,int sourceId)
-{ LFS
-	if (log_net)
-		lplog(L"CL:begin parse ****\n%s\n****\n",buffer.c_str());
-	size_t beginPos=-1;
-	if (buffer.find(L"</span> was not found in the <span class='dictname'>")!=wstring::npos ||
-		buffer.find(L" was not found in the <a class='dictname'>")!=wstring::npos) return WORD_NOT_FOUND;
-	wstring match,entry;
-	bool definition=
-		(!nextMatch(buffer,L"<!-- Begin results area -->",L"<!-- End results area -->",beginPos,match,false) ||
-		 !nextMatch(buffer,L"<h3>Definition</h3>",L"<!-- BeginLibraryItem",beginPos,match,false));
-	if (definition)
-	{
-		beginPos=-1;
-		if (nextMatch(match,L"<span class='cald-hword'>",L"</span>",beginPos,entry,false) &&
-			nextMatch(match,L"<span class='cald-word'>",L"</span>",beginPos,entry,false))
-		{
-			//lplog(LOG_ERROR,L"ERROR:cambridge entry for word %s has no definitions listed.",sWord.c_str());
-			definition=false;
-		}
-	}
-	if (definition)
-	{
-		// can't set beginPos to -1 or the same entry will be reread.
-		wstring entry2;
-		nextMatch(match,L"<span class='cald-hword'>",L"</span>",beginPos,entry2,false); // alternate word?
-		// <span class='cald-definition'><a href='results.asp?searchword=buy'>buy</a></span>
-		if (match.find(L"<i>plural of</i>")!=wstring::npos)
-		{
-			checkAdd(L"CAM p",iWord,sWord,0,L"noun",PLURAL,0,entry,sourceId);
-			return 0;
-		}
-		else if (match.find(L"<i>past simple of</i>")!=wstring::npos)
-		{
-			checkAdd(L"CAM p",iWord,sWord,0,L"verb",VERB_PAST,0,entry,sourceId);
-			return 0;
-		}
-		else if (match.find(L"<i>past participle of</i>")!=wstring::npos)
-		{
-			checkAdd(L"CAM p",iWord,sWord,0,L"verb",VERB_PAST_PARTICIPLE,0,entry,sourceId);
-			return 0;
-		}
-		//<i>past simple and past participle of</i> <span class='cald-definition'><a href='results.asp?searchword=buy'>buy</a></span>
-		else if (match.find(L"<i>past simple and past participle of</i>")!=wstring::npos)
-		{
-			checkAdd(L"CAM p",iWord,sWord,0,L"verb",VERB_PAST,0,entry,sourceId);
-			checkAdd(L"CAM p",iWord,sWord,0,L"verb",VERB_PAST_PARTICIPLE,0,entry,sourceId);
-			return 0;
-		}
-		int saveAltNatBegin=beginPos;  // this alternate form occurs BETWEEN cald-word and the def-classification
-		//<span class='def-compactLabel'>WRITTEN ABBREVIATION FOR</span>    <span class='cald-definition'>Thursday</span>
-		wstring label;
-		while (!nextMatch(match,L"<span class='def-label'>",L"</span>",beginPos,label,false))
-		{
-			for (unsigned int I=0; I<label.length(); I++) label[I]=towlower(label[I]);
-			if (label.find(L"abbreviation")!=wstring::npos)
-			{
-				wstring mainEntry;
-				if (!nextMatch(match,L"<span class='cald-definition'>",L"</span>",beginPos,mainEntry,false))
-				{
-					// only true abbreviations will have one word, other formats will have a definition which shouldn't go in here.
-					if (mainEntry.find(' ')==wstring::npos)
-						checkAdd(L"CAM abb",iWord,sWord,0,L"abbreviation",0,0,mainEntry,sourceId);
-				}
-			}
-		}
-		beginPos=saveAltNatBegin;  
-		wstring form;
-		if (nextMatch(match,L"<span class='def-classification'>",L"</span>",beginPos,form,false))
-		{
-			lplog(LOG_DICTIONARY,L"ERROR: Could not find classification of word %s in web page.",sWord.c_str());
-			return WORD_NOT_FOUND;
-		}
-		size_t nextDefinition=match.find(L"<br><br><span class='cald-word'>",beginPos);
-		// catch irregularly formed verbs
-		if (processIrregularForms(match,entry,beginPos,form,nextDefinition,iWord,sWord,sourceId))
-			inflectionMatch(form,iWord,sWord,entry,sourceId,entry);
-		if (entry2[0]) inflectionMatch(form,iWord,sWord,entry2,sourceId,entry2);
-		//(<span class='def-compactLabel'>US</span> <span class='cald-word'>neighbor</span>) check for alternate nationality
-		inflectionMatchAlternateNationality(match,form,iWord,sWord,saveAltNatBegin,nextDefinition,sourceId);
-		while (!nextMatch(match,L"<br><br><span class='cald-word'>",L"</span>",beginPos,entry,false))
-		{
-			saveAltNatBegin=beginPos;  // this alternate form occurs BETWEEN cald-word and the def-classification
-			nextDefinition=match.find(L"<br><br><span class='cald-word'>",beginPos);
-			if (nextMatch(match,L"<span class='def-classification'>",L"</span>",beginPos,form,false))
-			{
-				lplog(LOG_DICTIONARY,L"ERROR: Could not find classification of word %s in web page.",sWord.c_str());
-				return WORD_NOT_FOUND;
-			}
-			inflectionMatchAlternateNationality(match,form,iWord,sWord,saveAltNatBegin,nextDefinition,sourceId);
-			if (processIrregularForms(match,entry,beginPos,form,nextDefinition,iWord,sWord,sourceId))
-				inflectionMatch(form,iWord,sWord,entry,sourceId,entry);
-		}
-		return 0;
-	}
-	else if (nextMatch(buffer,L"<ul>",L"</ul>",beginPos,match,false)==0)
-	{
-		if (recursive) return 0;
-		bool mainEntryHasSpace=sWord.find(L" ")!=wstring::npos,mainEntryHasDash=sWord.find(L"-")!=wstring::npos;
-		beginPos=-1;
-		int list_limit=0;
-		while (!nextMatch(match,L"<li>",L"</li>",beginPos,entry,false))
-		{
-			size_t entry_pos=-1;
-			wstring key,entryWord;
-			if (nextMatch(entry,L"key=",L"&",entry_pos,key,false) ||
-				nextMatch(entry,L"CALD'>",L"</a>",entry_pos,entryWord,false))
-			{
-				// Incorrect Cambridge Dictionary listing entry found for zum:<a href="http://dictionary.cambridge.org/linktous.asp" title="Link to us"><img src="images-new/strip_linktous.gif" alt="Link to us" width="73" height="20" /></a>
-				// Incorrect Cambridge Dictionary listing entry found for zum:<a href="http://www.cambridge.org/uk/catalogue/viewBasket.asp" title="View the contents of your basket or place your order"><img src="images-new/strip_basket.gif" alt="View basket" width="32" height="20" /></a>
-				// Incorrect Cambridge Dictionary listing entry found for zum:<a href="http://dictionary.cambridge.org/help/" title="Get help with ordering, searching, contacts, etc."><img src="images-new/strip_help.gif" alt="Help" width="47" height="20" /></a>
-				if (logDatabaseDetails && entry.find(L"alt=\"Link to us\"")==wstring::npos && entry.find(L"alt=\"View basket\"")==wstring::npos && entry.find(L"alt=\"Help\"")==wstring::npos)
-					lplog(LOG_DICTIONARY,L"Incorrect Cambridge Dictionary listing entry found for %s:%s",sWord.c_str(),entry.c_str());
-				continue;
-			}
-			int parens=entryWord.find(L"(");
-			if (parens!=wstring::npos && parens>0) entryWord.erase(parens-1,entryWord.length()-parens+1);
-			bool entryHasSpace=entryWord.find(L" ")!=wstring::npos,entryHasDash=entryWord.find(L"-")!=wstring::npos;
-			// a word with dashes and spaces is unlikly to match the original unless it matches exactly
-			if (!equivalentIfIgnoreDashSpaceCase(sWord,entryWord) &&
-				(entryHasSpace!=mainEntryHasSpace || entryHasDash!=mainEntryHasDash || sWord[0]!=entryWord[0])) continue;
-			wstring listBuffer;
-			unsigned int p;
-			for (p=0; p<pastPages.size() && pastPages[p]!=key; p++);
-			if (p<pastPages.size()) continue;
-			pastPages.push_back(key);
-			//if (!getCambridgeLearnersDictionaryPage(key,listBuffer,true))
-			//	parseCambridgeLearnersDictionaryPage(listBuffer,iWord,sWord,pastPages,true,sourceId);
-			if (list_limit++>15) break;
-		}
-		return 0;
-	}
-	else if (buffer.length())
-	{
-		removeRedundantSpace(buffer);
-		lplog(LOG_DICTIONARY,L"ERROR CL:** Word %s resulted in an unparsable page.",sWord.c_str());
-		if (logDatabaseDetails)
-			lplog(LOG_DICTIONARY,L"ERROR CL:** page:\n%s\n",buffer.c_str());
-	}
-	return UNPARSABLE_PAGE;
 }
 
 #ifdef CHECK_WORD_CACHE
@@ -1617,14 +1174,12 @@ wchar_t *unknowns[]={L"countermarches",NULL,
  "ageist", 
 NULL };
 
-void reconfigure(void);
 bool endStringMatch(const wchar_t *str,wchar_t *endMatch)
 { LFS
 	return !wcscmp(str+wcslen(str)-wcslen(endMatch),endMatch);
 }
 
 #include "wn.h"
-bool checkexist(wchar_t *word,int wordClass);
 
 bool getWNForms(wstring w,vector <int> &WNForms)
 { LFS

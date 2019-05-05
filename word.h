@@ -468,18 +468,12 @@ bool loosesort( const wchar_t *s1, const wchar_t *s2 );
 
 bool equivalentIfIgnoreDashSpaceCase(wstring sWord,wstring word2);
 void removeDots(wstring &str);
-int processInflections(wstring sWord,wstring mainEntry,wstring Form,wstring sInflections,vector<wstring> &allInflections);
-int findFunction(wstring sInflection,wstring &Form);
 int takeLastMatch(wstring &buffer,wstring begin_string,wstring end_string,wstring &match,bool include_begin_and_end);
 int firstMatch(wstring &buffer,wstring begin_string,wstring end_string,size_t &beginPos,wstring &match,bool include_begin_and_end);
 int firstMatchNonEmbedded(wstring &buffer,wstring beginString,wstring endString,size_t &beginPos,wstring &match,bool include_begin_and_end);
-int findMainEntry(wstring &match,wstring &mainEntry);
 int getInflection(wstring sWord,wstring form,wstring mainEntry,wstring iform,vector <wstring> &allInflections);
 int nextMatch(wstring &buffer,wstring begin_string,wstring end_string,size_t &begin_pos,wstring &match,bool include_begin_and_end);
-void transformList(bool hasSpace,bool hasDash,wstring oldList,wstring &newList);
 int getPath(const wchar_t *pathname,void *buffer,int maxlen,int &actualLen);
-int parseOption(wstring option,wstring &newWord,wstring &form,wstring &jump);
-bool spaceSame(wstring sWord,wstring option);
 int readPage(const wchar_t *str, wstring &buffer);
 int readPage(const wchar_t *str, wstring &buffer,wstring &headers);
 
@@ -580,6 +574,9 @@ public:
   void testWordCacheFileRoutines(void);
 	static int processTime(wstring sWord, char &hour, char &minute);
 	static int processDate(wstring sWord, short &year, char &month, char &dayOfMonth);
+	vector<wstring> splitString(wstring str, wchar_t wc);
+	tIWMM fullQuery(MYSQL *mysql, wstring word, int sourceId);
+	int splitWord(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId);
 
 protected:
   bool appendToUnknownWordsMode;
@@ -593,7 +590,6 @@ protected:
 private:
   typedef pair <wstring, tFI> tWFIMap;
   static int lastWordWrittenClock;
-	int getNewWordsIds(MYSQL &mysql,int sourceId,wchar_t *newWordsQT,wchar_t *qt,tIWMM &startUpdateScan);
 	int readWordFormsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,int maxWordId,wchar_t *qt,int *words,int *counts,int &numWordForms,unsigned int * &wordForms, bool printProgress);
   int readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics,int &numWordsInserted,int &numWordsModified, bool printProgress);
   int lastModifiedTime;
@@ -611,17 +607,11 @@ private:
   vector <wchar_t *> multiElementWords;
   vector <wchar_t *> quotedWords;
   vector <wchar_t *> periodWords;
-  //vector <const char *> dashWords;
-  //bool loosesort( const char *s1, const char *s2 );
   unordered_map <wstring, tFI> WMM;
-  //HINTERNET hSession; // WinHTTP only
-  //HINTERNET hConnect;
   // filled during program execution
 	int disinclinationRecursionCount;
 
   bool evaluateIncludedSingleQuote(wchar_t *buffer,__int64 cp,__int64 begincp);
-  //typedef allocator<wstring>::reference reference;
-  //typedef allocator<wstring>::const_reference const_reference;
   int addGenderedNouns(wchar_t *genPath,int inflectionFlags,int wordForm);
 	int addDemonyms(wchar_t *demPath);
 	bool readVerbClasses(void);
@@ -639,55 +629,21 @@ private:
   int addWordToForm(wstring sWord,tIWMM &iWord,int flags,wstring sForm,wstring shortForm,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added);
   int predefineWords(InflectionsRoot words[],wstring form,wstring shortForm,wstring inflectionsClass=L"",int flags=0,bool properNounSubClass=false);
   bool closeConnection(void);
-  wchar_t *httpError(void);
-  int getResults(LPVOID hRequest,wstring &buffer);
   int checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,wstring sForm,int inflection,int derivationRules,wstring mainEntry,int sourceId);
-  bool processNamedForms(wstring sWord,wstring mainEntry,wstring Form,tIWMM &iWord,wstring sInflections,int sourceId);
-  int processAlternateForms(wstring sWord,wstring mainEntry,wstring sForm,tIWMM &iWord,int sourceId);
-  int generateInflections(wstring sWord,wstring mainEntry,wstring Form,tIWMM &iWord,wstring sInflection,wstring temp,int sourceId,bool medical);
-  bool processInflectedFunction(wstring sWord,wstring mainEntry,wstring temp,wstring Form,tIWMM &iWord,int sourceId);
-  int processMainEntryBlock(tIWMM &iWord,wstring sWord,wstring match,wstring desiredForm,vector <wstring> &pastPages,wstring &mainEntry,int sourceId);
-  int processSelectBlock(tIWMM &iWord,wstring sWord,wstring match,wstring lastSelectBlock,vector <wstring> &pastPages);
-  int parseMerriamWebsterDictionaryPage(wstring buffer,tIWMM &iWord,wstring sWord,wstring desiredForm,vector <wstring> &pastPages,bool recursive,int sourceId);
-	bool inflectionMatchNationality(wstring match,wstring form,tIWMM &iWord,wstring sWord,size_t beginPos,size_t nextDefinition,int sourceId,wchar_t *nationality,wchar_t *wordType);
-  void inflectionMatchAlternateNationality(wstring match,wstring form,tIWMM &iWord,wstring sWord,size_t beginPos,size_t nextDefinition,int sourceId);
-  int parseCambridgeLearnersDictionaryPage(wstring buffer,tIWMM &iWord,wstring sWord,vector <wstring> &pastPages,bool recursive,int sourceId);
 
   #ifdef CHECK_WORD_CACHE
     // test routines
     int checkWord(WordClass &Words2,tIWMM originalIWord,tIWMM newWord,int ret);
-    int getWebstersDictionaryWord(WordClass &Words2,tIWMM originalIWord);
-    int getCambridgeDictionaryWord(WordClass &Words2,tIWMM originalIWord);
   #endif
 
-  bool setOptions(LPVOID  hRequest);
-  int processOptionsList(tIWMM &iWord,wstring sWord,wstring match,wstring lastOptionsList,vector <wstring> &pastPages,int sourceId);
-  int getWebsterDictionaryPage(wstring sWord,wstring form,wstring &buffer,bool wordIsAddress);
-  int getCambridgeLearnersDictionaryPage(wstring sWord,wstring &buffer,bool listkey);
-  int inflectionMatch(wstring &form,tIWMM &iWord,wstring sWord,wstring derivationBase,int sourceId,wstring original);
-  bool processInstruction(tIWMM &iWord,wstring sWord,wstring newWord,wstring aForm,wstring instruction,int sourceId);
-  int processIrregularForms(wstring match,wstring entry,size_t beginPos,wstring form,size_t nextDefinition,tIWMM &iWord,wstring sWord,int sourceId);
   int addProperNamesFile(wstring path);
   void addNickNames(wchar_t *filePath);
-  int getProperNameForm(tIWMM &iWord,wstring properNoun);
-  int standardEnding(tIWMM iWord,wstring sWord,int sourceId);
-  int splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int dashLocation,int sourceId);
 	boolean findWordInDB(MYSQL *mysql, wstring word, tIWMM &iWord);
 	int markWordUndefined(tIWMM &iWord,wstring sWord,int flags,bool firstWordCapitalized,int nounOwner,int sourceId);
   void generateFormStatistics(void);
-  int checkAddInflections(vector <wstring> &allInflections,tIWMM &iWord,wstring sWord,wstring form,wstring mainEntry,int sourceId,bool medical);
-  //bool contains(vector<const char *> &words,const char *word);
   int processDate(wstring &sWord, wchar_t *buffer,__int64 &cp,__int64 &bufferScanLocation);
 	int processTime(wstring &sWord, wchar_t *buffer, __int64 &cp, __int64 &bufferScanLocation);
 	int processWebAddress(wstring &sWord, wchar_t *buffer, __int64 &cp, __int64 bufferLen);
-	bool eliminate(wchar_t *input, int &len, wchar_t *begin, wchar_t *end, bool keepBegin);
-  bool eliminate(wchar_t *input,int &len,wchar_t *pat);
-  void tableEliminateIf(wchar_t *input,int &len, wchar_t *txt,bool embeddedOK);
-  bool reduceDanielWebsterPage(wstring sWord,wstring &buffer);
-  bool reduceCambridgeDictionaryPage(wstring sWord,wstring &buffer);
-  void reduceDanielWebsterListwordPage(wstring &buffer);
-  void eliminateHTMLCharacterEntities(wstring &buffer);
-  void processEndForm(tIWMM &iWord,wstring sWord,wstring lastDitch,wstring mainEntry,int sourceId);
 };
 
 #include "pattern.h"

@@ -1278,11 +1278,11 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 			if (stopDisInclination) return 0;
 			if (containsSingleQuote)
 				markWordUndefined(iWord, sWord, 0, firstLetterCapitalized, nounOwner, sourceId);
-			else if (dashLocation >= 0 || mysql==NULL || (ret = attemptDisInclination(mysql,iWord, sWord, sourceId)))
+			else if (mysql==NULL || (ret = attemptDisInclination(mysql,iWord, sWord, sourceId)))
 			{
-				if (dashLocation<0 && ret != WORD_NOT_FOUND && ret != NO_FORMS_FOUND)
+				if (dashLocation < 0 && ret != WORD_NOT_FOUND && ret != NO_FORMS_FOUND)
 					return ret;
-				ret = splitWord(mysql,iWord, sWord, dashLocation, sourceId);
+				ret = splitWord(mysql,iWord, sWord, sourceId);
 				if (ret) ret = markWordUndefined(iWord, sWord, 0, firstLetterCapitalized, nounOwner, sourceId);
 			}
 		}

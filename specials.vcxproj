@@ -123,7 +123,7 @@
     <ClCompile>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <WarningLevel>Level3</WarningLevel>
-      <Optimization>MaxSpeed</Optimization>
+      <Optimization>Disabled</Optimization>
     </ClCompile>
     <Link>
       <AdditionalDependencies>winInet.lib;Ws2_32.lib;ole32.lib;oleaut32.lib;wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;yajl.lib;libmysql.lib;%(AdditionalDependencies)</AdditionalDependencies>

@@ -840,7 +840,7 @@ void identifyFormClass(set<int> &posSet, wstring pos,boolean &plural)
 	}
 	else if (pos.find(L"communications") != wstring::npos)
 	{
-		posSet.insert(FormsClass::gFindForm(L"noun"));
+posSet.insert(FormsClass::gFindForm(L"noun"));
 	}
 	for (auto c : ignoreBefore)
 		if (pos.find(c.c_str()) != wstring::npos)
@@ -848,10 +848,10 @@ void identifyFormClass(set<int> &posSet, wstring pos,boolean &plural)
 	for (auto c : classes)
 	{
 		int where;
-		if ((where=pos.find(c.c_str())) != wstring::npos)
+		if ((where = pos.find(c.c_str())) != wstring::npos)
 		{
 			// this is enough to differentiate between noun, pronoun, verb and adverb
-			if (where==0 || iswspace(pos[where-1]))
+			if (where == 0 || iswspace(pos[where - 1]))
 				posSet.insert(FormsClass::gFindForm(c.c_str()));
 		}
 	}
@@ -862,13 +862,13 @@ void identifyFormClass(set<int> &posSet, wstring pos,boolean &plural)
 		printf("form not recognized - %S", pos.c_str());
 }
 
-int getWordPOS(wstring word, set <int> &posSet, boolean &plural, boolean print, boolean &isNonEuropean,int &dictionaryComQueried,int &dictionaryComCacheQueried,boolean &websterAPIRequestsExhausted)
+int getWordPOS(wstring word, set <int> &posSet, boolean &plural, boolean print, boolean &isNonEuropean, int &dictionaryComQueried, int &dictionaryComCacheQueried, boolean &websterAPIRequestsExhausted)
 {
 	LFS
-	char temptransbuf[1024];
-	if (isNonEuropean=detectNonEuropeanWord(word, temptransbuf, 1024))
+		char temptransbuf[1024];
+	if (isNonEuropean = detectNonEuropeanWord(word, temptransbuf, 1024))
 		return 0;
-	bool networkAccessed,existsDM= existsInDictionaryDotCom(word, networkAccessed);
+	bool networkAccessed, existsDM = existsInDictionaryDotCom(word, networkAccessed);
 	if (networkAccessed)
 		dictionaryComQueried++;
 	else
@@ -879,7 +879,7 @@ int getWordPOS(wstring word, set <int> &posSet, boolean &plural, boolean print, 
 	wstring pageURL = L"https://www.dictionaryapi.com/api/v3/references/collegiate/json/";
 	pageURL += word + L"?key=ba4ac476-dac1-4b38-ad6b-fe36e8416e07";
 	wstring jsonWideBuffer;
-	if (!cacheWebPath(pageURL, jsonWideBuffer, word, L"Webster", false,networkAccessed))
+	if (!cacheWebPath(pageURL, jsonWideBuffer, word, L"Webster", false, networkAccessed))
 	{
 		char errbuf[1024];
 		errbuf[0] = 0;
@@ -898,7 +898,7 @@ int getWordPOS(wstring word, set <int> &posSet, boolean &plural, boolean print, 
 				yajl_val doc = node->u.array.values[docNum];
 				mTW(lookForPOS(doc), pos);
 				if (pos.length() > 0)
-					identifyFormClass(posSet, pos,plural);
+					identifyFormClass(posSet, pos, plural);
 			}
 		if (print)
 		{
@@ -913,17 +913,17 @@ int getWordPOS(wstring word, set <int> &posSet, boolean &plural, boolean print, 
 	}
 	if (networkAccessed && !MWRequestAllowed())
 	{
-		websterAPIRequestsExhausted=true;
+		websterAPIRequestsExhausted = true;
 	}
 	return 0;
 }
 
-int getWordPOSInContext(Source &source, WordMatch &word, wstring originalWord,int numUnknownWord, int numUnknownOriginalWord, int numUnknownAllCaps, set <int> &posSet,
-	bool print, boolean &plural, boolean &isNonEuropean, boolean &queryOnLowerCase, int &dictionaryComQueried, int &dictionaryComCacheQueried,boolean &websterAPIRequestsExhausted)
+int getWordPOSInContext(MYSQL *mysql,Source &source, int sourceId, WordMatch &word, wstring originalWord, int numUnknownWord, int numUnknownOriginalWord, int numUnknownAllCaps, set <int> &posSet,
+	bool print, boolean &plural, boolean &isNonEuropean, boolean &queryOnLowerCase, int &dictionaryComQueried, int &dictionaryComCacheQueried, boolean &websterAPIRequestsExhausted)
 {
 	LFS
 	// numUnknownAllCaps is zero if originalWord is already all caps.
-	if (queryOnLowerCase = (numUnknownWord > 5 && ((numUnknownOriginalWord+ numUnknownAllCaps)*100.0 / numUnknownWord) > 95.0 && iswupper(originalWord[0])))
+	if (queryOnLowerCase = (numUnknownWord > 5 && ((numUnknownOriginalWord + numUnknownAllCaps)*100.0 / numUnknownWord) > 95.0 && iswupper(originalWord[0])))
 	{
 		if (print)
 			lplog(LOG_INFO, L"Designated Proper Noun %s [numUnknownWord=%d][numUnknownOriginalWord=%d]", originalWord.c_str(), numUnknownWord, numUnknownOriginalWord);
@@ -931,13 +931,36 @@ int getWordPOSInContext(Source &source, WordMatch &word, wstring originalWord,in
 		posSet.insert(FormsClass::gFindForm(L"noun"));
 	}
 	else
-		getWordPOS(word.word->first, posSet, plural, false,isNonEuropean,dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted);
+		getWordPOS(word.word->first, posSet, plural, false, isNonEuropean, dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted);
 	if (posSet.size() > 0 && print)
 	{
 		wstring posStr;
 		for (int form : posSet)
 			posStr += L" " + Forms[form]->name;
 		lplog(LOG_INFO, L"Known Word %s: forms (%s)", originalWord.c_str(), posStr.c_str());
+	}
+	if (posSet.empty())
+	{
+		tIWMM iWord = Words.end();
+		int ret;
+		if (iswupper(originalWord[0]) || (ret = Words.attemptDisInclination(mysql, iWord, word.word->first, sourceId)))
+		{
+			if (ret = Words.splitWord(mysql, iWord, word.word->first, sourceId))
+			{
+				wstring sWord= word.word->first;
+				sWord.erase(std::remove(sWord.begin(), sWord.end(), L'-') , sWord.end());
+				if (Words.query(sWord)==Words.end())
+					ret = Words.attemptDisInclination(mysql, iWord, sWord, sourceId);
+			}
+		}
+		if (iWord!=Words.end())
+		{
+			for (unsigned int f=0; f<iWord->second.formsSize(); f++)
+			{
+				posSet.insert(iWord->second.forms()[f]);
+			}
+		}
+
 	}
 	return posSet.size();
 }
@@ -1551,7 +1574,7 @@ void removeUnknownWordsFromDB(Source source)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words READ"))
 		return;
-	wchar_t qt[query_buffer_len_overflow];
+	//wchar_t qt[query_buffer_len_overflow];
 	//_snwprintf(qt, query_buffer_len, L"select id, etext, path, title from sources where sourceType=%d and id>=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' order by id",
 	//	st, lastSourceId);
 	int dictionaryComQueried = 0, dictionaryComCacheQueried = 0;
@@ -1687,7 +1710,7 @@ void main()
 		boolean websterAPIRequestsExhausted = false;
 		if (myquery(&source.mysql, qt, result))
 		{
-			__int64 totalSource = mysql_num_rows(result);
+			__int64 totalSource = mysql_num_rows(result)+lastSourceId;
 			set<wstring> unknownWordsCleared, definedUnknownWord;
 			set<int> sourcesToReparse;
 			for (int is = 1; (sqlrow = mysql_fetch_row(result)); is++)
@@ -1757,7 +1780,7 @@ void main()
 									//int numUnknownOriginalWordsWithInflectionsFlags=unknownOriginalWordsWithInflectionsFlags[originalWord + inflectionFlags + L" " + wordFlags];
 									set <int> posSet;
 									boolean isNonEuropean, queryOnLowerCase, plural;
-									if (getWordPOSInContext(source, im, originalWord, numUnknownWord, numUnknownOriginalWord, numUnknownAllCaps, posSet,true, plural, isNonEuropean, queryOnLowerCase, dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted)>0)
+									if (getWordPOSInContext(&source.mysql,source, sourceId, im, originalWord, numUnknownWord, numUnknownOriginalWord, numUnknownAllCaps, posSet,true, plural, isNonEuropean, queryOnLowerCase, dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted)>0)
 									{
 										// remove all wordforms associated with this word and create new wordforms
 										if (createWordFormsInDBIfNecessary(source, sourceId, im.word->second.index, im.word->first, originalWord, actuallyExecuteAgainstDB)<0)

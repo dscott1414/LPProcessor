@@ -9,9 +9,9 @@
 #include "time.h" // clock
 #include "wn.h"
 #include "profile.h"
-unordered_map <int,wstring> levinClassSectionToVerbMap; // initialized
-unordered_map <wstring,int> levinVerbToClassSectionMap; // dictionary initialized 
-unordered_map <int,wstring> levinClassSectionNames; // dictionary initialized 
+map <int,wstring> levinClassSectionToVerbMap; // initialized
+map <wstring,int> levinVerbToClassSectionMap; // dictionary initialized 
+map <int,wstring> levinClassSectionNames; // dictionary initialized 
 
 tIWMM WordClass::gquery(wstring sWord)
 { LFS
@@ -26,7 +26,7 @@ tIWMM WordClass::predefineWord(const wchar_t *word,int flags)
   unsigned int iForm=FormsClass::addNewForm(word,word,false);
 	handleExtendedParseWords((wchar_t *)word);
 	bool added;
-	return addNewOrModify(NULL,word,flags,iForm,0,0,L"",-1,added);
+	return addNewOrModify(word,flags,iForm,0,0,L"",-1,added);
 }
 
 int WordClass::predefineWords(wchar_t *words[],wstring sForm,wstring shortForm,int flags,bool properNounSubClass)
@@ -36,7 +36,7 @@ int WordClass::predefineWords(wchar_t *words[],wstring sForm,wstring shortForm,i
 	{
 		handleExtendedParseWords(words[I]);
 		bool added;
-		addNewOrModify(NULL,words[I],flags,iForm,0,0,L"",-1,added);
+		addNewOrModify(words[I],flags,iForm,0,0,L"",-1,added);
 	}
 	return iForm;
 }
@@ -48,7 +48,7 @@ int WordClass::predefineWords(Inflections words[],wstring sForm,wstring shortNam
 	{
 		handleExtendedParseWords(words[I].word);
 		bool added;
-		addNewOrModify(NULL, words[I].word,flags,aForm,words[I].inflection,0,L"",-1,added);
+		tIWMM iWord=addNewOrModify(words[I].word,flags,aForm,words[I].inflection,0,L"",-1,added);
 	}
 	return 0;
 }
@@ -60,7 +60,7 @@ int WordClass::predefineWords(InflectionsRoot words[],wstring sForm,wstring shor
 	{
 		handleExtendedParseWords(words[I].word);
 		bool added;
-		addNewOrModify(NULL, words[I].word,flags,aForm,words[I].inflection,0,words[I].mainEntry,-1,added);
+		tIWMM iWord=addNewOrModify(words[I].word,flags,aForm,words[I].inflection,0,words[I].mainEntry,-1,added);
 		// check for possible spaces and add dashes if only one space
 		bool containsSpaces=false;
 		for (unsigned int J=0; words[I].word[J]; J++)
@@ -72,7 +72,7 @@ int WordClass::predefineWords(InflectionsRoot words[],wstring sForm,wstring shor
 		if (containsSpaces)
 		{
 			handleExtendedParseWords(words[I].word);
-			addNewOrModify(NULL, words[I].word,flags,aForm,words[I].inflection,0,words[I].mainEntry,-1,added);
+			tIWMM iWord=addNewOrModify(words[I].word,flags,aForm,words[I].inflection,0,words[I].mainEntry,-1,added);
 		}
 	}
 	return 0;
@@ -98,10 +98,11 @@ int WordClass::predefineVerbsFromFile(wstring sForm,wstring shortName,wchar_t *p
 		handleExtendedParseWords(presentParticiple);
 		handleExtendedParseWords(thirdSingular);
 		bool added;
-		addNewOrModify(NULL, firstSingular,flags,aForm,VERB_PRESENT_FIRST_SINGULAR,0,firstSingular,-1,added);
-		addNewOrModify(NULL, past,flags,aForm,VERB_PAST,0,firstSingular,-1,added);
-		addNewOrModify(NULL, presentParticiple,flags,aForm,VERB_PRESENT_PARTICIPLE,0,firstSingular,-1,added);
-		addNewOrModify(NULL, thirdSingular,flags,aForm,VERB_PRESENT_THIRD_SINGULAR,0,firstSingular,-1,added);
+		tIWMM iWord;
+		iWord=addNewOrModify(firstSingular,flags,aForm,VERB_PRESENT_FIRST_SINGULAR,0,firstSingular,-1,added);
+		iWord=addNewOrModify(past,flags,aForm,VERB_PAST,0,firstSingular,-1,added);
+		iWord=addNewOrModify(presentParticiple,flags,aForm,VERB_PRESENT_PARTICIPLE,0,firstSingular,-1,added);
+		iWord=addNewOrModify(thirdSingular,flags,aForm,VERB_PRESENT_THIRD_SINGULAR,0,firstSingular,-1,added);
 	}
 	fclose(tf);
 	return 0;
@@ -197,7 +198,7 @@ bool WordClass::readVerbClassNames(void)
 	return true;
 }
 
-int WordClass::addProperNamesFile(wstring path)
+int WordClass::addProperNamesFile(wstring path,int year)
 { LFS
 	FILE *fp=_wfopen(path.c_str(),L"rb");
 	if (!fp) return -1;
@@ -222,7 +223,7 @@ int WordClass::addProperNamesFile(wstring path)
 		//wstring maleName=savech;
 		bool added;
 		int flags=(query(savech)==end()) ? tFI::queryOnLowerCase : 0;
-		addNewOrModify(NULL, savech,flags,PROPER_NOUN_FORM_NUM/*MALE_GENDER+(rank<<8)+year*/,MALE_GENDER|MALE_GENDER_ONLY_CAPITALIZED,0,savech,-1,added);
+		addNewOrModify(savech,flags,PROPER_NOUN_FORM_NUM/*MALE_GENDER+(rank<<8)+year*/,MALE_GENDER|MALE_GENDER_ONLY_CAPITALIZED,0,savech,-1,added);
 		savech=++ch;
 		while (*ch!=',' && *ch) ch++;
 		if (!*ch) continue;
@@ -233,7 +234,7 @@ int WordClass::addProperNamesFile(wstring path)
 		*ch=0;
 		//wstring femaleName=savech;
 		flags=(query(savech)==end()) ? tFI::queryOnLowerCase : 0;
-		addNewOrModify(NULL, savech,flags,PROPER_NOUN_FORM_NUM/*FEMALE_GENDER+(rank<<8)+year*/,FEMALE_GENDER|FEMALE_GENDER_ONLY_CAPITALIZED,0,savech,-1,added);
+		addNewOrModify(savech,flags,PROPER_NOUN_FORM_NUM/*FEMALE_GENDER+(rank<<8)+year*/,FEMALE_GENDER|FEMALE_GENDER_ONLY_CAPITALIZED,0,savech,-1,added);
 	}
 	fclose(fp);
 	return 0;
@@ -241,11 +242,9 @@ int WordClass::addProperNamesFile(wstring path)
 
 #define MAX_BUF 32000
 
-int WordClass::writeWord(tIWMM iWord, void *buffer, int &where, int limit)
-{
-	LFS
-	if (!copy(buffer, iWord->first, where, limit))
-		return -1;
+int WordClass::writeWord(tIWMM iWord,void *buffer,int &where,int limit)
+{ LFS
+	copy(buffer,iWord->first,where,limit);
 	iWord->second.write(buffer,where,limit);
 	return 0;
 }
@@ -262,19 +261,19 @@ int WordClass::readFormsCache(char *buffer,int bufferlen,int &numReadForms)
 		if (!copy(name,buffer,where,bufferlen)) return -1;
 		if (!copy(shortName,buffer,where,bufferlen)) return -1;
 		if (!copy(inflectionsClass,buffer,where,bufferlen)) return -1;
-		short hasInflections,properNounSubClass,isTopLevel,isIgnore,isVerbForm,blockProperNounRecognition,formCheck;
+		short hasInflections,properNounSubClass,isTopLevel,isIgnore,verbForm,blockProperNounRecognition,formCheck;
 		if (!copy(hasInflections,buffer,where,bufferlen)) return -1;
 		if (!copy(properNounSubClass,buffer,where,bufferlen)) return -1;
 		if (!copy(isTopLevel,buffer,where,bufferlen)) return -1;
 		if (!copy(isIgnore,buffer,where,bufferlen)) return -1;
-		if (!copy(isVerbForm,buffer,where,bufferlen)) return -1;
+		if (!copy(verbForm,buffer,where,bufferlen)) return -1;
 		if (!copy(blockProperNounRecognition,buffer,where,bufferlen)) return -1;
 		if (!copy(formCheck,buffer,where,bufferlen)) return -1;
 		//lplog(L"%d:hasInflections=%d form=%s shortForm=%s inflectionsClass=%s",where,(int)hasInflections,name.c_str(),shortName.c_str(),inflectionsClass.c_str());
 		//int f=FormsClass::createForm(name,shortName,hasInflections!=0,inflectionsClass,properNounSubClass!=0);
 		if (FormsClass::findForm(name)<0)
 		{
-			Forms.push_back(new FormClass(-1,name,shortName,inflectionsClass,hasInflections!=0,properNounSubClass!=0,isTopLevel!=0,isIgnore!=0,isVerbForm!=0,blockProperNounRecognition!=0,formCheck!=0));
+			Forms.push_back(new FormClass(-1,name,shortName,inflectionsClass,hasInflections!=0,properNounSubClass!=0,isTopLevel!=0,isIgnore!=0,verbForm!=0,blockProperNounRecognition!=0,formCheck!=0));
 			FormsClass::formMap[name]=Forms.size()-1;
 		}
 	}
@@ -312,6 +311,7 @@ void WordClass::writeWords(wstring oPath)
 		return;
 	}
 	writeFormsCache(fd);
+	tIWMM iWord,iWordEnd=Words.WMM.end();
 	for (tIWMM iWord=begin(); iWord!=end(); iWord++)
 	{
 		if (!iWord->second.deltaUsagePatterns[tFI::TRANSFER_COUNT]) continue;
@@ -327,7 +327,7 @@ void WordClass::writeWords(wstring oPath)
 	}
 	char buffer[MAX_BUF];
 	int where=0;
-	for (tIWMM iWord=begin(); iWord!= end(); iWord++)
+	for (tIWMM iWord=begin(); iWord!=iWordEnd; iWord++)
 	{
 		if (iWord->first[0]>='0' && iWord->first[0]<='9') // time, date or number not considered unknown.
 			continue;
@@ -383,11 +383,11 @@ bool disqualify(wstring sWord)
 	return false;
 }
 
-int WordClass::readWords(wstring oPath, int sourceId)
-{
-	LFS
-	oPath += L".wordCacheFile";
-	int fd=_wopen(oPath.c_str(),O_RDONLY|O_BINARY);
+int WordClass::readWords(wchar_t *oPath,int sourceId)
+{ LFS
+	wchar_t path[1024];
+	_swprintf(path,L"%s.wordCacheFile",oPath);
+	int fd=_wopen(path,O_RDONLY|O_BINARY);
 	if (fd<0) return -1;
 	char *buffer;
 	int bufferlen=filelength(fd);
@@ -407,10 +407,10 @@ int WordClass::readWords(wstring oPath, int sourceId)
 	tIWMM iWord=wNULL;
 	vector <wstring> mainEntries;
 	vector <tIWMM> entries;
-	//int numPreps=0;
+	int numPreps=0;
 	while (where<bufferlen)
 	{
-		//int saveWhere=where;
+		int saveWhere=where;
 		if (!copy(sWord,buffer,where,bufferlen)) return -1;
 		//lplog(L"%d:word %s",saveWhere,sWord.c_str());
 		wstring sME;
@@ -422,7 +422,7 @@ int WordClass::readWords(wstring oPath, int sourceId)
 		}
 		if ((iWord=WMM.find(sWord))!=WMM.end())
 		{
-			if (iWord->second.updateFromDisk(buffer,where,bufferlen,sME))
+			if (iWord->second.updateFromDisk(buffer,where,bufferlen,sME,sourceId))
 			{
 				entries.push_back(iWord);
 				mainEntries.push_back(sME);
@@ -517,12 +517,12 @@ int WordClass::addGenderedNouns(wchar_t *genPath,int defaultInflectionFlags,int 
 		bool added;
 		tIWMM word=query(noun);
 		if (word==end())
-			addNewOrModify(NULL, noun,tFI::queryOnAnyAppearance,wordForm,defaultInflectionFlags,0,noun,-1,added);
+			addNewOrModify(noun,tFI::queryOnAnyAppearance,wordForm,defaultInflectionFlags,0,noun,-1,added);
 		else
 		{
 			int inflectionFlags=word->second.inflectionFlags;
 			if (!(inflectionFlags&(MALE_GENDER|FEMALE_GENDER))) inflectionFlags|=defaultInflectionFlags;
-			addNewOrModify(NULL, noun,0,wordForm,inflectionFlags,0,noun,-1,added);
+			addNewOrModify(noun,0,wordForm,inflectionFlags,0,noun,-1,added);
 		}
 		if (addWordNetSearch)
 		{
@@ -537,14 +537,15 @@ int WordClass::addGenderedNouns(wchar_t *genPath,int defaultInflectionFlags,int 
 				if (objects[I].ws.size()==1)
 				{
 					handleExtendedParseWords((wchar_t *)objects[I].ws[0].c_str());
-					word=query(objects[I].ws[0].c_str());
+					bool added;
+					tIWMM word=query(objects[I].ws[0].c_str());
 					if (word==end())
-						addNewOrModify(NULL, objects[I].ws[0].c_str(),tFI::queryOnAnyAppearance,wordForm,defaultInflectionFlags,0,objects[I].ws[0].c_str(),-1,added);
+						addNewOrModify(objects[I].ws[0].c_str(),tFI::queryOnAnyAppearance,wordForm,defaultInflectionFlags,0,objects[I].ws[0].c_str(),-1,added);
 					else
 					{
 						int inflectionFlags=word->second.inflectionFlags;
 						if (!(inflectionFlags&(MALE_GENDER|FEMALE_GENDER))) inflectionFlags|=defaultInflectionFlags;
-						addNewOrModify(NULL, objects[I].ws[0].c_str(),tFI::queryOnAnyAppearance,wordForm,inflectionFlags,0,objects[I].ws[0].c_str(),-1,added);
+						addNewOrModify(objects[I].ws[0].c_str(),tFI::queryOnAnyAppearance,wordForm,inflectionFlags,0,objects[I].ws[0].c_str(),-1,added);
 					}
 				}
 			}
@@ -558,7 +559,7 @@ int WordClass::addGenderedNouns(wchar_t *genPath,int defaultInflectionFlags,int 
 // ; He is from Afghanistan.  He is an Afghan.  He is Afghani.
 int WordClass::addDemonyms(wchar_t *demPath)
 { LFS
-	demonymForm=FormsClass::createForm(L"demonym",L"de",true,L"noun",true);
+	size_t demonymForm=FormsClass::createForm(L"demonym",L"de",true,L"noun",true);
 	FILE *fdem=_wfopen(demPath,L"rb"); // binary mode reads unicode
 	if (!fdem) 
 	{
@@ -608,16 +609,16 @@ int WordClass::addDemonyms(wchar_t *demPath)
 			adjectiveDemonym[len+1]=0;
 		handleExtendedParseWords(nounDemonym);
 		bool added;
-		addNewOrModify(NULL, nounDemonym,tFI::queryOnAnyAppearance,demonymForm,inflectionFlags,0,nounDemonym,-1,added);
-		addNewOrModify(NULL, nounDemonym,tFI::queryOnAnyAppearance,nounForm,inflectionFlags,0,nounDemonym,-1,added);
+		addNewOrModify(nounDemonym,tFI::queryOnAnyAppearance,demonymForm,inflectionFlags,0,nounDemonym,-1,added);
+		addNewOrModify(nounDemonym,tFI::queryOnAnyAppearance,nounForm,inflectionFlags,0,nounDemonym,-1,added);
 		if (wcscmp(nounDemonym,adjectiveDemonym))
 		{
-			addNewOrModify(NULL, adjectiveDemonym,tFI::queryOnAnyAppearance,demonymForm,MALE_GENDER|FEMALE_GENDER,0,adjectiveDemonym,-1,added);
-			addNewOrModify(NULL, adjectiveDemonym,tFI::queryOnAnyAppearance,adjectiveForm,MALE_GENDER|FEMALE_GENDER,0,adjectiveDemonym,-1,added);
-			addNewOrModify(NULL, adjectiveDemonym,tFI::queryOnAnyAppearance,nounForm,inflectionFlags|PLURAL&~SINGULAR,0,adjectiveDemonym,-1,added);
+			addNewOrModify(adjectiveDemonym,tFI::queryOnAnyAppearance,demonymForm,MALE_GENDER|FEMALE_GENDER,0,adjectiveDemonym,-1,added);
+			addNewOrModify(adjectiveDemonym,tFI::queryOnAnyAppearance,adjectiveForm,MALE_GENDER|FEMALE_GENDER,0,adjectiveDemonym,-1,added);
+			addNewOrModify(adjectiveDemonym,tFI::queryOnAnyAppearance,nounForm,inflectionFlags|PLURAL&~SINGULAR,0,adjectiveDemonym,-1,added);
 		}
 		else
-			addNewOrModify(NULL, adjectiveDemonym,tFI::queryOnAnyAppearance,adjectiveForm,0,0,adjectiveDemonym,-1,added);
+			addNewOrModify(adjectiveDemonym,tFI::queryOnAnyAppearance,adjectiveForm,0,0,adjectiveDemonym,-1,added);
 	}
 	fclose(fdem);
 	return 0;
@@ -625,7 +626,7 @@ int WordClass::addDemonyms(wchar_t *demPath)
 
 //     bool added;
 //    words.push_back(addNewOrModify(mwords[I],tFI::queryOnAnyAppearance,PROPER_NOUN_FORM_NUM,0,0,mwords[I],-1,added));
-bool WordClass::addPlaces(wstring pPath,vector <tmWS > &objects)
+bool WordClass::addPlaces(wstring pPath,wchar_t *sForm,vector <tmWS > &objects)
 { LFS
 	FILE *fp=_wfopen(pPath.c_str(),L"rb"); // binary mode reads unicode
 	if (!fp) return false;
@@ -728,7 +729,7 @@ bool WordClass::addPlaces(wstring pPath,vector <tmWS > &objects)
 	return true;
 }
 
-void WordClass::addNickNames(wchar_t *filePath)
+void WordClass::addNickNames(wchar_t *filePath,map <wstring,int> &nicknameEquivalenceMap)
 { LFS
 	FILE *nf=_wfopen(filePath,L"rb"); // binary mode reads unicode
 	if (!nf)
@@ -760,7 +761,7 @@ bool WordClass::readWordsOfMultiWordObjects(vector < vector < tmWS > > &multiWor
 	for (int pp=0; OCSubTypeStrings[pp]; pp++)
 	{
 		vector < tmWS > placeWords;
-		if (!addPlaces(wstring(L"source\\lists\\places\\")+OCSubTypeStrings[pp]+L".txt",placeWords)) 
+		if (!addPlaces(wstring(L"source\\lists\\places\\")+OCSubTypeStrings[pp]+L".txt",OCSubTypeStrings[pp],placeWords)) 
 			return false;
 		multiWordStrings.push_back(placeWords);
 		vector < vector <tIWMM> > multiWordObjectsCategory;
@@ -824,7 +825,7 @@ void WordClass::addMultiWordObjects(vector < vector < tmWS > > &multiWordStrings
 		L"lxx",L"lxxi",L"lxxii",L"lxxiii",L"lxxiv",L"lxxv",L"lxxvi",L"lxxvii",L"lxxviii",L"lxxix",
 		NULL};
 
-int WordClass::createWordCategories()
+int WordClass::createWordCategories(bool generateStatistics)
 { LFS
 	changedWords=true;
 	inCreateDictionaryPhase=true;
@@ -835,7 +836,7 @@ int WordClass::createWordCategories()
 	FormsClass::createForm(NUMBER_FORM,NUMBER_SHORT_FORM,false,L"",false);
 	// add special section word
 	bool added;
-	addNewOrModify(NULL,wstring(L"|||"),tFI::topLevelSeparator,SECTION_FORM_NUM,0,0,L"",-1,added);
+	addNewOrModify(wstring(L"|||"),tFI::topLevelSeparator,SECTION_FORM_NUM,0,0,L"",-1,added);
 	sectionWord=WMM.begin();
 	Inflections honorific[] = {{L"mister",MALE_GENDER},{L"missus",FEMALE_GENDER},{L"miss",FEMALE_GENDER},
 		{L"monsieur",MALE_GENDER},{L"madame",FEMALE_GENDER},{L"mademoiselle",FEMALE_GENDER},{L"sir",MALE_GENDER},{L"ma'am",FEMALE_GENDER},{L"lord",MALE_GENDER},
@@ -912,7 +913,7 @@ int WordClass::createWordCategories()
 				{L"chief",MALE_GENDER},{L"chieftess",FEMALE_GENDER},{L"ambassador",MALE_GENDER|FEMALE_GENDER},
 				{NULL,0}};
 	predefineWords(governmentTitle,L"honorific",L"hon",L"noun",tFI::queryOnAnyAppearance,false);
-	Inflections brackets[] = {{L"{",OPEN_INFLECTION},{L"}",CLOSE_INFLECTION},
+	Inflections brackets[] = {{L"{L",OPEN_INFLECTION},{L"}",CLOSE_INFLECTION},
 														{L"(",OPEN_INFLECTION},{L")",CLOSE_INFLECTION},
 														{L"<",OPEN_INFLECTION},{L">",CLOSE_INFLECTION},
 														{L"[",OPEN_INFLECTION},{L"]",CLOSE_INFLECTION},{NULL,0}};
@@ -1402,20 +1403,20 @@ int WordClass::createWordCategories()
 		L"source\\lists\\Names\\Names1940.csv",L"source\\lists\\Names\\Names1930.csv",L"source\\lists\\Names\\Names1920.csv",L"source\\lists\\Names\\Names1910.csv",L"source\\lists\\Names\\Names1900.csv",NULL
 	};
 	for (int nlp=0; nameListPaths[nlp]; nlp++)
-		addProperNamesFile(nameListPaths[nlp]);
+		addProperNamesFile(nameListPaths[nlp],(9-nlp)*10);
 	{
 		// The letters also should not be included as names (proper nouns)
-		wchar_t anyLetter[3];
+		wchar_t letter[3];
 		for (wchar_t l='a'; l<='z'; l++)
 		{
-			anyLetter[0]=l;
-			anyLetter[1]=0;
-			tIWMM q=Words.gquery(anyLetter);
+			letter[0]=l;
+			letter[1]=0;
+			tIWMM q=Words.gquery(letter);
 			if (q->second.query(PROPER_NOUN_FORM_NUM)>=0)
 				q->second.remove(PROPER_NOUN_FORM_NUM);
-			anyLetter[1]='.';
-			anyLetter[2]=0;
-			remove(anyLetter);
+			letter[1]='.';
+			letter[2]=0;
+			remove(letter);
 					//lplog(L"removed Prop Noun from %c.",letter[0]);
 		}
 	}
@@ -1592,11 +1593,11 @@ void WordClass::initializeChangeStateVerbs()
 	predefineWords(changeState,L"changeState",L"changeState",L"verb",0);
 }
 
-void WordClass::initialize()
+void WordClass::initialize(bool generateStatistics)
 { LFS
 	wprintf(L"Initializing dictionary...                  \r");
-	addNickNames(L"source\\lists\\maleNicknames.txt");
-	addNickNames(L"source\\lists\\femaleNicknames.txt");
+	addNickNames(L"source\\lists\\maleNicknames.txt",nicknameEquivalenceMap);
+	addNickNames(L"source\\lists\\femaleNicknames.txt",nicknameEquivalenceMap);
 	// avoid looking these common forms up...
 	if (accForm<0) accForm=FormsClass::gFindForm(L"personal_pronoun_accusative");
 	if (adverbForm<0) adverbForm=FormsClass::gFindForm(L"adverb");
