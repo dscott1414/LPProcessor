@@ -1,4 +1,4 @@
-#include <windows.h>
+Ôªø#include <windows.h>
 #include "Winhttp.h"
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
 #include <io.h>
@@ -49,6 +49,15 @@ int WordClass::predefineWords(Inflections words[],wstring sForm,wstring shortNam
 		handleExtendedParseWords(words[I].word);
 		bool added;
 		addNewOrModify(NULL, words[I].word,flags,aForm,words[I].inflection,0,L"",-1,added);
+		wchar_t *quote;
+		if (quote = wcschr(words[I].word, L'\''))
+		{
+			*quote = L' º';
+			handleExtendedParseWords(words[I].word);
+			bool added;
+			addNewOrModify(NULL, words[I].word, flags, aForm, words[I].inflection, 0, L"", -1, added);
+			*quote = L'\'';
+		}
 	}
 	return 0;
 }
@@ -917,13 +926,13 @@ int WordClass::createWordCategories()
 														{L"<",OPEN_INFLECTION},{L">",CLOSE_INFLECTION},
 														{L"[",OPEN_INFLECTION},{L"]",CLOSE_INFLECTION},{NULL,0}};
 	predefineWords(brackets,L"brackets",L"brackets",L"brackets");
-	// "\"" is mapped to {L"ì",OPEN_INFLECTION},{L"î",CLOSE_INFLECTION}
-	// "'" is mapped to {L"ë",OPEN_INFLECTION},{L"í",CLOSE_INFLECTION}
+	// "\"" is mapped to {L"‚Äú",OPEN_INFLECTION},{L"‚Äù",CLOSE_INFLECTION}
+	// "'" is mapped to {L"‚Äò",OPEN_INFLECTION},{L"‚Äô",CLOSE_INFLECTION}
 	Inflections quotes[] = {{L"\"",0},{L"'",0},{L"`",OPEN_INFLECTION},
-													{L"ë",OPEN_INFLECTION},{L"í",CLOSE_INFLECTION},{L"ì",OPEN_INFLECTION},{L"î",CLOSE_INFLECTION},{NULL,0}};
+													{L"‚Äò",OPEN_INFLECTION},{L"‚Äô",CLOSE_INFLECTION},{L"‚Äú",OPEN_INFLECTION},{L"‚Äù",CLOSE_INFLECTION},{NULL,0}};
 	predefineWords(quotes,L"quotes",L"quotes",L"quotes");
-	wchar_t *dash[] = {L"-",L"ó",L"ñ",L"--",NULL};                          predefineWords(dash,L"dash",L"dash");
-	wchar_t *punctuation[]={L".",L"∑",L"...",L";",L":",L"@",L"#",L"$",L"%",L"^",L"&",L"*",L"--",L"+",L"=",L"_",L"|",L"Ç",L",",L"/",L"~",L"Ö",NULL};
+	wchar_t *dash[] = {L"-",L"‚Äî",L"‚Äì",L"--",NULL};                          predefineWords(dash,L"dash",L"dash");
+	wchar_t *punctuation[]={L".",L"¬∑",L"...",L";",L":",L"@",L"#",L"$",L"%",L"^",L"&",L"*",L"--",L"+",L"=",L"_",L"|",L"‚Äö",L",",L"/",L"~",L"‚Ä¶",NULL};
 	for (wchar_t **p=punctuation; *p; p++) predefineWord(*p);
 	wchar_t *letter[] = {L"a",L"b",L"c",L"d",L"e",L"f",L"g",L"h",L"i",L"j",L"k",L"l",L"m",L"n",L"o",L"p",L"q",L"r",L"s",L"t",
 		L"u",L"v",L"w",L"x",L"y",L"z",NULL};

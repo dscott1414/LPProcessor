@@ -1,4 +1,4 @@
-#include <windows.h>
+Ôªø#include <windows.h>
 #include "Winhttp.h"
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
 #include <io.h>
@@ -923,7 +923,7 @@ bool WordClass::remove(wstring sWord)
     if ((index=lower_bound(multiElementWords.begin(),multiElementWords.end(),sWord))!=multiElementWords.end() && sWord==*index)
 			multiElementWords.erase(index);
   }
-  if (wcschr(sWord.c_str(),L'\''))
+  if (wcschr(sWord.c_str(),L'\'') || wcschr(sWord.c_str(), L' º'))
   {
     if ((index=lower_bound(quotedWords.begin(),quotedWords.end(),sWord))!=quotedWords.end() && sWord==*index)
 			quotedWords.erase(index);
@@ -1880,9 +1880,9 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
     return PARSE_DATE;
   }
   if (iswpunct(buffer[cp]) ||   (!iswprint(buffer[cp]) && iswspace(buffer[cp+1])) ||
-    buffer[cp]==L'`' || buffer[cp]==L'í' || buffer[cp]==L'ë' ||
-    buffer[cp]==L'ì' || buffer[cp]==L'î' || buffer[cp]==L'ó' ||
-    buffer[cp]==L'Ö')
+    buffer[cp]==L'`' || buffer[cp]==L'‚Äô' || buffer[cp]==L'‚Äò' ||
+    buffer[cp]==L'‚Äú' || buffer[cp]==L'‚Äù' || buffer[cp]==L'‚Äî' ||
+    buffer[cp]==L'‚Ä¶')
   {
     // contraction processing
     // <option>n't not contraction handled below as well to check for n
@@ -1916,7 +1916,7 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
     else sWord=buffer[cp];
     cp+=sWord.length();
     bufferScanLocation=cp;
-    if (sWord==L"." || sWord==L"?" || sWord==L"!" || sWord==L"..." || sWord==L"Ö")
+    if (sWord==L"." || sWord==L"?" || sWord==L"!" || sWord==L"..." || sWord==L"‚Ä¶")
       return PARSE_END_SENTENCE;
     return 0;
   }
@@ -1930,8 +1930,8 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
       numChars=extend;
       for (wchar_t *b=buffer+cp; cp<bufferLen; cp++,b++)
         if ((!iswspace(*b) && !iswpunct(*b) && (iswprint(*b) || !iswspace(b[1])) &&
-          !(*b=='`' || *b=='í' || *b=='ë' || *b=='ì' || *b=='î' || *b=='Ö' || *b=='_' || *b=='*')
-          ) || ((*b=='-' || *b=='ó') && iswalpha(b[1])) || // accept al-Jazeera as one word, but not a double dash or anything else
+          !(*b=='`' || *b=='‚Äô' || *b=='‚Äò' || *b=='‚Äú' || *b=='‚Äù' || *b=='‚Ä¶' || *b=='_' || *b=='*')
+          ) || ((*b=='-' || *b=='‚Äî') && iswalpha(b[1])) || // accept al-Jazeera as one word, but not a double dash or anything else
           cp-begincp<numChars)
         {
           if ((isSpace=(iswspace(*b)!=0)) && wasSpace) continue;
@@ -1955,7 +1955,7 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
       break;
     }
     // dangling - at the end of a line
-    if ((buffer[cp]=='-' || buffer[cp]=='ó' || buffer[cp]=='ñ') && buffer[cp+1]==13 && buffer[cp+2]==10 && query(sWord)==end())
+    if ((buffer[cp]=='-' || buffer[cp]=='‚Äî' || buffer[cp]=='‚Äì') && buffer[cp+1]==13 && buffer[cp+2]==10 && query(sWord)==end())
     {
       cp+=3;
       while (cp<bufferLen && iswspace(buffer[cp])) cp++;
@@ -1998,7 +1998,7 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
 		// 2"	char *
 		bool isAsciiMoney=false,isUnicodeMoney=false;
     if ((sWord[0]>0 && iswdigit(sWord[0])) || 
-		    ((isAsciiMoney=(sWord[0]==L'$')) || (isUnicodeMoney=((sWord[0])==L'¬' && (sWord[1])==L'£'))))
+		    ((isAsciiMoney=(sWord[0]==L'$')) || (isUnicodeMoney=((sWord[0])==L'√Ç' && (sWord[1])==L'¬£'))))
     {
       int I=0;
 			if (isAsciiMoney) I++;
@@ -2070,7 +2070,7 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
     }
     bufferScanLocation=cp;
   }
-  if (sWord[0]==L'\'' || sWord[0]==L'í' || sWord[0]==L'ë')
+  if (sWord[0]==L'\'' || sWord[0]==L'‚Äô' || sWord[0]==L'‚Äò')
     lplog(LOG_FATAL_ERROR,L"Illegal character");
   return 0;
 }
