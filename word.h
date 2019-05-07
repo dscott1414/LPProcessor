@@ -574,8 +574,6 @@ public:
   void testWordCacheFileRoutines(void);
 	static int processTime(wstring sWord, char &hour, char &minute);
 	static int processDate(wstring sWord, short &year, char &month, char &dayOfMonth);
-	vector<wstring> splitString(wstring str, wchar_t wc);
-	tIWMM fullQuery(MYSQL *mysql, wstring word, int sourceId);
 	int splitWord(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId);
 
 protected:
@@ -638,12 +636,13 @@ private:
 
   int addProperNamesFile(wstring path);
   void addNickNames(wchar_t *filePath);
-	boolean findWordInDB(MYSQL *mysql, wstring word, tIWMM &iWord);
 	int markWordUndefined(tIWMM &iWord,wstring sWord,int flags,bool firstWordCapitalized,int nounOwner,int sourceId);
   void generateFormStatistics(void);
   int processDate(wstring &sWord, wchar_t *buffer,__int64 &cp,__int64 &bufferScanLocation);
 	int processTime(wstring &sWord, wchar_t *buffer, __int64 &cp, __int64 &bufferScanLocation);
 	int processWebAddress(wstring &sWord, wchar_t *buffer, __int64 &cp, __int64 bufferLen);
+	tIWMM fullQuery(MYSQL *mysql, wstring word, int sourceId);
+	boolean findWordInDB(MYSQL *mysql, wstring sWord, tIWMM &iWord);
 };
 
 #include "pattern.h"

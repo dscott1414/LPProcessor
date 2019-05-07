@@ -26,11 +26,13 @@
 #include "paice.h"
 #include "mysqldb.h"
 #define MINSTEMSIZE 3
+#include <sstream>
 
 #define maxlinelength 1024 /* Maximum length of line read from file */
 enum states { s_notapply,s_stop,s_continue };
 vector <Stemmer::tSuffixRule> Stemmer::stemRules;
 vector <Stemmer::tPrefixRule> Stemmer::prefixRules;
+unordered_set<int> Stemmer::unacceptableCombinationForms;
 
 /* * * APPLYRULE()  * * * * * * * */
 int Stemmer::applyStemRule(wstring word,tSuffixRule rule,vector <tSuffixRule> &rulesUsed,intArray trail)
@@ -228,46 +230,22 @@ boolean Stemmer::isWordDBUnknown(MYSQL mysql,wstring word)
 	tIWMM iWord = Words.query(word);
 	if (iWord != Words.end() && iWord->second.query(UNDEFINED_FORM_NUM) >= 0)
 		return true;
-	if (!myquery(&mysql, L"LOCK TABLES words READ")) return true;
+	if (!myquery(&mysql, L"LOCK TABLES words w READ,wordForms wf READ")) return true;
 	wchar_t qt[query_buffer_len_overflow];
-	_snwprintf(qt, query_buffer_len, L"select wordId from words where word=%s", word.c_str());
+	_snwprintf(qt, query_buffer_len, L"select COUNT(*) from words w,wordForms wf where w.id=wf.wordId and word=\"%s\" and wf.formId=%d", word.c_str(), UNDEFINED_FORM_NUM+1); // always add one when referring to DB formId
 	MYSQL_RES *result = NULL;
-	if (!myquery(&mysql, qt, result))
-	{
-		myquery(&mysql, L"UNLOCK TABLES");
-		return true;
-	}
-	__int64 numRows = mysql_num_rows(result);
 	MYSQL_ROW sqlrow;
-	int wordId = 0;
-	if ((sqlrow = mysql_fetch_row(result)) == NULL)
-	{
-		// word is not in the DB, therefore it is unknown
-		mysql_free_result(result);
-		return true;
-	}
-	wordId = atoi(sqlrow[0]);
-	mysql_free_result(result);
-	if (!myquery(&mysql, L"UNLOCK TABLES words")) 
-		return false;
-	if (!myquery(&mysql, L"LOCK TABLES wordforms READ")) return true;
-	_snwprintf(qt, query_buffer_len, L"select COUNT(*) from wordforms wf where wf.formId=1 and wf.wordId=%d", wordId);
 	if (!myquery(&mysql, qt, result))
 	{
 		myquery(&mysql, L"UNLOCK TABLES");
 		return true;
 	}
-	numRows = mysql_num_rows(result);
-	if ((sqlrow = mysql_fetch_row(result)) == NULL)
-	{
-		// this should never occur - COUNT will always bring back one row
-		mysql_free_result(result);
-		return true;
-	}
-	int count = atoi(sqlrow[0]);
+	int count=1;
+	if ((sqlrow = mysql_fetch_row(result)) != NULL)
+		count = atoi(sqlrow[0]);
 	mysql_free_result(result);
-	if (!myquery(&mysql, L"UNLOCK TABLES wordforms"))
-		return false;
+	if (!myquery(&mysql, L"UNLOCK TABLES"))
+		return true;
 	return count > 0;
 }
 
@@ -341,5 +319,89 @@ Stemmer::~Stemmer()
 	LFS
 	stemRules.clear();
 	prefixRules.clear();
+}
+
+vector<wstring> Stemmer::splitString(wstring str, wchar_t wc)
+{
+	vector<wstring> strings;
+	std::wistringstream f(str);
+	wstring s;
+	while (std::getline(f, s, wc))
+		strings.push_back(s);
+	return strings;
+}
+
+boolean Stemmer::wordIsNotUnknownAndOpen(tIWMM iWord)
+{
+	if (unacceptableCombinationForms.empty())
+	{
+		unacceptableCombinationForms.insert(UNDEFINED_FORM_NUM);
+		unacceptableCombinationForms.insert(commaForm);
+		unacceptableCombinationForms.insert(periodForm);
+		unacceptableCombinationForms.insert(reflexiveForm);
+		unacceptableCombinationForms.insert(nomForm);
+		unacceptableCombinationForms.insert(accForm);
+		unacceptableCombinationForms.insert(quoteForm);
+		unacceptableCombinationForms.insert(dashForm);
+		unacceptableCombinationForms.insert(bracketForm);
+		unacceptableCombinationForms.insert(conjunctionForm);
+		unacceptableCombinationForms.insert(demonstrativeDeterminerForm);
+		unacceptableCombinationForms.insert(possessiveDeterminerForm);
+		unacceptableCombinationForms.insert(interrogativeDeterminerForm);
+		unacceptableCombinationForms.insert(indefinitePronounForm);
+		unacceptableCombinationForms.insert(reciprocalPronounForm);
+		unacceptableCombinationForms.insert(pronounForm);
+		unacceptableCombinationForms.insert(numeralCardinalForm);
+		unacceptableCombinationForms.insert(numeralOrdinalForm);
+		unacceptableCombinationForms.insert(romanNumeralForm);
+		unacceptableCombinationForms.insert(honorificForm);
+		unacceptableCombinationForms.insert(honorificAbbreviationForm);
+		unacceptableCombinationForms.insert(relativeForm);
+		unacceptableCombinationForms.insert(determinerForm);
+		unacceptableCombinationForms.insert(doesForm);
+		unacceptableCombinationForms.insert(doesNegationForm);
+		unacceptableCombinationForms.insert(possessivePronounForm);
+		unacceptableCombinationForms.insert(quantifierForm);
+		unacceptableCombinationForms.insert(dateForm);
+		unacceptableCombinationForms.insert(timeForm);
+		unacceptableCombinationForms.insert(telephoneNumberForm);
+		unacceptableCombinationForms.insert(coordinatorForm);
+		unacceptableCombinationForms.insert(abbreviationForm);
+		unacceptableCombinationForms.insert(numberForm);
+		unacceptableCombinationForms.insert(beForm);
+		unacceptableCombinationForms.insert(haveForm);
+		unacceptableCombinationForms.insert(haveNegationForm);
+		unacceptableCombinationForms.insert(doForm);
+		unacceptableCombinationForms.insert(doNegationForm);
+		unacceptableCombinationForms.insert(interjectionForm);
+		unacceptableCombinationForms.insert(personalPronounForm);
+		unacceptableCombinationForms.insert(letterForm);
+		unacceptableCombinationForms.insert(isForm);
+		unacceptableCombinationForms.insert(isNegationForm);
+		unacceptableCombinationForms.insert(prepositionForm);
+		unacceptableCombinationForms.insert(telenumForm);
+		unacceptableCombinationForms.insert(sa_abbForm);
+		unacceptableCombinationForms.insert(toForm);
+		unacceptableCombinationForms.insert(relativizerForm);
+		unacceptableCombinationForms.insert(moneyForm);
+		unacceptableCombinationForms.insert(particleForm);
+		unacceptableCombinationForms.insert(webAddressForm);
+		unacceptableCombinationForms.insert(doForm);
+		unacceptableCombinationForms.insert(doNegationForm);
+		unacceptableCombinationForms.insert(monthForm);
+		unacceptableCombinationForms.insert(letterForm);
+		unacceptableCombinationForms.insert(modalAuxiliaryForm);
+		unacceptableCombinationForms.insert(futureModalAuxiliaryForm);
+		unacceptableCombinationForms.insert(negationModalAuxiliaryForm);
+		unacceptableCombinationForms.insert(negationFutureModalAuxiliaryForm);
+	}
+	unordered_set<int>::iterator ucf;
+	for (unsigned int f = 0; f < iWord->second.formsSize(); f++)
+		if ((ucf = unacceptableCombinationForms.find(iWord->second.forms()[f])) != unacceptableCombinationForms.end())
+		{
+			lplog(LOG_DICTIONARY, L"WordPosMAP %s is a %s.", iWord->first.c_str(), Forms[*ucf]->name.c_str());
+			return false;
+		}
+	return (iWord->second.query(verbForm) >= 0) || (iWord->second.query(nounForm) >= 0) || (iWord->second.query(adverbForm) >= 0) || (iWord->second.query(adjectiveForm) >= 0);
 }
 

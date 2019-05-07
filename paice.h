@@ -62,8 +62,11 @@ public:
 	static int stem(MYSQL mysql, wstring s, vector <tSuffixRule> &rulesUsed, intArray &trail, int addRule);
 	~Stemmer();
 	static boolean isWordDBUnknown(MYSQL mysql, wstring word);
+	static vector<wstring> splitString(wstring str, wchar_t wc);
+	static boolean wordIsNotUnknownAndOpen(tIWMM iWord);
 
 private:
+	static unordered_set<int> unacceptableCombinationForms;
 	static vector <tSuffixRule> stemRules;
 	static vector <tPrefixRule> prefixRules;
 	static int applyStemRule(wstring sWord, tSuffixRule rule, vector <tSuffixRule> &rulesUsed, intArray trail);
@@ -72,5 +75,4 @@ private:
 	static int readPrefixRules(void);
 	static int getInflectionNum(wchar_t const *inflection);
 	static int stripPrefix(MYSQL mysql, wstring s, vector <tSuffixRule> &rulesUsed);
-
 };

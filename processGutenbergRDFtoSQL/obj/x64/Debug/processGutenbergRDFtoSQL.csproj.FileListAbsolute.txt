@@ -3,3 +3,7 @@ C:\lp\processGutenbergRDFtoSQL\bin\x64\Debug\processGutenbergRDFtoSQL.pdb
 C:\lp\processGutenbergRDFtoSQL\obj\x64\Debug\processGutenbergRDFtoSQL.exe
 C:\lp\processGutenbergRDFtoSQL\obj\x64\Debug\processGutenbergRDFtoSQL.pdb
 C:\lp\processGutenbergRDFtoSQL\obj\x64\Debug\processGutenbergRDFtoSQL.csprojResolveAssemblyReference.cache
+F:\lp\source\processGutenbergRDFtoSQL\obj\x64\Debug\processGutenbergRDFtoSQL.csprojAssemblyReference.cache
+F:\lp\source\processGutenbergRDFtoSQL\obj\x64\Debug\processGutenbergRDFtoSQL.csproj.CoreCompileInputs.cache
+F:\lp\source\processGutenbergRDFtoSQL\obj\x64\Debug\processGutenbergRDFtoSQL.exe
+F:\lp\source\processGutenbergRDFtoSQL\obj\x64\Debug\processGutenbergRDFtoSQL.pdb

@@ -11,6 +11,7 @@
 #include "malloc.h"
 #include "profile.h"
 #include "paice.h"
+#include "mysqldb.h"
 
 tInflectionMap nounInflectionMap[]=
 {
@@ -576,7 +577,7 @@ int tFI::addForm(int form,const wstring &word)
   if (count>=MAX_FORM_USAGE_PATTERNS)
   {
     ::lplog(LOG_INFO,L"Adding form %s was rejected for word %s because it already has a maximum of %d forms.",
-      Forms[form]->name.c_str(),word.c_str(),count);
+      (form<patternFormNumOffset) ? Forms[form]->name.c_str() : L"UsagePattern",word.c_str(),count);
     return 0;
   }
   int oldAllocated=allocated;
@@ -1157,8 +1158,9 @@ int WordClass::attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, 
 			if (iswdigit(r->text[r->text.length() - 1]) && iswdigit(r->text[r->text.length() - 2]))
 				continue;
 			// if stem is not found in memory and not in any dictionary, continue */
-			tIWMM saveIWord;
-			if ((saveIWord = Words.query(r->text)) == WMM.end() && getForms(saveIWord, r->text, sourceId))
+			tIWMM saveIWord=fullQuery(mysql, r->text, sourceId);
+			// must not itself be undefined
+			if (saveIWord == WMM.end() || saveIWord->second.query(UNDEFINED_FORM_NUM) >= 0)
 				continue;
 			/* make sure at least one form is one of the unlimited classes of words: adjective, adverb, noun, verb */
 			int acceptClasses[] = { nounForm,verbForm,adjectiveForm,adverbForm, NULL };
@@ -1167,9 +1169,6 @@ int WordClass::attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, 
 				if (saveIWord->second.query(acceptClasses[a]) >= 0)
 					break;
 			if (!acceptClasses[a]) continue;
-			// must not itself be undefined
-			if (saveIWord->second.query(UNDEFINED_FORM_NUM) >= 0)
-				continue;
 			// if r->rulenum is 0, then PREFIX (not suffix) has been removed from original
 			// if PREFIX, forms and inflections have already been added.
 			// only when a SUFFIX does another form and inflection get imposed onto the stem's form and inflection.
@@ -1192,13 +1191,17 @@ int WordClass::attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, 
 					return SUFFIX_HAS_NO_INFLECTION;
 				}
 				checkAdd(L"Stem", iWord, sWord, 0, form, inflection, derivationRules, r->text, sourceId);
+				lplog(LOG_DICTIONARY, L"WordPosMAP attemptDisInclination %s-->%s (%s)", sWord.c_str(), r->text.c_str(), form.c_str());
 			}
 			else
 			{
 				// prefix - copy only forms accepting prefix found in saveIWord to iWord
 				for (a = 0; acceptClasses[a]; a++)
 					if (saveIWord->second.query(acceptClasses[a]) >= 0)
+					{
 						checkAdd(L"Original", iWord, sWord, 0, Forms[acceptClasses[a]]->name.c_str(), saveIWord->second.inflectionFlags, derivationRules, r->text, sourceId);
+						lplog(LOG_DICTIONARY, L"WordPosMAP attemptDisInclination %s-->%s (%s)", sWord.c_str(), r->text.c_str(), Forms[acceptClasses[a]]->name.c_str());
+					}
 			}
 			return 0;
 		}
@@ -2085,5 +2088,55 @@ WordClass::~WordClass()
   tfree(tFI::allocated*sizeof(*tFI::formsArray),tFI::formsArray);
   tFI::allocated=0;
   tFI::fACount=0;
+}
+
+boolean WordClass::findWordInDB(MYSQL *mysql, wstring sWord, tIWMM &iWord)
+{
+	if (mysql == NULL)
+		return false;
+	if (!myquery(mysql, L"LOCK TABLES words w READ,wordforms wf READ")) return true;
+	wchar_t qt[query_buffer_len_overflow];
+	_snwprintf(qt, query_buffer_len, L"select w.id,wf.formId,wf.count,w.inflectionFlags,w.flags,w.timeFlags,w.mainEntryWordId,w.derivationRules,w.sourceId from words w,wordForms wf where wf.wordId=w.id and word=\"%s\"", sWord.c_str());
+	MYSQL_RES *result = NULL;
+	if (!myquery(mysql, qt, result) || mysql_num_rows(result) == 0)
+	{
+		if (result != NULL)
+			mysql_free_result(result);
+		myquery(mysql, L"UNLOCK TABLES");
+		return false;
+	}
+	MYSQL_ROW sqlrow;
+	unsigned int *wordForms = (unsigned int *)tmalloc(mysql_num_rows(result) * sizeof(int)*2);
+	int iInflectionFlags, iFlags, iTimeFlags, iMainEntryWordId, iDerivationRules, iSourceId, count = 0;
+	while ((sqlrow = mysql_fetch_row(result)) != NULL)
+	{
+		if (count == 0)
+		{
+			iInflectionFlags = atoi(sqlrow[3]);
+			iFlags = atoi(sqlrow[4]);
+			iTimeFlags = atoi(sqlrow[5]);
+			iMainEntryWordId = atoi(sqlrow[6]);
+			iDerivationRules = atoi(sqlrow[7]);
+			iSourceId = atoi(sqlrow[8]);
+		}
+		wordForms[count++] = atoi(sqlrow[1]) - 1;
+		wordForms[count++] = atoi(sqlrow[2]);
+	}
+	mysql_free_result(result);
+	if (!myquery(mysql, L"UNLOCK TABLES"))
+		return false;
+	//tFI::tFI(unsigned int *forms, unsigned int iCount, int iInflectionFlags, int iFlags, int iTimeFlags, int mainEntryWordId, int iDerivationRules, int iSourceId, int formNum, wstring &word)
+	int selfFormNum = FormsClass::findForm(sWord);
+	iWord = Words.WMM.insert(WordClass::tWFIMap(sWord, tFI(wordForms, count/2, iInflectionFlags, iFlags, iTimeFlags, iMainEntryWordId, iDerivationRules, iSourceId, selfFormNum, sWord))).first;
+	tfree(count * sizeof(int), wordForms);
+	return iWord != Words.end();
+}
+
+tIWMM WordClass::fullQuery(MYSQL *mysql, wstring word, int sourceId)
+{
+	tIWMM iWord = Words.end();
+	if ((iWord = Words.query(word)) == Words.end() && !findWordInDB(mysql, word, iWord))
+		getForms(iWord, word, sourceId);
+	return iWord;
 }
 

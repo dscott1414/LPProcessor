@@ -1016,7 +1016,7 @@ int overwriteWordFormsInDB(Source source, int wordId, wstring originalWord, set 
 	// insert wordForms(wordId, formId, count) VALUES(2, 33, 4), (5, 6, 7)
 	for (int form : posSet)
 		if (form < tFI::patternFormNumOffset)
-			len += wsprintf(qt + len, L"(%d,%d,1)", wordId, form);
+			len += wsprintf(qt + len, L"(%d,%d,1)", wordId, form+1); // formId -1 yields form offset in memory - 
 	if (actuallyExecuteAgainstDB)
 	{
 		if (!myquery(&source.mysql, qt, result))
@@ -1812,10 +1812,10 @@ void main()
 				}
 				source.clearSource();
 				wchar_t buffer[1024];
-				//DWORD numWritten;
-				wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d source (%-35.35s... finished)", is * 100 / totalSource, is, totalSource, title.c_str());
-				//WriteConsole(std_out, buffer, wcslen(buffer), &numWritten, NULL);
+				wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d source (%-35.35s... finished)", (is+ lastSourceId) * 100 / totalSource, is+ lastSourceId, totalSource, title.c_str());
 				SetConsoleTitle(buffer);
+				//DWORD numWritten;
+				//WriteConsole(std_out, buffer, wcslen(buffer), &numWritten, NULL);
 			}
 			if (loop == 0)
 			{

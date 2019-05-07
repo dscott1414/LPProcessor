@@ -788,65 +788,10 @@ return 0;
 }
 */
 
-boolean WordClass::findWordInDB(MYSQL *mysql, wstring sWord, tIWMM &iWord)
-{
-	if (mysql == NULL)
-		return false;
-	if (!myquery(mysql, L"LOCK TABLES words w READ,wordforms wf READ")) return true;
-	wchar_t qt[query_buffer_len_overflow];
-	_snwprintf(qt, query_buffer_len, L"select w.id,wf.formId,w.inflectionFlags,w.flags,w.timeFlags,w.derivationRules,w.sourceId from words w,wordForms wf where wf.wordId=w.id and word=\"%s\"", sWord.c_str());
-	MYSQL_RES *result = NULL;
-	if (!myquery(mysql, qt, result))
-	{
-		myquery(mysql, L"UNLOCK TABLES");
-		return false;
-	}
-	MYSQL_ROW sqlrow;
-	iWord = WMM.end();
-	while ((sqlrow = mysql_fetch_row(result)) != NULL)
-	{
-		int iForm = atoi(sqlrow[1]), iInflectionFlags = atoi(sqlrow[2]), iFlags = atoi(sqlrow[3]), iTimeFlags = atoi(sqlrow[4]), iDerivationRules = atoi(sqlrow[5]), iSourceId = atoi(sqlrow[6]);
-		if (iWord == WMM.end())
-		{
-			pair< tIWMM, bool > pr;
-			pr = WMM.insert(tWFIMap(sWord, tFI(iForm, iInflectionFlags, iFlags, iTimeFlags, iDerivationRules, wNULL, iSourceId)));
-			if (Forms[iForm]->isTopLevel)
-				pr.first->second.flags |= tFI::topLevelSeparator;
-			iWord = pr.first;
-		}
-		else
-		{
-			iWord->second.addForm(iForm, sWord);
-		}
-	}
-	mysql_free_result(result);
-	if (!myquery(mysql, L"UNLOCK TABLES"))
-		return false;
-	return iWord != WMM.end();
-}
-
-vector<wstring> WordClass::splitString(wstring str,wchar_t wc)
-{
-	vector<wstring> strings;
-	wistringstream f(str);
-	wstring s;
-	while (std::getline(f, s, wc)) 
-		strings.push_back(s);
-	return strings;
-}
-
-tIWMM WordClass::fullQuery(MYSQL *mysql, wstring word,int sourceId)
-{
-	tIWMM iWord = WMM.end();
-	if ((iWord = Words.query(word)) == WMM.end() && !findWordInDB(mysql, word, iWord))
-		getForms(iWord, word, sourceId);
-	return iWord;
-}
-
 int WordClass::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId)
 { LFS
 	if (sWord.length()<5) return -1;
-	vector <wstring> components = splitString(sWord, '-');
+	vector <wstring> components = Stemmer::splitString(sWord, '-');
 	tIWMM iWordComponent=WMM.end();
 	for (wstring w : components)
 		if ((iWordComponent = fullQuery(mysql, w, sourceId)) == WMM.end())
@@ -859,9 +804,18 @@ int WordClass::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId)
 			components.clear();
 			wstring firstWord = sWord.substr(0, I);
 			components.push_back(sWord.substr(I, sWord.length() - I));
-			tIWMM firstQIWord = WMM.end();
-			if ((firstQIWord = fullQuery(mysql, firstWord, sourceId)) != WMM.end() && (iWordComponent = fullQuery(mysql, components[components.size() - 1], sourceId)) != WMM.end())
-				break;
+			tIWMM firstQIWord;
+			// with splitting word this way, the previous word must also be known and of an open word type. 
+			if (((firstQIWord = fullQuery(mysql, firstWord, sourceId)) != WMM.end() && Stemmer::wordIsNotUnknownAndOpen(firstQIWord)) &&
+				((iWordComponent = fullQuery(mysql, components[components.size() - 1], sourceId)) != WMM.end() && Stemmer::wordIsNotUnknownAndOpen(iWordComponent)))
+			{
+				wchar_t *commonEndings[] = {L"o",L"ing",L"ton",L"rin",L"tin",L"pin",L"ism",L"ons",L"o",L"aire",L"ana",L"la",L"ard",L"ell",L"sey",L"ness",L"la",L"ies",NULL};
+				boolean reject = false;
+				for (int cei = 0; commonEndings[cei]!=NULL && !(reject = components[components.size() - 1] == commonEndings[cei]); cei++);
+				if (!reject)
+					break;
+			}
+			iWordComponent = WMM.end();
 		}
 	}
 	if (iWordComponent != WMM.end() && iWordComponent->second.query(UNDEFINED_FORM_NUM) < 0)
@@ -882,6 +836,8 @@ int WordClass::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId)
 			checkAdd(L"SW",iWord,sWord,0,L"adverb", iWordComponent->second.inflectionFlags,0, components[components.size() - 1],sourceId);
 		if (iWord==end()) return -1;
 		checkAdd(L"SW",iWord,sWord,0,COMBINATION_FORM,0,0, components[components.size() - 1],sourceId);
+		lplog(LOG_DICTIONARY, L"WordPosMAP splitWord %s-->%s", sWord.c_str(), components[components.size() - 1].c_str());
+		lplog(LOG_DICTIONARY, L"%s TEMPWordPosMAP", components[components.size() - 1].c_str());
 		return 0;
 	}
 	return -1;

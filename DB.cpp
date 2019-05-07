@@ -1087,45 +1087,53 @@ int WordClass::readWordFormsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,
   #endif
   if (!testCacheSuccess)
   {
-		MYSQL_RES *result=NULL;
-		MYSQL_ROW sqlrow;
-    int len=_snwprintf(qt,query_buffer_len,L"select wf.wordId, wf.formId, wf.count from wordForms wf, words w where w.id=wf.wordId");
-    if (sourceId==READ_WORDS_FOR_ALL_SOURCE)
-    {
-      len+=_snwprintf(qt+len,query_buffer_len-len,L" AND w.sourceId IS NULL");
-      if (lastReadfromDBTime>0)
-        len+=_snwprintf(qt+len,query_buffer_len-len,L" AND UNIX_TIMESTAMP(w.ts)>%d",lastReadfromDBTime);
-    }
-    else if (sourceId>=0) len+=_snwprintf(qt+len,query_buffer_len-len,L" AND w.sourceId=%d",sourceId);
-    _snwprintf(qt+len,query_buffer_len-len,L" ORDER BY wordId, formId");
-		if (printProgress)
-			wprintf(L"Querying word forms from database (sourceId=%d)...                        \r",sourceId);
-    if (!myquery(&mysql,qt,result)) return -1;
-      numWordForms=(int)mysql_num_rows(result);
-    wordForms=(unsigned int *)tmalloc(numWordForms*sizeof(int)*2);
-    int wf=0;
-		if (printProgress)
-			wprintf(L"Reading word forms from database...                        \r");
-    while ((sqlrow=mysql_fetch_row(result))!=NULL)
-    {
-      int wordId=atoi(sqlrow[0]);
-      if (wordId<0 || wordId>maxWordId)
-        lplog(LOG_FATAL_ERROR,L"wordId < 0 or > %d.",maxWordId);
-      if (words[wordId]==-1) words[wordId]=wf;
-      counts[wordId]++;
-      wordForms[wf++]=atoi(sqlrow[1])-1; // formId -1 yields form offset in memory
-      wordForms[wf++]=atoi(sqlrow[2]); // count
-    }
-    mysql_free_result(result);
+		int wf = 0;
+		numWordForms = 0;
+		if (sourceId == READ_WORDS_FOR_ALL_SOURCE)
+		{
+			MYSQL_RES *result = NULL;
+			MYSQL_ROW sqlrow;
+			int len = _snwprintf(qt, query_buffer_len, L"select wf.wordId, wf.formId, wf.count from wordForms wf, words w where w.id=wf.wordId");
+			//if (sourceId == READ_WORDS_FOR_ALL_SOURCE)
+			//{
+				len += _snwprintf(qt + len, query_buffer_len - len, L" AND w.sourceId IS NULL");
+				if (lastReadfromDBTime > 0)
+					len += _snwprintf(qt + len, query_buffer_len - len, L" AND UNIX_TIMESTAMP(w.ts)>%d", lastReadfromDBTime);
+			//}
+			//else
+			//	if (sourceId >= 0) len += _snwprintf(qt + len, query_buffer_len - len, L" AND w.sourceId=%d", sourceId);
+			_snwprintf(qt + len, query_buffer_len - len, L" ORDER BY wordId, formId");
+			if (printProgress)
+				wprintf(L"Querying word forms from database (sourceId=%d)...                        \r", sourceId);
+			if (!myquery(&mysql, qt, result)) return -1;
+			numWordForms = (int)mysql_num_rows(result);
+			wordForms = (unsigned int *)tmalloc(numWordForms * sizeof(int) * 2);
+			if (printProgress)
+				wprintf(L"Reading word forms from database...                        \r");
+			while ((sqlrow = mysql_fetch_row(result)) != NULL)
+			{
+				int wordId = atoi(sqlrow[0]);
+				if (wordId<0 || wordId>maxWordId)
+					lplog(LOG_FATAL_ERROR, L"wordId < 0 or > %d.", maxWordId);
+				if (words[wordId] == -1) words[wordId] = wf;
+				counts[wordId]++;
+				wordForms[wf++] = atoi(sqlrow[1]) - 1; // formId -1 yields form offset in memory
+				wordForms[wf++] = atoi(sqlrow[2]); // count
+			}
+			mysql_free_result(result);
+		}
     if (wf==0 && sourceId>0)
     {
-      if (!sourcePath.empty())
+			if (printProgress)
+				wprintf(L"Reading from word cache file...                                               \r");
+			if (!sourcePath.empty())
         readWords(sourcePath,sourceId); // no wordRelations possible because none of these exist in DB
 			if (printProgress)
-				wprintf(L"Finished reading from database...                                               \r");
+				wprintf(L"Finished reading from cache file...                                               \r");
       tfree(maxWordId*sizeof(int),counts);
       tfree(maxWordId*sizeof(int),words);
-      tfree(numWordForms*sizeof(int)*2,wordForms);
+			if (numWordForms>0)
+				tfree(numWordForms*sizeof(int)*2,wordForms);
       //lplog(L"TIME DB READ END (4) for source %d:%s",sourceId,getTimeStamp());
       return 0;
     }

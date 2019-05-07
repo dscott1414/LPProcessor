@@ -24,10 +24,15 @@ tinyxml2-master
 lloyd-yajl-66cb08c
 .vs
 release
+debug
 releasex64
+x64
 VerbNet
 verbnet-3.1
 target
 lists
 bin
 obj
+enc_temp_folder
+processGutenbergRDFtoSQL/obj/x64/Debug/processGutenbergRDFtoSQL.csproj.FileListAbsolute.txt
+processGutenbergRDFtoSQL/obj/x64/Release/processGutenbergRDFtoSQL.csproj.FileListAbsolute.txt
