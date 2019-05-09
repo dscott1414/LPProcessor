@@ -81,9 +81,9 @@
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\\yajl\Release;F:\Program Files\MySQL\MySQL Server 8.0\lib;F:\lp\source\Releasex64</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <ExecutablePath>C:\Program Files\Java\jdk1.8.0_181\bin;F:\Program Files\MySQL\MySQL Server 8.0\lib;$(ExecutablePath)</ExecutablePath>
+    <ExecutablePath>C:\Program Files\Java\jdk1.8.0_181\bin;F:\LP\tempMySQL;$(ExecutablePath)</ExecutablePath>
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);J:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-66cb08c\src\api;F:\lp\source\tinyxml2-master</IncludePath>
-    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\\yajl\Release;F:\Program Files\MySQL\MySQL Server 8.0\lib;F:\lp\source\Debug</LibraryPath>
+    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\\yajl\Release;F:\LP\tempMySQL;F:\lp\source\Debugx64</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ExecutablePath>C:\Program Files\Java\jdk1.8.0_181\bin;F:\LP\tempMySQL;$(ExecutablePath)</ExecutablePath>
@@ -137,9 +137,14 @@
     <ClCompile>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <Optimization>MaxSpeed</Optimization>
+      <PreprocessorDefinitions>_UNICODE;UNICODE;%(PreprocessorDefinitions);_ITERATOR_DEBUG_LEVEL=0</PreprocessorDefinitions>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;yajl.lib;libmysql.lib;wn.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>winInet.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;Winhttp.lib;yajl.lib;libmysql.lib;wn.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <IgnoreSpecificDefaultLibraries>MSVCRT</IgnoreSpecificDefaultLibraries>
+      <StackReserveSize>21097152</StackReserveSize>
+      <StackCommitSize>21097152</StackCommitSize>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

@@ -157,11 +157,11 @@ bool Source::getNextUnprocessedSource(int begin, int end, enum Source::sourceTyp
 {
 	LFS
 		MYSQL_RES * result;
-		if (!myquery(&mysql, L"LOCK TABLES sources WRITE")) return false;
+	if (!myquery(&mysql, L"LOCK TABLES sources WRITE")) return false;
 	wchar_t qt[query_buffer_len_overflow];
-	_snwprintf(qt, query_buffer_len, L"select id, path, start, repeatStart, etext, author, title from sources where id>=%d and sourceType=%d and processed IS NULL and processing IS NULL and start!='**SKIP**' and start!='**START NOT FOUND**'",begin, st);
-	if (end>=0)
-		_snwprintf(qt+wcslen(qt), query_buffer_len-wcslen(qt), L" and id<%d",end);
+	_snwprintf(qt, query_buffer_len, L"select id, path, start, repeatStart, etext, author, title from sources where id>=%d and sourceType=%d and processed IS NULL and processing IS NULL and start!='**SKIP**' and start!='**START NOT FOUND**'", begin, st);
+	if (end >= 0)
+		_snwprintf(qt + wcslen(qt), query_buffer_len - wcslen(qt), L" and id<%d", end);
 	wcscat(qt + wcslen(qt), L" order by id ASC limit 1");
 	MYSQL_ROW sqlrow = NULL;
 	if (myquery(&mysql, qt, result))
@@ -173,13 +173,13 @@ bool Source::getNextUnprocessedSource(int begin, int end, enum Source::sourceTyp
 		}
 		if (sqlrow != NULL)
 		{
-			sourceId=id = atoi(sqlrow[0]);
+			sourceId = id = atoi(sqlrow[0]);
 			mTW(sqlrow[1], path);
 			mTW(sqlrow[2], start);
 			repeatStart = atoi(sqlrow[3]);
-			if (sqlrow[4]!=NULL)
+			if (sqlrow[4] != NULL)
 				mTW(sqlrow[4], etext);
-			if (sqlrow[5]!=NULL)
+			if (sqlrow[5] != NULL)
 				mTW(sqlrow[5], author);
 			if (sqlrow[6] != NULL)
 				mTW(sqlrow[6], title);
@@ -187,7 +187,24 @@ bool Source::getNextUnprocessedSource(int begin, int end, enum Source::sourceTyp
 	}
 	mysql_free_result(result);
 	unlockTables();
-	return sqlrow!=NULL;
+	return sqlrow != NULL;
+}
+
+bool Source::anymoreUnprocessedForUnknown(enum Source::sourceTypeEnum st, int step)
+{
+	LFS
+	if (!myquery(&mysql, L"LOCK TABLES sources WRITE")) return false;
+	MYSQL_RES * result;
+	_int64 numResults = 0;
+	wchar_t qt[query_buffer_len_overflow];
+	_snwprintf(qt, query_buffer_len, L"select id, etext, path, title from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' and proc2=%d order by id limit 1", st,step);
+	if (myquery(&mysql, qt, result))
+	{
+		numResults = mysql_num_rows(result);
+		mysql_free_result(result);
+	}
+	unlockTables();
+	return numResults>0;
 }
 
 bool Source::getNextUnprocessedParseRequest(int &prId, wstring &pathInCache)
@@ -990,11 +1007,11 @@ bool tFI::updateFromDB(int wordId,unsigned int *forms,unsigned int iCount,int iI
 #define NUM_WORD_ALLOCATION 102400
 void WordClass::assign(int wordId,tIWMM iWord)
 { LFS
-  while (idsAllocated<=wordId)
+	while (idsAllocated<=wordId)
   {
 		int previousIdsAllocated=idsAllocated;
     idsAllocated+=NUM_WORD_ALLOCATION;
-    idToMap=(tIWMM *)trealloc(22,idToMap,previousIdsAllocated,idsAllocated*sizeof(*idToMap));
+    idToMap=(tIWMM *)trealloc(22,idToMap,previousIdsAllocated * sizeof(*idToMap),idsAllocated*sizeof(*idToMap));
     if (!idToMap)
       lplog(LOG_FATAL_ERROR,L"Out of memory allocating %d bytes to idToMap array.",idsAllocated*sizeof(*idToMap));
 		for (int I = idsAllocated - NUM_WORD_ALLOCATION; I < idsAllocated; I++)

@@ -878,6 +878,7 @@ void createLocks(void)
 //TryAcquireSRWLockShared	Attempts to acquire a slim reader/writer (SRW) lock in shared mode. If the call is successful, the calling thread takes ownership of the lock.
 
 // test timeExpressions -retry -BC 0 -cacheDir D:\cache -SR -SW -SWNR -SWNW -TNMS
+// -test tokenization ~~BEGINUNI -BC 0 -cacheDir J:\caches -SW -SWNR -SWNW -forceSourceReread -retry
 // parse one gutenberg book repeatedly:
 // book 0 -BC 0 -retry -cacheDir J:\caches -SR -SW -SWNR -SWNW -TNMS
 // parse gutenberg books all at once parcelled out:
@@ -888,7 +889,7 @@ void redistributeFilesAlphabetically(wchar_t *dir);
 int numSourceLimit = 0;
 int wmain(int argc,wchar_t *argv[])
 {
-	// Create a dump file whenever the gateway crashes only on windows
+	// Create a dump file whenever this program crashes (only on windows)
 	SetUnhandledExceptionFilter(unhandled_handler);
 	wstring testbuffer;
 	//int readPageFromSolr(const wchar_t *queryParams, wstring &buffer);
@@ -1229,6 +1230,8 @@ int wmain(int argc,wchar_t *argv[])
 	{
 		wstring path=L"tests\\"+ std::wstring(argv[sourceArgs + 1]) +L".txt";
 		wstring start=L"~~BEGIN",title,etext;
+		if (argv[sourceArgs + 2][0] == L'~')
+			start = argv[sourceArgs + 2];
 		int repeatStart=1;
 		if (!source.readSource(path,parseOnly,false,true)) 
 		{
@@ -1237,7 +1240,7 @@ int wmain(int argc,wchar_t *argv[])
 			lplog();
 			source.write(path,false);
 		}
-		quotationExceptions=source.doQuotesOwnershipAndContractions(totalQuotations,true);
+		quotationExceptions=source.doQuotesOwnershipAndContractions(totalQuotations,false);
 		globalTotalUnmatched+=source.printSentences(false,unknownCount,quotationExceptions,totalQuotations,globalOverMatchedPositionsTotal);
 		source.identifyObjects();
 		vector <int> secondaryQuotesResolutions;

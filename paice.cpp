@@ -225,7 +225,7 @@ int Stemmer::stem(MYSQL mysql, wstring word, vector <tSuffixRule> &rulesUsed,int
   return rulesUsed.size();
 }
 
-boolean Stemmer::isWordDBUnknown(MYSQL mysql,wstring word)
+bool Stemmer::isWordDBUnknown(MYSQL mysql,wstring word)
 {
 	tIWMM iWord = Words.query(word);
 	if (iWord != Words.end() && iWord->second.query(UNDEFINED_FORM_NUM) >= 0)
@@ -331,7 +331,7 @@ vector<wstring> Stemmer::splitString(wstring str, wchar_t wc)
 	return strings;
 }
 
-boolean Stemmer::wordIsNotUnknownAndOpen(tIWMM iWord)
+bool Stemmer::wordIsNotUnknownAndOpen(tIWMM iWord)
 {
 	if (unacceptableCombinationForms.empty())
 	{

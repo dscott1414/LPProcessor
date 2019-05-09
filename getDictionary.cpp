@@ -17,6 +17,10 @@
 #include <sstream>
 #include <iostream>
 #include <vector>
+extern "C" {
+#include <yajl_tree.h>
+}
+#define MAX_LEN 2048
 
 int bandwidthControl=1; // minimum seconds between requests   // initialized before threads
 
@@ -790,14 +794,17 @@ return 0;
 
 int WordClass::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId)
 { LFS
-	if (sWord.length()<5) return -1;
+	if (sWord.length()<5) 
+		return -1;
+	static unordered_set <wstring> rejectSplitEndings = { L"o",L"ing",L"ton",L"rin",L"tin",L"pin",L"ism",L"ons",L"aire",L"ana",L"la",L"ard",L"ell",L"sey",L"ness",L"la",L"ies",
+	L"ley",L"ers",L"ish",L"ner",L"ington",L"leys",L"que",L"tes",L"ion",L"in",L"els",L"era",L"ists",L"sie",L"and",L"ingly",L"ium",L"ics",L"ilate",L"issima",L"ells" };
 	vector <wstring> components = Stemmer::splitString(sWord, '-');
 	tIWMM iWordComponent=WMM.end();
 	for (wstring w : components)
 		if ((iWordComponent = fullQuery(mysql, w, sourceId)) == WMM.end())
 			break;
 	// don't split a word with a dash in it
-	if (components.size()==1 && (iWordComponent == WMM.end() || iWordComponent->second.query(UNDEFINED_FORM_NUM) >= 0)) // not found or unknown
+	if (components.size()==1 && (iWordComponent == WMM.end() || !Stemmer::wordIsNotUnknownAndOpen(iWordComponent) || rejectSplitEndings.find(components[components.size() - 1]) != rejectSplitEndings.end())) // not found or unknown
 	{
 		for (unsigned int I = 2; I < sWord.length() - 2; I++)
 		{
@@ -807,18 +814,13 @@ int WordClass::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId)
 			tIWMM firstQIWord;
 			// with splitting word this way, the previous word must also be known and of an open word type. 
 			if (((firstQIWord = fullQuery(mysql, firstWord, sourceId)) != WMM.end() && Stemmer::wordIsNotUnknownAndOpen(firstQIWord)) &&
-				((iWordComponent = fullQuery(mysql, components[components.size() - 1], sourceId)) != WMM.end() && Stemmer::wordIsNotUnknownAndOpen(iWordComponent)))
-			{
-				wchar_t *commonEndings[] = {L"o",L"ing",L"ton",L"rin",L"tin",L"pin",L"ism",L"ons",L"o",L"aire",L"ana",L"la",L"ard",L"ell",L"sey",L"ness",L"la",L"ies",NULL};
-				boolean reject = false;
-				for (int cei = 0; commonEndings[cei]!=NULL && !(reject = components[components.size() - 1] == commonEndings[cei]); cei++);
-				if (!reject)
+				((iWordComponent = fullQuery(mysql, components[components.size() - 1], sourceId)) != WMM.end() && Stemmer::wordIsNotUnknownAndOpen(iWordComponent)) &&
+				(rejectSplitEndings.find(components[components.size() - 1]) == rejectSplitEndings.end()))
 					break;
-			}
 			iWordComponent = WMM.end();
 		}
 	}
-	if (iWordComponent != WMM.end() && iWordComponent->second.query(UNDEFINED_FORM_NUM) < 0)
+	if (iWordComponent != WMM.end() && Stemmer::wordIsNotUnknownAndOpen(iWordComponent) && rejectSplitEndings.find(components[components.size() - 1]) == rejectSplitEndings.end())
 	{
 		// (SW) word bone-cracking( main: verb present part)
 		// (SW) word white-maned(main: verb past)
@@ -851,23 +853,314 @@ bool loosesort( const wchar_t *s1, const wchar_t *s2 )
 	return wcsncmp(s1+1,s2,wcslen(s2))<0;
 }
 
-int parseMerriamWebsterDictionaryAPI(tIWMM &iWord, wstring sWord, int sourceId)
+string lookForPOS(yajl_val node)
 {
-	sourceId = 0;
-	if (iWord!=Words.end())
-			
-	sWord = L"";
+	const char * path[] = { "fl", (const char *)0 };
+	yajl_val docs = yajl_tree_get(node, path, yajl_t_any);
+	return (docs == NULL) ? "" : YAJL_GET_STRING(docs);
+}
 
-	return WORD_NOT_FOUND;
+int cacheWebPath(wstring webAddress, wstring &buffer, wstring epath, wstring cacheTypePath, bool forceWebReread, bool &networkAccessed)
+{
+	LFS
+		wchar_t path[MAX_LEN];
+	int pathlen = _snwprintf(path, MAX_LEN, L"%s\\%s", CACHEDIR, cacheTypePath.c_str());
+	_wmkdir(path);
+	_snwprintf(path + pathlen, MAX_LEN - pathlen, L"\\_%s", epath.c_str());
+	path[MAX_PATH - 20] = 0; // make space for subdirectories and for file extensions
+	convertIllegalChars(path + pathlen + 1);
+	distributeToSubDirectories(path, pathlen + 1, true);
+	int ret, fd;
+	if (networkAccessed = forceWebReread || _waccess(path, 0) < 0)
+	{
+		if (ret = readPage(webAddress.c_str(), buffer)) return ret;
+		if ((fd = _wopen(path, O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE)) < 0)
+		{
+			lplog(LOG_ERROR, L"cacheWebPath:Cannot create path %s - %S.", path, sys_errlist[errno]);
+			return GETPAGE_CANNOT_CREATE;
+		}
+		_write(fd, buffer.c_str(), buffer.length() * sizeof(buffer[0]));
+		_close(fd);
+		return 0;
+	}
+	else
+	{
+		if ((fd = _wopen(path, O_RDWR | O_BINARY)) < 0)
+			lplog(LOG_ERROR, L"cacheWebPath:Cannot read path %s - %S.", path, sys_errlist[errno]);
+		else
+		{
+			int bufferlen = filelength(fd);
+			void *tbuffer = (void *)tcalloc(bufferlen + 10, 1);
+			_read(fd, tbuffer, bufferlen);
+			_close(fd);
+			buffer = (wchar_t *)tbuffer;
+			tfree(bufferlen + 10, tbuffer);
+		}
+	}
+	return 0;
+}
+
+/*
+// map to class/classes
+Italian adverb
+adjective or adverb
+adverb or adjective
+adjective
+adjective combining form
+German adjective
+verb
+phrasal verb
+impersonal verb
+Latin verb
+pronoun, singular or plural in construction
+noun
+noun phrase
+noun or adjective
+adjective or noun
+noun, plural in form but singular in construction
+noun, plural in form but singular or plural in construction
+French noun phrase
+Latin noun phrase
+plural noun
+French noun
+noun combining form
+noun or intransitive verb
+adverb
+interjection
+French interjection
+abbreviation
+Latin abbreviation
+symbol
+preposition
+conjunction
+trademark
+pronoun
+pronoun or adjective
+honorific title
+
+// ignore
+prefix
+noun suffix
+adverb suffix
+adjective suffix
+verb suffix
+plural noun suffix
+Greek phrase
+French phrase
+Latin phrase
+German phrase
+Spanish phrase
+Italian phrase
+Irish phrase
+Hawaiian phrase
+proverbial saying
+conventional saying
+French quotation from ...
+Latin quotation from ...
+German quotation from ...
+pronunciation spelling
+script annotation
+combining form
+
+// custom
+idiom
+biographical name
+geographical name
+certification mark
+communications code word
+communications signal
+*/
+vector<wstring> ignoreBefore = { L"pronunciation spelling" };
+vector<wstring> classes = { L"adjective",L"adverb",L"verb",L"noun",L"interjection",L"abbreviation",L"symbol",L"preposition",L"conjunction",L"trademark",L"pronoun",L"honorific" };
+vector<wstring> ignoreAfter = { L"prefix",L"suffix",L"phrase",L"saying",L"quotation",L"pronunciation spelling",L"script annotation",L"combining form",L"contraction" }; // must be processed after classes
+
+void identifyFormClass(set<int> &posSet, wstring pos, bool &plural)
+{
+		//investigate sidgwick should never have reached splitWord!
+
+	plural = pos.find(L"noun") != wstring::npos && pos.find(L"plural") != wstring::npos;
+	if (pos == L"idiom")
+	{
+		posSet.insert(FormsClass::gFindForm(L"noun"));
+		posSet.insert(FormsClass::gFindForm(L"adjective"));
+	}
+	else if (pos.find(L"name") != wstring::npos)
+	{
+		posSet.insert(PROPER_NOUN_FORM_NUM);
+	}
+	else if (pos == L"certification mark")
+	{
+		posSet.insert(FormsClass::gFindForm(L"symbol"));
+	}
+	else if (pos.find(L"communications") != wstring::npos)
+	{
+		posSet.insert(FormsClass::gFindForm(L"noun"));
+	}
+	for (auto c : ignoreBefore)
+		if (pos.find(c.c_str()) != wstring::npos)
+			return;
+	for (auto c : classes)
+	{
+		int where;
+		if ((where = pos.find(c.c_str())) != wstring::npos)
+		{
+			// this is enough to differentiate between noun, pronoun, verb and adverb
+			if (where == 0 || iswspace(pos[where - 1]))
+				posSet.insert(FormsClass::gFindForm(c.c_str()));
+		}
+	}
+	for (auto c : ignoreAfter)
+		if (pos.find(c.c_str()) != wstring::npos)
+			return;
+	if (posSet.empty())
+		printf("form not recognized - %S", pos.c_str());
+}
+
+// returns false if not found by the site (or error)
+bool existsInDictionaryDotCom(wstring word, bool &networkAccessed)
+{
+	wstring buffer;
+	if (cacheWebPath(L"https://www.dictionary.com/browse/" + word, buffer, word, L"DictionaryDotCom", false, networkAccessed))
+		return false;
+	return buffer.find(L"No results found") == wstring::npos;
+}
+
+bool detectNonEuropeanWord(wstring word, char *buffer, int bufferlen)
+{
+	BOOL usedDefaultChar;
+	int ret = WideCharToMultiByte(
+		1252,									//UINT CodePage,
+		WC_NO_BEST_FIT_CHARS,//DWORD dwFlags,
+		word.c_str(),				 //LPCWCH lpWideCharStr,
+		word.length(),			 //int cchWideChar,
+		buffer,              //LPSTR lpMultiByteStr,
+		bufferlen,           // int cbMultiByte,
+		NULL,                //LPCCH lpDefaultChar,
+		&usedDefaultChar										 //LPBOOL lpUsedDefaultChar
+	);
+	return (ret == 0) || (usedDefaultChar);
+	//if (!ret)
+	//	wprintf(L"%s %d\n", word.c_str(), GetLastError());
+	//else if (usedDefaultChar)
+	//	wprintf(L"%s UDC\n", word.c_str());
+	//else
+	//	return false;
+	//return true;
+}
+
+bool getMerriamWebsterDictionaryAPIForms(wstring sWord, set <int> &posSet, bool &plural, bool &networkAccessed)
+{
+	wstring pageURL = L"https://www.dictionaryapi.com/api/v3/references/collegiate/json/";
+	pageURL += sWord + L"?key=ba4ac476-dac1-4b38-ad6b-fe36e8416e07";
+	wstring jsonWideBuffer;
+	if (!cacheWebPath(pageURL, jsonWideBuffer, sWord, L"Webster", false, networkAccessed))
+	{
+		char errbuf[1024];
+		errbuf[0] = 0;
+		string jsonBuffer;
+		wTM(jsonWideBuffer, jsonBuffer);
+		yajl_val node = yajl_tree_parse((const char *)jsonBuffer.c_str(), errbuf, sizeof(errbuf));
+		/* parse error handling */
+		if (node == NULL) {
+			lplog(LOG_ERROR, L"Parse error:%s\n %S", jsonBuffer.c_str(), errbuf);
+			return false;
+		}
+		wstring posStr, pos;
+		if (node->type == yajl_t_array)
+			for (unsigned int docNum = 0; docNum < node->u.array.len; docNum++)
+			{
+				yajl_val doc = node->u.array.values[docNum];
+				mTW(lookForPOS(doc), pos);
+				if (pos.length() > 0)
+					identifyFormClass(posSet, pos, plural);
+			}
+	}
+	return posSet.size() > 0;
+}
+
+// pass back these inflections:
+int discoverInflections(set <int> posSet, bool plural, wstring word)
+{
+	int inflections=0;
+	for (auto c : posSet)
+	{
+		if (c == nounForm)
+		{
+			if (plural)
+				inflections += PLURAL;
+			else
+				inflections += SINGULAR;
+		}
+		else if (c == verbForm)
+		{
+			if (word.length() > 2)
+			{
+				if (word[word.length() - 3] == L'i' && word[word.length() - 2] == L'n' && word[word.length() - 1] == L'g')
+					inflections += VERB_PRESENT_PARTICIPLE;
+				else if (word[word.length() - 2] == L'e' && word[word.length() - 1] == L'd')
+					inflections += VERB_PAST_PARTICIPLE;
+				else if (word[word.length() - 1] == L's')
+					inflections += VERB_PRESENT_THIRD_SINGULAR; //?? guess
+				else
+					inflections += VERB_PRESENT_FIRST_SINGULAR;
+			}
+		}
+		else if (c == adjectiveForm)
+		{
+			// ADJECTIVE_NORMATIVE = 8192, ADJECTIVE_COMPARATIVE = 16384,ADJECTIVE_SUPERLATIVE = 32768,
+			if (word.length() < 3)
+				inflections += ADJECTIVE_NORMATIVE;
+			else
+			{
+				if (word[word.length() - 2] == L'e' && word[word.length() - 1] == L'r')
+					inflections += ADJECTIVE_COMPARATIVE;
+				else if (word[word.length() - 3] == L'e' && word[word.length() - 2] == L's' && word[word.length() - 1] == L't')
+					inflections += ADJECTIVE_SUPERLATIVE;
+				else
+					inflections += ADJECTIVE_NORMATIVE;
+			}
+		}
+		else if (c == adverbForm)
+		{
+			// ADVERB_NORMATIVE = 65536, ADVERB_COMPARATIVE = 131072,ADVERB_SUPERLATIVE = 262144
+			if (word.length() < 3)
+				inflections += ADVERB_NORMATIVE;
+			else
+			{
+				if (word[word.length() - 2] == L'e' && word[word.length() - 1] == L'r')
+					inflections += ADVERB_COMPARATIVE;
+				else if (word[word.length() - 3] == L'e' && word[word.length() - 2] == L's' && word[word.length() - 1] == L't')
+					inflections += ADVERB_SUPERLATIVE;
+				else
+					inflections += ADVERB_NORMATIVE;
+			}
+		}
+	}
+	return 0;
 }
 
 // this routine should look up words from wiktionary or some other dictionary
-int WordClass::getForms(tIWMM &iWord, wstring sWord, int sourceId)
+// this returns >0 if word is found or WORD_NOT_FOUND if word lookup fails.
+int WordClass::getForms(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId)
 {
 	LFS
+	char temptransbuf[1024];
+	if (detectNonEuropeanWord(sWord, temptransbuf, 1024))
+		return WORD_NOT_FOUND;
+	bool plural,networkAccessed, existsDM = existsInDictionaryDotCom(sWord, networkAccessed);
+	if (!existsDM)
+		return WORD_NOT_FOUND;
 	changedWords=true;
-	return parseMerriamWebsterDictionaryAPI(iWord, sWord, sourceId);
-	//return WORD_NOT_FOUND;
+	set <int> posSet;
+	if (!getMerriamWebsterDictionaryAPIForms(sWord, posSet, plural, networkAccessed))
+		return WORD_NOT_FOUND;
+	int inflections = discoverInflections(posSet, plural, sWord);
+	int flags = 0, derivationRules = 0;
+	bool added;
+	wstring sME = sWord;
+	for (int form : posSet)
+		iWord = addNewOrModify(mysql, sWord, flags, form, inflections, derivationRules, sME, sourceId, added);
+	return (iWord == Words.end()) ? WORD_NOT_FOUND : posSet.size();
 }
 
 HINTERNET hINet;
@@ -920,7 +1213,7 @@ bool InetOption(bool global,int option,wchar_t *description,unsigned long value)
 	return true;
 }
 
-boolean LPInternetOpen(int timer)
+bool LPInternetOpen(int timer)
 {
 	if (!hINet)
 	{
@@ -1307,7 +1600,7 @@ void WordClass::testWordCacheFileRoutines(void)
 		tIWMM saveEntry=iWord;
 		Words.remove(*w);
 		iWord=Words.end();
-		int ret=getForms(iWord,*w,false, sourceId);
+		int ret=getForms(mysql,iWord,*w,false, sourceId);
 		if (iWord==Words.end() || (ret==(int)WORD_NOT_FOUND || ret==(int)NO_FORMS_FOUND))
 		{
 			if (ret=attemptDisInclination(mysql, iWord,*w,false,-4))

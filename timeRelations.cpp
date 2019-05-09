@@ -2447,7 +2447,7 @@ bool Source::determineTimelineSegmentLink()
 bool Source::speakerGroupTransition(int where,int sg,bool forwardTransition)
 { LFS
 	if (!sg) return false;
-	boolean allNew=true,allNotPhysicallyPresent=true;
+	bool allNew=true,allNotPhysicallyPresent=true;
 	wstring tmpstr;
 	// is the newSG composed of people who have not been seen in any previous speaker group?
 	if (debugTrace.traceTime)

@@ -38,3 +38,5 @@ F:\lp\source\processGutenbergRDFtoSQL\obj\x64\Release\processGutenbergRDFtoSQL.c
 F:\lp\source\processGutenbergRDFtoSQL\obj\x64\Release\processGutenbergRDFtoSQL.csproj.CopyComplete
 F:\lp\source\processGutenbergRDFtoSQL\obj\x64\Release\processGutenbergRDFtoSQL.exe
 F:\lp\source\processGutenbergRDFtoSQL\obj\x64\Release\processGutenbergRDFtoSQL.pdb
+F:\lp\source\processGutenbergRDFtoSQL\bin\x64\Release\BouncyCastle.Crypto.dll
+F:\lp\source\processGutenbergRDFtoSQL\bin\x64\Release\MySql.Data.dll

@@ -263,6 +263,7 @@ vector <int> WordMatch::getForms()
 			checkedForms.push_back(form);
 	return checkedForms;
 }
+
 // in the case of a proper noun, it increases the size of the form by 1
 int WordMatch::queryForm(int form)
 { LFS
@@ -1084,7 +1085,7 @@ int Source::scanUntil(const wchar_t *start,int repeat,bool printError)
 bool Source::analyzeEnd(wstring &path,int begin,int end)
 { LFS
 	int w=0;
-	boolean endFound;
+	bool endFound;
 	for (w=begin; w<end; w++) if (m[w].word->first==L"end") break;
 	endFound=w!=end;
 	if (w==end) 
@@ -1598,7 +1599,7 @@ void Source::clearTagSetMaps(void)
 		pemaMapToTagSetsByPemaByTagSet[ts].clear();
 }
 
-int Source::printSentences(boolean updateStatistics,unsigned int unknownCount,unsigned int quotationExceptions,unsigned int totalQuotations,int &globalOverMatchedPositionsTotal)
+int Source::printSentences(bool updateStatistics,unsigned int unknownCount,unsigned int quotationExceptions,unsigned int totalQuotations,int &globalOverMatchedPositionsTotal)
 { LFS
 	if (!sentenceStarts.size() || sentenceStarts[sentenceStarts.size()-1]!=m.size())
 		sentenceStarts.push_back(m.size());

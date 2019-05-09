@@ -144,6 +144,9 @@ void *trealloc(int from,void *original,unsigned int oldbytes,unsigned int newbyt
 { LFS
   memoryAllocated+=(newbytes-oldbytes);
   void *newMemory=realloc(original,newbytes);
+#ifdef _DEBUG
+	memset(((::byte *)newMemory) + oldbytes, 0, (newbytes - oldbytes)); // necessary to make wNULL checked iterator execute because of orphan_me check
+#endif
   if (newMemory!=NULL) return newMemory;
   reportMemoryUsage();
   lplog(LOG_FATAL_ERROR,L"Out of memory requesting %d bytes! (%d)",newbytes,from);

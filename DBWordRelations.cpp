@@ -568,7 +568,7 @@ int getSolrField(char *element, yajl_val doc)
 extern HINTERNET hINet;
 #define MAX_BUF 200000
 // these are in getDictionary
-boolean LPInternetOpen(int timer);
+bool LPInternetOpen(int timer);
 bool InternetReadFile_Wait(HINTERNET RequestHandle, char *buffer, int bufsize, DWORD *dwRead);
 
 int readPageFromSolr(const wchar_t *queryParams, wstring &buffer)

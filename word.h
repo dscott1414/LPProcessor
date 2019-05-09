@@ -617,7 +617,7 @@ private:
   bool addPlaces(wstring pPath,vector <tmWS > &objects);
 	void addTimeFlags();
   void createTimeCategories(bool normalize);
-  int getForms(tIWMM &iWord,wstring sWord,int sourceId);
+  int getForms(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId);
   tIWMM addCopy(wstring sWord,tIWMM iWord,bool &added);
   tIWMM query(wstring sWord,int form,int inflection,int &offset);
   bool addFlag(wstring sWord,int flag);
@@ -642,7 +642,7 @@ private:
 	int processTime(wstring &sWord, wchar_t *buffer, __int64 &cp, __int64 &bufferScanLocation);
 	int processWebAddress(wstring &sWord, wchar_t *buffer, __int64 &cp, __int64 bufferLen);
 	tIWMM fullQuery(MYSQL *mysql, wstring word, int sourceId);
-	boolean findWordInDB(MYSQL *mysql, wstring sWord, tIWMM &iWord);
+	bool findWordInDB(MYSQL *mysql, wstring sWord, tIWMM &iWord);
 };
 
 #include "pattern.h"

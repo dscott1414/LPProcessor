@@ -12,7 +12,7 @@
 #include <crtdbg.h>
 #include "profile.h"
 
-	void itos(wchar_t *before,int i,wstring &concat,wchar_t *after)
+void itos(wchar_t *before,int i,wstring &concat,wchar_t *after)
 { LFS
 	wchar_t temp[1024];
 	wcscpy(temp,before);

@@ -103,7 +103,7 @@ wchar_t *readTillEndOfTripleString(wchar_t *s1, FILE *fp, wchar_t *buffer, int &
 	return buffer; // take care of incorrect warning
 }
 
-boolean readN3OnePropertyLine(wstring relation,wstring mapFrom, unordered_map < wstring, unordered_map <wstring, set< wstring > > > &triplets, FILE *fp, wchar_t *buffer, int &line, int &nonConformingLines)
+bool readN3OnePropertyLine(wstring relation,wstring mapFrom, unordered_map < wstring, unordered_map <wstring, set< wstring > > > &triplets, FILE *fp, wchar_t *buffer, int &line, int &nonConformingLines)
 {
 	for (line++; fgetws(buffer, MAX_BUF, fp); line++)
 	{

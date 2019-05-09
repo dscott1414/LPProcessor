@@ -54,7 +54,6 @@ int WordClass::predefineWords(Inflections words[],wstring sForm,wstring shortNam
 		{
 			*quote = L'ʼ';
 			handleExtendedParseWords(words[I].word);
-			bool added;
 			addNewOrModify(NULL, words[I].word, flags, aForm, words[I].inflection, 0, L"", -1, added);
 			*quote = L'\'';
 		}

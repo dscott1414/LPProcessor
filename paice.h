@@ -61,9 +61,9 @@ public:
 	static int findLastFormInflection(vector <tSuffixRule> rulesUsed, vector <tSuffixRule>::iterator &r, wstring &form, int &inflection);
 	static int stem(MYSQL mysql, wstring s, vector <tSuffixRule> &rulesUsed, intArray &trail, int addRule);
 	~Stemmer();
-	static boolean isWordDBUnknown(MYSQL mysql, wstring word);
+	static bool isWordDBUnknown(MYSQL mysql, wstring word);
 	static vector<wstring> splitString(wstring str, wchar_t wc);
-	static boolean wordIsNotUnknownAndOpen(tIWMM iWord);
+	static bool wordIsNotUnknownAndOpen(tIWMM iWord);
 
 private:
 	static unordered_set<int> unacceptableCombinationForms;

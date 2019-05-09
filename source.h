@@ -2342,7 +2342,7 @@ int wherePrepObject,
 
 
 	int refreshWordRelationsFromSolr(vector <testWordRelation> &testWordRelations,int &overTime,int &solrTime);
-	int printSentences(boolean updateStatistics,unsigned int unknownCount,unsigned int quotationExceptions,unsigned int totalQuotations,int &globalOverMatchedPositionsTotal);
+	int printSentences(bool updateStatistics,unsigned int unknownCount,unsigned int quotationExceptions,unsigned int totalQuotations,int &globalOverMatchedPositionsTotal);
 	int printSentencesCheck(bool skipCheck);
 	void printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &tagSet,int position,int PEMAPosition);
 	void printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &tagSet,int position,int PEMAPosition,vector <wstring> &words);
@@ -3026,6 +3026,7 @@ int wherePrepObject,
 	bool updateSourceStart(wstring &start, int repeatStart, wstring &etext, __int64 actualLenInBytes);
 	bool updateSource(wstring &path,wstring &start,int repeatStart,wstring &etext,int actualLenInBytes);
 	bool getNextUnprocessedSource(int begin, int end, enum Source::sourceTypeEnum st, bool setUsed, int &id, wstring &path, wstring &start, int &repeatStart, wstring &etext, wstring &author, wstring &title);
+	bool anymoreUnprocessedForUnknown(enum Source::sourceTypeEnum st, int step);
 	bool getNextUnprocessedParseRequest(int &prId, wstring &pathInCache);
 	int createThesaurusTables(void);
 	int createGroupTables(void);

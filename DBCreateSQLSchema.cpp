@@ -28,12 +28,12 @@ bool checkFull(MYSQL *mysql,wchar_t *qt,size_t &len,bool flush,wchar_t *qualifie
 int Source::createThesaurusTables()
 {
 	if (!myquery(&mysql, L"CREATE TABLE thesaurus ("
-		L"mainEntry CHAR(32) CHARACTER SET utf8 NOT NULL, INDEX me_ind (mainEntry), "
+		L"mainEntry CHAR(32) CHARACTER SET utf8mb4 NOT NULL, INDEX me_ind (mainEntry), "
 		L"wordType SMALLINT UNSIGNED NOT NULL,"
-		L"primarySynonyms CHAR(100) CHARACTER SET utf8 NOT NULL, "
-		L"accumulatedSynonyms TEXT(1000) CHARACTER SET utf8 NOT NULL, "
-		L"accumulatedAntonyms CHAR(120) CHARACTER SET utf8 NOT NULL, "
-		L"concepts CHAR(40) CHARACTER SET utf8 NOT NULL)")) 
+		L"primarySynonyms CHAR(100) CHARACTER SET utf8mb4 NOT NULL, "
+		L"accumulatedSynonyms TEXT(1000) CHARACTER SET utf8mb4 NOT NULL, "
+		L"accumulatedAntonyms CHAR(120) CHARACTER SET utf8mb4 NOT NULL, "
+		L"concepts CHAR(40) CHARACTER SET utf8mb4 NOT NULL)")) 
 		return -1;
 	return 0;
 }
@@ -181,7 +181,7 @@ int Source::createTimeRelationTables(void)
   // timeRelationTypes: ’BEFORE’|’AFTER’|’ON_OR_BEFORE’|’ON_OR_AFTER’|’LESS_THAN’|’MORE_THAN’|
   //                    ’EQUAL_OR_LESS’|’EQUAL_OR_MORE’|’START’|’MID’|’END’|’APPROX’
   if (!myquery(&mysql,L"CREATE TABLE timeRelationTypes (id int(11) unsigned NOT NULL auto_increment unique, "
-    L"type VARCHAR(256) CHARACTER SET utf8 NOT NULL)")) return -1;
+    L"type VARCHAR(256) CHARACTER SET utf8mb4 NOT NULL)")) return -1;
   // timeGroupRelations:
   if (!myquery(&mysql,L"CREATE TABLE timeGroupRelations (id int(11) unsigned NOT NULL auto_increment unique, "
     L"timeRelationTypeId INT UNSIGNED NOT NULL, INDEX tri_ind (timeRelationTypeId), FOREIGN KEY (timeRelationTypeId) REFERENCES timeRelationTypes(id), "
@@ -471,16 +471,16 @@ int Source::createDatabase(wchar_t *server)
     return -1;
   }
   wchar_t qt[2*query_buffer_len_overflow];
-  _snwprintf(qt,query_buffer_len,L"CREATE DATABASE %s character set utf8",LDBNAME);
+  _snwprintf(qt,query_buffer_len,L"CREATE DATABASE %s character set utf8mb4",LDBNAME);
   if (!myquery(&mysql,qt)) return -1;
   _snwprintf(qt,query_buffer_len,L"USE %s",LDBNAME);
   if (!myquery(&mysql,qt)) return -1;
   // create forms table
   if (!myquery(&mysql,L"CREATE TABLE forms ("
 		L"id int(11) unsigned NOT NULL auto_increment unique, "
-		L"name CHAR(32) CHARACTER SET utf8 NOT NULL, "
-		L"shortName CHAR(32) CHARACTER SET utf8 NOT NULL, "
-		L"inflectionsClass CHAR(12) CHARACTER SET utf8 NOT NULL, "
+		L"name CHAR(32) CHARACTER SET utf8mb4 NOT NULL, "
+		L"shortName CHAR(32) CHARACTER SET utf8mb4 NOT NULL, "
+		L"inflectionsClass CHAR(12) CHARACTER SET utf8mb4 NOT NULL, "
     L"hasInflections BIT NOT NULL, "
 		L"isTopLevel BIT NOT NULL, "
 		L"properNounSubClass BIT NOT NULL, "
@@ -489,14 +489,16 @@ int Source::createDatabase(wchar_t *server)
   // create sources table
   if (!myquery(&mysql,L"CREATE TABLE sources "
 		L"(id int(11) unsigned NOT NULL auto_increment unique, sourceType TINYINT NOT NULL, "
-		L"etext VARCHAR (10) CHARACTER SET utf8,"
-		L"path VARCHAR (1024) CHARACTER SET utf8 NOT NULL,"
-		L"start VARCHAR(256) CHARACTER SET utf8 NOT NULL, repeatStart INT NOT NULL, "
-		L"author VARCHAR (128) CHARACTER SET utf8, title VARCHAR (1024) CHARACTER SET utf8, date DATETIME,"
+		L"etext VARCHAR (10) CHARACTER SET utf8mb4,"
+		L"path VARCHAR (1024) CHARACTER SET utf8mb4 NOT NULL,"
+		L"start VARCHAR(256) CHARACTER SET utf8mb4 NOT NULL, repeatStart INT NOT NULL, "
+		L"author VARCHAR (128) CHARACTER SET utf8mb4, title VARCHAR (1024) CHARACTER SET utf8mb4, date DATETIME,"
     L"numSentences INT, matchedSentences INT, numWords INT, numUnknown INT, numUnmatched INT, numOvermatched INT,"
     L"numQuotations INT, quotationExceptions INT, numTicks INT, numPatternMatches INT, "
 		L"sizeInBytes INT, numWordRelations INT, numMultiWordRelations INT, "
-    L"processing BIT, processed BIT, ts TIMESTAMP) DEFAULT CHARSET=utf8 COLLATE utf8_bin"))
+    L"processing BIT, processed BIT, "
+		L"proc2 INT, " // other processing steps
+		L"ts TIMESTAMP) DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci"))
   {
     lplog(LOG_FATAL_ERROR,L"Failed to create sources - %S", mysql_error(&mysql));
     return -1;
@@ -515,23 +517,23 @@ int Source::createDatabase(wchar_t *server)
   generateNewsBankSources(mysql);
   generateTestSources(mysql);
   // create wordRelations types table (for convenience)
-  if (!myquery(&mysql,L"CREATE TABLE wordRelationType (id int(11) unsigned NOT NULL unique, type CHAR(32) CHARACTER SET utf8 UNIQUE NOT NULL)"))
+  if (!myquery(&mysql,L"CREATE TABLE wordRelationType (id int(11) unsigned NOT NULL unique, type CHAR(32) CHARACTER SET utf8mb4 UNIQUE NOT NULL)"))
   insertWordRelationTypes();
   // create words table
-  if (!myquery(&mysql,L"CREATE TABLE words (id int(11) unsigned NOT NULL auto_increment unique, "
-    L"word CHAR(32) CHARACTER SET utf8 UNIQUE NOT NULL DEFAULT '',"
+	if (!myquery(&mysql, L"CREATE TABLE words (id int(11) unsigned NOT NULL auto_increment unique, "
+		L"word CHAR(32) CHARACTER SET utf8mb4 UNIQUE NOT NULL DEFAULT '',"
 		L"inflectionFlags INT NOT NULL default '0',"
 		L"flags INT NOT NULL default '0',"
 		L"timeFlags INT NOT NULL default '0'," // INDEX word_ind (word) dropped (increased index space by more than 1000 times)
-    L"mainEntryWordId INT UNSIGNED NULL, INDEX me_ind (mainEntryWordId), "
+		L"mainEntryWordId INT UNSIGNED NULL, INDEX me_ind (mainEntryWordId), "
 		L"derivationRules INT DEFAULT 0, "
-    L"sourceId INT UNSIGNED DEFAULT NULL, INDEX s_ind (sourceId), " //FOREIGN KEY (sourceId) REFERENCES sources(id),
-    L"ts TIMESTAMP) DEFAULT CHARSET=utf8 COLLATE=utf8_bin"))
-  {
-    lplog(LOG_FATAL_ERROR,L"Failed to create words table - %S", mysql_error(&mysql));
-    return -1;
-  }
-  // create wordForms table
+		L"sourceId INT UNSIGNED DEFAULT NULL, INDEX s_ind (sourceId), " //FOREIGN KEY (sourceId) REFERENCES sources(id),
+		L"ts TIMESTAMP) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"))
+	{
+		lplog(LOG_FATAL_ERROR, L"Failed to create words table - %S", mysql_error(&mysql));
+		return -1;
+	}
+	// create wordForms table
   if (!myquery(&mysql,L"CREATE TABLE wordForms ("
 		L"wordId INT UNSIGNED NOT NULL, "
 		L"formId INT UNSIGNED NOT NULL, "
@@ -544,6 +546,20 @@ int Source::createDatabase(wchar_t *server)
     lplog(LOG_FATAL_ERROR,L"Failed to create wordForms - %S", mysql_error(&mysql));
     return -1;
   }
+	// words unknown processing
+	if (!myquery(&mysql, L"CREATE TABLE wordFrequency ("
+		L"word CHAR(32) CHARACTER SET utf8mb4 UNIQUE NOT NULL DEFAULT '',"
+		L"totalFrequency       INT NOT NULL default '0', "
+		L"unknownFrequency     INT NOT NULL default '0', "
+		L"capitalizedFrequency INT NOT NULL default '0', "
+		L"allCapsFrequency     INT NOT NULL default '0', " 
+		L"lastSourceId INT UNSIGNED DEFAULT NULL, INDEX s_ind (lastSourceId), "
+		L"nonEuropeanWord BIT "
+	  L") DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ENGINE = INNODB"))  // must use INNODB because of per row locking required by multiple processes 
+	{
+		lplog(LOG_FATAL_ERROR, L"Failed to create wordsFrequency table - %S", mysql_error(&mysql));
+		return -1;
+	}
 	if (!myquery(&mysql,L"ALTER TABLE wordForms DELAY_KEY_WRITE = 1")) return -1;
   if (createObjectTables()<0)
   {
@@ -565,8 +581,8 @@ int Source::createParseRequestTable(void)
 		  L"prId int(11) unsigned NOT NULL auto_increment unique,  "
 			L"typeId SMALLINT UNSIGNED NOT NULL, INDEX t_ind(typeId), "
 			L"status SMALLINT UNSIGNED NOT NULL," // 0 created, 1 processing, 2 processed
-			L"fullWebPath VARCHAR (1024) CHARACTER SET utf8 NOT NULL,"
-			L"pathInCache VARCHAR (1024) CHARACTER SET utf8 NOT NULL,"
+			L"fullWebPath VARCHAR (1024) CHARACTER SET utf8mb4 NOT NULL,"
+			L"pathInCache VARCHAR (1024) CHARACTER SET utf8mb4 NOT NULL,"
 			L"ts TIMESTAMP)")) return -1;
 	return 0;
 }

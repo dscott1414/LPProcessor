@@ -1209,6 +1209,9 @@ int WordClass::attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, 
 	return WORD_NOT_FOUND;
 }
 
+// returns a 0 if no error.  
+// tries to find a word in the dictionary, in the DB, by stemming or splitting the word. 
+// if the word is not found this still returns 0, but it will add all open word classes and mark the word as unknown.
 int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLetterCapitalized, int nounOwner, int sourceId)
 {
 	LFS
@@ -1262,7 +1265,7 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 			}
 		/* (s) check examples: finger(s) member(s) for now, chop off the (s) */
 		int len = sWord.length() - 3;
-		if (sWord[len] == '(' && sWord[len + 1] == 's' && sWord[len + 2] == ')')
+		if (len>=0 && sWord[len] == '(' && sWord[len + 1] == 's' && sWord[len + 2] == ')')
 			sWord.erase(len, 3);
 		if (!iswalnum(sWord[0]) && !sWord[1] && sWord[0])
 		{
@@ -1272,24 +1275,37 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 		if (firstLetterCapitalized)
 			markWordUndefined(iWord, sWord, tFI::queryOnLowerCase, firstLetterCapitalized, nounOwner, sourceId);
 		// make some attempt at getting past French words like d'affaires l'etat etc
-		else if (sWord[1] == '\'' && (sWord[0] == 'd' || sWord[0] == 'l'))
+		else if (sWord.length()>1 && sWord[1] == '\'' && (sWord[0] == 'd' || sWord[0] == 'l'))
 			markWordUndefined(iWord, sWord, 0, firstLetterCapitalized, nounOwner, sourceId);
-		else if ((dashLocation >= 0) || (ret = getForms(iWord, sWord, sourceId)))
+		else if ((dashLocation >= 0) || (ret = getForms(mysql,iWord, sWord, sourceId)))
 		{
 			if (dashLocation<0 && ret != WORD_NOT_FOUND && ret != NO_FORMS_FOUND)
 				return ret;
 			if (stopDisInclination) return 0;
 			if (containsSingleQuote)
 				markWordUndefined(iWord, sWord, 0, firstLetterCapitalized, nounOwner, sourceId);
-			else if (mysql==NULL || (ret = attemptDisInclination(mysql,iWord, sWord, sourceId)))
+			else if (firstLetterCapitalized) // don't try stemming or splitting if word is capitalized, but mark as reinvestigate if every encountered in lower case.
+			{
+				markWordUndefined(iWord, sWord, tFI::queryOnLowerCase, firstLetterCapitalized, nounOwner, sourceId);
+			}
+			else if (mysql==NULL || (ret = attemptDisInclination(mysql,iWord, sWord, sourceId))) // returns 0 if found or WORD_NOT_FOUND if not found
 			{
 				if (dashLocation < 0 && ret != WORD_NOT_FOUND && ret != NO_FORMS_FOUND)
 					return ret;
 				ret = splitWord(mysql,iWord, sWord, sourceId);
-				if (ret) ret = markWordUndefined(iWord, sWord, 0, firstLetterCapitalized, nounOwner, sourceId);
+				if (ret && dashLocation>=0)
+				{
+					wstring sWordNoDashes = sWord;
+					sWordNoDashes.erase(std::remove(sWordNoDashes.begin(), sWordNoDashes.end(), L'-'), sWordNoDashes.end());
+					if ((iWord=Words.query(sWordNoDashes)) != Words.end())
+						ret = Words.attemptDisInclination(mysql, iWord, sWordNoDashes, sourceId); // returns 0 if found or WORD_NOT_FOUND if not found
+				}
+				if (ret)
+					ret = markWordUndefined(iWord, sWord, 0, firstLetterCapitalized, nounOwner, sourceId);
 			}
 		}
-		iWord->second.preferVerbPresentParticiple();
+		if (iWord!=WMM.end())
+			iWord->second.preferVerbPresentParticiple();
 	}
 	return 0;
 }
@@ -1370,7 +1386,7 @@ int WordClass::continueParse(wchar_t *buffer,__int64 begincp,__int64 bufferLen,v
 int WordClass::processDate(wstring &sWord,wchar_t *buffer,__int64 &cp,__int64 &bufferScanLocation)
 { LFS
   __int64 tempcp=cp+1;
-	boolean twoDigitYear=false;
+	bool twoDigitYear=false;
   if (!iswdigit(buffer[tempcp++])) return -1; // 8 in 7-8-90
   if ((twoDigitYear=iswdigit(buffer[tempcp]))!=0) tempcp++; // 1 in 7-11-90
   if (buffer[tempcp]!='/' && buffer[tempcp]!='-')
@@ -2090,7 +2106,7 @@ WordClass::~WordClass()
   tFI::fACount=0;
 }
 
-boolean WordClass::findWordInDB(MYSQL *mysql, wstring sWord, tIWMM &iWord)
+bool WordClass::findWordInDB(MYSQL *mysql, wstring sWord, tIWMM &iWord)
 {
 	if (mysql == NULL)
 		return false;
@@ -2107,7 +2123,7 @@ boolean WordClass::findWordInDB(MYSQL *mysql, wstring sWord, tIWMM &iWord)
 	}
 	MYSQL_ROW sqlrow;
 	unsigned int *wordForms = (unsigned int *)tmalloc(mysql_num_rows(result) * sizeof(int)*2);
-	int iInflectionFlags, iFlags, iTimeFlags, iMainEntryWordId, iDerivationRules, iSourceId, count = 0;
+	int iInflectionFlags=0, iFlags=0, iTimeFlags=0, iMainEntryWordId=0, iDerivationRules=0, iSourceId=0, count = 0;
 	while ((sqlrow = mysql_fetch_row(result)) != NULL)
 	{
 		if (count == 0)
@@ -2136,7 +2152,7 @@ tIWMM WordClass::fullQuery(MYSQL *mysql, wstring word, int sourceId)
 {
 	tIWMM iWord = Words.end();
 	if ((iWord = Words.query(word)) == Words.end() && !findWordInDB(mysql, word, iWord))
-		getForms(iWord, word, sourceId);
+		getForms(mysql,iWord, word, sourceId);
 	return iWord;
 }
 

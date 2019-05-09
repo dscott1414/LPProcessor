@@ -21,7 +21,7 @@
 
 // needed for _STLP_DEBUG - these must be set to a legal, unreachable yet never changing value
 unordered_map <wstring,tFI> static_wordMap;
-tIWMM wNULL=static_wordMap.begin();
+tIWMM wNULL=static_wordMap.end();
 map<tIWMM, tFI::cRMap::tRelation, Source::wordMapCompare> static_tIcMap;
 tFI::cRMap::tIcRMap tNULL=(tFI::cRMap::tIcRMap)static_tIcMap.begin();
 vector <cLocalFocus> static_cLocalFocus;
@@ -32,6 +32,7 @@ vector <WordMatch> static_wm;
 vector <WordMatch>::iterator wmNULL=static_wm.begin();
 set<int> static_setInt;
 set<int>::iterator sNULL= static_setInt.begin();
+SRWLOCK rdfTypeMapSRWLock, mySQLTotalTimeSRWLock, totalInternetTimeWaitBandwidthControlSRWLock, mySQLQueryBufferSRWLock, orderedHyperNymsMapSRWLock;
 
 // profiling
 __int64 cProfile::cb;
@@ -56,172 +57,18 @@ int cProfile::lastNetClock;
 unordered_map < wstring, __int64 > cProfile::netAndSleepTimes,cProfile::onlyNetTimes,cProfile::numTimesPerURL;
 int websterQueriedToday = 0;
 
-int acquireList(wchar_t *filename)
-{ 
-	LFS
-	FILE *listfile=_wfopen(filename,L"rb"); // binary mode reads unicode
-	if (listfile)
-	{
-		wchar_t url[2048],*path;
-		int total=0;
-		while (fgetws(url,2047,listfile))
-		{
-			if (url[0]==0xFEFF) // detect BOM
-				memcpy(url,url+1,wcslen(url+1));
-			if (url[wcslen(url)-1]==L'\n') url[wcslen(url)-1]=0;
-			if (url[wcslen(url)-1]==L'\r') url[wcslen(url)-1]=0;
-			wchar_t *ch=wcschr(url,L'|');
-			*ch=0;
-			path=ch+1;
-			wchar_t *period=wcsrchr(url,L'.');
-			if (period) wcscat(path,period);
-			wstring buffer;
-			int destfile=_wopen(path,O_RDWR|O_BINARY|O_CREAT);
-			if (destfile)
-			{
-				if (Words.readBinaryPage(url,destfile,total))
-					lplog(LOG_ERROR,L"error retrieving %s.",url);
-				close(destfile);
-			}
-			else
-				lplog(LOG_ERROR,L"error opening %s.",path);
-			wprintf(L"%s - total bytes = %dMB.\n",path,total/1024/1024);
-			Sleep(5000);
-		}
-		fclose(listfile);
-	}
-	return 0;
-}
-
-/*
-int reportInfo(WMISupport &provider)
-{ LFS
-static __int64 lastVirtualBytes=0,lastWorkingSet=0;
-
-IWbemClassObject *resourceNameInstance;
-bool status=provider.getResourceObject(L"Win32_PerfFormattedData_PerfProc_Process.Name='lp'",resourceNameInstance);
-__int64 percentProcessorTime,percentUserTime,percentPrivilegedTime,elapsedTime,virtualBytes,workingSet;
-status = provider.getWMIKey(resourceNameInstance,L"ElapsedTime",elapsedTime);
-status = provider.getWMIKey(resourceNameInstance,L"PercentProcessorTime",percentProcessorTime);
-status = provider.getWMIKey(resourceNameInstance,L"PercentUserTime",percentUserTime);
-status = provider.getWMIKey(resourceNameInstance,L"PercentPrivilegedTime",percentPrivilegedTime);
-status = provider.getWMIKey(resourceNameInstance,L"VirtualBytes",virtualBytes);
-status = provider.getWMIKey(resourceNameInstance,L"WorkingSet",workingSet);
-lplog(L"elapsed time=%I64d (%I64d,%I64d,%I64d) virtualBytes=%I64d workingSet=%I64d",
-elapsedTime,percentProcessorTime,percentUserTime,percentPrivilegedTime,virtualBytes-lastVirtualBytes,workingSet-lastWorkingSet);
-wprintf(L"elapsed time=%I64d (%I64d,%I64d,%I64d) virtualBytes=%I64d workingSet=%I64d\n",
-elapsedTime,percentProcessorTime,percentUserTime,percentPrivilegedTime,virtualBytes-lastVirtualBytes,workingSet-lastWorkingSet);
-lastVirtualBytes=virtualBytes;
-lastWorkingSet=workingSet;
-return 0;
-}
-*/
-
-bool exitNow=false,exitEventually=false;
-
-BOOL WINAPI ConsoleHandler(DWORD CEvent)
-{ LFS
-	if (exitEventually) exitNow=true;
-	exitEventually=true;
-	switch(CEvent)
-	{
-	case CTRL_C_EVENT:
-		wprintf(L"\nCTRL+C received! Interrupting %s...\n",(exitNow) ? L"immediately" : L"at end of this source");
-		break;
-	case CTRL_BREAK_EVENT:
-		wprintf(L"\nCTRL+Break received! Interrupting %s...\n",(exitNow) ? L"immediately" : L"at end of this source");
-		break;
-	case CTRL_CLOSE_EVENT:
-		wprintf(L"\nClose received! Interrupting %s...\n",(exitNow) ? L"immediately" : L"at end of this source");
-		break;
-	case CTRL_LOGOFF_EVENT:
-		wprintf(L"\nUser is logging off! Interrupting %s...\n",(exitNow) ? L"immediately" : L"at end of this source");
-		break;
-	case CTRL_SHUTDOWN_EVENT:
-		exitNow=true;
-		wprintf(L"\nSystem is shutting down! Interrupting %s...\n",(exitNow) ? L"immediately" : L"at end of this source");
-		break;
-	}
-	return TRUE;
-}
-
+bool exitNow = false, exitEventually = false;
 int overallTime;
 int initializeCounter(void);
 void freeCounter(void);
-void reportMemoryUsage(void);
-int getInterviewTranscript();
-int getTwitterEntries(wchar_t *filter);
-bool TSROverride=false,flipTOROverride=false,flipTNROverride=false,flipTMSOverride=false,flipTUMSOverride=false;
+bool TSROverride = false, flipTOROverride = false, flipTNROverride = false, flipTMSOverride = false, flipTUMSOverride = false;
 
 void no_memory () {
 	lplog(LOG_FATAL_ERROR,L"Out of memory (new/STL allocation).");
 	exit (1);
 }
 
-void positionConsole(bool controller)
-{
-	LFS
-		CONSOLE_SCREEN_BUFFER_INFO csbiInfo;
-	HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
-	// Get the current screen buffer size and window position. 
-	if (!GetConsoleScreenBufferInfo(hStdout, &csbiInfo))
-		printf("Cannot get console buffer info (%d) %s", (int)GetLastError(), LastErrorStr());
-	else if (csbiInfo.dwSize.X < 150 || controller)
-	{
-		if (!controller)
-		{
-			csbiInfo.dwSize.X = 150;
-			csbiInfo.dwSize.Y = 400;
-			if (!SetConsoleScreenBufferSize(hStdout, csbiInfo.dwSize))
-				printf("Cannot set console buffer info (%d) %s", (int)GetLastError(), LastErrorStr());
-		}
-		csbiInfo.srWindow.Bottom = 6;
-		csbiInfo.srWindow.Right = 10;
-		if (!SetConsoleWindowInfo(hStdout, true, &csbiInfo.srWindow))
-			printf("Cannot set console window info (%d) %s", (int)GetLastError(), LastErrorStr());
-	}
-}
-
-void setConsoleWindowSize(int width,int height)
-{
-	HANDLE Handle = GetStdHandle(STD_OUTPUT_HANDLE);      // Get Handle 
-	_COORD coord;
-	coord.X = max(300, width);
-	coord.Y = max(6000, height);
-	if (!SetConsoleScreenBufferSize(Handle, coord))            // Set Buffer Size 
-		printf("Cannot set console buffer info to (%d,%d) (%d) %s\n", coord.X, coord.Y, (int)GetLastError(), LastErrorStr());
-
-	//CONSOLE_SCREEN_BUFFER_INFOEX  csbiInfo;
-	//csbiInfo.cbSize = sizeof(csbiInfo);
-	// Get the current screen buffer size and window position. 
-	//if (!GetConsoleScreenBufferInfoEx(Handle, &csbiInfo))
-	//	printf("Cannot get console buffer info (%d) %s\n", (int)GetLastError(), LastErrorStr());
-	//_COORD maxSize = GetLargestConsoleWindowSize(Handle);
-
-	//printf("buffer sizex=%d buffer sizey=%d buffer cursor=(%d,%d) \nattributeflags=%d buffer window=(top=%d,left=%d,bottom=%d,right=%d) \nmax given buf=(%d,%d) max absolute=(%d,%d) popupAttributes=%d fullScreen=%d\n", 
-	//	csbiInfo.dwSize.X, csbiInfo.dwSize.Y, csbiInfo.dwCursorPosition.X, csbiInfo.dwCursorPosition.Y,
-	//	(int)csbiInfo.wAttributes, csbiInfo.srWindow.Top, csbiInfo.srWindow.Left, csbiInfo.srWindow.Bottom, csbiInfo.srWindow.Right,
-	//	csbiInfo.dwMaximumWindowSize.X, csbiInfo.dwMaximumWindowSize.Y,
-	//	maxSize.X,maxSize.Y,
-	//	(int)csbiInfo.wPopupAttributes,(int)csbiInfo.bFullscreenSupported);
-
-	//height = min(height, csbiInfo.dwMaximumWindowSize.Y);
-	//width = min(width, csbiInfo.dwMaximumWindowSize.X);
-
-
-	_SMALL_RECT Rect;
-	Rect.Top = 0;
-	Rect.Left = 0;
-	Rect.Bottom = height - 1;
-	Rect.Right = width - 1;
-
-	if (!SetConsoleWindowInfo(Handle, TRUE, &Rect))            // Set Window Size 	SMALL_RECT srctWindow;
-		printf("Cannot set console window info to (top=%d,left=%d,bottom=%d,right=%d) (%d) %s\n", 
-			Rect.Top, Rect.Left, Rect.Bottom, Rect.Right,
-			(int)GetLastError(), LastErrorStr());
-}
-
-int createLPProcess(wstring path, int numProcess, HANDLE &processId, int numSourceLimit, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite)
+int createLPProcess(int numProcess, HANDLE &processId, wchar_t *commandPath, wchar_t *processParameters)
 {
 	STARTUPINFO si;
 	ZeroMemory(&si, sizeof(si));
@@ -237,23 +84,7 @@ int createLPProcess(wstring path, int numProcess, HANDLE &processId, int numSour
 	si.wShowWindow = SW_SHOWNOACTIVATE; // don't continuously hijack focus
 	PROCESS_INFORMATION pi;
 	ZeroMemory(&pi, sizeof(pi));
-	wchar_t processParameters[1024];
-	if (!path.empty())
-		wsprintf(processParameters, L"releasex64\\lp.exe -ParseRequest \"%s\" -cacheDir %s %s%s%s%s-log %d", path.c_str(), CACHEDIR,
-		(forceSourceReread) ? L"forceSourceReread " : L"",
-			(sourceWrite) ? L"-SW " : L"",
-			(sourceWordNetRead) ? L"-SWNR " : L"",
-			(sourceWordNetWrite) ? L"-SWNW " : L"",
-			numProcess);
-	else
-		wsprintf(processParameters, L"releasex64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s-numSourceLimit %d -log %d", CACHEDIR,
-		(forceSourceReread) ? L"forceSourceReread " : L"",
-			(sourceWrite) ? L"-SW " : L"",
-			(sourceWordNetRead) ? L"-SWNR " : L"",
-			(sourceWordNetWrite) ? L"-SWNW " : L"",
-			numSourceLimit,
-			numProcess);
-	if (!CreateProcess(L"releasex64\\lp.exe",
+	if (!CreateProcess(commandPath,
 		processParameters, // Command line
 		NULL, // Process handle not inheritable
 		NULL, // Thread handle not inheritable
@@ -273,10 +104,10 @@ int createLPProcess(wstring path, int numProcess, HANDLE &processId, int numSour
 	return 0;
 }
 
-int startProcesses(Source &source, int beginSource, int endSource, Source::sourceTypeEnum st, int maxProcesses, int numSourcesPerProcess, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite)
+int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st, int maxProcesses, int numSourcesPerProcess, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite)
 {
 	LFS
-		chdir("source");
+	chdir("source");
 	//MYSQL_RES *result = NULL;
 	HANDLE *handles = (HANDLE *)calloc(maxProcesses, sizeof(HANDLE));
 	int numProcesses = 0, errorCode = 0;
@@ -308,11 +139,13 @@ int startProcesses(Source &source, int beginSource, int endSource, Source::sourc
 		int id, repeatStart, prId;
 		wstring start, path, etext, author, title, pathInCache;
 		bool result;
-		if (st == Source::REQUEST_TYPE)
-			result = source.getNextUnprocessedParseRequest(prId, pathInCache);
-		else
-			result = source.getNextUnprocessedSource(beginSource, endSource, st, false, id, path, start, repeatStart, etext, author, title);
-
+		switch (processKind)
+		{
+		case 0:result = source.getNextUnprocessedParseRequest(prId, pathInCache); break;
+		case 1:result = source.getNextUnprocessedSource(beginSource, endSource, st, false, id, path, start, repeatStart, etext, author, title); break;
+		case 2:result = source.anymoreUnprocessedForUnknown(st, step); break;
+		default:break;
+		}
 		if (!result)
 		{
 			if (numProcesses == maxProcesses)
@@ -338,8 +171,37 @@ int startProcesses(Source &source, int beginSource, int endSource, Source::sourc
 			break;
 		}
 		HANDLE processId = 0;
-		if (errorCode = createLPProcess(((st == Source::REQUEST_TYPE) ? pathInCache : L""), nextProcessIndex, processId, numSourcesPerProcess, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite) < 0)
+		wchar_t processParameters[1024];
+		switch (processKind)
+		{
+		case 0:
+			wsprintf(processParameters, L"releasex64\\lp.exe -ParseRequest \"%s\" -cacheDir %s %s%s%s%s-log %d", pathInCache.c_str(), CACHEDIR,
+				(forceSourceReread) ? L"forceSourceReread " : L"",
+				(sourceWrite) ? L"-SW " : L"",
+				(sourceWordNetRead) ? L"-SWNR " : L"",
+				(sourceWordNetWrite) ? L"-SWNW " : L"",
+				numProcesses);
+			if (errorCode = createLPProcess(nextProcessIndex, processId, L"releasex64\\lp.exe", processParameters) < 0)
+				break;
 			break;
+		case 1:
+			wsprintf(processParameters, L"releasex64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s-numSourceLimit %d -log %d", CACHEDIR,
+				(forceSourceReread) ? L"forceSourceReread " : L"",
+				(sourceWrite) ? L"-SW " : L"",
+				(sourceWordNetRead) ? L"-SWNR " : L"",
+				(sourceWordNetWrite) ? L"-SWNW " : L"",
+				numSourcesPerProcess,
+				numProcesses);
+			if (errorCode = createLPProcess(nextProcessIndex, processId, L"releasex64\\lp.exe", processParameters) < 0)
+				break;
+			break;
+		case 2:
+			wsprintf(processParameters, L"releasex64\\CorpusAnalysis.exe -step %d -numSourceLimit %d -log %d", CACHEDIR, step, numSourcesPerProcess, numProcesses);
+			if (errorCode = createLPProcess(nextProcessIndex, processId, L"releasex64\\CorpusAnalysis.exe", processParameters) < 0)
+				break;
+			break;
+		default: break;
+		}
 		handles[nextProcessIndex] = processId;
 		if (numProcesses < maxProcesses)
 			numProcesses++;
@@ -355,100 +217,26 @@ int startProcesses(Source &source, int beginSource, int endSource, Source::sourc
 	return 0;
 }
 
-SRWLOCK rdfTypeMapSRWLock,mySQLTotalTimeSRWLock,totalInternetTimeWaitBandwidthControlSRWLock,mySQLQueryBufferSRWLock,orderedHyperNymsMapSRWLock;
-void createLocks(void)
-{ LFS
-	InitializeSRWLock(&rdfTypeMapSRWLock);
-	InitializeSRWLock(&mySQLTotalTimeSRWLock);
-	InitializeSRWLock(&totalInternetTimeWaitBandwidthControlSRWLock);
-	InitializeSRWLock(&mySQLQueryBufferSRWLock);
-	InitializeSRWLock(&orderedHyperNymsMapSRWLock);
-}
-
-void reparseSource(Source &source)
+void setConsoleWindowSize(int width,int height)
 {
-	LFS
-	if (!myquery(&source.mysql, L"LOCK TABLES sources WRITE")) 
-		return ;
-	wchar_t qt[query_buffer_len_overflow];
-	_snwprintf(qt, query_buffer_len, L"update sources set processed=false where id=%d ",source.sourceId);
-	MYSQL_RES * result;
-	myquery(&source.mysql, qt, result);
-	mysql_free_result(result);
-	source.unlockTables();
-}
+	HANDLE Handle = GetStdHandle(STD_OUTPUT_HANDLE);      // Get Handle 
+	_COORD coord;
+	coord.X = max(300, width);
+	coord.Y = max(6000, height);
+	if (!SetConsoleScreenBufferSize(Handle, coord))            // Set Buffer Size 
+		printf("Cannot set console buffer info to (%d,%d) (%d) %s\n", coord.X, coord.Y, (int)GetLastError(), LastErrorStr());
 
-string lookForPOS(yajl_val node)
-{
-	const char * path[] = { "fl", (const char *)0 };
-	yajl_val docs = yajl_tree_get(node, path, yajl_t_any);
-	return (docs == NULL) ? "":YAJL_GET_STRING(docs);
-}
+	_SMALL_RECT Rect;
+	Rect.Top = 0;
+	Rect.Left = 0;
+	Rect.Bottom = height - 1;
+	Rect.Right = width - 1;
 
-int cacheWebPathExists(wstring epath, wstring cacheTypePath)
-{
-	LFS
-		wchar_t path[MAX_LEN];
-	int pathlen = _snwprintf(path, MAX_LEN, L"%s\\%s", CACHEDIR, cacheTypePath.c_str());
-	_wmkdir(path);
-	_snwprintf(path + pathlen, MAX_LEN - pathlen, L"\\_%s", epath.c_str());
-	path[MAX_PATH - 20] = 0; // make space for subdirectories and for file extensions
-	convertIllegalChars(path + pathlen + 1);
-	distributeToSubDirectories(path, pathlen + 1, true);
-	return _waccess(path, 0) == 0;
+	if (!SetConsoleWindowInfo(Handle, TRUE, &Rect))            // Set Window Size 	SMALL_RECT srctWindow;
+		printf("Cannot set console window info to (top=%d,left=%d,bottom=%d,right=%d) (%d) %s\n", 
+			Rect.Top, Rect.Left, Rect.Bottom, Rect.Right,
+			(int)GetLastError(), LastErrorStr());
 }
-
-int cacheWebPath(wstring webAddress, wstring &buffer, wstring epath, wstring cacheTypePath, bool forceWebReread,bool &networkAccessed)
-{
-	LFS
-		wchar_t path[MAX_LEN];
-	int pathlen = _snwprintf(path, MAX_LEN, L"%s\\%s", CACHEDIR, cacheTypePath.c_str());
-	_wmkdir(path);
-	_snwprintf(path + pathlen, MAX_LEN - pathlen, L"\\_%s", epath.c_str());
-	path[MAX_PATH - 20] = 0; // make space for subdirectories and for file extensions
-	convertIllegalChars(path + pathlen + 1);
-	distributeToSubDirectories(path, pathlen + 1, true);
-	int exitCode = 0, ret, fd;
-	if (networkAccessed = forceWebReread || _waccess(path, 0) < 0)
-	{
-		if (ret = readPage(webAddress.c_str(), buffer)) return ret;
-		if ((fd = _wopen(path, O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE)) < 0)
-		{
-			lplog(LOG_ERROR, L"cacheWebPath:Cannot create path %s - %S.", path, sys_errlist[errno]);
-			return GETPAGE_CANNOT_CREATE;
-		}
-		_write(fd, buffer.c_str(), buffer.length() * sizeof(buffer[0]));
-		_close(fd);
-		return 0;
-	}
-	else
-	{
-		if ((fd = _wopen(path, O_RDWR | O_BINARY)) < 0)
-			lplog(LOG_ERROR, L"cacheWebPath:Cannot read path %s - %S.", path, sys_errlist[errno]);
-		else
-		{
-			int bufferlen = filelength(fd);
-			void *tbuffer = (void *)tcalloc(bufferlen + 10, 1);
-			_read(fd, tbuffer, bufferlen);
-			_close(fd);
-			buffer = (wchar_t *)tbuffer;
-			tfree(bufferlen + 10, tbuffer);
-		}
-	}
-	return 0;
-}
-
-map<wstring, wstring> websterFormMap = {
-	{L"abbreviation",L"abbreviation" },
-	{L"adjective",L"adjective"},
-	{L"adverb",L"adverb"},
-	{L"biographical name",L"Proper Noun"},
-	{L"geographical name",L"Proper Noun"},
-	{L"noun",L"noun"},
-	{L"noun phrase",L"noun"},
-	{L"verb",L"verb"},
-	{L"interjection",L"interjection"}
-};
 
 bool MWRequestAllowed()
 {
@@ -474,395 +262,14 @@ bool MWRequestAllowed()
 	return numRequests < 1000;
 }
 
-void updateLastSource(int sourceId)
-{
-	FILE *lastSourceFP = _wfopen(L"lastSourceIdCorpusAnalysis", L"w");
-	fwprintf(lastSourceFP, L"%d", sourceId);
-	fclose(lastSourceFP);
-}
+bool getMerriamWebsterDictionaryAPIForms(wstring sWord, set <int> &posSet, bool &plural, bool &networkAccessed);
+bool existsInDictionaryDotCom(wstring word, bool &networkAccessed);
+bool detectNonEuropeanWord(wstring word, char *buffer, int bufferlen);
+int cacheWebPath(wstring webAddress, wstring &buffer, wstring epath, wstring cacheTypePath, bool forceWebReread, bool &networkAccessed);
+string lookForPOS(yajl_val node);
+int discoverInflections(set <int> posSet, bool plural, wstring word);
 
-int readLastSource()
-{
-	int lastSourceId = 0;
-	FILE *lastSourceFP = _wfopen(L"lastSourceIdCorpusAnalysis", L"r");
-	if (lastSourceFP)
-	{
-		fscanf(lastSourceFP, "%d", &lastSourceId);
-		fclose(lastSourceFP);
-	}
-	return lastSourceId;
-}
-
-// returns false if not found by the site (or error)
-bool existsInDictionaryDotCom(wstring word,bool &networkAccessed)
-{
-	wstring buffer;
-	if (cacheWebPath(L"https://www.dictionary.com/browse/" + word, buffer, word, L"DictionaryDotCom", false, networkAccessed))
-		return false;
-	return buffer.find(L"No results found") == wstring::npos;
-}
-
-class WebstersEntry
-{
-public:
-	wstring word, info;
-	vector<wstring> wordClasses;
-	vector <wstring> definitions;
-	wstring getLine(wstring &buffer, int &where, int bufferLen)
-	{
-		wstring line;
-		for (; buffer[where] != '\r' && where < bufferLen; where++)
-			line += buffer[where];
-		where++;
-		if (buffer[where] == '\n')
-			where++;
-		return line;
-	}
-
-	wstring getUntilBlankLine(wstring &buffer, int &where, int bufferLen, bool &firstLineEntirelyUpperCase)
-	{
-		wstring paragraph;
-		while (true)
-		{
-			wstring line = getLine(buffer, where, bufferLen);
-
-			if (paragraph.empty())
-			{
-				bool oneLower = false;
-				for (int where = 0; where < line.length() && line[where] != '\r'; where++)
-					if (oneLower = iswlower(line[where]))
-						break;
-				firstLineEntirelyUpperCase= !oneLower;
-			}
-
-			if (line.empty())
-				return paragraph;
-			paragraph += line+L" ";
-		}
-	}
-
-	bool isAllUpper(wstring line)
-	{
-		for (wchar_t ch : line)
-			if (iswlower(ch))
-				return false;
-		return true;
-	}
-
-	int getWebsterEntryWord(wstring &buffer, int &where, wstring &word, int bufferLen)
-	{
-		wstring line;
-		while ((line = getLine(buffer, where, bufferLen)).empty() && where<bufferLen);
-		if (!line.empty() && isAllUpper(line))
-		{
-			word = line;
-			return where;
-		}
-		return -1;
-	}
-
-	int getWebsterEntryWordClass(wstring &buffer, int &where, vector<wstring> &wordClasses, int bufferLen)
-	{
-		bool firstLineEntirelyUpperCase;
-		wstring paragraph = getUntilBlankLine(buffer, where, bufferLen,firstLineEntirelyUpperCase);
-		int whereComma = paragraph.find(',');
-		int whereEtymology = paragraph.find(L"Etym:");
-		if (whereEtymology != wstring::npos)
-			paragraph.erase(whereEtymology);
-		if (whereComma >= 0)
-		{
-			map<wstring, wstring> websterMapping = {
-				{ L" vb.n.",L"verbal noun"},
-				{ L" vb. n.",L"verbal noun"},
-				{ L" n.",L"noun"},
-				{ L" v. t.",L"transitive verb"},
-				{ L" v.t.",L"transitive verb"},
-				{ L" v.i.",L"intransitive verb"},
-				{ L" a.",L"adjective"},
-				{ L" adj.",L"adjective"},
-				{ L" adv.",L"adverb"},
-				{ L" p.p.",L"past participle"},
-				{ L" p.a.",L"participial adjective"},
-				{ L" p.pr.",L"present participle"},
-				{ L" p.ple.",L"present participle"},
-				{ L" p.",L"participle"},
-				{ L" prep.",L"preposition"},
-				{ L" imp.",L"imperfect"},
-				{ L" inf.",L"infinitive"},
-				{ L" interj.",L"interjection"},
-				{ L" acc.",L"accusative"},
-			};
-			for (auto const&[webster, form] : websterMapping)
-				if (paragraph.find(webster, whereComma) != wstring::npos)
-				{
-					wordClasses.push_back(form);
-					break;
-				}
-		}
-		return wordClasses.size();
-	}
-
-	bool getWebsterEntryStartsWith(wstring &buffer, wstring searchStr)
-	{
-		return buffer.substr(0, searchStr.length()) == searchStr;
-	}
-
-	bool getWebsterEntryStartsWithNum(wstring &buffer, int &num)
-	{
-		int I;
-		for (I = 0; I < buffer.length() && iswdigit(buffer[I]); I++);
-		if (I > 0 && buffer[I] == '.')
-		{
-			num = _wtoi(buffer.c_str());
-			return true;
-		}
-		return false;
-	}
-
-	bool getWebsterEntryWordInfo(wstring &buffer, int &where, vector <wstring> &definitions, int bufferLen)
-	{
-		int saveWhere = where;
-		bool firstLineEntirelyUpperCase;
-		wstring paragraph = getUntilBlankLine(buffer, where, bufferLen, firstLineEntirelyUpperCase);
-		int num = 1;
-		if (getWebsterEntryStartsWith(paragraph, L"Defn:"))
-		{
-			wprintf(L"DEFN %d:%s\n", where, paragraph.c_str());
-			definitions.push_back(paragraph);
-			return true;
-		}
-		if (getWebsterEntryStartsWith(paragraph, L"Note:"))
-		{
-			wprintf(L"NOTE %d:%s\n", where, paragraph.c_str());
-			return true;
-		}
-		if (getWebsterEntryStartsWith(paragraph, L"Syn."))
-		{
-			wprintf(L"SYN %d:%s\n", where, paragraph.c_str());
-			//definitions.push_back(paragraph);
-			return true;
-		}
-		if (getWebsterEntryStartsWithNum(paragraph, num))
-		{
-			wprintf(L"NUM %d:%s\n", where, paragraph.c_str());
-			definitions.push_back(paragraph);
-			return true;
-		}
-		if (!firstLineEntirelyUpperCase)
-		{
-			wprintf(L"ADD %d:%s\n", where, paragraph.c_str());
-			return true;
-		}
-		//if (paragraph.find(L"Etym:") != wstring::npos)
-		//{
-		//	wprintf(L"ETYM %d:%s\n", where, paragraph.c_str());
-		//	return true;
-		//}
-		where = saveWhere;
-		return false;
-	}
-
-	WebstersEntry(wstring &buffer, int &where, int bufferLen, bool &reachedEnd)
-	{
-		// search for a line with all caps
-		where = getWebsterEntryWord(buffer, where, word, bufferLen);
-		if (reachedEnd=where < 0) return;
-		getWebsterEntryWordClass(buffer, where, wordClasses, bufferLen);
-		if (reachedEnd = where < 0) return;
-		wprintf(L"\n*** %s %s\n", word.c_str(), (wordClasses.size() > 0) ? wordClasses[0].c_str() : L"X");
-		while (getWebsterEntryWordInfo(buffer, where, definitions, bufferLen));
-		reachedEnd = false;
-	}
-};
-
-#define WebsterStart L"Produced by Graham Lawrence"
-int readUnabridgedGutenbergWebstersDictionary()
-{
-	nounForm = 1;
-	verbForm=2;
-	adjectiveForm=3;
-	adverbForm=4;
-	prepositionForm=5;
-
-	int bookhandle = _wopen(L"J:\\caches\\texts\\Webster, Noah\\Unabridged Dictionary.txt", O_RDWR | O_BINARY);
-	if (bookhandle < 0)
-	{
-		lplog(LOG_ERROR, L"ERROR:Unable to open dictionary - %S", _sys_errlist[errno]);
-		return -1;
-	}
-	int bufferLen;
-	char *dictionaryBuffer = (char *)tmalloc((size_t)(bufferLen = _filelength(bookhandle)) + 10);
-	bufferLen = _read(bookhandle, dictionaryBuffer, (unsigned int)bufferLen);
-	_close(bookhandle);
-	if (bufferLen < 0 || bufferLen == 0)
-		return -1;
-	dictionaryBuffer[bufferLen + 1] = 0;
-	wstring buffer;
-	mTW(dictionaryBuffer, buffer);
-	int where=buffer.find(WebsterStart);
-	if (where == wstring::npos)
-		return -1;
-	where += wcslen(WebsterStart);
-	int numWordEntries = 0;
-	bool reachedEnd = false;
-	vector <WebstersEntry> entries;
-	while (!reachedEnd)
-	{
-		entries.push_back(WebstersEntry(buffer, where, bufferLen,reachedEnd));
-		numWordEntries++;
-	}
-	map <wstring, int> formCounts;
-	for (auto we : entries)
-	{
-		if (we.wordClasses.size()>0)
-			formCounts[we.wordClasses[0]]++;
-		else
-			formCounts[L"unknown"]++;
-	}
-	wprintf(L"Webster Entries found:%d\n", numWordEntries);
-	for (auto const&[form, count] : formCounts)
-		wprintf(L"Form %s:%d\n", form.c_str(), count);
-	return 0;
-}
-
-bool detectNonEuropeanWord(wstring word, char *buffer, int bufferlen)
-{
-	BOOL usedDefaultChar;
-	int ret = WideCharToMultiByte(
-		1252,									//UINT CodePage,
-		WC_NO_BEST_FIT_CHARS,//DWORD dwFlags,
-		word.c_str(),				 //LPCWCH lpWideCharStr,
-		word.length(),			 //int cchWideChar,
-		buffer,              //LPSTR lpMultiByteStr,
-		bufferlen,           // int cbMultiByte,
-		NULL,                //LPCCH lpDefaultChar,
-		&usedDefaultChar										 //LPBOOL lpUsedDefaultChar
-	);
-	return (ret == 0) || (usedDefaultChar);
-	//if (!ret)
-	//	wprintf(L"%s %d\n", word.c_str(), GetLastError());
-	//else if (usedDefaultChar)
-	//	wprintf(L"%s UDC\n", word.c_str());
-	//else
-	//	return false;
-	//return true;
-}
-
-/*
-// map to class/classes
-Italian adverb
-adjective or adverb
-adverb or adjective
-adjective
-adjective combining form
-German adjective
-verb
-phrasal verb
-impersonal verb
-Latin verb
-pronoun, singular or plural in construction
-noun
-noun phrase
-noun or adjective
-adjective or noun
-noun, plural in form but singular in construction
-noun, plural in form but singular or plural in construction
-French noun phrase
-Latin noun phrase
-plural noun
-French noun
-noun combining form
-noun or intransitive verb
-adverb
-interjection
-French interjection
-abbreviation
-Latin abbreviation
-symbol
-preposition
-conjunction
-trademark
-pronoun
-pronoun or adjective
-honorific title
-
-// ignore
-prefix
-noun suffix
-adverb suffix
-adjective suffix
-verb suffix
-plural noun suffix
-Greek phrase
-French phrase
-Latin phrase
-German phrase
-Spanish phrase
-Italian phrase
-Irish phrase
-Hawaiian phrase
-proverbial saying
-conventional saying
-French quotation from ...
-Latin quotation from ...
-German quotation from ...
-pronunciation spelling
-script annotation
-combining form
-
-// custom
-idiom
-biographical name
-geographical name
-certification mark
-communications code word
-communications signal
-*/
-vector<wstring> ignoreBefore = { L"pronunciation spelling"};
-vector<wstring> classes = { L"adjective",L"adverb",L"verb",L"noun",L"interjection",L"abbreviation",L"symbol",L"preposition",L"conjunction",L"trademark",L"pronoun",L"honorific"};
-vector<wstring> ignoreAfter = { L"prefix",L"suffix",L"phrase",L"saying",L"quotation",L"pronunciation spelling",L"script annotation",L"combining form" }; // must be processed after classes
-
-void identifyFormClass(set<int> &posSet, wstring pos,boolean &plural)
-{
-	plural = pos.find(L"noun") != wstring::npos && pos.find(L"plural") != wstring::npos;
-	if (pos == L"idiom")
-	{
-		posSet.insert(FormsClass::gFindForm(L"noun"));
-		posSet.insert(FormsClass::gFindForm(L"adjective"));
-	}
-	else if (pos.find(L"name") != wstring::npos)
-	{
-		posSet.insert(PROPER_NOUN_FORM_NUM);
-	}
-	else if (pos==L"certification mark")
-	{
-		posSet.insert(FormsClass::gFindForm(L"symbol"));
-	}
-	else if (pos.find(L"communications") != wstring::npos)
-	{
-posSet.insert(FormsClass::gFindForm(L"noun"));
-	}
-	for (auto c : ignoreBefore)
-		if (pos.find(c.c_str()) != wstring::npos)
-			return;
-	for (auto c : classes)
-	{
-		int where;
-		if ((where = pos.find(c.c_str())) != wstring::npos)
-		{
-			// this is enough to differentiate between noun, pronoun, verb and adverb
-			if (where == 0 || iswspace(pos[where - 1]))
-				posSet.insert(FormsClass::gFindForm(c.c_str()));
-		}
-	}
-	for (auto c : ignoreAfter)
-		if (pos.find(c.c_str()) != wstring::npos)
-			return;
-	if (posSet.empty())
-		printf("form not recognized - %S", pos.c_str());
-}
-
-int getWordPOS(wstring word, set <int> &posSet, boolean &plural, boolean print, boolean &isNonEuropean, int &dictionaryComQueried, int &dictionaryComCacheQueried, boolean &websterAPIRequestsExhausted)
+int getWordPOS(wstring word, set <int> &posSet, bool &plural, bool print, bool &isNonEuropean, int &dictionaryComQueried, int &dictionaryComCacheQueried, bool &websterAPIRequestsExhausted)
 {
 	LFS
 		char temptransbuf[1024];
@@ -876,41 +283,7 @@ int getWordPOS(wstring word, set <int> &posSet, boolean &plural, boolean print, 
 	if (!existsDM || websterAPIRequestsExhausted)
 		return 0;
 	networkAccessed = false;
-	wstring pageURL = L"https://www.dictionaryapi.com/api/v3/references/collegiate/json/";
-	pageURL += word + L"?key=ba4ac476-dac1-4b38-ad6b-fe36e8416e07";
-	wstring jsonWideBuffer;
-	if (!cacheWebPath(pageURL, jsonWideBuffer, word, L"Webster", false, networkAccessed))
-	{
-		char errbuf[1024];
-		errbuf[0] = 0;
-		string jsonBuffer;
-		wTM(jsonWideBuffer, jsonBuffer);
-		yajl_val node = yajl_tree_parse((const char *)jsonBuffer.c_str(), errbuf, sizeof(errbuf));
-		/* parse error handling */
-		if (node == NULL) {
-			lplog(LOG_ERROR, L"Parse error:%s\n %S", jsonBuffer.c_str(), errbuf);
-			return -1;
-		}
-		wstring posStr, pos;
-		if (node->type == yajl_t_array)
-			for (unsigned int docNum = 0; docNum < node->u.array.len; docNum++)
-			{
-				yajl_val doc = node->u.array.values[docNum];
-				mTW(lookForPOS(doc), pos);
-				if (pos.length() > 0)
-					identifyFormClass(posSet, pos, plural);
-			}
-		if (print)
-		{
-			if (posStr.length() > 0)
-				wprintf(L"%s:%s\n", word.c_str(), posStr.c_str());
-			else if (posSet.empty())
-			{
-				wprintf(L"Unknown:%s\n", word.c_str());
-				posSet.insert(UNDEFINED_FORM_NUM);
-			}
-		}
-	}
+	getMerriamWebsterDictionaryAPIForms(word, posSet, plural, networkAccessed);
 	if (networkAccessed && !MWRequestAllowed())
 	{
 		websterAPIRequestsExhausted = true;
@@ -918,18 +291,13 @@ int getWordPOS(wstring word, set <int> &posSet, boolean &plural, boolean print, 
 	return 0;
 }
 
-int getWordPOSInContext(MYSQL *mysql,Source &source, int sourceId, WordMatch &word, wstring originalWord, int numUnknownWord, int numUnknownOriginalWord, int numUnknownAllCaps, set <int> &posSet,
-	bool print, boolean &plural, boolean &isNonEuropean, boolean &queryOnLowerCase, int &dictionaryComQueried, int &dictionaryComCacheQueried, boolean &websterAPIRequestsExhausted)
+int getWordPOSInContext(MYSQL *mysql,Source &source, int sourceId, WordMatch &word, bool capitalized, int numUnknownWord, int numUnknownOriginalWord, int numUnknownAllCaps, set <int> &posSet,
+	bool print, bool &plural, bool &isNonEuropean, bool &queryOnLowerCase, int &dictionaryComQueried, int &dictionaryComCacheQueried, bool &websterAPIRequestsExhausted)
 {
 	LFS
 	// numUnknownAllCaps is zero if originalWord is already all caps.
-	if (queryOnLowerCase = (numUnknownWord > 5 && ((numUnknownOriginalWord + numUnknownAllCaps)*100.0 / numUnknownWord) > 95.0 && iswupper(originalWord[0])))
-	{
-		if (print)
-			lplog(LOG_INFO, L"Designated Proper Noun %s [numUnknownWord=%d][numUnknownOriginalWord=%d]", originalWord.c_str(), numUnknownWord, numUnknownOriginalWord);
-		//posSet.insert(PROPER_NOUN_FORM_NUM);
+	if (queryOnLowerCase = (numUnknownWord > 5 && ((numUnknownOriginalWord + numUnknownAllCaps)*100.0 / numUnknownWord) > 95.0 && capitalized))
 		posSet.insert(FormsClass::gFindForm(L"noun"));
-	}
 	else
 		getWordPOS(word.word->first, posSet, plural, false, isNonEuropean, dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted);
 	if (posSet.size() > 0 && print)
@@ -937,19 +305,18 @@ int getWordPOSInContext(MYSQL *mysql,Source &source, int sourceId, WordMatch &wo
 		wstring posStr;
 		for (int form : posSet)
 			posStr += L" " + Forms[form]->name;
-		lplog(LOG_INFO, L"Known Word %s: forms (%s)", originalWord.c_str(), posStr.c_str());
 	}
 	if (posSet.empty())
 	{
 		tIWMM iWord = Words.end();
 		int ret;
-		if (iswupper(originalWord[0]) || (ret = Words.attemptDisInclination(mysql, iWord, word.word->first, sourceId)))
+		if (capitalized || (ret = Words.attemptDisInclination(mysql, iWord, word.word->first, sourceId)))
 		{
-			if (ret = Words.splitWord(mysql, iWord, word.word->first, sourceId))
+			if ((ret = Words.splitWord(mysql, iWord, word.word->first, sourceId)) && word.word->first.find(L'-')!=wstring::npos)
 			{
 				wstring sWord= word.word->first;
 				sWord.erase(std::remove(sWord.begin(), sWord.end(), L'-') , sWord.end());
-				if (Words.query(sWord)==Words.end())
+				if ((iWord=Words.query(sWord))==Words.end())
 					ret = Words.attemptDisInclination(mysql, iWord, sWord, sourceId);
 			}
 		}
@@ -965,7 +332,7 @@ int getWordPOSInContext(MYSQL *mysql,Source &source, int sourceId, WordMatch &wo
 	return posSet.size();
 }
 
-int createWordFormsInDBIfNecessary(Source source, int sourceId, int wordId, wstring word, wstring originalWord, bool actuallyExecuteAgainstDB)
+int createWordFormsInDBIfNecessary(Source source, int sourceId, int wordId, wstring word, bool actuallyExecuteAgainstDB)
 {
 	LFS
 	wchar_t qt[query_buffer_len_overflow];
@@ -988,13 +355,13 @@ int createWordFormsInDBIfNecessary(Source source, int sourceId, int wordId, wstr
 			mysql_free_result(result);
 		}
 		else
-			lplog(LOG_INFO, L"DB statement [%s create word]: %s", originalWord.c_str(), qt);
+			lplog(LOG_INFO, L"DB statement [%s create word]: %s", word.c_str(), qt);
 	}
 	return 0;
 }
 
 
-int overwriteWordFormsInDB(Source source, int wordId, wstring originalWord, set <int> posSet, bool actuallyExecuteAgainstDB)
+int overwriteWordFormsInDB(Source source, int wordId, wstring word, set <int> posSet, bool actuallyExecuteAgainstDB)
 {
 	LFS
 	wchar_t qt[query_buffer_len_overflow];
@@ -1010,7 +377,7 @@ int overwriteWordFormsInDB(Source source, int wordId, wstring originalWord, set 
 		mysql_free_result(result);
 	}
 	else
-		lplog(LOG_INFO, L"DB statement [%s delete]: %s", originalWord.c_str(), qt);
+		lplog(LOG_INFO, L"DB statement [%s delete]: %s", word.c_str(), qt);
 	wcscpy(qt, L"insert wordForms(wordId,formId,count) VALUES ");
 	int len = wcslen(qt);
 	// insert wordForms(wordId, formId, count) VALUES(2, 33, 4), (5, 6, 7)
@@ -1025,13 +392,13 @@ int overwriteWordFormsInDB(Source source, int wordId, wstring originalWord, set 
 		source.unlockTables();
 	}
 	else
-		lplog(LOG_INFO, L"DB statement [%s forms insert]: %s", originalWord.c_str(), qt);
+		lplog(LOG_INFO, L"DB statement [%s forms insert]: %s", word.c_str(), qt);
 	return 0;
 }
 
 // queryOnLowerCase will query for word forms  the next time the word is encountered in all lower case.
 // queryOnLowerCase = 4
-int overwriteWordFlagsInDB(Source source, int wordId, wstring originalWord, bool actuallyExecuteAgainstDB)
+int overwriteWordFlagsInDB(Source source, int wordId, wstring word, bool actuallyExecuteAgainstDB)
 {
 	LFS
 		// erase all wordforms associated with wordId in wordforms
@@ -1047,40 +414,12 @@ int overwriteWordFlagsInDB(Source source, int wordId, wstring originalWord, bool
 		mysql_free_result(result);
 	}
 	else
-		lplog(LOG_INFO, L"DB statement [%s add queryOnLowerCase flag]: %s", originalWord.c_str(), qt);
-	return 0;
-}
-
-// pass back these inflections:
-// if NOUN in posSet:
-// SINGULAR = 1, PLURAL = 2
-// if VERB in posSet:
-// VERB_PAST = 16, VERB_PAST_PARTICIPLE = 32, VERB_PRESENT_PARTICIPLE = 64,
-// VERB_PRESENT_THIRD_SINGULAR = 128, VERB_PRESENT_FIRST_SINGULAR = 256,
-// VERB_PAST_THIRD_SINGULAR = 512, VERB_PAST_PLURAL = 1024,
-// VERB_PRESENT_PLURAL = 2048, VERB_PRESENT_SECOND_SINGULAR = 4096,
-// if ADJECTIVE in posSet:
-// ADJECTIVE_NORMATIVE = 8192, ADJECTIVE_COMPARATIVE = 16384,ADJECTIVE_SUPERLATIVE = 32768,
-// if ADVERB in posSet:
-// ADVERB_NORMATIVE = 65536, ADVERB_COMPARATIVE = 131072,ADVERB_SUPERLATIVE = 262144
-int discoverInflections(set <int> posSet, boolean plural, wstring word)
-{
-	int nounForm = FormsClass::gFindForm(L"noun");
-	int verbForm = FormsClass::gFindForm(L"verb");
-	int adjectiveForm = FormsClass::gFindForm(L"adjective");
-	int adverbForm = FormsClass::gFindForm(L"adverb");
-	for (auto c : posSet)
-	{
-		if (c == adjectiveForm)
-		{
-
-		}
-	}
+		lplog(LOG_INFO, L"DB statement [%s add queryOnLowerCase flag]: %s", word.c_str(), qt);
 	return 0;
 }
 
 // PLURAL refers to noun plural form.
-int overwriteWordInflectionFlagsInDB(Source source, int wordId, wstring originalWord, int inflections, bool actuallyExecuteAgainstDB)
+int overwriteWordInflectionFlagsInDB(Source source, int wordId, wstring word, int inflections, bool actuallyExecuteAgainstDB)
 {
 	LFS
 	// erase all wordforms associated with wordId in wordforms
@@ -1096,7 +435,7 @@ int overwriteWordInflectionFlagsInDB(Source source, int wordId, wstring original
 		mysql_free_result(result);
 	}
 	else
-		lplog(LOG_INFO, L"DB statement [%s add inflection flag]: %s", originalWord.c_str(), qt);
+		lplog(LOG_INFO, L"DB statement [%s add inflection flag]: %s", word.c_str(), qt);
 	return 0;
 }
 
@@ -1341,7 +680,7 @@ void testWordList()
 	for (int I = 0; commonUnknownWords[I]; I++)
 	{
 		set <int> posSet;
-		boolean isNonEuropean,plural, websterAPIRequestsExhausted;
+		bool isNonEuropean,plural, websterAPIRequestsExhausted;
 		getWordPOS(commonUnknownWords[I], posSet,plural,true, isNonEuropean, dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted);
 		for (int wordForm : posSet)
 			posFrequency[wordForm]++;
@@ -1456,71 +795,6 @@ int readFrequencyMap(wchar_t *mapFilePath, unordered_map<wstring, int> &frequenc
 	return 0;
 }
 
-int writeFrequencyMap(wchar_t *mapFilePath, unordered_map<wstring, int> &frequencyMap, unordered_map<wstring, wstring> &lastSourceForUnknownWord)
-{
-	FILE *mapFile = NULL;
-	_wfopen_s(&mapFile,mapFilePath, L"wb,ccs=UNICODE");
-	if (mapFile)
-	{
-		for (auto const&[word, wordFrequency] : frequencyMap)
-		{
-			auto itr = lastSourceForUnknownWord.find(word);
-			wstring lastSource = (itr== lastSourceForUnknownWord.end()) ? L"X" : itr->second;
-			fwprintf(mapFile, L"%s %d %s\n", word.c_str(), wordFrequency,lastSource.c_str());
-		}
-		fclose(mapFile);
-		return 1;
-	}
-	return 0;
-}
-
-void getWordCapitalization(WordMatch m,wstring &out)
-{
-	out = m.word->first;
-	if (m.queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (m.flags&WordMatch::flagFirstLetterCapitalized))
-		out[0] = towupper(out[0]);
-	//if (m.flags&WordMatch::flagNounOwner)
-	//	out += L"'s";
-	if (m.flags&WordMatch::flagAllCaps)
-		for (int len=0; len<out.length(); len++) out[len] = towupper(out[len]);
-}
-
-void wordAnalysis(unordered_map<wstring, int> &unknownOriginalWords, unordered_map<wstring, int> &unknownWords)
-{
-	map <wstring, double> designatedMap;
-	for (auto word : unknownOriginalWords)
-	{
-		int numUnknownOriginalWord = unknownOriginalWords[word.first];
-		wstring lw = word.first;
-		for (int len = 0; len < lw.length(); len++) lw[len] = towlower(lw[len]);
-		int numUnknownWord = unknownWords[lw];
-		if (numUnknownWord > 30 && lw!=word.first)
-		{
-			//lplog(LOG_INFO, L"Designated Proper Noun %s [numUnknownWord=%d][numUnknownOriginalWord=%d]", word.first.c_str(), numUnknownWord, numUnknownOriginalWord);
-			designatedMap[word.first] = (100.0*numUnknownOriginalWord) / numUnknownWord;
-		}
-
-	}
-	std::vector<std::pair<wstring, double>> pairs;
-	for (auto itr = designatedMap.begin(); itr != designatedMap.end(); ++itr)
-		pairs.push_back(*itr);
-
-	sort(pairs.begin(), pairs.end(), [=](std::pair<wstring, double>& a, std::pair<wstring, double>& b)
-	{
-		return a.second < b.second;
-	});
-	FILE *fp = NULL;
-	_wfopen_s(&fp,L"Designated results.txt", L"w,ccs=UNICODE");
-	if (fp)
-	{
-		for (std::pair<wstring, double> itr : pairs)
-		{
-			fwprintf(fp, L"%-30s:%f\n", itr.first.c_str(), itr.second);
-		}
-		fclose(fp);
-	}
-}
-
 /*
 (Stem) word topsails: Added Inflection PLURAL (Form noun, definitionEntry topsail)
 (Original) word inappreciable: Added Inflection ADJECTIVE_NORMATIVE (Form adjective, definitionEntry appreciable)
@@ -1568,22 +842,23 @@ void writeFrequenciesToDB(Source source)
 	}
 }
 
-// if a word has frequency<=1, and is unknown (select wordId from wordforms where formId=1), OR is not a european word, remove it.
-// this must be done after the rewrite of the forms (overwriteWordFormsInDB).
-void removeUnknownWordsFromDB(Source source)
-{
-	if (!myquery(&source.mysql, L"LOCK TABLES words READ"))
-		return;
-	//wchar_t qt[query_buffer_len_overflow];
-	//_snwprintf(qt, query_buffer_len, L"select id, etext, path, title from sources where sourceType=%d and id>=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' order by id",
-	//	st, lastSourceId);
-	int dictionaryComQueried = 0, dictionaryComCacheQueried = 0;
-	//if (myquery(&source.mysql, qt, result))
-	//{
-
-}
-
 // this is to accumulate how webster describes word forms in its "fl" field, to properly map to lp forms.
+	/* test webster
+	unordered_set<wstring> pos;
+	int numFilesProcessed = 0;
+	scanAllWebsterEntries(L"J:\\caches\\webster", pos, numFilesProcessed);
+	for (wstring psi : pos)
+	{
+		bool plural = false;
+		set <int> posSet;
+		wstring forms;
+		identifyFormClass(posSet, psi, plural);
+		for (int form : posSet)
+			forms += Forms[form]->name + L" ";
+		printf("%S:%S %S\n", psi.c_str(), forms.c_str(), (plural) ? L"PLURAL" : L"");
+	}
+	 end test webster
+	*/
 void scanAllWebsterEntries(wchar_t *basepath, unordered_set<wstring> &pos,int &numFilesProcessed)
 {
 		WIN32_FIND_DATA FindFileData;
@@ -1646,18 +921,144 @@ void scanAllWebsterEntries(wchar_t *basepath, unordered_set<wstring> &pos,int &n
 		return;
 }
 
-int numSourceLimit = 0;
-void main()
+void writeWordFrequencyTable(MYSQL *mysql,unordered_map<wstring, int> wordFrequency, unordered_map<wstring, int> unknownWordFrequency, unordered_map<wstring, int> unknownWordCapitalizedFrequency, 
+	unordered_map<wstring, int> unknownWordAllCapsFrequency, wstring etext)
 {
-		//testDisinclination();
+	wchar_t qt[query_buffer_len_overflow];
+	int currentEntry = 0, totalEntries = wordFrequency.size(), percent = 0,len=0;
+	wprintf(L"000%%                                                                   \r");
+	int lastSourceForUnknownWordForWord = _wtoi(etext.c_str());
+	for (auto const&[word, totalFrequency] : wordFrequency)
+	{
+		int unknownWordFrequencyForWord = 0, unknownWordCapitalizedFrequencyForWord = 0, unknownWordAllCapsFrequencyForWord = 0, lastSourceForUnknownWordForWord = 0;
+		auto ufi = unknownWordFrequency.find(word);
+		if (ufi != unknownWordFrequency.end())
+			unknownWordFrequencyForWord = ufi->second;
+		auto ufci = unknownWordCapitalizedFrequency.find(word);
+		if (ufci != unknownWordCapitalizedFrequency.end())
+			unknownWordCapitalizedFrequencyForWord = ufci->second;
+		auto ufaci = unknownWordAllCapsFrequency.find(word);
+		if (ufaci != unknownWordAllCapsFrequency.end())
+			unknownWordAllCapsFrequencyForWord = ufaci->second;
+		char temptransbuf[1024];
+		bool isNonEuropeanWord = detectNonEuropeanWord(word, temptransbuf, 1024);
+		if (len == 0)
+			len += _snwprintf(qt, query_buffer_len, L"INSERT INTO wordFrequency (word,totalFrequency,unknownFrequency,capitalizedFrequency,allCapsFrequency,lastSourceId,nonEuropeanWord) VALUES");
+		len += _snwprintf(qt + len, query_buffer_len - len, L" (\"%s\",%d,%d,%d,%d,%d,%s)", word.c_str(), totalFrequency, unknownWordFrequencyForWord, unknownWordCapitalizedFrequencyForWord, unknownWordAllCapsFrequencyForWord, lastSourceForUnknownWordForWord, (isNonEuropeanWord) ? L"true" : L"false");
+		if (len > query_buffer_len_underflow)
+		{
+			len += _snwprintf(qt + len, query_buffer_len - len, L" ON DUPLICATE KEY UPDATE totalFrequency=totalFrequency+VALUES(totalFrequency),unknownFrequency=unknownFrequency+VALUES(unknownFrequency),capitalizedFrequency=capitalizedFrequency+VALUES(capitalizedFrequency),allCapsFrequency=allCapsFrequency+VALUES(allCapsFrequency),lastSourceId=VALUES(lastSourceId),nonEuropeanWord=VALUES(nonEuropeanWord)");
+			if (!myquery(mysql, qt)) return;
+			len = 0;
+		}
+		else
+			qt[len++] = L',';
+		int currentPercent = currentEntry++ * 100 / totalEntries;
+		if (percent < currentPercent)
+		{
+			wprintf(L"%03d%%\r", currentPercent);
+			percent = currentPercent;
+		}
+	}
+	if (len > 0)
+	{
+		qt[--len] = L' ';
+		len += _snwprintf(qt + len, query_buffer_len - len, L" ON DUPLICATE KEY UPDATE totalFrequency=totalFrequency+VALUES(totalFrequency),unknownFrequency=unknownFrequency+VALUES(unknownFrequency),capitalizedFrequency=capitalizedFrequency+VALUES(capitalizedFrequency),allCapsFrequency=allCapsFrequency+VALUES(allCapsFrequency),lastSourceId=VALUES(lastSourceId),nonEuropeanWord=VALUES(nonEuropeanWord)");
+		if (!myquery(mysql, qt)) return;
+	}
+}
+
+void processCorpusAnalysisForUnknownWords(Source source, int sourceId,wstring path, wstring etext, int step, bool actuallyExecuteAgainstDB)
+{
+	wchar_t qt[query_buffer_len_overflow];
+	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE")) return;
+	if (Words.readWithLock(source.mysql, sourceId, path, false, false) < 0)
+		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
+	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
+	if (source.readSource(path, false, false, false))
+	{
+		unordered_map<wstring, int> wordFrequency, unknownWordFrequency, unknownWordCapitalizedFrequency, unknownWordAllCapsFrequency;
+		set<wstring> unknownWordsCleared;
+		int definedUnknownWord=0, dictionaryComQueried=0, dictionaryComCacheQueried=0;
+		int I = 0;
+		bool websterAPIRequestsExhausted = false;
+		for (WordMatch &im : source.m)
+		{
+			if (im.word->first.empty() || im.word->first[im.word->first.length() - 1] == L'\\' || im.word->first.length()>32)
+				continue;
+			wordFrequency[im.word->first]++;
+			if (im.word->second.isUnknown())
+			{
+				if (step == 1)
+				{
+					unknownWordFrequency[im.word->first]++;
+					if (im.queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (im.flags&WordMatch::flagFirstLetterCapitalized))
+						unknownWordCapitalizedFrequency[im.word->first]++;
+					if (im.flags&WordMatch::flagAllCaps)
+						unknownWordAllCapsFrequency[im.word->first]++;
+				}
+				else
+				{
+					if (unknownWordsCleared.find(im.word->first) == unknownWordsCleared.end())
+					{
+						_snwprintf(qt, query_buffer_len, L"select totalFrequency, unknownFrequency, capitalizedFrequency,allCapsFrequency where word=%s", im.word->first.c_str());
+						MYSQL_RES * result;
+						MYSQL_ROW sqlrow = NULL;
+						int totalFrequency = 0, capitalizedFrequency = 0, allCapsFrequency = 0;
+						if (myquery(&source.mysql, qt, result))
+						{
+							sqlrow = mysql_fetch_row(result);
+							totalFrequency = atoi(sqlrow[0])+ atoi(sqlrow[1]);
+							capitalizedFrequency = atoi(sqlrow[2]);
+							allCapsFrequency= atoi(sqlrow[3]);
+							mysql_free_result(result);
+						}
+						// find definition in webster.
+						// if exists, erase all forms associated with this word and write the new forms (return true)
+						// else definition could not be found (return false)
+						set <int> posSet;
+						bool isNonEuropean, queryOnLowerCase, plural;
+						bool caps = im.queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (im.flags&WordMatch::flagFirstLetterCapitalized) || (im.flags&WordMatch::flagAllCaps);
+						if (getWordPOSInContext(&source.mysql, source, sourceId, im, caps, totalFrequency, capitalizedFrequency, allCapsFrequency, posSet, true, plural, isNonEuropean, queryOnLowerCase, dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted) > 0)
+						{
+							// remove all wordforms associated with this word and create new wordforms
+							if (createWordFormsInDBIfNecessary(source, sourceId, im.word->second.index, im.word->first, actuallyExecuteAgainstDB) < 0)
+								lplog(LOG_FATAL_ERROR, L"DB error unable to create word %s", im.word->first.c_str());
+							if (overwriteWordFormsInDB(source, im.word->second.index, im.word->first, posSet, actuallyExecuteAgainstDB) < 0)
+								lplog(LOG_FATAL_ERROR, L"DB error setting word forms with word %s", im.word->first.c_str());
+							if (queryOnLowerCase && overwriteWordFlagsInDB(source, im.word->second.index, im.word->first, actuallyExecuteAgainstDB) < 0)
+								lplog(LOG_FATAL_ERROR, L"DB error setting word flags with word %s", im.word->first.c_str());
+							int inflections = discoverInflections(posSet, plural, im.word->first);
+							if (inflections > 0 && overwriteWordInflectionFlagsInDB(source, im.word->second.index, im.word->first, inflections, actuallyExecuteAgainstDB) < 0)
+								lplog(LOG_FATAL_ERROR, L"DB error setting word inflection flags with word %s", im.word->first.c_str());
+							definedUnknownWord++;
+						}
+						// remember word for further sources
+						unknownWordsCleared.insert(im.word->first);
+						wprintf(L"%15.15s:%05d unknown=%06d/%06I64d webster=%06d dictionaryCom(%06d,cache=%06d) [UpperCase=%05.1f] %03I64d%%\r",
+							im.word->first.c_str(), sourceId, definedUnknownWord, unknownWordsCleared.size(), websterQueriedToday, dictionaryComQueried, dictionaryComCacheQueried,
+							((capitalizedFrequency + allCapsFrequency)*100.0 / totalFrequency), I * 100 / source.m.size());
+					}
+				}
+			}
+			I++;
+		}
+		if (step == 1)
+			writeWordFrequencyTable(&source.mysql,wordFrequency, unknownWordFrequency, unknownWordCapitalizedFrequency, unknownWordAllCapsFrequency, etext);
+	}
+}
+
+int numSourceLimit = 0;
+// to begin proc2 field in all sources must be set to 1
+// step = 1 - accumulate word frequency statistics - will set to 2 when finished.
+// step = 2 - evaluate statistics and create database statements to decrease the number of unknown words
+void wmain(int argc,wchar_t *argv[])
+{
 	setConsoleWindowSize(200, 15);
-	//readUnabridgedGutenbergWebstersDictionary();
 	chdir("..");
 	initializeCounter();
 	cacheDir = CACHEDIR;
 	wchar_t *sourceHost = L"localhost";
-	MYSQL_RES * result;
-	MYSQL_ROW sqlrow = NULL;
 	enum Source::sourceTypeEnum st = Source::GUTENBERG_SOURCE_TYPE;
 	Source source(sourceHost, st, false, false, true);
 	source.initializeNounVerbMapping();
@@ -1668,166 +1069,65 @@ void main()
 		source.pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
 	if (!myquery(&source.mysql, L"LOCK TABLES sources READ"))
 		return;
-	unordered_map<wstring, int> unknownWords, unknownOriginalWords,wordFrequency;
-	unordered_map<wstring, wstring> lastSourceForUnknownWord;
-	HANDLE std_out = GetStdHandle(STD_OUTPUT_HANDLE);
-	bool actuallyExecuteAgainstDB = false;
-	if (std_out == INVALID_HANDLE_VALUE) {
-		printf("stdout not available");
-		return;
-	}
-	/* test webster
-	unordered_set<wstring> pos;
-	int numFilesProcessed = 0;
-	scanAllWebsterEntries(L"J:\\caches\\webster", pos, numFilesProcessed);
-	for (wstring psi : pos)
-	{
-		boolean plural = false;
-		set <int> posSet;
-		wstring forms;
-		identifyFormClass(posSet, psi, plural);
-		for (int form : posSet)
-			forms += Forms[form]->name + L" ";
-		printf("%S:%S %S\n", psi.c_str(), forms.c_str(), (plural) ? L"PLURAL" : L"");
-	}
-	 end test webster
-	*/
+	//testDisinclination();
 	//writeFrequenciesToDB(source);
 	//if (true)
 	//	return;
-	int loop = 0;
-	int nonEuropeanWords = 0;
-	if (readFrequencyMap(L"unknownSummaryResultsFileUW.txt", unknownWords,true) &&
-		readFrequencyMap(L"unknownSummaryResultsFileOW.txt", unknownOriginalWords,false))
-		loop = 1;
-	for (; loop < 2; loop++)
+	nounForm = FormsClass::gFindForm(L"noun");
+	verbForm = FormsClass::gFindForm(L"verb");
+	adjectiveForm = FormsClass::gFindForm(L"adjective");
+	adverbForm = FormsClass::gFindForm(L"adverb");
+	int step = _wtoi(argv[1]);
+	bool actuallyExecuteAgainstDB = step==2 && wstring(argv[2])==L"executeAgainstDB";
+	MYSQL_RES * result;
+	MYSQL_ROW sqlrow = NULL;
+	wchar_t qt[query_buffer_len_overflow];
+	_snwprintf(qt, query_buffer_len, L"select COUNT(*) from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**'", st);
+	__int64 totalSource;
+	if (myquery(&source.mysql, qt, result))
 	{
-		wchar_t qt[query_buffer_len_overflow];
-		int lastSourceId = (loop==0) ? 0 : readLastSource();
-		_snwprintf(qt, query_buffer_len, L"select id, etext, path, title from sources where sourceType=%d and id>=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' order by id",
-			st, lastSourceId);
-		int dictionaryComQueried = 0, dictionaryComCacheQueried = 0;
-		boolean websterAPIRequestsExhausted = false;
+		sqlrow = mysql_fetch_row(result);
+		totalSource = atoi(sqlrow[0]);
+		mysql_free_result(result);
+	}
+	bool websterAPIRequestsExhausted = false;
+	while (true)
+	{
+		int sourcesLeft = 0;
+		_snwprintf(qt, query_buffer_len, L"select COUNT(*) from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' and proc2=%d", st,step);
 		if (myquery(&source.mysql, qt, result))
 		{
-			__int64 totalSource = mysql_num_rows(result)+lastSourceId;
-			set<wstring> unknownWordsCleared, definedUnknownWord;
-			set<int> sourcesToReparse;
-			for (int is = 1; (sqlrow = mysql_fetch_row(result)); is++)
-			{
-				wstring path, etext, title;
-				int sourceId = atoi(sqlrow[0]);
-				if (loop==1)
-					updateLastSource(sourceId);
-				if (sqlrow[1] == NULL)
-					etext = L"NULL";
-				else
-					mTW(sqlrow[1], etext);
-				mTW(sqlrow[2], path);
-				mTW(sqlrow[3], title);
-				path.insert(0, L"\\").insert(0, CACHEDIR);
-				if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE")) return;
-				if (Words.readWithLock(source.mysql, sourceId, path, false, false) < 0)
-					lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
-				Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
-				char transtempbuf[1024];
-				if (source.readSource(path, false, false, false))
-				{
-					int I = 0;
-					for (WordMatch &im : source.m)
-					{
-						wordFrequency[im.word->first]++;
-						if (im.word->second.isUnknown())
-						{
-							if (loop==0)
-							{
-								detectNonEuropeanWord(im.word->first,transtempbuf,1024);
-								unknownWords[im.word->first]++;
-								wstring originalWord;
-								getWordCapitalization(im, originalWord);
-								unknownOriginalWords[originalWord]++;
-								//wstring inflectionFlags, wordFlags;
-								//allFlags(im.word->second.inflectionFlags, inflectionFlags);
-								//allWordFlags(im.word->second.flags, wordFlags);
-								//wstring owIF = originalWord + L":"+inflectionFlags + L":" + wordFlags;
-								//owIF.erase(std::remove(owIF.begin(), owIF.end(), ' '), owIF.end()); 
-								//unknownOriginalWordsWithInflectionsFlags[owIF]++;
-								lastSourceForUnknownWord[im.word->first] = etext;
-							}
-							else
-							{
-								if (unknownWordsCleared.find(im.word->first) == unknownWordsCleared.end())
-								{
-									// find definition in webster.
-									// if exists, erase all forms associated with this word and write the new forms (return true)
-									// else definition could not be found (return false)
-									int numUnknownWord = unknownWords[im.word->first];
-									wstring originalWord;
-									getWordCapitalization(im, originalWord);
-									int numUnknownOriginalWord=unknownOriginalWords[originalWord];
-									int numUnknownAllCaps = 0;
-									if ((im.flags&WordMatch::flagFirstLetterCapitalized) && !(im.flags&WordMatch::flagAllCaps))
-									{
-										wstring allCaps = im.word->first;
-										for (int len = 0; len < allCaps.length(); len++) allCaps[len] = towupper(allCaps[len]);
-										auto aci = unknownOriginalWords.find(allCaps);
-										if (aci!= unknownOriginalWords.end())
-											numUnknownAllCaps = aci->second;
-									}
-									//wstring inflectionFlags, wordFlags;
-									//allFlags(im.word->second.inflectionFlags, inflectionFlags);
-									//allWordFlags(im.word->second.flags, wordFlags);
-									//int numUnknownOriginalWordsWithInflectionsFlags=unknownOriginalWordsWithInflectionsFlags[originalWord + inflectionFlags + L" " + wordFlags];
-									set <int> posSet;
-									boolean isNonEuropean, queryOnLowerCase, plural;
-									if (getWordPOSInContext(&source.mysql,source, sourceId, im, originalWord, numUnknownWord, numUnknownOriginalWord, numUnknownAllCaps, posSet,true, plural, isNonEuropean, queryOnLowerCase, dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted)>0)
-									{
-										// remove all wordforms associated with this word and create new wordforms
-										if (createWordFormsInDBIfNecessary(source, sourceId, im.word->second.index, im.word->first, originalWord, actuallyExecuteAgainstDB)<0)
-											lplog(LOG_FATAL_ERROR, L"DB error unable to create word %s", originalWord.c_str());
-										if (overwriteWordFormsInDB(source, im.word->second.index, originalWord, posSet, actuallyExecuteAgainstDB) < 0)
-											lplog(LOG_FATAL_ERROR, L"DB error setting word forms with word %s",originalWord.c_str());
-										if (queryOnLowerCase && overwriteWordFlagsInDB(source, im.word->second.index, originalWord, actuallyExecuteAgainstDB) < 0)
-											lplog(LOG_FATAL_ERROR, L"DB error setting word flags with word %s", originalWord.c_str());
-										int inflections = discoverInflections(posSet,plural,im.word->first);
-										if (inflections>0 && overwriteWordInflectionFlagsInDB(source, im.word->second.index, originalWord, inflections, actuallyExecuteAgainstDB) < 0)
-											lplog(LOG_FATAL_ERROR, L"DB error setting word inflection flags with word %s", originalWord.c_str());
-										// sources containing any of these words must be reparsed
-										definedUnknownWord.insert(im.word->first);
-									}
-									if (isNonEuropean)
-										nonEuropeanWords++;
-									// remember word for further sources
-									unknownWordsCleared.insert(im.word->first);
-									wprintf(L"%30.30s:numSources=(%05I64d,%05d) unknown=%06I64d out of %06I64d(nonEuropean=%05d) webster=%06d dictionaryCom(%06d,cache=%06d) [unknownUpperCase ratio=%08.4f]\r",
-										originalWord.c_str(),sourcesToReparse.size(), sourceId, definedUnknownWord.size(), unknownWordsCleared.size(),nonEuropeanWords, websterQueriedToday, dictionaryComQueried, dictionaryComCacheQueried,
-										((numUnknownOriginalWord+numUnknownAllCaps)*100.0 / numUnknownWord));
-								}
-								if (definedUnknownWord.find(im.word->first) != definedUnknownWord.end())
-									sourcesToReparse.insert(sourceId);
-							}
-						}
-						I++;
-					}
-				}
-				source.clearSource();
-				wchar_t buffer[1024];
-				wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d source (%-35.35s... finished)", (is+ lastSourceId) * 100 / totalSource, is+ lastSourceId, totalSource, title.c_str());
-				SetConsoleTitle(buffer);
-				//DWORD numWritten;
-				//WriteConsole(std_out, buffer, wcslen(buffer), &numWritten, NULL);
-			}
-			if (loop == 0)
-			{
-				writeFrequencyMap(L"unknownSummaryResultsFileUW.txt", unknownWords, lastSourceForUnknownWord);
-				writeFrequencyMap(L"unknownSummaryResultsFileOW.txt", unknownOriginalWords, lastSourceForUnknownWord);
-				writeMapReverseSorted(unknownWords, L"unknown results.txt");
-				writeMapReverseSorted(wordFrequency, L"word frequency.txt");
-				wordAnalysis(unknownOriginalWords,unknownWords);
-			}
+			sqlrow = mysql_fetch_row(result);
+			sourcesLeft = atoi(sqlrow[0]);
+			mysql_free_result(result);
 		}
+		if (!myquery(&source.mysql, L"START TRANSACTION"))
+			return;
+		_snwprintf(qt, query_buffer_len, L"select id, etext, path, title from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' and proc2=%d order by id limit 1 FOR UPDATE SKIP LOCKED", st, step);
+		if (!myquery(&source.mysql, qt, result) || mysql_num_rows(result) != 1)
+			break;
+		wstring path, etext, title;
+		sqlrow = mysql_fetch_row(result);
+		int sourceId = atoi(sqlrow[0]);
+		if (sqlrow[1] == NULL)
+			etext = L"NULL";
+		else
+			mTW(sqlrow[1], etext);
+		mTW(sqlrow[2], path);
+		mTW(sqlrow[3], title);
+		mysql_free_result(result);
+		path.insert(0, L"\\").insert(0, CACHEDIR);
+		processCorpusAnalysisForUnknownWords(source, sourceId, path, etext, step, actuallyExecuteAgainstDB);
+		source.clearSource();
+		_snwprintf(qt, query_buffer_len, L"update sources set proc2=%d where id=%d", step + 1, sourceId );
+		if (!myquery(&source.mysql, qt))
+			break;
+		if (!myquery(&source.mysql, L"COMMIT"))
+			return;
+		wchar_t buffer[1024];
+		wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d source (%-35.35s... finished)", (totalSource-(sourcesLeft-1)) * 100 / totalSource, (totalSource - (sourcesLeft - 1)) - 1, totalSource, title.c_str());
+		SetConsoleTitle(buffer);
 	}
-	mysql_free_result(result);
 	source.unlockTables();
 }
 

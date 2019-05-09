@@ -8558,7 +8558,7 @@ void Source::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
   int lastSentenceEndBeforeAndNotIncludingCurrentQuote=-1,lastProgressPercent=-1;
 	int whereLetterTo=-1,lastLetterBegin=-1;
 	/* last subject */
-	// subjectsInPreviousUnquotedSection is used in imposeSpeaker to set lastSubject boolean flag in each localObject occurring outside quotes.
+	// subjectsInPreviousUnquotedSection is used in imposeSpeaker to set lastSubject bool flag in each localObject occurring outside quotes.
 	//    also used in resolveSpeakersUsingPreviousSubject at the break after a section with no quotes in it.  
 	//    after a section with no quotes in it, subjectsInPreviousUnquotedSection is set by previousLastSubjects.  
 	//    It is cleared at the beginning of a section.
