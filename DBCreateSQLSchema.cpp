@@ -78,6 +78,7 @@ int Source::writeThesaurusEntry(sDefinition &d)
 	return myquery(&mysql, qt);
 }
 
+// thse are not used and do not exist within the database
 int Source::createGroupTables(void)
 { LFS
   if (!myquery(&mysql,L"CREATE TABLE groups (groupId int(11) unsigned NOT NULL, "
@@ -93,7 +94,8 @@ int Source::createGroupTables(void)
   return 0;
 }
 
-int Source::createWordRelationsTables(void)
+// thse are not used and do not exist within the database
+int Source::createLocationTables(void)
 { LFS
 	/*
 		locations table:
@@ -116,25 +118,6 @@ int Source::createWordRelationsTables(void)
     L"wordId INT UNSIGNED NOT NULL, INDEX w_ind (wordId), FOREIGN KEY (wordId) REFERENCES words(id), "
 		L"sourceId smallint NOT NULL, "
 		L"w int NOT NULL)")) return -1;
-	return 0;
-}
-
-int Source::createSentimentTables(void)
-{ LFS
-	if (!myquery(&mysql,L"CREATE TABLE wordRelationsSentiment ("
-		L"wordRelationId int unsigned NOT NULL, FOREIGN KEY (wordRelationId) REFERENCES wordRelations(id),"
-		L"twp int NOT NULL, " // # of twitters expressing positive sentiment 
-		L"twn int NOT NULL, " // # of twitters expressing negative sentiment 
-		L"ap int NOT NULL, " // # of amazon reviews expressing positive sentiment 
-		L"an int NOT NULL " // # of amazon reviews expressing negative sentiment 
-		L") DELAY_KEY_WRITE = 1")) return -1;
-	if (!myquery(&mysql,L"CREATE TABLE wordSentiment ("
-    L"wordId INT UNSIGNED NOT NULL, INDEX fw_ind (wordId), FOREIGN KEY (wordId) REFERENCES words(id), "
-		L"twp int NOT NULL, " // # of twitters expressing positive sentiment 
-		L"twn int NOT NULL, " // # of twitters expressing negative sentiment 
-		L"ap int NOT NULL, " // # of amazon reviews expressing positive sentiment 
-		L"an int NOT NULL " // # of amazon reviews expressing negative sentiment 
-		L") DELAY_KEY_WRITE = 1")) return -1;
 	return 0;
 }
 

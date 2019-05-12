@@ -420,7 +420,6 @@ int WordClass::readWords(wstring oPath, int sourceId)
 	{
 		//int saveWhere=where;
 		if (!copy(sWord,buffer,where,bufferlen)) return -1;
-		//lplog(L"%d:word %s",saveWhere,sWord.c_str());
 		wstring sME;
 		if (disqualify(sWord))
 		{

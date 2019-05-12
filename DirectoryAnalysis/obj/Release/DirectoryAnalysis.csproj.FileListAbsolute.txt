@@ -5,3 +5,10 @@ F:\lp\DirectoryAnalysis\obj\Release\DirectoryAnalysis.csprojAssemblyReference.ca
 F:\lp\DirectoryAnalysis\obj\Release\DirectoryAnalysis.csproj.CoreCompileInputs.cache
 F:\lp\DirectoryAnalysis\obj\Release\DirectoryAnalysis.exe
 F:\lp\DirectoryAnalysis\obj\Release\DirectoryAnalysis.pdb
+F:\lp\source\DirectoryAnalysis\bin\Release\DirectoryAnalysis.exe.config
+F:\lp\source\DirectoryAnalysis\bin\Release\DirectoryAnalysis.exe
+F:\lp\source\DirectoryAnalysis\bin\Release\DirectoryAnalysis.pdb
+F:\lp\source\DirectoryAnalysis\obj\Release\DirectoryAnalysis.csprojAssemblyReference.cache
+F:\lp\source\DirectoryAnalysis\obj\Release\DirectoryAnalysis.csproj.CoreCompileInputs.cache
+F:\lp\source\DirectoryAnalysis\obj\Release\DirectoryAnalysis.exe
+F:\lp\source\DirectoryAnalysis\obj\Release\DirectoryAnalysis.pdb

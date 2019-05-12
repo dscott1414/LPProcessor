@@ -312,7 +312,9 @@ bool tFI::write(void *buffer,int &where,int limit)
 bool tFI::updateFromDisk(char *buffer,int &where,int limit,wstring &ME)
 { LFS
   int iCount=*((int *)(buffer+where));
-  int iFlags=buffer[where+sizeof(iCount)+iCount*sizeof(int)+sizeof(inflectionFlags)];
+	if (iCount > MAX_FORMS)
+		::lplog(LOG_FATAL_ERROR, L"Illegal count of %d encountered in read buffer at location %d (3).", count, where);
+	int iFlags=buffer[where+sizeof(iCount)+iCount*sizeof(int)+sizeof(inflectionFlags)];
   if ((!(flags&queryOnLowerCase) && !(flags&queryOnAnyAppearance)) || ((iFlags&queryOnLowerCase) || (iFlags&queryOnAnyAppearance))) // update rejected.
   {
 		where+=sizeof(count)+iCount*sizeof(int)+sizeof(inflectionFlags)+sizeof(timeFlags)+sizeof(flags)+sizeof(derivationRules)+sizeof(index);
@@ -322,8 +324,6 @@ bool tFI::updateFromDisk(char *buffer,int &where,int limit,wstring &ME)
     return false;
   }
   count=iCount;
-  if (count>MAX_FORMS)
-		::lplog(LOG_FATAL_ERROR,L"Illegal count of %d encountered in read buffer at location %d (3).",count,where);
   int oldAllocated=allocated;
   if (fACount+count>=allocated)
     formsArray=(unsigned int *)trealloc(16,formsArray,oldAllocated*sizeof(*formsArray),(allocated=(allocated+count)*2)*sizeof(*formsArray));
@@ -1279,8 +1279,8 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 			markWordUndefined(iWord, sWord, 0, firstLetterCapitalized, nounOwner, sourceId);
 		else if ((dashLocation >= 0) || (ret = getForms(mysql,iWord, sWord, sourceId)))
 		{
-			if (dashLocation<0 && ret != WORD_NOT_FOUND && ret != NO_FORMS_FOUND)
-				return ret;
+			if (dashLocation<0 && ret != WORD_NOT_FOUND && ret != NO_FORMS_FOUND) // getForms found word (ret>0)
+				return 0;
 			if (stopDisInclination) return 0;
 			if (containsSingleQuote)
 				markWordUndefined(iWord, sWord, 0, firstLetterCapitalized, nounOwner, sourceId);

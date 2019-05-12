@@ -729,7 +729,7 @@ void setConsoleWindowSize(int width,int height)
 			(int)GetLastError(), LastErrorStr());
 }
 
-int createLPProcess(wstring path,int numProcess,HANDLE &processId, int numSourceLimit, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite)
+int createLPProcess(int numProcess, HANDLE &processId, wchar_t *commandPath, wchar_t *processParameters)
 {
 	STARTUPINFO si;
 	ZeroMemory(&si, sizeof(si));
@@ -745,23 +745,7 @@ int createLPProcess(wstring path,int numProcess,HANDLE &processId, int numSource
 	si.wShowWindow = SW_SHOWNOACTIVATE; // don't continuously hijack focus
 	PROCESS_INFORMATION pi;
 	ZeroMemory(&pi, sizeof(pi));
-	wchar_t processParameters[1024];
-	if (!path.empty())
-		wsprintf(processParameters, L"releasex64\\lp.exe -ParseRequest \"%s\" -cacheDir %s %s%s%s%s-log %d", path.c_str(), CACHEDIR, 
-		(forceSourceReread) ? L"forceSourceReread ":L"", 
-		(sourceWrite) ? L"-SW ":L"", 
-		(sourceWordNetRead) ? L"-SWNR ":L"",
-		(sourceWordNetWrite) ? L"-SWNW ":L"",
-		numProcess);
-	else
-		wsprintf(processParameters, L"releasex64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s-numSourceLimit %d -log %d", CACHEDIR,
-		(forceSourceReread) ? L"forceSourceReread " : L"",
-		(sourceWrite) ? L"-SW " : L"",
-		(sourceWordNetRead) ? L"-SWNR " : L"",
-		(sourceWordNetWrite) ? L"-SWNW " : L"",
-		numSourceLimit,
-		numProcess);
-	if (!CreateProcess(L"releasex64\\lp.exe",
+	if (!CreateProcess(commandPath,
 		processParameters, // Command line
 		NULL, // Process handle not inheritable
 		NULL, // Thread handle not inheritable
@@ -781,17 +765,17 @@ int createLPProcess(wstring path,int numProcess,HANDLE &processId, int numSource
 	return 0;
 }
 
-int startProcesses(Source &source, int beginSource, int endSource, Source::sourceTypeEnum st, int maxProcesses, int numSourcesPerProcess, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite)
+int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st, int maxProcesses, int numSourcesPerProcess, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite)
 {
 	LFS
-	chdir("source");
+		chdir("source");
 	//MYSQL_RES *result = NULL;
 	HANDLE *handles = (HANDLE *)calloc(maxProcesses, sizeof(HANDLE));
 	int numProcesses = 0, errorCode = 0;
 	wstring tmpstr;
 	while (!exitNow && !exitEventually && !errorCode)
 	{
-		unsigned int nextProcessIndex=numProcesses;
+		unsigned int nextProcessIndex = numProcesses;
 		if (numProcesses == maxProcesses)
 		{
 			nextProcessIndex = WaitForMultipleObjectsEx(numProcesses, handles, false, 1000 * 60 * 60, false);
@@ -816,16 +800,18 @@ int startProcesses(Source &source, int beginSource, int endSource, Source::sourc
 		int id, repeatStart, prId;
 		wstring start, path, etext, author, title, pathInCache;
 		bool result;
-		if (st == Source::REQUEST_TYPE)
-			result = source.getNextUnprocessedParseRequest(prId,pathInCache);
-		else
-			result = source.getNextUnprocessedSource(beginSource, endSource, st, false, id, path, start, repeatStart, etext, author, title);
-		
+		switch (processKind)
+		{
+		case 0:result = source.getNextUnprocessedParseRequest(prId, pathInCache); break;
+		case 1:result = source.getNextUnprocessedSource(beginSource, endSource, st, false, id, path, start, repeatStart, etext, author, title); break;
+		case 2:result = source.anymoreUnprocessedForUnknown(st, step); break;
+		default:result = 0; break;
+		}
 		if (!result)
 		{
 			if (numProcesses == maxProcesses)
 			{
-				memmove(handles + nextProcessIndex, handles + nextProcessIndex + 1, (maxProcesses - nextProcessIndex - 1)*sizeof(handles[0]));
+				memmove(handles + nextProcessIndex, handles + nextProcessIndex + 1, (maxProcesses - nextProcessIndex - 1) * sizeof(handles[0]));
 				numProcesses--;
 			}
 			if (numProcesses)
@@ -845,9 +831,38 @@ int startProcesses(Source &source, int beginSource, int endSource, Source::sourc
 			}
 			break;
 		}
-		HANDLE processId=0;
-		if (errorCode = createLPProcess(((st == Source::REQUEST_TYPE) ? pathInCache:L""), nextProcessIndex, processId, numSourcesPerProcess, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite) < 0)
+		HANDLE processId = 0;
+		wchar_t processParameters[1024];
+		switch (processKind)
+		{
+		case 0:
+			wsprintf(processParameters, L"releasex64\\lp.exe -ParseRequest \"%s\" -cacheDir %s %s%s%s%s-log %d", pathInCache.c_str(), CACHEDIR,
+				(forceSourceReread) ? L"forceSourceReread " : L"",
+				(sourceWrite) ? L"-SW " : L"",
+				(sourceWordNetRead) ? L"-SWNR " : L"",
+				(sourceWordNetWrite) ? L"-SWNW " : L"",
+				numProcesses);
+			if (errorCode = createLPProcess(nextProcessIndex, processId, L"releasex64\\lp.exe", processParameters) < 0)
+				break;
 			break;
+		case 1:
+			wsprintf(processParameters, L"releasex64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s-numSourceLimit %d -log %d", CACHEDIR,
+				(forceSourceReread) ? L"forceSourceReread " : L"",
+				(sourceWrite) ? L"-SW " : L"",
+				(sourceWordNetRead) ? L"-SWNR " : L"",
+				(sourceWordNetWrite) ? L"-SWNW " : L"",
+				numSourcesPerProcess,
+				numProcesses);
+			if (errorCode = createLPProcess(nextProcessIndex, processId, L"releasex64\\lp.exe", processParameters) < 0)
+				break;
+			break;
+		case 2:
+			wsprintf(processParameters, L"releasex64\\CorpusAnalysis.exe -step %d -numSourceLimit %d -log %d", CACHEDIR, step, numSourcesPerProcess, numProcesses);
+			if (errorCode = createLPProcess(nextProcessIndex, processId, L"releasex64\\CorpusAnalysis.exe", processParameters) < 0)
+				break;
+			break;
+		default: break;
+		}
 		handles[nextProcessIndex] = processId;
 		if (numProcesses < maxProcesses)
 			numProcesses++;
@@ -1065,7 +1080,7 @@ int wmain(int argc,wchar_t *argv[])
 		{
 			HWND consoleWindowHandle = GetConsoleWindow();
 			SetWindowPos(consoleWindowHandle, HWND_NOTOPMOST, 900, 0, 400, 200, SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-			startProcesses(source, beginSource, endSource, st, multiProcess, numSourcesPerProcess, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite);
+			startProcesses(source, 1,0,beginSource, endSource, st, multiProcess, numSourcesPerProcess, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite);
 			return 0;
 		}
 		int numSourcesProcessed=0;

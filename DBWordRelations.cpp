@@ -215,7 +215,7 @@ int WordClass::flushWordRelations(MYSQL &mysql)
 		if (!acquireLock(mysql,false)) return 0;
 	#endif
   int overallStartTime=clock();
-	if (!myquery(&mysql,L"LOCK TABLES wordRelations WRITE, wordRelationCombos WRITE")) return -1;
+	if (!myquery(&mysql,L"LOCK TABLES wordRelations WRITE")) return -1;
   wprintf(L"Loading word relations index...\r");
   if (logDatabaseDetails)
     lplog(L"Inserting relations overall start...");

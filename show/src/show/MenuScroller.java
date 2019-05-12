@@ -170,7 +170,7 @@ public class MenuScroller {
    * @param menu the menu
    */
   public MenuScroller(JMenu menu) {
-    this(menu, 15);
+    this(menu, 30);
   }
 
   /**
@@ -181,7 +181,7 @@ public class MenuScroller {
    * @param menu the popup menu
    */
   public MenuScroller(JPopupMenu menu) {
-    this(menu, 15);
+    this(menu, 30);
   }
 
   /**
@@ -194,7 +194,7 @@ public class MenuScroller {
    * @throws IllegalArgumentException if scrollCount is 0 or negative
    */
   public MenuScroller(JMenu menu, int scrollCount) {
-    this(menu, scrollCount, 150);
+    this(menu, scrollCount, 50);
   }
 
   /**
@@ -207,7 +207,7 @@ public class MenuScroller {
    * @throws IllegalArgumentException if scrollCount is 0 or negative
    */
   public MenuScroller(JPopupMenu menu, int scrollCount) {
-    this(menu, scrollCount, 150);
+    this(menu, scrollCount, 50);
   }
 
   /**

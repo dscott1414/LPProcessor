@@ -1082,14 +1082,23 @@ int Source::scanUntil(const wchar_t *start,int repeat,bool printError)
 // End of this Project Gutenberg
 // End Project Gutenberg
 // End of Project Gutenberg's
+// or THE END all in caps, on one line, alone
+// or FOOTNOTES all in caps, on one line, alone
+// or INDEX all in caps, on one line, alone
 bool Source::analyzeEnd(wstring &path,int begin,int end)
 { LFS
 	int w=0;
 	bool endFound;
-	for (w=begin; w<end; w++) if (m[w].word->first==L"end") break;
+	for (w=begin; w<end; w++) 
+		if (m[w].word->first==L"end") break;
 	endFound=w!=end;
 	if (w==end) 
 	  w=begin;
+	if (endFound && (m[w].flags&WordMatch::flagAllCaps) && w > 2 &&
+		m[w - 2].word == Words.sectionWord &&
+		m[w - 1].word->first == L"the" && (m[w - 1].flags&WordMatch::flagAllCaps) &&
+		(w + 1 >= m.size() || m[w + 1].word == Words.sectionWord))
+		return true;
 	for (; w<end; w++) if (m[w].word->first==L"project") break;
 	if (w==end) return false;
 	for (; w<end; w++) 
@@ -1103,6 +1112,7 @@ bool Source::analyzeEnd(wstring &path,int begin,int end)
 			}
 			return true;
 		}
+	
 	return false;
 }
 
@@ -1232,9 +1242,9 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 				result=0;
 				continue;
 			}
-			if (analyzeEnd(path,lastSentenceEnd,m.size()))
+			if (analyzeEnd(path,lastSentenceEnd, m.size()))
 			{
-				while (m.size()>lastSentenceEnd) m.erase(m.begin()+lastSentenceEnd);
+				m.erase(m.begin()+lastSentenceEnd,m.end());
 				alreadyAtEnd=true;
 				break;
 			}
@@ -1419,9 +1429,9 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 		}
 		if (endSentence)
 		{
-			if (analyzeEnd(path,lastSentenceEnd,m.size()))
+			if (analyzeEnd(path,lastSentenceEnd, m.size()))
 			{
-				while (m.size()>lastSentenceEnd) m.erase(m.begin()+lastSentenceEnd);
+				m.erase(m.begin()+lastSentenceEnd,m.end());
 				alreadyAtEnd=true;
 				break;
 			}
@@ -1438,9 +1448,9 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 			continue;
 		}
 	}
-	if (!alreadyAtEnd && analyzeEnd(path,lastSentenceEnd,m.size()))
+	if (!alreadyAtEnd && analyzeEnd(path,lastSentenceEnd, m.size()))
 	{
-		while (m.size()>lastSentenceEnd) m.erase(m.begin()+lastSentenceEnd);
+		m.erase(m.begin() + lastSentenceEnd, m.end());
 	}
 	else
 		sentenceStarts.push_back(lastSentenceEnd);

@@ -3079,6 +3079,7 @@ int wherePrepObject,
 	wstring objectString(cOM om,wstring &logres,bool shortNameFormat,bool objectOwnerRecursionFlag=false);
 	wstring wordString(vector <tIWMM> &words,wstring &logres);
 	const wchar_t *getOriginalWord(int I, wstring &out, bool concat, bool mostCommon = false);
+	bool analyzeEnd(wstring &path, int begin, int end);
 
 private:
 	wstring primaryQuoteType,secondaryQuoteType;
@@ -3096,14 +3097,14 @@ private:
 	void markMultipleObjects(int where);
 	bool setAdditionalRoleTags(int where,int &firstFreePrep,vector <int> &futureBoundPrepositions,bool inPrimaryQuote,bool inSecondaryQuote,
 		bool &nextVerbInSeries,int &sense,int &whereLastVerb,bool &ambiguousSense,bool inQuotedString,bool inSectionHeader,int sentenceBegin,int sentenceEnd,vector < vector <tTagLocation> > &tagSets);
-	void collectTagSetsFromSentence(unsigned int begin,unsigned int end,int &lastOpeningPrimaryQuote,unsigned int &section);
+	//void collectTagSetsFromSentence(unsigned int begin,unsigned int end,int &lastOpeningPrimaryQuote,unsigned int &section);
 	int replicate(int recursionLevel,int PEMAPosition,int position,vector <tTagLocation> &tagSet,vector < vector <tTagLocation> > &childTagSets,vector < vector <tTagLocation> > &tagSets, unordered_map <int, vector < vector <tTagLocation> > > &TagSetMap);
 	int collectTags(int rLevel,int PEMAPosition,int position,vector <tTagLocation> &tagSet,vector < vector <tTagLocation> > &tagSets, unordered_map <int, vector < vector <tTagLocation> > > &TagSetMap);
 	int getPEMAPosition(int position,int offset);
 	int scanUntil(const wchar_t *start,int repeat,bool printError);
 
 	// printing sentences
-	unsigned int getShortLen(int position);
+	//unsigned int getShortLen(int position);
 	unsigned int getMaxDisplaySize(vector <WordMatch>::iterator &im,int numPosition);
 	int printSentence(unsigned int rowsize,unsigned int begin,unsigned int end,bool containsNotMatched);
 	bool sumMaxLength(unsigned int begin,unsigned int end,unsigned int &matchedTripletSumTotal,int &matchedSentences,bool &containsUnmatchedElement);
@@ -3116,11 +3117,10 @@ private:
 	bool matchPatternAgainstSentence(cPattern *p,int s,bool fill);
 	int matchIgnoredPatternsAgainstSentence(unsigned int s,unsigned int &patternsTried,bool fill);
 	int matchPatternsAgainstSentence(unsigned int s,unsigned int &patternsTried);
-	void collectMatchedPatterns(wstring markType,int position,intArray &endPositions);
+	//void collectMatchedPatterns(wstring markType,int position,intArray &endPositions);
 
 	void logOptimizedString(wchar_t *line,unsigned int &linepos);
-	bool analyzeEnd(wstring &path,int begin,int end);
-	unsigned int getPMAMinCost(unsigned int position,int parentPattern,int rootPattern,int childend);
+	//unsigned int getPMAMinCost(unsigned int position,int parentPattern,int rootPattern,int childend);
 	int getMinCost(patternElementMatchArray::tPatternElementMatch *pem);
 
 	// speaker resolution   - resolving quotes, speakers and pronouns
@@ -3143,7 +3143,7 @@ private:
 	int scanForTag(int where,int tag);
 	void scanForLocation(bool check,bool &relAsObject,int &whereRelClause,int &pmWhere,int checkEnd);
 	bool assignRelativeClause(int where);
-	bool newPhysicallyPresentPosition(int where,int beginObjectPosition,bool &physicallyEvaluated);
+	//bool newPhysicallyPresentPosition(int where,int beginObjectPosition,bool &physicallyEvaluated);
 	bool physicallyPresentPosition(int where,bool &physicallyEvaluated);
 	bool accompanyingRolePP(int where);
 	bool physicallyPresentPosition(int where,int beginObjectPosition,bool &physicallyEvaluated,bool ignoreTense);
@@ -3540,7 +3540,7 @@ int &sense,
 	bool dbSearchForQuery(wchar_t *derivation, cSpaceRelation* parentSRI,vector < cAS > &answerSRIs);
 
 	// MYSQL Database
-	int createWordRelationsTables(void);
+	int createLocationTables(void);
 	int createSentimentTables(void);
 	int createObjectTables(void);
 	int createTimeRelationTables(void);

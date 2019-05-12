@@ -1025,16 +1025,17 @@ bool existsInDictionaryDotCom(wstring word, bool &networkAccessed)
 	return buffer.find(L"No results found") == wstring::npos;
 }
 
-bool detectNonEuropeanWord(wstring word, char *buffer, int bufferlen)
+bool detectNonEuropeanWord(wstring word)
 {
+	char temptransbuf[1024];
 	BOOL usedDefaultChar;
 	int ret = WideCharToMultiByte(
 		1252,									//UINT CodePage,
 		WC_NO_BEST_FIT_CHARS,//DWORD dwFlags,
 		word.c_str(),				 //LPCWCH lpWideCharStr,
 		word.length(),			 //int cchWideChar,
-		buffer,              //LPSTR lpMultiByteStr,
-		bufferlen,           // int cbMultiByte,
+		temptransbuf,              //LPSTR lpMultiByteStr,
+		1024,           // int cbMultiByte,
 		NULL,                //LPCCH lpDefaultChar,
 		&usedDefaultChar										 //LPBOOL lpUsedDefaultChar
 	);
@@ -1144,8 +1145,7 @@ int discoverInflections(set <int> posSet, bool plural, wstring word)
 int WordClass::getForms(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId)
 {
 	LFS
-	char temptransbuf[1024];
-	if (detectNonEuropeanWord(sWord, temptransbuf, 1024))
+	if (detectNonEuropeanWord(sWord))
 		return WORD_NOT_FOUND;
 	bool plural,networkAccessed, existsDM = existsInDictionaryDotCom(sWord, networkAccessed);
 	if (!existsDM)
