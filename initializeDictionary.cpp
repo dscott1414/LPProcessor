@@ -930,7 +930,7 @@ int WordClass::createWordCategories()
 													{L"‘",OPEN_INFLECTION},{L"’",CLOSE_INFLECTION},{L"“",OPEN_INFLECTION},{L"”",CLOSE_INFLECTION},{NULL,0}};
 	predefineWords(quotes,L"quotes",L"quotes",L"quotes");
 	wchar_t *dash[] = {L"-",L"—",L"–",L"--",NULL};                          predefineWords(dash,L"dash",L"dash");
-	wchar_t *punctuation[]={L".",L"·",L"...",L";",L":",L"@",L"#",L"$",L"%",L"^",L"&",L"*",L"--",L"+",L"=",L"_",L"|",L"‚",L",",L"/",L"~",L"…",NULL};
+	wchar_t *punctuation[]={L".",L"·",L"...",L";",L":",L"@",L"#",L"$",L"%",L"^",L"&",L"*",L"--",L"+",L"=",L"_",L"|",L"‚",L",",L"/",L"~",L"…",L"│",NULL};
 	for (wchar_t **p=punctuation; *p; p++) predefineWord(*p);
 	wchar_t *letter[] = {L"a",L"b",L"c",L"d",L"e",L"f",L"g",L"h",L"i",L"j",L"k",L"l",L"m",L"n",L"o",L"p",L"q",L"r",L"s",L"t",
 		L"u",L"v",L"w",L"x",L"y",L"z",NULL};
@@ -1900,7 +1900,7 @@ void WordClass::initialize()
 	gquery(L"wick")->second.remove(timeUnitForm);
 	Forms[honorificAbbreviationForm]->blockProperNounRecognition=true; // any words having this form will never be considered as proper nouns
 	wchar_t *topLevelForms[]=
-				 {L",",L";",L"--",L":",L".",L"*",L"!",L"?",L"...",L"&",L"/",L"#",L"=",L"|",  // added "|" 4/11/2006 for BNC
+				 {L",",L";",L"--",L":",L".",L"*",L"!",L"?",L"...",L"&",L"/",L"#",L"=",L"|",L"│", // added "|" 4/11/2006 for BNC
 			L"brackets",L"dash",L"quotes",L"numeral_ordinal",L"roman_numeral",L"sectionheader", // deleted 'not' 10/26/2006
 			L"conjunction",L"coordinator",L"interjection",L"relativizer",L"inserts",NULL}; // expandable forms
 	for (int form=0; topLevelForms[form]; form++)
@@ -1920,7 +1920,7 @@ void WordClass::initialize()
 	// "quotes" removed 6/24 because it was causing NOUN to match double nouns across ".
 	// example:_NOUN [my dear child , " interrupted tuppence]
 	wchar_t *ignoreForms[]=
-			{L"dash",L"interjection",L"/",L"^",L"|",NULL}; // bracketing with "/" sometimes used as emphasis (took out "--", 8/30/2005) added "|" 4/11/2006 for BNC
+			{L"dash",L"interjection",L"/",L"^",L"|",L"│",NULL}; // bracketing with "/" sometimes used as emphasis (took out "--", 8/30/2005) added "|" 4/11/2006 for BNC
 
 	for (tIWMM iWord=Words.WMM.begin(),iWordEnd=Words.WMM.end(); iWord!=iWordEnd; iWord++)
 		iWord->second.flags&=~tFI::ignoreFlag;

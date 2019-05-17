@@ -18,6 +18,7 @@
 #include "getMusicBrainz.h"
 #include "profile.h"
 #include <Dbghelp.h>
+#include "mysqldb.h"
 
 // needed for _STLP_DEBUG - these must be set to a legal, unreachable yet never changing value
 unordered_map <wstring,tFI> static_wordMap;
@@ -837,7 +838,7 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 		{
 		case 0:
 			wsprintf(processParameters, L"releasex64\\lp.exe -ParseRequest \"%s\" -cacheDir %s %s%s%s%s-log %d", pathInCache.c_str(), CACHEDIR,
-				(forceSourceReread) ? L"forceSourceReread " : L"",
+				(forceSourceReread) ? L"-forceSourceReread " : L"",
 				(sourceWrite) ? L"-SW " : L"",
 				(sourceWordNetRead) ? L"-SWNR " : L"",
 				(sourceWordNetWrite) ? L"-SWNW " : L"",
@@ -847,7 +848,7 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			break;
 		case 1:
 			wsprintf(processParameters, L"releasex64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s-numSourceLimit %d -log %d", CACHEDIR,
-				(forceSourceReread) ? L"forceSourceReread " : L"",
+				(forceSourceReread) ? L"-forceSourceReread " : L"",
 				(sourceWrite) ? L"-SW " : L"",
 				(sourceWordNetRead) ? L"-SWNR " : L"",
 				(sourceWordNetWrite) ? L"-SWNW " : L"",
@@ -886,6 +887,40 @@ void createLocks(void)
 	InitializeSRWLock(&totalInternetTimeWaitBandwidthControlSRWLock);
 	InitializeSRWLock(&mySQLQueryBufferSRWLock);
 	InitializeSRWLock(&orderedHyperNymsMapSRWLock);
+}
+
+int WRMemoryCheck(MYSQL mysql)
+{
+	int numRowsOnDisk = 0, numRowsInMemory = 0;
+	MYSQL_ROW sqlrow;
+	MYSQL_RES *result = NULL;
+	if (!myquery(&mysql, L"LOCK TABLES wordRelationsMemory WRITE,wordRelations READ"))
+		return -1;
+	if (!myquery(&mysql, L"SELECT COUNT(sourceId) from wordRelationsMemory", result))
+		return -1;
+	if ((sqlrow = mysql_fetch_row(result)) != NULL)
+		numRowsInMemory = atoi(sqlrow[0]);
+	else
+		return -1;
+	if (numRowsInMemory > 0)
+	{
+		myquery(&mysql, L"UNLOCK TABLES");
+		return 0;
+	}
+	if (!myquery(&mysql, L"SELECT COUNT(sourceId) from wordRelations", result))
+		return -1;
+	if ((sqlrow = mysql_fetch_row(result)) != NULL)
+		numRowsOnDisk = atoi(sqlrow[0]);
+	if (!myquery(&mysql, L"insert into wordrelationsmemory select id, sourceId, lastWhere, fromWordId, toWordId, typeId, totalCount from wordrelations"))
+		return -1;
+	if (!myquery(&mysql, L"SELECT COUNT(sourceId) from wordRelationsMemory", result))
+		return -1;
+	if ((sqlrow = mysql_fetch_row(result)) != NULL)
+		numRowsInMemory = atoi(sqlrow[0]);
+	else
+		return -1;
+	myquery(&mysql, L"UNLOCK TABLES");
+	return (numRowsInMemory == numRowsOnDisk) ? 0 : -1;
 }
 
 //SleepConditionVariableSRW	Sleeps on the specified condition variable and releases the specified lock as an atomic operation.
@@ -1027,6 +1062,8 @@ int wmain(int argc,wchar_t *argv[])
 	if (_waccess(cacheDir,0)<0)
 		lplog(LOG_FATAL_ERROR,L"Cache directory %s does not exist!",cacheDir);
 	Source source(sourceHost,st,generateFormStatistics,multiProcess>0,true);
+	if (multiProcess > 0 || numSourceLimit == 0) // controller or a single process not under control
+		WRMemoryCheck(source.mysql);
 
 	if (resetAllSource) source.resetAllSource();
 	if (resetProcessingFlags) source.resetProcessingFlags();

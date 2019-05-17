@@ -81,6 +81,14 @@ unordered_map <wstring,int> nicknameEquivalenceMap; // initialized
 bool FormsClass::changedForms; // change possible but shut off
 unordered_map <wstring,int> FormsClass::formMap; // change possible but shut off
 wchar_t *cacheDir; // initialize
+vector <wchar_t *> WordClass::multiElementWords;
+vector <wchar_t *> WordClass::quotedWords;
+vector <wchar_t *> WordClass::periodWords;
+unordered_map <wstring, tFI> WordClass::WMM;
+map <tIWMM, vector <tIWMM>, tFI::cRMap::wordMapCompare> WordClass::mainEntryMap;
+bool WordClass::changedWords;
+bool WordClass::inCreateDictionaryPhase;
+int WordClass::disinclinationRecursionCount;
 
 // maximum forms for one word to have (to guard against corruption)
 #define MAX_FORMS 30
@@ -1895,14 +1903,15 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
     bufferScanLocation=cp;
     return PARSE_DATE;
   }
+	// any character that should be its own word
   if (iswpunct(buffer[cp]) ||   (!iswprint(buffer[cp]) && iswspace(buffer[cp+1])) ||
-    buffer[cp]==L'`' || buffer[cp]==L'’' || buffer[cp]==L'‘' ||
+    buffer[cp]==L'`' || buffer[cp]==L'’' || buffer[cp] == L'‘' || buffer[cp] == L'‘' || buffer[cp] == L'ʼ' || // slightly different quotes
     buffer[cp]==L'“' || buffer[cp]==L'”' || buffer[cp]==L'—' ||
-    buffer[cp]==L'…')
+    buffer[cp]==L'…' || buffer[cp]==L'│')
   {
     // contraction processing
     // <option>n't not contraction handled below as well to check for n
-    if (buffer[cp]==L'\'' && !iswspace(buffer[cp-1]))
+    if ((buffer[cp]==L'\'' || buffer[cp] == L'’' || buffer[cp] == L'ʼ') && !iswspace(buffer[cp-1]))
     {
       switch (towlower(buffer[cp+1]))
       {
@@ -1946,8 +1955,8 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
       numChars=extend;
       for (wchar_t *b=buffer+cp; cp<bufferLen; cp++,b++)
         if ((!iswspace(*b) && !iswpunct(*b) && (iswprint(*b) || !iswspace(b[1])) &&
-          !(*b=='`' || *b=='’' || *b=='‘' || *b=='“' || *b=='”' || *b=='…' || *b=='_' || *b=='*')
-          ) || ((*b=='-' || *b=='—') && iswalpha(b[1])) || // accept al-Jazeera as one word, but not a double dash or anything else
+          !(*b==L'`' || *b==L'’' || *b==L'‘' || *b==L'“' || *b==L'”' || *b==L'…' || *b==L'_' || *b == L'*' || *b == L'ʼ')
+          ) || ((*b=='-' || *b==L'—') && iswalpha(b[1])) || // accept al-Jazeera as one word, but not a double dash or anything else
           cp-begincp<numChars)
         {
           if ((isSpace=(iswspace(*b)!=0)) && wasSpace) continue;
@@ -1959,12 +1968,12 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
         else
           break;
       if (numChars>=0 && cp-begincp==numChars) break;
-      if (buffer[cp]==L'\'' && evaluateIncludedSingleQuote(buffer,cp,begincp))
+      if ((buffer[cp] == '\'' || buffer[cp] == L'ʼ' || buffer[cp] == L'’') && evaluateIncludedSingleQuote(buffer,cp,begincp))
       {
         extend=(int)(cp-begincp+1);
         continue;
       }
-      if (buffer[cp]=='\'' && (extend=continueParse(buffer,begincp,bufferLen,quotedWords))>numChars)
+      if ((buffer[cp] == '\'' || buffer[cp] == L'ʼ' || buffer[cp] == L'’') && (extend=continueParse(buffer,begincp,bufferLen,quotedWords))>numChars)
         continue;
       else if (buffer[cp]=='.' && (extend=continueParse(buffer,begincp,bufferLen,periodWords))>numChars) continue;
       //else if (buffer[cp]=='-' && (extend=continueParse(buffer,begincp,dashWords))>numChars) continue;
@@ -1984,13 +1993,13 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
           break;
     }
     // ownership (plural) too ambiguous on this level to figure out whether it is ownership or the end of a single quoted string
-    if (buffer[cp]=='\'' && !iswalpha(buffer[cp+1]) && towlower(buffer[cp-1])=='s')
+    if ((buffer[cp] == '\'' || buffer[cp] == L'ʼ' || buffer[cp] == L'’') && !iswalpha(buffer[cp+1]) && towlower(buffer[cp-1])=='s')
     {
       nounOwner=1;
       //  cp++;
     }
     // ownership (single)
-    if (buffer[cp]=='\'' && bufferLen>cp+1 && towlower(buffer[cp+1])==L's' && (bufferLen<=cp+2 || !iswalpha(buffer[cp+2])) &&
+    if ((buffer[cp]=='\'' || buffer[cp] == L'ʼ' || buffer[cp] == L'’') && bufferLen>cp+1 && towlower(buffer[cp+1])==L's' && (bufferLen<=cp+2 || !iswalpha(buffer[cp+2])) &&
       wcsicmp(sWord.c_str(),L"he") && wcsicmp(sWord.c_str(),L"she") && wcsicmp(sWord.c_str(),L"it") &&
       wcsicmp(sWord.c_str(),L"there") && wcsicmp(sWord.c_str(),L"here")) // **hsit
     {
@@ -1998,13 +2007,13 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
       cp+=2;
     }
     // -n't not contraction - after processing done by next section
-    if (buffer[cp]==L'\'' && bufferLen>cp+1 && towlower(buffer[cp+1])==L't' && !wcsicmp(sWord.c_str(),L"n"))
+    if ((buffer[cp] == '\'' || buffer[cp] == L'ʼ' || buffer[cp] == L'’') && bufferLen>cp+1 && towlower(buffer[cp+1])==L't' && !wcsicmp(sWord.c_str(),L"n"))
     {
       sWord=L"not";
       cp+=2;
     }
     // -n't not contraction - cut off n, prepare for processing by previous section
-    else if (sWord.length()>1 && numChars==-1 && buffer[cp]==L'\'' && bufferLen>cp+1 && cp>0 && towlower(buffer[cp+1])==L't' && towlower(buffer[cp-1])==L'n')
+    else if (sWord.length()>1 && numChars==-1 && (buffer[cp] == '\'' || buffer[cp] == L'ʼ' || buffer[cp] == L'’') && bufferLen>cp+1 && cp>0 && towlower(buffer[cp+1])==L't' && towlower(buffer[cp-1])==L'n')
     {
       sWord.erase(sWord.length()-1,1); // cut off n
       //sWord[sWord.length()-1]=0;
@@ -2084,7 +2093,7 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
         sWord=tmp;
       }
     }
-    bufferScanLocation=cp;
+		bufferScanLocation = cp;
   }
   if (sWord[0]==L'\'' || sWord[0]==L'’' || sWord[0]==L'‘')
     lplog(LOG_FATAL_ERROR,L"Illegal character");

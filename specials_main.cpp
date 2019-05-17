@@ -614,10 +614,11 @@ int analyzeEnd(Source source, int sourceId, wstring path, wstring etext, wstring
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 	if (source.readSource(path, false, false, false))
 	{
+		bool multipleEnds = false;
 		for (unsigned int I = 0; I < source.sentenceStarts.size(); I++)
 		{
 			int s = source.sentenceStarts[I], sEnd = (I == source.sentenceStarts.count - 1) ? source.m.size() : source.sentenceStarts[I + 1];
-			if (source.analyzeEnd(path, s, sEnd))
+			if (source.analyzeEnd(path, s, sEnd, multipleEnds))
 			{
 				wstring tempPhrase;
 				if (reprocess = (s * 100 / source.m.size() < 99))
@@ -684,7 +685,7 @@ int processCorpusAnalysisForUnknownWords(Source source, int sourceId,wstring pat
 				{
 					if (unknownWordsCleared.find(word) == unknownWordsCleared.end())
 					{
-						_snwprintf(qt, query_buffer_len, L"select totalFrequency, unknownFrequency, capitalizedFrequency,allCapsFrequency where word=%s", word.c_str());
+						_snwprintf(qt, query_buffer_len, L"select totalFrequency, unknownFrequency, capitalizedFrequency,allCapsFrequency from wordFrequencyMemory where word=%s", word.c_str());
 						MYSQL_RES * result;
 						MYSQL_ROW sqlrow = NULL;
 						int totalFrequency = 0, capitalizedFrequency = 0, allCapsFrequency = 0;
@@ -806,6 +807,7 @@ void wmain(int argc,wchar_t *argv[])
 		mTW(sqlrow[3], title);
 		mysql_free_result(result);
 		path.insert(0, L"\\").insert(0, CACHEDIR);
+		/*
 		bool reprocess = false, nosource = false;
 		if (analyzeEnd(source, sourceId, path, etext,title,reprocess,nosource) >= 0)
 		{
@@ -818,16 +820,16 @@ void wmain(int argc,wchar_t *argv[])
 			if (!myquery(&source.mysql, qt))
 				break;
 		}
-
+		*/
 			
-		/*
+		
 		if (processCorpusAnalysisForUnknownWords(source, sourceId, path, etext, step, actuallyExecuteAgainstDB)>=0)
 		{ 
 			_snwprintf(qt, query_buffer_len, L"update sources set proc2=%d where id=%d", step + 1, sourceId);
 			if (!myquery(&source.mysql, qt))
 				break;
 		}
-		*/
+		
 		if (!myquery(&source.mysql, L"COMMIT"))
 			return;
 		source.clearSource();

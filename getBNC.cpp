@@ -1192,14 +1192,16 @@ int bncc::process(Source &source,int sourceId,wstring id)
     }
     s++;
     wchar_t *sentenceEnd=wcschr(end+1,L'\n');
-    if (!sentenceEnd) return -15;
+    if (!sentenceEnd) 
+			return -15;
     *sentenceEnd=0;
     where=(int)(sentenceEnd-buffer)+1;
     int returnSentence=processSentence(source,sourceId,end+2,lastSentenceEnd,printLocation,check);
     if (!source.m[source.m.size()-1].word->second.isSeparator())
       source.m.push_back(WordMatch(Words.sectionWord,PARSE_END_SENTENCE,source.debugTrace));
     source.sentenceStarts.push_back(lastSentenceEnd);
-    if (returnSentence==PARSE_EOF) break;
+    if (returnSentence==PARSE_EOF) 
+			break;
     lastSentenceEnd=source.m.size();
     if (returnSentence<0) return returnSentence;
   }

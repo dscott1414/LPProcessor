@@ -8,6 +8,7 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
+import java.awt.Menu;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.datatransfer.DataFlavor;
@@ -38,6 +39,8 @@ import java.io.FileOutputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.Reader;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Vector;
 
 import javax.swing.BoxLayout;
@@ -466,7 +469,7 @@ public class Show implements ActionListener, ItemListener {
 	      pickSourceMenu.setMnemonic(KeyEvent.VK_A);
 	      pickSourceMenu.getAccessibleContext().setAccessibleDescription(
 	              "Authors and their books");
-	      MS=MenuScroller.setScrollerFor(pickSourceMenu, 20, 50, 0, 0);
+	      MS=MenuScroller.setScrollerFor(pickSourceMenu, 30, 10, 0, 0);
 	      pickSourceMenuBar.add(pickSourceMenu);
 	      
 				sourceDir = new File("J:\\caches\\texts");
@@ -477,8 +480,25 @@ public class Show implements ActionListener, ItemListener {
 						return (file.isDirectory());
 					}
 				};
+				Map <String,JMenu> letterMenuMap=new HashMap<String,JMenu>();
+				for (char c='A'; c<='Z'; c++)
+				{
+					letterMenuMap.put(""+c,new JMenu(""+c));
+					pickSourceMenu.add(letterMenuMap.get(""+c));
+					MS=MenuScroller.setScrollerFor(letterMenuMap.get(""+c), 20, 10, 0, 0);
+				}
 				for (File author : sourceDir.listFiles(onlyDirectories))
-					pickSourceMenu.add(new DynamicMenu(author.getName()));
+				{
+					String authorMenuIndex=""+author.getName().toUpperCase().charAt(0);
+					if (letterMenuMap.get(authorMenuIndex)==null)
+					{
+						letterMenuMap.put(authorMenuIndex,new JMenu(authorMenuIndex));
+						pickSourceMenu.add(letterMenuMap.get(authorMenuIndex));
+						MS=MenuScroller.setScrollerFor(letterMenuMap.get(authorMenuIndex), 30, 10, 0, 0);
+						System.out.println("Created another submenu for author "+author.getName());
+					}
+					letterMenuMap.get(authorMenuIndex).add(new DynamicMenu(author.getName()));
+				}
 			}
       
       void loadSelectedSource()

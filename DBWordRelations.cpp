@@ -406,48 +406,12 @@ void compareTestRelations(vector <Source::testWordRelation> testWordRelations, v
 		lplog(LOG_FATAL_ERROR, L"Word relations No match!");
 }
 
-int Source::WRMemoryCheck()
-{
-	int numRowsOnDisk = 0, numRowsInMemory = 0;
-	MYSQL_ROW sqlrow;
-	MYSQL_RES *result = NULL;
-	if (!myquery(&mysql, L"LOCK TABLES wordRelationsMemory READ,wordRelations READ")) 
-		return -1;
-	if (!myquery(&mysql, L"SELECT COUNT(sourceId) from wordRelationsMemory", result)) 
-		return -1;
-	if ((sqlrow = mysql_fetch_row(result)) != NULL)
-		numRowsInMemory = atoi(sqlrow[0]);
-	else
-		return -1;
-	if (numRowsInMemory > 0)
-	{
-		myquery(&mysql, L"UNLOCK TABLES");
-		return 0;
-	}
-	if (!myquery(&mysql, L"SELECT COUNT(sourceId) from wordRelations", result)) 
-		return -1;
-	if ((sqlrow = mysql_fetch_row(result)) != NULL)
-		numRowsOnDisk = atoi(sqlrow[0]);
-	if (!myquery(&mysql, L"insert into wordrelationsmemory select id, sourceId, lastWhere, fromWordId, toWordId, typeId, totalCount from wordrelations", result)) 
-		return -1;
-	if (!myquery(&mysql, L"SELECT COUNT(sourceId) from wordRelationsMemory", result)) 
-		return -1;
-	if ((sqlrow = mysql_fetch_row(result)) != NULL)
-		numRowsInMemory = atoi(sqlrow[0]);
-	else
-		return -1;
-	myquery(&mysql, L"UNLOCK TABLES");
-	return (numRowsInMemory == numRowsOnDisk) ? 0 : -1;
-}
-
 // this is called immediately after reading in words from text (tokenization), before parsing and costing.
 // read word relations for only the words in the current source that have not been read before.
 int Source::refreshWordRelations()
 {
 	if (preTaggedSource) return 0; // we use BNC to construct word relations in the first place
 	LFS
-	if (WRMemoryCheck() < 0)
-		lplog(LOG_FATAL_ERROR, L"Cannot use wordrelationsnmemory table");
 	// find index ids for all words not having been refreshed previously and belonging ONLY to the current source
 	wprintf(L"Reading word indexes...                       \r");
 	vector <int> wordIds;

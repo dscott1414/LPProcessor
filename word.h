@@ -497,24 +497,24 @@ public:
 	tIWMM END_COLUMN; // used to end each column string which is extracted from <table> and table-like constructions in HTML
 	tIWMM END_COLUMN_HEADERS; // used to end the column header section in the table section which is extracted from <table> and table-like constructions in HTML
 	tIWMM MISSING_COLUMN; // used to mark missing columns in the table section which is extracted from <table> and table-like constructions in HTML
-  tIWMM begin(void)
+  static tIWMM begin(void)
   {
     return WMM.begin();
   }
-  tIWMM end(void)
+  static tIWMM end(void)
   {
     return WMM.end();
   }
-	map <tIWMM, vector <tIWMM>,tFI::cRMap::wordMapCompare> mainEntryMap;
-  tIWMM query(wstring sWord);
+	static map <tIWMM, vector <tIWMM>,tFI::cRMap::wordMapCompare> mainEntryMap;
+  static tIWMM query(wstring sWord);
   tIWMM gquery(wstring sWord);
     bool parseMetaCommands(wchar_t *buffer,int &endSymbol,sTrace &t);
   int readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocation,wstring &sWord,int &nounOwner,bool scanForSection,bool webScrapeParse,sTrace &t);
   int processFootnote(wchar_t *buffer,__int64 bufferLen,__int64 &cp);
 	int parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord);
-	int attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId);
-	int parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLetterCapitalized, int nounOwner, int sourceId);
-  tIWMM addNewOrModify(MYSQL *mysql,wstring sWord,int flags,int form,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added); // only used for adding a name
+	static int attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId);
+	static int parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLetterCapitalized, int nounOwner, int sourceId);
+  static tIWMM addNewOrModify(MYSQL *mysql,wstring sWord,int flags,int form,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added); // only used for adding a name
   // generic utilities
   bool isAllUpper(wstring &sWord);
 	int readPageWinHTTP(wchar_t *str, wstring &buffer);
@@ -569,12 +569,13 @@ public:
   int predefineVerbsFromFile(wstring form,wstring shortForm,wchar_t *path,int flags);
   int predefineWords(Inflections words[],wstring form,wstring shortForm,wstring inflectionsClass=L"",int flags=0,bool properNounSubClass=false);
   int predefineWords(wchar_t *words[],wstring form,wstring shortForm,int flags=0,bool properNounSubClass=false);
-  tIWMM predefineWord(const wchar_t *word,int flags=0);
+  static tIWMM predefineWord(const wchar_t *word,int flags=0);
 	int predefineHolidays();
   void testWordCacheFileRoutines(void);
 	static int processTime(wstring sWord, char &hour, char &minute);
 	static int processDate(wstring sWord, short &year, char &month, char &dayOfMonth);
-	int splitWord(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId);
+	static int splitWord(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId);
+	static tIWMM fullQuery(MYSQL *mysql, wstring word, int sourceId);
 
 protected:
   bool appendToUnknownWordsMode;
@@ -592,8 +593,8 @@ private:
   int readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics,int &numWordsInserted,int &numWordsModified, bool printProgress);
   int lastModifiedTime;
   int minimumLastWordWrittenClockDiff;
-  bool changedWords;
-  bool inCreateDictionaryPhase;
+  static bool changedWords;
+  static bool inCreateDictionaryPhase;
   vector <wstring> unknownWDWords;
   vector <wstring> unknownCDWords;
   void readUnknownWords(wchar_t *fileName,vector <wstring> &unknownWords);
@@ -602,12 +603,12 @@ private:
   int write(void);
 
   // initialized
-  vector <wchar_t *> multiElementWords;
-  vector <wchar_t *> quotedWords;
-  vector <wchar_t *> periodWords;
-  unordered_map <wstring, tFI> WMM;
+  static vector <wchar_t *> multiElementWords;
+  static vector <wchar_t *> quotedWords;
+  static vector <wchar_t *> periodWords;
+  static unordered_map <wstring, tFI> WMM;
   // filled during program execution
-	int disinclinationRecursionCount;
+	static int disinclinationRecursionCount;
 
   bool evaluateIncludedSingleQuote(wchar_t *buffer,__int64 cp,__int64 begincp);
   int addGenderedNouns(wchar_t *genPath,int inflectionFlags,int wordForm);
@@ -617,17 +618,17 @@ private:
   bool addPlaces(wstring pPath,vector <tmWS > &objects);
 	void addTimeFlags();
   void createTimeCategories(bool normalize);
-  int getForms(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId);
+  static int getForms(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId);
   tIWMM addCopy(wstring sWord,tIWMM iWord,bool &added);
-  tIWMM query(wstring sWord,int form,int inflection,int &offset);
+  static tIWMM query(wstring sWord,int form,int inflection,int &offset);
   bool addFlag(wstring sWord,int flag);
-  tIWMM hasFormInflection(tIWMM iWord,wstring sForm,int inflection);
-  bool handleExtendedParseWords(wchar_t *word);
+  static tIWMM hasFormInflection(tIWMM iWord,wstring sForm,int inflection);
+  static bool handleExtendedParseWords(wchar_t *word);
   int continueParse(wchar_t *buffer,__int64 begincp,__int64 bufferLen,vector<wchar_t *> &multiWords);
-  int addWordToForm(wstring sWord,tIWMM &iWord,int flags,wstring sForm,wstring shortForm,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added);
+  static int addWordToForm(wstring sWord,tIWMM &iWord,int flags,wstring sForm,wstring shortForm,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added);
   int predefineWords(InflectionsRoot words[],wstring form,wstring shortForm,wstring inflectionsClass=L"",int flags=0,bool properNounSubClass=false);
   bool closeConnection(void);
-  int checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,wstring sForm,int inflection,int derivationRules,wstring mainEntry,int sourceId);
+  static int checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,wstring sForm,int inflection,int derivationRules,wstring mainEntry,int sourceId);
 
   #ifdef CHECK_WORD_CACHE
     // test routines
@@ -636,13 +637,12 @@ private:
 
   int addProperNamesFile(wstring path);
   void addNickNames(wchar_t *filePath);
-	int markWordUndefined(tIWMM &iWord,wstring sWord,int flags,bool firstWordCapitalized,int nounOwner,int sourceId);
+	static int markWordUndefined(tIWMM &iWord,wstring sWord,int flags,bool firstWordCapitalized,int nounOwner,int sourceId);
   void generateFormStatistics(void);
   int processDate(wstring &sWord, wchar_t *buffer,__int64 &cp,__int64 &bufferScanLocation);
 	int processTime(wstring &sWord, wchar_t *buffer, __int64 &cp, __int64 &bufferScanLocation);
 	int processWebAddress(wstring &sWord, wchar_t *buffer, __int64 &cp, __int64 bufferLen);
-	tIWMM fullQuery(MYSQL *mysql, wstring word, int sourceId);
-	bool findWordInDB(MYSQL *mysql, wstring sWord, tIWMM &iWord);
+	static bool findWordInDB(MYSQL *mysql, wstring sWord, tIWMM &iWord);
 };
 
 #include "pattern.h"

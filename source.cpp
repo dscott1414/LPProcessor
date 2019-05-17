@@ -10,6 +10,7 @@
 #include "sys/stat.h"
 #include <sys/types.h>
 #include "profile.h"
+#include "paice.h"
 
 tInflectionMap shortNounInflectionMap[]=
 {
@@ -1076,6 +1077,12 @@ int Source::scanUntil(const wchar_t *start,int repeat,bool printError)
 	return -1;
 }
 
+bool checkIsolated(wchar_t *word,vector <WordMatch> &m,int I)
+{
+	return m[I].word == Words.sectionWord && m[I + 1].word->first == word && (m[I + 1].flags&WordMatch::flagAllCaps) && 
+		(m[I + 2].word == Words.sectionWord || (m[I + 2].word->first == L":" && m[I + 3].word == Words.sectionWord) || (m[I + 2].word->first == L"." && m[I + 3].word == Words.sectionWord));
+}
+
 // gutenberg books end with:
 // End of Project Gutenberg
 // End of the Project Gutenberg
@@ -1085,7 +1092,7 @@ int Source::scanUntil(const wchar_t *start,int repeat,bool printError)
 // or THE END all in caps, on one line, alone
 // or FOOTNOTES all in caps, on one line, alone
 // or INDEX all in caps, on one line, alone
-bool Source::analyzeEnd(wstring &path,int begin,int end)
+bool Source::analyzeEnd(wstring &path,int begin,int end,bool &multipleEnds)
 { LFS
 	int w=0;
 	bool endFound;
@@ -1094,11 +1101,46 @@ bool Source::analyzeEnd(wstring &path,int begin,int end)
 	endFound=w!=end;
 	if (w==end) 
 	  w=begin;
-	if (endFound && (m[w].flags&WordMatch::flagAllCaps) && w > 2 &&
-		m[w - 2].word == Words.sectionWord &&
-		m[w - 1].word->first == L"the" && (m[w - 1].flags&WordMatch::flagAllCaps) &&
-		(w + 1 >= m.size() || m[w + 1].word == Words.sectionWord))
-		return true;
+	if (!multipleEnds)
+	{
+		// THE END
+		if (endFound && (m[w].flags&WordMatch::flagAllCaps) && w > 3 && 
+			m[w - 2].word == Words.sectionWord &&
+			m[w - 1].word->first == L"the" && (m[w - 1].flags&WordMatch::flagAllCaps) &&
+			(w+1>=m.size() || m[w + 1].word == Words.sectionWord || (w+2<m.size() && (m[w + 1].word->first == L"." && m[w + 2].word == Words.sectionWord))))
+		{
+			if (bookBuffer)
+			{
+				// if there is another THE END later, then forget it.
+				multipleEnds = (wcsstr(bookBuffer + bufferScanLocation, L"THE END") != NULL);
+				// eliminate false ENDings by requiring a section beyond it
+				bool content = (wcsstr(bookBuffer + bufferScanLocation, L"CONTENTS") != NULL);
+				bool index = (wcsstr(bookBuffer + bufferScanLocation, L"INDEX") != NULL);
+				bool footnotes = (wcsstr(bookBuffer + bufferScanLocation, L"FOOTNOTES") != NULL);
+				return !multipleEnds && (content || index || footnotes);
+			}
+			else
+			{
+				for (int I = end; I < m.size() - 3; I++)
+					if (multipleEnds = m[I].word == Words.sectionWord && m[I + 1].word->first == L"the" && (m[I + 1].flags&WordMatch::flagAllCaps) && m[I + 2].word->first == L"end" && (m[I + 2].flags&WordMatch::flagAllCaps) &&
+						((m[I + 3].word == Words.sectionWord) || (m[I + 3].word->first == L"." && m[I + 4].word == Words.sectionWord)))
+						break;
+				bool content = false;
+				for (int I = end; I < m.size() - 2; I++)
+					if (content = checkIsolated(L"contents", m, I))
+						break;
+				bool index = false;
+				for (int I = end; I < m.size() - 2; I++)
+					if (index = checkIsolated(L"index", m, I))
+						break;
+				bool footnotes = false;
+				for (int I = end; I < m.size() - 2; I++)
+					if (checkIsolated(L"footnotes", m, I))
+						break;
+				return !multipleEnds && (content || index || footnotes);
+			}
+		}
+	}
 	for (; w<end; w++) if (m[w].word->first==L"project") break;
 	if (w==end) return false;
 	for (; w<end; w++) 
@@ -1202,7 +1244,7 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 { LFS
 	int lastProgressPercent=0,result=0,runOnSentences=0;
 	bool alreadyAtEnd=false,previousIsProperNoun=false;
-	bool webScrapeParse=sourceType==WEB_SEARCH_SOURCE_TYPE;
+	bool webScrapeParse=sourceType==WEB_SEARCH_SOURCE_TYPE,multipleEnds=false;
 	size_t lastSentenceEnd=m.size(),numParagraphsInSection=0;
 	unordered_map <wstring, wstring> parseVariables;
 	if (bufferScanLocation==0 && bookBuffer[0]==65279)
@@ -1242,7 +1284,7 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 				result=0;
 				continue;
 			}
-			if (analyzeEnd(path,lastSentenceEnd, m.size()))
+			if (analyzeEnd(path,lastSentenceEnd, m.size(), multipleEnds))
 			{
 				m.erase(m.begin()+lastSentenceEnd,m.end());
 				alreadyAtEnd=true;
@@ -1261,6 +1303,8 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 			continue;
 		}
 		size_t dash=sWord.find('-');
+		if (dash==wstring::npos)
+			dash= sWord.find(L'—');
 		bool firstLetterCapitalized=iswupper(sWord[0])!=0;
 		tIWMM w=(m.size()) ? m[m.size()-1].word : wNULL;
 		// this logic is copied in doQuotesOwnershipAndContractions
@@ -1277,38 +1321,24 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 		// Handle cases like 10-15 or 10-60,000 which are returned as PARSE_NUM
 		if (dash!=wstring::npos && result==0 && // if (not date or number)
 			sWord[1]!=0 && // not a single dash
-			sWord[dash+1]!=L'-' && // not '--'
-			!(sWord[0]==L'a' && sWord[1]==L'-') // a-working
+			sWord[dash+1]!=L'-' && sWord[dash + 1] != L'—' && // not '--'
+			!(sWord[0]==L'a' && (sWord[1] == L'-' || sWord[1] == L'—')) // a-working
 			 // state-of-the-art
 			)
 		{
-			unsigned int p=0,unknownWords=0,capitalizedWords=0,firstDash=dash;
-			while (true)
+			unsigned int unknownWords=0,capitalizedWords=0,firstDash=dash;
+			vector <wstring> dashedWords = Stemmer::splitString(sWord, sWord[dash]);
+			for (wstring subWord : dashedWords)
 			{
-				if (sWord[dash]==L'-')
-				{
-					sWord[dash]=0;
-					if (Words.query(sWord.c_str()+p)==Words.end())
-						unknownWords++;
-					sWord[dash]=L'-';
-					if (iswupper(sWord[p]) && !iswupper(sWord[p+1]))  // al-Jazeera, not BALL-PLAYING
-					{
-						capitalizedWords++;
-						break;
-					}
-					p=dash+1;
-					if ((dash=sWord.find(L'-',p))==wstring::npos)
-					{
-						if (Words.query(sWord.c_str()+p)==Words.end())
-							unknownWords++;
-						if (iswupper(sWord[p]) && !iswupper(sWord[p+1]))  // al-Jazeera, not BALL-PLAYING
-							capitalizedWords++;
-						break;
-					}
-				}
+				tIWMM iWord=WordClass::fullQuery(&mysql,subWord,sourceId);
+				if (iWord==WordClass::end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0)
+					unknownWords++;
+				if (subWord.length() > 1 && iswupper(subWord[0]) && !iswupper(subWord[1]))  // al-Jazeera, not BALL-PLAYING
+					capitalizedWords++;
 			}
 			// if this does not qualify as a dashed word, back up to just AFTER the dash
-			if ((capitalizedWords==0 || (capitalizedWords==1 && firstWordInSentence)) && unknownWords==0 && Words.query(sWord)==Words.end())
+			tIWMM iWord = WordClass::fullQuery(&mysql, sWord, sourceId);
+			if ((capitalizedWords==0 || (capitalizedWords==1 && firstWordInSentence)) && unknownWords==0 && (iWord==Words.end() || iWord->second.query(UNDEFINED_FORM_NUM)>=0))
 			{
 				bufferScanLocation-=sWord.length()-firstDash;
 				sWord.erase(firstDash,sWord.length()-firstDash);
@@ -1429,7 +1459,7 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 		}
 		if (endSentence)
 		{
-			if (analyzeEnd(path,lastSentenceEnd, m.size()))
+			if (analyzeEnd(path,lastSentenceEnd, m.size(), multipleEnds))
 			{
 				m.erase(m.begin()+lastSentenceEnd,m.end());
 				alreadyAtEnd=true;
@@ -1448,17 +1478,14 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 			continue;
 		}
 	}
-	if (!alreadyAtEnd && analyzeEnd(path,lastSentenceEnd, m.size()))
+	if (!alreadyAtEnd && analyzeEnd(path,lastSentenceEnd, m.size(), multipleEnds))
 	{
 		m.erase(m.begin() + lastSentenceEnd, m.end());
 	}
 	else
 		sentenceStarts.push_back(lastSentenceEnd);
-	if ((int)(bufferScanLocation*100/bufferLen)>lastProgressPercent)
-	{
-		lastProgressPercent=(int)(bufferScanLocation*100/bufferLen);
-		wprintf(L"PROGRESS: %03d%% (%06zu words) %I64d out of %I64d bytes read with %d seconds elapsed (%d bytes) \r",lastProgressPercent,m.size(),bufferScanLocation,bufferLen,clocksec(),memoryAllocated);
-	}
+	lastProgressPercent=(int)(bufferScanLocation*100/bufferLen);
+	wprintf(L"PROGRESS: %03d%% (%06zu words) %I64d out of %I64d bytes read with %d seconds elapsed (%d bytes) \r",lastProgressPercent,m.size(),bufferScanLocation,bufferLen,clocksec(),memoryAllocated);
 	if (runOnSentences>0)
 		lplog(LOG_ERROR,L"ERROR:%s:%d sentence early terminations (%d%%)...",path.c_str(),runOnSentences,100*runOnSentences/sentenceStarts.size());
 	return 0;

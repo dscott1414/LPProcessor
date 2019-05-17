@@ -972,7 +972,7 @@ communications signal
 */
 vector<wstring> ignoreBefore = { L"pronunciation spelling" };
 vector<wstring> classes = { L"adjective",L"adverb",L"verb",L"noun",L"interjection",L"abbreviation",L"symbol",L"preposition",L"conjunction",L"trademark",L"pronoun",L"honorific" };
-vector<wstring> ignoreAfter = { L"prefix",L"suffix",L"phrase",L"saying",L"quotation",L"pronunciation spelling",L"script annotation",L"combining form",L"contraction" }; // must be processed after classes
+vector<wstring> ignoreAfter = { L"prefix",L"suffix",L"phrase",L"saying",L"quotation",L"pronunciation spelling",L"script annotation",L"combining form",L"contraction",L"indefinite article" }; // must be processed after classes
 
 void identifyFormClass(set<int> &posSet, wstring pos, bool &plural)
 {

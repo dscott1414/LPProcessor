@@ -3079,7 +3079,7 @@ int wherePrepObject,
 	wstring objectString(cOM om,wstring &logres,bool shortNameFormat,bool objectOwnerRecursionFlag=false);
 	wstring wordString(vector <tIWMM> &words,wstring &logres);
 	const wchar_t *getOriginalWord(int I, wstring &out, bool concat, bool mostCommon = false);
-	bool analyzeEnd(wstring &path, int begin, int end);
+	bool analyzeEnd(wstring &path, int begin, int end, bool &multipleEnds);
 
 private:
 	wstring primaryQuoteType,secondaryQuoteType;
