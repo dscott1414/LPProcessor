@@ -233,7 +233,6 @@ extern bool TSROverride,flipTOROverride,flipTNROverride,flipTMSOverride,flipTUMS
 extern bool traceParseInfo;
 extern bool preTaggedSource;
 extern short logCache;
-extern int bandwidthControl;
 
 class tmWS 
 {
@@ -272,14 +271,12 @@ void *WideCharToMultiByte(wchar_t *q,int &queryLength,void *&buffer,unsigned int
 void distributeToSubDirectories(wchar_t *path,int pathlen,bool createDirs);
 void convertIllegalChars(wchar_t *path); // from getWikipedia
 void deleteIllegalChars(char *path); // from getWikipedia
-extern int memoryAllocated;
+extern __int64 memoryAllocated;
 extern unordered_map <wstring,set < wstring > > nounVerbMap;
 wstring vectorString(vector <wstring> &vstr,wstring &tmpstr,wstring separator);
 wstring vectorString(vector < vector <wstring> > &vstr,wstring &tmpstr,wstring separator);
 wstring setString(set <wstring> &sstr,wstring &tmpstr,wchar_t *separator);
 string setString(set <string> &sstr,string &tmpstr,char *separator);
-int getWebPath(int where,wstring webAddress,wstring &buffer,wstring epath,wstring cacheTypePath,wstring &filePathOut,wstring &headers,int searchIndex,bool clean,bool readInfoBuffer, bool forceWebReread=false);
-int testWebPath(int where,wstring webAddress,wstring epath,wstring cacheTypePath,wstring &filePathOut,wstring &headers);
 const wchar_t *ontologyTypeString(int ontologyType,int resourceType, wstring &Btmpstr);
 #define SEPARATOR L"SEPARATOR|||"
 int initializeDatabaseHandle(MYSQL &mysql,wchar_t *where,bool &alreadyConnected);
@@ -288,6 +285,6 @@ wstring lastErrorMsg();
 // google API used for custom search and freebase
 extern wstring webSearchKey;
 char * LastErrorStr(void);
-extern SRWLOCK rdfTypeMapSRWLock,mySQLTotalTimeSRWLock,totalInternetTimeWaitBandwidthControlSRWLock,mySQLQueryBufferSRWLock,orderedHyperNymsMapSRWLock;
+extern SRWLOCK rdfTypeMapSRWLock,mySQLTotalTimeSRWLock,mySQLQueryBufferSRWLock,orderedHyperNymsMapSRWLock;
 void positionConsole(bool controller);
 	

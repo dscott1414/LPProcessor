@@ -529,22 +529,29 @@ int Source::createDatabase(wchar_t *server)
     lplog(LOG_FATAL_ERROR,L"Failed to create wordForms - %S", mysql_error(&mysql));
     return -1;
   }
+	if (!myquery(&mysql, L"ALTER TABLE wordForms DELAY_KEY_WRITE = 1")) return -1;
 	// words unknown processing
 	if (!myquery(&mysql, L"CREATE TABLE wordFrequency ("
 		L"word CHAR(32) CHARACTER SET utf8mb4 UNIQUE NOT NULL DEFAULT '',"
 		L"totalFrequency       INT NOT NULL default '0', "
 		L"unknownFrequency     INT NOT NULL default '0', "
 		L"capitalizedFrequency INT NOT NULL default '0', "
-		L"allCapsFrequency     INT NOT NULL default '0', " 
+		L"allCapsFrequency     INT NOT NULL default '0', "
 		L"lastSourceId INT UNSIGNED DEFAULT NULL, INDEX s_ind (lastSourceId), "
 		L"nonEuropeanWord BIT "
-	  L") DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ENGINE = INNODB"))  // must use INNODB because of per row locking required by multiple processes 
+		L") DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ENGINE = INNODB"))  // must use INNODB because of per row locking required by multiple processes 
 	{
 		lplog(LOG_FATAL_ERROR, L"Failed to create wordsFrequency table - %S", mysql_error(&mysql));
 		return -1;
 	}
-	if (!myquery(&mysql,L"ALTER TABLE wordForms DELAY_KEY_WRITE = 1")) return -1;
-  if (createObjectTables()<0)
+	if (!myquery(&mysql, L"CREATE TABLE noRDFTypes ("
+		L"word CHAR(32) CHARACTER SET utf8mb4 UNIQUE NOT NULL DEFAULT ''"
+		L") DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"))  
+	{
+		lplog(LOG_FATAL_ERROR, L"Failed to create noRDFTypes table - %S", mysql_error(&mysql));
+		return -1;
+	}
+	if (createObjectTables()<0)
   {
     lplog(LOG_FATAL_ERROR,L"Failed to create object tables - %S", mysql_error(&mysql));
     return -1;

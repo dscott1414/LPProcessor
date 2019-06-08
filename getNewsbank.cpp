@@ -34,69 +34,6 @@ int lostDoc=0,retry=0,noTitle=0;  // not part of source parallel processing
 __int64 originalBytes=0; // not part of source parallel processing
 bool readTimeoutError=false; // not part of source parallel processing
 
-typedef struct 
-{
-	HINTERNET RequestHandle;
-	char *buffer;
-	int bufsize;
-	DWORD *dwRead;
-} tIRFW;
-
-DWORD WINAPI InternetReadFile_Child(void *vThreadParm)
-{
-	tIRFW *p=(tIRFW *) vThreadParm;
-	if (!InternetReadFile( p->RequestHandle, p->buffer, p->bufsize, p->dwRead))
-	{
-		wstring lem;
-		lplog(LOG_ERROR,L"InternetReadFile reports %s.",getLastErrorMessage(lem));
-		return 1;
-	}
-	return 0;
-}
- 
-bool InternetReadFile_Wait(	HINTERNET RequestHandle,char *buffer,int bufsize,DWORD *dwRead)
-{
-	tIRFW p;
-	readTimeoutError=false;
-	p.buffer=buffer;
-	p.bufsize=bufsize;
-	p.RequestHandle=RequestHandle;
-	p.dwRead=dwRead;
-	*dwRead=0;
-	// Create a worker thread
-	DWORD    dwThreadID;
-	HANDLE hThread = CreateThread(
-										 NULL,            // Pointer to thread security attributes
-										 0,               // Initial thread stack size, in bytes
-										 InternetReadFile_Child,  // Pointer to thread function
-										 &p,     // The argument for the new thread
-										 0,               // Creation flags
-										 &dwThreadID      // Pointer to returned thread identifier
-								 );
-
-	// Wait for the call to InternetConnect in worker function to complete
-	DWORD dwTimeout = 5*60*1000; // in milliseconds
-	if ( WaitForSingleObject ( hThread, dwTimeout ) == WAIT_TIMEOUT )
-	{
-		 InternetCloseHandle ( RequestHandle );
-		 CloseHandle (hThread);
-		 wprintf(L"\nRetry on document (InternetReadFile failure).\n");
-		 readTimeoutError=true;
-		 // Wait until the worker thread exits
-		 // WaitForSingleObject ( hThread, INFINITE );
-		 return false;
-	}
-	// The state of the specified object (thread) is signaled
-	DWORD   dwExitCode = 0;
-	if ( !GetExitCodeThread( hThread, &dwExitCode ) ) 
-	{
-		CloseHandle (hThread);
-		return false;
-	}
-	CloseHandle (hThread);
-	return dwExitCode==0;
-}
-
 int substNextDocNum(wstring URL,wstring &nextURL)
 {
 	wstring pDocNum=L"p_docnum=";
@@ -184,7 +121,7 @@ int getArticle(	HINTERNET hFile,wstring refer,wstring URL,bool &last,wstring &ne
 	char buffer[MAX_BUF+4];
 	wstring searchResponse;
 	DWORD dwRead,fileBytesRead=0;
-	while ( InternetReadFile_Wait( RequestHandle, buffer, MAX_BUF, &dwRead ) )
+	while ( Internet::InternetReadFile_Wait( RequestHandle, buffer, MAX_BUF, &dwRead ) )
 	{
 		if ( dwRead == 0 )
 			break;
@@ -360,7 +297,7 @@ int getArticle(	HINTERNET hFile,wstring refer,wstring URL,bool &last,wstring &ne
 int acquireNewsBankByDay(struct tm *day,FILE *nb,time_t startTime,__int64 &totalBytes,int &numWords)
 {
 	HINTERNET hFile;
-	HINTERNET hINet;
+	HINTERNET hINet=0;
 	hINet = InternetOpen(L"InetURL/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0 );
 	wstring lem;
 	if ( !hINet )
@@ -411,7 +348,7 @@ int acquireNewsBankByDay(struct tm *day,FILE *nb,time_t startTime,__int64 &total
 	char buffer[MAX_BUF];
 	DWORD dwRead,fileBytesRead=0;
 	wstring welcomeBuffer;
-	while ( InternetReadFile_Wait( RequestHandle, buffer, MAX_BUF, &dwRead ) )
+	while (Internet::InternetReadFile_Wait( RequestHandle, buffer, MAX_BUF, &dwRead ) )
 	{
 		if ( dwRead == 0 )
 			break;
@@ -513,7 +450,7 @@ int acquireNewsBankByDay(struct tm *day,FILE *nb,time_t startTime,__int64 &total
 		return -1;
 	}
 	wstring searchURLResponse;
-	while ( InternetReadFile_Wait( RequestHandle, buffer, MAX_BUF, &dwRead ) )
+	while (Internet::InternetReadFile_Wait( RequestHandle, buffer, MAX_BUF, &dwRead ) )
 	{
 		if ( dwRead == 0 )
 			break;

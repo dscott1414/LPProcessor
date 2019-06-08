@@ -26,6 +26,9 @@ lloyd-yajl-66cb08c
 release
 debug
 releasex64
+ReleaseOptimizationDisabled
+ReleaseOptimizationDisabledx64
+ReleaseForDebugging
 x64
 VerbNet
 verbnet-3.1

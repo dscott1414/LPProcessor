@@ -18,6 +18,8 @@
 #include "getMusicBrainz.h"
 #include "profile.h"
 #include "mysqldb.h"
+#include "mysqld_error.h"
+#include "internet.h"
 
 // needed for _STLP_DEBUG - these must be set to a legal, unreachable yet never changing value
 unordered_map <wstring,tFI> static_wordMap;
@@ -104,7 +106,7 @@ int createLPProcess(int numProcess, HANDLE &processId, wchar_t *commandPath, wch
 	return 0;
 }
 
-int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st, int maxProcesses, int numSourcesPerProcess, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite)
+int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st, int maxProcesses, int numSourcesPerProcess, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite,bool parseOnly)
 {
 	LFS
 	chdir("source");
@@ -155,7 +157,7 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			}
 			if (numProcesses)
 			{
-				printf("\nNo more processes to be created. %d processes left to wait for.", numProcesses);
+				printf("\nNo more processes to be createDd. %d processes left to wait for.", numProcesses);
 				while (true)
 				{
 					nextProcessIndex = WaitForMultipleObjectsEx(numProcesses, handles, true, 1000 * 60 * 60, false);
@@ -175,21 +177,23 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 		switch (processKind)
 		{
 		case 0:
-			wsprintf(processParameters, L"releasex64\\lp.exe -ParseRequest \"%s\" -cacheDir %s %s%s%s%s-log %d", pathInCache.c_str(), CACHEDIR,
+			wsprintf(processParameters, L"releasex64\\lp.exe -ParseRequest \"%s\" -cacheDir %s %s%s%s%s%s-log %d", pathInCache.c_str(), CACHEDIR,
 				(forceSourceReread) ? L"forceSourceReread " : L"",
 				(sourceWrite) ? L"-SW " : L"",
 				(sourceWordNetRead) ? L"-SWNR " : L"",
 				(sourceWordNetWrite) ? L"-SWNW " : L"",
+				(parseOnly) ? L"-parseOnly " : L"",
 				numProcesses);
 			if (errorCode = createLPProcess(nextProcessIndex, processId, L"releasex64\\lp.exe", processParameters) < 0)
 				break;
 			break;
 		case 1:
-			wsprintf(processParameters, L"releasex64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s-numSourceLimit %d -log %d", CACHEDIR,
+			wsprintf(processParameters, L"releasex64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s%s-numSourceLimit %d -log %d", CACHEDIR,
 				(forceSourceReread) ? L"forceSourceReread " : L"",
 				(sourceWrite) ? L"-SW " : L"",
 				(sourceWordNetRead) ? L"-SWNR " : L"",
 				(sourceWordNetWrite) ? L"-SWNW " : L"",
+				(parseOnly) ? L"-parseOnly " : L"",
 				numSourcesPerProcess,
 				numProcesses);
 			if (errorCode = createLPProcess(nextProcessIndex, processId, L"releasex64\\lp.exe", processParameters) < 0)
@@ -259,22 +263,22 @@ bool MWRequestAllowed()
 	fwprintf(MWRequestToday, L"%d %d", day, numRequests);
 	fclose(MWRequestToday);
 	websterQueriedToday= numRequests;
-	return numRequests < 1000;
+	return numRequests < 2000;
 }
 
 bool getMerriamWebsterDictionaryAPIForms(wstring sWord, set <int> &posSet, bool &plural, bool &networkAccessed);
-bool existsInDictionaryDotCom(wstring word, bool &networkAccessed);
+bool existsInDictionaryDotCom(MYSQL *mysql,wstring word, bool &networkAccessed);
 bool detectNonEuropeanWord(wstring word);
 int cacheWebPath(wstring webAddress, wstring &buffer, wstring epath, wstring cacheTypePath, bool forceWebReread, bool &networkAccessed);
 string lookForPOS(yajl_val node);
 int discoverInflections(set <int> posSet, bool plural, wstring word);
 
-int getWordPOS(wstring word, set <int> &posSet, bool &plural, bool print, bool &isNonEuropean, int &dictionaryComQueried, int &dictionaryComCacheQueried, bool &websterAPIRequestsExhausted)
+int getWordPOS(MYSQL *mysql,wstring word, set <int> &posSet, bool &plural, bool print, bool &isNonEuropean, int &dictionaryComQueried, int &dictionaryComCacheQueried, bool &websterAPIRequestsExhausted)
 {
 	LFS
 	if (isNonEuropean = detectNonEuropeanWord(word))
 		return 0;
-	bool networkAccessed, existsDM = existsInDictionaryDotCom(word, networkAccessed);
+	bool networkAccessed, existsDM = existsInDictionaryDotCom(mysql, word, networkAccessed);
 	if (networkAccessed)
 		dictionaryComQueried++;
 	else
@@ -290,21 +294,14 @@ int getWordPOS(wstring word, set <int> &posSet, bool &plural, bool print, bool &
 	return 0;
 }
 
-int getWordPOSInContext(MYSQL *mysql,Source &source, int sourceId, WordMatch &word, bool capitalized, int numUnknownWord, int numUnknownOriginalWord, int numUnknownAllCaps, set <int> &posSet,
-	bool print, bool &plural, bool &isNonEuropean, bool &queryOnLowerCase, int &dictionaryComQueried, int &dictionaryComCacheQueried, bool &websterAPIRequestsExhausted)
+int testDisInclineAndSplit(MYSQL *mysql, Source &source, int sourceId, WordMatch &word, bool capitalized, int totalFrequency, int capitalizedFrequency, int allCapsFrequency, set <int> &posSet,
+	bool &plural, bool &isNonEuropean, bool &queryOnLowerCase, int &dictionaryComQueried, int &dictionaryComCacheQueried, bool &websterAPIRequestsExhausted)
 {
-	LFS
-	// numUnknownAllCaps is zero if originalWord is already all caps.
-	if (queryOnLowerCase = (numUnknownWord > 5 && ((numUnknownOriginalWord + numUnknownAllCaps)*100.0 / numUnknownWord) > 95.0 && capitalized))
+	if (queryOnLowerCase = (totalFrequency > 5 && ((capitalizedFrequency + allCapsFrequency)*100.0 / totalFrequency) > 95.0))
 		posSet.insert(FormsClass::gFindForm(L"noun"));
 	else
-		getWordPOS(word.word->first, posSet, plural, false, isNonEuropean, dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted);
-	if (posSet.size() > 0 && print)
-	{
-		wstring posStr;
-		for (int form : posSet)
-			posStr += L" " + Forms[form]->name;
-	}
+		getWordPOS(mysql,word.word->first, posSet, plural, false, isNonEuropean, dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted);
+	bool caps = word.queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (word.flags&WordMatch::flagFirstLetterCapitalized) || (word.flags&WordMatch::flagAllCaps);
 	if (posSet.empty())
 	{
 		tIWMM iWord = Words.end();
@@ -326,41 +323,61 @@ int getWordPOSInContext(MYSQL *mysql,Source &source, int sourceId, WordMatch &wo
 				posSet.insert(iWord->second.forms()[f]);
 			}
 		}
-
 	}
 	return posSet.size();
 }
 
-int createWordFormsInDBIfNecessary(Source source, int sourceId, int wordId, wstring word, bool actuallyExecuteAgainstDB)
+int createWordFormsInDBIfNecessary(MYSQL mysql, int sourceId, int &wordId, wstring word, bool actuallyExecuteAgainstDB)
 {
 	LFS
 	wchar_t qt[query_buffer_len_overflow];
-	if (wordId < 0)
+	int startTime = clock(), numWordsInserted = 0;
+	MYSQL_RES * result;
+	MYSQL_ROW sqlrow = NULL;
+	if (actuallyExecuteAgainstDB)
 	{
-		int startTime = clock(), numWordsInserted = 0;
-		wcscpy(qt, L"INSERT IGNORE INTO words VALUES "); // IGNORE is necessary because C++ treats unicode strings as different, but MySQL treats them as the same
-		wstring word;
-		wchar_t sourceStr[10];
-		int len = 0, inflectionFlags=0, flags=0, timeFlags=0, derivationRules=0;
-		_snwprintf(qt + len, query_buffer_len - len, L"(NULL,\"%s\",%d,%d,%d,%d,%d,%s,NULL),",
-			word.c_str(), inflectionFlags, flags, timeFlags, -1, derivationRules,_itow(sourceId, sourceStr, 10));
-		MYSQL_RES * result;
-		if (actuallyExecuteAgainstDB)
+		if (!myquery(&mysql, L"LOCK TABLES words READ"))
+			return -1;
+		_snwprintf(qt, query_buffer_len, L"select id from words where word='%s'", word.c_str());
+		if (!myquery(&mysql, qt, result) && (sqlrow = mysql_fetch_row(result)))
 		{
-			if (!myquery(&source.mysql, L"LOCK TABLES words WRITE")) 
-				return -1;
-			if (!myquery(&source.mysql, qt, result))
-				return -1;
+			wordId = atoi(sqlrow[0]);
 			mysql_free_result(result);
+			if (!myquery(&mysql, L"UNLOCK TABLES"))
+				return -1;
 		}
 		else
-			lplog(LOG_INFO, L"DB statement [%s create word]: %s", word.c_str(), qt);
+			return -1;
 	}
+	else
+		wordId = -1;
+	wcscpy(qt, L"INSERT IGNORE INTO words VALUES "); // IGNORE is necessary because C++ treats unicode strings as different, but MySQL treats them as the same
+	wchar_t sourceStr[10];
+	int len = 0, inflectionFlags = 0, flags = 0, timeFlags = 0, derivationRules = 0;
+	_snwprintf(qt + len, query_buffer_len - len, L"(NULL,\"%s\",%d,%d,%d,%d,%d,%s,NULL),",
+		word.c_str(), inflectionFlags, flags, timeFlags, -1, derivationRules, _itow(sourceId, sourceStr, 10));
+	if (actuallyExecuteAgainstDB)
+	{
+		if (!myquery(&mysql, L"LOCK TABLES words WRITE"))
+			return -1;
+		if (!myquery(&mysql, qt, result))
+			return -1;
+		mysql_free_result(result);
+		if (!myquery(&mysql, L"SELECT LAST_INSERT_ID()", result))
+			return -1;
+		if (sqlrow = mysql_fetch_row(result))
+			wordId = atoi(sqlrow[0]);
+		mysql_free_result(result);
+		if (!myquery(&mysql, L"UNLOCK TABLES"))
+			return -1;
+	}
+	else
+		lplog(LOG_INFO, L"DB statement [%s create word]: %s", word.c_str(), qt);
 	return 0;
 }
 
 
-int overwriteWordFormsInDB(Source source, int wordId, wstring word, set <int> posSet, bool actuallyExecuteAgainstDB)
+int overwriteWordFormsInDB(MYSQL mysql, int wordId, wstring word, set <int> posSet, bool actuallyExecuteAgainstDB)
 {
 	LFS
 	wchar_t qt[query_buffer_len_overflow];
@@ -369,9 +386,9 @@ int overwriteWordFormsInDB(Source source, int wordId, wstring word, set <int> po
 	MYSQL_RES * result;
 	if (actuallyExecuteAgainstDB)
 	{
-		if (!myquery(&source.mysql, L"LOCK TABLES wordforms WRITE"))
+		if (!myquery(&mysql, L"LOCK TABLES wordforms WRITE"))
 			return -1;
-		if (!myquery(&source.mysql, qt, result))
+		if (!myquery(&mysql, qt, result))
 			return -1;
 		mysql_free_result(result);
 	}
@@ -385,10 +402,11 @@ int overwriteWordFormsInDB(Source source, int wordId, wstring word, set <int> po
 			len += wsprintf(qt + len, L"(%d,%d,1)", wordId, form+1); // formId -1 yields form offset in memory - 
 	if (actuallyExecuteAgainstDB)
 	{
-		if (!myquery(&source.mysql, qt, result))
+		if (!myquery(&mysql, qt, result))
 			return -1;
 		mysql_free_result(result);
-		source.unlockTables();
+		if (!myquery(&mysql, L"UNLOCK TABLES"))
+			return -1;
 	}
 	else
 		lplog(LOG_INFO, L"DB statement [%s forms insert]: %s", word.c_str(), qt);
@@ -397,18 +415,18 @@ int overwriteWordFormsInDB(Source source, int wordId, wstring word, set <int> po
 
 // queryOnLowerCase will query for word forms  the next time the word is encountered in all lower case.
 // queryOnLowerCase = 4
-int overwriteWordFlagsInDB(Source source, int wordId, wstring word, bool actuallyExecuteAgainstDB)
+int overwriteWordFlagsInDB(MYSQL mysql, wstring word, bool actuallyExecuteAgainstDB)
 {
 	LFS
 		// erase all wordforms associated with wordId in wordforms
 		wchar_t qt[query_buffer_len_overflow];
-	_snwprintf(qt, query_buffer_len, L"update words where wordId=%d set flags=flags|4", wordId);
+	_snwprintf(qt, query_buffer_len, L"update words where word='%s' set flags=flags|4", word.c_str());
 	MYSQL_RES * result;
 	if (actuallyExecuteAgainstDB)
 	{
-		if (!myquery(&source.mysql, L"LOCK TABLES words WRITE"))
+		if (!myquery(&mysql, L"LOCK TABLES words WRITE"))
 			return -1;
-		if (!myquery(&source.mysql, qt, result))
+		if (!myquery(&mysql, qt, result))
 			return -1;
 		mysql_free_result(result);
 	}
@@ -418,18 +436,18 @@ int overwriteWordFlagsInDB(Source source, int wordId, wstring word, bool actuall
 }
 
 // PLURAL refers to noun plural form.
-int overwriteWordInflectionFlagsInDB(Source source, int wordId, wstring word, int inflections, bool actuallyExecuteAgainstDB)
+int overwriteWordInflectionFlagsInDB(MYSQL mysql, wstring word, int inflections, bool actuallyExecuteAgainstDB)
 {
 	LFS
 	// erase all wordforms associated with wordId in wordforms
 	wchar_t qt[query_buffer_len_overflow];
-	_snwprintf(qt, query_buffer_len, L"update words where wordId=%d set inflectionFlags=inflectionFlags+inflections", wordId);
+	_snwprintf(qt, query_buffer_len, L"update words where word='%s' set inflectionFlags=inflectionFlags+inflections", word.c_str());
 	MYSQL_RES * result;
 	if (actuallyExecuteAgainstDB)
 	{
-		if (!myquery(&source.mysql, L"LOCK TABLES words WRITE"))
+		if (!myquery(&mysql, L"LOCK TABLES words WRITE"))
 			return -1;
-		if (!myquery(&source.mysql, qt, result))
+		if (!myquery(&mysql, qt, result))
 			return -1;
 		mysql_free_result(result);
 	}
@@ -468,66 +486,361 @@ void testDisinclination()
 	}
 	 end test webster
 	*/
-void scanAllWebsterEntries(wchar_t *basepath, unordered_set<wstring> &pos,int &numFilesProcessed)
+void scanAllWebsterEntries(wchar_t *basepath, unordered_set<wstring> &pos, int &numFilesProcessed)
 {
-		WIN32_FIND_DATA FindFileData;
-		wchar_t path[1024];
-		wsprintf(path, L"%s\\*.*", basepath);
-		HANDLE hFind = FindFirstFile(path, &FindFileData);
-		if (hFind == INVALID_HANDLE_VALUE)
+	WIN32_FIND_DATA FindFileData;
+	wchar_t path[1024];
+	wsprintf(path, L"%s\\*.*", basepath);
+	HANDLE hFind = FindFirstFile(path, &FindFileData);
+	if (hFind == INVALID_HANDLE_VALUE)
+	{
+		wprintf(L"FindFirstFile failed on directory %s (%d)\r", path, (int)GetLastError());
+		return;
+	}
+	do
+	{
+		if (FindFileData.cFileName[0] == '.') continue;
+		wchar_t completePath[1024];
+		wsprintf(completePath, L"%s\\%s", basepath, FindFileData.cFileName);
+		if ((FindFileData.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY)
+			scanAllWebsterEntries(completePath, pos, numFilesProcessed);
+		else
 		{
-			wprintf(L"FindFirstFile failed on directory %s (%d)\r", path, (int)GetLastError());
-			return;
-		}
-		do
-		{
-			if (FindFileData.cFileName[0] == '.') continue;
-			wchar_t completePath[1024];
-			wsprintf(completePath, L"%s\\%s", basepath, FindFileData.cFileName);
-			if ((FindFileData.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY)
-				scanAllWebsterEntries(completePath, pos,numFilesProcessed);
+			printf("%d:%100S\r", numFilesProcessed, completePath);
+			int fd;
+			if ((fd = _wopen(completePath, O_RDWR | O_BINARY)) < 0)
+				printf("cacheWebPath:Cannot read path %S - %s.\n", completePath, sys_errlist[errno]);
 			else
 			{
-				printf("%d:%100S\r", numFilesProcessed, completePath);
-				int fd;
-				if ((fd = _wopen(completePath, O_RDWR | O_BINARY)) < 0)
-					printf("cacheWebPath:Cannot read path %S - %s.\n", completePath, sys_errlist[errno]);
+				numFilesProcessed++;
+				int bufferlen = filelength(fd);
+				void *tbuffer = (void *)tcalloc(bufferlen + 10, 1);
+				_read(fd, tbuffer, bufferlen);
+				_close(fd);
+				wstring buffer = (wchar_t *)tbuffer;
+				tfree(bufferlen + 10, tbuffer);
+				char errbuf[1024];
+				errbuf[0] = 0;
+				string jsonBuffer;
+				wTM(buffer, jsonBuffer);
+				yajl_val node = yajl_tree_parse((const char *)jsonBuffer.c_str(), errbuf, sizeof(errbuf));
+				/* parse error handling */
+				if (node == NULL) {
+					lplog(LOG_ERROR, L"Parse error:%s\n %S\n", jsonBuffer.c_str(), errbuf);
+					return;
+				}
+				if (node->type == yajl_t_array)
+					for (unsigned int docNum = 0; docNum < node->u.array.len; docNum++)
+					{
+						yajl_val doc = node->u.array.values[docNum];
+						wstring temppos;
+						mTW(lookForPOS(doc), temppos);
+						if (temppos.length() > 0)
+						{
+							pos.insert(temppos);
+						}
+					}
+
+			}
+		}
+	} while (FindNextFile(hFind, &FindFileData) != 0);
+	FindClose(hFind);
+	return;
+}
+
+void eraseOldRDFTypeFiles(wstring completePath, int &removeErrors)
+{
+	if (_wremove(completePath.c_str()))
+	{
+		wprintf(L"\nremove failed on path %s (%d)\n", completePath.c_str(), (int)GetLastError());
+		removeErrors++;
+	}
+	completePath.erase(completePath.length() - 9);
+	wstring temp = completePath + L"_1_TYPES.xml";
+	if (_wremove(temp.c_str()) && errno!= ENOENT)
+	{
+		wprintf(L"\nremove failed on path %s (%d)\n", temp.c_str(), (int)GetLastError());
+		removeErrors++;
+	}
+	temp = completePath + L"_2_REDIRECT.xml";
+	if (_wremove(temp.c_str()) && errno != ENOENT)
+	{
+		wprintf(L"\nremove failed on path %s (%d)\n", temp.c_str(), (int)GetLastError());
+		removeErrors++;
+	}
+	temp = completePath + L"_3_DISAMBIGUATE.xml";
+	if (_wremove(temp.c_str()) && errno != ENOENT)
+	{
+		wprintf(L"\nremove failed on path %s (%d)\n", temp.c_str(), (int)GetLastError());
+		removeErrors++;
+	}
+	temp = completePath + L"_getDescription.xml";
+	if (_wremove(temp.c_str()) && errno != ENOENT)
+	{
+		wprintf(L"\nremove failed on path %s (%d)\n", temp.c_str(), (int)GetLastError());
+		removeErrors++;
+	}
+}
+
+void scanAllRDFTypes(MYSQL mysql, wchar_t *startPath, bool &startHit, wchar_t *basepath, int &numFilesProcessed, int &numNotOpenable, int &numNewestVersion, int &numOldVersion, int &removeErrors, int &populatedRDFs,
+	unordered_map<wstring,int> &extensions, unordered_map<wstring, __int64> &extensionSpace)
+{
+	WIN32_FIND_DATA FindFileData;
+	wchar_t path[1024];
+	wsprintf(path, L"%s\\*.*", basepath);
+	HANDLE hFind = FindFirstFile(path, &FindFileData);
+	if (hFind == INVALID_HANDLE_VALUE)
+	{
+		wprintf(L"\nscanAllRDFTypes:FindFirstFile failed on directory %s (%d)\n", path, (int)GetLastError());
+		return;
+	}
+	do
+	{
+		ULARGE_INTEGER ul;
+		ul.LowPart = FindFileData.nFileSizeLow;
+		ul.HighPart = FindFileData.nFileSizeHigh;
+		wchar_t *ext = wcsrchr(FindFileData.cFileName, L'.');
+		if (ext && ext[1]!=0)
+		{
+
+			extensions[ext]++;
+			extensionSpace[ext] += ((ULONGLONG)ul.QuadPart);
+		}
+		// must be an rdfTypes extension
+		if (FindFileData.cFileName[0] == '.' || (wcslen(FindFileData.cFileName) > 9 && wcscmp(FindFileData.cFileName + wcslen(FindFileData.cFileName) - 9, L".rdfTypes") != 0))
+			continue;
+		numFilesProcessed++;
+		wchar_t completePath[1024];
+		wsprintf(completePath, L"%s\\%s", basepath, FindFileData.cFileName);
+		if (!startHit && wcscmp(startPath, completePath) == 0)
+			startHit = true;
+		if ((FindFileData.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY)
+		{
+			if (startHit || wcsncmp(startPath, completePath,wcslen(completePath)) == 0)
+				scanAllRDFTypes(mysql, startPath, startHit, completePath, numFilesProcessed, numNotOpenable, numNewestVersion, numOldVersion, removeErrors, populatedRDFs,extensions,extensionSpace);
+		}
+		else
+		{
+			if ((numFilesProcessed & 63) == 0)
+			{
+				wstring extstr;
+				for (auto const&[ext, num] : extensions)
+				{
+					if (num > 1)
+					{
+						wchar_t buf[1024];
+						wsprintf(buf, L"%s:%d[%I64d] ", ext.c_str(), num, extensionSpace[ext]);
+						extstr += buf;
+					}
+				}
+				printf("%08d:unopenable=%02d newest=%08d old=%08d cannot remove=%08d populated=%07d [%s][%S]\r", numFilesProcessed, numNotOpenable, numNewestVersion, numOldVersion, removeErrors, populatedRDFs, (startHit) ? "HIT" : "NOT HIT",extstr.c_str());
+			}
+			
+			if (((ULONGLONG)ul.QuadPart) > 2)
+			{
+				if (startHit && (populatedRDFs & 63) == 0)
+				{
+					FILE *progressFile = _wfopen(L"RDFTypesScanProgress.txt", L"w");
+					if (progressFile)
+					{
+						fputws(completePath, progressFile);
+						fclose(progressFile);
+					}
+				}
+				populatedRDFs++;
+				continue;
+			}
+			int fd;
+			if ((fd = _wopen(completePath, O_RDWR | O_BINARY)) < 0)
+			{
+				numNotOpenable++;
+				printf("\nscanAllRDFTypes:Cannot read path %S - %s.\n", completePath, sys_errlist[errno]);
+			}
+			else
+			{
+				wchar_t version;
+				::read(fd, &version, sizeof(version));
+				_close(fd);
+				if (version != RDFLIBRARYTYPE_VERSION) // version
+				{
+					numOldVersion++;
+					eraseOldRDFTypeFiles(completePath, removeErrors);
+				}
 				else
 				{
-					numFilesProcessed++;
-					int bufferlen = filelength(fd);
-					void *tbuffer = (void *)tcalloc(bufferlen + 10, 1);
-					_read(fd, tbuffer, bufferlen);
-					_close(fd);
-					wstring buffer = (wchar_t *)tbuffer;
-					tfree(bufferlen + 10, tbuffer);
-					char errbuf[1024];
-					errbuf[0] = 0;
-					string jsonBuffer;
-					wTM(buffer, jsonBuffer);
-					yajl_val node = yajl_tree_parse((const char *)jsonBuffer.c_str(), errbuf, sizeof(errbuf));
-					/* parse error handling */
-					if (node == NULL) {
-						lplog(LOG_ERROR, L"Parse error:%s\n %S\n", jsonBuffer.c_str(), errbuf);
-						return;
-					}
-					if (node->type == yajl_t_array)
-						for (unsigned int docNum = 0; docNum < node->u.array.len; docNum++)
-						{
-							yajl_val doc = node->u.array.values[docNum];
-							wstring temppos;
-							mTW(lookForPOS(doc), temppos);
-							if (temppos.length() > 0)
-							{
-								pos.insert(temppos);
-							}
-						}
-
+					numNewestVersion++;
+					wchar_t qt[2048];
+					FindFileData.cFileName[wcslen(FindFileData.cFileName) - 9] = 0;
+					wsprintf(qt, L"INSERT INTO noRDFTypes VALUES ('%s')", FindFileData.cFileName);
+					if (wcslen(FindFileData.cFileName) > 127 || myquery(&mysql, qt, true) || mysql_errno(&mysql) == ER_DUP_ENTRY)
+						eraseOldRDFTypeFiles(completePath, removeErrors);
+					else
+						removeErrors++;
 				}
 			}
-		} while (FindNextFile(hFind, &FindFileData) != 0);
-		FindClose(hFind);
+		}
+	} while (FindNextFile(hFind, &FindFileData) != 0);
+	FindClose(hFind);
+	return;
+}
+
+void removeIllegalNames(wchar_t *basepath)
+{
+	WIN32_FIND_DATA FindFileData;
+	wchar_t path[1024];
+	wsprintf(path, L"%s\\*.*", basepath);
+	HANDLE hFind = FindFirstFile(path, &FindFileData);
+	if (hFind == INVALID_HANDLE_VALUE)
+	{
+		wprintf(L"\removeIllegalNames:FindFirstFile failed on directory %s (%d)\n", path, (int)GetLastError());
 		return;
+	}
+	do
+	{
+		// must be an rdfTypes extension
+		if (FindFileData.cFileName[0] == '.') // || (wcslen(FindFileData.cFileName) > 10 && wcscmp(FindFileData.cFileName + wcslen(FindFileData.cFileName) - 10, L".erdfTypes") != 0))
+			continue;
+		wchar_t completePath[1024];
+		wsprintf(completePath, L"%s\\%s", basepath, FindFileData.cFileName);
+		if ((FindFileData.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY)
+			removeIllegalNames(completePath);
+		bool isIllegal = false;
+		for (int I = 0; FindFileData.cFileName[I] && !isIllegal; I++)
+			if (!iswascii(FindFileData.cFileName[I]) && !iswdigit(FindFileData.cFileName[I]) && FindFileData.cFileName[I] != L'-' && FindFileData.cFileName[I] != L'_')
+				isIllegal = true;
+		if (isIllegal)
+		{
+			_wremove(completePath);
+			wprintf(L"removed %-200.200s\r", completePath);
+		}
+	} while (FindNextFile(hFind, &FindFileData) != 0);
+	FindClose(hFind);
+}
+
+/*
+void scanAllERDFTypes(MYSQL mysql, wchar_t *basepath, int &numFilesProcessed, int &numNotOpenable, int &numNewestVersion, int &numOldVersion, int &removeErrors, int &populatedRDFs)
+		wchar_t qt[2048];
+		if ((FindFileData.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY)
+			scanAllERDFTypes(mysql, completePath, numFilesProcessed, numNotOpenable, numNewestVersion, numOldVersion, removeErrors, populatedRDFs);
+		else
+		{
+			if ((numFilesProcessed & 31) == 0)
+				printf("%08d:unopenable=%02d newest=%08d old=%08d cannot remove=%08d populated=%07d [%s]\r", numFilesProcessed, numNotOpenable, numNewestVersion, numOldVersion, removeErrors, populatedRDFs, (startHit) ? "HIT" : "NOT HIT");
+			ULARGE_INTEGER ul;
+			ul.LowPart = FindFileData.nFileSizeLow;
+			ul.HighPart = FindFileData.nFileSizeHigh;
+			if (((ULONGLONG)ul.QuadPart) != 10)
+			{
+				populatedRDFs++;
+				continue;
+			}
+			int fd;
+			if ((fd = _wopen(completePath, O_RDWR | O_BINARY)) < 0)
+			{
+				numNotOpenable++;
+				printf("\nscanAllERDFTypes:Cannot read path %S - %s.\n", completePath, sys_errlist[errno]);
+			}
+			else
+			{
+				char buffer[12];
+				int bufferlen = filelength(fd);
+				::read(fd, buffer, bufferlen);
+				_close(fd);
+				if (*((wchar_t *)buffer) != EXTENDED_RDFTYPE_VERSION) // version
+				{
+					numOldVersion++;
+					if (_wremove(completePath))
+					{
+						wprintf(L"\nremove failed on path %s (%d)\n", completePath, (int)GetLastError());
+						removeErrors++;
+					}
+				}
+				int rdfTypeCount=*((int *)(buffer+sizeof(wchar_t)));
+				int topHierarchyClassIndexesCount= *((int *)(buffer + sizeof(wchar_t)+sizeof(rdfTypeCount)));
+				if (!rdfTypeCount || !topHierarchyClassIndexesCount)
+				{
+					numNewestVersion++;
+					FindFileData.cFileName[wcslen(FindFileData.cFileName) - 9] = 0;
+					wsprintf(qt, L"INSERT INTO noERDFTypes VALUES ('%s')", FindFileData.cFileName);
+					if (wcslen(FindFileData.cFileName) > 127 || myquery(&mysql, qt, true) || mysql_errno(&mysql) == ER_DUP_ENTRY)
+					{
+						if (_wremove(completePath))
+						{
+							wprintf(L"\nremove failed on path %s (%d)\n", completePath, (int)GetLastError());
+							removeErrors++;
+						}
+					}
+				}
+			}
+		}
+	} while (FindNextFile(hFind, &FindFileData) != 0);
+	FindClose(hFind);
+	return;
+}
+*/
+void scanAllDictionaryDotCom(MYSQL mysql, wchar_t *basepath, int &numFilesProcessed, int &numNotOpenable, int &filesRemoved,int &removeErrors)
+{
+	WIN32_FIND_DATA FindFileData;
+	wchar_t path[1024];
+	wsprintf(path, L"%s\\*.*", basepath);
+	HANDLE hFind = FindFirstFile(path, &FindFileData);
+	if (hFind == INVALID_HANDLE_VALUE)
+	{
+		wprintf(L"\nscanAllDictionaryDotCom:FindFirstFile failed on directory %s (%d)\n", path, (int)GetLastError());
+		return;
+	}
+	do
+	{
+		// must be an rdfTypes extension
+		if (FindFileData.cFileName[0] == '.')
+			continue;
+		numFilesProcessed++;
+		wchar_t completePath[1024];
+		wsprintf(completePath, L"%s\\%s", basepath, FindFileData.cFileName);
+		if ((FindFileData.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY)
+			scanAllDictionaryDotCom(mysql, completePath, numFilesProcessed, numNotOpenable, filesRemoved, removeErrors);
+		else
+		{
+			if ((numFilesProcessed & 31) == 0)
+				printf("%08d:unopenable=%02d removed=%08d cannot remove=%08d\r", numFilesProcessed, numNotOpenable, filesRemoved, removeErrors);
+			int fd;
+			if ((fd = _wopen(completePath, O_RDWR | O_BINARY)) < 0)
+			{
+				numNotOpenable++;
+				printf("\nscanAllDictionaryDotCom:Cannot read path %S - %s.\n", completePath, sys_errlist[errno]);
+			}
+			else
+			{
+				int bufferlen = filelength(fd);
+				wchar_t *tbuffer = (wchar_t *)tcalloc(bufferlen + 10, 1);
+				_read(fd, tbuffer, bufferlen);
+				_close(fd);
+				bool putInTable = !wcsstr(tbuffer, L"No results found") || !wcsstr(tbuffer, L"dcom-no-result");
+				tfree(bufferlen + 10, tbuffer);
+				if (putInTable)
+				{
+					if (wcslen(FindFileData.cFileName) > 31)
+						continue;
+					wchar_t qt[2048];
+					wsprintf(qt, L"INSERT INTO notwords VALUES ('%s')", FindFileData.cFileName);
+					if (!myquery(&mysql, qt, true) && mysql_errno(&mysql) != ER_DUP_ENTRY)
+						removeErrors++;
+					else
+					{
+						if (_wremove(completePath))
+						{
+							removeErrors++;
+							wprintf(L"\nremove failed on path %s (%d)\n", completePath, (int)GetLastError());
+						}
+						else
+							filesRemoved++;
+					}
+				}
+			}
+		}
+	} while (FindNextFile(hFind, &FindFileData) != 0);
+	FindClose(hFind);
+	return;
 }
 
 class wordInfo
@@ -568,7 +881,7 @@ public:
 
 
 
-void writeWordFrequencyTable(MYSQL *mysql,unordered_map<wstring, wordInfo> wf, wstring etext)
+void writeSourceWordFrequency(MYSQL *mysql,unordered_map<wstring, wordInfo> wf, wstring etext)
 {
 	wchar_t qt[query_buffer_len_overflow];
 	int currentEntry = 0, totalEntries = wf.size(), percent = 0,len=0;
@@ -609,7 +922,7 @@ int analyzeEnd(Source source, int sourceId, wstring path, wstring etext, wstring
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE")) 
 		return -1;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false) < 0)
+	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 	if (source.readSource(path, false, false, false))
@@ -634,20 +947,86 @@ int analyzeEnd(Source source, int sourceId, wstring path, wstring etext, wstring
 	return 0;
 }
 
-int processCorpusAnalysisForUnknownWords(Source source, int sourceId,wstring path, wstring etext, int step, bool actuallyExecuteAgainstDB)
+int writeWordFormsFromCorpusWideAnalysis(MYSQL mysql,bool actuallyExecuteAgainstDB)
 {
 	wchar_t qt[query_buffer_len_overflow];
+	int definedUnknownWord = 0, dictionaryComQueried = 0, dictionaryComCacheQueried = 0;
+	int I = 0, sumTotalFrequency=0,sumProcessedTotalFrequency=0;
+	bool websterAPIRequestsExhausted = false;
+	_snwprintf(qt, query_buffer_len, L"select word, totalFrequency, unknownFrequency, capitalizedFrequency,allCapsFrequency,lastSourceId from wordFrequencyMemory where unknownFrequency*100/totalFrequency>95 and"
+		L" nonEuropeanFlag =false and numberFlag = false and cardinalFlag = false and	ordinalFlag = false and	romanFlag = false and dateFlag = false and timeFlag = false and	telephoneFlag = false and	moneyFlag = false and	webaddressFlag = false order by unknownFrequency desc");
+	MYSQL_RES * result;
+	MYSQL_ROW sqlrow = NULL;
+	int totalFrequency = 0, capitalizedFrequency = 0, allCapsFrequency = 0, unknownFrequency = 0, sourceId = 0;
+	wstring word;
+	if (!myquery(&mysql, L"LOCK TABLES wordFrequencyMemory READ"))
+		return -1;
+	if (!myquery(&mysql, L"select SUM(totalFrequency) from wordFrequencyMemory where unknownFrequency*100/totalFrequency>95 and"
+		L" nonEuropeanFlag =false and numberFlag = false and cardinalFlag = false and	ordinalFlag = false and	romanFlag = false and dateFlag = false and timeFlag = false and	telephoneFlag = false and	moneyFlag = false and	webaddressFlag = false order by unknownFrequency desc", result))
+		return -1;
+	if (sqlrow = mysql_fetch_row(result))
+		sumTotalFrequency = atoi(sqlrow[0]);
+	if (!myquery(&mysql, qt, result))
+		return -1;
+	my_ulonglong totalWords = mysql_num_rows(result);
+	int numWordsProcessed = 0;
+	for (int row=0; sqlrow = mysql_fetch_row(result); row++)
+	{
+		mTW(sqlrow[0], word);
+		totalFrequency = atoi(sqlrow[1]);
+		sumProcessedTotalFrequency += totalFrequency;
+		if (word.find_first_of(L"ãâäáàæçêéèêëîíïñôóòöõôûüùú\'") != wstring::npos)
+			continue;
+		unknownFrequency = atoi(sqlrow[2]);
+		capitalizedFrequency = atoi(sqlrow[3]);
+		allCapsFrequency = atoi(sqlrow[4]);
+		sourceId = atoi(sqlrow[5]);
+		// find definition in webster.
+		// if exists, erase all forms associated with this word and write the new forms (return true)
+		// else definition could not be found (return false)
+		set <int> posSet;
+		bool isNonEuropean, queryOnLowerCase, plural;
+		if (queryOnLowerCase = (totalFrequency > 5 && ((capitalizedFrequency + allCapsFrequency)*100.0 / totalFrequency) > 95.0))
+			posSet.insert(FormsClass::gFindForm(L"noun"));
+		else
+			getWordPOS(&mysql,word, posSet, plural, false, isNonEuropean, dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted);
+		if (posSet.size() > 0)
+		{
+			int wordId;
+			// remove all wordforms associated with this word and create new wordforms
+			if (createWordFormsInDBIfNecessary(mysql, sourceId, wordId, word, actuallyExecuteAgainstDB) < 0)
+				lplog(LOG_FATAL_ERROR, L"DB error unable to create word %s", word.c_str());
+			if (overwriteWordFormsInDB(mysql, wordId, word, posSet, actuallyExecuteAgainstDB) < 0)
+				lplog(LOG_FATAL_ERROR, L"DB error setting word forms with word %s", word.c_str());
+			if (queryOnLowerCase && overwriteWordFlagsInDB(mysql, word, actuallyExecuteAgainstDB) < 0)
+				lplog(LOG_FATAL_ERROR, L"DB error setting word flags with word %s", word.c_str());
+			int inflections = discoverInflections(posSet, plural, word);
+			if (inflections > 0 && overwriteWordInflectionFlagsInDB(mysql, word, inflections, actuallyExecuteAgainstDB) < 0)
+				lplog(LOG_FATAL_ERROR, L"DB error setting word inflection flags with word %s", word.c_str());
+			definedUnknownWord++;
+		}
+		numWordsProcessed++;
+		// remember word for further sources
+		wprintf(L"%03I64d:%15.15s:unknown=%06d/%06d webster=%06d dictionaryCom(%06d,cache=%06d) [UpperCase=%05.1f] frequency %d%% done\r",
+			numWordsProcessed*100/totalWords,word.c_str(), definedUnknownWord, numWordsProcessed, websterQueriedToday, dictionaryComQueried, dictionaryComCacheQueried,
+			((capitalizedFrequency + allCapsFrequency)*100.0 / totalFrequency), sumProcessedTotalFrequency*100/ sumTotalFrequency);
+	}
+	mysql_free_result(result);
+	if (!myquery(&mysql, L"UNLOCK TABLES"))
+		return -1;
+	return 0;
+}
+
+int populateWordFrequencyTableFromSource(Source source, int sourceId,wstring path, wstring etext)
+{
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE")) return -1;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false) < 0)
+	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 	if (source.readSource(path, false, false, false))
 	{
 		unordered_map<wstring, wordInfo> wf;
-		set<wstring> unknownWordsCleared;
-		int definedUnknownWord=0, dictionaryComQueried=0, dictionaryComCacheQueried=0;
-		int I = 0;
-		bool websterAPIRequestsExhausted = false;
+		wf.reserve(source.m.size());
 		for (WordMatch &im : source.m)
 		{
 			wstring word = im.word->first;
@@ -657,120 +1036,48 @@ int processCorpusAnalysisForUnknownWords(Source source, int sourceId,wstring pat
 			if (wfi == wf.end())
 			{
 				wordInfo wi;
-				wf[word] = wi;
-				wfi = wf.find(word);
-				wfi->second.nonEuropeanWord = detectNonEuropeanWord(word);
-				wfi->second.number = im.queryForm(NUMBER_FORM_NUM)>=0;
-				wfi->second.cardinal = im.queryForm(numeralCardinalForm) >= 0;
-				wfi->second.ordinal = im.queryForm(numeralOrdinalForm) >= 0;
-				wfi->second.roman = im.queryForm(romanNumeralForm) >= 0;
-				wfi->second.date = im.queryForm(dateForm) >= 0;
-				wfi->second.time = im.queryForm(timeForm) >= 0;
-				wfi->second.telephone = im.queryForm(telephoneNumberForm) >= 0;
-				wfi->second.money = im.queryForm(moneyForm) >= 0;
-				wfi->second.webaddress = im.queryForm(webAddressForm) >= 0;
+				wi.totalFrequency = 0;
+				wi.unknownAllCapsFrequency = 0;
+				wi.unknownCapitalizedFrequency = 0;
+				wi.unknownFrequency = 0;
+				wi.nonEuropeanWord = detectNonEuropeanWord(word);
+				wi.number = im.queryForm(NUMBER_FORM_NUM) >= 0;
+				wi.cardinal = im.queryForm(numeralCardinalForm) >= 0;
+				wi.ordinal = im.queryForm(numeralOrdinalForm) >= 0;
+				wi.roman = im.queryForm(romanNumeralForm) >= 0;
+				wi.date = im.queryForm(dateForm) >= 0;
+				wi.time = im.queryForm(timeForm) >= 0;
+				wi.telephone = im.queryForm(telephoneNumberForm) >= 0;
+				wi.money = im.queryForm(moneyForm) >= 0;
+				wi.webaddress = im.queryForm(webAddressForm) >= 0;
+				wfi = wf.insert({ word,wi }).first;
 			}
 			wfi->second.totalFrequency++;
 			if (im.word->second.isUnknown())
 			{
-				if (step == 1)
-				{
-					wfi->second.unknownFrequency++;
-					if (im.queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (im.flags&WordMatch::flagFirstLetterCapitalized))
-						wfi->second.unknownCapitalizedFrequency++;
-					if (im.flags&WordMatch::flagAllCaps)
-						wfi->second.unknownAllCapsFrequency++;
-				}
-				else
-				{
-					if (unknownWordsCleared.find(word) == unknownWordsCleared.end())
-					{
-						_snwprintf(qt, query_buffer_len, L"select totalFrequency, unknownFrequency, capitalizedFrequency,allCapsFrequency from wordFrequencyMemory where word=%s", word.c_str());
-						MYSQL_RES * result;
-						MYSQL_ROW sqlrow = NULL;
-						int totalFrequency = 0, capitalizedFrequency = 0, allCapsFrequency = 0;
-						if (myquery(&source.mysql, qt, result))
-						{
-							sqlrow = mysql_fetch_row(result);
-							totalFrequency = atoi(sqlrow[0])+ atoi(sqlrow[1]);
-							capitalizedFrequency = atoi(sqlrow[2]);
-							allCapsFrequency= atoi(sqlrow[3]);
-							mysql_free_result(result);
-						}
-						// find definition in webster.
-						// if exists, erase all forms associated with this word and write the new forms (return true)
-						// else definition could not be found (return false)
-						set <int> posSet;
-						bool isNonEuropean, queryOnLowerCase, plural;
-						bool caps = im.queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (im.flags&WordMatch::flagFirstLetterCapitalized) || (im.flags&WordMatch::flagAllCaps);
-						if (getWordPOSInContext(&source.mysql, source, sourceId, im, caps, totalFrequency, capitalizedFrequency, allCapsFrequency, posSet, true, plural, isNonEuropean, queryOnLowerCase, dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted) > 0)
-						{
-							// remove all wordforms associated with this word and create new wordforms
-							if (createWordFormsInDBIfNecessary(source, sourceId, im.word->second.index, word, actuallyExecuteAgainstDB) < 0)
-								lplog(LOG_FATAL_ERROR, L"DB error unable to create word %s", word.c_str());
-							if (overwriteWordFormsInDB(source, im.word->second.index, word, posSet, actuallyExecuteAgainstDB) < 0)
-								lplog(LOG_FATAL_ERROR, L"DB error setting word forms with word %s", word.c_str());
-							if (queryOnLowerCase && overwriteWordFlagsInDB(source, im.word->second.index, word, actuallyExecuteAgainstDB) < 0)
-								lplog(LOG_FATAL_ERROR, L"DB error setting word flags with word %s", word.c_str());
-							int inflections = discoverInflections(posSet, plural, word);
-							if (inflections > 0 && overwriteWordInflectionFlagsInDB(source, im.word->second.index, word, inflections, actuallyExecuteAgainstDB) < 0)
-								lplog(LOG_FATAL_ERROR, L"DB error setting word inflection flags with word %s", word.c_str());
-							definedUnknownWord++;
-						}
-						// remember word for further sources
-						unknownWordsCleared.insert(word);
-						wprintf(L"%15.15s:%05d unknown=%06d/%06I64d webster=%06d dictionaryCom(%06d,cache=%06d) [UpperCase=%05.1f] %03I64d%%\r",
-							word.c_str(), sourceId, definedUnknownWord, unknownWordsCleared.size(), websterQueriedToday, dictionaryComQueried, dictionaryComCacheQueried,
-							((capitalizedFrequency + allCapsFrequency)*100.0 / totalFrequency), I * 100 / source.m.size());
-					}
-				}
+				wfi->second.unknownFrequency++;
+				if (im.queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (im.flags&WordMatch::flagFirstLetterCapitalized))
+					wfi->second.unknownCapitalizedFrequency++;
+				if (im.flags&WordMatch::flagAllCaps)
+					wfi->second.unknownAllCapsFrequency++;
 			}
-			I++;
 		}
-		if (step == 1)
-			writeWordFrequencyTable(&source.mysql, wf, etext);
+		writeSourceWordFrequency(&source.mysql, wf, etext);
 	}
 	else
 	{
-		wprintf(L"Unable to read source %s\n", path.c_str());
+		wprintf(L"Unable to read source %d:%s\n", sourceId,path.c_str());
 		return -1;
 	}
 	return 0;
 }
 
-int numSourceLimit = 0;
-// to begin proc2 field in all sources must be set to 1
-// step = 1 - accumulate word frequency statistics - will set to 2 when finished.
-// step = 2 - evaluate statistics and create database statements to decrease the number of unknown words
-void wmain(int argc,wchar_t *argv[])
+int populateWordFrequencyTable(Source source)
 {
-	setConsoleWindowSize(200, 15);
-	chdir("..");
-	initializeCounter();
-	cacheDir = CACHEDIR;
-	wchar_t *sourceHost = L"localhost";
-	enum Source::sourceTypeEnum st = Source::GUTENBERG_SOURCE_TYPE;
-	Source source(sourceHost, st, false, false, true);
-	source.initializeNounVerbMapping();
-	initializePatterns();
-	bandwidthControl = CLOCKS_PER_SEC / 2;
-	unordered_map <int, vector < vector <tTagLocation> > > emptyMap;
-	for (unsigned int ts = 0; ts < desiredTagSets.size(); ts++)
-		source.pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
-	if (!myquery(&source.mysql, L"LOCK TABLES sources READ"))
-		return;
-	//testDisinclination();
-	//writeFrequenciesToDB(source);
-	//if (true)
-	//	return;
-	nounForm = FormsClass::gFindForm(L"noun");
-	verbForm = FormsClass::gFindForm(L"verb");
-	adjectiveForm = FormsClass::gFindForm(L"adjective");
-	adverbForm = FormsClass::gFindForm(L"adverb");
-	int step = _wtoi(argv[1]);
-	bool actuallyExecuteAgainstDB = step==2 && wstring(argv[2])==L"executeAgainstDB";
+	int step = 1;
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
+	enum Source::sourceTypeEnum st = Source::GUTENBERG_SOURCE_TYPE;
 	wchar_t qt[query_buffer_len_overflow];
 	_snwprintf(qt, query_buffer_len, L"select COUNT(*) from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**'", st);
 	__int64 totalSource;
@@ -781,10 +1088,11 @@ void wmain(int argc,wchar_t *argv[])
 		mysql_free_result(result);
 	}
 	bool websterAPIRequestsExhausted = false;
+	int startTime = clock();
 	while (true)
 	{
 		int sourcesLeft = 0;
-		_snwprintf(qt, query_buffer_len, L"select COUNT(*) from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' and proc2=%d", st,step);
+		_snwprintf(qt, query_buffer_len, L"select COUNT(*) from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' and proc2=%d", st, step);
 		if (myquery(&source.mysql, qt, result))
 		{
 			sqlrow = mysql_fetch_row(result);
@@ -792,7 +1100,7 @@ void wmain(int argc,wchar_t *argv[])
 			mysql_free_result(result);
 		}
 		if (!myquery(&source.mysql, L"START TRANSACTION"))
-			return;
+			return -1;
 		_snwprintf(qt, query_buffer_len, L"select id, etext, path, title from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' and proc2=%d order by id limit 1 FOR UPDATE SKIP LOCKED", st, step);
 		if (!myquery(&source.mysql, qt, result) || mysql_num_rows(result) != 1)
 			break;
@@ -821,21 +1129,100 @@ void wmain(int argc,wchar_t *argv[])
 				break;
 		}
 		*/
-			
-		
-		if (processCorpusAnalysisForUnknownWords(source, sourceId, path, etext, step, actuallyExecuteAgainstDB)>=0)
-		{ 
+		if (populateWordFrequencyTableFromSource(source, sourceId, path, etext) >= 0)
 			_snwprintf(qt, query_buffer_len, L"update sources set proc2=%d where id=%d", step + 1, sourceId);
-			if (!myquery(&source.mysql, qt))
-				break;
-		}
-		
+		else
+			_snwprintf(qt, query_buffer_len, L"update sources set proc2=%d where id=%d", step - 1, sourceId);
+		if (!myquery(&source.mysql, qt))
+			break;
 		if (!myquery(&source.mysql, L"COMMIT"))
-			return;
+			return -1;
 		source.clearSource();
 		wchar_t buffer[1024];
-		wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d source (%-35.35s... finished)", (totalSource-(sourcesLeft-1)) * 100 / totalSource, (totalSource - (sourcesLeft - 1)) - 1, totalSource, title.c_str());
+		__int64 processingSeconds = (clock() - startTime) / CLOCKS_PER_SEC;
+		int numSourcesProcessedNow = (int) (totalSource - (sourcesLeft - 1));
+		if (processingSeconds)
+			wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d source in %02I64d:%02I64d:%02I64d [%d sources/hour] (%-35.35s... finished)", numSourcesProcessedNow * 100 / totalSource, numSourcesProcessedNow - 1, totalSource, 
+				processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, numSourcesProcessedNow * 3600 / processingSeconds, title.c_str());
 		SetConsoleTitle(buffer);
+	}
+	return 0;
+}
+
+int numSourceLimit = 0;
+// to begin proc2 field in all sources must be set to 1
+// step = 1 - accumulate word frequency statistics - will set to 2 when finished.
+// step = 2 - evaluate statistics and create database statements to decrease the number of unknown words
+void wmain(int argc,wchar_t *argv[])
+{
+	setConsoleWindowSize(200, 15);
+	chdir("..");
+	initializeCounter();
+	cacheDir = CACHEDIR;
+	wchar_t *sourceHost = L"localhost";
+	enum Source::sourceTypeEnum st = Source::GUTENBERG_SOURCE_TYPE;
+	Source source(sourceHost, st, false, false, true);
+	source.initializeNounVerbMapping();
+	initializePatterns();
+	Internet::bandwidthControl = CLOCKS_PER_SEC / 2;
+	unordered_map <int, vector < vector <tTagLocation> > > emptyMap;
+	for (unsigned int ts = 0; ts < desiredTagSets.size(); ts++)
+		source.pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
+	if (!myquery(&source.mysql, L"LOCK TABLES sources READ"))
+		return;
+	//testDisinclination();
+	//writeFrequenciesToDB(source);
+	//if (true)
+	//	return;
+	nounForm = FormsClass::gFindForm(L"noun");
+	verbForm = FormsClass::gFindForm(L"verb");
+	adjectiveForm = FormsClass::gFindForm(L"adjective");
+	adverbForm = FormsClass::gFindForm(L"adverb");
+	int step = _wtoi(argv[1]);
+	if (step == 1)
+	{
+		populateWordFrequencyTable(source);
+	}
+	else if (step == 2)
+	{
+		bool actuallyExecuteAgainstDB = step == 2 && wstring(argv[2]) == L"executeAgainstDB";
+		writeWordFormsFromCorpusWideAnalysis(source.mysql, actuallyExecuteAgainstDB);
+	}
+	else if (step == 3)
+	{
+		source.unlockTables();
+		int numFilesProcessed = 0, numNotOpenable = 0, numNewestVersion = 0, numOldVersion = 0, removeErrors = 0, populatedRDFs = 0;
+		if (!myquery(&source.mysql, L"LOCK TABLES noRDFTypes WRITE"))
+			return;
+		FILE *progressFile = _wfopen(L"RDFTypesScanProgress.txt", L"r");
+		wchar_t startPath[2048];
+		bool startHit = false;
+		if (progressFile)
+		{
+			fgetws(startPath, 2048, progressFile);
+			fclose(progressFile);
+		}
+		else
+			startHit = true;
+		unordered_map<wstring, int> extensions;
+		unordered_map<wstring, __int64> extensionSpace;
+		scanAllRDFTypes(source.mysql, startPath, startHit, L"J:\\caches\\dbPediaCache", numFilesProcessed, numNotOpenable, numNewestVersion, numOldVersion, removeErrors, populatedRDFs, extensions, extensionSpace);
+	}
+	else if (step == 4)
+	{
+		source.unlockTables();
+		int numFilesProcessed = 0, numNotOpenable = 0, filesRemoved = 0, removeErrors = 0;
+		if (!myquery(&source.mysql, L"LOCK TABLES notwords WRITE"))
+			return;
+		scanAllDictionaryDotCom(source.mysql, L"J:\\caches\\DictionaryDotCom", numFilesProcessed, numNotOpenable, filesRemoved, removeErrors);
+	}
+	else if (step == 5)
+	{
+		source.unlockTables();
+		//int numFilesProcessed = 0, numNotOpenable = 0, numNewestVersion = 0, numOldVersion = 0, removeErrors = 0, populatedRDFs = 0;
+		//if (!myquery(&source.mysql, L"LOCK TABLES noERDFTypes WRITE"))
+		//	return;
+		removeIllegalNames(L"J:\\caches\\dbPediaCache");
 	}
 	source.unlockTables();
 }

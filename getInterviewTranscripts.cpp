@@ -19,7 +19,7 @@ using namespace std;
 #include <direct.h>
 #include "word.h"
 #include "source.h"
-
+#include "internet.h"
 // ethereal parameters to track packets
 // host 64.15.203.18
 // TCP PORT 80
@@ -44,7 +44,7 @@ int getInterviewTranscriptGharibMoyers(	)
 	// int intervalSize=10;
 	wstring baseURL=L"http://www.pbs.org/moyers/journal/archives/archives.php?start="; // 80
 	int intervalSize=20;
-	bandwidthControl=0;
+	Internet::bandwidthControl=0;
 	wstring tmp;
 	for (int docNum=0; docNum<MAX_DOC_NUM; docNum+=intervalSize) 
 	{
@@ -54,7 +54,7 @@ int getInterviewTranscriptGharibMoyers(	)
 		wstring URL=baseURL+itos(docNum,tmp);
 		int ret; 
 		wstring buffer;
-		if (ret=readPage(URL.c_str(),buffer)) return ret;
+		if (ret=Internet::readPage(URL.c_str(),buffer)) return ret;
 		size_t pos = wstring::npos;
 		__int64 rpos = wstring::npos;
 		wstring match,link;
@@ -65,7 +65,7 @@ int getInterviewTranscriptGharibMoyers(	)
 			{
 				wstring linkbuffer,sections,away,linklink;
 				if (checkLinkExists(link)) continue;
-				if (ret=readPage(link.c_str(),linkbuffer)) continue;
+				if (ret= Internet::readPage(link.c_str(),linkbuffer)) continue;
 				//int ipos=-1;
 				//while (firstMatch(linkbuffer,L"<!--begin image-->",L"<!--end image-->",ipos,away,false)>=0);
 				// int spos=-1;
@@ -115,7 +115,7 @@ int getInterviewTranscriptGharibMoyers(	)
 							linklink=link.substr(0,fpos+1)+linklink;
 						}
 						wprintf(L"redirect to: %s\n",linklink.c_str()); 
-						if (!checkLinkExists(linklink) && (ret=readPage(linklink.c_str(),linkbuffer))==0) 
+						if (!checkLinkExists(linklink) && (ret= Internet::readPage(linklink.c_str(),linkbuffer))==0)
 						{
 							while (((int)(pos=takeLastMatch(linkbuffer,L"<div id=\"",L"</div>",sections,false)))>=0) 
 							{
@@ -151,7 +151,7 @@ int getInterviewTranscriptGharibMoyers(	)
 int getInterviewTranscript(	)
 {
 	wstring baseURL=L"http://www.npr.org/templates/rundowns/rundown.php?prgId=2&prgDate="; //11-1-2005"
-	bandwidthControl=0;
+	Internet::bandwidthControl=0;
 	wstring tmp;
 	//The time is represented as seconds elapsed since midnight (00:00:00), January 1, 1970, coordinated universal time (UTC). 
 	// we want everything after 1977.
@@ -165,7 +165,7 @@ int getInterviewTranscript(	)
 		wprintf(L"Day %I64d [%s]\n",timer/(24*3600),URL);
 		int ret; 
 		wstring buffer;
-		if (ret=readPage(URL,buffer)) return ret;
+		if (ret= Internet::readPage(URL,buffer)) return ret;
 		int pos=-1,rpos=-1;
 		wstring match,link;
 		// <a class="transcript" href="http://www.npr.org/templates/story/story.php?storyId=4981602">Transcript</a>
@@ -173,7 +173,7 @@ int getInterviewTranscript(	)
 			{
 				wstring linkbuffer,sections,away;
 				if (checkLinkExists(link)) continue;
-				if (ret=readPage(link.c_str(),linkbuffer)) continue;
+				if (ret= Internet::readPage(link.c_str(),linkbuffer)) continue;
 				bool transcriptFound=false;
 				while ((pos=takeLastMatch(linkbuffer,L"<div class=\"transcript\">",L"</div>",sections,false))>=0) 
 				{

@@ -17,7 +17,7 @@ using namespace std;
 # pragma comment(lib, "wbemuuid.lib")
 #pragma warning(disable: 4267)
 
-int memoryAllocated=0; // protect with mutex
+__int64 memoryAllocated=0; // protect with mutex
 
 IWbemRefresher          *pRefresher = NULL;
 IWbemHiPerfEnum         *pEnum = NULL;

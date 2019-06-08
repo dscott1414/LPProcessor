@@ -11,6 +11,7 @@
 #include <functional>
 #include <share.h>
 #include "profile.h"
+#include "internet.h"
 
 #define MAX_PATH_LEN 2048
 #define MAX_BUF 2000000
@@ -155,7 +156,7 @@ int getBINGSearchJSON(int where,wstring object,wstring &buffer,wstring &filePath
 	wstring wEncodedUserPassword;
 	mTW(encodedUserPassword,wEncodedUserPassword);
 	wstring headers=L"Authorization: Basic "+wEncodedUserPassword;
-	int errCode=getWebPath(where,webAddress,buffer,object+L"_BING",L"webSearchCache",filePathOut,headers,index,false,true);
+	int errCode= Internet::getWebPath(where,webAddress,buffer,object+L"_BING",L"webSearchCache",filePathOut,headers,index,false,true);
 	lplog(LOG_WEBSEARCH|LOG_WHERE|LOG_ERROR,L"searching BING: %s [%s] searchIndex=%d [%s]",object.c_str(),filePathOut.c_str(),index,webAddress.c_str());
 	if (buffer == L"Parameter: Query is not of type String")
 	{
@@ -181,7 +182,7 @@ int getGoogleSearchJSON(int where,wstring object,wstring &buffer,wstring &filePa
 	}
 	wstring webAddress=googleBaseWebSearchAddress+L"?key="+webSearchKey+start+L"&cx="+cseContext+L"&q="+uobject+L"&num="+itos(numWebSitesAskedFor,numWebSitesAskedForStr);
 	wstring headers;
-	int errCode=getWebPath(where,webAddress,buffer,object,L"webSearchCache",filePathOut,headers,index,false,true);
+	int errCode= Internet::getWebPath(where,webAddress,buffer,object,L"webSearchCache",filePathOut,headers,index,false,true);
 	lplog(LOG_WEBSEARCH|LOG_WHERE|LOG_ERROR,L"searching Google: %s [%s] searchIndex=%d [%s]",object.c_str(),filePathOut.c_str(),index,webAddress.c_str());
 	lplog(LOG_WHERE, NULL);
 	return errCode;
@@ -398,9 +399,9 @@ tIWMM Source::getTense(tIWMM verb,tIWMM subject,int tenseDesired)
 	else
 		desiredInflectionFlags=VERB_PAST;
 	tIWMM verbMainEntry=(verb->second.mainEntry==wNULL) ? verb : verb->second.mainEntry;
-	map <tIWMM, vector <tIWMM>,tFI::cRMap::wordMapCompare>::iterator mEMI;
+	unordered_map <wstring, vector <tIWMM>>::iterator mEMI;
 	// prefer third person verbs
-	if (verbMainEntry!=wNULL && (mEMI=Words.mainEntryMap.find(verbMainEntry))!=Words.mainEntryMap.end())
+	if (verbMainEntry!=wNULL && (mEMI=Words.mainEntryMap.find(verbMainEntry->first))!=Words.mainEntryMap.end())
 	{
 		for (vector <tIWMM>::iterator mei=mEMI->second.begin(),meiEnd=mEMI->second.end(); mei!=meiEnd; mei++)
 			{
@@ -416,9 +417,9 @@ tIWMM Source::getTense(tIWMM verb,tIWMM subject,int tenseDesired)
 wstring Source::getTense(int where,wstring candidate,int preferredVerb)
 { LFS
 	tIWMM mainEntry=m[where].getMainEntry();
-	map <tIWMM, vector <tIWMM>,tFI::cRMap::wordMapCompare>::iterator mEMI;
+	unordered_map <wstring, vector <tIWMM>>::iterator mEMI;
 	// prefer third person verbs
-	if (mainEntry!=wNULL && (mEMI=Words.mainEntryMap.find(mainEntry))!=Words.mainEntryMap.end())
+	if (mainEntry!=wNULL && (mEMI=Words.mainEntryMap.find(mainEntry->first))!=Words.mainEntryMap.end())
 	{
 		for (unsigned int me=0; me<mEMI->second.size(); me++)
 		{
@@ -941,7 +942,7 @@ wstring quoteLess(wstring &qo,wstring &qlo)
   return qlo;
 }
 
-int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st, int maxProcesses, int numSourcesPerProcess, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite);
+int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st, int maxProcesses, int numSourcesPerProcess, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool parseOnly);
 
 int Source::spinParses(vector <searchSource> &accumulatedParseRequests)
 {
@@ -979,7 +980,7 @@ int Source::spinParses(vector <searchSource> &accumulatedParseRequests)
 		if (processOldFile || (_waccess(path.c_str(), 0) && !rejectPath(pri->pathInCache.c_str())))
 			writeParseRequestToDatabase(pri);
 	}
-	return startProcesses(*this, 0,0,-1, -1, Source::REQUEST_TYPE, 5,5,false,true,true,true);
+	return startProcesses(*this, 0,0,-1, -1, Source::REQUEST_TYPE, 5,5,false,true,true,true,false);
 }
 
 extern int limitProcessingForProfiling;
@@ -1031,7 +1032,7 @@ int Source::accumulateParseRequests(cSpaceRelation* parentSRI, int webSitesAsked
 					accumulatedParseRequests.push_back(pr);
 				}
 			}
-			if (getWebPath(parentSRI->where, *wsi, webSiteBuffer, epath, L"webSearchCache", filePathOut, headers, index, true, false) == 0)
+			if (Internet::getWebPath(parentSRI->where, *wsi, webSiteBuffer, epath, L"webSearchCache", filePathOut, headers, index, true, false) == 0)
 			{
 				pr.isSnippet = false;
 				pr.pathInCache = filePathOut;
@@ -1126,7 +1127,7 @@ int Source::webSearchForQuerySerial(wchar_t *derivation, cSpaceRelation* parentS
 				}
 			}
 			maxAnswer = max(maxAnswer, sMaxAnswer);
-			if (sMaxAnswer<24 && getWebPath(parentSRI->where, *wsi, webSiteBuffer, epath, L"webSearchCache", filePathOut, headers, index, true, false) == 0)
+			if (sMaxAnswer<24 && Internet::getWebPath(parentSRI->where, *wsi, webSiteBuffer, epath, L"webSearchCache", filePathOut, headers, index, true, false) == 0)
 			{
 				Source *source = NULL;
 				if (processPath((wchar_t *)filePathOut.c_str(), source, Source::WEB_SEARCH_SOURCE_TYPE, 100, parseOnly) >= 0)

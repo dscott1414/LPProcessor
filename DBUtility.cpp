@@ -38,6 +38,7 @@ bool myquery(MYSQL *mysql,wchar_t *q,bool allowFailure)
 			logstring(LOG_FATAL_ERROR,q2.c_str());
 		else
 			logstring(LOG_ERROR, q2.c_str());
+		return false;
     //logstring(-1,NULL);
 		//exit(0);
   }

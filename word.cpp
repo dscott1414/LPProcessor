@@ -85,7 +85,7 @@ vector <wchar_t *> WordClass::multiElementWords;
 vector <wchar_t *> WordClass::quotedWords;
 vector <wchar_t *> WordClass::periodWords;
 unordered_map <wstring, tFI> WordClass::WMM;
-map <tIWMM, vector <tIWMM>, tFI::cRMap::wordMapCompare> WordClass::mainEntryMap;
+unordered_map <wstring, vector <tIWMM>> WordClass::mainEntryMap;
 bool WordClass::changedWords;
 bool WordClass::inCreateDictionaryPhase;
 int WordClass::disinclinationRecursionCount;
@@ -134,6 +134,7 @@ FormClass::FormClass(int indexIn,wstring nameIn,wstring shortNameIn,wstring infl
   blockProperNounRecognition=blockProperNounRecognitionIn;
 	formCheck=formCheckIn;
 	isCommonForm=false;
+	isNonCachedForm = false;
 }
 
 int FormsClass::findForm(wstring sForm)
@@ -667,10 +668,20 @@ bool tFI::isUnknown(void)
 }
 
 bool tFI::isCommonWord(void)
-{ LFS
-  unsigned int fscount=formsSize();
-  for (unsigned int f=0; f<fscount; f++)
-  	if (Form(f)->isCommonForm) return true;
+{
+	LFS
+		unsigned int fscount = formsSize();
+	for (unsigned int f = 0; f < fscount; f++)
+		if (Form(f)->isCommonForm) return true;
+	return false;
+}
+
+bool tFI::isNonCachedWord(void)
+{
+	LFS
+		unsigned int fscount = formsSize();
+	for (unsigned int f = 0; f < fscount; f++)
+		if (Form(f)->isNonCachedForm) return true;
 	return false;
 }
 
@@ -982,8 +993,9 @@ bool WordClass::addFlag(wstring sWord,int flag)
   return false;
 }
 
-tIWMM WordClass::addNewOrModify(MYSQL *mysql, wstring sWord,int flags,int form,int inflection,int derivationRules,wstring sME,int sourceId,bool &added)
-{ LFS
+tIWMM WordClass::addNewOrModify(MYSQL *mysql, wstring sWord, int flags, int form, int inflection, int derivationRules, wstring sME, int sourceId, bool &added)
+{
+	LFS
   bool firstLetterCapitalized=sWord[0]>0 && iswupper(sWord[0])!=0;
   for (unsigned int I=0; I<sWord.length(); I++) sWord[I]=towlower(sWord[I]);
   int offset;
@@ -1015,7 +1027,7 @@ tIWMM WordClass::addNewOrModify(MYSQL *mysql, wstring sWord,int flags,int form,i
       pr.first->second.flags|=tFI::topLevelSeparator;
     if (equivalentIfIgnoreDashSpaceCase(sME,sWord)) pr.first->second.mainEntry=pr.first;
 		if (mainEntry!=wNULL)
-			mainEntryMap[mainEntry].push_back(pr.first);
+			mainEntryMap[mainEntry->first].push_back(pr.first);
     return pr.first;
   }
   else
@@ -1032,7 +1044,7 @@ tIWMM WordClass::addNewOrModify(MYSQL *mysql, wstring sWord,int flags,int form,i
         iWMM->second.mainEntry = mainEntry;
     }
 		if (mainEntry!=wNULL)
-			mainEntryMap[mainEntry].push_back(iWMM);
+			mainEntryMap[mainEntry->first].push_back(iWMM);
   }
   return iWMM;
 }
@@ -1258,6 +1270,16 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 	}
 	if (!wordComplete)
 	{
+		// if word is not already in words array, and mysql is 0 (which is from read a source cache file),
+		// then the wordcache file was incorrectly written.
+		if (!mysql)
+		{
+			//wstring forms;
+			//for (unsigned int f = 0; f < iSave->second.formsSize(); f++)
+				//forms += iSave->second.Form(f)->name + L" ";
+			lplog(LOG_INFO, L"Word not found on source read [%s].", sWord.c_str());
+			return WORD_NOT_FOUND;
+		}
 		bool containsSingleQuote = false;
 		int dashLocation = -1;
 		if (sWord.length()>1 && !iswdigit(sWord[0]))
@@ -1285,18 +1307,20 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 		// make some attempt at getting past French words like d'affaires l'etat etc
 		else if (sWord.length()>1 && sWord[1] == '\'' && (sWord[0] == 'd' || sWord[0] == 'l'))
 			markWordUndefined(iWord, sWord, 0, firstLetterCapitalized, nounOwner, sourceId);
-		else if ((dashLocation >= 0) || (ret = getForms(mysql,iWord, sWord, sourceId)))
+		else 
 		{
-			if (dashLocation<0 && ret != WORD_NOT_FOUND && ret != NO_FORMS_FOUND) // getForms found word (ret>0)
+			// search sql DB for word
+			if (iWord == WMM.end() && findWordInDB(mysql, sWord, iWord) && !iWord->second.isUnknown()) 
+				return 0;
+			// search online dictionaries for word
+			if ((ret = getForms(mysql, iWord, sWord, sourceId)) && ret != WORD_NOT_FOUND && ret != NO_FORMS_FOUND) // getForms found word (ret>0)
 				return 0;
 			if (stopDisInclination) return 0;
 			if (containsSingleQuote)
 				markWordUndefined(iWord, sWord, 0, firstLetterCapitalized, nounOwner, sourceId);
 			else if (firstLetterCapitalized) // don't try stemming or splitting if word is capitalized, but mark as reinvestigate if every encountered in lower case.
-			{
 				markWordUndefined(iWord, sWord, tFI::queryOnLowerCase, firstLetterCapitalized, nounOwner, sourceId);
-			}
-			else if (mysql==NULL || (ret = attemptDisInclination(mysql,iWord, sWord, sourceId))) // returns 0 if found or WORD_NOT_FOUND if not found
+			else if (ret = attemptDisInclination(mysql,iWord, sWord, sourceId)) // returns 0 if found or WORD_NOT_FOUND if not found
 			{
 				if (dashLocation < 0 && ret != WORD_NOT_FOUND && ret != NO_FORMS_FOUND)
 					return ret;
@@ -1793,6 +1817,40 @@ bool WordClass::parseMetaCommands(wchar_t *buffer,int &endSymbol,sTrace &t)
   return false;
 }
 
+int readDate(wchar_t *buffer, __int64 bufferLen, __int64 &bufferScanLocation, __int64 cp,wstring &sWord)
+{
+	wchar_t *nextspace = wcschr(buffer + cp, L' ');
+	if (nextspace)
+		*nextspace = 0;
+	wchar_t *ch = wcschr(buffer + cp, L'-');
+	if (nextspace)
+		*nextspace = L' ';
+	if (cp + 5 >= bufferLen)
+		return 0;
+	bool isDate = false;
+	// '90s or '91
+	isDate = (buffer[cp] == L'\'' && iswdigit(buffer[cp + 1]) && iswdigit(buffer[cp + 2]) && ((buffer[cp + 3] == L's' && (iswspace(buffer[cp + 4]) || iswpunct(buffer[cp + 4]))) || iswspace(buffer[cp + 3]) || iswpunct(buffer[cp + 3])));
+	// mid-1989, mid-60s, mid-1860s, mid-90s, late-40s, early-10s
+	if (!isDate && ch && iswdigit(ch[1]) && iswdigit(ch[2]) && (
+			(iswdigit(ch[3]) && iswdigit(ch[4]) && (iswspace(ch[5]) || iswpunct(ch[5]))) || // mid-1989
+			(iswdigit(ch[3]) && ch[4]==L'0' && ch[5]==L's' && (iswspace(ch[6]) || iswpunct(ch[6]))) || // mid-1860s
+			(ch[3] == L's' && (iswspace(ch[4]) || iswpunct(ch[4]))) // mid-60s
+		))
+	{
+		vector <wstring> dateStart = { L"mid",L"over",L"early",L"late" };
+		for (wstring d : dateStart)
+			if (!wcsnicmp(buffer + cp, d.c_str(), d.length()) && ((ch - buffer) - cp) == d.length())
+				isDate = true;
+	}
+	if (isDate)
+	{
+		while (buffer[cp] && !iswspace(buffer[cp]) && (!iswpunct(buffer[cp]) || buffer[cp] == '\'' || buffer[cp] == '-')) sWord += buffer[cp++];
+		bufferScanLocation = cp;
+		return PARSE_DATE;
+	}
+	return 0;
+}
+
 int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocation,
                         wstring &sWord,int &nounOwner,bool scanForSection,bool webScrapeParse,sTrace &t)
 { LFS
@@ -1890,23 +1948,12 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
   if (cp>=bufferLen)
     return PARSE_EOF;
   if (processFootnote(buffer,bufferLen,cp)<0) return PARSE_EOF;
-  // '90s or '91
-  // mid-1989, mid-60s, mid-1860s, mid-90s, over-40s, under-14s, early 1960s, top?
-  wchar_t *ch=wcschr(buffer+cp,L'-'),*nextspace=wcschr(buffer+cp,L' ');
-	if (nextspace && ch && (nextspace-buffer)<(ch-buffer))
-		ch=0;
-	if (cp + 5 < bufferLen &&
-		  ((buffer[cp] == L'\'' && iswdigit(buffer[cp + 1]) && iswdigit(buffer[cp + 2]) &&	((buffer[cp + 3] == L's' && (iswspace(buffer[cp + 4]) || iswpunct(buffer[cp + 4]))) || iswspace(buffer[cp + 3]) || iswpunct(buffer[cp + 3]))) ||
-		   (ch && iswdigit(ch[1]) && (!wcsnicmp(buffer + cp, L"mid", 3) || !wcsnicmp(buffer + cp, L"over", 4) || !wcsnicmp(buffer + cp, L"under", 5) || !wcsnicmp(buffer + cp, L"early", 5) || !wcsnicmp(buffer + cp, L"late", 4)))))
-  {
-    while (buffer[cp] && !iswspace(buffer[cp]) && (!iswpunct(buffer[cp]) || buffer[cp]=='\'' || buffer[cp]=='-')) sWord+=buffer[cp++];
-    bufferScanLocation=cp;
-    return PARSE_DATE;
-  }
+	if (readDate(buffer, bufferLen, bufferScanLocation, cp,sWord))
+		return PARSE_DATE;
 	// any character that should be its own word
   if (iswpunct(buffer[cp]) ||   (!iswprint(buffer[cp]) && iswspace(buffer[cp+1])) ||
     buffer[cp]==L'`' || buffer[cp]==L'’' || buffer[cp] == L'‘' || buffer[cp] == L'‘' || buffer[cp] == L'ʼ' || // slightly different quotes
-    buffer[cp]==L'“' || buffer[cp]==L'”' || buffer[cp]==L'—' ||
+    buffer[cp]==L'“' || buffer[cp] == L'“' || buffer[cp]==L'”' || buffer[cp]==L'—' ||
     buffer[cp]==L'…' || buffer[cp]==L'│')
   {
     // contraction processing

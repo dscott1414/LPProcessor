@@ -308,67 +308,13 @@ int WordClass::writeFormsCache(int fd)
 	return len;
 }
 
-void WordClass::writeWords(wstring oPath)
-{ LFS
-	wchar_t path[1024];
-	wsprintf(path,L"%s.wordCacheFile",oPath.c_str());
-	if (_waccess(path,0)==0) return;
-	int fd=_wopen(path,O_WRONLY|O_CREAT|O_TRUNC|O_BINARY,_S_IREAD | _S_IWRITE );
-	if (fd<0)
-	{
-		lplog(L"Cannot open wordCacheFile - %S.",_sys_errlist[errno]);
-		return;
-	}
-	writeFormsCache(fd);
-	for (tIWMM iWord=begin(); iWord!=end(); iWord++)
-	{
-		if (!iWord->second.deltaUsagePatterns[tFI::TRANSFER_COUNT]) continue;
-		tIWMM iSave=iWord;
-		// mainEntries can exist in chains
-		int mainLoop=0;
-    while (mainLoop++<4)
-		{
-			if (iSave->second.mainEntry==iSave || iSave->second.mainEntry==wNULL) break;
-			iSave=iSave->second.mainEntry;
-			iSave->second.flags|=tFI::isMainEntry;
-		}
-	}
-	char buffer[MAX_BUF];
-	int where=0;
-	for (tIWMM iWord=begin(); iWord!= end(); iWord++)
-	{
-		if (iWord->first[0]>='0' && iWord->first[0]<='9') // time, date or number not considered unknown.
-			continue;
-		// REMOVED 8/30/2006 not sufficient for eliminating disk seeks during reprocessing of source
-		// three classes of words: unknown words, words only understood in combination, Proper Nouns that have no gender
-		//if (iWord->second.isRareWord() && !(iWord->second.flags&tFI::isMainEntry))
-
-		// if word has been used in this source OR is a mainEntry of the word used in the source
-		if (iWord->second.deltaUsagePatterns[tFI::TRANSFER_COUNT] || (iWord->second.flags&tFI::isMainEntry))
-		{
-			//lplog(L"%d:WROTE word %s.",where,iWord->first.c_str());
-			writeWord(iWord,buffer,where,MAX_BUF);
-			if (where>MAX_BUF-1024)
-			{
-				::write(fd,buffer,where);
-				where=0;
-			}
-		}
-	}
-	if (where)
-		::write(fd,buffer,where);
-	close(fd);
-	for (tIWMM iWord=begin(); iWord!=end(); iWord++)
-		iWord->second.flags&=~tFI::isMainEntry;
-}
-
 bool disqualify(wstring sWord)
 { LFS
 	if (sWord.length()>MAX_WORD_LENGTH)
 		return true;
 	if (sWord[sWord.length()-1]==' ')
 	{
-		lplog(LOG_ERROR,L"Word %s has a space at the end... Rejected (4).",sWord.c_str());
+		lplog(LOG_ERROR,L"Word '%s' has a space at the end... Rejected (4).",sWord.c_str());
 		return true;
 	}
 	if (sWord==L"--" || sWord==L"." || sWord==L"...")
@@ -376,7 +322,7 @@ bool disqualify(wstring sWord)
 	int dashes=0;
 	for (unsigned I=0; I<sWord.length(); I++)
 		if (sWord[I]=='-') dashes++;
-	if (dashes>1) return true;
+	if (dashes>2) return true;
 	if (sWord.find('.')==wstring::npos)
 		return false;
 	// word may only have periods if it is a real abbreviation X.X.X.X. ...
@@ -391,7 +337,7 @@ bool disqualify(wstring sWord)
 	return false;
 }
 
-int WordClass::readWords(wstring oPath, int sourceId)
+int WordClass::readWords(wstring oPath, int sourceId, bool disqualifyWords)
 {
 	LFS
 	oPath += L".wordCacheFile";
@@ -415,18 +361,25 @@ int WordClass::readWords(wstring oPath, int sourceId)
 	tIWMM iWord=wNULL;
 	vector <wstring> mainEntries;
 	vector <tIWMM> entries;
+	bool rejectionTitleIsPrinted = false;
 	//int numPreps=0;
 	while (where<bufferlen)
 	{
 		//int saveWhere=where;
 		if (!copy(sWord,buffer,where,bufferlen)) return -1;
 		wstring sME;
-		if (disqualify(sWord))
+		if (disqualifyWords && disqualify(sWord))
 		{
-			lplog(LOG_ERROR,L"DISQUALIFIED %s.",sWord.c_str());
+			if (!rejectionTitleIsPrinted)
+			{
+				lplog(LOG_ERROR, L"These words from word cache file %s are rejected:", oPath.c_str());
+				rejectionTitleIsPrinted = true;
+			}
+			lplog(LOG_ERROR, L"    %s", sWord.c_str());
 			tFI(buffer,where,bufferlen,sME,sourceId); // advance 'where' in buffer
 			continue;
 		}
+		//lplog(LOG_INFO, L"TEMP %s", sWord.c_str());
 		if ((iWord=WMM.find(sWord))!=WMM.end())
 		{
 			if (iWord->second.updateFromDisk(buffer,where,bufferlen,sME))
@@ -475,7 +428,7 @@ int WordClass::readWords(wstring oPath, int sourceId)
 			{
 				entries[I]->second.mainEntry=iWord;
 				if (iWord!=wNULL)
-					mainEntryMap[iWord].push_back(entries[I]);
+					mainEntryMap[iWord->first].push_back(entries[I]);
 			}
 		}
 	tfree(bufferlen+10,buffer);
@@ -487,7 +440,8 @@ int WordClass::readWords(wstring oPath, int sourceId)
 				 w->second.query(adjectiveForm)>=0 ||
 				 w->second.query(adverbForm)>=0))
 		{
-			lplog(LOG_ERROR,L"Word %s has no mainEntry after reading words!",w->first.c_str());
+			if (logDetail)
+				lplog(LOG_ERROR,L"Word %s has no mainEntry after reading wordcache!",w->first.c_str());
 			w->second.flags|=tFI::queryOnAnyAppearance;
 			w->second.mainEntry=w;
 		}
@@ -1672,6 +1626,7 @@ void WordClass::initialize()
 	if (internalStateForm<0) internalStateForm = FormsClass::gFindForm(L"internalState");
 	if (particleForm<0) particleForm=FormsClass::gFindForm(L"particle");
 	if (relativeForm<0) relativeForm=FormsClass::gFindForm(L"relative");
+	if (monthForm < 0) monthForm = FormsClass::gFindForm(L"month");
 
 	// DO NOT REMOVE - this section filled with Daniel Webster dictionary problems
 	removeFlag(L"man",PLURAL); // Webster has it also defined as a plural noun (very rare)
@@ -1917,6 +1872,20 @@ void WordClass::initialize()
 		doForm,doNegationForm,modalAuxiliaryForm,futureModalAuxiliaryForm,negationModalAuxiliaryForm,negationFutureModalAuxiliaryForm,NULL};
 	for (int form = 0; commonForms[form]; form++)
 		Forms[commonForms[form]]->isCommonForm = true;
+
+	// numeralCardinalForm, numeralOrdinalForm, romanNumeralForm, quantifierform, dateForm,timeForm, telephoneNumberForm, moneyForm, and webAddressForm
+	// are not closed, but they can be positively identified so they do not have to be written in the cache file
+	vector<int> nonCachedForms = { commaForm, periodForm ,reflexiveForm	,nomForm	,accForm	,quoteForm	,dashForm	,bracketForm	,conjunctionForm,
+		demonstrativeDeterminerForm	,possessiveDeterminerForm	,interrogativeDeterminerForm	,indefinitePronounForm	,reciprocalPronounForm,
+		pronounForm	,numeralCardinalForm	,numeralOrdinalForm	,romanNumeralForm	,honorificForm	,honorificAbbreviationForm	,relativeForm	,
+		determinerForm,doesForm	,doesNegationForm	,possessivePronounForm	,quantifierForm	,dateForm	,timeForm	,telephoneNumberForm	,
+		coordinatorForm,numberForm	,beForm	,haveForm	,haveNegationForm	,doForm	,doNegationForm	,
+		personalPronounForm	,letterForm	,isForm	,isNegationForm	, telenumForm	,sa_abbForm	,toForm,relativizerForm	,
+		moneyForm	,particleForm	,webAddressForm	,doForm	,doNegationForm	,monthForm	,letterForm,modalAuxiliaryForm	,futureModalAuxiliaryForm	,
+		negationModalAuxiliaryForm	,negationFutureModalAuxiliaryForm };
+	for (int form: nonCachedForms)
+		Forms[form]->isNonCachedForm = true;
+
 	// "quotes" removed 6/24 because it was causing NOUN to match double nouns across ".
 	// example:_NOUN [my dear child , " interrupted tuppence]
 	wchar_t *ignoreForms[]=

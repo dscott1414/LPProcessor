@@ -1830,9 +1830,9 @@ public:
 	vector <WordMatch> m;
 	patternElementMatchArray pema;
 	bool parseNecessary(wchar_t *path);
-	int readSourceBuffer(wstring title, wstring etext, wstring path, wstring start, int repeatStart);
+	int readSourceBuffer(wstring title, wstring etext, wstring path, wstring &start, int &repeatStart);
 	int parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank);
-	int parse(wstring title, wstring etext, wstring path, wstring start, int repeatStart, unsigned int &unknownCount, bool newsBank);
+	int parse(wstring title, wstring etext, wstring path, wstring &start, int &repeatStart, unsigned int &unknownCount, bool newsBank);
 	bool write(IOHANDLE file);
 	bool read(char *buffer,int &where,unsigned int total,bool S2,bool printProgress);
 	bool flush(int fd,void *buffer,int &where);
@@ -3080,6 +3080,7 @@ int wherePrepObject,
 	wstring wordString(vector <tIWMM> &words,wstring &logres);
 	const wchar_t *getOriginalWord(int I, wstring &out, bool concat, bool mostCommon = false);
 	bool analyzeEnd(wstring &path, int begin, int end, bool &multipleEnds);
+	void writeWords(wstring oPath);
 
 private:
 	wstring primaryQuoteType,secondaryQuoteType;

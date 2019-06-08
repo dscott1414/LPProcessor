@@ -1191,11 +1191,14 @@ void WordClass::addTimeFlag(int flag,wchar_t *words[])
 { LFS
 	for (int I=0; words[I]!=NULL; I++)
 	{
-		tIWMM iWord=query(words[I]);
-		if (iWord==end())
-			if (parseWord(NULL,words[I],iWord,false,false, -1)<0)
-				lplog(LOG_FATAL_ERROR,L"Error getting forms for time word %s",words[I]);
-		iWord->second.timeFlags|=flag;
+		if (words[I][0])
+		{
+			tIWMM iWord = query(words[I]);
+			if (iWord == end())
+				if (parseWord(NULL, words[I], iWord, false, false, -1) < 0)
+					lplog(LOG_FATAL_ERROR, L"Error getting forms for time word %s", words[I]);
+			iWord->second.timeFlags |= flag;
+		}
 	}
 }
 

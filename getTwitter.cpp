@@ -19,6 +19,7 @@ using namespace std;
 #include <direct.h>
 #include "word.h"
 #include "source.h"
+#include "internet.h"
 
 // ethereal parameters to track packets
 // host 64.15.203.18
@@ -88,7 +89,7 @@ int getTwitterEntries(wchar_t *filter)
 	// %3A) happy
 	// %3A( sad
 	baseURL+=filter;
-	bandwidthControl=0;
+	Internet::bandwidthControl=0;
 	__int64 lastId=-1;
 	int numTotalPerQueryCollected=0;
 	set <__int64> tweets;
@@ -109,7 +110,7 @@ int getTwitterEntries(wchar_t *filter)
 		{
 			wstring pagedURL=URL+L"&page="+itos(page,buffer);
 			int pos=-1,ret,numCollected=tweets.size();
-			if (ret=readPage(pagedURL.c_str(),buffer)) return ret;
+			if (ret= Internet::readPage(pagedURL.c_str(),buffer)) return ret;
 			wstring entry;
 			int numEntriesPerPage=0;
 			for (; (pos=takeLastMatch(buffer,L"<entry>",L"</entry>",entry,false))>=0; numEntriesPerPage++)

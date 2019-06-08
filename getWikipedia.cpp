@@ -13,6 +13,7 @@
 #include "profile.h"
 #include "ontology.h"
 #include <share.h>
+#include "internet.h"
 
 extern int logDetail; // not protected - too intensive to protect and doesn't matter
 extern int logSemanticMap; // not protected - too intensive to protect and doesn't matter
@@ -379,13 +380,13 @@ int reduceWikipediaPage(wstring &buffer)
 				lplog(LOG_WIKIPEDIA,L"%s",webAddress);
 				int ret; 
 				wstring secondaryBuffer;
-				if (ret=readPage(webAddress,secondaryBuffer)) return ret;
+				if (ret= Internet::readPage(webAddress,secondaryBuffer)) return ret;
 				reduceWikipediaPage(secondaryBuffer);
 				int fd=_wopen(path,O_CREAT|O_RDWR|O_BINARY,_S_IREAD | _S_IWRITE );
 				if (fd<0)
 				{
 					lplog(LOG_ERROR,L"ERROR:Cannot create path %s - %S (5).",path,sys_errlist[errno]);
-					return GETPAGE_CANNOT_CREATE;
+					return Internet::GETPAGE_CANNOT_CREATE;
 				}
 				_write(fd,secondaryBuffer.c_str(),secondaryBuffer.length()*sizeof(secondaryBuffer[0]));
 				_close(fd);
@@ -410,313 +411,6 @@ int reduceWikipediaPage(wstring &buffer)
 	}
 	if (buffer.find(L"For search options, see Help:Searching.")!=wstring::npos && buffer.length()<45)
 		buffer.clear();
-	return 0;
-}
-
-int runJavaJerichoHTML( wstring webAddress, wstring outputPath,string &outbuf);
-
-int getWebPath(int where,wstring webAddress,wstring &buffer,wstring epath,wstring cacheTypePath,wstring &filePathOut,wstring &headers,int index,bool clean,bool readInfoBuffer,bool forceWebReread)
-{ LFS
-	if (webAddress.find(L".pdf")!=wstring::npos || webAddress.find(L".php")!=wstring::npos) // Nobel Prize abstract is 2 bytes / also don't bother with pdf or php files for now
-		return -1;
-	//if (webAddress.find(L"_andrewcusack.com_2010_09_21_stereotype_2d_map_.11") != wstring::npos)
-	//	printf("LHEELO!"); // TMP DEBUG
-	if (logTraceOpen)
-		lplog(LOG_WHERE, L"TRACEOPEN %s %s", epath.c_str(), __FUNCTIONW__);
-	if (logDetail)
-		lplog(LOG_WIKIPEDIA,L"accessing page: %s",epath.c_str()); 
-	wchar_t path[MAX_LEN];
-	int pathlen=_snwprintf(path,MAX_LEN,L"%s\\%s",CACHEDIR,cacheTypePath.c_str());
-	_wmkdir(path);
-	if (index>1)
-		_snwprintf(path+pathlen,MAX_LEN-pathlen,L"\\_%s.%d",epath.c_str(),index);
-	else
-		_snwprintf(path+pathlen,MAX_LEN-pathlen,L"\\_%s",epath.c_str());
-	path[MAX_PATH-20]=0; // make space for subdirectories and for file extensions
-	convertIllegalChars(path+pathlen+1);
-	distributeToSubDirectories(path,pathlen+1,true);
-	filePathOut=path;
-	int exitCode=0;
-	string spath;
-	wTM(path,spath,CP_ACP);
-	deleteIllegalChars((char *)spath.c_str()+pathlen+5);
-	spath[pathlen+1]=spath[pathlen+6];
-	spath[pathlen+3]=spath[pathlen+7];
-	spath[pathlen+2]=0;
-	mkdir(spath.c_str());
-	spath[pathlen+2]='\\';
-	spath[pathlen+4]=0;
-	mkdir(spath.c_str());
-	spath[pathlen+4]='\\';
-  if (forceWebReread || (_waccess(path,0)<0 && _access(spath.c_str(),0)<0))
-	{
-		if (!forceWebReread)
-			lplog(LOG_WIKIPEDIA,L"getWebPath:failed to access page %s %S",path,spath.c_str());
-		int ret,fd;
-		if (ret=readPage(webAddress.c_str(),buffer,headers)) return ret;
-		if ((fd = _wopen(path, O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE))<0)
-		{
-			lplog(LOG_ERROR, L"%06d:ERROR:getWebPath:Cannot create dbPedia path %s - %S.", where, path, sys_errlist[errno]);
-			return GETPAGE_CANNOT_CREATE;
-		}
-		if (!clean)
-		{
-			_write(fd, buffer.c_str(), buffer.length()*sizeof(buffer[0]));
-			_close(fd);
-			if (rdfDetail)
-				lplog(LOG_WIKIPEDIA, L"getWebPath:nonJava wrote page %s", path);
-			return 0;
-		}
-		string utf8Buffer;
-		wTM(buffer, utf8Buffer);
-		_write(fd, utf8Buffer.c_str(), utf8Buffer.length()*sizeof(utf8Buffer[0]));
-		_close(fd);
-		string outbuf;
-		if ((exitCode=runJavaJerichoHTML(path,path,outbuf))<0) return -1; // changed to write file to disk twice because Java can no longer reliably scrape thesaurus.com due to cookie
-		lplog(LOG_WIKIPEDIA,L"getWebPath:Java wrote page %s:%S",path,outbuf.c_str());
-		if (outbuf.find("Exception")!=string::npos)
-		{
-			if ((fd=_wopen(path,O_CREAT|O_RDWR|O_BINARY,_S_IREAD | _S_IWRITE ))>=0)
-			{
-				_close(fd);
-				return 0;
-			}
-			if ((fd=_open(spath.c_str(),O_CREAT|O_RDWR|O_BINARY,_S_IREAD | _S_IWRITE ))>=0)
-			{
-				_close(fd);
-				return 0;
-			}
-			lplog(LOG_ERROR,L"%06d:ERROR:getWebPath:Cannot create dbPedia path %S - %S.",where,spath.c_str(),sys_errlist[errno]);
-		}
-	}
-	if (readInfoBuffer)
-	{
-		int fd;
-		if ((fd=_wopen(path,O_RDWR|O_BINARY))<0)
-		{
-			if (exitCode && (fd=_wopen(path,O_CREAT|O_RDWR|O_BINARY,_S_IREAD | _S_IWRITE ))>=0)
-			{
-				lplog(LOG_WIKIPEDIA,L"getWebPath:nonJava close 0 page %s",path);
-				_close(fd);
-				return 0;
-			}
-			if (exitCode && (fd=_open(spath.c_str(),O_CREAT|O_RDWR|O_BINARY,_S_IREAD | _S_IWRITE ))>=0)
-			{
-				lplog(LOG_WIKIPEDIA,L"getWebPath:nonJava close 0 page %S",spath.c_str());
-				_close(fd);
-				return 0;
-			}
-			if ((fd=_open(spath.c_str(),O_RDWR|O_BINARY))<0)
-			{
-				lplog(LOG_ERROR,L"%06d:ERROR:getWebPath:Cannot read dbPedia path %s [%S] - %S.",where,path,spath.c_str(),sys_errlist[errno]);
-				fd=_open(spath.c_str(),O_CREAT|O_RDWR|O_BINARY,_S_IREAD | _S_IWRITE );
-				if (fd>=0)
-					_close(fd);
-				return GETPATH_CANNOT_OPEN_PATH;
-			}
-			else
-				mTW(spath,filePathOut);
-		}
-		int bufferlen=filelength(fd);
-		void *tbuffer=(void *)tcalloc(bufferlen+10,1);
-		_read(fd,tbuffer,bufferlen);
-		_close(fd);
-		buffer=(wchar_t *)tbuffer;
-		tfree(bufferlen+10,tbuffer);
-	}
-	return 0;
-}
-
-int testWebPath(int where,wstring webAddress,wstring epath,wstring cacheTypePath,wstring &filePathOut,wstring &headers)
-{ LFS
-	wchar_t path[MAX_LEN];
-	int pathlen=_snwprintf(path,MAX_LEN,L"%s\\%s",CACHEDIR,cacheTypePath.c_str());
-	_wmkdir(path);
-	_snwprintf(path+pathlen,MAX_LEN-pathlen,L"\\_%s",epath.c_str());
-	path[MAX_PATH-20]=0; // make space for subdirectories and for file extensions
-	convertIllegalChars(path+pathlen+1);
-	distributeToSubDirectories(path,pathlen+1,true);
-	filePathOut=path;
-	//int exitCode=0;
-	string spath;
-	wTM(path,spath,CP_ACP);
-	deleteIllegalChars((char *)spath.c_str()+pathlen+5);
-	spath[pathlen+1]=spath[pathlen+6];
-	spath[pathlen+3]=spath[pathlen+7];
-	spath[pathlen+2]=0;
-	mkdir(spath.c_str());
-	spath[pathlen+2]='\\';
-	spath[pathlen+4]=0;
-	mkdir(spath.c_str());
-	spath[pathlen+4]='\\';
-  if (_waccess(path,0)<0 && _access(spath.c_str(),0)<0)
-		return 0;
-	wstring readBufferFromDisk;
-	if (readPage(webAddress.c_str(),readBufferFromDisk,headers)<0) return -1;
-	int fd;
-	if ((fd=_wopen(path,O_RDWR|O_BINARY))<0)
-	{
-		if ((fd=_open(spath.c_str(),O_RDWR|O_BINARY))<0)
-		{
-			lplog(LOG_ERROR,L"%06d:ERROR:getWebPath:Cannot read dbPedia path %s [%S] - %S.",where,path,spath.c_str(),sys_errlist[errno]);
-			return GETPATH_CANNOT_OPEN_PATH;
-		}
-		else
-			mTW(spath,filePathOut);
-	}
-	int bufferlen=filelength(fd);
-	void *tbuffer=(void *)tcalloc(bufferlen+10,1);
-	_read(fd,tbuffer,bufferlen);
-	_close(fd);
-	wstring writeBufferToDisk=(wchar_t *)tbuffer;
-	tfree(bufferlen+10,tbuffer);
-	if (readBufferFromDisk!=writeBufferToDisk)
-		lplog(L"MISMATCH!");
-	return 0;
-}
-
-// a routine derived from readPage which uses Windows HTTP routines – not used
-int WordClass::readPageWinHTTP(wchar_t *str, wstring &buffer)
-{ LFS
-  wstring lem;
-  DWORD dwSize = 0;
-  DWORD dwDownloaded = 0;
-  LPSTR pszOutBuffer;
-  BOOL  bResults = FALSE;
-  HINTERNET  hSession = NULL, 
-             hConnect = NULL,
-             hRequest = NULL;
-	// http://umbel.org/umbel/rc/MusicalPerformer
-	if (!readPage(L"http://umbel.org/umbel/rc/MusicalPerformer.rdf",buffer)) return 0;
-
-	wchar_t server[1024];
-	wcscpy(server,L"umbel.org");
-	wcscpy(str,L"/umbel/rc/MusicalPerformer.rdf");
-  // Use WinHttpOpen to obtain a session handle.
-  if (!(hSession = WinHttpOpen( L"HTTP/1.1",  
-                          WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-                          WINHTTP_NO_PROXY_NAME, 
-                          WINHTTP_NO_PROXY_BYPASS, 0 )))
-	{
-		lplog(LOG_ERROR,L"ERROR:Cannot WinHttpOpen - %s.",getLastErrorMessage(lem));
-		lplog(LOG_ERROR,NULL);
-		return -1;
-	}
-	// Use WinHttpSetTimeouts to set a new time-out values.
-  if (!WinHttpSetTimeouts( hSession, 0, 0, 0, 0))
-	{
-		lplog(LOG_ERROR,L"ERROR:Cannot WinHttpSetTimeouts - %s.",getLastErrorMessage(lem));
-		lplog(LOG_ERROR,NULL);
-		return -1;
-	}
-
-  // Specify an HTTP server.
-  if (!(hConnect = WinHttpConnect( hSession, server,
-                               INTERNET_DEFAULT_HTTPS_PORT, 0 )))
-	{
-		lplog(LOG_ERROR,L"ERROR:Cannot WinHttpConnect %s - %s.",server,getLastErrorMessage(lem));
-		lplog(LOG_ERROR,NULL);
-		return -1;
-	}
-  // Create an HTTP request handle.
-  if (!(hRequest = WinHttpOpenRequest( hConnect, L"GET", str,
-                                   NULL, WINHTTP_NO_REFERER, 
-                                   WINHTTP_DEFAULT_ACCEPT_TYPES, 
-                                   0 ))) //WINHTTP_FLAG_SECURE )))
-	{
-		lplog(LOG_ERROR,L"ERROR:Cannot WinHttpOpenRequest %s - %s.",str,getLastErrorMessage(lem));
-		lplog(LOG_ERROR,NULL);
-		return -1;
-	}
-	// Use WinHttpSetTimeouts to set a new time-out values.
-  if (!WinHttpSetTimeouts( hRequest, 0, 0, 0, 0))
-	{
-		lplog(LOG_ERROR,L"ERROR:Cannot WinHttpSetTimeouts on request - %s.",getLastErrorMessage(lem));
-		lplog(LOG_ERROR,NULL);
-		return -1;
-	}
-	// WINHTTP_OPTION_SEND_TIMEOUT
-	// Sets or retrieves an unsigned long integer value that contains the time-out value, in milliseconds, to send a request or write some data. If sending the request takes longer than the timeout, the send operation is canceled. The default timeout is 30 seconds.
-	DWORD timeoutValue;
-	DWORD dwBufferLength=sizeof(timeoutValue);
-	if (!WinHttpQueryOption(hRequest,WINHTTP_OPTION_SEND_TIMEOUT,&timeoutValue,&dwBufferLength))
-	{
-		lplog(LOG_ERROR,L"ERROR:Cannot WinHttpQueryOption on request - %s.",getLastErrorMessage(lem));
-		lplog(LOG_ERROR,NULL);
-		return -1;
-	}
-	lplog(LOG_ERROR,L"ERROR:WinHttpQueryOption yields a timeout value of %d(%d).",timeoutValue,dwBufferLength);
-	timeoutValue=0;
-	dwBufferLength=sizeof(timeoutValue);
-	if (!WinHttpSetOption(hRequest,WINHTTP_OPTION_SEND_TIMEOUT,&timeoutValue,dwBufferLength))
-	{
-		lplog(LOG_ERROR,L"ERROR:Cannot WinHttpSetOption on request - %s.",getLastErrorMessage(lem));
-		lplog(LOG_ERROR,NULL);
-		return -1;
-	}
-	int start=clock();
-  // Send a request.
-  if (!(bResults = WinHttpSendRequest( hRequest,
-                                   WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-                                   WINHTTP_NO_REQUEST_DATA, 0, 
-                                   0, 0 )))
-	{
-		lplog(LOG_ERROR,L"ERROR:Cannot WinHttpSendRequest %s%s - %s (%d MS).",server,str,getLastErrorMessage(lem),clock()-start);
-		lplog(LOG_ERROR,NULL);
-		return -1;
-	}
-  // End the request.
-  if (!(bResults = WinHttpReceiveResponse( hRequest, NULL )))
-	{
-		lplog(LOG_ERROR,L"ERROR:Cannot WinHttpReceiveResponse %s%s - %s.",server,str,getLastErrorMessage(lem));
-		lplog(LOG_ERROR,NULL);
-		return -1;
-	}
-
-  // Keep checking for data until there is nothing left.
-  if( bResults )
-  {
-    do 
-    {
-      // Check for available data.
-      dwSize = 0;
-      if( !WinHttpQueryDataAvailable( hRequest, &dwSize ) )
-        printf( "Error %u in WinHttpQueryDataAvailable.\n",
-				(int)GetLastError( ) );
-
-      // Allocate space for the buffer.
-      pszOutBuffer = new char[dwSize+1];
-      if( !pszOutBuffer )
-      {
-        printf( "Out of memory\n" );
-        dwSize=0;
-      }
-      else
-      {
-        // Read the data.
-        ZeroMemory( pszOutBuffer, dwSize+1 );
-
-        if( !WinHttpReadData( hRequest, (LPVOID)pszOutBuffer, 
-                              dwSize, &dwDownloaded ) )
-          printf( "Error %u in WinHttpReadData.\n", (int)GetLastError( ) );
-        else
-          printf( "%s", pszOutBuffer );
-
-        // Free the memory allocated to the buffer.
-        delete [] pszOutBuffer;
-      }
-    } while( dwSize > 0 );
-  }
-
-
-  // Report any errors.
-  if( !bResults )
-    printf( "Error %d has occurred.\n", (int)GetLastError( ) );
-
-  // Close any open handles.
-  if( hRequest ) WinHttpCloseHandle( hRequest );
-  if( hConnect ) WinHttpCloseHandle( hConnect );
-  if( hSession ) WinHttpCloseHandle( hSession );
 	return 0;
 }
 
@@ -1306,13 +1000,13 @@ int Source::getWikipediaPath(int principalWhere,vector <wstring> &wikipediaLinks
 		lplog(LOG_WIKIPEDIA,L"PRIMARY:  %s",webAddress);
 		int ret; 
 		wstring buffer;
-		if (ret=readPage(webAddress,buffer)) return ret;
+		if (ret= Internet::readPage(webAddress,buffer)) return ret;
 		reduceWikipediaPage(buffer);
 		int fd=_wopen(path,O_CREAT|O_RDWR|O_BINARY,_S_IREAD | _S_IWRITE ); 
 		if (fd<0)
 		{
 			lplog(LOG_ERROR,L"ERROR:Cannot create path %s - %S (6).",path,sys_errlist[errno]);
-			return GETPAGE_CANNOT_CREATE;
+			return Internet::GETPAGE_CANNOT_CREATE;
 		}
 		_write(fd,buffer.c_str(),buffer.length()*sizeof(buffer[0]));
 		_close(fd);
@@ -1589,6 +1283,7 @@ int Source::processPath(const wchar_t *path,Source *&source,Source::sourceTypeEn
 		source->multiWordStrings=multiWordStrings;
 		source->multiWordObjects=multiWordObjects;
 		wstring wpath=path,start=L"~~BEGIN";
+		int repeatStart = 1;
 		if (!source->readSource(wpath,parseOnly,true,false))
 		{
 			lplog(LOG_WIKIPEDIA|LOG_RESOLUTION|LOG_RESCHECK|LOG_WHERE,L"Begin Processing %s...",path);
@@ -1599,7 +1294,7 @@ int Source::processPath(const wchar_t *path,Source *&source,Source::sourceTypeEn
 				int globalOverMatchedPositionsTotal=0;
 				string cPath;
 				wTM(path,cPath);
-				source->parse(L"",L"",wpath,L"~~BEGIN",1,unknownCount,false);
+				source->parse(L"",L"",wpath, start, repeatStart,unknownCount,false);
 				source->doQuotesOwnershipAndContractions(totalQuotations,false);
 				unlockTables();
 				if (source->m.empty()) 
@@ -2317,142 +2012,153 @@ void Source::accumulateSemanticEntry(unsigned int where,set <cObject::cLocation>
 	}
 }
 
-// ReadAndHandleOutput
-// Monitors handle for input. Exits when child exits or pipe breaks.
-void ReadAndHandleOutput(HANDLE hPipeRead,string &outbuf)
-{ LFS
-  CHAR lpBuffer[257];
-  DWORD nBytesRead;
+#ifdef TEST_CODE
 
-  while (ReadFile(hPipeRead,lpBuffer,sizeof(lpBuffer)-1,&nBytesRead,NULL) && nBytesRead>0)
-  {
-			lpBuffer[nBytesRead]=0;
-			outbuf+=lpBuffer;
-  }
-  if (GetLastError() != ERROR_BROKEN_PIPE)
-		lplog(LOG_ERROR, L"%S:%d:%s", __FUNCTION__, __LINE__, lastErrorMsg().c_str());
-}
+int runJavaJerichoHTML(wstring webAddress, wstring outputPath, string &outbuf);
 
-// PrepAndLaunchRedirectedChild
-// Sets up STARTUPINFO structure, and launches redirected child.
-HANDLE PrepAndLaunchRedirectedChild(wstring commandLine,
-	HANDLE hChildStdOut,HANDLE hChildStdIn,HANDLE hChildStdErr)
-{ LFS
-  PROCESS_INFORMATION pi;
-  STARTUPINFO si;
-
-  // Set up the start up info struct.
-  ZeroMemory(&si,sizeof(STARTUPINFO));
-  si.cb = sizeof(STARTUPINFO);
-  si.dwFlags = STARTF_USESTDHANDLES|STARTF_USESHOWWINDOW;
-  si.hStdOutput = hChildStdOut;
-  si.hStdInput  = hChildStdIn;
-  si.hStdError  = hChildStdErr;
-  si.wShowWindow = SW_HIDE;
-  if (!CreateProcess(NULL,(LPWSTR)commandLine.c_str(),NULL,NULL,TRUE,
-                      CREATE_NEW_CONSOLE,NULL,NULL,&si,&pi))
-		lplog(LOG_ERROR, L"%S:%d:%s", __FUNCTION__, __LINE__, lastErrorMsg().c_str());
-
-  // Close any unnecessary handles.
-  if (!CloseHandle(pi.hThread)) 		
-		lplog(LOG_ERROR, L"%S:%d:%s", __FUNCTION__, __LINE__, lastErrorMsg().c_str());
-	return pi.hProcess;
-}
-
-int runJavaJerichoHTML(wstring webAddress, wstring outputPath, string &outbuf)
+// a routine derived from readPage which uses Windows HTTP routines – not used
+int WordClass::readPageWinHTTP(wchar_t *str, wstring &buffer)
 {
 	LFS
-		TCHAR NPath[MAX_PATH];
-	GetCurrentDirectory(MAX_PATH, NPath);
-	_wchdir(LMAINDIR);
-		wstring baseCommandLine = L"java -classpath jericho-html-3.2\\classes;jericho-html-3.2\\dist\\jericho-html-3.2.jar;TextRenderer\\bin RenderToText ";
-	wstring commandLine = baseCommandLine + webAddress + L" " + outputPath;
+		wstring lem;
+	DWORD dwSize = 0;
+	DWORD dwDownloaded = 0;
+	LPSTR pszOutBuffer;
+	BOOL  bResults = FALSE;
+	HINTERNET  hSession = NULL,
+		hConnect = NULL,
+		hRequest = NULL;
+	// http://umbel.org/umbel/rc/MusicalPerformer
+	if (!Internet::readPage(L"http://umbel.org/umbel/rc/MusicalPerformer.rdf", buffer)) return 0;
 
-	HANDLE hOutputReadTmp, hOutputRead, hOutputWrite;
-	HANDLE hInputWriteTmp, hInputRead, hInputWrite;
-	HANDLE hErrorWrite;
-	SECURITY_ATTRIBUTES sa;
-
-	// Set up the security attributes struct.
-	sa.nLength = sizeof(SECURITY_ATTRIBUTES);
-	sa.lpSecurityDescriptor = NULL;
-	sa.bInheritHandle = TRUE;
-
-	// Create the child output pipe.
-	if (!CreatePipe(&hOutputReadTmp, &hOutputWrite, &sa, 0))
-		lplog(LOG_FATAL_ERROR, L"CreatePipe %d line %d", GetLastError(), __LINE__);
-
-	// Create a duplicate of the output write handle for the std error write handle. This is necessary 
-	// in case the child application closes one of its std output handles.
-	if (!DuplicateHandle(GetCurrentProcess(), hOutputWrite, GetCurrentProcess(), &hErrorWrite, 0, TRUE, DUPLICATE_SAME_ACCESS))
-		lplog(LOG_FATAL_ERROR, L"DuplicateHandle %d line %d", GetLastError(), __LINE__);
-
-	// Create the child input pipe.
-	if (!CreatePipe(&hInputRead, &hInputWriteTmp, &sa, 0))
-		lplog(LOG_FATAL_ERROR, L"CreatePipe %d line %d", GetLastError(), __LINE__);
-
-	// Create new output read handle and the input write handles. Set the Properties to FALSE. 
-	// Otherwise, the child inherits the properties and, as a result, non-closeable handles to the pipes
-	// are created.
-	if (!DuplicateHandle(GetCurrentProcess(), hOutputReadTmp, GetCurrentProcess(),
-		&hOutputRead, // Address of new handle.
-		0, FALSE, // Make it uninheritable.
-		DUPLICATE_SAME_ACCESS))
-		lplog(LOG_FATAL_ERROR, L"DuplicateHandle %d line %d", GetLastError(), __LINE__);
-
-	if (!DuplicateHandle(GetCurrentProcess(), hInputWriteTmp,
-		GetCurrentProcess(),
-		&hInputWrite, // Address of new handle.
-		0, FALSE, // Make it uninheritable.
-		DUPLICATE_SAME_ACCESS))
-		lplog(LOG_FATAL_ERROR, L"DuplicateHandle %d line %d", GetLastError(), __LINE__);
-
-	// Close inheritable copies of the handles you do not want to be inherited.
-	if (!CloseHandle(hOutputReadTmp))
-		lplog(LOG_FATAL_ERROR, L"CloseHandle %d line %d", GetLastError(), __LINE__);
-	if (!CloseHandle(hInputWriteTmp))
-		lplog(LOG_FATAL_ERROR, L"CloseHandle %d line %d", GetLastError(), __LINE__);
-
-	HANDLE hStdIn = NULL; // Handle to parents std input.
-
-	// Get std input handle so you can close it and force the ReadFile to
-	// fail when you want the input thread to exit.
-	if ((hStdIn = GetStdHandle(STD_INPUT_HANDLE)) == INVALID_HANDLE_VALUE)
-		lplog(LOG_FATAL_ERROR, L"GetStdHandle %d line %d", GetLastError(), __LINE__);
-
-	HANDLE hChildProcess = PrepAndLaunchRedirectedChild(commandLine, hOutputWrite, hInputRead, hErrorWrite);
-
-	if (!hChildProcess)
+	wchar_t server[1024];
+	wcscpy(server, L"umbel.org");
+	wcscpy(str, L"/umbel/rc/MusicalPerformer.rdf");
+	// Use WinHttpOpen to obtain a session handle.
+	if (!(hSession = WinHttpOpen(L"HTTP/1.1",
+		WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+		WINHTTP_NO_PROXY_NAME,
+		WINHTTP_NO_PROXY_BYPASS, 0)))
 	{
-		wchar_t currentDirectory[4096];
-		GetCurrentDirectory(4096,currentDirectory);
-		lplog(LOG_FATAL_ERROR, L"Error launching %s in %s", commandLine.c_str(), currentDirectory);
+		lplog(LOG_ERROR, L"ERROR:Cannot WinHttpOpen - %s.", getLastErrorMessage(lem));
+		lplog(LOG_ERROR, NULL);
+		return -1;
 	}
-  // Close pipe handles (do not continue to modify the parent).
-  // You need to make sure that no handles to the write end of the
-  // output pipe are maintained in this process or else the pipe will
-  // not close when the child process exits and the ReadFile will hang.
-  if (!CloseHandle(hOutputWrite)) 
-    lplog(LOG_FATAL_ERROR, L"CloseHandle %d line %d", GetLastError(), __LINE__);
-  if (!CloseHandle(hInputRead)) 
-    lplog(LOG_FATAL_ERROR, L"CloseHandle %d line %d", GetLastError(), __LINE__);
-  if (!CloseHandle(hErrorWrite)) 
-    lplog(LOG_FATAL_ERROR, L"CloseHandle %d line %d", GetLastError(), __LINE__);
+	// Use WinHttpSetTimeouts to set a new time-out values.
+	if (!WinHttpSetTimeouts(hSession, 0, 0, 0, 0))
+	{
+		lplog(LOG_ERROR, L"ERROR:Cannot WinHttpSetTimeouts - %s.", getLastErrorMessage(lem));
+		lplog(LOG_ERROR, NULL);
+		return -1;
+	}
 
-  // Read the child's output.
-  ReadAndHandleOutput(hOutputRead,outbuf);
+	// Specify an HTTP server.
+	if (!(hConnect = WinHttpConnect(hSession, server,
+		INTERNET_DEFAULT_HTTPS_PORT, 0)))
+	{
+		lplog(LOG_ERROR, L"ERROR:Cannot WinHttpConnect %s - %s.", server, getLastErrorMessage(lem));
+		lplog(LOG_ERROR, NULL);
+		return -1;
+	}
+	// Create an HTTP request handle.
+	if (!(hRequest = WinHttpOpenRequest(hConnect, L"GET", str,
+		NULL, WINHTTP_NO_REFERER,
+		WINHTTP_DEFAULT_ACCEPT_TYPES,
+		0))) //WINHTTP_FLAG_SECURE )))
+	{
+		lplog(LOG_ERROR, L"ERROR:Cannot WinHttpOpenRequest %s - %s.", str, getLastErrorMessage(lem));
+		lplog(LOG_ERROR, NULL);
+		return -1;
+	}
+	// Use WinHttpSetTimeouts to set a new time-out values.
+	if (!WinHttpSetTimeouts(hRequest, 0, 0, 0, 0))
+	{
+		lplog(LOG_ERROR, L"ERROR:Cannot WinHttpSetTimeouts on request - %s.", getLastErrorMessage(lem));
+		lplog(LOG_ERROR, NULL);
+		return -1;
+	}
+	// WINHTTP_OPTION_SEND_TIMEOUT
+	// Sets or retrieves an unsigned long integer value that contains the time-out value, in milliseconds, to send a request or write some data. If sending the request takes longer than the timeout, the send operation is canceled. The default timeout is 30 seconds.
+	DWORD timeoutValue;
+	DWORD dwBufferLength = sizeof(timeoutValue);
+	if (!WinHttpQueryOption(hRequest, WINHTTP_OPTION_SEND_TIMEOUT, &timeoutValue, &dwBufferLength))
+	{
+		lplog(LOG_ERROR, L"ERROR:Cannot WinHttpQueryOption on request - %s.", getLastErrorMessage(lem));
+		lplog(LOG_ERROR, NULL);
+		return -1;
+	}
+	lplog(LOG_ERROR, L"ERROR:WinHttpQueryOption yields a timeout value of %d(%d).", timeoutValue, dwBufferLength);
+	timeoutValue = 0;
+	dwBufferLength = sizeof(timeoutValue);
+	if (!WinHttpSetOption(hRequest, WINHTTP_OPTION_SEND_TIMEOUT, &timeoutValue, dwBufferLength))
+	{
+		lplog(LOG_ERROR, L"ERROR:Cannot WinHttpSetOption on request - %s.", getLastErrorMessage(lem));
+		lplog(LOG_ERROR, NULL);
+		return -1;
+	}
+	int start = clock();
+	// Send a request.
+	if (!(bResults = WinHttpSendRequest(hRequest,
+		WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+		WINHTTP_NO_REQUEST_DATA, 0,
+		0, 0)))
+	{
+		lplog(LOG_ERROR, L"ERROR:Cannot WinHttpSendRequest %s%s - %s (%d MS).", server, str, getLastErrorMessage(lem), clock() - start);
+		lplog(LOG_ERROR, NULL);
+		return -1;
+	}
+	// End the request.
+	if (!(bResults = WinHttpReceiveResponse(hRequest, NULL)))
+	{
+		lplog(LOG_ERROR, L"ERROR:Cannot WinHttpReceiveResponse %s%s - %s.", server, str, getLastErrorMessage(lem));
+		lplog(LOG_ERROR, NULL);
+		return -1;
+	}
 
-	// Force the read on the input to return by closing the stdin handle.
-  //if (!CloseHandle(hStdIn)) // error is very common - returns handle invalid
-		//logLastError("CloseHandle",__LINE__);
+	// Keep checking for data until there is nothing left.
+	if (bResults)
+	{
+		do
+		{
+			// Check for available data.
+			dwSize = 0;
+			if (!WinHttpQueryDataAvailable(hRequest, &dwSize))
+				printf("Error %u in WinHttpQueryDataAvailable.\n",
+				(int)GetLastError());
 
-  if (WaitForSingleObject(hChildProcess,INFINITE) == WAIT_FAILED)
-	lplog(LOG_FATAL_ERROR, L"WaitForSingleObject %d line %d", GetLastError(), __LINE__);
+			// Allocate space for the buffer.
+			pszOutBuffer = new char[dwSize + 1];
+			if (!pszOutBuffer)
+			{
+				printf("Out of memory\n");
+				dwSize = 0;
+			}
+			else
+			{
+				// Read the data.
+				ZeroMemory(pszOutBuffer, dwSize + 1);
 
-  if (!CloseHandle(hOutputRead)) 
-	lplog(LOG_FATAL_ERROR, L"CloseHandle %d line %d", GetLastError(), __LINE__);
-  if (!CloseHandle(hInputWrite))
-	lplog(LOG_FATAL_ERROR, L"CloseHandle %d line %d", GetLastError(), __LINE__);
-	_wchdir(NPath);
+				if (!WinHttpReadData(hRequest, (LPVOID)pszOutBuffer,
+					dwSize, &dwDownloaded))
+					printf("Error %u in WinHttpReadData.\n", (int)GetLastError());
+				else
+					printf("%s", pszOutBuffer);
+
+				// Free the memory allocated to the buffer.
+				delete[] pszOutBuffer;
+			}
+		} while (dwSize > 0);
+	}
+
+
+	// Report any errors.
+	if (!bResults)
+		printf("Error %d has occurred.\n", (int)GetLastError());
+
+	// Close any open handles.
+	if (hRequest) WinHttpCloseHandle(hRequest);
+	if (hConnect) WinHttpCloseHandle(hConnect);
+	if (hSession) WinHttpCloseHandle(hSession);
 	return 0;
 }
+#endif

@@ -507,7 +507,6 @@ int bncc::findPreferredForm(vector <WordMatch>::iterator im,int tag,bool optiona
   }
   if (f==nounForm)
   {
-    if (monthForm<0) monthForm=FormsClass::gFindForm(L"month");
     // refuse adding noun to
     // ordinal, number, cardinal,"quantifier",L"time",L"date",abbreviations,months
     if (im->word->second.query(numeralOrdinalForm)>=0 || im->word->second.query(numberForm)>=0 || im->word->second.query(numeralCardinalForm)>=0 ||
@@ -1135,7 +1134,7 @@ int bncc::process(Source &source,int sourceId,wstring id)
   int printLocation=0;
   wchar_t path[1024];
   wsprintf(path,L"%s\\BNC-world\\Texts\\%lC\\%lC%lC\\%lC%lC%lC",LMAINDIR,id[0],id[0],id[1],id[0],id[1],id[2]);
-  if (Words.readWithLock(source.mysql,sourceId,path,false, true)<0)
+  if (Words.readWithLock(source.mysql,sourceId,path,false, true,false)<0)
     lplog(LOG_FATAL_ERROR,L"Cannot read dictionary.");
   Words.addMultiWordObjects(source.multiWordStrings,source.multiWordObjects);
   source.storageLocation =id;
@@ -1173,7 +1172,7 @@ int bncc::process(Source &source,int sourceId,wstring id)
     if ((int)(where*100/actualLen)>lastProgressPercent)
     {
       lastProgressPercent=(int)(where*100/actualLen);
-      wprintf(L"PROGRESS: %03d%% (%06zu words) %d out of %d bytes read with %d seconds elapsed (%d bytes) \r",lastProgressPercent,source.m.size(),where,actualLen,clocksec(),memoryAllocated);
+      wprintf(L"PROGRESS: %03d%% (%06zu words) %d out of %d bytes read with %d seconds elapsed (%I64d bytes) \r",lastProgressPercent,source.m.size(),where,actualLen,clocksec(),memoryAllocated);
     }
     wchar_t *sentenceStart=wcsstr(buffer+where,L"<s n=\"");
     if (!sentenceStart) break;
@@ -1206,7 +1205,7 @@ int bncc::process(Source &source,int sourceId,wstring id)
     if (returnSentence<0) return returnSentence;
   }
   tfree(actualLen+1,buffer);
-  wprintf(L"PROGRESS: 100%% (%06zu words) %d out of %d bytes read with %d seconds elapsed (%d bytes) \n",source.m.size(),where,actualLen,clocksec(),memoryAllocated);
+  wprintf(L"PROGRESS: 100%% (%06zu words) %d out of %d bytes read with %d seconds elapsed (%I64d bytes) \n",source.m.size(),where,actualLen,clocksec(),memoryAllocated);
   return 0;//source.write(sourceId,path);
 }
 

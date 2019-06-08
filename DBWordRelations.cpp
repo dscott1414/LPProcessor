@@ -20,6 +20,7 @@
 #include "vcXML.h"
 #include "profile.h"
 #include "mysqldb.h"
+#include "internet.h"
 
 #define NULLWORD 187
 bool checkFull(MYSQL *mysql,wchar_t *qt,size_t &len,bool flush,wchar_t *qualifier);
@@ -529,18 +530,14 @@ int getSolrField(char *element, yajl_val doc)
 	return (vid != NULL && YAJL_IS_NUMBER(vid)) ? atoi(YAJL_GET_NUMBER(vid)) : -1;
 }
 
-extern HINTERNET hINet;
 #define MAX_BUF 200000
-// these are in getDictionary
-bool LPInternetOpen(int timer);
-bool InternetReadFile_Wait(HINTERNET RequestHandle, char *buffer, int bufsize, DWORD *dwRead);
 
 int readPageFromSolr(const wchar_t *queryParams, wstring &buffer)
 {
 	LFS
-	if (!LPInternetOpen(0))
-		return INTERNET_OPEN_FAILED;
-	HINTERNET hHttpSession =InternetConnect(hINet, L"127.0.0.1", 8983, NULL /* user */, NULL /* password */, INTERNET_SERVICE_HTTP, 0, 0);
+	if (!Internet::LPInternetOpen(0))
+		return Internet::INTERNET_OPEN_FAILED;
+	HINTERNET hHttpSession =InternetConnect(Internet::hINet, L"127.0.0.1", 8983, NULL /* user */, NULL /* password */, INTERNET_SERVICE_HTTP, 0, 0);
 	if (hHttpSession == NULL)
 	{
 		lplog(LOG_ERROR, L"Cannot connect to Solr");
@@ -566,7 +563,7 @@ int readPageFromSolr(const wchar_t *queryParams, wstring &buffer)
 		DWORD dwRead;
 		char cBuffer[MAX_BUF + 4];
 		// does InternetReadFile in a child process to prevent lock
-		while (InternetReadFile_Wait(hHttpRequest, cBuffer, MAX_BUF, &dwRead))
+		while (Internet::InternetReadFile_Wait(hHttpRequest, cBuffer, MAX_BUF, &dwRead))
 		{
 			if (dwRead == 0)
 				break;

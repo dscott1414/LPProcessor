@@ -14,6 +14,7 @@
 #include "profile.h"
 #include "paice.h"
 #include "mysqldb.h"
+#include "mysqld_error.h"
 #include <sstream>
 #include <iostream>
 #include <vector>
@@ -21,6 +22,7 @@ extern "C" {
 #include <yajl_tree.h>
 }
 #define MAX_LEN 2048
+#include "internet.h"
 
 int bandwidthControl=1; // minimum seconds between requests   // initialized before threads
 
@@ -860,46 +862,6 @@ string lookForPOS(yajl_val node)
 	return (docs == NULL) ? "" : YAJL_GET_STRING(docs);
 }
 
-int cacheWebPath(wstring webAddress, wstring &buffer, wstring epath, wstring cacheTypePath, bool forceWebReread, bool &networkAccessed)
-{
-	LFS
-		wchar_t path[MAX_LEN];
-	int pathlen = _snwprintf(path, MAX_LEN, L"%s\\%s", CACHEDIR, cacheTypePath.c_str());
-	_wmkdir(path);
-	_snwprintf(path + pathlen, MAX_LEN - pathlen, L"\\_%s", epath.c_str());
-	path[MAX_PATH - 20] = 0; // make space for subdirectories and for file extensions
-	convertIllegalChars(path + pathlen + 1);
-	distributeToSubDirectories(path, pathlen + 1, true);
-	int ret, fd;
-	if (networkAccessed = forceWebReread || _waccess(path, 0) < 0)
-	{
-		if (ret = readPage(webAddress.c_str(), buffer)) return ret;
-		if ((fd = _wopen(path, O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE)) < 0)
-		{
-			lplog(LOG_ERROR, L"cacheWebPath:Cannot create path %s - %S.", path, sys_errlist[errno]);
-			return GETPAGE_CANNOT_CREATE;
-		}
-		_write(fd, buffer.c_str(), buffer.length() * sizeof(buffer[0]));
-		_close(fd);
-		return 0;
-	}
-	else
-	{
-		if ((fd = _wopen(path, O_RDWR | O_BINARY)) < 0)
-			lplog(LOG_ERROR, L"cacheWebPath:Cannot read path %s - %S.", path, sys_errlist[errno]);
-		else
-		{
-			int bufferlen = filelength(fd);
-			void *tbuffer = (void *)tcalloc(bufferlen + 10, 1);
-			_read(fd, tbuffer, bufferlen);
-			_close(fd);
-			buffer = (wchar_t *)tbuffer;
-			tfree(bufferlen + 10, tbuffer);
-		}
-	}
-	return 0;
-}
-
 /*
 // map to class/classes
 Italian adverb
@@ -972,7 +934,7 @@ communications signal
 */
 vector<wstring> ignoreBefore = { L"pronunciation spelling" };
 vector<wstring> classes = { L"adjective",L"adverb",L"verb",L"noun",L"interjection",L"abbreviation",L"symbol",L"preposition",L"conjunction",L"trademark",L"pronoun",L"honorific" };
-vector<wstring> ignoreAfter = { L"prefix",L"suffix",L"phrase",L"saying",L"quotation",L"pronunciation spelling",L"script annotation",L"combining form",L"contraction",L"indefinite article" }; // must be processed after classes
+vector<wstring> ignoreAfter = { L"prefix",L"suffix",L"phrase",L"saying",L"quotation",L"pronunciation spelling",L"script annotation",L"combining form",L"contraction",L"indefinite article",L"definite article" }; // must be processed after classes
 
 void identifyFormClass(set<int> &posSet, wstring pos, bool &plural)
 {
@@ -1013,16 +975,54 @@ void identifyFormClass(set<int> &posSet, wstring pos, bool &plural)
 		if (pos.find(c.c_str()) != wstring::npos)
 			return;
 	if (posSet.empty())
-		printf("form not recognized - %S", pos.c_str());
+		printf("form not recognized - %S\n", pos.c_str());
 }
 
 // returns false if not found by the site (or error)
-bool existsInDictionaryDotCom(wstring word, bool &networkAccessed)
+bool existsInDictionaryDotCom(MYSQL *mysql,wstring word, bool &networkAccessed)
 {
-	wstring buffer;
-	if (cacheWebPath(L"https://www.dictionary.com/browse/" + word, buffer, word, L"DictionaryDotCom", false, networkAccessed))
+	if (word.length() <= 2)
 		return false;
-	return buffer.find(L"No results found") == wstring::npos;
+	//initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
+	MYSQL_RES * result;
+	_int64 numResults = 0;
+	wchar_t qt[1024];
+	wchar_t path[1024];
+	path[0] = '_';
+	wcscpy(path+1, word.c_str());
+	convertIllegalChars(path + 1);
+	_snwprintf(qt, query_buffer_len, L"select 1 from notwords where word = '%s'", path);
+	if (!myquery(mysql, L"LOCK TABLES notwords READ"))
+		return false;
+	if (myquery(mysql, qt, result))
+	{
+		numResults = mysql_num_rows(result);
+		mysql_free_result(result);
+	}
+	if (!myquery(mysql, L"UNLOCK TABLES"))
+		return false;
+	//lplog(LOG_INFO, L"*** existsInDictionaryDotCom: statement %s resulted in numRows=%d.", qt, numResults);
+	if (numResults > 0)
+		return false;
+
+	wstring buffer,diskPath;
+	if (Internet::cacheWebPath(L"https://www.dictionary.com/browse/" + word, buffer, word, L"DictionaryDotCom", false, networkAccessed,diskPath))
+		return false;
+	if ((networkAccessed && Internet::redirectUrl.find(L"noresults")!=wstring::npos) || 
+		  buffer.find(L"No results found") != wstring::npos || 
+		  buffer.find(L"dcom-no-result") != wstring::npos ||
+			buffer.find(L"dcom-misspell") != wstring::npos)
+	{
+		if (!myquery(mysql, L"LOCK TABLES notwords WRITE"))
+			return false;
+		wsprintf(qt, L"INSERT INTO notwords VALUES ('%s')", path);
+		myquery(mysql, qt, true);
+		_wremove(diskPath.c_str());
+		if (!myquery(mysql, L"UNLOCK TABLES"))
+			return false;
+		return false;
+	}
+	return true;
 }
 
 bool detectNonEuropeanWord(wstring word)
@@ -1053,8 +1053,8 @@ bool getMerriamWebsterDictionaryAPIForms(wstring sWord, set <int> &posSet, bool 
 {
 	wstring pageURL = L"https://www.dictionaryapi.com/api/v3/references/collegiate/json/";
 	pageURL += sWord + L"?key=ba4ac476-dac1-4b38-ad6b-fe36e8416e07";
-	wstring jsonWideBuffer;
-	if (!cacheWebPath(pageURL, jsonWideBuffer, sWord, L"Webster", false, networkAccessed))
+	wstring jsonWideBuffer, diskPath;
+	if (!Internet::cacheWebPath(pageURL, jsonWideBuffer, sWord, L"Webster", false, networkAccessed,diskPath))
 	{
 		char errbuf[1024];
 		errbuf[0] = 0;
@@ -1145,15 +1145,23 @@ int discoverInflections(set <int> posSet, bool plural, wstring word)
 int WordClass::getForms(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId)
 {
 	LFS
-	if (detectNonEuropeanWord(sWord))
+	// non English word?
+	if (detectNonEuropeanWord(sWord) || sWord.find_first_of(L"ãâäáàæçêéèêëîíïñôóòöõôûüùú") != wstring::npos)
 		return WORD_NOT_FOUND;
-	bool plural,networkAccessed, existsDM = existsInDictionaryDotCom(sWord, networkAccessed);
+	// embedded quote?
+	size_t whereQuote = sWord.find('\'');
+	if (whereQuote != wstring::npos && whereQuote > 0 && whereQuote < sWord.length() - 1)
+		return WORD_NOT_FOUND;
+	// check dictionary.com for a sanity check
+	bool plural,networkAccessed, existsDM = existsInDictionaryDotCom(mysql, sWord, networkAccessed);
 	if (!existsDM)
 		return WORD_NOT_FOUND;
 	changedWords=true;
+	// check webster for a list of the forms (because of their API)
 	set <int> posSet;
 	if (!getMerriamWebsterDictionaryAPIForms(sWord, posSet, plural, networkAccessed))
 		return WORD_NOT_FOUND;
+	// discover common inflections for each open word class
 	int inflections = discoverInflections(posSet, plural, sWord);
 	int flags = 0, derivationRules = 0;
 	bool added;
@@ -1163,7 +1171,6 @@ int WordClass::getForms(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId)
 	return (iWord == Words.end()) ? WORD_NOT_FOUND : posSet.size();
 }
 
-HINTERNET hINet;
 const wchar_t *getLastErrorMessage(wstring &out)
 { LFS
 	wchar_t msg[10000]; 
@@ -1187,214 +1194,6 @@ const wchar_t *getLastErrorMessage(wstring &out)
 }
 
 
-bool InternetReadFile_Wait( HINTERNET RequestHandle,char *buffer,int bufsize,DWORD *dwRead);
-
-int readPage(const wchar_t *str, wstring &buffer)
-{ LFS
-	wstring headers;
-	return readPage(str,buffer,headers);
-}
-
-bool InetOption(bool global,int option,wchar_t *description,unsigned long value)
-{ LFS
-	HINTERNET hI=(global) ? 0 : hINet;
-	unsigned long qValue=value;
-	DWORD len=sizeof(qValue);
-	wstring inett;
-	if (!InternetQueryOption(hI,option,&qValue,&len))
-		lplog(LOG_ERROR,L"ERROR:InternetQueryOption of (%s) Failed - %s",description,getLastErrorMessage(inett));
-	if (value!=qValue)
-	{
-		lplog(LOG_INFO,L"%s set to %d from %d.",description,value,qValue);
-		qValue=value;
-		if (!InternetSetOption(hI,option,&qValue,sizeof(qValue)))
-			lplog(LOG_ERROR,L"ERROR:InternetSetOption of (%s) Failed - %s",description,getLastErrorMessage(inett));
-	}
-	return true;
-}
-
-bool LPInternetOpen(int timer)
-{
-	if (!hINet)
-	{
-		hINet = InternetOpen(L"InetURL/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
-		DWORD dwFlags;
-		InternetGetConnectedState(&dwFlags, 0); // BOOL connState=
-		if (dwFlags&INTERNET_CONNECTION_CONFIGURED)
-			lplog(LOG_INFO, L"Local system has a valid connection to the Internet, but it might or might not be currently connected.");
-		if (dwFlags&INTERNET_CONNECTION_LAN)
-			lplog(LOG_INFO, L"Local system uses a local area network to connect to the Internet.");
-		if (dwFlags&INTERNET_CONNECTION_MODEM)
-			lplog(LOG_INFO, L"Local system uses a modem to connect to the Internet.");
-		if (dwFlags&INTERNET_CONNECTION_MODEM_BUSY)
-			lplog(LOG_INFO, L"No longer used.");
-		if (dwFlags&INTERNET_CONNECTION_OFFLINE)
-			lplog(LOG_INFO, L"Local system is in offline mode.");
-		if (dwFlags&INTERNET_CONNECTION_PROXY)
-			lplog(LOG_INFO, L"Local system uses a proxy server to connect to the Internet.");
-		if (dwFlags&INTERNET_RAS_INSTALLED)
-			lplog(LOG_INFO, L"Local system has RAS installed.");
-		InetOption(true, INTERNET_OPTION_MAX_CONNS_PER_1_0_SERVER, L"Maximum connections per 1.0 server", 100);
-		InetOption(true, INTERNET_OPTION_MAX_CONNS_PER_PROXY, L"Maximum connections per proxy", 100);
-		InetOption(true, INTERNET_OPTION_MAX_CONNS_PER_SERVER, L"Maximum connections per server", 100);
-	}
-	wstring ioe;
-	if (!hINet)
-	{
-		lplog(LOG_ERROR, L"ERROR:InternetOpen Failed - %s", getLastErrorMessage(ioe));
-		AcquireSRWLockExclusive(&cProfile::networkTimeSRWLock);
-		cProfile::accumulationNetworkProfileTimer += (clock() - timer);
-		ReleaseSRWLockExclusive(&cProfile::networkTimeSRWLock);
-		return false;
-	}
-	InetOption(false, INTERNET_OPTION_CONNECT_TIMEOUT, L"Connect Timeout", 6000000);
-	return true;
-}
-
-#define MAX_BUF 200000
-int readPage(const wchar_t *str, wstring &buffer,wstring &headers)
-{ LFS
-	int timer=clock();
- 	AcquireSRWLockShared(&cProfile::networkTimeSRWLock);
-	if (clock()-cProfile::lastNetClock<bandwidthControl)
-	{
-		int timeWait=(bandwidthControl-(clock()-cProfile::lastNetClock));
-	 	ReleaseSRWLockShared(&cProfile::networkTimeSRWLock);
-		AcquireSRWLockExclusive(&totalInternetTimeWaitBandwidthControlSRWLock);
-		cProfile::totalInternetTimeWaitBandwidthControl+=timeWait;
-		ReleaseSRWLockExclusive(&totalInternetTimeWaitBandwidthControlSRWLock);
-		Sleep(timeWait);
-	}
-	else
-	 	ReleaseSRWLockShared(&cProfile::networkTimeSRWLock);
-	int errors=0;
- 	AcquireSRWLockExclusive(&cProfile::networkTimeSRWLock);
-	cProfile::lastNetClock=clock();
- 	ReleaseSRWLockExclusive(&cProfile::networkTimeSRWLock);
-	char cBuffer[MAX_BUF+4];
-	if (!LPInternetOpen(timer))
-		return INTERNET_OPEN_FAILED;
-	wstring ioe;
-
-	//INTERNET_OPTION_CONNECT_RETRIES
-#define MAX_ERRORS 3
-	extern bool readTimeoutError;
-	while (errors<MAX_ERRORS)
-	{
-		LPVOID hFile;
-		if (hFile = InternetOpenUrl( hINet, str, headers.c_str(), headers.length(), 0, INTERNET_FLAG_NO_CACHE_WRITE))
-		{
-			if (log_net) lplog(L"Successfully opened URL %s.",str);
-			DWORD dwRead;
-			readTimeoutError=false;
-			// does InternetReadFile in a child process to prevent lock
-			while ( InternetReadFile_Wait( hFile, cBuffer, MAX_BUF, &dwRead ) )
-			{
-				if ( dwRead == 0 )
-					break;
-				cBuffer[dwRead] = 0;
-				wstring wb;
-				buffer+=mTW(cBuffer,wb);
-			}
-			InternetCloseHandle( hFile );
-			if (!readTimeoutError)
-			{
-				cProfile::accumulateNetworkTime(str,timer,cProfile::lastNetClock);
-				return 0;
-			}
-			errors++;
-			lplog(LOG_ERROR,L"ERROR:%d:Timeout reading URL %s.",errors,str);
-			if (!InternetCheckConnection(str,FLAG_ICC_FORCE_CONNECTION,0))
-				lplog(LOG_ERROR,L"ERROR:Cannot force URL %s - %s.\r",str,getLastErrorMessage(ioe));
-			lplog(LOG_ERROR,NULL);
-		}
-		else
-		{
-			errors++;
-			int lastError=GetLastError();
-			lplog(LOG_ERROR,L"ERROR:%d:Cannot open URL %s - %s (%d).\r",errors,str,getLastErrorMessage(ioe),lastError);
-			if (wcsstr(str, L"sparql"))
-			{
-				wprintf(L"\n\nrestart virtuoso\n");
-				Sleep(30000);
-				return readPage(str, buffer, headers);
-			}
-			if (lastError == ERROR_NO_UNICODE_TRANSLATION)
-				break;
-			if (!InternetCheckConnection(str,FLAG_ICC_FORCE_CONNECTION,0))
-				lplog(LOG_ERROR,L"ERROR:Cannot force URL %s - %s.\r",str,getLastErrorMessage(ioe));
-			InternetCloseHandle(hINet);
-			hINet = InternetOpen(L"InetURL/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0 );
-			lplog(LOG_ERROR,NULL);
-			Sleep(2000);
-		 	AcquireSRWLockExclusive(&cProfile::networkTimeSRWLock);
-			cProfile::lastNetClock=clock();
-		 	ReleaseSRWLockExclusive(&cProfile::networkTimeSRWLock);
-		}
-	}
-	if (errors == MAX_ERRORS)
-		lplog(LOG_ERROR,L"ERROR:%d:Terminating because we cannot read URL %s - %s.",errors,str,getLastErrorMessage(ioe)); // TMP DEBUG
-	cProfile::accumulateNetworkTime(str,timer,cProfile::lastNetClock);
-	return (errors) ? WORD_NOT_FOUND : 0;
-}
-
-int WordClass::readBinaryPage(wchar_t *str, int destfile,int &total)
-{ LFS
- 	AcquireSRWLockShared(&cProfile::networkTimeSRWLock);
-	if (clock()-cProfile::lastNetClock<bandwidthControl)
-	{
-	 	ReleaseSRWLockShared(&cProfile::networkTimeSRWLock);
-		int timeWait=(bandwidthControl-(clock()-cProfile::lastNetClock));
-		AcquireSRWLockExclusive(&totalInternetTimeWaitBandwidthControlSRWLock);
-		cProfile::totalInternetTimeWaitBandwidthControl+=timeWait;
-		ReleaseSRWLockExclusive(&totalInternetTimeWaitBandwidthControlSRWLock);
-		Sleep(timeWait);
-	}
-	else
-	 	ReleaseSRWLockShared(&cProfile::networkTimeSRWLock);
- 	AcquireSRWLockShared(&cProfile::networkTimeSRWLock);
-	cProfile::lastNetClock=clock();
- 	ReleaseSRWLockShared(&cProfile::networkTimeSRWLock);
-	char cBuffer[MAX_BUF+4];
-	wstring ioe;
-	if (!hINet) hINet = InternetOpen(L"InetURL/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0 );
-	if ( !hINet )
-	{
-		lplog(LOG_ERROR,L"ERROR:InternetOpen Failed - %s",getLastErrorMessage(ioe));
-		return INTERNET_OPEN_FAILED;
-	}
-	while (true)
-	{
-		HANDLE hFile;
-		if (hFile = InternetOpenUrl( hINet, str, NULL, 0, 0, INTERNET_FLAG_NO_CACHE_WRITE ))
-		{
-			if (log_net) lplog(L"Successfully opened URL %s.",str);
-			DWORD dwRead;
-			while ( InternetReadFile( hFile, cBuffer, MAX_BUF, &dwRead ) )
-			{
-				if ( dwRead == 0 )
-					break;
-				total+=dwRead;
-				::write(destfile,cBuffer,dwRead);
-			}
-			InternetCloseHandle( hFile );
-			return 0;
-		}
-		else
-		{
-			lplog(LOG_ERROR,L"ERROR:Cannot open URL %s - %s.",str,getLastErrorMessage(ioe));
-			lplog(LOG_ERROR,NULL);
-			return -1;
-		}
-	}
-	return 0;
-}
-
-bool WordClass::closeConnection(void)
-{ LFS
-	if( hINet ) InternetCloseHandle( hINet );
-	return true;
-}
 
 #ifdef CHECK_WORD_CACHE
 
@@ -1707,7 +1506,6 @@ void WordClass::testWordCacheFileRoutines(void)
 		differentMainEntry,differentInflectionFlags,numWordsNotFound,numDifferentForms);
 }
 
-#endif
 // convert all files to unicode
 void convertAllToUnicode(void)
 { LFS
@@ -1852,6 +1650,7 @@ void tempRemoveBadWebsterPages(void)
 			FindClose(hFind);
 		}
 }
+#endif
 
 // filter out everything but nouns
 // filter out all {{ links }}

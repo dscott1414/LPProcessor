@@ -19,6 +19,7 @@
 #include "profile.h"
 #include <Dbghelp.h>
 #include "mysqldb.h"
+#include "internet.h"
 
 // needed for _STLP_DEBUG - these must be set to a legal, unreachable yet never changing value
 unordered_map <wstring,tFI> static_wordMap;
@@ -105,7 +106,7 @@ int acquireList(wchar_t *filename)
 			int destfile=_wopen(path,O_RDWR|O_BINARY|O_CREAT);
 			if (destfile)
 			{
-				if (Words.readBinaryPage(url,destfile,total))
+				if (Internet::readBinaryPage(url,destfile,total))
 					lplog(LOG_ERROR,L"error retrieving %s.",url);
 				close(destfile);
 			}
@@ -730,7 +731,7 @@ void setConsoleWindowSize(int width,int height)
 			(int)GetLastError(), LastErrorStr());
 }
 
-int createLPProcess(int numProcess, HANDLE &processId, wchar_t *commandPath, wchar_t *processParameters)
+int createLPProcess(int numProcess, HANDLE &processHandle, DWORD &processId, wchar_t *commandPath, wchar_t *processParameters)
 {
 	STARTUPINFO si;
 	ZeroMemory(&si, sizeof(si));
@@ -762,24 +763,95 @@ int createLPProcess(int numProcess, HANDLE &processId, wchar_t *commandPath, wch
 		printf("CreateProcess of %S failed (%d) %s in %S.\n", processParameters, (int)GetLastError(), LastErrorStr(), _wgetcwd(cwd, 1024));
 		return -1;
 	}
-	processId = pi.hProcess;
+	processHandle = pi.hProcess;
+	processId = pi.dwProcessId;
 	return 0;
 }
 
-int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st, int maxProcesses, int numSourcesPerProcess, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite)
+int getNumSourcesProcessed(Source &source, int &numSourcesProcessed, __int64 &wordsProcessed, __int64 &sentencesProcessed)
+{
+	MYSQL_RES * result;
+	if (!myquery(&source.mysql, L"LOCK TABLES sources WRITE")) return -1;
+	if (myquery(&source.mysql, L"select COUNT(id), SUM(numWords), SUM(numSentences) from sources where sourceType = 2 and processed IS not NULL and processing IS NULL and start != '**SKIP**' and start != '**START NOT FOUND**'",result))
+	{
+		MYSQL_ROW sqlrow = NULL;
+		if (sqlrow = mysql_fetch_row(result))
+		{
+			numSourcesProcessed = atoi(sqlrow[0]);
+			wordsProcessed = atol(sqlrow[1]);
+			sentencesProcessed = atoi(sqlrow[2]);
+		}
+		mysql_free_result(result);
+	}
+	if (!myquery(&source.mysql, L"UNLOCK TABLES")) return -1;
+	return 0;
+}
+
+// https://stackoverflow.com/questions/813086/can-i-send-a-ctrl-c-sigint-to-an-application-on-windows/1179124
+// Inspired from http://stackoverflow.com/a/15281070/1529139
+// and http://stackoverflow.com/q/40059902/1529139
+bool signalCtrl(DWORD dwProcessId, DWORD dwCtrlEvent)
+{
+	bool success = false;
+	DWORD thisConsoleId = GetCurrentProcessId();
+	// Leave current console if it exists
+	// (otherwise AttachConsole will return ERROR_ACCESS_DENIED)
+	bool consoleDetached = (FreeConsole() != FALSE);
+
+	if (AttachConsole(dwProcessId) != FALSE)
+	{
+		// Add a fake Ctrl-C handler for avoid instant kill is this console
+		// WARNING: do not revert it or current program will be also killed
+		SetConsoleCtrlHandler(nullptr, true);
+		success = (GenerateConsoleCtrlEvent(dwCtrlEvent, 0) != FALSE);
+		FreeConsole();
+	}
+
+	if (consoleDetached)
+	{
+		// Create a new console if previous was deleted by OS
+		if (AttachConsole(thisConsoleId) == FALSE)
+		{
+			int errorCode = GetLastError();
+			if (errorCode == 31) // 31=ERROR_GEN_FAILURE
+			{
+				AllocConsole();
+			}
+		}
+	}
+	return success;
+}
+
+int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st, int maxProcesses, int numSourcesPerProcess, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite,bool parseOnly)
 {
 	LFS
-		chdir("source");
-	//MYSQL_RES *result = NULL;
+	chdir("source");
+	bool sentBreakSignals = false;
+	int startTime = clock();
 	HANDLE *handles = (HANDLE *)calloc(maxProcesses, sizeof(HANDLE));
-	int numProcesses = 0, errorCode = 0;
+	int numProcesses = 0, errorCode = 0,numSourcesProcessedOriginally =0;
+	__int64 wordsProcessedOriginally = 0, sentencesProcessedOriginally = 0;
+	getNumSourcesProcessed(source, numSourcesProcessedOriginally, wordsProcessedOriginally, sentencesProcessedOriginally);
 	wstring tmpstr;
-	while (!exitNow && !exitEventually && !errorCode)
+	while (!errorCode)
 	{
 		unsigned int nextProcessIndex = numProcesses;
 		if (numProcesses == maxProcesses)
 		{
-			nextProcessIndex = WaitForMultipleObjectsEx(numProcesses, handles, false, 1000 * 60 * 60, false);
+			nextProcessIndex = WaitForMultipleObjectsEx(numProcesses, handles, false, 1000 * 60 * 5, false);
+			int numSourcesProcessedNow = 0;
+			__int64 wordsProcessedNow = 0, sentencesProcessedNow = 0;
+			getNumSourcesProcessed(source, numSourcesProcessedNow, wordsProcessedNow, sentencesProcessedNow);
+			int processingSeconds=(clock() - startTime) / CLOCKS_PER_SEC;
+			wchar_t consoleTitle[1500];
+			numSourcesProcessedNow -= numSourcesProcessedOriginally;
+			wordsProcessedNow -= wordsProcessedOriginally;
+			sentencesProcessedNow -= sentencesProcessedOriginally;
+			wsprintf(consoleTitle, L"sources=%06d:sentences=%06I64d:words=%08I64d in %02d:%02d:%02d [%d sources/hour] [%I64d words/hour].", 
+				numSourcesProcessedNow, sentencesProcessedNow, wordsProcessedNow, processingSeconds/3600, (processingSeconds % 3600)/60, processingSeconds % 60, numSourcesProcessedNow*3600/processingSeconds, wordsProcessedNow *3600/processingSeconds);
+			lplog(LOG_INFO | LOG_ERROR, L"%s", consoleTitle);
+			SetConsoleTitle(consoleTitle);
+
 			if (nextProcessIndex == WAIT_IO_COMPLETION || nextProcessIndex == WAIT_TIMEOUT)
 				continue;
 			if (nextProcessIndex == WAIT_FAILED)
@@ -788,12 +860,12 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			{
 				nextProcessIndex -= WAIT_OBJECT_0;
 				CloseHandle(handles[nextProcessIndex]);
-				printf("\nClosing process %d:%p", nextProcessIndex, handles[nextProcessIndex]);
+				printf("\nClosing process %d", nextProcessIndex);
 			}
 			if (nextProcessIndex >= WAIT_ABANDONED_0 && nextProcessIndex < WAIT_ABANDONED_0 + numProcesses)
 			{
 				nextProcessIndex -= WAIT_ABANDONED_0;
-				printf("\nClosing process %d:%p", nextProcessIndex, handles[nextProcessIndex]);
+				printf("\nClosing process %d [abandoned]", nextProcessIndex);
 				CloseHandle(handles[nextProcessIndex]);
 			}
 		}
@@ -832,42 +904,61 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			}
 			break;
 		}
-		HANDLE processId = 0;
-		wchar_t processParameters[1024];
-		switch (processKind)
+		if (exitNow || exitEventually)
 		{
-		case 0:
-			wsprintf(processParameters, L"releasex64\\lp.exe -ParseRequest \"%s\" -cacheDir %s %s%s%s%s-log %d", pathInCache.c_str(), CACHEDIR,
-				(forceSourceReread) ? L"-forceSourceReread " : L"",
-				(sourceWrite) ? L"-SW " : L"",
-				(sourceWordNetRead) ? L"-SWNR " : L"",
-				(sourceWordNetWrite) ? L"-SWNW " : L"",
-				numProcesses);
-			if (errorCode = createLPProcess(nextProcessIndex, processId, L"releasex64\\lp.exe", processParameters) < 0)
-				break;
-			break;
-		case 1:
-			wsprintf(processParameters, L"releasex64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s-numSourceLimit %d -log %d", CACHEDIR,
-				(forceSourceReread) ? L"-forceSourceReread " : L"",
-				(sourceWrite) ? L"-SW " : L"",
-				(sourceWordNetRead) ? L"-SWNR " : L"",
-				(sourceWordNetWrite) ? L"-SWNW " : L"",
-				numSourcesPerProcess,
-				numProcesses);
-			if (errorCode = createLPProcess(nextProcessIndex, processId, L"releasex64\\lp.exe", processParameters) < 0)
-				break;
-			break;
-		case 2:
-			wsprintf(processParameters, L"releasex64\\CorpusAnalysis.exe -step %d -numSourceLimit %d -log %d", CACHEDIR, step, numSourcesPerProcess, numProcesses);
-			if (errorCode = createLPProcess(nextProcessIndex, processId, L"releasex64\\CorpusAnalysis.exe", processParameters) < 0)
-				break;
-			break;
-		default: break;
+			printf("\nSending break signals to children...\n");
+			if (!sentBreakSignals)
+			{
+				for (int p = 0; p < numProcesses; p++)
+				{
+					int pid = GetProcessId(handles[p]);
+					signalCtrl(pid, CTRL_C_EVENT);
+				}
+				sentBreakSignals = true;
+			}
 		}
-		handles[nextProcessIndex] = processId;
-		if (numProcesses < maxProcesses)
-			numProcesses++;
-		printf("\nCreated process %d:%p", nextProcessIndex, processId);
+		else
+		{
+			HANDLE processHandle = 0;
+			DWORD processId = 0;
+			wchar_t processParameters[1024];
+			switch (processKind)
+			{
+			case 0:
+				wsprintf(processParameters, L"releasex64\\lp.exe -ParseRequest \"%s\" -cacheDir %s %s%s%s%s%s-log %d", pathInCache.c_str(), CACHEDIR,
+					(forceSourceReread) ? L"-forceSourceReread " : L"",
+					(sourceWrite) ? L"-SW " : L"",
+					(sourceWordNetRead) ? L"-SWNR " : L"",
+					(sourceWordNetWrite) ? L"-SWNW " : L"",
+					(parseOnly) ? L"-parseOnly " : L"",
+					nextProcessIndex);
+				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\lp.exe", processParameters) < 0)
+					break;
+				break;
+			case 1:
+				wsprintf(processParameters, L"releasex64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s%s-numSourceLimit %d -log %d", CACHEDIR,
+					(forceSourceReread) ? L"-forceSourceReread " : L"",
+					(sourceWrite) ? L"-SW " : L"",
+					(sourceWordNetRead) ? L"-SWNR " : L"",
+					(sourceWordNetWrite) ? L"-SWNW " : L"",
+					(parseOnly) ? L"-parseOnly " : L"",
+					numSourcesPerProcess,
+					nextProcessIndex);
+				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\lp.exe", processParameters) < 0)
+					break;
+				break;
+			case 2:
+				wsprintf(processParameters, L"releasex64\\CorpusAnalysis.exe -step %d -numSourceLimit %d -log %d", CACHEDIR, step, numSourcesPerProcess, nextProcessIndex);
+				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\CorpusAnalysis.exe", processParameters) < 0)
+					break;
+				break;
+			default: break;
+			}
+			handles[nextProcessIndex] = processHandle;
+			if (numProcesses < maxProcesses)
+				numProcesses++;
+			printf("\nCreated process %d:%d", nextProcessIndex, (int)processId);
+		}
 	}
 	if (st != Source::REQUEST_TYPE)
 	{
@@ -886,7 +977,6 @@ void createLocks(void)
 	InitializeSRWLock(&mySQLTotalTimeSRWLock);
 	InitializeSRWLock(&totalInternetTimeWaitBandwidthControlSRWLock);
 	InitializeSRWLock(&mySQLQueryBufferSRWLock);
-	InitializeSRWLock(&orderedHyperNymsMapSRWLock);
 }
 
 int WRMemoryCheck(MYSQL mysql)
@@ -911,8 +1001,10 @@ int WRMemoryCheck(MYSQL mysql)
 		return -1;
 	if ((sqlrow = mysql_fetch_row(result)) != NULL)
 		numRowsOnDisk = atoi(sqlrow[0]);
+	printf("Loading wordrelations into memory...\n");
 	if (!myquery(&mysql, L"insert into wordrelationsmemory select id, sourceId, lastWhere, fromWordId, toWordId, typeId, totalCount from wordrelations"))
 		return -1;
+	printf("Finished wordrelations into memory...\n");
 	if (!myquery(&mysql, L"SELECT COUNT(sourceId) from wordRelationsMemory", result))
 		return -1;
 	if ((sqlrow = mysql_fetch_row(result)) != NULL)
@@ -930,11 +1022,11 @@ int WRMemoryCheck(MYSQL mysql)
 // test timeExpressions -retry -BC 0 -cacheDir D:\cache -SR -SW -SWNR -SWNW -TNMS
 // -test tokenization ~~BEGINUNI -BC 0 -cacheDir J:\caches -SW -SWNR -SWNW -forceSourceReread -retry
 // parse one gutenberg book repeatedly:
-// book 0 -BC 0 -retry -cacheDir J:\caches -SR -SW -SWNR -SWNW -TNMS
-// parse gutenberg books all at once parcelled out:
-// book 0 + -BC 0 -cacheDir J:\caches -SR -SW -SWNR -SWNW -TNMS
+// -book 0 -BC 0 -retry -cacheDir J:\caches -SR -SW -SWNR -SWNW -TNMS
+// parse gutenberg books all at once parcelled out (parseOnly):
+// -book 0 + -BC 0 -cacheDir J:\caches -SW -SWNR -SWNW -forceSourceReread -numSourcesPerProcess 15 -parseOnly -mp 8
 // do TREC:
-// Interactive 0 + -BC 0 -cacheDir J:\caches -SR -SW -SWNR -SWNW -TNMS
+// -Interactive 0 + -BC 0 -cacheDir J:\caches -SR -SW -SWNR -SWNW -TNMS
 void redistributeFilesAlphabetically(wchar_t *dir);
 int numSourceLimit = 0;
 int wmain(int argc,wchar_t *argv[])
@@ -968,9 +1060,6 @@ int wmain(int argc,wchar_t *argv[])
 	//void extractFromWiktionary(wchar_t *f);
 	//extractFromWiktionary(LMAINDIR+L"\\Linguistics information\\TEMP-E20120211.tsv");
 	/* test over */
-	int acquireNewsBank(char *nbdir,int startTimer);
-	if (argc>2 && !_wcsicmp(argv[1],L"-acquireNewsBank"))
-		return acquireNewsBank("NewsBank",_wtoi(argv[2]));
 	if (argc>2 && !_wcsicmp(argv[1],L"-acquireMovieList"))
 		return acquireList(argv[2]);
 	if (argc>2 && !_wcsicmp(argv[1],L"-acquireInterviewTranscript"))
@@ -981,7 +1070,7 @@ int wmain(int argc,wchar_t *argv[])
 	wchar_t *sourceHost=L"localhost";
 	cacheDir=CACHEDIR;
 	bool resetAllSource=false,resetProcessingFlags=false,generateFormStatistics=false,retry=false;
-	bool forceSourceReread=false,sourceWrite=false,sourceWordNetRead=false,sourceWordNetWrite=false,parseOnly=false,wcWrite=false;
+	bool forceSourceReread=false,sourceWrite=false,sourceWordNetRead=false,sourceWordNetWrite=false,parseOnly=false;
 	int numSourcesPerProcess = 5; 
 	for (int I=0; I<argc; I++)
 	{
@@ -1010,7 +1099,7 @@ int wmain(int argc,wchar_t *argv[])
 		else if ((!_wcsicmp(argv[I],L"-LC") || !_wcsicmp(argv[I],L"-logCache")) && I<argc-1)
 			logCache=_wtoi(argv[I+1]);
 		else if ((!_wcsicmp(argv[I],L"-BC") || !_wcsicmp(argv[I],L"-bandwidthControl")) && I<argc-1)
-			bandwidthControl=_wtoi(argv[I+1]);
+			Internet::bandwidthControl=_wtoi(argv[I+1]);
 		else if (!_wcsicmp(argv[I],L"-fTMS") || !_wcsicmp(argv[I],L"-flipTMSOverride"))
 			flipTMSOverride=true;
 		else if (!_wcsicmp(argv[I],L"-fTUMS") || !_wcsicmp(argv[I],L"-flipTUMSOverride"))
@@ -1116,11 +1205,11 @@ int wmain(int argc,wchar_t *argv[])
 		if (multiProcess>0)
 		{
 			HWND consoleWindowHandle = GetConsoleWindow();
-			SetWindowPos(consoleWindowHandle, HWND_NOTOPMOST, 900, 0, 400, 200, SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-			startProcesses(source, 1,0,beginSource, endSource, st, multiProcess, numSourcesPerProcess, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite);
+			SetWindowPos(consoleWindowHandle, HWND_NOTOPMOST, 900, 0, 500, 200, SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+			startProcesses(source, 1,0,beginSource, endSource, st, multiProcess, numSourcesPerProcess, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite,parseOnly);
 			return 0;
 		}
-		int numSourcesProcessed=0;
+		int numSourcesProcessed=0,pid= GetCurrentProcessId();
 		while (!exitNow && !exitEventually && (numSourceLimit==0 || numSourcesProcessed++<numSourceLimit))
 		{
 			int sourceId, repeatStart;
@@ -1130,20 +1219,15 @@ int wmain(int argc,wchar_t *argv[])
 				break;
 			path.insert(0, L"\\");
 			path=path.insert(0,TEXTDIR);
-#ifdef _DEBUG
-			wchar_t dflag=L'D';
-#else
-			wchar_t dflag=L'R';
-#endif
 			wchar_t consoleTitle[1500];
-			wsprintf(consoleTitle,L"[%03d:%03d-%03d:%03d%%][%c] %s '%s'...",sourceId,beginSource,numSources, (numSources-numSourcesLeft)*100/numSources,dflag, (start == L"**SKIP**" || start == L"**START NOT FOUND**") ? L"Skipping":L"Parsing",title.c_str());
+			wsprintf(consoleTitle,L"[%03d:%03d-%03d:%03d%%]PID%05d %s '%s'...",sourceId,beginSource,numSources, (numSources-numSourcesLeft)*100/numSources,pid, (start == L"**SKIP**" || start == L"**START NOT FOUND**") ? L"Skipping":L"",title.c_str());
 			_putws(consoleTitle);
 			lplog(LOG_INFO|LOG_ERROR,L"%s\n", consoleTitle);
 			SetConsoleTitle(consoleTitle);
 			source.unlockTables();
 			if (start == L"**SKIP**")
 				continue;
-			if (st!=Source::BNC_SOURCE_TYPE && Words.readWithLock(source.mysql,sourceId,path,false,true)<0)
+			if (st!=Source::BNC_SOURCE_TYPE && !forceSourceReread && Words.readWithLock(source.mysql,sourceId,path,false,true,false)<0)
 				lplog(LOG_FATAL_ERROR,L"Cannot read dictionary.");
 			Words.addMultiWordObjects(source.multiWordStrings,source.multiWordObjects);
 			wstring rt1,rt2;
@@ -1190,14 +1274,16 @@ int wmain(int argc,wchar_t *argv[])
 				source.sourceId = sourceId;
 				globalTotalUnmatched+=source.printSentences(true,unknownCount,quotationExceptions,totalQuotations,globalOverMatchedPositionsTotal);
 				lplog();
-				if (wcWrite=sourceWrite)
-					source.write(path,false);
+				if (sourceWrite)
+				{
+					source.write(path, false);
+					source.writeWords(path);
+				}
 				puts("");
 			}
 			else
 			{
 				lplog(LOG_INFO,L"%s already parsed.",path.c_str());
-				wcWrite=true;
 				//int cap=source.m.capacity();
 				std::vector<WordMatch>(source.m).swap(source.m);
 				//int cap2=source.m.capacity();
@@ -1206,8 +1292,11 @@ int wmain(int argc,wchar_t *argv[])
 			numWords+=source.m.size();
 			if (parseOnly || viterbiTest) 
 			{
-				void testViterbiFromSource(Source &source);
-				testViterbiFromSource(source);
+				if (viterbiTest)
+				{
+					void testViterbiFromSource(Source &source);
+					testViterbiFromSource(source);
+				}
 				source.clearSource();
 				if (!exitNow) source.signalFinishedProcessingSource(sourceId);
 				continue;
@@ -1230,8 +1319,6 @@ int wmain(int argc,wchar_t *argv[])
 			source.narrativeIsQuoted = st != Source::GUTENBERG_SOURCE_TYPE;
 			source.syntacticRelations();
 			//source.printVerbFrequency();
-			if (wcWrite)
-				Words.writeWords(path);
 			source.identifySpeakerGroups(); 
 			source.resolveSpeakers(secondaryQuotesResolutions);
 			source.resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
@@ -1299,7 +1386,7 @@ int wmain(int argc,wchar_t *argv[])
 		source.analyzeWordSenses();
 		source.narrativeIsQuoted = true;
 		source.syntacticRelations();
-		Words.writeWords(path);
+		source.writeWords(path);
 		source.identifySpeakerGroups(); 
 		source.resolveSpeakers(secondaryQuotesResolutions);
 		source.resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);

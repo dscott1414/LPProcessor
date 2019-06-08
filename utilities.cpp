@@ -77,7 +77,7 @@ int retryWithDifferentCodepage(int codePage,string &inString,int &queryLength,in
 {
 	if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
 	{
-		lplog(LOG_ERROR, L"Error in translating buffer - %s\n%S", lastErrorMsg().c_str(), inString.c_str());
+		//lplog(LOG_ERROR, L"Error in translating buffer - %s\n%S", lastErrorMsg().c_str(), inString.c_str());
 		queryLength = MultiByteToWideChar(codePage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t *)buffer, bufferSize); // bufSize/2 is # of wide chars allocated
 		if (!queryLength && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
 			lplog(LOG_FATAL_ERROR, L"Final error in translating buffer - %s\n%S", lastErrorMsg().c_str(), inString.c_str());

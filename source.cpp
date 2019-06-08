@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include "profile.h"
 #include "paice.h"
+#include "internet.h"
 
 tInflectionMap shortNounInflectionMap[]=
 {
@@ -1059,7 +1060,7 @@ int Source::scanUntil(const wchar_t *start,int repeat,bool printError)
 			{
 				if (printError)
 				{
-					lplog(L"Unable to find start '%s'.",start);
+					lplog(LOG_ERROR,L"Unable to find start '%s'.",start);
 					wprintf(L"\nCould not find start '%s'.\n",start);
 				}
 				return -1;
@@ -1073,6 +1074,11 @@ int Source::scanUntil(const wchar_t *start,int repeat,bool printError)
 			bufferScanLocation=startScanningPosition-bookBuffer;
 			return 0;
 		}
+	}
+	if (printError)
+	{
+		lplog(LOG_ERROR, L"Unable to find start '%s'.", start);
+		wprintf(L"\nCould not find start '%s'.\n", start);
 	}
 	return -1;
 }
@@ -1182,20 +1188,31 @@ bool Source::parseNecessary(wchar_t *path)
 		dictionaryLastModified>cacheLastModified);
 }
 
-int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring start, int repeatStart)
+int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring &start, int &repeatStart)
 {
 	LFS
 	beginClock=clock();
 	//lplog(LOG_WHERE, L"TRACEOPEN %s %s", path.c_str(), __FUNCTIONW__);
-	int bookhandle = _wopen(path.c_str(), O_RDWR | O_BINARY); 
-	if (bookhandle<0)
+	HANDLE fd = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL| FILE_FLAG_SEQUENTIAL_SCAN, 0);
+	if (fd== INVALID_HANDLE_VALUE)
 	{
 		lplog(LOG_ERROR,L"ERROR:Unable to open %s - %S. (3)",path.c_str(),_sys_errlist[errno]);
 		return -1;
 	}
-	bookBuffer=(wchar_t *)tmalloc((size_t)(bufferLen=_filelengthi64(bookhandle))+10);
-	bufferLen=_read(bookhandle,bookBuffer,(unsigned int)bufferLen);
-	_close(bookhandle);
+	if (!GetFileSizeEx(fd, (PLARGE_INTEGER) &bufferLen))
+	{
+		lplog(LOG_ERROR, L"ERROR:Unable to get the file length of %s - %S. (3)", path.c_str(), _sys_errlist[errno]);
+		return -1;
+	}
+	bookBuffer=(wchar_t *)tmalloc((size_t)bufferLen+10);
+	DWORD numBytesRead;
+	if (!ReadFile(fd,bookBuffer,(unsigned int)bufferLen,&numBytesRead,0) || bufferLen!=numBytesRead)
+	{
+		CloseHandle(fd);
+		lplog(LOG_ERROR, L"ERROR:Unable to read %s - %S. (3)", path.c_str(), _sys_errlist[errno]);
+		return -1;
+	}
+	CloseHandle(fd);
 	if (bufferLen<0 || bufferLen==0) 
 		return PARSE_EOF;
 	sourcePath=path;
@@ -1223,6 +1240,9 @@ int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring
 	}
 	if (!startSet)
 		return -1;
+	size_t quoteEscapeFromDB = wstring::npos;
+	while ((quoteEscapeFromDB = start.find(L"\\'")) != wstring::npos)
+		start.erase(start.begin()+quoteEscapeFromDB);
 	if (scanUntil(start.c_str(),repeatStart,false)<0)
 	{
 		if (bufferScanLocation==1) return -2;
@@ -1231,8 +1251,11 @@ int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring
 		wstring wb;
 		wcscpy(bookBuffer,mTW((char *)bookBuffer,wb));
 		bufferLen<<=1;
-		if (scanUntil(start.c_str(),repeatStart,true)<0)
+		if (scanUntil(start.c_str(), repeatStart, true) < 0)
+		{
+			lplog(LOG_ERROR, L"ERROR:Unable to find start in %s - start=%s, repeatStart=%d.", path.c_str(), start.c_str(), repeatStart);
 			return -3;
+		}
 	}
 	if (sourceType!=PATTERN_TRANSFORM_TYPE) // patterns are included in variables which have _ in them
 		for (unsigned int I=0; I<bufferLen; I++)
@@ -1303,8 +1326,16 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 			continue;
 		}
 		size_t dash=sWord.find('-');
+		size_t dash2 = sWord.find(L'—');
+		if (dash != wstring::npos && dash2 != wstring::npos)
+		{
+			size_t firstDash = min(dash, dash2);
+			bufferScanLocation -= sWord.length() - firstDash;
+			sWord.erase(firstDash, sWord.length() - firstDash);
+			dash = dash2 = wstring::npos;
+		}
 		if (dash==wstring::npos)
-			dash= sWord.find(L'—');
+			dash= dash2;
 		bool firstLetterCapitalized=iswupper(sWord[0])!=0;
 		tIWMM w=(m.size()) ? m[m.size()-1].word : wNULL;
 		// this logic is copied in doQuotesOwnershipAndContractions
@@ -1326,23 +1357,31 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 			 // state-of-the-art
 			)
 		{
-			unsigned int unknownWords=0,capitalizedWords=0,firstDash=dash;
+			unsigned int unknownWords=0,capitalizedWords=0,firstDash=dash,openWords=0;
 			vector <wstring> dashedWords = Stemmer::splitString(sWord, sWord[dash]);
 			for (wstring subWord : dashedWords)
 			{
 				tIWMM iWord=WordClass::fullQuery(&mysql,subWord,sourceId);
-				if (iWord==WordClass::end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0)
+				if (iWord == WordClass::end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0)
 					unknownWords++;
+				if (iWord != WordClass::end() && Stemmer::wordIsNotUnknownAndOpen(iWord))
+					openWords++;
 				if (subWord.length() > 1 && iswupper(subWord[0]) && !iswupper(subWord[1]))  // al-Jazeera, not BALL-PLAYING
 					capitalizedWords++;
 			}
-			// if this does not qualify as a dashed word, back up to just AFTER the dash
+				// if this does not qualify as a dashed word, back up to just AFTER the dash
 			tIWMM iWord = WordClass::fullQuery(&mysql, sWord, sourceId);
-			if ((capitalizedWords==0 || (capitalizedWords==1 && firstWordInSentence)) && unknownWords==0 && (iWord==Words.end() || iWord->second.query(UNDEFINED_FORM_NUM)>=0))
+			//bool notCapitalized = (capitalizedWords == 0 || (capitalizedWords == 1 && firstWordInSentence));
+			// break apart if it is not capitalized, there are no unknown words, and the dashed word is unknown.
+			// however, there may be cases like I-THE, which webster/dictionary.com incorrectly say are defined.
+			if ((unknownWords <= capitalizedWords || unknownWords<=dashedWords.size()/2) && (iWord == Words.end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0))
 			{
-				bufferScanLocation-=sWord.length()-firstDash;
-				sWord.erase(firstDash,sWord.length()-firstDash);
+				bufferScanLocation -= sWord.length() - firstDash;
+				sWord.erase(firstDash, sWord.length() - firstDash);
 			}
+			else
+				lplog(LOG_INFO, L"%s NOT split (#unknownWords=%d #capitalizedWords=%d %s).", sWord.c_str(), unknownWords, capitalizedWords, ((iWord == Words.end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0)) ? L"UNKNOWN" : L"NOT unknown");
+
 			firstLetterCapitalized=(capitalizedWords>0);
 		}
 		bool allCaps=Words.isAllUpper(sWord);
@@ -1473,7 +1512,7 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 			if ((int)(bufferScanLocation*100/bufferLen)>lastProgressPercent)
 			{
 				lastProgressPercent=(int)(bufferScanLocation*100/bufferLen);
-				wprintf(L"PROGRESS: %03d%% (%06zu words) %I64d out of %I64d bytes read with %d seconds elapsed (%d bytes) \r",lastProgressPercent,m.size(),bufferScanLocation,bufferLen,clocksec(),memoryAllocated);
+				wprintf(L"PROGRESS: %03d%% (%06zu words) %I64d out of %I64d bytes read with %d seconds elapsed (%I64d bytes) \r",lastProgressPercent,m.size(),bufferScanLocation,bufferLen,clocksec(),memoryAllocated);
 			}
 			continue;
 		}
@@ -1485,13 +1524,13 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 	else
 		sentenceStarts.push_back(lastSentenceEnd);
 	lastProgressPercent=(int)(bufferScanLocation*100/bufferLen);
-	wprintf(L"PROGRESS: %03d%% (%06zu words) %I64d out of %I64d bytes read with %d seconds elapsed (%d bytes) \r",lastProgressPercent,m.size(),bufferScanLocation,bufferLen,clocksec(),memoryAllocated);
+	wprintf(L"PROGRESS: %03d%% (%06zu words) %I64d out of %I64d bytes read with %d seconds elapsed (%I64d bytes) \r",lastProgressPercent,m.size(),bufferScanLocation,bufferLen,clocksec(),memoryAllocated);
 	if (runOnSentences>0)
 		lplog(LOG_ERROR,L"ERROR:%s:%d sentence early terminations (%d%%)...",path.c_str(),runOnSentences,100*runOnSentences/sentenceStarts.size());
 	return 0;
 }
 
-int Source::parse(wstring title,wstring etext,wstring path,wstring start,int repeatStart,unsigned int &unknownCount,bool newsBank)
+int Source::parse(wstring title,wstring etext,wstring path,wstring &start,int &repeatStart,unsigned int &unknownCount,bool newsBank)
 { LFS
 	int ret=0;
   if ((ret=readSourceBuffer(title, etext, path, start, repeatStart))>=0)
@@ -1658,7 +1697,7 @@ int Source::printSentences(bool updateStatistics,unsigned int unknownCount,unsig
 	{
 		if ((where=s*100/sentenceStarts.size())>lastProgressPercent)
 		{
-			wprintf(L"PROGRESS: %d%% sentences printed with %04d seconds elapsed (%d bytes) \r",where,clocksec(),memoryAllocated);
+			wprintf(L"PROGRESS: %d%% sentences printed with %04d seconds elapsed (%I64d bytes) \r",where,clocksec(),memoryAllocated);
 			lastProgressPercent=where;
 		}
 		unsigned int begin=sentenceStarts[s];
@@ -1757,7 +1796,7 @@ int Source::printSentences(bool updateStatistics,unsigned int unknownCount,unsig
 		}
 	}
 	if (100>lastProgressPercent)
-		wprintf(L"PROGRESS: 100%% sentences printed with %04d seconds elapsed (%d bytes) \r",clocksec(),memoryAllocated);
+		wprintf(L"PROGRESS: 100%% sentences printed with %04d seconds elapsed (%I64d bytes) \r",clocksec(),memoryAllocated);
 	// accumulate globals
 	globalOverMatchedPositionsTotal+=overMatchedPositionsTotal;
 	if (debugTrace.collectPerSentenceStats)
@@ -2588,7 +2627,7 @@ bool Source::findStart(wstring &buffer,wstring &start,int &repeatStart,wstring &
 bool readWikiPage(wstring webAddress,wstring &buffer)
 { LFS
 	int ret;
-	if (ret=readPage(webAddress.c_str(),buffer)) return false;
+	if (ret=Internet::readPage(webAddress.c_str(),buffer)) return false;
 	if (buffer.find(L"Sorry, but the page or book you tried to access is unavailable")!=wstring::npos ||
 			buffer.find(L"<title>403 Forbidden</title>")!=wstring::npos ||
 			buffer.find(L"<h1>404 Not Found</h1>")!=wstring::npos ||
@@ -2994,9 +3033,9 @@ Source::Source(wchar_t *databaseServer,int _sourceType,bool generateFormStatisti
 	else if (!skipWordInitialization)
 	{
 		#ifdef CHECK_WORD_CACHE
-			if (Words.readWithLock, (mysql,-4,L"",generateFormStatistics,wNULL))
+			if (Words.readWithLock(mysql,-4,L"",generateFormStatistics,wNULL,false))
 		#else
-			if (Words.readWithLock(mysql,-1,L"",generateFormStatistics, printProgress))
+			if (Words.readWithLock(mysql,-1,L"",generateFormStatistics, printProgress, false))
 		#endif
 				lplog(LOG_FATAL_ERROR,L"Cannot read database.");
 	}
@@ -3080,3 +3119,63 @@ Source::Source(MYSQL *parentMysql,int _sourceType,int _sourceConfidence)
 	for (unsigned int ts=0; ts<desiredTagSets.size(); ts++)
 		pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
 }
+
+void Source::writeWords(wstring oPath)
+{
+	LFS
+		wchar_t path[1024];
+	wsprintf(path, L"%s.wordCacheFile", oPath.c_str());
+	int fd = _wopen(path, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, _S_IREAD | _S_IWRITE);
+	if (fd < 0)
+	{
+		lplog(L"Cannot open wordCacheFile - %S.", _sys_errlist[errno]);
+		return;
+	}
+	Words.writeFormsCache(fd);
+	unordered_set<wstring> sourceWords;
+	char buffer[MAX_BUF];
+	int where = 0,numWordInSource=0;
+	for (WordMatch im:m)
+	{
+		tIWMM iSave = im.word;
+		if (iSave->second.isNonCachedWord() && !iSave->second.isUnknown())
+		{
+			if (iSave->first == L"allthat" || iSave->first == L"whomso" || iSave->first == L"whenso" || iSave->first == L"thesame" || iSave->first == L"whillikins" || iSave->first == L"nither" || iSave->first == L"rty" || iSave->first == L"oneanother" || iSave->first == L"alo-ne" || iSave->first == L"something-else"
+				|| iSave->first == L"wherethrough" || iSave->first == L"whoohoo" || iSave->first == L"youall" || iSave->first == L"howdies" || iSave->first == L"howdied"
+				|| iSave->first == L"alo-ne"				|| iSave->first == L"something-else"				|| iSave->first == L"such-andsuch"				|| iSave->first == L"eachother"				|| iSave->first == L"dizen"				|| iSave->first == L"so-as"
+				|| iSave->first == L"at-that" || iSave->first == L"underogating")
+
+			{
+				wstring forms;
+				for (unsigned int f = 0; f < iSave->second.formsSize(); f++)
+					forms += iSave->second.Form(f)->name + L" ";
+				lplog(LOG_INFO, L"%s:TEMP WRITE %s@%d is a not a cached word [%s].", oPath.c_str(), iSave->first.c_str(), numWordInSource, forms.c_str());
+			}
+			continue;
+		}
+		if (sourceWords.find(iSave->first) != sourceWords.end())
+			continue;
+		sourceWords.insert(iSave->first);
+		Words.writeWord(iSave, buffer, where, MAX_BUF);
+		// mainEntries can exist in chains
+		int mainLoop = 0;
+		while (iSave->second.mainEntry != wNULL && mainLoop++ < 4)
+		{
+			iSave = iSave->second.mainEntry;
+			if (sourceWords.find(iSave->first) != sourceWords.end())
+				break;
+			sourceWords.insert(iSave->first);
+			Words.writeWord(iSave, buffer, where, MAX_BUF);
+		}
+		if (where > MAX_BUF - 1024)
+		{
+			::write(fd, buffer, where);
+			where = 0;
+		}
+		numWordInSource++;
+	}
+	if (where)
+		::write(fd, buffer, where);
+	close(fd);
+}
+

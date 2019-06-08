@@ -12,6 +12,7 @@
 #include "profile.h"
 #include "ontology.h"
 #include "mysqldb.h"
+#include "internet.h"
 
 wstring basehttpquery = L"http://localhost:8890/sparql?default-graph-uri=http%3A%2F%2Fdbpedia.org&query=";
 wstring decodedbasehttpquery = L"http://localhost:8890/sparql?default-graph-uri=http://dbpedia.org&query=";
@@ -414,24 +415,7 @@ int Ontology::getDBPediaPath(int where,wstring webAddress,wstring &buffer,wstrin
 	while ((bw=epath.find_first_of(L"/*?\"<>|,&-"))!=wstring::npos)
 		epath[bw]=L'_';
 	wstring filePathOut,headers;
-	int retValue=getWebPath(where,webAddress,buffer,epath,L"dbPediaCache",filePathOut,headers,0,false,true,forceWebReread);
-	if (buffer.find(L"SPARQL compiler")!=wstring::npos)
-	{
-		_wremove(filePathOut.c_str());
-		lplog(LOG_ERROR,L"PATH %s:\n%s",epath.c_str(),buffer.c_str());
-		return -1;
-	}
-	return retValue;
-}
-
-int Ontology::testDBPediaPath(int where,wstring webAddress,wstring &buffer,wstring epath)
-{ LFS
-	//int timer=clock(); 	
-	int bw=-1;
-	while ((bw=epath.find_first_of(L"/*?\"<>|,&-"))!=wstring::npos)
-		epath[bw]=L'_';
-	wstring filePathOut,headers;
-	int retValue=testWebPath(where,webAddress,epath,L"dbPediaCache",filePathOut,headers);
+	int retValue=Internet::getWebPath(where,webAddress,buffer,epath,L"dbPediaCache",filePathOut,headers,0,false,true,forceWebReread);
 	if (buffer.find(L"SPARQL compiler")!=wstring::npos)
 	{
 		_wremove(filePathOut.c_str());
@@ -1418,7 +1402,7 @@ int Ontology::fillOntologyList(bool reInitialize)
 				if (((__int64)where*100/(__int64)bufferlen)>(__int64)lastProgressPercent)
 				{
 					lastProgressPercent=((__int64)where*100/(__int64)bufferlen);
-					wprintf(L"PROGRESS: %03d%% %d out of %d ontology relation bytes read with %d seconds elapsed (%d bytes) \r",lastProgressPercent,where,bufferlen,clocksec(),memoryAllocated);
+					wprintf(L"PROGRESS: %03d%% %d out of %d ontology relation bytes read with %d seconds elapsed (%I64d bytes) \r",lastProgressPercent,where,bufferlen,clocksec(),memoryAllocated);
 				}
 				if (!::copy(hint, vBuffer,where,bufferlen,dbPediaOntologyCategoryList))
 				{
@@ -1439,7 +1423,7 @@ int Ontology::fillOntologyList(bool reInitialize)
 			}
 			lplog(LOG_WHERE, L"ontology: numAbstractDescriptions=%d,numCommentDescriptions=%d,numInfoPages=%d,numOntologyHierarchicalRank=%d,numSuperClasses=%d",
 				numAbstractDescriptions, numCommentDescriptions, numInfoPages, numOntologyHierarchicalRank, numSuperClasses);
-			wprintf(L"PROGRESS: 100%% %d out of %d ontology relation bytes read with %d seconds elapsed (%d bytes) \n",where,bufferlen,clocksec(),memoryAllocated);
+			wprintf(L"PROGRESS: 100%% %d out of %d ontology relation bytes read with %d seconds elapsed (%I64d bytes) \n",where,bufferlen,clocksec(),memoryAllocated);
 			tfree(bufferlen+10, vBuffer);
 		}
 	}
@@ -1697,7 +1681,7 @@ int Ontology::getAcronyms(wstring &object,vector <wstring> &acronyms)
 	// http://acronyms.thefreedictionary.com/BND
 	wstring webAddress=L"http://acronyms.thefreedictionary.com/"+object;
 	wstring buffer,filePathOut,headers;
-	if (getWebPath(-1,webAddress,buffer,object+L"ACRO",L"acronymCache",filePathOut,headers,-1,false,true, forceWebReread)<0)
+	if (Internet::getWebPath(-1,webAddress,buffer,object+L"ACRO",L"acronymCache",filePathOut,headers,-1,false,true, forceWebReread)<0)
 		return -1;
 	// reduce acronym page
 	size_t beginPos=wstring::npos;
@@ -2173,6 +2157,26 @@ void Ontology::compressPath(wchar_t *path)
 	}
 }
 
+bool Ontology::inRDFTypeNotFoundTable(wchar_t *object)
+{
+	initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
+	if (!myquery(&mysql, L"LOCK TABLES noRDFTypes READ"))
+		return false;
+	MYSQL_RES * result;
+	_int64 numResults = 0;
+	wchar_t qt[query_buffer_len_overflow];
+	_snwprintf(qt, query_buffer_len, L"select 1 from noRDFTypes where word = '%s'", object);
+	if (myquery(&mysql, qt, result))
+	{
+		numResults = mysql_num_rows(result);
+		mysql_free_result(result);
+	}
+	if (!myquery(&mysql, L"UNLOCK TABLES")) 
+		return false;
+	lplog(LOG_INFO, L"*** inRDFTypeNotFoundTable Temp: statement %s resulted in numRows=%d.", qt, numResults);
+	return numResults > 0;
+}
+
 int Ontology::getRDFTypesMaster(wstring object, vector <cTreeCat *> &rdfTypes, wstring fromWhere, bool fileCaching)
 { LFS
 	if (cacheRdfTypes && fileCaching)
@@ -2198,6 +2202,8 @@ int Ontology::getRDFTypesMaster(wstring object, vector <cTreeCat *> &rdfTypes, w
 	_wmkdir(path);
 	_snwprintf(path+pathlen,MAX_LEN-pathlen,L"\\_%s",object.c_str());
 	convertIllegalChars(path+pathlen+1);
+	if (wcslen(path + pathlen + 1) > 127 || inRDFTypeNotFoundTable(path + pathlen + 1))
+		return -1;
 	distributeToSubDirectories(path,pathlen+1,true);
 	if (wcslen(path)+12>MAX_PATH)
 		compressPath(path);
@@ -2373,14 +2379,23 @@ bool detectNonEuropean(wstring word)
 	return (ret == 0) || (usedDefaultChar);
 }
 
+// -\'a-zãâäáàæçêéèêëîíïñôóòöõûüù
+bool detectNonEnglish(wstring word)
+{
+	for (wchar_t c : word)
+		if (c != '-' && c != '\'' && !iswalpha(c))
+			return true;
+	return false;
+}
+
 void Ontology::rdfIdentify(wstring object,vector <cTreeCat *> &rdfTypes,wstring fromWhere, bool fileCaching)
 { LFS
 	if (object.size()>40 && logDetail)
 		lplog(LOG_ERROR,L"rdfIdentify:object too long - %s",object.c_str());
 	else if (object.size()==1 && logDetail)
 		lplog(LOG_ERROR,L"rdfIdentify:object too short - %s",object.c_str());
-	else if (detectNonEuropean(object))
-		lplog(LOG_ERROR, L"rdfIdentify:object having non european character set - %s", object.c_str());
+	else if (detectNonEuropean(object) || object.find_first_of(L"ãâäáàæçêéèêëîíïñôóòöõôûüùú")!=wstring::npos) 
+		lplog(LOG_ERROR, L"rdfIdentify:object having non european character set (or non English characters) - %s", object.c_str());
 	else
 	{
 		getRDFTypesMaster(object,rdfTypes,fromWhere,fileCaching);
@@ -2467,7 +2482,7 @@ void Ontology::printIdentities(wchar_t *objects[])
 		printIdentity(objects[I]);
 }
 
-
+#ifdef TEST_CODE
 void Ontology::compareRDFTypes()
 {
   // read in new 
@@ -2492,7 +2507,7 @@ void Ontology::compareRDFTypes()
 		if (((__int64)where * 100 / (__int64)bufferlen) > (__int64)lastProgressPercent)
 		{
 			lastProgressPercent = ((__int64)where * 100 / (__int64)bufferlen);
-			wprintf(L"PROGRESS: %03d%% %d out of %d ontology relation bytes read with %d seconds elapsed (%d bytes) \r", lastProgressPercent, where, bufferlen, clocksec(), memoryAllocated);
+			wprintf(L"PROGRESS: %03d%% %d out of %d ontology relation bytes read with %d seconds elapsed (%I64d bytes) \r", lastProgressPercent, where, bufferlen, clocksec(), memoryAllocated);
 		}
 		if (!::copy(hint, vBuffer, where, bufferlen, dbPediaOntologyCategoryList))
 			lplog(LOG_FATAL_ERROR, L"Cannot read ontology relations.");
@@ -2513,7 +2528,7 @@ void Ontology::compareRDFTypes()
 		numAbstractDescriptions, numCommentDescriptions, numInfoPages, numOntologyHierarchicalRank, numSuperClasses);
 	for (int I = 1; I < 5; I++)
 		lplog(LOG_WHERE, L"ontology: numType=%d", numTypes[I]);
-	wprintf(L"PROGRESS: 100%% %d out of %d ontology relation bytes read with %d seconds elapsed (%d bytes) \n", where, bufferlen, clocksec(), memoryAllocated);
+	wprintf(L"PROGRESS: 100%% %d out of %d ontology relation bytes read with %d seconds elapsed (%I64d bytes) \n", where, bufferlen, clocksec(), memoryAllocated);
 	//////////////////////////////////// original
 	_snwprintf(path, MAX_LEN, L"%s\\dbPediaCache\\_rdfTypes - original", CACHEDIR);
 	fd = _wopen(path, O_RDWR | O_BINARY);
@@ -2531,7 +2546,7 @@ void Ontology::compareRDFTypes()
 		if (((__int64)where * 100 / (__int64)bufferlen) > (__int64)lastProgressPercent)
 		{
 			lastProgressPercent = ((__int64)where * 100 / (__int64)bufferlen);
-			wprintf(L"PROGRESS: %03d%% %d out of %d original ontology relation bytes read with %d seconds elapsed (%d bytes) \r", lastProgressPercent, where, bufferlen, clocksec(), memoryAllocated);
+			wprintf(L"PROGRESS: %03d%% %d out of %d original ontology relation bytes read with %I64d seconds elapsed (%d bytes) \r", lastProgressPercent, where, bufferlen, clocksec(), memoryAllocated);
 		}
 		::copyOLD(hint, vBuffer, where, bufferlen, originalDbPediaOntologyCategoryList);
 		hint->second.lplog(LOG_WHERE, hint->first);
@@ -2551,7 +2566,7 @@ void Ontology::compareRDFTypes()
 		numOriginalAbstractDescriptions, numOriginalCommentDescriptions, numOriginalInfoPages, numOriginalOntologyHierarchicalRank, numOriginalSuperClasses);
 	for (int I = 1; I < 5; I++)
 		lplog(LOG_WHERE, L"ontology: numOriginalType=%d", numOriginalTypes[I]);
-	wprintf(L"PROGRESS: 100%% %d out of %d ontology relation bytes read with %d seconds elapsed (%d bytes) \n", where, bufferlen, clocksec(), memoryAllocated);
+	wprintf(L"PROGRESS: 100%% %d out of %d ontology relation bytes read with %d seconds elapsed (%I64d bytes) \n", where, bufferlen, clocksec(), memoryAllocated);
 	tfree(bufferlen + 10, vBuffer);
 }
 
@@ -2653,3 +2668,21 @@ printIdentity(L"USS_Abraham_Lincoln");
 }
 
 
+int Ontology::testDBPediaPath(int where, wstring webAddress, wstring &buffer, wstring epath)
+{
+	LFS
+		//int timer=clock(); 	
+		int bw = -1;
+	while ((bw = epath.find_first_of(L"/*?\"<>|,&-")) != wstring::npos)
+		epath[bw] = L'_';
+	wstring filePathOut, headers;
+	int retValue = testWebPath(where, webAddress, epath, L"dbPediaCache", filePathOut, headers);
+	if (buffer.find(L"SPARQL compiler") != wstring::npos)
+	{
+		_wremove(filePathOut.c_str());
+		lplog(LOG_ERROR, L"PATH %s:\n%s", epath.c_str(), buffer.c_str());
+		return -1;
+	}
+	return retValue;
+}
+#endif

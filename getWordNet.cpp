@@ -9,6 +9,8 @@
 #include "sys/stat.h"
 #include "vcXML.h"
 #include "profile.h"
+#include "wininet.h"
+#include "internet.h"
 
 bool myquery(MYSQL *mysql, wchar_t *q, MYSQL_RES * &result, bool allowFailure = false);
 bool myquery(MYSQL *mysql, wchar_t *q, bool allowFailure = false);
@@ -196,7 +198,7 @@ void scrapeOldThesaurus(wstring word,set <wstring> &synonyms, int synonymType,bo
 		webAddress[space]='+';
 	while ((space=epath.find(' '))!=wstring::npos) 
 		epath[space]='+';
-	getWebPath(-1,webAddress,buffer,epath,L"webSearchCache",filePathOut,headers,synonymType+1,true,true, forceWebReread);
+	Internet::getWebPath(-1,webAddress,buffer,epath,L"webSearchCache",filePathOut,headers,synonymType+1,true,true, forceWebReread);
 	size_t beginPos=buffer.find(L"Main Entry:",0);
 	if (beginPos==wstring::npos) 
 		return;
@@ -279,7 +281,7 @@ void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition> &vd)
 		webAddress[space] = '+';
 	while ((space = epath.find(' ')) != wstring::npos)
 		epath[space] = '+';
-	getWebPath(-1, webAddress, buffer, epath, L"webSearchCache", filePathOut, headers, synonymType, false, true);
+	Internet::getWebPath(-1, webAddress, buffer, epath, L"webSearchCache", filePathOut, headers, synonymType, false, true);
 	if (buffer.find(L"<li id=\"words-gallery-no-results\">no thesaurus results</li>") != wstring::npos ||
 		buffer.find(L"there's not a match") != wstring::npos)
 		return;

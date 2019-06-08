@@ -24,7 +24,7 @@ extern wchar_t *cacheDir;
 //#define ACCUMULATE_GROUPS 3686-3254
 // without WORD_RELATIONS, yields 209 bytes/word
 // with individually allocated relation maps, 402/word.
-extern int memoryAllocated;
+extern __int64 memoryAllocated;
 extern bool exitNow;
 
 #define LOG_BUFFER_SIZE 65536
@@ -139,8 +139,7 @@ enum NET_ERR {
   INFLECTION_PROCESSING_FAILED=-3,PARSE_OPTION_FAILED=-4,GETPATH_INVALID_FILELENGTH1=-5,
   GETPATH_INVALID_FILELENGTH2=-6,GETPATH_CANNOT_OPEN_PATH=-7,GETPATH_GENERAL=-8,
   GETFORMS_CANNOT_OPEN_PATH=-9,GETFORMS_CANNOT_WRITE=-10,WORD_NOT_FOUND=-11,
-  UNPARSABLE_PAGE=-12,INTERNET_OPEN_FAILED=-13,INTERNET_OPEN_URL_FAILED=-14,
-  GETPAGE_CANNOT_CREATE=-15,
+  UNPARSABLE_PAGE=-12,
 
   PARSE_EOF=-16,
   PARSE_END_WORD=-17,
@@ -185,6 +184,7 @@ public:
   bool isTopLevel;
 	bool isIgnore;
 	bool isCommonForm;
+	bool isNonCachedForm;
 	bool verbForm;
   // only honorific.  So if this word is capitalized, it will not be recogized as a Proper_Noun at all.
   bool blockProperNounRecognition;
@@ -436,6 +436,7 @@ public:
   int adjustFormsInflections(wstring originalWord,unsigned __int64 &flags,bool isFirstWord,int nounOwner,bool allCaps,bool firstLetterCapitalized);
   bool isUnknown(void);
   bool isCommonWord(void);
+	bool isNonCachedWord(void);
 	void setTopLevel(void);
   bool isSeparator(void);
 	void removeIllegalForms(void);
@@ -474,8 +475,6 @@ int firstMatchNonEmbedded(wstring &buffer,wstring beginString,wstring endString,
 int getInflection(wstring sWord,wstring form,wstring mainEntry,wstring iform,vector <wstring> &allInflections);
 int nextMatch(wstring &buffer,wstring begin_string,wstring end_string,size_t &begin_pos,wstring &match,bool include_begin_and_end);
 int getPath(const wchar_t *pathname,void *buffer,int maxlen,int &actualLen);
-int readPage(const wchar_t *str, wstring &buffer);
-int readPage(const wchar_t *str, wstring &buffer,wstring &headers);
 
 class WordClass
 {
@@ -505,7 +504,7 @@ public:
   {
     return WMM.end();
   }
-	static map <tIWMM, vector <tIWMM>,tFI::cRMap::wordMapCompare> mainEntryMap;
+	static unordered_map <wstring, vector <tIWMM>> mainEntryMap;
   static tIWMM query(wstring sWord);
   tIWMM gquery(wstring sWord);
     bool parseMetaCommands(wchar_t *buffer,int &endSymbol,sTrace &t);
@@ -517,35 +516,28 @@ public:
   static tIWMM addNewOrModify(MYSQL *mysql,wstring sWord,int flags,int form,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added); // only used for adding a name
   // generic utilities
   bool isAllUpper(wstring &sWord);
-	int readPageWinHTTP(wchar_t *str, wstring &buffer);
-  int readBinaryPage(wchar_t *str, int destfile,int &total);
   bool remove(wstring sWord);
 	int readFormsCache(char *buffer,int bufferlen,int &numReadForms);
-  int readWords(wstring oPath,int sourceId);
+  int readWords(wstring oPath,int sourceId, bool disqualifyWords);
 	int writeFormsCache(int fd);
-  void writeWords(wstring oPath);
   bool removeFlag(wstring sWord,int flag);				
 
   // MYSQL database
   int lastReadfromDBTime;
   int flushNewMainEntryWords(MYSQL &mysql,vector <tIWMM> &queryWords,bool justQuery);
   int flushNewWords(MYSQL &mysql,vector <tIWMM> &queryWords,bool justQuery);
-	void writeWordMap();
-	void updateWordRelationIndexesFromDB(MYSQL &mysql,int lastReadfromDBTime,int sourceId);
   int getNumWordRelationsToWrite(void);
-  int updateDBWordRelations(MYSQL &mysql,int totalWordRelationsToWrite);
-  int flushWordRelations(MYSQL &mysql);
+	int flushWordRelations(MYSQL &mysql);
   int flushGroups();
   int updateWordMainInfoToDB(MYSQL &mysql,int &numUpdates);
   int updateWordFormsToDB(MYSQL &mysql);
   int flushForms(MYSQL &mysql);
-  void updateUsages(MYSQL &mysql);
 	int insertWordIds(MYSQL &mysql,wchar_t *qt);
 	int refreshWordIdsFromDB(MYSQL &mysql,vector <tIWMM> &queryWords);
 	int updateOnlyMainEntryIndexToDB(MYSQL &mysql,vector <tIWMM> &queryWords);
 	int readWordIndexesFromDB(MYSQL &mysql);
 	int writeWordsToDB(MYSQL &mysql);
-  int readWithLock(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics, bool printProgress);
+  int readWithLock(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics, bool printProgress, bool disqualifyWords);
   void readForms(MYSQL &mysql, wchar_t *qt);
   void assign(int wordId,tIWMM iWord);
   tIWMM *idToMap;
@@ -560,7 +552,6 @@ public:
   int wordCheck(void);
   int createWordCategories();
 
-  void createHolidays(void);
   void addTimeFlag(int flag,Inflections words[]);
   void addTimeFlag(int flag,wchar_t *words[]);
   void usageCostToNoun(Inflections words[], wchar_t *subnounClass);
@@ -576,6 +567,12 @@ public:
 	static int processDate(wstring sWord, short &year, char &month, char &dayOfMonth);
 	static int splitWord(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId);
 	static tIWMM fullQuery(MYSQL *mysql, wstring word, int sourceId);
+	void writeWordMap();
+	void updateWordRelationIndexesFromDB(MYSQL &mysql, int lastReadfromDBTime, int sourceId);
+	int updateDBWordRelations(MYSQL &mysql, int totalWordRelationsToWrite);
+	void updateUsages(MYSQL &mysql);
+	void createHolidays(void);
+	static int writeWord(tIWMM iWord, void *buffer, int &where, int limit);
 
 protected:
   bool appendToUnknownWordsMode;
@@ -589,8 +586,8 @@ protected:
 private:
   typedef pair <wstring, tFI> tWFIMap;
   static int lastWordWrittenClock;
-	int readWordFormsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,int maxWordId,wchar_t *qt,int *words,int *counts,int &numWordForms,unsigned int * &wordForms, bool printProgress);
-  int readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics,int &numWordsInserted,int &numWordsModified, bool printProgress);
+	int readWordFormsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,int maxWordId,wchar_t *qt,int *words,int *counts,int &numWordForms,unsigned int * &wordForms, bool printProgress, bool disqualifyWords);
+  int readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics,int &numWordsInserted,int &numWordsModified, bool printProgress, bool disqualifyWords);
   int lastModifiedTime;
   int minimumLastWordWrittenClockDiff;
   static bool changedWords;
@@ -599,7 +596,6 @@ private:
   vector <wstring> unknownCDWords;
   void readUnknownWords(wchar_t *fileName,vector <wstring> &unknownWords);
   void writeUnknownWords(wchar_t *fileName,vector <wstring> &unknownWords);
-  int writeWord(tIWMM iWord,void *buffer,int &where,int limit);
   int write(void);
 
   // initialized

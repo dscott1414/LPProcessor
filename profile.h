@@ -260,7 +260,7 @@ public:
 		for (set<unordered_map<string,CP>::iterator>::iterator si=countSort.begin(),siEnd=countSort.end(); si!=siEnd && countListMax<40; si++,countListMax++)
 		{
 			string func=(*si)->first;
-			int lastColon=func.rfind(':');
+			size_t lastColon=func.rfind(':');
 			if (lastColon!=wstring::npos) 
 				func.erase(0,lastColon+1);
 			lplog(LOG_INFO,L"COUNT %30S:%I64d",func.c_str(),(*si)->second.c);
@@ -270,7 +270,7 @@ public:
 	static void accumulateNetworkTime(const wchar_t *str,int timer,int lNC)
 	{ 
 		if (!lockInitialized)
-			InitializeSRWLock(&rdfTypeMapSRWLock);
+			InitializeSRWLock(&networkTimeSRWLock);
  		AcquireSRWLockExclusive(&networkTimeSRWLock);
 		int c=clock();
 		accumulateNetworkTimeCount++;
