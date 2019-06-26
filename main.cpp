@@ -1232,7 +1232,8 @@ int wmain(int argc,wchar_t *argv[])
 			Words.addMultiWordObjects(source.multiWordStrings,source.multiWordObjects);
 			wstring rt1,rt2;
 			int ret=0;
-			if (forceSourceReread || !source.readSource(path,parseOnly,false,true))
+			bool parsedOnly = false;
+			if (forceSourceReread || !source.readSource(path,false, parsedOnly, true,true))
 			{
 				unknownCount=0;
 				switch (st)
@@ -1372,7 +1373,8 @@ int wmain(int argc,wchar_t *argv[])
 		if (argv[sourceArgs + 2][0] == L'~')
 			start = argv[sourceArgs + 2];
 		int repeatStart=1;
-		if (!source.readSource(path,parseOnly,false,true)) 
+		bool parsedOnly;
+		if (!source.readSource(path,false,parsedOnly,true,true)) 
 		{
 			if (source.parse(title,etext,path,start,repeatStart,unknownCount,false)<0)
 				exit(0);

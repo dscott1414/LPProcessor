@@ -2134,7 +2134,7 @@ bool Source::FlushFile(HANDLE fd, void *buffer, int &where)
 	return true;
 }
 
-bool Source::writeCheck(wstring path,bool S2)
+bool Source::writeCheck(wstring path)
 { LFS
 	path+=L".SourceCache";
 	//return _waccess(path.c_str(),0)==0; // long path limitation
@@ -2238,7 +2238,7 @@ bool Source::write(wstring path,bool S2)
 	return true;
 }
 	 
-bool Source::read(char *buffer,int &where,unsigned int total,bool printProgress)
+bool Source::read(char *buffer,int &where,unsigned int total, bool &parsedOnly, bool printProgress, bool readOnlyParsed)
 { LFS
   int sourceVersion;
 	if (!copy(sourceVersion,buffer,where,total)) return false;
@@ -2273,8 +2273,13 @@ bool Source::read(char *buffer,int &where,unsigned int total,bool printProgress)
 	for (unsigned int I=0; I<count && !error; I++)
 		speakerGroups.push_back(cSpeakerGroup(buffer,where,total,error));
 	if (error || !pema.read(buffer,where,total)) return false;
-	if (where == total)
+	if (where == total || readOnlyParsed)
+	{
+		parsedOnly = where == total;
+		if (printProgress)
+			wprintf(L"PROGRESS: 100%% source read with %d seconds elapsed \n", clocksec());
 		return true;
+	}
 	if (!copy(count,buffer,where,total)) return false;
 	for (unsigned int I=0; I<count && !error; I++)
 		objects.push_back(cObject(buffer,where,total,error));
@@ -2658,7 +2663,7 @@ void unescapeStr(wstring &str)
 	str=ess;
 }
 
-bool Source::readSource(wstring &path,bool checkOnly,bool S2,bool printProgress)
+bool Source::readSource(wstring &path,bool checkOnly,bool &parsedOnly,bool printProgress,bool readOnlyParsed)
 { LFS
 	//unescapeStr(path); // doesn't work on 'Twixt Land & Sea: Tales
 	wstring locationCache=path+L".SourceCache";
@@ -2697,7 +2702,7 @@ bool Source::readSource(wstring &path,bool checkOnly,bool S2,bool printProgress)
 	CloseHandle(fd);
 	int where=0;
 	sourcePath = path;
-	bool success = read((char *)buffer, where, bufferlen, printProgress);
+	bool success = read((char *)buffer, where, bufferlen, parsedOnly,printProgress,readOnlyParsed);
 	if (!success)
 		lplog(LOG_ERROR, L"Error while reading file %s at position %d.", path.c_str(),m.size());
 	tfree(bufferlen,buffer);

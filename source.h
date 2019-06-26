@@ -1835,14 +1835,14 @@ public:
 	int parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank);
 	int parse(wstring title, wstring etext, wstring path, wstring &start, int &repeatStart, unsigned int &unknownCount, bool newsBank);
 	bool write(IOHANDLE file);
-	bool read(char *buffer,int &where,unsigned int total,bool printProgress);
+	bool read(char *buffer,int &where,unsigned int total, bool &parsedOnly, bool printProgress, bool readOnlyParsed);
 	bool flush(int fd,void *buffer,int &where);
 	bool FlushFile(HANDLE fd, void *buffer, int &where);
-	bool writeCheck(wstring path,bool S2);
+	bool writeCheck(wstring path);
 	bool write(wstring file,bool S2);
 	bool findStart(wstring &buffer,wstring &start,int &repeatStart,wstring &title);
 	bool retrieveText(wstring &path,wstring etext,wstring &start,int &repeatStart,wstring author,wstring title);
-	bool readSource(wstring &path,bool checkOnly,bool S2,bool printProgress);
+	bool readSource(wstring &path,bool checkOnly, bool &parsedOnly, bool printProgress,bool readOnlyParsed);
 	Source *parentSource;
 	vector <matchElement> whatMatched;
 	struct wordMapCompare

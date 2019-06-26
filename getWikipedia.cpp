@@ -1284,10 +1284,11 @@ int Source::processPath(const wchar_t *path,Source *&source,Source::sourceTypeEn
 		source->multiWordObjects=multiWordObjects;
 		wstring wpath=path,start=L"~~BEGIN";
 		int repeatStart = 1;
-		if (!source->readSource(wpath,parseOnly,true,false))
+		bool justParsed = false;
+		if (!source->readSource(wpath,false, justParsed,false,parseOnly) || (justParsed && !parseOnly))
 		{
 			lplog(LOG_WIKIPEDIA|LOG_RESOLUTION|LOG_RESCHECK|LOG_WHERE,L"Begin Processing %s...",path);
-			if (!source->readSource(wpath,parseOnly,false,true))
+			if (!justParsed)
 			{
 				wprintf(L"\nParsing %s...\n",path);
 				unsigned int unknownCount=0,quotationExceptions=0,totalQuotations=0;
@@ -1300,7 +1301,7 @@ int Source::processPath(const wchar_t *path,Source *&source,Source::sourceTypeEn
 				if (source->m.empty()) 
 				{
 					wstring failurePath = path;
-					failurePath += L".SourceCache.2";
+					failurePath += L".SourceCache";
 					int fd;
 					_wsopen_s(&fd, failurePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE); // , errorCode = 
 					if (fd >= 0)
@@ -1331,18 +1332,21 @@ int Source::processPath(const wchar_t *path,Source *&source,Source::sourceTypeEn
 					close(fd);
 				return -1;
 			}
-			source->refreshWordRelations();
-			source->parentSource=this;
-			source->identifyObjects();
-			vector <int> secondaryQuotesResolutions;
-			source->analyzeWordSenses();
-			source->narrativeIsQuoted = true;
-			source->syntacticRelations();
-			//Words.writeWords(path);  not necessary and wastes huge amount of space
-			source->identifySpeakerGroups(); 
-			source->resolveSpeakers(secondaryQuotesResolutions);
-			source->resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
-			source->write(path,true);
+			if (!parseOnly)
+			{
+				source->refreshWordRelations();
+				source->parentSource = this;
+				source->identifyObjects();
+				vector <int> secondaryQuotesResolutions;
+				source->analyzeWordSenses();
+				source->narrativeIsQuoted = true;
+				source->syntacticRelations();
+				//Words.writeWords(path);  not necessary and wastes huge amount of space
+				source->identifySpeakerGroups();
+				source->resolveSpeakers(secondaryQuotesResolutions);
+				source->resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
+			}
+			source->write(path,!parseOnly);
 			lplog(LOG_WIKIPEDIA|LOG_RESOLUTION|LOG_RESCHECK|LOG_WHERE,L"End Processing %s...",path);
 		}
 		sourcesMap[path]=source;
