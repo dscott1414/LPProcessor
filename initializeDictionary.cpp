@@ -321,7 +321,7 @@ bool disqualify(wstring sWord)
 		return false;
 	int dashes=0;
 	for (unsigned I=0; I<sWord.length(); I++)
-		if (sWord[I]=='-') dashes++;
+		if (sWord[I] == '-' || sWord[I] == L'—') dashes++;
 	if (dashes>2) return true;
 	if (sWord.find('.')==wstring::npos)
 		return false;
@@ -607,7 +607,7 @@ bool WordClass::addPlaces(wstring pPath,vector <tmWS > &objects)
 		bool hypo=false,print=false;
 		if (print=(ch=wcsstr(place,L" +print"))!=NULL)
 			*ch=0;
-		while ((ch=wcsrchr(place,L'-'))!=NULL && ch!=place)
+		while (((ch=wcsrchr(place,L'-'))!=NULL || (ch = wcsrchr(place, L'—')) != NULL) && ch!=place)
 		{
 			string ic;
 			ignoreCategories.insert(wTM(ch+1,ic));
@@ -669,7 +669,7 @@ bool WordClass::addPlaces(wstring pPath,vector <tmWS > &objects)
 				objects.push_back(words);
 			}
 		}
-		if (place[0]==L'-')
+		if (place[0] == L'-' || place[0] == L'—')
 		{
 			for (unsigned int I=0; I<objects.size(); I++)
 				if (objects[I].ws[objects[I].ws.size()-1]==place+1)

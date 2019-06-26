@@ -427,7 +427,7 @@ int Internet::getWebPath(int where, wstring webAddress, wstring &buffer, wstring
 	if (logDetail)
 		lplog(LOG_WIKIPEDIA, L"accessing page: %s", epath.c_str());
 	wchar_t path[MAX_LEN];
-	int pathlen = _snwprintf(path, MAX_LEN, L"%s\\%s", CACHEDIR, cacheTypePath.c_str());
+	int pathlen = _snwprintf(path, MAX_LEN, L"%s\\%s", (cacheTypePath==L"webSearchCache") ? WEBSEARCH_CACHEDIR:CACHEDIR, cacheTypePath.c_str());
 	_wmkdir(path);
 	if (index > 1)
 		_snwprintf(path + pathlen, MAX_LEN - pathlen, L"\\_%s.%d", epath.c_str(), index);

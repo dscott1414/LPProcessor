@@ -494,13 +494,13 @@ bool WordMatch::read(char *buffer,int &where,int limit)
 			word = Words.addNewOrModify(NULL, sWord, 0, webAddressForm, 0, 0, L"", sourceId, added);
 		else if (result<0 && result != PARSE_END_SENTENCE)
 		{
-			lplog(L"Word %s cannot be added - error %d.",temp.c_str(),result);
+			lplog(LOG_ERROR,L"Word %s cannot be added - error %d.",temp.c_str(),result);
 			return false;
 		}
 		else
 			if ((result=Words.parseWord(NULL,sWord,word,false,nounOwner, sourceId))<0)
 			{
-				lplog(L"Word %s cannot be added",temp.c_str());
+				lplog(LOG_ERROR,L"Word %s cannot be added",temp.c_str());
 				return false;
 			}
 	}
@@ -1254,6 +1254,8 @@ int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring
 		if (scanUntil(start.c_str(), repeatStart, true) < 0)
 		{
 			lplog(LOG_ERROR, L"ERROR:Unable to find start in %s - start=%s, repeatStart=%d.", path.c_str(), start.c_str(), repeatStart);
+			start = L"**START NOT FOUND**";
+			updateSourceStart(start, -1, etext, 0);
 			return -3;
 		}
 	}
@@ -1357,8 +1359,9 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 			 // state-of-the-art
 			)
 		{
-			unsigned int unknownWords=0,capitalizedWords=0,firstDash=dash,openWords=0;
+			unsigned int unknownWords=0,capitalizedWords=0,firstDash=dash,openWords=0, letters =0;
 			vector <wstring> dashedWords = Stemmer::splitString(sWord, sWord[dash]);
+			wstring removeDashesWord;
 			for (wstring subWord : dashedWords)
 			{
 				tIWMM iWord=WordClass::fullQuery(&mysql,subWord,sourceId);
@@ -1368,19 +1371,25 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 					openWords++;
 				if (subWord.length() > 1 && iswupper(subWord[0]) && !iswupper(subWord[1]))  // al-Jazeera, not BALL-PLAYING
 					capitalizedWords++;
+				if (subWord.length() == 1)  // F-R-E-E-D-O-M  
+					letters++;
+				removeDashesWord += subWord;
 			}
 				// if this does not qualify as a dashed word, back up to just AFTER the dash
 			tIWMM iWord = WordClass::fullQuery(&mysql, sWord, sourceId);
+			tIWMM iWordNoDashes = WordClass::fullQuery(&mysql, removeDashesWord, sourceId);
 			//bool notCapitalized = (capitalizedWords == 0 || (capitalizedWords == 1 && firstWordInSentence));
 			// break apart if it is not capitalized, there are no unknown words, and the dashed word is unknown.
 			// however, there may be cases like I-THE, which webster/dictionary.com incorrectly say are defined.
-			if ((unknownWords <= capitalizedWords || unknownWords<=dashedWords.size()/2) && (iWord == Words.end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0))
+			if ((unknownWords <= capitalizedWords || unknownWords<=dashedWords.size()/2) && 
+				  (iWord == Words.end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0) && 
+				  (iWordNoDashes==Words.end() || iWordNoDashes->second.query(UNDEFINED_FORM_NUM) >= 0 || letters !=dashedWords.size() || letters <3))
 			{
 				bufferScanLocation -= sWord.length() - firstDash;
 				sWord.erase(firstDash, sWord.length() - firstDash);
 			}
 			else
-				lplog(LOG_INFO, L"%s NOT split (#unknownWords=%d #capitalizedWords=%d %s).", sWord.c_str(), unknownWords, capitalizedWords, ((iWord == Words.end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0)) ? L"UNKNOWN" : L"NOT unknown");
+				lplog(LOG_INFO, L"%s NOT split (#unknownWords=%d #capitalizedWords=%d #letters=%d %s).", sWord.c_str(), unknownWords, capitalizedWords, letters, ((iWord == Words.end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0)) ? L"UNKNOWN" : L"NOT unknown");
 
 			firstLetterCapitalized=(capitalizedWords>0);
 		}
@@ -1574,7 +1583,7 @@ bool Source::isSectionHeader(unsigned int begin,unsigned int end,unsigned int &s
 		wstring sWord=m[end-1].word->first;
 		if (sWord==primaryQuoteType || // buffer ends with " or ' - probably a quote
 				sWord==L":" ||              // buffer ends with : - probably the start of a list
-				sWord==L"," || sWord==L"-" || sWord==L")" || sWord==L"!" ||
+				sWord==L"," || sWord == L"-" || sWord == L"—" || sWord==L")" || sWord==L"!" ||
 				sWord==L"?" || sWord==L"." || sWord==L"--") return false; // buffer ends with , -, or ) probably not a title
 	}
 	sectionEnd=end;
@@ -2128,7 +2137,6 @@ bool Source::FlushFile(HANDLE fd, void *buffer, int &where)
 bool Source::writeCheck(wstring path,bool S2)
 { LFS
 	path+=L".SourceCache";
-	if (S2) path+=L".2";
 	//return _waccess(path.c_str(),0)==0; // long path limitation
 	return GetFileAttributesW(path.c_str())!= INVALID_FILE_ATTRIBUTES;
 }
@@ -2137,7 +2145,6 @@ bool Source::writeCheck(wstring path,bool S2)
 bool Source::write(wstring path,bool S2)
 { LFS
 	path+=L".SourceCache";
-	if (S2) path+=L".2";
 	// int fd=_wopen(path.c_str(),O_WRONLY|O_CREAT|O_TRUNC|O_BINARY,_S_IREAD | _S_IWRITE); subject to short path restriction
 	HANDLE fd = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,0);
 	if (fd== INVALID_HANDLE_VALUE)
@@ -2231,7 +2238,7 @@ bool Source::write(wstring path,bool S2)
 	return true;
 }
 	 
-bool Source::read(char *buffer,int &where,unsigned int total,bool S2,bool printProgress)
+bool Source::read(char *buffer,int &where,unsigned int total,bool printProgress)
 { LFS
   int sourceVersion;
 	if (!copy(sourceVersion,buffer,where,total)) return false;
@@ -2266,27 +2273,26 @@ bool Source::read(char *buffer,int &where,unsigned int total,bool S2,bool printP
 	for (unsigned int I=0; I<count && !error; I++)
 		speakerGroups.push_back(cSpeakerGroup(buffer,where,total,error));
 	if (error || !pema.read(buffer,where,total)) return false;
-	if (S2)
+	if (where == total)
+		return true;
+	if (!copy(count,buffer,where,total)) return false;
+	for (unsigned int I=0; I<count && !error; I++)
+		objects.push_back(cObject(buffer,where,total,error));
+	if (!copy(count,buffer,where,total)) return false;
+	for (unsigned int I=0; I<count && !error; I++)
 	{
-		if (!copy(count,buffer,where,total)) return false;
-		for (unsigned int I=0; I<count && !error; I++)
-			objects.push_back(cObject(buffer,where,total,error));
-		if (!copy(count,buffer,where,total)) return false;
-		for (unsigned int I=0; I<count && !error; I++)
-		{
-			spaceRelations.push_back(cSpaceRelation(buffer,where,total,error));
-			getSRIMinMax(&spaceRelations[spaceRelations.size()-1]);
-		}
-		// fill locations
-		unsigned int I=0;
-		for (vector <WordMatch>::iterator im=m.begin(),imEnd=m.end(); im!=imEnd; im++,I++)
-		{
-			if (im->getObject()>=0 && im->getObject()<(signed)objects.size())
-				objects[im->getObject()].locations.push_back(cObject::cLocation(I));
-			for (vector <cOM>::iterator omi=im->objectMatches.begin(),omiEnd=im->objectMatches.end(); omi!=omiEnd; omi++)
-				if (omi->object>=0 && omi->object<(signed)objects.size())
-					objects[omi->object].locations.push_back(cObject::cLocation(I));
-		}
+		spaceRelations.push_back(cSpaceRelation(buffer,where,total,error));
+		getSRIMinMax(&spaceRelations[spaceRelations.size()-1]);
+	}
+	// fill locations
+	unsigned int I=0;
+	for (vector <WordMatch>::iterator im=m.begin(),imEnd=m.end(); im!=imEnd; im++,I++)
+	{
+		if (im->getObject()>=0 && im->getObject()<(signed)objects.size())
+			objects[im->getObject()].locations.push_back(cObject::cLocation(I));
+		for (vector <cOM>::iterator omi=im->objectMatches.begin(),omiEnd=im->objectMatches.end(); omi!=omiEnd; omi++)
+			if (omi->object>=0 && omi->object<(signed)objects.size())
+				objects[omi->object].locations.push_back(cObject::cLocation(I));
 	}
 	if (printProgress)
 		wprintf(L"PROGRESS: 100%% source read with %d seconds elapsed \n",clocksec());
@@ -2400,8 +2406,10 @@ bool getNextParagraph(int &where,wstring &buffer,bool &eofEncountered,int &first
 				if (_wtoi((wchar_t *)line.c_str())==1)
 				{
 					size_t whereSeparator=line.find(L'.');
-					if (whereSeparator==wstring::npos)
-						whereSeparator=line.find(L'-');
+					if (whereSeparator == wstring::npos)
+						whereSeparator = line.find(L'-');
+					if (whereSeparator == wstring::npos)
+						whereSeparator = line.find(L'—');
 					if (whereSeparator!=wstring::npos)
 					{
 						whereSeparator++;
@@ -2488,7 +2496,7 @@ bool findNextParagraph(int &where,wstring &buffer,wstring &lastLine,int &whereLa
 				numPeriods++;
 		}
 		bool endsWithEOS=saveParagraph[saveParagraph.length()-1]==L'.' || saveParagraph[saveParagraph.length()-1]==L'?' || saveParagraph[saveParagraph.length()-1]==L'!' ||
-			               saveParagraph[saveParagraph.length()-1]==L'"' || saveParagraph[saveParagraph.length()-1]==L'”' || saveParagraph[saveParagraph.length()-1]==L'\'' || saveParagraph[saveParagraph.length()-1]==L'-';
+			               saveParagraph[saveParagraph.length()-1]==L'"' || saveParagraph[saveParagraph.length()-1]==L'”' || saveParagraph[saveParagraph.length()-1]==L'\'' || saveParagraph[saveParagraph.length() - 1] == L'-' || saveParagraph[saveParagraph.length() - 1] == L'—';
 		bool ccsh=containsSectionHeader(paragraph);
 		if (numPeriods<2 || !endsWithEOS || saveParagraph==paragraph || lastLine.empty() || ccsh)
 		{
@@ -2654,7 +2662,6 @@ bool Source::readSource(wstring &path,bool checkOnly,bool S2,bool printProgress)
 { LFS
 	//unescapeStr(path); // doesn't work on 'Twixt Land & Sea: Tales
 	wstring locationCache=path+L".SourceCache";
-	if (S2) locationCache+=L".2";
 	if (checkOnly)
 		//return _waccess(locationCache.c_str(),0)==0; // long path limitation
 		return GetFileAttributesW(locationCache.c_str()) != INVALID_FILE_ATTRIBUTES;
@@ -2664,7 +2671,7 @@ bool Source::readSource(wstring &path,bool checkOnly,bool S2,bool printProgress)
 	///if (fd<0) return false;
 	if (fd== INVALID_HANDLE_VALUE)
 	{
-		lplog(LOG_ERROR, L"Unable to open source %s - %s", path.c_str(), lastErrorMsg().c_str());
+		lplog(LOG_ERROR, L"Unable to open source %s - %s", locationCache.c_str(), lastErrorMsg().c_str());
 		CloseHandle(fd);
 		return false;
 	}
@@ -2690,7 +2697,9 @@ bool Source::readSource(wstring &path,bool checkOnly,bool S2,bool printProgress)
 	CloseHandle(fd);
 	int where=0;
 	sourcePath = path;
-	bool success = read((char *)buffer, where, bufferlen, S2, printProgress);
+	bool success = read((char *)buffer, where, bufferlen, printProgress);
+	if (!success)
+		lplog(LOG_ERROR, L"Error while reading file %s at position %d.", path.c_str(),m.size());
 	tfree(bufferlen,buffer);
 	if (!success) clearSource();
 	return success;

@@ -156,7 +156,7 @@ bool Source::signalFinishedProcessingSource(int thisSourceId)
 bool Source::getNextUnprocessedSource(int begin, int end, enum Source::sourceTypeEnum st, bool setUsed, int &id, wstring &path, wstring &start, int &repeatStart, wstring &etext, wstring &author, wstring &title)
 {
 	LFS
-		MYSQL_RES * result;
+	MYSQL_RES * result=NULL;
 	if (!myquery(&mysql, L"LOCK TABLES sources WRITE")) return false;
 	wchar_t qt[query_buffer_len_overflow];
 	_snwprintf(qt, query_buffer_len, L"select id, path, start, repeatStart, etext, author, title from sources where id>=%d and sourceType=%d and processed IS NULL and processing IS NULL and start!='**SKIP**' and start!='**START NOT FOUND**'", begin, st);
@@ -244,6 +244,8 @@ bool Source::updateSourceStart(wstring &start, int repeatStart, wstring &etext, 
 	LFS
 	wstring tmp, tmp2, sqlStatement;
 	escapeStr(start);
+	if (start.length() > 255)
+		start = start.substr(start.length() - 255, 255); // start column has a limit of 256 characters
 	sqlStatement = L"update sources set start='" + start + L"', repeatStart=" + itos(repeatStart, tmp) + L", sizeInBytes=" + itos((int)actualLenInBytes, tmp2) + L" where etext='" + etext + L"'";
 	return myquery(&mysql, (wchar_t *)sqlStatement.c_str());
 }
@@ -1224,7 +1226,7 @@ int WordClass::readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool
   int *words=(int *)tmalloc(maxWordId*sizeof(int));
   int *counts=(int *)tmalloc(maxWordId*sizeof(int));
   int numWordForms;
-  unsigned int *wordForms;
+  unsigned int *wordForms=NULL;
 	if (readWordFormsFromDB(mysql,sourceId,sourcePath,maxWordId,qt,words,counts,numWordForms,wordForms, printProgress,disqualifyWords)==0) return 0;
 
   // read words
@@ -1441,7 +1443,7 @@ int Source::testStartCode()
 		numSources++;
 		sourceId=atoi(sqlrow[1]);
     wstring tp,path=wstring(CACHEDIR)+mTW(sqlrow[2],tp);
-		wchar_t *extensions[]={ L".sourceCache",L".sourceCache.2",L".WNCache",L".wordCacheFile", NULL};
+		wchar_t *extensions[]={ L".sourceCache",L".WNCache",L".wordCacheFile", NULL};
 		for (int I=0; extensions[I]; I++)
 		{
 			wstring pathext=path+extensions[I];

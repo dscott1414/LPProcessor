@@ -950,7 +950,7 @@ void identifyFormClass(set<int> &posSet, wstring pos, bool &plural)
 	{
 		posSet.insert(PROPER_NOUN_FORM_NUM);
 	}
-	else if (pos == L"certification mark")
+	else if (pos == L"certification mark" || pos == L"service mark")
 	{
 		posSet.insert(FormsClass::gFindForm(L"symbol"));
 	}
@@ -981,7 +981,7 @@ void identifyFormClass(set<int> &posSet, wstring pos, bool &plural)
 // returns false if not found by the site (or error)
 bool existsInDictionaryDotCom(MYSQL *mysql,wstring word, bool &networkAccessed)
 {
-	if (word.length() <= 2)
+	if (word.length() <= 2 || word.length()>32)
 		return false;
 	//initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
 	MYSQL_RES * result;

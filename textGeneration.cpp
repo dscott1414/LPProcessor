@@ -69,9 +69,9 @@ int Source::processAbstract(cTreeCat *rdfType,Source *&source,bool parseOnly)
 int Source::processSnippet(wstring snippet,wstring object,Source *&source,bool parseOnly)
 { LFS
   wchar_t path[1024];
-	int pathlen=_snwprintf(path,MAX_LEN,L"%s\\webSearchCache",CACHEDIR)+1;
+	int pathlen=_snwprintf(path,MAX_LEN,L"%s\\webSearchCache", WEBSEARCH_CACHEDIR)+1;
 	_wmkdir(path);
-	_snwprintf(path,MAX_LEN,L"%s\\webSearchCache\\_%s",CACHEDIR,object.c_str());
+	_snwprintf(path,MAX_LEN,L"%s\\webSearchCache\\_%s",WEBSEARCH_CACHEDIR,object.c_str());
 	convertIllegalChars(path+pathlen);
 	distributeToSubDirectories(path,pathlen,true);
 	path[MAX_PATH-28]=0; // extensions

@@ -9,14 +9,15 @@
 #define _MIL 1024*1024
 #define MAINDIR "F:\\lp"
 #define LMAINDIR L"F:\\lp"
-#define CACHEDIR L"J:\\caches"
-#define TEXTDIR L"J:\\caches"
+#define CACHEDIR L"M:\\caches"
+#define WEBSEARCH_CACHEDIR L"J:\\caches"
+#define TEXTDIR L"M:\\caches"
 #define MAX_COST 100000
 #define CONFIDENCE_NOMATCH 100000
 #define UMBEL_CACHE_VERSION L'J'
-#define RDFLIBRARYTYPE_VERSION L'J'
-#define RDFTYPE_VERSION L'J'
-#define EXTENDED_RDFTYPE_VERSION L'O'
+#define RDFLIBRARYTYPE_VERSION L'K'
+#define RDFTYPE_VERSION L'K'
+#define EXTENDED_RDFTYPE_VERSION L'P'
 
 // When this enum is changed, inflection calculations must also change in net.cpp
 enum InflectionTypes {

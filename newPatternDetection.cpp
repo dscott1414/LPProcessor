@@ -223,11 +223,11 @@ bool Source::printPatterns(int patternLength,unsigned int topLimit)
 
 void Source::printAccumulatedPatterns(void)
 {
-	wprintf(L"PROGRESS: 0%% patterns printed with %d seconds elapsed (%d bytes) \r",clock()/CLOCKS_PER_SEC,memoryAllocated);
+	wprintf(L"PROGRESS: 0%% patterns printed with %d seconds elapsed (%I64d bytes) \r",clock()/CLOCKS_PER_SEC,memoryAllocated);
 	for (int p=maximumPatternLengthForAnalysis-1; p>=minimumPatternLengthForAnalysis; p--)
 	{
 		printPatterns(p,10);
-		wprintf(L"PROGRESS: %d%% patterns printed with %04d seconds elapsed (%d bytes) \r",
+		wprintf(L"PROGRESS: %d%% patterns printed with %04d seconds elapsed (%I64d bytes) \r",
     		(maximumPatternLengthForAnalysis-p)*100/(maximumPatternLengthForAnalysis-minimumPatternLengthForAnalysis),clock()/CLOCKS_PER_SEC,memoryAllocated);
 	}
 }
@@ -241,13 +241,13 @@ void Source::accumulateNewPatterns(void)
 	{
 		if ((where=w*100/m.size())>lastProgressPercent)
 		{
-			wprintf(L"PROGRESS: %d%% patterns analyzed with %04d seconds elapsed (%d bytes) \r",where,clock()/CLOCKS_PER_SEC,memoryAllocated);
+			wprintf(L"PROGRESS: %d%% patterns analyzed with %04d seconds elapsed (%I64d bytes) \r",where,clock()/CLOCKS_PER_SEC,memoryAllocated);
 			lastProgressPercent=where;
 		}
 		accumulateNewPattern(w,0,0);
 		//w=m[w].pma.getNextPosition(w);
 	}
-	wprintf(L"PROGRESS: 100%% patterns analyzed with %04d seconds elapsed (%d bytes) \n",clock()/CLOCKS_PER_SEC,memoryAllocated);
+	wprintf(L"PROGRESS: 100%% patterns analyzed with %04d seconds elapsed (%I64d bytes) \n",clock()/CLOCKS_PER_SEC,memoryAllocated);
 	lplog(L"pattern length:# tree nodes");
 	for (int I=0; I<maximumPatternLengthForAnalysis; I++) 
 		lplog(L"%d:%d",I,patternCountTree[I].size());

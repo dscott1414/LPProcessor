@@ -12,6 +12,7 @@
 #include "profile.h"
 #include "ontology.h"
 #include "mysqldb.h"
+#include "mysqld_error.h"
 #include "internet.h"
 
 wstring basehttpquery = L"http://localhost:8890/sparql?default-graph-uri=http%3A%2F%2Fdbpedia.org&query=";
@@ -502,7 +503,7 @@ wstring getDescriptionString(wstring label)
 {
 	return basehttpquery + prefix_foaf + prefix_colon +
 		L"SELECT+DISTINCT+%3Fv1+%3Fv2+%3Fv3+%3Fv4+%0D%0AWHERE+%7B%0D%0A+"
-		L"+%7B+" + label + L"+%3Chttp%3A%2F%2Fwww.w3.org%2F2002%2F07%2Fowl#sameAs%3E+%3Fs+.+%7D%0D%0A" // OPTIONAL removed
+		L"+%7B+" + label + L"+%3Chttp%3A%2F%2Fwww.w3.org%2F2002%2F07%2Fowl%23sameAs%3E+%3Fs+.+%7D%0D%0A" // OPTIONAL removed
 		L"OPTIONAL+%7B+%3Fs+%3Chttp%3A%2F%2Fwikidata.dbpedia.org%2Fontology%2Fabstract%3E+%3Fv1+.+%7D%0D%0A"
 		L"OPTIONAL+%7B+%3Fs+%3Chttp%3A%2F%2Fwww.w3.org%2F2000%2F01%2Frdf-schema%23comment%3E+%3Fv2+.+%7D%0D%0A"
 		L"OPTIONAL+%7B+" + label + L"+foaf%3Ahomepage+%3Fv3+.+%7D%0D%0A"
@@ -532,15 +533,14 @@ int Ontology::getDescription(wstring label, wstring objectName, wstring &abstrac
 	{
 		label = L"%3A" + label;
 	}
-	wstring dbPediaQueryString = getDescriptionString(label);
-	wstring temp;
+	wstring dbPediaQueryString = getDescriptionString(label),temp,buffer;
 	if (rdfDetail)
 		lplog(LOG_WIKIPEDIA, L"%s\nENCODED WEBADDRESS:%s\nDECODED WEBADDRESS:%s",
 			objectName.c_str(), dbPediaQueryString.c_str(), decodeURL(dbPediaQueryString, temp).c_str() + decodedbasehttpquery.length());
-	wstring buffer;
 	int numRows = 0;
 	objectName += L"_getDescription.xml";
-	if (!getDBPediaPath(0,dbPediaQueryString,buffer,objectName))
+	if (!Internet::readPage(dbPediaQueryString.c_str(), buffer))
+	//if (!getDBPediaPath(0,dbPediaQueryString,buffer,objectName))
 	{
 		// get number of rows
 		for (size_t w = 0; w < buffer.size(); numRows++, w++)
@@ -1510,7 +1510,7 @@ bool Ontology::extractResults(wstring begin,wstring uobject,wstring end,wstring 
 	while ((bw=uobject.find_first_of(L"+/ "))!=wstring::npos)
 		uobject[bw]=L'_';
 	encodeURL(uobject,object);
-	if (object[0]==L'-')
+	if (object[0]==L'-' || object[0] == L'—')
 		return false;
 	wstring webAddress=basehttpquery+begin+object+end,buffer,temp,uri,fpobject=uobject, beginhttpquery = basehttpquery + begin;
 	vector <wstring> labels;
@@ -1523,7 +1523,8 @@ bool Ontology::extractResults(wstring begin,wstring uobject,wstring end,wstring 
 	}
 	else
 		labels.push_back(object);
-	if (ret=getDBPediaPath(-1,webAddress,buffer,fpobject+L"_"+qtype+L".xml")) return false;
+	if (ret = Internet::readPage(webAddress.c_str(), buffer)) return false;
+	//if (ret=getDBPediaPath(-1,webAddress,buffer,fpobject+L"_"+qtype+L".xml")) return false;
 	takeLastMatch(buffer,L"<results distinct=\"false\" ordered=\"true\">",L"</results>",temp,false);
 	for (size_t pos=0; firstMatch(temp,L"<uri>",L"</uri>",pos,uri,false)!=wstring::npos; numResults++)
 	{
@@ -2096,6 +2097,7 @@ int Ontology::readRDFTypes(wchar_t path[4096], vector <cTreeCat *> &rdfTypes)
 	if (*((wchar_t *)buffer)!=RDFTYPE_VERSION) // version
 	{
 		tfree(bufferlen+10,buffer);
+		_wremove(path);
 		return -2;
 	}
 	where+=2;
@@ -2171,10 +2173,82 @@ bool Ontology::inRDFTypeNotFoundTable(wchar_t *object)
 		numResults = mysql_num_rows(result);
 		mysql_free_result(result);
 	}
-	if (!myquery(&mysql, L"UNLOCK TABLES")) 
+	if (!myquery(&mysql, L"UNLOCK TABLES"))
 		return false;
 	lplog(LOG_INFO, L"*** inRDFTypeNotFoundTable Temp: statement %s resulted in numRows=%d.", qt, numResults);
 	return numResults > 0;
+}
+
+bool Ontology::insertRDFTypeNotFoundTable(wchar_t *object)
+{
+	initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
+	if (!myquery(&mysql, L"LOCK TABLES noRDFTypes WRITE"))
+		return false;
+	wchar_t qt[query_buffer_len_overflow];
+	wsprintf(qt, L"INSERT INTO noRDFTypes VALUES ('%s')", object);
+	bool success = (myquery(&mysql, qt, true) || mysql_errno(&mysql) == ER_DUP_ENTRY);
+	if (!myquery(&mysql, L"UNLOCK TABLES"))
+		return false;
+	return success;
+}
+
+bool Ontology::inNoERDFTypesDBTable(wstring newObjectName)
+{
+	initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
+	wchar_t newPath[1024];
+	wcscpy(newPath, newObjectName.c_str());
+	convertIllegalChars(newPath);
+	if (!myquery(&mysql, L"LOCK TABLES noERDFTypes READ"))
+		return false;
+	MYSQL_RES * result;
+	_int64 numResults = 0;
+	wchar_t qt[query_buffer_len_overflow];
+	_snwprintf(qt, query_buffer_len, L"select 1 from noERDFTypes where word = '_%s'", newPath);
+	if (myquery(&mysql, qt, result))
+	{
+		numResults = mysql_num_rows(result);
+		mysql_free_result(result);
+	}
+	if (!myquery(&mysql, L"UNLOCK TABLES"))
+		return false;
+	lplog(LOG_INFO, L"*** inNoERDFTypesDBTable Temp: statement %s resulted in numRows=%d.", qt, numResults);
+	return numResults > 0;
+}
+
+bool Ontology::insertNoERDFTypesDBTable(wstring newObjectName)
+{
+	initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
+	wchar_t newPath[1024];
+	wcscpy(newPath, newObjectName.c_str());
+	convertIllegalChars(newPath);
+	if (!myquery(&mysql, L"LOCK TABLES noERDFTypes WRITE"))
+		return false;
+	wchar_t qt[query_buffer_len_overflow];
+	wsprintf(qt, L"INSERT INTO noERDFTypes VALUES ('_%s')", newPath);
+	bool success = (myquery(&mysql, qt, true) || mysql_errno(&mysql) == ER_DUP_ENTRY);
+	if (!myquery(&mysql, L"UNLOCK TABLES"))
+		return false;
+	return success;
+}
+
+int Ontology::printRDFTypes(wchar_t *kind, vector <cTreeCat *> &rdfTypes)
+{
+	lplog(LOG_WIKIPEDIA, L"BEGIN %s:%d", kind, rdfTypes.size());
+	for (int I = 0; I < rdfTypes.size(); I++)
+		rdfTypes[I]->lplogTC(LOG_WIKIPEDIA, L"");
+	lplog(LOG_WIKIPEDIA, L"END %s:%d %d", kind, rdfTypes.size());
+	return 0;
+}
+
+int Ontology::printExtendedRDFTypes(wchar_t *kind, vector <cTreeCat *> &rdfTypes, unordered_map <wstring, int > &topHierarchyClassIndexes)
+{
+	lplog(LOG_WIKIPEDIA, L"BEGIN %s:%d %d", kind, rdfTypes.size(), topHierarchyClassIndexes.size());
+	for (int I = 0; I < rdfTypes.size(); I++)
+		rdfTypes[I]->lplogTC(LOG_WIKIPEDIA, L"");
+	for (unordered_map <wstring, int >::iterator idi = topHierarchyClassIndexes.begin(), idiEnd = topHierarchyClassIndexes.end(); idi != idiEnd; idi++)
+		lplog(LOG_WIKIPEDIA, L"topHierarchyClassIndexes:%s %d", idi->first.c_str(), idi->second);
+	lplog(LOG_WIKIPEDIA, L"END %s:%d %d", kind, rdfTypes.size(), topHierarchyClassIndexes.size());
+	return 0;
 }
 
 int Ontology::getRDFTypesMaster(wstring object, vector <cTreeCat *> &rdfTypes, wstring fromWhere, bool fileCaching)
@@ -2202,7 +2276,7 @@ int Ontology::getRDFTypesMaster(wstring object, vector <cTreeCat *> &rdfTypes, w
 	_wmkdir(path);
 	_snwprintf(path+pathlen,MAX_LEN-pathlen,L"\\_%s",object.c_str());
 	convertIllegalChars(path+pathlen+1);
-	if (wcslen(path + pathlen + 1) > 127 || inRDFTypeNotFoundTable(path + pathlen + 1))
+	if (wcslen(path + pathlen + 1) > 127 || wcslen(path + pathlen + 1) < 2 || inRDFTypeNotFoundTable(path + pathlen + 1))
 		return -1;
 	distributeToSubDirectories(path,pathlen+1,true);
 	if (wcslen(path)+12>MAX_PATH)
@@ -2229,7 +2303,16 @@ int Ontology::getRDFTypesMaster(wstring object, vector <cTreeCat *> &rdfTypes, w
 			//for (unsigned int I=rdfLen; I<rdfTypes.size(); I++)
 			//	rdfTypes[I]->lplog(LOG_WHERE);
 		}
-		retCode=writeRDFTypes(path,rdfTypes);
+		if (rdfTypes.empty())
+		{
+			path[wcslen(path) - 9] = 0;
+			insertRDFTypeNotFoundTable(path + pathlen + 5); // added 4 for the distribution to subdirectories
+		}
+		else
+		{
+			printRDFTypes(L"RDFM", rdfTypes);
+			retCode = writeRDFTypes(path, rdfTypes);
+		}
 	}
 	if (!superClassesAllPopulated)
 	{
@@ -2383,7 +2466,7 @@ bool detectNonEuropean(wstring word)
 bool detectNonEnglish(wstring word)
 {
 	for (wchar_t c : word)
-		if (c != '-' && c != '\'' && !iswalpha(c))
+		if (c != '-' && c != L'—' && c != '\'' && !iswalpha(c))
 			return true;
 	return false;
 }

@@ -11,6 +11,10 @@ public:
 	static void compressPath(wchar_t *path);
 	static void compareRDFTypes();
 	static int readUMBELNS();
+	static bool inNoERDFTypesDBTable(wstring newPath);
+	static bool insertNoERDFTypesDBTable(wstring newPath);
+	static int printRDFTypes(wchar_t *kind, vector <cTreeCat *> &rdfTypes);
+	static int printExtendedRDFTypes(wchar_t *kind, vector <cTreeCat *> &rdfTypes, unordered_map <wstring, int > &topHierarchyClassIndexes);
 
 private:
 	static unordered_map<wstring, vector <cTreeCat *> > rdfTypeMap; 
@@ -35,6 +39,7 @@ private:
 	static int findCategoryRank(wstring &qtype,wstring &parentObject,wstring &object,vector <cTreeCat *> &rdfTypes,wstring &uri);
 	static bool extractResults(wstring begin,wstring uobject,wstring end,wstring qtype, vector <cTreeCat *> &rdfTypes,vector <wstring> &resources,wstring parentObject);
 	static bool inRDFTypeNotFoundTable(wchar_t *object);
+	static bool insertRDFTypeNotFoundTable(wchar_t *object);
 	static int getRDFTypesMaster(wstring object, vector <cTreeCat *> &rdfTypes, wstring fromWhere, bool fileCaching=true);
 	static bool isolateKnownClasses(unordered_map <wstring, int > &topHierarchyClassIndexes, vector <cTreeCat *> &rdfTypes, int rdfBaseTypeOffset);
 	static void includeAllSuperClasses(unordered_map <wstring, int > &topHierarchyClassIndexes, vector <cTreeCat *> &rdfTypes, int recursionLevel, int rdfBaseTypeOffset);

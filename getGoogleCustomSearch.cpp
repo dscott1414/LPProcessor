@@ -949,7 +949,7 @@ int Source::spinParses(vector <searchSource> &accumulatedParseRequests)
 	createParseRequestTable();
 	for (vector <searchSource>::iterator pri = accumulatedParseRequests.begin(), priEnd = accumulatedParseRequests.end(); pri != priEnd; pri++)
 	{
-		wstring path = pri->pathInCache + L".SourceCache.2";
+		wstring path = pri->pathInCache + L".SourceCache";
 		bool processOldFile = false;
 		if (!_waccess(path.c_str(), 0))
 		{
@@ -1012,9 +1012,9 @@ int Source::accumulateParseRequests(cSpaceRelation* parentSRI, int webSitesAsked
 			if (!ssi->empty())
 			{
 				wchar_t path[1024];
-				int pathlen = _snwprintf(path, MAX_LEN, L"%s\\webSearchCache", CACHEDIR) + 1;
+				int pathlen = _snwprintf(path, MAX_LEN, L"%s\\webSearchCache", WEBSEARCH_CACHEDIR) + 1;
 				_wmkdir(path);
-				_snwprintf(path, MAX_LEN, L"%s\\webSearchCache\\_%s", CACHEDIR, epath.c_str());
+				_snwprintf(path, MAX_LEN, L"%s\\webSearchCache\\_%s", WEBSEARCH_CACHEDIR, epath.c_str());
 				convertIllegalChars(path + pathlen);
 				distributeToSubDirectories(path, pathlen, true);
 				path[MAX_PATH - 28] = 0; // extensions

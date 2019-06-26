@@ -123,7 +123,7 @@ public class BatchDocument extends DefaultStyledDocument {
 			if (masterIndex<0)
 				break;
 			int numWords=0,index=masterIndex-1;
-			// get previous three words
+			// get previous four words
 			while (index>0 && numWords<surroundWords)
 			{
 				int previousIndex=noBracketStr.lastIndexOf(" ", index);
@@ -135,7 +135,7 @@ public class BatchDocument extends DefaultStyledDocument {
 			}
 			numWords=0;
 			index=masterIndex+searchString.length();
-			// get next three words
+			// get next four words
 			while (index<noBracketStr.length() && numWords<surroundWords)
 			{
 				int nextIndex=noBracketStr.indexOf(" ", index);
@@ -145,16 +145,17 @@ public class BatchDocument extends DefaultStyledDocument {
 				index=nextIndex+1;
 				numWords++;
 			}
-			if (menuString.length()<100)
-			{
-				JMenuItem menuItem=new JMenuItem(menuString);
-				menuItem.addActionListener(searchSourceListener);
-				searchSourceMenu.add(menuItem);
-			}
+			if (menuString.length()>100)
+				menuString=menuString.substring(0, 100);
+			JMenuItem menuItem=new JMenuItem(menuString);
+			menuItem.addActionListener(searchSourceListener);
+			System.out.println("added listener to new search results menu item - "+menuString);
+			searchSourceMenu.add(menuItem);
 		}
 	}
 	
-	public void addTextSegments(String searchString, JMenu searchSourceMenu, ActionListener searchSourceListener) {
+	public void addSurroundingContextAndListenerToSearchMenu(String searchString, JMenu searchSourceMenu, ActionListener searchSourceListener) {
+		System.out.println("Cleared all search menu items!");
 		searchSourceMenu.removeAll();
 		int nleft = getLength();
 		Segment text = new Segment();
@@ -167,14 +168,21 @@ public class BatchDocument extends DefaultStyledDocument {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-			String str=text.toString();
+			String str=text.toString().toLowerCase();
 			//str=removeBracketedItems(str);
 			int masterIndex=-200;
+			int numMatches=0;
 			while (true)
 			{
-				masterIndex=str.indexOf(searchString, masterIndex+200);
+				masterIndex=str.indexOf(searchString.toLowerCase(), masterIndex+200);
 				if (masterIndex<0)
 					break;
+				if (numMatches++>30)
+				{
+					searchSourceMenu.add(new JMenuItem("TOO MANY MATCHES"));
+					System.out.println("Maximum matches reached!");
+					break;
+				}
 				addSurroundingWords(searchString,str,6,masterIndex,searchSourceMenu,searchSourceListener);
 				masterIndex+=searchString.length();
 			}
@@ -187,18 +195,23 @@ public class BatchDocument extends DefaultStyledDocument {
 	// find the position of the iteration of the text within the document. 
 	public int findWordPosition(String searchfor, int iteration) {
 		try {
-			String text=getText(0, getLength());
+			String text=getText(0, getLength()).toLowerCase();
 			int lastindex=0;
 			for (int I=0; I<iteration+1; I++)
-				lastindex=text.indexOf(searchfor,lastindex+1);
+				lastindex=text.indexOf(searchfor.toLowerCase(),lastindex+1);
+			if (lastindex<0)
+			{
+				System.out.println("iteration "+iteration+" of "+searchfor+" is not found!");
+				return -1;
+			}
 			System.out.println("iteration "+iteration+" of "+searchfor+" is "+lastindex);
 			Element previousElement=getCharacterElement(lastindex);
 			AttributeSet as=previousElement.getAttributes();
 			String attributeString;
-			for ( name:as.getAttributeNames())
-			{
-			
-			}
+//			for ( name:as.getAttributeNames())
+//			{
+//			
+//			}
 			System.out.println("start="+previousElement.getStartOffset()+" end="+previousElement.getEndOffset()+" attributes="+previousElement.getAttributes().toString());
 			SimpleAttributeSet attributes = new SimpleAttributeSet();
 		    attributes = new SimpleAttributeSet();

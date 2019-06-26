@@ -636,6 +636,7 @@ public:
 	}
 	bool writeRef(void *buffer,int &where,int limit);
 	bool read(char *buffer,int &where,int limit);
+	void accumulateStatistics(unordered_map<wstring, int> &defaultMap);
 	WordMatch(char *buffer,int &where,int limit,bool &error)
 	{
 		error=!read(buffer,where,limit);
@@ -1834,7 +1835,7 @@ public:
 	int parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank);
 	int parse(wstring title, wstring etext, wstring path, wstring &start, int &repeatStart, unsigned int &unknownCount, bool newsBank);
 	bool write(IOHANDLE file);
-	bool read(char *buffer,int &where,unsigned int total,bool S2,bool printProgress);
+	bool read(char *buffer,int &where,unsigned int total,bool printProgress);
 	bool flush(int fd,void *buffer,int &where);
 	bool FlushFile(HANDLE fd, void *buffer, int &where);
 	bool writeCheck(wstring path,bool S2);
@@ -2386,7 +2387,6 @@ int wherePrepObject,
 	int getWikipediaPath(int principalWhere,vector <wstring> &wikipediaLinks,wchar_t *path,vector <wstring> &lookForSubject,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases);
 	int evaluateISARelation(int parentSourceWhere,int where,vector <tTagLocation> &tagSet,vector <wstring> &lookForSubject);
 	bool getISARelations(int parentSourceWhere,int where,vector < vector <tTagLocation> > &tagSets,vector <int> &OCTypes,vector <wstring> &lookForSubject);
-	int printExtendedRDFTypes(wchar_t *kind,vector <cTreeCat *> &rdfTypes,unordered_map <wstring ,int > &topHierarchyClassIndexes);
 	int getObjectRDFTypes(int object,vector <cTreeCat *> &rdfTypes,unordered_map <wstring ,int > &topHierarchyClassIndexes,wstring fromWhere);
 	int getExtendedRDFTypes(int where, vector <cTreeCat *> &rdfTypes, unordered_map <wstring, int > &topHierarchyClassIndexes, wstring fromWhere, bool ignoreMatches=false, bool fileCaching=true);
 	class extendedMapType

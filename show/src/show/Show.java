@@ -520,15 +520,15 @@ public class Show implements ActionListener, ItemListener {
 					  public void changedUpdate(DocumentEvent e) {
 					  }
 					  public void removeUpdate(DocumentEvent e) {
-							source.batchDoc.addTextSegments(searchField.getText(), searchSourceMenu, searchListener);
+							source.batchDoc.addSurroundingContextAndListenerToSearchMenu(searchField.getText(), searchSourceMenu, searchListener);
 					  }
 					  public void insertUpdate(DocumentEvent e) {
-							source.batchDoc.addTextSegments(searchField.getText(), searchSourceMenu, searchListener);
+							source.batchDoc.addSurroundingContextAndListenerToSearchMenu(searchField.getText(), searchSourceMenu, searchListener);
 					  }
 
 					});
 
-				sourceDir = new File("J:\\caches\\texts");
+				sourceDir = new File("M:\\caches\\texts");
 				if (!sourceDir.exists())
 					return;
 				FileFilter onlyDirectories = new FileFilter() {
@@ -559,7 +559,7 @@ public class Show implements ActionListener, ItemListener {
 				timelineFrame.setVisible(false);
 				agentFrame.setVisible(false);
 				wordInfoFrame.setVisible(false);
-				source = new Source(Words, new LittleEndianDataInputStream(sourcePath + ".SourceCache.2"));
+				source = new Source(Words, new LittleEndianDataInputStream(sourcePath + ".SourceCache"));
 				SwingUtilities.invokeLater(new Runnable() {
 					public void run() {
 						mainPane.setStyledDocument(source.print(Words, pickChapter, ccb.states));
@@ -671,8 +671,8 @@ public class Show implements ActionListener, ItemListener {
 								println(list);
 								if (list.size() == 1 && list.get(0) instanceof File) {
 									String path = ((File) list.get(0)).getAbsolutePath();
-									if (path.endsWith("SourceCache.2")) {
-										sourcePath = path.substring(0, path.lastIndexOf(".SourceCache.2"));
+									if (path.endsWith("SourceCache")) {
+										sourcePath = path.substring(0, path.lastIndexOf(".SourceCache"));
 										loadSelectedSource();
 										frame.setTitle(path);
 									}
@@ -741,16 +741,18 @@ public class Show implements ActionListener, ItemListener {
 					System.out.println("GUI state file not found.");
 				}
 				if (sourcePath == null || !(found = new File(sourcePath + ".wordCacheFile").exists()
-						&& new File(sourcePath + ".SourceCache.2").exists())) {
-					// find first entry which has wordCacheFile and SourceCache.2
+						&& new File(sourcePath + ".SourceCache").exists())) {
+					// find first entry which has wordCacheFile and SourceCache
 					for (Component author : pickSourceMenu.getMenuComponents()) {
+						if (!author.getClass().getName().equals("DynamicMenu"))
+							continue;
 						((DynamicMenu) author).populateSources();
 						for (Component book : ((DynamicMenu) author).getMenuComponents()) {
 							sourcePath = sourceDir.getAbsolutePath() + "\\" + ((DynamicMenu) author).getText() + "\\"
 									+ ((JMenuItem) book).getText() + ".txt";
 							frame.setTitle(((DynamicMenu) author).getText() + ": " + ((JMenuItem) book).getText());
 							if (found = new File(sourcePath + ".wordCacheFile").exists()
-									&& new File(sourcePath + ".SourceCache.2").exists())
+									&& new File(sourcePath + ".SourceCache").exists())
 								break;
 						}
 						if (found)
@@ -761,7 +763,7 @@ public class Show implements ActionListener, ItemListener {
 				// path="G:\\wikipediaCache\\_Llanelly.txt";
 				Words = new WordClass(new LittleEndianDataInputStream("F:\\lp\\wordFormCache"));
 				Words.readSpecificWordCache(new LittleEndianDataInputStream(sourcePath + ".wordCacheFile"));
-				source = new Source(Words, new LittleEndianDataInputStream(sourcePath + ".SourceCache.2"));
+				source = new Source(Words, new LittleEndianDataInputStream(sourcePath + ".SourceCache"));
 				mainPane.setStyledDocument(source.print(Words, pickChapter, ccb.states));
 				agentPane.setStyledDocument(source.fillAgents());
 				timelineFrame.setContentPane(timelinePane = new TimelineTreePanel(source));

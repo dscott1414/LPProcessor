@@ -1068,7 +1068,7 @@ bool WordClass::handleExtendedParseWords(wchar_t *word)
   if (!word[1]) return false;
   wchar_t *ch;
 	vector <wchar_t *>::iterator index;
-	if (wcschr(word,L' ') || wcschr(word,L'-'))
+	if (wcschr(word,L' ') || wcschr(word, L'-') || wcschr(word, L'—'))
 	{
 		if (multiElementWords.size() && loosesort( multiElementWords[multiElementWords.size()-1], word ))
 			index=multiElementWords.end();
@@ -1240,6 +1240,8 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 	bool wordComplete;
 	if (wordComplete = (iWord = query(sWord)) != WMM.end())
 	{
+		if (!mysql) // can get here calling parseWord on a mainEntry as well.
+			return 0;
 		if (!firstLetterCapitalized && (iWord->second.flags&tFI::queryOnLowerCase) == tFI::queryOnLowerCase)
 		{
 			changedWords = true;
@@ -1285,10 +1287,10 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 		if (sWord.length()>1 && !iswdigit(sWord[0]))
 			for (int I = sWord.length() - 1; I >= 0; I--)
 			{
-			if (!iswalnum(sWord[I]) && sWord[I] != ' ' && sWord[I] != '.' && sWord[I] != '-' &&
+			if (!iswalnum(sWord[I]) && sWord[I] != ' ' && sWord[I] != '.' && sWord[I] != '-' && sWord[I] != L'—' &&
 				((sWord[0] != 'd' && sWord[0] != 'l') || sWord[1] != '\''))
 				lplog(LOG_DICTIONARY, L"Suspect character %c(ascii value %d) encountered in word %s.", sWord[I], (int)sWord[I], sWord.c_str());
-			if (sWord[I] == '-')
+			if (sWord[I] == '-' || sWord[I] == L'—')
 				dashLocation = I;
 			if (sWord[I] == '\'')
 				containsSingleQuote = true;
@@ -1329,6 +1331,7 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 				{
 					wstring sWordNoDashes = sWord;
 					sWordNoDashes.erase(std::remove(sWordNoDashes.begin(), sWordNoDashes.end(), L'-'), sWordNoDashes.end());
+					sWordNoDashes.erase(std::remove(sWordNoDashes.begin(), sWordNoDashes.end(), L'—'), sWordNoDashes.end());
 					if ((iWord=Words.query(sWordNoDashes)) != Words.end())
 						ret = Words.attemptDisInclination(mysql, iWord, sWordNoDashes, sourceId); // returns 0 if found or WORD_NOT_FOUND if not found
 				}
@@ -1355,10 +1358,10 @@ int WordClass::parseWord(MYSQL *mysql,wstring sWord, tIWMM &iWord)
 	if (sWord.length()>1 && !iswdigit(sWord[0]))
 		for (int I = sWord.length() - 1; I >= 0; I--)
 		{
-		if (!iswalnum(sWord[I]) && sWord[I] != ' ' && sWord[I] != '.' && sWord[I] != '-' &&
+		if (!iswalnum(sWord[I]) && sWord[I] != ' ' && sWord[I] != '.' && sWord[I] != '-' && sWord[I] != L'—' &&
 			((sWord[0] != 'd' && sWord[0] != 'l') || sWord[1] != '\''))
 			lplog(LOG_DICTIONARY, L"Suspect character %c(ascii value %d) encountered in word %s.", sWord[I], (int)sWord[I], sWord.c_str());
-		if (sWord[I] == '-')
+		if (sWord[I] == '-' || sWord[I] == L'—')
 			dashLocation = I;
 		if (sWord[I] == '\'')
 			containsSingleQuote = true;
@@ -1421,7 +1424,7 @@ int WordClass::processDate(wstring &sWord,wchar_t *buffer,__int64 &cp,__int64 &b
 	bool twoDigitYear=false;
   if (!iswdigit(buffer[tempcp++])) return -1; // 8 in 7-8-90
   if ((twoDigitYear=iswdigit(buffer[tempcp]))!=0) tempcp++; // 1 in 7-11-90
-  if (buffer[tempcp]!='/' && buffer[tempcp]!='-')
+  if (buffer[tempcp]!='/' && buffer[tempcp] != '-' && buffer[tempcp] != L'—')
   {
 		int month=_wtoi(sWord.c_str());
 		int year=_wtoi(buffer+cp+1);
@@ -2027,7 +2030,7 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
       break;
     }
     // dangling - at the end of a line
-    if ((buffer[cp]=='-' || buffer[cp]=='—' || buffer[cp]=='–') && buffer[cp+1]==13 && buffer[cp+2]==10 && query(sWord)==end())
+    if ((buffer[cp]=='-' || buffer[cp]==L'—' || buffer[cp]==L'–') && buffer[cp+1]==13 && buffer[cp+2]==10 && query(sWord)==end())
     {
       cp+=3;
       while (cp<bufferLen && iswspace(buffer[cp])) cp++;
@@ -2076,7 +2079,7 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
 			if (isAsciiMoney) I++;
 			if (isUnicodeMoney) I+=2;
       while (iswdigit(sWord[I])) I++;
-      if (!sWord[I] && I==3 && buffer[cp]=='-' && iswdigit(buffer[cp+1]))
+      if (!sWord[I] && I==3 && (buffer[cp]=='-' || buffer[cp] == L'—') && iswdigit(buffer[cp+1]))
       {
         int J=0;
         while (iswdigit(buffer[J+cp+1]) && J+cp+1<bufferLen) J++;
@@ -2088,7 +2091,7 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
         }
       }
       // date processing
-      if (!sWord[I] && (buffer[cp]==L'/' || buffer[cp]==L'-') && processDate(sWord,buffer,cp,bufferScanLocation)==0)
+      if (!sWord[I] && (buffer[cp]==L'/' || buffer[cp] == L'-' || buffer[cp] == L'—') && processDate(sWord,buffer,cp,bufferScanLocation)==0)
         return PARSE_DATE;
 			// time processing
 			if (!sWord[I] && (buffer[cp] == L':' || buffer[cp] == L'.') && processTime(sWord, buffer, cp, bufferScanLocation) == 0)

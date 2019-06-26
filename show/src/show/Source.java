@@ -75,13 +75,14 @@ public class Source {
 	public static final int OBJECT_UNKNOWN_PLURAL = -6;
 	public static final int OBJECT_UNKNOWN_ALL = -7;
 
-	String[] wordOrderWords = { "other", "another", "second", "first", "third", "former", "latter", "that", "this", "two", "three", "one",
-			"four", "five", "six", "seven", "eight" };
+	String[] wordOrderWords = { "other", "another", "second", "first", "third", "former", "latter", "that", "this",
+			"two", "three", "one", "four", "five", "six", "seven", "eight" };
 
-	String[] OCSubTypeStrings = { "canadian province city", "country", "island", "mountain range peak landform", "ocean sea",
-			"park monument", "region", "river lake waterway", "us city town village", "us state territory region", "world city town village",
-			"geographical natural feature", "geographical urban feature", "geographical urban subfeature", "geographical urban subsubfeature",
-			"travel", "moving", "moving natural", "relative direction", "absolute direction", "by activity", "unknown(place)" };
+	String[] OCSubTypeStrings = { "canadian province city", "country", "island", "mountain range peak landform",
+			"ocean sea", "park monument", "region", "river lake waterway", "us city town village",
+			"us state territory region", "world city town village", "geographical natural feature",
+			"geographical urban feature", "geographical urban subfeature", "geographical urban subsubfeature", "travel",
+			"moving", "moving natural", "relative direction", "absolute direction", "by activity", "unknown(place)" };
 	public static final int CANADIAN_PROVINCE_CITY = 0;
 	public static final int COUNTRY = 1;
 	public static final int ISLAND = 2;
@@ -114,7 +115,9 @@ public class Source {
 	public static final int INCLUDE_TIME_TRANSITION = 5;
 
 	public enum SourceMapType {
-		relType, relType2, speakerGroupType, transitionSpeakerGroupType, wordType, QSWordType, ESType, URWordType, matchingSpeakerType, matchingType, audienceMatchingType, matchingObjectType, headerType, beType, possessionType, tableType
+		relType, relType2, speakerGroupType, transitionSpeakerGroupType, wordType, QSWordType, ESType, URWordType,
+		matchingSpeakerType, matchingType, audienceMatchingType, matchingObjectType, headerType, beType, possessionType,
+		tableType
 	}
 
 	String location;
@@ -128,7 +131,7 @@ public class Source {
 	CObject[] objects;
 	static Relation[] relations;
 	TimelineSegment[] timelineSegments;
-	//StyledDocument doc;
+	// StyledDocument doc;
 	int docPosition = 0;
 	BatchDocument batchDoc;
 	List<Integer> paragraphSpacingOff;
@@ -156,8 +159,7 @@ public class Source {
 
 	public Source(WordClass Words, LittleEndianDataInputStream rs) {
 		masterSpeakerList = new TreeMap<Integer, Integer>();
-		if (rs.b==null)
-		{
+		if (rs.b == null) {
 			m = new WordMatch[0];
 			return;
 		}
@@ -184,6 +186,13 @@ public class Source {
 			pema = new patternElementMatch[count];
 			for (int I = 0; I < count; I++)
 				pema[I] = new patternElementMatch(rs);
+			if (rs.EndOfBufferReached())
+			{
+				objects = new CObject[0];
+				relations = new Relation[0];
+				timelineSegments = new TimelineSegment[0];
+				return;
+			}
 			count = rs.readInteger();
 			objects = new CObject[count];
 			for (int I = 0; I < count; I++) {
@@ -303,9 +312,9 @@ public class Source {
 	}
 
 	String objectKnownString(int object, boolean shortFormat, boolean objectOwnerRecursionFlag) {
-		if (object==0)
+		if (object == 0)
 			return "Narrator";
-		else if (object==1)
+		else if (object == 1)
 			return "Audience";
 		String tmpstr;
 		if (objects[object].objectClass == NAME_OBJECT_CLASS)
@@ -360,9 +369,10 @@ public class Source {
 				tmpstr += "[" + OCSubTypeStrings[objects[object].subType] + "]";
 		}
 		if (objects[object].relativeClausePM >= 0 && objects[object].objectClass != NAME_OBJECT_CLASS)
-			tmpstr += "["
-					+ phraseString(objects[object].whereRelativeClause, objects[object].whereRelativeClause
-							+ m[objects[object].whereRelativeClause].pma[objects[object].relativeClausePM].len, shortFormat) + "]";
+			tmpstr += "[" + phraseString(objects[object].whereRelativeClause,
+					objects[object].whereRelativeClause
+							+ m[objects[object].whereRelativeClause].pma[objects[object].relativeClausePM].len,
+					shortFormat) + "]";
 		if (!shortFormat) {
 			if (objects[object].associatedAdjectives.length > 0 && objects[object].associatedAdjectives.length < 4) {
 				tmpstr += "ADJ:";
@@ -473,11 +483,13 @@ public class Source {
 	}
 
 	String relationString(int r) {
-		String[] relStrings = { "", "EXIT", "ENTER", "STAY", "ESTAB", "MOVE", "MOVE_OBJECT", "MOVE_IN_PLACE", "METAWQ", "CONTACT", "NEAR",
-				"TRANSFER", "LOCATION", "PREP TIME", "PREP DATE", "SUBJDAY TIME", "ABS TIME", "ABS DATE", "ADVERB TIME", "THINK", "COMMUNICATE",
-				"START", "COS", "BE", "HAS-A", "METAINFO", "METAPROFESSION", "METABELIEF", "METACONTACT", "THINK_OBJECT", "stCHANGESTATE",
-				"stCONTIGUOUS", "stCONTROL", "stAGENTCHANGEOBJECTINTERNALSTATE", "stSENSE", "stCREATE", "stCONSUME", "stMETAFUTUREHAVE",
-				"stMETAFUTURECONTACT", "stMETAIFTHEN", "stMETACONTAINS", "stMETADESIRE", "stMETAROLE", "stSPATIALORIENTATION", "stIGNORE", "stNORELATION","stOTHER","47" };
+		String[] relStrings = { "", "EXIT", "ENTER", "STAY", "ESTAB", "MOVE", "MOVE_OBJECT", "MOVE_IN_PLACE", "METAWQ",
+				"CONTACT", "NEAR", "TRANSFER", "LOCATION", "PREP TIME", "PREP DATE", "SUBJDAY TIME", "ABS TIME",
+				"ABS DATE", "ADVERB TIME", "THINK", "COMMUNICATE", "START", "COS", "BE", "HAS-A", "METAINFO",
+				"METAPROFESSION", "METABELIEF", "METACONTACT", "THINK_OBJECT", "stCHANGESTATE", "stCONTIGUOUS",
+				"stCONTROL", "stAGENTCHANGEOBJECTINTERNALSTATE", "stSENSE", "stCREATE", "stCONSUME", "stMETAFUTUREHAVE",
+				"stMETAFUTURECONTACT", "stMETAIFTHEN", "stMETACONTAINS", "stMETADESIRE", "stMETAROLE",
+				"stSPATIALORIENTATION", "stIGNORE", "stNORELATION", "stOTHER", "47" };
 		try {
 			if (r > 0)
 				return relStrings[r];
@@ -512,7 +524,7 @@ public class Source {
 			new Color(0x66, 0x30, 0x33), // "Brown(Dark)"
 			// new Color(0xF6, 0xCC, 0xC0), // "Brown(Faded)"
 			new Color(0x33, 0xCC, 0x99), // "Aquamarine(Med)" // moved to prevent
-																		// speakers from being to close in color
+											// speakers from being to close in color
 			new Color(0x6F, 0x9F, 0x90), // "Blue(Cadet3)"
 			new Color(0x63, 0x96, 0xFC), // "Blue(CornFlower-Light)"
 			new Color(0x6C, 0x33, 0x9F), // "Blue(DarkSlate)"
@@ -635,10 +647,10 @@ public class Source {
 				all = false;
 		if (all)
 			return true;
-		boolean timeRelation = relations[spr].timeInfo.length > 0
-				|| (relations[spr].relationType == stABSTIME || relations[spr].relationType == stPREPTIME
-						|| relations[spr].relationType == stPREPDATE || relations[spr].relationType == stSUBJDAYOFMONTHTIME
-						|| relations[spr].relationType == stABSTIME || relations[spr].relationType == stABSDATE || relations[spr].relationType == stADVERBTIME);
+		boolean timeRelation = relations[spr].timeInfo.length > 0 || (relations[spr].relationType == stABSTIME
+				|| relations[spr].relationType == stPREPTIME || relations[spr].relationType == stPREPDATE
+				|| relations[spr].relationType == stSUBJDAYOFMONTHTIME || relations[spr].relationType == stABSTIME
+				|| relations[spr].relationType == stABSDATE || relations[spr].relationType == stADVERBTIME);
 		if (!preference[INCLUDE_STORY] && relations[spr].story)
 			return false;
 		if (!preference[INCLUDE_QUOTES] && (m[relations[spr].where].objectRole & CObject.IN_PRIMARY_QUOTE_ROLE) != 0)
@@ -657,7 +669,8 @@ public class Source {
 	void printRelation(int where, Boolean[] preferences) {
 		if (spr < relations.length && relations[spr].where == where) {
 			if (shouldPrintRelation(where, spr, preferences))
-				addElement(relationString(relations[spr].relationType), setAttributes(relations, spr), where, spr, -1, SourceMapType.relType);
+				addElement(relationString(relations[spr].relationType), setAttributes(relations, spr), where, spr, -1,
+						SourceMapType.relType);
 		}
 		while (spr < relations.length && relations[spr].where < where)
 			spr = relations[spr].nextSPR;
@@ -666,7 +679,8 @@ public class Source {
 	String printFullRelationString(int originalSPRI, int endSpeakerGroup) {
 		String presType = "";
 		Relation r = relations[originalSPRI];
-		if (r.futureHappening && r.wherePrepObject >= 0 && m[r.wherePrepObject].object>=0 && objects[m[r.wherePrepObject].object].subType == BY_ACTIVITY) {
+		if (r.futureHappening && r.wherePrepObject >= 0 && m[r.wherePrepObject].object >= 0
+				&& objects[m[r.wherePrepObject].object].subType == BY_ACTIVITY) {
 			for (int li = originalSPRI + 1; Math.abs(relations[li].relationType) == stLOCATION && li < relations.length
 					&& relations[li].where < endSpeakerGroup; li++)
 				if (relations[li].whereSubject >= 0)
@@ -709,7 +723,8 @@ public class Source {
 					+ objects[masterSpeakerList.get(ms)].numIdentifiedAsSpeaker + "]";
 			batchDoc.insertString(s, keyWord);
 			batchDoc.insertString("\n", keyWord);
-			positionToAgent.put(docPosition, new WhereSource(masterSpeakerList.get(ms), -1, -1, SourceMapType.matchingSpeakerType));
+			positionToAgent.put(docPosition,
+					new WhereSource(masterSpeakerList.get(ms), -1, -1, SourceMapType.matchingSpeakerType));
 			agentToPosition.put(masterSpeakerList.get(ms), docPosition);
 			docPosition += s.length();
 		}
@@ -761,23 +776,30 @@ public class Source {
 			else
 				currentEmbeddedSpeakerGroup = -1;
 			int endSpr = -1;
-			for (endSpr = spr; endSpr<relations.length && relations[endSpr].where < speakerGroups[currentSpeakerGroup].begin; endSpr++)
+			for (endSpr = spr; endSpr < relations.length
+					&& relations[endSpr].where < speakerGroups[currentSpeakerGroup].begin; endSpr++)
 				;
 			if (endSpr > spr) {
-				for (int spri = spr; spri<relations.length && relations[spri].where < speakerGroups[currentSpeakerGroup].begin;)
+				for (int spri = spr; spri < relations.length
+						&& relations[spri].where < speakerGroups[currentSpeakerGroup].begin;)
 					spri = evaluateSpaceRelation(I, speakerGroups[currentSpeakerGroup].begin, spri, preferences);
 			}
 		}
-		while (currentEmbeddedSpeakerGroup >= 0 && currentSpeakerGroup>0 
+		while (currentEmbeddedSpeakerGroup >= 0 && currentSpeakerGroup > 0
 				&& currentEmbeddedSpeakerGroup < speakerGroups[currentSpeakerGroup - 1].embeddedSpeakerGroups.length
-				&& I == speakerGroups[currentSpeakerGroup - 1].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].begin) {
-			for (int mo : speakerGroups[currentSpeakerGroup - 1].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].speakers) {
-				boolean isPOV = Arrays.binarySearch(
-						speakerGroups[currentSpeakerGroup - 1].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].povSpeakers, mo) >= 0;
-				boolean isObserver = Arrays.binarySearch(
-						speakerGroups[currentSpeakerGroup - 1].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].observers, mo) >= 0;
-				boolean isGrouped = Arrays.binarySearch(
-						speakerGroups[currentSpeakerGroup - 1].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].groupedSpeakers, mo) >= 0;
+				&& I == speakerGroups[currentSpeakerGroup
+						- 1].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].begin) {
+			for (int mo : speakerGroups[currentSpeakerGroup
+					- 1].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].speakers) {
+				boolean isPOV = Arrays.binarySearch(speakerGroups[currentSpeakerGroup
+						- 1].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].povSpeakers, mo) >= 0;
+				boolean isObserver = Arrays.binarySearch(speakerGroups[currentSpeakerGroup
+						- 1].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].observers, mo) >= 0;
+				boolean isGrouped = Arrays
+						.binarySearch(
+								speakerGroups[currentSpeakerGroup
+										- 1].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].groupedSpeakers,
+								mo) >= 0;
 				int msindex = objects[mo].masterSpeakerIndex % masterSpeakerColors.length;
 				if (msindex < 0)
 					msindex = 0;
@@ -797,15 +819,18 @@ public class Source {
 				if (isGrouped)
 					oStr += "[grouped]";
 				oStr += objectString(mo, false, false);
-				addElement(oStr, keyWord, currentSpeakerGroup - 1, currentEmbeddedSpeakerGroup, mo, SourceMapType.speakerGroupType);
-				addElement("\n", keyWord, currentSpeakerGroup - 1, currentEmbeddedSpeakerGroup, mo, SourceMapType.speakerGroupType);
+				addElement(oStr, keyWord, currentSpeakerGroup - 1, currentEmbeddedSpeakerGroup, mo,
+						SourceMapType.speakerGroupType);
+				addElement("\n", keyWord, currentSpeakerGroup - 1, currentEmbeddedSpeakerGroup, mo,
+						SourceMapType.speakerGroupType);
 			}
 			currentEmbeddedSpeakerGroup++;
 		}
-		if (currentEmbeddedSpeakerGroup >= 0 && currentSpeakerGroup>0 
+		if (currentEmbeddedSpeakerGroup >= 0 && currentSpeakerGroup > 0
 				&& currentEmbeddedSpeakerGroup < speakerGroups[currentSpeakerGroup - 1].embeddedSpeakerGroups.length
 				&& I == speakerGroups[currentSpeakerGroup - 1].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].end) {
-			addElement("END", null, currentSpeakerGroup, currentEmbeddedSpeakerGroup, -1, SourceMapType.speakerGroupType);
+			addElement("END", null, currentSpeakerGroup, currentEmbeddedSpeakerGroup, -1,
+					SourceMapType.speakerGroupType);
 			currentEmbeddedSpeakerGroup = -1;
 		}
 	}
@@ -909,9 +934,9 @@ public class Source {
 		// map <wstring, set <int> >::iterator lvtoCi;
 		Vector<VerbMember> vms = Show.vn.vbNetVerbToClassMap.get(baseVerb);
 		// get_out is very different from get by itself
-		if (whereVerb + 1 < m.length
-				&& (m[whereVerb + 1].queryWinnerForm(Form.adverbForm) >= 0 || m[whereVerb + 1].queryWinnerForm(Form.prepositionForm) >= 0 || m[whereVerb + 1]
-						.queryWinnerForm(Form.nounForm) >= 0)) {
+		if (whereVerb + 1 < m.length && (m[whereVerb + 1].queryWinnerForm(Form.adverbForm) >= 0
+				|| m[whereVerb + 1].queryWinnerForm(Form.prepositionForm) >= 0
+				|| m[whereVerb + 1].queryWinnerForm(Form.nounForm) >= 0)) {
 			String verbParticiple = baseVerb + "_" + m[whereVerb + 1].word;
 			Vector<VerbMember> vmsParticiple = Show.vn.vbNetVerbToClassMap.get(verbParticiple);
 			if (vmsParticiple != null) {
@@ -931,15 +956,16 @@ public class Source {
 		paragraphSpacingOff = new ArrayList<Integer>();
 		paragraphSpacingOn = new ArrayList<Integer>();
 		pickChapter.removeAllItems();
-		pickChapter.setPreferredSize(new Dimension(500,30));
+		pickChapter.setPreferredSize(new Dimension(500, 30));
 		int section = 0;
 		docPosition = 0;
 		spr = 0;
-		//doc = new DefaultStyledDocument(); // creating new detached document is 30%
-																				// faster than using built-in
+		// doc = new DefaultStyledDocument(); // creating new detached document is 30%
+		// faster than using built-in
 		batchDoc = new BatchDocument(m.length * 2);
-		int total = m.length, I = -1, last = -1, current, inObject = -1, endObject = 0, principalWhere = -1, inObjectSubType = -1;
-		int numCurrentColumn=0,numCurrentRow=0,numTotalColumns=0;
+		int total = m.length, I = -1, last = -1, current, inObject = -1, endObject = 0, principalWhere = -1,
+				inObjectSubType = -1;
+		int numCurrentColumn = 0, numCurrentRow = 0, numTotalColumns = 0;
 		currentSpeakerGroup = 0;
 		boolean inSection = false;
 		chapters = new ArrayList<Integer>();
@@ -963,7 +989,7 @@ public class Source {
 						int is = sections[section].begin;
 						if (m[is].word.equals("chapter"))
 							is++;
-						for (; is < sections[section].endHeader && sectionHeader.length()<50; is++)
+						for (; is < sections[section].endHeader && sectionHeader.length() < 50; is++)
 							if (!m[is].word.equals("|||"))
 								sectionHeader += m[is].word + " ";
 						pickChapter.addItem(sectionHeader);
@@ -1018,52 +1044,50 @@ public class Source {
 					SourceMapType smt = SourceMapType.wordType;
 					if (inSection)
 						smt = SourceMapType.headerType;
-					boolean tablesmart=true;
-					if (tablesmart)
-					{
-						if (wm.word.equals("lpendcolumnheaders"))
-						{
-							numTotalColumns=numCurrentColumn;
-							numCurrentColumn=0;
+					boolean tablesmart = true;
+					if (tablesmart) {
+						if (wm.word.equals("lpendcolumnheaders")) {
+							numTotalColumns = numCurrentColumn;
+							numCurrentColumn = 0;
 							continue;
 						}
-						if ((I>3 && m[I-2].word.equals("lptable")) || wm.word.equals("lpendcolumn"))
-						{
+						if ((I > 3 && m[I - 2].word.equals("lptable")) || wm.word.equals("lpendcolumn")) {
 							addElement("\n", null, I, section, -1, SourceMapType.headerType);
-							if (wm.word.equals("lpendcolumn") && (I+2<m.length && !m[I+2].word.equals("lpendcolumnheaders") && !m[I+2].word.equals("lptable")))
-							{
-	//							System.out.println("I-2:"+m[I-2].word);
-	//							System.out.println("I-1:"+m[I-1].word);
-	//							System.out.println("I:"+m[I].word);
-	//							System.out.println("I+1:"+m[I+1].word);
-	//							System.out.println("I+2:"+m[I+2].word);
+							if (wm.word.equals("lpendcolumn")
+									&& (I + 2 < m.length && !m[I + 2].word.equals("lpendcolumnheaders")
+											&& !m[I + 2].word.equals("lptable"))) {
+								// System.out.println("I-2:"+m[I-2].word);
+								// System.out.println("I-1:"+m[I-1].word);
+								// System.out.println("I:"+m[I].word);
+								// System.out.println("I+1:"+m[I+1].word);
+								// System.out.println("I+2:"+m[I+2].word);
 								numCurrentColumn++;
-								if (numCurrentColumn>numTotalColumns && numTotalColumns>0)
-								{
-									numCurrentColumn=0;
+								if (numCurrentColumn > numTotalColumns && numTotalColumns > 0) {
+									numCurrentColumn = 0;
 									numCurrentRow++;
 								}
 								StyleConstants.setForeground(keyWord, Color.orange);
-								if (numCurrentRow==0 && numTotalColumns==0)
-									addElement("Column Title."+String.valueOf(numCurrentColumn)+":", keyWord, I, section, -1, SourceMapType.headerType);
+								if (numCurrentRow == 0 && numTotalColumns == 0)
+									addElement("Column Title." + String.valueOf(numCurrentColumn) + ":", keyWord, I,
+											section, -1, SourceMapType.headerType);
 								else
-									addElement(String.valueOf(numCurrentRow)+"."+String.valueOf(numCurrentColumn)+":", keyWord, I, section, -1, SourceMapType.headerType);
+									addElement(String.valueOf(numCurrentRow) + "." + String.valueOf(numCurrentColumn)
+											+ ":", keyWord, I, section, -1, SourceMapType.headerType);
 							}
 							continue;
 						}
-						if (I>1 && (m[I-1].word.equals("lpendcolumn") || (I+1<m.length && m[I+1].word.equals("lpendcolumn"))))
+						if (I > 1 && (m[I - 1].word.equals("lpendcolumn")
+								|| (I + 1 < m.length && m[I + 1].word.equals("lpendcolumn"))))
 							continue;
-						if (I>1 && m[I-1].word.equals("lptable"))
-						{
+						if (I > 1 && m[I - 1].word.equals("lptable")) {
 							StyleConstants.setForeground(keyWord, Color.RED);
 							StyleConstants.setFontSize(keyWord, 25);
 							StyleConstants.setBold(keyWord, true);
 							StyleConstants.setUnderline(keyWord, true);
-							addElement(String.valueOf(Integer.parseInt(wm.word)+1), keyWord, I, section, -1, smt);
+							addElement(String.valueOf(Integer.parseInt(wm.word) + 1), keyWord, I, section, -1, smt);
 							continue;
 						}
-						if (wm.word.equals("lptable"))
-						{
+						if (wm.word.equals("lptable")) {
 							addElement("\n", null, I, section, -1, SourceMapType.headerType);
 							addElement("\n", null, I, section, -1, SourceMapType.headerType);
 							smt = SourceMapType.tableType;
@@ -1072,26 +1096,26 @@ public class Source {
 							StyleConstants.setBold(keyWordTable, true);
 							StyleConstants.setFontSize(keyWordTable, 25);
 							StyleConstants.setUnderline(keyWordTable, true);
-							keyWord=keyWordTable;
-							numCurrentColumn=0;
+							keyWord = keyWordTable;
+							numCurrentColumn = 0;
 							addElement("TABLE ", keyWord, I, section, -1, smt);
-							//numTable++;
+							// numTable++;
 							continue;
 						}
 					}
 					addElement(getOriginalWord(wm), keyWord, I, section, -1, smt);
 				}
 				if ((wm.word.equals("“") || wm.word.equals("‘"))) {
-					//if (wm.word.equals("“"))
-					//	lastOpeningPrimaryQuote = I;
+					// if (wm.word.equals("“"))
+					// lastOpeningPrimaryQuote = I;
 					if ((wm.flags & WordMatch.flagQuotedString) != 0) {
 						SimpleAttributeSet keyWordQS = new SimpleAttributeSet();
 						StyleConstants.setForeground(keyWordQS, Color.GREEN);
 						addElement("QS", keyWordQS, I, -1, -1, SourceMapType.QSWordType); // green
-					} else if (wm.objectMatches.length != 1
-							|| wm.audienceObjectMatches.length == 0
+					} else if (wm.objectMatches.length != 1 || wm.audienceObjectMatches.length == 0
 							|| (currentSpeakerGroup < speakerGroups.length
-									&& wm.audienceObjectMatches.length >= speakerGroups[currentSpeakerGroup].speakers.length && speakerGroups[currentSpeakerGroup].speakers.length > 1)) {
+									&& wm.audienceObjectMatches.length >= speakerGroups[currentSpeakerGroup].speakers.length
+									&& speakerGroups[currentSpeakerGroup].speakers.length > 1)) {
 						SimpleAttributeSet keyWordRED = new SimpleAttributeSet();
 						StyleConstants.setForeground(keyWordRED, Color.RED);
 						addElement("Unresolved", keyWordRED, I, -1, -1, SourceMapType.URWordType); // green
@@ -1114,19 +1138,20 @@ public class Source {
 					int mObject = wm.objectMatches[J].object;
 					int objectWhere = objects[mObject].originalLocation;
 					// skip honorific
-					if ((m[objectWhere].queryWinnerForm(Form.honorificForm) >= 0 || m[objectWhere].queryWinnerForm(Form.honorificAbbreviationForm) >= 0)
+					if ((m[objectWhere].queryWinnerForm(Form.honorificForm) >= 0
+							|| m[objectWhere].queryWinnerForm(Form.honorificAbbreviationForm) >= 0)
 							&& objectWhere + 1 < m[objectWhere].endObjectPosition) {
 						objectWhere++;
 						if (m[objectWhere].word.equals("."))
 							objectWhere++;
 					}
 					String w;
-					if (mObject==0)
-						w="Narrator";
-					else if (mObject==1)
-						w="Audience";
-					else 
-						w=m[objectWhere].word;
+					if (mObject == 0)
+						w = "Narrator";
+					else if (mObject == 1)
+						w = "Audience";
+					else
+						w = m[objectWhere].word;
 					String S = ((J == 0) ? "[" : "") + w + ((J < wm.objectMatches.length - 1) ? "," : "");
 					if (objects[mObject].masterSpeakerIndex >= 0) {
 						int msindex = objects[mObject].masterSpeakerIndex % masterSpeakerColors.length;
@@ -1149,17 +1174,18 @@ public class Source {
 				for (int J = 0; J < wm.audienceObjectMatches.length; J++) {
 					StyleConstants.setForeground(keyWord, new Color(102, 204, 255));
 					String w;
-					int mObject=wm.audienceObjectMatches[J].object;
-					if (mObject==0)
-						w="Narrator";
-					else if (mObject==1)
-						w="Audience";
-					else 
-						w=m[objects[mObject].originalLocation].word;
-					addElement(w + ((J < wm.audienceObjectMatches.length - 1) ? "," : "]"), null, I, wm.audienceObjectMatches[J].object, J,
-							SourceMapType.audienceMatchingType);
+					int mObject = wm.audienceObjectMatches[J].object;
+					if (mObject == 0)
+						w = "Narrator";
+					else if (mObject == 1)
+						w = "Audience";
+					else
+						w = m[objects[mObject].originalLocation].word;
+					addElement(w + ((J < wm.audienceObjectMatches.length - 1) ? "," : "]"), null, I,
+							wm.audienceObjectMatches[J].object, J, SourceMapType.audienceMatchingType);
 					if (J > 2) {
-						addElement("...]", null, I, wm.audienceObjectMatches[J].object, J, SourceMapType.audienceMatchingType);
+						addElement("...]", null, I, wm.audienceObjectMatches[J].object, J,
+								SourceMapType.audienceMatchingType);
 						break;
 					}
 				}
@@ -1182,14 +1208,13 @@ public class Source {
 			}
 		}
 		batchDoc.processBatchUpdates(0);
-		Dimension cd=pickChapter.getMinimumSize();
-		pickChapter.setPreferredSize(new Dimension(100,30));
+		Dimension cd = pickChapter.getMinimumSize();
+		pickChapter.setPreferredSize(new Dimension(100, 30));
 		pickChapter.setPopupWidth(cd.width);
-		System.out.println("chapter minimum width="+cd.width);
+		System.out.println("chapter minimum width=" + cd.width);
 		return batchDoc;
 		// optionally apply paragraph spacing
 		// System.exit(0);
 	}
-
 
 }

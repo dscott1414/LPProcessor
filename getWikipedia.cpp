@@ -78,7 +78,7 @@ void convertIllegalChars(wchar_t *path)
 	if (len) newPath[--len]=0;
 	wcscpy(path,newPath);
 	for (int I=0; path[I]; I++)
-		if (!iswalnum(path[I]) && path[I]!=L'.' && path[I]!=L'-')
+		if (!iswalnum(path[I]) && path[I]!=L'.' && path[I] != L'-' && path[I] != L'—')
 			path[I]=L'_';
 }
 
@@ -99,7 +99,7 @@ void deleteIllegalChars(char *path)
   }
 	strcpy(path,newPath);
 	for (int I=0; path[I]; I++)
-		if (!isalnum((unsigned char)path[I]) && path[I]!='.' && path[I]!='-')
+		if (!isalnum((unsigned char)path[I]) && path[I]!='.' && path[I] != '-' && path[I] != L'—')
 			path[I]='_';
 }
 
@@ -488,17 +488,6 @@ void cTreeCat::lplogTC(int whichLog,wstring ofWhichObject)
 		::lplog(whichLog,L"%s",toString(tmpstr).c_str());
 }
 
-int Source::printExtendedRDFTypes(wchar_t *kind,vector <cTreeCat *> &rdfTypes,unordered_map <wstring ,int > &topHierarchyClassIndexes)
-{
-	lplog(LOG_INFO,L"BEGIN %s:%d %d",kind,rdfTypes.size(),topHierarchyClassIndexes.size());
-	for (int I=0; I<rdfTypes.size(); I++)
-		rdfTypes[I]->lplogTC(LOG_INFO,L"");
-	for (unordered_map <wstring ,int >::iterator idi=topHierarchyClassIndexes.begin(),idiEnd=topHierarchyClassIndexes.end(); idi!=idiEnd; idi++)
-		lplog(LOG_INFO,L"topHierarchyClassIndexes:%s %d",idi->first.c_str(),idi->second);
-	lplog(LOG_INFO,L"END %s:%d %d",kind,rdfTypes.size(),topHierarchyClassIndexes.size());
-	return 0;
-}
-
 int Source::getExtendedRDFTypes(int where, vector <cTreeCat *> &rdfTypes, unordered_map <wstring, int > &topHierarchyClassIndexes, wstring fromWhere, bool ignoreMatches, bool fileCaching)
 {
 	LFS
@@ -572,6 +561,7 @@ int Source::readExtendedRDFTypes(wchar_t path[4096],vector <cTreeCat *> &rdfType
 	if (*((wchar_t *)buffer)!=EXTENDED_RDFTYPE_VERSION) // version
 	{
 		tfree(bufferlen+10,buffer);
+		_wremove(path);
 		return -2;
 	}
 	where+=2;
@@ -799,6 +789,14 @@ int Source::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat 
 		topHierarchyClassIndexes = extendedRdfTypeMap[newObjectName].topHierarchyClassIndexes;
 		return 0;
 	}
+	if (Ontology::inNoERDFTypesDBTable(newObjectName))
+	{
+		rdfTypes.clear();
+		topHierarchyClassIndexes.clear();
+		extendedRdfTypeMap[newObjectName].rdfTypes = rdfTypes;
+		extendedRdfTypeMap[newObjectName].topHierarchyClassIndexes = topHierarchyClassIndexes;
+		return 0;
+	}
 	getOldRDFName(sourcePath, where, extendNumPP, object);
 	wchar_t path[4096], newPath[4096];
 	makePath(object, path);
@@ -858,7 +856,9 @@ int Source::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat 
 	//	totalRdfs+=rdfTypes.size();
 	//	uniqueRdfs+=(int)urs.size();
 	//	lplog(LOG_INFO,L"getExtendedRDFTypesMaster RDFTypes compression %d %d %d %d",rdfTypes.size(),urs.size(),totalRdfs,uniqueRdfs);
-		if (writeExtendedRDFTypes(newPath,urs,topHierarchyClassIndexes)<0)
+		if (urs.empty())
+			Ontology::insertNoERDFTypesDBTable(newObjectName);
+		else if (writeExtendedRDFTypes(newPath,urs,topHierarchyClassIndexes)<0)
 			return -1;
 		newRetCode = 0;
 		rdfTypes=urs;
@@ -1325,7 +1325,7 @@ int Source::processPath(const wchar_t *path,Source *&source,Source::sourceTypeEn
 			if (source->m.empty()) 
 			{
 				wstring failurePath = path;
-				failurePath += L".SourceCache.2";
+				failurePath += L".SourceCache";
 				int fd = _wopen(failurePath.c_str(), O_CREAT);
 				if (fd >= 0)
 					close(fd);
@@ -1461,6 +1461,7 @@ int Source::getRDFWhereString(int where, wstring &oStr, wchar_t *separator, int 
 	return 0;
 }
 
+// rdfTypes calls rdfIdentify, which then caches the rdfTypes of each individual string into the dbpedia cache.
 int Source::getRDFTypes(int where, vector <cTreeCat *> &rdfTypes, wstring fromWhere, int extendNumPP, bool ignoreMatches, bool fileCaching)
 { LFS
 	int o,begin,objectWordLength,pw;
