@@ -771,7 +771,7 @@ void tFI::transferFormUsagePatternsToCosts(int sameNameForm,int properNounForm,i
 
 // used during matching, printing, updatePEMA (cost reduction), updating usage patterns
 // if flagOnlyConsiderProperNounForms, cost should not be considered in matching, printing, or updating
-// if there is a possibility of proper noun (flagAddProperNoun), consider cost in matching, printing and updatingPEMA
+// if there is a possibility of proper noun (flagAddProperNoun), consider cost in matching, printing and updating PEMA
 //    AND if the winner form is not a proper noun, update usage patterns.
 bool WordMatch::costable(void)
 { LFS
@@ -1287,12 +1287,12 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 		if (sWord.length()>1 && !iswdigit(sWord[0]))
 			for (int I = sWord.length() - 1; I >= 0; I--)
 			{
-			if (!iswalnum(sWord[I]) && sWord[I] != ' ' && sWord[I] != '.' && sWord[I] != '-' && sWord[I] != L'—' &&
-				((sWord[0] != 'd' && sWord[0] != 'l') || sWord[1] != '\''))
+			if (!iswalnum(sWord[I]) && sWord[I] != ' ' && sWord[I] != '.' && !isDash(sWord[I]) &&
+				((sWord[0] != 'd' && sWord[0] != 'l') || !isSingleQuote(sWord[1])))
 				lplog(LOG_DICTIONARY, L"Suspect character %c(ascii value %d) encountered in word %s.", sWord[I], (int)sWord[I], sWord.c_str());
-			if (sWord[I] == '-' || sWord[I] == L'—')
+			if (isDash(sWord[I]))
 				dashLocation = I;
-			if (sWord[I] == '\'')
+			if (isSingleQuote(sWord[I]))
 				containsSingleQuote = true;
 			}
 		/* (s) check examples: finger(s) member(s) for now, chop off the (s) */
@@ -1315,7 +1315,7 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 			if (iWord == WMM.end() && findWordInDB(mysql, sWord, iWord) && !iWord->second.isUnknown()) 
 				return 0;
 			// search online dictionaries for word
-			if ((ret = getForms(mysql, iWord, sWord, sourceId)) && ret != WORD_NOT_FOUND && ret != NO_FORMS_FOUND) // getForms found word (ret>0)
+			if ((ret = getForms(mysql, iWord, sWord, sourceId,false)) && ret != WORD_NOT_FOUND && ret != NO_FORMS_FOUND) // getForms found word (ret>0)
 				return 0;
 			if (stopDisInclination) return 0;
 			if (containsSingleQuote)
@@ -1358,10 +1358,10 @@ int WordClass::parseWord(MYSQL *mysql,wstring sWord, tIWMM &iWord)
 	if (sWord.length()>1 && !iswdigit(sWord[0]))
 		for (int I = sWord.length() - 1; I >= 0; I--)
 		{
-		if (!iswalnum(sWord[I]) && sWord[I] != ' ' && sWord[I] != '.' && sWord[I] != '-' && sWord[I] != L'—' &&
+		if (!iswalnum(sWord[I]) && sWord[I] != ' ' && sWord[I] != '.' && !isDash(sWord[I]) &&
 			((sWord[0] != 'd' && sWord[0] != 'l') || sWord[1] != '\''))
 			lplog(LOG_DICTIONARY, L"Suspect character %c(ascii value %d) encountered in word %s.", sWord[I], (int)sWord[I], sWord.c_str());
-		if (sWord[I] == '-' || sWord[I] == L'—')
+		if (isDash(sWord[I]))
 			dashLocation = I;
 		if (sWord[I] == '\'')
 			containsSingleQuote = true;
@@ -1424,7 +1424,7 @@ int WordClass::processDate(wstring &sWord,wchar_t *buffer,__int64 &cp,__int64 &b
 	bool twoDigitYear=false;
   if (!iswdigit(buffer[tempcp++])) return -1; // 8 in 7-8-90
   if ((twoDigitYear=iswdigit(buffer[tempcp]))!=0) tempcp++; // 1 in 7-11-90
-  if (buffer[tempcp]!='/' && buffer[tempcp] != '-' && buffer[tempcp] != L'—')
+  if (buffer[tempcp]!='/' && !isDash(buffer[tempcp]))
   {
 		int month=_wtoi(sWord.c_str());
 		int year=_wtoi(buffer+cp+1);
@@ -1854,6 +1854,36 @@ int readDate(wchar_t *buffer, __int64 bufferLen, __int64 &bufferScanLocation, __
 	return 0;
 }
 
+bool WordClass::isDash(wchar_t ch)
+{
+	wchar_t dashes[] = { L'-',L'˗',L'۔',L'‐',L'‑',L'‒',L'–',L'⁃',L'−',L'➖',L'Ⲻ',L'﹘' };
+	for (wchar_t d : dashes)
+		if (ch == d)
+			return true;
+	return false;
+}
+
+bool WordClass::isSingleQuote(wchar_t ch)
+{
+	// L'\x16F51', L'\x16F52', multicharacter does not for now work with VC++?
+	wchar_t singleQuotes[] = { L'\'',L'`',L'´', L'ʹ', L'ʻ', L'ʼ', L'ʽ', L'ʾ', L'ˈ', L'ˊ', L'ˋ', L'˴', L'ʹ', L'΄', L'՚', L'՝', L'י', L'׳', L'ߴ', L'ߵ', L'ᑊ', L'ᛌ', L'᾽', L'᾿', L'`', L'´', L'῾', L'‘', L'’', L'‛', L'′',L'‵', L'ꞌ',L'\xFF07', L'\xFF40' };
+	for (wchar_t sq : singleQuotes)
+		if (ch == sq)
+			return true;
+	return false;
+}
+
+// from http://unicode.org/cldr/utility/confusables.jsp?a=%22&r=None
+// \x22 \xff02 \x3003 \x2ee \x5f2 \x2033 \x5f4 \x2036 \x2f6 \x2ba \x201c \x201d \x2dd \x201f
+bool WordClass::isDoubleQuote(wchar_t ch)
+{
+	wchar_t doubleQuotes[] = { L'"', L'＂',L'〃',L'ˮ',L'ײ',L'″',L'״',L'‶',L'˶',L'ʺ',L'“',L'”',L'˝',L'‟',L'᳓'};
+	for (wchar_t dq : doubleQuotes)
+		if (ch == dq)
+			return true;
+	return false;
+}
+
 int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocation,
                         wstring &sWord,int &nounOwner,bool scanForSection,bool webScrapeParse,sTrace &t)
 { LFS
@@ -1955,13 +1985,13 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
 		return PARSE_DATE;
 	// any character that should be its own word
   if (iswpunct(buffer[cp]) ||   (!iswprint(buffer[cp]) && iswspace(buffer[cp+1])) ||
-    buffer[cp]==L'`' || buffer[cp]==L'’' || buffer[cp] == L'‘' || buffer[cp] == L'‘' || buffer[cp] == L'ʼ' || // slightly different quotes
-    buffer[cp]==L'“' || buffer[cp] == L'“' || buffer[cp]==L'”' || buffer[cp]==L'—' ||
-    buffer[cp]==L'…' || buffer[cp]==L'│')
+    isSingleQuote(buffer[cp]) || // slightly different quotes
+    isDoubleQuote(buffer[cp]) || 
+		isDash(buffer[cp]) || buffer[cp]==L'…' || buffer[cp]==L'│')
   {
     // contraction processing
     // <option>n't not contraction handled below as well to check for n
-    if ((buffer[cp]==L'\'' || buffer[cp] == L'’' || buffer[cp] == L'ʼ') && !iswspace(buffer[cp-1]))
+    if (isSingleQuote(buffer[cp]) && !iswspace(buffer[cp-1]))
     {
       switch (towlower(buffer[cp+1]))
       {
@@ -2005,8 +2035,8 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
       numChars=extend;
       for (wchar_t *b=buffer+cp; cp<bufferLen; cp++,b++)
         if ((!iswspace(*b) && !iswpunct(*b) && (iswprint(*b) || !iswspace(b[1])) &&
-          !(*b==L'`' || *b==L'’' || *b==L'‘' || *b==L'“' || *b==L'”' || *b==L'…' || *b==L'_' || *b == L'*' || *b == L'ʼ')
-          ) || ((*b=='-' || *b==L'—') && iswalpha(b[1])) || // accept al-Jazeera as one word, but not a double dash or anything else
+          !(isSingleQuote(*b) || isDoubleQuote(*b) || *b==L'…' || *b==L'_' || *b == L'*')
+          ) || (isDash(*b) && iswalpha(b[1])) || // accept al-Jazeera as one word, but not a double dash or anything else
           cp-begincp<numChars)
         {
           if ((isSpace=(iswspace(*b)!=0)) && wasSpace) continue;
@@ -2018,19 +2048,19 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
         else
           break;
       if (numChars>=0 && cp-begincp==numChars) break;
-      if ((buffer[cp] == '\'' || buffer[cp] == L'ʼ' || buffer[cp] == L'’') && evaluateIncludedSingleQuote(buffer,cp,begincp))
+      if (isSingleQuote(buffer[cp]) && evaluateIncludedSingleQuote(buffer,cp,begincp))
       {
         extend=(int)(cp-begincp+1);
         continue;
       }
-      if ((buffer[cp] == '\'' || buffer[cp] == L'ʼ' || buffer[cp] == L'’') && (extend=continueParse(buffer,begincp,bufferLen,quotedWords))>numChars)
+      if (isSingleQuote(buffer[cp]) && (extend=continueParse(buffer,begincp,bufferLen,quotedWords))>numChars)
         continue;
       else if (buffer[cp]=='.' && (extend=continueParse(buffer,begincp,bufferLen,periodWords))>numChars) continue;
       //else if (buffer[cp]=='-' && (extend=continueParse(buffer,begincp,dashWords))>numChars) continue;
       break;
     }
     // dangling - at the end of a line
-    if ((buffer[cp]=='-' || buffer[cp]==L'—' || buffer[cp]==L'–') && buffer[cp+1]==13 && buffer[cp+2]==10 && query(sWord)==end())
+    if (isDash(buffer[cp]) && buffer[cp+1]==13 && buffer[cp+2]==10 && query(sWord)==end())
     {
       cp+=3;
       while (cp<bufferLen && iswspace(buffer[cp])) cp++;
@@ -2043,13 +2073,13 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
           break;
     }
     // ownership (plural) too ambiguous on this level to figure out whether it is ownership or the end of a single quoted string
-    if ((buffer[cp] == '\'' || buffer[cp] == L'ʼ' || buffer[cp] == L'’') && !iswalpha(buffer[cp+1]) && towlower(buffer[cp-1])=='s')
+    if (isSingleQuote(buffer[cp]) && !iswalpha(buffer[cp+1]) && towlower(buffer[cp-1])=='s')
     {
       nounOwner=1;
       //  cp++;
     }
     // ownership (single)
-    if ((buffer[cp]=='\'' || buffer[cp] == L'ʼ' || buffer[cp] == L'’') && bufferLen>cp+1 && towlower(buffer[cp+1])==L's' && (bufferLen<=cp+2 || !iswalpha(buffer[cp+2])) &&
+    if (isSingleQuote(buffer[cp]) && bufferLen>cp+1 && towlower(buffer[cp+1])==L's' && (bufferLen<=cp+2 || !iswalpha(buffer[cp+2])) &&
       wcsicmp(sWord.c_str(),L"he") && wcsicmp(sWord.c_str(),L"she") && wcsicmp(sWord.c_str(),L"it") &&
       wcsicmp(sWord.c_str(),L"there") && wcsicmp(sWord.c_str(),L"here")) // **hsit
     {
@@ -2057,13 +2087,13 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
       cp+=2;
     }
     // -n't not contraction - after processing done by next section
-    if ((buffer[cp] == '\'' || buffer[cp] == L'ʼ' || buffer[cp] == L'’') && bufferLen>cp+1 && towlower(buffer[cp+1])==L't' && !wcsicmp(sWord.c_str(),L"n"))
+    if (isSingleQuote(buffer[cp]) && bufferLen>cp+1 && towlower(buffer[cp+1])==L't' && !wcsicmp(sWord.c_str(),L"n"))
     {
       sWord=L"not";
       cp+=2;
     }
     // -n't not contraction - cut off n, prepare for processing by previous section
-    else if (sWord.length()>1 && numChars==-1 && (buffer[cp] == '\'' || buffer[cp] == L'ʼ' || buffer[cp] == L'’') && bufferLen>cp+1 && cp>0 && towlower(buffer[cp+1])==L't' && towlower(buffer[cp-1])==L'n')
+    else if (sWord.length()>1 && numChars==-1 && isSingleQuote(buffer[cp]) && bufferLen>cp+1 && cp>0 && towlower(buffer[cp+1])==L't' && towlower(buffer[cp-1])==L'n')
     {
       sWord.erase(sWord.length()-1,1); // cut off n
       //sWord[sWord.length()-1]=0;
@@ -2079,7 +2109,7 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
 			if (isAsciiMoney) I++;
 			if (isUnicodeMoney) I+=2;
       while (iswdigit(sWord[I])) I++;
-      if (!sWord[I] && I==3 && (buffer[cp]=='-' || buffer[cp] == L'—') && iswdigit(buffer[cp+1]))
+      if (!sWord[I] && I==3 && isDash(buffer[cp]) && iswdigit(buffer[cp+1]))
       {
         int J=0;
         while (iswdigit(buffer[J+cp+1]) && J+cp+1<bufferLen) J++;
@@ -2091,7 +2121,7 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
         }
       }
       // date processing
-      if (!sWord[I] && (buffer[cp]==L'/' || buffer[cp] == L'-' || buffer[cp] == L'—') && processDate(sWord,buffer,cp,bufferScanLocation)==0)
+      if (!sWord[I] && (buffer[cp]==L'/' || isDash(buffer[cp])) && processDate(sWord,buffer,cp,bufferScanLocation)==0)
         return PARSE_DATE;
 			// time processing
 			if (!sWord[I] && (buffer[cp] == L':' || buffer[cp] == L'.') && processTime(sWord, buffer, cp, bufferScanLocation) == 0)
@@ -2211,7 +2241,7 @@ tIWMM WordClass::fullQuery(MYSQL *mysql, wstring word, int sourceId)
 {
 	tIWMM iWord = Words.end();
 	if ((iWord = Words.query(word)) == Words.end() && !findWordInDB(mysql, word, iWord))
-		getForms(mysql,iWord, word, sourceId);
+		getForms(mysql,iWord, word, sourceId,false);
 	return iWord;
 }
 

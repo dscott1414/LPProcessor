@@ -78,7 +78,7 @@ void convertIllegalChars(wchar_t *path)
 	if (len) newPath[--len]=0;
 	wcscpy(path,newPath);
 	for (int I=0; path[I]; I++)
-		if (!iswalnum(path[I]) && path[I]!=L'.' && path[I] != L'-' && path[I] != L'—')
+		if (!iswalnum(path[I]) && path[I]!=L'.' && path[I] != L'-' && path[I] != L'—') // not all unicode dashes may be allowed in a Windows path, so not using isDash
 			path[I]=L'_';
 }
 
@@ -99,7 +99,7 @@ void deleteIllegalChars(char *path)
   }
 	strcpy(path,newPath);
 	for (int I=0; path[I]; I++)
-		if (!isalnum((unsigned char)path[I]) && path[I]!='.' && path[I] != '-' && path[I] != L'—')
+		if (!isalnum((unsigned char)path[I]) && path[I]!='.' && path[I] != '-' && path[I] != L'—') // not all unicode dashes may be allowed in a Windows path, so not using isDash
 			path[I]='_';
 }
 

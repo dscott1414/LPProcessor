@@ -481,7 +481,7 @@ int Source::createDatabase(wchar_t *server)
 		L"sizeInBytes INT, numWordRelations INT, numMultiWordRelations INT, "
     L"processing BIT, processed BIT, "
 		L"proc2 INT, " // other processing steps
-		L"ts TIMESTAMP) DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci"))
+		L"ts TIMESTAMP) DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_bin"))
   {
     lplog(LOG_FATAL_ERROR,L"Failed to create sources - %S", mysql_error(&mysql));
     return -1;
@@ -511,7 +511,7 @@ int Source::createDatabase(wchar_t *server)
 		L"mainEntryWordId INT UNSIGNED NULL, INDEX me_ind (mainEntryWordId), "
 		L"derivationRules INT DEFAULT 0, "
 		L"sourceId INT UNSIGNED DEFAULT NULL, INDEX s_ind (sourceId), " //FOREIGN KEY (sourceId) REFERENCES sources(id),
-		L"ts TIMESTAMP) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"))
+		L"ts TIMESTAMP) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
 	{
 		lplog(LOG_FATAL_ERROR, L"Failed to create words table - %S", mysql_error(&mysql));
 		return -1;
@@ -539,14 +539,14 @@ int Source::createDatabase(wchar_t *server)
 		L"allCapsFrequency     INT NOT NULL default '0', "
 		L"lastSourceId INT UNSIGNED DEFAULT NULL, INDEX s_ind (lastSourceId), "
 		L"nonEuropeanWord BIT "
-		L") DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ENGINE = INNODB"))  // must use INNODB because of per row locking required by multiple processes 
+		L") DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ENGINE = INNODB"))  // must use INNODB because of per row locking required by multiple processes 
 	{
 		lplog(LOG_FATAL_ERROR, L"Failed to create wordsFrequency table - %S", mysql_error(&mysql));
 		return -1;
 	}
 	if (!myquery(&mysql, L"CREATE TABLE noRDFTypes ("
 		L"word CHAR(32) CHARACTER SET utf8mb4 UNIQUE NOT NULL DEFAULT ''"
-		L") DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"))  
+		L") DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))  
 	{
 		lplog(LOG_FATAL_ERROR, L"Failed to create noRDFTypes table - %S", mysql_error(&mysql));
 		return -1;

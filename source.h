@@ -1576,7 +1576,7 @@ public:
 		if (error=!::copy(timeTransitions,buffer,w,limit)) return;
 		if (error=!::copy(locationTransitions,buffer,w,limit)) return;
 		if (error=!::copy(subTimelines,buffer,w,limit)) return;
-		error=w<=(signed)limit;
+		error=w>(signed)limit;
 	}
 };
 

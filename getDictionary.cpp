@@ -855,11 +855,105 @@ bool loosesort( const wchar_t *s1, const wchar_t *s2 )
 	return wcsncmp(s1+1,s2,wcslen(s2))<0;
 }
 
-string lookForPOS(yajl_val node)
+string lookForPOS(string originalWord,yajl_val node,bool logEverything,int &inflection,string &referWord)
 {
-	const char * path[] = { "fl", (const char *)0 };
-	yajl_val docs = yajl_tree_get(node, path, yajl_t_any);
-	return (docs == NULL) ? "" : YAJL_GET_STRING(docs);
+	inflection = 0;
+	// check identity to make sure word matches
+	const char * metaPath[] = { "meta", "id", (const char *)0 };
+	yajl_val metaIdDocs = yajl_tree_get(node, metaPath, yajl_t_any);
+	string id = (metaIdDocs == NULL) ? "" : YAJL_GET_STRING(metaIdDocs);
+	if (metaIdDocs == NULL && logEverything)
+		lplog(LOG_INFO, L"WAPI %S:meta id not found", originalWord.c_str());
+	transform(id.begin(), id.end(), id.begin(), ::tolower);
+	int whereColon = id.find(':');
+	if (whereColon != string::npos)
+		id = id.substr(0, whereColon);
+	if (metaIdDocs == NULL || originalWord == id)
+	{
+		const char * flPathMain[] = { "fl", (const char *)0 };
+		yajl_val flDocs = yajl_tree_get(node, flPathMain, yajl_t_any);
+		if (logEverything)
+			lplog(LOG_INFO, L"WAPI %S:fl %S", originalWord.c_str(),(flDocs == NULL) ? "not found": YAJL_GET_STRING(flDocs));
+		if (flDocs != NULL) return YAJL_GET_STRING(flDocs);
+		const char * cxsPath[] = { "cxs", "cxtis","cxt", (const char *)0 };
+		yajl_val cxsIdDocs = yajl_tree_get(node, cxsPath, yajl_t_any);
+		string cxs = (cxsIdDocs == NULL) ? "" : YAJL_GET_STRING(cxsIdDocs);
+		if (cxsIdDocs != NULL && logEverything)
+			lplog(LOG_INFO, L"WAPI %S:cxs refer %s", cxs.c_str());
+		referWord = cxs;
+		return "";
+	}
+	// main meta entry does not match the originalWord.
+	// try ins (inflections)
+	const char * inflectionsPath[] = { "ins", (const char *)0 };
+	yajl_val insDocs = yajl_tree_get(node, inflectionsPath, yajl_t_array);
+	if (insDocs)
+	{
+		for (unsigned int docNum = 0; docNum < insDocs->u.array.len; docNum++)
+		{
+			yajl_val doc = insDocs->u.array.values[docNum];
+			const char * ifPath[] = { "if", (const char *)0 };
+			yajl_val ifDocs = yajl_tree_get(doc, ifPath, yajl_t_any);
+			if (ifDocs == NULL)
+				continue;
+			string ifElement =  YAJL_GET_STRING(ifDocs);
+			ifElement.erase(std::remove(ifElement.begin(), ifElement.end(), L'*'), ifElement.end());
+			transform(ifElement.begin(), ifElement.end(), ifElement.begin(), ::tolower);
+			if (ifElement == originalWord)
+			{
+				const char * ilPath[] = { "il", (const char *)0 };
+				yajl_val ilDocs = yajl_tree_get(doc, ilPath, yajl_t_any);
+				if (ilDocs == NULL)
+					continue;
+				const char * flPathMain[] = { "fl", (const char *)0 };
+				yajl_val flinsDocs = yajl_tree_get(node, flPathMain, yajl_t_any);
+				string flinsForm = (flinsDocs == NULL) ? "" : YAJL_GET_STRING(flinsDocs);
+				string ilElement = YAJL_GET_STRING(ilDocs);
+				if (ilElement == "plural" || ((ilElement == "or" || ilElement == "also") && flinsForm == "noun"))
+					inflection = 1;
+				else if (logEverything)
+					lplog(LOG_INFO, L"WAPI %S:Unknown inflection type %S", originalWord.c_str(), ilElement.c_str());
+				if (logEverything)
+					lplog(LOG_INFO, L"WAPI %S:INS fl %S%s", originalWord.c_str(), flinsForm.c_str(),(inflection==1) ? L" plural":L"");
+				return flinsForm;
+			}
+		}
+	}
+	// now try run-ons
+	const char * runonPath[] = { "uros", (const char *)0 };
+	yajl_val urosDocs = yajl_tree_get(node, runonPath, yajl_t_array);
+	if (urosDocs)
+		for (unsigned int docNum = 0; docNum < urosDocs->u.array.len; docNum++)
+		{
+			yajl_val doc = urosDocs->u.array.values[docNum];
+			const char * urePath[] = { "ure", (const char *)0 };
+			yajl_val ureDocs = yajl_tree_get(doc, urePath, yajl_t_any);
+			string ure = (ureDocs == NULL) ? "" : YAJL_GET_STRING(ureDocs);
+			ure.erase(std::remove(ure.begin(), ure.end(), L'*'), ure.end());
+			transform(ure.begin(), ure.end(), ure.begin(), ::tolower);
+			if (ure == originalWord)
+			{
+				const char * flPathUre[] = { "fl", (const char *)0 };
+				yajl_val flDocs = yajl_tree_get(doc, flPathUre, yajl_t_any);
+				if (logEverything)
+					lplog(LOG_INFO, L"WAPI %S:UROS fl %S", originalWord.c_str(), (flDocs == NULL) ? "not found" : YAJL_GET_STRING(flDocs));
+				return (flDocs == NULL) ? "" : YAJL_GET_STRING(flDocs);
+			}
+			else
+				if (logEverything)
+					lplog(LOG_INFO, L"WAPI %S:UROS ure %S [not match]", originalWord.c_str(), ure.c_str());
+		}
+	if (logEverything)
+	{
+		wstring wid;
+		lplog(LOG_INFO, L"WAPI %S:meta id %s originalWord %s uros %s ins %s", originalWord.c_str(),
+			(metaIdDocs == NULL) ? L"not found" : mTW(id, wid),
+			(originalWord == id) ? L"matched" : L"not matched",
+			(urosDocs) ? L"found" : L"not found",
+			(insDocs) ? L"found" : L"not found"
+		);
+	}
+	return "";
 }
 
 /*
@@ -981,7 +1075,7 @@ void identifyFormClass(set<int> &posSet, wstring pos, bool &plural)
 // returns false if not found by the site (or error)
 bool existsInDictionaryDotCom(MYSQL *mysql,wstring word, bool &networkAccessed)
 {
-	if (word.length() <= 2 || word.length()>32)
+	if (word.length() <= 2 || word.length()>31)
 		return false;
 	//initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
 	MYSQL_RES * result;
@@ -1049,17 +1143,25 @@ bool detectNonEuropeanWord(wstring word)
 	//return true;
 }
 
-bool getMerriamWebsterDictionaryAPIForms(wstring sWord, set <int> &posSet, bool &plural, bool &networkAccessed)
+bool getMerriamWebsterDictionaryAPIForms(wstring sWord, set <int> &posSet, bool &plural, bool &networkAccessed,bool logEverything)
 {
 	wstring pageURL = L"https://www.dictionaryapi.com/api/v3/references/collegiate/json/";
 	pageURL += sWord + L"?key=ba4ac476-dac1-4b38-ad6b-fe36e8416e07";
 	wstring jsonWideBuffer, diskPath;
 	if (!Internet::cacheWebPath(pageURL, jsonWideBuffer, sWord, L"Webster", false, networkAccessed,diskPath))
 	{
+		if (jsonWideBuffer.find(L'{') == wstring::npos)
+		{
+			//if (logEverything)
+			//	lplog(LOG_INFO, L"WAPI %s:API returned list [not found]",sWord.c_str());
+			return false;
+		}
 		char errbuf[1024];
 		errbuf[0] = 0;
 		string jsonBuffer;
 		wTM(jsonWideBuffer, jsonBuffer);
+		string originalWord;
+		wTM(sWord, originalWord);
 		yajl_val node = yajl_tree_parse((const char *)jsonBuffer.c_str(), errbuf, sizeof(errbuf));
 		/* parse error handling */
 		if (node == NULL) {
@@ -1071,9 +1173,19 @@ bool getMerriamWebsterDictionaryAPIForms(wstring sWord, set <int> &posSet, bool 
 			for (unsigned int docNum = 0; docNum < node->u.array.len; docNum++)
 			{
 				yajl_val doc = node->u.array.values[docNum];
-				mTW(lookForPOS(doc), pos);
+				int inflection;
+				string referWord;
+				mTW(lookForPOS(originalWord, doc,logEverything,inflection,referWord), pos);
 				if (pos.length() > 0)
+				{
 					identifyFormClass(posSet, pos, plural);
+					plural |= (inflection == 1);
+				}
+				else if (referWord.length() > 0)
+				{
+					wstring wReferWord;
+					getMerriamWebsterDictionaryAPIForms(mTW(referWord,wReferWord), posSet, plural, networkAccessed, logEverything);
+				}
 			}
 	}
 	return posSet.size() > 0;
@@ -1142,7 +1254,7 @@ int discoverInflections(set <int> posSet, bool plural, wstring word)
 
 // this routine should look up words from wiktionary or some other dictionary
 // this returns >0 if word is found or WORD_NOT_FOUND if word lookup fails.
-int WordClass::getForms(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId)
+int WordClass::getForms(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId,bool logEverything)
 {
 	LFS
 	// non English word?
@@ -1159,7 +1271,7 @@ int WordClass::getForms(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId)
 	changedWords=true;
 	// check webster for a list of the forms (because of their API)
 	set <int> posSet;
-	if (!getMerriamWebsterDictionaryAPIForms(sWord, posSet, plural, networkAccessed))
+	if (!getMerriamWebsterDictionaryAPIForms(sWord, posSet, plural, networkAccessed,logEverything))
 		return WORD_NOT_FOUND;
 	// discover common inflections for each open word class
 	int inflections = discoverInflections(posSet, plural, sWord);
@@ -1657,7 +1769,7 @@ void tempRemoveBadWebsterPages(void)
 // filter out any entry having nothing but a {{ link }} after the # sign
 // delete left and right brackets
 // English	zymosterol	Noun	# {{biochemistry}} A [[cholesterol]] [[intermediate]].
-// create table wiktionaryNouns  ( noun char(56) COLLATE utf8_bin NOT NULL,definition TEXT(1024) COLLATE utf8_bin NOT NULL ) ENGINE=MyISAM AUTO_INCREMENT=798922 DEFAULT CHARSET=utf8 COLLATE=utf8_bin
+// create table wiktionaryNouns  ( noun char(56) COLLATE utf8mb4_bin NOT NULL,definition TEXT(1024) COLLATE utf8mb4_bin NOT NULL ) ENGINE=MyISAM AUTO_INCREMENT=798922 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
 // LOAD DATA INFILE MAINDIR+'\\Linguistics information\\TEMP-E20120211.nounsOnly.tsv' INTO TABLE wiktionaryNouns FIELDS TERMINATED BY ',' ENCLOSED BY '"' LINES TERMINATED BY '\n';
 void extractFromWiktionary(wchar_t *filename)
 { LFS

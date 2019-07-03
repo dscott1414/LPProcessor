@@ -292,14 +292,14 @@ int initializeDatabaseHandle(MYSQL &mysql,wchar_t *where,bool &alreadyConnected)
 	bool keep_connect=true;
 	mysql_options(&mysql,MYSQL_OPT_RECONNECT,&keep_connect);
 	string sqlStr;
-  if (alreadyConnected=(mysql_real_connect(&mysql,wTM(where,sqlStr),"root","byron0",DBNAME,0,NULL,0)!=NULL))
+	if (alreadyConnected = (mysql_real_connect(&mysql, wTM(where, sqlStr), "root", "byron0", DBNAME, 0, NULL, 0) != NULL))
 	{
-		mysql_options(&mysql,MYSQL_OPT_RECONNECT,&keep_connect);
-		if (mysql_set_character_set(&mysql, "utf8")) 
-			lplog(LOG_ERROR,L"Error setting default client character set to utf8.  Default now: %S\n", mysql_character_set_name(&mysql));
+		myquery(&mysql, L"SET NAMES 'utf8mb4' COLLATE 'utf8mb4_bin'");
+		mysql_options(&mysql, MYSQL_OPT_RECONNECT, &keep_connect);
+		if (mysql_set_character_set(&mysql, "utf8mb4"))
+			lplog(LOG_ERROR,L"Error setting default client character set to utf8mb4.  Default now: %S\n", mysql_character_set_name(&mysql));
     return 0;
 	}
-	mysql_options(&mysql,MYSQL_OPT_RECONNECT,&keep_connect);
 	return -1;
 }
 

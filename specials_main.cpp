@@ -266,14 +266,14 @@ bool MWRequestAllowed()
 	return numRequests < 2000;
 }
 
-bool getMerriamWebsterDictionaryAPIForms(wstring sWord, set <int> &posSet, bool &plural, bool &networkAccessed);
+bool getMerriamWebsterDictionaryAPIForms(wstring sWord, set <int> &posSet, bool &plural, bool &networkAccessed, bool logEverything);
 bool existsInDictionaryDotCom(MYSQL *mysql,wstring word, bool &networkAccessed);
 bool detectNonEuropeanWord(wstring word);
 int cacheWebPath(wstring webAddress, wstring &buffer, wstring epath, wstring cacheTypePath, bool forceWebReread, bool &networkAccessed);
-string lookForPOS(yajl_val node);
+string lookForPOS(string originalWord, yajl_val node, bool logEverything,int &inflection, string &referWord);
 int discoverInflections(set <int> posSet, bool plural, wstring word);
 
-int getWordPOS(MYSQL *mysql,wstring word, set <int> &posSet, bool &plural, bool print, bool &isNonEuropean, int &dictionaryComQueried, int &dictionaryComCacheQueried, bool &websterAPIRequestsExhausted)
+int getWordPOS(MYSQL *mysql,wstring word, set <int> &posSet, int &inflections, bool print, bool &isNonEuropean, int &dictionaryComQueried, int &dictionaryComCacheQueried, bool &websterAPIRequestsExhausted,bool logEverything)
 {
 	LFS
 	if (isNonEuropean = detectNonEuropeanWord(word))
@@ -286,7 +286,9 @@ int getWordPOS(MYSQL *mysql,wstring word, set <int> &posSet, bool &plural, bool 
 	if (!existsDM || websterAPIRequestsExhausted)
 		return 0;
 	networkAccessed = false;
-	getMerriamWebsterDictionaryAPIForms(word, posSet, plural, networkAccessed);
+	bool plural;
+	getMerriamWebsterDictionaryAPIForms(word, posSet, plural, networkAccessed,logEverything);
+	inflections = discoverInflections(posSet, plural, word);
 	if (networkAccessed && !MWRequestAllowed())
 	{
 		websterAPIRequestsExhausted = true;
@@ -295,12 +297,12 @@ int getWordPOS(MYSQL *mysql,wstring word, set <int> &posSet, bool &plural, bool 
 }
 
 int testDisInclineAndSplit(MYSQL *mysql, Source &source, int sourceId, WordMatch &word, bool capitalized, int totalFrequency, int capitalizedFrequency, int allCapsFrequency, set <int> &posSet,
-	bool &plural, bool &isNonEuropean, bool &queryOnLowerCase, int &dictionaryComQueried, int &dictionaryComCacheQueried, bool &websterAPIRequestsExhausted)
+	int &inflections, bool &isNonEuropean, bool &queryOnLowerCase, int &dictionaryComQueried, int &dictionaryComCacheQueried, bool &websterAPIRequestsExhausted)
 {
 	if (queryOnLowerCase = (totalFrequency > 5 && ((capitalizedFrequency + allCapsFrequency)*100.0 / totalFrequency) > 95.0))
 		posSet.insert(FormsClass::gFindForm(L"noun"));
 	else
-		getWordPOS(mysql,word.word->first, posSet, plural, false, isNonEuropean, dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted);
+		getWordPOS(mysql,word.word->first, posSet, inflections, false, isNonEuropean, dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted,false);
 	bool caps = word.queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (word.flags&WordMatch::flagFirstLetterCapitalized) || (word.flags&WordMatch::flagAllCaps);
 	if (posSet.empty())
 	{
@@ -327,110 +329,219 @@ int testDisInclineAndSplit(MYSQL *mysql, Source &source, int sourceId, WordMatch
 	return posSet.size();
 }
 
-int createWordFormsInDBIfNecessary(MYSQL mysql, int sourceId, int &wordId, wstring word, bool actuallyExecuteAgainstDB)
+int createWordInDBIfNecessary(MYSQL mysql, int sourceId, int &wordId, wstring word, bool actuallyExecuteAgainstDB, bool logEverything)
 {
 	LFS
 	wchar_t qt[query_buffer_len_overflow];
 	int startTime = clock(), numWordsInserted = 0;
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
-	if (actuallyExecuteAgainstDB)
+	_snwprintf(qt, query_buffer_len, L"select id from words where word=\"%s\"", word.c_str());
+	if (myquery(&mysql, qt, result)) // if result is null, also returns false
 	{
-		if (!myquery(&mysql, L"LOCK TABLES words READ"))
-			return -1;
-		_snwprintf(qt, query_buffer_len, L"select id from words where word='%s'", word.c_str());
-		if (!myquery(&mysql, qt, result) && (sqlrow = mysql_fetch_row(result)))
+		if (sqlrow = mysql_fetch_row(result))
 		{
 			wordId = atoi(sqlrow[0]);
 			mysql_free_result(result);
-			if (!myquery(&mysql, L"UNLOCK TABLES"))
-				return -1;
+			return 0; // did not create word
 		}
-		else
-			return -1;
 	}
-	else
-		wordId = -1;
-	wcscpy(qt, L"INSERT IGNORE INTO words VALUES "); // IGNORE is necessary because C++ treats unicode strings as different, but MySQL treats them as the same
-	wchar_t sourceStr[10];
-	int len = 0, inflectionFlags = 0, flags = 0, timeFlags = 0, derivationRules = 0;
-	_snwprintf(qt + len, query_buffer_len - len, L"(NULL,\"%s\",%d,%d,%d,%d,%d,%s,NULL),",
-		word.c_str(), inflectionFlags, flags, timeFlags, -1, derivationRules, _itow(sourceId, sourceStr, 10));
+	wcscpy(qt, L"INSERT IGNORE INTO words (word,inflectionFlags,flags,timeFlags,mainEntryWordId,derivationRules,sourceId) VALUES "); // IGNORE is necessary because C++ treats unicode strings as different, but MySQL treats them as the same
+	int len = wcslen(qt) , inflectionFlags = 0, flags = 0, timeFlags = 0, derivationRules = 0;
+	_snwprintf(qt + len, query_buffer_len - len, L"(\"%s\",%d,%d,%d,%d,%d,%d)",
+		word.c_str(), inflectionFlags, flags, timeFlags, -1, derivationRules, sourceId);
 	if (actuallyExecuteAgainstDB)
 	{
-		if (!myquery(&mysql, L"LOCK TABLES words WRITE"))
+		if (!myquery(&mysql, qt))
 			return -1;
-		if (!myquery(&mysql, qt, result))
-			return -1;
-		mysql_free_result(result);
 		if (!myquery(&mysql, L"SELECT LAST_INSERT_ID()", result))
 			return -1;
 		if (sqlrow = mysql_fetch_row(result))
 			wordId = atoi(sqlrow[0]);
 		mysql_free_result(result);
-		if (!myquery(&mysql, L"UNLOCK TABLES"))
+	}
+	else if (logEverything)
+		lplog(LOG_INFO, L"DB statement [%s create word]: %s", word.c_str(), qt);
+	return 1; // created word
+}
+
+int	analyzeFormsUsageVSNewForms(MYSQL mysql, int wordId, wstring word, bool properNoun, bool existingWord, set <int> posSetDB, set <int> &remove, set<int> &add, set<int> &keep, int &maxcount,bool logEverything)
+{
+	bool properNounFormFound = false;
+	maxcount = 127; // maximum
+	if (existingWord)
+	{
+		wchar_t qt[query_buffer_len_overflow];
+		_snwprintf(qt, query_buffer_len, L"select formId,count from wordforms where wordId=%d and (formId<=%d or formId=%d)", wordId, tFI::patternFormNumOffset,
+			tFI::PROPER_NOUN_USAGE_PATTERN - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset); // formId in (1,101,102,103,104)
+		MYSQL_RES * result;
+		MYSQL_ROW sqlrow = NULL;
+		if (!myquery(&mysql, qt, result))
 			return -1;
+		while (sqlrow = mysql_fetch_row(result))
+		{
+			int formId = atoi(sqlrow[0]);
+			int count = atoi(sqlrow[1]);
+			// record maximum usage count
+			if (formId == tFI::patternFormNumOffset)
+			{
+				maxcount = count;
+				continue;
+			}
+			// keep proper noun usage count if set as proper noun
+			if (formId == tFI::PROPER_NOUN_USAGE_PATTERN - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset)
+			{
+				properNounFormFound = true;
+				if (properNoun)
+					keep.insert(formId);
+				else
+					remove.insert(formId);
+				continue;
+			}
+			bool formUnknownCombinationOrOpen = (formId == (UNDEFINED_FORM_NUM + 1) || formId == (nounForm + 1) || formId == (adjectiveForm + 1) || formId == (verbForm+1) || formId == (adverbForm+1) || formId == (COMBINATION_FORM_NUM + 1));
+			// forms to be set (in posSetDB) are assumed to be only open classes (noun,verb,adjective,adverb) or classes returned from the webster API
+			// form to keep in DB - that is not unknown, and not combination and not open, and needs to be set
+			bool formToKeepInDB = posSetDB.find(formId) != posSetDB.end() || !formUnknownCombinationOrOpen;
+			// don't print unknown, combination, open forms or abbreviations or proper nouns, if this current word has been determined to be a proper noun
+			if (!properNoun || !(formUnknownCombinationOrOpen || formId==(abbreviationForm+1) || formId==(PROPER_NOUN_FORM_NUM+1)) || logEverything)
+				lplog(LOG_INFO, L"%s:original form: %s [%d] %s", word.c_str(), Forms[formId - 1]->name.c_str(), count, (formToKeepInDB) ? L"WILL BE KEPT" : L"WILL BE REMOVED");
+			// noun=101, adjective=102,verb=103,adverb=104
+			if (formToKeepInDB)
+			{
+				posSetDB.erase(formId);
+				keep.insert(formId);
+				if (formId == nounForm+1)
+				{
+					keep.insert(tFI::SINGULAR_NOUN_HAS_DETERMINER - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+					keep.insert(tFI::SINGULAR_NOUN_HAS_NO_DETERMINER - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+				}
+				if (formId == verbForm+1)
+				{
+					keep.insert(tFI::VERB_HAS_0_OBJECTS - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+					keep.insert(tFI::VERB_HAS_1_OBJECTS - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+					keep.insert(tFI::VERB_HAS_2_OBJECTS - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+				}
+			}
+			else
+			{
+				remove.insert(formId);
+				if (formId == nounForm + 1)
+				{
+					remove.insert(tFI::SINGULAR_NOUN_HAS_DETERMINER - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+					remove.insert(tFI::SINGULAR_NOUN_HAS_NO_DETERMINER - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+				}
+				if (formId == verbForm + 1)
+				{
+					remove.insert(tFI::VERB_HAS_0_OBJECTS - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+					remove.insert(tFI::VERB_HAS_1_OBJECTS - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+					remove.insert(tFI::VERB_HAS_2_OBJECTS - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+				}
+			}
+		}
 	}
 	else
-		lplog(LOG_INFO, L"DB statement [%s create word]: %s", word.c_str(), qt);
+		add.insert(tFI::patternFormNumOffset);
+	if (properNoun && !properNounFormFound)
+	{
+		add.insert(tFI::PROPER_NOUN_USAGE_PATTERN - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+	}
+	for (int formId : posSetDB)
+	{
+		if (!properNoun || logEverything || formId!=nounForm+1)
+			lplog(LOG_INFO, L"%s:new form: %s WILL BE ADDED", word.c_str(), Forms[formId-1]->name.c_str());
+		add.insert(formId);
+		if (formId == nounForm + 1)
+		{
+			add.insert(tFI::SINGULAR_NOUN_HAS_DETERMINER - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+			add.insert(tFI::SINGULAR_NOUN_HAS_NO_DETERMINER - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+		}
+		if (formId == verbForm + 1)
+		{
+			add.insert(tFI::VERB_HAS_0_OBJECTS - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+			add.insert(tFI::VERB_HAS_1_OBJECTS - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+			add.insert(tFI::VERB_HAS_2_OBJECTS - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+		}
+	}
+	//LOWER_CASE_USAGE_PATTERN = 32756
 	return 0;
 }
 
-
-int overwriteWordFormsInDB(MYSQL mysql, int wordId, wstring word, set <int> posSet, bool actuallyExecuteAgainstDB)
+int overwriteWordFormsInDB(MYSQL mysql, int wordId, wstring word, set <int> &posSetDB, __int64 &formsDeleted,bool properNoun,bool existingWord, bool actuallyExecuteAgainstDB,bool logEverything)
 {
 	LFS
+	set <int> remove, add, keep;
+	int maxcount;
+	analyzeFormsUsageVSNewForms(mysql, wordId, word, properNoun, existingWord, posSetDB, remove, add, keep,maxcount, logEverything);
 	wchar_t qt[query_buffer_len_overflow];
-	// erase all wordforms associated with wordId in wordforms
-	_snwprintf(qt, query_buffer_len, L"delete wordforms where formId<%d and wordId=%d", tFI::patternFormNumOffset, wordId);
-	MYSQL_RES * result;
-	if (actuallyExecuteAgainstDB)
+	if (existingWord)
 	{
-		if (!myquery(&mysql, L"LOCK TABLES wordforms WRITE"))
+		// erase all open wordforms and unknown form associated with wordId in wordforms
+		// keep all others - this will allow forms like demonym to be kept.
+		remove.insert(1); // unknown
+		wstring removeFormQueryString,removeFormString;
+		for (int r : remove)
+		{
+			removeFormQueryString += std::to_wstring(r) + L",";
+			if (r < 32750 && (logEverything || !properNoun || (r != (UNDEFINED_FORM_NUM+1) && r != (adjectiveForm+1) && r != (verbForm + 1) && r != (adverbForm + 1) && r !=(COMBINATION_FORM_NUM+1))))
+				removeFormString += Forms[r - 1]->name + L" ";
+		}
+		_snwprintf(qt, query_buffer_len, L"delete from wordforms where formId in (%s) and wordId=%d", removeFormQueryString.substr(0, removeFormQueryString.length() - 1).c_str(),wordId);
+		if (actuallyExecuteAgainstDB && !myquery(&mysql, qt))
 			return -1;
-		if (!myquery(&mysql, qt, result))
-			return -1;
-		mysql_free_result(result);
+		else if (removeFormString.length()>0)
+			lplog(LOG_INFO, L"DB statement [%s delete]: %s", word.c_str(), removeFormString.c_str());
+		formsDeleted = mysql_affected_rows(&mysql);
+		if (keep.find(tFI::PROPER_NOUN_USAGE_PATTERN - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset) != keep.end())
+		{
+			_snwprintf(qt, query_buffer_len, L"update wordforms set count=%d where wordId=%d and formId=%d", maxcount,wordId, tFI::PROPER_NOUN_USAGE_PATTERN - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+			if (actuallyExecuteAgainstDB && !myquery(&mysql, qt))
+				return -1;
+			else if (logEverything || !maxcount)
+				lplog(LOG_INFO, L"DB statement [%s update counts]: %s", word.c_str(), qt);
+		}
 	}
-	else
-		lplog(LOG_INFO, L"DB statement [%s delete]: %s", word.c_str(), qt);
-	wcscpy(qt, L"insert wordForms(wordId,formId,count) VALUES ");
-	int len = wcslen(qt);
-	// insert wordForms(wordId, formId, count) VALUES(2, 33, 4), (5, 6, 7)
-	for (int form : posSet)
-		if (form < tFI::patternFormNumOffset)
-			len += wsprintf(qt + len, L"(%d,%d,1)", wordId, form+1); // formId -1 yields form offset in memory - 
-	if (actuallyExecuteAgainstDB)
+	if (add.size() > 0)
 	{
-		if (!myquery(&mysql, qt, result))
+		wcscpy(qt, L"insert wordForms(wordId,formId,count) VALUES ");
+		int len = wcslen(qt);
+		// insert wordForms(wordId, formId, count) VALUES(2, 33, 4), (5, 6, 7)
+		for (int form : add)
+		{
+			// if transfer count (tFI::patternFormNumOffset) or tFI::PROPER_NOUN_USAGE_PATTERN, set this to maxcount
+			// else set to 0.
+			if (form == tFI::patternFormNumOffset || form == tFI::PROPER_NOUN_USAGE_PATTERN - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset)
+				len += wsprintf(qt + len, L"(%d,%d,%d),", wordId, form, maxcount);
+			else
+				len += wsprintf(qt + len, L"(%d,%d,%d),", wordId, form, 0);
+		}
+		qt[len - 1] = 0;
+		wcscat(qt, L" ON DUPLICATE KEY UPDATE count=VALUES(count)");
+		if (actuallyExecuteAgainstDB && !myquery(&mysql, qt))
 			return -1;
-		mysql_free_result(result);
-		if (!myquery(&mysql, L"UNLOCK TABLES"))
-			return -1;
+		else
+		{
+			wstring forms;
+			for (int form : add)
+				if (form < tFI::patternFormNumOffset && (!properNoun || form!=(nounForm+1)))
+					forms += Forms[form-1]->name + L" ";
+			if (forms.length()>0)
+				lplog(LOG_INFO, L"DB statement [%s forms insert]: %s (%s)", word.c_str(), forms.c_str(), qt);
+		}
 	}
-	else
-		lplog(LOG_INFO, L"DB statement [%s forms insert]: %s", word.c_str(), qt);
 	return 0;
 }
 
 // queryOnLowerCase will query for word forms  the next time the word is encountered in all lower case.
 // queryOnLowerCase = 4
-int overwriteWordFlagsInDB(MYSQL mysql, wstring word, bool actuallyExecuteAgainstDB)
+int overwriteWordFlagsInDB(MYSQL mysql, wstring word, bool actuallyExecuteAgainstDB,bool logEverything)
 {
 	LFS
-		// erase all wordforms associated with wordId in wordforms
-		wchar_t qt[query_buffer_len_overflow];
-	_snwprintf(qt, query_buffer_len, L"update words where word='%s' set flags=flags|4", word.c_str());
-	MYSQL_RES * result;
-	if (actuallyExecuteAgainstDB)
-	{
-		if (!myquery(&mysql, L"LOCK TABLES words WRITE"))
-			return -1;
-		if (!myquery(&mysql, qt, result))
-			return -1;
-		mysql_free_result(result);
-	}
-	else
+	// erase all wordforms associated with wordId in wordforms
+	wchar_t qt[query_buffer_len_overflow];
+	_snwprintf(qt, query_buffer_len, L"update words set flags=flags|%d where word=\"%s\"", tFI::queryOnLowerCase, word.c_str());
+	if (actuallyExecuteAgainstDB && !myquery(&mysql, qt))
+		return -1;
+	else if (logEverything)
 		lplog(LOG_INFO, L"DB statement [%s add queryOnLowerCase flag]: %s", word.c_str(), qt);
 	return 0;
 }
@@ -441,18 +552,14 @@ int overwriteWordInflectionFlagsInDB(MYSQL mysql, wstring word, int inflections,
 	LFS
 	// erase all wordforms associated with wordId in wordforms
 	wchar_t qt[query_buffer_len_overflow];
-	_snwprintf(qt, query_buffer_len, L"update words where word='%s' set inflectionFlags=inflectionFlags+inflections", word.c_str());
-	MYSQL_RES * result;
-	if (actuallyExecuteAgainstDB)
-	{
-		if (!myquery(&mysql, L"LOCK TABLES words WRITE"))
-			return -1;
-		if (!myquery(&mysql, qt, result))
-			return -1;
-		mysql_free_result(result);
-	}
+	_snwprintf(qt, query_buffer_len, L"update words set inflectionFlags=inflectionFlags+%d where word=\"%s\"", inflections,word.c_str());
+	if (actuallyExecuteAgainstDB && !myquery(&mysql, qt))
+		return -1;
 	else
-		lplog(LOG_INFO, L"DB statement [%s add inflection flag]: %s", word.c_str(), qt);
+	{
+		wstring sFlags;
+		lplog(LOG_INFO, L"DB statement [%s add inflection flag]:%s", word.c_str(), allFlags(inflections, sFlags));
+	}
 	return 0;
 }
 
@@ -534,7 +641,9 @@ void scanAllWebsterEntries(wchar_t *basepath, unordered_set<wstring> &pos, int &
 					{
 						yajl_val doc = node->u.array.values[docNum];
 						wstring temppos;
-						mTW(lookForPOS(doc), temppos);
+						int inflection;
+						string referWord;
+						mTW(lookForPOS(NULL, doc, true,inflection, referWord), temppos);
 						if (temppos.length() > 0)
 						{
 							pos.insert(temppos);
@@ -885,7 +994,7 @@ void writeSourceWordFrequency(MYSQL *mysql,unordered_map<wstring, wordInfo> wf, 
 	for (auto const&[word, wi] : wf)
 	{
 		if (len == 0)
-			len += _snwprintf(qt, query_buffer_len, L"INSERT INTO wordFrequencyMemory (word,totalFrequency,unknownFrequency,capitalizedFrequency,allCapsFrequency,lastSourceEtext,nonEuropeanFlag,numberFlag,cardinalFlag,ordinalFlag,romanFlag,dateFlag,timeFlag,telephoneFlag,moneyFlag,webaddressFlag) VALUES");
+			len += _snwprintf(qt, query_buffer_len, L"INSERT INTO wfcompare3 (word,totalFrequency,unknownFrequency,capitalizedFrequency,allCapsFrequency,lastSourceEtext,nonEuropeanFlag,numberFlag,cardinalFlag,ordinalFlag,romanFlag,dateFlag,timeFlag,telephoneFlag,moneyFlag,webaddressFlag) VALUES");
 		len += _snwprintf(qt + len, query_buffer_len - len, L" (\"%s\",%d,%d,%d,%d,%d,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", word.c_str(), wi.totalFrequency, wi.unknownFrequency, wi.unknownCapitalizedFrequency, wi.unknownAllCapsFrequency, lastSourceEtext,
 			(wi.nonEuropeanWord) ? L"true" : L"false",
 			(wi.number) ? L"true" : L"false",
@@ -921,7 +1030,8 @@ int analyzeEnd(Source source, int sourceId, wstring path, wstring etext, wstring
 	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
-	if (source.readSource(path, false, false, false))
+	bool parsedOnly = false;
+	if (source.readSource(path, false, parsedOnly, false, true))
 	{
 		bool multipleEnds = false;
 		for (unsigned int I = 0; I < source.sentenceStarts.size(); I++)
@@ -945,67 +1055,82 @@ int analyzeEnd(Source source, int sourceId, wstring path, wstring etext, wstring
 
 int writeWordFormsFromCorpusWideAnalysis(MYSQL mysql,bool actuallyExecuteAgainstDB)
 {
-	wchar_t qt[query_buffer_len_overflow];
 	int definedUnknownWord = 0, dictionaryComQueried = 0, dictionaryComCacheQueried = 0;
-	int I = 0, sumTotalFrequency=0,sumProcessedTotalFrequency=0;
+	int I = 0, sumTotalFrequency = 0, sumProcessedTotalFrequency = 0;
 	bool websterAPIRequestsExhausted = false;
-	_snwprintf(qt, query_buffer_len, L"select word, totalFrequency, unknownFrequency, capitalizedFrequency,allCapsFrequency,lastSourceEtext from wordFrequencyMemory where unknownFrequency*100/totalFrequency>95 and"
-		L" nonEuropeanFlag =false and numberFlag = false and cardinalFlag = false and	ordinalFlag = false and	romanFlag = false and dateFlag = false and timeFlag = false and	telephoneFlag = false and	moneyFlag = false and	webaddressFlag = false order by unknownFrequency desc");
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
-	int totalFrequency = 0, capitalizedFrequency = 0, allCapsFrequency = 0, unknownFrequency = 0, sourceId = 0;
 	wstring word;
-	if (!myquery(&mysql, L"LOCK TABLES wordFrequencyMemory READ"))
+	if (!myquery(&mysql, L"LOCK TABLES wfcompare3 READ"))
 		return -1;
-	if (!myquery(&mysql, L"select SUM(totalFrequency) from wordFrequencyMemory where unknownFrequency*100/totalFrequency>95 and"
+	if (!myquery(&mysql, L"select SUM(totalFrequency) from wfcompare3 where unknownFrequency*100/totalFrequency>95 and"
 		L" nonEuropeanFlag =false and numberFlag = false and cardinalFlag = false and	ordinalFlag = false and	romanFlag = false and dateFlag = false and timeFlag = false and	telephoneFlag = false and	moneyFlag = false and	webaddressFlag = false order by unknownFrequency desc", result))
 		return -1;
 	if (sqlrow = mysql_fetch_row(result))
 		sumTotalFrequency = atoi(sqlrow[0]);
+	wchar_t qt[query_buffer_len_overflow];
+	_snwprintf(qt, query_buffer_len, L"select word, totalFrequency, unknownFrequency, capitalizedFrequency,allCapsFrequency,lastSourceEtext from wfcompare3 where unknownFrequency*100/totalFrequency>95 and"
+		L" nonEuropeanFlag =false and numberFlag = false and cardinalFlag = false and	ordinalFlag = false and	romanFlag = false and dateFlag = false and timeFlag = false and	telephoneFlag = false and	moneyFlag = false and	webaddressFlag = false order by unknownFrequency desc");
 	if (!myquery(&mysql, qt, result))
 		return -1;
-	my_ulonglong totalWords = mysql_num_rows(result);
+	my_ulonglong totalWords = mysql_num_rows(result), totalFormsDeleted=0;
 	int numWordsProcessed = 0;
+	if (actuallyExecuteAgainstDB)
+	{
+		if (!myquery(&mysql, L"LOCK TABLES words WRITE,wordforms WRITE"))
+			return -1;
+	}
+	else if (!myquery(&mysql, L"LOCK TABLES words READ,wordforms READ"))
+			return -1;
 	for (int row=0; sqlrow = mysql_fetch_row(result); row++)
 	{
+		int totalFrequency = 0, capitalizedFrequency = 0, allCapsFrequency = 0, unknownFrequency = 0, sourceId = 0;
 		mTW(sqlrow[0], word);
+		bool logEverything = true;
 		totalFrequency = atoi(sqlrow[1]);
 		sumProcessedTotalFrequency += totalFrequency;
-		if (word.find_first_of(L"ãâäáàæçêéèêëîíïñôóòöõôûüùú\'") != wstring::npos)
-			continue;
 		unknownFrequency = atoi(sqlrow[2]);
 		capitalizedFrequency = atoi(sqlrow[3]);
 		allCapsFrequency = atoi(sqlrow[4]);
 		sourceId = atoi(sqlrow[5]);
+		if (word.find_first_of(L"ãâäáàæçêéèêëîíïñôóòöõôûüùú\'") != wstring::npos && (totalFrequency < 25 || capitalizedFrequency * 100 / totalFrequency < 99))
+			continue;
 		// find definition in webster.
 		// if exists, erase all forms associated with this word and write the new forms (return true)
 		// else definition could not be found (return false)
 		set <int> posSet;
-		bool isNonEuropean, queryOnLowerCase, plural;
-		if (queryOnLowerCase = (totalFrequency > 5 && ((capitalizedFrequency + allCapsFrequency)*100.0 / totalFrequency) > 95.0))
+		bool isNonEuropean, setProperNoun;
+		int inflections=0;
+		if (setProperNoun = (totalFrequency > 4 && ((capitalizedFrequency + allCapsFrequency)*100.0 / totalFrequency) > 95.0))
 			posSet.insert(FormsClass::gFindForm(L"noun"));
 		else
-			getWordPOS(&mysql,word, posSet, plural, false, isNonEuropean, dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted);
+			getWordPOS(&mysql,word, posSet, inflections, false, isNonEuropean, dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted,true);
 		if (posSet.size() > 0)
 		{
 			int wordId;
+			// convert posSet to DB form values
+			set<int> posSetDB;
+			for (int f : posSet)
+				posSetDB.insert(f + 1);
+			int ret = createWordInDBIfNecessary(mysql, sourceId, wordId, word, actuallyExecuteAgainstDB,logEverything);
 			// remove all wordforms associated with this word and create new wordforms
-			if (createWordFormsInDBIfNecessary(mysql, sourceId, wordId, word, actuallyExecuteAgainstDB) < 0)
+			if ( ret< 0)
 				lplog(LOG_FATAL_ERROR, L"DB error unable to create word %s", word.c_str());
-			if (overwriteWordFormsInDB(mysql, wordId, word, posSet, actuallyExecuteAgainstDB) < 0)
+			__int64 formsDeleted=0;
+			if (overwriteWordFormsInDB(mysql, wordId, word, posSetDB, formsDeleted, setProperNoun, ret==0, actuallyExecuteAgainstDB, logEverything) < 0)
 				lplog(LOG_FATAL_ERROR, L"DB error setting word forms with word %s", word.c_str());
-			if (queryOnLowerCase && overwriteWordFlagsInDB(mysql, word, actuallyExecuteAgainstDB) < 0)
+			totalFormsDeleted += formsDeleted;
+			if (setProperNoun && totalFrequency < 25 && overwriteWordFlagsInDB(mysql, word, actuallyExecuteAgainstDB,false) < 0)
 				lplog(LOG_FATAL_ERROR, L"DB error setting word flags with word %s", word.c_str());
-			int inflections = discoverInflections(posSet, plural, word);
 			if (inflections > 0 && overwriteWordInflectionFlagsInDB(mysql, word, inflections, actuallyExecuteAgainstDB) < 0)
 				lplog(LOG_FATAL_ERROR, L"DB error setting word inflection flags with word %s", word.c_str());
 			definedUnknownWord++;
 		}
 		numWordsProcessed++;
 		// remember word for further sources
-		wprintf(L"%03I64d:%15.15s:unknown=%06d/%06d webster=%06d dictionaryCom(%06d,cache=%06d) [UpperCase=%05.1f] frequency %d%% done\r",
+		wprintf(L"%03I64d:%15.15s:unknown=%06d/%06d webster=%06d dictionaryCom(%06d,cache=%06d) [UpperCase=%05.1f] [totalFormsDeleted=%08I64d] frequency %I64d%% done\r",
 			numWordsProcessed*100/totalWords,word.c_str(), definedUnknownWord, numWordsProcessed, websterQueriedToday, dictionaryComQueried, dictionaryComCacheQueried,
-			((capitalizedFrequency + allCapsFrequency)*100.0 / totalFrequency), sumProcessedTotalFrequency*100/ sumTotalFrequency);
+			((capitalizedFrequency + allCapsFrequency)*100.0 / totalFrequency), totalFormsDeleted, ((__int64)sumProcessedTotalFrequency)*100/ sumTotalFrequency);
 	}
 	mysql_free_result(result);
 	if (!myquery(&mysql, L"UNLOCK TABLES"))
@@ -1019,7 +1144,8 @@ int populateWordFrequencyTableFromSource(Source source, int sourceId,wstring pat
 	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
-	if (source.readSource(path, false, false, false))
+	bool parsedOnly=false;
+	if (source.readSource(path, false, parsedOnly, false, true))
 	{
 		unordered_map<wstring, wordInfo> wf;
 		wf.reserve(source.m.size());
@@ -1180,7 +1306,7 @@ int populateWordFrequencyTable(Source source)
 		__int64 processingSeconds = (clock() - startTime) / CLOCKS_PER_SEC;
 		numSourcesProcessedNow++;
 		if (processingSeconds)
-			wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d sources in %02I64d:%02I64d:%02I64d [%d sources/hour] (%-35.35s... finished)", numSourcesProcessedNow * 100 / totalSource, numSourcesProcessedNow - 1, totalSource,
+			wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d sources in %02I64d:%02I64d:%02I64d [%d sources/hour] (%-35.35s... finished)", numSourcesProcessedNow * 100 / totalSource, numSourcesProcessedNow, totalSource,
 				processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, numSourcesProcessedNow * 3600 / processingSeconds, title.c_str());
 		SetConsoleTitle(buffer);
 	}
@@ -1261,7 +1387,8 @@ void testRDFType(Source &source)
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 	vector <cTreeCat *> rdfTypes;
 	Ontology::rdfIdentify(L"clackamas", rdfTypes, L"Z", true);
-	if (source.readSource(path, false, false, false))
+	bool parsedOnly = false;
+	if (source.readSource(path, false, parsedOnly, false, true))
 	{
 		int where = 0;
 		for (auto im : source.m)
@@ -1313,7 +1440,7 @@ void wmain(int argc,wchar_t *argv[])
 		break;
 	case 2:
 		{
-			bool actuallyExecuteAgainstDB = step == 2 && wstring(argv[2]) == L"executeAgainstDB";
+			bool actuallyExecuteAgainstDB = wstring(argv[2]) == L"executeAgainstDB";
 			writeWordFormsFromCorpusWideAnalysis(source.mysql, actuallyExecuteAgainstDB);
 		}
 		break;

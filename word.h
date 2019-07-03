@@ -521,6 +521,9 @@ public:
   int readWords(wstring oPath,int sourceId, bool disqualifyWords);
 	int writeFormsCache(int fd);
   bool removeFlag(wstring sWord,int flag);				
+	static bool isDash(wchar_t ch);
+	static bool isSingleQuote(wchar_t ch);
+	static bool isDoubleQuote(wchar_t ch);
 
   // MYSQL database
   int lastReadfromDBTime;
@@ -614,7 +617,7 @@ private:
   bool addPlaces(wstring pPath,vector <tmWS > &objects);
 	void addTimeFlags();
   void createTimeCategories(bool normalize);
-  static int getForms(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId);
+  static int getForms(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId, bool logEverything);
   tIWMM addCopy(wstring sWord,tIWMM iWord,bool &added);
   static tIWMM query(wstring sWord,int form,int inflection,int &offset);
   bool addFlag(wstring sWord,int flag);

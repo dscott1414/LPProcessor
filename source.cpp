@@ -1354,8 +1354,8 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 		// Handle cases like 10-15 or 10-60,000 which are returned as PARSE_NUM
 		if (dash!=wstring::npos && result==0 && // if (not date or number)
 			sWord[1]!=0 && // not a single dash
-			sWord[dash+1]!=L'-' && sWord[dash + 1] != L'—' && // not '--'
-			!(sWord[0]==L'a' && (sWord[1] == L'-' || sWord[1] == L'—')) // a-working
+			!WordClass::isDash(sWord[dash+1]) && // not '--'
+			!(sWord[0]==L'a' && WordClass::isDash(sWord[1])) // a-working
 			 // state-of-the-art
 			)
 		{
@@ -2283,12 +2283,15 @@ bool Source::read(char *buffer,int &where,unsigned int total, bool &parsedOnly, 
 	if (!copy(count,buffer,where,total)) return false;
 	for (unsigned int I=0; I<count && !error; I++)
 		objects.push_back(cObject(buffer,where,total,error));
-	if (!copy(count,buffer,where,total)) return false;
-	for (unsigned int I=0; I<count && !error; I++)
+	if (!copy(count, buffer, where, total)) return false;
+	for (unsigned int I = 0; I < count && !error; I++)
 	{
-		spaceRelations.push_back(cSpaceRelation(buffer,where,total,error));
-		getSRIMinMax(&spaceRelations[spaceRelations.size()-1]);
+		spaceRelations.push_back(cSpaceRelation(buffer, where, total, error));
+		getSRIMinMax(&spaceRelations[spaceRelations.size() - 1]);
 	}
+	if (!copy(count, buffer, where, total)) return false;
+	for (unsigned int I = 0; I < count && !error; I++)
+		timelineSegments.push_back(cTimelineSegment(buffer, where, total, error));
 	// fill locations
 	unsigned int I=0;
 	for (vector <WordMatch>::iterator im=m.begin(),imEnd=m.end(); im!=imEnd; im++,I++)
@@ -2501,7 +2504,8 @@ bool findNextParagraph(int &where,wstring &buffer,wstring &lastLine,int &whereLa
 				numPeriods++;
 		}
 		bool endsWithEOS=saveParagraph[saveParagraph.length()-1]==L'.' || saveParagraph[saveParagraph.length()-1]==L'?' || saveParagraph[saveParagraph.length()-1]==L'!' ||
-			               saveParagraph[saveParagraph.length()-1]==L'"' || saveParagraph[saveParagraph.length()-1]==L'”' || saveParagraph[saveParagraph.length()-1]==L'\'' || saveParagraph[saveParagraph.length() - 1] == L'-' || saveParagraph[saveParagraph.length() - 1] == L'—';
+			               WordClass::isSingleQuote(saveParagraph[saveParagraph.length()-1]) || WordClass::isDoubleQuote(saveParagraph[saveParagraph.length() - 1]) ||
+										 WordClass::isDash(saveParagraph[saveParagraph.length() - 1]);
 		bool ccsh=containsSectionHeader(paragraph);
 		if (numPeriods<2 || !endsWithEOS || saveParagraph==paragraph || lastLine.empty() || ccsh)
 		{

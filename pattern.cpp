@@ -22,7 +22,7 @@ vector <wstring> patternTagStrings; // initialized
 struct {
   int flag;
   wchar_t *sFlag;
-} flagList[]=
+} inflectionFlagList[]=
 { 
   {SINGULAR,L"SINGULAR"},
   {PLURAL,L"PLURAL"},
@@ -896,9 +896,9 @@ patternElement::patternElement(wstring patternName,wstring differentiator,int el
     minimum=maximum=1;
   inflectionFlags=0;
   if (c_flags)
-    for (unsigned int I=0; flagList[I].sFlag; I++)
-      if (strstr(c_flags+1,flagList[I].sFlag))
-        inflectionFlags|=flagList[I].flag;
+    for (unsigned int I=0; inflectionFlagList[I].sFlag; I++)
+      if (strstr(c_flags+1,inflectionFlagList[I].sFlag))
+        inflectionFlags|=inflectionFlagList[I].flag;
   wchar_t *tag=c_tags+1;
   while (true)
   {
@@ -1278,18 +1278,18 @@ cPattern *cPattern::create(Source *source,wstring patternName,int num,int whereB
 const wchar_t *patternElement::allFlags(wstring &sFlags)
 { LFS
   sFlags.clear();
-  for (int I=0; flagList[I].sFlag; I++)
-    if (flagList[I].flag&inflectionFlags)
-      sFlags+=flagList[I].sFlag+wstring(L" ");
+  for (int I=0; inflectionFlagList[I].sFlag; I++)
+    if (inflectionFlagList[I].flag&inflectionFlags)
+      sFlags+=inflectionFlagList[I].sFlag+wstring(L" ");
   return sFlags.c_str();
 }
 
 const wchar_t *allFlags(int inflectionFlags,wstring &sFlags)
 { LFS
   sFlags.clear();
-  for (int I=0; flagList[I].sFlag; I++)
-    if (flagList[I].flag&inflectionFlags)
-      sFlags+=flagList[I].sFlag+wstring(L" ");
+  for (int I=0; inflectionFlagList[I].sFlag; I++)
+    if (inflectionFlagList[I].flag&inflectionFlags)
+      sFlags+=inflectionFlagList[I].sFlag+wstring(L" ");
   return sFlags.c_str();
 }
 
@@ -1881,7 +1881,7 @@ void initializePatterns(void)
       patternsWithNoParents.set(p);
   }
   //int startTime=clock();
-  wprintf(L"Evaluating tagsets...             \r");
+  wprintf(L"Evaluating tagsets...               \r");
   for (unsigned int p=0; p<patterns.size(); p++)
   {
     patterns[p]->setAncestorPatterns(p);

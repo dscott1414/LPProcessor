@@ -1510,7 +1510,7 @@ bool Ontology::extractResults(wstring begin,wstring uobject,wstring end,wstring 
 	while ((bw=uobject.find_first_of(L"+/ "))!=wstring::npos)
 		uobject[bw]=L'_';
 	encodeURL(uobject,object);
-	if (object[0]==L'-' || object[0] == L'—')
+	if (WordClass::isDash(object[0]))
 		return false;
 	wstring webAddress=basehttpquery+begin+object+end,buffer,temp,uri,fpobject=uobject, beginhttpquery = basehttpquery + begin;
 	vector <wstring> labels;
@@ -2466,7 +2466,7 @@ bool detectNonEuropean(wstring word)
 bool detectNonEnglish(wstring word)
 {
 	for (wchar_t c : word)
-		if (c != '-' && c != L'—' && c != '\'' && !iswalpha(c))
+		if (c != '-' && c != L'—' && c != '\'' && !iswalpha(c)) // deliberately not using isDash because we want to constrain to common well known dash types
 			return true;
 	return false;
 }

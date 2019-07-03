@@ -11,11 +11,11 @@
 
 extern set<int>::iterator sNULL;
 
-int copy(cOM &num,char *buf,int &where)
+bool copy(cOM &num,char *buf,int &where)
 { DLFS
   num=*((cOM *)(buf+where));
   where+=sizeof(num);
-  return 0;
+  return true;
 }
 
 bool copy(vector <cOM> &s,char *buf,int &where,int limit)
