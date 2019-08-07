@@ -386,6 +386,7 @@ void readVBNet(void)
 		wprintf (L"FindFirstFile failed on directory %s (%d)\r", L"source\\lists\\VBNet\\",(int)GetLastError());
 		return;
 	}
+	vbNetClasses.reserve(550);
 	do
 	{
 		if (FindFileData.cFileName[0]=='.') continue;

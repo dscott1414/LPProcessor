@@ -2062,7 +2062,6 @@ void WordClass::createTimeCategories(bool normalize)
 		usageCostToNoun(seasons,L"season");
 		usageCostToNoun(timeUnits,L"timeUnit");
 		usageCostToNoun(dayUnits,L"dayUnit");
-		addTimeFlags();
 		return;
 	}
 	predefineWords(months,L"month",L"month",L"noun",tFI::queryOnAnyAppearance,true);
@@ -2332,6 +2331,20 @@ wstring holidayString(int holiday)
 		return holidayMonths[holiday].name;
 	return L"illegal";
 }
+
+void WordClass::extendedParseHolidays()
+{
+	LFS
+		for (int I = 0; holidayDays[I].name; I++)
+		{
+			handleExtendedParseWords(holidayDays[I].name);
+		}
+	for (int I = 0; holidayMonths[I].name; I++)
+	{
+		handleExtendedParseWords(holidayMonths[I].name);
+	}
+}
+
 
 int WordClass::predefineHolidays()
 { LFS

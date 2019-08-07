@@ -30,7 +30,7 @@ bool myquery(MYSQL *mysql,wchar_t *q,bool allowFailure)
 	ReleaseSRWLockExclusive(&mySQLQueryBufferSRWLock);
 	if(mysql_real_query(mysql, (char *)buffer, queryLength )!=0)
   {
-    //if (wcslen(q)>query_buffer_len) q[query_buffer_len]=0;
+    //if (wcslen(q)>QUERY_BUFFER_LEN) q[QUERY_BUFFER_LEN]=0;
 		lplog(LOG_ERROR,L"mysql_real_query failed - %S (len=%d): ", mysql_error(mysql),queryLength);
 		wstring q2=q;
 		q2+=L"\n";
@@ -173,7 +173,7 @@ void WordClass::releaseLock(MYSQL &mysql)
 bool checkFull(MYSQL *mysql,wchar_t *qt,size_t &len,bool flush,wchar_t *qualifier)
 { LFS
   bool ret=true;
-  if (len>query_buffer_len_underflow || (flush && qt[len-1]==L','))
+  if (len>QUERY_BUFFER_LEN_UNDERFLOW || (flush && qt[len-1]==L','))
   {
     if (qt[len-2]==L')')
       qt[--len]=0; // must be INSERT strip off extra ,

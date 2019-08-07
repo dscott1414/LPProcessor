@@ -125,7 +125,7 @@ int WordClass::updateDBWordRelations(MYSQL &mysql,int totalWordRelationsToWrite)
               ur.push_back(r);
   sort(ur.begin(),ur.end(),deltaFrequencyCompare);
   int startTime=clock(),relationsUpdated=0,where,lastProgressPercent=-1,currentDelta=-1;
-  wchar_t nqt[query_buffer_len_overflow];
+  wchar_t nqt[QUERY_BUFFER_LEN_OVERFLOW];
   size_t nlen=0;
   for (vector<tFI::cRMap::tIcRMap>::iterator uri=ur.begin(),uriEnd=ur.end(); uri!=uriEnd && !exitNow; uri++)
   {
@@ -135,12 +135,12 @@ int WordClass::updateDBWordRelations(MYSQL &mysql,int totalWordRelationsToWrite)
       if ((clock()-startTime)>CLOCKS_PER_SEC && logDatabaseDetails)
         lplog(L"Updating %d relations (delta %d) took %d seconds.",relationsUpdated,currentDelta,(clock()-startTime)/CLOCKS_PER_SEC);
       startTime=clock();
-			_snwprintf(nqt,query_buffer_len,L"UPDATE wordRelations SET totalCount=totalCount+%d WHERE id in (",(*uri)->second.deltaFrequency);
+			_snwprintf(nqt,QUERY_BUFFER_LEN,L"UPDATE wordRelations SET totalCount=totalCount+%d WHERE id in (",(*uri)->second.deltaFrequency);
       nlen=wcslen(nqt);
       relationsUpdated=0;
       currentDelta=(*uri)->second.deltaFrequency;
     }
-    nlen+=_snwprintf(nqt+nlen,query_buffer_len-nlen,L"%d,",(*uri)->second.index);
+    nlen+=_snwprintf(nqt+nlen,QUERY_BUFFER_LEN-nlen,L"%d,",(*uri)->second.index);
     (*uri)->second.deltaFrequency=0;
     relationsUpdated++;
     overallRelationsUpdated++;
@@ -163,7 +163,7 @@ int WordClass::updateDBWordRelations(MYSQL &mysql,int totalWordRelationsToWrite)
   for (vector<tFI::cRMap::tIcRMap>::iterator uri=ur.begin(),uriEnd=ur.end(); uri!=uriEnd && !exitNow; uri++)
   {
 		if ((*uri)->second.index>=0)
-			nlen+=_snwprintf(nqt+nlen,query_buffer_len-nlen,L"(%d,%d,%d),",(*uri)->second.index,(*uri)->second.sourceId,(*uri)->second.rlastWhere);
+			nlen+=_snwprintf(nqt+nlen,QUERY_BUFFER_LEN-nlen,L"(%d,%d,%d),",(*uri)->second.index,(*uri)->second.sourceId,(*uri)->second.rlastWhere);
     if (!checkFull(&mysql,nqt,nlen,false,NULL)) return -1;
   }
   if (!checkFull(&mysql,nqt,nlen,true,NULL)) return -1;
@@ -179,13 +179,13 @@ int WordClass::updateDBWordRelations(MYSQL &mysql,int totalWordRelationsToWrite)
 int	Source::flushWordRelationsHistory(MYSQL &mysql)
 { LFS
     int startTime=clock(),relationHistoriesInserted=0;
-    wchar_t nqt[query_buffer_len_overflow];
+    wchar_t nqt[QUERY_BUFFER_LEN_OVERFLOW];
 		wcscpy(nqt,L"INSERT into wordRelationsHistory (wordRelationId, sourceId, w, narrativeNum, genericLocation, associatedSubject, flags) VALUES ");
     size_t nlen=wcslen(nqt);
 		for (vector <cRelationHistory>::iterator rhi=relationHistory.begin(),rhiEnd=relationHistory.end(); rhi!=rhiEnd && !exitNow; rhi++)
 			if (rhi->r->second.index>=0)
       {
-				nlen+=_snwprintf(nqt+nlen,query_buffer_len-nlen,L"(%d,%d,%u,%d,%d,%d,%d),",rhi->r->second.index,sourceId,rhi->toWhere, rhi->narrativeNum,NULL,rhi->subject,rhi->flags);
+				nlen+=_snwprintf(nqt+nlen,QUERY_BUFFER_LEN-nlen,L"(%d,%d,%u,%d,%d,%d,%d),",rhi->r->second.index,sourceId,rhi->toWhere, rhi->narrativeNum,NULL,rhi->subject,rhi->flags);
 				relationHistoriesInserted++;
 				if (!checkFull(&mysql,nqt,nlen,false,NULL)) 
 					return -1;
@@ -194,7 +194,7 @@ int	Source::flushWordRelationsHistory(MYSQL &mysql)
 				lplog(LOG_ERROR,L"Missing index for word relation %d,%d:%s - %d.",rhi->r,rhi->toWhere,rhi->r->first->first.c_str(),rhi->r->second.deltaFrequency);
 		if (!checkFull(&mysql,nqt,nlen,true,NULL)) 
 			return -1;
-		_snwprintf(nqt,query_buffer_len,L"UPDATE sources SET numWordRelations=%d where id=%d", relationHistoriesInserted,sourceId);
+		_snwprintf(nqt,QUERY_BUFFER_LEN,L"UPDATE sources SET numWordRelations=%d where id=%d", relationHistoriesInserted,sourceId);
 		relationHistory.clear();
     if ((clock()-startTime)>CLOCKS_PER_SEC && logDatabaseDetails) // relationsInserted &&
       lplog(L"Inserting %d relation history took %d seconds.",relationHistoriesInserted,(clock()-startTime)/CLOCKS_PER_SEC);
@@ -249,7 +249,7 @@ int WordClass::flushWordRelations(MYSQL &mysql)
   while (minNextDelta<1000000 && !exitNow)
   {
     int startTime=clock(),relationsInserted=0,where,lastProgressPercent=-1;
-    wchar_t nqt[query_buffer_len_overflow];
+    wchar_t nqt[QUERY_BUFFER_LEN_OVERFLOW];
 		wcscpy(nqt,L"INSERT into wordRelations (fromWordId, toWordId, sourceId, lastWhere, totalCount, typeId) VALUES ");
     wchar_t dupqt[128];
     _snwprintf(dupqt,128,L" ON DUPLICATE KEY UPDATE totalCount=totalCount+%d, sourceId=VALUES(sourceId), lastWhere=VALUES(lastWhere)",minNextDelta);
@@ -271,7 +271,7 @@ int WordClass::flushWordRelations(MYSQL &mysql)
 										lplog(LOG_ERROR,L"flushWordRelations:word %s has an index of %d and a sourceId of %d!",r->first->first.c_str(),r->first->second.index,r->second.sourceId);
                 else
                 {
-									nlen+=_snwprintf(nqt+nlen,query_buffer_len-nlen,L"(%d,%d,%d,%u,%d,%d),",w->second.index,r->first->second.index,r->second.sourceId, r->second.rlastWhere, r->second.deltaFrequency,rType);
+									nlen+=_snwprintf(nqt+nlen,QUERY_BUFFER_LEN-nlen,L"(%d,%d,%d,%u,%d,%d),",w->second.index,r->first->second.index,r->second.sourceId, r->second.rlastWhere, r->second.deltaFrequency,rType);
                   r->second.deltaFrequency=0;
                   relationsInserted++;
                   overallRelationsInserted++;
@@ -325,12 +325,12 @@ int Source::readWordIndexesForWordRelationsRefresh(vector <int> &wordIds)
 		w->second.flags&=~tFI::wordIndexRead;
 		w->second.clearRelationMaps();
 	}
-  wchar_t qt[query_buffer_len_overflow];
-  int len=_snwprintf(qt,query_buffer_len,L"select id,word from words where word in ("),wordId,originalLen=len;
+  wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+  int len=_snwprintf(qt,QUERY_BUFFER_LEN,L"select id,word from words where word in ("),wordId,originalLen=len;
 	tIWMM specials[]={Words.PPN,Words.TELENUM,Words.NUM,Words.DATE,Words.TIME,Words.LOCATION};
 	for (unsigned int I=0; I<sizeof(specials)/sizeof(tIWMM); I++)
 	{
-		len+=_snwprintf(qt+len,query_buffer_len-len,L"\"%s\",",specials[I]->first.c_str());
+		len+=_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L"\"%s\",",specials[I]->first.c_str());
 		specials[I]->second.flags|=tFI::wordIndexRead;
 		specials[I]->second.clearRelationMaps();
 	}
@@ -352,7 +352,7 @@ int Source::readWordIndexesForWordRelationsRefresh(vector <int> &wordIds)
         wordIds.push_back(ME->second.index);
       else
       {
-				int lencode=_snwprintf(qt+len,query_buffer_len_overflow-len,L"\"%s\",",ME->first.c_str());
+				int lencode=_snwprintf(qt+len,QUERY_BUFFER_LEN_OVERFLOW-len,L"\"%s\",",ME->first.c_str());
 				if (lencode>=0)
 					len+=lencode;
 				else
@@ -360,7 +360,7 @@ int Source::readWordIndexesForWordRelationsRefresh(vector <int> &wordIds)
 					lplog(LOG_ERROR,L"readWordIndexesForWordRelationsRefresh:error getting word %s.",ME->first.c_str());
           qt[len]=0;
 				}
-        if (len>query_buffer_len)
+        if (len>QUERY_BUFFER_LEN)
         {
           qt[len-1]=')';
           qt[len]=0;
@@ -423,9 +423,10 @@ int Source::refreshWordRelations()
 	int startTime = clock();
 	size_t I = 0, wrRead = 0, wrAdded = 0, totalWRIDs = wordIds.size();
 	__int64 lastProgressPercent = -1, where;
-	wprintf(L"Refreshing word relations for %zu words...                       \r", wordIds.size());
+	wprintf(L"Waiting for lock on word relations for %zu words...                       \r", wordIds.size());
 	if (!myquery(&mysql, L"LOCK TABLES wordRelationsMemory READ")) return -1; 
-	wchar_t qt[query_buffer_len_overflow];
+	wprintf(L"Acquired read lock.  Refreshing word relations for %zu words...                       \r", wordIds.size());
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	/* // this 'optimization' increased time from 19 seconds to 81 seconds
 	// set all ct bits in wordRelations to false
 	if (!myquery(&mysql,L"UPDATE wordRelations set ct=false")) return -1;
@@ -433,8 +434,8 @@ int Source::refreshWordRelations()
 	while (I<totalWRIDs)
 	{
 	  int len=0;
-	  for (; I<totalWRIDs && len<query_buffer_len; I++)
-		len+=_snwprintf(qt+len,query_buffer_len-len,L"%d,",wordIds[I]);
+	  for (; I<totalWRIDs && len<QUERY_BUFFER_LEN; I++)
+		len+=_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L"%d,",wordIds[I]);
 	  if (!len) break;
 	  qt[len-1]=0; //erase last ,
 	  wstring sqt="update wordRelations set ct=true where toWordId in (" + wstring(qt) + ")";
@@ -450,8 +451,8 @@ int Source::refreshWordRelations()
 	{
 		int len = 0;
 		__int64 wrSubRead = 0;
-		for (; I < totalWRIDs && len < query_buffer_len; I++)
-			len += _snwprintf(qt + len, query_buffer_len - len, L"%d,", wordIds[I]);
+		for (; I < totalWRIDs && len < QUERY_BUFFER_LEN; I++)
+			len += _snwprintf(qt + len, QUERY_BUFFER_LEN - len, L"%d,", wordIds[I]);
 		if (!len) break;
 		qt[len - 1] = 0; //erase last ,
 		//wstring sqt="select fromWordId, toWordId, totalCount, typeId from wordRelations where fromWordId in (" + wstring(qt) + ") and ct=true";
@@ -594,7 +595,7 @@ int Source::refreshWordRelationsFromSolr(vector <testWordRelation> &testWordRela
 	size_t I = 0, wrRead = 0, wrAdded = 0, totalWRIDs = wordIds.size();
 	__int64 lastProgressPercent = -1, where;
 	wprintf(L"Refreshing word relations for %zu words...                       \r", wordIds.size());
-	wchar_t qt[query_buffer_len_overflow];
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	// read all wordRelations for words that have never had their wordRelations read
 	// do not try to update wordRelations for those words that already have read their wordRelations.
 	//   the assumption is that the deltaWordRelations from other sources will not be great enough to justify the expense.
@@ -604,7 +605,7 @@ int Source::refreshWordRelationsFromSolr(vector <testWordRelation> &testWordRela
 		wcscpy(qt, L"{ params: { q: \"(");
 		int solrQueryLength = wcslen(qt);
 		for (; I < totalWRIDs && solrQueryLength < 6000; I++) // solr 8.0 maximum header length as of 3/29/2019
-			solrQueryLength += _snwprintf(qt + solrQueryLength, query_buffer_len - solrQueryLength, L"fromWordId:%d OR ", wordIds[I]);
+			solrQueryLength += _snwprintf(qt + solrQueryLength, QUERY_BUFFER_LEN - solrQueryLength, L"fromWordId:%d OR ", wordIds[I]);
 		//erase last OR and put in typeId restriction
 		solrQueryLength -= wcslen(L" OR ");
 		wcscpy(qt + solrQueryLength, L") AND (typeId:0 OR typeId:2 OR typeId:4 OR typeId:6 OR typeId:8 OR typeId:10 OR typeId:12 OR typeId:14 OR typeId:16 OR typeId:18 OR typeId:20 OR typeId:22 OR typeId:24 OR typeId:26 OR typeId:28 OR typeId:30 OR typeId:32 OR typeId:34 OR typeId:36)\"");

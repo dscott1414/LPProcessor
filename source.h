@@ -424,10 +424,12 @@ public:
 	unsigned short maxMatch;
 	int minAvgCostAfterAssessCost;
 	int lowestAverageCost;
+
+	// used in HMM Viterbi training and testing
 	int originalPreferredViterbiForm;
 	vector <int> preferredViterbiForms; // gives form # relative to Forms, not form offset relative to this word.
 	double preferredViterbiProbability;
-	double preferredViterbiMaximumProbability;;
+	double preferredViterbiMaximumProbability;
 	int preferredViterbiPreviousTagOfHighestProbability;
 	int preferredViterbiCurrentTagOfHighestProbability;
 
@@ -603,7 +605,7 @@ public:
 	int queryWinnerForm(int form);
 	int queryWinnerForm(wstring sForm);
 	wstring patternWinnerFormString(wstring &forms);
-	wstring winnerFormString(wstring &formsString);
+	wstring winnerFormString(wstring &formsString,bool withCost=true);
 	void getWinnerForms(vector <int> &winnerForms);
 	int getNumWinners();
 	bool hasWinnerVerbForm(void);
@@ -956,8 +958,8 @@ public:
 		 if (objectClass==NAME_OBJECT_CLASS && name.first!=wNULL && name.last!=wNULL)
 		 {
  			 int flc;
-			 if ((flc=name.last->second.getLowestCost())>=0 && name.last->second.Form(flc)->verbForm && !name.last->second.isUnknown()) return 1;
-			 if (name.middle!=wNULL && (flc=name.middle->second.getLowestCost())>=0 && name.middle->second.Form(flc)->verbForm && !name.middle->second.isUnknown()) return 2;
+			 if ((flc=name.last->second.getLowestCost())>=0 && name.last->second.Form(flc)->isVerbForm && !name.last->second.isUnknown()) return 1;
+			 if (name.middle!=wNULL && (flc=name.middle->second.getLowestCost())>=0 && name.middle->second.Form(flc)->isVerbForm && !name.middle->second.isUnknown()) return 2;
 		 }
 		 return 0;
 	}
@@ -1831,9 +1833,9 @@ public:
 	vector <WordMatch> m;
 	patternElementMatchArray pema;
 	bool parseNecessary(wchar_t *path);
-	int readSourceBuffer(wstring title, wstring etext, wstring path, wstring &start, int &repeatStart);
+	int readSourceBuffer(wstring title, wstring etext, wstring path, wstring encoding, wstring &start, int &repeatStart);
 	int parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank);
-	int parse(wstring title, wstring etext, wstring path, wstring &start, int &repeatStart, unsigned int &unknownCount, bool newsBank);
+	int parse(wstring title, wstring etext, wstring path, wstring encoding, wstring &start, int &repeatStart, unsigned int &unknownCount, bool newsBank);
 	bool write(IOHANDLE file);
 	bool read(char *buffer,int &where,unsigned int total, bool &parsedOnly, bool printProgress, bool readOnlyParsed);
 	bool flush(int fd,void *buffer,int &where);
@@ -3023,9 +3025,10 @@ int wherePrepObject,
 	int insertWordRelationTypes(void);
 	bool signalBeginProcessingSource(int sourceId);
 	bool signalFinishedProcessingSource(int sourceId);
+	bool updateSourceEncoding(int readBufferType, wstring sourceEncoding, wstring etext);
 	bool updateSourceStart(wstring &start, int repeatStart, wstring &etext, __int64 actualLenInBytes);
 	bool updateSource(wstring &path,wstring &start,int repeatStart,wstring &etext,int actualLenInBytes);
-	bool getNextUnprocessedSource(int begin, int end, enum Source::sourceTypeEnum st, bool setUsed, int &id, wstring &path, wstring &start, int &repeatStart, wstring &etext, wstring &author, wstring &title);
+	bool getNextUnprocessedSource(int begin, int end, enum Source::sourceTypeEnum st, bool setUsed, int &id, wstring &path, wstring &encoding, wstring &start, int &repeatStart, wstring &etext, wstring &author, wstring &title);
 	bool anymoreUnprocessedForUnknown(enum Source::sourceTypeEnum st, int step);
 	bool getNextUnprocessedParseRequest(int &prId, wstring &pathInCache);
 	int createThesaurusTables(void);
@@ -3081,6 +3084,8 @@ int wherePrepObject,
 	const wchar_t *getOriginalWord(int I, wstring &out, bool concat, bool mostCommon = false);
 	bool analyzeEnd(wstring &path, int begin, int end, bool &multipleEnds);
 	void writeWords(wstring oPath);
+	int scanForTag(int where, int tag);
+	int printSentence(unsigned int rowsize, unsigned int begin, unsigned int end, bool containsNotMatched);
 
 private:
 	wstring primaryQuoteType,secondaryQuoteType;
@@ -3107,7 +3112,6 @@ private:
 	// printing sentences
 	//unsigned int getShortLen(int position);
 	unsigned int getMaxDisplaySize(vector <WordMatch>::iterator &im,int numPosition);
-	int printSentence(unsigned int rowsize,unsigned int begin,unsigned int end,bool containsNotMatched);
 	bool sumMaxLength(unsigned int begin,unsigned int end,unsigned int &matchedTripletSumTotal,int &matchedSentences,bool &containsUnmatchedElement);
 
 	bool isSectionHeader(unsigned int begin,unsigned int end,unsigned int &sectionEnd);
@@ -3141,7 +3145,6 @@ private:
 	int previousPrimaryQuote; // updated during both identifySpeakerGroups and resolveSpeakers.  Valid only in-between quotes.
 	int spaceRelationsIdEnd; // marks the split between the space relations discovered by identifySpeakers and relations discovered by resolveSpeakers
 	void adjustSaliencesBySubjectRole(int where,int lastBeginS1);
-	int scanForTag(int where,int tag);
 	void scanForLocation(bool check,bool &relAsObject,int &whereRelClause,int &pmWhere,int checkEnd);
 	bool assignRelativeClause(int where);
 	//bool newPhysicallyPresentPosition(int where,int beginObjectPosition,bool &physicallyEvaluated);

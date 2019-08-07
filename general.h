@@ -196,6 +196,8 @@ wstring itos(int i,wstring &tmp);
 wstring dtos(double fl,wstring &tmp);
 char *wTM(wstring inString,string &outString,int codePage=CP_UTF8);
 const wchar_t *mTW(string inString, wstring &outString);
+const wchar_t *mTW(string inString, wstring &outString,int &codePage);
+const wchar_t *mTWCodePage(string inString, wstring &outString, int codepage,int &error);
 bool copy(void *buf,wstring str,int &where,int limit);
 bool copy(void *buf,int num,int &where,int limit);
 bool copy(void *buf,short num,int &where,int limit);
@@ -228,6 +230,11 @@ bool copy(vector <wstring> &s,void *buf,int &where,int limit);
 bool copy(vector <string> &s,void *buf,int &where,int limit);
 bool copy(set <string> &s,void *buf,int &where,int limit);
 bool copy(set <wstring> &s,void *buf,int &where,int limit);
+
+void escapeSingleQuote(wstring &lobject);
+void removeSingleQuote(wstring &lobject);
+void removeExcessSpaces(wstring &lobject);
+void trim(wstring &str);
 
 // command line parameters set globally
 extern bool TSROverride,flipTOROverride,flipTNROverride,flipTMSOverride,flipTUMSOverride;

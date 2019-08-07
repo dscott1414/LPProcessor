@@ -52,8 +52,9 @@ struct {
   {NO_OWNER,L"NO_OWNER"},
   {OPEN_INFLECTION,L"OPEN_INFLECTION"},
   {CLOSE_INFLECTION,L"CLOSE_INFLECTION"},
-  {ONLY_CAPITALIZED,L"ONLY_CAPITALIZED"},
-  {-1,NULL}
+	{FEMALE_GENDER_ONLY_CAPITALIZED,L"FEMALE_GENDER_ONLY_CAPITALIZED"},
+	{MALE_GENDER_ONLY_CAPITALIZED,L"MALE_GENDER_ONLY_CAPITALIZED"},
+{-1,NULL}
 };
 
 unsigned int matchElement::getChildPattern()
@@ -1880,7 +1881,7 @@ void initializePatterns(void)
     if (patterns[p]->parentPatterns.isEmpty())
       patternsWithNoParents.set(p);
   }
-  //int startTime=clock();
+  int startTime=clock();
   wprintf(L"Evaluating tagsets...               \r");
   for (unsigned int p=0; p<patterns.size(); p++)
   {
@@ -1907,8 +1908,9 @@ void initializePatterns(void)
     patterns[p]->lplog();
 #endif
   }
-  //lplog(LOG_FATAL_ERROR,L"Processing patterns took %d ms.",(clock()-startTime));
-  //printPatternsInABNF("patterns.abnf",lastTag);
+  lplog(LOG_INFO,L"Processing patterns took %d ms.",(clock()-startTime));
+	wprintf(L"Finished tagsets...               \r");
+	//printPatternsInABNF("patterns.abnf",lastTag);
 #ifdef LOG_AGREE_PATTERN_EVALUATION
   lplog(L"AGREEMENT PATTERNS");
   for (unsigned int p=0; p<patterns.size(); p++)

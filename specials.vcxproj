@@ -118,16 +118,16 @@
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\\yajl\Release;F:\LP\tempMySQL;F:\lp\source\Debugx64</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <ExecutablePath>C:\Program Files\Java\jdk1.8.0_181\bin;F:\LP\tempMySQL;$(ExecutablePath)</ExecutablePath>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);J:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-66cb08c\src\api;F:\lp\source\tinyxml2-master</IncludePath>
-    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\\yajl\Release;F:\LP\tempMySQL;F:\lp\source\Releasex64</LibraryPath>
+    <ExecutablePath>C:\Program Files\Java\jdk1.8.0_181\bin;F:\LP\tempMySQL;C:\Program Files\Java\jdk1.8.0_181\jre\bin\server;$(ExecutablePath)</ExecutablePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);J:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-66cb08c\src\api;F:\lp\source\tinyxml2-master;C:\Program Files\Java\jdk1.8.0_181\include;C:\Program Files\Java\jdk1.8.0_181\include\win32</IncludePath>
+    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\\yajl\Release;F:\LP\tempMySQL;F:\lp\source\Releasex64;C:\Program Files\Java\jdk1.8.0_181\lib</LibraryPath>
     <CodeAnalysisRuleSet>NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
     <RunCodeAnalysis>false</RunCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseForDebugging|x64'">
-    <ExecutablePath>C:\Program Files\Java\jdk1.8.0_181\bin;F:\LP\tempMySQL;$(ExecutablePath)</ExecutablePath>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);J:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-66cb08c\src\api;F:\lp\source\tinyxml2-master</IncludePath>
-    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\\yajl\Release;F:\LP\tempMySQL;F:\lp\source\Releasex64</LibraryPath>
+    <ExecutablePath>C:\Program Files\Java\jdk1.8.0_181\bin;F:\LP\tempMySQL;C:\Program Files\Java\jdk1.8.0_181\jre\bin\server;$(ExecutablePath)</ExecutablePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);J:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-66cb08c\src\api;F:\lp\source\tinyxml2-master;C:\Program Files\Java\jdk1.8.0_181\include;C:\Program Files\Java\jdk1.8.0_181\include\win32</IncludePath>
+    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\\yajl\Release;F:\LP\tempMySQL;F:\lp\source\Releasex64;C:\Program Files\Java\jdk1.8.0_181\lib</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -181,7 +181,7 @@
       <EnablePREfast>false</EnablePREfast>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>winInet.lib;Ws2_32.lib;ole32.lib;oleaut32.lib;wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;yajl.lib;libmysql.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>winInet.lib;Ws2_32.lib;ole32.lib;oleaut32.lib;wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;yajl.lib;libmysql.lib;jvm.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
       <StackReserveSize>21097152</StackReserveSize>
@@ -198,7 +198,7 @@
       <Optimization>Disabled</Optimization>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>winInet.lib;Ws2_32.lib;ole32.lib;oleaut32.lib;wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;yajl.lib;libmysql.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>winInet.lib;Ws2_32.lib;ole32.lib;oleaut32.lib;wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;yajl.lib;libmysql.lib;jvm.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
       <StackReserveSize>21097152</StackReserveSize>
@@ -278,6 +278,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="bncc.h" />
+    <ClInclude Include="DIYDiskArray.h" />
     <ClInclude Include="general.h" />
     <ClInclude Include="getMusicBrainz.h" />
     <ClInclude Include="hmm.h" />

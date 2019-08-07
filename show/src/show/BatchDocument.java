@@ -114,7 +114,10 @@ public class BatchDocument extends DefaultStyledDocument {
 	
 	void addSurroundingWords(String searchString,String str,int surroundWords,int masterIndex, JMenu searchSourceMenu, ActionListener searchSourceListener)
 	{
+		if (searchString.isEmpty())
+			return;
 		String noBracketStr=removeBracketedItems(str.substring(Math.max(masterIndex-100,0),Math.min(masterIndex+100,str.length())));
+		int numMenuItemsAdded=0;
 		masterIndex=0;
 		while (true)
 		{
@@ -150,6 +153,9 @@ public class BatchDocument extends DefaultStyledDocument {
 			JMenuItem menuItem=new JMenuItem(menuString);
 			menuItem.addActionListener(searchSourceListener);
 			System.out.println("added listener to new search results menu item - "+menuString);
+			numMenuItemsAdded++;
+			if (numMenuItemsAdded>30)
+				break;
 			searchSourceMenu.add(menuItem);
 		}
 	}
@@ -157,6 +163,8 @@ public class BatchDocument extends DefaultStyledDocument {
 	public void addSurroundingContextAndListenerToSearchMenu(String searchString, JMenu searchSourceMenu, ActionListener searchSourceListener) {
 		System.out.println("Cleared all search menu items!");
 		searchSourceMenu.removeAll();
+		if (searchString.isEmpty())
+			return;
 		int nleft = getLength();
 		Segment text = new Segment();
 		int offs = 0;
@@ -172,7 +180,7 @@ public class BatchDocument extends DefaultStyledDocument {
 			//str=removeBracketedItems(str);
 			int masterIndex=-200;
 			int numMatches=0;
-			while (true)
+			while (true && searchSourceMenu.getItemCount()<30)
 			{
 				masterIndex=str.indexOf(searchString.toLowerCase(), masterIndex+200);
 				if (masterIndex<0)

@@ -1624,53 +1624,6 @@ int Ontology::enterCategory(string &id,string &k,string &propertyValue,string &d
 	return -3;
 }
 
-void escapeSingleQuote(wstring &lobject)
-{ LFS
-	wstring slo2;
-	for (unsigned int I=0; I<lobject.size(); I++)
-		if (lobject[I]==L'\'')
-			slo2+=L"\\'";
-		else
-			slo2+=lobject[I];
-	lobject=slo2;
-}
-
-void removeSingleQuote(wstring &lobject)
-{ LFS
-	wstring slo2;
-	for (unsigned int I=0; I<lobject.size()-1; I++)
-		if (lobject[I]!=L'\\' || lobject[I+1]!=L'\'')
-			slo2+=lobject[I];
-		else
-			I++;
-	if (lobject[lobject.size()-1]!=L'\'')
-		slo2+=lobject[lobject.size()-1];
-	lobject=slo2;
-}
-
-void removeExcessSpaces(wstring &lobject)
-{ LFS
-	wstring slo2;
-	for (unsigned int I=0; I<lobject.size(); I++)
-		if (lobject[I]!=L' ' || I==0 || lobject[I-1]!=' ')
-			slo2+=lobject[I];
-	lobject=slo2;
-}
-
-void trim(wstring &str)
-{ LFS
-	int whereSpace=0;
-	while (str[whereSpace]==L' ')
-		whereSpace++;
-	if (whereSpace>1)
-		str.erase(0,whereSpace-1);
-	whereSpace=str.length()-1;
-	while (whereSpace>=0 && str[whereSpace]==L' ')
-		whereSpace--;
-	if (whereSpace<str.length()-1)
-		str.erase(whereSpace+1);
-}
-
 // get acronym
 int Ontology::getAcronyms(wstring &object,vector <wstring> &acronyms)
 { LFS
@@ -2166,8 +2119,8 @@ bool Ontology::inRDFTypeNotFoundTable(wchar_t *object)
 		return false;
 	MYSQL_RES * result;
 	_int64 numResults = 0;
-	wchar_t qt[query_buffer_len_overflow];
-	_snwprintf(qt, query_buffer_len, L"select 1 from noRDFTypes where word = '%s'", object);
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select 1 from noRDFTypes where word = '%s'", object);
 	if (myquery(&mysql, qt, result))
 	{
 		numResults = mysql_num_rows(result);
@@ -2184,7 +2137,7 @@ bool Ontology::insertRDFTypeNotFoundTable(wchar_t *object)
 	initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
 	if (!myquery(&mysql, L"LOCK TABLES noRDFTypes WRITE"))
 		return false;
-	wchar_t qt[query_buffer_len_overflow];
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	wsprintf(qt, L"INSERT INTO noRDFTypes VALUES ('%s')", object);
 	bool success = (myquery(&mysql, qt, true) || mysql_errno(&mysql) == ER_DUP_ENTRY);
 	if (!myquery(&mysql, L"UNLOCK TABLES"))
@@ -2202,8 +2155,8 @@ bool Ontology::inNoERDFTypesDBTable(wstring newObjectName)
 		return false;
 	MYSQL_RES * result;
 	_int64 numResults = 0;
-	wchar_t qt[query_buffer_len_overflow];
-	_snwprintf(qt, query_buffer_len, L"select 1 from noERDFTypes where word = '_%s'", newPath);
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select 1 from noERDFTypes where word = '_%s'", newPath);
 	if (myquery(&mysql, qt, result))
 	{
 		numResults = mysql_num_rows(result);
@@ -2223,7 +2176,7 @@ bool Ontology::insertNoERDFTypesDBTable(wstring newObjectName)
 	convertIllegalChars(newPath);
 	if (!myquery(&mysql, L"LOCK TABLES noERDFTypes WRITE"))
 		return false;
-	wchar_t qt[query_buffer_len_overflow];
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	wsprintf(qt, L"INSERT INTO noERDFTypes VALUES ('_%s')", newPath);
 	bool success = (myquery(&mysql, qt, true) || mysql_errno(&mysql) == ER_DUP_ENTRY);
 	if (!myquery(&mysql, L"UNLOCK TABLES"))

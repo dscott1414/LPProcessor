@@ -325,7 +325,7 @@ int Source::createRelationTables(void)
 int generateBNCSources(MYSQL &mysql,wstring indexFile) // note this is slightly modified from the original
 { LFS
   int startTime=clock();
-  wchar_t qt[query_buffer_len_overflow];
+  wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
   wcscpy(qt,L"INSERT INTO sources (sourceType, path, start, repeatStart) VALUES ");
   size_t len=wcslen(qt);
   HANDLE hFile = CreateFile(indexFile.c_str(),GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
@@ -377,7 +377,7 @@ int generateBNCSources(MYSQL &mysql,wstring indexFile) // note this is slightly 
       where=(docEnd-buffer)+wcslen(L"</doc>");
     if (genre[wcslen(L"<genre>")]!='W')
       continue;
-		len+=_snwprintf(qt+len,query_buffer_len-len,L"(%d, \"%s\", \"\", 0),",Source::BNC_SOURCE_TYPE,id);
+		len+=_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L"(%d, \"%s\", \"\", 0),",Source::BNC_SOURCE_TYPE,id);
     if (!checkFull(&mysql,qt,len,false,NULL)) return -20;
   }
   if (!checkFull(&mysql,qt,len,true,NULL)) return -21;
@@ -390,14 +390,14 @@ int generateBNCSources(MYSQL &mysql,wstring indexFile) // note this is slightly 
 int generateNewsBankSources(MYSQL &mysql)
 { LFS
   int startTime=clock();
-  wchar_t qt[query_buffer_len_overflow];
+  wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
   wcscpy(qt,L"INSERT INTO sources (sourceType, path, start, repeatStart) VALUES ");
   size_t len=wcslen(qt);
   for (unsigned int I=2557; I<7057; I++)
   {
     time_t timer=I*24*3600;
     struct tm *day=gmtime(&timer);
-		len+=_snwprintf(qt+len,query_buffer_len-len,L"(%d, \"newsbank\\%d\\%I64d.txt\", \"\", 0),",Source::NEWS_BANK_SOURCE_TYPE,day->tm_year+1900,timer/(24*3600));
+		len+=_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L"(%d, \"newsbank\\%d\\%I64d.txt\", \"\", 0),",Source::NEWS_BANK_SOURCE_TYPE,day->tm_year+1900,timer/(24*3600));
     if (!checkFull(&mysql,qt,len,false,NULL)) return -1;
   }
   if (!checkFull(&mysql,qt,len,true,NULL)) return -1;
@@ -409,14 +409,14 @@ int generateNewsBankSources(MYSQL &mysql)
 int generateTestSources(MYSQL &mysql)
 { LFS
   int startTime=clock();
-  wchar_t qt[query_buffer_len_overflow];
+  wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
   wcscpy(qt,L"INSERT INTO sources (sourceType, path, start, repeatStart) VALUES ");
   size_t len=wcslen(qt);
   wchar_t *testSources[]={L"agreement",L"date-time-number",L"lappinl",L"modification",L"Nameres",L"pattern matching",L"resolution",L"time",L"timeExpressions",L"usage",
                        L"verb object",NULL};     
   for (unsigned int I=0; testSources[I]; I++)
   {
-		len+=_snwprintf(qt+len,query_buffer_len-len,L"(%d, \"tests\\\\%s.txt\", \"~~BEGIN\", 1),",Source::TEST_SOURCE_TYPE,testSources[I]);
+		len+=_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L"(%d, \"tests\\\\%s.txt\", \"~~BEGIN\", 1),",Source::TEST_SOURCE_TYPE,testSources[I]);
     if (!checkFull(&mysql,qt,len,false,NULL)) return -1;
   }
   if (!checkFull(&mysql,qt,len,true,NULL)) return -1;
@@ -427,12 +427,12 @@ int generateTestSources(MYSQL &mysql)
 
 int Source::insertWordRelationTypes(void)
 { LFS
-  wchar_t qt[query_buffer_len_overflow];
+  wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	wcscpy(qt,L"INSERT INTO wordRelationType VALUES ");
   size_t len=wcslen(qt);
   for (unsigned int I=firstRelationType; I<numRelationWOTypes; I++)
   {
-    len+=_snwprintf(qt+len,query_buffer_len-len,L"(%d, \"%s\"),",I,getRelStr(I));
+    len+=_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L"(%d, \"%s\"),",I,getRelStr(I));
     if (!checkFull(&mysql,qt,len,false,NULL)) return -1;
   }
   if (!checkFull(&mysql,qt,len,true,NULL)) return -1;
@@ -453,10 +453,10 @@ int Source::createDatabase(wchar_t *server)
     //int err=mysql_errno(&mysql);
     return -1;
   }
-  wchar_t qt[2*query_buffer_len_overflow];
-  _snwprintf(qt,query_buffer_len,L"CREATE DATABASE %s character set utf8mb4",LDBNAME);
+  wchar_t qt[2*QUERY_BUFFER_LEN_OVERFLOW];
+  _snwprintf(qt,QUERY_BUFFER_LEN,L"CREATE DATABASE %s character set utf8mb4",LDBNAME);
   if (!myquery(&mysql,qt)) return -1;
-  _snwprintf(qt,query_buffer_len,L"USE %s",LDBNAME);
+  _snwprintf(qt,QUERY_BUFFER_LEN,L"USE %s",LDBNAME);
   if (!myquery(&mysql,qt)) return -1;
   // create forms table
   if (!myquery(&mysql,L"CREATE TABLE forms ("
@@ -471,23 +471,30 @@ int Source::createDatabase(wchar_t *server)
 		L"ts TIMESTAMP)")) return -1;
   // create sources table
   if (!myquery(&mysql,L"CREATE TABLE sources "
-		L"(id int(11) unsigned NOT NULL auto_increment unique, sourceType TINYINT NOT NULL, "
+		L"(id int(11) unsigned NOT NULL auto_increment unique, "
+		L"sourceType TINYINT(4) NOT NULL, "
 		L"etext VARCHAR (10) CHARACTER SET utf8mb4,"
-		L"path VARCHAR (1024) CHARACTER SET utf8mb4 NOT NULL,"
-		L"start VARCHAR(256) CHARACTER SET utf8mb4 NOT NULL, repeatStart INT NOT NULL, "
-		L"author VARCHAR (128) CHARACTER SET utf8mb4, title VARCHAR (1024) CHARACTER SET utf8mb4, date DATETIME,"
+		L"path VARCHAR (1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,"
+		L"start VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL, "
+		L"repeatStart INT NOT NULL, "
+		L"author VARCHAR (128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin, "
+		L"title VARCHAR (1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin, "
+		L"date DATETIME,"
     L"numSentences INT, matchedSentences INT, numWords INT, numUnknown INT, numUnmatched INT, numOvermatched INT,"
     L"numQuotations INT, quotationExceptions INT, numTicks INT, numPatternMatches INT, "
 		L"sizeInBytes INT, numWordRelations INT, numMultiWordRelations INT, "
     L"processing BIT, processed BIT, "
 		L"proc2 INT, " // other processing steps
-		L"ts TIMESTAMP) DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_bin"))
+		L"ts TIMESTAMP,"
+		L"KEY `EtextIndex` (`etext`),"
+		L"KEY `nsi` (`sourceType`,`start`,`processed`)"
+		L") DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_bin"))
   {
     lplog(LOG_FATAL_ERROR,L"Failed to create sources - %S", mysql_error(&mysql));
     return -1;
   }
   int actualLen;
-  getPath(L"source\\lists\\bookSources.sql",qt,2*query_buffer_len,actualLen);
+  getPath(L"source\\lists\\bookSources.sql",qt,2*QUERY_BUFFER_LEN,actualLen);
 	qt[actualLen]=0;
   wstring source=qt;
   //mysql_real_escape_string(&mysql, qt, source.c_str(), actualLen);

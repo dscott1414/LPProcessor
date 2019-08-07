@@ -456,6 +456,7 @@
     <ClInclude Include="relationTypes.h" />
     <ClInclude Include="semanticRelations.h" />
     <ClInclude Include="source.h" />
+    <ClInclude Include="stacktrace.h" />
     <ClInclude Include="syntacticRelations.h" />
     <ClInclude Include="timeRelations.h" />
     <ClInclude Include="vcXML.h" />

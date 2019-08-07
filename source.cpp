@@ -1,4 +1,4 @@
-#include <windows.h>
+ï»¿#include <windows.h>
 #include "Winhttp.h"
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
 #include <io.h>
@@ -303,7 +303,7 @@ int WordMatch::queryWinnerForm(int form)
 	return -1;
 }
 
-wstring WordMatch::winnerFormString(wstring &formsString)
+wstring WordMatch::winnerFormString(wstring &formsString,bool withCost)
 {
 	LFS
 	formsString.clear();
@@ -311,12 +311,23 @@ wstring WordMatch::winnerFormString(wstring &formsString)
 		if (isWinner(f))
 		{
 			formsString += word->second.Form(f)->name;
-			wchar_t temp[10];
-			_itow(word->second.usageCosts[f], temp, 10);
-			formsString += L"[" + wstring(temp) + L"] ";
+			if (withCost)
+			{
+				wchar_t temp[10];
+				_itow(word->second.usageCosts[f], temp, 10);
+				formsString += L"[" + wstring(temp) + L"] ";
+			}
+			else
+				formsString += L" ";
 		}
+	if (formsString.size() > 1)
+		formsString = formsString.substr(0, formsString.length() - 1);
 	if ((flags&flagAddProperNoun) && isWinner(word->second.formsSize()))
-		formsString += L"[" + wstring(Forms[PROPER_NOUN_FORM_NUM]->name) + L"] ";
+	{
+		if (formsString.size() > 0)
+			formsString += L" ";
+		formsString += wstring(Forms[PROPER_NOUN_FORM_NUM]->name);
+	}
 	return formsString;
 }
 
@@ -500,7 +511,8 @@ bool WordMatch::read(char *buffer,int &where,int limit)
 		else
 			if ((result=Words.parseWord(NULL,sWord,word,false,nounOwner, sourceId))<0)
 			{
-				lplog(LOG_ERROR,L"Word %s cannot be added",temp.c_str());
+				string temp2;
+				lplog(LOG_ERROR,L"Word %S cannot be added",wTM(temp,temp2,65001));
 				return false;
 			}
 	}
@@ -896,9 +908,12 @@ int Source::getPEMAPosition(int position,int line)
 int Source::printSentence(unsigned int rowsize,unsigned int begin,unsigned int end,bool containsNotMatched)
 { LFS
 	wchar_t printLine[2048];
+	wchar_t bufferZone[2048];
 	unsigned int totalSize,I=begin,maxLines,startword=begin,maxPhraseMatches,linepos=0;
 	printMaxSize.reserve(end-begin);
 	for (unsigned int fi=0; fi<end-begin; fi++) printMaxSize[fi]=0;
+	bufferZone[0] = 0xFEFE;
+	bufferZone[1] = 0xCECE;
 	int printStart=begin;
 #ifndef LOG_RELATIVE_LOCATION
 	printStart=0;
@@ -1009,6 +1024,9 @@ int Source::printSentence(unsigned int rowsize,unsigned int begin,unsigned int e
 	}
 		if (containsNotMatched)
 			logstring(LOG_NOTMATCHED,L"\n");
+		if (bufferZone[0] != 0xFEFE || bufferZone[1] != 0xCECE)
+			printf("STOP! BUFFER OVERRUN!");
+
 	return 0;
 }
 
@@ -1188,10 +1206,50 @@ bool Source::parseNecessary(wchar_t *path)
 		dictionaryLastModified>cacheLastModified);
 }
 
-int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring &start, int &repeatStart)
+#define ENCODING_STRING L"Character set encoding:"
+// 0 -not set
+#define HAS_BOM 1
+#define FIND_START 2
+#define FIND_START_BUFFER_CONVERT 4
+#define QUOTE_IN_START 8
+#define FIND_START_INITIAL_FAIL 16
+#define FIND_START_INITIAL_SUCCESS 32
+#define FIND_START_SUCCESS_AFTER_CONVERT 64
+// UTF-8 // Unicode (UTF-8)
+#define SOURCE_UTF8 128 // 65001
+// Latin: Latin-1, Latin1, ISO Latin - 1, Latin 1, ISO - Latin - 1 // // ANSI Latin 1; Western European (Windows)
+#define SOURCE_1252 256  // ANSI Latin 1; Western European (Windows) // 1252
+// 8859: ISO - 8859 - 1, ISO 8859 - 1, ASCII, with some ISO - 8859 - 1 characters // ISO 8859-1 Latin 1; Western European (ISO)
+#define SOURCE_8859 512 // ISO 8859-1 Latin 1; Western European (ISO) // 28591
+#define SOURCE_ASCII 2048 // ASCII: ISO-646-US (US-ASCII), ASCII, US-ASCII  // US-ASCII (7-bit) // 20127
+#define SOURCE_UNICODE 1024
+#define ENCODING_MATCH_FAILED 4096
+bool reDecodeNecessary(wstring encodingRecordedInDocument, int &codePage)
+{
+	int encodingRID= codePage;
+	if (encodingRecordedInDocument.find(L"UTF") != wstring::npos)
+		encodingRID = 65001;
+	else if (encodingRecordedInDocument.find(L"Latin") != wstring::npos)
+		encodingRID = 1252;
+	else if (encodingRecordedInDocument.find(L"8859") != wstring::npos)
+		encodingRID = 28591;
+	else if (encodingRecordedInDocument.find(L"ASCII") != wstring::npos)
+		encodingRID = 20127;
+	if (encodingRID != codePage)
+	{
+		lplog(LOG_ERROR, L"Encoding error: %s (%d) embedded in source disagrees with decoding guess %d", encodingRecordedInDocument.c_str(), encodingRID, codePage);
+		codePage = encodingRID;
+		return true;
+	}
+	return false;
+}
+
+
+int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring encodingFromDB, wstring &start, int &repeatStart)
 {
 	LFS
 	beginClock=clock();
+	int readBufferFlags = 0;
 	//lplog(LOG_WHERE, L"TRACEOPEN %s %s", path.c_str(), __FUNCTIONW__);
 	HANDLE fd = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL| FILE_FLAG_SEQUENTIAL_SCAN, 0);
 	if (fd== INVALID_HANDLE_VALUE)
@@ -1218,46 +1276,77 @@ int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring
 	sourcePath=path;
 	bufferLen/=sizeof(bookBuffer[0]);
 	bookBuffer[bufferLen+1]=0;
-	bufferScanLocation=(bookBuffer[0]==0xFEFF) ? 1 : 0; // detect BOM
-	bool startSet = true;
-	if (start == L"**FIND**")
+	bool hasBOM=bookBuffer[0] == 0xFEFF;
+	bufferScanLocation=(hasBOM) ? 1 : 0; // detect BOM
+	if (hasBOM)
+		readBufferFlags += HAS_BOM;
+	int bl = (int)bufferLen;
+	bookBuffer = (wchar_t *)trealloc(20, bookBuffer, (bl + 10) << 1, (bl + 10) << 2);
+	bufferLen <<= 1;
+	wstring wb;
+	int codepage;
+	mTW((char *)bookBuffer, wb, codepage);
+	wstring sourceEncoding = L"NOT FOUND";
+	if (wb.length() <10)
 	{
-		wchar_t wch = bookBuffer[100];
-		bookBuffer[100] = 0;
-		bool nlfound = wcschr(bookBuffer, '\n') != NULL;
-		bookBuffer[100] = wch;
-		wstring buffer;
-		if ((bookBuffer[0] != 65279 && !iswalnum(bookBuffer[0])) || !nlfound)
+		readBufferFlags |= SOURCE_UNICODE;
+		sourceEncoding = L"UNICODE";
+		wb = bookBuffer;
+	}
+	else
+	{
+		int ew,weol;
+		if ((ew = wb.find(ENCODING_STRING))!=wstring::npos && (weol = wb.find(13, ew+ wcslen(ENCODING_STRING))) != wstring::npos)
 		{
-			string charBookBuffer = (char *)bookBuffer;
-			mTW(charBookBuffer, buffer);
+			ew += wcslen(ENCODING_STRING);
+			sourceEncoding = wb.substr(ew,weol-ew);
+			trim(sourceEncoding);
+		}
+		int error = 0,desiredCodePage=codepage;
+		if (sourceEncoding != L"NOT FOUND" && (reDecodeNecessary(sourceEncoding, desiredCodePage)) && !mTWCodePage((char *)bookBuffer, wb, desiredCodePage, error))
+		{
+			desiredCodePage = 1252; // try ASCII
+			if (mTWCodePage((char *)bookBuffer, wb, desiredCodePage, error))
+				codepage = desiredCodePage;
+			readBufferFlags |= ENCODING_MATCH_FAILED;
 		}
 		else
-			buffer = bookBuffer;
-		startSet=findStart(buffer, start, repeatStart, title);
+			codepage = desiredCodePage;
+		error = wcscpy_s(bookBuffer, bufferLen + 10, wb.c_str());
+		if (error)
+			lplog(LOG_FATAL_ERROR, L"ERROR:Unable to copy string length %d into buffer of length %I64d wchar - (%d) %d.", (int)wb.length(), bufferLen, error, GetLastError());
+		if (codepage == CP_UTF8)
+			readBufferFlags |= SOURCE_UTF8;
+		else if (codepage == 1252) // ANSI Latin 1; Western European (Windows)
+			readBufferFlags |= SOURCE_1252;
+		else if (codepage == 28591) // ISO 8859-1 Latin 1; Western European (ISO)
+			readBufferFlags |= SOURCE_8859;
+		else if (codepage == 20127) // ASCII: ISO-646-US (US-ASCII), ASCII, US-ASCII  // US-ASCII (7-bit)
+			readBufferFlags |= SOURCE_ASCII;
+	}
+	bool startSet = true;
+	if (start == L"**FIND**" || encodingFromDB!=sourceEncoding || (readBufferFlags & ENCODING_MATCH_FAILED)!=0)
+	{
+		readBufferFlags += FIND_START;
+		startSet=findStart(wb, start, repeatStart, title);
 		// write path back to DB
 		updateSourceStart(start, repeatStart, etext, bufferLen);
+		updateSourceEncoding(readBufferFlags, sourceEncoding, etext);
 	}
 	if (!startSet)
 		return -1;
 	size_t quoteEscapeFromDB = wstring::npos;
 	while ((quoteEscapeFromDB = start.find(L"\\'")) != wstring::npos)
-		start.erase(start.begin()+quoteEscapeFromDB);
+	{
+		readBufferFlags |= QUOTE_IN_START;
+		start.erase(start.begin() + quoteEscapeFromDB);
+	}
 	if (scanUntil(start.c_str(),repeatStart,false)<0)
 	{
-		if (bufferScanLocation==1) return -2;
-		int bl=(int) bufferLen;
-		bookBuffer=(wchar_t *)trealloc(20,bookBuffer,(bl+2)<<1,(bl+2)<<2);
-		wstring wb;
-		wcscpy(bookBuffer,mTW((char *)bookBuffer,wb));
-		bufferLen<<=1;
-		if (scanUntil(start.c_str(), repeatStart, true) < 0)
-		{
 			lplog(LOG_ERROR, L"ERROR:Unable to find start in %s - start=%s, repeatStart=%d.", path.c_str(), start.c_str(), repeatStart);
 			start = L"**START NOT FOUND**";
 			updateSourceStart(start, -1, etext, 0);
 			return -3;
-		}
 	}
 	if (sourceType!=PATTERN_TRANSFORM_TYPE) // patterns are included in variables which have _ in them
 		for (unsigned int I=0; I<bufferLen; I++)
@@ -1327,17 +1416,36 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 			result=0;
 			continue;
 		}
-		size_t dash=sWord.find('-');
-		size_t dash2 = sWord.find(L'—');
-		if (dash != wstring::npos && dash2 != wstring::npos)
+		size_t dash=wstring::npos;
+		int numDash = 0,offset=0;
+		for (wchar_t dq : sWord)
 		{
-			size_t firstDash = min(dash, dash2);
-			bufferScanLocation -= sWord.length() - firstDash;
-			sWord.erase(firstDash, sWord.length() - firstDash);
-			dash = dash2 = wstring::npos;
+			if (WordClass::isDash(dq))
+			{
+				numDash++;
+				// if the word contains two dashes that follow right after each other or are of different types, split word immediately.
+				if (numDash > 1 && (offset==dash+1 || dq!=sWord[dash]))
+				{
+					if (dq != sWord[dash] && offset>dash+1)
+					{
+						bufferScanLocation -= sWord.length() - offset;
+						sWord.erase(offset, sWord.length() - offset);
+						numDash = 1;
+						break;
+					}
+					else if (dash>0)
+					{
+						bufferScanLocation -= sWord.length() - dash;
+						sWord.erase(dash, sWord.length() - dash);
+						dash = wstring::npos;
+						numDash = 0;
+						break;
+					}
+				}
+				dash = offset;
+			}
+			offset++;
 		}
-		if (dash==wstring::npos)
-			dash= dash2;
 		bool firstLetterCapitalized=iswupper(sWord[0])!=0;
 		tIWMM w=(m.size()) ? m[m.size()-1].word : wNULL;
 		// this logic is copied in doQuotesOwnershipAndContractions
@@ -1430,7 +1538,11 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 			if ((result=Words.parseWord(&mysql,sWord,iWord,firstLetterCapitalized,nounOwner, sourceId))<0)
 				break;
 		result=0;
-		if (iWord->second.isUnknown()) unknownCount++;
+		if (iWord->second.isUnknown())
+		{
+			lplog(LOG_INFO, L"UNKNOWN: %s", sWord.c_str());
+			unknownCount++;
+		}
 		unsigned __int64 flags;
 		iWord->second.adjustFormsInflections(sWord,flags,firstWordInSentence,nounOwner,allCaps,firstLetterCapitalized);
 		if (allCaps && m.size() && ((m[m.size()-1].word->first==L"the" && !(m[m.size()-1].flags&WordMatch::flagAllCaps)) || iWord->second.formsSize()==0))
@@ -1539,10 +1651,10 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 	return 0;
 }
 
-int Source::parse(wstring title,wstring etext,wstring path,wstring &start,int &repeatStart,unsigned int &unknownCount,bool newsBank)
+int Source::parse(wstring title,wstring etext,wstring path,wstring encoding, wstring &start,int &repeatStart,unsigned int &unknownCount,bool newsBank)
 { LFS
 	int ret=0;
-  if ((ret=readSourceBuffer(title, etext, path, start, repeatStart))>=0)
+  if ((ret=readSourceBuffer(title, etext, path, encoding, start, repeatStart))>=0)
 	{
 		if (wcsncmp(bookBuffer,L"%PDF-",wcslen(L"%PDF-")))
 			ret=parseBuffer(path,unknownCount,newsBank);
@@ -1566,7 +1678,7 @@ bool Source::isSectionHeader(unsigned int begin,unsigned int end,unsigned int &s
 { LFS
 	if (begin>0 && m[begin-1].word!=Words.sectionWord) return false; // less than two lines before section header - reject
 	if (m[end].word!=Words.sectionWord) return false; // less than two lines after section header - reject
-	if (m[begin].word->first==primaryQuoteType || m[begin].word->first==L"“") return false; // buffer begins with " or ' - probably a quote
+	if (m[begin].word->first==primaryQuoteType || m[begin].word->first==L"â€œ") return false; // buffer begins with " or ' - probably a quote
 	if (end-begin>10) return false; // too long
 	bool abbreviation=(m[end-1].word->first==L"." && m[end-2].beginPEMAPosition>=0 && 
 			(m[end-2].pma.queryPattern(L"_ABB")!=-1 || 
@@ -1583,7 +1695,7 @@ bool Source::isSectionHeader(unsigned int begin,unsigned int end,unsigned int &s
 		wstring sWord=m[end-1].word->first;
 		if (sWord==primaryQuoteType || // buffer ends with " or ' - probably a quote
 				sWord==L":" ||              // buffer ends with : - probably the start of a list
-				sWord==L"," || sWord == L"-" || sWord == L"—" || sWord==L")" || sWord==L"!" ||
+				sWord==L"," || sWord == L"-" || sWord == L"â€”" || sWord==L")" || sWord==L"!" ||
 				sWord==L"?" || sWord==L"." || sWord==L"--") return false; // buffer ends with , -, or ) probably not a title
 	}
 	sectionEnd=end;
@@ -1693,7 +1805,8 @@ int Source::printSentences(bool updateStatistics,unsigned int unknownCount,unsig
 	unsigned int totalUnmatched=0,patternsMatched=0,patternsTried=0;
 	bool containsUnmatchedElement,printedHeader=false;
 	section=0;
-	refreshWordRelations();
+	if (refreshWordRelations() < 0)
+		return -1;
 	// these patterns exclude NOUN patterns containing other NOUN patterns
 	int memoryPerSentenceBySize[512],timePerSentenceBySize[512],sizePerSentenceBySize[512];
 	if (debugTrace.collectPerSentenceStats)
@@ -2417,7 +2530,7 @@ bool getNextParagraph(int &where,wstring &buffer,bool &eofEncountered,int &first
 					if (whereSeparator == wstring::npos)
 						whereSeparator = line.find(L'-');
 					if (whereSeparator == wstring::npos)
-						whereSeparator = line.find(L'—');
+						whereSeparator = line.find(L'â€”');
 					if (whereSeparator!=wstring::npos)
 					{
 						whereSeparator++;
@@ -3158,11 +3271,7 @@ void Source::writeWords(wstring oPath)
 		tIWMM iSave = im.word;
 		if (iSave->second.isNonCachedWord() && !iSave->second.isUnknown())
 		{
-			if (iSave->first == L"allthat" || iSave->first == L"whomso" || iSave->first == L"whenso" || iSave->first == L"thesame" || iSave->first == L"whillikins" || iSave->first == L"nither" || iSave->first == L"rty" || iSave->first == L"oneanother" || iSave->first == L"alo-ne" || iSave->first == L"something-else"
-				|| iSave->first == L"wherethrough" || iSave->first == L"whoohoo" || iSave->first == L"youall" || iSave->first == L"howdies" || iSave->first == L"howdied"
-				|| iSave->first == L"alo-ne"				|| iSave->first == L"something-else"				|| iSave->first == L"such-andsuch"				|| iSave->first == L"eachother"				|| iSave->first == L"dizen"				|| iSave->first == L"so-as"
-				|| iSave->first == L"at-that" || iSave->first == L"underogating")
-
+			if (iSave->first == L"fewer" || iSave->first == L"afore" || iSave->first == L"thyself")
 			{
 				wstring forms;
 				for (unsigned int f = 0; f < iSave->second.formsSize(); f++)

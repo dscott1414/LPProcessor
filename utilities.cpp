@@ -73,48 +73,82 @@ char *wTM(wstring inString,string &outString,int codePage)
 
 __declspec(thread) static void *mTWbuffer = NULL;
 __declspec(thread) static unsigned int mTWbufSize = 0;
-int retryWithDifferentCodepage(int codePage,string &inString,int &queryLength,int &preferredCodepage,void *buffer,unsigned int bufferSize)
+const wchar_t *mTW(string inString, wstring &outString, int &codepage)
 {
-	if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+	LFS
+	codepage = CP_UTF8;
+	int queryLength = MultiByteToWideChar(codepage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t *)mTWbuffer, 0);
+	if (!queryLength && GetLastError() == ERROR_NO_UNICODE_TRANSLATION)
 	{
-		//lplog(LOG_ERROR, L"Error in translating buffer - %s\n%S", lastErrorMsg().c_str(), inString.c_str());
-		queryLength = MultiByteToWideChar(codePage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t *)buffer, bufferSize); // bufSize/2 is # of wide chars allocated
-		if (!queryLength && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-			lplog(LOG_FATAL_ERROR, L"Final error in translating buffer - %s\n%S", lastErrorMsg().c_str(), inString.c_str());
-		preferredCodepage = 1252;
-	}
-	return GetLastError();
-}
-
-// multibyte to wide string
-const wchar_t *mTW(string inString,wstring &outString)
-{ LFS
-	int queryLength=MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t *)mTWbuffer, mTWbufSize/2 ); // bufSize/2 is # of wide chars allocated
-	int preferredCodepage = CP_UTF8;
-	if (mTWbufSize==0)
-	{
-		mTWbufSize=max(queryLength*4,10000);
-		mTWbuffer=tmalloc(mTWbufSize);
-		if (!(queryLength = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t *)mTWbuffer, mTWbufSize / 2)))
-			retryWithDifferentCodepage(1252, inString, queryLength, preferredCodepage, (wchar_t *)mTWbuffer, mTWbufSize / 2);
-	}
-	if (!queryLength)
-	{
-		retryWithDifferentCodepage(1252, inString, queryLength, preferredCodepage, (wchar_t *)mTWbuffer, mTWbufSize / 2);
-		if (!queryLength)
+		codepage = 28591; // iso-8859-1	ISO 8859-1 Latin 1; Western European (ISO)
+		queryLength = MultiByteToWideChar(codepage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t *)mTWbuffer, 0);
+		if (!queryLength && GetLastError() == ERROR_NO_UNICODE_TRANSLATION)
 		{
-			queryLength = MultiByteToWideChar(preferredCodepage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, NULL, 0);
-			retryWithDifferentCodepage(1252, inString, queryLength, preferredCodepage, NULL, 0);
-			unsigned int previousBufSize = mTWbufSize;
-			mTWbufSize = queryLength * 4; // queryLength is # of wide chars returned, bufSize is the # of bytes
-			if (!(mTWbuffer = trealloc(24, mTWbuffer, previousBufSize, mTWbufSize)))
-				lplog(LOG_FATAL_ERROR, L"Out of memory requesting %d bytes from translating buffer %S!", mTWbufSize, inString.c_str());
-			if (!MultiByteToWideChar(preferredCodepage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t *)mTWbuffer, mTWbufSize / 2))
-				lplog(LOG_FATAL_ERROR, L"Error in translating buffer: %S", inString.c_str());
+			codepage = 1252; // ANSI Latin 1; Western European (Windows)
+			queryLength = MultiByteToWideChar(codepage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t *)mTWbuffer, 0);
+			if (!queryLength && GetLastError() == ERROR_NO_UNICODE_TRANSLATION)
+			{
+				codepage = 20127; // ASCII: ISO-646-US (US-ASCII), ASCII, US-ASCII  // US-ASCII (7-bit)
+				queryLength = MultiByteToWideChar(codepage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t *)mTWbuffer, 0);
+			}
 		}
 	}
-	outString=(wchar_t *)mTWbuffer;
+	if (!queryLength)
+		lplog(LOG_FATAL_ERROR, L"Error (2) (%d) in translating buffer: %S", GetLastError(), inString.c_str());
+	unsigned int desiredBufferSizeInBytes = (queryLength + 1) << 1;
+	if (mTWbufSize < desiredBufferSizeInBytes)
+	{
+		desiredBufferSizeInBytes = max(desiredBufferSizeInBytes, 1000000); // make minimum buffer 1MB to avoid repeatedly reallocating for trivially small sizes
+		unsigned int previousBufSize = mTWbufSize;
+		mTWbufSize = max(desiredBufferSizeInBytes, mTWbufSize);
+		mTWbuffer = (previousBufSize == 0) ? tmalloc(mTWbufSize) : trealloc(24, mTWbuffer, previousBufSize, mTWbufSize);
+		if (!mTWbuffer)
+			lplog(LOG_FATAL_ERROR, L"Out of memory requesting %d bytes from translating buffer %S!", mTWbufSize, inString.c_str());
+	}
+	if (!(queryLength = MultiByteToWideChar(codepage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t *)mTWbuffer, mTWbufSize / 2)))
+		lplog(LOG_FATAL_ERROR, L"Error (3) (%d) in translating buffer: %S", GetLastError(), inString.c_str());
+	outString = (wchar_t *)mTWbuffer;
 	return outString.c_str();
+}
+
+const wchar_t *mTWCodePage(string inString, wstring &outString, int codepage,int &error)
+{
+	LFS
+	int queryLength = MultiByteToWideChar(codepage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t *)mTWbuffer, 0);
+	if (!queryLength)
+	{
+		lplog(LOG_ERROR, L"Error (mTWCodePage) (%d) in translating buffer: %S", GetLastError(), inString.c_str());
+		error = -1;
+		return 0;
+	}
+	unsigned int desiredBufferSizeInBytes = (queryLength + 1) << 1;
+	if (mTWbufSize < desiredBufferSizeInBytes)
+	{
+		desiredBufferSizeInBytes = max(desiredBufferSizeInBytes, 1000000); // make minimum buffer 1MB to avoid repeatedly reallocating for trivially small sizes
+		unsigned int previousBufSize = mTWbufSize;
+		mTWbufSize = max(desiredBufferSizeInBytes, mTWbufSize);
+		mTWbuffer = (previousBufSize == 0) ? tmalloc(mTWbufSize) : trealloc(24, mTWbuffer, previousBufSize, mTWbufSize);
+		if (!mTWbuffer)
+		{
+			lplog(LOG_ERROR, L"Out of memory requesting %d bytes from translating buffer %S!", mTWbufSize, inString.c_str());
+			error = -2;
+			return 0;
+		}
+	}
+	if (!(queryLength = MultiByteToWideChar(codepage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t *)mTWbuffer, mTWbufSize / 2)))
+	{
+		lplog(LOG_ERROR, L"Error (mTWCodePage 2) (%d) in translating buffer: %S", GetLastError(), inString.c_str());
+		error = -3;
+		return 0;
+	}
+	outString = (wchar_t *)mTWbuffer;
+	return outString.c_str();
+}
+
+const wchar_t *mTW(string inString, wstring &outString)
+{
+	int codepage;
+	return mTW(inString, outString, codepage);
 }
 
 bool copy(void *buf,wstring str,int &where,int limit)
@@ -597,3 +631,53 @@ void checkHeap(wchar_t *desc)
 		printf("ERROR - %ls memory is bad", desc);
 }
 
+void escapeSingleQuote(wstring &lobject)
+{
+	LFS
+		wstring slo2;
+	for (unsigned int I = 0; I < lobject.size(); I++)
+		if (lobject[I] == L'\'')
+			slo2 += L"\\'";
+		else
+			slo2 += lobject[I];
+	lobject = slo2;
+}
+
+void removeSingleQuote(wstring &lobject)
+{
+	LFS
+		wstring slo2;
+	for (unsigned int I = 0; I < lobject.size() - 1; I++)
+		if (lobject[I] != L'\\' || lobject[I + 1] != L'\'')
+			slo2 += lobject[I];
+		else
+			I++;
+	if (lobject[lobject.size() - 1] != L'\'')
+		slo2 += lobject[lobject.size() - 1];
+	lobject = slo2;
+}
+
+void removeExcessSpaces(wstring &lobject)
+{
+	LFS
+		wstring slo2;
+	for (unsigned int I = 0; I < lobject.size(); I++)
+		if (lobject[I] != L' ' || I == 0 || lobject[I - 1] != ' ')
+			slo2 += lobject[I];
+	lobject = slo2;
+}
+
+void trim(wstring &str)
+{
+	LFS
+		int whereSpace = 0;
+	while (str[whereSpace] == L' ')
+		whereSpace++;
+	if (whereSpace > 0)
+		str.erase(0, whereSpace);
+	whereSpace = str.length() - 1;
+	while (whereSpace >= 0 && str[whereSpace] == L' ')
+		whereSpace--;
+	if (whereSpace < str.length() - 1)
+		str.erase(whereSpace + 1);
+}

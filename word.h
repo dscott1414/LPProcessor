@@ -185,7 +185,7 @@ public:
 	bool isIgnore;
 	bool isCommonForm;
 	bool isNonCachedForm;
-	bool verbForm;
+	bool isVerbForm;
   // only honorific.  So if this word is capitalized, it will not be recogized as a Proper_Noun at all.
   bool blockProperNounRecognition;
 	bool formCheck; // used only when checking dictionary entries
@@ -199,7 +199,7 @@ public:
     if (!copy(buffer,(short)properNounSubClass,where,limit)) return false;
     if (!copy(buffer,(short)isTopLevel,where,limit)) return false;
     if (!copy(buffer,(short)isIgnore,where,limit)) return false;
-    if (!copy(buffer,(short)verbForm,where,limit)) return false;
+    if (!copy(buffer,(short)isVerbForm,where,limit)) return false;
     if (!copy(buffer,(short)blockProperNounRecognition,where,limit)) return false;
     if (!copy(buffer,(short)formCheck,where,limit)) return false;
 		return true;
@@ -347,7 +347,8 @@ public:
     LAST_USAGE_PATTERN,
     MAX_USAGE_PATTERNS=16
   };
-  static const int patternFormNumOffset=32750;
+	wstring patternString(int p);
+	static const int patternFormNumOffset=32750;
   static const int HIGHEST_COST_OF_INCORRECT_NOUN_DET_USAGE=4;
   static const int HIGHEST_COST_OF_INCORRECT_VERB_USAGE=4;
   static const int HIGHEST_COST_OF_INCORRECT_VERB_AFTER_VERB_USAGE=6;
@@ -407,6 +408,14 @@ public:
   tFI(int iForm,int iInflectionFlags,int iFlags,int iTimeFlags,int derivationRules,tIWMM iMainEntry,int sourceId);
   tFI(char *buffer,int &where,int limit,wstring &ME,int sourceId);
   bool updateFromDisk(char *buffer,int &where,int limit,wstring &ME);
+	void computeDBUsagePatternsToUsagePattern(unordered_map <int, int> &dbUsagePatterns);
+	bool computeDifference(tFI &dbWordInfo, unordered_map <int, int> &dbUsagePatterns, unordered_map <int, int> &addUsagePatterns, int dbMainEntryWordId, bool &changedWord, bool &changedForms);
+	bool updateWordInDatabase(wstring sWord, MYSQL &mysql);
+	bool insertWordFormsInDatabase(MYSQL &mysql, unordered_map <int, int> &addUsagePatterns);
+	bool deleteWordFormsInDatabase(MYSQL &mysql, unordered_map <int, int> &deleteUsagePatterns);
+	bool writeNewWordToDatabase(wstring &sWord, MYSQL &mysql);
+	bool flushWordToDatabase(wstring sWord, MYSQL &mysql, bool writeDB, int &numChangedWords, int &numChangedForms, int &numNewWords);
+	bool retrieveWordFromDatabase(wstring &sWord, MYSQL &mysql, tFI &dbWordInfo, unordered_map <int, int> &dbUsagePatterns,int &dbMainEntryWordId);
 	bool write(void *buffer,int &where,int limit);
   // MYSQL database
   tFI(unsigned int *forms,unsigned int iCount,int iInflectionFlags,int iFlags,int iTimeFlags,int mainEntryWordId,int iDerivationRules,int sourceId,int formNum,wstring &word);
@@ -520,7 +529,7 @@ public:
 	int readFormsCache(char *buffer,int bufferlen,int &numReadForms);
   int readWords(wstring oPath,int sourceId, bool disqualifyWords);
 	int writeFormsCache(int fd);
-  bool removeFlag(wstring sWord,int flag);				
+  bool removeInflectionFlag(wstring sWord,int flag);				
 	static bool isDash(wchar_t ch);
 	static bool isSingleQuote(wchar_t ch);
 	static bool isDoubleQuote(wchar_t ch);
@@ -564,6 +573,7 @@ public:
   int predefineWords(Inflections words[],wstring form,wstring shortForm,wstring inflectionsClass=L"",int flags=0,bool properNounSubClass=false);
   int predefineWords(wchar_t *words[],wstring form,wstring shortForm,int flags=0,bool properNounSubClass=false);
   static tIWMM predefineWord(const wchar_t *word,int flags=0);
+	void extendedParseHolidays();
 	int predefineHolidays();
   void testWordCacheFileRoutines(void);
 	static int processTime(wstring sWord, char &hour, char &minute);
@@ -590,6 +600,7 @@ private:
   typedef pair <wstring, tFI> tWFIMap;
   static int lastWordWrittenClock;
 	int readWordFormsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,int maxWordId,wchar_t *qt,int *words,int *counts,int &numWordForms,unsigned int * &wordForms, bool printProgress, bool disqualifyWords);
+	int refreshWordsFromSource(MYSQL &mysql, int sourceId, int *words, int *counts, unsigned int * &wordForms, int &numWordsInserted, int &numWordsModified, bool printProgress);
   int readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics,int &numWordsInserted,int &numWordsModified, bool printProgress, bool disqualifyWords);
   int lastModifiedTime;
   int minimumLastWordWrittenClockDiff;
@@ -620,7 +631,7 @@ private:
   static int getForms(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId, bool logEverything);
   tIWMM addCopy(wstring sWord,tIWMM iWord,bool &added);
   static tIWMM query(wstring sWord,int form,int inflection,int &offset);
-  bool addFlag(wstring sWord,int flag);
+  bool addInflectionFlag(wstring sWord,int flag);
   static tIWMM hasFormInflection(tIWMM iWord,wstring sForm,int inflection);
   static bool handleExtendedParseWords(wchar_t *word);
   int continueParse(wchar_t *buffer,__int64 begincp,__int64 bufferLen,vector<wchar_t *> &multiWords);

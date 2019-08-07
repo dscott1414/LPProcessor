@@ -1085,7 +1085,7 @@ bool existsInDictionaryDotCom(MYSQL *mysql,wstring word, bool &networkAccessed)
 	path[0] = '_';
 	wcscpy(path+1, word.c_str());
 	convertIllegalChars(path + 1);
-	_snwprintf(qt, query_buffer_len, L"select 1 from notwords where word = '%s'", path);
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select 1 from notwords where word = '%s'", path);
 	if (!myquery(mysql, L"LOCK TABLES notwords READ"))
 		return false;
 	if (myquery(mysql, qt, result))

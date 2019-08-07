@@ -20,6 +20,7 @@
 #include <Dbghelp.h>
 #include "mysqldb.h"
 #include "internet.h"
+#include "stacktrace.h"
 
 // needed for _STLP_DEBUG - these must be set to a legal, unreachable yet never changing value
 unordered_map <wstring,tFI> static_wordMap;
@@ -80,6 +81,17 @@ void createMinidump(struct _EXCEPTION_POINTERS* apExceptionInfo)
 LONG WINAPI unhandled_handler(struct _EXCEPTION_POINTERS* apExceptionInfo)
 {
 	createMinidump(apExceptionInfo);
+	std::stringstream buff;
+	buff << ":  General Software Fault! \n";
+	buff << "\n";
+
+	std::vector<dbg::StackFrame> stack = dbg::stack_trace();
+	buff << "Callstack: \n";
+	for (unsigned int i = 0; i < stack.size(); i++)
+	{
+		buff << "0x" << std::hex << stack[i].address << ": " << stack[i].name << "(" << stack[i].line << ") in " << stack[i].module << "\n";
+	}
+	::lplog(LOG_FATAL_ERROR, L"%S", buff.str().c_str());
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
@@ -832,6 +844,8 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 	int numProcesses = 0, errorCode = 0,numSourcesProcessedOriginally =0;
 	__int64 wordsProcessedOriginally = 0, sentencesProcessedOriginally = 0;
 	getNumSourcesProcessed(source, numSourcesProcessedOriginally, wordsProcessedOriginally, sentencesProcessedOriginally);
+	int numSourcesLeft = source.getNumSources(st, true);
+	maxProcesses = min(maxProcesses, numSourcesLeft);
 	wstring tmpstr;
 	while (!errorCode)
 	{
@@ -839,6 +853,7 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 		if (numProcesses == maxProcesses)
 		{
 			nextProcessIndex = WaitForMultipleObjectsEx(numProcesses, handles, false, 1000 * 60 * 5, false);
+			numSourcesLeft = 0;
 			int numSourcesProcessedNow = 0;
 			__int64 wordsProcessedNow = 0, sentencesProcessedNow = 0;
 			getNumSourcesProcessed(source, numSourcesProcessedNow, wordsProcessedNow, sentencesProcessedNow);
@@ -869,16 +884,20 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 				CloseHandle(handles[nextProcessIndex]);
 			}
 		}
-		wstring parseRequestPath;
 		int id, repeatStart, prId;
-		wstring start, path, etext, author, title, pathInCache;
-		bool result;
-		switch (processKind)
+		wstring start, path, encoding, etext, author, title, pathInCache;
+		bool result=true;
+		if (processKind == 1 && numSourcesLeft > 0)
+			numSourcesLeft--;
+		else
 		{
-		case 0:result = source.getNextUnprocessedParseRequest(prId, pathInCache); break;
-		case 1:result = source.getNextUnprocessedSource(beginSource, endSource, st, false, id, path, start, repeatStart, etext, author, title); break;
-		case 2:result = source.anymoreUnprocessedForUnknown(st, step); break;
-		default:result = 0; break;
+			switch (processKind)
+			{
+			case 0:result = source.getNextUnprocessedParseRequest(prId, pathInCache); break;
+			case 1:result = source.getNextUnprocessedSource(beginSource, endSource, st, false, id, path, encoding, start, repeatStart, etext, author, title); break;
+			case 2:result = source.anymoreUnprocessedForUnknown(st, step); break;
+			default:result = false; break;
+			}
 		}
 		if (!result)
 		{
@@ -1176,6 +1195,7 @@ int wmain(int argc,wchar_t *argv[])
 	if (multiProcess==0)
 		initializePatterns();
 	unordered_map <int, vector < vector <tTagLocation> > > emptyMap;
+	source.pemaMapToTagSetsByPemaByTagSet.reserve(desiredTagSets.size());
 	for (unsigned int ts=0; ts<desiredTagSets.size(); ts++)
 		source.pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
 	if (st == Source::sourceTypeEnum::PATTERN_TRANSFORM_TYPE)
@@ -1198,24 +1218,30 @@ int wmain(int argc,wchar_t *argv[])
 	int globalTotalUnmatched=0,globalOverMatchedPositionsTotal=0,numWords=0;
 	if (iswdigit(argv[sourceArgs+1][0]))
 	{
-		int numSources,beginSource=_wtoi(argv[sourceArgs + 1]),endSource;
-		numSources = source.getNumSources(st,false);
+		int beginSource=_wtoi(argv[sourceArgs + 1]),endSource;
 		endSource = (argv[sourceArgs + 2][0] == '+') ? -1 : ((iswdigit(argv[sourceArgs + 2][0])) ? _wtoi(argv[sourceArgs + 2]) : beginSource + 1);
-		if (retry) source.resetSource(beginSource,endSource);
+		if (retry)
+		{
+			wprintf(L"Resetting sources...               \r");
+			source.resetSource(beginSource, endSource);
+		}
 		if (multiProcess>0)
 		{
 			HWND consoleWindowHandle = GetConsoleWindow();
-			SetWindowPos(consoleWindowHandle, HWND_NOTOPMOST, 900, 0, 500, 200, SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+			SetWindowPos(consoleWindowHandle, HWND_NOTOPMOST, 900, 0, 700, 180, SWP_NOACTIVATE | SWP_NOOWNERZORDER);
 			startProcesses(source, 1,0,beginSource, endSource, st, multiProcess, numSourcesPerProcess, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite,parseOnly);
 			return 0;
 		}
+		wprintf(L"Getting number of sources to process...               \r");
+		int numSources = source.getNumSources(st, false);
 		int numSourcesProcessed=0,pid= GetCurrentProcessId();
 		while (!exitNow && !exitEventually && (numSourceLimit==0 || numSourcesProcessed++<numSourceLimit))
 		{
 			int sourceId, repeatStart;
-			wstring path, etext, author, title, start;
+			wstring path, encoding, etext, author, title, start;
+			wprintf(L"Getting number of sources left...               \r");
 			int numSourcesLeft = source.getNumSources(st,true);
-			if (!source.getNextUnprocessedSource(beginSource, endSource, st, true, sourceId, path, start, repeatStart, etext, author, title))
+			if (!source.getNextUnprocessedSource(beginSource, endSource, st, true, sourceId, path, encoding, start, repeatStart, etext, author, title))
 				break;
 			path.insert(0, L"\\");
 			path=path.insert(0,TEXTDIR);
@@ -1243,7 +1269,7 @@ int wmain(int argc,wchar_t *argv[])
 				case Source::WIKIPEDIA_SOURCE_TYPE:
 				case Source::INTERACTIVE_SOURCE_TYPE:
 				case Source::WEB_SEARCH_SOURCE_TYPE:
-					if ((ret=source.parse(title,etext,path,start,repeatStart,unknownCount,false))<0) 
+					if ((ret=source.parse(title,etext,path,encoding,start,repeatStart,unknownCount,false))<0) 
 					{
 						lplog(LOG_ERROR,L"ERROR:Unable to parse %s - %d (start=%s, repeatStart=%d).",path.c_str(),ret,start.c_str(),repeatStart);
 						continue;
@@ -1251,7 +1277,7 @@ int wmain(int argc,wchar_t *argv[])
 					quotationExceptions=source.doQuotesOwnershipAndContractions(totalQuotations,false);
 					break;
 				case Source::NEWS_BANK_SOURCE_TYPE:
-					if (source.parse(title, etext,path,start,repeatStart,unknownCount,true)<0) continue;
+					if (source.parse(title, etext,path, encoding, start,repeatStart,unknownCount,true)<0) continue;
 					quotationExceptions=source.doQuotesOwnershipAndContractions(totalQuotations,true);
 					break;
 				case Source::BNC_SOURCE_TYPE:
@@ -1273,7 +1299,10 @@ int wmain(int argc,wchar_t *argv[])
 				std::vector<WordMatch>(source.m).swap(source.m);
 				//int cap2=source.m.capacity();
 				source.sourceId = sourceId;
-				globalTotalUnmatched+=source.printSentences(true,unknownCount,quotationExceptions,totalQuotations,globalOverMatchedPositionsTotal);
+				int totalUnmatched = source.printSentences(true, unknownCount, quotationExceptions, totalQuotations, globalOverMatchedPositionsTotal);
+				if (totalUnmatched < 0)
+					lplog(LOG_FATAL_ERROR, L"Cannot print sentences.");
+				globalTotalUnmatched+=totalUnmatched;
 				lplog();
 				if (sourceWrite)
 				{
@@ -1314,7 +1343,8 @@ int wmain(int argc,wchar_t *argv[])
 			//bool isNoun=false,isVerb=true,isAdjective=false,isAdverb=false;
 			//analyzeSense(false,L"draft",proposedSubstitute,numIrregular,inflectionFlags,isNoun,isVerb,isAdjective,isAdverb);
 			source.identifyObjects();
-			source.refreshWordRelations();
+			if (source.refreshWordRelations() < 0)
+				lplog(LOG_FATAL_ERROR, L"Failed to refresh word relations.");
 			vector <int> secondaryQuotesResolutions;
 			source.analyzeWordSenses();
 			source.narrativeIsQuoted = st != Source::GUTENBERG_SOURCE_TYPE;
@@ -1369,14 +1399,14 @@ int wmain(int argc,wchar_t *argv[])
 	else
 	{
 		wstring path=L"tests\\"+ std::wstring(argv[sourceArgs + 1]) +L".txt";
-		wstring start=L"~~BEGIN",title,etext;
+		wstring start=L"~~BEGIN",title,etext,encoding=L"UTF8";
 		if (argv[sourceArgs + 2][0] == L'~')
 			start = argv[sourceArgs + 2];
 		int repeatStart=1;
 		bool parsedOnly;
 		if (!source.readSource(path,false,parsedOnly,true,true)) 
 		{
-			if (source.parse(title,etext,path,start,repeatStart,unknownCount,false)<0)
+			if (source.parse(title,etext,path,encoding, start,repeatStart,unknownCount,false)<0)
 				exit(0);
 			lplog();
 			source.write(path,false);

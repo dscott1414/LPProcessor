@@ -231,8 +231,8 @@ bool Stemmer::isWordDBUnknown(MYSQL mysql,wstring word)
 	if (iWord != Words.end() && iWord->second.query(UNDEFINED_FORM_NUM) >= 0)
 		return true;
 	if (!myquery(&mysql, L"LOCK TABLES words w READ,wordForms wf READ")) return true;
-	wchar_t qt[query_buffer_len_overflow];
-	_snwprintf(qt, query_buffer_len, L"select COUNT(*) from words w,wordForms wf where w.id=wf.wordId and word=\"%s\" and wf.formId=%d", word.c_str(), UNDEFINED_FORM_NUM+1); // always add one when referring to DB formId
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select COUNT(*) from words w,wordForms wf where w.id=wf.wordId and word=\"%s\" and wf.formId=%d", word.c_str(), UNDEFINED_FORM_NUM+1); // always add one when referring to DB formId
 	MYSQL_RES *result = NULL;
 	MYSQL_ROW sqlrow;
 	if (!myquery(&mysql, qt, result))

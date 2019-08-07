@@ -343,7 +343,7 @@ void Source::insertPrepPhrase(vector <cSpaceRelation>::iterator sri,int where,in
 		testPFlag(m[*rp].getRelObject(),wherePrep,prepBindingFlags,8+bp,nearestObject);
 	}
 	if (wherePrep>=0)
-		pnlen+=_snwprintf(pnqt+pnlen,query_buffer_len-pnlen,L"(%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d),",
+		pnlen+=_snwprintf(pnqt+pnlen,QUERY_BUFFER_LEN-pnlen,L"(%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d),",
 			sourceId, // 1
 			where, // 2
 			getVerbIndex(nearestVerb), // 3
@@ -371,7 +371,7 @@ void Source::insertPrepPhrase(vector <cSpaceRelation>::iterator sri,int where,in
 		po=m[wherePrepObject].getObject();
 		prepObjectSubType=(po>=0) ? objects[po].getSubType() : -1;
 		if (prepObjectSubType<0 && po>=0 && objects[po].isPossibleSubType(false)) prepObjectSubType=UNKNOWN_PLACE_SUBTYPE;
-		pnlen+=_snwprintf(pnqt+pnlen,query_buffer_len-pnlen,L"(%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d),",
+		pnlen+=_snwprintf(pnqt+pnlen,QUERY_BUFFER_LEN-pnlen,L"(%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d),",
 			sourceId, // 1
 			where, // 2
 			getVerbIndex(nearestVerb), // 3
@@ -555,7 +555,7 @@ int Source::flushMultiWordRelations(set <int> &mwObjects)
 { LFS
 	if (!myquery(&mysql,L"LOCK TABLES multiWordRelations WRITE, prepPhraseMultiWordRelations WRITE")) return -1;
   int startTime=clock(),multiWordRelationsInserted=0,where,lastProgressPercent=-1;
-  wchar_t nqt[query_buffer_len_overflow],pnqt[query_buffer_len_overflow];
+  wchar_t nqt[QUERY_BUFFER_LEN_OVERFLOW],pnqt[QUERY_BUFFER_LEN_OVERFLOW];
 	wcscpy(nqt,L"INSERT into multiWordRelations (sourceId,w,sentenceNum,narrativeNum,speaker,audience,referencingEntityLocal,referencingEntityMatched, referencingVerb, "
 		L"subjectAdjectiveMatchedOwner, subjectAdjective, subjectAdjective2, subjectLocal, subjectMatched, verb, adverb, "
 		L"objectAdjectiveMatchedOwner, objectAdjective, objectAdjective2, objectAdjective3, objectLocal, objectMatched, "
@@ -604,7 +604,7 @@ int Source::flushMultiWordRelations(set <int> &mwObjects)
 		{
 			for (int wo=sri->whereObject; true; wo=m[wo].nextCompoundPartObject)
 			{
-				nlen+=_snwprintf(nqt+nlen,query_buffer_len-nlen,L"(%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%I64d),",
+				nlen+=_snwprintf(nqt+nlen,QUERY_BUFFER_LEN-nlen,L"(%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%I64d),",
 					sourceId, // 1
 					sri->where, // 2
 					s, // 3

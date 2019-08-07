@@ -1295,7 +1295,7 @@ int Source::processPath(const wchar_t *path,Source *&source,Source::sourceTypeEn
 				int globalOverMatchedPositionsTotal=0;
 				string cPath;
 				wTM(path,cPath);
-				source->parse(L"",L"",wpath, start, repeatStart,unknownCount,false);
+				source->parse(L"",L"",wpath, L"", start, repeatStart,unknownCount,false);
 				source->doQuotesOwnershipAndContractions(totalQuotations,false);
 				unlockTables();
 				if (source->m.empty()) 

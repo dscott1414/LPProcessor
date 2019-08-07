@@ -130,7 +130,7 @@ FormClass::FormClass(int indexIn,wstring nameIn,wstring shortNameIn,wstring infl
   properNounSubClass=properNounSubClassIn;
   isTopLevel=isTopLevelIn;
 	isIgnore=isIgnoreIn;
-	verbForm=verbFormIn;
+	isVerbForm=verbFormIn;
   blockProperNounRecognition=blockProperNounRecognitionIn;
 	formCheck=formCheckIn;
 	isCommonForm=false;
@@ -280,7 +280,317 @@ tFI::tFI(char *buffer,int &where,int limit,wstring &ME,int iSourceId)
   tmpMainEntryWordId=-1;
   changedSinceLastWordRelationFlush=false;
   sourceId=iSourceId;
+	numProperNounUsageAsAdjective = 0;
   //preferVerbPresentParticiple();
+}
+
+bool tFI::retrieveWordFromDatabase(wstring &sWord, MYSQL &mysql, tFI &dbWordInfo, unordered_map <int, int> &dbUsagePatterns,int &dbMainEntryWordId)
+{
+	MYSQL_RES * result = NULL;
+	if (!myquery(&mysql, L"LOCK TABLES words w READ, wordforms wf READ, words READ")) return false;
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select w.inflectionFlags,w.flags,w.timeFlags,IF( EXISTS(SELECT id FROM words WHERE id = w.mainEntryWordId), mainEntryWordId, null) mainEntryWordId,w.derivationRules,w.sourceId,wf.formId,wf.count from words w,wordforms wf where wf.wordId=w.id and word = '%s'", sWord.c_str());
+	MYSQL_ROW sqlrow = NULL;
+	dbWordInfo.inflectionFlags=-1;
+	if (myquery(&mysql, qt, result))
+	{
+		while (sqlrow = mysql_fetch_row(result))
+		{
+			if (dbWordInfo.inflectionFlags == -1)
+			{
+				dbWordInfo.inflectionFlags = atoi(sqlrow[0]);
+				dbWordInfo.flags = atoi(sqlrow[1]);
+				dbWordInfo.timeFlags = atoi(sqlrow[2]);
+				dbMainEntryWordId = (sqlrow[3]) ? atoi(sqlrow[3]) : -1;
+				dbWordInfo.derivationRules = atoi(sqlrow[4]);
+				dbWordInfo.sourceId = (sqlrow[5]) ? atoi(sqlrow[5]) : -1;
+			}
+			int dbFormId = atoi(sqlrow[6]);
+			int dbCount = atoi(sqlrow[7]);
+			dbUsagePatterns[dbFormId] = dbCount;
+		}
+	}
+	mysql_free_result(result);
+	myquery(&mysql, L"UNLOCK TABLES");
+	return dbWordInfo.inflectionFlags != -1;
+}
+
+int mTD(int p)
+{
+	return p + tFI::patternFormNumOffset - tFI::TRANSFER_COUNT;
+}
+
+// copies the same logic as transferDBUsagePatternsToUsagePattern
+// instead of transferring some flat array read rfom the database into an internal usagePatterns,
+// this transforms the counts in a map parameter.
+// transferDBUsagePatternsToUsagePattern(128, UPDB, 0, iCount);
+// transferDBUsagePatternsToUsagePattern(64, UPDB, SINGULAR_NOUN_HAS_DETERMINER, 2);
+// transferDBUsagePatternsToUsagePattern(64, UPDB, VERB_HAS_0_OBJECTS, 3);
+// usagePatterns[LOWER_CASE_USAGE_PATTERN] = max(127, UPDB[LOWER_CASE_USAGE_PATTERN]);
+// usagePatterns[PROPER_NOUN_USAGE_PATTERN] = max(127, UPDB[PROPER_NOUN_USAGE_PATTERN]);
+void tFI::computeDBUsagePatternsToUsagePattern(unordered_map <int, int> &dbUsagePatterns)
+{
+	LFS
+	int highest = -1, highestPatternCount=128;
+	for (auto const&[pattern, dbCount] : dbUsagePatterns)
+		if (pattern< patternFormNumOffset)
+			highest = max(highest, (signed)dbCount);
+	if (highest >= highestPatternCount)
+		// 600 8 0 -> highest=600   128  1 0
+		for (auto &dbup: dbUsagePatterns)
+			if (dbup.first < patternFormNumOffset)
+				dbup.second = (highestPatternCount*((unsigned int)dbup.second) / highest);
+
+	highestPatternCount = 64;
+	if (dbUsagePatterns.find(mTD(SINGULAR_NOUN_HAS_DETERMINER)) != dbUsagePatterns.end())
+	{
+		highest = max(dbUsagePatterns[mTD(SINGULAR_NOUN_HAS_DETERMINER)], dbUsagePatterns[mTD(SINGULAR_NOUN_HAS_NO_DETERMINER)]);
+		if (highest >= highestPatternCount)
+		{
+			dbUsagePatterns[mTD(SINGULAR_NOUN_HAS_DETERMINER)] = (highestPatternCount*((unsigned int)dbUsagePatterns[mTD(SINGULAR_NOUN_HAS_DETERMINER)]) / highest);
+			dbUsagePatterns[mTD(SINGULAR_NOUN_HAS_NO_DETERMINER)] = (highestPatternCount*((unsigned int)dbUsagePatterns[mTD(SINGULAR_NOUN_HAS_NO_DETERMINER)]) / highest);
+		}
+	}
+	if (dbUsagePatterns.find(mTD(VERB_HAS_0_OBJECTS)) != dbUsagePatterns.end())
+	{
+		highest = max(dbUsagePatterns[mTD(VERB_HAS_0_OBJECTS)], dbUsagePatterns[mTD(VERB_HAS_1_OBJECTS)]);
+		highest = max(highest, dbUsagePatterns[mTD(VERB_HAS_2_OBJECTS)]);
+		if (highest >= highestPatternCount)
+		{
+			dbUsagePatterns[mTD(VERB_HAS_0_OBJECTS)] = (highestPatternCount*((unsigned int)dbUsagePatterns[mTD(VERB_HAS_0_OBJECTS)]) / highest);
+			dbUsagePatterns[mTD(VERB_HAS_1_OBJECTS)] = (highestPatternCount*((unsigned int)dbUsagePatterns[mTD(VERB_HAS_1_OBJECTS)]) / highest);
+			dbUsagePatterns[mTD(VERB_HAS_2_OBJECTS)] = (highestPatternCount*((unsigned int)dbUsagePatterns[mTD(VERB_HAS_2_OBJECTS)]) / highest);
+		}
+	}
+	// these two fields are set to 0 for each word (because the values should be kept for each source), so we must copy that logic here.
+	//if (dbUsagePatterns.find(mTD(LOWER_CASE_USAGE_PATTERN)) != dbUsagePatterns.end() && dbUsagePatterns[mTD(LOWER_CASE_USAGE_PATTERN)] > 127)
+	//	dbUsagePatterns[mTD(LOWER_CASE_USAGE_PATTERN)] = 127;
+	//if (dbUsagePatterns.find(mTD(PROPER_NOUN_USAGE_PATTERN)) != dbUsagePatterns.end() && dbUsagePatterns[mTD(PROPER_NOUN_USAGE_PATTERN)] > 127)
+	//	dbUsagePatterns[mTD(PROPER_NOUN_USAGE_PATTERN)] = 127;
+	if (dbUsagePatterns.find(mTD(LOWER_CASE_USAGE_PATTERN)) != dbUsagePatterns.end())
+		dbUsagePatterns[mTD(LOWER_CASE_USAGE_PATTERN)] = 0;
+	if (dbUsagePatterns.find(mTD(PROPER_NOUN_USAGE_PATTERN)) != dbUsagePatterns.end())
+		dbUsagePatterns[mTD(PROPER_NOUN_USAGE_PATTERN)] = 0;
+	// this is never transferred in transferFormsAndUsage - should be on a per source level
+	if (dbUsagePatterns.find(mTD(TRANSFER_COUNT)) != dbUsagePatterns.end())
+		dbUsagePatterns[mTD(TRANSFER_COUNT)] = 0;
+}
+
+/*
+	transferDBUsagePatternsToUsagePattern(128,UPDB,0,iCount);
+	transferDBUsagePatternsToUsagePattern(64,UPDB,SINGULAR_NOUN_HAS_DETERMINER,2);
+	transferDBUsagePatternsToUsagePattern(64,UPDB,VERB_HAS_0_OBJECTS,3);
+	usagePatterns[LOWER_CASE_USAGE_PATTERN]=max(127,UPDB[LOWER_CASE_USAGE_PATTERN]);
+	usagePatterns[PROPER_NOUN_USAGE_PATTERN]=max(127,UPDB[PROPER_NOUN_USAGE_PATTERN]);
+*/
+bool tFI::computeDifference(tFI &dbWordInfo, unordered_map <int, int> &dbUsagePatterns, unordered_map <int, int> &addUsagePatterns, int dbMainEntryWordId,bool &changedWord,bool &changedForms)
+{
+	// if a form exists in both original and dbForms, remove from dbForms.
+	// what forms exist in dbForms which do not exist in original, leave it in dbForms (to delete).
+	// what forms do not exist in dbForms which do exist in original, add to addForms.
+	for (unsigned int c = 0; c < count; c++)
+	{
+		auto dbup = dbUsagePatterns.find(forms()[c]+1);
+		if (dbup != dbUsagePatterns.end())
+		{
+			if (dbup->second != usagePatterns[c])
+			{
+				::lplog(LOG_INFO, L"usage pattern %s:%d [DB]!=%d [MEMORY]", Form(c)->name.c_str(), dbup->second, usagePatterns[c]);
+				//addUsagePatterns[dbup->first] = usagePatterns[c];
+			}
+			dbUsagePatterns.erase(dbup);
+		}
+		else
+			addUsagePatterns[forms()[c] + 1]= usagePatterns[c];
+	}
+	for (unsigned int c= TRANSFER_COUNT; c< MAX_USAGE_PATTERNS; c++)
+	{
+		auto dbup = dbUsagePatterns.find(mTD(c));
+		if (dbup != dbUsagePatterns.end())
+		{
+			if (dbup->second != usagePatterns[c])
+			{
+				::lplog(LOG_INFO, L"usage pattern %s:%d [DB]!=%d [MEMORY]", patternString(c).c_str(), dbup->second, usagePatterns[c]);
+				//addUsagePatterns[dbup->first] = usagePatterns[c];
+			}
+			dbUsagePatterns.erase(dbup);
+		}
+		else if(usagePatterns[c] != 0)
+			addUsagePatterns[mTD(c)]=usagePatterns[c];
+	}
+	changedWord = (inflectionFlags != dbWordInfo.inflectionFlags || flags != dbWordInfo.flags || timeFlags != dbWordInfo.timeFlags || ((mainEntry==wNULL || mainEntry->second.index<0) ? -1 : mainEntry->second.index) != dbMainEntryWordId || derivationRules != dbWordInfo.derivationRules || sourceId != dbWordInfo.sourceId);
+	changedForms = dbUsagePatterns.size() > 0 || addUsagePatterns.size() > 0;
+	return changedWord || changedForms;
+}
+
+bool tFI::writeNewWordToDatabase(wstring &sWord, MYSQL &mysql)
+{
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	wstring mw, sid;
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"insert into words (word,inflectionFlags,flags,timeFlags,mainEntryWordId,derivationRules,sourceId) VALUES ('%s',%d,%d,%d,%s,%d,%s) ON DUPLICATE KEY UPDATE sourceId = VALUES(sourceId)",
+		sWord.c_str(), inflectionFlags, flags, timeFlags, (mainEntry == wNULL || mainEntry->second.index<0) ? L"null" : itos(mainEntry->second.index, mw).c_str(), derivationRules, (sourceId == -1) ? L"null" : itos(sourceId, sid).c_str());
+	if (!myquery(&mysql, qt, true))
+	{
+		::lplog(LOG_ERROR, L"Error executing statement %s", qt);
+		return false;
+	}
+	my_ulonglong wordId = mysql_insert_id(&mysql);
+	int len = _snwprintf(qt, QUERY_BUFFER_LEN, L"insert into wordforms (wordId,formId,count) VALUES ");
+	for (unsigned int c = 0; c < count; c++)
+		len+=_snwprintf(qt + len, QUERY_BUFFER_LEN - len, L"(%I64d,%d,%d),",wordId,forms()[c]+1,usagePatterns[c]);
+	for (unsigned int c=TRANSFER_COUNT; c< MAX_USAGE_PATTERNS; c++)
+		if (usagePatterns[c])
+			len+=_snwprintf(qt + len, QUERY_BUFFER_LEN - len, L"(%I64d,%d,%d),", wordId, c-TRANSFER_COUNT+patternFormNumOffset, usagePatterns[c]);
+	qt[len - 1] = 0;
+	if (!myquery(&mysql, qt))
+		::lplog(LOG_ERROR, L"Error executing statement %s", qt);
+	return true;
+}
+
+bool tFI::updateWordInDatabase(wstring sWord, MYSQL &mysql)
+{
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	wstring mw,sid;
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"update words set inflectionFlags=%d,flags=%d,timeFlags=%d,mainEntryWordId=%s,derivationRules=%d,sourceId=%s where word='%s'",
+		inflectionFlags, flags, timeFlags, (mainEntry == wNULL || mainEntry->second.index < 0) ? L"null":itos(mainEntry->second.index,mw).c_str(), derivationRules, (sourceId==-1) ? L"null":itos(sourceId,sid).c_str(), sWord.c_str());
+	if (!myquery(&mysql, qt))
+		::lplog(LOG_ERROR, L"Error executing statement %s", qt);
+	::lplog(LOG_INFO, L"UPDATE WORD:%s", qt);
+	return true;
+}
+
+bool tFI::insertWordFormsInDatabase(MYSQL &mysql, unordered_map <int, int> &addUsagePatterns)
+{
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	int len = _snwprintf(qt, QUERY_BUFFER_LEN, L"insert into wordforms (wordId,formId,count) VALUES ");
+	for (auto f:addUsagePatterns)
+		len += _snwprintf(qt + len, QUERY_BUFFER_LEN - len, L"(%d,%d,%d),", index, f.first, f.second);
+	_snwprintf(qt + len - 1, QUERY_BUFFER_LEN - len, L"ON DUPLICATE KEY UPDATE count = VALUES(count)");
+	if (!myquery(&mysql, qt))
+		::lplog(LOG_ERROR, L"Error executing statement %s", qt);
+	::lplog(LOG_INFO, L"INSERT WORDFORMS:%s", qt);
+	return true;
+}
+
+bool tFI::deleteWordFormsInDatabase(MYSQL &mysql, unordered_map <int, int> &deleteUsagePatterns)
+{
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	int len = _snwprintf(qt, QUERY_BUFFER_LEN, L"delete from wordforms where wordId=%d and formId in (",index);
+	for (auto f: deleteUsagePatterns)
+		len += _snwprintf(qt + len, QUERY_BUFFER_LEN - len, L"%d,", f.first);
+	qt[len - 1] = L')';
+	if (!myquery(&mysql, qt))
+		::lplog(LOG_ERROR, L"Error executing statement %s", qt);
+	::lplog(LOG_INFO, L"DELETE WORDFORMS:%s", qt);
+	return true;
+}
+
+wstring tFI::patternString(int p)
+{
+	switch (p)
+	{
+		case TRANSFER_COUNT: return L"transfer count";
+		case SINGULAR_NOUN_HAS_DETERMINER: return L"has determiner";
+		case SINGULAR_NOUN_HAS_NO_DETERMINER: return L"no determiner";
+		case VERB_HAS_0_OBJECTS: return L"0objects";
+		case VERB_HAS_1_OBJECTS: return L"1object";
+		case VERB_HAS_2_OBJECTS: return L"2objects";
+		case LOWER_CASE_USAGE_PATTERN: return L"lower case";
+		case PROPER_NOUN_USAGE_PATTERN: return L"proper noun";
+		default: return L"UNKNOWN";
+	};
+}
+
+// testing to sync individual words in memory to update DB
+//bool writeDB = false;
+//int numChangedWords = 0, numChangedForms = 0, numNewWords = 0, I = 0;
+//for (tIWMM iWord = Words.WMM.begin(), iWordEnd = Words.WMM.end(); iWord != iWordEnd; iWord++, I++)
+//{
+//	printf("%02I64d%%\r", (signed __int64)(I * 100 / Words.WMM.size()));
+//	if (iWord->second.flushWordToDatabase(iWord->first, mysql, writeDB, numChangedWords, numChangedForms, numNewWords) && writeDB && iWord->second.flushWordToDatabase(iWord->first, mysql, writeDB, numChangedWords, numChangedForms, numNewWords))
+//	{
+//		lplog(LOG_FATAL_ERROR, L"%s: unresolvable", iWord->first.c_str());
+//	}
+//}
+//lplog(LOG_INFO, L"numChangedWords = %d,numChangedForms=%d,numNewWords=%d", numChangedWords, numChangedForms, numNewWords);
+
+// make sure that the word as existing in memory is reflected in the words/wordforms tables.
+// 1. read the word/wordforms for the word into a copy.
+// 2. compare the word/wordforms in memory to the copy.
+// 3. write the differences to the database.
+// 4. return whether there were any differences (boolean)
+bool tFI::flushWordToDatabase(wstring sWord,MYSQL &mysql,bool writeDB,int &numChangedWords,int &numChangedForms,int &numNewWords)
+{
+	tFI dbWordInfo;
+	int dbMainEntryWordId=-1;
+	unordered_map <int, int> dbUsagePatterns;
+	wstring escWord;
+	for (wchar_t ch : sWord)
+		if (ch == L'\'')
+			escWord += L"\\'";
+		else
+			escWord += ch;
+	sWord = escWord;
+	if (retrieveWordFromDatabase(sWord, mysql, dbWordInfo, dbUsagePatterns, dbMainEntryWordId))
+	{
+		wstring sDBPatterns, p, f,iflags;
+		computeDBUsagePatternsToUsagePattern(dbUsagePatterns);
+		for (auto const&[pattern, dbcount] : dbUsagePatterns)
+		{
+			if (pattern < patternFormNumOffset)
+			{
+				if (pattern - 1 >= Forms.size())
+					return false;
+				sDBPatterns += ((pattern - 1 < Forms.size()) ? Forms[pattern - 1]->name : L"Illegal Pattern!") + L" " + itos(dbcount, p) + L" ";
+			}
+		}
+		for (auto const&[pattern, dbcount] : dbUsagePatterns)
+		{
+			if (pattern >= patternFormNumOffset && dbcount)
+				sDBPatterns += patternString(pattern - patternFormNumOffset + TRANSFER_COUNT) + L" " + itos(dbcount, p) + L" ";
+		}
+		unordered_map <int, int> addUsagePatterns;
+		bool changedWord, changedForms;
+		computeDifference(dbWordInfo, dbUsagePatterns, addUsagePatterns, dbMainEntryWordId, changedWord, changedForms);
+		if (changedWord || changedForms)
+		{
+			wstring memoryPatterns;
+			for (unsigned int c = 0; c < count; c++)
+				memoryPatterns += Form(c)->name + L" " + itos(usagePatterns[c], p) + L" ";
+			for (unsigned int c = TRANSFER_COUNT; c < MAX_USAGE_PATTERNS; c++)
+				if (usagePatterns[c])
+					memoryPatterns += patternString(c) + L" " + itos(usagePatterns[c], p) + L" ";
+			::lplog(LOG_INFO, L"%s: MEMORY:inflectionFlags=%s  flags=%s  timeFlags=%03d  mainEntry=%07d  derivationRules=%05d  sourceId=%06d  formpatterns=%s", sWord.c_str(), allFlags(inflectionFlags,iflags), allWordFlags(flags, f), timeFlags, (mainEntry == wNULL) ? -1 : mainEntry->second.index, derivationRules, sourceId, memoryPatterns.c_str());
+			::lplog(LOG_INFO, L"%s: DB    :inflectionFlags=%s  flags=%s  timeFlags=%03d  mainEntry=%07d  derivationRules=%05d  sourceId=%06d  formpatterns=%s", sWord.c_str(), allFlags(dbWordInfo.inflectionFlags,iflags), allWordFlags(dbWordInfo.flags, f), dbWordInfo.timeFlags, dbMainEntryWordId, dbWordInfo.derivationRules, dbWordInfo.sourceId, sDBPatterns.c_str());
+		}
+		if (writeDB)
+		{
+			if (changedWord)
+				updateWordInDatabase(sWord, mysql);
+			if (changedForms)
+			{
+				if (addUsagePatterns.size() > 0)
+					insertWordFormsInDatabase(mysql, addUsagePatterns);
+				if (dbUsagePatterns.size() > 0)
+					deleteWordFormsInDatabase(mysql, dbUsagePatterns);
+			}
+		}
+		else
+		{
+			if (changedWord) numChangedWords++;
+			if (changedForms) numChangedForms++;
+		}
+		return changedWord || changedForms;
+	}
+	else
+	{
+		::lplog(LOG_INFO, L"%s: DB: NO ENTRY!",sWord.c_str());
+		if (writeDB)
+			writeNewWordToDatabase(sWord, mysql);
+		else
+			numNewWords++;
+	}
+	return true;
 }
 
 bool tFI::write(void *buffer,int &where,int limit)
@@ -423,8 +733,9 @@ void tFI::setIgnore(void)
     if (Forms[*f]->isIgnore)
 		{
 			flags|=tFI::ignoreFlag;
-      break;
+      return;
 		}
+	flags &= ~tFI::ignoreFlag;
 }
 
 int tFI::query(int form)
@@ -438,7 +749,7 @@ int tFI::query(int form)
 bool tFI::hasWinnerVerbForm(int winnerForms)
 { LFS
   for (unsigned int *f=formsArray+formsOffset,*fend=formsArray+formsOffset+count,I=0; f!=fend; f++,I++)
-		if (Forms[*f]->verbForm && (!winnerForms || ((1<<I)&winnerForms)!=0))
+		if (Forms[*f]->isVerbForm && (!winnerForms || ((1<<I)&winnerForms)!=0))
 			return true;
   return false;
 }
@@ -623,8 +934,10 @@ int tFI::adjustFormsInflections(wstring originalWord,unsigned __int64 &wmflags,b
 			if (query(nounForm)==-1) // don't block pronouns that can be used like nouns (What company owned the Sago Mine?)
 				wmflags|=WordMatch::flagOnlyConsiderOtherNounForms;
 		}
-    else
-      wmflags|=WordMatch::flagOnlyConsiderProperNounForms;
+		else
+		{
+			wmflags |= WordMatch::flagOnlyConsiderProperNounForms;
+		}
   }
   // if it is capitalized and is not already a proper noun
   // and also contains at least one "noun" form, then add the proper noun form.
@@ -969,7 +1282,7 @@ bool WordClass::remove(wstring sWord)
   return false;
 }
 
-bool WordClass::removeFlag(wstring sWord,int flag)
+bool WordClass::removeInflectionFlag(wstring sWord,int flag)
 { LFS
   tIWMM iWMM;
   if ((iWMM=WMM.find(sWord))!=WMM.end() && (iWMM->second.inflectionFlags&flag)==flag)
@@ -981,7 +1294,7 @@ bool WordClass::removeFlag(wstring sWord,int flag)
   return false;
 }
 
-bool WordClass::addFlag(wstring sWord,int flag)
+bool WordClass::addInflectionFlag(wstring sWord,int flag)
 { LFS
   tIWMM iWMM;
   if ((iWMM=WMM.find(sWord))!=WMM.end() && (iWMM->second.inflectionFlags&flag)!=flag)
@@ -1274,6 +1587,7 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 	{
 		// if word is not already in words array, and mysql is 0 (which is from read a source cache file),
 		// then the wordcache file was incorrectly written.
+		// examine the logic in writeWords
 		if (!mysql)
 		{
 			//wstring forms;
@@ -1301,9 +1615,18 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 			sWord.erase(len, 3);
 		if (!iswalnum(sWord[0]) && !sWord[1] && sWord[0])
 		{
-			iWord = predefineWord((wchar_t *)sWord.c_str());
+			if (isDash(sWord[0]))
+			{
+				bool added;
+				iWord=addNewOrModify(NULL, sWord, 0, dashForm, 0, 0, sWord, -1, added);
+			}
+			else
+				iWord = predefineWord((wchar_t *)sWord.c_str());
 			return 0;
 		}
+		// search sql DB for word
+		if (iWord == WMM.end() && findWordInDB(mysql, sWord, iWord) && !iWord->second.isUnknown())
+			return 0;
 		if (firstLetterCapitalized)
 			markWordUndefined(iWord, sWord, tFI::queryOnLowerCase, firstLetterCapitalized, nounOwner, sourceId);
 		// make some attempt at getting past French words like d'affaires l'etat etc
@@ -1311,9 +1634,6 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 			markWordUndefined(iWord, sWord, 0, firstLetterCapitalized, nounOwner, sourceId);
 		else 
 		{
-			// search sql DB for word
-			if (iWord == WMM.end() && findWordInDB(mysql, sWord, iWord) && !iWord->second.isUnknown()) 
-				return 0;
 			// search online dictionaries for word
 			if ((ret = getForms(mysql, iWord, sWord, sourceId,false)) && ret != WORD_NOT_FOUND && ret != NO_FORMS_FOUND) // getForms found word (ret>0)
 				return 0;
@@ -1822,41 +2142,62 @@ bool WordClass::parseMetaCommands(wchar_t *buffer,int &endSymbol,sTrace &t)
 
 int readDate(wchar_t *buffer, __int64 bufferLen, __int64 &bufferScanLocation, __int64 cp,wstring &sWord)
 {
-	wchar_t *nextspace = wcschr(buffer + cp, L' ');
-	if (nextspace)
-		*nextspace = 0;
-	wchar_t *ch = wcschr(buffer + cp, L'-');
-	if (nextspace)
-		*nextspace = L' ';
 	if (cp + 5 >= bufferLen)
 		return 0;
 	bool isDate = false;
 	// '90s or '91
 	isDate = (buffer[cp] == L'\'' && iswdigit(buffer[cp + 1]) && iswdigit(buffer[cp + 2]) && ((buffer[cp + 3] == L's' && (iswspace(buffer[cp + 4]) || iswpunct(buffer[cp + 4]))) || iswspace(buffer[cp + 3]) || iswpunct(buffer[cp + 3])));
-	// mid-1989, mid-60s, mid-1860s, mid-90s, late-40s, early-10s
-	if (!isDate && ch && iswdigit(ch[1]) && iswdigit(ch[2]) && (
-			(iswdigit(ch[3]) && iswdigit(ch[4]) && (iswspace(ch[5]) || iswpunct(ch[5]))) || // mid-1989
-			(iswdigit(ch[3]) && ch[4]==L'0' && ch[5]==L's' && (iswspace(ch[6]) || iswpunct(ch[6]))) || // mid-1860s
-			(ch[3] == L's' && (iswspace(ch[4]) || iswpunct(ch[4]))) // mid-60s
-		))
-	{
-		vector <wstring> dateStart = { L"mid",L"over",L"early",L"late" };
-		for (wstring d : dateStart)
-			if (!wcsnicmp(buffer + cp, d.c_str(), d.length()) && ((ch - buffer) - cp) == d.length())
-				isDate = true;
-	}
 	if (isDate)
 	{
-		while (buffer[cp] && !iswspace(buffer[cp]) && (!iswpunct(buffer[cp]) || buffer[cp] == '\'' || buffer[cp] == '-')) sWord += buffer[cp++];
+		for (int c = 0; c < 3; c++, cp++)
+			sWord += buffer[cp];
+		if (buffer[cp] == L's') 
+			sWord += buffer[cp++];
 		bufferScanLocation = cp;
 		return PARSE_DATE;
 	}
+	// mid-1989, mid-60s, mid-1860s, mid-90s, late-40s, early-10s
+	vector <wstring> dateStart = { L"mid",L"over",L"early",L"late" };
+	for (wstring d : dateStart)
+		if (!wcsnicmp(buffer + cp, d.c_str(), d.length()) && WordClass::isDash(buffer[cp+d.length()]) && iswdigit(buffer[cp+d.length()+1]) && iswdigit(buffer[cp + d.length() + 2]))
+		{
+			__int64 ocp = cp;
+			ocp += d.length() + 3;
+			wchar_t *ch = buffer + cp;
+			// mid-1989
+			if (iswdigit(ch[0]) && iswdigit(ch[1]) && (iswspace(ch[2]) || iswpunct(ch[2])))
+				ocp += 2;
+			// mid-1860s
+			else if (iswdigit(ch[0]) && ch[1] == L'0' && ch[2] == L's' && (iswspace(ch[3]) || iswpunct(ch[3])))
+				ocp += 3;
+			// mid-60s
+			else if (ch[0] == L's' && (iswspace(ch[1]) || iswpunct(ch[1])))
+				ocp++;
+			else
+				return 0;
+			for (; cp < ocp; cp++)
+				sWord += buffer[cp];
+			bufferScanLocation = cp;
+			lplog(LOG_ERROR, L"TEMP DATE %s", sWord.c_str());
+			return PARSE_DATE;
+		}
 	return 0;
 }
 
+/*
+0097 included because of misencoding
+&#151; is wrong. When you use numeric character references, the number refers to the Unicode codepoint. 
+For numbers below 256 that is the same as the codepoint in ISO-8859-1. 
+In 8859-1, character 151 is amongst the “C1 control codes”, and not a dash or any other visible character.
+The confusion arises because character 151 is a dash in Windows code page 1252 (Western European). 
+Many people think cp1252 is the same thing as ISO-8859-1, but in reality it's not: the characters in the C1 range (128 to 159) are different.
+The first application is reading your “ASCII” file* as ISO-8859-1, but actually it's probably cp1252 and you'll need a way to clue the app in about what encoding it has to expect.
+*/
 bool WordClass::isDash(wchar_t ch)
 {
-	wchar_t dashes[] = { L'-',L'˗',L'۔',L'‐',L'‑',L'‒',L'–',L'⁃',L'−',L'➖',L'Ⲻ',L'﹘' };
+	// \u expects 4 hexadecimal digits
+	// 0097 encodes to 
+	wchar_t dashes[] = { L'-',L'˗',L'۔',L'‐',L'‑',L'‒',L'–',L'⁃',L'−',L'➖',L'Ⲻ',L'﹘',L'—',L'\u0097',L'─' };
 	for (wchar_t d : dashes)
 		if (ch == d)
 			return true;
@@ -2200,8 +2541,8 @@ bool WordClass::findWordInDB(MYSQL *mysql, wstring sWord, tIWMM &iWord)
 	if (mysql == NULL)
 		return false;
 	if (!myquery(mysql, L"LOCK TABLES words w READ,wordforms wf READ")) return true;
-	wchar_t qt[query_buffer_len_overflow];
-	_snwprintf(qt, query_buffer_len, L"select w.id,wf.formId,wf.count,w.inflectionFlags,w.flags,w.timeFlags,w.mainEntryWordId,w.derivationRules,w.sourceId from words w,wordForms wf where wf.wordId=w.id and word=\"%s\"", sWord.c_str());
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select w.id,wf.formId,wf.count,w.inflectionFlags,w.flags,w.timeFlags,w.mainEntryWordId,w.derivationRules,w.sourceId from words w,wordForms wf where wf.wordId=w.id and word=\"%s\"", sWord.c_str());
 	MYSQL_RES *result = NULL;
 	if (!myquery(mysql, qt, result) || mysql_num_rows(result) == 0)
 	{

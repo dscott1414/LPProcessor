@@ -1554,324 +1554,107 @@ void WordClass::initializeChangeStateVerbs()
 }
 
 void WordClass::initialize()
-{ LFS
-	wprintf(L"Initializing dictionary...                  \r");
+{
+	LFS
+		wprintf(L"Initializing dictionary...                  \r");
+	// read into nicknameEquivalenceMap
 	addNickNames(L"source\\lists\\maleNicknames.txt");
 	addNickNames(L"source\\lists\\femaleNicknames.txt");
+
+	// SET internal form variables
 	// avoid looking these common forms up...
-	if (accForm<0) accForm=FormsClass::gFindForm(L"personal_pronoun_accusative");
-	if (adverbForm<0) adverbForm=FormsClass::gFindForm(L"adverb");
-	if (adjectiveForm<0) adjectiveForm=FormsClass::gFindForm(L"adjective");
-	if (commaForm<0) commaForm=FormsClass::gFindForm(L",");
-	if (conjunctionForm<0) conjunctionForm=FormsClass::gFindForm(L"conjunction");
-	if (demonstrativeDeterminerForm<0) demonstrativeDeterminerForm=FormsClass::gFindForm(L"demonstrative_determiner");
-	if (determinerForm<0) determinerForm=FormsClass::gFindForm(L"determiner");
-	if (doesForm<0) doesForm=FormsClass::gFindForm(L"does");
-	if (doesNegationForm<0) doesNegationForm=FormsClass::gFindForm(L"does_negation");
-	if (honorificForm<0) honorificForm=FormsClass::gFindForm(L"honorific");
-	if (indefinitePronounForm<0) indefinitePronounForm=FormsClass::gFindForm(L"indefinite_pronoun");
-	if (reciprocalPronounForm<0) reciprocalPronounForm=FormsClass::gFindForm(L"reciprocal_pronoun");
-	if (pronounForm<0) pronounForm=FormsClass::gFindForm(L"pronoun");
-	if (nomForm<0) nomForm=FormsClass::gFindForm(L"personal_pronoun_nominative");
-	if (nounForm==-1) nounForm=FormsClass::gFindForm(L"noun");
-	if (numeralCardinalForm<0) numeralCardinalForm=FormsClass::gFindForm(L"numeral_cardinal");
-	if (numeralOrdinalForm<0) numeralOrdinalForm=FormsClass::gFindForm(L"numeral_ordinal");
-	if (romanNumeralForm<0) romanNumeralForm=FormsClass::gFindForm(L"roman_numeral");
-	if (possessiveDeterminerForm<0) possessiveDeterminerForm=FormsClass::gFindForm(L"possessive_determiner");
-	if (interrogativeDeterminerForm<0) interrogativeDeterminerForm=FormsClass::gFindForm(L"interrogative_determiner");
-	if (possessivePronounForm<0) possessivePronounForm=FormsClass::gFindForm(L"possessive_pronoun");  // mine, ours etc.
-	if (periodForm<0) periodForm=FormsClass::gFindForm(L".");
-	if (quantifierForm<0) quantifierForm=FormsClass::gFindForm(L"quantifier");
-	if (quoteForm<0) quoteForm=FormsClass::gFindForm(L"quotes");
-	if (dashForm<0) dashForm=FormsClass::gFindForm(L"dash");
-	if (reflexiveForm<0) reflexiveForm=FormsClass::gFindForm(L"reflexive_pronoun"); // myself, himself
-	if (verbForm<0) verbForm=FormsClass::gFindForm(L"verb");
-	if (thinkForm<0) thinkForm=FormsClass::gFindForm(L"think");
+	if (accForm < 0) accForm = FormsClass::gFindForm(L"personal_pronoun_accusative");
+	if (adverbForm < 0) adverbForm = FormsClass::gFindForm(L"adverb");
+	if (adjectiveForm < 0) adjectiveForm = FormsClass::gFindForm(L"adjective");
+	if (commaForm < 0) commaForm = FormsClass::gFindForm(L",");
+	if (conjunctionForm < 0) conjunctionForm = FormsClass::gFindForm(L"conjunction");
+	if (demonstrativeDeterminerForm < 0) demonstrativeDeterminerForm = FormsClass::gFindForm(L"demonstrative_determiner");
+	if (determinerForm < 0) determinerForm = FormsClass::gFindForm(L"determiner");
+	if (doesForm < 0) doesForm = FormsClass::gFindForm(L"does");
+	if (doesNegationForm < 0) doesNegationForm = FormsClass::gFindForm(L"does_negation");
+	if (honorificForm < 0) honorificForm = FormsClass::gFindForm(L"honorific");
+	if (indefinitePronounForm < 0) indefinitePronounForm = FormsClass::gFindForm(L"indefinite_pronoun");
+	if (reciprocalPronounForm < 0) reciprocalPronounForm = FormsClass::gFindForm(L"reciprocal_pronoun");
+	if (pronounForm < 0) pronounForm = FormsClass::gFindForm(L"pronoun");
+	if (nomForm < 0) nomForm = FormsClass::gFindForm(L"personal_pronoun_nominative");
+	if (nounForm == -1) nounForm = FormsClass::gFindForm(L"noun");
+	if (numeralCardinalForm < 0) numeralCardinalForm = FormsClass::gFindForm(L"numeral_cardinal");
+	if (numeralOrdinalForm < 0) numeralOrdinalForm = FormsClass::gFindForm(L"numeral_ordinal");
+	if (romanNumeralForm < 0) romanNumeralForm = FormsClass::gFindForm(L"roman_numeral");
+	if (possessiveDeterminerForm < 0) possessiveDeterminerForm = FormsClass::gFindForm(L"possessive_determiner");
+	if (interrogativeDeterminerForm < 0) interrogativeDeterminerForm = FormsClass::gFindForm(L"interrogative_determiner");
+	if (possessivePronounForm < 0) possessivePronounForm = FormsClass::gFindForm(L"possessive_pronoun");  // mine, ours etc.
+	if (periodForm < 0) periodForm = FormsClass::gFindForm(L".");
+	if (quantifierForm < 0) quantifierForm = FormsClass::gFindForm(L"quantifier");
+	if (quoteForm < 0) quoteForm = FormsClass::gFindForm(L"quotes");
+	if (dashForm < 0) dashForm = FormsClass::gFindForm(L"dash");
+	if (reflexiveForm < 0) reflexiveForm = FormsClass::gFindForm(L"reflexive_pronoun"); // myself, himself
+	if (verbForm < 0) verbForm = FormsClass::gFindForm(L"verb");
+	if (thinkForm < 0) thinkForm = FormsClass::gFindForm(L"think");
 	//if (internalStateForm<0) internalStateForm=FormsClass::gFindForm(L"internalState");
-	if (dateForm<0) dateForm=FormsClass::gFindForm(L"date");
-	if (timeForm<0) timeForm=FormsClass::gFindForm(L"time");
-	if (telephoneNumberForm<0) telephoneNumberForm=FormsClass::gFindForm(L"telephone_number");
-	if (coordinatorForm<0) coordinatorForm=FormsClass::gFindForm(L"coordinator");
-	if (verbverbForm<0) verbverbForm=FormsClass::gFindForm(L"verbverb");
-	if (abbreviationForm<0) abbreviationForm=FormsClass::gFindForm(L"abbreviation");
-	if (sa_abbForm<0) sa_abbForm=FormsClass::gFindForm(L"street_address_abbreviation");
-	numberForm=NUMBER_FORM_NUM;
-	if (beForm<0) beForm=FormsClass::gFindForm(L"be");
-	if (haveForm<0) haveForm=FormsClass::gFindForm(L"have");
-	if (haveNegationForm<0) haveNegationForm=FormsClass::gFindForm(L"have_negation");
-	if (doForm<0) doForm=FormsClass::gFindForm(L"does");
-	if (doNegationForm<0) doNegationForm=FormsClass::gFindForm(L"does_negation");
-	if (interjectionForm<0) interjectionForm=FormsClass::gFindForm(L"interjection");
-	if (personalPronounForm<0) personalPronounForm=FormsClass::gFindForm(L"personal_pronoun");
-	if (letterForm<0) letterForm=FormsClass::gFindForm(L"letter");
-	if (isForm<0) isForm=FormsClass::gFindForm(L"is");
-	if (isNegationForm<0) isNegationForm=FormsClass::gFindForm(L"is_negation");
-	if (prepositionForm<0) prepositionForm=FormsClass::gFindForm(L"preposition");
-	if (telenumForm<0) telenumForm=FormsClass::gFindForm(L"telephone_number");
-	if (bracketForm<0) bracketForm=FormsClass::gFindForm(L"brackets");
-	if (toForm<0) toForm=FormsClass::gFindForm(L"to");
-	if (futureModalAuxiliaryForm<0) futureModalAuxiliaryForm=FormsClass::gFindForm(L"future_modal_auxiliary");
-	if (negationModalAuxiliaryForm<0) negationModalAuxiliaryForm=FormsClass::gFindForm(L"negation_modal_auxiliary");
-	if (negationFutureModalAuxiliaryForm<0) negationFutureModalAuxiliaryForm=FormsClass::gFindForm(L"negation_future_modal_auxiliary");
-	if (modalAuxiliaryForm<0)  modalAuxiliaryForm=FormsClass::gFindForm(L"modal_auxiliary");
-	if (relativizerForm<0)  relativizerForm=FormsClass::gFindForm(L"relativizer");
-	if (honorificAbbreviationForm<0) honorificAbbreviationForm=FormsClass::gFindForm(L"honorific_abbreviation");
-	if (businessForm<0)  businessForm=FormsClass::gFindForm(L"business");
-	if (demonymForm<0)  demonymForm=FormsClass::gFindForm(L"demonym");
+	if (dateForm < 0) dateForm = FormsClass::gFindForm(L"date");
+	if (timeForm < 0) timeForm = FormsClass::gFindForm(L"time");
+	if (telephoneNumberForm < 0) telephoneNumberForm = FormsClass::gFindForm(L"telephone_number");
+	if (coordinatorForm < 0) coordinatorForm = FormsClass::gFindForm(L"coordinator");
+	if (verbverbForm < 0) verbverbForm = FormsClass::gFindForm(L"verbverb");
+	if (abbreviationForm < 0) abbreviationForm = FormsClass::gFindForm(L"abbreviation");
+	if (sa_abbForm < 0) sa_abbForm = FormsClass::gFindForm(L"street_address_abbreviation");
+	numberForm = NUMBER_FORM_NUM;
+	if (beForm < 0) beForm = FormsClass::gFindForm(L"be");
+	if (haveForm < 0) haveForm = FormsClass::gFindForm(L"have");
+	if (haveNegationForm < 0) haveNegationForm = FormsClass::gFindForm(L"have_negation");
+	if (doForm < 0) doForm = FormsClass::gFindForm(L"does");
+	if (doNegationForm < 0) doNegationForm = FormsClass::gFindForm(L"does_negation");
+	if (interjectionForm < 0) interjectionForm = FormsClass::gFindForm(L"interjection");
+	if (personalPronounForm < 0) personalPronounForm = FormsClass::gFindForm(L"personal_pronoun");
+	if (letterForm < 0) letterForm = FormsClass::gFindForm(L"letter");
+	if (isForm < 0) isForm = FormsClass::gFindForm(L"is");
+	if (isNegationForm < 0) isNegationForm = FormsClass::gFindForm(L"is_negation");
+	if (prepositionForm < 0) prepositionForm = FormsClass::gFindForm(L"preposition");
+	if (telenumForm < 0) telenumForm = FormsClass::gFindForm(L"telephone_number");
+	if (bracketForm < 0) bracketForm = FormsClass::gFindForm(L"brackets");
+	if (toForm < 0) toForm = FormsClass::gFindForm(L"to");
+	if (futureModalAuxiliaryForm < 0) futureModalAuxiliaryForm = FormsClass::gFindForm(L"future_modal_auxiliary");
+	if (negationModalAuxiliaryForm < 0) negationModalAuxiliaryForm = FormsClass::gFindForm(L"negation_modal_auxiliary");
+	if (negationFutureModalAuxiliaryForm < 0) negationFutureModalAuxiliaryForm = FormsClass::gFindForm(L"negation_future_modal_auxiliary");
+	if (modalAuxiliaryForm < 0)  modalAuxiliaryForm = FormsClass::gFindForm(L"modal_auxiliary");
+	if (relativizerForm < 0)  relativizerForm = FormsClass::gFindForm(L"relativizer");
+	if (honorificAbbreviationForm < 0) honorificAbbreviationForm = FormsClass::gFindForm(L"honorific_abbreviation");
+	if (businessForm < 0)  businessForm = FormsClass::gFindForm(L"business");
+	if (demonymForm < 0)  demonymForm = FormsClass::gFindForm(L"demonym");
 	//if (relativeForm<0)  relativeForm=FormsClass::gFindForm(L"relative");
-	if (commonProfessionForm<0) commonProfessionForm=FormsClass::gFindForm(L"commonProfession");
-	if (friendForm<0) friendForm=FormsClass::gFindForm(L"friend");
-	if (moneyForm<0) moneyForm = FormsClass::gFindForm(L"money");
-	if (webAddressForm<0) webAddressForm = FormsClass::gFindForm(L"webAddress");
-	if (internalStateForm<0) internalStateForm = FormsClass::gFindForm(L"internalState");
-	if (particleForm<0) particleForm=FormsClass::gFindForm(L"particle");
-	if (relativeForm<0) relativeForm=FormsClass::gFindForm(L"relative");
+	if (commonProfessionForm < 0) commonProfessionForm = FormsClass::gFindForm(L"commonProfession");
+	if (friendForm < 0) friendForm = FormsClass::gFindForm(L"friend");
+	if (moneyForm < 0) moneyForm = FormsClass::gFindForm(L"money");
+	if (webAddressForm < 0) webAddressForm = FormsClass::gFindForm(L"webAddress");
+	if (internalStateForm < 0) internalStateForm = FormsClass::gFindForm(L"internalState");
+	if (particleForm < 0) particleForm = FormsClass::gFindForm(L"particle");
+	if (relativeForm < 0) relativeForm = FormsClass::gFindForm(L"relative");
 	if (monthForm < 0) monthForm = FormsClass::gFindForm(L"month");
 
-	// DO NOT REMOVE - this section filled with Daniel Webster dictionary problems
-	removeFlag(L"man",PLURAL); // Webster has it also defined as a plural noun (very rare)
-	removeFlag(L"sir",PLURAL); 
-	removeFlag(L"other",PLURAL); 
-	removeFlag(L"ear",PLURAL); 
-	removeFlag(L"lives",SINGULAR); 
-	removeFlag(L"spoke",VERB_PRESENT_FIRST_SINGULAR);
-	removeFlag(L"rose",VERB_PRESENT_FIRST_SINGULAR);
-	removeFlag(L"one",FIRST_PERSON|SECOND_PERSON);
-	removeFlag(L"sat",VERB_PRESENT_FIRST_SINGULAR);
-	removeFlag(L"bleed",VERB_PAST_PLURAL);
-	addFlag(L"bleed",VERB_PRESENT_FIRST_SINGULAR);
-	addFlag(L"overspread",VERB_PAST|VERB_PAST_PARTICIPLE);
-	// written is incorrectly entered in Websters
-	removeFlag(L"written",VERB_PAST);
-	// come has rare usage in Websters
-	removeFlag(L"come",VERB_PAST);
-	// hold is incorrectly entered in Websters
-	removeFlag(L"hold",VERB_PAST);
-	// letters is incorrectly entered...
-	removeFlag(L"letters",SINGULAR);
-	// will is not an adverb or adjective!
-	tIWMM q=gquery(L"will");
-	q->second.remove(adjectiveForm);
-	q->second.remove(adverbForm);
-	// might is not a verb - it is only an auxiliary
-	gquery(L"might")->second.remove(verbForm);
-	// may is not a verb - it is only an auxiliary
-	gquery(L"may")->second.remove(verbForm);
-	// was is a plural of wa - exceedingly rare usage
-	gquery(L"was")->second.remove(nounForm);
-	// my as an interjection is OK, except that the parser "ignores" interjections, so this common adjective is absorbed into inappropriate
-	// patterns like _ADVERB.  If the parser would not need to ignore interjections, then this line can be removed.
-	gquery(L"my")->second.remove(interjectionForm);
-	// 'the' is never an adverb
-	gquery(L"the")->second.remove(adverbForm);
-	// 'the' is never a preposition
-	gquery(L"the")->second.remove(prepositionForm);
-	// 'of' is never a verbal auxiliary
-	gquery(L"of")->second.remove(L"verbal_auxiliary");
-	gquery(L"through")->second.remove(L"noun");
-	gquery(L"knowledge")->second.remove(verbForm);
-	// 'do' is a verb but it is already included in the patterns
-	gquery(L"do")->second.remove(verbForm);
-	// 'to' is kind of an adverb but most of the time it is not
-	gquery(L"to")->second.remove(adverbForm);
-	// 'in' is already a measurement abbreviation
-	gquery(L"in")->second.remove(abbreviationForm);
-	// 'in' is not a verb
-	gquery(L"in")->second.remove(verbForm);
-	// something is not a verb!
-	gquery(L"something")->second.remove(verbForm);
-	// 'but' is NOT a pronoun!
-	gquery(L"but")->second.remove(pronounForm);
-	// 'but' could be used as 'butt' out, but it is too rare
-	gquery(L"but")->second.remove(verbForm);
-	// 'but' could be used as 'butt' out, but it is too rare
-	// but is a coordinator for BNC only
-	gquery(L"but")->second.remove(coordinatorForm);
-	// at might have a pronoun form but that is very rare for such a common word
-	gquery(L"at")->second.remove(pronounForm);
-	// at only has conjunction because of 'at meaning that, which is really an abbreviation
-	gquery(L"at")->second.remove(conjunctionForm); 
-	// ear is not a pronoun!
-	gquery(L"ear")->second.remove(pronounForm);
-	// planning is not a noun (although it can be used as such)
-	gquery(L"planning")->second.remove(nounForm);
-	// 'here' when acting as an adverb should actually be a noun anaphor
-	tIWMM here=Words.query(L"here");
-	if (here!=Words.end()) here->second.remove(L"adverb");
-	// i is very rarely a proper noun
-	gquery(L"i")->second.remove(PROPER_NOUN_FORM_NUM);
-	// 'being' is NOT a conjunction - that is marked with top-level and then all verb relative clauses can start after it
-	// which would be wrong
-	gquery(L"being")->second.remove(conjunctionForm);
-	// beauty is not a verb 
-	gquery(L"beauty")->second.remove(verbForm);
-  gquery(L"bad")->second.remove(verbForm);
-	gquery(L"ought")->second.remove(pronounForm);
-	gquery(L"have")->second.remove(verbverbForm);
-	gquery(L"had")->second.remove(verbverbForm);
-	gquery(L"having")->second.remove(verbverbForm);
-		gquery(L"as")->second.remove(nounForm); // as is alternate singular form of "ass"
-		gquery(L"as")->second.remove(pronounForm); // as is technically a pronoun but is very rarely used in the same way as other pronouns
-		gquery(L"as")->second.flags&=~(tFI::queryOnLowerCase|tFI::queryOnAnyAppearance);
-	// feet is the plural of foot (an extremely rare usage is also included in MW with 'foot' as plural also)
-	gquery(L"feet")->second.mainEntry=gquery(L"foot");
-	gquery(L"women")->second.mainEntry=gquery(L"woman");
-	gquery(L"rose")->second.mainEntry=gquery(L"rise");
-	gquery(L"cutting")->second.mainEntry=gquery(L"cut");
-	gquery(L"speaking")->second.mainEntry=gquery(L"speak");
-	gquery(L"trying")->second.mainEntry=gquery(L"try");
-	gquery(L"becoming")->second.mainEntry=gquery(L"become");
-	gquery(L"gentlemen")->second.mainEntry=gquery(L"gentleman");
-	gquery(L"drew")->second.mainEntry=gquery(L"draw");
-	gquery(L"slewed")->second.mainEntry=gquery(L"slew");
-	gquery(L"paid")->second.mainEntry=gquery(L"pay");
-	gquery(L"produced")->second.mainEntry=gquery(L"produce");
-	gquery(L"tried")->second.mainEntry=gquery(L"try");
-	gquery(L"hurried")->second.mainEntry=gquery(L"hurry");
-	gquery(L"carried")->second.mainEntry=gquery(L"carry");
-	gquery(L"thrown")->second.mainEntry=gquery(L"throw");
-	gquery(L"slid")->second.mainEntry=gquery(L"slide");
-	gquery(L"hid")->second.mainEntry=gquery(L"hide");
-	gquery(L"woke")->second.mainEntry=gquery(L"wake");
-	gquery(L"hidden")->second.mainEntry=gquery(L"hide");
-	gquery(L"aged")->second.mainEntry=gquery(L"age");
-	gquery(L"pictured")->second.mainEntry=gquery(L"picture");
-	gquery(L"acquired")->second.mainEntry=gquery(L"acquire");
-	gquery(L"published")->second.mainEntry=gquery(L"publish");
-	gquery(L"modelled")->second.mainEntry=gquery(L"model");
-	gquery(L"hemmed")->second.mainEntry=gquery(L"hem");
-	gquery(L"leaned")->second.mainEntry=gquery(L"lean");
-	gquery(L"letters")->second.mainEntry=gquery(L"letter");
-	gquery(L"ditches")->second.mainEntry=gquery(L"ditch");
-	gquery(L"fairies")->second.mainEntry=gquery(L"fairy");
-	gquery(L"geese")->second.mainEntry=gquery(L"goose");
-	gquery(L"lilies")->second.mainEntry=gquery(L"lily");
-	//gquery(L"jackknives")->second.mainEntry=gquery(L"jackknife");
-	gquery(L"mice")->second.mainEntry=gquery(L"mouse");
-	gquery(L"mistresses")->second.mainEntry=gquery(L"mistress");
-	gquery(L"mercies")->second.mainEntry=gquery(L"mercy");
-	gquery(L"lives")->second.mainEntry=gquery(L"live");
-	gquery(L"drowned")->second.mainEntry=gquery(L"drown");
-	gquery(L"worried")->second.mainEntry=gquery(L"worry");
-	gquery(L"satisfied")->second.mainEntry=gquery(L"satisfy");
-	gquery(L"studied")->second.mainEntry=gquery(L"study");
-	gquery(L"keeping")->second.mainEntry=gquery(L"keep");
-	gquery(L"killing")->second.mainEntry=gquery(L"kill");
-	gquery(L"dying")->second.mainEntry=gquery(L"die");
-	gquery(L"bringing")->second.mainEntry=gquery(L"bring");
-	gquery(L"buying")->second.mainEntry=gquery(L"buy");
-	gquery(L"occupied")->second.mainEntry=gquery(L"occupy");
-	gquery(L"countesses")->second.mainEntry=gquery(L"countess");
-	gquery(L"grandchildren")->second.mainEntry=gquery(L"grandchild");
-	gquery(L"kings")->second.mainEntry=gquery(L"king");
-	gquery(L"ladies")->second.mainEntry=gquery(L"lady");
-	gquery(L"leashes")->second.mainEntry=gquery(L"leash");
-	//gquery(L"messieurs")->second.mainEntry=gquery(L"messieur");
-	//gquery(L"nanobots")->second.mainEntry=gquery(L"nanobot");
-	gquery(L"navies")->second.mainEntry=gquery(L"navy");
-	gquery(L"rosebushes")->second.mainEntry=gquery(L"bush");
-	gquery(L"scarves")->second.mainEntry=gquery(L"scarf");
-	gquery(L"sisters")->second.mainEntry=gquery(L"sister");
-	gquery(L"snuffboxes")->second.mainEntry=gquery(L"box");
-	//gquery(L"subdelegations")->second.mainEntry=gquery(L"subdelegation");
-	gquery(L"teeth")->second.mainEntry=gquery(L"tooth");
-	gquery(L"waitresses")->second.mainEntry=gquery(L"waitress");
-	gquery(L"wives")->second.mainEntry=gquery(L"wife");
-	//gquery(L"bivouacking")->second.mainEntry=gquery(L"bivouack");
-	gquery(L"omitting")->second.mainEntry=gquery(L"omit");
-	gquery(L"businessmen")->second.mainEntry=gquery(L"man");
-	gquery(L"saves")->second.mainEntry=gquery(L"save");
-	gquery(L"bucks")->second.mainEntry=gquery(L"buck");
-	gquery(L"torments")->second.mainEntry=gquery(L"torment");
-	//gquery(L"militarymen")->second.mainEntry=gquery(L"man");
-	gquery(L"bled")->second.mainEntry=gquery(L"bleed");
-	gquery(L"dotted")->second.mainEntry=gquery(L"dot");
-	gquery(L"repaid")->second.mainEntry=gquery(L"repay");
-	gquery(L"countermarches")->second.mainEntry=gquery(L"march");
-	//gquery(L"reestablishes")->second.mainEntry=gquery(L"establish");
-	//gquery(L"outvying")->second.mainEntry=gquery(L"vie");
-	gquery(L"few")->second.remove(verbForm);
-	gquery(L"gov'nor")->second.remove(verbForm);
-	gquery(L"bear")->second.remove(verbForm);
-	gquery(L"more")->second.remove(verbForm);
-	gquery(L"just")->second.remove(verbForm);
-	gquery(L"poor")->second.remove(verbForm);
-	gquery(L"able")->second.remove(verbForm);
-	gquery(L"m.p.")->second.remove(verbForm);
-	gquery(L"much")->second.remove(verbForm);
-	gquery(L"c.i.d.")->second.remove(verbForm);
-	gquery(L"gott")->second.remove(verbForm);
-	gquery(L"trading")->second.mainEntry=gquery(L"trade");
-	gquery(L"sitting")->second.mainEntry=gquery(L"sit");
-	gquery(L"rattling")->second.mainEntry=gquery(L"rattle");
-	gquery(L"jarred")->second.mainEntry=gquery(L"jar");
-	gquery(L"sitting")->second.mainEntry=gquery(L"sit");
-	gquery(L"panning")->second.mainEntry=gquery(L"pan");
-	gquery(L"emboldened")->second.mainEntry=gquery(L"embolden");
-	gquery(L"laid")->second.mainEntry=gquery(L"lay");
-	gquery(L"girls")->second.mainEntry=gquery(L"girl");
-	gquery(L"waiters")->second.mainEntry=gquery(L"waiter");
-	gquery(L"burning")->second.mainEntry=gquery(L"burn");
-	gquery(L"bluffing")->second.mainEntry=gquery(L"bluff");
-	gquery(L"employed")->second.mainEntry=gquery(L"employ");
-	gquery(L"pinning")->second.mainEntry=gquery(L"pin");
-	gquery(L"polishing")->second.mainEntry=gquery(L"polish");
-	gquery(L"terrified")->second.mainEntry=gquery(L"terrify");
-	gquery(L"barbecued")->second.mainEntry=gquery(L"barbecue");
-	gquery(L"rung")->second.mainEntry=gquery(L"ring");
+	// set internal word variables
+	PPN = gquery(L"__ppn__"); // personal proper noun used for relations with pronouns or gendered proper nouns.
+	TELENUM = gquery(L"__telenum__"); // personal proper noun used for relations with pronouns or gendered proper nouns.
+	NUM = gquery(L"__num__"); // number used for relations.
+	DATE = gquery(L"__date__");
+	TIME = gquery(L"__time__");
+	predefineWord(L"__location__"); // location used for relations.
+	LOCATION = gquery(L"__location__");
+	TABLE = predefineWord(L"lpTABLE"); // used to start the table section which is extracted from <table> and table-like constructions in HTML
+	END_COLUMN = predefineWord(L"lpENDCOLUMN"); // used to end each column string which is extracted from <table> and table-like constructions in HTML
+	END_COLUMN_HEADERS = predefineWord(L"lpENDCOLUMNHEADERS"); // used to start the table section which is extracted from <table> and table-like constructions in HTML
+	MISSING_COLUMN = predefineWord(L"lpMISSINGCOLUMN"); // used to start the table section which is extracted from <table> and table-like constructions in HTML
 
-	// bore should never have been made a "think" verb
-	gquery(L"bear")->second.remove(thinkForm);
-	gquery(L"bore")->second.remove(thinkForm);
-	gquery(L"bored")->second.remove(thinkForm);
-	gquery(L"bears")->second.remove(thinkForm);
-	gquery(L"or")->second.remove(prepositionForm);
-	gquery(L"or")->second.remove(adjectiveForm);
-	gquery(L"hand")->second.remove(commonProfessionForm); // included by WordNet employee +HYPO
-	gquery(L"daughters")->second.mainEntry=gquery(L"daughter");
-	gquery(L"husbands")->second.mainEntry=gquery(L"husband");
-	gquery(L"fathers")->second.mainEntry=gquery(L"father");
-	gquery(L"seconds")->second.mainEntry=gquery(L"second");
-	gquery(L"can't")->second.mainEntry=gquery(L"can");
-	gquery(L"couldn't")->second.mainEntry=gquery(L"could");
-	gquery(L"shouldn't")->second.mainEntry=gquery(L"should");
-	gquery(L"hadn't")->second.mainEntry=gquery(L"have");
-	gquery(L"oughtn't")->second.mainEntry=gquery(L"ought");
-	gquery(L"won't")->second.mainEntry=gquery(L"will");
-	gquery(L"convey")->second.remove(internalStateForm);
-	gquery(L"conveys")->second.remove(internalStateForm);
-	gquery(L"conveyed")->second.remove(internalStateForm);
-	gquery(L"conveying")->second.remove(internalStateForm);
-	gquery(L"janet")->second.remove(verbForm);
-	gquery(L"janet")->second.remove(nounForm);
-	gquery(L"janet")->second.remove(adjectiveForm);
-	gquery(L"janet")->second.remove(COMBINATION_FORM_NUM);
-	gquery(L"arrange")->second.remove(thinkForm);
-	gquery(L"arranges")->second.remove(thinkForm);
-	gquery(L"arranged")->second.remove(thinkForm);
-	gquery(L"arranging")->second.remove(thinkForm);
-	int timeUnitForm=FormsClass::gFindForm(L"timeUnit");
-	addFlag(L"what",PLURAL);  // 'what' was inadvertently set to singular before
-	gquery(L"wick")->second.remove(timeUnitForm);
-	Forms[honorificAbbreviationForm]->blockProperNounRecognition=true; // any words having this form will never be considered as proper nouns
-	wchar_t *topLevelForms[]=
-				 {L",",L";",L"--",L":",L".",L"*",L"!",L"?",L"...",L"&",L"/",L"#",L"=",L"|",L"│", // added "|" 4/11/2006 for BNC
-			L"brackets",L"dash",L"quotes",L"numeral_ordinal",L"roman_numeral",L"sectionheader", // deleted 'not' 10/26/2006
-			L"conjunction",L"coordinator",L"interjection",L"relativizer",L"inserts",NULL}; // expandable forms
-	for (int form=0; topLevelForms[form]; form++)
-	{
-		int f=FormsClass::gFindForm(topLevelForms[form]);
-		Forms[f]->isTopLevel=true;
-	}
-	int commonForms[]= 
-			{ reflexiveForm,nomForm,accForm,conjunctionForm,demonstrativeDeterminerForm,possessiveDeterminerForm,interrogativeDeterminerForm,
+	//** SET Forms
+	vector <int> commonForms =
+	{ reflexiveForm,nomForm,accForm,conjunctionForm,demonstrativeDeterminerForm,possessiveDeterminerForm,interrogativeDeterminerForm,
 		indefinitePronounForm,reciprocalPronounForm,pronounForm,thinkForm,relativeForm,
 		determinerForm,doesForm,doesNegationForm,possessivePronounForm,quantifierForm,coordinatorForm,
 		beForm,haveForm,haveNegationForm,doForm,doNegationForm,interjectionForm,personalPronounForm,
 		isForm,isNegationForm,prepositionForm,toForm,relativizerForm,particleForm,
-		doForm,doNegationForm,modalAuxiliaryForm,futureModalAuxiliaryForm,negationModalAuxiliaryForm,negationFutureModalAuxiliaryForm,NULL};
-	for (int form = 0; commonForms[form]; form++)
-		Forms[commonForms[form]]->isCommonForm = true;
+		doForm,doNegationForm,modalAuxiliaryForm,futureModalAuxiliaryForm,negationModalAuxiliaryForm,negationFutureModalAuxiliaryForm };
+	for (int cf : commonForms)
+		Forms[cf]->isCommonForm = true;
 
 	// numeralCardinalForm, numeralOrdinalForm, romanNumeralForm, quantifierform, dateForm,timeForm, telephoneNumberForm, moneyForm, and webAddressForm
 	// are not closed, but they can be positively identified so they do not have to be written in the cache file
@@ -1883,239 +1666,85 @@ void WordClass::initialize()
 		personalPronounForm	,letterForm	,isForm	,isNegationForm	, telenumForm	,sa_abbForm	,toForm,relativizerForm	,
 		moneyForm	,particleForm	,webAddressForm	,doForm	,doNegationForm	,monthForm	,letterForm,modalAuxiliaryForm	,futureModalAuxiliaryForm	,
 		negationModalAuxiliaryForm	,negationFutureModalAuxiliaryForm };
-	for (int form: nonCachedForms)
+	for (int form : nonCachedForms)
 		Forms[form]->isNonCachedForm = true;
 
 	// "quotes" removed 6/24 because it was causing NOUN to match double nouns across ".
 	// example:_NOUN [my dear child , " interrupted tuppence]
-	wchar_t *ignoreForms[]=
-			{L"dash",L"interjection",L"/",L"^",L"|",L"│",NULL}; // bracketing with "/" sometimes used as emphasis (took out "--", 8/30/2005) added "|" 4/11/2006 for BNC
+	vector <wstring> ignoreForms =
+	{ L"dash",L"interjection",L"/",L"^",L"|",L"│" }; // bracketing with "/" sometimes used as emphasis (took out "--", 8/30/2005) added "|" 4/11/2006 for BNC
+	for (wstring ifs : ignoreForms)
+	{
+		int f = FormsClass::gFindForm(ifs);
+		Forms[f]->isIgnore = true;
+	}
 
-	for (tIWMM iWord=Words.WMM.begin(),iWordEnd=Words.WMM.end(); iWord!=iWordEnd; iWord++)
-		iWord->second.flags&=~tFI::ignoreFlag;
-	for (int form=0; ignoreForms[form]; form++)
-	{
-		int f=FormsClass::gFindForm(ignoreForms[form]);
-		Forms[f]->isIgnore=true;
-	}
-	for (tIWMM iWord=Words.WMM.begin(),iWordEnd=Words.WMM.end(); iWord!=iWordEnd; iWord++)
-	{
-		iWord->second.removeIllegalForms();
-		iWord->second.setIgnore();
-		iWord->second.setTopLevel();
-	}
-	int verbForms[]={ verbForm,verbverbForm,isForm,isNegationForm,haveForm,haveNegationForm,doesForm,doesNegationForm,
-		modalAuxiliaryForm,negationModalAuxiliaryForm,futureModalAuxiliaryForm,negationFutureModalAuxiliaryForm,beForm,thinkForm,-1 };
-	for (int form=0; verbForms[form]>=0; form++)
-		Forms[verbForms[form]]->verbForm=true;
-	gquery(L"i")->second.flags&=~tFI::topLevelSeparator; // don't make "I" top level, even though it is also a roman numeral!
-	sectionWord->second.flags|=tFI::topLevelSeparator;
-	PPN=gquery(L"__ppn__"); // personal proper noun used for relations with pronouns or gendered proper nouns.
-	TELENUM=gquery(L"__telenum__"); // personal proper noun used for relations with pronouns or gendered proper nouns.
-	NUM=gquery(L"__num__"); // number used for relations.
-	DATE=gquery(L"__date__");
-	TIME=gquery(L"__time__");
-	predefineWord(L"__location__"); // location used for relations.
-	LOCATION=gquery(L"__location__");
-	TABLE=predefineWord(L"lpTABLE"); // used to start the table section which is extracted from <table> and table-like constructions in HTML
-	END_COLUMN=predefineWord(L"lpENDCOLUMN"); // used to end each column string which is extracted from <table> and table-like constructions in HTML
-	END_COLUMN_HEADERS=predefineWord(L"lpENDCOLUMNHEADERS"); // used to start the table section which is extracted from <table> and table-like constructions in HTML
-	MISSING_COLUMN=predefineWord(L"lpMISSINGCOLUMN"); // used to start the table section which is extracted from <table> and table-like constructions in HTML
+	vector <int> verbForms = { verbForm,verbverbForm,isForm,isNegationForm,haveForm,haveNegationForm,doesForm,doesNegationForm,
+		modalAuxiliaryForm,negationModalAuxiliaryForm,futureModalAuxiliaryForm,negationFutureModalAuxiliaryForm,beForm,thinkForm };
+	for (int vf : verbForms)
+		Forms[vf]->isVerbForm = true;
+
+	// initialize levin arrays
+	readVerbClasses();
+	readVerbClassNames();
+	// initialize vbNet arrays
+	readVBNet();
+
 	// set usageCosts for 'think' verbs to be equal to the cost of verb usage.
 	// see similar routine for regularizing usage cost of nouns - usageCostToNoun
-	for (tIWMM iWord=Words.WMM.begin(),iWordEnd=Words.WMM.end(); iWord!=iWordEnd; iWord++)
+	// **changes 
+	// flags, inflectionFlags, usagePatterns, usageCosts, numProperNounUsageAsAdjective
+	for (tIWMM iWord = Words.WMM.begin(), iWordEnd = Words.WMM.end(); iWord != iWordEnd; iWord++)
 	{
-		iWord->second.flags&=~(tFI::physicalObjectByWN|tFI::notPhysicalObjectByWN|tFI::uncertainPhysicalObjectByWN);
-		iWord->second.costEquivalentSubClass(commonProfessionForm,nounForm);
-		iWord->second.costEquivalentSubClass(thinkForm,verbForm);
-		iWord->second.costEquivalentSubClass(verbverbForm,verbForm);
-		if ((iWord->second.inflectionFlags&(VERB_PRESENT_FIRST_SINGULAR|VERB_PAST))==(VERB_PRESENT_FIRST_SINGULAR|VERB_PAST) &&
-      iWord->second.mainEntry!=iWord && iWord->second.mainEntry!=wNULL &&
-			(iWord->second.mainEntry->second.inflectionFlags&(VERB_PRESENT_FIRST_SINGULAR))==(VERB_PRESENT_FIRST_SINGULAR))
-		{
-			//lplog(L"past,present confused for verb %s (mainEntry %s).",iWord->first.c_str(),iWord->second.mainEntry->first.c_str());
-			removeFlag(iWord->first,VERB_PRESENT_FIRST_SINGULAR);
-		}
+		iWord->second.setIgnore();
+		iWord->second.setTopLevel();
+		iWord->second.flags &= ~(tFI::physicalObjectByWN | tFI::notPhysicalObjectByWN | tFI::uncertainPhysicalObjectByWN);
+		iWord->second.costEquivalentSubClass(commonProfessionForm, nounForm);
+		iWord->second.costEquivalentSubClass(thinkForm, verbForm);
+		iWord->second.costEquivalentSubClass(verbverbForm, verbForm);
 		// reset these counts, which are more relevant on a per-source basis
-		iWord->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN]=iWord->second.usagePatterns[tFI::LOWER_CASE_USAGE_PATTERN]=0;
-		iWord->second.numProperNounUsageAsAdjective=0;
+		iWord->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN] = iWord->second.usagePatterns[tFI::LOWER_CASE_USAGE_PATTERN] = 0;
 		// make honorifics not costly (honorifics are not reflected out of BNC properly so they are underweighted)
 		iWord->second.toLowestCost(honorificForm);
-		if (!iWord->second.toLowestCost(demonstrativeDeterminerForm) && iWord->second.query(relativizerForm)<0 && iWord->first!=L"there")
+		if (!iWord->second.toLowestCost(demonstrativeDeterminerForm) && iWord->second.query(relativizerForm) < 0 && iWord->first != L"there")
 			iWord->second.toLowestCost(pronounForm);
-		if (iWord->second.costEquivalentSubClass(indefinitePronounForm,nounForm))
-		{
-			iWord->second.remove(nounForm);
-			iWord->second.flags&=~(tFI::queryOnLowerCase|tFI::queryOnAnyAppearance);
-		}
-		// two knocks followed in succession (two could also be a noun, knocks could be a verb, so two must be marked as plural!)
-		if (iWord->second.query(numeralCardinalForm)>=0)
-		{
-			if (iWord->first!=L"one")
-				iWord->second.inflectionFlags|=PLURAL;
-			iWord->second.inflectionFlags|=MALE_GENDER|FEMALE_GENDER; // Number Fourteen, please close the door. / The Two
-		}
-		// Brandy vs brandy / The brandy[rita] brought the colour back to her[rita] white cheeks[rita] , and revived her[rita] in a marvellous fashion .
-		if ((iWord->second.inflectionFlags&(MALE_GENDER|FEMALE_GENDER)) && iWord->second.query(PROPER_NOUN_FORM_NUM)>=0 && 
-				iWord->second.query(nounForm)>=0 && iWord->second.query(honorificForm)<0)
-		{
-			if (iWord->second.inflectionFlags&MALE_GENDER)
-			{
-				iWord->second.inflectionFlags&=~MALE_GENDER;
-				iWord->second.inflectionFlags|=MALE_GENDER_ONLY_CAPITALIZED;
-			}
-			if (iWord->second.inflectionFlags&FEMALE_GENDER)
-			{
-				iWord->second.inflectionFlags&=~FEMALE_GENDER;
-				iWord->second.inflectionFlags|=FEMALE_GENDER_ONLY_CAPITALIZED;
-			}
-			//lplog(LOG_RESOLUTION,L"%s will only be gendered if capitalized.",iWord->first.c_str());
-		}
 	}
-	gquery(L"tell")->second.usagePatterns[tFI::VERB_HAS_2_OBJECTS]=255;
-	gquery(L"tell")->second.usageCosts[tFI::VERB_HAS_2_OBJECTS]=0;
-	gquery(L"descend")->second.usagePatterns[tFI::VERB_HAS_1_OBJECTS]=255;
-	gquery(L"descend")->second.usageCosts[tFI::VERB_HAS_1_OBJECTS]=0;
-	gquery(L"wish")->second.usagePatterns[tFI::VERB_HAS_2_OBJECTS]=255; // I wish you some figgy pudding
-	gquery(L"wish")->second.usageCosts[tFI::VERB_HAS_2_OBJECTS]=0;
-	gquery(L"get")->second.usagePatterns[tFI::VERB_HAS_2_OBJECTS]=127; // to get her a taxi
-	gquery(L"get")->second.usageCosts[tFI::VERB_HAS_2_OBJECTS]=2;
-	gquery(L"nurse")->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]=0; 
-	gquery(L"nurse")->second.usageCosts[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]=4;
-	gquery(L"turn")->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]=0; 
-	gquery(L"turn")->second.usageCosts[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]=4;
-	gquery(L"rap")->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]=0; 
-	gquery(L"rap")->second.usageCosts[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]=4;
-	gquery(L"speed")->second.usagePatterns[tFI::VERB_HAS_1_OBJECTS]=0;
-	gquery(L"speed")->second.usageCosts[tFI::VERB_HAS_1_OBJECTS]=4;
+	gquery(L"tell")->second.usagePatterns[tFI::VERB_HAS_2_OBJECTS] = 255;
+	gquery(L"tell")->second.usageCosts[tFI::VERB_HAS_2_OBJECTS] = 0;
+	gquery(L"descend")->second.usagePatterns[tFI::VERB_HAS_1_OBJECTS] = 255;
+	gquery(L"descend")->second.usageCosts[tFI::VERB_HAS_1_OBJECTS] = 0;
+	gquery(L"wish")->second.usagePatterns[tFI::VERB_HAS_2_OBJECTS] = 255; // I wish you some figgy pudding
+	gquery(L"wish")->second.usageCosts[tFI::VERB_HAS_2_OBJECTS] = 0;
+	gquery(L"get")->second.usagePatterns[tFI::VERB_HAS_2_OBJECTS] = 127; // to get her a taxi
+	gquery(L"get")->second.usageCosts[tFI::VERB_HAS_2_OBJECTS] = 2;
+	gquery(L"speed")->second.usagePatterns[tFI::VERB_HAS_1_OBJECTS] = 0;
+	gquery(L"speed")->second.usageCosts[tFI::VERB_HAS_1_OBJECTS] = 4;
 	gquery(L"other")->second.toLowestCost(indefinitePronounForm);
 	gquery(L"last")->second.toLowestCost(adjectiveForm);
 	gquery(L"last")->second.toLowestCost(adverbForm);
 	gquery(L"few")->second.toLowestCost(quantifierForm);
 	gquery(L"spring")->second.toLowestCost(verbForm);
-	gquery(L"dove")->second.setCost(verbForm,3);
-	gquery(L"mind")->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]=0; 
-	gquery(L"mind")->second.usageCosts[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]=4;
-	gquery(L"walk")->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]=0; 
-	gquery(L"walk")->second.usageCosts[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]=4;
-	gquery(L"repair")->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]=0; // He wanted to repair to the Gallery.
-	gquery(L"repair")->second.usageCosts[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]=4;
-	gquery(L"step")->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]=0; 
-	gquery(L"step")->second.usageCosts[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]=4;
-	gquery(L"side")->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]=0; 
-	gquery(L"side")->second.usageCosts[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]=4;
-	gquery(L"situation")->second.flags|=tFI::notPhysicalObjectByWN;
-	gquery(L"hope")->second.flags|=tFI::notPhysicalObjectByWN;
-	gquery(L"mind")->second.flags|=tFI::notPhysicalObjectByWN;
-	Forms[indefinitePronounForm]->inflectionsClass=L"noun";
-	Forms[letterForm]->inflectionsClass=L"noun";
-	Forms[honorificForm]->inflectionsClass=L"noun";
-	addGenderedNouns(L"source\\lists\\commonProfessions.txt",SINGULAR|MALE_GENDER|FEMALE_GENDER,commonProfessionForm);
-	addGenderedNouns(L"source\\lists\\newCommonProfessions.txt",SINGULAR|MALE_GENDER|FEMALE_GENDER,commonProfessionForm);
-	addGenderedNouns(L"source\\lists\\commonProfessionsPlural.txt",PLURAL|MALE_GENDER|FEMALE_GENDER,commonProfessionForm); // only exist in plural form [staff]
-	gquery(L"woman")->second.remove(commonProfessionForm);
-	gquery(L"hand")->second.remove(commonProfessionForm);
-	predefineVerbsFromFile(L"think",L"think",L"source\\lists\\newThinkSayVerbs.txt",0);
-	Inflections governmentTitle[] = {
-				{L"ambassador",MALE_GENDER|FEMALE_GENDER},
-				{NULL,0}};
-	predefineWords(governmentTitle,L"honorific",L"hon",L"noun",tFI::queryOnAnyAppearance,false);
-	/***** begin remove section when refresh of DB is done 
-		// for each timeUnit, etc., make sure that the usageCost of that = that of the equivalent noun.
-	/*
-	addGenderedNouns(L"source\\lists\\newCommonProfessions.txt",SINGULAR|MALE_GENDER|FEMALE_GENDER,commonProfessionForm);
-	predefineVerbsFromFile(L"internalState",L"internalState",L"source\\lists\\newInternalStateVerbs.txt",0);
-	Inflections honorificFull[] = {{L"count",MALE_GENDER},{L"inspector",MALE_GENDER|FEMALE_GENDER},{NULL,0}};
-	predefineWords(honorificFull,L"honorific",L"hon",L"",0,false);
-	wchar_t *particles[]={ L"apart", L"about", L"across", L"along", L"around", L"aside", L"away", L"back", L"by", L"down", 
-												 L"forth", L"forward", L"home", L"in", L"off", L"on", L"out", L"over", L"past", L"round", L"through", L"under", L"up",NULL };
-	particleForm=predefineWords(particles,L"particle",L"pa");
-	wchar_t *relatives[]={ L"mother", L"father", L"sister", L"brother", L"sibling", L"son", L"daughter",
-												 L"grandmother", L"grandfather", L"grandson", L"granddaughter",
-												 L"wife", L"husband", L"spouse",
-												 L"niece", L"nephew", L"uncle", L"aunt", 
-												 L"grandniece", L"grandnephew", L"granduncle", L"grandaunt", 
-												 L"brother-in-law", L"sister-in-law", L"father-in-law", L"mother-in-law", L"daughter-in-law", L"son-in-law",
-												 L"cousin", L"coworker", L"relation", L"relative", L"parent", L"child",
-												 NULL };
-	relativeForm=predefineWords(relatives,L"relative",L"re");
-	wchar_t *interjection[] = {L"sorry",L"lord",NULL};
-	predefineWords(interjection,L"interjection",L"inter");
-	*/
-	/***** end remove section when refresh of DB is done ****/
-	Inflections pronoun[] = {{L"rest",PLURAL|MALE_GENDER|FEMALE_GENDER|NEUTER_GENDER},{NULL,0}};
-	predefineWords(pronoun,L"pronoun",L"pn",L"noun",tFI::queryOnAnyAppearance,false);
-	Inflections indefinite_pronoun[]={ {L"every one",SINGULAR|MALE_GENDER|FEMALE_GENDER},{NULL,0}};
-	predefineWords(indefinite_pronoun,L"indefinite_pronoun",L"indef_pron",L"noun",0);
-	gquery(L"every one")->second.remove(UNDEFINED_FORM_NUM);
-	gquery(L"every one")->second.remove(L"abbreviation");
-	gquery(L"every one")->second.remove(L"adjective");
-	gquery(L"every one")->second.remove(L"verb");
-	gquery(L"every one")->second.remove(L"adverb");
-	gquery(L"every one")->second.remove(pronounForm);
-	Inflections titles[]={ {L"priestess",FEMALE_GENDER},{L"chief",MALE_GENDER},{L"chieftess",FEMALE_GENDER},{L"mayor",MALE_GENDER},{L"monseigneur",MALE_GENDER},{L"emperor",MALE_GENDER},{NULL,0}};
-	predefineWords(titles,L"honorific",L"hon",L"noun",0,false);
-	Inflections honorific[] = {{L"mademoiselle",FEMALE_GENDER},{NULL,0}};
-	predefineWords(honorific,L"honorific",L"hon",L"noun",0,false);
-	Inflections pinr[] = {{L"mademoiselle",FEMALE_GENDER},{NULL,0}};
-  predefineWords(pinr,L"pinr",L"pinr",L"noun",false,false);
-	Inflections indefinite_pronoun2[]={ // agreement is singular ownership is fuzzy
-			{L"crowd",PLURAL|MALE_GENDER|FEMALE_GENDER},
-			{NULL,0}};
-	predefineWords(indefinite_pronoun2,L"indefinite_pronoun",L"indef_pron",L"noun",0);
-	Inflections quantifier[] = {{L"several",PLURAL},{NULL,0}};
-	predefineWords(quantifier,L"quantifier",L"quant",L"noun",0,false);
-	InflectionsRoot adverb2[] = {{L"next",ADVERB_NORMATIVE,L"next"},{L"first",ADVERB_NORMATIVE,L"first"},{L"in total",ADVERB_NORMATIVE,L"in total"},{NULL,0}}; // when did he first run?
-	predefineWords(adverb2,L"adverb",L"adv",L"adverb");  
-	InflectionsRoot adjective[] = {{L"state-of-the-art",ADJECTIVE_NORMATIVE,L"state-of-the-art"},{L"next",ADJECTIVE_NORMATIVE,L"next"},{L"op-ed",ADJECTIVE_NORMATIVE,L"op-ed"},{NULL,0}};
-	predefineWords(adjective,L"adjective",L"adj",L"adjective");  
-	Inflections honorific_abbreviation[] = {{L"sen",MALE_GENDER|FEMALE_GENDER},{NULL,0}};
-	predefineWords(honorific_abbreviation,L"honorific_abbreviation",L"hon_abb",L"noun",0,false);
-	InflectionsRoot noun_abbreviation[] = {{L"ph.d.",SINGULAR,L"ph.d."},{NULL,0}};
-	predefineWords(noun_abbreviation,L"noun",L"n",L"noun");
-	wchar_t *det_another[]={ L"another",NULL };
-	predefineWords(det_another,L"determiner",L"det");
-	addDemonyms(L"source\\lists\\newdemonyms.txt");
-	gquery(L"englishmen")->second.mainEntry=gquery(L"englishman");
-	gquery(L"men")->second.mainEntry=gquery(L"man");
-	gquery(L"burning")->second.mainEntry=gquery(L"burn");
-	InflectionsRoot verbverb[] = {
-		{L"feel",VERB_PRESENT_FIRST_SINGULAR,L"feel"},{L"felt",VERB_PAST,L"feel"},      {L"feeling",VERB_PRESENT_PARTICIPLE,L"feel"},  {L"feels",VERB_PRESENT_THIRD_SINGULAR,L"feel"},
-		{NULL,0}};
-	predefineWords(verbverb,L"verbverb",L"verbverb",L"verb",0);
-	Inflections abbreviation[] = {
-		{L"isbn",SINGULAR},
-		{NULL,0}};
-	predefineWords(abbreviation,L"abbreviation",L"abb",L"noun",0,true);
-	initializeChangeStateVerbs();
+	gquery(L"dove")->second.setCost(verbForm, 3);
+	gquery(L"nurse")->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
+	gquery(L"nurse")->second.usageCosts[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
+	gquery(L"turn")->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
+	gquery(L"turn")->second.usageCosts[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
+	gquery(L"rap")->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
+	gquery(L"rap")->second.usageCosts[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
+	gquery(L"mind")->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
+	gquery(L"mind")->second.usageCosts[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
+	gquery(L"walk")->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
+	gquery(L"walk")->second.usageCosts[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
+	gquery(L"repair")->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0; // He wanted to repair to the Gallery.
+	gquery(L"repair")->second.usageCosts[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
+	gquery(L"step")->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
+	gquery(L"step")->second.usageCosts[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
+	gquery(L"side")->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
+	gquery(L"side")->second.usageCosts[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
+	// initialize time flags
+	createTimeCategories(true);  // normalize cost only
+	extendedParseHolidays();
 
-	gquery(L"felt")->second.flags&=~(tFI::queryOnLowerCase|tFI::queryOnAnyAppearance);
-	removeFlag(L"felt",VERB_PRESENT_FIRST_SINGULAR);
-	wchar_t *addAllGender[]={L"both",L"either",L"neither",L"any",L"all",L"another",L"other",L"each",NULL};
-	for (unsigned int I=0; addAllGender[I]; I++) 
-		addFlag(addAllGender[I],MALE_GENDER|FEMALE_GENDER|NEUTER_GENDER);
-	wchar_t *addGender[]={L"me",L"my",L"our",L"your",L"thy",L"you",L"ye",L"ya",L"yer",L"youse",L"thee",L"thees",L"thou",L"yourself",L"yourselves",NULL};
-	for (unsigned int I=0; addGender[I]; I++) 
-		addFlag(addGender[I],MALE_GENDER|FEMALE_GENDER);
-	addFlag(L"i",MALE_GENDER_ONLY_CAPITALIZED|FEMALE_GENDER_ONLY_CAPITALIZED);
-	addFlag(L"their",FEMALE_GENDER|MALE_GENDER|NEUTER_GENDER);
-	addFlag(L"couple",PLURAL);
-	wchar_t *genericGender[]={ L"man", L"fellow", L"gentleman", L"sir", L"chap", L"woman", L"lady", L"madam", L"girl", L"miss",L"missus",L"boy",NULL };
-	for (unsigned int I=0; genericGender[I]; I++)
-		Words.gquery(genericGender[I])->second.flags|=tFI::genericGenderIgnoreMatch;
-	wchar_t *genericAgeGender[]={ L"child", L"baby", L"husband", L"wife",L"father", L"mother",NULL };
-	for (unsigned int I=0; genericAgeGender[I]; I++)
-		Words.gquery(genericAgeGender[I])->second.flags|=tFI::genericAgeGender;
-	// 'that' may not be a relativizer... it doesn't necessarily start a question...
-	gquery(L"that")->second.remove(relativizerForm);
-	Forms[determinerForm]->blockProperNounRecognition=true; // any words having this form will never be considered as proper nouns
-	Forms[honorificAbbreviationForm]->blockProperNounRecognition=true; // any words having this form will never be considered as proper nouns
-	createTimeCategories(true);
-	gquery(L"sat")->second.flags&=~(tFI::queryOnLowerCase|tFI::queryOnAnyAppearance);
-	readVerbClasses();
-	readVerbClassNames();
-	readVBNet();
-	predefineHolidays();
 	printf("Finished initializing dictionary...\r");
 }
 
