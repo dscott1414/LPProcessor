@@ -24,7 +24,7 @@ class DIYDiskArray
 	bool check=false;
 
 public:
-	errno_t DIYDiskArray::initialize(__int64 first, __int64 second, T value)
+	errno_t initialize(__int64 first, __int64 second, T value)
 	{
 		saveFirst = first;
 		saveSecond = second;
@@ -56,13 +56,13 @@ public:
 		return 0;
 	}
 
-	wchar_t *DIYDiskArray::errstr()
+	wchar_t *errstr()
 	{
 		_wcserror_s(errbuffer, 1024, error);
 		return errbuffer;
 	}
 
-	int DIYDiskArray::put(__int64 first, __int64 second, T value)
+	int put(__int64 first, __int64 second, T value)
 	{
 		if (check)
 			lplog(LOG_ERROR, L"DIYDiskArray:put [%I64d,%I64d] %f", first, second, value);
@@ -98,7 +98,7 @@ public:
 		return 0;
 	}
 
-	T DIYDiskArray::get(__int64 first, __int64 second)
+	T get(__int64 first, __int64 second)
 	{
 		if (check)
 			lplog(LOG_ERROR, L"DIYDiskArray:get [%I64d,%I64d]", first, second);
@@ -134,14 +134,14 @@ public:
 		}
 	}
 
-	DIYDiskArray::DIYDiskArray(wchar_t *tpath)
+	DIYDiskArray(wchar_t *tpath)
 	{
 		path = tpath;
 		anyErrorFatal = true;
 	}
 
 
-	DIYDiskArray::~DIYDiskArray()
+	~DIYDiskArray()
 	{
 	}
 };

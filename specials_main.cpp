@@ -1534,7 +1534,7 @@ unordered_map<wstring, vector <wstring> > maxentAssociationMap =
 	{ L"relativizer", { L"what" } },
 	{ L"particle", { L"adverb" } }, // LP usually treats particles as adverbs, not sure whether this is strictly correct, but it makes sense to me.
 	// include possible subclasses
-	{ L"verb", { L"verbverb",L"think",L"have",L"is",L"does",L"be",L"does_negation",L"is_negation",L"been",L"negation_modal_auxiliary",L"modal_auxiliary"} }, // feel, see, watch, hear, tell etc // fancy, say (thinksay verbs)
+	{ L"verb", { L"verbverb",L"think",L"have",L"have_negation",L"is",L"is_negation",L"does",L"does_negation",L"be",L"been",L"modal_auxiliary",L"negation_modal_auxiliary",L"future_modal_auxiliary",L"negation_future_modal_auxiliary"} }, // feel, see, watch, hear, tell etc // fancy, say (thinksay verbs)
 	// stanford maxent apparently has no indefinite pronoun, so it classes them all as nouns.
 	{ L"noun",{ L"dayUnit",L"timeUnit",L"quantifier",L"numeral_cardinal",L"indefinite_pronoun" } }, // all, some etc // something, everything
 	{ L"adjective",{ L"quantifier",L"numeral_ordinal" }},  // many
@@ -1629,7 +1629,7 @@ int checkStanfordMaxentAgainstWinner(Source &source, int wordSourceIndex, wstrin
 		//(std::find(winnerForms.begin(), winnerForms.end(), nounForm) != winnerForms.end() || std::find(winnerForms.begin(), winnerForms.end(), adjectiveForm) != winnerForms.end()) && 
 		iswlower(originalWordSave[0]))
 		return 0;
-	// Maxent sometimes thinks things are proper nouns, when they are actually just other forms, even if theyare capitalized, usually when they are the first word.
+	// Maxent sometimes thinks things are proper nouns, when they are actually just other forms, even if they are capitalized, usually when they are the first word.
 	// I have not found an example where this is the case.
 	vector <wstring> pnExceptionForms =
 	{ L"pronoun", L"pronoun possessive_pronoun", L"conjunction", L"determiner",
@@ -1651,6 +1651,15 @@ int checkStanfordMaxentAgainstWinner(Source &source, int wordSourceIndex, wstrin
 		return 0;
 	// these cases have been proven by examination to be either maxent mistakes or Proper Nouns used as adjectives (which is more of an implementation difference)
 	if (posList[0] == L"adjective" && std::find(winnerForms.begin(), winnerForms.end(), PROPER_NOUN_FORM_NUM) != winnerForms.end())
+		return 0;
+	// these cases have been proven by examination - Stanford guesses this to be a noun, but if it is capitalized, it is an honorific/honorific_abreviation
+	if (posList[0] == L"noun" && iswupper(originalWordSave[0]) && (std::find(winnerForms.begin(), winnerForms.end(), honorificForm) != winnerForms.end() || std::find(winnerForms.begin(), winnerForms.end(), honorificAbbreviationForm) != winnerForms.end()))
+		return 0;
+	// LP is always right about these negative forms (by examination)
+	if (posList[0] == L"noun" && (std::find(winnerForms.begin(), winnerForms.end(), doesNegationForm) != winnerForms.end() ||
+		                            std::find(winnerForms.begin(), winnerForms.end(), negationModalAuxiliaryForm) != winnerForms.end() ||
+																std::find(winnerForms.begin(), winnerForms.end(), isNegationForm) != winnerForms.end() ||
+																std::find(winnerForms.begin(), winnerForms.end(), haveNegationForm) != winnerForms.end()))
 		return 0;
 	/////////////////////////////
 	wstring posListStr;
@@ -1713,7 +1722,7 @@ int maxentCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *vm
 				if (checkStanfordMaxentAgainstWinner(source, wordSourceIndex, originalParse, parse, numPOSNotFound, noMatchMap, inRelativeClause))
 				{
 					numNoMatch++;
-					if (source.m[wordSourceIndex].word->first == L"that" && !inRelativeClause)
+					//if (source.m[wordSourceIndex].word->first == L"that" && !inRelativeClause)
 						source.printSentence(SCREEN_WIDTH, start, endIndex, true);
 				}
 				if (wordSourceIndex == until)

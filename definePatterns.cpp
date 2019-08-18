@@ -2227,8 +2227,9 @@ int createSecondaryPatterns2(void)
 									 1,L"?*-1",0,0,1,
 									 0); // (a) - slide the block over.
 		// what he seeks to attain we do not know.
+		// When he thinks he has given an extraordinarily clever impersonation he shakes with laughter.
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}",L"C",//3,L"demonstrative_determiner",L"personal_pronoun_nominative",L"indefinite_pronoun",0,0,1, // *he* whom you await taken out - how is this different than _NOUN[9]?
-										3,L"which",L"what",L"whose",0,1,1,
+										4,L"which",L"what",L"whose",L"relativizer|when",0,1,1,
 										1,L"__S1{_BLOCK:EVAL}",0,1,1,
 										1,L"__S1{_BLOCK:EVAL}",0,1,1,
 										0);

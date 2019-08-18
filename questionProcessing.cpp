@@ -464,14 +464,14 @@ void createQuestionPatterns(void)
 						1,L"__NOUN[*]{HOBJECT}",0,1,1,
 						2,L"__ALLVERB",L"_COND{VERB}",0,1,1,
 						0);
-		cPattern::create(L"_RELQ{_FINAL_IF_ALONE:_FORWARD_REFERENCE:S_IN_REL:_QUESTION}",L"",
-										2,L"_ADJECTIVE",L"_ADVERB",0,0,1,
-										1,L"relativizer*-1",0,1,1, // this is necessary to beat Q1[J] which matches the same but incorrectly
-										1,L"_ADVERB",0,0,1, // where simply every one is bound to turn up sooner or later
-										1,L"__S1{_BLOCK:EVAL}",0,1,1,
-										1,L"preposition*4",0,0,1, // that you are afraid 'of'// preposition use should be rare!
-										0);
-				//  Mrs . Edgar Keith lives here , does she[mrs] not ?
+	cPattern::create(L"_RELQ{_FINAL_IF_ALONE:_FORWARD_REFERENCE:S_IN_REL:_QUESTION}", L"",
+		2, L"_ADJECTIVE", L"_ADVERB", 0, 0, 1,
+		1, L"relativizer*-1", 0, 1, 1, // this is necessary to beat Q1[J] which matches the same but incorrectly
+		1, L"_ADVERB", 0, 0, 1, // where simply every one is bound to turn up sooner or later
+		1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
+		1, L"preposition*4", 0, 0, 1, // that you are afraid 'of'// preposition use should be rare!
+		0);
+	//  Mrs . Edgar Keith lives here , does she[mrs] not ?
 	cPattern::create(L"_MS1{_FINAL:_QUESTION}",L"7",
 									 1,L"__S1{_BLOCK:EVAL}",0,1,1,
 									 1,L",",0,1,1,

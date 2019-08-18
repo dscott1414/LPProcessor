@@ -292,7 +292,6 @@ void trainModelFromSource(Source &source, unordered_map <wstring, int> &wordTagC
 		MYSQL_RES * result;
 		MYSQL_ROW sqlrow;
 		wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-		int startTime = clock(), numSourcesProcessedNow = 0;
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"select w.word, f.name as formname, MAX(count) from words w, wordforms wf, forms f where wf.formId = f.id and w.id = wf.wordId and w.word in(%s) group by word", wordsToAdd.substr(0, wordsToAdd.length() - 1).c_str());
 		if (!myquery(&source.mysql, qt, result))
 			lplog(LOG_FATAL_ERROR, L"Error in model training.");
@@ -360,7 +359,7 @@ void loadModel(vector <wstring> &model, unordered_map <wstring, int> &wordTagCou
 	for (vector <wstring>::iterator mi = model.begin(), miEnd = model.end(); mi != miEnd; mi++)
 	{
 		if ((mi-model.begin()) % 5000 == 0)
-			printf("Loading model processed: %03I64d%%:%09I64d\r", 100 * (mi - model.begin()) / model.size(), (mi - model.begin()));
+			printf("Loading model processed: %03d%%:%09I64d\r", (int) (100 * (mi - model.begin()) / model.size()), (__int64)(mi - model.begin()));
 		wstring type, tag, x;
 		int count;
 		std::wstringstream convertor(*mi);
@@ -683,7 +682,7 @@ void appendAssociatedFormsToViterbiTags(Source &source)
 	for (WordMatch &im : source.m)
 	{
 		if (wordIndex % 5000 == 0)
-			printf("Appending associated forms: %03I64d%%:%09d\r", ((__int64)100) * wordIndex / source.m.size(), wordIndex);
+			printf("Appending associated forms: %03I64d%%:%09d\r", (__int64)(((__int64)100) * wordIndex / source.m.size()), wordIndex);
 		if (im.preferredViterbiForms.empty())
 			break;
 		im.originalPreferredViterbiForm = im.preferredViterbiForms[0];
@@ -748,7 +747,7 @@ void appendAssociatedFormsToViterbiTags(Source &source)
 
 void getInternalViterbiInfo(Source &source, int viterbiOriginalTagIndex, int wordSourceIndex, wstring &prevTag, wstring &tag, int &tagTransitionCount, int &wordTagCount,
 	vector <wstring> &tags, //vector <wstring> &vocab,
-	DIYDiskArray<double> &probabilityMatrix, DIYDiskArray<int> &pathMatrix,
+	DIYDiskArray<int> &pathMatrix,
 	unordered_map <wstring, int> &wordTagCountsMap, unordered_map <wstring, int> &tagTransitionCountsMap)
 {
 	prevTag = tags[pathMatrix.get(viterbiOriginalTagIndex,wordSourceIndex)];
@@ -771,7 +770,7 @@ void compareViterbiAgainstStructuredTagging(Source &source,
 	unordered_map <wstring, int> &tagLookup,
 	vector <wstring> &tags, //vector <wstring> &vocab,
 	unordered_map <wstring, int> &wordTagCountsMap, unordered_map <wstring, int> &tagTransitionCountsMap, unordered_map <wstring, int> &tagCountsMap,
-	JavaVM *vm, JNIEnv *env)
+	JNIEnv *env)
 {
 	wstring winnerFormsString;
 	int viterbiMismatchesSetToSeparator = 0, viterbiMismatchesNotSet = 0, viterbiMismatchesIllegal = 0, viterbiMismatchesNotWinner = 0, wordSourceIndex = 0;
@@ -783,7 +782,7 @@ void compareViterbiAgainstStructuredTagging(Source &source,
 	for (vector <WordMatch>::iterator im = source.m.begin(), imEnd = source.m.end(); im != imEnd; im++, wordSourceIndex++)
 	{
 		if (wordSourceIndex % 5000 == 0)
-			printf("Comparing viterbi against structured tagging: %03I64d%%:%09d\r", ((__int64)100) * wordSourceIndex / source.m.size(), wordSourceIndex);
+			printf("Comparing viterbi against structured tagging: %03I64d%%:%09d\r", (__int64)(((__int64)100) * wordSourceIndex / source.m.size()), wordSourceIndex);
 		averageViterbiProbability += im->preferredViterbiProbability;
 		totalNumWinnerForms += im->getNumWinners();
 		totalNumForms += im->formsSize();
@@ -905,7 +904,7 @@ void compareViterbiAgainstStructuredTagging(Source &source,
 				}
 				if (winnerForms.size() > 0)
 					winnerWordTagProbability += L")";
-				getInternalViterbiInfo(source, viterbiOriginalTagIndex, wordSourceIndex, prevTag, tag, tagTransitionCount, wordTagCount,tags, probabilityMatrix, pathMatrix,wordTagCountsMap, tagTransitionCountsMap);
+				getInternalViterbiInfo(source, viterbiOriginalTagIndex, wordSourceIndex, prevTag, tag, tagTransitionCount, wordTagCount,tags, pathMatrix,wordTagCountsMap, tagTransitionCountsMap);
 				lplog(LOG_ERROR, L"stanfordNotIdentified = %s stanfordIsLPWinner=%s stanfordIsViterbiWinner=%s", (stanfordNotIdentified) ? L"true" : L"false", (stanfordIsLPWinner) ? L"true" : L"false", (stanfordIsViterbiWinner) ? L"true" : L"false");
 				if (stanfordNotIdentified) stanfordNotIdentifiedNum++;
 				if (stanfordIsLPWinner) stanfordIsLPWinnerNum++;
@@ -932,7 +931,7 @@ void compareViterbiAgainstStructuredTagging(Source &source,
 					int tagTransitionCount, wordTagCount;
 					int currentTagIndex = tagLookup[currentTagOfHighestProbabilities[p]];
 					getInternalViterbiInfo(source, currentTagIndex, wordSourceIndex, prevTag, tag, tagTransitionCount, wordTagCount,
-						tags, probabilityMatrix, pathMatrix, wordTagCountsMap, tagTransitionCountsMap);
+						tags, pathMatrix, wordTagCountsMap, tagTransitionCountsMap);
 					lplog(LOG_ERROR, L"%d:preferredViterbiTags %d: %s [%f tagTransition=%f (#previousTag[%s]=%d #transition=%d) wordTagProbability=%f (#tag[%s]=%d #wordTag=%d)]", 
 						wordSourceIndex, p, currentTagOfHighestProbabilities[p].c_str(), bestProbabilitiesAtWordOnly[p],
 						tagTransitionProbabilityMatrix[pathMatrix.get(currentTagIndex,wordSourceIndex)][currentTagIndex],
@@ -986,7 +985,7 @@ void compareViterbiAgainstStructuredTagging(Source &source,
 
 // Decode sequences
 // wordCountLimit - use words that occur across the corpus no less than this number
-void tagFromSource(Source &source, vector <wstring> &model,int wordCountLimit, JavaVM *vm,JNIEnv *env,bool compare)
+void tagFromSource(Source &source, vector <wstring> &model,int wordCountLimit, JNIEnv *env,bool compare)
 {
 	unordered_map <wstring, int> wordTagCountsMap, tagTransitionCountsMap, tagCountsMap;
 	loadModel(model, wordTagCountsMap, tagTransitionCountsMap, tagCountsMap);
@@ -1021,7 +1020,7 @@ void tagFromSource(Source &source, vector <wstring> &model,int wordCountLimit, J
 				tagLookup,
 				tags,//vocab,
 				wordTagCountsMap, tagTransitionCountsMap, tagCountsMap,
-				vm,env);
+				env);
 	}
 }
 
@@ -1049,7 +1048,7 @@ void testViterbiFromSource(Source &source)
 	JavaVM *vm;
 	JNIEnv *env;
 	createJavaVM(vm, env);
-	tagFromSource(source, model, 1, vm, env, true);
+	tagFromSource(source, model, 1, env, true);
 	destroyJavaVM(vm);
 }
 
