@@ -186,6 +186,7 @@ public:
 	bool isCommonForm;
 	bool isNonCachedForm;
 	bool isVerbForm;
+	bool isNounForm;
   // only honorific.  So if this word is capitalized, it will not be recogized as a Proper_Noun at all.
   bool blockProperNounRecognition;
 	bool formCheck; // used only when checking dictionary entries
@@ -367,6 +368,8 @@ public:
   tIWMM mainEntry;
 	vector <int> relatedSubTypes;
 	vector <int> relatedSubTypeObjects;
+	int localWordIsCapitalized;
+	int localWordIsLowercase;
   void allocateMap(int relationType);
   cRMap *relationMaps[numRelationWOTypes];
   #ifdef ACCUMULATE_GROUPS
@@ -435,7 +438,9 @@ public:
   bool blockProperNounRecognition(void);
   int query(int form);
 	bool hasWinnerVerbForm(int winnerForms);
-  int query(wstring form);
+	bool hasVerbForm();
+	bool hasNounForm();
+	int query(wstring form);
   int lowestSeparatorCost();
     bool isLowestCost(int form);
   int queryForSeparator(void);

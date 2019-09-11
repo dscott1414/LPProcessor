@@ -89,7 +89,7 @@ LONG WINAPI unhandled_handler(struct _EXCEPTION_POINTERS* apExceptionInfo)
 	buff << "Callstack: \n";
 	for (unsigned int i = 0; i < stack.size(); i++)
 	{
-		buff << "0x" << std::hex << stack[i].address << ": " << stack[i].name << "(" << stack[i].line << ") in " << stack[i].module << "\n";
+		buff << "0x" << std::hex << stack[i].address << ": " << stack[i].name << "(" << std::dec << stack[i].line << ") in " << stack[i].module << "\n";
 	}
 	::lplog(LOG_FATAL_ERROR, L"%S", buff.str().c_str());
 	return EXCEPTION_CONTINUE_SEARCH;
@@ -1038,10 +1038,11 @@ int WRMemoryCheck(MYSQL mysql)
 //TryAcquireSRWLockExclusive	Attempts to acquire a slim reader/writer (SRW) lock in exclusive mode. If the call is successful, the calling thread takes ownership of the lock.
 //TryAcquireSRWLockShared	Attempts to acquire a slim reader/writer (SRW) lock in shared mode. If the call is successful, the calling thread takes ownership of the lock.
 
-// test timeExpressions -retry -BC 0 -cacheDir D:\cache -SR -SW -SWNR -SWNW -TNMS
-// -test tokenization ~~BEGINUNI -BC 0 -cacheDir J:\caches -SW -SWNR -SWNW -forceSourceReread -retry
+// -test timeExpressions -retry -BC 0 -cacheDir M:\caches -forceSourceReread -parseOnly -SW -SWNR -SWNW 
+// -test tokenization ~~BEGINUNI -BC 0 -cacheDir M:\caches -SW -SWNR -SWNW -forceSourceReread -retry
 // parse one gutenberg book repeatedly:
-// -book 0 -BC 0 -retry -cacheDir J:\caches -SR -SW -SWNR -SWNW -TNMS
+// -book 3537 3538 -BC 0 -cacheDir M:\caches -SW -SWNR -SWNW -forceSourceReread -numSourcesPerProcess 15 -retry -parseOnly
+// -book 0 -BC 0 -retry -cacheDir M:\caches -SR -SW -SWNR -SWNW -TNMS
 // parse gutenberg books all at once parcelled out (parseOnly):
 // -book 0 + -BC 0 -cacheDir J:\caches -SW -SWNR -SWNW -forceSourceReread -numSourcesPerProcess 15 -parseOnly -mp 8
 // do TREC:
@@ -1269,7 +1270,7 @@ int wmain(int argc,wchar_t *argv[])
 				case Source::WIKIPEDIA_SOURCE_TYPE:
 				case Source::INTERACTIVE_SOURCE_TYPE:
 				case Source::WEB_SEARCH_SOURCE_TYPE:
-					if ((ret=source.parse(title,etext,path,encoding,start,repeatStart,unknownCount,false))<0) 
+					if ((ret=source.tokenize(title,etext,path,encoding,start,repeatStart,unknownCount,false))<0) 
 					{
 						lplog(LOG_ERROR,L"ERROR:Unable to parse %s - %d (start=%s, repeatStart=%d).",path.c_str(),ret,start.c_str(),repeatStart);
 						continue;
@@ -1277,7 +1278,7 @@ int wmain(int argc,wchar_t *argv[])
 					quotationExceptions=source.doQuotesOwnershipAndContractions(totalQuotations,false);
 					break;
 				case Source::NEWS_BANK_SOURCE_TYPE:
-					if (source.parse(title, etext,path, encoding, start,repeatStart,unknownCount,true)<0) continue;
+					if (source.tokenize(title, etext,path, encoding, start,repeatStart,unknownCount,true)<0) continue;
 					quotationExceptions=source.doQuotesOwnershipAndContractions(totalQuotations,true);
 					break;
 				case Source::BNC_SOURCE_TYPE:
@@ -1399,34 +1400,46 @@ int wmain(int argc,wchar_t *argv[])
 	else
 	{
 		wstring path=L"tests\\"+ std::wstring(argv[sourceArgs + 1]) +L".txt";
-		wstring start=L"~~BEGIN",title,etext,encoding=L"UTF8";
+		wstring start=L"~~BEGIN",title,etext,encoding=L"NOT FOUND";
 		if (argv[sourceArgs + 2][0] == L'~')
 			start = argv[sourceArgs + 2];
 		int repeatStart=1;
 		bool parsedOnly;
-		if (!source.readSource(path,false,parsedOnly,true,true)) 
+		if (forceSourceReread || !source.readSource(path, false, parsedOnly, true, true))
 		{
-			if (source.parse(title,etext,path,encoding, start,repeatStart,unknownCount,false)<0)
+			if (source.tokenize(title,etext,path,encoding, start,repeatStart,unknownCount,false)<0)
 				exit(0);
 			lplog();
 			source.write(path,false);
 		}
 		quotationExceptions=source.doQuotesOwnershipAndContractions(totalQuotations,false);
 		globalTotalUnmatched+=source.printSentences(false,unknownCount,quotationExceptions,totalQuotations,globalOverMatchedPositionsTotal);
-		source.identifyObjects();
-		vector <int> secondaryQuotesResolutions;
-		source.analyzeWordSenses();
-		source.narrativeIsQuoted = true;
-		source.syntacticRelations();
-		source.writeWords(path);
-		source.identifySpeakerGroups(); 
-		source.resolveSpeakers(secondaryQuotesResolutions);
-		source.resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
-		source.printObjects();
-		source.write(path,true);
-		source.printResolutionCheck(badSpeakers);
-		source.logSpaceCheck();
-		lplog();
+		if (parseOnly || viterbiTest)
+		{
+			if (viterbiTest)
+			{
+				void testViterbiFromSource(Source &source);
+				testViterbiFromSource(source);
+			}
+			source.write(path, true);
+		}
+		else
+		{
+			source.identifyObjects();
+			vector <int> secondaryQuotesResolutions;
+			source.analyzeWordSenses();
+			source.narrativeIsQuoted = true;
+			source.syntacticRelations();
+			source.writeWords(path);
+			source.identifySpeakerGroups();
+			source.resolveSpeakers(secondaryQuotesResolutions);
+			source.resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
+			source.printObjects();
+			source.write(path, true);
+			source.printResolutionCheck(badSpeakers);
+			source.logSpaceCheck();
+			lplog();
+		}
 	}
 	freeCounter();
 	cProfile::lfprint(profile);

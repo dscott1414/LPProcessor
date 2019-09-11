@@ -146,7 +146,7 @@ bool Source::signalFinishedProcessingSource(int thisSourceId)
 { LFS
   if (!myquery(&mysql,L"LOCK TABLES sources WRITE")) return false;
   wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-  _snwprintf(qt,QUERY_BUFFER_LEN,L"update sources set processing=NULL, processed=true where id=%d", thisSourceId);
+  _snwprintf(qt,QUERY_BUFFER_LEN,L"update sources set processing=NULL, processed=true, lastProcessedTime=NOW() where id=%d", thisSourceId);
   myquery(&mysql,qt);
   unlockTables();
   return true;
@@ -886,6 +886,8 @@ tFI::tFI(void)
   tmpMainEntryWordId=-1;
   formsOffset=fACount;
   sourceId=-1;
+	localWordIsCapitalized = 0;
+	localWordIsLowercase = 0;
 }
 
 // called by transferFormsAndUsage (in this file)
@@ -928,6 +930,8 @@ tFI::tFI(unsigned int *forms,unsigned int iCount,int iInflectionFlags,int iFlags
   fACount+=(count-iCount);
   count=iCount;
   memset(relationMaps,0,numRelationWOTypes*sizeof(*relationMaps));
+	localWordIsCapitalized = 0;
+	localWordIsLowercase = 0;
 }
 
 void tFI::transferFormsAndUsage(unsigned int *forms,unsigned int &iCount,int formNum,wstring &word)

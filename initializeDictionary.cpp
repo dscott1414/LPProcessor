@@ -983,7 +983,7 @@ int WordClass::createWordCategories()
 	// http://www.wwnorton.com/write/waor.htm
 	// Some of the oil has been cleaned up.
 	// Some of the problems have been solved.
-	Inflections quantifier[] = {{L"all",SINGULAR|PLURAL},{L"some",SINGULAR|PLURAL},{L"much",SINGULAR|PLURAL},{L"many",PLURAL},{L"few",PLURAL},{L"each",SINGULAR},{L"every",PLURAL},{L"several",PLURAL},{NULL,0}};
+	Inflections quantifier[] = {{L"all",SINGULAR|PLURAL},{L"some",SINGULAR|PLURAL},{L"much",SINGULAR|PLURAL},{L"many",PLURAL},{L"few",PLURAL},{L"each",SINGULAR},{L"every",PLURAL},{L"several",PLURAL},{L"plenty",PLURAL},{NULL,0}};
 	predefineWords(quantifier,L"quantifier",L"quant",L"noun",tFI::queryOnAnyAppearance,false);
 
 	Inflections personal_pronoun_nominative[] = {
@@ -1684,6 +1684,10 @@ void WordClass::initialize()
 	for (int vf : verbForms)
 		Forms[vf]->isVerbForm = true;
 
+	vector <int> nounForms = { nounForm,indefinitePronounForm,personalPronounForm,accForm,nomForm,PROPER_NOUN_FORM_NUM,reflexiveForm,letterForm };
+	for (int nf : nounForms)
+		Forms[nf]->isNounForm = true;
+
 	// initialize levin arrays
 	readVerbClasses();
 	readVerbClassNames();
@@ -1744,7 +1748,6 @@ void WordClass::initialize()
 	// initialize time flags
 	createTimeCategories(true);  // normalize cost only
 	extendedParseHolidays();
-
 	printf("Finished initializing dictionary...\r");
 }
 

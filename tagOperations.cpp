@@ -61,7 +61,7 @@ int Source::collectTags(int recursionLevel,int PEMAPosition,int position,vector 
 				duplicate=tagSetSame(tagSet,tagSets[ts]);
 		// !duplicate && && tagSet.size() if removing empty tagsets from top level EMPTAG
 		if (recursionLevel==0 && secondaryPEMAPositions.size() && secondaryPEMAPositions[secondaryPEMAPositions.size()-1].tagSet!=tagSets.size())
-			secondaryPEMAPositions.push_back(costTagSet(position,-PEMAPosition,-1,tagSets.size(),pema[-PEMAPosition].getElement()));
+			secondaryPEMAPositions.push_back(costPatternElementByTagSet(position,-PEMAPosition,-1,tagSets.size(),pema[-PEMAPosition].getElement()));
 		if (!duplicate) // Eliminate empty tagsets? (recursionLevel || tagSet.size()) && (EMPTAG)
 		{
 			tagSets.push_back(tagSet);
@@ -93,7 +93,7 @@ int Source::collectTags(int recursionLevel,int PEMAPosition,int position,vector 
 		if (pem->begin==relativeBegin)
 		{
 			if (recursionLevel==0) // pushing down PEMAPositions to gain more accuracy
-				secondaryPEMAPositions.push_back(costTagSet(position,PEMAPosition,-1,tagSets.size(),patternElement));
+				secondaryPEMAPositions.push_back(costPatternElementByTagSet(position,PEMAPosition,-1,tagSets.size(),patternElement));
 			int nextPEMAPosition,nextPosition=position,tag;
 			if ((nextPEMAPosition=pem->nextPatternElement)>=0)
 				nextPosition=begin-pema[nextPEMAPosition].begin; // update next position
@@ -118,7 +118,7 @@ int Source::collectTags(int recursionLevel,int PEMAPosition,int position,vector 
 						position,patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),begin,end,
 						pem->getElement(),pem->getElementIndex());
 					//if (recursionLevel==0)
-					//    secondaryPEMAPositions.push_back(costTagSet(position,PEMAPosition,-1,tagSets.size(),patternElement));
+					//    secondaryPEMAPositions.push_back(costPatternElementByTagSet(position,PEMAPosition,-1,tagSets.size(),patternElement));
 					if (!exitTags)
 						collectTags(recursionLevel,nextPEMAPosition,nextPosition,tagSet,tagSets,TagSetMap);
 					tagSet.erase(tagSet.begin()+originalTagSetSize,tagSet.end());
@@ -136,7 +136,7 @@ int Source::collectTags(int recursionLevel,int PEMAPosition,int position,vector 
 						if (!childPem->begin) break;
 					if (childPEMAPosition<0 || childPem->getPattern()!=p || childPem->end!=childEnd || childPem->begin) continue;
 					//if (recursionLevel==0) // pushing down PEMAPositions to gain more accuracy
-					//  secondaryPEMAPositions.push_back(costTagSet(position,PEMAPosition,childPEMAPosition,tagSets.size(),patternElement));
+					//  secondaryPEMAPositions.push_back(costPatternElementByTagSet(position,PEMAPosition,childPEMAPosition,tagSets.size(),patternElement));
 					beginTag=0;
 					bool found=false;
 					while ((tag=patterns[p]->hasTagInSet(desiredTagSetNum,beginTag))>=0)
@@ -212,7 +212,7 @@ int Source::collectTags(int recursionLevel,int PEMAPosition,int position,vector 
 					Forms[m[position].getFormNum(pem->getChildForm())]->shortName.c_str(),
 					pem->getElement());
 				//if (recursionLevel==0) // pushing down PEMAPositions to gain more accuracy
-				//    secondaryPEMAPositions.push_back(costTagSet(position,PEMAPosition,-1,tagSets.size(),patternElement));
+				//    secondaryPEMAPositions.push_back(costPatternElementByTagSet(position,PEMAPosition,-1,tagSets.size(),patternElement));
 				if (!exitTags)
 					collectTags(recursionLevel,nextPEMAPosition,nextPosition,tagSet,tagSets,TagSetMap);
 			}
@@ -555,7 +555,6 @@ tIWMM Source::resolveToClass(int where)
 		else if (m[beginObjectPosition].pma.queryPattern(L"_TELENUM")!=-1)
 			return Words.TELENUM;
 	}
-	tIWMM w=m[where].resolveToClass();
 	if (m[where].isPPN())
 		return Words.PPN;
 	else if (m[where].queryWinnerForm(NUMBER_FORM_NUM)>=0)
@@ -572,7 +571,7 @@ tIWMM Source::resolveToClass(int where)
 		return Words.TIME;
 	else if (m[where].pma.queryPattern(L"_TELENUM")!=-1)
 		return Words.TELENUM;
-	return w;
+	return m[where].resolveToClass();
 }
 
 tIWMM Source::resolveObjectToClass(int where,int o)

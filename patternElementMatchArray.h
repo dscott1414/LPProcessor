@@ -72,6 +72,20 @@ public:
       else if (iCost+addedCost<MIN_SIGNED_SHORT) iCost=MIN_SIGNED_SHORT;
       else iCost+=addedCost;
     }
+		const wchar_t *flagsStr(wstring &temp)
+		{
+			temp.clear();
+			if (flagSet(WINNER_FLAG)) temp+=L" WINNER";
+			if (flagSet(CHILDPATBITS)) temp += L" CHILDPATBITS";
+			if (flagSet(COST_EVAL)) temp += L" COST_EVAL";
+			if (flagSet(COST_ND)) temp += L" COST_ND";
+			if (flagSet(COST_AGREE)) temp += L" COST_AGREE";
+			if (flagSet(COST_NVO)) temp += L" COST_NVO";
+			if (flagSet(COST_DONE)) temp += L" COST_DONE";
+			if (flagSet(IN_CHAIN)) temp += L" IN_CHAIN";
+			if (flagSet(ELIMINATED)) temp += L" ELIMINATED";
+			return temp.c_str();
+		}
     __int64 getRole(__int64 &tagRole); 
     bool isChildPattern(void) { return (PEMAElementMatchedSubIndex&patternFlag)==patternFlag; }
     unsigned int getChildPattern(void) { return (PEMAElementMatchedSubIndex&~patternFlag)>>CHILDPATBITS; }

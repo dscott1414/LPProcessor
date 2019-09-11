@@ -367,9 +367,10 @@ int createBasicPatterns(void)
 	cPattern::create(L"__ADVERB",L"1",2,L"to",L"preposition|by",0,1,1,
 											2,L"and",L"&",0,1,1,
 											2,L"preposition|fro",L"preposition|by",0,1,1,0);
-	// this morning
+	// this morning / this very morning
 	cPattern::create(L"_ADVERB{FLOATTIME}",L"T",
 											2,L"demonstrative_determiner{TIMEMODIFIER}",L"adjective{TIMEMODIFIER}",0,1,1,
+											1, L"adverb{ADV}", 0, 0, 1, // very
 											5,L"month{MONTH}",L"daysOfWeek{DAYWEEK}",L"season{SEASON}",L"timeUnit{TIMECAPACITY}",L"dayUnit{TIMECAPACITY}",0,1,1,
 											0);
 	cPattern::create(L"_ADVERB{FLOATTIME}",L"9",1,L"to",0,1,1,
@@ -1598,7 +1599,7 @@ void createPrepositionalPhrases(void)
 	// After a moment or two Tommy's indignation got the better of him.
 	cPattern::create(L"_PP{_FINAL_IF_ALONE:_BLOCK:PREP:_NO_REPEAT}",L"2",
 									 1,L"_ADVERB*1",0,0,1, // discourage ADVERBS if they can be picked up from ALLOBJECTS instead and bound to the previous verb
-									 2,L"preposition{P}",L"verbalPreposition{P}",0,1,1,
+									 2,L"preposition{P}",L"verbalPreposition{P}",0,1,1,  // this should be a particle
 									 1,L"preposition{P}",0,0,1, // from within
 									 1,L"_ADVERB*3",0,0,1, // I haven't seen you for SIMPLY centuries, my dear. // adverbial use should be rare - prefer adjectives attached to the nouns over adverbs.
 									 // Under the original act, how many judges were to be on the court? - __NOUNREL should have at least a cost of 2 because it matches too much (with its comma)
@@ -1679,7 +1680,7 @@ int createSecondaryPatterns2(void)
 				L"_VERBREL2*2{SUBJECT:GNOUN:SINGULAR:_BLOCK:EVAL}",L"__QSUBJECT{SUBJECT:GNOUN:SINGULAR}",L"__NOUNRU{SUBJECT}",
 				L"noun{SUBJECT:N_AGREE}",SINGULAR_OWNER|PLURAL_OWNER,1,1, // Poirot's were pleasantly vague .
 			 1,L"__INTERPPB",0,0,1,
-			 1,L"__C1_IP",0,0,1,
+			 1,L"__C1_IP",0,0,1, // her father, Neptune, lives in a beautiful castle
 			0);
 	// with him was the evil-looking Number 14.
 	// Beside him stood Annette.
@@ -1852,11 +1853,12 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"__ALLTHINK",L"",                   
 						1,L"_ADVERB",0,0,1,
 						3,L"_THINK",L"_THINKPAST",L"_THINKPRESENT",0,1,1,0); // for the programming convenience of getNounPhraseInfo
+	// She thinks that if you are going to carry her banner in the procession you ought to let her take your light .
 	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}",L"5",
 									 1,L"__C1__S1",0,1,1,
 									 1,L"__ALLTHINK{VERB}",0,1,1, // L"think" for all active tenses! - possibly add INTRO_S1.
 									 3,L"_NOUN_OBJ{OBJECT}",L"__NOUN[*]{OBJECT}",L"_ADJECTIVE",0,0,1, // Lawrence told me you were with monsieur Poirot. /  She felt confident he was there.
-									 1,L"demonstrative_determiner|that",0,0,1,
+									 1,L"demonstrative_determiner|that{S_IN_REL}",0,0,1,
 									 2,L"__S1[*]{_BLOCK:OBJECT:EVAL}",L"_MS1[*]{_BLOCK:OBJECT:EVAL}",0,1,1,
 									 0);
 	// missing 'that' clause
@@ -1923,7 +1925,7 @@ int createSecondaryPatterns2(void)
 									 0);
 	cPattern::create(L"__INTRO2_S1{_ONLY_BEGIN_MATCH:FLOATTIME}",L"5", // PP could match a time
 									7,L"_PP",L"_VERBREL2*1{_BLOCK:EVAL}",L"_REL1[*]*1",L"conjunction",L"coordinator",L"then",L"so",0,1,1, // took out *1 from _PP - discouraged legitimate leading prepositional phrases
-									 3,L"dash",L":",L",",0,0,1,
+									 4,L"dash",L":",L",",L"__ADVERB",0,0,1,
 									 0);
 	cPattern::create(L"__INTRO2_S1{_ONLY_BEGIN_MATCH}",L"6",
 									1,L"if",0,1,1,
@@ -2071,6 +2073,7 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"_REL1{_FINAL_IF_ALONE:_FORWARD_REFERENCE:S_IN_REL}",L"2",//3,L"demonstrative_determiner",L"personal_pronoun_nominative",L"indefinite_pronoun",0,0,1, // *he* whom you await taken out - how is this different than _NOUN[9]?
 										2,L"_ADJECTIVE",L"_ADVERB",0,0,1,
 										4,L"relativizer",L"interrogative_determiner",L"as",L"demonstrative_determiner|that",0,1,1,
+										1,L"_PP", 0,0,1,  // He knew that *after sunset* almost all the birds were asleep.
 										1,L"_ADVERB",0,0,1, // where simply every one is bound to turn up sooner or later
 										1,L"__S1{_BLOCK:EVAL}",0,1,1,
 										1,L"preposition*4",0,0,1, // that you are afraid 'of'// preposition use should be rare!
@@ -2229,7 +2232,7 @@ int createSecondaryPatterns2(void)
 		// what he seeks to attain we do not know.
 		// When he thinks he has given an extraordinarily clever impersonation he shakes with laughter.
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}",L"C",//3,L"demonstrative_determiner",L"personal_pronoun_nominative",L"indefinite_pronoun",0,0,1, // *he* whom you await taken out - how is this different than _NOUN[9]?
-										4,L"which",L"what",L"whose",L"relativizer|when",0,1,1,
+										10,L"which",L"what",L"whose",L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"preposition|during", 0,1,1,
 										1,L"__S1{_BLOCK:EVAL}",0,1,1,
 										1,L"__S1{_BLOCK:EVAL}",0,1,1,
 										0);

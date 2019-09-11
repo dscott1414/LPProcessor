@@ -79,17 +79,61 @@ unordered_map<wstring, vector<wstring>> pennMapToLP = {
 { L"VBN",{L"verb" }},
 { L"VBP",{L"verb" }},
 { L"VBZ",{L"verb" }},
-{ L"WDT",{L"interrogative_determiner",L"demonstrative_determiner" }},
-{ L"WP",{L"relativizer"}},
-{ L"WP$",{L"interrogative_determiner",L"demonstrative_determiner" }},
-{ L"WRB",{L"relativizer"} }
+{ L"WDT",{L"relativizer",L"interrogative_determiner",L"demonstrative_determiner",L"which",L"what",L"whose" }}, // wh-determiner: which, whatever, whichever 
+{ L"WP",{L"interrogative_pronoun",L"what" }}, // wh-pronoun, personal:	what, who, whom 
+{ L"WP$",{L"interrogative_determiner",L"whose",L"relativizer" }}, // wh-pronoun, possessive:	whose, whosever 
+{ L"WRB",{L"adverb",L"relativizer",L"how"} }, // wh-adverb:	where, when - LP does not distinguish WRB used to introduce a relative phrase (which is true) and its adverbial use (also true)
+{ L".",{ }}, // punctuation mark, sentence closer	.; ? *
+{ L",",{ }}, //	punctuation mark, comma	,
+{ L":",{ }}, // punctuation mark, colon :
+{ L"(",{ }}, // contextual separator, left paren (
+{ L")",{ }}, //	contextual separator, right paren )
+{ L"''",{ }} //	not listed in standard PennBank tag list but emitted by Stanford
 };
 
-int parseSentence(JNIEnv *env, wstring sentence, wstring &parse, bool pcfg)
+bool foundParsedSentence(Source &source, wstring sentence, wstring &parse)
+{
+	if (!myquery(&source.mysql, L"LOCK TABLES stanfordPCFGParsedSentences READ")) return false;
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	std::replace(sentence.begin(), sentence.end(), L'\'', L'"');
+	size_t sentencehash=std::hash<std::wstring>{}(sentence);
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select parse from stanfordPCFGParsedSentences where sentencehash = %I64d", (__int64)sentencehash); // must be %I64d because of BIGINT signed considerations
+	MYSQL_RES * result = NULL;
+	MYSQL_ROW sqlrow = NULL;
+	parse.erase();
+	if (myquery(&source.mysql, qt, result) && (sqlrow = mysql_fetch_row(result)))
+	{
+		mTW(sqlrow[0], parse);
+		std::replace(parse.begin(), parse.end(), L'"', L'\'');
+	}
+	mysql_free_result(result);
+	source.unlockTables();
+	return parse.length() > 0;
+}
+
+
+int setParsedSentence(Source &source, wstring sentence, wstring parse)
+{
+	if (!myquery(&source.mysql, L"LOCK TABLES stanfordPCFGParsedSentences WRITE")) 
+		return -1;
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	std::replace(sentence.begin(), sentence.end(), L'\'', L'"');
+	std::replace(parse.begin(), parse.end(), L'\'', L'"');
+	size_t sentencehash = std::hash<std::wstring>{}(sentence);
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"insert stanfordPCFGParsedSentences (parse,sentence,sentencehash) VALUES('%s','%s',%I64d)", parse.c_str(),sentence.c_str(),(__int64)sentencehash);
+	if (!myquery(&source.mysql, qt))
+		return -1;
+	source.unlockTables();
+	return 0;
+}
+
+int parseSentence(Source &source,JNIEnv *env, wstring sentence, wstring &parse, bool pcfg)
 {
 	static jclass parserDemoClass;
 	static jmethodID parseSentenceMethod;
 	static bool initialized = false;
+	if (pcfg && foundParsedSentence(source, sentence, parse))
+		return 0;
 	if (!initialized)
 	{
 		// First get the class that contains the method you need to call
@@ -139,13 +183,13 @@ int parseSentence(JNIEnv *env, wstring sentence, wstring &parse, bool pcfg)
 		env->ExceptionDescribe();
 		return -6;
 	}
+	if (pcfg && setParsedSentence(source, sentence, parse) < 0)
+		return -7;
 	return 0;
 }
 
-int callParseMethod(JNIEnv *env, wstring sentence, wstring &parse,wstring originalWord,vector<wstring> &posList,int duplicateSkip,bool pcfg)
+int findLPPOSEquivalents(wstring sentence, wstring &parse,wstring originalWord,vector<wstring> &posList,int duplicateSkip,bool pcfg)
 {
-	if (parseSentence(env, sentence, parse, pcfg) < 0)
-		return -1;
 	parse = L" " + parse; // take care of the edge case where the match is at the beginning
 	// pcfg output:
 	// parse=(ROOT (PRN (: ;) (S (NP (NP (NP (QP (CC and) (CD Bunny))) (, ,) (CC and) (NP (NNP Bobtail)) (, ,)) (CC and) (NP (NNP Billy))) (VP (VBD were) (ADVP (RB always)) (VP (VBG doing) (NP (JJ *) (NN something)))))))
@@ -770,7 +814,7 @@ void compareViterbiAgainstStructuredTagging(Source &source,
 	unordered_map <wstring, int> &tagLookup,
 	vector <wstring> &tags, //vector <wstring> &vocab,
 	unordered_map <wstring, int> &wordTagCountsMap, unordered_map <wstring, int> &tagTransitionCountsMap, unordered_map <wstring, int> &tagCountsMap,
-	JNIEnv *env)
+	JNIEnv *env,bool pcfg)
 {
 	wstring winnerFormsString;
 	int viterbiMismatchesSetToSeparator = 0, viterbiMismatchesNotSet = 0, viterbiMismatchesIllegal = 0, viterbiMismatchesNotWinner = 0, wordSourceIndex = 0;
@@ -861,9 +905,11 @@ void compareViterbiAgainstStructuredTagging(Source &source,
 			{
 				int duplicateSkip = 0;
 				wstring contextSentence= getContext(source, wordSourceIndex, false,duplicateSkip),parse;
-				wstring out, originalWord = source.getOriginalWord(wordSourceIndex, out, false, false);
+				if (parseSentence(source, env, contextSentence, parse, pcfg) < 0)
+					lplog(LOG_FATAL_ERROR, L"Parse failed.");
 				vector <wstring> posList;
-				callParseMethod(env, contextSentence, parse, originalWord, posList,duplicateSkip,true);
+				wstring out, originalWord = source.getOriginalWord(wordSourceIndex, out, false, false);
+				findLPPOSEquivalents(contextSentence, parse, originalWord, posList,duplicateSkip,pcfg);
 				contextSentence = getContext(source, wordSourceIndex, true, duplicateSkip);
 				bool stanfordNotIdentified = posList.empty(), stanfordIsLPWinner=false,stanfordIsViterbiWinner=false;
 				wstring viterbiForms;
@@ -1020,7 +1066,7 @@ void tagFromSource(Source &source, vector <wstring> &model,int wordCountLimit, J
 				tagLookup,
 				tags,//vocab,
 				wordTagCountsMap, tagTransitionCountsMap, tagCountsMap,
-				env);
+				env,true);
 	}
 }
 

@@ -1835,7 +1835,7 @@ public:
 	bool parseNecessary(wchar_t *path);
 	int readSourceBuffer(wstring title, wstring etext, wstring path, wstring encoding, wstring &start, int &repeatStart);
 	int parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank);
-	int parse(wstring title, wstring etext, wstring path, wstring encoding, wstring &start, int &repeatStart, unsigned int &unknownCount, bool newsBank);
+	int tokenize(wstring title, wstring etext, wstring path, wstring encoding, wstring &start, int &repeatStart, unsigned int &unknownCount, bool newsBank);
 	bool write(IOHANDLE file);
 	bool read(char *buffer,int &where,unsigned int total, bool &parsedOnly, bool printProgress, bool readOnlyParsed);
 	bool flush(int fd,void *buffer,int &where);
@@ -2028,7 +2028,7 @@ public:
 	// begin collectTags global section
 	bool tagInFocus(int begin,int end);
 	vector <int> collectTagsFocusPositions;
-	class costTagSet
+	class costPatternElementByTagSet
 	{
 	public:
 		int position;
@@ -2038,7 +2038,7 @@ public:
 		int element;
 		int cost;
 		int traceSource;
-		costTagSet(int P,int PP,int cPP,int ts,int e)
+		costPatternElementByTagSet(int P,int PP,int cPP,int ts,int e)
 		{
 			position=P;
 			PEMAPosition=PP;
@@ -2048,7 +2048,7 @@ public:
 			cost=10000000;
 			traceSource=-1;
 		}
-		bool operator == (const costTagSet& o)
+		bool operator == (const costPatternElementByTagSet& o)
 		{
 			return position==o.position &&
 				PEMAPosition==o.PEMAPosition &&
@@ -2057,7 +2057,7 @@ public:
 				element==o.element &&
 				cost==o.cost;
 		}
-		bool operator != (const costTagSet& o)
+		bool operator != (const costPatternElementByTagSet& o)
 		{
 			return position!=o.position ||
 				PEMAPosition!=o.PEMAPosition ||
@@ -2069,7 +2069,7 @@ public:
 	};
 	void identifyConversations();
 
-	vector <costTagSet> secondaryPEMAPositions;
+	vector <costPatternElementByTagSet> secondaryPEMAPositions;
 	int beginTime,timerForExit,desiredTagSetNum; // beginTime,timerForExit monitor time for collectTags
 	bool exitTags,blocking,focused;
 	sTrace debugTrace;
@@ -2077,15 +2077,16 @@ public:
 
 	int gTraceSource;
 	bool lowestContainingPatternElement(int nextPatternElementPEMAPosition,int element,vector <int> &lowestCostPEMAPositions);
-	bool tagSetAllIn(vector <costTagSet> &PEMAPositions,int I);
-	void setChain(vector <patternElementMatchArray::tPatternElementMatch *> chainPEMAPositions,vector <costTagSet> &PEMAPositions,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int &traceSource,int &minOverallChainCost);
-	void findAllChains(vector <costTagSet> &PEMAPositions,int PEMAPosition,int position,vector <patternElementMatchArray::tPatternElementMatch *> &chain,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int totalCost,int &traceSource,int &minOverallChainCost);
+	bool tagSetAllIn(vector <costPatternElementByTagSet> &PEMAPositions,int I);
+	void setChain(vector <patternElementMatchArray::tPatternElementMatch *> chainPEMAPositions,vector <costPatternElementByTagSet> &PEMAPositions,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int &traceSource,int &minOverallChainCost);
+	void findAllChains(vector <costPatternElementByTagSet> &PEMAPositions,int PEMAPosition,int position,vector <patternElementMatchArray::tPatternElementMatch *> &chain,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int totalCost,int &traceSource,int &minOverallChainCost);
 	void setChain2(vector <patternElementMatchArray::tPatternElementMatch *> &chainPEMAPositions,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int deltaCost);
 	void findAllChains2(int PEMAPosition,int position,vector <patternElementMatchArray::tPatternElementMatch *> &chain,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int changedPosition,int rootPattern,int len,bool includesPatternMatch,int deltaCost);
-	int cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patternMatchArray::tPatternMatch *childPM,int traceSource,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet);
+	int cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patternMatchArray::tPatternMatch *childPM,int traceSource,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet, wchar_t *fromWhere);
 	void recalculateOCosts(bool &recalculatePMCost,vector<patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int start,int traceSource);
-	int setSecondaryCosts(vector <int> &costs,vector <costTagSet> &secondaryPEMAPositions,vector <int> &traceSources,patternMatchArray::tPatternMatch *pm,int basePosition);
-	void lowerPreviousElementCosts(vector <int> &costs,vector <int> &traceSources,vector <costTagSet>::iterator &IP,vector <costTagSet>::iterator IPEnd);
+	int setSecondaryCosts(vector <costPatternElementByTagSet> &secondaryPEMAPositions,patternMatchArray::tPatternMatch *pm,int basePosition,wchar_t *fromWhere);
+	void lowerPreviousElementCosts(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, wchar_t *fromWhere);
+	void lowerPreviousElementCostsOld(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, wchar_t *fromWhere);
 	bool assessEVALCost(tTagLocation &tl,int pattern,patternMatchArray::tPatternMatch *pm,int position);
 	int assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,int parentPosition,int position,vector < vector <tTagLocation> > &tagSets);
 	int eliminateLoserPatterns(unsigned int begin,unsigned int end);
@@ -3086,6 +3087,7 @@ int wherePrepObject,
 	void writeWords(wstring oPath);
 	int scanForTag(int where, int tag);
 	int printSentence(unsigned int rowsize, unsigned int begin, unsigned int end, bool containsNotMatched);
+	bool evaluateAgreement(int verbPosition, int whereSubject, bool &agreementTestable);
 
 private:
 	wstring primaryQuoteType,secondaryQuoteType;
@@ -3275,7 +3277,6 @@ int wordOrderSensitiveModifier,
 	unsigned int getAllLocations(unsigned int position,int parentPattern,int rootp,int childLen,int parentLen,vector <unsigned int> &allLocations);
 	int markChildren(patternElementMatchArray::tPatternElementMatch *pem,int position,int recursionLevel,int allRootsLowestCost);
 	bool findLowCostTag(vector<tTagLocation> &tagSet,int &cost,wchar_t *tagName,tTagLocation &lowestCostTag,int parentCost,int &nextTag);
-	bool evaluateAgreement(int verbPosition,int whereSubject);
 	int evaluateAgreement(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,unsigned int parentPosition,unsigned int position,vector<tTagLocation> &tagSet,int &traceSource);
 	// agreement section end
 

@@ -226,6 +226,7 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 	tIWMM secondaryQuoteOpenWord=Words.gquery(L"‘"),secondaryQuoteCloseWord=Words.gquery(L"’");
 	unsigned int lastWord=m.size();
 	primaryQuotations=0;
+	wstring originalWord;
 	// scan for only single quotations - convert if necessary
 	// rearrange quotes, also figure out plural ownership and more on would/had is/has
 	for (unsigned int s=0; s+1<sentenceStarts.size(); s++)
@@ -284,7 +285,10 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 				{
 					m[q].flags&=~WordMatch::flagAddProperNoun;
 					if (traceParseInfo)
-						lplog(LOG_INFO,L"%d:removed flagAddProperNoun PROPER_NOUN_USAGE_PATTERN=%d asAdjective=%d lower case=%d.",q,m[q].word->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN],m[q].word->second.numProperNounUsageAsAdjective,m[q].word->second.usagePatterns[tFI::LOWER_CASE_USAGE_PATTERN]);
+						lplog(LOG_INFO, L"%d:%s:removed flagAddProperNoun asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
+							q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
+							m[q].word->second.usagePatterns[tFI::LOWER_CASE_USAGE_PATTERN], (int)m[q].word->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN],
+							m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
 				}
 				// refuse to make it proper noun, even if it is listed as one.  see WordMatch::queryForm(int form)
 				else
@@ -292,8 +296,22 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 					{
 						m[q].flags|=WordMatch::flagRefuseProperNoun;
 						if (traceParseInfo)
-							lplog(LOG_INFO,L"%d:added flagRefuseProperNoun.",q);
+							lplog(LOG_INFO, L"%d:%s:added flagRefuseProperNoun asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.", 
+								q, getOriginalWord(q, originalWord,false),m[q].word->second.numProperNounUsageAsAdjective,
+								m[q].word->second.usagePatterns[tFI::LOWER_CASE_USAGE_PATTERN], (int)m[q].word->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN],
+								m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
 					}
+			}
+			if (firstWordInSentence && (m[q].flags&WordMatch::flagFirstLetterCapitalized) && !(m[q].flags&WordMatch::flagAddProperNoun) && !(m[q].flags & WordMatch::flagRefuseProperNoun) &&
+				m[q].word->second.query(PROPER_NOUN_FORM_NUM) < 0 && m[q].word->second.localWordIsLowercase == 0 && m[q].word->second.localWordIsCapitalized > 2)
+			{
+				m[q].flags |= WordMatch::flagAddProperNoun;
+				if (traceParseInfo)
+					lplog(LOG_INFO, L"%d:%s:added flagAddProperNoun (from local) asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
+						q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
+						m[q].word->second.usagePatterns[tFI::LOWER_CASE_USAGE_PATTERN], (int)m[q].word->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN],
+						m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
+
 			}
 			// if capitalized, not all caps, at least 2 letters long, not a cardinal or ordinal number
 			// does not already have flagRefuseProperNoun or flagAddProperNoun or flagOnlyConsiderProperNounForms or flagOnlyConsiderOtherNounForms set
@@ -301,7 +319,7 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 			if ((m[q].flags&WordMatch::flagFirstLetterCapitalized) && !(m[q].flags&WordMatch::flagAllCaps) && m[q].word->first[1] &&
 				m[q].word->second.query(numeralOrdinalForm)==-1 && m[q].word->second.query(numeralCardinalForm)==-1 &&
 				!(m[q].flags&(WordMatch::flagRefuseProperNoun|WordMatch::flagOnlyConsiderProperNounForms|WordMatch::flagOnlyConsiderOtherNounForms)) &&
-				m[q].word->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN]>0 &&
+				(m[q].word->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN]>0 || m[q].word->second.localWordIsCapitalized>0) &&  // PROPER_NOUN_USAGE_PATTERN is only updated if proper noun form is added 
 				m[q].word->second.usagePatterns[tFI::LOWER_CASE_USAGE_PATTERN]==0 && 
 				// word was found capitalized alone (the number of times being a capitalized adjective is < the number of times being capitalized)
 				(m[q].word->second.numProperNounUsageAsAdjective<m[q].word->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN] ||
@@ -318,7 +336,7 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 				{
 					m[q].flags|=WordMatch::flagOnlyConsiderProperNounForms;
 					if (traceParseInfo)
-						lplog(LOG_INFO,L"%d:added flagOnlyConsiderProperNounForms (2).",q);
+						lplog(LOG_INFO,L"%d:%s:added flagOnlyConsiderProperNounForms (2).",q, getOriginalWord(q, originalWord, false));
 				}
 			}
 			if ((m[q].flags&WordMatch::flagOnlyConsiderProperNounForms) && end-begin>4 && !m[q].word->second.isUnknown())
@@ -345,17 +363,17 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 					else
 						numCapitalized++;
 				}
-				if ((allCapitalized && longestContinuousTerm>4 && numCommonClassCapitalizedWords>0) || 
+				if ((allCapitalized && longestContinuousTerm>4 && numCommonClassCapitalizedWords>0) ||
 						((end-begin)>(unsigned)numCapitalized && longestContinuousTerm>4 && (unsigned)numCommonClassCapitalizedWords>=((end-begin)-numCapitalized))) // take care of small errors / How Jay-Z Went from Street Corner to Corner Office by Zack O'Malley Greenburg (2011: Portfolio (Penguin), 240 pages) ISBN 978-1-59184-381-8
 				{
 					m[q].flags&=~WordMatch::flagOnlyConsiderProperNounForms;
 					if (traceParseInfo)
-						lplog(LOG_INFO,L"%d:removed flagOnlyConsiderProperNounForms [allCapitalized longestContinuousTerm=%d numCommonClassCapitalizedWords=%d numCapitalized=%d totalLength=%d].",
-									q,longestContinuousTerm,numCommonClassCapitalizedWords,numCapitalized,end-begin);
+						lplog(LOG_INFO,L"%d:%s:removed flagOnlyConsiderProperNounForms [allCapitalized longestContinuousTerm=%d numCommonClassCapitalizedWords=%d numCapitalized=%d totalLength=%d].",
+									q, getOriginalWord(q, originalWord, false), longestContinuousTerm,numCommonClassCapitalizedWords,numCapitalized,end-begin);
 				}
 				else	if (traceParseInfo)
-						lplog(LOG_INFO,L"%d:did not remove flagOnlyConsiderProperNounForms [allCapitalized=%s longestContinuousTerm=%d numCommonClassCapitalizedWords=%d numCapitalized=%d totalLength=%d].",
-									q,(allCapitalized) ? L"true":L"false",longestContinuousTerm,numCommonClassCapitalizedWords,numCapitalized,end-begin);
+						lplog(LOG_INFO,L"%d:%s:did not remove flagOnlyConsiderProperNounForms [allCapitalized=%s longestContinuousTerm=%d numCommonClassCapitalizedWords=%d numCapitalized=%d totalLength=%d].",
+									q, getOriginalWord(q, originalWord, false), (allCapitalized) ? L"true":L"false",longestContinuousTerm,numCommonClassCapitalizedWords,numCapitalized,end-begin);
 			}
 			if (m[q].word==Words.sectionWord)
 			{

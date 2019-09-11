@@ -2908,7 +2908,7 @@ bool Source::processPathToPattern(const wchar_t *path,Source *&source)
 		// id, path, start, repeatStart, etext, author, title from sources 
 		//char *sqlrow[]={ "1", (char *)cPath.c_str(), "~~BEGIN","1","","",(char *)cPath.c_str() };
 		wstring wpath = path, start = L"~~BEGIN",title,etext;
-		source->parse(title,etext,wpath,L"",start,repeatStart,unknownCount,false);
+		source->tokenize(title,etext,wpath,L"",start,repeatStart,unknownCount,false);
 		source->doQuotesOwnershipAndContractions(totalQuotations,false);
 		source->printSentences(false,unknownCount,quotationExceptions,totalQuotations,globalOverMatchedPositionsTotal);
 		source->addWNExtensions();

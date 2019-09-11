@@ -1416,7 +1416,7 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 			result=0;
 			continue;
 		}
-		size_t dash=wstring::npos;
+		size_t dash=wstring::npos,firstDash= wstring::npos;
 		int numDash = 0,offset=0;
 		for (wchar_t dq : sWord)
 		{
@@ -1443,6 +1443,8 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 					}
 				}
 				dash = offset;
+				if (firstDash == wstring::npos)
+					firstDash = offset;
 			}
 			offset++;
 		}
@@ -1463,11 +1465,11 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 		if (dash!=wstring::npos && result==0 && // if (not date or number)
 			sWord[1]!=0 && // not a single dash
 			!WordClass::isDash(sWord[dash+1]) && // not '--'
-			!(sWord[0]==L'a' && WordClass::isDash(sWord[1])) // a-working
+			!(sWord[0]==L'a' && WordClass::isDash(sWord[1]) && numDash==1) // a-working
 			 // state-of-the-art
 			)
 		{
-			unsigned int unknownWords=0,capitalizedWords=0,firstDash=dash,openWords=0, letters =0;
+			unsigned int unknownWords=0,capitalizedWords=0,openWords=0, letters =0;
 			vector <wstring> dashedWords = Stemmer::splitString(sWord, sWord[dash]);
 			wstring removeDashesWord;
 			for (wstring subWord : dashedWords)
@@ -1555,11 +1557,11 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 		}
 
 		if ((flags&WordMatch::flagAddProperNoun) && traceParseInfo)
-			lplog(LOG_INFO,L"%d:added flagAddProperNoun.",m.size());
+			lplog(LOG_INFO,L"%d:%s:added flagAddProperNoun.",m.size(), sWord.c_str());
 		if ((flags&WordMatch::flagOnlyConsiderProperNounForms) && traceParseInfo)
-			lplog(LOG_INFO,L"%d:added flagOnlyConsiderProperNounForms.",m.size());
+			lplog(LOG_INFO,L"%d:%s:added flagOnlyConsiderProperNounForms.", m.size(), sWord.c_str());
 		if ((flags&WordMatch::flagOnlyConsiderOtherNounForms) && traceParseInfo)
-			lplog(LOG_INFO,L"%d:added flagOnlyConsiderOtherNounForms.",m.size());
+			lplog(LOG_INFO,L"%d:%s:added flagOnlyConsiderOtherNounForms.", m.size(), sWord.c_str());
 		// does not necessarily have to be a proper noun after a word with a . at the end (P.N.C.)
 		// The description of a green toque , a coat with a handkerchief in the pocket marked P.L.C. He looked an agonized question at Mr . Carter .
 		if ((flags&WordMatch::flagOnlyConsiderProperNounForms) && m.size() && m[m.size()-1].word->first.length()>1 && m[m.size()-1].word->first[m[m.size()-1].word->first.length()-1]==L'.')
@@ -1651,7 +1653,7 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 	return 0;
 }
 
-int Source::parse(wstring title,wstring etext,wstring path,wstring encoding, wstring &start,int &repeatStart,unsigned int &unknownCount,bool newsBank)
+int Source::tokenize(wstring title,wstring etext,wstring path,wstring encoding, wstring &start,int &repeatStart,unsigned int &unknownCount,bool newsBank)
 { LFS
 	int ret=0;
   if ((ret=readSourceBuffer(title, etext, path, encoding, start, repeatStart))>=0)

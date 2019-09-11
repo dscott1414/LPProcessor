@@ -2129,9 +2129,10 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 				}
 	}
 	// prevent PRESENT from overwriting PAST / Tuppence beat a hasty retreat . 
+	bool agreementTestable;
 	if (isNonPast && inPrimaryQuote && !(tsSense&(VT_POSSIBLE|VT_PASSIVE|VT_EXTENDED|VT_VERB_CLAUSE)) && 
 		 (tsSense&VT_TENSE_MASK)!=VT_PAST_PERFECT && (tsSense&VT_TENSE_MASK)!=VT_PRESENT_PERFECT && (tsSense&VT_TENSE_MASK)!=VT_FUTURE && (tsSense&VT_TENSE_MASK)!=VT_FUTURE_PERFECT && 
-		whereSubjects.size()==1 && subjectObjects[0]>=0 && !objects[subjectObjects[0]].plural && !evaluateAgreement(whereVerb,whereSubjects[0]))
+		whereSubjects.size()==1 && subjectObjects[0]>=0 && !objects[subjectObjects[0]].plural && !evaluateAgreement(whereVerb,whereSubjects[0], agreementTestable))
 		isNonPast=false;
 	wstring tmpstr,tmpstr2,tmpstr3;
 	// if passive, locate "by" preposition and relocate SUBJECT there (with SUBJECT_ROLE)
@@ -2922,7 +2923,7 @@ void Source::syntacticRelations()
 					for (unsigned int J=0; J<tagSets.size(); J++)
 					{
 						if (debugTrace.traceDeterminer)
-							printTagSet(LOG_INFO,L"ND",J,tagSets[J],I,pma->pemaByPatternEnd);
+							printTagSet(LOG_INFO,L"ND3",J,tagSets[J],I,pma->pemaByPatternEnd);
 						evaluateNounDeterminer(tagSets[J],false,traceSource,I,I+pma->len);
 					}
 			}

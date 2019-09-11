@@ -245,6 +245,8 @@ tFI::tFI(int iForm,int iInflectionFlags,int iFlags,int iTimeFlags,int iDerivatio
   preferVerbPresentParticiple();
   sourceId=iSourceId;
   changedSinceLastWordRelationFlush=false;
+	localWordIsCapitalized=0;
+	localWordIsLowercase=0;
 }
 
 
@@ -281,7 +283,9 @@ tFI::tFI(char *buffer,int &where,int limit,wstring &ME,int iSourceId)
   changedSinceLastWordRelationFlush=false;
   sourceId=iSourceId;
 	numProperNounUsageAsAdjective = 0;
-  //preferVerbPresentParticiple();
+	localWordIsCapitalized = 0;
+	localWordIsLowercase = 0;
+	//preferVerbPresentParticiple();
 }
 
 bool tFI::retrieveWordFromDatabase(wstring &sWord, MYSQL &mysql, tFI &dbWordInfo, unordered_map <int, int> &dbUsagePatterns,int &dbMainEntryWordId)
@@ -597,6 +601,9 @@ bool tFI::write(void *buffer,int &where,int limit)
 { LFS
   if (!copy(buffer,(int)count,where,limit)) return false;
   memcpy(((char *)buffer)+where,forms(),count*sizeof(int));
+	// must write unknown form first!
+	if (query(UNDEFINED_FORM_NUM) > 0)
+		::lplog(LOG_FATAL_ERROR, L"write ILLEGAL Unknown nonzero!");
   where+=count*sizeof(int);
   if (!copy(buffer,inflectionFlags,where,limit)) return false;
 	if (!copy(buffer,timeFlags,where,limit)) return false;
@@ -747,11 +754,30 @@ int tFI::query(int form)
 }
 
 bool tFI::hasWinnerVerbForm(int winnerForms)
-{ LFS
-  for (unsigned int *f=formsArray+formsOffset,*fend=formsArray+formsOffset+count,I=0; f!=fend; f++,I++)
-		if (Forms[*f]->isVerbForm && (!winnerForms || ((1<<I)&winnerForms)!=0))
-			return true;
-  return false;
+{
+	LFS
+		for (unsigned int *f = formsArray + formsOffset, *fend = formsArray + formsOffset + count, I = 0; f != fend; f++, I++)
+			if (Forms[*f]->isVerbForm && (!winnerForms || ((1 << I)&winnerForms) != 0))
+				return true;
+	return false;
+}
+
+bool tFI::hasVerbForm()
+{
+	LFS
+		for (unsigned int *f = formsArray + formsOffset, *fend = formsArray + formsOffset + count, I = 0; f != fend; f++, I++)
+			if (Forms[*f]->isVerbForm)
+				return true;
+	return false;
+}
+
+bool tFI::hasNounForm()
+{
+	LFS
+		for (unsigned int *f = formsArray + formsOffset, *fend = formsArray + formsOffset + count, I = 0; f != fend; f++, I++)
+			if (Forms[*f]->isNounForm)
+				return true;
+	return false;
 }
 
 int tFI::query(wstring sForm)
@@ -873,7 +899,7 @@ int tFI::getFormNum(unsigned int offset)
 		return 0;
 	}
 	if ((unsigned)(formsOffset + offset) >= fACount)
-	{
+	{ 
 		::lplog(LOG_ERROR, L"ERROR:form offset %d is illegal (>%d)!", formsOffset + offset, fACount);
 		return 0;
 	}
@@ -913,7 +939,16 @@ int tFI::addForm(int form,const wstring &word)
   }
 	flags|=tFI::insertNewForms;
   count++;
-  formsArray[fACount++]=form;
+	if (form || count==1)
+		formsArray[fACount++]=form;
+	else
+	{
+		// make SURE unknownform is the first form to make isUnknown work properly
+		int saveForm = formsArray[formsOffset];
+		formsArray[formsOffset] = 0;
+		formsArray[fACount++] = saveForm;
+		::lplog(LOG_FATAL_ERROR, L"Test this!");
+	}
   return 0;
 }
 
@@ -958,21 +993,28 @@ int tFI::adjustFormsInflections(wstring originalWord,unsigned __int64 &wmflags,b
       ::lplog(L"Added ProperNoun to word %s (form #%d) at cost %d.",originalWord.c_str(),formsSize(),usageCosts[formsSize()]);
 #endif
     }
-    if ((wmflags&WordMatch::flagAddProperNoun) && !allCaps && !isFirstWord && usagePatterns[PROPER_NOUN_USAGE_PATTERN]<255)
+    if (((wmflags&WordMatch::flagAddProperNoun) || query(PROPER_NOUN_FORM_NUM)!=-1) && !allCaps && !isFirstWord && usagePatterns[PROPER_NOUN_USAGE_PATTERN]<255)
     {
       usagePatterns[PROPER_NOUN_USAGE_PATTERN]++;
       deltaUsagePatterns[PROPER_NOUN_USAGE_PATTERN]++;
     }
-    if (firstLetterCapitalized) wmflags|=WordMatch::flagFirstLetterCapitalized;
-    if (allCaps) wmflags|=WordMatch::flagAllCaps;
+		if (!isFirstWord && !allCaps)
+			localWordIsCapitalized++;
+    if (firstLetterCapitalized) 
+			wmflags|=WordMatch::flagFirstLetterCapitalized;
+    if (allCaps) 
+			wmflags|=WordMatch::flagAllCaps;
   }
-  else
-    if (usagePatterns[LOWER_CASE_USAGE_PATTERN]<255)
-    {
-      usagePatterns[LOWER_CASE_USAGE_PATTERN]++;
-      deltaUsagePatterns[LOWER_CASE_USAGE_PATTERN]++;
-    }
-    return 0;
+	else
+	{
+		if (usagePatterns[LOWER_CASE_USAGE_PATTERN] < 255)
+		{
+			usagePatterns[LOWER_CASE_USAGE_PATTERN]++;
+			deltaUsagePatterns[LOWER_CASE_USAGE_PATTERN]++;
+		}
+		localWordIsLowercase++;
+	}
+	return 0;
 }
 
 bool tFI::isUnknown(void)
@@ -1550,7 +1592,7 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 	LFS
 	bool stopDisInclination = disinclinationRecursionCount>2;
 	int ret= WORD_NOT_FOUND;
-	bool wordComplete;
+	bool wordComplete, dontMarkUndefined=false;
 	if (wordComplete = (iWord = query(sWord)) != WMM.end())
 	{
 		if (!mysql) // can get here calling parseWord on a mainEntry as well.
@@ -1582,6 +1624,7 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 			wordComplete = false;
 			if (iWord->second.isUnknown()) iWord->second.eraseForms();
 		}
+		dontMarkUndefined = true;
 	}
 	if (!wordComplete)
 	{
@@ -1628,10 +1671,18 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 		if (iWord == WMM.end() && findWordInDB(mysql, sWord, iWord) && !iWord->second.isUnknown())
 			return 0;
 		if (firstLetterCapitalized)
+		{
+			if (dontMarkUndefined)
+				return 0;
 			markWordUndefined(iWord, sWord, tFI::queryOnLowerCase, firstLetterCapitalized, nounOwner, sourceId);
+		}
 		// make some attempt at getting past French words like d'affaires l'etat etc
-		else if (sWord.length()>1 && sWord[1] == '\'' && (sWord[0] == 'd' || sWord[0] == 'l'))
+		else if (sWord.length() > 1 && sWord[1] == '\'' && (sWord[0] == 'd' || sWord[0] == 'l'))
+		{
+			if (dontMarkUndefined)
+				return 0;
 			markWordUndefined(iWord, sWord, 0, firstLetterCapitalized, nounOwner, sourceId);
+		}
 		else 
 		{
 			// search online dictionaries for word
@@ -1639,9 +1690,17 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 				return 0;
 			if (stopDisInclination) return 0;
 			if (containsSingleQuote)
+			{
+				if (dontMarkUndefined)
+					return 0;
 				markWordUndefined(iWord, sWord, 0, firstLetterCapitalized, nounOwner, sourceId);
+			}
 			else if (firstLetterCapitalized) // don't try stemming or splitting if word is capitalized, but mark as reinvestigate if every encountered in lower case.
+			{
+				if (dontMarkUndefined)
+					return 0;
 				markWordUndefined(iWord, sWord, tFI::queryOnLowerCase, firstLetterCapitalized, nounOwner, sourceId);
+			}
 			else if (ret = attemptDisInclination(mysql,iWord, sWord, sourceId)) // returns 0 if found or WORD_NOT_FOUND if not found
 			{
 				if (dashLocation < 0 && ret != WORD_NOT_FOUND && ret != NO_FORMS_FOUND)
@@ -1652,10 +1711,13 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 					wstring sWordNoDashes = sWord;
 					sWordNoDashes.erase(std::remove(sWordNoDashes.begin(), sWordNoDashes.end(), L'-'), sWordNoDashes.end());
 					sWordNoDashes.erase(std::remove(sWordNoDashes.begin(), sWordNoDashes.end(), L'—'), sWordNoDashes.end());
-					if ((iWord=Words.query(sWordNoDashes)) != Words.end())
+					tIWMM tiWord;
+					if ((tiWord = Words.query(sWordNoDashes)) == Words.end())
 						ret = Words.attemptDisInclination(mysql, iWord, sWordNoDashes, sourceId); // returns 0 if found or WORD_NOT_FOUND if not found
+					else
+						iWord = tiWord;
 				}
-				if (ret)
+				if (ret && !dontMarkUndefined)
 					ret = markWordUndefined(iWord, sWord, 0, firstLetterCapitalized, nounOwner, sourceId);
 			}
 		}
@@ -2542,7 +2604,7 @@ bool WordClass::findWordInDB(MYSQL *mysql, wstring sWord, tIWMM &iWord)
 		return false;
 	if (!myquery(mysql, L"LOCK TABLES words w READ,wordforms wf READ")) return true;
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"select w.id,wf.formId,wf.count,w.inflectionFlags,w.flags,w.timeFlags,w.mainEntryWordId,w.derivationRules,w.sourceId from words w,wordForms wf where wf.wordId=w.id and word=\"%s\"", sWord.c_str());
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select w.id,wf.formId,wf.count,w.inflectionFlags,w.flags,w.timeFlags,w.mainEntryWordId,w.derivationRules,w.sourceId from words w,wordForms wf where wf.wordId=w.id and word=\"%s\" order by wf.formId", sWord.c_str());  // don't drop order by formId!  this is necessary to ensure unknown form (0) is first, which is used in isUnknown processing!
 	MYSQL_RES *result = NULL;
 	if (!myquery(mysql, qt, result) || mysql_num_rows(result) == 0)
 	{
