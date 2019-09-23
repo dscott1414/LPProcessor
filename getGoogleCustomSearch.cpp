@@ -942,7 +942,7 @@ wstring quoteLess(wstring &qo,wstring &qlo)
   return qlo;
 }
 
-int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st, int maxProcesses, int numSourcesPerProcess, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool parseOnly);
+int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st, int maxProcesses, int numSourcesPerProcess, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool makeCopyBeforeSourceWrite, bool parseOnly);
 
 int Source::spinParses(vector <searchSource> &accumulatedParseRequests)
 {
@@ -980,7 +980,7 @@ int Source::spinParses(vector <searchSource> &accumulatedParseRequests)
 		if (processOldFile || (_waccess(path.c_str(), 0) && !rejectPath(pri->pathInCache.c_str())))
 			writeParseRequestToDatabase(pri);
 	}
-	return startProcesses(*this, 0,0,-1, -1, Source::REQUEST_TYPE, 5,5,false,true,true,true,false);
+	return startProcesses(*this, 0,0,-1, -1, Source::REQUEST_TYPE, 5,5,false,true,true,true,false,false);
 }
 
 extern int limitProcessingForProfiling;

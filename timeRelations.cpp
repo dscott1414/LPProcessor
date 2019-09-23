@@ -1165,14 +1165,27 @@ void WordClass::addTimeFlag(int flag,Inflections words[])
 	}
 }
 
-void WordClass::usageCostToNoun(Inflections words[],wchar_t *nounSubclass)
-{ LFS
-	int nounSubclassForm=FormsClass::gFindForm(nounSubclass);
-	for (int I=0; words[I].word[0]; I++)
+void WordClass::usageCostToNoun(Inflections words[], wchar_t *nounSubclass)
+{
+	LFS
+		int nounSubclassForm = FormsClass::gFindForm(nounSubclass);
+	for (int I = 0; words[I].word[0]; I++)
 	{
-		tIWMM iWord=query(words[I].word);
-		if (iWord==wNULL) continue;
-		iWord->second.costEquivalentSubClass(nounSubclassForm,nounForm);
+		tIWMM iWord = query(words[I].word);
+		if (iWord == wNULL) continue;
+		iWord->second.costEquivalentSubClass(nounSubclassForm, nounForm);
+	}
+}
+
+void WordClass::toLowestUsageCost(Inflections words[], wchar_t *formClass)
+{
+	LFS
+	int form = FormsClass::gFindForm(formClass);
+	for (int I = 0; words[I].word[0]; I++)
+	{
+		tIWMM iWord = query(words[I].word);
+		if (iWord == wNULL) continue;
+		iWord->second.toLowestCost(form);
 	}
 }
 
@@ -2051,8 +2064,9 @@ void WordClass::createTimeCategories(bool normalize)
 	{L"dawn",SINGULAR},{L"dusk",SINGULAR},{L"noon",SINGULAR},
 			{L"mornings",PLURAL},{L"afternoons",PLURAL},{L"evenings",PLURAL},{L"nights",PLURAL},{L"tomorrows",PLURAL},{L"yesterdays",PLURAL},{L"midnights",PLURAL},
 	{L"dawns",PLURAL},{L"dusks",PLURAL},{L"noons",PLURAL},{NULL,0}};
-	Inflections simultaneousUnits[] = {{L"moment",SINGULAR},{L"instant",SINGULAR},{L"flash",SINGULAR},{L"shake",SINGULAR},
-	{L"moments",PLURAL},{L"instants",PLURAL},{L"shakes",PLURAL},{NULL,0}};
+	Inflections simultaneousUnits[] = { {L"moment",SINGULAR},{L"instant",SINGULAR},{L"flash",SINGULAR},{L"shake",SINGULAR},
+	{L"moments",PLURAL},{L"instants",PLURAL},{L"shakes",PLURAL},{NULL,0} };
+	Inflections uncertainDurationUnits[] = { {L"while",SINGULAR},{L"time",SINGULAR},{NULL,0} };
 	if (normalize)
 	{
 		usageCostToNoun(months,L"month");
@@ -2061,7 +2075,8 @@ void WordClass::createTimeCategories(bool normalize)
 		usageCostToNoun(daysOfWeek,L"daysOfWeek");
 		usageCostToNoun(seasons,L"season");
 		usageCostToNoun(timeUnits,L"timeUnit");
-		usageCostToNoun(dayUnits,L"dayUnit");
+		usageCostToNoun(dayUnits, L"dayUnit");
+		toLowestUsageCost(uncertainDurationUnits, L"uncertainDurationUnit");
 		return;
 	}
 	predefineWords(months,L"month",L"month",L"noun",tFI::queryOnAnyAppearance,true);
@@ -2078,8 +2093,10 @@ void WordClass::createTimeCategories(bool normalize)
 	addTimeFlag(T_UNIT|T_LENGTH,timeUnits);
 	predefineWords(dayUnits,L"dayUnit",L"dayUnit",L"noun",tFI::queryOnAnyAppearance,true);
 	addTimeFlag(T_UNIT,simultaneousUnits);
-	predefineWords(simultaneousUnits,L"simultaneousUnit",L"simultaneousUnit",L"noun",tFI::queryOnAnyAppearance,true);
-	addTimeFlag(T_UNIT,dayUnits);
+	predefineWords(simultaneousUnits, L"simultaneousUnit", L"simultaneousUnit", L"noun", tFI::queryOnAnyAppearance, true);
+	addTimeFlag(T_UNIT, dayUnits);
+	predefineWords(uncertainDurationUnits, L"uncertainDurationUnit", L"uncertainDurationUnit", L"noun", tFI::queryOnAnyAppearance, true);
+	addTimeFlag(T_UNIT, uncertainDurationUnits);
 	wchar_t *times[]={L"3:45",NULL};
 	predefineWords(times,L"time",L"time",0,false);
 	wchar_t *dates[]={L"3/4/90",NULL};

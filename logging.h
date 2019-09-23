@@ -56,7 +56,9 @@
 extern short logCache;
 enum LogLevels { LOG_INFO=1, LOG_ERROR=2, LOG_RESOLUTION=4, LOG_NOTMATCHED=8, LOG_WHERE=128, LOG_RESCHECK=256, 
 								 LOG_SG=512, LOG_WORDNET=1024, LOG_WIKIPEDIA=2048, LOG_WEBSEARCH=4096,
-								 LOG_ROLE=8192, LOG_WCHECK=16384, LOG_TIME=32768, LOG_DICTIONARY=65536, LOG_FATAL_ERROR=131072, LOG_PROFILER=262144, LOG_QCHECK=LOG_PROFILER<<1 };
+								 LOG_ROLE=8192, LOG_WCHECK=16384, LOG_TIME=32768, LOG_DICTIONARY=65536, LOG_FATAL_ERROR=131072, LOG_PROFILER=262144, 
+								 LOG_QCHECK=LOG_PROFILER<<1, LOG_STDOUT = LOG_QCHECK << 1
+};
 //#define LOG_WORD_FLOW
 extern int logDatabaseDetails;
 int lplog(void);
@@ -69,7 +71,7 @@ struct sTrace
 {
 	bool traceTime,traceTags,traceWhere;
 	bool traceWikipedia,traceWebSearch,traceQCheck;
-	bool printBeforeElimination,traceAgreement,traceEVALObjects,traceAnaphors,traceRelations,traceSpeakerResolution,traceNyms,traceRole;
+	bool printBeforeElimination,traceSubjectVerbAgreement, traceTestSubjectVerbAgreement, traceEVALObjects,traceAnaphors,traceRelations,traceSpeakerResolution,traceNyms,traceRole;
 	bool traceObjectResolution,traceVerbObjects,traceDeterminer,traceBNCPreferences,tracePatternElimination,traceNameResolution;
 	bool traceSecondaryPEMACosting,traceMatchedSentences,traceUnmatchedSentences,traceIncludesPEMAIndex;
 	bool traceTransitoryQuestion,traceConstantQuestion,traceMapQuestion,traceCommonQuestion,traceQuestionPatternMap;

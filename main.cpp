@@ -586,7 +586,7 @@ Campello, Mole Bisleti, Cuione, Fontana Santo Stefano, Fontana Sistiliana, Fritt
 Montelena, Quercia d'Orlando, San Mattia, Carano, Fontana Scurano, Magliano, Cellerano, Fiume, Fiura, Fontana Santa, Riano, Abbadia, Case Paolone, 
 Fontana Sambuco, Gaudo, Intignano, Colleprata. 
 
-enhance agreement with the examples in comment before evaluateAgreement.
+enhance agreement with the examples in comment before evaluateSubjectVerbAgreement.
 when she thought of him, she yelled "How!". (speaker related speech not in a conversation)
 abb as pertains to plural measurements restricted 10 oz 11 in, etc.
 fix multi-subject relations
@@ -697,7 +697,7 @@ void freeCounter(void);
 void reportMemoryUsage(void);
 int getInterviewTranscript();
 int getTwitterEntries(wchar_t *filter);
-bool TSROverride=false,flipTOROverride=false,flipTNROverride=false,flipTMSOverride=false,flipTUMSOverride=false;
+bool TSROverride=false,flipTOROverride=false,flipTNROverride=false,logMatchedSentences=false,logUnmatchedSentences=false;
 
 void no_memory () {
 	lplog(LOG_FATAL_ERROR,L"Out of memory (new/STL allocation).");
@@ -834,7 +834,9 @@ bool signalCtrl(DWORD dwProcessId, DWORD dwCtrlEvent)
 	return success;
 }
 
-int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st, int maxProcesses, int numSourcesPerProcess, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite,bool parseOnly)
+int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st,
+ int maxProcesses, int numSourcesPerProcess, 
+	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite,bool makeCopyBeforeSourceWrite,bool parseOnly)
 {
 	LFS
 	chdir("source");
@@ -944,23 +946,29 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			switch (processKind)
 			{
 			case 0:
-				wsprintf(processParameters, L"releasex64\\lp.exe -ParseRequest \"%s\" -cacheDir %s %s%s%s%s%s-log %d", pathInCache.c_str(), CACHEDIR,
+				wsprintf(processParameters, L"releasex64\\lp.exe -ParseRequest \"%s\" -cacheDir %s %s%s%s%s%s%s%s%s-log %d", pathInCache.c_str(), CACHEDIR,
 					(forceSourceReread) ? L"-forceSourceReread " : L"",
 					(sourceWrite) ? L"-SW " : L"",
 					(sourceWordNetRead) ? L"-SWNR " : L"",
 					(sourceWordNetWrite) ? L"-SWNW " : L"",
 					(parseOnly) ? L"-parseOnly " : L"",
+					(makeCopyBeforeSourceWrite) ? L"-MCSW " : L"",
+					(logMatchedSentences) ? L"-logMatchedSentences " : L"",
+					(logUnmatchedSentences) ? L"-logUnmatchedSentences " : L"",
 					nextProcessIndex);
 				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\lp.exe", processParameters) < 0)
 					break;
 				break;
 			case 1:
-				wsprintf(processParameters, L"releasex64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s%s-numSourceLimit %d -log %d", CACHEDIR,
+				wsprintf(processParameters, L"releasex64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %d", CACHEDIR,
 					(forceSourceReread) ? L"-forceSourceReread " : L"",
 					(sourceWrite) ? L"-SW " : L"",
 					(sourceWordNetRead) ? L"-SWNR " : L"",
 					(sourceWordNetWrite) ? L"-SWNW " : L"",
 					(parseOnly) ? L"-parseOnly " : L"",
+					(makeCopyBeforeSourceWrite) ? L"-MCSW " : L"",
+					(logMatchedSentences) ? L"-logMatchedSentences " : L"",
+					(logUnmatchedSentences) ? L"-logUnmatchedSentences " : L"",
 					numSourcesPerProcess,
 					nextProcessIndex);
 				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\lp.exe", processParameters) < 0)
@@ -1090,7 +1098,7 @@ int wmain(int argc,wchar_t *argv[])
 	wchar_t *sourceHost=L"localhost";
 	cacheDir=CACHEDIR;
 	bool resetAllSource=false,resetProcessingFlags=false,generateFormStatistics=false,retry=false;
-	bool forceSourceReread=false,sourceWrite=false,sourceWordNetRead=false,sourceWordNetWrite=false,parseOnly=false;
+	bool forceSourceReread=false,sourceWrite=false,sourceWordNetRead=false,sourceWordNetWrite=false,parseOnly=false, makeCopyBeforeSourceWrite=false;
 	int numSourcesPerProcess = 5; 
 	for (int I=0; I<argc; I++)
 	{
@@ -1118,25 +1126,29 @@ int wmain(int argc,wchar_t *argv[])
 			parseOnly=true;
 		else if ((!_wcsicmp(argv[I],L"-LC") || !_wcsicmp(argv[I],L"-logCache")) && I<argc-1)
 			logCache=_wtoi(argv[I+1]);
-		else if ((!_wcsicmp(argv[I],L"-BC") || !_wcsicmp(argv[I],L"-bandwidthControl")) && I<argc-1)
+		else if ((!_wcsicmp(argv[I],L"-BC")) && I<argc-1) // bandwidth control
 			Internet::bandwidthControl=_wtoi(argv[I+1]);
-		else if (!_wcsicmp(argv[I],L"-fTMS") || !_wcsicmp(argv[I],L"-flipTMSOverride"))
-			flipTMSOverride=true;
-		else if (!_wcsicmp(argv[I],L"-fTUMS") || !_wcsicmp(argv[I],L"-flipTUMSOverride"))
-			flipTUMSOverride=true;
-		else if (!_wcsicmp(argv[I],L"-TSRO") || !_wcsicmp(argv[I],L"-TSROverride"))
+		else if (!_wcsicmp(argv[I],L"-logMatchedSentences"))
+			logMatchedSentences=true;
+		else if (!_wcsicmp(argv[I],L"-logUnmatchedSentences"))
+			logUnmatchedSentences=true;
+		else if (!_wcsicmp(argv[I],L"-TSRO"))
 			TSROverride=true;
-		else if (!_wcsicmp(argv[I],L"-fTOR") || !_wcsicmp(argv[I],L"-flipTOROverride"))
+		else if (!_wcsicmp(argv[I],L"-fTOR"))
 			flipTOROverride=true;
-		else if (!_wcsicmp(argv[I],L"-fTNR") || !_wcsicmp(argv[I],L"-flipTNROverride"))
+		else if (!_wcsicmp(argv[I],L"-fTNR"))
 			flipTNROverride=true;
-		else if (!_wcsicmp(argv[I],L"-forceSourceReread"))
-			forceSourceReread=true;
-		else if (!_wcsicmp(argv[I],L"-SW") || !_wcsicmp(argv[I],L"-sourceWrite"))
-			sourceWrite=true;
-		else if (!_wcsicmp(argv[I],L"-SWNR") || !_wcsicmp(argv[I],L"-sourceWordNetRead"))
+		else if (!_wcsicmp(argv[I], L"-forceSourceReread"))
+			forceSourceReread = true;
+		else if (!_wcsicmp(argv[I], L"-traceParseInfo"))
+			traceParseInfo = true;
+		else if (!_wcsicmp(argv[I], L"-SW"))
+			sourceWrite = true;
+		else if (!_wcsicmp(argv[I], L"-MCSW"))
+			makeCopyBeforeSourceWrite = true;
+		else if (!_wcsicmp(argv[I],L"-SWNR"))
 			sourceWordNetRead=true;
-		else if (!_wcsicmp(argv[I],L"-SWNW") || !_wcsicmp(argv[I],L"-sourceWordNetWrite"))
+		else if (!_wcsicmp(argv[I],L"-SWNW"))
 			sourceWordNetWrite=true;
 		else
 			continue;
@@ -1230,7 +1242,7 @@ int wmain(int argc,wchar_t *argv[])
 		{
 			HWND consoleWindowHandle = GetConsoleWindow();
 			SetWindowPos(consoleWindowHandle, HWND_NOTOPMOST, 900, 0, 700, 180, SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-			startProcesses(source, 1,0,beginSource, endSource, st, multiProcess, numSourcesPerProcess, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite,parseOnly);
+			startProcesses(source, 1,0,beginSource, endSource, st, multiProcess, numSourcesPerProcess, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite,makeCopyBeforeSourceWrite,parseOnly);
 			return 0;
 		}
 		wprintf(L"Getting number of sources to process...               \r");
@@ -1307,7 +1319,7 @@ int wmain(int argc,wchar_t *argv[])
 				lplog();
 				if (sourceWrite)
 				{
-					source.write(path, false);
+					source.write(path, false, makeCopyBeforeSourceWrite);
 					source.writeWords(path);
 				}
 				puts("");
@@ -1356,7 +1368,7 @@ int wmain(int argc,wchar_t *argv[])
 			source.resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
 			source.printObjects();
 			source.resolveWordRelations();
-			if (!source.write(path,true))
+			if (!source.write(path,true, false))
 				lplog(LOG_FATAL_ERROR,L"buffer overrun");
 			source.printResolutionCheck(badSpeakers);
 			source.logSpaceCheck();
@@ -1400,7 +1412,7 @@ int wmain(int argc,wchar_t *argv[])
 	else
 	{
 		wstring path=L"tests\\"+ std::wstring(argv[sourceArgs + 1]) +L".txt";
-		wstring start=L"~~BEGIN",title,etext,encoding=L"NOT FOUND";
+		wstring start=L"~~BEGIN",title,etext,encoding=L"UNICODE";
 		if (argv[sourceArgs + 2][0] == L'~')
 			start = argv[sourceArgs + 2];
 		int repeatStart=1;
@@ -1410,7 +1422,7 @@ int wmain(int argc,wchar_t *argv[])
 			if (source.tokenize(title,etext,path,encoding, start,repeatStart,unknownCount,false)<0)
 				exit(0);
 			lplog();
-			source.write(path,false);
+			source.write(path,false, false);
 		}
 		quotationExceptions=source.doQuotesOwnershipAndContractions(totalQuotations,false);
 		globalTotalUnmatched+=source.printSentences(false,unknownCount,quotationExceptions,totalQuotations,globalOverMatchedPositionsTotal);
@@ -1421,7 +1433,7 @@ int wmain(int argc,wchar_t *argv[])
 				void testViterbiFromSource(Source &source);
 				testViterbiFromSource(source);
 			}
-			source.write(path, true);
+			source.write(path, true, false);
 		}
 		else
 		{
@@ -1435,7 +1447,7 @@ int wmain(int argc,wchar_t *argv[])
 			source.resolveSpeakers(secondaryQuotesResolutions);
 			source.resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
 			source.printObjects();
-			source.write(path, true);
+			source.write(path, true, false);
 			source.printResolutionCheck(badSpeakers);
 			source.logSpaceCheck();
 			lplog();

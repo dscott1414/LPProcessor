@@ -3818,28 +3818,39 @@ void Source::adjustSaliencesBySubjectRole(int where,int lastBeginS1)
     objects[lsi->om.object].lsiOffset=cNULL;
 }
 
-int Source::scanForTag(int where,int tag)
-{ LFS
-	if (where>=(int)m.size()) return -1;
-	int maxLen=-1;
-	patternMatchArray::tPatternMatch *maxpm=NULL;
-	for (patternMatchArray::tPatternMatch *pm=m[where].pma.content,*pmend=pm+m[where].pma.count; pm!=pmend; pm++)
-		if (patterns[pm->getPattern()]->tags.find(tag)!=patterns[pm->getPattern()]->tags.end() && pm->len>maxLen)
+int Source::scanForPatternTag(int where, int tag)
+{
+	LFS
+		if (where >= (int)m.size()) return -1;
+	int maxLen = -1;
+	patternMatchArray::tPatternMatch *maxpm = NULL;
+	for (patternMatchArray::tPatternMatch *pm = m[where].pma.content, *pmend = pm + m[where].pma.count; pm != pmend; pm++)
+		if (patterns[pm->getPattern()]->tags.find(tag) != patterns[pm->getPattern()]->tags.end() && pm->len > maxLen)
 		{
-			maxpm=pm;
-			maxLen=pm->len;
+			maxpm = pm;
+			maxLen = pm->len;
 		}
-	return (maxLen<0) ? -1 : (int)(maxpm-m[where].pma.content);
+	return (maxLen < 0) ? -1 : (int)(maxpm - m[where].pma.content);
+}
+
+int Source::scanForPatternElementTag(int where, int tag)
+{
+	LFS
+	if (where >= (int)m.size()) return -1;
+	for (int pemaPosition = m[where].beginPEMAPosition; pemaPosition >= 0; pemaPosition = pema[pemaPosition].nextByPosition)
+		if (patterns[pema[pemaPosition].getPattern()]->getElement(pema[pemaPosition].getElement())->hasTag(tag))
+			return pemaPosition;
+	return -1;
 }
 
 void Source::scanForLocation(bool check,bool &relAsObject,int &whereRelClause,int &pmWhere,int checkEnd)
 { LFS
 		if (check)
 		{
-			pmWhere=scanForTag(whereRelClause=checkEnd,REL_TAG);
+			pmWhere=scanForPatternTag(whereRelClause=checkEnd,REL_TAG);
 			if (pmWhere<0) 
 			{
-				relAsObject=((pmWhere=scanForTag(whereRelClause=checkEnd,SENTENCE_IN_REL_TAG))>=0);
+				relAsObject=((pmWhere=scanForPatternTag(whereRelClause=checkEnd,SENTENCE_IN_REL_TAG))>=0);
 				// whose is a adjectival relativizer - the only one, and so this is not a valid procedure (relAsObject) for it.
 				if (pmWhere>=0 && m[whereRelClause].word->first==L"whose") pmWhere=-1;
 			}

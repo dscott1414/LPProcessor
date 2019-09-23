@@ -507,6 +507,15 @@ void createQuestionPatterns(void)
 											 1,L"and",0,1,1,
 											 1,L"_Q2{EVAL:_BLOCK}",0,1,1,
 											 0);
+	// Do you think that I should care for a moment for such things as those , or *that* they have brought the slightest taint of disgrace upon you in the minds of those that know you ?
+	cPattern::create(L"_MQ1{_FINAL_IF_ALONE:_QUESTION}", L"4",
+		1, L"relativizer", 0, 0, 1,
+		4, L"_Q1S", L"_Q1PASSIVE", L"_Q1", L"_QT1", 0, 1, 1,
+		// __ALLOBJECTS_0 would be harmful here because ALLOBJECTS_0 could resolve to a NAME, which must be an object, but will not be registered as one if
+		//   __ALLOBJECTS_0 is its parent.  
+		5, L"__QNOUN", L"_PP", L"adjective{ADJ}", L"__ALLOBJECTS_1", L"__ALLOBJECTS_2", 0, 0, 1, // there must only be one adjective and it must be last (not mixed in) see *
+		1, L"__MSTAIL", 0, 1, 1,
+		0);
 }
 
 // after a question, a new paragraph, and a non-quote paragraph, 

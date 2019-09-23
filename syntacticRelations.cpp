@@ -2132,7 +2132,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 	bool agreementTestable;
 	if (isNonPast && inPrimaryQuote && !(tsSense&(VT_POSSIBLE|VT_PASSIVE|VT_EXTENDED|VT_VERB_CLAUSE)) && 
 		 (tsSense&VT_TENSE_MASK)!=VT_PAST_PERFECT && (tsSense&VT_TENSE_MASK)!=VT_PRESENT_PERFECT && (tsSense&VT_TENSE_MASK)!=VT_FUTURE && (tsSense&VT_TENSE_MASK)!=VT_FUTURE_PERFECT && 
-		whereSubjects.size()==1 && subjectObjects[0]>=0 && !objects[subjectObjects[0]].plural && !evaluateAgreement(whereVerb,whereSubjects[0], agreementTestable))
+		whereSubjects.size()==1 && subjectObjects[0]>=0 && !objects[subjectObjects[0]].plural && !evaluateSubjectVerbAgreement(whereVerb,whereSubjects[0], agreementTestable))
 		isNonPast=false;
 	wstring tmpstr,tmpstr2,tmpstr3;
 	// if passive, locate "by" preposition and relocate SUBJECT there (with SUBJECT_ROLE)
@@ -2383,7 +2383,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 			}
 			if ((infpElement=m[I].pma.queryPattern(L"__INFP"))!=-1)
 				processInternalInfinitivePhrase(I,-1,(whereLastEncounteredGenderedObject>=0) ? whereLastEncounteredGenderedObject : whereLastEncounteredObject,-1,firstFreePrep,futureBoundPrepositions,inPrimaryQuote,inSecondaryQuote,nextVerbInSeries,sense,whereLastVerb,ambiguousSense,inQuotedString,inSectionHeader,begin,end,infpElement,tagSet);
-			if (!inRelativeClause && (scanForTag(I,REL_TAG)!=-1 || scanForTag(I,SENTENCE_IN_REL_TAG)!=-1))
+			if (!inRelativeClause && (scanForPatternTag(I,REL_TAG)!=-1 || scanForPatternTag(I,SENTENCE_IN_REL_TAG)!=-1))
 				inRelativeClause=true;
 			if (m[I].getObject()==-1) continue;
 			addRoleTagsAt(where,I,inRelativeClause,withinInfinitivePhrase,subjectIsPleonastic,isNot,objectNot,tsSense,isNonPast,isNonPresent,objectAsSubject,isId,inPrimaryQuote,inSecondaryQuote,L"MO");
@@ -2570,7 +2570,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 		else if (m[where+len+1].pma.queryPattern(L"__NOUN",extendedLen)!=-1) extendedBegin=where+len+1;
 		else if (m[where+len+1].pma.queryPattern(L"__MNOUN",extendedLen)!=-1) extendedBegin=where+len+1;
 		else if (m[where+len+1].queryForm(coordinatorForm)>=0 && m[where+len+2].pma.queryPattern(L"__NOUN",extendedLen)!=-1) extendedBegin=where+len+2;
-		if (extendedBegin!=-1 && extendedBegin+extendedLen<(signed)m.size() && isEOS(extendedBegin+extendedLen) && scanForTag(extendedBegin,VNOUN_TAG)==-1)
+		if (extendedBegin!=-1 && extendedBegin+extendedLen<(signed)m.size() && isEOS(extendedBegin+extendedLen) && scanForPatternTag(extendedBegin,VNOUN_TAG)==-1)
 		{
 			bool inRelativeClause=false,objectNot=false;
 			if (debugTrace.traceRole)
@@ -2578,7 +2578,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 			for (int I=extendedBegin; I<extendedBegin+extendedLen; I++)
 			{
 				if (m[I].word->first==L"not") isNot=true;
-				if (!inRelativeClause && (scanForTag(I,REL_TAG)!=-1 || scanForTag(I,SENTENCE_IN_REL_TAG)!=-1))
+				if (!inRelativeClause && (scanForPatternTag(I,REL_TAG)!=-1 || scanForPatternTag(I,SENTENCE_IN_REL_TAG)!=-1))
 					inRelativeClause=true;
 				if (m[I].getObject()==-1) continue;
 				addRoleTagsAt(where,I,inRelativeClause,withinInfinitivePhrase,subjectIsPleonastic,isNot,objectNot,tsSense,isNonPast,isNonPresent,objectAsSubject,isId,inPrimaryQuote,inSecondaryQuote,L"ME");

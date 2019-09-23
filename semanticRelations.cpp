@@ -1428,7 +1428,7 @@ bool Source::placeIdentification(int where,bool inPrimaryQuote,int whereControll
 	// they[tuppence,tommy] started walking down Dover Street towards Piccadilly
 	if (start && // only beginning
 			// verbclass afterward (NOUN[D])
-			whereObject>=0 && m[whereObject].relNextObject<0 && (pmaOffset=scanForTag(whereObject,VNOUN_TAG))>=0)
+			whereObject>=0 && m[whereObject].relNextObject<0 && (pmaOffset=scanForPatternTag(whereObject,VNOUN_TAG))>=0)
 	{
 		vector < vector <tTagLocation> > tagSets;
 		startCollectTags(debugTrace.traceVerbObjects,verbObjectsTagSet,whereObject,m[whereObject].pma[pmaOffset].pemaByPatternEnd,tagSets,true,false);

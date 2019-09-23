@@ -1308,13 +1308,13 @@ int Source::processPath(const wchar_t *path,Source *&source,Source::sourceTypeEn
 						close(fd);
 					return -1;
 				}
-				bool s1=flipTMSOverride,s2=flipTUMSOverride;
-				flipTMSOverride=flipTUMSOverride=true;
+				bool s1=logMatchedSentences,s2=logUnmatchedSentences;
+				logMatchedSentences=logUnmatchedSentences=true;
 				source->printSentences(false,unknownCount,quotationExceptions,totalQuotations,globalOverMatchedPositionsTotal);
-				flipTMSOverride=s1;
-				flipTUMSOverride=s2;
+				logMatchedSentences=s1;
+				logUnmatchedSentences=s2;
 				lplog();
-				source->write(path,false);
+				source->write(path,false, false);
 				limitProcessingForProfiling=0;
 				puts("");
 			}
@@ -1346,7 +1346,7 @@ int Source::processPath(const wchar_t *path,Source *&source,Source::sourceTypeEn
 				source->resolveSpeakers(secondaryQuotesResolutions);
 				source->resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
 			}
-			source->write(path,!parseOnly);
+			source->write(path,!parseOnly, false);
 			lplog(LOG_WIKIPEDIA|LOG_RESOLUTION|LOG_RESCHECK|LOG_WHERE,L"End Processing %s...",path);
 		}
 		sourcesMap[path]=source;

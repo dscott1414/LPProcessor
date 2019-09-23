@@ -485,6 +485,19 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 					sentenceStarts[s2]++;
 				end++;
 			}
+			// if the word 'no one' is immediately before a non capitalized word which is almost certainly a noun, or cannot be a verb, convert it to 'no' 'one'
+			// Of course , no one man would attempt such a thing.
+			int nounFormOffset, verbFormOffset;
+			if (q < m.size() - 1 && m[q].word->first == L"no one" &&
+				(nounFormOffset = m[q + 1].queryForm(L"noun")) >= 0 && // next word could be a noun
+				(!m[q + 1].word->second.hasVerbForm() || ((verbFormOffset = m[q + 1].queryForm(L"verb")) >= 0 && m[q + 1].word->second.usageCosts[verbFormOffset] > m[q + 1].word->second.usageCosts[nounFormOffset]))) // next word is not a verb, or the cost of the verb is > cost of noun
+			{
+				m[q].word = Words.gquery(L"no");
+				m.insert(m.begin() + q + 1, WordMatch(Words.gquery(L"one"), 0, debugTrace));
+				for (unsigned int s2 = s + 1; s2 < sentenceStarts.size(); s2++)
+					sentenceStarts[s2]++;
+				end++;
+			}
 		}
 		// if a ' is right after the end of a sentence, and there was a preceding ', extend the end of the sentence.
 		// secondaryQuotations should be BEFORE the check for primary (") quotations because single quotations (') should always

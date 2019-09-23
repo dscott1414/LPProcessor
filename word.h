@@ -572,6 +572,7 @@ public:
   void addTimeFlag(int flag,Inflections words[]);
   void addTimeFlag(int flag,wchar_t *words[]);
   void usageCostToNoun(Inflections words[], wchar_t *subnounClass);
+	void toLowestUsageCost(Inflections words[], wchar_t *subnounClass);
   void usageCostToNoun(wchar_t *words[], wchar_t *subnounClass);
   // the following are only used temporarily in BNCC and should be moved back to private usage
   int predefineVerbsFromFile(wstring form,wstring shortForm,wchar_t *path,int flags);

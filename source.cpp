@@ -578,9 +578,10 @@ bool WordMatch::read(char *buffer,int &where,int limit)
 	t.traceRelations=tflags&1; tflags>>=1;
 	t.traceAnaphors=tflags&1; tflags>>=1;
 	t.traceEVALObjects=tflags&1; tflags>>=1;
-	t.traceAgreement=tflags&1; tflags>>=1;
+	t.traceSubjectVerbAgreement=tflags&1; tflags>>=1;
 	t.traceRole=tflags&1; tflags>>=1;
-	t.printBeforeElimination=tflags&1;
+	t.printBeforeElimination=tflags&1; tflags >>= 1;
+	t.traceTestSubjectVerbAgreement = tflags & 1; tflags >>= 1;
 	if (!copy(logCache,buffer,where,limit)) return false;
 	skipResponse=-1;
 	if (!copy(relNextObject,buffer,where,limit)) return false;
@@ -648,9 +649,10 @@ bool WordMatch::writeRef(void *buffer,int &where,int limit)
 	// flags
 	// 110000000000
 	__int64 tflags=0;
-	tflags|=(t.printBeforeElimination) ? 1:0; tflags<<=1;
+	tflags |= (t.traceTestSubjectVerbAgreement) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.printBeforeElimination) ? 1 : 0; tflags <<= 1;
 	tflags|=(t.traceRole) ? 1:0; tflags<<=1;
-	tflags|=(t.traceAgreement) ? 1:0; tflags<<=1;
+	tflags|=(t.traceSubjectVerbAgreement) ? 1:0; tflags<<=1;
 	tflags|=(t.traceEVALObjects) ? 1:0; tflags<<=1;
 	tflags|=(t.traceAnaphors) ? 1:0; tflags<<=1;
 	tflags|=(t.traceRelations) ? 1:0; tflags<<=1;
@@ -829,7 +831,7 @@ bool Source::matchPattern(cPattern *p,int begin,int end,bool fill)
 	for (int pos=begin; pos<(int)end-1; pos++) // skip period
 	{
 #ifdef LOG_PATTERN_MATCHING
-		lplog(L"%c %d:pattern %s[%s]:---------------------",phase,pos,p->name.c_str(),p->differentiator.c_str());
+		lplog(L"%d:pattern %s[%s]:---------------------",pos,p->name.c_str(),p->differentiator.c_str());
 #endif
 		// do not put pos==begin here because we don't know whether we have split the sentence correctly!
 		if (p->onlyBeginMatch && pos && (!m[pos-1].word->second.isSeparator() || m[pos-1].queryForm(relativizerForm)>=0)) continue; //  || m[pos-1].queryForm(relativeForm)
@@ -1498,7 +1500,7 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 				bufferScanLocation -= sWord.length() - firstDash;
 				sWord.erase(firstDash, sWord.length() - firstDash);
 			}
-			else
+			else if (sWord!=L"--")
 				lplog(LOG_INFO, L"%s NOT split (#unknownWords=%d #capitalizedWords=%d #letters=%d %s).", sWord.c_str(), unknownWords, capitalizedWords, letters, ((iWord == Words.end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0)) ? L"UNKNOWN" : L"NOT unknown");
 
 			firstLetterCapitalized=(capitalizedWords>0);
@@ -1613,9 +1615,9 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 			m.push_back(WordMatch(Words.sectionWord,0,debugTrace));
 		}
 		int numWords=m.size()-lastSentenceEnd;
-		if (numWords>150 || (numWords>60 && (iWord->second.query(conjunctionForm)>=0 || iWord->first==L";")))
+		if (numWords>150 || (numWords>100 && (iWord->second.query(conjunctionForm)>=0 || iWord->first==L";")))
 		{
-			//lplog(LOG_ERROR,L"ERROR:Terminating run-on sentence at word %d in source %s (word offset %d).",numWords,location.c_str(),m.size());
+			lplog(LOG_ERROR,L"ERROR:Terminating run-on sentence at word %d in source %s (word offset %d).",numWords,path.c_str(),m.size());
 			runOnSentences++;
 			endSentence=true;
 		}
@@ -1833,7 +1835,8 @@ int Source::printSentences(bool updateStatistics,unsigned int unknownCount,unsig
 			matchedSentences++;
 			continue;
 		}
-		debugTrace.traceAgreement=m[begin].t.traceAgreement;
+		debugTrace.traceSubjectVerbAgreement = m[begin].t.traceSubjectVerbAgreement;
+		debugTrace.traceTestSubjectVerbAgreement = m[begin].t.traceTestSubjectVerbAgreement;
 		debugTrace.traceAnaphors=m[begin].t.traceAnaphors;
 		debugTrace.traceEVALObjects=m[begin].t.traceEVALObjects;
 		debugTrace.traceRelations=m[begin].t.traceRelations;
@@ -1844,8 +1847,8 @@ int Source::printSentences(bool updateStatistics,unsigned int unknownCount,unsig
 		debugTrace.tracePatternElimination=m[begin].t.tracePatternElimination;
 		debugTrace.traceBNCPreferences=m[begin].t.traceBNCPreferences;
 		debugTrace.traceSecondaryPEMACosting=m[begin].t.traceSecondaryPEMACosting;
-		debugTrace.traceMatchedSentences=m[begin].t.traceMatchedSentences ^ flipTMSOverride;
-		debugTrace.traceUnmatchedSentences=m[begin].t.traceUnmatchedSentences ^ flipTUMSOverride;
+		debugTrace.traceMatchedSentences=m[begin].t.traceMatchedSentences ^ logMatchedSentences;
+		debugTrace.traceUnmatchedSentences=m[begin].t.traceUnmatchedSentences ^ logUnmatchedSentences;
 		logCache=m[begin].logCache;
 
 		// clear tag set maps
@@ -1968,7 +1971,7 @@ int Source::printSentencesCheck(bool skipCheck)
 		}
 	}
 	if (!skipCheck && _wstat64(logFilename,&buffer)>=0 && buffer.st_size>2*1024*1024) return 0;
-	if (sentenceStarts.size()==0 || !(m[sentenceStarts[0]].t.traceMatchedSentences ^ (flipTMSOverride | flipTUMSOverride))) return 0;
+	if (sentenceStarts.size()==0 || !(m[sentenceStarts[0]].t.traceMatchedSentences ^ (logMatchedSentences | logUnmatchedSentences))) return 0;
 	for (unsigned int s=0; s+1<sentenceStarts.size() && !exitNow; s++)
 	{
 		unsigned int begin=sentenceStarts[s],end=sentenceStarts[s+1];
@@ -1977,7 +1980,7 @@ int Source::printSentencesCheck(bool skipCheck)
 		if (begin>=end)
 			continue;
 		logCache=m[begin].logCache;
-		if (m[begin].t.traceMatchedSentences ^ (flipTMSOverride|flipTUMSOverride))
+		if (m[begin].t.traceMatchedSentences ^ (logMatchedSentences|logUnmatchedSentences))
 			printSentence(SCREEN_WIDTH,begin,end,false);  // print before elimination
 	}
 	return 0;
@@ -2257,10 +2260,18 @@ bool Source::writeCheck(wstring path)
 }
 
 // if returning false, the file will not be closed.
-bool Source::write(wstring path,bool S2)
+bool Source::write(wstring path,bool S2, bool makeCopyBeforeSourceWrite)
 { LFS
 	path+=L".SourceCache";
 	// int fd=_wopen(path.c_str(),O_WRONLY|O_CREAT|O_TRUNC|O_BINARY,_S_IREAD | _S_IWRITE); subject to short path restriction
+	if (makeCopyBeforeSourceWrite)
+	{
+		wstring renamePath = path + L".old";
+		if (_wremove(renamePath.c_str()) < 0)
+			lplog(LOG_FATAL_ERROR, L"REMOVE %s - %S", renamePath.c_str(), sys_errlist[errno]);
+		else if (_wrename(path.c_str(), renamePath.c_str()))
+			lplog(LOG_FATAL_ERROR, L"RENAME %s to %s - %S", path.c_str(), renamePath.c_str(), sys_errlist[errno]);
+	}
 	HANDLE fd = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,0);
 	if (fd== INVALID_HANDLE_VALUE)
 	{
@@ -3123,7 +3134,8 @@ Source::Source(wchar_t *databaseServer,int _sourceType,bool generateFormStatisti
 	numTotalNarratorFullVerbTenses=numTotalNarratorVerbTenses=0;
 	numTotalSpeakerFullVerbTenses=numTotalSpeakerVerbTenses=0;
 	debugTrace.printBeforeElimination=false;
-	debugTrace.traceAgreement=false;
+	debugTrace.traceSubjectVerbAgreement = false;
+	debugTrace.traceTestSubjectVerbAgreement = false;
 	debugTrace.traceEVALObjects=false;
 	debugTrace.traceAnaphors=false;
 	debugTrace.traceRelations=false;
@@ -3207,7 +3219,8 @@ Source::Source(MYSQL *parentMysql,int _sourceType,int _sourceConfidence)
 	numTotalNarratorFullVerbTenses=numTotalNarratorVerbTenses=0;
 	numTotalSpeakerFullVerbTenses=numTotalSpeakerVerbTenses=0;
 	debugTrace.printBeforeElimination=false;
-	debugTrace.traceAgreement=false;
+	debugTrace.traceSubjectVerbAgreement = false;
+	debugTrace.traceTestSubjectVerbAgreement = false;
 	debugTrace.traceEVALObjects=false;
 	debugTrace.traceAnaphors=false;
 	debugTrace.traceRelations=false;

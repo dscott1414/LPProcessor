@@ -249,6 +249,7 @@ public:
 				onlyEndMatch=false;
 				questionFlag=false;
 				notAfterPronoun=false;
+				explicitSubjectVerbAgreement = false;
 				metaPattern=false;
         onlyAloneExceptInSubPatternsFlag=false;
         firstPassForwardReference=false;
@@ -265,6 +266,7 @@ public:
         ancestorsSet=false;
         noRepeat=false;
         ignoreFlag=false;
+				checkIgnorableForms = false;
         objectTag=-1;
 				destinationPatternType=false;
     };
@@ -353,8 +355,10 @@ public:
     bool firstPassForwardReference;
     bool noRepeat; // cannot be repeated
     bool ignoreFlag; // ignore pattern - do not consider pattern in costing 
+		bool checkIgnorableForms; // during the matching of this pattern, check all forms even if they are marked ignore (such as dash), so if a dash is in the middle of this pattern, it won't match.
 		bool questionFlag; // higher cost if not ending in a question mark
 		bool notAfterPronoun; // higher cost if after pronoun (she/her)
+		bool explicitSubjectVerbAgreement; // contains a subject/verb within itself (blocked otherwise by _BLOCK)
 		bool metaPattern;
     int numPushes,numComparisons,numHits,numWinners,numChildrenWinners;
     bitObject allElementTags;

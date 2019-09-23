@@ -66,14 +66,14 @@ bool exitNow = false, exitEventually = false;
 int overallTime;
 int initializeCounter(void);
 void freeCounter(void);
-bool TSROverride = false, flipTOROverride = false, flipTNROverride = false, flipTMSOverride = false, flipTUMSOverride = false;
+bool TSROverride = false, flipTOROverride = false, flipTNROverride = false, logMatchedSentences=false, logUnmatchedSentences=false;
 
 void no_memory () {
 	lplog(LOG_FATAL_ERROR,L"Out of memory (new/STL allocation).");
 	exit (1);
 }
 
-int createLPProcess(int numProcess, HANDLE &processId, wchar_t *commandPath, wchar_t *processParameters)
+int createLPProcess(int numProcess, HANDLE &processHandle, DWORD &processId, wchar_t *commandPath, wchar_t *processParameters)
 {
 	STARTUPINFO si;
 	ZeroMemory(&si, sizeof(si));
@@ -105,24 +105,98 @@ int createLPProcess(int numProcess, HANDLE &processId, wchar_t *commandPath, wch
 		printf("CreateProcess of %S failed (%d) %s in %S.\n", processParameters, (int)GetLastError(), LastErrorStr(), _wgetcwd(cwd, 1024));
 		return -1;
 	}
-	processId = pi.hProcess;
+	processHandle = pi.hProcess;
+	processId = pi.dwProcessId;
 	return 0;
 }
 
-int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st, int maxProcesses, int numSourcesPerProcess, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite,bool parseOnly)
+int getNumSourcesProcessed(Source &source, int &numSourcesProcessed, __int64 &wordsProcessed, __int64 &sentencesProcessed)
+{
+	MYSQL_RES * result;
+	if (!myquery(&source.mysql, L"LOCK TABLES sources WRITE")) return -1;
+	if (myquery(&source.mysql, L"select COUNT(id), SUM(numWords), SUM(numSentences) from sources where sourceType = 2 and processed IS not NULL and processing IS NULL and start != '**SKIP**' and start != '**START NOT FOUND**'", result))
+	{
+		MYSQL_ROW sqlrow = NULL;
+		if (sqlrow = mysql_fetch_row(result))
+		{
+			numSourcesProcessed = atoi(sqlrow[0]);
+			wordsProcessed = atol(sqlrow[1]);
+			sentencesProcessed = atoi(sqlrow[2]);
+		}
+		mysql_free_result(result);
+	}
+	if (!myquery(&source.mysql, L"UNLOCK TABLES")) return -1;
+	return 0;
+}
+
+// https://stackoverflow.com/questions/813086/can-i-send-a-ctrl-c-sigint-to-an-application-on-windows/1179124
+// Inspired from http://stackoverflow.com/a/15281070/1529139
+// and http://stackoverflow.com/q/40059902/1529139
+bool signalCtrl(DWORD dwProcessId, DWORD dwCtrlEvent)
+{
+	bool success = false;
+	DWORD thisConsoleId = GetCurrentProcessId();
+	// Leave current console if it exists
+	// (otherwise AttachConsole will return ERROR_ACCESS_DENIED)
+	bool consoleDetached = (FreeConsole() != FALSE);
+
+	if (AttachConsole(dwProcessId) != FALSE)
+	{
+		// Add a fake Ctrl-C handler for avoid instant kill is this console
+		// WARNING: do not revert it or current program will be also killed
+		SetConsoleCtrlHandler(nullptr, true);
+		success = (GenerateConsoleCtrlEvent(dwCtrlEvent, 0) != FALSE);
+		FreeConsole();
+	}
+
+	if (consoleDetached)
+	{
+		// Create a new console if previous was deleted by OS
+		if (AttachConsole(thisConsoleId) == FALSE)
+		{
+			int errorCode = GetLastError();
+			if (errorCode == 31) // 31=ERROR_GEN_FAILURE
+			{
+				AllocConsole();
+			}
+		}
+	}
+	return success;
+}
+
+int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st, int maxProcesses, int numSourcesPerProcess, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool makeCopyBeforeSourceWrite, bool parseOnly)
 {
 	LFS
-	chdir("source");
-	//MYSQL_RES *result = NULL;
+		chdir("source");
+	bool sentBreakSignals = false;
+	int startTime = clock();
 	HANDLE *handles = (HANDLE *)calloc(maxProcesses, sizeof(HANDLE));
-	int numProcesses = 0, errorCode = 0;
+	int numProcesses = 0, errorCode = 0, numSourcesProcessedOriginally = 0;
+	__int64 wordsProcessedOriginally = 0, sentencesProcessedOriginally = 0;
+	getNumSourcesProcessed(source, numSourcesProcessedOriginally, wordsProcessedOriginally, sentencesProcessedOriginally);
+	int numSourcesLeft = source.getNumSources(st, true);
+	maxProcesses = min(maxProcesses, numSourcesLeft);
 	wstring tmpstr;
-	while (!exitNow && !exitEventually && !errorCode)
+	while (!errorCode)
 	{
 		unsigned int nextProcessIndex = numProcesses;
 		if (numProcesses == maxProcesses)
 		{
-			nextProcessIndex = WaitForMultipleObjectsEx(numProcesses, handles, false, 1000 * 60 * 60, false);
+			nextProcessIndex = WaitForMultipleObjectsEx(numProcesses, handles, false, 1000 * 60 * 5, false);
+			numSourcesLeft = 0;
+			int numSourcesProcessedNow = 0;
+			__int64 wordsProcessedNow = 0, sentencesProcessedNow = 0;
+			getNumSourcesProcessed(source, numSourcesProcessedNow, wordsProcessedNow, sentencesProcessedNow);
+			int processingSeconds = (clock() - startTime) / CLOCKS_PER_SEC;
+			wchar_t consoleTitle[1500];
+			numSourcesProcessedNow -= numSourcesProcessedOriginally;
+			wordsProcessedNow -= wordsProcessedOriginally;
+			sentencesProcessedNow -= sentencesProcessedOriginally;
+			wsprintf(consoleTitle, L"sources=%06d:sentences=%06I64d:words=%08I64d in %02d:%02d:%02d [%d sources/hour] [%I64d words/hour].",
+				numSourcesProcessedNow, sentencesProcessedNow, wordsProcessedNow, processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, numSourcesProcessedNow * 3600 / processingSeconds, wordsProcessedNow * 3600 / processingSeconds);
+			lplog(LOG_INFO | LOG_ERROR, L"%s", consoleTitle);
+			SetConsoleTitle(consoleTitle);
+
 			if (nextProcessIndex == WAIT_IO_COMPLETION || nextProcessIndex == WAIT_TIMEOUT)
 				continue;
 			if (nextProcessIndex == WAIT_FAILED)
@@ -131,25 +205,29 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			{
 				nextProcessIndex -= WAIT_OBJECT_0;
 				CloseHandle(handles[nextProcessIndex]);
-				printf("\nClosing process %d:%p", nextProcessIndex, handles[nextProcessIndex]);
+				printf("\nClosing process %d", nextProcessIndex);
 			}
 			if (nextProcessIndex >= WAIT_ABANDONED_0 && nextProcessIndex < WAIT_ABANDONED_0 + numProcesses)
 			{
 				nextProcessIndex -= WAIT_ABANDONED_0;
-				printf("\nClosing process %d:%p", nextProcessIndex, handles[nextProcessIndex]);
+				printf("\nClosing process %d [abandoned]", nextProcessIndex);
 				CloseHandle(handles[nextProcessIndex]);
 			}
 		}
-		wstring parseRequestPath;
 		int id, repeatStart, prId;
 		wstring start, path, encoding, etext, author, title, pathInCache;
-		bool result;
-		switch (processKind)
+		bool result = true;
+		if (processKind == 1 && numSourcesLeft > 0)
+			numSourcesLeft--;
+		else
 		{
-		case 0:result = source.getNextUnprocessedParseRequest(prId, pathInCache); break;
-		case 1:result = source.getNextUnprocessedSource(beginSource, endSource, st, false, id, path, encoding, start, repeatStart, etext, author, title); break;
-		case 2:result = source.anymoreUnprocessedForUnknown(st, step); break;
-		default:result = 0; break;
+			switch (processKind)
+			{
+			case 0:result = source.getNextUnprocessedParseRequest(prId, pathInCache); break;
+			case 1:result = source.getNextUnprocessedSource(beginSource, endSource, st, false, id, path, encoding, start, repeatStart, etext, author, title); break;
+			case 2:result = source.anymoreUnprocessedForUnknown(st, step); break;
+			default:result = false; break;
+			}
 		}
 		if (!result)
 		{
@@ -160,7 +238,7 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			}
 			if (numProcesses)
 			{
-				printf("\nNo more processes to be createDd. %d processes left to wait for.", numProcesses);
+				printf("\nNo more processes to be created. %d processes left to wait for.", numProcesses);
 				while (true)
 				{
 					nextProcessIndex = WaitForMultipleObjectsEx(numProcesses, handles, true, 1000 * 60 * 60, false);
@@ -175,44 +253,63 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			}
 			break;
 		}
-		HANDLE processId = 0;
-		wchar_t processParameters[1024];
-		switch (processKind)
+		if (exitNow || exitEventually)
 		{
-		case 0:
-			wsprintf(processParameters, L"releasex64\\lp.exe -ParseRequest \"%s\" -cacheDir %s %s%s%s%s%s-log %d", pathInCache.c_str(), CACHEDIR,
-				(forceSourceReread) ? L"forceSourceReread " : L"",
-				(sourceWrite) ? L"-SW " : L"",
-				(sourceWordNetRead) ? L"-SWNR " : L"",
-				(sourceWordNetWrite) ? L"-SWNW " : L"",
-				(parseOnly) ? L"-parseOnly " : L"",
-				numProcesses);
-			if (errorCode = createLPProcess(nextProcessIndex, processId, L"releasex64\\lp.exe", processParameters) < 0)
-				break;
-			break;
-		case 1:
-			wsprintf(processParameters, L"releasex64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s%s-numSourceLimit %d -log %d", CACHEDIR,
-				(forceSourceReread) ? L"forceSourceReread " : L"",
-				(sourceWrite) ? L"-SW " : L"",
-				(sourceWordNetRead) ? L"-SWNR " : L"",
-				(sourceWordNetWrite) ? L"-SWNW " : L"",
-				(parseOnly) ? L"-parseOnly " : L"",
-				numSourcesPerProcess,
-				numProcesses);
-			if (errorCode = createLPProcess(nextProcessIndex, processId, L"releasex64\\lp.exe", processParameters) < 0)
-				break;
-			break;
-		case 2:
-			wsprintf(processParameters, L"releasex64\\CorpusAnalysis.exe -step %d -numSourceLimit %d -log %d", CACHEDIR, step, numSourcesPerProcess, numProcesses);
-			if (errorCode = createLPProcess(nextProcessIndex, processId, L"releasex64\\CorpusAnalysis.exe", processParameters) < 0)
-				break;
-			break;
-		default: break;
+			printf("\nSending break signals to children...\n");
+			if (!sentBreakSignals)
+			{
+				for (int p = 0; p < numProcesses; p++)
+				{
+					int pid = GetProcessId(handles[p]);
+					signalCtrl(pid, CTRL_C_EVENT);
+				}
+				sentBreakSignals = true;
+			}
 		}
-		handles[nextProcessIndex] = processId;
-		if (numProcesses < maxProcesses)
-			numProcesses++;
-		printf("\nCreated process %d:%p", nextProcessIndex, processId);
+		else
+		{
+			HANDLE processHandle = 0;
+			DWORD processId = 0;
+			wchar_t processParameters[1024];
+			switch (processKind)
+			{
+			case 0:
+				wsprintf(processParameters, L"releasex64\\lp.exe -ParseRequest \"%s\" -cacheDir %s %s%s%s%s%s%s-log %d", pathInCache.c_str(), CACHEDIR,
+					(forceSourceReread) ? L"-forceSourceReread " : L"",
+					(sourceWrite) ? L"-SW " : L"",
+					(sourceWordNetRead) ? L"-SWNR " : L"",
+					(sourceWordNetWrite) ? L"-SWNW " : L"",
+					(parseOnly) ? L"-parseOnly " : L"",
+					(makeCopyBeforeSourceWrite) ? L"-MCSW " : L"",
+					nextProcessIndex);
+				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\lp.exe", processParameters) < 0)
+					break;
+				break;
+			case 1:
+				wsprintf(processParameters, L"releasex64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s%s%s-numSourceLimit %d -log %d", CACHEDIR,
+					(forceSourceReread) ? L"-forceSourceReread " : L"",
+					(sourceWrite) ? L"-SW " : L"",
+					(sourceWordNetRead) ? L"-SWNR " : L"",
+					(sourceWordNetWrite) ? L"-SWNW " : L"",
+					(parseOnly) ? L"-parseOnly " : L"",
+					(makeCopyBeforeSourceWrite) ? L"-MCSW " : L"",
+					numSourcesPerProcess,
+					nextProcessIndex);
+				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\lp.exe", processParameters) < 0)
+					break;
+				break;
+			case 2:
+				wsprintf(processParameters, L"releasex64\\CorpusAnalysis.exe -step %d -numSourceLimit %d -log %d", CACHEDIR, step, numSourcesPerProcess, nextProcessIndex);
+				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\CorpusAnalysis.exe", processParameters) < 0)
+					break;
+				break;
+			default: break;
+			}
+			handles[nextProcessIndex] = processHandle;
+			if (numProcesses < maxProcesses)
+				numProcesses++;
+			printf("\nCreated process %d:%d", nextProcessIndex, (int)processId);
+		}
 	}
 	if (st != Source::REQUEST_TYPE)
 	{
@@ -1158,9 +1255,9 @@ int printUnknownsFromSource(Source source, int sourceId, wstring path, wstring e
 		{
 			if (im.word->second.isUnknown())
 			{
-				lplog(LOG_INFO, L"SI%d: WI%d: %s", sourceId,wordIndex, im.word->first.c_str());
+				lplog(LOG_INFO, L"SI%d: WI%d: %s", sourceId, wordIndex, im.word->first.c_str());
 			}
-			else if (im.word->second.query(UNDEFINED_FORM_NUM)>0)
+			else if (im.word->second.query(UNDEFINED_FORM_NUM) > 0)
 			{
 				if (!firstIllegal)
 				{
@@ -1178,6 +1275,68 @@ int printUnknownsFromSource(Source source, int sourceId, wstring path, wstring e
 		return 20;
 	}
 	return 21;
+}
+
+int patternAnalysisFromSource(Source source, int sourceId, wstring path, wstring etext, wstring patternName, wstring differentiator)
+{
+	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
+		return -20;
+	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false) < 0)
+		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
+	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
+	bool parsedOnly = false;
+	if (source.readSource(path, false, parsedOnly, false, true))
+	{
+		int wordIndex = 0, pmaPosition = 0, pmaOffset, until;
+		unsigned int ss = 1;
+		bool inBiSentenceClause=false;
+		for (WordMatch &im : source.m)
+		{
+			if ((pmaOffset=im.pma.queryPattern(L"_REL1", L"6")) != -1 || (pmaOffset = im.pma.queryPattern(L"_MS1", L"1")) != -1 || (pmaOffset = im.pma.queryPattern(L"_MS1", L"5")) != -1 || (pmaOffset = im.pma.queryPattern(L"_MS1", L"C")) != -1) // _REL1[6], _MS[1], _MS[5], _MS1[C]
+			{
+				inBiSentenceClause = true;
+				until = wordIndex + source.m[wordIndex].pma[pmaOffset&~patternFlag].len;
+			}
+			if ((pmaPosition = im.pma.queryPattern(patternName, differentiator)) !=-1)
+			{
+				pmaPosition = pmaPosition & ~patternFlag;
+				int NOUNRLength = im.pma[pmaPosition].len;
+				wstring sentence,originalIWord;
+				bool inPattern=false, sentenceStartInMiddleOfNoun=false;
+				for (int I = source.sentenceStarts[ss - 1]; I < source.sentenceStarts[ss]; I++)
+				{
+					source.getOriginalWord(I, originalIWord, false, false);
+					if (I == wordIndex)
+					{
+						sentence += L"**";
+						inPattern = true;
+					}
+					sentence += originalIWord;
+					if (I == wordIndex + NOUNRLength - 1)
+					{
+						sentence += L"**";
+						inPattern = false;
+					}
+					sentence += L" ";
+				}
+				if ((pmaPosition = source.m[wordIndex+2].pma.queryPattern(L"__S1")) != -1 && inBiSentenceClause)
+					sentenceStartInMiddleOfNoun = true;
+				wstring path = source.sourcePath.substr(16, source.sourcePath.length() - 20);
+				lplog(LOG_INFO, L"%s%s[%d-%d]:%s", (sentenceStartInMiddleOfNoun) ? L"XXIC ":L"",path.c_str(), wordIndex, wordIndex + NOUNRLength, sentence.c_str());
+			}
+			wordIndex++;
+			if (until == wordIndex)
+				inBiSentenceClause = false;
+			while (ss < source.sentenceStarts.size() && source.sentenceStarts[ss] < wordIndex+1)
+				ss++;
+		}
+	}
+	else
+	{
+		wprintf(L"Unable to read source %d:%s\n", sourceId, path.c_str());
+		return 21;
+	}
+	return 22;
 }
 
 int populateWordFrequencyTableFromSource(Source source, int sourceId, wstring path, wstring etext)
@@ -1417,6 +1576,46 @@ int printUnknowns(Source source, int step)
 		mTW(sqlrow[3], title);
 		path.insert(0, L"\\").insert(0, CACHEDIR);
 		int setStep = printUnknownsFromSource(source, sourceId, path, etext);
+		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
+		if (!myquery(&source.mysql, qt))
+			break;
+		source.clearSource();
+		wchar_t buffer[1024];
+		__int64 processingSeconds = (clock() - startTime) / CLOCKS_PER_SEC;
+		numSourcesProcessedNow++;
+		if (processingSeconds)
+			wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d sources in %02I64d:%02I64d:%02I64d [%d sources/hour] (%-35.35s... finished)", numSourcesProcessedNow * 100 / totalSource, numSourcesProcessedNow, totalSource,
+				processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, numSourcesProcessedNow * 3600 / processingSeconds, title.c_str());
+		SetConsoleTitle(buffer);
+	}
+	mysql_free_result(result);
+	return 0;
+}
+
+int patternAnalysis(Source source, int step, wstring patternName, wstring differentiator)
+{
+	MYSQL_RES * result;
+	MYSQL_ROW sqlrow = NULL;
+	enum Source::sourceTypeEnum st = Source::GUTENBERG_SOURCE_TYPE;
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	bool websterAPIRequestsExhausted = false;
+	int startTime = clock(), numSourcesProcessedNow = 0;
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select id, etext, path, title from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' and proc2=%d order by id", st, step);
+	if (!myquery(&source.mysql, qt, result))
+		return -1;
+	my_ulonglong totalSource = mysql_num_rows(result);
+	for (int row = 0; sqlrow = mysql_fetch_row(result); row++)
+	{
+		wstring path, etext, title;
+		int sourceId = atoi(sqlrow[0]);
+		if (sqlrow[1] == NULL)
+			etext = L"NULL";
+		else
+			mTW(sqlrow[1], etext);
+		mTW(sqlrow[2], path);
+		mTW(sqlrow[3], title);
+		path.insert(0, L"\\").insert(0, CACHEDIR);
+		int setStep = patternAnalysisFromSource(source, sourceId, path, etext,patternName,differentiator);
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
 			break;
@@ -1689,30 +1888,29 @@ int checkStanfordMaxentAgainstWinner(Source &source, int wordSourceIndex, wstrin
 		numPOSNotFound++;
 		return 1;
 	}
-	vector<wstring> posList = lpPOS->second;
+	std::set<wstring> posList(lpPOS->second.begin(), lpPOS->second.end());
 	for (auto pos : lpPOS->second)
 	{
 		auto imai = maxentAssociationMap.find(pos);
 		if (imai != maxentAssociationMap.end())
 		{
-			for (auto ampi : imai->second)
-				posList.push_back(ampi);
+			posList.insert(imai->second.begin(), imai->second.end());
 		}
 	}
 	vector <int> winnerForms;
 	source.m[wordSourceIndex].getWinnerForms(winnerForms);
 	for (int wf : winnerForms)
 	{
-		if (std::find(posList.begin(), posList.end(), Forms[wf]->name) != posList.end())
+		if (posList.find(Forms[wf]->name) != posList.end())
 			return 0;
 	}
 	//////////////////////////////
 	// corrections based on implementation/interpretation differences and statistical findings
 	// with maxent, if LP thinks it is a ProperNoun, it is always correct, compared with maxent which thinks it is a noun.
-	if (posList[0] == L"noun" && std::find(winnerForms.begin(), winnerForms.end(), PROPER_NOUN_FORM_NUM) != winnerForms.end())
+	if (posList.find(L"noun")!=posList.end() && std::find(winnerForms.begin(), winnerForms.end(), PROPER_NOUN_FORM_NUM) != winnerForms.end())
 		return 0;
 	// Maxent sometimes thinks things are proper nouns, when they are not capitalized.  I have not found an example where this is the case.
-	if (posList[0] == L"Proper Noun" &&
+	if (posList.find(L"Proper Noun") != posList.end() &&
 		//(std::find(winnerForms.begin(), winnerForms.end(), nounForm) != winnerForms.end() || std::find(winnerForms.begin(), winnerForms.end(), adjectiveForm) != winnerForms.end()) && 
 		iswlower(originalWordSave[0]))
 		return 0;
@@ -1725,7 +1923,7 @@ int checkStanfordMaxentAgainstWinner(Source &source, int wordSourceIndex, wstrin
 		 L"negation_modal_auxiliary", L"numeral_ordinal", L"personal_pronoun_nominative",
 		 L"polite_inserts", L"sectionheader", L"street_address", L"think",
 		 L"trademark" };
-	if (posList[0] == L"Proper Noun")
+	if (posList.find(L"Proper Noun") != posList.end())
 	{
 		for (wstring form : pnExceptionForms)
 		{
@@ -1737,13 +1935,13 @@ int checkStanfordMaxentAgainstWinner(Source &source, int wordSourceIndex, wstrin
 	if (originalWordSave == L"that" && inRelativeClause)
 		return 0;
 	// these cases have been proven by examination to be either maxent mistakes or Proper Nouns used as adjectives (which is more of an implementation difference)
-	if (posList[0] == L"adjective" && std::find(winnerForms.begin(), winnerForms.end(), PROPER_NOUN_FORM_NUM) != winnerForms.end())
+	if (posList.find(L"adjective") != posList.end() && std::find(winnerForms.begin(), winnerForms.end(), PROPER_NOUN_FORM_NUM) != winnerForms.end())
 		return 0;
 	// these cases have been proven by examination - Stanford guesses this to be a noun, but if it is capitalized, it is an honorific/honorific_abreviation
-	if (posList[0] == L"noun" && iswupper(originalWordSave[0]) && (std::find(winnerForms.begin(), winnerForms.end(), honorificForm) != winnerForms.end() || std::find(winnerForms.begin(), winnerForms.end(), honorificAbbreviationForm) != winnerForms.end()))
+	if (posList.find(L"noun") != posList.end() && iswupper(originalWordSave[0]) && (std::find(winnerForms.begin(), winnerForms.end(), honorificForm) != winnerForms.end() || std::find(winnerForms.begin(), winnerForms.end(), honorificAbbreviationForm) != winnerForms.end()))
 		return 0;
 	// LP is always right about these negative forms (by examination)
-	if (posList[0] == L"noun" && (std::find(winnerForms.begin(), winnerForms.end(), doesNegationForm) != winnerForms.end() ||
+	if (posList.find(L"noun") != posList.end() && (std::find(winnerForms.begin(), winnerForms.end(), doesNegationForm) != winnerForms.end() ||
 		std::find(winnerForms.begin(), winnerForms.end(), negationModalAuxiliaryForm) != winnerForms.end() ||
 		std::find(winnerForms.begin(), winnerForms.end(), isNegationForm) != winnerForms.end() ||
 		std::find(winnerForms.begin(), winnerForms.end(), haveNegationForm) != winnerForms.end()))
@@ -1771,7 +1969,7 @@ bool isStanfordDeterminerType(Source &source, int wordNounVerbDisagreementSource
 		if (source.m[wordNounVerbDisagreementSourceIndex].word->second.hasVerbForm())
 		{
 			bool agreementTestable;
-			bool agree=source.evaluateAgreement(wordNounVerbDisagreementSourceIndex, wordDeterminerSourceIndex, agreementTestable);
+			bool agree=source.evaluateSubjectVerbAgreement(wordNounVerbDisagreementSourceIndex, wordDeterminerSourceIndex, agreementTestable);
 			// if not testable, or the purported verb and determiner/subject agree, reject.
 			if (!agreementTestable || agree)
 				return false;
@@ -1799,7 +1997,7 @@ bool isStanfordDeterminerType(Source &source, int wordNounVerbDisagreementSource
 
 // checks if the part of speech indicated in parse from the Stanford POS tagger matches the winner forms at wordSourceIndex.
 // returns yes=0, no=1
-int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, wstring originalParse, wstring sentence, wstring &parse, int &numPOSNotFound, unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, bool inRelativeClause, unordered_map<wstring, int> &errorMap)
+int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numTimesWordOccurred, wstring originalParse, wstring sentence, wstring &parse, int &numPOSNotFound, unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, bool inRelativeClause, unordered_map<wstring, int> &errorMap)
 {
 	if (!iswalpha(source.m[wordSourceIndex].word->first[0]))
 		return 0;
@@ -1817,6 +2015,9 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, wstring 
 	// cannot
 	if (source.m[wordSourceIndex].word->first == L"cannot")
 		originalWord.erase(originalWord.length() - 3);
+	// gimme
+	if (source.m[wordSourceIndex].word->first == L"gimme")
+		originalWord.erase(originalWord.length() - 2);
 	//wer'n, better'n etc but not o'clock and ma'am, which are found by ST
 	size_t findQuote = (originalWord.find(L'\''));
 	if (findQuote != wstring::npos && parse.find(originalWord)==wstring::npos)
@@ -1856,50 +2057,54 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, wstring 
 			auto lpPOS = pennMapToLP.find(partofspeech);
 			if (lpPOS != pennMapToLP.end())
 			{
-				vector<wstring> posList = lpPOS->second;
+				std::set<wstring> posList(lpPOS->second.begin(), lpPOS->second.end());
 				// ST incorrectly assigned a word a punctuation!
 				if (posList.empty())
 				{
 					errorMap[L"ST Punctuation assignment"]++;
 					return 0;
 				}
+				wstring primarySTLPMatch = lpPOS->second[0];
 				for (auto pos : lpPOS->second)
 				{
 					auto imai = maxentAssociationMap.find(pos);
 					if (imai != maxentAssociationMap.end())
 					{
-						for (auto ampi : imai->second)
-							posList.push_back(ampi);
+						posList.insert(imai->second.begin(), imai->second.end());
 					}
 				}
 				vector <int> winnerForms;
 				source.m[wordSourceIndex].getWinnerForms(winnerForms);
 				for (int wf : winnerForms)
 				{
-					if (std::find(posList.begin(), posList.end(), Forms[wf]->name) != posList.end())
+					if (posList.find(Forms[wf]->name) != posList.end())
 						return 0;
 				}
 				//////////////////////////////
 				// corrections based on implementation/interpretation differences and statistical findings
 				// 1. LP has a NOUN[2] which allows a noun in what should be an adjective position
-				if (posList[0] == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && wordSourceIndex < source.m.size() - 1 && source.m[wordSourceIndex + 1].queryWinnerForm(L"noun")>=0)
+				if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && wordSourceIndex < source.m.size() - 1 && source.m[wordSourceIndex + 1].queryWinnerForm(L"noun")>=0)
 					return 0;
 				// 2. where 'that' is a demonstrative_determiner, and matches a REL1 pattern, then we count that as correct parse for LP as this is a relative phrase, and te usage of 'that' is correctly understood within that pattern.
-				if (posList[0] == L"preposition" && wordSourceIndex < source.m.size() - 1 && source.m[wordSourceIndex].queryWinnerForm(L"demonstrative_determiner") &&
-					(source.m[wordSourceIndex].pma.queryPattern(L"_REL1") != -1 || source.m[wordSourceIndex-1].pma.queryPattern(L"_REL1") != -1)) // must be the start of a relative clause
-					return 0;
+				if (primarySTLPMatch == L"preposition" && wordSourceIndex < source.m.size() - 1 && source.m[wordSourceIndex].queryWinnerForm(L"demonstrative_determiner"))
+				{
+					int maxEnd, pemaPosition = source.queryPattern(wordSourceIndex, L"_REL1", maxEnd);
+					if ((pemaPosition >= 0 && source.pema[pemaPosition].begin <= 0 && source.pema[pemaPosition].begin >= -5) || // must be the start of a relative clause
+						source.scanForPatternElementTag(wordSourceIndex, SENTENCE_IN_REL_TAG) != -1)
+						return 0;
+				}
 				// 3. ST is always wrong when given a phrase like [(ROOT (S ('' '') (S (S (VP (VBD said))) (VP (VBZ Bobtail)))] - LP correctly tags 'Bobtail' as a proper noun
 				vector <wstring> speakingVerbs = { L"said",L"cried",L"called",L"asked",L"answered",L"barked",L"sang",L"whistled",L"shouted",L"whispered",L"laughed",L"begged",L"exclaimed",L"replied",L"reminded",L"screamed",L"responded",L"repeated",L"yelled",L"grumbled",L"agreed"  };
-				if (posList[0] == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"Proper Noun") >= 0 && source.m[wordSourceIndex - 2].queryForm(quoteForm) >= 0 &&
+				if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"Proper Noun") >= 0 && source.m[wordSourceIndex - 2].queryForm(quoteForm) >= 0 &&
 					wordSourceIndex > 1 && find(speakingVerbs.begin(), speakingVerbs.end(), source.m[wordSourceIndex - 1].word->first) != speakingVerbs.end())
 					return 0;
 				// 4. ST is always wrong when given a phrase like [(ROOT (S ('' '') (S (S (VP (VBD said))) (VP (VBZ Bobtail)))] - LP correctly tags 'said' as a verb
-				if ((posList[0] == L"adjective" || posList[0] == L"Proper Noun" || posList[0] == L"noun") && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && source.m[wordSourceIndex - 1].queryForm(quoteForm) >= 0 && source.m[wordSourceIndex+1].queryWinnerForm(L"Proper Noun") >= 0 &&
+				if ((primarySTLPMatch == L"adjective" || primarySTLPMatch == L"Proper Noun" || primarySTLPMatch == L"noun") && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && source.m[wordSourceIndex - 1].queryForm(quoteForm) >= 0 && source.m[wordSourceIndex+1].queryWinnerForm(L"Proper Noun") >= 0 &&
 					wordSourceIndex > 1 && find(speakingVerbs.begin(), speakingVerbs.end(), source.m[wordSourceIndex].word->first) != speakingVerbs.end())
 					return 0;
 				// 5. if ST thinks it is a verb, and LP thinks it is a noun, and it is preceded by a determiner separated only by up to 2 adjectives (unless it is a VBG and then it has to be immediately preceeded by a determiner)
 				//    examined 100 examples from gutenburg and 1 violated this rule.
-				if ((posList[0] == L"verb") && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && wordSourceIndex > 2)
+				if ((primarySTLPMatch == L"verb") && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && wordSourceIndex > 2)
 				{
 					if (isStanfordDeterminerType(source, wordSourceIndex, wordSourceIndex - 1) || (partofspeech != L"VBG" &&
 						((isStanfordDeterminerType(source, wordSourceIndex, wordSourceIndex - 2) && source.m[wordSourceIndex - 2].word->first != L"no" && (source.m[wordSourceIndex - 1].queryWinnerForm(adjectiveForm) >= 0)) ||
@@ -1917,63 +2122,60 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, wstring 
 				}
 				// 7. if ST thinks it is a noun, and LP does not know of it having a noun form
 				//    examined 100 examples from gutenburg and X violated this rule.
-				if ((posList[0] == L"noun"))
+				if (primarySTLPMatch == L"noun" && !source.m[wordSourceIndex].word->second.hasNounForm())
 				{
-					if (!source.m[wordSourceIndex].word->second.hasNounForm())
+					// However, if it is a present participle verb
+					//    then this is only acceptable if LP has matched it to __N1.
+					if (source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE)
 					{
-						// However, if it is a present participle verb
-						//    then this is only acceptable if LP has matched it to __N1.
-						if (source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE)
-						{
-							if (source.m[wordSourceIndex].pma.queryPattern(L"__N1") != -1)
-								return 0;
-						}
-						else
-						{
-							return 0;
-						}
+						if (source.m[wordSourceIndex].pma.queryPattern(L"__N1") != -1)
+							return 0; // ST and LP agree
+					}
+					else
+					{
+						return 0; // ST and LP disagree and ST is wrong
 					}
 				}
 				// 8. if ST thinks it is an adjective, and LP maps it to an __ADJECTIVE pattern
 				//    examined 100 examples from gutenburg and 0 violated this rule.
-				if ((posList[0] == L"adjective") && source.m[wordSourceIndex].queryForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST && source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1)
+				if ((primarySTLPMatch == L"adjective") && source.m[wordSourceIndex].queryForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST && source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1)
 				{
 					return 0;
 				}
 				// 9. In LP rules, here is not an adverb.  It designates a place and therefore is a noun.
 				//    examined 10 examples from gutenburg and 0 violated this rule.
-				if ((posList[0] == L"adverb") && source.m[wordSourceIndex].queryForm(L"adverb") < 0 && source.m[wordSourceIndex].word->first==L"here")
+				if ((primarySTLPMatch == L"adverb") && source.m[wordSourceIndex].queryForm(L"adverb") < 0 && source.m[wordSourceIndex].word->first==L"here")
 				{
 					return 0;
 					// VFTMap[source.m[wordSourceIndex].word->first]++;
 				}
 				// 10. out of 654 examples, 815 were marked LP correct,  10 for ST and 24 were neither.
 				// this is because LP is able to use statistics regarding Proper Nouns which are not used in ST, and also all caps words are particularly marked as being Proper Nouns when they are hardly ever proper nouns.
-				if ((posList[0] == L"Proper Noun") || source.m[wordSourceIndex].queryWinnerForm(L"Proper Noun") >= 0)
+				if ((primarySTLPMatch == L"Proper Noun") || source.m[wordSourceIndex].queryWinnerForm(L"Proper Noun") >= 0)
 				{
 					return 0;
 				}
 				// 11. numeral_cardinal counts as an adjective for LP if it matches the pattern __ADJECTIVE or _TIME (with the first match being an adjective of how much time)
-				if ((posList[0] == L"adjective") && source.m[wordSourceIndex].queryWinnerForm(L"numeral_cardinal") >= 0 && 
+				if ((primarySTLPMatch == L"adjective") && source.m[wordSourceIndex].queryWinnerForm(L"numeral_cardinal") >= 0 && 
 					  (source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"_TIME") != -1))
 				{
 					return 0;
 				}
 				// 12. "one" is post processed and understood as a pronoun by LP, even if it is only matched as a numeral_cardinal. (10 examples examined)
 				//   this is often encountered if the author is fond of speaking in the general person ('one')
-				if (source.m[wordSourceIndex].word->first == L"one" && (posList[0] == L"personal_pronoun_accusative") && source.m[wordSourceIndex].queryWinnerForm(L"numeral_cardinal") >= 0 &&
+				if (source.m[wordSourceIndex].word->first == L"one" && (primarySTLPMatch == L"personal_pronoun_accusative") && source.m[wordSourceIndex].queryWinnerForm(L"numeral_cardinal") >= 0 &&
 					(source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"__NOUN") != -1))
 				{
 					return 0;
 				}
 				// 13. numeral_ordinal counts as an noun for LP if it matches the pattern __NOUN
-				if ((posList[0] == L"noun") && source.m[wordSourceIndex].queryWinnerForm(L"numeral_ordinal") >= 0 && source.m[wordSourceIndex].pma.queryPattern(L"__N1") != -1)
+				if ((primarySTLPMatch == L"noun") && source.m[wordSourceIndex].queryWinnerForm(L"numeral_ordinal") >= 0 && source.m[wordSourceIndex].pma.queryPattern(L"__N1") != -1)
 				{
 					return 0;
 				}
 				// 14. LP does not have 'any' as a determiner but rather as a pronoun/adjective which is used internally as an indicator as to how to match the noun to other nouns.
 				// out of 100 examples, 100% were interpreted correctly - added 'any' as a determiner when calculating noun/determiner agreement cost
-				if (source.m[wordSourceIndex].word->first == L"any" && posList[0] == L"determiner" &&
+				if (source.m[wordSourceIndex].word->first == L"any" && primarySTLPMatch == L"determiner" &&
 					(source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1 && source.m[wordSourceIndex].pma.queryPattern(L"__NOUN") != -1))
 				{
 					return 0;
@@ -1987,7 +2189,7 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, wstring 
 				int wallp = -1, qallp = (wordSourceIndex + 1<source.m.size()) ? source.m[wordSourceIndex + 1].pma.queryPattern(L"__NOUN") : -1;
 				if (qallp >= 0)
 					wallp = wordSourceIndex + 1 + source.m[wordSourceIndex + 1].pma[qallp].len-1;
-				if (source.m[wordSourceIndex].word->first == L"all" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && (posList[0] == L"determiner" || posList[0] == L"predeterminer") &&
+				if (source.m[wordSourceIndex].word->first == L"all" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && (primarySTLPMatch == L"determiner" || primarySTLPMatch == L"predeterminer") &&
 					  (source.m[wordSourceIndex - 1].queryWinnerForm(L"demonstrative_determiner") >= 0 || // case 1
 						(source.m[wordSourceIndex + 1].queryForm(L"demonstrative_determiner") >= 0) || //  case 2- all these / all those / all this / all that
 						(source.m[wordSourceIndex + 1].queryForm(L"possessive_determiner") >= 0) || // case 2- all my / all his / all her
@@ -2039,15 +2241,19 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, wstring 
 				// 21. every one can be interpreted by ST as a DT (determiner) followed by a CD (numeral_cardinal) .  For LP's purposes, this is an indefinite pronoun!
 				if (source.m[wordSourceIndex].word->first == L"every one")
 					return 0;
-
-				if (source.m[wordSourceIndex].word->first == L"that" && source.scanForTag(wordSourceIndex, SENTENCE_IN_REL_TAG) != -1)
+				// 22. Stanford sometimes guesses that as an adverb as well (all 3 examples checked)
+				if (source.m[wordSourceIndex].word->first == L"that" && source.scanForPatternTag(wordSourceIndex, SENTENCE_IN_REL_TAG) != -1)
+				{
+					return 0;
+				}
+				if (source.m[wordSourceIndex].word->first == L"that")
 				{
 					partofspeech += L"***TH";
 				}
 				if (source.m[wordSourceIndex].queryWinnerForm(L"pronoun") >= 0)
 				{
 					/*	16 neither      16 there     19 hers     21 either     21 less     24 all     42 same     52 mine     53 most     56 Both     59 such     66 least     91 another     96 other    109 any    180 so    182 more		*/
-					partofspeech += L"***PN";
+					//partofspeech += L"***PN";
 				}
 
 				//////////////////////////////
@@ -2058,7 +2264,17 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, wstring 
 				source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 				formNoMatchMap[posListStr + L"!= " + winnerFormsString]++;
 				wordNoMatchMap[source.m[wordSourceIndex].word->first]++;
-				lplog(LOG_ERROR, L"%07d:Stanford POS %s (%s) not found in winnerForms %s for word%s %s [%s][%s].", wordSourceIndex, partofspeech.c_str(), posListStr.c_str(), winnerFormsString.c_str(), (originalWord.find(L' ')==wstring::npos) ? L"":L"[space]", originalWord.c_str(), sentence.c_str(),originalParse.c_str());
+				wstring originalNextWord;
+				source.getOriginalWord(wordSourceIndex+1, originalNextWord, false, false);
+				size_t pos = sentence.find(originalWord);
+				while (pos != wstring::npos)
+				{
+					size_t nextWordPos = pos + originalWord.length() + 1;
+					if (!--numTimesWordOccurred && (pos==0 || sentence[pos-1]==' ') && (sentence.length()==pos+ originalWord.length() || sentence[pos + originalWord.length()]==L' ' || sentence[pos + originalWord.length()] == L'\''))
+						sentence.replace(pos,originalWord.length(), L"*" + originalWord + L"*");
+					pos = sentence.find(originalWord,pos+ originalWord.length()+2);
+				}
+				lplog(LOG_ERROR, L"%07d:Stanford POS %s (%s) not found in winnerForms %s for word%s %s [%s][%s].", wordSourceIndex, partofspeech.c_str(), primarySTLPMatch.c_str(), winnerFormsString.c_str(), (originalWord.find(L' ')==wstring::npos) ? L"":L"[space]", originalWord.c_str(), sentence.c_str(),originalParse.c_str());
 				if (originalWord.find(L' ') != wstring::npos && 
 					source.m[wordSourceIndex].word->first != L"no one" && source.m[wordSourceIndex].word->first != L"every one" && source.m[wordSourceIndex].word->first != L"as if" && source.m[wordSourceIndex].word->first != L"for ever" && source.m[wordSourceIndex].word->first != L"next to")
 				{
@@ -2159,9 +2375,13 @@ int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *
 			wstring originalParse = parse;
 			int start = wordSourceIndex, until = -1,pmaOffset=-1;
 			bool inRelativeClause = false, sentencePrinted = false;
+			map <wstring, int> numTimesWordOccurred;
 			for (; wordSourceIndex < endIndex; wordSourceIndex++)
 			{
-				if ((pmaOffset = source.scanForTag(wordSourceIndex, REL_TAG)) != -1 || (pmaOffset = source.scanForTag(wordSourceIndex, SENTENCE_IN_REL_TAG)) != -1)
+				wstring originalIWord;
+				source.getOriginalWord(wordSourceIndex, originalIWord, false, false);
+				numTimesWordOccurred[originalIWord]++;
+				if ((pmaOffset = source.scanForPatternTag(wordSourceIndex, REL_TAG)) != -1 || (pmaOffset = source.scanForPatternTag(wordSourceIndex, SENTENCE_IN_REL_TAG)) != -1)
 				{
 					inRelativeClause = true;
 					until = wordSourceIndex+source.m[wordSourceIndex].pma[pmaOffset].len;
@@ -2178,7 +2398,7 @@ int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *
 				}
 				else
 				{
-					if (checkStanfordPCFGAgainstWinner(source, wordSourceIndex, originalParse, sentence, parse, numPOSNotFound, formNoMatchMap, wordNoMatchMap, VFTMap, inRelativeClause,errorMap))
+					if (checkStanfordPCFGAgainstWinner(source, wordSourceIndex, numTimesWordOccurred[originalIWord], originalParse, sentence, parse, numPOSNotFound, formNoMatchMap, wordNoMatchMap, VFTMap, inRelativeClause,errorMap))
 					{
 						numNoMatch++;
 						if (!sentencePrinted)
@@ -2248,21 +2468,21 @@ int stanfordCheck(Source source, int step, bool pcfg)
 	mysql_free_result(result);
 	destroyJavaVM(vm);
 	if (totalWords>0)
-		lplog(LOG_ERROR, L"numNoMatch=%d %d%% numPOSNotFound=%d", numNoMatch, numNoMatch * 100 / totalWords, numPOSNotFound);
-	lplog(LOG_ERROR, L"FORMS ****************************************************************************");
+		lplog(LOG_ERROR, L"numNoMatch=%d %7.3f%% numPOSNotFound=%d", numNoMatch, numNoMatch * 100.0 / totalWords, numPOSNotFound);
+	lplog(LOG_ERROR, L"FORMS ------------------------------------------------------------------------------");
 	map<int, wstring, std::greater<int>> formNoMatchReverseMap, wordNoMatchReverseMap,VFTReverseMap;
 	for (auto const&[forms, count] : formNoMatchMap)
 		formNoMatchReverseMap[count] += forms + L" *";
 	for (auto const&[count, forms] : formNoMatchReverseMap)
 		lplog(LOG_ERROR, L"forms %s [%d]", forms.c_str(), count);
-	lplog(LOG_ERROR, L"VFT ******************************************************************************");
+	lplog(LOG_ERROR, L"VFT --------------------------------------------------------------------------------");
 	for (auto const&[word, count] : VFTMap)
 		VFTReverseMap[count] += word +L" *";
 	for (auto const&[count, word] : VFTReverseMap)
 		lplog(LOG_ERROR, L"VFT %s [%d]", word.c_str(), count);
 	for (auto const&[forms, count] : wordNoMatchMap)
 		wordNoMatchReverseMap[count] += forms + L" *";
-	lplog(LOG_ERROR, L"WORDS ****************************************************************************");
+	lplog(LOG_ERROR, L"WORDS ------------------------------------------------------------------------------");
 	int numListed = 0;
 	for (auto const&[count, forms] : wordNoMatchReverseMap)
 	{
@@ -2386,7 +2606,7 @@ void wmain(int argc,wchar_t *argv[])
 	int step = _wtoi(argv[1]);
 	switch (step)
 	{
-	case 1:
+	case 10:
 	case 11:
 	case 12:
 	case 13:
@@ -2396,10 +2616,6 @@ void wmain(int argc,wchar_t *argv[])
 	case 17:
 	case 18:
 	case 19:
-	case 20:
-	case 100:
-	case 1000:
-	case 10000:
 		populateWordFrequencyTable(source,step);
 		break;
 	case 2:
@@ -2455,9 +2671,13 @@ void wmain(int argc,wchar_t *argv[])
 	case 9: 
 		stanfordCheck(source,step,true);
 		break;
-	case 30:
+	case 20:
 		printUnknowns(source, step);
-			break;
+		break;
+	case 21:
+		patternAnalysis(source, step, L"__NOUN", L"R");
+		// patternAnalysis(source, step, L"_MS1", L"2"); // TODO: testing weight change on _S1.
+		break;
 	}
 	source.unlockTables();
 }

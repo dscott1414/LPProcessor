@@ -389,17 +389,22 @@ bool patternElement::matchOne(Source &source,unsigned int sourcePosition,unsigne
 #endif
     }
   }
-  if (oneMatch || (minimum==0)) return true;
-  // words to ignore can only be forms, not patterns
-  // no inflected forms allowed
-  // if [first non-optional element in pattern , and - removed] pattern has not matched any elements previously,
-  //   reject, because the pattern will have a chance to match with the next position
-  // (and we want to avoid double matching)
-  if (!im->word->second.isIgnore()) return false;
+	// if matched, immediately return true
+	if (oneMatch)
+		return true;
+	// if not matched, but match is optional (minimum==0) and word should not be ignored (or pattern is set to disable ignore forms), return true (go on to next element)
+	// words to ignore can only be forms, not patterns
+	// no inflected forms allowed
+	// if [first non-optional element in pattern , and - removed] pattern has not matched any elements previously,
+	//   reject, because the pattern will have a chance to match with the next position
+	// (and we want to avoid double matching)
+	if ((!im->word->second.isIgnore() || patterns[patternNum]->checkIgnorableForms))
+		return minimum==0;
+	// if there is nothing to match against, or current source position is the matched end position, return false (fail match)
   if (!whatMatched.size() || sourcePosition==whatMatched[0].endPosition) return false;
 #ifdef LOG_PATTERN_MATCHING
-  lplog(L"%d:pattern %s:position %d:%s is ignored.",
-    sourcePosition,patternName.c_str(),elementPosition,im->word->first.c_str());
+  lplog(L"%d:pattern %s:position %d:%s is ignored%s.",
+    sourcePosition,patternName.c_str(),elementPosition,im->word->first.c_str(),(minimum==0) ? L" optional pattern":L"");
 #endif
   //whatMatched[lastElement].sentencePosition++; // eliminated because multiple matches could use this and some might ignore and others not
   // see beginPosition in matchElement
@@ -940,8 +945,9 @@ void cPattern::writeABNF(FILE *fh,unsigned int lastTag)
   if (noRepeat) len+=_snwprintf(buf+len,1024-len,L"_NO_REPEAT:");
   if (ignoreFlag) len+=_snwprintf(buf+len,1024-len,L"_IGNORE:");
   if (questionFlag) len+=_snwprintf(buf+len,1024-len,L"_QUESTION:");
-  if (notAfterPronoun) len+=_snwprintf(buf+len,1024-len,L"_NOT_AFTER_PRONOUN:");
-  if (buf[len-1]==L':') buf[len-1]=L']';
+	if (notAfterPronoun) len += _snwprintf(buf + len, 1024 - len, L"_NOT_AFTER_PRONOUN:");
+	if (explicitSubjectVerbAgreement) len += _snwprintf(buf + len, 1024 - len, L"_EXPLICIT_SUBJECT_VERB_AGREEMENT:");
+	if (buf[len-1]==L':') buf[len-1]=L']';
   if (buf[len-1]==L'[') len--;
   buf[len++]=L'=';
   buf[len]=0;
@@ -1027,6 +1033,7 @@ cPattern::cPattern(FILE *fh,bool &valid)
       else if (!wcscmp(tag,L"_IGNORE")) ignoreFlag=true;
       else if (!wcscmp(tag,L"_QUESTION")) questionFlag=true;
       else if (!wcscmp(tag,L"_NOT_AFTER_PRONOUN")) notAfterPronoun=true;
+			else if (!wcscmp(tag, L"_EXPLICIT_SUBJECT_VERB_AGREEMENT")) explicitSubjectVerbAgreement = true;
       else
         tags.push_back(findTag(tag));
     }
@@ -1072,7 +1079,9 @@ bool cPattern::create(wstring patternName,wstring differentiator,int numForms,..
   p->noRepeat=p->eliminateTag(L"_NO_REPEAT");
   p->ignoreFlag=p->eliminateTag(L"_IGNORE");
   p->questionFlag=p->eliminateTag(L"_QUESTION");
-  p->notAfterPronoun=p->eliminateTag(L"_NOT_AFTER_PRONOUN");
+	p->notAfterPronoun = p->eliminateTag(L"_NOT_AFTER_PRONOUN");
+	p->explicitSubjectVerbAgreement = p->eliminateTag(L"_EXPLICIT_SUBJECT_VERB_AGREEMENT");
+	p->checkIgnorableForms= p->eliminateTag(L"_CHECK_IGNORABLE_FORMS");
 	// free form is dangerous to use.  New forms are added to the word only if
 	// the form has never existed.  If somehow a word is part of a pattern which
 	// is meant to be a form (the form = the word), but the form already exists,
@@ -1354,8 +1363,9 @@ void cPattern::lplog(void)
   if (noRepeat) wcscat(temp,L" {_NO_REPEAT}");
   if (ignoreFlag) wcscat(temp,L" {_IGNORE}");
   if (questionFlag) wcscat(temp,L" {_QUESTION}");
-  if (notAfterPronoun) wcscat(temp,L" {_NOT_AFTER_PRONOUN}");
-  for (set<unsigned int>::iterator dt=tags.begin(),dtEnd=tags.end(); dt!=dtEnd; dt++)
+	if (notAfterPronoun) wcscat(temp, L" {_NOT_AFTER_PRONOUN}");
+	if (explicitSubjectVerbAgreement) wcscat(temp, L" {_EXPLICIT_SUBJECT_VERB_AGREEMENT}");
+	for (set<unsigned int>::iterator dt=tags.begin(),dtEnd=tags.end(); dt!=dtEnd; dt++)
     _snwprintf(temp+wcslen(temp),1024-wcslen(temp),L"{%s}",patternTagStrings[*dt].c_str());
   ::lplog(L"%s",temp);
   wstring temp2;
@@ -1450,7 +1460,7 @@ bool cPattern::add(int elementNum,wstring patternName,bool logFutureReferences,i
     p++;
   }
   if (!found)
-    ::lplog(L"Resolve failure: pattern %s not found.",patternName.c_str());
+    ::lplog(L"Resolve failure: pattern %s not found while defining pattern %s[%s].",patternName.c_str(),name.c_str(),differentiator.c_str());
   return (!found)|error;
 }
 
@@ -1578,7 +1588,7 @@ unsigned int findTagSet(wchar_t *tagSet)
 unsigned int verbObjectsTagSet;
 unsigned int iverbTagSet;
 unsigned int nounDeterminerTagSet;
-unsigned int agreementTagSet;
+unsigned int subjectVerbAgreementTagSet;
 unsigned int subjectTagSet;
 unsigned int specificAnaphorTagSet;
 unsigned int descendantAgreementTagSet;
@@ -1615,7 +1625,7 @@ void initializeTagSets(int &startSuperTagSets)
 { LFS
 	desiredTagSets.push_back(tTS(verbSenseTagSet,L"_VERB_SENSE",-28,
     L"no",L"never",L"not",L"past",L"imp",L"future",L"id",L"conditional",L"vS",L"vAC",L"vC",L"vD",L"vB",L"vAB",L"vBC",L"vABC",L"vCD",L"vBD",L"vABD",L"vACD",L"vBCD",L"vABCD",L"vE",L"vrBD",L"vrB",L"vrBC",L"vrD",L"vAD",NULL));
-  desiredTagSets.push_back(tTS(agreementTagSet,L"_AGREEMENT",3,L"SUBJECT",L"VERB",L"V_AGREE",L"V_OBJECT",L"conditional",L"future",L"past",NULL)); // V_OBJECT used for relations
+  desiredTagSets.push_back(tTS(subjectVerbAgreementTagSet,L"_AGREEMENT",3,L"SUBJECT",L"VERB",L"V_AGREE",L"V_OBJECT",L"conditional",L"future",L"past",NULL)); // V_OBJECT used for relations
   // "N_AGREE",L"GNOUN",L"SINGULAR",L"PLURAL" were put into SUBJECT_TAGSET because these tags also belong in OBJECTS which are after the verb, have nothing to
   // do with agreement and yet greatly multiply the number of tagsets.
 	desiredTagSets.push_back(tTS(subjectTagSet,L"_SUBJECT",-4,L"N_AGREE",L"GNOUN",L"MNOUN",L"NAME",L"SINGULAR",L"PLURAL",L"RE_OBJECT",NULL));
@@ -1914,7 +1924,7 @@ void initializePatterns(void)
 #ifdef LOG_AGREE_PATTERN_EVALUATION
   lplog(L"AGREEMENT PATTERNS");
   for (unsigned int p=0; p<patterns.size(); p++)
-    if (patterns[p]->includesDescendantsAndSelfAllOfTagSet&1<<agreementTagSet)
+    if (patterns[p]->includesDescendantsAndSelfAllOfTagSet&1<<subjectVerbAgreementTagSet)
     {
       lplog(L"%d:AP:%s[%s]",p,patterns[p]->name.c_str(),patterns[p]->differentiator.c_str());
       patterns[p]->evaluateAllTagPatternsForAgreement(1);
@@ -2069,20 +2079,21 @@ void printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &t
 // exactly like pema::queryPattern
 int Source::queryPattern(int position,wstring pattern,int &maxEnd)
 { LFS
-  int maxLen=-1,element=-1,nextByPosition=m[position].beginPEMAPosition;
+  int maxLen=-1,pemaPosition=-1,nextByPosition=m[position].beginPEMAPosition;
   for (; nextByPosition!=-1; nextByPosition=pema[nextByPosition].nextByPosition)
     if (patterns[pema[nextByPosition].getPattern()]->name==pattern && (pema[nextByPosition].end-pema[nextByPosition].begin)>maxLen)
-      maxLen=pema[element=nextByPosition].end-pema[nextByPosition].begin;
-  if (element!=-1) maxEnd=pema[element].end;
-  return element;
+      maxLen=pema[pemaPosition=nextByPosition].end-pema[nextByPosition].begin;
+  if (pemaPosition!=-1) maxEnd=pema[pemaPosition].end;
+  return pemaPosition;
 }
 
 void Source::printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &tagSet,int position,int PEMAPosition)
 { LFS
   wchar_t temp[1024];
   if (descriptor) wcscpy(temp,descriptor);
-  if (PEMAPosition>=0 && position>=0)
-    pema[PEMAPosition].toText(position,temp+((descriptor==NULL) ? 0 : wcslen(descriptor)),m);
+	if (PEMAPosition >= 0 && position >= 0)
+		wsprintf(temp + ((descriptor == NULL) ? 0 : wcslen(descriptor)), L"%s[%s](%d,%d)",
+			patterns[pema[PEMAPosition].getPattern()]->name.c_str(), patterns[pema[PEMAPosition].getPattern()]->differentiator.c_str(), position + pema[PEMAPosition].begin, position + pema[PEMAPosition].end);
   ::printTagSet(logType,temp,ts,tagSet);
 }
 

@@ -322,7 +322,8 @@ public:
 		notFreePrep=false;
 		hasVerbRelations=false;
 		t.printBeforeElimination=trace.printBeforeElimination;
-		t.traceAgreement=trace.traceAgreement;
+		t.traceSubjectVerbAgreement=trace.traceSubjectVerbAgreement;
+		t.traceTestSubjectVerbAgreement = trace.traceTestSubjectVerbAgreement;
 		t.traceEVALObjects=trace.traceEVALObjects;
 		t.traceAnaphors=trace.traceAnaphors;
 		t.traceRelations=trace.traceRelations;
@@ -1469,7 +1470,7 @@ enum eOBJECTS { UNKNOWN_OBJECT=-1,OBJECT_UNKNOWN_MALE=-2, OBJECT_UNKNOWN_FEMALE=
 extern unsigned int verbObjectsTagSet;
 extern unsigned int iverbTagSet;
 extern unsigned int nounDeterminerTagSet;
-extern unsigned int agreementTagSet;
+extern unsigned int subjectVerbAgreementTagSet;
 extern unsigned int subjectTagSet;
 extern unsigned int specificAnaphorTagSet;
 extern unsigned int descendantAgreementTagSet;
@@ -1841,7 +1842,7 @@ public:
 	bool flush(int fd,void *buffer,int &where);
 	bool FlushFile(HANDLE fd, void *buffer, int &where);
 	bool writeCheck(wstring path);
-	bool write(wstring file,bool S2);
+	bool write(wstring file,bool S2, bool saveOld);
 	bool findStart(wstring &buffer,wstring &start,int &repeatStart,wstring &title);
 	bool retrieveText(wstring &path,wstring etext,wstring &start,int &repeatStart,wstring author,wstring title);
 	bool readSource(wstring &path,bool checkOnly, bool &parsedOnly, bool printProgress,bool readOnlyParsed);
@@ -2085,7 +2086,10 @@ public:
 	int cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patternMatchArray::tPatternMatch *childPM,int traceSource,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet, wchar_t *fromWhere);
 	void recalculateOCosts(bool &recalculatePMCost,vector<patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int start,int traceSource);
 	int setSecondaryCosts(vector <costPatternElementByTagSet> &secondaryPEMAPositions,patternMatchArray::tPatternMatch *pm,int basePosition,wchar_t *fromWhere);
+	int getEndRelativeSourcePosition(int PEMAPosition);
+	void setPreviousElementsCostsAtIndex(vector <costPatternElementByTagSet> &PEMAPositions, int pp, int cost, int traceSource, int patternElementEndPosition, int pattern, int patternElement);
 	void lowerPreviousElementCosts(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, wchar_t *fromWhere);
+	void lowerPreviousElementCostsLowerRegardlessOfPosition(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, wchar_t *fromWhere);
 	void lowerPreviousElementCostsOld(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, wchar_t *fromWhere);
 	bool assessEVALCost(tTagLocation &tl,int pattern,patternMatchArray::tPatternMatch *pm,int position);
 	int assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,int parentPosition,int position,vector < vector <tTagLocation> > &tagSets);
@@ -3085,9 +3089,12 @@ int wherePrepObject,
 	const wchar_t *getOriginalWord(int I, wstring &out, bool concat, bool mostCommon = false);
 	bool analyzeEnd(wstring &path, int begin, int end, bool &multipleEnds);
 	void writeWords(wstring oPath);
-	int scanForTag(int where, int tag);
+	int scanForPatternTag(int where, int tag);
+	int scanForPatternElementTag(int where, int tag);
 	int printSentence(unsigned int rowsize, unsigned int begin, unsigned int end, bool containsNotMatched);
-	bool evaluateAgreement(int verbPosition, int whereSubject, bool &agreementTestable);
+	int getSubjectInfo(tTagLocation subjectTagset, int whereSubject, int &nounPosition, int &nameLastPosition, bool &restateSet, bool &singularSet, bool &pluralSet);
+	bool evaluateSubjectVerbAgreement(int verbPosition, int whereSubject, bool &agreementTestable);
+	int queryPattern(int position, wstring pattern, int &maxEnd);
 
 private:
 	wstring primaryQuoteType,secondaryQuoteType;
@@ -3266,7 +3273,6 @@ int wordOrderSensitiveModifier,
 	void consolidateWinners(int begin);
 	void addSpeakerObjects(int position,bool toMatched,int where,vector <int> speakers,__int64 resolutionFlag);
 	// exactly like PEMA but with position
-	int queryPattern(int position,wstring pattern,int &maxEnd);
 	bool matchAliases(int where,int object,int aliasObject);
 	bool matchAliases(int where,int object,set <int> &objects);
 	bool matchAliases(int where,int object,vector <cOM> &objects);
@@ -3277,7 +3283,7 @@ int wordOrderSensitiveModifier,
 	unsigned int getAllLocations(unsigned int position,int parentPattern,int rootp,int childLen,int parentLen,vector <unsigned int> &allLocations);
 	int markChildren(patternElementMatchArray::tPatternElementMatch *pem,int position,int recursionLevel,int allRootsLowestCost);
 	bool findLowCostTag(vector<tTagLocation> &tagSet,int &cost,wchar_t *tagName,tTagLocation &lowestCostTag,int parentCost,int &nextTag);
-	int evaluateAgreement(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,unsigned int parentPosition,unsigned int position,vector<tTagLocation> &tagSet,int &traceSource);
+	int evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,unsigned int parentPosition,unsigned int position,vector<tTagLocation> &tagSet,int &traceSource);
 	// agreement section end
 
 	void printSpeakerQueue(int where);

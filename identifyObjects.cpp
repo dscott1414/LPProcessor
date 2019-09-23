@@ -1269,7 +1269,7 @@ int Source::identifyObject(int tag, int where, int element, bool adjectival, int
 		if (end - begin == 2 && m[begin].word->first == L"some" && m[begin + 1].word->first == L"one")
 			objectClass = PRONOUN_OBJECT_CLASS;
 		// don't recognize 'that' in: He had never recognized that he was a good baseball player.
-		if (objectClass != NAME_OBJECT_CLASS && scanForTag(where, SENTENCE_IN_REL_TAG) != -1 && end - where == 1)
+		if (objectClass != NAME_OBJECT_CLASS && scanForPatternTag(where, SENTENCE_IN_REL_TAG) != -1 && end - where == 1)
 			return -1;
 		if (objectClass == NAME_OBJECT_CLASS && !(m[principalWhere].flags&WordMatch::flagFirstLetterCapitalized) &&
 			(m[principalWhere].queryForm(relativeForm) >= 0 ||

@@ -2115,9 +2115,11 @@ bool WordClass::parseMetaCommands(wchar_t *buffer,int &endSymbol,sTrace &t)
 	}
   else if (!wcsnicmp(buffer,L"printBeforeElimination",wcslen(L"printBeforeElimination")))
     t.printBeforeElimination=!t.printBeforeElimination;
-  else if (!wcsnicmp(buffer,L"traceAgreement",wcslen(L"traceAgreement")))
-    t.traceAgreement=!t.traceAgreement;
-  else if (!wcsnicmp(buffer,L"traceEVALObjects",wcslen(L"traceEVALObjects")))
+	else if (!wcsnicmp(buffer, L"traceSubjectVerbAgreement", wcslen(L"traceSubjectVerbAgreement")))
+		t.traceSubjectVerbAgreement = !t.traceSubjectVerbAgreement;
+	else if (!wcsnicmp(buffer, L"traceTestSubjectVerbAgreement", wcslen(L"traceTestSubjectVerbAgreement")))
+		t.traceTestSubjectVerbAgreement = !t.traceTestSubjectVerbAgreement;
+	else if (!wcsnicmp(buffer,L"traceEVALObjects",wcslen(L"traceEVALObjects")))
     t.traceEVALObjects=!t.traceEVALObjects;
   else if (!wcsnicmp(buffer,L"traceAnaphors",wcslen(L"traceAnaphors")))
     t.traceAnaphors=!t.traceAnaphors;

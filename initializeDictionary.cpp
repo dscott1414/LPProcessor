@@ -1728,6 +1728,7 @@ void WordClass::initialize()
 	gquery(L"last")->second.toLowestCost(adverbForm);
 	gquery(L"few")->second.toLowestCost(quantifierForm);
 	gquery(L"spring")->second.toLowestCost(verbForm);
+	gquery(L"whenever")->second.toLowestCost(relativizerForm);
 	gquery(L"dove")->second.setCost(verbForm, 3);
 	gquery(L"nurse")->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
 	gquery(L"nurse")->second.usageCosts[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
