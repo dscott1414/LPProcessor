@@ -2267,7 +2267,7 @@ bool Source::write(wstring path,bool S2, bool makeCopyBeforeSourceWrite)
 	if (makeCopyBeforeSourceWrite)
 	{
 		wstring renamePath = path + L".old";
-		if (_wremove(renamePath.c_str()) < 0)
+		if (_wremove(renamePath.c_str()) < 0 && errno!=ENOENT)
 			lplog(LOG_FATAL_ERROR, L"REMOVE %s - %S", renamePath.c_str(), sys_errlist[errno]);
 		else if (_wrename(path.c_str(), renamePath.c_str()))
 			lplog(LOG_FATAL_ERROR, L"RENAME %s to %s - %S", path.c_str(), renamePath.c_str(), sys_errlist[errno]);

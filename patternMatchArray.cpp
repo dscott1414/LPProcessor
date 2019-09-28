@@ -493,6 +493,8 @@ bool patternMatchArray::consolidateWinners(int lastPEMAConsolidationIndex,patter
       pema.translate(lastPEMAConsolidationIndex,wa,&content[target].pemaByChildPatternEnd,patternElementMatchArray::BY_CHILD_PATTERN_END);
       target++;
     }
+		else if (t.tracePatternElimination)
+			lplog(L"position %d:pma %d:Eliminated %s[%s](%d,%d) [not winner]", position, J, patterns[content[J].getPattern()]->name.c_str(),patterns[content[J].getPattern()]->differentiator.c_str(), position,position+content[J].len);
   }
   if (t.tracePatternElimination)
     lplog(L"%d:PMA count reduced from %d to %d",position,count,target);

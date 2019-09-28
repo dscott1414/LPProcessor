@@ -270,8 +270,8 @@ int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem,int
 					if (pm->isWinner())
 						continue;
 					if (debugTrace.tracePatternElimination)
-						lplog(L"%*sMC position %d:pattern %s[%s](%d,%d) child %s[%s](%d,%d) PMA set winner (cost %d<=lowest cost %d).",
-						recursionLevel*2," ",position,patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),begin,end,
+						lplog(L"%*sMC position %d:pma %d:pattern %s[%s](%d,%d) child %s[%s](%d,%d) PMA set winner (cost %d<=lowest cost %d).",
+						recursionLevel*2," ",position, allLocations[lc], patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),begin,end,
 						patterns[childp]->name.c_str(),patterns[childp]->differentiator.c_str(),position,position+childLen,pm->getCost(),lowestCost);
 					numChildren+=markChildren(pema.begin()+pm->pemaByPatternEnd,position,recursionLevel+1,lowestCost);
 					patterns[pm->getPattern()]->numChildrenWinners++;
@@ -350,13 +350,26 @@ int Source::getSubjectInfo(tTagLocation subjectTagset,int whereSubject, int &nou
 							printTagSet(LOG_INFO, L"AGREE-SUBJECT (1)", K, subjectTagSets[K], tagSetSubjectPosition, subjectTagset.PEMAOffset);
 						// both of the below statements must execute!  (no || )
 						int nagreeNextTag, nextTag;
-						bool foundMNoun = false;
-						if (findLowCostTag(subjectTagSets[K], GNounCost, L"GNOUN", gtl, parentCost, nextTag) && GNounCost < nounCost && GNounCost < nameCost) sTagSet = K;
+						bool foundMNoun = false,foundGNoun=false,foundNAgree=false;
+						if ((foundGNoun=findLowCostTag(subjectTagSets[K], GNounCost, L"GNOUN", gtl, parentCost, nextTag)) && GNounCost < nounCost && GNounCost < nameCost) sTagSet = K;
 						if ((foundMNoun = findLowCostTag(subjectTagSets[K], GNounCost, L"MNOUN", gtl, parentCost, nextTag)) && GNounCost < nounCost && GNounCost < nameCost) sTagSet = K;
 						// if there is an mnoun and 2 nagrees (or more), then don't count the nagree because the mnoun will produce 2 or more nagrees inside it and lowCost tag only counts the cost
 						//     of one of the nagrees, so it would win, when clearly the mnoun should win.
-						if (findLowCostTag(subjectTagSets[K], nounCost, L"N_AGREE", ntl, parentCost, nagreeNextTag) && nounCost < GNounCost && nounCost < nameCost && (nagreeNextTag == -1 || !foundMNoun)) sTagSet = K;
+						if ((foundNAgree=findLowCostTag(subjectTagSets[K], nounCost, L"N_AGREE", ntl, parentCost, nagreeNextTag)) && nounCost < GNounCost && nounCost < nameCost && (nagreeNextTag == -1 || !foundMNoun)) sTagSet = K;
 						if (findLowCostTag(subjectTagSets[K], nameCost, L"NAME", natl, parentCost, nextTag) && nameCost < nounCost && nameCost < GNounCost) sTagSet = K;
+						// AGREE-SUBJECT (1) TAGSET 00000: #TAGS=2
+						// TAGSET 00000: 002 __NOUN[2] 000002 : __N1[](2, 3) TAG N_AGREE[2, 3]
+						// TAGSET 00000 : 003 __NOUN[9] 000128 : _REL1[5](3, 7) TAG GNOUN[128, 2]
+						// Anyone who sees his friends runs to greet them.
+						// NAgree='Anyone' and GNoun='who sees his friends', and subject is really 'Anyone', but that will not have the lowest cost ever in this example because
+						// REL1 will have agreement internally and so will be marked lower.
+						// In this sentence - Anyone who arrives late are welcome. REL1 is marked as the same cost (GNounCost==nounCost) because who could refer to a plural or a singular entity.
+						if (foundGNoun && foundNAgree && !foundMNoun && ntl.sourcePosition + ntl.len == gtl.sourcePosition && GNounCost <= nounCost)
+						{
+							nounCost = GNounCost - 1;
+							if (nounCost < nameCost)
+								sTagSet = K;
+						}
 					}
 				}
 			}
@@ -388,12 +401,18 @@ int Source::getSubjectInfo(tTagLocation subjectTagset,int whereSubject, int &nou
 		}
 		if (debugTrace.traceSubjectVerbAgreement)
 			lplog(L"%d:Final costs for subject tagset: nounCost=%d GNounCost=%d nameCost=%d tagSet#=%d", tagSetSubjectPosition, nounCost, GNounCost, nameCost, sTagSet);
+		if (sTagSet == -1)
+		{
+			if (debugTrace.traceSubjectVerbAgreement)
+				lplog(L"%d:Unable to find consistent tagset for subject. ", tagSetSubjectPosition);
+			return -1;
+		}
 		int nextSingularTag = -1, nextPluralTag = -1, nextRE = -1;
 		singularSet = findTag(subjectTagSets[sTagSet], L"SINGULAR", nextSingularTag) >= 0;
 		pluralSet = findTag(subjectTagSets[sTagSet], L"PLURAL", nextPluralTag) >= 0;
 		restateSet = findTag(subjectTagSets[sTagSet], L"RE_OBJECT", nextRE) >= 0;
-		int nextMnounTag, mnounTag = findTag(subjectTagSets[sTagSet], L"MNOUN", nextMnounTag);
-		if (sTagSet == -1 || (nounCost == GNounCost && nameCost > nounCost && (ntl.len != gtl.len && !pluralSet)))
+		int nextMnounTag=-1, mnounTag = findTag(subjectTagSets[sTagSet], L"MNOUN", nextMnounTag);
+		if (nounCost == GNounCost && nameCost > nounCost && ntl.len != gtl.len && mnounTag<0)
 		{
 			if (debugTrace.traceSubjectVerbAgreement)
 				lplog(L"%d:Tags are inconsistent for subject tagsets ntl.end=%d gtl.end=%d.", tagSetSubjectPosition, ntl.len, gtl.len);
@@ -404,7 +423,10 @@ int Source::getSubjectInfo(tTagLocation subjectTagset,int whereSubject, int &nou
 			if (debugTrace.traceSubjectVerbAgreement)
 				lplog(L"%d:Name cost %d is <= nounCost %d.  Setting noun position to -2 and nameLastPosition to %d.", tagSetSubjectPosition, nameCost, nounCost, ntl.sourcePosition + ntl.len - 1);
 			nounPosition = -2;
-			nameLastPosition = ntl.sourcePosition + ntl.len - 1;
+			if (nounCost==nameCost)
+				nameLastPosition = ntl.sourcePosition + ntl.len - 1;
+			else
+				nameLastPosition = natl.sourcePosition + natl.len - 1;
 		}
 		else if (nounCost <= GNounCost && ntl.len>0)
 			nounPosition = ntl.sourcePosition;
@@ -413,22 +435,16 @@ int Source::getSubjectInfo(tTagLocation subjectTagset,int whereSubject, int &nou
 		if (nameCost == nounCost && natl.sourcePosition + natl.len <= ntl.sourcePosition && ntl.len > 0)
 			nounPosition = ntl.sourcePosition;
 		// if singular is set (because mnoun has an 'OR', like 'a mouse or a horse'), but nounPosition>=0 and the noun is plural, then forget about the singular setting and mark as plural.
-		if (singularSet && nounPosition >= 0 && mnounTag >= 0)
+		if (singularSet && !pluralSet && nounPosition >= 0 && mnounTag >= 0)
 		{
-			if (nextSingularTag >= 0)
-			{
-				pluralSet = true;
-				singularSet = false;
-				if (debugTrace.traceSubjectVerbAgreement && pluralSet)
-					lplog(L"%d:Singular tag overridden in case of 'OR' mnoun where two SINGULAR tags detected.", tagSetSubjectPosition);
-			}
-			else
-			{
-				pluralSet = (m[nounPosition].word->second.inflectionFlags&PLURAL) == PLURAL;
-				singularSet = (m[nounPosition].word->second.inflectionFlags&SINGULAR) == SINGULAR;
-				if (debugTrace.traceSubjectVerbAgreement)
-					lplog(L"%d:Singular tag overridden in case of 'OR' mnoun where each object in compound noun is a plural noun.", tagSetSubjectPosition);
-			}
+			int nextAgreeNounTag=-1;
+			findTag(subjectTagSets[sTagSet], L"N_AGREE", nextAgreeNounTag);
+			if (nextAgreeNounTag >= 0)
+				nounPosition = subjectTagSets[sTagSet][nextAgreeNounTag].sourcePosition;
+			pluralSet = (m[nounPosition].word->second.inflectionFlags&PLURAL) == PLURAL;
+			singularSet = (m[nounPosition].word->second.inflectionFlags&SINGULAR) == SINGULAR;
+			if (debugTrace.traceSubjectVerbAgreement && pluralSet)
+				lplog(L"%d:Singular tag overridden in case of 'OR' mnoun where the last object in compound noun is a plural noun.", tagSetSubjectPosition);
 		}
 	}
 	else
@@ -463,10 +479,62 @@ The word number is singular when it follows the, plural when it follows a:
 The number of applications was huge.
 A number of teenagers now hold full-time jobs.
 */
-int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,unsigned parentPosition,unsigned int position,vector<tTagLocation> &tagSet,int &traceSource)
-{ LFS
-	int nextSubject=-1,whereSubject=findTag(tagSet,L"SUBJECT",nextSubject);
+int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *parentpm, patternMatchArray::tPatternMatch *pm, unsigned parentPosition, unsigned int position, vector<tTagLocation> &tagSet, int &traceSource)
+{
+	LFS
+	int nextSubject = -1, whereSubject = findTag(tagSet, L"SUBJECT", nextSubject);
 	if (whereSubject < 0) return 0;
+	// if exception
+	// If I were a rich man, I would make more charitable donations.
+	// If he were here right now, he would help us.
+	// this exception applies only to unreal conditionals—that is, situations that do not reflect reality. (Hint: unreal conditionals often contain words like “would” or “ought to.”) 
+	// When talking about a possibility that did happen or might be true, “was” and “were” are used normally.
+	// If I was rude to you, I apologize.
+	if (tagSet[whereSubject].sourcePosition > 1 && m[tagSet[whereSubject].sourcePosition - 1].word->first == L"if")
+	{
+		if (debugTrace.traceSubjectVerbAgreement)
+			lplog(L"%d: if exception [SOURCE=%06d] cost=%d", position, traceSource = gTraceSource++, 0);
+		return 0;
+	}
+	int nextVerb = -1, nextMainVerb = -1;
+	int whereMainVerb = findTag(tagSet, L"VERB", nextMainVerb);
+	if (whereSubject < whereMainVerb)
+	{
+		// if subject is: there, here, who, what, how, where, whose, when, why, what, and the subject comes before the verb, make the object the subject.
+		// There is a book on the table. / There are books on the table.
+		// What is the problem ? / What are the problems ?
+		// How has the flower grown this quickly ? / How have the flowers grown this quickly ? // the question pattern should assure that the subject is already after the verb!
+		set <wstring> reverseSubjects = { L"there", L"here", L"who", L"what", L"how", L"where", L"whose", L"when", L"why", L"what" };
+		vector < vector <tTagLocation> > subjectVerbRelationTagSets;
+		// use subjectVerbRelationTagSet because it includes subject, verb and object so we can attempt to match with the existing subject verb agreement tagset.
+		if (reverseSubjects.find(m[tagSet[whereSubject].sourcePosition].word->first) != reverseSubjects.end() && startCollectTags(debugTrace.traceSubjectVerbAgreement, subjectVerbRelationTagSet, position, pm->pemaByPatternEnd, subjectVerbRelationTagSets, true, false) > 0)
+		{
+			for (int svrTagSetIndex = 0; svrTagSetIndex < subjectVerbRelationTagSets.size(); svrTagSetIndex++)
+			{
+				int nextSVRSubject = -1, whereSVRSubject = findTag(subjectVerbRelationTagSets[svrTagSetIndex], L"SUBJECT", nextSVRSubject);
+				int nextSVRMainVerb = -1, whereSVRMainVerb = findTag(subjectVerbRelationTagSets[svrTagSetIndex], L"VERB", nextSVRMainVerb);
+				// attempt to match with the existing subject verb agreement tagset.
+				if (whereSVRSubject>=0 && whereSVRMainVerb >=0 && whereMainVerb>=0 && subjectVerbRelationTagSets[svrTagSetIndex][whereSVRSubject].sourcePosition == tagSet[whereSubject].sourcePosition && subjectVerbRelationTagSets[svrTagSetIndex][whereSVRMainVerb].sourcePosition == tagSet[whereMainVerb].sourcePosition)
+				{
+					int nextSVRObject = -1, whereSVRObject = findTag(subjectVerbRelationTagSets[svrTagSetIndex], L"OBJECT", nextSVRObject);
+					if (whereSVRObject >= 0)
+					{
+						if (debugTrace.traceSubjectVerbAgreement)
+						{
+							wstring objectStr, subjectStr;
+							lplog(L"%d: object %d:%s substituted for subject %d:%s in here/there/question subject", position,
+								subjectVerbRelationTagSets[svrTagSetIndex][whereSVRObject].sourcePosition,
+								phraseString(subjectVerbRelationTagSets[svrTagSetIndex][whereSVRObject].sourcePosition, subjectVerbRelationTagSets[svrTagSetIndex][whereSVRObject].sourcePosition + subjectVerbRelationTagSets[svrTagSetIndex][whereSVRObject].len, objectStr, true).c_str(),
+								tagSet[whereSubject].sourcePosition,
+								phraseString(tagSet[whereSubject].sourcePosition, tagSet[whereSubject].sourcePosition + tagSet[whereSubject].len, subjectStr, true).c_str());
+						}
+						tagSet[whereSubject] = subjectVerbRelationTagSets[svrTagSetIndex][whereSVRObject];
+						break;
+					}
+				}
+			}
+		}
+	}
 	bool restateSet, singularSet, pluralSet;
 	int nounPosition, nameLastPosition;
 	if (getSubjectInfo(tagSet[whereSubject], whereSubject, nounPosition, nameLastPosition, restateSet, singularSet, pluralSet) < 0)
@@ -479,8 +547,7 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 	//wchar_t temp2[1024];
 	//if (tagSet[whereSubject].PEMAOffset>=0 && pema[tagSet[whereSubject].PEMAOffset].getPattern()>=0)
 	//	lplog(L"%d:SUBJECT %s",tagSet[whereSubject].sourcePosition,pema[tagSet[whereSubject].PEMAOffset].toText(tagSet[whereSubject].sourcePosition,temp2,m));
-	int nextVerb = -1, nextMainVerb = -1, nextConditionalTag = -1, nextFutureTag = -1;
-	int whereMainVerb=findTag(tagSet,L"VERB",nextMainVerb);
+	int nextConditionalTag = -1, nextFutureTag = -1;
 	int whereVerbTag=(whereMainVerb>=0) ? findTagConstrained(tagSet,L"V_AGREE",nextVerb,tagSet[whereMainVerb]) : -1;
 	int whereConditional=(whereMainVerb>=0) ? findTagConstrained(tagSet,L"conditional",nextConditionalTag,tagSet[whereMainVerb]) : -1;
 	int wherePast=(whereMainVerb>=0) ? findTagConstrained(tagSet,L"past",nextConditionalTag,tagSet[whereMainVerb]) : -1;
@@ -509,8 +576,8 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 		else
 		{
 			if (debugTrace.traceSubjectVerbAgreement)
-				lplog(L"%d:Search for noun and verb tag returned V_AGREE=(%d,%d) SUBJECT=(%d,%d) VERB=(%d,%d)",
-				position,whereVerbTag,nextVerb,whereSubject,nextSubject,whereMainVerb,nextMainVerb);
+				lplog(L"%d:Search for noun and verb tag returned V_AGREE=(%d,%d) SUBJECT=(%d,%d) VERB=(%d,%d) [SOURCE=%06d] cost=%d",
+								position,whereVerbTag,nextVerb,whereSubject,nextSubject,whereMainVerb,nextMainVerb, traceSource = gTraceSource++, 0);
 			return 0;
 		}
 	}
@@ -571,34 +638,92 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 	//  bool thirdPersonSet=(whereSubject>=0) ? findTagConstrained(tagSet,"THIRD_PERSON",nextPersonTag,tagSet[whereSubject])>=0 : false;
 	int person=THIRD_PERSON;
 	// if third_person not already set,
-	if (nounPosition>=0)
+	if (nounPosition >= 0)
 	{
-		person=m[nounPosition].word->second.inflectionFlags&(FIRST_PERSON|SECOND_PERSON|THIRD_PERSON);
-		// many is the time she has said to me...
-		if (m[nounPosition].word->first==L"many")
-			singularSet=pluralSet=true;
+		// SANAM
+		// substitute the object of the preposition
+		set <wstring> SANAM = { L"some", L"any", L"none", L"all", L"most" };
+		if (SANAM.find(m[nounPosition].word->first) != SANAM.end() && nounPosition+1<m.size() && m[nounPosition+1].word->first==L"of")
+		{
+			singularSet=pluralSet = false;
+			if (debugTrace.traceSubjectVerbAgreement)
+				lplog(L"%d:SANAM detected: tracing immediately proceeding prepositional phrase.", nounPosition);
+			// substitute the object of the preposition.  We cannot use the relPrep or other syntactic relations fields because they are not set yet at this stage.
+			// Some of the debt is paid off.
+			// Some of the debts are being paid off.
+			for (unsigned int pmOffset = 0; pmOffset < m[nounPosition + 1].pma.count; pmOffset++)
+				if (patterns[m[nounPosition + 1].pma.content[pmOffset].getPattern()]->name == L"_PP")
+				{
+					vector < vector <tTagLocation> > prepTagSets;
+					if (startCollectTags(debugTrace.traceSubjectVerbAgreement, prepTagSet, nounPosition + 1, m[nounPosition + 1].pma.content[pmOffset].pemaByPatternEnd, prepTagSets, true, false) > 0)
+					{
+						for (unsigned int J = 0; J < prepTagSets.size(); J++)
+						{
+							int nextTag=-1, tag = findTag(prepTagSets[J], L"PREPOBJECT", nextTag);
+							vector < vector <tTagLocation> > ndTagSets;
+							if (tag >= 0 && startCollectTagsFromTag(debugTrace.traceSubjectVerbAgreement, nounDeterminerTagSet, prepTagSets[J][tag], ndTagSets, -1, true) > 0)
+							{
+								if (debugTrace.traceSubjectVerbAgreement)
+									lplog(L"%d:SANAM detection: prepobject at %d-%d.", nounPosition,prepTagSets[J][tag].sourcePosition, prepTagSets[J][tag].sourcePosition + prepTagSets[J][tag].len);
+								for (unsigned int K = 0; K < ndTagSets.size(); K++)
+								{
+									int nounTag = -1, nextNounTag = -1, nAgreeTag = -1, nextNAgreeTag = -1;
+									if ((nounTag = findTag(ndTagSets[K], L"NOUN", nextNounTag)) >= 0 && (nAgreeTag = findTagConstrained(ndTagSets[K], L"N_AGREE", nextNAgreeTag, ndTagSets[K][nounTag])) > 0)
+									{
+										if (debugTrace.traceSubjectVerbAgreement)
+											lplog(L"%d:SANAM detection: N_AGREE within prepobject %d-%d located at %d.", nounPosition, prepTagSets[J][tag].sourcePosition, prepTagSets[J][tag].sourcePosition + prepTagSets[J][tag].len, ndTagSets[K][nAgreeTag].sourcePosition);
+										tIWMM nounWord = m[nounPosition = ndTagSets[K][nAgreeTag].sourcePosition].word;
+										if (nounWord->second.inflectionFlags&SINGULAR)
+										{
+											if (debugTrace.traceSubjectVerbAgreement)
+												lplog(L"%d:noun %s is singular.", nounPosition, nounWord->first.c_str());
+											singularSet = true;
+										}
+										if (nounWord->second.inflectionFlags&PLURAL)
+										{
+											if (debugTrace.traceSubjectVerbAgreement)
+												lplog(L"%d:noun %s is plural.", nounPosition, nounWord->first.c_str());
+											pluralSet = true;
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			
+		}
+		person = m[nounPosition].word->second.inflectionFlags&(FIRST_PERSON | SECOND_PERSON | THIRD_PERSON);
 	}
 	if (!person)
 		person=THIRD_PERSON;
 	// if singular | plural not already set
 	// words like "there" may be plural or singular depending on usage
+	int inflectionFlags = m[verbPosition].word->second.inflectionFlags&VERB_INFLECTIONS_MASK;
 	if (!singularSet && !pluralSet && nounPosition>=0)
 	{
 		pluralSet=(m[nounPosition].word->second.inflectionFlags&PLURAL)==PLURAL;
 		singularSet=(m[nounPosition].word->second.inflectionFlags&SINGULAR)==SINGULAR;
 		// a proper noun is very rarely plural - Tuppence should only be considered singular
 		// special rules for multiple proper nouns needed in future (two ICBMs)
-		if (pluralSet && singularSet && (m[nounPosition].flags&WordMatch::flagOnlyConsiderProperNounForms))
+		if (pluralSet && singularSet && (m[nounPosition].flags&WordMatch::flagOnlyConsiderProperNounForms) && 
+			  (person!=THIRD_PERSON || (inflectionFlags!=VERB_PRESENT_PLURAL && inflectionFlags != VERB_PAST_PLURAL)))
 			pluralSet=false;
 		if (m[nounPosition].word->first==L"who" || // those who were OR this person who was
 			  m[nounPosition].word->first==L"that") // the settlement that was OR the settlements that were
 			singularSet=pluralSet=true;
 	}
 	// The Prince of Asturias Awards (Spanish) are a series awarded in Spain.
-	int inflectionFlags=m[verbPosition].word->second.inflectionFlags&VERB_INFLECTIONS_MASK;
 	int np=nounPosition;
 	if (np==-2 && nameLastPosition>=0)
-		np=nameLastPosition;
+	{
+		// The above Books are among a large collection
+		np = nameLastPosition;
+		if ((m[np].flags&WordMatch::flagOnlyConsiderProperNounForms) &&
+				(m[np].word->second.inflectionFlags&PLURAL) == PLURAL && 
+				(person == THIRD_PERSON && (inflectionFlags == VERB_PRESENT_PLURAL || inflectionFlags == VERB_PAST_PLURAL)))
+			pluralSet = true;
+	}
 	if (np>=0 && np+4<(signed)m.size() && !pluralSet && 
 		  (inflectionFlags==VERB_PRESENT_PLURAL || inflectionFlags==VERB_PAST_PLURAL) && 
 		  (m[np].flags&WordMatch::flagFirstLetterCapitalized) && m[np+1].word->first==L"of" && 
@@ -2110,11 +2235,14 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 				lplog(L"          %d:verb %s is both a first-singular and past participle, and is preceded by 'have' - don't match _VERB_BARE_INF.",vsp,verbWord->first.c_str());
 		}
 		// if the object is a present participle, this is not an object, but rather an adverb:
-		// Soon after Henrietta Hen shrieked for the rooster he came **hurrying around a corner of the barn** .   // how he came
-		if (numObjects > 0 && (m[tagSet[whereObjectTag].sourcePosition].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) != 0)
+		// Soon after Henrietta Hen shrieked for the rooster he came **hurrying around a corner of the barn** .   // how he came - adverb
+		// at the same time, sometimes it really is an object:
+		// Arthur Scott Bailey\The Tale of Freddie Firefly[4325-4330]:
+		// When he saw his brothers and cousins go dancing off in **the dark he couldn't help** wanting to dance too . // what he couldn't help - object
+		if (numObjects > 0 && (m[tagSet[whereObjectTag].sourcePosition].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) != 0 && verbWord->second.usageCosts[tFI::VERB_HAS_0_OBJECTS + numObjects] > verbWord->second.usageCosts[tFI::VERB_HAS_0_OBJECTS+numObjects-1])
 		{
 			if (debugTrace.traceVerbObjects)
-				lplog(L"          %d:decreased numObjects=%d to %d for verb %s because the object %s is a present participle (adverbial usage)",
+				lplog(L"          %d:decreased numObjects=%d to %d for verb %s because the object %s is a present participle (may be adverbial usage)",
 					tagSet[verbTagIndex].sourcePosition, numObjects, numObjects-1, verbWord->first.c_str(), m[tagSet[whereObjectTag].sourcePosition].word->first.c_str());
 			numObjects--;
 		}
@@ -2514,7 +2642,47 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 					lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) PHASE 1 not marked as winner (%s).",position,pmIndex,
 					p->name.c_str(),p->differentiator.c_str(),position,pm->len+position,(p->onlyAloneExceptInSubPatternsFlag)? L"onlyAloneExceptInSubPatternsFlag" : L"no fill flag");
 				if (p->explicitSubjectVerbAgreement)
+				{
+					// this is for NOUN[R]
+					int nextWord = position+pm->len;
+					int verbPosition = position + pm->len - 1;
+					if (debugTrace.traceDeterminer)
+						lplog(L"%d:Noun (%d,%d) is compound, testing verb=%d, nextWord=%d.", position, position, position + pm->len, verbPosition, nextWord);
+					int verbAfterVerbCost = calculateVerbAfterVerbUsage(verbPosition, nextWord);
+					if (!verbAfterVerbCost)
+					{
+						// if next word is an adverb, skip.
+						int maxLen = -1;
+						if (m[nextWord].pma.queryPattern(L"_ADVERB", maxLen) != -1)
+						{
+							nextWord += maxLen;
+							if (debugTrace.traceDeterminer)
+								lplog(L"%d:Noun (%d,%d) is compound, testing verb=%d, nextWord=%d.", position, position, position + pm->len, verbPosition, nextWord);
+							verbAfterVerbCost = calculateVerbAfterVerbUsage(verbPosition, nextWord);
+						}
+					}
+					if (!verbAfterVerbCost)
+					{
+						// if verb is an adverb, go backward.
+						if (m[verbPosition].pma.queryPattern(L"_ADVERB") != -1)
+						{
+							verbPosition--;
+							if (debugTrace.traceDeterminer)
+								lplog(L"%d:Noun (%d,%d) is compound, testing verb=%d, nextWord=%d.", position, position, position + pm->len, verbPosition, nextWord);
+							verbAfterVerbCost = calculateVerbAfterVerbUsage(verbPosition, nextWord);
+						}
+					}
+					if (verbAfterVerbCost)
+					{
+						if (debugTrace.traceDeterminer)
+							lplog(L"%d:Noun (%d,%d) is compound, has a verb at end and a verb after the end.", position, position, position+pm->len);
+						int PEMAPosition = pm->pemaByPatternEnd;
+						pema[PEMAPosition].addOCostTillMax(tFI::COST_OF_INCORRECT_VERBAL_NOUN);
+						lplog(L"%d:Added %d cost to %s[%s](%d,%d).", position, tFI::COST_OF_INCORRECT_VERBAL_NOUN, 
+							patterns[pema[PEMAPosition].getPattern()]->name.c_str(), patterns[pema[PEMAPosition].getPattern()]->differentiator.c_str(), position + pema[PEMAPosition].begin, position + pema[PEMAPosition].end);
+					}
 					assessCost(NULL, pm, -1, position, tagSets);
+				}
 				continue;
 			}
 			unsigned int bp;
@@ -2647,5 +2815,6 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 		}
 	}
 	matchedPositions-=end-begin+1;// +1 for the period, which isn't usually matched
+	lplog(L"position %d:pma %d:isWinner=%s", 3, 74, m[3].pma.content[74].isWinner() ? L"true" : L"false"); //TEMP DEBUG
 	return (matchedPositions<0) ? 0 : matchedPositions;
 }

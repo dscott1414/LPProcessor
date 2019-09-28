@@ -1412,7 +1412,7 @@ int wmain(int argc,wchar_t *argv[])
 	else
 	{
 		wstring path=L"tests\\"+ std::wstring(argv[sourceArgs + 1]) +L".txt";
-		wstring start=L"~~BEGIN",title,etext,encoding=L"UNICODE";
+		wstring start=L"~~BEGIN",title,etext,encoding=L"NOT FOUND";
 		if (argv[sourceArgs + 2][0] == L'~')
 			start = argv[sourceArgs + 2];
 		int repeatStart=1;

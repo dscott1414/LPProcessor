@@ -518,7 +518,7 @@ __int64 patternElementMatchArray::tPatternElementMatch::getRole(__int64 &tagRole
 	while ((tag=patterns[getPattern()]->elementHasTagInSet(__patternElement,__patternElementIndex,roleTagSet,tagNumBySet,isChildPattern()))>=0)
 	{
 		if (tag==HAIL_TAG) childTagRole|=HAIL_ROLE;
-		if (tag==SUBJECTT_TAG) childTagRole|=SUBJECT_ROLE;
+		if (tag==SUBJECT_TAG) childTagRole|=SUBJECT_ROLE;
 		if (tag==OBJECT_TAG) childTagRole|=OBJECT_ROLE;
 		if (tag==SUBOBJECT_TAG) childTagRole|=SUBOBJECT_ROLE;
 		if (tag==REOBJECT_TAG) childTagRole|=RE_OBJECT_ROLE;

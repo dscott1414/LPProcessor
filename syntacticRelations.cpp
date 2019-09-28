@@ -2038,7 +2038,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 		// don't scan forwards in questions [MOVE_OBJECTBrought a message from Mrs . Vandemeyer , I[master] suppose ? ]
 		// but accept forwards in these questions: Brought a telephone message to the man Whittington , did he[brown,whittington] ?
 		if (whereSubjects.empty() && 
-			  (m[where].pma.queryPattern(L"_INTRO_S1",maxLen)!=-1 && pema.queryTag(m[where+maxLen].beginPEMAPosition,SUBJECTT_TAG)!=-1 && !(m[where].flags&WordMatch::flagInQuestion)) ||
+			  (m[where].pma.queryPattern(L"_INTRO_S1",maxLen)!=-1 && pema.queryTag(m[where+maxLen].beginPEMAPosition,SUBJECT_TAG)!=-1 && !(m[where].flags&WordMatch::flagInQuestion)) ||
 			  ((m[where].flags&WordMatch::flagInQuestion) && m[where].pma.queryPattern(L"__INTRO_S1",maxLen)!=-1 && m[where+maxLen].word->first==L"did" && m[where+maxLen+1].getObject()>=0))
 		{
 			int whereSubject=where+maxLen;
@@ -2829,7 +2829,7 @@ void Source::syntacticRelations()
 				{
 					setRelPrep(lastInChain,firstFreePrep,13,PREP_PREP_SET);
 					if (debugTrace.traceRelations)
-					lplog(LOG_RESOLUTION,L"%06d:Prep@%d bound to %d verb=%d ZZZ.",I,firstFreePrep,lastInChain,lastVerb);
+						lplog(LOG_RESOLUTION,L"%06d:Prep@%d bound to %d verb=%d ZZZ.",I,firstFreePrep,lastInChain,lastVerb);
 				}
 			}
 			lastBeginS1=lastRelativePhrase=lastQ2=-1;

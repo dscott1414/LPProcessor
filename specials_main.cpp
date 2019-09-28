@@ -1287,22 +1287,17 @@ int patternAnalysisFromSource(Source source, int sourceId, wstring path, wstring
 	bool parsedOnly = false;
 	if (source.readSource(path, false, parsedOnly, false, true))
 	{
-		int wordIndex = 0, pmaPosition = 0, pmaOffset, until;
+		int wordIndex = 0;
 		unsigned int ss = 1;
-		bool inBiSentenceClause=false;
 		for (WordMatch &im : source.m)
 		{
-			if ((pmaOffset=im.pma.queryPattern(L"_REL1", L"6")) != -1 || (pmaOffset = im.pma.queryPattern(L"_MS1", L"1")) != -1 || (pmaOffset = im.pma.queryPattern(L"_MS1", L"5")) != -1 || (pmaOffset = im.pma.queryPattern(L"_MS1", L"C")) != -1) // _REL1[6], _MS[1], _MS[5], _MS1[C]
+			int pmaOffset;
+			if ((pmaOffset = im.pma.queryPattern(patternName, differentiator)) !=-1)
 			{
-				inBiSentenceClause = true;
-				until = wordIndex + source.m[wordIndex].pma[pmaOffset&~patternFlag].len;
-			}
-			if ((pmaPosition = im.pma.queryPattern(patternName, differentiator)) !=-1)
-			{
-				pmaPosition = pmaPosition & ~patternFlag;
-				int NOUNRLength = im.pma[pmaPosition].len;
+				pmaOffset = pmaOffset & ~patternFlag;
+				int NOUNRLength = im.pma[pmaOffset].len;
 				wstring sentence,originalIWord;
-				bool inPattern=false, sentenceStartInMiddleOfNoun=false;
+				bool inPattern=false;
 				for (int I = source.sentenceStarts[ss - 1]; I < source.sentenceStarts[ss]; I++)
 				{
 					source.getOriginalWord(I, originalIWord, false, false);
@@ -1319,14 +1314,21 @@ int patternAnalysisFromSource(Source source, int sourceId, wstring path, wstring
 					}
 					sentence += L" ";
 				}
-				if ((pmaPosition = source.m[wordIndex+2].pma.queryPattern(L"__S1")) != -1 && inBiSentenceClause)
-					sentenceStartInMiddleOfNoun = true;
+				// a man she did not fancy 
+				// wordIndex+NOUNRLength-1 = fancy
+				// wordIndex+1=man
+				// a mystery %you have never guessed
+				// wordIndex+NOUNRLength-1 = guessed
+				// wordIndex+1 = mystery
+				// I felt **the way you do**
+				// wordIndex+NOUNRLength-1 = do
+				// wordIndex+1=the way
+				// wordIndex-1=felt (do is a COND)
+				//analyzeUsage(source,wordIndex+1,wordIndex+2,wordIndex-1,)  
 				wstring path = source.sourcePath.substr(16, source.sourcePath.length() - 20);
-				lplog(LOG_INFO, L"%s%s[%d-%d]:%s", (sentenceStartInMiddleOfNoun) ? L"XXIC ":L"",path.c_str(), wordIndex, wordIndex + NOUNRLength, sentence.c_str());
+				lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, wordIndex + NOUNRLength, sentence.c_str());
 			}
 			wordIndex++;
-			if (until == wordIndex)
-				inBiSentenceClause = false;
 			while (ss < source.sentenceStarts.size() && source.sentenceStarts[ss] < wordIndex+1)
 				ss++;
 		}

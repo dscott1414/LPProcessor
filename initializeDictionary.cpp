@@ -1026,10 +1026,10 @@ int WordClass::createWordCategories()
 	wchar_t *reciprocal_pronoun[]={L"each other",L"one another",NULL};
 	predefineWords(reciprocal_pronoun,L"reciprocal_pronoun",L"recip_pron");
 	Inflections indefinite_pronoun[]={ // agreement is singular ownership is fuzzy
-			{L"everybody",PLURAL|MALE_GENDER|FEMALE_GENDER},{L"everyone",SINGULAR|MALE_GENDER|FEMALE_GENDER},{L"every one",SINGULAR|MALE_GENDER|FEMALE_GENDER},
+			{L"everybody",SINGULAR|MALE_GENDER|FEMALE_GENDER},{L"everyone",SINGULAR|MALE_GENDER|FEMALE_GENDER},{L"every one",SINGULAR|MALE_GENDER|FEMALE_GENDER},
 			{L"people",PLURAL|MALE_GENDER|FEMALE_GENDER},{L"person",SINGULAR|MALE_GENDER|FEMALE_GENDER},
 			{L"others",PLURAL|MALE_GENDER|FEMALE_GENDER},{L"other",SINGULAR|MALE_GENDER|FEMALE_GENDER},
-			{L"everything",PLURAL|NEUTER_GENDER},{L"somebody",SINGULAR|MALE_GENDER|FEMALE_GENDER},
+			{L"everything",SINGULAR|NEUTER_GENDER},{L"somebody",SINGULAR|MALE_GENDER|FEMALE_GENDER},
 			{L"someone",SINGULAR|MALE_GENDER|FEMALE_GENDER},{L"something",SINGULAR|NEUTER_GENDER},
 			{L"anybody",SINGULAR|MALE_GENDER|FEMALE_GENDER},{L"anyone",SINGULAR|MALE_GENDER|FEMALE_GENDER},
 			{L"anything",SINGULAR|NEUTER_GENDER},{L"nobody",SINGULAR|MALE_GENDER|FEMALE_GENDER},

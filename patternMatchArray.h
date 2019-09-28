@@ -11,7 +11,6 @@ public:
 	{
 		short len;
 		short cost;
-		unsigned short flags;
 		void resetFlags(void) { flags=0; }
 		bool isWinner(void) { return (flags&(1<<WINNER_FLAG))!=0; }
 		bool isEval(void) { return (flags&(1<<COST_EVAL_FLAG))!=0; }
@@ -54,6 +53,7 @@ public:
 	private:
 		enum flags { WINNER_FLAG=0,NEW_FLAG=1,COST_EVAL_FLAG=2,PASS_FLAGS=3,ELIMINATE_FLAG=4 };
 		unsigned short pattern;
+		unsigned short flags;
 	} tPatternMatch;
 	patternMatchArray();
 	~patternMatchArray();

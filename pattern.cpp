@@ -1060,9 +1060,9 @@ cPattern::cPattern(FILE *fh,bool &valid)
 // no pattern may limit references to only some instances of patterns
 // that is, a pattern may not refer to a only _NOUN[1] and _NOUN[2], and not to _NOUN[3] which is after it.
 // patternName,each element:(numForms,(form,...),flags,minimum,maximum)  - until numForms=0
-bool cPattern::create(wstring patternName,wstring differentiator,int numForms,...)
-{ LFS
-  //wstring differentiator="";
+bool cPattern::create(wstring patternName, wstring differentiator, int numForms, ...)
+{
+	LFS
   bool OK=true,explicitFutureReference; // nonOptionalElementFound=false,
   cPattern *p=new cPattern();
   va_list patternMarker;
@@ -1094,7 +1094,7 @@ bool cPattern::create(wstring patternName,wstring differentiator,int numForms,..
 	// Moreover, this feature, thogh convenient, leads to a proliferation of forms.
 	bool freeForm=p->eliminateTag(L"_FREE_FORM");
   p->name=patternName;
-  p->differentiator=differentiator;
+	p->differentiator=differentiator;
   p->num=patterns.size();
   p->rootPattern=0;
   //size_t pr=patternReferences.size();
@@ -1124,7 +1124,7 @@ bool cPattern::create(wstring patternName,wstring differentiator,int numForms,..
         if ((f=FormsClass::findForm(form))<0)
 				{
 					if (!freeForm)
-						::lplog(LOG_FATAL_ERROR|LOG_ERROR,L"FATAL_ERROR:Pattern %s[%s] uses an undefined form %s.",p->name.c_str(),p->differentiator.c_str(),form.c_str());
+						::lplog(LOG_FATAL_ERROR|LOG_ERROR,L"FATAL_ERROR:Pattern %s[%s] uses an undefined form %s (1).",p->name.c_str(),p->differentiator.c_str(),form.c_str());
 				  Words.predefineWord(form.c_str(),tFI::queryOnAnyAppearance);
 					f=FormsClass::findForm(form);
 					predefinedForms.push_back(f);
@@ -1259,7 +1259,7 @@ cPattern *cPattern::create(Source *source,wstring patternName,int num,int whereB
 			else
 			{
 				if ((f=FormsClass::findForm(form))<0)
-					::lplog(LOG_FATAL_ERROR|LOG_ERROR,L"FATAL_ERROR:Pattern %s[%s] uses an undefined form %s.",p->name.c_str(),p->differentiator.c_str(),form.c_str());
+					::lplog(LOG_FATAL_ERROR|LOG_ERROR,L"FATAL_ERROR:Pattern %s[%s] uses an undefined form %s (2).",p->name.c_str(),p->differentiator.c_str(),form.c_str());
 				element->formStr.push_back(form);
 				element->specificWords.push_back(specificWord);
 				element->formIndexes.push_back(f);
@@ -1611,7 +1611,7 @@ unsigned int ndPrepTagSet;
 unsigned int timeTagSet;
 unsigned int qtobjectTagSet;
 
-unsigned int PREP_TAG,OBJECT_TAG,SUBOBJECT_TAG,REOBJECT_TAG,IOBJECT_TAG,SUBJECTT_TAG,PREP_OBJECT_TAG,VERB_TAG,PLURAL_TAG,MPLURAL_TAG,GNOUN_TAG,MNOUN_TAG,PNOUN_TAG,VNOUN_TAG,HAIL_TAG,NAME_TAG,REL_TAG,SENTENCE_IN_REL_TAG,FLOAT_TIME_TAG;
+unsigned int PREP_TAG,OBJECT_TAG,SUBOBJECT_TAG,REOBJECT_TAG,IOBJECT_TAG,SUBJECT_TAG,PREP_OBJECT_TAG,VERB_TAG,PLURAL_TAG,MPLURAL_TAG,GNOUN_TAG,MNOUN_TAG,PNOUN_TAG,VNOUN_TAG,HAIL_TAG,NAME_TAG,REL_TAG,SENTENCE_IN_REL_TAG,FLOAT_TIME_TAG;
 
 void tTS::addTagSet(int tagSet)
 { LFS
@@ -1683,7 +1683,7 @@ void initializeTagSets(int &startSuperTagSets)
   OBJECT_TAG=findTag(L"OBJECT");
   REOBJECT_TAG=findTag(L"RE_OBJECT");
   IOBJECT_TAG=findTag(L"IOBJECT");
-  SUBJECTT_TAG=findTag(L"SUBJECT");
+  SUBJECT_TAG=findTag(L"SUBJECT");
   PREP_OBJECT_TAG=findTag(L"PREPOBJECT");
   VERB_TAG=findTag(L"VERB");
   PLURAL_TAG=findTag(L"PLURAL");

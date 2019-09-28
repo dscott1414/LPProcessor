@@ -333,7 +333,7 @@ void createQuestionPatterns(void)
 									1,L"__INTRO_S1{_BLOCK:EVAL}",0,0,1, 
 									1,L"_Q2PREP*-2",0,1,1, // don't add OBJECT to this relativizer - it will screw up agreement
 									1,L"__INTERPPB",0,0,1,
-									1,L"__ALLVERB*1",0,1,1, // _VERBREL1 removed because ALLOBJECTS follow is redundant
+									2,L"__ALLVERB*1", L"_VERBPASSIVE",0,1,1, // _VERBREL1 removed because ALLOBJECTS follow is redundant
 									1,L"__NOUN[*]{SUBJECT}",0,1,1,
 									1,L"__CLOSING__S1",0,0,3,
 									0);
