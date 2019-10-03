@@ -1295,7 +1295,7 @@ int patternAnalysisFromSource(Source source, int sourceId, wstring path, wstring
 			if ((pmaOffset = im.pma.queryPattern(patternName, differentiator)) !=-1)
 			{
 				pmaOffset = pmaOffset & ~patternFlag;
-				int NOUNRLength = im.pma[pmaOffset].len;
+				int patternEnd = wordIndex+im.pma[pmaOffset].len;
 				wstring sentence,originalIWord;
 				bool inPattern=false;
 				for (int I = source.sentenceStarts[ss - 1]; I < source.sentenceStarts[ss]; I++)
@@ -1307,7 +1307,7 @@ int patternAnalysisFromSource(Source source, int sourceId, wstring path, wstring
 						inPattern = true;
 					}
 					sentence += originalIWord;
-					if (I == wordIndex + NOUNRLength - 1)
+					if (I == patternEnd - 1)
 					{
 						sentence += L"**";
 						inPattern = false;
@@ -1326,7 +1326,7 @@ int patternAnalysisFromSource(Source source, int sourceId, wstring path, wstring
 				// wordIndex-1=felt (do is a COND)
 				//analyzeUsage(source,wordIndex+1,wordIndex+2,wordIndex-1,)  
 				wstring path = source.sourcePath.substr(16, source.sourcePath.length() - 20);
-				lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, wordIndex + NOUNRLength, sentence.c_str());
+				lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, patternEnd, sentence.c_str());
 			}
 			wordIndex++;
 			while (ss < source.sentenceStarts.size() && source.sentenceStarts[ss] < wordIndex+1)
@@ -1824,7 +1824,7 @@ unordered_map<wstring, vector <wstring> > maxentAssociationMap =
 	{ L"verb", { L"verbverb",L"think",L"have",L"have_negation",L"is",L"is_negation",L"does",L"does_negation",L"be",L"been",L"modal_auxiliary",L"negation_modal_auxiliary",L"future_modal_auxiliary",L"negation_future_modal_auxiliary",L"being"} }, // feel, see, watch, hear, tell etc // fancy, say (thinksay verbs)
 	// stanford maxent apparently has no indefinite pronoun, so it classes them all as nouns.
 	{ L"noun",{ L"dayUnit",L"timeUnit",L"quantifier",L"numeral_cardinal",L"indefinite_pronoun",L"season" } }, // all, some etc // something, everything
-	{ L"adjective",{ L"quantifier",L"numeral_ordinal" }},  // many
+	{ L"adjective",{ L"quantifier",L"numeral_ordinal" }},  // many / more
 	{ L"adverb",{ L"not",L"never",L"then" }},  // many
 	{ L"to",{ L"preposition" }},
 	{ L"of",{ L"preposition" }},
@@ -1999,7 +1999,7 @@ bool isStanfordDeterminerType(Source &source, int wordNounVerbDisagreementSource
 
 // checks if the part of speech indicated in parse from the Stanford POS tagger matches the winner forms at wordSourceIndex.
 // returns yes=0, no=1
-int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numTimesWordOccurred, wstring originalParse, wstring sentence, wstring &parse, int &numPOSNotFound, unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, bool inRelativeClause, unordered_map<wstring, int> &errorMap)
+int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numTimesWordOccurred, wstring originalParse, wstring sentence, wstring &parse, int &numPOSNotFound, unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, bool inRelativeClause, unordered_map<wstring, int> &errorMap,int startOfSentence)
 {
 	if (!iswalpha(source.m[wordSourceIndex].word->first[0]))
 		return 0;
@@ -2182,8 +2182,23 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 				{
 					return 0;
 				}
+				// 15. in the event of __AS_AS pattern, which is as (adverb) followed by an adjective or adverb followed by as (preposition)
+				// either adverb or preposition may be acceptable as both are incorporated into the pattern.  __AS_AS pattern was derived from Longman
+				if (source.m[wordSourceIndex].word->first == L"as" && (primarySTLPMatch == L"preposition" || primarySTLPMatch == L"adverb"))
+				{
+					if (source.m[wordSourceIndex].pma.queryPattern(L"__AS_AS") != -1)
+						return 0;
+					if (wordSourceIndex >= 2 && source.m[wordSourceIndex - 2].word->first == L"as" && source.m[wordSourceIndex - 2].pma.queryPattern(L"__AS_AS") != -1)
+						return 0;
+				}
+				// 16. So as matched in the beginning of a phrase is a linking adverbial (Longman) but is usually marked as a preposition by Stanford.
+				if (source.m[wordSourceIndex].word->first == L"so" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && 
+					  (primarySTLPMatch == L"preposition" || primarySTLPMatch == L"conjunction") && wordSourceIndex==startOfSentence)
+				{
+					return 0;
+				}
 				bool tempstar = false;
-				// 15. this is determined to be an adverb by LP, but this is wrong, it is actually a determiner for the preceding word
+				// 17. this is determined to be an adverb by LP, but this is wrong, it is actually a determiner for the preceding word
 				//     over 100 items have been examined and 0 errors. - note this is also AFTER the POS processing has narrowed it down to disagreements with Stanford POS
 				// case 1 is all after a plural noun.
 				// case 2 is all before a determiner or 'right'. (39 out of 178 cases)
@@ -2210,7 +2225,7 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 				{
 					return 0;
 				}
-				// 16. This 'All' should be classified as a subject (2 matches)
+				// 18. This 'All' should be classified as a subject (2 matches)
 				else if (source.m[wordSourceIndex].word->first == L"all" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && 
 					(source.m[wordSourceIndex+1].word->first == L"are" || source.m[wordSourceIndex+1].word->first == L"was")) // && 
 					//source.m[wordSourceIndex-1].word->second.hasVerbForm() && 
@@ -2220,7 +2235,7 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 				{
 					return 0;
 				}
-				// 17. this should be an adjective (all 12 examples checked)
+				// 19. this should be an adjective (all 12 examples checked)
 				else if (source.m[wordSourceIndex].word->first == L"all" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && 
 					(source.m[wordSourceIndex - 1].queryForm(L"is") >= 0 || 
 						source.m[wordSourceIndex - 1].queryForm(L"modal_auxiliary") >= 0 ||
@@ -2231,26 +2246,32 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 				{
 					return 0;
 				}
-				// 18. each other seems to always be interpreted as a DET followed by an adjective.  For LP's purposes, this is a reciprocal pronoun!
+				// 20. each other seems to always be interpreted as a DET followed by an adjective.  For LP's purposes, this is a reciprocal pronoun!
 				if (source.m[wordSourceIndex].word->first == L"each other")
 					return 0;
-				// 19. one another is always be interpreted by ST as a CD (numeral_cardinal) followed by a DT (determiner!).  For LP's purposes, this is a reciprocal pronoun!
+				// 21. one another is always be interpreted by ST as a CD (numeral_cardinal) followed by a DT (determiner!).  For LP's purposes, this is a reciprocal pronoun!
 				if (source.m[wordSourceIndex].word->first == L"one another")
 					return 0;
-				// 20. no one is always be interpreted by ST as a RB (adverb) followed by a CD (numeral_cardinal).  For LP's purposes, this is an indefinite pronoun!
+				// 22. no one is always be interpreted by ST as a RB (adverb) followed by a CD (numeral_cardinal).  For LP's purposes, this is an indefinite pronoun!
 				if (source.m[wordSourceIndex].word->first == L"no one")
 					return 0;
-				// 21. every one can be interpreted by ST as a DT (determiner) followed by a CD (numeral_cardinal) .  For LP's purposes, this is an indefinite pronoun!
+				// 23. every one can be interpreted by ST as a DT (determiner) followed by a CD (numeral_cardinal) .  For LP's purposes, this is an indefinite pronoun!
 				if (source.m[wordSourceIndex].word->first == L"every one")
 					return 0;
-				// 22. Stanford sometimes guesses that as an adverb as well (all 3 examples checked)
+				// 24. Stanford sometimes guesses that as an adverb as well (all 3 examples checked)
 				if (source.m[wordSourceIndex].word->first == L"that" && source.scanForPatternTag(wordSourceIndex, SENTENCE_IN_REL_TAG) != -1)
+				{
+					return 0;
+				}
+				// 25. 'So' before _S1 is a linking adverbial, not a preposition (Longman - 891)
+				if (source.m[wordSourceIndex].word->first == L"so" && primarySTLPMatch == L"preposition" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 &&
+					  wordSourceIndex<source.m.size() && source.m[wordSourceIndex+1].pma.queryPattern(L"__S1") != -1)
 				{
 					return 0;
 				}
 				if (source.m[wordSourceIndex].word->first == L"that")
 				{
-					partofspeech += L"***TH";
+					//partofspeech += L"***TH";
 				}
 				if (source.m[wordSourceIndex].queryWinnerForm(L"pronoun") >= 0)
 				{
@@ -2269,10 +2290,11 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 				wstring originalNextWord;
 				source.getOriginalWord(wordSourceIndex+1, originalNextWord, false, false);
 				size_t pos = sentence.find(originalWord);
-				while (pos != wstring::npos)
+				while (pos != wstring::npos && numTimesWordOccurred>0)
 				{
 					size_t nextWordPos = pos + originalWord.length() + 1;
-					if (!--numTimesWordOccurred && (pos==0 || sentence[pos-1]==' ') && (sentence.length()==pos+ originalWord.length() || sentence[pos + originalWord.length()]==L' ' || sentence[pos + originalWord.length()] == L'\''))
+					bool wholeWord = (pos == 0 || sentence[pos - 1] == ' ') && (sentence.length() == pos + originalWord.length() || sentence[pos + originalWord.length()] == L' ' || sentence[pos + originalWord.length()] == L'\'');
+					if (wholeWord && !--numTimesWordOccurred)
 						sentence.replace(pos,originalWord.length(), L"*" + originalWord + L"*");
 					pos = sentence.find(originalWord,pos+ originalWord.length()+2);
 				}
@@ -2400,7 +2422,7 @@ int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *
 				}
 				else
 				{
-					if (checkStanfordPCFGAgainstWinner(source, wordSourceIndex, numTimesWordOccurred[originalIWord], originalParse, sentence, parse, numPOSNotFound, formNoMatchMap, wordNoMatchMap, VFTMap, inRelativeClause,errorMap))
+					if (checkStanfordPCFGAgainstWinner(source, wordSourceIndex, numTimesWordOccurred[originalIWord], originalParse, sentence, parse, numPOSNotFound, formNoMatchMap, wordNoMatchMap, VFTMap, inRelativeClause,errorMap, start))
 					{
 						numNoMatch++;
 						if (!sentencePrinted)
@@ -2470,7 +2492,7 @@ int stanfordCheck(Source source, int step, bool pcfg)
 	mysql_free_result(result);
 	destroyJavaVM(vm);
 	if (totalWords>0)
-		lplog(LOG_ERROR, L"numNoMatch=%d %7.3f%% numPOSNotFound=%d", numNoMatch, numNoMatch * 100.0 / totalWords, numPOSNotFound);
+		lplog(LOG_ERROR, L"numNoMatch=%d/%d %7.3f%% numPOSNotFound=%d", numNoMatch, totalWords, numNoMatch * 100.0 / totalWords, numPOSNotFound);
 	lplog(LOG_ERROR, L"FORMS ------------------------------------------------------------------------------");
 	map<int, wstring, std::greater<int>> formNoMatchReverseMap, wordNoMatchReverseMap,VFTReverseMap;
 	for (auto const&[forms, count] : formNoMatchMap)
@@ -2677,7 +2699,7 @@ void wmain(int argc,wchar_t *argv[])
 		printUnknowns(source, step);
 		break;
 	case 21:
-		patternAnalysis(source, step, L"__NOUN", L"R");
+		patternAnalysis(source, step, L"__PP", L"A");
 		// patternAnalysis(source, step, L"_MS1", L"2"); // TODO: testing weight change on _S1.
 		break;
 	}

@@ -18,6 +18,38 @@ void defineNames(void);
 void defineTimePatterns(void);
 void createMetaNameEquivalencePatterns(void);
 
+// study of as: can be used as a coordinator, a conjunction, or an adverb
+// Longman 74-76, 85-86, 130,196,336,340,415,423,527-8,550,609,838,841-7,908,919,1000,1011,1017ff,1023-4
+// preposition: as a cultivator / The police are treating it as a murder case.
+// subordinator (manner, reason, time): as they watched / An armed robber was mugged of his loot as he made his getaway.
+// 527:comparative clause: Maybe Henry would realize she was not as nice as she pretended to be.[subordinator] / The last tinkle of the last shard died away and silence closed in as deep as ever before.[preposition]
+// adverbs with degree complements: The normal scan must be resumed as quickly as possible. / I didn't do as well as I wish I had.  / I said as heartily as I could.
+// as is only mentioned as a non-standard relativizer (609)
+// fronting the verb in dependent clauses: Try as she might to make it otherwise... / rich as they are in the prejudices of our enlightened age... / 
+// Inversion in dependent clauses (subject coming after the verb): They chatted about Hollywood, and Claudia was fascinated, as were the other guests. / The contraceptive cap can also spark the syndrome, as can a wound infection.
+// Subordinator to a verbal clause: A curve may be plotted as shown in Fig 3.16. [p 1023]
+// complex subordinators: As far as I know / As long as you don't get caught / As soon as you find your thing
+
+// study of more: can be used as a 'large' quantifier, an amplifier degree adverb (7.14.2.4)
+// Longman 278, 522, 524, 525, 527ff, 544-5, 554, 561, 884
+// statistics quantifier 600/1000000, adverb 200/1000000
+
+// study of so:
+// Longman 68,72,80,86,526-8, 550, 554, 562, 564-6, 751-3, 844, 877-8, 880,883-7, 889, 891, 903, 916-19, 970, 1002, 1046, 1050, 1074, 1078ff
+// 72:so is a 'pro-form'
+// 80: so is like a coordinator and like a linking adverbial
+// 527:structural types of degree complement
+//     so + adjective/adverb + that-clause The murder investigation was so contrived that it created false testimony
+//     so + adjective/adverb + as to-clause And if anybody was so foolhardy as to pass by the shrine after dusk he was sure to see the old woman hopping about.
+// 554: amplifier degree adverb
+// 562: linking adverb over 1000/1000000 in AmE
+// 844: adverbial subordinator
+// 877: so is a linking adverbial sometimes indicating a result/inference
+// 891: so as a linking adverbial must occur in the beginning of the clause
+// 903,916: so used in a special type of predicative fronting, with subject-operator inversion: so preoccupied was she at the moment/so ruthless was the IRA in its onslaught/so different was the theories of schools
+// 917: inversion after linking form: Gail's in, and so is Lisa. / She despised him; so did they all. / As the infections spread in women, so did infections in their babies.
+// 
+
 int createNouns(void)
 { LFS
 	// this has the same follows as _NOUN[9] (except _PP and _REL1 are optional)
@@ -131,7 +163,7 @@ int createNouns(void)
 	// all the boys, half the boys, double the sauce
 	cPattern::create(L"__PNOUN{NOUN}",L"2",
 										1,L"predeterminer{DET}",0,1,1,
-										1,L"the",0,1,1,
+										1,L"determiner|the",0,1,1,
 										1,L"__N1",0,1,1,
 										0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"5",
@@ -152,21 +184,21 @@ int createNouns(void)
 		// anyone as simple and honest as
 	cPattern::create(L"__NOUN",L"U",
 										1,L"indefinite_pronoun",0,1,1,
-										2,L"so",L"as",0,1,1,
+										2,L"adverb|so",L"adverb|as",0,1,1,
 										1,L"_ADVERB",0,0,1,
 										2,L"adjective{ADJ}",L"verb*1{ADJ}", VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,1,1,                            // we can make cost of *1 for __NOUN[2]
-										1,L"as",0,1,1,
+										1,L"preposition|as",0,1,1,
 										1,L"__APPNOUN[*]{_BLOCK:RE_OBJECT}",0,1,1,
 										//1,L"is*1",0,0,1,
 										0);
 	cPattern::create(L"__NOUN",L"V",
 										1,L"indefinite_pronoun",0,1,1,
-										2,L"so",L"as",0,1,1,
+										2,L"adverb|so",L"adverb|as",0,1,1,
 										1,L"_ADVERB",0,0,1,
 										2,L"adjective{ADJ}",L"verb*1{ADJ}", VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,1,1,                            // we can make cost of *1 for __NOUN[2]
 										1,L"coordinator",0,1,1,
 										2,L"adjective{ADJ}",L"verb*1{ADJ}", VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,1,1,                            // we can make cost of *1 for __NOUN[2]
-										1,L"as",0,1,1,
+										1,L"preposition|as",0,1,1,
 										1,L"__APPNOUN[*]{_BLOCK:RE_OBJECT}",0,1,1,
 										//1,L"is*1",0,0,1,
 										0);
@@ -210,7 +242,7 @@ int createNouns(void)
 	// better than two years, more than two years
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"H",
 										1,L"_ADJECTIVE",0,1,1,
-										1,L"than",0,1,1,
+										1,L"preposition|than",0,1,1,
 										3,L"_NOUN_OBJ{SUBOBJECT}",L"__NOUN[*]{SUBOBJECT}",L"__NOUNREL{SUBOBJECT}",0,1,1,    // the news I gave Bill __ALLOBJECT
 										0);
 	// black beans and head lettuce
@@ -364,31 +396,43 @@ int createBasicPatterns(void)
 											1,L".",0,0,1,0);
 	// to and fro -- usage: he was tossed to and fro
 	// by and by Mrs. Vandermeyer brought me some supper
-	cPattern::create(L"__ADVERB",L"1",2,L"to",L"preposition|by",0,1,1,
-											2,L"and",L"&",0,1,1,
+	cPattern::create(L"__ADVERB",L"1",
+											2,L"to",L"preposition|by",0,1,1,
+											2,L"coordinator|and",L"&",0,1,1,
 											2,L"preposition|fro",L"preposition|by",0,1,1,0);
+
+	// this is used as an adverb, a preposition and a subordinator (included as a REL1 syntax)
+	cPattern::create(L"__AS_AS", L"", 
+											1, L"adverb|as*-1", 0, 1, 1,
+											2, L"adverb", L"adjective", 0, 1, 1,
+											1, L"preposition|as{P}", 0, 1, 1, 0); // when included in a _PP, mark this as a preposition
 	// this morning / this very morning
 	cPattern::create(L"_ADVERB{FLOATTIME}",L"T",
 											2,L"demonstrative_determiner{TIMEMODIFIER}",L"adjective{TIMEMODIFIER}",0,1,1,
 											1, L"adverb{ADV}", 0, 0, 1, // very
 											5,L"month{MONTH}",L"daysOfWeek{DAYWEEK}",L"season{SEASON}",L"timeUnit{TIMECAPACITY}",L"dayUnit{TIMECAPACITY}",0,1,1,
 											0);
-	cPattern::create(L"_ADVERB{FLOATTIME}",L"9",1,L"to",0,1,1,
+	cPattern::create(L"_ADVERB{FLOATTIME}",L"9",
+		                    1,L"to",0,1,1,
 												1,L"dash|-*-2",0,1,1,
 												2,L"noun|day{DAY}",L"noun|morrow{DAY}",0,1,1,0);
 	// lightly,
-	cPattern::create(L"__ADV_S1",L"",3,L"adverb{ADV}",L"not{:not}",L"never{:never}",0,1,4,
+	cPattern::create(L"__ADV_S1",L"",
+		                   3,L"adverb{ADV}",L"not{:not}",L"never{:never}",0,1,4,
 											 1,L",",0,1,1,0);
 	// lightly, slowly
-	cPattern::create(L"__ADVERB{FLOATTIME}",L"2",1,L"__ADV_S1",0,0,4,
+	cPattern::create(L"__ADVERB{FLOATTIME}",L"2",
+		                  1,L"__ADV_S1",0,0,4,
 											3,L"adverb{ADV}",L"not{:not}",L"never{:never}",0,1,4,0);
 
 	// lightly, brightly and painfully slowly
-	cPattern::create(L"__ADVERB",L"3",1,L"__ADVERB",0,1,1,
+	cPattern::create(L"__ADVERB",L"3",
+		                  1,L"__ADVERB",0,1,1,
 											1,L",",0,0,1,
 											1,L"coordinator",0,1,1,
 											3,L"adverb{ADV}",L"not{:not}",L"never{:never}",0,1,4,0);
-	cPattern::create(L"_ADVERB",L"1",1,L",",0,1,1,
+	cPattern::create(L"_ADVERB",L"1",
+		                  1,L",",0,1,1,
 											1,L"__ADVERB",0,1,1,
 											1,L",",0,1,1,
 											0);
@@ -398,7 +442,8 @@ int createBasicPatterns(void)
 											1,L"quotes",CLOSE_INFLECTION,1,1,
 											0);
 	*/
-	cPattern::create(L"_ADVERB",L"3",1,L"brackets",OPEN_INFLECTION,1,1,
+	cPattern::create(L"_ADVERB",L"3",
+		                  1,L"brackets",OPEN_INFLECTION,1,1,
 											1,L"__ADVERB",0,1,1,
 											1,L"brackets",CLOSE_INFLECTION,1,1,
 											0);
@@ -406,30 +451,32 @@ int createBasicPatterns(void)
 	//                    1,L"__NOUN[*]",0,1,1,
 	//                    1,L"_VERB[*]",0,1,1,
 	//                    0);
-		cPattern::create(L"_ADVERB{_FINAL:_NO_REPEAT}",L"5",1,L"__ADVERB",0,1,1,0);
+		cPattern::create(L"_ADVERB{_FINAL:_NO_REPEAT}",L"5",
+										2,L"__ADVERB",L"__AS_AS",0,1,1, // as much as possible.
+										0);
 	// better than two years, more than two years
 	cPattern::create(L"_ADVERB{_FINAL}",L"5",
 										1,L"__ADVERB{TIMEMODIFIER}",0,1,1,
-										1,L"than",0,1,1,
+										1,L"preposition|than",0,1,1,
 										3,L"numeral_ordinal{TIMEMODIFIER}",L"numeral_cardinal{TIMEMODIFIER}",L"determiner{TIMEMODIFIER}",0,1,1,
 										2,L"timeUnit{TIMECAPACITY}",L"season{SEASON}",0,1,1,
 										0);
 	cPattern::create(L"_ADVERB{_FINAL}",L"6",
-										1,L"more",0,1,1,
-										1,L"than",0,1,1,
+										1,L"adverb|more",0,1,1,
+										1,L"preposition|than",0,1,1,
 										2,L"once",L"twice",0,1,1,
 										0);
-	// He held as much as a 200 pound fish
-	cPattern::create(L"_ADVERB{_FINAL}",L"7",1,L"as",0,1,1,
-															1,L"adverb|much",0,1,1,
-															1,L"as",0,1,1,
-															0);
+	// He held as much as a 200 pound fish - this has been taken by the pattern __AS_AS
+	//cPattern::create(L"_ADVERB{_FINAL}",L"7",1,L"as",0,1,1,
+	//														1,L"adverb|much",0,1,1,
+	//														1,L"as",0,1,1,
+	//														0);
 	cPattern::create(L"_ADVERB{_FINAL}",L"8",
 											4,L"adjective|little",L"noun|inch",L"noun|step",L"noun|bit",0,1,1,
 											1,L"preposition|by",0,1,1,
 											4,L"adjective|little",L"noun|inch",L"noun|step",L"noun|bit",0,1,1,0);
-	cPattern::create(L"_ADVERB{_FINAL}", L"T",
-											6, L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", 0, 1, 1,
+	cPattern::create(L"_ADVERB{_FINAL}", L"U",
+											7, L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"__AS_AS",0, 1, 1,
 											1, L"__S1*1{EVAL:_BLOCK}", 0, 1, 1, 0);
 
 
@@ -464,19 +511,23 @@ int createBasicPatterns(void)
 	// if the proper noun is not preceded by an adverb and is a single word then it will be covered by a modifier to NOUN directly.
 	// if the proper noun is not preceded by an adverb and is a multi word then it is a _NAME, which is directly used by _NOUN.
 	// if the proper noun is in an owner form then it will be a NAMEOWNER
-	cPattern::create(L"__ADJECTIVE",L"2",1,L"_ADVERB",0,0,1,
-		7,L"adjective{ADJ}",L"verb*1{ADJ}",L"numeral_ordinal{ADJ}",L"_NUMBER{ADJ}",L"ex{ADJ}",L"noun{ADJ}",L"no{ADJ:no}", // removed *1 as cost so that
-			VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,1,2,                            // we can make cost of *1 for __NOUN[2]
+	cPattern::create(L"__ADJECTIVE",L"2",
+		1,L"_ADVERB",0,0,1,
+		//7, L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", // removed *1 as cost so that
+		8, L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", L"quantifier|more{ADJ}", // removed *1 as cost so that
+		VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,1,2,                            // we can make cost of *1 for __NOUN[2]
 												 1,L"adverb*1",0,0,1,0);                                                                // 2/3/2007
 		// OWNER attributes deleted - why would ownership occur before a dash?
-	cPattern::create(L"__ADJECTIVE",L"3",1,L"_ADVERB",0,0,1,
+	cPattern::create(L"__ADJECTIVE",L"3",
+		1,L"_ADVERB",0,0,1,
 		6,L"adjective{ADJ}",L"numeral_ordinal{ADJ}",L"_NUMBER{ADJ}",L"ex{ADJ}",L"noun*1{ADJ}",L"no{ADJ:no}",SINGULAR,1,2,
 		1,L"dash",0,1,1,
 		7,L"adjective{ADJ}",L"verb*1{ADJ}",L"numeral_ordinal{ADJ}",L"_NUMBER{ADJ}",L"ex{ADJ}",L"noun{ADJ}",L"no{ADJ:no}",
 			VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,1,2,
 		1,L"adverb*1",0,0,1,0);
 		// first-class passengers
-	cPattern::create(L"__ADJECTIVE", L"A", 1, L"_ADVERB", 0, 0, 1,
+	cPattern::create(L"__ADJECTIVE", L"A", 
+		1, L"_ADVERB", 0, 0, 1,
 		6, L"adjective{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"ex{ADJ}", L"noun*1{ADJ}", L"no{ADJ:no}", SINGULAR, 1, 2,
 		1, L"dash", 0, 1, 1,
 		3, L"noun*1{ADJ}", L"adjective|best*-4", L"noun|class*-4", SINGULAR, 1, 1,
@@ -493,9 +544,10 @@ int createBasicPatterns(void)
 	// adverb use after adjective should be rare!
 	// must restrict a verb after a noun tightly! (lowered from 5 to 3 10/17/2007)
 	// a noun as an adjective after another noun is probably not correct!
-	cPattern::create(L"_ADJECTIVE_AFTER{_NOT_AFTER_PRONOUN}",L"",1,L"_ADVERB",0,0,1,
+	cPattern::create(L"_ADJECTIVE_AFTER{_NOT_AFTER_PRONOUN}",L"",
+		                     1,L"_ADVERB",0,0,1,
 												 // every moment *RUNNING* | every moment GAINED (verb entry below) 11/4/2005
-		5,L"adjective{ADJ}",L"numeral_ordinal",L"verb*2",L"_NUMBER",L"noun*2",VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,1,1,
+                     		 5,L"adjective{ADJ}",L"numeral_ordinal",L"verb*2",L"_NUMBER",L"noun*2",VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,1,1,
 												 1,L"adverb*1",0,0,1,0); // he said , nodding -gravely .
 	// lightly frozen,
 	cPattern::create(L"__ADJ_S2",L"",1,L"__ADJECTIVE[*]",0,1,1,
@@ -520,21 +572,25 @@ int createBasicPatterns(void)
 	cPattern::create(L"__ADJECTIVE",L"4",1,L"Number",0,1,1,
 															1,L"_MEAS_ABB{ADJ}",SINGULAR,1,1,0);
 	// a 121 to 200 pound fish
-	cPattern::create(L"__ADJECTIVE",L"5",1,L"Number",0,1,1,
+	cPattern::create(L"__ADJECTIVE",L"5",
+		                          1,L"Number",0,1,1,
 															1,L"to",0,1,1,
 															1,L"Number",0,1,1,
 															0);
 	// she was younger than he could have imagined
-	cPattern::create(L"__ADJECTIVE",L"A",1,L"adjective",ADJECTIVE_COMPARATIVE,1,1,
-															1,L"than",0,1,1,
+	cPattern::create(L"__ADJECTIVE",L"A",
+		                          1,L"adjective",ADJECTIVE_COMPARATIVE,1,1,
+															1,L"preposition|than",0,1,1,
 															1,L"__S1{EVAL:_BLOCK}",0,1,1,
 															0);
 	// lightly frozen, magnificently melting skeleton
-	cPattern::create(L"__ADJECTIVE{APLURAL}",L"6",1,L"__ADJ_S2",0,1,3,
+	cPattern::create(L"__ADJECTIVE{APLURAL}",L"6",
+		                          1,L"__ADJ_S2",0,1,3,
 															1,L"__ADJECTIVE[*]",0,1,1,
 															1,L"__ANDADJ",0,0,1,
 															0);
-	cPattern::create(L"__NADJECTIVE{APLURAL}",L"7",1,L"__NADJ_S2",0,1,3,
+	cPattern::create(L"__NADJECTIVE{APLURAL}",L"7",
+		                          1,L"__NADJ_S2",0,1,3,
 															1,L"__NADJECTIVE[*]*2",0,1,1, // __NAMEOWNER also provides PLURAL
 															1,L"__NANDADJ*-2",0,0,1, // strongly encourage AND
 															0);
@@ -549,7 +605,8 @@ int createBasicPatterns(void)
 															1,L"__NANDADJ",0,1,1,
 															0);
 
-	cPattern::create(L"_ADJECTIVE{_FINAL_IF_ALONE}",L"1",2,L"quotes",L"brackets",OPEN_INFLECTION,1,1,
+	cPattern::create(L"_ADJECTIVE{_FINAL_IF_ALONE}",L"1",
+		                     2,L"quotes",L"brackets",OPEN_INFLECTION,1,1,
 												 3,L"__ADJECTIVE",L"_NAMEOWNER",L"noun*1{ADJ}",NO_OWNER,1,1, // block PLURAL
 												 2,L"quotes",L"brackets",CLOSE_INFLECTION,1,1,
 												 0);
@@ -1451,7 +1508,7 @@ void createSecondaryPatterns1(void)
 									 2,L"__NOUN[*]{SUBJECT}",L"__NOUNREL{SUBJECT}",0,1,1, 
 									 0);
 	// another voice which 'Tommy rather thought' was that of Boris replied:
-	cPattern::create(L"_SUBREL{_BLOCK}",L"",
+	cPattern::create(L"_SUBREL2{_BLOCK}",L"",
 									 1,L"__C1__S1",0,1,1,
 									 1,L"__ALLTHINK",0,1,1,
 									 0);
@@ -1462,7 +1519,7 @@ void createSecondaryPatterns1(void)
 	cPattern::create(L"_REL1{_BLOCK:REL}",L"1",
 										1,L"_ADJECTIVE",0,0,1,
 										2,L"relativizer{SUBJECT}",L"demonstrative_determiner|that{SUBJECT}",0,1,1,
-									 3,L"_PP",L"_REL1[*]",L"_SUBREL",0,0,1,
+									 3,L"_PP",L"_REL1[*]",L"_SUBREL2",0,0,1,
 									 1,L"_ADJECTIVE",0,0,1,
 									 2,L"__SUB_S2",L"_VERBPASSIVE_P",0,1,1,
 									 0);
@@ -1471,7 +1528,7 @@ void createSecondaryPatterns1(void)
 	cPattern::create(L"_REL1{_BLOCK:REL:GNOUN}", L"5",
 									1, L"_ADJECTIVE", 0, 0, 1,
 									2, L"relativizer{SUBJECT}", L"demonstrative_determiner|that{SUBJECT}", 0, 1, 1,
-									3, L"_PP", L"_REL1[*]", L"_SUBREL", 0, 0, 1,
+									3, L"_PP", L"_REL1[*]", L"_SUBREL2", 0, 0, 1,
 									3, L"__ALLVERB", L"_COND{VERB}", L"_VERBPASSIVE", 0, 1, 1,
 									3, L"__ALLOBJECTS_0", L"__ALLOBJECTS_1", L"__ALLOBJECTS_2", 0, 0, 1, // there must only be one adjective and it must be last (not mixed in) see *
 									0);
@@ -1566,7 +1623,7 @@ void createPrepositionalPhrases(void)
 	//                1,L"__S1",0,1,1,0);
 	// at old Red's
 	cPattern::create(L"__PP",L"6",1,L"_ADVERB*1",0,0,1, // discourage ADVERBS if they can be picked up from ALLOBJECTS instead and bound to the previous verb
-									 2,L"preposition{P}",L"verbalPreposition{P}",0,1,1,
+									 3,L"preposition{P}",L"verbalPreposition{P}", L"__AS_AS",0,1,1,
 									 1,L"preposition*1{P}",0,0,1, // from within
 									 1,L"determiner",0,0,1, // the
 									 1,L"Proper Noun{PREPOBJECT}",SINGULAR_OWNER|PLURAL_OWNER,1,1,
@@ -1579,8 +1636,9 @@ void createPrepositionalPhrases(void)
 	//                 1,L"_VERBREL2{_BLOCK:EVAL}",0,1,1,  // we can keep the fact -of having done so quite secret .
 	//                 0);
 	// there was never much chance of -their ‘ letting me go ’
-	cPattern::create(L"__PP",L"8",1,L"_ADVERB*1",0,0,1,  // discourage ADVERBS if they can be picked up from ALLOBJECTS instead and bound to the previous verb
-									 2,L"preposition{P}",L"verbalPreposition{P}",0,1,1,
+	cPattern::create(L"__PP",L"8",
+		               1,L"_ADVERB*1",0,0,1,  // discourage ADVERBS if they can be picked up from ALLOBJECTS instead and bound to the previous verb
+									 3,L"preposition{P}",L"verbalPreposition{P}",L"__AS_AS",0,1,1,
 									 1,L"preposition*1{P}",0,0,1, // from within
 									 1,L"_ADVERB*3",0,0,1, // I haven't seen you for SIMPLY centuries, my dear. // adverbial use should be rare - prefer adjectives attached to the nouns over adverbs.
 									 6,L"_NOUN_OBJ{PREPOBJECT}",L"__NOUN[*]{PREPOBJECT}",L"__MNOUN[*]{PREPOBJECT}", // _NOUN* includes NOUN[D] and NOUN[E]
@@ -1589,8 +1647,9 @@ void createPrepositionalPhrases(void)
 									 1,L"_VERBREL2{_BLOCK:EVAL}",0,1,1,  //  the fact -of -them 'having done so'
 									 1,L"quotes",CLOSE_INFLECTION,1,1,
 									 0);
-	cPattern::create(L"__PP",L"9",1,L"_ADVERB*1",0,0,1, // discourage ADVERBS if they can be picked up from ALLOBJECTS instead and bound to the previous verb
-									 2,L"preposition{P}",L"verbalPreposition{P}",0,1,1,
+	cPattern::create(L"__PP",L"9",
+		               1,L"_ADVERB*1",0,0,1, // discourage ADVERBS if they can be picked up from ALLOBJECTS instead and bound to the previous verb
+									 3,L"preposition{P}",L"verbalPreposition{P}",L"__AS_AS",0,1,1, // as much as Old Mr. Crow / As busy as chirpy cricket
 									 1,L"preposition*1{P}",0,0,1, // from within
 									 1,L"_ADVERB*3",0,0,1, // I haven't seen you for SIMPLY centuries, my dear. // adverbial use should be rare - prefer adjectives attached to the nouns over adverbs.
 									 6,L"_NOUN_OBJ{PREPOBJECT}",L"__NOUN[*]{PREPOBJECT}",L"__MNOUN[*]{PREPOBJECT}", // _NOUN* includes NOUN[D] and NOUN[E]
@@ -1604,7 +1663,7 @@ void createPrepositionalPhrases(void)
 	// After a moment or two Tommy's indignation got the better of him.
 	cPattern::create(L"_PP{_FINAL_IF_ALONE:_BLOCK:PREP:_NO_REPEAT}",L"2",
 									 1,L"_ADVERB*1",0,0,1, // discourage ADVERBS if they can be picked up from ALLOBJECTS instead and bound to the previous verb
-									 2,L"preposition{P}",L"verbalPreposition{P}",0,1,1,  // this should be a particle
+									 3,L"preposition{P}",L"verbalPreposition{P}", L"__AS_AS",0,1,1,  // this should be a particle
 									 1,L"preposition{P}",0,0,1, // from within
 									 1,L"_ADVERB*3",0,0,1, // I haven't seen you for SIMPLY centuries, my dear. // adverbial use should be rare - prefer adjectives attached to the nouns over adverbs.
 									 // Under the original act, how many judges were to be on the court? - __NOUNREL should have at least a cost of 2 because it matches too much (with its comma)
@@ -1656,7 +1715,7 @@ int createSecondaryPatterns2(void)
 	// This woman, as an American, would always prevail.
 	cPattern::create(L"__C1_IP{_BLOCK:EVAL}",L"4",
 									 1,L",",0,1,1,
-									 1,L"as",0,1,1,
+									 1,L"preposition|as",0,1,1,
 									 1,L"__NOUN[*]{_BLOCK:RE_OBJECT}",0,1,1,
 									 1,L",",0,1,1, 
 									 0);
@@ -1861,10 +1920,12 @@ int createSecondaryPatterns2(void)
 						1,L"_ADVERB",0,0,1,
 						3,L"_THINK",L"_THINKPAST",L"_THINKPRESENT",0,1,1,0); // for the programming convenience of getNounPhraseInfo
 	// She thinks that if you are going to carry her banner in the procession you ought to let her take your light .
+	// XXIC Henty G. A. (George Alfred) 1832-1902\Dorothys Double Volume III (of 3)[29123-29128]:
+	// “ Of course, no one man would attempt such a thing, ” Ned Hampton said, “ but [I believe in some of **the camps they have banded** together] and given the gamblers and the hard characters notice to quit, and have hung up those who refused to go .
 	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"5",
 										1, L"__C1__S1", 0, 1, 1,
 										1, L"__ALLTHINK{VERB}", 0, 1, 1, // L"think" for all active tenses! - possibly add INTRO_S1.
-										3, L"_NOUN_OBJ{OBJECT}", L"__NOUN[*]{OBJECT}", L"_ADJECTIVE", 0, 0, 1, // Lawrence told me you were with monsieur Poirot. /  She felt confident he was there.
+										4, L"_NOUN_OBJ{OBJECT}", L"__NOUN[*]{OBJECT}", L"_ADJECTIVE", L"_PP",0, 0, 1, // Lawrence told me you were with monsieur Poirot. /  She felt confident he was there.
 										1, L"demonstrative_determiner|that{S_IN_REL}", 0, 0, 1,
 										2, L"__S1[*]{_BLOCK:OBJECT:EVAL}", L"_MS1[*]{_BLOCK:OBJECT:EVAL}", 0, 1, 1,
 										0);
@@ -1946,12 +2007,12 @@ int createSecondaryPatterns2(void)
 									 3,L"dash",L":",L",",0,1,1,
 									 0);
 	cPattern::create(L"__INTRO2_S1{_ONLY_BEGIN_MATCH:FLOATTIME}",L"5", // PP could match a time
-									7,L"_PP",L"_VERBREL2*1{_BLOCK:EVAL}",L"_REL1[*]*1",L"conjunction",L"coordinator",L"then",L"so",0,1,1, // took out *1 from _PP - discouraged legitimate leading prepositional phrases
+									7,L"_PP",L"_VERBREL2*1{_BLOCK:EVAL}",L"_REL1[*]*1",L"conjunction",L"coordinator",L"then",L"adverb|so",0,1,1, // took out *1 from _PP - discouraged legitimate leading prepositional phrases
 									 4,L"dash",L":",L",",L"__ADVERB",0,0,1,
 									 0);
 	cPattern::create(L"__INTRO2_S1{_ONLY_BEGIN_MATCH}",L"6",
-									1,L"if",0,1,1,
-									1,L"so",0,1,1,
+									1,L"conjunction|if",0,1,1,
+									1,L"pronoun|so",0,1,1,
 									1,L",",0,0,1,
 									 0);
 	// What I mean is, ...
@@ -2123,9 +2184,12 @@ int createSecondaryPatterns2(void)
 	// what he did do
 	// she went to London, where she entered a children's hospital.
 	// Do NOT add REL tag here - the REL tag is only for relative phrases that be attached to objects
+	// REMOVED: as and __AS_AS - they are not relativizers! and cause overlap with __PP[A].  'as' is a subordinator
+	// REMOVED __AS_AS = *As* soon as he saw that his companion was afraid of the dark (from ST comparison - ) -the second 'as' is the relativizer
 	cPattern::create(L"_REL1{_FINAL_IF_ALONE:_FORWARD_REFERENCE:S_IN_REL}",L"2",//3,L"demonstrative_determiner",L"personal_pronoun_nominative",L"indefinite_pronoun",0,0,1, // *he* whom you await taken out - how is this different than _NOUN[9]?
 										2,L"_ADJECTIVE",L"_ADVERB",0,0,1,
-										4,L"relativizer",L"interrogative_determiner",L"as",L"demonstrative_determiner|that",0,1,1,
+										// when matching as and __AS_AS, this REL1 is a subordinating clause, not a relative clause
+										3,L"relativizer",L"interrogative_determiner",L"demonstrative_determiner|that",0,1,1, 
 										1,L"_PP", 0,0,1,  // He knew that *after sunset* almost all the birds were asleep.
 										1,L"_ADVERB",0,0,1, // where simply every one is bound to turn up sooner or later
 										1,L"__S1{_BLOCK:EVAL}",0,1,1,
@@ -2177,19 +2241,17 @@ int createSecondaryPatterns2(void)
 	// and tell sister Ann , *that* if she can write as well as you tell of , I wish she would write me a letter . 
 	cPattern::create(L"_REL1{_FINAL_IF_ALONE:_FORWARD_REFERENCE}", L"6",
 										2, L"_ADJECTIVE", L"_ADVERB", 0, 0, 1,
-										// may also create a new pattern if this is too confusing
-										// Gilman, Charlotte Perkins\The Yellow Wallpaper[2110-2114]:
-										// when this was used as **a playroom they had** to take the nursery things out
-										9, L"as", L"demonstrative_determiner|that", L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"relativizer|whenever", 0, 1, 1,
+										8, L"demonstrative_determiner|that", L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"relativizer|whenever", 0, 1, 1,
 											// They were not long in noticing that whenever Ned presented himself at the bar she would in a very short time come across from her place behind to speak to him
-										8, L"if", L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"relativizer|whenever", 0, 0, 1,
+										8, L"conjunction|if", L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"relativizer|whenever", 0, 0, 1,
 										1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
 										1, L",", 0, 0, 1,
 										2, L"then",L"_ADVERB", 0, 0, 1,
 										1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
 										0);
 
-	cPattern::create(L"__PP",L"A",1,L"_ADVERB*1",0,0,1, // discourage ADVERBS if they can be picked up from ALLOBJECTS instead and bound to the previous verb
+	cPattern::create(L"__PP",L"A",
+		               1,L"_ADVERB*1",0,0,1, // discourage ADVERBS if they can be picked up from ALLOBJECTS instead and bound to the previous verb
 									 2,L"preposition{P}",L"verbalPreposition{P}",0,1,1,
 									 1,L"preposition*1{P}",0,0,1, // from within
 									 1,L"_ADVERB*3",0,0,1, // I haven't seen you for SIMPLY centuries, my dear. // adverbial use should be rare - prefer adjectives attached to the nouns over adverbs.
@@ -2212,7 +2274,7 @@ int createSecondaryPatterns2(void)
 											 1,L"_STEP",0,0,1,
 											 1,L"_INTRO_S1",0,0,1,
 											 1,L"_ADVERB",0,0,1, // even if 
-											 2,L"if",L"as",0,1,1,
+											 2,L"conjunction|if",L"conjunction|as",0,1,1,
 											 1,L"__S1{_BLOCK:EVAL}",0,1,1,
 											 1,L",",0,0,1,
 											 1,L"then",0,0,1,
@@ -2222,7 +2284,7 @@ int createSecondaryPatterns2(void)
 	/* matches MS1[1]
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}",L"5",
 											 1,L"_INTRO_S1",0,0,1,
-											 1,L"if",0,1,1,
+											 1,L"conjunction|if",0,1,1,
 											 1,L"__S1{_BLOCK:EVAL}",0,1,1,
 											 1,L",",0,0,1,
 											 1,L"then",0,0,1,
@@ -2233,14 +2295,14 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}",L"1",
 											 1,L",",0,0,1,
 											 1, L"_ADVERB", 0, 0, 1,
-											 4,L"then",L"so",L"conjunction",L"coordinator",0,1,1,
+											 4,L"then",L"adverb|so",L"conjunction",L"coordinator",0,1,1,
 											 1,L"then",0,0,1,
 											 2,L"_PP*2",L"_VERBREL2*2",0,0,1,  // Tommy did not hear Boris's reply , but [in response to it] Whittington said something that sounded like - *1 competition with __MSTAIL[9]
 											 2,L"__S1{_BLOCK:EVAL}",L"_REL1[*]",0,1,1, // L"__NOUN[*]*1",0,1,1,  took __NOUN out - absorbed the subject of the second sentence following another sentence (and a conjunction)
 											 0);
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}",L"2",
 											 1,L",",0,0,1,
-											 3,L"but",L"then",L"and",0,1,1,
+											 3,L"conjunction|but",L"then",L"coordinator|and",0,1,1,
 											 1,L"then",0,0,1,
 											 5,L"__ALLVERB{VERB2}",L"_COND{VERB2}",L"_VERBPASTPART*1{vB:VERB2}",L"_BEEN{vB:id:VERB2}",L"_VERBPASSIVE{VERB2}",0,1,1,
 											 3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, // there must only be one adjective and it must be last (not mixed in) see *
@@ -2250,7 +2312,7 @@ int createSecondaryPatterns2(void)
 	// he meant well , but it was terrible he did it . 
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}",L"3",
 											 1,L",",0,0,1,
-											 4,L"then",L"so",L"conjunction",L"coordinator",0,1,1,
+											 4,L"then",L"adverb|so",L"conjunction",L"coordinator",0,1,1,
 											 1,L"then",0,0,1,
 											 1,L"__C1__S1",0,1,1,
 											 1,L"_IS{VERB:vS:id}",0,1,1,
@@ -2262,8 +2324,8 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}",L"3",
 												1,L"_INTRO_S1",0,0,1,
 												1,L"__S1{_BLOCK:EVAL}",0,1,1,
-												1,L"more",0,1,1,
-												1,L"than",0,1,1,
+												1,L"adverb|more",0,1,1,
+												1,L"preposition|than",0,1,1,
 												3,L"__S1{_BLOCK:EVAL}",L"__NOUN",L"__MNOUN",0,1,1,
 												0);
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_STRICT_NO_MIDDLE_MATCH}",L"4",
@@ -2275,7 +2337,7 @@ int createSecondaryPatterns2(void)
 											 1,L"_INTRO_S1",0,0,1,
 											 1,L"__S1{_BLOCK:EVAL}",0,1,1,
 											 1,L",",0,0,1,
-											 3,L"but",L"then",L"and",0,1,1,
+											 3,L"conjunction|but",L"then",L"coordinator|and",0,1,1,
 											 1,L"then",0,0,1,
 											 1,L"__ALLTHINK",0,1,1, // L"think" for all active tenses! - possibly add INTRO_S1.
 											 2,L"_PP",L"_REL1[*]",0,0,1,
@@ -2289,13 +2351,13 @@ int createSecondaryPatterns2(void)
 									 1,L"_Q1PASSIVE{_BLOCK}",0,0,1,
 									 1,L"_PP",0,1,1,
 									 1,L",",0,0,1,
-									 1,L"but",0,1,1,
+									 1,L"conjunction|but",0,1,1,
 									 1,L"also",0,0,1,
 									 2,L"_PP",L"__S1{_BLOCK:EVAL}",0,1,1,0);
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}",L"9",
 									 1,L"_STEP",0,0,1,
 									 1,L"_INTRO_S1",0,1,1,
-									 1,L"if",0,0,1,
+									 1,L"conjunction|if",0,0,1,
 									 1,L"__S1[*]{_BLOCK:EVAL}",0,1,1,
 									 1,L"__CLOSING__S1",0,0,3,
 									 1,L"_REF",0,0,1,
@@ -2307,7 +2369,7 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}",L"F",
 									 1,L"_STEP",0,0,1,
 									 1,L"_INTRO_S1",0,1,1,
-									 1,L"if",0,0,1,
+									 1,L"conjunction|if",0,0,1,
 									 3,L"_Q1*1{_BLOCK:EVAL}",L"_VERBREL1",L"_COMMAND1{_BLOCK:EVAL}",0,1,1,
 									 1,L"__CLOSING__S1",0,0,3,
 									 1,L"_REF",0,0,1,
@@ -2315,7 +2377,7 @@ int createSecondaryPatterns2(void)
 									 0); // In any case, what do you lose? (_Q1)
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}",L"A",
 									 1,L"_STEP",0,1,1,
-									 1,L"if",0,0,1,
+									 1,L"conjunction|if",0,0,1,
 									 3,L"_Q1*1{_BLOCK:EVAL}",L"_VERBREL1",L"_COMMAND1{_BLOCK:EVAL}",0,1,1,
 									 1,L"__CLOSING__S1",0,0,3,
 									 1,L"_REF",0,0,1,
@@ -2323,7 +2385,7 @@ int createSecondaryPatterns2(void)
 									 0); // (a) - slide the block over.
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}",L"E",
 									 1,L"_STEP",0,1,1,
-									 1,L"if",0,0,1,
+									 1,L"conjunction|if",0,0,1,
 									 1,L"__S1[*]{_BLOCK:EVAL}",0,1,1,
 									 1,L"_REF",0,0,1,
 									 1,L"?*-1",0,0,1,
@@ -2371,14 +2433,14 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"_MS2{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}", L"1",//3,L"demonstrative_determiner",L"personal_pronoun_nominative",L"indefinite_pronoun",0,0,1, // *he* whom you await taken out - how is this different than _NOUN[9]?
 										1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
 										1,L",",0,1,1,
-										1,L"and",0,1,1,
+										1,L"coordinator|and",0,1,1,
 										7, L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"preposition|during", 0, 1, 1,
 										1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
 										1, L",", 0, 0, 1,
 										2, L"then", L"_ADVERB", 0, 0, 1,
 										1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
 										1,L"preposition*2",0,0,1,
-										2, L"if", L"as", 0, 1, 1,
+										2, L"conjunction|if", L"conjunction|as", 0, 1, 1,
 										1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
 										1, L"_MSTAIL", 0, 0, 1,
 										0);

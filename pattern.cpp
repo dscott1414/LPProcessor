@@ -341,11 +341,11 @@ bool patternElement::matchOne(Source &source,unsigned int sourcePosition,unsigne
     }
     else
     {
-      if ((!inflectionFlags || (Forms[f]->inflectionsClass.empty() && 
-				 !((im->flags&WordMatch::flagNounOwner) && (inflectionFlags&NO_OWNER)) &&
-				 !((im->flags&(WordMatch::flagAllCaps|WordMatch::flagFirstLetterCapitalized)) && (inflectionFlags&ONLY_CAPITALIZED))) ||
-        inflectionMatch(im->word->second.inflectionFlags,im->flags,Forms[f]->inflectionsClass)) &&
-				(specificWords[form].empty() || im->word->first==specificWords[form] || (im->word->second.mainEntry!=wNULL && im->word->second.mainEntry->first==specificWords[form])))
+      if (
+				  (!inflectionFlags || 
+				   (Forms[f]->inflectionsClass.empty() && !((im->flags&WordMatch::flagNounOwner) && (inflectionFlags&NO_OWNER)) && !((im->flags&(WordMatch::flagAllCaps|WordMatch::flagFirstLetterCapitalized)) && (inflectionFlags&ONLY_CAPITALIZED))) ||
+           inflectionMatch(im->word->second.inflectionFlags,im->flags,Forms[f]->inflectionsClass)) &&
+				  (specificWords[form].empty() || im->word->first==specificWords[form] || (im->word->second.mainEntry!=wNULL && im->word->second.mainEntry->first==specificWords[form])))
       {
         int ME=im->queryForm(f);
         if (ME<0) continue;

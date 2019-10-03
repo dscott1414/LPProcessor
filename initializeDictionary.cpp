@@ -1672,7 +1672,7 @@ void WordClass::initialize()
 	// "quotes" removed 6/24 because it was causing NOUN to match double nouns across ".
 	// example:_NOUN [my dear child , " interrupted tuppence]
 	vector <wstring> ignoreForms =
-	{ L"dash",L"interjection",L"/",L"^",L"|",L"│" }; // bracketing with "/" sometimes used as emphasis (took out "--", 8/30/2005) added "|" 4/11/2006 for BNC
+	{ L"dash",L"/",L"^",L"|",L"│" }; // bracketing with "/" sometimes used as emphasis (took out "--", 8/30/2005) added "|" 4/11/2006 for BNC (took out L"interjection" 9/28/2019)
 	for (wstring ifs : ignoreForms)
 	{
 		int f = FormsClass::gFindForm(ifs);

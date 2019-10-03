@@ -1298,7 +1298,7 @@ int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring
 	else
 	{
 		int ew,weol;
-		if ((ew = wb.find(ENCODING_STRING))!=wstring::npos && (weol = wb.find(13, ew+ wcslen(ENCODING_STRING))) != wstring::npos)
+		if ((ew = wb.find(ENCODING_STRING))!=wstring::npos && ((weol = wb.find(13, ew+ wcslen(ENCODING_STRING))) != wstring::npos || (weol = wb.find(10, ew + wcslen(ENCODING_STRING))) != wstring::npos))
 		{
 			ew += wcslen(ENCODING_STRING);
 			sourceEncoding = wb.substr(ew,weol-ew);

@@ -2678,8 +2678,9 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 							lplog(L"%d:Noun (%d,%d) is compound, has a verb at end and a verb after the end.", position, position, position+pm->len);
 						int PEMAPosition = pm->pemaByPatternEnd;
 						pema[PEMAPosition].addOCostTillMax(tFI::COST_OF_INCORRECT_VERBAL_NOUN);
-						lplog(L"%d:Added %d cost to %s[%s](%d,%d).", position, tFI::COST_OF_INCORRECT_VERBAL_NOUN, 
-							patterns[pema[PEMAPosition].getPattern()]->name.c_str(), patterns[pema[PEMAPosition].getPattern()]->differentiator.c_str(), position + pema[PEMAPosition].begin, position + pema[PEMAPosition].end);
+						if (debugTrace.traceDeterminer)
+							lplog(L"%d:Added %d cost to %s[%s](%d,%d).", position, tFI::COST_OF_INCORRECT_VERBAL_NOUN,
+								patterns[pema[PEMAPosition].getPattern()]->name.c_str(), patterns[pema[PEMAPosition].getPattern()]->differentiator.c_str(), position + pema[PEMAPosition].begin, position + pema[PEMAPosition].end);
 					}
 					assessCost(NULL, pm, -1, position, tagSets);
 				}
@@ -2815,6 +2816,5 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 		}
 	}
 	matchedPositions-=end-begin+1;// +1 for the period, which isn't usually matched
-	lplog(L"position %d:pma %d:isWinner=%s", 3, 74, m[3].pma.content[74].isWinner() ? L"true" : L"false"); //TEMP DEBUG
 	return (matchedPositions<0) ? 0 : matchedPositions;
 }
