@@ -10,7 +10,7 @@
 #include "profile.h"
 
 // the below are all initialized
-int commaForm=-1,periodForm=-1,reflexiveForm=-1,possessivePronounForm=-1,nomForm=-1,accForm=-1;
+int commaForm=-1,periodForm=-1,reflexivePronounForm=-1,possessivePronounForm=-1,nomForm=-1,accForm=-1;
 int possessiveDeterminerForm=-1,interrogativeDeterminerForm=-1,particleForm=-1;
 int nounForm=-1,quoteForm=-1,conjunctionForm=-1,quantifierForm=-1,dashForm=-1,bracketForm=-1;
 int demonstrativeDeterminerForm=-1,numeralCardinalForm=-1,numeralOrdinalForm=-1,romanNumeralForm=-1,moneyForm=-1,internalStateForm=-1,webAddressForm=-1;
@@ -4764,7 +4764,7 @@ int Source::scanForSpeaker(int where,bool &definitelySpeaker,bool &crossedSectio
 							if (debugTrace.traceSpeakerResolution)
 								lplog(LOG_RESOLUTION,L"%06d:audience/hail match %d:%s",objectPosition,audienceObjectPosition,objectString(m[audienceObjectPosition].getObject(),tmpstr,true).c_str());
 						}
-						else if (audienceObjectPosition<0 || ao<0 || objects[m[audienceObjectPosition].getObject()].objectClass!=NAME_OBJECT_CLASS || m[verbPosition+2].queryWinnerForm(reflexiveForm)>=0)
+						else if (audienceObjectPosition<0 || ao<0 || objects[m[audienceObjectPosition].getObject()].objectClass!=NAME_OBJECT_CLASS || m[verbPosition+2].queryWinnerForm(reflexivePronounForm)>=0)
 		          audienceObjectPosition=verbPosition+2;
 					}
         }

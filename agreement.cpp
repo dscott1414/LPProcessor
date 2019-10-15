@@ -6,6 +6,7 @@
 #include "malloc.h"
 #include "profile.h"
 
+// (CMREADME018)
 void Source::setRole(int position,patternElementMatchArray::tPatternElementMatch *pem)
 { LFS
 	int end=position+pem->end;
@@ -1844,24 +1845,31 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 			}
 	}
 	*/
-	tIWMM nounWord=m[tagSet[nAgreeTag].sourcePosition].word;
+	int whereNAgree = tagSet[nAgreeTag].sourcePosition;
+	tIWMM nounWord=m[whereNAgree].word;
 	if (!(nounWord->second.inflectionFlags&SINGULAR))
 	{
 		if (debugTrace.traceDeterminer)
-			lplog(L"%d:noun %s is not singular [SOURCE=%06d].",tagSet[nAgreeTag].sourcePosition,nounWord->first.c_str(),traceSource=gTraceSource++);
+			lplog(L"%d:noun %s is not singular [SOURCE=%06d].",whereNAgree,nounWord->first.c_str(),traceSource=gTraceSource++);
 		return PNC;
 	}
-	if (!tagIsCertain(tagSet[nAgreeTag].sourcePosition))
+	if (!tagIsCertain(whereNAgree))
 	{
 		if (debugTrace.traceDeterminer)
-			lplog(L"%d:tag for noun %s is not certain [SOURCE=%06d].",tagSet[nAgreeTag].sourcePosition,nounWord->first.c_str(),traceSource=gTraceSource++);
+			lplog(L"%d:tag for noun %s is not certain [SOURCE=%06d].", whereNAgree, nounWord->first.c_str(), traceSource = gTraceSource++);
+		return PNC;
+	}
+	// mine is both a possessive pronoun AND a noun in completely different word senses, so they have differing determiner usage.
+	if (m[whereNAgree].queryForm(nounForm) >= 0 && (m[whereNAgree].queryForm(pronounForm) >= 0 || m[whereNAgree].queryForm(indefinitePronounForm) >= 0 || m[whereNAgree].queryForm(possessivePronounForm) >= 0))
+	{
+		if (debugTrace.traceDeterminer)
+			lplog(L"%d:tag for noun/pronoun %s has potentially conflicting determiner usage (PEMA=%d). [SOURCE=%06d].", whereNAgree, nounWord->first.c_str(), tagSet[nAgreeTag].PEMAOffset, traceSource = gTraceSource++);
 		return PNC;
 	}
 	int whereDet=(findTagConstrained(tagSet,L"DET",nextDet,tagSet[nounTag])>=0) ? 0 : 1;
 	int b=tagSet[nounTag].sourcePosition;
 	if (whereDet==1 && (m[b].queryForm(PROPER_NOUN_FORM)>=0 || m[b].queryForm(honorificForm)>=0 || m[b].queryForm(honorificAbbreviationForm)>=0))
 	{
-		int whereNAgree=tagSet[nAgreeTag].sourcePosition;
 		//lplog(L"%d: %d %s %s",begin,b,(m[b].queryForm(PROPER_NOUN_FORM)>=0) ? L"true":L"false",(m[b].flags&WordMatch::flagNounOwner) ? L"true":L"false");
 		while ((m[b].queryForm(PROPER_NOUN_FORM)>=0 || m[b].queryForm(honorificForm)>=0 || m[b].queryForm(honorificAbbreviationForm)>=0 || m[b].word->first==L".") && 
 					 !(m[b].flags&WordMatch::flagNounOwner) && b<whereNAgree) b++;
@@ -1874,7 +1882,7 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 	if (whereDet==1 && begin>0 && (m[begin-1].word->first==L"which" || m[begin-1].word->first==L"what" || m[begin-1].word->first==L"whose"))
 	{
 		if (debugTrace.traceDeterminer)
-			lplog(L"%d:noun %s lacks a determiner but is led by a determiner relative [SOURCE=%06d].",tagSet[nAgreeTag].sourcePosition,nounWord->first.c_str(),traceSource=gTraceSource++);
+			lplog(L"%d:noun %s lacks a determiner but is led by a determiner relative [SOURCE=%06d].",whereNAgree,nounWord->first.c_str(),traceSource=gTraceSource++);
 		whereDet=0;
 	}
 	/*
@@ -1889,14 +1897,15 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 	{
 		//if (t.traceDeterminer)
 		lplog(L"%d:determiner for noun %s found in previous coordinated phrase @%d [SOURCE=%06d].",
-					tagSet[nAgreeTag].sourcePosition,nounWord->first.c_str(),begin-2,traceSource=gTraceSource);
+					whereNAgree,nounWord->first.c_str(),begin-2,traceSource=gTraceSource);
 		whereDet=0;
 	}
 	*/
+	if (nounWord->second.query(nounForm)>=0 && nounWord->second.query(possessivePronounForm) >= 0)
 	if (nounWord->second.mainEntry!=wNULL)
 		nounWord=nounWord->second.mainEntry;
 	if (debugTrace.traceDeterminer)
-		lplog(L"%d:singular noun %s has %s determiner (cost=%d) [SOURCE=%06d].",tagSet[nAgreeTag].sourcePosition,nounWord->first.c_str(),(whereDet==0) ? L"a":L"no",nounWord->second.usageCosts[tFI::SINGULAR_NOUN_HAS_DETERMINER+whereDet],traceSource=gTraceSource++);
+		lplog(L"%d:singular noun %s has %s determiner (cost=%d) [SOURCE=%06d].",whereNAgree,nounWord->first.c_str(),(whereDet==0) ? L"a":L"no",nounWord->second.usageCosts[tFI::SINGULAR_NOUN_HAS_DETERMINER+whereDet],traceSource=gTraceSource++);
 	if (assessCost)
 		return PNC+nounWord->second.usageCosts[tFI::SINGULAR_NOUN_HAS_DETERMINER+whereDet];
 	normalize(nounWord->second.usagePatterns,tFI::SINGULAR_NOUN_HAS_DETERMINER,2);
@@ -2251,7 +2260,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 		if (numObjects>0)
 		{
 			wstring w=m[tagSet[whereObjectTag].sourcePosition].word->first;
-			if (tagSet[whereObjectTag].len==1 && (w==L"i" || w==L"he" || w==L"she" || w==L"we" || w==L"they"))
+			if (tagSet[whereObjectTag].len==1 && (w==L"i" || w==L"he" || w==L"she" || w==L"we" || w==L"they") && !patterns[pm->getPattern()]->questionFlag)
 			{
 				verbObjectCost+=6;
 				if (debugTrace.traceVerbObjects)
@@ -2284,7 +2293,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 		if (numObjects==2)
 		{
 			wstring w=m[tagSet[nextObjectTag].sourcePosition].word->first;
-			if (tagSet[nextObjectTag].len==1 && (w==L"i" || w==L"he" || w==L"she" || w==L"we" || w==L"they"))
+			if (tagSet[nextObjectTag].len==1 && (w==L"i" || w==L"he" || w==L"she" || w==L"we" || w==L"they") && !patterns[pm->getPattern()]->questionFlag)
 			{
 				verbObjectCost+=6;
 				wstring tmpstr;

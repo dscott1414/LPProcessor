@@ -979,7 +979,7 @@ int tFI::adjustFormsInflections(wstring originalWord,unsigned __int64 &wmflags,b
   if (firstLetterCapitalized || allCaps)
   {
     int costingOffset=-1;
-    if (!preTaggedSource && originalWord.length()>0 && !blockProperNounRecognition() && formsSize()<tFI::MAX_USAGE_PATTERNS &&
+    if (!preTaggedSource && originalWord.length()>0 && !blockProperNounRecognition() && formsSize()<tFI::MAX_USAGE_PATTERNS && // lord is a very special word!  It is not only an interjection, but can be used as a title.  But let's not block Lord as a proper noun because of that!
       //formsArray[formsOffset]!=UNDEFINED_FORM_NUM && // DR. BAURSTEIN (a chapter heading)
       query(PROPER_NOUN_FORM_NUM)==-1 &&
       // if a proper noun is not all caps, and not the first word, it probably needs to be a noun, abbreviation or proper noun sub-class.
@@ -1159,6 +1159,7 @@ bool WordMatch::maxWinner(int len,int avgCost,int lowestSeparatorCost)
 //   if 1 out of 3, add 2.  if 2 out of 3, add 1.
 //   if 1 out of 4, add 3.  if 2 out of 4, add 2.  if 3 out of 4, add 1.
 //   if overflow, divide all usage pattern counts by 2.
+// CMREADME017
 bool WordMatch::updateFormUsagePatterns(void)
 { LFS
   if (!costable() || !preTaggedSource) // these words are capitalized whenever they are used (honorifics and 'I')

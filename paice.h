@@ -62,7 +62,6 @@ public:
 	static int stem(MYSQL mysql, wstring s, vector <tSuffixRule> &rulesUsed, intArray &trail, int addRule);
 	~Stemmer();
 	static bool isWordDBUnknown(MYSQL mysql, wstring word);
-	static vector<wstring> splitString(wstring str, wchar_t wc);
 	static bool wordIsNotUnknownAndOpen(tIWMM iWord);
 
 private:

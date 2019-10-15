@@ -800,7 +800,7 @@ int WordClass::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId)
 		return -1;
 	static unordered_set <wstring> rejectSplitEndings = { L"o",L"ing",L"ton",L"rin",L"tin",L"pin",L"ism",L"ons",L"aire",L"ana",L"la",L"ard",L"ell",L"sey",L"ness",L"la",L"ies",
 	L"ley",L"ers",L"ish",L"ner",L"ington",L"leys",L"que",L"tes",L"ion",L"in",L"els",L"era",L"ists",L"sie",L"and",L"ingly",L"ium",L"ics",L"ilate",L"issima",L"ells" };
-	vector <wstring> components = Stemmer::splitString(sWord, '-');
+	vector <wstring> components = splitString(sWord, '-');
 	tIWMM iWordComponent=WMM.end();
 	for (wstring w : components)
 		if ((iWordComponent = fullQuery(mysql, w, sourceId)) == WMM.end())
@@ -1442,7 +1442,7 @@ void WordClass::testWordCacheFileRoutines(void)
 					Forms[I]->name=="verbverb" || Forms[I]->name=="past_verbal_auxiliary" || Forms[I]->name=="street_address" || Forms[I]->name=="negation_verb_contraction" || 
 					Forms[I]->name=="daysOfWeek" || Forms[I]->name=="street_address"  || Forms[I]->name=="season"  || Forms[I]->name=="numeral_ordinal"  ||  
 					Forms[I]->name=="startquestion" || Forms[I]->name=="simultaneousUnit" || Forms[I]->name=="measurement_abbreviation"  || 
-					Forms[I]->name=="polite_inserts" || Forms[I]->name=="month" ||  Forms[I]->name=="verbalPreposition" ||  Forms[I]->name=="trademark" ||  Forms[I]->name=="symbol" ||  
+					Forms[I]->name=="politeness_discourse_marker" || Forms[I]->name=="month" ||  Forms[I]->name=="verbalPreposition" ||  Forms[I]->name=="trademark" ||  Forms[I]->name=="symbol" ||  
 					Forms[I]->name=="indefinite_pronoun" || Forms[I]->name=="honorific" || Forms[I]->name=="possessive_pronoun" ||  Forms[I]->name=="personal_pronoun" ||  
 					I==quantifierForm || I==verbverbForm || Forms[I]->name=="relativizer" || Forms[I]->name=="predeterminer") 
 				Forms[I]->formCheck=true;

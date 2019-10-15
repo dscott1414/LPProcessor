@@ -395,7 +395,7 @@ bool WordMatch::isGendered(void)
 		queryWinnerForm(nomForm)<0 &&
 		queryWinnerForm(personalPronounForm)<0 &&
 		queryWinnerForm(accForm)<0 &&
-		queryWinnerForm(reflexiveForm)<0 &&
+		queryWinnerForm(reflexivePronounForm)<0 &&
 		queryWinnerForm(possessivePronounForm)<0 &&
 		queryWinnerForm(PROPER_NOUN_FORM_NUM)<0 &&
 		queryWinnerForm(pronounForm)<0 &&
@@ -858,13 +858,14 @@ bool Source::matchPatternAgainstSentence(cPattern *p,int s,bool fill)
 }
 
 
-void Source::logOptimizedString(wchar_t *line,unsigned int &linepos)
+void Source::logOptimizedString(wchar_t *line,unsigned int lineBufferLen,unsigned int &linepos)
 { LFS
 	wchar_t dest[2048];
 	if (!linepos)
 	{
 		lplog(L"");
-		for (wchar_t *p=line,*pEnd=line+2048; p!=pEnd; p++) *p=' '; // cannot use _wcsnset_s!
+		//for (wchar_t *p=line,*pEnd=line+ lineBufferLen; p!=pEnd; p++) *p=' '; // cannot use _wcsnset_s!
+		wmemset(line, L' ', lineBufferLen);
 		return;
 	}
 	int len=linepos;
@@ -891,7 +892,8 @@ void Source::logOptimizedString(wchar_t *line,unsigned int &linepos)
 	dest[destI+1]=0;
 	logstring(LOG_INFO,dest);
 	linepos=0;
-	for (wchar_t *p=line,*pEnd=line+2048; p!=pEnd; p++) *p=' '; // cannot use _wcsnset_s!
+	//for (wchar_t *p=line,*pEnd=line+ lineBufferLen; p!=pEnd; p++) *p=' '; // cannot use _wcsnset_s!
+	wmemset(line, L' ', lineBufferLen);
 }
 
 int Source::getPEMAPosition(int position,int line)
@@ -907,9 +909,10 @@ int Source::getPEMAPosition(int position,int line)
 
 // print a sentence
 // end should normally be set to words.size();
+#define LINE_BUFFER_LEN 2048
 int Source::printSentence(unsigned int rowsize,unsigned int begin,unsigned int end,bool containsNotMatched)
 { LFS
-	wchar_t printLine[2048];
+	wchar_t printLine[LINE_BUFFER_LEN];
 	wchar_t bufferZone[2048];
 	unsigned int totalSize,I=begin,maxLines,startword=begin,maxPhraseMatches,linepos=0;
 	printMaxSize.reserve(end-begin);
@@ -925,11 +928,11 @@ int Source::printSentence(unsigned int rowsize,unsigned int begin,unsigned int e
 		maxLines=0;
 		maxPhraseMatches=0;
 		startword=I;
-		logOptimizedString(printLine,linepos);
+		logOptimizedString(printLine, LINE_BUFFER_LEN,linepos);
 		for (unsigned int line=0; (line<=(maxLines+maxPhraseMatches) || (maxLines==0 && I<end)); line++)
 		{
 			totalSize=0;
-			logOptimizedString(printLine,linepos);
+			logOptimizedString(printLine, LINE_BUFFER_LEN,linepos);
 			vector <WordMatch>::iterator im;
 			for (I=startword,im=m.begin()+startword; I<end && totalSize<rowsize; I++,im++)
 			{
@@ -1471,12 +1474,16 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 			 // state-of-the-art
 			)
 		{
+			wstring lowerWord = sWord;
+			transform(lowerWord.begin(), lowerWord.end(), lowerWord.begin(), (int(*)(int)) tolower);
 			unsigned int unknownWords=0,capitalizedWords=0,openWords=0, letters =0;
-			vector <wstring> dashedWords = Stemmer::splitString(sWord, sWord[dash]);
+			vector <wstring> dashedWords = splitString(sWord, sWord[dash]);
 			wstring removeDashesWord;
 			for (wstring subWord : dashedWords)
 			{
-				tIWMM iWord=WordClass::fullQuery(&mysql,subWord,sourceId);
+				wstring lowerSubWord = subWord;
+				transform(lowerSubWord.begin(), lowerSubWord.end(), lowerSubWord.begin(), (int(*)(int)) tolower);
+				tIWMM iWord=WordClass::fullQuery(&mysql, lowerSubWord,sourceId);
 				if (iWord == WordClass::end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0)
 					unknownWords++;
 				if (iWord != WordClass::end() && Stemmer::wordIsNotUnknownAndOpen(iWord))
@@ -1485,10 +1492,10 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 					capitalizedWords++;
 				if (subWord.length() == 1)  // F-R-E-E-D-O-M  
 					letters++;
-				removeDashesWord += subWord;
+				removeDashesWord += lowerSubWord;
 			}
 				// if this does not qualify as a dashed word, back up to just AFTER the dash
-			tIWMM iWord = WordClass::fullQuery(&mysql, sWord, sourceId);
+			tIWMM iWord = WordClass::fullQuery(&mysql, lowerWord, sourceId);
 			tIWMM iWordNoDashes = WordClass::fullQuery(&mysql, removeDashesWord, sourceId);
 			//bool notCapitalized = (capitalizedWords == 0 || (capitalizedWords == 1 && firstWordInSentence));
 			// break apart if it is not capitalized, there are no unknown words, and the dashed word is unknown.
@@ -2269,7 +2276,7 @@ bool Source::write(wstring path,bool S2, bool makeCopyBeforeSourceWrite)
 		wstring renamePath = path + L".old";
 		if (_wremove(renamePath.c_str()) < 0 && errno!=ENOENT)
 			lplog(LOG_FATAL_ERROR, L"REMOVE %s - %S", renamePath.c_str(), sys_errlist[errno]);
-		else if (_wrename(path.c_str(), renamePath.c_str()))
+		else if (_wrename(path.c_str(), renamePath.c_str()) && errno != ENOENT)
 			lplog(LOG_FATAL_ERROR, L"RENAME %s to %s - %S", path.c_str(), renamePath.c_str(), sys_errlist[errno]);
 	}
 	HANDLE fd = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,0);

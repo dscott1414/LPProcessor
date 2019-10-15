@@ -1,6 +1,6 @@
 //#define LOG_RELATIVE_LOCATION
 //#define LOG_OLD_MATCH
-//#define LOG_UNICODE
+#define LOG_BUFFER
 //#define LOG_RELATION_GROUPING
 //#define LOG_BNC_PATTERNS_CHECK
 //#define LOG_FORM_USAGE_COSTS

@@ -321,16 +321,6 @@ Stemmer::~Stemmer()
 	prefixRules.clear();
 }
 
-vector<wstring> Stemmer::splitString(wstring str, wchar_t wc)
-{
-	vector<wstring> strings;
-	std::wistringstream f(str);
-	wstring s;
-	while (std::getline(f, s, wc))
-		strings.push_back(s);
-	return strings;
-}
-
 bool Stemmer::wordIsNotUnknownAndOpen(tIWMM iWord)
 {
 	if (unacceptableCombinationForms.empty())
@@ -338,7 +328,7 @@ bool Stemmer::wordIsNotUnknownAndOpen(tIWMM iWord)
 		unacceptableCombinationForms.insert(UNDEFINED_FORM_NUM);
 		unacceptableCombinationForms.insert(commaForm);
 		unacceptableCombinationForms.insert(periodForm);
-		unacceptableCombinationForms.insert(reflexiveForm);
+		unacceptableCombinationForms.insert(reflexivePronounForm);
 		unacceptableCombinationForms.insert(nomForm);
 		unacceptableCombinationForms.insert(accForm);
 		unacceptableCombinationForms.insert(quoteForm);

@@ -2484,6 +2484,7 @@ bool Source::sameSpeaker(int sWhere1,int sWhere2)
 	return oneIn;
 }
 
+// CMREADME019
 void Source::embeddedStory(int where,int &numPastSinceLastQuote,int &numNonPastSinceLastQuote,int &numSecondInQuote,int &numFirstInQuote,
 													 int &lastEmbeddedStory,int &lastEmbeddedImposedSpeakerPosition,int lastSpeakerPosition)
 { LFS
@@ -2625,7 +2626,7 @@ void Source::adjustHailRoleDuringScan(int where)
 	}
 	// if the last quote has the speaker talking to himself/herself, remove hail
 	if ((or&HAIL_ROLE) && (im->objectRole&IN_PRIMARY_QUOTE_ROLE) && lastOpeningPrimaryQuote>=0 && 
-		  m[lastOpeningPrimaryQuote].audiencePosition>=0 && m[m[lastOpeningPrimaryQuote].audiencePosition].queryWinnerForm(reflexiveForm)>=0)
+		  m[lastOpeningPrimaryQuote].audiencePosition>=0 && m[m[lastOpeningPrimaryQuote].audiencePosition].queryWinnerForm(reflexivePronounForm)>=0)
 	{
 			or&=~HAIL_ROLE;
 			im->objectRole&=~HAIL_ROLE;
@@ -3011,7 +3012,7 @@ void Source::identifySpeakerGroups()
               speakerObject=m[lastSpeakerPosition].objectMatches[0].object;
             if (speakerObject>=0) 
 						{
-							if (audienceObjectPosition<0 || m[audienceObjectPosition].queryForm(reflexiveForm)<0)
+							if (audienceObjectPosition<0 || m[audienceObjectPosition].queryForm(reflexivePronounForm)<0)
 								tempSpeakerGroup.conversationalQuotes++;
 							objects[speakerObject].PISDefinite++;
 						}

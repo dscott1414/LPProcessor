@@ -10,6 +10,13 @@ int createSecondaryPatterns2(void);
 void createQuestionPatterns(void);
 
 #define SOURCE_VERSION 29
+/*
+EXAMPLE
+cPattern::create(L"XX{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"Y",
+										1, L"__C1__S1", 0, 1, 1, ** patternElement 0, patternElementIndex=0
+										3, L"_NOUN_OBJ{OBJECT}", L"__NOUN[*]{OBJECT}", L"_ADJECTIVE", 0, 0, 1, ** patternElement 1, patternElementIndex=0, patternElement 1, patternElementIndex=1, patternElement 1, patternElementIndex=2
+										0);
+*/
 class Source;
 class matchElement
 {
@@ -28,6 +35,7 @@ public:
     char patternElementIndex;
     int previousMatch;
     int PMAIndex;
+
     unsigned int patternElement; // could be a short but int is better for alignment
     matchElement(int inPMAIndex,unsigned int inBeginPosition,unsigned int inEndPosition,unsigned int inElementMatchedIndex,short inCost,bool isPattern,
         int inPreviousMatch,unsigned int inPatternElement,unsigned int inPatternElementIndex,bool inNew)

@@ -292,7 +292,7 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 				}
 				// refuse to make it proper noun, even if it is listed as one.  see WordMatch::queryForm(int form)
 				else
-					if ((m[q].flags&WordMatch::flagFirstLetterCapitalized) && !afterPossibleAbbreviation && !(m[q].flags&WordMatch::flagAllCaps))
+					if ((m[q].flags&WordMatch::flagFirstLetterCapitalized) && !afterPossibleAbbreviation && !(m[q].flags&WordMatch::flagAllCaps) && m[q].word->second.localWordIsLowercase > 0)
 					{
 						m[q].flags|=WordMatch::flagRefuseProperNoun;
 						if (traceParseInfo)
@@ -312,6 +312,15 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 						m[q].word->second.usagePatterns[tFI::LOWER_CASE_USAGE_PATTERN], (int)m[q].word->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN],
 						m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
 
+			}
+			if (m[q].word->first == L"lord" && (m[q].flags&WordMatch::flagFirstLetterCapitalized) && !(m[q].flags&WordMatch::flagAddProperNoun) && q + 1 < m.size() && !(m[q + 1].flags&WordMatch::flagFirstLetterCapitalized))
+			{
+				m[q].flags |= WordMatch::flagAddProperNoun;
+				if (traceParseInfo)
+					lplog(LOG_INFO, L"%d:%s:added flagAddProperNoun (SPECIAL CASE lord) asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
+						q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
+						m[q].word->second.usagePatterns[tFI::LOWER_CASE_USAGE_PATTERN], (int)m[q].word->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN],
+						m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
 			}
 			// if capitalized, not all caps, at least 2 letters long, not a cardinal or ordinal number
 			// does not already have flagRefuseProperNoun or flagAddProperNoun or flagOnlyConsiderProperNounForms or flagOnlyConsiderOtherNounForms set

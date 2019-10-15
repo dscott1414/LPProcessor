@@ -229,7 +229,7 @@ void Source::addWNExtensions(void)
 {
 	LFS
 		tIWMM w_tall = Words.query(L"tall"), w_small = Words.query(L"small"), mainEntry;
-	if (w_tall != wNULL && w_small != wNULL)
+	if (w_tall != Words.end() && w_small != Words.end())
 	{
 		if ((mainEntry = w_tall->second.mainEntry) == wNULL) mainEntry = w_tall;
 		if (!(mainEntry->second.flags&tFI::genericGenderIgnoreMatch) && wnAntonymsAdjectiveMap.find(mainEntry) == wnAntonymsAdjectiveMap.end())
@@ -1102,7 +1102,7 @@ int Source::identifyObject(int tag, int where, int element, bool adjectival, int
 		}
 		if (tagName == L"NOUN" || tagName == L"PNOUN")
 		{
-			if (m[principalWhere].queryWinnerForm(reflexiveForm) >= 0)
+			if (m[principalWhere].queryWinnerForm(reflexivePronounForm) >= 0)
 				objectClass = REFLEXIVE_PRONOUN_OBJECT_CLASS;
 			else if (m[principalWhere].queryWinnerForm(reciprocalPronounForm) >= 0)
 				objectClass = RECIPROCAL_PRONOUN_OBJECT_CLASS;
@@ -1592,12 +1592,27 @@ bool Source::eraseWinnerFromRecalculatingAloneness(int where, patternMatchArray:
 void Source::removeWinnerFlag(int where, patternMatchArray::tPatternMatch *pma,int recursionSpaces)
 {
 	cPattern *p = patterns[pma->getPattern()];
-	if (debugTrace.tracePatternElimination)
-		lplog(L"%*sposition %d:pma %d:%s[%s]*%d(%d,%d) eliminated because it is a %s.  Winner removed.", recursionSpaces-2,L" ",
-					where, pma-m[where].pma.content,p->name.c_str(), p->differentiator.c_str(), pma->cost, where, where + pma->len,
-		(recursionSpaces==2) ? L"FINAL_IF_ALONE and it is not alone":L"descendant of a FINAL_IF_ALONE pattern");
 	int nPEMAPosition = pma->pemaByPatternEnd;
 	patternElementMatchArray::tPatternElementMatch *pem = pema.begin() + nPEMAPosition;
+	for (; nPEMAPosition >= 0 && pem->getPattern() == pma->getPattern() && (pem->end - pem->begin) == pma->len; nPEMAPosition = pem->nextPatternElement, pem = pema.begin() + nPEMAPosition)
+	{
+		// go to where the child begin position is. scan all 
+		int np;
+		for (np = m[where - pem->begin].beginPEMAPosition; np >= 0 && (np == nPEMAPosition || !pema[np].isWinner()); np = pema[np].nextByPosition);
+		if (np < 0)
+		{
+			if (debugTrace.tracePatternElimination)
+				lplog(L"%*sposition %d:pma %d:%s[%s]*%d(%d,%d) not eliminated because even though it is a FINAL_IF_ALONE and it is not alone, it will orphan position %d.", recursionSpaces - 2, L" ",
+					where, pma - m[where].pma.content, p->name.c_str(), p->differentiator.c_str(), pma->cost, where, where + pma->len, where - pem->begin);
+			return;
+		}
+	}
+	if (debugTrace.tracePatternElimination)
+		lplog(L"%*sposition %d:pma %d:%s[%s]*%d(%d,%d) eliminated because it is a %s.  Winner removed.", recursionSpaces - 2, L" ",
+			where, pma - m[where].pma.content, p->name.c_str(), p->differentiator.c_str(), pma->cost, where, where + pma->len,
+			(recursionSpaces == 2) ? L"FINAL_IF_ALONE and it is not alone" : L"descendant of a FINAL_IF_ALONE pattern");
+	nPEMAPosition = pma->pemaByPatternEnd;
+	pem = pema.begin() + nPEMAPosition;
 	for (; nPEMAPosition >= 0 && pem->getPattern() == pma->getPattern() && (pem->end - pem->begin) == pma->len; nPEMAPosition = pem->nextPatternElement, pem = pema.begin() + nPEMAPosition)
 	{
 		pem->removeWinnerFlag();

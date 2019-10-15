@@ -10,9 +10,9 @@
 #include "profile.h"
 
 __declspec(thread) static int lastInfoClock=0,lastErrorClock=0,lastNomatchClock=0,lastResolutionClock=0,lastWhereClock=0,lastResCheckClock=0,lastSGClock=0,lastWNClock=0,lastWPClock=0,lastWSClock=0,lastRoleClock=0,lastWCClock=0,lastTimeClock=0,lastDictionaryClock=0,lastQCClock=0; 		// per thread
-#ifdef LOG_UNICODE
+#ifdef LOG_BUFFER
 static FILE *logInfoFile,*logErrorFile,*logNomatchFile,*logResolutionFile,*logResCheckFile,*logSGFile,*logWNFile,*logWPFile;
-static FILE *logWhereFile;
+static FILE *logWSFile, *logWhereFile, *logRoleFile, *logWCFile, *logTimeFile, *logDictionaryFile, *logQCFile;
 #else
 __declspec(thread) static int logInfoFile=-1,logErrorFile=-1,logNomatchFile=-1,logResolutionFile=-1,logResCheckFile=-1,logSGFile=-1,logWNFile=-1,logWPFile=-1,logWSFile=-1,logWhereFile=-1,logRoleFile=-1,logWCFile=-1,logTimeFile=-1,logDictionaryFile=-1,logQCFile=-1; // per thread
 #endif
@@ -39,8 +39,8 @@ int logstring(int logLevel,const wchar_t *s)
 	while (logLevel&LOG_MASK)
 	{
 		int *lastClock = &lastInfoClock;
-#ifdef LOG_UNICODE
-		FILE **logFile;
+#ifdef LOG_BUFFER
+		FILE **logFile=NULL;
 #else
 		int *logFile= &logInfoFile;
 #endif
@@ -143,7 +143,7 @@ int logstring(int logLevel,const wchar_t *s)
 		}
 		if (s==NULL)
 		{
-#ifdef LOG_UNICODE
+#ifdef LOG_BUFFER
 			if (*logFile) fclose(*logFile);
 			*logFile=NULL;
 #else
@@ -154,7 +154,7 @@ int logstring(int logLevel,const wchar_t *s)
 		}
 		if (clock()-*lastClock>logCache*CLOCKS_PER_SEC)
 		{
-#ifdef LOG_UNICODE
+#ifdef LOG_BUFFER
 			if (*logFile) fclose(*logFile);
 			*logFile=NULL;
 #else
@@ -163,21 +163,36 @@ int logstring(int logLevel,const wchar_t *s)
 #endif
 			*lastClock=clock();
 		}
-#ifdef LOG_UNICODE
+#ifdef LOG_BUFFER
 		if (*logFile==NULL)
 		{
-			bool writeBOM=_access(logFilename,0)<0;
-			*logFile=fopen(logFilename,"a+b");
-			if (writeBOM)
-				fputs("\xFF\xFE",*logFile);
+			// write pure unicode log
+			//bool writeBOM=_access(logFilename,0)<0; 
+			//*logFile=fopen(logFilename,"a+b");
+			//if (writeBOM)
+			//	fputs("\xFF\xFE",*logFile);
+			*logFile=fopen(logFilename,"a+t,ccs=UTF-8");
+			setvbuf(*logFile, NULL, _IOFBF, 1024 * 1024);
 		}
 		if (!*logFile) return -1;
 		if (fputws(s,*logFile)==WEOF)
-			printf("Error in fputws - %d\n",GetLastError());
+			printf("Error in fputws - %d\n",(int)GetLastError());
 		if (!logCache)
 		{
 			fclose(*logFile);
 			*logFile=NULL;
+		}
+		if (logLevel&LOG_FATAL_ERROR)
+		{
+			cProfile::accumulateNetworkTime(L"", 0, 0);
+			wprintf(L"%s", s);
+			if (*logFile != NULL)
+				fclose(*logFile);
+			*logFile = NULL;
+			getchar(); // wait so we can see the error
+			char buf[11];
+			fgets(buf, 10, stdin); // make sure we wait so we can see the error
+			exit(0);
 		}
 #else
 		if (*logFile<0)

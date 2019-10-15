@@ -93,7 +93,7 @@ unordered_map<wstring, vector<wstring>> pennMapToLP = {
 
 bool foundParsedSentence(Source &source, wstring sentence, wstring &parse)
 {
-	if (!myquery(&source.mysql, L"LOCK TABLES stanfordPCFGParsedSentences READ")) return false;
+	//if (!myquery(&source.mysql, L"LOCK TABLES stanfordPCFGParsedSentences READ")) return false; // moved out to higher level for performance
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	std::replace(sentence.begin(), sentence.end(), L'\'', L'"');
 	size_t sentencehash=std::hash<std::wstring>{}(sentence);
@@ -107,15 +107,15 @@ bool foundParsedSentence(Source &source, wstring sentence, wstring &parse)
 		std::replace(parse.begin(), parse.end(), L'"', L'\'');
 	}
 	mysql_free_result(result);
-	source.unlockTables();
+	//source.unlockTables(); // moved out to higher level for performance
 	return parse.length() > 0;
 }
 
 
 int setParsedSentence(Source &source, wstring sentence, wstring parse)
 {
-	if (!myquery(&source.mysql, L"LOCK TABLES stanfordPCFGParsedSentences WRITE")) 
-		return -1;
+	//if (!myquery(&source.mysql, L"LOCK TABLES stanfordPCFGParsedSentences WRITE")) // moved out to higher level for performance
+	//	return -1;
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	std::replace(sentence.begin(), sentence.end(), L'\'', L'"');
 	std::replace(parse.begin(), parse.end(), L'\'', L'"');
@@ -123,7 +123,7 @@ int setParsedSentence(Source &source, wstring sentence, wstring parse)
 	_snwprintf(qt, QUERY_BUFFER_LEN, L"insert stanfordPCFGParsedSentences (parse,sentence,sentencehash) VALUES('%s','%s',%I64d)", parse.c_str(),sentence.c_str(),(__int64)sentencehash);
 	if (!myquery(&source.mysql, qt))
 		return -1;
-	source.unlockTables();
+	//source.unlockTables();
 	return 0;
 }
 
@@ -823,6 +823,8 @@ void compareViterbiAgainstStructuredTagging(Source &source,
 	unordered_map<wstring, int> winnerViolationFormCountMap,winnerViolationWordCountMap;
 	int pathViolations = 0;
 	int stanfordNotIdentifiedNum=0, stanfordIsLPWinnerNum=0, stanfordIsViterbiWinnerNum=0;
+	if (!myquery(&source.mysql, L"LOCK TABLES stanfordPCFGParsedSentences WRITE")) // moved out parseSentence (actually in foundParseSentence and setParsedSentence) for performance
+		return;
 	for (vector <WordMatch>::iterator im = source.m.begin(), imEnd = source.m.end(); im != imEnd; im++, wordSourceIndex++)
 	{
 		if (wordSourceIndex % 5000 == 0)
@@ -993,6 +995,7 @@ void compareViterbiAgainstStructuredTagging(Source &source,
 		//	lplog(LOG_ERROR, L"%d:preferredViterbiForms %s is/are among the winner forms %s for word %s [%f]",
 		//		wordSourceIndex, viterbiForms.c_str(), im->winnerFormString(winnerForms).c_str(), im->word->first.c_str(), im->preferredViterbiProbability);
 	}
+	source.unlockTables();
 	map<int, wstring, std::greater<int>> orderedFormCountMap;
 	for (auto const&[winnerForm, count] : winnerViolationFormCountMap)
 		orderedFormCountMap[count] = winnerForm;

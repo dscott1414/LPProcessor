@@ -441,9 +441,9 @@ void createQuestionPatterns(void)
 		cPattern::create(L"__SQ{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_QUESTION}",L"1",
 									 1,L"relativizer{SUBJECT}",0,1,1,
 									 2,L"__ALLVERB",L"_COND{VERB}",0,1,1,
-									 1,L":",0,0,1, // and they were: "dasher", "prancer", and "comet".  / ALSO another voice[boris] which Tommy rather thought was that[boris] of boris replied :
-										// __ALLOBJECTS_0 would be harmful here because ALLOBJECTS_0 could resolve to a NAME, which must be an object, but will not be registered as one if
-										//   __ALLOBJECTS_0 is its parent
+									 1,L":",0,0,1, 
+										// __ALLOBJECTS_0 would be harmful here because ALLOBJECTS_0 could resolve to a NAME, which must be an object, 
+										// but will not be registered as one if __ALLOBJECTS_0 is its parent
 									 5,L"__QNOUN",L"_PP",L"adjective{ADJ}",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, // there must only be one adjective and it must be last (not mixed in) see *
 									 1,L"__CLOSING__S1",0,0,3,
 									 0);
@@ -484,7 +484,7 @@ void createQuestionPatterns(void)
 									1,L"relativizer",0,0,1,
 									4,L"_Q1S",L"_Q1PASSIVE",L"_Q1",L"_QT1",0,1,1,
 									1,L",",0,1,1, // , ma'am // if this is made optional, _NOUN of C4 and _ALLOBJECT of C3 are identical
-									4,L"_NAME{HAIL}",L"_META_GROUP{HAIL}",L"honorific{HON}",L"_HON_ABB{HON}",0,1,1, // , sir / , freak! noun includes _NAME, L"honorific",
+									5,L"_NAME{HAIL}",L"_META_GROUP{HAIL}",L"honorific{HON}",L"_HON_ABB{HON}",L"_PP",0,1,1, // , sir / , freak! noun includes _NAME, L"honorific",
 									0);
 	// would you if you could?
 	// What does he want from me, I wonder.
@@ -496,7 +496,7 @@ void createQuestionPatterns(void)
 									5,L"__QNOUN",L"_PP",L"adjective{ADJ}",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, // there must only be one adjective and it must be last (not mixed in) see *
 									1,L",",0,0,1, 
 									1,L"conjunction|if",0,0,1,
-									1,L"__S1{EVAL:_BLOCK}",0,1,1,
+									2,L"__S1{EVAL:_BLOCK}", L"_PP",0,1,1, // Why don't you get a showy tie , like *mine* ?
 									0);
 	// But if so, where was the girl, and what had she done with the papers?
 	cPattern::create(L"_MQ1{_FINAL_IF_ALONE:_STRICT_NO_MIDDLE_MATCH:_QUESTION}",L"3",

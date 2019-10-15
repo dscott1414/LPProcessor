@@ -370,7 +370,7 @@ public:
 			if (word->first.length()==1) return word;
 			if (word->second.query(numeralCardinalForm)>=0 || word->second.query(NUMBER_FORM_NUM)>=0) return word;
 			if (word->second.query(nomForm)>=0 || word->second.query(accForm)>=0 || word->second.query(personalPronounForm)>=0) return word;
-			if (word->second.query(possessiveDeterminerForm)>=0 || word->second.query(possessivePronounForm)>=0 || word->second.query(reflexiveForm)>=0) return word;
+			if (word->second.query(possessiveDeterminerForm)>=0 || word->second.query(possessivePronounForm)>=0 || word->second.query(reflexivePronounForm)>=0) return word;
 			if (isNoun && word->second.query(nounForm)<0) return word;
 			wstring in=word->first;
 		::deriveMainEntry(where,fromWhere,in,inflectionFlags,isVerb,isNoun,lastNounNotFound,lastVerbNotFound);
@@ -392,7 +392,7 @@ public:
 			if (word->first.length()==1) return word;
 			if (word->second.query(numeralCardinalForm)>=0 || word->second.query(NUMBER_FORM_NUM)>=0) return word;
 			if (word->second.query(nomForm)>=0 || word->second.query(accForm)>=0 || word->second.query(personalPronounForm)>=0) return word;
-			if (word->second.query(possessiveDeterminerForm)>=0 || word->second.query(possessivePronounForm)>=0 || word->second.query(reflexiveForm)>=0) return word;
+			if (word->second.query(possessiveDeterminerForm)>=0 || word->second.query(possessivePronounForm)>=0 || word->second.query(reflexivePronounForm)>=0) return word;
 			if (word->second.query(nounForm)<0) return word;
 			wstring in=word->first;
 			int inflectionFlags=word->second.inflectionFlags; // avoid altering original inflectionFlags
@@ -3134,7 +3134,7 @@ private:
 	int matchPatternsAgainstSentence(unsigned int s,unsigned int &patternsTried);
 	//void collectMatchedPatterns(wstring markType,int position,intArray &endPositions);
 
-	void logOptimizedString(wchar_t *line,unsigned int &linepos);
+	void logOptimizedString(wchar_t *line,unsigned int lineBufferLen,unsigned int &linepos);
 	//unsigned int getPMAMinCost(unsigned int position,int parentPattern,int rootPattern,int childend);
 	int getMinCost(patternElementMatchArray::tPatternElementMatch *pem);
 

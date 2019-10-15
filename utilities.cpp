@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <crtdbg.h>
 #include "profile.h"
+#include <sstream>
 
 void itos(wchar_t *before,int i,wstring &concat,wchar_t *after)
 { LFS
@@ -681,3 +682,14 @@ void trim(wstring &str)
 	if (whereSpace < str.length() - 1)
 		str.erase(whereSpace + 1);
 }
+
+vector<wstring> splitString(wstring str, wchar_t wc)
+{
+	vector<wstring> strings;
+	std::wistringstream f(str);
+	wstring s;
+	while (std::getline(f, s, wc))
+		strings.push_back(s);
+	return strings;
+}
+

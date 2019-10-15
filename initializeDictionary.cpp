@@ -1104,9 +1104,9 @@ int WordClass::createWordCategories()
 	predefineWords(numeral_ordinal,L"numeral_ordinal",L"ord");
 	wchar_t *inserts[] = {L"ouch",L"right-o",L"good-bye",NULL}; // chapter 14 LGSWE
 	predefineWords(inserts,L"inserts",L"ins");
-	wchar_t *polite_inserts[] = {L"please",L"pray",NULL}; // chapter 14 LGSWE // "thank you" removed (decreased matches)
-	predefineWords(polite_inserts,L"polite_inserts",L"pi",tFI::queryOnAnyAppearance,false);
-	wchar_t *predeterminer[] = {L"all",L"half",L"double",L"both",L"once",L"twice",L"thrice",NULL};
+	wchar_t *politeness_discourse_marker[] = {L"please",L"pray",NULL}; // chapter 14 LGSWE // "thank you" removed (decreased matches)
+	predefineWords(politeness_discourse_marker,L"politeness_discourse_marker",L"pi",tFI::queryOnAnyAppearance,false);
+	wchar_t *predeterminer[] = {L"all",L"half",L"double",L"both",L"once",L"twice",L"thrice",L"such",NULL};
 	predefineWords(predeterminer,L"predeterminer",L"predeterminer",tFI::queryOnAnyAppearance,false);
 	wchar_t *sNoQuery[] = {L"and",L"you",L"p.o.",L"!",L"?",NULL};
 	for (wchar_t **s=sNoQuery; *s; s++) predefineWord(*s);
@@ -1498,13 +1498,14 @@ WordClass::WordClass(void)
 }
 
 bool tFI::toLowestCost(int form)
-{ LFS
-	int hf;
-	if ((hf=query(form))>=0)
+{
+	LFS
+		int hf;
+	if ((hf = query(form)) >= 0)
 	{
-		int flc=getLowestCost();
-		usagePatterns[hf]=usagePatterns[flc];
-		usageCosts[hf]=usageCosts[flc];
+		int flc = getLowestCost();
+		usagePatterns[hf] = usagePatterns[flc];
+		usageCosts[hf] = usageCosts[flc];
 		return true;
 	}
 	return false;
@@ -1588,7 +1589,7 @@ void WordClass::initialize()
 	if (quantifierForm < 0) quantifierForm = FormsClass::gFindForm(L"quantifier");
 	if (quoteForm < 0) quoteForm = FormsClass::gFindForm(L"quotes");
 	if (dashForm < 0) dashForm = FormsClass::gFindForm(L"dash");
-	if (reflexiveForm < 0) reflexiveForm = FormsClass::gFindForm(L"reflexive_pronoun"); // myself, himself
+	if (reflexivePronounForm < 0) reflexivePronounForm = FormsClass::gFindForm(L"reflexive_pronoun"); // myself, himself
 	if (verbForm < 0) verbForm = FormsClass::gFindForm(L"verb");
 	if (thinkForm < 0) thinkForm = FormsClass::gFindForm(L"think");
 	//if (internalStateForm<0) internalStateForm=FormsClass::gFindForm(L"internalState");
@@ -1647,7 +1648,7 @@ void WordClass::initialize()
 
 	//** SET Forms
 	vector <int> commonForms =
-	{ reflexiveForm,nomForm,accForm,conjunctionForm,demonstrativeDeterminerForm,possessiveDeterminerForm,interrogativeDeterminerForm,
+	{ reflexivePronounForm,nomForm,accForm,conjunctionForm,demonstrativeDeterminerForm,possessiveDeterminerForm,interrogativeDeterminerForm,
 		indefinitePronounForm,reciprocalPronounForm,pronounForm,thinkForm,relativeForm,
 		determinerForm,doesForm,doesNegationForm,possessivePronounForm,quantifierForm,coordinatorForm,
 		beForm,haveForm,haveNegationForm,doForm,doNegationForm,interjectionForm,personalPronounForm,
@@ -1658,7 +1659,7 @@ void WordClass::initialize()
 
 	// numeralCardinalForm, numeralOrdinalForm, romanNumeralForm, quantifierform, dateForm,timeForm, telephoneNumberForm, moneyForm, and webAddressForm
 	// are not closed, but they can be positively identified so they do not have to be written in the cache file
-	vector<int> nonCachedForms = { commaForm, periodForm ,reflexiveForm	,nomForm	,accForm	,quoteForm	,dashForm	,bracketForm	,conjunctionForm,
+	vector<int> nonCachedForms = { commaForm, periodForm ,reflexivePronounForm	,nomForm	,accForm	,quoteForm	,dashForm	,bracketForm	,conjunctionForm,
 		demonstrativeDeterminerForm	,possessiveDeterminerForm	,interrogativeDeterminerForm	,indefinitePronounForm	,reciprocalPronounForm,
 		pronounForm	,numeralCardinalForm	,numeralOrdinalForm	,romanNumeralForm	,honorificForm	,honorificAbbreviationForm	,relativeForm	,
 		determinerForm,doesForm	,doesNegationForm	,possessivePronounForm	,quantifierForm	,dateForm	,timeForm	,telephoneNumberForm	,
@@ -1684,7 +1685,7 @@ void WordClass::initialize()
 	for (int vf : verbForms)
 		Forms[vf]->isVerbForm = true;
 
-	vector <int> nounForms = { nounForm,indefinitePronounForm,personalPronounForm,accForm,nomForm,PROPER_NOUN_FORM_NUM,reflexiveForm,letterForm };
+	vector <int> nounForms = { nounForm,indefinitePronounForm,personalPronounForm,accForm,nomForm,PROPER_NOUN_FORM_NUM,reflexivePronounForm,letterForm };
 	for (int nf : nounForms)
 		Forms[nf]->isNounForm = true;
 
@@ -1729,6 +1730,7 @@ void WordClass::initialize()
 	gquery(L"few")->second.toLowestCost(quantifierForm);
 	gquery(L"spring")->second.toLowestCost(verbForm);
 	gquery(L"whenever")->second.toLowestCost(relativizerForm);
+	gquery(L"such")->second.toLowestCost(FormsClass::gFindForm(L"predeterminer"));
 	gquery(L"dove")->second.setCost(verbForm, 3);
 	gquery(L"nurse")->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
 	gquery(L"nurse")->second.usageCosts[tFI::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;

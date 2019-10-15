@@ -2421,7 +2421,7 @@ bool Source::isNounClass(int where,wstring group)
 	if (word->first.length()==1) return false;
 	if (word->second.query(numeralCardinalForm)>=0 || word->second.query(NUMBER_FORM_NUM)>=0) return false;
 	if (word->second.query(nomForm)>=0 || word->second.query(accForm)>=0 || word->second.query(personalPronounForm)>=0) return false;
-	if (word->second.query(possessiveDeterminerForm)>=0 || word->second.query(possessivePronounForm)>=0 || word->second.query(reflexiveForm)>=0) return false;
+	if (word->second.query(possessiveDeterminerForm)>=0 || word->second.query(possessivePronounForm)>=0 || word->second.query(reflexivePronounForm)>=0) return false;
 	if (word->second.query(nounForm)<0) return false;
 	string groupStr;
 	return inWordNetClass(where,m[where].word->first,m[where].word->second.inflectionFlags,wTM(group,groupStr),lastNounNotFound,lastVerbNotFound);

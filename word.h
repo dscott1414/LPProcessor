@@ -212,7 +212,7 @@ public:
 };
 
 extern vector <FormClass *> Forms;
-extern int commaForm,periodForm,reflexiveForm,nomForm,accForm;
+extern int commaForm,periodForm,reflexivePronounForm,nomForm,accForm;
 extern int nounForm,quoteForm,dashForm,bracketForm,conjunctionForm,demonstrativeDeterminerForm,possessiveDeterminerForm,interrogativeDeterminerForm;
 extern int indefinitePronounForm,reciprocalPronounForm,pronounForm,numeralCardinalForm,numeralOrdinalForm,romanNumeralForm,adverbForm,adjectiveForm;
 extern int verbForm,thinkForm,honorificForm,honorificAbbreviationForm,demonymForm,relativeForm,commonProfessionForm,businessForm,friendForm,internalStateForm;

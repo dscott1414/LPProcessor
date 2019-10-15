@@ -378,7 +378,7 @@ bool Source::matchSourcePositions(Source *parentSource,int parentWhere,Source *c
       imChild->queryWinnerForm(possessivePronounForm)>=0 ||
       imChild->queryWinnerForm(indefinitePronounForm)>=0 || imChild->queryWinnerForm(pronounForm)>=0 ||
 			imChild->queryWinnerForm(demonstrativeDeterminerForm)>=0 ||
-			imChild->queryWinnerForm(reflexiveForm)>=0 ||
+			imChild->queryWinnerForm(reflexivePronounForm)>=0 ||
 			imChild->queryWinnerForm(reciprocalPronounForm)>=0))
 			return false;
   // narrator==0 or audience==1 objects
@@ -571,7 +571,7 @@ int Source::sriMatch(Source *childSource, int parentWhere, int childWhere, int w
       imChild->queryWinnerForm(possessivePronounForm)>=0 ||
       imChild->queryWinnerForm(indefinitePronounForm)>=0 || imChild->queryWinnerForm(pronounForm)>=0 ||
 			imChild->queryWinnerForm(demonstrativeDeterminerForm)>=0 ||
-			imChild->queryWinnerForm(reflexiveForm)>=0 ||
+			imChild->queryWinnerForm(reflexivePronounForm)>=0 ||
 			imChild->queryWinnerForm(reciprocalPronounForm)>=0));
   if (childIsPronoun)
 		return (inQuestionObject) ? -cost : 0;

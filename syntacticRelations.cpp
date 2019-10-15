@@ -2804,7 +2804,7 @@ void Source::syntacticRelations()
 		if (im->pma.queryPattern(L"_Q2")!=-1)
 			lastVerb=-1;
 		if (m[I].hasVerbRelations) lastVerb=I;
-		// At the end of each sentence, link any free preposition clauses to other preposition clauses in the sentence
+		// At the end of each sentence, link any free preposition clauses to other preposition clauses in the sentence / CMREADME015
 		if (isEOS(I) || im->word==Words.sectionWord)
 		{
 			if (lastVerb>=0 && firstFreePrep>=0 && !m[firstFreePrep].notFreePrep)
@@ -2835,6 +2835,7 @@ void Source::syntacticRelations()
 			lastBeginS1=lastRelativePhrase=lastQ2=-1;
 			lastVerb=firstFreePrep=-1;
 		}
+		// CMREADME016
     if (im->word->first==L"“")
 		{
       inPrimaryQuote=true;
@@ -2896,7 +2897,7 @@ void Source::syntacticRelations()
 		if (inSecondaryQuote)
 			im->objectRole|=IN_SECONDARY_QUOTE_ROLE;
 	  for (int nextPEMAPosition=im->beginPEMAPosition; nextPEMAPosition!=-1; nextPEMAPosition=pema[nextPEMAPosition].nextByPosition)
-			setRole(I,pema.begin()+nextPEMAPosition); 
+			setRole(I,pema.begin()+nextPEMAPosition); // (CMREADME018)
     if (inPrimaryQuote || inSecondaryQuote)		
 			adjustToHailRole(I);
 		// And Sir James?

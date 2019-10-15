@@ -50,7 +50,7 @@ void defineTimePatterns()
 		2,L"quantifier{TIMEMODIFIER}",L"adjective{TIMEMODIFIER}",0,0,1, // a little after half-past 5
 		3,L"numeral_cardinal*-1{TIMEMODIFIER}",L"Number*-1{TIMEMODIFIER}",L"adjective{TIMEMODIFIER}",0,0,1,
 		9,L"month*-2{MONTH}",L"daysOfWeek*-2{DAYWEEK}",L"season*-2{SEASON}",L"timeUnit*-2{TIMECAPACITY}",L"dayUnit*-2{TIMECAPACITY}",L"numeral_cardinal*-1{MINUTE}",
-		  L"adjective|half*-2{TIMEMODIFIER}",L"adjective|little{TIMEMODIFIER}",L"noun|quarter{TIMEMODIFIER}",0,1,1, // half past noon // a little after 11
+		  L"adjective|half*-2{TIMEMODIFIER}",L"adverb|little{TIMEMODIFIER}",L"noun|quarter{TIMEMODIFIER}",0,1,1, // half past noon // a little after 11
 		// to, past, before, till, etc
 		3,L"_ADVERB{TIMETYPE}",L"adjective|past{TIMETYPE}",L"preposition{TIMETYPE}",0,1,1,
 		9,L"_TIME[*]*-1",L"_DATE[*]*-1",L"numeral_cardinal*-1{HOUR}",L"Number*-1{HOUR}",L"adverb|now{HOUR}",L"daysOfWeek*-2{DAYWEEK}",L"season*-2{SEASON}",L"holiday*-2{HOLIDAY}",L"dayUnit*-2{TIMECAPACITY}",0,1,1,
@@ -1172,7 +1172,8 @@ void WordClass::usageCostToNoun(Inflections words[], wchar_t *nounSubclass)
 	for (int I = 0; words[I].word[0]; I++)
 	{
 		tIWMM iWord = query(words[I].word);
-		if (iWord == wNULL) continue;
+		if (iWord == end()) 
+			continue;
 		iWord->second.costEquivalentSubClass(nounSubclassForm, nounForm);
 	}
 }
@@ -1221,7 +1222,7 @@ void WordClass::usageCostToNoun(wchar_t *words[],wchar_t *nounSubclass)
 	for (int I=0; words[I]; I++)
 	{
 		tIWMM iWord=query(words[I]);
-		if (iWord==wNULL) continue;
+		if (iWord==end()) continue;
 		iWord->second.costEquivalentSubClass(nounSubclassForm,nounForm);
 	}
 }
@@ -2059,11 +2060,13 @@ void WordClass::createTimeCategories(bool normalize)
 		{L"month",SINGULAR},{L"season",SINGULAR},{L"semester",SINGULAR},{L"quarter",SINGULAR},{L"year",SINGULAR},{L"decade",SINGULAR},{L"century",SINGULAR},{L"millenium",SINGULAR},
 		{L"seconds",PLURAL},{L"minutes",PLURAL},{L"hours",PLURAL},{L"days",PLURAL},{L"weeks",PLURAL},
 		{L"months",PLURAL},{L"seasons",PLURAL},{L"semesters",PLURAL},{L"quarters",PLURAL},{L"years",PLURAL},{L"decades",PLURAL},{L"centuries",PLURAL},{L"millenia",PLURAL},{NULL,0}};
-	Inflections dayUnits[] = {{L"morning",SINGULAR},{L"afternoon",SINGULAR},{L"evening",SINGULAR},{L"night",SINGULAR},
+	Inflections dayUnits[] = {
+		  {L"morning",SINGULAR},{L"afternoon",SINGULAR},{L"evening",SINGULAR},{L"night",SINGULAR},
+			{L"mornings",PLURAL},{L"afternoons",PLURAL},{L"evenings",PLURAL},{L"nights",PLURAL},
 			{L"tonight",SINGULAR},{L"today",SINGULAR},{L"tomorrow",SINGULAR},{L"yesterday",SINGULAR},{L"midnight",SINGULAR},
-	{L"dawn",SINGULAR},{L"dusk",SINGULAR},{L"noon",SINGULAR},
-			{L"mornings",PLURAL},{L"afternoons",PLURAL},{L"evenings",PLURAL},{L"nights",PLURAL},{L"tomorrows",PLURAL},{L"yesterdays",PLURAL},{L"midnights",PLURAL},
-	{L"dawns",PLURAL},{L"dusks",PLURAL},{L"noons",PLURAL},{NULL,0}};
+			{L"tomorrows",PLURAL},{L"yesterdays",PLURAL},{L"midnights",PLURAL},
+			{L"dawn",SINGULAR},{L"dusk",SINGULAR},{L"noon",SINGULAR},{L"sunset",SINGULAR},
+			{L"dawns",PLURAL},{L"dusks",PLURAL},{L"noons",PLURAL},{L"sunsets",PLURAL},{NULL,0}};
 	Inflections simultaneousUnits[] = { {L"moment",SINGULAR},{L"instant",SINGULAR},{L"flash",SINGULAR},{L"shake",SINGULAR},
 	{L"moments",PLURAL},{L"instants",PLURAL},{L"shakes",PLURAL},{NULL,0} };
 	Inflections uncertainDurationUnits[] = { {L"while",SINGULAR},{L"time",SINGULAR},{NULL,0} };
