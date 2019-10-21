@@ -934,8 +934,9 @@ tFI::tFI(unsigned int *forms,unsigned int iCount,int iInflectionFlags,int iFlags
 	localWordIsLowercase = 0;
 }
 
-void tFI::transferFormsAndUsage(unsigned int *forms,unsigned int &iCount,int formNum,wstring &word)
-{ LFS
+void tFI::transferFormsAndUsage(unsigned int *forms, unsigned int &iCount, int formNum, wstring &word)
+{
+	LFS
   memset(usagePatterns,0,MAX_USAGE_PATTERNS);
   memset(usageCosts,0,MAX_USAGE_PATTERNS);
   memset(deltaUsagePatterns,0,MAX_USAGE_PATTERNS);

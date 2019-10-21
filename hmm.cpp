@@ -31,14 +31,17 @@ double alpha = 0.001;
 
 int createJavaVM(JavaVM *&vm, JNIEnv *&env)
 {
-	JavaVMOption options[3];
+	JavaVMOption options[5];
 	memset(&options, 0, sizeof(options));
 	options[0].optionString = "-Djava.class.path=.;F:\\lp\\Stanford\\workspace\\StanfordParser\\target\\StanfordParser-0.0.1-SNAPSHOT.jar";
-	options[1].optionString = "-Xms1m"; // 1MB
-	options[2].optionString = "-Xmx1g"; // 1GB
+	options[1].optionString = "-Xms10m"; // 1MB
+	options[2].optionString = "-Xmx3g"; // 1GB
+	options[3].optionString = "-mx2400m"; // 2.4GB
+	options[4].optionString = "-server"; // Selects server application runtime optimizations. The directory server will take longer to start and “warm up” but will be more aggressively optimized to produce higher throughput.
+
 	JavaVMInitArgs vm_args;
 	vm_args.version = JNI_VERSION_1_8;
-	vm_args.nOptions = 3;
+	vm_args.nOptions = 5;
 	vm_args.options = options;
 	vm_args.ignoreUnrecognized = 1;
 	jint res = JNI_CreateJavaVM(&vm, (void **)&env, &vm_args);
@@ -88,7 +91,9 @@ unordered_map<wstring, vector<wstring>> pennMapToLP = {
 { L":",{ }}, // punctuation mark, colon :
 { L"(",{ }}, // contextual separator, left paren (
 { L")",{ }}, //	contextual separator, right paren )
-{ L"''",{ }} //	not listed in standard PennBank tag list but emitted by Stanford
+{ L"''",{ }}, //	not listed in standard PennBank tag list but emitted by Stanford
+{ L"``",{ }}, //	not listed in standard PennBank tag list but emitted by Stanford
+{ L"$",{ }} //	not listed in standard PennBank tag list but emitted by Stanford
 };
 
 bool foundParsedSentence(Source &source, wstring sentence, wstring &parse)
@@ -104,6 +109,9 @@ bool foundParsedSentence(Source &source, wstring sentence, wstring &parse)
 	if (myquery(&source.mysql, qt, result) && (sqlrow = mysql_fetch_row(result)))
 	{
 		mTW(sqlrow[0], parse);
+		if (parse.empty())
+			lplog(LOG_FATAL_ERROR, L"Parse is empty to %s", sentence.c_str());
+		parse += L" ";
 		std::replace(parse.begin(), parse.end(), L'"', L'\'');
 	}
 	mysql_free_result(result);
@@ -156,6 +164,7 @@ int parseSentence(Source &source,JNIEnv *env, wstring sentence, wstring &parse, 
 		}
 		initialized = true;
 	}
+	lplog(LOG_ERROR, L"Did not find sentence! %s", sentence.c_str());
 	// Construct the sentence argument - Java takes UTF8
 	string out;
 	jstring parseSentenceArgumentString = env->NewStringUTF(wTM(sentence, out));

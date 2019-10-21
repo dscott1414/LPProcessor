@@ -1786,7 +1786,7 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 	if (nAgreeTag<end-1 && calculateVerbAfterVerbUsage(end-1,end)) // if nAgreeTag<end-1, it is more likely a compound noun
 	{
 		if (debugTrace.traceDeterminer)
-			lplog(L"%d:Noun (%d,%d) is compound, has a verb at end and a verb after the end [SOURCE=%06d].",begin,begin,end,traceSource=gTraceSource);
+			lplog(L"%d:Noun (%d,%d) is compound, has a verb at end and a verb after the end (cost=%d). [SOURCE=%06d].",begin,begin,end, tFI::COST_OF_INCORRECT_VERBAL_NOUN, traceSource=gTraceSource);
 		PNC+=tFI::COST_OF_INCORRECT_VERBAL_NOUN;
 	}
 	if (begin>0 && m[begin-1].word->first==L"to" && m[begin].queryForm(verbForm)>=0 && 
@@ -1794,7 +1794,7 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 	{
 		wstring formsString;
 		if (debugTrace.traceDeterminer)
-			lplog(L"%d:%s: Noun (%d,%d) has verb form after 'to' - verb cost=%d",begin,m[begin].word->first.c_str(),begin,end,
+			lplog(L"%d:%s: Noun (%d,%d) has verb form after 'to' - verb cost=%d+10",begin,m[begin].word->first.c_str(),begin,end,
 				m[begin].word->second.usageCosts[m[begin].queryForm(verbForm)]);
 		PNC+=10;
 	}
@@ -1860,7 +1860,7 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 		return PNC;
 	}
 	// mine is both a possessive pronoun AND a noun in completely different word senses, so they have differing determiner usage.
-	if (m[whereNAgree].queryForm(nounForm) >= 0 && (m[whereNAgree].queryForm(pronounForm) >= 0 || m[whereNAgree].queryForm(indefinitePronounForm) >= 0 || m[whereNAgree].queryForm(possessivePronounForm) >= 0))
+	if (m[whereNAgree].word->first==L"mine")
 	{
 		if (debugTrace.traceDeterminer)
 			lplog(L"%d:tag for noun/pronoun %s has potentially conflicting determiner usage (PEMA=%d). [SOURCE=%06d].", whereNAgree, nounWord->first.c_str(), tagSet[nAgreeTag].PEMAOffset, traceSource = gTraceSource++);
@@ -2260,7 +2260,8 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 		if (numObjects>0)
 		{
 			wstring w=m[tagSet[whereObjectTag].sourcePosition].word->first;
-			if (tagSet[whereObjectTag].len==1 && (w==L"i" || w==L"he" || w==L"she" || w==L"we" || w==L"they") && !patterns[pm->getPattern()]->questionFlag)
+			if (tagSet[whereObjectTag].len==1 && (w==L"i" || w==L"he" || w==L"she" || w==L"we" || w==L"they") && !patterns[pm->getPattern()]->questionFlag && 
+				  (w != L"i" || (verbWord->first != L"is" && verbWord->first != L"do"))) // It is I!  So do I!
 			{
 				verbObjectCost+=6;
 				if (debugTrace.traceVerbObjects)

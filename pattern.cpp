@@ -260,7 +260,7 @@ bool patternElement::matchOne(Source &source,unsigned int sourcePosition,unsigne
   for (unsigned int pattern=0; pattern<patternIndexes.size(); pattern++)
   {
     unsigned int p=patternIndexes[pattern];
-    if (im->patterns.isSet(p))
+		if (im->patterns.isSet(p))
     {
       patternMatchArray::tPatternMatch *pm=im->pma.content;
       int startPositions=whatMatched.size(),msize=startPositions;
@@ -724,12 +724,12 @@ unsigned int findPattern(wstring name,wstring diff)
 }
 
 // _VERB|wrapping[*]*2{VERB:pM:V_OBJECT} is a verb with future reference and a cost of 2.
-void cPattern::processForm(wstring &form,wstring &specificWord,int &cost,set <unsigned int> &tags,bool &explicitFutureReference,bool &blockDescendants)
+void cPattern::processForm(wstring &form,wstring &specificWord,int &cost,set <unsigned int> &tags,bool &explicitFutureReference,bool &blockDescendants,bool &allowRecursiveMatch)
 { LFS
   const wchar_t *ch;
 	for (ch=form.c_str(); *ch && *ch!=L'|' && *ch!=L'[' && *ch!=L'*' && *ch!=L'{'; ch++);
   cost=0;
-  blockDescendants=explicitFutureReference=false;
+	blockDescendants= allowRecursiveMatch = explicitFutureReference=false;
   unsigned int eraseFromThisPoint=(unsigned int)(ch-form.c_str());
 	if (*ch==L'|')
   {
@@ -743,6 +743,7 @@ void cPattern::processForm(wstring &form,wstring &specificWord,int &cost,set <un
   if (*ch==L'[')
   {
     explicitFutureReference=true;
+		allowRecursiveMatch = (ch[1] == L'R');
     ch+=3;
   }
   if (*ch==L'*')
@@ -1067,7 +1068,7 @@ bool cPattern::create(wstring patternName, wstring differentiator, int numForms,
   cPattern *p=new cPattern();
   va_list patternMarker;
 	wstring specificPatternWord; //specificPatternWord is not valid for pattern names
-  processForm(patternName,specificPatternWord,p->cost,p->tags,explicitFutureReference,p->blockDescendants);
+  processForm(patternName,specificPatternWord,p->cost,p->tags,explicitFutureReference,p->blockDescendants,p->allowRecursiveMatch);
   p->fillIfAloneFlag=p->eliminateTag(L"_FINAL_IF_ALONE");
   p->fillFlag=p->eliminateTag(L"_FINAL");
   p->onlyAloneExceptInSubPatternsFlag=p->eliminateTag(L"_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN");
@@ -1110,15 +1111,15 @@ bool cPattern::create(wstring patternName, wstring differentiator, int numForms,
     {
       form=va_arg( patternMarker, wchar_t *);
       set <unsigned int> elementTags;
-      bool blockDescendants;
+      bool blockDescendants, allowRecursiveMatch;
       int elementCost,f=-1;
 			wstring specificWord;
-      processForm(form,specificWord,elementCost,elementTags,explicitFutureReference,blockDescendants);
+      processForm(form,specificWord,elementCost,elementTags,explicitFutureReference,blockDescendants,allowRecursiveMatch);
       for (set <unsigned int>::iterator et=elementTags.begin(),etEnd=elementTags.end(); et!=etEnd; et++)
         p->allElementTags.set(*et);
       bool isPattern;
       if (isPattern=form[0]==L'_') //specificWord is not valid for _PATTERNS
-        patternReferences.push_back(new patternReference(form,p->num,-1,p->elements.size(),elementCost,elementTags,blockDescendants,!explicitFutureReference));
+        patternReferences.push_back(new patternReference(form,p->num,-1,p->elements.size(),elementCost,elementTags,blockDescendants, allowRecursiveMatch, !explicitFutureReference));
       else
       {
         if ((f=FormsClass::findForm(form))<0)
@@ -1246,16 +1247,16 @@ cPattern *cPattern::create(Source *source,wstring patternName,int num,int whereB
 			else
 				form=forms.substr(pos+1);
 			set <unsigned int> elementTags;
-			bool blockDescendants;
+			bool blockDescendants,allowRecursiveMatch;
 			int elementCost,f=-1;
 			wstring specificWord;
-			processForm(form,specificWord,elementCost,elementTags,explicitFutureReference,blockDescendants);
+			processForm(form,specificWord,elementCost,elementTags,explicitFutureReference,blockDescendants,allowRecursiveMatch);
 			for (set <unsigned int>::iterator et=elementTags.begin(),etEnd=elementTags.end(); et!=etEnd; et++)
 				p->allElementTags.set(*et);
 			bool isPattern;
 			if (isPattern=form[0]==L'_')
 				//specificWord is not valid for _PATTERNS 
-				patternReferences.push_back(new patternReference(form,p->num,-1,p->elements.size(),elementCost,elementTags,blockDescendants,!explicitFutureReference));
+				patternReferences.push_back(new patternReference(form,p->num,-1,p->elements.size(),elementCost,elementTags,blockDescendants,allowRecursiveMatch,!explicitFutureReference));
 			else
 			{
 				if ((f=FormsClass::findForm(form))<0)
@@ -1411,14 +1412,14 @@ void cPattern::lplog(void)
 }
 
 bool cPattern::add(int elementNum,wstring patternName,bool logFutureReferences,int elementCost,set <unsigned int> elementTags,
-                   bool elementBlockDescendants)
+                   bool elementBlockDescendants,bool elementAllowRecursiveMatch)
 { LFS
   bool found=false,error=false;
   unsigned int p=0;
   //int mandatoryChild=-1;
   while (findPattern(patternName,p)<patterns.size())
   {
-    if (p!=num)
+    if (p!=num || elementAllowRecursiveMatch)
     {
       if (patternReference::lastPatternReference<(int)p)
         patternReference::lastPatternReference=p;
@@ -1457,7 +1458,12 @@ bool cPattern::add(int elementNum,wstring patternName,bool logFutureReferences,i
       }
       found=true;
     }
-    p++;
+#ifdef LOG_PATTERN_MATCHING
+		else
+			::lplog(L"Pattern %s[%s] element %s blocked self match against pattern %s[%s].",
+				name.c_str(), differentiator.c_str(), patternName.c_str(), patterns[p]->name.c_str(), patterns[p]->differentiator.c_str());
+#endif
+		p++;
   }
   if (!found)
     ::lplog(L"Resolve failure: pattern %s not found while defining pattern %s[%s].",patternName.c_str(),name.c_str(),differentiator.c_str());
@@ -1522,12 +1528,12 @@ continue matching patterns after LAST pattern
 
 void patternReference::resolve(bool &patternError)
 { LFS
-  patternError|=patterns[patternNum]->add(elementNum,form,logFutureReferences,cost,tags,blockDescendants);
+  patternError|=patterns[patternNum]->add(elementNum,form,logFutureReferences,cost,tags,blockDescendants,allowRecursiveMatch);
 }
 
 void patternReference::resolve(vector <cPattern *> &transformPatterns,bool &patternError)
 { LFS
-  patternError|=transformPatterns[patternNum]->add(elementNum,form,logFutureReferences,cost,tags,blockDescendants);
+  patternError|=transformPatterns[patternNum]->add(elementNum,form,logFutureReferences,cost,tags,blockDescendants, allowRecursiveMatch);
 }
 
 bool cPattern::hasDescendantTag(unsigned int tag)

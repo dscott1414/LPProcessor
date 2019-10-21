@@ -293,7 +293,7 @@ public:
     cPattern(string patternName,patternElement *element);
     void replace(int elementNum,int patternNum);
     void replace(int elementNum,string patternName);
-    bool add(int elementNum,wstring patternName,bool logFutureReferences,int cost,set <unsigned int> tags,bool blockDescendants);
+    bool add(int elementNum,wstring patternName,bool logFutureReferences,int cost,set <unsigned int> tags,bool blockDescendants,bool allowRecursiveMatch);
     void lplog(void);
     void readABNF(FILE *fh);
     void writeABNF(FILE *fh,unsigned int lastTag);
@@ -357,6 +357,8 @@ public:
     bool onlyAloneExceptInSubPatternsFlag; // pattern only wins if it is a subphrase or if previous word has isSeparator=true
     // used if a pattern should only be at the start of a sentence by itself but is also used as a subphrase
     bool blockDescendants;
+		// pattern is allowed to submatch itself
+		bool allowRecursiveMatch;
     bool isFutureReference;
     bool containsFutureReference;
     bool indirectFutureReference;
@@ -440,7 +442,7 @@ public:
 private:
     vector <patternElement *> elements;
 //    static vector <matchElement> whatMatched;
-    void static processForm(wstring &form,wstring &specificWord,int &cost,set <unsigned int> &tags,bool &explicitFutureReference,bool &blockDescendants);
+    void static processForm(wstring &form,wstring &specificWord,int &cost,set <unsigned int> &tags,bool &explicitFutureReference,bool &blockDescendants, bool &allowRecursiveMatch);
     void firstForm(void);
     void lastForm(void);
     void firstNonMandatoryForm(void);
@@ -451,7 +453,7 @@ class patternReference
 {
 public:
     static int firstPatternReference,lastPatternReference;
-    patternReference(wstring inForm,int inPatternNum,int inDiffNum,int inElementNum,int inCost,set <unsigned int> inTags,bool inBlockDescendants,bool inLogFutureReferences)
+    patternReference(wstring inForm,int inPatternNum,int inDiffNum,int inElementNum,int inCost,set <unsigned int> inTags, bool inBlockDescendants, bool inAllowRecursiveMatch, bool inLogFutureReferences)
     {
         form=inForm;
         patternNum=inPatternNum;
@@ -460,8 +462,9 @@ public:
         cost=inCost;
         tags=inTags;
         logFutureReferences=inLogFutureReferences;
-        blockDescendants=inBlockDescendants;
-    };
+				blockDescendants = inBlockDescendants;
+				allowRecursiveMatch = inAllowRecursiveMatch;
+		};
     void resolve(bool &patternError);
     void resolve(vector <cPattern *> &patterns,bool &patternError);
     wstring form;
@@ -472,6 +475,7 @@ public:
     set <unsigned int> tags;
     bool blockDescendants;
     bool logFutureReferences;
+		bool allowRecursiveMatch;
 private:
 };
 extern vector <patternReference *> patternReferences;

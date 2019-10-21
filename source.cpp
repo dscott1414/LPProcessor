@@ -836,7 +836,8 @@ bool Source::matchPattern(cPattern *p,int begin,int end,bool fill)
 		// do not put pos==begin here because we don't know whether we have split the sentence correctly!
 		if (p->onlyBeginMatch && pos && (!m[pos-1].word->second.isSeparator() || m[pos-1].queryForm(relativizerForm)>=0)) continue; //  || m[pos-1].queryForm(relativeForm)
 		if (p->strictNoMiddleMatch && pos && iswalpha(m[pos-1].word->first[0])) continue;
-		if (p->notAfterPronoun && pos && (m[pos-1].queryForm(nomForm)>=0 || m[pos-1].queryForm(accForm)>=0 || m[pos-1].queryForm(personalPronounForm)>=0)) continue;
+		// cannot come after a pronoun which would definitely be a subject (I, we, etc)
+		if (p->notAfterPronoun && pos && (m[pos-1].queryForm(nomForm)>=0 || (m[pos-1].queryForm(personalPronounForm)>=0 && m[pos-1].word->first!=L"you" && m[pos - 1].word->first != L"it"))) continue;
 		if (p->afterQuote && (pos<2 || 
 				((m[pos-1].word->second.query(quoteForm)<0 || (m[pos-1].word->second.inflectionFlags&CLOSE_INFLECTION)!=CLOSE_INFLECTION)) && 
 				(m[pos-2].word->second.query(quoteForm)<0 || m[pos-1].word->first==L","))) continue;

@@ -855,6 +855,9 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 		if (numProcesses == maxProcesses)
 		{
 			nextProcessIndex = WaitForMultipleObjectsEx(numProcesses, handles, false, 1000 * 60 * 5, false);
+			if (nextProcessIndex == WAIT_FAILED)
+				lplog(LOG_FATAL_ERROR, L"WaitForMultipleObjectsEx failed with error %s", getLastErrorMessage(tmpstr));
+
 			numSourcesLeft = 0;
 			int numSourcesProcessedNow = 0;
 			__int64 wordsProcessedNow = 0, sentencesProcessedNow = 0;
@@ -871,8 +874,6 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 
 			if (nextProcessIndex == WAIT_IO_COMPLETION || nextProcessIndex == WAIT_TIMEOUT)
 				continue;
-			if (nextProcessIndex == WAIT_FAILED)
-				lplog(LOG_FATAL_ERROR, L"WaitForMultipleObjectsEx failed with error %s", getLastErrorMessage(tmpstr));
 			if (nextProcessIndex < WAIT_OBJECT_0 + numProcesses) // nextProcessIndex >= WAIT_OBJECT_0 && 
 			{
 				nextProcessIndex -= WAIT_OBJECT_0;
@@ -911,10 +912,11 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			if (numProcesses)
 			{
 				printf("\nNo more processes to be created. %d processes left to wait for.", numProcesses);
-				while (true)
+				while (numProcesses)
 				{
 					nextProcessIndex = WaitForMultipleObjectsEx(numProcesses, handles, false, 1000 * 60 * 3, false);
-					numSourcesLeft = 0;
+					if (nextProcessIndex == WAIT_FAILED)
+						lplog(LOG_FATAL_ERROR, L"\nWaitForMultipleObjectsEx failed with error %s", getLastErrorMessage(tmpstr));
 					int numSourcesProcessedNow = 0;
 					__int64 wordsProcessedNow = 0, sentencesProcessedNow = 0;
 					getNumSourcesProcessed(source, numSourcesProcessedNow, wordsProcessedNow, sentencesProcessedNow);
@@ -929,8 +931,6 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 					SetConsoleTitle(consoleTitle);
 					if (nextProcessIndex == WAIT_IO_COMPLETION || nextProcessIndex == WAIT_TIMEOUT)
 						continue;
-					if (nextProcessIndex == WAIT_FAILED)
-						lplog(LOG_FATAL_ERROR, L"\nWaitForMultipleObjectsEx failed with error %s", getLastErrorMessage(tmpstr));
 					if (nextProcessIndex < WAIT_OBJECT_0 + numProcesses) // nextProcessIndex >= WAIT_OBJECT_0 && 
 					{
 						nextProcessIndex -= WAIT_OBJECT_0;
@@ -943,11 +943,8 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 						printf("\nClosing process %d [abandoned]", nextProcessIndex);
 						CloseHandle(handles[nextProcessIndex]);
 					}
-					if (numProcesses == maxProcesses)
-					{
-						memmove(handles + nextProcessIndex, handles + nextProcessIndex + 1, (maxProcesses - nextProcessIndex - 1) * sizeof(handles[0]));
-						numProcesses--;
-					}
+					memmove(handles + nextProcessIndex, handles + nextProcessIndex + 1, (maxProcesses - nextProcessIndex - 1) * sizeof(handles[0]));
+					numProcesses--;
 				}
 			}
 			break;

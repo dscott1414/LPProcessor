@@ -1820,6 +1820,7 @@ unordered_map<wstring, vector <wstring> > maxentAssociationMap =
 	{ L"honorific noun",{ L"honorific",L"honorific_abbreviation" }},
 	{ L"modal_auxiliary",{ L"future_modal_auxiliary",L"negation_modal_auxiliary",L"negation_future_modal_auxiliary"} },
 	{ L"determiner",{ L"demonstrative_determiner",L"no",L"the",L"quantifier",L"predeterminer"} },
+	{ L"predeterminer",{ L"quantifier" } },
 	{ L"interjection",{ L"no",L"politeness_discourse_marker"} },
 	{ L"relativizer", { L"what" } },
 	{ L"particle", { L"adverb",L"preposition",L"quantifier" } }, // LP usually treats particles as adverbs, not sure whether this is strictly correct, but it makes sense to me.
@@ -2010,17 +2011,9 @@ public:
 	map <wstring, int> agreeFormDistribution; // total count for each form match agreed between ST and LP
 };
 map <wstring, FormDistribution> formDistribution;
-// checks if the part of speech indicated in parse from the Stanford POS tagger matches the winner forms at wordSourceIndex.
-// returns yes=0, no=1
-int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numTimesWordOccurred, wstring originalParse, wstring sentence, wstring &parse, int &numPOSNotFound, 
-	  unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, 
-	bool inRelativeClause, unordered_map<wstring, int> &errorMap,int startOfSentence)
+
+wstring stTokenizeWord(wstring tokenizedWord,wstring &originalWord, unsigned long long flags,wstring parse,int &wspace)
 {
-	if (!iswalpha(source.m[wordSourceIndex].word->first[0]))
-		return 0;
-	wstring originalWordSave;
-	source.getOriginalWord(wordSourceIndex, originalWordSave, false, false);
-	wstring originalWord = originalWordSave;
 	// pcfg output:
 	// parse=(ROOT (PRN (: ;) (S (NP (NP (NP (QP (CC and) (CD Bunny))) (, ,) (CC and) (NP (NNP Bobtail)) (, ,)) (CC and) (NP (NNP Billy))) (VP (VBD were) (ADVP (RB always)) (VP (VBG doing) (NP (JJ *) (NN something)))))))
 	// ben's
@@ -2029,39 +2022,446 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 	// don't
 	if (towlower(originalWord[originalWord.length() - 3]) == L'n' && originalWord[originalWord.length() - 2] == L'\'' && towlower(originalWord[originalWord.length() - 1]) == L't')
 		originalWord.erase(originalWord.length() - 3);
-	// cannot
-	if (source.m[wordSourceIndex].word->first == L"cannot")
+	// cannot, dunno
+	if (tokenizedWord == L"cannot" || tokenizedWord == L"dunno")
 		originalWord.erase(originalWord.length() - 3);
-	// gimme
-	if (source.m[wordSourceIndex].word->first == L"gimme")
+	// gimme, lemme
+	if (tokenizedWord == L"gimme" || tokenizedWord == L"lemme")
 		originalWord.erase(originalWord.length() - 2);
-	//wer'n, better'n etc but not o'clock and ma'am, which are found by ST
-	size_t findQuote = (originalWord.find(L'\''));
-	if (findQuote != wstring::npos && parse.find(originalWord)==wstring::npos)
+	// y'are
+	if (tokenizedWord == L"y'are")
+		originalWord.erase(originalWord.length() - 3);
+	else if (tokenizedWord == L"y'r")
+		originalWord.erase(originalWord.length() - 1);
+	else if (tokenizedWord == L"ma’am")
+		originalWord[2] = '\'';
+	// o'brien, o'clock, b'ar o'sheen
+	else if (tokenizedWord[0] == L'o' && tokenizedWord[1] == L'’')
+		originalWord[1] = L'\'';
+	else
 	{
-		originalWord = originalWord.substr(0, findQuote);
+		//wer'n, better'n etc but not o'clock and ma'am, which are found by ST
+		size_t findQuote = (originalWord.find(L'\''));
+		if (findQuote != wstring::npos && parse.find(originalWord) == wstring::npos)
+		{
+			originalWord = originalWord.substr(0, findQuote);
+		}
 	}
 	wstring lookFor;
 	// all words in LP which have spaces in them are interpreted by ST separately
-	int wspace = originalWord.find(L' ');
+	wspace = originalWord.find(L' ');
 	if (wspace != wstring::npos)
 	{
-		if (source.m[wordSourceIndex].word->first == L"no one" || source.m[wordSourceIndex].word->first == L"every one")
+		if (tokenizedWord == L"no one" || tokenizedWord == L"every one")
 			lookFor = L" one)";
 		else
-			if (source.m[wordSourceIndex].word->first == L"as if")
+			if (tokenizedWord == L"as if")
 				lookFor = L" if)";
 			else
-				if (source.m[wordSourceIndex].word->first == L"for ever")
+				if (tokenizedWord == L"for ever")
 					lookFor = L" ever)";
 				else
-					if (source.m[wordSourceIndex].word->first == L"next to")
+					if (tokenizedWord == L"next to")
 						lookFor = L" to)";
 					else
-					lookFor = L" " + originalWord.substr(0, wspace) + L")";
+						lookFor = L" " + originalWord.substr(0, wspace) + L")";
+		if (lookFor.length() > 0 && (flags&WordMatch::flagAllCaps))
+			for (int len = 0; lookFor[len]; len++) lookFor[len] = towupper(lookFor[len]);
 	}
 	else
 		lookFor = L" " + originalWord + L")";
+	return lookFor;
+}
+
+int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceIndex, unordered_map<wstring, int> &errorMap, wstring partofspeech, int startOfSentence)
+{
+	wstring word = source.m[wordSourceIndex].word->first;
+	//////////////////////////////
+	// corrections based on implementation/interpretation differences and statistical findings
+	// 1. LP has a NOUN[2] which allows a noun in what should be an adjective position
+	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && wordSourceIndex < source.m.size() - 1 && source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") >= 0)
+	{
+		errorMap[L"diff: noun in adjective position"]++;
+		return 0;
+	}
+	// 2. where 'that' is a demonstrative_determiner, and matches a REL1 pattern, then we count that as correct parse for LP as this is a relative phrase, and the usage of 'that' is correctly understood within that pattern.
+	if (primarySTLPMatch == L"preposition" && wordSourceIndex < source.m.size() - 1 && source.m[wordSourceIndex].queryWinnerForm(L"demonstrative_determiner"))
+	{
+		int maxEnd, pemaPosition = source.queryPattern(wordSourceIndex, L"_REL1", maxEnd);
+		if (pemaPosition >= 0 && (//(source.pema[pemaPosition].begin == 0 && patterns[source.pema[pemaPosition].getPattern()]->differentiator == L"2") || // REL1[2] includes S1 
+			(source.pema[pemaPosition].begin <= 0 && source.pema[pemaPosition].begin >= -5) || // must be the start of a relative clause
+			source.scanForPatternElementTag(wordSourceIndex, SENTENCE_IN_REL_TAG) != -1))
+		{
+			errorMap[L"LP correct:" + word + L" start of relative phrase"]++;
+			return 0;
+		}
+	}
+	// 3. ST is always wrong when given a phrase like [(ROOT (S ('' '') (S (S (VP (VBD said))) (VP (VBZ Bobtail)))] - LP correctly tags 'Bobtail' as a proper noun
+	vector <wstring> speakingVerbs = { L"said",L"cried",L"called",L"asked",L"answered",L"barked",L"sang",L"whistled",L"shouted",L"whispered",L"laughed",L"begged",L"exclaimed",L"replied",L"reminded",L"screamed",L"responded",L"repeated",L"yelled",L"grumbled",L"agreed" };
+	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"Proper Noun") >= 0 && source.m[wordSourceIndex - 2].queryForm(quoteForm) >= 0 &&
+		wordSourceIndex > 1 && find(speakingVerbs.begin(), speakingVerbs.end(), source.m[wordSourceIndex - 1].word->first) != speakingVerbs.end())
+	{
+		errorMap[L"LP correct: speaker is proper noun (not verb)"]++;
+		return 0;
+	}
+	// 4. ST is always wrong when given a phrase like [(ROOT (S ('' '') (S (S (VP (VBD said))) (VP (VBZ Bobtail)))] - LP correctly tags 'said' as a verb
+	if ((primarySTLPMatch == L"adjective" || primarySTLPMatch == L"Proper Noun" || primarySTLPMatch == L"noun") && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && source.m[wordSourceIndex - 1].queryForm(quoteForm) >= 0 && source.m[wordSourceIndex + 1].queryWinnerForm(L"Proper Noun") >= 0 &&
+		wordSourceIndex > 1 && find(speakingVerbs.begin(), speakingVerbs.end(), word) != speakingVerbs.end())
+	{
+		errorMap[L"LP correct: speaking verb is not adjective, noun or Proper Noun"]++;
+		return 0;
+	}
+	// 5. if ST thinks it is a verb, and LP thinks it is a noun, and it is preceded by a determiner separated only by up to 2 adjectives (that are not 'no'), unless it is a VBG and then it has to be immediately preceeded by a determiner
+	//    examined 100 examples from gutenburg and 1 violated this rule.
+	if ((primarySTLPMatch == L"verb") && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && wordSourceIndex > 2)
+	{
+		if (isStanfordDeterminerType(source, wordSourceIndex, wordSourceIndex - 1) || (partofspeech != L"VBG" &&
+			((isStanfordDeterminerType(source, wordSourceIndex, wordSourceIndex - 2) && source.m[wordSourceIndex - 2].word->first != L"no" && (source.m[wordSourceIndex - 1].queryWinnerForm(adjectiveForm) >= 0)) ||
+			(isStanfordDeterminerType(source, wordSourceIndex, wordSourceIndex - 3) && source.m[wordSourceIndex - 3].word->first != L"no" && source.m[wordSourceIndex - 2].queryWinnerForm(adjectiveForm) >= 0 && source.m[wordSourceIndex - 1].queryWinnerForm(adjectiveForm) >= 0))))
+		{
+			// further more, the 
+			errorMap[L"LP correct: ST says verb when it is a noun (preceded by determiner)"]++;
+			return 0;
+		}
+		// 6. if ST thinks it is a verb, and LP thinks it is a noun, and LP does not know of it having a verb form
+		//    examined 100 examples from gutenburg and 0 violated this rule.
+		else if (!source.m[wordSourceIndex].word->second.hasVerbForm())
+		{
+			errorMap[L"LP correct: ST says verb when it is a noun (no verb form possible)"]++;
+			return 0;
+		}
+	}
+	// 7. if ST thinks it is a noun, and LP does not know of it having a noun form
+	//    examined 100 examples from gutenburg and X violated this rule.
+	if (primarySTLPMatch == L"noun" && !source.m[wordSourceIndex].word->second.hasNounForm())
+	{
+		// However, if it is a present participle verb
+		//    then this is only acceptable if LP has matched it to __N1.
+		if (source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE)
+		{
+			if (source.m[wordSourceIndex].pma.queryPattern(L"__N1") != -1)
+			{
+				errorMap[L"diff: ST says noun when it is a present participle [acceptable]"]++;
+				return 0; // ST and LP agree
+			}
+		}
+		else
+		{
+			errorMap[L"LP correct: ST says noun when no noun form possible"]++;
+			return 0; // ST and LP disagree and ST is wrong
+		}
+	}
+	// 8. if ST thinks it is an adjective, and LP maps it to an __ADJECTIVE pattern
+	//    examined 100 examples from gutenburg and 0 violated this rule.
+	if ((primarySTLPMatch == L"adjective") && source.m[wordSourceIndex].queryForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST && source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1)
+	{
+		errorMap[L"diff: ST says adjective, LP says verb PAST matched to an _ADJECTIVE pattern"]++;
+		return 0;
+	}
+	// 9. In LP rules, here is not an adverb.  It designates a place and therefore is a noun.
+	//    examined 10 examples from gutenburg and 0 violated this rule.
+	if ((primarySTLPMatch == L"adverb") && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && word == L"here")
+	{
+		errorMap[L"diff: ST says here is an adverb, LP says prefers to say a noun"]++;
+		return 0;
+	}
+	// 10. out of 849 examples, 815 were marked LP correct,  10 for ST and 24 were neither.
+	// this is because LP is able to use statistics regarding Proper Nouns which are not used in ST, and also all caps words are particularly marked as being Proper Nouns when they are hardly ever proper nouns.
+	if ((primarySTLPMatch == L"Proper Noun") || source.m[wordSourceIndex].queryWinnerForm(L"Proper Noun") >= 0)
+	{
+		errorMap[L"LP correct: ST says Proper Noun when it is not or does not say it is a proper noun when it is"]++;
+		return 0;
+	}
+	// 11. numeral_cardinal counts as an adjective for LP if it matches the pattern __ADJECTIVE or _TIME (with the first match being an adjective of how much time)
+	if ((primarySTLPMatch == L"adjective") && source.m[wordSourceIndex].queryWinnerForm(L"numeral_cardinal") >= 0 &&
+		(source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"_TIME") != -1))
+	{
+		errorMap[L"diff: ST says here is an adjective, LP says numeral_cardinal if matching _ADJECTIVE or _TIME"]++;
+		return 0;
+	}
+	// 12. "one" is post processed and understood as a pronoun by LP, even if it is only matched as a numeral_cardinal. (10 examples examined)
+	//   this is often encountered if the author is fond of speaking in the general person ('one')
+	if (word == L"one" && (primarySTLPMatch == L"personal_pronoun_accusative") && source.m[wordSourceIndex].queryWinnerForm(L"numeral_cardinal") >= 0 &&
+		(source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"__NOUN") != -1))
+	{
+		errorMap[L"LP correct: ST says noun when no noun form possible"]++;
+		return 0;
+	}
+	// 13. numeral_ordinal counts as an noun for LP if it matches the pattern __NOUN
+	if ((primarySTLPMatch == L"noun") && source.m[wordSourceIndex].queryWinnerForm(L"numeral_ordinal") >= 0 && source.m[wordSourceIndex].pma.queryPattern(L"__N1") != -1)
+	{
+		errorMap[L"diff: ST says noun, LP says numeral_ordinal matched to _N1 (noun subpattern)"]++;
+		return 0;
+	}
+	// 14. LP does not have 'any' as a determiner but rather as a pronoun/adjective which is used internally as an indicator as to how to match the noun to other nouns.
+	// out of 100 examples, 100% were interpreted correctly - added 'any' as a determiner when calculating noun/determiner agreement cost
+	if (word == L"any" && primarySTLPMatch == L"determiner" &&
+		(source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1 && source.m[wordSourceIndex].pma.queryPattern(L"__NOUN") != -1))
+	{
+		errorMap[L"diff: ST says determiner, LP says adjective which is used as a determiner in post-processing"]++;
+		return 0;
+	}
+	// 15. in the event of __AS_AS pattern, which is as (adverb) followed by an adjective or adverb followed by as (preposition)
+	// either adverb or preposition may be acceptable as both are incorporated into the pattern.  __AS_AS pattern was derived from Longman
+	if (word == L"as" && (primarySTLPMatch == L"preposition" || primarySTLPMatch == L"adverb"))
+	{
+		if (source.m[wordSourceIndex].pma.queryPattern(L"__AS_AS") != -1)
+		{
+			errorMap[L"diff: word 'as': ST says " + primarySTLPMatch + L", LP says __AS_AS (Longman adverbial clause) - first as"]++;
+			return 0;
+		}
+		if (wordSourceIndex >= 2 && source.m[wordSourceIndex - 2].word->first == L"as" && source.m[wordSourceIndex - 2].pma.queryPattern(L"__AS_AS") != -1)
+		{
+			errorMap[L"diff: word 'as': ST says " + primarySTLPMatch + L", LP says __AS_AS (Longman adverbial clause) - second as"]++;
+			return 0;
+		}
+	}
+	// 16. So as matched in the beginning of a phrase is a linking adverbial (Longman) but is usually marked as a preposition by Stanford.
+	if (word == L"so" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 &&
+		(primarySTLPMatch == L"preposition" || primarySTLPMatch == L"conjunction") && wordSourceIndex == startOfSentence)
+	{
+		errorMap[L"LP correct: word 'so': ST says " + primarySTLPMatch + L" LP says adverb (Longman linking adverbial)"]++;
+		return 0;
+	}
+	bool tempstar = false;
+	// 17. this is determined to be an adverb by LP, but this is wrong, it is actually a determiner for the preceding word
+	//     over 100 items have been examined and 0 errors. - note this is also AFTER the POS processing has narrowed it down to disagreements with Stanford POS
+	// case 1 is all after a plural noun.
+	// case 2 is all before a determiner or 'right'. (39 out of 178 cases)
+	//   
+	int wallp = -1, qallp = (wordSourceIndex + 1 < source.m.size()) ? source.m[wordSourceIndex + 1].pma.queryPattern(L"__NOUN") : -1;
+	if (qallp >= 0)
+		wallp = wordSourceIndex + 1 + source.m[wordSourceIndex + 1].pma[qallp].len - 1;
+	if (word == L"all" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && (primarySTLPMatch == L"determiner" || primarySTLPMatch == L"predeterminer") &&
+		(source.m[wordSourceIndex - 1].queryWinnerForm(L"demonstrative_determiner") >= 0 || // case 1
+		(source.m[wordSourceIndex + 1].queryForm(L"demonstrative_determiner") >= 0) || //  case 2- all these / all those / all this / all that
+			(source.m[wordSourceIndex + 1].queryForm(L"possessive_determiner") >= 0) || // case 2- all my / all his / all her
+			(source.m[wordSourceIndex + 1].queryForm(L"determiner") >= 0) || // case 2- all the ...
+			(source.m[wordSourceIndex + 1].word->first == L"right") || // case 2- all right
+			source.m[wordSourceIndex - 1].queryWinnerForm(L"personal_pronoun") >= 0 || // case 1
+			source.m[wordSourceIndex - 1].word->first == L"them" || // case 1
+			source.m[wordSourceIndex - 1].word->first == L"they" || // case 1
+			source.m[wordSourceIndex - 1].word->first == L"we" || // case 1
+			source.m[wordSourceIndex - 1].word->first == L"us" || // case 1
+			((source.m[wordSourceIndex - 1].pma.queryPattern(L"__N1") != -1 || source.m[wordSourceIndex - 1].pma.queryPattern(L"__NOUN") != -1) && // case 1
+			(source.m[wordSourceIndex - 1].word->second.inflectionFlags&PLURAL) == PLURAL) ||
+				(tempstar = wallp >= 0 && (source.m[wallp].word->second.inflectionFlags&PLURAL) == PLURAL)
+			)
+		)
+	{
+		errorMap[L"ST correct: word 'all': [after plural noun or before a determiner or 'right'] ST says " + primarySTLPMatch + L" LP says adverb"]++;
+		return 0;
+	}
+	// 18. This 'All' should be classified as a subject (2 matches)
+	else if (word == L"all" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 &&
+		(source.m[wordSourceIndex + 1].word->first == L"are" || source.m[wordSourceIndex + 1].word->first == L"was"))
+	{
+		errorMap[L"ST correct: word 'all': [before 'are' or 'was'] ST says " + primarySTLPMatch + L" LP says adverb"]++;
+		return 0;
+	}
+	// 19. this should be an adjective (all 12 examples checked)
+	else if (word == L"all" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 &&
+		(source.m[wordSourceIndex - 1].queryForm(L"is") >= 0 ||
+			source.m[wordSourceIndex - 1].queryForm(L"modal_auxiliary") >= 0 ||
+			source.m[wordSourceIndex - 1].queryForm(L"future_modal_auxiliary") >= 0 ||
+			source.m[wordSourceIndex - 1].queryForm(L"negation_modal_auxiliary") >= 0 ||
+			source.m[wordSourceIndex - 1].queryForm(L"negation_future_modal_auxiliary") >= 0 ||
+			source.m[wordSourceIndex - 1].queryForm(L"is_negation") >= 0))
+	{
+		errorMap[L"ST correct: word 'all': [after 'is' or modal_auxiliary] ST says " + primarySTLPMatch + L" LP says adverb"]++;
+		return 0;
+	}
+	// 19b. All immediately before verb or preposition is definitely an adverb (checked with 100 examples)
+	else if (word == L"all" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 &&
+		(source.m[wordSourceIndex + 1].queryWinnerForm(L"preposition") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(verbForm) >= 0))
+	{
+		errorMap[L"LP correct: word 'all': [before a verb or a preposition] ST says " + primarySTLPMatch + L" LP says adverb"]++;
+		return 0;
+	}
+	// 20. each other seems to always be interpreted as a DET followed by an adjective.  For LP's purposes, this is a reciprocal pronoun!
+	if (word == L"each other")
+	{
+		errorMap[L"LP correct: word 'each other': ST says DET adjective LP says reciprocal pronoun"]++;
+		return 0;
+	}
+	// 21. one another is always be interpreted by ST as a CD (numeral_cardinal) followed by a DT (determiner!).  For LP's purposes, this is a reciprocal pronoun!
+	if (word == L"one another")
+	{
+		errorMap[L"LP correct: word 'one another': ST says DET CD, LP says reciprocal pronoun"]++;
+		return 0;
+	}
+	// 22. no one is always be interpreted by ST as a RB (adverb) followed by a CD (numeral_cardinal).  For LP's purposes, this is an indefinite pronoun!
+	if (word == L"no one")
+	{
+		errorMap[L"LP correct: word 'no one': ST says RB CD, LP says indefinite pronoun"]++;
+		return 0;
+	}
+	// 23. every one can be interpreted by ST as a DT (determiner) followed by a CD (numeral_cardinal) .  For LP's purposes, this is an indefinite pronoun!
+	if (word == L"every one")
+	{
+		errorMap[L"LP correct: word 'every one': ST says DT CD, LP says indefinite pronoun"]++;
+		return 0;
+	}
+	// 24. Stanford sometimes guesses that as an adverb as well (all 3 examples checked)
+	if (word == L"that" && source.scanForPatternTag(wordSourceIndex, SENTENCE_IN_REL_TAG) != -1)
+	{
+		errorMap[L"LP correct: word 'that': ST says adverb, LP says relativizer [beginning of SENTENCE_IN_REL_TAG]"]++;
+		return 0;
+	}
+	// 25. 'So' before _S1 is a linking adverbial, not a preposition (Longman - 891)
+	if (word == L"so" && primarySTLPMatch == L"preposition" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 &&
+		wordSourceIndex + 1 < source.m.size() && source.m[wordSourceIndex + 1].pma.queryPattern(L"__S1") != -1)
+	{
+		errorMap[L"LP correct: word 'so' before _S1 is a linking adverbial, not a preposition (Longman - 891)"]++;
+		return 0;
+	}
+	// 26. 'So' before a period or a comma is a pro-form (derived from Longman), but ST says it is an adverb
+	if (word == L"so" && primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(L"pronoun") >= 0 &&
+		wordSourceIndex + 1 < source.m.size() &&
+		(source.m[wordSourceIndex + 1].word->first == L"." || source.m[wordSourceIndex + 1].word->first == L"?" || source.m[wordSourceIndex + 1].word->first == L"!" ||
+			source.m[wordSourceIndex + 1].word->first == L","))
+	{
+		errorMap[L"LP correct: word 'so' before a period or a comma is a pro-form (derived from Longman), but ST says it is an adverb"]++;
+		return 0;
+	}
+	// 27. 'Such' or 'all' before a noun is a predeterminer (LP), not an adjective (ST)!
+	if ((word == L"such" || word == L"all") &&
+		(primarySTLPMatch == L"adjective") && source.m[wordSourceIndex].queryWinnerForm(L"predeterminer") >= 0)
+	{
+		errorMap[L"LP correct: word 'such or all': ST says adjective, LP says predeterminer (derived from Longman)"]++;
+		return 0;
+	}
+	// 28. 'Dear' is misinterpreted to be an adverb or a verb (!), and in the 76 examples, dear is almost always correctly interpreted by LP to be an interjection or an adjective.
+	if (word == L"dear")
+	{
+		errorMap[L"LP correct: word 'dear': ST says " + primarySTLPMatch + L" LP says interjection or adjective"]++;
+		return 0;
+	}
+	// 29. 'Though' or 'though' when LP determines is a conjunction (equivalent of a Longman subordinator), Stanford still insists that it is an adverb (wrong)
+	if ((word == L"though") && (primarySTLPMatch == L"adverb") && source.m[wordSourceIndex].queryWinnerForm(L"conjunction") >= 0)
+	{
+		errorMap[L"LP correct: word 'though': ST says adverb LP says conjunction"]++;
+		return 0;
+	}
+	// 30. 'her' when followed by an adverb ending in an 'ly' OR a determiner (a, the) or a personal_pronoun_nominative (I, we) or a coordinator (and,or) or an indefinite_pronoun (everything, nothing) is a pronoun (ST wrong)
+	if (word == L"her" && primarySTLPMatch == L"possessive_determiner" && source.m[wordSourceIndex].queryWinnerForm(L"personal_pronoun_accusative") >= 0 &&
+		wordSourceIndex + 1 < source.m.size() &&
+		(source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0 ||
+			source.m[wordSourceIndex + 1].queryWinnerForm(L"determiner") >= 0 ||
+			source.m[wordSourceIndex + 1].queryWinnerForm(L"personal_pronoun_nominative") >= 0 ||
+			source.m[wordSourceIndex + 1].queryWinnerForm(L"coordinator") >= 0 ||
+			source.m[wordSourceIndex + 1].queryWinnerForm(L"indefinite_pronoun") >= 0
+			))
+	{
+		errorMap[L"LP correct: word 'her': [before an adverb, determiner, personal_pronoun_nominative, coordinator, indefinite_pronoun] ST says possessive_determiner LP says personal_pronoun_accusative"]++;
+		return 0;
+	}
+	// 31. 'that' when followed by an _S1 is a relativizer, not a preposition (ST wrong)
+	if (word == L"that")
+	{
+		if (wordSourceIndex + 1 < source.m.size() && source.m[wordSourceIndex + 1].pma.queryPattern(L"__S1") != -1 && primarySTLPMatch == L"preposition" && source.m[wordSourceIndex].queryWinnerForm(L"demonstrative_determiner") >= 0)
+		{
+			for (int nextByPosition = source.m[wordSourceIndex].beginPEMAPosition; nextByPosition != -1; nextByPosition = source.pema[nextByPosition].nextByPosition)
+			{
+				cPattern *p = patterns[source.pema[nextByPosition].getPattern()];
+				if (p->name == L"__S1" && p->differentiator == L"5" && (source.pema[nextByPosition].getElement() == 2 || source.pema[nextByPosition].getElement() == 3))
+				{
+					errorMap[L"LP correct: word 'that': [embedded in _S1[5]] ST says preposition LP says demonstrative_determiner (relativizer)"]++;
+					return 0;
+				}
+			}
+			errorMap[L"LP correct: word 'that': [immediately preceding _S1 otherwise unidentified (hidden in pattern, must be identified in post-processing)] ST says preposition LP says demonstrative_determiner (relativizer)"]++;
+			return 0;
+		}
+	}
+	// 32. 'out' is an adverb particle (Longman 78,413), not a preposition (ST wrong)
+	if (word == L"out" && primarySTLPMatch == L"preposition" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
+	{
+		errorMap[L"LP correct: word 'out': [adverb particle] ST says preposition LP says adverb"]++;
+		return 0;
+	}
+	// 33. 'at least' is an adverbial phrase (Longman 542), least for LP could be a pronoun or a quantifier (https://english.stackexchange.com/questions/107396/what-are-the-parts-of-speech-of-at-and-least-in-at-least)
+	// most is a quantifier and a degree adverb, unlike least (Longman, 522)
+	// the POS for at least is simply not well established.  LP has it as a pronoun because that works within the resolving logic
+	if ((word == L"least" || word == L"most") &&
+		primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"pronoun") >= 0)
+	{
+		errorMap[L"diff: word 'least': [part of adverbial phrase 'at least' or more of a noun 'the least'] ST says adjective"]++;
+		return 0;
+	}
+	// 34. possessive pronoun section - ST likes to think of possessive pronouns as verbs.  This will have to be investigated at some point by examining the collection of statistics from the original source material
+	if (word == L"mine" && source.m[wordSourceIndex].queryWinnerForm(L"possessive_pronoun") >= 0)
+	{
+		if (primarySTLPMatch == L"verb" || primarySTLPMatch == L"interjection")
+		{
+			errorMap[L"LP correct: word 'mine': [verb or interjection] ST says verb or interjection LP says possessive_pronoun, which is always correct (26 examples out of 5968058)"]++;
+			return 0;
+		}
+		if ((primarySTLPMatch == L"noun" || primarySTLPMatch == L"personal_pronoun_accusative") && source.m[wordSourceIndex].queryWinnerForm(L"possessive_pronoun") >= 0)
+		{
+			errorMap[L"LP correct: word 'mine': ST says noun or personal_pronoun_accusative, LP says possessive_pronoun"]++;
+			return 0;
+		}
+	}
+	if (word == L"yours" && source.m[wordSourceIndex].queryWinnerForm(L"possessive_pronoun") >= 0 &&
+		(primarySTLPMatch == L"verb" || primarySTLPMatch == L"interjection" || primarySTLPMatch == L"numeral_cardinal" || primarySTLPMatch == L"adjective" || primarySTLPMatch == L"adverb" || primarySTLPMatch == L"possessive_determiner"))
+	{
+		errorMap[L"LP correct: word 'yours': ST says verb, interjection, numeral_cardinal, adjective or possessive_determiner LP says possessive_pronoun, which is always correct"]++;
+		return 0;
+	}
+	if (word == L"hers" && source.m[wordSourceIndex].queryWinnerForm(L"possessive_pronoun") >= 0 && (primarySTLPMatch == L"verb" || primarySTLPMatch == L"adjective"))
+	{
+		errorMap[L"LP correct: word 'hers': ST says verb, adjective LP says possessive_pronoun, which is always correct"]++;
+		return 0;
+	}
+	// possessive pronoun section - end
+	// 35. round is never a verb in the gutenberg corpus
+	if (word == L"round" && (source.m[wordSourceIndex].queryWinnerForm(L"preposition") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0) && primarySTLPMatch == L"verb")
+	{
+		errorMap[L"LP correct: word 'round': ST says verb LP says preposition or adverb.  round as studied is never a verb in > 200 examples from corpus"]++;
+		return 0;
+	}
+	// 36. please is rarely a verb.  It is mostly used as a discourse politeness marker (Longman)
+	if (word == L"please" && source.m[wordSourceIndex].queryWinnerForm(L"politeness_discourse_marker") >= 0 && (primarySTLPMatch == L"verb" || primarySTLPMatch == L"adverb" || primarySTLPMatch == L"adjective"))
+	{
+		errorMap[L"LP correct: word 'please': ST says verb LP says politeness_discourse_marker"]++;
+		return 0;
+	}
+	// 37. less is never a conjunction.  (Longman)
+	if (word == L"less" && primarySTLPMatch == L"conjunction")
+	{
+		errorMap[L"LP correct: word 'less': ST says conjunction LP says quantifier/adverb/adjective"]++;
+		return 0;
+	}
+	// 38. I is always a personal_pronoun_nominative
+	if (word == L"i" && source.m[wordSourceIndex].queryWinnerForm(L"personal_pronoun_nominative") >= 0 && (primarySTLPMatch == L"noun" || primarySTLPMatch == L"interjection"))
+	{
+		errorMap[L"LP correct: word 'I': ST says " + primarySTLPMatch + L" LP says personal_pronoun_nominative"]++;
+		return 0;
+	}
+	// 39. a is always a determiner
+	//if (word == L"a" && source.m[wordSourceIndex].queryWinnerForm(L"determiner") >= 0)
+	//{
+	//	errorMap[L"LP correct: word 'a': ST says " + primarySTLPMatch + L" LP says determiner"]++;
+	//	return 0;
+	//}
+	return -1;
+}
+
+// checks if the part of speech indicated in parse from the Stanford POS tagger matches the winner forms at wordSourceIndex.
+// returns yes=0, no=1
+int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numTimesWordOccurred, wstring originalParse, wstring sentence, wstring &parse, int &numPOSNotFound, 
+	  unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, 
+	bool inRelativeClause, unordered_map<wstring, int> &errorMap,int startOfSentence)
+{
+	wstring word = source.m[wordSourceIndex].word->first;
+	if (!iswalpha(word[0]) || (word.length()<=1 && word[0]!='a' && word[0]!='i'))
+		return 0;
+	wstring originalWordSave;
+	source.getOriginalWord(wordSourceIndex, originalWordSave, false, false);
+	wstring originalWord = originalWordSave;
+	int wspace;
+	wstring lookFor=stTokenizeWord(word,originalWord, source.m[wordSourceIndex].flags,parse,wspace);
 	size_t wow = parse.find(lookFor);
 	if (wow != wstring::npos)
 	{
@@ -2083,7 +2483,7 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 				}
 				FormDistribution fd;
 				wstring primarySTLPMatch = lpPOS->second[0];
-				auto fdi = formDistribution.find(source.m[wordSourceIndex].word->first);
+				auto fdi = formDistribution.find(word);
 				if (fdi != formDistribution.end())
 					fd = fdi->second;
 				for (auto pos : lpPOS->second)
@@ -2097,19 +2497,6 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 				}
 				vector <int> winnerForms;
 				source.m[wordSourceIndex].getWinnerForms(winnerForms);
-/*
-class FormDistribution
-{
-public:
-	int agreeSTLP; // count of times word-POS agreed between ST and LP
-	int disagreeSTLP; // count of times word-POS disgreed between ST and LP
-	map <wstring, int> STFormDistribution; // total count for each form match in ST
-	map <wstring, int> LPFormDistribution; // total count for each form match in LP
-	map <wstring, int> agreeFormDistribution; // total count for each form match agreed between ST and LP
-};
-map <wstring, FormDistribution> formDistribution;
-*/
-
 				bool agree = false;
 				for (int wf : winnerForms)
 				{
@@ -2126,369 +2513,17 @@ map <wstring, FormDistribution> formDistribution;
 					fd.disagreeSTLP++;
 				if (agree)
 				{
-					formDistribution[source.m[wordSourceIndex].word->first] = fd;
+					formDistribution[word] = fd;
 					return 0;
 				}
-				//////////////////////////////
-				// corrections based on implementation/interpretation differences and statistical findings
-				// 1. LP has a NOUN[2] which allows a noun in what should be an adjective position
-				if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && wordSourceIndex < source.m.size() - 1 && source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") >= 0)
-				{
-					errorMap[L"diff: noun in adjective position"]++;
+				if (attributeErrors(primarySTLPMatch, source, wordSourceIndex, errorMap, partofspeech, startOfSentence) == 0)
 					return 0;
-				}
-				// 2. where 'that' is a demonstrative_determiner, and matches a REL1 pattern, then we count that as correct parse for LP as this is a relative phrase, and the usage of 'that' is correctly understood within that pattern.
-				if (primarySTLPMatch == L"preposition" && wordSourceIndex < source.m.size() - 1 && source.m[wordSourceIndex].queryWinnerForm(L"demonstrative_determiner"))
-				{
-					int maxEnd, pemaPosition = source.queryPattern(wordSourceIndex, L"_REL1", maxEnd);
-					if (pemaPosition >= 0 && (//(source.pema[pemaPosition].begin == 0 && patterns[source.pema[pemaPosition].getPattern()]->differentiator == L"2") || // REL1[2] includes S1 
-						(source.pema[pemaPosition].begin <= 0 && source.pema[pemaPosition].begin >= -5) || // must be the start of a relative clause
-						source.scanForPatternElementTag(wordSourceIndex, SENTENCE_IN_REL_TAG) != -1))
-					{
-						errorMap[L"LP correct:" + source.m[wordSourceIndex].word->first + L" start of relative phrase"]++;
-						return 0;
-					}
-				}
-				// 3. ST is always wrong when given a phrase like [(ROOT (S ('' '') (S (S (VP (VBD said))) (VP (VBZ Bobtail)))] - LP correctly tags 'Bobtail' as a proper noun
-				vector <wstring> speakingVerbs = { L"said",L"cried",L"called",L"asked",L"answered",L"barked",L"sang",L"whistled",L"shouted",L"whispered",L"laughed",L"begged",L"exclaimed",L"replied",L"reminded",L"screamed",L"responded",L"repeated",L"yelled",L"grumbled",L"agreed"  };
-				if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"Proper Noun") >= 0 && source.m[wordSourceIndex - 2].queryForm(quoteForm) >= 0 &&
-					wordSourceIndex > 1 && find(speakingVerbs.begin(), speakingVerbs.end(), source.m[wordSourceIndex - 1].word->first) != speakingVerbs.end())
-				{
-					errorMap[L"LP correct: speaker is proper noun (not verb)"]++;
-					return 0;
-				}
-				// 4. ST is always wrong when given a phrase like [(ROOT (S ('' '') (S (S (VP (VBD said))) (VP (VBZ Bobtail)))] - LP correctly tags 'said' as a verb
-				if ((primarySTLPMatch == L"adjective" || primarySTLPMatch == L"Proper Noun" || primarySTLPMatch == L"noun") && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && source.m[wordSourceIndex - 1].queryForm(quoteForm) >= 0 && source.m[wordSourceIndex + 1].queryWinnerForm(L"Proper Noun") >= 0 &&
-					wordSourceIndex > 1 && find(speakingVerbs.begin(), speakingVerbs.end(), source.m[wordSourceIndex].word->first) != speakingVerbs.end())
-				{
-					errorMap[L"LP correct: speaking verb is not adjective, noun or Proper Noun"]++;
-					return 0;
-				}
-				// 5. if ST thinks it is a verb, and LP thinks it is a noun, and it is preceded by a determiner separated only by up to 2 adjectives (that are not 'no'), unless it is a VBG and then it has to be immediately preceeded by a determiner
-				//    examined 100 examples from gutenburg and 1 violated this rule.
-				if ((primarySTLPMatch == L"verb") && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && wordSourceIndex > 2)
-				{
-					if (isStanfordDeterminerType(source, wordSourceIndex, wordSourceIndex - 1) || (partofspeech != L"VBG" &&
-						((isStanfordDeterminerType(source, wordSourceIndex, wordSourceIndex - 2) && source.m[wordSourceIndex - 2].word->first != L"no" && (source.m[wordSourceIndex - 1].queryWinnerForm(adjectiveForm) >= 0)) ||
-						(isStanfordDeterminerType(source, wordSourceIndex, wordSourceIndex - 3) && source.m[wordSourceIndex - 3].word->first != L"no" && source.m[wordSourceIndex - 2].queryWinnerForm(adjectiveForm) >= 0 && source.m[wordSourceIndex - 1].queryWinnerForm(adjectiveForm) >= 0))))
-					{
-						// further more, the 
-						errorMap[L"LP correct: ST says verb when it is a noun (preceded by determiner)"]++;
-						return 0;
-					}
-					// 6. if ST thinks it is a verb, and LP thinks it is a noun, and LP does not know of it having a verb form
-					//    examined 100 examples from gutenburg and 0 violated this rule.
-					else if (!source.m[wordSourceIndex].word->second.hasVerbForm())
-					{
-						errorMap[L"LP correct: ST says verb when it is a noun (no verb form possible)"]++;
-						return 0;
-					}
-				}
-				// 7. if ST thinks it is a noun, and LP does not know of it having a noun form
-				//    examined 100 examples from gutenburg and X violated this rule.
-				if (primarySTLPMatch == L"noun" && !source.m[wordSourceIndex].word->second.hasNounForm())
-				{
-					// However, if it is a present participle verb
-					//    then this is only acceptable if LP has matched it to __N1.
-					if (source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE)
-					{
-						if (source.m[wordSourceIndex].pma.queryPattern(L"__N1") != -1)
-						{
-							errorMap[L"diff: ST says noun when it is a present participle [acceptable]"]++;
-							return 0; // ST and LP agree
-						}
-					}
-					else
-					{
-						errorMap[L"LP correct: ST says noun when no noun form possible"]++;
-						return 0; // ST and LP disagree and ST is wrong
-					}
-				}
-				// 8. if ST thinks it is an adjective, and LP maps it to an __ADJECTIVE pattern
-				//    examined 100 examples from gutenburg and 0 violated this rule.
-				if ((primarySTLPMatch == L"adjective") && source.m[wordSourceIndex].queryForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST && source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1)
-				{
-					errorMap[L"diff: ST says adjective, LP says verb PAST matched to an _ADJECTIVE pattern"]++;
-					return 0;
-				}
-				// 9. In LP rules, here is not an adverb.  It designates a place and therefore is a noun.
-				//    examined 10 examples from gutenburg and 0 violated this rule.
-				if ((primarySTLPMatch == L"adverb") && source.m[wordSourceIndex].queryWinnerForm(L"noun") >=0 && source.m[wordSourceIndex].word->first==L"here")
-				{
-					errorMap[L"diff: ST says here is an adverb, LP says prefers to say a noun"]++;
-					return 0;
-				}
-				// 10. out of 849 examples, 815 were marked LP correct,  10 for ST and 24 were neither.
-				// this is because LP is able to use statistics regarding Proper Nouns which are not used in ST, and also all caps words are particularly marked as being Proper Nouns when they are hardly ever proper nouns.
-				if ((primarySTLPMatch == L"Proper Noun") || source.m[wordSourceIndex].queryWinnerForm(L"Proper Noun") >= 0)
-				{
-					errorMap[L"LP correct: ST says Proper Noun when it is not or does not say it is a proper noun when it is"]++;
-					return 0;
-				}
-				// 11. numeral_cardinal counts as an adjective for LP if it matches the pattern __ADJECTIVE or _TIME (with the first match being an adjective of how much time)
-				if ((primarySTLPMatch == L"adjective") && source.m[wordSourceIndex].queryWinnerForm(L"numeral_cardinal") >= 0 && 
-					  (source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"_TIME") != -1))
-				{
-					errorMap[L"diff: ST says here is an adjective, LP says numeral_cardinal if matching _ADJECTIVE or _TIME"]++;
-					return 0;
-				}
-				// 12. "one" is post processed and understood as a pronoun by LP, even if it is only matched as a numeral_cardinal. (10 examples examined)
-				//   this is often encountered if the author is fond of speaking in the general person ('one')
-				if (source.m[wordSourceIndex].word->first == L"one" && (primarySTLPMatch == L"personal_pronoun_accusative") && source.m[wordSourceIndex].queryWinnerForm(L"numeral_cardinal") >= 0 &&
-					(source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"__NOUN") != -1))
-				{
-					errorMap[L"LP correct: ST says noun when no noun form possible"]++;
-					return 0;
-				}
-				// 13. numeral_ordinal counts as an noun for LP if it matches the pattern __NOUN
-				if ((primarySTLPMatch == L"noun") && source.m[wordSourceIndex].queryWinnerForm(L"numeral_ordinal") >= 0 && source.m[wordSourceIndex].pma.queryPattern(L"__N1") != -1)
-				{
-					errorMap[L"diff: ST says noun, LP says numeral_ordinal matched to _N1 (noun subpattern)"]++;
-					return 0;
-				}
-				// 14. LP does not have 'any' as a determiner but rather as a pronoun/adjective which is used internally as an indicator as to how to match the noun to other nouns.
-				// out of 100 examples, 100% were interpreted correctly - added 'any' as a determiner when calculating noun/determiner agreement cost
-				if (source.m[wordSourceIndex].word->first == L"any" && primarySTLPMatch == L"determiner" &&
-					(source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1 && source.m[wordSourceIndex].pma.queryPattern(L"__NOUN") != -1))
-				{
-					errorMap[L"diff: ST says determiner, LP says adjective which is used as a determiner in post-processing"]++;
-					return 0;
-				}
-				// 15. in the event of __AS_AS pattern, which is as (adverb) followed by an adjective or adverb followed by as (preposition)
-				// either adverb or preposition may be acceptable as both are incorporated into the pattern.  __AS_AS pattern was derived from Longman
-				if (source.m[wordSourceIndex].word->first == L"as" && (primarySTLPMatch == L"preposition" || primarySTLPMatch == L"adverb"))
-				{
-					if (source.m[wordSourceIndex].pma.queryPattern(L"__AS_AS") != -1)
-					{
-						errorMap[L"diff: word 'as': ST says " + primarySTLPMatch+ L", LP says __AS_AS (Longman adverbial clause) - first as"]++;
-						return 0;
-					}
-					if (wordSourceIndex >= 2 && source.m[wordSourceIndex - 2].word->first == L"as" && source.m[wordSourceIndex - 2].pma.queryPattern(L"__AS_AS") != -1)
-					{
-						errorMap[L"diff: word 'as': ST says " + primarySTLPMatch + L", LP says __AS_AS (Longman adverbial clause) - second as"]++;
-						return 0;
-					}
-				}
-				// 16. So as matched in the beginning of a phrase is a linking adverbial (Longman) but is usually marked as a preposition by Stanford.
-				if (source.m[wordSourceIndex].word->first == L"so" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && 
-					  (primarySTLPMatch == L"preposition" || primarySTLPMatch == L"conjunction") && wordSourceIndex==startOfSentence)
-				{
-					errorMap[L"LP correct: word 'so': ST says "+primarySTLPMatch+ L" LP says adverb (Longman linking adverbial)"]++;
-					return 0;
-				}
-				bool tempstar = false;
-				// 17. this is determined to be an adverb by LP, but this is wrong, it is actually a determiner for the preceding word
-				//     over 100 items have been examined and 0 errors. - note this is also AFTER the POS processing has narrowed it down to disagreements with Stanford POS
-				// case 1 is all after a plural noun.
-				// case 2 is all before a determiner or 'right'. (39 out of 178 cases)
-				//   
-				int wallp = -1, qallp = (wordSourceIndex + 1<source.m.size()) ? source.m[wordSourceIndex + 1].pma.queryPattern(L"__NOUN") : -1;
-				if (qallp >= 0)
-					wallp = wordSourceIndex + 1 + source.m[wordSourceIndex + 1].pma[qallp].len-1;
-				if (source.m[wordSourceIndex].word->first == L"all" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && (primarySTLPMatch == L"determiner" || primarySTLPMatch == L"predeterminer") &&
-					  (source.m[wordSourceIndex - 1].queryWinnerForm(L"demonstrative_determiner") >= 0 || // case 1
-						(source.m[wordSourceIndex + 1].queryForm(L"demonstrative_determiner") >= 0) || //  case 2- all these / all those / all this / all that
-						(source.m[wordSourceIndex + 1].queryForm(L"possessive_determiner") >= 0) || // case 2- all my / all his / all her
-						(source.m[wordSourceIndex + 1].queryForm(L"determiner") >= 0) || // case 2- all the ...
-						(source.m[wordSourceIndex + 1].word->first == L"right") || // case 2- all right
-							source.m[wordSourceIndex - 1].queryWinnerForm(L"personal_pronoun") >= 0 || // case 1
-							source.m[wordSourceIndex - 1].word->first == L"them" || // case 1
-							source.m[wordSourceIndex - 1].word->first == L"they" || // case 1
-							source.m[wordSourceIndex - 1].word->first == L"we" || // case 1
-							source.m[wordSourceIndex - 1].word->first == L"us" || // case 1
-							((source.m[wordSourceIndex - 1].pma.queryPattern(L"__N1") != -1 || source.m[wordSourceIndex - 1].pma.queryPattern(L"__NOUN") != -1) && // case 1
-							 (source.m[wordSourceIndex - 1].word->second.inflectionFlags&PLURAL) == PLURAL) ||
-							(tempstar=wallp>=0 && (source.m[wallp].word->second.inflectionFlags&PLURAL) == PLURAL)
-						)
-					)
-				{
-					errorMap[L"ST correct: word 'all': [after plural noun or before a determiner or 'right'] ST says " + primarySTLPMatch + L" LP says adverb"]++;
-					return 0;
-				}
-				// 18. This 'All' should be classified as a subject (2 matches)
-				else if (source.m[wordSourceIndex].word->first == L"all" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && 
-					(source.m[wordSourceIndex+1].word->first == L"are" || source.m[wordSourceIndex+1].word->first == L"was")) // && 
-					//source.m[wordSourceIndex-1].word->second.hasVerbForm() && 
-					//((source.m[wordSourceIndex + 1].queryWinnerForm(L"preposition") >= 0 && 
-					 //(source.m[wordSourceIndex + 2].pma.queryPattern(L"__N1") != -1 || source.m[wordSourceIndex + 2].pma.queryPattern(L"__NOUN") != -1)) ||
-						//source.m[wordSourceIndex + 1].word->first==L"that"))
-				{
-					errorMap[L"ST correct: word 'all': [before 'are' or 'was'] ST says " + primarySTLPMatch + L" LP says adverb"]++;
-					return 0;
-				}
-				// 19. this should be an adjective (all 12 examples checked)
-				else if (source.m[wordSourceIndex].word->first == L"all" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && 
-					(source.m[wordSourceIndex - 1].queryForm(L"is") >= 0 || 
-						source.m[wordSourceIndex - 1].queryForm(L"modal_auxiliary") >= 0 ||
-						source.m[wordSourceIndex - 1].queryForm(L"future_modal_auxiliary") >= 0 ||
-						source.m[wordSourceIndex - 1].queryForm(L"negation_modal_auxiliary") >= 0 ||
-						source.m[wordSourceIndex - 1].queryForm(L"negation_future_modal_auxiliary") >= 0 ||
-						source.m[wordSourceIndex - 1].queryForm(L"is_negation") >= 0))
-				{
-					errorMap[L"ST correct: word 'all': [after 'is' or modal_auxiliary] ST says " + primarySTLPMatch + L" LP says adverb"]++;
-					return 0;
-				}
-				// 20. each other seems to always be interpreted as a DET followed by an adjective.  For LP's purposes, this is a reciprocal pronoun!
-				if (source.m[wordSourceIndex].word->first == L"each other")
-				{
-					errorMap[L"LP correct: word 'each other': ST says DET adjective LP says reciprocal pronoun"]++;
-					return 0;
-				}
-				// 21. one another is always be interpreted by ST as a CD (numeral_cardinal) followed by a DT (determiner!).  For LP's purposes, this is a reciprocal pronoun!
-				if (source.m[wordSourceIndex].word->first == L"one another")
-				{
-					errorMap[L"LP correct: word 'one another': ST says DET CD, LP says reciprocal pronoun"]++;
-					return 0;
-				}
-				// 22. no one is always be interpreted by ST as a RB (adverb) followed by a CD (numeral_cardinal).  For LP's purposes, this is an indefinite pronoun!
-				if (source.m[wordSourceIndex].word->first == L"no one")
-				{
-					errorMap[L"LP correct: word 'no one': ST says RB CD, LP says indefinite pronoun"]++;
-					return 0;
-				}
-				// 23. every one can be interpreted by ST as a DT (determiner) followed by a CD (numeral_cardinal) .  For LP's purposes, this is an indefinite pronoun!
-				if (source.m[wordSourceIndex].word->first == L"every one")
-				{
-					errorMap[L"LP correct: word 'every one': ST says DT CD, LP says indefinite pronoun"]++;
-					return 0;
-				}
-				// 24. Stanford sometimes guesses that as an adverb as well (all 3 examples checked)
-				if (source.m[wordSourceIndex].word->first == L"that" && source.scanForPatternTag(wordSourceIndex, SENTENCE_IN_REL_TAG) != -1)
-				{
-					errorMap[L"LP correct: word 'that': ST says adverb, LP says relativizer [beginning of SENTENCE_IN_REL_TAG]"]++;
-					return 0;
-				}
-				// 25. 'So' before _S1 is a linking adverbial, not a preposition (Longman - 891)
-				if (source.m[wordSourceIndex].word->first == L"so" && primarySTLPMatch == L"preposition" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 &&
-					wordSourceIndex+1 < source.m.size() && source.m[wordSourceIndex + 1].pma.queryPattern(L"__S1") != -1)
-				{
-					errorMap[L"LP correct: word 'so' before _S1 is a linking adverbial, not a preposition (Longman - 891)"]++;
-					return 0;
-				}
-				// 26. 'So' before a period or a comma is a pro-form (derived from Longman), but ST says it is an adverb
-				if (source.m[wordSourceIndex].word->first == L"so" && primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(L"pronoun") >= 0 &&
-					wordSourceIndex+1 < source.m.size() && 
-					(source.m[wordSourceIndex + 1].word->first==L"." || source.m[wordSourceIndex + 1].word->first == L"?" || source.m[wordSourceIndex + 1].word->first == L"!" ||
-					 source.m[wordSourceIndex + 1].word->first == L","))
-				{
-					errorMap[L"LP correct: word 'so' before a period or a comma is a pro-form (derived from Longman), but ST says it is an adverb"]++;
-					return 0;
-				}
-				// 27. 'Such' or 'all' before a noun is a predeterminer (LP), not an adjective (ST)!
-				if ((source.m[wordSourceIndex].word->first == L"such" || source.m[wordSourceIndex].word->first == L"all") &&
-					(primarySTLPMatch == L"adjective") && source.m[wordSourceIndex].queryWinnerForm(L"predeterminer") >= 0)
-				{
-					errorMap[L"LP correct: word 'such or all': ST says adjective, LP says predeterminer (derived from Longman)"]++;
-					return 0;
-				}
-				// 28. 'Dear' is misinterpreted to be an adverb or a verb (!), and in the 76 examples, dear is almost always correctly interpreted by LP to be an interjection or an adjective.
-				if (source.m[wordSourceIndex].word->first == L"dear")
-				{
-					errorMap[L"LP correct: word 'dear': ST says " + primarySTLPMatch + L" LP says interjection or adjective"]++;
-					return 0;
-				}
-				// 29. 'Though' or 'though' when LP determines is a conjunction (equivalent of a Longman subordinator), Stanford still insists that it is an adverb (wrong)
-				if ((source.m[wordSourceIndex].word->first == L"though") && (primarySTLPMatch == L"adverb") && source.m[wordSourceIndex].queryWinnerForm(L"conjunction") >= 0)
-				{
-					errorMap[L"LP correct: word 'though': ST says adverb LP says conjunction"]++;
-					return 0;
-				}
-				// 30. 'her' when followed by an adverb ending in an 'ly' OR a determiner (a, the) or a personal_pronoun_nominative (I, we) or a coordinator (and,or) or an indefinite_pronoun (everything, nothing) is a pronoun (ST wrong)
-				if (source.m[wordSourceIndex].word->first == L"her" && primarySTLPMatch == L"possessive_determiner" && source.m[wordSourceIndex].queryWinnerForm(L"personal_pronoun_accusative") >= 0 &&
-					wordSourceIndex + 1 < source.m.size() && 
-					(source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0 ||
-						source.m[wordSourceIndex + 1].queryWinnerForm(L"determiner") >= 0  ||
-						source.m[wordSourceIndex + 1].queryWinnerForm(L"personal_pronoun_nominative") >= 0 ||
-						source.m[wordSourceIndex + 1].queryWinnerForm(L"coordinator") >= 0 ||
-						source.m[wordSourceIndex + 1].queryWinnerForm(L"indefinite_pronoun") >= 0
-					))
-				{
-					errorMap[L"LP correct: word 'her': [before an adverb, determiner, personal_pronoun_nominative, coordinator, indefinite_pronoun] ST says possessive_determiner LP says personal_pronoun_accusative"]++;
-					return 0;
-				}
-				// 31. 'that' when followed by an _S1 is a relativizer, not a preposition (ST wrong)
-				if (source.m[wordSourceIndex].word->first == L"that")
-				{
-					if (wordSourceIndex + 1 < source.m.size() && source.m[wordSourceIndex + 1].pma.queryPattern(L"__S1") != -1 && primarySTLPMatch == L"preposition" && source.m[wordSourceIndex].queryWinnerForm(L"demonstrative_determiner") >= 0)
-					{
-						for (int nextByPosition = source.m[wordSourceIndex].beginPEMAPosition; nextByPosition != -1; nextByPosition = source.pema[nextByPosition].nextByPosition)
-						{
-							cPattern *p = patterns[source.pema[nextByPosition].getPattern()];
-							if (p->name == L"__S1" && p->differentiator == L"5" && (source.pema[nextByPosition].getElement() == 2 || source.pema[nextByPosition].getElement() == 3))
-							{
-								errorMap[L"LP correct: word 'that': [embedded in _S1[5]] ST says preposition LP says demonstrative_determiner (relativizer)"]++;
-								return 0;
-							}
-						}
-						errorMap[L"LP correct: word 'that': [immediately preceding _S1 otherwise unidentified (hidden in pattern, must be identified in post-processing)] ST says preposition LP says demonstrative_determiner (relativizer)"]++;
-						return 0;
-					}
-				}
-				// 32. 'out' is an adverb particle (Longman 78,413), not a preposition (ST wrong)
-				if (source.m[wordSourceIndex].word->first == L"out" && primarySTLPMatch == L"preposition" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
-				{
-					errorMap[L"LP correct: word 'out': [adverb particle] ST says preposition LP says adverb"]++;
-					return 0;
-				}
-				// 33. 'at least' is an adverbial phrase (Longman 542), least for LP could be a pronoun or a quantifier (https://english.stackexchange.com/questions/107396/what-are-the-parts-of-speech-of-at-and-least-in-at-least)
-				// most is a quantifier and a degree adverb, unlike least (Longman, 522)
-				// the POS for at least is simply not well established.  LP has it as a pronoun because that works within the resolving logic
-				if ((source.m[wordSourceIndex].word->first == L"least" || source.m[wordSourceIndex].word->first == L"most") && 
-					  primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"pronoun") >= 0)
-				{
-					errorMap[L"diff: word 'least': [part of adverbial phrase 'at least' or more of a noun 'the least'] ST says adjective"]++;
-					return 0;
-				}
-				// 34. possessive pronoun section - ST likes to think of possessive pronouns as verbs.  This will have to be investigated at some point by examining the collection of statistics from the original source material
-				if (source.m[wordSourceIndex].word->first == L"mine" && source.m[wordSourceIndex].queryWinnerForm(L"possessive_pronoun") >= 0)
-				{
-					if (primarySTLPMatch == L"verb" || primarySTLPMatch == L"interjection")
-					{
-						errorMap[L"LP correct: word 'mine': [verb or interjection] ST says verb or interjection LP says possessive_pronoun, which is always correct (26 examples out of 5968058)"]++;
-						return 0;
-					}
-					if ((primarySTLPMatch == L"noun" || primarySTLPMatch == L"personal_pronoun_accusative") && source.m[wordSourceIndex].queryWinnerForm(L"possessive_pronoun") >= 0)
-					{
-						errorMap[L"LP correct: word 'mine': ST says noun or personal_pronoun_accusative, LP says possessive_pronoun"]++;
-						return 0;
-					}
-				}
-				if (source.m[wordSourceIndex].word->first == L"yours" && source.m[wordSourceIndex].queryWinnerForm(L"possessive_pronoun") >= 0 && 
-					(primarySTLPMatch == L"verb" || primarySTLPMatch == L"interjection" || primarySTLPMatch == L"numeral_cardinal" || primarySTLPMatch == L"adjective" || primarySTLPMatch == L"adverb" || primarySTLPMatch == L"possessive_determiner"))
-				{
-					errorMap[L"LP correct: word 'yours': ST says verb, interjection, numeral_cardinal, adjective or possessive_determiner LP says possessive_pronoun, which is always correct"]++;
-					return 0;
-				}
-				if (source.m[wordSourceIndex].word->first == L"hers" && source.m[wordSourceIndex].queryWinnerForm(L"possessive_pronoun") >= 0 && (primarySTLPMatch == L"verb" || primarySTLPMatch == L"adjective"))
-				{
-					errorMap[L"LP correct: word 'hers': ST says verb, adjective LP says possessive_pronoun, which is always correct"]++;
-					return 0;
-				}
-				// possessive pronoun section - end
-				// 35. round is never a verb in the gutenberg corpus
-				if (source.m[wordSourceIndex].word->first == L"round" && (source.m[wordSourceIndex].queryWinnerForm(L"preposition") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0) && primarySTLPMatch == L"verb")
-				{
-					errorMap[L"LP correct: word 'round': ST says verb LP says preposition or adverb.  round as studied is never a verb in > 200 examples from corpus"]++;
-					return 0;
-				}
-				// 36. please is rarely a verb.  It is mostly used as a discourse politeness marker (Longman)
-				if (source.m[wordSourceIndex].word->first == L"please" && source.m[wordSourceIndex].queryWinnerForm(L"politeness_discourse_marker") >= 0 && (primarySTLPMatch == L"verb" || primarySTLPMatch == L"adverb" || primarySTLPMatch == L"adjective"))
-				{
-					errorMap[L"LP correct: word 'please': ST says verb LP says politeness_discourse_marker"]++;
-					return 0;
-				}
-				// 37. less is never a conjunction.  (Longman)
-				if (source.m[wordSourceIndex].word->first == L"less" && primarySTLPMatch == L"conjunction")
-				{
-					errorMap[L"LP correct: word 'less': ST says conjunction LP says quantifier/adverb/adjective"]++;
-					return 0;
-				}
 				if (source.m[wordSourceIndex].queryWinnerForm(L"pronoun") >= 0)
 				{
 					/*	16 neither      16 there     19 hers     21 either     21 less     24 all     42 same     52 mine     53 most     56 Both     59 such     66 least     91 another     96 other    109 any    180 so    182 more		*/
 					//partofspeech += L"***PN";
 				}
-				formDistribution[source.m[wordSourceIndex].word->first] = fd;
+				formDistribution[word] = fd;
 
 				//////////////////////////////
 				wstring posListStr;
@@ -2497,7 +2532,7 @@ map <wstring, FormDistribution> formDistribution;
 				wstring winnerFormsString;
 				source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 				formNoMatchMap[posListStr + L"!= " + winnerFormsString]++;
-				wordNoMatchMap[source.m[wordSourceIndex].word->first]++;
+				wordNoMatchMap[word]++;
 				wstring originalNextWord;
 				source.getOriginalWord(wordSourceIndex+1, originalNextWord, false, false);
 				size_t pos = sentence.find(originalWord);
@@ -2511,9 +2546,10 @@ map <wstring, FormDistribution> formDistribution;
 				}
 				lplog(LOG_ERROR, L"Stanford POS %s (%s) not found in winnerForms %s for word%s %s %07d:[%s]", partofspeech.c_str(), primarySTLPMatch.c_str(), winnerFormsString.c_str(), (originalWord.find(L' ')==wstring::npos) ? L"":L"[space]", originalWord.c_str(), wordSourceIndex, sentence.c_str());
 				if (originalWord.find(L' ') != wstring::npos && 
-					source.m[wordSourceIndex].word->first != L"no one" && source.m[wordSourceIndex].word->first != L"every one" && source.m[wordSourceIndex].word->first != L"as if" && source.m[wordSourceIndex].word->first != L"for ever" && source.m[wordSourceIndex].word->first != L"next to")
+					word != L"no one" && word != L"every one" && word != L"as if" && word != L"for ever" && word != L"next to")
 				{
 					lookFor = originalWord.substr(wspace, originalWord.length()) + L")";
+					parse = originalParse;
 					wow = parse.find(lookFor);
 					if (wow != wstring::npos)
 					{
@@ -2542,33 +2578,36 @@ map <wstring, FormDistribution> formDistribution;
 									if (std::find(posList.begin(), posList.end(), Forms[wf]->name) != posList.end())
 										foundSecondaryForm = true;
 								}
-								wstring posListStr;
-								for (auto pos : posList)
-									posListStr += pos + L" ";
-								lplog(LOG_ERROR, L"%07d:ALSO %s not found in winnerForms %s [%s]?", wordSourceIndex, posListStr.c_str(), winnerFormsString.c_str(),(foundSecondaryForm) ? L"TRUE":L"FALSE");
+								if (!foundSecondaryForm)
+								{
+									wstring posListStr;
+									for (auto pos : posList)
+										posListStr += pos + L" ";
+									lplog(LOG_FATAL_ERROR, L"%07d:ALSO %s not found in winnerForms %s", wordSourceIndex, posListStr.c_str(), winnerFormsString.c_str());
+								}
 							}
 						}
 						else
-							lplog(LOG_ERROR, L"%d:Parenthesis not found in %s (from position %d).", wordSourceIndex,parse.c_str(), wow);
+							lplog(LOG_FATAL_ERROR, L"%d:Parenthesis not found in %s (from position %d) (2).", wordSourceIndex,parse.c_str(), wow);
 					}
 					else
-						lplog(LOG_ERROR, L"%d:Word %s not found in parse %s.", wordSourceIndex,lookFor.c_str(),parse.c_str());
+						lplog(LOG_FATAL_ERROR, L"%d:Word %s not found in parse %s (2).", wordSourceIndex,lookFor.c_str(),parse.c_str());
 				}
 			}
 			else
-				lplog(LOG_ERROR, L"%d:Part of Speech %s not found looking for word %s in the parse %s.", wordSourceIndex,partofspeech.c_str(),originalWord.c_str(),originalParse.c_str());
+				lplog(LOG_FATAL_ERROR, L"%d:Part of Speech %s not found looking for word %s in the parse %s.", wordSourceIndex,partofspeech.c_str(),originalWord.c_str(),originalParse.c_str());
 		}
 		else
-			lplog(LOG_ERROR, L"%d:Parenthesis not found in %s (from position %d).", wordSourceIndex,parse.c_str(),wow);
+			lplog(LOG_FATAL_ERROR, L"%d:Parenthesis not found in %s (from position %d).", wordSourceIndex,parse.c_str(),wow);
 	}
 	else
-		lplog(LOG_ERROR, L"%d:Word %s not found in parse %s", wordSourceIndex,originalWord.c_str(),parse.c_str());
+		lplog(LOG_ERROR, L"%d:FATAL! Word %s not found in parse %s [%s]", wordSourceIndex,originalWord.c_str(),parse.c_str(),originalParse.c_str());
 	return 1;
 }
 
 void printFormDistribution(wstring word, double adp, FormDistribution fd, wstring &maxWord, wstring &maxForm, int &maxDiff)
 {
-	lplog(LOG_ERROR, L"%s:%3.2f (%d/%d)", word.c_str(), adp,fd.agreeSTLP,fd.agreeSTLP+fd.disagreeSTLP);
+	lplog(LOG_ERROR, L"%s:%3.2f (%d/%d)", word.c_str(), adp, fd.agreeSTLP, fd.agreeSTLP + fd.disagreeSTLP);
 	for (auto &&[form, count] : fd.LPFormDistribution)
 	{
 		// form name, total number of times form is a winner form for this word, % of times this form is the winner form for this word, % of times this form agrees with ST.
@@ -2715,41 +2754,42 @@ int stanfordCheck(Source source, int step, bool pcfg)
 		mTW(sqlrow[2], path);
 		mTW(sqlrow[3], title);
 		path.insert(0, L"\\").insert(0, CACHEDIR);
+		wchar_t buffer[1024];
+		__int64 processingSeconds = (clock() - startTime) / CLOCKS_PER_SEC;
+		wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d sources in %02I64d:%02I64d:%02I64d [%d sources/hour] (%-35.35s...)", numSourcesProcessedNow * 100 / totalSource, numSourcesProcessedNow, totalSource,
+			processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, (processingSeconds) ? numSourcesProcessedNow * 3600 / processingSeconds : 0, title.c_str());
+		SetConsoleTitle(buffer);
 		int setStep = stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, wordNoMatchMap,VFTMap,errorMap,pcfg);
 		totalWords += source.m.size();
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
 			break;
 		source.clearSource();
-		wchar_t buffer[1024];
-		__int64 processingSeconds = (clock() - startTime) / CLOCKS_PER_SEC;
 		numSourcesProcessedNow++;
-		if (processingSeconds)
-			wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d sources in %02I64d:%02I64d:%02I64d [%d sources/hour] (%-35.35s... finished)", numSourcesProcessedNow * 100 / totalSource, numSourcesProcessedNow, totalSource,
-				processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, numSourcesProcessedNow * 3600 / processingSeconds, title.c_str());
-		SetConsoleTitle(buffer);
 	}
 	mysql_free_result(result);
 	destroyJavaVM(vm);
 	if (totalWords>0)
 		lplog(LOG_ERROR, L"numNoMatch=%d/%d %7.3f%% numPOSNotFound=%d", numNoMatch, totalWords, numNoMatch * 100.0 / totalWords, numPOSNotFound);
 	lplog(LOG_ERROR, L"WORD AGREE DISTRIBUTION ------------------------------------------------------------");
-	map <double, wstring> agreeCountMap;
+	map <int, wstring, std::greater<int>> agreeCountMap;
 	for (auto &&[word, fd] : formDistribution)
 	{
-		agreeCountMap[((double)fd.agreeSTLP) / (fd.agreeSTLP + fd.disagreeSTLP)] = word;
+		agreeCountMap[fd.disagreeSTLP] += word + L"*";
 	}
 	int limit = 0;
 	int maxDiff = -1;
 	wstring maxForm,maxWord;
-	for (auto &&[adp, word] : agreeCountMap)
+	for (auto &&[adp, multiword] : agreeCountMap)
 	{
-		if (formDistribution[word].agreeSTLP + formDistribution[word].disagreeSTLP > 500)
-		{
-			printFormDistribution(word, adp, formDistribution[word], maxWord, maxForm, maxDiff);
-			if (limit++ > 100)
-				break;
-		}
+		for (auto word : splitString(multiword, L'*'))
+			if (formDistribution[word].agreeSTLP + formDistribution[word].disagreeSTLP > 500)
+			{
+				printFormDistribution(word, adp, formDistribution[word], maxWord, maxForm, maxDiff);
+				limit++;
+			}
+		if (limit++ > 10)
+			break;
 	}
 	lplog(LOG_ERROR, L"maxWord=%s maxForm=%s maxDiff=%d", maxWord.c_str(), maxForm.c_str(), maxDiff);
 	lplog(LOG_ERROR, L"FORMS ------------------------------------------------------------------------------");
@@ -3032,7 +3072,7 @@ int numSourceLimit = 0;
 // step = 2 - evaluate statistics and create database statements to decrease the number of unknown words
 void wmain(int argc,wchar_t *argv[])
 {
-	setConsoleWindowSize(150, 15);
+	setConsoleWindowSize(150, 10);
 	chdir("..");
 	initializeCounter();
 	cacheDir = CACHEDIR;
@@ -3059,7 +3099,7 @@ void wmain(int argc,wchar_t *argv[])
 	if (!wcscmp(argv[1], L"-stanfordCheck"))
 	{
 		stanfordCheck(source, step, true);
-		return;
+		return; 
 	}
 	switch (step)
 	{
