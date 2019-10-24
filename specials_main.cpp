@@ -1279,7 +1279,7 @@ int printUnknownsFromSource(Source source, int sourceId, wstring path, wstring e
 	return 21;
 }
 
-int patternAnalysisFromSource(Source source, int sourceId, wstring path, wstring etext, wstring patternName, wstring differentiator)
+int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, wstring etext, wstring patternOrWordName, wstring differentiator, bool isPattern)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
@@ -1287,6 +1287,7 @@ int patternAnalysisFromSource(Source source, int sourceId, wstring path, wstring
 		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 	bool parsedOnly = false;
+	int lastSentenceIndexPrinted = -1;
 	if (source.readSource(path, false, parsedOnly, false, true))
 	{
 		int wordIndex = 0;
@@ -1294,7 +1295,7 @@ int patternAnalysisFromSource(Source source, int sourceId, wstring path, wstring
 		for (WordMatch &im : source.m)
 		{
 			int pmaOffset;
-			if ((pmaOffset = im.pma.queryPattern(patternName, differentiator)) !=-1)
+			if (isPattern && (pmaOffset = im.pma.queryPattern(patternOrWordName, differentiator)) !=-1)
 			{
 				pmaOffset = pmaOffset & ~patternFlag;
 				int patternEnd = wordIndex+im.pma[pmaOffset].len;
@@ -1329,6 +1330,23 @@ int patternAnalysisFromSource(Source source, int sourceId, wstring path, wstring
 				//analyzeUsage(source,wordIndex+1,wordIndex+2,wordIndex-1,)  
 				wstring path = source.sourcePath.substr(16, source.sourcePath.length() - 20);
 				lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, patternEnd, sentence.c_str());
+				lplog(LOG_ERROR, L"%s", sentence.c_str());
+			}
+			else if (!isPattern && im.word->first==patternOrWordName)
+			{
+				wstring sentence, originalIWord;
+				if (lastSentenceIndexPrinted != source.sentenceStarts[ss - 1])
+				{
+					for (int I = source.sentenceStarts[ss - 1]; I < source.sentenceStarts[ss]; I++)
+					{
+						source.getOriginalWord(I, originalIWord, false, false);
+						if (I == wordIndex)
+							originalIWord = L"*" + originalIWord + L"*";
+						sentence += originalIWord + L" ";
+					}
+					lplog(LOG_ERROR, L"%s", sentence.c_str());
+					lastSentenceIndexPrinted = source.sentenceStarts[ss - 1];
+				}
 			}
 			wordIndex++;
 			while (ss < source.sentenceStarts.size() && source.sentenceStarts[ss] < wordIndex+1)
@@ -1596,7 +1614,7 @@ int printUnknowns(Source source, int step)
 	return 0;
 }
 
-int patternAnalysis(Source source, int step, wstring patternName, wstring differentiator)
+int patternOrWordAnalysis(Source source, int step, wstring patternOrWordName, wstring differentiator,bool isPattern)
 {
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
@@ -1619,7 +1637,7 @@ int patternAnalysis(Source source, int step, wstring patternName, wstring differ
 		mTW(sqlrow[2], path);
 		mTW(sqlrow[3], title);
 		path.insert(0, L"\\").insert(0, CACHEDIR);
-		int setStep = patternAnalysisFromSource(source, sourceId, path, etext,patternName,differentiator);
+		int setStep=patternOrWordAnalysisFromSource(source, sourceId, path, etext, patternOrWordName, differentiator, isPattern);
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
 			break;
@@ -2073,7 +2091,7 @@ wstring stTokenizeWord(wstring tokenizedWord,wstring &originalWord, unsigned lon
 	return lookFor;
 }
 
-int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceIndex, unordered_map<wstring, int> &errorMap, wstring partofspeech, int startOfSentence)
+int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceIndex, unordered_map<wstring, int> &errorMap, wstring &partofspeech, int startOfSentence)
 {
 	wstring word = source.m[wordSourceIndex].word->first;
 	//////////////////////////////
@@ -2440,11 +2458,37 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		return 0;
 	}
 	// 39. a is always a determiner
-	//if (word == L"a" && source.m[wordSourceIndex].queryWinnerForm(L"determiner") >= 0)
-	//{
-	//	errorMap[L"LP correct: word 'a': ST says " + primarySTLPMatch + L" LP says determiner"]++;
-	//	return 0;
-	//}
+	if (word == L"a" && source.m[wordSourceIndex].queryWinnerForm(L"determiner") >= 0 && (primarySTLPMatch.empty() || primarySTLPMatch == L"noun" || primarySTLPMatch == L"symbol"))
+	{
+		errorMap[L"LP correct: word 'a': ST says " + primarySTLPMatch + L" LP says determiner"]++;
+		return 0;
+	}
+	// 40. but is never a verb (reviewed all examples in corpus)
+	if (word == L"but" && source.m[wordSourceIndex].queryWinnerForm(L"conjunction") >= 0 && primarySTLPMatch == L"verb")
+	{
+		errorMap[L"LP correct: word 'but': ST says " + primarySTLPMatch + L" LP says conjunction"]++;
+		return 0;
+	}
+	// 41. but in between two adverbs/adjectives, a verb and adverb/adjective or all/does/has and a verb.  100 examples in corpus with 100% correctness.
+	if (word == L"but" && wordSourceIndex > 0 && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
+	{
+		if (((source.m[wordSourceIndex - 1].queryWinnerForm(L"adverb") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"adjective") >= 0) &&
+			   (source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0)) || 
+				((source.m[wordSourceIndex - 1].queryWinnerForm(L"verb") >= 0) &&
+				 (source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0)) || 
+		    ((source.m[wordSourceIndex - 1].word->first == L"all" || source.m[wordSourceIndex - 1].queryWinnerForm(L"does") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"has") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"is") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"verbverb") >= 0) &&
+				 (source.m[wordSourceIndex + 1].queryWinnerForm(L"verb") >= 0)))
+		{
+			errorMap[L"LP correct: word 'but': ST says " + primarySTLPMatch + L" LP says adverb"]++;
+			return 0;
+		}
+	}
+	// 42. this is correct 95% of the time in the corpus (over 100 examples).  Only once was it perhaps a conjunction.
+	if (word == L"but" && wordSourceIndex > 0 && source.m[wordSourceIndex].queryWinnerForm(L"preposition") >= 0)
+	{
+		errorMap[L"LP correct: word 'but': ST says " + primarySTLPMatch + L" LP says preposition"]++;
+		return 0;
+	}
 	return -1;
 }
 
@@ -2627,7 +2671,7 @@ void printFormDistribution(wstring word, double adp, FormDistribution fd, wstrin
 
 }
 
-int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *vm,JNIEnv *env, int &numNoMatch, int &numPOSNotFound, unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, unordered_map<wstring, int> &errorMap, bool pcfg)
+int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *vm,JNIEnv *env, int &numNoMatch, int &numPOSNotFound, unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, unordered_map<wstring, int> &errorMap, bool pcfg,wstring limitToWord)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
@@ -2684,24 +2728,27 @@ int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *
 					inRelativeClause = true;
 					until = wordSourceIndex+source.m[wordSourceIndex].pma[pmaOffset].len;
 				}
-				if (!pcfg)
+				if (limitToWord.empty() || limitToWord == source.m[wordSourceIndex].word->first)
 				{
-					if (checkStanfordMaxentAgainstWinner(source, wordSourceIndex, originalParse, parse, numPOSNotFound, formNoMatchMap, wordNoMatchMap, inRelativeClause))
+					if (!pcfg)
 					{
-						numNoMatch++;
-						if (!sentencePrinted)
-							source.printSentence(SCREEN_WIDTH, start, endIndex, true);
-						sentencePrinted = true;
+						if (checkStanfordMaxentAgainstWinner(source, wordSourceIndex, originalParse, parse, numPOSNotFound, formNoMatchMap, wordNoMatchMap, inRelativeClause))
+						{
+							numNoMatch++;
+							if (!sentencePrinted)
+								source.printSentence(SCREEN_WIDTH, start, endIndex, true);
+							sentencePrinted = true;
+						}
 					}
-				}
-				else
-				{
-					if (checkStanfordPCFGAgainstWinner(source, wordSourceIndex, numTimesWordOccurred[originalIWord], originalParse, sentence, parse, numPOSNotFound, formNoMatchMap, wordNoMatchMap, VFTMap, inRelativeClause,errorMap, start))
+					else
 					{
-						numNoMatch++;
-						if (!sentencePrinted)
-							source.printSentence(SCREEN_WIDTH, start, endIndex, true);
-						sentencePrinted = true;
+						if (checkStanfordPCFGAgainstWinner(source, wordSourceIndex, numTimesWordOccurred[originalIWord], originalParse, sentence, parse, numPOSNotFound, formNoMatchMap, wordNoMatchMap, VFTMap, inRelativeClause, errorMap, start))
+						{
+							numNoMatch++;
+							if (!sentencePrinted)
+								source.printSentence(SCREEN_WIDTH, start, endIndex, true);
+							sentencePrinted = true;
+						}
 					}
 				}
 				if (wordSourceIndex == until)
@@ -2759,7 +2806,7 @@ int stanfordCheck(Source source, int step, bool pcfg)
 		wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d sources in %02I64d:%02I64d:%02I64d [%d sources/hour] (%-35.35s...)", numSourcesProcessedNow * 100 / totalSource, numSourcesProcessedNow, totalSource,
 			processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, (processingSeconds) ? numSourcesProcessedNow * 3600 / processingSeconds : 0, title.c_str());
 		SetConsoleTitle(buffer);
-		int setStep = stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, wordNoMatchMap,VFTMap,errorMap,pcfg);
+		int setStep = stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, wordNoMatchMap,VFTMap,errorMap,pcfg,L"");
 		totalWords += source.m.size();
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
@@ -2918,16 +2965,18 @@ int stanfordCheckMP(Source source, int step, bool pcfg, int MP)
 	free(handles);
 }
 
-int stanfordCheckTest(Source source, wstring path, int sourceId, bool pcfg)
+int stanfordCheckTest(Source source, wstring path, int sourceId, bool pcfg,wstring limitToWord)
 {
 	JavaVM *vm;
 	JNIEnv *env;
 	createJavaVM(vm, env);
 	unordered_map<wstring, int> formNoMatchMap, wordNoMatchMap, VFTMap, errorMap;
 	int numNoMatch = 0, numPOSNotFound = 0;
-	stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, wordNoMatchMap, VFTMap, errorMap, pcfg);
+	stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, wordNoMatchMap, VFTMap, errorMap, pcfg,limitToWord);
 	int totalWords = source.m.size();
 	destroyJavaVM(vm);
+	if (limitToWord.length() > 0)
+		return 0;
 	if (totalWords > 0)
 		lplog(LOG_ERROR, L"numNoMatch=%d/%d %7.3f%% numPOSNotFound=%d", numNoMatch, totalWords, numNoMatch * 100.0 / totalWords, numPOSNotFound);
 	lplog(LOG_ERROR, L"WORD AGREE DISTRIBUTION ------------------------------------------------------------");
@@ -3169,15 +3218,16 @@ void wmain(int argc,wchar_t *argv[])
 		printUnknowns(source, step);
 		break;
 	case 21:
-		patternAnalysis(source, step, L"__PP", L"A");
+		//patternOrWordAnalysis(source, step, L"__PP", L"A",true);
 		// patternAnalysis(source, step, L"_MS1", L"2"); // TODO: testing weight change on _S1.
+		patternOrWordAnalysis(source, step, L"that", L"", false);
 		break;
 	case 60:
 		//stanfordCheckMP(source, step, true,8);
 		stanfordCheck(source, step, true);
 		break;
 	case 70:
-		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true);
+		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"but");
 		break;
 	}
 	source.unlockTables();

@@ -89,7 +89,7 @@ void createQuestionPatterns(void)
 									2,L"_VERBPRESENT",L"_BE{vS:V_OBJECT:id}",0,1,1,0);
 	// are you? // aren't you covered by a combination of 
 	// also covered by _Q2"F" __ALLOBJECTS, except __ALLOBJECTS are objects, and this is a subject (which is correct)
-	cPattern::create(L"_Q1{_STRICT_NO_MIDDLE_MATCH}",L"4", // this pattern must not have a subject!  otherwise it is interpreted as the _IS having an object!
+	cPattern::create(L"_Q1",L"4", // this pattern must not have a subject!  otherwise it is interpreted as the _IS having an object!
 									1,L"_IS{VERB:vS:id}",0,1,1,
 									1,L"__NOUN[*]{SUBJECT}",0,1,1, // L"_NOUN_OBJ{SUBJECT}",
 									1,L"__ALLOBJECTS_1",0,0,1, // is he president? / now covered in _Q2[J] because allowing _Q1[4] to have its own object will
@@ -319,14 +319,14 @@ void createQuestionPatterns(void)
 	// if this is ever added to, then add FINAL_IF_ALONE to _Q1 and _Q1PASSIVE
 	// re-added _ALLVERB because _Q2 is altered by the _QUESTION characteristic which alters the weight against _VERBREL1.
 	cPattern::create(L"_Q2{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH:_QUESTION}",L"F",
-									1,L"__INTRO_S1{_BLOCK:EVAL}",0,0,1, 
+									1,L"_INTRO_S1{_BLOCK:EVAL}",0,0,1, 
 									2,L"relativizer*-2{QTYPE:OBJECT}",L"_Q2PREP*-2",0,0,1, 
 									1,L"__INTERPPB",0,0,1,
 									2,L"_Q1",L"_Q1PASSIVE",0,1,1, // _VERBREL1 removed because ALLOBJECTS follow is redundant
 									// __ALLOBJECTS_0 would be harmful here "(" ALLOBJECTS_0 could resolve to a NAME, which must be an object, but will not be registered as one if
 									//   __ALLOBJECTS_0 is its parent. This is especially important because the relativizer will be registered also as an object
 									1,L"adjective{ADJ}",0,0,1,
-									3,L"__QNOUN",L"_PP",L"__ALLOBJECTS_1",0,0,1, // ,L"_INFP{OBJECT:_BLOCK}" RINFP 6/7/2006 -- *1 encourages the object to be in Q1, not outside.
+									4,L"__QNOUN",L"_PP", L"__ALLOBJECTS_1", L"__ALLOBJECTS_2*1", 0,0,1, // ,L"_INFP{OBJECT:_BLOCK}" RINFP 6/7/2006 -- *1 encourages the object to be in Q1, not outside.
 									1,L"__CLOSING__S1",0,0,3,
 									0);
 	cPattern::create(L"_Q2{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH:_QUESTION}",L"G",
@@ -465,22 +465,24 @@ void createQuestionPatterns(void)
 						2,L"__ALLVERB",L"_COND{VERB}",0,1,1,
 						0);
 	cPattern::create(L"_RELQ{_FINAL_IF_ALONE:_FORWARD_REFERENCE:S_IN_REL:_QUESTION}", L"",
-		2, L"_ADJECTIVE", L"_ADVERB", 0, 0, 1,
-		1, L"relativizer*-1", 0, 1, 1, // this is necessary to beat Q1[J] which matches the same but incorrectly
-		1, L"_ADVERB", 0, 0, 1, // where simply every one is bound to turn up sooner or later
-		1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
-		1, L"preposition*4", 0, 0, 1, // that you are afraid 'of'// preposition use should be rare!
-		0);
+									3, L"_ADJECTIVE", L"_ADVERB", L"conjunction|but", 0, 0, 1,
+									1, L"relativizer*-1", 0, 1, 1, // this is necessary to beat Q1[J] which matches the same but incorrectly
+									1, L"_ADVERB", 0, 0, 1, // where simply every one is bound to turn up sooner or later
+									1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
+									1, L"preposition*4", 0, 0, 1, // that you are afraid 'of'// preposition use should be rare!
+									0);
 	//  Mrs . Edgar Keith lives here , does she[mrs] not ?
 	cPattern::create(L"_MS1{_FINAL:_QUESTION}",L"7",
-									 1,L"__S1{_BLOCK:EVAL}",0,1,1,
-									 1,L",",0,1,1,
-									 1,L"does",0,1,1,
-									 2,L"personal_pronoun_nominative",L"personal_pronoun",0,1,1,
-									 1,L"not",0,0,1,
-									 0);
+									1,L"conjunction|but", 0, 0, 1,
+									1,L"__S1{_BLOCK:EVAL}",0,1,1,
+									1,L",",0,1,1,
+									1,L"does",0,1,1,
+									2,L"personal_pronoun_nominative",L"personal_pronoun",0,1,1,
+									1,L"not",0,0,1,
+									0);
 	// would you, Tommy?
 	cPattern::create(L"_MQ1{_FINAL_IF_ALONE:_QUESTION}",L"1",
+									1, L"conjunction|but", 0, 0, 1,
 									1,L"relativizer",0,0,1,
 									4,L"_Q1S",L"_Q1PASSIVE",L"_Q1",L"_QT1",0,1,1,
 									1,L",",0,1,1, // , ma'am // if this is made optional, _NOUN of C4 and _ALLOBJECT of C3 are identical
@@ -489,6 +491,7 @@ void createQuestionPatterns(void)
 	// would you if you could?
 	// What does he want from me, I wonder.
 	cPattern::create(L"_MQ1{_FINAL_IF_ALONE:_QUESTION}",L"2",
+									1,L"conjunction|but",0,0,1,
 									1,L"relativizer",0,0,1,
 									4,L"_Q1S",L"_Q1PASSIVE",L"_Q1",L"_QT1",0,1,1,
 									// __ALLOBJECTS_0 would be harmful here because ALLOBJECTS_0 could resolve to a NAME, which must be an object, but will not be registered as one if
@@ -500,22 +503,23 @@ void createQuestionPatterns(void)
 									0);
 	// But if so, where was the girl, and what had she done with the papers?
 	cPattern::create(L"_MQ1{_FINAL_IF_ALONE:_STRICT_NO_MIDDLE_MATCH:_QUESTION}",L"3",
-											 1,L"_STEP",0,0,1,
-											 1,L"_INTRO_S1",0,0,1,
-											 1,L"_Q2{EVAL:_BLOCK}",0,1,1,
-											 1,L",",0,0,1,
-											 1,L"and",0,1,1,
-											 1,L"_Q2{EVAL:_BLOCK}",0,1,1,
-											 0);
+									1,L"_STEP",0,0,1,
+									1,L"_INTRO_S1",0,0,1,
+									1,L"_Q2{EVAL:_BLOCK}",0,1,1,
+									1,L",",0,0,1,
+									1,L"and",0,1,1,
+									1,L"_Q2{EVAL:_BLOCK}",0,1,1,
+									0);
 	// Do you think that I should care for a moment for such things as those , or *that* they have brought the slightest taint of disgrace upon you in the minds of those that know you ?
 	cPattern::create(L"_MQ1{_FINAL_IF_ALONE:_QUESTION}", L"4",
-		1, L"relativizer", 0, 0, 1,
-		4, L"_Q1S", L"_Q1PASSIVE", L"_Q1", L"_QT1", 0, 1, 1,
-		// __ALLOBJECTS_0 would be harmful here because ALLOBJECTS_0 could resolve to a NAME, which must be an object, but will not be registered as one if
-		//   __ALLOBJECTS_0 is its parent.  
-		5, L"__QNOUN", L"_PP", L"adjective{ADJ}", L"__ALLOBJECTS_1", L"__ALLOBJECTS_2", 0, 0, 1, // there must only be one adjective and it must be last (not mixed in) see *
-		1, L"__MSTAIL", 0, 1, 1,
-		0);
+									1, L"conjunction|but", 0, 0, 1,
+									1, L"relativizer", 0, 0, 1,
+									4, L"_Q1S", L"_Q1PASSIVE", L"_Q1", L"_QT1", 0, 1, 1,
+									// __ALLOBJECTS_0 would be harmful here because ALLOBJECTS_0 could resolve to a NAME, which must be an object, but will not be registered as one if
+									//   __ALLOBJECTS_0 is its parent.  
+									5, L"__QNOUN", L"_PP", L"adjective{ADJ}", L"__ALLOBJECTS_1", L"__ALLOBJECTS_2", 0, 0, 1, // there must only be one adjective and it must be last (not mixed in) see *
+									1, L"__MSTAIL", 0, 1, 1,
+									0);
 }
 
 // after a question, a new paragraph, and a non-quote paragraph, 

@@ -2165,6 +2165,13 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 	//tFI::cRMap *rm=(tFI::cRMap *)NULL;
 	tFI::cRMap::tIcRMap tr=tNULL;
 	bool success;
+	if (whereObjectTag >= 0 && nextObjectTag >= 0 && patterns[pm->getPattern()]->questionFlag && (m[tagSet[whereObjectTag].sourcePosition].word->first == L"how" || m[tagSet[whereObjectTag].sourcePosition].word->first == L"when" || m[tagSet[whereObjectTag].sourcePosition].word->first == L"why"))
+	{
+		if (debugTrace.traceVerbObjects)
+			lplog(L"          %d:verb %s is in a question, has two objects (%d,%d) and the first object is the how/when relativizer - numObjects is decremented.", tagSet[verbTagIndex].sourcePosition, verbWord->first.c_str(), tagSet[whereObjectTag].sourcePosition, tagSet[nextObjectTag].sourcePosition);
+		whereObjectTag = nextObjectTag;
+		nextObjectTag = -1;
+	}
 	if (whereObjectTag>=0)
 	{
 		if (assessCost)

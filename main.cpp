@@ -1076,7 +1076,7 @@ int WRMemoryCheck(MYSQL mysql)
 // -book 3537 3538 -BC 0 -cacheDir M:\caches -SW -SWNR -SWNW -forceSourceReread -numSourcesPerProcess 15 -retry -parseOnly
 // -book 0 -BC 0 -retry -cacheDir M:\caches -SR -SW -SWNR -SWNW -TNMS
 // parse gutenberg books all at once parcelled out (parseOnly):
-// -book 0 + -BC 0 -cacheDir J:\caches -SW -SWNR -SWNW -forceSourceReread -numSourcesPerProcess 15 -parseOnly -mp 8
+// -book 0 + -BC 0 -cacheDir M:\caches -SWNR -SWNW -SW -MCSW -logMatchedSentences -logUnmatchedSentences -numSourcesPerProcess 15 -forceSourceReread -parseOnly -retry -mp 8
 // do TREC:
 // -Interactive 0 + -BC 0 -cacheDir J:\caches -SR -SW -SWNR -SWNW -TNMS
 void redistributeFilesAlphabetically(wchar_t *dir);

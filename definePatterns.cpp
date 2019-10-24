@@ -139,7 +139,22 @@ void createMetaNameEquivalencePatterns(void);
 // study of 'but':
 // Longman 79-81, 84, 433, 851, 898, 901, 1047, 1070, 1079
 // but is a coordinator (coordinating conjunction)
-// 
+// Quirk: 9.4n; II.9 (conjunction: 4.53n; 6.5; 8.144, 146; 9.58n; 10.66n; 11.44; 12.68; 13 passim; 14.2; 15.43, 44; 19.58, 59n, 65; III.7.12)
+//                   (subjunct: 8.111, 116n; 10.69; 11.41)
+//                   (preposition: 6.5, 27; 9.7,58; 15.44)
+
+
+// study of 'that':
+// Longman 85-7, 97, 135, 193-4, 196, 233, 270, 272, 274, 309, 336, 349-350, 584-5, 
+//         608-9, 611-17, 621, 629, 644-5, 647-8, 650-1, 653-4, 658, 660ff, 671-2, 
+//         674, 676-9, 684, 687, 693, 695, 705-6, 709, 714, 724-5 730ff, 739, 751-7,
+//         839, 860, 865, 970, 972, 984, 992, 994, 999, 1001-3, 1005-6, 1008,1010, 
+//         1016-21, 1043, 1076
+// noted as conjunctionm determiner, intesifier, pronoun, relative by Quirk
+// 85: subordinating conjunction introducing degree clauses OR complement/nomincal clause OR adverbial caluse as part of a complex subordinator
+// 87: that is also a degree adverb (that good), a relativizer, and a demonstrative determiner or pronoun
+// 97: that as pronoun: Anyone can see *that*.
+// 135: 
 int createNouns(void)
 { LFS
 	// this has the same follows as _NOUN[9] (except _PP and _REL1 are optional)
@@ -585,6 +600,16 @@ int createBasicPatterns(void)
 										3, L"noun|amount", L"noun|lot", L"noun|deal", 0, 0, 1,
 										2, L"adjective|worse", L"adverb|better", 0, 1, 1,
 										0);
+	cPattern::create(L"_ADVERB{_FINAL}", L"L",
+										1, L"determiner|a", 0, 1, 1,
+										2, L"adverb|little*1", L"adverb|bit*1", 0, 1, 1, // make it preferable for another match 
+										1, L"adverb", 0, 0, 1,
+										0);
+	cPattern::create(L"_ADVERB{_FINAL}", L"Y",
+										1, L"predeterminer|all", 0, 1, 1,
+										1, L"determiner|the", 0, 1, 1,
+										2, L"pronoun|same", L"adverb|sooner", 0, 1, 1,
+										0);
 	// He held as much as a 200 pound fish - this has been taken by the pattern __AS_AS
 	//cPattern::create(L"_ADVERB{_FINAL}",L"7",1,L"as",0,1,1,
 	//														1,L"adverb|much",0,1,1,
@@ -969,7 +994,8 @@ void createInfinitivePhrases(void)
 	// to L"infinitive" phrase as a noun object [PRESENT]
 	// to think he should go / to think he should go and she should also go.
 	// simple infinitive nonfinite verb phrase Quirk CGEL (3.56) vIS
-	cPattern::create(L"__INFPT{IVERB:_BLOCK}",L"1",1,L"to{ITO}",0,1,1,
+	cPattern::create(L"__INFPT{IVERB:_BLOCK}",L"1",
+										1,L"to{ITO}",0,1,1,
 										1,L"_ADVERB",0,0,1,
 										1,L"verbal_auxiliary{V_AGREE}",0,0,1, // to help think this through
 										1,L"think{vS:V_OBJECT}",VERB_PRESENT_FIRST_SINGULAR,1,1,
@@ -1029,13 +1055,15 @@ void createInfinitivePhrases(void)
 										0);
 	/*THINKSAY*/
 	// goes with next INFP [PRESENT SUB]
-	cPattern::create(L"__INFP4TSUB{IVERB:_BLOCK}",L"",1,L"coordinator{ITO}",0,1,1,
+	cPattern::create(L"__INFP4TSUB{IVERB:_BLOCK}",L"",
+												1,L"coordinator{ITO}",0,1,1,
 												1,L"think{vC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
 												1,L"__S1{OBJECT:EVAL:_BLOCK}",0,1,1,
 												0);
 	// to be thinking he should go / to be thinking he should go and she should too. [PRESENT]
 	// L"C" infinitive nonfinite verb phrase Quirk CGEL (3.56) 
-	cPattern::create(L"__INFPT{IVERB:_BLOCK}",L"4",1,L"to{ITO}",0,1,1,
+	cPattern::create(L"__INFPT{IVERB:_BLOCK}",L"4",
+										1,L"to{ITO}",0,1,1,
 										1,L"_ADVERB",0,0,1,
 										1,L"_BE{_BLOCK}",0,1,1,
 										1,L"think{vC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
@@ -1043,7 +1071,8 @@ void createInfinitivePhrases(void)
 										1,L"__INFP4TSUB",0,0,1,
 										0);
 	// goes with next INFP [PRESENT SUB]
-	cPattern::create(L"__INFP5SUB{IVERB:_BLOCK}",L"",1,L"coordinator{ITO}",0,1,1,
+	cPattern::create(L"__INFP5SUB{IVERB:_BLOCK}",L"",
+												1,L"coordinator{ITO}",0,1,1,
 												1,L"_ADVERB",0,0,1,
 												// encourage __INFP5SUB to stick closely together / I was just in time to see him ring the bell and get admitted to the house
 												2,L"_BE*-1{_BLOCK}",L"verb|get*-1{V_AGREE:V_OBJECT}",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_PLURAL,1,1,
@@ -1115,9 +1144,10 @@ void createInfinitivePhrases(void)
 	/*THINKSAY*/
 	// to have been thinking he should go to the store
 	// L"BC" infinitive nonfinite verb phrase Quirk CGEL (3.56)
-	cPattern::create(L"__INFPT{IVERB:_BLOCK}",L"7",1,L"to{ITO}",0,1,1,
+	cPattern::create(L"__INFPT{IVERB:_BLOCK}",L"7",
+		                 1,L"to{ITO}",0,1,1,
 										 1,L"_ADVERB",0,0,1,
-										1,L"_HAVE{_BLOCK}",0,1,1,
+										 1,L"_HAVE{_BLOCK}",0,1,1,
 										 1,L"_BEEN",0,1,1,
 										 1,L"think{vBC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
 										 1,L"__S1{OBJECT:EVAL:_BLOCK}",0,1,1,
@@ -1127,13 +1157,16 @@ void createInfinitivePhrases(void)
 	cPattern::create(L"__INFP_S1",L"",2,L"__INFP",L"__INFPT",0,1,1,
 												1,L",",0,1,1,0);
 	// to be blended, to be hurried, and to have been washed
-	cPattern::create(L"_INFP{_FINAL_IF_ALONE}",L"1",1,L"__INFP_S1",0,0,3,
+	// not only to be interested but also to be surprised.
+	cPattern::create(L"_INFP{_FINAL_IF_ALONE}",L"1",
+		                 1,L"__INFP_S1",0,0,3,
 										 2,L"__INFP",L"__INFPT",0,1,1,
 										 1,L",",0,0,1,
-										 1,L"coordinator",0,1,1,
+										 2,L"coordinator",L"conjunction|but",0,1,1,
 										 2,L"_INFP",L"__INFPT",0,1,1,0);
-	cPattern::create(L"_INFP{_FINAL_IF_ALONE}",L"2",1,L"_ADVERB",0,0,1,
-										2,L"__INFP",L"__INFPT",0,1,1,0);
+	cPattern::create(L"_INFP{_FINAL_IF_ALONE}",L"2",
+		                 1,L"_ADVERB",0,0,1,
+										 2,L"__INFP",L"__INFPT",0,1,1,0);
 }
 
 int createVerbPatterns(void)
@@ -1971,6 +2004,13 @@ int createSecondaryPatterns2(void)
 									3, L"verb|please*-2{VERB:V_AGREE:V_OBJECT}", L"verb|pleases*-2{VERB:V_AGREE:V_OBJECT}", L"verb|pleased*-2{VERB:V_AGREE:V_OBJECT}", 0, 1, 1, // incentivize against pi (politeness_discourse_marker)
 									0);
 
+	// but with extreme graciousness
+	cPattern::create(L"__CLOSING__S1{_BLOCK:_ONLY_END_MATCH}", L"A",
+									1, L",", 0, 0, 1,
+									2, L"conjunction", L"coordinator", 0, 1, 1,
+									1, L"_ADJECTIVE", 0, 0, 1,
+									1, L"_PP*1", 0, 0, 1,
+									0);
 	// DECLARATIVES p.803 CGEL
 	// The simple sentence (p. 754)
 	// SVC, SVA, SV, SVO, SVOC, SVOA, SVOO
@@ -2220,6 +2260,10 @@ int createSecondaryPatterns2(void)
 										4, L"honorific{HON:HAIL}", L"noun{HAIL}", L"adjective|dear", L"interjection*-4", MALE_GENDER | FEMALE_GENDER, 1, 1,
 										1, L"noun*1", 0, 0, 1, // Oh, dear mother earth!
 										0);
+	// *But* doesn't some one of that name live here ?
+	cPattern::create(L"__INTRO_S1{_ONLY_BEGIN_MATCH}", L"C",
+										1, L"conjunction", 0, 1, 1,
+										0);
 	// added interjection to take care of 'Well' Stanford mismatch
 	cPattern::create(L"__INTRO_S1{_ONLY_BEGIN_MATCH}",L"2",
 									 2,L"interjection*-4", L"politeness_discourse_marker*-1", 0, 0, 1,
@@ -2409,13 +2453,6 @@ int createSecondaryPatterns2(void)
 						3,L"_NOUN_OBJ",L"__NOUN[*]",L"__MNOUN[*]",0,0,1, // Tell me you were with monsieur Poirot.
 						1,L"__S1[*]{_BLOCK:OBJECT:EVAL}",0,1,1,
 						0);
-	// willing to do anything, go anywhere. (Secret Adversary)
-	cPattern::create(L"_PLEA{_FINAL:_ONLY_BEGIN_MATCH}",L"1",
-						1,L"_VERBONGOING{VERB:vE}",0,1,1,
-						3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, // there must only be one adjective and it must be last (not mixed in) see *
-						1,L"__CLOSING__S1",0,0,3,
-						0);
-
 
 	// that one might believe every day to be Sunday
 	// that such was not the case.
@@ -2518,7 +2555,7 @@ int createSecondaryPatterns2(void)
 											 1,L"_STEP",0,0,1,
 											 1,L"_INTRO_S1",0,0,1,
 											 1,L"_ADVERB",0,0,1, // even if 
-											 9,L"conjunction|if", L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"relativizer|whenever", L"conjunction|as", 0, 0, 1,
+											 9,L"conjunction|if", L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"relativizer|whenever", L"conjunction|as", 0, 1, 1,
 											 1,L"__S1{_BLOCK:EVAL}",0,1,1,
 											 2,L"_ADVERB*1",L"_ADJECTIVE_AFTER*1",0,0,1, // any time between dawn and sunset / I wish to see him *alive*
 											 1,L",",0,0,1,
@@ -2542,7 +2579,7 @@ int createSecondaryPatterns2(void)
 											 1, L"_ADVERB", 0, 0, 1,
 											 4,L"then",L"adverb|so",L"conjunction",L"coordinator",0,1,1,
 											 1,L"then",0,0,1,
-											 2,L"_PP*2",L"_VERBREL2*2",0,0,1,  // Tommy did not hear Boris's reply , but [in response to it] Whittington said something that sounded like - *1 competition with __MSTAIL[9]
+											 3,L"_PP*2",L"_VERBREL2*2", L"_ADVERB", 0,0,1,  // Tommy did not hear Boris's reply , but [in response to it] Whittington said something that sounded like - *1 competition with __MSTAIL[9]
 											 2,L"__S1{_BLOCK:EVAL}",L"_REL1[*]",0,1,1, // L"__NOUN[*]*1",0,1,1,  took __NOUN out - absorbed the subject of the second sentence following another sentence (and a conjunction)
 											 0);
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}",L"2",
@@ -2566,10 +2603,11 @@ int createSecondaryPatterns2(void)
 											 1,L"__S1[*]*2{_BLOCK:OBJECT:EVAL}",0,1,1, // very rare             // and in general _NOUN[5] is correct when this is a NOUN
 											 0);
 	// and happy like you.
+	// but with extreme graciousness
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL:_ONLY_END_MATCH}", L"4",
 												1, L",", 0, 0, 1,
 												2, L"conjunction", L"coordinator", 0, 1, 1,
-												1, L"_ADJECTIVE", 0, 1, 1,
+												1, L"_ADJECTIVE", 0, 0, 1,
 												3, L"_PP*1", L"_VERBREL2*1", L"_INFP*1", 0, 0, 1,
 												0);
 	// prevents multiplicative nesting in _MS1
@@ -2763,6 +2801,7 @@ int createSecondaryPatterns2(void)
 	// especially him.  especially this case.
 	// you too? // me especially? / those?
 	cPattern::create(L"__IMPLIEDIS{_FINAL_IF_ALONE:_STRICT_NO_MIDDLE_MATCH}",L"1",
+													1,L"conjunction",0,0,1, // and especially this case / but never mind.
 													1,L"_ADVERB",0,1,1,
 													2,L"_NOUN_OBJ",L"__NOUN",0,1,1,
 													1,L"_ADVERB",0,0,1,
@@ -2783,6 +2822,13 @@ int createSecondaryPatterns2(void)
 												 1,L"preposition|out",0,1,1,
 												 1,L"_PP",0,1,1,
 												 0);
+	// willing to do anything, go anywhere. (Secret Adversary)
+	cPattern::create(L"_PLEA{_FINAL_IF_ALONE:_STRICT_NO_MIDDLE_MATCH}", L"1",
+													1, L"_VERBONGOING{VERB:vE}", 0, 1, 1,
+													3, L"__ALLOBJECTS_0", L"__ALLOBJECTS_1", L"__ALLOBJECTS_2", 0, 0, 1, // there must only be one adjective and it must be last (not mixed in) see *
+													1, L"__CLOSING__S1", 0, 0, 3,
+													0);
+
 	// yes, please.  Oh, please.  No, No, please!
 	// No, please, sir
 	cPattern::create(L"_PLEA{_FINAL_IF_ALONE:_STRICT_NO_MIDDLE_MATCH}", L"2",
