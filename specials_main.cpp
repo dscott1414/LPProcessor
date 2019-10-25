@@ -2489,6 +2489,130 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: word 'but': ST says " + primarySTLPMatch + L" LP says preposition"]++;
 		return 0;
 	}
+	// 43. this is correct 100% of the time in the corpus (over 100 examples).  
+	if (word == L"more" && wordSourceIndex > 0 && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
+	{
+		if ((source.m[wordSourceIndex - 1].queryWinnerForm(L"verb") >= 0) ||
+			(source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0 && source.m[wordSourceIndex + 1].queryForm(L"indefinite_pronoun") < 0) ||
+			(source.m[wordSourceIndex - 1].word->first == L"the"))
+		{
+			errorMap[L"LP correct: word 'more': ST says " + primarySTLPMatch + L" LP says adverb"]++;
+			return 0;
+		}
+	}
+	if (word == L"more" && wordSourceIndex > 0 && source.m[wordSourceIndex].queryWinnerForm(L"quantifier") >= 0)
+	{
+		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") >= 0 && source.m[wordSourceIndex + 1].queryForm(L"verb")<0)
+		{
+			errorMap[L"LP correct: word 'more': ST says " + primarySTLPMatch + L" LP says quantifier"]++;
+			return 0;
+		}
+	}
+	// never correct
+	if (word == L"more" && (primarySTLPMatch == L"interjection" || primarySTLPMatch == L"verb"))
+	{
+		errorMap[L"LP correct: word 'more': ST says " + primarySTLPMatch]++;
+		return 0;
+	}
+	// never correct
+	if (word == L"after" && primarySTLPMatch == L"preposition" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && 
+		  (!iswalpha(source.m[wordSourceIndex+1].word->first[0]) || source.m[wordSourceIndex + 1].queryWinnerForm(L"verb")>=0))
+	{
+		errorMap[L"LP correct: word 'after': ST says " + primarySTLPMatch + L"but LP says adverb"]++;
+		return 0;
+	}
+	// 45. this is correct 100% of the time in the corpus (over 100 examples).  
+	if ((primarySTLPMatch == L"verb") && !source.m[wordSourceIndex].word->second.hasVerbForm())
+	{
+		errorMap[L"LP correct: ST says verb when no verb form possible"]++;
+		return 0;
+	}
+	// 46. this is correct 100% of the time in the corpus (over 100 examples).  
+	if ((primarySTLPMatch == L"conjunction") && source.m[wordSourceIndex].queryForm(L"conjunction") < 0)
+	{
+		errorMap[L"LP correct: ST says conjunction when no conjunction form possible)"]++;
+		return 0;
+	}
+	// 47. this is correct 100% of the time in the corpus (over 100 examples).  
+	if ((primarySTLPMatch == L"preposition") && source.m[wordSourceIndex].queryForm(L"preposition") < 0)
+	{
+		errorMap[L"LP correct: ST says preposition when no preposition form possible)"]++;
+		return 0;
+	}
+	// 48. this is correct 100% of the time in the corpus (over 100 examples).  
+	if ((primarySTLPMatch == L"adverb") && source.m[wordSourceIndex].queryForm(L"adverb") < 0 &&
+		   (source.m[wordSourceIndex].queryWinnerForm(L"adjective") < 0 || word[word.length()-2]!=L'l' || word[word.length() - 1] != L'y')) // don't end in ly
+	{
+		errorMap[L"LP correct: ST says adverb when no adverb form possible)"]++;
+		return 0;
+	}
+	// 49. this is correct 100% of the time in the corpus (over 100 examples).  
+	if ((primarySTLPMatch == L"interjection") && source.m[wordSourceIndex].queryForm(L"interjection") < 0)
+	{
+		//partofspeech += L"**INTERJ";
+		errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
+		return 0;
+	}
+	// 50. this is correct 100% of the time in the corpus (over 100 examples).  
+	if ((primarySTLPMatch == L"numeral_cardinal") && source.m[wordSourceIndex].queryForm(L"numeral_cardinal") < 0)
+	{
+		errorMap[L"LP correct: ST says numeral_cardinal when no numeral_cardinal form possible)"]++;
+		return 0;
+	}
+	if ((primarySTLPMatch == L""))
+	{
+		partofspeech += L"***FW";
+		//errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
+		//return 0;
+	}
+	if ((primarySTLPMatch == L"|||"))
+	{
+		partofspeech += L"***LS";
+		//errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
+		//return 0;
+	}
+	if ((primarySTLPMatch == L"symbol"))
+	{
+		partofspeech += L"***SYM";
+		//errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
+		//return 0;
+	}
+	if (primarySTLPMatch == L"determiner")
+	{
+		vector<wstring> determinerTypes = { L"determiner",L"demonstrative_determiner",L"possessive_determiner",L"interrogative_determiner", L"quantifier", L"numeral_cardinal" };
+		bool detMatch = false;
+		for (wstring dt : determinerTypes)
+			if (detMatch = source.m[wordSourceIndex].queryWinnerForm(dt) >= 0)
+				break;
+		if (!detMatch)
+			partofspeech += L"***DT";
+		//errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
+		//return 0;
+	}
+	if (primarySTLPMatch == L"personal_pronoun_accusative")
+	{
+		vector<wstring> pronounTypes = { L"personal_pronoun_accusative",L"personal_pronoun_nominative",L"personal_pronoun",L"reflexive_pronoun" };
+		bool pnMatch = false;
+		for (wstring pn : pronounTypes)
+			if (pnMatch = source.m[wordSourceIndex].queryWinnerForm(pn) >= 0)
+				break;
+		if (!pnMatch)
+			partofspeech += L"***PN";
+		//errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
+		//return 0;
+	}
+	if (primarySTLPMatch == L"possessive_determiner")
+	{
+		vector<wstring> pronounTypes = { L"possessive_determiner" };
+		bool pnMatch = false;
+		for (wstring pn : pronounTypes)
+			if (pnMatch = source.m[wordSourceIndex].queryWinnerForm(pn) >= 0)
+				break;
+		if (!pnMatch)
+			partofspeech += L"***PNPDET";
+		//errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
+		//return 0;
+	}
 	return -1;
 }
 

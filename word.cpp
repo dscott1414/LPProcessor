@@ -2341,6 +2341,17 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
 		bufferScanLocation = cp;
 		return PARSE_WEB_ADDRESS;
 	}
+	// remove italic html
+	if (!wcsncmp(buffer + cp, L"<i>", 3))
+	{
+		bufferScanLocation = cp + 3;
+		return readWord(buffer, bufferLen, bufferScanLocation, sWord, nounOwner, scanForSection, webScrapeParse, t);
+	}
+	if (!wcsncmp(buffer + cp, L"</i>", 4))
+	{
+		bufferScanLocation = cp + 4;
+		return readWord(buffer, bufferLen, bufferScanLocation, sWord, nounOwner, scanForSection, webScrapeParse, t);
+	}
 	// NewsBank XML parsing
   if (buffer[cp]=='&')
   {

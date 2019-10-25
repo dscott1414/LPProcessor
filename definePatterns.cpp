@@ -155,6 +155,11 @@ void createMetaNameEquivalencePatterns(void);
 // 87: that is also a degree adverb (that good), a relativizer, and a demonstrative determiner or pronoun
 // 97: that as pronoun: Anyone can see *that*.
 // 135: 
+
+// study of 'this':
+// Longman 270, 272, 274, 309, 349, 584, 616, 730, 947, 1023-4, 1043
+// 272: demostrative determiner
+// 616: demonstrative pronoun
 int createNouns(void)
 { LFS
 	// this has the same follows as _NOUN[9] (except _PP and _REL1 are optional)
