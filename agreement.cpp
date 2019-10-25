@@ -623,6 +623,12 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 							temp,nounPosition,nounWord->first.c_str(),tr->second.frequency,verbWord->first.c_str());
 		}
 	}
+	if (nounPosition>=0 && m[nounPosition].queryWinnerForm(accForm) >= 0)
+	{
+		if (debugTrace.traceSubjectVerbAgreement)
+			lplog(L"%d:Noun phrase at %d is accusative pronoun [additional cost of 4]!", position, nounPosition);
+		//relationCost += 4; must be carefully tested
+	}
 	if (restateSet && relationCost)
 	{
 		if (debugTrace.traceSubjectVerbAgreement)

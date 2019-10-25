@@ -1711,7 +1711,8 @@ void WordClass::initialize()
 		iWord->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN] = iWord->second.usagePatterns[tFI::LOWER_CASE_USAGE_PATTERN] = 0;
 		// make honorifics not costly (honorifics are not reflected out of BNC properly so they are underweighted)
 		iWord->second.toLowestCost(honorificForm);
-		if (!iWord->second.toLowestCost(demonstrativeDeterminerForm) && iWord->second.query(relativizerForm) < 0 && iWord->first != L"there" && iWord->first != L"so")
+		if (!iWord->second.toLowestCost(demonstrativeDeterminerForm) && iWord->second.query(relativizerForm) < 0 && 
+			  iWord->first != L"there" && iWord->first != L"another" && iWord->first != L"so" && iWord->first != L"either" && iWord->first != L"neither")
 			iWord->second.toLowestCost(pronounForm);
 	}
 	gquery(L"tell")->second.usagePatterns[tFI::VERB_HAS_2_OBJECTS] = 255;

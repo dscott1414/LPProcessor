@@ -228,7 +228,7 @@ int createNouns(void)
 	// a female called Jane Finn
 	// a Sikh called Bob
 	// this was created to aid name recognition (name recognition help)
-	cPattern::create(L"__NOUN",L"7",
+	cPattern::create(L"__NOUN",L"P",
 										1,L"__NOUN[*]{SUBOBJECT}",0,1,1, 
 										2,L"verb|called",L"verb|named",VERB_PAST_PARTICIPLE,1,1,
 										1,L"_NAME*-1{SUBOBJECT}",0,1,1,
@@ -336,7 +336,7 @@ int createNouns(void)
 										1,L"__NOUN[*]{_BLOCK:RE_OBJECT}",0,1,1,
 										0);
 	// MERGED into __NOUN "C"
-	//cPattern::create(L"__NOUN{_FINAL_IF_ALONE:PNOUN}",L"6",1,L"demonstrative_determiner",0,1,1,
+	//cPattern::create(L"__NOUN{_FINAL_IF_ALONE:PNOUN}",L"",1,L"demonstrative_determiner",0,1,1,
 	//                      1,L"_ADJECTIVE_AFTER",0,0,1, // they will declare 'these sane'
 	//                      0);
 	// created subobject so that address is not seen as a single object (so that the name in the address can be visible)
@@ -358,6 +358,12 @@ int createNouns(void)
 											// also 'me sane' or I sane is not really one noun.
 												1,L"reflexive_pronoun",0,0,1,
 												0);
+	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:PNOUN}", L"Y", 5,
+		L"personal_pronoun_accusative|us{N_AGREE}", L"personal_pronoun_accusative|them{N_AGREE}", 
+		L"personal_pronoun_nominative|we{N_AGREE}", L"personal_pronoun_nominative|they{N_AGREE}", 
+		L"personal_pronoun_accusative|you{N_AGREE}", PLURAL, 1, 1,
+		1, L"predeterminer|both", 0, 1, 1,
+		0);
 	// this pattern must go after all nouns EXCEPT it must be before any noun patterns that use _NOUN as a subpattern
 	//cPattern::create(L"_NOUN",L"",1,L"__NOUN[*]",0,1,1,0);
 
@@ -369,10 +375,12 @@ int createNouns(void)
 										0);
 	// black beans and head lettuce
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:PLURAL:MPLURAL:MNOUN:_BLOCK}",L"J",
-										1,L"both",0,0,1,
+										1,L"predeterminer|both*-1",0,0,1,
 										2,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ",0,1,1,
 										2,L"coordinator|and",L"&",0,1,1,
-										3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"__NOUNREL{MOBJECT}",0,1,1,0);
+										3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"__NOUNREL{MOBJECT}",0,1,1,
+										1, L"predeterminer|both*-1", 0, 0, 1,
+										0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:SINGULAR:MNOUN:_BLOCK}",L"O",
 										1,L"adverb|either*-2",0,0,1,
 										2,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",0,1,1,
@@ -1595,7 +1603,7 @@ void createSecondaryPatterns1(void)
 	//    1,L"__ALLOBJECTS",0,0,1,
 	//  0);
 	// REPLACED BY __NOUN L"5L"
-	//cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"X",
+	//cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"",
 	//                  1,L"__PNOUN",0,1,1,
 	//                  1,L"__APPNOUN2{_BLOCK:RE_OBJECT}",0,1,1,
 	//                  0);
@@ -2034,7 +2042,7 @@ int createSecondaryPatterns2(void)
 									 1,L"__CLOSING__S1",0,0,3,
 									 0);
 	// *I* shall have to speak to *whoever is in charge * .
-	cPattern::create(L"__NOUN{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_FORWARD_REFERENCE:_BLOCK:GNOUN:VNOUN:_EXPLICIT_SUBJECT_VERB_AGREEMENT:_CHECK_IGNORABLE_FORMS}", L"W",
+	cPattern::create(L"__NOUN{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_FORWARD_REFERENCE:_BLOCK:GNOUN:VNOUN:_EXPLICIT_SUBJECT_VERB_AGREEMENT:_CHECK_IGNORABLE_FORMS}", L"Z",
 										5, L"interrogative_determiner|whatever", L"interrogative_determiner|whichever", L"interrogative_determiner|whosoever",L"interrogative_determiner|whoever", L"interrogative_determiner|wherever", 0, 1, 1, 
 										1, L"__ALLVERB*1", 0, 1, 1, // make this more expensive than a normal__S1
 										1, L"__INTERS1*1{BLOCK}", 0, 0, 1,
@@ -2326,7 +2334,7 @@ int createSecondaryPatterns2(void)
 	  // One beautiful , warm , dark night 
 	cPattern::create(L"__INTRO_N{_ONLY_BEGIN_MATCH:NOUN:OBJECT:FLOATTIME}",L"9",
 									 1,L"preposition",0,0,1, // after a moment / after a while
-									 3,L"determiner{TIMEMODIFIER:DET}",L"quantifier{TIMEMODIFIER:DET}", L"numeral_cardinal{TIMEMODIFIER:DET}", 0,0,1,
+									 4, L"determiner{TIMEMODIFIER:DET}", L"demonstrative_determiner{TIMEMODIFIER:DET}", L"quantifier{TIMEMODIFIER:DET}", L"numeral_cardinal{TIMEMODIFIER:DET}", 0,0,1,
 									 1,L"_ADJECTIVE{TIMEMODIFIER:_BLOCK}",0,0,1,
 									 7,L"month{MONTH:N_AGREE}",L"daysOfWeek{DAYWEEK:N_AGREE}",L"season{SEASON:N_AGREE}",L"timeUnit{TIMECAPACITY:N_AGREE}", 
 											L"dayUnit{TIMECAPACITY:N_AGREE}", L"uncertainDurationUnit{TIMECAPACITY:N_AGREE}", L"simultaneousUnit{TIMECAPACITY:N_AGREE}", 0,1,1, // A moment
@@ -2546,7 +2554,7 @@ int createSecondaryPatterns2(void)
 		// moved to __C1_IP
 	// restatement / this woman, whoever she was, was saved
 	// this woman, master of disguise,
-	//cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_FORWARD_REFERENCE}",L"A",
+	//cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_FORWARD_REFERENCE}",L"",
 	//                 1,L"__NOUN[*]",0,1,1,
 	//                 1,L",",0,1,1,
 	//                 2,L"__NOUN[*]{_BLOCK:RE_OBJECT}",L"_REL1[*]{_BLOCK}",0,1,1,

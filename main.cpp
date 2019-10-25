@@ -1071,7 +1071,8 @@ int WRMemoryCheck(MYSQL mysql)
 //TryAcquireSRWLockShared	Attempts to acquire a slim reader/writer (SRW) lock in shared mode. If the call is successful, the calling thread takes ownership of the lock.
 
 // -test timeExpressions -retry -BC 0 -cacheDir M:\caches -forceSourceReread -parseOnly -SW -SWNR -SWNW 
-// -test tokenization ~~BEGINUNI -BC 0 -cacheDir M:\caches -SW -SWNR -SWNW -forceSourceReread -retry
+// -test tokenization -BC 0 -cacheDir M:\caches -SW -SWNR -SWNW -forceSourceReread -retry
+// -test thatParsing -BC 0 -cacheDir M:\caches -SW -SWNR -SWNW -forceSourceReread -retry
 // parse one gutenberg book repeatedly:
 // -book 3537 3538 -BC 0 -cacheDir M:\caches -SW -SWNR -SWNW -forceSourceReread -numSourcesPerProcess 15 -retry -parseOnly
 // -book 0 -BC 0 -retry -cacheDir M:\caches -SR -SW -SWNR -SWNW -TNMS

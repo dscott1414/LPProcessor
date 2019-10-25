@@ -2559,24 +2559,27 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: ST says numeral_cardinal when no numeral_cardinal form possible)"]++;
 		return 0;
 	}
+	// 51. this is correct 100% of the time 
 	if ((primarySTLPMatch == L""))
 	{
 		partofspeech += L"***FW";
 		//errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
 		//return 0;
 	}
+	// 52. this is correct 100% of the time 
 	if ((primarySTLPMatch == L"|||"))
 	{
-		partofspeech += L"***LS";
-		//errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
-		//return 0;
+		errorMap[L"diff: ST says list but LP does not have that semantic category yet"]++;
+		return 0;
 	}
+	// 53. this is correct 100% of the time 
 	if ((primarySTLPMatch == L"symbol"))
 	{
-		partofspeech += L"***SYM";
-		//errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
-		//return 0;
+		
+		errorMap[L"LP correct: ST says symbol when it is not a symbol"]++;
+		return 0;
 	}
+	// 53. this is correct 100% of the time 
 	if (primarySTLPMatch == L"determiner")
 	{
 		vector<wstring> determinerTypes = { L"determiner",L"demonstrative_determiner",L"possessive_determiner",L"interrogative_determiner", L"quantifier", L"numeral_cardinal" };
@@ -2585,9 +2588,14 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			if (detMatch = source.m[wordSourceIndex].queryWinnerForm(dt) >= 0)
 				break;
 		if (!detMatch)
+		{
+			if (word == L"both")
+			{
+				errorMap[L"LP correct: word 'both': ST says determiner when there is no following noun form (LP says pronoun)"]++;
+				return 0;
+			}
 			partofspeech += L"***DT";
-		//errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
-		//return 0;
+		}
 	}
 	if (primarySTLPMatch == L"personal_pronoun_accusative")
 	{
@@ -2751,7 +2759,7 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 									wstring posListStr;
 									for (auto pos : posList)
 										posListStr += pos + L" ";
-									lplog(LOG_FATAL_ERROR, L"%07d:ALSO %s not found in winnerForms %s", wordSourceIndex, posListStr.c_str(), winnerFormsString.c_str());
+									lplog(LOG_ERROR, L"FATAL! %07d:ALSO no winnerForm %s is found in ST POS list %s (2)", wordSourceIndex,  winnerFormsString.c_str(), posListStr.c_str());
 								}
 							}
 						}
@@ -3351,7 +3359,7 @@ void wmain(int argc,wchar_t *argv[])
 		stanfordCheck(source, step, true);
 		break;
 	case 70:
-		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"but");
+		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"this");
 		break;
 	}
 	source.unlockTables();
