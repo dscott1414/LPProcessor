@@ -2039,15 +2039,25 @@ public:
 		int element;
 		int cost;
 		int traceSource;
-		costPatternElementByTagSet(int P,int PP,int cPP,int ts,int e)
+		costPatternElementByTagSet(int P, int PP, int cPP, int ts, int e)
 		{
-			position=P;
-			PEMAPosition=PP;
-			childPEMAPosition=cPP;
-			tagSet=ts;
-			element=e;
-			cost=10000000;
-			traceSource=-1;
+			position = P;
+			PEMAPosition = PP;
+			childPEMAPosition = cPP;
+			tagSet = ts;
+			element = e;
+			cost = 10000000;
+			traceSource = -1;
+		}
+		costPatternElementByTagSet()
+		{
+			position = 0;
+			PEMAPosition = 0;
+			childPEMAPosition = 0;
+			tagSet = 0;
+			element = 0;
+			cost = 0;
+			traceSource = 0;
 		}
 		bool operator == (const costPatternElementByTagSet& o)
 		{
@@ -2091,8 +2101,10 @@ public:
 	void lowerPreviousElementCosts(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, wchar_t *fromWhere);
 	void lowerPreviousElementCostsLowerRegardlessOfPosition(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, wchar_t *fromWhere);
 	void lowerPreviousElementCostsOld(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, wchar_t *fromWhere);
-	bool assessEVALCost(tTagLocation &tl,int pattern,patternMatchArray::tPatternMatch *pm,int position);
-	int assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,int parentPosition,int position,vector < vector <tTagLocation> > &tagSets);
+	bool assessEVALCost(tTagLocation &tl,int pattern,patternMatchArray::tPatternMatch *pm,int position, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
+	void accumulateTertiaryPEMAPositions(int tagSetOffset,int traceSource,vector <tTagLocation>  &tagSet, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions, int tmpVOCost);
+	void applyTertiaryPEMAPositions(unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
+	int assessCost(patternMatchArray::tPatternMatch *parentpm, patternMatchArray::tPatternMatch *pm, int parentPosition, int position, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
 	int eliminateLoserPatterns(unsigned int begin,unsigned int end);
 	enum prepSetEnum { PREP_PREP_SET,PREP_OBJECT_SET,PREP_VERB_SET };
 	void setRelPrep(int where,int relPrep,int fromWhere,int setType);
@@ -3281,8 +3293,8 @@ int wordOrderSensitiveModifier,
 	bool matchAlias(int where,int object, int aliasObject);
 
 	// agreement
-	unsigned int getAllLocations(unsigned int position,int parentPattern,int rootp,int childLen,int parentLen,vector <unsigned int> &allLocations);
-	int markChildren(patternElementMatchArray::tPatternElementMatch *pem,int position,int recursionLevel,int allRootsLowestCost);
+	unsigned int getAllLocations(unsigned int position,int parentPattern,int rootp,int childLen,int parentLen,vector <unsigned int> &allLocations, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
+	int markChildren(patternElementMatchArray::tPatternElementMatch *pem,int position,int recursionLevel,int allRootsLowestCost, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
 	bool findLowCostTag(vector<tTagLocation> &tagSet,int &cost,wchar_t *tagName,tTagLocation &lowestCostTag,int parentCost,int &nextTag);
 	int evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,unsigned int parentPosition,unsigned int position,vector<tTagLocation> &tagSet,int &traceSource);
 	// agreement section end

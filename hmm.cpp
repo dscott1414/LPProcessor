@@ -717,7 +717,7 @@ unordered_map<wstring, vector <wstring> > viterbiAssociationMap = {
 
 	// include possible subclasses
 	{L"verb", { L"verbverb",L"think"} }, // feel, see, watch, hear, tell etc // fancy, say (thinksay verbs)
-	{L"noun",{ L"dayUnit",L"timeUnit",L"quantifier",L"Proper Noun" } }, // all, some etc
+	{L"noun",{ L"dayUnit",L"timeUnit",L"simultaneousUnit",L"quantifier",L"Proper Noun" } }, // all, some etc
 	{L"adjective",{ L"quantifier" } } // many
 };
 

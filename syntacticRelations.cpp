@@ -1226,10 +1226,8 @@ bool Source::skipQuote(int &where)
 	return true;
 }
 
-void Source::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool isId,bool &objectAsSubject,bool &subjectIsPleonastic,
-vector <tIWMM> &subjectWords,
-																								vector <int> &subjectObjects,vector <int> &whereSubjects,int tsSense,bool &multiSubject,
-bool preferInfinitive)
+void Source::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool isId,bool &objectAsSubject,bool &subjectIsPleonastic,vector <tIWMM> &subjectWords,
+																								vector <int> &subjectObjects,vector <int> &whereSubjects,int tsSense,bool &multiSubject,bool preferInfinitive)
 { LFS
 	int I=where,maxEnd=-1,PEMAOffset,MSTechnique=-1,saveBeginMST=-1;
 	// if where matches _MSTAIL and find _MS1, find the beginning and see if SUBJECT_ROLE.
@@ -1624,13 +1622,9 @@ void Source::addRoleTagsAt(int where,int I,bool inRelativeClause,bool withinInfi
 //   I want Bill to remember to thank Mrs. Smith for taking us back today. (single object, multiple infinitive phrase and so on)
 // relation to noun: I use language to suit the occasion.
 // relation as subjectObject to main verb: An extra candle to give away is always a good idea.
-int Source::processInternalInfinitivePhrase(int where,int whereVerb,int whereParentObject,int iverbTag,int firstFreePrep,
-vector <int> &futureBoundPrepositions,
-																						bool inPrimaryQuote,bool inSecondaryQuote,bool &nextVerbInSeries,
-int &sense,
-																						int &whereLastVerb,bool &ambiguousSense,bool inQuotedString,bool inSectionHeader,
-int begin,int end,
-int infpElement,vector <tTagLocation> &tagSet)
+int Source::processInternalInfinitivePhrase(int where,int whereVerb,int whereParentObject,int iverbTag,int firstFreePrep,vector <int> &futureBoundPrepositions,
+																						bool inPrimaryQuote,bool inSecondaryQuote,bool &nextVerbInSeries,int &sense,
+																						int &whereLastVerb,bool &ambiguousSense,bool inQuotedString,bool inSectionHeader,int begin,int end,int infpElement,vector <tTagLocation> &tagSet)
 { LFS
 	int whereIVerb=-1,whereHVerb=-1,nextTag=-1,parentTagLen=-1;
 	vector < vector <tTagLocation> > tagSets;

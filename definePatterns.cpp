@@ -160,6 +160,11 @@ void createMetaNameEquivalencePatterns(void);
 // Longman 270, 272, 274, 309, 349, 584, 616, 730, 947, 1023-4, 1043
 // 272: demostrative determiner
 // 616: demonstrative pronoun
+
+// study of 'some':
+// Longman 112,176,184,276,278,1007,1039,1113,1115
+// 276:some is a moderate/small quantifier, which is a type of determiner
+// 176: some is also a pronoun
 int createNouns(void)
 { LFS
 	// this has the same follows as _NOUN[9] (except _PP and _REL1 are optional)
@@ -382,10 +387,15 @@ int createNouns(void)
 										1, L"predeterminer|both*-1", 0, 0, 1,
 										0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:SINGULAR:MNOUN:_BLOCK}",L"O",
-										1,L"adverb|either*-2",0,0,1,
+										1,L"quantifier|either*-2",0,0,1,
 										2,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",0,1,1,
 										1,L"coordinator|or",0,1,1,
 										3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"__NOUNREL{MOBJECT}",0,1,1,0);
+	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:PLURAL:MNOUN:_BLOCK}", L"P",
+										1, L"quantifier|neither*-4", 0, 0, 1,
+										2, L"__NOUN[*]{MOBJECT}", L"_NOUN_OBJ{MOBJECT}", 0, 1, 1,
+										1, L"coordinator|nor", 0, 1, 1,
+										3, L"__NOUN[*]{MOBJECT}", L"_NOUN_OBJ{MOBJECT}", L"__NOUNREL{MOBJECT}", 0, 1, 1, 0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:SINGULAR:not:MNOUN:_BLOCK}",L"7",
 										1,L"adverb|neither*-2",0,0,1,
 										2,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",0,1,1,
@@ -536,11 +546,11 @@ int createBasicPatterns(void)
 											1, L"adverb|as*-1", 0, 1, 1,
 											2, L"adverb", L"adjective", 0, 1, 1,
 											1, L"preposition|as{P}", 0, 1, 1, 0); // when included in a _PP, mark this as a preposition
-	// this morning / this very morning
+	// this morning / this very morning / some morning
 	cPattern::create(L"_ADVERB{FLOATTIME}",L"T",
-											2,L"demonstrative_determiner{TIMEMODIFIER}",L"adjective{TIMEMODIFIER}",0,1,1,
+											5,L"demonstrative_determiner{TIMEMODIFIER}",L"adjective{TIMEMODIFIER}", L"quantifier|some", L"quantifier|each", L"quantifier|every",0,1,1,
 											1, L"adverb{ADV}", 0, 0, 1, // very
-											5,L"month{MONTH}",L"daysOfWeek{DAYWEEK}",L"season{SEASON}",L"timeUnit{TIMECAPACITY}",L"dayUnit{TIMECAPACITY}",0,1,1,
+											6,L"month{MONTH}",L"daysOfWeek{DAYWEEK}",L"season{SEASON}",L"timeUnit{TIMECAPACITY}",L"dayUnit{TIMECAPACITY}",L"noun|time",0,1,1,
 											0);
 	// any time between dawn and sunset
 	cPattern::create(L"_ADVERB{FLOATTIME}", L"V",
@@ -1332,7 +1342,7 @@ int createVerbPatterns(void)
 	// L"A" structure of verb phrases from Quirk CGEL (3.54)
 	cPattern::create(L"_VERB{VERB}",L"1",
 										1,L"_COND",0,1,1,
-										1, L"__INTERS1", 0, 0, 1,
+										2, L"__INTERS1", L"_ADVERB*2", 0, 0, 1,
 										2,L"_VERBPRESENT",L"_BE{vS:V_OBJECT:id}",0,1,1,0);
 	// L"A" structure of verb phrases from Quirk CGEL (3.54)
 	cPattern::create(L"_THINK",L"1",
@@ -1382,7 +1392,7 @@ int createVerbPatterns(void)
 									1,L"_COND",0,1,1,
 									1,L"_HAVE",0,1,1,
 									1, L"__INTERS1", 0, 0, 1,
-									2,L"_VERBPASTPART{vAB}",L"_BEEN{vAB:id}",0,1,1,0);
+									1,L"_VERBPASTPART{vAB}",0,1,1,0);
 	// I would/will have thought
 	cPattern::create(L"_THINK",L"6",
 									1,L"_COND",0,1,1,
@@ -1943,9 +1953,10 @@ int createSecondaryPatterns2(void)
 	// parsed as a VERB clause, which then is more expensive.
 	cPattern::create(L"__C1__S1",L"1",
 				1,L"__INTRO_NP",0,0,1,
-				13,L"__NOUN[*]{SUBJECT}",L"__MNOUN[*]{SUBJECT}",L"_INFP*2{GNOUN:SINGULAR:SUBJECT}",L"interrogative_pronoun{N_AGREE:SINGULAR:SUBJECT}",
+				15,L"__NOUN[*]{SUBJECT}",L"__MNOUN[*]{SUBJECT}",L"_INFP*2{GNOUN:SINGULAR:SUBJECT}",L"interrogative_pronoun{N_AGREE:SINGULAR:SUBJECT}",
 						L"interrogative_determiner{N_AGREE:SINGULAR:SUBJECT}", 
 						L"adverb|there*-1{N_AGREE:SINGULAR:PLURAL:SUBJECT}",L"adverb|here*-1{N_AGREE:SINGULAR:PLURAL:SUBJECT}",
+						L"quantifier|neither{N_AGREE:PLURAL:SUBJECT}", L"quantifier|either{N_AGREE:SINGULAR:SUBJECT}",
 						L"_REL1[*]*2{SUBJECT:GNOUN:SINGULAR}",L"_ADJECTIVE*1{SUBJECT:GNOUN}",
 						L"_VERBREL2*2{SUBJECT:GNOUN:SINGULAR:_BLOCK:EVAL}",L"__QSUBJECT{SUBJECT:GNOUN:SINGULAR}",L"__NOUNRU{SUBJECT}",
 						L"noun{SUBJECT:N_AGREE}",SINGULAR_OWNER|PLURAL_OWNER,1,1, // Poirot's were pleasantly vague .
@@ -2596,7 +2607,8 @@ int createSecondaryPatterns2(void)
 											 2,L"__S1{_BLOCK:EVAL}",L"_REL1[*]",0,1,1, // L"__NOUN[*]*1",0,1,1,  took __NOUN out - absorbed the subject of the second sentence following another sentence (and a conjunction)
 											 0);
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}",L"2",
-											 1,L",",0,0,1,
+												1, L"_ADVERB", 0, 0, 1,
+												1,L",",0,0,1,
 											 3,L"conjunction|but",L"then",L"coordinator|and",0,1,1,
 											 1,L"then",0,0,1,
 											 5,L"__ALLVERB{VERB2}",L"_COND{VERB2}",L"_VERBPASTPART*1{vB:VERB2}",L"_BEEN{vB:id:VERB2}",L"_VERBPASSIVE{VERB2}",0,1,1,

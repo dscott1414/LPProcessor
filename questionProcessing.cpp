@@ -499,7 +499,7 @@ void createQuestionPatterns(void)
 									5,L"__QNOUN",L"_PP",L"adjective{ADJ}",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, // there must only be one adjective and it must be last (not mixed in) see *
 									1,L",",0,0,1, 
 									1,L"conjunction|if",0,0,1,
-									2,L"__S1{EVAL:_BLOCK}", L"_PP",0,1,1, // Why don't you get a showy tie , like *mine* ?
+									3,L"__S1{EVAL:_BLOCK}", L"_PP",L"_INFP",0,1,1, // Why don't you get a showy tie , like *mine* ?
 									0);
 	// But if so, where was the girl, and what had she done with the papers?
 	cPattern::create(L"_MQ1{_FINAL_IF_ALONE:_STRICT_NO_MIDDLE_MATCH:_QUESTION}",L"3",

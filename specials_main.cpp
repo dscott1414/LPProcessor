@@ -1845,7 +1845,7 @@ unordered_map<wstring, vector <wstring> > maxentAssociationMap =
 	// include possible subclasses
 	{ L"verb", { L"verbverb",L"think",L"have",L"have_negation",L"is",L"is_negation",L"does",L"does_negation",L"be",L"been",L"modal_auxiliary",L"negation_modal_auxiliary",L"future_modal_auxiliary",L"negation_future_modal_auxiliary",L"being"} }, // feel, see, watch, hear, tell etc // fancy, say (thinksay verbs)
 	// stanford maxent apparently has no indefinite pronoun, so it classes them all as nouns.
-	{ L"noun",{ L"dayUnit",L"timeUnit",L"quantifier",L"numeral_cardinal",L"indefinite_pronoun",L"season" } }, // all, some etc // something, everything
+	{ L"noun",{ L"simultaneousUnit",L"dayUnit",L"timeUnit",L"quantifier",L"numeral_cardinal",L"indefinite_pronoun",L"season" } }, // all, some etc // something, everything
 	{ L"adjective",{ L"quantifier",L"numeral_ordinal" }},  // many / more
 	{ L"adverb",{ L"not",L"never",L"then" }},  // many
 	{ L"to",{ L"preposition" }},
@@ -2114,8 +2114,15 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			return 0;
 		}
 	}
+	vector <wstring> speakingVerbs = { L"said",L"cried",L"called",L"asked",L"answered",L"barked",L"sang",L"whistled",L"shouted",L"whispered",L"laughed",L"begged",L"exclaimed",L"replied",L"reminded",L"screamed",L"responded",L"repeated",L"yelled",L"grumbled",L"agreed",L"ejaculated" };
+	// Stanford POS NN (noun) not found in winnerForms determiner for word the 0002542:[” asked *the* mother . ]
+	if (wordSourceIndex > 1 && primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"determiner") >= 0 && source.m[wordSourceIndex - 2].queryForm(quoteForm) >= 0 &&
+			find(speakingVerbs.begin(), speakingVerbs.end(), source.m[wordSourceIndex-1].word->first) != speakingVerbs.end())
+	{
+		errorMap[L"LP correct: 'the' is not a noun"]++;
+		return 0;
+	}
 	// 3. ST is always wrong when given a phrase like [(ROOT (S ('' '') (S (S (VP (VBD said))) (VP (VBZ Bobtail)))] - LP correctly tags 'Bobtail' as a proper noun
-	vector <wstring> speakingVerbs = { L"said",L"cried",L"called",L"asked",L"answered",L"barked",L"sang",L"whistled",L"shouted",L"whispered",L"laughed",L"begged",L"exclaimed",L"replied",L"reminded",L"screamed",L"responded",L"repeated",L"yelled",L"grumbled",L"agreed" };
 	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"Proper Noun") >= 0 && source.m[wordSourceIndex - 2].queryForm(quoteForm) >= 0 &&
 		wordSourceIndex > 1 && find(speakingVerbs.begin(), speakingVerbs.end(), source.m[wordSourceIndex - 1].word->first) != speakingVerbs.end())
 	{
@@ -2123,7 +2130,10 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		return 0;
 	}
 	// 4. ST is always wrong when given a phrase like [(ROOT (S ('' '') (S (S (VP (VBD said))) (VP (VBZ Bobtail)))] - LP correctly tags 'said' as a verb
-	if ((primarySTLPMatch == L"adjective" || primarySTLPMatch == L"Proper Noun" || primarySTLPMatch == L"noun") && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && source.m[wordSourceIndex - 1].queryForm(quoteForm) >= 0 && source.m[wordSourceIndex + 1].queryWinnerForm(L"Proper Noun") >= 0 &&
+	// Stanford POS JJ(adjective) not found in winnerForms verb for word ejaculated 0002658:[” *ejaculated* Mrs.Ross .]
+	if ((primarySTLPMatch == L"adjective" || primarySTLPMatch == L"Proper Noun" || primarySTLPMatch == L"noun") &&
+		source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && source.m[wordSourceIndex - 1].queryForm(quoteForm) >= 0 && 
+		(source.m[wordSourceIndex + 1].queryWinnerForm(L"Proper Noun") >= 0 || source.m[wordSourceIndex + 1].word->first==L"the") &&
 		wordSourceIndex > 1 && find(speakingVerbs.begin(), speakingVerbs.end(), word) != speakingVerbs.end())
 	{
 		errorMap[L"LP correct: speaking verb is not adjective, noun or Proper Noun"]++;
@@ -2268,6 +2278,12 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		)
 	{
 		errorMap[L"ST correct: word 'all': [after plural noun or before a determiner or 'right'] ST says " + primarySTLPMatch + L" LP says adverb"]++;
+		return 0;
+	}
+	else if (word == L"all" && source.m[wordSourceIndex].queryWinnerForm(L"predeterminer") >= 0 && primarySTLPMatch == L"adverb" && 
+		       (source.m[wordSourceIndex+1].queryWinnerForm(L"determiner") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"possessive_determiner") >= 0))
+	{
+		errorMap[L"ST correct: word 'all': [after determiner/possessive determiner] ST says " + primarySTLPMatch + L" LP says adverb"]++;
 		return 0;
 	}
 	// 18. This 'All' should be classified as a subject (2 matches)
@@ -2562,9 +2578,9 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	// 51. this is correct 100% of the time 
 	if ((primarySTLPMatch == L""))
 	{
-		partofspeech += L"***FW";
-		//errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
-		//return 0;
+		//partofspeech += L"***FW";
+		errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
+		return 0;
 	}
 	// 52. this is correct 100% of the time 
 	if ((primarySTLPMatch == L"|||"))
@@ -2575,11 +2591,10 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	// 53. this is correct 100% of the time 
 	if ((primarySTLPMatch == L"symbol"))
 	{
-		
 		errorMap[L"LP correct: ST says symbol when it is not a symbol"]++;
 		return 0;
 	}
-	// 53. this is correct 100% of the time 
+	// 54. this is correct 100% of the time 
 	if (primarySTLPMatch == L"determiner")
 	{
 		vector<wstring> determinerTypes = { L"determiner",L"demonstrative_determiner",L"possessive_determiner",L"interrogative_determiner", L"quantifier", L"numeral_cardinal" };
@@ -2594,8 +2609,26 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				errorMap[L"LP correct: word 'both': ST says determiner when there is no following noun form (LP says pronoun)"]++;
 				return 0;
 			}
+			if (word == L"another" && source.m[wordSourceIndex].queryWinnerForm(pronounForm) >= 0 && source.m[wordSourceIndex + 1].queryWinnerForm(nounForm) < 0 &&
+				(source.m[wordSourceIndex + 1].queryWinnerForm(prepositionForm) >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(determinerForm) >= 0 || !iswalpha(source.m[wordSourceIndex + 1].word->first[0]) ||
+					source.m[wordSourceIndex + 1].word->second.hasVerbForm() || source.m[wordSourceIndex + 1].queryWinnerForm(conjunctionForm) >= 0))
+			{
+				errorMap[L"LP correct: word 'another': ST says determiner when there is no following noun form (LP says pronoun)"]++;
+				return 0;
+			}
+			if (word == L"any" && source.m[wordSourceIndex].queryWinnerForm(adverbForm) >= 0 && 
+				(source.m[wordSourceIndex + 1].queryWinnerForm(adjectiveForm) >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(adverbForm) >= 0))
+			{
+				errorMap[L"LP correct: word 'any': ST says determiner when there is only a following adverb or adjective form (LP says adverb)"]++;
+				return 0;
+			}
 			partofspeech += L"***DT";
 		}
+	}
+	if (word == L"to-night" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
+	{
+		errorMap[L"LP correct: word 'to-night': ST says " + primarySTLPMatch + L"but LP says adverb"]++;
+		return 0;
 	}
 	if (primarySTLPMatch == L"personal_pronoun_accusative")
 	{
@@ -2967,7 +3000,7 @@ int stanfordCheck(Source source, int step, bool pcfg)
 				printFormDistribution(word, adp, formDistribution[word], maxWord, maxForm, maxDiff);
 				limit++;
 			}
-		if (limit++ > 10)
+		if (limit++ > 20)
 			break;
 	}
 	lplog(LOG_ERROR, L"maxWord=%s maxForm=%s maxDiff=%d", maxWord.c_str(), maxForm.c_str(), maxDiff);
@@ -3253,7 +3286,7 @@ int numSourceLimit = 0;
 // step = 2 - evaluate statistics and create database statements to decrease the number of unknown words
 void wmain(int argc,wchar_t *argv[])
 {
-	setConsoleWindowSize(150, 10);
+	setConsoleWindowSize(85, 5);
 	chdir("..");
 	initializeCounter();
 	cacheDir = CACHEDIR;
@@ -3359,7 +3392,7 @@ void wmain(int argc,wchar_t *argv[])
 		stanfordCheck(source, step, true);
 		break;
 	case 70:
-		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"this");
+		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"");
 		break;
 	}
 	source.unlockTables();

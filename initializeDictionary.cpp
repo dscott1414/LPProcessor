@@ -1712,7 +1712,7 @@ void WordClass::initialize()
 		// make honorifics not costly (honorifics are not reflected out of BNC properly so they are underweighted)
 		iWord->second.toLowestCost(honorificForm);
 		if (!iWord->second.toLowestCost(demonstrativeDeterminerForm) && iWord->second.query(relativizerForm) < 0 && 
-			  iWord->first != L"there" && iWord->first != L"another" && iWord->first != L"so" && iWord->first != L"either" && iWord->first != L"neither")
+			  iWord->first != L"there" && iWord->first != L"another" && iWord->first != L"so" && iWord->first != L"each" && iWord->first != L"every" && iWord->first != L"either" && iWord->first != L"neither" && iWord->first != L"other")
 			iWord->second.toLowestCost(pronounForm);
 	}
 	gquery(L"tell")->second.usagePatterns[tFI::VERB_HAS_2_OBJECTS] = 255;
@@ -1721,8 +1721,8 @@ void WordClass::initialize()
 	gquery(L"descend")->second.usageCosts[tFI::VERB_HAS_1_OBJECTS] = 0;
 	gquery(L"wish")->second.usagePatterns[tFI::VERB_HAS_2_OBJECTS] = 255; // I wish you some figgy pudding
 	gquery(L"wish")->second.usageCosts[tFI::VERB_HAS_2_OBJECTS] = 0;
-	gquery(L"get")->second.usagePatterns[tFI::VERB_HAS_2_OBJECTS] = 127; // to get her a taxi
-	gquery(L"get")->second.usageCosts[tFI::VERB_HAS_2_OBJECTS] = 2;
+	//gquery(L"get")->second.usagePatterns[tFI::VERB_HAS_2_OBJECTS] = 127; // to get her a taxi - already set in DB
+	//gquery(L"get")->second.usageCosts[tFI::VERB_HAS_2_OBJECTS] = 2;
 	gquery(L"speed")->second.usagePatterns[tFI::VERB_HAS_1_OBJECTS] = 0;
 	gquery(L"speed")->second.usageCosts[tFI::VERB_HAS_1_OBJECTS] = 4;
 	gquery(L"other")->second.toLowestCost(indefinitePronounForm);
