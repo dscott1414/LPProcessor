@@ -25,7 +25,7 @@ void defineNames(void)
   cPattern::create(L"__NAME",L"1",
                     1,L"__NAMEINTRO",0,0,1,
                     1,L"Proper Noun{FIRST}",NO_OWNER,1,2,
-                    6,L"le{MIDDLE}",L"de{MIDDLE}",L"van{MIDDLE}",L"von{MIDDLE}",L"_ABB{MIDDLE}",L"letter{MIDDLE}",NO_OWNER,0,1,
+                    6,L"determiner|le{MIDDLE}",L"preposition|de{MIDDLE}",L"noun|van{MIDDLE}",L"noun|von{MIDDLE}",L"_ABB{MIDDLE}",L"letter{MIDDLE}",NO_OWNER,0,1,
                     //1,L".",0,0,1, // included by _ABB
                     1,L"Proper Noun{LAST}",NO_OWNER,1,2,
 										0); // noun removed
@@ -39,7 +39,7 @@ void defineNames(void)
                     1,L"__NAMEINTRO",0,0,1,
                      1,L"letter{FIRST}",0,1,1,
                     1,L".",0,0,1,
-                    4,L"le{MIDDLE}",L"de{MIDDLE}",L"van{MIDDLE}",L"von{MIDDLE}",0,1,1,
+                    4,L"determiner|le{MIDDLE}",L"preposition|de{MIDDLE}",L"noun|van{MIDDLE}",L"noun|von{MIDDLE}",0,1,1,
                     2,L"Proper Noun{LAST}",L"noun*2{LAST}",NO_OWNER,1,2,0); // Names ending in a noun should be not common
 
   // D' Artagnan / O'Malley / d'artagnan
@@ -73,7 +73,7 @@ void defineNames(void)
   cPattern::create(L"__NAME",L"9",
                     1,L"__NAMEINTRO",0,0,1,
                      1,L"Proper Noun{FIRST}",NO_OWNER,0,1,
-                     4,L"le{MIDDLE}",L"de{MIDDLE}",L"van{MIDDLE}",L"von{MIDDLE}",0,1,1,
+                     4,L"determiner|le{MIDDLE}",L"preposition|de{MIDDLE}",L"noun|van{MIDDLE}",L"noun|von{MIDDLE}",0,1,1,
                      2,L"Proper Noun{LAST}",L"noun*1{LAST}",NO_OWNER,1,2,0); // Names ending in a noun should be not common
 
   // M. D' Artagnan / K. O'Malley / M. d'artagnan
@@ -193,15 +193,15 @@ void defineNames(void)
     0);
   // p.o. box 3
   cPattern::create(L"_POADDRESS",L"4",
-    1,L"p.o.",0,1,1,
-    1,L"box",0,1,1,
+    1,L"abbreviation|p.o.",0,1,1,
+    1,L"noun|box",0,1,1,
     1,L"Number",0,1,1,
     0);
   // P O Box 3
   cPattern::create(L"_POADDRESS",L"5",
-    1,L"p",0,1,1,
-    1,L"o",0,1,1,
-    1,L"box",0,1,1,
+    1,L"letter|p",0,1,1,
+    1,L"letter|o",0,1,1,
+    1,L"noun|box",0,1,1,
     1,L"Number",0,1,1,
     0);
   cPattern::create(L"_MADDRESS",L"",
@@ -235,7 +235,7 @@ void defineNames(void)
                           1,L"__NAMEINTRO",0,0,1,
                      1,L"letter{FIRST}",0,1,1,
                     1,L".",0,0,1,
-                    3,L"le{MIDDLE}",L"de{MIDDLE}",L"van{MIDDLE}",0,1,1,
+                    3,L"determiner|le{MIDDLE}",L"preposition|de{MIDDLE}",L"noun|van{MIDDLE}",0,1,1,
                     2,L"Proper Noun{LAST}",L"noun*2{LAST}",SINGULAR_OWNER|PLURAL_OWNER,1,2,0); // Names ending in a noun should be not common
   // D' Artagnan / O'Malley / d'artagnan
   cPattern::create(L"__NAMEOWNER{NAMEOWNER}",L"4",
@@ -248,7 +248,7 @@ void defineNames(void)
   cPattern::create(L"__NAMEOWNER{NAMEOWNER}",L"9",
                           1,L"__NAMEINTRO",0,0,1,
                      1,L"Proper Noun{FIRST}",NO_OWNER,0,1,
-                     2,L"le{MIDDLE}",L"de{MIDDLE}",0,1,1,
+                     2,L"determiner|le{MIDDLE}",L"preposition|de{MIDDLE}",0,1,1,
                      2,L"Proper Noun{LAST}",L"noun*1{LAST}",SINGULAR_OWNER|PLURAL_OWNER,1,2,0); // Names ending in a noun should be not common
   // M. D' Artagnan / K. O'Malley / M. d'artagnan
   cPattern::create(L"__NAMEOWNER{NAMEOWNER}",L"A",
@@ -1109,7 +1109,7 @@ void createMetaNameEquivalencePatterns(void)
     3,L"verb|known",L"verb|called",L"verb|named",VERB_PAST_PARTICIPLE,1,1,
 		1,L"_ADVERB",0,0,1,
 		1,L"_META_PP",0,0,1, // to her friends
-		2,L"as",L"preposition|by",0,0,1,
+		2,L"preposition|as",L"preposition|by",0,0,1,
 		// this is NOUN[G]
 		5,L"determiner{DET}",L"demonstrative_determiner{DET}",L"possessive_determiner{DET}",L"interrogative_determiner{DET}",L"quantifier{DET}",0,1,1,
 		1,L"_ADJECTIVE",0,0,2,
@@ -1147,7 +1147,7 @@ void createMetaNameEquivalencePatterns(void)
 			 L"verb|calls",L"verb|names",L"verb|renames",L"verb|nicknames",L"verb|addresses",0,1,1,
 		1,L"_ADVERB",0,0,1,
 		2,L"personal_pronoun_accusative{NAME_PRIMARY}",L"__RENOUN{NAME_PRIMARY}",0,1,1, 
-		2,L"as",L"preposition|by",0,0,1,
+		2,L"preposition|as",L"preposition|by",0,0,1,
     1,L"quotes",OPEN_INFLECTION,0,1,
 		1,L"_NAME{NAME_SECONDARY}",0,1,1,
     1,L"quotes",CLOSE_INFLECTION,0,1,0);
@@ -1169,7 +1169,7 @@ void createMetaNameEquivalencePatterns(void)
 		1,L"personal_pronoun_accusative{NAME_PRIMARY}",0,1,1, // 3,L"him{NAME_PRIMARY}",L"her{NAME_PRIMARY}",L"them{NAME_PRIMARY}",0,0,1,
 		1,L"determiner|the",0,1,1,
 		2,L"noun|nickname",L"noun|name",0,1,1,
-		1,L"of",0,0,1,
+		1,L"preposition|of",0,0,1,
     1,L"quotes",OPEN_INFLECTION,0,1,
 		1,L"_NAME{NAME_SECONDARY}",0,1,1,
     1,L"quotes",CLOSE_INFLECTION,0,1,0);
@@ -1226,7 +1226,7 @@ void createMetaNameEquivalencePatterns(void)
 		1,L"_ADVERB",0,0,1,
 		5,L"verb|called",L"verb|named",L"verb|renamed",L"verb|nicknamed",L"verb|addressed",0,1,1,
 		1,L"_ADVERB",0,0,1,
-		1,L"as",0,0,1,
+		1,L"preposition|as",0,0,1,
     1,L"quotes",OPEN_INFLECTION,0,1,
 		1,L"_NAME{NAME_SECONDARY}",0,1,1,
     1,L"quotes",CLOSE_INFLECTION,0,1,0);
@@ -1288,7 +1288,7 @@ void createMetaNameEquivalencePatterns(void)
 		1,L"__NOUN{NAME_PRIMARY}",0,1,1, // he/him/Bob
 		1,L"preposition|for",0,1,1,
     1,L"indefinite_pronoun|anything",0,1,1, 
-    1,L"but",0,1,1, 
+    1,L"preposition|but",0,1,1, 
 		2,L"__NOUN{_BLOCK:NAME_SECONDARY}",L"__MNOUN{_BLOCK:NAME_SECONDARY}",0,1,1,
 		0);
 	// Tommy recognized in him[Irish] an Irish Sinn feiner . 
@@ -1343,7 +1343,7 @@ void createMetaNameEquivalencePatterns(void)
     1,L"_ADVERB",0,0,1,
 		1,L"determiner|the",0,1,1,
 		2,L"noun|impression",L"noun|look",0,1,1,
-		1,L"of",0,0,1,
+		1,L"preposition|of",0,0,1,
 		1,L"__RENOUN{_BLOCK:RE_OBJECT:NAME_SECONDARY}",0,1,1,
     0);
 	//  a woman dressed as a hospital nurse
@@ -1513,7 +1513,7 @@ void createMetaNameEquivalencePatterns(void)
 	// Next to him ran Mr. Bill.
 	cPattern::create(L"_META_GROUP{_IGNORE:_ONLY_BEGIN_MATCH}",L"4",
     1,L"preposition|next",0,1,1, 
-    1,L"to",0,1,1, 
+    1,L"preposition|to",0,1,1, 
 		3,L"_NAME{NAME_PRIMARY}",L"__NOUN{NAME_PRIMARY}",L"personal_pronoun_accusative{NAME_PRIMARY}",0,1,1, // Bob
     1,L"__ALLVERB",0,1,1,
 		2,L"_NAME{NAME_SECONDARY}",L"__NOUN{NAME_SECONDARY}",0,1,1, // Bob

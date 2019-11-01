@@ -185,9 +185,9 @@ int createNouns(void)
 		L"time",L"date",L"telephone_number",VERB_PRESENT_PARTICIPLE|NO_OWNER,1,1,0);
 
 	cPattern::create(L"__HIS_HER_DETERMINER",L"",
-						1,L"his{DET}",0,1,1,
+						1,L"possessive_determiner|his{DET}",0,1,1,
 						3,L",",L"/",L"or",0,1,1,
-						1,L"her",0,1,1,0);
+						1,L"possessive_determiner|her",0,1,1,0);
 	cPattern::create(L"__IPDET", L"",
 						1, L"indefinite_pronoun{DET}", SINGULAR_OWNER | PLURAL_OWNER, 1, 1,
 						0);
@@ -204,7 +204,7 @@ int createNouns(void)
 	cPattern::create(L"_META_GROUP{_FINAL_IF_ALONE:NOUN}",L"",
 			1,L"possessive_determiner{DET:ADJ}",0,0,1,
 			1,L"_ADJECTIVE{_BLOCK}",0,0,1,
-			1,L"friend{N_AGREE}",0,1,1,
+			1,L"noun|friend{N_AGREE}",0,1,1,
 			0);
  // this also encourages a word identified as both adverb and adjective to be an adverb if identified before an adjective.
 	// the more adjectives repeated, the more uncommon - taken out - discourages nouns taking on adjectives
@@ -285,7 +285,7 @@ int createNouns(void)
 										7,L"determiner{DET}",L"demonstrative_determiner{DET}",L"possessive_determiner{DET}",L"interrogative_determiner{DET}",L"quantifier{DET}",L"__HIS_HER_DETERMINER*1",L"_NAMEOWNER{DET}",0,0,1,
 										1,L"_ADJECTIVE{_BLOCK}",0,0,3,
 										// prefer _NAME over noun
-										5,L"you{N_AGREE}",L"noun*1{N_AGREE}",L"personal_pronoun_nominative{N_AGREE}",L"_NAME{GNOUN:NAME}",L"personal_pronoun{N_AGREE}",NO_OWNER,1,1, // the one they want
+										5,L"personal_pronoun|you{N_AGREE}",L"noun*1{N_AGREE}",L"personal_pronoun_nominative{N_AGREE}",L"_NAME{GNOUN:NAME}",L"personal_pronoun{N_AGREE}",NO_OWNER,1,1, // the one they want
 										0);
 	// all the boys, half the boys, double the sauce
 	cPattern::create(L"__PNOUN{NOUN}",L"2",
@@ -331,13 +331,13 @@ int createNouns(void)
 										0);
 	cPattern::create(L"__NOUN",L"W",
 										1,L"indefinite_pronoun",0,1,1,
-										1,L"like",0,1,1,
+										1,L"preposition|like",0,1,1,
 										1,L"__APPNOUN[*]{_BLOCK:RE_OBJECT}",0,1,1,
 										0);
 
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"K",
 										1,L"__NOUN[*]",0,1,1,
-										2,L"eg",L"e.g.",0,1,1,
+										2,L"abbreviation|eg",L"abbreviation|e.g.",0,1,1,
 										1,L"__NOUN[*]{_BLOCK:RE_OBJECT}",0,1,1,
 										0);
 	// MERGED into __NOUN "C"
@@ -499,7 +499,7 @@ int createNouns(void)
 										0);
 	// no. 7
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:GNOUN:SINGULAR}",L"Q",
-										7,L"no",L"determiner|no",L"num",L"number",L"Proper Noun|no",L"Proper Noun|num",L"Proper Noun|n",0,1,1,
+										7,L"no",L"determiner|no",L"abbreviation|num",L"number",L"Proper Noun|no",L"Proper Noun|num",L"Proper Noun|n",0,1,1,
 										1,L".",0,0,1,
 										3,L"Number*-3",L"roman_numeral*-3",L"numeral_cardinal*-3",NO_OWNER,1,1,
 										0);
@@ -537,7 +537,7 @@ int createBasicPatterns(void)
 	// to and fro -- usage: he was tossed to and fro
 	// by and by Mrs. Vandermeyer brought me some supper
 	cPattern::create(L"__ADVERB",L"1",
-											2,L"to",L"preposition|by",0,1,1,
+											2,L"preposition|to",L"preposition|by",0,1,1,
 											2,L"coordinator|and",L"&",0,1,1,
 											2,L"preposition|fro",L"preposition|by",0,1,1,0);
 
@@ -562,7 +562,7 @@ int createBasicPatterns(void)
 											5, L"month{MONTH}", L"daysOfWeek{DAYWEEK}", L"season{SEASON}", L"timeUnit{TIMECAPACITY}", L"dayUnit{TIMECAPACITY}", SINGULAR, 1, 1,
 											0);
 	cPattern::create(L"_ADVERB{FLOATTIME}",L"9",
-		                    1,L"to",0,1,1,
+		                    1,L"preposition|to",0,1,1,
 												1,L"dash|-*-2",0,1,1,
 												2,L"noun|day{DAY}",L"noun|morrow{DAY}",0,1,1,0);
 	// lightly,
@@ -613,7 +613,7 @@ int createBasicPatterns(void)
 	cPattern::create(L"_ADVERB{_FINAL}",L"6",
 										1,L"adverb|more",0,1,1,
 										1,L"preposition|than",0,1,1,
-										2,L"once",L"twice",0,1,1,
+										2,L"adverb|once",L"adverb|twice",0,1,1,
 										0);
 	// a great amount worse/ a whole lot worse / a great deal worse
 	// a little worse
@@ -662,11 +662,11 @@ int createBasicPatterns(void)
 	cPattern::create(L"_NUMBER{_NO_REPEAT}",L"3",1,L"number*-1",0,0,1, // the form of the word L"number"
 													1,L"numeral_cardinal",0,1,1,0);
 	cPattern::create(L"_NUMBER{_NO_REPEAT}",L"4",1,L"Number",0,1,1,
-													5,L"%",L"p",L"f",L"c",L"k",0,1,1,0); // both % and p from BNC, f,c,k are temperatures
+													5,L"%",L"letter|p",L"letter|f",L"letter|c",L"letter|k",0,1,1,0); // both % and p from BNC, f,c,k are temperatures
 	// from BNC
 	cPattern::create(L"_NUMBER{_NO_REPEAT}",L"5",2,L"$",L"#",0,1,1,
 													1,L"Number",0,1,1,
-													2,L"m",L"b",0,1,1,0);
+													2,L"letter|m",L"letter|b",0,1,1,0);
 
 	cPattern::create(L"_STEP",L"1", 1,L"brackets",OPEN_INFLECTION,0,1,
 												 2,L"letter",L"number",0,1,1,
@@ -680,25 +680,25 @@ int createBasicPatterns(void)
 	// if the proper noun is in an owner form then it will be a NAMEOWNER
 	cPattern::create(L"__ADJECTIVE",L"2",
 		1,L"_ADVERB",0,0,1,
-		//7, L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", // removed *1 as cost so that
-		8, L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", L"quantifier|more{ADJ}", // removed *1 as cost so that
+		//7, L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"preposition|ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", // removed *1 as cost so that
+		8, L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"preposition|ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", L"quantifier|more{ADJ}", // removed *1 as cost so that
 		VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,1,2,                            // we can make cost of *1 for __NOUN[2]
 												 1,L"adverb*1",0,0,1,0);                                                                // 2/3/2007
 		// OWNER attributes deleted - why would ownership occur before a dash?
 	cPattern::create(L"__ADJECTIVE",L"3",
 		1,L"_ADVERB",0,0,1,
-		6,L"adjective{ADJ}",L"numeral_ordinal{ADJ}",L"_NUMBER{ADJ}",L"ex{ADJ}",L"noun*1{ADJ}",L"no{ADJ:no}",SINGULAR,1,2,
+		6,L"adjective{ADJ}",L"numeral_ordinal{ADJ}",L"_NUMBER{ADJ}",L"preposition|ex{ADJ}",L"noun*1{ADJ}",L"no{ADJ:no}",SINGULAR,1,2,
 		1,L"dash",0,1,1,
-		7,L"adjective{ADJ}",L"verb*1{ADJ}",L"numeral_ordinal{ADJ}",L"_NUMBER{ADJ}",L"ex{ADJ}",L"noun{ADJ}",L"no{ADJ:no}",
+		7,L"adjective{ADJ}",L"verb*1{ADJ}",L"numeral_ordinal{ADJ}",L"_NUMBER{ADJ}",L"preposition|ex{ADJ}",L"noun{ADJ}",L"no{ADJ:no}",
 			VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,1,2,
 		1,L"adverb*1",0,0,1,0);
 		// first-class passengers
 	cPattern::create(L"__ADJECTIVE", L"A", 
 		1, L"_ADVERB", 0, 0, 1,
-		6, L"adjective{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"ex{ADJ}", L"noun*1{ADJ}", L"no{ADJ:no}", SINGULAR, 1, 2,
+		6, L"adjective{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"preposition|ex{ADJ}", L"noun*1{ADJ}", L"no{ADJ:no}", SINGULAR, 1, 2,
 		1, L"dash", 0, 1, 1,
 		3, L"noun*1{ADJ}", L"adjective|best*-4", L"noun|class*-4", SINGULAR, 1, 1,
-		8, L"adverb*1", L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", 0, 0, 2,
+		8, L"adverb*1", L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"preposition|ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", 0, 0, 2,
 		0);
 
 	// _NAME will ONLY be used in a case where a proper noun is not in an owner form AND it is preceded by an adverb.
@@ -741,7 +741,7 @@ int createBasicPatterns(void)
 	// a 121 to 200 pound fish
 	cPattern::create(L"__ADJECTIVE",L"5",
 		                          1,L"Number",0,1,1,
-															1,L"to",0,1,1,
+															1,L"preposition|to",0,1,1,
 															1,L"Number",0,1,1,
 															0);
 	// she was younger than he could have imagined
@@ -1157,8 +1157,8 @@ void createInfinitivePhrases(void)
 	// L"vrD" infinitive nonfinite verb phrase Quirk CGEL (3.56)
 	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"A",1,L"to{ITO}",0,1,1,
 										1,L"_ADVERB",0,0,1,
-										5,L"_NOUN_OBJ{IOBJECT}",L"__NOUN[*]{IOBJECT}", // _NOUN* includes NOUN[D] and NOUN[E]
-											L"there",L"demonstrative_determiner{IOBJECT}",L"possessive_determiner{IOBJECT}",0,0,1, // there was never much chance to their being given me
+										4,L"_NOUN_OBJ{IOBJECT}",L"__NOUN[*]{IOBJECT}", // _NOUN* includes NOUN[D] and NOUN[E]
+											L"demonstrative_determiner{IOBJECT}",L"possessive_determiner{IOBJECT}",0,0,1, // there was never much chance to their being given me
 										1,L"_BEING{_BLOCK}",0,1,1,
 										1,L"verb{vrD:V_OBJECT}",VERB_PAST_PARTICIPLE,1,1,
 										3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1,
@@ -1273,7 +1273,19 @@ int createVerbPatterns(void)
 												2,L"coordinator|and",L"coordinator|or",0,1,1,
 											  1,L"_VERBPRESENT",0,1,1,
 												0);
-		// eliminated as preposition is already included in _IS 2/20/2007
+	cPattern::create(L"_VERBPRESENTC{VERB}", L"O",
+												1, L"quantifier|either",0,1,1,
+												1, L"_VERBPRESENT", 0, 1, 1,
+												1, L"coordinator|or", 0, 1, 1,
+												1, L"_VERBPRESENT", 0, 1, 1,
+												0);
+	cPattern::create(L"_VERBPRESENTC{VERB}", L"P",
+												1, L"quantifier|neither", 0, 1, 1,
+												1, L"_VERBPRESENT", 0, 1, 1,
+												1, L"coordinator|nor", 0, 1, 1,
+												1, L"_VERBPRESENT", 0, 1, 1,
+												0);
+	// eliminated as preposition is already included in _IS 2/20/2007
 	//cPattern::create(L"_VERB_ID{VERB}",L"1",
 	//                        1,L"_IS{vS:id}",0,1,1,
 	//                        1,L"preposition*2",0,0,1,0); // preposition use should be rare!
@@ -1301,10 +1313,22 @@ int createVerbPatterns(void)
 													L"is{past:id:V_AGREE}",L"is_negation{not:past:id:V_AGREE}",
 													VERB_PAST|VERB_PAST_THIRD_SINGULAR|VERB_PAST_PLURAL,1,1,
 												0);
-	cPattern::create(L"_VERBPASTC{VERB}",L"",
-											  1,L"_VERBPAST",0,1,1,
-												2,L"coordinator|and",L"coordinator|or",0,1,1,
-											  1,L"_VERBPAST",0,1,1,
+	cPattern::create(L"_VERBPASTC{VERB}", L"",
+												1, L"_VERBPAST", 0, 1, 1,
+												2, L"coordinator|and", L"coordinator|or", 0, 1, 1,
+												1, L"_VERBPAST", 0, 1, 1,
+												0);
+	cPattern::create(L"_VERBPASTC{VERB}", L"O",
+												1, L"quantifier|either", 0, 1, 1,
+												1, L"_VERBPAST", 0, 1, 1,
+												1, L"coordinator|or", 0, 1, 1,
+												1, L"_VERBPAST", 0, 1, 1,
+												0);
+	cPattern::create(L"_VERBPASTC{VERB}", L"P",
+												1, L"quantifier|neither", 0, 1, 1,
+												1, L"_VERBPAST", 0, 1, 1,
+												1, L"coordinator|nor", 0, 1, 1,
+												1, L"_VERBPAST", 0, 1, 1,
 												0);
 	// She[tuppence] ran rather than walked down the street .
 	cPattern::create(L"_VERBPASTCORR",L"", // this cannot have the VERB flag because _VERBPAST already has VERB
@@ -1437,7 +1461,7 @@ int createVerbPatterns(void)
 										1,L"_IS",0,1,1,
 										1,L"_ADVERB",0,0,2,
 										1,L"verb",VERB_PRESENT_PARTICIPLE|VERB_PAST,1,1,
-										1,L"to",0,1,1,
+										1,L"preposition|to",0,1,1,
 										1,L"_ADVERB",0,0,2,
 										1,L"_BE",0,1,1,
 										1,L"_VERBONGOING",0,0,1,
@@ -1632,7 +1656,7 @@ void createSecondaryPatterns1(void)
 	// another verb which is really not allowed
 	cPattern::create(L"__ADJECTIVE_WITHOUT_VERB",L"",
 								1,L"_ADVERB",0,0,1,
-								6,L"adjective",L"numeral_ordinal",L"_NUMBER",L"ex",L"noun*1",L"_NAMEOWNER*2",VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,1,1,
+								6,L"adjective",L"numeral_ordinal",L"_NUMBER",L"preposition|ex",L"noun*1",L"_NAMEOWNER*2",VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,1,1,
 								1,L"adverb*1",0,0,1,
 						0);
 	cPattern::create(L"__ALLOBJECTS_0",L"2",1,L"__ADJECTIVE_WITHOUT_VERB{ADJ:ADJOBJECT}",0,1,1,0);
@@ -1822,7 +1846,7 @@ void createPrepositionalPhrases(void)
 	*/
 	// of Mrs. Vandermeyer's.
 	cPattern::create(L"__PP",L"2",
-		                   1,L"of{P}",0,1,1,
+		                   1,L"preposition|of{P}",0,1,1,
 											 1,L"__NAMEOWNER{PREPOBJECT}",0,1,1,0);
 	// He loved himself (himself should be a direct object, not a PP)
 	cPattern::create(L"__PP",L"3",1,L"reflexive_pronoun*1",0,1,1,0); // prefer reflexive pronoun be a direct object than a preposition.
@@ -1856,8 +1880,8 @@ void createPrepositionalPhrases(void)
 									 3,L"preposition{P}",L"verbalPreposition{P}",L"__AS_AS",0,1,1,
 									 1,L"preposition*1{P}",0,0,1, // from within
 									 1,L"_ADVERB*3",0,0,1, // I haven't seen you for SIMPLY centuries, my dear. // adverbial use should be rare - prefer adjectives attached to the nouns over adverbs.
-									 6,L"_NOUN_OBJ{PREPOBJECT}",L"__NOUN[*]{PREPOBJECT}",L"__MNOUN[*]{PREPOBJECT}", // _NOUN* includes NOUN[D] and NOUN[E]
-										 L"there",L"demonstrative_determiner",L"possessive_determiner",0,0,1, // there was never much chance of -their ‘ letting me go ’
+									 5,L"_NOUN_OBJ{PREPOBJECT}",L"__NOUN[*]{PREPOBJECT}",L"__MNOUN[*]{PREPOBJECT}", // _NOUN* includes NOUN[D] and NOUN[E]
+										 L"demonstrative_determiner",L"possessive_determiner",0,0,1, // there was never much chance of -their ‘ letting me go ’
 									 1,L"quotes",OPEN_INFLECTION,1,1,
 									 1,L"_VERBREL2{_BLOCK:EVAL}",0,1,1,  //  the fact -of -them 'having done so'
 									 1,L"quotes",CLOSE_INFLECTION,1,1,
@@ -1867,8 +1891,8 @@ void createPrepositionalPhrases(void)
 									 3,L"preposition{P}",L"verbalPreposition{P}",L"__AS_AS",0,1,1, // as much as Old Mr. Crow / As busy as chirpy cricket
 									 1,L"preposition*1{P}",0,0,1, // from within
 									 1,L"_ADVERB*3",0,0,1, // I haven't seen you for SIMPLY centuries, my dear. // adverbial use should be rare - prefer adjectives attached to the nouns over adverbs.
-									 6,L"_NOUN_OBJ{PREPOBJECT}",L"__NOUN[*]{PREPOBJECT}",L"__MNOUN[*]{PREPOBJECT}", // _NOUN* includes NOUN[D] and NOUN[E]
-										 L"there",L"demonstrative_determiner{PREPOBJECT}",L"possessive_determiner{PREPOBJECT}",0,0,1, // there was never much chance of -their ‘ letting me go ’
+									 5,L"_NOUN_OBJ{PREPOBJECT}",L"__NOUN[*]{PREPOBJECT}",L"__MNOUN[*]{PREPOBJECT}", // _NOUN* includes NOUN[D] and NOUN[E]
+										 L"demonstrative_determiner{PREPOBJECT}",L"possessive_determiner{PREPOBJECT}",0,0,1, // there was never much chance of -their ‘ letting me go ’
 									 1,L"_VERBREL2*2{_BLOCK:EVAL}",0,1,1,  // we can keep the fact -of having done so quite secret . / the fact -of -them having done so
 									 0);
 		cPattern::create(L"_PP{_FINAL:_NO_REPEAT}",L"1",1,L"__PP[*]{PREP:_BLOCK}",0,1,5,0);
@@ -1882,13 +1906,13 @@ void createPrepositionalPhrases(void)
 									 1,L"preposition{P}",0,0,1, // from within
 									 1,L"_ADVERB*3",0,0,1, // I haven't seen you for SIMPLY centuries, my dear. // adverbial use should be rare - prefer adjectives attached to the nouns over adverbs.
 									 // Under the original act, how many judges were to be on the court? - __NOUNREL should have at least a cost of 2 because it matches too much (with its comma)
-									 7,L"_NOUN_OBJ{PREPOBJECT}",L"__NOUN[*]{PREPOBJECT}",L"__MNOUN[*]{PREPOBJECT}",L"__NOUNREL*4{PREPOBJECT}",L"there",L"_ADJECTIVE[*]*4",L"__NOUNRU{PREPOBJECT}",0,1,1,  // _NOUN* includes NOUN[D] and NOUN[E]
+									 6,L"_NOUN_OBJ{PREPOBJECT}",L"__NOUN[*]{PREPOBJECT}",L"__MNOUN[*]{PREPOBJECT}",L"__NOUNREL*4{PREPOBJECT}",L"_ADJECTIVE[*]*4",L"__NOUNRU{PREPOBJECT}",0,1,1,  // _NOUN* includes NOUN[D] and NOUN[E]
 									 0);
 	// We are nearer to finding Tuppence.
 	//  This is not an infinitive phrase.  'to' is a participle, and finding is an verb with a subject Tuppence
 	// it is not a prepositional phrase either, but it is a convenient place to put this.
 	cPattern::create(L"_PP{_FINAL:_BLOCK:_NO_REPEAT}",L"3",
-									 1,L"to",0,1,1,
+									 1,L"preposition|to",0,1,1,
 									 1,L"_VERBONGOING{VERB:vE}",0,1,1,
 									 3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,1,1, // there must only be one adjective and it must be last (not mixed in) see *
 									 0);
@@ -1955,7 +1979,7 @@ int createSecondaryPatterns2(void)
 				1,L"__INTRO_NP",0,0,1,
 				15,L"__NOUN[*]{SUBJECT}",L"__MNOUN[*]{SUBJECT}",L"_INFP*2{GNOUN:SINGULAR:SUBJECT}",L"interrogative_pronoun{N_AGREE:SINGULAR:SUBJECT}",
 						L"interrogative_determiner{N_AGREE:SINGULAR:SUBJECT}", 
-						L"adverb|there*-1{N_AGREE:SINGULAR:PLURAL:SUBJECT}",L"adverb|here*-1{N_AGREE:SINGULAR:PLURAL:SUBJECT}",
+						L"there*-1{N_AGREE:SINGULAR:PLURAL:SUBJECT}",L"adverb|here*-1{N_AGREE:SINGULAR:PLURAL:SUBJECT}",
 						L"quantifier|neither{N_AGREE:PLURAL:SUBJECT}", L"quantifier|either{N_AGREE:SINGULAR:SUBJECT}",
 						L"_REL1[*]*2{SUBJECT:GNOUN:SINGULAR}",L"_ADJECTIVE*1{SUBJECT:GNOUN}",
 						L"_VERBREL2*2{SUBJECT:GNOUN:SINGULAR:_BLOCK:EVAL}",L"__QSUBJECT{SUBJECT:GNOUN:SINGULAR}",L"__NOUNRU{SUBJECT}",
@@ -1969,7 +1993,7 @@ int createSecondaryPatterns2(void)
 	// on one side was ...
 	cPattern::create(L"__C1__S1",L"2",
 				5,L"preposition|with*1",L"preposition|beside*1",L"preposition|through",L"preposition|on*2",L"preposition|from*2",0,1,1, // rare pattern 
-				8,L"adjective{ADJ}",L"verb*1{ADJ}",L"numeral_ordinal{ADJ}",L"_NUMBER{ADJ}",L"ex{ADJ}",L"noun{ADJ}",L"no{ADJ:no}",L"__NAMEOWNER", // removed *1 as cost so that
+				8,L"adjective{ADJ}",L"verb*1{ADJ}",L"numeral_ordinal{ADJ}",L"_NUMBER{ADJ}",L"preposition|ex{ADJ}",L"noun{ADJ}",L"no{ADJ:no}",L"__NAMEOWNER", // removed *1 as cost so that
 					VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,0,1,                            // we can make cost of *1 for __NOUN[2]
 					5, L"__N1{SUBJECT:NOUN}", L"__NOUN[*]*1{SUBJECT:NOUN}", L"_NAME{GNOUN:NAME:SUBJECT}",L"_NOUN_OBJ{SUBJECT:NOUN}",L"personal_pronoun_accusative{SUBJECT:NOUN}",0,1,1,
 			 1,L"__C1_IP",0,0,1,
@@ -2315,7 +2339,7 @@ int createSecondaryPatterns2(void)
 									1, L"_ADJECTIVE", 0,1,1,
 									0);
 	cPattern::create(L"__INTRO2_S1{_ONLY_BEGIN_MATCH:FLOATTIME}",L"5", // PP could match a time
-									8,L"_PP",L"_VERBREL2*1{_BLOCK:EVAL}", L"_REL1[*]*1", L"_INFP{BLOCK}", L"conjunction",L"coordinator",L"then",L"adverb|so",0,1,1, // took out *1 from _PP - discouraged legitimate leading prepositional phrases
+									8,L"_PP",L"_VERBREL2*1{_BLOCK:EVAL}", L"_REL1[*]*1", L"_INFP{BLOCK}", L"conjunction",L"coordinator",L"adverb|then",L"adverb|so",0,1,1, // took out *1 from _PP - discouraged legitimate leading prepositional phrases
 									 5,L"dash",L":",L",",L"__ADVERB",L"conjunction|though*-3",0,0,1, // though is not used as a conjunction often, but should be one in this position
 									 0);
 	cPattern::create(L"__INTRO2_S1{_ONLY_BEGIN_MATCH}",L"6",
@@ -2550,7 +2574,7 @@ int createSecondaryPatterns2(void)
 										1, L"__INTERS1{BLOCK}",0,0,1,
 										1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
 										1, L",", 0, 0, 1,
-										4, L"then", L"_ADVERB", L"conjunction|though*-3", L"quantifier|all*-2", 0, 0, 1, // though is not used as a conjunction often, but should be one in this position
+										4, L"adverb|then", L"_ADVERB", L"conjunction|though*-3", L"quantifier|all*-2", 0, 0, 1, // though is not used as a conjunction often, but should be one in this position
 										1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
 										0);
 
@@ -2583,7 +2607,7 @@ int createSecondaryPatterns2(void)
 											 1,L"__S1{_BLOCK:EVAL}",0,1,1,
 											 2,L"_ADVERB*1",L"_ADJECTIVE_AFTER*1",0,0,1, // any time between dawn and sunset / I wish to see him *alive*
 											 1,L",",0,0,1,
-											 1,L"then",0,0,1,
+											 1,L"adverb|then",0,0,1,
 											 1,L"__S1{_BLOCK:EVAL}",0,1,1,
 											 1, L"_MSTAIL", 0, 0, 1,
 											 0);
@@ -2593,7 +2617,7 @@ int createSecondaryPatterns2(void)
 											 1,L"conjunction|if",0,1,1,
 											 1,L"__S1{_BLOCK:EVAL}",0,1,1,
 											 1,L",",0,0,1,
-											 1,L"then",0,0,1,
+											 1,L"adverb|then",0,0,1,
 											 1,L"__S1{_BLOCK:EVAL}",0,1,1,
 											 1,L"_MSTAIL",0,1,1,
 											 0);
@@ -2601,16 +2625,16 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}",L"1",
 											 1,L",",0,0,1,
 											 1, L"_ADVERB", 0, 0, 1,
-											 4,L"then",L"adverb|so",L"conjunction",L"coordinator",0,1,1,
-											 1,L"then",0,0,1,
+											 4,L"adverb|then",L"adverb|so",L"conjunction",L"coordinator",0,1,1,
+											 1,L"adverb|then",0,0,1,
 											 3,L"_PP*2",L"_VERBREL2*2", L"_ADVERB", 0,0,1,  // Tommy did not hear Boris's reply , but [in response to it] Whittington said something that sounded like - *1 competition with __MSTAIL[9]
 											 2,L"__S1{_BLOCK:EVAL}",L"_REL1[*]",0,1,1, // L"__NOUN[*]*1",0,1,1,  took __NOUN out - absorbed the subject of the second sentence following another sentence (and a conjunction)
 											 0);
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}",L"2",
 												1, L"_ADVERB", 0, 0, 1,
 												1,L",",0,0,1,
-											 3,L"conjunction|but",L"then",L"coordinator|and",0,1,1,
-											 1,L"then",0,0,1,
+											 3,L"conjunction|but",L"adverb|then",L"coordinator|and",0,1,1,
+											 1,L"adverb|then",0,0,1,
 											 5,L"__ALLVERB{VERB2}",L"_COND{VERB2}",L"_VERBPASTPART*1{vB:VERB2}",L"_BEEN{vB:id:VERB2}",L"_VERBPASSIVE{VERB2}",0,1,1,
 											 3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, // there must only be one adjective and it must be last (not mixed in) see *
 											 1,L"__CLOSING__S1",0,0,3,
@@ -2619,8 +2643,8 @@ int createSecondaryPatterns2(void)
 	// he meant well , but it was terrible he did it . 
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}",L"3",
 											 1,L",",0,0,1,
-											 4,L"then",L"adverb|so",L"conjunction",L"coordinator",0,1,1,
-											 1,L"then",0,0,1,
+											 4,L"adverb|then",L"adverb|so",L"conjunction",L"coordinator",0,1,1,
+											 1,L"adverb|then",0,0,1,
 											 1,L"__C1__S1",0,1,1,
 											 4, L"_IS{VERB:vS:id}", L"_WOULDBE", L"_HAVEBEEN", L"_COULDHAVEBEEN", 0, 1, 1,
 											// removed OBJECT from _NOUN as this will cause IS to have two objects (including the one from _S1) which is wrong and will cause elimination of this pattern
@@ -2653,8 +2677,8 @@ int createSecondaryPatterns2(void)
 											 1,L"_INTRO_S1",0,0,1,
 											 1,L"__S1{_BLOCK:EVAL}",0,1,1,
 											 1,L",",0,0,1,
-											 3,L"conjunction|but",L"then",L"coordinator|and",0,1,1,
-											 1,L"then",0,0,1,
+											 3,L"conjunction|but",L"adverb|then",L"coordinator|and",0,1,1,
+											 1,L"adverb|then",0,0,1,
 											 1,L"__ALLTHINK",0,1,1, // L"think" for all active tenses! - possibly add INTRO_S1.
 											 2,L"_PP",L"_REL1[*]",0,0,1,
 											 2,L"_INFP{OBJECT}",L"__S1{_BLOCK:OBJECT:EVAL}",0,0,1, // there must only be one adjective and it must be last (not mixed in) see *
@@ -2663,12 +2687,12 @@ int createSecondaryPatterns2(void)
 	// for not only was he born in that city, but his family had been resident there for centuries.
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}",L"6",
 									 1,L"not",0,1,1,
-									 1,L"only",0,1,1,
+									 1,L"adverb|only",0,1,1,
 									 1,L"_Q1PASSIVE{_BLOCK}",0,0,1,
 									 1,L"_PP",0,1,1,
 									 1,L",",0,0,1,
 									 1,L"conjunction|but",0,1,1,
-									 1,L"also",0,0,1,
+									 1,L"adverb|also",0,0,1,
 									 2,L"_PP",L"__S1{_BLOCK:EVAL}",0,1,1,0);
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}",L"9",
 									 1,L"_STEP",0,0,1,
@@ -2715,7 +2739,7 @@ int createSecondaryPatterns2(void)
 									 11, L"__INTRO_N_ET", L"which",L"what",L"whose",L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"preposition|during", 0,1,1,
 										1,L"__S1{_BLOCK:EVAL}",0,1,1,
 										1, L",", 0, 0, 1,
-										2, L"then", L"_ADVERB", 0, 0, 1,
+										2, L"adverb|then", L"_ADVERB", 0, 0, 1,
 										1,L"__S1{_BLOCK:EVAL}",0,1,1,
 										1, L"_MSTAIL", 0, 0, 1,
 										0);
@@ -2728,7 +2752,7 @@ int createSecondaryPatterns2(void)
 										1, L"_ADVERB", 0, 0, 1, // later
 										1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,  // I made the promise
 										1, L",", 0, 0, 1,
-										2, L"then", L"_ADVERB", 0, 0, 1,
+										2, L"adverb|then", L"_ADVERB", 0, 0, 1,
 										1, L"__S1{_BLOCK:EVAL}", 0, 1, 1, // I thought his request was not fair to you.
 										1, L"_MSTAIL", 0, 0, 1,
 										0);
@@ -2773,7 +2797,7 @@ int createSecondaryPatterns2(void)
 										7, L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"preposition|during", 0, 1, 1,
 										1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
 										1, L",", 0, 0, 1,
-										3, L"then", L"_ADVERB", L"conjunction|though*-3", 0, 0, 1, // though is not used as a conjunction often, but should be one in this position
+										3, L"adverb|then", L"_ADVERB", L"conjunction|though*-3", 0, 0, 1, // though is not used as a conjunction often, but should be one in this position
 										1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
 										1,L"preposition*2",0,0,1,
 										2, L"conjunction|if", L"conjunction|as", 0, 1, 1,
@@ -2786,7 +2810,7 @@ int createSecondaryPatterns2(void)
 										1, L"_INTRO_S1", 0, 1, 1,
 										1, L"__S1[*]{_BLOCK:EVAL}", 0, 1, 1,
 										1, L",", 0, 1, 1,
-										3, L"then", L"_ADVERB", L"conjunction|though*-3", 0, 0, 1, // though is not used as a conjunction often, but should be one in this position
+										3, L"adverb|then", L"_ADVERB", L"conjunction|though*-3", 0, 0, 1, // though is not used as a conjunction often, but should be one in this position
 										1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
 										1, L"__CLOSING__S1", 0, 0, 3,
 										1, L"_REF", 0, 0, 1,

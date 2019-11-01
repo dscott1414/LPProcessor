@@ -57,7 +57,7 @@ void createQuestionPatterns(void)
 	cPattern::create(L"_Q1",L"1",
 									1,L"_ADVERB",0,0,1,
 									1,L"_BEEN{VERB:id:past}",0,1,1,
-									2,L"there",L"_PP",0,0,1, // removed L"_NOUN_OBJ" - included in later _Q1 is it really you?
+									2,L"pronoun|there",L"_PP",0,0,1, // removed L"_NOUN_OBJ" - included in later _Q1 is it really you?
 									1,L"_ADVERB",0,0,1,
 									0);
 		/* covered by _Q2[F], also 'that' is no longer a relativizer 4/10/2008
@@ -307,7 +307,7 @@ void createQuestionPatterns(void)
 									 // into how many languages...
 									 4,L"relativizer|which{QTYPE}",L"relativizer|what{QTYPE}",L"relativizer|whose{QTYPE}",L"relativizer|how{QTYPE}",0,1,1, 
 									 1,L"__ADJECTIVE",0,0,1, // discourage ADVERBS if they can be picked up from ALLOBJECTS instead and bound to the previous verb
-									 7,L"_NOUN_OBJ{PREPOBJECT}",L"__NOUN[*]{PREPOBJECT}",L"__MNOUN[*]{PREPOBJECT}",L"__NOUNREL{PREPOBJECT}",L"there",L"_ADJECTIVE[*]*4",L"__NOUNRU{PREPOBJECT}",0,1,1,  // _NOUN* includes NOUN[D] and NOUN[E]
+									 6,L"_NOUN_OBJ{PREPOBJECT}",L"__NOUN[*]{PREPOBJECT}",L"__MNOUN[*]{PREPOBJECT}",L"__NOUNREL{PREPOBJECT}",L"_ADJECTIVE[*]*4",L"__NOUNRU{PREPOBJECT}",0,1,1,  // _NOUN* includes NOUN[D] and NOUN[E]
 									 0);
 	// With whom did Kurt Weill collaborate?
 	cPattern::create(L"_Q2PREP{_FINAL_IF_ALONE:_BLOCK:PREP:_NO_REPEAT:_ONLY_BEGIN_MATCH}",L"2",

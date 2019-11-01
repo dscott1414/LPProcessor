@@ -1833,11 +1833,11 @@ unordered_map<wstring, vector <wstring> > maxentAssociationMap =
 
 	// similarity 
 	//{ L"coordinator",{ L"conjunction"} },
-	{ L"conjunction",{ L"coordinator",L"and",L"as",L"if",L"so",L"than",L"but" } },
+	{ L"conjunction",{ L"coordinator" } },
 	{ L"Proper Noun",{ L"honorific_abbreviation",L"honorific",L"roman_numeral",L"month",L"interjection",L"daysOfWeek",L"no",L"holiday" } },
 	{ L"honorific noun",{ L"honorific",L"honorific_abbreviation" }},
 	{ L"modal_auxiliary",{ L"future_modal_auxiliary",L"negation_modal_auxiliary",L"negation_future_modal_auxiliary"} },
-	{ L"determiner",{ L"demonstrative_determiner",L"no",L"the",L"quantifier",L"predeterminer"} },
+	{ L"determiner",{ L"demonstrative_determiner",L"no",L"quantifier",L"predeterminer"} },
 	{ L"predeterminer",{ L"quantifier" } },
 	{ L"interjection",{ L"no",L"politeness_discourse_marker"} },
 	{ L"relativizer", { L"what" } },
@@ -1847,30 +1847,13 @@ unordered_map<wstring, vector <wstring> > maxentAssociationMap =
 	// stanford maxent apparently has no indefinite pronoun, so it classes them all as nouns.
 	{ L"noun",{ L"simultaneousUnit",L"dayUnit",L"timeUnit",L"quantifier",L"numeral_cardinal",L"indefinite_pronoun",L"season" } }, // all, some etc // something, everything
 	{ L"adjective",{ L"quantifier",L"numeral_ordinal" }},  // many / more
-	{ L"adverb",{ L"not",L"never",L"then" }},  // many
+	{ L"adverb",{ L"not",L"never" }},  // many
 	{ L"to",{ L"preposition" }},
-	{ L"of",{ L"preposition" }},
-	{ L"and",{ L"coordinator" }},
-	{ L"or",{ L"coordinator" }},
-	{ L"if",{ L"conjunction" }},
-	{ L"the",{ L"determiner" }},
-	{ L"you",{ L"personal_pronoun" }},
-	{ L"his",{ L"possessive_determiner",L"reflexive_pronoun" }},
-	{ L"her",{ L"possessive_determiner",L"reflexive_pronoun" }},
-	{ L"there",{ L"pronoun",L"adverb" }},
-	{ L"once",{ L"predeterminer" }},
-	{ L"twice",{ L"predeterminer" }},
-	{ L"both",{ L"predeterminer" }},
-	{ L"but",{ L"conjunction",L"preposition" }},
-	{ L"than",{ L"conjunction",L"preposition" }},
-	{ L"box",{ L"noun",L"verb" }},
-	{ L"ex",{ L"adjective",L"adverb" }},
 	{ L"which",{ L"interrogative_determiner",L"interrogative_pronoun",L"relativizer"}},
 	{ L"what",{ L"interrogative_determiner",L"interrogative_pronoun",L"relativizer"}},
 	{ L"who",{ L"interrogative_pronoun",L"relativizer"}},
 	{ L"whose",{ L"interrogative_determiner",L"relativizer"}},
-	{ L"how",{ L"relativizer",L"conjunction",L"adverb"}},
-	{ L"less",{ L"pronoun" }}
+	{ L"how",{ L"relativizer",L"conjunction",L"adverb"}}
 };
 
 // checks if the part of speech indicated in parse from the Stanford Maxent POS tagger matches the winner forms at wordSourceIndex.
@@ -2531,6 +2514,12 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		return 0;
 	}
 	// never correct
+	if (word == L"once" && primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && (source.m[wordSourceIndex-1].word->first==L"at" || source.m[wordSourceIndex-1].word->first == L"for"))
+	{
+		errorMap[L"diff: word 'once': in saying 'at once' or 'for once'"]++;
+		return 0;
+	}
+	// never correct
 	if (word == L"after" && primarySTLPMatch == L"preposition" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && 
 		  (!iswalpha(source.m[wordSourceIndex+1].word->first[0]) || source.m[wordSourceIndex + 1].queryWinnerForm(L"verb")>=0))
 	{
@@ -2628,6 +2617,21 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	if (word == L"to-night" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
 	{
 		errorMap[L"LP correct: word 'to-night': ST says " + primarySTLPMatch + L"but LP says adverb"]++;
+		return 0;
+	}
+	if (word == L"either" && (source.m[wordSourceIndex].pma.queryPattern(L"__NOUN", L"O") !=-1 || source.m[wordSourceIndex].pma.queryPattern(L"_VERBPRESENTC", L"O") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"_VERBPAST", L"O") != -1))
+	{
+		errorMap[L"LP correct: word 'either': ST says " + primarySTLPMatch + L"but LP says quantifier"]++;
+		return 0;
+	}
+	if (word == L"neither" && source.m[wordSourceIndex].pma.queryPattern(L"__NOUN", L"P") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"_VERBPRESENTC", L"P") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"_VERBPAST", L"P") != -1)
+	{
+		errorMap[L"LP correct: word 'either': ST says " + primarySTLPMatch + L"but LP says quantifier"]++;
+		return 0;
+	}
+	if (word == L"you" && primarySTLPMatch==L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"personal_pronoun") >= 0)
+	{
+		errorMap[L"LP correct: word 'you': ST says " + primarySTLPMatch + L"but LP says personal_pronoun"]++;
 		return 0;
 	}
 	if (primarySTLPMatch == L"personal_pronoun_accusative")
@@ -2814,16 +2818,22 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 	return 1;
 }
 
-void printFormDistribution(wstring word, double adp, FormDistribution fd, wstring &maxWord, wstring &maxForm, int &maxDiff)
+void printFormDistribution(wstring word, double adp, FormDistribution fd, wstring &maxWord, wstring &maxForm, int &maxDiff,int limit)
 {
-	lplog(LOG_ERROR, L"%s:%3.2f (%d/%d)", word.c_str(), adp, fd.agreeSTLP, fd.agreeSTLP + fd.disagreeSTLP);
+	if (limit<70)
+		lplog(LOG_ERROR, L"%s:%3.2f (%d/%d)", word.c_str(), adp, fd.agreeSTLP, fd.agreeSTLP + fd.disagreeSTLP);
 	for (auto &&[form, count] : fd.LPFormDistribution)
 	{
 		// form name, total number of times form is a winner form for this word, % of times this form is the winner form for this word, % of times this form agrees with ST.
-		lplog(LOG_ERROR, L"  LP %s:%d %d%% %d%%", form.c_str(), count, 100 * count / (fd.agreeSTLP + fd.disagreeSTLP), fd.agreeFormDistribution[form] * 100 / count);
+		if (limit<70)
+			lplog(LOG_ERROR, L"  LP %s:%d %d%% %d%%", form.c_str(), count, 100 * count / (fd.agreeSTLP + fd.disagreeSTLP), fd.agreeFormDistribution[form] * 100 / count);
 		// commented out: look for forms that have a high percentage of LP winners, but a low percentage of agreement.
 		// actually just look for the highest occurring forms with maximum poor agreement.
 		int diff = count * (100 - (fd.agreeFormDistribution[form] * 100 / count));//count*count / (fd.agreeSTLP + fd.disagreeSTLP)*fd.agreeFormDistribution[form];
+		if (count > 100 && (fd.agreeFormDistribution[form] * 100 / count) == 0)
+		{
+			lplog(LOG_ERROR, L"**%s:%3.2f (%d/%d) %s:%d %d%% %d%%", word.c_str(), adp, fd.agreeSTLP, fd.agreeSTLP + fd.disagreeSTLP, form.c_str(), count, 100 * count / (fd.agreeSTLP + fd.disagreeSTLP), fd.agreeFormDistribution[form] * 100 / count);
+		}
 		if (maxDiff < diff)
 		{
 			maxWord = word;
@@ -2831,9 +2841,9 @@ void printFormDistribution(wstring word, double adp, FormDistribution fd, wstrin
 			maxForm = form;
 		}
 	}
-	for (auto &&[form, count] : fd.STFormDistribution)
-		lplog(LOG_ERROR, L"  ST %s:%d %d%% %d%%", form.c_str(), count, 100 * count / (fd.agreeSTLP + fd.disagreeSTLP), fd.agreeFormDistribution[form] * 100 / count);
-
+	if (limit < 70)
+		for (auto &&[form, count] : fd.STFormDistribution)
+			lplog(LOG_ERROR, L"  ST %s:%d %d%% %d%%", form.c_str(), count, 100 * count / (fd.agreeSTLP + fd.disagreeSTLP), fd.agreeFormDistribution[form] * 100 / count);
 }
 
 int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *vm,JNIEnv *env, int &numNoMatch, int &numPOSNotFound, unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, unordered_map<wstring, int> &errorMap, bool pcfg,wstring limitToWord)
@@ -2997,11 +3007,9 @@ int stanfordCheck(Source source, int step, bool pcfg)
 		for (auto word : splitString(multiword, L'*'))
 			if (formDistribution[word].agreeSTLP + formDistribution[word].disagreeSTLP > 500)
 			{
-				printFormDistribution(word, adp, formDistribution[word], maxWord, maxForm, maxDiff);
+				printFormDistribution(word, adp, formDistribution[word], maxWord, maxForm, maxDiff,limit);
 				limit++;
 			}
-		if (limit++ > 20)
-			break;
 	}
 	lplog(LOG_ERROR, L"maxWord=%s maxForm=%s maxDiff=%d", maxWord.c_str(), maxForm.c_str(), maxDiff);
 	lplog(LOG_ERROR, L"FORMS ------------------------------------------------------------------------------");
@@ -3155,7 +3163,7 @@ int stanfordCheckTest(Source source, wstring path, int sourceId, bool pcfg,wstri
 	wstring maxForm, maxWord;
 	for (auto &&[adp, word] : agreeCountMap)
 	{
-		printFormDistribution(word, adp, formDistribution[word], maxWord, maxForm, maxDiff);
+		printFormDistribution(word, adp, formDistribution[word], maxWord, maxForm, maxDiff,limit);
 		if (limit++ > 100)
 			break;
 	}
