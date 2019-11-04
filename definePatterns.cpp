@@ -170,16 +170,16 @@ int createNouns(void)
 	// this has the same follows as _NOUN[9] (except _PP and _REL1 are optional)
 	// _NOUN_OBJ is referenced by getNounPhraseInfo as having a differentiator of L"1"
 	cPattern::create(L"_NOUN_OBJ{PNOUN}",L"1",
-		5,L"reflexive_pronoun{N_AGREE}",    L"reciprocal_pronoun{N_AGREE}",
-			L"relativizer{N_AGREE:SINGULAR}", L"personal_pronoun_nominative{N_AGREE}",  L"personal_pronoun{N_AGREE}",0,1,1,
+		6,L"reflexive_pronoun{N_AGREE}",    L"reciprocal_pronoun{N_AGREE}",
+			L"relativizer{N_AGREE:SINGULAR}", L"personal_pronoun_nominative{N_AGREE}",  L"personal_pronoun{N_AGREE}",L"adjective|other{N_AGREE}",0,1,1,
 		1,L"_ADJECTIVE_AFTER*1",0,0,1, // adjectives after the noun are rare
 										//2,L"_PP",L"_REL1",0,0,4,  merged with _NOUN[9]
 		0);
 	// verbs should tend to be used as verbs
 	// possessive pronouns are rarely nouns (removed - 'mine' is a perfectly fine noun)
 	// L"demonstrative_determiner", removed - because __N1 may take adjectives and this class does not
-	cPattern::create(L"__N1{N_AGREE}",L"",18,
-		L"possessive_pronoun",L"interrogative_pronoun",L"pronoun",L"indefinite_pronoun",
+	cPattern::create(L"__N1{N_AGREE}",L"",19,
+		L"possessive_pronoun",L"interrogative_pronoun",L"pronoun",L"indefinite_pronoun", L"adjective|other{N_AGREE}",
 		L"noun",L"abbreviation",L"measurement_abbreviation*1",L"trademark", // L"country", // removed -- I've got to trust some one--and it must be a woman. (moved to _NOUN)
 		L"numeral_cardinal",L"numeral_ordinal",L"quantifier",L"Number*1",L"verb*1{VNOUN}",L"does*1{VNOUN}",L"letter",
 		L"time",L"date",L"telephone_number",VERB_PRESENT_PARTICIPLE|NO_OWNER,1,1,0);
@@ -450,7 +450,7 @@ int createNouns(void)
 	// anxiety which underlay his tone (REL1)
 	// the right to lay down arms (INFP)
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"9",
-										2,L"__NOUN[*]",L"_NOUN_OBJ",0,1,1,
+										2,L"__NOUN[*]{_BLOCK}",L"_NOUN_OBJ{_BLOCK}",0,1,1,
 										3,L"__INTERPPB[*]{_BLOCK}",L"_DATE*1{FLOATTIME}",L"_TIME*1{FLOATTIME}",0,0,1, 
 										3,L"_PP",L"_REL1",L"_INFP",0,1,1,
 										3,L"_PP*1",L"_REL1*1",L"_INFP*1",0,0,2,
@@ -1589,7 +1589,8 @@ int createVerbPatterns(void)
 	cPattern::create(L"__ALLVERB",L"",1,L"_ADVERB",0,0,1,
 		10,L"_VERB",L"_VERBPAST{V_OBJECT}",L"_VERBPASTC{V_OBJECT}",L"_VERBPASTCORR{V_OBJECT}",L"_VERBPRESENT{VERB}",L"_VERBPRESENTC{VERB}",L"_BE*4{vS:V_OBJECT:id:VERB}",L"_VERB_BARE_INF",
 				L"is{vS:id:V_AGREE:V_OBJECT:VERB}",L"is_negation{vS:id:not:V_AGREE:V_OBJECT:VERB}",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_PLURAL,1,1,
-				0,1,1,0);
+		 2, L"particle|in", L"particle|on", 0,0,1,
+		0);
 	// __ALLOBJECTS - should L"_ADJECTIVE" really be an object?  If so, it overlaps with _NOUN, so if it is added back this overlap
 	// must be avoided.
 	// _ALLOBJECTS should represent all cases of an object of a verb

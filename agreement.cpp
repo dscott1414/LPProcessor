@@ -482,7 +482,8 @@ The word number is singular when it follows the, plural when it follows a:
 The number of applications was huge.
 A number of teenagers now hold full-time jobs.
 */
-int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *parentpm, patternMatchArray::tPatternMatch *pm, unsigned parentPosition, unsigned int position, vector<tTagLocation> &tagSet, int &traceSource)
+// tagSet is modified during this procedure!  Do not pass by address!
+int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *parentpm, patternMatchArray::tPatternMatch *pm, unsigned parentPosition, unsigned int position, vector<tTagLocation> tagSet, int &traceSource)
 {
 	LFS
 	int nextSubject = -1, whereSubject = findTag(tagSet, L"SUBJECT", nextSubject);
@@ -1375,7 +1376,7 @@ int Source::cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patter
 					if ((*ppsi)->cumulativeDeltaCost)
 					{
 						if (debugTrace.traceSecondaryPEMACosting)
-							lplog(L"assessCost PEMA %06dA Added %d cost for a total of %d (%s)",*ppsi-pema.begin(),(*ppsi)->cumulativeDeltaCost,(*ppsi)->getOCost()+(*ppsi)->cumulativeDeltaCost,fromWhere);
+							lplog(L"assessCost PEMA %06dA Added %d cost for a total of %d (%s) [SOURCE=%06d]",*ppsi-pema.begin(),(*ppsi)->cumulativeDeltaCost,(*ppsi)->getOCost()+(*ppsi)->cumulativeDeltaCost,fromWhere,traceSource);
 						(*ppsi)->addOCostTillMax((*ppsi)->cumulativeDeltaCost);
 						(*ppsi)->cumulativeDeltaCost=0;
 					}
@@ -1731,7 +1732,7 @@ int Source::setSecondaryCosts(vector <costPatternElementByTagSet> &PEMAPositions
 		if ((*ppsi)->cumulativeDeltaCost)
 		{
 			if (debugTrace.traceSecondaryPEMACosting)
-				lplog(L"assessCost PEMA %06dA Added %d cost for a total of %d (%s)",*ppsi-pema.begin(),(*ppsi)->cumulativeDeltaCost,(*ppsi)->getOCost()+(*ppsi)->cumulativeDeltaCost,fromWhere);
+				lplog(L"assessCost PEMA %06dA Added %d cost for a total of %d (%s) [SOURCE=%06d]",*ppsi-pema.begin(),(*ppsi)->cumulativeDeltaCost,(*ppsi)->getOCost()+(*ppsi)->cumulativeDeltaCost,fromWhere,traceSource);
 			(*ppsi)->addOCostTillMax((*ppsi)->cumulativeDeltaCost);
 			(*ppsi)->cumulativeDeltaCost=0;
 		}
@@ -2520,12 +2521,20 @@ int Source::assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchAr
 		vector <int> costs,traceSources;
 		for (unsigned int J=0; J<tagSets.size(); J++)                          // which erases secondaryPEMAPositions
 		{
-			if (J && tagSetSame(tagSets[J],tagSets[J-1]))
+			if (J && tagSetSame(tagSets[J], tagSets[J - 1]))
 			{
-				costs.push_back(costs[J-1]);
-				traceSources.push_back(traceSources[J-1]);
+				costs.push_back(costs[J - 1]);
+				traceSources.push_back(traceSources[J - 1]);
 				if (debugTrace.traceSubjectVerbAgreement)
-					lplog(L"AGREE TAGSET #%d (REPEAT OF PREVIOUS) - cost %d.",J,costs[J-1]);
+					lplog(L"AGREE TAGSET #%d (REPEAT OF PREVIOUS) - cost %d.", J, costs[J - 1]);
+				continue;
+			}
+			else if (J>1 && tagSetSame(tagSets[J], tagSets[J - 2]))
+			{
+				costs.push_back(costs[J - 2]);
+				traceSources.push_back(traceSources[J - 2]);
+				if (debugTrace.traceSubjectVerbAgreement)
+					lplog(L"AGREE TAGSET #%d (REPEAT OF PREVIOUS) - cost %d.", J, costs[J - 2]);
 				continue;
 			}
 			else
@@ -2576,6 +2585,9 @@ int Source::assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchAr
 			}
 			setSecondaryCosts(saveSecondaryPEMAPositions, pm, position, L"agreement");
 		}
+		if (debugTrace.traceTags)
+			lplog(L"%d:======== END EVALUATING %06d %s %s[%s](%d,%d)", position, pm->pemaByPatternEnd, desiredTagSets[subjectVerbAgreementTagSet].name.c_str(),
+				patterns[pema[pm->pemaByPatternEnd].getPattern()]->name.c_str(), patterns[pema[pm->pemaByPatternEnd].getPattern()]->differentiator.c_str(), position, position + pema[pm->pemaByPatternEnd].end);
 	}
 	tagSets.clear();
 	if (!preTaggedSource)

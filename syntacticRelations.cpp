@@ -2147,7 +2147,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 		// not delayed because the arguments are not subject to enhanced resolution (not an object)
 		if (ambiguous=!(m[relPrep].objectRole&SUBJECT_ROLE))
 			addDelayedWordRelations(where,whereVerb,relPrep,VerbWithPrep);
-		// if a preposition directly follows another object of a preposition, the object of the preposition points to the previous object by relNextObject.
+		// if a preposition (PREP2) directly follows another object (O1) of another preposition (PREP1), the object (O2) of the preposition PREP2 points to the previous object (O1) by relNextObject.
 		int relObject=m[relPrep].getRelObject();
 		if (relObject>=0 && m[relObject].relNextObject>=0)
 		{

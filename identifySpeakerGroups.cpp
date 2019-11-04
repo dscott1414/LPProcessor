@@ -2848,6 +2848,7 @@ void Source::identifySpeakerGroups()
 			else if (isSubject)
 				numNonPastSinceLastQuote++;
 		}
+		// CMREADME20
     int o=(m[I].objectMatches.size()==1) ? m[I].objectMatches[0].object : m[I].getObject();
 		if (!currentIsQuestion && !(m[I].flags&WordMatch::flagAdjectivalObject) && !(m[I].flags&WordMatch::flagRelativeHead) &&
 			!(m[I].getObject()<0 || !objects[m[I].getObject()].plural || objects[m[I].getObject()].male || objects[m[I].getObject()].female || !objects[m[I].getObject()].neuter || objects[m[I].getObject()].objectClass==BODY_OBJECT_CLASS) &&

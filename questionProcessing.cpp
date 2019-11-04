@@ -57,7 +57,7 @@ void createQuestionPatterns(void)
 	cPattern::create(L"_Q1",L"1",
 									1,L"_ADVERB",0,0,1,
 									1,L"_BEEN{VERB:id:past}",0,1,1,
-									2,L"pronoun|there",L"_PP",0,0,1, // removed L"_NOUN_OBJ" - included in later _Q1 is it really you?
+									2,L"there",L"_PP",0,0,1, // removed L"_NOUN_OBJ" - included in later _Q1 is it really you?
 									1,L"_ADVERB",0,0,1,
 									0);
 		/* covered by _Q2[F], also 'that' is no longer a relativizer 4/10/2008
@@ -89,9 +89,9 @@ void createQuestionPatterns(void)
 									2,L"_VERBPRESENT",L"_BE{vS:V_OBJECT:id}",0,1,1,0);
 	// are you? // aren't you covered by a combination of 
 	// also covered by _Q2"F" __ALLOBJECTS, except __ALLOBJECTS are objects, and this is a subject (which is correct)
-	cPattern::create(L"_Q1",L"4", // this pattern must not have a subject!  otherwise it is interpreted as the _IS having an object!
+	cPattern::create(L"_Q1",L"4", 
 									1,L"_IS{VERB:vS:id}",0,1,1,
-									1,L"__NOUN[*]{SUBJECT}",0,1,1, // L"_NOUN_OBJ{SUBJECT}",
+									1,L"__NOUN[*]{SUBJECT}",0,1,1, 
 									1,L"__ALLOBJECTS_1",0,0,1, // is he president? / now covered in _Q2[J] because allowing _Q1[4] to have its own object will
 									// allow the verb in a _Q2 to have two effective objects
 									0);

@@ -1845,10 +1845,11 @@ unordered_map<wstring, vector <wstring> > maxentAssociationMap =
 	// include possible subclasses
 	{ L"verb", { L"verbverb",L"think",L"have",L"have_negation",L"is",L"is_negation",L"does",L"does_negation",L"be",L"been",L"modal_auxiliary",L"negation_modal_auxiliary",L"future_modal_auxiliary",L"negation_future_modal_auxiliary",L"being"} }, // feel, see, watch, hear, tell etc // fancy, say (thinksay verbs)
 	// stanford maxent apparently has no indefinite pronoun, so it classes them all as nouns.
-	{ L"noun",{ L"simultaneousUnit",L"dayUnit",L"timeUnit",L"quantifier",L"numeral_cardinal",L"indefinite_pronoun",L"season" } }, // all, some etc // something, everything
+	{ L"noun",{ L"uncertainDurationUnit",L"simultaneousUnit",L"dayUnit",L"timeUnit",L"quantifier",L"numeral_cardinal",L"indefinite_pronoun",L"season" } }, // all, some etc // something, everything
 	{ L"adjective",{ L"quantifier",L"numeral_ordinal" }},  // many / more
 	{ L"adverb",{ L"not",L"never" }},  // many
 	{ L"to",{ L"preposition" }},
+{ L"there",{ L"pronoun",L"adverb" }},
 	{ L"which",{ L"interrogative_determiner",L"interrogative_pronoun",L"relativizer"}},
 	{ L"what",{ L"interrogative_determiner",L"interrogative_pronoun",L"relativizer"}},
 	{ L"who",{ L"interrogative_pronoun",L"relativizer"}},
@@ -2616,22 +2617,29 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	if (word == L"to-night" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
 	{
-		errorMap[L"LP correct: word 'to-night': ST says " + primarySTLPMatch + L"but LP says adverb"]++;
+		errorMap[L"LP correct: word 'to-night': ST says " + primarySTLPMatch + L" but LP says adverb"]++;
 		return 0;
 	}
 	if (word == L"either" && (source.m[wordSourceIndex].pma.queryPattern(L"__NOUN", L"O") !=-1 || source.m[wordSourceIndex].pma.queryPattern(L"_VERBPRESENTC", L"O") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"_VERBPAST", L"O") != -1))
 	{
-		errorMap[L"LP correct: word 'either': ST says " + primarySTLPMatch + L"but LP says quantifier"]++;
+		errorMap[L"LP correct: word 'either': ST says " + primarySTLPMatch + L" but LP says quantifier"]++;
 		return 0;
 	}
 	if (word == L"neither" && source.m[wordSourceIndex].pma.queryPattern(L"__NOUN", L"P") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"_VERBPRESENTC", L"P") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"_VERBPAST", L"P") != -1)
 	{
-		errorMap[L"LP correct: word 'either': ST says " + primarySTLPMatch + L"but LP says quantifier"]++;
+		errorMap[L"LP correct: word 'either': ST says " + primarySTLPMatch + L" but LP says quantifier"]++;
 		return 0;
 	}
-	if (word == L"you" && primarySTLPMatch==L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"personal_pronoun") >= 0)
+	if (word == L"you" && primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"personal_pronoun") >= 0)
 	{
-		errorMap[L"LP correct: word 'you': ST says " + primarySTLPMatch + L"but LP says personal_pronoun"]++;
+		errorMap[L"LP correct: word 'you': ST says " + primarySTLPMatch + L" but LP says personal_pronoun"]++;
+		return 0;
+	}
+	if (word == L"his" && primarySTLPMatch == L"possessive_determiner" && source.m[wordSourceIndex].queryWinnerForm(L"possessive_pronoun") >= 0 && 
+		  (source.m[wordSourceIndex + 1].queryWinnerForm(prepositionForm) >= 0 || !iswalpha(source.m[wordSourceIndex + 1].word->first[0]) ||
+		   source.m[wordSourceIndex + 1].queryWinnerForm(conjunctionForm) >= 0 || source.m[wordSourceIndex + 1].word->second.hasVerbForm()))
+	{
+		errorMap[L"LP correct: word 'his': ST says " + primarySTLPMatch + L" but LP says possessive_pronoun"]++;
 		return 0;
 	}
 	if (primarySTLPMatch == L"personal_pronoun_accusative")
@@ -2818,21 +2826,25 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 	return 1;
 }
 
+//map <wstring, int> STFormDistribution; // total count for each form match in ST
+//map <wstring, int> LPFormDistribution; // total count for each form match in LP
+//map <wstring, int> agreeFormDistribution; // total count for each form match agreed between ST and LP
 void printFormDistribution(wstring word, double adp, FormDistribution fd, wstring &maxWord, wstring &maxForm, int &maxDiff,int limit)
 {
 	if (limit<70)
 		lplog(LOG_ERROR, L"%s:%3.2f (%d/%d)", word.c_str(), adp, fd.agreeSTLP, fd.agreeSTLP + fd.disagreeSTLP);
-	for (auto &&[form, count] : fd.LPFormDistribution)
+	int totalWordOccurrenceCount = fd.agreeSTLP + fd.disagreeSTLP;
+	for (auto &&[form, formCount] : fd.LPFormDistribution)
 	{
 		// form name, total number of times form is a winner form for this word, % of times this form is the winner form for this word, % of times this form agrees with ST.
 		if (limit<70)
-			lplog(LOG_ERROR, L"  LP %s:%d %d%% %d%%", form.c_str(), count, 100 * count / (fd.agreeSTLP + fd.disagreeSTLP), fd.agreeFormDistribution[form] * 100 / count);
+			lplog(LOG_ERROR, L"  LP %s:%d %d%% %d%%", form.c_str(), formCount, 100 * formCount / totalWordOccurrenceCount, fd.agreeFormDistribution[form] * 100 / formCount);
 		// commented out: look for forms that have a high percentage of LP winners, but a low percentage of agreement.
 		// actually just look for the highest occurring forms with maximum poor agreement.
-		int diff = count * (100 - (fd.agreeFormDistribution[form] * 100 / count));//count*count / (fd.agreeSTLP + fd.disagreeSTLP)*fd.agreeFormDistribution[form];
-		if (count > 100 && (fd.agreeFormDistribution[form] * 100 / count) == 0)
+		int diff = formCount * (100 - (fd.agreeFormDistribution[form] * 100 / formCount));//count*count / totalWordOccurrenceCount*fd.agreeFormDistribution[form];
+		if (adp > 100.0 && (fd.agreeFormDistribution[form] * 100 / formCount) == 0)
 		{
-			lplog(LOG_ERROR, L"**%s:%3.2f (%d/%d) %s:%d %d%% %d%%", word.c_str(), adp, fd.agreeSTLP, fd.agreeSTLP + fd.disagreeSTLP, form.c_str(), count, 100 * count / (fd.agreeSTLP + fd.disagreeSTLP), fd.agreeFormDistribution[form] * 100 / count);
+			lplog(LOG_ERROR, L"**%s:%3.2f (%d/%d) %s:%d %d%% %d%%", word.c_str(), adp, fd.agreeSTLP, totalWordOccurrenceCount, form.c_str(), formCount, 100 * formCount / totalWordOccurrenceCount, fd.agreeFormDistribution[form] * 100 / formCount);
 		}
 		if (maxDiff < diff)
 		{
