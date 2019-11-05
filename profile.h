@@ -1,6 +1,6 @@
 #include "time.h"
 #include "Psapi.h"
-	extern int logQuestionProfileTime;
+extern int logQuestionProfileTime;
 int clocksec();
 
 class cProfile
@@ -50,7 +50,7 @@ public:
 	static SRWLOCK networkTimeSRWLock;
 	static __int64 mySQLTotalTime; // protect by mySQLTotalTimeSRWLock
 	string saveFunctionPath;
-		__int64 startTime,startPrivateBytes;
+	__int64 startTime,startPrivateBytes;
 	cProfile(char *function,int num=0)
 	{
 		if (function[0]==0)

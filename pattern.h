@@ -121,6 +121,7 @@ public:
         if (patternIndexes[e]==pn) return true;
       return false;
     }
+		void reportUsage(wchar_t *temp, int J, bool isPattern);
 		wchar_t *toText(wchar_t *temp,int J,bool isPattern,int maxBuf);
     bool hasTag(unsigned int tag);
 		bool hasTag(unsigned int elementIndex,unsigned int tag,bool isPattern);
@@ -293,6 +294,7 @@ public:
     cPattern(string patternName,patternElement *element);
     void replace(int elementNum,int patternNum);
     void replace(int elementNum,string patternName);
+		void reportUsage(void);
     bool add(int elementNum,wstring patternName,bool logFutureReferences,int cost,set <unsigned int> tags,bool blockDescendants,bool allowRecursiveMatch);
     void lplog(void);
     void readABNF(FILE *fh);

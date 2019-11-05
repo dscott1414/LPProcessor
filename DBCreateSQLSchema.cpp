@@ -519,7 +519,9 @@ int Source::createDatabase(wchar_t *server)
 		L"mainEntryWordId INT UNSIGNED NULL, INDEX me_ind (mainEntryWordId), "
 		L"derivationRules INT DEFAULT 0, "
 		L"sourceId INT UNSIGNED DEFAULT NULL, INDEX s_ind (sourceId), " //FOREIGN KEY (sourceId) REFERENCES sources(id),
-		L"ts TIMESTAMP) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
+		L"ts TIMESTAMP, ",
+		L"INDEX ts_ind (ts)"
+		L") DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
 	{
 		lplog(LOG_FATAL_ERROR, L"Failed to create words table - %S", mysql_error(&mysql));
 		return -1;
@@ -531,7 +533,8 @@ int Source::createDatabase(wchar_t *server)
 		L"count INT NOT NULL, "
 		L"ts TIMESTAMP, "
     L"INDEX wId_ind (wordId), " // FOREIGN KEY (wordId) REFERENCES words(id), "
-    L"INDEX fId_ind (formId), "
+		L"INDEX fId_ind (formId), "
+		L"INDEX ts_ind (ts), "
 		L"UNIQUE INDEX uw_ind (wordId,formId)"))
   {
     lplog(LOG_FATAL_ERROR,L"Failed to create wordForms - %S", mysql_error(&mysql));

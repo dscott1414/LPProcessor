@@ -1090,24 +1090,77 @@ void WordClass::readForms(MYSQL &mysql, wchar_t *qt)
     lplog(LOG_FATAL_ERROR,L"New forms discovered in db AND new forms already in memory!  Exiting!");
 }
 
+bool WordClass::isWordFormCacheValid(MYSQL &mysql)
+{
+	HANDLE hFile = CreateFile(L"wordFormCache", GENERIC_READ, FILE_SHARE_READ, NULL,OPEN_EXISTING, 0, NULL);
+	if (hFile == INVALID_HANDLE_VALUE)
+	{
+		lplog(LOG_ERROR,L"Failed to open wordFormCache - %d", GetLastError());
+		return false;
+	}
+	FILETIME lastWriteTime;
+	int retCode = GetFileTime(hFile, NULL, NULL, &lastWriteTime);
+	CloseHandle(hFile);
+	if (!retCode)
+		return false;
+	LARGE_INTEGER date, adjust;
+	date.HighPart = lastWriteTime.dwHighDateTime;
+	date.LowPart = lastWriteTime.dwLowDateTime;
+	// 100-nanoseconds = milliseconds * 10000
+	adjust.QuadPart = 11644473600000 * 10000;
+	// removes the diff between 1970 and 1601
+	date.QuadPart -= adjust.QuadPart;
+	// converts back from 100-nanoseconds to seconds
+	int wordFormCacheLastWriteTime = (int) (date.QuadPart / 10000000);
+	MYSQL_RES *result = NULL;
+	MYSQL_ROW sqlrow;
+	// this is insufficient as ISAM table update times are not updated consistently
+	//if (!myquery(&mysql, L"SELECT UNIX_TIMESTAMP(UPDATE_TIME) FROM information_schema.tables WHERE TABLE_SCHEMA = 'lp'	AND (TABLE_NAME = 'wordforms' or table_name = 'words')", result)) 
+	//	return false;
+	bool wordCacheValid = true;
+	if (!myquery(&mysql, L"SELECT UNIX_TIMESTAMP(MAX(TS)) FROM words", result))
+		return false;
+	if ((sqlrow = mysql_fetch_row(result)) != NULL)
+	{
+		int tableTimestamp = atoi(sqlrow[0]);
+		if (tableTimestamp > wordFormCacheLastWriteTime)
+			wordCacheValid = false;
+	}
+	if (!myquery(&mysql, L"SELECT UNIX_TIMESTAMP(MAX(TS)) FROM wordforms", result))
+		return false;
+	if ((sqlrow = mysql_fetch_row(result)) != NULL)
+	{
+		int tableTimestamp = atoi(sqlrow[0]);
+		if (tableTimestamp > wordFormCacheLastWriteTime)
+			wordCacheValid = false;
+	}
+	if (!wordCacheValid)
+		printf("Refreshing wordcache...                                \n");
+	mysql_free_result(result);
+	return wordCacheValid;
+}
+
 // called by readWordsFromDB (in this file)
 // Reads word ids into words with numWordForms filled with the number of wordforms, and 
 //   wordForms filled with the forms of the words, with counts the number of wordForms for each word.
 // if return code is 0, parent calling this procedure should return with a 0.
 // if return code is 2, parent calling this procedure should continue.
 // qt is a scratch query buffer.
-int WordClass::readWordFormsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,int maxWordId,wchar_t *qt,	int *words,int *counts,int &numWordForms,unsigned int * &wordForms, bool printProgress, bool disqualifyWords)
+int WordClass::readWordFormsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,int maxWordId,wchar_t *qt,	int *words,int *counts,int &numWordForms,unsigned int * &wordForms, bool printProgress, bool disqualifyWords, bool skipWordInitialization)
 { LFS
   memset(words,-1,maxWordId*sizeof(int));
   memset(counts,0,maxWordId*sizeof(int));
   bool testCacheSuccess=false;
   #ifdef USE_TEST_CACHE
-    if (sourceId==READ_WORDS_FOR_ALL_SOURCE && lastReadfromDBTime==-1)
+		;
+    if (sourceId==READ_WORDS_FOR_ALL_SOURCE && lastReadfromDBTime==-1 && isWordFormCacheValid(mysql))
     {
+			if (skipWordInitialization)
+				return 0;
       int testfd=open("wordFormCache",O_RDWR|O_BINARY);
       if (testfd>=0)
       {
-        int checkMaxWordId;
+				int checkMaxWordId;
         ::read(testfd,&checkMaxWordId,sizeof(checkMaxWordId));
         if (checkMaxWordId==maxWordId)
         {
@@ -1323,7 +1376,7 @@ int WordClass::refreshWordsFromSource(MYSQL &mysql, int sourceId, int *words, in
 // sourceId==READ_WORDS_FOR_ALL_SOURCE. update read: read NULL source since lastReadfromDBTime and update or insert the entries into memory (lastReadfromDBTime>0)
 // sourceId>=0. source read: read all source words belonging to a certain source
 // only pay attention to lastReadfromDBTime IF sourceId==READ_WORDS_FOR_ALL_SOURCE.  If sourceId is >=0, then the source was never read before (sources are never repeated).
-int WordClass::readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatisticsFlag,int &numWordsInserted,int &numWordsModified, bool printProgress,bool disqualifyWords)
+int WordClass::readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatisticsFlag,int &numWordsInserted,int &numWordsModified, bool printProgress,bool disqualifyWords, bool skipWordInitialization)
 { LFS
 	if (printProgress)
 		wprintf(L"Started reading from database...                        \r");
@@ -1357,7 +1410,7 @@ int WordClass::readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool
   int *counts=(int *)tmalloc(maxWordId*sizeof(int));
   int numWordForms;
   unsigned int *wordForms=NULL;
-	if (readWordFormsFromDB(mysql,sourceId,sourcePath,maxWordId,qt,words,counts,numWordForms,wordForms, printProgress,disqualifyWords)==0) return 0;
+	if (readWordFormsFromDB(mysql,sourceId,sourcePath,maxWordId,qt,words,counts,numWordForms,wordForms, printProgress,disqualifyWords,skipWordInitialization)==0) return 0;
 	if (refreshWordsFromSource(mysql, sourceId, words, counts, wordForms, numWordsInserted, numWordsModified, printProgress) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read words from source %s.", sourcePath.c_str());
 	tfree(maxWordId * sizeof(int), counts);
@@ -1370,14 +1423,14 @@ int WordClass::readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool
   return 0;
 }
 
-int WordClass::readWithLock(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics, bool printProgress, bool disqualifyWords)
+int WordClass::readWithLock(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics, bool printProgress, bool disqualifyWords, bool skipWordInitialization)
 { LFS
   int startTime=clock();
 	#ifdef WRITE_WORDS_AND_FORMS_TO_DB
 		acquireLock(mysql,true);
 	#endif
   int numWordsInserted=0,numWordsModified=0;
-  int ret=readWordsFromDB(mysql,sourceId,sourcePath, generateFormStatistics,numWordsInserted,numWordsModified, printProgress, disqualifyWords);
+  int ret=readWordsFromDB(mysql,sourceId,sourcePath, generateFormStatistics,numWordsInserted,numWordsModified, printProgress, disqualifyWords, skipWordInitialization);
   myquery(&mysql,L"UNLOCK TABLES");
 	#ifdef WRITE_WORDS_AND_FORMS_TO_DB
 		releaseLock(mysql);

@@ -1130,7 +1130,7 @@ int analyzeEnd(Source source, int sourceId, wstring path, wstring etext, wstring
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE")) 
 		return -1;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false) < 0)
+	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 	bool parsedOnly = false;
@@ -1245,7 +1245,7 @@ int printUnknownsFromSource(Source source, int sourceId, wstring path, wstring e
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false) < 0)
+	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 	bool parsedOnly = false, firstIllegal = false;
@@ -1283,7 +1283,7 @@ int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, w
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false) < 0)
+	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 	bool parsedOnly = false;
@@ -1365,7 +1365,7 @@ int populateWordFrequencyTableFromSource(Source source, int sourceId, wstring pa
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false) < 0)
+	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 	bool parsedOnly = false;
@@ -1725,7 +1725,7 @@ void testRDFType(Source &source)
 	int sourceId = 25291;
 	wstring path = L"J:\\caches\\texts\\Schoonover, Frank E\\Jules of the Great Heart  Free Trapper and Outlaw in the Hudson Bay Region in the Early Days.txt";
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE")) return;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false) < 0)
+	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 	vector <cTreeCat *> rdfTypes;
@@ -2010,7 +2010,10 @@ public:
 	int disagreeSTLP=0; // count of times word-POS disgreed between ST and LP
 	map <wstring, int> STFormDistribution; // total count for each form match in ST
 	map <wstring, int> LPFormDistribution; // total count for each form match in LP
+	map <wstring, int> LPErrorFormDistribution; // count for each form error match in LP if none agree
 	map <wstring, int> agreeFormDistribution; // total count for each form match agreed between ST and LP
+	map <wstring, int> disagreeFormDistribution; // total count for each form match disagreed between ST and LP
+	map <wstring, int> LPAlreadyAccountedFormDistribution; // total count for each form match already accounted for (already entered in the errorMap)
 };
 map <wstring, FormDistribution> formDistribution;
 
@@ -2666,6 +2669,24 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		//errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
 		//return 0;
 	}
+	if (source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE && source.m[wordSourceIndex].pma.queryPattern(L"_ADJECTIVE") != -1)
+	{
+		errorMap[L"diff: ST says adjective when LP says it is a present participle, matched to __ADJECTIVE pattern [acceptable]"]++;
+		return 0; // ST and LP agree
+	}
+	if (source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE && source.m[wordSourceIndex].pma.queryPattern(L"__N1") != -1)
+	{
+		partofspeech += L"***SPNOUN";
+		errorMap[L"diff: ST says adjective when LP says it is a present participle, matched to __ADJECTIVE pattern [acceptable]"]++;
+		///return 0; // ST and LP agree
+	}
+	// 55. this is correct 100% of the time 
+	if ((primarySTLPMatch == L"noun" || primarySTLPMatch == L"adjective") && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && word.length()>3 && word.substr(word.length()-3)==L"ing")
+	{
+		partofspeech += L"***SP"+ primarySTLPMatch;
+		//errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
+		//return 0;
+	}
 	return -1;
 }
 
@@ -2727,6 +2748,10 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 						fd.agreeFormDistribution[Forms[wf]->name]++;
 						agree = true;
 					}
+					else
+					{
+						fd.disagreeFormDistribution[Forms[wf]->name]++;
+					}
 				}
 				if (agree)
 					fd.agreeSTLP++;
@@ -2738,14 +2763,14 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 					return 0;
 				}
 				if (attributeErrors(primarySTLPMatch, source, wordSourceIndex, errorMap, partofspeech, startOfSentence) == 0)
-					return 0;
-				if (source.m[wordSourceIndex].queryWinnerForm(L"pronoun") >= 0)
 				{
-					/*	16 neither      16 there     19 hers     21 either     21 less     24 all     42 same     52 mine     53 most     56 Both     59 such     66 least     91 another     96 other    109 any    180 so    182 more		*/
-					//partofspeech += L"***PN";
+					for (int wf : winnerForms)
+					{
+						fd.LPAlreadyAccountedFormDistribution[Forms[wf]->name]++;
+					}
+					formDistribution[word] = fd;
+					return 0;
 				}
-				formDistribution[word] = fd;
-
 				//////////////////////////////
 				wstring posListStr;
 				for (auto pos : posList)
@@ -2766,7 +2791,12 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 					pos = sentence.find(originalWord,pos+ originalWord.length()+2);
 				}
 				lplog(LOG_ERROR, L"Stanford POS %s (%s) not found in winnerForms %s for word%s %s %07d:[%s]", partofspeech.c_str(), primarySTLPMatch.c_str(), winnerFormsString.c_str(), (originalWord.find(L' ')==wstring::npos) ? L"":L"[space]", originalWord.c_str(), wordSourceIndex, sentence.c_str());
-				if (originalWord.find(L' ') != wstring::npos && 
+				for (int wf : winnerForms)
+				{
+					fd.LPErrorFormDistribution[Forms[wf]->name]++;
+				}
+				formDistribution[word] = fd;
+				if (originalWord.find(L' ') != wstring::npos &&
 					word != L"no one" && word != L"every one" && word != L"as if" && word != L"for ever" && word != L"next to")
 				{
 					lookFor = originalWord.substr(wspace, originalWord.length()) + L")";
@@ -2829,6 +2859,7 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 //map <wstring, int> STFormDistribution; // total count for each form match in ST
 //map <wstring, int> LPFormDistribution; // total count for each form match in LP
 //map <wstring, int> agreeFormDistribution; // total count for each form match agreed between ST and LP
+//map <wstring, int> disagreeFormDistribution; // total count for each form match disagreed between ST and LP
 void printFormDistribution(wstring word, double adp, FormDistribution fd, wstring &maxWord, wstring &maxForm, int &maxDiff,int limit)
 {
 	if (limit<70)
@@ -2838,13 +2869,20 @@ void printFormDistribution(wstring word, double adp, FormDistribution fd, wstrin
 	{
 		// form name, total number of times form is a winner form for this word, % of times this form is the winner form for this word, % of times this form agrees with ST.
 		if (limit<70)
-			lplog(LOG_ERROR, L"  LP %s:%d %d%% %d%%", form.c_str(), formCount, 100 * formCount / totalWordOccurrenceCount, fd.agreeFormDistribution[form] * 100 / formCount);
+			lplog(LOG_ERROR, L"  LP %s:total=%d accounted=%d agree=%d disagree=%d error=%d %d%% %d%%", 
+				form.c_str(), 
+				formCount, fd.LPAlreadyAccountedFormDistribution[form], fd.agreeFormDistribution[form], fd.disagreeFormDistribution[form], fd.LPErrorFormDistribution[form],
+				100 * formCount / totalWordOccurrenceCount, fd.agreeFormDistribution[form] * 100 / formCount);
 		// commented out: look for forms that have a high percentage of LP winners, but a low percentage of agreement.
 		// actually just look for the highest occurring forms with maximum poor agreement.
 		int diff = formCount * (100 - (fd.agreeFormDistribution[form] * 100 / formCount));//count*count / totalWordOccurrenceCount*fd.agreeFormDistribution[form];
 		if (adp > 100.0 && (fd.agreeFormDistribution[form] * 100 / formCount) == 0)
 		{
-			lplog(LOG_ERROR, L"**%s:%3.2f (%d/%d) %s:%d %d%% %d%%", word.c_str(), adp, fd.agreeSTLP, totalWordOccurrenceCount, form.c_str(), formCount, 100 * formCount / totalWordOccurrenceCount, fd.agreeFormDistribution[form] * 100 / formCount);
+			lplog(LOG_ERROR, L"%05d **%s:%3.2f (%d/%d) %s:total=%d accounted=%d agree=%d disagree=%d error=%d %d%% %d%%", 
+				fd.LPErrorFormDistribution[form],
+				word.c_str(), adp, fd.agreeSTLP, totalWordOccurrenceCount, form.c_str(), 
+				formCount, fd.LPAlreadyAccountedFormDistribution[form], fd.agreeFormDistribution[form], fd.disagreeFormDistribution[form], fd.LPErrorFormDistribution[form],
+				100 * formCount / totalWordOccurrenceCount, fd.agreeFormDistribution[form] * 100 / formCount);
 		}
 		if (maxDiff < diff)
 		{
@@ -2862,7 +2900,7 @@ int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false) < 0)
+	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 	bool parsedOnly = false,bearFound=false;
@@ -3245,7 +3283,7 @@ int testViterbiHMMMultiSource(Source &source,wchar_t *databaseHost,int step)
 		mTW(sqlrow[2], title);
 		path.insert(0, L"\\").insert(0, CACHEDIR);
 		bool parsedOnly = false;
-		if (Words.readWithLock(source.mysql, sourceId, path, false, false, false) < 0)
+		if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false) < 0)
 			lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 		Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 		//unordered_map <int, vector < vector <tTagLocation> > > emptyMap;

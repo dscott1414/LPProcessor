@@ -554,7 +554,7 @@ public:
 	int updateOnlyMainEntryIndexToDB(MYSQL &mysql,vector <tIWMM> &queryWords);
 	int readWordIndexesFromDB(MYSQL &mysql);
 	int writeWordsToDB(MYSQL &mysql);
-  int readWithLock(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics, bool printProgress, bool disqualifyWords);
+  int readWithLock(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics, bool printProgress, bool disqualifyWords, bool skipWordInitialization);
   void readForms(MYSQL &mysql, wchar_t *qt);
   void assign(int wordId,tIWMM iWord);
   tIWMM *idToMap;
@@ -605,9 +605,10 @@ protected:
 private:
   typedef pair <wstring, tFI> tWFIMap;
   static int lastWordWrittenClock;
-	int readWordFormsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,int maxWordId,wchar_t *qt,int *words,int *counts,int &numWordForms,unsigned int * &wordForms, bool printProgress, bool disqualifyWords);
+	bool isWordFormCacheValid(MYSQL &mysql);
+	int readWordFormsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,int maxWordId,wchar_t *qt,int *words,int *counts,int &numWordForms,unsigned int * &wordForms, bool printProgress, bool disqualifyWords, bool skipWordInitialization);
 	int refreshWordsFromSource(MYSQL &mysql, int sourceId, int *words, int *counts, unsigned int * &wordForms, int &numWordsInserted, int &numWordsModified, bool printProgress);
-  int readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics,int &numWordsInserted,int &numWordsModified, bool printProgress, bool disqualifyWords);
+  int readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics,int &numWordsInserted,int &numWordsModified, bool printProgress, bool disqualifyWords, bool skipWordInitialization);
   int lastModifiedTime;
   int minimumLastWordWrittenClockDiff;
   static bool changedWords;

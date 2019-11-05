@@ -3183,12 +3183,12 @@ Source::Source(wchar_t *databaseServer,int _sourceType,bool generateFormStatisti
 		Words.createWordCategories();
 		writeSource();
 	}
-	else if (!skipWordInitialization)
+	else 
 	{
 		#ifdef CHECK_WORD_CACHE
-			if (Words.readWithLock(mysql,-4,L"",generateFormStatistics,wNULL,false))
+			if (Words.readWithLock(mysql,-4,L"",generateFormStatistics,wNULL,false,skipWordInitialization))
 		#else
-			if (Words.readWithLock(mysql,-1,L"",generateFormStatistics, printProgress, false))
+			if (Words.readWithLock(mysql,-1,L"",generateFormStatistics, printProgress, false,skipWordInitialization))
 		#endif
 				lplog(LOG_FATAL_ERROR,L"Cannot read database.");
 	}

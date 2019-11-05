@@ -1291,7 +1291,7 @@ int wmain(int argc,wchar_t *argv[])
 			source.unlockTables();
 			if (start == L"**SKIP**")
 				continue;
-			if (st!=Source::BNC_SOURCE_TYPE && !forceSourceReread && Words.readWithLock(source.mysql,sourceId,path,false,true,false)<0)
+			if (st!=Source::BNC_SOURCE_TYPE && !forceSourceReread && Words.readWithLock(source.mysql,sourceId,path,false,true,false,false)<0)
 				lplog(LOG_FATAL_ERROR,L"Cannot read dictionary.");
 			Words.addMultiWordObjects(source.multiWordStrings,source.multiWordObjects);
 			wstring rt1,rt2;
