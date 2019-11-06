@@ -2669,18 +2669,24 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		//errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
 		//return 0;
 	}
+	// 55. this is correct 100% of the time 
 	if (source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE && source.m[wordSourceIndex].pma.queryPattern(L"_ADJECTIVE") != -1)
 	{
 		errorMap[L"diff: ST says adjective when LP says it is a present participle, matched to __ADJECTIVE pattern [acceptable]"]++;
 		return 0; // ST and LP agree
 	}
-	if (source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE && source.m[wordSourceIndex].pma.queryPattern(L"__N1") != -1)
+	// 56. incorrect 3 times out of 141 instances
+	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE && source.m[wordSourceIndex].pma.queryPattern(L"__N1") != -1)
 	{
-		partofspeech += L"***SPNOUN";
-		errorMap[L"diff: ST says adjective when LP says it is a present participle, matched to __ADJECTIVE pattern [acceptable]"]++;
-		///return 0; // ST and LP agree
+		errorMap[L"diff: ST says verb when LP says it is a noun but matching to a present participle and an __N1 pattern [acceptable]"]++;
+		return 0; // ST and LP agree
 	}
-	// 55. this is correct 100% of the time 
+	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE && source.m[wordSourceIndex].pma.queryPattern(L"__N1") != -1)
+	{
+		//partofspeech += L"***SPNOUN";
+		errorMap[L"diff: ST says noun when LP says it is a verb but matching to a present participle and an __N1 pattern [acceptable]"]++;
+		return 0; // ST and LP agree
+	}
 	if ((primarySTLPMatch == L"noun" || primarySTLPMatch == L"adjective") && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && word.length()>3 && word.substr(word.length()-3)==L"ing")
 	{
 		partofspeech += L"***SP"+ primarySTLPMatch;
