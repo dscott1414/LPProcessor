@@ -2060,6 +2060,13 @@ int createSecondaryPatterns2(void)
 									1, L"_ADJECTIVE", 0, 0, 1,
 									1, L"_PP*1", 0, 0, 1,
 									0);
+	// as usual - to match ST, as should be an adverb
+	cPattern::create(L"__CLOSING__S1{_BLOCK:_ONLY_END_MATCH}", L"B",
+									1, L",", 0, 0, 1,
+									1, L"adverb|as*-2",  0, 1, 1,
+									1, L"_ADJECTIVE", 0, 1, 1,
+									1, L"_PP*1", 0, 0, 1,
+									0);
 	// DECLARATIVES p.803 CGEL
 	// The simple sentence (p. 754)
 	// SVC, SVA, SV, SVO, SVOC, SVOA, SVOO
@@ -2107,7 +2114,7 @@ int createSecondaryPatterns2(void)
 									 2,L"_PP",L"_REL1[*]{_BLOCK}",0,0,1,         // from C2__S1 - __PP after noun is absorbed into the noun itself through NOUN 9
 									 0);
  */
-	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_FORWARD_REFERENCE:_BLOCK:GNOUN:VNOUN}",L"F",
+	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_FORWARD_REFERENCE:_BLOCK:GNOUN:VNOUN:_CHECK_IGNORABLE_FORMS}",L"F",
 									 1,L"__C1__S1",0,1,1, // changed to cost *2 5/17 to avoid being the same cost as _NOUN[2]
 									 1,L"_VERBONGOING*1{VERB:vE}",0,1,1,  // from C2__S1 - also matches _N1// this pattern should not be common
 									 //1,L"_INFP{OBJECT}",0,0,1,         // from C2__S1   RINFP 6/7/06

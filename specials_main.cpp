@@ -2007,7 +2007,8 @@ class FormDistribution
 {
 public:
 	int agreeSTLP=0; // count of times word-POS agreed between ST and LP
-	int disagreeSTLP=0; // count of times word-POS disgreed between ST and LP
+	int disagreeSTLP = 0; // count of times word-POS disgreed between ST and LP
+	int unaccountedForDisagreeSTLP = 0; // count of times word-POS disgreed between ST and LP
 	map <wstring, int> STFormDistribution; // total count for each form match in ST
 	map <wstring, int> LPFormDistribution; // total count for each form match in LP
 	map <wstring, int> LPErrorFormDistribution; // count for each form error match in LP if none agree
@@ -2530,6 +2531,67 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: word 'after': ST says " + primarySTLPMatch + L"but LP says adverb"]++;
 		return 0;
 	}
+	// Longman p85 subordinator 'as though' - subordinating conjunction
+	if (word == L"as" && primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(L"conjunction") >= 0 && source.m[wordSourceIndex + 1].word->first==L"though")
+	{
+		errorMap[L"LP correct: word 'as': ST says adverb but LP says conjunction"]++;
+		return 0;
+	}
+	if (word == L"as") // && source.m[wordSourceIndex + 1].word->first == L"to")
+	{
+		// 'as to stand outside in the wind' - 'as' is part of a subordinating conjunctive phrase and so therefore a conjunction
+		if (source.m[wordSourceIndex].queryWinnerForm(L"conjunction") >= 0 && (source.m[wordSourceIndex + 1].pma.queryPattern(L"_INFP") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"_INFP") != -1) && source.m[wordSourceIndex + 1].word->first!=L"if")
+		{
+			errorMap[L"LP correct: word 'as': ST says " + primarySTLPMatch + L" but LP says conjunction (complex subordinator)"]++;
+			return 0;
+		}
+		// 'as to the romantic nonsense' - 'as' is a preposition - part of the complex preposition referred to in Longman
+		if (source.m[wordSourceIndex].queryWinnerForm(L"preposition") >= 0 && (source.m[wordSourceIndex + 1].pma.queryPattern(L"_PP") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"_PP") != -1))
+		{
+			errorMap[L"LP correct: word 'as': ST says " + primarySTLPMatch + L" but LP says preposition (complex preposition)"]++;
+			return 0;
+		}
+		if (source.m[wordSourceIndex + 1].pma.queryPattern(L"__S1") != -1)
+		{
+			if (primarySTLPMatch == L"preposition" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
+			{
+				errorMap[L"LP correct: word 'as': ST says preposition and LP says adverb"]++;
+				return 0;
+			}
+			if (primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(L"conjunction") >= 0)
+			{
+				errorMap[L"diff: word 'as': ST says adverb and LP says conjunction"]++;
+				return 0;
+			}
+		}
+		// followed by a preposition?
+		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"preposition") >= 0)
+		{
+			partofspeech += L"**ASPREP";
+		}
+		// followed by an adverb?
+		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0)
+		{
+			partofspeech += L"**ASADVERB";
+		}
+		// followed by an adjective?
+		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0)
+		{
+			partofspeech += L"**ASADJECTIVE";
+		}
+		// followed by a noun?
+		if (source.m[wordSourceIndex + 1].pma.queryPattern(L"__NOUN") != -1)
+		{
+			partofspeech += L"**ASNOUN";
+		}
+		// followed by an mod_aux?
+		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"mod_aux") >= 0)
+		{
+			partofspeech += L"**ASMODAUX";
+		}
+		
+	}
+
 	// 45. this is correct 100% of the time in the corpus (over 100 examples).  
 	if ((primarySTLPMatch == L"verb") && !source.m[wordSourceIndex].word->second.hasVerbForm())
 	{
@@ -2683,9 +2745,50 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE && source.m[wordSourceIndex].pma.queryPattern(L"__N1") != -1)
 	{
-		//partofspeech += L"***SPNOUN";
 		errorMap[L"diff: ST says noun when LP says it is a verb but matching to a present participle and an __N1 pattern [acceptable]"]++;
 		return 0; // ST and LP agree
+	}
+	// Rollo met the policeman *walking* towards him
+	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE &&
+		source.m[wordSourceIndex].pma.queryPattern(L"_VERBONGOING") != -1 && 
+		(source.queryPattern(wordSourceIndex, L"__NOUN", L"F") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"__NOUN", L"D") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"_PP", L"3") != -1))
+	{
+		errorMap[L"diff: ST says noun when LP says it is a verb but matching to a present participle and an _NOUN[F], _NOUN[D] or _PP[3] pattern [acceptable]"]++;
+		return 0; // ST and LP agree
+	}
+	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE)
+	{
+		/*
+		int maxLen=-1,pemaIndex=-1;
+		if (source.m[wordSourceIndex].pma.queryPattern(L"__N1") != -1 && (pemaIndex = source.queryPattern(wordSourceIndex, L"__NOUN", maxLen)) != -1)
+		{
+			if (source.pema[pemaIndex].end > 1)
+			{
+				errorMap[L"diff: ST says adjective when LP says it is a verb but matching to a present participle and an __N1 inside of a __NOUN pattern [acceptable]"]++;
+				partofspeech += L"***SPADJVERB";
+			}
+			else
+			{
+				errorMap[L"LP correct: ST says adjective when LP says it is a verb but matching to a present participle and an __N1 as the front of a __NOUN pattern"]++;
+				partofspeech += L"***SPADJVERBNOUN";
+			}
+		}
+		*/
+		int maxLen = -1,pemaIndex;
+		// It will be *surprising*
+		if ((pemaIndex = source.queryPattern(wordSourceIndex, L"_VERB", maxLen)) != -1)
+		{
+			int verbBegin = source.pema[pemaIndex].begin + wordSourceIndex;
+			// check for an 'is' or 'has' verb
+			for (int wsi = wordSourceIndex - 1; wsi >= verbBegin; wsi--)
+			{
+				if (source.m[wsi].pma.queryPattern(L"_IS") != -1 || source.m[wsi].pma.queryPattern(L"_HAVE") != -1 || source.m[wsi].pma.queryPattern(L"_BE") != -1)
+				{
+					errorMap[L"ST correct: present participle after 'is' or 'has' ST says adjective LP says verb"]++;
+					return 0;
+				}
+			}
+		}
 	}
 	if ((primarySTLPMatch == L"noun" || primarySTLPMatch == L"adjective") && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && word.length()>3 && word.substr(word.length()-3)==L"ing")
 	{
@@ -2731,6 +2834,8 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 				}
 				FormDistribution fd;
 				wstring primarySTLPMatch = lpPOS->second[0];
+				if (partofspeech == L"IN")
+					primarySTLPMatch += L" or " + lpPOS->second[1];
 				auto fdi = formDistribution.find(word);
 				if (fdi != formDistribution.end())
 					fd = fdi->second;
@@ -2801,6 +2906,7 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 				{
 					fd.LPErrorFormDistribution[Forms[wf]->name]++;
 				}
+				fd.unaccountedForDisagreeSTLP++;
 				formDistribution[word] = fd;
 				if (originalWord.find(L' ') != wstring::npos &&
 					word != L"no one" && word != L"every one" && word != L"as if" && word != L"for ever" && word != L"next to")
@@ -2869,7 +2975,7 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 void printFormDistribution(wstring word, double adp, FormDistribution fd, wstring &maxWord, wstring &maxForm, int &maxDiff,int limit)
 {
 	if (limit<70)
-		lplog(LOG_ERROR, L"%s:%3.2f (%d/%d)", word.c_str(), adp, fd.agreeSTLP, fd.agreeSTLP + fd.disagreeSTLP);
+		lplog(LOG_ERROR, L"%s:%d %3.0f (%d/%d)", word.c_str(), fd.unaccountedForDisagreeSTLP, adp, fd.agreeSTLP, fd.agreeSTLP + fd.disagreeSTLP);
 	int totalWordOccurrenceCount = fd.agreeSTLP + fd.disagreeSTLP;
 	for (auto &&[form, formCount] : fd.LPFormDistribution)
 	{
@@ -2882,7 +2988,7 @@ void printFormDistribution(wstring word, double adp, FormDistribution fd, wstrin
 		// commented out: look for forms that have a high percentage of LP winners, but a low percentage of agreement.
 		// actually just look for the highest occurring forms with maximum poor agreement.
 		int diff = formCount * (100 - (fd.agreeFormDistribution[form] * 100 / formCount));//count*count / totalWordOccurrenceCount*fd.agreeFormDistribution[form];
-		if (adp > 100.0 && (fd.agreeFormDistribution[form] * 100 / formCount) == 0)
+		if (fd.LPErrorFormDistribution[form]>200 && (fd.agreeFormDistribution[form] * 100 / formCount) < 2)
 		{
 			lplog(LOG_ERROR, L"%05d **%s:%3.2f (%d/%d) %s:total=%d accounted=%d agree=%d disagree=%d error=%d %d%% %d%%", 
 				fd.LPErrorFormDistribution[form],
@@ -3053,7 +3159,7 @@ int stanfordCheck(Source source, int step, bool pcfg)
 	map <int, wstring, std::greater<int>> agreeCountMap;
 	for (auto &&[word, fd] : formDistribution)
 	{
-		agreeCountMap[fd.disagreeSTLP] += word + L"*";
+		agreeCountMap[fd.unaccountedForDisagreeSTLP] += word + L"*";
 	}
 	int limit = 0;
 	int maxDiff = -1;

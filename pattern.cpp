@@ -2122,14 +2122,25 @@ void printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &t
 }
 
 // exactly like pema::queryPattern
-int Source::queryPattern(int position,wstring pattern,int &maxEnd)
-{ LFS
-  int maxLen=-1,pemaPosition=-1,nextByPosition=m[position].beginPEMAPosition;
-  for (; nextByPosition!=-1; nextByPosition=pema[nextByPosition].nextByPosition)
-    if (patterns[pema[nextByPosition].getPattern()]->name==pattern && (pema[nextByPosition].end-pema[nextByPosition].begin)>maxLen)
-      maxLen=pema[pemaPosition=nextByPosition].end-pema[nextByPosition].begin;
-  if (pemaPosition!=-1) maxEnd=pema[pemaPosition].end;
-  return pemaPosition;
+int Source::queryPattern(int position, wstring pattern, int &maxEnd)
+{
+	LFS
+		int maxLen = -1, pemaPosition = -1, nextByPosition = m[position].beginPEMAPosition;
+	for (; nextByPosition != -1; nextByPosition = pema[nextByPosition].nextByPosition)
+		if (patterns[pema[nextByPosition].getPattern()]->name == pattern && (pema[nextByPosition].end - pema[nextByPosition].begin) > maxLen)
+			maxLen = pema[pemaPosition = nextByPosition].end - pema[nextByPosition].begin;
+	if (pemaPosition != -1) maxEnd = pema[pemaPosition].end;
+	return pemaPosition;
+}
+
+// exactly like pema::queryPattern
+int Source::queryPattern(int position, wstring pattern, wstring differentiator)
+{
+	LFS
+	for (int nextByPosition = m[position].beginPEMAPosition; nextByPosition != -1; nextByPosition = pema[nextByPosition].nextByPosition)
+		if (patterns[pema[nextByPosition].getPattern()]->name == pattern && patterns[pema[nextByPosition].getPattern()]->differentiator == differentiator)
+			return nextByPosition;
+	return -1;
 }
 
 void Source::printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &tagSet,int position,int PEMAPosition)
