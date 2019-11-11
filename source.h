@@ -3437,7 +3437,7 @@ bool &comparableName,
 	int calculateVerbAfterVerbUsage(int whereVerb,unsigned int nextWord);
 	int evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,int parentPosition,int position,vector <tTagLocation> &tagSet,bool infinitive,bool assessCost,int &voRelationsFound,int &traceSource);
 	int properNounCheck(int &traceSource,int begin,int end,int whereDet);
-	int evaluateNounDeterminer(vector <tTagLocation> &tagSet,bool assessCost,int &traceSource,int begin,int end);
+	int evaluateNounDeterminer(vector <tTagLocation> &tagSet,bool assessCost,int &traceSource,int begin,int end, int fromPEMAPosition);
 	bool hasTimeObject(int where);
 	int attachAdjectiveRelation(vector <tTagLocation> &tagSet,int whereObject);
 	int attachAdverbRelation(vector <tTagLocation> &tagSet,int verbTagIndex,tIWMM verbWord);

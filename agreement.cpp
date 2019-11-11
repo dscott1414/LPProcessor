@@ -1789,22 +1789,31 @@ int Source::calculateVerbAfterVerbUsage(int whereVerb,unsigned int nextWord)
 int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCost, int &traceSource, int begin, int end)
 {
 	LFS
-		int nounTag = -1, nextNounTag = -1, nAgreeTag = -1, nextNAgreeTag = -1, nextDet = -1, PNC = 0;// , nextName = -1, subObjectTag = -1;
+	int nounTag = -1, nextNounTag = -1, nAgreeTag = -1, nextNAgreeTag = -1, nextDet = -1, PNC = 0;// , nextName = -1, subObjectTag = -1;
 	if ((nounTag=findTag(tagSet,L"NOUN",nextNounTag))>=0)
 		nAgreeTag=findTagConstrained(tagSet,L"N_AGREE",nextNAgreeTag,tagSet[nounTag]);
-	if (nAgreeTag<end-1 && calculateVerbAfterVerbUsage(end-1,end)) // if nAgreeTag<end-1, it is more likely a compound noun
+	else
+		return 0;
+	if (nAgreeTag >= 0 && nAgreeTag < end - 1 && calculateVerbAfterVerbUsage(end - 1, end)) // if nAgreeTag<end-1, it is more likely a compound noun
 	{
 		if (debugTrace.traceDeterminer)
-			lplog(L"%d:Noun (%d,%d) is compound, has a verb at end and a verb after the end (cost=%d). [SOURCE=%06d].",begin,begin,end, tFI::COST_OF_INCORRECT_VERBAL_NOUN, traceSource=gTraceSource);
-		PNC+=tFI::COST_OF_INCORRECT_VERBAL_NOUN;
+		{
+			//printTagSet(LOG_INFO, L"_ND2", -1, tagSet, begin, fromPEMAPosition);
+			wstring phrase;
+			lplog(L"%d:%s[%s]:%s(%s):Noun (%d,%d) is compound, has a verb at end and a verb after the end (cost=%d). [SOURCE=%06d].", begin, (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->differentiator.c_str(), phraseString(begin, end, phrase, true).c_str(), m[end].word->first.c_str(), begin, end, tFI::COST_OF_INCORRECT_VERBAL_NOUN, traceSource = gTraceSource);
+		}
+		PNC += tFI::COST_OF_INCORRECT_VERBAL_NOUN;
 	}
-	if (begin>0 && m[begin-1].word->first==L"to" && m[begin].queryForm(verbForm)>=0 && 
+	if (begin>0 && m[begin-1].word->first==L"to" && m[begin].queryForm(verbForm)>=0 &&
 			!(m[begin].word->second.inflectionFlags&(PLURAL|PLURAL_OWNER)) && m[begin].word->second.usageCosts[m[begin].queryForm(verbForm)]<4)
 	{
-		wstring formsString;
 		if (debugTrace.traceDeterminer)
-			lplog(L"%d:%s: Noun (%d,%d) has verb form after 'to' - verb cost=%d+10",begin,m[begin].word->first.c_str(),begin,end,
+		{
+			//printTagSet(LOG_INFO, L"_ND2", -1, tagSet, begin, fromPEMAPosition);
+			wstring phrase;
+			lplog(L"%d:%s[%s]:(%s)%s: Noun (%d,%d) has verb form after 'to' - verb cost=%d+10", begin, (fromPEMAPosition<0) ? L"":patterns[pema[fromPEMAPosition].getPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->differentiator.c_str(),m[begin-1].word->first.c_str(),phraseString(begin,end,phrase,true).c_str(), begin, end,
 				m[begin].word->second.usageCosts[m[begin].queryForm(verbForm)]);
+		}
 		PNC+=10;
 	}
 	//__int64 or=m[begin].objectRole;
@@ -1834,10 +1843,10 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 			}
 		}
 	}
-	if (nAgreeTag<0 || nounTag<0) 
+	if (nAgreeTag < 0 || nounTag < 0)
 	{
 		if (debugTrace.traceDeterminer)
-			lplog(L"%d:Noun (%d,%d) has no nAgree or no noun tag (cost=%d) [SOURCE=%06d].",begin,begin,end,PNC,traceSource=gTraceSource++);
+			lplog(L"%d:Noun (%d,%d) has no nAgree or no noun tag (cost=%d) [SOURCE=%06d].", begin, begin, end, PNC, traceSource = gTraceSource++);
 		return PNC;
 	}
 	/*
@@ -2061,7 +2070,7 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 									}
 									printTagSet(LOG_INFO, L"ND1", K, nTagSets[K], nPosition, nPEMAPosition);
 								}
-								nCosts.push_back(evaluateNounDeterminer(nTagSets[K],true,traceSource,nPosition,nPosition+nLen));
+								nCosts.push_back(evaluateNounDeterminer(nTagSets[K],true,traceSource,nPosition,nPosition+nLen, nPEMAPosition));
 								traceSources.push_back(traceSource);
 							}
 							lowerPreviousElementCosts(secondaryPEMAPositions, nCosts, traceSources, L"nounDeterminer");
@@ -2088,7 +2097,7 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 							if (debugTrace.traceDeterminer)
 								printTagSet(LOG_INFO,L"ND2",K,nTagSets[K],nPosition,tl->PEMAOffset);
 							int tTraceSource=-1;
-							nCosts.push_back(evaluateNounDeterminer(nTagSets[K],true, tTraceSource,nPosition,nPosition+nLen));
+							nCosts.push_back(evaluateNounDeterminer(nTagSets[K],true, tTraceSource,nPosition,nPosition+nLen, tl->PEMAOffset));
 							traceSources.push_back(tTraceSource);
 						}
 						lowerPreviousElementCosts(secondaryPEMAPositions, nCosts, traceSources, L"nounDeterminer2");

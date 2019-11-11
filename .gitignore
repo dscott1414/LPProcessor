@@ -39,3 +39,5 @@ obj
 enc_temp_folder
 processGutenbergRDFtoSQL/obj/x64/Debug/processGutenbergRDFtoSQL.csproj.FileListAbsolute.txt
 processGutenbergRDFtoSQL/obj/x64/Release/processGutenbergRDFtoSQL.csproj.FileListAbsolute.txt
+*.obj
+*.exe

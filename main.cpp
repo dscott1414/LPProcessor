@@ -1420,7 +1420,9 @@ int wmain(int argc,wchar_t *argv[])
 			if (!exitNow) source.signalFinishedProcessingSource(sourceId);
 			source.clearSource();
 		}
+#ifdef LOG_PATTERNS
 		cPattern::printPatternStatistics();
+#endif
 		if (numWords)
 		{
 			wprintf(L"\n%d milliseconds elapsed (%d words, %d unmatched (%5.2f%%) %d overmatched (%5.2f%%)",

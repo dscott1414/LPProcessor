@@ -875,7 +875,7 @@ void Source::getCompoundPositions(int where,vector <tTagLocation> &multipleObjec
 			if (wob<=1 || (m[wob-1].word->first!=L"," && m[wob-2].word->first!=L",") ||
 					startCollectTagsFromTag(true,nounDeterminerTagSet,multipleObjectTagSet[oTag],ndTagSets,-1,true)<=0 ||
 					findOneTag(ndTagSets[0],L"DET",-1)>=0 ||
-					!evaluateNounDeterminer(ndTagSets[0],true,traceSource,wob,wob+multipleObjectTagSet[oTag].len))
+					!evaluateNounDeterminer(ndTagSets[0],true,traceSource,wob,wob+multipleObjectTagSet[oTag].len,-1))
 			{
 				objectPositions.push_back(wo);
 				//if (objects[o].neuter)
@@ -930,7 +930,7 @@ void Source::markMultipleObjects(int where)
 							if (wob<=1 || (m[wob-1].word->first!=L"," && m[wob-2].word->first!=L",") ||
 								  startCollectTagsFromTag(true,nounDeterminerTagSet,mobjectTagSets[J][oTag],ndTagSets,-1,true)<=0 ||
 								  findOneTag(ndTagSets[0],L"DET",-1)>=0 ||
-									!evaluateNounDeterminer(ndTagSets[0],true,traceSource,wob,wob+mobjectTagSets[J][oTag].len))
+									!evaluateNounDeterminer(ndTagSets[0],true,traceSource,wob,wob+mobjectTagSets[J][oTag].len,-1))
 							{
 								objectPositions.push_back(wo);
 								if (objects[o].objectClass==NAME_OBJECT_CLASS)
@@ -2919,7 +2919,7 @@ void Source::syntacticRelations()
 					{
 						if (debugTrace.traceDeterminer)
 							printTagSet(LOG_INFO,L"ND3",J,tagSets[J],I,pma->pemaByPatternEnd);
-						evaluateNounDeterminer(tagSets[J],false,traceSource,I,I+pma->len);
+						evaluateNounDeterminer(tagSets[J],false,traceSource,I,I+pma->len, pma->pemaByPatternEnd);
 					}
 			}
 			tagSets.clear();

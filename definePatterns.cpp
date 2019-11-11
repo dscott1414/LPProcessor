@@ -545,8 +545,9 @@ int createBasicPatterns(void)
 	cPattern::create(L"__AS_AS", L"", 
 											1, L"adverb|as*-1", 0, 1, 1,
 											2, L"adverb", L"adjective", 0, 1, 1,
-											1, L"preposition|as{P}", 0, 1, 1, 0); // when included in a _PP, mark this as a preposition
-	// this morning / this very morning / some morning
+											1, L"__NOUN*1",0,0,1, // as brave hearts as / as silent a type as / as stern a voice as 
+											2, L"preposition|as{P}", L"conjunction|as if", 0, 1, 1, 0); // when included in a _PP, mark this as a preposition
+// this morning / this very morning / some morning
 	cPattern::create(L"_ADVERB{FLOATTIME}",L"T",
 											5,L"demonstrative_determiner{TIMEMODIFIER}",L"adjective{TIMEMODIFIER}", L"quantifier|some", L"quantifier|each", L"quantifier|every",0,1,1,
 											1, L"adverb{ADV}", 0, 0, 1, // very
@@ -1922,6 +1923,15 @@ void createPrepositionalPhrases(void)
 									 1,L"preposition|in",0,1,1,
 									 1,L"noun|case",0,1,1,
 									 1,L"__S1{PREPOBJECT:OBJECT:EVAL:_BLOCK}",0,1,1,0);
+	// with as brave a heart as possible
+	cPattern::create(L"__PP{_FINAL_IF_ALONE:_BLOCK:PREP}", L"B",
+										1, L"preposition{P}", 0, 1, 1,  
+										1, L"adverb|as*-2", 0, 1, 1,
+										2, L"adverb", L"adjective", 0, 1, 1,
+										1, L"__NOUN[*]", 0, 1, 1, // as brave hearts as / as silent a type as / as stern a voice as 
+										1, L"preposition|as{P}", 0, 1, 1,  // when included in a _PP, mark this as a preposition
+										2, L"adjective", L"__S1",0, 1, 1,
+										0);
 
 }
 
@@ -2347,7 +2357,7 @@ int createSecondaryPatterns2(void)
 									1, L"_ADJECTIVE", 0,1,1,
 									0);
 	cPattern::create(L"__INTRO2_S1{_ONLY_BEGIN_MATCH:FLOATTIME}",L"5", // PP could match a time
-									8,L"_PP",L"_VERBREL2*1{_BLOCK:EVAL}", L"_REL1[*]*1", L"_INFP{BLOCK}", L"conjunction",L"coordinator",L"adverb|then",L"adverb|so",0,1,1, // took out *1 from _PP - discouraged legitimate leading prepositional phrases
+									9,L"__AS_AS",L"_PP",L"_VERBREL2*1{_BLOCK:EVAL}", L"_REL1[*]*1", L"_INFP{BLOCK}", L"conjunction",L"coordinator",L"adverb|then",L"adverb|so",0,1,1, // took out *1 from _PP - discouraged legitimate leading prepositional phrases
 									 5,L"dash",L":",L",",L"__ADVERB",L"conjunction|though*-3",0,0,1, // though is not used as a conjunction often, but should be one in this position
 									 0);
 	cPattern::create(L"__INTRO2_S1{_ONLY_BEGIN_MATCH}",L"6",
@@ -2744,7 +2754,7 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}",L"C",
 										//3,L"demonstrative_determiner",L"personal_pronoun_nominative",L"indefinite_pronoun",0,0,1, // *he* whom you await taken out - how is this different than _NOUN[9]?
 										1, L"_INTRO_S1{_BLOCK:EVAL}", 0, 0, 1,
-									 11, L"__INTRO_N_ET", L"which",L"what",L"whose",L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"preposition|during", 0,1,1,
+									 12, L"__INTRO_N_ET", L"which",L"what",L"whose",L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"preposition|during", L"__AS_AS*-1",0,1,1,
 										1,L"__S1{_BLOCK:EVAL}",0,1,1,
 										1, L",", 0, 0, 1,
 										2, L"adverb|then", L"_ADVERB", 0, 0, 1,

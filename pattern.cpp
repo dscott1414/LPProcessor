@@ -1419,7 +1419,8 @@ void cPattern::reportUsage(void)
 {
 	LFS
 	wchar_t temp[1024];
-	wsprintf(temp, L"%s[%s] ", name.c_str(), differentiator.c_str());
+	wstring fullname = name + L"["+differentiator+L"]";
+	wsprintf(temp, L"%40s ", fullname.c_str());
 	for (unsigned int I = 0; I < elements.size(); I++)
 	{
 		for (unsigned int J = 0; J < elements[I]->formCosts.size(); J++)
@@ -1770,18 +1771,18 @@ void patternElement::reportUsage(wchar_t *temp, int J, bool isPattern)
 	int len = wcslen(temp);
 	if (isPattern)
 	{
-		wsprintf(temp, L"%s[%s]%d|%d", patterns[patternIndexes[J]]->name.c_str(), patterns[patternIndexes[J]]->differentiator.c_str(), usageEverMatched[J], usageFinalMatch[J]);
+		wstring fullname = patterns[patternIndexes[J]]->name + L"["+patterns[patternIndexes[J]]->differentiator+L"]";
+		wsprintf(temp+len, L"%40s  %05d  %05d", fullname.c_str(), usageEverMatched[J], usageFinalMatch[J]);
 	}
 	else
 	{
 		wstring fs = formStr[J];
 		if (specificWords[J].length())
 			fs += L"|" + specificWords[J];
-		wsprintf(temp, L"%s%d|%d", fs.c_str(), usageEverMatched[J], usageFinalMatch[J]);
+		wsprintf(temp+len, L"%40s  %05d  %05d", fs.c_str(), usageEverMatched[J], usageFinalMatch[J]);
 	}
-	temp[len] = 0;
 	::lplog(L"%s", temp);
-
+	temp[len] = 0;
 }
 
 bool patternElement::hasTag(unsigned int tag)
@@ -2196,13 +2197,14 @@ void cPattern::printPatternStatistics(void)
 		for (unsigned int p=0; p<patterns.size(); p++)
 		{
 			if ((p&31)==0)
-				::lplog(L"\n%24s[ ]: matches ET emi pushes comparisons hits winners %%",L"name");
+				::lplog(L"\n%24s[  ]: %8s %7s %10s %11s %10s %7s %%",L"pattern",L"matches",L"ET",L"emi",L"pushes",L"compares",L"hits",L"winners",L"name");
 			::lplog(L"%c%23s[%2s]: %08u %07u %010u %010u %011u %010u %07u %5.2f%%",
 				(patterns[p]->numWinners==0 && patterns[p]->numChildrenWinners==0) ? '*' : (patterns[p]->fillFlag || patterns[p]->fillIfAloneFlag) ? '!' : ' ',
 				patterns[p]->name.c_str(),patterns[p]->differentiator.c_str(),
 				patterns[p]->numMatches,patterns[p]->evaluationTime,patterns[p]->emi,patterns[p]->numPushes,
 				patterns[p]->numComparisons,patterns[p]->numHits,patterns[p]->numWinners+patterns[p]->numChildrenWinners,(float)(patterns[p]->numWinners+patterns[p]->numChildrenWinners)*100/totalWinnersMatched);
 		}
+	::lplog(L"%40s %40s  %5s  %5s", L"PATTERN", L"PATTERN ELEMENT",L"#EVER",L"#FINAL");
 	for (unsigned int p = 0; p < patterns.size(); p++)
 		patterns[p]->reportUsage();
 	for (unsigned int r=0; r<patternReferences.size(); r++)

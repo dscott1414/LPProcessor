@@ -53,13 +53,13 @@ int Source::collectTags(int recursionLevel,int PEMAPosition,int position,vector 
 { LFS
 	if (PEMAPosition<0)
 	{
-		if (timerForExit++==31 && (clock()-beginTime)>COLLECT_TAGS_TIME_LIMIT)
+		if (timerForExit++==31 && !debugTrace.tracePatternElimination && (clock()-beginTime)>COLLECT_TAGS_TIME_LIMIT)
 			exitTags=true;
 		bool duplicate=false;
 		if (recursionLevel)
 			for (size_t ts=(tagSets.size()>10) ? tagSets.size()-10 : 0; ts<tagSets.size() && !duplicate; ts++)
 				duplicate=tagSetSame(tagSet,tagSets[ts]);
-		// !duplicate && && tagSet.size() if removing empty tagsets from top level EMPTAG
+		// !duplicate && tagSet.size() if removing empty tagsets from top level EMPTAG
 		if (recursionLevel==0 && secondaryPEMAPositions.size() && secondaryPEMAPositions[secondaryPEMAPositions.size()-1].tagSet!=tagSets.size())
 			secondaryPEMAPositions.push_back(costPatternElementByTagSet(position,-PEMAPosition,-1,tagSets.size(),pema[-PEMAPosition].getElement()));
 		if (!duplicate) // Eliminate empty tagsets? (recursionLevel || tagSet.size()) && (EMPTAG)

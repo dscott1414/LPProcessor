@@ -1849,7 +1849,8 @@ unordered_map<wstring, vector <wstring> > maxentAssociationMap =
 	{ L"adjective",{ L"quantifier",L"numeral_ordinal" }},  // many / more
 	{ L"adverb",{ L"not",L"never" }},  // many
 	{ L"to",{ L"preposition" }},
-{ L"there",{ L"pronoun",L"adverb" }},
+	{ L"there",{ L"pronoun",L"adverb" }},
+	{ L"no",{ L"adverb" }},
 	{ L"which",{ L"interrogative_determiner",L"interrogative_pronoun",L"relativizer"}},
 	{ L"what",{ L"interrogative_determiner",L"interrogative_pronoun",L"relativizer"}},
 	{ L"who",{ L"interrogative_pronoun",L"relativizer"}},
@@ -2091,7 +2092,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		return 0;
 	}
 	// 2. where 'that' is a demonstrative_determiner, and matches a REL1 pattern, then we count that as correct parse for LP as this is a relative phrase, and the usage of 'that' is correctly understood within that pattern.
-	if (primarySTLPMatch == L"preposition" && wordSourceIndex < source.m.size() - 1 && source.m[wordSourceIndex].queryWinnerForm(L"demonstrative_determiner"))
+	if (primarySTLPMatch == L"preposition or conjunction" && wordSourceIndex < source.m.size() - 1 && source.m[wordSourceIndex].queryWinnerForm(L"demonstrative_determiner")>=0)
 	{
 		int maxEnd, pemaPosition = source.queryPattern(wordSourceIndex, L"_REL1", maxEnd);
 		if (pemaPosition >= 0 && (//(source.pema[pemaPosition].begin == 0 && patterns[source.pema[pemaPosition].getPattern()]->differentiator == L"2") || // REL1[2] includes S1 
@@ -2219,7 +2220,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	// 15. in the event of __AS_AS pattern, which is as (adverb) followed by an adjective or adverb followed by as (preposition)
 	// either adverb or preposition may be acceptable as both are incorporated into the pattern.  __AS_AS pattern was derived from Longman
-	if (word == L"as" && (primarySTLPMatch == L"preposition" || primarySTLPMatch == L"adverb"))
+	if (word == L"as" && (primarySTLPMatch == L"preposition or conjunction" || primarySTLPMatch == L"adverb"))
 	{
 		if (source.m[wordSourceIndex].pma.queryPattern(L"__AS_AS") != -1)
 		{
@@ -2234,7 +2235,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	// 16. So as matched in the beginning of a phrase is a linking adverbial (Longman) but is usually marked as a preposition by Stanford.
 	if (word == L"so" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 &&
-		(primarySTLPMatch == L"preposition" || primarySTLPMatch == L"conjunction") && wordSourceIndex == startOfSentence)
+		(primarySTLPMatch == L"preposition or conjunction" || primarySTLPMatch == L"conjunction") && wordSourceIndex == startOfSentence)
 	{
 		errorMap[L"LP correct: word 'so': ST says " + primarySTLPMatch + L" LP says adverb (Longman linking adverbial)"]++;
 		return 0;
@@ -2331,7 +2332,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		return 0;
 	}
 	// 25. 'So' before _S1 is a linking adverbial, not a preposition (Longman - 891)
-	if (word == L"so" && primarySTLPMatch == L"preposition" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 &&
+	if (word == L"so" && primarySTLPMatch == L"preposition or conjunction" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 &&
 		wordSourceIndex + 1 < source.m.size() && source.m[wordSourceIndex + 1].pma.queryPattern(L"__S1") != -1)
 	{
 		errorMap[L"LP correct: word 'so' before _S1 is a linking adverbial, not a preposition (Longman - 891)"]++;
@@ -2381,7 +2382,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	// 31. 'that' when followed by an _S1 is a relativizer, not a preposition (ST wrong)
 	if (word == L"that")
 	{
-		if (wordSourceIndex + 1 < source.m.size() && source.m[wordSourceIndex + 1].pma.queryPattern(L"__S1") != -1 && primarySTLPMatch == L"preposition" && source.m[wordSourceIndex].queryWinnerForm(L"demonstrative_determiner") >= 0)
+		if (wordSourceIndex + 1 < source.m.size() && source.m[wordSourceIndex + 1].pma.queryPattern(L"__S1") != -1 && primarySTLPMatch == L"preposition or conjunction" && source.m[wordSourceIndex].queryWinnerForm(L"demonstrative_determiner") >= 0)
 		{
 			for (int nextByPosition = source.m[wordSourceIndex].beginPEMAPosition; nextByPosition != -1; nextByPosition = source.pema[nextByPosition].nextByPosition)
 			{
@@ -2397,7 +2398,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		}
 	}
 	// 32. 'out' is an adverb particle (Longman 78,413), not a preposition (ST wrong)
-	if (word == L"out" && primarySTLPMatch == L"preposition" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
+	if (word == L"out" && primarySTLPMatch == L"preposition or conjunction" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
 	{
 		errorMap[L"LP correct: word 'out': [adverb particle] ST says preposition LP says adverb"]++;
 		return 0;
@@ -2525,7 +2526,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		return 0;
 	}
 	// never correct
-	if (word == L"after" && primarySTLPMatch == L"preposition" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && 
+	if (word == L"after" && primarySTLPMatch == L"preposition or conjunction" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && 
 		  (!iswalpha(source.m[wordSourceIndex+1].word->first[0]) || source.m[wordSourceIndex + 1].queryWinnerForm(L"verb")>=0))
 	{
 		errorMap[L"LP correct: word 'after': ST says " + primarySTLPMatch + L"but LP says adverb"]++;
@@ -2553,7 +2554,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		}
 		if (source.m[wordSourceIndex + 1].pma.queryPattern(L"__S1") != -1)
 		{
-			if (primarySTLPMatch == L"preposition" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
+			if (primarySTLPMatch == L"preposition or conjunction" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
 			{
 				errorMap[L"LP correct: word 'as': ST says preposition and LP says adverb"]++;
 				return 0;
@@ -2569,25 +2570,26 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		{
 			partofspeech += L"**ASPREP";
 		}
+		// followed by a preposition?
+		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"verb") >= 0)
+		{
+			partofspeech += L"**ASVERB";
+		}
 		// followed by an adverb?
-		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0)
+		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0 && source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE")!=-1)
 		{
 			partofspeech += L"**ASADVERB";
 		}
-		// followed by an adjective?
+		// followed by an adjective? [2 instances where conjunction might be considered out of 100 observed]
 		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0)
 		{
-			partofspeech += L"**ASADJECTIVE";
+			errorMap[L"LP correct: word 'as': ST says preposition or conjunction and LP says adverb"]++;
+			return 0;
 		}
 		// followed by a noun?
 		if (source.m[wordSourceIndex + 1].pma.queryPattern(L"__NOUN") != -1)
 		{
 			partofspeech += L"**ASNOUN";
-		}
-		// followed by an mod_aux?
-		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"mod_aux") >= 0)
-		{
-			partofspeech += L"**ASMODAUX";
 		}
 		
 	}
@@ -2605,7 +2607,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		return 0;
 	}
 	// 47. this is correct 100% of the time in the corpus (over 100 examples).  
-	if ((primarySTLPMatch == L"preposition") && source.m[wordSourceIndex].queryForm(L"preposition") < 0)
+	if ((primarySTLPMatch == L"preposition or conjunction") && source.m[wordSourceIndex].queryForm(L"preposition") < 0)
 	{
 		errorMap[L"LP correct: ST says preposition when no preposition form possible)"]++;
 		return 0;
@@ -2700,7 +2702,15 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: word 'you': ST says " + primarySTLPMatch + L" but LP says personal_pronoun"]++;
 		return 0;
 	}
-	if (word == L"his" && primarySTLPMatch == L"possessive_determiner" && source.m[wordSourceIndex].queryWinnerForm(L"possessive_pronoun") >= 0 && 
+	if ((word == L"mother" || word == L"father") && (primarySTLPMatch == L"noun" || primarySTLPMatch == L"verb") && source.m[wordSourceIndex].queryWinnerForm(L"honorific") >= 0)
+	{
+		if (primarySTLPMatch == L"noun")
+			errorMap[L"diff: word 'mother' or 'father': ST says " + primarySTLPMatch + L" but LP says honorific"]++;
+		if (primarySTLPMatch == L"verb")
+			errorMap[L"LP correct: word 'mother' or 'father': ST says verb but LP says honorific"]++;
+		return 0;
+	}
+	if (word == L"his" && primarySTLPMatch == L"possessive_determiner" && source.m[wordSourceIndex].queryWinnerForm(L"possessive_pronoun") >= 0 &&
 		  (source.m[wordSourceIndex + 1].queryWinnerForm(prepositionForm) >= 0 || !iswalpha(source.m[wordSourceIndex + 1].word->first[0]) ||
 		   source.m[wordSourceIndex + 1].queryWinnerForm(conjunctionForm) >= 0 || source.m[wordSourceIndex + 1].word->second.hasVerbForm()))
 	{
@@ -2988,7 +2998,7 @@ void printFormDistribution(wstring word, double adp, FormDistribution fd, wstrin
 		// commented out: look for forms that have a high percentage of LP winners, but a low percentage of agreement.
 		// actually just look for the highest occurring forms with maximum poor agreement.
 		int diff = formCount * (100 - (fd.agreeFormDistribution[form] * 100 / formCount));//count*count / totalWordOccurrenceCount*fd.agreeFormDistribution[form];
-		if (fd.LPErrorFormDistribution[form]>200 && (fd.agreeFormDistribution[form] * 100 / formCount) < 2)
+		if (fd.LPErrorFormDistribution[form]>200 && (fd.agreeFormDistribution[form] * 100 / formCount) < 10)
 		{
 			lplog(LOG_ERROR, L"%05d **%s:%3.2f (%d/%d) %s:total=%d accounted=%d agree=%d disagree=%d error=%d %d%% %d%%", 
 				fd.LPErrorFormDistribution[form],
@@ -3562,7 +3572,7 @@ void wmain(int argc,wchar_t *argv[])
 		stanfordCheck(source, step, true);
 		break;
 	case 70:
-		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"");
+		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"as");
 		break;
 	}
 	source.unlockTables();

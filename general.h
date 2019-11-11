@@ -10,7 +10,7 @@
 #define MAINDIR "F:\\lp"
 #define LMAINDIR L"F:\\lp"
 #define CACHEDIR L"M:\\caches"
-#define WEBSEARCH_CACHEDIR L"J:\\caches"
+#define WEBSEARCH_CACHEDIR L"M:\\caches"
 #define TEXTDIR L"M:\\caches"
 #define MAX_COST 100000
 #define CONFIDENCE_NOMATCH 100000
