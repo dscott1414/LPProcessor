@@ -1786,7 +1786,7 @@ int Source::calculateVerbAfterVerbUsage(int whereVerb,unsigned int nextWord)
 }
 
 //  desiredTagSets.push_back(tTS(NOUN_DETERMINER_TAGSET,1,"N_AGREE",NULL));
-int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCost, int &traceSource, int begin, int end)
+int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCost, int &traceSource, int begin, int end, int fromPEMAPosition)
 {
 	LFS
 	int nounTag = -1, nextNounTag = -1, nAgreeTag = -1, nextNAgreeTag = -1, nextDet = -1, PNC = 0;// , nextName = -1, subObjectTag = -1;
