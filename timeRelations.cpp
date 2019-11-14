@@ -603,7 +603,7 @@ bool Source::evaluateTimePattern(int beginObjectPosition,int &maxLen,cTimeInfo &
 			(element=m[beginObjectPosition].pma.queryPattern(L"_ADVERB",maxLen))!=-1)
 	{
 		vector < vector <tTagLocation> > tagSets;
-		if (startCollectTags(false,timeTagSet,beginObjectPosition,m[beginObjectPosition].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true)>0)
+		if (startCollectTags(false,timeTagSet,beginObjectPosition,m[beginObjectPosition].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true,L"time pattern")>0)
 			for (unsigned int J=0; J<tagSets.size(); J++)
 			{
 				//printTagSet(LOG_TIME,L"LT",J,tagSets[J],beginObjectPosition,m[beginObjectPosition].pma[element&~patternFlag].pemaByPatternEnd);
@@ -1358,7 +1358,7 @@ bool Source::resolveTimeRange(int where,int pmaOffset,vector <cSpaceRelation>::i
 { LFS
 	vector <int> objectPositions;
 	vector < vector <tTagLocation> > mobjectTagSets;
-	if (startCollectTags(true,mobjectTagSet,where,m[where].pma[pmaOffset].pemaByPatternEnd,mobjectTagSets,true,false)>0)
+	if (startCollectTags(true,mobjectTagSet,where,m[where].pma[pmaOffset].pemaByPatternEnd,mobjectTagSets,true,false,L"resolve time range")>0)
 		for (unsigned int J=0; J<mobjectTagSets.size(); J++)
 		{
 			//if (t.traceSpeakerResolution)

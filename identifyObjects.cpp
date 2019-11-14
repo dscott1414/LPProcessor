@@ -20,7 +20,7 @@ bool Source::findSpecificAnaphor(wstring tagName, int where, int element, int &s
 	{
 		vector < vector <tTagLocation> > tagSets;
 		patternMatchArray::tPatternMatch *pm = m[where].pma.content + (element&~patternFlag);
-		if (!startCollectTags(debugTrace.traceAnaphors, specificAnaphorTagSet, where, pm->pemaByPatternEnd, tagSets, true, false)) return false;
+		if (!startCollectTags(debugTrace.traceAnaphors, specificAnaphorTagSet, where, pm->pemaByPatternEnd, tagSets, true, false,L"find specific anaphor")) return false;
 		for (unsigned int J = 0; J < tagSets.size(); J++)
 		{
 			if (debugTrace.traceAnaphors)

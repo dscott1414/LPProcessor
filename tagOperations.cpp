@@ -286,7 +286,7 @@ bool Source::tagIsCertain(int position)
 	return !preTaggedSource || (m[position].flags&WordMatch::flagBNCFormNotCertain)==0;
 }
 
-bool Source::resolveObjectTagBeforeObjectResolution(vector <tTagLocation> &tagSet,int tag,tIWMM &word)
+bool Source::resolveObjectTagBeforeObjectResolution(vector <tTagLocation> &tagSet,int tag,tIWMM &word,wstring purpose)
 { LFS
 	if (tag<0) return false;
 	if (tagSet[tag].len==1)
@@ -298,8 +298,8 @@ bool Source::resolveObjectTagBeforeObjectResolution(vector <tTagLocation> &tagSe
 			return false;
 		vector < vector <tTagLocation> > tagSets;
 		// He gave a book.
-		if (startCollectTagsFromTag(false,nAgreeTagSet,tagSet[tag],tagSets,GNOUN_TAG,false)>0 || 
-			  startCollectTagsFromTag(false,nAgreeTagSet,tagSet[tag],tagSets,MNOUN_TAG,false)>0 )
+		if (startCollectTagsFromTag(false,nAgreeTagSet,tagSet[tag],tagSets,GNOUN_TAG,false,purpose + L"| resolve object - GNOUN")>0 || 
+			  startCollectTagsFromTag(false,nAgreeTagSet,tagSet[tag],tagSets,MNOUN_TAG,false, purpose + L"| resolve object - MNOUN")>0 )
 			for (unsigned int J=0; J<tagSets.size(); J++)
 				if (tagSets[J].size()==1)
 				{
@@ -416,7 +416,7 @@ void compareTagSets(vector < vector <tTagLocation> > tagSets,vector < vector <tT
 	}
 }
 
-size_t Source::startCollectTagsFromTag(bool inTrace,int tagSet,tTagLocation &tl,vector < vector <tTagLocation> > &tagSets,int rejectTag,bool collectSelfTags)
+size_t Source::startCollectTagsFromTag(bool inTrace,int tagSet,tTagLocation &tl,vector < vector <tTagLocation> > &tagSets,int rejectTag,bool collectSelfTags,wstring purpose)
 { LFS
 	int pattern=tl.pattern,position=tl.sourcePosition,end=tl.len,PEMAOffset=tl.PEMAOffset;
 	if (collectSelfTags && !(patterns[pattern]->includesDescendantsAndSelfAllOfTagSet&((__int64)1<<tagSet)))
@@ -437,14 +437,18 @@ size_t Source::startCollectTagsFromTag(bool inTrace,int tagSet,tTagLocation &tl,
 			for (; PEMAOffset>=0 && pem->getPattern()==p && pem->end==end; PEMAOffset=pem->nextByPatternEnd,pem=pema.begin()+PEMAOffset)
 				if (!pem->begin) break;
 			if (PEMAOffset<0 || pem->getPattern()!=p || pem->end!=end || pem->begin) continue;
-			startCollectTags(inTrace,tagSet,position,PEMAOffset,tagSets,true,collectSelfTags);
+			startCollectTags(inTrace,tagSet,position,PEMAOffset,tagSets,true,collectSelfTags,purpose + L"| from tag ");
 		}
-		return tagSets.size();
 	}
-	return startCollectTags(inTrace,tagSet,position,PEMAOffset,tagSets,true,collectSelfTags);
+	else
+		startCollectTags(inTrace,tagSet,position,PEMAOffset,tagSets,true,collectSelfTags,purpose + L"| from tag ");
+	for (auto ttagSet : tagSets)
+		if (ttagSet.size() > 0)
+			return tagSets.size();
+	return 0;
 }
 
-size_t Source::startCollectTags(bool inTrace,int tagSet,int position,int PEMAPosition,vector < vector <tTagLocation> > &tagSets,bool obeyBlock,bool collectSelfTags)
+size_t Source::startCollectTags(bool inTrace,int tagSet,int position,int PEMAPosition,vector < vector <tTagLocation> > &tagSets,bool obeyBlock,bool collectSelfTags,wstring purpose)
 {  LFS
 	secondaryPEMAPositions.clear();
 	if (PEMAPosition<0)
@@ -457,20 +461,20 @@ size_t Source::startCollectTags(bool inTrace,int tagSet,int position,int PEMAPos
 	if (collectSelfTags && !(patterns[pattern]->includesDescendantsAndSelfAllOfTagSet&((__int64)1<<tagSet)))
 	{
 		if (debugTrace.traceTags)
-			lplog(L"%d:======== EVALUATION %06d %s %s[%s](%d,%d) SKIPPED (not enough tags [descendants and self])",position,PEMAPosition,desiredTagSets[tagSet].name.c_str(),
-						patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),position,position+pema[PEMAPosition].end);
+			lplog(L"%d:======== EVALUATION %06d %s %s[%s](%d,%d) SKIPPED (not enough tags [descendants and self]) - from %s",position,PEMAPosition,desiredTagSets[tagSet].name.c_str(),
+						patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),position,position+pema[PEMAPosition].end,purpose.c_str());
 		return 0;
 	}
 	if (!collectSelfTags && !(patterns[pattern]->includesOnlyDescendantsAllOfTagSet&((__int64)1<<tagSet)))
 	{
 		if (debugTrace.traceTags)
-			lplog(L"%d:======== EVALUATION %06d %s %s[%s](%d,%d) SKIPPED (not enough tags [only descendants])",position,PEMAPosition,desiredTagSets[tagSet].name.c_str(),
-						patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),position,position+pema[PEMAPosition].end);
+			lplog(L"%d:======== EVALUATION %06d %s %s[%s](%d,%d) SKIPPED (not enough tags [only descendants]) - from %s",position,PEMAPosition,desiredTagSets[tagSet].name.c_str(),
+						patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),position,position+pema[PEMAPosition].end, purpose.c_str());
 		return 0;
 	}
 	if (debugTrace.traceTags)
-		lplog(L"%d:======== EVALUATING %06d %s %s[%s](%d,%d)",position,PEMAPosition,desiredTagSets[tagSet].name.c_str(),
-					patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),position,position+pema[PEMAPosition].end);
+		lplog(L"%d:======== EVALUATING %06d %s %s[%s](%d,%d) - from %s",position,PEMAPosition,desiredTagSets[tagSet].name.c_str(),
+					patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),position,position+pema[PEMAPosition].end, purpose.c_str());
 	exitTags=false;
 
 	vector <tTagLocation> tTagSet;

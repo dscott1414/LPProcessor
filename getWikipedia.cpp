@@ -1106,7 +1106,7 @@ bool Source::getISARelations(int parentSourceWhere,int where,vector < vector <tT
 		if ((((patterns[pma->getPattern()]->includesOnlyDescendantsAllOfTagSet)&((__int64)1<<subjectVerbRelationTagSet))!=0))
 		{
 			tagSets.clear();
-			if (startCollectTags(debugTrace.traceRelations,subjectVerbRelationTagSet,where,pma->pemaByPatternEnd,tagSets,true,false)>0)
+			if (startCollectTags(debugTrace.traceRelations,subjectVerbRelationTagSet,where,pma->pemaByPatternEnd,tagSets,true,false,L"get ISA relation")>0)
 			{
 				for (unsigned int J=0; J<tagSets.size(); J++)
 				{

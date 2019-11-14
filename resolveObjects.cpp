@@ -3024,7 +3024,7 @@ int Source::coreferenceFilterLL2345(int where,int rObject,vector <int> &disallow
 		if ((element=m[whereMNE].pma.queryPattern(L"_META_NAME_EQUIVALENCE",nameEnd))!=-1) 
 		{
 			vector < vector <tTagLocation> > tagSets;
-			if (startCollectTags(true,metaNameEquivalenceTagSet,whereMNE,m[whereMNE].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true)>0)
+			if (startCollectTags(true,metaNameEquivalenceTagSet,whereMNE,m[whereMNE].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true,L"name equivalence coref filter")>0)
 				for (unsigned int J=0; J<tagSets.size(); J++)
 				{
 					if (debugTrace.traceNameResolution)

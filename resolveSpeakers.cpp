@@ -4537,7 +4537,7 @@ int Source::speakerBefore(int beginQuote,bool &previousParagraph)
 			{
 		    vector < vector <tTagLocation> > tagSets;
 				tagSets.clear();
-				if (startCollectTags(debugTrace.traceRelations,subjectVerbRelationTagSet,where,m[I].pma[element].pemaByPatternEnd,tagSets,true,false)>0)
+				if (startCollectTags(debugTrace.traceRelations,subjectVerbRelationTagSet,where,m[I].pma[element].pemaByPatternEnd,tagSets,true,false,L"verb relation - speaker before")>0)
 				{
 					for (unsigned int J=0; J<tagSets.size() && subjectTag<0; J++) 
 						if ((subjectTag=findOneTag(tagSets[J],L"SUBJECT",-1))>=0)
@@ -4724,7 +4724,7 @@ int Source::scanForSpeaker(int where,bool &definitelySpeaker,bool &crossedSectio
 		if (atSectionWord) return -1;
     vector < vector <tTagLocation> > tagSets;
     int nextObjectTag=-1,vTag=-1;
-    if (startCollectTags(debugTrace.traceVerbObjects,verbObjectsTagSet,where+1,im->pma.content[element].pemaByPatternEnd,tagSets,true,false)>0)
+    if (startCollectTags(debugTrace.traceVerbObjects,verbObjectsTagSet,where+1,im->pma.content[element].pemaByPatternEnd,tagSets,true,false,L"verb objects - scan for speaker")>0)
       for (unsigned int J=0; J<tagSets.size(); J++)
       {
 				if (debugTrace.traceVerbObjects)
@@ -7344,7 +7344,7 @@ void Source::checkInfinitivePhraseForLocation(vector <tTagLocation> &tagSet,bool
 	if (!resolveTag(tagSet,subjectTag,subjectObject,whereSubjectObject,subjectWord)) return;
 	// find verb of IVERB to associate with verb
 	vector < vector <tTagLocation> > iTagSets;
-	if (startCollectTagsFromTag(debugTrace.traceRelations,iverbTagSet,tagSet[iverbTag],iTagSets,-1,false)>0)
+	if (startCollectTagsFromTag(debugTrace.traceRelations,iverbTagSet,tagSet[iverbTag],iTagSets,-1,false,L"check infinitive phrase for location")>0)
 	for (unsigned int K=0; K<iTagSets.size(); K++)
 	{
 		if (debugTrace.traceRelations)
@@ -7413,7 +7413,7 @@ void Source::accumulateLocation(int where,vector <tTagLocation> &tagSet,int subj
 	int pIndex,subobject=-1,movementPrepType=-1,embeddedPrepTag=-1,wherePrepObject=-1;
 	while (true)
 	{
-		if (startCollectTagsFromTag(debugTrace.traceRelations,prepTagSet,ts,tagSets,-1,false)>0)
+		if (startCollectTagsFromTag(debugTrace.traceRelations,prepTagSet,ts,tagSets,-1,false,L"accumulate location")>0)
 			for (unsigned int K=0; K<tagSets.size(); K++)
 			{
 				if (debugTrace.traceRelations)
@@ -7627,7 +7627,7 @@ bool Source::processMetaSpeakerQueryAnswer(int beginQuote,int previousQuote,int 
 { LFS
 	vector < vector<tTagLocation> > tagSets;
 	int element=m[lastQuery].pma.queryPattern(L"_META_SPEAKER_QUERY");
-	if (element==-1 || startCollectTags(debugTrace.traceNameResolution,metaNameEquivalenceTagSet,lastQuery,m[lastQuery].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true)==0)
+	if (element==-1 || startCollectTags(debugTrace.traceNameResolution,metaNameEquivalenceTagSet,lastQuery,m[lastQuery].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true,L"name equivalence - meta speaker query answer [query]")==0)
 		return false;
 	wstring tmpstr,tmpstr2,tmpstr3;
 	tIWMM aboutWord=wNULL;
@@ -7641,7 +7641,7 @@ bool Source::processMetaSpeakerQueryAnswer(int beginQuote,int previousQuote,int 
 	}
 	tagSets.clear();
 	element=m[beginQuote+1].pma.queryPattern(L"_META_SPEAKER_QUERY_RESPONSE");
-	if (element==-1 || startCollectTags(debugTrace.traceNameResolution,metaNameEquivalenceTagSet,beginQuote+1,m[beginQuote+1].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true)==0)
+	if (element==-1 || startCollectTags(debugTrace.traceNameResolution,metaNameEquivalenceTagSet,beginQuote+1,m[beginQuote+1].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true, L"name equivalence - meta speaker query answer [response]")==0)
 		return false;
 	int whereAboutResponseObject=-1,aboutResponseObject=-1,aboutResponseTag=-1;
 	for (unsigned int I=0; I<tagSets.size(); I++)
@@ -8269,7 +8269,7 @@ int Source::letterDetectionBegin(int where,int &whereLetterTo,int &lastLetterBeg
 	int element=-1,maxLen=-1;
   vector < vector <tTagLocation> > tagSets;
 	if (where<(signed)m.size() && (element=m[where].pma.queryPattern(L"_LETTER_BEGIN",maxLen))!=-1 && 
-		  startCollectTags(true,metaSpeakerTagSet,where,m[where].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true)>0)
+		  startCollectTags(true,metaSpeakerTagSet,where,m[where].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true,L"letter detection")>0)
 	{
     for (unsigned int J=0; J<tagSets.size(); J++)
     {

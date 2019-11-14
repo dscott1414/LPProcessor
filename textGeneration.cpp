@@ -835,7 +835,7 @@ int Source::metaPatternMatch(Source *childSource,vector <cSpaceRelation>::iterat
 		mapPatternQuestion->lplog();
 		lastWhere=whereMNE;
 		vector < vector <tTagLocation> > tagSets;
-		if (childSource->startCollectTags(true,metaNameEquivalenceTagSet,whereMNE,childSource->m[whereMNE].pma[element&~patternFlag].pemaByPatternEnd,tagSets,false,true)>0)
+		if (childSource->startCollectTags(true,metaNameEquivalenceTagSet,whereMNE,childSource->m[whereMNE].pma[element&~patternFlag].pemaByPatternEnd,tagSets,false,true,L"meta pattern match")>0)
 			for (unsigned int J=0; J<tagSets.size(); J++)
 			{
 				
@@ -3120,7 +3120,7 @@ void Source::detectByClausePassive(vector <cSpaceRelation>::iterator sri,cSpaceR
 		  (verbPhraseElement=m[sri->whereSubject].pma.queryPattern(L"__NOUN",L"F"))!=-1)
 	{
 		vector < vector <tTagLocation> > tagSets;
-		startCollectTags(false, subjectVerbRelationTagSet, sri->whereSubject, m[sri->whereSubject].pma[verbPhraseElement&~patternFlag].pemaByPatternEnd, tagSets, true, true);
+		startCollectTags(false, subjectVerbRelationTagSet, sri->whereSubject, m[sri->whereSubject].pma[verbPhraseElement&~patternFlag].pemaByPatternEnd, tagSets, true, true,L"passive clause detection");
 		// not reachable?
 			//for (unsigned int J=0; J<tagSets.size(); J++)
 			//{

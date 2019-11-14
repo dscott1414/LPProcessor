@@ -1431,7 +1431,7 @@ bool Source::placeIdentification(int where,bool inPrimaryQuote,int whereControll
 			whereObject>=0 && m[whereObject].relNextObject<0 && (pmaOffset=scanForPatternTag(whereObject,VNOUN_TAG))>=0)
 	{
 		vector < vector <tTagLocation> > tagSets;
-		startCollectTags(debugTrace.traceVerbObjects,verbObjectsTagSet,whereObject,m[whereObject].pma[pmaOffset].pemaByPatternEnd,tagSets,true,false);
+		startCollectTags(debugTrace.traceVerbObjects,verbObjectsTagSet,whereObject,m[whereObject].pma[pmaOffset].pemaByPatternEnd,tagSets,true,false,L"place identification");
 		for (int J=0; J<(signed)tagSets.size(); J++)
 		{
 			tIWMM vWord=wNULL,oWord;

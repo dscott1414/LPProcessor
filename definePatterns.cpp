@@ -449,9 +449,12 @@ int createNouns(void)
 	// my son of the east Village (PP)
 	// anxiety which underlay his tone (REL1)
 	// the right to lay down arms (INFP)
+	// CANNOT _BLOCK __NOUN 0 the following sentence will not parse correctly because countenance +PP will not find SUBJECT.
+	// “ Don't go , John , ” said Mrs . Wilkinson , still forcing a smile to *her* countenance . 
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"9",
-										2,L"__NOUN[*]{_BLOCK}",L"_NOUN_OBJ{_BLOCK}",0,1,1,
-										3,L"__INTERPPB[*]{_BLOCK}",L"_DATE*1{FLOATTIME}",L"_TIME*1{FLOATTIME}",0,0,1, 
+										//2,L"__NOUN[*]{_BLOCK}",L"_NOUN_OBJ{_BLOCK}",0,1,1,
+										2,L"__NOUN[*]",L"_NOUN_OBJ",0,1,1,
+										3,L"__INTERPPB[*]{_BLOCK}",L"_DATE*1{FLOATTIME}",L"_TIME*1{FLOATTIME}",0,0,1,
 										3,L"_PP",L"_REL1",L"_INFP",0,1,1,
 										3,L"_PP*1",L"_REL1*1",L"_INFP*1",0,0,2,
 										0);
@@ -2586,9 +2589,8 @@ int createSecondaryPatterns2(void)
 	// and tell sister Ann , *that* if she can write as well as you tell of , I wish she would write me a letter . 
 	cPattern::create(L"_REL1{_FINAL_IF_ALONE:_FORWARD_REFERENCE}", L"6",
 										2, L"_ADJECTIVE", L"_ADVERB", 0, 0, 1,
-										8, L"demonstrative_determiner|that", L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"relativizer|whenever", 0, 1, 1,
-											// They were not long in noticing that whenever Ned presented himself at the bar she would in a very short time come across from her place behind to speak to him
-										8, L"conjunction|if", L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"relativizer|whenever", 0, 0, 1,
+										1, L"demonstrative_determiner|that",0,0,1,
+										8, L"conjunction|if", L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"relativizer|whenever", 0, 1, 1,
 										1, L"__INTERS1{BLOCK}",0,0,1,
 										1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
 										1, L",", 0, 0, 1,

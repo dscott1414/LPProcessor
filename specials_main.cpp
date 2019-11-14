@@ -2702,6 +2702,21 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: word 'you': ST says " + primarySTLPMatch + L" but LP says personal_pronoun"]++;
 		return 0;
 	}
+	// Stanford POS JJ (adjective) not found in winnerForms adverb for word little 0000121:[With a sigh she pressed the pillow more firmly under her cheek , and lay looking a *little* wistfully at her maid , who , having drawn back the curtains at the window , stood now regarding her with the discreet and confidential smile which drew from her a protesting frown of irritation . ]
+	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && wordSourceIndex + 1 < source.m.size() && source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0)
+	{
+		errorMap[L"LP correct: Modifying an adverb ST says " + primarySTLPMatch + L" but LP says adverb"]++;
+		return 0;
+	}
+	if (primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0 && wordSourceIndex + 1 < source.m.size() && source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0)
+	{
+		//errorMap[L"LP correct: Modifying an adverb ST says " + primarySTLPMatch + L" but LP says adverb"]++;
+		//return 0;
+		partofspeech += L"***ADJADV";
+		int maxlen = -1;
+		if (source.queryPattern(wordSourceIndex,L"__ADJECTIVE_WITHOUT_VERB",maxlen)!=-1)
+			partofspeech += L"WV";
+	}
 	if ((word == L"mother" || word == L"father") && (primarySTLPMatch == L"noun" || primarySTLPMatch == L"verb") && source.m[wordSourceIndex].queryWinnerForm(L"honorific") >= 0)
 	{
 		if (primarySTLPMatch == L"noun")
@@ -2919,7 +2934,7 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 				fd.unaccountedForDisagreeSTLP++;
 				formDistribution[word] = fd;
 				if (originalWord.find(L' ') != wstring::npos &&
-					word != L"no one" && word != L"every one" && word != L"as if" && word != L"for ever" && word != L"next to")
+					word != L"no one" && word != L"every one" && word != L"as if" && word != L"for ever" && word != L"next to" && word != L"good by" && word != L"good bye" && word != L"a trifle" && word!=L"a" && word!=L"i")
 				{
 					lookFor = originalWord.substr(wspace, originalWord.length()) + L")";
 					parse = originalParse;
@@ -3572,7 +3587,7 @@ void wmain(int argc,wchar_t *argv[])
 		stanfordCheck(source, step, true);
 		break;
 	case 70:
-		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"as");
+		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"");
 		break;
 	}
 	source.unlockTables();

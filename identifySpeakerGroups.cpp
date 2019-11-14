@@ -2877,9 +2877,11 @@ void Source::identifySpeakerGroups()
 		      lplog(LOG_RESOLUTION,L"%06d:QXQ whereFirstSubjectInParagraph set to %d.",I,whereFirstSubjectInParagraph);
 			}
     }
-    if (!inPrimaryQuote && !inSecondaryQuote) // avoid accumulating groups of objects in quotes that have not been disambiguated or resolved yet (and might not match or be invalid)
+		// CMREADME21
+		if (!inPrimaryQuote && !inSecondaryQuote) // avoid accumulating groups of objects in quotes that have not been disambiguated or resolved yet (and might not match or be invalid)
 			accumulateGroups(I,groupedObjects,lastWhereMPluralGroupedObject);
-    // Make sure tempSpeakerGroup has objects up-to-date
+		// CMREADME22
+		// Make sure tempSpeakerGroup has objects up-to-date
     for (set <int>::iterator q=tempSpeakerGroup.speakers.begin(),qEnd=tempSpeakerGroup.speakers.end(); q!=qEnd; )
       if (objects[*q].eliminated)
       {
@@ -2889,7 +2891,8 @@ void Source::identifySpeakerGroups()
         tempSpeakerGroup.speakers.insert(tmp);
       }
       else q++;
-    if (inPrimaryQuote && o>=0 && (m[I].objectRole&(HAIL_ROLE|IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE|IN_QUOTE_REFERRING_AUDIENCE_ROLE)) && 
+		// CMREADME23
+		if (inPrimaryQuote && o>=0 && (m[I].objectRole&(HAIL_ROLE|IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE|IN_QUOTE_REFERRING_AUDIENCE_ROLE)) &&
 			  !(m[I].flags&WordMatch::flagAdjectivalObject) &&
         objects[o].objectClass==NAME_OBJECT_CLASS && !objects[o].plural)
     {

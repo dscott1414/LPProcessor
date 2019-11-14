@@ -828,7 +828,7 @@ bool Source::identifyNameAdjective(int where,cName &name,bool &isMale,bool &isFe
 		return false;
 	}
   vector < vector <tTagLocation> > tagSets;
-  if (startCollectTags(false,nameTagSet,where,m[where].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true)>0)
+  if (startCollectTags(false,nameTagSet,where,m[where].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true,L"identify name adjective")>0)
     for (unsigned int J=0; J<tagSets.size(); J++)
     {
       if (debugTrace.traceNameResolution)
@@ -852,7 +852,7 @@ bool Source::identifyName(int where,int &element,cName &name,bool &isMale,bool &
   isPlural=(m[nameEnd-1].word->first[m[nameEnd-1].word->first.size()-1]==L's' &&
       (m[where].word->first==L"the" || (m[where].queryForm(L"quantifier")>=0 && m[where].word->first!=L"one")));
   vector < vector <tTagLocation> > tagSets;
-  if (startCollectTags(false,nameTagSet,where,m[where].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true)>0)
+  if (startCollectTags(false,nameTagSet,where,m[where].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true,L"identify name")>0)
     for (unsigned int J=0; J<tagSets.size(); J++)
     {
       if (debugTrace.traceNameResolution)
@@ -2150,7 +2150,7 @@ bool Source::identifyMetaNameEquivalence(int where,bool inPrimaryQuote,bool inSe
 	{
 		vector < vector <tTagLocation> > tagSets;
 		// obeyBlock must be false because of _META_NAME_EQUIVALENCE[8]
-		if (startCollectTags(true,metaNameEquivalenceTagSet,where,m[where].pma[element].pemaByPatternEnd,tagSets,false,true)>0)
+		if (startCollectTags(true,metaNameEquivalenceTagSet,where,m[where].pma[element].pemaByPatternEnd,tagSets,false,true,L"name equivalence")>0)
 			for (unsigned int J=0; J<tagSets.size(); J++)
 			{
 				if (debugTrace.traceNameResolution)
@@ -2186,7 +2186,7 @@ bool Source::identifyMetaSpeaker(int where,bool inQuote)
   int element,nameEnd=-1;
   if ((element=m[where].pma.queryPattern(L"_META_SPEAKER",nameEnd))==-1) return false;
   vector < vector <tTagLocation> > tagSets;
-  if (startCollectTags(true,metaNameEquivalenceTagSet,where,m[where].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true)>0)
+  if (startCollectTags(true,metaNameEquivalenceTagSet,where,m[where].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true,L"meta speaker identification")>0)
     for (unsigned int J=0; J<tagSets.size(); J++)
     {
       if (debugTrace.traceNameResolution)
@@ -2225,7 +2225,7 @@ bool Source::identifyAnnounce(int where,bool inQuote)
   int element,nameEnd=-1;
   if ((element=m[where].pma.queryPattern(L"_META_ANNOUNCE",nameEnd))==-1) return false;
   vector < vector <tTagLocation> > tagSets;
-  if (startCollectTags(true,metaSpeakerTagSet,where,m[where].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true)>0)
+  if (startCollectTags(true,metaSpeakerTagSet,where,m[where].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true, L"meta announce")>0)
     for (unsigned int J=0; J<tagSets.size(); J++)
     {
       if (debugTrace.traceNameResolution)
@@ -2300,7 +2300,7 @@ bool Source::identifyMetaGroup(int where,bool inPrimaryQuote,bool inSecondaryQuo
   int element,nameEnd=-1;
   if ((element=m[where].pma.queryPattern(L"_META_GROUP",nameEnd))==-1) return false;
   vector < vector <tTagLocation> > tagSets;
-  if (startCollectTags(true,metaNameEquivalenceTagSet,where,m[where].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true)>0)
+  if (startCollectTags(true,metaNameEquivalenceTagSet,where,m[where].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true, L"meta group identification")>0)
     for (unsigned int J=0; J<tagSets.size(); J++)
     {
       if (debugTrace.traceNameResolution)
