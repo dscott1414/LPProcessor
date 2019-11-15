@@ -1,6 +1,7 @@
 #pragma warning (disable: 4503)
 #include "syntacticRelations.h"
 #include "names.h"
+#include "bitObject.h"
 
 class cSpaceRelation;
 #define MAX_LEN 2048
@@ -443,9 +444,9 @@ public:
 	int endPEMAPosition;
 	unsigned int PEMACount;
 	patternMatchArray pma;
-	bitObject forms;
+	bitObject<> forms;
 	//bitObject winnerForms; // used for BNC to remember tagged form
-	bitObject patterns;
+	bitObject<32, 5, unsigned int, 32> patterns;
 
 	// the man's shoes
 	//  0   1     2

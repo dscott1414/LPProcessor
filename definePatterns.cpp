@@ -383,6 +383,7 @@ int createNouns(void)
 										1,L"predeterminer|both*-1",0,0,1,
 										2,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ",0,1,1,
 										2,L"coordinator|and",L"&",0,1,1,
+										1,L"not",0,0,1, // I want to be the party that pulls the wires and not the figures *that* dance on the front of the stage .
 										3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"__NOUNREL{MOBJECT}",0,1,1,
 										1, L"predeterminer|both*-1", 0, 0, 1,
 										0);
@@ -455,6 +456,7 @@ int createNouns(void)
 										//2,L"__NOUN[*]{_BLOCK}",L"_NOUN_OBJ{_BLOCK}",0,1,1,
 										2,L"__NOUN[*]",L"_NOUN_OBJ",0,1,1,
 										3,L"__INTERPPB[*]{_BLOCK}",L"_DATE*1{FLOATTIME}",L"_TIME*1{FLOATTIME}",0,0,1,
+										1,L"_ADVERB",0,0,1, // He gave a number *presently* which was his own in Panton Square .
 										3,L"_PP",L"_REL1",L"_INFP",0,1,1,
 										3,L"_PP*1",L"_REL1*1",L"_INFP*1",0,0,2,
 										0);
@@ -685,7 +687,7 @@ int createBasicPatterns(void)
 	cPattern::create(L"__ADJECTIVE",L"2",
 		1,L"_ADVERB",0,0,1,
 		//7, L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"preposition|ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", // removed *1 as cost so that
-		8, L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"preposition|ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", L"quantifier|more{ADJ}", // removed *1 as cost so that
+		9, L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"preposition|ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", L"quantifier|more{ADJ}", L"indefinite_pronoun{ADJ}",// removed *1 as cost so that
 		VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,1,2,                            // we can make cost of *1 for __NOUN[2]
 												 1,L"adverb*1",0,0,1,0);                                                                // 2/3/2007
 		// OWNER attributes deleted - why would ownership occur before a dash?
@@ -769,6 +771,18 @@ int createBasicPatterns(void)
 	cPattern::create(L"__ADJECTIVE{APLURAL}",L"8",
 															1,L"__ADJECTIVE[*]",0,1,1,
 															1,L"__ANDADJ",0,1,1,
+															0);
+	cPattern::create(L"__ADJECTIVE{SINGULAR}", L"C",
+															1, L"determiner|either*-2", 0, 0, 1, // determiner agrees with ST
+															1, L"__ADJECTIVE[*]", 0, 1, 1,
+															1, L"coordinator|or", 0, 1, 1,
+															1, L"__ADJECTIVE[*]", 0, 1, 1,
+															0);
+	cPattern::create(L"__ADJECTIVE{SINGULAR}", L"D",
+															1, L"determiner|neither*-2", 0, 0, 1, // determiner agrees with ST
+															1, L"__ADJECTIVE[*]", 0, 1, 1,
+															1, L"coordinator|nor", 0, 1, 1,
+															1, L"__ADJECTIVE[*]", 0, 1, 1,
 															0);
 	// Ned and Ally's
 	cPattern::create(L"__NADJECTIVE{APLURAL}",L"9",
@@ -1534,6 +1548,7 @@ int createVerbPatterns(void)
 	// L"BD" structure of verb phrases from Quirk CGEL (3.54)
 	cPattern::create(L"_VERBPASSIVE{VERB}",L"4",1,L"_ADVERB",0,0,1,
 										1,L"_HAVE",0,1,1,
+										1,L"predeterminer|both",0,0,1,
 										1,L"_BEEN",0,1,1,
 										1, L"__INTERS1", 0, 0, 1,
 										3,L"verb{vBD:V_OBJECT}",L"does{vBD:V_OBJECT}",L"have{vBD:V_OBJECT}",VERB_PAST_PARTICIPLE,1,1,
@@ -1690,6 +1705,7 @@ void createSecondaryPatterns1(void)
 																			 // L"hang up" the phone and L"hang" up the phone, so resolve to a prepositional phrase and
 																			 // then reprocess later to analyze which prepositions actually belong with their verbs.
 																			 // __PP already has an adverb as the first element.
+						1, L"_ADVERB", 0, 0, 1, // I seemed for him *almost* a recluse.
 						5,L"_NOUN_OBJ{OBJECT}",L"__NOUN[*]{OBJECT}",L"__MNOUN[*]{OBJECT}",L"__NOUNREL*3{OBJECT}",L"__NOUNRU{OBJECT}",0,1,1,
 						0);
 	// I want to remember to thank Mrs. Smith for taking us back today.
@@ -2097,6 +2113,16 @@ int createSecondaryPatterns2(void)
 									 3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, // there must only be one adjective and it must be last (not mixed in) see *
 									 1,L"__CLOSING__S1",0,0,3,
 									 0);
+	// *This* she knew had caused a change in her own attitude 
+	cPattern::create(L"__S1{_ONLY_BEGIN_MATCH:_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"R",
+										1, L"predeterminer|all",0,0,1, // All *this* the governor of the prison affected to disbelieve
+										1, L"demonstrative_determiner|this*1{OBJECT}",0,1,1,
+										1, L"__C1__S1", 0, 1, 1,
+										2, L"__ALLVERB", L"_COND{VERB}", 0, 1, 1,
+										// *This* she had done solely to appease Marian Barber's wounded pride . 
+										3, L"__ALLOBJECTS_0", L"_INFP", L"_REL1[*]", 0, 0, 1, 
+										1, L"__CLOSING__S1", 0, 0, 2,
+										0);
 	// *I* shall have to speak to *whoever is in charge * .
 	cPattern::create(L"__NOUN{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_FORWARD_REFERENCE:_BLOCK:GNOUN:VNOUN:_EXPLICIT_SUBJECT_VERB_AGREEMENT:_CHECK_IGNORABLE_FORMS}", L"Z",
 										5, L"interrogative_determiner|whatever", L"interrogative_determiner|whichever", L"interrogative_determiner|whosoever",L"interrogative_determiner|whoever", L"interrogative_determiner|wherever", 0, 1, 1, 
@@ -2162,7 +2188,7 @@ int createSecondaryPatterns2(void)
 									 // VERBPASTPART added 8/29/2006 to handle coordinators
 									 // they must be given the facts about AIDS and given -the -opportunity to discuss the issues
 									 1,L"_VERBPASSIVE",0,1,1, // passive verbs take only one direct object (MAX) // john could be called -a -brilliant -conversationalist .
-												 2,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",0,0,1,0);
+									 2,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",0,0,1,0);
 	cPattern::create(L"_VERBPASSIVE_P{_FINAL_IF_ALONE}",L"2",
 									 1,L"_THINKPASSIVE",0,1,1, // passive verbs take only one direct object (MAX) // I was told it was M . Fouquet .
 									 2,L"_ADVERB",L"preposition*2",0,0,2, // hanging preposition!
@@ -2589,7 +2615,7 @@ int createSecondaryPatterns2(void)
 	// and tell sister Ann , *that* if she can write as well as you tell of , I wish she would write me a letter . 
 	cPattern::create(L"_REL1{_FINAL_IF_ALONE:_FORWARD_REFERENCE}", L"6",
 										2, L"_ADJECTIVE", L"_ADVERB", 0, 0, 1,
-										1, L"demonstrative_determiner|that",0,0,1,
+										2, L"demonstrative_determiner|that",L"preposition|for",0,0,1, // for when Mama returned she told them she had heard from Mrs . Clifford , who wrote she had that day sent off a box . 
 										8, L"conjunction|if", L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"relativizer|whenever", 0, 1, 1,
 										1, L"__INTERS1{BLOCK}",0,0,1,
 										1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
@@ -2678,6 +2704,14 @@ int createSecondaryPatterns2(void)
 												2, L"conjunction", L"coordinator", 0, 1, 1,
 												1, L"_ADJECTIVE", 0, 0, 1,
 												3, L"_PP*1", L"_VERBREL2*1", L"_INFP*1", 0, 0, 1,
+												0);
+	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL:_ONLY_END_MATCH}", L"F",
+												1, L",", 0, 0, 1,
+												1, L"preposition|for", 0, 1, 1,
+												1, L"conjunction|though", 0, 1, 1,
+												1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
+												1, L",", 0, 0, 1,
+												1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
 												0);
 	// prevents multiplicative nesting in _MS1
 	cPattern::create(L"_MSTAIL{_NO_REPEAT}",L"",1,L"__MSTAIL[*]",0,1,4,0);

@@ -14,7 +14,7 @@
 vector <cPattern *> patterns; // initialized
 int patternReference::firstPatternReference=-1,patternReference::lastPatternReference=-1; // initialized
 vector <patternReference *> patternReferences; // initialized
-bitObject patternsWithNoParents,patternsWithNoChildren; // initialized
+bitObject<32, 5, unsigned int, 32> patternsWithNoParents,patternsWithNoChildren; // initialized
 bool overMatchMemoryExceeded=false; // used only in error - one way 
 vector < tTS > desiredTagSets; // initialized
 vector <wstring> patternTagStrings; // initialized
@@ -705,7 +705,7 @@ unsigned int findPattern(wstring form)
   return findPattern(form,startingPattern);
 }
 
-void findPatterns(wstring form,bitObject &patternsFound)
+void findPatterns(wstring form,bitObject<> &patternsFound)
 { LFS
   unsigned int startingPattern=0;
   int p;

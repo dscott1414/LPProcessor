@@ -2094,7 +2094,7 @@ int Source::matchPatternsAgainstSentence(unsigned int s,unsigned int &patternsTr
 int Source::matchPatternsAgainstSentence(unsigned int s,unsigned int &patternsTried)
 { LFS
 	int numPatternsMatched=0;
-	bitObject patternsToTry,patternsToTryLast,patternsToTryNext=patternsWithNoChildren,patternsMatched;
+	bitObject<32, 5, unsigned int, 32> patternsToTry,patternsToTryLast,patternsToTryNext=patternsWithNoChildren,patternsMatched;
 	for (pass=0; pass<5; pass++)
 	{
 		patternsToTry=patternsToTryNext;

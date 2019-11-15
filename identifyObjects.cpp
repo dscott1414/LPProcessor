@@ -9,6 +9,7 @@
 #include "sys/stat.h"
 #include <wn.h>
 #include "profile.h"
+#include "bitObject.h"
 #define MAX_BUF 10240000
 
 bool Source::findSpecificAnaphor(wstring tagName, int where, int element, int &specificWhere, bool &pluralNounOverride, bool &embeddedName)
@@ -1425,7 +1426,7 @@ int Source::identifyObject(int tag, int where, int element, bool adjectival, int
 		*/
 		for (int I = thisObject.begin; I < thisObject.end; I++)
 		{
-			bitObject *forms = &m[I].forms;
+			bitObject<> *forms = &m[I].forms;
 			if ((forms->isSet(nounForm) || forms->isSet(adjectiveForm) || forms->isSet(adverbForm) ||
 				forms->isSet(verbForm) || forms->isSet(PROPER_NOUN_FORM_NUM) || forms->isSet(NUMBER_FORM_NUM) || forms->isSet(numeralOrdinalForm) ||
 				(forms->isSet(honorificForm) && m[I].queryForm(L"pinr") < 0)) &&

@@ -1,3 +1,4 @@
+#include "bitObject.h"
 const unsigned int patternFlag=(1<<31);
 extern vector <wstring> patternTagStrings;
 
@@ -77,7 +78,7 @@ public:
 
 class cPattern;
 extern vector <cPattern *> patterns;
-extern bitObject patternsWithNoParents,patternsWithNoChildren;
+extern bitObject<32, 5, unsigned int, 32> patternsWithNoParents,patternsWithNoChildren;
 
 class patternElement {
 public:
@@ -373,11 +374,11 @@ public:
 		bool explicitSubjectVerbAgreement; // contains a subject/verb within itself (blocked otherwise by _BLOCK)
 		bool metaPattern;
     int numPushes,numComparisons,numHits,numWinners,numChildrenWinners;
-    bitObject allElementTags;
-    bitObject childPatterns,mandatoryChildPatterns;
-    bitObject parentPatterns,mandatoryParentPatterns;
+    bitObject<> allElementTags;
+		bitObject<32, 5, unsigned int, 32> childPatterns,mandatoryChildPatterns;
+		bitObject<32, 5, unsigned int, 32> parentPatterns,mandatoryParentPatterns;
     bool ancestorsSet,mandatoryAncestorsSet;
-    bitObject ancestorPatterns,mandatoryAncestorPatterns;
+    bitObject<32, 5, unsigned int, 32> ancestorPatterns,mandatoryAncestorPatterns;
     bool contains(int patternNum,int &elementStart)
     {
         for (elementStart++; elementStart<(signed)elements.size(); elementStart++)

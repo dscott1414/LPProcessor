@@ -2352,9 +2352,11 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 			{
 				objectDistanceCost += 6;
 				if (debugTrace.traceVerbObjects)
-						lplog(L"          %d:increased objectDistanceCost to %d because first object has an embedded preposition clause [tagsets follow]",wo, objectDistanceCost);
-				for (auto ppTagSet : prepTagSets)
-					printTagSet(LOG_INFO, L"PrepInFirstObject", -1, ppTagSet, tagSet[whereObjectTag].sourcePosition, tagSet[whereObjectTag].PEMAOffset);
+				{
+					lplog(L"          %d:increased objectDistanceCost to %d because first object has an embedded preposition clause [tagsets follow]", wo, objectDistanceCost);
+					for (auto ppTagSet : prepTagSets)
+						printTagSet(LOG_INFO, L"PrepInFirstObject", -1, ppTagSet, tagSet[whereObjectTag].sourcePosition, tagSet[whereObjectTag].PEMAOffset);
+				}
 			}
 			if (debugTrace.traceVerbObjects)
 				lplog(L"%d:VOC__Prep first object test from %s[%s](%d,%d) END", tagSet[verbTagIndex].sourcePosition, patterns[tagSet[whereObjectTag].parentPattern]->name.c_str(), patterns[tagSet[whereObjectTag].parentPattern]->differentiator.c_str(),

@@ -565,6 +565,7 @@
     <ClCompile Include="word.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="bitObject.h" />
     <ClInclude Include="bncc.h" />
     <ClInclude Include="general.h" />
     <ClInclude Include="getMusicBrainz.h" />

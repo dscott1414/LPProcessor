@@ -2666,6 +2666,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				errorMap[L"LP correct: word 'both': ST says determiner when there is no following noun form (LP says pronoun)"]++;
 				return 0;
 			}
+			if (word == L"a trifle" || word == L"a bit")
+			{
+				errorMap[L"LP correct: word 'a trifle' or 'a bit': ST says determiner when LP says adverb"]++;
+				return 0;
+			}
 			if (word == L"another" && source.m[wordSourceIndex].queryWinnerForm(pronounForm) >= 0 && source.m[wordSourceIndex + 1].queryWinnerForm(nounForm) < 0 &&
 				(source.m[wordSourceIndex + 1].queryWinnerForm(prepositionForm) >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(determinerForm) >= 0 || !iswalpha(source.m[wordSourceIndex + 1].word->first[0]) ||
 					source.m[wordSourceIndex + 1].word->second.hasVerbForm() || source.m[wordSourceIndex + 1].queryWinnerForm(conjunctionForm) >= 0))
@@ -2673,7 +2678,15 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				errorMap[L"LP correct: word 'another': ST says determiner when there is no following noun form (LP says pronoun)"]++;
 				return 0;
 			}
-			if (word == L"any" && source.m[wordSourceIndex].queryWinnerForm(adverbForm) >= 0 && 
+			if ((word == L"that" || word == L"this") && source.m[wordSourceIndex].queryWinnerForm(pronounForm) >= 0 && source.m[wordSourceIndex + 1].queryWinnerForm(nounForm) < 0 &&
+				(source.m[wordSourceIndex + 1].queryWinnerForm(prepositionForm) >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(determinerForm) >= 0 || !iswalpha(source.m[wordSourceIndex + 1].word->first[0]) ||
+					source.m[wordSourceIndex + 1].word->second.hasVerbForm() || source.m[wordSourceIndex + 1].queryWinnerForm(conjunctionForm) >= 0))
+			{
+				partofspeech += L"***PNPDET";
+				//errorMap[L"LP correct: word 'another': ST says determiner when there is no following noun form (LP says pronoun)"]++;
+				//return 0;
+			}
+			if (word == L"any" && source.m[wordSourceIndex].queryWinnerForm(adverbForm) >= 0 &&
 				(source.m[wordSourceIndex + 1].queryWinnerForm(adjectiveForm) >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(adverbForm) >= 0))
 			{
 				errorMap[L"LP correct: word 'any': ST says determiner when there is only a following adverb or adjective form (LP says adverb)"]++;
@@ -2708,28 +2721,62 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: Modifying an adverb ST says " + primarySTLPMatch + L" but LP says adverb"]++;
 		return 0;
 	}
-	if (primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0 && wordSourceIndex + 1 < source.m.size() && source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0)
+	if (primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0 && wordSourceIndex + 1 < source.m.size())
 	{
 		//errorMap[L"LP correct: Modifying an adverb ST says " + primarySTLPMatch + L" but LP says adverb"]++;
 		//return 0;
-		partofspeech += L"***ADJADV";
+		partofspeech += L"***ADVADJ";
 		int maxlen = -1;
-		if (source.queryPattern(wordSourceIndex,L"__ADJECTIVE_WITHOUT_VERB",maxlen)!=-1)
-			partofspeech += L"WV";
+		if ((source.queryPattern(wordSourceIndex - 1, L"_BE", maxlen) != -1 || source.m[wordSourceIndex - 1].queryWinnerForm(L"is") >= 0) &&
+			source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") < 0 && source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") < 0 && source.m[wordSourceIndex + 1].queryWinnerForm(L"verb") < 0)
+		{
+			errorMap[L"LP correct: ST says adverb but LP says adjective, following a being verb"]++;
+			return 0;
+		}
 	}
-	if ((word == L"mother" || word == L"father") && (primarySTLPMatch == L"noun" || primarySTLPMatch == L"verb") && source.m[wordSourceIndex].queryWinnerForm(L"honorific") >= 0)
+	// POS JJ (adjective) not found in winnerForms verb for word annoyed 0006301:[Miss Farrar now was more than bored , she was *annoyed* . ]
+	// in the future may attempt to correct ishas constuction which is actually ownership
+	int maxEnd = -1;
+	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && source.queryPattern(wordSourceIndex, L"_VERBPASSIVE", maxEnd) != -1)
+	{
+		errorMap[L"ST correct: ST says " + primarySTLPMatch + L" but LP says a passive construction (may be classified as diff in future)"]++;
+		return 0;
+		//partofspeech += L"***VERBPASSIVE";
+	}
+	maxEnd = -1;
+	if (primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0 && source.queryPattern(wordSourceIndex, L"__AS_AS", maxEnd) != -1)
+	{
+		errorMap[L"diff: ST says " + primarySTLPMatch + L" but LP says adjective embedded in an adverbial construction"]++;
+		return 0;
+		//partofspeech += L"***__AS_AS";
+	}
+	// Stanford POS JJ***SPadjective(adjective) not found in winnerForms verb for word bellowing
+	maxEnd = -1;
+	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && source.queryPattern(wordSourceIndex, L"__ADJECTIVE", maxEnd) != -1)
+	{
+		//errorMap[L"diff: ST says " + primarySTLPMatch + L" but LP says adjective embedded in an adverbial construction"]++;
+		//return 0;
+		partofspeech += L"***__ADJECTIVE";
+	}
+	if ((primarySTLPMatch == L"noun" || primarySTLPMatch == L"verb") && source.m[wordSourceIndex].queryWinnerForm(L"honorific") >= 0)
 	{
 		if (primarySTLPMatch == L"noun")
-			errorMap[L"diff: word 'mother' or 'father': ST says " + primarySTLPMatch + L" but LP says honorific"]++;
+			errorMap[L"diff: word '"+word+L"': ST says " + primarySTLPMatch + L" but LP says honorific"]++;
 		if (primarySTLPMatch == L"verb")
-			errorMap[L"LP correct: word 'mother' or 'father': ST says verb but LP says honorific"]++;
+			errorMap[L"LP correct: word '"+word+L"': ST says verb but LP says honorific"]++;
 		return 0;
 	}
 	if (word == L"his" && primarySTLPMatch == L"possessive_determiner" && source.m[wordSourceIndex].queryWinnerForm(L"possessive_pronoun") >= 0 &&
-		  (source.m[wordSourceIndex + 1].queryWinnerForm(prepositionForm) >= 0 || !iswalpha(source.m[wordSourceIndex + 1].word->first[0]) ||
-		   source.m[wordSourceIndex + 1].queryWinnerForm(conjunctionForm) >= 0 || source.m[wordSourceIndex + 1].word->second.hasVerbForm()))
+		(source.m[wordSourceIndex + 1].queryWinnerForm(prepositionForm) >= 0 || !iswalpha(source.m[wordSourceIndex + 1].word->first[0]) ||
+			source.m[wordSourceIndex + 1].queryWinnerForm(conjunctionForm) >= 0 || source.m[wordSourceIndex + 1].word->second.hasVerbForm()))
 	{
 		errorMap[L"LP correct: word 'his': ST says " + primarySTLPMatch + L" but LP says possessive_pronoun"]++;
+		return 0;
+	}
+	if (word == L"plenty" && primarySTLPMatch == L"adverb" && (source.m[wordSourceIndex].queryWinnerForm(L"quantifier") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 ) &&
+		  source.m[wordSourceIndex + 1].word->first==L"of")
+	{
+		errorMap[L"LP correct: word 'plenty': ST says " + primarySTLPMatch + L" but LP says quantifier"]++;
 		return 0;
 	}
 	if (primarySTLPMatch == L"personal_pronoun_accusative")
