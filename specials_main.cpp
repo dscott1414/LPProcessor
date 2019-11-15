@@ -2734,6 +2734,12 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			return 0;
 		}
 	}
+	// over 100 examples checked and 99% correct except for 'only'
+	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && word.length() > 3 && word.substr(word.length() - 2) == L"ly" && word != L"only")
+	{
+		errorMap[L"LP correct: adverb of customary form (ending in -ly) ST says " + primarySTLPMatch + L" but LP says adverb"]++;
+		return 0;
+	}
 	// POS JJ (adjective) not found in winnerForms verb for word annoyed 0006301:[Miss Farrar now was more than bored , she was *annoyed* . ]
 	// in the future may attempt to correct ishas constuction which is actually ownership
 	int maxEnd = -1;
@@ -2754,9 +2760,9 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	maxEnd = -1;
 	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && source.queryPattern(wordSourceIndex, L"__ADJECTIVE", maxEnd) != -1)
 	{
-		//errorMap[L"diff: ST says " + primarySTLPMatch + L" but LP says adjective embedded in an adverbial construction"]++;
-		//return 0;
-		partofspeech += L"***__ADJECTIVE";
+		errorMap[L"diff: ST says " + primarySTLPMatch + L" but LP says verb embedded in an adjectival construction"]++;
+		return 0;
+		//partofspeech += L"***__ADJECTIVE";
 	}
 	if ((primarySTLPMatch == L"noun" || primarySTLPMatch == L"verb") && source.m[wordSourceIndex].queryWinnerForm(L"honorific") >= 0)
 	{
