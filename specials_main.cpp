@@ -2740,11 +2740,20 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			return 0;
 		}
 	}
-	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0 && source.queryPattern(wordSourceIndex,L"__NOUN",L"4")!=-1)
+	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0)
 	{
-		errorMap[L"diff: ST says " + primarySTLPMatch + L" but LP says adjective in the head of a __NOUN construction"]++;
-		return 0;
-		//partofspeech += L"***NOUNADJ";
+		if (source.queryPattern(wordSourceIndex, L"__NOUN", L"4") != -1)
+		{
+			errorMap[L"diff: ST says " + primarySTLPMatch + L" but LP says adjective in the head of a __NOUN construction"]++;
+			return 0;
+		}
+		// two incorrect parses lead to inaccuracy (ST is correct)
+		if (source.queryPattern(wordSourceIndex, L"__NOUN", L"2") != -1 && source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE")!=-1)
+		{
+			//partofspeech += L"***NOUNADJ";
+			errorMap[L"LP correct: ST says " + primarySTLPMatch + L" but LP says adjective in an __ADJECTIVE construction"]++;
+			return 0;
+		}
 	}
 	// over 100 examples checked and 99% correct except for 'only'
 	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && word.length() > 3 && word.substr(word.length() - 2) == L"ly" && word != L"only")
