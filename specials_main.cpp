@@ -2721,6 +2721,12 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: Modifying an adverb ST says " + primarySTLPMatch + L" but LP says adverb"]++;
 		return 0;
 	}
+	if (primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(L"preposition") >= 0 && wordSourceIndex + 1 < source.m.size() && source.m[wordSourceIndex+1].pma.queryPattern(L"__NOUN")!=-1 && source.m[wordSourceIndex].pma.queryPattern(L"_PP") != -1)
+	{
+		errorMap[L"LP correct: ST says " + primarySTLPMatch + L" but LP says preposition - as the head of a _PP construct"]++;
+		return 0;
+		//partofspeech += L"***ADVPREP";
+	}
 	if (primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0 && wordSourceIndex + 1 < source.m.size())
 	{
 		//errorMap[L"LP correct: Modifying an adverb ST says " + primarySTLPMatch + L" but LP says adverb"]++;
@@ -2733,6 +2739,12 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"LP correct: ST says adverb but LP says adjective, following a being verb"]++;
 			return 0;
 		}
+	}
+	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0 && source.queryPattern(wordSourceIndex,L"__NOUN",L"4")!=-1)
+	{
+		errorMap[L"diff: ST says " + primarySTLPMatch + L" but LP says adjective in the head of a __NOUN construction"]++;
+		return 0;
+		//partofspeech += L"***NOUNADJ";
 	}
 	// over 100 examples checked and 99% correct except for 'only'
 	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && word.length() > 3 && word.substr(word.length() - 2) == L"ly" && word != L"only")
