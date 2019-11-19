@@ -1312,7 +1312,7 @@ void Source::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool isI
 				// I and J are within the same subject, but J is a time that should not be considered a subject
 				// the following morning the indefatigable Albert ...
 				else if ((element=m[m[J].beginObjectPosition].pma.queryPattern(L"__NOUN",L"5"))!=-1 && 
-					  I>J && I<m[J].beginObjectPosition+m[m[J].beginObjectPosition].pma[element&~patternFlag].len &&
+					  I>J && I<m[J].beginObjectPosition+m[m[J].beginObjectPosition].pma[element&~matchElement::patternFlag].len &&
 						(m[J].word->second.timeFlags&T_UNIT)!=0)
 				{
 					if (debugTrace.traceSpeakerResolution)
@@ -1635,8 +1635,8 @@ int Source::processInternalInfinitivePhrase(int where,int whereVerb,int wherePar
 	}
 	else
 	{
-		startCollectTags(debugTrace.traceRelations,iverbTagSet,where,m[where].pma[infpElement&~patternFlag].pemaByPatternEnd,tagSets,true,false,L"internal infinitive phrase");
-		parentTagLen=m[where].pma[infpElement&~patternFlag].len;
+		startCollectTags(debugTrace.traceRelations,iverbTagSet,where,m[where].pma[infpElement&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,false,L"internal infinitive phrase");
+		parentTagLen=m[where].pma[infpElement&~matchElement::patternFlag].len;
 	}
 	for (unsigned int K=0; K<tagSets.size(); K++)
 	{

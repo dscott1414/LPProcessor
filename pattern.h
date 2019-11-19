@@ -1,5 +1,4 @@
 #include "bitObject.h"
-const unsigned int patternFlag=(1<<31);
 extern vector <wstring> patternTagStrings;
 
 int createBasicPatterns(void);
@@ -23,6 +22,7 @@ class matchElement
 {
 public:
     enum { NEW_FLAG=1 };
+		static const unsigned int patternFlag = (1 << 31);
     unsigned int beginPosition;
     unsigned int endPosition;
     // if patternFlag set: (bit 31)
@@ -92,6 +92,7 @@ public:
     vector <wstring> specificWords;
     intArray formIndexes;
     intArray formCosts;
+
     vector < set <unsigned int> > formTags;
     vector <bool> formStopDescendingSearch;
     vector <wstring> patternStr;
@@ -99,17 +100,23 @@ public:
     intArray patternCosts;
     vector < set <unsigned int> > patternTags;
     vector <bool> patternStopDescendingSearch;
-    //intArray indexes;
-    //intArray isPattern;
-    //intArray costs;
-    intArray usageFinalMatch;
-    intArray usageEverMatched;
-    set <int> endPositionsSet;
+		vector <int> usageFormFinalMatch;
+		vector <int> usageFormEverMatched;
+		vector <int> usagePatternFinalMatch;
+		vector <int> usagePatternEverMatched;
+		set <int> endPositionsSet;
     bool consolidateEndPositions; // no longer used - was for "super" patterns where remembering precise ends was no longer necessary
     patternElement(void)
     {
-        consolidateEndPositions=false;
+      consolidateEndPositions=false;
     };
+		void initializeUsage()
+		{
+			usageFormFinalMatch.reserve(formIndexes.size());
+			usageFormEverMatched.reserve(formIndexes.size());
+			usagePatternFinalMatch.reserve(patternIndexes.size());
+			usagePatternEverMatched.reserve(patternIndexes.size());
+		}
     //patternElement(string patternName,string differentiator,int elementNum,set <unsigned int> &descendantTags,char *&buf);
     bool matchOne(Source &source,unsigned int sourcePosition,unsigned int lastElement,vector <matchElement> &whatMatched);
     bool matchRange(Source &source,int begin,int end,vector <matchElement> &whatMatched);
@@ -123,6 +130,8 @@ public:
       return false;
     }
 		void reportUsage(wchar_t *temp, int J, bool isPattern);
+		bool copyUsage(void *buf, int &where, int limit);
+		void zeroUsage();
 		wchar_t *toText(wchar_t *temp,int J,bool isPattern,int maxBuf);
     bool hasTag(unsigned int tag);
 		bool hasTag(unsigned int elementIndex,unsigned int tag,bool isPattern);
@@ -296,6 +305,8 @@ public:
     void replace(int elementNum,int patternNum);
     void replace(int elementNum,string patternName);
 		void reportUsage(void);
+		bool copyUsage(void *buf, int &where, int limit);
+		void zeroUsage();
     bool add(int elementNum,wstring patternName,bool logFutureReferences,int cost,set <unsigned int> tags,bool blockDescendants,bool allowRecursiveMatch);
     void lplog(void);
     void readABNF(FILE *fh);
@@ -391,10 +402,13 @@ public:
     //{
     //    whatMatched.clear();
     //}
-    void incrementUse(unsigned int elementNum,unsigned int indexNum)
+    void incrementUse(unsigned int elementNum,unsigned int indexNum,bool isPattern)
     {
-        elements[elementNum]->usageFinalMatch[indexNum]++;
-    }
+			if (isPattern)
+				elements[elementNum]->usagePatternFinalMatch[indexNum]++;
+			else
+				elements[elementNum]->usageFormFinalMatch[indexNum]++;
+		}
     int getCost(unsigned int elementNum,int offset,bool isPattern)
     {
         return (isPattern) ? elements[elementNum]->patternCosts[offset] : elements[elementNum]->formCosts[offset];
@@ -417,6 +431,7 @@ public:
     bool containsOneOfTagSet(tTS &desiredTagSet,unsigned int limit,bool includeSelf);
     bool setCheckDescendantsForTagSet(tTS &desiredTagSet,bool includeSelf);
     void evaluateTagSets(unsigned int start,unsigned int end);
+		void initializeUsage();
     bool hasDescendantTag(unsigned int tag);
     bool onlyDescendant(unsigned int parent,vector <unsigned int> &ancestors);
     bool hasTag(unsigned int tag);

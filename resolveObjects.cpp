@@ -2627,7 +2627,7 @@ int Source::reflexivePronounCoreference(int where, int lastBeginS1,int lastRelat
 		if (where && m[where-1].queryForm(prepositionForm)>=0 && (where==1 || isEOS(where-2)) && (element=m[where+1].pma.queryPattern(L"__S1"))!=-1)
 		{
 			lastBeginS1=where+1;
-			futureReference=where+1+m[where+1].pma[element&~patternFlag].len;
+			futureReference=where+1+m[where+1].pma[element&~matchElement::patternFlag].len;
 		}
 		else
 		{
@@ -2828,7 +2828,7 @@ int Source::coreferenceFilterLL2345(int where,int rObject,vector <int> &disallow
 	{
 		if ((element=m[lastRelativePhrase].pma.queryPattern(L"_REL1",end))==-1)
 			return -1;
-		endS1=lastRelativePhrase+m[lastRelativePhrase].pma[element&~patternFlag].len;
+		endS1=lastRelativePhrase+m[lastRelativePhrase].pma[element&~matchElement::patternFlag].len;
 		begin=lastRelativePhrase;
 	}
 	if (lastBeginS1>=lastRelativePhrase && lastBeginS1>=lastQ2)
@@ -2836,7 +2836,7 @@ int Source::coreferenceFilterLL2345(int where,int rObject,vector <int> &disallow
 		if (lastBeginS1<0) return 0;
 		if ((element=m[lastBeginS1].pma.queryPattern(L"__S1",end))==-1)
 			return -1;
-		endS1=lastBeginS1+m[lastBeginS1].pma[element&~patternFlag].len;
+		endS1=lastBeginS1+m[lastBeginS1].pma[element&~matchElement::patternFlag].len;
 		begin=lastBeginS1;
 	}
 	if (lastQ2>lastRelativePhrase && lastQ2>lastBeginS1)
@@ -2844,7 +2844,7 @@ int Source::coreferenceFilterLL2345(int where,int rObject,vector <int> &disallow
 		if (lastQ2<0) return 0;
 		if ((element=m[lastQ2].pma.queryPattern(L"_Q2",end))==-1)
 			return -1;
-		endS1=lastQ2+m[lastQ2].pma[element&~patternFlag].len;
+		endS1=lastQ2+m[lastQ2].pma[element&~matchElement::patternFlag].len;
 		begin=lastQ2;
 	}
 	int whereSubject=-1,directObjectPosition=-1,indirectObjectPosition=-1;
@@ -2859,13 +2859,13 @@ int Source::coreferenceFilterLL2345(int where,int rObject,vector <int> &disallow
 		// get the pattern that covers the most of the rest of the sentence.
 		element=m[searchPosition].pma.findMaxLen(); // at conjunction
 		int element2=m[searchPosition+1].pma.findMaxLen(); // one afterward
-		if (element2>=0 && (element<0 || m[searchPosition].pma[element&~patternFlag].len<m[searchPosition+1].pma[element2].len))
+		if (element2>=0 && (element<0 || m[searchPosition].pma[element&~matchElement::patternFlag].len<m[searchPosition+1].pma[element2].len))
 		{
 			searchPosition++;
 			element=element2;
 		}
 		// if the where still has not been reached, return.
-		if (element<0 || searchPosition+m[searchPosition].pma[element&~patternFlag].len<where) return 0;
+		if (element<0 || searchPosition+m[searchPosition].pma[element&~matchElement::patternFlag].len<where) return 0;
 	}	
 	int whereVerb=m[where].relVerb;
 	if (whereVerb<0)
@@ -3024,11 +3024,11 @@ int Source::coreferenceFilterLL2345(int where,int rObject,vector <int> &disallow
 		if ((element=m[whereMNE].pma.queryPattern(L"_META_NAME_EQUIVALENCE",nameEnd))!=-1) 
 		{
 			vector < vector <tTagLocation> > tagSets;
-			if (startCollectTags(true,metaNameEquivalenceTagSet,whereMNE,m[whereMNE].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true,L"name equivalence coref filter")>0)
+			if (startCollectTags(true,metaNameEquivalenceTagSet,whereMNE,m[whereMNE].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,true,L"name equivalence coref filter")>0)
 				for (unsigned int J=0; J<tagSets.size(); J++)
 				{
 					if (debugTrace.traceNameResolution)
-						printTagSet(LOG_RESOLUTION,L"MNE",J,tagSets[J],whereMNE,m[whereMNE].pma[element&~patternFlag].pemaByPatternEnd);
+						printTagSet(LOG_RESOLUTION,L"MNE",J,tagSets[J],whereMNE,m[whereMNE].pma[element&~matchElement::patternFlag].pemaByPatternEnd);
 					int primaryTag=findOneTag(tagSets[J],L"NAME_PRIMARY",-1),secondaryTag=findOneTag(tagSets[J],L"NAME_SECONDARY",-1);
 					if (primaryTag<0 || secondaryTag<0) return false;
 					int wherePrimary=tagSets[J][primaryTag].sourcePosition,whereSecondary=tagSets[J][secondaryTag].sourcePosition;

@@ -279,7 +279,7 @@ int patternMatchArray::queryPattern(wstring pattern,int &len)
     if (patterns[content[I].getPattern()]->name==pattern && content[I].len>maxLen)
     {
       maxLen=content[I].len;
-      element=I|patternFlag;
+      element=I| matchElement::patternFlag;
     }
   len=maxLen;
   return element;
@@ -302,7 +302,7 @@ int patternMatchArray::queryMaximumLowestCostPattern(wstring pattern,int &len)
     {
       maxLen=content[I].len;
 			minCost=content[I].cost;
-      element=I|patternFlag;
+      element=I| matchElement::patternFlag;
     }
   len=maxLen;
   return element;
@@ -315,7 +315,7 @@ int patternMatchArray::queryPattern(int pattern,int &len)
     if (content[I].getPattern()==pattern && content[I].len>len)
     {
       len=content[I].len;
-      element=I|patternFlag;
+      element=I| matchElement::patternFlag;
     }
   return element;
 }
@@ -332,7 +332,7 @@ int patternMatchArray::queryTagSet(unsigned int &element,int desiredTagSetNum,in
       tagInSet=0;
       tag=patterns[content[I].getPattern()]->hasTagInSet(desiredTagSetNum,tagInSet);
       maxLen=content[I].len;
-      element=I|patternFlag;
+      element=I| matchElement::patternFlag;
     }
   return tag;
 }
@@ -342,7 +342,7 @@ int patternMatchArray::queryPatternWithLen(int pattern,int len)
 { LFS
   tPatternMatch *e;
   if ((e=find(pattern,len))==NULL) return -1;
-  return (int)(e-content)|patternFlag;
+  return (int)(e-content)| matchElement::patternFlag;
 }
 
 int patternMatchArray::queryPatternWithLen(wstring pattern,int len)
@@ -350,7 +350,7 @@ int patternMatchArray::queryPatternWithLen(wstring pattern,int len)
   int element=-1;
   for (unsigned int I=0; I<count; I++)
     if (patterns[content[I].getPattern()]->name==pattern && content[I].len==len)
-      element=I|patternFlag;
+      element=I| matchElement::patternFlag;
   return element;
 }
 
@@ -361,7 +361,7 @@ int patternMatchArray::queryPattern(int pattern)
     if (content[I].getPattern()==pattern && content[I].len>maxLen)
     {
       maxLen=content[I].len;
-      element=I|patternFlag;
+      element=I| matchElement::patternFlag;
     }
   return element;
 }
@@ -379,7 +379,7 @@ int patternMatchArray::findAgent(int &element,int maximumMaxLen,bool includePron
         content[I].len>maxLen && content[I].len<=maximumMaxLen)
     {
       maxLen=content[I].len;
-      element=I|patternFlag;
+      element=I| matchElement::patternFlag;
     }
   }
   return element;
@@ -400,7 +400,7 @@ int patternMatchArray::queryPattern(wstring pattern,wstring differentiator,int &
         content[I].len>maxLen)
     {
       maxLen=content[I].len;
-      element=I|patternFlag;
+      element=I| matchElement::patternFlag;
     }
   return element;
 }
@@ -413,7 +413,7 @@ int patternMatchArray::queryQuestionFlagPattern()
     if (patterns[content[I].getPattern()]->questionFlag && content[I].len>maxLen)
     {
       maxLen=content[I].len;
-      element=I|patternFlag;
+      element=I| matchElement::patternFlag;
     }
   return element;
 }

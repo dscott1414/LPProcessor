@@ -828,11 +828,11 @@ bool Source::identifyNameAdjective(int where,cName &name,bool &isMale,bool &isFe
 		return false;
 	}
   vector < vector <tTagLocation> > tagSets;
-  if (startCollectTags(false,nameTagSet,where,m[where].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true,L"identify name adjective")>0)
+  if (startCollectTags(false,nameTagSet,where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,true,L"identify name adjective")>0)
     for (unsigned int J=0; J<tagSets.size(); J++)
     {
       if (debugTrace.traceNameResolution)
-        printTagSet(LOG_RESOLUTION,L"NR",J,tagSets[J],where,m[where].pma[element&~patternFlag].pemaByPatternEnd);
+        printTagSet(LOG_RESOLUTION,L"NR",J,tagSets[J],where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd);
       if (evaluateNameAdjective(tagSets[J],name,isMale,isFemale))
         return true;
     }
@@ -852,11 +852,11 @@ bool Source::identifyName(int where,int &element,cName &name,bool &isMale,bool &
   isPlural=(m[nameEnd-1].word->first[m[nameEnd-1].word->first.size()-1]==L's' &&
       (m[where].word->first==L"the" || (m[where].queryForm(L"quantifier")>=0 && m[where].word->first!=L"one")));
   vector < vector <tTagLocation> > tagSets;
-  if (startCollectTags(false,nameTagSet,where,m[where].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true,L"identify name")>0)
+  if (startCollectTags(false,nameTagSet,where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,true,L"identify name")>0)
     for (unsigned int J=0; J<tagSets.size(); J++)
     {
       if (debugTrace.traceNameResolution)
-        printTagSet(LOG_RESOLUTION,L"NR",J,tagSets[J],where,m[where].pma[element&~patternFlag].pemaByPatternEnd);
+        printTagSet(LOG_RESOLUTION,L"NR",J,tagSets[J],where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd);
       if (evaluateName(tagSets[J],name,isMale,isFemale,isPlural,isBusiness))
         return true;
     }
@@ -2186,11 +2186,11 @@ bool Source::identifyMetaSpeaker(int where,bool inQuote)
   int element,nameEnd=-1;
   if ((element=m[where].pma.queryPattern(L"_META_SPEAKER",nameEnd))==-1) return false;
   vector < vector <tTagLocation> > tagSets;
-  if (startCollectTags(true,metaNameEquivalenceTagSet,where,m[where].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true,L"meta speaker identification")>0)
+  if (startCollectTags(true,metaNameEquivalenceTagSet,where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,true,L"meta speaker identification")>0)
     for (unsigned int J=0; J<tagSets.size(); J++)
     {
       if (debugTrace.traceNameResolution)
-        printTagSet(LOG_RESOLUTION,L"MS",J,tagSets[J],where,m[where].pma[element&~patternFlag].pemaByPatternEnd);
+        printTagSet(LOG_RESOLUTION,L"MS",J,tagSets[J],where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd);
       if (evaluateMetaSpeaker(where,tagSets[J]))
         return true;
     }
@@ -2225,11 +2225,11 @@ bool Source::identifyAnnounce(int where,bool inQuote)
   int element,nameEnd=-1;
   if ((element=m[where].pma.queryPattern(L"_META_ANNOUNCE",nameEnd))==-1) return false;
   vector < vector <tTagLocation> > tagSets;
-  if (startCollectTags(true,metaSpeakerTagSet,where,m[where].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true, L"meta announce")>0)
+  if (startCollectTags(true,metaSpeakerTagSet,where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,true, L"meta announce")>0)
     for (unsigned int J=0; J<tagSets.size(); J++)
     {
       if (debugTrace.traceNameResolution)
-        printTagSet(LOG_RESOLUTION,L"MA",J,tagSets[J],where,m[where].pma[element&~patternFlag].pemaByPatternEnd);
+        printTagSet(LOG_RESOLUTION,L"MA",J,tagSets[J],where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd);
       if (evaluateAnnounce(where,tagSets[J]))
         return true;
     }
@@ -2300,11 +2300,11 @@ bool Source::identifyMetaGroup(int where,bool inPrimaryQuote,bool inSecondaryQuo
   int element,nameEnd=-1;
   if ((element=m[where].pma.queryPattern(L"_META_GROUP",nameEnd))==-1) return false;
   vector < vector <tTagLocation> > tagSets;
-  if (startCollectTags(true,metaNameEquivalenceTagSet,where,m[where].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true, L"meta group identification")>0)
+  if (startCollectTags(true,metaNameEquivalenceTagSet,where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,true, L"meta group identification")>0)
     for (unsigned int J=0; J<tagSets.size(); J++)
     {
       if (debugTrace.traceNameResolution)
-        printTagSet(LOG_RESOLUTION,L"MG",J,tagSets[J],where,m[where].pma[element&~patternFlag].pemaByPatternEnd);
+        printTagSet(LOG_RESOLUTION,L"MG",J,tagSets[J],where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd);
       if (evaluateMetaGroup(where,tagSets[J],lastBeginS1,lastRelativePhrase,lastQ2,lastVerb))
         return true;
     }

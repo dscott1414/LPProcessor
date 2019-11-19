@@ -94,7 +94,7 @@ wstring matchesToString(vector <matchElement> &whatMatched,int elementMatched,ws
   s.clear();
   while (elementMatched>=0)
   {
-    if (whatMatched[elementMatched].elementMatchedIndex&patternFlag)
+    if (whatMatched[elementMatched].elementMatchedIndex&matchElement::patternFlag)
     {
       if (whatMatched[elementMatched].getChildPattern()>=patterns.size())
         lplog(LOG_FATAL_ERROR,L"Illegal pattern #%d at elementMatched %d!",whatMatched[elementMatched].getChildPattern(),elementMatched);
@@ -644,7 +644,10 @@ bool cPattern::fillPattern(Source &source,int sourcePosition,vector <matchElemen
       thisMatch->patternElementIndex,source.m.size()-sourcePosition,newElement,POFlag);
     if (newElement)
     {
-      elements[thisMatch->patternElement]->usageEverMatched[thisMatch->patternElementIndex]++;
+			if (thisMatch->elementMatchedIndex&matchElement::patternFlag)
+				elements[thisMatch->patternElement]->usagePatternEverMatched[thisMatch->patternElementIndex]++;
+			else
+				elements[thisMatch->patternElement]->usageFormEverMatched[thisMatch->patternElementIndex]++;
       source.pema[PEMAOffset].origin=*firstPosition;
       if (source.pema[*firstPosition].begin!=0)
         break;
@@ -861,8 +864,6 @@ void patternElement::readABNFElementTag(wstring patternName,wstring differentiat
     formStr.push_back(form);
     costs.push_back(cost);
     indexes.push_back(f);
-    usageFinalMatch.push_back(0);
-    usageEverMatched.push_back(0);
     tags.push_back(elementTags);
     stopDescendingSearch.push_back(blockDescendants);
     isPattern.push_back(false);
@@ -1137,8 +1138,6 @@ bool cPattern::create(wstring patternName, wstring differentiator, int numForms,
         element->specificWords.push_back(specificWord);
         element->formIndexes.push_back(f);
         element->formCosts.push_back(elementCost);
-        element->usageFinalMatch.push_back(0);
-        element->usageEverMatched.push_back(0);
         element->formTags.push_back(elementTags);
         element->formStopDescendingSearch.push_back(blockDescendants);
       }
@@ -1268,8 +1267,6 @@ cPattern *cPattern::create(Source *source,wstring patternName,int num,int whereB
 				element->specificWords.push_back(specificWord);
 				element->formIndexes.push_back(f);
 				element->formCosts.push_back(elementCost);
-				element->usageFinalMatch.push_back(0);
-				element->usageEverMatched.push_back(0);
 				element->formTags.push_back(elementTags);
 				element->formStopDescendingSearch.push_back(blockDescendants);
 			}
@@ -1418,8 +1415,8 @@ void cPattern::lplog(void)
 void cPattern::reportUsage(void)
 {
 	LFS
-	wchar_t temp[1024];
-	wstring fullname = name + L"["+differentiator+L"]";
+		wchar_t temp[1024];
+	wstring fullname = name + L"[" + differentiator + L"]";
 	wsprintf(temp, L"%40s ", fullname.c_str());
 	for (unsigned int I = 0; I < elements.size(); I++)
 	{
@@ -1428,6 +1425,23 @@ void cPattern::reportUsage(void)
 		for (unsigned int J = 0; J < elements[I]->patternCosts.size(); J++)
 			elements[I]->reportUsage(temp, J, true);
 	}
+}
+
+bool cPattern::copyUsage(void *buf, int &where, int limit)
+{
+	DLFS
+	if (!::copy(buf, num, where, limit)) return false;
+	if (!::copy(buf, elements.size(), where, limit)) return false;
+	for (unsigned int I = 0; I < elements.size(); I++)
+		if (!elements[I]->copyUsage(buf, where, limit))
+			return false;
+	return true;
+}
+
+void cPattern::zeroUsage()
+{
+	for (unsigned int I = 0; I < elements.size(); I++)
+		elements[I]->zeroUsage();
 }
 
 bool cPattern::add(int elementNum,wstring patternName,bool logFutureReferences,int elementCost,set <unsigned int> elementTags,
@@ -1446,8 +1460,6 @@ bool cPattern::add(int elementNum,wstring patternName,bool logFutureReferences,i
       childPatterns.set(p);
       patterns[p]->parentPatterns.set(num);
       elements[elementNum]->patternIndexes.push_back(p);
-      elements[elementNum]->usageFinalMatch.push_back(0);
-      elements[elementNum]->usageEverMatched.push_back(0);
       elements[elementNum]->patternCosts.push_back(elementCost);
       if (!patterns[p]->blockDescendants && !elementBlockDescendants) // if the pattern or the element has blocked descendants
       {
@@ -1739,7 +1751,7 @@ wchar_t *patternElement::toText(wchar_t *temp, int J, bool isPattern, int maxBuf
 	LFS
 		if (isPattern)
 		{
-			wsprintf(temp, L"%s[%s]*%d|%d|%d%s", patterns[patternIndexes[J]]->name.c_str(), patterns[patternIndexes[J]]->differentiator.c_str(), patternCosts[J], usageEverMatched[J], usageFinalMatch[J], (patternStopDescendingSearch[J]) ? L"{_BLOCK}" : L"");
+			wsprintf(temp, L"%s[%s]*%d%s", patterns[patternIndexes[J]]->name.c_str(), patterns[patternIndexes[J]]->differentiator.c_str(), patternCosts[J], (patternStopDescendingSearch[J]) ? L"{_BLOCK}" : L"");
 			if (patternTags[J].size())
 			{
 				wcscat(temp, L"{");
@@ -1753,7 +1765,7 @@ wchar_t *patternElement::toText(wchar_t *temp, int J, bool isPattern, int maxBuf
 			wstring fs = formStr[J];
 			if (specificWords[J].length())
 				fs += L"|" + specificWords[J];
-			wsprintf(temp, L"%s*%d|%d|%d%s", fs.c_str(), formCosts[J], usageEverMatched[J], usageFinalMatch[J], (formStopDescendingSearch[J]) ? L"{_BLOCK}" : L"");
+			wsprintf(temp, L"%s*%d%s", fs.c_str(), formCosts[J], (formStopDescendingSearch[J]) ? L"{_BLOCK}" : L"");
 			if (formTags[J].size())
 			{
 				wcscat(temp, L"{");
@@ -1765,6 +1777,23 @@ wchar_t *patternElement::toText(wchar_t *temp, int J, bool isPattern, int maxBuf
 	return temp;
 }
 
+bool patternElement::copyUsage(void *buf, int &where, int limit)
+{
+	if (!::copy(buf, usageFormEverMatched, where, limit)) return false;
+	if (!::copy(buf, usageFormFinalMatch, where, limit)) return false;
+	if (!::copy(buf, usagePatternEverMatched, where, limit)) return false;
+	if (!::copy(buf, usagePatternFinalMatch, where, limit)) return false;
+	return true;
+}
+
+void patternElement::zeroUsage()
+{
+	std::fill(usageFormEverMatched.begin(), usageFormEverMatched.end(), 0);
+	std::fill(usageFormFinalMatch.begin(), usageFormFinalMatch.end(), 0);
+	std::fill(usagePatternEverMatched.begin(), usagePatternEverMatched.end(), 0);
+	std::fill(usagePatternFinalMatch.begin(), usagePatternFinalMatch.end(), 0);
+}
+
 void patternElement::reportUsage(wchar_t *temp, int J, bool isPattern)
 {
 	LFS
@@ -1772,14 +1801,14 @@ void patternElement::reportUsage(wchar_t *temp, int J, bool isPattern)
 	if (isPattern)
 	{
 		wstring fullname = patterns[patternIndexes[J]]->name + L"["+patterns[patternIndexes[J]]->differentiator+L"]";
-		wsprintf(temp+len, L"%40s  %05d  %05d", fullname.c_str(), usageEverMatched[J], usageFinalMatch[J]);
+		wsprintf(temp+len, L"%40s  %05d  %05d", fullname.c_str(), usagePatternEverMatched[J], usagePatternFinalMatch[J]);
 	}
 	else
 	{
 		wstring fs = formStr[J];
 		if (specificWords[J].length())
 			fs += L"|" + specificWords[J];
-		wsprintf(temp+len, L"%40s  %05d  %05d", fs.c_str(), usageEverMatched[J], usageFinalMatch[J]);
+		wsprintf(temp+len, L"%40s  %05d  %05d", fs.c_str(), usageFormEverMatched[J], usageFormFinalMatch[J]);
 	}
 	::lplog(L"%s", temp);
 	temp[len] = 0;
@@ -1900,6 +1929,12 @@ void cPattern::evaluateTagSets(unsigned int start,unsigned int end)
   }
 }
 
+void cPattern::initializeUsage()
+{
+	for (auto element : elements)
+		element->initializeUsage();
+}
+
 void cPattern::establishMandatoryChildPatterns(void)
 { LFS
   for (vector <patternElement *>::iterator e=elements.begin(),eEnd=elements.end(); e!=eEnd; e++)
@@ -1960,6 +1995,7 @@ void initializePatterns(void)
   for (unsigned int p=0; p<patterns.size(); p++)
   {
     patterns[p]->evaluateTagSets(startSuperTagSets,desiredTagSets.size());
+		patterns[p]->initializeUsage(); 
 #ifdef LOG_PATTERNS
     patterns[p]->lplog();
 #endif

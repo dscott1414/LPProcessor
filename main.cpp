@@ -1346,6 +1346,7 @@ int wmain(int argc,wchar_t *argv[])
 				{
 					source.write(path, false, makeCopyBeforeSourceWrite);
 					source.writeWords(path);
+					source.writePatternUsage(path,true);
 				}
 				puts("");
 			}

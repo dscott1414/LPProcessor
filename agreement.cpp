@@ -879,7 +879,7 @@ bool Source::preferVerbRel(int position,unsigned int J,cPattern *p)
 	if (patterns[im->pma[J].getPattern()]->name!=L"__NOUN" && patterns[im->pma[J].getPattern()]->name!=L"__MNOUN") return true;
 	int nounAvgCost=im->pma[J].getAverageCost(),element,elementVP;
 	if ((element=im->pma.queryPatternWithLen(L"_VERBREL1",im->pma[J].len))!=-1 &&
-		im->pma.findMaxLen(L"_VERBPAST",elementVP)==true && nounAvgCost>=im->pma[element&~patternFlag].getAverageCost())
+		im->pma.findMaxLen(L"_VERBPAST",elementVP)==true && nounAvgCost>=im->pma[element&~matchElement::patternFlag].getAverageCost())
 	{
 		if (debugTrace.tracePatternElimination)
 			lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) is not a winner (VERBREL preference).",position,J,
@@ -900,10 +900,10 @@ bool Source::preferS1(int position,unsigned int J)
 	if (patterns[im->pma[J].getPattern()]->name!=L"__NOUN" && patterns[im->pma[J].getPattern()]->name!=L"__MNOUN") return false;
 	int nounAvgCost=im->pma[J].getAverageCost(),element;
 	if ((element=im->pma.queryPatternWithLen(L"__S1",im->pma[J].len))==-1 ||
-		nounAvgCost<im->pma[element&~patternFlag].getAverageCost()) return false;
+		nounAvgCost<im->pma[element&~matchElement::patternFlag].getAverageCost()) return false;
 	if (debugTrace.tracePatternElimination)
 		lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) is not a winner (S1 preference) nounAvgCost=%d >= S1Cost %d.",position,J,
-		p->name.c_str(),p->differentiator.c_str(),position,im->pma[J].len+position,nounAvgCost,im->pma[element&~patternFlag].getAverageCost());
+		p->name.c_str(),p->differentiator.c_str(),position,im->pma[J].len+position,nounAvgCost,im->pma[element&~matchElement::patternFlag].getAverageCost());
 	return true;
 }
 
@@ -1808,17 +1808,21 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 		}
 		PNC += tFI::COST_OF_INCORRECT_VERBAL_NOUN;
 	}
+	// I went to jail with him.
 	if (begin>0 && m[begin-1].word->first==L"to" && m[begin].queryForm(verbForm)>=0 &&
 			!(m[begin].word->second.inflectionFlags&(PLURAL|PLURAL_OWNER)) && m[begin].word->second.usageCosts[m[begin].queryForm(verbForm)]<4)
 	{
+		//int toCost[] = { 10,5,4,3 };
+		//int toFormVerbCost = toCost[m[begin].word->second.usageCosts[m[begin].queryForm(verbForm)]];
 		if (debugTrace.traceDeterminer)
 		{
 			//printTagSet(LOG_INFO, L"_ND2", -1, tagSet, begin, fromPEMAPosition);
 			wstring phrase;
-			lplog(L"%d:%s[%s]:(%s)%s: Noun (%d,%d) has verb form after 'to' - verb cost=%d+10", begin, (fromPEMAPosition<0) ? L"":patterns[pema[fromPEMAPosition].getPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->differentiator.c_str(),m[begin-1].word->first.c_str(),phraseString(begin,end,phrase,true).c_str(), begin, end,
+			lplog(L"%d:%s[%s]:(%s)%s: Noun (%d,%d) has verb form after 'to' - verb cost=%d+4", begin, (fromPEMAPosition<0) ? L"":patterns[pema[fromPEMAPosition].getPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->differentiator.c_str(),m[begin-1].word->first.c_str(),phraseString(begin,end,phrase,true).c_str(), begin, end,
 				m[begin].word->second.usageCosts[m[begin].queryForm(verbForm)]);
 		}
-		PNC+=10;
+		// if verb cost is 3, +3.  if verb cost is 2, +4.  if verb cost is 1, +5, otherwise +10
+		PNC += 10; // toFormVerbCost;
 	}
 	//__int64 or=m[begin].objectRole;
 	// Quick as a flash Tommy / in a moment Edith

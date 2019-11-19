@@ -1924,7 +1924,7 @@ void createPrepositionalPhrases(void)
 	cPattern::create(L"_PP{_FINAL_IF_ALONE:_BLOCK:PREP:_NO_REPEAT}",L"2",
 									 1,L"_ADVERB*1",0,0,1, // discourage ADVERBS if they can be picked up from ALLOBJECTS instead and bound to the previous verb
 									 3,L"preposition{P}",L"verbalPreposition{P}", L"__AS_AS",0,1,1,  // this should be a particle
-									 1,L"preposition{P}",0,0,1, // from within
+									 1,L"preposition{P}",0,0,1, // from within - complex prepositions
 									 1,L"_ADVERB*3",0,0,1, // I haven't seen you for SIMPLY centuries, my dear. // adverbial use should be rare - prefer adjectives attached to the nouns over adverbs.
 									 // Under the original act, how many judges were to be on the court? - __NOUNREL should have at least a cost of 2 because it matches too much (with its comma)
 									 6,L"_NOUN_OBJ{PREPOBJECT}",L"__NOUN[*]{PREPOBJECT}",L"__MNOUN[*]{PREPOBJECT}",L"__NOUNREL*4{PREPOBJECT}",L"_ADJECTIVE[*]*4",L"__NOUNRU{PREPOBJECT}",0,1,1,  // _NOUN* includes NOUN[D] and NOUN[E]
@@ -2549,6 +2549,15 @@ int createSecondaryPatterns2(void)
 						1,L"__S1[*]{_BLOCK:OBJECT:EVAL}",0,1,1,
 						0);
 
+	//cPattern::create(L"__NOUN", L"H",
+	//	1, L"_ADVERB", 0, 0, 1, // much more / ever more
+	//	2, L"adverb|more", L"adverb|less", 0,1,1,
+	//	2, L"_PP", L"_ADVERB",0, 0, 1, // ever more *out of life* than .. / more *unreservedly* than
+	//	1, L"preposition|than",0,1,1,
+	//	3, L"__S1[*]{_BLOCK:OBJECT:EVAL}", // he gets alot more out of life than *I do* .
+	//	   L"__NOUN[*]", // She had expected more than a phrase.
+	//		 L"_PP",0, 1, 1, // I care no more for her fortune than *for the ashes in that grate*. 
+	//	0);
 	// that one might believe every day to be Sunday
 	// that such was not the case.
 	// char *relativizer[] = {L"who",L"which",L"whom",L"whose",L"where",L"when",L"why",NULL};
@@ -2631,7 +2640,12 @@ int createSecondaryPatterns2(void)
 									 1,L"_ADVERB*3",0,0,1, // I haven't seen you for SIMPLY centuries, my dear. // adverbial use should be rare - prefer adjectives attached to the nouns over adverbs.
 									 1,L"_REL1[*]{PREPOBJECT}",0,1,1,   // my purpose IN (prep) what follows (_REL) (is to try to place him) A6U .
 									 0);
-		// this was cut because it is too ambiguous and allowed too many non-coherent parses
+	//cPattern::create(L"__PP", L"B",
+	//	1, L"_ADVERB", 0, 0, 1, 
+	//	1, L"preposition|to{P}", 0, 1, 1,
+	//	3, L"noun*-2|lunch{PREPOBJECT}", L"noun*-2|breakfast{PREPOBJECT}", L"noun*-2|bed{PREPOBJECT}", 0, 1, 1,
+	//	0);
+	// this was cut because it is too ambiguous and allowed too many non-coherent parses
 		// moved to __C1_IP
 	// restatement / this woman, whoever she was, was saved
 	// this woman, master of disguise,

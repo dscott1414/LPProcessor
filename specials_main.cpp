@@ -1297,7 +1297,7 @@ int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, w
 			int pmaOffset;
 			if (isPattern && (pmaOffset = im.pma.queryPattern(patternOrWordName, differentiator)) !=-1)
 			{
-				pmaOffset = pmaOffset & ~patternFlag;
+				pmaOffset = pmaOffset & ~matchElement::patternFlag;
 				int patternEnd = wordIndex+im.pma[pmaOffset].len;
 				wstring sentence,originalIWord;
 				bool inPattern=false;
@@ -2103,7 +2103,13 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			return 0;
 		}
 	}
-	vector <wstring> speakingVerbs = { L"said",L"cried",L"called",L"asked",L"answered",L"barked",L"sang",L"whistled",L"shouted",L"whispered",L"laughed",L"begged",L"exclaimed",L"replied",L"reminded",L"screamed",L"responded",L"repeated",L"yelled",L"grumbled",L"agreed",L"ejaculated" };
+	static set <wstring> speakingVerbs = { L"said",L"cried",L"called",L"asked",L"answered",L"barked",L"sang",L"whistled",L"shouted",L"whispered",L"laughed",
+		                                L"begged",L"exclaimed",L"replied",L"reminded",L"screamed",L"responded",L"repeated",L"yelled",L"grumbled",L"agreed",
+																		L"ejaculated",L"blazed",L"chaffed",L"chorused",L"commended",L"dimpled",L"ejaculated",L"flung",L"fumed",L"gazing",L"gibed",L"guffawed",L"hooted",L"implored",L"jeered",
+																		L"joked",L"puffed",L"quizzed",L"raved",L"retaliated",L"scowled",L"seconded",L"shot",L"shrilled",L"smirked",L"surmised",L"sympathized",L"turning",
+																		L"twitted",L"yawned",L"yawped",L"blurted",L"chimed",L"droned",L"grinned",L"groaned",L"grunted",L"mourned",L"propounded",L"sobbed",L"whined",L"expostulated",
+																		L"shrieked",L"stuttered",L"wailed",L"bellowed",L"drawled",L"mused",L"snarled",L"enquired",L"interposed",L"moaned",L"panted",L"stammered",L"exulted",L"roared",
+																		L"commanded",L"chuckled",L"retorted",L"snorted",L"sneered",L"growled",L"burst",L"muttered",L"cried",L"murmured",L"exclaimed",L"thought" };
 	// Stanford POS NN (noun) not found in winnerForms determiner for word the 0002542:[” asked *the* mother . ]
 	if (wordSourceIndex > 1 && primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"determiner") >= 0 && source.m[wordSourceIndex - 2].queryForm(quoteForm) >= 0 &&
 			find(speakingVerbs.begin(), speakingVerbs.end(), source.m[wordSourceIndex-1].word->first) != speakingVerbs.end())
@@ -2113,7 +2119,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	// 3. ST is always wrong when given a phrase like [(ROOT (S ('' '') (S (S (VP (VBD said))) (VP (VBZ Bobtail)))] - LP correctly tags 'Bobtail' as a proper noun
 	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"Proper Noun") >= 0 && source.m[wordSourceIndex - 2].queryForm(quoteForm) >= 0 &&
-		wordSourceIndex > 1 && find(speakingVerbs.begin(), speakingVerbs.end(), source.m[wordSourceIndex - 1].word->first) != speakingVerbs.end())
+		wordSourceIndex > 1 && speakingVerbs.find(source.m[wordSourceIndex - 1].word->first) != speakingVerbs.end())
 	{
 		errorMap[L"LP correct: speaker is proper noun (not verb)"]++;
 		return 0;

@@ -2267,6 +2267,35 @@ bool Source::writeCheck(wstring path)
 	return GetFileAttributesW(path.c_str())!= INVALID_FILE_ATTRIBUTES;
 }
 
+bool Source::writePatternUsage(wstring path,bool zeroOutPatternUsage)
+{
+	path += L".patternUsage";
+	HANDLE fd = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+	if (fd == INVALID_HANDLE_VALUE)
+	{
+		lplog(LOG_ERROR, L"Unable to open source %s - %s", path.c_str(), lastErrorMsg().c_str());
+		return false;
+	}
+	char buffer[MAX_BUF];
+	int where = 0;
+	for (auto p : patterns)
+	{
+		p->copyUsage(buffer, where, MAX_BUF);
+		if (zeroOutPatternUsage)
+			p->zeroUsage();
+		if (!FlushFile(fd, buffer, where)) return false;
+	}
+	if (where)
+	{
+		DWORD dwBytesWritten;
+		if (!WriteFile(fd, buffer, where, &dwBytesWritten, NULL) || where != dwBytesWritten)
+			return false;
+		where = 0;
+	}
+	CloseHandle(fd);
+	return true;
+}
+
 // if returning false, the file will not be closed.
 bool Source::write(wstring path,bool S2, bool makeCopyBeforeSourceWrite)
 { LFS

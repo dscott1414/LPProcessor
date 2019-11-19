@@ -835,11 +835,11 @@ int Source::metaPatternMatch(Source *childSource,vector <cSpaceRelation>::iterat
 		mapPatternQuestion->lplog();
 		lastWhere=whereMNE;
 		vector < vector <tTagLocation> > tagSets;
-		if (childSource->startCollectTags(true,metaNameEquivalenceTagSet,whereMNE,childSource->m[whereMNE].pma[element&~patternFlag].pemaByPatternEnd,tagSets,false,true,L"meta pattern match")>0)
+		if (childSource->startCollectTags(true,metaNameEquivalenceTagSet,whereMNE,childSource->m[whereMNE].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,false,true,L"meta pattern match")>0)
 			for (unsigned int J=0; J<tagSets.size(); J++)
 			{
 				
-				childSource->printTagSet(LOG_WHERE,L"MNE",J,tagSets[J],whereMNE,childSource->m[whereMNE].pma[element&~patternFlag].pemaByPatternEnd);
+				childSource->printTagSet(LOG_WHERE,L"MNE",J,tagSets[J],whereMNE,childSource->m[whereMNE].pma[element&~matchElement::patternFlag].pemaByPatternEnd);
 				// collect tag for each of the rest of the elements
 				unordered_map <int,wstring>::iterator lvmi=mapPatternAnswer->locationToVariableMap.begin();
 				lvmi++;
@@ -885,8 +885,8 @@ int Source::metaPatternMatch(Source *childSource,vector <cSpaceRelation>::iterat
 						continue;
 					// test only for patterns diff 8,9,G
 					vector <tIWMM> parentWords;
-					wstring diff=patterns[childSource->m[whereMNE].pma[element&~patternFlag].getPattern()]->differentiator;
-					lplog(LOG_WHERE,L"%d:meta matched pattern %s[%s]",whereMNE,patterns[childSource->m[whereMNE].pma[element&~patternFlag].getPattern()]->name.c_str(),patterns[childSource->m[whereMNE].pma[element&~patternFlag].getPattern()]->differentiator.c_str());
+					wstring diff=patterns[childSource->m[whereMNE].pma[element&~matchElement::patternFlag].getPattern()]->differentiator;
+					lplog(LOG_WHERE,L"%d:meta matched pattern %s[%s]",whereMNE,patterns[childSource->m[whereMNE].pma[element&~matchElement::patternFlag].getPattern()]->name.c_str(),patterns[childSource->m[whereMNE].pma[element&~matchElement::patternFlag].getPattern()]->differentiator.c_str());
 					vector <wchar_t *> checkVerbs;
 					if (diff==L"8")
 					{
@@ -3120,11 +3120,11 @@ void Source::detectByClausePassive(vector <cSpaceRelation>::iterator sri,cSpaceR
 		  (verbPhraseElement=m[sri->whereSubject].pma.queryPattern(L"__NOUN",L"F"))!=-1)
 	{
 		vector < vector <tTagLocation> > tagSets;
-		startCollectTags(false, subjectVerbRelationTagSet, sri->whereSubject, m[sri->whereSubject].pma[verbPhraseElement&~patternFlag].pemaByPatternEnd, tagSets, true, true,L"passive clause detection");
+		startCollectTags(false, subjectVerbRelationTagSet, sri->whereSubject, m[sri->whereSubject].pma[verbPhraseElement&~matchElement::patternFlag].pemaByPatternEnd, tagSets, true, true,L"passive clause detection");
 		// not reachable?
 			//for (unsigned int J=0; J<tagSets.size(); J++)
 			//{
-			//	printTagSet(LOG_WHERE,L"QR",J,tagSets[J],sri->whereSubject,m[sri->whereSubject].pma[verbPhraseElement&~patternFlag].pemaByPatternEnd);
+			//	printTagSet(LOG_WHERE,L"QR",J,tagSets[J],sri->whereSubject,m[sri->whereSubject].pma[verbPhraseElement&~matchElement::patternFlag].pemaByPatternEnd);
 			//	int nextSubjectTag=-1,whereSubjectTag=findTag(tagSets[J],L"SUBJECT",nextSubjectTag);
 			//	int nextVerbTag=-1,whereVerbTag=findTag(tagSets[J],L"VERB",nextVerbTag);
 			//	int nextObjectTag=-1,whereObjectTag=findTag(tagSets[J],L"OBJECT",nextObjectTag);

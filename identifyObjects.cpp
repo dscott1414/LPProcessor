@@ -16,11 +16,11 @@ bool Source::findSpecificAnaphor(wstring tagName, int where, int element, int &s
 {
 	LFS
 		specificWhere = where;
-	if (!(element&patternFlag)) return true;
+	if (!(element&matchElement::patternFlag)) return true;
 	if (tagName == L"NOUN" || tagName == L"VNOUN" || tagName == L"ADJOBJECT")
 	{
 		vector < vector <tTagLocation> > tagSets;
-		patternMatchArray::tPatternMatch *pm = m[where].pma.content + (element&~patternFlag);
+		patternMatchArray::tPatternMatch *pm = m[where].pma.content + (element&~matchElement::patternFlag);
 		if (!startCollectTags(debugTrace.traceAnaphors, specificAnaphorTagSet, where, pm->pemaByPatternEnd, tagSets, true, false,L"find specific anaphor")) return false;
 		for (unsigned int J = 0; J < tagSets.size(); J++)
 		{
@@ -120,7 +120,7 @@ bool Source::isPleonastic(unsigned int where)
 				if (m[where + 4].pma.queryPattern(L"_INFP") != -1) return true;
 				int tmpPP;
 				if ((tmpPP = m[where + 4].pma.queryPattern(L"_PP")) == -1) return false;
-				return m[where + 4 + m[where + 4].pma[tmpPP&~patternFlag].len].pma.queryPattern(L"_INFP") != -1;
+				return m[where + 4 + m[where + 4].pma[tmpPP&~matchElement::patternFlag].len].pma.queryPattern(L"_INFP") != -1;
 			}
 			return false;
 		}
@@ -132,7 +132,7 @@ bool Source::isPleonastic(unsigned int where)
 		{
 			int tmpPP;
 			if ((tmpPP = m[where + 3].pma.queryPattern(L"_PP")) == -1) return false;
-			return m[where + 3 + m[where + 3].pma[tmpPP&~patternFlag].len].pma.queryPattern(L"_REL1") != -1;
+			return m[where + 3 + m[where + 3].pma[tmpPP&~matchElement::patternFlag].len].pma.queryPattern(L"_REL1") != -1;
 		}
 		return false;
 	}
@@ -1028,7 +1028,7 @@ int Source::identifyObject(int tag, int where, int element, bool adjectival, int
 		// this is to correct parsing errors that inadvertently classify the noun as modifying the ordinal
 		if (where < principalWhere && m[principalWhere].queryWinnerForm(numeralOrdinalForm) >= 0 && m[principalWhere - 1].queryWinnerForm(nounForm) >= 0)
 			principalWhere--;
-		end = (element == -1) ? where + 1 : (element&patternFlag) ? m[where].pma[element&~patternFlag].len + where : where + 1;
+		end = (element == -1) ? where + 1 : (element&matchElement::patternFlag) ? m[where].pma[element&~matchElement::patternFlag].len + where : where + 1;
 		if ((signed)end > where + 1 && m[end - 1].word->first == L"--")
 		{
 			end--; // subtract -- from the end of a noun (see NOUN[E])
@@ -1112,7 +1112,7 @@ int Source::identifyObject(int tag, int where, int element, bool adjectival, int
 	else
 	{
 		isNeuter = true;
-		principalWhere = m[where].pma[element&~patternFlag].len + where - 1;
+		principalWhere = m[where].pma[element&~matchElement::patternFlag].len + where - 1;
 		end = principalWhere + 1;
 		if (m[principalWhere].queryForm(quoteForm) >= 0) principalWhere--;
 		// the(95557) much- heralded “Labour Day,”
@@ -1134,7 +1134,7 @@ int Source::identifyObject(int tag, int where, int element, bool adjectival, int
 				ownerWhere = testOwnerWhere;
 			}
 			int element2 = m[principalWhere].pma.queryPattern(L"__NAMEOWNER");
-			if (element2 != -1) element2 &= ~patternFlag;
+			if (element2 != -1) element2 &= ~matchElement::patternFlag;
 			plural = plural || (m[principalWhere].word->second.inflectionFlags&PLURAL_OWNER) == PLURAL_OWNER ||
 				(element2 >= 0 && patterns[m[principalWhere].pma[element2].getPattern()]->tags.find(PLURAL_TAG) != patterns[m[principalWhere].pma[element2].getPattern()]->tags.end());
 		}
@@ -1173,12 +1173,12 @@ int Source::identifyObject(int tag, int where, int element, bool adjectival, int
 			int nameLen, nelement, ow = cObject::whichOrderWord(m[I].word);
 			if ((nelement = m[I].pma.queryPattern(L"_NAME", nameLen)) != -1 && nameLen >= maxLen)
 			{
-				identifyObject(nameTag, I, nelement | patternFlag, true, -1, where);
+				identifyObject(nameTag, I, nelement | matchElement::patternFlag, true, -1, where);
 				I += nameLen - 1;
 			}
 			else if ((nelement = m[I].pma.queryPattern(L"_NAMEOWNER", nameLen)) != -1)
 			{
-				if (identifyObject(nameTag, I, nelement | patternFlag, true, ownerWhere, where) >= 0 && m[I].getObject() >= 0 && (objects[m[I].getObject()].male || objects[m[I].getObject()].female))
+				if (identifyObject(nameTag, I, nelement | matchElement::patternFlag, true, ownerWhere, where) >= 0 && m[I].getObject() >= 0 && (objects[m[I].getObject()].male || objects[m[I].getObject()].female))
 					ownerWhere = I;
 				I += nameLen - 1;
 				hasDeterminer = true;
@@ -1399,7 +1399,7 @@ int Source::identifyObject(int tag, int where, int element, bool adjectival, int
 		objectClass = META_GROUP_OBJECT_CLASS;
 	if (isBusiness || (objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS && m[principalWhere].queryWinnerForm(businessForm) >= 0))
 		objectClass = NON_GENDERED_BUSINESS_OBJECT_CLASS;
-	cObject thisObject(objectClass, name, where, end, principalWhere, ((element&patternFlag) && element != -1) ? element & ~patternFlag : -1, ownerWhere,
+	cObject thisObject(objectClass, name, where, end, principalWhere, ((element&matchElement::patternFlag) && element != -1) ? element & ~matchElement::patternFlag : -1, ownerWhere,
 		isMale, isFemale, isNeuter, plural, false);
 	if (ownerWhere >= 0)
 	{
@@ -1635,7 +1635,7 @@ void Source::removeWinnerFlag(int where, patternMatchArray::tPatternMatch *pma,i
 						lplog(L"%d:Could not find pattern %s[*][%d].", where - pem->begin, patterns[pem->getChildPattern()]->name.c_str(), pem->getChildLen() + where - pem->begin);
 				}
 				else
-					removeWinnerFlag(where - pem->begin, m[where - pem->begin].pma.content+(pmaOffset&~patternFlag), recursionSpaces+2);
+					removeWinnerFlag(where - pem->begin, m[where - pem->begin].pma.content+(pmaOffset&~matchElement::patternFlag), recursionSpaces+2);
 			}
 		}
 		else 	if (debugTrace.tracePatternElimination)
@@ -1829,7 +1829,7 @@ void Source::identifyObjects(void)
 				nameFound = (patternTagStrings[lastTag = p->objectTag] == L"NAME");
 				maxLen = pma->len;
 				lowestCost = pma->cost;
-				element = PMAElement | patternFlag;
+				element = PMAElement | matchElement::patternFlag;
 			}
 			else if (p->objectTag >= 0 && p->objectContainer && (int)I + pma->len >= maxContainerEnd)
 			{
@@ -1844,7 +1844,7 @@ void Source::identifyObjects(void)
 		// which can mess up speaker resolution 29414:"thought Tuppence to herself"
 		if (saveOverride && lastTag >= 0 && maxLen > 1 && saveOverride->len >= maxLen && saveOverride->cost < lowestCost && m[I].queryWinnerForm(verbForm) >= 0)
 		{
-			cPattern *p = patterns[im->pma[element&~patternFlag].getPattern()];
+			cPattern *p = patterns[im->pma[element&~matchElement::patternFlag].getPattern()];
 			cPattern *vp = patterns[saveOverride->getPattern()];
 			if (debugTrace.traceSpeakerResolution)
 				lplog(LOG_RESOLUTION, L"%06d:%s[%s]*%d(%d,%d) eliminated because of lower cost VERBREL %s[%s]*%d(%d,%d).",

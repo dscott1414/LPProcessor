@@ -1667,7 +1667,7 @@ int Source::detectMetaResponse(int I,int element)
 		if (nextSubSentence+1>=(signed)m.size()) return -1;
 		if (isEOS(nextSubSentence)) break;
 		where=m[nextSubSentence].principalWherePosition;
-		skipResponse=nextSubSentence+m[nextSubSentence].pma[element&~patternFlag].len;
+		skipResponse=nextSubSentence+m[nextSubSentence].pma[element&~matchElement::patternFlag].len;
 	}
 	// tommy felt that[interference,america] Boris had shrugged his[boris] shoulders[boris] as he[boris] answered :
 	if (where<0 || !(m[where].objectRole&SUBJECT_ROLE) || (m[where].objectRole&(OBJECT_ROLE|PREP_OBJECT_ROLE)) || !endsParagraph)
@@ -2781,7 +2781,7 @@ void Source::identifySpeakerGroups()
 			lastVerb=I;
     if ((element=m[I].pma.queryPattern(L"__S1"))!=-1)
     {
-			if (endMetaResponse<I && (endMetaResponse=detectMetaResponse(I,element&~patternFlag))<0)
+			if (endMetaResponse<I && (endMetaResponse=detectMetaResponse(I,element&~matchElement::patternFlag))<0)
 			{
 				lastBeginS1=I;
 				if (debugTrace.traceSpeakerResolution)
@@ -3213,7 +3213,7 @@ void Source::identifySpeakerGroups()
 			// skip / another voice[boris] which Tommy rather thought was that of Boris replied :
 			bool metaResponseDetected=false;
 	    if (nsAfter!=m.size() && (element=m[nsAfter].pma.queryPattern(L"__S1"))!=-1)
-				metaResponseDetected=(nsSkipAfter=detectMetaResponse(nsAfter,element&~patternFlag))>=0;
+				metaResponseDetected=(nsSkipAfter=detectMetaResponse(nsAfter,element&~matchElement::patternFlag))>=0;
 			if (metaResponseDetected) nsAfter=nsSkipAfter;
 			bool block=blockSpeakerGroupCreation(I,quotesSeenSinceLastSentence,nsAfter);
 		  if (debugTrace.traceSpeakerResolution)

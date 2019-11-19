@@ -17,6 +17,10 @@ public:
     unsigned char __patternElementIndex;
     unsigned char getElement(void) { return __patternElement; }
     unsigned char getElementIndex(void) { return __patternElementIndex; }
+		bool getIsPattern()
+		{
+			return PEMAElementMatchedSubIndex & matchElement::patternFlag;
+		}
     void setElementAndIndex(unsigned char patternElement,unsigned char patternElementIndex)
     {
       __patternElement=patternElement;
@@ -87,8 +91,8 @@ public:
 			return temp.c_str();
 		}
     __int64 getRole(__int64 &tagRole); 
-    bool isChildPattern(void) { return (PEMAElementMatchedSubIndex&patternFlag)==patternFlag; }
-    unsigned int getChildPattern(void) { return (PEMAElementMatchedSubIndex&~patternFlag)>>CHILDPATBITS; }
+    bool isChildPattern(void) { return (PEMAElementMatchedSubIndex&matchElement::patternFlag)== matchElement::patternFlag; }
+    unsigned int getChildPattern(void) { return (PEMAElementMatchedSubIndex&~matchElement::patternFlag)>>CHILDPATBITS; }
     unsigned int getChildLen(void) { return PEMAElementMatchedSubIndex&((1<<CHILDPATBITS)-1); }
     unsigned int getChildForm(void) { return PEMAElementMatchedSubIndex; }
     void setSubIndex(unsigned int subIndexPattern,unsigned int endPosition) { PEMAElementMatchedSubIndex=(subIndexPattern <<CHILDPATBITS)+endPosition; }
@@ -113,7 +117,7 @@ public:
 
   static unsigned int PATMASK(int elementMatchedSubIndex)
   {
-    return (unsigned int)((elementMatchedSubIndex&~patternFlag)>>CHILDPATBITS);
+    return (unsigned int)((elementMatchedSubIndex&~matchElement::patternFlag)>>CHILDPATBITS);
   }
   static unsigned int ENDMASK(int elementMatchedSubIndex)
   {

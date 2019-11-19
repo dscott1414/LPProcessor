@@ -7627,7 +7627,7 @@ bool Source::processMetaSpeakerQueryAnswer(int beginQuote,int previousQuote,int 
 { LFS
 	vector < vector<tTagLocation> > tagSets;
 	int element=m[lastQuery].pma.queryPattern(L"_META_SPEAKER_QUERY");
-	if (element==-1 || startCollectTags(debugTrace.traceNameResolution,metaNameEquivalenceTagSet,lastQuery,m[lastQuery].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true,L"name equivalence - meta speaker query answer [query]")==0)
+	if (element==-1 || startCollectTags(debugTrace.traceNameResolution,metaNameEquivalenceTagSet,lastQuery,m[lastQuery].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,true,L"name equivalence - meta speaker query answer [query]")==0)
 		return false;
 	wstring tmpstr,tmpstr2,tmpstr3;
 	tIWMM aboutWord=wNULL;
@@ -7635,19 +7635,19 @@ bool Source::processMetaSpeakerQueryAnswer(int beginQuote,int previousQuote,int 
 	for (unsigned int I=0; I<tagSets.size(); I++)
 	{
 		if (debugTrace.traceNameResolution)
-			printTagSet(LOG_RESOLUTION,L"MSQ",I,tagSets[I],lastQuery,m[lastQuery].pma[element&~patternFlag].pemaByPatternEnd);
+			printTagSet(LOG_RESOLUTION,L"MSQ",I,tagSets[I],lastQuery,m[lastQuery].pma[element&~matchElement::patternFlag].pemaByPatternEnd);
 		if ((aboutTag=findOneTag(tagSets[I],L"NAME_ABOUT",-1))>=0)
 			aboutObject=m[whereAboutObject=tagSets[I][aboutTag].sourcePosition].getObject();
 	}
 	tagSets.clear();
 	element=m[beginQuote+1].pma.queryPattern(L"_META_SPEAKER_QUERY_RESPONSE");
-	if (element==-1 || startCollectTags(debugTrace.traceNameResolution,metaNameEquivalenceTagSet,beginQuote+1,m[beginQuote+1].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true, L"name equivalence - meta speaker query answer [response]")==0)
+	if (element==-1 || startCollectTags(debugTrace.traceNameResolution,metaNameEquivalenceTagSet,beginQuote+1,m[beginQuote+1].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,true, L"name equivalence - meta speaker query answer [response]")==0)
 		return false;
 	int whereAboutResponseObject=-1,aboutResponseObject=-1,aboutResponseTag=-1;
 	for (unsigned int I=0; I<tagSets.size(); I++)
 	{
 		if (debugTrace.traceNameResolution)
-			printTagSet(LOG_RESOLUTION,L"MSQR",I,tagSets[I],beginQuote+1,m[beginQuote+1].pma[element&~patternFlag].pemaByPatternEnd);
+			printTagSet(LOG_RESOLUTION,L"MSQR",I,tagSets[I],beginQuote+1,m[beginQuote+1].pma[element&~matchElement::patternFlag].pemaByPatternEnd);
 		if ((aboutResponseTag=findOneTag(tagSets[I],L"NAME_ABOUT",-1))>=0)
 			aboutResponseObject=m[whereAboutResponseObject=tagSets[I][aboutResponseTag].sourcePosition].getObject();
 		int primaryTag=findOneTag(tagSets[I],L"NAME_PRIMARY",-1),secondaryTag=findOneTag(tagSets[I],L"NAME_SECONDARY",-1);
@@ -8269,12 +8269,12 @@ int Source::letterDetectionBegin(int where,int &whereLetterTo,int &lastLetterBeg
 	int element=-1,maxLen=-1;
   vector < vector <tTagLocation> > tagSets;
 	if (where<(signed)m.size() && (element=m[where].pma.queryPattern(L"_LETTER_BEGIN",maxLen))!=-1 && 
-		  startCollectTags(true,metaSpeakerTagSet,where,m[where].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true,L"letter detection")>0)
+		  startCollectTags(true,metaSpeakerTagSet,where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,true,L"letter detection")>0)
 	{
     for (unsigned int J=0; J<tagSets.size(); J++)
     {
       if (debugTrace.traceNameResolution)
-        printTagSet(LOG_RESOLUTION,L"LDB",J,tagSets[J],where,m[where].pma[element&~patternFlag].pemaByPatternEnd);
+        printTagSet(LOG_RESOLUTION,L"LDB",J,tagSets[J],where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd);
 			int primaryTag;
 			int wherePrimary=tagSets[J][primaryTag=findOneTag(tagSets[J],L"NAME_PRIMARY",-1)].sourcePosition;
 			if (tagSets[J][primaryTag].len>1 && m[wherePrimary].principalWherePosition>=0) // make sure to bypass any adjectives

@@ -228,7 +228,7 @@ int patternElementMatchArray::push_back_unique(int *firstPosition,unsigned int p
 { LFS
   bool isPattern;
   unsigned int referredPattern=-1,endPoint=-1;
-  if (isPattern=(elementMatchedSubIndex&patternFlag)==patternFlag)
+  if (isPattern=(elementMatchedSubIndex&matchElement::patternFlag)== matchElement::patternFlag)
   {
     if (PATMASK(elementMatchedSubIndex)>=patterns.size())
     {
@@ -443,7 +443,7 @@ bool patternElementMatchArray::consolidateWinners(int lastPEMAConsolidationIndex
 	{
 		if (wa[I-lastPEMAConsolidationIndex]>=0)
 		{
-			patterns[content[I].getPattern()]->incrementUse(content[I].__patternElement,content[I].__patternElementIndex);
+			patterns[content[I].getPattern()]->incrementUse(content[I].__patternElement,content[I].__patternElementIndex,content[I].getIsPattern());
 			translate(lastPEMAConsolidationIndex,wa,&content[I].nextByPosition,BY_POSITION);
 			translate(lastPEMAConsolidationIndex,wa,&content[I].nextByPatternEnd,BY_PATTERN_END);
 			translate(lastPEMAConsolidationIndex,wa,&content[I].nextByChildPatternEnd,BY_CHILD_PATTERN_END);

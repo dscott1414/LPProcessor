@@ -603,7 +603,7 @@ bool Source::evaluateTimePattern(int beginObjectPosition,int &maxLen,cTimeInfo &
 			(element=m[beginObjectPosition].pma.queryPattern(L"_ADVERB",maxLen))!=-1)
 	{
 		vector < vector <tTagLocation> > tagSets;
-		if (startCollectTags(false,timeTagSet,beginObjectPosition,m[beginObjectPosition].pma[element&~patternFlag].pemaByPatternEnd,tagSets,true,true,L"time pattern")>0)
+		if (startCollectTags(false,timeTagSet,beginObjectPosition,m[beginObjectPosition].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,true,L"time pattern")>0)
 			for (unsigned int J=0; J<tagSets.size(); J++)
 			{
 				//printTagSet(LOG_TIME,L"LT",J,tagSets[J],beginObjectPosition,m[beginObjectPosition].pma[element&~patternFlag].pemaByPatternEnd);

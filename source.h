@@ -1843,6 +1843,7 @@ public:
 	bool flush(int fd,void *buffer,int &where);
 	bool FlushFile(HANDLE fd, void *buffer, int &where);
 	bool writeCheck(wstring path);
+	bool writePatternUsage(wstring path, bool zeroOutPatternUsage);
 	bool write(wstring file,bool S2, bool saveOld);
 	bool findStart(wstring &buffer,wstring &start,int &repeatStart,wstring &title);
 	bool retrieveText(wstring &path,wstring etext,wstring &start,int &repeatStart,wstring author,wstring title);
