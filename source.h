@@ -3111,6 +3111,7 @@ int wherePrepObject,
 	bool evaluateSubjectVerbAgreement(int verbPosition, int whereSubject, bool &agreementTestable);
 	int queryPattern(int position, wstring pattern, wstring differentiator);
 	int queryPattern(int position, wstring pattern, int &maxEnd);
+	int queryPattern(int position, wstring pattern);
 
 private:
 	wstring primaryQuoteType,secondaryQuoteType;

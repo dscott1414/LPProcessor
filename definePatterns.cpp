@@ -2640,11 +2640,11 @@ int createSecondaryPatterns2(void)
 									 1,L"_ADVERB*3",0,0,1, // I haven't seen you for SIMPLY centuries, my dear. // adverbial use should be rare - prefer adjectives attached to the nouns over adverbs.
 									 1,L"_REL1[*]{PREPOBJECT}",0,1,1,   // my purpose IN (prep) what follows (_REL) (is to try to place him) A6U .
 									 0);
-	//cPattern::create(L"__PP", L"B",
-	//	1, L"_ADVERB", 0, 0, 1, 
-	//	1, L"preposition|to{P}", 0, 1, 1,
-	//	3, L"noun*-2|lunch{PREPOBJECT}", L"noun*-2|breakfast{PREPOBJECT}", L"noun*-2|bed{PREPOBJECT}", 0, 1, 1,
-	//	0);
+	cPattern::create(L"__PP", L"B",
+										1, L"_ADVERB", 0, 0, 1, 
+										1, L"preposition|to{P}", 0, 1, 1,
+										7, L"noun|lunch*-2{PREPOBJECT}", L"noun|breakfast*-2{PREPOBJECT}", L"noun|bed*-2{PREPOBJECT}", L"noun|supper*-2{PREPOBJECT}", L"noun|date*-2{PREPOBJECT}", L"noun|jail*-2{PREPOBJECT}", L"noun|reason*-2{PREPOBJECT}", 0, 1, 1,
+										0);
 	// this was cut because it is too ambiguous and allowed too many non-coherent parses
 		// moved to __C1_IP
 	// restatement / this woman, whoever she was, was saved

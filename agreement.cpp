@@ -1810,19 +1810,30 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 	}
 	// I went to jail with him.
 	if (begin>0 && m[begin-1].word->first==L"to" && m[begin].queryForm(verbForm)>=0 &&
-			!(m[begin].word->second.inflectionFlags&(PLURAL|PLURAL_OWNER)) && m[begin].word->second.usageCosts[m[begin].queryForm(verbForm)]<4)
+			!(m[begin].word->second.inflectionFlags&(PLURAL|PLURAL_OWNER)) && m[begin].word->second.usageCosts[m[begin].queryForm(verbForm)]<5)  
 	{
-		//int toCost[] = { 10,5,4,3 };
-		//int toFormVerbCost = toCost[m[begin].word->second.usageCosts[m[begin].queryForm(verbForm)]];
-		if (debugTrace.traceDeterminer)
+		// from face to face / rock to rock / stone to stone
+		if (begin >= 3 && m[begin - 3].word->first == L"from" && m[begin].word->second.usageCosts[m[begin].queryForm(verbForm)] > 0)
 		{
-			//printTagSet(LOG_INFO, L"_ND2", -1, tagSet, begin, fromPEMAPosition);
-			wstring phrase;
-			lplog(L"%d:%s[%s]:(%s)%s: Noun (%d,%d) has verb form after 'to' - verb cost=%d+4", begin, (fromPEMAPosition<0) ? L"":patterns[pema[fromPEMAPosition].getPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->differentiator.c_str(),m[begin-1].word->first.c_str(),phraseString(begin,end,phrase,true).c_str(), begin, end,
-				m[begin].word->second.usageCosts[m[begin].queryForm(verbForm)]);
+			if (debugTrace.traceDeterminer)
+			{
+				wstring phrase;
+				lplog(L"%d:%s[%s]:(%s)%s: Noun (%d,%d) has 'from' 'to' construction cost-=4", begin, (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->differentiator.c_str(), m[begin - 1].word->first.c_str(), phraseString(begin, end, phrase, true).c_str(), begin, end);
+			}
+			PNC -= 4;
 		}
-		// if verb cost is 3, +3.  if verb cost is 2, +4.  if verb cost is 1, +5, otherwise +10
-		PNC += 10; // toFormVerbCost;
+		else
+		{
+			int toCost[] = { 10,8,7,5,1 };
+			int toFormVerbCost = toCost[m[begin].word->second.usageCosts[m[begin].queryForm(verbForm)]];
+			if (debugTrace.traceDeterminer)
+			{
+				wstring phrase;
+				lplog(L"%d:%s[%s]:(%s)%s: Noun (%d,%d) has verb form after 'to' - verb cost+=%d", begin, (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->differentiator.c_str(), m[begin - 1].word->first.c_str(), phraseString(begin, end, phrase, true).c_str(), begin, end,
+					toFormVerbCost);
+			}
+			PNC += toFormVerbCost; // 10
+		}
 	}
 	//__int64 or=m[begin].objectRole;
 	// Quick as a flash Tommy / in a moment Edith

@@ -2848,10 +2848,18 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"diff: ST says verb when LP says it is a noun but matching to a present participle and an __N1 pattern [acceptable]"]++;
 		return 0; // ST and LP agree
 	}
-	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE && source.m[wordSourceIndex].pma.queryPattern(L"__N1") != -1)
+	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0)
 	{
-		errorMap[L"diff: ST says noun when LP says it is a verb but matching to a present participle and an __N1 pattern [acceptable]"]++;
-		return 0; // ST and LP agree
+		if ((source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE && source.m[wordSourceIndex].pma.queryPattern(L"__N1") != -1)
+		{
+			errorMap[L"diff: ST says noun when LP says it is a verb but matching to a present participle and an __N1 pattern [acceptable]"]++;
+			return 0; // ST and LP agree
+		}
+		if (wordSourceIndex>=1 && source.m[wordSourceIndex-1].word->first==L"to")
+		{
+			errorMap[L"LP correct: ST says noun when LP says it is a verb but before 'to'"]++;
+			return 0; 
+		}
 	}
 	// Rollo met the policeman *walking* towards him
 	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE &&
@@ -2895,11 +2903,26 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			}
 		}
 	}
+	// checked with 100 examples and 1 was incorrect (misparse)
 	if ((primarySTLPMatch == L"noun" || primarySTLPMatch == L"adjective") && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && word.length()>3 && word.substr(word.length()-3)==L"ing")
 	{
-		partofspeech += L"***SP"+ primarySTLPMatch;
-		//errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
-		//return 0;
+		if (primarySTLPMatch == L"noun" && (source.queryPattern(wordSourceIndex, L"__INFP") != -1 ||
+			source.queryPattern(wordSourceIndex, L"_VERB", L"4") != -1 ||
+			source.queryPattern(wordSourceIndex, L"_VERB", L"8") != -1 ||
+			source.queryPattern(wordSourceIndex, L"_ADJECTIVE_AFTER") != -1 ||
+			source.queryPattern(wordSourceIndex, L"__ADJECTIVE", L"2") != -1 ||
+			(source.queryPattern(wordSourceIndex, L"_VERBONGOING") != -1 && source.queryPattern(wordSourceIndex, L"__MODAUX") != -1) ||
+			(source.queryPattern(wordSourceIndex, L"_VERBONGOING") != -1 && source.queryPattern(wordSourceIndex, L"_VERBREL2", L"1") != -1)))
+		{
+			errorMap[L"LP correct: ST says noun when LP says verb participle"]++;
+			return 0;
+		}
+		if (primarySTLPMatch == L"noun" && source.queryPattern(wordSourceIndex, L"__NOUN", L"D") != -1)
+		{
+			errorMap[L"diff: ST says noun and LP says verb in a noun structure"]++;
+			return 0;
+		}
+		partofspeech += L"***NAING";
 	}
 	return -1;
 }

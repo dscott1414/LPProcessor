@@ -2174,9 +2174,19 @@ int Source::queryPattern(int position, wstring pattern, int &maxEnd)
 int Source::queryPattern(int position, wstring pattern, wstring differentiator)
 {
 	LFS
-	for (int nextByPosition = m[position].beginPEMAPosition; nextByPosition != -1; nextByPosition = pema[nextByPosition].nextByPosition)
-		if (patterns[pema[nextByPosition].getPattern()]->name == pattern && patterns[pema[nextByPosition].getPattern()]->differentiator == differentiator)
-			return nextByPosition;
+		for (int nextByPosition = m[position].beginPEMAPosition; nextByPosition != -1; nextByPosition = pema[nextByPosition].nextByPosition)
+			if (patterns[pema[nextByPosition].getPattern()]->name == pattern && patterns[pema[nextByPosition].getPattern()]->differentiator == differentiator)
+				return nextByPosition;
+	return -1;
+}
+
+// exactly like pema::queryPattern
+int Source::queryPattern(int position, wstring pattern)
+{
+	LFS
+		for (int nextByPosition = m[position].beginPEMAPosition; nextByPosition != -1; nextByPosition = pema[nextByPosition].nextByPosition)
+			if (patterns[pema[nextByPosition].getPattern()]->name == pattern)
+				return nextByPosition;
 	return -1;
 }
 
