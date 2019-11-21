@@ -2128,7 +2128,8 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	// Stanford POS JJ(adjective) not found in winnerForms verb for word ejaculated 0002658:[” *ejaculated* Mrs.Ross .]
 	if ((primarySTLPMatch == L"adjective" || primarySTLPMatch == L"Proper Noun" || primarySTLPMatch == L"noun") &&
 		source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && source.m[wordSourceIndex - 1].queryForm(quoteForm) >= 0 && 
-		(source.m[wordSourceIndex + 1].queryWinnerForm(L"Proper Noun") >= 0 || source.m[wordSourceIndex + 1].word->first==L"the") &&
+		(source.m[wordSourceIndex + 1].queryWinnerForm(L"Proper Noun") >= 0 || source.m[wordSourceIndex + 1].word->first==L"the" || 
+		 source.m[wordSourceIndex + 1].queryWinnerForm(L"honorific") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"honorific_abbreviation") >= 0) &&
 		wordSourceIndex > 1 && find(speakingVerbs.begin(), speakingVerbs.end(), word) != speakingVerbs.end())
 	{
 		errorMap[L"LP correct: speaking verb is not adjective, noun or Proper Noun"]++;
@@ -2914,7 +2915,20 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			(source.queryPattern(wordSourceIndex, L"_VERBONGOING") != -1 && source.queryPattern(wordSourceIndex, L"__MODAUX") != -1) ||
 			(source.queryPattern(wordSourceIndex, L"_VERBONGOING") != -1 && source.queryPattern(wordSourceIndex, L"_VERBREL2", L"1") != -1)))
 		{
-			errorMap[L"LP correct: ST says noun when LP says verb participle"]++;
+			errorMap[L"LP correct: ST says noun when LP says verb participle in a structure consonant with a verb"]++;
+			return 0;
+		}
+		//int w;
+		if (primarySTLPMatch == L"adjective" && (
+			source.queryPattern(wordSourceIndex, L"__INFP") != -1 ||
+			source.queryPattern(wordSourceIndex, L"_VERB", L"4") != -1 ||
+			source.queryPattern(wordSourceIndex, L"_VERB", L"8") != -1 ||			
+			source.queryPattern(wordSourceIndex, L"__NOUN", L"D") != -1 || 
+			//(w=source.queryPattern(wordSourceIndex, L"__NOUN", L"2")) != -1 && source.pema[w].end==1) ||
+			(source.queryPattern(wordSourceIndex, L"_VERBONGOING") != -1 && source.queryPattern(wordSourceIndex, L"__MODAUX") != -1) ||
+			(source.queryPattern(wordSourceIndex, L"_VERBONGOING") != -1 && source.queryPattern(wordSourceIndex, L"_VERBREL2", L"1") != -1)))
+		{
+			errorMap[L"LP correct: ST says adjective when LP says verb participle in a structure consonant with a verb"]++;
 			return 0;
 		}
 		if (primarySTLPMatch == L"noun" && source.queryPattern(wordSourceIndex, L"__NOUN", L"D") != -1)
@@ -2922,7 +2936,13 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"diff: ST says noun and LP says verb in a noun structure"]++;
 			return 0;
 		}
-		partofspeech += L"***NAING";
+		if (primarySTLPMatch == L"adjective" && (source.queryPattern(wordSourceIndex, L"_ADJECTIVE_AFTER") != -1 ||
+			source.queryPattern(wordSourceIndex, L"__ADJECTIVE", L"2") != -1))
+		{
+			errorMap[L"diff: ST says adjective and LP says verb in a adjective structure"]++;
+			return 0;
+		}
+		//partofspeech += L"***NAVING";
 	}
 	return -1;
 }
