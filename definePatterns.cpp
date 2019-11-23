@@ -1006,7 +1006,7 @@ void createInfinitivePhrases(void)
 	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"B",
 		                1,L"to{ITO}",0,1,1,
 										1,L"_ADVERB",0,0,1,
-										2,L"verbverb{vS:V_HOBJECT:V_AGREE}", L"have|have{vS:V_HOBJECT:V_AGREE}", VERB_PRESENT_FIRST_SINGULAR,1,1,
+										2,L"verbverb{vS:V_HOBJECT:V_AGREE}", L"have{vS:V_HOBJECT:V_AGREE}", VERB_PRESENT_FIRST_SINGULAR,1,1,
 										2,L"_NOUN_OBJ{HOBJECT}",L"__NOUN[*]{HOBJECT}",0,0,1,
 										2,L"_ADVERB",L"_PP",0,0,2,
 										5,L"verb{vS:V_AGREE:V_OBJECT}",L"does{vS:V_AGREE:V_OBJECT}",L"does_negation{vS:not:V_AGREE:V_OBJECT}",
