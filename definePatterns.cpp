@@ -858,7 +858,7 @@ int createBareInfinitives(void)
 											L"have{vS:V_AGREE:V_OBJECT}",L"have_negation{vS:not:V_AGREE:V_OBJECT}",L"be{id:V_AGREE:V_OBJECT}", VERB_PRESENT_FIRST_SINGULAR,1,1,
 										0);
 	cPattern::create(L"_VERB_BARE_INF{VERB}",L"A",
-										1,L"verb|have{vS:V_HOBJECT:V_AGREE}",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_SECOND_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_PLURAL,1,1,
+										1,L"have|have{vS:V_HOBJECT:V_AGREE}",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_SECOND_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_PLURAL,1,1,
 										2,L"_NOUN_OBJ{HOBJECT}",L"__NOUN[*]{HOBJECT}",0,1,1,
 										2,L"_ADVERB",L"_PP",0,0,2,
 										5,L"verb{vS:V_AGREE:V_OBJECT}",L"does{vS:V_AGREE:V_OBJECT}",L"does_negation{vS:not:V_AGREE:V_OBJECT}",
@@ -872,7 +872,7 @@ int createBareInfinitives(void)
 											L"have{vS:V_AGREE:V_OBJECT}",L"have_negation{vS:not:V_AGREE:V_OBJECT}", L"be{id:V_AGREE:V_OBJECT}", VERB_PRESENT_FIRST_SINGULAR,1,1,
 										0);
 	cPattern::create(L"_VERB_BARE_INF{VERB}",L"B",
-										1,L"verb|had{past:V_HOBJECT:V_AGREE}",VERB_PAST|VERB_PAST_THIRD_SINGULAR|VERB_PAST_PLURAL,1,1,
+										1,L"have|had{past:V_HOBJECT:V_AGREE}",VERB_PAST|VERB_PAST_THIRD_SINGULAR|VERB_PAST_PLURAL,1,1,
 										2,L"_NOUN_OBJ{HOBJECT}",L"__NOUN[*]{HOBJECT}",0,1,1,
 										2,L"_ADVERB",L"_PP",0,0,2,
 										5,L"verb{vS:V_AGREE:V_OBJECT}",L"does{vS:V_AGREE:V_OBJECT}",L"does_negation{vS:not:V_AGREE:V_OBJECT}",
@@ -882,7 +882,7 @@ int createBareInfinitives(void)
 										1,L"verbverb{past:V_HOBJECT:V_AGREE}",VERB_PAST|VERB_PAST_THIRD_SINGULAR|VERB_PAST_PLURAL,1,1,
 										1,L"adverb|rather",0,1,1,
 										1,L"preposition|than",0,1,1,
-										2,L"verbverb",L"verb|had",VERB_PAST|VERB_PAST_THIRD_SINGULAR|VERB_PAST_PLURAL,1,1,
+										2,L"verbverb",L"have|had",VERB_PAST|VERB_PAST_THIRD_SINGULAR|VERB_PAST_PLURAL,1,1,
 										2,L"_NOUN_OBJ{HOBJECT}",L"__NOUN[*]{HOBJECT}",0,0,1,
 										2,L"_ADVERB",L"_PP",0,0,2,
 										5,L"verb{vS:V_AGREE:V_OBJECT}",L"does{vS:V_AGREE:V_OBJECT}",L"does_negation{vS:not:V_AGREE:V_OBJECT}",
@@ -892,7 +892,7 @@ int createBareInfinitives(void)
 	// you will/would make them protect you ?
 	cPattern::create(L"_VERB_BARE_INF{VERB}",L"3",
 										1,L"_COND",0,1,1,
-										2,L"verbverb{vS:V_HOBJECT}",L"verb|have{vS:V_HOBJECT}",VERB_PRESENT_FIRST_SINGULAR,1,1,
+										2,L"verbverb{vS:V_HOBJECT}",L"have|have{vS:V_HOBJECT}",VERB_PRESENT_FIRST_SINGULAR,1,1,
 										2,L"_NOUN_OBJ{HOBJECT}",L"__NOUN[*]{HOBJECT}",0,0,1,
 										2,L"_ADVERB",L"_PP",0,0,2,
 										6,L"verb{vS:V_AGREE:V_OBJECT}",L"does{vS:V_AGREE:V_OBJECT}",L"does_negation{vS:not:V_AGREE:V_OBJECT}",
@@ -902,7 +902,7 @@ int createBareInfinitives(void)
 	// I do make you go  | I don't make you go - matches VERB 3
 	cPattern::create(L"_VERB_BARE_INF{VERB}",L"4",
 										1,L"_DO{imp}",0,1,1,
-										2,L"verbverb{vS:V_HOBJECT}",L"verb|have{vS:V_HOBJECT}",VERB_PRESENT_FIRST_SINGULAR,1,1,
+										2,L"verbverb{vS:V_HOBJECT}",L"have|have{vS:V_HOBJECT}",VERB_PRESENT_FIRST_SINGULAR,1,1,
 										2,L"_NOUN_OBJ{HOBJECT}",L"__NOUN[*]{HOBJECT}",0,0,1,
 										2,L"_ADVERB",L"_PP",0,0,2,
 										6,L"verb{vS:V_AGREE:V_OBJECT}",L"does{vS:V_AGREE:V_OBJECT}",L"does_negation{vS:not:V_AGREE:V_OBJECT}",
@@ -911,7 +911,7 @@ int createBareInfinitives(void)
 	// I have/had made you do that  / had made L"his indecision of character" be
 	cPattern::create(L"_VERB_BARE_INF{VERB}",L"5",
 										1,L"_HAVE",0,1,1,
-										2,L"verbverb{vB:V_HOBJECT}",L"verb|had{vS:V_HOBJECT}",VERB_PAST_PARTICIPLE,1,1,
+										2,L"verbverb{vB:V_HOBJECT}",L"have|had{vS:V_HOBJECT}",VERB_PAST_PARTICIPLE,1,1,
 										2,L"_NOUN_OBJ{HOBJECT}",L"__NOUN[*]{HOBJECT}",0,0,1,
 										2,L"_ADVERB",L"_PP",0,0,2,
 										6,L"verb{vS:V_AGREE:V_OBJECT}",L"does{vS:V_AGREE:V_OBJECT}",L"does_negation{vS:not:V_AGREE:V_OBJECT}",
@@ -951,7 +951,7 @@ int createBareInfinitives(void)
 	cPattern::create(L"_VERB_BARE_INF{VERB}",L"7",
 										1,L"_COND",0,1,1,
 										1,L"_HAVE{_BLOCK}",0,1,1,
-										2,L"verbverb{vAB:V_HOBJECT}",L"verb|had{vAB:V_HOBJECT}",VERB_PAST_PARTICIPLE,1,1,
+										2,L"verbverb{vAB:V_HOBJECT}",L"have|had{vAB:V_HOBJECT}",VERB_PAST_PARTICIPLE,1,1,
 										2,L"_NOUN_OBJ{HOBJECT}",L"__NOUN[*]{HOBJECT}",0,0,1,
 										2,L"_ADVERB",L"_PP",0,0,2,
 										6,L"verb{vS:V_AGREE:V_OBJECT}",L"does{vS:V_AGREE:V_OBJECT}",L"does_negation{vS:not:V_AGREE:V_OBJECT}",
@@ -1006,7 +1006,7 @@ void createInfinitivePhrases(void)
 	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"B",
 		                1,L"to{ITO}",0,1,1,
 										1,L"_ADVERB",0,0,1,
-										1,L"verbverb{vS:V_HOBJECT:V_AGREE}",VERB_PRESENT_FIRST_SINGULAR,1,1,
+										2,L"verbverb{vS:V_HOBJECT:V_AGREE}", L"have|have{vS:V_HOBJECT:V_AGREE}", VERB_PRESENT_FIRST_SINGULAR,1,1,
 										2,L"_NOUN_OBJ{HOBJECT}",L"__NOUN[*]{HOBJECT}",0,0,1,
 										2,L"_ADVERB",L"_PP",0,0,2,
 										5,L"verb{vS:V_AGREE:V_OBJECT}",L"does{vS:V_AGREE:V_OBJECT}",L"does_negation{vS:not:V_AGREE:V_OBJECT}",
@@ -1017,7 +1017,8 @@ void createInfinitivePhrases(void)
 	// to L"infinitive" phrase as a noun object
 	// to "send him" / to "send him and Bob"
 	// simple infinitive nonfinite verb phrase Quirk CGEL (3.56) vIS
-	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"2",1,L"to{ITO}",0,1,1,
+	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"2",
+		                1,L"to{ITO}",0,1,1,
 										1,L"quotes",OPEN_INFLECTION,1,1,
 										1,L"_ADVERB",0,0,1,
 										1,L"verbal_auxiliary{V_AGREE}",0,0,1, // to help eat this?
@@ -1058,7 +1059,8 @@ void createInfinitivePhrases(void)
 												0);
 	// to have sent him / to have sent him and Bob [PAST]
 	// L"B" infinitive nonfinite verb phrase Quirk CGEL (3.56)
-	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"3",1,L"to{ITO}",0,1,1,
+	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"3",
+		                1,L"to{ITO}",0,1,1,
 										1,L"_ADVERB",0,0,1,
 										1,L"_HAVE{_BLOCK}",0,1,1,
 										1,L"_VERBPASTPART{vB}",0,1,1,
@@ -1067,13 +1069,15 @@ void createInfinitivePhrases(void)
 										0);
 	/*THINKSAY*/
 	// goes with next INFP [PAST SUB]
-	cPattern::create(L"__INFP3TSUB{IVERB:_BLOCK}",L"",1,L"coordinator{ITO}",0,1,1,
-												1,L"_ADVERB",0,0,1,
-												1,L"_THINKPASTPART{vB}",0,1,1,
-												1,L"__S1{OBJECT:EVAL:_BLOCK}",0,1,1,
-												0);
+	cPattern::create(L"__INFP3TSUB{IVERB:_BLOCK}",L"",
+		                1,L"coordinator{ITO}",0,1,1,
+										1,L"_ADVERB",0,0,1,
+										1,L"_THINKPASTPART{vB}",0,1,1,
+										1,L"__S1{OBJECT:EVAL:_BLOCK}",0,1,1,
+										0);
 	// to have thought he wanted to go / to have thought he wanted this and she didn't stop him. [PAST]
-	cPattern::create(L"__INFPT{IVERB:_BLOCK}",L"3",1,L"to{ITO}",0,1,1,
+	cPattern::create(L"__INFPT{IVERB:_BLOCK}",L"3",
+		                1,L"to{ITO}",0,1,1,
 										1,L"_ADVERB",0,0,1,
 										1,L"_HAVE{_BLOCK}",0,1,1,
 										1,L"_THINKPASTPART{vB}",0,1,1,
@@ -1081,13 +1085,15 @@ void createInfinitivePhrases(void)
 										1,L"__INFP3TSUB",0,0,1,
 										0);
 	// goes with next INFP 
-	cPattern::create(L"__INFP4SUB{IVERB:_BLOCK}",L"",1,L"coordinator{ITO}",0,1,1,
-												1,L"verb{vC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
-												3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1,
-												0);
+	cPattern::create(L"__INFP4SUB{IVERB:_BLOCK}",L"",
+		                1,L"coordinator{ITO}",0,1,1,
+										1,L"verb{vC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
+										3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1,
+										0);
 	// to be sending him / to be sending him and Bob [PRESENT]
 	// L"C" infinitive nonfinite verb phrase Quirk CGEL (3.56)
-	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"4",1,L"to{ITO}",0,1,1,
+	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"4",
+		                1,L"to{ITO}",0,1,1,
 										1,L"_ADVERB",0,0,1,
 										1,L"_BE{_BLOCK}",0,1,1,
 										1,L"verb{vC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
@@ -1097,10 +1103,10 @@ void createInfinitivePhrases(void)
 	/*THINKSAY*/
 	// goes with next INFP [PRESENT SUB]
 	cPattern::create(L"__INFP4TSUB{IVERB:_BLOCK}",L"",
-												1,L"coordinator{ITO}",0,1,1,
-												1,L"think{vC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
-												1,L"__S1{OBJECT:EVAL:_BLOCK}",0,1,1,
-												0);
+										1,L"coordinator{ITO}",0,1,1,
+										1,L"think{vC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
+										1,L"__S1{OBJECT:EVAL:_BLOCK}",0,1,1,
+										0);
 	// to be thinking he should go / to be thinking he should go and she should too. [PRESENT]
 	// L"C" infinitive nonfinite verb phrase Quirk CGEL (3.56) 
 	cPattern::create(L"__INFPT{IVERB:_BLOCK}",L"4",
@@ -1113,17 +1119,18 @@ void createInfinitivePhrases(void)
 										0);
 	// goes with next INFP [PRESENT SUB]
 	cPattern::create(L"__INFP5SUB{IVERB:_BLOCK}",L"",
-												1,L"coordinator{ITO}",0,1,1,
-												1,L"_ADVERB",0,0,1,
-												// encourage __INFP5SUB to stick closely together / I was just in time to see him ring the bell and get admitted to the house
-												2,L"_BE*-1{_BLOCK}",L"verb|get*-1{V_AGREE:V_OBJECT}",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_PLURAL,1,1,
-												1,L"verb{vD:V_OBJECT}",VERB_PAST_PARTICIPLE,1,1,
-												3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1,
-												0);
+										1,L"coordinator{ITO}",0,1,1,
+										1,L"_ADVERB",0,0,1,
+										// encourage __INFP5SUB to stick closely together / I was just in time to see him ring the bell and get admitted to the house
+										2,L"_BE*-1{_BLOCK}",L"verb|get*-1{V_AGREE:V_OBJECT}",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_PLURAL,1,1,
+										1,L"verb{vD:V_OBJECT}",VERB_PAST_PARTICIPLE,1,1,
+										3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1,
+										0);
 	// PASSIVE
 	// to be blended / to get admitted [PRESENT]
 	// "D" infinitive nonfinite verb phrase Quirk CGEL (3.56)
-	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"5",1,L"to{ITO}",0,1,1,
+	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"5",
+		                1,L"to{ITO}",0,1,1,
 										1,L"_ADVERB",0,0,1,
 										2,L"_BE{_BLOCK}",L"verb|get{V_AGREE:V_OBJECT}",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_PLURAL,1,1,
 										2,L"verb{vD:V_OBJECT}",L"does{vD:V_OBJECT}",VERB_PAST_PARTICIPLE,1,1,
@@ -1133,7 +1140,8 @@ void createInfinitivePhrases(void)
 
 	// to have been sending him 
 	// L"BC" infinitive nonfinite verb phrase Quirk CGEL (3.56)
-	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"6",1,L"to{ITO}",0,1,1,
+	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"6",
+		                 1,L"to{ITO}",0,1,1,
 										 1,L"_ADVERB",0,0,1,
 										 1,L"_HAVE{_BLOCK}",0,1,1,
 										 1,L"_BEEN",0,1,1,
@@ -1142,7 +1150,8 @@ void createInfinitivePhrases(void)
 										 0);
 	// to have been sent 
 	// L"BD" infinitive nonfinite verb phrase Quirk CGEL (3.56)
-	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"7",1,L"to{ITO}",0,1,1,
+	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"7",
+		                1,L"to{ITO}",0,1,1,
 										1,L"_ADVERB",0,0,1,
 										1,L"_HAVE{_BLOCK}",0,1,1,
 										1,L"_BEEN",0,1,1,
@@ -1152,7 +1161,8 @@ void createInfinitivePhrases(void)
 										0);
 	// to be being examined
 	// L"CD" infinitive nonfinite verb phrase Quirk CGEL (3.56)
-	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"8",1,L"to{ITO}",0,1,1,
+	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"8",
+		                1,L"to{ITO}",0,1,1,
 										1,L"_ADVERB",0,0,1,
 										1,L"_BE{_BLOCK}",0,1,1,
 										1,L"_BEING{_BLOCK}",0,1,1,
@@ -1162,7 +1172,8 @@ void createInfinitivePhrases(void)
 										0);
 	// to have been being examined
 	// L"BCD" infinitive nonfinite verb phrase Quirk CGEL (3.56)
-	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"9",1,L"to{ITO}",0,1,1,
+	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"9",
+		                1,L"to{ITO}",0,1,1,
 										1,L"_ADVERB",0,0,1,
 										1,L"_HAVE{_BLOCK}",0,1,1,
 										1,L"_BEEN",0,1,1,
@@ -1173,7 +1184,8 @@ void createInfinitivePhrases(void)
 										0);
 	// to being examined
 	// L"vrD" infinitive nonfinite verb phrase Quirk CGEL (3.56)
-	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"A",1,L"to{ITO}",0,1,1,
+	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"A",
+		                1,L"to{ITO}",0,1,1,
 										1,L"_ADVERB",0,0,1,
 										4,L"_NOUN_OBJ{IOBJECT}",L"__NOUN[*]{IOBJECT}", // _NOUN* includes NOUN[D] and NOUN[E]
 											L"demonstrative_determiner{IOBJECT}",L"possessive_determiner{IOBJECT}",0,0,1, // there was never much chance to their being given me

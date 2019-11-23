@@ -1840,7 +1840,7 @@ unordered_map<wstring, vector <wstring> > maxentAssociationMap =
 	{ L"determiner",{ L"demonstrative_determiner",L"no",L"quantifier",L"predeterminer"} },
 	{ L"predeterminer",{ L"quantifier" } },
 	{ L"interjection",{ L"no",L"politeness_discourse_marker"} },
-	{ L"relativizer", { L"what" } },
+	{ L"relativizer", { L"what",L"startquestion" } },
 	{ L"particle", { L"adverb",L"preposition",L"quantifier" } }, // LP usually treats particles as adverbs, not sure whether this is strictly correct, but it makes sense to me.
 	// include possible subclasses
 	{ L"verb", { L"verbverb",L"think",L"have",L"have_negation",L"is",L"is_negation",L"does",L"does_negation",L"be",L"been",L"modal_auxiliary",L"negation_modal_auxiliary",L"future_modal_auxiliary",L"negation_future_modal_auxiliary",L"being"} }, // feel, see, watch, hear, tell etc // fancy, say (thinksay verbs)
@@ -2103,7 +2103,8 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			return 0;
 		}
 	}
-	static set <wstring> speakingVerbs = { L"said",L"cried",L"called",L"asked",L"answered",L"barked",L"sang",L"whistled",L"shouted",L"whispered",L"laughed",
+	static set <wstring> speakingVerbs = { L"said",L"cried",L"called",L"asked",L"answered",L"barked",L"sang",L"whistled",L"shouted",L"whispered",L"laughed",L"added",L"announced",L"continued",L"inquired",
+																		L"observed",L"questioned",
 		                                L"begged",L"exclaimed",L"replied",L"reminded",L"screamed",L"responded",L"repeated",L"yelled",L"grumbled",L"agreed",
 																		L"ejaculated",L"blazed",L"chaffed",L"chorused",L"commended",L"dimpled",L"ejaculated",L"flung",L"fumed",L"gazing",L"gibed",L"guffawed",L"hooted",L"implored",L"jeered",
 																		L"joked",L"puffed",L"quizzed",L"raved",L"retaliated",L"scowled",L"seconded",L"shot",L"shrilled",L"smirked",L"surmised",L"sympathized",L"turning",
@@ -2127,8 +2128,9 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	// 4. ST is always wrong when given a phrase like [(ROOT (S ('' '') (S (S (VP (VBD said))) (VP (VBZ Bobtail)))] - LP correctly tags 'said' as a verb
 	// Stanford POS JJ(adjective) not found in winnerForms verb for word ejaculated 0002658:[” *ejaculated* Mrs.Ross .]
 	if ((primarySTLPMatch == L"adjective" || primarySTLPMatch == L"Proper Noun" || primarySTLPMatch == L"noun") &&
-		source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && source.m[wordSourceIndex - 1].queryForm(quoteForm) >= 0 && 
-		(source.m[wordSourceIndex + 1].queryWinnerForm(L"Proper Noun") >= 0 || source.m[wordSourceIndex + 1].word->first==L"the" || 
+		(source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"think") >= 0 ) && 
+		source.m[wordSourceIndex - 1].queryForm(quoteForm) >= 0 &&
+		(source.m[wordSourceIndex + 1].queryWinnerForm(L"Proper Noun") >= 0 || source.m[wordSourceIndex + 1].word->first == L"the" || source.m[wordSourceIndex + 1].word->first == L"a" || source.m[wordSourceIndex + 1].word->first == L"one" ||
 		 source.m[wordSourceIndex + 1].queryWinnerForm(L"honorific") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"honorific_abbreviation") >= 0) &&
 		wordSourceIndex > 1 && find(speakingVerbs.begin(), speakingVerbs.end(), word) != speakingVerbs.end())
 	{
@@ -2378,6 +2380,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		wordSourceIndex + 1 < source.m.size() &&
 		(source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0 ||
 			source.m[wordSourceIndex + 1].queryWinnerForm(L"determiner") >= 0 ||
+			source.m[wordSourceIndex + 1].queryWinnerForm(L"possessive_determiner") >= 0 ||
 			source.m[wordSourceIndex + 1].queryWinnerForm(L"personal_pronoun_nominative") >= 0 ||
 			source.m[wordSourceIndex + 1].queryWinnerForm(L"coordinator") >= 0 ||
 			source.m[wordSourceIndex + 1].queryWinnerForm(L"indefinite_pronoun") >= 0
@@ -2385,6 +2388,20 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	{
 		errorMap[L"LP correct: word 'her': [before an adverb, determiner, personal_pronoun_nominative, coordinator, indefinite_pronoun] ST says possessive_determiner LP says personal_pronoun_accusative"]++;
 		return 0;
+	}
+	if (word == L"her" && primarySTLPMatch == L"possessive_determiner" && source.m[wordSourceIndex].queryWinnerForm(L"personal_pronoun_accusative") >= 0
+		&& source.m[wordSourceIndex].pma.queryPattern(L"__NOUN",L"C") != -1 && source.m[wordSourceIndex].pma.queryPattern(L"__ALLOBJECTS_2") != -1)
+	{
+		partofspeech += L"***OBJECT2HER";
+		//errorMap[L"LP correct: word 'her': [before an adverb, determiner, personal_pronoun_nominative, coordinator, indefinite_pronoun] ST says possessive_determiner LP says personal_pronoun_accusative"]++;
+		//return 0;
+	}
+	// 30. 'her' when in the beginning of a __NOUN[2]
+	if (word == L"her" && source.m[wordSourceIndex].queryWinnerForm(L"possessive_determiner") >= 0 && source.m[wordSourceIndex].pma.queryPattern(L"__NOUN") != -1)
+	{
+		partofspeech += L"***HER";
+		//errorMap[L"LP correct: word 'her': [before an adverb, determiner, personal_pronoun_nominative, coordinator, indefinite_pronoun] ST says possessive_determiner LP says personal_pronoun_accusative"]++;
+		//return 0;
 	}
 	// 31. 'that' when followed by an _S1 is a relativizer, not a preposition (ST wrong)
 	if (word == L"that")
@@ -2707,6 +2724,16 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: word 'to-night': ST says " + primarySTLPMatch + L" but LP says adverb"]++;
 		return 0;
 	}
+	if (word == L"well" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && source.m[wordSourceIndex + 1].word->first == L"-")
+	{
+		errorMap[L"LP correct: word 'well': ST says " + primarySTLPMatch + L" but LP says adverb"]++;
+		return 0;
+	}
+	if (word == L"well" && source.m[wordSourceIndex].queryWinnerForm(L"interjection") >= 0)
+	{
+		errorMap[L"LP correct: word 'well': ST says " + primarySTLPMatch + L" but LP says interjection"]++;
+		return 0;
+	}
 	if (word == L"either" && (source.m[wordSourceIndex].pma.queryPattern(L"__NOUN", L"O") !=-1 || source.m[wordSourceIndex].pma.queryPattern(L"_VERBPRESENTC", L"O") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"_VERBPAST", L"O") != -1))
 	{
 		errorMap[L"LP correct: word 'either': ST says " + primarySTLPMatch + L" but LP says quantifier"]++;
@@ -2944,6 +2971,69 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		}
 		//partofspeech += L"***NAVING";
 	}
+	// this is correct exceot for rare parse structure: I would have done it *again* here had I thought you were coming to try to win her heart
+	if (source.m[wordSourceIndex].queryWinnerForm(L"conjunction") >= 0 && source.m[wordSourceIndex + 1].pma.queryPattern(L"__S1") != -1)
+	{
+		errorMap[L"LP correct: ST says " + primarySTLPMatch + L" and LP says conjunction"]++;
+		return 0;
+	}
+	if ((word == L"upstairs" || word == L"downstairs") && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && primarySTLPMatch == L"noun")
+	{
+		errorMap[L"LP correct: word 'upstairs' or 'downstairs': ST says noun LP says adverb"]++;
+		return 0;
+	}
+	if (word == L"yer" || word == L"youse" || word == L"em" || word == L"ourselves")
+	{
+		errorMap[L"LP correct '"+word+L"': incorrect noun usage"]++;
+		return 0;
+	}
+	if (partofspeech == L"VBZ" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_THIRD_SINGULAR) != VERB_PRESENT_THIRD_SINGULAR)
+		partofspeech += L"**VBWRONG";
+	if (partofspeech == L"VBP" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_FIRST_SINGULAR) != VERB_PRESENT_FIRST_SINGULAR)
+		partofspeech += L"**VBWRONG";
+	if (partofspeech == L"VBD" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) != VERB_PAST)
+		partofspeech += L"**VBWRONG";
+	if (partofspeech == L"VBN" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST_PARTICIPLE) != VERB_PAST_PARTICIPLE)
+		partofspeech += L"**VBWRONG";
+	if (partofspeech == L"VBG" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) != VERB_PRESENT_PARTICIPLE)
+	{
+		if (word == L"bleeding")
+		{
+			errorMap[L"LP correct '" + word + L"': incorrect verb usage"]++;
+			return 0;
+		}
+		partofspeech += L"**VBWRONG";
+	}
+	if (partofspeech == L"NN" && (source.m[wordSourceIndex].word->second.inflectionFlags&SINGULAR) != SINGULAR)
+	{
+		if (source.m[wordSourceIndex].queryWinnerForm(L"interjection") >= 0 && primarySTLPMatch == L"noun")
+		{
+			errorMap[L"LP correct: ST says noun LP says interjection"]++;
+			return 0;
+		}
+		partofspeech += L"**NWRONG";
+	}
+	if (partofspeech == L"NNS" && (source.m[wordSourceIndex].word->second.inflectionFlags&PLURAL) != PLURAL)
+	{
+		if (word == L"semi" || word == L"but" || word == L"oh" || word == L"hey" || word == L"yes" || source.m[wordSourceIndex].queryWinnerForm(L"reflexive_pronoun") >= 0)
+		{
+			errorMap[L"LP correct '" + word + L"': incorrect noun usage"]++;
+			return 0;
+		}
+		partofspeech += L"**NWRONG";
+	}
+	if (partofspeech == L"JJ" && (source.m[wordSourceIndex].word->second.inflectionFlags&(ADJECTIVE_COMPARATIVE | ADJECTIVE_SUPERLATIVE)) != 0)
+		partofspeech += L"**JJWRONG";
+	if (partofspeech == L"JJR" && (source.m[wordSourceIndex].word->second.inflectionFlags&(ADJECTIVE_COMPARATIVE | ADJECTIVE_SUPERLATIVE)) != ADJECTIVE_COMPARATIVE)
+		partofspeech += L"**JJWRONG";
+	if (partofspeech == L"JJS" && (source.m[wordSourceIndex].word->second.inflectionFlags&(ADJECTIVE_COMPARATIVE | ADJECTIVE_SUPERLATIVE)) != ADJECTIVE_SUPERLATIVE)
+		partofspeech += L"**JJWRONG";
+	if (partofspeech == L"RB" && (source.m[wordSourceIndex].word->second.inflectionFlags&(ADVERB_COMPARATIVE | ADVERB_SUPERLATIVE)) != 0)
+		partofspeech += L"**RBWRONG";
+	if (partofspeech == L"RBR" && (source.m[wordSourceIndex].word->second.inflectionFlags&(ADVERB_COMPARATIVE | ADVERB_SUPERLATIVE)) != ADVERB_COMPARATIVE)
+		partofspeech += L"**RBWRONG";
+	if (partofspeech == L"RBS" && (source.m[wordSourceIndex].word->second.inflectionFlags&(ADVERB_COMPARATIVE | ADVERB_SUPERLATIVE)) != ADVERB_SUPERLATIVE)
+		partofspeech += L"**RBWRONG";
 	return -1;
 }
 
@@ -3122,13 +3212,13 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 //map <wstring, int> disagreeFormDistribution; // total count for each form match disagreed between ST and LP
 void printFormDistribution(wstring word, double adp, FormDistribution fd, wstring &maxWord, wstring &maxForm, int &maxDiff,int limit)
 {
-	if (limit<70)
+	if (limit<100)
 		lplog(LOG_ERROR, L"%s:%d %3.0f (%d/%d)", word.c_str(), fd.unaccountedForDisagreeSTLP, adp, fd.agreeSTLP, fd.agreeSTLP + fd.disagreeSTLP);
 	int totalWordOccurrenceCount = fd.agreeSTLP + fd.disagreeSTLP;
 	for (auto &&[form, formCount] : fd.LPFormDistribution)
 	{
 		// form name, total number of times form is a winner form for this word, % of times this form is the winner form for this word, % of times this form agrees with ST.
-		if (limit<70)
+		if (limit<100)
 			lplog(LOG_ERROR, L"  LP %s:total=%d accounted=%d agree=%d disagree=%d error=%d %d%% %d%%", 
 				form.c_str(), 
 				formCount, fd.LPAlreadyAccountedFormDistribution[form], fd.agreeFormDistribution[form], fd.disagreeFormDistribution[form], fd.LPErrorFormDistribution[form],
@@ -3136,7 +3226,7 @@ void printFormDistribution(wstring word, double adp, FormDistribution fd, wstrin
 		// commented out: look for forms that have a high percentage of LP winners, but a low percentage of agreement.
 		// actually just look for the highest occurring forms with maximum poor agreement.
 		int diff = formCount * (100 - (fd.agreeFormDistribution[form] * 100 / formCount));//count*count / totalWordOccurrenceCount*fd.agreeFormDistribution[form];
-		if (fd.LPErrorFormDistribution[form]>200 && (fd.agreeFormDistribution[form] * 100 / formCount) < 10)
+		if (fd.LPErrorFormDistribution[form]>10 && (fd.agreeFormDistribution[form] * 100 / formCount) < 5 && fd.LPAlreadyAccountedFormDistribution[form]<5)
 		{
 			lplog(LOG_ERROR, L"%05d **%s:%3.2f (%d/%d) %s:total=%d accounted=%d agree=%d disagree=%d error=%d %d%% %d%%", 
 				fd.LPErrorFormDistribution[form],
@@ -3151,7 +3241,7 @@ void printFormDistribution(wstring word, double adp, FormDistribution fd, wstrin
 			maxForm = form;
 		}
 	}
-	if (limit < 70)
+	if (limit < 100)
 		for (auto &&[form, count] : fd.STFormDistribution)
 			lplog(LOG_ERROR, L"  ST %s:%d %d%% %d%%", form.c_str(), count, 100 * count / (fd.agreeSTLP + fd.disagreeSTLP), fd.agreeFormDistribution[form] * 100 / count);
 }

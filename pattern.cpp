@@ -687,7 +687,7 @@ bool cPattern::fillPattern(Source &source,int sourcePosition,vector <matchElemen
       additionalMatch=true;
     }
 #ifdef LOG_PATTERN_MATCHING
-    if (thisMatch->elementMatchedIndex&(patternFlag))
+    if (thisMatch->elementMatchedIndex&(matchElement::patternFlag))
       ::lplog(L"%d:pattern %s[%s](%d,%d) %s[%s](%d,%d) cost=%d%s",
       subMatchBegin,name.c_str(),differentiator.c_str(),sourcePosition,endPosition,
       patterns[thisMatch->getChildPattern()]->name.c_str(),patterns[thisMatch->getChildPattern()]->differentiator.c_str(),
