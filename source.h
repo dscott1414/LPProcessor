@@ -3465,15 +3465,13 @@ bool inSectionHeader,
 	void addRoleTagsAt(int where,int I,bool inRelativeClause,bool withinInfinitivePhrase,bool subjectIsPleonastic,bool isNot,bool objectNot,int tsSense,bool isNonPast,bool isNonPresent,bool objectAsSubject,bool isId,bool inPrimaryQuote,bool inSecondaryQuote,wchar_t *fromWhere);
 	int findPrepRole(int whereLastPrep,int role,int rejectRole);
 	int processInternalInfinitivePhrase(int where,int whereVerb,int whereParentObject,int iverbTag,int firstFreePrep,vector <int> &futureBoundPrepositions,bool inPrimaryQuote,bool inSecondaryQuote,
-bool &nextVerbInSeries,
-
-int &sense,
+		bool &nextVerbInSeries,int &sense,
 		int &whereLastVerb,bool &ambiguousSense,bool inQuotedString,bool inSectionHeader,int begin,int end,int infpElement,vector <tTagLocation> &tagSet);
 	bool evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,int len,int firstFreePrep,vector <int> &futureBoundPrepositions,bool inPrimaryQuote,bool inSecondaryQuote,bool &outsideQuoteTruth,bool &inQuoteTruth,bool withinInfinitivePhrase,bool internalInfinitivePhrase,
 																	bool &nextVerbInSeries,int &sense,int &whereLastVerb,bool &ambiguousSense,bool inQuotedString,bool inSectionHeader,int begin,int end);
 	int findObject(tTagLocation &tag,int &position);
-	size_t startCollectTagsFromTag(bool inTrace,int tagSet,tTagLocation &tl,vector < vector <tTagLocation> > &tagSets,int rejectTag,bool collectParentTags,wstring purpose);
-	size_t startCollectTags(bool trace,int tagSet,int position,int PEMAPosition,vector < vector <tTagLocation> > &tagSets,bool obeyBlock,bool collectParentTags,wstring purpose);
+	public: size_t startCollectTagsFromTag(bool inTrace,int tagSet,tTagLocation &tl,vector < vector <tTagLocation> > &tagSets,int rejectTag,bool collectParentTags,wstring purpose);
+	public: size_t startCollectTags(bool trace,int tagSet,int position,int PEMAPosition,vector < vector <tTagLocation> > &tagSets,bool obeyBlock,bool collectParentTags,wstring purpose);
 	void evaluateNounDeterminers(int PEMAPosition,int position,vector < vector <tTagLocation> > &tagSets,wstring purpose);
 	int evaluatePrepObjectRelation(vector <tTagLocation> &tagSet,int &pIndex,tIWMM &prepWord,int &object,int &wherePrepObject,tIWMM &objectWord);
 	bool inTag(tTagLocation &innerTag,tTagLocation &outerTag);

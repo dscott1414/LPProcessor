@@ -231,8 +231,13 @@
     <ClCompile>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <WarningLevel>Level3</WarningLevel>
-      <Optimization>Disabled</Optimization>
+      <Optimization>MaxSpeed</Optimization>
       <EnablePREfast>false</EnablePREfast>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <OmitFramePointers>true</OmitFramePointers>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Fast</FloatingPointModel>
     </ClCompile>
     <Link>
       <AdditionalDependencies>winInet.lib;Ws2_32.lib;ole32.lib;oleaut32.lib;wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;yajl.lib;libmysql.lib;jvm.lib;%(AdditionalDependencies)</AdditionalDependencies>

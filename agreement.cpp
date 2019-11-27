@@ -566,6 +566,17 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 			lplog(L"%d: verb capitalized [SOURCE=%06d] cost=%d",position,traceSource=gTraceSource++,20);
 		return 20;
 	}
+	//lplog(L"%d: use of possessive determiner as subject TEST %d %d %d %d %d %d %d %d %d", position,nextSubjectTag,tagSet[subjectTag].len,m[tagSet[subjectTag].sourcePosition].queryForm(possessiveDeterminerForm),
+	//	nextVerbAgreeTag,tagSet[mainVerbTag].len, m[tagSet[mainVerbTag].sourcePosition].word->second.inflectionFlags&VERB_PAST,tagSet[subjectTag].sourcePosition,tagSet[mainVerbTag].sourcePosition - 1,m[tagSet[mainVerbTag].sourcePosition + 1].queryForm(nounForm));
+	// his sacrificed ambition / his is modifying a past verb which serves as an adjective
+	if (nextSubjectTag<0 && tagSet[subjectTag].len==1 && m[tagSet[subjectTag].sourcePosition].queryForm(possessiveDeterminerForm)!=-1 &&
+		  nextVerbAgreeTag<0 && tagSet[mainVerbTag].len==1 && (m[tagSet[mainVerbTag].sourcePosition].word->second.inflectionFlags&VERB_PAST) != -1 &&
+		tagSet[subjectTag].sourcePosition== tagSet[mainVerbTag].sourcePosition-1 && m[tagSet[mainVerbTag].sourcePosition + 1].queryForm(nounForm)!=-1)
+	{
+		if (debugTrace.traceSubjectVerbAgreement)
+			lplog(L"%d: use of possessive determiner as subject [SOURCE=%06d] cost=%d", position, traceSource = gTraceSource++, 6);
+		return 6;
+	}
 	if ((conditionalTag<0 && futureTag<0 && verbAgreeTag<0) || subjectTag<0 || mainVerbTag<0 || nextSubjectTag>=0)
 	{
 		// check for question

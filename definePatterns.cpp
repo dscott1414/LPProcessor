@@ -264,10 +264,11 @@ int createNouns(void)
 										0);
 	// everything she writes / those I had known
 	cPattern::create(L"__NOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}", L"S",
-										14,L"indefinite_pronoun|everybody",L"indefinite_pronoun|everyone", L"indefinite_pronoun|every one",	L"indefinite_pronoun|everything",L"indefinite_pronoun|somebody",L"indefinite_pronoun|someone",
-		                   L"indefinite_pronoun|something",L"indefinite_pronoun|anybody",  L"indefinite_pronoun|anyone",    L"indefinite_pronoun|anything",  L"indefinite_pronoun|nobody",  L"indefinite_pronoun|no one",L"indefinite_pronoun|nothing",L"demonstrative_determiner|those",0,1,1,
+										14, L"indefinite_pronoun|everybody", L"indefinite_pronoun|everyone", L"indefinite_pronoun|every one", L"indefinite_pronoun|everything", L"indefinite_pronoun|somebody", L"indefinite_pronoun|someone",
+										L"indefinite_pronoun|something", L"indefinite_pronoun|anybody", L"indefinite_pronoun|anyone", L"indefinite_pronoun|anything", L"indefinite_pronoun|nobody", L"indefinite_pronoun|no one", L"indefinite_pronoun|nothing", L"demonstrative_determiner|those", 0, 1, 1,
 										4, L"Proper Noun*2{ANY:NAME:SUBJECT:PREFER_S1}", L"indefinite_pronoun*2{SUBJECT:PREFER_S1}", L"personal_pronoun_nominative*2{SUBJECT:PREFER_S1}", L"personal_pronoun*2{SUBJECT:PREFER_S1}", NO_OWNER, 1, 1, // highly restrict and discourage to prevent unnecessary matches
 										3, L"__ALLVERB", L"_COND{VERB}", L"_VERBPASSIVE", 0, 1, 1,
+										2, L"_ADVERB",L"_ADJECTIVE",0,0,1,
 										0);
 	cPattern::create(L"__APPNOUN{NOUN}",L"1",
 										5,L"determiner*2{DET}",L"demonstrative_determiner*2{DET}",L"possessive_determiner*2{DET}",L"__HIS_HER_DETERMINER*3",L"_NAMEOWNER{DET}",0,0,1,
@@ -944,7 +945,7 @@ int createBareInfinitives(void)
 											L"have{vS:V_AGREE:V_OBJECT}",L"have_negation{vS:not:V_AGREE:V_OBJECT}",VERB_PRESENT_FIRST_SINGULAR,1,1,
 										3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, // there must only be one adjective and it must be last (not mixed in) see *
 										0);
-	// I have/had made you do that  / had made L"his indecision of characterL" be
+	// I have/had made you do that  / had made "his indecision of character" be
 	// I will have made him go and do that | I will definitely have let him go and do that
 	// I would have made him do that
 		// I would have helped do that
@@ -1653,6 +1654,7 @@ void createSecondaryPatterns1(void)
 						 // previously incorrect - 'round and lowered his' with 'round and lowered' being an adjective and 'his' being a noun!
 						 // then the next noun would be considered a secondary noun, which is incorrect. 'looked round and lowered his voice'
 		2,L"__ALLVERB",L"_VERBPASSIVE",0,1,1,     // the news I brought
+		1, L"adverb", 0, 0, 1, // bind the adverb to the preceding verb without the added cost 2 of the following OBJECTs
 		//2,L"preposition*4",L"_ADVERB*2",0,0,1, // hanging preposition BNC A01 L"the power I dreamed of" already in ALLOBJECTS
 		2,L"__ALLOBJECTS_0*2",L"__ALLOBJECTS_1*2",0,0,1, // the books I bought Bob
 		0);
@@ -1705,7 +1707,7 @@ void createSecondaryPatterns1(void)
 						1,L"_ADVERB{ADVOBJECT}",0,1,1,
 						1,L"_PP",0,1,1,
 						0);
-	// NEGATION
+		// NEGATION
 	// CGEL 10.54-10.70
 	// encourage verbs to group their nouns (without using NOUN[5], which is set considerably higher in cost)
 	// (_NOUN[9] includes _INFP as a post-modifier)
@@ -1731,7 +1733,7 @@ void createSecondaryPatterns1(void)
 	// by secondaryCosts
 	cPattern::create(L"__ALLOBJECTS_2",L"",
 						2,L"_ADVERB",L"_PP*4",0,0,1, // removed L"preposition*2", because there is no difference at this level of processing between
-																			 // L"hang upL" the phone and L"hangL" up the phone, so resolve to a prepositional phrase and
+																			 // L"hang up" the phone and L"hang" up the phone, so resolve to a prepositional phrase and
 																			 // then reprocess later to analyze which prepositions actually belong with their verbs.
 																			 // __PP already has an adverb as the first element.
 						3,L"_NOUN_OBJ{OBJECT}",L"__NOUN[*]{OBJECT}",L"__MNOUN[*]{OBJECT}",0,1,1,
@@ -1979,12 +1981,14 @@ int createSecondaryPatterns2(void)
 								 1,L"_VERBREL2{_BLOCK:EVAL}",0,1,1,
 								 1,L",",0,0,1,
 									0);
+  // the last comma should not be made optional, this causes the collowing sentence to be misparsed at *ebbing*
+	// Gerty , as she mentioned the names of her callers , subsided with her *ebbing* green waves into the chair from which she had risen.
 	cPattern::create(L"__C1_IP{_BLOCK:EVAL}",L"2",
 								 1,L",",0,1,1,
 								 1,L"_ADVERB",0,0,1, // _VERBPASTPART does not have an adverb
 								 2,L"_VERBPASTPART",L"being{vC:id:V_OBJECT}",VERB_PAST_PARTICIPLE,1,1,
 								 3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,1,1, // added _PP 8/28/2006
-								 1,L",",0,0,1,
+								 1,L",",0,1,1,
 									0);
 	// restatement / this woman, whoever she was, was saved
 	// this woman, master of disguise,
@@ -2245,15 +2249,16 @@ int createSecondaryPatterns2(void)
 	// I think you are right.
 	// Lawrence told me you were with monsieur Poirot.
 	cPattern::create(L"__ALLTHINK",L"",                   
-						1,L"_ADVERB",0,0,1,
-						3,L"_THINK",L"_THINKPAST",L"_THINKPRESENT",0,1,1,0); // for the programming convenience of getNounPhraseInfo
+									1,L"_ADVERB",0,0,1,
+									3,L"_THINK",L"_THINKPAST",L"_THINKPRESENT",0,1,1,
+									0); 
 	// She thinks that if you are going to carry her banner in the procession you ought to let her take your light .
 	// XXIC Henty G. A. (George Alfred) 1832-1902\Dorothys Double Volume III (of 3)[29123-29128]:
 	// “ Of course, no one man would attempt such a thing, ” Ned Hampton said, “ but [I believe in some of **the camps they have banded** together] and given the gamblers and the hard characters notice to quit, and have hung up those who refused to go .
-	// verbverb:I helped him cross the road. / I heard the car hit the tree. / I saw him hit the man.
+	// verbverb cases have been removed since they were already covered (and better because they were more restrictive):I helped him cross the road. / I heard the car hit the tree. / I saw him hit the man.
 	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"5",
 										1, L"__C1__S1", 0, 1, 1,
-										2, L"__ALLTHINK{VERB}", L"verbverb{VERB:V_AGREE}", 0, 1, 1, // L"think" for all active tenses! - possibly add INTRO_S1.
+										1, L"__ALLTHINK{VERB}", 0, 1, 1, // L"think" for all active tenses! - possibly add INTRO_S1.
 										// removed OBJECT from _NOUN as this will cause IS to have two objects (including the one from _S1) which is wrong and will cause elimination of this pattern
 										3, L"_NOUN_OBJ", L"__NOUN[*]", L"_PP",0, 0, 1, // Lawrence told me you were with monsieur Poirot. /  She felt confident he was there.
 										1, L"_ADJECTIVE", 0,0,1,

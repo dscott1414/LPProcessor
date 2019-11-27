@@ -1279,6 +1279,53 @@ int printUnknownsFromSource(Source source, int sourceId, wstring path, wstring e
 	return 21;
 }
 
+int addTagMark(wstring tag, vector<tTagLocation> tagSet, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
+{
+	int nextTagIndex=-1, tagIndex = findTag(tagSet, (wchar_t *)tag.c_str(), nextTagIndex);
+	if (tagIndex >= 0)
+	{
+		tagBeginPositionMap[tagSet[tagIndex].sourcePosition].insert(tag);
+		tagEndPositionMap[tagSet[tagIndex].sourcePosition + tagSet[tagIndex].len-1].insert(tag);
+	}
+	return tagIndex;
+}
+
+void addTagConstrainedMark(wstring tag, int constrainByTag, vector<tTagLocation> tagSet, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
+{
+	int nextConstrainedTagIndex= -1, constrainedTagIndex = (constrainByTag >= 0) ? findTagConstrained(tagSet, (wchar_t *)tag.c_str(), nextConstrainedTagIndex, tagSet[constrainByTag]) : -1;
+	if (constrainedTagIndex >= 0)
+	{
+		tagBeginPositionMap[tagSet[constrainedTagIndex].sourcePosition].insert(tag);
+		tagEndPositionMap[tagSet[constrainedTagIndex].sourcePosition + tagSet[constrainedTagIndex].len-1].insert(tag);
+	}
+}
+
+void getTagPositionsFromTagSet(unsigned int position, vector<tTagLocation> tagSet, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
+{
+	if (addTagMark(L"SUBJECT", tagSet, tagBeginPositionMap, tagEndPositionMap) < 0)
+		return;
+	if (addTagMark(L"VERB", tagSet, tagBeginPositionMap, tagEndPositionMap) < 0)
+		return;
+	int nextMainVerbTag = -1,mainVerbTag = findTag(tagSet, L"VERB", nextMainVerbTag);
+	addTagConstrainedMark(L"V_AGREE", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
+	addTagConstrainedMark(L"conditional", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
+	addTagConstrainedMark(L"past", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
+	addTagConstrainedMark(L"future", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
+}
+
+void getTagPositions(Source source,int position,int pemaByPatternEnd, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
+{
+	vector < vector <tTagLocation> > tagSets;
+	if (source.startCollectTags(false, subjectVerbAgreementTagSet, position, pemaByPatternEnd, tagSets, true, false, L"tags for debugging") > 0)
+	{
+		for (unsigned int J = 0; J < tagSets.size(); J++)
+		{
+			if (tagSets[J].size())
+				getTagPositionsFromTagSet(position, tagSets[J], tagBeginPositionMap, tagEndPositionMap);
+		}
+	}
+}
+
 int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, wstring etext, wstring patternOrWordName, wstring differentiator, bool isPattern)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
@@ -1295,10 +1342,14 @@ int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, w
 		for (WordMatch &im : source.m)
 		{
 			int pmaOffset;
-			if (isPattern && (pmaOffset = im.pma.queryPattern(patternOrWordName, differentiator)) !=-1)
+			wstring adiff;
+			if (isPattern && (pmaOffset = (differentiator == L"*") ? im.pma.queryPattern(patternOrWordName) : im.pma.queryPattern(patternOrWordName, differentiator))!=-1)
 			{
 				pmaOffset = pmaOffset & ~matchElement::patternFlag;
+				map <int, set<wstring>> tagBeginPositionMap, tagEndPositionMap;
+				getTagPositions(source, wordIndex, im.pma[pmaOffset].pemaByPatternEnd, tagBeginPositionMap, tagEndPositionMap);
 				int patternEnd = wordIndex+im.pma[pmaOffset].len;
+				adiff = patterns[im.pma[pmaOffset].getPattern()]->differentiator;
 				wstring sentence,originalIWord;
 				bool inPattern=false;
 				for (int I = source.sentenceStarts[ss - 1]; I < source.sentenceStarts[ss]; I++)
@@ -1309,7 +1360,22 @@ int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, w
 						sentence += L"**";
 						inPattern = true;
 					}
+					if (tagBeginPositionMap.find(I) != tagBeginPositionMap.end())
+					{
+						for (wstring tag:tagBeginPositionMap[I])
+							sentence += tag+L"{";
+					}
 					sentence += originalIWord;
+					if (tagEndPositionMap.find(I) != tagEndPositionMap.end())
+					{
+						bool notFoundInBeginPositions=tagBeginPositionMap.find(I) == tagBeginPositionMap.end();
+						for (wstring tag : tagEndPositionMap[I])
+						{
+							if (notFoundInBeginPositions || tagBeginPositionMap[I].find(tag)== tagBeginPositionMap[I].end())
+								sentence += L" " + tag;
+							sentence += L"}";
+						}
+					}
 					if (I == patternEnd - 1)
 					{
 						sentence += L"**";
@@ -1330,7 +1396,10 @@ int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, w
 				//analyzeUsage(source,wordIndex+1,wordIndex+2,wordIndex-1,)  
 				wstring path = source.sourcePath.substr(16, source.sourcePath.length() - 20);
 				lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, patternEnd, sentence.c_str());
-				lplog(LOG_ERROR, L"%s", sentence.c_str());
+				if (differentiator!=L"*")
+					lplog(LOG_ERROR, L"%s", sentence.c_str());
+				else
+					lplog(LOG_ERROR, L"%s:%s", adiff.c_str(),sentence.c_str());
 			}
 			else if (!isPattern && im.word->first==patternOrWordName)
 			{
@@ -2761,11 +2830,69 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		return 0;
 		//partofspeech += L"***ADVPREP";
 	}
-	if (primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0 && wordSourceIndex + 1 < source.m.size())
+	if (primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0 && wordSourceIndex + 1 < source.m.size() && wordSourceIndex>3)
 	{
 		//errorMap[L"LP correct: Modifying an adverb ST says " + primarySTLPMatch + L" but LP says adverb"]++;
 		//return 0;
-		partofspeech += L"***ADVADJ";
+		// verb *ADJ* (relativizer OR preposition OR coordinator or ,)
+		bool wordBeforeIsVerb = source.m[wordSourceIndex - 1].hasWinnerVerbForm() && source.m[wordSourceIndex - 1].queryWinnerForm(isForm)==-1;
+		bool word2BeforeIsVerb = source.m[wordSourceIndex - 2].hasWinnerVerbForm(); 
+		vector<wstring> determinerTypes = { L"determiner",L"demonstrative_determiner",L"possessive_determiner",L"interrogative_determiner", L"quantifier", L"numeral_cardinal" };
+		bool wordBeforeIsDeterminer = false;
+		for (wstring dt : determinerTypes)
+			if (wordBeforeIsDeterminer = source.m[wordSourceIndex - 1].queryWinnerForm(dt) >= 0)
+				break;
+		bool word2BeforeIsDeterminer = false;
+		for (wstring dt : determinerTypes)
+			if (word2BeforeIsDeterminer = source.m[wordSourceIndex - 2].queryWinnerForm(dt) >= 0)
+				break;
+		vector<wstring> pronounTypes = { L"personal_pronoun_accusative",L"personal_pronoun_nominative",L"personal_pronoun",L"reflexive_pronoun",L"indefinite_pronoun" };
+		bool wordBeforeIsPronoun = false;
+		for (wstring pn : pronounTypes)
+			if (wordBeforeIsPronoun = source.m[wordSourceIndex-1].queryWinnerForm(pn) >= 0)
+				break;
+		if (wordBeforeIsVerb || (word2BeforeIsVerb && source.m[wordSourceIndex - 1].queryWinnerForm(L"adverb") >= 0) &&
+			(source.m[wordSourceIndex + 1].queryWinnerForm(L"relativizer") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"preposition") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"coordinator") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"conjunction") >= 0 ||
+				!iswalpha(source.m[wordSourceIndex + 1].word->first[0]) || source.m[wordSourceIndex + 1].queryWinnerForm(L"quantifier") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0))
+		{
+			errorMap[L"ST correct: ST says adverb but LP says adjective, following a verb and followed by a relativizer, preposition or coordinator"]++;
+			return 0;
+		}
+		else
+		{
+			// an *even* and noiseless step
+			if (wordBeforeIsDeterminer && source.m[wordSourceIndex + 1].queryWinnerForm(L"coordinator") >= 0 && source.m[wordSourceIndex + 2].queryWinnerForm(L"adjective") >= 0 && source.m[wordSourceIndex + 3].queryWinnerForm(L"noun") >= 0)
+			{
+				errorMap[L"LP correct: ST says adverb but LP says adjective"]++;
+				return 0;
+			}
+			// how *much* trouble
+			else if ((wordBeforeIsDeterminer || source.m[wordSourceIndex - 1].queryWinnerForm(L"preposition") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"adjective") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"relativizer") >= 0 || !iswalpha(source.m[wordSourceIndex - 1].word->first[0])) &&
+				source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") >= 0)
+			{
+				errorMap[L"LP correct: ST says adverb but LP says adjective"]++;
+				return 0;
+			}
+			else if ((wordBeforeIsDeterminer || source.m[wordSourceIndex - 1].queryWinnerForm(L"adverb") >= 0 ) && (source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0))
+			{
+				errorMap[L"ST correct: ST says adverb but LP says adjective (4)"]++;
+				return 0;
+			}
+			// much better looking - true except for IS verbs (
+			else if (source.m[wordSourceIndex - 1].queryWinnerForm(L"adverb") >= 0 && source.m[wordSourceIndex + 1].hasWinnerVerbForm())
+			{
+				errorMap[L"ST correct: ST says adverb but LP says adjective (5)"]++;
+				return 0;
+			}
+			// correct except for the rare IS verb or a noun restatement (you measly scrub!)
+			else if ((wordBeforeIsPronoun || source.m[wordSourceIndex - 1].queryWinnerForm(L"Proper Noun") >= 0) && source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") < 0)
+			{
+				errorMap[L"ST correct: ST says adverb but LP says adjective (6)"]++;
+				return 0;
+			}
+			else
+				partofspeech += L"***ISADVERBELSE";
+		}
 		int maxlen = -1;
 		if ((source.queryPattern(wordSourceIndex - 1, L"_BE", maxlen) != -1 || source.m[wordSourceIndex - 1].queryWinnerForm(L"is") >= 0) &&
 			source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") < 0 && source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") < 0 && source.m[wordSourceIndex + 1].queryWinnerForm(L"verb") < 0)
@@ -3793,7 +3920,8 @@ void wmain(int argc,wchar_t *argv[])
 	case 21:
 		//patternOrWordAnalysis(source, step, L"__PP", L"A",true);
 		// patternAnalysis(source, step, L"_MS1", L"2"); // TODO: testing weight change on _S1.
-		patternOrWordAnalysis(source, step, L"that", L"", false);
+		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
+		patternOrWordAnalysis(source, step, L"_VERB_BARE_INF", L"*", true);
 		break;
 	case 60:
 		//stanfordCheckMP(source, step, true,8);
