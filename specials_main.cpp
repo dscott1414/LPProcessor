@@ -2830,28 +2830,37 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		return 0;
 		//partofspeech += L"***ADVPREP";
 	}
+	bool wordBeforeIsIs = source.m[wordSourceIndex - 1].queryWinnerForm(isForm) != -1 || source.m[wordSourceIndex - 1].queryWinnerForm(isNegationForm) != -1 || source.m[wordSourceIndex - 1].queryWinnerForm(beForm) != -1 || source.m[wordSourceIndex - 1].word->first == L"being";
+	bool wordBeforeIsVerb = source.m[wordSourceIndex - 1].hasWinnerVerbForm();
+	bool word2BeforeIsIs = source.m[wordSourceIndex - 2].queryWinnerForm(isForm) != -1 || source.m[wordSourceIndex - 2].queryWinnerForm(isNegationForm) != -1 || source.m[wordSourceIndex - 2].queryWinnerForm(beForm) != -1 || source.m[wordSourceIndex - 2].word->first == L"being";
+	bool word2BeforeIsVerb = source.m[wordSourceIndex - 2].hasWinnerVerbForm();
+	vector<wstring> determinerTypes = { L"determiner",L"demonstrative_determiner",L"possessive_determiner",L"interrogative_determiner", L"quantifier", L"numeral_cardinal" };
+	bool wordBeforeIsDeterminer = false;
+	for (wstring dt : determinerTypes)
+		if (wordBeforeIsDeterminer = source.m[wordSourceIndex - 1].queryWinnerForm(dt) >= 0)
+			break;
+	bool word2BeforeIsDeterminer = false;
+	for (wstring dt : determinerTypes)
+		if (word2BeforeIsDeterminer = source.m[wordSourceIndex - 2].queryWinnerForm(dt) >= 0)
+			break;
+	vector<wstring> pronounTypes = { L"personal_pronoun_accusative",L"personal_pronoun_nominative",L"personal_pronoun",L"reflexive_pronoun",L"indefinite_pronoun" };
+	bool wordBeforeIsPronoun = false;
+	for (wstring pn : pronounTypes)
+		if (wordBeforeIsPronoun = source.m[wordSourceIndex - 1].queryWinnerForm(pn) >= 0)
+			break;
 	if (primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0 && wordSourceIndex + 1 < source.m.size() && wordSourceIndex>3)
 	{
-		//errorMap[L"LP correct: Modifying an adverb ST says " + primarySTLPMatch + L" but LP says adverb"]++;
-		//return 0;
+		// investigate later!
+		if (((wordBeforeIsVerb && wordBeforeIsIs) || (word2BeforeIsVerb && word2BeforeIsIs && source.m[wordSourceIndex - 1].queryWinnerForm(L"adverb") >= 0)) &&
+			(source.m[wordSourceIndex + 1].queryWinnerForm(L"relativizer") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"preposition") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"coordinator") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"conjunction") >= 0 ||
+				!iswalpha(source.m[wordSourceIndex + 1].word->first[0]) || source.m[wordSourceIndex + 1].queryWinnerForm(L"quantifier") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0))
+		{
+			//partofspeech += L"***ADVADJ8";
+			//errorMap[L"LP correct: ST says adverb but LP says adjective, IS following a verb and followed by a relativizer, preposition or coordinator"]++;
+			//return 0;
+		}
 		// verb *ADJ* (relativizer OR preposition OR coordinator or ,)
-		bool wordBeforeIsVerb = source.m[wordSourceIndex - 1].hasWinnerVerbForm() && source.m[wordSourceIndex - 1].queryWinnerForm(isForm)==-1;
-		bool word2BeforeIsVerb = source.m[wordSourceIndex - 2].hasWinnerVerbForm(); 
-		vector<wstring> determinerTypes = { L"determiner",L"demonstrative_determiner",L"possessive_determiner",L"interrogative_determiner", L"quantifier", L"numeral_cardinal" };
-		bool wordBeforeIsDeterminer = false;
-		for (wstring dt : determinerTypes)
-			if (wordBeforeIsDeterminer = source.m[wordSourceIndex - 1].queryWinnerForm(dt) >= 0)
-				break;
-		bool word2BeforeIsDeterminer = false;
-		for (wstring dt : determinerTypes)
-			if (word2BeforeIsDeterminer = source.m[wordSourceIndex - 2].queryWinnerForm(dt) >= 0)
-				break;
-		vector<wstring> pronounTypes = { L"personal_pronoun_accusative",L"personal_pronoun_nominative",L"personal_pronoun",L"reflexive_pronoun",L"indefinite_pronoun" };
-		bool wordBeforeIsPronoun = false;
-		for (wstring pn : pronounTypes)
-			if (wordBeforeIsPronoun = source.m[wordSourceIndex-1].queryWinnerForm(pn) >= 0)
-				break;
-		if (wordBeforeIsVerb || (word2BeforeIsVerb && source.m[wordSourceIndex - 1].queryWinnerForm(L"adverb") >= 0) &&
+		if (((wordBeforeIsVerb && !wordBeforeIsIs)|| (word2BeforeIsVerb && !word2BeforeIsIs && source.m[wordSourceIndex - 1].queryWinnerForm(L"adverb") >= 0)) &&
 			(source.m[wordSourceIndex + 1].queryWinnerForm(L"relativizer") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"preposition") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"coordinator") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"conjunction") >= 0 ||
 				!iswalpha(source.m[wordSourceIndex + 1].word->first[0]) || source.m[wordSourceIndex + 1].queryWinnerForm(L"quantifier") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0))
 		{
@@ -2913,6 +2922,69 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		{
 			//partofspeech += L"***NOUNADJ";
 			errorMap[L"LP correct: ST says " + primarySTLPMatch + L" but LP says adjective in an __ADJECTIVE construction"]++;
+			return 0;
+		}
+	}
+	// verb *ADJ* (relativizer OR preposition OR coordinator or ,)
+	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && wordSourceIndex + 1 < source.m.size() && wordSourceIndex > 3)
+	{
+		if (((wordBeforeIsVerb && wordBeforeIsIs) || (word2BeforeIsVerb && word2BeforeIsIs && source.m[wordSourceIndex - 1].queryWinnerForm(L"adverb") >= 0)) &&
+			(source.m[wordSourceIndex + 1].queryWinnerForm(L"relativizer") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"preposition") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"coordinator") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"conjunction") >= 0 ||
+				!iswalpha(source.m[wordSourceIndex + 1].word->first[0]) || source.m[wordSourceIndex + 1].queryWinnerForm(L"quantifier") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0))
+		{
+			errorMap[L"ST correct: LP says adverb but ST says adjective, IS following a verb and followed by a relativizer, preposition or coordinator"]++;
+			return 0;
+		}
+		if (((wordBeforeIsVerb && !wordBeforeIsIs) || (word2BeforeIsVerb && !word2BeforeIsIs && source.m[wordSourceIndex - 1].queryWinnerForm(L"adverb") >= 0)) &&
+				(source.m[wordSourceIndex + 1].queryWinnerForm(L"relativizer") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"preposition") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"coordinator") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"conjunction") >= 0 ||
+				!iswalpha(source.m[wordSourceIndex + 1].word->first[0]) || source.m[wordSourceIndex + 1].queryWinnerForm(L"quantifier") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0))
+		{
+			errorMap[L"LP correct: LP says adverb but ST says adjective, following a verb and followed by a relativizer, preposition or coordinator"]++;
+			return 0;
+		}
+		else
+		{
+			// an *even* and noiseless step - 0 matches!
+			//if (wordBeforeIsDeterminer && source.m[wordSourceIndex + 1].queryWinnerForm(L"coordinator") >= 0 && source.m[wordSourceIndex + 2].queryWinnerForm(L"adjective") >= 0 && source.m[wordSourceIndex + 3].queryWinnerForm(L"noun") >= 0)
+			//{
+			//	partofspeech += L"***ADJADV3";
+			//	//errorMap[L"ST correct: LP says adverb but ST says adjective"]++;
+			//	//return 0;
+			//}
+			// how *much* trouble
+			if ((wordBeforeIsDeterminer || source.m[wordSourceIndex - 1].queryWinnerForm(L"preposition") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"adjective") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"relativizer") >= 0 || !iswalpha(source.m[wordSourceIndex - 1].word->first[0])) &&
+				source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") >= 0)
+			{
+				errorMap[L"ST correct: LP says adverb but ST says adjective"]++;
+				return 0;
+			}
+			else if ((wordBeforeIsDeterminer || source.m[wordSourceIndex - 1].queryWinnerForm(L"adverb") >= 0) && (source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0))
+			{
+				errorMap[L"LP correct: LP says adverb but ST says adjective"]++;
+				return 0;
+			}
+			// much better looking - true except for IS verbs (only 58 matches)
+			else if (source.m[wordSourceIndex - 1].queryWinnerForm(L"adverb") >= 0 && source.m[wordSourceIndex + 1].hasWinnerVerbForm())
+			{
+				//partofspeech += L"***ADJADV6";
+				//errorMap[L"LP correct: LP says adverb but ST says adjective (5)"]++;
+				//return 0;
+			}
+			// correct except for the rare IS verb or a noun restatement (you measly scrub!)
+			else if ((wordBeforeIsPronoun || source.m[wordSourceIndex - 1].queryWinnerForm(L"Proper Noun") >= 0) && source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") < 0)
+			{
+				//partofspeech += L"***ADJADV7";
+				errorMap[L"LP correct: LP says adverb but ST says adjective"]++;
+				return 0;
+			}
+			else
+				partofspeech += L"***ISADJECTIVEELSE";
+		}
+		int maxlen = -1;
+		if ((source.queryPattern(wordSourceIndex - 1, L"_BE", maxlen) != -1 || source.m[wordSourceIndex - 1].queryWinnerForm(L"is") >= 0) &&
+			source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") < 0 && source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") < 0 && source.m[wordSourceIndex + 1].queryWinnerForm(L"verb") < 0)
+		{
+			errorMap[L"LP correct: ST says adverb but LP says adjective, following a being verb"]++;
 			return 0;
 		}
 	}
@@ -3161,6 +3233,15 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		partofspeech += L"**RBWRONG";
 	if (partofspeech == L"RBS" && (source.m[wordSourceIndex].word->second.inflectionFlags&(ADVERB_COMPARATIVE | ADVERB_SUPERLATIVE)) != ADVERB_SUPERLATIVE)
 		partofspeech += L"**RBWRONG";
+	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && (word==L"half" || word==L"round"))
+	{
+		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"verb") >= 0 ||
+			(source.m[wordSourceIndex + 1].queryForm(dashForm) != -1 && source.m[wordSourceIndex + 2].queryWinnerForm(L"adjective") >= 0))
+		{
+			errorMap[L"LP correct '" + word + L"': adverb not noun"]++;
+			return 0;
+		}
+	}
 	return -1;
 }
 
