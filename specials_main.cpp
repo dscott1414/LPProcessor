@@ -2847,8 +2847,12 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	for (wstring dt : determinerTypes)
 		if (wordAfterIsDeterminer = source.m[wordSourceIndex + 1].queryWinnerForm(dt) >= 0)
 			break;
-	bool wordAfterIsUnmodifiable = (source.m[wordSourceIndex + 1].queryWinnerForm(L"relativizer") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"preposition") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"coordinator") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"conjunction") >= 0 ||
-		!iswalpha(source.m[wordSourceIndex + 1].word->first[0]) || source.m[wordSourceIndex + 1].queryWinnerForm(L"quantifier") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0 || wordAfterIsDeterminer);
+	wchar_t *unmodifiableForms[] = { L"relativizer",L"preposition",L"coordinator",L"conjunction",L"quantifier", L"adverb",L"adjective",L"personal_pronoun_accusative",L"personal_pronoun_nominative",L"personal_pronoun",L"reflexive_pronoun" };
+	bool wordAfterIsUnmodifiable = false;
+	for (wstring unForm : unmodifiableForms)
+		if (wordAfterIsUnmodifiable = source.m[wordSourceIndex + 1].queryWinnerForm(unForm) >= 0)
+			break;
+	wordAfterIsUnmodifiable|=!iswalpha(source.m[wordSourceIndex + 1].word->first[0]) || wordAfterIsDeterminer;
 	vector<wstring> pronounTypes = { L"personal_pronoun_accusative",L"personal_pronoun_nominative",L"personal_pronoun",L"reflexive_pronoun",L"indefinite_pronoun" };
 	bool wordBeforeIsPronoun = false;
 	for (wstring pn : pronounTypes)
@@ -2878,8 +2882,16 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				return 0;
 			}
 			// how *much* trouble
-			else if ((wordBeforeIsDeterminer || source.m[wordSourceIndex - 1].queryWinnerForm(L"preposition") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"adjective") >= 0 || source.queryPattern(wordSourceIndex - 1, L"__ADJECTIVE") != -1 || source.m[wordSourceIndex - 1].queryWinnerForm(L"relativizer") >= 0 || !iswalpha(source.m[wordSourceIndex - 1].word->first[0])) &&
-				source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") >= 0)
+			else if ((wordBeforeIsDeterminer || 
+				source.m[wordSourceIndex - 1].queryWinnerForm(L"preposition") >= 0 || 
+				source.m[wordSourceIndex - 1].queryWinnerForm(L"adverb") >= 0 ||
+				source.m[wordSourceIndex - 1].queryWinnerForm(L"conjunction") >= 0 ||
+				source.m[wordSourceIndex - 1].queryWinnerForm(L"coordinator") >= 0 ||
+				source.m[wordSourceIndex - 1].queryWinnerForm(L"adjective") >= 0 ||
+				source.queryPattern(wordSourceIndex - 1, L"__ADJECTIVE") != -1 || 
+				source.m[wordSourceIndex - 1].queryWinnerForm(L"relativizer") >= 0 || 
+				!iswalpha(source.m[wordSourceIndex - 1].word->first[0])) &&
+				(source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"timeUnit") >= 0))
 			{
 				errorMap[L"LP correct: ST says adverb but LP says adjective"]++;
 				return 0;
@@ -2955,13 +2967,26 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			// The game was as old as the Garden of Eden, she had played it well or *ill* from her cradle, and at last she had begun to grow a trifle weary .
 
 			// how *much* trouble
-			if ((wordBeforeIsDeterminer || source.m[wordSourceIndex - 1].queryWinnerForm(L"preposition") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"conjunction") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"coordinator") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"adjective") >= 0 || source.queryPattern(wordSourceIndex-1, L"__ADJECTIVE") != -1 || source.m[wordSourceIndex - 1].queryWinnerForm(L"relativizer") >= 0 || !iswalpha(source.m[wordSourceIndex - 1].word->first[0])) &&
-				source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") >= 0)
+			if ((wordBeforeIsDeterminer || 
+				source.m[wordSourceIndex - 1].queryWinnerForm(L"preposition") >= 0 || 
+				source.m[wordSourceIndex - 1].queryWinnerForm(L"adverb") >= 0 ||
+				source.m[wordSourceIndex - 1].queryWinnerForm(L"conjunction") >= 0 || 
+				source.m[wordSourceIndex - 1].queryWinnerForm(L"coordinator") >= 0 || 
+				source.m[wordSourceIndex - 1].queryWinnerForm(L"adjective") >= 0 || 
+				source.queryPattern(wordSourceIndex-1, L"__ADJECTIVE") != -1 || 
+				source.m[wordSourceIndex - 1].queryWinnerForm(L"relativizer") >= 0 || 
+				!iswalpha(source.m[wordSourceIndex - 1].word->first[0])) &&
+				(source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"timeUnit") >= 0))
 			{
 				errorMap[L"ST correct: LP says adverb but ST says adjective"]++;
 				return 0;
 			}
 			else if ((wordBeforeIsDeterminer || source.m[wordSourceIndex - 1].queryWinnerForm(L"adverb") >= 0) && (source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0 || source.queryPattern(wordSourceIndex+1, L"__ADJECTIVE") != -1 || source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0))
+			{
+				errorMap[L"LP correct: LP says adverb but ST says adjective"]++;
+				return 0;
+			}
+			else if (wordBeforeIsDeterminer && source.m[wordSourceIndex + 1].queryWinnerForm(L"quantifier") >= 0 && source.queryPattern(wordSourceIndex + 1, L"_TIME") != -1)
 			{
 				errorMap[L"LP correct: LP says adverb but ST says adjective"]++;
 				return 0;
