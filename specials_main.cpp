@@ -2852,7 +2852,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	for (wstring unForm : unmodifiableForms)
 		if (wordAfterIsUnmodifiable = source.m[wordSourceIndex + 1].queryWinnerForm(unForm) >= 0)
 			break;
-	wordAfterIsUnmodifiable|=!iswalpha(source.m[wordSourceIndex + 1].word->first[0]) || wordAfterIsDeterminer;
+	wordAfterIsUnmodifiable |= !iswalpha(source.m[wordSourceIndex + 1].word->first[0]) || wordAfterIsDeterminer;
 	vector<wstring> pronounTypes = { L"personal_pronoun_accusative",L"personal_pronoun_nominative",L"personal_pronoun",L"reflexive_pronoun",L"indefinite_pronoun" };
 	bool wordBeforeIsPronoun = false;
 	for (wstring pn : pronounTypes)
@@ -2913,6 +2913,10 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				errorMap[L"ST correct: ST says adverb but LP says adjective"]++;
 				return 0;
 			}
+			if (source.queryPattern(wordSourceIndex, L"__ADVERB") != -1 && source.queryPattern(wordSourceIndex, L"__INTRO_N") != -1)
+			{
+				partofspeech += L"***INTROISADV(1)";
+			}
 			else
 				partofspeech += L"***ISADVERBELSE";
 		}
@@ -2938,6 +2942,19 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"LP correct: ST says " + primarySTLPMatch + L" but LP says adjective in an __ADJECTIVE construction"]++;
 			return 0;
 		}
+	}
+	if ((source.m[wordSourceIndex - 1].queryWinnerForm(L"modal_auxiliary") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"future_modal_auxiliary") >= 0 || 
+		source.m[wordSourceIndex - 1].queryWinnerForm(L"negation_modal_auxiliary") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"negation_future_modal_auxiliary") >= 0) &&
+		source.m[wordSourceIndex + 1].queryWinnerForm(L"verb") >= 0 && word == L"better" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
+	{
+		errorMap[L"LP correct: LP says adverb ST says "+ primarySTLPMatch]++;
+		return 0;
+	}
+	// 100 examples checked - no errors
+	if (primarySTLPMatch == L"preposition or conjunction" && wordAfterIsDeterminer && (source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"particle") >= 0))
+	{
+		errorMap[L"ST correct: LP says adverb or particle when ST says " + primarySTLPMatch]++;
+		return 0;
 	}
 	// verb *ADJ* (relativizer OR preposition OR coordinator or ,)
 	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && wordSourceIndex + 1 < source.m.size() && wordSourceIndex > 3)
@@ -3004,6 +3021,35 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				//partofspeech += L"***ADJADV7";
 				errorMap[L"LP correct: LP says adverb but ST says adjective"]++;
 				return 0;
+			}
+			if (source.queryPattern(wordSourceIndex, L"__ADVERB") != -1 && source.queryPattern(wordSourceIndex, L"__CLOSING__S1") != -1)
+			{
+				enum ADVCL {ALWAYS_ADJECTIVE, ALWAYS_ADVERB, UNKNOWN};
+				map <wstring,ADVCL> closingmap = { 
+					{L"above",ALWAYS_ADJECTIVE },
+					{L"asleep",ALWAYS_ADJECTIVE },
+					{L"enough",ALWAYS_ADVERB },
+					{L"much",ALWAYS_ADVERB },
+					{L"pretty",ALWAYS_ADJECTIVE },
+					{L"right",ALWAYS_ADJECTIVE },
+					{L"more",ALWAYS_ADJECTIVE },
+					{L"less",ALWAYS_ADJECTIVE }
+				};
+				auto cm = closingmap.find(word);
+				if (cm != closingmap.end())
+				{
+					if (cm->second == ALWAYS_ADJECTIVE)
+						errorMap[L"ST correct: LP says adverb but ST says adjective"]++;
+					else
+						errorMap[L"LP correct: LP says adverb but ST says adjective"]++;
+					return 0;
+				}
+				else
+					partofspeech += L"***CLOSINGISADV(2)";
+			}
+			if (source.queryPattern(wordSourceIndex, L"__ADVERB") != -1 && source.queryPattern(wordSourceIndex, L"__INTRO_N") != -1)
+			{
+				partofspeech += L"***INTROISADV(2)";
 			}
 			else
 				partofspeech += L"***ISADJECTIVEELSE";
