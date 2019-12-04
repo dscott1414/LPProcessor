@@ -2913,9 +2913,10 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				errorMap[L"ST correct: ST says adverb but LP says adjective"]++;
 				return 0;
 			}
-			if (source.queryPattern(wordSourceIndex, L"__ADVERB") != -1 && source.queryPattern(wordSourceIndex, L"__INTRO_N") != -1)
+			if (source.m[wordSourceIndex + 1].queryWinnerForm(L"Proper Noun") >= 0)
 			{
-				partofspeech += L"***INTROISADV(1)";
+				errorMap[L"ST correct: ST says adverb but LP says adjective"]++;
+				return 0;
 			}
 			else
 				partofspeech += L"***ISADVERBELSE";
@@ -3051,8 +3052,41 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			{
 				partofspeech += L"***INTROISADV(2)";
 			}
-			else
-				partofspeech += L"***ISADJECTIVEELSE";
+			else if (word == L"much")
+			{
+				// much money / much Nature / much of the road / how much he had gotten / he isn't much.
+				if (source.m[wordSourceIndex + 1].queryWinnerForm(L"Proper Noun") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") >= 0 ||
+					source.m[wordSourceIndex + 1].word->first == L"of" || 
+					source.m[wordSourceIndex - 1].queryWinnerForm(L"is") >= 0)
+				{
+					errorMap[L"ST correct 'much': LP says adverb but ST says adjective"]++;
+					return 0;
+				}
+				else
+				{
+					errorMap[L"LP correct 'much': LP says adverb but ST says adjective"]++; // this includes the 'how much' case - may investigate this as how much does not act like adverb nor adjective
+					return 0;
+				}
+			}
+			else if (word == L"enough")
+			{
+				// much money / much Nature / much of the road / how much he had gotten / he isn't much.
+				if (source.m[wordSourceIndex + 1].queryWinnerForm(L"Proper Noun") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"noun") >= 0 ||
+					source.m[wordSourceIndex + 1].queryWinnerForm(L"indefinite_pronoun") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"indefinite_pronoun") >= 0 ||
+					source.m[wordSourceIndex + 1].word->first == L"of" ||
+					source.m[wordSourceIndex - 1].queryWinnerForm(L"is") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"is_negation") >= 0 ||
+					source.m[wordSourceIndex - 2].queryWinnerForm(L"is") >= 0 || source.m[wordSourceIndex - 2].queryWinnerForm(L"is_negation") >= 0)
+				{
+					errorMap[L"ST correct 'enough': LP says adverb but ST says adjective"]++;
+					return 0;
+				}
+				else
+				{
+					//partofspeech += L"***ENOUGHISNOTADJECTIVE";
+					errorMap[L"LP correct 'enough': LP says adverb but ST says adjective"]++; // this includes the 'how much' case - may investigate this as how much does not act like adverb nor adjective
+					return 0;
+				}
+			}
 		}
 		int maxlen = -1;
 		if ((source.queryPattern(wordSourceIndex - 1, L"_BE", maxlen) != -1 || source.m[wordSourceIndex - 1].queryWinnerForm(L"is") >= 0) &&
@@ -3061,6 +3095,80 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"LP correct: ST says adverb but LP says adjective, following a being verb"]++;
 			return 0;
 		}
+	}
+	if (word == L"more")
+	{
+		// more money / more Nature / more of the road / how much more he had gotten / he isn't more wealthy.
+		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"Proper Noun") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") >= 0 ||
+			source.m[wordSourceIndex + 1].queryWinnerForm(L"indefinite_pronoun") >= 0 ||
+			(source.m[wordSourceIndex + 1].word->first == L"of" && source.m[wordSourceIndex - 1].word->first != L"no"))
+		{
+			//partofspeech += L"***MOREISADJECTIVEQUANTIFIER";
+			if (source.m[wordSourceIndex ].queryWinnerForm(L"quantifier") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0)
+				errorMap[L"LP correct 'more': LP says quantifier/adjective but ST says "+ primarySTLPMatch]++;
+			else
+				errorMap[L"ST correct 'more': ST says "+ primarySTLPMatch]++;
+			return 0;
+		}
+		else if ((source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"verb") >= 0) && source.m[wordSourceIndex].queryWinnerForm(L"quantifier") >= 0 && primarySTLPMatch == L"adverb")
+		{
+			//partofspeech += L"***MOREISADVERB";
+			errorMap[L"ST correct 'more': LP says quantifier but ST says adverb"]++; // this includes the 'how much' case - may investigate this as how much does not act like adverb nor adjective
+			return 0;
+		}
+		// no more!
+		else if (source.m[wordSourceIndex - 1].word->first == L"no")
+		{
+			errorMap[L"diff: LP says quantifier but ST says adverb"]++; 
+			return 0;
+		}
+		// more or less responsible is not included!
+		else if ((source.m[wordSourceIndex - 1].queryWinnerForm(L"is") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"is_negation") >= 0) && wordAfterIsUnmodifiable && source.m[wordSourceIndex + 1].word->first != L"or")
+		{
+			errorMap[L"LP correct 'more': LP says quantifier but ST says " + primarySTLPMatch]++;
+			return 0;
+			//partofspeech += L"***MOREISADJECTIVE()";
+		}
+		else
+			partofspeech += L"***MOREIS()";
+
+	}
+	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && 
+		source.m[wordSourceIndex+1].queryWinnerForm(L"coordinator")==-1 && source.m[wordSourceIndex + 1].word->first!=L"," &&
+		!WordClass::isDash(source.m[wordSourceIndex + 1].word->first[0]) && !WordClass::isDoubleQuote(source.m[wordSourceIndex + 1].word->first[0]) && !WordClass::isSingleQuote(source.m[wordSourceIndex + 1].word->first[0]))
+	{
+		bool wordAfterIsVeryUnmodifiable = wordAfterIsUnmodifiable && source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") == -1 && source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") == -1;
+		int pemaOffset=source.queryPattern(wordSourceIndex, L"__NOUN",L"2");
+		if (pemaOffset >= 0 && source.pema[pemaOffset].end >= 2)
+			partofspeech += L"***ADJNOUNDET1";
+		else if (wordBeforeIsDeterminer && source.m[wordSourceIndex + 1].queryForm(L"noun") == -1)
+		{
+			errorMap[L"LP correct: LP says noun but ST says " + primarySTLPMatch]++;
+			return 0;
+		}
+		else if (source.m[wordSourceIndex - 1].queryWinnerForm(L"preposition") != -1 && wordAfterIsVeryUnmodifiable && source.m[wordSourceIndex - 1].word->first != L"than" && source.m[wordSourceIndex - 1].word->first != L"as")
+		{
+			errorMap[L"LP correct: LP says noun but ST says " + primarySTLPMatch]++;
+			return 0;
+		}
+		else if ((source.m[wordSourceIndex - 1].queryWinnerForm(L"is") != -1 || source.m[wordSourceIndex - 1].queryWinnerForm(L"is_negation") != -1) && wordAfterIsVeryUnmodifiable &&
+			(source.m[wordSourceIndex].word->second.inflectionFlags&PLURAL) != PLURAL)
+		{
+			errorMap[L"ST correct: LP says noun but ST says adjective (after is, before unmodifiable)"]++;
+			return 0;
+		}
+		else if ((source.m[wordSourceIndex - 2].queryWinnerForm(L"is") != -1 || source.m[wordSourceIndex - 2].queryWinnerForm(L"is_negation") != -1) && wordAfterIsVeryUnmodifiable && source.m[wordSourceIndex - 1].queryWinnerForm(L"adverb") != -1 &&
+			(source.m[wordSourceIndex].word->second.inflectionFlags&PLURAL) != PLURAL)
+		{
+			errorMap[L"ST correct: LP says noun but ST says adjective (after is, before unmodifiable)"]++;
+			return 0;
+		}
+		else if ((source.m[wordSourceIndex].word->second.inflectionFlags&PLURAL) == PLURAL)
+			partofspeech += L"***ADJNOUNDET4";
+		else 
+			partofspeech += L"***ADJNOUNDET5";
+		//errorMap[L"LP correct: adverb of customary form (ending in -ly) ST says " + primarySTLPMatch + L" but LP says adverb"]++;
+		//return 0;
 	}
 	// over 100 examples checked and 99% correct except for 'only'
 	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && word.length() > 3 && word.substr(word.length() - 2) == L"ly" && word != L"only")
@@ -3107,10 +3215,15 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: word 'his': ST says " + primarySTLPMatch + L" but LP says possessive_pronoun"]++;
 		return 0;
 	}
-	if (word == L"plenty" && primarySTLPMatch == L"adverb" && (source.m[wordSourceIndex].queryWinnerForm(L"quantifier") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 ) &&
-		  source.m[wordSourceIndex + 1].word->first==L"of")
+	if (word == L"plenty" && primarySTLPMatch == L"adverb" && (source.m[wordSourceIndex].queryWinnerForm(L"quantifier") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0) &&
+		source.m[wordSourceIndex + 1].word->first == L"of")
 	{
 		errorMap[L"LP correct: word 'plenty': ST says " + primarySTLPMatch + L" but LP says quantifier"]++;
+		return 0;
+	}
+	if (word == L"little" && source.m[wordSourceIndex - 1].word->first == L"a" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
+	{
+		errorMap[L"LP correct: word 'a little': ST says " + primarySTLPMatch + L" but LP says adverb"]++;
 		return 0;
 	}
 	if (primarySTLPMatch == L"personal_pronoun_accusative")

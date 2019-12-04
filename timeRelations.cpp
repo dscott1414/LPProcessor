@@ -124,7 +124,7 @@ void defineTimePatterns()
 	cPattern::create(L"_TIME",L"9",
 		1,L"_MLT*-2",0,0,1,
 		1,L"determiner|the{DET}",0,0,1, // the past few years
-		2,L"adverb{TIMEMODIFIER}",L"quantifier{TIMEMODIFIER}",0,0,1, // they had lunch [together] two weeks ago today / [every] two weeks
+		3,L"adverb{TIMEMODIFIER}",L"quantifier{TIMEMODIFIER}", L"adjective|past*-1{TIMETYPE}", 0,0,1, // they had lunch [together] two weeks ago today / [every] two weeks
 		7,L"numeral_ordinal*-1{TIMEMODIFIER}",L"numeral_cardinal*-1{TIMEMODIFIER}",L"Number*-1{TIMEMODIFIER}",L"demonstrative_determiner{TIMEMODIFIER}",L"quantifier{TIMEMODIFIER}",L"determiner|a",L"adjective|other{TIMEMODIFIER}",0,1,1,
 		6,L"month*-1{MONTH}",L"daysOfWeek*-1{DAYWEEK}",L"season*-1{SEASON}",L"timeUnit*-1{TIMECAPACITY}",L"dayUnit*-1{TIMECAPACITY}",L"holiday*-1{HOLIDAY}",0,1,1,
 		// to, past, before, till, ago, etc

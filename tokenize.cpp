@@ -8,14 +8,48 @@
 
 bool Source::adjustWord(unsigned int q)
 { LFS
-	bool insertedWord=false;
+	bool insertedOrDeletedWord=false;
 	// let's have some dinner!
 	if ((m[q].flags&WordMatch::flagNounOwner) && m[q].word->first==L"let")
 	{
 		m[q].flags&=~WordMatch::flagNounOwner;
 		m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"us"),0,debugTrace));
 		m[q+1].forms.set(accForm);
-		insertedWord=true;
+		insertedOrDeletedWord=true;
+	}
+	// d'ye -> do you
+	else if (m[q].word->first == L"d'ye" || m[q].word->first == L"d'you")
+	{
+		m[q].word = Words.gquery(L"do");
+		m[q].forms.clear();
+		m[q].forms.set(FormsClass::gFindForm(L"does"));
+		m[q].flags = 0;
+		m.insert(m.begin() + q, WordMatch(Words.gquery(L"you"), 0, debugTrace));
+		m[q + 1].forms.set(FormsClass::gFindForm(L"personal_pronoun"));
+		insertedOrDeletedWord = true;
+	}
+	// t'other -> the other
+	else if (m[q].word->first == L"t'other")
+	{
+		m[q].word = Words.gquery(L"the");
+		m[q].forms.clear();
+		m[q].forms.set(FormsClass::gFindForm(L"determiner"));
+		m[q].flags = 0;
+		m.insert(m.begin() + q, WordMatch(Words.gquery(L"other"), 0, debugTrace));
+		m[q + 1].forms.set(FormsClass::gFindForm(L"pronoun"));
+		insertedOrDeletedWord = true;
+	}
+	// more'n -> more than
+	else if (m[q].word->first == L"more'n")
+	{
+		m[q].word = Words.gquery(L"more");
+		m[q].forms.clear();
+		m[q].forms.set(FormsClass::gFindForm(L"adverb"));
+		m[q].flags = 0;
+		m.insert(m.begin() + q, WordMatch(Words.gquery(L"than"), 0, debugTrace));
+		m[q + 1].forms.set(FormsClass::gFindForm(L"conjunction"));
+		m[q + 1].forms.set(FormsClass::gFindForm(L"preposition"));
+		insertedOrDeletedWord = true;
 	}
 	// What's he want? --> What does he want?
 	// What's for dinner? --> What is for dinner?
@@ -25,14 +59,14 @@ bool Source::adjustWord(unsigned int q)
 		m[q].flags&=~WordMatch::flagNounOwner;
 		m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"ishasdoes"),0,debugTrace));
 		m[q+1].setPreferredForm();
-		insertedWord=true;
+		insertedOrDeletedWord=true;
 	}
 	else if ((m[q].flags&WordMatch::flagNounOwner) && (m[q].word->first==L"that"))
 	{
 		m[q].flags&=~WordMatch::flagNounOwner;
 		m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"is"),0,debugTrace));
 		m[q+1].setPreferredForm();
-		insertedWord=true;
+		insertedOrDeletedWord=true;
 	}
 	// 'Tis the season --> It is the season
 	else if (m[q].word->first==L"'" && q+1<m.size() && m[q+1].word->first==L"tis")
@@ -46,26 +80,36 @@ bool Source::adjustWord(unsigned int q)
 		m[q+1].forms.set(FormsClass::gFindForm(L"is"));
 		m[q+1].flags=0;
 	}
-	else if (m[q].word->first==L"gotta")
+	else if (m[q].word->first == L"gotta")
 	{
 		// Gotta penny?                   have a
 		// You gotta lot of nerve...      have a
 		// I gotta go now.                have to
-		m[q].word=Words.gquery(L"have");
-		m[q].flags=0;
+		m[q].word = Words.gquery(L"have");
+		m[q].flags = 0;
 		m[q].forms.clear();
 		m[q].setPreferredForm();
-		if (m[q+1].queryForm(verbForm)<0)
+		if (m[q + 1].queryForm(verbForm) < 0)
 		{
-			m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"a"),0,debugTrace));
-			m[q+1].forms.set(determinerForm);
+			m.insert(m.begin() + q + 1, WordMatch(Words.gquery(L"a"), 0, debugTrace));
+			m[q + 1].forms.set(determinerForm);
 		}
 		else
 		{
-			m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"to"),0,debugTrace));
-			m[q+1].forms.set(toForm);
+			m.insert(m.begin() + q + 1, WordMatch(Words.gquery(L"to"), 0, debugTrace));
+			m[q + 1].forms.set(toForm);
 		}
-		insertedWord=true;
+		insertedOrDeletedWord = true;
+	}
+	else if (m[q].word->first == L"dinna")
+	{
+		m[q].word = Words.gquery(L"didn't");
+		m[q].flags = 0;
+		m[q].forms.clear();
+		m[q].forms.set(doForm);
+		m.insert(m.begin() + q + 1, WordMatch(Words.gquery(L"you"), 0, debugTrace));
+		m[q + 1].forms.set(FormsClass::gFindForm(L"personal_pronoun"));
+		insertedOrDeletedWord = true;
 	}
 	// I lived at 23 Beek St.  That was a nice block.
 	else if (q>0 && m[q].queryForm(sa_abbForm)>=0 &&
@@ -73,28 +117,28 @@ bool Source::adjustWord(unsigned int q)
 		(m[q+1].flags&WordMatch::flagFirstLetterCapitalized))
 	{
 		m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"."),0,debugTrace));
-		insertedWord=true;
+		insertedOrDeletedWord=true;
 	}
 	// 2:30 A.M.
 	else if (q>0 && (m[q].word->first==L"a.m." || m[q].word->first==L"p.m.") && (m[q-1].queryForm(timeForm)>=0 || m[q-1].queryForm(NUMBER_FORM_NUM)>=0) &&
 		(m[q+1].flags&WordMatch::flagFirstLetterCapitalized) && m[q+1].queryForm(L"daysOfWeek")<0)
 	{
 		m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"."),0,debugTrace));
-		insertedWord=true;
+		insertedOrDeletedWord=true;
 	}
 	// 2390 B.C.
 	else if (q>0 && (m[q].word->first==L"a.d." || m[q].word->first==L"b.c.") && m[q-1].queryForm(numberForm)>=0 &&
 		(m[q+1].flags&WordMatch::flagFirstLetterCapitalized))
 	{
 		m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"."),0,debugTrace));
-		insertedWord=true;
+		insertedOrDeletedWord=true;
 	}
 	else if (q>0 && m[q].word->first==L"no." &&
 		m[q+1].queryForm(numberForm)<0 && m[q+1].queryForm(numeralCardinalForm)<0 && m[q+1].queryForm(romanNumeralForm)<0 &&
 		(m[q+1].flags&WordMatch::flagFirstLetterCapitalized))
 	{
 		m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"."),0,debugTrace));
-		insertedWord=true;
+		insertedOrDeletedWord=true;
 	}
 	else if (m[q].word->first==L"had" && m[q+1].word->first==L"better" && m[q+2].queryForm(verbForm)>=0)
 	{
@@ -116,10 +160,10 @@ bool Source::adjustWord(unsigned int q)
 		m[q].forms.clear();
 		m[q].setPreferredForm();
 		m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"to"),0,debugTrace));
-		insertedWord=true;
+		insertedOrDeletedWord=true;
 		m[q+1].forms.set(toForm);
 	}
-	return insertedWord;
+	return insertedOrDeletedWord;
 }
 
 bool Source::quoteTest(int q,unsigned int &quoteCount,int &lastPSQuote,tIWMM quoteType,tIWMM quoteOpenType,tIWMM quoteCloseType)

@@ -197,6 +197,7 @@ int createNouns(void)
 		9,L"determiner{DET}",L"demonstrative_determiner{DET}",L"possessive_determiner{DET:ADJ}",L"interrogative_determiner{DET}", L"quantifier{DET}", L"numeral_cardinal{DET}", L"__HIS_HER_DETERMINER*1",L"_NAMEOWNER{DET}",L"__IPDET", 0,0,1,
 				1,L"_ADJECTIVE{_BLOCK}",0,0,3, 
 				2,L"noun*1",L"Proper Noun*1",SINGULAR,0,2, // noun and Proper Noun must cost 1 otherwise they will match / diamond necklace
+				1, L"adjective", 0, 0, 1,  // cherry coloured ribbons
 				2,L"__N1",L"_NAME{GNOUN:NAME}",0,1,1,                 // the noun and PN in ADJECTIVE.  The only difference is here they have
 																																	 // no OWNER flags
 			//2,L"_ADJECTIVE",L"preposition",0,0,2,0);// confused with repeated preposition phrases 'on the afternoon of May'.
@@ -206,7 +207,7 @@ int createNouns(void)
 			1,L"_ADJECTIVE{_BLOCK}",0,0,1,
 			1,L"noun|friend{N_AGREE}",0,1,1,
 			0);
- // this also encourages a word identified as both adverb and adjective to be an adverb if identified before an adjective.
+// this also encourages a word identified as both adverb and adjective to be an adverb if identified before an adjective.
 	// the more adjectives repeated, the more uncommon - taken out - discourages nouns taking on adjectives
 	// all these old things / all my old things / half these old things / both old things
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}",L"3",
