@@ -661,7 +661,7 @@ int overwriteWordInflectionFlagsInDB(MYSQL mysql, wstring word, int inflections,
 	else
 	{
 		wstring sFlags;
-		lplog(LOG_INFO, L"DB statement [%s add inflection flag]:%s", word.c_str(), allFlags(inflections, sFlags));
+		lplog(LOG_INFO, L"DB statement [%s add inflection flag]:%s", word.c_str(), inflectionFlagsToStr(inflections, sFlags));
 	}
 	return 0;
 }
@@ -3163,10 +3163,15 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"ST correct: LP says noun but ST says adjective (after is, before unmodifiable)"]++;
 			return 0;
 		}
-		else if ((source.m[wordSourceIndex].word->second.inflectionFlags&PLURAL) == PLURAL)
-			partofspeech += L"***ADJNOUNDET4";
-		else 
-			partofspeech += L"***ADJNOUNDET5";
+		else if ((source.m[wordSourceIndex].word->second.inflectionFlags&(SINGULAR|PLURAL)) == PLURAL)
+		{
+			errorMap[L"LP correct: LP says noun but ST says adjective (plural only)"]++;
+			return 0;
+		}
+		else if (source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(nounForm)] >=4)
+			partofspeech += L"***ADJNOUNDET2";
+		else
+			partofspeech += L"***ADJNOUNDET3";
 		//errorMap[L"LP correct: adverb of customary form (ending in -ly) ST says " + primarySTLPMatch + L" but LP says adverb"]++;
 		//return 0;
 	}
@@ -3318,7 +3323,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		}
 	}
 	// checked with 100 examples and 1 was incorrect (misparse)
-	if ((primarySTLPMatch == L"noun" || primarySTLPMatch == L"adjective") && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && word.length()>3 && word.substr(word.length()-3)==L"ing")
+	if ((primarySTLPMatch == L"noun" || primarySTLPMatch == L"adjective") && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && word.length() > 3 && word.substr(word.length() - 3) == L"ing")
 	{
 		if (primarySTLPMatch == L"noun" && (source.queryPattern(wordSourceIndex, L"__INFP") != -1 ||
 			source.queryPattern(wordSourceIndex, L"_VERB", L"4") != -1 ||
@@ -3335,8 +3340,8 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		if (primarySTLPMatch == L"adjective" && (
 			source.queryPattern(wordSourceIndex, L"__INFP") != -1 ||
 			source.queryPattern(wordSourceIndex, L"_VERB", L"4") != -1 ||
-			source.queryPattern(wordSourceIndex, L"_VERB", L"8") != -1 ||			
-			source.queryPattern(wordSourceIndex, L"__NOUN", L"D") != -1 || 
+			source.queryPattern(wordSourceIndex, L"_VERB", L"8") != -1 ||
+			source.queryPattern(wordSourceIndex, L"__NOUN", L"D") != -1 ||
 			//(w=source.queryPattern(wordSourceIndex, L"__NOUN", L"2")) != -1 && source.pema[w].end==1) ||
 			(source.queryPattern(wordSourceIndex, L"_VERBONGOING") != -1 && source.queryPattern(wordSourceIndex, L"__MODAUX") != -1) ||
 			(source.queryPattern(wordSourceIndex, L"_VERBONGOING") != -1 && source.queryPattern(wordSourceIndex, L"_VERBREL2", L"1") != -1)))
@@ -3356,6 +3361,58 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			return 0;
 		}
 		//partofspeech += L"***NAVING";
+	}
+	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0)
+	{
+		wstring nounCost, verbCost;
+		itos(source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(nounForm)], nounCost);
+		itos(source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(verbForm)], verbCost);
+		if (word.length() > 2 && word.substr(word.length() - 2) == L"ed" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST)
+		{
+			partofspeech += L"***ISNOUN?PAST NOUN=" + nounCost + L"VERB=" + verbCost;
+		}
+		if (word.length() > 3 && word.substr(word.length() - 3) == L"ing" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE)
+		{
+			int pemaOffset = source.queryPattern(wordSourceIndex, L"__NOUN", L"2");
+			if (pemaOffset >= 0 && source.pema[pemaOffset].end >= 2)
+				partofspeech += L"***ISNOUN?PRESENTPARTNOUNADJ NOUN=" + nounCost + L"VERB=" + verbCost;
+			else
+				partofspeech += L"***ISNOUN?PRESENTPART NOUN=" + nounCost + L"VERB=" + verbCost;
+		}
+		if ((source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_THIRD_SINGULAR) == VERB_PRESENT_THIRD_SINGULAR)
+		{
+			partofspeech += L"***ISNOUN?PRESENTTHIRD NOUN=" + nounCost + L"VERB=" + verbCost;
+		}
+		if ((source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_FIRST_SINGULAR) == VERB_PRESENT_FIRST_SINGULAR)
+		{
+			partofspeech += L"***ISNOUN?PRESENTFIRST NOUN=" + nounCost + L"VERB=" + verbCost;
+		}
+	}
+	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0)
+	{
+		wstring adjectiveCost, verbCost;
+		itos(source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(adjectiveForm)], adjectiveCost);
+		itos(source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(verbForm)], verbCost);
+		if (word.length() > 2 && word.substr(word.length() - 2) == L"ed" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST)
+		{
+			partofspeech += L"***ISADJECTIVE?PAST ADJECTIVE=" + adjectiveCost + L"VERB=" + verbCost;
+		}
+		if (word.length() > 3 && word.substr(word.length() - 3) == L"ing" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE)
+		{
+			int pemaOffset = source.queryPattern(wordSourceIndex, L"__NOUN", L"2");
+			if (pemaOffset >= 0 && source.pema[pemaOffset].end >= 2)
+				partofspeech += L"***ISADJECTIVE?PRESENTPARTNOUNADJ ADJECTIVE=" + adjectiveCost + L"VERB=" + verbCost;
+			else
+				partofspeech += L"***ISADJECTIVE?PRESENTPART ADJECTIVE=" + adjectiveCost + L"VERB=" + verbCost;
+		}
+		if ((source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_THIRD_SINGULAR) == VERB_PRESENT_THIRD_SINGULAR)
+		{
+			partofspeech += L"***ISADJECTIVE?PRESENTTHIRD ADJECTIVE=" + adjectiveCost + L"VERB=" + verbCost;
+		}
+		if ((source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_FIRST_SINGULAR) == VERB_PRESENT_FIRST_SINGULAR)
+		{
+			partofspeech += L"***ISADJECTIVE?PRESENTFIRST ADJECTIVE=" + adjectiveCost + L"VERB=" + verbCost;
+		}
 	}
 	// this is correct exceot for rare parse structure: I would have done it *again* here had I thought you were coming to try to win her heart
 	if (source.m[wordSourceIndex].queryWinnerForm(L"conjunction") >= 0 && source.m[wordSourceIndex + 1].pma.queryPattern(L"__S1") != -1)
@@ -3435,7 +3492,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 // checks if the part of speech indicated in parse from the Stanford POS tagger matches the winner forms at wordSourceIndex.
 // returns yes=0, no=1
 int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numTimesWordOccurred, wstring originalParse, wstring sentence, wstring &parse, int &numPOSNotFound, 
-	  unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, 
+	unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &formMisMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap,
 	bool inRelativeClause, unordered_map<wstring, int> &errorMap,int startOfSentence)
 {
 	wstring word = source.m[wordSourceIndex].word->first;
@@ -3523,6 +3580,7 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 				source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 				formNoMatchMap[posListStr + L"!= " + winnerFormsString]++;
 				wordNoMatchMap[word]++;
+				formMisMatchMap[primarySTLPMatch + L"!=" + winnerFormsString]++;
 				wstring originalNextWord;
 				source.getOriginalWord(wordSourceIndex+1, originalNextWord, false, false);
 				size_t pos = sentence.find(originalWord);
@@ -3641,7 +3699,7 @@ void printFormDistribution(wstring word, double adp, FormDistribution fd, wstrin
 			lplog(LOG_ERROR, L"  ST %s:%d %d%% %d%%", form.c_str(), count, 100 * count / (fd.agreeSTLP + fd.disagreeSTLP), fd.agreeFormDistribution[form] * 100 / count);
 }
 
-int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *vm,JNIEnv *env, int &numNoMatch, int &numPOSNotFound, unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, unordered_map<wstring, int> &errorMap, bool pcfg,wstring limitToWord)
+int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *vm,JNIEnv *env, int &numNoMatch, int &numPOSNotFound, unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &formMisMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, unordered_map<wstring, int> &errorMap, bool pcfg,wstring limitToWord)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
@@ -3712,7 +3770,7 @@ int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *
 					}
 					else
 					{
-						if (checkStanfordPCFGAgainstWinner(source, wordSourceIndex, numTimesWordOccurred[originalIWord], originalParse, sentence, parse, numPOSNotFound, formNoMatchMap, wordNoMatchMap, VFTMap, inRelativeClause, errorMap, start))
+						if (checkStanfordPCFGAgainstWinner(source, wordSourceIndex, numTimesWordOccurred[originalIWord], originalParse, sentence, parse, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, inRelativeClause, errorMap, start))
 						{
 							numNoMatch++;
 							if (!sentencePrinted)
@@ -3757,7 +3815,7 @@ int stanfordCheck(Source source, int step, bool pcfg)
 	JavaVM *vm;
 	JNIEnv *env;
 	createJavaVM(vm, env);
-	unordered_map<wstring, int> formNoMatchMap,wordNoMatchMap,VFTMap,errorMap;
+	unordered_map<wstring, int> formNoMatchMap, formMisMatchMap, wordNoMatchMap,VFTMap,errorMap;
 	int numNoMatch = 0, numPOSNotFound = 0,totalWords=0;
 	my_ulonglong totalSource = mysql_num_rows(result);
 	for (int row = 0; sqlrow = mysql_fetch_row(result); row++)
@@ -3776,7 +3834,7 @@ int stanfordCheck(Source source, int step, bool pcfg)
 		wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d sources in %02I64d:%02I64d:%02I64d [%d sources/hour] (%-35.35s...)", numSourcesProcessedNow * 100 / totalSource, numSourcesProcessedNow, totalSource,
 			processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, (processingSeconds) ? numSourcesProcessedNow * 3600 / processingSeconds : 0, title.c_str());
 		SetConsoleTitle(buffer);
-		int setStep = stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, wordNoMatchMap,VFTMap,errorMap,pcfg,L"");
+		int setStep = stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap,VFTMap,errorMap,pcfg,L"");
 		totalWords += source.m.size();
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
@@ -3808,10 +3866,15 @@ int stanfordCheck(Source source, int step, bool pcfg)
 	}
 	lplog(LOG_ERROR, L"maxWord=%s maxForm=%s maxDiff=%d", maxWord.c_str(), maxForm.c_str(), maxDiff);
 	lplog(LOG_ERROR, L"FORMS ------------------------------------------------------------------------------");
-	map<int, wstring, std::greater<int>> formNoMatchReverseMap, wordNoMatchReverseMap,VFTReverseMap,errorReverseMap;
+	map<int, wstring, std::greater<int>> formNoMatchReverseMap, formMisMatchReverseMap, wordNoMatchReverseMap,VFTReverseMap,errorReverseMap;
 	for (auto const&[forms, count] : formNoMatchMap)
 		formNoMatchReverseMap[count] += forms + L" *";
 	for (auto const&[count, forms] : formNoMatchReverseMap)
+		lplog(LOG_ERROR, L"forms %s [%d]", forms.c_str(), count);
+	lplog(LOG_ERROR, L"FORM MAPPING ---------------------------------------------------------------------------");
+	for (auto const&[forms, count] : formMisMatchMap)
+		formMisMatchReverseMap[count] += forms + L" *";
+	for (auto const&[count, forms] : formMisMatchReverseMap)
 		lplog(LOG_ERROR, L"forms %s [%d]", forms.c_str(), count);
 	if (!VFTMap.empty())
 	{
@@ -3938,9 +4001,9 @@ int stanfordCheckTest(Source source, wstring path, int sourceId, bool pcfg,wstri
 	JavaVM *vm;
 	JNIEnv *env;
 	createJavaVM(vm, env);
-	unordered_map<wstring, int> formNoMatchMap, wordNoMatchMap, VFTMap, errorMap;
+	unordered_map<wstring, int> formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, errorMap;
 	int numNoMatch = 0, numPOSNotFound = 0;
-	stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, wordNoMatchMap, VFTMap, errorMap, pcfg,limitToWord);
+	stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, errorMap, pcfg,limitToWord);
 	int totalWords = source.m.size();
 	destroyJavaVM(vm);
 	if (limitToWord.length() > 0)
@@ -4198,6 +4261,67 @@ void wmain(int argc,wchar_t *argv[])
 	case 70:
 		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"");
 		break;
+	case 71:
+		vector <wstring> words = { L"advertising",L"angling",L"bearing",L"blending",L"blessing",L"blowing",L"boating",L"booking",L"bottling",L"casting",L"clearing",
+L"colouring",L"craving",L"drinking",L"etching",L"fastening",L"felling",L"fencing",L"finding",L"fixing",L"flooding",L"furnishing",
+L"gilding",L"grading",L"grafting",L"grating",L"greeting",L"kindling",L"labouring",L"lending",L"lessening",L"leveling",L"logging",
+L"manufacturing",L"masking",L"meddling",L"mixing",L"molting",L"motoring",L"mourning",L"ordering",L"paling",L"parking",L"peeling",
+L"pumping",L"quickening",L"railing",L"riding",L"rigging",L"rising",L"rumbling",L"running",L"scrubbing",L"seating",L"setting",
+L"sewing",L"sheeting",L"shelling",L"sighting",L"signing",L"slackening",L"stabling",L"thickening",L"undertaking",L"undoing",L"upcurling",
+L"walking",L"watering",L"weaving",L"yellowing",L"baking",L"bathing",L"bidding",L"bullying",L"curling",L"eating",L"farming",
+L"flying",L"gambling",L"gnawing",L"healing",L"knitting",L"liking",L"mountaineering",L"painting",L"printing",L"rendering",L"scattering",
+L"scolding",L"tinkling",L"understanding",L"backing",L"blotting",L"building",L"fishing",L"handling",L"packing",L"planning",L"planting",
+L"seeming",L"shrinking",L"spending",L"trapping",L"tuning",L"whistling",L"awakening",L"dawning",L"dressing",L"fluttering",L"grinding",
+L"lodging",L"meaning",L"pounding",L"racking",L"warning",L"posting",L"washing",L"breathing",L"drawing",L"opening",L"crying",
+L"racing",L"shooting",L"swimming",L"hunting",L"learning",L"lighting",L"whispering",L"wishing",L"beginning",L"writing",L"boarding",
+L"reading",L"feeling",L"questioning",L"showing",L"knowing",L"being",L"meeting",L"thinking",L"living",L"saying",
+L"advertising",L"angling",L"attending",L"awakening",L"backing",L"baking",L"bathing",L"bearing",L"beginning",L"being",L"bidding",L"blending",
+L"blessing",L"blotting",L"boarding",L"boating",L"booking",L"bottling",L"breathing",L"building",L"bullying",L"casting",L"clearing",L"colouring",
+L"craving",L"crying",L"curling",L"dawning",L"drawing",L"dressing",L"drinking",L"dwelling",L"eating",L"etching",L"farming",L"fastening",
+L"feeling",L"fishing",L"fixing",L"flooding",L"fluttering",L"furnishing",L"gambling",L"gilding",L"gnawing",L"grading",L"grafting",L"grating",
+L"greeting",L"grinding",L"handling",L"healing",L"hunting",L"kindling",L"knitting",L"knowing",L"labouring",L"learning",L"lending",L"lessening",
+L"leveling",L"lighting",L"liking",L"living",L"lodging",L"logging",L"manufacturing",L"masking",L"meaning",L"meddling",L"meeting",L"mixing",
+L"molting",L"motoring",L"mountaineering",L"mourning",L"opening",L"ordering",L"packing",L"painting",L"paling",L"parking",L"peeling",L"piping",
+L"planning",L"planting",L"posting",L"pounding",L"printing",L"pumping",L"questioning",L"quickening",L"racing",L"racking",L"railing",L"reading",
+L"rendering",L"riding",L"rigging",L"rumbling",L"running",L"saying",L"scattering",L"scolding",L"scrubbing",L"seating",L"seeming",L"setting",
+L"sewing",L"sheeting",L"shelling",L"shooting",L"showing",L"shrinking",L"sighting",L"signing",L"slackening",L"spending",L"stabling",L"swimming",
+L"thickening",L"thinking",L"tinkling",L"trapping",L"tuning",L"understanding",L"undertaking",L"undoing",L"upcurling",L"walking",L"warning",L"washing",
+L"watering",L"weaving",L"whispering",L"whistling",L"wishing",L"writing",L"yachting",L"yellowing" };
+		if (!myquery(&source.mysql, L"LOCK TABLES words WRITE"))
+			return;
+		for (wstring sWord : words)
+		{
+			set <int> posSet;
+			bool plural, networkAccessed, logEverything=true;
+			getMerriamWebsterDictionaryAPIForms(sWord, posSet, plural, networkAccessed, logEverything);
+			wstring sForms;
+			bool hasNoun = false;
+			for (int form : posSet)
+			{
+				sForms += Forms[form]->name + L" ";
+				if (Forms[form]->name == L"noun")
+					hasNoun = true;
+			}
+			if (!hasNoun)
+				lplog(LOG_INFO, L"***%s: %s", sWord.c_str(), sForms.c_str());
+			wstring pluralWord = sWord + L"s";
+			wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+			int startTime = clock(), numWordsInserted = 0;
+			MYSQL_RES * result;
+			MYSQL_ROW sqlrow = NULL;
+			_snwprintf(qt, QUERY_BUFFER_LEN, L"select id from words where word=\"%s\"", pluralWord.c_str());
+			int wordId=-1;
+			if (myquery(&source.mysql, qt, result)) // if result is null, also returns false
+			{
+				if (sqlrow = mysql_fetch_row(result))
+				{
+					wordId = atoi(sqlrow[0]);
+					mysql_free_result(result);
+				}
+			}
+			if (wordId<0)
+				lplog(LOG_INFO, L"***%s: plural %s not found.", sWord.c_str(),pluralWord.c_str());
+		}
 	}
 	source.unlockTables();
 }

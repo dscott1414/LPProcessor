@@ -1044,6 +1044,12 @@ bool Source::tagSetAllIn(vector <costPatternElementByTagSet> &PEMAPositions,int 
 }
 
 // ONLY AND ALL pema in chainPEMAPositions have IN_CHAIN flag set.
+// input:
+//   PEMAPositions - used not set
+//   chainPEMAPositions - tempCost set, to transfer to PEMAPositionsSet.
+// output:
+//   PEMAPositionsSet - set eith elements from chainPEMAPositions, with tempCost set to the minimum of the maximum cost (maxOCost)
+//     maxOCost is the maximum of the original cost of the element (the cost of just the words and the cost associated with the element of the pattern explicitly set in the pattern definition) PLUS the cumulativeDeltaCost
 #define MIN_CHAIN_COST -MAX_COST
 void Source::setChain(vector <patternElementMatchArray::tPatternElementMatch *> chainPEMAPositions,vector <costPatternElementByTagSet> &PEMAPositions,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int &traceSource,int &minOverallChainCost)
 { LFS
@@ -1079,17 +1085,6 @@ void Source::setChain(vector <patternElementMatchArray::tPatternElementMatch *> 
 					PEMAPositions[I].tagSet, PEMAPositions[I].traceSource, PEMAPositions[I].element, PEMAPositions[I].cost, maxDeltaCost, lastWinningPEMAPosition);
 			}
 		}
-		// back up if PEMA element is the same
-		// POS   : PEMA   TS E# COST MINC TRSC REJECT (0 set)
-		// 000008: 000180 00 01 000  000  001  true
-		// 000009: 000181 00 02 000  000  001  true
-		// 000009: 000181 01 03 002  002  002  false
-		/* decreased pattern matching accuracy - does not take into account when pattern actually ends
-		if (I==PEMAPositions.size() && I) I--;
-		for (int pp=PEMAPositions[I].PEMAPosition; I<PEMAPositions.size() && PEMAPositions[I].PEMAPosition==pp; I--)
-		if (PEMAPositions[I].cost<maxDeltaCost)
-		maxDeltaCost=PEMAPositions[lastWinningPEMAPosition=I].cost;
-		*/
 		// find lowest cost for this element.  Otherwise this would stop at element 106, when really 108 is better.
 		//  POS   : PEMA   TS E# COST MINC TRSC REJECT (3 set)
 		//  000002: 002580 27 01 000  -09  108  false
@@ -1985,7 +1980,7 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vector <tTagLocation> > &tagSets,wstring purpose)
 { LFS // DLFS
 	vector <int> costs;
-	if (pema[PEMAPosition].flagSet(patternElementMatchArray::COST_ND))
+	if (pema[PEMAPosition].flagSet(patternElementMatchArray::COST_ROLE))
 	{
 		if (debugTrace.traceDeterminer)
 		{
@@ -1995,7 +1990,7 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 		}
 		return;
 	}
-	pema[PEMAPosition].setFlag(patternElementMatchArray::COST_ND);
+	pema[PEMAPosition].setFlag(patternElementMatchArray::COST_ROLE);
 	// search for all subjects, objects, subobjects and prepobjects
 	if (startCollectTags(debugTrace.traceDeterminer,roleTagSet,position,PEMAPosition,tagSets,true,true,L"evaluateNounDeterminers - ROLE")>0)
 	{
@@ -2009,7 +2004,7 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 			//    not having the determiner.
 			// MOVEClimb aboard the lugger . 
 			tagSets[0].push_back(tTagLocation(0,pema[PEMAPosition].getChildPattern(),pema[PEMAPosition].getPattern(),pema[PEMAPosition].getElement(),position,pema[PEMAPosition].end,-PEMAPosition,true));
-			pema[PEMAPosition].removeFlag(patternElementMatchArray::COST_ND);
+			pema[PEMAPosition].removeFlag(patternElementMatchArray::COST_ROLE);
 		}
 		// for each pattern of subjects, objects and subobjects
 		for (unsigned int I=0; I<tagSets.size(); I++)
@@ -2028,6 +2023,7 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 				for (unsigned int J=0; J<tagSets[I].size(); J++)
 				{
 					tTagLocation *tl=&tagSets[I][J];
+					// don't obey blocks when searching for objects to evaluate
 					if (patterns[tl->parentPattern]->stopDescendingTagSearch(tl->parentElement,pema[(tl->PEMAOffset<0) ? -tl->PEMAOffset:tl->PEMAOffset].__patternElementIndex,pema[(tl->PEMAOffset<0) ? -tl->PEMAOffset:tl->PEMAOffset].isChildPattern()))
 						continue;
 					int nPattern=tl->pattern,nPosition=tl->sourcePosition,nLen=tl->len,traceSource=-1;
@@ -2356,6 +2352,16 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 				lplog(L"          %d:decreased verbObjectCost=%d to %d for verb %s because of possible particle usage (%s)",
 					tagSet[verbTagIndex].sourcePosition, verbObjectCost, 0, verbWord->first.c_str(), m[whereVerb + 1].word->first.c_str());
 			verbObjectCost = 0;
+		}
+		// here or there may be considered a prepositional phrase
+		// I am swimming here. (I am swimming in the pool) / I am going there now. (I am going to the store now)
+		if (numObjects == 1 && verbObjectCost > verbWord->second.usageCosts[tFI::VERB_HAS_0_OBJECTS] && tagSet[whereObjectTag].len == 1 &&
+			(m[tagSet[whereObjectTag].sourcePosition].word->first == L"there" || m[tagSet[whereObjectTag].sourcePosition].word->first == L"here"))
+		{
+			if (debugTrace.traceVerbObjects)
+				lplog(L"          %d:decreased verbObjectCost=%d to %d for verb %s because object is 'here' or 'there' (standing in for a PP which may not be considered an object)",
+					tagSet[verbTagIndex].sourcePosition, verbObjectCost, verbWord->second.usageCosts[tFI::VERB_HAS_0_OBJECTS], verbWord->first.c_str(), m[whereVerb + 1].word->first.c_str());
+			verbObjectCost = verbWord->second.usageCosts[tFI::VERB_HAS_0_OBJECTS];
 		}
 		if (numObjects==2)
 		{
@@ -2775,6 +2781,55 @@ bool WordMatch::compareCost(int AC1,int LEN1,int lowestSeparatorCost,bool alsoSe
 	return setInternal;
 }
 
+void Source::evaluateExplicitSubjectVerbAgreement(int position, patternMatchArray::tPatternMatch *pm, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions)
+{
+	// this is for NOUN[R]
+	int nextWord = position + pm->len;
+	int verbPosition = position + pm->len - 1;
+	if (debugTrace.traceDeterminer)
+		lplog(L"%d:Noun (%d,%d) is compound, testing verb=%d, nextWord=%d.", position, position, position + pm->len, verbPosition, nextWord);
+	int verbAfterVerbCost = calculateVerbAfterVerbUsage(verbPosition, nextWord);
+	if (!verbAfterVerbCost)
+	{
+		// if next word is an adverb, skip.
+		int maxLen = -1;
+		if (m[nextWord].pma.queryPattern(L"_ADVERB", maxLen) != -1)
+		{
+			nextWord += maxLen;
+			if (debugTrace.traceDeterminer)
+				lplog(L"%d:Noun (%d,%d) is compound, testing verb=%d, nextWord=%d.", position, position, position + pm->len, verbPosition, nextWord);
+			verbAfterVerbCost = calculateVerbAfterVerbUsage(verbPosition, nextWord);
+		}
+	}
+	if (!verbAfterVerbCost)
+	{
+		// if verb is an adverb, go backward.
+		if (m[verbPosition].pma.queryPattern(L"_ADVERB") != -1)
+		{
+			verbPosition--;
+			if (debugTrace.traceDeterminer)
+				lplog(L"%d:Noun (%d,%d) is compound, testing verb=%d, nextWord=%d.", position, position, position + pm->len, verbPosition, nextWord);
+			verbAfterVerbCost = calculateVerbAfterVerbUsage(verbPosition, nextWord);
+		}
+	}
+	if (verbAfterVerbCost)
+	{
+		if (debugTrace.traceDeterminer)
+			lplog(L"%d:Noun (%d,%d) is compound, has a verb at end and a verb after the end.", position, position, position + pm->len);
+		int PEMAPosition = pm->pemaByPatternEnd;
+		pema[PEMAPosition].addOCostTillMax(tFI::COST_OF_INCORRECT_VERBAL_NOUN);
+		if (debugTrace.traceDeterminer)
+			lplog(L"%d:Added %d cost to %s[%s](%d,%d).", position, tFI::COST_OF_INCORRECT_VERBAL_NOUN,
+				patterns[pema[PEMAPosition].getPattern()]->name.c_str(), patterns[pema[PEMAPosition].getPattern()]->differentiator.c_str(), position + pema[PEMAPosition].begin, position + pema[PEMAPosition].end);
+	}
+	assessCost(NULL, pm, -1, position, tagSets, tertiaryPEMAPositions, L"eliminate loser patterns - explicit subject verb agreement");
+}
+
+void Source::evaluateExplicitNounDeterminerAgreement(int position, patternMatchArray::tPatternMatch *pm, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions)
+{
+	assessCost(NULL, pm, -1, position, tagSets, tertiaryPEMAPositions, L"eliminate loser patterns - explicit noun determiner agreement");
+}
+
 // at each position in m:
 //   for each pma entry not already marked as winner
 //     for each position from begin to end
@@ -2810,48 +2865,9 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 					lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) PHASE 1 not marked as winner (%s).",position,pmIndex,
 					p->name.c_str(),p->differentiator.c_str(),position,pm->len+position,(p->onlyAloneExceptInSubPatternsFlag)? L"onlyAloneExceptInSubPatternsFlag" : L"no fill flag");
 				if (p->explicitSubjectVerbAgreement)
-				{
-					// this is for NOUN[R]
-					int nextWord = position+pm->len;
-					int verbPosition = position + pm->len - 1;
-					if (debugTrace.traceDeterminer)
-						lplog(L"%d:Noun (%d,%d) is compound, testing verb=%d, nextWord=%d.", position, position, position + pm->len, verbPosition, nextWord);
-					int verbAfterVerbCost = calculateVerbAfterVerbUsage(verbPosition, nextWord);
-					if (!verbAfterVerbCost)
-					{
-						// if next word is an adverb, skip.
-						int maxLen = -1;
-						if (m[nextWord].pma.queryPattern(L"_ADVERB", maxLen) != -1)
-						{
-							nextWord += maxLen;
-							if (debugTrace.traceDeterminer)
-								lplog(L"%d:Noun (%d,%d) is compound, testing verb=%d, nextWord=%d.", position, position, position + pm->len, verbPosition, nextWord);
-							verbAfterVerbCost = calculateVerbAfterVerbUsage(verbPosition, nextWord);
-						}
-					}
-					if (!verbAfterVerbCost)
-					{
-						// if verb is an adverb, go backward.
-						if (m[verbPosition].pma.queryPattern(L"_ADVERB") != -1)
-						{
-							verbPosition--;
-							if (debugTrace.traceDeterminer)
-								lplog(L"%d:Noun (%d,%d) is compound, testing verb=%d, nextWord=%d.", position, position, position + pm->len, verbPosition, nextWord);
-							verbAfterVerbCost = calculateVerbAfterVerbUsage(verbPosition, nextWord);
-						}
-					}
-					if (verbAfterVerbCost)
-					{
-						if (debugTrace.traceDeterminer)
-							lplog(L"%d:Noun (%d,%d) is compound, has a verb at end and a verb after the end.", position, position, position+pm->len);
-						int PEMAPosition = pm->pemaByPatternEnd;
-						pema[PEMAPosition].addOCostTillMax(tFI::COST_OF_INCORRECT_VERBAL_NOUN);
-						if (debugTrace.traceDeterminer)
-							lplog(L"%d:Added %d cost to %s[%s](%d,%d).", position, tFI::COST_OF_INCORRECT_VERBAL_NOUN,
-								patterns[pema[PEMAPosition].getPattern()]->name.c_str(), patterns[pema[PEMAPosition].getPattern()]->differentiator.c_str(), position + pema[PEMAPosition].begin, position + pema[PEMAPosition].end);
-					}
-					assessCost(NULL, pm, -1, position, tagSets, tertiaryPEMAPositions,L"eliminate loser patterns - explicit subject verb agreement");
-				}
+					evaluateExplicitSubjectVerbAgreement(position, pm, tagSets, tertiaryPEMAPositions);
+				if (p->explicitNounDeterminerAgreement)
+					evaluateExplicitNounDeterminerAgreement(position, pm, tagSets, tertiaryPEMAPositions);
 				continue;
 			}
 			unsigned int bp;

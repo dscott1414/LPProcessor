@@ -128,7 +128,7 @@ bool inWordNetClass(int where,wstring in,int inflectionFlags,string group,wstrin
 void getAllHyperNyms(wstring in,vector < set <string> > &objects);
 void getAllOrderedHyperNyms(wstring in,vector < vector <string> > &objects);
 void deriveMainEntry(int where,int fromWhere,wstring &in,int &inflectionFlags,bool isVerb,bool isNoun,wstring &lastNounNotFound,wstring &lastVerbNotFound);
-const wchar_t *allFlags(int inflectionFlags, wstring &sFlags);
+const wchar_t *inflectionFlagsToStr(int inflectionFlags, wstring &sFlags);
 const wchar_t *allWordFlags(int inflectionFlags, wstring &sFlags);
 void readVBNet(void);
 wstring relationString(int r);

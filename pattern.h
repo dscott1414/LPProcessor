@@ -139,7 +139,7 @@ public:
     void writeABNF(wchar_t *buf,int &len);
     int writeABNFElementTag(wchar_t *buf,wstring sForm,int num,int cost,vector <unsigned int> &tags,bool printNum);
     void readABNFElementTag(wstring patternName,wstring differentiator,int elementNum,set <unsigned int> &descendantTags,wchar_t *buf);
-    const wchar_t *allFlags(wstring &sFlags);
+    const wchar_t *inflectionFlagsToStr(wstring &sFlags);
 		wstring variable;
 		int endPosition;
 };
@@ -269,6 +269,7 @@ public:
 				questionFlag=false;
 				notAfterPronoun=false;
 				explicitSubjectVerbAgreement = false;
+				explicitNounDeterminerAgreement = false;
 				metaPattern=false;
         onlyAloneExceptInSubPatternsFlag=false;
         firstPassForwardReference=false;
@@ -383,6 +384,7 @@ public:
 		bool questionFlag; // higher cost if not ending in a question mark
 		bool notAfterPronoun; // higher cost if after pronoun (she/her)
 		bool explicitSubjectVerbAgreement; // contains a subject/verb within itself (blocked otherwise by _BLOCK)
+		bool explicitNounDeterminerAgreement; // contains a NOUN with determiner within itself (blocked otherwise by _BLOCK or otherwise not implicitly processed)
 		bool metaPattern;
     int numPushes,numComparisons,numHits,numWinners,numChildrenWinners;
     bitObject<> allElementTags;
@@ -454,7 +456,7 @@ public:
 		{
 			return elements[I];
 		}
-    //const char *allFlags(int flags,string &sFlags);
+    //const char *inflectionFlagsToStr(int flags,string &sFlags);
 		static void printPatternStatistics(void);
 
 private:

@@ -8,7 +8,7 @@
 //#define LOG_DICTIONARY
 
 // diagnostic messages about patterns as they are matched
-//#define LOG_PATTERN_MATCHING
+// #define LOG_PATTERN_MATCHING
 // log patterns before they are used
 //#define LOG_PATTERNS
 //#define LOG_OVERMATCHED

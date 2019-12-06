@@ -212,18 +212,27 @@ bool patternElement::matchFirst(Source &source,int sourcePosition,vector <matchE
 	endPosition=whatMatched[whatMatched.size()-1].endPosition;
 #ifdef LOG_PATTERN_MATCHING
 	if (patternName.empty())
-		::lplog(LOG_WHERE,L"   pattern %s:matchPosition %d:ending at endPosition %d.",
+		::lplog(L"   pattern %s:matchPosition %d:ending at endPosition %d.",
 			      patternName.c_str(),elementPosition,endPosition);
 #endif
   return true;
 }
 
+// inflectionFlagsFromWord are the inflections of the word in the source
 // flags are the flags to match in the patternElement.
-// inflectionFlags are the inflections of the word in the source
-// formStr is the form of the word of the source
-bool patternElement::inflectionMatch(int inflectionFlagsFromWord,__int64 flags,wstring sourceFormStr)
-{ LFS
-  if (sourceFormStr==L"noun" && (flags&WordMatch::flagNounOwner))
+// sourceFormStr is the form of the word of the source
+bool patternElement::inflectionMatch(int inflectionFlagsFromWord, __int64 flags, wstring sourceFormStr)
+{
+	LFS
+	#ifdef LOG_PATTERN_MATCHING
+		wstring sInflectionFlagsFromWord,sInflectionFlags;
+			::lplog(L"   pattern %s:inflectionMatch:inflectionFlagsFromWord=%s inflectionFlags=%s flags owner=%s capitalized=%s sourceFormStr=%s",
+							patternName.c_str(), ::inflectionFlagsToStr(inflectionFlagsFromWord, sInflectionFlagsFromWord), ::inflectionFlagsToStr(inflectionFlags, sInflectionFlags),
+				(flags&WordMatch::flagNounOwner) ? L"TRUE":L"FALSE",
+				(flags&(WordMatch::flagAllCaps | WordMatch::flagFirstLetterCapitalized)) ? L"TRUE" : L"FALSE",
+				sourceFormStr.c_str());
+	#endif
+	if (sourceFormStr==L"noun" && (flags&WordMatch::flagNounOwner))
   {
     if (inflectionFlagsFromWord&SINGULAR)
       inflectionFlagsFromWord=SINGULAR_OWNER|(inflectionFlagsFromWord&~SINGULAR);
@@ -235,7 +244,16 @@ bool patternElement::inflectionMatch(int inflectionFlagsFromWord,__int64 flags,w
   }
 	if ((inflectionFlags&ONLY_CAPITALIZED) && !(flags&(WordMatch::flagAllCaps|WordMatch::flagFirstLetterCapitalized)))
     return false;
-  if ((inflectionFlags&inflectionFlagsFromWord)!=0) return true;
+	int matchingInflectionFlags = (inflectionFlags&inflectionFlagsFromWord);
+	if ((sourceFormStr == L"verb" && (matchingInflectionFlags&VERB_INFLECTIONS_MASK)!=0) ||
+			(sourceFormStr == L"noun" && (matchingInflectionFlags&NOUN_INFLECTIONS_MASK) != 0) ||
+			(sourceFormStr == L"adjective" && (matchingInflectionFlags&ADJECTIVE_INFLECTIONS_MASK) != 0) ||
+			(sourceFormStr == L"adverb" && (matchingInflectionFlags&ADVERB_INFLECTIONS_MASK) != 0) ||
+			(sourceFormStr == L"quotes" && (matchingInflectionFlags&INFLECTIONS_MASK) != 0) ||
+			(sourceFormStr == L"brackets" && (matchingInflectionFlags&INFLECTIONS_MASK) != 0))
+		return true;
+	// if there are NO flags in the pattern element restricting the inflection of the for given by sourceFormStr, return true.  
+	//  otherwise if the inflectionFlags don't corespond at all with the inflectionFlags from the word, then return false. (the statement directly above).
   return  (sourceFormStr==L"verb" && !(inflectionFlags&VERB_INFLECTIONS_MASK)) ||
     (sourceFormStr==L"noun" && !(inflectionFlags&NOUN_INFLECTIONS_MASK)) ||
     (sourceFormStr==L"adjective" && !(inflectionFlags&ADJECTIVE_INFLECTIONS_MASK)) ||
@@ -876,7 +894,7 @@ void patternElement::writeABNF(wchar_t *buf,int &len,int maxBuf)
 { LFS
   if (minimum!=1 || maximum!=1) len+=_snwprintf(buf+len,maxBuf-len,L"%d*%d",minimum,maximum);
   wstring sFlags;
-  allFlags(sFlags);
+  inflectionFlagsToStr(sFlags);
   if (sFlags.length()) len+=_snwprintf(buf+len,maxBuf-len,L"{%s}",sFlags.c_str());
   buf[len++]=L'(';
   for (unsigned int I=0; I<formStr.size(); I++)
@@ -952,6 +970,7 @@ void cPattern::writeABNF(FILE *fh,unsigned int lastTag)
   if (questionFlag) len+=_snwprintf(buf+len,1024-len,L"_QUESTION:");
 	if (notAfterPronoun) len += _snwprintf(buf + len, 1024 - len, L"_NOT_AFTER_PRONOUN:");
 	if (explicitSubjectVerbAgreement) len += _snwprintf(buf + len, 1024 - len, L"_EXPLICIT_SUBJECT_VERB_AGREEMENT:");
+	if (explicitNounDeterminerAgreement) len += _snwprintf(buf + len, 1024 - len, L"_EXPLICIT_NOUN_DETERMINER_AGREEMENT:");
 	if (buf[len-1]==L':') buf[len-1]=L']';
   if (buf[len-1]==L'[') len--;
   buf[len++]=L'=';
@@ -1039,7 +1058,8 @@ cPattern::cPattern(FILE *fh,bool &valid)
       else if (!wcscmp(tag,L"_QUESTION")) questionFlag=true;
       else if (!wcscmp(tag,L"_NOT_AFTER_PRONOUN")) notAfterPronoun=true;
 			else if (!wcscmp(tag, L"_EXPLICIT_SUBJECT_VERB_AGREEMENT")) explicitSubjectVerbAgreement = true;
-      else
+			else if (!wcscmp(tag, L"_EXPLICIT_NOUN_DETERMINER_AGREEMENT")) explicitNounDeterminerAgreement = true;
+			else
         tags.push_back(findTag(tag));
     }
   }
@@ -1086,6 +1106,7 @@ bool cPattern::create(wstring patternName, wstring differentiator, int numForms,
   p->questionFlag=p->eliminateTag(L"_QUESTION");
 	p->notAfterPronoun = p->eliminateTag(L"_NOT_AFTER_PRONOUN");
 	p->explicitSubjectVerbAgreement = p->eliminateTag(L"_EXPLICIT_SUBJECT_VERB_AGREEMENT");
+	p->explicitNounDeterminerAgreement = p->eliminateTag(L"_EXPLICIT_NOUN_DETERMINER_AGREEMENT");
 	p->checkIgnorableForms= p->eliminateTag(L"_CHECK_IGNORABLE_FORMS");
 	// free form is dangerous to use.  New forms are added to the word only if
 	// the form has never existed.  If somehow a word is part of a pattern which
@@ -1286,7 +1307,7 @@ cPattern *cPattern::create(Source *source,wstring patternName,int num,int whereB
   return p;
 }
 
-const wchar_t *patternElement::allFlags(wstring &sFlags)
+const wchar_t *patternElement::inflectionFlagsToStr(wstring &sFlags)
 { LFS
   sFlags.clear();
   for (int I=0; inflectionFlagList[I].sFlag; I++)
@@ -1295,7 +1316,7 @@ const wchar_t *patternElement::allFlags(wstring &sFlags)
   return sFlags.c_str();
 }
 
-const wchar_t *allFlags(int inflectionFlags,wstring &sFlags)
+const wchar_t *inflectionFlagsToStr(int inflectionFlags,wstring &sFlags)
 { LFS
   sFlags.clear();
   for (int I=0; inflectionFlagList[I].sFlag; I++)
@@ -1367,6 +1388,7 @@ void cPattern::lplog(void)
 	if (questionFlag) wcscat(temp, L" {_QUESTION}");
 	if (notAfterPronoun) wcscat(temp, L" {_NOT_AFTER_PRONOUN}");
 	if (explicitSubjectVerbAgreement) wcscat(temp, L" {_EXPLICIT_SUBJECT_VERB_AGREEMENT}");
+	if (explicitNounDeterminerAgreement) wcscat(temp, L" {_EXPLICIT_NOUN_DETERMINER_AGREEMENT}");
 	for (set<unsigned int>::iterator dt = tags.begin(), dtEnd = tags.end(); dt != dtEnd; dt++)
 		_snwprintf(temp + wcslen(temp), 1024 - wcslen(temp), L"{%s}", patternTagStrings[*dt].c_str());
 	::lplog(L"%s", temp);
@@ -1408,7 +1430,7 @@ void cPattern::lplog(void)
 		for (unsigned int J = 0; J < elements[I]->patternCosts.size(); J++)
 			formsString = formsString + elements[I]->toText(temp, J, true, 1024) + L" ";
 		wstring sFlags;
-		::lplog(L"%d:%d-%d %s %s", I, elements[I]->minimum, elements[I]->maximum, elements[I]->allFlags(sFlags), formsString.c_str());
+		::lplog(L"%d:%d-%d %s %s", I, elements[I]->minimum, elements[I]->maximum, elements[I]->inflectionFlagsToStr(sFlags), formsString.c_str());
 	}
 }
 

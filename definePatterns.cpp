@@ -1403,31 +1403,31 @@ int createVerbPatterns(void)
 	// L"A" structure of verb phrases from Quirk CGEL (3.54)
 	cPattern::create(L"_THINK",L"1",
 										1,L"_COND2",0,1,1,
-										1, L"__INTERS1", 0, 0, 1,
+										2, L"__INTERS1", L"_ADVERB*2", 0, 0, 1,
 										1,L"_THINKPRESENTFIRST",0,1,1,0);
 	// I do go | do not go
 	// L"AL" structure of verb phrases from Quirk CGEL (3.54)
 	cPattern::create(L"_VERB{VERB}",L"3",
 										1,L"_DO{imp}",0,1,1,
-										1, L"__INTERS1", 0, 0, 1,
+										2, L"__INTERS1", L"_ADVERB*1", 0, 0, 1,
 										1,L"_VERBPRESENT",0,1,1,0);
 	// I do think
 	cPattern::create(L"_THINK",L"3",
 										1,L"_DO{imp}",0,1,1,
-										1, L"__INTERS1", 0, 0, 1,
+										2, L"__INTERS1", L"_ADVERB*1", 0, 0, 1,
 										1,L"_THINKPRESENTFIRST",0,1,1,0);
 	// I am/was going
 	// I am/was being
 	// L"CL" structure of verb phrases from Quirk CGEL (3.54)
 	cPattern::create(L"_VERB{VERB}",L"4",
 										1,L"_IS",0,1,1,
-										1, L"__INTERS1", 0, 0, 1,
+										2, L"__INTERS1", L"_ADVERB*1", 0, 0, 1,
 										2,L"verb{vC:V_OBJECT}",L"being{vC:id:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
 										0); // preposition use should be rare!
 	// I am/was thinking
 	cPattern::create(L"_THINK",L"4",
 										1,L"_IS",0,1,1,
-										1, L"__INTERS1", 0, 0, 1,
+										2, L"__INTERS1", L"_ADVERB*1", 0, 0, 1,
 										1,L"think{vC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
 										1,L"_ADVERB",0,0,1,0);
 	// I have/had gone  / (had "his indecision of character" been - REMOVED - inappropriate for this pattern) 1/11/2006
@@ -1435,25 +1435,25 @@ int createVerbPatterns(void)
 	// "B" structure of verb phrases from Quirk CGEL (3.54)
 	cPattern::create(L"_VERB{VERB}",L"5",
 										1,L"_HAVE",0,1,1,
-										1,L"__INTERS1",0,0,1,
+										2, L"__INTERS1", L"_ADVERB*1", 0, 0, 1,
 										2,L"_VERBPASTPART{vB}",L"_BEEN{vB:id}",0,1,1,0);
 	// I have thought
 	cPattern::create(L"_THINK",L"5",
 										1,L"_HAVE",0,1,1,
-										1, L"__INTERS1", 0, 0, 1,
+										2, L"__INTERS1", L"_ADVERB*1", 0, 0, 1,
 										1,L"_THINKPASTPART{vB}",0,1,1,0);
 	// I would/will have gone | I would/will definitely have gone
 	// L"AB" structure of verb phrases from Quirk CGEL (3.54)
 	cPattern::create(L"_VERB{VERB}",L"6",
 									1,L"_COND",0,1,1,
 									1,L"_HAVE",0,1,1,
-									1, L"__INTERS1", 0, 0, 1,
+									2, L"__INTERS1", L"_ADVERB*1", 0, 0, 1,
 									1,L"_VERBPASTPART{vAB}",0,1,1,0);
 	// I would/will have thought
 	cPattern::create(L"_THINK",L"6",
 									1,L"_COND",0,1,1,
 									1,L"_HAVE",0,1,1,
-									1, L"__INTERS1", 0, 0, 1,
+									2, L"__INTERS1", L"_ADVERB*1", 0, 0, 1,
 									1,L"_THINKPASTPART{vAB}",0,1,1,0);
 	// I have been sending | I had been sending
 	// L"BC" structure of verb phrases from Quirk CGEL (3.54)
@@ -1461,14 +1461,14 @@ int createVerbPatterns(void)
 									1,L"_ADVERB",0,0,1,
 									1,L"_HAVE",0,1,1,
 									1,L"_BEEN",0,1,1,
-									1, L"__INTERS1", 0, 0, 1,
+									2, L"__INTERS1", L"_ADVERB*1", 0, 0, 1,
 									3,L"verb{vBC:V_OBJECT}",L"does{vBC:V_OBJECT}",L"have{vBC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
 									0); // preposition use should be rare!
 	// I had been telling
 	cPattern::create(L"_THINK",L"8",1,L"_ADVERB",0,0,1,
 														1,L"_HAVE",0,1,1,
-													 1,L"_BEEN",0,1,1,
-														1, L"__INTERS1", 0, 0, 1,
+													  1,L"_BEEN",0,1,1,
+														2, L"__INTERS1", L"_ADVERB*1", 0, 0, 1,
 														1,L"think{vBC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
 													 2,L"_ADVERB",L"preposition*2",0,0,1,0); // preposition use should be rare!
 	// I will be sending | I would be sending | I will not be sending | I would not be sending
@@ -1476,14 +1476,14 @@ int createVerbPatterns(void)
 	cPattern::create(L"_VERB{VERB}",L"9",
 									1,L"_COND",0,1,1,
 									1,L"_BE{_BLOCK}",0,1,1,
-									1, L"__INTERS1", 0, 0, 1,
+									2, L"__INTERS1", L"_ADVERB*1", 0, 0, 1,
 									3,L"verb{vAC:V_OBJECT}",L"does{vAC:V_OBJECT}",L"have{vAC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
 									0); // preposition use should be rare!
 	// I will be telling | I would be telling | I will not be telling | I would not be telling
 	cPattern::create(L"_THINK",L"9",
 									1,L"_COND",0,1,1,
 									1,L"_BE{_BLOCK}",0,1,1,
-									1, L"__INTERS1", 0, 0, 1,
+									2, L"__INTERS1", L"_ADVERB*1", 0, 0, 1,
 									1,L"think{vAC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
 									2,L"_ADVERB",L"preposition*2",0,0,1,0); // preposition use should be rare!
 	/*
@@ -1505,7 +1505,7 @@ int createVerbPatterns(void)
 										1,L"_COND",0,1,1,
 										1,L"_HAVE",0,1,1, // {_BLOCK} removed 8/17 will block negation
 										1,L"_BEEN",0,1,1,
-										1, L"__INTERS1", 0, 0, 1,
+										2, L"__INTERS1", L"_ADVERB*1", 0, 0, 1,
 										3,L"verb{vABC:V_OBJECT}",L"does{vABC:V_OBJECT}",L"have{vABC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
 										0);// preposition use should be rare!
 	// I would have been telling / I will have been telling
@@ -1513,7 +1513,7 @@ int createVerbPatterns(void)
 										1,L"_COND",0,1,1,
 										1,L"_HAVE",0,1,1, // {_BLOCK} removed 8/17 will block negation
 										1,L"_BEEN",0,1,1,
-										1, L"__INTERS1", 0, 0, 1,
+										2, L"__INTERS1", L"_ADVERB*1", 0, 0, 1,
 										1,L"think{vABC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
 										2,L"_ADVERB",L"preposition*2",0,0,1,0);// preposition use should be rare!
 	// PASSIVE CONSTRUCTION

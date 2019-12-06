@@ -2107,6 +2107,8 @@ public:
 	void accumulateTertiaryPEMAPositions(int tagSetOffset,int traceSource,vector <tTagLocation>  &tagSet, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions, int tmpVOCost);
 	void applyTertiaryPEMAPositions(unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
 	int assessCost(patternMatchArray::tPatternMatch *parentpm, patternMatchArray::tPatternMatch *pm, int parentPosition, int position, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,wstring purpose);
+	void evaluateExplicitNounDeterminerAgreement(int position, patternMatchArray::tPatternMatch *pm, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
+	void evaluateExplicitSubjectVerbAgreement(int position, patternMatchArray::tPatternMatch *pm, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
 	int eliminateLoserPatterns(unsigned int begin,unsigned int end);
 	enum prepSetEnum { PREP_PREP_SET,PREP_OBJECT_SET,PREP_VERB_SET };
 	void setRelPrep(int where,int relPrep,int fromWhere,int setType);

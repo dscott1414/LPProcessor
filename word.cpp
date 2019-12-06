@@ -564,8 +564,8 @@ bool tFI::flushWordToDatabase(wstring sWord,MYSQL &mysql,bool writeDB,int &numCh
 			for (unsigned int c = TRANSFER_COUNT; c < MAX_USAGE_PATTERNS; c++)
 				if (usagePatterns[c])
 					memoryPatterns += patternString(c) + L" " + itos(usagePatterns[c], p) + L" ";
-			::lplog(LOG_INFO, L"%s: MEMORY:inflectionFlags=%s  flags=%s  timeFlags=%03d  mainEntry=%07d  derivationRules=%05d  sourceId=%06d  formpatterns=%s", sWord.c_str(), allFlags(inflectionFlags,iflags), allWordFlags(flags, f), timeFlags, (mainEntry == wNULL) ? -1 : mainEntry->second.index, derivationRules, sourceId, memoryPatterns.c_str());
-			::lplog(LOG_INFO, L"%s: DB    :inflectionFlags=%s  flags=%s  timeFlags=%03d  mainEntry=%07d  derivationRules=%05d  sourceId=%06d  formpatterns=%s", sWord.c_str(), allFlags(dbWordInfo.inflectionFlags,iflags), allWordFlags(dbWordInfo.flags, f), dbWordInfo.timeFlags, dbMainEntryWordId, dbWordInfo.derivationRules, dbWordInfo.sourceId, sDBPatterns.c_str());
+			::lplog(LOG_INFO, L"%s: MEMORY:inflectionFlags=%s  flags=%s  timeFlags=%03d  mainEntry=%07d  derivationRules=%05d  sourceId=%06d  formpatterns=%s", sWord.c_str(), inflectionFlagsToStr(inflectionFlags,iflags), allWordFlags(flags, f), timeFlags, (mainEntry == wNULL) ? -1 : mainEntry->second.index, derivationRules, sourceId, memoryPatterns.c_str());
+			::lplog(LOG_INFO, L"%s: DB    :inflectionFlags=%s  flags=%s  timeFlags=%03d  mainEntry=%07d  derivationRules=%05d  sourceId=%06d  formpatterns=%s", sWord.c_str(), inflectionFlagsToStr(dbWordInfo.inflectionFlags,iflags), allWordFlags(dbWordInfo.flags, f), dbWordInfo.timeFlags, dbMainEntryWordId, dbWordInfo.derivationRules, dbWordInfo.sourceId, sDBPatterns.c_str());
 		}
 		if (writeDB)
 		{

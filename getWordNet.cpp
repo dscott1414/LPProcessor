@@ -1196,7 +1196,7 @@ void deriveMainEntry(int where,int fromWhere,wstring &in,int &inflectionFlags,bo
 			if (!(meError->second.flags&tFI::mainEntryErrorNoted))
 				lplog(LOG_DICTIONARY,L"%06d:%s irregular verb [mainEntry %s] (%s,%d).",where,in.c_str(),
 					(meError->second.mainEntry!=wNULL) ? meError->second.mainEntry->first.c_str() : L"",
-						allFlags(inflectionFlags&VERB_INFLECTIONS_MASK,sFlags),fromWhere);
+						inflectionFlagsToStr(inflectionFlags&VERB_INFLECTIONS_MASK,sFlags),fromWhere);
 			meError->second.flags|=tFI::mainEntryErrorNoted;
 			lastVerbNotFound=in;
 		}
@@ -1219,7 +1219,7 @@ void deriveMainEntry(int where,int fromWhere,wstring &in,int &inflectionFlags,bo
 			if (in==L"many" || in==L"various") return;
 			lplog(LOG_DICTIONARY,L"%06d:%s irregular noun not found [mainEntry %s] (%s,%d).",where,in.c_str(),
 				(Words.gquery(in)->second.mainEntry!=wNULL) ? Words.gquery(in)->second.mainEntry->first.c_str() : L"",
-						allFlags(inflectionFlags&NOUN_INFLECTIONS_MASK,sFlags),fromWhere);
+						inflectionFlagsToStr(inflectionFlags&NOUN_INFLECTIONS_MASK,sFlags),fromWhere);
 			lastNounNotFound=in;
 		}
 	}
@@ -1565,7 +1565,7 @@ void analyzeVerbNetClass(int where,wstring in,wstring &proposedSubstitute,int &n
 		if (!oneSenseVbNetClassFound && !multiSenseVbNetClassFound)
 		{
 			wstring sFlags,multiSenseSynonym;
-			allFlags(inflectionFlags&VERB_INFLECTIONS_MASK,sFlags);
+			inflectionFlagsToStr(inflectionFlags&VERB_INFLECTIONS_MASK,sFlags);
 			for (set <wstring>::iterator si=synonyms.begin(),siEnd=synonyms.end(); si!=siEnd; si++)
 				multiSenseSynonym+=L" "+*si;
 			if (t.traceSpeakerResolution)
