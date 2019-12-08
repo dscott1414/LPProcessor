@@ -846,7 +846,7 @@ int createBasicPatterns(void)
 };
 
 // Page 694, Section 9.4.2.1 Grammatical patterns
-// Pattern 4 - verb + bare infinitive clause (dare, help, let)
+// Pattern 4 - verb + bare infinitive clause (dare, help, let, bade)
 // Pattern 5 - verb + NP + bare infinitive clause (have, feel, help)
 int createBareInfinitives(void)
 { LFS
@@ -930,7 +930,7 @@ int createBareInfinitives(void)
 		// I preferred helping her finish the table.
 	cPattern::create(L"_VERB_BARE_INF{VERB}",L"6",
 										1,L"_IS",0,1,1,
-										2,L"verbverb{vC:V_HOBJECT}",L"verb|having{vS:V_HOBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
+										2,L"verbverb{vC:V_HOBJECT}",L"have|having{vS:V_HOBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
 										2,L"_NOUN_OBJ{HOBJECT}",L"__NOUN[*]{HOBJECT}",0,0,1,
 										2,L"_ADVERB",L"_PP",0,0,2,
 										6,L"verb{vS:V_AGREE:V_OBJECT}",L"does{vS:V_AGREE:V_OBJECT}",L"does_negation{vS:not:V_AGREE:V_OBJECT}",
@@ -939,7 +939,8 @@ int createBareInfinitives(void)
 		// feeling, hearing, seeing, watching, telling, daring, letting, making, helping, having...
 		// Tuppence hated thinking the grass grows.
 		cPattern::create(L"__NOUN{_BLOCK:GNOUN:VNOUN}",L"6",
-										2,L"verbverb{vE:V_HOBJECT}",L"verb|having{vE:V_HOBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
+										1, L"_ADVERB", 0, 0, 1,
+										2,L"verbverb{vE:V_HOBJECT}",L"have|having{vE:V_HOBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
 										2,L"_NOUN_OBJ{HOBJECT}",L"__NOUN[*]{HOBJECT}",0,0,1,
 										2,L"_ADVERB",L"_PP",0,0,2,
 										5,L"verb{vS:V_AGREE:V_OBJECT}",L"does{vS:V_AGREE:V_OBJECT}",L"does_negation{vS:not:V_AGREE:V_OBJECT}",
@@ -1271,6 +1272,13 @@ int createVerbPatterns(void)
 										L"modal_auxiliary{conditional:V_AGREE}",L"negation_modal_auxiliary{not:conditional:V_AGREE}",0,1,1,
 										3,L"_ADVERB",L"preposition*2",L"_PP*1{_BLOCK}",0,0,2,// preposition use should be rare!
 									0);
+	// you better say sorry!
+	// you had better not steal that car!
+	cPattern::create(L"_COND", L"B",
+									1, L"have|had", 0, 1, 1,
+									1, L"adverb|better", 0, 1, 1,
+									1, L"not{not}", 0, 0, 1,
+									0);
 	// MODAL of L"AL" structure of verb phrases from Quirk CGEL
 		/* _COND2 is just a combination of _COND and a verbal auxiliary, which is really a verb taking a bare infinitive phrase (Pattern 4, 9.4.2.1 LGSWE) */
 	cPattern::create(L"_COND2",L"",
@@ -1399,6 +1407,7 @@ int createVerbPatterns(void)
 	cPattern::create(L"_VERB{VERB}",L"1",
 										1,L"_COND",0,1,1,
 										2, L"__INTERS1", L"_ADVERB*2", 0, 0, 1,
+										1, L"verb|go",0,0,1,  // I shall go do this.
 										2,L"_VERBPRESENT",L"_BE{vS:V_OBJECT:id}",0,1,1,0);
 	// L"A" structure of verb phrases from Quirk CGEL (3.54)
 	cPattern::create(L"_THINK",L"1",

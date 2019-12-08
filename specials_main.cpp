@@ -3364,7 +3364,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0)
 	{
-		wstring nounCost, verbCost;
+		wstring nounCost, verbCost; 
 		itos(source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(nounForm)], nounCost);
 		itos(source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(verbForm)], verbCost);
 		if (word.length() > 2 && word.substr(word.length() - 2) == L"ed" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST)
