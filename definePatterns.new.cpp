@@ -1680,7 +1680,7 @@ void createSecondaryPatterns1(void)
 	//  2,L"__ALLVERB",L"_VERBPASSIVE",0,1,1,     // the news I brought
 	//    1,L"__ALLOBJECTS",0,0,1,
 	//  0);
-	// REPLACED BY __NOUN L"5L"
+	// REPLACED BY __NOUN L"5"
 	//cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"",
 	//                  1,L"__PNOUN",0,1,1,
 	//                  1,L"__APPNOUN2{_BLOCK:RE_OBJECT}",0,1,1,

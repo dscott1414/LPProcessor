@@ -2880,7 +2880,7 @@ void Source::syntacticRelations()
 				lastVerb=firstFreePrep=-1;
 			}
 		}
-		if (im->updateFormUsagePatterns())
+		if (updateWordUsageCostsDynamically && im->updateFormUsagePatterns())
 		{
 #ifdef LOG_USAGE_PATTERNS
 			im->logFormUsageCosts();

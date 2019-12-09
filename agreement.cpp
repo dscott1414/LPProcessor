@@ -1965,15 +1965,18 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 		lplog(L"%d:singular noun %s has %s determiner (cost=%d) [SOURCE=%06d].",whereNAgree,nounWord->first.c_str(),(hasDeterminer) ? L"a":L"no",nounWord->second.usageCosts[(hasDeterminer) ? tFI::SINGULAR_NOUN_HAS_DETERMINER : tFI::SINGULAR_NOUN_HAS_NO_DETERMINER],traceSource=gTraceSource++);
 	if (assessCost)
 		return PNC+nounWord->second.usageCosts[(hasDeterminer) ? tFI::SINGULAR_NOUN_HAS_DETERMINER : tFI::SINGULAR_NOUN_HAS_NO_DETERMINER];
-	normalize(nounWord->second.usagePatterns,tFI::SINGULAR_NOUN_HAS_DETERMINER,2);
-	normalize(nounWord->second.deltaUsagePatterns,tFI::SINGULAR_NOUN_HAS_DETERMINER,2);
-	nounWord->second.usagePatterns[(hasDeterminer) ? tFI::SINGULAR_NOUN_HAS_DETERMINER : tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]++;
-	nounWord->second.deltaUsagePatterns[(hasDeterminer) ? tFI::SINGULAR_NOUN_HAS_DETERMINER : tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]++;
-	int transferTotal=0;
-	for (unsigned int I=tFI::SINGULAR_NOUN_HAS_DETERMINER; I<tFI::SINGULAR_NOUN_HAS_DETERMINER+2; I++)
-		transferTotal+=nounWord->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_DETERMINER+I];
-	if ((transferTotal&15)==15)
-		nounWord->second.transferUsagePatternsToCosts(tFI::HIGHEST_COST_OF_INCORRECT_NOUN_DET_USAGE,tFI::SINGULAR_NOUN_HAS_DETERMINER,2);
+	if (updateWordUsageCostsDynamically)
+	{
+		normalize(nounWord->second.usagePatterns, tFI::SINGULAR_NOUN_HAS_DETERMINER, 2);
+		normalize(nounWord->second.deltaUsagePatterns, tFI::SINGULAR_NOUN_HAS_DETERMINER, 2);
+		nounWord->second.usagePatterns[(hasDeterminer) ? tFI::SINGULAR_NOUN_HAS_DETERMINER : tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]++;
+		nounWord->second.deltaUsagePatterns[(hasDeterminer) ? tFI::SINGULAR_NOUN_HAS_DETERMINER : tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]++;
+		int transferTotal = 0;
+		for (unsigned int I = tFI::SINGULAR_NOUN_HAS_DETERMINER; I < tFI::SINGULAR_NOUN_HAS_DETERMINER + 2; I++)
+			transferTotal += nounWord->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_DETERMINER + I];
+		if ((transferTotal & 15) == 15)
+			nounWord->second.transferUsagePatternsToCosts(tFI::HIGHEST_COST_OF_INCORRECT_NOUN_DET_USAGE, tFI::SINGULAR_NOUN_HAS_DETERMINER, 2);
+	}
 	return 0;
 }
 
@@ -2460,13 +2463,16 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 		}
 	}
 	// otherwise, accumulate usage patterns and update cost
-	verbWord->second.usagePatterns[tFI::VERB_HAS_0_OBJECTS+numObjects]++;
-	verbWord->second.deltaUsagePatterns[tFI::VERB_HAS_0_OBJECTS+numObjects]++;
-	int transferTotal=0;
-	for (unsigned int I=tFI::VERB_HAS_0_OBJECTS; I<tFI::VERB_HAS_0_OBJECTS+3; I++)
-		transferTotal+=verbWord->second.usagePatterns[tFI::VERB_HAS_0_OBJECTS+I];
-	if ((transferTotal&15)==15)
-		verbWord->second.transferUsagePatternsToCosts(tFI::HIGHEST_COST_OF_INCORRECT_VERB_USAGE,tFI::VERB_HAS_0_OBJECTS,3);
+	if (updateWordUsageCostsDynamically)
+	{
+		verbWord->second.usagePatterns[tFI::VERB_HAS_0_OBJECTS + numObjects]++;
+		verbWord->second.deltaUsagePatterns[tFI::VERB_HAS_0_OBJECTS + numObjects]++;
+		int transferTotal = 0;
+		for (unsigned int I = tFI::VERB_HAS_0_OBJECTS; I < tFI::VERB_HAS_0_OBJECTS + 3; I++)
+			transferTotal += verbWord->second.usagePatterns[tFI::VERB_HAS_0_OBJECTS + I];
+		if ((transferTotal & 15) == 15)
+			verbWord->second.transferUsagePatternsToCosts(tFI::HIGHEST_COST_OF_INCORRECT_VERB_USAGE, tFI::VERB_HAS_0_OBJECTS, 3);
+	}
 	if (debugTrace.traceVerbObjects)
 		lplog(L"          %d:verb %s has %d objects.",tagSet[verbTagIndex].sourcePosition,verbWord->first.c_str(),numObjects);
 	return 0;

@@ -3442,6 +3442,18 @@ bool &comparableName,
 	int calculateVerbAfterVerbUsage(int whereVerb,unsigned int nextWord);
 	int evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,int parentPosition,int position,vector <tTagLocation> &tagSet,bool infinitive,bool assessCost,int &voRelationsFound,int &traceSource,wstring purpose);
 	int properNounCheck(int &traceSource,int begin,int end,int whereDet);
+	bool updateWordUsageCostsDynamically;  // this is turned of by default.  Do NOT turn this back on unless a great deal of testing is done, as this will
+																// upset carefully defined weights of word forms usages, and it will also accumulate usages into costs which will make results nonreproducible
+	                              // from actual to test because the exact parsing history from the beginning of Source initialization must be followed
+	                              // so testing of one sentence in the middle of a book will not necessarily yield the same results as the sentence buried inside of the book
+	                              // because previous words have accumulated usages of the words in the sentence which have in turn been rolled over into the costs.
+	                              // ALSO processing of multiple books with a single source object will make this much more likely, unless the following procedure is also 
+	                              // enabled (this procedure has not been tested!)
+																// PLEASE NOTE this does not turn off accumulation of proper noun and lower case statistics as these are used for proper noun processing and
+																// not for parsing costs, and will mess up proper noun identification if these statistics are also reset.  These statistics are reset individually
+																// in resetCapitalizationAndProperNounUsageStatistics.  All statistics including these proper noun/lower case statistics are reset in resetUsagePatternsAndCosts.
+	void resetUsagePatternsAndCosts(); // not been tested!
+	void resetCapitalizationAndProperNounUsageStatistics(); // this must also occur during clearsource to prevent proper noun/lower case usage from leaking from one source to another inappropriately
 	int evaluateNounDeterminer(vector <tTagLocation> &tagSet,bool assessCost,int &traceSource,int begin,int end, int fromPEMAPosition);
 	bool hasTimeObject(int where);
 	int attachAdjectiveRelation(vector <tTagLocation> &tagSet,int whereObject);

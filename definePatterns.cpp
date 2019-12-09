@@ -1680,7 +1680,7 @@ void createSecondaryPatterns1(void)
 	//  2,L"__ALLVERB",L"_VERBPASSIVE",0,1,1,     // the news I brought
 	//    1,L"__ALLOBJECTS",0,0,1,
 	//  0);
-	// REPLACED BY __NOUN L"5L"
+	// REPLACED BY __NOUN L"5"
 	//cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"",
 	//                  1,L"__PNOUN",0,1,1,
 	//                  1,L"__APPNOUN2{_BLOCK:RE_OBJECT}",0,1,1,
@@ -2883,6 +2883,15 @@ int createSecondaryPatterns2(void)
 											1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
 											1, L"_MSTAIL", 0, 0, 1,
 											0);
+	// I *want* to live here in the woods , where there is not so much deceit and treachery as there seems to be in the big towns .
+	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}", L"8",
+											1, L"_INTRO_S1", 0, 0, 1,
+											1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
+											1, L",", 0, 1, 1,
+											1, L"_REL1{_BLOCK:EVAL}",0,1,1,
+											1, L"_MSTAIL", 0, 0, 1,
+											0);
+
 
 	// I had undertaken the task , and when I once undertake **a thing I always carry** it through if I can . / preventing __NOUN[R]
 	cPattern::create(L"_MS2{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}", L"1",//3,L"demonstrative_determiner",L"personal_pronoun_nominative",L"indefinite_pronoun",0,0,1, // *he* whom you await taken out - how is this different than _NOUN[9]?

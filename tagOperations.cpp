@@ -251,36 +251,6 @@ bool Source::getIVerb(vector <tTagLocation> &tagSet,int &tag)
 	return true;
 }
 
-void tFI::transferUsagePatternsToCosts(int highestCost,unsigned int upStart,unsigned int upLength)
-{ LFS
-	int highest=-1,lowest=255,K=0;
-	for (unsigned int up=upStart; up<upStart+upLength; up++)
-	{
-		highest=max(highest,usagePatterns[up]);
-		lowest=min(lowest,usagePatterns[up]);
-	}
-	if (lowest && (K=highest/lowest)<2) return;
-	if (highest<5) return;
-	if (!lowest || K>highestCost)
-	{
-		// 8 4 0 -> K=2  0 2 4
-		// 16 2 2 -> K=8 0 4 4
-		// example: word trust
-		//wordId | formId | count  cost
-		//  7139 |    100 |   886  0    noun (singular)                      (4*(886-886))/886==0
-		//  7139 |    101 |    16  3    adjective                            (4*(886- 16))/886==3
-		//  7139 |    102 |   418  2    verb (present tense first person)    (4*(886-418))/886==2
-		for (unsigned int up=upStart; up<upStart+upLength; up++)
-			usageCosts[up]=(highestCost*(highest-((unsigned int)usagePatterns[up])))/highest;
-	}
-	else
-	{
-		// 8 4 4 -> K=2  0 1 1
-		for (unsigned int up=upStart; up<upStart+upLength; up++)
-			usageCosts[up]=K-(((unsigned int)usagePatterns[up])/lowest);
-	}
-}
-
 bool Source::tagIsCertain(int position)
 { LFS
 	return !preTaggedSource || (m[position].flags&WordMatch::flagBNCFormNotCertain)==0;

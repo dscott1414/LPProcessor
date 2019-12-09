@@ -465,6 +465,8 @@ public:
   bool intersect(relationWOTypes relationType,tIWMM word,tIWMM self,tIWMM &fromWord,tIWMM &toWord);
   void transferUsagePatternsToCosts(int highestCost,unsigned int upStart,unsigned int upLength);
   void transferFormUsagePatternsToCosts(int sameNameForm,int properNounForm,int iCount);
+	void resetUsagePatternsAndCosts(wstring sWord);
+	void resetCapitalizationAndProperNounUsageStatistics();
 
 protected:
   static unsigned int *formsArray; // must not change after initialization or this must be protected by SRWLock

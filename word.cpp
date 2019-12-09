@@ -1082,6 +1082,37 @@ void tFI::preferVerbPresentParticiple(void)
   }
 }
 
+void tFI::transferUsagePatternsToCosts(int highestCost, unsigned int upStart, unsigned int upLength)
+{
+	LFS
+		int highest = -1, lowest = 255, K = 0;
+	for (unsigned int up = upStart; up < upStart + upLength; up++)
+	{
+		highest = max(highest, usagePatterns[up]);
+		lowest = min(lowest, usagePatterns[up]);
+	}
+	if (lowest && (K = highest / lowest) < 2) return;
+	if (highest < 5) return;
+	if (!lowest || K > highestCost)
+	{
+		// 8 4 0 -> K=2  0 2 4
+		// 16 2 2 -> K=8 0 4 4
+		// example: word trust
+		//wordId | formId | count  cost
+		//  7139 |    100 |   886  0    noun (singular)                      (4*(886-886))/886==0
+		//  7139 |    101 |    16  3    adjective                            (4*(886- 16))/886==3
+		//  7139 |    102 |   418  2    verb (present tense first person)    (4*(886-418))/886==2
+		for (unsigned int up = upStart; up < upStart + upLength; up++)
+			usageCosts[up] = (highestCost*(highest - ((unsigned int)usagePatterns[up]))) / highest;
+	}
+	else
+	{
+		// 8 4 4 -> K=2  0 1 1
+		for (unsigned int up = upStart; up < upStart + upLength; up++)
+			usageCosts[up] = K - (((unsigned int)usagePatterns[up]) / lowest);
+	}
+}
+
 #define FORM_USAGE_PATTERN_HIGHEST_COST 4 // set from 32 to 4 6/21/2006
 // get highest value (I) and divide by the lowest value (J).  K=I/J.
 // If K>FORM_USAGE_PATTERN_HIGHEST_COST, for every value L, L2=FORM_USAGE_PATTERN_HIGHEST_COST-(FORM_USAGE_PATTERN_HIGHEST_COST*L/I).
@@ -1122,6 +1153,38 @@ void tFI::transferFormUsagePatternsToCosts(int sameNameForm,int properNounForm,i
           usageCosts[f]=K-(((unsigned int)usagePatterns[f])/lowest);
     }
     //preferVerbPresentParticiple();
+}
+
+void tFI::resetUsagePatternsAndCosts(wstring sWord)
+{
+	localWordIsCapitalized = 0;
+	localWordIsLowercase = 0;
+	for (unsigned int f = 0; f < MAX_USAGE_PATTERNS; f++)
+	{
+		usagePatterns[f] -= deltaUsagePatterns[f];
+		deltaUsagePatterns[f] = 0;
+	}
+	int sameNameFormIndex = -1, properNounFormIndex = -1;
+	for (unsigned int f = 0; f < count; f++)
+	{
+		if (Form(f)->name == sWord)
+			sameNameFormIndex = f;
+		else if (forms()[f] == PROPER_NOUN_FORM_NUM)
+			properNounFormIndex = f;
+	}
+	transferFormUsagePatternsToCosts(sameNameFormIndex, properNounFormIndex, count);
+	transferUsagePatternsToCosts(HIGHEST_COST_OF_INCORRECT_NOUN_DET_USAGE, SINGULAR_NOUN_HAS_DETERMINER, 2);
+	transferUsagePatternsToCosts(HIGHEST_COST_OF_INCORRECT_VERB_USAGE, VERB_HAS_0_OBJECTS, 3);
+}
+
+void tFI::resetCapitalizationAndProperNounUsageStatistics()
+{
+	usagePatterns[LOWER_CASE_USAGE_PATTERN] -= deltaUsagePatterns[LOWER_CASE_USAGE_PATTERN];
+	deltaUsagePatterns[LOWER_CASE_USAGE_PATTERN] = 0;
+	usagePatterns[PROPER_NOUN_USAGE_PATTERN] -= deltaUsagePatterns[PROPER_NOUN_USAGE_PATTERN];
+	deltaUsagePatterns[PROPER_NOUN_USAGE_PATTERN] = 0;
+	localWordIsCapitalized=0;
+	localWordIsLowercase = 0;
 }
 
 // used during matching, printing, updatePEMA (cost reduction), updating usage patterns
@@ -1215,20 +1278,22 @@ bool WordMatch::updateFormUsagePatterns(void)
     for (unsigned int f=0; f<topAllowableUsageCount; f++)
       if (f!=sameNameForm && f!=properNounForm)
         word->second.deltaUsagePatterns[f]>>=1;
-  for (unsigned int f=0; f<topAllowableUsageCount; f++)
-    if (f!=sameNameForm && f!=properNounForm && isWinner(f))
-    {
-      word->second.usagePatterns[f]+=add;
-      word->second.deltaUsagePatterns[f]+=add;
-    }
-    word->second.deltaUsagePatterns[tFI::TRANSFER_COUNT]++;
-    word->second.changedSinceLastWordRelationFlush=true;
-    if (word->second.usagePatterns[tFI::TRANSFER_COUNT]++<63)
-      return false;
-    word->second.transferFormUsagePatternsToCosts(sameNameForm,properNounForm,count);
-    word->second.usagePatterns[tFI::TRANSFER_COUNT]=1; // so writeUnknownWords knows this word is used more than once
-    word->second.deltaUsagePatterns[tFI::TRANSFER_COUNT]=1; // so writeUnknownWords knows this word is used more than once
-    return true;
+	for (unsigned int f = 0; f < topAllowableUsageCount; f++)
+	{
+		if (f != sameNameForm && f != properNounForm && isWinner(f))
+		{
+			word->second.usagePatterns[f] += add;
+			word->second.deltaUsagePatterns[f] += add;
+		}
+	}
+  word->second.deltaUsagePatterns[tFI::TRANSFER_COUNT]++;
+  word->second.changedSinceLastWordRelationFlush=true;
+  if (word->second.usagePatterns[tFI::TRANSFER_COUNT]++<63)
+    return false;
+  word->second.transferFormUsagePatternsToCosts(sameNameForm,properNounForm,count);
+  word->second.usagePatterns[tFI::TRANSFER_COUNT]=1; // so writeUnknownWords knows this word is used more than once
+  word->second.deltaUsagePatterns[tFI::TRANSFER_COUNT]=1; // so writeUnknownWords knows this word is used more than once
+  return true;
 }
 
 void tFI::logFormUsageCosts(wstring w)

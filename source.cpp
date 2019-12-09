@@ -2211,6 +2211,10 @@ void Source::clearSource(void)
 		sourcesMap.erase(smi);
 		smi = sourcesMap.begin();
 	}
+	if (updateWordUsageCostsDynamically)
+		resetUsagePatternsAndCosts();
+	else
+		resetCapitalizationAndProperNounUsageStatistics();
 }
 
 int read(string &str,IOHANDLE file)
@@ -3241,6 +3245,7 @@ Source::Source(wchar_t *databaseServer,int _sourceType,bool generateFormStatisti
 		pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
 	primaryLocationLastMovingPosition=-1;
 	primaryLocationLastPosition=-1;
+	updateWordUsageCostsDynamically = false;
 }
 
 Source::Source(MYSQL *parentMysql,int _sourceType,int _sourceConfidence)
@@ -3301,6 +3306,7 @@ Source::Source(MYSQL *parentMysql,int _sourceType,int _sourceConfidence)
 	unordered_map <int, vector < vector <tTagLocation> > > emptyMap;
 	for (unsigned int ts=0; ts<desiredTagSets.size(); ts++)
 		pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
+	updateWordUsageCostsDynamically = false;
 }
 
 void Source::writeWords(wstring oPath)
@@ -3356,5 +3362,17 @@ void Source::writeWords(wstring oPath)
 	if (where)
 		::write(fd, buffer, where);
 	close(fd);
+}
+
+void Source::resetUsagePatternsAndCosts()
+{
+	for (tIWMM w = Words.begin(), wEnd = Words.end(); w != wEnd; w++)
+		w->second.resetUsagePatternsAndCosts(w->first);
+}
+
+void Source::resetCapitalizationAndProperNounUsageStatistics()
+{
+	for (tIWMM w = Words.begin(), wEnd = Words.end(); w != wEnd; w++)
+		w->second.resetCapitalizationAndProperNounUsageStatistics();
 }
 
