@@ -138,7 +138,19 @@ void createQuestionPatterns(void)
 									1,L"_THINKPRESENTFIRST",0,1,1,
 									1,L"__S1{OBJECT:EVAL:_BLOCK}",0,1,1,
 									0);
-		// am/was I going? was I being?
+	cPattern::create(L"_QT1{_FINAL_IF_ALONE:VERB}", L"V",
+									1, L"_ADVERB", 0, 0, 1,
+									1, L"_DO{imp}", 0, 1, 1, // this is the only V_AGREE
+									1, L"__NOUN[*]{SUBJECT}", 0, 1, 1,
+									1, L"_ADVERB", 0, 0, 2,
+									// _VERB_BARE_INF - copied here because there are too many other BARE_INF that don't fit this pattern, and V_AGREE must be deleted
+									1, L"verbverb{vS:V_HOBJECT}", VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_SECOND_SINGULAR | VERB_PRESENT_THIRD_SINGULAR | VERB_PRESENT_PLURAL, 1, 1,
+									2, L"_NOUN_OBJ{HOBJECT}", L"__NOUN[*]{HOBJECT}", 0, 0, 1,
+									2, L"_ADVERB", L"_PP", 0, 0, 2,
+									6, L"verb{vS:V_OBJECT}", L"does{vS:V_OBJECT}", L"does_negation{vS:not:V_OBJECT}",
+									L"have{vS:V_OBJECT}", L"have_negation{vS:not:V_OBJECT}", L"be{id:V_OBJECT}", VERB_PRESENT_FIRST_SINGULAR, 1, 1,
+									0);
+	// am/was I going? was I being?
 	// "C" structure of verb phrases from Quirk CGEL (3.54)
 	cPattern::create(L"_Q1{VERB}",L"8",
 									1,L"_IS",0,1,1,
@@ -169,7 +181,7 @@ void createQuestionPatterns(void)
 									1,L"_IS",0,1,1,
 									1,L"__NOUN[*]{SUBJECT}",0,1,1,
 									1,L"_ADVERB",0,0,2,
-									1,L"think{vC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
+									1,L"SYNTAX:Accepts S as Object{vC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
 									1,L"_ADVERB",0,0,1,
 									1,L"__S1{OBJECT:EVAL:_BLOCK}",0,1,1,
 									0);
@@ -189,7 +201,7 @@ void createQuestionPatterns(void)
 									1,L"_THINKPASTPART{vB}",0,1,1,
 									1,L"__S1{OBJECT:EVAL:_BLOCK}",0,1,1,
 									0);
-		// will I have though the baby would go with me? | will I definitely have thought this is the way to go?
+		// will I have thought the baby would go with me? | will I definitely have thought this is the way to go?
 	// INTERROGATIVES p.803 CGEL
 	cPattern::create(L"_QT1{_FINAL_IF_ALONE:VERB}",L"A",
 									1,L"_COND",0,1,1,
@@ -289,7 +301,7 @@ void createQuestionPatterns(void)
 													 1,L"_BEEN",0,1,1,
 													 3,L"verb{vABD:V_OBJECT}",L"does{vABD:V_OBJECT}",L"have{vABD:V_OBJECT}",VERB_PAST_PARTICIPLE,1,1,
 													 2,L"_ADVERB",L"preposition*2",0,0,1,0); // preposition use should be rare!
-	// have I,L" he said, L"been sent | will I have been sent | will I have been sending
+	// "have I," he said, L"been sent | will I have been sent | will I have been sending
 	// INTERROGATIVES p.803 CGEL
 	cPattern::create(L"_Q1PASSIVE{VERB}",L"7",1,L"_ADVERB",0,0,1,
 													1,L"_HAVE",0,1,1,
@@ -435,7 +447,7 @@ void createQuestionPatterns(void)
 						1,L"__NOUN[*]{SUBJECT}",0,1,1,
 						1,L"_HAVE",0,1,1,
 						1,L"_BEEN",0,1,1,
-						1,L"think{vBC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
+						1,L"SYNTAX:Accepts S as Object{vBC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
 						0);
 
 		cPattern::create(L"__SQ{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_QUESTION}",L"1",

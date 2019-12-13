@@ -523,8 +523,8 @@ public:
 	static unordered_map <wstring, vector <tIWMM>> mainEntryMap;
   static tIWMM query(wstring sWord);
   tIWMM gquery(wstring sWord);
-    bool parseMetaCommands(wchar_t *buffer,int &endSymbol,sTrace &t);
-  int readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocation,wstring &sWord,int &nounOwner,bool scanForSection,bool webScrapeParse,sTrace &t);
+  bool parseMetaCommands(wchar_t *buffer,int &endSymbol, wstring &comment, sTrace &t);
+  int readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocation,wstring &sWord, wstring &comment, int &nounOwner,bool scanForSection,bool webScrapeParse,sTrace &t);
   int processFootnote(wchar_t *buffer,__int64 bufferLen,__int64 &cp);
 	int parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord);
 	static int attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId);

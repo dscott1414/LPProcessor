@@ -1833,6 +1833,7 @@ public:
 	int pass;
 	intArray reverseMatchElements;
 	vector <WordMatch> m;
+	unordered_map <int, wstring> metaCommandsEmbeddedInSource;
 	patternElementMatchArray pema;
 	bool parseNecessary(wchar_t *path);
 	int readSourceBuffer(wstring title, wstring etext, wstring path, wstring encoding, wstring &start, int &repeatStart);

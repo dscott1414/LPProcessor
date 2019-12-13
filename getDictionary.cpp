@@ -1435,7 +1435,7 @@ void WordClass::testWordCacheFileRoutines(void)
 	if (modalAuxiliaryForm<0)  modalAuxiliaryForm=FormsClass::gFindForm("modal_auxiliary");
 	if (abbreviationForm<0) abbreviationForm=FormsClass::gFindForm("abbreviation");
 	for (unsigned int I=0; I<Forms.size(); I++)
-			if (I==PROPER_NOUN_FORM_NUM ||	I==commonProfessionForm || Forms[I]->name=="think" ||	I==interrogativeDeterminerForm || I==COMBINATION_FORM_NUM ||	
+			if (I==PROPER_NOUN_FORM_NUM ||	I==commonProfessionForm || Forms[I]->name=="SYNTAX:Accepts S as Object" ||	I==interrogativeDeterminerForm || I==COMBINATION_FORM_NUM ||	
 					I==interjectionForm || I==modalAuxiliaryForm ||	I==futureModalAuxiliaryForm ||	I==negationModalAuxiliaryForm || I==abbreviationForm ||
 					I==negationFutureModalAuxiliaryForm ||	Forms[I]->name=="interrogative_pronoun" ||	Forms[I]->name=="timeUnit" ||	Forms[I]->name=="dayUnit" ||
 					I==indefinitePronounForm || I==doesForm || I==possessivePronounForm || Forms[I]->name=="verbal_auxiliary" || Forms[I]->name=="sectionheader" || 

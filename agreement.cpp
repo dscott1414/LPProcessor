@@ -603,6 +603,9 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 	{
 		tIWMM nounWord,verbWord;
 		int nextObjectVerbTag=-1,whereObjectVerbTag=(mainVerbTag>=0) ? findTagConstrained(tagSet,L"V_OBJECT",nextObjectVerbTag,tagSet[mainVerbTag]) : -1;
+		//if (patterns[tagSet[verbAgreeTag].pattern]->name==L"_VERB_BARE_INF") // if this is a _VERB_BARE_INF - take the first verb
+		//	verbWord = m[verbPosition].word;
+		//else 
 		if (nextObjectVerbTag>=0)
 			verbWord=m[tagSet[nextObjectVerbTag].sourcePosition].word;
 		else if (whereObjectVerbTag>=0)
@@ -1851,6 +1854,8 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 			lplog(L"%d:Noun (%d,%d) has a time value after a preposition",begin,begin,end);
 		PNC+=6;
 	}
+	// disallow adjectives after nouns!
+	// her cold
 	// P.N.C. He
 	// it is time I strolled around to the Ritz
 	if (end-begin>1)
@@ -2859,6 +2864,12 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 	{
 		if (debugTrace.tracePatternElimination)
 			lplog(L"position %d:PMA count=%d ----------------------",position,m[position].pma.count);
+		if (debugTrace.traceTestSubjectVerbAgreement)
+		{
+			auto mc = metaCommandsEmbeddedInSource.find(position);
+			if (mc != metaCommandsEmbeddedInSource.end())
+				lplog(LOG_INFO, L"\n*****  %s  *****", mc->second.c_str());
+		}
 		vector <unsigned int> preliminaryWinnersPreAssessCost;
 		patternMatchArray::tPatternMatch *pm=m[position].pma.content;
 		for (unsigned int pmIndex=0; pmIndex<m[position].pma.count; pmIndex++,pm++)

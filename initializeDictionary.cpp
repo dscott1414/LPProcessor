@@ -1299,7 +1299,7 @@ int WordClass::createWordCategories()
 	// defined by Daniel Webster
 	wchar_t *servicemark[] = {L"automat",L"bake-off",L"college board",L"laundromat",L"planned parenthood",L"soap box derby",L"comsat",L"grammy",L"rolfing",L"super bowl",NULL};
 	predefineWords(servicemark,L"service mark",L"sm");
-	predefineVerbsFromFile(L"think",L"think",L"source\\lists\\thinksayVerbs.txt",0);
+	predefineVerbsFromFile(L"SYNTAX:Accepts S as Object",L"SYN:S as O",L"source\\lists\\thinksayVerbs.txt",0);
 	predefineVerbsFromFile(L"istate",L"istate",L"source\\lists\\internalStateVerbs.txt",0);
 	wchar_t *coordinator[] = {L"and",L"or",L"nor",L"an'",L"plus",NULL};  // He and I / David and Jane, etc. ('but' removed) 2/2/2007
 	predefineWords(coordinator,L"coordinator",L"coord");
@@ -1591,7 +1591,7 @@ void WordClass::initialize()
 	if (dashForm < 0) dashForm = FormsClass::gFindForm(L"dash");
 	if (reflexivePronounForm < 0) reflexivePronounForm = FormsClass::gFindForm(L"reflexive_pronoun"); // myself, himself
 	if (verbForm < 0) verbForm = FormsClass::gFindForm(L"verb");
-	if (thinkForm < 0) thinkForm = FormsClass::gFindForm(L"think");
+	if (thinkForm < 0) thinkForm = FormsClass::gFindForm(L"SYNTAX:Accepts S as Object");
 	//if (internalStateForm<0) internalStateForm=FormsClass::gFindForm(L"internalState");
 	if (dateForm < 0) dateForm = FormsClass::gFindForm(L"date");
 	if (timeForm < 0) timeForm = FormsClass::gFindForm(L"time");

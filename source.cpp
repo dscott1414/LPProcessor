@@ -479,11 +479,11 @@ bool WordMatch::read(char *buffer,int &where,int limit)
 	if (!copy(temp,buffer,where,limit)) return false;
 	if ((word=Words.query(temp))==Words.end())
 	{
-		wstring sWord;
+		wstring sWord,comment;
 		int sourceId=-1,nounOwner=0;
 		__int64 bufferLength=temp.length(),bufferScanLocation=0;
 		bool added=false;
-		int result=Words.readWord((wchar_t *)temp.c_str(),bufferLength,bufferScanLocation,sWord,nounOwner,false,false,t);
+		int result=Words.readWord((wchar_t *)temp.c_str(),bufferLength,bufferScanLocation,sWord,comment,nounOwner,false,false,t);
 		word=Words.end();
 		if (result==PARSE_NUM)
 			word=Words.addNewOrModify(NULL, sWord,0,NUMBER_FORM_NUM,0,0,L"",sourceId,added);
@@ -1371,11 +1371,13 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 		bufferScanLocation=1;
 	while (result==0 && !exitNow)
 	{
-		wstring sWord;
+		wstring sWord,comment;
 		int nounOwner=0;
 		bool flagAlphaBeforeHint=(bufferScanLocation && iswalpha(bookBuffer[bufferScanLocation-1]));
 		bool flagNewLineBeforeHint=(bufferScanLocation && bookBuffer[bufferScanLocation-1]==13);
-		result=Words.readWord(bookBuffer,bufferLen,bufferScanLocation,sWord,nounOwner,false,webScrapeParse,debugTrace);//m.size()==lastSentenceEnd);
+		result=Words.readWord(bookBuffer,bufferLen,bufferScanLocation,sWord,comment,nounOwner,false,webScrapeParse,debugTrace);//m.size()==lastSentenceEnd);
+		if (comment.size() > 0)
+			metaCommandsEmbeddedInSource[m.size()] = comment;
 		bool flagAlphaAfterHint=(bufferScanLocation<bufferLen && iswalpha(bookBuffer[bufferScanLocation]));
 		if (result==PARSE_EOF)
 			break;

@@ -355,12 +355,12 @@ struct
   {L"VHN",L"have",0,0}, // The past participle form of the verb HAVE: had
   {L"VHZ",L"have",0,0}, // The -s form of the verb HAVE: has, 's
   {L"VM0",L"modal_auxiliary//future_modal_auxiliary//verbverb",0,0}, // Modal auxiliary verb (e.g. will, would, can, could, 'll, 'd) or "let",L"dare"
-  {L"VVB",L"verbverb//verb//think",0,0}, // The finite base form of lexical verbs (e.g. forget, send, live, return) [Including the imperative and present subjunctive]
-  {L"VVD",L"verbverb//verb//think",0,VERB_PAST}, // The past tense form of lexical verbs (e.g. forgot, sent, lived, returned)
-  {L"VVG",L"verbverb//verb//think",0,VERB_PRESENT_PARTICIPLE}, // The -ing form of lexical verbs (e.g. forgetting, sending, living, returning)
-  {L"VVI",L"verbverb//verb//think",0,0}, // The infinitive form of lexical verbs (e.g. forget, send, live, return)
-  {L"VVN",L"verbverb//verb//think",0,VERB_PAST_PARTICIPLE}, // The past participle form of lexical verbs (e.g. forgotten, sent, lived, returned)
-  {L"VVZ",L"verbverb//verb//think",0,VERB_PRESENT_THIRD_SINGULAR}, // The -s form of lexical verbs (e.g. forgets, sends, lives, returns)
+  {L"VVB",L"verbverb//verb//SYNTAX:Accepts S as Object",0,0}, // The finite base form of lexical verbs (e.g. forget, send, live, return) [Including the imperative and present subjunctive]
+  {L"VVD",L"verbverb//verb//SYNTAX:Accepts S as Object",0,VERB_PAST}, // The past tense form of lexical verbs (e.g. forgot, sent, lived, returned)
+  {L"VVG",L"verbverb//verb//SYNTAX:Accepts S as Object",0,VERB_PRESENT_PARTICIPLE}, // The -ing form of lexical verbs (e.g. forgetting, sending, living, returning)
+  {L"VVI",L"verbverb//verb//SYNTAX:Accepts S as Object",0,0}, // The infinitive form of lexical verbs (e.g. forget, send, live, return)
+  {L"VVN",L"verbverb//verb//SYNTAX:Accepts S as Object",0,VERB_PAST_PARTICIPLE}, // The past participle form of lexical verbs (e.g. forgotten, sent, lived, returned)
+  {L"VVZ",L"verbverb//verb//SYNTAX:Accepts S as Object",0,VERB_PRESENT_THIRD_SINGULAR}, // The -s form of lexical verbs (e.g. forgets, sends, lives, returns)
   {L"XX0",L"COMBINE",0,0}, // The negative particle not or n't
   {L"ZZ0",NULL,0,0}, // Alphabetical symbols (e.g. A, a, B, b, c, d)
   };
@@ -704,7 +704,7 @@ void WordMatch::setForm(void)
 int bncc::processWord(Source &source,int sourceId,wchar_t *buffer,int tag,int secondTag,int &lastSentenceEnd,int &printLocation,int sentence)
 {
   bool anotherWord=false;
-  wstring sWord;
+  wstring sWord,comment;
   int nounOwner=0;
   size_t numWords=source.m.size();
   __int64 bufferScanLocation=0;
@@ -713,7 +713,7 @@ int bncc::processWord(Source &source,int sourceId,wchar_t *buffer,int tag,int se
     anotherWord=false;
   if (!wcscmp(L"(s)",buffer+wcslen(buffer)-3)) // dilemma(s) member(s) finger(s) just delete the (s) for now
     buffer[wcslen(buffer)-3]=0;
-  int result=Words.readWord((wchar_t *)buffer,wcslen(buffer),bufferScanLocation,sWord,nounOwner,false,false,source.debugTrace);
+  int result=Words.readWord((wchar_t *)buffer,wcslen(buffer),bufferScanLocation,sWord,comment,nounOwner,false,false,source.debugTrace);
   if (buffer[bufferScanLocation]==L'.')
   {
     // only assigns the whole buffer if every entry is a single letter

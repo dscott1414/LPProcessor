@@ -2167,7 +2167,7 @@ bool WordClass::evaluateIncludedSingleQuote(wchar_t *buffer,__int64 cp,__int64 b
   return iswalpha(buffer[cp+1])!=0; // is there a letter right after this quote?
 }
 
-bool WordClass::parseMetaCommands(wchar_t *buffer,int &endSymbol,sTrace &t)
+bool WordClass::parseMetaCommands(wchar_t *buffer,int &endSymbol,wstring &comment,sTrace &t)
 { LFS
   if (!wcsncmp(buffer,L"DUMPLOCALOBJECTS",wcslen(L"DUMPLOCALOBJECTS")))
 	{
@@ -2259,15 +2259,25 @@ bool WordClass::parseMetaCommands(wchar_t *buffer,int &endSymbol,sTrace &t)
     t.traceTransitoryQuestion=false;
 		t.traceQuestionPatternMap=false;
 	}
-  else if (!wcsnicmp(buffer,L"traceQuestionPatternMap",wcslen(L"traceQuestionPatternMap")))
+	else if (!wcsnicmp(buffer, L"traceQuestionPatternMap", wcslen(L"traceQuestionPatternMap")))
 	{
-    t.traceCommonQuestion=false;
-    t.traceMapQuestion=false;
-    t.traceConstantQuestion=false;
-    t.traceTransitoryQuestion=false;
-		t.traceQuestionPatternMap=true;
+		t.traceCommonQuestion = false;
+		t.traceMapQuestion = false;
+		t.traceConstantQuestion = false;
+		t.traceTransitoryQuestion = false;
+		t.traceQuestionPatternMap = true;
 	}
-  return false;
+	else if (!wcsnicmp(buffer, L"P ", wcslen(L"P ")))
+	{
+		wchar_t *endline = wcschr(buffer + 2, '\r');
+		if (endline)
+		{
+			*endline = 0;
+			comment=buffer+2;
+			*endline = '\r';
+		}
+	}
+	return false;
 }
 
 int readDate(wchar_t *buffer, __int64 bufferLen, __int64 &bufferScanLocation, __int64 cp,wstring &sWord)
@@ -2356,7 +2366,7 @@ bool WordClass::isDoubleQuote(wchar_t ch)
 }
 
 int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocation,
-                        wstring &sWord,int &nounOwner,bool scanForSection,bool webScrapeParse,sTrace &t)
+                        wstring &sWord,wstring &comment,int &nounOwner,bool scanForSection,bool webScrapeParse,sTrace &t)
 { LFS
   __int64 cp=bufferScanLocation;
   nounOwner=0;
@@ -2410,12 +2420,12 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
 	if (!wcsncmp(buffer + cp, L"<i>", 3))
 	{
 		bufferScanLocation = cp + 3;
-		return readWord(buffer, bufferLen, bufferScanLocation, sWord, nounOwner, scanForSection, webScrapeParse, t);
+		return readWord(buffer, bufferLen, bufferScanLocation, sWord, comment, nounOwner, scanForSection, webScrapeParse, t);
 	}
 	if (!wcsncmp(buffer + cp, L"</i>", 4))
 	{
 		bufferScanLocation = cp + 4;
-		return readWord(buffer, bufferLen, bufferScanLocation, sWord, nounOwner, scanForSection, webScrapeParse, t);
+		return readWord(buffer, bufferLen, bufferScanLocation, sWord, comment, nounOwner, scanForSection, webScrapeParse, t);
 	}
 	// NewsBank XML parsing
   if (buffer[cp]=='&')
@@ -2449,7 +2459,7 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
   if (buffer[cp]=='~' && buffer[cp+1]=='~')
   {
 		int endSymbol=0;
-    parseMetaCommands(buffer+cp+2,endSymbol,t);
+    parseMetaCommands(buffer+cp+2,endSymbol,comment,t);
     while (cp<bufferLen && buffer[cp]!=13)
       cp++;
     if (cp<bufferLen) cp++;
@@ -2458,7 +2468,7 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
 		if (endSymbol) 
 			return endSymbol;
 		else
-			return readWord(buffer,bufferLen,bufferScanLocation,sWord,nounOwner,scanForSection,webScrapeParse,t);
+			return readWord(buffer,bufferLen,bufferScanLocation,sWord,comment,nounOwner,scanForSection,webScrapeParse,t);
   }
   if (cp>=bufferLen)
     return PARSE_EOF;
