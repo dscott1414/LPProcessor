@@ -490,7 +490,7 @@ int createNouns(void)
 										1,L"quotes",OPEN_INFLECTION,1,1,
 										3,L"__NOUN[*]*2",L"__MNOUN[*]*2",L"_NAME",0,1,1, // quoted nouns should be rare in general
 										1,L"adverb",0,0,1, // her " afternoon out . "
-										2,L",",L".",0,0,1,
+										2,L",*2",L".",0,0,1, // *s discourages match of “ *Send* for the lookout , ” ordered Tom . 
 										1,L"quotes",CLOSE_INFLECTION,1,1,0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"G",
 										7,L"determiner{DET}",L"demonstrative_determiner{DET}",L"possessive_determiner{DET}",L"interrogative_determiner{DET}",L"quantifier{DET}",L"__HIS_HER_DETERMINER*1",L"_NAMEOWNER{DET}",0,1,1,
@@ -1115,7 +1115,8 @@ void createInfinitivePhrases(void)
 										1,L"to{ITO}",0,1,1,
 										1,L"_ADVERB",0,0,1,
 										1,L"_BE{_BLOCK}",0,1,1,
-										1,L"SYNTAX:Accepts S as Object{vC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
+										1, L"_ADVERB", 0, 0, 1,
+										2,L"SYNTAX:Accepts S as Object{vC:V_OBJECT}",L"adjective|sure",VERB_PRESENT_PARTICIPLE,1,1, // to be sure she really did sink!
 										1,L"__S1{OBJECT:EVAL:_BLOCK}",0,1,1,
 										1,L"__INFP4TSUB",0,0,1,
 										0);
@@ -1264,7 +1265,7 @@ int createVerbPatterns(void)
 						1,L"verb|get{past:V_AGREE:V_OBJECT}",VERB_PAST|VERB_PAST_THIRD_SINGULAR|VERB_PAST_PLURAL,1,1,
 						3,L"_ADVERB",L"preposition*2",L"_PP*1{_BLOCK}",0,0,2,// preposition use should be rare!
 						0);
-	// L"AL" structure of verb phrases from Quirk CGEL
+	// L"A" structure of verb phrases from Quirk CGEL
 	cPattern::create(L"_COND",L"",
 									1,L"_ADVERB",0,0,1,
 									4,L"future_modal_auxiliary{future:V_AGREE}",L"negation_future_modal_auxiliary{not:future:V_AGREE}",
@@ -1275,11 +1276,11 @@ int createVerbPatterns(void)
 	// you had better not steal that car!
 	cPattern::create(L"_COND", L"B",
 									1, L"have|had", 0, 1, 1,
-									1, L"adverb|better", 0, 1, 1,
+									2, L"adverb|better", L"adverb|best", 0, 1, 1,
 									1, L"not{not}", 0, 0, 1,
 									0);
-	// MODAL of L"AL" structure of verb phrases from Quirk CGEL
-		/* _COND2 is just a combination of _COND and a verbal auxiliary, which is really a verb taking a bare infinitive phrase (Pattern 4, 9.4.2.1 LGSWE) */
+	// MODAL of L"A" structure of verb phrases from Quirk CGEL
+	/* _COND2 is just a combination of _COND and a verbal auxiliary, which is really a verb taking a bare infinitive phrase (Pattern 4, 9.4.2.1 LGSWE) */
 	cPattern::create(L"_COND2",L"",
 									1,L"_ADVERB",0,0,1,
 									6,L"future_modal_auxiliary{future:V_AGREE}",L"negation_future_modal_auxiliary{not:future:V_AGREE}",
@@ -1405,7 +1406,7 @@ int createVerbPatterns(void)
 	// L"A" structure of verb phrases from Quirk CGEL (3.54)
 	cPattern::create(L"_VERB{VERB}",L"1",
 										1,L"_COND",0,1,1,
-										2, L"__INTERS1", L"_ADVERB*2", 0, 0, 1,
+										3, L"__INTERS1", L"_ADVERB*2", L"predeterminer|both",0, 0, 1,
 										1, L"verb|go",0,0,1,  // I shall go do this.
 										2,L"_VERBPRESENT",L"_BE{vS:V_OBJECT:id}",0,1,1,0);
 	// L"A" structure of verb phrases from Quirk CGEL (3.54)
@@ -2310,6 +2311,11 @@ int createSecondaryPatterns2(void)
 									 1,L"__S1[*]*1{_BLOCK:OBJECT:EVAL}",0,1,1, // rare             // and in general _NOUN[5] is correct when this is a NOUN
 									 1,L"_MSTAIL",0,0,1,
 									 0);
+	cPattern::create(L"_MS1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_STRICT_NO_MIDDLE_MATCH}", L"V",
+										1, L"_VERBREL1", 0, 1, 1,
+										1, L"conjunction", 0, 1, 1,
+										1, L"__S1[*]*1{_BLOCK:OBJECT:EVAL}", 0, 1, 1, // rare             // and in general _NOUN[5] is correct when this is a NOUN
+										0);
 	// *I* reckon the trouble is they are my kind. - A combination of S1[5] and MS1[2]
 	cPattern::create(L"_MS1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_STRICT_NO_MIDDLE_MATCH}", L"H",
 										1, L"_STEP", 0, 0, 1,
@@ -2519,9 +2525,9 @@ int createSecondaryPatterns2(void)
 	// IMPERATIVES p.803 CGEL
 	// don't _BE _NOUN _NOUN_OBJ
 	// don't -be -hasty .
-	// don't -be a fool . L"
+	// don't -be a fool . "
 	// stop it.
-	// L" don't -be too -disconsolate , Miss Tuppence , L" he said in a low voice .
+	// " don't -be too -disconsolate , Miss Tuppence , " he said in a low voice .
 	// please be quiet.
 	cPattern::create(L"_COMMAND1{_FINAL:_ONLY_BEGIN_MATCH}",L"1",
 						2,L"_ADVERB",L"_NAME",0,0,1, // pray / please / Yes (ADVERB) / Tommy
@@ -2554,7 +2560,13 @@ int createSecondaryPatterns2(void)
 						3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, // L"there{OBJECT}L" removed
 						1,L"__CLOSING__S1",0,1,3,
 						0);
-
+	// be sure you wait.
+	cPattern::create(L"_COMMAND1{_FINAL:_ONLY_BEGIN_MATCH}", L"5",
+						1, L"_ADVERB", 0, 0, 1, // pray / please / Yes (ADVERB) 
+						2, L"be", L"verb|make", 0, 1, 1,
+						1, L"_ADVERB", 0, 1, 1, // sure / certain
+						1, L"__S1{OBJECT:EVAL:_BLOCK}", 0, 1, 1,
+						0);
 	cPattern::create(L"_THINKPRESENT_CO",L"",
 												1,L"_THINKPRESENTFIRST",0,1,1,
 												1,L"coordinator",0,1,1,

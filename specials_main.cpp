@@ -2573,6 +2573,13 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: word 'but': ST says " + primarySTLPMatch + L" LP says conjunction"]++;
 		return 0;
 	}
+	// 40. but is never a verb (reviewed all examples in corpus)
+	if (word == L"want" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && primarySTLPMatch == L"verb" && 
+		  (source.m[wordSourceIndex-1].word->first==L"in" || source.m[wordSourceIndex - 1].word->first == L"for" || source.m[wordSourceIndex - 1].word->first == L"from" || source.m[wordSourceIndex - 1].word->first == L"by" || source.m[wordSourceIndex - 1].word->first == L"of"))
+	{
+		errorMap[L"LP correct: word 'want': ST says " + primarySTLPMatch + L" LP says noun"]++;
+		return 0;
+	}
 	// 41. in between two adverbs/adjectives, a verb and adverb/adjective or all/does/has and a verb.  100 examples in corpus with 100% correctness.
 	if (wordSourceIndex > 0 && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
 	{
