@@ -631,6 +631,10 @@ int createBasicPatterns(void)
 										3, L"noun|amount", L"noun|lot", L"noun|deal", 0, 0, 1,
 										2, L"adjective|worse", L"adverb|better", 0, 1, 1,
 										0);
+	cPattern::create(L"_ADVERB{_FINAL}", L"M",
+										1, L"quantifier|some", 0, 1, 1,
+										2, L"adverb|how", L"noun|way", 0, 1, 1,
+										0);
 	cPattern::create(L"_ADVERB{_FINAL}", L"L",
 										1, L"determiner|a", 0, 1, 1,
 										2, L"adverb|little*1", L"adverb|bit*1", 0, 1, 1, // make it preferable for another match 

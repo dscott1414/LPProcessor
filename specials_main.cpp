@@ -3510,7 +3510,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 // returns yes=0, no=1
 int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numTimesWordOccurred, wstring originalParse, wstring sentence, wstring &parse, int &numPOSNotFound, 
 	unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &formMisMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap,
-	bool inRelativeClause, unordered_map<wstring, int> &errorMap,int startOfSentence)
+	bool inRelativeClause, unordered_map<wstring, int> &errorMap,int startOfSentence,int maxLength)
 {
 	wstring word = source.m[wordSourceIndex].word->first;
 	if (!iswalpha(word[0]) || (word.length()<=1 && word[0]!='a' && word[0]!='i'))
@@ -3609,7 +3609,7 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 						sentence.replace(pos,originalWord.length(), L"*" + originalWord + L"*");
 					pos = sentence.find(originalWord,pos+ originalWord.length()+2);
 				}
-				lplog(LOG_ERROR, L"Stanford POS %s (%s) not found in winnerForms %s for word%s %s %07d:[%s]", partofspeech.c_str(), primarySTLPMatch.c_str(), winnerFormsString.c_str(), (originalWord.find(L' ')==wstring::npos) ? L"":L"[space]", originalWord.c_str(), wordSourceIndex, sentence.c_str());
+				lplog(LOG_ERROR, L"Stanford POS %s%s (%s) not found in winnerForms %s for word%s %s %07d:[%s]", partofspeech.c_str(), (sentence.length()<=maxLength) ? L"SHORT":L"",primarySTLPMatch.c_str(), winnerFormsString.c_str(), (originalWord.find(L' ')==wstring::npos) ? L"":L"[space]", originalWord.c_str(), wordSourceIndex, sentence.c_str());
 				for (int wf : winnerForms)
 				{
 					fd.LPErrorFormDistribution[Forms[wf]->name]++;
@@ -3716,7 +3716,7 @@ void printFormDistribution(wstring word, double adp, FormDistribution fd, wstrin
 			lplog(LOG_ERROR, L"  ST %s:%d %d%% %d%%", form.c_str(), count, 100 * count / (fd.agreeSTLP + fd.disagreeSTLP), fd.agreeFormDistribution[form] * 100 / count);
 }
 
-int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *vm,JNIEnv *env, int &numNoMatch, int &numPOSNotFound, unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &formMisMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, unordered_map<wstring, int> &errorMap, bool pcfg,wstring limitToWord)
+int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *vm,JNIEnv *env, int &numNoMatch, int &numPOSNotFound, unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &formMisMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, unordered_map<wstring, int> &errorMap, bool pcfg,wstring limitToWord,int maxLength)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
@@ -3787,7 +3787,7 @@ int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *
 					}
 					else
 					{
-						if (checkStanfordPCFGAgainstWinner(source, wordSourceIndex, numTimesWordOccurred[originalIWord], originalParse, sentence, parse, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, inRelativeClause, errorMap, start))
+						if (checkStanfordPCFGAgainstWinner(source, wordSourceIndex, numTimesWordOccurred[originalIWord], originalParse, sentence, parse, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, inRelativeClause, errorMap, start,maxLength))
 						{
 							numNoMatch++;
 							if (!sentencePrinted)
@@ -3851,7 +3851,7 @@ int stanfordCheck(Source source, int step, bool pcfg)
 		wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d sources in %02I64d:%02I64d:%02I64d [%d sources/hour] (%-35.35s...)", numSourcesProcessedNow * 100 / totalSource, numSourcesProcessedNow, totalSource,
 			processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, (processingSeconds) ? numSourcesProcessedNow * 3600 / processingSeconds : 0, title.c_str());
 		SetConsoleTitle(buffer);
-		int setStep = stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap,VFTMap,errorMap,pcfg,L"");
+		int setStep = stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap,VFTMap,errorMap,pcfg,L"",40);
 		totalWords += source.m.size();
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
@@ -4013,14 +4013,14 @@ int stanfordCheckMP(Source source, int step, bool pcfg, int MP)
 	free(handles);
 }
 
-int stanfordCheckTest(Source source, wstring path, int sourceId, bool pcfg,wstring limitToWord)
+int stanfordCheckTest(Source source, wstring path, int sourceId, bool pcfg,wstring limitToWord,int maxSentenceLimit)
 {
 	JavaVM *vm;
 	JNIEnv *env;
 	createJavaVM(vm, env);
 	unordered_map<wstring, int> formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, errorMap;
 	int numNoMatch = 0, numPOSNotFound = 0;
-	stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, errorMap, pcfg,limitToWord);
+	stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, errorMap, pcfg,limitToWord,maxSentenceLimit);
 	int totalWords = source.m.size();
 	destroyJavaVM(vm);
 	if (limitToWord.length() > 0)
@@ -4276,7 +4276,7 @@ void wmain(int argc,wchar_t *argv[])
 		stanfordCheck(source, step, true);
 		break;
 	case 70:
-		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"");
+		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"",40);
 		break;
 	case 71:
 		vector <wstring> words = { L"advertising",L"angling",L"bearing",L"blending",L"blessing",L"blowing",L"boating",L"booking",L"bottling",L"casting",L"clearing",

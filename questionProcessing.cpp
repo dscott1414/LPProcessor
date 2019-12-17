@@ -124,7 +124,7 @@ void createQuestionPatterns(void)
 									0);
 		// do I go? / don't you be afraid //
 	cPattern::create(L"_Q1{VERB}",L"7",1,L"_ADVERB",0,0,1,
-									1,L"_DO*-4{imp}",0,1,1, // -4 is to encourage _VERBPRESENT from not becoming a noun (the object of _DO) in an _SQ or _Q2[G]
+									1,L"_DO*-2{imp}",0,1,1, // -4 is to encourage _VERBPRESENT from not becoming a noun (the object of _DO) in an _SQ or _Q2[G]
 									1,L"__NOUN[*]{SUBJECT}",0,1,1,
 									1,L"_ADVERB",0,0,2,
 									2,L"_VERBPRESENT",L"_BE{vS:V_OBJECT:id}",0,1,1,
@@ -141,7 +141,7 @@ void createQuestionPatterns(void)
 	// Do you *mean* do I love Kara ?
 	cPattern::create(L"_QT1{_FINAL_IF_ALONE:VERB}", L"A",
 									1, L"_ADVERB", 0, 0, 1,
-									1, L"_DO*-3{imp}", 0, 1, 1,
+									1, L"_DO*-2{imp}", 0, 1, 1,
 									1, L"__NOUN[*]{SUBJECT}", 0, 1, 1,
 									1, L"verb|mean", 0, 1, 1,
 									1, L"_Q1[*]{OBJECT:EVAL:_BLOCK}", 0, 1, 1,
@@ -476,17 +476,27 @@ void createQuestionPatterns(void)
 									 1,L"__CLOSING__S1",0,0,3,
 									 0);
 			// Nurse Edith, did you say her name was?
+		// what salary do you think I get?
 	cPattern::create(L"_DISPLACED_OBJECT{_FINAL:_ONLY_BEGIN_MATCH:_QUESTION}",L"1",
 						1,L"__ALLOBJECTS_1",0,1,1,
-						1,",",0,1,1,
+						1,",",0,0,1,
 						1,L"_ADVERB",0,0,1,
 						1,L"_DO{imp}",0,1,1,
 						1,L"__NOUN[*]{SUBJECT}",0,1,1,
-						1,L"_ADVERB",0,0,2,
+						1,L"_ADVERB",0,0,1,
 						1,L"_THINKPRESENTFIRST{V_HOBJECT}",0,1,1,
 						1,L"__NOUN[*]{HOBJECT}",0,1,1,
 						2,L"__ALLVERB",L"_COND{VERB}",0,1,1,
 						0);
+	// a man did you say?
+	cPattern::create(L"_DISPLACED_OBJECT{_FINAL:_ONLY_BEGIN_MATCH:_QUESTION}", L"2",
+									1, L"__ALLOBJECTS_1", 0, 1, 1,
+									1, L"_ADVERB", 0, 0, 1,
+									1, L"_DO{imp}", 0, 1, 1,
+									1, L"__NOUN[*]{SUBJECT}", 0, 1, 1,
+									1, L"_ADVERB", 0, 0, 1,
+									1, L"__ALLVERB*2", 0, 1, 1,
+									0);
 	cPattern::create(L"_RELQ{_FINAL_IF_ALONE:_FORWARD_REFERENCE:S_IN_REL:_QUESTION}", L"",
 									3, L"_ADJECTIVE", L"_ADVERB", L"conjunction|but", 0, 0, 1,
 									1, L"relativizer*-1", 0, 1, 1, // this is necessary to beat Q1[J] which matches the same but incorrectly
