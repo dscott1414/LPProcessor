@@ -1041,7 +1041,7 @@ bool Source::tagSetAllIn(vector <costPatternElementByTagSet> &PEMAPositions,int 
 			return false;
 		int tagSetElement=PEMAPositions[I].element-1;
 		if (!tagSetElement) return true;
-		for (I--; I>=0 && PEMAPositions[I].element!=tagSetElement; I--);
+		for (I--; I>=0 && PEMAPositions[I].element>tagSetElement; I--);
 	}
 	return true;
 }
@@ -1056,6 +1056,8 @@ bool Source::tagSetAllIn(vector <costPatternElementByTagSet> &PEMAPositions,int 
 #define MIN_CHAIN_COST -MAX_COST
 void Source::setChain(vector <patternElementMatchArray::tPatternElementMatch *> chainPEMAPositions,vector <costPatternElementByTagSet> &PEMAPositions,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int &traceSource,int &minOverallChainCost)
 { LFS
+	if (debugTrace.traceSecondaryPEMACosting && PEMAPositions.size() > 0 && chainPEMAPositions.size() > 0)
+		lplog(L"*** BEGIN set chain TS#%03d [SOURCE=%06d] %06d", PEMAPositions[0].tagSet, PEMAPositions[0].traceSource, chainPEMAPositions[0] - pema.begin());
 	unsigned int I;
 	wstring flags;
 	// get the last element that has IN_CHAIN set for the first tagset that has all of its elements having IN_CHAIN set
@@ -1067,6 +1069,8 @@ void Source::setChain(vector <patternElementMatchArray::tPatternElementMatch *> 
 		else // skip all elements that depend on this element
 			for (int e=PEMAPositions[I++].element; I<PEMAPositions.size() && e<PEMAPositions[I].element; I++);
 	}
+	if (debugTrace.traceSecondaryPEMACosting)
+		lplog(L"%06d:the last index in PEMAPositions for the first tagset that has all of its elements having IN_CHAIN set",I);
 	int maxDeltaCost=MIN_CHAIN_COST,lastWinningPEMAPosition=0;
 	if (I<PEMAPositions.size())
 	{
@@ -1161,6 +1165,8 @@ void Source::setChain(vector <patternElementMatchArray::tPatternElementMatch *> 
 			}
 			PEMAPositionsSet.push_back(*cPI);
 		}
+	if (debugTrace.traceSecondaryPEMACosting && PEMAPositions.size() > 0 && chainPEMAPositions.size() > 0)
+		lplog(L"*** END set chain TS#%03d [SOURCE=%06d] %06d", PEMAPositions[0].tagSet, PEMAPositions[0].traceSource, chainPEMAPositions[0] - pema.begin());
 }
 
 void Source::findAllChains(vector <costPatternElementByTagSet> &PEMAPositions,int PEMAPosition,int position,vector <patternElementMatchArray::tPatternElementMatch *> &chain,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int totalCost,int &traceSource,int &minOverallChainCost)
@@ -1174,12 +1180,16 @@ void Source::findAllChains(vector <costPatternElementByTagSet> &PEMAPositions,in
 			int nextPatternElementPEMAPosition=pem->nextPatternElement;
 			chain.push_back(pem);
 			pem->setFlag(patternElementMatchArray::IN_CHAIN);
+			if (debugTrace.traceSecondaryPEMACosting)
+				lplog(L"Set flag IN_CHAIN for PEMA position %06d.",pem-pema.begin());
 			if (nextPatternElementPEMAPosition>=0)
 				findAllChains(PEMAPositions,nextPatternElementPEMAPosition,position+relativeBegin-pema[nextPatternElementPEMAPosition].begin,
 				chain,PEMAPositionsSet,totalCost+pem->iCost,traceSource,minOverallChainCost);
 			else
 				setChain(chain,PEMAPositions,PEMAPositionsSet,traceSource,minOverallChainCost);
 			pem->removeFlag(patternElementMatchArray::IN_CHAIN);
+			if (debugTrace.traceSecondaryPEMACosting)
+				lplog(L"Removed flag IN_CHAIN for PEMA position %06d.", pem - pema.begin());
 			chain.pop_back();
 		}
 }

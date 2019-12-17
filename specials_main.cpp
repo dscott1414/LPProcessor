@@ -2573,6 +2573,12 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: word 'but': ST says " + primarySTLPMatch + L" LP says conjunction"]++;
 		return 0;
 	}
+	// the is never anything but a determiner
+	if (word == L"the" && source.m[wordSourceIndex].queryWinnerForm(L"determiner") >= 0)
+	{
+		errorMap[L"LP correct: word 'the': ST says " + primarySTLPMatch + L" LP says determiner"]++;
+		return 0;
+	}
 	// 40. but is never a verb (reviewed all examples in corpus)
 	if (word == L"want" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && primarySTLPMatch == L"verb" && 
 		  (source.m[wordSourceIndex-1].word->first==L"in" || source.m[wordSourceIndex - 1].word->first == L"for" || source.m[wordSourceIndex - 1].word->first == L"from" || source.m[wordSourceIndex - 1].word->first == L"by" || source.m[wordSourceIndex - 1].word->first == L"of"))
@@ -4276,7 +4282,7 @@ void wmain(int argc,wchar_t *argv[])
 		stanfordCheck(source, step, true);
 		break;
 	case 70:
-		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"",40);
+		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"",50);
 		break;
 	case 71:
 		vector <wstring> words = { L"advertising",L"angling",L"bearing",L"blending",L"blessing",L"blowing",L"boating",L"booking",L"bottling",L"casting",L"clearing",

@@ -84,6 +84,13 @@ void createQuestionPatterns(void)
 									3,L"_NOUN_OBJ{SUBJECT}",L"__NOUN[*]{SUBJECT}",L"__NOUNREL{SUBJECT}",0,1,1,
 									1,L"_ADVERB",0,0,1,
 									0);
+	cPattern::create(L"_Q1S{_FINAL_IF_ALONE}", L"3",
+									2, L"have|had", L"have_negation|hadn't{not}", 0, 1, 1,
+									3, L"_NOUN_OBJ{SUBJECT}", L"__NOUN[*]{SUBJECT}", L"__NOUNREL{SUBJECT}", 0, 1, 1,
+									2, L"adverb|better", L"adverb|best", 0, 1, 1,
+									1, L"not{not}", 0, 0, 1,
+									0);
+
 		// would you go? / will there not be?
 	cPattern::create(L"_Q1{VERB}",L"3",1,L"_Q1S",0,1,1,
 									2,L"_VERBPRESENT",L"_BE{vS:V_OBJECT:id}",0,1,1,0);
@@ -148,6 +155,7 @@ void createQuestionPatterns(void)
 									0);
 	// Did anyone make him run to the store ?
 	// Can I let you *go*
+	// Did you see my roommate *go* out ? 
 	cPattern::create(L"_QT1{_FINAL_IF_ALONE:VERB}", L"V",
 									1, L"_ADVERB", 0, 0, 1,
 									2, L"_DO{imp}", L"_COND", 0, 1, 1, // this is the only V_AGREE
@@ -342,7 +350,7 @@ void createQuestionPatterns(void)
 	// re-added _ALLVERB because _Q2 is altered by the _QUESTION characteristic which alters the weight against _VERBREL1.
 	cPattern::create(L"_Q2{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH:_QUESTION}",L"F",
 									1,L"_INTRO_S1{_BLOCK:EVAL}",0,0,1, 
-									2,L"relativizer*-1{QTYPE:OBJECT}",L"_Q2PREP*-1",0,0,1, 
+									3,L"relativizer*-1{QTYPE:OBJECT}",L"_Q2PREP*-1",L"interrogative_pronoun{QTYPE:OBJECT}",0,0,1, 
 									1,L"__INTERPPB",0,0,1,
 									2,L"_Q1",L"_Q1PASSIVE",0,1,1, // _VERBREL1 removed because ALLOBJECTS follow is redundant
 									// __ALLOBJECTS_0 would be harmful here "(" ALLOBJECTS_0 could resolve to a NAME, which must be an object, but will not be registered as one if
@@ -351,7 +359,7 @@ void createQuestionPatterns(void)
 									4,L"__QNOUN",L"_PP", L"__ALLOBJECTS_1", L"__ALLOBJECTS_2*1", 0,0,1, // ,L"_INFP{OBJECT:_BLOCK}" RINFP 6/7/2006 -- *1 encourages the object to be in Q1, not outside.
 									1,L"__CLOSING__S1",0,0,3,
 									0);
-	cPattern::create(L"_Q2{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH:_QUESTION}",L"G",
+	cPattern::create(L"_Q2{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH:_QUESTION}",L"A",
 									1,L"__INTRO_S1{_BLOCK:EVAL}",0,0,1, 
 									1,L"_Q2PREP*-2",0,1,1, // don't add OBJECT to this relativizer - it will screw up agreement
 									1,L"__INTERPPB",0,0,1,
@@ -489,10 +497,11 @@ void createQuestionPatterns(void)
 						2,L"__ALLVERB",L"_COND{VERB}",0,1,1,
 						0);
 	// a man did you say?
+		// one more sign shall I send.
 	cPattern::create(L"_DISPLACED_OBJECT{_FINAL:_ONLY_BEGIN_MATCH:_QUESTION}", L"2",
 									1, L"__ALLOBJECTS_1", 0, 1, 1,
 									1, L"_ADVERB", 0, 0, 1,
-									1, L"_DO{imp}", 0, 1, 1,
+									2, L"_DO{imp}", L"future_modal_auxiliary",0, 1, 1,
 									1, L"__NOUN[*]{SUBJECT}", 0, 1, 1,
 									1, L"_ADVERB", 0, 0, 1,
 									1, L"__ALLVERB*2", 0, 1, 1,
@@ -551,7 +560,7 @@ void createQuestionPatterns(void)
 									// __ALLOBJECTS_0 would be harmful here because ALLOBJECTS_0 could resolve to a NAME, which must be an object, but will not be registered as one if
 									//   __ALLOBJECTS_0 is its parent.  
 									5, L"__QNOUN", L"_PP", L"adjective{ADJ}", L"__ALLOBJECTS_1", L"__ALLOBJECTS_2", 0, 0, 1, // there must only be one adjective and it must be last (not mixed in) see *
-									1, L"__MSTAIL", 0, 0, 1,
+									2, L"__MSTAIL", L"_ADVERB", 0, 0, 1,
 									0);
 }
 

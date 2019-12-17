@@ -2526,6 +2526,12 @@ int createSecondaryPatterns2(void)
 	//                 1,L"_ADJECTIVE",0,1,1,
 	//                 1,L"_PP",0,1,1,
 	//                 0);
+	// let us
+	cPattern::create(L"_INTROCOMMAND1{_FINAL:_ONLY_BEGIN_MATCH}", L"1",
+		1, L"verb|let", 0, 1, 1, 
+		1, L"personal_pronoun_accusative|us", 0, 1, 1,
+		0);
+
 	// IMPERATIVES p.803 CGEL
 	// don't _BE _NOUN _NOUN_OBJ
 	// don't -be -hasty .
@@ -2536,13 +2542,14 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"_COMMAND1{_FINAL:_ONLY_BEGIN_MATCH}",L"1",
 						2,L"_ADVERB",L"_NAME",0,0,1, // pray / please / Yes (ADVERB) / Tommy
 						1,L",",0,0,1,
-						1,L"_DO{imp}",0,0,1,
+						2,L"_DO{imp}",L"_INTROCOMMAND1",0,0,1,
 						1,L"_BE{VERB:vS:id}",0,1,1,
 						5,L"__NOUN[*]{OBJECT}",L"_NOUN_OBJ{OBJECT}",L"__NOUNREL{OBJECT}",L"_VERBPASTPART",L"_ADJECTIVE",0,0,1,0);
 	// make Ben help me.
 	cPattern::create(L"_COMMAND1{_FINAL:_ONLY_BEGIN_MATCH}",L"2",
 						2,L"_ADVERB",L"_NAME",0,0,1, // pray / please / Yes (ADVERB) / Tommy
 						1,L",",0,0,1,
+						1,L"_INTROCOMMAND1",0,0,1,
 						1,L"verbverb{vS:V_HOBJECT}",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_SECOND_SINGULAR|VERB_PRESENT_PLURAL,1,1,
 						3,L"_NOUN_OBJ{HOBJECT}",L"__NOUN[*]{HOBJECT}",L"__MNOUN[*]{HOBJECT}",0,1,1,
 						2,L"_ADVERB",L"_PP",0,0,2,
@@ -2555,18 +2562,24 @@ int createSecondaryPatterns2(void)
 						1,L"_PP",0,1,1,
 						1,L"__CLOSING__S1",0,1,3,
 						0);
+	// let us hope so.
+	cPattern::create(L"_COMMAND1{_FINAL:_ONLY_BEGIN_MATCH}", L"6",
+						1, L"_VERB_BARE_INF", 0, 1, 1,
+						1, L"_ADVERB", 0, 0, 1,
+						0);
 	// bake some buns with me, please.
-	cPattern::create(L"_COMMAND1{_FINAL:_ONLY_BEGIN_MATCH}",L"3",
-						1,L"_ADVERB",0,0,1,
+	cPattern::create(L"_COMMAND1{_FINAL:_ONLY_BEGIN_MATCH}",L"4",
+						1,L"_INTROCOMMAND1",0,0,1,
+						2,L"_ADVERB",L"verb|go",0,0,1,
 						1, L"_DO{imp}", 0, 0, 1,
-						4,L"_VERBPRESENT{VERB}",L"_VERBPRESENT_CO",L"is{vS:id:V_AGREE:V_OBJECT:VERB}",L"is_negation{vS:id:not:V_AGREE:V_OBJECT:VERB}",
+						4,L"_VERBPRESENT{VERB:V_OBJECT}",L"_VERBPRESENT_CO",L"is{vS:id:V_OBJECT:VERB}",L"is_negation{vS:id:not:V_OBJECT:VERB}",
 							VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_PLURAL,1,1,
 						3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, // L"there{OBJECT}L" removed
 						1,L"__CLOSING__S1",0,1,3,
 						0);
 	// be sure you wait.
 	cPattern::create(L"_COMMAND1{_FINAL:_ONLY_BEGIN_MATCH}", L"5",
-						1, L"_ADVERB", 0, 0, 1, // pray / please / Yes (ADVERB) 
+						2, L"_ADVERB", L"_INTROCOMMAND1",0, 0, 1, // pray / please / Yes (ADVERB) 
 						2, L"be", L"verb|make", 0, 1, 1,
 						1, L"_ADVERB", 0, 1, 1, // sure / certain
 						1, L"__S1{OBJECT:EVAL:_BLOCK}", 0, 1, 1,
@@ -2581,7 +2594,7 @@ int createSecondaryPatterns2(void)
 						1,L"_DO{imp}",0,1,1,
 						3,L"__NOUN[*]{OBJECT}",L"_NOUN_OBJ{OBJECT}",L"__NOUNREL{OBJECT}",0,1,1,
 						0);
-	cPattern::create(L"_COMMAND1{_FINAL:_ONLY_BEGIN_MATCH}",L"4",
+	cPattern::create(L"_COMMAND1{_FINAL:_ONLY_BEGIN_MATCH}",L"6",
 						2,L"_ADVERB",L"_NAME",0,0,1, // pray / please / Yes (ADVERB) / Tommy
 						1,L",",0,0,1,
 						1,L"_SUBCOM",0,0,1,
