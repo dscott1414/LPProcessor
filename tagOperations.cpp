@@ -60,7 +60,7 @@ int Source::collectTags(int recursionLevel,int PEMAPosition,int position,vector 
 			for (size_t ts=(tagSets.size()>10) ? tagSets.size()-10 : 0; ts<tagSets.size() && !duplicate; ts++)
 				duplicate=tagSetSame(tagSet,tagSets[ts]);
 		// !duplicate && tagSet.size() if removing empty tagsets from top level EMPTAG
-		if (recursionLevel==0 && secondaryPEMAPositions.size() && secondaryPEMAPositions[secondaryPEMAPositions.size()-1].tagSet!=tagSets.size())
+		if (recursionLevel==0 && secondaryPEMAPositions.size() && secondaryPEMAPositions[secondaryPEMAPositions.size()-1].getTagSet()!=tagSets.size())
 			secondaryPEMAPositions.push_back(costPatternElementByTagSet(position,-PEMAPosition,-1,tagSets.size(),pema[-PEMAPosition].getElement()));
 		if (!duplicate) // Eliminate empty tagsets? (recursionLevel || tagSet.size()) && (EMPTAG)
 		{
@@ -470,7 +470,7 @@ size_t Source::startCollectTags(bool inTrace,int tagSet,int position,int PEMAPos
 	collectTags(0,PEMAPosition,position,tTagSet,tagSets,pemaMapToTagSetsByPemaByTagSet[tagSet]);
 	int numTagSets=(signed)tagSets.size();
 	for (int J=secondaryPEMAPositions.size()-1; J>=0; J--)
-		if (secondaryPEMAPositions[J].tagSet>=numTagSets)
+		if (secondaryPEMAPositions[J].getTagSet()>=numTagSets)
 			secondaryPEMAPositions.erase(secondaryPEMAPositions.begin()+J);
 	if (!exitTags)
 		return tagSets.size();

@@ -195,7 +195,7 @@ int patternElementMatchArray::push_back(int oCost,int iCost,unsigned int p,int b
   tPatternElementMatch *c=content+count-1;
   c->setPattern(p);
   c->setOCost(oCost);
-  c->iCost=iCost;
+  c->setIncrementalCost(iCost);
   c->removeWinnerFlag();
   c->begin=begin;
   c->end=end;
@@ -266,7 +266,7 @@ int patternElementMatchArray::push_back_unique(int *firstPosition,unsigned int p
 #endif
         c->setOCost(oCost);
       }
-      if (c->iCost>iCost)
+      if (c->getIncrementalCost()>iCost)
       {
 #ifdef LOG_PATTERN_COST_CHECK
         if (isPattern)
@@ -279,7 +279,7 @@ int patternElementMatchArray::push_back_unique(int *firstPosition,unsigned int p
           position,patterns[p]->name.c_str(),patterns[p]->differentiator.c_str(),position+begin,position+end,
           c->iCost,iCost);
 #endif
-        c->iCost=iCost;
+        c->setIncrementalCost(iCost);
       }
       patterns[p]->emi++;
       newElement=false;

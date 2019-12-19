@@ -168,7 +168,7 @@ void createMetaNameEquivalencePatterns(void);
 int createNouns(void)
 { LFS
 	// this has the same follows as _NOUN[9] (except _PP and _REL1 are optional)
-	// _NOUN_OBJ is referenced by getNounPhraseInfo as having a differentiator of L"1"
+	// _NOUN_OBJ is referenced by getNounPhraseInfo as having a differentiator of "1"
 	cPattern::create(L"_NOUN_OBJ{PNOUN}",L"1",
 		6,L"reflexive_pronoun{N_AGREE}",    L"reciprocal_pronoun{N_AGREE}",
 			L"relativizer{N_AGREE:SINGULAR}", L"personal_pronoun_nominative{N_AGREE}",  L"personal_pronoun{N_AGREE}",L"adjective|other{N_AGREE}",0,1,1,
@@ -638,7 +638,7 @@ int createBasicPatterns(void)
 	cPattern::create(L"_ADVERB{_FINAL}", L"L",
 										1, L"determiner|a", 0, 1, 1,
 										2, L"adverb|little*1", L"adverb|bit*1", 0, 1, 1, // make it preferable for another match 
-										1, L"adverb", 0, 0, 1,
+										2, L"adverb", L"uncertainDurationUnit|while",0, 0, 1,
 										0);
 	cPattern::create(L"_ADVERB{_FINAL}", L"Y",
 										1, L"predeterminer|all", 0, 1, 1,
@@ -914,7 +914,7 @@ int createBareInfinitives(void)
 										6,L"verb{vS:V_OBJECT}",L"does{vS:V_OBJECT}",L"does_negation{vS:not:V_OBJECT}",
 											L"have{vS:V_OBJECT}",L"have_negation{vS:not:V_OBJECT}", L"be{id:V_OBJECT}", VERB_PRESENT_FIRST_SINGULAR,1,1,
 										0);
-	// I have/had made you do that  / had made L"his indecision of character" be
+	// I have/had made you do that  / had made "his indecision of character" be
 	cPattern::create(L"_VERB_BARE_INF{VERB}",L"5",
 										1,L"_HAVE",0,1,1,
 										2,L"verbverb{vB:V_HOBJECT}",L"have|had{vS:V_HOBJECT}",VERB_PAST_PARTICIPLE,1,1,
@@ -1306,7 +1306,8 @@ int createVerbPatterns(void)
 	// I go / I go up
 	// possessive_determiner is actually an adjective modifying an object missing from the sentence
 	// Simple verb phrase 3.54 Quirk CGEL
-	cPattern::create(L"_VERBPRESENT",L"1",1,L"possessive_determiner*4",0,0,1, // removed _ADVERB and added it to later patterns // the hidden object use should be very rare!
+	cPattern::create(L"_VERBPRESENT",L"1",
+		                          2,L"possessive_determiner*4", L"verb|go", 0,0,1, // removed _ADVERB and added it to later patterns // the hidden object use should be very rare! / You go get the wheel.
 															5,L"verb{vS:V_AGREE:V_OBJECT}",L"does{vS:V_AGREE:V_OBJECT}",
 															L"does_negation{vS:not:V_AGREE:V_OBJECT}",
 															L"have{vS:V_AGREE:V_OBJECT}",L"have_negation{vS:not:V_AGREE:V_OBJECT}",
@@ -1411,7 +1412,6 @@ int createVerbPatterns(void)
 	cPattern::create(L"_VERB{VERB}",L"1",
 										1,L"_COND",0,1,1,
 										3, L"__INTERS1", L"_ADVERB*2", L"predeterminer|both",0, 0, 1,
-										1, L"verb|go",0,0,1,  // I shall go do this.
 										2,L"_VERBPRESENT",L"_BE{vS:V_OBJECT:id}",0,1,1,0);
 	// L"A" structure of verb phrases from Quirk CGEL (3.54)
 	cPattern::create(L"_THINK",L"1",
@@ -2570,7 +2570,7 @@ int createSecondaryPatterns2(void)
 	// bake some buns with me, please.
 	cPattern::create(L"_COMMAND1{_FINAL:_ONLY_BEGIN_MATCH}",L"4",
 						1,L"_INTROCOMMAND1",0,0,1,
-						2,L"_ADVERB",L"verb|go",0,0,1,
+						1,L"_ADVERB",0,0,1,
 						1, L"_DO{imp}", 0, 0, 1,
 						4,L"_VERBPRESENT{VERB:V_OBJECT}",L"_VERBPRESENT_CO",L"is{vS:id:V_OBJECT:VERB}",L"is_negation{vS:id:not:V_OBJECT:VERB}",
 							VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_PLURAL,1,1,

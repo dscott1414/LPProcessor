@@ -86,7 +86,9 @@ void createQuestionPatterns(void)
 									0);
 	cPattern::create(L"_Q1S{_FINAL_IF_ALONE}", L"3",
 									2, L"have|had", L"have_negation|hadn't{not}", 0, 1, 1,
+									1, L"not",0,0,1,
 									3, L"_NOUN_OBJ{SUBJECT}", L"__NOUN[*]{SUBJECT}", L"__NOUNREL{SUBJECT}", 0, 1, 1,
+									1, L"not", 0, 0, 1,
 									2, L"adverb|better", L"adverb|best", 0, 1, 1,
 									1, L"not{not}", 0, 0, 1,
 									0);

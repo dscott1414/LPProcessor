@@ -603,9 +603,10 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 	{
 		tIWMM nounWord,verbWord;
 		int nextObjectVerbTag=-1,whereObjectVerbTag=(mainVerbTag>=0) ? findTagConstrained(tagSet,L"V_OBJECT",nextObjectVerbTag,tagSet[mainVerbTag]) : -1;
-		//if (patterns[tagSet[verbAgreeTag].pattern]->name==L"_VERB_BARE_INF") // if this is a _VERB_BARE_INF - take the first verb
-		//	verbWord = m[verbPosition].word;
-		//else 
+		lplog(L"TEMP DEBUG %d:%s %s", verbPosition, m[verbPosition].word->first.c_str(), patterns[tagSet[verbAgreeTag].parentPattern]->name.c_str());
+		if (patterns[tagSet[verbAgreeTag].parentPattern]->name==L"_VERB_BARE_INF") // if this is a _VERB_BARE_INF - take the first verb
+			verbWord = m[verbPosition].word;
+		else 
 		if (nextObjectVerbTag>=0)
 			verbWord=m[tagSet[nextObjectVerbTag].sourcePosition].word;
 		else if (whereObjectVerbTag>=0)
@@ -724,6 +725,8 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 	// if singular | plural not already set
 	// words like "there" may be plural or singular depending on usage
 	int inflectionFlags = m[verbPosition].word->second.inflectionFlags&VERB_INFLECTIONS_MASK;
+	wstring verbInflections;
+	lplog(L"TEMP DEBUG %d:%s %s", verbPosition, m[verbPosition].word->first.c_str(), getInflectionName(inflectionFlags, verbInflectionMap, verbInflections));
 	if (!singularSet && !pluralSet && nounPosition>=0)
 	{
 		pluralSet=(m[nounPosition].word->second.inflectionFlags&PLURAL)==PLURAL;
@@ -731,7 +734,7 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 		// a proper noun is very rarely plural - Tuppence should only be considered singular
 		// special rules for multiple proper nouns needed in future (two ICBMs)
 		if (pluralSet && singularSet && (m[nounPosition].flags&WordMatch::flagOnlyConsiderProperNounForms) && 
-			  (person!=THIRD_PERSON || (inflectionFlags!=VERB_PRESENT_PLURAL && inflectionFlags != VERB_PAST_PLURAL)))
+			  (person!=THIRD_PERSON || ((inflectionFlags&VERB_PRESENT_PLURAL)!= VERB_PRESENT_PLURAL && (inflectionFlags&VERB_PAST_PLURAL)!= VERB_PAST_PLURAL)))
 			pluralSet=false;
 		if (m[nounPosition].word->first==L"who" || // those who were OR this person who was
 			  m[nounPosition].word->first==L"that") // the settlement that was OR the settlements that were
@@ -761,7 +764,7 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 	}
 	// The Men of Yore Briefcase is essential for every trip.
 	if (np>=0 && np+4<(signed)m.size() && pluralSet && 
-		  (inflectionFlags==VERB_PRESENT_FIRST_SINGULAR || inflectionFlags==VERB_PRESENT_THIRD_SINGULAR) && 
+		  ((inflectionFlags&VERB_PRESENT_FIRST_SINGULAR) || (inflectionFlags&VERB_PRESENT_THIRD_SINGULAR)) && 
 		  (m[np].flags&WordMatch::flagFirstLetterCapitalized) && m[np+1].word->first==L"of" && 
 		  (m[np+2].flags&WordMatch::flagFirstLetterCapitalized) && (m[np+3].flags&WordMatch::flagFirstLetterCapitalized) &&
 			(m[np+3].word->second.inflectionFlags&SINGULAR)==SINGULAR)
@@ -1037,11 +1040,11 @@ bool Source::tagSetAllIn(vector <costPatternElementByTagSet> &PEMAPositions,int 
 { LFS
 	while (I>=0)
 	{
-		if (!pema[PEMAPositions[I].PEMAPosition].flagSet(patternElementMatchArray::IN_CHAIN))
+		if (!pema[PEMAPositions[I].getPEMAPosition()].flagSet(patternElementMatchArray::IN_CHAIN))
 			return false;
-		int tagSetElement=PEMAPositions[I].element-1;
+		int tagSetElement=PEMAPositions[I].getElement()-1;
 		if (!tagSetElement) return true;
-		for (I--; I>=0 && PEMAPositions[I].element>tagSetElement; I--);
+		for (I--; I>=0 && PEMAPositions[I].getElement()>tagSetElement; I--);
 	}
 	return true;
 }
@@ -1057,17 +1060,17 @@ bool Source::tagSetAllIn(vector <costPatternElementByTagSet> &PEMAPositions,int 
 void Source::setChain(vector <patternElementMatchArray::tPatternElementMatch *> chainPEMAPositions,vector <costPatternElementByTagSet> &PEMAPositions,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int &traceSource,int &minOverallChainCost)
 { LFS
 	if (debugTrace.traceSecondaryPEMACosting && PEMAPositions.size() > 0 && chainPEMAPositions.size() > 0)
-		lplog(L"*** BEGIN set chain TS#%03d [SOURCE=%06d] %06d", PEMAPositions[0].tagSet, PEMAPositions[0].traceSource, chainPEMAPositions[0] - pema.begin());
+		lplog(L"*** BEGIN set chain TS#%03d [SOURCE=%06d] %06d", PEMAPositions[0].getTagSet(), PEMAPositions[0].getTraceSource(), chainPEMAPositions[0] - pema.begin());
 	unsigned int I;
 	wstring flags;
 	// get the last element that has IN_CHAIN set for the first tagset that has all of its elements having IN_CHAIN set
 	for (I=0; I<PEMAPositions.size(); )
 	{
-		for (int ts=PEMAPositions[I].tagSet; I+1<PEMAPositions.size() && ts==PEMAPositions[I+1].tagSet; I++);
+		for (int ts=PEMAPositions[I].getTagSet(); I+1<PEMAPositions.size() && ts==PEMAPositions[I+1].getTagSet(); I++);
 		if (tagSetAllIn(PEMAPositions,I))
 			break;
 		else // skip all elements that depend on this element
-			for (int e=PEMAPositions[I++].element; I<PEMAPositions.size() && e<PEMAPositions[I].element; I++);
+			for (int e=PEMAPositions[I++].getElement(); I<PEMAPositions.size() && e<PEMAPositions[I].getElement(); I++);
 	}
 	if (debugTrace.traceSecondaryPEMACosting)
 		lplog(L"%06d:the last index in PEMAPositions for the first tagset that has all of its elements having IN_CHAIN set",I);
@@ -1078,18 +1081,18 @@ void Source::setChain(vector <patternElementMatchArray::tPatternElementMatch *> 
 		if (debugTrace.traceSecondaryPEMACosting)
 		{
 			lplog(L"     PEMAPosition %d: TS#%03d [SOURCE=%06d] element=%d cost=%d maxDeltaCost=%d (lastWinningPEMAPosition=%d).", I,
-				PEMAPositions[I].tagSet, PEMAPositions[I].traceSource, PEMAPositions[I].element, PEMAPositions[I].cost, maxDeltaCost, lastWinningPEMAPosition);
+				PEMAPositions[I].getTagSet(), PEMAPositions[I].getTraceSource(), PEMAPositions[I].getElement(), PEMAPositions[I].getCost(), maxDeltaCost, lastWinningPEMAPosition);
 		}
 		// found first element match.  How many more elements match?
 		// elements which are greater must always ADD cost, or keep it the same.  The cost never decreases. see lowerPreviousElementCosts
-		for (maxDeltaCost = PEMAPositions[I++].cost; I<PEMAPositions.size() && PEMAPositions[I].element>PEMAPositions[I - 1].element && tagSetAllIn(PEMAPositions, I); I++)
+		for (maxDeltaCost = PEMAPositions[I++].getCost(); I<PEMAPositions.size() && PEMAPositions[I].getElement()>PEMAPositions[I - 1].getElement() && tagSetAllIn(PEMAPositions, I); I++)
 		{
-			if (PEMAPositions[I].cost > maxDeltaCost)
-				maxDeltaCost = PEMAPositions[lastWinningPEMAPosition = I].cost;
+			if (PEMAPositions[I].getCost() > maxDeltaCost)
+				maxDeltaCost = PEMAPositions[lastWinningPEMAPosition = I].getCost();
 			if (debugTrace.traceSecondaryPEMACosting)
 			{
 				lplog(L"     PEMAPosition %d: TS#%03d [SOURCE=%06d] element=%d cost=%d maxDeltaCost=%d (lastWinningPEMAPosition=%d).",I,
-					PEMAPositions[I].tagSet, PEMAPositions[I].traceSource, PEMAPositions[I].element, PEMAPositions[I].cost, maxDeltaCost, lastWinningPEMAPosition);
+					PEMAPositions[I].getTagSet(), PEMAPositions[I].getTraceSource(), PEMAPositions[I].getElement(), PEMAPositions[I].getCost(), maxDeltaCost, lastWinningPEMAPosition);
 			}
 		}
 		// find lowest cost for this element.  Otherwise this would stop at element 106, when really 108 is better.
@@ -1104,14 +1107,14 @@ void Source::setChain(vector <patternElementMatchArray::tPatternElementMatch *> 
 		//  000004: 002581 33 03 001  001  111  false
 		//  000004: 002581 34 03 000  000  112  false
 		//  000004: 002581 35 03 000  000  112  false
-		for (; I < PEMAPositions.size() && PEMAPositions[I].element == PEMAPositions[I - 1].element && PEMAPositions[I].PEMAPosition == PEMAPositions[I - 1].PEMAPosition; I++)
+		for (; I < PEMAPositions.size() && PEMAPositions[I].getElement() == PEMAPositions[I - 1].getElement() && PEMAPositions[I].getPEMAPosition() == PEMAPositions[I - 1].getPEMAPosition(); I++)
 		{
-			if (PEMAPositions[I].cost < maxDeltaCost)
-				maxDeltaCost = PEMAPositions[lastWinningPEMAPosition = I].cost;
+			if (PEMAPositions[I].getCost() < maxDeltaCost)
+				maxDeltaCost = PEMAPositions[lastWinningPEMAPosition = I].getCost();
 			if (debugTrace.traceSecondaryPEMACosting)
 			{
 				lplog(L"     PEMAPosition %d: TS#%03d [SOURCE=%06d] element=%d cost=%d maxDeltaCost=%d (lastWinningPEMAPosition=%d).", I,
-					PEMAPositions[I].tagSet, PEMAPositions[I].traceSource, PEMAPositions[I].element, PEMAPositions[I].cost, maxDeltaCost, lastWinningPEMAPosition);
+					PEMAPositions[I].getTagSet(), PEMAPositions[I].getTraceSource(), PEMAPositions[I].getElement(), PEMAPositions[I].getCost(), maxDeltaCost, lastWinningPEMAPosition);
 			}
 		}
 	}
@@ -1130,7 +1133,7 @@ void Source::setChain(vector <patternElementMatchArray::tPatternElementMatch *> 
 			for (vector <patternElementMatchArray::tPatternElementMatch *>::iterator cPI=chainPEMAPositions.begin(),cPIEnd=chainPEMAPositions.end(); cPI!=cPIEnd; cPI++)
 				len+=wsprintf(temp+len,L"%06d (oCost=%d cumulativeDeltaCost=%d) %s | ",*cPI-pema.begin(),(*cPI)->getOCost(), (*cPI)->cumulativeDeltaCost, (*cPI)->flagsStr(flags));
 			lplog(L"TS#%03d set chain %s with %d=maxOCost %d + maxDeltaCost %d [SOURCE=%06d].",
-				PEMAPositions[lastWinningPEMAPosition].tagSet,temp,maxOCost+maxDeltaCost,maxOCost,maxDeltaCost,PEMAPositions[lastWinningPEMAPosition].traceSource);
+				PEMAPositions[lastWinningPEMAPosition].getTagSet(),temp,maxOCost+maxDeltaCost,maxOCost,maxDeltaCost,PEMAPositions[lastWinningPEMAPosition].getTraceSource());
 		}
 	maxOCost+=maxDeltaCost;
 	// set the cost of the entire chain to maxOCost
@@ -1139,7 +1142,7 @@ void Source::setChain(vector <patternElementMatchArray::tPatternElementMatch *> 
 		{
 			if ((*cPI)->tempCost>maxOCost && (*cPI)->begin==0 && minOverallChainCost>maxOCost)
 			{
-				traceSource=PEMAPositions[lastWinningPEMAPosition].traceSource;
+				traceSource=PEMAPositions[lastWinningPEMAPosition].getTraceSource();
 				minOverallChainCost=maxOCost;
 			}
 			if (debugTrace.traceSecondaryPEMACosting)
@@ -1160,16 +1163,16 @@ void Source::setChain(vector <patternElementMatchArray::tPatternElementMatch *> 
 			(*cPI)->setFlag(patternElementMatchArray::COST_DONE);
 			if ((*cPI)->begin==0 && minOverallChainCost>maxOCost)
 			{
-				traceSource=PEMAPositions[lastWinningPEMAPosition].traceSource;
+				traceSource=PEMAPositions[lastWinningPEMAPosition].getTraceSource();
 				minOverallChainCost=maxOCost;
 			}
 			PEMAPositionsSet.push_back(*cPI);
 		}
 	if (debugTrace.traceSecondaryPEMACosting && PEMAPositions.size() > 0 && chainPEMAPositions.size() > 0)
-		lplog(L"*** END set chain TS#%03d [SOURCE=%06d] %06d", PEMAPositions[0].tagSet, PEMAPositions[0].traceSource, chainPEMAPositions[0] - pema.begin());
+		lplog(L"*** END set chain TS#%03d [SOURCE=%06d] %06d", PEMAPositions[0].getTagSet(), PEMAPositions[0].getTraceSource(), chainPEMAPositions[0] - pema.begin());
 }
 
-void Source::findAllChains(vector <costPatternElementByTagSet> &PEMAPositions,int PEMAPosition,int position,vector <patternElementMatchArray::tPatternElementMatch *> &chain,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int totalCost,int &traceSource,int &minOverallChainCost)
+void Source::findAllChains(vector <costPatternElementByTagSet> &PEMAPositions,int PEMAPosition,vector <patternElementMatchArray::tPatternElementMatch *> &chain,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int &traceSource,int &minOverallChainCost)
 { LFS // DLFS
 	// find first position with pattern and relativeEnd
 	patternElementMatchArray::tPatternElementMatch *pem=pema.begin()+PEMAPosition;
@@ -1183,8 +1186,7 @@ void Source::findAllChains(vector <costPatternElementByTagSet> &PEMAPositions,in
 			if (debugTrace.traceSecondaryPEMACosting)
 				lplog(L"Set flag IN_CHAIN for PEMA position %06d.",pem-pema.begin());
 			if (nextPatternElementPEMAPosition>=0)
-				findAllChains(PEMAPositions,nextPatternElementPEMAPosition,position+relativeBegin-pema[nextPatternElementPEMAPosition].begin,
-				chain,PEMAPositionsSet,totalCost+pem->iCost,traceSource,minOverallChainCost);
+				findAllChains(PEMAPositions,nextPatternElementPEMAPosition,chain,PEMAPositionsSet,traceSource,minOverallChainCost);
 			else
 				setChain(chain,PEMAPositions,PEMAPositionsSet,traceSource,minOverallChainCost);
 			pem->removeFlag(patternElementMatchArray::IN_CHAIN);
@@ -1443,6 +1445,8 @@ int Source::cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patter
 // 	000005: 000669 16 02 000  000  033  false - this is not less than the cost of the occurrence of the previous element #
 // 	000007: 000670 16 03 000  000  033  false - this is not less than the cost of the occurrence of the previous element #
 // 	000005: 001793 17 02 000  000  034  true  - this is not less than the cost of the occurrence of the previous element #
+// this is obsolete!  replaced by lowerPreviousElementCosts
+/*
 void Source::lowerPreviousElementCostsOld(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, wchar_t *fromWhere)
 {
 	LFS
@@ -1452,11 +1456,11 @@ void Source::lowerPreviousElementCostsOld(vector <costPatternElementByTagSet> &P
 	{
 		map <int, vector <costPatternElementByTagSet>::iterator> lastOccurrenceOfElement; // index is pattern element #, assigned value is PEMAPosition iterator.
 		int tagSet;
-		for (tagSet = IP->tagSet; IP != IPEnd && IP->tagSet == tagSet; IP++)
+		for (tagSet = IP->getTagSet(); IP != IPEnd && IP->getTagSet() == tagSet; IP++)
 		{
-			lastOccurrenceOfElement[IP->element] = IP;
-			IP->cost = costs[IP->tagSet];
-			IP->traceSource = traceSources[IP->tagSet];
+			lastOccurrenceOfElement[IP->getElement()] = IP;
+			IP->setCost(costs[IP->getTagSet()]);
+			IP->setTraceSource(traceSources[IP->getTagSet()]);
 		}
 		// Important to change only the last occurrence of element!
 		// divide array into sets of increasing elements.
@@ -1464,21 +1468,21 @@ void Source::lowerPreviousElementCostsOld(vector <costPatternElementByTagSet> &P
 		//  then decrease the cost of A to the cost of B.  This is because with any set of PEMA elements SPEMA that form a complete matched pattern
 		//  if element of A < element of B and member B belongs to set SPEMA then member A also belongs to SPEMA. Member A also belongs to another
 		//  set SPEMA2, with a higher cost, but we prefer the lower cost one because we are seeking patterns with the lowest cost.
-		while (IP != IPEnd && IP->element)
+		while (IP != IPEnd && IP->getElement())
 		{
-			tagSet = IP->tagSet;
-			for (int lowestElement = IP->element - 1; lowestElement >= 0; lowestElement--)
+			tagSet = IP->getTagSet();
+			for (int lowestElement = IP->getElement() - 1; lowestElement >= 0; lowestElement--)
 				if (lastOccurrenceOfElement.find(lowestElement) != lastOccurrenceOfElement.end())
-					if (lastOccurrenceOfElement[lowestElement]->cost > costs[tagSet])
+					if (lastOccurrenceOfElement[lowestElement]->getCost() > costs[tagSet])
 					{
-						lastOccurrenceOfElement[lowestElement]->cost = costs[tagSet];
-						lastOccurrenceOfElement[lowestElement]->traceSource = traceSources[tagSet];
+						lastOccurrenceOfElement[lowestElement]->setCost(costs[tagSet]);
+						lastOccurrenceOfElement[lowestElement]->setTraceSource(traceSources[tagSet]);
 					}
-			for (; IP != IPEnd && IP->tagSet == tagSet; IP++)
+			for (; IP != IPEnd && IP->getTagSet() == tagSet; IP++)
 			{
-				lastOccurrenceOfElement[IP->element] = IP;
-				IP->cost = costs[IP->tagSet];
-				IP->traceSource = traceSources[IP->tagSet];
+				lastOccurrenceOfElement[IP->getElement()] = IP;
+				IP->setCost(costs[IP->getTagSet()]);
+				IP->setTraceSource(traceSources[IP->getTagSet()]);
 			}
 		}
 		if (debugTrace.traceSecondaryPEMACosting)
@@ -1486,11 +1490,12 @@ void Source::lowerPreviousElementCostsOld(vector <costPatternElementByTagSet> &P
 			lplog(L"POS   : PEMA   TS E# COST MINC TRSC REJECT (ORIGIN SET %04d) Secondary costing reason: %s", costSet++, fromWhere);
 			for (vector <costPatternElementByTagSet>::iterator tIP = IPBegin; tIP != IP; tIP++)
 				lplog(L"%06d: %06d %02d %02d %03d  %03d  %03d  %s",
-					tIP->position, tIP->PEMAPosition, tIP->tagSet, tIP->element, costs[tIP->tagSet], tIP->cost, tIP->traceSource,
-					(pema[tIP->PEMAPosition].tempCost == tIP->cost) ? L"true " : L"false");
+					tIP->getSourcePosition(), tIP->getPEMAPosition(), tIP->getTagSet(), tIP->getElement(), costs[tIP->getTagSet()], tIP->getCost(), tIP->getTraceSource(),
+					(pema[tIP->getPEMAPosition()].tempCost == tIP->getCost()) ? L"true " : L"false");
 		}
 	}
 }
+*/
 
 // Divide PEMAPositions into sets (logged as ORIGIN SET) depending on the first immediate child (the first branch or first element of the pattern has more than one match)
 //    So, __NOUN[9] has a __NOUN as the first element, but that element has multiple matches of differing lengths (see below).
@@ -1561,9 +1566,9 @@ int Source::getEndRelativeSourcePosition(int PEMAPosition)
 // get the nearest preceding element which is not optional (minimum > 0)
 // for each preceding matched element in the pattern, 
 //   check to see whether it is immediately preceding it in the source (its end position matches the passed in patternElementEndPosition), 
+//   and that its cost is > than the cost passed in.
 //   and also that the element matched for that position is >= the nearest preceding non-optional element 
 //   and it is less than the element of the calling procedure (which could have been recursive)
-//   and that its cost is > than the cost passed in.
 void Source::setPreviousElementsCostsAtIndex(vector <costPatternElementByTagSet> &PEMAPositions, int pp, int cost, int traceSource, int patternElementEndPosition,int pattern,int patternElement)
 {
 	int lme = 0;
@@ -1573,60 +1578,51 @@ void Source::setPreviousElementsCostsAtIndex(vector <costPatternElementByTagSet>
 			lme = pe;
 			break;
 		}
+	int settingPEMAPosition = PEMAPositions[pp].getPEMAPosition();
 	for (int ppi = pp; ppi >= 0; ppi--)
 	{
-		if (PEMAPositions[ppi].position+ getEndRelativeSourcePosition(PEMAPositions[ppi].PEMAPosition) == patternElementEndPosition && PEMAPositions[ppi].cost > cost && PEMAPositions[ppi].element >= lme && PEMAPositions[ppi].element < patternElement)
+		if ((PEMAPositions[ppi].getSourcePosition()+ getEndRelativeSourcePosition(PEMAPositions[ppi].getPEMAPosition()) == patternElementEndPosition && // it is immediately preceding it in the source (its end position matches the passed in patternElementEndPosition)?
+			   PEMAPositions[ppi].getCost() > cost && // its cost is > than the cost passed in?
+				 PEMAPositions[ppi].getElement() >= lme && // the element matched for that position is >= the nearest preceding non-optional element?
+				 PEMAPositions[ppi].getElement() < patternElement) || // less than the element of the calling procedure (which could have been recursive)?
+			  (PEMAPositions[ppi].getPEMAPosition()==settingPEMAPosition && // same PEMAPosition? (but from a different tagset!)
+				 PEMAPositions[ppi].getCost() > cost && // its cost is > than the cost passed in?
+				 PEMAPositions[ppi].getElement() == patternElement) // same element?
+			)
 		{
-			PEMAPositions[ppi].cost = cost;
-			PEMAPositions[ppi].traceSource = traceSource;
-			setPreviousElementsCostsAtIndex(PEMAPositions, ppi - 1, cost, traceSource, PEMAPositions[ppi].position, pattern, PEMAPositions[ppi].element);
+			PEMAPositions[ppi].setCost(cost);
+			PEMAPositions[ppi].setTraceSource(traceSource);
+			if (ppi>0)
+				setPreviousElementsCostsAtIndex(PEMAPositions, ppi - 1, cost, traceSource, PEMAPositions[ppi].getSourcePosition(), pattern, PEMAPositions[ppi].getElement());
 		}
 	}
 }
 
-void Source::lowerPreviousElementCosts(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, wchar_t *fromWhere)
+void Source::lowerPreviousElementCosts(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costsPerTagSet, vector <int> &traceSources, wchar_t *fromWhere)
 {
 	LFS
-	//vector <costPatternElementByTagSet> copyPEMAPositions, copyPEMAPositions2 ;
-	//if (debugTrace.traceSecondaryPEMACosting)
-	//{
-	//	lplog(L"lowerPreviousElementCosts OLD %s BEGIN ================================", fromWhere);
-	//	copyPEMAPositions = copyPEMAPositions2 = PEMAPositions;
-	//	lowerPreviousElementCostsLowerRegardlessOfPosition(copyPEMAPositions, costs, traceSources, fromWhere);
-	//	lowerPreviousElementCostsOld(copyPEMAPositions2, costs, traceSources, fromWhere);
-	//	// for each PEMAPosition (ip) set all previous positions that could have led to this position to this cost if it is lower.
-	//	//   cost=ip->cost=costs[ip->tagSet]
-	//	//   traceSource=ip->traceSource=traceSources[ip->tagSet]
-	//	//   sourcePosition=ip->position
-	//	//   element=ip->element
-	//	//   call setPreviousElementsCostsAtIndex(ip-1,element)
-	//	//
-	//	lplog(L"lowerPreviousElementCosts OLD %s END ================================", fromWhere);
-	//	lplog(L"lowerPreviousElementCosts NEW %s BEGIN ================================", fromWhere);
-	//}
 	for (int ip = 0; ip < PEMAPositions.size(); ip++)
 	{
-		PEMAPositions[ip].cost = costs[PEMAPositions[ip].tagSet];
-		PEMAPositions[ip].traceSource = traceSources[PEMAPositions[ip].tagSet];
+		PEMAPositions[ip].setCost(costsPerTagSet[PEMAPositions[ip].getTagSet()]);
+		PEMAPositions[ip].setTraceSource(traceSources[PEMAPositions[ip].getTagSet()]);
 		if (ip>0)
-			setPreviousElementsCostsAtIndex(PEMAPositions,ip - 1, PEMAPositions[ip].cost, PEMAPositions[ip].traceSource, PEMAPositions[ip].position, pema[PEMAPositions[ip].PEMAPosition].getPattern(), PEMAPositions[ip].element);
+			setPreviousElementsCostsAtIndex(PEMAPositions,ip - 1, PEMAPositions[ip].getCost(), PEMAPositions[ip].getTraceSource(), PEMAPositions[ip].getSourcePosition(), pema[PEMAPositions[ip].getPEMAPosition()].getPattern(), PEMAPositions[ip].getElement());
 	}
 	if (debugTrace.traceSecondaryPEMACosting)
 	{
-		lplog(L"POS B -  E   : PEMA   TS E# OCOST ADJCOST TRSC TempCostMatch? Secondary costing reason: %s", fromWhere); //  DIFF2  ODIFF
+		lplog(L"POS B -  E   : PEMA   TS E# TSCOST ADJCOST TRSC TempCostMatch? Secondary costing reason: %s", fromWhere); //  DIFF2  ODIFF
 		for (int ip = 0; ip < PEMAPositions.size(); ip++)
 		{
-			lplog(L"%06d-%06d: %06d %02d %02d %03d   %03d     %03d  %s", //          %02d%s %02d%s",
-				PEMAPositions[ip].position, PEMAPositions[ip].position + getEndRelativeSourcePosition(PEMAPositions[ip].PEMAPosition),
-				PEMAPositions[ip].PEMAPosition, PEMAPositions[ip].tagSet, PEMAPositions[ip].element, costs[PEMAPositions[ip].tagSet], PEMAPositions[ip].cost, PEMAPositions[ip].traceSource,
-				(pema[PEMAPositions[ip].PEMAPosition].tempCost == PEMAPositions[ip].cost) ? L"true " : L"false");//,
-				//copyPEMAPositions[ip].cost, (PEMAPositions[ip].cost != copyPEMAPositions[ip].cost) ? L"*DX*" : L"    ",
-				//copyPEMAPositions2[ip].cost,(PEMAPositions[ip].cost != copyPEMAPositions2[ip].cost) ? L"*DXO*" : L"    ");
+			lplog(L"%06d-%06d: %06d %02d %02d  %03d   %03d     %03d  %s", 
+				PEMAPositions[ip].getSourcePosition(), PEMAPositions[ip].getSourcePosition() + getEndRelativeSourcePosition(PEMAPositions[ip].getPEMAPosition()),
+				PEMAPositions[ip].getPEMAPosition(), PEMAPositions[ip].getTagSet(), PEMAPositions[ip].getElement(), costsPerTagSet[PEMAPositions[ip].getTagSet()], PEMAPositions[ip].getCost(), PEMAPositions[ip].getTraceSource(),
+				(pema[PEMAPositions[ip].getPEMAPosition()].tempCost == PEMAPositions[ip].getCost()) ? L"true " : L"false");
 		}
-		//lplog(L"lowerPreviousElementCosts NEW %s END ================================", fromWhere);
 	}
 }
 
+// this is obsolete!  replaced by lowerPreviousElementCosts
+/*
 void Source::lowerPreviousElementCostsLowerRegardlessOfPosition(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, wchar_t *fromWhere)
 {
 	LFS
@@ -1634,17 +1630,17 @@ void Source::lowerPreviousElementCostsLowerRegardlessOfPosition(vector <costPatt
 	int costSet = 0;
 	while (originSetEnd != IPEnd)
 	{
-		for (IPBegin = originSetEnd, originSetEnd = IPBegin + 1; originSetEnd != IPEnd && originSetEnd->element; originSetEnd++);
+		for (IPBegin = originSetEnd, originSetEnd = IPBegin + 1; originSetEnd != IPEnd && originSetEnd->getElement(); originSetEnd++);
 		map <int, int> lowestCostOfElement; // index is pattern element #, assigned value is PEMAPosition iterator.
 		map <int, int> lowestCostTraceSource; // index is pattern element #, assigned value is traceSource.
 		for (IP = IPBegin; IP != originSetEnd; IP++)
 		{
-			for (int element = IP->element; element >= 0; element--)
+			for (int element = IP->getElement(); element >= 0; element--)
 			{
-				if (lowestCostOfElement.find(element) == lowestCostOfElement.end() || costs[IP->tagSet] < lowestCostOfElement[element])
+				if (lowestCostOfElement.find(element) == lowestCostOfElement.end() || costs[IP->getTagSet()] < lowestCostOfElement[element])
 				{
-					lowestCostOfElement[element] = costs[IP->tagSet];
-					lowestCostTraceSource[element] = traceSources[IP->tagSet];
+					lowestCostOfElement[element] = costs[IP->getTagSet()];
+					lowestCostTraceSource[element] = traceSources[IP->getTagSet()];
 				}
 				else
 					break;
@@ -1652,19 +1648,20 @@ void Source::lowerPreviousElementCostsLowerRegardlessOfPosition(vector <costPatt
 		}
 		for (IP = IPBegin; IP != originSetEnd; IP++)
 		{
-			IP->cost = lowestCostOfElement[IP->element];
-			IP->traceSource = lowestCostTraceSource[IP->element];
+			IP->setCost(lowestCostOfElement[IP->getElement()]);
+			IP->setTraceSource(lowestCostTraceSource[IP->getElement()]);
 		}
 		if (debugTrace.traceSecondaryPEMACosting)
 		{
 			lplog(L"POS   : PEMA   TS E# COST MINC TRSC REJECT (ORIGIN SET %04d) Secondary costing reason: %s", costSet++, fromWhere);
 			for (IP = IPBegin; IP != originSetEnd; IP++)
 				lplog(L"%06d: %06d %02d %02d %03d  %03d  %03d  %s",
-					IP->position, IP->PEMAPosition, IP->tagSet, IP->element, costs[IP->tagSet], IP->cost, IP->traceSource,
-					(pema[IP->PEMAPosition].tempCost == IP->cost) ? L"true " : L"false");
+					IP->getSourcePosition(), IP->getPEMAPosition(), IP->getTagSet(), IP->getElement(), costs[IP->getTagSet()], IP->getCost(), IP->getTraceSource(),
+					(pema[IP->getPEMAPosition()].tempCost == IP->getCost()) ? L"true " : L"false");
 		}
 	}
 }
+*/
 
 void Source::recalculateOCosts(bool &recalculatePMCost,vector<patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int start,int traceSource)
 { LFS
@@ -1732,14 +1729,14 @@ int Source::setSecondaryCosts(vector <costPatternElementByTagSet> &PEMAPositions
 	vector <patternElementMatchArray::tPatternElementMatch *> chain,PEMAPositionsSet;
 	chain.reserve(16);
 	PEMAPositionsSet.reserve(1024);
-	int traceSource=-1,totalCost=0,minOverallChainCost=MAX_COST;
+	int traceSource=-1,minOverallChainCost=MAX_COST;
 	set <int> origins;
 	for (auto costTS:PEMAPositions)
 	{
-		if (origins.find(pema[costTS.PEMAPosition].origin) == origins.end())
+		if (origins.find(pema[costTS.getPEMAPosition()].origin) == origins.end())
 		{
-			origins.insert(pema[costTS.PEMAPosition].origin);
-			findAllChains(PEMAPositions, pema[costTS.PEMAPosition].origin, basePosition, chain, PEMAPositionsSet, totalCost, traceSource, minOverallChainCost);
+			origins.insert(pema[costTS.getPEMAPosition()].origin);
+			findAllChains(PEMAPositions, pema[costTS.getPEMAPosition()].origin, chain, PEMAPositionsSet, traceSource, minOverallChainCost);
 		}
 	}
 	bool recalculatePMCost=false;
@@ -2108,10 +2105,10 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 								{
 									// update nPosition from secondaryPEMAPositions to get true child
 									// find first position with tagset.
-									for (; firstChildSecondaryPEMAPositionIndex < secondaryPEMAPositions.size() && secondaryPEMAPositions[firstChildSecondaryPEMAPositionIndex].tagSet != K; firstChildSecondaryPEMAPositionIndex++);
+									for (; firstChildSecondaryPEMAPositionIndex < secondaryPEMAPositions.size() && secondaryPEMAPositions[firstChildSecondaryPEMAPositionIndex].getTagSet() != K; firstChildSecondaryPEMAPositionIndex++);
 									// if this position is at the first element, then update nPEMAPosition.  This will allow printTagSet to print the first child correctly
-									if (firstChildSecondaryPEMAPositionIndex < secondaryPEMAPositions.size() && secondaryPEMAPositions[firstChildSecondaryPEMAPositionIndex].element == 0)
-										nPEMAPosition = secondaryPEMAPositions[firstChildSecondaryPEMAPositionIndex].PEMAPosition;
+									if (firstChildSecondaryPEMAPositionIndex < secondaryPEMAPositions.size() && secondaryPEMAPositions[firstChildSecondaryPEMAPositionIndex].getElement() == 0)
+										nPEMAPosition = secondaryPEMAPositions[firstChildSecondaryPEMAPositionIndex].getPEMAPosition();
 									printTagSet(LOG_INFO, L"ND1", K, nTagSets[K], nPosition, nPEMAPosition);
 								}
 								nCosts.push_back(evaluateNounDeterminer(nTagSets[K],true,traceSource,nPosition,nPosition+nLen, nPEMAPosition));
@@ -2505,13 +2502,10 @@ void Source::accumulateTertiaryPEMAPositions(int tagSetOffset, int traceSource, 
 			auto tppi = tertiaryPEMAPositions.find(abs(its.PEMAOffset));
 			if (tppi == tertiaryPEMAPositions.end())
 			{
-				tertiaryPEMAPositions[abs(its.PEMAOffset)].cost = tmpVOCost;
-				tertiaryPEMAPositions[abs(its.PEMAOffset)].position = its.sourcePosition;
-				tertiaryPEMAPositions[abs(its.PEMAOffset)].tagSet = tagSetOffset;
-				tertiaryPEMAPositions[abs(its.PEMAOffset)].traceSource = traceSource;
+				tertiaryPEMAPositions[abs(its.PEMAOffset)].initialize(its.sourcePosition, tagSetOffset, traceSource, tmpVOCost);
 			}
 			else
-				tppi->second.cost = min(tppi->second.cost,tmpVOCost);
+				tppi->second.setCost(min(tppi->second.getCost(),tmpVOCost));
 		}
 		else if (debugTrace.traceVerbObjects)
 		{
@@ -2529,13 +2523,13 @@ void Source::applyTertiaryPEMAPositions(unordered_map <int, costPatternElementBy
 			if (debugTrace.traceVerbObjects)
 			{
 				if (pema[its.first].isChildPattern())
-					lplog(L"tertiaryPEMAPosition %06d:%s[%s](%d,%d) %s[%s](%d): cost increased by %d [SOURCE=%06d] (tagSet=%d).", its.first, patterns[pema[its.first].getPattern()]->name.c_str(), patterns[pema[its.first].getPattern()]->differentiator.c_str(), pema[its.first].begin + its.second.position, pema[its.first].end + its.second.position,
-						patterns[pema[its.first].getChildPattern()]->name.c_str(), patterns[pema[its.first].getChildPattern()]->differentiator.c_str(), pema[its.first].getChildLen() + its.second.position, its.second.cost, its.second.traceSource, its.second.tagSet);
+					lplog(L"tertiaryPEMAPosition %06d:%s[%s](%d,%d) %s[%s](%d): cost increased by %d [SOURCE=%06d] (tagSet=%d).", its.first, patterns[pema[its.first].getPattern()]->name.c_str(), patterns[pema[its.first].getPattern()]->differentiator.c_str(), pema[its.first].begin + its.second.getSourcePosition(), pema[its.first].end + its.second.getSourcePosition(),
+						patterns[pema[its.first].getChildPattern()]->name.c_str(), patterns[pema[its.first].getChildPattern()]->differentiator.c_str(), pema[its.first].getChildLen() + its.second.getSourcePosition(), its.second.getCost(), its.second.getTraceSource(), its.second.getTagSet());
 				else
-					lplog(L"tertiaryPEMAPosition %06d:%s[%s](%d,%d) %s(%d): cost increased by %d [SOURCE=%06d] (tagSet=%d).", its.first, patterns[pema[its.first].getPattern()]->name.c_str(), patterns[pema[its.first].getPattern()]->differentiator.c_str(), pema[its.first].begin + its.second.position, pema[its.first].end + its.second.position,
-						Forms[m[its.second.position].getFormNum(pema[its.first].getChildForm())]->shortName.c_str(), pema[its.first].getChildLen() + its.second.position, its.second.cost, its.second.traceSource, its.second.tagSet);
+					lplog(L"tertiaryPEMAPosition %06d:%s[%s](%d,%d) %s(%d): cost increased by %d [SOURCE=%06d] (tagSet=%d).", its.first, patterns[pema[its.first].getPattern()]->name.c_str(), patterns[pema[its.first].getPattern()]->differentiator.c_str(), pema[its.first].begin + its.second.getSourcePosition(), pema[its.first].end + its.second.getSourcePosition(),
+						Forms[m[its.second.getSourcePosition()].getFormNum(pema[its.first].getChildForm())]->shortName.c_str(), pema[its.first].getChildLen() + its.second.getSourcePosition(), its.second.getCost(), its.second.getTraceSource(), its.second.getTagSet());
 			}
-			pema[its.first].addOCostTillMax(its.second.cost);
+			pema[its.first].addOCostTillMax(its.second.getCost());
 		}
 	}
 }
@@ -2592,23 +2586,23 @@ int Source::assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchAr
 	{
 		pema[pm->pemaByPatternEnd].setFlag(patternElementMatchArray::COST_AGREE);
 		vector <costPatternElementByTagSet> saveSecondaryPEMAPositions=secondaryPEMAPositions; // evaluateSubjectVerbAgreement now calls startCollectTags as well...
-		vector <int> costs,traceSources;
+		vector <int> costsPerTagSet,traceSources;
 		for (unsigned int J=0; J<tagSets.size(); J++)                          // which erases secondaryPEMAPositions
 		{
 			if (J && tagSetSame(tagSets[J], tagSets[J - 1]))
 			{
-				costs.push_back(costs[J - 1]);
+				costsPerTagSet.push_back(costsPerTagSet[J - 1]);
 				traceSources.push_back(traceSources[J - 1]);
 				if (debugTrace.traceSubjectVerbAgreement)
-					lplog(L"AGREE TAGSET #%d (REPEAT OF PREVIOUS) - cost %d.", J, costs[J - 1]);
+					lplog(L"AGREE TAGSET #%d (REPEAT OF PREVIOUS) - cost %d.", J, costsPerTagSet[J - 1]);
 				continue;
 			}
 			else if (J>1 && tagSetSame(tagSets[J], tagSets[J - 2]))
 			{
-				costs.push_back(costs[J - 2]);
+				costsPerTagSet.push_back(costsPerTagSet[J - 2]);
 				traceSources.push_back(traceSources[J - 2]);
 				if (debugTrace.traceSubjectVerbAgreement)
-					lplog(L"AGREE TAGSET #%d (REPEAT OF PREVIOUS) - cost %d.", J, costs[J - 2]);
+					lplog(L"AGREE TAGSET #%d (REPEAT OF PREVIOUS) - cost %d.", J, costsPerTagSet[J - 2]);
 				continue;
 			}
 			else
@@ -2616,14 +2610,14 @@ int Source::assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchAr
 				if (debugTrace.traceSubjectVerbAgreement)
 					printTagSet(LOG_INFO, L"AGREE", J, tagSets[J], position, pm->pemaByPatternEnd);
 				int traceSource=-1;
-				costs.push_back(evaluateSubjectVerbAgreement(parentpm,pm,parentPosition,position,tagSets[J],traceSource));
+				costsPerTagSet.push_back(evaluateSubjectVerbAgreement(parentpm,pm,parentPosition,position,tagSets[J],traceSource));
 				traceSources.push_back(traceSource);
 			}
 		}
 		if (tagSets.size())
 		{
-			lowerPreviousElementCosts(saveSecondaryPEMAPositions, costs, traceSources, L"agreement");
-			if (debugTrace.traceTestSubjectVerbAgreement &&	saveSecondaryPEMAPositions.size() > 0 && saveSecondaryPEMAPositions[0].tagSet >= 0)
+			lowerPreviousElementCosts(saveSecondaryPEMAPositions, costsPerTagSet, traceSources, L"agreement");
+			if (debugTrace.traceTestSubjectVerbAgreement &&	saveSecondaryPEMAPositions.size() > 0 && saveSecondaryPEMAPositions[0].getTagSet() >= 0)
 			{
 				wstring sentence, originalIWord;
 				for (int I = position; I < position + pm->len; I++)
@@ -2634,16 +2628,16 @@ int Source::assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchAr
 				// get lowest cost E#=0
 				int lowestCost = 10000,lowestElement=10000;
 				for (auto p : saveSecondaryPEMAPositions)
-					if ((p.element == lowestElement && p.cost < lowestCost) || p.element < lowestElement)
+					if ((p.getElement() == lowestElement && p.getCost() < lowestCost) || p.getElement() < lowestElement)
 					{
-						lowestElement = p.element;
-						lowestCost = p.cost;
+						lowestElement = p.getElement();
+						lowestCost = p.getCost();
 					}
 				for (auto p : saveSecondaryPEMAPositions)
-					if ((p.element == lowestElement && p.cost == lowestCost))
+					if ((p.getElement() == lowestElement && p.getCost() == lowestCost))
 					{
 						lplog(LOG_INFO, L"\n%s [cost=%d] %s", (lowestCost <= 0) ? L"agree" : L"DISAGREE", lowestCost, sentence.c_str());
-						for (tTagLocation its : tagSets[p.tagSet])
+						for (tTagLocation its : tagSets[p.getTagSet()])
 						{
 							wstring phrase, word;
 							for (unsigned int sp = its.sourcePosition; sp < its.sourcePosition + its.len; sp++)

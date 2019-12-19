@@ -2035,51 +2035,71 @@ public:
 	class costPatternElementByTagSet
 	{
 	public:
-		int position;
-		int PEMAPosition;
-		int childPEMAPosition; // may be -1, in which case child is not determined or applies to all children
-		int tagSet;
-		int element;
-		int cost;
-		int traceSource;
 		costPatternElementByTagSet(int P, int PP, int cPP, int ts, int e)
 		{
-			position = P;
+			sourcePosition = P;
 			PEMAPosition = PP;
 			childPEMAPosition = cPP;
 			tagSet = ts;
-			element = e;
+			patternElement = e;
 			cost = 10000000;
 			traceSource = -1;
 		}
+		void initialize(int P, int tso, int ts, int tmpVOCost)
+		{
+			sourcePosition = P;
+			PEMAPosition = -1;
+			childPEMAPosition = -1;
+			tagSet = tso;
+			patternElement = -1;
+			cost = tmpVOCost;
+			traceSource = ts;
+		}
 		costPatternElementByTagSet()
 		{
-			position = 0;
+			sourcePosition = 0;
 			PEMAPosition = 0;
 			childPEMAPosition = 0;
 			tagSet = 0;
-			element = 0;
+			patternElement = 0;
 			cost = 0;
 			traceSource = 0;
 		}
 		bool operator == (const costPatternElementByTagSet& o)
 		{
-			return position==o.position &&
+			return sourcePosition ==o.sourcePosition &&
 				PEMAPosition==o.PEMAPosition &&
 				childPEMAPosition==o.childPEMAPosition &&
 				tagSet==o.tagSet &&
-				element==o.element &&
+				patternElement ==o.patternElement &&
 				cost==o.cost;
 		}
 		bool operator != (const costPatternElementByTagSet& o)
 		{
-			return position!=o.position ||
+			return sourcePosition !=o.sourcePosition ||
 				PEMAPosition!=o.PEMAPosition ||
 				childPEMAPosition!=o.childPEMAPosition ||
 				tagSet!=o.tagSet ||
-				element!=o.element ||
+				patternElement !=o.patternElement ||
 				cost!=o.cost;
 		}
+		int getSourcePosition() { return sourcePosition; }
+		int getPEMAPosition() { return PEMAPosition; }
+		int getChildPEMAPosition() { return childPEMAPosition; }
+		int getTagSet() { return tagSet; }
+		int getElement() { return patternElement; }
+		int getCost() { return cost; }
+		void setCost(int c) { cost = c; }
+		int getTraceSource() { return traceSource; }
+		void setTraceSource(int ts) { traceSource = ts; }
+	private:
+		int sourcePosition;
+		int PEMAPosition;
+		int childPEMAPosition; // may be -1, in which case child is not determined or applies to all children
+		int tagSet;
+		int patternElement;
+		int cost;
+		int traceSource;
 	};
 	void identifyConversations();
 
@@ -2093,7 +2113,7 @@ public:
 	bool lowestContainingPatternElement(int nextPatternElementPEMAPosition,int element,vector <int> &lowestCostPEMAPositions);
 	bool tagSetAllIn(vector <costPatternElementByTagSet> &PEMAPositions,int I);
 	void setChain(vector <patternElementMatchArray::tPatternElementMatch *> chainPEMAPositions,vector <costPatternElementByTagSet> &PEMAPositions,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int &traceSource,int &minOverallChainCost);
-	void findAllChains(vector <costPatternElementByTagSet> &PEMAPositions,int PEMAPosition,int position,vector <patternElementMatchArray::tPatternElementMatch *> &chain,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int totalCost,int &traceSource,int &minOverallChainCost);
+	void findAllChains(vector <costPatternElementByTagSet> &PEMAPositions,int PEMAPosition,vector <patternElementMatchArray::tPatternElementMatch *> &chain,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int &traceSource,int &minOverallChainCost);
 	void setChain2(vector <patternElementMatchArray::tPatternElementMatch *> &chainPEMAPositions,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int deltaCost);
 	void findAllChains2(int PEMAPosition,int position,vector <patternElementMatchArray::tPatternElementMatch *> &chain,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int changedPosition,int rootPattern,int len,bool includesPatternMatch,int deltaCost);
 	int cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patternMatchArray::tPatternMatch *childPM,int traceSource,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet, wchar_t *fromWhere);

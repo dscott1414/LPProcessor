@@ -2579,6 +2579,18 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: word 'the': ST says " + primarySTLPMatch + L" LP says determiner"]++;
 		return 0;
 	}
+	// worth while
+	if (word == L"while" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && wordSourceIndex>=2 &&
+		  ((WordClass::isDash(source.m[wordSourceIndex-1].word->first[0]) && source.m[wordSourceIndex - 2].word->first==L"worth") || source.m[wordSourceIndex - 1].word->first==L"worth"))
+	{
+		errorMap[L"LP correct: word 'while': ST says " + primarySTLPMatch + L" LP says noun [worthwhile]"]++;
+		return 0;
+	}
+	if (word == L"while" && source.m[wordSourceIndex].queryWinnerForm(L"uncertainDurationUnit") >= 0 && source.m[wordSourceIndex].pma.queryPattern(L"__INTRO_N") != -1)
+	{
+		errorMap[L"LP correct: word 'while': ST says " + primarySTLPMatch + L" LP says uncertainDurationUnit [__INTRO_N]"]++;
+		return 0;
+	}
 	// 40. but is never a verb (reviewed all examples in corpus)
 	if (word == L"want" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && primarySTLPMatch == L"verb" && 
 		  (source.m[wordSourceIndex-1].word->first==L"in" || source.m[wordSourceIndex - 1].word->first == L"for" || source.m[wordSourceIndex - 1].word->first == L"from" || source.m[wordSourceIndex - 1].word->first == L"by" || source.m[wordSourceIndex - 1].word->first == L"of"))

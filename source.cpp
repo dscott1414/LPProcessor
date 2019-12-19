@@ -2919,7 +2919,7 @@ int Source::updatePEMACosts(int PEMAPosition,int pattern,int begin,int end,int p
 					position,PEMAPosition,patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),begin,end,
 					patterns[pem->getChildPattern()]->name.c_str(),position,position+childEnd,pem->getElement(),pem->iCost);
 #endif
-				cost=pem->iCost;
+				cost=pem->getIncrementalCost();
 				if (nextPEMAPosition>=0 && !patterns[pattern]->nextPossibleElementRange(pem->getElement()))
 						lplog(LOG_FATAL_ERROR,L"Inconsistency!");
 				if (nextPEMAPosition>=0)
@@ -3040,7 +3040,7 @@ void Source::reduceParent(int position,unsigned int PMAOffset,int reducedCost)
 			// this is needed because iCost is the reducedCost of the child + any costs added by the parent pattern ("_INFP*1")
 						int incrementalCost=reducedCost+patterns[pem->getPattern()]->getCost(pem->getElement(),pem->getElementIndex(),pem->isChildPattern());
 			if (pem->getPattern()!=childPattern && // parent patterns never match themselves
-				pem->iCost>incrementalCost)  // the reducedCost of ONE instance of the pattern may not be less than the lowest cost of all children
+				pem->getIncrementalCost()>incrementalCost)  // the reducedCost of ONE instance of the pattern may not be less than the lowest cost of all children
 			{
 #ifdef LOG_PATTERN_COST_CHECK
 				char temp[1024];
@@ -3048,7 +3048,7 @@ void Source::reduceParent(int position,unsigned int PMAOffset,int reducedCost)
 					patterns[childPattern]->name.c_str(),patterns[childPattern]->differentiator.c_str(),
 					position,position+childLen,pem->iCost,incrementalCost,pem->toText(position+pem->begin,temp,m));
 #endif
-				pem->iCost=incrementalCost;
+				pem->setIncrementalCost(incrementalCost);
 				int finalCost=0;
 				vector<patternElementMatchArray::tPatternElementMatch *> ppema;
 				if (patterns[pem->getPattern()]->nextPossibleElementRange(-1))

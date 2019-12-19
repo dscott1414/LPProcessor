@@ -37,9 +37,11 @@ public:
     int nextPatternElement; // the next PEMA entry in the next position with the same pattern and end - allows routines to skip forward by pattern
     int origin; // beginning of the chain for the first element of the pattern
     //int sourcePosition; // so position not needed on print
-    short iCost; // lowest cost of PMA element
+
+		// costing variables - in addition to cost, itself.
     short cumulativeDeltaCost; // accumulates costs or benefits of assessCost (from multiple setSecondaryCosts)
     short tempCost; // used for setSecondaryCosts
+		
     void setWinner(void) { flags|=WINNER_FLAG; }
     bool isWinner(void) { return (flags&WINNER_FLAG)!=0; }
     void removeWinnerFlag(void) { flags&=~WINNER_FLAG; }
@@ -56,7 +58,14 @@ public:
     unsigned int getPattern() { return pattern; }
     void setPattern(int p) { pattern=p; flags=0; }
     int getOCost() { return cost; }
-    void setOCost(int c)
+		// this incremental cost is only used in reduceParent!
+		short getIncrementalCost() {
+			return iCost;
+		}
+		void setIncrementalCost(int ic) {
+			iCost=ic;
+		}
+		void setOCost(int c)
     {
 			#ifdef LOG_PATTERN_COST_CHECK
 				if (c>MAX_SIGNED_SHORT)
@@ -111,7 +120,9 @@ public:
     unsigned short pattern;
     unsigned char flags;
     short cost;
-  } tPatternElementMatch;
+		// this incremental cost is only used in reduceParent!
+		short iCost; // lowest cost of PMA element
+	} tPatternElementMatch;
   patternElementMatchArray();
   ~patternElementMatchArray();
   patternElementMatchArray(const patternElementMatchArray &rhs);
