@@ -603,7 +603,7 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 	{
 		tIWMM nounWord,verbWord;
 		int nextObjectVerbTag=-1,whereObjectVerbTag=(mainVerbTag>=0) ? findTagConstrained(tagSet,L"V_OBJECT",nextObjectVerbTag,tagSet[mainVerbTag]) : -1;
-		lplog(L"TEMP DEBUG %d:%s %s", verbPosition, m[verbPosition].word->first.c_str(), patterns[tagSet[verbAgreeTag].parentPattern]->name.c_str());
+		//lplog(L"TEMP DEBUG %d:%s %s", verbPosition, m[verbPosition].word->first.c_str(), patterns[tagSet[verbAgreeTag].parentPattern]->name.c_str());
 		if (patterns[tagSet[verbAgreeTag].parentPattern]->name==L"_VERB_BARE_INF") // if this is a _VERB_BARE_INF - take the first verb
 			verbWord = m[verbPosition].word;
 		else 
@@ -725,8 +725,8 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 	// if singular | plural not already set
 	// words like "there" may be plural or singular depending on usage
 	int inflectionFlags = m[verbPosition].word->second.inflectionFlags&VERB_INFLECTIONS_MASK;
-	wstring verbInflections;
-	lplog(L"TEMP DEBUG %d:%s %s", verbPosition, m[verbPosition].word->first.c_str(), getInflectionName(inflectionFlags, verbInflectionMap, verbInflections));
+	//wstring verbInflections;
+	//lplog(L"TEMP DEBUG %d:%s %s", verbPosition, m[verbPosition].word->first.c_str(), getInflectionName(inflectionFlags, verbInflectionMap, verbInflections));
 	if (!singularSet && !pluralSet && nounPosition>=0)
 	{
 		pluralSet=(m[nounPosition].word->second.inflectionFlags&PLURAL)==PLURAL;
@@ -1578,18 +1578,15 @@ void Source::setPreviousElementsCostsAtIndex(vector <costPatternElementByTagSet>
 			lme = pe;
 			break;
 		}
-	int settingPEMAPosition = PEMAPositions[pp].getPEMAPosition();
 	for (int ppi = pp; ppi >= 0; ppi--)
 	{
-		if ((PEMAPositions[ppi].getSourcePosition()+ getEndRelativeSourcePosition(PEMAPositions[ppi].getPEMAPosition()) == patternElementEndPosition && // it is immediately preceding it in the source (its end position matches the passed in patternElementEndPosition)?
+		if (PEMAPositions[ppi].getSourcePosition()+ getEndRelativeSourcePosition(PEMAPositions[ppi].getPEMAPosition()) == patternElementEndPosition && // it is immediately preceding it in the source (its end position matches the passed in patternElementEndPosition)?
 			   PEMAPositions[ppi].getCost() > cost && // its cost is > than the cost passed in?
 				 PEMAPositions[ppi].getElement() >= lme && // the element matched for that position is >= the nearest preceding non-optional element?
-				 PEMAPositions[ppi].getElement() < patternElement) || // less than the element of the calling procedure (which could have been recursive)?
-			  (PEMAPositions[ppi].getPEMAPosition()==settingPEMAPosition && // same PEMAPosition? (but from a different tagset!)
-				 PEMAPositions[ppi].getCost() > cost && // its cost is > than the cost passed in?
-				 PEMAPositions[ppi].getElement() == patternElement) // same element?
-			)
+				 PEMAPositions[ppi].getElement() < patternElement)  // less than the element of the calling procedure (which could have been recursive)?
 		{
+			if (debugTrace.traceSecondaryPEMACosting)
+				lplog(L"set index %d (PEMA=%06d) to cost %d from originating index position %d. [OLD SOURCE=%06d] [NEW SOURCE=%06d] %s", ppi, PEMAPositions[ppi].getPEMAPosition(), cost, pp, PEMAPositions[ppi].getTraceSource(), traceSource,L"PREVIOUS");
 			PEMAPositions[ppi].setCost(cost);
 			PEMAPositions[ppi].setTraceSource(traceSource);
 			if (ppi>0)
@@ -1601,22 +1598,52 @@ void Source::setPreviousElementsCostsAtIndex(vector <costPatternElementByTagSet>
 void Source::lowerPreviousElementCosts(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costsPerTagSet, vector <int> &traceSources, wchar_t *fromWhere)
 {
 	LFS
+	if (debugTrace.traceSecondaryPEMACosting)
+	{
+		map<int, wstring> pemaPositionsByTagSet;
+		for (costPatternElementByTagSet pp:PEMAPositions)
+		{
+			wstring PP;
+			pemaPositionsByTagSet[pp.getTagSet()] += itos(pp.getPEMAPosition(), L"%06d", PP) + L" ";
+		}
+		for (auto const& [tagSet,PEMAPositionsStr]: pemaPositionsByTagSet)
+			lplog(L"tagSet %02d:%s", tagSet, PEMAPositionsStr.c_str());
+	}
 	for (int ip = 0; ip < PEMAPositions.size(); ip++)
 	{
 		PEMAPositions[ip].setCost(costsPerTagSet[PEMAPositions[ip].getTagSet()]);
 		PEMAPositions[ip].setTraceSource(traceSources[PEMAPositions[ip].getTagSet()]);
+		if (debugTrace.traceSecondaryPEMACosting)
+			lplog(L"start from position index %d cost=%d tagSet=%02d PEMA=%06d [SOURCE=%06d]", ip, costsPerTagSet[PEMAPositions[ip].getTagSet()], PEMAPositions[ip].getTagSet(),PEMAPositions[ip].getPEMAPosition(), traceSources[PEMAPositions[ip].getTagSet()]);
 		if (ip>0)
 			setPreviousElementsCostsAtIndex(PEMAPositions,ip - 1, PEMAPositions[ip].getCost(), PEMAPositions[ip].getTraceSource(), PEMAPositions[ip].getSourcePosition(), pema[PEMAPositions[ip].getPEMAPosition()].getPattern(), PEMAPositions[ip].getElement());
+		for (int psmi = 0; psmi < ip; psmi++)
+			if (PEMAPositions[psmi].getPEMAPosition() == PEMAPositions[ip].getPEMAPosition() && // same PEMAPosition? (but from a different tagset!)
+				PEMAPositions[psmi].getCost() > costsPerTagSet[PEMAPositions[ip].getTagSet()]) // its cost is > than the cost passed in?
+			{
+				if (debugTrace.traceSecondaryPEMACosting)
+					lplog(L"set index %d (PEMA=%06d) to cost %d from originating index position %d. [OLD SOURCE=%06d] [NEW SOURCE=%06d] %s", psmi, PEMAPositions[psmi].getPEMAPosition(), costsPerTagSet[PEMAPositions[ip].getTagSet()], ip, PEMAPositions[psmi].getTraceSource(), traceSources[PEMAPositions[ip].getTagSet()], L"SAME");
+				PEMAPositions[psmi].setCost(costsPerTagSet[PEMAPositions[ip].getTagSet()]);
+				PEMAPositions[psmi].setTraceSource(traceSources[PEMAPositions[ip].getTagSet()]);
+			}
 	}
 	if (debugTrace.traceSecondaryPEMACosting)
 	{
-		lplog(L"POS B -  E   : PEMA   TS E# TSCOST ADJCOST TRSC TempCostMatch? Secondary costing reason: %s", fromWhere); //  DIFF2  ODIFF
+		lplog(L"I  :POS B -  E   : PEMA   TS E# TSCOST ADJCOST TRSC Secondary costing reason: %s", fromWhere); 
 		for (int ip = 0; ip < PEMAPositions.size(); ip++)
 		{
-			lplog(L"%06d-%06d: %06d %02d %02d  %03d   %03d     %03d  %s", 
+			wchar_t PP[1024];
+			memset(PP, L' ', sizeof(PP));
+			if (PEMAPositions[ip].getElement() > 100 || PEMAPositions[ip].getElement() < 0)
+				wsprintf(PP, L"Illegal Element %d!", PEMAPositions[ip].getElement());
+			else
+			{
+				wsprintf(PP, L"%s[%s](%d,%d)", patterns[pema[PEMAPositions[ip].getPEMAPosition()].getPattern()]->name.c_str(), patterns[pema[PEMAPositions[ip].getPEMAPosition()].getPattern()]->differentiator.c_str(), PEMAPositions[ip].getSourcePosition(), PEMAPositions[ip].getSourcePosition() + pema[PEMAPositions[ip].getPEMAPosition()].getChildLen()); //  + PEMAPositions[ip].getElement() * 16
+			}
+			lplog(L"%03d:%06d-%06d: %06d %02d %02d  %03d   %03d     %03d:%s", ip,
 				PEMAPositions[ip].getSourcePosition(), PEMAPositions[ip].getSourcePosition() + getEndRelativeSourcePosition(PEMAPositions[ip].getPEMAPosition()),
 				PEMAPositions[ip].getPEMAPosition(), PEMAPositions[ip].getTagSet(), PEMAPositions[ip].getElement(), costsPerTagSet[PEMAPositions[ip].getTagSet()], PEMAPositions[ip].getCost(), PEMAPositions[ip].getTraceSource(),
-				(pema[PEMAPositions[ip].getPEMAPosition()].tempCost == PEMAPositions[ip].getCost()) ? L"true " : L"false");
+				PP);
 		}
 	}
 }
@@ -1881,7 +1908,19 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 		}
 	}
 	// set the actual noun pattern that is being used, so that if __NOUN[9] comes first, for example, that the NOUNs in NOUN[9] don't get counted twice (once here, and once on their own).
-	pema[tagSet[nounTag].PEMAOffset].setFlag(patternElementMatchArray::COST_ND);
+	// problem - what if _NOUN[2] needs to be evaluated separately because _NOUN[9] is not under a certain PP.
+	if (nounTag>=0 && !pema[abs(tagSet[nounTag].PEMAOffset)].flagSet(patternElementMatchArray::COST_ND))
+	{
+		if (tagSet[nounTag].isPattern)
+			::lplog(LOG_INFO, L"ND NOT SET! %06d:%s[%s] %06d:%s[%s](%d,%d) TAG %s [Element=%d]", tagSet[nounTag].sourcePosition, patterns[tagSet[nounTag].parentPattern]->name.c_str(), patterns[tagSet[nounTag].parentPattern]->differentiator.c_str(),
+				tagSet[nounTag].PEMAOffset, patterns[tagSet[nounTag].pattern]->name.c_str(), patterns[tagSet[nounTag].pattern]->differentiator.c_str(), tagSet[nounTag].sourcePosition, tagSet[nounTag].sourcePosition + tagSet[nounTag].len, patternTagStrings[tagSet[nounTag].tag].c_str(),
+				tagSet[nounTag].parentElement);
+		else
+			::lplog(LOG_INFO, L"ND NOT SET! %06d %s[%s] %06d:%s(%d,%d) TAG %s [Element=%d]", tagSet[nounTag].sourcePosition, patterns[tagSet[nounTag].parentPattern]->name.c_str(), patterns[tagSet[nounTag].parentPattern]->differentiator.c_str(),
+				tagSet[nounTag].PEMAOffset, Forms[tagSet[nounTag].pattern]->shortName.c_str(), tagSet[nounTag].sourcePosition, tagSet[nounTag].sourcePosition + tagSet[nounTag].len, patternTagStrings[tagSet[nounTag].tag].c_str(),
+				tagSet[nounTag].parentElement);
+	}
+	//pema[tagSet[nounTag].PEMAOffset].setFlag(patternElementMatchArray::COST_ND);
 	if (nAgreeTag < 0)
 	{
 		if (debugTrace.traceDeterminer)
@@ -1992,6 +2031,14 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 	return 0;
 }
 
+void Source::sortTagLocations(vector < vector <tTagLocation> > &tagSets, vector <tTagLocation> &tagSetLocations)
+{
+	for (auto ts:tagSets)
+		for (auto tl:ts)
+			tagSetLocations.push_back(tl);
+	sort(tagSetLocations.begin(), tagSetLocations.end(), tTagLocation::compareTagLocation);
+}
+
 void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vector <tTagLocation> > &tagSets,wstring purpose)
 { LFS // DLFS
 	vector <int> costs;
@@ -2000,13 +2047,14 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 		if (debugTrace.traceDeterminer)
 		{
 			int pattern=pema[PEMAPosition].getPattern();
-			lplog(L"%d:======== EVALUATION %06d %s %s[%s](%d,%d) SKIPPED (already evaluated)",position,PEMAPosition,desiredTagSets[roleTagSet].name.c_str(),
+			lplog(L"%d:======== EVALUATION %06d %s %s[%s](%d,%d) SKIPPED (ROLE already evaluated)",position,PEMAPosition,desiredTagSets[roleTagSet].name.c_str(),
 						patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),position,position+pema[PEMAPosition].end);
 		}
 		return;
 	}
 	pema[PEMAPosition].setFlag(patternElementMatchArray::COST_ROLE);
-	// search for all subjects, objects, subobjects and prepobjects
+	// search for all subjects, objects, subobjects and prepobjects - DO NOT obey BLOCK! (obeyBlock=false)
+	// if this is set to not obey block, testing with source 21780, there are about 30 sentences in the entire book that might have improvement.  However, the time required multiplied by 4.
 	if (startCollectTags(debugTrace.traceDeterminer,roleTagSet,position,PEMAPosition,tagSets,true,true,L"evaluateNounDeterminers - ROLE")>0)
 	{
 		vector < vector <tTagLocation> > nTagSets;
@@ -2022,131 +2070,129 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 			pema[PEMAPosition].removeFlag(patternElementMatchArray::COST_ROLE);
 		}
 		// for each pattern of subjects, objects and subobjects
-		for (unsigned int I=0; I<tagSets.size(); I++)
+		vector <tTagLocation> tagLocations;
+		sortTagLocations(tagSets, tagLocations);
+		if (debugTrace.traceDeterminer)
+			for (auto tl:tagLocations)
+				if (tl.isPattern)
+					::lplog(LOG_INFO, L"TL %06d:%s[%s] %06d:%s[%s](%d,%d) TAG %s [Element=%d]", tl.sourcePosition, patterns[tl.parentPattern]->name.c_str(), patterns[tl.parentPattern]->differentiator.c_str(),
+						tl.PEMAOffset, patterns[tl.pattern]->name.c_str(), patterns[tl.pattern]->differentiator.c_str(), tl.sourcePosition, tl.sourcePosition + tl.len, patternTagStrings[tl.tag].c_str(),
+						tl.parentElement);
+				else
+					::lplog(LOG_INFO, L"TL %06d %s[%s] %06d:%s(%d,%d) TAG %s [Element=%d]", tl.sourcePosition, patterns[tl.parentPattern]->name.c_str(), patterns[tl.parentPattern]->differentiator.c_str(),
+						tl.PEMAOffset, Forms[tl.pattern]->shortName.c_str(), tl.sourcePosition, tl.sourcePosition + tl.len, patternTagStrings[tl.tag].c_str(),
+						tl.parentElement);
+		for (int tl=0; tl<tagLocations.size(); tl++)
 		{
-			if (I && tagSetSame(tagSets[I],tagSets[I-1]))
-			{
-				if (debugTrace.traceDeterminer)
-					lplog(L"OB TAGSET #%d (REPEAT OF PREVIOUS)",I);
+			// don't obey blocks when searching for objects to evaluate
+			//if (patterns[tl.parentPattern]->stopDescendingTagSearch(tl.parentElement,pema[(tl.PEMAOffset<0) ? -tl.PEMAOffset:tl.PEMAOffset].__patternElementIndex,pema[(tl.PEMAOffset<0) ? -tl.PEMAOffset:tl.PEMAOffset].isChildPattern()))
+			//	continue;
+			if (tl > 0 && tagLocations[tl - 1]==tagLocations[tl])
 				continue;
-			}
-			else
+			int nPattern=tagLocations[tl].pattern,nPosition=tagLocations[tl].sourcePosition,nLen=tagLocations[tl].len,traceSource=-1;
+			if (tagLocations[tl].PEMAOffset<0)
 			{
-				if (debugTrace.traceDeterminer)
-					printTagSet(LOG_INFO,L"OB",I,tagSets[I],position,PEMAPosition);
-				// for each subject, object or subobject
-				for (unsigned int J=0; J<tagSets[I].size(); J++)
+				// for each iteration of that subject, object or subobject
+				for (int p=patterns[nPattern]->rootPattern; p>=0; p=patterns[p]->nextRoot)
 				{
-					tTagLocation *tl=&tagSets[I][J];
-					// don't obey blocks when searching for objects to evaluate
-					if (patterns[tl->parentPattern]->stopDescendingTagSearch(tl->parentElement,pema[(tl->PEMAOffset<0) ? -tl->PEMAOffset:tl->PEMAOffset].__patternElementIndex,pema[(tl->PEMAOffset<0) ? -tl->PEMAOffset:tl->PEMAOffset].isChildPattern()))
+					if (!m[nPosition].patterns.isSet(p)) continue;
+					if (patterns[p]->hasTag(MNOUN_TAG))
 						continue;
-					int nPattern=tl->pattern,nPosition=tl->sourcePosition,nLen=tl->len,traceSource=-1;
-					if (tl->PEMAOffset<0)
+					patternMatchArray::tPatternMatch *pma=m[nPosition].pma.find(p,nLen);
+					if (pma==NULL) continue;
+					int nPEMAPosition=pma->pemaByPatternEnd;
+					patternElementMatchArray::tPatternElementMatch *pem=pema.begin()+nPEMAPosition;
+					for (; nPEMAPosition>=0 && pem->getPattern()==p && pem->end==nLen; nPEMAPosition=pem->nextByPatternEnd,pem=pema.begin()+nPEMAPosition)
+						if (!pem->begin) break;
+					if (nPEMAPosition<0 || pem->getPattern()!=p || pem->end!=nLen || pem->begin) continue;
+					if (pema[nPEMAPosition].flagSet(patternElementMatchArray::COST_ND))
 					{
-						// for each iteration of that subject, object or subobject
-						for (int p=patterns[nPattern]->rootPattern; p>=0; p=patterns[p]->nextRoot)
+						if (debugTrace.traceDeterminer)
 						{
-							if (!m[nPosition].patterns.isSet(p)) continue;
-							if (patterns[p]->hasTag(MNOUN_TAG))
-								continue;
-							patternMatchArray::tPatternMatch *pma=m[nPosition].pma.find(p,nLen);
-							if (pma==NULL) continue;
-							int nPEMAPosition=pma->pemaByPatternEnd;
-							patternElementMatchArray::tPatternElementMatch *pem=pema.begin()+nPEMAPosition;
-							for (; nPEMAPosition>=0 && pem->getPattern()==p && pem->end==nLen; nPEMAPosition=pem->nextByPatternEnd,pem=pema.begin()+nPEMAPosition)
-								if (!pem->begin) break;
-							if (nPEMAPosition<0 || pem->getPattern()!=p || pem->end!=nLen || pem->begin) continue;
-							if (pema[nPEMAPosition].flagSet(patternElementMatchArray::COST_ND))
-							{
-								if (debugTrace.traceDeterminer)
-								{
-									int pattern=pema[nPEMAPosition].getPattern();
-									lplog(L"%d:======== EVALUATION %06d %s %s[%s](%d,%d) SKIPPED (already evaluated)",nPosition,nPEMAPosition,desiredTagSets[nounDeterminerTagSet].name.c_str(),
-												patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),nPosition,nPosition+pema[nPEMAPosition].end);
-								}
-								continue;
-							}
-							pema[nPEMAPosition].setFlag(patternElementMatchArray::COST_ND);
-							nTagSets.clear();
-							nCosts.clear();
-							traceSources.clear();
-							// We're getting a bit unpopular here--blocking the gangway as it were. / a bit is not a subject of 'blocking'
-							if (patterns[pma->getPattern()]->hasTag(GNOUN_TAG))
-							{
-								bool hasEmbeddedDash=false;
-								for (int K=nPosition; K<nPosition+nLen-1 && !hasEmbeddedDash; K++) 
-									hasEmbeddedDash=(m[K].word->first==L"--"); // must only be --, not a single dash, as single dashes are legal in adjectives and dates like to-day
-								if (hasEmbeddedDash)
-								{
-									if (debugTrace.traceDeterminer)
-										lplog(L"%d:noun has dash %s %s[%s](%d,%d) (GNOUN DASH) [SOURCE=%06d]",nPosition,desiredTagSets[nounDeterminerTagSet].name.c_str(),
-												patterns[pma->getPattern()]->name.c_str(),patterns[pma->getPattern()]->differentiator.c_str(),nPosition,nPosition+nLen,traceSource=gTraceSource++);
-									secondaryPEMAPositions.clear(); // normally cleared by startCollectTags which is not called here
-									patternElementMatchArray::tPatternElementMatch *npemi=pema.begin()+nPEMAPosition;
-									for (;  nPEMAPosition>=0 && npemi->getPattern()==p && npemi->end==nLen; nPEMAPosition=npemi->nextByPatternEnd,npemi=pema.begin()+nPEMAPosition)
-									{
-										patternElementMatchArray::tPatternElementMatch *epem=pema.begin()+nPEMAPosition;
-										for (int ePEMAPosition=nPEMAPosition;  ePEMAPosition>=0 && epem->getPattern()==p && (epem->end-epem->begin)==nLen; ePEMAPosition=epem->nextPatternElement,epem=pema.begin()+ePEMAPosition)
-											secondaryPEMAPositions.push_back(costPatternElementByTagSet(nPosition,ePEMAPosition,-1,0,pema[ePEMAPosition].getElement()));
-									}
-									nCosts.push_back(10);
-									traceSources.push_back(traceSource);
-									lowerPreviousElementCosts(secondaryPEMAPositions, nCosts, traceSources, L"hasEmbeddedDash");
-									setSecondaryCosts(secondaryPEMAPositions,pma,nPosition,L"hasEmbeddedDash");
-								}
-								continue;
-							}
-							startCollectTags(debugTrace.traceDeterminer,nounDeterminerTagSet,nPosition,nPEMAPosition,nTagSets,true,true,purpose+L" evaluateNounDeterminers - for each role - root pattern");
-							int firstChildSecondaryPEMAPositionIndex = 0;
-							for (unsigned int K=0; K<nTagSets.size(); K++)
-							{
-								if (debugTrace.traceDeterminer)
-								{
-									// update nPosition from secondaryPEMAPositions to get true child
-									// find first position with tagset.
-									for (; firstChildSecondaryPEMAPositionIndex < secondaryPEMAPositions.size() && secondaryPEMAPositions[firstChildSecondaryPEMAPositionIndex].getTagSet() != K; firstChildSecondaryPEMAPositionIndex++);
-									// if this position is at the first element, then update nPEMAPosition.  This will allow printTagSet to print the first child correctly
-									if (firstChildSecondaryPEMAPositionIndex < secondaryPEMAPositions.size() && secondaryPEMAPositions[firstChildSecondaryPEMAPositionIndex].getElement() == 0)
-										nPEMAPosition = secondaryPEMAPositions[firstChildSecondaryPEMAPositionIndex].getPEMAPosition();
-									printTagSet(LOG_INFO, L"ND1", K, nTagSets[K], nPosition, nPEMAPosition);
-								}
-								nCosts.push_back(evaluateNounDeterminer(nTagSets[K],true,traceSource,nPosition,nPosition+nLen, nPEMAPosition));
-								traceSources.push_back(traceSource);
-							}
-							lowerPreviousElementCosts(secondaryPEMAPositions, nCosts, traceSources, L"nounDeterminer");
-							setSecondaryCosts(secondaryPEMAPositions,pma,nPosition, L"nounDeterminer");
-						} // for each iteration of each object
-					}
-					else if (!patterns[nPattern]->hasTag(GNOUN_TAG) && !patterns[nPattern]->hasTag(MNOUN_TAG) && tl->isPattern)
-					{
-						if (tl->PEMAOffset!=PEMAPosition && pema[tl->PEMAOffset].flagSet(patternElementMatchArray::COST_ND))
-							continue;
-						pema[tl->PEMAOffset].setFlag(patternElementMatchArray::COST_ND);
-						patternMatchArray::tPatternMatch *pma=(m[nPosition].patterns.isSet(nPattern)) ? m[nPosition].pma.find(nPattern,nLen) : NULL;
-						if (!pma)
-						{
-							lplog(L"%d:Noun Determiner %s[%s](%d,%d) not found!",nPosition,patterns[nPattern]->name.c_str(),patterns[nPattern]->differentiator.c_str(),nPosition,nPosition+nLen);
-							continue;
+							int pattern=pema[nPEMAPosition].getPattern();
+							lplog(L"%d:======== EVALUATION %06d %s %s[%s](%d,%d) SKIPPED (ND already evaluated)",nPosition,nPEMAPosition,desiredTagSets[nounDeterminerTagSet].name.c_str(),
+										patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),nPosition,nPosition+pema[nPEMAPosition].end);
 						}
-						nTagSets.clear();
-						nCosts.clear();
-						traceSources.clear();
-						startCollectTags(debugTrace.traceDeterminer,nounDeterminerTagSet,nPosition,tl->PEMAOffset,nTagSets,true,true,purpose+L" evaluateNounDeterminers - for each role - specific pattern");
-						for (unsigned int K=0; K<nTagSets.size(); K++)
+						continue;
+					}
+					pema[nPEMAPosition].setFlag(patternElementMatchArray::COST_ND);
+					nTagSets.clear();
+					nCosts.clear();
+					traceSources.clear();
+					// We're getting a bit unpopular here--blocking the gangway as it were. / a bit is not a subject of 'blocking'
+					if (patterns[pma->getPattern()]->hasTag(GNOUN_TAG))
+					{
+						bool hasEmbeddedDash=false;
+						for (int K=nPosition; K<nPosition+nLen-1 && !hasEmbeddedDash; K++) 
+							hasEmbeddedDash=(m[K].word->first==L"--"); // must only be --, not a single dash, as single dashes are legal in adjectives and dates like to-day
+						if (hasEmbeddedDash)
 						{
 							if (debugTrace.traceDeterminer)
-								printTagSet(LOG_INFO,L"ND2",K,nTagSets[K],nPosition,tl->PEMAOffset);
-							int tTraceSource=-1;
-							nCosts.push_back(evaluateNounDeterminer(nTagSets[K],true, tTraceSource,nPosition,nPosition+nLen, tl->PEMAOffset));
-							traceSources.push_back(tTraceSource);
+								lplog(L"%d:noun has dash %s %s[%s](%d,%d) (GNOUN DASH) [SOURCE=%06d]",nPosition,desiredTagSets[nounDeterminerTagSet].name.c_str(),
+										patterns[pma->getPattern()]->name.c_str(),patterns[pma->getPattern()]->differentiator.c_str(),nPosition,nPosition+nLen,traceSource=gTraceSource++);
+							secondaryPEMAPositions.clear(); // normally cleared by startCollectTags which is not called here
+							patternElementMatchArray::tPatternElementMatch *npemi=pema.begin()+nPEMAPosition;
+							for (;  nPEMAPosition>=0 && npemi->getPattern()==p && npemi->end==nLen; nPEMAPosition=npemi->nextByPatternEnd,npemi=pema.begin()+nPEMAPosition)
+							{
+								patternElementMatchArray::tPatternElementMatch *epem=pema.begin()+nPEMAPosition;
+								for (int ePEMAPosition=nPEMAPosition;  ePEMAPosition>=0 && epem->getPattern()==p && (epem->end-epem->begin)==nLen; ePEMAPosition=epem->nextPatternElement,epem=pema.begin()+ePEMAPosition)
+									secondaryPEMAPositions.push_back(costPatternElementByTagSet(nPosition,ePEMAPosition,-1,0,pema[ePEMAPosition].getElement()));
+							}
+							nCosts.push_back(10);
+							traceSources.push_back(traceSource);
+							lowerPreviousElementCosts(secondaryPEMAPositions, nCosts, traceSources, L"hasEmbeddedDash");
+							setSecondaryCosts(secondaryPEMAPositions,pma,nPosition,L"hasEmbeddedDash");
 						}
-						lowerPreviousElementCosts(secondaryPEMAPositions, nCosts, traceSources, L"nounDeterminer2");
-						setSecondaryCosts(secondaryPEMAPositions,pma,nPosition, L"nounDeterminer2");
+						continue;
 					}
+					startCollectTags(debugTrace.traceDeterminer,nounDeterminerTagSet,nPosition,nPEMAPosition,nTagSets,true,true,purpose+L" evaluateNounDeterminers - for each role - root pattern");
+					int firstChildSecondaryPEMAPositionIndex = 0;
+					for (unsigned int K=0; K<nTagSets.size(); K++)
+					{
+						if (debugTrace.traceDeterminer)
+						{
+							// update nPosition from secondaryPEMAPositions to get true child
+							// find first position with tagset.
+							for (; firstChildSecondaryPEMAPositionIndex < secondaryPEMAPositions.size() && secondaryPEMAPositions[firstChildSecondaryPEMAPositionIndex].getTagSet() != K; firstChildSecondaryPEMAPositionIndex++);
+							// if this position is at the first element, then update nPEMAPosition.  This will allow printTagSet to print the first child correctly
+							if (firstChildSecondaryPEMAPositionIndex < secondaryPEMAPositions.size() && secondaryPEMAPositions[firstChildSecondaryPEMAPositionIndex].getElement() == 0)
+								nPEMAPosition = secondaryPEMAPositions[firstChildSecondaryPEMAPositionIndex].getPEMAPosition();
+							printTagSet(LOG_INFO, L"ND1", K, nTagSets[K], nPosition, nPEMAPosition);
+						}
+						nCosts.push_back(evaluateNounDeterminer(nTagSets[K],true,traceSource,nPosition,nPosition+nLen, nPEMAPosition));
+						traceSources.push_back(traceSource);
+					}
+					lowerPreviousElementCosts(secondaryPEMAPositions, nCosts, traceSources, L"nounDeterminer");
+					setSecondaryCosts(secondaryPEMAPositions,pma,nPosition, L"nounDeterminer");
+				} // for each iteration of each object
+			}
+			else if (!patterns[nPattern]->hasTag(GNOUN_TAG) && !patterns[nPattern]->hasTag(MNOUN_TAG) && tagLocations[tl].isPattern)
+			{
+				if (tagLocations[tl].PEMAOffset!=PEMAPosition && pema[tagLocations[tl].PEMAOffset].flagSet(patternElementMatchArray::COST_ND))
+					continue;
+				pema[tagLocations[tl].PEMAOffset].setFlag(patternElementMatchArray::COST_ND);
+				patternMatchArray::tPatternMatch *pma=(m[nPosition].patterns.isSet(nPattern)) ? m[nPosition].pma.find(nPattern,nLen) : NULL;
+				if (!pma)
+				{
+					lplog(L"%d:Noun Determiner %s[%s](%d,%d) not found!",nPosition,patterns[nPattern]->name.c_str(),patterns[nPattern]->differentiator.c_str(),nPosition,nPosition+nLen);
+					continue;
 				}
-			} // for each object
-		} // for each pattern of subjects, objects and subobjects
+				nTagSets.clear();
+				nCosts.clear();
+				traceSources.clear();
+				startCollectTags(debugTrace.traceDeterminer,nounDeterminerTagSet,nPosition,tagLocations[tl].PEMAOffset,nTagSets,true,true,purpose+L" evaluateNounDeterminers - for each role - specific pattern");
+				for (unsigned int K=0; K<nTagSets.size(); K++)
+				{
+					if (debugTrace.traceDeterminer)
+						printTagSet(LOG_INFO,L"ND2",K,nTagSets[K],nPosition,tagLocations[tl].PEMAOffset);
+					int tTraceSource=-1;
+					nCosts.push_back(evaluateNounDeterminer(nTagSets[K],true, tTraceSource,nPosition,nPosition+nLen, tagLocations[tl].PEMAOffset));
+					traceSources.push_back(tTraceSource);
+				}
+				lowerPreviousElementCosts(secondaryPEMAPositions, nCosts, traceSources, L"nounDeterminer2");
+				setSecondaryCosts(secondaryPEMAPositions,pma,nPosition, L"nounDeterminer2");
+			}
+		}
 	}
 }
 

@@ -47,7 +47,8 @@ int getCounter(wchar_t *counter,unsigned long &dwValue);
 
 void itos(wchar_t *before,int i,wstring &concat,wchar_t *after);
 void itos(wchar_t *before,int i,wstring &concat,wstring after);
-wstring itos(int i,wstring &tmp);
+wstring itos(int i, wstring &tmp);
+wstring itos(int i, wchar_t *format, wstring &tmp);
 wstring dtos(double fl,wstring &tmp);
 char *wTM(wstring inString,string &outString,int codePage=CP_UTF8);
 const wchar_t *mTW(string inString, wstring &outString);

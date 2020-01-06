@@ -2248,7 +2248,8 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	// 8. if ST thinks it is an adjective, and LP maps it to an __ADJECTIVE pattern
 	//    examined 100 examples from gutenburg and 0 violated this rule.
-	if ((primarySTLPMatch == L"adjective") && source.m[wordSourceIndex].queryForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST && source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1)
+	if ((primarySTLPMatch == L"adjective") && source.m[wordSourceIndex].queryForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST && 
+		  (source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"_ADJECTIVE_AFTER") != -1))
 	{
 		errorMap[L"diff: ST says adjective, LP says verb PAST matched to an _ADJECTIVE pattern"]++;
 		return 0;

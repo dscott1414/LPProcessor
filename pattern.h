@@ -215,6 +215,10 @@ public:
         isPattern=o.isPattern;
         return *this;
     }
+		static bool compareTagLocation(tTagLocation tl1, tTagLocation tl2)
+		{
+			return tl1.len < tl2.len;
+		}
 } ;
 
 class tTS

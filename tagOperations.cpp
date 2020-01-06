@@ -17,9 +17,9 @@ bool Source::tagInFocus(int begin,int end)
 }
 
 #if defined NDEBUG
-#define COLLECT_TAGS_TIME_LIMIT 100
+#define COLLECT_TAGS_TIME_LIMIT 70
 #else
-#define COLLECT_TAGS_TIME_LIMIT 400
+#define COLLECT_TAGS_TIME_LIMIT 1000
 #endif
 
 
@@ -477,7 +477,7 @@ size_t Source::startCollectTags(bool inTrace,int tagSet,int position,int PEMAPos
 	if (debugTrace.traceMatchedSentences || debugTrace.traceUnmatchedSentences)
 	{
 		if (tagSets.size()<MAX_TAGSETS)
-			lplog(LOG_ERROR,L"%d:Maximum time limit hit (%d seconds) when collecting tags for %s %s[%s](%d,%d)",position,COLLECT_TAGS_TIME_LIMIT,desiredTagSets[tagSet].name.c_str(),
+			lplog(LOG_ERROR,L"%d:Maximum time limit hit (%d microseconds) when collecting tags for %s %s[%s](%d,%d)",position,COLLECT_TAGS_TIME_LIMIT,desiredTagSets[tagSet].name.c_str(),
 			patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),position,position+pema[PEMAPosition].end);
 		else if (debugTrace.traceTagSetCollection)
 			lplog(LOG_ERROR,L"%d:Maximum # of tagsets hit when collecting tags for %s %s[%s](%d,%d)",position,desiredTagSets[tagSet].name.c_str(),

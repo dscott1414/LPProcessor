@@ -2158,13 +2158,13 @@ void printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &t
     for (; its!=itsEnd; its++)
     {
       if (its->isPattern)
-        ::lplog(logType,L"TAGSET %05d: %03d %s[%s] %06d:%s[%s](%d,%d) TAG %s [%d,%d]",ts,its->sourcePosition,patterns[its->parentPattern]->name.c_str(),patterns[its->parentPattern]->differentiator.c_str(),
+        ::lplog(logType,L"TAGSET %05d: %03d %s[%s] %06d:%s[%s](%d,%d) TAG %s [Element=%d]",ts,its->sourcePosition,patterns[its->parentPattern]->name.c_str(),patterns[its->parentPattern]->differentiator.c_str(),
 				its->PEMAOffset,patterns[its->pattern]->name.c_str(),patterns[its->pattern]->differentiator.c_str(),its->sourcePosition,its->sourcePosition+its->len,patternTagStrings[its->tag].c_str(),
-        its->PEMAOffset,its->parentElement);
+        its->parentElement);
       else
-        ::lplog(logType,L"TAGSET %05d: %03d %s[%s] %06d:%s(%d,%d) TAG %s [%d,%d]",ts,its->sourcePosition,patterns[its->parentPattern]->name.c_str(),patterns[its->parentPattern]->differentiator.c_str(),
+        ::lplog(logType,L"TAGSET %05d: %03d %s[%s] %06d:%s(%d,%d) TAG %s [Element=%d]",ts,its->sourcePosition,patterns[its->parentPattern]->name.c_str(),patterns[its->parentPattern]->differentiator.c_str(),
 					its->PEMAOffset,Forms[its->pattern]->shortName.c_str(),its->sourcePosition,its->sourcePosition+its->len,patternTagStrings[its->tag].c_str(),
-        its->PEMAOffset,its->parentElement);
+        its->parentElement);
     }
   else
     for (; its!=itsEnd; its++)

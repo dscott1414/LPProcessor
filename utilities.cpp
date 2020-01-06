@@ -30,11 +30,20 @@ void itos(wchar_t *before,int i,wstring &concat,wstring after)
 	concat+=temp+after;
 }
 
-wstring itos(int i,wstring &tmp)
-{ LFS
+wstring itos(int i, wstring &tmp)
+{
+	LFS
+		wchar_t temp[1024];
+	_itow(i, temp, 10);
+	return tmp = temp;
+}
+
+wstring itos(int i, wchar_t *format, wstring &tmp)
+{
+	LFS
 	wchar_t temp[1024];
-	_itow(i,temp,10);
-	return tmp=temp;
+	wsprintf(temp,format,i);
+	return tmp = temp;
 }
 
 wstring dtos(double fl,wstring &tmp)

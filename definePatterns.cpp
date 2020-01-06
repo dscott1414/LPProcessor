@@ -229,7 +229,7 @@ int createNouns(void)
 										3,L"determiner{DET}",L"possessive_determiner{DET}",L"quantifier{DET}",0,1,1, // L"demonstrative_determiner{DET}", removed - covered better by 'this' being a noun and the adjective being an ADJECTIVE_AFTER
 										1,L"adverb",0,0,1,
 										 // this entire pattern is rare and should not be encouraged (can be confused with an adjective to a noun)
-										3,L"adjective*3{N_AGREE}",L"numeral_ordinal*2{N_AGREE}",L"noun*2{N_AGREE}",SINGULAR_OWNER|PLURAL_OWNER,1,1,
+										3,L"adjective*3{N_AGREE}",L"numeral_ordinal*2{N_AGREE}",L"noun*4{N_AGREE}",SINGULAR_OWNER|PLURAL_OWNER,1,1,
 										0);
 	// a female called Jane Finn
 	// a Sikh called Bob
@@ -296,7 +296,7 @@ int createNouns(void)
 										1,L"__N1",0,1,1,
 										0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"5",
-										1,L"__PNOUN",0,1,1,
+										1,L"__PNOUN{SUBOBJECT}",0,1,1,
 										1,L",*3",0,0,1,
 										1,L"__APPNOUN[*]{_BLOCK:RE_OBJECT}",0,1,1,
 										0);
@@ -456,7 +456,7 @@ int createNouns(void)
 	// “ Don't go , John , ” said Mrs . Wilkinson , still forcing a smile to *her* countenance . 
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"9",
 										//2,L"__NOUN[*]{_BLOCK}",L"_NOUN_OBJ{_BLOCK}",0,1,1,
-										2,L"__NOUN[*]",L"_NOUN_OBJ",0,1,1,
+										2,L"__NOUN[*]{SUBOBJECT}",L"_NOUN_OBJ{SUBOBJECT}",0,1,1,
 										3,L"__INTERPPB[*]{_BLOCK}",L"_DATE*1{FLOATTIME}",L"_TIME*1{FLOATTIME}",0,0,1,
 										1,L"_ADVERB",0,0,1, // He gave a number *presently* which was his own in Panton Square .
 										3,L"_PP",L"_REL1",L"_INFP",0,1,1,
@@ -1658,7 +1658,7 @@ void createSecondaryPatterns1(void)
 		4,L"determiner*2{DET}",L"demonstrative_determiner*2{DET}",L"possessive_determiner*2{DET}",L"__HIS_HER_DETERMINER*3",0,0,1,
 		1,L"_ADJECTIVE_AFTER",0,0,2, // this cannot contain VERBPAST, as it is not possible yet to ascertain the difference between this and _S1.
 																// otherwise, _NOUN would win over _S1 because it has fewer subcomponents, which was incorrect.
-		4,L"noun*4{SUBJECT:N_AGREE}",L"_NAME*4{SUBJECT:GNOUN:NAME}",L"personal_pronoun_nominative*3{SUBJECT:N_AGREE}",L"personal_pronoun*3{SUBJECT:N_AGREE}",NO_OWNER,1,1, // this is tightly controlled -
+		4,L"noun*4{N_AGREE}",L"_NAME*4{GNOUN:NAME}",L"personal_pronoun_nominative*3{N_AGREE}",L"personal_pronoun*3{N_AGREE}",NO_OWNER,1,1, // this is tightly controlled -
 		0);
 	// this pattern contains a relative clause!
 	cPattern::create(L"__APPNOUN{EVAL}",L"2",
