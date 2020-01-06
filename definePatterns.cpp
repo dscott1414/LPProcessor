@@ -1779,7 +1779,8 @@ void createSecondaryPatterns1(void)
 									 // removed REL1 and _PP - included with __ALLOBJECTS
 									 3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, // L"there{OBJECT}L" removed
 																		 // ADVERB made more expensive because ALLOBJECTS already has ADVERB 2/17/2007
-									 1,L"_NAME_INJECT",0,0,1, // Thank you , ma'am                 // removed _PP from above because __ALLOBJECTS already has _PP
+									 2,L"_NAME_INJECT",L"adverb",0,0,1, // Thank you , ma'am                 // removed _PP from above because __ALLOBJECTS already has _PP
+									 // ” agreed her *chum* enthusiastically . 
 									 0);
 	cPattern::create(L"_VERBREL1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_BLOCK:EVAL}",L"2",
 									 2,L"_PRE_VR1",L"politeness_discourse_marker",0,0,1,
@@ -1970,6 +1971,10 @@ void createPrepositionalPhrases(void)
 									 1,L"preposition|in",0,1,1,
 									 1,L"noun|case",0,1,1,
 									 1,L"__S1{PREPOBJECT:OBJECT:EVAL:_BLOCK}",0,1,1,0);
+	// from there / to there (because there has no noun form)
+	cPattern::create(L"__PP", L"C",
+										2, L"preposition|from", L"preposition|to", 0, 1, 1,
+										1, L"adverb|there", 0, 1, 1, 0);
 	// with as brave a heart as possible
 	cPattern::create(L"__PP{_FINAL_IF_ALONE:_BLOCK:PREP}", L"B",
 										1, L"preposition{P}", 0, 1, 1,  

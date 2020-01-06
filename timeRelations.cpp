@@ -113,6 +113,12 @@ void defineTimePatterns()
 		2,L"noun|lunch{TIMECAPACITY}",L"noun|dinner{TIMECAPACITY}",0,1,1,
     1,L"dash|-*-2",0,1,1,
 		1,L"noun|time",0,1,1,0);
+	// part of the time, some of the time, half of the time, all of the time
+	cPattern::create(L"_TIME", L"G",
+		4, L"noun|part", L"quantifier|some", L"adjective|half", L"predeterminer|all", 0, 1, 1,
+		1, L"preposition|of", 0, 1, 1,
+		1, L"determiner|the", 0, 1, 1,
+		1, L"noun|time", 0, 1, 1, 0);
 	// half past noon / 2 / 12
 	// next Tuesday - cannot make numeral_ordinal optional because this will create hanging CLOSING_S1s
 	// 6 months

@@ -2642,6 +2642,12 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			return 0;
 		}
 	}
+	// p80, Longman
+	if (word == L"yet" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && primarySTLPMatch == L"conjunction")
+	{
+		errorMap[L"diff: word 'yet': can be either a conjunction or a linking adverbial"]++;
+		return 0;
+	}
 	// never correct
 	if (word == L"more" && (primarySTLPMatch == L"interjection" || primarySTLPMatch == L"verb"))
 	{
@@ -3400,7 +3406,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0)
 	{
-		wstring nounCost, verbCost; 
+		wstring nounCost, verbCost;
 		itos(source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(nounForm)], nounCost);
 		itos(source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(verbForm)], verbCost);
 		if (word.length() > 2 && word.substr(word.length() - 2) == L"ed" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST)
@@ -3422,6 +3428,32 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		if ((source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_FIRST_SINGULAR) == VERB_PRESENT_FIRST_SINGULAR)
 		{
 			partofspeech += L"***ISNOUN?PRESENTFIRST NOUN=" + nounCost + L"VERB=" + verbCost;
+		}
+	}
+	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0)
+	{
+		wstring nounCost, verbCost;
+		itos(source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(nounForm)], nounCost);
+		itos(source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(verbForm)], verbCost);
+		if (word.length() > 2 && word.substr(word.length() - 2) == L"ed" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST)
+		{
+			partofspeech += L"***ISVERB?PAST NOUN=" + nounCost + L"VERB=" + verbCost;
+		}
+		if (word.length() > 3 && word.substr(word.length() - 3) == L"ing" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE)
+		{
+			int pemaOffset = source.queryPattern(wordSourceIndex, L"__NOUN", L"2");
+			if (pemaOffset >= 0 && source.pema[pemaOffset].end >= 2)
+				partofspeech += L"***ISVERB?PRESENTPARTNOUNADJ NOUN=" + nounCost + L"VERB=" + verbCost;
+			else
+				partofspeech += L"***ISVERB?PRESENTPART NOUN=" + nounCost + L"VERB=" + verbCost;
+		}
+		if ((source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_THIRD_SINGULAR) == VERB_PRESENT_THIRD_SINGULAR)
+		{
+			partofspeech += L"***ISVERB?PRESENTTHIRD NOUN=" + nounCost + L"VERB=" + verbCost;
+		}
+		if ((source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_FIRST_SINGULAR) == VERB_PRESENT_FIRST_SINGULAR)
+		{
+			partofspeech += L"***ISVERB?PRESENTFIRST NOUN=" + nounCost + L"VERB=" + verbCost;
 		}
 	}
 	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0)
@@ -3870,7 +3902,7 @@ int stanfordCheck(Source source, int step, bool pcfg)
 		wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d sources in %02I64d:%02I64d:%02I64d [%d sources/hour] (%-35.35s...)", numSourcesProcessedNow * 100 / totalSource, numSourcesProcessedNow, totalSource,
 			processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, (processingSeconds) ? numSourcesProcessedNow * 3600 / processingSeconds : 0, title.c_str());
 		SetConsoleTitle(buffer);
-		int setStep = stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap,VFTMap,errorMap,pcfg,L"",40);
+		int setStep = stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap,VFTMap,errorMap,pcfg,L"",60);
 		totalWords += source.m.size();
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))

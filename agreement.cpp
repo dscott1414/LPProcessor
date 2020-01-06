@@ -1909,7 +1909,7 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 	}
 	// set the actual noun pattern that is being used, so that if __NOUN[9] comes first, for example, that the NOUNs in NOUN[9] don't get counted twice (once here, and once on their own).
 	// problem - what if _NOUN[2] needs to be evaluated separately because _NOUN[9] is not under a certain PP.
-	if (nounTag>=0 && !pema[abs(tagSet[nounTag].PEMAOffset)].flagSet(patternElementMatchArray::COST_ND))
+	if (debugTrace.traceDeterminer && nounTag>=0 && !pema[abs(tagSet[nounTag].PEMAOffset)].flagSet(patternElementMatchArray::COST_ND))
 	{
 		if (tagSet[nounTag].isPattern)
 			::lplog(LOG_INFO, L"ND NOT SET! %06d:%s[%s] %06d:%s[%s](%d,%d) TAG %s [Element=%d]", tagSet[nounTag].sourcePosition, patterns[tagSet[nounTag].parentPattern]->name.c_str(), patterns[tagSet[nounTag].parentPattern]->differentiator.c_str(),
@@ -2055,6 +2055,13 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 	pema[PEMAPosition].setFlag(patternElementMatchArray::COST_ROLE);
 	// search for all subjects, objects, subobjects and prepobjects - DO NOT obey BLOCK! (obeyBlock=false)
 	// if this is set to not obey block, testing with source 21780, there are about 30 sentences in the entire book that might have improvement.  However, the time required multiplied by 4.
+	// Two sentences illustrating the difference:
+	// All through morning school Reggie debated the matter with so much absorption that he had no attention to give to mischief, and in consequence earned
+	// the good - conduct mark, to his great amazement.
+	// If he had been able to whisper the information it would not have seemed so bad, but to be obliged to shout out what in
+	// honour he ought to have kept silent about made him so angry that he hated the old man he had come so far to serve.
+	// You may lay me down to sleep, my mother dear, But rock me in the cradle all the day.
+
 	if (startCollectTags(debugTrace.traceDeterminer,roleTagSet,position,PEMAPosition,tagSets,true,true,L"evaluateNounDeterminers - ROLE")>0)
 	{
 		vector < vector <tTagLocation> > nTagSets;
