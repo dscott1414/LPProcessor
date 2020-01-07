@@ -2420,10 +2420,41 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 				voRelationsFound=0;
 			}
 		}
+		// if one object, and object follows directly after verb, and object consists of adverb, adverb, acc, then add cost.
+		if (numObjects == 1 && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len < whereVerb + 5)
+		{
+			bool isAdverb = m[whereVerb + 1].forms.isSet(adverbForm) && m[whereVerb + 1].word->second.usageCosts[m[whereVerb + 1].queryForm(adverbForm)] < 4; // is it possibly an adverb?
+			if (isAdverb && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len == whereVerb + 3)
+			{
+				bool isPreposition = m[whereVerb + 1].forms.isSet(prepositionForm);
+				bool objectDoesntTakeAdjectives = (m[whereVerb + 2].queryForm(accForm) != -1 || m[whereVerb + 2].queryForm(personalPronounForm) != -1) &&
+					m[whereVerb + 2].word->first != L"he" && m[whereVerb + 2].word->first != L"she";
+				if (isPreposition && objectDoesntTakeAdjectives)
+				{
+					verbObjectCost += 6;
+					if (debugTrace.traceVerbObjects)
+						lplog(L"          %d:verb %s is followed by an object %s with one previous adverb and the object doesn't take an adjective - more likely a prep phrase.", vsp, verbWord->first.c_str(), object1Word->first.c_str());
+				}
+			}
+			else if (isAdverb  && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len == whereVerb + 4)
+			{
+				isAdverb = m[whereVerb + 2].forms.isSet(adverbForm) && m[whereVerb + 2].word->second.usageCosts[m[whereVerb + 2].queryForm(adverbForm)] < 4; // is it possibly an adverb?
+				bool isPreposition = m[whereVerb + 2].forms.isSet(prepositionForm);
+				bool objectDoesntTakeAdjectives = (m[whereVerb + 3].queryForm(accForm) != -1 || m[whereVerb + 3].queryForm(personalPronounForm) != -1) &&
+					m[whereVerb + 3].word->first != L"he" && m[whereVerb + 3].word->first != L"she";
+				if (isAdverb && isPreposition && objectDoesntTakeAdjectives)
+				{
+					verbObjectCost += 6;
+					if (debugTrace.traceVerbObjects)
+						lplog(L"          %d:verb %s is followed by an object %s with two previous adverbs and the object doesn't take an adjective - more likely a prep phrase.", vsp, verbWord->first.c_str(), object1Word->first.c_str());
+				}
+			}
+		}
 		if (numObjects == 1 && verbObjectCost && whereVerb + 1 < m.size() && m[whereVerb + 1].queryWinnerForm(adverbForm) >= 0 && m[whereVerb + 1].queryForm(particleForm) >= 0 &&
 			// if the particle is followed by a preposition, then don't decrease the cost of having an object because then that encourages the preposition to become an adverb.
 			// also include a case where 'to' is not a preposition because of to-day and to-morrow
-			(whereVerb + 3 >= m.size() || m[whereVerb + 2].queryForm(prepositionForm) < 0 || m[whereVerb + 3].word->first == L"-"))
+			(whereVerb + 3 >= m.size() || m[whereVerb + 2].queryForm(prepositionForm) < 0 || m[whereVerb + 3].word->first == L"-") &&
+			verbObjectCost<6)
 		{
 			if (debugTrace.traceVerbObjects)
 				lplog(L"          %d:decreased verbObjectCost=%d to %d for verb %s because of possible particle usage (%s)",

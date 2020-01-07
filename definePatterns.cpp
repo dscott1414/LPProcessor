@@ -2517,7 +2517,8 @@ int createSecondaryPatterns2(void)
 	// if no pattern matches a plain interjection, that interjection will never be matched as one
 	// if it can be matched as anything else, even though those other forms carry a higher cost.
 	cPattern::create(L"__S2{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}", L"8",
-									2, L"interjection", L"politeness_discourse_marker", 0, 1, 1, // pray / please / Yes (ADVERB)
+									2, L"interjection*-4", L"politeness_discourse_marker", 0, 1, 1, // pray / please / Yes (ADVERB)
+									1, L",", 0, 0, 1,
 									0);
 	cPattern::create(L"__S2{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}",L"9",
 									 1,L"quotes",OPEN_INFLECTION,1,1,

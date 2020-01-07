@@ -573,8 +573,9 @@ public:
 	}
 	bool isOnlyWinner(int form)
 	{
-		if (!tmpWinnerForms) return formsSize()==1;
-		return (1<<form)==tmpWinnerForms;
+		int formIndex = word->second.query(form);
+		if (formIndex!=-1 && !tmpWinnerForms) return formsSize() == 1;
+		return (1<< formIndex)==tmpWinnerForms;
 	}
 	wstring roleString(wstring &sRole);
 	void logRelations(int where)

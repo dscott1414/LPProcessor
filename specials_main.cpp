@@ -1430,6 +1430,76 @@ int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, w
 	return 22;
 }
 
+int syntaxCheckFromSource(Source source, int sourceId, wstring path, wstring etext)
+{
+	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
+		return -20;
+	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false) < 0)
+		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
+	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
+	bool parsedOnly = false;
+	if (source.readSource(path, false, parsedOnly, false, true))
+	{
+		int wordIndex = 0;
+		unsigned int ss = 1;
+		for (WordMatch &im : source.m)
+		{
+			// verb, adverb, adverb, OBJECT_1 that is composed of a single noun that does not accept adjectives
+			int pemaOffset= source.queryPattern(wordIndex,L"__S1", L"1"),pmaOffset;
+			if (pemaOffset != -1 && im.hasWinnerVerbForm() && im.getNumWinners() == 1 && wordIndex < source.m.size() - 3 &&
+				(pmaOffset = source.m[wordIndex + 1].pma.queryPattern(L"__ALLOBJECTS_1", L"1")) != -1)
+			{
+				pmaOffset &= ~matchElement::patternFlag;
+				bool twoAdverbs =
+					source.m[wordIndex + 1].pma[pmaOffset].len == 3 &&
+					source.m[wordIndex + 1].isOnlyWinner(adverbForm) &&
+					source.m[wordIndex + 2].isOnlyWinner(adverbForm) && source.m[wordIndex + 2].queryForm(prepositionForm)!=-1 &&
+					(source.m[wordIndex + 3].isOnlyWinner(accForm) || source.m[wordIndex + 3].isOnlyWinner(personalPronounForm)) &&
+					source.m[wordIndex + 3].word->first!=L"he" && source.m[wordIndex + 3].word->first != L"she";
+				bool oneAdverb =
+					source.m[wordIndex + 1].pma[pmaOffset].len == 2 &&
+					source.m[wordIndex + 1].isOnlyWinner(adverbForm) && source.m[wordIndex + 1].queryForm(prepositionForm) != -1 &&
+					(source.m[wordIndex + 2].isOnlyWinner(accForm) || source.m[wordIndex + 2].isOnlyWinner(personalPronounForm)) &&
+					source.m[wordIndex + 2].word->first != L"he" && source.m[wordIndex + 2].word->first != L"she";
+				if (oneAdverb || twoAdverbs)
+				{
+					int patternEnd = wordIndex + 1 + source.m[wordIndex + 1].pma[pmaOffset].len;
+					wstring sentence, originalIWord;
+					bool inPattern = false;
+					for (int I = source.sentenceStarts[ss - 1]; I < source.sentenceStarts[ss]; I++)
+					{
+						source.getOriginalWord(I, originalIWord, false, false);
+						if (I == wordIndex + 1)
+						{
+							sentence += L"**";
+							inPattern = true;
+						}
+						sentence += originalIWord;
+						if (I == patternEnd - 1)
+						{
+							sentence += L"**";
+							inPattern = false;
+						}
+						sentence += L" ";
+					}
+					wstring path = source.sourcePath.substr(16, source.sourcePath.length() - 20);
+					lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, patternEnd, sentence.c_str());
+					lplog(LOG_ERROR, L"%s", sentence.c_str());
+				}
+			}
+			wordIndex++;
+			while (ss < source.sentenceStarts.size() && source.sentenceStarts[ss] < wordIndex + 1)
+				ss++;
+		}
+	}
+	else
+	{
+		wprintf(L"Unable to read source %d:%s\n", sourceId, path.c_str());
+		return 61;
+	}
+	return 62;
+}
+
 int populateWordFrequencyTableFromSource(Source source, int sourceId, wstring path, wstring etext)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
@@ -1683,7 +1753,7 @@ int printUnknowns(Source source, int step)
 	return 0;
 }
 
-int patternOrWordAnalysis(Source source, int step, wstring patternOrWordName, wstring differentiator,bool isPattern)
+int patternOrWordAnalysis(Source source, int step, wstring patternOrWordName, wstring differentiator, bool isPattern)
 {
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
@@ -1706,7 +1776,47 @@ int patternOrWordAnalysis(Source source, int step, wstring patternOrWordName, ws
 		mTW(sqlrow[2], path);
 		mTW(sqlrow[3], title);
 		path.insert(0, L"\\").insert(0, CACHEDIR);
-		int setStep=patternOrWordAnalysisFromSource(source, sourceId, path, etext, patternOrWordName, differentiator, isPattern);
+		int setStep = patternOrWordAnalysisFromSource(source, sourceId, path, etext, patternOrWordName, differentiator, isPattern);
+		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
+		if (!myquery(&source.mysql, qt))
+			break;
+		source.clearSource();
+		wchar_t buffer[1024];
+		__int64 processingSeconds = (clock() - startTime) / CLOCKS_PER_SEC;
+		numSourcesProcessedNow++;
+		if (processingSeconds)
+			wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d sources in %02I64d:%02I64d:%02I64d [%d sources/hour] (%-35.35s... finished)", numSourcesProcessedNow * 100 / totalSource, numSourcesProcessedNow, totalSource,
+				processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, numSourcesProcessedNow * 3600 / processingSeconds, title.c_str());
+		SetConsoleTitle(buffer);
+	}
+	mysql_free_result(result);
+	return 0;
+}
+
+int syntaxCheck(Source source, int step)
+{
+	MYSQL_RES * result;
+	MYSQL_ROW sqlrow = NULL;
+	enum Source::sourceTypeEnum st = Source::GUTENBERG_SOURCE_TYPE;
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	bool websterAPIRequestsExhausted = false;
+	int startTime = clock(), numSourcesProcessedNow = 0;
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select id, etext, path, title from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' and proc2=%d order by id", st, step);
+	if (!myquery(&source.mysql, qt, result))
+		return -1;
+	my_ulonglong totalSource = mysql_num_rows(result);
+	for (int row = 0; sqlrow = mysql_fetch_row(result); row++)
+	{
+		wstring path, etext, title;
+		int sourceId = atoi(sqlrow[0]);
+		if (sqlrow[1] == NULL)
+			etext = L"NULL";
+		else
+			mTW(sqlrow[1], etext);
+		mTW(sqlrow[2], path);
+		mTW(sqlrow[3], title);
+		path.insert(0, L"\\").insert(0, CACHEDIR);
+		int setStep = syntaxCheckFromSource(source, sourceId, path, etext);
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
 			break;
@@ -3660,6 +3770,8 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 						sentence.replace(pos,originalWord.length(), L"*" + originalWord + L"*");
 					pos = sentence.find(originalWord,pos+ originalWord.length()+2);
 				}
+				if (source.m[wordSourceIndex].flags&WordMatch::flagFirstLetterCapitalized)
+					partofspeech += L"**CAP**";
 				lplog(LOG_ERROR, L"Stanford POS %s%s (%s) not found in winnerForms %s for word%s %s %07d:[%s]", partofspeech.c_str(), (sentence.length()<=maxLength) ? L"SHORT":L"",primarySTLPMatch.c_str(), winnerFormsString.c_str(), (originalWord.find(L' ')==wstring::npos) ? L"":L"[space]", originalWord.c_str(), wordSourceIndex, sentence.c_str());
 				for (int wf : winnerForms)
 				{
@@ -4325,6 +4437,9 @@ void wmain(int argc,wchar_t *argv[])
 	case 60:
 		//stanfordCheckMP(source, step, true,8);
 		stanfordCheck(source, step, true);
+		break;
+	case 61:
+		syntaxCheck(source, step);
 		break;
 	case 70:
 		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"",50);

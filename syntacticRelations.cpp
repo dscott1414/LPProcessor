@@ -2157,7 +2157,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 	}
 	// Occasionally PREP may not be visible from the S1 structure
 	// He[man] indicated the place he[man] had been occupying at the head of the table[table] .
-	if (m[whereVerb].relPrep<0 && whereVerb+2<(signed)m.size() && m[whereVerb+1].pma.queryPattern(L"_PP")!=-1 && m[whereVerb+1].isOnlyWinner(m[whereVerb+1].word->second.query(prepositionForm)) &&
+	if (m[whereVerb].relPrep<0 && whereVerb+2<(signed)m.size() && m[whereVerb+1].pma.queryPattern(L"_PP")!=-1 && m[whereVerb+1].isOnlyWinner(prepositionForm) &&
 		  m[whereVerb+2].queryWinnerForm(prepositionForm)<0 && m[whereVerb+2].queryWinnerForm(relativizerForm)<0)
 		futureBoundPrepositions.push_back(whereVerb);
 	if (firstFreePrep>=0)
