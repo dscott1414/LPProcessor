@@ -1841,6 +1841,15 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 			lplog(L"%d:Noun (%d,%d) has no noun tag (cost=%d) [SOURCE=%06d].", begin, begin, end, PNC, traceSource = gTraceSource++);
 		return PNC;
 	}
+	if (fromPEMAPosition!= abs(tagSet[nounTag].PEMAOffset) && pema[abs(tagSet[nounTag].PEMAOffset)].flagSet(patternElementMatchArray::COST_ND))
+	{
+		if (debugTrace.traceDeterminer)
+		{
+			int pattern = pema[abs(tagSet[nounTag].PEMAOffset)].getPattern();
+			lplog(L"%d:======== EVALUATION %06d %s[%s](%d,%d) SKIPPED (ND already evaluated)", begin, fromPEMAPosition, patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), begin, end);
+		}
+		return 0;
+	}
 	if (nAgreeTag >= 0 && nAgreeTag < end - 1 && calculateVerbAfterVerbUsage(end - 1, end)) // if nAgreeTag<end-1, it is more likely a compound noun
 	{
 		if (debugTrace.traceDeterminer)
