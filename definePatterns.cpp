@@ -1003,7 +1003,7 @@ void createInfinitivePhrases(void)
 		                1,L"to{ITO}",0,1,1,
 										1,L"_ADVERB",0,0,1,
 										1,L"verbal_auxiliary{V_AGREE}",0,0,1, // to help eat this
-										4,L"be{vS:id:V_OBJECT}",L"verb{vS:V_OBJECT}",L"does{vS:V_OBJECT}",L"have{vS:V_OBJECT}",
+										5,L"be{vS:id:V_OBJECT}",L"verb{vS:V_OBJECT}",L"does{vS:V_OBJECT}",L"have{vS:V_OBJECT}",L"SYNTAX:Accepts S as Object|make sure",
 											VERB_PRESENT_FIRST_SINGULAR,1,1,
 										3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, 
 										3,L"__INFP5SUB",L"__INFPSUB",L"__INFPT2SUB",0,0,1,
@@ -2263,6 +2263,12 @@ int createSecondaryPatterns2(void)
 									 2,L"__SUB_S2",L"_VERBPASSIVE_P",0,1,1,
 									 1,L"__CLOSING__S1",0,0,3,
 									 0);
+	// you do everything you could do.
+	// you have done everything you could do.
+	// you did everything you could do.
+	// you will do everything you could do.
+	//cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"D",
+	//									0);
 	// I will think you will be one forever.
 	// I thought you were right.
 	// I think you are right.
@@ -2384,8 +2390,9 @@ int createSecondaryPatterns2(void)
 									 2,L"_ADJECTIVE*1",L"uncertainDurationUnit",0,1,1, // afraid I don't. / while **the little Pilgrim was still gazing** , disappeared from her
 									 0);
 	cPattern::create(L"__INTRO_N{_ONLY_BEGIN_MATCH}",L"3",
-									 2,L"_ADVERB",L"_ADJECTIVE*1",0,1,1, // glibly, she refused. / New, isn't she?
+									 3,L"_ADVERB",L"_ADJECTIVE*1", L"interjection*-4", 0,1,1, // glibly, she refused. / New, isn't she?
 									 1,L",",0,1,1,
+									 1,L"adverb",0,0,1,
 									 0);
 	// Hullo, stranger
 	// Oh, well! / Oh, very well!
@@ -2510,9 +2517,14 @@ int createSecondaryPatterns2(void)
 										0);
 	// Please, Tommy?  Later, Tommy. Yes Mom. Sorry, Tuppence.
 	cPattern::create(L"__S2{_FINAL:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}",L"5",
-									 2,L"_ADVERB",L"interjection",0,1,1, // pray / please / Yes (ADVERB)
+									 2,L"_ADVERB",L"interjection*-4",0,1,1, // pray / please / Yes (ADVERB)
 									 1,L",",0,0,1,
 									 1,L"_NAME_INJECT",0,1,1,0);
+	cPattern::create(L"__S2{_FINAL:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}", L"6",
+									1, L"__INTRO_N{_BLOCK:EVAL}", 0, 0, 1, 
+									1, L"personal_pronoun_nominative|i", 0, 1, 1, 
+									1, L"never", 0, 1, 1,
+									0);
 	// __S2 -- 8 and 9
 	// if no pattern matches a plain interjection, that interjection will never be matched as one
 	// if it can be matched as anything else, even though those other forms carry a higher cost.

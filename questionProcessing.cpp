@@ -437,6 +437,10 @@ void createQuestionPatterns(void)
 									3,L"personal_pronoun{NOUN}",L"possessive_pronoun{NOUN}",L"personal_pronoun_accusative{NOUN}",0,0,1, // ,L"_INFP{OBJECT:_BLOCK}L" RINFP 6/7/2006
 									1,L"__CLOSING__S1",0,0,2,
 									0);
+	cPattern::create(L"_Q2{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}", L"M",
+									1, L"adverb|how*-4", 0, 1, 1,
+									2, L"_ADVERB", L"_ADJECTIVE", 0, 1, 1,
+									0);
 	// is that your idea, Tuppence?
 	//cPattern::create(L"_Q2{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH:_QUESTION}",L"L",
 	//								1,L"_IS{VERB:vS:id}",0,1,1, 
@@ -556,7 +560,7 @@ void createQuestionPatterns(void)
 									0);
 	// Do you think that I should care for a moment for such things as those , or *that* they have brought the slightest taint of disgrace upon you in the minds of those that know you ?
 	cPattern::create(L"_MQ1{_FINAL_IF_ALONE:_QUESTION}", L"4",
-									2, L"conjunction|but", L"__INTRO2_S1", 0, 0, 1,
+									3, L"conjunction|but", L"__INTRO2_S1", L"__INTRO_N",0, 0, 1,
 									1, L"relativizer", 0, 0, 1,
 									4, L"_Q1S", L"_Q1PASSIVE", L"_Q1", L"_QT1", 0, 1, 1,
 									// __ALLOBJECTS_0 would be harmful here because ALLOBJECTS_0 could resolve to a NAME, which must be an object, but will not be registered as one if

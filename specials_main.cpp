@@ -2423,10 +2423,16 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		}
 	}
 	// 16. So as matched in the beginning of a phrase is a linking adverbial (Longman) but is usually marked as a preposition by Stanford.
+	bool atStart = wordSourceIndex == startOfSentence || (wordSourceIndex == startOfSentence + 1 && WordClass::isDoubleQuote(source.m[wordSourceIndex - 1].word->first[0]));
 	if (word == L"so" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 &&
-		(primarySTLPMatch == L"preposition or conjunction" || primarySTLPMatch == L"conjunction") && wordSourceIndex == startOfSentence)
+		(primarySTLPMatch == L"preposition or conjunction" || primarySTLPMatch == L"conjunction") && atStart)
 	{
 		errorMap[L"LP correct: word 'so': ST says " + primarySTLPMatch + L" LP says adverb (Longman linking adverbial)"]++;
+		return 0;
+	}
+	if (word == L"before" && primarySTLPMatch == L"preposition or conjunction" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && atStart)
+	{
+		errorMap[L"LP correct: word 'before' at the start of a sentence"]++;
 		return 0;
 	}
 	bool tempstar = false;
@@ -2521,8 +2527,8 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		return 0;
 	}
 	// 25. 'So' before _S1 is a linking adverbial, not a preposition (Longman - 891)
-	if (word == L"so" && primarySTLPMatch == L"preposition or conjunction" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 &&
-		wordSourceIndex + 1 < source.m.size() && source.m[wordSourceIndex + 1].pma.queryPattern(L"__S1") != -1)
+	if (word == L"so" && (primarySTLPMatch == L"preposition or conjunction" || primarySTLPMatch == L"conjunction") && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 &&
+		wordSourceIndex + 1 < source.m.size() && (source.m[wordSourceIndex + 1].pma.queryPattern(L"__S1") != -1))
 	{
 		errorMap[L"LP correct: word 'so' before _S1 is a linking adverbial, not a preposition (Longman - 891)"]++;
 		return 0;
@@ -2771,10 +2777,10 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		return 0;
 	}
 	// never correct
-	if (word == L"after" && primarySTLPMatch == L"preposition or conjunction" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && 
+	if ((word == L"after" || word == L"besides") && primarySTLPMatch == L"preposition or conjunction" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 &&
 		  (!iswalpha(source.m[wordSourceIndex + 1].word->first[0]) || source.m[wordSourceIndex + 1].queryWinnerForm(L"verb")>=0))
 	{
-		errorMap[L"LP correct: word 'after': ST says " + primarySTLPMatch + L"but LP says adverb"]++;
+		errorMap[L"LP correct: word 'after, besides': ST says " + primarySTLPMatch + L"but LP says adverb"]++;
 		return 0;
 	}
 	// Longman p85 subordinator 'as though' - subordinating conjunction
@@ -3663,6 +3669,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"LP correct '" + word + L"': adverb not noun"]++;
 			return 0;
 		}
+	}
+	if ((source.m[wordSourceIndex].flags&WordMatch::flagFirstLetterCapitalized) && !iswalpha(source.m[wordSourceIndex + 1].word->first[0]) && source.m[wordSourceIndex].queryWinnerForm(L"interjection") >= 0)
+	{
+		errorMap[L"LP correct '" + word + L"': interjection not "+ primarySTLPMatch]++;
+		return 0;
 	}
 	return -1;
 }
