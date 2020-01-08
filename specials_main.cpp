@@ -2711,6 +2711,8 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		}
 		if (source.m[wordSourceIndex].queryWinnerForm(L"interjection") >= 0 && (atStart || !iswalpha(source.m[wordSourceIndex - 1].word->first[0]) && !iswalpha(source.m[wordSourceIndex + 1].word->first[0])))
 			errorMap[L"LP correct: word 'no' is interjection not adverb when alone"]++;
+		if (source.m[wordSourceIndex].queryWinnerForm(L"determiner") >= 0 && source.m[wordSourceIndex+1].queryWinnerForm(L"noun") >= 0)
+			errorMap[L"LP correct: word 'no' is a determiner and not adverb when immediately before a noun"]++;
 		return 0;
 	}
 	// the is never anything but a determiner
