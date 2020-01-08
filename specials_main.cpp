@@ -2607,6 +2607,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			return 0;
 		}
 	}
+	if (primarySTLPMatch == L"modal_auxiliary" && (source.m[wordSourceIndex].queryWinnerForm(L"verbverb") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"does") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"does_negation") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"have_negation") >= 0))
+	{
+		errorMap[L"diff: ST says modal_auxiliary and LP says verbverb, does, does_negation, have_negation"]++;
+		return 0;
+	}
 	// 32. 'out' is an adverb particle (Longman 78,413), not a preposition (ST wrong)
 	if (word == L"out" && primarySTLPMatch == L"preposition or conjunction" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
 	{
@@ -2627,7 +2632,12 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"diff: word 'to-morrow': ST says noun, but this is always used as a time adverbial"]++;
 		return 0;
 	}
-
+	// (adjective) not found in winnerForms modal_auxiliary for word wouldhad
+	if (word == L"wouldhad" && source.m[wordSourceIndex].queryWinnerForm(L"modal_auxiliary") >= 0 && primarySTLPMatch == L"adjective")
+	{
+		errorMap[L"diff: word 'wouldhad': wouldhad special to LP"]++;
+		return 0;
+	}
 	// 34. possessive pronoun section - ST likes to think of possessive pronouns as verbs.  This will have to be investigated at some point by examining the collection of statistics from the original source material
 	if (word == L"mine" && source.m[wordSourceIndex].queryWinnerForm(L"possessive_pronoun") >= 0)
 	{
@@ -2842,9 +2852,12 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		{
 			partofspeech += L"**ASNOUN";
 		}
-		
 	}
-
+	if ((primarySTLPMatch == L"adjective") && (source.m[wordSourceIndex].queryWinnerForm(L"honorific_abbreviation") !=-1)) // source.m[wordSourceIndex].queryWinnerForm(L"honorific") !=-1 || 
+	{
+		errorMap[L"LP correct: ST says adjective when LP says honorific/honorific_abbreviation"]++;
+		return 0;
+	}
 	// 45. this is correct 100% of the time in the corpus (over 100 examples).  
 	if ((primarySTLPMatch == L"verb") && !source.m[wordSourceIndex].word->second.hasVerbForm())
 	{
