@@ -2700,6 +2700,19 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: word 'but': ST says " + primarySTLPMatch + L" LP says conjunction"]++;
 		return 0;
 	}
+	if (word == L"no" && primarySTLPMatch == L"adverb") 
+	{
+		if (source.m[wordSourceIndex].queryWinnerForm(L"no") >= 0)
+		{
+			if (wordSourceIndex > 1 && source.m[wordSourceIndex - 1].word->second.mainEntry->first == L"say")
+				errorMap[L"LP correct: word 'no' which is literally saying no"]++;
+			else
+				errorMap[L"diff: word 'no': ST says " + primarySTLPMatch + L" LP says 'no'"]++;
+		}
+		if (source.m[wordSourceIndex].queryWinnerForm(L"interjection") >= 0 && (atStart || !iswalpha(source.m[wordSourceIndex - 1].word->first[0]) && !iswalpha(source.m[wordSourceIndex + 1].word->first[0])))
+			errorMap[L"LP correct: word 'no' is interjection not adverb when alone"]++;
+		return 0;
+	}
 	// the is never anything but a determiner
 	if (word == L"the" && source.m[wordSourceIndex].queryWinnerForm(L"determiner") >= 0)
 	{
@@ -3003,17 +3016,18 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	bool wordBeforeIsIs = source.m[wordSourceIndex - 1].queryWinnerForm(isForm) != -1 || source.m[wordSourceIndex - 1].queryWinnerForm(isNegationForm) != -1 || source.m[wordSourceIndex - 1].queryWinnerForm(beForm) != -1 || source.m[wordSourceIndex - 1].word->first == L"being";
 	bool wordBeforeIsVerb = source.m[wordSourceIndex - 1].hasWinnerVerbForm();
-	bool word2BeforeIsIs = source.m[wordSourceIndex - 2].queryWinnerForm(isForm) != -1 || source.m[wordSourceIndex - 2].queryWinnerForm(isNegationForm) != -1 || source.m[wordSourceIndex - 2].queryWinnerForm(beForm) != -1 || source.m[wordSourceIndex - 2].word->first == L"being";
-	bool word2BeforeIsVerb = source.m[wordSourceIndex - 2].hasWinnerVerbForm();
+	bool word2BeforeIsIs = wordSourceIndex>1 && (source.m[wordSourceIndex - 2].queryWinnerForm(isForm) != -1 || source.m[wordSourceIndex - 2].queryWinnerForm(isNegationForm) != -1 || source.m[wordSourceIndex - 2].queryWinnerForm(beForm) != -1 || source.m[wordSourceIndex - 2].word->first == L"being");
+	bool word2BeforeIsVerb = wordSourceIndex>1 && source.m[wordSourceIndex - 2].hasWinnerVerbForm();
 	vector<wstring> determinerTypes = { L"determiner",L"demonstrative_determiner",L"possessive_determiner",L"interrogative_determiner", L"quantifier", L"numeral_cardinal" };
 	bool wordBeforeIsDeterminer = false;
 	for (wstring dt : determinerTypes)
 		if (wordBeforeIsDeterminer = source.m[wordSourceIndex - 1].queryWinnerForm(dt) >= 0)
 			break;
 	bool word2BeforeIsDeterminer = false;
-	for (wstring dt : determinerTypes)
-		if (word2BeforeIsDeterminer = source.m[wordSourceIndex - 2].queryWinnerForm(dt) >= 0)
-			break;
+	if (wordSourceIndex>1)
+		for (wstring dt : determinerTypes)
+			if (word2BeforeIsDeterminer = source.m[wordSourceIndex - 2].queryWinnerForm(dt) >= 0)
+				break;
 	bool wordAfterIsDeterminer = false;
 	for (wstring dt : determinerTypes)
 		if (wordAfterIsDeterminer = source.m[wordSourceIndex + 1].queryWinnerForm(dt) >= 0)
@@ -4466,7 +4480,7 @@ void wmain(int argc,wchar_t *argv[])
 		syntaxCheck(source, step);
 		break;
 	case 70:
-		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"",50);
+		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"well",50);
 		break;
 	case 71:
 		vector <wstring> words = { L"advertising",L"angling",L"bearing",L"blending",L"blessing",L"blowing",L"boating",L"booking",L"bottling",L"casting",L"clearing",
