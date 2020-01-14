@@ -355,7 +355,7 @@ public:
   static const int HIGHEST_COST_OF_INCORRECT_VERB_AFTER_VERB_USAGE=6;
   static const int COST_OF_INCORRECT_PROPER_NOUN=10;
   static const int COST_OF_INCORRECT_VERBAL_NOUN=10;
-  int inflectionFlags;
+  unsigned int  inflectionFlags;
   int flags;
 	int timeFlags;
   int index; // to DB

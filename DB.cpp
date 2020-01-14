@@ -162,7 +162,7 @@ bool Source::getNextUnprocessedSource(int begin, int end, enum Source::sourceTyp
 	_snwprintf(qt, QUERY_BUFFER_LEN, L"select id, path, encoding, start, repeatStart, etext, author, title from sources where id>=%d and sourceType=%d and processed IS NULL and processing IS NULL and start!='**SKIP**' and start!='**START NOT FOUND**'", begin, st);
 	if (end >= 0)
 		_snwprintf(qt + wcslen(qt), QUERY_BUFFER_LEN - wcslen(qt), L" and id<%d", end);
-	wcscat(qt + wcslen(qt), L" order by id ASC limit 1");
+	wcscat(qt + wcslen(qt), L" order by numWords desc limit 1");
 	MYSQL_ROW sqlrow = NULL;
 	if (myquery(&mysql, qt, result))
 	{
@@ -1285,10 +1285,11 @@ int WordClass::refreshWordsFromSource(MYSQL &mysql, int sourceId, int *words, in
 	vector <tIWMM> wordsToResolve;
   while ((sqlrow=mysql_fetch_row(result))!=NULL)
   {
-    int wordId=atoi(sqlrow[0]),inflectionFlags=atoi(sqlrow[2]),flags=atoi(sqlrow[3]),timeFlags=atoi(sqlrow[4]),mainEntryWordId=(sqlrow[5]==NULL) ? -1:atoi(sqlrow[5]),derivationRules=(sqlrow[6]==NULL) ? 0:atoi(sqlrow[6]);
+    int wordId=atoi(sqlrow[0]),flags=atoi(sqlrow[3]),timeFlags=atoi(sqlrow[4]),mainEntryWordId=(sqlrow[5]==NULL) ? -1:atoi(sqlrow[5]),derivationRules=(sqlrow[6]==NULL) ? 0:atoi(sqlrow[6]);
+		unsigned int inflectionFlags = atoi(sqlrow[2]);
     wstring sWord;
 		mTW(sqlrow[1],sWord);
-    if (words[wordId]==-1)
+		if (words[wordId]==-1)
 		{
 			if (!iswdigit(sWord[0]) && sWord[0])
 				lplog(LOG_ERROR,L"No forms for %s (wordId=%d) found!",sWord.c_str(),wordId);

@@ -188,8 +188,9 @@ unsigned int WordMatch::getShortAllFormAndInflectionLen(void)
 	return allLen;
 }
 
-unsigned int WordMatch::getShortFormInflectionEntry(int line,wchar_t *entry)
-{ LFS
+unsigned int WordMatch::getShortFormInflectionEntry(int line, wchar_t *entry)
+{
+	LFS
 	int inflectionFlags=word->second.inflectionFlags;
 	wstring temp;
 	if (flags&flagOnlyConsiderProperNounForms)

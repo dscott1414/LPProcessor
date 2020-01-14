@@ -513,7 +513,7 @@ int Source::createDatabase(wchar_t *server)
   // create words table
 	if (!myquery(&mysql, L"CREATE TABLE words (id int(11) unsigned NOT NULL auto_increment unique, "
 		L"word CHAR(32) CHARACTER SET utf8mb4 UNIQUE NOT NULL DEFAULT '',"
-		L"inflectionFlags INT NOT NULL default '0',"
+		L"inflectionFlags INT UNSIGNED NOT NULL default '0',"
 		L"flags INT NOT NULL default '0',"
 		L"timeFlags INT NOT NULL default '0'," // INDEX word_ind (word) dropped (increased index space by more than 1000 times)
 		L"mainEntryWordId INT UNSIGNED NULL, INDEX me_ind (mainEntryWordId), "

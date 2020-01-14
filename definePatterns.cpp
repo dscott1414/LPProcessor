@@ -548,6 +548,11 @@ int createBasicPatterns(void)
 											2,L"coordinator|and",L"&",0,1,1,
 											2,L"preposition|fro",L"preposition|by",0,1,1,0);
 
+	cPattern::create(L"__ADVERB", L"H",
+										1, L"noun|hand", 0, 1, 1,
+										2, L"preposition|in", L"preposition|over", 0, 1, 1,
+										1, L"noun|hand", 0, 1, 1,
+										0);
 	// this is used as an adverb, a preposition and a subordinator (included as a REL1 syntax)
 	cPattern::create(L"__AS_AS", L"", 
 											1, L"adverb|as*-1", 0, 1, 1,

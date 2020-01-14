@@ -2422,12 +2422,23 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			return 0;
 		}
 	}
+	if (source.m[wordSourceIndex].queryWinnerForm(L"does") >= 0)
+	{
+		errorMap[L"LP correct: word 'does': ST says " + primarySTLPMatch + L" LP says helper verb (does)"]++;
+		return 0;
+	}
 	// 16. So as matched in the beginning of a phrase is a linking adverbial (Longman) but is usually marked as a preposition by Stanford.
 	bool atStart = wordSourceIndex == startOfSentence || (wordSourceIndex == startOfSentence + 1 && WordClass::isDoubleQuote(source.m[wordSourceIndex - 1].word->first[0]));
-	if (word == L"so" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 &&
+	if ((word == L"so" || word==L"either") && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 &&
 		(primarySTLPMatch == L"preposition or conjunction" || primarySTLPMatch == L"conjunction") && atStart)
 	{
-		errorMap[L"LP correct: word 'so': ST says " + primarySTLPMatch + L" LP says adverb (Longman linking adverbial)"]++;
+		errorMap[L"LP correct: word 'so,either': ST says " + primarySTLPMatch + L" LP says adverb (Longman linking adverbial)"]++;
+		return 0;
+	}
+	if ((word == L"up"  || word == L"off") && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 &&
+		(primarySTLPMatch == L"preposition or conjunction" || primarySTLPMatch == L"conjunction") && atStart && source.m[wordSourceIndex+1].queryWinnerForm(L"preposition")>=0)
+	{
+		errorMap[L"LP correct: word 'up': ST says " + primarySTLPMatch + L" LP says adverb (Longman linking adverbial)"]++;
 		return 0;
 	}
 	if (word == L"before" && primarySTLPMatch == L"preposition or conjunction" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && atStart)
@@ -2700,6 +2711,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: word 'but': ST says " + primarySTLPMatch + L" LP says conjunction"]++;
 		return 0;
 	}
+	if (word == L"no" && primarySTLPMatch == L"determiner" && source.m[wordSourceIndex].queryWinnerForm(L"interjection") >= 0 && !iswalpha(source.m[wordSourceIndex + 1].word->first[0]))
+	{
+		errorMap[L"LP correct: word 'no': determiner before nothing is incorrect"]++;
+		return 0;
+	}
 	if (word == L"no" && primarySTLPMatch == L"adverb") 
 	{
 		if (source.m[wordSourceIndex].queryWinnerForm(L"no") >= 0)
@@ -2708,12 +2724,18 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				errorMap[L"LP correct: word 'no' which is literally saying no"]++;
 			else
 				errorMap[L"diff: word 'no': ST says " + primarySTLPMatch + L" LP says 'no'"]++;
+			return 0;
 		}
-		if (source.m[wordSourceIndex].queryWinnerForm(L"interjection") >= 0 && (atStart || !iswalpha(source.m[wordSourceIndex - 1].word->first[0]) && !iswalpha(source.m[wordSourceIndex + 1].word->first[0])))
+		if (source.m[wordSourceIndex].queryWinnerForm(L"interjection") >= 0 && (atStart || !iswalpha(source.m[wordSourceIndex - 1].word->first[0] || source.m[wordSourceIndex-1].queryForm(L"interjection") >= 0 || source.m[wordSourceIndex - 1].word->first==L"but") && !iswalpha(source.m[wordSourceIndex + 1].word->first[0])))
+		{
 			errorMap[L"LP correct: word 'no' is interjection not adverb when alone"]++;
-		if (source.m[wordSourceIndex].queryWinnerForm(L"determiner") >= 0 && source.m[wordSourceIndex+1].queryWinnerForm(L"noun") >= 0)
+			return 0;
+		}
+		if (source.m[wordSourceIndex].queryWinnerForm(L"determiner") >= 0 && source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") >= 0)
+		{
 			errorMap[L"LP correct: word 'no' is a determiner and not adverb when immediately before a noun"]++;
-		return 0;
+			return 0;
+		}
 	}
 	// the is never anything but a determiner
 	if (word == L"the" && source.m[wordSourceIndex].queryWinnerForm(L"determiner") >= 0)
@@ -3704,6 +3726,20 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct '" + word + L"': interjection not "+ primarySTLPMatch]++;
 		return 0;
 	}
+	if ((source.queryPattern(wordSourceIndex,L"__INTRO_N", L"9") != -1 || source.queryPattern(wordSourceIndex,L"_ADVERB", L"T") != -1) && 
+		  (source.m[wordSourceIndex].queryWinnerForm(L"dayUnit") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"timeUnit") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"uncertainDurationUnit") >= 0))
+	{
+		if (primarySTLPMatch ==L"adverb")
+			errorMap[L"diff: TIME (adverb)"]++;
+		else
+			errorMap[L"LP correct: adverb not " + primarySTLPMatch]++;
+		return 0;
+	}
+	if (word == L"on board")
+	{
+		errorMap[L"diff: on board (adverb)"]++;
+		return 0;
+	}
 	return -1;
 }
 
@@ -4482,7 +4518,7 @@ void wmain(int argc,wchar_t *argv[])
 		syntaxCheck(source, step);
 		break;
 	case 70:
-		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"well",50);
+		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"sure",50);
 		break;
 	case 71:
 		vector <wstring> words = { L"advertising",L"angling",L"bearing",L"blending",L"blessing",L"blowing",L"boating",L"booking",L"bottling",L"casting",L"clearing",
