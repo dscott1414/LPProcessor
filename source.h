@@ -3461,7 +3461,7 @@ bool &comparableName,
 	int getVerbTense(vector <tTagLocation> &tagSet,int verbTagIndex,bool &isId);
 	bool getIVerb(vector <tTagLocation> &tagSet,int &tag);
 	bool checkRelation(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,int parentPosition,int position,tIWMM verbWord,tIWMM objectWord,int relationType);
-	int calculateVerbAfterVerbUsage(int whereVerb,unsigned int nextWord);
+	int calculateVerbAfterVerbUsage(int whereVerb,unsigned int nextWord, bool adverbialObject);
 	int evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,int parentPosition,int position,vector <tTagLocation> &tagSet,bool infinitive,bool assessCost,int &voRelationsFound,int &traceSource,wstring purpose);
 	int properNounCheck(int &traceSource,int begin,int end,int whereDet);
 	bool updateWordUsageCostsDynamically;  // this is turned of by default.  Do NOT turn this back on unless a great deal of testing is done, as this will

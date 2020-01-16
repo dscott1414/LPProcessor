@@ -1793,9 +1793,9 @@ void normalize(unsigned char *usages,int start,int len)
 			usages[J]>>=1;
 }
 
-int Source::calculateVerbAfterVerbUsage(int whereVerb,unsigned int nextWord)
+int Source::calculateVerbAfterVerbUsage(int whereVerb,unsigned int nextWord,bool adverbialObject)
 { LFS
-	if (nextWord<m.size() && m[nextWord].forms.isSet(verbForm))
+	if (nextWord<m.size() && (m[nextWord].forms.isSet(verbForm) || adverbialObject))
 	{
 		// tried to adjust by the probability of the next word being a verb
 		// but this made parsing worse, even if cost was high (costs are not entirely accurate either)
@@ -1810,20 +1810,36 @@ int Source::calculateVerbAfterVerbUsage(int whereVerb,unsigned int nextWord)
 		//  add "verbal_auxiliary{V_AGREE}",0,1,1, // he dares eat this?
 		if ((im->forms.isSet(futureModalAuxiliaryForm) || im->forms.isSet(negationFutureModalAuxiliaryForm) ||
 			im->forms.isSet(modalAuxiliaryForm) || im->forms.isSet(negationModalAuxiliaryForm)) &&
-			(m[nextWord].word->second.inflectionFlags&(VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_PLURAL|VERB_PRESENT_SECOND_SINGULAR))!=0)
+			((m[nextWord].word->second.inflectionFlags&(VERB_PRESENT_THIRD_SINGULAR | VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_PLURAL | VERB_PRESENT_SECOND_SINGULAR)) != 0 || adverbialObject))
+		{
+			if (debugTrace.traceVerbObjects)
+				lplog(L"VerbAfterVerb: testing verb=%d:%s, nextWord=%d:%s adverbialObject=%s CASE 1 is true", whereVerb, m[whereVerb].word->first.c_str(),nextWord,m[nextWord].word->first.c_str(),(adverbialObject) ? L"true":L"false");
 			return cost;
-		if ((im->forms.isSet(isForm) || im->forms.isSet(isNegationForm) || im->word->first==L"be" || im->word->first==L"been") &&
-			(m[nextWord].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE)!=0)
+		}
+		if ((im->forms.isSet(isForm) || im->forms.isSet(isNegationForm) || im->word->first == L"be" || im->word->first == L"been") &&
+			((m[nextWord].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) != 0 || adverbialObject))
+		{
+			if (debugTrace.traceVerbObjects)
+				lplog(L"VerbAfterVerb: testing verb=%d:%s, nextWord=%d:%s adverbialObject=%s CASE 2 is true", whereVerb, m[whereVerb].word->first.c_str(), nextWord, m[nextWord].word->first.c_str(), (adverbialObject) ? L"true" : L"false");
 			return cost;
+		}
 		// 'having' is sufficiently rare that I will not include it to be conservative. 'having examined'
 		if ((((im->forms.isSet(haveForm) || im->forms.isSet(haveNegationForm))) || // && !(im->word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE)) ||
 			im->forms.isSet(isForm) || im->forms.isSet(isNegationForm) ||
 			im->word->first==L"be" || im->word->first==L"being") && // "been" included in isForm
 			(m[nextWord].word->second.inflectionFlags&VERB_PAST_PARTICIPLE)!=0)
+		{
+			if (debugTrace.traceVerbObjects)
+				lplog(L"VerbAfterVerb: testing verb=%d:%s, nextWord=%d:%s adverbialObject=%s CASE 3 is true", whereVerb, m[whereVerb].word->first.c_str(), nextWord, m[nextWord].word->first.c_str(), (adverbialObject) ? L"true" : L"false");
 			return cost;
+		}
 		if ((im->forms.isSet(doesForm) || im->forms.isSet(doesNegationForm)) && im->word->first!=L"doing" &&
 				(m[nextWord].word->second.inflectionFlags&VERB_PRESENT_FIRST_SINGULAR)!=0)
+		{
+			if (debugTrace.traceVerbObjects)
+				lplog(L"VerbAfterVerb: testing verb=%d:%s, nextWord=%d:%s adverbialObject=%s CASE 4 is true", whereVerb, m[whereVerb].word->first.c_str(), nextWord, m[nextWord].word->first.c_str(), (adverbialObject) ? L"true" : L"false");
 			return cost;
+		}
 	}
 	return 0;
 }
@@ -1850,7 +1866,7 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 		}
 		return 0;
 	}
-	if (nAgreeTag >= 0 && nAgreeTag < end - 1 && calculateVerbAfterVerbUsage(end - 1, end)) // if nAgreeTag<end-1, it is more likely a compound noun
+	if (nAgreeTag >= 0 && nAgreeTag < end - 1 && calculateVerbAfterVerbUsage(end - 1, end,false)) // if nAgreeTag<end-1, it is more likely a compound noun
 	{
 		if (debugTrace.traceDeterminer)
 		{
@@ -2369,9 +2385,12 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 			if ((element=m[nextWord].pma.queryMaximumLowestCostPattern(L"_PP",maxLen))!=-1 && m[nextWord+maxLen].forms.isSet(verbForm))
 				nextWord+=maxLen;
 		}
+		int nextAdvObjectTag = -1, advObjectTag = findTag(tagSet, L"ADVOBJECT", nextAdvObjectTag);
+		int nextAdjObjectTag = -1, adjObjectTag = findTag(tagSet, L"ADJOBJECT", nextAdjObjectTag);
 		// if the word after this verb is compatible (it should be included as part of the verb), yet is not included, 
 		// then punch up the cost.
-		verbAfterVerbCost=calculateVerbAfterVerbUsage(whereVerb,nextWord);
+		if ((verbAfterVerbCost = calculateVerbAfterVerbUsage(whereVerb, nextWord, numObjects == 0 && advObjectTag >= 0)) && patterns[pm->getPattern()]->name == L"__S1" && patterns[pm->getPattern()]->differentiator == L"7")
+			verbAfterVerbCost++;  // takes care of ADJECTIVE being lowered in cost in __S1[7]!
 		int vsp=tagSet[verbTagIndex].sourcePosition,pp=tagSet[verbTagIndex].parentPattern;
 		// make the following pattern costly:
 		// we have come across his tracks. / where 'have' is verbverb and 'come' is a present tense (_VERB_BARE_INF)
@@ -2396,6 +2415,12 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 		}
 		// increase parent pattern cost at verb
 		verbObjectCost=verbWord->second.usageCosts[tFI::VERB_HAS_0_OBJECTS+numObjects];
+		if (numObjects == 0 && verbWord->second.query(isForm) >= 0 && adjObjectTag >= 0)
+		{
+			if (debugTrace.traceVerbObjects)
+				lplog(L"          %d:decreased objectCost to 0 because of adjectiveObject and isForm.",tagSet[verbTagIndex].sourcePosition);
+			verbObjectCost = 0;
+		}
 		if (numObjects>0)
 		{
 			wstring w=m[tagSet[whereObjectTag].sourcePosition].word->first;
@@ -2419,6 +2444,16 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 					tagSet[verbTagIndex].sourcePosition,verbWord->first.c_str(),objectDistanceCost);
 				voRelationsFound=0;
 			}
+		}
+		// they were all alike
+		// if there is one object, and the object is 'all' and there is a match for __S1[7] (but this is not __S1[7]), and the word after the object could be an adjective, then increase cost greatly.
+		// this encourages 'all' to be an adverb and the next word to be an adjective.
+		if (numObjects == 1 && object1Word->first == L"all" && m.size() > tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len &&
+			m[tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len].word->second.query(L"adjective") >= 0)
+		{
+			verbObjectCost += 6;
+			if (debugTrace.traceVerbObjects)
+				lplog(L"          %d:verb %s is followed by all with an added adverb, which is unlikely (added cost 6).", vsp, verbWord->first.c_str());
 		}
 		// if one object, and object follows directly after verb, and object consists of adverb, adverb, acc, then add cost.
 		if (numObjects == 1 && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len < whereVerb + 5)
@@ -2531,8 +2566,8 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 		if (verbAfterVerbCost) // top cost
 		{
 			if (debugTrace.traceVerbObjects)
-				lplog(L"          %d:verb %s has verbAfterVerbCost=%d (nextWord=%d:%s). voRelationsFound cancelled.",
-				tagSet[verbTagIndex].sourcePosition,verbWord->first.c_str(),verbAfterVerbCost,nextWord,m[nextWord].word->first.c_str());
+				lplog(L"          %d:verb %s has %s=%d (nextWord=%d:%s). voRelationsFound cancelled.",
+				tagSet[verbTagIndex].sourcePosition,verbWord->first.c_str(),(numObjects == 0 && advObjectTag >= 0) ? L"adverbAfterIsVerbCost":L"verbAfterVerbCost",verbAfterVerbCost,nextWord,m[nextWord].word->first.c_str());
 			voRelationsFound=0; // GRADUATED RELATIONS
 		}
 		// determine whether this is a special "after quotes" case preferVerbRel
@@ -2896,7 +2931,7 @@ void Source::evaluateExplicitSubjectVerbAgreement(int position, patternMatchArra
 	int verbPosition = position + pm->len - 1;
 	if (debugTrace.traceDeterminer)
 		lplog(L"%d:Noun (%d,%d) is compound, testing verb=%d, nextWord=%d.", position, position, position + pm->len, verbPosition, nextWord);
-	int verbAfterVerbCost = calculateVerbAfterVerbUsage(verbPosition, nextWord);
+	int verbAfterVerbCost = calculateVerbAfterVerbUsage(verbPosition, nextWord,false);
 	if (!verbAfterVerbCost)
 	{
 		// if next word is an adverb, skip.
@@ -2906,7 +2941,7 @@ void Source::evaluateExplicitSubjectVerbAgreement(int position, patternMatchArra
 			nextWord += maxLen;
 			if (debugTrace.traceDeterminer)
 				lplog(L"%d:Noun (%d,%d) is compound, testing verb=%d, nextWord=%d.", position, position, position + pm->len, verbPosition, nextWord);
-			verbAfterVerbCost = calculateVerbAfterVerbUsage(verbPosition, nextWord);
+			verbAfterVerbCost = calculateVerbAfterVerbUsage(verbPosition, nextWord,false);
 		}
 	}
 	if (!verbAfterVerbCost)
@@ -2917,7 +2952,7 @@ void Source::evaluateExplicitSubjectVerbAgreement(int position, patternMatchArra
 			verbPosition--;
 			if (debugTrace.traceDeterminer)
 				lplog(L"%d:Noun (%d,%d) is compound, testing verb=%d, nextWord=%d.", position, position, position + pm->len, verbPosition, nextWord);
-			verbAfterVerbCost = calculateVerbAfterVerbUsage(verbPosition, nextWord);
+			verbAfterVerbCost = calculateVerbAfterVerbUsage(verbPosition, nextWord,false);
 		}
 	}
 	if (verbAfterVerbCost)

@@ -3072,9 +3072,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		// investigate later!
 		if (((wordBeforeIsVerb && wordBeforeIsIs) || (word2BeforeIsVerb && word2BeforeIsIs && source.m[wordSourceIndex - 1].queryWinnerForm(L"adverb") >= 0)) && wordAfterIsUnmodifiable)
 		{
-			//partofspeech += L"***ADVADJ8";
-			//errorMap[L"LP correct: ST says adverb but LP says adjective, IS following a verb and followed by a relativizer, preposition or coordinator"]++;
-			//return 0;
+			if (source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0)
+				errorMap[L"ST correct: ST says adverb but LP says adjective, IS following a verb and followed by an adjective or adverb"]++;
+			else
+			  errorMap[L"LP correct: ST says adverb but LP says adjective, IS following a verb and followed by a relativizer, preposition or coordinator"]++;
+			return 0;
 		}
 		// verb *ADJ* (relativizer OR preposition OR coordinator or ,)
 		if (((wordBeforeIsVerb && !wordBeforeIsIs)|| (word2BeforeIsVerb && !word2BeforeIsIs && source.m[wordSourceIndex - 1].queryWinnerForm(L"adverb") >= 0)) && wordAfterIsUnmodifiable)
@@ -3483,15 +3485,15 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"diff: ST says noun when LP says it is a verb but matching to a present participle and an __N1 pattern [acceptable]"]++;
 			return 0; // ST and LP agree
 		}
-		if (wordSourceIndex>=1 && source.m[wordSourceIndex - 1].word->first==L"to")
-		{
-			errorMap[L"LP correct: ST says noun when LP says it is a verb but before 'to'"]++;
-			return 0; 
-		}
+if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
+{
+	errorMap[L"LP correct: ST says noun when LP says it is a verb but before 'to'"]++;
+	return 0;
+}
 	}
 	// Rollo met the policeman *walking* towards him
 	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE &&
-		source.m[wordSourceIndex].pma.queryPattern(L"_VERBONGOING") != -1 && 
+		source.m[wordSourceIndex].pma.queryPattern(L"_VERBONGOING") != -1 &&
 		(source.queryPattern(wordSourceIndex, L"__NOUN", L"F") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"__NOUN", L"D") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"_PP", L"3") != -1))
 	{
 		errorMap[L"diff: ST says noun when LP says it is a verb but matching to a present participle and an _NOUN[F], _NOUN[D] or _PP[3] pattern [acceptable]"]++;
@@ -3515,7 +3517,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			}
 		}
 		*/
-		int maxLen = -1,pemaIndex;
+		int maxLen = -1, pemaIndex;
 		// It will be *surprising*
 		if ((pemaIndex = source.queryPattern(wordSourceIndex, L"_VERB", maxLen)) != -1)
 		{
@@ -3571,11 +3573,37 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		}
 		//partofspeech += L"***NAVING";
 	}
+	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0 &&
+		source.m[wordSourceIndex].queryForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST &&
+		source.queryPattern(wordSourceIndex, L"__S1", L"7") != -1)
+	{
+		partofspeech += L"***S1[7]VERBPAST_ADJECTIVE";
+		errorMap[L"ST correct: ST says verb and LP says adjective"]++;
+		return 0;
+	}
 	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0)
 	{
 		wstring nounCost, verbCost;
 		itos(source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(nounForm)], nounCost);
 		itos(source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(verbForm)], verbCost);
+		// 115 out of 116 correct
+		if (nounCost == L"0" && (verbCost == L"4" || verbCost == L"3" || verbCost == L"2") && partofspeech == L"VBN")
+		{
+			errorMap[L"LP correct: ST says verb VBN and LP says noun"]++;
+			return 0;
+		}
+		// all of 183 examples
+		if (nounCost == L"0" && (verbCost == L"4" || verbCost == L"3" || verbCost == L"2") && source.m[wordSourceIndex - 1].word->first == L"-") // not double dash!
+		{
+			if (word.length() > 3 && word.substr(word.length() - 3) == L"ing" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE &&
+				source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") >= 0)
+			{
+				errorMap[L"diff: ST says verb and LP says noun - after -, and using ing (really adjective)"]++;
+			}
+			else
+				errorMap[L"LP correct: ST says verb and LP says noun - after -"]++;
+			return 0;
+		}
 		if (word.length() > 2 && word.substr(word.length() - 2) == L"ed" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST)
 		{
 			partofspeech += L"***ISNOUN?PAST NOUN=" + nounCost + L"VERB=" + verbCost;
@@ -3738,6 +3766,17 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	if (word == L"on board")
 	{
 		errorMap[L"diff: on board (adverb)"]++;
+		return 0;
+	}
+	if ((word == L"to-day" || word == L"to-morrow") && primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
+	{
+		if (source.m[wordSourceIndex-1].queryWinnerForm(L"preposition")>=0)
+			errorMap[L"ST correct: 'to-day' or 'to-morrow' after preposition must be noun"]++;
+		else
+		{
+			errorMap[L"LP correct: 'to-day' or 'to-morrow' is in general an adverb of time"]++;
+			partofspeech += L"**TO-DAY";
+		}
 		return 0;
 	}
 	return -1;

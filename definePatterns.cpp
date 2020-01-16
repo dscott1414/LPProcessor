@@ -642,7 +642,7 @@ int createBasicPatterns(void)
 										0);
 	cPattern::create(L"_ADVERB{_FINAL}", L"L",
 										1, L"determiner|a", 0, 1, 1,
-										2, L"adverb|little*1", L"adverb|bit*1", 0, 1, 1, // make it preferable for another match 
+										4, L"adverb|little*1", L"adverb|bit*1", L"noun|mite", L"adjective|wee",0, 1, 1, // make it preferable for another match 
 										2, L"adverb", L"uncertainDurationUnit|while",0, 0, 1,
 										0);
 	cPattern::create(L"_ADVERB{_FINAL}", L"Y",
@@ -2373,14 +2373,17 @@ int createSecondaryPatterns2(void)
 	//                 1,L"__S1{_BLOCK:OBJECT:EVAL}",0,1,1,
 	//                 0);
 	// He is a little red.
+	/// do not change this # "7" without changing the calculateVerbAfterVerbUsage code.
 	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}",L"7",
 									 1,L"__C1__S1",0,1,1,
 								   4, L"_IS{VERB:vS:id}", L"_WOULDBE", L"_HAVEBEEN", L"_COULDHAVEBEEN", 0, 1, 1,
-     							 1,L"determiner|a",0,1,1,
-									 3,L"adverb|little",L"noun|mite",L"adjective|wee",0,1,1,
-									 1,L"_ADJECTIVE*-1",0,1,1,
+									 // covered by _ADVERB[L]
+     							 //1,L"determiner|a",0,1,1,
+									 //3,L"adverb|little",L"noun|mite",L"adjective|wee",0,1,1,
+									 1,L"_ADJECTIVE*-1",0,1,1,  // calculateVerbAfterVerbUsage specifically removes this -1 incentive by matching on this pattern!
 									 2,L"_PP",L"_REL1[*]",0,0,1,
-									 0);
+										1, L"__CLOSING__S1", 0, 0, 3,
+										0);
 	// Later, in her room, she sat and read.
 	// restrict this to things relating to "time"? (see [9])
 	// __INTRO_N was introduced to prevent meta patterns incorporating Q1 and VERBREL from 
