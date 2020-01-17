@@ -2191,10 +2191,10 @@ public:
 	int unaccountedForDisagreeSTLP = 0; // count of times word-POS disgreed between ST and LP
 	map <wstring, int> STFormDistribution; // total count for each form match in ST
 	map <wstring, int> LPFormDistribution; // total count for each form match in LP
-	map <wstring, int> LPErrorFormDistribution; // count for each form error match in LP if none agree
-	map <wstring, int> agreeFormDistribution; // total count for each form match agreed between ST and LP
-	map <wstring, int> disagreeFormDistribution; // total count for each form match disagreed between ST and LP
-	map <wstring, int> LPAlreadyAccountedFormDistribution; // total count for each form match already accounted for (already entered in the errorMap)
+	unordered_map <wstring, int> LPErrorFormDistribution; // count for each form error match in LP if none agree
+	unordered_map <wstring, int> agreeFormDistribution; // total count for each form match agreed between ST and LP
+	unordered_map <wstring, int> disagreeFormDistribution; // total count for each form match disagreed between ST and LP
+	unordered_map <wstring, int> LPAlreadyAccountedFormDistribution; // total count for each form match already accounted for (already entered in the errorMap)
 };
 map <wstring, FormDistribution> formDistribution;
 
@@ -2282,14 +2282,19 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			return 0;
 		}
 	}
-	static set <wstring> speakingVerbs = { L"said",L"cried",L"called",L"asked",L"answered",L"barked",L"sang",L"whistled",L"shouted",L"whispered",L"laughed",L"added",L"announced",L"continued",L"inquired",
-																		L"observed",L"questioned",
-		                                L"begged",L"exclaimed",L"replied",L"reminded",L"screamed",L"responded",L"repeated",L"yelled",L"grumbled",L"agreed",
-																		L"ejaculated",L"blazed",L"chaffed",L"chorused",L"commended",L"dimpled",L"ejaculated",L"flung",L"fumed",L"gazing",L"gibed",L"guffawed",L"hooted",L"implored",L"jeered",
-																		L"joked",L"puffed",L"quizzed",L"raved",L"retaliated",L"scowled",L"seconded",L"shot",L"shrilled",L"smirked",L"surmised",L"sympathized",L"turning",
-																		L"twitted",L"yawned",L"yawped",L"blurted",L"chimed",L"droned",L"grinned",L"groaned",L"grunted",L"mourned",L"propounded",L"sobbed",L"whined",L"expostulated",
-																		L"shrieked",L"stuttered",L"wailed",L"bellowed",L"drawled",L"mused",L"snarled",L"enquired",L"interposed",L"moaned",L"panted",L"stammered",L"exulted",L"roared",
-																		L"commanded",L"chuckled",L"retorted",L"snorted",L"sneered",L"growled",L"burst",L"muttered",L"cried",L"murmured",L"exclaimed",L"thought" };
+	static set <wstring> speakingVerbs = { 
+					L"added",L"agreed",L"announced",L"answered",L"approved",L"asked",L"aspirated",L"assented",L"barked",L"bawled",L"beamed",L"begged",
+					L"bellowed",L"beseeched",L"blazed",L"blurted",L"brayed",L"burst",L"called",L"chaffed",L"chimed",L"chorused",L"chuckled",L"commanded",
+					L"commended",L"commented",L"continued",L"cried",L"croaked",L"declaimed",L"demanded",L"dimpled",L"drawled",L"droned",L"ejaculated",L"enquired",
+					L"exclaimed",L"expostulated",L"exulted",L"fell",L"flung",L"fumed",L"gasped",L"gazing",L"gibed",L"grinned",L"groaned",L"growled",
+					L"grumbled",L"grunted",L"guffawed",L"hooted",L"howled",L"implored",L"inquired",L"interjected",L"interposed",L"interrupted",L"jeered",L"joked",
+					L"jubilated",L"laughed",L"leered",L"moaned",L"mourned",L"murmured",L"mused",L"muttered",L"observed",L"panted",L"persisted",L"promised",
+					L"proposed",L"propounded",L"protested",L"puffed",L"pursued",L"questioned",L"quizzed",L"raved",L"reminded",L"remonstrated",L"repeated",L"replied",
+					L"responded",L"retaliated",L"retorted",L"roared",L"said",L"sang",L"scoffed",L"scorned",L"scowled",L"screamed",L"seconded",L"secure",
+					L"shot",L"shouted",L"shrieked",L"shrilled",L"smirked",L"snapped",L"snarled",L"sneered",L"snorted",L"sobbed",L"soliloquized",L"spluttered",
+					L"stammered",L"stuttered",L"suggested",L"surmised",L"sympathized",L"thought",L"turning",L"twitted",L"used",L"ventured",L"wailed",L"wheezed",
+					L"whined",L"whispered",L"whistled",L"yawned",L"yawped",L"yelled"
+	};
 	// Stanford POS NN (noun) not found in winnerForms determiner for word the 0002542:[” asked *the* mother . ]
 	if (wordSourceIndex > 1 && primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"determiner") >= 0 && source.m[wordSourceIndex - 2].queryForm(quoteForm) >= 0 &&
 			find(speakingVerbs.begin(), speakingVerbs.end(), source.m[wordSourceIndex - 1].word->first) != speakingVerbs.end())
@@ -3768,14 +3773,15 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"diff: on board (adverb)"]++;
 		return 0;
 	}
-	if ((word == L"to-day" || word == L"to-morrow") && primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
+	if ((word == L"to-day" || word == L"to-morrow") && (primarySTLPMatch == L"noun" || primarySTLPMatch == L"adjective") && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
 	{
-		if (source.m[wordSourceIndex-1].queryWinnerForm(L"preposition")>=0)
-			errorMap[L"ST correct: 'to-day' or 'to-morrow' after preposition must be noun"]++;
+		if ((source.m[wordSourceIndex - 1].queryWinnerForm(L"preposition") >= 0 && primarySTLPMatch == L"noun"))
+			errorMap[L"ST correct: 'to-day' or 'to-morrow' after preposition must be a noun"]++;
+		else if ((source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") >= 0 && primarySTLPMatch == L"adjective"))
+			errorMap[L"ST correct: 'to-day' or 'to-morrow' before noun must be an adjective"]++;
 		else
 		{
 			errorMap[L"LP correct: 'to-day' or 'to-morrow' is in general an adverb of time"]++;
-			partofspeech += L"**TO-DAY";
 		}
 		return 0;
 	}
@@ -3815,16 +3821,20 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 					errorMap[L"ST Punctuation assignment"]++;
 					return 0;
 				}
-				FormDistribution fd;
+				
 				wstring primarySTLPMatch = lpPOS->second[0];
 				if (partofspeech == L"IN")
 					primarySTLPMatch += L" or " + lpPOS->second[1];
 				auto fdi = formDistribution.find(word);
-				if (fdi != formDistribution.end())
-					fd = fdi->second;
+				if (fdi == formDistribution.end())
+				{
+					FormDistribution fd;
+					formDistribution[word] = fd;
+					fdi = formDistribution.find(word);
+				}
 				for (auto pos : lpPOS->second)
 				{
-					fd.STFormDistribution[pos]++;
+					fdi->second.STFormDistribution[pos]++;
 					auto imai = maxentAssociationMap.find(pos);
 					if (imai != maxentAssociationMap.end())
 					{
@@ -3836,33 +3846,31 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 				bool agree = false;
 				for (int wf : winnerForms)
 				{
-					fd.LPFormDistribution[Forms[wf]->name]++;
+					fdi->second.LPFormDistribution[Forms[wf]->name]++;
 					if (posList.find(Forms[wf]->name) != posList.end())
 					{
-						fd.agreeFormDistribution[Forms[wf]->name]++;
+						fdi->second.agreeFormDistribution[Forms[wf]->name]++;
 						agree = true;
 					}
 					else
 					{
-						fd.disagreeFormDistribution[Forms[wf]->name]++;
+						fdi->second.disagreeFormDistribution[Forms[wf]->name]++;
 					}
 				}
 				if (agree)
-					fd.agreeSTLP++;
+					fdi->second.agreeSTLP++;
 				else
-					fd.disagreeSTLP++;
+					fdi->second.disagreeSTLP++;
 				if (agree)
 				{
-					formDistribution[word] = fd;
 					return 0;
 				}
 				if (attributeErrors(primarySTLPMatch, source, wordSourceIndex, errorMap, partofspeech, startOfSentence) == 0)
 				{
 					for (int wf : winnerForms)
 					{
-						fd.LPAlreadyAccountedFormDistribution[Forms[wf]->name]++;
+						fdi->second.LPAlreadyAccountedFormDistribution[Forms[wf]->name]++;
 					}
-					formDistribution[word] = fd;
 					return 0;
 				}
 				//////////////////////////////
@@ -3890,10 +3898,10 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 				lplog(LOG_ERROR, L"Stanford POS %s%s (%s) not found in winnerForms %s for word%s %s %07d:[%s]", partofspeech.c_str(), (sentence.length()<=maxLength) ? L"SHORT":L"",primarySTLPMatch.c_str(), winnerFormsString.c_str(), (originalWord.find(L' ')==wstring::npos) ? L"":L"[space]", originalWord.c_str(), wordSourceIndex, sentence.c_str());
 				for (int wf : winnerForms)
 				{
-					fd.LPErrorFormDistribution[Forms[wf]->name]++;
+					fdi->second.LPErrorFormDistribution[Forms[wf]->name]++;
 				}
-				fd.unaccountedForDisagreeSTLP++;
-				formDistribution[word] = fd;
+				fdi->second.unaccountedForDisagreeSTLP++;
+				//formDistribution[word] = fd;
 				if (originalWord.find(L' ') != wstring::npos &&
 					word != L"no one" && word != L"every one" && word != L"as if" && word != L"for ever" && word != L"next to" && word != L"good by" && word != L"good bye" && word != L"a trifle" && word!=L"a" && word!=L"i")
 				{

@@ -2179,6 +2179,7 @@ int createSecondaryPatterns2(void)
 									 //1,L"_PP",0,0,1,         // from C2__S1 - __PP after noun is absorbed into the noun itself through NOUN 9
 									 // if the following is made optional this pattern can match _NOUN[9] with an embedded _NOUN[2]
 									 3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,1,1, // there must only be one adjective and it must be last (not mixed in) see *
+									 1,L"__ADJECTIVE",0,0,1,
 									 0);
 	// 'the man spending money' was their target.
 	// pattern is not grouped with its other root patterns

@@ -2370,7 +2370,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 			voRelationsFound++;
 		int verbObjectCost=0,verbAfterVerbCost=0,objectDistanceCost=0,prepForm=-1;
 		unsigned int whereVerb=tagSet[verbTagIndex].sourcePosition+tagSet[verbTagIndex].len-1,nextWord=whereVerb+1;
-		if (nextWord+1<m.size() && 
+		if (nextWord+1<m.size() && m[nextWord].word->first != L"no" && // There was no thought to which rocket to launch. / thought is a past verb, and no is an adverb of cost < 4.  But still should not be considered a verbafterverb.
 				(m[nextWord].word->first==L"not" || m[nextWord].word->first==L"never" || // is it a not or never?
 				 (m[nextWord].forms.isSet(adverbForm) && m[nextWord].word->second.usageCosts[m[nextWord].queryForm(adverbForm)]<4 &&  // is it possibly an adverb?
 					(!m[nextWord].forms.isSet(verbForm) ||                                 // and definitely not a verb (don't skip it unnecessarily)
@@ -2499,10 +2499,10 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 		// here or there may be considered a prepositional phrase
 		// I am swimming here. (I am swimming in the pool) / I am going there now. (I am going to the store now)
 		if (numObjects == 1 && verbObjectCost > verbWord->second.usageCosts[tFI::VERB_HAS_0_OBJECTS] && tagSet[whereObjectTag].len == 1 &&
-			(m[tagSet[whereObjectTag].sourcePosition].word->first == L"there" || m[tagSet[whereObjectTag].sourcePosition].word->first == L"here"))
+			(m[tagSet[whereObjectTag].sourcePosition].word->first == L"there" || m[tagSet[whereObjectTag].sourcePosition].word->first == L"here" || m[tagSet[whereObjectTag].sourcePosition].word->first == L"home"))
 		{
 			if (debugTrace.traceVerbObjects)
-				lplog(L"          %d:decreased verbObjectCost=%d to %d for verb %s because object is 'here' or 'there' (standing in for a PP which may not be considered an object)",
+				lplog(L"          %d:decreased verbObjectCost=%d to %d for verb %s because object is 'here' or 'there' or 'home' (standing in for a PP which may not be considered an object)",
 					tagSet[verbTagIndex].sourcePosition, verbObjectCost, verbWord->second.usageCosts[tFI::VERB_HAS_0_OBJECTS], verbWord->first.c_str(), m[whereVerb + 1].word->first.c_str());
 			verbObjectCost = verbWord->second.usageCosts[tFI::VERB_HAS_0_OBJECTS];
 		}
