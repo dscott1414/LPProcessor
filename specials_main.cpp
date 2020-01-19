@@ -1417,6 +1417,31 @@ int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, w
 					lastSentenceIndexPrinted = source.sentenceStarts[ss - 1];
 				}
 			}
+			else if (!isPattern && patternOrWordName == L"" && (im.flags&WordMatch::flagNotMatched) != 0)
+			{
+				wstring sentence, originalIWord;
+				if (lastSentenceIndexPrinted != source.sentenceStarts[ss - 1])
+				{
+					bool inNoMatch = false;
+					for (int I = source.sentenceStarts[ss - 1]; I < source.sentenceStarts[ss]; I++)
+					{
+						source.getOriginalWord(I, originalIWord, false, false);
+						if (I == wordIndex)
+						{
+							originalIWord = L"*" + originalIWord;
+							inNoMatch = true;
+						}
+						if (inNoMatch && (I + 1 >= source.sentenceStarts[ss] || (source.m[I + 1].flags&WordMatch::flagNotMatched) == 0))
+						{
+							originalIWord += L"*";
+							inNoMatch = false;
+						}
+						sentence += originalIWord + L" ";
+					}
+					lplog(LOG_ERROR, L"%s", sentence.c_str());
+					lastSentenceIndexPrinted = source.sentenceStarts[ss - 1];
+				}
+			}
 			wordIndex++;
 			while (ss < source.sentenceStarts.size() && source.sentenceStarts[ss] < wordIndex+1)
 				ss++;
@@ -3785,6 +3810,11 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		}
 		return 0;
 	}
+	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && 
+		  (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST && source.queryPattern(wordSourceIndex, L"__S1") != -1)
+	{
+		partofspeech += L"**ISVERBNOTADJECTIVE?";
+	}
 	return -1;
 }
 
@@ -4553,9 +4583,10 @@ void wmain(int argc,wchar_t *argv[])
 		break;
 	case 21:
 		//patternOrWordAnalysis(source, step, L"__PP", L"A",true);
-		// patternAnalysis(source, step, L"_MS1", L"2"); // TODO: testing weight change on _S1.
+		//patternOrWordAnalysis(source, step, L"_MS1", L"2",true); // TODO: testing weight change on _S1.
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
-		patternOrWordAnalysis(source, step, L"_VERB_BARE_INF", L"*", true);
+		//patternOrWordAnalysis(source, step, L"_VERB_BARE_INF", L"*", true);
+		patternOrWordAnalysis(source, step, L"", L"", false); // TODO: testing weight change on _S1.
 		break;
 	case 60:
 		//stanfordCheckMP(source, step, true,8);
@@ -4568,31 +4599,7 @@ void wmain(int argc,wchar_t *argv[])
 		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"sure",50);
 		break;
 	case 71:
-		vector <wstring> words = { L"advertising",L"angling",L"bearing",L"blending",L"blessing",L"blowing",L"boating",L"booking",L"bottling",L"casting",L"clearing",
-L"colouring",L"craving",L"drinking",L"etching",L"fastening",L"felling",L"fencing",L"finding",L"fixing",L"flooding",L"furnishing",
-L"gilding",L"grading",L"grafting",L"grating",L"greeting",L"kindling",L"labouring",L"lending",L"lessening",L"leveling",L"logging",
-L"manufacturing",L"masking",L"meddling",L"mixing",L"molting",L"motoring",L"mourning",L"ordering",L"paling",L"parking",L"peeling",
-L"pumping",L"quickening",L"railing",L"riding",L"rigging",L"rising",L"rumbling",L"running",L"scrubbing",L"seating",L"setting",
-L"sewing",L"sheeting",L"shelling",L"sighting",L"signing",L"slackening",L"stabling",L"thickening",L"undertaking",L"undoing",L"upcurling",
-L"walking",L"watering",L"weaving",L"yellowing",L"baking",L"bathing",L"bidding",L"bullying",L"curling",L"eating",L"farming",
-L"flying",L"gambling",L"gnawing",L"healing",L"knitting",L"liking",L"mountaineering",L"painting",L"printing",L"rendering",L"scattering",
-L"scolding",L"tinkling",L"understanding",L"backing",L"blotting",L"building",L"fishing",L"handling",L"packing",L"planning",L"planting",
-L"seeming",L"shrinking",L"spending",L"trapping",L"tuning",L"whistling",L"awakening",L"dawning",L"dressing",L"fluttering",L"grinding",
-L"lodging",L"meaning",L"pounding",L"racking",L"warning",L"posting",L"washing",L"breathing",L"drawing",L"opening",L"crying",
-L"racing",L"shooting",L"swimming",L"hunting",L"learning",L"lighting",L"whispering",L"wishing",L"beginning",L"writing",L"boarding",
-L"reading",L"feeling",L"questioning",L"showing",L"knowing",L"being",L"meeting",L"thinking",L"living",L"saying",
-L"advertising",L"angling",L"attending",L"awakening",L"backing",L"baking",L"bathing",L"bearing",L"beginning",L"being",L"bidding",L"blending",
-L"blessing",L"blotting",L"boarding",L"boating",L"booking",L"bottling",L"breathing",L"building",L"bullying",L"casting",L"clearing",L"colouring",
-L"craving",L"crying",L"curling",L"dawning",L"drawing",L"dressing",L"drinking",L"dwelling",L"eating",L"etching",L"farming",L"fastening",
-L"feeling",L"fishing",L"fixing",L"flooding",L"fluttering",L"furnishing",L"gambling",L"gilding",L"gnawing",L"grading",L"grafting",L"grating",
-L"greeting",L"grinding",L"handling",L"healing",L"hunting",L"kindling",L"knitting",L"knowing",L"labouring",L"learning",L"lending",L"lessening",
-L"leveling",L"lighting",L"liking",L"living",L"lodging",L"logging",L"manufacturing",L"masking",L"meaning",L"meddling",L"meeting",L"mixing",
-L"molting",L"motoring",L"mountaineering",L"mourning",L"opening",L"ordering",L"packing",L"painting",L"paling",L"parking",L"peeling",L"piping",
-L"planning",L"planting",L"posting",L"pounding",L"printing",L"pumping",L"questioning",L"quickening",L"racing",L"racking",L"railing",L"reading",
-L"rendering",L"riding",L"rigging",L"rumbling",L"running",L"saying",L"scattering",L"scolding",L"scrubbing",L"seating",L"seeming",L"setting",
-L"sewing",L"sheeting",L"shelling",L"shooting",L"showing",L"shrinking",L"sighting",L"signing",L"slackening",L"spending",L"stabling",L"swimming",
-L"thickening",L"thinking",L"tinkling",L"trapping",L"tuning",L"understanding",L"undertaking",L"undoing",L"upcurling",L"walking",L"warning",L"washing",
-L"watering",L"weaving",L"whispering",L"whistling",L"wishing",L"writing",L"yachting",L"yellowing" };
+		vector <wstring> words = { L"advertising",L"wishing",L"writing",L"yachting",L"yellowing" };
 		if (!myquery(&source.mysql, L"LOCK TABLES words WRITE"))
 			return;
 		for (wstring sWord : words)

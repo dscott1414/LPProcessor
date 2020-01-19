@@ -3176,7 +3176,7 @@ private:
 
 	void logOptimizedString(wchar_t *line,unsigned int lineBufferLen,unsigned int &linepos);
 	//unsigned int getPMAMinCost(unsigned int position,int parentPattern,int rootPattern,int childend);
-	int getMinCost(patternElementMatchArray::tPatternElementMatch *pem);
+	int getMinCost(patternElementMatchArray::tPatternElementMatch *pem, int &minPEMAOffset);
 
 	// speaker resolution   - resolving quotes, speakers and pronouns
 	vector <cObject> objects; // each object has only one position within the text
@@ -3321,7 +3321,7 @@ int wordOrderSensitiveModifier,
 	bool matchAlias(int where,int object, int aliasObject);
 
 	// agreement
-	unsigned int getAllLocations(unsigned int position,int parentPattern,int rootp,int childLen,int parentLen,vector <unsigned int> &allLocations, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
+	unsigned int getAllLocations(unsigned int position,int parentPattern,int rootp,int childLen,int parentLen,vector <unsigned int> &allLocations, int recursionLevel,unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
 	int markChildren(patternElementMatchArray::tPatternElementMatch *pem,int position,int recursionLevel,int allRootsLowestCost, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
 	bool findLowCostTag(vector<tTagLocation> &tagSet,int &cost,wchar_t *tagName,tTagLocation &lowestCostTag,int parentCost,int &nextTag);
 	int evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,unsigned int parentPosition,unsigned int position,vector<tTagLocation> tagSet,int &traceSource);

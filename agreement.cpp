@@ -104,7 +104,7 @@ void Source::setRole(int position,patternElementMatchArray::tPatternElementMatch
 // 1. Are the lowest cost patterns
 // 2. have the same rootPattern
 // 4. have the same end as childend
-unsigned int Source::getAllLocations(unsigned int position,int parentPattern,int rootPattern,int childLen,int parentLen,vector <unsigned int> &allLocations, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions)
+unsigned int Source::getAllLocations(unsigned int position,int parentPattern,int rootPattern,int childLen,int parentLen,vector <unsigned int> &allLocations, int recursionLevel, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions)
 { LFS
 	int minCost=MAX_COST;
 	patternMatchArray::tPatternMatch *pm;
@@ -120,7 +120,16 @@ unsigned int Source::getAllLocations(unsigned int position,int parentPattern,int
 				vector < vector <tTagLocation> > tagSets;
 				assessCost(NULL,pm,-1,position,tagSets, tertiaryPEMAPositions,L"get all locations");
 			}
-			minCost=min(minCost,pm->getCost());
+			if (minCost > pm->getCost())
+			{
+				if (debugTrace.tracePatternElimination)
+				{
+					lplog(L"%*sMC getAllLocations position %d:pattern %s[%s](%d,%d) (cost %d < previous lowest cost %d)",
+						recursionLevel * 2, " ", position, p->name.c_str(), p->differentiator.c_str(), position, position+pm->len,
+						pm->getCost(), minCost);
+				}
+				minCost = pm->getCost();
+			}
 			allLocations.push_back((int)(pm-m[position].pma.content));
 		}
 	}
@@ -132,12 +141,15 @@ unsigned int Source::getAllLocations(unsigned int position,int parentPattern,int
 //   agreement costs are only attributed to each individual disagreeing element within the pattern,
 //   not necessarily percolating up to the top pattern on each position (although it will always percolate up to the
 //     FIRST position of each pattern that only contains disagreeing positions)
-int Source::getMinCost(patternElementMatchArray::tPatternElementMatch *pem)
+int Source::getMinCost(patternElementMatchArray::tPatternElementMatch *pem, int &minPEMAOffset)
 { LFS
 	int minCost=MAX_COST,pattern=pem->getPattern(),relativeEnd=pem->end,relativeBegin=pem->begin;
 	for (; pem && pem->getPattern()==pattern && pem->end==relativeEnd; pem=(pem->nextByPatternEnd<0) ? NULL : pema.begin()+pem->nextByPatternEnd)
-		if (pem->begin==relativeBegin)
-			minCost=min(minCost,pem->getOCost());
+		if (pem->begin == relativeBegin && minCost > pem->getOCost())
+		{
+			minCost = pem->getOCost();
+			minPEMAOffset = (int) (pem - pema.begin());
+		}
 	return minCost;
 }
 
@@ -205,14 +217,24 @@ int Source::getMinCost(patternElementMatchArray::tPatternElementMatch *pem)
 // __S1[1](71,76)*0 __ALLOBJECTS[*](76)   __S1[1](71,76)*0 __C2__S1[*](76)       CORRECT - agrees with S1 having a childEnd of 73
 // __S1[1](71,76)*0 __C2__S1[*](76)
 // mark a pattern with a begin and end, begin at source position position.
-int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem,int position,int recursionLevel,int allRootsLowestCost, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions)
-{ LFS
-	// find first position with pattern and relativeEnd
-	int pattern=pem->getPattern(),begin=pem->begin+position,end=pem->end+position,relativeEnd=pem->end,relativeBegin=pem->begin;
-	int   numChildren=0,minCost=(allRootsLowestCost==MIN_INT) ? getMinCost(pem) : allRootsLowestCost;
+int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem, int position, int recursionLevel, int allRootsLowestCost, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions)
+{
+	LFS
+		// find first position with pattern and relativeEnd
+	int pattern = pem->getPattern(), begin = pem->begin + position, end = pem->end + position, relativeEnd = pem->end, relativeBegin = pem->begin,minPEMAOffset = -1;
+	int numChildren=0,minCost=(allRootsLowestCost==MIN_INT) ? getMinCost(pem,minPEMAOffset) : allRootsLowestCost;
 	if (debugTrace.tracePatternElimination)
-		lplog(L"%*s%d:MC pattern %s[%s](%d,%d) element #%d minCost=%d-----------------",recursionLevel*2," ",
-		position,patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),begin,end,pem->getElement(),minCost);
+	{
+		wstring minPEMAOffsetStr;
+		if (minPEMAOffset != -1)
+		{
+			unsigned int minPattern = pema[minPEMAOffset].getPattern();
+			wstring tmp1, tmp2;
+			minPEMAOffsetStr = L" from " + patterns[minPattern]->name + L"[" + patterns[minPattern]->differentiator + L"](" + itos((unsigned int)pema[minPEMAOffset].begin + position, tmp1) + L"," + itos(pema[minPEMAOffset].end + position, tmp2) + L")";
+		}
+		lplog(L"%*s%d:MC pattern %s[%s](%d,%d) element #%d minCost=%d%s-----------------", recursionLevel * 2, " ",
+			position, patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), begin, end, pem->getElement(), minCost, minPEMAOffsetStr.c_str());
+	}
 	for (; pem && pem->getPattern()==pattern && pem->end==relativeEnd && !exitNow; pem=(pem->nextByPatternEnd<0) ? NULL : pema.begin()+pem->nextByPatternEnd)
 		if (pem->begin==relativeBegin)
 		{ 
@@ -236,14 +258,21 @@ int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem,int
 			}
 			if (debugTrace.tracePatternElimination)
 			{
+				// TEMP DEBUG
+				if ((pem - pema.begin()) == 434)
+				{
+					logCache = 0;
+					printf("TEMP DEBUG");
+				}
 				if (pem->isChildPattern())
-					lplog(L"%*sMC position %d:pattern %s[%s](%d,%d)*%d child %s[%s](%d,%d) PEMA set winner.",recursionLevel*2," ",position,
+					lplog(L"%*sMC position %d:pattern %s[%s](%d,%d)*%d child %s[%s](%d,%d) PEMA[%d] set winner.",recursionLevel*2," ",position,
 					patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),begin,end,minCost,
-					patterns[pem->getChildPattern()]->name.c_str(),patterns[pem->getChildPattern()]->differentiator.c_str(),position,position+pem->getChildLen());
+					patterns[pem->getChildPattern()]->name.c_str(),patterns[pem->getChildPattern()]->differentiator.c_str(),position,position+pem->getChildLen(),
+					pem - pema.begin());
 				else
-					lplog(L"%*sMC position %d:pattern %s[%s](%d,%d)*%d child %d PEMA set winner.",recursionLevel*2," ",position,
+					lplog(L"%*sMC position %d:pattern %s[%s](%d,%d)*%d child %d PEMA[%d] set winner.",recursionLevel*2," ",position,
 					patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),begin,end,minCost,
-					pem->getChildForm());
+					pem->getChildForm(),pem-pema.begin());
 			}
 			pem->setWinner();
 			setRole(position,pem);
@@ -255,7 +284,7 @@ int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem,int
 				vector <unsigned int> allLocations;
 				// this routine gets all the patterns that are actually matched by the root pattern.
 				// this also returns locations in pma so that each pattern is also accompanied by a cost.
-				int lowestCost=getAllLocations(position,pattern,rootp,childLen,end-begin,allLocations, tertiaryPEMAPositions);
+				int lowestCost=getAllLocations(position,pattern,rootp,childLen,end-begin,allLocations, recursionLevel, tertiaryPEMAPositions);
 				// if (lowestCost>minCost) // this sometimes happens because of negative costs in some patterns
 				// 	 lplog(L"STOP! lowestCost %ld>minCost %d.",lowestCost,minCost);
 				for (unsigned int lc=0; lc<allLocations.size(); lc++)
@@ -289,8 +318,28 @@ int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem,int
 				m[position].setWinner(pem->getChildForm());
 			}
 			int nextPatternElement=pem->nextPatternElement;
-			if (nextPatternElement>=0)
-				numChildren+=markChildren(pema.begin()+nextPatternElement,begin-pema[nextPatternElement].begin,recursionLevel,allRootsLowestCost, tertiaryPEMAPositions);
+			if (nextPatternElement >= 0)
+			{
+				minPEMAOffset = -1;
+				int nextPEMALowestCost = getMinCost(pema.begin() + nextPatternElement, minPEMAOffset);
+				if (debugTrace.tracePatternElimination)
+				{
+					int nextPEMAPosition = begin - pema[nextPatternElement].begin;
+					int nextPEMAPattern = pema[nextPatternElement].getPattern(), nextPEMABegin = pema[nextPatternElement].begin + nextPEMAPosition, nextPEMAEnd = pema[nextPatternElement].end + nextPEMAPosition;
+					wstring minPEMAOffsetStr;
+					if (minPEMAOffset != -1)
+					{
+						unsigned int minPattern = pema[minPEMAOffset].getPattern();
+						wstring tmp1, tmp2;
+						minPEMAOffsetStr = L" from " + patterns[minPattern]->name + L"[" + patterns[minPattern]->differentiator + L"](" + itos(pema[minPEMAOffset].begin + nextPEMAPosition, tmp1) + L"," + itos(pema[minPEMAOffset].end + nextPEMAPosition, tmp2) + L")";
+					}
+					lplog(L"%*s%d:MC pattern %s[%s](%d,%d) element #%d minCost=%d%s-----------------", recursionLevel * 2, " ",
+						nextPEMAPosition, patterns[nextPEMAPattern]->name.c_str(), patterns[nextPEMAPattern]->differentiator.c_str(), nextPEMABegin, nextPEMAEnd, pema[nextPatternElement].getElement(), nextPEMALowestCost, minPEMAOffsetStr.c_str());
+					if (nextPEMALowestCost != allRootsLowestCost)
+						lplog(L"%*s%d:MC lowest cost difference (nextPEMALowestCost %d != allRootsLowestCost %d)!", recursionLevel * 2, " ", nextPEMAPosition, nextPEMALowestCost , allRootsLowestCost);
+				}
+				numChildren += markChildren(pema.begin() + nextPatternElement, begin - pema[nextPatternElement].begin, recursionLevel, nextPEMALowestCost, tertiaryPEMAPositions);
+			}
 		}
 		return numChildren;
 }

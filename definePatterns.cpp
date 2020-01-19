@@ -660,9 +660,13 @@ int createBasicPatterns(void)
 											1,L"preposition|by",0,1,1,
 											4,L"adverb|little",L"noun|inch",L"noun|step",L"noun|bit",0,1,1,0);
 	cPattern::create(L"_ADVERB{_FINAL}", L"U",
-											8, L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"__AS_AS",L"quantifier|all*-1",0, 1, 1,
+											8, L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"__AS_AS", L"quantifier|all*-1", 0, 1, 1,
 											1, L"__S1*1{EVAL:_BLOCK}", 0, 1, 1, 0);
 
+	cPattern::create(L"_ADVERB{_FINAL}", L"V",
+											1, L"determiner|the", 0, 1, 1,
+											2, L"noun|moment",L"noun|instant",0,1,1,
+											1, L"__S1*1{EVAL:_BLOCK}", 0, 1, 1, 0);
 
 	defineNames();
 	createMetaNameEquivalencePatterns();
@@ -2328,7 +2332,9 @@ int createSecondaryPatterns2(void)
 									 1,L"__C1__S1",0,1,1,
 									 4,L"_IS{VERB:vS:id}", L"_WOULDBE", L"_HAVEBEEN", L"_COULDHAVEBEEN",0,1,1,
 										// removed OBJECT from _NOUN as this will cause IS to have two objects (including the one from _S1) which is wrong and will cause elimination of this pattern
-									 1,L"_ADJECTIVE",0,0,1, // make NOUN more expensive because this is redundant with _NOUN[5] 
+										// if _ADJECTIVE is not optional, DOES NOT match:
+										// The fact is it is all *so* funny.
+									 1,L"_ADJECTIVE",0,1,1, // make NOUN more expensive because this is redundant with _NOUN[5] 
 									 1,L"__S1[*]*1{_BLOCK:OBJECT:EVAL}",0,1,1, // rare             // and in general _NOUN[5] is correct when this is a NOUN
 									 1,L"_MSTAIL",0,0,1,
 									 0);

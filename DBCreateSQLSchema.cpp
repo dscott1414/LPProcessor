@@ -485,6 +485,7 @@ int Source::createDatabase(wchar_t *server)
 		L"sizeInBytes INT, numWordRelations INT, numMultiWordRelations INT, "
     L"processing BIT, processed BIT, "
 		L"proc2 INT, " // other processing steps
+		L"duplicateId INT," // if not null, this source should be skipped because it is a duplicate of another source (id)
 		L"lastProcessedTime TIMESTAMP DEFAULT 0, " // not set to current timestamp or updated automatically
 		L"ts TIMESTAMP," // specifying nothing is the same as DEFAULT CURRENT_TIMESTAMP and ON UPDATE CURRENT_TIMESTAMP
 		L"KEY `EtextIndex` (`etext`),"
