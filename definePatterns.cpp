@@ -256,12 +256,14 @@ int createNouns(void)
 										0);
 	// I dare say [the little we know] won't be any good to you, sir.
 	// any boy we know
+	// I resemble *some one you have met*.
 	/* - watch for bad matches! */
 	cPattern::create(L"__NOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}",L"R",
-										9, L"interrogative_determiner|whichever", L"determiner|the{DET}", L"determiner|a{DET}", L"determiner|an{DET}", L"quantifier|every{DET}", L"adjective|many{DET}", L"demonstrative_determiner|that{DET}", L"quantifier|any{DET}", L"adverb|too",0,1,1, // L"demonstrative_determiner{DET}", removed - covered better by 'this' being a noun and the adjective being an ADJECTIVE_AFTER
+										10, L"interrogative_determiner|whichever", L"determiner|the{DET}", L"determiner|a{DET}", L"determiner|an{DET}", L"quantifier|every{DET}", L"adjective|many{DET}", L"demonstrative_determiner|that{DET}", L"quantifier|any{DET}", L"quantifier|some{DET}", L"adverb|too",0,1,1, // L"demonstrative_determiner{DET}", removed - covered better by 'this' being a noun and the adjective being an ADJECTIVE_AFTER
 										1,L"_ADJECTIVE*2",0,0,1,  // The *only other* person I saw
 										6,L"adjective*1", L"noun{N_AGREE}",L"Proper Noun",L"indefinite_pronoun{N_AGREE}",L"numeral_cardinal{N_AGREE}",L"verb*2",VERB_PRESENT_PARTICIPLE,1,1,  // adjective may be loosed from ProperNoun improperly - prevent match in 'The little Pilgrim was startled by this tone.'
-										3,L"Proper Noun*3{ANY:NAME:SUBJECT:PREFER_S1}",L"personal_pronoun_nominative*3{SUBJECT:PREFER_S1}",L"personal_pronoun*3{SUBJECT:PREFER_S1}",NO_OWNER,1,1, // highly restrict and discourage to prevent unnecessary matches
+										1, L"determiner|the{DET}",0,0,1, // the facilities *the institute* affords
+										4,L"Proper Noun*3{ANY:NAME:SUBJECT:PREFER_S1}",L"personal_pronoun_nominative*3{SUBJECT:PREFER_S1}",L"personal_pronoun*3{SUBJECT:PREFER_S1}", L"noun*2{N_AGREE}", NO_OWNER,1,1, // highly restrict and discourage to prevent unnecessary matches
 										3,L"__ALLVERB",L"_COND{VERB}", L"_VERBPASSIVE",0,1,1,
 										4, L"__ALLOBJECTS_0*2", L"__ALLOBJECTS_1*2", L"_INFP*2", L"_REL1[*]*2", 0, 0, 1,
 										0);
@@ -2261,6 +2263,19 @@ int createSecondaryPatterns2(void)
 									 3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, // there must only be one adjective and it must be last (not mixed in) see *
 									 1,L"__CLOSING__S1",0,0,3,
 									 0);
+	// *I* never saw so young a child with so perverse an inclination . 
+	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"SO",
+									1, L"__C1__S1", 0, 1, 1,
+									1, L"__ALLVERB", 0, 1, 1,
+									1, L"adverb|so",0,1,1,
+									1, L"adjective",0,1,1,
+									1, L"__ALLOBJECTS_1", 0, 1, 1, // there must only be one adjective and it must be last (not mixed in) see *
+									1, L"preposition",0,1,1,
+									1, L"adverb|so", 0, 1, 1,
+									1, L"adjective", 0, 1, 1,
+									1, L"__ALLOBJECTS_1", 0, 1, 1, // there must only be one adjective and it must be last (not mixed in) see *
+									1, L"__CLOSING__S1", 0, 0, 3,
+									0);
 	// *This* she knew had caused a change in her own attitude 
 	// OBJVERB patterns
 	cPattern::create(L"__S1{_ONLY_BEGIN_MATCH:_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"R",
@@ -2297,6 +2312,15 @@ int createSecondaryPatterns2(void)
 										1, L"__ALLVERB*1", 0, 1, 1, // make this more expensive than a normal__S1
 										1, L"__INTERS1*1{BLOCK}", 0, 0, 1,
 										3, L"__ALLOBJECTS_0", L"__ALLOBJECTS_1", L"__ALLOBJECTS_2", 0, 0, 1, // there must only be one adjective and it must be last (not mixed in) see *
+										0);
+	// I will give you *five dollars a week*
+	// You must produce 5 bushels of grain a day.
+	cPattern::create(L"__NOUN{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_FORWARD_REFERENCE:_BLOCK:GNOUN:VNOUN}", L"MO",
+										2, L"numeral_cardinal", L"Number", 0, 1, 1,
+										1, L"noun*1", 0, 1, 1, 
+										1, L"_PP*2",0,0,1,
+										1, L"determiner|a",0,1,1,
+										2, L"timeUnit{TIMECAPACITY}", L"dayUnit{TIMECAPACITY}",0,1,1,
 										0);
 	// __NOUN[D], __NOUN[E], and __NOUN[F] will function as subjects or objects by themselves.
 	// they are split this way so that only "E" and "F" are checked for _AGREEMENT, and only "D" and "F" are checked for verb usage.

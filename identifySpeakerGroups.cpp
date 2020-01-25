@@ -2949,13 +2949,15 @@ void Source::identifySpeakerGroups()
 					}
 			}
     }
+		// CMREADME24
 		if (I<endMetaResponse) continue;
 		if (m[I].word->first==L"lptable" || m[I].word->first==L"lpendcolumn")
 		{
 			localObjects.clear();
 			lplog(LOG_RESOLUTION,L"%06d:cleared local objects (%s)",I,m[I].word->first.c_str()); 
 		}
-    if (m[I].word->first==L"‘")
+		// CMREADME25
+		if (m[I].word->first==L"‘")
 		{
 			if (lastOpeningSecondaryQuote>=0)
 			{
