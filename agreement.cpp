@@ -258,12 +258,6 @@ int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem, in
 			}
 			if (debugTrace.tracePatternElimination)
 			{
-				// TEMP DEBUG
-				if ((pem - pema.begin()) == 434)
-				{
-					logCache = 0;
-					printf("TEMP DEBUG");
-				}
 				if (pem->isChildPattern())
 					lplog(L"%*sMC position %d:pattern %s[%s](%d,%d)*%d child %s[%s](%d,%d) PEMA[%d] set winner.",recursionLevel*2," ",position,
 					patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),begin,end,minCost,

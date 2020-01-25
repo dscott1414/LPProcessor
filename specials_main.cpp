@@ -1777,12 +1777,12 @@ int printUnknowns(Source source, int step)
 	mysql_free_result(result);
 	return 0;
 }
-
-int patternOrWordAnalysis(Source source, int step, wstring patternOrWordName, wstring differentiator, bool isPattern)
+  
+int patternOrWordAnalysis(Source source, int step, wstring patternOrWordName, wstring differentiator, enum Source::sourceTypeEnum st,bool isPattern)
 {
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
-	enum Source::sourceTypeEnum st = Source::GUTENBERG_SOURCE_TYPE;
+	;
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	bool websterAPIRequestsExhausted = false;
 	int startTime = clock(), numSourcesProcessedNow = 0;
@@ -1800,7 +1800,10 @@ int patternOrWordAnalysis(Source source, int step, wstring patternOrWordName, ws
 			mTW(sqlrow[1], etext);
 		mTW(sqlrow[2], path);
 		mTW(sqlrow[3], title);
-		path.insert(0, L"\\").insert(0, CACHEDIR);
+		if (st== Source::GUTENBERG_SOURCE_TYPE)
+			path.insert(0, L"\\").insert(0, CACHEDIR);
+		else if (st == Source::TEST_SOURCE_TYPE)
+			path.insert(0, L"\\").insert(0, LMAINDIR);
 		int setStep = patternOrWordAnalysisFromSource(source, sourceId, path, etext, patternOrWordName, differentiator, isPattern);
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
@@ -2727,6 +2730,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	if (word == L"i" && source.m[wordSourceIndex].queryWinnerForm(L"personal_pronoun_nominative") >= 0 && (primarySTLPMatch == L"noun" || primarySTLPMatch == L"interjection"))
 	{
 		errorMap[L"LP correct: word 'I': ST says " + primarySTLPMatch + L" LP says personal_pronoun_nominative"]++;
+		return 0;
+	}
+	if (word == L"i" && source.m[wordSourceIndex].queryWinnerForm(L"roman_numeral") >= 0 && (source.m[wordSourceIndex-1].word->first==L"chapter" || source.m[wordSourceIndex - 1].word->first == L"book"))
+	{
+		errorMap[L"LP correct: word 'I': ST says " + primarySTLPMatch + L" LP says roman_numeral after chapter or book"]++;
 		return 0;
 	}
 	// 39. a is always a determiner
@@ -4582,11 +4590,11 @@ void wmain(int argc,wchar_t *argv[])
 		printUnknowns(source, step);
 		break;
 	case 21:
-		//patternOrWordAnalysis(source, step, L"__PP", L"A",true);
+		patternOrWordAnalysis(source, step, L"_MS1", L"XX", Source::TEST_SOURCE_TYPE,true);
 		//patternOrWordAnalysis(source, step, L"_MS1", L"2",true); // TODO: testing weight change on _S1.
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
 		//patternOrWordAnalysis(source, step, L"_VERB_BARE_INF", L"A", true);
-		patternOrWordAnalysis(source, step, L"", L"", false); // TODO: testing weight change on _S1.
+		//patternOrWordAnalysis(source, step, L"", L"", false); // TODO: testing weight change on _S1.
 		break;
 	case 60:
 		//stanfordCheckMP(source, step, true,8);

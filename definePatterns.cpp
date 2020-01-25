@@ -255,13 +255,15 @@ int createNouns(void)
 										2,L"_PP",L"__ALLOBJECTS_1{SUBOBJECT:_BLOCK}",0,1,1,
 										0);
 	// I dare say [the little we know] won't be any good to you, sir.
+	// any boy we know
 	/* - watch for bad matches! */
 	cPattern::create(L"__NOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}",L"R",
-										5, L"determiner|the{DET}", L"determiner|a{DET}", L"determiner|an{DET}", L"quantifier|every{DET}", L"adjective|many{DET}",0,1,1, // L"demonstrative_determiner{DET}", removed - covered better by 'this' being a noun and the adjective being an ADJECTIVE_AFTER
+										9, L"interrogative_determiner|whichever", L"determiner|the{DET}", L"determiner|a{DET}", L"determiner|an{DET}", L"quantifier|every{DET}", L"adjective|many{DET}", L"demonstrative_determiner|that{DET}", L"quantifier|any{DET}", L"adverb|too",0,1,1, // L"demonstrative_determiner{DET}", removed - covered better by 'this' being a noun and the adjective being an ADJECTIVE_AFTER
 										1,L"_ADJECTIVE*2",0,0,1,  // The *only other* person I saw
-										4,L"adjective*1", L"noun{N_AGREE}",L"indefinite_pronoun{N_AGREE}",L"numeral_cardinal{N_AGREE}",0,1,1,  // adjective may be loosed from ProperNoun improperly - prevent match in 'The little Pilgrim was startled by this tone.'
+										6,L"adjective*1", L"noun{N_AGREE}",L"Proper Noun",L"indefinite_pronoun{N_AGREE}",L"numeral_cardinal{N_AGREE}",L"verb*2",VERB_PRESENT_PARTICIPLE,1,1,  // adjective may be loosed from ProperNoun improperly - prevent match in 'The little Pilgrim was startled by this tone.'
 										3,L"Proper Noun*3{ANY:NAME:SUBJECT:PREFER_S1}",L"personal_pronoun_nominative*3{SUBJECT:PREFER_S1}",L"personal_pronoun*3{SUBJECT:PREFER_S1}",NO_OWNER,1,1, // highly restrict and discourage to prevent unnecessary matches
 										3,L"__ALLVERB",L"_COND{VERB}", L"_VERBPASSIVE",0,1,1,
+										4, L"__ALLOBJECTS_0*2", L"__ALLOBJECTS_1*2", L"_INFP*2", L"_REL1[*]*2", 0, 0, 1,
 										0);
 	// everything she writes / those I had known
 	cPattern::create(L"__NOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}", L"S",
@@ -295,10 +297,14 @@ int createNouns(void)
 										1,L"determiner|the",0,1,1,
 										1,L"__N1",0,1,1,
 										0);
-	cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"5",
-										1,L"__PNOUN{SUBOBJECT}",0,1,1,
-										1,L",*3",0,0,1,
-										1,L"__APPNOUN[*]{_BLOCK:RE_OBJECT}",0,1,1,
+	//cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"5",
+	//									1,L"__PNOUN{SUBOBJECT}",0,1,1,
+	//									1,L",*3",0,0,1,
+	//									1,L"__APPNOUN[*]{_BLOCK:RE_OBJECT}",0,1,1,
+	//									0);
+	cPattern::create(L"__NOUN",L"5",
+										1,L"personal_pronoun|you",0,1,1,
+										1,L"noun",FEMALE_GENDER|MALE_GENDER,1,1,
 										0);
 	// this is the same as "5" above but it is marked as a single object so "Iraqi weapons labs" is marked as a single object
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}",L"N",
@@ -563,14 +569,21 @@ int createBasicPatterns(void)
 	/// TIME related adverbs
 	// this morning / this very morning / some morning
 	cPattern::create(L"_ADVERB{FLOATTIME}",L"T",
-											5,L"demonstrative_determiner{TIMEMODIFIER}",L"adjective{TIMEMODIFIER}", L"quantifier|some", L"quantifier|each", L"quantifier|every",0,1,1,
+											6,L"demonstrative_determiner{TIMEMODIFIER}",L"adjective{TIMEMODIFIER}", L"quantifier|some", L"quantifier|each", L"quantifier|every", L"adverb|any", 0,1,1,
 											1, L"adverb{ADV}", 0, 0, 1, // very
 											6,L"month{MONTH}",L"daysOfWeek{DAYWEEK}",L"season{SEASON}",L"timeUnit{TIMECAPACITY}",L"dayUnit{TIMECAPACITY}",L"noun|time",0,1,1,
 											0);
+	// The summer before
 	cPattern::create(L"_ADVERB{FLOATTIME}", L"U",
 											1, L"determiner|the{TIMEMODIFIER}", 0, 1, 1,
 											6, L"month{MONTH}", L"daysOfWeek{DAYWEEK}", L"season{SEASON}", L"timeUnit{TIMECAPACITY}", L"dayUnit{TIMECAPACITY}", L"noun|time", 0, 1, 1,
 											2, L"conjunction|before",L"conjunction|after",0,1,1,
+											0);
+	// The next summer 
+	cPattern::create(L"_ADVERB{FLOATTIME}", L"U",
+											1, L"determiner|the{TIMEMODIFIER}", 0, 1, 1,
+											2, L"adjective|following", L"adjective|next", L"adjective|succeeding", L"adjective|previous", L"verb|proceeding", 0, 0, 1, // following
+											6, L"month{MONTH}", L"daysOfWeek{DAYWEEK}", L"season{SEASON}", L"timeUnit{TIMECAPACITY}", L"dayUnit{TIMECAPACITY}", L"noun|time", 0, 1, 1,
 											0);
 	// any time between dawn and sunset
 	cPattern::create(L"_ADVERB{FLOATTIME}", L"V",
@@ -581,10 +594,43 @@ int createBasicPatterns(void)
 											1, L"coordinator|and", 0, 1, 1,
 											5, L"month{MONTH}", L"daysOfWeek{DAYWEEK}", L"season{SEASON}", L"timeUnit{TIMECAPACITY}", L"dayUnit{TIMECAPACITY}", SINGULAR, 1, 1,
 											0);
+	// all the rest of **the summer
+	cPattern::create(L"_ADVERB{FLOATTIME}", L"W",
+											1, L"predeterminer|all",0,0,1,
+											1, L"determiner|the", 0, 1, 1,
+											1, L"noun|rest",0,1,1,
+											1, L"preposition|of",0,1,1,
+											1, L"determiner|the{TIMEMODIFIER}", 0, 0, 1, // The rest of Tuesday / July
+											6, L"month{MONTH}", L"daysOfWeek{DAYWEEK}", L"season{SEASON}", L"timeUnit{TIMECAPACITY}", L"dayUnit{TIMECAPACITY}", L"noun|time", 0, 1, 1,
+											0);
+	cPattern::create(L"_ADVERB{FLOATTIME}", L"W2",
+											1, L"predeterminer|all", 0, 1, 1,
+											1, L"determiner|the", 0, 1, 1,
+											1, L"noun|time", 0, 1, 1,
+											0);
 	cPattern::create(L"_ADVERB{FLOATTIME}",L"9",
 		                    1,L"preposition|to",0,1,1,
 												1,L"dash|-*-2",0,1,1,
 												2,L"noun|day{DAY}",L"noun|morrow{DAY}",0,1,1,0);
+	// Should this be an MS1?
+	cPattern::create(L"_ADVERB{_FINAL}", L"U",
+											8, L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"__AS_AS", L"quantifier|all*-1", 0, 1, 1,
+											1, L"__S1*1{EVAL:_BLOCK}", 0, 1, 1, 0);
+	cPattern::create(L"_ADVERB{_FINAL}", L"Z",
+		                  1,L"determiner|the",0,0,1, // only used with 'next'
+											4, L"quantifier|every", L"quantifier|each", L"adjective|next", L"adverb|any", 0, 1, 1,
+											1, L"noun|time",0,1,1,
+											1, L"__S1*1{EVAL:_BLOCK}", 0, 1, 1, 0);
+	// Should this be an MS1?
+	cPattern::create(L"_ADVERB{_FINAL}", L"V",
+											1, L"determiner|the", 0, 1, 1,
+											3, L"noun|moment", L"noun|instant", L"noun|second", 0, 1, 1,
+											1, L"__S1*1{EVAL:_BLOCK}", 0, 1, 1, 0);
+	cPattern::create(L"_ADVERB{_FINAL}", L"W",
+											2, L"determiner|a", L"determiner|an", 0, 1, 1,
+											4, L"noun|moment", L"noun|instant", L"noun|second", L"noun|minute", 0, 1, 1,
+											2, L"adverb|earlier", L"adverb|later", 0, 0, 1,
+											0);
 	/// TIME related adverbs [end]
 	// lightly,
 	cPattern::create(L"__ADV_S1",L"",
@@ -667,19 +713,6 @@ int createBasicPatterns(void)
 											4,L"adverb|little",L"noun|inch",L"noun|step",L"noun|bit",0,1,1,
 											1,L"preposition|by",0,1,1,
 											4,L"adverb|little",L"noun|inch",L"noun|step",L"noun|bit",0,1,1,0);
-	cPattern::create(L"_ADVERB{_FINAL}", L"U",
-											8, L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"__AS_AS", L"quantifier|all*-1", 0, 1, 1,
-											1, L"__S1*1{EVAL:_BLOCK}", 0, 1, 1, 0);
-
-	cPattern::create(L"_ADVERB{_FINAL}", L"V",
-											1, L"determiner|the", 0, 1, 1,
-											2, L"noun|moment",L"noun|instant",0,1,1,
-											1, L"__S1*1{EVAL:_BLOCK}", 0, 1, 1, 0);
-	cPattern::create(L"_ADVERB{_FINAL}", L"W",
-											2, L"determiner|a", L"determiner|an", 0, 1, 1,
-											2, L"noun|moment", L"noun|instant", 0, 1, 1,
-											2, L"adverb|earlier",L"adverb|later",0,0,1,
-											0);
 
 	defineNames();
 	createMetaNameEquivalencePatterns();
@@ -1351,6 +1384,15 @@ int createVerbPatterns(void)
 															L"have{vS:V_AGREE:V_OBJECT}",L"have_negation{vS:not:V_AGREE:V_OBJECT}",
 															VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_SECOND_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_PLURAL,1,1,
 													 0); // preposition use should be rare!
+	// special case - V_AGREE has been removed
+	// He need not say anything. - need is subject independent.
+	cPattern::create(L"_VERBPRESENT", L"2",
+												1, L"verb|need", 0, 1, 1,
+												1, L"not", 0, 1, 1,
+												5, L"verb{vS:V_OBJECT}", L"does{vS:V_OBJECT}",L"does_negation{vS:not:V_OBJECT}",
+													L"have{vS:V_OBJECT}", L"have_negation{vS:not:V_OBJECT}",
+													VERB_PRESENT_FIRST_SINGULAR , 1, 1,
+													0); 
 	cPattern::create(L"_VERBPRESENTC{VERB}",L"",
 											  1,L"_VERBPRESENT",0,1,1,
 												2,L"coordinator|and",L"coordinator|or",0,1,1,
@@ -1379,14 +1421,20 @@ int createVerbPatterns(void)
 	cPattern::create(L"_THINKPRESENTFIRST",L"",
 													 1,L"SYNTAX:Accepts S as Object{V_AGREE:vS}",VERB_PRESENT_FIRST_SINGULAR,1,1,
 													 2,L"_ADVERB",L"_PP*1",0,0,2,0);
-	// going / being / seeing
+	// he need not think such a thing is possible.  - this is special case, must match any case subject, he, she, it they, I, you
+	cPattern::create(L"_THINKPRESENT{BLOCK}", L"2",
+													1,L"verb|need",0,1,1,
+													1,L"not",0,1,1,
+													1, L"SYNTAX:Accepts S as Object", VERB_PRESENT_FIRST_SINGULAR, 1, 1,
+													0); 
+// going / being / seeing
 	cPattern::create(L"_VERBONGOING",L"",2,L"_ADVERB",L"possessive_determiner*2",0,0,2, // possessive determiner should be rare
 													 3,L"verb{V_AGREE:V_OBJECT}",L"does{V_AGREE:V_OBJECT}",L"have{V_AGREE:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
-													 0);// preposition use should be rare!
+													 0); // preposition use should be rare!
 	cPattern::create(L"_THINKONGOING",L"",
 													 1,L"_ADVERB",0,0,2,
 													 1,L"SYNTAX:Accepts S as Object{V_AGREE:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
-													 0);// preposition use should be rare!
+													 0);
 	// I quickly went lurchingly
 	// Simple verb phrase 3.54 Quirk CGEL
 	cPattern::create(L"_VERBPAST{VERB}",L"",//1,L"_ADVERB",0,0,1, added ADVERB to subsequent patterns
@@ -1722,7 +1770,7 @@ void createSecondaryPatterns1(void)
 	//  2,L"__ALLVERB",L"_VERBPASSIVE",0,1,1,     // the news I brought
 	//    1,L"__ALLOBJECTS",0,0,1,
 	//  0);
-	// REPLACED BY __NOUN L"5"
+	// REPLACED BY __NOUN "5" which was then replaced by NOUN[R]
 	//cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"",
 	//                  1,L"__PNOUN",0,1,1,
 	//                  1,L"__APPNOUN2{_BLOCK:RE_OBJECT}",0,1,1,
@@ -2022,6 +2070,22 @@ void createPrepositionalPhrases(void)
 										1, L"preposition|as{P}", 0, 1, 1,  // when included in a _PP, mark this as a preposition
 										2, L"adjective", L"__S1",0, 1, 1,
 										0);
+	//~~~Ellen Anderson Gholson Glasgow\The Wheel of Life[44590 - 44593]: FAIL
+	//“ I merely wanted to let her know the kind of **man he is**, ” explained Perry .
+	//~~~Ellen Anderson Gholson Glasgow\The Wheel of Life[27951 - 27955]: FAIL
+	//But I am perfectly sure that it ishas not the kind of **thing you wouldhad like** .
+	//~~~Ellen Anderson Gholson Glasgow\The Wheel of Life[33229 - 33233]: FAIL
+	//Then suddenly her brow contracted with resolution, and she went through a long list of items as if the most important fact in life were the amount of **money she must pay** to her dressmaker . |||
+	//~~~Ellen Anderson Gholson Glasgow\The Wheel of Life[52039 - 52043]: FAIL
+	//The simple spirit of **contemplation we have come** to regard as a pauperising habit and it puts us out of patience .
+	//~~~Ellen Anderson Gholson Glasgow\The Wheel of Life[68011 - 68014]: FAIL
+	//He spoke with an entire unconsciousness of the amount of **work he asked** of her, and she liked him the better for the readiness with which he took for granted that she possessed the patience as well as the will to serve him . |||
+	cPattern::create(L"__PP{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS:PREP}", L"R",
+		1, L"preposition|of{P}", 0, 1, 1,
+		3, L"adjective*1", L"noun{N_AGREE}", L"Proper Noun", 0, 1, 1,  // adjective may be loosed from ProperNoun improperly - prevent match in 'The little Pilgrim was startled by this tone.'
+		3, L"Proper Noun*3{ANY:NAME:SUBJECT:PREFER_S1}", L"personal_pronoun_nominative*2{SUBJECT:PREFER_S1}", L"personal_pronoun*3{SUBJECT:PREFER_S1}", NO_OWNER, 1, 1, // highly restrict and discourage to prevent unnecessary matches
+		3, L"__ALLVERB", L"_COND{VERB}", L"_VERBPASSIVE", 0, 1, 1,
+		0);
 
 }
 
@@ -2102,13 +2166,19 @@ int createSecondaryPatterns2(void)
 			 1,L"__C1_IP",0,0,1,
 			0);
 	// my dear / my lord
-	cPattern::create(L"_END_HAIL_OBJECT{_ONLY_END_MATCH}",L"",
+	cPattern::create(L"_HAIL_OBJECT{_ONLY_END_MATCH}",L"1",
 									 1,L"possessive_determiner|my",0,1,1, // my dear
 									 3,L"honorific{HON:HAIL}",L"noun{HAIL}",L"adjective|dear",MALE_GENDER|FEMALE_GENDER,1,1,
 									0);
+	// you fortunate dear / you poor boy
+	cPattern::create(L"_HAIL_OBJECT{_ONLY_END_MATCH:_FINAL_IF_ALONE}", L"2",
+									1, L"personal_pronoun|you", 0, 1, 1, 
+									1, L"adjective",0,0,1,
+									3, L"honorific{HON:HAIL}", L"noun{HAIL}", L"adjective|dear", MALE_GENDER | FEMALE_GENDER, 1, 1,
+									0);
 	cPattern::create(L"__CLOSING__S1{_ONLY_END_MATCH}",L"1",
 									 1,L",",0,1,1, // , ma'am // if this is made optional, _NOUN of C4 and _ALLOBJECT of C3 are identical
-									 7,L"_NAME{HAIL}",L"honorific{HON:HAIL}",L"_HON_ABB{HON:HAIL}",L"_META_GROUP{HAIL}",L"noun{HAIL}",L"_END_HAIL_OBJECT{HAIL|OBJECT}", L"politeness_discourse_marker",MALE_GENDER|FEMALE_GENDER,1,1, // , sir / , freak! noun includes _NAME, L"honorific",
+									 7,L"_NAME{HAIL}",L"honorific{HON:HAIL}",L"_HON_ABB{HON:HAIL}",L"_META_GROUP{HAIL}",L"noun{HAIL}",L"_HAIL_OBJECT{HAIL|OBJECT}", L"politeness_discourse_marker",MALE_GENDER|FEMALE_GENDER,1,1, // , sir / , freak! noun includes _NAME, L"honorific",
 									0);
 	cPattern::create(L"__CLOSING__S1{_ONLY_END_MATCH}",L"2",
 									 1,L",",0,0,1,
@@ -2117,6 +2187,11 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"__CLOSING__S1{_BLOCK:_ONLY_END_MATCH:FLOATTIME}",L"3",
 									 6,L"_ADVERB",L"__ADJECTIVE_WITHOUT_VERB*1",L"_ADJECTIVE*4",L"preposition*2",L"_TIME",L"_DATE",0,1,1, // dangling adverb or adjective // dangling adverb or adjective should be taken only if there is no other match
 									 0);
+	// He likes me best *I know*.
+	cPattern::create(L"__CLOSING__S1{_ONLY_END_MATCH}", L"4",
+										1, L"personal_pronoun_nominative|i", 0, 1, 1, 
+										1, L"__ALLTHINK", 0, 1, 1, 
+										0);
 	// already taken by _TIME
 	//cPattern::create(L"__CLOSING__S1{_BLOCK:_ONLY_END_MATCH}",L"4",
 	//                 2,L"demonstrative_determiner{DET}",L"quantifier{DET}",0,0,1,
@@ -2187,6 +2262,7 @@ int createSecondaryPatterns2(void)
 									 1,L"__CLOSING__S1",0,0,3,
 									 0);
 	// *This* she knew had caused a change in her own attitude 
+	// OBJVERB patterns
 	cPattern::create(L"__S1{_ONLY_BEGIN_MATCH:_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"R",
 										1, L"predeterminer|all",0,0,1, // All *this* the governor of the prison affected to disbelieve
 										1, L"demonstrative_determiner|this*1{OBJECT}",0,1,1,
@@ -2194,6 +2270,25 @@ int createSecondaryPatterns2(void)
 										2, L"__ALLVERB", L"_COND{VERB}", 0, 1, 1,
 										// *This* she had done solely to appease Marian Barber's wounded pride . 
 										3, L"__ALLOBJECTS_0", L"_INFP", L"_REL1[*]", 0, 0, 1, 
+										1, L"__CLOSING__S1", 0, 0, 2,
+										0);
+	// One thing *I* would like to ask
+	// Another thing *I* was mistaken about
+	// One thing I will tell you
+	cPattern::create(L"__S1{_ONLY_BEGIN_MATCH:_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"R2",
+										3, L"personal_pronoun_nominative|one", L"pronoun|another", L"quantifier|some", 0, 1, 1,
+										1, L"noun|thing{OBJECT}", 0, 1, 1,
+										1, L"__C1__S1", 0, 1, 1,
+										2, L"__ALLVERB", L"_COND{VERB}", 0, 1, 1,
+										4, L"__ALLOBJECTS_0", L"__ALLOBJECTS_1", L"_INFP", L"_REL1[*]", 0, 0, 1,
+										1, L"__CLOSING__S1", 0, 0, 2,
+										0);
+	// NOUN[R](The three thousand dollars I lent you) I regard as an investment - NOUN[R] is an object
+	cPattern::create(L"__S1{_ONLY_BEGIN_MATCH:_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"R3",
+										1, L"__NOUN[*]*3{OBJECT}", 0, 1, 1,
+										1, L"__C1__S1", 0, 1, 1,
+										2, L"__ALLVERB", L"_COND{VERB}", 0, 1, 1,
+										4, L"__ALLOBJECTS_0", L"__ALLOBJECTS_1", L"_INFP", L"_REL1[*]", 0, 0, 1,
 										1, L"__CLOSING__S1", 0, 0, 2,
 										0);
 	// *I* shall have to speak to *whoever is in charge * .
@@ -2316,6 +2411,7 @@ int createSecondaryPatterns2(void)
 									1,L"_ADVERB",0,0,1,
 									3,L"_THINK",L"_THINKPAST",L"_THINKPRESENT",0,1,1,
 									0); 
+
 	// She thinks that if you are going to carry her banner in the procession you ought to let her take your light .
 	// XXIC Henty G. A. (George Alfred) 1832-1902\Dorothys Double Volume III (of 3)[29123-29128]:
 	// “ Of course, no one man would attempt such a thing, ” Ned Hampton said, “ but [I believe in some of **the camps they have banded** together] and given the gamblers and the hard characters notice to quit, and have hung up those who refused to go .
@@ -2355,17 +2451,15 @@ int createSecondaryPatterns2(void)
 										1, L"_COND", 0, 1, 1,
 										1, L"_HAVE", 0, 1, 1,
 										1, L"_BEEN{vAB:id}", 0, 1, 1, 0);
-	cPattern::create(L"_MS1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_STRICT_NO_MIDDLE_MATCH}",L"2",
-									 1,L"_STEP",0,0,1,
-									 1,L"_INTRO_S1",0,0,1,
+	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}",L"R3",
 									 1,L"__C1__S1",0,1,1,
 									 4,L"_IS{VERB:vS:id}", L"_WOULDBE", L"_HAVEBEEN", L"_COULDHAVEBEEN",0,1,1,
 										// removed OBJECT from _NOUN as this will cause IS to have two objects (including the one from _S1) which is wrong and will cause elimination of this pattern
 										// if _ADJECTIVE is not optional, DOES NOT match:
 										// The fact is it is all *so* funny.
 									 1,L"_ADJECTIVE",0,1,1, // make NOUN more expensive because this is redundant with _NOUN[5] 
+									 2,L"_PP",L"_ADVERB",0,0,2,
 									 1,L"__S1[*]*1{_BLOCK:OBJECT:EVAL}",0,1,1, // rare             // and in general _NOUN[5] is correct when this is a NOUN
-									 1,L"_MSTAIL",0,0,1,
 									 0);
 	cPattern::create(L"_MS1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_STRICT_NO_MIDDLE_MATCH}", L"V",
 										1, L"_VERBREL1", 0, 1, 1,
@@ -2392,15 +2486,13 @@ int createSecondaryPatterns2(void)
 	// this is slightly different than MS1[2] to capture the verb objects proper word relation
 	// It ishas a mercy you are better ! / mercy is the object here.  This is reflected in the below pattern, but not in the above pattern.
 	// NOUN could be made optional like ADJECTIVE above, but then when it does appear, IS will have two objects, thus dooming the match.
-	cPattern::create(L"_MS1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_STRICT_NO_MIDDLE_MATCH}", L"8",
-										1, L"_STEP", 0, 0, 1,
-										1, L"_INTRO_S1", 0, 0, 1,
+	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"9",
 										1, L"__C1__S1", 0, 1, 1,
 										4, L"_IS{VERB:vS:id}", L"_WOULDBE", L"_HAVEBEEN", L"_COULDHAVEBEEN", 0, 1, 1,
 										// removed OBJECT from _NOUN as this will cause IS to have two objects (including teh one from _S1) which is wrong and will cause elimination of this pattern
-										2, L"__NOUN[*]*1{OBJECT}", L"_NOUN_OBJ*1{OBJECT}", 0, 1, 1, // make NOUN more expensive because this is redundant with _NOUN[5] 
+										// _ADJECTIVE: I am *sure* I would have been so *scared* I wouldhad have gone right ahead
+										3, L"__NOUN[*]*1{OBJECT}", L"_NOUN_OBJ*1{OBJECT}", L"_ADJECTIVE", 0, 1, 1, // make NOUN more expensive because this is redundant with _NOUN[5] 
 										1, L"__S1[*]*1{_BLOCK:EVAL}", 0, 1, 1, // rare             // and in general _NOUN[5] is correct when this is a NOUN
-										1, L"_MSTAIL", 0, 0, 1,
 										0);
 	//cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}",L"B",
 	//                 1,L"__C1__S1",0,1,1,
@@ -2430,14 +2522,51 @@ int createSecondaryPatterns2(void)
 									 3,L"_ADVERB*1",L"interjection", L"conjunction|though*-3", 0,1,1, // could be a time / though is not used as a conjunction often, but should be one in this position
 									 1,L",",0,0,1,
 									 0);
-	cPattern::create(L"__INTRO_N{_ONLY_BEGIN_MATCH}",L"2",
-									 2,L"_ADJECTIVE*1",L"uncertainDurationUnit",0,1,1, // afraid I don't. / while **the little Pilgrim was still gazing** , disappeared from her
-									 0);
+	cPattern::create(L"__INTRO_N{_ONLY_BEGIN_MATCH}", L"2",
+									2, L"_ADJECTIVE*1", L"uncertainDurationUnit", 0, 1, 1, // afraid I don't. / while **the little Pilgrim was still gazing** , disappeared from her
+									0);
+	// Thank heaven you have never kept a fashion.
+	cPattern::create(L"__INTRO_N{_ONLY_BEGIN_MATCH}", L"4",
+									1, L"verb|thank", 0, 1, 1, 
+									1, L"noun|heaven", 0, 1, 1, 
+									0);
 	cPattern::create(L"__INTRO_N{_ONLY_BEGIN_MATCH}",L"3",
 									 3,L"_ADVERB",L"_ADJECTIVE*1", L"interjection*-4", 0,1,1, // glibly, she refused. / New, isn't she?
 									 1,L",",0,1,1,
 									 1,L"adverb",0,0,1,
 									 0);
+	cPattern::create(L"__INTRO_N{}", L"5",
+										1, L"personal_pronoun_nominative|i", 0, 1, 1, 
+										1, L"verbverb|dare", 0, 1, 1,
+										1, L"verb|say", 0, 1, 1,
+										0);
+	// the next thing *I* knew it was morning .
+	cPattern::create(L"__INTRO_N{_ONLY_BEGIN_MATCH}", L"6",
+										1, L"determiner|the", 0, 1, 1,
+										1, L"adjective|next", 0, 1, 1,
+										1, L"noun|thing", 0, 1, 1,
+										0);
+	// *I* have no doubt you shall do the square thing.
+	cPattern::create(L"__INTRO_N{}", L"7",
+									1, L"personal_pronoun_nominative|i", 0, 1, 1, 
+									1, L"have|have", 0, 1, 1,
+									1, L"no", 0, 1, 1,
+									1, L"noun|doubt", 0, 1, 1,
+									0);
+	// *I* had no idea it was so late .
+	cPattern::create(L"__INTRO_N{}", L"8",
+									1, L"personal_pronoun_nominative|i", 0, 1, 1,
+									2, L"have|had", L"have|wouldhad",0, 1, 1,
+									1, L"no", 0, 1, 1,
+									1, L"noun|idea", 0, 1, 1,
+									0);
+	// *I* don't doubt you shall do the right thing.
+	cPattern::create(L"__INTRO_N{}", L"9",
+									1, L"personal_pronoun_nominative|i", 0, 1, 1,
+									1, L"does_negation|don't", 0, 0, 1,
+									1, L"noun|doubt", 0, 1, 1,
+									0);
+
 	// Hullo, stranger
 	// Oh, well! / Oh, very well!
 	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"8",
@@ -2455,7 +2584,7 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"__INTRO_S1{_ONLY_BEGIN_MATCH}",L"2",
 									 2,L"interjection*-4", L"politeness_discourse_marker*-1", 0, 0, 1,
 									 1, L",", 0, 0, 1,
-									 8,L"_NAME{HAIL}",L"honorific{HON:HAIL}",L"_HON_ABB{HON:HAIL}",L"_META_GROUP{HAIL}",L"_VERBREL2{_BLOCK}",L"_VERBREL1{_BLOCK}",L"interjection*-4", L"politeness_discourse_marker*-1", 0,1,1,
+									 9,L"_HAIL_OBJECT",L"_NAME{HAIL}",L"honorific{HON:HAIL}",L"_HON_ABB{HON:HAIL}",L"_META_GROUP{HAIL}",L"_VERBREL2{_BLOCK}",L"_VERBREL1{_BLOCK}",L"interjection*-4", L"politeness_discourse_marker*-1", 0,1,1,
 									 1,L",",0,1,1,
 									 0);
 	cPattern::create(L"__INTRO2_S1{_ONLY_BEGIN_MATCH:FLOATTIME}",L"3",
@@ -2515,6 +2644,7 @@ int createSecondaryPatterns2(void)
 									 1,L"_ADVERB",0,0,1, // later
 									 1,L",",0,0,1,
 									 0);
+	// TODO merge with _ADVERB[T] patterns?
 	cPattern::create(L"__INTRO_N_ET{_ONLY_BEGIN_MATCH:FLOATTIME}", L"1",
 									2, L"quantifier|every{TIMEMODIFIER:DET}", L"quantifier|each{TIMEMODIFIER:DET}", 0, 1, 1,
 									1, L"noun|time{TIMECAPACITY:N_AGREE}", 0, 1, 1, // A moment
@@ -2553,7 +2683,7 @@ int createSecondaryPatterns2(void)
 									 0);
 	// One beautiful , warm , dark night early in the summer
 	cPattern::create(L"_INTRO_S1{_NO_REPEAT}",L"1",
-										3,L"__INTRO_S1{_BLOCK:EVAL}",L"__INTRO2_S1{_BLOCK:EVAL}",L"__INTRO_N{_BLOCK:EVAL}",0,1,1,
+										4,L"__INTRO_S1{_BLOCK:EVAL}",L"__INTRO2_S1{_BLOCK:EVAL}",L"__INTRO_N{_BLOCK:EVAL}", L"_PP",0,1,1,
 										// the following line may be an error! - since each of these patterns are marked ONLY_BEGIN_MATCH, this will never match anything
 										3,L"__INTRO_S1*1{_BLOCK:EVAL}",L"__INTRO2_S1*1{_BLOCK:EVAL}",L"__INTRO_N*1{_BLOCK:EVAL}",0,0,2, 
 										1,L"_ADJECTIVE",0,0,1, 
@@ -2742,7 +2872,7 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"_REL1{_FINAL_IF_ALONE:_FORWARD_REFERENCE}", L"6",
 										2, L"_ADJECTIVE", L"_ADVERB", 0, 0, 1,
 										2, L"demonstrative_determiner|that",L"preposition|for",0,0,1, // for when Mama returned she told them she had heard from Mrs . Clifford , who wrote she had that day sent off a box . 
-										8, L"conjunction|if", L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"relativizer|whenever", 0, 1, 1,
+										9, L"conjunction|if", L"conjunction|unless", L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"relativizer|whenever", 0, 1, 1,
 										1, L"__INTERS1{BLOCK}",0,0,1,
 										1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
 										1, L",", 0, 0, 1,
@@ -2773,14 +2903,14 @@ int createSecondaryPatterns2(void)
 	//                 1,L",",0,1,1, // period deleted because of the '.' at end - swallows up the period
 	//                  0);
 	 
-	//cPattern::create(L"__S1",L"7",1,L"relativizer",0,1,1, // put into Q1 L"CL"
+	//cPattern::create(L"__S1",L"7",1,L"relativizer",0,1,1, // put into Q1[C]
 	//                 1,L"not",0,1,1,0);
 	// If you passed that way *any* time between dawn and sunset you could see me hanging by my heels from one of the branches . 
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}",L"1",
 											 1,L"_STEP",0,0,1,
 											 1,L"_INTRO_S1",0,0,1,
 											 1,L"_ADVERB",0,0,1, // even if 
-											 10,L"conjunction|if", L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|because", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"relativizer|whenever", L"conjunction|as", 0, 1, 1,
+											 13, L"noun|once", L"conjunction|although", L"conjunction|though", L"conjunction|if", L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|because", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"relativizer|whenever", L"conjunction|as", 0, 1, 1,
 											 1,L"__S1{_BLOCK:EVAL}",0,1,1,
 											 2,L"_ADVERB*1",L"_ADJECTIVE_AFTER*1",0,0,1, // any time between dawn and sunset / I wish to see him *alive*
 											 1,L",",0,0,1,
@@ -2800,6 +2930,17 @@ int createSecondaryPatterns2(void)
 											2, L"__S1{_BLOCK:EVAL}", L"__NOUN*1",0, 0, 1,
 											1, L"_MSTAIL", 0, 0, 1,
 											0);
+	//cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}", L"XX",
+	//	1, L"_STEP", 0, 0, 1,
+	//	1, L"_INTRO_S1", 0, 0, 1,
+	//	1, L"_ADVERB", 0, 0, 1, // even if 
+	//	1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
+	//	2, L"_ADVERB*1", L"_ADJECTIVE_AFTER*1", 0, 0, 1, // any time between dawn and sunset / I wish to see him *alive*
+	//	1, L",", 0, 0, 1,
+	//	1, L"adverb|then", 0, 0, 1,
+	//	1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
+	//	1, L"_MSTAIL", 0, 0, 1,
+	//	0);
 	/* matches MS1[1]
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}",L"5",
 											 1,L"_INTRO_S1",0,0,1,
@@ -2947,6 +3088,7 @@ int createSecondaryPatterns2(void)
 										1, L"_MSTAIL", 0, 0, 1,
 										0);
 	// At the time I made **the promise I thought** his request was not fair to you and was unwise
+	// could this not be eliminated with use of the _ADVERB[T] patterns?
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}", L"D",//3,L"demonstrative_determiner",L"personal_pronoun_nominative",L"indefinite_pronoun",0,0,1, // *he* whom you await taken out - how is this different than _NOUN[9]?
 										3, L"preposition|at", L"preposition|in", L"preposition|on", 0, 1, 1, // at the moment / in the July / on the Wednesday 
 										1, L"determiner|the{TIMEMODIFIER:DET}", 0, 1, 1,
@@ -3099,7 +3241,7 @@ int createSecondaryPatterns2(void)
 													1, L",", 0, 0, 1,
 													1, L"politeness_discourse_marker*-1", 0, 1, 1,
 													1, L",", 0, 0, 1,
-													3, L"honorific{HON:HAIL}", L"noun{HAIL}", L"adjective|dear", MALE_GENDER | FEMALE_GENDER, 0, 1,
+													4, L"_HAIL_OBJECT",L"honorific{HON:HAIL}", L"noun{HAIL}", L"adjective|dear", MALE_GENDER | FEMALE_GENDER, 0, 1,
 													0);
 	cPattern::create(L"_SECTIONHEADER{_FINAL:_ONLY_BEGIN_MATCH}",L"",
 													1,L"sectionheader*-10",0,1,1,
