@@ -663,9 +663,16 @@ void WordMatch::setForm(void)
   // adjust words that are honorifics that are capitalized so that they are only recognized as honorifics
   if (flags&WordMatch::flagOnlyConsiderOtherNounForms)
   {
-    for (unsigned int I=0; I<word->second.formsSize(); I++)
-      if (word->second.Form(I)->blockProperNounRecognition)
-        forms.set(word->second.forms()[I]);
+		// since it is a determiner, and also capitalized, the flagOnlyConsiderOtherNounForms was set, since we do not usually want a determiner to be considered a proper noun.
+		// HOWEVER, the word no is both a determiner, which has block proper noun on it, and an abbreviation, which is a proper noun subclass.  In this case, recognize it as an abbreviation.
+		if (word->first == L"no")
+		{
+			forms.set(abbreviationForm);
+		}
+		else
+			for (unsigned int I=0; I<word->second.formsSize(); I++)
+				if (word->second.Form(I)->blockProperNounRecognition)
+					forms.set(word->second.forms()[I]);
     return;
   }
   if (flags&WordMatch::flagOnlyConsiderProperNounForms)

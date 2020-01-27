@@ -3120,7 +3120,8 @@ void Source::identifySpeakerGroups()
         previousPrimaryQuote=lastOpeningPrimaryQuote;
       }
     }
-    else if (isEOS(I))
+		// CMREADME26
+		else if (isEOS(I))
     {
 			lastBeginS1=-1;
 			lastRelativePhrase=-1;

@@ -466,7 +466,7 @@ int createNouns(void)
 										//2,L"__NOUN[*]{_BLOCK}",L"_NOUN_OBJ{_BLOCK}",0,1,1,
 										2,L"__NOUN[*]{SUBOBJECT}",L"_NOUN_OBJ{SUBOBJECT}",0,1,1,
 										3,L"__INTERPPB[*]{_BLOCK}",L"_DATE*1{FLOATTIME}",L"_TIME*1{FLOATTIME}",0,0,1,
-										1,L"_ADVERB",0,0,1, // He gave a number *presently* which was his own in Panton Square .
+										2,L"_ADVERB",L"_ADJECTIVE",0,0,1, // He gave a number *presently* which was his own in Panton Square . / I consider him primarily responsible for all the trouble that has occurred.
 										3,L"_PP",L"_REL1",L"_INFP",0,1,1,
 										3,L"_PP*1",L"_REL1*1",L"_INFP*1",0,0,2,
 										0);
@@ -2485,10 +2485,30 @@ int createSecondaryPatterns2(void)
 									 2,L"_PP",L"_ADVERB",0,0,2,
 									 1,L"__S1[*]*1{_BLOCK:OBJECT:EVAL}",0,1,1, // rare             // and in general _NOUN[5] is correct when this is a NOUN
 									 0);
+	cPattern::create(L"_WOULDMAKE{VERB}", L"",
+		1, L"_COND", 0, 1, 1,
+		1, L"verb|make{vS:V_OBJECT:id}", 0, 1, 1, 0);
+	cPattern::create(L"_HAVEBEENMAKING{VERB}", L"",
+		1, L"_HAVEBEEN", 0, 1, 1,
+		1, L"verb|making{vB:id}", 0, 1, 1, 0);
+	cPattern::create(L"_COULDHAVEBEENMAKING{VERB}", L"",
+		1, L"_COULDHAVEBEEN", 0, 1, 1,
+		1, L"verb|making", 0, 1, 1,
+		0);
+	// *I* shall make you sorry you ever came near my hickory tree
+	// A blend of R3 and 5
+	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"R4",
+										1, L"__C1__S1", 0, 1, 1,
+										4, L"verb|make{VERB:vS:id}", L"_WOULDMAKE", L"_HAVEBEENMAKING", L"_COULDHAVEBEENMAKING", 0, 1, 1,
+										2, L"_NOUN_OBJ", L"__NOUN[*]", 0, 1, 1, // Lawrence told me you were with monsieur Poirot. 
+										1, L"_ADJECTIVE", 0, 1, 1, 
+										3, L"_PP", L"_ADVERB", L"demonstrative_determiner|that{S_IN_REL}", 0, 0, 2,
+										1, L"__S1[*]*1{_BLOCK:OBJECT:EVAL}", 0, 1, 1, 
+										0);
 	cPattern::create(L"_MS1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_STRICT_NO_MIDDLE_MATCH}", L"V",
 										1, L"_VERBREL1", 0, 1, 1,
 										1, L"conjunction", 0, 1, 1,
-										1, L"__S1[*]*1{_BLOCK:OBJECT:EVAL}", 0, 1, 1, // rare             // and in general _NOUN[5] is correct when this is a NOUN
+										1, L"__S1[*]*1{_BLOCK:OBJECT:EVAL}", 0, 1, 1, 
 										0);
 	// *I* reckon the trouble is they are my kind. - A combination of S1[5] and MS1[2]
 	cPattern::create(L"_MS1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_STRICT_NO_MIDDLE_MATCH}", L"H",
@@ -3027,6 +3047,12 @@ int createSecondaryPatterns2(void)
 												3, L"_PP", L"_VERBREL2", L"_INFP", 0, 1, 1,
 												1, L"_ADVERB", 0, 0, 1,
 												0);
+	// as far as I am concerned.
+	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL:_ONLY_END_MATCH}", L"H",
+										1, L",", 0, 0, 1,
+										1, L"__AS_AS", 0, 1, 1,
+										1, L"__S1", 0, 1, 1,
+										0);
 	// prevents multiplicative nesting in _MS1
 	cPattern::create(L"_MSTAIL{_NO_REPEAT}",L"",1,L"__MSTAIL[*]",0,1,4,0);
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}",L"3",

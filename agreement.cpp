@@ -2947,12 +2947,13 @@ int tFI::getLowestCost(void)
 //     set AC2=AC1 and LEN2=LEN1, return true.
 //   else return false
 // this could be done in one line, but it could be more confusing.
-bool WordMatch::compareCost(int AC1,int LEN1,int lowestSeparatorCost,bool alsoSet)
+bool WordMatch::compareCost(int AC1,int LEN1,int lowestSeparatorCost,int pmaOffset, bool alsoSet)
 { LFS
 	if (lowestSeparatorCost>=0 && AC1>=lowestSeparatorCost) return false; // prevent patterns that match only separators optimally
 	int AC2=minAvgCostAfterAssessCost,LEN2=maxLACAACMatch;
 	bool setInternal=false;
-	if (LEN2==0) setInternal=true;
+	if (lastWinnerLACAACMatchPMAOffset == pmaOffset) setInternal = true;
+	else if (LEN2==0) setInternal=true;
 	else if (AC2>=0 && AC1<0) setInternal=true;
 	else if (AC2<0 && AC1>=0) setInternal=false;
 	else if (AC2>=0 && AC1>=0)
@@ -2963,6 +2964,7 @@ bool WordMatch::compareCost(int AC1,int LEN1,int lowestSeparatorCost,bool alsoSe
 	{
 		minAvgCostAfterAssessCost=AC1;
 		maxLACAACMatch=LEN1;
+		lastWinnerLACAACMatchPMAOffset = pmaOffset;
 	}
 	return setInternal;
 }
@@ -3121,7 +3123,7 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 					patternFlagCost=0;
 				int minAvgCostAfterAssessCost=pm->getAverageCost(patternFlagCost);
 				for (unsigned int bp=position; bp<position+len; bp++)
-					if (m[bp].compareCost(minAvgCostAfterAssessCost,len,minSeparatorCost[bp-begin],true))
+					if (m[bp].compareCost(minAvgCostAfterAssessCost,len,minSeparatorCost[bp-begin], winners[position - begin][I],true))
 					{
 						globalMinAvgCostAfterAssessCostWinner=true;
 						if (debugTrace.tracePatternElimination)
@@ -3159,11 +3161,23 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 			int minAvgCostAfterAssessCost=pm->getAverageCost(patternFlagCost);
 			unsigned int bp;
 			for (bp=position; bp<position+len && !globalMinAvgCostAfterAssessCostWinner; bp++)
-				if (m[bp].compareCost(minAvgCostAfterAssessCost,len,minSeparatorCost[bp-begin],false))
+				if (m[bp].compareCost(minAvgCostAfterAssessCost,len,minSeparatorCost[bp-begin], winners[position - begin][winner],false))
 					globalMinAvgCostAfterAssessCostWinner=true;
 				else if (debugTrace.tracePatternElimination)
-					lplog(L"%d:%s[%s](%d,%d) PHASE 3 lost GMACAACW (%d>%d) (OR %d>%d) [cost=%d len=%d].",bp,p->name.c_str(),p->differentiator.c_str(),position,len+position,
-					minAvgCostAfterAssessCost,m[bp].minAvgCostAfterAssessCost,m[bp].maxLACAACMatch,len,pm->getCost(),len);
+				{
+					if (m[bp].lastWinnerLACAACMatchPMAOffset >= 0)
+					{
+						patternMatchArray::tPatternMatch *winnerPM = m[position].pma.content + m[bp].lastWinnerLACAACMatchPMAOffset;
+						cPattern *wp = patterns[pm->getPattern()];
+						lplog(L"%d:PMOffset %d:%s[%s](%d,%d) PHASE 3 lost GMACAACW (%d>%d) (OR %d>%d) [cost=%d len=%d] against PMOffset %d:%s[%s](%d,%d).", bp, winners[position - begin][winner], p->name.c_str(), p->differentiator.c_str(), position, len + position,
+							minAvgCostAfterAssessCost, m[bp].minAvgCostAfterAssessCost, m[bp].maxLACAACMatch, len, pm->getCost(), len,
+							m[bp].lastWinnerLACAACMatchPMAOffset,wp->name.c_str(), wp->differentiator.c_str(), position, winnerPM->len + position);
+					}
+					else
+						lplog(L"%d:%s[%s](%d,%d) PHASE 3 lost GMACAACW (%d>%d) (OR %d>%d) [cost=%d len=%d] (no winner set)", bp, p->name.c_str(), p->differentiator.c_str(), position, len + position,
+							minAvgCostAfterAssessCost, m[bp].minAvgCostAfterAssessCost, m[bp].maxLACAACMatch, len, pm->getCost(), len);
+
+				}
 			if (globalMinAvgCostAfterAssessCostWinner)
 			{
 				// if a pattern matching just the separator (for example - 'and') goes up against a separator of lower cost, reject.

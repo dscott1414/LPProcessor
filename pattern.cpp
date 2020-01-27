@@ -376,11 +376,15 @@ bool patternElement::matchOne(Source &source,unsigned int sourcePosition,unsigne
 					continue;
         int cost=formCosts[form];
         if (!preTaggedSource && im->costable())
-          cost+=im->word->second.usageCosts[ME];
+          cost+=im->word->second.usageCosts[ME]; 
         //if (f==PROPER_NOUN_FORM_NUM && (im->flags&(WordMatch::flagAllCaps|WordMatch::flagAddProperNoun))==(WordMatch::flagAllCaps|WordMatch::flagAddProperNoun)) // make this proper noun a little expensive
         //  cost++;
-        // refuse any other form for this very common word if the next word is not punctuation.
-        if (im->word->first==L"i" && f!=nomForm &&
+				if (f == abbreviationForm && sourcePosition + 1 < source.m.size() && source.m[sourcePosition + 1].word->first[0] != L'.')
+						cost += 5;
+				if (f == abbreviationForm && !(im->flags&(WordMatch::flagAllCaps | WordMatch::flagFirstLetterCapitalized)))
+					cost += 10;
+				// refuse any other form for this very common word if the next word is not punctuation.
+				if (im->word->first==L"i" && f!=nomForm &&
           sourcePosition+1<source.m.size() && (signed)source.m[sourcePosition+1].word->first[0]>0 && iswalpha(source.m[sourcePosition+1].word->first[0]))
           cost+=10;
         if (im->word->first==L"a" && f!=determinerForm &&

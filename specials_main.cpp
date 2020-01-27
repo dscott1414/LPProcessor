@@ -4130,7 +4130,7 @@ int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *
 	}
 	else
 	{
-		wprintf(L"Unable to read source %d:%s\n", sourceId, path.c_str());
+		lplog(LOG_FATAL_ERROR, L"Unable to read source %d:%s\n", sourceId, path.c_str());
 		return -1;
 	}
 	return 10;
@@ -4590,11 +4590,11 @@ void wmain(int argc,wchar_t *argv[])
 		printUnknowns(source, step);
 		break;
 	case 21:
-		patternOrWordAnalysis(source, step, L"_MS1", L"XX", Source::TEST_SOURCE_TYPE,true);
+		//patternOrWordAnalysis(source, step, L"_MS1", L"XX", Source::TEST_SOURCE_TYPE,true);
 		//patternOrWordAnalysis(source, step, L"_MS1", L"2",true); // TODO: testing weight change on _S1.
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
 		//patternOrWordAnalysis(source, step, L"_VERB_BARE_INF", L"A", true);
-		//patternOrWordAnalysis(source, step, L"", L"", false); // TODO: testing weight change on _S1.
+		patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false); // TODO: testing weight change on _S1.
 		break;
 	case 60:
 		//stanfordCheckMP(source, step, true,8);

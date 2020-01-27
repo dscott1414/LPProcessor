@@ -2430,7 +2430,11 @@ bool Source::read(char *buffer,int &where,unsigned int total, bool &parsedOnly, 
 			wprintf(L"PROGRESS: %03d%% source read with %d seconds elapsed \r",lastProgressPercent=where*100/total,clocksec());
 		m.emplace_back(buffer,where,total,error);
 	}
-	if (error || where>=(signed)total) return false;
+	if (error || where >= (signed)total)
+	{
+		lplog(LOG_ERROR, L"%s read error at position %d, read buffer location %d (out of %d) - error %d.", sourcePath.c_str(),m.size(),where,total,error);
+		return false;
+	}
 	sentenceStarts.read(buffer,where,total);
 	if ((where*100/total)>lastProgressPercent && printProgress)
 		wprintf(L"PROGRESS: %03d%% source read with %d seconds elapsed \r",lastProgressPercent=where*100/total,clocksec());

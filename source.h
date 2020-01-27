@@ -296,6 +296,7 @@ public:
 		flags=inAdjustedForms;
 		minAvgCostAfterAssessCost=1000000;
 		maxLACAACMatch=0;
+		lastWinnerLACAACMatchPMAOffset = -1;
 		maxMatch=0;
 		maxLACMatch=0;
 		lowestAverageCost=1000000;
@@ -437,6 +438,7 @@ public:
 
 	unsigned short maxLACMatch;
 	unsigned short maxLACAACMatch;
+	unsigned short lastWinnerLACAACMatchPMAOffset; // only used during tracing
 	unsigned __int64 objectRole;
 	char verbSense;
 	unsigned char timeColor;
@@ -621,7 +623,7 @@ public:
 	unsigned int getFormNum(unsigned int line);
 	bool updateMaxMatch(int len,int avgCost);
 	bool updateMaxMatch(int len,int avgCost,int lowerAvgCost);
-	bool compareCost(int AC1,int LEN1,int lowestSeparatorCost,bool alsoSet);
+	bool compareCost(int AC1,int LEN1,int lowestSeparatorCost,int pmaOffset, bool alsoSet);
 	unsigned int getShortFormInflectionEntry(int line,wchar_t *entry);
 	unsigned int getShortAllFormAndInflectionLen(void);
 	int getInflectionLength(int inflection,tInflectionMap *map);
