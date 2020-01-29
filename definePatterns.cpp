@@ -257,14 +257,23 @@ int createNouns(void)
 	// I dare say [the little we know] won't be any good to you, sir.
 	// any boy we know
 	// I resemble *some one you have met*.
+	// But I conclude she would have carried out *whatever plan she might have formed *.
 	/* - watch for bad matches! */
 	cPattern::create(L"__NOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}",L"R",
-										10, L"interrogative_determiner|whichever", L"determiner|the{DET}", L"determiner|a{DET}", L"determiner|an{DET}", L"quantifier|every{DET}", L"adjective|many{DET}", L"demonstrative_determiner|that{DET}", L"quantifier|any{DET}", L"quantifier|some{DET}", L"adverb|too",0,1,1, // L"demonstrative_determiner{DET}", removed - covered better by 'this' being a noun and the adjective being an ADJECTIVE_AFTER
+										11, L"interrogative_determiner|whichever", L"interrogative_determiner|whatever", L"determiner|the{DET}", L"determiner|a{DET}", L"determiner|an{DET}", L"quantifier|every{DET}", L"adjective|many{DET}", L"demonstrative_determiner|that{DET}", L"quantifier|any{DET}", L"quantifier|some{DET}", L"adverb|too",0,1,1, // L"demonstrative_determiner{DET}", removed - covered better by 'this' being a noun and the adjective being an ADJECTIVE_AFTER
 										1,L"_ADJECTIVE*2",0,0,1,  // The *only other* person I saw
 										6,L"adjective*1", L"noun{N_AGREE}",L"Proper Noun",L"indefinite_pronoun{N_AGREE}",L"numeral_cardinal{N_AGREE}",L"verb*2",VERB_PRESENT_PARTICIPLE,1,1,  // adjective may be loosed from ProperNoun improperly - prevent match in 'The little Pilgrim was startled by this tone.'
 										1, L"determiner|the{DET}",0,0,1, // the facilities *the institute* affords
 										4,L"Proper Noun*3{ANY:NAME:SUBJECT:PREFER_S1}",L"personal_pronoun_nominative*3{SUBJECT:PREFER_S1}",L"personal_pronoun*3{SUBJECT:PREFER_S1}", L"noun*2{N_AGREE}", NO_OWNER,1,1, // highly restrict and discourage to prevent unnecessary matches
 										3,L"__ALLVERB",L"_COND{VERB}", L"_VERBPASSIVE",0,1,1,
+										4, L"__ALLOBJECTS_0*2", L"__ALLOBJECTS_1*2", L"_INFP*2", L"_REL1[*]*2", 0, 0, 1,
+										0);
+	// I shall make it my business to follow her *everywhere she goes*.
+	cPattern::create(L"__NOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}", L"R2",
+										1, L"noun|everywhere", 0, 1, 1, 
+										1, L"determiner|the{DET}", 0, 0, 1, // the facilities *the institute* affords
+										4, L"Proper Noun*3{ANY:NAME:SUBJECT:PREFER_S1}", L"personal_pronoun_nominative*3{SUBJECT:PREFER_S1}", L"personal_pronoun*3{SUBJECT:PREFER_S1}", L"noun*2{N_AGREE}", NO_OWNER, 1, 1, // highly restrict and discourage to prevent unnecessary matches
+										3, L"__ALLVERB", L"_COND{VERB}", L"_VERBPASSIVE", 0, 1, 1,
 										4, L"__ALLOBJECTS_0*2", L"__ALLOBJECTS_1*2", L"_INFP*2", L"_REL1[*]*2", 0, 0, 1,
 										0);
 	// everything she writes / those I had known
@@ -1039,6 +1048,115 @@ int createBareInfinitives(void)
 	return 0;
 }
 
+int createThinkBareInfinitives(void)
+{
+	LFS
+		//cPattern *p=NULL;
+		// I make/made you think
+		cPattern::create(L"_THINK_BARE_INF{VERB}", L"1",
+			1, L"verbverb{vS:V_HOBJECT:V_AGREE}", VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_SECOND_SINGULAR | VERB_PRESENT_THIRD_SINGULAR | VERB_PRESENT_PLURAL, 1, 1,
+			2, L"_NOUN_OBJ{HOBJECT}", L"__NOUN[*]{HOBJECT}", 0, 0, 1,
+			2, L"_ADVERB", L"_PP", 0, 0, 2,
+			1, L"SYNTAX:Accepts S as Object{vS:V_OBJECT}", VERB_PRESENT_FIRST_SINGULAR, 1, 1,
+			0);
+	// And **have him shoot** up the ship !
+	// I shall ring and **have Blake screw** in another .
+	// Why , what would you **have her do** ?	
+	// Let me **have them mix** a cocktail for you?
+	// We **have all come** away
+	// I wasn't going to sit there calmly and **have him take** away all our money .
+	cPattern::create(L"_THINK_BARE_INF{VERB}", L"A",
+		1, L"have|have{vS:V_HOBJECT:V_AGREE}", VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_SECOND_SINGULAR | VERB_PRESENT_THIRD_SINGULAR | VERB_PRESENT_PLURAL, 1, 1,
+		6, L"personal_pronoun_accusative{HOBJECT}", L"_NAME{HOBJECT}", L"predeterminer|all{HOBJECT}", L"indefinite_pronoun", L"personal_pronoun|you", L"personal_pronoun|it", 0, 1, 1, // must be very tightly controlled or results in many misparses
+		2, L"_ADVERB", L"_PP", 0, 0, 2,
+		1, L"SYNTAX:Accepts S as Object{vS:V_OBJECT}", VERB_PRESENT_FIRST_SINGULAR, 1, 1,
+		0);
+	// And **have the man drive** slowly
+	// or **have his head cut** off from his shoulders .
+	cPattern::create(L"_THINK_BARE_INF{VERB}", L"B",
+		1, L"have|have{vS:V_HOBJECT:V_AGREE}", VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_SECOND_SINGULAR | VERB_PRESENT_THIRD_SINGULAR | VERB_PRESENT_PLURAL, 1, 1,
+		2, L"determiner", L"possessive_determiner", 0, 1, 1,
+		1, L"noun", 0, 1, 1,
+		2, L"_ADVERB", L"_PP", 0, 0, 2,
+		1, L"SYNTAX:Accepts S as Object{vS:V_OBJECT}", VERB_PRESENT_FIRST_SINGULAR, 1, 1,
+		0);
+	cPattern::create(L"_THINK_BARE_INF{VERB}", L"2",
+		1, L"verbverb{past:V_HOBJECT:V_AGREE}", VERB_PAST | VERB_PAST_THIRD_SINGULAR | VERB_PAST_PLURAL, 1, 1,
+		2, L"_NOUN_OBJ{HOBJECT}", L"__NOUN[*]{HOBJECT}", 0, 0, 1,
+		2, L"_ADVERB", L"_PP", 0, 0, 2,
+		1, L"SYNTAX:Accepts S as Object{vS:V_OBJECT}",  VERB_PRESENT_FIRST_SINGULAR, 1, 1,
+		0);
+	cPattern::create(L"_THINK_BARE_INF{VERB}", L"B",
+		1, L"have|had{past:V_HOBJECT:V_AGREE}", VERB_PAST | VERB_PAST_THIRD_SINGULAR | VERB_PAST_PLURAL, 1, 1,
+		2, L"_NOUN_OBJ{HOBJECT}", L"__NOUN[*]{HOBJECT}", 0, 1, 1,
+		2, L"_ADVERB", L"_PP", 0, 0, 2,
+		1, L"SYNTAX:Accepts S as Object{vS:V_OBJECT}", VERB_PRESENT_FIRST_SINGULAR, 1, 1,
+		0);
+	cPattern::create(L"_THINK_BARE_INF{VERB}", L"C",
+		1, L"verbverb{past:V_HOBJECT:V_AGREE}", VERB_PAST | VERB_PAST_THIRD_SINGULAR | VERB_PAST_PLURAL, 1, 1,
+		1, L"adverb|rather", 0, 1, 1,
+		1, L"preposition|than", 0, 1, 1,
+		2, L"verbverb", L"have|had", VERB_PAST | VERB_PAST_THIRD_SINGULAR | VERB_PAST_PLURAL, 1, 1,
+		2, L"_NOUN_OBJ{HOBJECT}", L"__NOUN[*]{HOBJECT}", 0, 0, 1,
+		2, L"_ADVERB", L"_PP", 0, 0, 2,
+		1, L"SYNTAX:Accepts S as Object{vS:V_OBJECT}", VERB_PRESENT_FIRST_SINGULAR, 1, 1,
+		0);
+	// I would make you go  | I won't make you go
+	// you will/would make them protect you ?
+	cPattern::create(L"_THINK_BARE_INF{VERB}", L"3",
+		1, L"_COND", 0, 1, 1,
+		2, L"verbverb{vS:V_HOBJECT}", L"have|have{vS:V_HOBJECT}", VERB_PRESENT_FIRST_SINGULAR, 1, 1,
+		2, L"_NOUN_OBJ{HOBJECT}", L"__NOUN[*]{HOBJECT}", 0, 0, 1,
+		2, L"_ADVERB", L"_PP", 0, 0, 2,
+		1, L"SYNTAX:Accepts S as Object{vS:V_OBJECT}", VERB_PRESENT_FIRST_SINGULAR, 1, 1,
+		0);
+	// I don't let him always allow them to depart
+	// I do make you go  | I don't make you go - matches VERB 3
+	cPattern::create(L"_THINK_BARE_INF{VERB}", L"4",
+		1, L"_DO{imp}", 0, 1, 1,
+		2, L"verbverb{vS:V_HOBJECT}", L"have|have{vS:V_HOBJECT}", VERB_PRESENT_FIRST_SINGULAR, 1, 1,
+		2, L"_NOUN_OBJ{HOBJECT}", L"__NOUN[*]{HOBJECT}", 0, 0, 1,
+		2, L"_ADVERB", L"_PP", 0, 0, 2,
+		1, L"SYNTAX:Accepts S as Object{vS:V_OBJECT}", VERB_PRESENT_FIRST_SINGULAR, 1, 1,
+		0);
+	// I have/had made you do that  / had made "his indecision of character" be
+	cPattern::create(L"_THINK_BARE_INF{VERB}", L"5",
+		1, L"_HAVE", 0, 1, 1,
+		2, L"verbverb{vB:V_HOBJECT}", L"have|had{vS:V_HOBJECT}", VERB_PAST_PARTICIPLE, 1, 1,
+		2, L"_NOUN_OBJ{HOBJECT}", L"__NOUN[*]{HOBJECT}", 0, 0, 1,
+		2, L"_ADVERB", L"_PP", 0, 0, 2,
+		1, L"SYNTAX:Accepts S as Object{vS:V_OBJECT}", VERB_PRESENT_FIRST_SINGULAR, 1, 1,
+		0);
+	// I am/was [making you go] and do that
+	// you are [making them protect] you ?
+		// Tuppence hated [letting her dangle] below the ceiling.
+		// Tuppence loved [feeling the grass grow] under her feet.
+		// Terrance hated [letting the grass grow] under her feet.
+		// Harry felt her [hearing the glass slide] underneath the fitting.
+		// Hillary thought [watching them float] under the water was quite wonderful.
+		// David liked [making him do] that.
+		// I preferred helping her finish the table.
+	cPattern::create(L"_THINK_BARE_INF{VERB}", L"6",
+		1, L"_IS", 0, 1, 1,
+		2, L"verbverb{vC:V_HOBJECT}", L"have|having{vS:V_HOBJECT}", VERB_PRESENT_PARTICIPLE, 1, 1,
+		2, L"_NOUN_OBJ{HOBJECT}", L"__NOUN[*]{HOBJECT}", 0, 0, 1,
+		2, L"_ADVERB", L"_PP", 0, 0, 2,
+		1, L"SYNTAX:Accepts S as Object{vS:V_OBJECT}", VERB_PRESENT_FIRST_SINGULAR, 1, 1,
+		0);
+	// I will have made him go and do that | I will definitely have let him go and do that
+	// I would have made him do that
+		// I would have helped do that
+	cPattern::create(L"_THINK_BARE_INF{VERB}", L"7",
+		1, L"_COND", 0, 1, 1,
+		1, L"_HAVE{_BLOCK}", 0, 1, 1,
+		2, L"verbverb{vAB:V_HOBJECT}", L"have|had{vAB:V_HOBJECT}", VERB_PAST_PARTICIPLE, 1, 1,
+		2, L"_NOUN_OBJ{HOBJECT}", L"__NOUN[*]{HOBJECT}", 0, 0, 1,
+		2, L"_ADVERB", L"_PP", 0, 0, 2,
+		1, L"SYNTAX:Accepts S as Object{vS:V_OBJECT}", VERB_PRESENT_FIRST_SINGULAR, 1, 1,
+		0);
+	return 0;
+}
+
 /* Infinitive phrases are objects or subjects, with their tags blocked from being seen.
 	 within the IVERB tag, there are v* verb sense tags, V_OBJECT objects and the OBJECT tags produced by __ALLOBJECTS
 
@@ -1115,12 +1233,15 @@ void createInfinitivePhrases(void)
 	// to L"infinitive" phrase as a noun object [PRESENT]
 	// to think he should go / to think he should go and she should also go.
 	// simple infinitive nonfinite verb phrase Quirk CGEL (3.56) vIS
+	// I shall have *to tell him you are sorry*.
 	cPattern::create(L"__INFPT{IVERB:_BLOCK}",L"1",
 										1,L"to{ITO}",0,1,1,
 										1,L"_ADVERB",0,0,1,
 										1,L"verbal_auxiliary{V_AGREE}",0,0,1, // to help think this through
 										1,L"SYNTAX:Accepts S as Object{vS:V_OBJECT}",VERB_PRESENT_FIRST_SINGULAR,1,1,
-										2,L"_ADVERB",L"preposition*2",0,0,1, // preposition use should be rare!
+										3, L"_NOUN_OBJ", L"__NOUN[*]", L"_PP", 0, 0, 1, 
+										3, L"_ADJECTIVE", L"_ADVERB", L"preposition*2", 0, 0, 1,  
+										3, L"demonstrative_determiner|that{S_IN_REL}", L"quantifier|all*-2", L",", 0, 0, 1,
 										1,L"__S1{OBJECT:EVAL:_BLOCK}",0,1,1,
 										3,L"__INFP5SUB",L"__INFPSUB",L"__INFPT2SUB",0,0,1,
 										0);
@@ -1908,6 +2029,7 @@ void createSecondaryPatterns1(void)
 									3, L"__ALLOBJECTS_0", L"__ALLOBJECTS_1", L"__ALLOBJECTS_2", 0, 0, 1, // there must only be one adjective and it must be last (not mixed in) see *
 									0);
 	createBareInfinitives();
+	createThinkBareInfinitives();
 
 
 	// having sent
@@ -2333,6 +2455,14 @@ int createSecondaryPatterns2(void)
 									 3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,1,1, // there must only be one adjective and it must be last (not mixed in) see *
 									 1,L"__ADJECTIVE",0,0,1,
 									 0);
+	// I can't help *wishing my legs were like Mr . Grouse's *. 
+	cPattern::create(L"__NOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}", L"D2",
+									1, L"SYNTAX:Accepts S as Object{vS:V_OBJECT}", VERB_PRESENT_PARTICIPLE, 1, 1,
+									3, L"_NOUN_OBJ*1", L"__NOUN[*]*1", L"_PP*2", 0, 0, 1, // telling me you were with monsieur Poirot. 
+									2, L"_ADJECTIVE", L"_ADVERB", 0, 0, 1, // feeling confident he was there.
+									2, L"demonstrative_determiner|that*1{S_IN_REL}", L"quantifier|all", 0, 0, 1,
+									2, L"__S1[R]*1{_BLOCK:OBJECT:EVAL}", L"_MS1[*]*2{_BLOCK:OBJECT:EVAL}", 0, 1, 1,
+									0);
 	// 'the man spending money' was their target.
 	// pattern is not grouped with its other root patterns
 	/* RINFP - INFP removed after VERB and placed in ALLOBJECTS as an object of the verb.
@@ -2433,7 +2563,7 @@ int createSecondaryPatterns2(void)
 	// Lawrence told me you were with monsieur Poirot.
 	cPattern::create(L"__ALLTHINK",L"",                   
 									1,L"_ADVERB",0,0,1,
-									3,L"_THINK",L"_THINKPAST",L"_THINKPRESENT",0,1,1,
+									4,L"_THINK",L"_THINKPAST",L"_THINKPRESENT",L"_THINK_BARE_INF",0,1,1,
 									0); 
 
 	// She thinks that if you are going to carry her banner in the procession you ought to let her take your light .
@@ -2449,6 +2579,14 @@ int createSecondaryPatterns2(void)
 										3, L"demonstrative_determiner|that{S_IN_REL}", L"quantifier|all*-2",L",",0, 0, 1,
 										2, L"__S1[R]{_BLOCK:OBJECT:EVAL}", L"_MS1[*]{_BLOCK:OBJECT:EVAL}", 0, 1, 1,
 										0);
+		// I would have him fired
+	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"1P",
+										1, L"__C1__S1", 0, 1, 1,
+										1, L"_COND", 0, 1, 1,
+										1, L"_HAVE", 0, 1, 1,
+										1,L"__ALLOBJECTS_1",0,1,1,
+										1, L"_VERBPASTPART{vAB}", 0, 1, 1, 0);
+
 	//cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"X",
 	//									1, L"__C1__S1", 0, 1, 1,
 	//									1, L"verbverb{VERB:V_AGREE}", 0, 1, 1, 
@@ -2475,16 +2613,6 @@ int createSecondaryPatterns2(void)
 										1, L"_COND", 0, 1, 1,
 										1, L"_HAVE", 0, 1, 1,
 										1, L"_BEEN{vAB:id}", 0, 1, 1, 0);
-	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}",L"R3",
-									 1,L"__C1__S1",0,1,1,
-									 4,L"_IS{VERB:vS:id}", L"_WOULDBE", L"_HAVEBEEN", L"_COULDHAVEBEEN",0,1,1,
-										// removed OBJECT from _NOUN as this will cause IS to have two objects (including the one from _S1) which is wrong and will cause elimination of this pattern
-										// if _ADJECTIVE is not optional, DOES NOT match:
-										// The fact is it is all *so* funny.
-									 1,L"_ADJECTIVE",0,1,1, // make NOUN more expensive because this is redundant with _NOUN[5] 
-									 2,L"_PP",L"_ADVERB",0,0,2,
-									 1,L"__S1[*]*1{_BLOCK:OBJECT:EVAL}",0,1,1, // rare             // and in general _NOUN[5] is correct when this is a NOUN
-									 0);
 	cPattern::create(L"_WOULDMAKE{VERB}", L"",
 		1, L"_COND", 0, 1, 1,
 		1, L"verb|make{vS:V_OBJECT:id}", 0, 1, 1, 0);
@@ -2524,6 +2652,21 @@ int createSecondaryPatterns2(void)
 										1, L"__S1[*]*1{_BLOCK:OBJECT:EVAL}", 0, 1, 1, // rare             // and in general _NOUN[5] is correct when this is a NOUN
 										1, L"_MSTAIL", 0, 0, 1,
 										0);
+	// if _ADJECTIVE is not optional, DOES NOT match:
+	// The fact is it is all *so* funny.   The trouble is I can't trust you.
+	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"R4",
+										1, L"__C1__S1", 0, 1, 1,
+										4, L"_IS{VERB:vS:id}", L"_WOULDBE", L"_HAVEBEEN", L"_COULDHAVEBEEN", 0, 1, 1,
+										1, L"_ADJECTIVE", 0, 1, 1,
+										2, L"_PP", L"_ADVERB", 0, 0, 2,
+										1, L"__S1[*]*1{_BLOCK:OBJECT:EVAL}", 0, 1, 1, // rare             // and in general _NOUN[5] is correct when this is a NOUN
+										0);
+	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"R5",
+										1, L"__C1__S1*20", 0, 1, 1,
+										4, L"_IS{VERB:vS:id}", L"_WOULDBE", L"_HAVEBEEN", L"_COULDHAVEBEEN", 0, 1, 1,
+										2, L"_PP", L"_ADVERB", 0, 0, 2,
+										1, L"__S1[*]*1{_BLOCK:OBJECT:EVAL}", 0, 1, 1, // rare             // and in general _NOUN[5] is correct when this is a NOUN
+										0);
 	// it is me they are after.
 	// It was Tilda they would go after next.
 	// The infernal skunk , it is **a pity he didn't go** down twenty years ago . / prevent NOUN[R] from dominating
@@ -2533,25 +2676,16 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"9",
 										1, L"__C1__S1", 0, 1, 1,
 										4, L"_IS{VERB:vS:id}", L"_WOULDBE", L"_HAVEBEEN", L"_COULDHAVEBEEN", 0, 1, 1,
-										// removed OBJECT from _NOUN as this will cause IS to have two objects (including teh one from _S1) which is wrong and will cause elimination of this pattern
+										// removed OBJECT from _S1 as this will cause IS to have two objects which is wrong and will cause elimination of this pattern
 										// _ADJECTIVE: I am *sure* I would have been so *scared* I wouldhad have gone right ahead
-										3, L"__NOUN[*]*1{OBJECT}", L"_NOUN_OBJ*1{OBJECT}", L"_ADJECTIVE", 0, 1, 1, // make NOUN more expensive because this is redundant with _NOUN[5] 
+										2, L"__NOUN[*]*1{OBJECT}", L"_NOUN_OBJ*1{OBJECT}", 0, 1, 1, // make NOUN more expensive because this is redundant with _NOUN[5] 
 										1, L"__S1[*]*1{_BLOCK:EVAL}", 0, 1, 1, // rare             // and in general _NOUN[5] is correct when this is a NOUN
 										0);
-	//cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}",L"B",
-	//                 1,L"__C1__S1",0,1,1,
-	//                 1,L"_IS{VERB:vS:id}",0,1,1,
-	//                 3,L"_ADJECTIVE",L"__NOUN[*]{OBJECT}",L"_NOUN_OBJ{OBJECT}",0,1,1,
-	//                 1,L"__S1{_BLOCK:OBJECT:EVAL}",0,1,1,
-	//                 0);
 	// He is a little red.
 	/// do not change this # "7" without changing the calculateVerbAfterVerbUsage code.
 	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}",L"7",
 									 1,L"__C1__S1",0,1,1,
 								   4, L"_IS{VERB:vS:id}", L"_WOULDBE", L"_HAVEBEEN", L"_COULDHAVEBEEN", 0, 1, 1,
-									 // covered by _ADVERB[L]
-     							 //1,L"determiner|a",0,1,1,
-									 //3,L"adverb|little",L"noun|mite",L"adjective|wee",0,1,1,
 									 1,L"_ADJECTIVE*-1",0,1,1,  // calculateVerbAfterVerbUsage specifically removes this -1 incentive by matching on this pattern!
 									 2,L"_PP",L"_REL1[*]",0,0,1,
 										1, L"__CLOSING__S1", 0, 0, 3,
@@ -2569,11 +2703,22 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"__INTRO_N{_ONLY_BEGIN_MATCH}", L"2",
 									2, L"_ADJECTIVE*1", L"uncertainDurationUnit", 0, 1, 1, // afraid I don't. / while **the little Pilgrim was still gazing** , disappeared from her
 									0);
+	
 	// Thank heaven you have never kept a fashion.
 	cPattern::create(L"__INTRO_N{_ONLY_BEGIN_MATCH}", L"4",
 									1, L"verb|thank", 0, 1, 1, 
 									1, L"noun|heaven", 0, 1, 1, 
 									0);
+	// No doubt
+	cPattern::create(L"__INTRO_N{_ONLY_BEGIN_MATCH}", L"ND",
+										1, L"determiner|no", 0, 1, 1,
+										1, L"noun|doubt", 0, 1, 1,
+										0);
+	// Good thing you know *I* am in the house.
+	cPattern::create(L"__INTRO_N{_ONLY_BEGIN_MATCH}", L"5",
+										1, L"adjective|good", 0, 1, 1,
+										1, L"noun|thing", 0, 1, 1,
+										0);
 	cPattern::create(L"__INTRO_N{_ONLY_BEGIN_MATCH}",L"3",
 									 3,L"_ADVERB",L"_ADJECTIVE*1", L"interjection*-4", 0,1,1, // glibly, she refused. / New, isn't she?
 									 1,L",",0,1,1,
@@ -2590,6 +2735,11 @@ int createSecondaryPatterns2(void)
 										1, L"adjective|next", 0, 1, 1,
 										1, L"noun|thing", 0, 1, 1,
 										0);
+	cPattern::create(L"__INTRO_N{_ONLY_BEGIN_MATCH}", L"7",
+									1, L"personal_pronoun_nominative|i", 0, 1, 1,
+									1, L"verb|take", 0, 1, 1,
+									1, L"personal_pronoun|it", 0, 1, 1,
+									0);
 	// *I* have no doubt you shall do the square thing.
 	cPattern::create(L"__INTRO_N{}", L"7",
 									1, L"personal_pronoun_nominative|i", 0, 1, 1, 

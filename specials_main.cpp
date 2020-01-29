@@ -3818,10 +3818,16 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		}
 		return 0;
 	}
-	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && 
-		  (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST && source.queryPattern(wordSourceIndex, L"__S1") != -1)
+	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 &&
+		(source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST && source.queryPattern(wordSourceIndex, L"__S1") != -1)
 	{
 		partofspeech += L"**ISVERBNOTADJECTIVE?";
+	}
+	// 102 examples checked, 101 correct.
+	if (word==L"after" && primarySTLPMatch == L"preposition or conjunction" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0)
+	{
+		errorMap[L"LP correct: 'after' can be an adjective"]++;
+		return 0;
 	}
 	return -1;
 }
@@ -4590,7 +4596,8 @@ void wmain(int argc,wchar_t *argv[])
 		printUnknowns(source, step);
 		break;
 	case 21:
-		//patternOrWordAnalysis(source, step, L"_MS1", L"XX", Source::TEST_SOURCE_TYPE,true);
+		// Source::TEST_SOURCE_TYPE
+		//patternOrWordAnalysis(source, step, L"__S1", L"R5", Source::GUTENBERG_SOURCE_TYPE,true);
 		//patternOrWordAnalysis(source, step, L"_MS1", L"2",true); // TODO: testing weight change on _S1.
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
 		//patternOrWordAnalysis(source, step, L"_VERB_BARE_INF", L"A", true);

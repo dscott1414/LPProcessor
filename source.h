@@ -438,7 +438,7 @@ public:
 
 	unsigned short maxLACMatch;
 	unsigned short maxLACAACMatch;
-	unsigned short lastWinnerLACAACMatchPMAOffset; // only used during tracing
+	short lastWinnerLACAACMatchPMAOffset; // only used during tracing
 	unsigned __int64 objectRole;
 	char verbSense;
 	unsigned char timeColor;
