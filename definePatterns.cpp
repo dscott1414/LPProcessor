@@ -663,6 +663,11 @@ int createBasicPatterns(void)
 											1,L"__ADVERB",0,1,1,
 											1,L",",0,1,1,
 											0);
+	// No doubt
+	cPattern::create(L"_ADVERB{_ONLY_BEGIN_MATCH}", L"ND",
+									1, L"determiner|no", 0, 1, 1,
+									1, L"noun|doubt", 0, 1, 1,
+									0);
 	/* Causes incorrect parse - "Then"--Tuppence's voice shook a little--"there's a boy."
 	cPattern::create(L"_ADVERB",L"2",1,L"quotes",OPEN_INFLECTION,1,1,
 											1,L"__ADVERB",0,1,1,
@@ -2298,7 +2303,7 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"_HAIL_OBJECT{_ONLY_END_MATCH:_FINAL_IF_ALONE}", L"2",
 									1, L"personal_pronoun|you", 0, 1, 1, 
 									1, L"adjective",0,0,1,
-									3, L"honorific{HON:HAIL}", L"noun{HAIL}", L"adjective|dear", MALE_GENDER | FEMALE_GENDER, 1, 1,
+									5, L"honorific{HON:HAIL}", L"noun{HAIL}", L"adjective|dear", L"noun|thing{HAIL}", L"adverb|too{HAIL}", MALE_GENDER | FEMALE_GENDER, 1, 1,
 									0);
 	cPattern::create(L"__CLOSING__S1{_ONLY_END_MATCH}",L"1",
 									 1,L",",0,1,1, // , ma'am // if this is made optional, _NOUN of C4 and _ALLOBJECT of C3 are identical
@@ -2709,10 +2714,10 @@ int createSecondaryPatterns2(void)
 									1, L"verb|thank", 0, 1, 1, 
 									1, L"noun|heaven", 0, 1, 1, 
 									0);
-	// No doubt
-	cPattern::create(L"__INTRO_N{_ONLY_BEGIN_MATCH}", L"ND",
-										1, L"determiner|no", 0, 1, 1,
-										1, L"noun|doubt", 0, 1, 1,
+	cPattern::create(L"__INTRO_N{_ONLY_BEGIN_MATCH}", L"ID",
+										1, L"personal_pronoun_nominative|i", 0, 1, 1,
+										1, L"verb|doubt*-3", 0, 1, 1,
+										1, L"conjunction|if",0,1,1,
 										0);
 	// Good thing you know *I* am in the house.
 	cPattern::create(L"__INTRO_N{_ONLY_BEGIN_MATCH}", L"5",

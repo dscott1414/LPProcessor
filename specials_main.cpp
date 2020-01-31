@@ -2317,7 +2317,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 					L"exclaimed",L"expostulated",L"exulted",L"fell",L"flung",L"fumed",L"gasped",L"gazing",L"gibed",L"grinned",L"groaned",L"growled",
 					L"grumbled",L"grunted",L"guffawed",L"hooted",L"howled",L"implored",L"inquired",L"interjected",L"interposed",L"interrupted",L"jeered",L"joked",
 					L"jubilated",L"laughed",L"leered",L"moaned",L"mourned",L"murmured",L"mused",L"muttered",L"observed",L"panted",L"persisted",L"promised",
-					L"proposed",L"propounded",L"protested",L"puffed",L"pursued",L"questioned",L"quizzed",L"raved",L"reminded",L"remonstrated",L"repeated",L"replied",
+					L"proposed",L"propounded",L"protested",L"puffed",L"pursued",L"put",L"questioned",L"quizzed",L"raved",L"reminded",L"remonstrated",L"repeated",L"replied",
 					L"responded",L"retaliated",L"retorted",L"roared",L"said",L"sang",L"scoffed",L"scorned",L"scowled",L"screamed",L"seconded",L"secure",
 					L"shot",L"shouted",L"shrieked",L"shrilled",L"smirked",L"snapped",L"snarled",L"sneered",L"snorted",L"sobbed",L"soliloquized",L"spluttered",
 					L"stammered",L"stuttered",L"suggested",L"surmised",L"sympathized",L"thought",L"turning",L"twitted",L"used",L"ventured",L"wailed",L"wheezed",
@@ -2337,17 +2337,40 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: speaker is proper noun (not verb)"]++;
 		return 0;
 	}
+	// 3b. ST is always wrong when given a phrase like " she *exclaimed* - LP correctly tags 'exclaimed' as a verb
+	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && wordSourceIndex > 2 && source.m[wordSourceIndex - 2].queryForm(quoteForm) >= 0 &&
+		(source.m[wordSourceIndex-1].queryWinnerForm(L"personal pronoun") >= 0 || source.m[wordSourceIndex-1].queryWinnerForm(L"Proper Noun") >= 0) &&
+		speakingVerbs.find(source.m[wordSourceIndex].word->first) != speakingVerbs.end())
+	{
+		errorMap[L"LP correct: verb of speaking is a verb"]++;
+		return 0;
+	}
+	// 3c. ST is always wrong when given a phrase like " added his father - LP correctly tags 'added' as a verb
+	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && source.m[wordSourceIndex - 1].queryForm(quoteForm) >= 0 &&
+		wordSourceIndex > 1 && speakingVerbs.find(source.m[wordSourceIndex].word->first) != speakingVerbs.end())
+	{
+		errorMap[L"LP correct: verb of speaking is a verb"]++;
+		return 0;
+	}
 	// 4. ST is always wrong when given a phrase like [(ROOT (S ('' '') (S (S (VP (VBD said))) (VP (VBZ Bobtail)))] - LP correctly tags 'said' as a verb
 	// Stanford POS JJ(adjective) not found in winnerForms verb for word ejaculated 0002658:[” *ejaculated* Mrs.Ross .]
 	if ((primarySTLPMatch == L"adjective" || primarySTLPMatch == L"Proper Noun" || primarySTLPMatch == L"noun") &&
-		(source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"SYNTAX:Accepts S as Object") >= 0 ) && 
+		(source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"SYNTAX:Accepts S as Object") >= 0) && wordSourceIndex > 1 &&
 		source.m[wordSourceIndex - 1].queryForm(quoteForm) >= 0 &&
-		(source.m[wordSourceIndex + 1].queryWinnerForm(L"Proper Noun") >= 0 || source.m[wordSourceIndex + 1].word->first == L"the" || source.m[wordSourceIndex + 1].word->first == L"a" || source.m[wordSourceIndex + 1].word->first == L"one" ||
-		 source.m[wordSourceIndex + 1].queryWinnerForm(L"honorific") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"honorific_abbreviation") >= 0) &&
-		wordSourceIndex > 1 && find(speakingVerbs.begin(), speakingVerbs.end(), word) != speakingVerbs.end())
+		find(speakingVerbs.begin(), speakingVerbs.end(), word) != speakingVerbs.end())
 	{
-		errorMap[L"LP correct: speaking verb is not adjective, noun or Proper Noun"]++;
-		return 0;
+		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"Proper Noun") >= 0 || source.m[wordSourceIndex + 1].word->first == L"the" || source.m[wordSourceIndex + 1].word->first == L"a" || source.m[wordSourceIndex + 1].word->first == L"one" ||
+			source.m[wordSourceIndex + 1].queryWinnerForm(L"honorific") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"honorific_abbreviation") >= 0)
+		{
+			errorMap[L"LP correct: speaking verb is not adjective, noun or Proper Noun"]++;
+			return 0;
+		}
+		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"preposition") >= 0 && (source.m[wordSourceIndex + 2].queryWinnerForm(L"Proper Noun") >= 0 || source.m[wordSourceIndex + 2].queryWinnerForm(L"honorific") >= 0 || source.m[wordSourceIndex + 2].queryWinnerForm(L"honorific_abbreviation") >= 0))
+		{
+			//partofspeech += L"SPV3";
+			errorMap[L"LP correct: speaking verb is not adjective, noun or Proper Noun"]++;
+			return 0;
+		}
 	}
 	// 5. if ST thinks it is a verb, and LP thinks it is a noun, and it is preceded by a determiner separated only by up to 2 adjectives (that are not 'no'), unless it is a VBG and then it has to be immediately preceeded by a determiner
 	//    examined 100 examples from gutenburg and 1 violated this rule.
@@ -3829,6 +3852,29 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"LP correct: 'after' can be an adjective"]++;
 		return 0;
 	}
+	if (word==L"doubt")
+	{
+		if (source.queryPattern(wordSourceIndex, L"__INTRO_N", L"ID") != -1)
+		{
+			errorMap[L"LP correct: 'doubt' is a verb in 'I doubt if'"]++;
+			return 0;
+		}
+		if (source.queryPattern(wordSourceIndex, L"__ADVERB", L"ND") != -1)
+		{
+			errorMap[L"LP correct: 'doubt' is a noun in 'no doubt'"]++;
+			return 0;
+		}
+	}
+	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0)
+	{
+		errorMap[L"LP correct: adjective not verb"]++; // probabilistic - see distribute errors
+		return 0;
+	}
+	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].isOnlyWinner(adverbForm) && source.m[wordSourceIndex-1].queryWinnerForm(L"preposition") < 0)
+	{
+		errorMap[L"LP correct: adverb not noun"]++; // probabilistic - see distribute errors
+		return 0;
+	}
 	return -1;
 }
 
@@ -3947,7 +3993,7 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 				fdi->second.unaccountedForDisagreeSTLP++;
 				//formDistribution[word] = fd;
 				if (originalWord.find(L' ') != wstring::npos &&
-					word != L"no one" && word != L"every one" && word != L"as if" && word != L"for ever" && word != L"next to" && word != L"good by" && word != L"good bye" && word != L"a trifle" && word!=L"a" && word!=L"i")
+					word != L"no one" && word != L"every one" && word != L"as if" && word != L"for ever" && word != L"next to" && word != L"good by" && word != L"good bye" && word != L"a trifle" && word!=L"a" && word!=L"i" && word!=L"young 'un")
 				{
 					lookFor = originalWord.substr(wspace, originalWord.length()) + L")";
 					parse = originalParse;
@@ -4142,6 +4188,16 @@ int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *
 	return 10;
 }
 
+void distributeErrors(unordered_map<wstring, int> &errorMap)
+{
+	int numErrors=errorMap[L"LP correct: adjective not verb (94% probabilistic)"];  // out of 215 examples studied, 12 were incorrect
+	errorMap[L"LP correct: adjective not verb (94% probabilistic)"] = numErrors * 94 / 100;
+	errorMap[L"ST correct: adjective not verb (6% probabilistic)"] = numErrors * 6 / 100;
+	numErrors = errorMap[L"LP correct: adverb not noun (97% probabilistic)"];  // out of 233 examples studied, 7 were incorrect
+	errorMap[L"LP correct: adverb not noun (97% probabilistic)"] = numErrors * 97 / 100;
+	errorMap[L"ST correct: adverb not noun (3% probabilistic)"] = numErrors * 3 / 100;
+}
+
 int stanfordCheck(Source source, int step, bool pcfg)
 {
 	MYSQL_RES * result;
@@ -4242,6 +4298,7 @@ int stanfordCheck(Source source, int step, bool pcfg)
 			break;
 	}
 	lplog(LOG_ERROR, L"DIFF ANALYSIS ------------------------------------------------------------------------");
+	distributeErrors(errorMap);
 	int LPErrors = 0, STErrors = 0, diff=0;
 	for (auto const&[error, count] : errorMap)
 	{
@@ -4601,7 +4658,8 @@ void wmain(int argc,wchar_t *argv[])
 		//patternOrWordAnalysis(source, step, L"_MS1", L"2",true); // TODO: testing weight change on _S1.
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
 		//patternOrWordAnalysis(source, step, L"_VERB_BARE_INF", L"A", true);
-		patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false); // TODO: testing weight change on _S1.
+		//patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false); // TODO: testing weight change on _S1.
+		patternOrWordAnalysis(source, step, L"fritilla", L"", Source::GUTENBERG_SOURCE_TYPE, false); // TODO: testing weight change on _S1.
 		break;
 	case 60:
 		//stanfordCheckMP(source, step, true,8);

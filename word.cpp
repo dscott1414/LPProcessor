@@ -2515,7 +2515,14 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
     bufferScanLocation=cp;
     if (sWord==L"." || sWord==L"?" || sWord==L"!" || sWord==L"..." || sWord==L"…")
       return PARSE_END_SENTENCE;
-    return 0;
+		int extend;
+		if (sWord.length() == 1 && isSingleQuote(sWord[0]) && (extend = continueParse(buffer, cp-1, bufferLen, quotedWords)) > 1)
+		{
+			for (int sqi = 0; sqi < extend-1; sqi++)
+				sWord += buffer[cp++];
+			bufferScanLocation = cp;
+		}
+		return 0;
   }
   else
   {
