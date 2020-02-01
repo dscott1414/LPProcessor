@@ -315,14 +315,14 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 					 (m[q-2].flags&(WordMatch::flagFirstLetterCapitalized));
 			// added q>0 because in abstracts, most of the other criteria is invalid (see Curveball - Rafid Ahmed Alwan al-Janabi, known by the Central Intelligence Agency cryptonym "Curveball")
 			if (((firstWordInSentence && q>0) || m[q].flags&WordMatch::flagAllCaps) && !mightBeName &&
-				  (m[q].word->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN]==0 ||
-				   (m[q].word->second.numProperNounUsageAsAdjective==m[q].word->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN] &&
+				  (m[q].word->second.getUsagePattern(tFI::PROPER_NOUN_USAGE_PATTERN)==0 ||
+				   (m[q].word->second.numProperNounUsageAsAdjective==m[q].word->second.getUsagePattern(tFI::PROPER_NOUN_USAGE_PATTERN) &&
 					  (q+1>=m.size() || (m[q+1].flags&(WordMatch::flagFirstLetterCapitalized|WordMatch::flagAllCaps))==0))) &&
 					//m[q].word->second.relatedSubTypeObjects.size()==0 && // not a known common place 
 					(q<1 || (m[q-1].word->first!=L"the" && !(m[q-1].flags&WordMatch::flagAllCaps))) && 
 					!((m[q].flags&WordMatch::flagAllCaps) && m[q].word->second.formsSize()==0) && // The US / that IRS tax form
 				  // must NOT be queryForm because of test
-				  (m[q].word->second.usagePatterns[tFI::LOWER_CASE_USAGE_PATTERN]>0 || m[q].word->second.query(PROPER_NOUN_FORM_NUM)<0))
+				  (m[q].word->second.getUsagePattern(tFI::LOWER_CASE_USAGE_PATTERN)>0 || m[q].word->second.query(PROPER_NOUN_FORM_NUM)<0))
 			{
 				// if flagAddProperNoun and first word, check if usage pattern is 0.  If it is, unflag word.
 				if (m[q].flags&WordMatch::flagAddProperNoun)
@@ -331,7 +331,7 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 					if (traceParseInfo)
 						lplog(LOG_INFO, L"%d:%s:removed flagAddProperNoun asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
 							q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
-							m[q].word->second.usagePatterns[tFI::LOWER_CASE_USAGE_PATTERN], (int)m[q].word->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN],
+							m[q].word->second.getUsagePattern(tFI::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(tFI::PROPER_NOUN_USAGE_PATTERN),
 							m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
 				}
 				// refuse to make it proper noun, even if it is listed as one.  see WordMatch::queryForm(int form)
@@ -342,7 +342,7 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 						if (traceParseInfo)
 							lplog(LOG_INFO, L"%d:%s:added flagRefuseProperNoun asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.", 
 								q, getOriginalWord(q, originalWord,false),m[q].word->second.numProperNounUsageAsAdjective,
-								m[q].word->second.usagePatterns[tFI::LOWER_CASE_USAGE_PATTERN], (int)m[q].word->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN],
+								m[q].word->second.getUsagePattern(tFI::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(tFI::PROPER_NOUN_USAGE_PATTERN),
 								m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
 					}
 			}
@@ -353,7 +353,7 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 				if (traceParseInfo)
 					lplog(LOG_INFO, L"%d:%s:added flagAddProperNoun (from local) asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
 						q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
-						m[q].word->second.usagePatterns[tFI::LOWER_CASE_USAGE_PATTERN], (int)m[q].word->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN],
+						m[q].word->second.getUsagePattern(tFI::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(tFI::PROPER_NOUN_USAGE_PATTERN),
 						m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
 
 			}
@@ -363,7 +363,7 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 				if (traceParseInfo)
 					lplog(LOG_INFO, L"%d:%s:added flagAddProperNoun (SPECIAL CASE lord) asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
 						q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
-						m[q].word->second.usagePatterns[tFI::LOWER_CASE_USAGE_PATTERN], (int)m[q].word->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN],
+						m[q].word->second.getUsagePattern(tFI::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(tFI::PROPER_NOUN_USAGE_PATTERN),
 						m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
 			}
 			// if capitalized, not all caps, at least 2 letters long, not a cardinal or ordinal number
@@ -372,10 +372,10 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 			if ((m[q].flags&WordMatch::flagFirstLetterCapitalized) && !(m[q].flags&WordMatch::flagAllCaps) && m[q].word->first[1] &&
 				m[q].word->second.query(numeralOrdinalForm)==-1 && m[q].word->second.query(numeralCardinalForm)==-1 &&
 				!(m[q].flags&(WordMatch::flagRefuseProperNoun|WordMatch::flagOnlyConsiderProperNounForms|WordMatch::flagOnlyConsiderOtherNounForms)) &&
-				(m[q].word->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN]>0 || m[q].word->second.localWordIsCapitalized>0) &&  // PROPER_NOUN_USAGE_PATTERN is only updated if proper noun form is added 
-				m[q].word->second.usagePatterns[tFI::LOWER_CASE_USAGE_PATTERN]==0 && 
+				(m[q].word->second.getUsagePattern(tFI::PROPER_NOUN_USAGE_PATTERN)>0 || m[q].word->second.localWordIsCapitalized>0) &&  // PROPER_NOUN_USAGE_PATTERN is only updated if proper noun form is added 
+				m[q].word->second.getUsagePattern(tFI::LOWER_CASE_USAGE_PATTERN)==0 &&
 				// word was found capitalized alone (the number of times being a capitalized adjective is < the number of times being capitalized)
-				(m[q].word->second.numProperNounUsageAsAdjective<m[q].word->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN] ||
+				(m[q].word->second.numProperNounUsageAsAdjective<m[q].word->second.getUsagePattern(tFI::PROPER_NOUN_USAGE_PATTERN) ||
 				// OR this particular position is followed by a capitalized word (Peel Edgerton) - peel is also a verb!
 				 (q+1<m.size() && (m[q+1].flags&(WordMatch::flagFirstLetterCapitalized|WordMatch::flagAllCaps))!=0)))
 			{
@@ -513,7 +513,7 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 				if (I>=0)
 				{
 					int numForm=m[I].queryForm(prepositionForm);
-					if (numForm<0 || m[I].word->second.usageCosts[numForm]>1)
+					if (numForm<0 || m[I].word->second.getUsageCost(numForm)>1)
 					{
 						// is the next word a noun?  If there is no noun, 's cannot be ownership.
 						// if it IS a noun, it might mean ownership, or maybe not (further work?)
@@ -521,7 +521,7 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 						for (; I<(int)lastWord && m[I].isModifierType() && !m[I].isNounType(); I++);
 						// other's a cadillac
 						// other's reform.
-						if ((I<(int)lastWord && !m[I].isNounType()) || ((numForm=m[q].queryForm(relativizerForm))>=0 && m[q].word->second.usageCosts[numForm]<3))
+						if ((I<(int)lastWord && !m[I].isNounType()) || ((numForm=m[q].queryForm(relativizerForm))>=0 && m[q].word->second.getUsageCost(numForm)<3))
 						{
 							m[q].flags&=~WordMatch::flagNounOwner;
 							m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"ishas"),0,debugTrace));
@@ -543,7 +543,7 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 			int nounFormOffset, verbFormOffset;
 			if (q < m.size() - 1 && m[q].word->first == L"no one" &&
 				(nounFormOffset = m[q + 1].queryForm(L"noun")) >= 0 && // next word could be a noun
-				(!m[q + 1].word->second.hasVerbForm() || ((verbFormOffset = m[q + 1].queryForm(L"verb")) >= 0 && m[q + 1].word->second.usageCosts[verbFormOffset] > m[q + 1].word->second.usageCosts[nounFormOffset]))) // next word is not a verb, or the cost of the verb is > cost of noun
+				(!m[q + 1].word->second.hasVerbForm() || ((verbFormOffset = m[q + 1].queryForm(L"verb")) >= 0 && m[q + 1].word->second.getUsageCost(verbFormOffset) > m[q + 1].word->second.getUsageCost(nounFormOffset)))) // next word is not a verb, or the cost of the verb is > cost of noun
 			{
 				m[q].word = Words.gquery(L"no");
 				m.insert(m.begin() + q + 1, WordMatch(Words.gquery(L"one"), 0, debugTrace));

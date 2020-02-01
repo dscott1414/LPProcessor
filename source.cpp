@@ -164,7 +164,7 @@ unsigned int WordMatch::getShortAllFormAndInflectionLen(void)
 				else inflectionFlags|=SINGULAR_OWNER;
 			}
 			formLen+=getInflectionLength(inflectionFlags&NOUN_INFLECTIONS_MASK,shortNounInflectionMap)+2;
-			if (word->second.usageCosts[line]>9) formLen++;
+			if (word->second.getUsageCost(line)>9) formLen++;
 		}
 		else
 		{
@@ -181,7 +181,7 @@ unsigned int WordMatch::getShortAllFormAndInflectionLen(void)
 			else if (inflectionsClass==L"brackets" && (inflectionFlags&INFLECTIONS_MASK))
 				formLen+=getInflectionLength(inflectionFlags&INFLECTIONS_MASK,shortBracketInflectionMap);
 			formLen+=2;
-			if (word->second.usageCosts[line]>9) formLen++;
+			if (word->second.getUsageCost(line)>9) formLen++;
 		}
 		allLen=max(allLen,formLen);
 	}
@@ -222,7 +222,7 @@ unsigned int WordMatch::getShortFormInflectionEntry(int line, wchar_t *entry)
 		wcscat(entry,getInflectionName(inflectionFlags&NOUN_INFLECTIONS_MASK,shortNounInflectionMap,temp));
 		// only accumulate or use usage costs IF word is not capitalized
 		if (costable())
-			wsprintf(entry+wcslen(entry),L"*%d",word->second.usageCosts[line]);
+			wsprintf(entry+wcslen(entry),L"*%d",word->second.getUsageCost(line));
 		return 0;
 	}
 	wstring inflectionsClass=word->second.Form(line)->inflectionsClass;
@@ -238,7 +238,7 @@ unsigned int WordMatch::getShortFormInflectionEntry(int line, wchar_t *entry)
 	else if (inflectionsClass==L"brackets" && (inflectionFlags&INFLECTIONS_MASK))
 		wcscat(entry,getInflectionName(inflectionFlags&INFLECTIONS_MASK,shortBracketInflectionMap,temp));
 	if (costable())
-		wsprintf(entry+wcslen(entry),L"*%d",word->second.usageCosts[line]);
+		wsprintf(entry+wcslen(entry),L"*%d",word->second.getUsageCost(line));
 	return 0;
 }
 
@@ -315,7 +315,7 @@ wstring WordMatch::winnerFormString(wstring &formsString,bool withCost)
 			if (withCost)
 			{
 				wchar_t temp[10];
-				_itow(word->second.usageCosts[f], temp, 10);
+				_itow(word->second.getUsageCost(f), temp, 10);
 				formsString += L"[" + wstring(temp) + L"] ";
 			}
 			else
@@ -365,7 +365,7 @@ wstring WordMatch::patternWinnerFormString(wstring &winnerForms)
 			winnerForms+=word->second.Form(f)->name;
 			winnerForms+=L"|"+word->first;
 			wchar_t temp[10];
-			_itow(word->second.usageCosts[f],temp,10);
+			_itow(word->second.getUsageCost(f),temp,10);
 			winnerForms+=L"*"+wstring(temp);
 		}
 	return winnerForms;
@@ -441,9 +441,9 @@ bool WordMatch::isNounType(void)
 		(flags&flagOnlyConsiderProperNounForms) ||
 		(flags&flagAddProperNoun) ||
 		((form = word->second.query(PROPER_NOUN_FORM_NUM)) >= 0 && (flags&flagFirstLetterCapitalized)) ||
-		((form = word->second.query(nounForm)) >= 0 && word->second.usageCosts[form] < 3) ||
-		((form = word->second.query(indefinitePronounForm)) >= 0 && word->second.usageCosts[form] < 3) ||
-		((form = word->second.query(relativizerForm)) >= 0 && word->second.usageCosts[form] < 3);
+		((form = word->second.query(nounForm)) >= 0 && word->second.getUsageCost(form) < 3) ||
+		((form = word->second.query(indefinitePronounForm)) >= 0 && word->second.getUsageCost(form) < 3) ||
+		((form = word->second.query(relativizerForm)) >= 0 && word->second.getUsageCost(form) < 3);
 }
 
 bool WordMatch::isTopLevel(void)
@@ -468,10 +468,10 @@ bool WordMatch::isModifierType(void)
 			return false;
 		int modifierForms[]={adverbForm,adjectiveForm,numeralOrdinalForm,NUMBER_FORM_NUM,coordinatorForm,NULL};
 		for (int I=0; modifierForms[I]; I++)
-			if ((form=word->second.query(modifierForms[I]))>=0 && word->second.usageCosts[form]<3) return true;
+			if ((form=word->second.query(modifierForms[I]))>=0 && word->second.getUsageCost(form)<3) return true;
 	}
 	return (((form=word->second.query(nounForm))>=0 || (form=word->second.query(PROPER_NOUN_FORM_NUM))>=0) && 
-					word->second.usageCosts[form]<3 && (flags&flagNounOwner));
+					word->second.getUsageCost(form)<3 && (flags&flagNounOwner));
 }
 
 bool WordMatch::read(char *buffer,int &where,int limit)
@@ -1563,7 +1563,7 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 		if (allCaps && m.size() && ((m[m.size()-1].word->first==L"the" && !(m[m.size()-1].flags&WordMatch::flagAllCaps)) || iWord->second.formsSize()==0))
 		{
       flags|=WordMatch::flagAddProperNoun;
-      iWord->second.usageCosts[iWord->second.formsSize()]=0;
+			iWord->second.zeroNewProperNounCostIfUsedAllCaps();
 #ifdef LOG_PATTERN_COST_CHECK
       ::lplog(L"Added ProperNoun [from the] to word %s (form #%d) at cost %d.",originalWord.c_str(),formsSize(),usageCosts[formsSize()]);
 #endif
@@ -1968,17 +1968,11 @@ int Source::printSentencesCheck(bool skipCheck)
 	extern wchar_t *multiProcessorLog;
 	wsprintf(logFilename,L"main%S.lplog",multiProcessorLog);
 	vector <WordMatch>::iterator im=m.begin(),mend=m.end();
-	int costingOffset=-1;
 	for (unsigned int I=0; im!=mend; im++,I++)
 	{
 		if (im->flags&WordMatch::flagAddProperNoun)
 		{
-			if ((costingOffset=im->word->second.query(nounForm))!=-1 ||
-				(costingOffset=im->word->second.query(abbreviationForm))!=-1 ||
-				(costingOffset=im->word->second.query(sa_abbForm))!=-1)
-				im->word->second.usageCosts[im->word->second.formsSize()]=im->word->second.usageCosts[costingOffset];
-			else
-				im->word->second.usageCosts[im->word->second.formsSize()]=0;
+			im->word->second.setProperNounUsageCost();
 		}
 	}
 	if (!skipCheck && _wstat64(logFilename,&buffer)>=0 && buffer.st_size>2*1024*1024) return 0;
@@ -2935,7 +2929,7 @@ int Source::updatePEMACosts(int PEMAPosition,int pattern,int begin,int end,int p
 				cost=(pem->getElementIndex()==(unsigned char)-2) ? 0 : patterns[pattern]->getCost(pem->getElement(),pem->getElementIndex(),pem->isChildPattern());
 				// only accumulate or use usage costs IF word is not capitalized
 				if (im->costable())
-					cost+=im->word->second.usageCosts[pem->getChildForm()];
+					cost+=im->word->second.getUsageCost(pem->getChildForm());
 #ifdef LOG_PATTERN_COST_CHECK
 				lplog(L"%d:RP PEMA %06d %s[%s](%d,%d) child form %s element #%d resulted in a minCost of %d.",
 					position,PEMAPosition,patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),begin,end,

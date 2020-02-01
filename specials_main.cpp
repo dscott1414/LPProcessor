@@ -2339,7 +2339,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	// 3b. ST is always wrong when given a phrase like " she *exclaimed* - LP correctly tags 'exclaimed' as a verb
 	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && wordSourceIndex > 2 && source.m[wordSourceIndex - 2].queryForm(quoteForm) >= 0 &&
-		(source.m[wordSourceIndex-1].queryWinnerForm(L"personal pronoun") >= 0 || source.m[wordSourceIndex-1].queryWinnerForm(L"Proper Noun") >= 0) &&
+		(source.m[wordSourceIndex-1].queryWinnerForm(L"personal_pronoun") >= 0 || source.m[wordSourceIndex-1].queryWinnerForm(L"Proper Noun") >= 0) &&
 		speakingVerbs.find(source.m[wordSourceIndex].word->first) != speakingVerbs.end())
 	{
 		errorMap[L"LP correct: verb of speaking is a verb"]++;
@@ -3440,7 +3440,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"LP correct: LP says noun but ST says adjective (plural only)"]++;
 			return 0;
 		}
-		else if (source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(nounForm)] >=4)
+		else if (source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(nounForm)) >=4)
 			partofspeech += L"***ADJNOUNDET2";
 		else
 			partofspeech += L"***ADJNOUNDET3";
@@ -3645,8 +3645,8 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0)
 	{
 		wstring nounCost, verbCost;
-		itos(source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(nounForm)], nounCost);
-		itos(source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(verbForm)], verbCost);
+		itos(source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(nounForm)), nounCost);
+		itos(source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(verbForm)), verbCost);
 		// 115 out of 116 correct
 		if (nounCost == L"0" && (verbCost == L"4" || verbCost == L"3" || verbCost == L"2") && partofspeech == L"VBN")
 		{
@@ -3689,8 +3689,8 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0)
 	{
 		wstring nounCost, verbCost;
-		itos(source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(nounForm)], nounCost);
-		itos(source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(verbForm)], verbCost);
+		itos(source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(nounForm)), nounCost);
+		itos(source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(verbForm)), verbCost);
 		if (word.length() > 2 && word.substr(word.length() - 2) == L"ed" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST)
 		{
 			partofspeech += L"***ISVERB?PAST NOUN=" + nounCost + L"VERB=" + verbCost;
@@ -3715,8 +3715,8 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0)
 	{
 		wstring adjectiveCost, verbCost;
-		itos(source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(adjectiveForm)], adjectiveCost);
-		itos(source.m[wordSourceIndex].word->second.usageCosts[source.m[wordSourceIndex].queryForm(verbForm)], verbCost);
+		itos(source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(adjectiveForm)), adjectiveCost);
+		itos(source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(verbForm)), verbCost);
 		if (word.length() > 2 && word.substr(word.length() - 2) == L"ed" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST)
 		{
 			partofspeech += L"***ISADJECTIVE?PAST ADJECTIVE=" + adjectiveCost + L"VERB=" + verbCost;
@@ -3874,6 +3874,16 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	{
 		errorMap[L"LP correct: adverb not noun"]++; // probabilistic - see distribute errors
 		return 0;
+	}
+	int pemaOffset = -1;
+	if (wordSourceIndex > 0 && source.m[wordSourceIndex].queryWinnerForm(L"quantifier") >= 0 && (pemaOffset=source.queryPattern(wordSourceIndex, L"__NOUN", L"2")) != -1)
+	{
+		if (source.pema[pemaOffset].end !=1)
+		{
+			partofspeech += L"**ISQUANTIFIERADJECTIVE?";
+			//errorMap[L"LP correct: word 'more': ST says " + primarySTLPMatch + L" LP says quantifier"]++;
+			//return 0;
+		}
 	}
 	return -1;
 }
@@ -4058,13 +4068,15 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 //map <wstring, int> disagreeFormDistribution; // total count for each form match disagreed between ST and LP
 void printFormDistribution(wstring word, double adp, FormDistribution fd, wstring &maxWord, wstring &maxForm, int &maxDiff,int limit)
 {
-	if (limit<100)
+	if (fd.unaccountedForDisagreeSTLP == 0)
+		return;
+	if (limit<1000)
 		lplog(LOG_ERROR, L"%s:%d %3.0f (%d/%d)", word.c_str(), fd.unaccountedForDisagreeSTLP, adp, fd.agreeSTLP, fd.agreeSTLP + fd.disagreeSTLP);
 	int totalWordOccurrenceCount = fd.agreeSTLP + fd.disagreeSTLP;
 	for (auto &&[form, formCount] : fd.LPFormDistribution)
 	{
 		// form name, total number of times form is a winner form for this word, % of times this form is the winner form for this word, % of times this form agrees with ST.
-		if (limit<100)
+		if (limit<1000)
 			lplog(LOG_ERROR, L"  LP %s:total=%d accounted=%d agree=%d disagree=%d error=%d %d%% %d%%", 
 				form.c_str(), 
 				formCount, fd.LPAlreadyAccountedFormDistribution[form], fd.agreeFormDistribution[form], fd.disagreeFormDistribution[form], fd.LPErrorFormDistribution[form],
@@ -4087,7 +4099,7 @@ void printFormDistribution(wstring word, double adp, FormDistribution fd, wstrin
 			maxForm = form;
 		}
 	}
-	if (limit < 100)
+	if (limit < 1000)
 		for (auto &&[form, count] : fd.STFormDistribution)
 			lplog(LOG_ERROR, L"  ST %s:%d %d%% %d%%", form.c_str(), count, 100 * count / (fd.agreeSTLP + fd.disagreeSTLP), fd.agreeFormDistribution[form] * 100 / count);
 }
@@ -4426,7 +4438,7 @@ int stanfordCheckTest(Source source, wstring path, int sourceId, bool pcfg,wstri
 	for (auto &&[adp, word] : agreeCountMap)
 	{
 		printFormDistribution(word, adp, formDistribution[word], maxWord, maxForm, maxDiff,limit);
-		if (limit++ > 100)
+		if (limit++ > 1000)
 			break;
 	}
 	lplog(LOG_ERROR, L"FORMS ------------------------------------------------------------------------------");
@@ -4654,12 +4666,12 @@ void wmain(int argc,wchar_t *argv[])
 		break;
 	case 21:
 		// Source::TEST_SOURCE_TYPE
-		//patternOrWordAnalysis(source, step, L"__S1", L"R5", Source::GUTENBERG_SOURCE_TYPE,true);
+		patternOrWordAnalysis(source, step, L"__NOUN", L"NAE", Source::GUTENBERG_SOURCE_TYPE,true);
 		//patternOrWordAnalysis(source, step, L"_MS1", L"2",true); // TODO: testing weight change on _S1.
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
 		//patternOrWordAnalysis(source, step, L"_VERB_BARE_INF", L"A", true);
 		//patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false); // TODO: testing weight change on _S1.
-		patternOrWordAnalysis(source, step, L"fritilla", L"", Source::GUTENBERG_SOURCE_TYPE, false); // TODO: testing weight change on _S1.
+		//patternOrWordAnalysis(source, step, L"fritilla", L"", Source::GUTENBERG_SOURCE_TYPE, false); // TODO: testing weight change on _S1.
 		break;
 	case 60:
 		//stanfordCheckMP(source, step, true,8);

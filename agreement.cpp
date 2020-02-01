@@ -1826,16 +1826,6 @@ int Source::setSecondaryCosts(vector <costPatternElementByTagSet> &PEMAPositions
 	return 0;
 }
 
-void normalize(unsigned char *usages,int start,int len)
-{ LFS
-	len+=start;
-	int I;
-	for (I=start; I<len && usages[I]==255; I++);
-	if (I==len)
-		for (int J=start; J<len; J++)
-			usages[J]>>=1;
-}
-
 int Source::calculateVerbAfterVerbUsage(int whereVerb,unsigned int nextWord,bool adverbialObject)
 { LFS
 	if (nextWord<m.size() && (m[nextWord].forms.isSet(verbForm) || adverbialObject))
@@ -1921,10 +1911,10 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 	}
 	// I went to jail with him.
 	if (begin>0 && m[begin-1].word->first==L"to" && m[begin].queryForm(verbForm)>=0 &&
-			!(m[begin].word->second.inflectionFlags&(PLURAL|PLURAL_OWNER)) && m[begin].word->second.usageCosts[m[begin].queryForm(verbForm)]<5)  
+			!(m[begin].word->second.inflectionFlags&(PLURAL|PLURAL_OWNER)) && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm))<5)  
 	{
 		// from face to face / rock to rock / stone to stone
-		if (begin >= 3 && m[begin - 3].word->first == L"from" && m[begin].word->second.usageCosts[m[begin].queryForm(verbForm)] > 0)
+		if (begin >= 3 && m[begin - 3].word->first == L"from" && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm)) > 0)
 		{
 			if (debugTrace.traceDeterminer)
 			{
@@ -1936,7 +1926,7 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 		else
 		{
 			int toCost[] = { 10,8,7,5,1 };
-			int toFormVerbCost = toCost[m[begin].word->second.usageCosts[m[begin].queryForm(verbForm)]];
+			int toFormVerbCost = toCost[m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm))];
 			if (debugTrace.traceDeterminer)
 			{
 				wstring phrase;
@@ -2081,21 +2071,11 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 	if (nounWord->second.mainEntry!=wNULL)
 		nounWord=nounWord->second.mainEntry;
 	if (debugTrace.traceDeterminer)
-		lplog(L"%d:singular noun %s has %s determiner (cost=%d) [SOURCE=%06d].",whereNAgree,nounWord->first.c_str(),(hasDeterminer) ? L"a":L"no",nounWord->second.usageCosts[(hasDeterminer) ? tFI::SINGULAR_NOUN_HAS_DETERMINER : tFI::SINGULAR_NOUN_HAS_NO_DETERMINER],traceSource=gTraceSource++);
+		lplog(L"%d:singular noun %s has %s determiner (cost=%d) [SOURCE=%06d].",whereNAgree,nounWord->first.c_str(),(hasDeterminer) ? L"a":L"no",nounWord->second.getUsageCost((hasDeterminer) ? tFI::SINGULAR_NOUN_HAS_DETERMINER : tFI::SINGULAR_NOUN_HAS_NO_DETERMINER),traceSource=gTraceSource++);
 	if (assessCost)
-		return PNC+nounWord->second.usageCosts[(hasDeterminer) ? tFI::SINGULAR_NOUN_HAS_DETERMINER : tFI::SINGULAR_NOUN_HAS_NO_DETERMINER];
+		return PNC+nounWord->second.getUsageCost((hasDeterminer) ? tFI::SINGULAR_NOUN_HAS_DETERMINER : tFI::SINGULAR_NOUN_HAS_NO_DETERMINER);
 	if (updateWordUsageCostsDynamically)
-	{
-		normalize(nounWord->second.usagePatterns, tFI::SINGULAR_NOUN_HAS_DETERMINER, 2);
-		normalize(nounWord->second.deltaUsagePatterns, tFI::SINGULAR_NOUN_HAS_DETERMINER, 2);
-		nounWord->second.usagePatterns[(hasDeterminer) ? tFI::SINGULAR_NOUN_HAS_DETERMINER : tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]++;
-		nounWord->second.deltaUsagePatterns[(hasDeterminer) ? tFI::SINGULAR_NOUN_HAS_DETERMINER : tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]++;
-		int transferTotal = 0;
-		for (unsigned int I = tFI::SINGULAR_NOUN_HAS_DETERMINER; I < tFI::SINGULAR_NOUN_HAS_DETERMINER + 2; I++)
-			transferTotal += nounWord->second.usagePatterns[tFI::SINGULAR_NOUN_HAS_DETERMINER + I];
-		if ((transferTotal & 15) == 15)
-			nounWord->second.transferUsagePatternsToCosts(tFI::HIGHEST_COST_OF_INCORRECT_NOUN_DET_USAGE, tFI::SINGULAR_NOUN_HAS_DETERMINER, 2);
-	}
+		nounWord->second.updateNounDeterminerUsageCost(hasDeterminer);
 	return 0;
 }
 
@@ -2348,8 +2328,6 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 	tIWMM verbWord=m[tagSet[verbTagIndex].sourcePosition].word;
 	if (verbWord->second.mainEntry!=wNULL)
 		verbWord=verbWord->second.mainEntry;
-	normalize(verbWord->second.usagePatterns,tFI::VERB_HAS_0_OBJECTS,3);
-	normalize(verbWord->second.deltaUsagePatterns,tFI::VERB_HAS_0_OBJECTS,3);
 	unsigned int numObjects=0;
 	int object1=-1,object2=-1,wo1=-1,wo2=-1;
 	tIWMM object1Word=wNULL,object2Word=wNULL;
@@ -2415,14 +2393,14 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 		unsigned int whereVerb=tagSet[verbTagIndex].sourcePosition+tagSet[verbTagIndex].len-1,nextWord=whereVerb+1;
 		if (nextWord+1<m.size() && m[nextWord].word->first != L"no" && // There was no thought to which rocket to launch. / thought is a past verb, and no is an adverb of cost < 4.  But still should not be considered a verbafterverb.
 				(m[nextWord].word->first==L"not" || m[nextWord].word->first==L"never" || // is it a not or never?
-				 (m[nextWord].forms.isSet(adverbForm) && m[nextWord].word->second.usageCosts[m[nextWord].queryForm(adverbForm)]<4 &&  // is it possibly an adverb?
+				 (m[nextWord].forms.isSet(adverbForm) && m[nextWord].word->second.getUsageCost(m[nextWord].queryForm(adverbForm))<4 &&  // is it possibly an adverb?
 					(!m[nextWord].forms.isSet(verbForm) ||                                 // and definitely not a verb (don't skip it unnecessarily)
 					 (m[nextWord+1].forms.isSet(verbForm) && m[nextWord+1].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE))))) // OR is the next word after a verb participle?
 					nextWord++; // could possibly be an adverb in between
 		// they were at once taken up to his suite. - be conservative by only including the most likely (lowest cost) path
 		// Don't include 'that' as an adverb! / Another voice which Tommy rather thought was that[voice] of Boris replied :
 		if (nextWord<m.size() && m[whereVerb].forms.isSet(isForm) && m[nextWord].forms.isSet(prepositionForm) && 
-				((prepForm=m[nextWord].queryForm(prepositionForm))>=0 && m[nextWord].word->second.usageCosts[prepForm]==0))
+				((prepForm=m[nextWord].queryForm(prepositionForm))>=0 && m[nextWord].word->second.getUsageCost(prepForm)==0))
 		{
 			int maxLen=-1,element;
 			if ((element=m[nextWord].pma.queryMaximumLowestCostPattern(L"_PP",maxLen))!=-1 && m[nextWord+maxLen].forms.isSet(verbForm))
@@ -2449,7 +2427,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 		// at the same time, sometimes it really is an object:
 		// Arthur Scott Bailey\The Tale of Freddie Firefly[4325-4330]:
 		// When he saw his brothers and cousins go dancing off in **the dark he couldn't help** wanting to dance too . // what he couldn't help - object
-		if (numObjects > 0 && (m[tagSet[whereObjectTag].sourcePosition].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) != 0 && verbWord->second.usageCosts[tFI::VERB_HAS_0_OBJECTS + numObjects] > verbWord->second.usageCosts[tFI::VERB_HAS_0_OBJECTS+numObjects-1])
+		if (numObjects > 0 && (m[tagSet[whereObjectTag].sourcePosition].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) != 0 && verbWord->second.getUsageCost(tFI::VERB_HAS_0_OBJECTS + numObjects) > verbWord->second.getUsageCost(tFI::VERB_HAS_0_OBJECTS+numObjects-1))
 		{
 			if (debugTrace.traceVerbObjects)
 				lplog(L"          %d:decreased numObjects=%d to %d for verb %s because the object %s is a present participle (may be adverbial usage)",
@@ -2457,7 +2435,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 			numObjects--;
 		}
 		// increase parent pattern cost at verb
-		verbObjectCost=verbWord->second.usageCosts[tFI::VERB_HAS_0_OBJECTS+numObjects];
+		verbObjectCost=verbWord->second.getUsageCost(tFI::VERB_HAS_0_OBJECTS+numObjects);
 		if (numObjects == 0 && verbWord->second.query(isForm) >= 0 && adjObjectTag >= 0)
 		{
 			if (debugTrace.traceVerbObjects)
@@ -2501,7 +2479,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 		// if one object, and object follows directly after verb, and object consists of adverb, adverb, acc, then add cost.
 		if (numObjects == 1 && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len < whereVerb + 5)
 		{
-			bool isAdverb = m[whereVerb + 1].forms.isSet(adverbForm) && m[whereVerb + 1].word->second.usageCosts[m[whereVerb + 1].queryForm(adverbForm)] < 4; // is it possibly an adverb?
+			bool isAdverb = m[whereVerb + 1].forms.isSet(adverbForm) && m[whereVerb + 1].word->second.getUsageCost(m[whereVerb + 1].queryForm(adverbForm)) < 4; // is it possibly an adverb?
 			if (isAdverb && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len == whereVerb + 3)
 			{
 				bool isPreposition = m[whereVerb + 1].forms.isSet(prepositionForm);
@@ -2516,7 +2494,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 			}
 			else if (isAdverb  && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len == whereVerb + 4)
 			{
-				isAdverb = m[whereVerb + 2].forms.isSet(adverbForm) && m[whereVerb + 2].word->second.usageCosts[m[whereVerb + 2].queryForm(adverbForm)] < 4; // is it possibly an adverb?
+				isAdverb = m[whereVerb + 2].forms.isSet(adverbForm) && m[whereVerb + 2].word->second.getUsageCost(m[whereVerb + 2].queryForm(adverbForm)) < 4; // is it possibly an adverb?
 				bool isPreposition = m[whereVerb + 2].forms.isSet(prepositionForm);
 				bool objectDoesntTakeAdjectives = (m[whereVerb + 3].queryForm(accForm) != -1 || m[whereVerb + 3].queryForm(personalPronounForm) != -1) &&
 					m[whereVerb + 3].word->first != L"he" && m[whereVerb + 3].word->first != L"she";
@@ -2541,13 +2519,13 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 		}
 		// here or there may be considered a prepositional phrase
 		// I am swimming here. (I am swimming in the pool) / I am going there now. (I am going to the store now)
-		if (numObjects == 1 && verbObjectCost > verbWord->second.usageCosts[tFI::VERB_HAS_0_OBJECTS] && tagSet[whereObjectTag].len == 1 &&
+		if (numObjects == 1 && verbObjectCost > verbWord->second.getUsageCost(tFI::VERB_HAS_0_OBJECTS) && tagSet[whereObjectTag].len == 1 &&
 			(m[tagSet[whereObjectTag].sourcePosition].word->first == L"there" || m[tagSet[whereObjectTag].sourcePosition].word->first == L"here" || m[tagSet[whereObjectTag].sourcePosition].word->first == L"home"))
 		{
 			if (debugTrace.traceVerbObjects)
 				lplog(L"          %d:decreased verbObjectCost=%d to %d for verb %s because object is 'here' or 'there' or 'home' (standing in for a PP which may not be considered an object)",
-					tagSet[verbTagIndex].sourcePosition, verbObjectCost, verbWord->second.usageCosts[tFI::VERB_HAS_0_OBJECTS], verbWord->first.c_str(), m[whereVerb + 1].word->first.c_str());
-			verbObjectCost = verbWord->second.usageCosts[tFI::VERB_HAS_0_OBJECTS];
+					tagSet[verbTagIndex].sourcePosition, verbObjectCost, verbWord->second.getUsageCost(tFI::VERB_HAS_0_OBJECTS), verbWord->first.c_str(), m[whereVerb + 1].word->first.c_str());
+			verbObjectCost = verbWord->second.getUsageCost(tFI::VERB_HAS_0_OBJECTS);
 		}
 		if (numObjects==2)
 		{
@@ -2648,13 +2626,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 	// otherwise, accumulate usage patterns and update cost
 	if (updateWordUsageCostsDynamically)
 	{
-		verbWord->second.usagePatterns[tFI::VERB_HAS_0_OBJECTS + numObjects]++;
-		verbWord->second.deltaUsagePatterns[tFI::VERB_HAS_0_OBJECTS + numObjects]++;
-		int transferTotal = 0;
-		for (unsigned int I = tFI::VERB_HAS_0_OBJECTS; I < tFI::VERB_HAS_0_OBJECTS + 3; I++)
-			transferTotal += verbWord->second.usagePatterns[tFI::VERB_HAS_0_OBJECTS + I];
-		if ((transferTotal & 15) == 15)
-			verbWord->second.transferUsagePatternsToCosts(tFI::HIGHEST_COST_OF_INCORRECT_VERB_USAGE, tFI::VERB_HAS_0_OBJECTS, 3);
+		verbWord->second.updateVerbObjectsUsageCost(numObjects);
 	}
 	if (debugTrace.traceVerbObjects)
 		lplog(L"          %d:verb %s has %d objects.",tagSet[verbTagIndex].sourcePosition,verbWord->first.c_str(),numObjects);
@@ -2908,27 +2880,6 @@ int Source::assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchAr
 						patterns[parentpm->getPattern()]->name.c_str(),patterns[parentpm->getPattern()]->differentiator.c_str(),parentPosition,parentpm->len+parentPosition,pm->getCost(),minAvgCostAfterAssessCost);
 	}
 	return pm->getCost();
-}
-
-int tFI::getLowestTopLevelCost(void)
-{ LFS
-	int lowestCost=10000;
-	for (unsigned int f=0; f<count; f++)
-		if (Form(f)->isTopLevel)
-			lowestCost=min(lowestCost,usageCosts[f]);
-	return lowestCost;
-}
-
-int tFI::getLowestCost(void)
-{ LFS
-	int lowestCost=10000,offset=-1;
-	for (unsigned int f=0; f<count; f++)
-		if (lowestCost>usageCosts[f] || (lowestCost==usageCosts[f] && forms()[f]!=PROPER_NOUN_FORM_NUM))
-		{
-			lowestCost=usageCosts[f];
-			offset=f;
-		}
-	return offset;
 }
 
 // AC1=incoming avgCost

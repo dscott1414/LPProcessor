@@ -376,7 +376,7 @@ bool patternElement::matchOne(Source &source,unsigned int sourcePosition,unsigne
 					continue;
         int cost=formCosts[form];
         if (!preTaggedSource && im->costable())
-          cost+=im->word->second.usageCosts[ME]; 
+          cost+=im->word->second.getUsageCost(ME); 
         //if (f==PROPER_NOUN_FORM_NUM && (im->flags&(WordMatch::flagAllCaps|WordMatch::flagAddProperNoun))==(WordMatch::flagAllCaps|WordMatch::flagAddProperNoun)) // make this proper noun a little expensive
         //  cost++;
 				if (f == abbreviationForm && sourcePosition + 1 < source.m.size() && source.m[sourcePosition + 1].word->first[0] != L'.')

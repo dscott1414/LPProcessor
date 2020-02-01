@@ -1227,73 +1227,10 @@ bool WordMatch::updateFormUsagePatterns(void)
 { LFS
   if (!costable() || !preTaggedSource) // these words are capitalized whenever they are used (honorifics and 'I')
   {
-    word->second.deltaUsagePatterns[tFI::TRANSFER_COUNT]++;
-    word->second.usagePatterns[tFI::TRANSFER_COUNT]++;
-    word->second.changedSinceLastWordRelationFlush=true;
+		word->second.incrementTransferCount();
     return false;
   }
-  int numWinnerForms=0,sameNameForm=-1,properNounForm=-1;
-  unsigned int count=word->second.formsSize();
-  for (unsigned int f=0; f<count; f++)
-  {
-    if (word->second.Form(f)->name==word->first)
-    {
-      sameNameForm=f;
-      continue;
-    }
-    if (word->second.forms()[f]==PROPER_NOUN_FORM_NUM)
-    {
-      properNounForm=f;
-      continue;
-    }
-    if (isWinner(f))
-      numWinnerForms++;
-  }
-  // do not update usage pattern if proper noun has been imposed on the word because of capitalization and
-  // this form won - numWinnerForms will be zero.
-  int add=count-numWinnerForms;
-  if (sameNameForm>=0) add--;
-  if (properNounForm>=0) add--;
-  if (!numWinnerForms || add<=0)
-  {
-    word->second.deltaUsagePatterns[tFI::TRANSFER_COUNT]++;
-    word->second.usagePatterns[tFI::TRANSFER_COUNT]++;
-    word->second.changedSinceLastWordRelationFlush=true;
-    return false;
-  }
-  unsigned int topAllowableUsageCount=min(count,tFI::MAX_USAGE_PATTERNS);
-  bool reduce=false;
-  for (unsigned int f=0; f<topAllowableUsageCount; f++)
-    if (f!=sameNameForm && f!=properNounForm)
-      reduce|=((add+word->second.usagePatterns[f])>255);
-  if (reduce)
-    for (unsigned int f=0; f<topAllowableUsageCount; f++)
-      if (f!=sameNameForm && f!=properNounForm)
-        word->second.usagePatterns[f]>>=1;
-  bool reduceDelta=false;
-  for (unsigned int f=0; f<topAllowableUsageCount; f++)
-    if (f!=sameNameForm && f!=properNounForm)
-      reduceDelta|=((add+word->second.deltaUsagePatterns[f])>255);
-  if (reduceDelta)
-    for (unsigned int f=0; f<topAllowableUsageCount; f++)
-      if (f!=sameNameForm && f!=properNounForm)
-        word->second.deltaUsagePatterns[f]>>=1;
-	for (unsigned int f = 0; f < topAllowableUsageCount; f++)
-	{
-		if (f != sameNameForm && f != properNounForm && isWinner(f))
-		{
-			word->second.usagePatterns[f] += add;
-			word->second.deltaUsagePatterns[f] += add;
-		}
-	}
-  word->second.deltaUsagePatterns[tFI::TRANSFER_COUNT]++;
-  word->second.changedSinceLastWordRelationFlush=true;
-  if (word->second.usagePatterns[tFI::TRANSFER_COUNT]++<63)
-    return false;
-  word->second.transferFormUsagePatternsToCosts(sameNameForm,properNounForm,count);
-  word->second.usagePatterns[tFI::TRANSFER_COUNT]=1; // so writeUnknownWords knows this word is used more than once
-  word->second.deltaUsagePatterns[tFI::TRANSFER_COUNT]=1; // so writeUnknownWords knows this word is used more than once
-  return true;
+	return word->second.updateFormUsagePatterns(tmpWinnerForms,word->first);
 }
 
 void tFI::logFormUsageCosts(wstring w)

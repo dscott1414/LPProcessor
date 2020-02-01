@@ -353,6 +353,12 @@ int createNouns(void)
 										1,L"preposition|like",0,1,1,
 										1,L"__APPNOUN[*]{_BLOCK:RE_OBJECT}",0,1,1,
 										0);
+	// makes no difference
+	//cPattern::create(L"__NOUN", L"NAE",
+	//									3, L"quantifier|neither", L"quantifier|any", L"quantifier|either", 0, 1, 1,
+	//									1, L"preposition|of", 0, 1, 1,
+	//									1, L"__NOUN[*]", 0, 1, 1,
+	//									0);
 
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"K",
 										1,L"__NOUN[*]",0,1,1,

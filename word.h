@@ -360,9 +360,6 @@ public:
 	int timeFlags;
   int index; // to DB
   int sourceId; // where the word came from
-  unsigned char usagePatterns[tFI::MAX_USAGE_PATTERNS]; // usage counts for every class of this word
-  unsigned char usageCosts[tFI::MAX_USAGE_PATTERNS];
-  unsigned char deltaUsagePatterns[tFI::MAX_USAGE_PATTERNS];
 	int numProperNounUsageAsAdjective;
   int derivationRules;
   tIWMM mainEntry;
@@ -427,8 +424,6 @@ public:
   bool costEquivalentSubClass(int subclassForm,int parentForm);
 	bool toLowestCost(int form);
 	bool setCost(int form,int cost);
-	int getLowestCost(void);
-  int getLowestTopLevelCost(void);
   void mainEntryCheck(const wstring first,int where);
   void lplog(void);
   void transferFormsAndUsage(unsigned int *forms,unsigned int &iCount,int formNum,wstring &word);
@@ -467,6 +462,150 @@ public:
   void transferFormUsagePatternsToCosts(int sameNameForm,int properNounForm,int iCount);
 	void resetUsagePatternsAndCosts(wstring sWord);
 	void resetCapitalizationAndProperNounUsageStatistics();
+	unsigned char getUsageCost(int formIndex) { return usageCosts[formIndex]; }
+	unsigned char getUsagePattern(int formIndex) { return usagePatterns[formIndex]; }
+	void incrementTransferCount()
+	{
+		deltaUsagePatterns[tFI::TRANSFER_COUNT]++;
+		usagePatterns[tFI::TRANSFER_COUNT]++;
+		changedSinceLastWordRelationFlush = true;
+	}
+	bool isWinner(int form,int tmpWinnerForms)
+	{
+		if (form >= sizeof(tmpWinnerForms) * 8)
+		{
+			return false;
+		}
+		return (tmpWinnerForms) ? ((1 << form)&tmpWinnerForms) != 0 : true;
+	}
+	bool updateFormUsagePatterns(int tmpWinnerForms,wstring sWord)
+	{
+		int numWinnerForms = 0, sameNameForm = -1, properNounForm = -1;
+		for (unsigned int f = 0; f < count; f++)
+		{
+			if (Form(f)->name == sWord)
+			{
+				sameNameForm = f;
+				continue;
+			}
+			if (forms()[f] == PROPER_NOUN_FORM_NUM)
+			{
+				properNounForm = f;
+				continue;
+			}
+			if (isWinner(f,tmpWinnerForms))
+				numWinnerForms++;
+		}
+		// do not update usage pattern if proper noun has been imposed on the word because of capitalization and
+		// this form won - numWinnerForms will be zero.
+		int add = count - numWinnerForms;
+		if (sameNameForm >= 0) add--;
+		if (properNounForm >= 0) add--;
+		if (!numWinnerForms || add <= 0)
+		{
+			deltaUsagePatterns[tFI::TRANSFER_COUNT]++;
+			usagePatterns[tFI::TRANSFER_COUNT]++;
+			changedSinceLastWordRelationFlush = true;
+			return false;
+		}
+		unsigned int topAllowableUsageCount = min(count, tFI::MAX_USAGE_PATTERNS);
+		bool reduce = false;
+		for (unsigned int f = 0; f < topAllowableUsageCount; f++)
+			if (f != sameNameForm && f != properNounForm)
+				reduce |= ((add + usagePatterns[f]) > 255);
+		if (reduce)
+			for (unsigned int f = 0; f < topAllowableUsageCount; f++)
+				if (f != sameNameForm && f != properNounForm)
+					usagePatterns[f] >>= 1;
+		bool reduceDelta = false;
+		for (unsigned int f = 0; f < topAllowableUsageCount; f++)
+			if (f != sameNameForm && f != properNounForm)
+				reduceDelta |= ((add + deltaUsagePatterns[f]) > 255);
+		if (reduceDelta)
+			for (unsigned int f = 0; f < topAllowableUsageCount; f++)
+				if (f != sameNameForm && f != properNounForm)
+					deltaUsagePatterns[f] >>= 1;
+		for (unsigned int f = 0; f < topAllowableUsageCount; f++)
+		{
+			if (f != sameNameForm && f != properNounForm && isWinner(f,tmpWinnerForms))
+			{
+				usagePatterns[f] += add;
+				deltaUsagePatterns[f] += add;
+			}
+		}
+		deltaUsagePatterns[tFI::TRANSFER_COUNT]++;
+		changedSinceLastWordRelationFlush = true;
+		if (usagePatterns[tFI::TRANSFER_COUNT]++ < 63)
+			return false;
+		transferFormUsagePatternsToCosts(sameNameForm, properNounForm, count);
+		usagePatterns[tFI::TRANSFER_COUNT] = 1; // so writeUnknownWords knows this word is used more than once
+		deltaUsagePatterns[tFI::TRANSFER_COUNT] = 1; // so writeUnknownWords knows this word is used more than once
+		return true;
+
+	}
+	void normalize(unsigned char *usages, int start, int len)
+	{
+		len += start;
+		int I;
+		for (I = start; I < len && usages[I] == 255; I++);
+		if (I == len)
+			for (int J = start; J < len; J++)
+				usages[J] >>= 1;
+	}
+	void zeroNewProperNounCostIfUsedAllCaps() { usageCosts[formsSize()] = 0; }
+	void setProperNounUsageCost()
+	{
+		int costingOffset;
+		if ((costingOffset = query(nounForm)) != -1 ||
+			(costingOffset = query(abbreviationForm)) != -1 ||
+			(costingOffset = query(sa_abbForm)) != -1)
+			usageCosts[formsSize()] = usageCosts[costingOffset];
+		else
+			usageCosts[formsSize()] = 0;
+	}
+	void updateNounDeterminerUsageCost(bool hasDeterminer)
+	{
+		normalize(usagePatterns, tFI::SINGULAR_NOUN_HAS_DETERMINER, 2);
+		normalize(deltaUsagePatterns, tFI::SINGULAR_NOUN_HAS_DETERMINER, 2);
+		usagePatterns[(hasDeterminer) ? tFI::SINGULAR_NOUN_HAS_DETERMINER : tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]++;
+		deltaUsagePatterns[(hasDeterminer) ? tFI::SINGULAR_NOUN_HAS_DETERMINER : tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]++;
+		int transferTotal = 0;
+		for (unsigned int I = tFI::SINGULAR_NOUN_HAS_DETERMINER; I < tFI::SINGULAR_NOUN_HAS_DETERMINER + 2; I++)
+			transferTotal += usagePatterns[tFI::SINGULAR_NOUN_HAS_DETERMINER + I];
+		if ((transferTotal & 15) == 15)
+			transferUsagePatternsToCosts(tFI::HIGHEST_COST_OF_INCORRECT_NOUN_DET_USAGE, tFI::SINGULAR_NOUN_HAS_DETERMINER, 2);
+	}
+	void updateVerbObjectsUsageCost(int numObjects)
+	{
+		usagePatterns[tFI::VERB_HAS_0_OBJECTS + numObjects]++;
+		deltaUsagePatterns[tFI::VERB_HAS_0_OBJECTS + numObjects]++;
+		int transferTotal = 0;
+		for (unsigned int I = tFI::VERB_HAS_0_OBJECTS; I < tFI::VERB_HAS_0_OBJECTS + 3; I++)
+			transferTotal += usagePatterns[tFI::VERB_HAS_0_OBJECTS + I];
+		if ((transferTotal & 15) == 15)
+			transferUsagePatternsToCosts(tFI::HIGHEST_COST_OF_INCORRECT_VERB_USAGE, tFI::VERB_HAS_0_OBJECTS, 3);
+	}
+	int getLowestTopLevelCost(void)
+	{
+			int lowestCost = 10000;
+		for (unsigned int f = 0; f < count; f++)
+			if (Form(f)->isTopLevel)
+				lowestCost = min(lowestCost, usageCosts[f]);
+		return lowestCost;
+	}
+
+	int getLowestCost(void)
+	{
+			int lowestCost = 10000, offset = -1;
+		for (unsigned int f = 0; f < count; f++)
+			if (lowestCost > usageCosts[f] || (lowestCost == usageCosts[f] && forms()[f] != PROPER_NOUN_FORM_NUM))
+			{
+				lowestCost = usageCosts[f];
+				offset = f;
+			}
+		return offset;
+	}
+
 
 protected:
   static unsigned int *formsArray; // must not change after initialization or this must be protected by SRWLock
@@ -476,7 +615,10 @@ protected:
 private:
   unsigned int count;
   static int uniqueNewIndex; // use to insure every word has a unique index, even though it hasn't been consigned to the database yet.  
-  // must not change after initialization or this must be protected by SRWLock 
+	unsigned char usagePatterns[tFI::MAX_USAGE_PATTERNS]; // usage counts for every class of this word
+	unsigned char usageCosts[tFI::MAX_USAGE_PATTERNS];
+	unsigned char deltaUsagePatterns[tFI::MAX_USAGE_PATTERNS];
+	// must not change after initialization or this must be protected by SRWLock 
 };
 
 extern tFI::cRMap::tIcRMap tNULL;

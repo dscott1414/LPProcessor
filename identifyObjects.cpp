@@ -1054,7 +1054,7 @@ int Source::identifyObject(int tag, int where, int element, bool adjectival, int
 				*/
 				if (!(m[I].flags&WordMatch::flagAllCaps) ||
 					(pnwf = m[I].queryWinnerForm(PROPER_NOUN_FORM_NUM)) >= 0 &&
-					(((nwf = m[I].queryWinnerForm(nounForm)) < 0) || m[I].word->second.usageCosts[pnwf] <= m[I].word->second.usageCosts[nwf]))
+					(((nwf = m[I].queryWinnerForm(nounForm)) < 0) || m[I].word->second.getUsageCost(pnwf) <= m[I].word->second.getUsageCost(nwf)))
 					break;
 			}
 			if (I == end)
@@ -1480,7 +1480,7 @@ void Source::checkObject(vector <cObject>::iterator o)
 		for (unsigned int formOffset = 0; formOffset < im->word->second.formsSize(); formOffset++)
 			if (im->isWinner(formOffset) && im->costable())
 			{
-				if (im->word->second.usageCosts[formOffset] >= 4)
+				if (im->word->second.getUsageCost(formOffset) >= 4)
 					highCostElement = true;
 				numWinners++;
 			}
