@@ -3196,14 +3196,15 @@ void Source::identifySpeakerGroups()
       {
         // is the period in the middle of a quote?  if then, set to true.
         // is the period not in a quote, or at the end of a quote? then set to false.
-        quotesSeenSinceLastSentence=inPrimaryQuote && (m[I+1].word->first!=L"”" && (m[I+1].word->first!=L"’" && m[I+2].word->first!=L"”"));
+        quotesSeenSinceLastSentence=inPrimaryQuote && (m[I+1].word->first!=L"”" || (m[I+1].word->first!=L"’" && m[I+2].word->first!=L"”"));
         // in the case where a .?! is followed by a quote and a speaker designation,
         // the speaker designation does not count as a sentence.
         if (debugTrace.traceSpeakerResolution)
           lplog(LOG_SG,L"%d:(1)quotesSeenSinceLastSentence=%s",I,(quotesSeenSinceLastSentence) ? L"true":L"false");
       }
     }
-    else if (m[I].word==Words.sectionWord)
+		// CMREADME27
+		else if (m[I].word==Words.sectionWord)
     {
 			if (questionSpeakerLastParagraph>=0 && whereFirstSubjectInParagraph>=0)
 				questionSubjectAgreementMap[whereFirstSubjectInParagraph]=questionSpeakerLastParagraph;

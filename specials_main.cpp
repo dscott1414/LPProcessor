@@ -4414,6 +4414,8 @@ int stanfordCheckMP(Source source, int step, bool pcfg, int MP)
 
 int stanfordCheckTest(Source source, wstring path, int sourceId, bool pcfg,wstring limitToWord,int maxSentenceLimit)
 {
+	if (limitToWord.length() > 0)
+		printf("limited to %S!", limitToWord.c_str());
 	JavaVM *vm;
 	JNIEnv *env;
 	createJavaVM(vm, env);
@@ -4666,7 +4668,7 @@ void wmain(int argc,wchar_t *argv[])
 		break;
 	case 21:
 		// Source::TEST_SOURCE_TYPE
-		patternOrWordAnalysis(source, step, L"__NOUN", L"NAE", Source::GUTENBERG_SOURCE_TYPE,true);
+		patternOrWordAnalysis(source, step, L"_VERBREL1", L"1", Source::GUTENBERG_SOURCE_TYPE,true);
 		//patternOrWordAnalysis(source, step, L"_MS1", L"2",true); // TODO: testing weight change on _S1.
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
 		//patternOrWordAnalysis(source, step, L"_VERB_BARE_INF", L"A", true);
@@ -4681,7 +4683,7 @@ void wmain(int argc,wchar_t *argv[])
 		syntaxCheck(source, step);
 		break;
 	case 70:
-		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"sure",50);
+		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"",50);
 		break;
 	case 71:
 		vector <wstring> words = { L"advertising",L"wishing",L"writing",L"yachting",L"yellowing" };

@@ -1688,7 +1688,7 @@ void initializeTagSets(int &startSuperTagSets)
 { LFS
 	desiredTagSets.push_back(tTS(verbSenseTagSet,L"_VERB_SENSE",-28,
     L"no",L"never",L"not",L"past",L"imp",L"future",L"id",L"conditional",L"vS",L"vAC",L"vC",L"vD",L"vB",L"vAB",L"vBC",L"vABC",L"vCD",L"vBD",L"vABD",L"vACD",L"vBCD",L"vABCD",L"vE",L"vrBD",L"vrB",L"vrBC",L"vrD",L"vAD",NULL));
-  desiredTagSets.push_back(tTS(subjectVerbAgreementTagSet,L"_AGREEMENT",3,L"SUBJECT",L"VERB",L"V_AGREE",L"V_OBJECT",L"conditional",L"future",L"past",NULL)); // V_OBJECT used for relations
+  desiredTagSets.push_back(tTS(subjectVerbAgreementTagSet,L"_AGREEMENT",3,L"SUBJECT",L"VERB",L"V_AGREE",L"V_OBJECT",L"conditional",L"future",L"past",L"SUBJUNCTIVE",NULL)); // V_OBJECT used for relations
   // "N_AGREE",L"GNOUN",L"SINGULAR",L"PLURAL" were put into SUBJECT_TAGSET because these tags also belong in OBJECTS which are after the verb, have nothing to
   // do with agreement and yet greatly multiply the number of tagsets.
 	desiredTagSets.push_back(tTS(subjectTagSet,L"_SUBJECT",-4,L"N_AGREE",L"GNOUN",L"MNOUN",L"NAME",L"SINGULAR",L"PLURAL",L"RE_OBJECT",NULL));
@@ -1706,7 +1706,7 @@ void initializeTagSets(int &startSuperTagSets)
   desiredTagSets.push_back(tTS(objectTagSet,L"_OBJECTS",-6,L"NOUN",L"VNOUN",L"PNOUN",L"GNOUN",L"NAME",L"ADJOBJECT",L"NAMEOWNER",NULL));
   // RE_OBJECT is an object restated, IOBJECT is an immediate object of an infinitive phrase, PREPOBJECT is an object of a prepositional phrase, and SUBOBJECT is everything else.
   desiredTagSets.push_back(tTS(roleTagSet,L"_ROLE",-6,L"SUBJECT",L"OBJECT",L"RE_OBJECT",L"SUBOBJECT",L"IOBJECT",L"PREPOBJECT",L"HAIL",NULL));
-  desiredTagSets.push_back(tTS(subjectVerbRelationTagSet,L"_SUBJECT_VERB_RELATION",3,L"VERB",L"V_OBJECT",L"SUBJECT",L"OBJECT",L"PREP",L"IVERB",L"REL",L"ADJ",L"ADV",L"HOBJECT",L"V_AGREE",L"V_HOBJECT",L"VERB2",L"ADJOBJECT",L"ADVOBJECT",L"MNOUN",L"MVERB",L"S_IN_REL",L"QTYPE",NULL));
+  desiredTagSets.push_back(tTS(subjectVerbRelationTagSet,L"_SUBJECT_VERB_RELATION",3,L"VERB",L"V_OBJECT",L"SUBJECT",L"OBJECT",L"PREP",L"IVERB",L"REL",L"ADJ",L"ADV",L"HOBJECT",L"V_AGREE",L"V_HOBJECT",L"VERB2",L"ADJOBJECT",L"ADVOBJECT",L"MNOUN",L"MVERB",L"S_IN_REL",L"QTYPE",L"not",NULL));
 	desiredTagSets.push_back(tTS(verbObjectRelationTagSet,L"_VERB_OBJECT_RELATION",3,L"VERB",L"V_OBJECT",L"OBJECT",L"SUBJECT",L"PREP",L"IVERB",L"REL",L"ADJ",L"ADV",L"HOBJECT",L"V_AGREE",L"V_HOBJECT",L"VERB2",L"ADJOBJECT",L"ADVOBJECT",L"MNOUN",L"MVERB",L"S_IN_REL",L"QTYPE",NULL));
   desiredTagSets.push_back(tTS(nameTagSet,L"_NAME",-7,L"FIRST",L"MIDDLE",L"LAST",L"QLAST",L"ANY",L"HON",L"BUS",L"HON2",L"HON3",L"SUFFIX",L"SINGULAR",L"PLURAL",NULL));
   desiredTagSets.push_back(tTS(metaNameEquivalenceTagSet,L"_META_NAME_EQUIVALENCE",-3,L"NAME_PRIMARY",L"NAME_SECONDARY",L"NAME_ABOUT",NULL));

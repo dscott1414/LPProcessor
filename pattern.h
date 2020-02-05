@@ -236,7 +236,7 @@ extern vector < tTS > desiredTagSets;
 
 int findTag(vector <tTagLocation> &tagSet,wchar_t *tagName,int &nextTag);
 int findTag(wchar_t *tagName);
-int findOneTag(vector <tTagLocation> &tagSet,wchar_t *tagName,int start);
+int findOneTag(vector <tTagLocation> &tagSet,wchar_t *tagName,int start=-1);
 int findTagConstrained(vector <tTagLocation> &tagSet,wchar_t *tagName,int &nextTag,tTagLocation &parentTag);
 int findTagConstrained(vector <tTagLocation> &tagSet,wchar_t *tagName,int &nextTag,unsigned int searchBegin,unsigned int searchEnd);
 void findTagSetConstrained(vector <tTagLocation> &tagSet,unsigned int desiredTagSetNum,char *tagFilledArray,tTagLocation &parentTag);

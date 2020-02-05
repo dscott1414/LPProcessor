@@ -378,22 +378,35 @@ int createNouns(void)
 		L"demonstrative_determiner",0,1,1,
 									 0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:PNOUN}",L"C",3,
-						L"personal_pronoun_accusative{N_AGREE}", // used to be OBJ
-						L"personal_pronoun_nominative{N_AGREE}", // used to be SUBJ
-						L"personal_pronoun{N_AGREE}",
+											L"personal_pronoun_accusative{N_AGREE}", // used to be OBJ
+											L"personal_pronoun_nominative{N_AGREE}", // used to be SUBJ
+											L"personal_pronoun{N_AGREE}", 0, 1, 1,
 													//L"demonstrative_determiner{N_AGREE}", __NOUN[2]
 													//L"--", // used to be in _N1,took out 11/4/2005-caused too many misparses see other changes *--*
-													 0,1,1,
 											// they will declare 'me sane' - L"_ADJECTIVE_AFTER", NOT applicable because this verb actually has two objects
 											// also 'me sane' or I sane is not really one noun.
 												1,L"reflexive_pronoun",0,0,1,
 												0);
+	// Yes , she , herself , in spite of *her* boasted strength had come at last to feel the need of being loved for the very weakness she had once despised . 
+	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:PNOUN}", L"CC", 3,
+												L"personal_pronoun_accusative{N_AGREE}", // used to be OBJ
+												L"personal_pronoun_nominative{N_AGREE}", // used to be SUBJ
+												L"personal_pronoun{N_AGREE}",
+												//L"demonstrative_determiner{N_AGREE}", __NOUN[2]
+												//L"--", // used to be in _N1,took out 11/4/2005-caused too many misparses see other changes *--*
+												0, 1, 1,
+												// they will declare 'me sane' - L"_ADJECTIVE_AFTER", NOT applicable because this verb actually has two objects
+												// also 'me sane' or I sane is not really one noun.
+												1, L",",0,1,1,
+												1, L"reflexive_pronoun", 0, 1, 1,
+												1, L",", 0, 1, 1,
+												0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:PNOUN}", L"Y", 5,
-		L"personal_pronoun_accusative|us{N_AGREE}", L"personal_pronoun_accusative|them{N_AGREE}", 
-		L"personal_pronoun_nominative|we{N_AGREE}", L"personal_pronoun_nominative|they{N_AGREE}", 
-		L"personal_pronoun_accusative|you{N_AGREE}", PLURAL, 1, 1,
-		1, L"predeterminer|both", 0, 1, 1,
-		0);
+										L"personal_pronoun_accusative|us{N_AGREE}", L"personal_pronoun_accusative|them{N_AGREE}", 
+										L"personal_pronoun_nominative|we{N_AGREE}", L"personal_pronoun_nominative|they{N_AGREE}", 
+										L"personal_pronoun_accusative|you{N_AGREE}", PLURAL, 1, 1,
+										1, L"predeterminer|both", 0, 1, 1,
+										0);
 	// this pattern must go after all nouns EXCEPT it must be before any noun patterns that use _NOUN as a subpattern
 	//cPattern::create(L"_NOUN",L"",1,L"__NOUN[*]",0,1,1,0);
 
@@ -2070,6 +2083,11 @@ void createSecondaryPatterns1(void)
 	cPattern::create(L"_VERBREL2{_FINAL_IF_ALONE}",L"1",
 						2,L"_VERBONGOING{vE:VERB}",L"__VERBREL2",0,1,1,
 						3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1,0);
+	// ‘ I am exactly the same , ’ Catherine repeated , *wishing her aunt were a little less sympathetic* .
+	cPattern::create(L"_VERBREL2{_FINAL_IF_ALONE}", L"3",
+						1, L"_THINKONGOING{vE:VERB}", 0, 1, 1,
+						1, L"__S1*1{EVAL:_BLOCK:SUBJUNCTIVE}", 0, 1, 1,
+		0);
 	// PASSIVE
 	// , having been spread
 	// , having been given
@@ -2158,7 +2176,8 @@ void createPrepositionalPhrases(void)
 									 1,L"quotes",CLOSE_INFLECTION,1,1,
 									 0);
 	cPattern::create(L"__PP",L"9",
-		               1,L"_ADVERB*1",0,0,1, // discourage ADVERBS if they can be picked up from ALLOBJECTS instead and bound to the previous verb
+										// Why , I am not only older than you in years , I am older in soul , *older in a thousand lives* . (adjective required to match 'older' below)
+		               2,L"_ADVERB*1",L"adjective*1",0,0,1, // discourage ADVERBS if they can be picked up from ALLOBJECTS instead and bound to the previous verb
 									 3,L"preposition{P}",L"verbalPreposition{P}",L"__AS_AS",0,1,1, // as much as Old Mr. Crow / As busy as chirpy cricket
 									 1,L"preposition*1{P}",0,0,1, // from within
 									 1,L"_ADVERB*3",0,0,1, // I haven't seen you for SIMPLY centuries, my dear. // adverbial use should be rare - prefer adjectives attached to the nouns over adverbs.
@@ -2172,7 +2191,8 @@ void createPrepositionalPhrases(void)
 	// in the sentence below, the _PP containing moment or two Tommy's indignation should not be included
 	// After a moment or two Tommy's indignation got the better of him.
 	cPattern::create(L"_PP{_FINAL_IF_ALONE:_BLOCK:PREP:_NO_REPEAT}",L"2",
-									 1,L"_ADVERB*1",0,0,1, // discourage ADVERBS if they can be picked up from ALLOBJECTS instead and bound to the previous verb
+									 // Why , I am not only older than you in years , I am older in soul , *older in a thousand lives* . (adjective required to match 'older' below)
+									 2, L"_ADVERB*1", L"adjective*1", 0, 0, 1, // discourage ADVERBS if they can be picked up from ALLOBJECTS instead and bound to the previous verb
 									 3,L"preposition{P}",L"verbalPreposition{P}", L"__AS_AS",0,1,1,  // this should be a particle
 									 1,L"preposition{P}",0,0,1, // from within - complex prepositions
 									 1,L"_ADVERB*3",0,0,1, // I haven't seen you for SIMPLY centuries, my dear. // adverbial use should be rare - prefer adjectives attached to the nouns over adverbs.
@@ -2585,10 +2605,10 @@ int createSecondaryPatterns2(void)
 										1, L"__C1__S1", 0, 1, 1,
 										1, L"__ALLTHINK{VERB}", 0, 1, 1, // L"think" for all active tenses! - possibly add INTRO_S1.
 										// removed OBJECT from _NOUN as this will cause IS to have two objects (including the one from _S1) which is wrong and will cause elimination of this pattern
-										3, L"_NOUN_OBJ", L"__NOUN[*]", L"_PP",0, 0, 1, // Lawrence told me you were with monsieur Poirot. /  She felt confident he was there.
+										3, L"_NOUN_OBJ", L"__NOUN[*]", L"_PP",0, 0, 1, // Lawrence told *me* you were with monsieur Poirot. /  She felt confident he was there.
 										2, L"_ADJECTIVE", L"_ADVERB",0,0,1,  // I tell you frankly, she would hate you.
 										3, L"demonstrative_determiner|that{S_IN_REL}", L"quantifier|all*-2",L",",0, 0, 1,
-										2, L"__S1[R]{_BLOCK:OBJECT:EVAL}", L"_MS1[*]{_BLOCK:OBJECT:EVAL}", 0, 1, 1,
+										2, L"__S1[R]{_BLOCK:OBJECT:EVAL:SUBJUNCTIVE}", L"_MS1[*]{_BLOCK:OBJECT:EVAL}", 0, 1, 1,
 										0);
 		// I would have him fired
 	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"1P",
@@ -2783,7 +2803,7 @@ int createSecondaryPatterns2(void)
 										0);
 	// *But* doesn't some one of that name live here ?
 	cPattern::create(L"__INTRO_S1{_ONLY_BEGIN_MATCH}", L"C",
-										1, L"conjunction", 0, 1, 1,
+										2, L"conjunction", L"conjunction|for*-3",0, 1, 1, // for is not usually a conjunction
 										0);
 	// added interjection to take care of 'Well' Stanford mismatch
 	cPattern::create(L"__INTRO_S1{_ONLY_BEGIN_MATCH}",L"2",
@@ -3266,7 +3286,8 @@ int createSecondaryPatterns2(void)
 									 1,L"_STEP",0,0,1,
 									 1,L"_INTRO_S1",0,1,1,
 									 1,L"conjunction|if",0,0,1,
-									 5,L"_Q1*1{_BLOCK:EVAL}",L"_VERBREL1",L"_COMMAND1{_BLOCK:EVAL}",L"__SQ{_BLOCK:EVAL}", L"politeness_discourse_marker*-1",0,1,1, // Please, Jake, please
+									 4,L"_Q1*1{_BLOCK:EVAL}",L"_COMMAND1{_BLOCK:EVAL}",L"__SQ{_BLOCK:EVAL}", L"politeness_discourse_marker*-1",0,1,1, // Please, Jake, please // L"_VERBREL1",
+									 // 5,L"_Q1*1{_BLOCK:EVAL}",L"_VERBREL1",L"_COMMAND1{_BLOCK:EVAL}",L"__SQ{_BLOCK:EVAL}", L"politeness_discourse_marker*-1",0,1,1, // Please, Jake, please
 									 1,L"__CLOSING__S1",0,0,3,
 									 1,L"_REF",0,0,1,
 									 //1,L"?*-1",0,0,1,
@@ -3437,11 +3458,11 @@ int createSecondaryPatterns2(void)
 												 1,L"_PP",0,1,1,
 												 0);
 	// willing to do anything, go anywhere. (Secret Adversary)
-	cPattern::create(L"_PLEA{_FINAL_IF_ALONE:_STRICT_NO_MIDDLE_MATCH}", L"1",
-													1, L"_VERBONGOING{VERB:vE}", 0, 1, 1,
-													3, L"__ALLOBJECTS_0", L"__ALLOBJECTS_1", L"__ALLOBJECTS_2", 0, 0, 1, // there must only be one adjective and it must be last (not mixed in) see *
-													1, L"__CLOSING__S1", 0, 0, 3,
-													0);
+	//cPattern::create(L"_PLEA{_FINAL_IF_ALONE:_STRICT_NO_MIDDLE_MATCH}", L"1",
+	//												1, L"_VERBONGOING{VERB:vE}", 0, 1, 1,
+	//												3, L"__ALLOBJECTS_0", L"__ALLOBJECTS_1", L"__ALLOBJECTS_2", 0, 0, 1, // there must only be one adjective and it must be last (not mixed in) see *
+	//												1, L"__CLOSING__S1", 0, 0, 3,
+	//												0);
 
 	// yes, please.  Oh, please.  No, No, please!
 	// No, please, sir

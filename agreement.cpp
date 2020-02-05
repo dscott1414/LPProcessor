@@ -531,18 +531,6 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 	LFS
 	int nextSubjectTag = -1, subjectTag = findTag(tagSet, L"SUBJECT", nextSubjectTag);
 	if (subjectTag < 0) return 0;
-	// if exception
-	// If I were a rich man, I would make more charitable donations.
-	// If he were here right now, he would help us.
-	// this exception applies only to unreal conditionals—that is, situations that do not reflect reality. (Hint: unreal conditionals often contain words like “would” or “ought to.”) 
-	// When talking about a possibility that did happen or might be true, “was” and “were” are used normally.
-	// If I was rude to you, I apologize.
-	if (tagSet[subjectTag].sourcePosition > 1 && m[tagSet[subjectTag].sourcePosition - 1].word->first == L"if")
-	{
-		if (debugTrace.traceSubjectVerbAgreement)
-			lplog(L"%d: if exception [SOURCE=%06d] cost=%d", position, traceSource = gTraceSource++, 0);
-		return 0;
-	}
 	int nextMainVerbTag = -1;
 	int mainVerbTag = findTag(tagSet, L"VERB", nextMainVerbTag);
 	if (subjectTag < mainVerbTag)
@@ -642,6 +630,16 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 	int relationCost=0;
 	tFI::cRMap *rm;
 	int verbPosition=(verbAgreeTag>=0) ? tagSet[verbAgreeTag].sourcePosition : -1;
+	// prevent _INTRO_S1 that matches a _PP like 'from her' and a subject like 'face' when it should be 'from her face' - This particular intro_S1 should not be allowed 
+	// But this , she knew , was not so , for her face was perfectly unharmed ; 
+	// position must = nounPosition because nounPosition = the main noun, which may have a determiner which is perfectly normal (and in this case position!=nounPosition)
+	if (nounPosition >= 1 && position==nounPosition && m[nounPosition].queryForm(nounForm) !=-1 && m[nounPosition - 1].queryForm(possessiveDeterminerForm) !=-1)
+	{
+		if (debugTrace.traceSubjectVerbAgreement)
+			lplog(L"%d:Noun subject %d:%s is preceeded by a possessive determiner %d:%s",
+				position, nounPosition, m[nounPosition].word->first.c_str(),nounPosition-1,m[nounPosition-1].word->first.c_str());
+		relationCost += 10;
+	}
 	if ((nounPosition>=0 || nounPosition==-2) && verbPosition>=0)
 	{
 		tIWMM nounWord,verbWord;
@@ -666,11 +664,11 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 			verbWord=verbWord->second.mainEntry;
 		tFI::cRMap::tIcRMap tr=tNULL;
 		if ((rm=nounWord->second.relationMaps[SubjectWordWithVerb]) && ((tr=rm->r.find(verbWord))!=rm->r.end()))
-			relationCost=-COST_PER_RELATION;
+			relationCost-=COST_PER_RELATION;
 		else // Whom did Obama defeat for the Senate seat? - Obama is a single word, so it never gets a name (nounPosition=-2) designation, and so never tries __ppn__->verb relation
 			if (nounWord!=Words.PPN && tagSet[subjectTag].len==1 && (m[nounPosition].flags&WordMatch::flagFirstLetterCapitalized) &&
 			    (rm=Words.PPN->second.relationMaps[SubjectWordWithVerb]) && (tr=rm->r.find(verbWord))!=rm->r.end())
-			relationCost=-COST_PER_RELATION;
+			relationCost-=COST_PER_RELATION;
 		if (debugTrace.traceSubjectVerbAgreement)
 		{
 			wchar_t temp[1024];
@@ -684,7 +682,7 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 							temp,nounPosition,nounWord->first.c_str(),tr->second.frequency,verbWord->first.c_str());
 		}
 	}
-	if (nounPosition>=0 && m[nounPosition].queryWinnerForm(accForm) >= 0)
+	if (nounPosition>=0 && m[nounPosition].queryForm(accForm) >= 0)
 	{
 		if (debugTrace.traceSubjectVerbAgreement)
 			lplog(L"%d:Noun phrase at %d is accusative pronoun [additional cost of 4]!", position, nounPosition);
@@ -819,9 +817,11 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 	}
 	if (!singularSet && !pluralSet)
 		singularSet=true;
-	wstring temp;
 	if (debugTrace.traceSubjectVerbAgreement)
-		lplog(L"%d:Noun phrase at %d was %s [plural=%s singular=%s]",position,nounPosition,getInflectionName(person,nounInflectionMap,temp),(pluralSet) ? L"true" : L"false",(singularSet) ? L"true" : L"false");
+	{
+		wstring temp;
+		lplog(L"%d:Noun phrase at %d was %s [plural=%s singular=%s]", position, nounPosition, getInflectionName(person, nounInflectionMap, temp), (pluralSet) ? L"true" : L"false", (singularSet) ? L"true" : L"false");
+	}
 	bool ambiguousTense;
 	// the verb 'beat' is both past and present tense
 	if (ambiguousTense=(inflectionFlags&(VERB_PRESENT_FIRST_SINGULAR|VERB_PAST))==(VERB_PRESENT_FIRST_SINGULAR|VERB_PAST))
@@ -830,9 +830,88 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 		else inflectionFlags&=VERB_PRESENT_PARTICIPLE|VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_PLURAL;
 	}
 	if (debugTrace.traceSubjectVerbAgreement)
-		lplog(L"%d:Verb phrase at (%d:%d-%d) had mask of %s.",position,verbPosition,
-					tagSet[mainVerbTag].sourcePosition,tagSet[mainVerbTag].len+tagSet[mainVerbTag].sourcePosition,
-					getInflectionName(inflectionFlags,verbInflectionMap,temp));
+	{
+		wstring temp;
+		lplog(L"%d:Verb phrase at (%d:%d-%d) had mask of %s.", position, verbPosition,
+			tagSet[mainVerbTag].sourcePosition, tagSet[mainVerbTag].len + tagSet[mainVerbTag].sourcePosition,
+			getInflectionName(inflectionFlags, verbInflectionMap, temp));
+	}
+	//	The present subjunctive is identical to the bare infinitive(and imperative) of the verb in all forms.
+	// This means that, for almost all verbs, the present subjunctive differs from the present indicative only in the 
+	// third person singular form, which lacks the ending - s in the subjunctive.
+
+	//Present indicative
+	//	I own, you own, he owns, we own, they own
+	//Present subjunctive
+	//	(that) I own, (that)you own, (that)he own, (that)we own, (that)they own
+
+	//	With the verb be, however, the two moods are fully distinguished :
+	//Present indicative
+	//	I am, you are, he is, we are, they are
+	//Present subjunctive
+	//	(that) I be, (that)you be, (that)he be, (that)we be, (that)they be
+	//	Note also the defective verb beware, which lacks indicative forms, but has a present subjunctive : (that)she beware…
+
+	//The two moods are also fully distinguished when negated.
+	//Present subjunctive forms are negated by placing the word not before them.
+
+	//Present indicative
+	//	I do not own, you do not own, he does not own…; I am not…
+	//Present subjunctive
+	//	(that) I not own, (that)you not own, (that)he not own…; (that)I not be…
+
+	//	The past subjunctive exists as a distinct form only for the verb be, which has the form were throughout :
+	//Past indicative
+	//	I was, you were, he was, we were, they were
+	//Past subjunctive
+	//	(that) I were, (that)you were, (that)he were, (that)we were, (that)they were
+
+	//In the past tense, there is no difference between the two moods as regards manner of negation : I was not; (that)I were not.  
+	//Verbs other than be are described as lacking a past subjunctive, 
+	//or possibly as having a past subjunctive identical in form to the past indicative : (that)I owned; (that)I did not own.
+
+	//Certain subjunctives(particularly were) can also be distinguished from indicatives by the possibility of inversion with the subject.
+
+	bool subjunctiveMood = findOneTag(tagSet, L"SUBJUNCTIVE")>=0;
+	// if/lest exception
+	// If I were a rich man, I would make more charitable donations.
+	// If he were here right now, he would help us.
+	// this exception applies only to unreal conditionals—that is, situations that do not reflect reality. (Hint: unreal conditionals often contain words like “would” or “ought to.”) 
+	// When talking about a possibility that did happen or might be true, “was” and “were” are used normally.
+	// If I was rude to you, I apologize.
+	// wishing he were here right now
+	// ‘ I am exactly the same , ’ Catherine repeated , wishing her aunt were a little less sympathetic .
+	if (tagSet[subjectTag].sourcePosition > 1 &&
+		(m[tagSet[subjectTag].sourcePosition - 1].word->first == L"if" || m[tagSet[subjectTag].sourcePosition - 1].word->first == L"lest" ||
+			m[tagSet[subjectTag].sourcePosition - 1].queryForm(thinkForm) != -1))
+	{
+		if (debugTrace.traceSubjectVerbAgreement)
+			lplog(L"%d: if/lest/SYNTAX:Accepts S as Object exception triggers subjunctive mood", position);
+		subjunctiveMood = true;
+	}
+	// if the subjunctive tag is found, it means that the subjunctive mood MAY BE used, not that it is definitely being used.
+	if (subjunctiveMood)
+	{
+		// past subjunctive for "be" = 'were' present subjunctive for "be" = 'be'
+		if (verbPosition >= 0 && (m[verbPosition].word->first == L"were" || m[verbPosition].word->first == L"be"))
+		{
+			lplog(L"%d: subjunctive tag agreement 1) verb is 'were' or 'be'.", position);
+			return relationCost;
+		}
+		// ambiguous for third person - subjunctive mood disagrees with non subjunctive 
+		if (person&THIRD_PERSON)
+		{
+			lplog(L"%d: subjunctive tag agreement 2) subject is third person.", position);
+			return relationCost;
+		}
+		if (findOneTag(tagSet, L"not") >= 0)
+		{
+			lplog(L"%d: subjunctive tag agreement 3) verb negated.", position);
+			return relationCost;
+		}
+		if (debugTrace.traceSubjectVerbAgreement)
+			lplog(L"%d: subjunctive mood failed to find a case where it would make a difference in agreement.", position);
+	}
 	bool agree=true;
 	switch(inflectionFlags)
 	{
@@ -858,6 +937,11 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 		if (((person&THIRD_PERSON)!=THIRD_PERSON || (singularSet && !pluralSet)) && (person&FIRST_PERSON)!=FIRST_PERSON &&
 			(person&SECOND_PERSON)!=SECOND_PERSON && (person!=(FIRST_PERSON|SECOND_PERSON))) agree=false;
 		break;
+	default:
+		{
+			wstring temp;
+			lplog(LOG_ERROR, L"inflectionFlags of %s (%d) not supported!", getInflectionName(inflectionFlags, verbForm, temp), inflectionFlags);
+		}
 	}
 	int cost=((agree) ? 0 : NON_AGREEMENT_COST)+relationCost;
 	if (!agree && ambiguousTense && verbAgreeTag>=0 && conditionalTag<0 && 
