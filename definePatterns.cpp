@@ -661,6 +661,10 @@ int createBasicPatterns(void)
 											4, L"noun|moment", L"noun|instant", L"noun|second", L"noun|minute", 0, 1, 1,
 											2, L"adverb|earlier", L"adverb|later", 0, 0, 1,
 											0);
+	cPattern::create(L"_ADVERB{_FINAL}", L"W2",
+											1, L"preposition|at", 0, 1, 1,
+											1, L"noun|once*-4", 0, 1, 1,  // noun cost is 4
+											0);
 	/// TIME related adverbs [end]
 	// lightly,
 	cPattern::create(L"__ADV_S1",L"",
@@ -2199,6 +2203,15 @@ void createPrepositionalPhrases(void)
 									 // Under the original act, how many judges were to be on the court? - __NOUNREL should have at least a cost of 2 because it matches too much (with its comma)
 									 6,L"_NOUN_OBJ{PREPOBJECT}",L"__NOUN[*]{PREPOBJECT}",L"__MNOUN[*]{PREPOBJECT}",L"__NOUNREL*4{PREPOBJECT}",L"_ADJECTIVE[*]*4",L"__NOUNRU{PREPOBJECT}",0,1,1,  // _NOUN* includes NOUN[D] and NOUN[E]
 									 0);
+	// The pursuit of managers and of players had *left* her continually alone .
+	cPattern::create(L"_PP{_FINAL_IF_ALONE:_BLOCK:PREP:_NO_REPEAT}", L"2C",
+										2, L"_ADVERB*1", L"adjective*1", 0, 0, 1, 
+										1, L"preposition|of{P}", 0, 1, 1,  
+										1, L"__NOUN[*]{PREPOBJECT}", 0, 1, 1,
+										1, L"coordinator",0,1,1,
+										1, L"preposition|of{P}", 0, 1, 1,  
+										1, L"__NOUN[*]{PREPOBJECT}", 0, 1, 1,
+										0);
 	// We are nearer to finding Tuppence.
 	//  This is not an infinitive phrase.  'to' is a participle, and finding is an verb with a subject Tuppence
 	// it is not a prepositional phrase either, but it is a convenient place to put this.
@@ -2429,11 +2442,12 @@ int createSecondaryPatterns2(void)
 									1, L"__ALLOBJECTS_1", 0, 1, 1, // there must only be one adjective and it must be last (not mixed in) see *
 									1, L"__CLOSING__S1", 0, 0, 3,
 									0);
+	// OBJVERB patterns - reverse
 	// *This* she knew had caused a change in her own attitude 
-	// OBJVERB patterns
+	// ‘ That you can do next *time* . 
 	cPattern::create(L"__S1{_ONLY_BEGIN_MATCH:_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"R",
 										1, L"predeterminer|all",0,0,1, // All *this* the governor of the prison affected to disbelieve
-										1, L"demonstrative_determiner|this*1{OBJECT}",0,1,1,
+										2, L"demonstrative_determiner|this*1{OBJECT}", L"demonstrative_determiner|that*1{OBJECT}", 0,1,1,
 										1, L"__C1__S1", 0, 1, 1,
 										2, L"__ALLVERB", L"_COND{VERB}", 0, 1, 1,
 										// *This* she had done solely to appease Marian Barber's wounded pride . 
@@ -2459,6 +2473,7 @@ int createSecondaryPatterns2(void)
 										4, L"__ALLOBJECTS_0", L"__ALLOBJECTS_1", L"_INFP", L"_REL1[*]", 0, 0, 1,
 										1, L"__CLOSING__S1", 0, 0, 2,
 										0);
+	// END OBJVERB patterns - reverse END
 	// *I* shall have to speak to *whoever is in charge * .
 	cPattern::create(L"__NOUN{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_FORWARD_REFERENCE:_BLOCK:GNOUN:VNOUN:_EXPLICIT_SUBJECT_VERB_AGREEMENT:_CHECK_IGNORABLE_FORMS}", L"Z",
 										5, L"interrogative_determiner|whatever", L"interrogative_determiner|whichever", L"interrogative_determiner|whosoever",L"interrogative_determiner|whoever", L"interrogative_determiner|wherever", 0, 1, 1, 
@@ -2975,9 +2990,9 @@ int createSecondaryPatterns2(void)
 						1,L"__CLOSING__S1",0,0,3,
 						0);
 	// to the point, my friend.
-	cPattern::create(L"_COMMAND1{_FINAL:_ONLY_BEGIN_MATCH}",L"3",
+	cPattern::create(L"_COMMAND1{_FINAL:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}",L"3",
 						1,L"_PP",0,1,1,
-						1,L"__CLOSING__S1",0,1,3,
+						1, L"__NOUN[*]{OBJECT}",0,1,1,
 						0);
 	// let us hope so.
 	cPattern::create(L"_COMMAND1{_FINAL:_ONLY_BEGIN_MATCH}", L"6",
@@ -3223,7 +3238,8 @@ int createSecondaryPatterns2(void)
 												1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
 												0);
 	// to put it mildly.
-	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL:_ONLY_END_MATCH}", L"G",
+	// _FINAL: ’ said Grace , snapping *her* finger resignedly . 
+	cPattern::create(L"__MSTAIL{_FINAL:NO_MIDDLE_MATCH:_BLOCK:EVAL:_ONLY_END_MATCH}", L"G",
 												1, L",", 0, 1, 1,
 												3, L"_PP", L"_VERBREL2", L"_INFP", 0, 1, 1,
 												1, L"_ADVERB", 0, 0, 1,

@@ -3885,6 +3885,18 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			//return 0;
 		}
 	}
+	if (source.queryPattern(wordSourceIndex, L"_ADVERB", L"8") != -1)
+	{
+		errorMap[L"LP correct:little by little"]++; 
+		return 0;
+	}
+	// *time* to time OR time to *time* / *face* to face
+	if (source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && ((wordSourceIndex > 2 && source.m[wordSourceIndex - 1].word->first == L"to" && source.m[wordSourceIndex].word == source.m[wordSourceIndex - 2].word) ||
+		(wordSourceIndex < source.m.size() - 1 && source.m[wordSourceIndex + 1].word->first == L"to" && source.m[wordSourceIndex].word == source.m[wordSourceIndex + 2].word)))
+	{
+		errorMap[L"LP correct:little by little"]++;
+		return 0;
+	}
 	return -1;
 }
 

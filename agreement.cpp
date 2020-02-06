@@ -895,18 +895,21 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 		// past subjunctive for "be" = 'were' present subjunctive for "be" = 'be'
 		if (verbPosition >= 0 && (m[verbPosition].word->first == L"were" || m[verbPosition].word->first == L"be"))
 		{
-			lplog(L"%d: subjunctive tag agreement 1) verb is 'were' or 'be'.", position);
+			if (debugTrace.traceSubjectVerbAgreement)
+				lplog(L"%d: subjunctive tag agreement 1) verb is 'were' or 'be'.", position);
 			return relationCost;
 		}
 		// ambiguous for third person - subjunctive mood disagrees with non subjunctive 
 		if (person&THIRD_PERSON)
 		{
-			lplog(L"%d: subjunctive tag agreement 2) subject is third person.", position);
+			if (debugTrace.traceSubjectVerbAgreement)
+				lplog(L"%d: subjunctive tag agreement 2) subject is third person.", position);
 			return relationCost;
 		}
 		if (findOneTag(tagSet, L"not") >= 0)
 		{
-			lplog(L"%d: subjunctive tag agreement 3) verb negated.", position);
+			if (debugTrace.traceSubjectVerbAgreement)
+				lplog(L"%d: subjunctive tag agreement 3) verb negated.", position);
 			return relationCost;
 		}
 		if (debugTrace.traceSubjectVerbAgreement)
@@ -936,6 +939,24 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 	case VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_PLURAL:
 		if (((person&THIRD_PERSON)!=THIRD_PERSON || (singularSet && !pluralSet)) && (person&FIRST_PERSON)!=FIRST_PERSON &&
 			(person&SECOND_PERSON)!=SECOND_PERSON && (person!=(FIRST_PERSON|SECOND_PERSON))) agree=false;
+		break;
+	case VERB_PAST|VERB_PAST_PARTICIPLE:
+		break;
+	case VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_THIRD_SINGULAR:
+		break;
+	case VERB_PAST_PARTICIPLE|VERB_PRESENT_FIRST_SINGULAR:
+		break;
+	case VERB_PRESENT_PARTICIPLE|VERB_PRESENT_FIRST_SINGULAR:
+		break;
+	case VERB_PAST|VERB_PRESENT_THIRD_SINGULAR:
+		break;
+	case VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PAST_PLURAL:
+		break;
+	case VERB_PAST|VERB_PRESENT_PARTICIPLE|VERB_PRESENT_THIRD_SINGULAR:
+		break;
+	case VERB_PRESENT_PARTICIPLE|VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR:
+		break;
+	case 0:
 		break;
 	default:
 		{
@@ -1924,14 +1945,22 @@ int Source::calculateVerbAfterVerbUsage(int whereVerb,unsigned int nextWord,bool
 		// previous verb: has, is (be, been, being), 'object' verb: past participle
 		// increase by HIGHEST_COST_OF_INCORRECT_VERB_AFTER_VERB_USAGE.
 		vector <WordMatch>::iterator im=m.begin()+whereVerb;
+		int nextVerbIndex = m[nextWord].queryForm(verbForm);
+		if (nextVerbIndex < 0)
+			return 0;
+		int nextVerbCost = m[nextWord].word->second.getUsageCost(nextVerbIndex);
 		//  add "verbal_auxiliary{V_AGREE}",0,1,1, // he dares eat this?
 		if ((im->forms.isSet(futureModalAuxiliaryForm) || im->forms.isSet(negationFutureModalAuxiliaryForm) ||
 			im->forms.isSet(modalAuxiliaryForm) || im->forms.isSet(negationModalAuxiliaryForm)) &&
 			((m[nextWord].word->second.inflectionFlags&(VERB_PRESENT_THIRD_SINGULAR | VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_PLURAL | VERB_PRESENT_SECOND_SINGULAR)) != 0 || adverbialObject))
 		{
-			if (debugTrace.traceVerbObjects)
-				lplog(L"VerbAfterVerb: testing verb=%d:%s, nextWord=%d:%s adverbialObject=%s CASE 1 is true", whereVerb, m[whereVerb].word->first.c_str(),nextWord,m[nextWord].word->first.c_str(),(adverbialObject) ? L"true":L"false");
-			return cost;
+			if ((m[nextWord].word->second.inflectionFlags&(VERB_PRESENT_THIRD_SINGULAR | VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_PLURAL | VERB_PRESENT_SECOND_SINGULAR)) != VERB_PRESENT_FIRST_SINGULAR ||
+				nextVerbCost < 4)
+			{
+				if (debugTrace.traceVerbObjects)
+					lplog(L"VerbAfterVerb: testing verb=%d:%s, nextWord=%d:%s adverbialObject=%s CASE 1 is true", whereVerb, m[whereVerb].word->first.c_str(), nextWord, m[nextWord].word->first.c_str(), (adverbialObject) ? L"true" : L"false");
+				return cost;
+			}
 		}
 		if ((im->forms.isSet(isForm) || im->forms.isSet(isNegationForm) || im->word->first == L"be" || im->word->first == L"been") &&
 			((m[nextWord].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) != 0 || adverbialObject))
@@ -1953,8 +1982,10 @@ int Source::calculateVerbAfterVerbUsage(int whereVerb,unsigned int nextWord,bool
 		if ((im->forms.isSet(doesForm) || im->forms.isSet(doesNegationForm)) && im->word->first!=L"doing" &&
 				(m[nextWord].word->second.inflectionFlags&VERB_PRESENT_FIRST_SINGULAR)!=0)
 		{
+			int verbAfterVerbCostRatio[] = { 16, 12, 8, 6, 4 };
+			cost = (cost * verbAfterVerbCostRatio[nextVerbCost]) / 10;
 			if (debugTrace.traceVerbObjects)
-				lplog(L"VerbAfterVerb: testing verb=%d:%s, nextWord=%d:%s adverbialObject=%s CASE 4 is true", whereVerb, m[whereVerb].word->first.c_str(), nextWord, m[nextWord].word->first.c_str(), (adverbialObject) ? L"true" : L"false");
+				lplog(L"VerbAfterVerb: testing verb=%d:%s, nextWord=%d:%s adverbialObject=%s CASE 4 is true [cost=%d]", whereVerb, m[whereVerb].word->first.c_str(), nextWord, m[nextWord].word->first.c_str(), (adverbialObject) ? L"true" : L"false",cost);
 			return cost;
 		}
 	}
@@ -2088,8 +2119,16 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 	tIWMM nounWord=m[whereNAgree].word;
 	if (!(nounWord->second.inflectionFlags&SINGULAR))
 	{
-		if (debugTrace.traceDeterminer)
-			lplog(L"%d:noun %s is not singular [SOURCE=%06d].",whereNAgree,nounWord->first.c_str(),traceSource=gTraceSource++);
+		// disallow the adjective 'one' immediately before a noun that is plural
+		// if *any one wishes* to know.
+		if (begin < whereNAgree && m[whereNAgree-1].word->first == L"one")
+		{
+			if (debugTrace.traceDeterminer)
+				lplog(L"%d:plural noun %s has an immediately preceding contradictory adjective 'one' [SOURCE=%06d].", whereNAgree, nounWord->first.c_str(), traceSource = gTraceSource++);
+			PNC += 10;
+		}
+		else if (debugTrace.traceDeterminer)
+			lplog(L"%d:noun %s is not singular [SOURCE=%06d].", whereNAgree, nounWord->first.c_str(), traceSource = gTraceSource++);
 		return PNC;
 	}
 	if (!tagIsCertain(whereNAgree))
@@ -2475,20 +2514,28 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 			voRelationsFound++;
 		int verbObjectCost=0,verbAfterVerbCost=0,objectDistanceCost=0,prepForm=-1;
 		unsigned int whereVerb=tagSet[verbTagIndex].sourcePosition+tagSet[verbTagIndex].len-1,nextWord=whereVerb+1;
-		if (nextWord+1<m.size() && m[nextWord].word->first != L"no" && // There was no thought to which rocket to launch. / thought is a past verb, and no is an adverb of cost < 4.  But still should not be considered a verbafterverb.
-				(m[nextWord].word->first==L"not" || m[nextWord].word->first==L"never" || // is it a not or never?
-				 (m[nextWord].forms.isSet(adverbForm) && m[nextWord].word->second.getUsageCost(m[nextWord].queryForm(adverbForm))<4 &&  // is it possibly an adverb?
-					(!m[nextWord].forms.isSet(verbForm) ||                                 // and definitely not a verb (don't skip it unnecessarily)
-					 (m[nextWord+1].forms.isSet(verbForm) && m[nextWord+1].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE))))) // OR is the next word after a verb participle?
-					nextWord++; // could possibly be an adverb in between
+		if (nextWord + 1 < m.size() && m[nextWord].word->first != L"no" && // There was no thought to which rocket to launch. / thought is a past verb, and no is an adverb of cost < 4.  But still should not be considered a verbafterverb.
+			(m[nextWord].word->first == L"not" || m[nextWord].word->first == L"never" || // is it a not or never?
+			(m[nextWord].forms.isSet(adverbForm) && m[nextWord].word->second.getUsageCost(m[nextWord].queryForm(adverbForm)) < 4 &&  // is it possibly an adverb?
+				(!m[nextWord].forms.isSet(verbForm) ||                                 // and definitely not a verb (don't skip it unnecessarily)
+				(m[nextWord + 1].forms.isSet(verbForm) && m[nextWord + 1].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE))))) // OR is the next word after a verb participle?
+		{
+			if (debugTrace.traceVerbObjects)
+				lplog(L"          %d:bumped nextWord from %d:%s to %d:%s. (case 1 - adverb)", position, nextWord, m[nextWord].word->first.c_str(), nextWord+1, m[nextWord+1].word->first.c_str());
+			nextWord++; // could possibly be an adverb in between
+		}
 		// they were at once taken up to his suite. - be conservative by only including the most likely (lowest cost) path
 		// Don't include 'that' as an adverb! / Another voice which Tommy rather thought was that[voice] of Boris replied :
 		if (nextWord<m.size() && m[whereVerb].forms.isSet(isForm) && m[nextWord].forms.isSet(prepositionForm) && 
 				((prepForm=m[nextWord].queryForm(prepositionForm))>=0 && m[nextWord].word->second.getUsageCost(prepForm)==0))
 		{
 			int maxLen=-1,element;
-			if ((element=m[nextWord].pma.queryMaximumLowestCostPattern(L"_PP",maxLen))!=-1 && m[nextWord+maxLen].forms.isSet(verbForm))
-				nextWord+=maxLen;
+			if ((element = m[nextWord].pma.queryMaximumLowestCostPattern(L"_PP", maxLen)) != -1 && m[nextWord + maxLen].forms.isSet(verbForm))
+			{
+				if (debugTrace.traceVerbObjects)
+					lplog(L"          %d:bumped nextWord from %d:%s to %d:%s. (case 2 - _PP)", position, nextWord, m[nextWord].word->first.c_str(), nextWord + maxLen, m[nextWord + maxLen].word->first.c_str());
+				nextWord += maxLen;
+			}
 		}
 		int nextAdvObjectTag = -1, advObjectTag = findTag(tagSet, L"ADVOBJECT", nextAdvObjectTag);
 		int nextAdjObjectTag = -1, adjObjectTag = findTag(tagSet, L"ADJOBJECT", nextAdjObjectTag);
