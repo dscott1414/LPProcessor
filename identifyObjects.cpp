@@ -1586,63 +1586,77 @@ bool Source::eraseWinnerFromRecalculatingAloneness(int where, patternMatchArray:
 		removeWinnerFlag(where, pma,2);
 		return true;
 	}
+	else if (debugTrace.tracePatternElimination)
+	{
+		if (!(p->fillIfAloneFlag || p->onlyAloneExceptInSubPatternsFlag))
+			lplog(L"position %d:pma %d:%s[%s]*%d(%d,%d) not eliminated because it does not have alone flags.",
+				where, pma - m[where].pma.content, p->name.c_str(), p->differentiator.c_str(), pma->cost, where, where + pma->len);
+		else if (pema.ownedByOtherWinningPattern(m[where].beginPEMAPosition, pma->getPattern(), pma->len))
+			lplog(L"position %d:pma %d:%s[%s]*%d(%d,%d) not eliminated because it is owned by another winner pattern.",
+				where, pma - m[where].pma.content, p->name.c_str(), p->differentiator.c_str(), pma->cost, where, where + pma->len);
+		else if (!(where && !m[where - 1].isWinnerSeparator()) && !(where + pma->len < (int)m.size() && !m[where + pma->len].isWinnerSeparator()))
+			lplog(L"position %d:pma %d:%s[%s]*%d(%d,%d) not eliminated because it is not alone.",
+				where, pma - m[where].pma.content, p->name.c_str(), p->differentiator.c_str(), pma->cost, where, where + pma->len);
+	}
 	return false;
 }
-
 
 void Source::removeWinnerFlag(int where, patternMatchArray::tPatternMatch *pma,int recursionSpaces)
 {
 	cPattern *p = patterns[pma->getPattern()];
-	int nPEMAPosition = pma->pemaByPatternEnd;
-	patternElementMatchArray::tPatternElementMatch *pem = pema.begin() + nPEMAPosition;
-	for (; nPEMAPosition >= 0 && pem->getPattern() == pma->getPattern() && (pem->end - pem->begin) == pma->len; nPEMAPosition = pem->nextPatternElement, pem = pema.begin() + nPEMAPosition)
+	for (int nPEMAPositionByPatternEnd = pma->pemaByPatternEnd; nPEMAPositionByPatternEnd >= 0; nPEMAPositionByPatternEnd = pema[nPEMAPositionByPatternEnd].nextByPatternEnd)
 	{
-		// go to where the child begin position is. scan all 
-		int np;
-		for (np = m[where - pem->begin].beginPEMAPosition; np >= 0 && (np == nPEMAPosition || !pema[np].isWinner()); np = pema[np].nextByPosition);
-		if (np < 0)
+		int nPEMAPositionByPatternElement = nPEMAPositionByPatternEnd;
+		patternElementMatchArray::tPatternElementMatch *pem = pema.begin() + nPEMAPositionByPatternElement;
+		for (; nPEMAPositionByPatternElement >= 0 && pem->getPattern() == pma->getPattern() && (pem->end - pem->begin) == pma->len; nPEMAPositionByPatternElement = pem->nextPatternElement, pem = pema.begin() + nPEMAPositionByPatternElement)
 		{
-			if (debugTrace.tracePatternElimination)
-				lplog(L"%*sposition %d:pma %d:%s[%s]*%d(%d,%d) not eliminated because even though it is a FINAL_IF_ALONE and it is not alone, it will orphan position %d.", recursionSpaces - 2, L" ",
-					where, pma - m[where].pma.content, p->name.c_str(), p->differentiator.c_str(), pma->cost, where, where + pma->len, where - pem->begin);
-			return;
-		}
-	}
-	if (debugTrace.tracePatternElimination)
-		lplog(L"%*sposition %d:pma %d:%s[%s]*%d(%d,%d) eliminated because it is a %s.  Winner removed.", recursionSpaces - 2, L" ",
-			where, pma - m[where].pma.content, p->name.c_str(), p->differentiator.c_str(), pma->cost, where, where + pma->len,
-			(recursionSpaces == 2) ? L"FINAL_IF_ALONE and it is not alone" : L"descendant of a FINAL_IF_ALONE pattern");
-	nPEMAPosition = pma->pemaByPatternEnd;
-	pem = pema.begin() + nPEMAPosition;
-	for (; nPEMAPosition >= 0 && pem->getPattern() == pma->getPattern() && (pem->end - pem->begin) == pma->len; nPEMAPosition = pem->nextPatternElement, pem = pema.begin() + nPEMAPosition)
-	{
-		pem->removeWinnerFlag();
-		if (pem->isChildPattern())
-		{
-			if (debugTrace.tracePatternElimination)
-				lplog(L"%*sposition %d:pema %d:%s[%s](%d,%d)*%d %s[*](%d)%c eliminated because it is a descendant of a FINAL_IF_ALONE pattern.  Winner removed.", recursionSpaces, L" ", where - pem->begin, nPEMAPosition,
-					p->name.c_str(), p->differentiator.c_str(), where, where + pma->len, pem->getOCost(),
-					patterns[pem->getChildPattern()]->name.c_str(),
-					pem->getChildLen() + where - pem->begin,
-					(pem->flagSet(patternElementMatchArray::ELIMINATED)) ? 'E' : ' ');
-			// is this the only winner parent of this child? 
-			if (!pema.ownedByOtherWinningPattern(m[where - pem->begin].beginPEMAPosition, pem->getChildPattern(), pem->getChildLen()))
+			// go to where the child begin position is. scan all 
+			int np;
+			for (np = m[where - pem->begin].beginPEMAPosition; np >= 0 && (np == nPEMAPositionByPatternElement || !pema[np].isWinner()); np = pema[np].nextByPosition);
+			if (np < 0)
 			{
-				int pmaOffset = m[where - pem->begin].pma.queryPatternWithLen(pem->getChildPattern(), pem->getChildLen());
-				if (pmaOffset == -1)
-				{
-					if (debugTrace.tracePatternElimination)
-						lplog(L"%d:Could not find pattern %s[*][%d].", where - pem->begin, patterns[pem->getChildPattern()]->name.c_str(), pem->getChildLen() + where - pem->begin);
-				}
-				else
-					removeWinnerFlag(where - pem->begin, m[where - pem->begin].pma.content+(pmaOffset&~matchElement::patternFlag), recursionSpaces+2);
+				if (debugTrace.tracePatternElimination)
+					lplog(L"%*sposition %d:pma %d:%s[%s]*%d(%d,%d) not eliminated because even though it is a FINAL_IF_ALONE and it is not alone, it will orphan position %d.", recursionSpaces - 2, L" ",
+						where, pma - m[where].pma.content, p->name.c_str(), p->differentiator.c_str(), pma->cost, where, where + pma->len, where - pem->begin);
+				return;
 			}
 		}
-		else 	if (debugTrace.tracePatternElimination)
-			lplog(L"%*sposition %d:pema %d:%s[%s](%d,%d)*%d %s%c eliminated because it is a descendant of a FINAL_IF_ALONE pattern.  Winner removed.", recursionSpaces, L" ", where - pem->begin, nPEMAPosition,
-				p->name.c_str(), p->differentiator.c_str(), where, where + pma->len, pem->getOCost(),
-				Forms[m[where].getFormNum(pem->getChildForm())]->shortName.c_str(),
-				(pem->flagSet(patternElementMatchArray::ELIMINATED)) ? 'E' : ' ');
+		if (debugTrace.tracePatternElimination)
+			lplog(L"%*sposition %d:pma %d:%s[%s]*%d(%d,%d) eliminated because it is a %s.  Winner removed.", recursionSpaces - 2, L" ",
+				where, pma - m[where].pma.content, p->name.c_str(), p->differentiator.c_str(), pma->cost, where, where + pma->len,
+				(recursionSpaces == 2) ? L"FINAL_IF_ALONE and it is not alone" : L"descendant of a FINAL_IF_ALONE pattern");
+		nPEMAPositionByPatternElement = nPEMAPositionByPatternEnd;
+		pem = pema.begin() + nPEMAPositionByPatternElement;
+		for (; nPEMAPositionByPatternElement >= 0 && pem->getPattern() == pma->getPattern() && (pem->end - pem->begin) == pma->len; nPEMAPositionByPatternElement = pem->nextPatternElement, pem = pema.begin() + nPEMAPositionByPatternElement)
+		{
+			pem->removeWinnerFlag();
+			if (pem->isChildPattern())
+			{
+				if (debugTrace.tracePatternElimination)
+					lplog(L"%*sposition %d:pema %d:%s[%s](%d,%d)*%d %s[*](%d)%c eliminated because it is a descendant of a FINAL_IF_ALONE pattern.  Winner removed.", recursionSpaces, L" ", where - pem->begin, nPEMAPositionByPatternElement,
+						p->name.c_str(), p->differentiator.c_str(), where, where + pma->len, pem->getOCost(),
+						patterns[pem->getChildPattern()]->name.c_str(),
+						pem->getChildLen() + where - pem->begin,
+						(pem->flagSet(patternElementMatchArray::ELIMINATED)) ? 'E' : ' ');
+				// is this the only winner parent of this child? 
+				if (!pema.ownedByOtherWinningPattern(m[where - pem->begin].beginPEMAPosition, pem->getChildPattern(), pem->getChildLen()))
+				{
+					int pmaOffset = m[where - pem->begin].pma.queryPatternWithLen(pem->getChildPattern(), pem->getChildLen());
+					if (pmaOffset == -1)
+					{
+						if (debugTrace.tracePatternElimination)
+							lplog(L"%d:Could not find pattern %s[*][%d].", where - pem->begin, patterns[pem->getChildPattern()]->name.c_str(), pem->getChildLen() + where - pem->begin);
+					}
+					else
+						removeWinnerFlag(where - pem->begin, m[where - pem->begin].pma.content + (pmaOffset&~matchElement::patternFlag), recursionSpaces + 2);
+				}
+			}
+			else 	if (debugTrace.tracePatternElimination)
+				lplog(L"%*sposition %d:pema %d:%s[%s](%d,%d)*%d %s%c eliminated because it is a descendant of a FINAL_IF_ALONE pattern.  Winner removed.", recursionSpaces, L" ", where - pem->begin, nPEMAPositionByPatternElement,
+					p->name.c_str(), p->differentiator.c_str(), where, where + pma->len, pem->getOCost(),
+					Forms[m[where].getFormNum(pem->getChildForm())]->shortName.c_str(),
+					(pem->flagSet(patternElementMatchArray::ELIMINATED)) ? 'E' : ' ');
+		}
 	}
 	pma->removeWinnerFlag();
 }

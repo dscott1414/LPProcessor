@@ -492,7 +492,9 @@ bool patternMatchArray::consolidateWinners(int lastPEMAConsolidationIndex,patter
       pema.getNextValidPosition(lastPEMAConsolidationIndex,wa,&content[target].pemaByChildPatternEnd,patternElementMatchArray::BY_CHILD_PATTERN_END);
       pema.translate(lastPEMAConsolidationIndex,wa,&content[target].pemaByChildPatternEnd,patternElementMatchArray::BY_CHILD_PATTERN_END);
       target++;
-    }
+			if (t.tracePatternElimination)
+				lplog(L"position %d:pma %d:Kept %s[%s](%d,%d) [winner]", position, J, patterns[content[J].getPattern()]->name.c_str(), patterns[content[J].getPattern()]->differentiator.c_str(), position, position + content[J].len);
+		}
 		else if (t.tracePatternElimination)
 			lplog(L"position %d:pma %d:Eliminated %s[%s](%d,%d) [not winner]", position, J, patterns[content[J].getPattern()]->name.c_str(),patterns[content[J].getPattern()]->differentiator.c_str(), position,position+content[J].len);
   }

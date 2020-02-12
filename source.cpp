@@ -1876,14 +1876,6 @@ int Source::printSentences(bool updateStatistics,unsigned int unknownCount,unsig
 				addCostFromRecalculatingAloneness(I,pma);
 		}
 		int overMatchedPositions=eliminateLoserPatterns(begin,end);
-		for (unsigned int I=begin; I<end && !exitNow; I++)
-		{
-			patternMatchArray::tPatternMatch *pma=m[I].pma.content;
-			for (int PMAElement=0,count=m[I].pma.count; PMAElement<count; PMAElement++,pma++)
-				if (pma->isWinner())
-					eraseWinnerFromRecalculatingAloneness(I,pma);
-			m[I].maxMatch=0; 
-		}
 		if (debugTrace.collectPerSentenceStats)
 			memoryPerSentenceBySize[end-begin]+=pema.count-sentenceStartMemory;
 		if (debugTrace.printBeforeElimination)

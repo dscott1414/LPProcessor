@@ -2727,6 +2727,14 @@ int createSecondaryPatterns2(void)
 										2, L"__NOUN[*]*1{OBJECT}", L"_NOUN_OBJ*1{OBJECT}", 0, 1, 1, // make NOUN more expensive because this is redundant with _NOUN[5] 
 										1, L"__S1[*]*1{_BLOCK:EVAL}", 0, 1, 1, // rare             // and in general _NOUN[5] is correct when this is a NOUN
 										0);
+	// *I* have a notion there ishas a gully between her and us , ” he remarked .
+	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"9N",
+									1, L"__C1__S1", 0, 1, 1,
+									1, L"_HAVE{VERB:vS:id}",  0, 1, 1,
+									1,L"determiner|a",0,1,1,
+									1,L"noun|notion",0,1,1,
+									1, L"__S1[*]*1{_BLOCK:EVAL}", 0, 1, 1, // rare             // and in general _NOUN[5] is correct when this is a NOUN
+									0);
 	// He is a little red.
 	/// do not change this # "7" without changing the calculateVerbAfterVerbUsage code.
 	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}",L"7",

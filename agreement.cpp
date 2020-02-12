@@ -3114,7 +3114,7 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 	unordered_map <int, costPatternElementByTagSet> tertiaryPEMAPositions;
 	tagSets.reserve(4096);
 	vector <int> minSeparatorCost;
-	vector < vector <unsigned int> > winners;
+	vector < vector <unsigned int> > winners; // each winner is a PMAOffset
 	minSeparatorCost.reserve(end-begin+1);
 	for (unsigned int I=0; I<end-begin+1 && I<m.size()-begin; I++)
 		minSeparatorCost[I]=m[begin+I].word->second.lowestSeparatorCost();
@@ -3182,6 +3182,8 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 			assessCost(NULL,pm,-1,position,tagSets,tertiaryPEMAPositions,L"eliminate loser patterns - preliminary winners");
 		}
 		winners.push_back(preliminaryWinnersPreAssessCost);
+		//for (int t1 = 0; t1 < preliminaryWinnersPreAssessCost.size(); t1++)
+		//	lplog(L"%d:TDLELP PHASE 1 preliminaryWinnersPreAssessCost %d", winners.size() - 1, preliminaryWinnersPreAssessCost[t1]); 
 	}
 	applyTertiaryPEMAPositions(tertiaryPEMAPositions);
 	for (unsigned int position=begin; position<end && !exitNow; position++)
@@ -3191,6 +3193,8 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 		vector <unsigned int> preliminaryWinners;
 		for (unsigned int I=0; I<winners[position-begin].size(); I++)
 		{
+			if (position - begin >= winners.size() || I >= winners[position - begin].size() || m[position].pma.count <= ((int)winners[position - begin][I]))
+				lplog(LOG_FATAL_ERROR, L"%d:%d:illegal winner index found during PHASE 2 of eliminateLoserPatterns.", position, I);
 			pm=m[position].pma.content+winners[position-begin][I];
 			cPattern *p=patterns[pm->getPattern()];
 			if (pm->isWinner())
@@ -3223,6 +3227,8 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 			}
 		}
 		winners[position-begin]=preliminaryWinners;
+		//for (int t1 = 0; t1 < preliminaryWinners.size(); t1++)
+		//	lplog(L"%d:TDLELP PHASE 2 preliminaryWinners %d", position - begin, preliminaryWinners[t1]); // TEMP DEBUG 
 	}
 	if (debugTrace.tracePatternElimination)
 		for (unsigned int bp=begin; bp<end; bp++)
@@ -3232,6 +3238,8 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 		patternMatchArray::tPatternMatch *pm;
 		for (unsigned int winner=0; winner<winners[position-begin].size(); winner++)
 		{
+			if (position - begin >= winners.size() || winner >= winners[position - begin].size() || m[position].pma.count <= ((int)winners[position - begin][winner]))
+				lplog(LOG_FATAL_ERROR, L"%d:%d:illegal winner index found during PHASE 3 of eliminateLoserPatterns.", position, winner);
 			pm=m[position].pma.content+winners[position-begin][winner];
 			cPattern *p=patterns[pm->getPattern()];
 			int len=pm->len;
@@ -3243,8 +3251,13 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 			int minAvgCostAfterAssessCost=pm->getAverageCost(patternFlagCost);
 			unsigned int bp;
 			for (bp=position; bp<position+len && !globalMinAvgCostAfterAssessCostWinner; bp++)
-				if (m[bp].compareCost(minAvgCostAfterAssessCost,len,minSeparatorCost[bp-begin], winners[position - begin][winner],false))
-					globalMinAvgCostAfterAssessCostWinner=true;
+				if (m[bp].compareCost(minAvgCostAfterAssessCost, len, minSeparatorCost[bp - begin], winners[position - begin][winner], false))
+				{
+					globalMinAvgCostAfterAssessCostWinner = true;
+					if (debugTrace.tracePatternElimination)
+						lplog(L"%d:%s[%s](%d,%d) PHASE 3 winner (no update) GMACAACW (%d<%d) [cost=%d len=%d].", bp, p->name.c_str(), p->differentiator.c_str(), position, len + position,
+							minAvgCostAfterAssessCost, m[bp].minAvgCostAfterAssessCost, pm->getCost(), len);
+				}
 				else if (debugTrace.tracePatternElimination)
 				{
 					if (m[bp].lastWinnerLACAACMatchPMAOffset >= 0)
@@ -3275,7 +3288,7 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 					if (debugTrace.tracePatternElimination)
 						lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) PHASE 3 winner (cost=%d minAvgCostAfterAssessCost %d first winning position=%d)",position,winners[position-begin][winner],
 						patterns[pm->getPattern()]->name.c_str(),patterns[pm->getPattern()]->differentiator.c_str(),position,pm->len+position,
-						pm->getCost(),minAvgCostAfterAssessCost,bp);
+						pm->getCost(),minAvgCostAfterAssessCost,bp-1);
 					markChildren(pema.begin()+pm->pemaByPatternEnd,position,0,MIN_INT, tertiaryPEMAPositions);
 					patterns[pm->getPattern()]->numWinners++;
 					pm->setWinner();
@@ -3289,5 +3302,21 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 		}
 	}
 	matchedPositions-=end-begin+1;// +1 for the period, which isn't usually matched
+	for (unsigned int position = begin; position < end && !exitNow; position++)
+	{
+		patternMatchArray::tPatternMatch *pm = m[position].pma.content;
+		for (int PMAElement = 0, count = m[position].pma.count; PMAElement < count; PMAElement++, pm++)
+			if (pm->isWinner() && eraseWinnerFromRecalculatingAloneness(position, pm))
+			{
+				for (unsigned bp = position; bp < position + pm->len; bp++)
+					if (m[bp].lastWinnerLACAACMatchPMAOffset == PMAElement)
+					{
+						m[bp].lastWinnerLACAACMatchPMAOffset = -1;
+						if (debugTrace.tracePatternElimination)
+							lplog(L"%d:%s[%s](%d,%d) PHASE 4 Marked lastWinnerLACAACMatchPMAOffset to -1.", bp, patterns[pm->getPattern()]->name.c_str(), patterns[pm->getPattern()]->differentiator.c_str(), position, pm->len + position);
+					}
+			}
+		m[position].maxMatch = 0;
+	}
 	return (matchedPositions<0) ? 0 : matchedPositions;
 }
