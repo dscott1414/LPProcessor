@@ -856,8 +856,11 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 		{
 			nextProcessIndex = WaitForMultipleObjectsEx(numProcesses, handles, false, 1000 * 60 * 5, false);
 			if (nextProcessIndex == WAIT_FAILED)
+			{
+				if (!numProcesses)
+					break;
 				lplog(LOG_FATAL_ERROR, L"WaitForMultipleObjectsEx failed with error %s", getLastErrorMessage(tmpstr));
-
+			}
 			numSourcesLeft = 0;
 			int numSourcesProcessedNow = 0;
 			__int64 wordsProcessedNow = 0, sentencesProcessedNow = 0;

@@ -49,20 +49,14 @@ package show;
 																							// skip forward by pattern
 			origin = rs.readInteger(); // beginning of the chain for the first element
 																	// of the pattern
-			// int sourcePosition; // so position not needed on print
-			iCost = rs.readShort(); // lowest cost of PMA element
-			cumulativeDeltaCost = rs.readShort(); // accumulates costs or benefits of
-																						// assessCost (from multiple
-																						// setSecondaryCosts)
+			cumulativeDeltaCost = rs.readShort(); // accumulates costs or benefits of assessCost (from multiple setSecondaryCosts)
 			tempCost = rs.readShort(); // used for setSecondaryCosts
-			rs.readShort(); // skip two bytes for alignment
 			PEMAElementMatchedSubIndex = rs.readInteger(); // points to a pattern
-																											// #/end OR a form #
 			pattern = rs.readShort();
 			flags = rs.readByte();
 			rs.readByte(); // skip byte for alignment
 			cost = rs.readShort();
-			rs.readShort(); // skip two bytes for alignment
+			iCost = rs.readShort(); // lowest cost of PMA element
 		}
 	}
 

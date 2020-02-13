@@ -198,9 +198,9 @@ public class WordMatch {
 		pma = new patternMatch[count];
 		for (int I = 0; I < count; I++)
 			pma[I] = new patternMatch(rs);
-		forms = new bitObject(rs);
-		winnerForms = new bitObject(rs);
-		patterns = new bitObject(rs);
+		forms = new bitObject(rs,16);
+		winnerForms = new bitObject(rs,16);
+		patterns = new bitObject(rs,32);
 		object = rs.readInteger();
 		principalWherePosition = rs.readInteger();
 		principalWhereAdjectivalPosition = rs.readInteger();
