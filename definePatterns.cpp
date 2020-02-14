@@ -258,13 +258,14 @@ int createNouns(void)
 	// any boy we know
 	// I resemble *some one you have met*.
 	// But I conclude she would have carried out *whatever plan she might have formed *.
+	// First thing *I* see clearly is the road through the woods , not far from the station . // added 'first'
 	/* - watch for bad matches! */
 	cPattern::create(L"__NOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}",L"R",
-										11, L"interrogative_determiner|whichever", L"interrogative_determiner|whatever", L"determiner|the{DET}", L"determiner|a{DET}", L"determiner|an{DET}", L"quantifier|every{DET}", L"adjective|many{DET}", L"demonstrative_determiner|that{DET}", L"quantifier|any{DET}", L"quantifier|some{DET}", L"adverb|too",0,1,1, // L"demonstrative_determiner{DET}", removed - covered better by 'this' being a noun and the adjective being an ADJECTIVE_AFTER
+										12, L"interrogative_determiner|whichever", L"interrogative_determiner|whatever", L"determiner|the{DET}", L"determiner|a{DET}", L"determiner|an{DET}", L"quantifier|every{DET}", L"adjective|many{DET}", L"demonstrative_determiner|that{DET}", L"quantifier|any{DET}", L"quantifier|some{DET}", L"adverb|too",L"numeral_ordinal|first",0,1,1, // L"demonstrative_determiner{DET}", removed - covered better by 'this' being a noun and the adjective being an ADJECTIVE_AFTER
 										1,L"_ADJECTIVE*2",0,0,1,  // The *only other* person I saw
 										6,L"adjective*1", L"noun{N_AGREE}",L"Proper Noun",L"indefinite_pronoun{N_AGREE}",L"numeral_cardinal{N_AGREE}",L"verb*2",VERB_PRESENT_PARTICIPLE,1,1,  // adjective may be loosed from ProperNoun improperly - prevent match in 'The little Pilgrim was startled by this tone.'
 										1, L"determiner|the{DET}",0,0,1, // the facilities *the institute* affords
-										4,L"Proper Noun*3{ANY:NAME:SUBJECT:PREFER_S1}",L"personal_pronoun_nominative*3{SUBJECT:PREFER_S1}",L"personal_pronoun*3{SUBJECT:PREFER_S1}", L"noun*2{N_AGREE}", NO_OWNER,1,1, // highly restrict and discourage to prevent unnecessary matches
+										5,L"Proper Noun*3{ANY:NAME:SUBJECT:PREFER_S1}",L"personal_pronoun_nominative*3{SUBJECT:PREFER_S1}",L"personal_pronoun*3{SUBJECT:PREFER_S1}", L"noun*2{N_AGREE}", L"adverb|there",NO_OWNER,1,1, // highly restrict and discourage to prevent unnecessary matches
 										3,L"__ALLVERB",L"_COND{VERB}", L"_VERBPASSIVE",0,1,1,
 										4, L"__ALLOBJECTS_0*2", L"__ALLOBJECTS_1*2", L"_INFP*2", L"_REL1[*]*2", 0, 0, 1,
 										0);
@@ -276,10 +277,10 @@ int createNouns(void)
 										3, L"__ALLVERB", L"_COND{VERB}", L"_VERBPASSIVE", 0, 1, 1,
 										4, L"__ALLOBJECTS_0*2", L"__ALLOBJECTS_1*2", L"_INFP*2", L"_REL1[*]*2", 0, 0, 1,
 										0);
-	// everything she writes / those I had known
+	// everything she writes / those I had known / things you like
 	cPattern::create(L"__NOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}", L"S",
-										14, L"indefinite_pronoun|everybody", L"indefinite_pronoun|everyone", L"indefinite_pronoun|every one", L"indefinite_pronoun|everything", L"indefinite_pronoun|somebody", L"indefinite_pronoun|someone",
-										L"indefinite_pronoun|something", L"indefinite_pronoun|anybody", L"indefinite_pronoun|anyone", L"indefinite_pronoun|anything", L"indefinite_pronoun|nobody", L"indefinite_pronoun|no one", L"indefinite_pronoun|nothing", L"demonstrative_determiner|those", 0, 1, 1,
+										15, L"indefinite_pronoun|everybody", L"indefinite_pronoun|everyone", L"indefinite_pronoun|every one", L"indefinite_pronoun|everything", L"indefinite_pronoun|somebody", L"indefinite_pronoun|someone",
+										L"indefinite_pronoun|something", L"indefinite_pronoun|anybody", L"indefinite_pronoun|anyone", L"indefinite_pronoun|anything", L"indefinite_pronoun|nobody", L"indefinite_pronoun|no one", L"indefinite_pronoun|nothing", L"demonstrative_determiner|those", L"noun|things",0, 1, 1,
 										4, L"Proper Noun*2{ANY:NAME:SUBJECT:PREFER_S1}", L"indefinite_pronoun*2{SUBJECT:PREFER_S1}", L"personal_pronoun_nominative*2{SUBJECT:PREFER_S1}", L"personal_pronoun*2{SUBJECT:PREFER_S1}", NO_OWNER, 1, 1, // highly restrict and discourage to prevent unnecessary matches
 										3, L"__ALLVERB", L"_COND{VERB}", L"_VERBPASSIVE", 0, 1, 1,
 										2, L"_ADVERB",L"_ADJECTIVE",0,0,1,
@@ -404,7 +405,7 @@ int createNouns(void)
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:PNOUN}", L"Y", 5,
 										L"personal_pronoun_accusative|us{N_AGREE}", L"personal_pronoun_accusative|them{N_AGREE}", 
 										L"personal_pronoun_nominative|we{N_AGREE}", L"personal_pronoun_nominative|they{N_AGREE}", 
-										L"personal_pronoun_accusative|you{N_AGREE}", PLURAL, 1, 1,
+										L"personal_pronoun|you{N_AGREE}", PLURAL, 1, 1,
 										1, L"predeterminer|both", 0, 1, 1,
 										0);
 	// this pattern must go after all nouns EXCEPT it must be before any noun patterns that use _NOUN as a subpattern
@@ -1227,7 +1228,7 @@ void createInfinitivePhrases(void)
 										3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, 
 										3,L"__INFP5SUB",L"__INFPSUB",L"__INFPT2SUB",0,0,1,
 										0);
-		// verb bare infinitive form of infinitive phrase [PRESENT]
+	// verb bare infinitive form of infinitive phrase [PRESENT]
 	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"B",
 		                1,L"to{ITO}",0,1,1,
 										1,L"_ADVERB",0,0,1,
@@ -1239,7 +1240,18 @@ void createInfinitivePhrases(void)
 										3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, 
 										2,L"__INFP5SUB",L"__INFPSUB",0,0,1,
 										0);
-	// to L"infinitive" phrase as a noun object
+	// verb bare infinitive form of infinitive phrase [PRESENT] with think pattern
+	cPattern::create(L"__INFPT{IVERB:_BLOCK}", L"B",
+										1, L"to{ITO}", 0, 1, 1,
+										1, L"_ADVERB", 0, 0, 1,
+										2, L"verbverb{vS:V_HOBJECT:V_AGREE}", L"have{vS:V_HOBJECT:V_AGREE}", VERB_PRESENT_FIRST_SINGULAR, 1, 1,
+										2, L"_NOUN_OBJ{HOBJECT}", L"__NOUN[*]{HOBJECT}", 0, 0, 1,
+										2, L"_ADVERB", L"_PP", 0, 0, 2,
+										1, L"SYNTAX:Accepts S as Object{vS:V_OBJECT}", VERB_PRESENT_FIRST_SINGULAR, 1, 1,
+										1, L"__S1{OBJECT:EVAL:_BLOCK}", 0, 1, 1,
+										1, L"__INFP3TSUB", 0, 0, 1,
+										0);
+	// to "infinitive" phrase as a noun object
 	// to "send him" / to "send him and Bob"
 	// simple infinitive nonfinite verb phrase Quirk CGEL (3.56) vIS
 	cPattern::create(L"__INFP{IVERB:_BLOCK}",L"2",
@@ -2352,9 +2364,14 @@ int createSecondaryPatterns2(void)
 									 1,L",",0,0,1,
 									 2,L"__INFPSUB*1",L"__INFP3SUB*1",0,1,1, // prefer __S1 to __INFP?SUB - verbs in INFP?SUB must agree with _INFP as object of verb!
 									 0);
-	cPattern::create(L"__CLOSING__S1{_BLOCK:_ONLY_END_MATCH:FLOATTIME}",L"3",
-									 6,L"_ADVERB",L"__ADJECTIVE_WITHOUT_VERB*1",L"_ADJECTIVE*4",L"preposition*2",L"_TIME",L"_DATE",0,1,1, // dangling adverb or adjective // dangling adverb or adjective should be taken only if there is no other match
-									 0);
+	cPattern::create(L"__CLOSING__S1{_BLOCK:_ONLY_END_MATCH:FLOATTIME}", L"3",
+										6, L"_ADVERB", L"__ADJECTIVE_WITHOUT_VERB*1", L"_ADJECTIVE*4", L"preposition*2", L"_TIME", L"_DATE", 0, 1, 1, // dangling adverb or adjective // dangling adverb or adjective should be taken only if there is no other match
+										0);
+	// *I* shall help him not to .
+	cPattern::create(L"__CLOSING__S1{_BLOCK:_ONLY_END_MATCH:FLOATTIME}", L"TO",
+										1, L"_ADVERB", 0, 0, 1, 
+										1, L"to", 0, 1, 1, 
+										0);
 	// He likes me best *I know*.
 	cPattern::create(L"__CLOSING__S1{_ONLY_END_MATCH}", L"4",
 										1, L"personal_pronoun_nominative|i", 0, 1, 1, 
@@ -2697,6 +2714,17 @@ int createSecondaryPatterns2(void)
 										1, L"_ADJECTIVE", 0, 0, 1, // make NOUN more expensive because this is redundant with _NOUN[5] 
 										1, L"__S1[*]*1{_BLOCK:OBJECT:EVAL}", 0, 1, 1, // rare             // and in general _NOUN[5] is correct when this is a NOUN
 										1, L"_MSTAIL", 0, 0, 1,
+										0);
+	// I would rather suffer than have him suffer.  // centers on 'rather than' pattern
+	cPattern::create(L"_MS1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_STRICT_NO_MIDDLE_MATCH}", L"RT",
+										1, L"__C1__S1", 0, 1, 1,
+										1, L"modal_auxiliary|would", 0, 1, 1,
+										1, L"adverb|rather", 0, 1, 1,
+										1, L"verb", VERB_PRESENT_FIRST_SINGULAR, 1, 1,
+										1, L"preposition|than", 0, 1, 1,
+										1, L"have", 0, 1, 1,
+										1, L"__ALLOBJECTS_1",0,1,1,
+										1, L"verb", VERB_PRESENT_FIRST_SINGULAR, 1, 1,
 										0);
 	// if _ADJECTIVE is not optional, DOES NOT match:
 	// The fact is it is all *so* funny.   The trouble is I can't trust you.
@@ -3211,8 +3239,8 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}",L"2",
 												1, L"_ADVERB", 0, 0, 1,
 												1,L",",0,0,1,
-											 3,L"conjunction|but",L"adverb|then",L"coordinator|and",0,1,1,
-											 1,L"adverb|then",0,0,1,
+											 4,L"conjunction|but",L"adverb|then",L"coordinator|and",L"adverb|rather",0,1,1,  // assumption: 'rather than' will exist independently of the other words in the same lines
+											 2,L"adverb|then",L"preposition|than",0,0,1,
 											 5,L"__ALLVERB{VERB2}",L"_COND{VERB2}",L"_VERBPASTPART*1{vB:VERB2}",L"_BEEN{vB:id:VERB2}",L"_VERBPASSIVE{VERB2}",0,1,1,
 											 3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, // there must only be one adjective and it must be last (not mixed in) see *
 											 1,L"__CLOSING__S1",0,0,3,
