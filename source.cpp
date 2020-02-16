@@ -1372,11 +1372,24 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 		bufferScanLocation=1;
 	while (result==0 && !exitNow)
 	{
+		// TEMP DEBUG
+		tIWMM martial = Words.query(L"martial");
+		if (martial != Words.end())
+		{
+			if (martial->second.query(PROPER_NOUN_FORM_NUM) != -1)
+				lplog(L"%s:%d:MARTIAL XXX gained PROPER_NOUN_FORM_NUM!",path.c_str(),m.size());
+			else
+				lplog(L"%s:%d:MARTIAL XXX DOES NOT HAVE PROPER_NOUN_FORM_NUM!", path.c_str(), m.size());
+		}
 		wstring sWord,comment;
 		int nounOwner=0;
 		bool flagAlphaBeforeHint=(bufferScanLocation && iswalpha(bookBuffer[bufferScanLocation-1]));
 		bool flagNewLineBeforeHint=(bufferScanLocation && bookBuffer[bufferScanLocation-1]==13);
 		result=Words.readWord(bookBuffer,bufferLen,bufferScanLocation,sWord,comment,nounOwner,false,webScrapeParse,debugTrace);//m.size()==lastSentenceEnd);
+		if (sWord == L"martial")
+		{
+			printf("TEMP DEBUG");
+		}
 		if (comment.size() > 0)
 			metaCommandsEmbeddedInSource[m.size()] = comment;
 		bool flagAlphaAfterHint=(bufferScanLocation<bufferLen && iswalpha(bookBuffer[bufferScanLocation]));

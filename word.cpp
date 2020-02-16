@@ -949,6 +949,7 @@ int tFI::addForm(int form,const wstring &word)
 		formsArray[fACount++] = saveForm;
 		::lplog(LOG_FATAL_ERROR, L"Test this!");
 	}
+	::lplog(L"XXADDFORM form %d added to word %s!", form, word.c_str());
   return 0;
 }
 

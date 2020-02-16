@@ -604,6 +604,13 @@ int createBasicPatterns(void)
 											1, L"adverb{ADV}", 0, 0, 1, // very
 											6,L"month{MONTH}",L"daysOfWeek{DAYWEEK}",L"season{SEASON}",L"timeUnit{TIMECAPACITY}",L"dayUnit{TIMECAPACITY}",L"noun|time",0,1,1,
 											0);
+	// some of the time / some of these days / some of the month
+	cPattern::create(L"_ADVERB{FLOATTIME}", L"ST",
+		2, L"quantifier|some", L"quantifier|most", 0, 1, 1,
+		1, L"preposition|of", 0, 1, 1,
+		2, L"determiner|the{TIMEMODIFIER}", L"demonstrative_determiner{TIMEMODIFIER}", 0, 1, 1,
+		2, L"timeUnit{TIMECAPACITY}", L"noun|time", 0, 1, 1,
+		0);
 	// The summer before
 	cPattern::create(L"_ADVERB{FLOATTIME}", L"U",
 											1, L"determiner|the{TIMEMODIFIER}", 0, 1, 1,
@@ -1880,8 +1887,15 @@ int createVerbPatterns(void)
 										1, L"__INTERS1", 0, 0, 1,
 										3,L"verb{vABCD:V_OBJECT}",L"does{vABCD:V_OBJECT}",L"have{vABCD:V_OBJECT}",VERB_PAST_PARTICIPLE,1,1,
 										0); // preposition use should be rare!
-// _BE should be rarely used as an active verb by itself (we be giants)
-	cPattern::create(L"__ALLVERB",L"",1,L"_ADVERB",0,0,1,
+
+	cPattern::create(L"__BELIEVE", L"",
+		1, L"personal_pronoun_nominative|i", 0, 1, 1,
+		1, L"verb|believe*4", 0, 1, 1,
+		0);
+
+	// _BE should be rarely used as an active verb by itself (we be giants)
+	cPattern::create(L"__ALLVERB",L"",
+		 2,L"_ADVERB",L"__BELIEVE",0,0,1,
 		10,L"_VERB",L"_VERBPAST{V_OBJECT}",L"_VERBPASTC{V_OBJECT}",L"_VERBPASTCORR{V_OBJECT}",L"_VERBPRESENT{VERB}",L"_VERBPRESENTC{VERB}",L"_BE*4{vS:V_OBJECT:id:VERB}",L"_VERB_BARE_INF",
 				L"is{vS:id:V_AGREE:V_OBJECT:VERB}",L"is_negation{vS:id:not:V_AGREE:V_OBJECT:VERB}",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_PLURAL,1,1,
 		 2, L"particle|in", L"particle|on", 0,0,1,
@@ -2640,7 +2654,8 @@ int createSecondaryPatterns2(void)
 										3, L"_NOUN_OBJ", L"__NOUN[*]", L"_PP",0, 0, 1, // Lawrence told *me* you were with monsieur Poirot. /  She felt confident he was there.
 										2, L"_ADJECTIVE", L"_ADVERB",0,0,1,  // I tell you frankly, she would hate you.
 										3, L"demonstrative_determiner|that{S_IN_REL}", L"quantifier|all*-2",L",",0, 0, 1,
-										2, L"__S1[R]{_BLOCK:OBJECT:EVAL:SUBJUNCTIVE}", L"_MS1[*]{_BLOCK:OBJECT:EVAL}", 0, 1, 1,
+										// __VERBREL2 below: she has long forgotten having given me an invitation . 
+										3, L"__S1[R]{_BLOCK:OBJECT:EVAL:SUBJUNCTIVE}", L"_MS1[*]{_BLOCK:OBJECT:EVAL}", L"_VERBREL2{_BLOCK:OBJECT:EVAL}",0, 1, 1,
 										0);
 		// I would have him fired
 	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"1P",
@@ -2822,19 +2837,15 @@ int createSecondaryPatterns2(void)
 									1, L"verb|take", 0, 1, 1,
 									1, L"personal_pronoun|it", 0, 1, 1,
 									0);
-	// *I* have no doubt you shall do the square thing.
-	cPattern::create(L"__INTRO_N{}", L"7",
-									1, L"personal_pronoun_nominative|i", 0, 1, 1, 
-									1, L"have|have", 0, 1, 1,
-									1, L"no", 0, 1, 1,
-									1, L"noun|doubt", 0, 1, 1,
-									0);
 	// *I* had no idea it was so late .
+	// *I* have an idea our audience will be very large . 
+	// *I* have no doubt you shall do the square thing.
 	cPattern::create(L"__INTRO_N{}", L"8",
 									1, L"personal_pronoun_nominative|i", 0, 1, 1,
-									2, L"have|had", L"have|wouldhad",0, 1, 1,
-									1, L"no", 0, 1, 1,
-									1, L"noun|idea", 0, 1, 1,
+									3, L"have|have", L"have|had", L"have|wouldhad",0, 1, 1,
+									2, L"verb|got",L"verb|gotten",0,0,1,
+									4, L"no", L"determiner|an", L"determiner|a", L"quantifier|some", 0, 0, 1, // optional: I had doubt the aliens would get us.
+									2, L"noun|idea", L"noun|doubt", 0, 1, 1,
 									0);
 	// *I* don't doubt you shall do the right thing.
 	cPattern::create(L"__INTRO_N{}", L"9",
@@ -2842,6 +2853,17 @@ int createSecondaryPatterns2(void)
 									1, L"does_negation|don't", 0, 0, 1,
 									1, L"noun|doubt", 0, 1, 1,
 									0);
+	// I give you my solemn oath *I* shall be good to you both ! 
+	// I give you my word *I* don't put it on ; 
+	// “ I give you my word *I* don't understand it , ” said the man . 
+	cPattern::create(L"__INTRO_N{}", L"A",
+										2, L"personal_pronoun_nominative|i", L"personal_pronoun|you", 0, 1, 1,
+										2, L"verb|give", L"verb|gave", 0, 1, 1,
+										1, L"__NOUN", 0, 1, 1,  // him, Ben, the group
+										2, L"possessive_determiner|my", L"possessive_determiner|your", 0, 1, 1, 
+										1, L"adjective",0,0,1, // solemn
+										2, L"noun|word", L"noun|oath", 0, 1, 1,
+										0);
 
 	// Hullo, stranger
 	// Oh, well! / Oh, very well!
@@ -3292,8 +3314,9 @@ int createSecondaryPatterns2(void)
 												1,L"_INTRO_S1",0,0,1,
 												1,L"__S1{_BLOCK:EVAL}",0,1,1,
 												1,L"adverb|more",0,1,1,
+												1, L"adverb*1", 0, 0, 1, // he will hate us *more heartily than ever now *. 
 												1,L"preposition|than",0,1,1,
-												3,L"__S1{_BLOCK:EVAL}",L"__NOUN",L"__MNOUN",0,1,1,
+												4,L"__S1{_BLOCK:EVAL}",L"__NOUN",L"__MNOUN",L"_ADVERB",0,1,1, // _ADVERB=*ever now*
 												0);
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_STRICT_NO_MIDDLE_MATCH}",L"4",
 											 1,L"_INTRO_S1",0,0,1,

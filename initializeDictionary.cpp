@@ -379,7 +379,6 @@ int WordClass::readWords(wstring oPath, int sourceId, bool disqualifyWords)
 			tFI(buffer,where,bufferlen,sME,sourceId); // advance 'where' in buffer
 			continue;
 		}
-		//lplog(LOG_INFO, L"TEMP %s", sWord.c_str());
 		if ((iWord=WMM.find(sWord))!=WMM.end())
 		{
 			if (iWord->second.updateFromDisk(buffer,where,bufferlen,sME))

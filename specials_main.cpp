@@ -2394,6 +2394,8 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	// 7. if ST thinks it is a noun, and LP does not know of it having a noun form
 	//    examined 100 examples from gutenburg and X violated this rule.
+	if (word == L"martial")
+		printf("STOP!"); // TEMP DEBUG!
 	if (primarySTLPMatch == L"noun" && !source.m[wordSourceIndex].word->second.hasNounForm())
 	{
 		// However, if it is a present participle verb
@@ -4236,7 +4238,7 @@ int stanfordCheck(Source source, int step, bool pcfg)
 
 	if (!myquery(&source.mysql, L"LOCK TABLES sources WRITE"))
 		return -1;
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"select id, etext, path, title from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' and proc2=%d order by id", st, step);
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select id, etext, path, title from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' and proc2=%d order by numWords desc", st, step);
 	if (!myquery(&source.mysql, qt, result))
 		return -1;
 	JavaVM *vm;
@@ -4680,12 +4682,12 @@ void wmain(int argc,wchar_t *argv[])
 		break;
 	case 21:
 		// Source::TEST_SOURCE_TYPE
-		patternOrWordAnalysis(source, step, L"_VERBREL1", L"1", Source::GUTENBERG_SOURCE_TYPE,true);
+		//patternOrWordAnalysis(source, step, L"_VERBREL1", L"1", Source::GUTENBERG_SOURCE_TYPE,true);
 		//patternOrWordAnalysis(source, step, L"_MS1", L"2",true); // TODO: testing weight change on _S1.
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
 		//patternOrWordAnalysis(source, step, L"_VERB_BARE_INF", L"A", true);
 		//patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false); // TODO: testing weight change on _S1.
-		//patternOrWordAnalysis(source, step, L"fritilla", L"", Source::GUTENBERG_SOURCE_TYPE, false); // TODO: testing weight change on _S1.
+		patternOrWordAnalysis(source, step, L"martial", L"", Source::GUTENBERG_SOURCE_TYPE, false); // TODO: testing weight change on _S1.
 		break;
 	case 60:
 		//stanfordCheckMP(source, step, true,8);
