@@ -314,9 +314,9 @@ int createNouns(void)
 	//									1,L",*3",0,0,1,
 	//									1,L"__APPNOUN[*]{_BLOCK:RE_OBJECT}",0,1,1,
 	//									0);
-	cPattern::create(L"__NOUN",L"5",
+	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}",L"5",
 										1,L"personal_pronoun|you",0,1,1,
-										1,L"noun",FEMALE_GENDER|MALE_GENDER,1,1,
+										3,L"numeral_cardinal|two", L"noun|here", L"noun*1", FEMALE_GENDER|MALE_GENDER,1,1,
 										0);
 	// this is the same as "5" above but it is marked as a single object so "Iraqi weapons labs" is marked as a single object
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}",L"N",
@@ -2867,12 +2867,16 @@ int createSecondaryPatterns2(void)
 
 	// Hullo, stranger
 	// Oh, well! / Oh, very well!
+	// Oh, dear mother earth! 
+	// Oh, and my dearest father too?
 	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"8",
 										2, L"possessive_determiner|my", L"interjection*-4",0, 1, 1, // my dear
 										1, L",", 0, 1, 1,
+										1, L"coordinator", 0, 0, 1, // Oh, dear mother earth! / Oh, and my dearest father too?
 										2, L"adverb", L"adjective",0,0,1, // Oh, dear mother earth!
-										4, L"honorific{HON:HAIL}", L"noun{HAIL}", L"adjective|dear", L"interjection*-4", MALE_GENDER | FEMALE_GENDER, 1, 1,
+										3, L"honorific{HON:HAIL}", L"noun{HAIL}", L"interjection*-4", MALE_GENDER | FEMALE_GENDER, 1, 1,
 										1, L"noun*1", 0, 0, 1, // Oh, dear mother earth!
+										1, L"adverb", 0, 0, 1, // Oh, and my dearest father too?
 										0);
 	// *But* doesn't some one of that name live here ?
 	cPattern::create(L"__INTRO_S1{_ONLY_BEGIN_MATCH}", L"C",
@@ -2997,6 +3001,31 @@ int createSecondaryPatterns2(void)
 									1, L"personal_pronoun_nominative|i", 0, 1, 1, 
 									1, L"never", 0, 1, 1,
 									0);
+		cPattern::create(L"__S2{_FINAL:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}", L"S1",
+			1, L"preposition|of", 0, 1, 1,
+			1, L"noun|course", 0, 1, 1,
+			1, L"not", 0, 1, 1,
+			0);
+	cPattern::create(L"__S2{_FINAL:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}", L"S2",
+		2, L"indefinite_pronoun|anything", L"indefinite_pronoun|nothing", 0, 1, 1,
+		3, L"adverb|else", L"quantifier|more", L"interrogative_pronoun|whatever", 0, 1, 1,
+		0);
+	cPattern::create(L"__S2{_FINAL:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}", L"S3",
+		1, L"adjective|glad", 0, 1, 1,
+		1, L"preposition|to", 0, 1, 1,
+		1, L"verb|see", 0, 1, 1,
+		1, L"personal_pronoun|you", 0, 1, 1,
+		0);
+	cPattern::create(L"__S2{_FINAL:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}", L"S4",
+		1, L"determiner|the", 0, 1, 1,
+		1, L"adverb|sooner", 0, 1, 1,
+		1, L"determiner|the", 0, 1, 1,
+		1, L"adverb|better", 0, 1, 1,
+		0);
+	cPattern::create(L"__S2{_FINAL:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}", L"S6",
+		1, L"noun|goodness", 0, 1, 1,
+		1, L"personal_pronoun_accusative|me", 0, 1, 1,
+		0);
 	// __S2 -- 8 and 9
 	// if no pattern matches a plain interjection, that interjection will never be matched as one
 	// if it can be matched as anything else, even though those other forms carry a higher cost.

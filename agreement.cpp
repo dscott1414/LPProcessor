@@ -956,12 +956,14 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 		break;
 	case VERB_PRESENT_PARTICIPLE|VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR:
 		break;
+	case VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_PLURAL:
+		break;
 	case 0:
 		break;
 	default:
 		{
 			wstring temp;
-			lplog(LOG_ERROR, L"inflectionFlags of %s (%d) not supported!", getInflectionName(inflectionFlags, verbForm, temp), inflectionFlags);
+			lplog(LOG_ERROR, L"inflectionFlags of %s (%d) on %s not supported!", getInflectionName(inflectionFlags, verbForm, temp), inflectionFlags, m[verbPosition].word->first.c_str());
 		}
 	}
 	int cost=((agree) ? 0 : NON_AGREEMENT_COST)+relationCost;

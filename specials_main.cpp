@@ -4686,8 +4686,8 @@ void wmain(int argc,wchar_t *argv[])
 		//patternOrWordAnalysis(source, step, L"_MS1", L"2",true); // TODO: testing weight change on _S1.
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
 		//patternOrWordAnalysis(source, step, L"_VERB_BARE_INF", L"A", true);
-		//patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false); // TODO: testing weight change on _S1.
-		patternOrWordAnalysis(source, step, L"martial", L"", Source::GUTENBERG_SOURCE_TYPE, false); // TODO: testing weight change on _S1.
+		patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false); 
+		//patternOrWordAnalysis(source, step, L"martial", L"", Source::GUTENBERG_SOURCE_TYPE, false); // TODO: testing weight change on _S1.
 		break;
 	case 60:
 		//stanfordCheckMP(source, step, true,8);
