@@ -3739,6 +3739,10 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		{
 			partofspeech += L"***ISVERB?PRESENTFIRST NOUN=" + nounCost + L"VERB=" + verbCost;
 		}
+		if (source.queryPattern(wordSourceIndex, L"__ADJECTIVE") != -1)
+		{
+			partofspeech += L"***ISVERB_AS_ADJ";
+		}
 	}
 	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0)
 	{

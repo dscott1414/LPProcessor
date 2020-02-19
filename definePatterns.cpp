@@ -2474,6 +2474,13 @@ int createSecondaryPatterns2(void)
 									1, L"__ALLOBJECTS_1", 0, 1, 1, // there must only be one adjective and it must be last (not mixed in) see *
 									1, L"__CLOSING__S1", 0, 0, 3,
 									0);
+	// Again against her will she made *reply* .
+	cPattern::create(L"__S1{_FINAL:_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"MR",
+									1, L"__C1__S1", 0, 1, 1,
+									1, L"verb|made*-2{VERB}", 0, 1, 1,
+									2, L"noun|reply{OBJECT}", L"noun|answer{OBJECT}", 0, 1, 1,
+									1, L"__CLOSING__S1", 0, 0, 3,
+									0);
 	// OBJVERB patterns - reverse
 	// *This* she knew had caused a change in her own attitude 
 	// ‘ That you can do next *time* . 
@@ -3007,11 +3014,11 @@ int createSecondaryPatterns2(void)
 									1, L"personal_pronoun_nominative|i", 0, 1, 1, 
 									1, L"never", 0, 1, 1,
 									0);
-		cPattern::create(L"__S2{_FINAL:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}", L"S1",
-			1, L"preposition|of", 0, 1, 1,
-			1, L"noun|course", 0, 1, 1,
-			1, L"not", 0, 1, 1,
-			0);
+	cPattern::create(L"__S2{_FINAL:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}", L"S1",
+		1, L"preposition|of", 0, 1, 1,
+		1, L"noun|course", 0, 1, 1,
+		1, L"not", 0, 1, 1,
+		0);
 	cPattern::create(L"__S2{_FINAL:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}", L"S2",
 		4, L"indefinite_pronoun|anything", L"indefinite_pronoun|anybody", L"indefinite_pronoun|anyone", L"indefinite_pronoun|nothing", 0, 1, 1,
 		3, L"adverb|else", L"quantifier|more", L"interrogative_pronoun|whatever", 0, 1, 1,
