@@ -314,9 +314,10 @@ int createNouns(void)
 	//									1,L",*3",0,0,1,
 	//									1,L"__APPNOUN[*]{_BLOCK:RE_OBJECT}",0,1,1,
 	//									0);
-	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}",L"5",
+	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}",L"YOU",
 										1,L"personal_pronoun|you",0,1,1,
-										3,L"numeral_cardinal|two", L"noun|here", L"noun*1", FEMALE_GENDER|MALE_GENDER,1,1,
+										1,L"adjective*2",0,0,1,
+										3,L"numeral_cardinal|two", L"adjective|here*-3", L"noun*1", FEMALE_GENDER|MALE_GENDER,1,1,
 										0);
 	// this is the same as "5" above but it is marked as a single object so "Iraqi weapons labs" is marked as a single object
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}",L"N",
@@ -2874,7 +2875,7 @@ int createSecondaryPatterns2(void)
 										1, L",", 0, 1, 1,
 										1, L"coordinator", 0, 0, 1, // Oh, dear mother earth! / Oh, and my dearest father too?
 										2, L"adverb", L"adjective",0,0,1, // Oh, dear mother earth!
-										3, L"honorific{HON:HAIL}", L"noun{HAIL}", L"interjection*-4", MALE_GENDER | FEMALE_GENDER, 1, 1,
+										4, L"possessive_determiner|my*-7",L"honorific{HON:HAIL}", L"noun{HAIL}", L"interjection*-4", MALE_GENDER | FEMALE_GENDER, 1, 1,
 										1, L"noun*1", 0, 0, 1, // Oh, dear mother earth!
 										1, L"adverb", 0, 0, 1, // Oh, and my dearest father too?
 										0);
@@ -2889,6 +2890,11 @@ int createSecondaryPatterns2(void)
 									 9,L"_HAIL_OBJECT",L"_NAME{HAIL}",L"honorific{HON:HAIL}",L"_HON_ABB{HON:HAIL}",L"_META_GROUP{HAIL}",L"_VERBREL2{_BLOCK}",L"_VERBREL1{_BLOCK}",L"interjection*-4", L"politeness_discourse_marker*-1", 0,1,1,
 									 1,L",",0,1,1,
 									 0);
+	cPattern::create(L"__INTRO_S1{_ONLY_BEGIN_MATCH}", L"2MD",
+										1, L"possessive_determiner|my*-7", 0, 1, 1,
+										1, L"noun|dear*-6", 0, 1, 1,
+										1, L",", 0, 1, 1,
+										0);
 	cPattern::create(L"__INTRO2_S1{_ONLY_BEGIN_MATCH:FLOATTIME}",L"3",
 									 3,L"_TIME",L"_DATE",L"letter",0,1,1,
 									 3,L"dash",L":",L",",0,0,1,
@@ -3007,7 +3013,7 @@ int createSecondaryPatterns2(void)
 			1, L"not", 0, 1, 1,
 			0);
 	cPattern::create(L"__S2{_FINAL:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}", L"S2",
-		2, L"indefinite_pronoun|anything", L"indefinite_pronoun|nothing", 0, 1, 1,
+		4, L"indefinite_pronoun|anything", L"indefinite_pronoun|anybody", L"indefinite_pronoun|anyone", L"indefinite_pronoun|nothing", 0, 1, 1,
 		3, L"adverb|else", L"quantifier|more", L"interrogative_pronoun|whatever", 0, 1, 1,
 		0);
 	cPattern::create(L"__S2{_FINAL:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}", L"S3",

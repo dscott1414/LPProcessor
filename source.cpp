@@ -1148,7 +1148,9 @@ bool Source::analyzeEnd(wstring &path,int begin,int end,bool &multipleEnds)
 				bool content = (wcsstr(bookBuffer + bufferScanLocation, L"CONTENTS") != NULL);
 				bool index = (wcsstr(bookBuffer + bufferScanLocation, L"INDEX") != NULL);
 				bool footnotes = (wcsstr(bookBuffer + bufferScanLocation, L"FOOTNOTES") != NULL);
-				return !multipleEnds && (content || index || footnotes);
+				bool catalogue = (wcsstr(bookBuffer + bufferScanLocation, L"Catalogue of ") != NULL); // specifically for Horatio books
+				bool transcriber = (wcsstr(bookBuffer + bufferScanLocation, L"Transcriber") != NULL); 
+				return !multipleEnds && (content || index || footnotes || catalogue || transcriber);
 			}
 			else
 			{

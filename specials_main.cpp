@@ -3192,6 +3192,19 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				errorMap[L"ST correct: ST says adverb but LP says adjective"]++;
 				return 0;
 			}
+			else if (source.m[wordSourceIndex + 1].word->first == L"-")
+			{
+				if (source.m[wordSourceIndex + 2].queryWinnerForm(L"noun") >=0 && source.queryPattern(wordSourceIndex + 2, L"__ADJECTIVE") == -1)
+				{
+					errorMap[L"LP correct: ST says adverb but LP says adjective with dash and then a noun"]++;
+					return 0;
+				}
+				else
+				{
+					errorMap[L"ST correct: ST says adverb but LP says adjective with dash and then a non-noun"]++;
+					return 0;
+				}
+			}
 			else
 				partofspeech += L"***ISADVERBELSE";
 		}
@@ -3368,6 +3381,19 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		{
 			errorMap[L"LP correct: ST says adverb but LP says adjective, following a being verb"]++;
 			return 0;
+		}
+		else if (source.m[wordSourceIndex + 1].word->first == L"-")
+		{
+			if (source.m[wordSourceIndex + 2].queryWinnerForm(L"noun") >= 0 && source.queryPattern(wordSourceIndex + 2, L"__ADJECTIVE") == -1)
+			{
+				errorMap[L"ST correct: ST says adjective but LP says adverb with dash and then a noun"]++;
+				return 0;
+			}
+			else
+			{
+				errorMap[L"LP correct: ST says adjective but LP says adverb with dash and then a non-noun"]++;
+				return 0;
+			}
 		}
 	}
 	if (word == L"more")
@@ -3866,6 +3892,11 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			errorMap[L"LP correct: 'doubt' is a noun in 'no doubt'"]++;
 			return 0;
 		}
+	}
+	if (word == L"my" && source.m[wordSourceIndex].queryWinnerForm(L"possessive_determiner") >= 0)
+	{
+		errorMap[L"LP correct: 'my' is possessive_determiner (now that interjection has been added as a form)"]++; // probabilistic - see distribute errors
+		return 0;
 	}
 	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0)
 	{
