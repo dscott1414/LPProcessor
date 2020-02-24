@@ -31,7 +31,7 @@ int rdfDetail = 0;
 int logSemanticMap = 0;
 bool logTraceOpen = false;
 bool log_net=false;  
-bool traceParseInfo = false;
+bool traceParseInfo = true;
 
 
 int logstring(int logLevel,const wchar_t *s)
