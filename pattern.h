@@ -118,9 +118,9 @@ public:
 			usagePatternEverMatched.reserve(patternIndexes.size());
 		}
     //patternElement(string patternName,string differentiator,int elementNum,set <unsigned int> &descendantTags,char *&buf);
-    bool matchOne(Source &source,unsigned int sourcePosition,unsigned int lastElement,vector <matchElement> &whatMatched);
-    bool matchRange(Source &source,int begin,int end,vector <matchElement> &whatMatched);
-    bool matchFirst(Source &source,int sourcePosition,vector <matchElement> &whatMatched);
+    bool matchOne(Source &source,unsigned int sourcePosition,unsigned int lastElement,vector <matchElement> &whatMatched, sTrace &t);
+    bool matchRange(Source &source,int begin,int end,vector <matchElement> &whatMatched, sTrace &t);
+    bool matchFirst(Source &source,int sourcePosition,vector <matchElement> &whatMatched, sTrace &t);
     bool inflectionMatch(int inflectionFlags,__int64 flags,wstring formStr);
     wstring formsStr(void);
     bool contains(int pn)

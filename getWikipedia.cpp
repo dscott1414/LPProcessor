@@ -1285,7 +1285,7 @@ int Source::processPath(const wchar_t *path,Source *&source,Source::sourceTypeEn
 		wstring wpath=path,start=L"~~BEGIN";
 		int repeatStart = 1;
 		bool justParsed = false;
-		if (!source->readSource(wpath,false, justParsed,false,parseOnly) || (justParsed && !parseOnly))
+		if (!source->readSource(wpath,false, justParsed,false,parseOnly, L"") || (justParsed && !parseOnly))
 		{
 			lplog(LOG_WIKIPEDIA|LOG_RESOLUTION|LOG_RESCHECK|LOG_WHERE,L"Begin Processing %s...",path);
 			if (!justParsed)
@@ -1314,7 +1314,7 @@ int Source::processPath(const wchar_t *path,Source *&source,Source::sourceTypeEn
 				logMatchedSentences=s1;
 				logUnmatchedSentences=s2;
 				lplog();
-				source->write(path,false, false);
+				source->write(path,false, false, L"");
 				limitProcessingForProfiling=0;
 				puts("");
 			}
@@ -1346,7 +1346,7 @@ int Source::processPath(const wchar_t *path,Source *&source,Source::sourceTypeEn
 				source->resolveSpeakers(secondaryQuotesResolutions);
 				source->resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
 			}
-			source->write(path,!parseOnly, false);
+			source->write(path,!parseOnly, false, L"");
 			lplog(LOG_WIKIPEDIA|LOG_RESOLUTION|LOG_RESCHECK|LOG_WHERE,L"End Processing %s...",path);
 		}
 		sourcesMap[path]=source;

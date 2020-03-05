@@ -617,7 +617,7 @@ bool tFI::write(void *buffer,int &where,int limit)
 			query(adjectiveForm) >= 0 ||
 			query(adverbForm) >= 0)
 		{
-			//lplog(LOG_INFO,L"Word %s has no mainEntry! (1)",iWord->first.c_str());
+			::lplog(LOG_INFO,L"QueryOnAnyAppearance added to word because it has no mainEntry and has open class!");
 			flags |= tFI::queryOnAnyAppearance;
 		}
 		wstring empty;
@@ -917,6 +917,25 @@ void tFI::eraseForms(void)
   formsOffset=fACount;
 }
 
+void tFI::cloneForms(tFI fromWord)
+{
+  // make sure this has enough forms space
+	if (count < fromWord.count)
+	{
+		int oldAllocated = allocated;
+		if (allocated <= fACount + fromWord.count)
+			formsArray = (unsigned int *)trealloc(19, formsArray, oldAllocated * sizeof(int), (allocated = (allocated + fromWord.count) * 2) * sizeof(int));
+		// if not already at the end
+		if (formsOffset + fromWord.count != fACount)
+		{
+			formsOffset = fACount;
+			fACount += fromWord.count;
+		}
+	}
+	memmove(formsArray + formsOffset, formsArray + fromWord.formsOffset, fromWord.count * sizeof(int));
+	count = fromWord.count;
+}
+
 // this is a dynamic addForm routine, called from BNC routines, addForm or addNewOrModify.  insertNewForms flag is necessary.
 int tFI::addForm(int form,const wstring &word)
 { LFS
@@ -947,13 +966,13 @@ int tFI::addForm(int form,const wstring &word)
 		int saveForm = formsArray[formsOffset];
 		formsArray[formsOffset] = 0;
 		formsArray[fACount++] = saveForm;
-		::lplog(LOG_FATAL_ERROR, L"Test this!");
+		::lplog(LOG_FATAL_ERROR, L"Test this - %d!", formsArray[formsOffset]);
 	}
 	::lplog(L"XXADDFORM form %d added to word %s!", form, word.c_str());
   return 0;
 }
 
-int tFI::adjustFormsInflections(wstring originalWord,unsigned __int64 &wmflags,bool isFirstWord,int nounOwner,bool allCaps,bool firstLetterCapitalized)
+int tFI::adjustFormsInflections(wstring originalWord,unsigned __int64 &wmflags,bool isFirstWord,int nounOwner,bool allCaps,bool firstLetterCapitalized, bool log)
 { LFS
   //flags=(1<<count)-1;
   wmflags=0;
@@ -1000,7 +1019,9 @@ int tFI::adjustFormsInflections(wstring originalWord,unsigned __int64 &wmflags,b
       deltaUsagePatterns[PROPER_NOUN_USAGE_PATTERN]++;
     }
 		if (!isFirstWord && !allCaps)
+		{
 			localWordIsCapitalized++;
+		}
     if (firstLetterCapitalized) 
 			wmflags|=WordMatch::flagFirstLetterCapitalized;
     if (allCaps) 
@@ -1013,14 +1034,23 @@ int tFI::adjustFormsInflections(wstring originalWord,unsigned __int64 &wmflags,b
 			usagePatterns[LOWER_CASE_USAGE_PATTERN]++;
 			deltaUsagePatterns[LOWER_CASE_USAGE_PATTERN]++;
 		}
+		if (log)
+			::lplog(LOG_INFO, L"Increased localWordIsLowercase from %d to %d!", localWordIsLowercase, localWordIsLowercase+1);
 		localWordIsLowercase++;
+	}
+	if (log)
+	{
+		::lplog(L"lower case=%d (%d) proper noun=%d (%d) localWordIsCapitalized=%d localWordIsLowercase=%d",
+			usagePatterns[LOWER_CASE_USAGE_PATTERN], deltaUsagePatterns[LOWER_CASE_USAGE_PATTERN],
+			usagePatterns[PROPER_NOUN_USAGE_PATTERN], deltaUsagePatterns[PROPER_NOUN_USAGE_PATTERN],
+			localWordIsCapitalized, localWordIsLowercase);
 	}
 	return 0;
 }
 
 bool tFI::isUnknown(void)
 { LFS
-  return formsArray[formsOffset]==UNDEFINED_FORM_NUM;
+  return count>0 && formsArray[formsOffset]==UNDEFINED_FORM_NUM;
 }
 
 bool tFI::isCommonWord(void)
@@ -1160,6 +1190,7 @@ void tFI::resetUsagePatternsAndCosts(wstring sWord)
 {
 	localWordIsCapitalized = 0;
 	localWordIsLowercase = 0;
+	numProperNounUsageAsAdjective = 0;
 	for (unsigned int f = 0; f < MAX_USAGE_PATTERNS; f++)
 	{
 		usagePatterns[f] -= deltaUsagePatterns[f];
@@ -1178,14 +1209,24 @@ void tFI::resetUsagePatternsAndCosts(wstring sWord)
 	transferUsagePatternsToCosts(HIGHEST_COST_OF_INCORRECT_VERB_USAGE, VERB_HAS_0_OBJECTS, 3);
 }
 
+void tFI::logReset(wstring sWord)
+{
+	if (deltaUsagePatterns[LOWER_CASE_USAGE_PATTERN] || deltaUsagePatterns[PROPER_NOUN_USAGE_PATTERN] || localWordIsCapitalized || localWordIsLowercase)
+		::lplog(L"resetting word %s to lower case=%d (=%d-%d) and proper noun=%d (=%d-%d) and localWordIsCapitalized=%d and localWordIsLowercase=%d", sWord.c_str(),
+			usagePatterns[LOWER_CASE_USAGE_PATTERN] - deltaUsagePatterns[LOWER_CASE_USAGE_PATTERN], usagePatterns[LOWER_CASE_USAGE_PATTERN], deltaUsagePatterns[LOWER_CASE_USAGE_PATTERN],
+			usagePatterns[PROPER_NOUN_USAGE_PATTERN] - deltaUsagePatterns[PROPER_NOUN_USAGE_PATTERN], usagePatterns[PROPER_NOUN_USAGE_PATTERN], deltaUsagePatterns[PROPER_NOUN_USAGE_PATTERN],
+			localWordIsCapitalized, localWordIsLowercase);
+}
+
 void tFI::resetCapitalizationAndProperNounUsageStatistics()
 {
 	usagePatterns[LOWER_CASE_USAGE_PATTERN] -= deltaUsagePatterns[LOWER_CASE_USAGE_PATTERN];
 	deltaUsagePatterns[LOWER_CASE_USAGE_PATTERN] = 0;
 	usagePatterns[PROPER_NOUN_USAGE_PATTERN] -= deltaUsagePatterns[PROPER_NOUN_USAGE_PATTERN];
 	deltaUsagePatterns[PROPER_NOUN_USAGE_PATTERN] = 0;
-	localWordIsCapitalized=0;
+	localWordIsCapitalized = 0;
 	localWordIsLowercase = 0;
+	numProperNounUsageAsAdjective = 0;
 }
 
 // used during matching, printing, updatePEMA (cost reduction), updating usage patterns
@@ -1328,6 +1369,52 @@ bool WordClass::remove(wstring sWord)
   return false;
 }
 
+void WordClass::resetUsagePatternsAndCosts()
+{
+	for (tIWMM w = begin(), wEnd = end(); w != wEnd; )
+	{
+		if (w->second.flags&tFI::deleteWordAfterSourceProcessing)
+			w = WMM.erase(w);
+		else
+		{
+			w->second.resetUsagePatternsAndCosts(w->first);
+			w++;
+		}
+	}
+}
+
+void WordClass::resetCapitalizationAndProperNounUsageStatistics()
+{
+	// mainEntry processing must be completed before any words are deleted.
+	for (tIWMM w = begin(), wEnd = end(); w != wEnd; w++)
+	{
+		if (w->second.mainEntry != wNULL && (w->second.mainEntry->second.flags&tFI::deleteWordAfterSourceProcessing) && !(w->second.flags&tFI::deleteWordAfterSourceProcessing))
+		{
+			lplog(LOG_INFO, L"Removing deletion of word %s because it is a main entry of another word which is not going to be deleted.", w->second.mainEntry->first.c_str());
+			w->second.mainEntry->second.flags &= ~tFI::deleteWordAfterSourceProcessing;
+		}
+		if ((w->second.flags&tFI::deleteWordAfterSourceProcessing) && w->second.sourceId<0)
+		{
+			lplog(LOG_INFO, L"Removing deletion of word %s because it is has a NULL sourceId.", w->first.c_str());
+			w->second.flags &= ~tFI::deleteWordAfterSourceProcessing;
+		}
+	}
+	for (tIWMM w = begin(), wEnd = end(); w != wEnd; )
+	{
+		if (w->second.flags&tFI::deleteWordAfterSourceProcessing)
+		{
+			lplog(LOG_INFO, L"Deleting word %s post source processing", w->first.c_str());
+			w = WMM.erase(w);
+		}
+		else
+		{
+			w->second.logReset(w->first);
+			w->second.resetCapitalizationAndProperNounUsageStatistics();
+			w++;
+		}
+	}
+}
+
 bool WordClass::removeInflectionFlag(wstring sWord,int flag)
 { LFS
   tIWMM iWMM;
@@ -1387,6 +1474,8 @@ tIWMM WordClass::addNewOrModify(MYSQL *mysql, wstring sWord, int flags, int form
     if (equivalentIfIgnoreDashSpaceCase(sME,sWord)) pr.first->second.mainEntry=pr.first;
 		if (mainEntry!=wNULL)
 			mainEntryMap[mainEntry->first].push_back(pr.first);
+		else
+			pr.first->second.mainEntry = pr.first;
     return pr.first;
   }
   else
@@ -1601,6 +1690,7 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 	{
 		if (!mysql) // can get here calling parseWord on a mainEntry as well.
 			return 0;
+		dontMarkUndefined = true;
 		if (!firstLetterCapitalized && (iWord->second.flags&tFI::queryOnLowerCase) == tFI::queryOnLowerCase)
 		{
 			changedWords = true;
@@ -1608,9 +1698,13 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 			iWord->second.flags |= tFI::updateMainInfo;
 			//iWord->second.remove(PROPER_NOUN_FORM_NUM);
 			wordComplete = false;
-			if (iWord->second.isUnknown()) iWord->second.eraseForms();
+			if (iWord->second.isUnknown())
+			{
+				iWord->second.eraseForms();
+				dontMarkUndefined = false;
+			}
 		}
-		if (iWord != end() && (iWord->second.flags&tFI::queryOnAnyAppearance) && inCreateDictionaryPhase == false)
+		else if (iWord != end() && (iWord->second.flags&tFI::queryOnAnyAppearance) && inCreateDictionaryPhase == false)
 		{
 			changedWords = true;
 			iWord->second.flags &= ~tFI::queryOnAnyAppearance;
@@ -1626,9 +1720,12 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 			}
 			stopDisInclination = true;
 			wordComplete = false;
-			if (iWord->second.isUnknown()) iWord->second.eraseForms();
+			if (iWord->second.isUnknown())
+			{
+				iWord->second.eraseForms();
+				dontMarkUndefined = false;
+			}
 		}
-		dontMarkUndefined = true;
 	}
 	if (!wordComplete)
 	{
@@ -1648,13 +1745,13 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 		if (sWord.length()>1 && !iswdigit(sWord[0]))
 			for (int I = sWord.length() - 1; I >= 0; I--)
 			{
-			if (!iswalnum(sWord[I]) && sWord[I] != ' ' && sWord[I] != '.' && !isDash(sWord[I]) &&
-				((sWord[0] != 'd' && sWord[0] != 'l') || !isSingleQuote(sWord[1])))
-				lplog(LOG_DICTIONARY, L"Suspect character %c(ascii value %d) encountered in word %s.", sWord[I], (int)sWord[I], sWord.c_str());
-			if (isDash(sWord[I]))
-				dashLocation = I;
-			if (isSingleQuote(sWord[I]))
-				containsSingleQuote = true;
+				if (!iswalnum(sWord[I]) && sWord[I] != ' ' && sWord[I] != '.' && !isDash(sWord[I]) &&
+					((sWord[0] != 'd' && sWord[0] != 'l') || !isSingleQuote(sWord[1])))
+					lplog(LOG_DICTIONARY, L"Suspect character %c(ascii value %d) encountered in word %s.", sWord[I], (int)sWord[I], sWord.c_str());
+				if (isDash(sWord[I]))
+					dashLocation = I;
+				if (isSingleQuote(sWord[I]))
+					containsSingleQuote = true;
 			}
 		/* (s) check examples: finger(s) member(s) for now, chop off the (s) */
 		int len = sWord.length() - 3;
@@ -1672,8 +1769,10 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 			return 0;
 		}
 		// search sql DB for word
-		if (iWord == WMM.end() && findWordInDB(mysql, sWord, iWord) && !iWord->second.isUnknown())
+		int wordId = -1;
+		if (iWord == WMM.end() && findWordInDB(mysql, sWord, wordId, iWord) && !iWord->second.isUnknown())
 			return 0;
+		bool newWordIsUnknown = wordId != -1;
 		if (firstLetterCapitalized)
 		{
 			if (dontMarkUndefined)
@@ -1716,14 +1815,33 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 					sWordNoDashes.erase(std::remove(sWordNoDashes.begin(), sWordNoDashes.end(), L'-'), sWordNoDashes.end());
 					sWordNoDashes.erase(std::remove(sWordNoDashes.begin(), sWordNoDashes.end(), L'—'), sWordNoDashes.end());
 					tIWMM tiWord;
-					if ((tiWord = Words.query(sWordNoDashes)) == Words.end())
-						ret = Words.attemptDisInclination(mysql, iWord, sWordNoDashes, sourceId); // returns 0 if found or WORD_NOT_FOUND if not found
+					if ((tiWord = Words.query(sWordNoDashes)) == Words.end() && !findWordInDB(mysql, sWordNoDashes, wordId, tiWord))
+					{
+						// all words found on a conditional that they are searched for only if lower case must be deleted after the source is finished
+						// because when a single run parses multiple sources, if a capitalized version of the word is the only kind in a source, after the lower case version is found in a previous source,
+						// the parse for the capitalized version is different than if the lower case version was never encountered previously, leading to 
+						// a dependency on order of capitalization.  To get rid of this dependency and ensure that parses are identical no matter what order, this word must be deleted after source processing.
+						if (!(ret = Words.attemptDisInclination(mysql, iWord, sWordNoDashes, sourceId))) // returns 0 if found or WORD_NOT_FOUND if not found
+							iWord->second.flags |= tFI::deleteWordAfterSourceProcessing; 
+					}
 					else
-						iWord = tiWord;
+					{
+						if (iWord == end())
+						{
+							markWordUndefined(iWord, sWord, 0, firstLetterCapitalized, nounOwner, sourceId);
+							iWord->second.mainEntry = tiWord;
+						}
+						iWord->second.cloneForms(tiWord->second);
+						ret = 0; // don't mark undefined!
+						iWord->second.flags |= tFI::deleteWordAfterSourceProcessing;
+					}
 				}
 				if (ret && !dontMarkUndefined)
 					ret = markWordUndefined(iWord, sWord, 0, firstLetterCapitalized, nounOwner, sourceId);
 			}
+			else if (newWordIsUnknown)
+				iWord->second.flags |= tFI::deleteWordAfterSourceProcessing;
+
 		}
 		if (iWord!=WMM.end())
 			iWord->second.preferVerbPresentParticiple();
@@ -2105,9 +2223,20 @@ bool WordClass::evaluateIncludedSingleQuote(wchar_t *buffer,__int64 cp,__int64 b
   return iswalpha(buffer[cp+1])!=0; // is there a letter right after this quote?
 }
 
-bool WordClass::parseMetaCommands(wchar_t *buffer,int &endSymbol,wstring &comment,sTrace &t)
-{ LFS
-  if (!wcsncmp(buffer,L"DUMPLOCALOBJECTS",wcslen(L"DUMPLOCALOBJECTS")))
+bool WordClass::parseMetaCommands(int where,wchar_t *buffer, int &endSymbol, wstring &comment, sTrace &t)
+{
+	LFS
+	if (buffer[0] != '!' && !iswalpha(buffer[0]))
+		return false;
+	wchar_t *nl = wcschr(buffer, '\r');
+	if (nl == 0)
+		return false;
+	bool setValue = (buffer[0] != L'!');
+	int offset = (setValue) ? 0 : 1;
+	*nl = 0;
+	lplog(LOG_INFO, L"%d:setting meta %s to %d", where,buffer+offset, setValue);
+	*nl = '\r';
+	if (!wcsncmp(buffer,L"DUMPLOCALOBJECTS",wcslen(L"DUMPLOCALOBJECTS")))
 	{
 		endSymbol=PARSE_DUMP_LOCAL_OBJECTS;
     return true;
@@ -2117,55 +2246,57 @@ bool WordClass::parseMetaCommands(wchar_t *buffer,int &endSymbol,wstring &commen
 		endSymbol=PARSE_EOF;
     return true;
 	}
-  else if (!wcsnicmp(buffer,L"printBeforeElimination",wcslen(L"printBeforeElimination")))
-    t.printBeforeElimination=!t.printBeforeElimination;
-	else if (!wcsnicmp(buffer, L"traceSubjectVerbAgreement", wcslen(L"traceSubjectVerbAgreement")))
-		t.traceSubjectVerbAgreement = !t.traceSubjectVerbAgreement;
-	else if (!wcsnicmp(buffer, L"traceTestSubjectVerbAgreement", wcslen(L"traceTestSubjectVerbAgreement")))
-		t.traceTestSubjectVerbAgreement = !t.traceTestSubjectVerbAgreement;
-	else if (!wcsnicmp(buffer,L"traceEVALObjects",wcslen(L"traceEVALObjects")))
-    t.traceEVALObjects=!t.traceEVALObjects;
-  else if (!wcsnicmp(buffer,L"traceAnaphors",wcslen(L"traceAnaphors")))
-    t.traceAnaphors=!t.traceAnaphors;
-  else if (!wcsnicmp(buffer,L"traceRelations",wcslen(L"traceRelations")))
-    t.traceRelations=!t.traceRelations;
-  else if (!wcsnicmp(buffer,L"traceSpeakerResolution",wcslen(L"traceSpeakerResolution")))
-    t.traceSpeakerResolution=!t.traceSpeakerResolution;
-  else if (!wcsnicmp(buffer,L"traceObjectResolution",wcslen(L"traceObjectResolution")))
-    t.traceObjectResolution=!t.traceObjectResolution;
-  else if (!wcsnicmp(buffer,L"traceNameResolution",wcslen(L"traceNameResolution")))
-    t.traceNameResolution=!t.traceNameResolution;
-  else if (!wcsnicmp(buffer,L"traceVerbObjects",wcslen(L"traceVerbObjects")))
-    t.traceVerbObjects=!t.traceVerbObjects;
-  else if (!wcsnicmp(buffer,L"traceDeterminer",wcslen(L"traceDeterminer")))
-    t.traceDeterminer=!t.traceDeterminer;
-  else if (!wcsnicmp(buffer,L"traceBNCPreferences",wcslen(L"traceBNCPreferences")))
-    t.traceBNCPreferences=!t.traceBNCPreferences;
-  else if (!wcsnicmp(buffer,L"tracePatternElimination",wcslen(L"tracePatternElimination")))
-    t.tracePatternElimination=!t.tracePatternElimination;
-  else if (!wcsnicmp(buffer,L"traceSecondaryPEMACosting",wcslen(L"traceSecondaryPEMACosting")))
-    t.traceSecondaryPEMACosting=!t.traceSecondaryPEMACosting;
-  else if (!wcsnicmp(buffer,L"traceMatchedSentences",wcslen(L"traceMatchedSentences")))
-    t.traceMatchedSentences=!t.traceMatchedSentences;
-  else if (!wcsnicmp(buffer,L"traceUnmatchedSentences",wcslen(L"traceUnmatchedSentences")))
-    t.traceUnmatchedSentences=!t.traceUnmatchedSentences;
-  else if (!wcsnicmp(buffer,L"traceIncludesPEMAIndex",wcslen(L"traceIncludesPEMAIndex")))
-    t.traceIncludesPEMAIndex=!t.traceIncludesPEMAIndex;
-  else if (!wcsnicmp(buffer,L"traceTagSetCollection",wcslen(L"traceTagSetCollection")))
-    t.traceTagSetCollection=!t.traceTagSetCollection;
-  else if (!wcsnicmp(buffer,L"collectPerSentenceStats",wcslen(L"collectPerSentenceStats")))
-    t.collectPerSentenceStats=!t.collectPerSentenceStats;
-  else if (!wcsnicmp(buffer,L"logCache=",wcslen(L"logCache=")))
+  else if (!wcsnicmp(buffer+offset,L"printBeforeElimination",wcslen(L"printBeforeElimination")))
+    t.printBeforeElimination=setValue;
+	else if (!wcsnicmp(buffer+offset, L"traceSubjectVerbAgreement", wcslen(L"traceSubjectVerbAgreement")))
+		t.traceSubjectVerbAgreement = setValue;
+	else if (!wcsnicmp(buffer+offset, L"traceTestSubjectVerbAgreement", wcslen(L"traceTestSubjectVerbAgreement")))
+		t.traceTestSubjectVerbAgreement = setValue;
+	else if (!wcsnicmp(buffer+offset,L"traceEVALObjects",wcslen(L"traceEVALObjects")))
+    t.traceEVALObjects= setValue;
+  else if (!wcsnicmp(buffer+offset,L"traceAnaphors",wcslen(L"traceAnaphors")))
+    t.traceAnaphors= setValue;
+  else if (!wcsnicmp(buffer+offset,L"traceRelations",wcslen(L"traceRelations")))
+    t.traceRelations= setValue;
+  else if (!wcsnicmp(buffer+offset,L"traceSpeakerResolution",wcslen(L"traceSpeakerResolution")))
+    t.traceSpeakerResolution= setValue;
+  else if (!wcsnicmp(buffer+offset,L"traceObjectResolution",wcslen(L"traceObjectResolution")))
+    t.traceObjectResolution= setValue;
+  else if (!wcsnicmp(buffer+offset,L"traceNameResolution",wcslen(L"traceNameResolution")))
+    t.traceNameResolution= setValue;
+  else if (!wcsnicmp(buffer+offset,L"traceVerbObjects",wcslen(L"traceVerbObjects")))
+    t.traceVerbObjects= setValue;
+  else if (!wcsnicmp(buffer+offset,L"traceDeterminer",wcslen(L"traceDeterminer")))
+    t.traceDeterminer= setValue;
+  else if (!wcsnicmp(buffer+offset,L"traceBNCPreferences",wcslen(L"traceBNCPreferences")))
+    t.traceBNCPreferences= setValue;
+  else if (!wcsnicmp(buffer+offset,L"tracePatternElimination",wcslen(L"tracePatternElimination")))
+    t.tracePatternElimination= setValue;
+  else if (!wcsnicmp(buffer+offset,L"traceSecondaryPEMACosting",wcslen(L"traceSecondaryPEMACosting")))
+    t.traceSecondaryPEMACosting= setValue;
+  else if (!wcsnicmp(buffer+offset,L"traceMatchedSentences",wcslen(L"traceMatchedSentences")))
+    t.traceMatchedSentences= setValue;
+  else if (!wcsnicmp(buffer+offset,L"traceUnmatchedSentences",wcslen(L"traceUnmatchedSentences")))
+    t.traceUnmatchedSentences= setValue;
+  else if (!wcsnicmp(buffer+offset,L"traceIncludesPEMAIndex",wcslen(L"traceIncludesPEMAIndex")))
+    t.traceIncludesPEMAIndex= setValue;
+  else if (!wcsnicmp(buffer+offset,L"traceTagSetCollection",wcslen(L"traceTagSetCollection")))
+    t.traceTagSetCollection= setValue;
+  else if (!wcsnicmp(buffer+offset,L"collectPerSentenceStats",wcslen(L"collectPerSentenceStats")))
+    t.collectPerSentenceStats= setValue;
+  else if (!wcsnicmp(buffer+offset,L"logCache=",wcslen(L"logCache=")))
     logCache=_wtoi(buffer+wcslen(L"logCache="));
-  else if (!wcsnicmp(buffer,L"traceRole",wcslen(L"traceRole")))
-    t.traceRole=!t.traceRole;
-  else if (!wcsnicmp(buffer,L"traceWikipedia",wcslen(L"traceWikipedia")))
-    t.traceWikipedia=!t.traceWikipedia;
-  else if (!wcsnicmp(buffer,L"traceWebSearch",wcslen(L"traceWebSearch")))
-    t.traceWebSearch=!t.traceWebSearch;
-  else if (!wcsnicmp(buffer,L"traceQCheck",wcslen(L"traceQCheck")))
-    t.traceQCheck=!t.traceQCheck;
-  else if (!wcsnicmp(buffer,L"traceTransitoryQuestion",wcslen(L"traceTransitoryQuestion")))
+  else if (!wcsnicmp(buffer+offset,L"traceRole",wcslen(L"traceRole")))
+    t.traceRole= setValue;
+  else if (!wcsnicmp(buffer+offset,L"traceWikipedia",wcslen(L"traceWikipedia")))
+    t.traceWikipedia= setValue;
+  else if (!wcsnicmp(buffer+offset,L"traceWebSearch",wcslen(L"traceWebSearch")))
+    t.traceWebSearch= setValue;
+	else if (!wcsnicmp(buffer + offset, L"traceQCheck", wcslen(L"traceQCheck")))
+		t.traceQCheck = setValue;
+	else if (!wcsnicmp(buffer + offset, L"traceParseInfo", wcslen(L"traceParseInfo")))
+		t.traceParseInfo = setValue;
+	else if (!wcsnicmp(buffer,L"traceTransitoryQuestion",wcslen(L"traceTransitoryQuestion")))
 	{
     t.traceCommonQuestion=false;
     t.traceMapQuestion=false;
@@ -2304,7 +2435,7 @@ bool WordClass::isDoubleQuote(wchar_t ch)
 }
 
 int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocation,
-                        wstring &sWord,wstring &comment,int &nounOwner,bool scanForSection,bool webScrapeParse,sTrace &t)
+                        wstring &sWord,wstring &comment,int &nounOwner,bool scanForSection,bool webScrapeParse,sTrace &t, MYSQL *mysql,int sourceId)
 { LFS
   __int64 cp=bufferScanLocation;
   nounOwner=0;
@@ -2358,12 +2489,12 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
 	if (!wcsncmp(buffer + cp, L"<i>", 3))
 	{
 		bufferScanLocation = cp + 3;
-		return readWord(buffer, bufferLen, bufferScanLocation, sWord, comment, nounOwner, scanForSection, webScrapeParse, t);
+		return readWord(buffer, bufferLen, bufferScanLocation, sWord, comment, nounOwner, scanForSection, webScrapeParse, t,mysql,sourceId);
 	}
 	if (!wcsncmp(buffer + cp, L"</i>", 4))
 	{
 		bufferScanLocation = cp + 4;
-		return readWord(buffer, bufferLen, bufferScanLocation, sWord, comment, nounOwner, scanForSection, webScrapeParse, t);
+		return readWord(buffer, bufferLen, bufferScanLocation, sWord, comment, nounOwner, scanForSection, webScrapeParse, t,mysql,sourceId);
 	}
 	// NewsBank XML parsing
   if (buffer[cp]=='&')
@@ -2397,7 +2528,7 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
   if (buffer[cp]=='~' && buffer[cp+1]=='~')
   {
 		int endSymbol=0;
-    parseMetaCommands(buffer+cp+2,endSymbol,comment,t);
+    parseMetaCommands(cp,buffer+cp+2,endSymbol,comment,t);
     while (cp<bufferLen && buffer[cp]!=13)
       cp++;
     if (cp<bufferLen) cp++;
@@ -2406,7 +2537,7 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
 		if (endSymbol) 
 			return endSymbol;
 		else
-			return readWord(buffer,bufferLen,bufferScanLocation,sWord,comment,nounOwner,scanForSection,webScrapeParse,t);
+			return readWord(buffer,bufferLen,bufferScanLocation,sWord,comment,nounOwner,scanForSection,webScrapeParse,t,mysql,sourceId);
   }
   if (cp>=bufferLen)
     return PARSE_EOF;
@@ -2497,7 +2628,7 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
       break;
     }
     // dangling - at the end of a line
-    if (isDash(buffer[cp]) && buffer[cp+1]==13 && buffer[cp+2]==10 && query(sWord)==end())
+    if (isDash(buffer[cp]) && buffer[cp+1]==13 && buffer[cp+2]==10 && fullQuery(mysql,sWord,sourceId)==end())
     {
       cp+=3;
       while (cp<bufferLen && iswspace(buffer[cp])) cp++;
@@ -2604,7 +2735,7 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
       I++;
       wstring tmp=sWord.substr(0,I);
       // if it is a word we recognize, uncouple the word from the number.
-      if (query(tmp)!=WMM.end())
+      if (fullQuery(mysql, tmp, sourceId)!=WMM.end())
       {
         cp-=sWord.length()-I;
         sWord=tmp;
@@ -2632,13 +2763,17 @@ WordClass::~WordClass()
   tFI::fACount=0;
 }
 
-bool WordClass::findWordInDB(MYSQL *mysql, wstring sWord, tIWMM &iWord)
+bool WordClass::findWordInDB(MYSQL *mysql, wstring &sWord, int &wordId, tIWMM &iWord)
 {
 	if (mysql == NULL)
 		return false;
 	if (!myquery(mysql, L"LOCK TABLES words w READ,wordforms wf READ")) return true;
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"select w.id,wf.formId,wf.count,w.inflectionFlags,w.flags,w.timeFlags,w.mainEntryWordId,w.derivationRules,w.sourceId from words w,wordForms wf where wf.wordId=w.id and word=\"%s\" order by wf.formId", sWord.c_str());  // don't drop order by formId!  this is necessary to ensure unknown form (0) is first, which is used in isUnknown processing!
+	// don't drop order by formId!  this is necessary to ensure unknown form (0) is first, which is used in isUnknown processing!
+	if (wordId == -1)
+		_snwprintf(qt, QUERY_BUFFER_LEN, L"select w.id,wf.formId,wf.count,w.inflectionFlags,w.flags,w.timeFlags,w.mainEntryWordId,w.derivationRules,w.sourceId from words w,wordForms wf where wf.wordId=w.id and word=\"%s\" order by wf.formId", sWord.c_str());
+	else
+		_snwprintf(qt, QUERY_BUFFER_LEN, L"select w.word,wf.formId,wf.count,w.inflectionFlags,w.flags,w.timeFlags,w.mainEntryWordId,w.derivationRules,w.sourceId from words w,wordForms wf where wf.wordId=%d and w.id=%d order by wf.formId", wordId, wordId);
 	MYSQL_RES *result = NULL;
 	if (!myquery(mysql, qt, result) || mysql_num_rows(result) == 0)
 	{
@@ -2648,12 +2783,16 @@ bool WordClass::findWordInDB(MYSQL *mysql, wstring sWord, tIWMM &iWord)
 		return false;
 	}
 	MYSQL_ROW sqlrow;
-	unsigned int *wordForms = (unsigned int *)tmalloc(mysql_num_rows(result) * sizeof(int)*2);
-	int iInflectionFlags=0, iFlags=0, iTimeFlags=0, iMainEntryWordId=0, iDerivationRules=0, iSourceId=0, count = 0;
+	unsigned int *wordForms = (unsigned int *)tmalloc(mysql_num_rows(result) * sizeof(int) * 2);
+	int iInflectionFlags = 0, iFlags = 0, iTimeFlags = 0, iMainEntryWordId = 0, iDerivationRules = 0, iSourceId = 0, count = 0;
 	while ((sqlrow = mysql_fetch_row(result)) != NULL)
 	{
 		if (count == 0)
 		{
+			if (wordId == -1)
+				wordId = atoi(sqlrow[0]);
+			else
+				mTW(sqlrow[0], sWord);
 			iInflectionFlags = atoi(sqlrow[3]);
 			iFlags = atoi(sqlrow[4]);
 			iTimeFlags = atoi(sqlrow[5]);
@@ -2669,7 +2808,19 @@ bool WordClass::findWordInDB(MYSQL *mysql, wstring sWord, tIWMM &iWord)
 		return false;
 	//tFI::tFI(unsigned int *forms, unsigned int iCount, int iInflectionFlags, int iFlags, int iTimeFlags, int mainEntryWordId, int iDerivationRules, int iSourceId, int formNum, wstring &word)
 	int selfFormNum = FormsClass::findForm(sWord);
-	iWord = Words.WMM.insert(WordClass::tWFIMap(sWord, tFI(wordForms, count/2, iInflectionFlags, iFlags, iTimeFlags, iMainEntryWordId, iDerivationRules, iSourceId, selfFormNum, sWord))).first;
+	if (Words.query(sWord) != Words.end())
+	{
+		lplog(LOG_FATAL_ERROR, L"word %s double insertion attempted", sWord.c_str());
+	}
+	iWord = Words.WMM.insert(WordClass::tWFIMap(sWord, tFI(wordForms, count / 2, iInflectionFlags, iFlags, iTimeFlags, iMainEntryWordId, iDerivationRules, iSourceId, selfFormNum, sWord))).first;
+	Words.mapWordIdToWordStructure(wordId, iWord);
+	if (Words.wordStructureGivenWordIdExists(iMainEntryWordId) == wNULL)
+	{
+		wstring sMainEntryWord;
+		findWordInDB(mysql, sMainEntryWord, iMainEntryWordId, iWord->second.mainEntry);
+	}
+	else
+		iWord->second.mainEntry = Words.wordStructureGivenWordIdExists(iMainEntryWordId);
 	tfree(count * sizeof(int), wordForms);
 	return iWord != Words.end();
 }
@@ -2677,7 +2828,8 @@ bool WordClass::findWordInDB(MYSQL *mysql, wstring sWord, tIWMM &iWord)
 tIWMM WordClass::fullQuery(MYSQL *mysql, wstring word, int sourceId)
 {
 	tIWMM iWord = Words.end();
-	if ((iWord = Words.query(word)) == Words.end() && !findWordInDB(mysql, word, iWord))
+	int wordId = -1;
+	if ((iWord = Words.query(word)) == Words.end() && !findWordInDB(mysql, word, wordId, iWord))
 		getForms(mysql,iWord, word, sourceId,false);
 	return iWord;
 }

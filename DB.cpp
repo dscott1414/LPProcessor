@@ -886,6 +886,7 @@ tFI::tFI(void)
   tmpMainEntryWordId=-1;
   formsOffset=fACount;
   sourceId=-1;
+	numProperNounUsageAsAdjective = 0;
 	localWordIsCapitalized = 0;
 	localWordIsLowercase = 0;
 }
@@ -930,6 +931,7 @@ tFI::tFI(unsigned int *forms,unsigned int iCount,int iInflectionFlags,int iFlags
   fACount+=(count-iCount);
   count=iCount;
   memset(relationMaps,0,numRelationWOTypes*sizeof(*relationMaps));
+	numProperNounUsageAsAdjective = 0;
 	localWordIsCapitalized = 0;
 	localWordIsLowercase = 0;
 }
@@ -1045,6 +1047,35 @@ void WordClass::assign(int wordId,tIWMM iWord)
   iWord->second.index=wordId;
 }
 
+#define NUM_WORD_ALLOCATION 102400
+void WordClass::mapWordIdToWordStructure(int wordId, tIWMM iWord)
+{
+	LFS
+		while (idsAllocated <= wordId)
+		{
+			int previousIdsAllocated = idsAllocated;
+			idsAllocated += NUM_WORD_ALLOCATION;
+			idToMap = (tIWMM *)trealloc(22, idToMap, previousIdsAllocated * sizeof(*idToMap), idsAllocated * sizeof(*idToMap));
+			if (!idToMap)
+				lplog(LOG_FATAL_ERROR, L"Out of memory allocating %d bytes to idToMap array.", idsAllocated * sizeof(*idToMap));
+			for (int I = idsAllocated - NUM_WORD_ALLOCATION; I < idsAllocated; I++)
+				idToMap[I] = wNULL;
+			//memset(idToMap+idsAllocated-NUM_WORD_ALLOCATION,wNULL,NUM_WORD_ALLOCATION*sizeof(*idToMap));
+		}
+#ifdef LOG_WORD_FLOW
+	lplog(L"Word %s assigned to index %d.", iWord->first.c_str(), wordId);
+#endif
+	idToMap[wordId] = iWord;
+	iWord->second.index = wordId;
+}
+
+tIWMM WordClass::wordStructureGivenWordIdExists(int wordId)
+{
+	if (wordId >= idsAllocated || wordId < 0)
+		return wNULL;
+	return idToMap[wordId];
+}
+
 void tFI::mainEntryCheck(const wstring first,int where)
 { LFS
   if (mainEntry==wNULL && (query(nounForm)>=0 || query(verbForm)>=0 || query(adjectiveForm)>=0 || query(adverbForm)>=0))
@@ -1146,7 +1177,7 @@ bool WordClass::isWordFormCacheValid(MYSQL &mysql)
 // if return code is 0, parent calling this procedure should return with a 0.
 // if return code is 2, parent calling this procedure should continue.
 // qt is a scratch query buffer.
-int WordClass::readWordFormsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,int maxWordId,wchar_t *qt,	int *words,int *counts,int &numWordForms,unsigned int * &wordForms, bool printProgress, bool disqualifyWords, bool skipWordInitialization)
+int WordClass::readWordFormsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,int maxWordId,wchar_t *qt,	int *words,int *counts,int &numWordForms,unsigned int * &wordForms, bool printProgress, bool disqualifyWords, bool skipWordInitialization, wstring specialExtension)
 { LFS
   memset(words,-1,maxWordId*sizeof(int));
   memset(counts,0,maxWordId*sizeof(int));
@@ -1217,7 +1248,7 @@ int WordClass::readWordFormsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,
 			if (printProgress)
 				wprintf(L"Reading from word cache file...                                               \r");
 			if (!sourcePath.empty())
-        readWords(sourcePath,sourceId, disqualifyWords); // no wordRelations possible because none of these exist in DB
+        readWords(sourcePath,sourceId, disqualifyWords, specialExtension); // no wordRelations possible because none of these exist in DB
 			if (printProgress)
 				wprintf(L"Finished reading from cache file...                                               \r");
       tfree(maxWordId*sizeof(int),counts);
@@ -1304,7 +1335,7 @@ int WordClass::refreshWordsFromSource(MYSQL &mysql, int sourceId, int *words, in
         lplog(L"Updated (from sourceId %d) read word %s.",sourceId,sWord.c_str());
       #endif
       if (iWord->second.index<0)
-        assign(wordId,iWord);
+				mapWordIdToWordStructure(wordId, iWord);
       if (iWord->second.updateFromDB(wordId,wordForms+words[wordId],counts[wordId],inflectionFlags,flags,timeFlags,mainEntryWordId,derivationRules,sourceId,selfFormNum,sWord))
         numWordsModified++;
     }
@@ -1315,7 +1346,7 @@ int WordClass::refreshWordsFromSource(MYSQL &mysql, int sourceId, int *words, in
       #ifdef LOG_WORD_FLOW
         lplog(L"Inserted (from sourceId %d) read word %s.",sourceId,sWord.c_str());
       #endif
-      assign(wordId,iWord);
+			mapWordIdToWordStructure(wordId, iWord);
     }
 		if (mainEntryWordId>=0)
 			wordsToResolve.push_back(iWord);
@@ -1377,7 +1408,7 @@ int WordClass::refreshWordsFromSource(MYSQL &mysql, int sourceId, int *words, in
 // sourceId==READ_WORDS_FOR_ALL_SOURCE. update read: read NULL source since lastReadfromDBTime and update or insert the entries into memory (lastReadfromDBTime>0)
 // sourceId>=0. source read: read all source words belonging to a certain source
 // only pay attention to lastReadfromDBTime IF sourceId==READ_WORDS_FOR_ALL_SOURCE.  If sourceId is >=0, then the source was never read before (sources are never repeated).
-int WordClass::readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatisticsFlag,int &numWordsInserted,int &numWordsModified, bool printProgress,bool disqualifyWords, bool skipWordInitialization)
+int WordClass::readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatisticsFlag,int &numWordsInserted,int &numWordsModified, bool printProgress,bool disqualifyWords, bool skipWordInitialization, wstring specialExtension)
 { LFS
 	if (printProgress)
 		wprintf(L"Started reading from database...                        \r");
@@ -1411,7 +1442,7 @@ int WordClass::readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool
   int *counts=(int *)tmalloc(maxWordId*sizeof(int));
   int numWordForms;
   unsigned int *wordForms=NULL;
-	if (readWordFormsFromDB(mysql,sourceId,sourcePath,maxWordId,qt,words,counts,numWordForms,wordForms, printProgress,disqualifyWords,skipWordInitialization)==0) return 0;
+	if (readWordFormsFromDB(mysql,sourceId,sourcePath,maxWordId,qt,words,counts,numWordForms,wordForms, printProgress,disqualifyWords,skipWordInitialization, specialExtension)==0) return 0;
 	if (refreshWordsFromSource(mysql, sourceId, words, counts, wordForms, numWordsInserted, numWordsModified, printProgress) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read words from source %s.", sourcePath.c_str());
 	tfree(maxWordId * sizeof(int), counts);
@@ -1424,14 +1455,14 @@ int WordClass::readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool
   return 0;
 }
 
-int WordClass::readWithLock(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics, bool printProgress, bool disqualifyWords, bool skipWordInitialization)
+int WordClass::readWithLock(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics, bool printProgress, bool disqualifyWords, bool skipWordInitialization, wstring specialExtension)
 { LFS
   int startTime=clock();
 	#ifdef WRITE_WORDS_AND_FORMS_TO_DB
 		acquireLock(mysql,true);
 	#endif
   int numWordsInserted=0,numWordsModified=0;
-  int ret=readWordsFromDB(mysql,sourceId,sourcePath, generateFormStatistics,numWordsInserted,numWordsModified, printProgress, disqualifyWords, skipWordInitialization);
+  int ret=readWordsFromDB(mysql,sourceId,sourcePath, generateFormStatistics,numWordsInserted,numWordsModified, printProgress, disqualifyWords, skipWordInitialization, specialExtension);
   myquery(&mysql,L"UNLOCK TABLES");
 	#ifdef WRITE_WORDS_AND_FORMS_TO_DB
 		releaseLock(mysql);

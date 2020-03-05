@@ -348,6 +348,7 @@ public:
 		t.traceCommonQuestion=trace.traceCommonQuestion;
 		t.traceQuestionPatternMap=trace.traceQuestionPatternMap;
 		t.collectPerSentenceStats=trace.collectPerSentenceStats;
+		t.traceParseInfo = trace.traceParseInfo;
 		logCache=::logCache;
 	};
 	tIWMM word;  // points to WMM array
@@ -1834,6 +1835,16 @@ public:
 	Source(wchar_t *databaseServer,int _sourceType,bool generateFormStatistics,bool skipWordInitialization,bool printProgress);
 	int beginClock;
 	int pass;
+	inline static bool updateWordUsageCostsDynamically=false;  // this is turned of by default.  Do NOT turn this back on unless a great deal of testing is done, as this will
+																// upset carefully defined weights of word forms usages, and it will also accumulate usages into costs which will make results nonreproducible
+	                              // from actual to test because the exact parsing history from the beginning of Source initialization must be followed
+	                              // so testing of one sentence in the middle of a book will not necessarily yield the same results as the sentence buried inside of the book
+	                              // because previous words have accumulated usages of the words in the sentence which have in turn been rolled over into the costs.
+	                              // ALSO processing of multiple books with a single source object will make this much more likely, unless the following procedure is also 
+	                              // enabled (this procedure has not been tested!)
+																// PLEASE NOTE this does not turn off accumulation of proper noun and lower case statistics as these are used for proper noun processing and
+																// not for parsing costs, and will mess up proper noun identification if these statistics are also reset.  These statistics are reset individually
+																// in resetCapitalizationAndProperNounUsageStatistics.  All statistics including these proper noun/lower case statistics are reset in resetUsagePatternsAndCosts.
 	intArray reverseMatchElements;
 	vector <WordMatch> m;
 	unordered_map <int, wstring> metaCommandsEmbeddedInSource;
@@ -1843,15 +1854,15 @@ public:
 	int parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank);
 	int tokenize(wstring title, wstring etext, wstring path, wstring encoding, wstring &start, int &repeatStart, unsigned int &unknownCount, bool newsBank);
 	bool write(IOHANDLE file);
-	bool read(char *buffer,int &where,unsigned int total, bool &parsedOnly, bool printProgress, bool readOnlyParsed);
+	bool read(char *buffer,int &where,unsigned int total, bool &parsedOnly, bool printProgress, bool readOnlyParsed, wstring specialExtension);
 	bool flush(int fd,void *buffer,int &where);
 	bool FlushFile(HANDLE fd, void *buffer, int &where);
 	bool writeCheck(wstring path);
 	bool writePatternUsage(wstring path, bool zeroOutPatternUsage);
-	bool write(wstring file,bool S2, bool saveOld);
+	bool write(wstring file,bool S2, bool saveOld, wstring specialExtension);
 	bool findStart(wstring &buffer,wstring &start,int &repeatStart,wstring &title);
 	bool retrieveText(wstring &path,wstring etext,wstring &start,int &repeatStart,wstring author,wstring title);
-	bool readSource(wstring &path,bool checkOnly, bool &parsedOnly, bool printProgress,bool readOnlyParsed);
+	bool readSource(wstring &path,bool checkOnly, bool &parsedOnly, bool printProgress,bool readOnlyParsed, wstring specialExtension);
 	Source *parentSource;
 	vector <matchElement> whatMatched;
 	struct wordMapCompare
@@ -2253,7 +2264,23 @@ int wherePrepObject,
 	bool placeIdentification(int where,bool inPrimaryQuote,int whereControllingEntity,int whereSubject,int whereVerb,int vnClass);
 	bool srMoveObject(int where,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int at,int whereMovingRelativeTo,int spaceRelation,wchar_t *whereType,bool physicalRelation);
 	void defineObjectAsSpatial(int where);
+	void detectTenseAndFirstPersonUsage(int where, int lastBeginS1, int lastRelativePhrase, int &numPastSinceLastQuote, int &numNonPastSinceLastQuote, int &numFirstInQuote, int &numSecondInQuote, bool inPrimaryQuote);
 	void evaluateMetaWhereQuery(int where,bool inPrimaryQuote,int &currentMetaWhereQuery);
+	void identifyHailObjects(int where, int o, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool inPrimaryQuote, bool inSecondaryQuote);
+	void processEndOfSentence(int where, int &lastBeginS1, int &lastRelativePhrase, int &lastCommand, int &lastSentenceEnd, int &uqPreviousToLastSentenceEnd, int &uqLastSentenceEnd,
+		int &questionSpeakerLastSentence, int &questionSpeaker, bool &currentIsQuestion,
+		bool inPrimaryQuote, bool inSecondaryQuote, bool &endOfSentence, bool &transitionSinceEOS,
+		unsigned int &agingStructuresSeen, bool quotesSeenSinceLastSentence,
+		vector <int> &lastSubjects, vector <int> &previousLastSubjects);
+	void processEndOfPrimaryQuote(int where, int lastSentenceEndBeforeAndNotIncludingCurrentQuote,
+		int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, int &lastSpeakerPosition, int &lastQuotedString, int &quotedObjectCounter,
+		bool &inPrimaryQuote, bool &immediatelyAfterEndOfParagraph, bool &firstQuotedSentenceOfSpeakerGroupNotSeen, bool &quotesSeenSinceLastSentence,
+		vector <int> &lastSubjects);
+	void processEndOfPrimaryQuoteRS(int where, int lastSentenceEndBeforeAndNotIncludingCurrentQuote,
+		int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, int &lastQuotedString,unsigned int &quotedObjectCounter, int &lastDefiniteSpeaker, int &lastClosingPrimaryQuote,
+		int &paragraphsSinceLastSubjectWasSet, int wherePreviousLastSubjects,
+		bool &inPrimaryQuote, bool &immediatelyAfterEndOfParagraph, bool &quotesSeenSinceLastSentence, bool &previousSpeakersUncertain,
+		vector <int> &previousLastSubjects);
 	void srd(int where,wstring spd,wstring &description);
 	wstring wsrToText(int where,wstring &description);
 	wstring srToText(int &spr,wstring &description);
@@ -2276,6 +2303,10 @@ int wherePrepObject,
 	void logSpaceCheck(void);
 
 	int getSpeakersToKeep(vector<cSpaceRelation>::iterator sr);
+	void beginSection(int &lastSpeakerGroupPositionConsidered, int &lastSpeakerGroupOfPreviousSection, int I, vector <int> &previousLastSubjects, vector <int> &lastSubjects);
+	void endSection(int &questionSpeakerLastParagraph, int &questionSpeakerLastSentence, int &whereFirstSubjectInParagraph, int &lastSpeakerGroupPositionConsidered, int &lastSpeakerGroupOfPreviousSection, int I,
+		bool &endOfSentence, bool &immediatelyAfterEndOfParagraph, bool &quotesSeenSinceLastSentence, bool inSecondaryQuote, bool inPrimaryQuote, bool &quotesSeen, bool &firstQuotedSentenceOfSpeakerGroupNotSeen,
+		vector <int> previousLastSubjects);
 	void identifySpeakerGroups();
 	void substituteGenderedObject(int where,int &object,set <int> &speakers);
 	void mergeFocusResolution(int o,int I,vector <int> &lastSubjects,bool &clearBeforeSet);
@@ -3129,7 +3160,7 @@ int wherePrepObject,
 	wstring wordString(vector <tIWMM> &words,wstring &logres);
 	const wchar_t *getOriginalWord(int I, wstring &out, bool concat, bool mostCommon = false);
 	bool analyzeEnd(wstring &path, int begin, int end, bool &multipleEnds);
-	void writeWords(wstring oPath);
+	void writeWords(wstring oPath, wstring specialExtension);
 	int scanForPatternTag(int where, int tag);
 	int scanForPatternElementTag(int where, int tag);
 	int printSentence(unsigned int rowsize, unsigned int begin, unsigned int end, bool containsNotMatched);
@@ -3466,18 +3497,6 @@ bool &comparableName,
 	int calculateVerbAfterVerbUsage(int whereVerb,unsigned int nextWord, bool adverbialObject);
 	int evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,int parentPosition,int position,vector <tTagLocation> &tagSet,bool infinitive,bool assessCost,int &voRelationsFound,int &traceSource,wstring purpose);
 	int properNounCheck(int &traceSource,int begin,int end,int whereDet);
-	bool updateWordUsageCostsDynamically;  // this is turned of by default.  Do NOT turn this back on unless a great deal of testing is done, as this will
-																// upset carefully defined weights of word forms usages, and it will also accumulate usages into costs which will make results nonreproducible
-	                              // from actual to test because the exact parsing history from the beginning of Source initialization must be followed
-	                              // so testing of one sentence in the middle of a book will not necessarily yield the same results as the sentence buried inside of the book
-	                              // because previous words have accumulated usages of the words in the sentence which have in turn been rolled over into the costs.
-	                              // ALSO processing of multiple books with a single source object will make this much more likely, unless the following procedure is also 
-	                              // enabled (this procedure has not been tested!)
-																// PLEASE NOTE this does not turn off accumulation of proper noun and lower case statistics as these are used for proper noun processing and
-																// not for parsing costs, and will mess up proper noun identification if these statistics are also reset.  These statistics are reset individually
-																// in resetCapitalizationAndProperNounUsageStatistics.  All statistics including these proper noun/lower case statistics are reset in resetUsagePatternsAndCosts.
-	void resetUsagePatternsAndCosts(); // not been tested!
-	void resetCapitalizationAndProperNounUsageStatistics(); // this must also occur during clearsource to prevent proper noun/lower case usage from leaking from one source to another inappropriately
 	int evaluateNounDeterminer(vector <tTagLocation> &tagSet,bool assessCost,int &traceSource,int begin,int end, int fromPEMAPosition);
 	bool hasTimeObject(int where);
 	int attachAdjectiveRelation(vector <tTagLocation> &tagSet,int whereObject);

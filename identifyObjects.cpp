@@ -1731,7 +1731,7 @@ bool Source::addCostFromRecalculatingAloneness(int where, patternMatchArray::tPa
 		{
 			int nPEMAPosition = pma->pemaByPatternEnd;
 			patternElementMatchArray::tPatternElementMatch *pem = pema.begin() + nPEMAPosition;
-			if (traceParseInfo)
+			if (debugTrace.traceParseInfo)
 				lplog(L"%d:%s[%s]*%d(%d,%d) added cost %d because it is a FINAL_IF_ALONE and it is not alone.",
 			where, p->name.c_str(), p->differentiator.c_str(), pma->cost, where, where + pma->len, cost);
 			for (; nPEMAPosition >= 0 && pem->getPattern() == pma->getPattern() && (pem->end - pem->begin) == pma->len; nPEMAPosition = pem->nextPatternElement, pem = pema.begin() + nPEMAPosition)

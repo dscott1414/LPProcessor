@@ -484,7 +484,7 @@ bool WordMatch::read(char *buffer,int &where,int limit)
 		int sourceId=-1,nounOwner=0;
 		__int64 bufferLength=temp.length(),bufferScanLocation=0;
 		bool added=false;
-		int result=Words.readWord((wchar_t *)temp.c_str(),bufferLength,bufferScanLocation,sWord,comment,nounOwner,false,false,t);
+		int result=Words.readWord((wchar_t *)temp.c_str(),bufferLength,bufferScanLocation,sWord,comment,nounOwner,false,false,t,NULL,-1);
 		word=Words.end();
 		if (result==PARSE_NUM)
 			word=Words.addNewOrModify(NULL, sWord,0,NUMBER_FORM_NUM,0,0,L"",sourceId,added);
@@ -1374,24 +1374,11 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 		bufferScanLocation=1;
 	while (result==0 && !exitNow)
 	{
-		// TEMP DEBUG
-		tIWMM martial = Words.query(L"martial");
-		if (martial != Words.end())
-		{
-			if (martial->second.query(PROPER_NOUN_FORM_NUM) != -1)
-				lplog(L"%s:%d:MARTIAL XXX gained PROPER_NOUN_FORM_NUM!",path.c_str(),m.size());
-			else
-				lplog(L"%s:%d:MARTIAL XXX DOES NOT HAVE PROPER_NOUN_FORM_NUM!", path.c_str(), m.size());
-		}
 		wstring sWord,comment;
 		int nounOwner=0;
 		bool flagAlphaBeforeHint=(bufferScanLocation && iswalpha(bookBuffer[bufferScanLocation-1]));
 		bool flagNewLineBeforeHint=(bufferScanLocation && bookBuffer[bufferScanLocation-1]==13);
-		result=Words.readWord(bookBuffer,bufferLen,bufferScanLocation,sWord,comment,nounOwner,false,webScrapeParse,debugTrace);//m.size()==lastSentenceEnd);
-		if (sWord == L"martial")
-		{
-			printf("TEMP DEBUG");
-		}
+		result=Words.readWord(bookBuffer,bufferLen,bufferScanLocation,sWord,comment,nounOwner,false,webScrapeParse,debugTrace,&mysql,sourceId);//m.size()==lastSentenceEnd);
 		if (comment.size() > 0)
 			metaCommandsEmbeddedInSource[m.size()] = comment;
 		bool flagAlphaAfterHint=(bufferScanLocation<bufferLen && iswalpha(bookBuffer[bufferScanLocation]));
@@ -1526,9 +1513,8 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 				bufferScanLocation -= sWord.length() - firstDash;
 				sWord.erase(firstDash, sWord.length() - firstDash);
 			}
-			else if (sWord!=L"--")
+			else if (sWord!=L"--" && debugTrace.traceParseInfo)
 				lplog(LOG_INFO, L"%s NOT split (#unknownWords=%d #capitalizedWords=%d #letters=%d %s).", sWord.c_str(), unknownWords, capitalizedWords, letters, ((iWord == Words.end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0)) ? L"UNKNOWN" : L"NOT unknown");
-
 			firstLetterCapitalized=(capitalizedWords>0);
 		}
 		bool allCaps=Words.isAllUpper(sWord);
@@ -1574,7 +1560,7 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 			unknownCount++;
 		}
 		unsigned __int64 flags;
-		iWord->second.adjustFormsInflections(sWord,flags,firstWordInSentence,nounOwner,allCaps,firstLetterCapitalized);
+		iWord->second.adjustFormsInflections(sWord,flags,firstWordInSentence,nounOwner,allCaps,firstLetterCapitalized, false); 
 		if (allCaps && m.size() && ((m[m.size()-1].word->first==L"the" && !(m[m.size()-1].flags&WordMatch::flagAllCaps)) || iWord->second.formsSize()==0))
 		{
       flags|=WordMatch::flagAddProperNoun;
@@ -1583,26 +1569,29 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
       ::lplog(L"Added ProperNoun [from the] to word %s (form #%d) at cost %d.",originalWord.c_str(),formsSize(),usageCosts[formsSize()]);
 #endif
 		}
-
-		if ((flags&WordMatch::flagAddProperNoun) && traceParseInfo)
+		if ((flags&WordMatch::flagAddProperNoun) && debugTrace.traceParseInfo)
 			lplog(LOG_INFO,L"%d:%s:added flagAddProperNoun.",m.size(), sWord.c_str());
-		if ((flags&WordMatch::flagOnlyConsiderProperNounForms) && traceParseInfo)
+		if ((flags&WordMatch::flagOnlyConsiderProperNounForms) && debugTrace.traceParseInfo)
 			lplog(LOG_INFO,L"%d:%s:added flagOnlyConsiderProperNounForms.", m.size(), sWord.c_str());
-		if ((flags&WordMatch::flagOnlyConsiderOtherNounForms) && traceParseInfo)
+		if ((flags&WordMatch::flagOnlyConsiderOtherNounForms) && debugTrace.traceParseInfo)
 			lplog(LOG_INFO,L"%d:%s:added flagOnlyConsiderOtherNounForms.", m.size(), sWord.c_str());
 		// does not necessarily have to be a proper noun after a word with a . at the end (P.N.C.)
 		// The description of a green toque , a coat with a handkerchief in the pocket marked P.L.C. He looked an agonized question at Mr . Carter .
 		if ((flags&WordMatch::flagOnlyConsiderProperNounForms) && m.size() && m[m.size()-1].word->first.length()>1 && m[m.size()-1].word->first[m[m.size()-1].word->first.length()-1]==L'.')
 		{
 			flags&=~WordMatch::flagOnlyConsiderProperNounForms;
-			if (traceParseInfo)
+			if (debugTrace.traceParseInfo)
 				lplog(LOG_INFO,L"%d:removed flagOnlyConsiderProperNounForms.",m.size());
 		}
 		// if a word is capitalized, but is always followed by another word that is also capitalized, then 
 		// don't treat it as an automatic proper noun ('New' York)
 		bool isProperNoun=(flags&WordMatch::flagAddProperNoun) && !allCaps && !firstWordInSentence;
 		if (isProperNoun && previousIsProperNoun)
-			m[m.size()-1].word->second.numProperNounUsageAsAdjective++;
+		{
+			m[m.size() - 1].word->second.numProperNounUsageAsAdjective++;
+			if (debugTrace.traceParseInfo)
+				lplog(LOG_INFO, L"%d:%s:increased usage of proper noun as adjective to %d.", m.size()-1, m[m.size() - 1].word->first.c_str(), m[m.size() - 1].word->second.numProperNounUsageAsAdjective);
+		}
 		previousIsProperNoun=isProperNoun;
 		// used in disambiguating abbreviated quotes from nested quotes
 		if (sWord==secondaryQuoteType)
@@ -1739,7 +1728,7 @@ bool Source::isSectionHeader(unsigned int begin,unsigned int end,unsigned int &s
 
 int Source::reportUnmatchedElements(int begin,int end,bool logElements)
 { LFS
-	if (!traceParseInfo)
+	if (!debugTrace.traceParseInfo)
 		return 0;
 	int len=-1,firstUnmatched=0,totalUnmatched=0;
 	bool matched=true;
@@ -1873,8 +1862,8 @@ int Source::printSentences(bool updateStatistics,unsigned int unknownCount,unsig
 		debugTrace.tracePatternElimination=m[begin].t.tracePatternElimination;
 		debugTrace.traceBNCPreferences=m[begin].t.traceBNCPreferences;
 		debugTrace.traceSecondaryPEMACosting=m[begin].t.traceSecondaryPEMACosting;
-		debugTrace.traceMatchedSentences=m[begin].t.traceMatchedSentences ^ logMatchedSentences;
-		debugTrace.traceUnmatchedSentences=m[begin].t.traceUnmatchedSentences ^ logUnmatchedSentences;
+		debugTrace.traceMatchedSentences= m[begin].t.traceMatchedSentences;
+		debugTrace.traceUnmatchedSentences= m[begin].t.traceUnmatchedSentences;
 		logCache=m[begin].logCache;
 
 		// clear tag set maps
@@ -1972,8 +1961,8 @@ int Source::printSentencesCheck(bool skipCheck)
 { LFS
 	struct __stat64 buffer;
 	wchar_t logFilename[1024];
-	extern wchar_t *multiProcessorLog;
-	wsprintf(logFilename,L"main%S.lplog",multiProcessorLog);
+	extern wstring logFileExtension;
+	wsprintf(logFilename,L"main%S.lplog",logFileExtension.c_str());
 	vector <WordMatch>::iterator im=m.begin(),mend=m.end();
 	for (unsigned int I=0; im!=mend; im++,I++)
 	{
@@ -2211,14 +2200,14 @@ void Source::clearSource(void)
 	{
 		Source *source = smi->second;
 		source->clearSource();
+		if (source->updateWordUsageCostsDynamically)
+			WordClass::resetUsagePatternsAndCosts();
+		else
+			WordClass::resetCapitalizationAndProperNounUsageStatistics();
 		delete source;
 		sourcesMap.erase(smi);
 		smi = sourcesMap.begin();
 	}
-	if (updateWordUsageCostsDynamically)
-		resetUsagePatternsAndCosts();
-	else
-		resetCapitalizationAndProperNounUsageStatistics();
 }
 
 int read(string &str,IOHANDLE file)
@@ -2305,9 +2294,9 @@ bool Source::writePatternUsage(wstring path,bool zeroOutPatternUsage)
 }
 
 // if returning false, the file will not be closed.
-bool Source::write(wstring path,bool S2, bool makeCopyBeforeSourceWrite)
+bool Source::write(wstring path,bool S2, bool makeCopyBeforeSourceWrite, wstring specialExtension)
 { LFS
-	path+=L".SourceCache";
+	path+=L".SourceCache"+specialExtension;
 	// int fd=_wopen(path.c_str(),O_WRONLY|O_CREAT|O_TRUNC|O_BINARY,_S_IREAD | _S_IWRITE); subject to short path restriction
 	if (makeCopyBeforeSourceWrite)
 	{
@@ -2409,7 +2398,7 @@ bool Source::write(wstring path,bool S2, bool makeCopyBeforeSourceWrite)
 	return true;
 }
 	 
-bool Source::read(char *buffer,int &where,unsigned int total, bool &parsedOnly, bool printProgress, bool readOnlyParsed)
+bool Source::read(char *buffer,int &where,unsigned int total, bool &parsedOnly, bool printProgress, bool readOnlyParsed, wstring specialExtension)
 { LFS
   int sourceVersion;
 	if (!copy(sourceVersion,buffer,where,total)) return false;
@@ -2842,10 +2831,10 @@ void unescapeStr(wstring &str)
 	str=ess;
 }
 
-bool Source::readSource(wstring &path,bool checkOnly,bool &parsedOnly,bool printProgress,bool readOnlyParsed)
+bool Source::readSource(wstring &path,bool checkOnly,bool &parsedOnly,bool printProgress,bool readOnlyParsed, wstring specialExtension)
 { LFS
 	//unescapeStr(path); // doesn't work on 'Twixt Land & Sea: Tales
-	wstring locationCache=path+L".SourceCache";
+	wstring locationCache=path+L".SourceCache"+specialExtension;
 	if (checkOnly)
 		//return _waccess(locationCache.c_str(),0)==0; // long path limitation
 		return GetFileAttributesW(locationCache.c_str()) != INVALID_FILE_ATTRIBUTES;
@@ -2881,11 +2870,18 @@ bool Source::readSource(wstring &path,bool checkOnly,bool &parsedOnly,bool print
 	CloseHandle(fd);
 	int where=0;
 	sourcePath = path;
-	bool success = read((char *)buffer, where, bufferlen, parsedOnly,printProgress,readOnlyParsed);
+	bool success = read((char *)buffer, where, bufferlen, parsedOnly,printProgress,readOnlyParsed,specialExtension);
 	if (!success)
 		lplog(LOG_ERROR, L"Error while reading file %s at position %d.", path.c_str(),m.size());
 	tfree(bufferlen,buffer);
-	if (!success) clearSource();
+	if (!success)
+	{
+		clearSource();
+		if (updateWordUsageCostsDynamically)
+			WordClass::resetUsagePatternsAndCosts();
+		else
+			WordClass::resetCapitalizationAndProperNounUsageStatistics();
+	}
 	return success;
 }
 
@@ -3213,6 +3209,7 @@ Source::Source(wchar_t *databaseServer,int _sourceType,bool generateFormStatisti
 	debugTrace.traceTagSetCollection=false;
 	debugTrace.collectPerSentenceStats=false;
 	debugTrace.traceNameResolution=false;
+	debugTrace.traceParseInfo = false;
 	pass=-1;
 	repeatReplaceObjectInSectionPosition=-1;
 	accumulateLocationLastLocation=-1;
@@ -3227,9 +3224,9 @@ Source::Source(wchar_t *databaseServer,int _sourceType,bool generateFormStatisti
 	else 
 	{
 		#ifdef CHECK_WORD_CACHE
-			if (Words.readWithLock(mysql,-4,L"",generateFormStatistics,wNULL,false,skipWordInitialization))
+			if (Words.readWithLock(mysql,-4,L"",generateFormStatistics,wNULL,false,skipWordInitialization,L""))
 		#else
-			if (Words.readWithLock(mysql,-1,L"",generateFormStatistics, printProgress, false,skipWordInitialization))
+			if (Words.readWithLock(mysql,-1,L"",generateFormStatistics, printProgress, false,skipWordInitialization, L""))
 		#endif
 				lplog(LOG_FATAL_ERROR,L"Cannot read database.");
 	}
@@ -3299,6 +3296,7 @@ Source::Source(MYSQL *parentMysql,int _sourceType,int _sourceConfidence)
 	debugTrace.traceTagSetCollection=false;
 	debugTrace.collectPerSentenceStats=false;
 	debugTrace.traceNameResolution=false;
+	debugTrace.traceParseInfo = false;
 	alreadyConnected=true;
 	pass=-1;
 	repeatReplaceObjectInSectionPosition=-1;
@@ -3317,7 +3315,7 @@ Source::Source(MYSQL *parentMysql,int _sourceType,int _sourceConfidence)
 	updateWordUsageCostsDynamically = false;
 }
 
-void Source::writeWords(wstring oPath)
+void Source::writeWords(wstring oPath, wstring specialExtension)
 {
 	LFS
 		wchar_t path[1024];
@@ -3337,13 +3335,13 @@ void Source::writeWords(wstring oPath)
 		tIWMM iSave = im.word;
 		if (iSave->second.isNonCachedWord() && !iSave->second.isUnknown())
 		{
-			if (iSave->first == L"fewer" || iSave->first == L"afore" || iSave->first == L"thyself")
-			{
-				wstring forms;
-				for (unsigned int f = 0; f < iSave->second.formsSize(); f++)
-					forms += iSave->second.Form(f)->name + L" ";
-				lplog(LOG_INFO, L"%s:TEMP WRITE %s@%d is a not a cached word [%s].", oPath.c_str(), iSave->first.c_str(), numWordInSource, forms.c_str());
-			}
+			//if (iSave->first == L"fewer" || iSave->first == L"afore" || iSave->first == L"thyself")
+			//{
+			//	wstring forms;
+			//	for (unsigned int f = 0; f < iSave->second.formsSize(); f++)
+			//		forms += iSave->second.Form(f)->name + L" ";
+			//	lplog(LOG_INFO, L"%s:TEMP WRITE %s@%d is a not a cached word [%s].", oPath.c_str(), iSave->first.c_str(), numWordInSource, forms.c_str());
+			//}
 			continue;
 		}
 		if (sourceWords.find(iSave->first) != sourceWords.end())
@@ -3370,17 +3368,5 @@ void Source::writeWords(wstring oPath)
 	if (where)
 		::write(fd, buffer, where);
 	close(fd);
-}
-
-void Source::resetUsagePatternsAndCosts()
-{
-	for (tIWMM w = Words.begin(), wEnd = Words.end(); w != wEnd; w++)
-		w->second.resetUsagePatternsAndCosts(w->first);
-}
-
-void Source::resetCapitalizationAndProperNounUsageStatistics()
-{
-	for (tIWMM w = Words.begin(), wEnd = Words.end(); w != wEnd; w++)
-		w->second.resetCapitalizationAndProperNounUsageStatistics();
 }
 

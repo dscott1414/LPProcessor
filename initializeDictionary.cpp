@@ -252,6 +252,11 @@ int WordClass::addProperNamesFile(wstring path)
 int WordClass::writeWord(tIWMM iWord, void *buffer, int &where, int limit)
 {
 	LFS
+		if (iWord->second.mainEntry == wNULL)
+		{
+			logCache = 0;
+			lplog(LOG_ERROR, L"mainentry is NULL for word %s!", iWord->first.c_str());
+		}
 	if (!copy(buffer, iWord->first, where, limit))
 		return -1;
 	iWord->second.write(buffer,where,limit);
@@ -337,7 +342,7 @@ bool disqualify(wstring sWord)
 	return false;
 }
 
-int WordClass::readWords(wstring oPath, int sourceId, bool disqualifyWords)
+int WordClass::readWords(wstring oPath, int sourceId, bool disqualifyWords, wstring specialExtension)
 {
 	LFS
 	oPath += L".wordCacheFile";
@@ -421,7 +426,7 @@ int WordClass::readWords(wstring oPath, int sourceId, bool disqualifyWords)
 			if (iWord==end())
 			{
 				entries[I]->second.flags|=tFI::queryOnAnyAppearance;
-				lplog(LOG_ERROR,L"MainEntry %s not found in memory for word %s!",mainEntries[I].c_str(),entries[I]->first.c_str());
+				lplog(LOG_FATAL_ERROR,L"MainEntry %s not found in memory for word %s!",mainEntries[I].c_str(),entries[I]->first.c_str());
 			}
 			else
 			{
@@ -440,7 +445,7 @@ int WordClass::readWords(wstring oPath, int sourceId, bool disqualifyWords)
 				 w->second.query(adverbForm)>=0))
 		{
 			if (logDetail)
-				lplog(LOG_ERROR,L"Word %s has no mainEntry after reading wordcache!",w->first.c_str());
+				lplog(LOG_FATAL_ERROR,L"Word %s has no mainEntry after reading wordcache!",w->first.c_str());
 			w->second.flags|=tFI::queryOnAnyAppearance;
 			w->second.mainEntry=w;
 		}

@@ -720,7 +720,7 @@ int bncc::processWord(Source &source,int sourceId,wchar_t *buffer,int tag,int se
     anotherWord=false;
   if (!wcscmp(L"(s)",buffer+wcslen(buffer)-3)) // dilemma(s) member(s) finger(s) just delete the (s) for now
     buffer[wcslen(buffer)-3]=0;
-  int result=Words.readWord((wchar_t *)buffer,wcslen(buffer),bufferScanLocation,sWord,comment,nounOwner,false,false,source.debugTrace);
+  int result=Words.readWord((wchar_t *)buffer,wcslen(buffer),bufferScanLocation,sWord,comment,nounOwner,false,false,source.debugTrace,&source.mysql,source.sourceId);
   if (buffer[bufferScanLocation]==L'.')
   {
     // only assigns the whole buffer if every entry is a single letter
@@ -939,7 +939,7 @@ int bncc::processWord(Source &source,int sourceId,wchar_t *buffer,int tag,int se
   }
   if (iWord->second.isUnknown()) unknownCount++;
   unsigned __int64 flags;
-  iWord->second.adjustFormsInflections(sWord,flags,firstWordInSentence,nounOwner,allCaps,firstLetterCapitalized);
+  iWord->second.adjustFormsInflections(sWord,flags,firstWordInSentence,nounOwner,allCaps,firstLetterCapitalized, false);
   //source.m.push_back(WordMatch(iWord,flags));
   if (!wcsicmp(iWord->first.c_str(),L"ca") || !wcsicmp(iWord->first.c_str(),L"wo") || !wcsicmp(iWord->first.c_str(),L"sha"))
   {
@@ -1141,7 +1141,7 @@ int bncc::process(Source &source,int sourceId,wstring id)
   int printLocation=0;
   wchar_t path[1024];
   wsprintf(path,L"%s\\BNC-world\\Texts\\%lC\\%lC%lC\\%lC%lC%lC",LMAINDIR,id[0],id[0],id[1],id[0],id[1],id[2]);
-  if (Words.readWithLock(source.mysql,sourceId,path,false, true,false,false)<0)
+  if (Words.readWithLock(source.mysql,sourceId,path,false, true,false,false, L"")<0)
     lplog(LOG_FATAL_ERROR,L"Cannot read dictionary.");
   Words.addMultiWordObjects(source.multiWordStrings,source.multiWordObjects);
   source.storageLocation =id;

@@ -2253,7 +2253,8 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 		vector <tTagLocation> tagLocations;
 		sortTagLocations(tagSets, tagLocations);
 		if (debugTrace.traceDeterminer)
-			for (auto tl:tagLocations)
+		{
+			for (auto tl : tagLocations)
 				if (tl.isPattern)
 					::lplog(LOG_INFO, L"TL %06d:%s[%s] %06d:%s[%s](%d,%d) TAG %s [Element=%d]", tl.sourcePosition, patterns[tl.parentPattern]->name.c_str(), patterns[tl.parentPattern]->differentiator.c_str(),
 						tl.PEMAOffset, patterns[tl.pattern]->name.c_str(), patterns[tl.pattern]->differentiator.c_str(), tl.sourcePosition, tl.sourcePosition + tl.len, patternTagStrings[tl.tag].c_str(),
@@ -2262,6 +2263,7 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 					::lplog(LOG_INFO, L"TL %06d %s[%s] %06d:%s(%d,%d) TAG %s [Element=%d]", tl.sourcePosition, patterns[tl.parentPattern]->name.c_str(), patterns[tl.parentPattern]->differentiator.c_str(),
 						tl.PEMAOffset, Forms[tl.pattern]->shortName.c_str(), tl.sourcePosition, tl.sourcePosition + tl.len, patternTagStrings[tl.tag].c_str(),
 						tl.parentElement);
+		}
 		for (int tl=0; tl<tagLocations.size(); tl++)
 		{
 			// don't obey blocks when searching for objects to evaluate

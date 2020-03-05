@@ -164,7 +164,6 @@ void trim(wstring &str);
 
 // command line parameters set globally
 extern bool TSROverride,flipTOROverride,flipTNROverride,logMatchedSentences,logUnmatchedSentences;
-extern bool traceParseInfo;
 extern bool preTaggedSource;
 extern short logCache;
 

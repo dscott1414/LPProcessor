@@ -2002,6 +2002,327 @@ void Source::defineObjectAsSpatial(int where)
 	} 
 }     
 
+void Source::detectTenseAndFirstPersonUsage(int where, int lastBeginS1, int lastRelativePhrase, int &numPastSinceLastQuote, int &numNonPastSinceLastQuote, int &numFirstInQuote, int &numSecondInQuote, bool inPrimaryQuote)
+{
+	if (inPrimaryQuote && m[where].relVerb >= 0 && lastBeginS1 > lastRelativePhrase && (m[where].objectRole&(OBJECT_ROLE | SUBJECT_ROLE)) > 0)
+	{
+		wstring tmpstr;
+		bool isSubject = (m[where].objectRole&(OBJECT_ROLE | SUBJECT_ROLE)) == SUBJECT_ROLE; // only count the verb tense once
+		// quoteForwardLink is overloaded with tsSense only for verbs
+		int tsSense = m[m[where].relVerb].quoteForwardLink;
+		//lplog(LOG_RESOLUTION,L"%06d:L Sense %s",where,senseString(tmpstr,tsSense).c_str());
+		if ((tsSense&VT_TENSE_MASK) == VT_PAST || (tsSense&VT_TENSE_MASK) == VT_PAST_PERFECT)
+		{
+			if (isSubject)
+				numPastSinceLastQuote++;
+			int person = m[where].word->second.inflectionFlags&(FIRST_PERSON | SECOND_PERSON | THIRD_PERSON);
+			bool plural = (m[where].word->second.inflectionFlags&PLURAL) == PLURAL;
+			if (((person&FIRST_PERSON) && plural) || (person == FIRST_PERSON))  // I, we
+				numFirstInQuote++;
+			if (m[where].word->first == L"you")  // you (not we)
+			{
+				numSecondInQuote++;
+				if (debugTrace.traceSpeakerResolution)
+					lplog(LOG_RESOLUTION, L"%06d:L past you detected verb %d:%s", where, m[where].relVerb, senseString(tmpstr, tsSense).c_str());
+			}
+		}
+		else if (isSubject)
+			numNonPastSinceLastQuote++;
+	}
+}
+
+void Source::identifyHailObjects(int where, int o, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool inPrimaryQuote, bool inSecondaryQuote)
+{
+	LFS
+	bool uniquelyMergable;
+	wstring tmpstr,tmpstr2;
+	set <int>::iterator stsi;
+	if (inPrimaryQuote && o >= 0 && (m[where].objectRole&(HAIL_ROLE | IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE | IN_QUOTE_REFERRING_AUDIENCE_ROLE)) &&
+		!(m[where].flags&WordMatch::flagAdjectivalObject) &&
+		objects[o].objectClass == NAME_OBJECT_CLASS && !objects[o].plural)
+	{
+		bool appMatch = false;
+		int appFirstObject = m[where].beginObjectPosition;
+		if ((m[where].objectRole&HAIL_ROLE) && appFirstObject > 2 && m[appFirstObject - 1].word->first == L",")
+		{
+			appFirstObject -= 2;
+			while (appFirstObject && m[appFirstObject].getObject() == -1) appFirstObject--;
+			if (m[appFirstObject].endObjectPosition + 1 == where && (appMatch = matchByAppositivity(appFirstObject, where)) && debugTrace.traceSpeakerResolution)
+				lplog(LOG_SG, L"%06d:%02d     REJECTED hail %s-matched appositively to %d:%s", where, section, objectString(o, tmpstr, true).c_str(), appFirstObject, objectString(m[appFirstObject].getObject(), tmpstr2, true).c_str());
+		}
+		if (!appMatch)
+		{
+			resolveObject(where, true, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, true, false, false);
+			if (m[where].objectMatches.empty())
+			{
+				if (!objects[o].name.justHonorific() || m[where].queryForm(L"pinr") < 0)
+				{
+					o = m[where].getObject();
+					if (section < sections.size()) sections[section].preIdentifiedSpeakerObjects.insert(o);
+					bool inserted = (unMergable(where, o, tempSpeakerGroup.speakers, uniquelyMergable, true, false, false, false, stsi));
+					vector <cLocalFocus>::iterator lsi = in(o);
+					if (debugTrace.traceSpeakerResolution && lsi != localObjects.end())
+						lplog(LOG_SG, L"%06d:%02d     hail %s %s [%d %d]", where, section, objectString(o, tmpstr, true).c_str(), (inserted) ? L"inserted" : L"merged", lsi->lastWhere, lsi->previousWhere);
+					objects[o].PISHail++;
+					// make sure this hail is not deleted afterward because of lack of definite references
+					if (m[where].objectRole&(IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE | IN_QUOTE_REFERRING_AUDIENCE_ROLE))
+						objects[o].PISDefinite++;
+				}
+				definitelyIdentifiedAsSpeakerInSpeakerGroups.push_back(where);
+				objects[o].numDefinitelyIdentifiedAsSpeaker++;
+				objects[o].numDefinitelyIdentifiedAsSpeakerInSection++;
+				if (objects[o].numDefinitelyIdentifiedAsSpeakerInSection + objects[o].numIdentifiedAsSpeakerInSection == 1 && section < sections.size())
+					sections[section].speakerObjects.push_back(cOM(o, SALIENCE_THRESHOLD));
+			}
+			else
+				for (vector <cOM>::iterator omi = m[where].objectMatches.begin(); omi != m[where].objectMatches.end(); omi++)
+				{
+					o = omi->object;
+					if (section < sections.size()) sections[section].preIdentifiedSpeakerObjects.insert(o);
+					bool inserted = (unMergable(-1, o, tempSpeakerGroup.speakers, uniquelyMergable, true, false, false, false, stsi));
+					if (debugTrace.traceSpeakerResolution)
+						lplog(LOG_SG, L"%06d:%02d     hail %s %s", where, section, objectString(o, tmpstr, true).c_str(), (inserted) ? L"inserted" : L"merged");
+					objects[o].PISHail++;
+					if (m[where].objectMatches.size() == 1)
+					{
+						definitelyIdentifiedAsSpeakerInSpeakerGroups.push_back(where);
+						objects[o].numDefinitelyIdentifiedAsSpeaker++;
+						objects[o].numDefinitelyIdentifiedAsSpeakerInSection++;
+						if (objects[o].numDefinitelyIdentifiedAsSpeakerInSection + objects[o].numIdentifiedAsSpeakerInSection == 1 && section < sections.size())
+							sections[section].speakerObjects.push_back(cOM(o, SALIENCE_THRESHOLD));
+					}
+				}
+		}
+	}
+}
+
+void Source::processEndOfSentence(int where,int &lastBeginS1, int &lastRelativePhrase, int &lastCommand, int &lastSentenceEnd, int &uqPreviousToLastSentenceEnd, int &uqLastSentenceEnd,
+																	int &questionSpeakerLastSentence,int &questionSpeaker,bool &currentIsQuestion,
+																	bool inPrimaryQuote, bool inSecondaryQuote,bool &endOfSentence, bool &transitionSinceEOS,
+																	unsigned int &agingStructuresSeen,bool quotesSeenSinceLastSentence,
+																	vector <int> &lastSubjects, vector <int> &previousLastSubjects)
+{
+	wstring tmpstr;
+	lastBeginS1 = -1;
+	lastRelativePhrase = -1;
+	lastCommand = -1;
+	endOfSentence = true;
+	transitionSinceEOS = false;
+	lastSentenceEnd = where;
+	// use uqLastSentenceEnd so that space relations use disambiguated objects, and also that SPEAKER_ROLEs that come before their quotes are recognized
+	if (!(m[where].objectRole&(IN_PRIMARY_QUOTE_ROLE | IN_SECONDARY_QUOTE_ROLE)) || narrativeIsQuoted)
+	{
+		int lastTransitionSR = -1, keepPPSpeakerWhere = -1;
+		for (int J = uqPreviousToLastSentenceEnd; J < uqLastSentenceEnd; J++)
+		{
+			if (!(m[J].objectRole&(IN_PRIMARY_QUOTE_ROLE | IN_SECONDARY_QUOTE_ROLE)) || narrativeIsQuoted)
+				detectSpaceRelation(J, where, lastSubjects);
+			vector<cSpaceRelation>::iterator sr;
+			if (m[J].spaceRelation && (sr = findSpaceRelation(J)) != spaceRelations.end() && sr->where == J && sr->tft.timeTransition)
+			{
+				int tmpKeepPPSpeakerWhere = getSpeakersToKeep(sr);
+				if (tmpKeepPPSpeakerWhere >= 0 && keepPPSpeakerWhere < 0)
+					keepPPSpeakerWhere = tmpKeepPPSpeakerWhere;
+				lastTransitionSR = J; // subsequent space relations can remove the time transition from previous ones
+			}
+		}
+		if (lastTransitionSR != -1)
+		{
+			if (keepPPSpeakerWhere >= 0 && m[keepPPSpeakerWhere].objectMatches.size() > 1)
+				lplog(LOG_RESOLUTION, L"%06d:transition is vague - %d.", lastTransitionSR, keepPPSpeakerWhere);
+			else
+			{
+				vector<cSpaceRelation>::iterator sr = findSpaceRelation(lastTransitionSR);
+				//keepPPSpeakerWhere=getSpeakersToKeep(sr);
+				if (sr != spaceRelations.end())
+					ageTransition(sr->where, true, transitionSinceEOS, sr->tft.duplicateTimeTransitionFromWhere, keepPPSpeakerWhere, lastSubjects, L"TSR 1");
+			}
+		}
+		uqPreviousToLastSentenceEnd = uqLastSentenceEnd;
+		uqLastSentenceEnd = where;
+	}
+	if (!inSecondaryQuote || (where + 1 < (signed)m.size() && m[where + 1].word->first == L"’"))
+		setQuestion(m.begin() + where, inPrimaryQuote, questionSpeakerLastSentence, questionSpeaker, currentIsQuestion);
+	else
+		setSecondaryQuestion(m.begin() + where);
+	if (!inPrimaryQuote && !inSecondaryQuote && subjectsInPreviousUnquotedSectionUsableForImmediateResolution)
+	{
+		subjectsInPreviousUnquotedSectionUsableForImmediateResolution = false;
+		if (debugTrace.traceSpeakerResolution && subjectsInPreviousUnquotedSection.size())
+			lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d Cancelling subjectsInPreviousUnquotedSectionUsableForImmediateResolution", where, section);
+	}
+	if (!inPrimaryQuote && !agingStructuresSeen)
+	{
+		if (debugTrace.traceSpeakerResolution)
+			lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d     aging speakers (%s) EOS", where, section, (inPrimaryQuote) ? L"inQuote" : L"outsideQuote");
+		m[where].flags |= WordMatch::flagAge;
+		for (vector <cLocalFocus>::iterator lfi = localObjects.begin(); lfi != localObjects.end(); )
+			ageSpeakerWithoutSpeakerInfo(where, inPrimaryQuote, inSecondaryQuote, lfi, 1);
+	}
+	agingStructuresSeen = 0;
+	if (!inPrimaryQuote)
+	{
+		if (debugTrace.traceSpeakerResolution)
+			lplog(LOG_SG, L"%d:ZXZ set previousLastSubjects=%s (previous value %s). Cleared lastSubjects", where, objectString(lastSubjects, tmpstr).c_str(), objectString(previousLastSubjects, tmpstr).c_str());
+		previousLastSubjects = lastSubjects;
+		lastSubjects.clear();
+	}
+	// look ahead - is this the last sentence in the paragraph?
+	// the sentence ends with a period, or a period and a quote.
+	if (where + 3 < (signed)m.size() &&
+		m[where + 1].word != Words.sectionWord && // period
+		!(m[where + 1].word->first == L"”" && m[where + 2].word == Words.sectionWord) && // period and quote
+		!(m[where + 1].word->first == L"’" && m[where + 2].word->first == L"”" && m[where + 3].word == Words.sectionWord)) // period, single quote and double quote
+	{
+		// is the period in the middle of a quote?  if then, set to true.
+		// is the period not in a quote, or at the end of a quote? then set to false.
+		quotesSeenSinceLastSentence = inPrimaryQuote && (m[where + 1].word->first != L"”" || (m[where + 1].word->first != L"’" && m[where + 2].word->first != L"”"));
+		// in the case where a .?! is followed by a quote and a speaker designation,
+		// the speaker designation does not count as a sentence.
+		if (debugTrace.traceSpeakerResolution)
+			lplog(LOG_SG, L"%d:(1)quotesSeenSinceLastSentence=%s", where, (quotesSeenSinceLastSentence) ? L"true" : L"false");
+	}
+}
+
+void Source::processEndOfPrimaryQuote(int where, int lastSentenceEndBeforeAndNotIncludingCurrentQuote,
+																			int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, int &lastSpeakerPosition, int &lastQuotedString, int &quotedObjectCounter,
+																			bool &inPrimaryQuote, bool &immediatelyAfterEndOfParagraph, bool &firstQuotedSentenceOfSpeakerGroupNotSeen, bool &quotesSeenSinceLastSentence,
+																			vector <int> &lastSubjects)
+{
+	wstring tmpstr;
+
+	m[lastOpeningPrimaryQuote].endQuote = where;
+	inPrimaryQuote = false;
+	// if the previous end quote was inserted, and this end quote was also inserted, then this quote has the same speakers as the last
+	bool previousEndQuoteInserted = previousPrimaryQuote >= 0 && (m[m[previousPrimaryQuote].endQuote].flags&WordMatch::flagInsertedQuote) != 0 && (m[where].flags&WordMatch::flagInsertedQuote) != 0;
+	bool noTextBeforeOrAfter, quotedStringSeen = false, multipleQuoteInSentence = (previousPrimaryQuote > lastSentenceEndBeforeAndNotIncludingCurrentQuote), noSpeakerAfterward = false;
+	if (!(quotedStringSeen = quotedString(lastOpeningPrimaryQuote, where, noTextBeforeOrAfter, noSpeakerAfterward)))
+	{
+		if (!multipleQuoteInSentence && immediatelyAfterEndOfParagraph && !previousEndQuoteInserted)
+		{
+			int audienceObjectPosition = -1;
+			bool definitelySpeaker = false;
+			lastSpeakerPosition = determineSpeaker(lastOpeningPrimaryQuote, where, true, noSpeakerAfterward, definitelySpeaker, audienceObjectPosition);
+			// the boots of Albert
+			if (lastSpeakerPosition >= 0 && m[lastSpeakerPosition].getObject() >= 0 && objects[m[lastSpeakerPosition].getObject()].objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS &&
+				objects[m[lastSpeakerPosition].getObject()].ownerWhere >= 0 && m[objects[m[lastSpeakerPosition].getObject()].ownerWhere].getObject() >= 0 &&
+				(objects[m[objects[m[lastSpeakerPosition].getObject()].ownerWhere].getObject()].male || objects[m[objects[m[lastSpeakerPosition].getObject()].ownerWhere].getObject()].female))
+				lastSpeakerPosition = objects[m[lastSpeakerPosition].getObject()].ownerWhere;
+			if (lastSpeakerPosition >= 0)
+			{
+				int definiteSpeakerUnnecessary = -1;
+				imposeSpeaker(-1, where, definiteSpeakerUnnecessary, lastSpeakerPosition, definitelySpeaker, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, false, audienceObjectPosition, lastSubjects, -1);
+				if (m[lastSpeakerPosition].principalWherePosition >= 0)
+					lastSpeakerPosition = m[lastSpeakerPosition].principalWherePosition;
+				int speakerObject = m[lastSpeakerPosition].getObject();
+				if (m[lastSpeakerPosition].objectMatches.size() == 1)
+					speakerObject = m[lastSpeakerPosition].objectMatches[0].object;
+				if (speakerObject >= 0)
+				{
+					if (audienceObjectPosition < 0 || m[audienceObjectPosition].queryForm(reflexivePronounForm) < 0)
+						tempSpeakerGroup.conversationalQuotes++;
+					objects[speakerObject].PISDefinite++;
+				}
+				if (m[lastSpeakerPosition].objectMatches.empty())
+					mergeObjectIntoSpeakerGroup(lastSpeakerPosition, speakerObject);
+				else
+				{
+					for (unsigned int s = 0; s < m[lastSpeakerPosition].objectMatches.size(); s++)
+						mergeObjectIntoSpeakerGroup(lastSpeakerPosition, m[lastSpeakerPosition].objectMatches[s].object);
+				}
+			}
+			else if ((m[where].flags&WordMatch::flagInsertedQuote) == 0) // definitely not a quoted string if it is completed only by an inserted quote.
+			{
+				// but it is an inserted quote from the speaker before the definite speaker.
+				// “[tuppence:julius] Well , luckily for me[tuppence] , I[tuppence] pitched down into a good soft bed of earth -- but it[bed,earth] put me[tuppence] out of action for the time[time] , sure enough .
+				// no speaker seen.  Insert last subject into speaker group (to make sure it is included as a possibility in the next stage)
+				quotedStringSeen |= (!noTextBeforeOrAfter);
+				if (firstQuotedSentenceOfSpeakerGroupNotSeen)
+					for (unsigned int ls = 0; ls < subjectsInPreviousUnquotedSection.size(); ls++)
+						mergeObjectIntoSpeakerGroup(lastSpeakerPosition, subjectsInPreviousUnquotedSection[ls]);
+				firstQuotedSentenceOfSpeakerGroupNotSeen = false;
+				if (audienceObjectPosition >= 0 && m[audienceObjectPosition].audienceObjectMatches.size() <= 1)
+				{
+					definitelyIdentifiedAsSpeakerInSpeakerGroups.push_back(audienceObjectPosition);
+					int audienceObject = (m[audienceObjectPosition].audienceObjectMatches.size()) ? m[audienceObjectPosition].audienceObjectMatches[0].object : m[audienceObjectPosition].getObject();
+					objects[audienceObject].numDefinitelyIdentifiedAsSpeaker++;
+					objects[audienceObject].numDefinitelyIdentifiedAsSpeakerInSection++;
+					if (objects[audienceObject].numDefinitelyIdentifiedAsSpeakerInSection + objects[audienceObject].numIdentifiedAsSpeakerInSection == 1 && section < sections.size())
+						sections[section].speakerObjects.push_back(cOM(audienceObject, SALIENCE_THRESHOLD));
+				}
+			}
+			// is there a close quote immediately before the opening quote?  If so, increase conversationalQuotes.
+			if (previousPrimaryQuote >= 0 && lastOpeningPrimaryQuote - m[previousPrimaryQuote].endQuote <= 2)
+				tempSpeakerGroup.conversationalQuotes++;
+		}
+		else if (!multipleQuoteInSentence && immediatelyAfterEndOfParagraph)
+			lastSpeakerPosition = -1; // if inserted quote, lastSpeakerPosition should be unknown (see quote below) - this quote is after a definite speaker
+	}
+	if (lastQuotedString > lastSentenceEndBeforeAndNotIncludingCurrentQuote)
+		quotedStringSeen = true;
+	if (quotedStringSeen)
+	{
+		m[lastOpeningPrimaryQuote].flags |= WordMatch::flagQuotedString;
+		lastQuotedString = lastOpeningPrimaryQuote;
+	}
+	else
+	{
+		if ((multipleQuoteInSentence || !immediatelyAfterEndOfParagraph || previousEndQuoteInserted) && previousPrimaryQuote >= 0)
+		{
+			if (previousPrimaryQuote != lastOpeningPrimaryQuote)
+			{
+				m[previousPrimaryQuote].quoteForwardLink = lastOpeningPrimaryQuote; // resolve unknown speakers
+				m[lastOpeningPrimaryQuote].quoteBackLink = previousPrimaryQuote; // resolve unknown speakers
+			}
+			else
+				lplog(LOG_ERROR, L"%06d:previousPrimaryQuote and lastOpeningPrimaryQuote are the same (1)!", previousPrimaryQuote);
+			if (m[previousPrimaryQuote].flags&WordMatch::flagEmbeddedStoryResolveSpeakers)
+				m[lastOpeningPrimaryQuote].flags |= WordMatch::flagEmbeddedStoryResolveSpeakers;
+			if (debugTrace.traceSpeakerResolution)
+			{
+				wstring reason,tmpstr2;
+				if (multipleQuoteInSentence) reason = L"multipleQuoteInSentence previousPrimaryQuote=" + itos(previousPrimaryQuote, tmpstr) + L" > lastSentenceEndBeforeAndNotIncludingCurrentQuote=" + itos(lastSentenceEndBeforeAndNotIncludingCurrentQuote, tmpstr2);
+				if (!immediatelyAfterEndOfParagraph) reason += L"!immediatelyAfterEndOfParagraph ";
+				if (previousEndQuoteInserted) reason += L"inserted quote ";
+				if (debugTrace.traceSpeakerResolution)
+					lplog(LOG_SG, L"%d:quote at %d linked forward to %d (%s)", lastOpeningPrimaryQuote, previousPrimaryQuote, lastOpeningPrimaryQuote, reason.c_str());
+			}
+		}
+		if (!multipleQuoteInSentence && immediatelyAfterEndOfParagraph && !previousEndQuoteInserted) // include inserted quotes
+		{
+			if (firstQuote == -1)
+				firstQuote = lastOpeningPrimaryQuote;
+			if (lastQuote != -1)
+			{
+				m[lastQuote].nextQuote = lastOpeningPrimaryQuote;
+				m[lastOpeningPrimaryQuote].previousQuote = lastQuote;
+			}
+			lastQuote = lastOpeningPrimaryQuote;
+		}
+		// remove any objects referring to a quote which is not a quoted string
+		for (; quotedObjectCounter < (int)objects.size(); quotedObjectCounter++)
+			if (objects[quotedObjectCounter].begin == lastOpeningPrimaryQuote)
+			{
+				if (debugTrace.traceObjectResolution)
+					lplog(LOG_SG, L"%06d:%02d     object %s eliminated because it includes a primary quote",
+						lastOpeningPrimaryQuote, section, objectString(quotedObjectCounter, tmpstr, true).c_str());
+				objects[quotedObjectCounter].eliminated = true;
+				for (vector <cSection>::iterator is = sections.begin(), isEnd = sections.end(); is != isEnd; is++)
+					is->preIdentifiedSpeakerObjects.erase(quotedObjectCounter);
+				for (vector <cSpeakerGroup>::iterator is = speakerGroups.begin(), isEnd = speakerGroups.end(); is != isEnd; is++)
+					is->speakers.erase(quotedObjectCounter);
+			}
+			else if (objects[quotedObjectCounter].begin > lastOpeningPrimaryQuote)
+				break;
+		immediatelyAfterEndOfParagraph = false;
+		quotesSeenSinceLastSentence = true;
+		if (debugTrace.traceSpeakerResolution)
+			lplog(LOG_SG, L"%d:(2) quotesSeenSinceLastSentence set to true", where);
+		previousPrimaryQuote = lastOpeningPrimaryQuote;
+	}
+
+}
+
 void Source::evaluateMetaWhereQuery(int where, bool inPrimaryQuote, int &currentMetaWhereQuery)
 {
 	LFS

@@ -16,7 +16,7 @@ static FILE *logWSFile, *logWhereFile, *logRoleFile, *logWCFile, *logTimeFile, *
 #else
 __declspec(thread) static int logInfoFile=-1,logErrorFile=-1,logNomatchFile=-1,logResolutionFile=-1,logResCheckFile=-1,logSGFile=-1,logWNFile=-1,logWPFile=-1,logWSFile=-1,logWhereFile=-1,logRoleFile=-1,logWCFile=-1,logTimeFile=-1,logDictionaryFile=-1,logQCFile=-1; // per thread
 #endif
-__declspec(thread) wchar_t *multiProcessorLog=L""; // parallel processing will overload this variable 
+__declspec(thread) wstring logFileExtension; // parallel processing will overload this variable 
 __declspec(thread) int multiProcess = 0; // initialized
 #define LOG_MASK (LOG_INFO|LOG_ERROR|LOG_NOTMATCHED|LOG_RESOLUTION|LOG_WHERE|LOG_RESCHECK|LOG_SG|LOG_WORDNET|LOG_WIKIPEDIA|LOG_WEBSEARCH|LOG_ROLE|LOG_WCHECK|LOG_TIME|LOG_DICTIONARY|LOG_QCHECK|LOG_FATAL_ERROR)
 short logCache=40; // initialized
@@ -31,7 +31,6 @@ int rdfDetail = 0;
 int logSemanticMap = 0;
 bool logTraceOpen = false;
 bool log_net=false;  
-bool traceParseInfo = true;
 
 
 int logstring(int logLevel,const wchar_t *s)
@@ -48,94 +47,94 @@ int logstring(int logLevel,const wchar_t *s)
 		if ((logLevel&LOG_INFO) || (logLevel&LOG_FATAL_ERROR))
 		{
 			lastClock=&lastInfoClock; logFile=&logInfoFile;
-			sprintf(logFilename,"main%S.lplog",multiProcessorLog);
+			sprintf(logFilename,"main%S.lplog",logFileExtension.c_str());
 			logLevel&=~LOG_INFO;
 		}
 		else if (logLevel&LOG_ERROR)
 		{
 			lastClock=&lastErrorClock; logFile=&logErrorFile;
-			sprintf(logFilename,"error%S.lplog",multiProcessorLog);
+			sprintf(logFilename,"error%S.lplog",logFileExtension.c_str());
 			logLevel&=~LOG_ERROR;
 		}
 		else if (logLevel&LOG_NOTMATCHED)
 		{
 			lastClock=&lastNomatchClock; logFile=&logNomatchFile;
-			sprintf(logFilename,"nomatch%S.lplog",multiProcessorLog);
+			sprintf(logFilename,"nomatch%S.lplog",logFileExtension.c_str());
 			logLevel&=~LOG_NOTMATCHED;
 		}
 		else if (logLevel&LOG_RESOLUTION)
 		{
 			lastClock=&lastResolutionClock; logFile=&logResolutionFile;
-			sprintf(logFilename,"resolution%S.lplog",multiProcessorLog);
+			sprintf(logFilename,"resolution%S.lplog",logFileExtension.c_str());
 			logLevel&=~LOG_RESOLUTION;
 		}
 		else if (logLevel&LOG_WHERE)
 		{
 			lastClock=&lastWhereClock; logFile=&logWhereFile;
-			sprintf(logFilename,"where%S.lplog",multiProcessorLog);
+			sprintf(logFilename,"where%S.lplog",logFileExtension.c_str());
 			logLevel&=~LOG_WHERE;
 		}
 		else if (logLevel&LOG_RESCHECK)
 		{
 			lastClock=&lastResCheckClock; logFile=&logResCheckFile;
-			sprintf(logFilename,"rescheck%S.lplog",multiProcessorLog);
+			sprintf(logFilename,"rescheck%S.lplog",logFileExtension.c_str());
 			logLevel&=~LOG_RESCHECK;
 		}
 		else if (logLevel&LOG_SG)
 		{
 			lastClock=&lastSGClock; logFile=&logSGFile;
-			sprintf(logFilename,"speakerGroup%S.lplog",multiProcessorLog);
+			sprintf(logFilename,"speakerGroup%S.lplog",logFileExtension.c_str());
 			logLevel&=~LOG_SG;
 		}
 		else if (logLevel&LOG_WORDNET)
 		{
 			lastClock=&lastWNClock; logFile=&logWNFile;
-			sprintf(logFilename,"wordNet%S.lplog",multiProcessorLog);
+			sprintf(logFilename,"wordNet%S.lplog",logFileExtension.c_str());
 			logLevel&=~LOG_WORDNET;
 		}
 		else if (logLevel&LOG_WEBSEARCH)
 		{
 			lastClock=&lastWSClock; logFile=&logWSFile;
-			sprintf(logFilename,"webSearch%S.lplog",multiProcessorLog);
+			sprintf(logFilename,"webSearch%S.lplog",logFileExtension.c_str());
 			logLevel&=~LOG_WEBSEARCH;
 		}
 		else if (logLevel&LOG_QCHECK)
 		{
 			lastClock=&lastQCClock; logFile=&logQCFile;
-			sprintf(logFilename,"questionAnswerCheck%S.lplog",multiProcessorLog);
+			sprintf(logFilename,"questionAnswerCheck%S.lplog",logFileExtension.c_str());
 			logLevel&=~LOG_QCHECK;
 		}
 		else if (logLevel&LOG_WIKIPEDIA)
 		{
 			lastClock=&lastWPClock; logFile=&logWPFile;
-			sprintf(logFilename,"wikipedia%S.lplog",multiProcessorLog);
+			sprintf(logFilename,"wikipedia%S.lplog",logFileExtension.c_str());
 			logLevel&=~LOG_WIKIPEDIA;
 		}
 		else if (logLevel&LOG_ROLE)
 		{
 			lastClock=&lastRoleClock; logFile=&logRoleFile;
-			sprintf(logFilename,"role%S.lplog",multiProcessorLog);
+			sprintf(logFilename,"role%S.lplog",logFileExtension.c_str());
 			logLevel&=~LOG_ROLE;
 		}
 		else if (logLevel&LOG_WCHECK)
 		{
 			lastClock=&lastWCClock; logFile=&logWCFile;
-			sprintf(logFilename,"wcheck%S.lplog",multiProcessorLog);
+			sprintf(logFilename,"wcheck%S.lplog",logFileExtension.c_str());
 			logLevel&=~LOG_WCHECK;
 		}
 		else if (logLevel&LOG_TIME)
 		{
 			lastClock=&lastTimeClock; logFile=&logTimeFile;
-			sprintf(logFilename,"time%S.lplog",multiProcessorLog);
+			sprintf(logFilename,"time%S.lplog",logFileExtension.c_str());
 			logLevel&=~LOG_TIME;
 		}
 		else if (logLevel&LOG_DICTIONARY)
 		{
 			lastClock=&lastDictionaryClock; logFile=&logDictionaryFile;
-			sprintf(logFilename,"dictionary%S.lplog",multiProcessorLog);
+			sprintf(logFilename,"dictionary%S.lplog",logFileExtension.c_str());
 			logLevel&=~LOG_DICTIONARY;
 		}
-		if (multiProcessorLog[0])
+		if (logFileExtension[0])
 		{
 			char logFilenameTmp[1024];
 			sprintf(logFilenameTmp, "multiprocessor logs\\%s",logFilename);

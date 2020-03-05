@@ -111,7 +111,7 @@ wstring matchesToString(vector <matchElement> &whatMatched,int elementMatched,ws
   return s;
 }
 
-bool patternElement::matchRange(Source &source,int matchBegin,int matchEnd,vector <matchElement> &whatMatched)
+bool patternElement::matchRange(Source &source,int matchBegin,int matchEnd,vector <matchElement> &whatMatched,sTrace &t)
 { LFS // DLFS
   int rep;
   if (minimum==0)
@@ -136,7 +136,7 @@ bool patternElement::matchRange(Source &source,int matchBegin,int matchEnd,vecto
 #endif
 		for (int matchPosition = matchBegin; matchPosition < matchEnd; matchPosition++)
 		{
-			matchOne(source, whatMatched[matchPosition].endPosition, matchPosition, whatMatched);
+			matchOne(source, whatMatched[matchPosition].endPosition, matchPosition, whatMatched,t);
 		}
     matchBegin=saveBegin;
     matchEnd=whatMatched.size();
@@ -153,7 +153,7 @@ bool patternElement::matchRange(Source &source,int matchBegin,int matchEnd,vecto
   return matchBegin!=matchEnd || rep>1 || minimum==0; // if no matches, only return success if the element is optional
 }
 
-bool patternElement::matchFirst(Source &source,int sourcePosition,vector <matchElement> &whatMatched)
+bool patternElement::matchFirst(Source &source,int sourcePosition,vector <matchElement> &whatMatched, sTrace &t)
 { LFS
   int rep;
   if (minimum==0)
@@ -167,7 +167,7 @@ bool patternElement::matchFirst(Source &source,int sourcePosition,vector <matchE
 #endif
   }
   // match the first matchPosition once
-  if (!matchOne(source,sourcePosition,-1,whatMatched))
+  if (!matchOne(source,sourcePosition,-1,whatMatched,t))
   {
 #ifdef LOG_PATTERN_MATCHING
     lplog(L"%d:pattern %s:matchPosition %d:Match failed",sourcePosition,patternName.c_str(),elementPosition);
@@ -201,7 +201,7 @@ bool patternElement::matchFirst(Source &source,int sourcePosition,vector <matchE
     {
       if (!consolidateEndPositions || endPositionsSet.find(whatMatched[matchPosition].endPosition)==endPositionsSet.end())
       {
-        matchOne(source,whatMatched[matchPosition].endPosition,matchPosition,whatMatched);
+        matchOne(source,whatMatched[matchPosition].endPosition,matchPosition,whatMatched,t);
         if (consolidateEndPositions)
           endPositionsSet.insert(whatMatched[matchPosition].endPosition);
       }
@@ -265,7 +265,7 @@ bool patternElement::inflectionMatch(int inflectionFlagsFromWord, __int64 flags,
 #define MAX_PATTERN_NUM_MATCH 4000 // Charles Dickens may require a lower limit.
 // because endPositionMatches is being pushed back into whatMatched, endPositionMatches must be a COPY
 // of the position of whatMatched it started out as.  Do not pass endPositionMatches as a reference.
-bool patternElement::matchOne(Source &source,unsigned int sourcePosition,unsigned int lastElement,vector <matchElement> &whatMatched)
+bool patternElement::matchOne(Source &source,unsigned int sourcePosition,unsigned int lastElement,vector <matchElement> &whatMatched, sTrace &t)
 { LFS
   if (sourcePosition>=source.m.size())
   {
@@ -286,7 +286,7 @@ bool patternElement::matchOne(Source &source,unsigned int sourcePosition,unsigne
       int startPositions=whatMatched.size(),msize=startPositions;
       if (msize>MAX_PATTERN_NUM_MATCH)
       {
-        if (!overMatchMemoryExceeded && traceParseInfo)
+        if (!overMatchMemoryExceeded && t.traceParseInfo)
           lplog(LOG_ERROR,L"ERROR:%d:pattern %s[%s]:position %d:Match size array reached over %d entries",
           sourcePosition,patternName.c_str(),patterns[patternNum]->differentiator.c_str(),elementPosition,msize);
         im->maxLACMatch=-1;
@@ -432,7 +432,7 @@ bool patternElement::matchOne(Source &source,unsigned int sourcePosition,unsigne
 #endif
   //whatMatched[lastElement].sentencePosition++; // eliminated because multiple matches could use this and some might ignore and others not
   // see beginPosition in matchElement
-  return matchOne(source,sourcePosition+1,lastElement,whatMatched);
+  return matchOne(source,sourcePosition+1,lastElement,whatMatched,t);
 }
 
 // this assumes that optional or multiple elements cannot have a next element that could match
@@ -443,12 +443,12 @@ bool cPattern::matchPatternPosition(Source &source, const unsigned int sourcePos
   source.whatMatched.reserve(10000);
   overMatchMemoryExceeded=false;
   vector <patternElement *>::iterator e=elements.begin(),eEnd=elements.end();
-  if (!(*e)->matchFirst(source,sourcePosition,source.whatMatched)) return false;
+  if (!(*e)->matchFirst(source,sourcePosition,source.whatMatched,t)) return false;
   int begin=0;
   for (e++; e!=eEnd; e++)
   {
 		int saveEnd=source.whatMatched.size();
-    if (!(*e)->matchRange(source,begin,saveEnd,source.whatMatched))
+    if (!(*e)->matchRange(source,begin,saveEnd,source.whatMatched,t))
     {
 #ifdef LOG_PATTERN_MATCHING
       ::lplog(L"%d:pattern %s:position %d:Match failed",sourcePosition,name.c_str(),e-elements.begin());

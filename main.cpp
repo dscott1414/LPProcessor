@@ -836,7 +836,7 @@ bool signalCtrl(DWORD dwProcessId, DWORD dwCtrlEvent)
 
 int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st,
  int maxProcesses, int numSourcesPerProcess, 
-	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite,bool makeCopyBeforeSourceWrite,bool parseOnly)
+	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite,bool makeCopyBeforeSourceWrite,bool parseOnly, wstring specialExtension)
 {
 	LFS
 	chdir("source");
@@ -973,7 +973,7 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			switch (processKind)
 			{
 			case 0:
-				wsprintf(processParameters, L"releasex64\\lp.exe -ParseRequest \"%s\" -cacheDir %s %s%s%s%s%s%s%s%s-log %d", pathInCache.c_str(), CACHEDIR,
+				wsprintf(processParameters, L"releasex64\\lp.exe -ParseRequest \"%s\" -cacheDir %s %s%s%s%s%s%s%s%s-log %s.%d", pathInCache.c_str(), CACHEDIR,
 					(forceSourceReread) ? L"-forceSourceReread " : L"",
 					(sourceWrite) ? L"-SW " : L"",
 					(sourceWordNetRead) ? L"-SWNR " : L"",
@@ -982,12 +982,13 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 					(makeCopyBeforeSourceWrite) ? L"-MCSW " : L"",
 					(logMatchedSentences) ? L"-logMatchedSentences " : L"",
 					(logUnmatchedSentences) ? L"-logUnmatchedSentences " : L"",
+					specialExtension.c_str(),
 					nextProcessIndex);
 				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\lp.exe", processParameters) < 0)
 					break;
 				break;
 			case 1:
-				wsprintf(processParameters, L"releasex64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %d", CACHEDIR,
+				wsprintf(processParameters, L"releasex64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %s.%d", CACHEDIR,
 					(forceSourceReread) ? L"-forceSourceReread " : L"",
 					(sourceWrite) ? L"-SW " : L"",
 					(sourceWordNetRead) ? L"-SWNR " : L"",
@@ -997,12 +998,18 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 					(logMatchedSentences) ? L"-logMatchedSentences " : L"",
 					(logUnmatchedSentences) ? L"-logUnmatchedSentences " : L"",
 					numSourcesPerProcess,
+					specialExtension.c_str(),
 					nextProcessIndex);
+				if (specialExtension.length() > 0)
+				{
+					wcscat(processParameters, L" -specialExtension ");
+					wcscat(processParameters, specialExtension.c_str());
+				}
 				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\lp.exe", processParameters) < 0)
 					break;
 				break;
 			case 2:
-				wsprintf(processParameters, L"releasex64\\CorpusAnalysis.exe -step %d -numSourceLimit %d -log %d", CACHEDIR, step, numSourcesPerProcess, nextProcessIndex);
+				wsprintf(processParameters, L"releasex64\\CorpusAnalysis.exe -step %d -numSourceLimit %d -log %s.%d", CACHEDIR, step, numSourcesPerProcess, specialExtension.c_str(),nextProcessIndex);
 				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\CorpusAnalysis.exe", processParameters) < 0)
 					break;
 				break;
@@ -1128,12 +1135,13 @@ int wmain(int argc,wchar_t *argv[])
 	bool resetAllSource=false,resetProcessingFlags=false,generateFormStatistics=false,retry=false;
 	bool forceSourceReread=false,sourceWrite=false,sourceWordNetRead=false,sourceWordNetWrite=false,parseOnly=false, makeCopyBeforeSourceWrite=false;
 	int numSourcesPerProcess = 5; 
+	wstring specialExtension;
 	for (int I=0; I<argc; I++)
 	{
 		if (!_wcsicmp(argv[I],L"-server") && I<argc-1)
 			sourceHost=argv[++I];
 		else if (!_wcsicmp(argv[I],L"-log") && I<argc-1)
-			multiProcessorLog=argv[++I];
+			logFileExtension=argv[++I];
 		else if (!_wcsicmp(argv[I], L"-mp") && I < argc - 1)
 			multiProcess = _wtoi(argv[++I]);
 		else if (!_wcsicmp(argv[I], L"-numSourcesPerProcess") && I < argc - 1)
@@ -1168,16 +1176,16 @@ int wmain(int argc,wchar_t *argv[])
 			flipTNROverride=true;
 		else if (!_wcsicmp(argv[I], L"-forceSourceReread"))
 			forceSourceReread = true;
-		else if (!_wcsicmp(argv[I], L"-traceParseInfo"))
-			traceParseInfo = true;
 		else if (!_wcsicmp(argv[I], L"-SW"))
 			sourceWrite = true;
 		else if (!_wcsicmp(argv[I], L"-MCSW"))
 			makeCopyBeforeSourceWrite = true;
 		else if (!_wcsicmp(argv[I],L"-SWNR"))
 			sourceWordNetRead=true;
-		else if (!_wcsicmp(argv[I],L"-SWNW"))
-			sourceWordNetWrite=true;
+		else if (!_wcsicmp(argv[I], L"-SWNW"))
+			sourceWordNetWrite = true;
+		else if (!_wcsicmp(argv[I], L"-specialExtension"))
+			specialExtension = argv[++I];
 		else
 			continue;
 		numCommandLineParameters=min(numCommandLineParameters,I);
@@ -1270,7 +1278,7 @@ int wmain(int argc,wchar_t *argv[])
 		{
 			HWND consoleWindowHandle = GetConsoleWindow();
 			SetWindowPos(consoleWindowHandle, HWND_NOTOPMOST, 900, 0, 700, 180, SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-			startProcesses(source, 1,0,beginSource, endSource, st, multiProcess, numSourcesPerProcess, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite,makeCopyBeforeSourceWrite,parseOnly);
+			startProcesses(source, 1,0,beginSource, endSource, st, multiProcess, numSourcesPerProcess, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite,makeCopyBeforeSourceWrite,parseOnly,specialExtension);
 			return 0;
 		}
 		wprintf(L"Getting number of sources to process...               \r");
@@ -1294,13 +1302,13 @@ int wmain(int argc,wchar_t *argv[])
 			source.unlockTables();
 			if (start == L"**SKIP**")
 				continue;
-			if (st!=Source::BNC_SOURCE_TYPE && !forceSourceReread && Words.readWithLock(source.mysql,sourceId,path,false,true,false,false)<0)
+			if (st!=Source::BNC_SOURCE_TYPE && !forceSourceReread && Words.readWithLock(source.mysql,sourceId,path,false,true,false,false, specialExtension)<0)
 				lplog(LOG_FATAL_ERROR,L"Cannot read dictionary.");
 			Words.addMultiWordObjects(source.multiWordStrings,source.multiWordObjects);
 			wstring rt1,rt2;
 			int ret=0;
 			bool parsedOnly = false;
-			if (forceSourceReread || !source.readSource(path,false, parsedOnly, true,true))
+			if (forceSourceReread || !source.readSource(path,false, parsedOnly, true,true, specialExtension))
 			{
 				unknownCount=0;
 				switch (st)
@@ -1347,8 +1355,8 @@ int wmain(int argc,wchar_t *argv[])
 				lplog();
 				if (sourceWrite)
 				{
-					source.write(path, false, makeCopyBeforeSourceWrite);
-					source.writeWords(path);
+					source.write(path, false, makeCopyBeforeSourceWrite,specialExtension);
+					source.writeWords(path, specialExtension);
 					source.writePatternUsage(path,true);
 				}
 				puts("");
@@ -1370,6 +1378,10 @@ int wmain(int argc,wchar_t *argv[])
 					testViterbiFromSource(source);
 				}
 				source.clearSource();
+				if (source.updateWordUsageCostsDynamically)
+					WordClass::resetUsagePatternsAndCosts();
+				else
+					WordClass::resetCapitalizationAndProperNounUsageStatistics();
 				if (!exitNow) source.signalFinishedProcessingSource(sourceId);
 				continue;
 			}
@@ -1397,7 +1409,7 @@ int wmain(int argc,wchar_t *argv[])
 			source.resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
 			source.printObjects();
 			source.resolveWordRelations();
-			if (!source.write(path,true, false))
+			if (!source.write(path,true, false,specialExtension))
 				lplog(LOG_FATAL_ERROR,L"buffer overrun");
 			source.printResolutionCheck(badSpeakers);
 			source.logSpaceCheck();
@@ -1423,6 +1435,10 @@ int wmain(int argc,wchar_t *argv[])
 				source.matchBasicElements(parseOnly);
 			if (!exitNow) source.signalFinishedProcessingSource(sourceId);
 			source.clearSource();
+			if (source.updateWordUsageCostsDynamically)
+				WordClass::resetUsagePatternsAndCosts();
+			else
+				WordClass::resetCapitalizationAndProperNounUsageStatistics();
 		}
 #ifdef LOG_PATTERNS
 		cPattern::printPatternStatistics();
@@ -1448,12 +1464,12 @@ int wmain(int argc,wchar_t *argv[])
 			start = argv[sourceArgs + 2];
 		int repeatStart=1;
 		bool parsedOnly;
-		if (forceSourceReread || !source.readSource(path, false, parsedOnly, true, true))
+		if (forceSourceReread || !source.readSource(path, false, parsedOnly, true, true, specialExtension))
 		{
 			if (source.tokenize(title,etext,path,encoding, start,repeatStart,unknownCount,false)<0)
 				exit(0);
 			lplog();
-			source.write(path,false, false);
+			source.write(path,false, false,specialExtension);
 		}
 		quotationExceptions=source.doQuotesOwnershipAndContractions(totalQuotations,false);
 		globalTotalUnmatched+=source.printSentences(false,unknownCount,quotationExceptions,totalQuotations,globalOverMatchedPositionsTotal);
@@ -1464,8 +1480,8 @@ int wmain(int argc,wchar_t *argv[])
 				void testViterbiFromSource(Source &source);
 				testViterbiFromSource(source);
 			}
-			source.write(path, true, false);
-			source.writeWords(path);
+			source.write(path, true, false,specialExtension);
+			source.writeWords(path, specialExtension);
 		}
 		else
 		{
@@ -1474,12 +1490,12 @@ int wmain(int argc,wchar_t *argv[])
 			source.analyzeWordSenses();
 			source.narrativeIsQuoted = true;
 			source.syntacticRelations();
-			source.writeWords(path);
+			source.writeWords(path, specialExtension);
 			source.identifySpeakerGroups();
 			source.resolveSpeakers(secondaryQuotesResolutions);
 			source.resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
 			source.printObjects();
-			source.write(path, true, false);
+			source.write(path, true, false,specialExtension);
 			source.printResolutionCheck(badSpeakers);
 			source.logSpaceCheck();
 			lplog();

@@ -80,7 +80,7 @@ void logCurrentTime(void)
 	lplog(L"%d-%d-%d",day->tm_mon,day->tm_mday,1900+day->tm_year);
 }
 
-extern wchar_t *multiProcessorLog; 
+extern wstring logFileExtension; 
 int getTwitterEntries(wchar_t *filter)
 {
 	// happy
@@ -96,7 +96,7 @@ int getTwitterEntries(wchar_t *filter)
 	logCache=0;
 	wchar_t logbuf[1024];
 	_swprintf(logbuf,L".Twitter.%s",filter);
-	multiProcessorLog=logbuf;
+	logFileExtension=logbuf;
 	while (true)
 	{
 		logCurrentTime();

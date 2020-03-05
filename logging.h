@@ -75,7 +75,7 @@ struct sTrace
 	bool traceObjectResolution,traceVerbObjects,traceDeterminer,traceBNCPreferences,tracePatternElimination,traceNameResolution;
 	bool traceSecondaryPEMACosting,traceMatchedSentences,traceUnmatchedSentences,traceIncludesPEMAIndex;
 	bool traceTransitoryQuestion,traceConstantQuestion,traceMapQuestion,traceCommonQuestion,traceQuestionPatternMap;
-	bool traceTagSetCollection,collectPerSentenceStats;
+	bool traceTagSetCollection,collectPerSentenceStats,traceParseInfo;
 };
 
 extern int logQuestionProfileTime;
@@ -88,5 +88,5 @@ extern int rdfDetail;
 extern bool log_net;  
 extern bool logTraceOpen;
 
-extern __declspec(thread) wchar_t *multiProcessorLog; // parallel processing will overload this variable 
+extern __declspec(thread) wstring logFileExtension; // parallel processing will overload this variable 
 extern __declspec(thread) int multiProcess; // initialized

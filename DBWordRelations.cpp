@@ -322,7 +322,7 @@ int Source::readWordIndexesForWordRelationsRefresh(vector <int> &wordIds)
 { LFS
 	for (tIWMM w=Words.begin(),wEnd=Words.end(); w!=wEnd; w++)
 	{
-		w->second.flags&=~tFI::wordIndexRead;
+		w->second.flags&=~(tFI::wordIndexRead|tFI::inSourceFlag);
 		w->second.clearRelationMaps();
 	}
   wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
@@ -331,7 +331,7 @@ int Source::readWordIndexesForWordRelationsRefresh(vector <int> &wordIds)
 	for (unsigned int I=0; I<sizeof(specials)/sizeof(tIWMM); I++)
 	{
 		len+=_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L"\"%s\",",specials[I]->first.c_str());
-		specials[I]->second.flags|=tFI::wordIndexRead;
+		specials[I]->second.flags|=tFI::wordIndexRead| tFI::inSourceFlag;
 		specials[I]->second.clearRelationMaps();
 	}
   Words.sectionWord->second.flags|=tFI::wordIndexRead;

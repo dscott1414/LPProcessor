@@ -166,7 +166,7 @@ bool signalCtrl(DWORD dwProcessId, DWORD dwCtrlEvent)
 	return success;
 }
 
-int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st, int maxProcesses, int numSourcesPerProcess, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool makeCopyBeforeSourceWrite, bool parseOnly)
+int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st, int maxProcesses, int numSourcesPerProcess, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool makeCopyBeforeSourceWrite, bool parseOnly, wstring specialExtension)
 {
 	LFS
 		chdir("source");
@@ -297,6 +297,11 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 					(makeCopyBeforeSourceWrite) ? L"-MCSW " : L"",
 					numSourcesPerProcess,
 					nextProcessIndex);
+				if (specialExtension.length() > 0)
+				{
+					wcscat(processParameters, L" -specialExtension ");
+					wcscat(processParameters, specialExtension.c_str());
+				}
 				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\lp.exe", processParameters) < 0)
 					break;
 				break;
@@ -1126,15 +1131,15 @@ void writeSourceWordFrequency(MYSQL *mysql,unordered_map<wstring, wordInfo> wf, 
 	}
 }
 
-int analyzeEnd(Source source, int sourceId, wstring path, wstring etext, wstring title,bool &reprocess,bool &nosource)
+int analyzeEnd(Source source, int sourceId, wstring path, wstring etext, wstring title,bool &reprocess,bool &nosource,wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE")) 
 		return -1;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false) < 0)
+	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false,specialExtension) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 	bool parsedOnly = false;
-	if (source.readSource(path, false, parsedOnly, false, true))
+	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
 	{
 		bool multipleEnds = false;
 		for (unsigned int I = 0; I < source.sentenceStarts.size(); I++)
@@ -1241,16 +1246,16 @@ int writeWordFormsFromCorpusWideAnalysis(MYSQL mysql,bool actuallyExecuteAgainst
 	return 0;
 }
 
-int printUnknownsFromSource(Source source, int sourceId, wstring path, wstring etext)
+int printUnknownsFromSource(Source source, int sourceId, wstring path, wstring etext, wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false) < 0)
+	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false,specialExtension) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 	bool parsedOnly = false, firstIllegal = false;
 	int numIllegalWords = 0;
-	if (source.readSource(path, false, parsedOnly, false, true))
+	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
 	{
 		int wordIndex = 0;
 		for (WordMatch &im : source.m)
@@ -1326,16 +1331,16 @@ void getTagPositions(Source source,int position,int pemaByPatternEnd, map <int, 
 	}
 }
 
-int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, wstring etext, wstring patternOrWordName, wstring differentiator, bool isPattern)
+int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, wstring etext, wstring patternOrWordName, wstring differentiator, bool isPattern, wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false) < 0)
+	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false,specialExtension) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 	bool parsedOnly = false;
 	int lastSentenceIndexPrinted = -1;
-	if (source.readSource(path, false, parsedOnly, false, true))
+	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
 	{
 		int wordIndex = 0;
 		unsigned int ss = 1;
@@ -1455,15 +1460,15 @@ int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, w
 	return 22;
 }
 
-int syntaxCheckFromSource(Source source, int sourceId, wstring path, wstring etext)
+int syntaxCheckFromSource(Source source, int sourceId, wstring path, wstring etext, wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false) < 0)
+	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false,specialExtension) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 	bool parsedOnly = false;
-	if (source.readSource(path, false, parsedOnly, false, true))
+	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
 	{
 		int wordIndex = 0;
 		unsigned int ss = 1;
@@ -1525,16 +1530,16 @@ int syntaxCheckFromSource(Source source, int sourceId, wstring path, wstring ete
 	return 62;
 }
 
-int populateWordFrequencyTableFromSource(Source source, int sourceId, wstring path, wstring etext)
+int populateWordFrequencyTableFromSource(Source source, int sourceId, wstring path, wstring etext, wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false) < 0)
+	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false,specialExtension) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 	bool parsedOnly = false;
 	int numIllegalWords = 0;
-	if (source.readSource(path, false, parsedOnly, false, true))
+	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
 	{
 		unordered_map<wstring, wordInfo> wf;
 		int numUnknown = 0;
@@ -1623,7 +1628,7 @@ int populateWordFrequencyTableFromSource(Source source, int sourceId, wstring pa
 	return (numIllegalWords == 0) ? 2 : -(numIllegalWords + 10);
 }
 
-int populateWordFrequencyTableMP(Source source)
+int populateWordFrequencyTableMP(Source source, wstring specialExtension)
 {
 	int step = 1;
 	MYSQL_RES * result;
@@ -1680,7 +1685,7 @@ int populateWordFrequencyTableMP(Source source)
 				break;
 		}
 		*/
-		int setStep = populateWordFrequencyTableFromSource(source, sourceId, path, etext);
+		int setStep = populateWordFrequencyTableFromSource(source, sourceId, path, etext,specialExtension);
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
 			break;
@@ -1698,7 +1703,7 @@ int populateWordFrequencyTableMP(Source source)
 	return 0;
 }
 
-int populateWordFrequencyTable(Source source, int step)
+int populateWordFrequencyTable(Source source, int step, wstring specialExtension)
 {
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
@@ -1721,7 +1726,7 @@ int populateWordFrequencyTable(Source source, int step)
 		mTW(sqlrow[2], path);
 		mTW(sqlrow[3], title);
 		path.insert(0, L"\\").insert(0, CACHEDIR);
-		int setStep = populateWordFrequencyTableFromSource(source, sourceId, path, etext);
+		int setStep = populateWordFrequencyTableFromSource(source, sourceId, path, etext,specialExtension);
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
 			break;
@@ -1738,7 +1743,7 @@ int populateWordFrequencyTable(Source source, int step)
 	return 0;
 }
 
-int printUnknowns(Source source, int step)
+int printUnknowns(Source source, int step, wstring specialExtension)
 {
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
@@ -1761,7 +1766,7 @@ int printUnknowns(Source source, int step)
 		mTW(sqlrow[2], path);
 		mTW(sqlrow[3], title);
 		path.insert(0, L"\\").insert(0, CACHEDIR);
-		int setStep = printUnknownsFromSource(source, sourceId, path, etext);
+		int setStep = printUnknownsFromSource(source, sourceId, path, etext,specialExtension);
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
 			break;
@@ -1778,7 +1783,7 @@ int printUnknowns(Source source, int step)
 	return 0;
 }
   
-int patternOrWordAnalysis(Source source, int step, wstring patternOrWordName, wstring differentiator, enum Source::sourceTypeEnum st,bool isPattern)
+int patternOrWordAnalysis(Source source, int step, wstring patternOrWordName, wstring differentiator, enum Source::sourceTypeEnum st,bool isPattern, wstring specialExtension)
 {
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
@@ -1804,7 +1809,7 @@ int patternOrWordAnalysis(Source source, int step, wstring patternOrWordName, ws
 			path.insert(0, L"\\").insert(0, CACHEDIR);
 		else if (st == Source::TEST_SOURCE_TYPE)
 			path.insert(0, L"\\").insert(0, LMAINDIR);
-		int setStep = patternOrWordAnalysisFromSource(source, sourceId, path, etext, patternOrWordName, differentiator, isPattern);
+		int setStep = patternOrWordAnalysisFromSource(source, sourceId, path, etext, patternOrWordName, differentiator, isPattern,specialExtension);
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
 			break;
@@ -1821,7 +1826,7 @@ int patternOrWordAnalysis(Source source, int step, wstring patternOrWordName, ws
 	return 0;
 }
 
-int syntaxCheck(Source source, int step)
+int syntaxCheck(Source source, int step, wstring specialExtension)
 {
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
@@ -1844,7 +1849,7 @@ int syntaxCheck(Source source, int step)
 		mTW(sqlrow[2], path);
 		mTW(sqlrow[3], title);
 		path.insert(0, L"\\").insert(0, CACHEDIR);
-		int setStep = syntaxCheckFromSource(source, sourceId, path, etext);
+		int setStep = syntaxCheckFromSource(source, sourceId, path, etext,specialExtension);
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
 			break;
@@ -1927,18 +1932,18 @@ int removeOldCacheFiles(Source source)
 	return 0;
 }
 
-void testRDFType(Source &source)
+void testRDFType(Source &source, wstring specialExtension)
 {
 	int sourceId = 25291;
 	wstring path = L"J:\\caches\\texts\\Schoonover, Frank E\\Jules of the Great Heart  Free Trapper and Outlaw in the Hudson Bay Region in the Early Days.txt";
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE")) return;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false) < 0)
+	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false,specialExtension) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 	vector <cTreeCat *> rdfTypes;
 	Ontology::rdfIdentify(L"clackamas", rdfTypes, L"Z", true);
 	bool parsedOnly = false;
-	if (source.readSource(path, false, parsedOnly, false, true))
+	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
 	{
 		int where = 0;
 		for (auto im : source.m)
@@ -4153,16 +4158,18 @@ void printFormDistribution(wstring word, double adp, FormDistribution fd, wstrin
 			lplog(LOG_ERROR, L"  ST %s:%d %d%% %d%%", form.c_str(), count, 100 * count / (fd.agreeSTLP + fd.disagreeSTLP), fd.agreeFormDistribution[form] * 100 / count);
 }
 
-int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *vm,JNIEnv *env, int &numNoMatch, int &numPOSNotFound, unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &formMisMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, unordered_map<wstring, int> &errorMap, bool pcfg,wstring limitToWord,int maxLength)
+int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *vm,JNIEnv *env, int &numNoMatch, int &numPOSNotFound, unordered_map<wstring, int> &formNoMatchMap, 
+	                          unordered_map<wstring, int> &formMisMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, 
+	                          unordered_map<wstring, int> &errorMap, bool pcfg,wstring limitToWord,int maxLength, wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false) < 0)
+	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false,specialExtension) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 	bool parsedOnly = false,bearFound=false;
 	int numIllegalWords = 0;
-	if (source.readSource(path, false, parsedOnly, false, true))
+	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
 	{
 		lplog(LOG_INFO| LOG_ERROR, L"source*** %d:%s", sourceId, path.c_str());
 		int lastPercent=-1;
@@ -4259,7 +4266,7 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"ST correct: adverb not noun (3% probabilistic)"] = numErrors * 3 / 100;
 }
 
-int stanfordCheck(Source source, int step, bool pcfg)
+int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension)
 {
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
@@ -4270,6 +4277,7 @@ int stanfordCheck(Source source, int step, bool pcfg)
 	wchar_t buffer[1024];
 	wsprintf(buffer, L"stanfordCheck %d", step);
 	SetConsoleTitle(buffer);
+	logFileExtension = L".stanfordCheckErrors"+specialExtension;
 
 	if (!myquery(&source.mysql, L"LOCK TABLES sources WRITE"))
 		return -1;
@@ -4298,7 +4306,7 @@ int stanfordCheck(Source source, int step, bool pcfg)
 		wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d sources in %02I64d:%02I64d:%02I64d [%d sources/hour] (%-35.35s...)", numSourcesProcessedNow * 100 / totalSource, numSourcesProcessedNow, totalSource,
 			processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, (processingSeconds) ? numSourcesProcessedNow * 3600 / processingSeconds : 0, title.c_str());
 		SetConsoleTitle(buffer);
-		int setStep = stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap,VFTMap,errorMap,pcfg,L"",60);
+		int setStep = stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap,VFTMap,errorMap,pcfg,L"",60,specialExtension);
 		totalWords += source.m.size();
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
@@ -4461,7 +4469,7 @@ int stanfordCheckMP(Source source, int step, bool pcfg, int MP)
 	free(handles);
 }
 
-int stanfordCheckTest(Source source, wstring path, int sourceId, bool pcfg,wstring limitToWord,int maxSentenceLimit)
+int stanfordCheckTest(Source source, wstring path, int sourceId, bool pcfg,wstring limitToWord,int maxSentenceLimit, wstring specialExtension)
 {
 	if (limitToWord.length() > 0)
 		printf("limited to %S!", limitToWord.c_str());
@@ -4470,7 +4478,7 @@ int stanfordCheckTest(Source source, wstring path, int sourceId, bool pcfg,wstri
 	createJavaVM(vm, env);
 	unordered_map<wstring, int> formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, errorMap;
 	int numNoMatch = 0, numPOSNotFound = 0;
-	stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, errorMap, pcfg,limitToWord,maxSentenceLimit);
+	stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, errorMap, pcfg,limitToWord,maxSentenceLimit,specialExtension);
 	int totalWords = source.m.size();
 	destroyJavaVM(vm);
 	if (limitToWord.length() > 0)
@@ -4533,7 +4541,7 @@ int stanfordCheckTest(Source source, wstring path, int sourceId, bool pcfg,wstri
 }
 
 // this would be easier if you had all the sources in memory at once!
-int testViterbiHMMMultiSource(Source &source,wchar_t *databaseHost,int step)
+int testViterbiHMMMultiSource(Source &source,wchar_t *databaseHost,int step, wstring specialExtension)
 {
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
@@ -4558,13 +4566,13 @@ int testViterbiHMMMultiSource(Source &source,wchar_t *databaseHost,int step)
 		mTW(sqlrow[2], title);
 		path.insert(0, L"\\").insert(0, CACHEDIR);
 		bool parsedOnly = false;
-		if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false) < 0)
+		if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false,specialExtension) < 0)
 			lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 		Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 		//unordered_map <int, vector < vector <tTagLocation> > > emptyMap;
 		//for (unsigned int ts = 0; ts < desiredTagSets.size(); ts++)
 		//	childSource.pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
-		if (childSource.readSource(path, false, parsedOnly, false, true))
+		if (childSource.readSource(path, false, parsedOnly, false, true,specialExtension))
 		{
 			lplog(LOG_ERROR,L"Beginning child source %d:%s at offset %d.", sourceId,path.c_str(), source.m.size());
 			source.copySource(&childSource, 0, childSource.m.size());
@@ -4634,6 +4642,7 @@ void wmain(int argc,wchar_t *argv[])
 		source.pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
 	if (!myquery(&source.mysql, L"LOCK TABLES sources READ"))
 		return;
+	wstring specialExtension = L"";
 	//testDisinclination();
 	//writeFrequenciesToDB(source);
 	//if (true)
@@ -4642,12 +4651,25 @@ void wmain(int argc,wchar_t *argv[])
 	verbForm = FormsClass::gFindForm(L"verb");
 	adjectiveForm = FormsClass::gFindForm(L"adjective");
 	adverbForm = FormsClass::gFindForm(L"adverb");
-	int step = _wtoi(argv[2]);
-	if (!wcscmp(argv[1], L"-stanfordCheck"))
+	int step=-1;
+	bool actuallyExecuteAgainstDB=false;
+	for (int I = 0; I < argc; I++)
 	{
-		stanfordCheck(source, step, true);
-		return; 
+		if (!_wcsicmp(argv[I], L"-step") && I < argc - 1)
+			step = _wtoi(argv[++I]);
+		else if (!_wcsicmp(argv[I], L"-stanfordCheck") && I < argc - 1)
+		{
+			stanfordCheck(source, step, true, specialExtension);
+			return;
+		}
+		else if (!_wcsicmp(argv[I], L"-specialExtension"))
+			specialExtension = argv[++I];
+		else if (!_wcsicmp(argv[I], L"-executeAgainstDB"))
+			actuallyExecuteAgainstDB = true;
+		else
+			continue;
 	}
+	logFileExtension = specialExtension;
 	switch (step)
 	{
 	case 10:
@@ -4660,13 +4682,10 @@ void wmain(int argc,wchar_t *argv[])
 	case 17:
 	case 18:
 	case 19:
-		populateWordFrequencyTable(source,step);
+		populateWordFrequencyTable(source,step,specialExtension);
 		break;
 	case 2:
-		{
-			bool actuallyExecuteAgainstDB = wstring(argv[2]) == L"executeAgainstDB";
-			writeWordFormsFromCorpusWideAnalysis(source.mysql, actuallyExecuteAgainstDB);
-		}
+		writeWordFormsFromCorpusWideAnalysis(source.mysql, actuallyExecuteAgainstDB);
 		break;
 	case 3:
 		{
@@ -4707,13 +4726,13 @@ void wmain(int argc,wchar_t *argv[])
 		removeOldCacheFiles(source);
 		break;
 	case 7:
-		testRDFType(source);
+		testRDFType(source,specialExtension);
 		break;
 	case 8:
-		testViterbiHMMMultiSource(source,databaseHost,step);
+		testViterbiHMMMultiSource(source,databaseHost,step,specialExtension);
 		break;
 	case 20:
-		printUnknowns(source, step);
+		printUnknowns(source, step,specialExtension);
 		break;
 	case 21:
 		// Source::TEST_SOURCE_TYPE
@@ -4721,18 +4740,18 @@ void wmain(int argc,wchar_t *argv[])
 		//patternOrWordAnalysis(source, step, L"_MS1", L"2",true); // TODO: testing weight change on _S1.
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
 		//patternOrWordAnalysis(source, step, L"_VERB_BARE_INF", L"A", true);
-		patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false); 
+		patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false, specialExtension);
 		//patternOrWordAnalysis(source, step, L"martial", L"", Source::GUTENBERG_SOURCE_TYPE, false); // TODO: testing weight change on _S1.
 		break;
 	case 60:
 		//stanfordCheckMP(source, step, true,8);
-		stanfordCheck(source, step, true);
+		stanfordCheck(source, step, true,specialExtension);
 		break;
 	case 61:
-		syntaxCheck(source, step);
+		syntaxCheck(source, step,specialExtension);
 		break;
 	case 70:
-		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"",50);
+		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"",50,specialExtension);
 		break;
 	case 71:
 		vector <wstring> words = { L"advertising",L"wishing",L"writing",L"yachting",L"yellowing" };
