@@ -25,6 +25,7 @@
 #include "thread"
 #include "future"
 #include "mutex"
+#include "stacktrace.h"
 
 // needed for _STLP_DEBUG - these must be set to a legal, unreachable yet never changing value
 unordered_map <wstring,tFI> static_wordMap;
@@ -69,6 +70,21 @@ int overallTime;
 int initializeCounter(void);
 void freeCounter(void);
 bool TSROverride = false, flipTOROverride = false, flipTNROverride = false, logMatchedSentences=false, logUnmatchedSentences=false;
+
+void printStackTrace()
+{
+	std::stringstream buff;
+	buff << ":  General Software Fault! \n";
+	buff << "\n";
+
+	std::vector<dbg::StackFrame> stack = dbg::stack_trace();
+	buff << "Callstack: \n";
+	for (unsigned int i = 0; i < stack.size(); i++)
+	{
+		buff << "0x" << std::hex << stack[i].address << ": " << stack[i].name << "(" << std::dec << stack[i].line << ") in " << stack[i].module << "\n";
+	}
+	::lplog(LOG_FATAL_ERROR, L"%S", buff.str().c_str());
+}
 
 void no_memory () {
 	lplog(LOG_FATAL_ERROR,L"Out of memory (new/STL allocation).");
@@ -1311,6 +1327,8 @@ void getTagPositionsFromTagSet(unsigned int position, vector<tTagLocation> tagSe
 		return;
 	if (addTagMark(L"VERB", tagSet, tagBeginPositionMap, tagEndPositionMap) < 0)
 		return;
+	if (addTagMark(L"OBJECT", tagSet, tagBeginPositionMap, tagEndPositionMap) < 0)
+		return;
 	int nextMainVerbTag = -1,mainVerbTag = findTag(tagSet, L"VERB", nextMainVerbTag);
 	addTagConstrainedMark(L"V_AGREE", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
 	addTagConstrainedMark(L"conditional", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
@@ -1348,7 +1366,7 @@ int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, w
 		{
 			int pmaOffset;
 			wstring adiff;
-			if (isPattern && (pmaOffset = (differentiator == L"*") ? im.pma.queryPattern(patternOrWordName) : im.pma.queryPattern(patternOrWordName, differentiator))!=-1)
+			if (isPattern && (pmaOffset = (differentiator == L"*") ? im.pma.queryPattern(patternOrWordName) : im.pma.queryPatternDiff(patternOrWordName, differentiator))!=-1)
 			{
 				pmaOffset = pmaOffset & ~matchElement::patternFlag;
 				map <int, set<wstring>> tagBeginPositionMap, tagEndPositionMap;
@@ -1475,9 +1493,9 @@ int syntaxCheckFromSource(Source source, int sourceId, wstring path, wstring ete
 		for (WordMatch &im : source.m)
 		{
 			// verb, adverb, adverb, OBJECT_1 that is composed of a single noun that does not accept adjectives
-			int pemaOffset= source.queryPattern(wordIndex,L"__S1", L"1"),pmaOffset;
+			int pemaOffset= source.queryPatternDiff(wordIndex,L"__S1", L"1"),pmaOffset;
 			if (pemaOffset != -1 && im.hasWinnerVerbForm() && im.getNumWinners() == 1 && wordIndex < source.m.size() - 3 &&
-				(pmaOffset = source.m[wordIndex + 1].pma.queryPattern(L"__ALLOBJECTS_1", L"1")) != -1)
+				(pmaOffset = source.m[wordIndex + 1].pma.queryPatternDiff(L"__ALLOBJECTS_1", L"1")) != -1)
 			{
 				pmaOffset &= ~matchElement::patternFlag;
 				bool twoAdverbs =
@@ -2650,7 +2668,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		return 0;
 	}
 	if (word == L"her" && primarySTLPMatch == L"possessive_determiner" && source.m[wordSourceIndex].queryWinnerForm(L"personal_pronoun_accusative") >= 0
-		&& source.m[wordSourceIndex].pma.queryPattern(L"__NOUN",L"C") != -1 && source.m[wordSourceIndex].pma.queryPattern(L"__ALLOBJECTS_2") != -1)
+		&& source.m[wordSourceIndex].pma.queryPatternDiff(L"__NOUN",L"C") != -1 && source.m[wordSourceIndex].pma.queryPattern(L"__ALLOBJECTS_2") != -1)
 	{
 		partofspeech += L"***OBJECT2HER";
 		//errorMap[L"LP correct: word 'her': [before an adverb, determiner, personal_pronoun_nominative, coordinator, indefinite_pronoun] ST says possessive_determiner LP says personal_pronoun_accusative"]++;
@@ -3079,12 +3097,12 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: word 'well': ST says " + primarySTLPMatch + L" but LP says interjection"]++;
 		return 0;
 	}
-	if (word == L"either" && (source.m[wordSourceIndex].pma.queryPattern(L"__NOUN", L"O") !=-1 || source.m[wordSourceIndex].pma.queryPattern(L"_VERBPRESENTC", L"O") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"_VERBPAST", L"O") != -1))
+	if (word == L"either" && (source.m[wordSourceIndex].pma.queryPatternDiff(L"__NOUN", L"O") !=-1 || source.m[wordSourceIndex].pma.queryPatternDiff(L"_VERBPRESENTC", L"O") != -1 || source.m[wordSourceIndex].pma.queryPatternDiff(L"_VERBPAST", L"O") != -1))
 	{
 		errorMap[L"LP correct: word 'either': ST says " + primarySTLPMatch + L" but LP says quantifier"]++;
 		return 0;
 	}
-	if (word == L"neither" && source.m[wordSourceIndex].pma.queryPattern(L"__NOUN", L"P") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"_VERBPRESENTC", L"P") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"_VERBPAST", L"P") != -1)
+	if (word == L"neither" && source.m[wordSourceIndex].pma.queryPatternDiff(L"__NOUN", L"P") != -1 || source.m[wordSourceIndex].pma.queryPatternDiff(L"_VERBPRESENTC", L"P") != -1 || source.m[wordSourceIndex].pma.queryPatternDiff(L"_VERBPAST", L"P") != -1)
 	{
 		errorMap[L"LP correct: word 'either': ST says " + primarySTLPMatch + L" but LP says quantifier"]++;
 		return 0;
@@ -3223,13 +3241,13 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0)
 	{
-		if (source.queryPattern(wordSourceIndex, L"__NOUN", L"4") != -1)
+		if (source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"4") != -1)
 		{
 			errorMap[L"diff: ST says " + primarySTLPMatch + L" but LP says adjective in the head of a __NOUN construction"]++;
 			return 0;
 		}
 		// two incorrect parses lead to inaccuracy (ST is correct)
-		if (source.queryPattern(wordSourceIndex, L"__NOUN", L"2") != -1 && source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE")!=-1)
+		if (source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"2") != -1 && source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE")!=-1)
 		{
 			//partofspeech += L"***NOUNADJ";
 			errorMap[L"LP correct: ST says " + primarySTLPMatch + L" but LP says adjective in an __ADJECTIVE construction"]++;
@@ -3443,7 +3461,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		!WordClass::isDash(source.m[wordSourceIndex + 1].word->first[0]) && !WordClass::isDoubleQuote(source.m[wordSourceIndex + 1].word->first[0]) && !WordClass::isSingleQuote(source.m[wordSourceIndex + 1].word->first[0]))
 	{
 		bool wordAfterIsVeryUnmodifiable = wordAfterIsUnmodifiable && source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") == -1 && source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") == -1;
-		int pemaOffset=source.queryPattern(wordSourceIndex, L"__NOUN",L"2");
+		int pemaOffset=source.queryPatternDiff(wordSourceIndex, L"__NOUN",L"2");
 		if (pemaOffset >= 0 && source.pema[pemaOffset].end >= 2)
 			partofspeech += L"***ADJNOUNDET1";
 		else if (wordBeforeIsDeterminer && source.m[wordSourceIndex + 1].queryForm(L"noun") == -1)
@@ -3588,7 +3606,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	// Rollo met the policeman *walking* towards him
 	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE &&
 		source.m[wordSourceIndex].pma.queryPattern(L"_VERBONGOING") != -1 &&
-		(source.queryPattern(wordSourceIndex, L"__NOUN", L"F") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"__NOUN", L"D") != -1 || source.m[wordSourceIndex].pma.queryPattern(L"_PP", L"3") != -1))
+		(source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"F") != -1 || source.m[wordSourceIndex].pma.queryPatternDiff(L"__NOUN", L"D") != -1 || source.m[wordSourceIndex].pma.queryPatternDiff(L"_PP", L"3") != -1))
 	{
 		errorMap[L"diff: ST says noun when LP says it is a verb but matching to a present participle and an _NOUN[F], _NOUN[D] or _PP[3] pattern [acceptable]"]++;
 		return 0; // ST and LP agree
@@ -3631,12 +3649,12 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	if ((primarySTLPMatch == L"noun" || primarySTLPMatch == L"adjective") && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && word.length() > 3 && word.substr(word.length() - 3) == L"ing")
 	{
 		if (primarySTLPMatch == L"noun" && (source.queryPattern(wordSourceIndex, L"__INFP") != -1 ||
-			source.queryPattern(wordSourceIndex, L"_VERB", L"4") != -1 ||
-			source.queryPattern(wordSourceIndex, L"_VERB", L"8") != -1 ||
+			source.queryPatternDiff(wordSourceIndex, L"_VERB", L"4") != -1 ||
+			source.queryPatternDiff(wordSourceIndex, L"_VERB", L"8") != -1 ||
 			source.queryPattern(wordSourceIndex, L"_ADJECTIVE_AFTER") != -1 ||
-			source.queryPattern(wordSourceIndex, L"__ADJECTIVE", L"2") != -1 ||
+			source.queryPatternDiff(wordSourceIndex, L"__ADJECTIVE", L"2") != -1 ||
 			(source.queryPattern(wordSourceIndex, L"_VERBONGOING") != -1 && source.queryPattern(wordSourceIndex, L"__MODAUX") != -1) ||
-			(source.queryPattern(wordSourceIndex, L"_VERBONGOING") != -1 && source.queryPattern(wordSourceIndex, L"_VERBREL2", L"1") != -1)))
+			(source.queryPattern(wordSourceIndex, L"_VERBONGOING") != -1 && source.queryPatternDiff(wordSourceIndex, L"_VERBREL2", L"1") != -1)))
 		{
 			errorMap[L"LP correct: ST says noun when LP says verb participle in a structure consonant with a verb"]++;
 			return 0;
@@ -3644,23 +3662,23 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		//int w;
 		if (primarySTLPMatch == L"adjective" && (
 			source.queryPattern(wordSourceIndex, L"__INFP") != -1 ||
-			source.queryPattern(wordSourceIndex, L"_VERB", L"4") != -1 ||
-			source.queryPattern(wordSourceIndex, L"_VERB", L"8") != -1 ||
-			source.queryPattern(wordSourceIndex, L"__NOUN", L"D") != -1 ||
+			source.queryPatternDiff(wordSourceIndex, L"_VERB", L"4") != -1 ||
+			source.queryPatternDiff(wordSourceIndex, L"_VERB", L"8") != -1 ||
+			source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"D") != -1 ||
 			//(w=source.queryPattern(wordSourceIndex, L"__NOUN", L"2")) != -1 && source.pema[w].end==1) ||
 			(source.queryPattern(wordSourceIndex, L"_VERBONGOING") != -1 && source.queryPattern(wordSourceIndex, L"__MODAUX") != -1) ||
-			(source.queryPattern(wordSourceIndex, L"_VERBONGOING") != -1 && source.queryPattern(wordSourceIndex, L"_VERBREL2", L"1") != -1)))
+			(source.queryPattern(wordSourceIndex, L"_VERBONGOING") != -1 && source.queryPatternDiff(wordSourceIndex, L"_VERBREL2", L"1") != -1)))
 		{
 			errorMap[L"LP correct: ST says adjective when LP says verb participle in a structure consonant with a verb"]++;
 			return 0;
 		}
-		if (primarySTLPMatch == L"noun" && source.queryPattern(wordSourceIndex, L"__NOUN", L"D") != -1)
+		if (primarySTLPMatch == L"noun" && source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"D") != -1)
 		{
 			errorMap[L"diff: ST says noun and LP says verb in a noun structure"]++;
 			return 0;
 		}
 		if (primarySTLPMatch == L"adjective" && (source.queryPattern(wordSourceIndex, L"_ADJECTIVE_AFTER") != -1 ||
-			source.queryPattern(wordSourceIndex, L"__ADJECTIVE", L"2") != -1))
+			source.queryPatternDiff(wordSourceIndex, L"__ADJECTIVE", L"2") != -1))
 		{
 			errorMap[L"diff: ST says adjective and LP says verb in a adjective structure"]++;
 			return 0;
@@ -3669,7 +3687,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	}
 	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0 &&
 		source.m[wordSourceIndex].queryForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST &&
-		source.queryPattern(wordSourceIndex, L"__S1", L"7") != -1)
+		source.queryPatternDiff(wordSourceIndex, L"__S1", L"7") != -1)
 	{
 		partofspeech += L"***S1[7]VERBPAST_ADJECTIVE";
 		errorMap[L"ST correct: ST says verb and LP says adjective"]++;
@@ -3704,7 +3722,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		}
 		if (word.length() > 3 && word.substr(word.length() - 3) == L"ing" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE)
 		{
-			int pemaOffset = source.queryPattern(wordSourceIndex, L"__NOUN", L"2");
+			int pemaOffset = source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"2");
 			if (pemaOffset >= 0 && source.pema[pemaOffset].end >= 2)
 				partofspeech += L"***ISNOUN?PRESENTPARTNOUNADJ NOUN=" + nounCost + L"VERB=" + verbCost;
 			else
@@ -3730,7 +3748,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		}
 		if (word.length() > 3 && word.substr(word.length() - 3) == L"ing" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE)
 		{
-			int pemaOffset = source.queryPattern(wordSourceIndex, L"__NOUN", L"2");
+			int pemaOffset = source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"2");
 			if (pemaOffset >= 0 && source.pema[pemaOffset].end >= 2)
 				partofspeech += L"***ISVERB?PRESENTPARTNOUNADJ NOUN=" + nounCost + L"VERB=" + verbCost;
 			else
@@ -3760,7 +3778,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		}
 		if (word.length() > 3 && word.substr(word.length() - 3) == L"ing" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE)
 		{
-			int pemaOffset = source.queryPattern(wordSourceIndex, L"__NOUN", L"2");
+			int pemaOffset = source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"2");
 			if (pemaOffset >= 0 && source.pema[pemaOffset].end >= 2)
 				partofspeech += L"***ISADJECTIVE?PRESENTPARTNOUNADJ ADJECTIVE=" + adjectiveCost + L"VERB=" + verbCost;
 			else
@@ -3852,7 +3870,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"LP correct '" + word + L"': interjection not "+ primarySTLPMatch]++;
 		return 0;
 	}
-	if ((source.queryPattern(wordSourceIndex,L"__INTRO_N", L"9") != -1 || source.queryPattern(wordSourceIndex,L"_ADVERB", L"T") != -1) && 
+	if ((source.queryPatternDiff(wordSourceIndex,L"__INTRO_N", L"9") != -1 || source.queryPatternDiff(wordSourceIndex,L"_ADVERB", L"T") != -1) && 
 		  (source.m[wordSourceIndex].queryWinnerForm(L"dayUnit") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"timeUnit") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"uncertainDurationUnit") >= 0))
 	{
 		if (primarySTLPMatch ==L"adverb")
@@ -3891,12 +3909,12 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	}
 	if (word==L"doubt")
 	{
-		if (source.queryPattern(wordSourceIndex, L"__INTRO_N", L"ID") != -1)
+		if (source.queryPatternDiff(wordSourceIndex, L"__INTRO_N", L"ID") != -1)
 		{
 			errorMap[L"LP correct: 'doubt' is a verb in 'I doubt if'"]++;
 			return 0;
 		}
-		if (source.queryPattern(wordSourceIndex, L"__ADVERB", L"ND") != -1)
+		if (source.queryPatternDiff(wordSourceIndex, L"__ADVERB", L"ND") != -1)
 		{
 			errorMap[L"LP correct: 'doubt' is a noun in 'no doubt'"]++;
 			return 0;
@@ -3918,7 +3936,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		return 0;
 	}
 	int pemaOffset = -1;
-	if (wordSourceIndex > 0 && source.m[wordSourceIndex].queryWinnerForm(L"quantifier") >= 0 && (pemaOffset=source.queryPattern(wordSourceIndex, L"__NOUN", L"2")) != -1)
+	if (wordSourceIndex > 0 && source.m[wordSourceIndex].queryWinnerForm(L"quantifier") >= 0 && (pemaOffset=source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"2")) != -1)
 	{
 		if (source.pema[pemaOffset].end !=1)
 		{
@@ -3927,7 +3945,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			//return 0;
 		}
 	}
-	if (source.queryPattern(wordSourceIndex, L"_ADVERB", L"8") != -1)
+	if (source.queryPatternDiff(wordSourceIndex, L"_ADVERB", L"8") != -1)
 	{
 		errorMap[L"LP correct:little by little"]++; 
 		return 0;
@@ -4277,6 +4295,7 @@ int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension)
 	wchar_t buffer[1024];
 	wsprintf(buffer, L"stanfordCheck %d", step);
 	SetConsoleTitle(buffer);
+	lplog(LOG_INFO | LOG_ERROR | LOG_NOTMATCHED, NULL); // close all log files to change extension
 	logFileExtension = L".stanfordCheckErrors"+specialExtension;
 
 	if (!myquery(&source.mysql, L"LOCK TABLES sources WRITE"))
@@ -4736,8 +4755,8 @@ void wmain(int argc,wchar_t *argv[])
 		break;
 	case 21:
 		// Source::TEST_SOURCE_TYPE
-		//patternOrWordAnalysis(source, step, L"_VERBREL1", L"1", Source::GUTENBERG_SOURCE_TYPE,true);
-		//patternOrWordAnalysis(source, step, L"_MS1", L"2",true); // TODO: testing weight change on _S1.
+		//patternOrWordAnalysis(source, step, L"__S1", L"R*", Source::GUTENBERG_SOURCE_TYPE,true);
+		patternOrWordAnalysis(source, step, L"__N1", L"EXTENDED", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
 		//patternOrWordAnalysis(source, step, L"_VERB_BARE_INF", L"A", true);
 		patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false, specialExtension);

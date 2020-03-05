@@ -2200,14 +2200,14 @@ void Source::clearSource(void)
 	{
 		Source *source = smi->second;
 		source->clearSource();
-		if (source->updateWordUsageCostsDynamically)
-			WordClass::resetUsagePatternsAndCosts();
-		else
-			WordClass::resetCapitalizationAndProperNounUsageStatistics();
 		delete source;
 		sourcesMap.erase(smi);
 		smi = sourcesMap.begin();
 	}
+	if (updateWordUsageCostsDynamically)
+		WordClass::resetUsagePatternsAndCosts();
+	else
+		WordClass::resetCapitalizationAndProperNounUsageStatistics();
 }
 
 int read(string &str,IOHANDLE file)
@@ -3219,7 +3219,6 @@ Source::Source(wchar_t *databaseServer,int _sourceType,bool generateFormStatisti
 	{
 		createDatabase(databaseServer);
 		Words.createWordCategories();
-		writeSource();
 	}
 	else 
 	{

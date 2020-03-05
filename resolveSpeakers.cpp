@@ -3955,7 +3955,7 @@ bool Source::physicallyPresentPosition(int where,int beginObjectPosition,bool &p
 			// ignore descriptions
 			// Mr. Julius P. Hersheimmer was a great deal younger than either Tommy or Tuppence had pictured him.
 			int wo;
-			if (m[where].relVerb>=0 && (wo=m[m[where].relVerb].getRelObject())>=0 && m[wo].endObjectPosition>=0 && m[wo].endObjectPosition<(signed)m.size() && m[m[wo].endObjectPosition].pma.queryPattern(L"__ADJECTIVE",L"A")==-1)
+			if (m[where].relVerb>=0 && (wo=m[m[where].relVerb].getRelObject())>=0 && m[wo].endObjectPosition>=0 && m[wo].endObjectPosition<(signed)m.size() && m[m[wo].endObjectPosition].pma.queryPatternDiff(L"__ADJECTIVE",L"A")==-1)
 			{
 				return false;
 			}

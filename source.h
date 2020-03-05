@@ -2421,7 +2421,6 @@ int wherePrepObject,
 	};
 
 
-	int refreshWordRelationsFromSolr(vector <testWordRelation> &testWordRelations,int &overTime,int &solrTime);
 	int printSentences(bool updateStatistics,unsigned int unknownCount,unsigned int quotationExceptions,unsigned int totalQuotations,int &globalOverMatchedPositionsTotal);
 	int printSentencesCheck(bool skipCheck);
 	void printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &tagSet,int position,int PEMAPosition);
@@ -3096,7 +3095,6 @@ int wherePrepObject,
 	MYSQL mysql;
 	bool alreadyConnected;
 	int sourceId;
-	int writeSource();
 	int getNumSources(enum Source::sourceTypeEnum st, bool left);
 	int createDatabase(wchar_t *server);
 	int insertWordRelationTypes(void);
@@ -3127,7 +3125,6 @@ int wherePrepObject,
 	int checkInsertPrep(set <int> &relPreps,int wp,int wo);
 	void getAllPreps(cSpaceRelation* sri,set <int> &relPreps,int wo=-1);
 	int flushMultiWordRelations(set <int> &objects);
-	int testStartCode();
 	int initializeNounVerbMapping(void);
 	void getSynonyms(wstring word, set <wstring> &synonyms, int synonymType);
 	void getSynonyms(wstring word, vector <set <wstring> > &synonyms, int synonymType);
@@ -3166,7 +3163,7 @@ int wherePrepObject,
 	int printSentence(unsigned int rowsize, unsigned int begin, unsigned int end, bool containsNotMatched);
 	int getSubjectInfo(tTagLocation subjectTagset, int whereSubject, int &nounPosition, int &nameLastPosition, bool &restateSet, bool &singularSet, bool &pluralSet);
 	bool evaluateSubjectVerbAgreement(int verbPosition, int whereSubject, bool &agreementTestable);
-	int queryPattern(int position, wstring pattern, wstring differentiator);
+	int queryPatternDiff(int position, wstring pattern, wstring differentiator);
 	int queryPattern(int position, wstring pattern, int &maxEnd);
 	int queryPattern(int position, wstring pattern);
 

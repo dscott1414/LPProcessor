@@ -424,7 +424,7 @@ void Source::resolveNonGenderedGeneralObject(int where,vector <cObject>::iterato
 		return;
 	}
 	// No. 27 - does it match an address?
-	if (m[m[where].beginObjectPosition].pma.queryPattern(L"__NOUN",L"Q")!=-1)
+	if (m[m[where].beginObjectPosition].pma.queryPatternDiff(L"__NOUN",L"Q")!=-1)
 	{
 		tIWMM numWord=m[where].word;
 		vector <cLocalFocus>::iterator lsi=localObjects.begin(),lsiEnd=localObjects.end();

@@ -644,7 +644,7 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 	{
 		tIWMM nounWord,verbWord;
 		int nextObjectVerbTag=-1,whereObjectVerbTag=(mainVerbTag>=0) ? findTagConstrained(tagSet,L"V_OBJECT",nextObjectVerbTag,tagSet[mainVerbTag]) : -1;
-		//lplog(L"TEMP DEBUG %d:%s %s", verbPosition, m[verbPosition].word->first.c_str(), patterns[tagSet[verbAgreeTag].parentPattern]->name.c_str());
+		//lplog(L"%d:%s %s", verbPosition, m[verbPosition].word->first.c_str(), patterns[tagSet[verbAgreeTag].parentPattern]->name.c_str());
 		if (patterns[tagSet[verbAgreeTag].parentPattern]->name==L"_VERB_BARE_INF") // if this is a _VERB_BARE_INF - take the first verb
 			verbWord = m[verbPosition].word;
 		else 
@@ -767,7 +767,7 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 	// words like "there" may be plural or singular depending on usage
 	int inflectionFlags = m[verbPosition].word->second.inflectionFlags&VERB_INFLECTIONS_MASK;
 	//wstring verbInflections;
-	//lplog(L"TEMP DEBUG %d:%s %s", verbPosition, m[verbPosition].word->first.c_str(), getInflectionName(inflectionFlags, verbInflectionMap, verbInflections));
+	//lplog(L"%d:%s %s", verbPosition, m[verbPosition].word->first.c_str(), getInflectionName(inflectionFlags, verbInflectionMap, verbInflections));
 	if (!singularSet && !pluralSet && nounPosition>=0)
 	{
 		pluralSet=(m[nounPosition].word->second.inflectionFlags&PLURAL)==PLURAL;
@@ -1730,17 +1730,26 @@ void Source::setPreviousElementsCostsAtIndex(vector <costPatternElementByTagSet>
 		}
 	for (int ppi = pp; ppi >= 0; ppi--)
 	{
-		if (PEMAPositions[ppi].getSourcePosition()+ getEndRelativeSourcePosition(PEMAPositions[ppi].getPEMAPosition()) == patternElementEndPosition && // it is immediately preceding it in the source (its end position matches the passed in patternElementEndPosition)?
+		if ((PEMAPositions[ppi].getSourcePosition()+ getEndRelativeSourcePosition(PEMAPositions[ppi].getPEMAPosition())) == patternElementEndPosition && // it is immediately preceding it in the source (its end position matches the passed in patternElementEndPosition)?
 			   PEMAPositions[ppi].getCost() > cost && // its cost is > than the cost passed in?
 				 PEMAPositions[ppi].getElement() >= lme && // the element matched for that position is >= the nearest preceding non-optional element?
 				 PEMAPositions[ppi].getElement() < patternElement)  // less than the element of the calling procedure (which could have been recursive)?
 		{
 			if (debugTrace.traceSecondaryPEMACosting)
-				lplog(L"set index %d (PEMA=%06d) to cost %d from originating index position %d. [OLD SOURCE=%06d] [NEW SOURCE=%06d] %s", ppi, PEMAPositions[ppi].getPEMAPosition(), cost, pp, PEMAPositions[ppi].getTraceSource(), traceSource,L"PREVIOUS");
+				lplog(L"set index %d (PEMA=%06d) to cost %d from originating index position %d. [OLD SOURCE=%06d] [NEW SOURCE=%06d] %s", ppi, PEMAPositions[ppi].getPEMAPosition(), cost, pp+1, PEMAPositions[ppi].getTraceSource(), traceSource,L"PREVIOUS");
 			PEMAPositions[ppi].setCost(cost);
 			PEMAPositions[ppi].setTraceSource(traceSource);
 			if (ppi>0)
 				setPreviousElementsCostsAtIndex(PEMAPositions, ppi - 1, cost, traceSource, PEMAPositions[ppi].getSourcePosition(), pattern, PEMAPositions[ppi].getElement());
+		}
+		else	if (debugTrace.traceSecondaryPEMACosting)
+		{
+			bool b1 = (PEMAPositions[ppi].getSourcePosition() + getEndRelativeSourcePosition(PEMAPositions[ppi].getPEMAPosition())) == patternElementEndPosition;// it is immediately preceding it in the source (its end position matches the passed in patternElementEndPosition)?
+			bool b2 = PEMAPositions[ppi].getCost() > cost; // its cost is > than the cost passed in?
+			bool b3 = PEMAPositions[ppi].getElement() >= lme; // the element matched for that position is >= the nearest preceding non-optional element?
+			bool b4 = PEMAPositions[ppi].getElement() < patternElement;  // less than the element of the calling procedure (which could have been recursive)?
+			lplog(L"DID NOT set index %d (PEMA=%06d) to cost %d from originating index position %d [REASONS=%s %s %s %s]. ", ppi, PEMAPositions[ppi].getPEMAPosition(), cost, pp + 1,
+						(b1) ? L"true" : L"false", (b2) ? L"true" : L"false", (b3) ? L"true" : L"false", (b4) ? L"true" : L"false");
 		}
 	}
 }
@@ -2395,8 +2404,8 @@ bool Source::assessEVALCost(tTagLocation &tl,int pattern,patternMatchArray::tPat
 bool Source::checkRelation(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,int parentPosition,int position,tIWMM verbWord,tIWMM objectWord,int relationType)
 { LFS
 	if (objectWord==wNULL) return false;
-	tFI::cRMap *rm=verbWord->second.relationMaps[relationType];
 	if (objectWord->second.mainEntry!=wNULL) objectWord=objectWord->second.mainEntry;
+	tFI::cRMap *rm=verbWord->second.relationMaps[relationType];
 	tFI::cRMap::tIcRMap tr=(rm) ? rm->r.find(objectWord) : tNULL;
 	if (debugTrace.traceVerbObjects)
 	{
@@ -3232,7 +3241,7 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 		}
 		winners[position-begin]=preliminaryWinners;
 		//for (int t1 = 0; t1 < preliminaryWinners.size(); t1++)
-		//	lplog(L"%d:TDLELP PHASE 2 preliminaryWinners %d", position - begin, preliminaryWinners[t1]); // TEMP DEBUG 
+		//	lplog(L"%d:TDLELP PHASE 2 preliminaryWinners %d", position - begin, preliminaryWinners[t1]);  
 	}
 	if (debugTrace.tracePatternElimination)
 		for (unsigned int bp=begin; bp<end; bp++)

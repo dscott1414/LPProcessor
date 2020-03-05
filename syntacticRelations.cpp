@@ -1262,7 +1262,7 @@ void Source::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool isI
 			int J=I-1,element;
 			while (J>=0 && !isEOS(J) && m[J].word->first!=L"”" && m[J].word->first!=L"’" && m[J].word!=Words.sectionWord && m[J].word->first!=L":" && m[J].queryWinnerForm(coordinatorForm)<0 && 
 						(!(m[J].objectRole&SUBJECT_ROLE) || m[J].getObject()==UNKNOWN_OBJECT || (m[J].flags&WordMatch::flagAdjectivalObject))) J--;
-			if (multiSubject=(J>=0 && m[J].objectRole&SUBJECT_ROLE) && m[J].getObject()!=UNKNOWN_OBJECT && m[J].getObject()!=m[I].getObject() && m[J].word!=m[I].word && m[J].pma.queryPattern(L"__S1",L"5")==-1) 
+			if (multiSubject=(J>=0 && m[J].objectRole&SUBJECT_ROLE) && m[J].getObject()!=UNKNOWN_OBJECT && m[J].getObject()!=m[I].getObject() && m[J].word!=m[I].word && m[J].pma.queryPatternDiff(L"__S1",L"5")==-1) 
 			{
 				if (m[I].relInternalVerb>=0 && (m[m[I].relInternalVerb].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) &&
 					  m[J].relVerb>=0 && m[m[J].relVerb].quoteForwardLink==tsSense)
@@ -1311,14 +1311,14 @@ void Source::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool isI
 				}
 				// I and J are within the same subject, but J is a time that should not be considered a subject
 				// the following morning the indefatigable Albert ...
-				else if ((element=m[m[J].beginObjectPosition].pma.queryPattern(L"__NOUN",L"5"))!=-1 && 
+				else if ((element=m[m[J].beginObjectPosition].pma.queryPatternDiff(L"__NOUN",L"5"))!=-1 && 
 					  I>J && I<m[J].beginObjectPosition+m[m[J].beginObjectPosition].pma[element&~matchElement::patternFlag].len &&
 						(m[J].word->second.timeFlags&T_UNIT)!=0)
 				{
 					if (debugTrace.traceSpeakerResolution)
 					lplog(LOG_RESOLUTION,L"%06d:Prefer later compound subject@%d for verb @%d if earlier co-subject@%d is a time.",where,I,whereVerb,J); 
 				}
-				else if (m[saveBeginMST].pma.queryPattern(L"__S1",L"5")==-1)
+				else if (m[saveBeginMST].pma.queryPatternDiff(L"__S1",L"5")==-1)
 					I=MSTechnique;
 			}
 		}
@@ -1408,7 +1408,7 @@ void Source::discoverSubjects(int where,vector <tTagLocation> &tagSet,int subjec
 			subjectIsPleonastic=true;
 		}
 		// The following morning the indefatigable Albert , having cemented an alliance with the greengrocer's boy[tommy,albert] 
-		if (subjectWord!=wNULL && ((subjectWord->second.timeFlags&T_UNIT)!=0 || subjectWord==Words.TIME) && m[where].pma.queryPattern(L"__NOUN",L"5")!=-1 && 
+		if (subjectWord!=wNULL && ((subjectWord->second.timeFlags&T_UNIT)!=0 || subjectWord==Words.TIME) && m[where].pma.queryPatternDiff(L"__NOUN",L"5")!=-1 && 
 			  ((signed)tagSet[subjectTag].sourcePosition+tagSet[subjectTag].len>whereSubject) && m[whereSubject+1].principalWherePosition>=0 && 
 				m[m[whereSubject+1].principalWherePosition].endObjectPosition<=(signed)(tagSet[subjectTag].sourcePosition+tagSet[subjectTag].len))
 		{
@@ -2396,7 +2396,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 	}
 	// with him was the evil-looking Number 14.
 	if (objectAsSubject && whereSubjects.size()>0 && whereSubjects[0]>0 && m[whereSubjects[0]-1].queryWinnerForm(prepositionForm)>=0 && m[whereVerb].getRelObject()>=0 && whereSubjects[0]>0 &&
-		  (m[whereSubjects[0]-1].pma.queryPattern(L"__C1__S1",L"2")!=-1))
+		  (m[whereSubjects[0]-1].pma.queryPatternDiff(L"__C1__S1",L"2")!=-1))
 	{
 		int whereSubject=m[whereVerb].getRelObject();
 		int wherePrepObject=whereSubjects[0];

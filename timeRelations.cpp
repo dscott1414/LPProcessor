@@ -786,7 +786,7 @@ bool Source::identifyDateTime(int where,vector <cSpaceRelation>::iterator csr,in
 		// must not be used as an adjective, and must be an object of a preposition
 		if ((m[where].forms.isSet(numeralCardinalForm) || m[where].forms.isSet(numeralOrdinalForm) || m[where].forms.isSet(NUMBER_FORM_NUM)) &&
 				m[beginObjectPosition].pma.queryPatternWithLen(L"__NOUN",where-beginObjectPosition+1)!=-1 &&
-				m[beginObjectPosition].pma.queryPattern(L"__NOUN",L"Q")==-1)
+				m[beginObjectPosition].pma.queryPatternDiff(L"__NOUN",L"Q")==-1)
 		{
 			vector <cTimeInfo>::iterator ti;
 			if (inMultiObject==2)

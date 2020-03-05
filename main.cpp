@@ -78,9 +78,8 @@ void createMinidump(struct _EXCEPTION_POINTERS* apExceptionInfo)
 	::CloseHandle(hFile);
 }
 
-LONG WINAPI unhandled_handler(struct _EXCEPTION_POINTERS* apExceptionInfo)
+void printStackTrace()
 {
-	createMinidump(apExceptionInfo);
 	std::stringstream buff;
 	buff << ":  General Software Fault! \n";
 	buff << "\n";
@@ -92,6 +91,12 @@ LONG WINAPI unhandled_handler(struct _EXCEPTION_POINTERS* apExceptionInfo)
 		buff << "0x" << std::hex << stack[i].address << ": " << stack[i].name << "(" << std::dec << stack[i].line << ") in " << stack[i].module << "\n";
 	}
 	::lplog(LOG_FATAL_ERROR, L"%S", buff.str().c_str());
+}
+
+LONG WINAPI unhandled_handler(struct _EXCEPTION_POINTERS* apExceptionInfo)
+{
+	createMinidump(apExceptionInfo);
+	printStackTrace();
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
@@ -1111,12 +1116,12 @@ int wmain(int argc,wchar_t *argv[])
 	chdir("..");
 	overallTime=clock();
 	// test gutenberg by generating usage statistics
-	if (argc>1 && !wcscmp(argv[1],L"-tg"))
-	{
-		Source source2(L"localhost",0,false,true,true);
-		source2.testStartCode();
-		return 0;
-	}
+	//if (argc>1 && !wcscmp(argv[1],L"-tg"))
+	//{
+	//	Source source2(L"localhost",0,false,true,true);
+	//	source2.testStartCode();
+	//	return 0;
+	//}
 	SetConsoleCtrlHandler(ConsoleHandler, true);
 	if (remove("wcheck.lplog")==ERROR_SHARING_VIOLATION) return -1;
 	initializeCounter();
@@ -1427,10 +1432,6 @@ int wmain(int argc,wchar_t *argv[])
 					source.printSectionStatistics();
 			}
 			lplog();
-#ifndef EXIT_WITHOUT_UPDATE
-			if (source.writeSource()<0)
-				lplog(LOG_FATAL_ERROR,L"Cannot write results for %s.",path.c_str());
-#endif
 			if (source.sourceInPast=source.sourceType==Source::INTERACTIVE_SOURCE_TYPE)
 				source.matchBasicElements(parseOnly);
 			if (!exitNow) source.signalFinishedProcessingSource(sourceId);

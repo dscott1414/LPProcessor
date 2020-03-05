@@ -380,114 +380,6 @@ void tFI::computeDBUsagePatternsToUsagePattern(unordered_map <int, int> &dbUsage
 		dbUsagePatterns[mTD(TRANSFER_COUNT)] = 0;
 }
 
-/*
-	transferDBUsagePatternsToUsagePattern(128,UPDB,0,iCount);
-	transferDBUsagePatternsToUsagePattern(64,UPDB,SINGULAR_NOUN_HAS_DETERMINER,2);
-	transferDBUsagePatternsToUsagePattern(64,UPDB,VERB_HAS_0_OBJECTS,3);
-	usagePatterns[LOWER_CASE_USAGE_PATTERN]=max(127,UPDB[LOWER_CASE_USAGE_PATTERN]);
-	usagePatterns[PROPER_NOUN_USAGE_PATTERN]=max(127,UPDB[PROPER_NOUN_USAGE_PATTERN]);
-*/
-bool tFI::computeDifference(tFI &dbWordInfo, unordered_map <int, int> &dbUsagePatterns, unordered_map <int, int> &addUsagePatterns, int dbMainEntryWordId,bool &changedWord,bool &changedForms)
-{
-	// if a form exists in both original and dbForms, remove from dbForms.
-	// what forms exist in dbForms which do not exist in original, leave it in dbForms (to delete).
-	// what forms do not exist in dbForms which do exist in original, add to addForms.
-	for (unsigned int c = 0; c < count; c++)
-	{
-		auto dbup = dbUsagePatterns.find(forms()[c]+1);
-		if (dbup != dbUsagePatterns.end())
-		{
-			if (dbup->second != usagePatterns[c])
-			{
-				::lplog(LOG_INFO, L"usage pattern %s:%d [DB]!=%d [MEMORY]", Form(c)->name.c_str(), dbup->second, usagePatterns[c]);
-				//addUsagePatterns[dbup->first] = usagePatterns[c];
-			}
-			dbUsagePatterns.erase(dbup);
-		}
-		else
-			addUsagePatterns[forms()[c] + 1]= usagePatterns[c];
-	}
-	for (unsigned int c= TRANSFER_COUNT; c< MAX_USAGE_PATTERNS; c++)
-	{
-		auto dbup = dbUsagePatterns.find(mTD(c));
-		if (dbup != dbUsagePatterns.end())
-		{
-			if (dbup->second != usagePatterns[c])
-			{
-				::lplog(LOG_INFO, L"usage pattern %s:%d [DB]!=%d [MEMORY]", patternString(c).c_str(), dbup->second, usagePatterns[c]);
-				//addUsagePatterns[dbup->first] = usagePatterns[c];
-			}
-			dbUsagePatterns.erase(dbup);
-		}
-		else if(usagePatterns[c] != 0)
-			addUsagePatterns[mTD(c)]=usagePatterns[c];
-	}
-	changedWord = (inflectionFlags != dbWordInfo.inflectionFlags || flags != dbWordInfo.flags || timeFlags != dbWordInfo.timeFlags || ((mainEntry==wNULL || mainEntry->second.index<0) ? -1 : mainEntry->second.index) != dbMainEntryWordId || derivationRules != dbWordInfo.derivationRules || sourceId != dbWordInfo.sourceId);
-	changedForms = dbUsagePatterns.size() > 0 || addUsagePatterns.size() > 0;
-	return changedWord || changedForms;
-}
-
-bool tFI::writeNewWordToDatabase(wstring &sWord, MYSQL &mysql)
-{
-	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	wstring mw, sid;
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"insert into words (word,inflectionFlags,flags,timeFlags,mainEntryWordId,derivationRules,sourceId) VALUES ('%s',%d,%d,%d,%s,%d,%s) ON DUPLICATE KEY UPDATE sourceId = VALUES(sourceId)",
-		sWord.c_str(), inflectionFlags, flags, timeFlags, (mainEntry == wNULL || mainEntry->second.index<0) ? L"null" : itos(mainEntry->second.index, mw).c_str(), derivationRules, (sourceId == -1) ? L"null" : itos(sourceId, sid).c_str());
-	if (!myquery(&mysql, qt, true))
-	{
-		::lplog(LOG_ERROR, L"Error executing statement %s", qt);
-		return false;
-	}
-	my_ulonglong wordId = mysql_insert_id(&mysql);
-	int len = _snwprintf(qt, QUERY_BUFFER_LEN, L"insert into wordforms (wordId,formId,count) VALUES ");
-	for (unsigned int c = 0; c < count; c++)
-		len+=_snwprintf(qt + len, QUERY_BUFFER_LEN - len, L"(%I64d,%d,%d),",wordId,forms()[c]+1,usagePatterns[c]);
-	for (unsigned int c=TRANSFER_COUNT; c< MAX_USAGE_PATTERNS; c++)
-		if (usagePatterns[c])
-			len+=_snwprintf(qt + len, QUERY_BUFFER_LEN - len, L"(%I64d,%d,%d),", wordId, c-TRANSFER_COUNT+patternFormNumOffset, usagePatterns[c]);
-	qt[len - 1] = 0;
-	if (!myquery(&mysql, qt))
-		::lplog(LOG_ERROR, L"Error executing statement %s", qt);
-	return true;
-}
-
-bool tFI::updateWordInDatabase(wstring sWord, MYSQL &mysql)
-{
-	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	wstring mw,sid;
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"update words set inflectionFlags=%d,flags=%d,timeFlags=%d,mainEntryWordId=%s,derivationRules=%d,sourceId=%s where word='%s'",
-		inflectionFlags, flags, timeFlags, (mainEntry == wNULL || mainEntry->second.index < 0) ? L"null":itos(mainEntry->second.index,mw).c_str(), derivationRules, (sourceId==-1) ? L"null":itos(sourceId,sid).c_str(), sWord.c_str());
-	if (!myquery(&mysql, qt))
-		::lplog(LOG_ERROR, L"Error executing statement %s", qt);
-	::lplog(LOG_INFO, L"UPDATE WORD:%s", qt);
-	return true;
-}
-
-bool tFI::insertWordFormsInDatabase(MYSQL &mysql, unordered_map <int, int> &addUsagePatterns)
-{
-	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	int len = _snwprintf(qt, QUERY_BUFFER_LEN, L"insert into wordforms (wordId,formId,count) VALUES ");
-	for (auto f:addUsagePatterns)
-		len += _snwprintf(qt + len, QUERY_BUFFER_LEN - len, L"(%d,%d,%d),", index, f.first, f.second);
-	_snwprintf(qt + len - 1, QUERY_BUFFER_LEN - len, L"ON DUPLICATE KEY UPDATE count = VALUES(count)");
-	if (!myquery(&mysql, qt))
-		::lplog(LOG_ERROR, L"Error executing statement %s", qt);
-	::lplog(LOG_INFO, L"INSERT WORDFORMS:%s", qt);
-	return true;
-}
-
-bool tFI::deleteWordFormsInDatabase(MYSQL &mysql, unordered_map <int, int> &deleteUsagePatterns)
-{
-	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	int len = _snwprintf(qt, QUERY_BUFFER_LEN, L"delete from wordforms where wordId=%d and formId in (",index);
-	for (auto f: deleteUsagePatterns)
-		len += _snwprintf(qt + len, QUERY_BUFFER_LEN - len, L"%d,", f.first);
-	qt[len - 1] = L')';
-	if (!myquery(&mysql, qt))
-		::lplog(LOG_ERROR, L"Error executing statement %s", qt);
-	::lplog(LOG_INFO, L"DELETE WORDFORMS:%s", qt);
-	return true;
-}
 
 wstring tFI::patternString(int p)
 {
@@ -503,98 +395,6 @@ wstring tFI::patternString(int p)
 		case PROPER_NOUN_USAGE_PATTERN: return L"proper noun";
 		default: return L"UNKNOWN";
 	};
-}
-
-// testing to sync individual words in memory to update DB
-//bool writeDB = false;
-//int numChangedWords = 0, numChangedForms = 0, numNewWords = 0, I = 0;
-//for (tIWMM iWord = Words.WMM.begin(), iWordEnd = Words.WMM.end(); iWord != iWordEnd; iWord++, I++)
-//{
-//	printf("%02I64d%%\r", (signed __int64)(I * 100 / Words.WMM.size()));
-//	if (iWord->second.flushWordToDatabase(iWord->first, mysql, writeDB, numChangedWords, numChangedForms, numNewWords) && writeDB && iWord->second.flushWordToDatabase(iWord->first, mysql, writeDB, numChangedWords, numChangedForms, numNewWords))
-//	{
-//		lplog(LOG_FATAL_ERROR, L"%s: unresolvable", iWord->first.c_str());
-//	}
-//}
-//lplog(LOG_INFO, L"numChangedWords = %d,numChangedForms=%d,numNewWords=%d", numChangedWords, numChangedForms, numNewWords);
-
-// make sure that the word as existing in memory is reflected in the words/wordforms tables.
-// 1. read the word/wordforms for the word into a copy.
-// 2. compare the word/wordforms in memory to the copy.
-// 3. write the differences to the database.
-// 4. return whether there were any differences (boolean)
-bool tFI::flushWordToDatabase(wstring sWord,MYSQL &mysql,bool writeDB,int &numChangedWords,int &numChangedForms,int &numNewWords)
-{
-	tFI dbWordInfo;
-	int dbMainEntryWordId=-1;
-	unordered_map <int, int> dbUsagePatterns;
-	wstring escWord;
-	for (wchar_t ch : sWord)
-		if (ch == L'\'')
-			escWord += L"\\'";
-		else
-			escWord += ch;
-	sWord = escWord;
-	if (retrieveWordFromDatabase(sWord, mysql, dbWordInfo, dbUsagePatterns, dbMainEntryWordId))
-	{
-		wstring sDBPatterns, p, f,iflags;
-		computeDBUsagePatternsToUsagePattern(dbUsagePatterns);
-		for (auto const&[pattern, dbcount] : dbUsagePatterns)
-		{
-			if (pattern < patternFormNumOffset)
-			{
-				if (pattern - 1 >= Forms.size())
-					return false;
-				sDBPatterns += ((pattern - 1 < Forms.size()) ? Forms[pattern - 1]->name : L"Illegal Pattern!") + L" " + itos(dbcount, p) + L" ";
-			}
-		}
-		for (auto const&[pattern, dbcount] : dbUsagePatterns)
-		{
-			if (pattern >= patternFormNumOffset && dbcount)
-				sDBPatterns += patternString(pattern - patternFormNumOffset + TRANSFER_COUNT) + L" " + itos(dbcount, p) + L" ";
-		}
-		unordered_map <int, int> addUsagePatterns;
-		bool changedWord, changedForms;
-		computeDifference(dbWordInfo, dbUsagePatterns, addUsagePatterns, dbMainEntryWordId, changedWord, changedForms);
-		if (changedWord || changedForms)
-		{
-			wstring memoryPatterns;
-			for (unsigned int c = 0; c < count; c++)
-				memoryPatterns += Form(c)->name + L" " + itos(usagePatterns[c], p) + L" ";
-			for (unsigned int c = TRANSFER_COUNT; c < MAX_USAGE_PATTERNS; c++)
-				if (usagePatterns[c])
-					memoryPatterns += patternString(c) + L" " + itos(usagePatterns[c], p) + L" ";
-			::lplog(LOG_INFO, L"%s: MEMORY:inflectionFlags=%s  flags=%s  timeFlags=%03d  mainEntry=%07d  derivationRules=%05d  sourceId=%06d  formpatterns=%s", sWord.c_str(), inflectionFlagsToStr(inflectionFlags,iflags), allWordFlags(flags, f), timeFlags, (mainEntry == wNULL) ? -1 : mainEntry->second.index, derivationRules, sourceId, memoryPatterns.c_str());
-			::lplog(LOG_INFO, L"%s: DB    :inflectionFlags=%s  flags=%s  timeFlags=%03d  mainEntry=%07d  derivationRules=%05d  sourceId=%06d  formpatterns=%s", sWord.c_str(), inflectionFlagsToStr(dbWordInfo.inflectionFlags,iflags), allWordFlags(dbWordInfo.flags, f), dbWordInfo.timeFlags, dbMainEntryWordId, dbWordInfo.derivationRules, dbWordInfo.sourceId, sDBPatterns.c_str());
-		}
-		if (writeDB)
-		{
-			if (changedWord)
-				updateWordInDatabase(sWord, mysql);
-			if (changedForms)
-			{
-				if (addUsagePatterns.size() > 0)
-					insertWordFormsInDatabase(mysql, addUsagePatterns);
-				if (dbUsagePatterns.size() > 0)
-					deleteWordFormsInDatabase(mysql, dbUsagePatterns);
-			}
-		}
-		else
-		{
-			if (changedWord) numChangedWords++;
-			if (changedForms) numChangedForms++;
-		}
-		return changedWord || changedForms;
-	}
-	else
-	{
-		::lplog(LOG_INFO, L"%s: DB: NO ENTRY!",sWord.c_str());
-		if (writeDB)
-			writeNewWordToDatabase(sWord, mysql);
-		else
-			numNewWords++;
-	}
-	return true;
 }
 
 bool tFI::write(void *buffer,int &where,int limit)
@@ -1761,8 +1561,9 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 		{
 			if (isDash(sWord[0]))
 			{
-				bool added;
-				iWord=addNewOrModify(NULL, sWord, 0, dashForm, 0, 0, sWord, -1, added);
+				lplog(LOG_FATAL_ERROR, L"Dash should already exist!");
+				//bool added;
+				//iWord=addNewOrModify(NULL, sWord, 0, dashForm, 0, 0, sWord, -1, added);
 			}
 			else
 				iWord = predefineWord((wchar_t *)sWord.c_str());
@@ -2528,7 +2329,7 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
   if (buffer[cp]=='~' && buffer[cp+1]=='~')
   {
 		int endSymbol=0;
-    parseMetaCommands(cp,buffer+cp+2,endSymbol,comment,t);
+    parseMetaCommands((int)cp,buffer+cp+2,endSymbol,comment,t);
     while (cp<bufferLen && buffer[cp]!=13)
       cp++;
     if (cp<bufferLen) cp++;

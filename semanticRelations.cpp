@@ -2897,7 +2897,7 @@ void Source::detectSpaceRelation(int where,int backInitialPosition,vector <int> 
 		if (isSpecialVerb(where,false) || m[where].getRelObject()>=0 || m[where].relPrep>=0)
 			whereVerb=where;
 		// promoted to drying plates
-		if (m[where].getRelObject()<0 && where+2<(signed)m.size() && m[where].pma.queryPattern(L"_VERBREL1")!=-1 && m[where+1].pma.queryPattern(L"_PP",L"3")!=-1)
+		if (m[where].getRelObject()<0 && where+2<(signed)m.size() && m[where].pma.queryPattern(L"_VERBREL1")!=-1 && m[where+1].pma.queryPatternDiff(L"_PP",L"3")!=-1)
 			whereVerb=where;
 	}
 	if (whereVerb>=0 && !m[whereVerb].hasWinnerVerbForm()) // includes verbverbForm

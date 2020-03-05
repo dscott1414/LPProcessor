@@ -82,8 +82,8 @@ public:
 	bool consolidateWinners(int lastPEMAConsolidationIndex,patternElementMatchArray &pema,int *wa,int position,int &maxMatch,sTrace &t);
 	bool findMaxLen(wstring pattern,int &element);
 	int findMaxLen(void);
-	int queryPattern(wstring pattern,wstring differentiator,int &maxLen);
-	int queryPattern(wstring pattern,wstring differentiator);
+	int queryPatternDiff(wstring pattern,wstring differentiator,int &maxLen);
+	int queryPatternDiff(wstring pattern,wstring differentiator);
 	int findAgent(int &element,int maximumMaxEnd,bool allowPronouns);
 	int queryPattern(wstring pattern);
 	int queryPattern(wstring pattern,int &len);

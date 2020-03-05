@@ -1986,18 +1986,29 @@ void initializePatterns(void)
   bool patternError=false;
   for (unsigned int r=0; r<patternReferences.size(); r++)
     patternReferences[r]->resolve(patternError);
-  if (patternError) exit(0);
+  if (patternError) 
+		exit(0);
   //int lastTag=patternTagStrings.size();
   int startSuperTagSets;
   initializeTagSets(startSuperTagSets);
+	set <wstring> namedifferentiators;
+	bool patternDuplicateNameError = false;
   for (unsigned int p=0; p<patterns.size(); p++)
   {
+		if (namedifferentiators.find(patterns[p]->name + patterns[p]->differentiator) != namedifferentiators.end())
+		{
+			patternDuplicateNameError = true;
+			lplog(LOG_ERROR|LOG_STDOUT, L"Pattern %s[%s] is a duplicate name+differentiator", patterns[p]->name.c_str(), patterns[p]->differentiator.c_str());
+		}
+		namedifferentiators.insert(patterns[p]->name + patterns[p]->differentiator);
     patterns[p]->establishMandatoryChildPatterns();
     if (patterns[p]->mandatoryChildPatterns.isEmpty())
       patternsWithNoChildren.set(p);
     if (patterns[p]->parentPatterns.isEmpty())
       patternsWithNoParents.set(p);
   }
+	//if (patternDuplicateNameError)
+	//	exit(0);
   int startTime=clock();
   wprintf(L"Evaluating tagsets...               \r");
   for (unsigned int p=0; p<patterns.size(); p++)
@@ -2197,7 +2208,7 @@ int Source::queryPattern(int position, wstring pattern, int &maxEnd)
 }
 
 // exactly like pema::queryPattern
-int Source::queryPattern(int position, wstring pattern, wstring differentiator)
+int Source::queryPatternDiff(int position, wstring pattern, wstring differentiator)
 {
 	LFS
 		for (int nextByPosition = m[position].beginPEMAPosition; nextByPosition != -1; nextByPosition = pema[nextByPosition].nextByPosition)

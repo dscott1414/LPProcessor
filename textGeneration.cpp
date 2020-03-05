@@ -3121,7 +3121,7 @@ void Source::detectByClausePassive(vector <cSpaceRelation>::iterator sri,cSpaceR
 	// What are titles of albums featuring Jay-Z? --> what albums featured Jay-Z?
 	int verbPhraseElement=-1;
 	if (queryPattern(sri->whereQuestionType,L"__SQ",maxEnd)!=-1 && sri->whereSubject>=0 && m[sri->whereSubject].relVerb>=0 && m[m[sri->whereSubject].relVerb].queryWinnerForm(isForm)>=0 && 
-		  (verbPhraseElement=m[sri->whereSubject].pma.queryPattern(L"__NOUN",L"F"))!=-1)
+		  (verbPhraseElement=m[sri->whereSubject].pma.queryPatternDiff(L"__NOUN",L"F"))!=-1)
 	{
 		vector < vector <tTagLocation> > tagSets;
 		startCollectTags(false, subjectVerbRelationTagSet, sri->whereSubject, m[sri->whereSubject].pma[verbPhraseElement&~matchElement::patternFlag].pemaByPatternEnd, tagSets, true, true,L"passive clause detection");
@@ -3158,7 +3158,7 @@ void Source::detectByClausePassive(vector <cSpaceRelation>::iterator sri,cSpaceR
 int Source::detectAttachedPhrase(vector <cSpaceRelation>::iterator sri,int &relVerb)
 { LFS
 	int collectionWhere=sri->whereQuestionTypeObject;
-	if (m[collectionWhere].beginObjectPosition>=0 && m[m[collectionWhere].beginObjectPosition].pma.queryPattern(L"__NOUN",L"F")!=-1 && (relVerb=m[collectionWhere].relVerb)>=0 && m[relVerb].relSubject==collectionWhere)
+	if (m[collectionWhere].beginObjectPosition>=0 && m[m[collectionWhere].beginObjectPosition].pma.queryPatternDiff(L"__NOUN",L"F")!=-1 && (relVerb=m[collectionWhere].relVerb)>=0 && m[relVerb].relSubject==collectionWhere)
 		return 0;
 	return -1;
 }

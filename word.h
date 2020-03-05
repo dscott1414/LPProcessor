@@ -410,12 +410,6 @@ public:
   tFI(char *buffer,int &where,int limit,wstring &ME,int sourceId);
   bool updateFromDisk(char *buffer,int &where,int limit,wstring &ME);
 	void computeDBUsagePatternsToUsagePattern(unordered_map <int, int> &dbUsagePatterns);
-	bool computeDifference(tFI &dbWordInfo, unordered_map <int, int> &dbUsagePatterns, unordered_map <int, int> &addUsagePatterns, int dbMainEntryWordId, bool &changedWord, bool &changedForms);
-	bool updateWordInDatabase(wstring sWord, MYSQL &mysql);
-	bool insertWordFormsInDatabase(MYSQL &mysql, unordered_map <int, int> &addUsagePatterns);
-	bool deleteWordFormsInDatabase(MYSQL &mysql, unordered_map <int, int> &deleteUsagePatterns);
-	bool writeNewWordToDatabase(wstring &sWord, MYSQL &mysql);
-	bool flushWordToDatabase(wstring sWord, MYSQL &mysql, bool writeDB, int &numChangedWords, int &numChangedForms, int &numNewWords);
 	bool retrieveWordFromDatabase(wstring &sWord, MYSQL &mysql, tFI &dbWordInfo, unordered_map <int, int> &dbUsagePatterns,int &dbMainEntryWordId);
 	bool write(void *buffer,int &where,int limit);
   // MYSQL database
@@ -620,8 +614,6 @@ private:
   static int uniqueNewIndex; // use to insure every word has a unique index, even though it hasn't been consigned to the database yet.  
 	unsigned char usagePatterns[tFI::MAX_USAGE_PATTERNS]; // usage counts for every class of this word
 	unsigned char usageCosts[tFI::MAX_USAGE_PATTERNS];
-	unsigned char saveOriginalUsagePatterns[tFI::MAX_USAGE_PATTERNS]; // usage counts for every class of this word
-	unsigned char saveOriginalUsageCosts[tFI::MAX_USAGE_PATTERNS];
 	unsigned char deltaUsagePatterns[tFI::MAX_USAGE_PATTERNS];
 	// must not change after initialization or this must be protected by SRWLock 
 };
