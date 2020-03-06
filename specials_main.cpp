@@ -3867,7 +3867,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"LP correct '" + word + L"': interjection not "+ primarySTLPMatch]++;
 		return 0;
 	}
-	if ((source.queryPatternDiff(wordSourceIndex,L"__INTRO_N", L"9") != -1 || source.queryPatternDiff(wordSourceIndex,L"_ADVERB", L"T") != -1) && 
+	if ((source.queryPatternDiff(wordSourceIndex,L"__INTRO_N", L"C") != -1 || source.queryPatternDiff(wordSourceIndex,L"_ADVERB", L"T") != -1) && 
 		  (source.m[wordSourceIndex].queryWinnerForm(L"dayUnit") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"timeUnit") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"uncertainDurationUnit") >= 0))
 	{
 		if (primarySTLPMatch ==L"adverb")
