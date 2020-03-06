@@ -288,37 +288,6 @@ tFI::tFI(char *buffer,int &where,int limit,wstring &ME,int iSourceId)
 	//preferVerbPresentParticiple();
 }
 
-bool tFI::retrieveWordFromDatabase(wstring &sWord, MYSQL &mysql, tFI &dbWordInfo, unordered_map <int, int> &dbUsagePatterns,int &dbMainEntryWordId)
-{
-	MYSQL_RES * result = NULL;
-	if (!myquery(&mysql, L"LOCK TABLES words w READ, wordforms wf READ, words READ")) return false;
-	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"select w.inflectionFlags,w.flags,w.timeFlags,IF( EXISTS(SELECT id FROM words WHERE id = w.mainEntryWordId), mainEntryWordId, null) mainEntryWordId,w.derivationRules,w.sourceId,wf.formId,wf.count from words w,wordforms wf where wf.wordId=w.id and word = '%s'", sWord.c_str());
-	MYSQL_ROW sqlrow = NULL;
-	dbWordInfo.inflectionFlags=-1;
-	if (myquery(&mysql, qt, result))
-	{
-		while (sqlrow = mysql_fetch_row(result))
-		{
-			if (dbWordInfo.inflectionFlags == -1)
-			{
-				dbWordInfo.inflectionFlags = atoi(sqlrow[0]);
-				dbWordInfo.flags = atoi(sqlrow[1]);
-				dbWordInfo.timeFlags = atoi(sqlrow[2]);
-				dbMainEntryWordId = (sqlrow[3]) ? atoi(sqlrow[3]) : -1;
-				dbWordInfo.derivationRules = atoi(sqlrow[4]);
-				dbWordInfo.sourceId = (sqlrow[5]) ? atoi(sqlrow[5]) : -1;
-			}
-			int dbFormId = atoi(sqlrow[6]);
-			int dbCount = atoi(sqlrow[7]);
-			dbUsagePatterns[dbFormId] = dbCount;
-		}
-	}
-	mysql_free_result(result);
-	myquery(&mysql, L"UNLOCK TABLES");
-	return dbWordInfo.inflectionFlags != -1;
-}
-
 int mTD(int p)
 {
 	return p + tFI::patternFormNumOffset - tFI::TRANSFER_COUNT;
@@ -379,7 +348,6 @@ void tFI::computeDBUsagePatternsToUsagePattern(unordered_map <int, int> &dbUsage
 	if (dbUsagePatterns.find(mTD(TRANSFER_COUNT)) != dbUsagePatterns.end())
 		dbUsagePatterns[mTD(TRANSFER_COUNT)] = 0;
 }
-
 
 wstring tFI::patternString(int p)
 {

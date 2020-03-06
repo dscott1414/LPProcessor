@@ -2088,7 +2088,7 @@ int Source::matchPatternsAgainstSentence(unsigned int s,unsigned int &patternsTr
 { LFS
 	int numPatternsMatched=0;
 	bitObject<32, 5, unsigned int, 32> patternsToTry,patternsToTryLast,patternsToTryNext=patternsWithNoChildren,patternsMatched;
-	for (pass=0; pass<5; pass++)
+	for (pass=0; pass<6; pass++)
 	{
 		patternsToTry=patternsToTryNext;
 #ifdef LOG_IPATTERN

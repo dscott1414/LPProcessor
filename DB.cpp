@@ -644,8 +644,7 @@ void WordClass::assign(int wordId,tIWMM iWord)
 
 #define NUM_WORD_ALLOCATION 102400
 void WordClass::mapWordIdToWordStructure(int wordId, tIWMM iWord)
-{
-	LFS
+{ LFS
 		while (idsAllocated <= wordId)
 		{
 			int previousIdsAllocated = idsAllocated;
@@ -1057,32 +1056,15 @@ int WordClass::readWithLock(MYSQL &mysql,int sourceId,wstring sourcePath,bool ge
 		acquireLock(mysql,true);
 	#endif
   int numWordsInserted=0,numWordsModified=0;
-  int ret=readWordsFromDB(mysql,sourceId,sourcePath, generateFormStatistics,numWordsInserted,numWordsModified, printProgress, disqualifyWords, skipWordInitialization, specialExtension);
+  readWordsFromDB(mysql,sourceId,sourcePath, generateFormStatistics,numWordsInserted,numWordsModified, printProgress, disqualifyWords, skipWordInitialization, specialExtension);
   myquery(&mysql,L"UNLOCK TABLES");
 	#ifdef WRITE_WORDS_AND_FORMS_TO_DB
 		releaseLock(mysql);
 	#endif
 	if (numWordsInserted || numWordsModified)
     lplog(L"%d words inserted into and %d words modified in memory in %d seconds.",numWordsInserted,numWordsModified,(clock()-startTime)/CLOCKS_PER_SEC);
-  return ret;
+	return 0;
 }
-
-int readProcessedLocationsInSource(wstring path)
-{ LFS
-	path+=L".SourceCache";
-	IOHANDLE fd=_wopen(path.c_str(),O_RDWR|O_BINARY);
-	if (fd<0) return -1;
-	int bufferlen=min(1024,filelength(fd)),where=0;
-	void *buffer=(void *)tmalloc(bufferlen+10);
-	::read(fd,buffer,bufferlen);
-	close(fd);
-	wstring location=(wchar_t *)((char *)buffer+where);
-  where+=(location.length()+1)*sizeof(location[0]);
-  unsigned int count=*((unsigned int *)(((char *)buffer)+where));
-	tfree(bufferlen,buffer);
-	return count;
-}
-
 
 int readWikiNominalizations(MYSQL &mysql, unordered_map <wstring,set < wstring > > &agentiveNominalizations)
 { LFS

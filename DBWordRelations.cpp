@@ -29,11 +29,6 @@ void tFI::allocateMap(int relationType)
     relationMaps[relationType]=new cRMap;
 }
 
-bool deltaFrequencyCompare(const tFI::cRMap::tIcRMap &lhs,const tFI::cRMap::tIcRMap &rhs)
-{ LFS
-  return lhs->second.deltaFrequency<rhs->second.deltaFrequency;
-}
-
 // read word DB indexes for mainEntries of words not already having indexes and belonging to the current source.
 // return a set of wordIds for the mainEntries of words belonging to the current source and not previously had wordRelations refreshed.
 int Source::readWordIndexesForWordRelationsRefresh(vector <int> &wordIds)
@@ -110,19 +105,6 @@ int Source::readWordIndexesForWordRelationsRefresh(vector <int> &wordIds)
     mysql_free_result(result);
   }
   return 0;
-}
-
-// this is for performance testing between MySQL and Solr
-void compareTestRelations(vector <Source::testWordRelation> testWordRelations, vector <Source::testWordRelation> testWordRelationsFromSolr)
-{
-	vector <Source::testWordRelation> wordRelationsNotFoundInSolr;
-	for (Source::testWordRelation tr : testWordRelations)
-	{
-		if (std::find(testWordRelationsFromSolr.begin(), testWordRelationsFromSolr.end(), tr) == testWordRelationsFromSolr.end())
-			wordRelationsNotFoundInSolr.push_back(tr);
-	}
-	if (wordRelationsNotFoundInSolr.size() > 0 || testWordRelations.size()!= testWordRelationsFromSolr.size())
-		lplog(LOG_FATAL_ERROR, L"Word relations No match!");
 }
 
 // this is called immediately after reading in words from text (tokenization), before parsing and costing.

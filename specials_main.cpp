@@ -1339,7 +1339,7 @@ void getTagPositionsFromTagSet(unsigned int position, vector<tTagLocation> tagSe
 void getTagPositions(Source source,int position,int pemaByPatternEnd, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
 {
 	vector < vector <tTagLocation> > tagSets;
-	if (source.startCollectTags(false, subjectVerbAgreementTagSet, position, pemaByPatternEnd, tagSets, true, false, L"tags for debugging") > 0)
+	if (source.startCollectTags(false, subjectVerbRelationTagSet, position, pemaByPatternEnd, tagSets, true, false, L"tags for debugging")>0)
 	{
 		for (unsigned int J = 0; J < tagSets.size(); J++)
 		{
@@ -1356,6 +1356,9 @@ int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, w
 	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false,specialExtension) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
+	bool extended=false;
+	if (extended = differentiator == L"EXTENDED")
+		differentiator = L"*";
 	bool parsedOnly = false;
 	int lastSentenceIndexPrinted = -1;
 	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
@@ -1369,6 +1372,16 @@ int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, w
 			if (isPattern && (pmaOffset = (differentiator == L"*") ? im.pma.queryPattern(patternOrWordName) : im.pma.queryPatternDiff(patternOrWordName, differentiator))!=-1)
 			{
 				pmaOffset = pmaOffset & ~matchElement::patternFlag;
+				if (extended)
+				{
+					// only get verb participle matches
+					int pemaOffset = im.pma[pmaOffset].pemaByPatternEnd;
+					if (im.word->second.Form(source.pema[pemaOffset].getChildForm())->name != L"verb")
+					{
+						wordIndex++;
+						continue;
+					}
+				}
 				map <int, set<wstring>> tagBeginPositionMap, tagEndPositionMap;
 				getTagPositions(source, wordIndex, im.pma[pmaOffset].pemaByPatternEnd, tagBeginPositionMap, tagEndPositionMap);
 				int patternEnd = wordIndex+im.pma[pmaOffset].len;
@@ -1406,23 +1419,19 @@ int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, w
 					}
 					sentence += L" ";
 				}
-				// a man she did not fancy 
-				// wordIndex+NOUNRLength-1 = fancy
-				// wordIndex+1=man
-				// a mystery %you have never guessed
-				// wordIndex+NOUNRLength-1 = guessed
-				// wordIndex+1 = mystery
-				// I felt **the way you do**
-				// wordIndex+NOUNRLength-1 = do
-				// wordIndex+1=the way
-				// wordIndex-1=felt (do is a COND)
-				//analyzeUsage(source,wordIndex+1,wordIndex+2,wordIndex-1,)  
+				if (extended)
+					lplog(LOG_INFO, L"_N1:%d:%s:form %s.", wordIndex,im.word->first.c_str(),im.word->second.Form(source.pema[im.pma[pmaOffset].pemaByPatternEnd].getChildForm())->name.c_str());
 				wstring path = source.sourcePath.substr(16, source.sourcePath.length() - 20);
-				lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, patternEnd, sentence.c_str());
-				if (differentiator!=L"*")
+				if (differentiator.find(L'*') == wstring::npos)
+				{
 					lplog(LOG_ERROR, L"%s", sentence.c_str());
+				lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, patternEnd, sentence.c_str());
+				}
 				else
-					lplog(LOG_ERROR, L"%s:%s", adiff.c_str(),sentence.c_str());
+				{
+					lplog(LOG_ERROR, L"[%s]:%s", adiff.c_str(), sentence.c_str());
+					lplog(LOG_INFO, L"%s[%s](%d-%d):%s", path.c_str(), adiff.c_str(),wordIndex, patternEnd, sentence.c_str());
+				}
 			}
 			else if (!isPattern && im.word->first==patternOrWordName)
 			{

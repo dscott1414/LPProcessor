@@ -154,7 +154,7 @@ void defineTimePatterns()
 		0);
 	// between now and Monday morning 
 	// 6 months or a year from now
-	cPattern::create(L"_TIME{MNOUN}",L"C",
+	cPattern::create(L"_TIME{MNOUN}",L"INTERVAL",
 		1,L"_TIME{MOBJECT}",0,1,1,
 		1,L"coordinator*-1",0,1,1, // prefer over _NOUN[O]
 		1,L"_TIME{MOBJECT}",0,1,1,

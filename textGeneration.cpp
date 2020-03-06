@@ -2917,7 +2917,6 @@ bool Source::processPathToPattern(const wchar_t *path,Source *&source)
 		source->printSentences(false,unknownCount,quotationExceptions,totalQuotations,globalOverMatchedPositionsTotal);
 		source->addWNExtensions();
 		source->identifyObjects();
-		source->refreshWordRelations();
 		source->analyzeWordSenses();
 		source->narrativeIsQuoted = false;
 		source->syntacticRelations();

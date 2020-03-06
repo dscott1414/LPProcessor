@@ -148,7 +148,7 @@ void createQuestionPatterns(void)
 									1,L"__S1{OBJECT:EVAL:_BLOCK}",0,1,1,
 									0);
 	// Do you *mean* do I love Kara ?
-	cPattern::create(L"_QT1{_FINAL_IF_ALONE:VERB}", L"A",
+	cPattern::create(L"_QT1{_FINAL_IF_ALONE:VERB}", L"B",
 									1, L"_ADVERB", 0, 0, 1,
 									1, L"_DO*-2{imp}", 0, 1, 1,
 									1, L"__NOUN[*]{SUBJECT}", 0, 1, 1,

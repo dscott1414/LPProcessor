@@ -3078,7 +3078,6 @@ int wherePrepObject,
 	vector <cMultiRelationHistory> multiRelationHistory;
 	vector <int> delayedWordRelations;  // stores relations that should be delayed from being recorded in the syntactic phase because speakers are not resolved
 	vector <int> delayedMultiWordRelations;  // stores relations that should be delayed from being recorded in the syntactic phase because speakers are not resolved
-	void addDelayedMultiWordRelations(int whereSubject,int whereVerb,int whereObject, int wherePrep, int wherePrepObject);
 	void addDelayedWordRelations(int where,int fromWhere,int toWhere,int relationType);
 	void createProbableRelationsList();
 	void reportProbableRelationsAccuracy();
@@ -3118,7 +3117,6 @@ int wherePrepObject,
 	void updateSourceStatistics2(int sizeInBytes, int numWordRelations);
 	void updateSourceStatistics3(int numMultiWordRelations);
 	void logPatternChain(int sourcePosition,int insertionPoint,enum patternElementMatchArray::chainType patternChainType);
-	int	flushWordRelationsHistory(MYSQL &mysql);	
 	void printCAS(wstring logPrefix,cAS &childCAS);
 	void printSRI(wstring logPrefix,cSpaceRelation* sri,int s,int ws,int wo,int ps,bool overWrote,int matchSum,wstring matchInfo,int logDestination=LOG_WHERE);
 	void printSRI(wstring logPrefix,cSpaceRelation* sri,int s,int ws,int wo,wstring ps,bool overWrote,int matchSum,wstring matchInfo,int logDestination=LOG_WHERE);

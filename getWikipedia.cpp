@@ -1334,7 +1334,6 @@ int Source::processPath(const wchar_t *path,Source *&source,Source::sourceTypeEn
 			}
 			if (!parseOnly)
 			{
-				source->refreshWordRelations();
 				source->parentSource = this;
 				source->identifyObjects();
 				vector <int> secondaryQuotesResolutions;

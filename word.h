@@ -684,19 +684,6 @@ public:
 
   // MYSQL database
   int lastReadfromDBTime;
-  int flushNewMainEntryWords(MYSQL &mysql,vector <tIWMM> &queryWords,bool justQuery);
-  int flushNewWords(MYSQL &mysql,vector <tIWMM> &queryWords,bool justQuery);
-  int getNumWordRelationsToWrite(void);
-	int flushWordRelations(MYSQL &mysql);
-  int flushGroups();
-  int updateWordMainInfoToDB(MYSQL &mysql,int &numUpdates);
-  int updateWordFormsToDB(MYSQL &mysql);
-  int flushForms(MYSQL &mysql);
-	int insertWordIds(MYSQL &mysql,wchar_t *qt);
-	int refreshWordIdsFromDB(MYSQL &mysql,vector <tIWMM> &queryWords);
-	int updateOnlyMainEntryIndexToDB(MYSQL &mysql,vector <tIWMM> &queryWords);
-	int readWordIndexesFromDB(MYSQL &mysql);
-	int writeWordsToDB(MYSQL &mysql);
   int readWithLock(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics, bool printProgress, bool disqualifyWords, bool skipWordInitialization, wstring specialExtension);
   void readForms(MYSQL &mysql, wchar_t *qt);
 	void mapWordIdToWordStructure(int wordId, tIWMM iWord);
@@ -726,16 +713,10 @@ public:
   static tIWMM predefineWord(const wchar_t *word,int flags=0);
 	void extendedParseHolidays();
 	int predefineHolidays();
-  void testWordCacheFileRoutines(void);
 	static int processTime(wstring sWord, char &hour, char &minute);
 	static int processDate(wstring sWord, short &year, char &month, char &dayOfMonth);
 	static int splitWord(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId);
 	static tIWMM fullQuery(MYSQL *mysql, wstring word, int sourceId);
-	void writeWordMap();
-	void updateWordRelationIndexesFromDB(MYSQL &mysql, int lastReadfromDBTime, int sourceId);
-	int updateDBWordRelations(MYSQL &mysql, int totalWordRelationsToWrite);
-	void updateUsages(MYSQL &mysql);
-	void createHolidays(void);
 	static int writeWord(tIWMM iWord, void *buffer, int &where, int limit);
 
 protected:
@@ -762,7 +743,6 @@ private:
   vector <wstring> unknownCDWords;
   void readUnknownWords(wchar_t *fileName,vector <wstring> &unknownWords);
   void writeUnknownWords(wchar_t *fileName,vector <wstring> &unknownWords);
-  int write(void);
 
   // initialized
   static vector <wchar_t *> multiElementWords;
@@ -789,7 +769,6 @@ private:
   int continueParse(wchar_t *buffer,__int64 begincp,__int64 bufferLen,vector<wchar_t *> &multiWords);
   static int addWordToForm(wstring sWord,tIWMM &iWord,int flags,wstring sForm,wstring shortForm,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added);
   int predefineWords(InflectionsRoot words[],wstring form,wstring shortForm,wstring inflectionsClass=L"",int flags=0,bool properNounSubClass=false);
-  bool closeConnection(void);
   static int checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,wstring sForm,int inflection,int derivationRules,wstring mainEntry,int sourceId);
 
   #ifdef CHECK_WORD_CACHE
