@@ -1206,11 +1206,11 @@ int Source::analyzeQuestionFromSource(wchar_t *derivation,wstring childSourceTyp
 		{
 			Source *source=smi->second;
 			sourcesMap.erase(smi);
-			source->clearSource();
 			if (source->updateWordUsageCostsDynamically)
-				WordClass::resetUsagePatternsAndCosts();
+				WordClass::resetUsagePatternsAndCosts(source->debugTrace);
 			else
-				WordClass::resetCapitalizationAndProperNounUsageStatistics();
+				WordClass::resetCapitalizationAndProperNounUsageStatistics(source->debugTrace);
+			source->clearSource();
 			delete source;
 		}
 	}
@@ -3745,9 +3745,9 @@ int Source::matchBasicElements(bool parseOnly)
 			Source *source = smi->second;
 			source->clearSource();
 			if (source->updateWordUsageCostsDynamically)
-				WordClass::resetUsagePatternsAndCosts();
+				WordClass::resetUsagePatternsAndCosts(source->debugTrace);
 			else
-				WordClass::resetCapitalizationAndProperNounUsageStatistics();
+				WordClass::resetCapitalizationAndProperNounUsageStatistics(source->debugTrace);
 			delete source;
 			sourcesMap.erase(smi);
 			smi = sourcesMap.begin();

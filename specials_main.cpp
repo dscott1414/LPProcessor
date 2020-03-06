@@ -1151,9 +1151,7 @@ int analyzeEnd(Source source, int sourceId, wstring path, wstring etext, wstring
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE")) 
 		return -1;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false,specialExtension) < 0)
-		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
-	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
+	Words.readWords(path, sourceId, false,L"");
 	bool parsedOnly = false;
 	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
 	{
@@ -1266,9 +1264,7 @@ int printUnknownsFromSource(Source source, int sourceId, wstring path, wstring e
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false,specialExtension) < 0)
-		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
-	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
+	Words.readWords(path, sourceId, false, L"");
 	bool parsedOnly = false, firstIllegal = false;
 	int numIllegalWords = 0;
 	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
@@ -1353,9 +1349,7 @@ int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, w
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false,specialExtension) < 0)
-		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
-	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
+	Words.readWords(path, sourceId, false, L"");
 	bool extended=false;
 	if (extended = differentiator == L"EXTENDED")
 		differentiator = L"*";
@@ -1491,9 +1485,7 @@ int syntaxCheckFromSource(Source source, int sourceId, wstring path, wstring ete
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false,specialExtension) < 0)
-		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
-	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
+	Words.readWords(path, sourceId, false, L"");
 	bool parsedOnly = false;
 	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
 	{
@@ -1561,9 +1553,7 @@ int populateWordFrequencyTableFromSource(Source source, int sourceId, wstring pa
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false,specialExtension) < 0)
-		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
-	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
+	Words.readWords(path, sourceId, false, L"");
 	bool parsedOnly = false;
 	int numIllegalWords = 0;
 	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
@@ -1964,9 +1954,7 @@ void testRDFType(Source &source, wstring specialExtension)
 	int sourceId = 25291;
 	wstring path = L"J:\\caches\\texts\\Schoonover, Frank E\\Jules of the Great Heart  Free Trapper and Outlaw in the Hudson Bay Region in the Early Days.txt";
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE")) return;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false,specialExtension) < 0)
-		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
-	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
+	Words.readWords(path, sourceId, false, L"");
 	vector <cTreeCat *> rdfTypes;
 	Ontology::rdfIdentify(L"clackamas", rdfTypes, L"Z", true);
 	bool parsedOnly = false;
@@ -4191,9 +4179,7 @@ int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
-	if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false,specialExtension) < 0)
-		lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
-	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
+	Words.readWords(path, sourceId, false, L""); 
 	bool parsedOnly = false,bearFound=false;
 	int numIllegalWords = 0;
 	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
@@ -4594,9 +4580,7 @@ int testViterbiHMMMultiSource(Source &source,wchar_t *databaseHost,int step, wst
 		mTW(sqlrow[2], title);
 		path.insert(0, L"\\").insert(0, CACHEDIR);
 		bool parsedOnly = false;
-		if (Words.readWithLock(source.mysql, sourceId, path, false, false, false, false,specialExtension) < 0)
-			lplog(LOG_FATAL_ERROR, L"Cannot read dictionary.");
-		Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
+		Words.readWords(path, sourceId, false, L"");
 		//unordered_map <int, vector < vector <tTagLocation> > > emptyMap;
 		//for (unsigned int ts = 0; ts < desiredTagSets.size(); ts++)
 		//	childSource.pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);

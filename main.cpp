@@ -1307,8 +1307,6 @@ int wmain(int argc,wchar_t *argv[])
 			source.unlockTables();
 			if (start == L"**SKIP**")
 				continue;
-			if (st!=Source::BNC_SOURCE_TYPE && !forceSourceReread && Words.readWithLock(source.mysql,sourceId,path,false,true,false,false, specialExtension)<0)
-				lplog(LOG_FATAL_ERROR,L"Cannot read dictionary.");
 			Words.addMultiWordObjects(source.multiWordStrings,source.multiWordObjects);
 			wstring rt1,rt2;
 			int ret=0;
@@ -1384,9 +1382,9 @@ int wmain(int argc,wchar_t *argv[])
 				}
 				source.clearSource();
 				if (source.updateWordUsageCostsDynamically)
-					WordClass::resetUsagePatternsAndCosts();
+					WordClass::resetUsagePatternsAndCosts(source.debugTrace);
 				else
-					WordClass::resetCapitalizationAndProperNounUsageStatistics();
+					WordClass::resetCapitalizationAndProperNounUsageStatistics(source.debugTrace);
 				if (!exitNow) source.signalFinishedProcessingSource(sourceId);
 				continue;
 			}
@@ -1402,8 +1400,6 @@ int wmain(int argc,wchar_t *argv[])
 			//bool isNoun=false,isVerb=true,isAdjective=false,isAdverb=false;
 			//analyzeSense(false,L"draft",proposedSubstitute,numIrregular,inflectionFlags,isNoun,isVerb,isAdjective,isAdverb);
 			source.identifyObjects();
-			if (source.refreshWordRelations() < 0)
-				lplog(LOG_FATAL_ERROR, L"Failed to refresh word relations.");
 			vector <int> secondaryQuotesResolutions;
 			source.analyzeWordSenses();
 			source.narrativeIsQuoted = st != Source::GUTENBERG_SOURCE_TYPE;
@@ -1437,9 +1433,9 @@ int wmain(int argc,wchar_t *argv[])
 			if (!exitNow) source.signalFinishedProcessingSource(sourceId);
 			source.clearSource();
 			if (source.updateWordUsageCostsDynamically)
-				WordClass::resetUsagePatternsAndCosts();
+				WordClass::resetUsagePatternsAndCosts(source.debugTrace);
 			else
-				WordClass::resetCapitalizationAndProperNounUsageStatistics();
+				WordClass::resetCapitalizationAndProperNounUsageStatistics(source.debugTrace);
 		}
 #ifdef LOG_PATTERNS
 		cPattern::printPatternStatistics();

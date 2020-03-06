@@ -1343,8 +1343,6 @@ struct {
 	{tFI::insertNewForms,L"insertNewForms"},
 	{tFI::isMainEntry,L"isMainEntry"},
 	{tFI::intersectionGroup,L"intersectionGroup"},
-	{tFI::wordIndexRead,L"wordIndexRead"},
-	{tFI::wordRelationsRefreshed,L"wordRelationsRefreshed"},
 	{tFI::newWordFlag,L"newWordFlag"},
 	{tFI::inSourceFlag,L"inSourceFlag"},
 	{tFI::alreadyTaken,L"alreadyTaken"},

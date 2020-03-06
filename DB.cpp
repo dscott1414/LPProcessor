@@ -18,9 +18,6 @@
 #include "profile.h"
 #include "mysqldb.h"
 
-#define READ_WORDS_FOR_ALL_SOURCE -1
-#define READ_NEW_MAINENTRY -2
-#define READ_NEW_WORDS -3
 bool checkFull(MYSQL *mysql,wchar_t *qt,size_t &len,bool flush,wchar_t *qualifier);
 
 /*
@@ -404,7 +401,6 @@ int Source::readMultiSourceObjects(tIWMM *wordMap,int numWords)
 int Source::flushObjects(set <int> &objectsToFlush)
 {
 	LFS
-  if (sourceId==READ_WORDS_FOR_ALL_SOURCE) return 0;
   wprintf(L"Writing objects to database...\r");
   if (!myquery(&mysql,L"LOCK TABLES objects WRITE")) return -1;
 
@@ -622,27 +618,6 @@ bool tFI::updateFromDB(int wordId,unsigned int *forms,unsigned int iCount,int iI
 }
 
 #define NUM_WORD_ALLOCATION 102400
-void WordClass::assign(int wordId,tIWMM iWord)
-{ LFS
-	while (idsAllocated<=wordId)
-  {
-		int previousIdsAllocated=idsAllocated;
-    idsAllocated+=NUM_WORD_ALLOCATION;
-    idToMap=(tIWMM *)trealloc(22,idToMap,previousIdsAllocated * sizeof(*idToMap),idsAllocated*sizeof(*idToMap));
-    if (!idToMap)
-      lplog(LOG_FATAL_ERROR,L"Out of memory allocating %d bytes to idToMap array.",idsAllocated*sizeof(*idToMap));
-		for (int I = idsAllocated - NUM_WORD_ALLOCATION; I < idsAllocated; I++)
-			idToMap[I] = wNULL;
-    //memset(idToMap+idsAllocated-NUM_WORD_ALLOCATION,wNULL,NUM_WORD_ALLOCATION*sizeof(*idToMap));
-  }
-  #ifdef LOG_WORD_FLOW
-		lplog(L"Word %s assigned to index %d.",iWord->first.c_str(),wordId);
-	#endif
-  idToMap[wordId]=iWord;
-  iWord->second.index=wordId;
-}
-
-#define NUM_WORD_ALLOCATION 102400
 void WordClass::mapWordIdToWordStructure(int wordId, tIWMM iWord)
 { LFS
 		while (idsAllocated <= wordId)
@@ -771,14 +746,14 @@ bool WordClass::isWordFormCacheValid(MYSQL &mysql)
 // if return code is 0, parent calling this procedure should return with a 0.
 // if return code is 2, parent calling this procedure should continue.
 // qt is a scratch query buffer.
-int WordClass::readWordFormsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,int maxWordId,wchar_t *qt,	int *words,int *counts,int &numWordForms,unsigned int * &wordForms, bool printProgress, bool disqualifyWords, bool skipWordInitialization, wstring specialExtension)
+int WordClass::readWordFormsFromDB(MYSQL &mysql,int maxWordId,wchar_t *qt,	int *words,int *counts,int &numWordForms,unsigned int * &wordForms, bool printProgress, bool skipWordInitialization, wstring specialExtension)
 { LFS
   memset(words,-1,maxWordId*sizeof(int));
   memset(counts,0,maxWordId*sizeof(int));
   bool testCacheSuccess=false;
   #ifdef USE_TEST_CACHE
 		;
-    if (sourceId==READ_WORDS_FOR_ALL_SOURCE && lastReadfromDBTime==-1 && isWordFormCacheValid(mysql))
+    if (lastReadfromDBTime==-1 && isWordFormCacheValid(mysql))
     {
 			if (skipWordInitialization)
 				return 0;
@@ -804,22 +779,12 @@ int WordClass::readWordFormsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,
   {
 		int wf = 0;
 		numWordForms = 0;
-		if (sourceId == READ_WORDS_FOR_ALL_SOURCE)
-		{
 			MYSQL_RES *result = NULL;
 			MYSQL_ROW sqlrow;
-			int len = _snwprintf(qt, QUERY_BUFFER_LEN, L"select wf.wordId, wf.formId, wf.count from wordForms wf, words w where w.id=wf.wordId");
-			//if (sourceId == READ_WORDS_FOR_ALL_SOURCE)
-			//{
-				len += _snwprintf(qt + len, QUERY_BUFFER_LEN - len, L" AND w.sourceId IS NULL");
+		int len = _snwprintf(qt, QUERY_BUFFER_LEN, L"select wf.wordId, wf.formId, wf.count from wordForms wf, words w where w.id=wf.wordId AND w.sourceId IS NULL");
 				if (lastReadfromDBTime > 0)
 					len += _snwprintf(qt + len, QUERY_BUFFER_LEN - len, L" AND UNIX_TIMESTAMP(w.ts)>%d", lastReadfromDBTime);
-			//}
-			//else
-			//	if (sourceId >= 0) len += _snwprintf(qt + len, QUERY_BUFFER_LEN - len, L" AND w.sourceId=%d", sourceId);
 			_snwprintf(qt + len, QUERY_BUFFER_LEN - len, L" ORDER BY wordId, formId");
-			if (printProgress)
-				wprintf(L"Querying word forms from database (sourceId=%d)...                        \r", sourceId);
 			if (!myquery(&mysql, qt, result)) return -1;
 			numWordForms = (int)mysql_num_rows(result);
 			wordForms = (unsigned int *)tmalloc(numWordForms * sizeof(int) * 2);
@@ -836,24 +801,8 @@ int WordClass::readWordFormsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,
 				wordForms[wf++] = atoi(sqlrow[2]); // count
 			}
 			mysql_free_result(result);
-		}
-    if (wf==0 && sourceId>0)
-    {
-			if (printProgress)
-				wprintf(L"Reading from word cache file...                                               \r");
-			if (!sourcePath.empty())
-        readWords(sourcePath,sourceId, disqualifyWords, specialExtension); // no wordRelations possible because none of these exist in DB
-			if (printProgress)
-				wprintf(L"Finished reading from cache file...                                               \r");
-      tfree(maxWordId*sizeof(int),counts);
-      tfree(maxWordId*sizeof(int),words);
-			if (numWordForms>0)
-				tfree(numWordForms*sizeof(int)*2,wordForms);
-      //lplog(L"TIME DB READ END (4) for source %d:%s",sourceId,getTimeStamp());
-      return 0;
-    }
     #ifdef USE_TEST_CACHE
-      if (sourceId==READ_WORDS_FOR_ALL_SOURCE && lastReadfromDBTime==-1)
+      if (lastReadfromDBTime==-1)
       {
         int testfd=open("wordFormCache",O_WRONLY|O_CREAT|O_BINARY,_S_IREAD|_S_IWRITE);
         if (testfd>=0)
@@ -882,7 +831,7 @@ int getMaxWordId(MYSQL &mysql)
 	return maxWordId;
 }
 
-int WordClass::refreshWordsFromSource(MYSQL &mysql, int sourceId, int *words, int *counts, unsigned int * &wordForms, int &numWordsInserted, int &numWordsModified, bool printProgress)
+int WordClass::initializeWordsFromDB(MYSQL &mysql, int *words, int *counts, unsigned int * &wordForms, int &numWordsInserted, int &numWordsModified, bool printProgress)
 {
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
   MYSQL_RES *result=NULL;
@@ -891,15 +840,9 @@ int WordClass::refreshWordsFromSource(MYSQL &mysql, int sourceId, int *words, in
 		wprintf(L"Reading from database: waiting for response from source NULL word query...                        \r");
   // read words
   tIWMM iWord=wNULL;
-  int len=_snwprintf(qt,QUERY_BUFFER_LEN,L"select id, word, inflectionFlags, flags, timeFlags, mainEntryWordId, derivationRules from words");
-  if (sourceId==READ_WORDS_FOR_ALL_SOURCE)
-  {
-    len+=_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L" where sourceId IS NULL");
+  int len=_snwprintf(qt,QUERY_BUFFER_LEN,L"select id, word, inflectionFlags, flags, timeFlags, mainEntryWordId, derivationRules from words where sourceId IS NULL");
     if (lastReadfromDBTime>0)
       len+=_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L" AND UNIX_TIMESTAMP(ts)>%d",lastReadfromDBTime);
-  }
-	else if (sourceId >= 0)  
-		len += _snwprintf(qt + len, QUERY_BUFFER_LEN - len, L" where sourceId=%d", sourceId);
   //_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L" ORDER BY word");
   if (!myquery(&mysql,qt,result)) return -1;
   __int64 numRows=mysql_num_rows(result);
@@ -922,7 +865,7 @@ int WordClass::refreshWordsFromSource(MYSQL &mysql, int sourceId, int *words, in
 		}
     int selfFormNum=FormsClass::findForm(sWord);
 		tIWMM tryWord;
-    if ((sourceId!=-1 || lastReadfromDBTime>=0) && (tryWord=WMM.find(sWord))!=WMM.end())
+    if (lastReadfromDBTime>=0 && (tryWord=WMM.find(sWord))!=WMM.end())
     {
 			iWord=tryWord;
       #ifdef LOG_WORD_FLOW
@@ -930,12 +873,12 @@ int WordClass::refreshWordsFromSource(MYSQL &mysql, int sourceId, int *words, in
       #endif
       if (iWord->second.index<0)
 				mapWordIdToWordStructure(wordId, iWord);
-      if (iWord->second.updateFromDB(wordId,wordForms+words[wordId],counts[wordId],inflectionFlags,flags,timeFlags,mainEntryWordId,derivationRules,sourceId,selfFormNum,sWord))
+      if (iWord->second.updateFromDB(wordId,wordForms+words[wordId],counts[wordId],inflectionFlags,flags,timeFlags,mainEntryWordId,derivationRules,-1,selfFormNum,sWord))
         numWordsModified++;
     }
     else
     {
-      iWord=WMM.insert(tWFIMap(sWord,tFI(wordForms+words[wordId],counts[wordId],inflectionFlags,flags,timeFlags,mainEntryWordId,derivationRules,sourceId,selfFormNum,sWord))).first;
+      iWord=WMM.insert(tWFIMap(sWord,tFI(wordForms+words[wordId],counts[wordId],inflectionFlags,flags,timeFlags,mainEntryWordId,derivationRules,-1,selfFormNum,sWord))).first;
       numWordsInserted++;
       #ifdef LOG_WORD_FLOW
         lplog(L"Inserted (from sourceId %d) read word %s.",sourceId,sWord.c_str());
@@ -959,15 +902,16 @@ int WordClass::refreshWordsFromSource(MYSQL &mysql, int sourceId, int *words, in
 	mainEntryMap.reserve(mainEntryMap.size() + wordsToResolve.size());
 	for (vector<tIWMM>::iterator wi=wordsToResolve.begin(),wiEnd=wordsToResolve.end(); wi!=wiEnd; wi++)
 	{
-		if ((*wi)->second.tmpMainEntryWordId>=idsAllocated || (*wi)->second.tmpMainEntryWordId<0 || (idToMap[(*wi)->second.tmpMainEntryWordId]==wNULL && (*wi)->second.tmpMainEntryWordId!=0))
+		if (wordStructureGivenWordIdExists((*wi)->second.tmpMainEntryWordId)==wNULL)
     {
       numMainEntriesNotFound++;
-			lplog(L"mainEntryWordId %d not found for word %s (sourceId=%d lastReadfromDBTime=%d)!",(*wi)->second.tmpMainEntryWordId,(*wi)->first.c_str(),sourceId,lastReadfromDBTime); // mainEntries and any references must always have the same source
+			lplog(LOG_FATAL_ERROR,L"mainEntryWordId %d not found for word %s (lastReadfromDBTime=%d)!",(*wi)->second.tmpMainEntryWordId,(*wi)->first.c_str(),lastReadfromDBTime); // mainEntries and any references must always have the same source
 			(*wi)->second.mainEntry=*wi; 
     }
 		else
 		{
-			(*wi)->second.mainEntry=idToMap[(*wi)->second.tmpMainEntryWordId];
+			(*wi)->second.mainEntry= wordStructureGivenWordIdExists((*wi)->second.tmpMainEntryWordId);
+			(*wi)->second.tmpMainEntryWordId = -1;
 			if ((*wi)->second.mainEntry!=wNULL)
 				mainEntryMap[(*wi)->second.mainEntry->first].push_back(*wi);
 		}
@@ -978,8 +922,6 @@ int WordClass::refreshWordsFromSource(MYSQL &mysql, int sourceId, int *words, in
     addNewOrModify(NULL,wstring(L"|||"),tFI::topLevelSeparator,SECTION_FORM_NUM,0,0,L"section",-1,added);
     sectionWord=WMM.find(L"|||");
   }
-  if (sourceId==READ_WORDS_FOR_ALL_SOURCE)
-  {
 		if (!myquery(&mysql, L"select UNIX_TIMESTAMP(NOW())", result)) 
 			return -1;
 		if ((sqlrow = mysql_fetch_row(result)) == NULL) 
@@ -993,22 +935,18 @@ int WordClass::refreshWordsFromSource(MYSQL &mysql, int sourceId, int *words, in
     }
     lastReadfromDBTime=atoi(sqlrow[0])+1;
     mysql_free_result(result);
-  }
 	return 0;
 }
 
-// called by readWithLock (in this file)
-// Ways this function is used:
-// sourceId==READ_WORDS_FOR_ALL_SOURCE. update read: read NULL source since lastReadfromDBTime and update or insert the entries into memory (lastReadfromDBTime>0)
-// sourceId>=0. source read: read all source words belonging to a certain source
-// only pay attention to lastReadfromDBTime IF sourceId==READ_WORDS_FOR_ALL_SOURCE.  If sourceId is >=0, then the source was never read before (sources are never repeated).
-int WordClass::readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatisticsFlag,int &numWordsInserted,int &numWordsModified, bool printProgress,bool disqualifyWords, bool skipWordInitialization, wstring specialExtension)
+// update read: read NULL source since lastReadfromDBTime and update or insert the entries into memory (lastReadfromDBTime>0)
+int WordClass::readWordsFromDB(MYSQL &mysql,bool generateFormStatisticsFlag,bool printProgress,bool skipWordInitialization)
 { LFS
+int startTime = clock();
+int numWordsInserted = 0, numWordsModified = 0;
 	if (printProgress)
 		wprintf(L"Started reading from database...                        \r");
   //lplog(L"TIME DB READ START for source %d:%s",sourceId,getTimeStamp());
   wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-  if (sourceId==READ_WORDS_FOR_ALL_SOURCE)
     readForms(mysql,qt);
   if (nounForm==-1) nounForm=FormsClass::gFindForm(L"noun");
   if (verbForm==-1) verbForm=FormsClass::gFindForm(L"verb");
@@ -1019,26 +957,14 @@ int WordClass::readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool
   FormsClass::changedForms=false;
 	int maxWordId=getMaxWordId(mysql);
 	if (maxWordId<=0) return maxWordId;
-  if (sourceId==READ_WORDS_FOR_ALL_SOURCE)
-  {
-		// have to do it twice to catch mainEntryWords that point to other mainEntryWords
-	  myquery(&mysql,L"update words w inner join words mw on w.mainEntryWordId=mw.id set mw.sourceId=NULL where w.sourceId is NULL");
-	  myquery(&mysql,L"update words w inner join words mw on w.mainEntryWordId=mw.id set mw.sourceId=NULL where w.sourceId is NULL");
-  }
-  else if (sourceId>=0)  
-	{
-		wsprintf(qt,L"update words w inner join words mw on w.mainEntryWordId=mw.id set mw.sourceId=%d where w.sourceId=%d and mw.sourceId is not null",sourceId,sourceId);
-		myquery(&mysql,qt);
-		myquery(&mysql,qt);
-	}
   // read wordForms of the words
   int *words=(int *)tmalloc(maxWordId*sizeof(int));
   int *counts=(int *)tmalloc(maxWordId*sizeof(int));
   int numWordForms;
   unsigned int *wordForms=NULL;
-	if (readWordFormsFromDB(mysql,sourceId,sourcePath,maxWordId,qt,words,counts,numWordForms,wordForms, printProgress,disqualifyWords,skipWordInitialization, specialExtension)==0) return 0;
-	if (refreshWordsFromSource(mysql, sourceId, words, counts, wordForms, numWordsInserted, numWordsModified, printProgress) < 0)
-		lplog(LOG_FATAL_ERROR, L"Cannot read words from source %s.", sourcePath.c_str());
+	if (readWordFormsFromDB(mysql,maxWordId,qt,words,counts,numWordForms,wordForms, printProgress,skipWordInitialization,L"")==0) return 0;
+	if (initializeWordsFromDB(mysql, words, counts, wordForms, numWordsInserted, numWordsModified, printProgress) < 0)
+		lplog(LOG_FATAL_ERROR, L"Cannot read words from DB.");
 	tfree(maxWordId * sizeof(int), counts);
 	tfree(maxWordId * sizeof(int), words);
 	tfree(numWordForms * sizeof(int) * 2, wordForms);
@@ -1046,21 +972,6 @@ int WordClass::readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool
 		generateFormStatistics();
 	if (printProgress)
 		wprintf(L"Finished reading from database...                                                  \r");
-  return 0;
-}
-
-int WordClass::readWithLock(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics, bool printProgress, bool disqualifyWords, bool skipWordInitialization, wstring specialExtension)
-{ LFS
-  int startTime=clock();
-	#ifdef WRITE_WORDS_AND_FORMS_TO_DB
-		acquireLock(mysql,true);
-	#endif
-  int numWordsInserted=0,numWordsModified=0;
-  readWordsFromDB(mysql,sourceId,sourcePath, generateFormStatistics,numWordsInserted,numWordsModified, printProgress, disqualifyWords, skipWordInitialization, specialExtension);
-  myquery(&mysql,L"UNLOCK TABLES");
-	#ifdef WRITE_WORDS_AND_FORMS_TO_DB
-		releaseLock(mysql);
-	#endif
 	if (numWordsInserted || numWordsModified)
     lplog(L"%d words inserted into and %d words modified in memory in %d seconds.",numWordsInserted,numWordsModified,(clock()-startTime)/CLOCKS_PER_SEC);
 	return 0;

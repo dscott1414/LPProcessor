@@ -2385,9 +2385,8 @@ int wherePrepObject,
 	unsigned int doQuotesOwnershipAndContractions(unsigned int &quotations,bool newsBank);
 	int reportUnmatchedElements(int begin,int end,bool logElements);
 	void clearTagSetMaps(void);
-	int readWordIndexesForWordRelationsRefresh(vector <int> &wordIds);
 	int WRMemoryCheck();
-	int refreshWordRelations();
+	int readWordIdsNeedingWordRelations(set <int> &wordIds);
 
 	class testWordRelation
 	{
@@ -3085,7 +3084,7 @@ int wherePrepObject,
 	tFI::cRMap::tIcRMap addRelations(int where,tIWMM from,tIWMM to,int relationType);
 	// multiWordStrings is read once from txt files in Source initialization.
 	vector < vector < tmWS > > multiWordStrings;
-	// after each readWithLock (after each book adds more words)
+	// after each readWordsFromDB (after each book adds more words)
 	// the multiWordStrings vector is scanned and any more objects which have all the words defined are moved to the multiWordObjects array,
 	//   and the entry is removed from the multiWordStrings array
 	vector < vector < vector <tIWMM> > > multiWordObjects;

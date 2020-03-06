@@ -1141,8 +1141,6 @@ int bncc::process(Source &source,int sourceId,wstring id)
   int printLocation=0;
   wchar_t path[1024];
   wsprintf(path,L"%s\\BNC-world\\Texts\\%lC\\%lC%lC\\%lC%lC%lC",LMAINDIR,id[0],id[0],id[1],id[0],id[1],id[2]);
-  if (Words.readWithLock(source.mysql,sourceId,path,false, true,false,false, L"")<0)
-    lplog(LOG_FATAL_ERROR,L"Cannot read dictionary.");
   Words.addMultiWordObjects(source.multiWordStrings,source.multiWordObjects);
   source.storageLocation =id;
   HANDLE hFile = CreateFile(path,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);

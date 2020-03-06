@@ -1378,7 +1378,7 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 		int nounOwner=0;
 		bool flagAlphaBeforeHint=(bufferScanLocation && iswalpha(bookBuffer[bufferScanLocation-1]));
 		bool flagNewLineBeforeHint=(bufferScanLocation && bookBuffer[bufferScanLocation-1]==13);
-		result=Words.readWord(bookBuffer,bufferLen,bufferScanLocation,sWord,comment,nounOwner,false,webScrapeParse,debugTrace,&mysql,sourceId);//m.size()==lastSentenceEnd);
+		result=Words.readWord(bookBuffer,bufferLen,bufferScanLocation,sWord,comment,nounOwner,false,webScrapeParse,debugTrace,&mysql,sourceId);
 		if (comment.size() > 0)
 			metaCommandsEmbeddedInSource[m.size()] = comment;
 		bool flagAlphaAfterHint=(bufferScanLocation<bufferLen && iswalpha(bookBuffer[bufferScanLocation]));
@@ -1824,8 +1824,12 @@ int Source::printSentences(bool updateStatistics,unsigned int unknownCount,unsig
 	unsigned int totalUnmatched=0,patternsMatched=0,patternsTried=0;
 	bool containsUnmatchedElement,printedHeader=false;
 	section=0;
-	if (refreshWordRelations() < 0)
+	set <int> wordIds;
+	readWordIdsNeedingWordRelations(wordIds);
+	if (Words.initializeWordRelationsFromDB(mysql, wordIds,true)<0)
 		return -1;
+	for (vector <WordMatch>::iterator im = m.begin(), imEnd = m.end(); im != imEnd; im++)
+		im->getMainEntry()->second.flags &= ~tFI::inSourceFlag;
 	// these patterns exclude NOUN patterns containing other NOUN patterns
 	int memoryPerSentenceBySize[512],timePerSentenceBySize[512],sizePerSentenceBySize[512];
 	if (debugTrace.collectPerSentenceStats)
@@ -2205,9 +2209,9 @@ void Source::clearSource(void)
 		smi = sourcesMap.begin();
 	}
 	if (updateWordUsageCostsDynamically)
-		WordClass::resetUsagePatternsAndCosts();
+		WordClass::resetUsagePatternsAndCosts(debugTrace);
 	else
-		WordClass::resetCapitalizationAndProperNounUsageStatistics();
+		WordClass::resetCapitalizationAndProperNounUsageStatistics(debugTrace);
 }
 
 int read(string &str,IOHANDLE file)
@@ -2878,9 +2882,9 @@ bool Source::readSource(wstring &path,bool checkOnly,bool &parsedOnly,bool print
 	{
 		clearSource();
 		if (updateWordUsageCostsDynamically)
-			WordClass::resetUsagePatternsAndCosts();
+			WordClass::resetUsagePatternsAndCosts(debugTrace);
 		else
-			WordClass::resetCapitalizationAndProperNounUsageStatistics();
+			WordClass::resetCapitalizationAndProperNounUsageStatistics(debugTrace);
 	}
 	return success;
 }
@@ -3222,11 +3226,7 @@ Source::Source(wchar_t *databaseServer,int _sourceType,bool generateFormStatisti
 	}
 	else 
 	{
-		#ifdef CHECK_WORD_CACHE
-			if (Words.readWithLock(mysql,-4,L"",generateFormStatistics,wNULL,false,skipWordInitialization,L""))
-		#else
-			if (Words.readWithLock(mysql,-1,L"",generateFormStatistics, printProgress, false,skipWordInitialization, L""))
-		#endif
+		if (Words.readWordsFromDB(mysql,generateFormStatistics, printProgress, skipWordInitialization))
 				lplog(LOG_FATAL_ERROR,L"Cannot read database.");
 	}
 	unlockTables();

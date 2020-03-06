@@ -332,14 +332,14 @@ public:
   static const int MAX_FORM_USAGE_PATTERNS=8;
 	// up to 32 bits
   enum eWordFlags { topLevelSeparator=1, ignoreFlag=2, queryOnLowerCase=4, queryOnAnyAppearance=8, updateMainInfo=32, updateMainEntry=64,
-                    insertNewForms=128, isMainEntry=256, intersectionGroup=512, wordIndexRead=1024, wordRelationsRefreshed=1024, newWordFlag=2048, inSourceFlag=4096, 
+                    insertNewForms=128, isMainEntry=256, intersectionGroup=512, newWordFlag=2048, inSourceFlag=4096, 
 										deleteWordAfterSourceProcessing=8192,
 										alreadyTaken=8192*256, physicalObjectByWN=8192*512, notPhysicalObjectByWN=8192*1024,uncertainPhysicalObjectByWN=notPhysicalObjectByWN<<1,
 										genericGenderIgnoreMatch=uncertainPhysicalObjectByWN<<1,prepMoveType=genericGenderIgnoreMatch<<1,
 										genericAgeGender=prepMoveType<<1,stateVerb=genericAgeGender<<1,possibleStateVerb=stateVerb<<1,mainEntryErrorNoted=possibleStateVerb<<1,
 										lastWordFlag=mainEntryErrorNoted<<1
   };
-  static const int resetFlagsOnRead=updateMainInfo|insertNewForms|wordIndexRead|newWordFlag|inSourceFlag;
+  static const int resetFlagsOnRead=updateMainInfo|insertNewForms|newWordFlag|inSourceFlag;
   static const int VERB_AFTER_VERB_COST_FLAG=65536;
   enum eUsagePatterns {
     TRANSFER_COUNT=MAX_FORM_USAGE_PATTERNS,
@@ -672,8 +672,8 @@ public:
   // generic utilities
   bool isAllUpper(wstring &sWord);
   bool remove(wstring sWord);
-	static void resetUsagePatternsAndCosts();
-	static void resetCapitalizationAndProperNounUsageStatistics();
+	static void resetUsagePatternsAndCosts(sTrace debugTrace);
+	static void resetCapitalizationAndProperNounUsageStatistics(sTrace debugTrace);
 	int readFormsCache(char *buffer,int bufferlen,int &numReadForms);
   int readWords(wstring oPath,int sourceId, bool disqualifyWords, wstring specialExtension);
 	int writeFormsCache(int fd);
@@ -684,13 +684,9 @@ public:
 
   // MYSQL database
   int lastReadfromDBTime;
-  int readWithLock(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics, bool printProgress, bool disqualifyWords, bool skipWordInitialization, wstring specialExtension);
   void readForms(MYSQL &mysql, wchar_t *qt);
 	void mapWordIdToWordStructure(int wordId, tIWMM iWord);
 	tIWMM wordStructureGivenWordIdExists(int wordId);
-	void assign(int wordId,tIWMM iWord);
-  tIWMM *idToMap;
-  int idsAllocated;
   bool acquireLock(MYSQL &mysql,bool persistent);
   void releaseLock(MYSQL &mysql);
 
@@ -718,6 +714,8 @@ public:
 	static int splitWord(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId);
 	static tIWMM fullQuery(MYSQL *mysql, wstring word, int sourceId);
 	static int writeWord(tIWMM iWord, void *buffer, int &where, int limit);
+	int readWordsFromDB(MYSQL &mysql, bool generateFormStatistics, bool printProgress, bool skipWordInitialization);
+	int initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, bool inSourceFlagSet);
 
 protected:
   bool appendToUnknownWordsMode;
@@ -729,12 +727,13 @@ protected:
   }
 
 private:
+	tIWMM *idToMap;
+	int idsAllocated;
   typedef pair <wstring, tFI> tWFIMap;
   static int lastWordWrittenClock;
 	bool isWordFormCacheValid(MYSQL &mysql);
-	int readWordFormsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,int maxWordId,wchar_t *qt,int *words,int *counts,int &numWordForms,unsigned int * &wordForms, bool printProgress, bool disqualifyWords, bool skipWordInitialization, wstring specialExtension);
-	int refreshWordsFromSource(MYSQL &mysql, int sourceId, int *words, int *counts, unsigned int * &wordForms, int &numWordsInserted, int &numWordsModified, bool printProgress);
-  int readWordsFromDB(MYSQL &mysql,int sourceId,wstring sourcePath,bool generateFormStatistics,int &numWordsInserted,int &numWordsModified, bool printProgress, bool disqualifyWords, bool skipWordInitialization, wstring specialExtension);
+	int readWordFormsFromDB(MYSQL &mysql,int maxWordId,wchar_t *qt,int *words,int *counts,int &numWordForms,unsigned int * &wordForms, bool printProgress, bool skipWordInitialization, wstring specialExtension);
+	int initializeWordsFromDB(MYSQL &mysql, int *words, int *counts, unsigned int * &wordForms, int &numWordsInserted, int &numWordsModified, bool printProgress);
   int lastModifiedTime;
   int minimumLastWordWrittenClockDiff;
   static bool changedWords;
@@ -743,6 +742,7 @@ private:
   vector <wstring> unknownCDWords;
   void readUnknownWords(wchar_t *fileName,vector <wstring> &unknownWords);
   void writeUnknownWords(wchar_t *fileName,vector <wstring> &unknownWords);
+  int write(void);
 
   // initialized
   static vector <wchar_t *> multiElementWords;
@@ -769,6 +769,7 @@ private:
   int continueParse(wchar_t *buffer,__int64 begincp,__int64 bufferLen,vector<wchar_t *> &multiWords);
   static int addWordToForm(wstring sWord,tIWMM &iWord,int flags,wstring sForm,wstring shortForm,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added);
   int predefineWords(InflectionsRoot words[],wstring form,wstring shortForm,wstring inflectionsClass=L"",int flags=0,bool properNounSubClass=false);
+  bool closeConnection(void);
   static int checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,wstring sForm,int inflection,int derivationRules,wstring mainEntry,int sourceId);
 
   #ifdef CHECK_WORD_CACHE

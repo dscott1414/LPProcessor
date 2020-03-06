@@ -1137,12 +1137,21 @@ bool WordClass::remove(wstring sWord)
   return false;
 }
 
-void WordClass::resetUsagePatternsAndCosts()
+void WordClass::resetUsagePatternsAndCosts(sTrace debugTrace)
 {
 	for (tIWMM w = begin(), wEnd = end(); w != wEnd; )
 	{
 		if (w->second.flags&tFI::deleteWordAfterSourceProcessing)
+		{
+			if (w->second.index < 0 || w->second.index >= Words.idsAllocated)
+			{
+				if (debugTrace.traceParseInfo)
+					lplog(LOG_ERROR, L"wordId %d belonging to %s is being removed!", w->second.index, w->first.c_str());
+			}
+			else
+				Words.idToMap[w->second.index] = wNULL;
 			w = WMM.erase(w);
+		}
 		else
 		{
 			w->second.resetUsagePatternsAndCosts(w->first);
@@ -1151,19 +1160,21 @@ void WordClass::resetUsagePatternsAndCosts()
 	}
 }
 
-void WordClass::resetCapitalizationAndProperNounUsageStatistics()
+void WordClass::resetCapitalizationAndProperNounUsageStatistics(sTrace debugTrace)
 {
 	// mainEntry processing must be completed before any words are deleted.
 	for (tIWMM w = begin(), wEnd = end(); w != wEnd; w++)
 	{
 		if (w->second.mainEntry != wNULL && (w->second.mainEntry->second.flags&tFI::deleteWordAfterSourceProcessing) && !(w->second.flags&tFI::deleteWordAfterSourceProcessing))
 		{
-			lplog(LOG_INFO, L"Removing deletion of word %s because it is a main entry of another word which is not going to be deleted.", w->second.mainEntry->first.c_str());
+			if (debugTrace.traceParseInfo)
+				lplog(LOG_INFO, L"Removing deletion of word %s because it is a main entry of another word which is not going to be deleted.", w->second.mainEntry->first.c_str());
 			w->second.mainEntry->second.flags &= ~tFI::deleteWordAfterSourceProcessing;
 		}
 		if ((w->second.flags&tFI::deleteWordAfterSourceProcessing) && w->second.sourceId<0)
 		{
-			lplog(LOG_INFO, L"Removing deletion of word %s because it is has a NULL sourceId.", w->first.c_str());
+			if (debugTrace.traceParseInfo)
+				lplog(LOG_INFO, L"Removing deletion of word %s because it is has a NULL sourceId.", w->first.c_str());
 			w->second.flags &= ~tFI::deleteWordAfterSourceProcessing;
 		}
 	}
@@ -1171,7 +1182,15 @@ void WordClass::resetCapitalizationAndProperNounUsageStatistics()
 	{
 		if (w->second.flags&tFI::deleteWordAfterSourceProcessing)
 		{
-			lplog(LOG_INFO, L"Deleting word %s post source processing", w->first.c_str());
+			if (debugTrace.traceParseInfo)
+				lplog(LOG_INFO, L"Deleting word %s post source processing", w->first.c_str());
+			if (w->second.index < 0 || w->second.index >= Words.idsAllocated)
+			{
+				if (debugTrace.traceParseInfo)
+					lplog(LOG_ERROR, L"wordId %d belonging to %s is being removed!", w->second.index, w->first.c_str());
+			}
+			else
+				Words.idToMap[w->second.index] = wNULL;
 			w = WMM.erase(w);
 		}
 		else
