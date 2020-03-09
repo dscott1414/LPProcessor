@@ -2005,8 +2005,8 @@ void initializePatterns(void)
     if (patterns[p]->parentPatterns.isEmpty())
       patternsWithNoParents.set(p);
   }
-	//if (patternDuplicateNameError)
-	//	exit(0);
+	if (patternDuplicateNameError)
+		exit(0);
   int startTime=clock();
   wprintf(L"Evaluating tagsets...               \r");
   for (unsigned int p=0; p<patterns.size(); p++)

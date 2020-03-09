@@ -8984,6 +8984,7 @@ void Source::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 		// Wikipedia
 		if (sourceType != PATTERN_TRANSFORM_TYPE)
 			identifyISARelation(I, true);
+		// CMREADME30
 		if (!(m[I].objectRole&(FOCUS_EVALUATED | HAIL_ROLE)) && (m[I].getObject() >= 0 && objects[m[I].getObject()].objectClass == NAME_OBJECT_CLASS &&
 			m[I].beginObjectPosition > 0 && (m[m[I].beginObjectPosition - 1].queryWinnerForm(conjunctionForm) >= 0 || m[m[I].beginObjectPosition - 1].queryForm(quoteForm) >= 0) &&
 			m[I].endObjectPosition<(signed)m.size() && isEOS(m[I].endObjectPosition)) && objects[m[I].getObject()].numDefinitelyIdentifiedAsSpeaker>0)
@@ -8996,6 +8997,7 @@ void Source::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 				lplog(LOG_RESOLUTION, L"%06d:Set object %s to OBJ/SUBJ role (ALONE) [%d].", I, objectString(m[I].getObject(), tmpstr, true).c_str(), (lsi != localObjects.end()) ? lsi->lastWhere : -1);
 		}
 		if (I < endMetaResponse) continue;
+		// CMREADME31
 		if (!currentIsQuestion)
 		{
 			bool erasePreviousSubject = (m[I].objectRole != (SUBJECT_ROLE | MPLURAL_ROLE) || !accumulateMultipleSubjects);
@@ -9011,11 +9013,13 @@ void Source::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 					lplog(LOG_RESOLUTION, L"%06d:QXQ whereFirstSubjectInParagraph set to %d.", I, whereFirstSubjectInParagraph);
 			}
 		}
+		// CMREADME32
 		if (m[I].word->first == L"lptable" || m[I].word->first == L"lpendcolumn")
 		{
 			localObjects.clear();
 			lplog(LOG_RESOLUTION, L"%06d:cleared local objects (%s)", I, m[I].word->first.c_str());
 		}
+		// CMREADME33
 		if (m[I].word->first == L"“")
 		{
 			if (m[I].flags&WordMatch::flagEmbeddedStoryBeginResolveSpeakers)

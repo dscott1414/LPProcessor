@@ -958,6 +958,14 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 		break;
 	case VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_PLURAL:
 		break;
+	case VERB_PAST|VERB_PAST_PARTICIPLE|VERB_PRESENT_PARTICIPLE:
+	case VERB_PAST|VERB_PRESENT_PARTICIPLE:
+	case VERB_PAST_PARTICIPLE|VERB_PRESENT_PARTICIPLE:
+	case VERB_PAST_THIRD_SINGULAR:
+	case VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_SECOND_SINGULAR:
+	case VERB_PRESENT_PARTICIPLE|VERB_PRESENT_THIRD_SINGULAR:
+	case VERB_PRESENT_SECOND_SINGULAR:
+	case VERB_PRESENT_SECOND_SINGULAR|VERB_PRESENT_PLURAL:
 	case 0:
 		break;
 	default:
@@ -2034,6 +2042,37 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 			lplog(L"%d:%s[%s]:%s(%s):Noun (%d,%d) is compound, has a verb at end and a verb after the end (cost=%d). [SOURCE=%06d].", begin, (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->differentiator.c_str(), phraseString(begin, end, phrase, true).c_str(), m[end].word->first.c_str(), begin, end, tFI::COST_OF_INCORRECT_VERBAL_NOUN, traceSource = gTraceSource);
 		}
 		PNC += tFI::COST_OF_INCORRECT_VERBAL_NOUN;
+	}
+	// for nouns where the immediately preceding adjective in the noun is a verb, and that verb has a relation to the head noun.
+	// He had *one stinging cut*.  So - does the *cut* *sting*? - head noun is subject, adjective is verb
+	if (end - begin > 1 && end-begin<4 && m[end - 2].queryForm(verbForm) >= 0 && (m[end - 2].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) && 
+		 m[end - 1].queryForm(nounForm)>=0 && m[end - 1].word->first != L"that" && m[end - 1].queryForm(adverbForm) < 0)
+	{
+		vector<wstring> determinerTypes = { L"determiner",L"demonstrative_determiner",L"possessive_determiner",L"interrogative_determiner", L"quantifier", L"numeral_cardinal" };
+		bool beginIsDeterminer = false;
+		for (wstring dt : determinerTypes)
+			if (beginIsDeterminer = m[begin].queryWinnerForm(dt) >= 0)
+				break;
+		if (beginIsDeterminer)
+		{
+			tIWMM verbWord = m[end - 2].word, subjectWord = m[end - 1].word;
+			if (verbWord->second.mainEntry != wNULL) verbWord = verbWord->second.mainEntry;
+			if (subjectWord->second.mainEntry != wNULL) subjectWord = subjectWord->second.mainEntry;
+			tFI::cRMap *rm = subjectWord->second.relationMaps[SubjectWordWithVerb];
+			tFI::cRMap::tIcRMap tr = (rm) ? rm->r.find(verbWord) : tNULL;
+			wstring patternName = patterns[pema[fromPEMAPosition].getPattern()]->name;
+			if (patternName != L"__S1" && patternName != L"__INTRO_N" && rm != (tFI::cRMap *)NULL && tr != rm->r.end() &&
+				subjectWord->second.getUsageCost(m[end - 1].queryForm(nounForm))>0)
+			{
+				PNC -= subjectWord->second.getUsageCost(m[end-1].queryForm(nounForm));
+				wstring logres;
+				phraseString(begin, end, logres, true);
+				lplog(L"%s[%s]:%s:(head noun)subject '%s' has %d relationship count with (adjective)verb '%s'.",
+					(fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->differentiator.c_str(),
+					logres.c_str(),
+					subjectWord->first.c_str(), tr->second.frequency, verbWord->first.c_str());
+			}
+		}
 	}
 	// I went to jail with him.
 	if (begin>0 && m[begin-1].word->first==L"to" && m[begin].queryForm(verbForm)>=0 &&

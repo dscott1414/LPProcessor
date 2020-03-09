@@ -3954,6 +3954,11 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"LP correct:little by little"]++;
 		return 0;
 	}
+	if (word == L"hers" && primarySTLPMatch==L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"pronoun") >= 0)
+	{
+		errorMap[L"LP correct:hers is better considered a pronoun/possessive, not a noun"]++;
+		return 0;
+	}
 	return -1;
 }
 
