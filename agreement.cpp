@@ -2065,12 +2065,33 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 				subjectWord->second.getUsageCost(m[end - 1].queryForm(nounForm))>0)
 			{
 				PNC -= subjectWord->second.getUsageCost(m[end-1].queryForm(nounForm));
+				if (debugTrace.traceDeterminer)
+				{
+					wstring logres;
+					phraseString(begin, end, logres, true);
+					lplog(L"%s[%s]:%s:(head noun)subject '%s' has %d relationship count with (adjective)verb '%s'.  Cost decreased %d.",
+						(fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->differentiator.c_str(),
+						logres.c_str(),
+						subjectWord->first.c_str(), tr->second.frequency, verbWord->first.c_str(),
+						subjectWord->second.getUsageCost(m[end - 1].queryForm(nounForm)));
+				}
+			}
+		}
+	}
+	// to interest Bob - interest would need a determiner, but not as an adjective, and after a 'to' is probably a verb
+	if (end - begin == 2 && m[begin].queryForm(nounForm) >= 0 && begin > 0 && m[begin - 1].word->first == L"to" && m[begin].word->second.getUsageCost(tFI::SINGULAR_NOUN_HAS_NO_DETERMINER) == 4)
+	{
+		int verbCost = m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm));
+		if (verbCost > 0)
+		{
+			PNC += verbCost;
+			if (debugTrace.traceDeterminer)
+			{
 				wstring logres;
-				phraseString(begin, end, logres, true);
-				lplog(L"%s[%s]:%s:(head noun)subject '%s' has %d relationship count with (adjective)verb '%s'.",
+				phraseString(begin - 1, end, logres, true);
+				lplog(L"%s[%s]:%s:noun %s used as adjective without determiner after to.  Cost increased %d.",
 					(fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->differentiator.c_str(),
-					logres.c_str(),
-					subjectWord->first.c_str(), tr->second.frequency, verbWord->first.c_str());
+					logres.c_str(), m[begin].word->first.c_str(), verbCost);
 			}
 		}
 	}
