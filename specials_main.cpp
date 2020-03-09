@@ -2194,6 +2194,39 @@ int checkStanfordMaxentAgainstWinner(Source &source, int wordSourceIndex, wstrin
 	return 1;
 }
 
+void formMatrixTest(Source &source, int wordSourceIndex, wstring X, wstring Y, int costX, int costY, unordered_map<wstring,int> &comboCostFrequency, wstring &partofspeech)
+{
+	if (source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(X)) != costX ||
+		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(Y)) != costY)
+		return;
+	wstring XCost, YCost;
+	itos(costX, XCost);
+	itos(costY, YCost);
+	wstring tmp1,tmp2,combo = X + L"*" + itos(costX, tmp1) + L" " + Y + L"*"+ itos(costY, tmp2);
+	wstring word = source.m[wordSourceIndex].word->first;
+	if (Y == L"verb" || X == L"verb")
+	{
+		if (word.length() > 2 && word.substr(word.length() - 2) == L"ed" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST)
+		{
+			combo += L" PAST";
+		}
+		if (word.length() > 3 && word.substr(word.length() - 3) == L"ing" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE)
+		{
+			combo += L" PARTICIPLE";
+		}
+		if ((source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_THIRD_SINGULAR) == VERB_PRESENT_THIRD_SINGULAR)
+		{
+			combo += L" 3rdSING";
+		}
+		if ((source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_FIRST_SINGULAR) == VERB_PRESENT_FIRST_SINGULAR)
+		{
+			combo += L" 1stSING";
+		}
+	}
+	comboCostFrequency[combo]++;
+	partofspeech += L"***|"+combo+L"|***";
+}
+
 // perform tests to make sure that the noun according to LP is not a verb (that ST says).
 // that smells / those smell - these agree by verb
 bool isStanfordDeterminerType(Source &source, int wordNounVerbDisagreementSourceIndex, int wordDeterminerSourceIndex)
@@ -2307,7 +2340,7 @@ wstring stTokenizeWord(wstring tokenizedWord,wstring &originalWord, unsigned lon
 	return lookFor;
 }
 
-int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceIndex, unordered_map<wstring, int> &errorMap, wstring &partofspeech, int startOfSentence)
+int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceIndex, unordered_map<wstring, int> &errorMap, unordered_map<wstring, int> &comboCostFrequency, wstring &partofspeech, int startOfSentence)
 {
 	wstring word = source.m[wordSourceIndex].word->first;
 	//////////////////////////////
@@ -3959,6 +3992,18 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"LP correct:hers is better considered a pronoun/possessive, not a noun"]++;
 		return 0;
 	}
+	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].isOnlyWinner(adjectiveForm) &&
+		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(primarySTLPMatch))==4 &&
+		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(adjectiveForm))==0)
+	{
+		errorMap[L"LP correct: adjective not noun (noun cost 4, adjective cost 0)"]++; // probabilistic - see distribute errors
+		return 0;
+	}
+	wstring winnerFormsString;
+	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
+	// matrix analysis
+	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 0, 4, comboCostFrequency, partofspeech);
+	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 4, 0, comboCostFrequency, partofspeech);
 	return -1;
 }
 
@@ -3966,7 +4011,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 // returns yes=0, no=1
 int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numTimesWordOccurred, wstring originalParse, wstring sentence, wstring &parse, int &numPOSNotFound, 
 	unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &formMisMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap,
-	bool inRelativeClause, unordered_map<wstring, int> &errorMap,int startOfSentence,int maxLength)
+	bool inRelativeClause, unordered_map<wstring, int> &errorMap, unordered_map<wstring, int> &comboCostFrequency,int startOfSentence,int maxLength)
 {
 	wstring word = source.m[wordSourceIndex].word->first;
 	if (!iswalpha(word[0]) || (word.length()<=1 && word[0]!='a' && word[0]!='i'))
@@ -4039,7 +4084,7 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 				{
 					return 0;
 				}
-				if (attributeErrors(primarySTLPMatch, source, wordSourceIndex, errorMap, partofspeech, startOfSentence) == 0)
+				if (attributeErrors(primarySTLPMatch, source, wordSourceIndex, errorMap, comboCostFrequency, partofspeech, startOfSentence) == 0)
 				{
 					for (int wf : winnerForms)
 					{
@@ -4180,7 +4225,7 @@ void printFormDistribution(wstring word, double adp, FormDistribution fd, wstrin
 
 int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *vm,JNIEnv *env, int &numNoMatch, int &numPOSNotFound, unordered_map<wstring, int> &formNoMatchMap, 
 	                          unordered_map<wstring, int> &formMisMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, 
-	                          unordered_map<wstring, int> &errorMap, bool pcfg,wstring limitToWord,int maxLength, wstring specialExtension)
+	                          unordered_map<wstring, int> &errorMap, unordered_map<wstring, int> &comboCostFrequency, bool pcfg,wstring limitToWord,int maxLength, wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
@@ -4249,7 +4294,7 @@ int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *
 					}
 					else
 					{
-						if (checkStanfordPCFGAgainstWinner(source, wordSourceIndex, numTimesWordOccurred[originalIWord], originalParse, sentence, parse, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, inRelativeClause, errorMap, start,maxLength))
+						if (checkStanfordPCFGAgainstWinner(source, wordSourceIndex, numTimesWordOccurred[originalIWord], originalParse, sentence, parse, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, inRelativeClause, errorMap, comboCostFrequency, start,maxLength))
 						{
 							numNoMatch++;
 							if (!sentencePrinted)
@@ -4282,6 +4327,10 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	numErrors = errorMap[L"LP correct: adverb not noun (97% probabilistic)"];  // out of 233 examples studied, 7 were incorrect
 	errorMap[L"LP correct: adverb not noun (97% probabilistic)"] = numErrors * 97 / 100;
 	errorMap[L"ST correct: adverb not noun (3% probabilistic)"] = numErrors * 3 / 100;
+	numErrors=errorMap[L"LP correct: adjective not noun (noun cost 4, adjective cost 0)"]; // out of 252 examples, 23 were incorrect (15 of those were the word 'safe'?)
+	errorMap[L"LP correct: adjective not noun (noun cost 4, adjective cost 0)"] = numErrors * 90 / 100;
+	errorMap[L"ST correct: adjective not noun (noun cost 4, adjective cost 0)"] = numErrors * 10 / 100;
+
 }
 
 int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension)
@@ -4306,7 +4355,7 @@ int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension)
 	JavaVM *vm;
 	JNIEnv *env;
 	createJavaVM(vm, env);
-	unordered_map<wstring, int> formNoMatchMap, formMisMatchMap, wordNoMatchMap,VFTMap,errorMap;
+	unordered_map<wstring, int> formNoMatchMap, formMisMatchMap, wordNoMatchMap,VFTMap,errorMap, comboCostFrequency;
 	int numNoMatch = 0, numPOSNotFound = 0,totalWords=0;
 	my_ulonglong totalSource = mysql_num_rows(result);
 	for (int row = 0; sqlrow = mysql_fetch_row(result); row++)
@@ -4325,7 +4374,7 @@ int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension)
 		wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d sources in %02I64d:%02I64d:%02I64d [%d sources/hour] (%-35.35s...)", numSourcesProcessedNow * 100 / totalSource, numSourcesProcessedNow, totalSource,
 			processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, (processingSeconds) ? numSourcesProcessedNow * 3600 / processingSeconds : 0, title.c_str());
 		SetConsoleTitle(buffer);
-		int setStep = stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap,VFTMap,errorMap,pcfg,L"",60,specialExtension);
+		int setStep = stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap,VFTMap,errorMap, comboCostFrequency,pcfg,L"",60,specialExtension);
 		totalWords += source.m.size();
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
@@ -4357,7 +4406,7 @@ int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension)
 	}
 	lplog(LOG_ERROR, L"maxWord=%s maxForm=%s maxDiff=%d", maxWord.c_str(), maxForm.c_str(), maxDiff);
 	lplog(LOG_ERROR, L"FORMS ------------------------------------------------------------------------------");
-	map<int, wstring, std::greater<int>> formNoMatchReverseMap, formMisMatchReverseMap, wordNoMatchReverseMap,VFTReverseMap,errorReverseMap;
+	map<int, wstring, std::greater<int>> formNoMatchReverseMap, formMisMatchReverseMap, wordNoMatchReverseMap,VFTReverseMap,errorReverseMap, comboCostFrequencyReverseMap;
 	for (auto const&[forms, count] : formNoMatchMap)
 		formNoMatchReverseMap[count] += forms + L" *";
 	for (auto const&[count, forms] : formNoMatchReverseMap)
@@ -4382,6 +4431,16 @@ int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension)
 	for (auto const&[count, forms] : wordNoMatchReverseMap)
 	{
 		lplog(LOG_ERROR, L"words %s [%d]", forms.c_str(), count);
+		if (numListed++ > 100)
+			break;
+	}
+	lplog(LOG_ERROR, L"ComboExtremeCosts ------------------------------------------------------------------------------");
+	for (auto const&[formCombo, frequency] : comboCostFrequency)
+		comboCostFrequencyReverseMap[frequency] += formCombo + L" *";
+	numListed = 0;
+	for (auto const&[frequency, formCombo] : comboCostFrequencyReverseMap)
+	{
+		lplog(LOG_ERROR, L"combo %s [%d]", formCombo.c_str(), frequency);
 		if (numListed++ > 100)
 			break;
 	}
@@ -4495,9 +4554,9 @@ int stanfordCheckTest(Source source, wstring path, int sourceId, bool pcfg,wstri
 	JavaVM *vm;
 	JNIEnv *env;
 	createJavaVM(vm, env);
-	unordered_map<wstring, int> formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, errorMap;
+	unordered_map<wstring, int> formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, errorMap, comboCostFrequency ;
 	int numNoMatch = 0, numPOSNotFound = 0;
-	stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, errorMap, pcfg,limitToWord,maxSentenceLimit,specialExtension);
+	stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, errorMap, comboCostFrequency, pcfg,limitToWord,maxSentenceLimit,specialExtension);
 	int totalWords = source.m.size();
 	destroyJavaVM(vm);
 	if (limitToWord.length() > 0)
