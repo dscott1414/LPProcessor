@@ -2447,8 +2447,6 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	// 7. if ST thinks it is a noun, and LP does not know of it having a noun form
 	//    examined 100 examples from gutenburg and X violated this rule.
-	if (word == L"martial")
-		printf("STOP!"); // TEMP DEBUG!
 	if (primarySTLPMatch == L"noun" && !source.m[wordSourceIndex].word->second.hasNounForm())
 	{
 		// However, if it is a present participle verb
@@ -3987,6 +3985,14 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"LP correct:little by little"]++;
 		return 0;
 	}
+	// from *head* to foot OR from head to *foot*
+	if ((word == L"foot" && wordSourceIndex>3 && source.m[wordSourceIndex - 3].word->first == L"from" && source.m[wordSourceIndex - 2].word->first == L"head" &&source.m[wordSourceIndex - 1].word->first == L"to") ||
+		  (word == L"head" && wordSourceIndex > 1 && source.m[wordSourceIndex - 1].word->first == L"from" && source.m[wordSourceIndex + 1].word->first == L"to" &&source.m[wordSourceIndex + 2].word->first == L"foot"))
+	{
+		errorMap[L"LP correct:from head to foot"]++;
+		return 0;
+	}
+
 	if (word == L"hers" && primarySTLPMatch==L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"pronoun") >= 0)
 	{
 		errorMap[L"LP correct:hers is better considered a pronoun/possessive, not a noun"]++;

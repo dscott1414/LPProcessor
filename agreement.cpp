@@ -2113,6 +2113,9 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 		{
 			int toCost[] = { 10,8,7,5,1 };
 			int toFormVerbCost = toCost[m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm))];
+			int missingDeterminerCost = m[begin].word->second.getUsageCost(tFI::SINGULAR_NOUN_HAS_NO_DETERMINER);
+			if (missingDeterminerCost == 4)
+				toFormVerbCost += missingDeterminerCost;
 			if (debugTrace.traceDeterminer)
 			{
 				wstring phrase;
