@@ -2658,7 +2658,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 				verbObjectCost+=6;
 				if (debugTrace.traceVerbObjects)
 					lplog(L"          %d:objectWord %s is a nominative pronoun used as an accusative.",
-					tagSet[whereObjectTag].sourcePosition,object1Word->first.c_str(),verbObjectCost);
+					tagSet[whereObjectTag].sourcePosition,(object1Word != wNULL) ? object1Word->first.c_str():L"",verbObjectCost);
 			}
 			int distance=tagSet[whereObjectTag].sourcePosition-(tagSet[verbTagIndex].sourcePosition+tagSet[verbTagIndex].len);
 			if (distance>2) objectDistanceCost=distance-2;
@@ -2676,7 +2676,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 		// they were all alike
 		// if there is one object, and the object is 'all' and there is a match for __S1[7] (but this is not __S1[7]), and the word after the object could be an adjective, then increase cost greatly.
 		// this encourages 'all' to be an adverb and the next word to be an adjective.
-		if (numObjects == 1 && object1Word->first == L"all" && m.size() > tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len &&
+		if (numObjects == 1 && object1Word != wNULL && object1Word->first == L"all" && m.size() > tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len &&
 			m[tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len].word->second.query(L"adjective") >= 0)
 		{
 			verbObjectCost += 6;
@@ -2709,7 +2709,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 				{
 					verbObjectCost += 6;
 					if (debugTrace.traceVerbObjects)
-						lplog(L"          %d:verb %s is followed by an object %s with two previous adverbs and the object doesn't take an adjective - more likely a prep phrase.", vsp, verbWord->first.c_str(), object1Word->first.c_str());
+						lplog(L"          %d:verb %s is followed by an object %s with two previous adverbs and the object doesn't take an adjective - more likely a prep phrase.", vsp, verbWord->first.c_str(), (object1Word != wNULL) ? object1Word->first.c_str():L"");
 				}
 			}
 		}
@@ -2733,6 +2733,16 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 				lplog(L"          %d:decreased verbObjectCost=%d to %d for verb %s because object is 'here' or 'there' or 'home' (standing in for a PP which may not be considered an object)",
 					tagSet[verbTagIndex].sourcePosition, verbObjectCost, verbWord->second.getUsageCost(tFI::VERB_HAS_0_OBJECTS), verbWord->first.c_str(), m[whereVerb + 1].word->first.c_str());
 			verbObjectCost = verbWord->second.getUsageCost(tFI::VERB_HAS_0_OBJECTS);
+		}
+		// modal auxiliaries really should not have objects!
+		if (numObjects > 0 && object1Word != wNULL && object1Word->second.query(verbForm)>=0 &&
+			(m[whereVerb].word->second.query(modalAuxiliaryForm) >= 0 || m[whereVerb].word->second.query(negationModalAuxiliaryForm) >= 0 || m[whereVerb].word->second.query(futureModalAuxiliaryForm) >= 0 || m[whereVerb].word->second.query(negationFutureModalAuxiliaryForm) >= 0 ||
+				m[whereVerb].word->second.query(doesForm) >= 0 || m[whereVerb].word->second.query(doesNegationForm) >= 0))
+		{
+			if (debugTrace.traceVerbObjects)
+				lplog(L"          %d:increased verbObjectCost=%d to %d for verb %s because verb is modal auxiliary or does",
+					tagSet[verbTagIndex].sourcePosition, verbObjectCost, verbObjectCost+verbWord->second.getUsageCost(tFI::VERB_HAS_1_OBJECTS), verbWord->first.c_str());
+			verbObjectCost += verbWord->second.getUsageCost(tFI::VERB_HAS_1_OBJECTS);
 		}
 		if (numObjects==2)
 		{
