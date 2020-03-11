@@ -3999,10 +3999,17 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		return 0;
 	}
 	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].isOnlyWinner(adjectiveForm) &&
-		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(primarySTLPMatch))==4 &&
-		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(adjectiveForm))==0)
+		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(primarySTLPMatch)) == 4 &&
+		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(adjectiveForm)) == 0)
 	{
 		errorMap[L"LP correct: adjective not noun (noun cost 4, adjective cost 0)"]++; // probabilistic - see distribute errors
+		return 0;
+	}
+	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].isOnlyWinner(nounForm) &&
+		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(primarySTLPMatch)) == 4 &&
+		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(nounForm)) == 0)
+	{
+		errorMap[L"LP correct: noun not verb (verb cost 4, noun cost 0)"]++; // probabilistic - see distribute errors
 		return 0;
 	}
 	wstring winnerFormsString;
@@ -4330,12 +4337,18 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	int numErrors=errorMap[L"LP correct: adjective not verb (94% probabilistic)"];  // out of 215 examples studied, 12 were incorrect
 	errorMap[L"LP correct: adjective not verb (94% probabilistic)"] = numErrors * 94 / 100;
 	errorMap[L"ST correct: adjective not verb (6% probabilistic)"] = numErrors * 6 / 100;
+
 	numErrors = errorMap[L"LP correct: adverb not noun (97% probabilistic)"];  // out of 233 examples studied, 7 were incorrect
 	errorMap[L"LP correct: adverb not noun (97% probabilistic)"] = numErrors * 97 / 100;
 	errorMap[L"ST correct: adverb not noun (3% probabilistic)"] = numErrors * 3 / 100;
-	numErrors=errorMap[L"LP correct: adjective not noun (noun cost 4, adjective cost 0)"]; // out of 252 examples, 23 were incorrect (15 of those were the word 'safe'?)
+
+	numErrors = errorMap[L"LP correct: adjective not noun (noun cost 4, adjective cost 0)"]; // out of 252 examples, 23 were incorrect (15 of those were the word 'safe'?)
 	errorMap[L"LP correct: adjective not noun (noun cost 4, adjective cost 0)"] = numErrors * 90 / 100;
 	errorMap[L"ST correct: adjective not noun (noun cost 4, adjective cost 0)"] = numErrors * 10 / 100;
+
+	numErrors = errorMap[L"LP correct: noun not verb (verb cost 4, noun cost 0)"]; // out of 135 examples, 32 were incorrect 
+	errorMap[L"LP correct: noun not verb (verb cost 4, noun cost 0)"] = numErrors * 76 / 100;
+	errorMap[L"ST correct: noun not verb (verb cost 4, noun cost 0)"] = numErrors * 24 / 100;
 
 }
 
