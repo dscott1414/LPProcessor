@@ -4012,6 +4012,17 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"LP correct: noun not verb (verb cost 4, noun cost 0)"]++; // probabilistic - see distribute errors
 		return 0;
 	}
+	if ((word == L"in" || word == L"since" || word==L"beyond") && primarySTLPMatch == L"preposition or conjunction" && (!iswalpha(source.m[wordSourceIndex + 1].word->first[0]) || source.m[wordSourceIndex+1].isOnlyWinner(coordinatorForm)))
+	{
+		errorMap[L"LP correct: not preposition or conjunction before punctuation or coordinator"]++; // probabilistic - see distribute errors
+		return 0;
+	}
+	if (word == L"in" && primarySTLPMatch == L"preposition or conjunction" && source.m[wordSourceIndex].isOnlyWinner(adverbForm) &&
+		(source.m[wordSourceIndex + 1].word->first == L"there" || source.m[wordSourceIndex + 1].word->first == L"silence"))
+	{
+		errorMap[L"ST correct: in is a preposition before 'silence' or 'there'"]++; 
+		return 0;
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
