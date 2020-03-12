@@ -3284,11 +3284,24 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0)
 	{
+		int pemaPosition = -1;
 		// two incorrect parses lead to inaccuracy (ST is correct)
-		if (source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"2") != -1 && source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1)
+		if ((pemaPosition=source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"2")) != -1)
 		{
-			errorMap[L"diff: ST says adjective and LP says noun in an __ADJECTIVE construction"]++;
-			return 0;
+			if (source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1)
+			{
+				errorMap[L"diff: ST says adjective and LP says noun in an __ADJECTIVE construction"]++;
+				return 0;
+			}
+			for (; pemaPosition != -1; pemaPosition = source.pema[pemaPosition].nextByPosition)
+				if (patterns[source.pema[pemaPosition].getPattern()]->name == L"__NOUN" && patterns[source.pema[pemaPosition].getPattern()]->differentiator == L"2")
+				{
+					if (!source.pema[pemaPosition].isChildPattern() && source.m[wordSourceIndex].getFormNum(source.pema[pemaPosition].getChildForm()) == nounForm)
+					{
+						errorMap[L"diff: ST says adjective and LP says noun in an __NOUN(n) construction"]++;
+						return 0;
+					}
+				}
 		}
 	}
 	if ((source.m[wordSourceIndex - 1].queryWinnerForm(L"modal_auxiliary") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"future_modal_auxiliary") >= 0 ||
