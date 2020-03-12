@@ -4020,7 +4020,12 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	if (word == L"in" && primarySTLPMatch == L"preposition or conjunction" && source.m[wordSourceIndex].isOnlyWinner(adverbForm) &&
 		(source.m[wordSourceIndex + 1].word->first == L"there" || source.m[wordSourceIndex + 1].word->first == L"silence"))
 	{
-		errorMap[L"ST correct: in is a preposition before 'silence' or 'there'"]++; 
+		errorMap[L"ST correct: in is a preposition before 'silence' or 'there'"]++;
+		return 0;
+	}
+	if (word == L"home" && primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].isOnlyWinner(nounForm))
+	{
+		errorMap[L"ST correct: home is an adverb when having no determiner (go home)"]++;
 		return 0;
 	}
 	wstring winnerFormsString;

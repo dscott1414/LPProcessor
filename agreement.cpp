@@ -2788,7 +2788,8 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 							wo,wo+tagSet[whereObjectTag].len,
 							tagSet[nextObjectTag].sourcePosition,tagSet[nextObjectTag].sourcePosition+tagSet[nextObjectTag].len);
 			objectDistanceCost+=(tagSet[nextObjectTag].sourcePosition-(wo+tagSet[whereObjectTag].len));
-			verbObjectCost<<=1;
+			if (voRelationsFound<2 || objectDistanceCost>0)
+				verbObjectCost<<=1;
 		}
 		//if (verbObjectCost==0)
 		//  objectDistanceCost>>=1;
