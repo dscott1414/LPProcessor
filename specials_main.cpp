@@ -3275,14 +3275,23 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			return 0;
 		}
 		// two incorrect parses lead to inaccuracy (ST is correct)
-		if (source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"2") != -1 && source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE")!=-1)
+		if (source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"2") != -1 && source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1)
 		{
 			//partofspeech += L"***NOUNADJ";
 			errorMap[L"LP correct: ST says " + primarySTLPMatch + L" but LP says adjective in an __ADJECTIVE construction"]++;
 			return 0;
 		}
 	}
-	if ((source.m[wordSourceIndex - 1].queryWinnerForm(L"modal_auxiliary") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"future_modal_auxiliary") >= 0 || 
+	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0)
+	{
+		// two incorrect parses lead to inaccuracy (ST is correct)
+		if (source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"2") != -1 && source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1)
+		{
+			errorMap[L"diff: ST says adjective and LP says noun in an __ADJECTIVE construction"]++;
+			return 0;
+		}
+	}
+	if ((source.m[wordSourceIndex - 1].queryWinnerForm(L"modal_auxiliary") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"future_modal_auxiliary") >= 0 ||
 		source.m[wordSourceIndex - 1].queryWinnerForm(L"negation_modal_auxiliary") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"negation_future_modal_auxiliary") >= 0) &&
 		source.m[wordSourceIndex + 1].queryWinnerForm(L"verb") >= 0 && word == L"better" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
 	{
