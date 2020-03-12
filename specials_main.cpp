@@ -3303,6 +3303,16 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 					}
 				}
 		}
+		if (source.queryPattern(wordSourceIndex, L"__ADJECTIVE") != -1)
+		{
+			if (WordClass::isDash(source.m[wordSourceIndex + 1].word->first[0]))
+			{
+				errorMap[L"diff: ST says adjective and LP says noun in an __ADJECTIVE construction"]++;
+				return 0;
+			}
+			else
+				partofspeech += L"***NOUNADJ2";
+		}
 	}
 	if ((source.m[wordSourceIndex - 1].queryWinnerForm(L"modal_auxiliary") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"future_modal_auxiliary") >= 0 ||
 		source.m[wordSourceIndex - 1].queryWinnerForm(L"negation_modal_auxiliary") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"negation_future_modal_auxiliary") >= 0) &&
