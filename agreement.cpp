@@ -5,6 +5,7 @@
 #include "time.h"
 #include "malloc.h"
 #include "profile.h"
+#include <algorithm>    // std::lower_bound, std::upper_bound, std::sort
 
 // (CMREADME018)
 void Source::setRole(int position,patternElementMatchArray::tPatternElementMatch *pem)
@@ -104,7 +105,7 @@ void Source::setRole(int position,patternElementMatchArray::tPatternElementMatch
 // 1. Are the lowest cost patterns
 // 2. have the same rootPattern
 // 4. have the same end as childend
-unsigned int Source::getAllLocations(unsigned int position,int parentPattern,int rootPattern,int childLen,int parentLen,vector <unsigned int> &allLocations, int recursionLevel, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions)
+unsigned int Source::getAllLocations(unsigned int position,int parentPattern,int rootPattern,int childLen,int parentLen,vector <unsigned int> &allLocations, int recursionLevel, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,bool &reassessParentCosts)
 { LFS
 	int minCost=MAX_COST;
 	patternMatchArray::tPatternMatch *pm;
@@ -118,7 +119,18 @@ unsigned int Source::getAllLocations(unsigned int position,int parentPattern,int
 			if (!p->isTopLevelMatch(*this,position,position+pm->len) && p->fillIfAloneFlag)
 			{
 				vector < vector <tTagLocation> > tagSets;
+				if (debugTrace.tracePatternElimination)
+				{
+					lplog(L"%*sMC getAllLocations BEGIN REASSESS COST position %d:pattern %s[%s](%d,%d)",
+						recursionLevel * 2, " ", position, p->name.c_str(), p->differentiator.c_str(), position, position + pm->len);
+				}
 				assessCost(NULL,pm,-1,position,tagSets, tertiaryPEMAPositions,L"get all locations");
+				reassessParentCosts = true;
+				if (debugTrace.tracePatternElimination)
+				{
+					lplog(L"%*sMC getAllLocations END REASSESS COST position %d:pattern %s[%s](%d,%d)",
+						recursionLevel * 2, " ", position, p->name.c_str(), p->differentiator.c_str(), position, position + pm->len);
+				}
 			}
 			if (minCost > pm->getCost())
 			{
@@ -130,6 +142,10 @@ unsigned int Source::getAllLocations(unsigned int position,int parentPattern,int
 				}
 				minCost = pm->getCost();
 			}
+			else if (debugTrace.tracePatternElimination)
+				lplog(L"%*sMC getAllLocations position %d:pattern %s[%s](%d,%d) (cost %d >= previous lowest cost %d)",
+					recursionLevel * 2, " ", position, p->name.c_str(), p->differentiator.c_str(), position, position + pm->len,
+					pm->getCost(), minCost);
 			allLocations.push_back((int)(pm-m[position].pma.content));
 		}
 	}
@@ -217,7 +233,7 @@ int Source::getMinCost(patternElementMatchArray::tPatternElementMatch *pem, int 
 // __S1[1](71,76)*0 __ALLOBJECTS[*](76)   __S1[1](71,76)*0 __C2__S1[*](76)       CORRECT - agrees with S1 having a childEnd of 73
 // __S1[1](71,76)*0 __C2__S1[*](76)
 // mark a pattern with a begin and end, begin at source position position.
-int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem, int position, int recursionLevel, int allRootsLowestCost, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions)
+int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem, int position, int recursionLevel, int allRootsLowestCost, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,bool &reassessParentCosts)
 {
 	LFS
 		// find first position with pattern and relativeEnd
@@ -250,9 +266,9 @@ int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem, in
 						patterns[pem->getChildPattern()]->name.c_str(),patterns[pem->getChildPattern()]->differentiator.c_str(),position,position+pem->getChildLen(),
 						pem->getOCost(),minCost);
 					else
-						lplog(L"%*sMC position %d:pattern %s[%s](%d,%d)*%d child %d form PEMA rejected (cost %d > minCost %d).",recursionLevel*2," ",position,
+						lplog(L"%*sMC position %d:pattern %s[%s](%d,%d)*%d child %s form PEMA rejected (cost %d > minCost %d).",recursionLevel*2," ",position,
 						patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),begin,end,pem->getOCost(),
-						pem->getChildForm(),pem->getOCost(),minCost);
+							Forms[m[position].getFormNum(pem->getChildForm())]->shortName.c_str(),pem->getOCost(),minCost);
 				}
 				continue;
 			}
@@ -264,9 +280,11 @@ int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem, in
 					patterns[pem->getChildPattern()]->name.c_str(),patterns[pem->getChildPattern()]->differentiator.c_str(),position,position+pem->getChildLen(),
 					pem - pema.begin());
 				else
-					lplog(L"%*sMC position %d:pattern %s[%s](%d,%d)*%d child %d PEMA[%d] set winner.",recursionLevel*2," ",position,
-					patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),begin,end,minCost,
-					pem->getChildForm(),pem-pema.begin());
+				{
+					lplog(L"%*sMC position %d:pattern %s[%s](%d,%d)*%d child %s PEMA[%d] set winner.", recursionLevel * 2, " ", position,
+						patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), begin, end, minCost,
+						Forms[m[position].getFormNum(pem->getChildForm())]->shortName.c_str(), pem - pema.begin());
+				}
 			}
 			pem->setWinner();
 			setRole(position,pem);
@@ -278,7 +296,8 @@ int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem, in
 				vector <unsigned int> allLocations;
 				// this routine gets all the patterns that are actually matched by the root pattern.
 				// this also returns locations in pma so that each pattern is also accompanied by a cost.
-				int lowestCost=getAllLocations(position,pattern,rootp,childLen,end-begin,allLocations, recursionLevel, tertiaryPEMAPositions);
+				int lowestCost=getAllLocations(position,pattern,rootp,childLen,end-begin,allLocations, recursionLevel, tertiaryPEMAPositions,reassessParentCosts);
+				vector <int> setAsWinners;
 				// if (lowestCost>minCost) // this sometimes happens because of negative costs in some patterns
 				// 	 lplog(L"STOP! lowestCost %ld>minCost %d.",lowestCost,minCost);
 				for (unsigned int lc=0; lc<allLocations.size(); lc++)
@@ -294,21 +313,56 @@ int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem, in
 						continue;
 					}
 					if (pm->isWinner())
+					{
+						lplog(L"%*sMC position %d:pma %d:pattern %s[%s](%d,%d) child %s[%s](%d,%d) PMA kept as winner (cost %d,lowest cost %d).",
+							recursionLevel * 2, " ", position, allLocations[lc], patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), begin, end,
+							patterns[childp]->name.c_str(), patterns[childp]->differentiator.c_str(), position, position + childLen, pm->getCost(), lowestCost);
 						continue;
+					}
+					setAsWinners.push_back(allLocations[lc]);
 					if (debugTrace.tracePatternElimination)
 						lplog(L"%*sMC position %d:pma %d:pattern %s[%s](%d,%d) child %s[%s](%d,%d) PMA set winner (cost %d<=lowest cost %d).",
 						recursionLevel*2," ",position, allLocations[lc], patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),begin,end,
 						patterns[childp]->name.c_str(),patterns[childp]->differentiator.c_str(),position,position+childLen,pm->getCost(),lowestCost);
-					numChildren+=markChildren(pema.begin()+pm->pemaByPatternEnd,position,recursionLevel+1,lowestCost, tertiaryPEMAPositions);
+					bool localReassessParentCosts = false;
+					numChildren+=markChildren(pema.begin()+pm->pemaByPatternEnd,position,recursionLevel+1,lowestCost, tertiaryPEMAPositions, localReassessParentCosts);
 					patterns[pm->getPattern()]->numChildrenWinners++;
 					pm->setWinner();
+					if (localReassessParentCosts)
+					{
+						reassessParentCosts = true; // let parent markChildren know!
+						// recalculate lowestCost that could have changed
+						lowestCost = MAX_COST;
+						for (unsigned int clc = 0; clc < allLocations.size(); clc++)
+							lowestCost = min(lowestCost, m[position].pma.content[allLocations[clc]].getCost());
+						// go back to beginning and see whether there are other patterns that could become winners.
+						lc = 0;
+						// the lowest cost could have changed, or the cost of the winners could have changed, so re-evaluate the winners already set
+						vector <int> keptWinners;
+						for (int alreadySet : setAsWinners)
+						{
+							if (m[position].pma.content[alreadySet].getCost() > lowestCost)
+							{
+								childp = m[position].pma.content[alreadySet].getPattern();
+								if (debugTrace.tracePatternElimination)
+									lplog(L"%*sMC position %d:pattern %s[%s](%d,%d) child %s[%s](%d,%d) PMA CHANGED COST rejected WINNER REVERSED (cost %d>lowest cost %d)",
+										recursionLevel * 2, " ", position, patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), begin, end,
+										patterns[childp]->name.c_str(), patterns[childp]->differentiator.c_str(), position, position + childLen, m[position].pma.content[alreadySet].getCost(), lowestCost);
+								vector <__int64> alreadyCovered;
+								removeWinnerFlag(position, m[position].pma.content + alreadySet, 2, alreadyCovered);
+							}
+							else
+								keptWinners.push_back(alreadySet);
+						}
+						setAsWinners = keptWinners;
+					}
 				}
 			}
 			else
 			{
 				if (debugTrace.tracePatternElimination)
-					lplog(L"%*sMC position %d:pattern %s[%s](%d,%d) child %d FORM set winner.",
-					recursionLevel*2," ",position,patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),begin,end,pem->getChildForm());
+					lplog(L"%*sMC position %d:pattern %s[%s](%d,%d) child %s FORM set winner.",
+					recursionLevel*2," ",position,patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),begin,end, Forms[m[position].getFormNum(pem->getChildForm())]->shortName.c_str());
 				m[position].setWinner(pem->getChildForm());
 			}
 			int nextPatternElement=pem->nextPatternElement;
@@ -332,7 +386,7 @@ int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem, in
 					if (nextPEMALowestCost != allRootsLowestCost)
 						lplog(L"%*s%d:MC lowest cost difference (nextPEMALowestCost %d != allRootsLowestCost %d)!", recursionLevel * 2, " ", nextPEMAPosition, nextPEMALowestCost , allRootsLowestCost);
 				}
-				numChildren += markChildren(pema.begin() + nextPatternElement, begin - pema[nextPatternElement].begin, recursionLevel, nextPEMALowestCost, tertiaryPEMAPositions);
+				numChildren += markChildren(pema.begin() + nextPatternElement, begin - pema[nextPatternElement].begin, recursionLevel, nextPEMALowestCost, tertiaryPEMAPositions,reassessParentCosts);
 			}
 		}
 		return numChildren;
@@ -498,6 +552,8 @@ int Source::getSubjectInfo(tTagLocation subjectTagset,int whereSubject, int &nou
 	return 0;
 }
 
+void getSentenceWithTags(Source source, int patternBegin, int patternEnd, int sentenceBegin, int sentenceEnd, int PEMAPosition, wstring &sentence);
+
 /*
 1. Compound subjects made with 'and' are plural when they are used before
 the verb and refer to more than one thing:
@@ -597,17 +653,28 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 			lplog(L"%d: verb capitalized [SOURCE=%06d] cost=%d",position,traceSource=gTraceSource++,20);
 		return 20;
 	}
-	//lplog(L"%d: use of possessive determiner as subject TEST %d %d %d %d %d %d %d %d %d", position,nextSubjectTag,tagSet[subjectTag].len,m[tagSet[subjectTag].sourcePosition].queryForm(possessiveDeterminerForm),
-	//	nextVerbAgreeTag,tagSet[mainVerbTag].len, m[tagSet[mainVerbTag].sourcePosition].word->second.inflectionFlags&VERB_PAST,tagSet[subjectTag].sourcePosition,tagSet[mainVerbTag].sourcePosition - 1,m[tagSet[mainVerbTag].sourcePosition + 1].queryForm(nounForm));
 	// his sacrificed ambition / his is modifying a past verb which serves as an adjective
-	if (nextSubjectTag<0 && tagSet[subjectTag].len==1 && m[tagSet[subjectTag].sourcePosition].queryForm(possessiveDeterminerForm)!=-1 &&
-		  nextVerbAgreeTag<0 && tagSet[mainVerbTag].len==1 && (m[tagSet[mainVerbTag].sourcePosition].word->second.inflectionFlags&VERB_PAST) != -1 &&
-		tagSet[subjectTag].sourcePosition== tagSet[mainVerbTag].sourcePosition-1 && m[tagSet[mainVerbTag].sourcePosition + 1].queryForm(nounForm)!=-1)
+	if (mainVerbTag>=0 && subjectTag>=0 && nextSubjectTag<0 && tagSet[subjectTag].len==1 && m[tagSet[subjectTag].sourcePosition].queryForm(possessiveDeterminerForm)!=-1 &&
+		  nextVerbAgreeTag<0 && tagSet[mainVerbTag].len==1 && // &&
+		tagSet[subjectTag].sourcePosition== tagSet[mainVerbTag].sourcePosition-1 && 
+		(m[tagSet[mainVerbTag].sourcePosition].queryForm(nounForm)!=-1 || 
+		((m[tagSet[mainVerbTag].sourcePosition].word->second.inflectionFlags&VERB_PAST) == VERB_PAST && m[tagSet[mainVerbTag].sourcePosition+1].queryForm(nounForm) != -1)))
+		//if (nextSubjectTag < 0 && tagSet[subjectTag].len == 1 && m[tagSet[subjectTag].sourcePosition].queryForm(possessiveDeterminerForm) != -1 &&
+		//	nextVerbAgreeTag < 0 && tagSet[mainVerbTag].len == 1 && (m[tagSet[mainVerbTag].sourcePosition].word->second.inflectionFlags&VERB_PAST) != -1 &&
+		//	tagSet[subjectTag].sourcePosition == tagSet[mainVerbTag].sourcePosition - 1 && m[tagSet[mainVerbTag].sourcePosition + 1].queryForm(nounForm) != -1)
 	{
 		if (debugTrace.traceSubjectVerbAgreement)
 			lplog(L"%d: use of possessive determiner as subject [SOURCE=%06d] cost=%d", position, traceSource = gTraceSource++, 6);
+		//int patternEnd = position + pm->len;
+		//wstring sentence;
+		//int ss = sentenceStarts.binary_search_lower_bound(position);
+		//getSentenceWithTags(*this, position, patternEnd, sentenceStarts[ss], sentenceStarts[ss+1], pm->pemaByPatternEnd, sentence);
+		//lplog(L"ZZCHECK %d:%s",position,sentence.c_str());
 		return 6;
 	}
+	//if (mainVerbTag >= 0 && subjectTag >= 0)
+	//	lplog(L"ZZCHECK %d:%d<0 %d==1 %d!=-1 %d<0 %d==1 %d==%d-1 %d!=-1", position, nextSubjectTag, tagSet[subjectTag].len, m[tagSet[subjectTag].sourcePosition].queryForm(possessiveDeterminerForm),
+	//		nextVerbAgreeTag, tagSet[mainVerbTag].len, tagSet[subjectTag].sourcePosition, tagSet[mainVerbTag].sourcePosition, m[tagSet[mainVerbTag].sourcePosition].queryForm(nounForm));
 	if ((conditionalTag<0 && futureTag<0 && verbAgreeTag<0) || subjectTag<0 || mainVerbTag<0 || nextSubjectTag>=0)
 	{
 		// check for question
@@ -1555,7 +1622,7 @@ int Source::cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patter
 					if ((*ppsi)->cumulativeDeltaCost)
 					{
 						if (debugTrace.traceSecondaryPEMACosting)
-							lplog(L"assessCost PEMA %06dA Added %d cost for a total of %d (%s) [SOURCE=%06d]",*ppsi-pema.begin(),(*ppsi)->cumulativeDeltaCost,(*ppsi)->getOCost()+(*ppsi)->cumulativeDeltaCost,fromWhere,traceSource);
+							lplog(L"assessCost PEMA %06dA Added %d cost for a total of %d (%s) [SOURCE=%06d] cascadeUpToAllParents",*ppsi-pema.begin(),(*ppsi)->cumulativeDeltaCost,(*ppsi)->getOCost()+(*ppsi)->cumulativeDeltaCost,fromWhere,traceSource);
 						(*ppsi)->addOCostTillMax((*ppsi)->cumulativeDeltaCost);
 						(*ppsi)->cumulativeDeltaCost=0;
 					}
@@ -1942,7 +2009,7 @@ int Source::setSecondaryCosts(vector <costPatternElementByTagSet> &PEMAPositions
 		if ((*ppsi)->cumulativeDeltaCost)
 		{
 			if (debugTrace.traceSecondaryPEMACosting)
-				lplog(L"assessCost PEMA %06dA Added %d cost for a total of %d (%s) [SOURCE=%06d]",*ppsi-pema.begin(),(*ppsi)->cumulativeDeltaCost,(*ppsi)->getOCost()+(*ppsi)->cumulativeDeltaCost,fromWhere,traceSource);
+				lplog(L"assessCost PEMA %06dA Added %d cost for a total of %d (%s) [SOURCE=%06d] setSecondaryCosts",*ppsi-pema.begin(),(*ppsi)->cumulativeDeltaCost,(*ppsi)->getOCost()+(*ppsi)->cumulativeDeltaCost,fromWhere,traceSource);
 			(*ppsi)->addOCostTillMax((*ppsi)->cumulativeDeltaCost);
 			(*ppsi)->cumulativeDeltaCost=0;
 		}
@@ -2397,6 +2464,42 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 							lowerPreviousElementCosts(secondaryPEMAPositions, nCosts, traceSources, L"hasEmbeddedDash");
 							setSecondaryCosts(secondaryPEMAPositions,pma,nPosition,L"hasEmbeddedDash");
 						}
+						if (patterns[pma->getPattern()]->name == L"__NOUN" && patterns[pma->getPattern()]->differentiator == L"F")
+						{
+							int highestPNC = 0;
+							// find SUBJECT
+							vector < vector <tTagLocation> > subjectTagSets;
+							if (startCollectTags(false, subjectVerbRelationTagSet, nPosition, nPEMAPosition, subjectTagSets, true, false, L"tags for SUBJECT") > 0)
+							{
+								nCosts.clear();
+								traceSources.clear();
+								for (unsigned int J = 0; J < subjectTagSets.size(); J++)
+								{
+									int nextTagIndex = -1, tagIndex = findTag(subjectTagSets[J], L"SUBJECT", nextTagIndex),PNC=0;
+									if (tagIndex >= 0)
+										for (unsigned int I = subjectTagSets[J][tagIndex].sourcePosition + 1; I < subjectTagSets[J][tagIndex].sourcePosition + subjectTagSets[J][tagIndex].len; I++) // must be sourcePosition+1 - do not want to penalize a determiner in the very beginning of the subject
+											if (m[I].queryForm(determinerForm) >= 0 || m[I].queryForm(coordinatorForm) >= 0)
+											{
+												//lplog(L"%d:Noun[F] (%d,%d) subject (%d,%d) coordinator and/or determiner detected", I, nPosition, nPosition + pma->len, subjectTagSets[J][tagIndex].sourcePosition,subjectTagSets[J][tagIndex].sourcePosition + subjectTagSets[J][tagIndex].len);
+												PNC++;
+											}
+									nCosts.push_back(PNC);
+									traceSources.push_back(traceSource = gTraceSource++);
+									highestPNC = max(highestPNC, PNC);
+								}
+							}
+							highestPNC = 0; // 5. TEMP DEBUG - correction to __NOUN[F] after studying matches to increase cost with long subjects
+
+							if (highestPNC > 0)
+							{
+								if (debugTrace.traceDeterminer)
+									lplog(L"%d:__NOUN[F](%d,%d) BEGIN subject with coordinators and/or determiners - %d [SOURCE=%06d]", nPosition, nPosition, nPosition + pma->len, highestPNC, traceSource);
+								lowerPreviousElementCosts(secondaryPEMAPositions, nCosts, traceSources, L"subjectHasCoordinatorsOrDeterminers");
+								setSecondaryCosts(secondaryPEMAPositions, pma, nPosition, L"subjectHasCoordinatorsOrDeterminers");
+								if (debugTrace.traceDeterminer)
+									lplog(L"%d:__NOUN[F](%d,%d) END subject with coordinators and/or determiners - %d", nPosition, nPosition, nPosition + pma->len, highestPNC);
+							}
+						}
 						continue;
 					}
 					startCollectTags(debugTrace.traceDeterminer,nounDeterminerTagSet,nPosition,nPEMAPosition,nTagSets,true,true,purpose+L" evaluateNounDeterminers - for each role - root pattern");
@@ -2447,6 +2550,54 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 				setSecondaryCosts(secondaryPEMAPositions,pma,nPosition, L"nounDeterminer2");
 			}
 		}
+	}
+}
+
+void Source::evaluatePrepObjects(int PEMAPosition, int position, vector < vector <tTagLocation> > &tagSets, wstring purpose)
+{
+	LFS // DLFS
+	if (pema[PEMAPosition].flagSet(patternElementMatchArray::COST_PREP))
+	{
+		if (debugTrace.tracePreposition)
+		{
+			int pattern = pema[PEMAPosition].getPattern();
+			lplog(L"%d:======== EVALUATION %06d %s %s[%s](%d,%d) SKIPPED (PREP already evaluated)", position, PEMAPosition, desiredTagSets[prepTagSet].name.c_str(),
+				patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), position, position + pema[PEMAPosition].end);
+		}
+		return;
+	}
+	pema[PEMAPosition].setFlag(patternElementMatchArray::COST_PREP);
+	if (startCollectTags(debugTrace.tracePreposition, prepTagSet, position, PEMAPosition, tagSets, true, true, L"evaluatePrepositions - PREP") > 0)
+	{
+		int nPattern = pema[PEMAPosition].getPattern(), nLen = pema[PEMAPosition].end- pema[PEMAPosition].begin,traceSource=0;
+		patternMatchArray::tPatternMatch *pm = m[position].pma.find(nPattern, nLen);
+		vector <int> costs, traceSources;
+		for (unsigned int J = 0; J < tagSets.size(); J++)
+		{
+			int nextPrepObjectTag, wherePrepObjectTag = findTag(tagSets[J], L"PREPOBJECT", nextPrepObjectTag), cost = 0;
+			// incorrectly having a subject pronoun in an objective position
+			if (wherePrepObjectTag >= 0 && tagSets[J][wherePrepObjectTag].len == 1 &&
+				(m[tagSets[J][wherePrepObjectTag].sourcePosition].word->first == L"he" ||
+					m[tagSets[J][wherePrepObjectTag].sourcePosition].word->first == L"she" ||
+					m[tagSets[J][wherePrepObjectTag].sourcePosition].word->first == L"they"))
+			{
+				cost = 10;
+			}
+			int nfindex;
+			// leaving a noun hanging but including its possessive
+			if (wherePrepObjectTag >= 0 && tagSets[J][wherePrepObjectTag].len == 1 &&
+				(m[tagSets[J][wherePrepObjectTag].sourcePosition].word->first == L"his" ||
+					m[tagSets[J][wherePrepObjectTag].sourcePosition].word->first == L"her") &&
+				(nfindex=m[tagSets[J][wherePrepObjectTag].sourcePosition+1].word->second.query(nounForm))>=0 &&
+				m[tagSets[J][wherePrepObjectTag].sourcePosition+1].word->second.getUsageCost(nfindex) == 0)
+			{
+				cost = 4;
+			}
+			costs.push_back(cost);
+			traceSources.push_back(traceSource++);
+		}
+		lowerPreviousElementCosts(secondaryPEMAPositions, costs, traceSources, L"prepObjects");
+		setSecondaryCosts(secondaryPEMAPositions, pm, position, L"prepObjects");
 	}
 }
 
@@ -3067,7 +3218,8 @@ int Source::assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchAr
 				for (unsigned int K=0; K<tagSets[J].size(); K++)
 				{
 					vector < vector <tTagLocation> > ndTagSets;					
-					evaluateNounDeterminers(abs(tagSets[J][K].PEMAOffset),tagSets[J][K].sourcePosition,ndTagSets,purpose+ L"| from prep phrases"); // this does not include blocked prepositional phrases
+					evaluateNounDeterminers(abs(tagSets[J][K].PEMAOffset), tagSets[J][K].sourcePosition, ndTagSets, purpose + L"| from prep phrases"); // this does not include blocked prepositional phrases
+					evaluatePrepObjects(abs(tagSets[J][K].PEMAOffset), tagSets[J][K].sourcePosition, ndTagSets, purpose + L"| from prep phrases"); 
 				}
 		}
 	}
@@ -3376,7 +3528,8 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 						lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) PHASE 3 winner (cost=%d minAvgCostAfterAssessCost %d first winning position=%d)",position,winners[position-begin][winner],
 						patterns[pm->getPattern()]->name.c_str(),patterns[pm->getPattern()]->differentiator.c_str(),position,pm->len+position,
 						pm->getCost(),minAvgCostAfterAssessCost,bp-1);
-					markChildren(pema.begin()+pm->pemaByPatternEnd,position,0,MIN_INT, tertiaryPEMAPositions);
+					bool reassessParentCosts = false;
+					markChildren(pema.begin()+pm->pemaByPatternEnd,position,0,MIN_INT, tertiaryPEMAPositions,reassessParentCosts);
 					patterns[pm->getPattern()]->numWinners++;
 					pm->setWinner();
 					matchedPositions+=pm->len;

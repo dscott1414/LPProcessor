@@ -411,7 +411,7 @@ int createNouns(void)
 										0);
 	// this pattern must go after all nouns EXCEPT it must be before any noun patterns that use _NOUN as a subpattern
 	//cPattern::create(L"_NOUN",L"",1,L"__NOUN[*]",0,1,1,0);
-
+	// 6. TEMP DEBUG correction to __NOUN[F] after studying matches to increase cost with long subjects - comment out __NOUN[H]
 	// better than two years, more than two years
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"H",
 										1,L"_ADJECTIVE",0,1,1,
@@ -653,7 +653,7 @@ int createBasicPatterns(void)
 												2,L"noun|day{DAY}",L"noun|morrow{DAY}",0,1,1,0);
 	// Should this be an MS1?
 	cPattern::create(L"_ADVERB{_FINAL}", L"AT7",
-											8, L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"__AS_AS", L"quantifier|all*-1", 0, 1, 1,
+											9, L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|as", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"__AS_AS", L"quantifier|all*-1", 0, 1, 1,
 											1, L"__S1*1{EVAL:_BLOCK}", 0, 1, 1, 0);
 	cPattern::create(L"_ADVERB{_FINAL}", L"AT8",
 		                  1,L"determiner|the",0,0,1, // only used with 'next'
@@ -815,7 +815,13 @@ int createBasicPatterns(void)
 		3, L"noun*1{ADJ}", L"adjective|best*-4", L"noun|class*-4", SINGULAR, 1, 1,
 		8, L"adverb*1", L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"preposition|ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", 0, 0, 2,
 		0);
-
+	// 6. TEMP DEBUG correction to __NOUN[F] after studying matches to increase cost with long subjects - comment out __NOUN[H]
+	// better than two years, more than two years
+	//cPattern::create(L"__ADJECTIVE{_FINAL_IF_ALONE}", L"MTHAN",
+	//	1, L"_ADJECTIVE", 0, 1, 1,
+	//	1, L"preposition|than", 0, 1, 1,
+	//	4, L"_NOUN_OBJ{SUBOBJECT}", L"__NOUN[*]{SUBOBJECT}", L"__NOUNREL{SUBOBJECT}", L"__S1*2{BLOCK:EVAL}", 0, 1, 1,    // I shall treat you **worse than I have yet **. / he was only a year **older than I** am at present .
+	//	0);
 	// _NAME will ONLY be used in a case where a proper noun is not in an owner form AND it is preceded by an adverb.
 	cPattern::create(L"__NADJECTIVE",L"",
 		2,L"_ADVERB",L"commonProfession*1",0,0,1, // cp=commonProfession What was author Jasper Fforde's first book?
@@ -865,6 +871,13 @@ int createBasicPatterns(void)
 															1,L"preposition|than",0,1,1,
 															1,L"__S1{EVAL:_BLOCK}",0,1,1,
 															0);
+	// 7. TEMP DEBUG - helps with more .. than ... expressions
+	//cPattern::create(L"__ADJECTIVE", L"ATHAN2",
+	//														1, L"adverb|more", 0,1,1,
+	//														1, L"__ADJECTIVE[*]", 0, 1, 1,
+	//														1, L"preposition|than", 0, 1, 1,
+	//														1, L"__S1{EVAL:_BLOCK}", 0, 1, 1,
+	//														0);
 	// lightly frozen, magnificently melting skeleton
 	cPattern::create(L"__ADJECTIVE{APLURAL}",L"6",
 		                          1,L"__ADJ_S2",0,1,3,
@@ -2113,12 +2126,17 @@ void createSecondaryPatterns1(void)
 	// giving bill the book
 	cPattern::create(L"_VERBREL2{_FINAL_IF_ALONE}",L"1",
 						2,L"_VERBONGOING{vE:VERB}",L"__VERBREL2",0,1,1,
-						3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1,0);
+						3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1,
+						0);
 	// ‘ I am exactly the same , ’ Catherine repeated , *wishing her aunt were a little less sympathetic* .
 	cPattern::create(L"_VERBREL2{_FINAL_IF_ALONE}", L"3",
 						1, L"_THINKONGOING{vE:VERB}", 0, 1, 1,
 						1, L"__S1*1{EVAL:_BLOCK:SUBJUNCTIVE}", 0, 1, 1,
-		0);
+						0);
+	// 8. TEMP DEBUG becoming...
+	//cPattern::create(L"_VERBREL2{_FINAL_IF_ALONE}", L"4",
+	//								1, L"verb|becoming{vE:VERB}", 0, 1, 1,
+	//								1, L"__ADJECTIVE", 0, 0, 1, 0);
 	// PASSIVE
 	// , having been spread
 	// , having been given
@@ -2574,6 +2592,7 @@ int createSecondaryPatterns2(void)
 									 2,L"_PP",L"_REL1[*]{_BLOCK}",0,0,1,         // from C2__S1 - __PP after noun is absorbed into the noun itself through NOUN 9
 									 0);
  */
+	// this pattern differentiator is specifically checked for in evaluateNounDeterminer!
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_FORWARD_REFERENCE:_BLOCK:GNOUN:VNOUN:_CHECK_IGNORABLE_FORMS}",L"F",
 									 1,L"__C1__S1",0,1,1, // changed to cost *2 5/17 to avoid being the same cost as _NOUN[2]
 									 1,L"_VERBONGOING*1{VERB:vE}",0,1,1,  // from C2__S1 - also matches _N1// this pattern should not be common
@@ -3312,7 +3331,8 @@ int createSecondaryPatterns2(void)
 											 4,L"adverb|then",L"adverb|so",L"conjunction",L"coordinator",0,1,1,
 											 1,L"adverb|then",0,0,1,
 											 3,L"_PP*2",L"_VERBREL2*2", L"_ADVERB", 0,0,1,  // Tommy did not hear Boris's reply , but [in response to it] Whittington said something that sounded like - *1 competition with __MSTAIL[9]
-											 2,L"__S1{_BLOCK:EVAL}",L"_REL1[*]",0,1,1, // L"__NOUN[*]*1",0,1,1,  took __NOUN out - absorbed the subject of the second sentence following another sentence (and a conjunction)
+		// 9. TEMP DEBUG NOUN*3 - helps with hanging nouns prevents 'eyes' used as a verb because _MS uses _MSTAIL to cover more even though it is more expensive
+											 2,L"__S1{_BLOCK:EVAL}",L"_REL1[*]", /*L"__NOUN*3",*/ 0,1,1, // __NOUN must be expensive to avoid absorbing the subject of the second sentence following another sentence (and a conjunction)
 											 0);
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}",L"2",
 												1, L"_ADVERB", 0, 0, 1,
@@ -3341,7 +3361,7 @@ int createSecondaryPatterns2(void)
 												1, L",", 0, 0, 1,
 												2, L"conjunction", L"coordinator", 0, 1, 1,
 												1, L"_ADJECTIVE", 0, 0, 1,
-												3, L"_PP*1", L"_VERBREL2*1", L"_INFP*1", 0, 0, 1,
+												3, L"_PP*1", L"_VERBREL2*1{_BLOCK:EVAL}", L"_INFP*1{_BLOCK:EVAL}", 0, 0, 1,
 												0);
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL:_ONLY_END_MATCH}", L"F",
 												1, L",", 0, 0, 1,

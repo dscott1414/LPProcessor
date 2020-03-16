@@ -8,7 +8,7 @@ public:
   unsigned int count;
   unsigned int allocated;
   enum chainType { BY_PATTERN_END=0, BY_POSITION=1, BY_CHILD_PATTERN_END=2 };
-  enum eFlags { WINNER_FLAG=1,CHILDPATBITS=15,COST_EVAL=2,COST_ND=4,COST_AGREE=8,COST_NVO=16,COST_DONE=32,IN_CHAIN=64,ELIMINATED=128,COST_TERTIARY=256,COST_ROLE=512 };
+	enum eFlags { WINNER_FLAG = 1, CHILDPATBITS = 15, COST_EVAL = 2, COST_ND = 4, COST_AGREE = 8, COST_NVO = 16, COST_DONE = 32, IN_CHAIN = 64, ELIMINATED = 128, COST_TERTIARY = 256, COST_ROLE = 512, COST_PREP = 1024 };
   typedef struct
   {
     short begin;
@@ -118,7 +118,7 @@ public:
   private:
     unsigned int PEMAElementMatchedSubIndex; // points to a pattern #/end OR a form #
     unsigned short pattern;
-    unsigned char flags;
+    unsigned short flags;
     short cost;
 		// this incremental cost is only used in reduceParent!
 		short iCost; // lowest cost of PMA element

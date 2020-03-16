@@ -1195,7 +1195,8 @@ void WordClass::resetCapitalizationAndProperNounUsageStatistics(sTrace debugTrac
 		}
 		else
 		{
-			w->second.logReset(w->first);
+			if (debugTrace.traceParseInfo)
+				w->second.logReset(w->first);
 			w->second.resetCapitalizationAndProperNounUsageStatistics();
 			w++;
 		}
@@ -2084,6 +2085,8 @@ bool WordClass::parseMetaCommands(int where,wchar_t *buffer, int &endSymbol, wst
 		t.traceQCheck = setValue;
 	else if (!wcsnicmp(buffer + offset, L"traceParseInfo", wcslen(L"traceParseInfo")))
 		t.traceParseInfo = setValue;
+	else if (!wcsnicmp(buffer + offset, L"tracePreposition", wcslen(L"tracePreposition")))
+		t.tracePreposition = setValue;
 	else if (!wcsnicmp(buffer,L"traceTransitoryQuestion",wcslen(L"traceTransitoryQuestion")))
 	{
     t.traceCommonQuestion=false;

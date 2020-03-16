@@ -9088,6 +9088,7 @@ void Source::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 			setSecondaryQuoteString(I, secondaryQuotesResolutions);
 			resolveQuotedPOVObjects(lastOpeningSecondaryQuote, I);
 		}
+		// CMREADME34
 		// if end of sentence, or next word is a double 'next line' BUT the current word is not itself a 'next line' or a comma or inside of a chapter heading
 		else if (isEOS(I) || (I + 1 < ((signed)m.size()) && m[I + 1].word == Words.sectionWord && m[I].word != Words.sectionWord && m[I].word->first != L"," && (sections.empty() || I >= (int)sections[section].endHeader)))
 		{

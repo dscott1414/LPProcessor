@@ -27,6 +27,8 @@
 #include "mutex"
 #include "stacktrace.h"
 
+void getSentenceWithTags(Source source, int patternBegin, int patternEnd, int sentenceBegin, int sentenceEnd, int PEMAPosition, wstring &sentence);
+
 // needed for _STLP_DEBUG - these must be set to a legal, unreachable yet never changing value
 unordered_map <wstring,tFI> static_wordMap;
 tIWMM wNULL=static_wordMap.end();
@@ -1296,55 +1298,6 @@ int printUnknownsFromSource(Source source, int sourceId, wstring path, wstring e
 	return 21;
 }
 
-int addTagMark(wstring tag, vector<tTagLocation> tagSet, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
-{
-	int nextTagIndex=-1, tagIndex = findTag(tagSet, (wchar_t *)tag.c_str(), nextTagIndex);
-	if (tagIndex >= 0)
-	{
-		tagBeginPositionMap[tagSet[tagIndex].sourcePosition].insert(tag);
-		tagEndPositionMap[tagSet[tagIndex].sourcePosition + tagSet[tagIndex].len-1].insert(tag);
-	}
-	return tagIndex;
-}
-
-void addTagConstrainedMark(wstring tag, int constrainByTag, vector<tTagLocation> tagSet, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
-{
-	int nextConstrainedTagIndex= -1, constrainedTagIndex = (constrainByTag >= 0) ? findTagConstrained(tagSet, (wchar_t *)tag.c_str(), nextConstrainedTagIndex, tagSet[constrainByTag]) : -1;
-	if (constrainedTagIndex >= 0)
-	{
-		tagBeginPositionMap[tagSet[constrainedTagIndex].sourcePosition].insert(tag);
-		tagEndPositionMap[tagSet[constrainedTagIndex].sourcePosition + tagSet[constrainedTagIndex].len-1].insert(tag);
-	}
-}
-
-void getTagPositionsFromTagSet(unsigned int position, vector<tTagLocation> tagSet, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
-{
-	if (addTagMark(L"SUBJECT", tagSet, tagBeginPositionMap, tagEndPositionMap) < 0)
-		return;
-	if (addTagMark(L"VERB", tagSet, tagBeginPositionMap, tagEndPositionMap) < 0)
-		return;
-	if (addTagMark(L"OBJECT", tagSet, tagBeginPositionMap, tagEndPositionMap) < 0)
-		return;
-	int nextMainVerbTag = -1,mainVerbTag = findTag(tagSet, L"VERB", nextMainVerbTag);
-	addTagConstrainedMark(L"V_AGREE", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
-	addTagConstrainedMark(L"conditional", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
-	addTagConstrainedMark(L"past", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
-	addTagConstrainedMark(L"future", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
-}
-
-void getTagPositions(Source source,int position,int pemaByPatternEnd, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
-{
-	vector < vector <tTagLocation> > tagSets;
-	if (source.startCollectTags(false, subjectVerbRelationTagSet, position, pemaByPatternEnd, tagSets, true, false, L"tags for debugging")>0)
-	{
-		for (unsigned int J = 0; J < tagSets.size(); J++)
-		{
-			if (tagSets[J].size())
-				getTagPositionsFromTagSet(position, tagSets[J], tagBeginPositionMap, tagEndPositionMap);
-		}
-	}
-}
-
 int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, wstring etext, wstring patternOrWordName, wstring differentiator, bool isPattern, wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
@@ -1362,7 +1315,6 @@ int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, w
 		for (WordMatch &im : source.m)
 		{
 			int pmaOffset;
-			wstring adiff;
 			if (isPattern && (pmaOffset = (differentiator == L"*") ? im.pma.queryPattern(patternOrWordName) : im.pma.queryPatternDiff(patternOrWordName, differentiator))!=-1)
 			{
 				pmaOffset = pmaOffset & ~matchElement::patternFlag;
@@ -1376,43 +1328,10 @@ int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, w
 						continue;
 					}
 				}
-				map <int, set<wstring>> tagBeginPositionMap, tagEndPositionMap;
-				getTagPositions(source, wordIndex, im.pma[pmaOffset].pemaByPatternEnd, tagBeginPositionMap, tagEndPositionMap);
-				int patternEnd = wordIndex+im.pma[pmaOffset].len;
-				adiff = patterns[im.pma[pmaOffset].getPattern()]->differentiator;
-				wstring sentence,originalIWord;
-				bool inPattern=false;
-				for (int I = source.sentenceStarts[ss - 1]; I < source.sentenceStarts[ss]; I++)
-				{
-					source.getOriginalWord(I, originalIWord, false, false);
-					if (I == wordIndex)
-					{
-						sentence += L"**";
-						inPattern = true;
-					}
-					if (tagBeginPositionMap.find(I) != tagBeginPositionMap.end())
-					{
-						for (wstring tag:tagBeginPositionMap[I])
-							sentence += tag+L"{";
-					}
-					sentence += originalIWord;
-					if (tagEndPositionMap.find(I) != tagEndPositionMap.end())
-					{
-						bool notFoundInBeginPositions=tagBeginPositionMap.find(I) == tagBeginPositionMap.end();
-						for (wstring tag : tagEndPositionMap[I])
-						{
-							if (notFoundInBeginPositions || tagBeginPositionMap[I].find(tag)== tagBeginPositionMap[I].end())
-								sentence += L" " + tag;
-							sentence += L"}";
-						}
-					}
-					if (I == patternEnd - 1)
-					{
-						sentence += L"**";
-						inPattern = false;
-					}
-					sentence += L" ";
-				}
+				int patternEnd = wordIndex + im.pma[pmaOffset].len;
+				wstring sentence;
+				getSentenceWithTags(source, wordIndex,patternEnd, source.sentenceStarts[ss - 1], source.sentenceStarts[ss], im.pma[pmaOffset].pemaByPatternEnd, sentence);
+				wstring adiff = patterns[im.pma[pmaOffset].getPattern()]->differentiator;
 				if (extended)
 					lplog(LOG_INFO, L"_N1:%d:%s:form %s.", wordIndex,im.word->first.c_str(),im.word->second.Form(source.pema[im.pma[pmaOffset].pemaByPatternEnd].getChildForm())->name.c_str());
 				wstring path = source.sourcePath.substr(16, source.sourcePath.length() - 20);
@@ -1804,7 +1723,7 @@ int patternOrWordAnalysis(Source source, int step, wstring patternOrWordName, ws
 {
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
-	;
+	if (!myquery(&source.mysql, L"LOCK TABLES sources WRITE")) return -1;
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	bool websterAPIRequestsExhausted = false;
 	int startTime = clock(), numSourcesProcessedNow = 0;
@@ -1812,6 +1731,10 @@ int patternOrWordAnalysis(Source source, int step, wstring patternOrWordName, ws
 	if (!myquery(&source.mysql, qt, result))
 		return -1;
 	my_ulonglong totalSource = mysql_num_rows(result);
+	lplog(LOG_INFO | LOG_ERROR | LOG_NOTMATCHED, NULL); // close all log files to change extension
+	logFileExtension = L"."+patternOrWordName;
+	if (!differentiator.empty())
+		logFileExtension += L"[" + differentiator + L"]";
 	for (int row = 0; sqlrow = mysql_fetch_row(result); row++)
 	{
 		wstring path, etext, title;
@@ -1827,6 +1750,7 @@ int patternOrWordAnalysis(Source source, int step, wstring patternOrWordName, ws
 		else if (st == Source::TEST_SOURCE_TYPE)
 			path.insert(0, L"\\").insert(0, LMAINDIR);
 		int setStep = patternOrWordAnalysisFromSource(source, sourceId, path, etext, patternOrWordName, differentiator, isPattern,specialExtension);
+		if (!myquery(&source.mysql, L"LOCK TABLES sources WRITE")) return -1;
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
 			break;
@@ -2705,7 +2629,30 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	// 30. 'her' when in the beginning of a __NOUN[2]
 	if (word == L"her" && source.m[wordSourceIndex].queryWinnerForm(L"possessive_determiner") >= 0 && source.m[wordSourceIndex].pma.queryPattern(L"__NOUN") != -1)
 	{
-		partofspeech += L"***HER";
+		int nf;
+		if ((nf = source.m[wordSourceIndex + 1].queryWinnerForm(nounForm)) >= 0)
+		{
+			int nounCost = source.m[wordSourceIndex + 1].word->second.getUsageCost(nf);
+			wstring tmpstr;
+			partofspeech += L"***HERNOUNCOST"+itos(nounCost,tmpstr);
+			int af = source.m[wordSourceIndex + 1].queryForm(adverbForm);
+			if (af >= 0)
+			{
+				int adverbCost = source.m[wordSourceIndex + 1].word->second.getUsageCost(af);
+				if (nounCost == 0 && adverbCost > 0)
+				{
+					errorMap[L"LP correct: word 'her': [before a low cost noun] ST says personal_pronoun_accusative LP says possessive_determiner"]++; // probability 6 out of 130 are ST correct
+					return 0;
+				}
+			}
+			else if ((source.m[wordSourceIndex+1].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) != VERB_PRESENT_PARTICIPLE)
+			{
+				errorMap[L"LP correct: word 'her': [before a low cost noun] ST says personal_pronoun_accusative LP says possessive_determiner"]++; // probability 6 out of 130 are ST correct
+				return 0;
+			}
+		}
+		else
+			partofspeech += L"***HERNONOUN";
 		//errorMap[L"LP correct: word 'her': [before an adverb, determiner, personal_pronoun_nominative, coordinator, indefinite_pronoun] ST says possessive_determiner LP says personal_pronoun_accusative"]++;
 		//return 0;
 	}
@@ -4060,6 +4007,12 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"ST correct: home is an adverb when having no determiner (go home)"]++;
 		return 0;
 	}
+	// all 32 examples are correct.
+	if (word == L"fool" && source.m[wordSourceIndex].isOnlyWinner(nounForm))
+	{
+		errorMap[L"ST correct: fool is a noun (you fool!)"]++;
+		return 0;
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
@@ -4398,6 +4351,10 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"LP correct: noun not verb (verb cost 4, noun cost 0)"] = numErrors * 76 / 100;
 	errorMap[L"ST correct: noun not verb (verb cost 4, noun cost 0)"] = numErrors * 24 / 100;
 
+	numErrors = errorMap[L"LP correct: word 'her': [before a low cost noun] ST says personal_pronoun_accusative LP says possessive_determiner"]; // probability 6 out of 130 are ST correct
+	errorMap[L"LP correct: word 'her': [before a low cost noun] ST says personal_pronoun_accusative LP says possessive_determiner"] = numErrors * 130 / 136;
+	errorMap[L"ST correct: word 'her': [before a low cost noun] ST says personal_pronoun_accusative LP says possessive_determiner"] = numErrors * 6 / 136;
+	
 }
 
 int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension)
@@ -4880,7 +4837,8 @@ void wmain(int argc,wchar_t *argv[])
 	case 21:
 		// Source::TEST_SOURCE_TYPE
 		//patternOrWordAnalysis(source, step, L"__S1", L"R*", Source::GUTENBERG_SOURCE_TYPE,true);
-		patternOrWordAnalysis(source, step, L"__N1", L"EXTENDED", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
+		//patternOrWordAnalysis(source, step, L"__ADJECTIVE", L"MTHAN", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
+		patternOrWordAnalysis(source, step, L"__NOUN", L"F", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
 		//patternOrWordAnalysis(source, step, L"_VERB_BARE_INF", L"A", true);
 		patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false, specialExtension);

@@ -1868,6 +1868,7 @@ int Source::printSentences(bool updateStatistics,unsigned int unknownCount,unsig
 		debugTrace.traceSecondaryPEMACosting=m[begin].t.traceSecondaryPEMACosting;
 		debugTrace.traceMatchedSentences= m[begin].t.traceMatchedSentences;
 		debugTrace.traceUnmatchedSentences= m[begin].t.traceUnmatchedSentences;
+		debugTrace.tracePreposition = m[begin].t.tracePreposition;
 		logCache=m[begin].logCache;
 
 		// clear tag set maps
@@ -3214,6 +3215,7 @@ Source::Source(wchar_t *databaseServer,int _sourceType,bool generateFormStatisti
 	debugTrace.collectPerSentenceStats=false;
 	debugTrace.traceNameResolution=false;
 	debugTrace.traceParseInfo = false;
+	debugTrace.tracePreposition = false;
 	pass=-1;
 	repeatReplaceObjectInSectionPosition=-1;
 	accumulateLocationLastLocation=-1;
@@ -3296,6 +3298,7 @@ Source::Source(MYSQL *parentMysql,int _sourceType,int _sourceConfidence)
 	debugTrace.collectPerSentenceStats=false;
 	debugTrace.traceNameResolution=false;
 	debugTrace.traceParseInfo = false;
+	debugTrace.tracePreposition = false;
 	alreadyConnected=true;
 	pass=-1;
 	repeatReplaceObjectInSectionPosition=-1;

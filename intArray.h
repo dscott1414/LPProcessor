@@ -3,6 +3,37 @@
 class intArray
 {
 public:
+
+	int binary_search_lower_bound(int x) 
+	{
+		int lowIndex = 0,highIndex = count; // Not n - 1
+		while (lowIndex < highIndex) 
+		{
+			int midIndex = (lowIndex + highIndex) / 2;
+			if (x <= content[midIndex]) 
+				highIndex = midIndex;
+			else 
+				lowIndex = midIndex + 1;
+		}
+		return lowIndex-1;
+	}
+
+	int binary_search_upper_bound(int x) 
+	{
+		int lowIndex = 0;
+		int highIndex = count; // Not n - 1
+		while (lowIndex < highIndex) {
+			int midIndex = (lowIndex + highIndex) / 2;
+			if (x >= content[midIndex]) {
+				lowIndex = midIndex + 1;
+			}
+			else {
+				highIndex = midIndex;
+			}
+		}
+		return lowIndex;
+	}
+
 	bool zeroOutSpace;
 	unsigned int count;
 	unsigned int allocated;

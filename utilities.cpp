@@ -702,3 +702,92 @@ vector<wstring> splitString(wstring str, wchar_t wc)
 	return strings;
 }
 
+
+int addTagMark(wstring tag, vector<tTagLocation> tagSet, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
+{
+	int nextTagIndex = -1, tagIndex = findTag(tagSet, (wchar_t *)tag.c_str(), nextTagIndex);
+	if (tagIndex >= 0)
+	{
+		tagBeginPositionMap[tagSet[tagIndex].sourcePosition].insert(tag);
+		tagEndPositionMap[tagSet[tagIndex].sourcePosition + tagSet[tagIndex].len - 1].insert(tag);
+	}
+	return tagIndex;
+}
+
+void addTagConstrainedMark(wstring tag, int constrainByTag, vector<tTagLocation> tagSet, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
+{
+	int nextConstrainedTagIndex = -1, constrainedTagIndex = (constrainByTag >= 0) ? findTagConstrained(tagSet, (wchar_t *)tag.c_str(), nextConstrainedTagIndex, tagSet[constrainByTag]) : -1;
+	if (constrainedTagIndex >= 0)
+	{
+		tagBeginPositionMap[tagSet[constrainedTagIndex].sourcePosition].insert(tag);
+		tagEndPositionMap[tagSet[constrainedTagIndex].sourcePosition + tagSet[constrainedTagIndex].len - 1].insert(tag);
+	}
+}
+
+void getTagPositionsFromTagSet(vector<tTagLocation> tagSet, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
+{
+	if (addTagMark(L"SUBJECT", tagSet, tagBeginPositionMap, tagEndPositionMap) < 0)
+		return;
+	if (addTagMark(L"VERB", tagSet, tagBeginPositionMap, tagEndPositionMap) < 0)
+		return;
+	if (addTagMark(L"OBJECT", tagSet, tagBeginPositionMap, tagEndPositionMap) < 0)
+		return;
+	int nextMainVerbTag = -1, mainVerbTag = findTag(tagSet, L"VERB", nextMainVerbTag);
+	addTagConstrainedMark(L"V_AGREE", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
+	addTagConstrainedMark(L"conditional", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
+	addTagConstrainedMark(L"past", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
+	addTagConstrainedMark(L"future", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
+}
+
+void getTagPositions(Source source, int position, int pemaByPatternEnd, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
+{
+	vector < vector <tTagLocation> > tagSets;
+	if (source.startCollectTags(false, subjectVerbRelationTagSet, position, pemaByPatternEnd, tagSets, true, false, L"tags for debugging") > 0)
+	{
+		for (unsigned int J = 0; J < tagSets.size(); J++)
+		{
+			if (tagSets[J].size())
+				getTagPositionsFromTagSet(tagSets[J], tagBeginPositionMap, tagEndPositionMap);
+		}
+	}
+}
+
+void getSentenceWithTags(Source source, int patternBegin, int patternEnd, int sentenceBegin, int sentenceEnd, int PEMAPosition, wstring &sentence)
+{
+	map <int, set<wstring>> tagBeginPositionMap, tagEndPositionMap;
+	getTagPositions(source, patternBegin, PEMAPosition, tagBeginPositionMap, tagEndPositionMap);
+	wstring originalIWord;
+	bool inPattern = false;
+	for (int I = sentenceBegin; I < sentenceEnd; I++)
+	{
+		source.getOriginalWord(I, originalIWord, false, false);
+		if (I == patternBegin)
+		{
+			sentence += L"**";
+			inPattern = true;
+		}
+		if (tagBeginPositionMap.find(I) != tagBeginPositionMap.end())
+		{
+			for (wstring tag : tagBeginPositionMap[I])
+				sentence += tag + L"{";
+		}
+		sentence += originalIWord;
+		if (tagEndPositionMap.find(I) != tagEndPositionMap.end())
+		{
+			bool notFoundInBeginPositions = tagBeginPositionMap.find(I) == tagBeginPositionMap.end();
+			for (wstring tag : tagEndPositionMap[I])
+			{
+				if (notFoundInBeginPositions || tagBeginPositionMap[I].find(tag) == tagBeginPositionMap[I].end())
+					sentence += L" " + tag;
+				sentence += L"}";
+			}
+		}
+		if (I == patternEnd - 1)
+		{
+			sentence += L"**";
+			inPattern = false;
+		}
+		sentence += L" ";
+	}
+}
+

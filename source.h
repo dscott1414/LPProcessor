@@ -349,6 +349,7 @@ public:
 		t.traceQuestionPatternMap=trace.traceQuestionPatternMap;
 		t.collectPerSentenceStats=trace.collectPerSentenceStats;
 		t.traceParseInfo = trace.traceParseInfo;
+		t.tracePreposition = trace.tracePreposition;
 		logCache=::logCache;
 	};
 	tIWMM word;  // points to WMM array
@@ -3348,8 +3349,8 @@ int wordOrderSensitiveModifier,
 	bool matchAlias(int where,int object, int aliasObject);
 
 	// agreement
-	unsigned int getAllLocations(unsigned int position,int parentPattern,int rootp,int childLen,int parentLen,vector <unsigned int> &allLocations, int recursionLevel,unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
-	int markChildren(patternElementMatchArray::tPatternElementMatch *pem,int position,int recursionLevel,int allRootsLowestCost, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
+	unsigned int getAllLocations(unsigned int position,int parentPattern,int rootp,int childLen,int parentLen,vector <unsigned int> &allLocations, int recursionLevel,unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,bool &reassessParentCosts);
+	int markChildren(patternElementMatchArray::tPatternElementMatch *pem,int position,int recursionLevel,int allRootsLowestCost, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,bool &reassessParentCosts);
 	bool findLowCostTag(vector<tTagLocation> &tagSet,int &cost,wchar_t *tagName,tTagLocation &lowestCostTag,int parentCost,int &nextTag);
 	int evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,unsigned int parentPosition,unsigned int position,vector<tTagLocation> tagSet,int &traceSource);
 	// agreement section end
@@ -3525,6 +3526,7 @@ bool inSectionHeader,
 	public: size_t startCollectTags(bool trace,int tagSet,int position,int PEMAPosition,vector < vector <tTagLocation> > &tagSets,bool obeyBlock,bool collectParentTags,wstring purpose);
 	void sortTagLocations(vector < vector <tTagLocation> > &tagSets, vector <tTagLocation> &tagSetLocations);
 	void evaluateNounDeterminers(int PEMAPosition,int position,vector < vector <tTagLocation> > &tagSets,wstring purpose);
+	void evaluatePrepObjects(int PEMAPosition, int position, vector < vector <tTagLocation> > &tagSets, wstring purpose);
 	int evaluatePrepObjectRelation(vector <tTagLocation> &tagSet,int &pIndex,tIWMM &prepWord,int &object,int &wherePrepObject,tIWMM &objectWord);
 	bool inTag(tTagLocation &innerTag,tTagLocation &outerTag);
 	void equivocateObjects(int where,int eTo,int eFrom);

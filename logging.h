@@ -8,7 +8,7 @@
 //#define LOG_DICTIONARY
 
 // diagnostic messages about patterns as they are matched
-// #define LOG_PATTERN_MATCHING
+//#define LOG_PATTERN_MATCHING
 // log patterns before they are used
 //#define LOG_PATTERNS
 //#define LOG_OVERMATCHED
@@ -75,7 +75,7 @@ struct sTrace
 	bool traceObjectResolution,traceVerbObjects,traceDeterminer,traceBNCPreferences,tracePatternElimination,traceNameResolution;
 	bool traceSecondaryPEMACosting,traceMatchedSentences,traceUnmatchedSentences,traceIncludesPEMAIndex;
 	bool traceTransitoryQuestion,traceConstantQuestion,traceMapQuestion,traceCommonQuestion,traceQuestionPatternMap;
-	bool traceTagSetCollection,collectPerSentenceStats,traceParseInfo;
+	bool traceTagSetCollection,collectPerSentenceStats,traceParseInfo, tracePreposition;
 };
 
 extern int logQuestionProfileTime;
