@@ -8622,6 +8622,7 @@ void Source::processEndOfPrimaryQuoteRS(int where, int lastSentenceEndBeforeAndN
 			{
 				m[lastOpeningPrimaryQuote].audienceObjectMatches = m[previousPrimaryQuote].audienceObjectMatches;
 				bool allIn, oneIn;
+				// (CMREADME34)
 				// scan quote for audience - if supposed audience is included in the quote, then reject
 				for (int ai = lastOpeningPrimaryQuote; ai < m[lastOpeningPrimaryQuote].endQuote; ai++)
 					if (m[ai].getObject() >= 0 && !(m[ai].objectRole&(HAIL_ROLE | PP_OBJECT_ROLE | IN_QUOTE_REFERRING_AUDIENCE_ROLE)) && (m[ai].objectRole&FOCUS_EVALUATED) &&
@@ -8652,6 +8653,7 @@ void Source::processEndOfPrimaryQuoteRS(int where, int lastSentenceEndBeforeAndN
 						}
 						break;
 					}
+				// (CMREADME35)
 				// possible different person talking to?
 				if (!immediatelyAfterEndOfParagraph)
 				{

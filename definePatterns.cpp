@@ -413,11 +413,11 @@ int createNouns(void)
 	//cPattern::create(L"_NOUN",L"",1,L"__NOUN[*]",0,1,1,0);
 	// 6. TEMP DEBUG correction to __NOUN[F] after studying matches to increase cost with long subjects - comment out __NOUN[H]
 	// better than two years, more than two years
-	cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"H",
-										1,L"_ADJECTIVE",0,1,1,
-										1,L"preposition|than",0,1,1,
-										3,L"_NOUN_OBJ{SUBOBJECT}",L"__NOUN[*]{SUBOBJECT}",L"__NOUNREL{SUBOBJECT}",0,1,1,    
-										0);
+	//cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"H",
+	//									1,L"_ADJECTIVE",0,1,1,
+	//									1,L"preposition|than",0,1,1,
+	//									3,L"_NOUN_OBJ{SUBOBJECT}",L"__NOUN[*]{SUBOBJECT}",L"__NOUNREL{SUBOBJECT}",0,1,1,    
+	//									0);
 	// black beans and head lettuce
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:PLURAL:MPLURAL:MNOUN:_BLOCK}",L"J",
 										1,L"predeterminer|both*-1",0,0,1,
@@ -822,11 +822,11 @@ int createBasicPatterns(void)
 		0);
 	// 6. TEMP DEBUG correction to __NOUN[F] after studying matches to increase cost with long subjects - comment out __NOUN[H]
 	// better than two years, more than two years
-	//cPattern::create(L"__ADJECTIVE{_FINAL_IF_ALONE}", L"MTHAN",
-	//	1, L"_ADJECTIVE", 0, 1, 1,
-	//	1, L"preposition|than", 0, 1, 1,
-	//	4, L"_NOUN_OBJ{SUBOBJECT}", L"__NOUN[*]{SUBOBJECT}", L"__NOUNREL{SUBOBJECT}", L"__S1*2{BLOCK:EVAL}", 0, 1, 1,    // I shall treat you **worse than I have yet **. / he was only a year **older than I** am at present .
-	//	0);
+	cPattern::create(L"__ADJECTIVE{_FINAL_IF_ALONE}", L"MTHAN",
+		1, L"_ADJECTIVE", 0, 1, 1,
+		1, L"preposition|than", 0, 1, 1,
+		4, L"_NOUN_OBJ{SUBOBJECT}", L"__NOUN[*]{SUBOBJECT}", L"__NOUNREL{SUBOBJECT}", L"__S1*2{BLOCK:EVAL}", 0, 1, 1,    // I shall treat you **worse than I have yet **. / he was only a year **older than I** am at present .
+		0);
 	// _NAME will ONLY be used in a case where a proper noun is not in an owner form AND it is preceded by an adverb.
 	cPattern::create(L"__NADJECTIVE",L"",
 		2,L"_ADVERB",L"commonProfession*1",0,0,1, // cp=commonProfession What was author Jasper Fforde's first book?

@@ -308,22 +308,23 @@ int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem, in
 					{
 						if (debugTrace.tracePatternElimination)
 							lplog(L"%*sMC position %d:pattern %s[%s](%d,%d) child %s[%s](%d,%d) PMA rejected (cost %d>lowest cost %d)",
-							recursionLevel*2," ",position,patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),begin,end,
-							patterns[childp]->name.c_str(),patterns[childp]->differentiator.c_str(),position,position+childLen,pm->getCost(),lowestCost);
+								recursionLevel*2," ",position,patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),begin,end,
+								patterns[childp]->name.c_str(),patterns[childp]->differentiator.c_str(),position,position+childLen,pm->getCost(),lowestCost);
 						continue;
 					}
 					if (pm->isWinner())
 					{
-						lplog(L"%*sMC position %d:pma %d:pattern %s[%s](%d,%d) child %s[%s](%d,%d) PMA kept as winner (cost %d,lowest cost %d).",
-							recursionLevel * 2, " ", position, allLocations[lc], patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), begin, end,
-							patterns[childp]->name.c_str(), patterns[childp]->differentiator.c_str(), position, position + childLen, pm->getCost(), lowestCost);
+						if (debugTrace.tracePatternElimination)
+							lplog(L"%*sMC position %d:pma %d:pattern %s[%s](%d,%d) child %s[%s](%d,%d) PMA kept as winner (cost %d,lowest cost %d).",
+								recursionLevel * 2, " ", position, allLocations[lc], patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), begin, end,
+								patterns[childp]->name.c_str(), patterns[childp]->differentiator.c_str(), position, position + childLen, pm->getCost(), lowestCost);
 						continue;
 					}
 					setAsWinners.push_back(allLocations[lc]);
 					if (debugTrace.tracePatternElimination)
 						lplog(L"%*sMC position %d:pma %d:pattern %s[%s](%d,%d) child %s[%s](%d,%d) PMA set winner (cost %d<=lowest cost %d).",
-						recursionLevel*2," ",position, allLocations[lc], patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),begin,end,
-						patterns[childp]->name.c_str(),patterns[childp]->differentiator.c_str(),position,position+childLen,pm->getCost(),lowestCost);
+							recursionLevel*2," ",position, allLocations[lc], patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),begin,end,
+							patterns[childp]->name.c_str(),patterns[childp]->differentiator.c_str(),position,position+childLen,pm->getCost(),lowestCost);
 					bool localReassessParentCosts = false;
 					numChildren+=markChildren(pema.begin()+pm->pemaByPatternEnd,position,recursionLevel+1,lowestCost, tertiaryPEMAPositions, localReassessParentCosts);
 					patterns[pm->getPattern()]->numChildrenWinners++;

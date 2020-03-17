@@ -4013,6 +4013,12 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"ST correct: fool is a noun (you fool!)"]++;
 		return 0;
 	}
+	// 1 out of 109 examples was wrong (LP did not select the correct form)
+	if (wordSourceIndex>0 && source.m[wordSourceIndex-1].word->first==L"wouldhad")
+	{
+		errorMap[L"diff: wouldhad is an LP construction, so Stanford will not do this correctly."]++;
+		return 0;
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
