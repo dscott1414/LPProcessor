@@ -591,6 +591,11 @@ int createBasicPatterns(void)
 										2, L"preposition|in", L"preposition|over", 0, 1, 1,
 										1, L"noun|hand", 0, 1, 1,
 										0);
+	cPattern::create(L"__ADVERB", L"SIDE",
+										1, L"noun|side", 0, 1, 1,
+										1, L"preposition|by", 0, 1, 1,
+										1, L"noun|side", 0, 1, 1,
+										0);
 	// this is used as an adverb, a preposition and a subordinator (included as a REL1 syntax)
 	cPattern::create(L"__AS_AS", L"", 
 											1, L"adverb|as*-1", 0, 1, 1,
@@ -3331,8 +3336,8 @@ int createSecondaryPatterns2(void)
 											 4,L"adverb|then",L"adverb|so",L"conjunction",L"coordinator",0,1,1,
 											 1,L"adverb|then",0,0,1,
 											 3,L"_PP*2",L"_VERBREL2*2", L"_ADVERB", 0,0,1,  // Tommy did not hear Boris's reply , but [in response to it] Whittington said something that sounded like - *1 competition with __MSTAIL[9]
-		// 9. TEMP DEBUG NOUN*3 - helps with hanging nouns prevents 'eyes' used as a verb because _MS uses _MSTAIL to cover more even though it is more expensive
-											 2,L"__S1{_BLOCK:EVAL}",L"_REL1[*]", /*L"__NOUN*3",*/ 0,1,1, // __NOUN must be expensive to avoid absorbing the subject of the second sentence following another sentence (and a conjunction)
+		// NOUN*3 - helps with hanging nouns prevents 'eyes' used as a verb because _MS uses _MSTAIL to cover more even though it is more expensive
+											 3,L"__S1{_BLOCK:EVAL}",L"_REL1[*]", L"__NOUN*3", 0,1,1, // __NOUN must be expensive to avoid absorbing the subject of the second sentence following another sentence (and a conjunction)
 											 0);
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}",L"2",
 												1, L"_ADVERB", 0, 0, 1,

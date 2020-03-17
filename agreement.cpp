@@ -2488,8 +2488,7 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 									highestPNC = max(highestPNC, PNC);
 								}
 							}
-							highestPNC = 0; // 5. TEMP DEBUG - correction to __NOUN[F] after studying matches to increase cost with long subjects
-
+							// correction to __NOUN[F] after studying matches to increase cost with long subjects
 							if (highestPNC > 0)
 							{
 								if (debugTrace.traceDeterminer)
