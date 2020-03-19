@@ -606,28 +606,31 @@ int createBasicPatterns(void)
 	/// TIME related adverbs
 	// this morning / this very morning / some morning
 	cPattern::create(L"_ADVERB{FLOATTIME}",L"T",
+											1, L"_ADVERB[*]", 0, 0, 1, // bright and early
 											6,L"demonstrative_determiner{TIMEMODIFIER}",L"adjective{TIMEMODIFIER}", L"quantifier|some", L"quantifier|each", L"quantifier|every", L"adverb|any", 0,1,1,
 											1, L"adverb{ADV}", 0, 0, 1, // very
 											6,L"month{MONTH}",L"daysOfWeek{DAYWEEK}",L"season{SEASON}",L"timeUnit{TIMECAPACITY}",L"dayUnit{TIMECAPACITY}",L"noun|time",0,1,1,
 											0);
 	// some of the time / some of these days / some of the month
 	cPattern::create(L"_ADVERB{FLOATTIME}", L"ST",
-		2, L"quantifier|some", L"quantifier|most", 0, 1, 1,
-		1, L"preposition|of", 0, 1, 1,
-		2, L"determiner|the{TIMEMODIFIER}", L"demonstrative_determiner{TIMEMODIFIER}", 0, 1, 1,
-		2, L"timeUnit{TIMECAPACITY}", L"noun|time", 0, 1, 1,
-		0);
+											2, L"quantifier|some", L"quantifier|most", 0, 1, 1,
+											1, L"preposition|of", 0, 1, 1,
+											2, L"determiner|the{TIMEMODIFIER}", L"demonstrative_determiner{TIMEMODIFIER}", 0, 1, 1,
+											2, L"timeUnit{TIMECAPACITY}", L"noun|time", 0, 1, 1,
+											0);
 	// The summer before
 	cPattern::create(L"_ADVERB{FLOATTIME}", L"AT1",
+											2, L"predeterminer|half*-2", L"_ADVERB[*]", 0, 0, 1, // bright an early
 											1, L"determiner|the{TIMEMODIFIER}", 0, 1, 1,
-											6, L"month{MONTH}", L"daysOfWeek{DAYWEEK}", L"season{SEASON}", L"timeUnit{TIMECAPACITY}", L"dayUnit{TIMECAPACITY}", L"noun|time", 0, 1, 1,
+											6, L"month{MONTH}", L"daysOfWeek{DAYWEEK}", L"season{SEASON}", L"timeUnit*2{TIMECAPACITY}", L"dayUnit*1{TIMECAPACITY}", L"noun|time", 0, 1, 1,
 											2, L"conjunction|before",L"conjunction|after",0,1,1,
 											0);
 	// The next summer 
 	cPattern::create(L"_ADVERB{FLOATTIME}", L"AT2",
+											2, L"predeterminer|half*-2",L"_ADVERB[*]",0,0,1, // bright an early
 											1, L"determiner|the{TIMEMODIFIER}", 0, 1, 1,
-											2, L"adjective|following", L"adjective|next", L"adjective|succeeding", L"adjective|previous", L"verb|proceeding", 0, 0, 1, // following
-											6, L"month{MONTH}", L"daysOfWeek{DAYWEEK}", L"season{SEASON}", L"timeUnit{TIMECAPACITY}", L"dayUnit{TIMECAPACITY}", L"noun|time", 0, 1, 1,
+											7, L"adjective|following*-1", L"adjective|next*-1", L"adjective|succeeding*-1", L"adjective|previous*-1", L"verb|proceeding*-1", L"numeral_ordinal|first",L"numeral_ordinal|last",0, 0, 1, // following
+											6, L"month*1{MONTH}", L"daysOfWeek*4{DAYWEEK}", L"season*1{SEASON}", L"timeUnit*4{TIMECAPACITY}", L"dayUnit*4{TIMECAPACITY}", L"noun|time*2", 0, 1, 1, // daysOfWeek sun should be a noun, minute/second is also an issue
 											0);
 	// any time between dawn and sunset
 	cPattern::create(L"_ADVERB{FLOATTIME}", L"AT3",
@@ -2288,6 +2291,11 @@ void createPrepositionalPhrases(void)
 										1, L"preposition|as{P}", 0, 1, 1,  // when included in a _PP, mark this as a preposition
 										2, L"adjective", L"__S1",0, 1, 1,
 										0);
+	cPattern::create(L"_PP{_FINAL:_BLOCK:_NO_REPEAT}", L"T",
+										3, L"preposition|on", L"preposition|at", L"preposition|from", 0, 1, 1,  // from the time your office closes / on the day your office closes
+										1, L"determiner|the{TIMEMODIFIER}", 0, 1, 1,
+										2, L"timeUnit*1{TIMECAPACITY}", L"noun|time", 0, 1, 1,
+										1, L"__S1*1{PREPOBJECT:OBJECT:EVAL:_BLOCK}", 0, 1, 1, 0);
 	//~~~Ellen Anderson Gholson Glasgow\The Wheel of Life[44590 - 44593]: FAIL
 	//“ I merely wanted to let her know the kind of **man he is**, ” explained Perry .
 	//~~~Ellen Anderson Gholson Glasgow\The Wheel of Life[27951 - 27955]: FAIL
