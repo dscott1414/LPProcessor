@@ -1996,7 +1996,7 @@ unordered_map<wstring, vector <wstring> > maxentAssociationMap =
 	// include possible subclasses
 	{ L"verb", { L"verbverb",L"SYNTAX:Accepts S as Object",L"have",L"have_negation",L"is",L"is_negation",L"does",L"does_negation",L"be",L"been",L"modal_auxiliary",L"negation_modal_auxiliary",L"future_modal_auxiliary",L"negation_future_modal_auxiliary",L"being"} }, // feel, see, watch, hear, tell etc // fancy, say (thinksay verbs)
 	// stanford maxent apparently has no indefinite pronoun, so it classes them all as nouns.
-	{ L"noun",{ L"uncertainDurationUnit",L"simultaneousUnit",L"dayUnit",L"timeUnit",L"quantifier",L"numeral_cardinal",L"indefinite_pronoun",L"season" } }, // all, some etc // something, everything
+	{ L"noun",{ L"uncertainDurationUnit",L"simultaneousUnit",L"dayUnit",L"timeUnit",L"quantifier",L"numeral_cardinal",L"indefinite_pronoun",L"season",L"time_abbreviation" } }, // all, some etc // something, everything
 	{ L"adjective",{ L"quantifier",L"numeral_ordinal" }},  // many / more
 	{ L"adverb",{ L"not",L"never" }},  // many
 	{ L"to",{ L"preposition" }},
@@ -4017,6 +4017,12 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	if (wordSourceIndex>0 && source.m[wordSourceIndex-1].word->first==L"wouldhad")
 	{
 		errorMap[L"diff: wouldhad is an LP construction, so Stanford will not do this correctly."]++;
+		return 0;
+	}
+	// (noun) not found in winnerForms is for word ishas
+	if (word == L"ishas" && primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"is") >= 0)
+	{
+		errorMap[L"diff: ishas cannot be a noun."]++;
 		return 0;
 	}
 	wstring winnerFormsString;
