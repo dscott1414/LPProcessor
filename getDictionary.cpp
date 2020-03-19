@@ -657,7 +657,7 @@ bool equivalentIfIgnoreDashSpaceCase(wstring sWord,wstring sWord2)
 	return false;
 }
 
-int WordClass::checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,wstring sForm,int inflection,int derivationRules,wstring definitionEntry,int sourceId)
+int WordClass::checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,wstring sForm,int inflection,int derivationRules,wstring definitionEntry,int sourceId,bool log)
 { LFS
 	int iForm;
 	vector <FormClass *>::iterator ifc,ifcend=Forms.end();
@@ -683,6 +683,7 @@ int WordClass::checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,
 			sForm=L"quantifier";
 		else if (sForm.find(L"verbal auxiliary")!=wstring::npos)
 		{
+			if (log)
 			lplog(LOG_DICTIONARY,L"Form %s rejected!",sForm.c_str());
 			return 0;
 		}
@@ -700,6 +701,7 @@ int WordClass::checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,
 		if (saveIWord!=WMM.end()) iWord=saveIWord;
 		if (added)
 		{
+			if (log)
 			lplog(LOG_DICTIONARY,L"(%s) word %s: Added Inflection%s (Form %s, definitionEntry %s)",fromWhere,sWord.c_str(),getInflectionName(inflection,iForm,inflectionName),sForm.c_str(),definitionEntry.c_str());
 			return 0;
 		}
@@ -707,9 +709,11 @@ int WordClass::checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,
 	iForm=FormsClass::findForm(sForm);
 	if (iForm<0)
 	{
+		if (log)
 		lplog(LOG_DICTIONARY,L"form %s is not found!",sForm.c_str());
 		return -1;
 	}
+	if (log)
 	lplog(LOG_DICTIONARY,L"(%s) word %s: (Already) Added Inflection%s (Form %s, definitionEntry %s)",fromWhere,sWord.c_str(),getInflectionName(inflection,iForm,inflectionName),sForm.c_str(),definitionEntry.c_str());
 	return 0;
 }
@@ -764,37 +768,7 @@ int getPath(const wchar_t *pathname,void *buffer,int maxlen,int &actualLen)
 	return 0;
 }
 
-/*
-int WordClass::standardEnding(tIWMM iWord,wstring sWord,int sourceId)
-{ LFS
-wchar_t *standard_ending[]={"ing","ed","s","er","est",NULL};
-int len;
-if (!wcscmp(standard_ending[0],sWord.c_str()+(len=sWord.length()-wcslen(standard_ending[0]))))
-checkAdd(L"SE",iWord,sWord,0,"verb",VERB_PRESENT_PARTICIPLE,0,sWord.substr(0,len),sourceId);
-else if (!wcscmp(standard_ending[1],sWord.c_str()+(len=sWord.length()-wcslen(standard_ending[1]))))
-checkAdd(L"SE",iWord,sWord,0,"verb",VERB_PAST,0,sWord.substr(0,len),sourceId);
-else if (!wcscmp(standard_ending[2],sWord.c_str()+(len=sWord.length()-wcslen(standard_ending[2]))))
-checkAdd(L"SE",iWord,sWord,0,"noun",PLURAL,0,sWord.substr(0,len),sourceId);
-else if (!wcscmp(standard_ending[3],sWord.c_str()+(len=sWord.length()-wcslen(standard_ending[3]))))
-{ LFS
-checkAdd(L"SE",iWord,sWord,0,"adjective",ADJECTIVE_COMPARATIVE,0,sWord.substr(0,len),sourceId);
-checkAdd(L"SE",iWord,sWord,0,"adverb",ADVERB_COMPARATIVE,0,sWord.substr(0,len),sourceId);
-}
-else if (!wcscmp(standard_ending[4],sWord.c_str()+(len=sWord.length()-wcslen(standard_ending[4]))))
-{ LFS
-checkAdd(L"SE",iWord,sWord,0,"adjective",ADJECTIVE_SUPERLATIVE,0,sWord.substr(0,len),sourceId);
-checkAdd(L"SE",iWord,sWord,0,"adverb",ADVERB_SUPERLATIVE,0,sWord.substr(0,len),sourceId);
-}
-else
-{ LFS
-lplog(LOG_DICTIONARY,L"** ERROR:Word %s did not have standard ending.\n",sWord.c_str());
-return WORD_NOT_FOUND;
-}
-return 0;
-}
-*/
-
-int WordClass::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId)
+int WordClass::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId,bool log)
 { LFS
 	if (sWord.length()<5) 
 		return -1;
@@ -806,7 +780,7 @@ int WordClass::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId)
 		if ((iWordComponent = fullQuery(mysql, w, sourceId)) == WMM.end())
 			break;
 	// don't split a word with a dash in it
-	if (components.size()==1 && (iWordComponent == WMM.end() || !Stemmer::wordIsNotUnknownAndOpen(iWordComponent) || rejectSplitEndings.find(components[components.size() - 1]) != rejectSplitEndings.end())) // not found or unknown
+	if (components.size()==1 && (iWordComponent == WMM.end() || !Stemmer::wordIsNotUnknownAndOpen(iWordComponent,log) || rejectSplitEndings.find(components[components.size() - 1]) != rejectSplitEndings.end())) // not found or unknown
 	{
 		for (unsigned int I = 2; I < sWord.length() - 2; I++)
 		{
@@ -815,14 +789,14 @@ int WordClass::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId)
 			components.push_back(sWord.substr(I, sWord.length() - I));
 			tIWMM firstQIWord;
 			// with splitting word this way, the previous word must also be known and of an open word type. 
-			if (((firstQIWord = fullQuery(mysql, firstWord, sourceId)) != WMM.end() && Stemmer::wordIsNotUnknownAndOpen(firstQIWord)) &&
-				((iWordComponent = fullQuery(mysql, components[components.size() - 1], sourceId)) != WMM.end() && Stemmer::wordIsNotUnknownAndOpen(iWordComponent)) &&
+			if (((firstQIWord = fullQuery(mysql, firstWord, sourceId)) != WMM.end() && Stemmer::wordIsNotUnknownAndOpen(firstQIWord,log)) &&
+				((iWordComponent = fullQuery(mysql, components[components.size() - 1], sourceId)) != WMM.end() && Stemmer::wordIsNotUnknownAndOpen(iWordComponent,log)) &&
 				(rejectSplitEndings.find(components[components.size() - 1]) == rejectSplitEndings.end()))
 					break;
 			iWordComponent = WMM.end();
 		}
 	}
-	if (iWordComponent != WMM.end() && Stemmer::wordIsNotUnknownAndOpen(iWordComponent) && rejectSplitEndings.find(components[components.size() - 1]) == rejectSplitEndings.end())
+	if (iWordComponent != WMM.end() && Stemmer::wordIsNotUnknownAndOpen(iWordComponent,log) && rejectSplitEndings.find(components[components.size() - 1]) == rejectSplitEndings.end())
 	{
 		// (SW) word bone-cracking( main: verb present part)
 		// (SW) word white-maned(main: verb past)
@@ -831,15 +805,15 @@ int WordClass::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId)
 		// (SW) word arms-sales(main: noun)
 		iWord=end();
 		if (iWordComponent->second.query(verbForm) >= 0)
-			checkAdd(L"SW", iWord, sWord, 0, L"verb", iWordComponent->second.inflectionFlags, 0, components[components.size()-1], sourceId);
+			checkAdd(L"SW", iWord, sWord, 0, L"verb", iWordComponent->second.inflectionFlags, 0, components[components.size()-1], sourceId,log);
 		if (iWordComponent->second.query(nounForm)>=0)
-			checkAdd(L"SW",iWord,sWord,0,L"noun", iWordComponent->second.inflectionFlags,0, components[components.size() - 1],sourceId);
+			checkAdd(L"SW",iWord,sWord,0,L"noun", iWordComponent->second.inflectionFlags,0, components[components.size() - 1],sourceId, log);
 		if (iWordComponent->second.query(adjectiveForm)>=0)
-			checkAdd(L"SW",iWord,sWord,0,L"adjective", iWordComponent->second.inflectionFlags,0, components[components.size() - 1],sourceId);
+			checkAdd(L"SW",iWord,sWord,0,L"adjective", iWordComponent->second.inflectionFlags,0, components[components.size() - 1],sourceId, log);
 		if (iWordComponent->second.query(adverbForm)>=0)
-			checkAdd(L"SW",iWord,sWord,0,L"adverb", iWordComponent->second.inflectionFlags,0, components[components.size() - 1],sourceId);
+			checkAdd(L"SW",iWord,sWord,0,L"adverb", iWordComponent->second.inflectionFlags,0, components[components.size() - 1],sourceId, log);
 		if (iWord==end()) return -1;
-		checkAdd(L"SW",iWord,sWord,0,COMBINATION_FORM,0,0, components[components.size() - 1],sourceId);
+		checkAdd(L"SW",iWord,sWord,0,COMBINATION_FORM,0,0, components[components.size() - 1],sourceId, log);
 		lplog(LOG_DICTIONARY, L"WordPosMAP splitWord %s-->%s", sWord.c_str(), components[components.size() - 1].c_str());
 		lplog(LOG_DICTIONARY, L"%s TEMPWordPosMAP", components[components.size() - 1].c_str());
 		return 0;

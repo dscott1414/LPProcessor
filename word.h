@@ -665,9 +665,9 @@ public:
   bool parseMetaCommands(int where,wchar_t *buffer,int &endSymbol, wstring &comment, sTrace &t);
   int readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocation,wstring &sWord, wstring &comment, int &nounOwner,bool scanForSection,bool webScrapeParse,sTrace &t,MYSQL *mysql,int sourceId);
   int processFootnote(wchar_t *buffer,__int64 bufferLen,__int64 &cp);
-	int parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord);
-	static int attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId);
-	static int parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLetterCapitalized, int nounOwner, int sourceId);
+	int parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool log);
+	static int attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId,bool log);
+	static int parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLetterCapitalized, int nounOwner, int sourceId, bool log);
   static tIWMM addNewOrModify(MYSQL *mysql,wstring sWord,int flags,int form,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added); // only used for adding a name
   // generic utilities
   bool isAllUpper(wstring &sWord);
@@ -711,7 +711,7 @@ public:
 	int predefineHolidays();
 	static int processTime(wstring sWord, char &hour, char &minute);
 	static int processDate(wstring sWord, short &year, char &month, char &dayOfMonth);
-	static int splitWord(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId);
+	static int splitWord(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId,bool log);
 	static tIWMM fullQuery(MYSQL *mysql, wstring word, int sourceId);
 	static int writeWord(tIWMM iWord, void *buffer, int &where, int limit);
 	int readWordsFromDB(MYSQL &mysql, bool generateFormStatistics, bool printProgress, bool skipWordInitialization);
@@ -770,7 +770,7 @@ private:
   static int addWordToForm(wstring sWord,tIWMM &iWord,int flags,wstring sForm,wstring shortForm,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added);
   int predefineWords(InflectionsRoot words[],wstring form,wstring shortForm,wstring inflectionsClass=L"",int flags=0,bool properNounSubClass=false);
   bool closeConnection(void);
-  static int checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,wstring sForm,int inflection,int derivationRules,wstring mainEntry,int sourceId);
+  static int checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,wstring sForm,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool log);
 
   #ifdef CHECK_WORD_CACHE
     // test routines

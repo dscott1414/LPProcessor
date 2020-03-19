@@ -321,7 +321,7 @@ Stemmer::~Stemmer()
 	prefixRules.clear();
 }
 
-bool Stemmer::wordIsNotUnknownAndOpen(tIWMM iWord)
+bool Stemmer::wordIsNotUnknownAndOpen(tIWMM iWord,bool log)
 {
 	if (unacceptableCombinationForms.empty())
 	{
@@ -389,6 +389,7 @@ bool Stemmer::wordIsNotUnknownAndOpen(tIWMM iWord)
 	for (unsigned int f = 0; f < iWord->second.formsSize(); f++)
 		if ((ucf = unacceptableCombinationForms.find(iWord->second.forms()[f])) != unacceptableCombinationForms.end())
 		{
+			if (log)
 			lplog(LOG_DICTIONARY, L"WordPosMAP %s is a %s.", iWord->first.c_str(), Forms[*ucf]->name.c_str());
 			return false;
 		}

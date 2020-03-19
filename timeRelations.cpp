@@ -1164,7 +1164,7 @@ void WordClass::addTimeFlag(int flag,Inflections words[])
 	{
 		tIWMM iWord=query(words[I].word);
 		if (iWord==end())
-			if (parseWord(NULL,words[I].word,iWord,false,false, -1)<0)
+			if (parseWord(NULL,words[I].word,iWord,false,false, -1,false)<0)
 				lplog(LOG_FATAL_ERROR,L"Error getting forms for time word %s",words[I].word);
 		iWord->second.timeFlags|=flag;
     iWord->second.flags|=tFI::updateMainInfo;
@@ -1215,7 +1215,7 @@ void WordClass::addTimeFlag(int flag,wchar_t *words[])
 		{
 			tIWMM iWord = query(words[I]);
 			if (iWord == end())
-				if (parseWord(NULL, words[I], iWord, false, false, -1) < 0)
+				if (parseWord(NULL, words[I], iWord, false, false, -1,false) < 0)
 					lplog(LOG_FATAL_ERROR, L"Error getting forms for time word %s", words[I]);
 			iWord->second.timeFlags |= flag;
 		}

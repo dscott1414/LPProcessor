@@ -434,14 +434,14 @@ int testDisInclineAndSplit(MYSQL *mysql, Source &source, int sourceId, WordMatch
 	{
 		tIWMM iWord = Words.end();
 		int ret;
-		if (capitalized || (ret = Words.attemptDisInclination(mysql, iWord, word.word->first, sourceId)))
+		if (capitalized || (ret = Words.attemptDisInclination(mysql, iWord, word.word->first, sourceId,false)))
 		{
-			if ((ret = Words.splitWord(mysql, iWord, word.word->first, sourceId)) && word.word->first.find(L'-')!=wstring::npos)
+			if ((ret = Words.splitWord(mysql, iWord, word.word->first, sourceId,false)) && word.word->first.find(L'-')!=wstring::npos,false)
 			{
 				wstring sWord= word.word->first;
 				sWord.erase(std::remove(sWord.begin(), sWord.end(), L'-') , sWord.end());
 				if ((iWord=Words.query(sWord))==Words.end())
-					ret = Words.attemptDisInclination(mysql, iWord, sWord, sourceId);
+					ret = Words.attemptDisInclination(mysql, iWord, sWord, sourceId,false);
 			}
 		}
 		if (iWord!=Words.end())

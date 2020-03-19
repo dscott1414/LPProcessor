@@ -924,7 +924,7 @@ int bncc::processWord(Source &source,int sourceId,wchar_t *buffer,int tag,int se
 	else if (result<0 && result != PARSE_END_SENTENCE)
     return -40;
   else
-    if ((result=Words.parseWord(&source.mysql,sWord,iWord,firstLetterCapitalized,nounOwner, sourceId))<0)
+    if ((result=Words.parseWord(&source.mysql,sWord,iWord,firstLetterCapitalized,nounOwner, sourceId,false))<0)
     {
       lplog(L"Cannot parse word %s (%s #%d).",sWord.c_str(),source.storageLocation.c_str(),sentence);
       return 0;

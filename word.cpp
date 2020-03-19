@@ -1245,7 +1245,7 @@ tIWMM WordClass::addNewOrModify(MYSQL *mysql, wstring sWord, int flags, int form
   {
     for (unsigned int I=0; I<sME.length(); I++) sME[I]=towlower(sME[I]);
 		disinclinationRecursionCount++;
-    if (sME[0] && !equivalentIfIgnoreDashSpaceCase(sME,sWord) && (parseWord(mysql,sME,mainEntry,firstLetterCapitalized,false, sourceId) || mainEntry==wNULL))
+    if (sME[0] && !equivalentIfIgnoreDashSpaceCase(sME,sWord) && (parseWord(mysql,sME,mainEntry,firstLetterCapitalized,false, sourceId,false) || mainEntry==wNULL))
     {
 			disinclinationRecursionCount--;
       lplog(LOG_ERROR,L"ERROR:addNewOrModify failed finding %s as a main entry.",sME.c_str());
@@ -1393,7 +1393,7 @@ tIWMM WordClass::hasFormInflection(tIWMM iWord,wstring sForm,int inflection)
 // find sWord with prefix or suffix.
 // if prefix, add all forms of base word to iWord.
 // if suffix, add specific suffix form to iWord.
-int WordClass::attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId)
+int WordClass::attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId,bool log)
 {
 	LFS
 	if (mysql == NULL)
@@ -1446,7 +1446,7 @@ int WordClass::attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, 
 					lplog(LOG_DICTIONARY, L"ERROR:Suffix rule #%d with word %s (root %s) has no suffix inflection.", r->rulenum, sWord.c_str(), r->text.c_str());
 					return SUFFIX_HAS_NO_INFLECTION;
 				}
-				checkAdd(L"Stem", iWord, sWord, 0, form, inflection, derivationRules, r->text, sourceId);
+				checkAdd(L"Stem", iWord, sWord, 0, form, inflection, derivationRules, r->text, sourceId,log);
 				lplog(LOG_DICTIONARY, L"WordPosMAP attemptDisInclination %s-->%s (%s)", sWord.c_str(), r->text.c_str(), form.c_str());
 			}
 			else
@@ -1455,7 +1455,7 @@ int WordClass::attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, 
 				for (a = 0; acceptClasses[a]; a++)
 					if (saveIWord->second.query(acceptClasses[a]) >= 0)
 					{
-						checkAdd(L"Original", iWord, sWord, 0, Forms[acceptClasses[a]]->name.c_str(), saveIWord->second.inflectionFlags, derivationRules, r->text, sourceId);
+						checkAdd(L"Original", iWord, sWord, 0, Forms[acceptClasses[a]]->name.c_str(), saveIWord->second.inflectionFlags, derivationRules, r->text, sourceId,log);
 						lplog(LOG_DICTIONARY, L"WordPosMAP attemptDisInclination %s-->%s (%s)", sWord.c_str(), r->text.c_str(), Forms[acceptClasses[a]]->name.c_str());
 					}
 			}
@@ -1468,7 +1468,7 @@ int WordClass::attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, 
 // returns a 0 if no error.  
 // tries to find a word in the dictionary, in the DB, by stemming or splitting the word. 
 // if the word is not found this still returns 0, but it will add all open word classes and mark the word as unknown.
-int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLetterCapitalized, int nounOwner, int sourceId)
+int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLetterCapitalized, int nounOwner, int sourceId,bool log)
 {
 	LFS
 	bool stopDisInclination = disinclinationRecursionCount>2;
@@ -1593,11 +1593,11 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 					return 0;
 				markWordUndefined(iWord, sWord, tFI::queryOnLowerCase, firstLetterCapitalized, nounOwner, sourceId);
 			}
-			else if (ret = attemptDisInclination(mysql,iWord, sWord, sourceId)) // returns 0 if found or WORD_NOT_FOUND if not found
+			else if (ret = attemptDisInclination(mysql,iWord, sWord, sourceId,log)) // returns 0 if found or WORD_NOT_FOUND if not found
 			{
 				if (dashLocation < 0 && ret != WORD_NOT_FOUND && ret != NO_FORMS_FOUND)
 					return ret;
-				ret = splitWord(mysql,iWord, sWord, sourceId);
+				ret = splitWord(mysql,iWord, sWord, sourceId, log);
 				if (ret && dashLocation>=0)
 				{
 					wstring sWordNoDashes = sWord;
@@ -1610,7 +1610,7 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 						// because when a single run parses multiple sources, if a capitalized version of the word is the only kind in a source, after the lower case version is found in a previous source,
 						// the parse for the capitalized version is different than if the lower case version was never encountered previously, leading to 
 						// a dependency on order of capitalization.  To get rid of this dependency and ensure that parses are identical no matter what order, this word must be deleted after source processing.
-						if (!(ret = Words.attemptDisInclination(mysql, iWord, sWordNoDashes, sourceId))) // returns 0 if found or WORD_NOT_FOUND if not found
+						if (!(ret = Words.attemptDisInclination(mysql, iWord, sWordNoDashes, sourceId,log))) // returns 0 if found or WORD_NOT_FOUND if not found
 							iWord->second.flags |= tFI::deleteWordAfterSourceProcessing; 
 					}
 					else
@@ -1639,7 +1639,7 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 }
 
 // 
-int WordClass::parseWord(MYSQL *mysql,wstring sWord, tIWMM &iWord)
+int WordClass::parseWord(MYSQL *mysql,wstring sWord, tIWMM &iWord,bool log)
 {
 	LFS
 	bool firstLetterCapitalized = false;
@@ -1653,7 +1653,10 @@ int WordClass::parseWord(MYSQL *mysql,wstring sWord, tIWMM &iWord)
 		{
 		if (!iswalnum(sWord[I]) && sWord[I] != ' ' && sWord[I] != '.' && !isDash(sWord[I]) &&
 			((sWord[0] != 'd' && sWord[0] != 'l') || sWord[1] != '\''))
+			{
+				if (log)
 			lplog(LOG_DICTIONARY, L"Suspect character %c(ascii value %d) encountered in word %s.", sWord[I], (int)sWord[I], sWord.c_str());
+			}
 		if (isDash(sWord[I]))
 			dashLocation = I;
 		if (sWord[I] == '\'')
@@ -1672,7 +1675,7 @@ int WordClass::parseWord(MYSQL *mysql,wstring sWord, tIWMM &iWord)
 		return WORD_NOT_FOUND;
 	if (containsSingleQuote)
 		return WORD_NOT_FOUND;
-	return attemptDisInclination(mysql,iWord, sWord, sourceId);
+	return attemptDisInclination(mysql,iWord, sWord, sourceId,log);
 }
 
 

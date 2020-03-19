@@ -62,7 +62,7 @@ public:
 	static int stem(MYSQL mysql, wstring s, vector <tSuffixRule> &rulesUsed, intArray &trail, int addRule);
 	~Stemmer();
 	static bool isWordDBUnknown(MYSQL mysql, wstring word);
-	static bool wordIsNotUnknownAndOpen(tIWMM iWord);
+	static bool wordIsNotUnknownAndOpen(tIWMM iWord, bool log);
 
 private:
 	static unordered_set<int> unacceptableCombinationForms;

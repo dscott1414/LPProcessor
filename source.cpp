@@ -510,10 +510,10 @@ bool WordMatch::read(char *buffer,int &where,int limit)
 			return false;
 		}
 		else
-			if ((result=Words.parseWord(NULL,sWord,word,false,nounOwner, sourceId))<0)
+			if ((result=Words.parseWord(NULL,sWord,word,false,nounOwner, sourceId,false))<0)
 			{
 				string temp2;
-				lplog(LOG_ERROR,L"Word %S cannot be added",wTM(temp,temp2,65001));
+				lplog(LOG_ERROR,L"Word %S cannot be added at buffer location %d",wTM(temp,temp2,65001),bufferScanLocation);
 				return false;
 			}
 	}
@@ -1492,7 +1492,7 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 				tIWMM iWord=WordClass::fullQuery(&mysql, lowerSubWord,sourceId);
 				if (iWord == WordClass::end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0)
 					unknownWords++;
-				if (iWord != WordClass::end() && Stemmer::wordIsNotUnknownAndOpen(iWord))
+				if (iWord != WordClass::end() && Stemmer::wordIsNotUnknownAndOpen(iWord, debugTrace.traceParseInfo))
 					openWords++;
 				if (subWord.length() > 1 && iswupper(subWord[0]) && !iswupper(subWord[1]))  // al-Jazeera, not BALL-PLAYING
 					capitalizedWords++;
@@ -1551,7 +1551,7 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 		else if (result<0 && result != PARSE_END_SENTENCE)
 			break;
 		else
-			if ((result=Words.parseWord(&mysql,sWord,iWord,firstLetterCapitalized,nounOwner, sourceId))<0)
+			if ((result=Words.parseWord(&mysql,sWord,iWord,firstLetterCapitalized,nounOwner, sourceId,debugTrace.traceParseInfo))<0)
 				break;
 		result=0;
 		if (iWord->second.isUnknown())

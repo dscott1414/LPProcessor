@@ -903,7 +903,7 @@ void removeDash(MYSQL mysql, string &possibleDashedWord)
 	}
 	tIWMM iWord = Words.end();
 	int result = 0;
-	if ((result = Words.parseWord(&mysql, rd, iWord))>=0)
+	if ((result = Words.parseWord(&mysql, rd, iWord,false))>=0)
 	{
 		numconvertedWords++;
 		printf("%d:%d:%s -> %S                                            \n", numDashedWords, numconvertedWords, possibleDashedWord.c_str(), rd.c_str());

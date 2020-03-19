@@ -877,7 +877,6 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			sentencesProcessedNow -= sentencesProcessedOriginally;
 			wsprintf(consoleTitle, L"sources=%06d:sentences=%06I64d:words=%08I64d in %02d:%02d:%02d [%d sources/hour] [%I64d words/hour].", 
 				numSourcesProcessedNow, sentencesProcessedNow, wordsProcessedNow, processingSeconds/3600, (processingSeconds % 3600)/60, processingSeconds % 60, numSourcesProcessedNow*3600/processingSeconds, wordsProcessedNow *3600/processingSeconds);
-			lplog(LOG_INFO | LOG_ERROR, L"%s", consoleTitle);
 			SetConsoleTitle(consoleTitle);
 
 			if (nextProcessIndex == WAIT_IO_COMPLETION || nextProcessIndex == WAIT_TIMEOUT)
