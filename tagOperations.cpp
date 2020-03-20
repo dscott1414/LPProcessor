@@ -268,8 +268,8 @@ bool Source::resolveObjectTagBeforeObjectResolution(vector <tTagLocation> &tagSe
 			return false;
 		vector < vector <tTagLocation> > tagSets;
 		// He gave a book.
-		if (startCollectTagsFromTag(false,nAgreeTagSet,tagSet[tag],tagSets,GNOUN_TAG,false,purpose + L"| resolve object - GNOUN")>0 || 
-			  startCollectTagsFromTag(false,nAgreeTagSet,tagSet[tag],tagSets,MNOUN_TAG,false, purpose + L"| resolve object - MNOUN")>0 )
+		if (startCollectTagsFromTag(false,nAgreeTagSet,tagSet[tag],tagSets,GNOUN_TAG,true, false, purpose + L"| resolve object - GNOUN")>0 || 
+			  startCollectTagsFromTag(false,nAgreeTagSet,tagSet[tag],tagSets,MNOUN_TAG,true, false, purpose + L"| resolve object - MNOUN")>0 )
 			for (unsigned int J=0; J<tagSets.size(); J++)
 				if (tagSets[J].size()==1)
 				{
@@ -386,13 +386,16 @@ void compareTagSets(vector < vector <tTagLocation> > tagSets,vector < vector <tT
 	}
 }
 
-size_t Source::startCollectTagsFromTag(bool inTrace,int tagSet,tTagLocation &tl,vector < vector <tTagLocation> > &tagSets,int rejectTag,bool collectSelfTags,wstring purpose)
+size_t Source::startCollectTagsFromTag(bool inTrace,int tagSet,tTagLocation &tl,vector < vector <tTagLocation> > &tagSets,int rejectTag,bool obeyBlock, bool collectSelfTags, wstring purpose)
 { LFS
 	int pattern=tl.pattern,position=tl.sourcePosition,end=tl.len,PEMAOffset=tl.PEMAOffset;
+	if (obeyBlock) // in this case, if we check for descendants even with obeyBlock on, _NOUN[9] will not appear to contain prepTagSet because _PP is blocked in that pattern.  It will only contain PREP.
+	{
 	if (collectSelfTags && !(patterns[pattern]->includesDescendantsAndSelfAllOfTagSet&((__int64)1<<tagSet)))
 		return 0;
 	if (!collectSelfTags && !(patterns[pattern]->includesOnlyDescendantsAllOfTagSet&((__int64)1<<tagSet)))
 		return 0;
+	}
 	if (PEMAOffset<0)
 	{
 		for (int p=patterns[pattern]->rootPattern; p>=0; p=patterns[p]->nextRoot)
@@ -407,11 +410,11 @@ size_t Source::startCollectTagsFromTag(bool inTrace,int tagSet,tTagLocation &tl,
 			for (; PEMAOffset>=0 && pem->getPattern()==p && pem->end==end; PEMAOffset=pem->nextByPatternEnd,pem=pema.begin()+PEMAOffset)
 				if (!pem->begin) break;
 			if (PEMAOffset<0 || pem->getPattern()!=p || pem->end!=end || pem->begin) continue;
-			startCollectTags(inTrace,tagSet,position,PEMAOffset,tagSets,true,collectSelfTags,purpose + L"| from tag ");
+			startCollectTags(inTrace,tagSet,position,PEMAOffset,tagSets, obeyBlock,collectSelfTags,purpose + L"| from tag ");
 		}
 	}
 	else
-		startCollectTags(inTrace,tagSet,position,PEMAOffset,tagSets,true,collectSelfTags,purpose + L"| from tag ");
+		startCollectTags(inTrace,tagSet,position,PEMAOffset,tagSets, obeyBlock,collectSelfTags,purpose + L"| from tag ");
 	for (auto ttagSet : tagSets)
 		if (ttagSet.size() > 0)
 			return tagSets.size();

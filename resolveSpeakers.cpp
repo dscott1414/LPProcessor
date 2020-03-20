@@ -7344,7 +7344,7 @@ void Source::checkInfinitivePhraseForLocation(vector <tTagLocation> &tagSet,bool
 	if (!resolveTag(tagSet,subjectTag,subjectObject,whereSubjectObject,subjectWord)) return;
 	// find verb of IVERB to associate with verb
 	vector < vector <tTagLocation> > iTagSets;
-	if (startCollectTagsFromTag(debugTrace.traceRelations,iverbTagSet,tagSet[iverbTag],iTagSets,-1,false,L"check infinitive phrase for location")>0)
+	if (startCollectTagsFromTag(debugTrace.traceRelations,iverbTagSet,tagSet[iverbTag],iTagSets,-1,true, false, L"check infinitive phrase for location")>0)
 	for (unsigned int K=0; K<iTagSets.size(); K++)
 	{
 		if (debugTrace.traceRelations)
@@ -7413,7 +7413,7 @@ void Source::accumulateLocation(int where,vector <tTagLocation> &tagSet,int subj
 	int pIndex,subobject=-1,movementPrepType=-1,embeddedPrepTag=-1,wherePrepObject=-1;
 	while (true)
 	{
-		if (startCollectTagsFromTag(debugTrace.traceRelations,prepTagSet,ts,tagSets,-1,false,L"accumulate location")>0)
+		if (startCollectTagsFromTag(debugTrace.traceRelations,prepTagSet,ts,tagSets,-1,true, false, L"accumulate location")>0)
 			for (unsigned int K=0; K<tagSets.size(); K++)
 			{
 				if (debugTrace.traceRelations)

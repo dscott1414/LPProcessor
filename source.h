@@ -3522,7 +3522,7 @@ bool inSectionHeader,
 	bool evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,int len,int firstFreePrep,vector <int> &futureBoundPrepositions,bool inPrimaryQuote,bool inSecondaryQuote,bool &outsideQuoteTruth,bool &inQuoteTruth,bool withinInfinitivePhrase,bool internalInfinitivePhrase,
 																	bool &nextVerbInSeries,int &sense,int &whereLastVerb,bool &ambiguousSense,bool inQuotedString,bool inSectionHeader,int begin,int end);
 	int findObject(tTagLocation &tag,int &position);
-	public: size_t startCollectTagsFromTag(bool inTrace,int tagSet,tTagLocation &tl,vector < vector <tTagLocation> > &tagSets,int rejectTag,bool collectParentTags,wstring purpose);
+	public: size_t startCollectTagsFromTag(bool inTrace,int tagSet,tTagLocation &tl,vector < vector <tTagLocation> > &tagSets,int rejectTag,bool obeyBlock, bool collectParentTags, wstring purpose);
 	public: size_t startCollectTags(bool trace,int tagSet,int position,int PEMAPosition,vector < vector <tTagLocation> > &tagSets,bool obeyBlock,bool collectParentTags,wstring purpose);
 	void sortTagLocations(vector < vector <tTagLocation> > &tagSets, vector <tTagLocation> &tagSetLocations);
 	void evaluateNounDeterminers(int PEMAPosition,int position,vector < vector <tTagLocation> > &tagSets,wstring purpose);

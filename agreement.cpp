@@ -795,7 +795,7 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 						{
 							int nextTag=-1, tag = findTag(prepTagSets[J], L"PREPOBJECT", nextTag);
 							vector < vector <tTagLocation> > ndTagSets;
-							if (tag >= 0 && startCollectTagsFromTag(debugTrace.traceSubjectVerbAgreement, nounDeterminerTagSet, prepTagSets[J][tag], ndTagSets, -1, true,L"subject verb agreement - SANAM") > 0)
+							if (tag >= 0 && startCollectTagsFromTag(debugTrace.traceSubjectVerbAgreement, nounDeterminerTagSet, prepTagSets[J][tag], ndTagSets, -1, true, true, L"subject verb agreement - SANAM") > 0)
 							{
 								if (debugTrace.traceSubjectVerbAgreement)
 									lplog(L"%d:SANAM detection: prepobject at %d-%d.", nounPosition,prepTagSets[J][tag].sourcePosition, prepTagSets[J][tag].sourcePosition + prepTagSets[J][tag].len);
@@ -2912,7 +2912,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 				lplog(L"%d:VOC__Prep first object test from %s[%s](%d,%d) BEGIN",tagSet[verbTagIndex].sourcePosition, patterns[tagSet[whereObjectTag].parentPattern]->name.c_str(), patterns[tagSet[whereObjectTag].parentPattern]->differentiator.c_str(),
 					pema[abs(tagSet[whereObjectTag].PEMAOffset)].begin + tagSet[whereObjectTag].sourcePosition, pema[abs(tagSet[whereObjectTag].PEMAOffset)].end + tagSet[whereObjectTag].sourcePosition);
 			vector < vector <tTagLocation> > prepTagSets;
-			if (startCollectTagsFromTag(debugTrace.traceSubjectVerbAgreement, prepTagSet, tagSet[whereObjectTag], prepTagSets, -1, true,L"verb objects 2 - prep phrase") > 0)
+			if (startCollectTagsFromTag(debugTrace.traceSubjectVerbAgreement, prepTagSet, tagSet[whereObjectTag], prepTagSets, -1, true, true, L"verb objects 2 - prep phrase") > 0)
 			{
 				objectDistanceCost += 6;
 				if (debugTrace.traceVerbObjects)

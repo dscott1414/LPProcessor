@@ -873,7 +873,7 @@ void Source::getCompoundPositions(int where,vector <tTagLocation> &multipleObjec
 			// examine if this position is actually an RE_OBJECT by testing for the lack of a determiner
 			// this phrase must be preceded by a comma (because otherwise it cannot be an RE_OBJECT)
 			if (wob<=1 || (m[wob-1].word->first!=L"," && m[wob-2].word->first!=L",") ||
-					startCollectTagsFromTag(true,nounDeterminerTagSet,multipleObjectTagSet[oTag],ndTagSets,-1,true,L"compound position - noun determiner")<=0 ||
+					startCollectTagsFromTag(true,nounDeterminerTagSet,multipleObjectTagSet[oTag],ndTagSets,-1,true, true, L"compound position - noun determiner")<=0 ||
 					findOneTag(ndTagSets[0],L"DET",-1)>=0 ||
 					!evaluateNounDeterminer(ndTagSets[0],true,traceSource,wob,wob+multipleObjectTagSet[oTag].len,-1))
 			{
@@ -928,7 +928,7 @@ void Source::markMultipleObjects(int where)
 							// examine if this position is actually an RE_OBJECT by testing for the lack of a determiner
 							// this phrase must be preceded by a comma (because otherwise it cannot be an RE_OBJECT)
 							if (wob<=1 || (m[wob-1].word->first!=L"," && m[wob-2].word->first!=L",") ||
-								  startCollectTagsFromTag(true,nounDeterminerTagSet,mobjectTagSets[J][oTag],ndTagSets,-1,true,L"multiple object - noun determiner")<=0 ||
+								  startCollectTagsFromTag(true,nounDeterminerTagSet,mobjectTagSets[J][oTag],ndTagSets,-1,true, true, L"multiple object - noun determiner")<=0 ||
 								  findOneTag(ndTagSets[0],L"DET",-1)>=0 ||
 									!evaluateNounDeterminer(ndTagSets[0],true,traceSource,wob,wob+mobjectTagSets[J][oTag].len,-1))
 							{
@@ -1362,7 +1362,7 @@ void Source::discoverSubjects(int where,vector <tTagLocation> &tagSet,int subjec
 	{	
 		whereObject=-1;
 		vector < vector <tTagLocation> > mobjectTagSets;
-		if (startCollectTagsFromTag(true,mobjectTagSet,tagSet[mnounTag],mobjectTagSets,false,true,L"discover subjects - compound objects")>0)
+		if (startCollectTagsFromTag(true,mobjectTagSet,tagSet[mnounTag],mobjectTagSets,false,true, true, L"discover subjects - compound objects")>0)
 		{
 			for (unsigned int J=0; J<mobjectTagSets.size(); J++)
 			{
@@ -1443,7 +1443,7 @@ void Source::markPrepositionalObjects(int where,int whereVerb,bool flagInInfinit
 	for (int prepTag=findOneTag(tagSet,L"PREP",-1); prepTag>=0; prepTag=findOneTag(tagSet,L"PREP",prepTag))
 	{
 		vector < vector <tTagLocation> > tagSets;
-		if (startCollectTagsFromTag(debugTrace.traceRelations,prepTagSet,tagSet[prepTag],tagSets,-1,false,L"mark prepositional objects")>0)
+		if (startCollectTagsFromTag(debugTrace.traceRelations,prepTagSet,tagSet[prepTag],tagSets,-1,true, false, L"mark prepositional objects")>0)
 			for (unsigned int K=0; K<tagSets.size(); K++)
 			{
 				if (debugTrace.traceRole)
@@ -1630,7 +1630,7 @@ int Source::processInternalInfinitivePhrase(int where,int whereVerb,int wherePar
 	vector < vector <tTagLocation> > tagSets;
 	if (iverbTag>=0)
 	{
-		startCollectTagsFromTag(debugTrace.traceRelations,iverbTagSet,tagSet[iverbTag],tagSets,-1,false,L"internal infinitive phrase");
+		startCollectTagsFromTag(debugTrace.traceRelations,iverbTagSet,tagSet[iverbTag],tagSets,-1,true, false, L"internal infinitive phrase");
 		parentTagLen=tagSet[iverbTag].len;
 	}
 	else
@@ -1842,7 +1842,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 		for (int mverbTag=findOneTag(tagSet,L"MVERB",-1); mverbTag>=0; mverbTag=findOneTag(tagSet,L"MVERB",mverbTag))
 		{
 			vector < vector <tTagLocation> > mverbTagSets;
-			if (startCollectTagsFromTag(true,verbObjectRelationTagSet,tagSet[mverbTag],mverbTagSets,false,true,L"additional role tags - compound verbs")>0)
+			if (startCollectTagsFromTag(true,verbObjectRelationTagSet,tagSet[mverbTag],mverbTagSets,false,true, true, L"additional role tags - compound verbs")>0)
 			{
 				for (unsigned int J=0; J<mverbTagSets.size(); J++)
 				{
@@ -2249,7 +2249,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 			bool notbutFound=false;
 			whereObject=-1;
 			vector < vector <tTagLocation> > notTagSets;
-			if (startCollectTagsFromTag(false,notbutTagSet,tagSet[mnounTag],notTagSets,false,false,L"compound objects - 'not' detection")>0)
+			if (startCollectTagsFromTag(false,notbutTagSet,tagSet[mnounTag],notTagSets,false,true, false, L"compound objects - 'not' detection")>0)
 			{
 				for (unsigned int J=0; J<notTagSets.size(); J++)
 				{
@@ -2272,7 +2272,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 				}
 			}
 			vector < vector <tTagLocation> > mobjectTagSets;
-			if (startCollectTagsFromTag(true,mobjectTagSet,tagSet[mnounTag],mobjectTagSets,false,true, L"compound objects")>0)
+			if (startCollectTagsFromTag(true,mobjectTagSet,tagSet[mnounTag],mobjectTagSets,false,true, true, L"compound objects")>0)
 			{
 				for (unsigned int J=0; J<mobjectTagSets.size(); J++)
 				{
