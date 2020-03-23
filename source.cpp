@@ -1826,7 +1826,7 @@ int Source::printSentences(bool updateStatistics,unsigned int unknownCount,unsig
 	section=0;
 	set <int> wordIds;
 	readWordIdsNeedingWordRelations(wordIds);
-	if (Words.initializeWordRelationsFromDB(mysql, wordIds,true)<0)
+	if (Words.initializeWordRelationsFromDB(mysql, wordIds,true,debugTrace.traceParseInfo)<0)
 		return -1;
 	for (vector <WordMatch>::iterator im = m.begin(), imEnd = m.end(); im != imEnd; im++)
 		im->getMainEntry()->second.flags &= ~tFI::inSourceFlag;

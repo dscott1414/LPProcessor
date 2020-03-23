@@ -1671,6 +1671,7 @@ unsigned int mobjectTagSet;
 unsigned int ndPrepTagSet;
 unsigned int timeTagSet;
 unsigned int qtobjectTagSet;
+unsigned int twoObjectTestTagSet;
 
 unsigned int PREP_TAG,OBJECT_TAG,SUBOBJECT_TAG,REOBJECT_TAG,IOBJECT_TAG,SUBJECT_TAG,PREP_OBJECT_TAG,VERB_TAG,PLURAL_TAG,MPLURAL_TAG,GNOUN_TAG,MNOUN_TAG,PNOUN_TAG,VNOUN_TAG,HAIL_TAG,NAME_TAG,REL_TAG,SENTENCE_IN_REL_TAG,FLOAT_TIME_TAG;
 
@@ -1721,7 +1722,8 @@ void initializeTagSets(int &startSuperTagSets)
 	//    as objects, but _ROLE tagset cannot be used because PREP is not a object type, and PREPOBJECT is blocked 
   desiredTagSets.push_back(tTS(ndPrepTagSet,L"_NDP",1,L"PREP",NULL));
   desiredTagSets.push_back(tTS(timeTagSet,L"_TIME",-10,L"TIMESPEC",L"HOUR",L"TIMEMODIFIER",L"TIMECAPACITY",L"TIMETYPE",L"DAYMONTH",L"MONTH",L"YEAR",L"DATESPEC",L"DAYWEEK",L"SEASON",L"HOLIDAY",L"MINUTE",NULL));
-
+	desiredTagSets.push_back(tTS(twoObjectTestTagSet, L"_TOT", -3, L"PREP", L"SUBJECT",L"REL",NULL));
+	
   startSuperTagSets=desiredTagSets.size();
   // these tagsets indicate the pattern has the descendant tagset which is blocked.
   desiredTagSets.push_back(tTS(descendantAgreementTagSet,L"_DESCENDANTS_HAVE_AGREEMENT",1,L"_AGREEMENT",NULL));

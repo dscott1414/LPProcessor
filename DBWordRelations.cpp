@@ -56,7 +56,7 @@ int Source::readWordIdsNeedingWordRelations(set <int> &wordIdsAndMainEntryIdsInS
   return 0;
 }
 
-int WordClass::initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, bool inSourceFlagSet)
+int WordClass::initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, bool inSourceFlagSet,bool log)
 {
 	int startTime = clock();
 	size_t wrRead = 0, wrAdded = 0, totalWRIDs = wordIds.size(),numWordsProcessed=0;
@@ -93,7 +93,8 @@ int WordClass::initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, boo
 			len += _snwprintf(qt + len, QUERY_BUFFER_LEN - len, L"%d,", *wi);
 		if (!len) break;
 		qt[len - 1] = 0; //erase last ,
-		lplog(LOG_DICTIONARY, L"Refreshing word relations of wordIds %s", qt);
+		if (log)
+			lplog(LOG_DICTIONARY, L"Refreshing word relations of wordIds %s", qt);
 		//wstring sqt="select fromWordId, toWordId, totalCount, typeId from wordRelations where fromWordId in (" + wstring(qt) + ") and ct=true";
 		wstring sqt;
 		if (inSourceFlagSet)

@@ -317,7 +317,11 @@ int createNouns(void)
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}",L"YOU",
 										1,L"personal_pronoun|you",0,1,1,
 										1,L"adjective*2",0,0,1,
-										3,L"numeral_cardinal|two", L"adjective|here*-3", L"noun*1", FEMALE_GENDER|MALE_GENDER,1,1,
+										4,L"numeral_cardinal|two", L"adjective|here*-3", L"noun*1", L"indefinite_pronoun|people",FEMALE_GENDER|MALE_GENDER,1,1,
+										0);
+	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}", L"THEM",
+										1, L"personal_pronoun_accusative|them", 0, 1, 1,
+										4, L"numeral_cardinal|two", L"adjective|here*-3", L"noun*1", L"indefinite_pronoun|people", FEMALE_GENDER | MALE_GENDER | PLURAL, 1, 1,
 										0);
 	// this is the same as "5" above but it is marked as a single object so "Iraqi weapons labs" is marked as a single object
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}",L"N",
@@ -647,7 +651,7 @@ int createBasicPatterns(void)
 											1, L"determiner|the", 0, 1, 1,
 											1, L"noun|rest",0,1,1,
 											1, L"preposition|of",0,1,1,
-											1, L"determiner|the{TIMEMODIFIER}", 0, 0, 1, // The rest of Tuesday / July
+											2, L"determiner|the{TIMEMODIFIER}", L"demonstrative_determiner|that{TIMEMODIFIER}", 0, 0, 1, // The rest of Tuesday / July
 											6, L"month{MONTH}", L"daysOfWeek{DAYWEEK}", L"season{SEASON}", L"timeUnit{TIMECAPACITY}", L"dayUnit{TIMECAPACITY}", L"noun|time", 0, 1, 1,
 											0);
 	cPattern::create(L"_ADVERB{FLOATTIME}", L"AT5",
@@ -659,30 +663,68 @@ int createBasicPatterns(void)
 		                    1,L"preposition|to",0,1,1,
 												1,L"dash|-*-2",0,1,1,
 												2,L"noun|day{DAY}",L"noun|morrow{DAY}",0,1,1,0);
+	// Day after day/ week after week
+	cPattern::create(L"_ADVERB{FLOATTIME}", L"AT7",
+											1, L"timeUnit{TIMECAPACITY}", 0, 1, 1, 
+											1, L"preposition|after{TIMEMODIFIER}", 0, 1, 1,
+											1, L"timeUnit{TIMECAPACITY}", 0, 1, 1,
+											0);
 	// Should this be an MS1?
-	cPattern::create(L"_ADVERB{_FINAL}", L"AT7",
+	cPattern::create(L"_ADVERB{_FINAL}", L"AT8",
 											9, L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|as", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"__AS_AS", L"quantifier|all*-1", 0, 1, 1,
 											1, L"__S1*1{EVAL:_BLOCK}", 0, 1, 1, 0);
-	cPattern::create(L"_ADVERB{_FINAL}", L"AT8",
+	cPattern::create(L"_ADVERB{_FINAL}", L"AT9",
 		                  1,L"determiner|the",0,0,1, // only used with 'next'
 											4, L"quantifier|every", L"quantifier|each", L"adjective|next", L"adverb|any", 0, 1, 1,
 											1, L"noun|time",0,1,1,
 											1, L"__S1*1{EVAL:_BLOCK}", 0, 1, 1, 0);
 	// Should this be an MS1?
-	cPattern::create(L"_ADVERB{_FINAL}", L"AT9",
+	cPattern::create(L"_ADVERB{_FINAL}", L"AT10",
 											1, L"determiner|the", 0, 1, 1,
 											3, L"noun|moment", L"noun|instant", L"noun|second", 0, 1, 1,
 											1, L"__S1*1{EVAL:_BLOCK}", 0, 1, 1, 0);
-	cPattern::create(L"_ADVERB{_FINAL}", L"AT10",
-											2, L"determiner|a", L"determiner|an", 0, 1, 1,
-											4, L"noun|moment", L"noun|instant", L"noun|second", L"noun|minute", 0, 1, 1,
-											2, L"adverb|earlier", L"adverb|later", 0, 0, 1,
-											0);
+	// a day or two before
 	cPattern::create(L"_ADVERB{_FINAL}", L"AT11",
+											1, L"predeterminer|half*-1", 0, 0, 1, 
+											2, L"determiner|a", L"determiner|an", 0, 1, 1,
+											3, L"timeUnit*1{TIMECAPACITY}", L"dayUnit*1{TIMECAPACITY}", L"simultaneousUnit*1{TIMECAPACITY}", 0, 1, 1,
+											1, L"or", 0, 0, 1,
+											1, L"numeral_cardinal|two", 0, 0, 1,
+											5, L"adverb|earlier", L"adverb|later", L"adverb|ago",L"conjunction|before", L"conjunction|after", 0, 1, 1,
+											0);
+	//Jake was silent *a* moment .
+	//He was silent *a* moment .
+	//Mrs.Penniman, at this, looked thoughtful *a* moment .
+	//Her father was silent *a* moment .
+	//She was silent *a* moment .
+	//Catherine was silent *a* moment .
+	//The few shreds of conversation held them *back* a moment .
+	//He fell silent *a* moment .
+	//Will you *step* into the library a moment ? 
+	cPattern::create(L"_ADVERB{_FINAL}", L"AT11m",
+											2, L"determiner|a", L"determiner|an", 0, 1, 1,
+											2, L"noun|moment", L"noun|instant", 0, 1, 1, // second is more likely an adjective
+											0);
+	cPattern::create(L"_ADVERB{_FINAL}", L"AT11p",
+											1, L"determiner|a", 0, 0, 1,
+											1, L"adjective|few",0,0,1,
+											4, L"noun|moments*1", L"noun|seconds*1", L"noun|minutes*1", L"noun|days*1", 0, 1, 1,
+											3, L"adverb|earlier", L"adverb|later", L"adverb|ago", 0, 0, 1,
+											0);
+	cPattern::create(L"_ADVERB{_FINAL}", L"AT12",
 											1, L"preposition|at", 0, 1, 1,
 											1, L"noun|once*-4", 0, 1, 1,  // noun cost is 4
 											0);
 	/// TIME related adverbs [end]
+	// DISTANCE related adverbs [begin]
+	// *10 feet below her* the boulder trembled.
+	// 
+	cPattern::create(L"_ADVERB{_FINAL}", L"AD1",
+											2, L"Number", L"numeral_cardinal", 0, 1, 1,
+											6, L"noun|miles", L"noun|yards", L"noun|feet",L"noun|inches",L"noun|meters",L"noun|metres",0,1,1, // this is not meant to be exhaustive, just the most common units for this saying
+											1, L"_PP",0,1,1,
+											0);
+	// DISTANCE related adverbs [end]
 	// lightly,
 	cPattern::create(L"__ADV_S1",L"",
 		                   3,L"adverb{ADV}",L"not{:not}",L"never{:never}",0,1,4,
@@ -804,7 +846,7 @@ int createBasicPatterns(void)
 	cPattern::create(L"__ADJECTIVE",L"2",
 		1,L"_ADVERB",0,0,1,
 		//7, L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"preposition|ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", // removed *1 as cost so that
-		9, L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"preposition|ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", L"quantifier|more{ADJ}", L"indefinite_pronoun{ADJ}",// removed *1 as cost so that
+		10, L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"preposition|ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", L"quantifier|more{ADJ}", L"indefinite_pronoun{ADJ}", L"reciprocal_pronoun{ADJ}",// removed *1 as cost so that
 		VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,1,2,                            // we can make cost of *1 for __NOUN[2]
 												 1,L"adverb*1",0,0,1,0);                                                                // 2/3/2007
 		// OWNER attributes deleted - why would ownership occur before a dash?
@@ -830,6 +872,11 @@ int createBasicPatterns(void)
 		1, L"preposition|than", 0, 1, 1,
 		4, L"_NOUN_OBJ{SUBOBJECT}", L"__NOUN[*]{SUBOBJECT}", L"__NOUNREL{SUBOBJECT}", L"__S1*2{BLOCK:EVAL}", 0, 1, 1,    // I shall treat you **worse than I have yet **. / he was only a year **older than I** am at present .
 		0);
+	cPattern::create(L"__ADJECTIVE{_FINAL_IF_ALONE}", L"QN",
+		1, L"quotes", OPEN_INFLECTION, 1, 1,
+		1, L"adjective",0,0,1,
+		1, L"_NAME*1", 0, 1, 1, 
+		1, L"quotes", CLOSE_INFLECTION, 1, 1, 0);
 	// _NAME will ONLY be used in a case where a proper noun is not in an owner form AND it is preceded by an adverb.
 	cPattern::create(L"__NADJECTIVE",L"",
 		2,L"_ADVERB",L"commonProfession*1",0,0,1, // cp=commonProfession What was author Jasper Fforde's first book?
@@ -3255,7 +3302,7 @@ int createSecondaryPatterns2(void)
 	// There was a possibility *that* if the scientists moved him , his new tank would be shielded so *that* it would be impossible to enjoy himself as he now was . 
 	// “ I can see *that* if she had , maybe a hundred dollars , say -- of her own , unexpected like -- when she left the hospital -- I can just see the things she would do with it ! 
 	// and tell sister Ann , *that* if she can write as well as you tell of , I wish she would write me a letter . 
-	cPattern::create(L"_REL1{_FINAL_IF_ALONE:_FORWARD_REFERENCE}", L"6",
+	cPattern::create(L"_REL1{_FINAL_IF_ALONE:_FORWARD_REFERENCE:S_IN_REL}", L"6",
 										2, L"_ADJECTIVE", L"_ADVERB", 0, 0, 1,
 										2, L"demonstrative_determiner|that",L"preposition|for",0,0,1, // for when Mama returned she told them she had heard from Mrs . Clifford , who wrote she had that day sent off a box . 
 										9, L"conjunction|if", L"conjunction|unless", L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"relativizer|whenever", 0, 1, 1,

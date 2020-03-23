@@ -715,7 +715,7 @@ public:
 	static tIWMM fullQuery(MYSQL *mysql, wstring word, int sourceId);
 	static int writeWord(tIWMM iWord, void *buffer, int &where, int limit);
 	int readWordsFromDB(MYSQL &mysql, bool generateFormStatistics, bool printProgress, bool skipWordInitialization);
-	int initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, bool inSourceFlagSet);
+	int initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, bool inSourceFlagSet,bool log);
 
 protected:
   bool appendToUnknownWordsMode;

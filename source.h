@@ -675,7 +675,7 @@ public:
 	int lastEntrance; // position in source of last explicit entrance of object 
 	int whereBecamePhysicallyPresent; // position where the object last became physically present.
 	bool notSpeaker;
-	bool lastSubject;
+	bool lastSubject; // // last subject preference used in chooseBest
 	bool occurredInPrimaryQuote;
 	bool occurredOutsidePrimaryQuote;
 	bool occurredInSecondaryQuote;
@@ -1498,6 +1498,7 @@ extern unsigned int mobjectTagSet;
 extern unsigned int ndPrepTagSet;
 extern unsigned int timeTagSet;
 extern unsigned int qtobjectTagSet;
+extern unsigned int twoObjectTestTagSet;
 
 extern unsigned int PREP_TAG,OBJECT_TAG,SUBOBJECT_TAG,REOBJECT_TAG,IOBJECT_TAG,SUBJECT_TAG,PREP_OBJECT_TAG,VERB_TAG,PLURAL_TAG,MPLURAL_TAG,GNOUN_TAG,FLOAT_TIME_TAG;
 extern unsigned int MNOUN_TAG,PNOUN_TAG,VNOUN_TAG,HAIL_TAG,NAME_TAG,REL_TAG,SENTENCE_IN_REL_TAG;

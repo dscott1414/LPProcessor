@@ -590,16 +590,20 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 	if (subjectTag < 0) return 0;
 	int nextMainVerbTag = -1;
 	int mainVerbTag = findTag(tagSet, L"VERB", nextMainVerbTag);
-	if (subjectTag < mainVerbTag)
+	//wstring debugSwitchBack;
+	// for the subject reversal, constrain matches to the relativizer itself because otherwise there are 300,000 unique matches in 106 sources and all studied make no sense to reverse.  (see switchcheck debug statement below)
+		// if child is a REL, rather than S1, then the pattern is 'A man who fights other soldiers...', and who should not be replaced with soldiers, but rather with 'a man'!  This alternate check is not performed.
+	if (subjectTag < mainVerbTag && tagSet[subjectTag].len==1 && patterns[pm->getPattern()]->name == L"__S1")
 	{
 		// if subject is: there, here, who, what, how, where, whose, when, why, what, and the subject comes before the verb, make the object the subject.
 		// There is a book on the table. / There are books on the table.
 		// What is the problem ? / What are the problems ?
 		// How has the flower grown this quickly ? / How have the flowers grown this quickly ? // the question pattern should assure that the subject is already after the verb!
 		set <wstring> reverseSubjects = { L"there", L"here", L"who", L"what", L"how", L"where", L"whose", L"when", L"why", L"what" };
+		bool eligibleSubject = reverseSubjects.find(m[tagSet[subjectTag].sourcePosition].word->first) != reverseSubjects.end();
 		vector < vector <tTagLocation> > subjectVerbRelationTagSets;
 		// use subjectVerbRelationTagSet because it includes subject, verb and object so we can attempt to match with the existing subject verb agreement tagset.
-		if (reverseSubjects.find(m[tagSet[subjectTag].sourcePosition].word->first) != reverseSubjects.end() && startCollectTags(debugTrace.traceSubjectVerbAgreement, subjectVerbRelationTagSet, position, pm->pemaByPatternEnd, subjectVerbRelationTagSets, true, false,L"evaluateSubjectVerbAgreement") > 0)
+		if (eligibleSubject && startCollectTags(debugTrace.traceSubjectVerbAgreement, subjectVerbRelationTagSet, position, pm->pemaByPatternEnd, subjectVerbRelationTagSets, true, false,L"evaluateSubjectVerbAgreement") > 0)
 		{
 			for (int svrTagSetIndex = 0; svrTagSetIndex < subjectVerbRelationTagSets.size(); svrTagSetIndex++)
 			{
@@ -609,7 +613,7 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 				if (whereSVRSubject>=0 && whereSVRMainVerb >=0 && mainVerbTag>=0 && subjectVerbRelationTagSets[svrTagSetIndex][whereSVRSubject].sourcePosition == tagSet[subjectTag].sourcePosition && subjectVerbRelationTagSets[svrTagSetIndex][whereSVRMainVerb].sourcePosition == tagSet[mainVerbTag].sourcePosition)
 				{
 					int nextSVRObject = -1, whereSVRObject = findTag(subjectVerbRelationTagSets[svrTagSetIndex], L"OBJECT", nextSVRObject);
-					if (whereSVRObject >= 0)
+					if (whereSVRObject >= 0 && subjectVerbRelationTagSets[svrTagSetIndex][whereSVRObject].sourcePosition> tagSet[subjectTag].sourcePosition)
 					{
 						if (debugTrace.traceSubjectVerbAgreement)
 						{
@@ -620,6 +624,13 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 								tagSet[subjectTag].sourcePosition,
 								phraseString(tagSet[subjectTag].sourcePosition, tagSet[subjectTag].sourcePosition + tagSet[subjectTag].len, subjectStr, true).c_str());
 						}
+						// log this to check validity
+						//wstring objectStr, subjectStr, verbStr, sentenceStr;
+						//debugSwitchBack = L"SWITCHCHECK SUBJECT=" + phraseString(tagSet[subjectTag].sourcePosition, tagSet[subjectTag].sourcePosition + tagSet[subjectTag].len, subjectStr, true) + L" VERB = " +
+						//	phraseString(tagSet[mainVerbTag].sourcePosition, tagSet[mainVerbTag].sourcePosition + tagSet[mainVerbTag].len, verbStr, true) + L" OBJECT=" +
+						//	phraseString(subjectVerbRelationTagSets[svrTagSetIndex][whereSVRObject].sourcePosition, subjectVerbRelationTagSets[svrTagSetIndex][whereSVRObject].sourcePosition + subjectVerbRelationTagSets[svrTagSetIndex][whereSVRObject].len, objectStr, true) +
+						//	L" SENTENCE=" +
+						//	phraseString(tagSet[subjectTag].sourcePosition, subjectVerbRelationTagSets[svrTagSetIndex][whereSVRObject].sourcePosition + subjectVerbRelationTagSets[svrTagSetIndex][whereSVRObject].len, sentenceStr, true);
 						tagSet[subjectTag] = subjectVerbRelationTagSets[svrTagSetIndex][whereSVRObject];
 						break;
 					}
@@ -1055,6 +1066,8 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 	}
 	if (debugTrace.traceSubjectVerbAgreement)
 		lplog(L"%d: %s [SOURCE=%06d] cost=%d",position,(agree) ? L"agree" : L"DISAGREE",traceSource=gTraceSource++,cost);
+	//if (!agree && debugSwitchBack.length()>0)
+	//	lplog(LOG_INFO, debugSwitchBack.c_str());
 	return cost;
 }
 
@@ -2908,23 +2921,39 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 					lplog(L"          %d:objectWord %s, immediately before %s, is a determiner (verbObjectCost=%d).",
 						wo, w.c_str(), w2.c_str(), verbObjectCost);
 			}
-			if (debugTrace.traceVerbObjects)
-				lplog(L"%d:VOC__Prep first object test from %s[%s](%d,%d) BEGIN",tagSet[verbTagIndex].sourcePosition, patterns[tagSet[whereObjectTag].parentPattern]->name.c_str(), patterns[tagSet[whereObjectTag].parentPattern]->differentiator.c_str(),
-					pema[abs(tagSet[whereObjectTag].PEMAOffset)].begin + tagSet[whereObjectTag].sourcePosition, pema[abs(tagSet[whereObjectTag].PEMAOffset)].end + tagSet[whereObjectTag].sourcePosition);
-			vector < vector <tTagLocation> > prepTagSets;
-			if (startCollectTagsFromTag(debugTrace.traceSubjectVerbAgreement, prepTagSet, tagSet[whereObjectTag], prepTagSets, -1, true, true, L"verb objects 2 - prep phrase") > 0)
+			bool prepOrSubjectDetected = false;
+			if (tagSet[whereObjectTag].isPattern && tagSet[whereObjectTag].len>1)
 			{
-				objectDistanceCost += 6;
 				if (debugTrace.traceVerbObjects)
+						lplog(L"%d:VOC__Prep first object test from %s[%s](%d,%d) %s[%s](%d,%d) BEGIN", tagSet[verbTagIndex].sourcePosition,
+							patterns[tagSet[whereObjectTag].parentPattern]->name.c_str(), patterns[tagSet[whereObjectTag].parentPattern]->differentiator.c_str(),
+							pema[abs(tagSet[whereObjectTag].PEMAOffset)].begin + tagSet[whereObjectTag].sourcePosition, pema[abs(tagSet[whereObjectTag].PEMAOffset)].end + tagSet[whereObjectTag].sourcePosition,
+							patterns[tagSet[whereObjectTag].pattern]->name.c_str(), patterns[tagSet[whereObjectTag].pattern]->differentiator.c_str(),
+							tagSet[whereObjectTag].sourcePosition, tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len);
+				vector < vector <tTagLocation> > twoObjectTestTagSets;
+				if (prepOrSubjectDetected=(startCollectTagsFromTag(debugTrace.traceSubjectVerbAgreement, twoObjectTestTagSet, tagSet[whereObjectTag], twoObjectTestTagSets, -1, false, true, L"verb objects 2 - prep phrase") > 0))
 				{
-					lplog(L"          %d:increased objectDistanceCost to %d because first object has an embedded preposition clause [tagsets follow]", wo, objectDistanceCost);
-					for (auto ppTagSet : prepTagSets)
-						printTagSet(LOG_INFO, L"PrepInFirstObject", -1, ppTagSet, tagSet[whereObjectTag].sourcePosition, tagSet[whereObjectTag].PEMAOffset);
+					objectDistanceCost += 6;
+					if (debugTrace.traceVerbObjects)
+					{
+						lplog(L"          %d:increased objectDistanceCost to %d because first object has an embedded preposition clause [tagsets follow]", wo, objectDistanceCost);
+							for (auto totTagSet : twoObjectTestTagSets)
+								printTagSet(LOG_INFO, L"PrepInFirstObject", -1, totTagSet, tagSet[whereObjectTag].sourcePosition, tagSet[whereObjectTag].PEMAOffset);
+					}
 				}
+				//for (auto ppTagSet : ndPrepTagSets)
+				//{
+				//	int nextPrepPhraseTag=-1,prepPhraseTag=findTag(ppTagSet, L"PREP", nextPrepPhraseTag);
+
+				//}
+
+				if (debugTrace.traceVerbObjects)
+					lplog(L"%d:VOC__Prep first object test from %s[%s](%d,%d) END", tagSet[verbTagIndex].sourcePosition, patterns[tagSet[whereObjectTag].parentPattern]->name.c_str(), patterns[tagSet[whereObjectTag].parentPattern]->differentiator.c_str(),
+						pema[abs(tagSet[whereObjectTag].PEMAOffset)].begin + tagSet[whereObjectTag].sourcePosition, pema[abs(tagSet[whereObjectTag].PEMAOffset)].end + tagSet[whereObjectTag].sourcePosition);
+				//wstring object1Temp, object2Temp;
+				//lplog(L"PREPTEST {%s} {%s} {%s} %s", m[whereVerb].word->first.c_str(), phraseString(tagSet[whereObjectTag].sourcePosition, tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len, object1Temp, true).c_str(),
+				//	phraseString(tagSet[nextObjectTag].sourcePosition, tagSet[nextObjectTag].sourcePosition + tagSet[nextObjectTag].len, object2Temp, true).c_str(), (prepOrSubjectDetected) ? L"prepDetected" : L"NOPrepDetected");
 			}
-			if (debugTrace.traceVerbObjects)
-				lplog(L"%d:VOC__Prep first object test from %s[%s](%d,%d) END", tagSet[verbTagIndex].sourcePosition, patterns[tagSet[whereObjectTag].parentPattern]->name.c_str(), patterns[tagSet[whereObjectTag].parentPattern]->differentiator.c_str(),
-					pema[abs(tagSet[whereObjectTag].PEMAOffset)].begin + tagSet[whereObjectTag].sourcePosition, pema[abs(tagSet[whereObjectTag].PEMAOffset)].end + tagSet[whereObjectTag].sourcePosition);
 			if (tagSet[nextObjectTag].len==1 && (w2==L"i" || w2==L"he" || w2==L"she" || w2==L"we" || w2==L"they") && !patterns[pm->getPattern()]->questionFlag)
 			{
 				verbObjectCost+=6;

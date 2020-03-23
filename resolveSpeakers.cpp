@@ -6281,12 +6281,16 @@ void Source::imposeSpeaker(int beginQuote,int endQuote,int &lastDefiniteSpeaker,
     lplog(LOG_RESOLUTION,L"%d-%d:Imposing speaker at %d definitelySpeaker=%s last=%d lastBeginS1=%d previousSpeakersUncertain=%s audienceObjectPosition=%d lastUnquotedSubjects=%s@%d",
           beginQuote,endQuote,speakerObjectAt,(definitelySpeaker) ? L"true":L"false",lastDefiniteSpeaker,lastBeginS1,(previousSpeakersUncertain) ? L"true":L"false",
           audienceObjectPosition,objectString(lastUnquotedSubjects,tmpstr).c_str(),whereLastUnquotedSubjects);
+	// if subjects in previous unquoted section usable for immediate resolution, and last unquoted subjects position exists and is not plural,
+	//   set last subject preference=true for all local objects outside primary quotes which match the last subjects.
+	// last subject preference used in chooseBest
 	if (subjectsInPreviousUnquotedSectionUsableForImmediateResolution && (whereLastUnquotedSubjects<0 || m[whereLastUnquotedSubjects].getObject()<0 || !objects[m[whereLastUnquotedSubjects].getObject()].plural))
 		for (vector <cLocalFocus>::iterator lsi=localObjects.begin(),lsiEnd=localObjects.end(); lsi!=lsiEnd; lsi++)
 	    if (lsi->occurredOutsidePrimaryQuote)
 				lsi->lastSubject=(find(lastUnquotedSubjects.begin(),lastUnquotedSubjects.end(),lsi->om.object)!=lastUnquotedSubjects.end());
   // resolve object at speakerObjectAt
   resolveObject(speakerObjectAt,definitelySpeaker,false,false,lastBeginS1,lastRelativePhrase,lastQ2,lastVerb,true,false,false);
+	// if all beforePreviousSpeakers are in the speaker object, then delete all of the beforePreviousSpeakers from the speakerObject position.
   bool allIn,oneIn;
 	if (m[speakerObjectAt].objectMatches.size()>1 && beforePreviousSpeakers.size()<m[speakerObjectAt].objectMatches.size() &&
 		  intersect(beforePreviousSpeakers,m[speakerObjectAt].objectMatches,allIn,oneIn) && allIn)
@@ -6326,6 +6330,7 @@ void Source::imposeSpeaker(int beginQuote,int endQuote,int &lastDefiniteSpeaker,
 			//else if (t.traceSpeakerResolution) // unnecessary
 			//	lplog(LOG_RESOLUTION,L"%06d:Imposed object %s not found in aliases %s for the speaker object %s.",beginQuote,
 			//	  objectString(speakerObject,tmpstr,true).c_str(),objectString(objects[*si].aliases,tmpstr2).c_str(),objectString(*si,tmpstr3,true).c_str());
+	// resolve audience
   int audienceObject=-1;
   if (audienceObjectPosition>=0)
   {
@@ -6340,6 +6345,7 @@ void Source::imposeSpeaker(int beginQuote,int endQuote,int &lastDefiniteSpeaker,
 		else
 			audienceObject=m[audienceObjectPosition].getObject(); // just in case object is replaced during resolveObject
   }
+	// set speaker and audience.  If the speaker is definitively specified, but the speaker object is a gendered pronoun, for which there is more than one matching gender, then flag as ambiguous.
   if (beginQuote>=0)
   {
 		__int64 flag=WordMatch::flagMostLikelyResolveSpeakers;
@@ -6366,12 +6372,14 @@ void Source::imposeSpeaker(int beginQuote,int endQuote,int &lastDefiniteSpeaker,
 		{
 			flag=WordMatch::flagSpecifiedResolveAudience;
 			int o=m[audienceObjectPosition].getObject();
+			// if audience is a hail, and there is more than one match and the number of matching gendered objects in the speaker group > the number of audience objects, mark as ambiguous
 			if ((m[audienceObjectPosition].objectRole&HAIL_ROLE) && m[audienceObjectPosition].objectMatches.size()>1 && (objects[o].male ^ objects[o].female) &&
 				  numMatchingGenderInSpeakerGroup(o)>m[audienceObjectPosition].objectMatches.size())
 				flag=WordMatch::flagGenderIsAmbiguousResolveAudience|WordMatch::flagMostLikelyResolveAudience;
       setSpeakerMatchesFromPosition(beginQuote,m[beginQuote].audienceObjectMatches,audienceObjectPosition,L"audiencePosition (2)",flag);
 		}
   }
+	// if speaker/audience is definite and not a pronoun, set the speaker and audience as definite in counters, definitive speaker groups, section speakers, local focus
   if (definitelySpeaker)
   {
     if (speakerObject<0)
@@ -6420,6 +6428,7 @@ void Source::imposeSpeaker(int beginQuote,int endQuote,int &lastDefiniteSpeaker,
           speakerObject=replacementObject;
         }
       }
+			// set speaker object counters, definite speaker groups, section speaker objects, make sure object in local focus.
       objects[speakerObject].numDefinitelyIdentifiedAsSpeaker++;
 			if (speakerObject!=audienceObject)
 				definitelyIdentifiedAsSpeakerInSpeakerGroups.push_back(speakerObjectAt);
@@ -6446,6 +6455,7 @@ void Source::imposeSpeaker(int beginQuote,int endQuote,int &lastDefiniteSpeaker,
 				lsi->numDefinitelyIdentifiedAsSpeaker++;
     }
   }
+
   if (beginQuote>=0)
   {
     // resolve previous uncertain matches
@@ -8724,10 +8734,9 @@ void Source::processEndOfPrimaryQuoteRS(int where, int lastSentenceEndBeforeAndN
 								objectString(m[lastOpeningPrimaryQuote].audienceObjectMatches, tmpstr2, true).c_str(),
 								previousPrimaryQuote,
 								objectString(m[previousPrimaryQuote].audienceObjectMatches, tmpstr3, true).c_str());
-						for (unsigned int J = 0; J < m[lastOpeningPrimaryQuote].audienceObjectMatches.size(); J++)
-							objects[m[lastOpeningPrimaryQuote].audienceObjectMatches[J].object].speakerLocations.insert(lastOpeningPrimaryQuote);
 					}
 				}
+				// (CMREADME36)
 				for (unsigned int J = 0; J < m[lastOpeningPrimaryQuote].audienceObjectMatches.size(); J++)
 					objects[m[lastOpeningPrimaryQuote].audienceObjectMatches[J].object].speakerLocations.insert(lastOpeningPrimaryQuote);
 				if (previousPrimaryQuote != lastOpeningPrimaryQuote)
@@ -8753,6 +8762,7 @@ void Source::processEndOfPrimaryQuoteRS(int where, int lastSentenceEndBeforeAndN
 		}
 		else
 		{
+		  // (CMREADME37)
 			int lastDefinedOpenEmbeddedSpeakerGroup = currentEmbeddedSpeakerGroup, ldsg = currentSpeakerGroup;
 			if (lastDefinedOpenEmbeddedSpeakerGroup < 0 && ldsg>0 && speakerGroups[ldsg - 1].embeddedSpeakerGroups.size() > 0)
 				lastDefinedOpenEmbeddedSpeakerGroup = speakerGroups[ldsg = ldsg - 1].embeddedSpeakerGroups.size() - 1;
@@ -8781,11 +8791,13 @@ void Source::processEndOfPrimaryQuoteRS(int where, int lastSentenceEndBeforeAndN
 				speakerPosition = w2;
 			if (speakerPosition < 0)
 				definitelySpeaker |= (speakerPosition = scanForSpeakers(lastOpeningPrimaryQuote, where, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE)) >= 0;
+			// If there is more than one speaker, and if the speaker position object is not found in the current speaker group, invalidate speaker position.
 			if (speakerPosition >= 0 && m[speakerPosition].principalWherePosition >= 0 && m[m[speakerPosition].principalWherePosition].getObject() >= 0 &&
 				speakerGroups[currentSpeakerGroup].speakers.size() > 1 &&
 				objects[m[m[speakerPosition].principalWherePosition].getObject()].objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS &&
 				speakerGroups[currentSpeakerGroup].speakers.find(m[m[speakerPosition].principalWherePosition].getObject()) == speakerGroups[currentSpeakerGroup].speakers.end())
 				speakerPosition = -1;
+			// (CMREADME38)
 			if (speakerPosition >= 0)
 			{
 				resolveMetaReference(speakerPosition, lastOpeningPrimaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb);
