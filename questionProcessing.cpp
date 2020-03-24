@@ -42,13 +42,6 @@ void createQuestionPatterns(void)
 									 // if the following is made optional this pattern can match _NOUN[9] with an embedded _NOUN[2]
 									 3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,1,1, // there must only be one adjective and it must be last (not mixed in) see *
 									 0);
-	// moved to _VERBREL1
-	//cPattern::create(L"_Q1",1,L"_ADVERB",0,0,1,
-	//                6,L"does",L"does_negation",L"have",L"have_negation{:not}",L"is",L"is_negation{:not}",
-	//                  VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_SECOND_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_PLURAL|VERB_PAST,1,1,
-	//                2,L"__NOUN",L"there",0,1,1,
-	//                1,L"not",0,0,1,
-	//                0);
 	cPattern::create(L"_Q1{VERB}",L"H",
 									1,L"_HAVE",0,1,1,
 									1,L"__NOUN[*]{SUBJECT}",0,1,1,
@@ -354,7 +347,7 @@ void createQuestionPatterns(void)
 									1,L"_INTRO_S1{_BLOCK:EVAL}",0,0,1, 
 									3,L"relativizer*-1{QTYPE:OBJECT}",L"_Q2PREP*-1",L"interrogative_pronoun{QTYPE:OBJECT}",0,0,1, 
 									1,L"__INTERPPB",0,0,1,
-									2,L"_Q1",L"_Q1PASSIVE",0,1,1, // _VERBREL1 removed because ALLOBJECTS follow is redundant
+									2,L"_Q1",L"_Q1PASSIVE",0,1,1, 
 									// __ALLOBJECTS_0 would be harmful here "(" ALLOBJECTS_0 could resolve to a NAME, which must be an object, but will not be registered as one if
 									//   __ALLOBJECTS_0 is its parent. This is especially important because the relativizer will be registered also as an object
 									1,L"adjective{ADJ}",0,0,1,
@@ -365,7 +358,7 @@ void createQuestionPatterns(void)
 									1,L"__INTRO_S1{_BLOCK:EVAL}",0,0,1, 
 									1,L"_Q2PREP*-2",0,1,1, // don't add OBJECT to this relativizer - it will screw up agreement
 									1,L"__INTERPPB",0,0,1,
-									2,L"__ALLVERB*1", L"_VERBPASSIVE",0,1,1, // _VERBREL1 removed because ALLOBJECTS follow is redundant
+									2,L"__ALLVERB*1", L"_VERBPASSIVE",0,1,1, 
 									1,L"__NOUN[*]{SUBJECT}",0,1,1,
 									1,L"__CLOSING__S1",0,0,3,
 									0);
@@ -374,7 +367,7 @@ void createQuestionPatterns(void)
 									1,L"__INTRO_S1{_BLOCK:EVAL}",0,0,1, 
 									1,L"relativizer",0,1,1,
 									2,L"__NOUN[*]{OBJECT}",L"_PP",0,1,1, // _PP what on God's earth have you been doing?
-									2,L"_Q1",L"_Q1PASSIVE",0,1,1, // _VERBREL1 removed because ALLOBJECTS follow is redundant  *1 encourages the object to be in Q1, not outside.
+									2,L"_Q1",L"_Q1PASSIVE",0,1,1, 
 									// __ALLOBJECTS_0 would be harmful here because ALLOBJECTS_0 could resolve to a NAME, which must be an object, but will not be registered as one if
 									//   __ALLOBJECTS_0 is its parent. This is especially important because the beginning __NOUN will be registered also as an object
 									4,L"__QNOUN",L"_PP",L"adjective{ADJ}",L"__ALLOBJECTS_1",0,0,1, 
@@ -389,7 +382,7 @@ void createQuestionPatterns(void)
 	cPattern::create(L"_Q2{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH:PREP:_QUESTION}",L"P",
 									1,L"relativizer",0,1,1,
 									1,L"__NOUN[*]{PREPOBJECT}",0,1,1, // _PP what on God's earth have you been doing?
-									3,L"_Q1",L"_Q1PASSIVE",L"_Q2EMBED",0,1,1, // _VERBREL1 removed because ALLOBJECTS follow is redundant  *1 encourages the object to be in Q1, not outside.
+									3,L"_Q1",L"_Q1PASSIVE",L"_Q2EMBED",0,1,1, 
 									// __ALLOBJECTS_0 would be harmful here because ALLOBJECTS_0 could resolve to a NAME, which must be an object, but will not be registered as one if
 									//   __ALLOBJECTS_0 is its parent
 									4,L"__QNOUN",L"_PP",L"adjective{ADJ}",L"__ALLOBJECTS_1",0,0,1, 
@@ -398,7 +391,7 @@ void createQuestionPatterns(void)
 	// Where can I find shelter?
 	cPattern::create(L"_Q2{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH:PREP:_QUESTION}",L"Q",
 									1,L"relativizer{PREPOBJECT}",0,1,1,
-									3,L"_Q1",L"_Q1PASSIVE",L"_Q2EMBED",0,1,1, // _VERBREL1 removed because ALLOBJECTS follow is redundant  *1 encourages the object to be in Q1, not outside.
+									3,L"_Q1",L"_Q1PASSIVE",L"_Q2EMBED",0,1,1, 
 									// __ALLOBJECTS_0 would be harmful here because ALLOBJECTS_0 could resolve to a NAME, which must be an object, but will not be registered as one if
 									//   __ALLOBJECTS_0 is its parent
 									4,L"__QNOUN",L"_PP",L"adjective{ADJ}",L"__ALLOBJECTS_1",0,0,1, 
@@ -407,7 +400,7 @@ void createQuestionPatterns(void)
 	cPattern::create(L"_Q2{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH:_QUESTION}",L"K",
 									1,L"relativizer",0,1,1,
 									3,L"__NOUN[*]",L"_PP",L"_ADJECTIVE{_BLOCK}",0,1,1, // _PP what on God's earth is it? / What good is it? / Which bottle is it?
-									1,L"_IS{VERB:vS:id}",0,1,1, // _VERBREL1 removed because ALLOBJECTS follow is redundant
+									1,L"_IS{VERB:vS:id}",0,1,1, 
 									1,L"__C1__S1",0,0,1,  // this is the subject
 									1,L"__CLOSING__S1",0,0,3,
 									0);

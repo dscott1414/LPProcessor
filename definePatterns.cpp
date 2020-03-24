@@ -591,9 +591,9 @@ int createBasicPatterns(void)
 											2,L"preposition|fro",L"preposition|by",0,1,1,0);
 
 	cPattern::create(L"__ADVERB", L"H",
-										1, L"noun|hand", 0, 1, 1,
+										2, L"noun|hand", L"noun|arm", 0, 1, 1,
 										2, L"preposition|in", L"preposition|over", 0, 1, 1,
-										1, L"noun|hand", 0, 1, 1,
+										2, L"noun|hand", L"noun|arm", 0, 1, 1,
 										0);
 	cPattern::create(L"__ADVERB", L"SIDE",
 										1, L"noun|side", 0, 1, 1,
@@ -2109,11 +2109,14 @@ void createSecondaryPatterns1(void)
 									 2,L"__ALLVERB",L"_VERBPRESENT_CO",0,1,1,  //            _PP               VERBREL
 									 // removed L"not{not}",L"never{never}", 7/14/2006 - already included in ADVERB at the end of each subcomponent of __ALLVERB
 									 // removed REL1 and _PP - included with __ALLOBJECTS
-									 3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, // L"there{OBJECT}L" removed
+									 3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,1,1, // L"there{OBJECT}" removed
 																		 // ADVERB made more expensive because ALLOBJECTS already has ADVERB 2/17/2007
 									 2,L"_NAME_INJECT",L"adverb",0,0,1, // Thank you , ma'am                 // removed _PP from above because __ALLOBJECTS already has _PP
 									 // ” agreed her *chum* enthusiastically . 
 									 0);
+	cPattern::create(L"_VERBREL1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_BLOCK:EVAL}", L"4",
+										2, L"__ALLVERB", L"_VERBPRESENT_CO", 0, 1, 1,  // this is used by  
+										0);
 	cPattern::create(L"_VERBREL1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_BLOCK:EVAL}",L"2",
 									 2,L"_PRE_VR1",L"politeness_discourse_marker",0,0,1,
 									 1,L"__ALLTHINK*1{VERB}",0,1,1, // L"think" for all active tenses! - possibly add INTRO_S1.
@@ -3417,11 +3420,11 @@ int createSecondaryPatterns2(void)
 											 0);
 	// and happy like you.
 	// but with extreme graciousness
-	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL:_ONLY_END_MATCH}", L"4",
+	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}", L"4",
 												1, L",", 0, 0, 1,
 												2, L"conjunction", L"coordinator", 0, 1, 1,
 												1, L"_ADJECTIVE", 0, 0, 1,
-												3, L"_PP*1", L"_VERBREL2*1{_BLOCK:EVAL}", L"_INFP*1{_BLOCK:EVAL}", 0, 0, 1,
+												4, L"_PP*1", L"_VERBREL2*1{_BLOCK:EVAL}", L"_VERBREL1*1{_BLOCK:EVAL}", L"_INFP*1{_BLOCK:EVAL}", 0, 1, 1,
 												0);
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL:_ONLY_END_MATCH}", L"F",
 												1, L",", 0, 0, 1,
@@ -3497,11 +3500,9 @@ int createSecondaryPatterns2(void)
 									 1,L"_STEP",0,0,1,
 									 1,L"_INTRO_S1",0,1,1,
 									 1,L"conjunction|if",0,0,1,
-									 4,L"_Q1*1{_BLOCK:EVAL}",L"_COMMAND1{_BLOCK:EVAL}",L"__SQ{_BLOCK:EVAL}", L"politeness_discourse_marker*-1",0,1,1, // Please, Jake, please // L"_VERBREL1",
-									 // 5,L"_Q1*1{_BLOCK:EVAL}",L"_VERBREL1",L"_COMMAND1{_BLOCK:EVAL}",L"__SQ{_BLOCK:EVAL}", L"politeness_discourse_marker*-1",0,1,1, // Please, Jake, please
+									 4,L"_Q1*1{_BLOCK:EVAL}",L"_COMMAND1{_BLOCK:EVAL}",L"__SQ{_BLOCK:EVAL}", L"politeness_discourse_marker*-1",0,1,1, // Please, Jake, please 
 									 1,L"__CLOSING__S1",0,0,3,
 									 1,L"_REF",0,0,1,
-									 //1,L"?*-1",0,0,1,
 									 0); // In any case, what do you lose? (_Q1)
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}",L"A",
 									 1,L"_STEP",0,1,1,
