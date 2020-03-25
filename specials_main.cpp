@@ -2264,9 +2264,65 @@ wstring stTokenizeWord(wstring tokenizedWord,wstring &originalWord, unsigned lon
 	return lookFor;
 }
 
+// see if adjective should be changed to adverb.
+// return code:
+//   -1: adjective changed to adverb.  ST prefers something other than adverb, so LP is correct
+//   -2: adjective changed to adverb.  ST prefers adverb, so this entry should simply be removed from the output file.
+//    0: unable to determine whether adjective should be changed to adverb.  Continue.
+int ruleChangeToAdverb(wstring primarySTLPMatch, Source &source, int wordSourceIndex, wstring &partofspeech, int startOfSentence)
+{
+	int nounFormOffset = source.m[wordSourceIndex + 1].word->second.query(nounForm), adverbFormOffset;
+	// RULE CHANGE - change an adjective to an adverb?
+	if (source.m[wordSourceIndex].word->first != L"that" && // 'that' is very ambiguous
+		source.m[wordSourceIndex].isOnlyWinner(adjectiveForm) && 
+		source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") < 0 &&
+		source.m[wordSourceIndex + 1].queryWinnerForm(L"Proper Noun") < 0 &&
+		source.m[wordSourceIndex + 1].queryWinnerForm(L"indefinite_pronoun") < 0 &&
+		source.m[wordSourceIndex + 1].queryWinnerForm(L"numeral_cardinal") < 0 &&
+		source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") < 0 && // only an adjective, not before a noun
+		(nounFormOffset<0 || source.m[wordSourceIndex+1].word->second.getUsageCost(nounFormOffset)==4) && 
+		(adverbFormOffset=source.m[wordSourceIndex].queryForm(L"adverb")) >= 0 && source.m[wordSourceIndex].word->second.getUsageCost(adverbFormOffset) < 2 &&
+		source.m[wordSourceIndex].queryForm(L"interjection") < 0 && // interjection acts similarly to adverb
+		(iswalpha(source.m[wordSourceIndex + 1].word->first[0]) || wordSourceIndex == 0 || iswalpha(source.m[wordSourceIndex - 1].word->first[0])) && // not alone in the sentence
+		(wordSourceIndex <= 0 || (source.m[wordSourceIndex - 1].queryForm(L"is") < 0 && source.m[wordSourceIndex - 1].word->first != L"be" && source.m[wordSourceIndex - 1].word->first != L"being")) && // is/ishas before means it really is an adjective!
+		(wordSourceIndex <= 1 || (source.m[wordSourceIndex - 2].queryForm(L"is") < 0 && source.m[wordSourceIndex - 2].word->first != L"be" && source.m[wordSourceIndex - 1].word->first != L"being")) && // is/ishas before means it really is an adjective!
+		(wordSourceIndex <= 2 || (source.m[wordSourceIndex - 3].queryForm(L"is") < 0 && source.m[wordSourceIndex - 3].word->first != L"be" && source.m[wordSourceIndex - 1].word->first != L"being")) && // is/ishas before means it really is an adjective!
+		(wordSourceIndex <= 3 || (source.m[wordSourceIndex - 4].queryForm(L"is") < 0 && source.m[wordSourceIndex - 4].word->first != L"be" && source.m[wordSourceIndex - 1].word->first != L"being")) && // is/ishas before means it really is an adjective!
+		(wordSourceIndex < source.m.size()-1 || (source.m[wordSourceIndex + 1].queryForm(L"is") < 0 && source.m[wordSourceIndex + 1].word->first != L"be")) && // is/ishas before means it really is an adjective!
+		(source.m[wordSourceIndex].queryForm(L"preposition") < 0) && (source.m[wordSourceIndex].queryForm(L"relativizer") < 0)) // || source.m[wordSourceIndex + 1].queryWinnerForm(L"numeral_cardinal") < 0)) // before one o'clock
+	{
+		bool isDeterminer = false;
+		if (wordSourceIndex > 0)
+		{
+			vector<wstring> determinerTypes = { L"determiner",L"demonstrative_determiner",L"possessive_determiner",L"interrogative_determiner", L"quantifier", L"numeral_cardinal" };
+			for (wstring dt : determinerTypes)
+				if (isDeterminer = source.m[wordSourceIndex - 1].queryWinnerForm(dt) >= 0)
+					break;
+		}
+		// The door that faced her stood *open*
+		if (!isDeterminer && primarySTLPMatch != L"Proper Noun" && source.m[wordSourceIndex - 1].queryWinnerForm(L"verb") >= 0) // Proper Noun is already well controlled
+		{
+			source.m[wordSourceIndex].setWinner(source.m[wordSourceIndex].queryForm(adverbForm));
+			source.m[wordSourceIndex].unsetWinner(source.m[wordSourceIndex].queryForm(adjectiveForm));
+			return (primarySTLPMatch == L"adverb") ? -2 : -1;
+		}
+	}
+	return 0;
+}
+
 int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceIndex, unordered_map<wstring, int> &errorMap, unordered_map<wstring, int> &comboCostFrequency, wstring &partofspeech, int startOfSentence)
 {
 	wstring word = source.m[wordSourceIndex].word->first;
+	//int ruleCode=ruleChangeToAdverb(primarySTLPMatch, source, wordSourceIndex, partofspeech, startOfSentence);
+	//if (ruleCode == -1)
+	//{
+	//	errorMap[L"LP correct: adverb rule"]++;
+	//	return 0;
+	//}
+	//if (ruleCode == -2)
+	//{
+	//	return 0; // LP has changed to be a winner of adverb and ST agrees.
+	//}
 	//////////////////////////////
 	// corrections based on implementation/interpretation differences and statistical findings
 	// 1. LP has a NOUN[2] which allows a noun in what should be an adjective position
@@ -4086,6 +4142,7 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 						posList.insert(imai->second.begin(), imai->second.end());
 					}
 				}
+				int ruleCode = ruleChangeToAdverb(primarySTLPMatch, source, wordSourceIndex, partofspeech, startOfSentence);
 				vector <int> winnerForms;
 				source.m[wordSourceIndex].getWinnerForms(winnerForms);
 				bool agree = false;
@@ -4106,11 +4163,21 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 					fdi->second.agreeSTLP++;
 				else
 					fdi->second.disagreeSTLP++;
-				if (agree)
+				// ruleCode
+				//   -1: adjective changed to adverb.  ST prefers something other than adverb, so LP is correct
+				//   -2: adjective changed to adverb.  ST prefers adverb, so this entry should simply be removed from the output file.
+				//    0: unable to determine whether adjective should be changed to adverb.  Continue.
+				if (ruleCode == -1)
+				{
+					errorMap[L"LP correct: adverb rule"]++;
+					fdi->second.LPAlreadyAccountedFormDistribution[L"adverb"]++;
+					return 0;
+				}
+				else if (agree)
 				{
 					return 0;
 				}
-				if (attributeErrors(primarySTLPMatch, source, wordSourceIndex, errorMap, comboCostFrequency, partofspeech, startOfSentence) == 0)
+				else if (attributeErrors(primarySTLPMatch, source, wordSourceIndex, errorMap, comboCostFrequency, partofspeech, startOfSentence) == 0)
 				{
 					for (int wf : winnerForms)
 					{

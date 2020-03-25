@@ -527,9 +527,15 @@ public:
 
 	void setWinner(int form)
 	{
-		if (form>=sizeof(tmpWinnerForms)*8)
-			lplog(LOG_FATAL_ERROR,L"overFlow on tmpWinnerForms (1)!");
-		tmpWinnerForms|=(1<<form);
+		if (form >= sizeof(tmpWinnerForms) * 8)
+			lplog(LOG_FATAL_ERROR, L"overFlow on tmpWinnerForms (1)!");
+		tmpWinnerForms |= (1 << form);
+	}
+	void unsetWinner(int form)
+	{
+		if (form >= sizeof(tmpWinnerForms) * 8)
+			lplog(LOG_FATAL_ERROR, L"overFlow on tmpWinnerForms (1)!");
+		tmpWinnerForms &= ~(1 << form);
 	}
 	bool setPreferredViterbiForm(wstring form,double probability)
 	{
