@@ -459,8 +459,8 @@ public:
 	void resetUsagePatternsAndCosts(wstring sWord);
 	void logReset(wstring sWord);
 	void resetCapitalizationAndProperNounUsageStatistics();
-	unsigned char getUsageCost(int formIndex) { return usageCosts[formIndex]; }
-	unsigned char getUsagePattern(int formIndex) { return usagePatterns[formIndex]; }
+	char getUsageCost(int formIndex) { return (formIndex>= MAX_USAGE_PATTERNS || formIndex<0) ? -1 : usageCosts[formIndex]; }
+	char getUsagePattern(int formIndex) { return (formIndex >= MAX_USAGE_PATTERNS || formIndex<0) ? -1 : usagePatterns[formIndex]; }
 	void incrementTransferCount()
 	{
 		deltaUsagePatterns[tFI::TRANSFER_COUNT]++;

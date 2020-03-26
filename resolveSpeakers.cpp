@@ -6455,7 +6455,7 @@ void Source::imposeSpeaker(int beginQuote,int endQuote,int &lastDefiniteSpeaker,
 				lsi->numDefinitelyIdentifiedAsSpeaker++;
     }
   }
-
+	// (CMREADME39)
   if (beginQuote>=0)
   {
     // resolve previous uncertain matches

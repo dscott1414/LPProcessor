@@ -2313,16 +2313,6 @@ int ruleChangeToAdverb(wstring primarySTLPMatch, Source &source, int wordSourceI
 int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceIndex, unordered_map<wstring, int> &errorMap, unordered_map<wstring, int> &comboCostFrequency, wstring &partofspeech, int startOfSentence)
 {
 	wstring word = source.m[wordSourceIndex].word->first;
-	//int ruleCode=ruleChangeToAdverb(primarySTLPMatch, source, wordSourceIndex, partofspeech, startOfSentence);
-	//if (ruleCode == -1)
-	//{
-	//	errorMap[L"LP correct: adverb rule"]++;
-	//	return 0;
-	//}
-	//if (ruleCode == -2)
-	//{
-	//	return 0; // LP has changed to be a winner of adverb and ST agrees.
-	//}
 	//////////////////////////////
 	// corrections based on implementation/interpretation differences and statistical findings
 	// 1. LP has a NOUN[2] which allows a noun in what should be an adjective position
@@ -3983,6 +3973,13 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			return 0;
 		}
 	}
+	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].isOnlyWinner(nounForm) &&
+		  source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(L"adjective")) == 4 &&
+		  source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(L"noun")) == 0)
+	{
+		errorMap[L"LP correct: noun more probable than adjective"]++; // probabilistic - see distribute errors (19 out of 119 LP correct)
+		return 0;
+	}
 	if (word == L"my" && source.m[wordSourceIndex].queryWinnerForm(L"possessive_determiner") >= 0)
 	{
 		errorMap[L"LP correct: 'my' is possessive_determiner (now that interjection has been added as a form)"]++; // probabilistic - see distribute errors
@@ -4084,6 +4081,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
+	// combo list - primarySTLPMatch comes first!
 	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 0, 4, comboCostFrequency, partofspeech);
 	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 4, 0, comboCostFrequency, partofspeech);
 	return -1;
@@ -4434,6 +4432,10 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"LP correct: word 'her': [before a low cost noun] ST says personal_pronoun_accusative LP says possessive_determiner"] = numErrors * 130 / 136;
 	errorMap[L"ST correct: word 'her': [before a low cost noun] ST says personal_pronoun_accusative LP says possessive_determiner"] = numErrors * 6 / 136;
 	
+	numErrors = errorMap[L"LP correct: noun more probable than adjective"]; // 19 ST correct out of 119 total
+	errorMap[L"LP correct: noun more probable than adjective"] = numErrors * 100 / 119;
+	errorMap[L"ST correct: noun more probable than adjective"] = numErrors * 19 / 119;
+
 }
 
 int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension)
