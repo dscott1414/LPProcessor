@@ -4080,9 +4080,12 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	}
 	if (primarySTLPMatch != L"preposition or conjunction" && source.m[wordSourceIndex].isOnlyWinner(prepositionForm) && source.m[wordSourceIndex].getRelObject()>=0)
 	{
-		partofspeech += L"**PREPHASOBJECT?"+primarySTLPMatch;
-		//errorMap[L"preposition with no ]++;
-		//return 0;
+		if (source.m[wordSourceIndex + 1].word->first == L"to")
+		{
+			errorMap[L"LP correct: preposition preposition (to)"]++;
+			return 0;
+		}
+		partofspeech += L"**PREPHASOBJECT?" + primarySTLPMatch;
 	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
