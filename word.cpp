@@ -2090,6 +2090,8 @@ bool WordClass::parseMetaCommands(int where,wchar_t *buffer, int &endSymbol, wst
 		t.traceParseInfo = setValue;
 	else if (!wcsnicmp(buffer + offset, L"tracePreposition", wcslen(L"tracePreposition")))
 		t.tracePreposition = setValue;
+	else if (!wcsnicmp(buffer + offset, L"tracePatternMatching", wcslen(L"tracePatternMatching")))
+		t.tracePatternMatching = setValue;
 	else if (!wcsnicmp(buffer,L"traceTransitoryQuestion",wcslen(L"traceTransitoryQuestion")))
 	{
     t.traceCommonQuestion=false;

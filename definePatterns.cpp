@@ -415,7 +415,7 @@ int createNouns(void)
 										0);
 	// this pattern must go after all nouns EXCEPT it must be before any noun patterns that use _NOUN as a subpattern
 	//cPattern::create(L"_NOUN",L"",1,L"__NOUN[*]",0,1,1,0);
-	// 6. TEMP DEBUG correction to __NOUN[F] after studying matches to increase cost with long subjects - comment out __NOUN[H]
+	// 6. correction to __NOUN[F] after studying matches to increase cost with long subjects - comment out __NOUN[H]
 	// better than two years, more than two years
 	//cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"H",
 	//									1,L"_ADJECTIVE",0,1,1,
@@ -865,7 +865,7 @@ int createBasicPatterns(void)
 		3, L"noun*1{ADJ}", L"adjective|best*-4", L"noun|class*-4", SINGULAR, 1, 1,
 		8, L"adverb*1", L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"preposition|ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", 0, 0, 2,
 		0);
-	// 6. TEMP DEBUG correction to __NOUN[F] after studying matches to increase cost with long subjects - comment out __NOUN[H]
+	// 6. correction to __NOUN[F] after studying matches to increase cost with long subjects - comment out __NOUN[H]
 	// better than two years, more than two years
 	cPattern::create(L"__ADJECTIVE{_FINAL_IF_ALONE}", L"MTHAN",
 		1, L"_ADJECTIVE", 0, 1, 1,
@@ -926,7 +926,7 @@ int createBasicPatterns(void)
 															1,L"preposition|than",0,1,1,
 															1,L"__S1{EVAL:_BLOCK}",0,1,1,
 															0);
-	// 7. TEMP DEBUG - helps with more .. than ... expressions
+	// 7. helps with more .. than ... expressions
 	//cPattern::create(L"__ADJECTIVE", L"ATHAN2",
 	//														1, L"adverb|more", 0,1,1,
 	//														1, L"__ADJECTIVE[*]", 0, 1, 1,
@@ -2191,7 +2191,7 @@ void createSecondaryPatterns1(void)
 						1, L"_THINKONGOING{vE:VERB}", 0, 1, 1,
 						1, L"__S1*1{EVAL:_BLOCK:SUBJUNCTIVE}", 0, 1, 1,
 						0);
-	// 8. TEMP DEBUG becoming...
+	// 8. becoming...
 	//cPattern::create(L"_VERBREL2{_FINAL_IF_ALONE}", L"4",
 	//								1, L"verb|becoming{vE:VERB}", 0, 1, 1,
 	//								1, L"__ADJECTIVE", 0, 0, 1, 0);

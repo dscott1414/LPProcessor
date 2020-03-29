@@ -832,7 +832,8 @@ bool Source::matchPattern(cPattern *p,int begin,int end,bool fill)
 	for (int pos=begin; pos<(int)end-1; pos++) // skip period
 	{
 #ifdef LOG_PATTERN_MATCHING
-		lplog(L"%d:pattern %s[%s]:---------------------",pos,p->name.c_str(),p->differentiator.c_str());
+		if (debugTrace.tracePatternMatching)
+			lplog(L"%d:pattern %s[%s]:---------------------",pos,p->name.c_str(),p->differentiator.c_str());
 #endif
 		// do not put pos==begin here because we don't know whether we have split the sentence correctly!
 		if (p->onlyBeginMatch && pos && (!m[pos-1].word->second.isSeparator() || m[pos-1].queryForm(relativizerForm)>=0)) continue; //  || m[pos-1].queryForm(relativeForm)
@@ -1869,6 +1870,8 @@ int Source::printSentences(bool updateStatistics,unsigned int unknownCount,unsig
 		debugTrace.traceMatchedSentences= m[begin].t.traceMatchedSentences;
 		debugTrace.traceUnmatchedSentences= m[begin].t.traceUnmatchedSentences;
 		debugTrace.tracePreposition = m[begin].t.tracePreposition;
+		debugTrace.tracePatternMatching = m[begin].t.tracePatternMatching;
+		debugTrace.traceIncludesPEMAIndex = m[begin].t.traceIncludesPEMAIndex;
 		logCache=m[begin].logCache;
 
 		// clear tag set maps
@@ -2201,6 +2204,8 @@ void Source::clearSource(void)
 	unresolvedSpeakers.clear();
 	spaceRelations.clear();
 	timelineSegments.clear();
+	for (int objectLastTense = 0; objectLastTense < VERB_HISTORY; objectLastTense++)
+		lastVerbTenses[objectLastTense].clear();
 	for (unordered_map <wstring, Source *>::iterator smi = sourcesMap.begin(); smi != sourcesMap.end();)
 	{
 		Source *source = smi->second;
@@ -3216,6 +3221,7 @@ Source::Source(wchar_t *databaseServer,int _sourceType,bool generateFormStatisti
 	debugTrace.traceNameResolution=false;
 	debugTrace.traceParseInfo = false;
 	debugTrace.tracePreposition = false;
+	debugTrace.tracePatternMatching = false;
 	pass=-1;
 	repeatReplaceObjectInSectionPosition=-1;
 	accumulateLocationLastLocation=-1;
@@ -3299,6 +3305,7 @@ Source::Source(MYSQL *parentMysql,int _sourceType,int _sourceConfidence)
 	debugTrace.traceNameResolution=false;
 	debugTrace.traceParseInfo = false;
 	debugTrace.tracePreposition = false;
+	debugTrace.tracePatternMatching = false;
 	alreadyConnected=true;
 	pass=-1;
 	repeatReplaceObjectInSectionPosition=-1;

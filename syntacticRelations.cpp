@@ -2732,7 +2732,7 @@ bool Source::setAdditionalRoleTags(int where,int &firstFreePrep,vector <int> &fu
 		*/
 void Source::syntacticRelations()
 { LFS 
-  vector < vector <tTagLocation> > tagSets;
+	vector < vector <tTagLocation> > tagSets;
   vector <WordMatch>::iterator im=m.begin(),imend=m.end();
 	vector <int> futureBoundPrepositions;
 	bool inPrimaryQuote=narrativeIsQuoted,inSecondaryQuote=false;

@@ -4078,12 +4078,20 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"diff: ishas cannot be a noun."]++;
 		return 0;
 	}
+	if (primarySTLPMatch != L"preposition or conjunction" && source.m[wordSourceIndex].isOnlyWinner(prepositionForm) && source.m[wordSourceIndex].getRelObject()>=0)
+	{
+		partofspeech += L"**PREPHASOBJECT?"+primarySTLPMatch;
+		//errorMap[L"preposition with no ]++;
+		//return 0;
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
 	// combo list - primarySTLPMatch comes first!
 	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 0, 4, comboCostFrequency, partofspeech);
+	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 0, 3, comboCostFrequency, partofspeech);
 	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 4, 0, comboCostFrequency, partofspeech);
+	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 3, 0, comboCostFrequency, partofspeech);
 	return -1;
 }
 

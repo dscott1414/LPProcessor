@@ -350,6 +350,7 @@ public:
 		t.collectPerSentenceStats=trace.collectPerSentenceStats;
 		t.traceParseInfo = trace.traceParseInfo;
 		t.tracePreposition = trace.tracePreposition;
+		t.tracePatternMatching = trace.tracePatternMatching;
 		logCache=::logCache;
 	};
 	tIWMM word;  // points to WMM array

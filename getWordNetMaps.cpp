@@ -161,7 +161,7 @@ bool Source::readWNMaps(wstring path)
 		if (!copy(flags, buffer, where, bufferlen)) return false;
 		tIWMM w = Words.query(word);
 		if (w != Words.end())
-			w->second.flags |= flags;
+			w->second.flags |= (flags&(tFI::physicalObjectByWN | tFI::notPhysicalObjectByWN));
 	}
 	tfree(bufferlen, buffer);
 	return where <= bufferlen;

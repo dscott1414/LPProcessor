@@ -1354,14 +1354,6 @@ int wmain(int argc,wchar_t *argv[])
 				if (totalUnmatched < 0)
 					lplog(LOG_FATAL_ERROR, L"Cannot print sentences.");
 				globalTotalUnmatched+=totalUnmatched;
-				lplog();
-				if (sourceWrite)
-				{
-					source.write(path, false, makeCopyBeforeSourceWrite,specialExtension);
-					source.writeWords(path, specialExtension);
-					source.writePatternUsage(path,true);
-				}
-				puts("");
 			}
 			else
 			{
@@ -1372,21 +1364,6 @@ int wmain(int argc,wchar_t *argv[])
 				source.printSentencesCheck(false);
 			}
 			numWords+=source.m.size();
-			if (parseOnly || viterbiTest) 
-			{
-				if (viterbiTest)
-				{
-					void testViterbiFromSource(Source &source);
-					testViterbiFromSource(source);
-				}
-				source.clearSource();
-				if (source.updateWordUsageCostsDynamically)
-					WordClass::resetUsagePatternsAndCosts(source.debugTrace);
-				else
-					WordClass::resetCapitalizationAndProperNounUsageStatistics(source.debugTrace);
-				if (!exitNow) source.signalFinishedProcessingSource(sourceId);
-				continue;
-			}
 			//source.accumulateNewPatterns();
 			//source.printAccumulatedPatterns();
 			sourceWordNetWrite=(!sourceWordNetRead || !source.readWNMaps(path)) && sourceWordNetWrite;
@@ -1403,13 +1380,36 @@ int wmain(int argc,wchar_t *argv[])
 			source.analyzeWordSenses();
 			source.narrativeIsQuoted = st != Source::GUTENBERG_SOURCE_TYPE;
 			source.syntacticRelations();
+			lplog();
+			if (sourceWrite)
+			{
+				source.write(path, false, makeCopyBeforeSourceWrite, specialExtension);
+				source.writeWords(path, specialExtension);
+				source.writePatternUsage(path, true);
+			}
+			puts("");
+			if (parseOnly || viterbiTest)
+			{
+				if (viterbiTest)
+				{
+					void testViterbiFromSource(Source &source);
+					testViterbiFromSource(source);
+				}
+				source.clearSource();
+				if (source.updateWordUsageCostsDynamically)
+					WordClass::resetUsagePatternsAndCosts(source.debugTrace);
+				else
+					WordClass::resetCapitalizationAndProperNounUsageStatistics(source.debugTrace);
+				if (!exitNow) source.signalFinishedProcessingSource(sourceId);
+				continue;
+			}
 			//source.printVerbFrequency();
 			source.identifySpeakerGroups(); 
 			source.resolveSpeakers(secondaryQuotesResolutions);
 			source.resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
 			source.printObjects();
 			source.resolveWordRelations();
-			if (!source.write(path,true, false,specialExtension))
+			if (sourceWrite && !source.write(path,true, false,specialExtension))
 				lplog(LOG_FATAL_ERROR,L"buffer overrun");
 			source.printResolutionCheck(badSpeakers);
 			source.logSpaceCheck();
