@@ -4085,7 +4085,19 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			errorMap[L"LP correct: preposition preposition (to)"]++;
 			return 0;
 		}
-		partofspeech += L"**PREPHASOBJECT?" + primarySTLPMatch;
+		if (source.m[wordSourceIndex + 1].queryWinnerForm(prepositionForm) >= 0)
+		{
+			errorMap[L"ST correct: preposition preposition (other than to)"]++;
+			return 0;
+		}
+		if (wordSourceIndex > 0 && (WordClass::isDash(source.m[wordSourceIndex - 1].word->first[0]) || WordClass::isDash(source.m[wordSourceIndex + 1].word->first[0])))
+		{
+			errorMap[L"ST correct: dash preposition"]++;
+			return 0;
+		}
+		// 22 ST/163 LP
+		errorMap[L"LP correct: preposition with relative object"]++; // probabilistic - see distribute errors
+		return 0;
 	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
@@ -4447,6 +4459,10 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"LP correct: noun more probable than adjective"] = numErrors * 100 / 119;
 	errorMap[L"ST correct: noun more probable than adjective"] = numErrors * 19 / 119;
 
+	numErrors = errorMap[L"LP correct: preposition with relative object"]; // 22 ST correct out of 185 total
+	errorMap[L"LP correct: preposition with relative object"] = numErrors * 163 / 185;
+	errorMap[L"ST correct: preposition with relative object"] = numErrors * 22 / 185;
+	
 }
 
 int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension)
