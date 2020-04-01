@@ -2155,7 +2155,7 @@ public:
 	void evaluateExplicitSubjectVerbAgreement(int position, patternMatchArray::tPatternMatch *pm, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
 	int eliminateLoserPatterns(unsigned int begin,unsigned int end);
 	enum prepSetEnum { PREP_PREP_SET,PREP_OBJECT_SET,PREP_VERB_SET };
-	void setRelPrep(int where,int relPrep,int fromWhere,int setType);
+	void setRelPrep(int where,int relPrep,int fromWhere,int setType, int whereVerb);
 	wstring lastNounNotFound,lastVerbNotFound;
 
 	void printObjects(void);
@@ -2290,6 +2290,16 @@ int wherePrepObject,
 		int &paragraphsSinceLastSubjectWasSet, int wherePreviousLastSubjects,
 		bool &inPrimaryQuote, bool &immediatelyAfterEndOfParagraph, bool &quotesSeenSinceLastSentence, bool &previousSpeakersUncertain,
 		vector <int> &previousLastSubjects);
+	void processEndOfSentenceRS(int where,
+		int &questionSpeakerLastSentence, int &questionSpeaker, bool &currentIsQuestion,
+		int &lastBeginS1, int &lastRelativePhrase, int &lastQ2, int &lastClosingPrimaryQuote,
+		int &paragraphsSinceLastSubjectWasSet, int &wherePreviousLastSubjects,
+		bool &inPrimaryQuote, bool &inSecondaryQuote, bool &quotesSeenSinceLastSentence,
+		int whereSubject, vector <int> &lastSubjects, vector <int> &previousLastSubjects,
+		int &lastSentenceMetaSpeakerQuery, int &currentMetaSpeakerQuery, int &currentMetaWhereQuery,
+		bool &endOfSentence, bool &transitionSinceEOS, bool &accumulateMultipleSubjects,
+		int &uqPreviousToLastSentenceEnd, int &uqLastSentenceEnd, int &lastSentenceEnd,
+		int lastSectionWord, unsigned int &agingStructuresSeen);
 	void srd(int where,wstring spd,wstring &description);
 	wstring wsrToText(int where,wstring &description);
 	wstring srToText(int &spr,wstring &description);

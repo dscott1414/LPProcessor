@@ -3268,7 +3268,7 @@ bool Source::resolvePronoun(int where,bool definitelySpeaker,bool inPrimaryQuote
 			int wpo=m[where].getRelObject();
 			m[wpo].objectRole&=~IS_OBJECT_ROLE;
 			m[wpo].objectRole|=PREP_OBJECT_ROLE;
-			setRelPrep(m[where].relVerb,m[wpo].beginObjectPosition-1,1,PREP_VERB_SET);
+			setRelPrep(m[where].relVerb,m[wpo].beginObjectPosition-1,1,PREP_VERB_SET, m[where].relVerb);
 			m[m[wpo].beginObjectPosition-1].setRelObject(wpo);
 			m[where].setRelObject(-1);
 			if (debugTrace.traceSpeakerResolution)

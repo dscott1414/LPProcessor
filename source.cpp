@@ -753,22 +753,28 @@ bool Source::sumMaxLength(unsigned int begin,unsigned int end,unsigned int &matc
 	return true;
 }
 
-void Source::setRelPrep(int where,int relPrep,int fromWhere,int setType)
+void Source::setRelPrep(int where,int relPrep,int fromWhere,int setType,int whereVerb)
 { LFS
 	int original=m[where].relPrep;
-	m[where].relPrep=relPrep;
+	m[where].relPrep = relPrep;
+	m[where].relVerb = whereVerb;
 	wchar_t *setTypeStr;
-	if (setType==PREP_PREP_SET) setTypeStr=L"PREP_SET";
-	if (setType==PREP_OBJECT_SET) setTypeStr=L"OBJECT_SET";
-	if (setType==PREP_VERB_SET) setTypeStr=L"VERB_SET";
-	//lplog(LOG_RESOLUTION,L"%06d:%s:Prep loop putting %d (replacing %d) resulting in %s (%d) [%s].",where,sourcePath.c_str(),relPrep,original,loopString(relPrep),fromWhere,setTypeStr);
+	wstring tmpstr;
+	switch (setType)
+	{
+	case PREP_PREP_SET: setTypeStr = L"PREP_SET"; break;
+	case PREP_OBJECT_SET: setTypeStr = L"OBJECT_SET"; break;
+	case PREP_VERB_SET: setTypeStr = L"VERB_SET"; break;
+	default: setTypeStr = L"NOT_SET"; break;
+	}
+	if (debugTrace.traceRelations)
+		lplog(LOG_RESOLUTION,L"%06d:%s:Prep loop putting %d (replacing %d) resulting in %s (%d) [%s].",where,sourcePath.c_str(),relPrep,original,loopString(relPrep,tmpstr),fromWhere,setTypeStr);
 	int prepLoop=0;
 	while (relPrep!=-1) 
 	{
 		relPrep=m[relPrep].relPrep;
 		if (prepLoop++>20)
 		{
-			wstring tmpstr;
 			lplog(LOG_ERROR,L"%06d:Prep loop putting %d (replacing %d) resulting in %s (%d).",where,relPrep,original,loopString(relPrep,tmpstr),fromWhere);
 			m[where].relPrep=original;
 			break;
@@ -1855,23 +1861,7 @@ int Source::printSentences(bool updateStatistics,unsigned int unknownCount,unsig
 			matchedSentences++;
 			continue;
 		}
-		debugTrace.traceSubjectVerbAgreement = m[begin].t.traceSubjectVerbAgreement;
-		debugTrace.traceTestSubjectVerbAgreement = m[begin].t.traceTestSubjectVerbAgreement;
-		debugTrace.traceAnaphors=m[begin].t.traceAnaphors;
-		debugTrace.traceEVALObjects=m[begin].t.traceEVALObjects;
-		debugTrace.traceRelations=m[begin].t.traceRelations;
-		debugTrace.traceRole=m[begin].t.traceRole;
-		debugTrace.traceVerbObjects=m[begin].t.traceVerbObjects;
-		debugTrace.traceDeterminer=m[begin].t.traceDeterminer;
-		debugTrace.printBeforeElimination=m[begin].t.printBeforeElimination;
-		debugTrace.tracePatternElimination=m[begin].t.tracePatternElimination;
-		debugTrace.traceBNCPreferences=m[begin].t.traceBNCPreferences;
-		debugTrace.traceSecondaryPEMACosting=m[begin].t.traceSecondaryPEMACosting;
-		debugTrace.traceMatchedSentences= m[begin].t.traceMatchedSentences;
-		debugTrace.traceUnmatchedSentences= m[begin].t.traceUnmatchedSentences;
-		debugTrace.tracePreposition = m[begin].t.tracePreposition;
-		debugTrace.tracePatternMatching = m[begin].t.tracePatternMatching;
-		debugTrace.traceIncludesPEMAIndex = m[begin].t.traceIncludesPEMAIndex;
+		debugTrace=m[begin].t;
 		logCache=m[begin].logCache;
 
 		// clear tag set maps

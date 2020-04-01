@@ -1375,6 +1375,7 @@ int wmain(int argc,wchar_t *argv[])
 			//int inflectionFlags=0;
 			//bool isNoun=false,isVerb=true,isAdjective=false,isAdverb=false;
 			//analyzeSense(false,L"draft",proposedSubstitute,numIrregular,inflectionFlags,isNoun,isVerb,isAdjective,isAdverb);
+			puts("");
 			source.identifyObjects();
 			vector <int> secondaryQuotesResolutions;
 			source.analyzeWordSenses();
@@ -1387,7 +1388,6 @@ int wmain(int argc,wchar_t *argv[])
 				source.writeWords(path, specialExtension);
 				source.writePatternUsage(path, true);
 			}
-			puts("");
 			if (parseOnly || viterbiTest)
 			{
 				if (viterbiTest)
@@ -1469,6 +1469,12 @@ int wmain(int argc,wchar_t *argv[])
 		}
 		quotationExceptions=source.doQuotesOwnershipAndContractions(totalQuotations,false);
 		globalTotalUnmatched+=source.printSentences(false,unknownCount,quotationExceptions,totalQuotations,globalOverMatchedPositionsTotal);
+		puts("");
+		source.identifyObjects();
+		vector <int> secondaryQuotesResolutions;
+		source.analyzeWordSenses();
+		source.narrativeIsQuoted = true;
+		source.syntacticRelations();
 		if (parseOnly || viterbiTest)
 		{
 			if (viterbiTest)
@@ -1481,12 +1487,6 @@ int wmain(int argc,wchar_t *argv[])
 		}
 		else
 		{
-			source.identifyObjects();
-			vector <int> secondaryQuotesResolutions;
-			source.analyzeWordSenses();
-			source.narrativeIsQuoted = true;
-			source.syntacticRelations();
-			source.writeWords(path, specialExtension);
 			source.identifySpeakerGroups();
 			source.resolveSpeakers(secondaryQuotesResolutions);
 			source.resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);

@@ -191,6 +191,7 @@ int logstring(int logLevel,const wchar_t *s)
 			getchar(); // wait so we can see the error
 			char buf[11];
 			fgets(buf, 10, stdin); // make sure we wait so we can see the error
+
 			exit(0);
 		}
 #else

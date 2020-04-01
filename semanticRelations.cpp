@@ -1408,7 +1408,7 @@ bool Source::placeIdentification(int where,bool inPrimaryQuote,int whereControll
 							whereSubType(m[m[associatedLocation].relPrep].getRelObject()))
 						associatedLocation=m[m[associatedLocation].relPrep].getRelObject();
 					lplog(LOG_RESOLUTION,L"%06d:space relation: hanging prep@%d from verb %d:%s [%s] %d:%s?",where,afterVerb,whereVerb,m[whereVerb].word->first.c_str(),m[afterVerb].word->first.c_str(),associatedLocation,whereString(associatedLocation,tmpstr,false).c_str());
-					setRelPrep(whereVerb,afterVerb,2,PREP_VERB_SET);
+					setRelPrep(whereVerb,afterVerb,2,PREP_VERB_SET,whereVerb);
 					m[afterVerb].setRelObject(associatedLocation);
 				}
 			}			
