@@ -3371,6 +3371,14 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 					return 0;
 				}
 			}
+			else if (source.queryPattern(wordSourceIndex, L"__ADJECTIVE") != -1 && source.queryPatternDiff(wordSourceIndex, L"__S1",L"7") != -1)
+			{
+				if (source.m[wordSourceIndex].queryWinnerForm(adjectiveForm) >= 0)
+					errorMap[L"ST correct: ST says adverb but LP says adjective with __S1[7] before an adjective"]++;
+				else
+					errorMap[L"LP correct: ST says adverb but LP says adjective with __S1[7] alone"]++;
+				return 0;
+			}
 			else
 				partofspeech += L"***ISADVERBELSE";
 		}
