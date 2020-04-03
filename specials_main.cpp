@@ -4121,7 +4121,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	{
 		if (source.m[wordSourceIndex + 1].word->first == L"to")
 		{
-			errorMap[L"LP correct: preposition preposition (to)"]++;
+			errorMap[L"LP correct: preposition preposition (to)"]++; 
 			return 0;
 		}
 		if (source.m[wordSourceIndex + 1].queryWinnerForm(prepositionForm) >= 0)
