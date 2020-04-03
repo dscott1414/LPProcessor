@@ -3384,6 +3384,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0)
 	{
+		int pemaOffset = source.queryPattern(wordSourceIndex, L"__NOUN");
 		if (source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"4") != -1)
 		{
 			errorMap[L"diff: ST says " + primarySTLPMatch + L" but LP says adjective in the head of a __NOUN construction"]++;
@@ -3392,10 +3393,51 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		// two incorrect parses lead to inaccuracy (ST is correct)
 		if (source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"2") != -1 && source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE") != -1)
 		{
-			//partofspeech += L"***NOUNADJ";
 			errorMap[L"LP correct: ST says " + primarySTLPMatch + L" but LP says adjective in an __ADJECTIVE construction"]++;
 			return 0;
 		}
+		if (pemaOffset>=0 && WordClass::isDash((source.m[wordSourceIndex + 1].word->first[0])) && source.m[wordSourceIndex + 1].word->first.length()==1)
+		{
+			errorMap[L"LP correct: ST says " + primarySTLPMatch + L" but LP says adjective before dash"]++;
+			return 0;
+		}
+	}
+	if (wordSourceIndex + 2 < source.m.size() && WordClass::isDash((source.m[wordSourceIndex + 1].word->first[0])) && source.m[wordSourceIndex + 1].word->first.length() == 1)
+	{
+		int pemaOffset = source.queryPattern(wordSourceIndex, L"__NOUN");
+		bool adjectivePosition = (pemaOffset >= 0) ? (source.pema[pemaOffset].end > 1) : false, nounHeadPosition = (pemaOffset >= 0) ? (source.pema[pemaOffset].end == 1) : false;
+		if (source.m[wordSourceIndex + 2].word->first != L"and" && source.m[wordSourceIndex + 2].word->first != L"to" && source.m[wordSourceIndex + 2].word->first != L"for" &&
+			source.m[wordSourceIndex + 2].word->first != L"of" &&	source.m[wordSourceIndex + 2].queryWinnerForm(determinerForm) < 0 &&
+			source.m[wordSourceIndex].queryWinnerForm(interjectionForm) < 0)
+		{
+			if ((source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"numeral_ordinal") >= 0) && 
+				  (primarySTLPMatch == L"noun" || primarySTLPMatch == L"determiner" || primarySTLPMatch == L"predeterminer"))
+			{
+				errorMap[L"LP correct: ST says " + primarySTLPMatch + L" but LP says adjective before dash"]++;
+				return 0;
+			}
+			else if (source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
+			{
+				errorMap[L"LP correct: ST says " + primarySTLPMatch + L" but LP says adjective/adverb before dash"]++;
+				return 0;
+			}
+			else if ((source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0) && primarySTLPMatch == L"adjective" && (pemaOffset<0 || nounHeadPosition))
+			{
+				errorMap[L"ST correct: ST says " + primarySTLPMatch + L" but LP says noun before dash"]++;
+				return 0;
+			}
+			else if (adjectivePosition)
+			{
+				errorMap[L"LP correct: ST says " + primarySTLPMatch + L" but LP says adjective position in __NOUN structure before dash"]++;
+				return 0;
+			}
+		}
+		//if (source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && source.m[wordSourceIndex + 2].word->first == L"and" && nounHeadPosition)
+		//	partofspeech += L"***ADJNOUNDashCorrect?";
+		//else 
+		//	partofspeech += L"***ADJNOUNDashUnknown";
+		//errorMap[L"LP correct: ST says " + primarySTLPMatch + L" but LP says adjective before dash"]++;
+		//return 0;
 	}
 	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0)
 	{
@@ -3425,8 +3467,6 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				errorMap[L"diff: ST says adjective and LP says noun in an __ADJECTIVE construction"]++;
 				return 0;
 			}
-			else
-				partofspeech += L"***NOUNADJ2";
 		}
 	}
 	if ((source.m[wordSourceIndex - 1].queryWinnerForm(L"modal_auxiliary") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"future_modal_auxiliary") >= 0 ||
@@ -3864,7 +3904,6 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		source.m[wordSourceIndex].queryForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST &&
 		source.queryPatternDiff(wordSourceIndex, L"__S1", L"7") != -1)
 	{
-		partofspeech += L"***S1[7]VERBPAST_ADJECTIVE";
 		errorMap[L"ST correct: ST says verb and LP says adjective"]++;
 		return 0;
 	}
@@ -3893,23 +3932,24 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		}
 	}
 	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0)
-	{
+		{
 		wstring verbCost;
 		itos(source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(verbForm)), verbCost);
+		int pemaOffset = source.queryPattern(wordSourceIndex, L"__NOUN");
 		if (source.m[wordSourceIndex].isOnlyWinner(verbForm) && verbCost==L"0")
 		{
-			int pemaOffset = source.queryPattern(wordSourceIndex, L"__NOUN");
+			// letting her hands *fall*
 			if (pemaOffset >= 0 && source.pema[pemaOffset].end == 1 && patterns[source.pema[pemaOffset].getPattern()]->differentiator==L"6")
 			{
-				partofspeech += L"***INNOUNSTRUCT?";
-				//return 0;
+				errorMap[L"diff: LP says verb in head part of NOUN struct and ST says noun"]++;
+				return 0;
 			}
+			// 3 out of 108 incorrect because the parse was wrong
+			// for a *split* second .
 			if (pemaOffset >= 0 && source.pema[pemaOffset].end > 1)
 			{
-				wstring tmpstr;
-				itos(source.pema[pemaOffset].end, tmpstr);
-				partofspeech += L"***INNOUNSTRUCT?ADJ["+tmpstr+L"]";
-				//return 0;
+				errorMap[L"LP correct: LP says verb in adjective part of NOUN struct and ST says noun"]++;
+				return 0;
 			}
 		}
 	}
