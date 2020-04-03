@@ -672,7 +672,7 @@ int createBasicPatterns(void)
 	// Should this be an MS1?
 	cPattern::create(L"_ADVERB{_FINAL}", L"AT8",
 											9, L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|as", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"__AS_AS", L"quantifier|all*-1", 0, 1, 1,
-											1, L"__S1*1{EVAL:_BLOCK}", 0, 1, 1, 0);
+											1, L"__S1*1{EVAL:_BLOCK}", 0, 1, 1, 0); // this has been probabilistically checked against Stanford and 1 is optimal
 	cPattern::create(L"_ADVERB{_FINAL}", L"AT9",
 		                  1,L"determiner|the",0,0,1, // only used with 'next'
 											4, L"quantifier|every", L"quantifier|each", L"adjective|next", L"adverb|any", 0, 1, 1,

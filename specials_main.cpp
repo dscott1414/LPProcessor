@@ -1,4 +1,5 @@
 ﻿#include <windows.h>
+#include <windows.h>
 #define _WINSOCKAPI_ /* Prevent inclusion of winsock.h in windows.h */
 #include "io.h"
 #include "winhttp.h"
@@ -3890,81 +3891,26 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 				errorMap[L"LP correct: ST says verb and LP says noun - after -"]++;
 			return 0;
 		}
-		if (word.length() > 2 && word.substr(word.length() - 2) == L"ed" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST)
-		{
-			partofspeech += L"***ISNOUN?PAST NOUN=" + nounCost + L"VERB=" + verbCost;
-		}
-		if (word.length() > 3 && word.substr(word.length() - 3) == L"ing" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE)
-		{
-			int pemaOffset = source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"2");
-			if (pemaOffset >= 0 && source.pema[pemaOffset].end >= 2)
-				partofspeech += L"***ISNOUN?PRESENTPARTNOUNADJ NOUN=" + nounCost + L"VERB=" + verbCost;
-			else
-				partofspeech += L"***ISNOUN?PRESENTPART NOUN=" + nounCost + L"VERB=" + verbCost;
-		}
-		if ((source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_THIRD_SINGULAR) == VERB_PRESENT_THIRD_SINGULAR)
-		{
-			partofspeech += L"***ISNOUN?PRESENTTHIRD NOUN=" + nounCost + L"VERB=" + verbCost;
-		}
-		if ((source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_FIRST_SINGULAR) == VERB_PRESENT_FIRST_SINGULAR)
-		{
-			partofspeech += L"***ISNOUN?PRESENTFIRST NOUN=" + nounCost + L"VERB=" + verbCost;
-		}
 	}
 	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0)
 	{
-		wstring nounCost, verbCost;
-		itos(source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(nounForm)), nounCost);
+		wstring verbCost;
 		itos(source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(verbForm)), verbCost);
-		if (word.length() > 2 && word.substr(word.length() - 2) == L"ed" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST)
+		if (source.m[wordSourceIndex].isOnlyWinner(verbForm) && verbCost==L"0")
 		{
-			partofspeech += L"***ISVERB?PAST NOUN=" + nounCost + L"VERB=" + verbCost;
-		}
-		if (word.length() > 3 && word.substr(word.length() - 3) == L"ing" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE)
-		{
-			int pemaOffset = source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"2");
-			if (pemaOffset >= 0 && source.pema[pemaOffset].end >= 2)
-				partofspeech += L"***ISVERB?PRESENTPARTNOUNADJ NOUN=" + nounCost + L"VERB=" + verbCost;
-			else
-				partofspeech += L"***ISVERB?PRESENTPART NOUN=" + nounCost + L"VERB=" + verbCost;
-		}
-		if ((source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_THIRD_SINGULAR) == VERB_PRESENT_THIRD_SINGULAR)
-		{
-			partofspeech += L"***ISVERB?PRESENTTHIRD NOUN=" + nounCost + L"VERB=" + verbCost;
-		}
-		if ((source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_FIRST_SINGULAR) == VERB_PRESENT_FIRST_SINGULAR)
-		{
-			partofspeech += L"***ISVERB?PRESENTFIRST NOUN=" + nounCost + L"VERB=" + verbCost;
-		}
-		if (source.queryPattern(wordSourceIndex, L"__ADJECTIVE") != -1)
-		{
-			partofspeech += L"***ISVERB_AS_ADJ";
-		}
-	}
-	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0)
-	{
-		wstring adjectiveCost, verbCost;
-		itos(source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(adjectiveForm)), adjectiveCost);
-		itos(source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(verbForm)), verbCost);
-		if (word.length() > 2 && word.substr(word.length() - 2) == L"ed" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST)
-		{
-			partofspeech += L"***ISADJECTIVE?PAST ADJECTIVE=" + adjectiveCost + L"VERB=" + verbCost;
-		}
-		if (word.length() > 3 && word.substr(word.length() - 3) == L"ing" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE)
-		{
-			int pemaOffset = source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"2");
-			if (pemaOffset >= 0 && source.pema[pemaOffset].end >= 2)
-				partofspeech += L"***ISADJECTIVE?PRESENTPARTNOUNADJ ADJECTIVE=" + adjectiveCost + L"VERB=" + verbCost;
-			else
-				partofspeech += L"***ISADJECTIVE?PRESENTPART ADJECTIVE=" + adjectiveCost + L"VERB=" + verbCost;
-		}
-		if ((source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_THIRD_SINGULAR) == VERB_PRESENT_THIRD_SINGULAR)
-		{
-			partofspeech += L"***ISADJECTIVE?PRESENTTHIRD ADJECTIVE=" + adjectiveCost + L"VERB=" + verbCost;
-		}
-		if ((source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_FIRST_SINGULAR) == VERB_PRESENT_FIRST_SINGULAR)
-		{
-			partofspeech += L"***ISADJECTIVE?PRESENTFIRST ADJECTIVE=" + adjectiveCost + L"VERB=" + verbCost;
+			int pemaOffset = source.queryPattern(wordSourceIndex, L"__NOUN");
+			if (pemaOffset >= 0 && source.pema[pemaOffset].end == 1 && patterns[source.pema[pemaOffset].getPattern()]->differentiator==L"6")
+			{
+				partofspeech += L"***INNOUNSTRUCT?";
+				//return 0;
+			}
+			if (pemaOffset >= 0 && source.pema[pemaOffset].end > 1)
+			{
+				wstring tmpstr;
+				itos(source.pema[pemaOffset].end, tmpstr);
+				partofspeech += L"***INNOUNSTRUCT?ADJ["+tmpstr+L"]";
+				//return 0;
+			}
 		}
 	}
 	// this is correct exceot for rare parse structure: I would have done it *again* here had I thought you were coming to try to win her heart
@@ -3983,14 +3929,6 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"LP correct '"+word+L"': incorrect noun usage"]++;
 		return 0;
 	}
-	if (partofspeech == L"VBZ" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_THIRD_SINGULAR) != VERB_PRESENT_THIRD_SINGULAR)
-		partofspeech += L"**VBWRONG";
-	if (partofspeech == L"VBP" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_FIRST_SINGULAR) != VERB_PRESENT_FIRST_SINGULAR)
-		partofspeech += L"**VBWRONG";
-	if (partofspeech == L"VBD" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) != VERB_PAST)
-		partofspeech += L"**VBWRONG";
-	if (partofspeech == L"VBN" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST_PARTICIPLE) != VERB_PAST_PARTICIPLE)
-		partofspeech += L"**VBWRONG";
 	if (partofspeech == L"VBG" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) != VERB_PRESENT_PARTICIPLE)
 	{
 		if (word == L"bleeding")
@@ -3998,7 +3936,6 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			errorMap[L"LP correct '" + word + L"': incorrect verb usage"]++;
 			return 0;
 		}
-		partofspeech += L"**VBWRONG";
 	}
 	if (partofspeech == L"NN" && (source.m[wordSourceIndex].word->second.inflectionFlags&SINGULAR) != SINGULAR)
 	{
@@ -4007,7 +3944,6 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			errorMap[L"LP correct: ST says noun LP says interjection"]++;
 			return 0;
 		}
-		partofspeech += L"**NWRONG";
 	}
 	if (partofspeech == L"NNS" && (source.m[wordSourceIndex].word->second.inflectionFlags&PLURAL) != PLURAL)
 	{
@@ -4016,20 +3952,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			errorMap[L"LP correct '" + word + L"': incorrect noun usage"]++;
 			return 0;
 		}
-		partofspeech += L"**NWRONG";
 	}
-	if (partofspeech == L"JJ" && (source.m[wordSourceIndex].word->second.inflectionFlags&(ADJECTIVE_COMPARATIVE | ADJECTIVE_SUPERLATIVE)) != 0)
-		partofspeech += L"**JJWRONG";
-	if (partofspeech == L"JJR" && (source.m[wordSourceIndex].word->second.inflectionFlags&(ADJECTIVE_COMPARATIVE | ADJECTIVE_SUPERLATIVE)) != ADJECTIVE_COMPARATIVE)
-		partofspeech += L"**JJWRONG";
-	if (partofspeech == L"JJS" && (source.m[wordSourceIndex].word->second.inflectionFlags&(ADJECTIVE_COMPARATIVE | ADJECTIVE_SUPERLATIVE)) != ADJECTIVE_SUPERLATIVE)
-		partofspeech += L"**JJWRONG";
-	if (partofspeech == L"RB" && (source.m[wordSourceIndex].word->second.inflectionFlags&(ADVERB_COMPARATIVE | ADVERB_SUPERLATIVE)) != 0)
-		partofspeech += L"**RBWRONG";
-	if (partofspeech == L"RBR" && (source.m[wordSourceIndex].word->second.inflectionFlags&(ADVERB_COMPARATIVE | ADVERB_SUPERLATIVE)) != ADVERB_COMPARATIVE)
-		partofspeech += L"**RBWRONG";
-	if (partofspeech == L"RBS" && (source.m[wordSourceIndex].word->second.inflectionFlags&(ADVERB_COMPARATIVE | ADVERB_SUPERLATIVE)) != ADVERB_SUPERLATIVE)
-		partofspeech += L"**RBWRONG";
 	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && (word==L"half" || word==L"round"))
 	{
 		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"verb") >= 0 ||
@@ -4069,11 +3992,6 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			errorMap[L"LP correct: 'to-day' or 'to-morrow' is in general an adverb of time"]++;
 		}
 		return 0;
-	}
-	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 &&
-		(source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST && source.queryPattern(wordSourceIndex, L"__S1") != -1)
-	{
-		partofspeech += L"**ISVERBNOTADJECTIVE?";
 	}
 	// 102 examples checked, 101 correct.
 	if (word==L"after" && primarySTLPMatch == L"preposition or conjunction" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0)
@@ -4220,6 +4138,13 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"LP correct: preposition with relative object"]++; // probabilistic - see distribute errors
 		return 0;
 	}
+	// 'all' before an _S1 is an adverb not a determiner
+	// L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|as", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"__AS_AS", L"quantifier|all*-1"
+	if (source.m[wordSourceIndex].pma.queryPatternDiff(L"_ADVERB",L"AT8") != -1 && source.m[wordSourceIndex+1].pma.queryPattern(L"__S1")!=-1)
+	{
+		errorMap[L"LP correct: word:"+word+L" ST says "+ primarySTLPMatch+L", LP says AT8 match"]++;
+		return 0;
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
@@ -4310,6 +4235,8 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 					fdi->second.agreeSTLP++;
 				else
 					fdi->second.disagreeSTLP++;
+				char tempdebugBuffer[4096];
+				tempdebugBuffer[0] = 'c';
 				if (ruleCode == -1)
 				{
 					// recording the error in errorMap already taken care of in rule procedure
