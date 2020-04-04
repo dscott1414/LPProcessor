@@ -1719,6 +1719,7 @@ void WordClass::initialize()
 			  iWord->first != L"there" && iWord->first != L"another" && iWord->first != L"so" && iWord->first != L"each" && iWord->first != L"every" && iWord->first != L"either" && iWord->first != L"neither" && iWord->first != L"other")
 			iWord->second.toLowestCost(pronounForm);
 	}
+	// gquery(L"--")->second.flags &= ~tFI::ignoreFlag; // ignore all dashes EXCEPT the double dash!  Stanford check 33023/5697357 0.580% BEFORE.  
 	gquery(L"tell")->second.usagePatterns[tFI::VERB_HAS_2_OBJECTS] = 255;
 	gquery(L"tell")->second.usageCosts[tFI::VERB_HAS_2_OBJECTS] = 0;
 	gquery(L"descend")->second.usagePatterns[tFI::VERB_HAS_1_OBJECTS] = 255;

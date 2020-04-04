@@ -848,7 +848,8 @@ int createBasicPatterns(void)
 		//7, L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"preposition|ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", // removed *1 as cost so that
 		10, L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"preposition|ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", L"quantifier|more{ADJ}", L"indefinite_pronoun{ADJ}", L"reciprocal_pronoun{ADJ}",// removed *1 as cost so that
 		VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,1,2,                            // we can make cost of *1 for __NOUN[2]
-												 1,L"adverb*1",0,0,1,0);                                                                // 2/3/2007
+		//										 1,L"adverb*1",0,0,1,  // why should adverb come AFTER adjective?
+		0);                                                                // 2/3/2007
 		// OWNER attributes deleted - why would ownership occur before a dash?
 	cPattern::create(L"__ADJECTIVE",L"3",
 		1,L"_ADVERB",0,0,1,
@@ -860,10 +861,17 @@ int createBasicPatterns(void)
 		// first-class passengers
 	cPattern::create(L"__ADJECTIVE", L"A", 
 		1, L"_ADVERB", 0, 0, 1,
-		6, L"adjective{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"preposition|ex{ADJ}", L"noun*1{ADJ}", L"no{ADJ:no}", SINGULAR, 1, 2,
+		7, L"adjective{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"preposition|ex{ADJ}", L"noun*1{ADJ}", L"no{ADJ:no}", L"quantifier|all", SINGULAR, 1, 2, // new all-metal construction
 		1, L"dash", 0, 1, 1,
 		3, L"noun*1{ADJ}", L"adjective|best*-4", L"noun|class*-4", SINGULAR, 1, 1,
 		8, L"adverb*1", L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"preposition|ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", 0, 0, 2,
+		0);
+	cPattern::create(L"__ADJECTIVE", L"UP",
+		1, L"_ADVERB", 0, 0, 1,
+		1, L"verb{ADJ}", VERB_PAST_PARTICIPLE, 1, 1, // hunched-up
+		1, L"dash", 0, 0, 1,
+		1, L"preposition|up", 0, 1, 1,
+		1, L"adjective{ADJ}", 0, 0, 2,
 		0);
 	// 6. correction to __NOUN[F] after studying matches to increase cost with long subjects - comment out __NOUN[H]
 	// better than two years, more than two years

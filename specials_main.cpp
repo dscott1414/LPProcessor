@@ -3315,6 +3315,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		}
 		else
 		{
+			int adjectivePEMAOffset = source.queryPattern(wordSourceIndex, L"__ADJECTIVE");
 			// an *even* and noiseless step
 			if (wordBeforeIsDeterminer && source.m[wordSourceIndex + 1].queryWinnerForm(L"coordinator") >= 0 && source.m[wordSourceIndex + 2].queryWinnerForm(L"adjective") >= 0 && source.m[wordSourceIndex + 3].queryWinnerForm(L"noun") >= 0)
 			{
@@ -3371,7 +3372,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 					return 0;
 				}
 			}
-			else if (source.queryPattern(wordSourceIndex, L"__ADJECTIVE") != -1 && source.queryPatternDiff(wordSourceIndex, L"__S1",L"7") != -1)
+			else if (adjectivePEMAOffset != -1 && source.queryPatternDiff(wordSourceIndex, L"__S1",L"7") != -1)
 			{
 				if (source.m[wordSourceIndex].queryWinnerForm(adjectiveForm) >= 0)
 					errorMap[L"ST correct: ST says adverb but LP says adjective with __S1[7] before an adjective"]++;
@@ -3379,8 +3380,22 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 					errorMap[L"LP correct: ST says adverb but LP says adjective with __S1[7] alone"]++;
 				return 0;
 			}
+			else if (adjectivePEMAOffset != -1 && source.queryPatternDiff(wordSourceIndex + source.pema[adjectivePEMAOffset].begin, L"__NOUN", L"2") != -1)
+			{
+				partofspeech += L"***ISADJECTIVENOTADVERBELSE?";
+			}
 			else
 				partofspeech += L"***ISADVERBELSE";
+		}
+		if (word == L"o'clock" && primarySTLPMatch == L"adverb")
+		{
+			errorMap[L"diff: ST says adverb (which is correct by form) but LP says noun, from usage"]++;
+			return 0;
+		}
+		if (word == L"but" && source.m[wordSourceIndex + 1].word->first==L"--")
+		{
+			errorMap[L"LP correct: 'but' before a double dash is a conjunction!"]++;
+			return 0;
 		}
 		int maxlen = -1;
 		if ((source.queryPattern(wordSourceIndex - 1, L"_BE", maxlen) != -1 || source.m[wordSourceIndex - 1].queryWinnerForm(L"is") >= 0) &&
@@ -4462,15 +4477,26 @@ int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *
 			if (endIndex < source.m.size() && source.isEOS(endIndex))
 				endIndex++;
 			wstring sentence;
+			int numLetters=0, numNumbers=0;
 			for (int I = wordSourceIndex; I < endIndex; I++)
 			{
 				wstring originalIWord;
 				source.getOriginalWord(I, originalIWord, false, false);
+				if (source.m[I].word->first.length() == 1 && iswalpha(source.m[I].word->first[0]))
+					numLetters++;
+				if (source.m[I].word->second.query(NUMBER_FORM_NUM) >= 0)
+					numNumbers++;
 				sentence += originalIWord + L" ";
 			}
 			if (sentence.empty())
 			{
 				wordSourceIndex++;
+				continue;
+			}
+			// not a sentence
+			if ((numNumbers + numLetters) > (endIndex - wordSourceIndex) / 2)
+			{
+				wordSourceIndex=endIndex; 
 				continue;
 			}
 			wstring parse;
