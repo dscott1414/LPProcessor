@@ -4208,6 +4208,25 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"LP correct: word:"+word+L" ST says "+ primarySTLPMatch+L", LP says AT8 match"]++;
 		return 0;
 	}
+	// |noun*3 verb*0 1stSING|
+	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].isOnlyWinner(verbForm) &&
+		  source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(nounForm)) == 3 &&
+			source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(verbForm))==0 &&
+		(source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_FIRST_SINGULAR) == VERB_PRESENT_FIRST_SINGULAR)
+	{
+		bool dashed = (wordSourceIndex > 0 && wordSourceIndex < source.m.size() - 1 &&
+			(WordClass::isDash(source.m[wordSourceIndex - 1].word->first[0]) || WordClass::isDash(source.m[wordSourceIndex + 1].word->first[0])));
+		bool previousWords = (source.m[wordSourceIndex - 2].word->first == L"a" || 
+			source.m[wordSourceIndex - 1].word->first == L"that" || source.m[wordSourceIndex - 1].word->first == L"this");
+		if (dashed || previousWords)
+		{
+			errorMap[L"ST correct: ST says noun and LP says verb (determined by dash or previous word)"]++;
+			return 0;
+		}
+		// 73 ST/144 LP
+		errorMap[L"LP correct: (noun cost 3, verb cost 0)"]++; // probabilistic - see distribute errors
+		return 0;
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
@@ -4585,6 +4604,9 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"LP correct: preposition with relative object"] = numErrors * 163 / 185;
 	errorMap[L"ST correct: preposition with relative object"] = numErrors * 22 / 185;
 	
+	numErrors = errorMap[L"LP correct: (noun cost 3, verb cost 0)"]; // 73 ST correct out of 217 total
+	errorMap[L"LP correct: (noun cost 3, verb cost 0)"] = numErrors * 144 / 217;
+	errorMap[L"ST correct: (noun cost 3, verb cost 0)"] = numErrors * 73 / 217;
 }
 
 int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension)
