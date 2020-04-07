@@ -715,7 +715,12 @@ int createBasicPatterns(void)
 											1, L"preposition|at", 0, 1, 1,
 											1, L"noun|once*-4", 0, 1, 1,  // noun cost is 4
 											0);
-	/// TIME related adverbs [end]
+	// after July, after Tuesday, after summer, after dawn, before dusk
+	cPattern::create(L"_ADVERB{_FINAL}", L"AT13",
+											2, L"preposition|before*-1", L"preposition|after*-1", 0, 1, 1,
+											4, L"month{MONTH}", L"daysOfWeek{DAYWEEK}", L"season{SEASON}", L"dayUnit{TIMECAPACITY}", 0, 1, 1,
+											0);
+/// TIME related adverbs [end]
 	// DISTANCE related adverbs [begin]
 	// *10 feet below her* the boulder trembled.
 	// 

@@ -2228,7 +2228,7 @@ void Source::setQuoteContainsSpeaker(int where,bool inPrimaryQuote)
 	{
 		wstring tmpstr;
 		m[lastOpeningPrimaryQuote].flags|=WordMatch::flagQuoteContainsSpeaker;
-		m[lastOpeningPrimaryQuote].setRelObject(where);
+	m[lastOpeningPrimaryQuote].setRelObject(where);
 		if (debugTrace.traceSpeakerResolution)
 			lplog(LOG_RESOLUTION,L"%06d:%d:Speaker %s talking about other speakers/audience",where,lastOpeningPrimaryQuote,objectString(m[where].getObject(),tmpstr,false).c_str());
 	}

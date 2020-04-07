@@ -12,6 +12,6 @@ void forwardFromSource(Source &source, vector<vector<double>> &tagTransitionProb
 	vector <wstring> &tags, unordered_map <wstring, int> &wordSourceIndexLookup, unordered_map <wstring, int> &tagLookup);
 void testViterbiFromSource(Source &source);
 int createJavaVM(JavaVM *&vm, JNIEnv *&env);
-int parseSentence(Source &source,JNIEnv *env, wstring sentence, wstring &parse, bool pcfg);
+int parseSentence(Source &source,JNIEnv *env, wstring sentence, wstring &parse, bool pcfg,bool lockTable);
 int findLPPOSEquivalents(JNIEnv *env, wstring sentence, wstring &parse, wstring originalWord, vector<wstring> &posList, int duplicateSkip, bool pcfg);
 void destroyJavaVM(JavaVM *vm);

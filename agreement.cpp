@@ -2141,7 +2141,7 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 			if (subjectWord->second.mainEntry != wNULL) subjectWord = subjectWord->second.mainEntry;
 			tFI::cRMap *rm = subjectWord->second.relationMaps[SubjectWordWithVerb];
 			tFI::cRMap::tIcRMap tr = (rm) ? rm->r.find(verbWord) : tNULL;
-			wstring patternName = patterns[pema[fromPEMAPosition].getPattern()]->name;
+			wstring patternName = (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->name;
 			if (patternName != L"__S1" && patternName != L"__INTRO_N" && rm != (tFI::cRMap *)NULL && tr != rm->r.end() &&
 				subjectWord->second.getUsageCost(m[end - 1].queryForm(nounForm))>0)
 			{

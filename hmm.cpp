@@ -96,9 +96,14 @@ unordered_map<wstring, vector<wstring>> pennMapToLP = {
 { L"$",{ }} //	not listed in standard PennBank tag list but emitted by Stanford
 };
 
-bool foundParsedSentence(Source &source, wstring sentence, wstring &parse)
+bool foundParsedSentence(Source &source, wstring sentence, wstring &parse,bool lockTable)
 {
-	//if (!myquery(&source.mysql, L"LOCK TABLES stanfordPCFGParsedSentences READ")) return false; // moved out to higher level for performance
+	if (lockTable)
+	{
+		printf("Waiting for read lock.                        \r");
+		if (!myquery(&source.mysql, L"LOCK TABLES stanfordPCFGParsedSentences READ")) return false; // moved out to higher level for performance
+		printf("Acquired lock. Selecting sentence.\r");
+	}
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	std::replace(sentence.begin(), sentence.end(), L'\'', L'"');
 	size_t sentencehash=std::hash<std::wstring>{}(sentence);
@@ -115,15 +120,24 @@ bool foundParsedSentence(Source &source, wstring sentence, wstring &parse)
 		std::replace(parse.begin(), parse.end(), L'"', L'\'');
 	}
 	mysql_free_result(result);
-	//source.unlockTables(); // moved out to higher level for performance
+	if (lockTable)
+	{
+		source.unlockTables(); // moved out to higher level for performance
+		printf("Released lock.                           \r");
+	}
 	return parse.length() > 0;
 }
 
 
-int setParsedSentence(Source &source, wstring sentence, wstring parse)
+int setParsedSentence(Source &source, wstring sentence, wstring parse,bool lockTable)
 {
-	//if (!myquery(&source.mysql, L"LOCK TABLES stanfordPCFGParsedSentences WRITE")) // moved out to higher level for performance
-	//	return -1;
+	if (lockTable)
+	{
+		printf("Waiting for write lock.                           \r");
+		if (!myquery(&source.mysql, L"LOCK TABLES stanfordPCFGParsedSentences WRITE")) // moved out to higher level for performance
+			return -1;
+		printf("Acquired lock. Inserting sentence in table.\r");
+	}
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	std::replace(sentence.begin(), sentence.end(), L'\'', L'"');
 	std::replace(parse.begin(), parse.end(), L'\'', L'"');
@@ -131,16 +145,20 @@ int setParsedSentence(Source &source, wstring sentence, wstring parse)
 	_snwprintf(qt, QUERY_BUFFER_LEN, L"insert stanfordPCFGParsedSentences (parse,sentence,sentencehash) VALUES('%s','%s',%I64d)", parse.c_str(),sentence.c_str(),(__int64)sentencehash);
 	if (!myquery(&source.mysql, qt))
 		return -1;
-	//source.unlockTables();
+	if (lockTable)
+	{
+		source.unlockTables();
+		printf("Released lock.                           \r");
+	}
 	return 0;
 }
 
-int parseSentence(Source &source,JNIEnv *env, wstring sentence, wstring &parse, bool pcfg)
+int parseSentence(Source &source,JNIEnv *env, wstring sentence, wstring &parse, bool pcfg, bool lockTable)
 {
 	static jclass parserDemoClass;
 	static jmethodID parseSentenceMethod;
 	static bool initialized = false;
-	if (pcfg && foundParsedSentence(source, sentence, parse))
+	if (pcfg && foundParsedSentence(source, sentence, parse,lockTable))
 		return 0;
 	if (!initialized)
 	{
@@ -192,7 +210,7 @@ int parseSentence(Source &source,JNIEnv *env, wstring sentence, wstring &parse, 
 		env->ExceptionDescribe();
 		return -6;
 	}
-	if (pcfg && setParsedSentence(source, sentence, parse) < 0)
+	if (pcfg && setParsedSentence(source, sentence, parse,lockTable) < 0)
 		return -7;
 	return 0;
 }
@@ -916,7 +934,7 @@ void compareViterbiAgainstStructuredTagging(Source &source,
 			{
 				int duplicateSkip = 0;
 				wstring contextSentence= getContext(source, wordSourceIndex, false,duplicateSkip),parse;
-				if (parseSentence(source, env, contextSentence, parse, pcfg) < 0)
+				if (parseSentence(source, env, contextSentence, parse, pcfg,false) < 0)
 					lplog(LOG_FATAL_ERROR, L"Parse failed.");
 				vector <wstring> posList;
 				wstring out, originalWord = source.getOriginalWord(wordSourceIndex, out, false, false);
