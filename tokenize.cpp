@@ -256,6 +256,22 @@ void Source::eraseLastQuote(int &lastPSQuote,tIWMM quoteCloseWord,unsigned int &
 	lastPSQuote=q-1;
 }
 
+bool Source::getFormFlags(int where, bool &maybeVerb, bool &maybeNoun, bool &maybeAdjective, bool &preferNoun)
+{
+	int verbFormOffset= m[where].queryForm(verbForm),nounFormOffset,adjectiveFormOffset;
+	// does this position have any verb form other than verbForm itself (then check if it does have verbForm, that it is a probable verbForm)
+	maybeVerb = (m[where].word->second.hasVerbForm() && verbFormOffset<0) || (verbFormOffset >= 0 && m[where].word->second.getUsageCost(verbFormOffset) < 4);
+	if ((m[where].flags&WordMatch::flagFirstLetterCapitalized) && !(m[where].flags&WordMatch::flagAllCaps))
+		maybeVerb = false;
+	maybeNoun = (nounFormOffset = m[where].queryForm(nounForm)) >= 0 && m[where].word->second.getUsageCost(nounFormOffset) < 4;
+	maybeAdjective = (adjectiveFormOffset = m[where].queryForm(adjectiveForm)) >= 0 && m[where].word->second.getUsageCost(adjectiveFormOffset) < 4;
+	preferNoun = maybeNoun && (adjectiveFormOffset<0 || ((unsigned)m[where].word->second.getUsagePattern(nounFormOffset))>((unsigned)m[where].word->second.getUsagePattern(adjectiveFormOffset)));
+	if (debugTrace.traceParseInfo)
+		lplog(LOG_INFO, L"%s %s %s %s %s nounOffset=%d adjectiveOffset=%d noun count=%u adjective count=%u", m[where].word->first.c_str(), (maybeVerb) ? L"verb" : L"", (maybeNoun) ? L"noun" : L"", (maybeAdjective) ? L"adjective" : L"",
+			(preferNoun) ? L"preferNoun":L"",nounFormOffset, adjectiveFormOffset, (unsigned char)m[where].word->second.getUsagePattern(nounFormOffset), (unsigned char)m[where].word->second.getUsagePattern(adjectiveFormOffset));
+	return false;
+}
+
 // executed after tokenization but before pattern matching.
 // also handle Let's = Let us and What's he want = What does he want?
 // also handle 'Tis as in 'Tis the time for all good men... (It is)
@@ -528,6 +544,68 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 							for (unsigned int s2=s+1; s2<sentenceStarts.size(); s2++)
 								sentenceStarts[s2]++;
 							end++;
+						}
+					}
+				}
+			}
+			// The captain's right.
+			// if there is no verb before the owning noun, and no verb after the owned word, and the word is more likely an adjective, then convert.
+			// Also a title (which will be in all caps) is more likely to be a noun phrase, so don't expand an ownership.  Also 'worth' is a strange adjective, which tends to be owned (a thousand pound's worth)
+			if (m[q].word->first != L"let" && (q+1>=m.size() || m[q+1].word->first != L"worth") && (m[q].flags&WordMatch::flagNounOwner) && !(m[q].flags&WordMatch::flagAllCaps))
+			{
+				int capitalizedWords = 0;
+				for (unsigned int I = begin; I < end; I++)
+					if (m[q].flags&WordMatch::flagFirstLetterCapitalized)
+						capitalizedWords++;
+				// detect titles - titles tend to be noun phrases
+				// David Lloyd's Last Will . 
+				if (capitalizedWords * 100 / (end - begin) < 75)
+				{
+					if (debugTrace.traceParseInfo)
+						lplog(LOG_INFO, L"NOUNOWNER %s test", m[q].word->first.c_str());
+					bool maybeVerb = false, maybeNoun, maybeAdjective, preferNoun, detectNoun = true;
+					// go backwards skip past any adjectives, nouns or determiners.  Stop at verb, or at non-noun/adjective or beginning of sentence (begin).
+					// go forwards skip past adjectives or nouns. Stop at verb or at non-noun/adjective or at end of sentence (end)
+					for (unsigned int I = begin; I < q && !maybeVerb; I++)
+						getFormFlags(I, maybeVerb, maybeNoun, maybeAdjective, preferNoun);
+					maybeNoun = preferNoun = false;
+					int whereLastNoun = -1, whereLastAdjective = -1;
+					// don't go beyond the double quote, as it will probably have a verb after it (said) which should not be counted in this analysis.
+					// sentenceStarts may not include an end of sentence!
+					for (unsigned int I = q + 1; I < end && !isEOS(I) && !maybeVerb && !WordClass::isDoubleQuote(m[I].word->first[0]); I++)
+					{
+						getFormFlags(I, maybeVerb, maybeNoun, maybeAdjective, preferNoun);
+						if (!maybeNoun && !maybeAdjective && !WordClass::isDash(m[I].word->first[0]))
+							detectNoun = false;
+						if (detectNoun)
+						{
+							if (maybeNoun && preferNoun)
+								whereLastNoun = I;
+							if (maybeAdjective && (!maybeNoun || !preferNoun))
+								whereLastAdjective = I;
+						}
+					}
+					// if there is no verb anywhere in the sentence (must be very conservative at this stage of tokenization)
+					// and if there is no probable noun after the ownership, and there is at least one adjective, then convert.
+					if (!maybeVerb && whereLastNoun < 0 && whereLastAdjective >= 0)
+					{
+						m[q].flags &= ~WordMatch::flagNounOwner;
+						m.insert(m.begin() + q + 1, WordMatch(Words.gquery(L"ishas"), 0, debugTrace));
+						for (unsigned int s2 = s + 1; s2 < sentenceStarts.size(); s2++)
+							sentenceStarts[s2]++;
+						end++;
+						if (debugTrace.traceParseInfo)
+						{
+							wstring sentence;
+							for (unsigned int swhere = begin; swhere < end; swhere++)
+							{
+								wstring originalIWord;
+								getOriginalWord(swhere, originalIWord, false, false);
+								if (swhere == q)
+									originalIWord = L"*" + originalIWord + L"*";
+								sentence += originalIWord + L" ";
+							}
+							lplog(LOG_INFO, L"OWNERCONVERSION [%d]:%s", whereLastAdjective, sentence.c_str());
 						}
 					}
 				}

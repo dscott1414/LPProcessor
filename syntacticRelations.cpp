@@ -2959,7 +2959,8 @@ void Source::syntacticRelations()
 		if (whereLastVerb>=0 && m[I].queryWinnerForm(prepositionForm) >= 0 && m[I].relVerb == -1 && find(futureBoundPrepositions.begin(), futureBoundPrepositions.end(), I) == futureBoundPrepositions.end())
 		{
 			m[I].relVerb = whereLastVerb-1;
-			lplog(LOG_INFO, L"bound prep at %d to verb position %d.", I, whereLastVerb-1);
+			if (debugTrace.traceRelations)
+				lplog(LOG_INFO, L"bound prep at %d to verb position %d.", I, whereLastVerb-1);
 		}
 	}
 	for (unsigned int p=0; p<futureBoundPrepositions.size(); p++)

@@ -2401,6 +2401,7 @@ int wherePrepObject,
 	void adjustWords(void);
 	void eraseLastQuote(int &lastQuote,tIWMM quoteCloseWord,unsigned int &q);
 	bool testConversionToDoubleQuotes();
+	bool getFormFlags(int where, bool &maybeVerb, bool &maybeNoun, bool &maybeAdjective, bool &preferNoun);
 	unsigned int doQuotesOwnershipAndContractions(unsigned int &quotations,bool newsBank);
 	int reportUnmatchedElements(int begin,int end,bool logElements);
 	void clearTagSetMaps(void);
