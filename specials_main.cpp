@@ -3424,6 +3424,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"LP correct: ST says " + primarySTLPMatch + L" but LP says adjective before dash"]++;
 			return 0;
 		}
+		if (word == L"right")
+		{
+			errorMap[L"LP correct: word 'right': ST says " + primarySTLPMatch + L" but LP says adjective"]++;
+			return 0;
+		}
 	}
 	if (wordSourceIndex + 2 < source.m.size() && WordClass::isDash((source.m[wordSourceIndex + 1].word->first[0])) && source.m[wordSourceIndex + 1].word->first.length() == 1)
 	{
@@ -4175,9 +4180,9 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		return 0;
 	}
 	// (noun) not found in winnerForms is for word ishas
-	if (word == L"ishas" && primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"is") >= 0)
+	if (word == L"ishas")
 	{
-		errorMap[L"diff: ishas cannot be a noun."]++;
+		errorMap[L"diff: ishas is a special word."]++;
 		return 0;
 	}
 	if (primarySTLPMatch != L"preposition or conjunction" && source.m[wordSourceIndex].isOnlyWinner(prepositionForm) && source.m[wordSourceIndex].getRelObject()>=0)
@@ -4253,6 +4258,20 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	{
 		errorMap[L"LP correct: (noun cost 3, adjective cost 0)"]++; // probabilistic - see distribute errors
 		return 0;
+	}
+	if (wordSourceIndex > 0 && (source.m[wordSourceIndex - 1].flags&WordMatch::flagNounOwner) && source.m[wordSourceIndex].isOnlyWinner(nounForm))
+	{
+		int pemaOffset = source.queryPattern(wordSourceIndex,L"__NOUN");
+		if (pemaOffset >= 0 && source.pema[pemaOffset].end > 1 && primarySTLPMatch==L"verb")
+		{
+			errorMap[L"LP correct: ownership (verb infinitive)"]++; 
+			return 0;
+		}
+		else
+		{
+			errorMap[L"LP correct: ownership of noun"]++; // probabilistic - see distribute errors ST=12 / LP=79
+			return 0;
+		}
 	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
@@ -4642,6 +4661,9 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"LP correct: (noun cost 3, adjective cost 0)"] = numErrors * 332 / 403;
 	errorMap[L"ST correct: (noun cost 3, adjective cost 0)"] = numErrors * 71 / 403;
 
+	numErrors = errorMap[L"LP correct: ownership of noun"]; // 12 ST correct out of 91 total 
+	errorMap[L"LP correct: ownership of noun"] = numErrors * 79 / 91;
+	errorMap[L"ST correct: ownership of noun"] = numErrors * 12 / 91;
 
 }
 

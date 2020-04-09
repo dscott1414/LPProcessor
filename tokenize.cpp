@@ -555,7 +555,7 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 			{
 				int capitalizedWords = 0;
 				for (unsigned int I = begin; I < end; I++)
-					if (m[q].flags&WordMatch::flagFirstLetterCapitalized)
+					if (m[I].flags&WordMatch::flagFirstLetterCapitalized)
 						capitalizedWords++;
 				// detect titles - titles tend to be noun phrases
 				// David Lloyd's Last Will . 
@@ -609,6 +609,9 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 						}
 					}
 				}
+				else
+					if (debugTrace.traceParseInfo)
+						lplog(LOG_INFO, L"NOUNOWNER %s capitalized words test %d*100/%d<75", m[q].word->first.c_str(), capitalizedWords, end - begin);
 			}
 			if (adjustWord(q))
 			{
