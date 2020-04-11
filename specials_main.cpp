@@ -4292,6 +4292,14 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"LP correct: that after 'is' in a question OR before is not in a question is a pronoun OR before punctuation!"]++; // what is that? / “ Billy , *that* is exactly where you are wrong / “ It isn't *that* , ” she said .
 		return 0;
 	}
+	if (word == L"that" && source.m[wordSourceIndex].queryWinnerForm(demonstrativeDeterminerForm) >= 0 && 
+		  wordSourceIndex<source.m.size()-2 && source.m[wordSourceIndex+1].queryWinnerForm(adjectiveForm) >= 0 && 
+		source.m[wordSourceIndex].principalWherePosition==wordSourceIndex && // this is not acting as a determiner
+		(source.m[wordSourceIndex + 2].word->first==L"." || source.m[wordSourceIndex + 2].word->first == L"," || source.m[wordSourceIndex + 2].queryWinnerForm(prepositionForm)>=0))
+	{
+		errorMap[L"ST correct: that before an adjective, not in an object and having passed all other tests (doesn't work for a rule)"]++; 
+		return 0;
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
