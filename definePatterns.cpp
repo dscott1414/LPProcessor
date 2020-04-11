@@ -3225,6 +3225,15 @@ int createSecondaryPatterns2(void)
 						1, L"_ADVERB", 0, 1, 1, // sure / certain
 						1, L"__S1{OBJECT:EVAL:_BLOCK}", 0, 1, 1,
 						0);
+	// never mind! // this pattern is specifically referenced in specials_main
+	cPattern::create(L"_COMMAND1{_FINAL:_ONLY_BEGIN_MATCH}", L"8",
+						2, L"conjunction|but",L"interjection",0,0,1,
+						1,L",",0,0,1,
+						1, L"never", 0, 1, 1, 
+						1, L"verb|mind*-3", 0, 1, 1,
+						2, L"__ALLOBJECTS_0", L"__ALLOBJECTS_1", 0, 0, 1,
+						1, L"__CLOSING__S1", 0, 0, 3,
+						0);
 	cPattern::create(L"_THINKPRESENT_CO",L"",
 												1,L"_THINKPRESENTFIRST",0,1,1,
 												1,L"coordinator",0,1,1,

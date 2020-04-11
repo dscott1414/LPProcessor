@@ -4300,6 +4300,12 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"ST correct: that before an adjective, not in an object and having passed all other tests (doesn't work for a rule)"]++; 
 		return 0;
 	}
+	// never mind
+	if (word == L"mind" && source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0 && source.queryPatternDiff(wordSourceIndex,L"_COMMAND1", L"8") != -1)
+	{
+		errorMap[L"LP correct: never mind!"]++;
+		return 0;
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
