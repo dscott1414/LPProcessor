@@ -272,17 +272,18 @@ int patternMatchArray::queryPattern(wstring pattern)
   return queryPattern(pattern,maxLen);
 }
 
-int patternMatchArray::queryPattern(wstring pattern,int &len)
-{ LFS
-  int maxLen=-1,element=-1;
-  for (unsigned int I=0; I<count; I++)
-    if (patterns[content[I].getPattern()]->name==pattern && content[I].len>maxLen)
-    {
-      maxLen=content[I].len;
-      element=I| matchElement::patternFlag;
-    }
-  len=maxLen;
-  return element;
+int patternMatchArray::queryPattern(wstring pattern, int &len)
+{
+	LFS
+		int maxLen = -1, element = -1;
+	for (unsigned int I = 0; I < count; I++)
+		if (patterns[content[I].getPattern()]->name == pattern && content[I].len > maxLen)
+		{
+			maxLen = content[I].len;
+			element = I | matchElement::patternFlag;
+		}
+	len = maxLen;
+	return element;
 }
 
 int patternMatchArray::queryAllPattern(wstring pattern,int startAt)

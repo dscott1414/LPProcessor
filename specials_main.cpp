@@ -2429,11 +2429,12 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 		}
 		return -3;
 	}
-	if ((source.m[wordSourceIndex].word->first == L"that" && (source.m[wordSourceIndex].flags&WordMatch::flagInQuestion) && wordSourceIndex > 0 && 
+	if (source.m[wordSourceIndex].word->first == L"that" && (((source.m[wordSourceIndex].flags&WordMatch::flagInQuestion) && wordSourceIndex > 0 && 
 		(source.m[wordSourceIndex - 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex - 1].queryForm(L"is_negation") >= 0) &&
 		source.m[wordSourceIndex].queryWinnerForm(demonstrativeDeterminerForm)>=0 && source.m[wordSourceIndex + 1].queryWinnerForm(nounForm) < 0) ||
 		(source.m[wordSourceIndex].word->first == L"that" && !(source.m[wordSourceIndex].flags&WordMatch::flagInQuestion) && wordSourceIndex > 0 && (source.m[wordSourceIndex + 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex + 1].queryForm(L"is_negation") >= 0) &&
-		(!iswalpha(source.m[wordSourceIndex - 1].word->first[0]) || wordSourceIndex == startOfSentence)))
+		(!iswalpha(source.m[wordSourceIndex - 1].word->first[0]) || wordSourceIndex == startOfSentence)) ||
+		(source.m[wordSourceIndex].queryWinnerForm(demonstrativeDeterminerForm) >= 0 && !iswalpha(source.m[wordSourceIndex + 1].word->first[0]))))
 	{
 		source.m[wordSourceIndex].setWinner(source.m[wordSourceIndex].queryForm(pronounForm));
 		source.m[wordSourceIndex].unsetWinner(source.m[wordSourceIndex].queryForm(demonstrativeDeterminerForm));
@@ -4282,12 +4283,13 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			return 0;
 		}
 	}
-	if (word == L"that" && (((source.m[wordSourceIndex].flags&WordMatch::flagInQuestion) && wordSourceIndex > 0 && (source.m[wordSourceIndex - 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex - 1].queryForm(L"is_negation") >= 0) &&
-		source.m[wordSourceIndex].queryWinnerForm(pronounForm) >= 0 && source.m[wordSourceIndex+1].queryWinnerForm(nounForm) < 0) ||
-			(!(source.m[wordSourceIndex].flags&WordMatch::flagInQuestion) && wordSourceIndex > 0 && (source.m[wordSourceIndex + 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex + 1].queryForm(L"is_negation") >= 0) &&
-			(!iswalpha(source.m[wordSourceIndex - 1].word->first[0]) || wordSourceIndex == startOfSentence))))
+	if (word == L"that" && source.m[wordSourceIndex].queryWinnerForm(pronounForm) >= 0 && 
+		(((source.m[wordSourceIndex].flags&WordMatch::flagInQuestion) && wordSourceIndex > 0 && (source.m[wordSourceIndex - 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex - 1].queryForm(L"is_negation") >= 0)) ||
+		 (!(source.m[wordSourceIndex].flags&WordMatch::flagInQuestion) && wordSourceIndex > 0 && (source.m[wordSourceIndex + 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex + 1].queryForm(L"is_negation") >= 0) &&
+			(!iswalpha(source.m[wordSourceIndex - 1].word->first[0]) || wordSourceIndex == startOfSentence)) ||
+				!iswalpha(source.m[wordSourceIndex + 1].word->first[0])))
 	{
-		errorMap[L"LP correct: that after 'is' in a question or before is not in a question is a pronoun!"]++; // what is that? / “ Billy , *that* is exactly where you are wrong
+		errorMap[L"LP correct: that after 'is' in a question OR before is not in a question is a pronoun OR before punctuation!"]++; // what is that? / “ Billy , *that* is exactly where you are wrong / “ It isn't *that* , ” she said .
 		return 0;
 	}
 	wstring winnerFormsString;

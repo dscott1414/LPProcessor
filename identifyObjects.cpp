@@ -1810,6 +1810,14 @@ void Source::identifyObjects(void)
 			{
 				if (imtmp->getObject() != -1 || imtmp->queryWinnerForm(relativizerForm) != -1)
 					imtmp->flags |= WordMatch::flagInQuestion;
+				// is *that* Ella? is *that* ours?  'that Ella' is ambiguous.  The identify object routine takes the longest object length, which excludes 'that' from being an object
+				// so reinclude it here.
+				int pmaOffset;
+				if (imtmp->getObject() == -1 && (pmaOffset = imtmp->pma.queryPatternWithLen(L"__NOUN",1)) != -1)
+				{
+					identifyObject(-1, J, pmaOffset, false, -1, -1);
+					imtmp->flags |= WordMatch::flagInQuestion;
+				}
 				// sit down, will you?
 				if (imtmp->pma.queryPattern(L"_Q1S") != -1 && J > 0 && m[J - 1].word->first == L",")
 				{
