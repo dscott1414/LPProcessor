@@ -2270,7 +2270,7 @@ wstring stTokenizeWord(wstring tokenizedWord,wstring &originalWord, unsigned lon
 //   -1: LP class corrected.  ST prefers something other than correct class, so LP is correct
 //   -2: LP class corrected.  ST prefers correct class, so this entry should simply be removed from the output file.
 //   -3: test whether to change to correct class - set to disagree.
-//    0: unable to determine whether class should be corrected.  Continue.
+//    0: unable to determine whether class should be corrected, or the class has been corrected. Normal processing should continue.  
 int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceIndex, unordered_map<wstring, int> &errorMap, wstring &partofspeech, int startOfSentence, map<wstring,FormDistribution>::iterator fdi)
 {
 	int adverbFormOffset = source.m[wordSourceIndex].queryForm(adverbForm);
@@ -2428,6 +2428,15 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 			}
 		}
 		return -3;
+	}
+	if ((source.m[wordSourceIndex].word->first == L"that" && (source.m[wordSourceIndex].flags&WordMatch::flagInQuestion) && wordSourceIndex > 0 && 
+		(source.m[wordSourceIndex - 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex - 1].queryForm(L"is_negation") >= 0) &&
+		source.m[wordSourceIndex].queryWinnerForm(demonstrativeDeterminerForm)>=0 && source.m[wordSourceIndex + 1].queryWinnerForm(nounForm) < 0) ||
+		(source.m[wordSourceIndex].word->first == L"that" && !(source.m[wordSourceIndex].flags&WordMatch::flagInQuestion) && wordSourceIndex > 0 && (source.m[wordSourceIndex + 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex + 1].queryForm(L"is_negation") >= 0) &&
+		(!iswalpha(source.m[wordSourceIndex - 1].word->first[0]) || wordSourceIndex == startOfSentence)))
+	{
+		source.m[wordSourceIndex].setWinner(source.m[wordSourceIndex].queryForm(pronounForm));
+		source.m[wordSourceIndex].unsetWinner(source.m[wordSourceIndex].queryForm(demonstrativeDeterminerForm));
 	}
 	return 0;
 }
@@ -4272,6 +4281,14 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			errorMap[L"LP correct: ownership of noun"]++; // probabilistic - see distribute errors ST=12 / LP=79
 			return 0;
 		}
+	}
+	if (word == L"that" && (((source.m[wordSourceIndex].flags&WordMatch::flagInQuestion) && wordSourceIndex > 0 && (source.m[wordSourceIndex - 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex - 1].queryForm(L"is_negation") >= 0) &&
+		source.m[wordSourceIndex].queryWinnerForm(pronounForm) >= 0 && source.m[wordSourceIndex+1].queryWinnerForm(nounForm) < 0) ||
+			(!(source.m[wordSourceIndex].flags&WordMatch::flagInQuestion) && wordSourceIndex > 0 && (source.m[wordSourceIndex + 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex + 1].queryForm(L"is_negation") >= 0) &&
+			(!iswalpha(source.m[wordSourceIndex - 1].word->first[0]) || wordSourceIndex == startOfSentence))))
+	{
+		errorMap[L"LP correct: that after 'is' in a question or before is not in a question is a pronoun!"]++; // what is that? / “ Billy , *that* is exactly where you are wrong
+		return 0;
 	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);

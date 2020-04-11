@@ -8921,7 +8921,7 @@ void Source::processEndOfSentenceRS(int where,
 		if (debugTrace.traceSpeakerResolution && subjectsInPreviousUnquotedSection.size())
 			lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d Cancelling subjectsInPreviousUnquotedSectionUsableForImmediateResolution", where, section);
 	}
-	// use  questions to enhance the identification of speakers
+	// use questions to enhance the identification of speakers
 	if (!inSecondaryQuote || (where + 1 < (signed)m.size() && m[where + 1].word->first == L"’"))
 		setQuestion(m.begin() + where, inPrimaryQuote, questionSpeakerLastSentence, questionSpeaker, currentIsQuestion);
 	else
@@ -8936,6 +8936,7 @@ void Source::processEndOfSentenceRS(int where,
 	else if (debugTrace.traceSpeakerResolution)
 		lplog(LOG_RESOLUTION, L"%06d:%02d     NOT aging speakers (%s) EOS - %d agingStructuresSeen", where, section, (inPrimaryQuote) ? L"inQuote" : L"outsideQuote", agingStructuresSeen);
 	agingStructuresSeen = 0;
+	// save subjects and clear current subjects
 	if (!inPrimaryQuote && !inSecondaryQuote)
 	{
 		if (debugTrace.traceSpeakerResolution)
