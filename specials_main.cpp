@@ -4332,6 +4332,28 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryForm(adjectiveForm) < 0)
 	{
 		partofspeech += L"NOTADJECTIVE!";
+		if (source.queryPattern(wordSourceIndex, L"_Q1PASSIVE") != -1)
+		{
+			errorMap[L"LP correct: passive verb is not adjective"]++;
+			return 0;
+		}
+		// not specific enough and only matched 45 
+		//if (source.queryPattern(wordSourceIndex, L"__ADJECTIVE") != -1)
+		//{
+		//	partofspeech += L"_ADJ!";
+		//	//errorMap[L"LP correct: passive verb is not adjective"]++;
+		//	//return 0;
+		//}
+		if (source.queryPattern(wordSourceIndex, L"_VERB_BARE_INF") != -1)
+		{
+			partofspeech += L"_BARE_INF!";
+
+		}
+	}
+	if ((word == L"more" || word == L"less") && source.m[wordSourceIndex + 1].queryWinnerForm(adverbForm) >= 0)
+	{
+		errorMap[L"ST correct: more or less before adverb is an adverb, not a quantifier"]++;
+		return 0;
 	}
 	if ((word == L"more" || word == L"less") && source.m[wordSourceIndex + 1].word->first == L"than" && source.m[wordSourceIndex].queryWinnerForm(quantifierForm) != -1)
 	{

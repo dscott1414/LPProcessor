@@ -963,13 +963,13 @@ int createBasicPatterns(void)
 															1,L"__ANDADJ",0,1,1,
 															0);
 	cPattern::create(L"__ADJECTIVE{SINGULAR}", L"C",
-															1, L"determiner|either*-2", 0, 0, 1, // determiner agrees with ST
+															1, L"quantifier|either*-2", 0, 0, 1, // determiner agrees with ST
 															1, L"__ADJECTIVE[*]", 0, 1, 1,
 															1, L"coordinator|or", 0, 1, 1,
 															1, L"__ADJECTIVE[*]", 0, 1, 1,
 															0);
 	cPattern::create(L"__ADJECTIVE{SINGULAR}", L"D",
-															1, L"determiner|neither*-2", 0, 0, 1, // determiner agrees with ST
+															1, L"quantifier|neither*-4", 0, 0, 1, // determiner agrees with ST - cost now matched with __NOUN[P]
 															1, L"__ADJECTIVE[*]", 0, 1, 1,
 															1, L"coordinator|nor", 0, 1, 1,
 															1, L"__ADJECTIVE[*]", 0, 1, 1,
