@@ -4314,13 +4314,29 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		return 0;
 	}
 	// parallel structures
-	if (wordSourceIndex > 2 && source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0 && source.m[wordSourceIndex - 1].queryWinnerForm(coordinatorForm) >= 0 && source.m[wordSourceIndex - 2].queryWinnerForm(verbForm) >= 0)
+	if (wordSourceIndex > 2 && source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0 && source.m[wordSourceIndex - 1].queryWinnerForm(coordinatorForm) >= 0 && source.m[wordSourceIndex - 2].queryWinnerForm(verbForm) >= 0 &&
+		(source.queryPatternDiff(wordSourceIndex, L"__INFPSUB", L"") != -1 || source.queryPatternDiff(wordSourceIndex, L"__SUB_S2", L"") != -1 || source.queryPatternDiff(wordSourceIndex, L"_VERBPASTC", L"") != -1))
 	{
 		partofspeech += L"PARALLELVERB";
+		if (source.queryPatternDiff(wordSourceIndex, L"__INFPSUB", L"") != -1)
+			partofspeech += L"INFPSUB";
+		if (source.queryPatternDiff(wordSourceIndex, L"__SUB_S2", L"") != -1)
+			partofspeech += L"__SUB_S2";
+		if (source.queryPatternDiff(wordSourceIndex, L"_VERBPASTC", L"") != -1)
+			partofspeech += L"_VERBPASTC";
 	}
 	if (wordSourceIndex > 2 && source.m[wordSourceIndex].queryWinnerForm(nounForm) >= 0 && source.m[wordSourceIndex - 1].queryWinnerForm(coordinatorForm) >= 0 && source.m[wordSourceIndex - 2].queryWinnerForm(nounForm) >= 0)
 	{
 		partofspeech += L"PARALLELNOUN";
+	}
+	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryForm(adjectiveForm) < 0)
+	{
+		partofspeech += L"NOTADJECTIVE!";
+	}
+	if ((word == L"more" || word == L"less") && source.m[wordSourceIndex + 1].word->first == L"than" && source.m[wordSourceIndex].queryWinnerForm(quantifierForm) != -1)
+	{
+		errorMap[L"diff: quantifier is preferred but ST pick of adverb for more or less than is acceptable."]++;
+		return 0;
 	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
