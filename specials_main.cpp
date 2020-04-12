@@ -2382,8 +2382,15 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 							fdi->second.LPAlreadyAccountedFormDistribution[L"particle"]++;
 							return -1;
 						}
-						partofspeech += L"**PREPNOOBJECT-CHANGETOADJECTIVE?";
-						return -3;
+						if (adverbFormOffset >= 0)
+						{
+							source.m[wordSourceIndex].setWinner(adverbFormOffset);
+							source.m[wordSourceIndex].unsetWinner(source.m[wordSourceIndex].queryForm(prepositionForm));
+							errorMap[L"LP correct: adverb rule"]++;
+							fdi->second.LPAlreadyAccountedFormDistribution[L"adverb"]++;
+							return -1;
+						}
+						return 0;
 					}
 					//if (relVerb >= 0)
 					//	partofspeech += source.m[relVerb].word->first;
@@ -4305,6 +4312,15 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	{
 		errorMap[L"LP correct: never mind!"]++;
 		return 0;
+	}
+	// parallel structures
+	if (wordSourceIndex > 2 && source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0 && source.m[wordSourceIndex - 1].queryWinnerForm(coordinatorForm) >= 0 && source.m[wordSourceIndex - 2].queryWinnerForm(verbForm) >= 0)
+	{
+		partofspeech += L"PARALLELVERB";
+	}
+	if (wordSourceIndex > 2 && source.m[wordSourceIndex].queryWinnerForm(nounForm) >= 0 && source.m[wordSourceIndex - 1].queryWinnerForm(coordinatorForm) >= 0 && source.m[wordSourceIndex - 2].queryWinnerForm(nounForm) >= 0)
+	{
+		partofspeech += L"PARALLELNOUN";
 	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
