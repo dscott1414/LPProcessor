@@ -2124,21 +2124,22 @@ int findTag(wchar_t *tagName)
   return -1;
 }
 
-int findTag(vector <tTagLocation> &tagSet,wchar_t *tagName,int &nextTag)
-{ LFS
-  for (unsigned int I=nextTag+1; I<tagSet.size(); I++)
-    if (patternTagStrings[tagSet[I].tag]==tagName)
-    {
-      int saveTag=I;
-      for (I++; I<tagSet.size() && patternTagStrings[tagSet[I].tag]!=tagName; I++);
-      //|| (tagSet[I].sourcePosition==tagSet[saveTag].sourcePosition && tagSet[I].end==tagSet[saveTag].end)); I++);
-      if (I==tagSet.size())
-        nextTag=-1;
-      else
-        nextTag=I;
-      return saveTag;
-    }
-    return -1;
+int findTag(vector <tTagLocation> &tagSet, wchar_t *tagName, int &nextTag)
+{
+	LFS
+		for (unsigned int I = nextTag + 1; I < tagSet.size(); I++)
+			if (patternTagStrings[tagSet[I].tag] == tagName)
+			{
+				int saveTag = I;
+				for (I++; I < tagSet.size() && patternTagStrings[tagSet[I].tag] != tagName; I++);
+				//|| (tagSet[I].sourcePosition==tagSet[saveTag].sourcePosition && tagSet[I].end==tagSet[saveTag].end)); I++);
+				if (I == tagSet.size())
+					nextTag = -1;
+				else
+					nextTag = I;
+				return saveTag;
+			}
+	return -1;
 }
 
 int findOneTag(vector <tTagLocation> &tagSet,wchar_t *tagName,int start)

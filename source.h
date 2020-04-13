@@ -3178,7 +3178,7 @@ int wherePrepObject,
 	int scanForPatternTag(int where, int tag);
 	int scanForPatternElementTag(int where, int tag);
 	int printSentence(unsigned int rowsize, unsigned int begin, unsigned int end, bool containsNotMatched);
-	int getSubjectInfo(tTagLocation subjectTagset, int whereSubject, int &nounPosition, int &nameLastPosition, bool &restateSet, bool &singularSet, bool &pluralSet);
+	int getSubjectInfo(tTagLocation subjectTagset, int whereSubject, int &nounPosition, int &nameLastPosition, bool &restateSet, bool &singularSet, bool &pluralSet, bool &adjectivalSet);
 	bool evaluateSubjectVerbAgreement(int verbPosition, int whereSubject, bool &agreementTestable);
 	int queryPatternDiff(int position, wstring pattern, wstring differentiator);
 	int queryPattern(int position, wstring pattern, int &maxEnd);

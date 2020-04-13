@@ -416,16 +416,16 @@ bool Source::findLowCostTag(vector<tTagLocation> &tagSet,int &cost,wchar_t *tagN
 	return false;
 }
 
-int Source::getSubjectInfo(tTagLocation subjectTagset,int whereSubject, int &nounPosition,int &nameLastPosition, bool &restateSet, bool &singularSet, bool &pluralSet)
+int Source::getSubjectInfo(tTagLocation subjectTag,int whereSubject, int &nounPosition,int &nameLastPosition, bool &restateSet, bool &singularSet, bool &pluralSet,bool &adjectivalSet)
 {
 	nounPosition = nameLastPosition = -1;
-	singularSet = pluralSet = restateSet = false;
-	if (subjectTagset.len > 1)
+	singularSet = pluralSet = restateSet = adjectivalSet = false;
+	if (subjectTag.len > 1)
 	{
 		int nounCost = 1000000, GNounCost = 1000000, nameCost = 1000000, sTagSet = -1;
 		tTagLocation ntl(0, 0, 0, 0, 0, 0, 0, false), gtl(0, 0, 0, 0, 0, 0, 0, false), natl(0, 0, 0, 0, 0, 0, 0, false);
 		vector < vector<tTagLocation> > subjectTagSets;
-		tTagLocation *tl = &subjectTagset;
+		tTagLocation *tl = &subjectTag;
 		int pattern = tl->pattern, tagSetSubjectPosition = tl->sourcePosition, end = tl->len, PEMAOffset = tl->PEMAOffset;
 		if (patterns[pattern]->includesDescendantsAndSelfAllOfTagSet&((__int64)1 << subjectTagSet))
 		{
@@ -448,7 +448,7 @@ int Source::getSubjectInfo(tTagLocation subjectTagset,int whereSubject, int &nou
 					for (unsigned int K = startSize; K < subjectTagSets.size(); K++)
 					{
 						if (debugTrace.traceSubjectVerbAgreement)
-							printTagSet(LOG_INFO, L"AGREE-SUBJECT (1)", K, subjectTagSets[K], tagSetSubjectPosition, subjectTagset.PEMAOffset);
+							printTagSet(LOG_INFO, L"AGREE-SUBJECT (1)", K, subjectTagSets[K], tagSetSubjectPosition, subjectTag.PEMAOffset);
 						// both of the below statements must execute!  (no || )
 						int nagreeNextTag, nextTag;
 						bool foundMNoun = false,foundGNoun=false,foundNAgree=false;
@@ -481,7 +481,7 @@ int Source::getSubjectInfo(tTagLocation subjectTagset,int whereSubject, int &nou
 				for (unsigned int K = 0; K < subjectTagSets.size(); K++)
 				{
 					if (debugTrace.traceSubjectVerbAgreement)
-						printTagSet(LOG_INFO, L"AGREE-SUBJECT (2)", K, subjectTagSets[K], tagSetSubjectPosition, subjectTagset.PEMAOffset);
+						printTagSet(LOG_INFO, L"AGREE-SUBJECT (2)", K, subjectTagSets[K], tagSetSubjectPosition, subjectTag.PEMAOffset);
 					// both of the below statements must execute!  (no || )
 					int nagreeNextTag, nextTag;
 					bool foundMNoun = false;
@@ -512,6 +512,7 @@ int Source::getSubjectInfo(tTagLocation subjectTagset,int whereSubject, int &nou
 		singularSet = findTag(subjectTagSets[sTagSet], L"SINGULAR", nextSingularTag) >= 0;
 		pluralSet = findTag(subjectTagSets[sTagSet], L"PLURAL", nextPluralTag) >= 0;
 		restateSet = findTag(subjectTagSets[sTagSet], L"RE_OBJECT", nextRE) >= 0;
+		adjectivalSet = !singularSet && GNounCost != 1000000;
 		int nextMnounTag=-1, mnounTag = findTag(subjectTagSets[sTagSet], L"MNOUN", nextMnounTag);
 		if (nounCost == GNounCost && nameCost > nounCost && ntl.len != gtl.len && mnounTag<0)
 		{
@@ -549,7 +550,7 @@ int Source::getSubjectInfo(tTagLocation subjectTagset,int whereSubject, int &nou
 		}
 	}
 	else
-		nounPosition = subjectTagset.sourcePosition;
+		nounPosition = subjectTag.sourcePosition;
 	return 0;
 }
 
@@ -638,10 +639,31 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 			}
 		}
 	}
-	bool restateSet, singularSet, pluralSet;
+	bool restateSet, singularSet, pluralSet,adjectivalSet;
 	int nounPosition, nameLastPosition;
-	if (getSubjectInfo(tagSet[subjectTag], subjectTag, nounPosition, nameLastPosition, restateSet, singularSet, pluralSet) < 0)
+	if (getSubjectInfo(tagSet[subjectTag], subjectTag, nounPosition, nameLastPosition, restateSet, singularSet, pluralSet,adjectivalSet) < 0)
 		return 0;
+	// to block unwanted C1_S1 -> ADJECTIVE, but removed ADJECTIVE from pattern instead.
+	//if (tagSet[subjectTag].len == 1)
+	//{
+	//	int pattern = tagSet[subjectTag].pattern, subjectPosition = tagSet[subjectTag].sourcePosition, end = tagSet[subjectTag].len, PEMAOffset = tagSet[subjectTag].PEMAOffset;
+	//	if (PEMAOffset < 0)
+	//	{
+	//		for (int p = patterns[pattern]->rootPattern; p >= 0; p = patterns[p]->nextRoot)
+	//		{
+	//			if (!m[subjectPosition].patterns.isSet(p)) continue;
+	//			patternMatchArray::tPatternMatch *pma = m[subjectPosition].pma.find(p, end);
+	//			if (pma == NULL) continue;
+	//			PEMAOffset = pma->pemaByPatternEnd;
+	//			patternElementMatchArray::tPatternElementMatch *pem = pema.begin() + PEMAOffset;
+	//			for (; PEMAOffset >= 0 && pem->getPattern() == p && pem->end == end; PEMAOffset = pem->nextByPatternEnd, pem = pema.begin() + PEMAOffset)
+	//				if (!pem->begin) break;
+	//			if (PEMAOffset < 0 || pem->getPattern() != p || pem->end != end || pem->begin) continue;
+	//			if (patterns[pema[PEMAOffset].getPattern()]->name == L"_ADJECTIVE")
+	//				return 20; // adjective is allowed as a C1_S1, but lets see whether it is really needed!
+	//		}
+	//	}
+	//}
 	// evaluate if SUBJECT is an _ADJECTIVE and ALSO a _NAME.  This is not allowed as a subject
 	// A _NAME is allowed as an adjective (Dover Street Pub), and an _ADJECTIVE is allowed as a subject (The poor)
 	// but a _NAME as a subject should be an OBJECT, not classified as an ADJECTIVE.

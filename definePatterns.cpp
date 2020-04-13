@@ -2433,11 +2433,11 @@ int createSecondaryPatterns2(void)
 	// parsed as a VERB clause, which then is more expensive.
 	cPattern::create(L"__C1__S1",L"1",
 				1,L"__INTRO_NP",0,0,1,
-				15,L"__NOUN[*]{SUBJECT}",L"__MNOUN[*]{SUBJECT}",L"_INFP*2{GNOUN:SINGULAR:SUBJECT}",L"interrogative_pronoun{N_AGREE:SINGULAR:SUBJECT}",
+				16,L"__NOUN[*]{SUBJECT}",L"__MNOUN[*]{SUBJECT}",L"_INFP*2{GNOUN:SINGULAR:SUBJECT}",L"interrogative_pronoun{N_AGREE:SINGULAR:SUBJECT}",
 						L"interrogative_determiner{N_AGREE:SINGULAR:SUBJECT}", 
 						L"there*-1{N_AGREE:SINGULAR:PLURAL:SUBJECT}",L"adverb|here*-1{N_AGREE:SINGULAR:PLURAL:SUBJECT}",
 						L"quantifier|neither{N_AGREE:PLURAL:SUBJECT}", L"quantifier|either{N_AGREE:SINGULAR:SUBJECT}",
-						L"_REL1[*]*2{SUBJECT:GNOUN:SINGULAR}",L"_ADJECTIVE*1{SUBJECT:GNOUN}",
+						L"_REL1[*]*2{SUBJECT:GNOUN:SINGULAR}",L"adjective*2{SUBJECT:GNOUN}",L"_ADJECTIVE*10{SUBJECT:GNOUN}",
 						L"_VERBREL2*2{SUBJECT:GNOUN:SINGULAR:_BLOCK:EVAL}",L"__QSUBJECT{SUBJECT:GNOUN:SINGULAR}",L"__NOUNRU{SUBJECT}",
 						L"noun{SUBJECT:N_AGREE}",SINGULAR_OWNER|PLURAL_OWNER,1,1, // Poirot's were pleasantly vague .
 			 1,L"__INTERPPB",0,0,1,
@@ -3469,6 +3469,14 @@ int createSecondaryPatterns2(void)
 										1, L"__AS_AS", 0, 1, 1,
 										1, L"__S1", 0, 1, 1,
 										0);
+	// Joan could think of no suitable reply for this and they sat in silence , *the woman studying her face intently* .
+	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL:_ONLY_END_MATCH}", L"J",
+		1, L",", 0, 1, 1,
+		1, L"__NOUN", 0, 1, 1, // the woman
+		1, L"verb", VERB_PRESENT_PARTICIPLE, 1, 1, // studying
+		2, L"__ALLOBJECTS_0", L"__ALLOBJECTS_1", 0, 1, 1, // her face 
+		1, L"_ADVERB",0,0,1,
+		0);
 	// prevents multiplicative nesting in _MS1
 	cPattern::create(L"_MSTAIL{_NO_REPEAT}",L"",1,L"__MSTAIL[*]",0,1,4,0);
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}",L"3",

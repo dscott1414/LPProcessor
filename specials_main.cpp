@@ -1299,14 +1299,11 @@ int printUnknownsFromSource(Source source, int sourceId, wstring path, wstring e
 	return 21;
 }
 
-int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, wstring etext, wstring patternOrWordName, wstring differentiator, bool isPattern, wstring specialExtension)
+int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, wstring etext, wstring primaryPatternOrWordName, wstring primaryDifferentiator, wstring secondaryPatternOrWordName, wstring secondaryDifferentiator, bool isPrimaryPattern, bool isSecondaryPattern, wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
 	Words.readWords(path, sourceId, false, L"");
-	bool extended=false;
-	if (extended = differentiator == L"EXTENDED")
-		differentiator = L"*";
 	bool parsedOnly = false;
 	int lastSentenceIndexPrinted = -1;
 	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
@@ -1315,77 +1312,95 @@ int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, w
 		unsigned int ss = 1;
 		for (WordMatch &im : source.m)
 		{
-			int pmaOffset;
-			if (isPattern && (pmaOffset = (differentiator == L"*") ? im.pma.queryPattern(patternOrWordName) : im.pma.queryPatternDiff(patternOrWordName, differentiator))!=-1)
+			int primaryPMAOffset;
+			if (isPrimaryPattern && (primaryPMAOffset = (primaryDifferentiator == L"*") ? im.pma.queryPattern(primaryPatternOrWordName) : im.pma.queryPatternDiff(primaryPatternOrWordName, primaryDifferentiator))!=-1)
 			{
-				pmaOffset = pmaOffset & ~matchElement::patternFlag;
-				if (extended)
+				int secondaryPMAOffset;
+				if (secondaryPatternOrWordName.empty() ||
+					(isSecondaryPattern && (secondaryPMAOffset = (secondaryDifferentiator == L"*") ? im.pma.queryPattern(secondaryPatternOrWordName) : im.pma.queryPatternDiff(secondaryPatternOrWordName, secondaryDifferentiator)) != -1) ||
+					(!isSecondaryPattern && im.word->first == secondaryPatternOrWordName) ||
+					(!isSecondaryPattern && secondaryPatternOrWordName == L"" && (im.flags&WordMatch::flagNotMatched) != 0))
 				{
-					// only get verb participle matches
-					int pemaOffset = im.pma[pmaOffset].pemaByPatternEnd;
-					if (im.word->second.Form(source.pema[pemaOffset].getChildForm())->name != L"verb")
+					primaryPMAOffset = primaryPMAOffset & ~matchElement::patternFlag;
+					/*additional logic begin*/
+					if (im.pma[primaryPMAOffset].len != 1 || im.pma.queryPattern(L"__NOUN") != -1)
 					{
 						wordIndex++;
+						while (ss < source.sentenceStarts.size() && source.sentenceStarts[ss] < wordIndex + 1)
+							ss++;
 						continue;
 					}
-				}
-				int patternEnd = wordIndex + im.pma[pmaOffset].len;
-				wstring sentence;
-				getSentenceWithTags(source, wordIndex,patternEnd, source.sentenceStarts[ss - 1], source.sentenceStarts[ss], im.pma[pmaOffset].pemaByPatternEnd, sentence);
-				wstring adiff = patterns[im.pma[pmaOffset].getPattern()]->differentiator;
-				if (extended)
-					lplog(LOG_INFO, L"_N1:%d:%s:form %s.", wordIndex,im.word->first.c_str(),im.word->second.Form(source.pema[im.pma[pmaOffset].pemaByPatternEnd].getChildForm())->name.c_str());
-				wstring path = source.sourcePath.substr(16, source.sourcePath.length() - 20);
-				if (differentiator.find(L'*') == wstring::npos)
-				{
-					lplog(LOG_ERROR, L"%s", sentence.c_str());
-				lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, patternEnd, sentence.c_str());
-				}
-				else
-				{
-					lplog(LOG_ERROR, L"[%s]:%s", adiff.c_str(), sentence.c_str());
-					lplog(LOG_INFO, L"%s[%s](%d-%d):%s", path.c_str(), adiff.c_str(),wordIndex, patternEnd, sentence.c_str());
+					/*additional logic end*/
+					int patternEnd = wordIndex + im.pma[primaryPMAOffset].len;
+					wstring sentence;
+					getSentenceWithTags(source, wordIndex, patternEnd, source.sentenceStarts[ss - 1], source.sentenceStarts[ss], im.pma[primaryPMAOffset].pemaByPatternEnd, sentence);
+					wstring adiff = patterns[im.pma[primaryPMAOffset].getPattern()]->differentiator;
+					wstring path = source.sourcePath.substr(16, source.sourcePath.length() - 20);
+					if (primaryDifferentiator.find(L'*') == wstring::npos)
+					{
+						lplog(LOG_ERROR, L"%s", sentence.c_str());
+						lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, patternEnd, sentence.c_str());
+					}
+					else
+					{
+						lplog(LOG_ERROR, L"[%s]:%s", adiff.c_str(), sentence.c_str());
+						lplog(LOG_INFO, L"%s[%s](%d-%d):%s", path.c_str(), adiff.c_str(), wordIndex, patternEnd, sentence.c_str());
+					}
 				}
 			}
-			else if (!isPattern && im.word->first==patternOrWordName)
+			else if (!isPrimaryPattern && im.word->first==primaryPatternOrWordName)
 			{
-				wstring sentence, originalIWord;
-				if (lastSentenceIndexPrinted != source.sentenceStarts[ss - 1])
+				int secondaryPMAOffset;
+				if (secondaryPatternOrWordName.empty() ||
+					(isSecondaryPattern && (secondaryPMAOffset = (secondaryDifferentiator == L"*") ? im.pma.queryPattern(secondaryPatternOrWordName) : im.pma.queryPatternDiff(secondaryPatternOrWordName, secondaryDifferentiator)) != -1) ||
+					(!isSecondaryPattern && im.word->first == secondaryPatternOrWordName) ||
+					(!isSecondaryPattern && secondaryPatternOrWordName == L"" && (im.flags&WordMatch::flagNotMatched) != 0))
 				{
-					for (int I = source.sentenceStarts[ss - 1]; I < source.sentenceStarts[ss]; I++)
+					wstring sentence, originalIWord;
+					if (lastSentenceIndexPrinted != source.sentenceStarts[ss - 1])
 					{
-						source.getOriginalWord(I, originalIWord, false, false);
-						if (I == wordIndex)
-							originalIWord = L"*" + originalIWord + L"*";
-						sentence += originalIWord + L" ";
+						for (int I = source.sentenceStarts[ss - 1]; I < source.sentenceStarts[ss]; I++)
+						{
+							source.getOriginalWord(I, originalIWord, false, false);
+							if (I == wordIndex)
+								originalIWord = L"*" + originalIWord + L"*";
+							sentence += originalIWord + L" ";
+						}
+						lplog(LOG_ERROR, L"%s", sentence.c_str());
+						lastSentenceIndexPrinted = source.sentenceStarts[ss - 1];
 					}
-					lplog(LOG_ERROR, L"%s", sentence.c_str());
-					lastSentenceIndexPrinted = source.sentenceStarts[ss - 1];
 				}
 			}
-			else if (!isPattern && patternOrWordName == L"" && (im.flags&WordMatch::flagNotMatched) != 0)
+			else if (!isPrimaryPattern && primaryPatternOrWordName == L"" && (im.flags&WordMatch::flagNotMatched) != 0)
 			{
-				wstring sentence, originalIWord;
-				if (lastSentenceIndexPrinted != source.sentenceStarts[ss - 1])
+				int secondaryPMAOffset;
+				if (secondaryPatternOrWordName.empty() ||
+					(isSecondaryPattern && (secondaryPMAOffset = (secondaryDifferentiator == L"*") ? im.pma.queryPattern(secondaryPatternOrWordName) : im.pma.queryPatternDiff(secondaryPatternOrWordName, secondaryDifferentiator)) != -1) ||
+					(!isSecondaryPattern && im.word->first == secondaryPatternOrWordName) ||
+					(!isSecondaryPattern && secondaryPatternOrWordName == L"" && (im.flags&WordMatch::flagNotMatched) != 0))
 				{
-					bool inNoMatch = false;
-					for (int I = source.sentenceStarts[ss - 1]; I < source.sentenceStarts[ss]; I++)
+					wstring sentence, originalIWord;
+					if (lastSentenceIndexPrinted != source.sentenceStarts[ss - 1])
 					{
-						source.getOriginalWord(I, originalIWord, false, false);
-						if (I == wordIndex)
+						bool inNoMatch = false;
+						for (int I = source.sentenceStarts[ss - 1]; I < source.sentenceStarts[ss]; I++)
 						{
-							originalIWord = L"*" + originalIWord;
-							inNoMatch = true;
+							source.getOriginalWord(I, originalIWord, false, false);
+							if (I == wordIndex)
+							{
+								originalIWord = L"*" + originalIWord;
+								inNoMatch = true;
+							}
+							if (inNoMatch && (I + 1 >= source.sentenceStarts[ss] || (source.m[I + 1].flags&WordMatch::flagNotMatched) == 0))
+							{
+								originalIWord += L"*";
+								inNoMatch = false;
+							}
+							sentence += originalIWord + L" ";
 						}
-						if (inNoMatch && (I + 1 >= source.sentenceStarts[ss] || (source.m[I + 1].flags&WordMatch::flagNotMatched) == 0))
-						{
-							originalIWord += L"*";
-							inNoMatch = false;
-						}
-						sentence += originalIWord + L" ";
+						lplog(LOG_ERROR, L"%s", sentence.c_str());
+						lastSentenceIndexPrinted = source.sentenceStarts[ss - 1];
 					}
-					lplog(LOG_ERROR, L"%s", sentence.c_str());
-					lastSentenceIndexPrinted = source.sentenceStarts[ss - 1];
 				}
 			}
 			wordIndex++;
@@ -1720,7 +1735,7 @@ int printUnknowns(Source source, int step, wstring specialExtension)
 	return 0;
 }
   
-int patternOrWordAnalysis(Source source, int step, wstring patternOrWordName, wstring differentiator, enum Source::sourceTypeEnum st,bool isPattern, wstring specialExtension)
+int patternOrWordAnalysis(Source source, int step, wstring primaryPatternOrWordName, wstring primaryDifferentiator, wstring secondaryPatternOrWordName, wstring secondaryDifferentiator, enum Source::sourceTypeEnum st, bool isPrimaryPattern, bool isSecondaryPattern, wstring specialExtension)
 {
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
@@ -1733,9 +1748,15 @@ int patternOrWordAnalysis(Source source, int step, wstring patternOrWordName, ws
 		return -1;
 	my_ulonglong totalSource = mysql_num_rows(result);
 	lplog(LOG_INFO | LOG_ERROR | LOG_NOTMATCHED, NULL); // close all log files to change extension
-	logFileExtension = L"."+patternOrWordName;
-	if (!differentiator.empty())
-		logFileExtension += L"[" + differentiator + L"]";
+	logFileExtension = L"."+primaryPatternOrWordName;
+	if (!primaryDifferentiator.empty() && primaryDifferentiator!=L"*")
+		logFileExtension += L"[" + primaryDifferentiator + L"]";
+	if (!secondaryPatternOrWordName.empty())
+	{
+		logFileExtension += L"." + secondaryPatternOrWordName;
+		if (!secondaryDifferentiator.empty() && secondaryDifferentiator != L"*")
+			logFileExtension += L"[" + secondaryDifferentiator + L"]";
+	}
 	for (int row = 0; sqlrow = mysql_fetch_row(result); row++)
 	{
 		wstring path, etext, title;
@@ -1750,7 +1771,7 @@ int patternOrWordAnalysis(Source source, int step, wstring patternOrWordName, ws
 			path.insert(0, L"\\").insert(0, CACHEDIR);
 		else if (st == Source::TEST_SOURCE_TYPE)
 			path.insert(0, L"\\").insert(0, LMAINDIR);
-		int setStep = patternOrWordAnalysisFromSource(source, sourceId, path, etext, patternOrWordName, differentiator, isPattern,specialExtension);
+		int setStep = patternOrWordAnalysisFromSource(source, sourceId, path, etext, primaryPatternOrWordName, primaryDifferentiator, secondaryPatternOrWordName, secondaryDifferentiator, isPrimaryPattern, isSecondaryPattern, specialExtension);
 		if (!myquery(&source.mysql, L"LOCK TABLES sources WRITE")) return -1;
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
@@ -4344,10 +4365,16 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		//	//errorMap[L"LP correct: passive verb is not adjective"]++;
 		//	//return 0;
 		//}
-		if (source.queryPattern(wordSourceIndex, L"_VERB_BARE_INF") != -1)
+		if (source.m[wordSourceIndex].queryWinnerForm(verbverbForm) >= 0 && (source.queryPattern(wordSourceIndex, L"_VERB_BARE_INF") != -1 && source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0))
 		{
-			partofspeech += L"_BARE_INF!";
-
+			errorMap[L"LP correct: helper verbs are not adjectives"]++;
+			return 0;
+		}
+		if (source.queryPattern(wordSourceIndex, L"_VERBPAST") != -1 && source.queryPattern(wordSourceIndex, L"__S1") != -1)
+		{
+			partofspeech += L"verbpast!";
+			//errorMap[L"LP correct: passive verb is not adjective"]++;
+			//return 0;
 		}
 	}
 	if ((word == L"more" || word == L"less") && source.m[wordSourceIndex + 1].queryWinnerForm(adverbForm) >= 0)
@@ -4373,7 +4400,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 
 // checks if the part of speech indicated in parse from the Stanford POS tagger matches the winner forms at wordSourceIndex.
 // returns yes=0, no=1
-int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numTimesWordOccurred, wstring originalParse, wstring sentence, wstring &parse, int &numPOSNotFound, 
+int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numTimesWordOccurred, wstring originalParse, wstring sentence, wstring &parse, int &numTotalDifferenceFromStanford, 
 	unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &formMisMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap,
 	bool inRelativeClause, unordered_map<wstring, int> &errorMap, unordered_map<wstring, int> &comboCostFrequency,int startOfSentence,int maxLength)
 {
@@ -4449,7 +4476,10 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 				if (agree)
 					fdi->second.agreeSTLP++;
 				else
+				{
 					fdi->second.disagreeSTLP++;
+					numTotalDifferenceFromStanford++;
+				}
 				char tempdebugBuffer[4096];
 				tempdebugBuffer[0] = 'c';
 				if (ruleCode == -1)
@@ -4600,7 +4630,7 @@ void printFormDistribution(wstring word, double adp, FormDistribution fd, wstrin
 			lplog(LOG_ERROR, L"  ST %s:%d %d%% %d%%", form.c_str(), count, 100 * count / (fd.agreeSTLP + fd.disagreeSTLP), fd.agreeFormDistribution[form] * 100 / count);
 }
 
-int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *vm,JNIEnv *env, int &numNoMatch, int &numPOSNotFound, unordered_map<wstring, int> &formNoMatchMap, 
+int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *vm,JNIEnv *env, int &numNoMatch, int &numPOSNotFound, int &numTotalDifferenceFromStanford,unordered_map<wstring, int> &formNoMatchMap,
 	                          unordered_map<wstring, int> &formMisMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, 
 	                          unordered_map<wstring, int> &errorMap, unordered_map<wstring, int> &comboCostFrequency, bool pcfg,wstring limitToWord,int maxLength, wstring specialExtension,bool lockPerSource)
 {
@@ -4685,7 +4715,7 @@ int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *
 					}
 					else
 					{
-						if (checkStanfordPCFGAgainstWinner(source, wordSourceIndex, numTimesWordOccurred[originalIWord], originalParse, sentence, parse, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, inRelativeClause, errorMap, comboCostFrequency, start,maxLength))
+						if (checkStanfordPCFGAgainstWinner(source, wordSourceIndex, numTimesWordOccurred[originalIWord], originalParse, sentence, parse, numTotalDifferenceFromStanford, formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, inRelativeClause, errorMap, comboCostFrequency, start,maxLength))
 						{
 							numNoMatch++;
 							if (!sentencePrinted)
@@ -4777,7 +4807,7 @@ int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, 
 	JNIEnv *env;
 	createJavaVM(vm, env);
 	unordered_map<wstring, int> formNoMatchMap, formMisMatchMap, wordNoMatchMap,VFTMap,errorMap, comboCostFrequency;
-	int numNoMatch = 0, numPOSNotFound = 0,totalWords=0;
+	int numNoMatch = 0, numPOSNotFound = 0,totalWords=0, numTotalDifferenceFromStanford=0;
 	my_ulonglong totalSource = mysql_num_rows(result);
 	for (int row = 0; sqlrow = mysql_fetch_row(result); row++)
 	{
@@ -4795,7 +4825,7 @@ int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, 
 		wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d sources in %02I64d:%02I64d:%02I64d [%d sources/hour] (%-35.35s...)", numSourcesProcessedNow * 100 / totalSource, numSourcesProcessedNow, totalSource,
 			processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, (processingSeconds) ? numSourcesProcessedNow * 3600 / processingSeconds : 0, title.c_str());
 		SetConsoleTitle(buffer);
-		int setStep = stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap,VFTMap,errorMap, comboCostFrequency,pcfg,L"",60,specialExtension,lockPerSource);
+		int setStep = stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, numTotalDifferenceFromStanford, formNoMatchMap, formMisMatchMap, wordNoMatchMap,VFTMap,errorMap, comboCostFrequency,pcfg,L"",60,specialExtension,lockPerSource);
 		totalWords += source.m.size();
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
@@ -4805,8 +4835,6 @@ int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, 
 	}
 	mysql_free_result(result);
 	destroyJavaVM(vm);
-	if (totalWords>0)
-		lplog(LOG_ERROR, L"numNoMatch=%d/%d %7.3f%% numPOSNotFound=%d", numNoMatch, totalWords, numNoMatch * 100.0 / totalWords, numPOSNotFound);
 	lplog(LOG_ERROR, L"WORD AGREE DISTRIBUTION ------------------------------------------------------------");
 	map <int, wstring, std::greater<int>> agreeCountMap;
 	for (auto &&[word, fd] : formDistribution)
@@ -4887,6 +4915,8 @@ int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, 
 				lplog(LOG_ERROR, L"%07d:%s", count, LPSTErr.c_str());
 		}
 	}
+	if (totalWords > 0)
+		lplog(LOG_ERROR, L"numNoMatch=%d/%d %6.3f%% numTotalDifferenceFromStanford=%d", numNoMatch, totalWords, numNoMatch * 100.0 / totalWords, numTotalDifferenceFromStanford);
 	return 0;
 }
 
@@ -4977,8 +5007,8 @@ int stanfordCheckTest(Source source, wstring path, int sourceId, bool pcfg,wstri
 	JNIEnv *env;
 	createJavaVM(vm, env);
 	unordered_map<wstring, int> formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, errorMap, comboCostFrequency ;
-	int numNoMatch = 0, numPOSNotFound = 0;
-	stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, errorMap, comboCostFrequency, pcfg,limitToWord,maxSentenceLimit,specialExtension,true);
+	int numNoMatch = 0, numPOSNotFound = 0, numTotalDifferenceFromStanford=0;
+	stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, numTotalDifferenceFromStanford, formNoMatchMap, formMisMatchMap, wordNoMatchMap, VFTMap, errorMap, comboCostFrequency, pcfg,limitToWord,maxSentenceLimit,specialExtension,true);
 	int totalWords = source.m.size();
 	destroyJavaVM(vm);
 	if (limitToWord.length() > 0)
@@ -5245,9 +5275,9 @@ void wmain(int argc,wchar_t *argv[])
 		//patternOrWordAnalysis(source, step, L"__ADJECTIVE", L"MTHAN", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__NOUN", L"F", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
-		//patternOrWordAnalysis(source, step, L"_VERB_BARE_INF", L"A", true);
+		patternOrWordAnalysis(source, step, L"__C1__S1", L"*",L"_ADJECTIVE", L"*", Source::GUTENBERG_SOURCE_TYPE, true,true,L"");
 		//patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false, specialExtension);
-		patternOrWordAnalysis(source, step, L"worth", L"", Source::GUTENBERG_SOURCE_TYPE, false,L""); // TODO: testing weight change on _S1.
+		//patternOrWordAnalysis(source, step, L"worth", L"", Source::GUTENBERG_SOURCE_TYPE, false,L""); // TODO: testing weight change on _S1.
 		break;
 	case 60:
 		stanfordCheck(source, step, true,specialExtension,true);
