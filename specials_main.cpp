@@ -1323,13 +1323,13 @@ int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, w
 				{
 					primaryPMAOffset = primaryPMAOffset & ~matchElement::patternFlag;
 					/*additional logic begin*/
-					if (im.pma[primaryPMAOffset].len != 1 || im.pma.queryPattern(L"__NOUN") != -1)
-					{
-						wordIndex++;
-						while (ss < source.sentenceStarts.size() && source.sentenceStarts[ss] < wordIndex + 1)
-							ss++;
-						continue;
-					}
+					//if (im.pma[primaryPMAOffset].len != 1 || im.pma.queryPattern(L"__NOUN") != -1)
+					//{
+					//	wordIndex++;
+					//	while (ss < source.sentenceStarts.size() && source.sentenceStarts[ss] < wordIndex + 1)
+					//		ss++;
+					//	continue;
+					//}
 					/*additional logic end*/
 					int patternEnd = wordIndex + im.pma[primaryPMAOffset].len;
 					wstring sentence;
@@ -5275,7 +5275,7 @@ void wmain(int argc,wchar_t *argv[])
 		//patternOrWordAnalysis(source, step, L"__ADJECTIVE", L"MTHAN", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__NOUN", L"F", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
-		patternOrWordAnalysis(source, step, L"__C1__S1", L"*",L"_ADJECTIVE", L"*", Source::GUTENBERG_SOURCE_TYPE, true,true,L"");
+		patternOrWordAnalysis(source, step, L"__ALLOBJECTS_2", L"2",L"", L"", Source::GUTENBERG_SOURCE_TYPE, true,true,L"");
 		//patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false, specialExtension);
 		//patternOrWordAnalysis(source, step, L"worth", L"", Source::GUTENBERG_SOURCE_TYPE, false,L""); // TODO: testing weight change on _S1.
 		break;

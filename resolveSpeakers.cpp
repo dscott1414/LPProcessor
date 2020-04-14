@@ -9270,6 +9270,7 @@ void Source::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 				uqPreviousToLastSentenceEnd, uqLastSentenceEnd, lastSentenceEnd,
 				lastSectionWord, agingStructuresSeen);
 		}
+		// (CMREADME42)
 		else if (m[I].word == Words.sectionWord)
 		{
 			if (m[I].flags & 1)
@@ -9334,6 +9335,7 @@ void Source::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 			questionSpeakerLastSentence = -1;
 			whereFirstSubjectInParagraph = -1;
 		}
+		// (CMREADME43)
 		if (section == 0 && section < sections.size() && I == sections[0].begin)
 		{
 			if (debugTrace.traceSpeakerResolution)
@@ -9389,6 +9391,7 @@ void Source::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 		while (currentSpeakerGroup + 1 < speakerGroups.size() && I == speakerGroups[currentSpeakerGroup + 1].sgBegin)
 			ageIntoNewSpeakerGroup(I);
 	}
+	// (CMREADME44)
 	int whereLastObject=-1;
 	bool anySpaceRelation=false;
 	for (int J=uqPreviousToLastSentenceEnd; J<uqLastSentenceEnd; J++)

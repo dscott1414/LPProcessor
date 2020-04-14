@@ -237,9 +237,7 @@ void Source::resolveFirstSecondPersonPronouns(vector <int> &secondaryQuotesResol
 	initializeTimelineSegments();
   for (int I=0; im!=imend; im++,I++)
   {
-		debugTrace.traceObjectResolution=im->t.traceObjectResolution ^ flipTOROverride;
-    debugTrace.traceNameResolution=im->t.traceNameResolution ^ flipTNROverride;
-    debugTrace.traceSpeakerResolution=im->t.traceSpeakerResolution || TSROverride;
+		debugTrace=im->t;
     if (section+1<sections.size() && I==sections[section+1].begin)
       section++;
     while (currentSpeakerGroup+1<speakerGroups.size() && I==speakerGroups[currentSpeakerGroup+1].sgBegin)

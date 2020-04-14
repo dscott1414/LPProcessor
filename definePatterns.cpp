@@ -2049,7 +2049,7 @@ void createSecondaryPatterns1(void)
 	// another verb which is really not allowed
 	cPattern::create(L"__ADJECTIVE_WITHOUT_VERB",L"",
 								1,L"_ADVERB",0,0,1,
-								6,L"adjective",L"numeral_ordinal",L"_NUMBER",L"preposition|ex",L"noun*1",L"_NAMEOWNER*2",VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,1,1,
+								7, L"adjective|own*10", L"adjective", L"numeral_ordinal",L"_NUMBER",L"preposition|ex",L"noun*1",L"_NAMEOWNER*2",VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,1,1,
 								1,L"adverb*1",0,0,1,
 						0);
 	cPattern::create(L"__ALLOBJECTS_0",L"2",1,L"__ADJECTIVE_WITHOUT_VERB{ADJ:ADJOBJECT}",0,1,1,0);
@@ -2099,6 +2099,12 @@ void createSecondaryPatterns1(void)
 						2,L"_ADVERB*1",L"preposition*2",0,0,1, // hanging preposition!
 						4,L"_NOUN_OBJ{OBJECT}",L"__NOUN[*]{OBJECT}",L"__MNOUN[*]{OBJECT}",L"__NOUNREL{OBJECT}",0,1,1,
 						0);
+	// It left her flushed and silent.
+	cPattern::create(L"__ALLOBJECTS_2", L"2",
+		1, L"personal_pronoun_accusative*1{OBJECT}", 0, 1, 1,
+		1, L"adverb", 0, 0, 2,
+		3, L"adjective|own*10{ADJ}", L"adjective{ADJ}",  L"verb*1{ADJ}", VERB_PRESENT_PARTICIPLE | VERB_PAST_PARTICIPLE , 1, 2,
+		0);
 	// Thank you , ma'am
 	cPattern::create(L"_NAME_INJECT",L"1",
 									 1,L",",0,1,1,

@@ -426,6 +426,9 @@ int patternElement::matchOne(Source &source,unsigned int sourcePosition,unsigned
 							Forms[f]->name.c_str(), specificWords[form].c_str(), matchesToString(whatMatched, whatMatched.size() - 1, s).c_str());
 					}
 				#endif
+				// if a word is specifically marked as a match, no more matches will be searched.  This allows a specific word to over-rule a more general search form (own, in ALLOBJECTS_2[2])
+				if (specificWords[form].length())
+					break;
       }
 			#ifdef LOG_PATTERN_MATCHING
       else if (t.tracePatternMatching)
