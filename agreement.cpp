@@ -643,26 +643,30 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 	int nounPosition, nameLastPosition;
 	if (getSubjectInfo(tagSet[subjectTag], subjectTag, nounPosition, nameLastPosition, restateSet, singularSet, pluralSet,adjectivalSet) < 0)
 		return 0;
-	// to block unwanted C1_S1 -> ADJECTIVE, but removed ADJECTIVE from pattern instead.
+	// to block unwanted C1_S1 -> reflexive_pronoun
 	//if (tagSet[subjectTag].len == 1)
 	//{
-	//	int pattern = tagSet[subjectTag].pattern, subjectPosition = tagSet[subjectTag].sourcePosition, end = tagSet[subjectTag].len, PEMAOffset = tagSet[subjectTag].PEMAOffset;
-	//	if (PEMAOffset < 0)
-	//	{
-	//		for (int p = patterns[pattern]->rootPattern; p >= 0; p = patterns[p]->nextRoot)
-	//		{
-	//			if (!m[subjectPosition].patterns.isSet(p)) continue;
-	//			patternMatchArray::tPatternMatch *pma = m[subjectPosition].pma.find(p, end);
-	//			if (pma == NULL) continue;
-	//			PEMAOffset = pma->pemaByPatternEnd;
-	//			patternElementMatchArray::tPatternElementMatch *pem = pema.begin() + PEMAOffset;
-	//			for (; PEMAOffset >= 0 && pem->getPattern() == p && pem->end == end; PEMAOffset = pem->nextByPatternEnd, pem = pema.begin() + PEMAOffset)
-	//				if (!pem->begin) break;
-	//			if (PEMAOffset < 0 || pem->getPattern() != p || pem->end != end || pem->begin) continue;
-	//			if (patterns[pema[PEMAOffset].getPattern()]->name == L"_ADJECTIVE")
-	//				return 20; // adjective is allowed as a C1_S1, but lets see whether it is really needed!
-	//		}
-	//	}
+		// remove form
+		if (m[tagSet[subjectTag].sourcePosition].queryForm(reflexivePronounForm) >= 0)
+			return 20;
+		// remove pattern
+		//	int pattern = tagSet[subjectTag].pattern, subjectPosition = tagSet[subjectTag].sourcePosition, end = tagSet[subjectTag].len, PEMAOffset = tagSet[subjectTag].PEMAOffset;
+		//	if (PEMAOffset < 0)
+		//	{
+		//		for (int p = patterns[pattern]->rootPattern; p >= 0; p = patterns[p]->nextRoot)
+		//		{
+		//			if (!m[subjectPosition].patterns.isSet(p)) continue;
+		//			patternMatchArray::tPatternMatch *pma = m[subjectPosition].pma.find(p, end);
+		//			if (pma == NULL) continue;
+		//			PEMAOffset = pma->pemaByPatternEnd;
+		//			patternElementMatchArray::tPatternElementMatch *pem = pema.begin() + PEMAOffset;
+		//			for (; PEMAOffset >= 0 && pem->getPattern() == p && pem->end == end; PEMAOffset = pem->nextByPatternEnd, pem = pema.begin() + PEMAOffset)
+		//				if (!pem->begin) break;
+		//			if (PEMAOffset < 0 || pem->getPattern() != p || pem->end != end || pem->begin) continue;
+		//			if (patterns[pema[PEMAOffset].getPattern()]->name == L"_ADJECTIVE")
+		//				return 20; // adjective is allowed as a C1_S1, but lets see whether it is really needed!
+		//		}
+		//	}
 	//}
 	// evaluate if SUBJECT is an _ADJECTIVE and ALSO a _NAME.  This is not allowed as a subject
 	// A _NAME is allowed as an adjective (Dover Street Pub), and an _ADJECTIVE is allowed as a subject (The poor)

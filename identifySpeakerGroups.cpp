@@ -882,7 +882,7 @@ bool Source::createSpeakerGroup(int begin,int end,bool endOfSection,int &lastSpe
 			{
 				bool exitOnly=false;
 				for (vector <cObject::cLocation>::iterator loc=objects[object].locations.begin(),locEnd=objects[object].locations.end(); loc!=locEnd; loc++)
-					if (loc->at>=begin && loc->at<end && m[loc->at].relVerb>=0 && isSelfMoveVerb(m[loc->at].relVerb,exitOnly) && m[loc->at].getObject()>=0 && objects[m[loc->at].getObject()].objectClass!=BODY_OBJECT_CLASS) 
+					if (loc->at>=begin && loc->at<end && m[loc->at].getRelVerb()>=0 && isSelfMoveVerb(m[loc->at].getRelVerb(),exitOnly) && m[loc->at].getObject()>=0 && objects[m[loc->at].getObject()].objectClass!=BODY_OBJECT_CLASS) 
 					{
 						vector <cSpaceRelation>::iterator sr=findSpaceRelation(loc->at);
 						vector <int> lastSubjects;
@@ -1201,8 +1201,8 @@ bool Source::setPOVStatus(int where,bool inPrimaryQuote,bool inSecondaryQuote)
 	}
 	// he was conscious
 	if (!inPrimaryQuote && !inSecondaryQuote && m[where].getObject()>=0 && objects[m[where].getObject()].ownerWhere<0 && m[where].getRelObject()<0 && 
-		  ((m[where].objectRole&(SUBJECT_ROLE|IS_OBJECT_ROLE|PREP_OBJECT_ROLE))==(SUBJECT_ROLE|IS_OBJECT_ROLE)) && m[where].relVerb>=0 && m[where].relVerb+1<(signed)m.size() &&
-		  isInternalDescription(m[where].relVerb+1))
+		  ((m[where].objectRole&(SUBJECT_ROLE|IS_OBJECT_ROLE|PREP_OBJECT_ROLE))==(SUBJECT_ROLE|IS_OBJECT_ROLE)) && m[where].getRelVerb()>=0 && m[where].getRelVerb()+1<(signed)m.size() &&
+		  isInternalDescription(m[where].getRelVerb()+1))
 	{
 		povInSpeakerGroups.push_back(where);
 		m[where].objectRole|=POV_OBJECT_ROLE; // used in determining point of view/observer status for speakerGroups
@@ -1215,10 +1215,10 @@ bool Source::setPOVStatus(int where,bool inPrimaryQuote,bool inSecondaryQuote)
 
 bool Source::notPhysicallyPresentByMissive(int where)
 { LFS
-	if (m[where].relVerb>=0 && m[m[where].relVerb].relPrep>=0 && m[m[m[where].relVerb].relPrep].word->first==L"in" && 
-		  m[m[m[where].relVerb].relPrep].getRelObject()>=0 && m[m[m[m[where].relVerb].relPrep].getRelObject()].getObject()>=0)
+	if (m[where].getRelVerb()>=0 && m[m[where].getRelVerb()].relPrep>=0 && m[m[m[where].getRelVerb()].relPrep].word->first==L"in" && 
+		  m[m[m[where].getRelVerb()].relPrep].getRelObject()>=0 && m[m[m[m[where].getRelVerb()].relPrep].getRelObject()].getObject()>=0)
 	{
-		int wpo=m[m[m[where].relVerb].relPrep].getRelObject(),prepObject=m[wpo].getObject();
+		int wpo=m[m[m[where].getRelVerb()].relPrep].getRelObject(),prepObject=m[wpo].getObject();
 		bool isPlace=false,isLetterWord=false,isPhysical=false,isGendered=false,isTime=false;
 		for (int I=0; I<(signed)m[wpo].objectMatches.size(); I++)
 		{
@@ -1339,7 +1339,7 @@ bool Source::isFocus(int where,bool inPrimaryQuote,bool inSecondaryQuote,int o,b
 		// there came the accents of Number One
 		if ((objectRole&(SUBJECT_ROLE|PREP_OBJECT_ROLE|OBJECT_ROLE))==OBJECT_ROLE && 
 			  (m[where].relSubject<0 || m[m[where].relSubject].getObject()<0 || objects[m[m[where].relSubject].getObject()].neuter) &&
-				m[where].relVerb>=0 && m[m[where].relVerb].word->first==L"came")
+				m[where].getRelVerb()>=0 && m[m[where].getRelVerb()].word->first==L"came")
 		{
 	    if (debugTrace.traceSpeakerResolution)
 		    lplog(LOG_SG|LOG_RESOLUTION,L"%06d:%02d   object %s accepted through special 'came' object",where,section,objectString(o,tmpstr,true).c_str());
@@ -1689,7 +1689,7 @@ int Source::detectMetaResponse(int I,int element)
 				m[I].relSubject=m[where].relSubject;
 			return skipResponse;
 		}
-	int whereVerb=m[where].relVerb;
+	int whereVerb=m[where].getRelVerb();
 	// if the verb of the only sentence indicates the character of the response, don't split.  If verb has an object, return false, unless the object is 'question'.
 	if (whereVerb<0 || m[whereVerb].word->second.mainEntry==wNULL) return -1;
 	// Boris asked a question:
@@ -1732,7 +1732,7 @@ bool Source::skipMetaResponse(int &I)
 void Source::associatePossessions(int where)
 { LFS
 	if (m[where].objectMatches.size()>1 || (m[where].flags&WordMatch::flagInPStatement)) return;
-  int o=m[where].getObject(),ro=m[where].getRelObject(),wv=m[where].relVerb; // rs=m[where].relSubject,
+  int o=m[where].getObject(),ro=m[where].getRelObject(),wv=m[where].getRelVerb(); // rs=m[where].relSubject,
 	__int64 or=m[where].objectRole;
 	if (o>=0 && (or&SUBJECT_ROLE) && wv>=0 && ro>=0 && m[ro].getObject()>=0)
 	{
@@ -1758,7 +1758,7 @@ void Source::associateNyms(int where)
 	wstring tmpstr;
   //int o=(m[where].objectMatches.size()==1) ? m[where].objectMatches[0].object : m[where].getObject(); this routine should be used BEFORE object is resolved
 	// at speakerResolution, because this is used before resolveObject the object matched is the old object from the last phase, so it is invalid.
-  int o=m[where].getObject(),wv=m[where].relVerb,tsSense=(wv>=0) ? m[wv].quoteForwardLink : 0; // rs=m[where].relSubject,ro=m[where].getRelObject(),
+  int o=m[where].getObject(),wv=m[where].getRelVerb(),tsSense=(wv>=0) ? m[wv].quoteForwardLink : 0; // rs=m[where].relSubject,ro=m[where].getRelObject(),
 	__int64 or=m[where].objectRole,ror=-1;
 	// vS                               simple examine                     VT_PRESENT                                          R=E=S
 	// vS+past                          examined                           VT_PAST                                             R=E<S
@@ -1821,8 +1821,8 @@ void Source::associateNyms(int where)
 			}
 			narrowGender(m[where].getRelObject(),o);
 			m[where].flags|=WordMatch::flagUsedBeRelation;
-			if (m[where].relVerb>=0)
-				m[m[where].relVerb].flags|=WordMatch::flagUsedBeRelation;
+			if (m[where].getRelVerb()>=0)
+				m[m[where].getRelVerb()].flags|=WordMatch::flagUsedBeRelation;
 			for (vector <tIWMM>::iterator ai=objects[ao].associatedAdjectives.begin(),aiEnd=objects[ao].associatedAdjectives.end(); ai!=aiEnd; ai++)
 				if (find(objects[o].associatedAdjectives.begin(),objects[o].associatedAdjectives.end(),*ai)==objects[o].associatedAdjectives.end())
 					objects[o].associatedAdjectives.push_back(*ai);
@@ -1850,7 +1850,7 @@ void Source::associateNyms(int where)
 	if (o>=0 && (or&(SUBJECT_ROLE|IS_OBJECT_ROLE|SUBJECT_PLEONASTIC_ROLE))==(SUBJECT_ROLE|IS_OBJECT_ROLE) && m[where].getRelObject()<0 && nymIsUseful)
 	{
 		m[where].flags|=WordMatch::flagUsedBeRelation;
-		for (unsigned int aow=m[where].relVerb+1; (m[aow].objectRole&IS_ADJ_OBJECT_ROLE) && aow<m.size(); aow++)
+		for (unsigned int aow=m[where].getRelVerb()+1; (m[aow].objectRole&IS_ADJ_OBJECT_ROLE) && aow<m.size(); aow++)
 			if (m[aow].queryWinnerForm(adjectiveForm)>=0 && find(objects[o].associatedAdjectives.begin(),objects[o].associatedAdjectives.end(),m[aow].word)==objects[o].associatedAdjectives.end() &&
 					!nymNoMatch(objects.begin()+o,m[aow].word))
 			{
@@ -1859,7 +1859,7 @@ void Source::associateNyms(int where)
 					lplog(LOG_RESOLUTION,L"%06d:Object %s associated adjective (%s) (1)",where,objectString(o,tmpstr,false).c_str(),m[aow].word->first.c_str());
 			}
 		// look for expressions
-		for (unsigned int aow=m[where].relVerb+1;  aow+1<m.size() && (m[aow+1].objectRole&IS_ADJ_OBJECT_ROLE); aow++)
+		for (unsigned int aow=m[where].getRelVerb()+1;  aow+1<m.size() && (m[aow+1].objectRole&IS_ADJ_OBJECT_ROLE); aow++)
 		{
 			wstring word=m[aow].word->first+L"_"+m[aow+1].word->first;
 			set <wstring> synonyms;
@@ -1879,9 +1879,9 @@ void Source::associateNyms(int where)
 		}
     // He[Boris] was probably about fifty years of age 
 		//   ALLOBJECTS_0 - probably [adv] about [prep] fifty [card] years [noun] of [prep] age [noun]
-		if (m[where].relVerb>=0 && m[m[where].relVerb].relPrep>=0 && m[m[m[where].relVerb].relPrep].getRelObject()>=0 && m[m[m[m[where].relVerb].relPrep].getRelObject()].getObject()>=0 &&
-			  (m[m[m[m[where].relVerb].relPrep].getRelObject()].word->second.timeFlags&T_LENGTH))
-			ageDetection(where,o,m[m[m[m[where].relVerb].relPrep].getRelObject()].getObject());
+		if (m[where].getRelVerb()>=0 && m[m[where].getRelVerb()].relPrep>=0 && m[m[m[where].getRelVerb()].relPrep].getRelObject()>=0 && m[m[m[m[where].getRelVerb()].relPrep].getRelObject()].getObject()>=0 &&
+			  (m[m[m[m[where].getRelVerb()].relPrep].getRelObject()].word->second.timeFlags&T_LENGTH))
+			ageDetection(where,o,m[m[m[m[where].getRelVerb()].relPrep].getRelObject()].getObject());
 	}
 }
 
@@ -1897,7 +1897,7 @@ bool Source::implicitObject(int where)
 				return true;
 	}
 	// the front door bell rang
-	if (where>=0 && m[where].getObject()>=0 && m[where].word->first==L"bell" && m[where].relVerb>=0 && m[m[where].relVerb].getMainEntry()->first==L"ring" &&
+	if (where>=0 && m[where].getObject()>=0 && m[where].word->first==L"bell" && m[where].getRelVerb()>=0 && m[m[where].getRelVerb()].getMainEntry()->first==L"ring" &&
 		  m[where-1].word->first==L"door")
 	{
 		m[where].objectRole|=UNRESOLVABLE_FROM_IMPLICIT_OBJECT_ROLE;
@@ -2344,13 +2344,13 @@ void Source::accumulateGroups(int where, vector <int> &groupedObjects, int &last
 			m[where+3].word->first==L"by")
 	{
 		whereWithObject=m[where+3].getRelObject();
-		if (m[where].relVerb>=0 && whereWithObject>=0 && m[whereWithObject].relVerb<0)
-			m[whereWithObject].relVerb=m[where].relVerb;
+		if (m[where].getRelVerb()>=0 && whereWithObject>=0 && m[whereWithObject].getRelVerb()<0)
+			m[whereWithObject].setRelVerb(m[where].getRelVerb());
 	}
 	// With him[conrad] was the evil - looking Number 14 .
-	if ((m[where].objectRole&SUBJECT_ROLE) && m[where].getRelObject()<0 && m[where].relVerb>=0 && m[m[where].relVerb].queryWinnerForm(isForm)>=0 &&
-		  m[m[where].relVerb].relPrep>=0 && m[m[m[where].relVerb].relPrep].word->first==L"with" && m[m[m[where].relVerb].relPrep].getRelObject()>=0)
-		whereWithObject=m[m[m[where].relVerb].relPrep].getRelObject();
+	if ((m[where].objectRole&SUBJECT_ROLE) && m[where].getRelObject()<0 && m[where].getRelVerb()>=0 && m[m[where].getRelVerb()].queryWinnerForm(isForm)>=0 &&
+		  m[m[where].getRelVerb()].relPrep>=0 && m[m[m[where].getRelVerb()].relPrep].word->first==L"with" && m[m[m[where].getRelVerb()].relPrep].getRelObject()>=0)
+		whereWithObject=m[m[m[where].getRelVerb()].relPrep].getRelObject();
 	if (whereWithObject>=0 && m[whereWithObject].getObject()>=0 && im->getObject()>=0 &&
 			objects[m[whereWithObject].getObject()].objectClass!=BODY_OBJECT_CLASS && m[whereWithObject].objectMatches.size()<=1 &&
 			objects[im->getObject()].objectClass!=BODY_OBJECT_CLASS && im->objectMatches.size()<=1)
@@ -2894,7 +2894,7 @@ void Source::identifySpeakerGroups()
 		//   should likely not be added to localObjects.
 		// There was a man who would unerringly ferret out Tuppence's whereabouts .
 		if ((m[I].objectRole&SUBJECT_PLEONASTIC_ROLE) && m[I].getObject()>=0 && objects[m[I].getObject()].whereRelativeClause>=0 &&
-			  m[objects[m[I].getObject()].whereRelativeClause].relVerb>=0 && (m[m[objects[m[I].getObject()].whereRelativeClause].relVerb].quoteForwardLink&VT_POSSIBLE))
+			  m[objects[m[I].getObject()].whereRelativeClause].getRelVerb()>=0 && (m[m[objects[m[I].getObject()].whereRelativeClause].getRelVerb()].quoteForwardLink&VT_POSSIBLE))
 		{
 			m[I].objectRole&=~SUBJECT_PLEONASTIC_ROLE;
 			if (debugTrace.traceSpeakerResolution)

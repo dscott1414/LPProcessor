@@ -583,6 +583,7 @@ bool WordMatch::read(char *buffer,int &where,int limit)
 	t.traceRole=tflags&1; tflags>>=1;
 	t.printBeforeElimination=tflags&1; tflags >>= 1;
 	t.traceTestSubjectVerbAgreement = tflags & 1; tflags >>= 1;
+	t.traceTestSyntacticRelations = tflags & 1; tflags >>= 1;
 	if (!copy(logCache,buffer,where,limit)) return false;
 	skipResponse=-1;
 	if (!copy(relNextObject,buffer,where,limit)) return false;
@@ -650,6 +651,7 @@ bool WordMatch::writeRef(void *buffer,int &where,int limit)
 	// flags
 	// 110000000000
 	__int64 tflags=0;
+	tflags |= (t.traceTestSyntacticRelations) ? 1 : 0; tflags <<= 1;
 	tflags |= (t.traceTestSubjectVerbAgreement) ? 1 : 0; tflags <<= 1;
 	tflags |= (t.printBeforeElimination) ? 1 : 0; tflags <<= 1;
 	tflags|=(t.traceRole) ? 1:0; tflags<<=1;
@@ -757,7 +759,7 @@ void Source::setRelPrep(int where,int relPrep,int fromWhere,int setType,int wher
 { LFS
 	int original=m[where].relPrep;
 	m[where].relPrep = relPrep;
-	m[where].relVerb = whereVerb;
+	m[where].setRelVerb(whereVerb);
 	wchar_t *setTypeStr;
 	wstring tmpstr;
 	switch (setType)
@@ -1367,6 +1369,8 @@ int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring
 	if (sourceType!=PATTERN_TRANSFORM_TYPE) // patterns are included in variables which have _ in them
 		for (unsigned int I=0; I<bufferLen; I++)
 			if (bookBuffer[I]==L'_') bookBuffer[I]=L' ';
+	while (bufferLen>0 && !bookBuffer[bufferLen-1])
+		bufferLen--;
 	return 0;
 }
 
@@ -1533,8 +1537,8 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 			wchar_t *abbreviationForms[]={ L"letter",L"abbreviation",L"measurement_abbreviation",L"street_address_abbreviation",L"business_abbreviation",
 				L"time_abbreviation",L"date_abbreviation",L"honorific_abbreviation",L"trademark",L"pagenum",NULL };
 			for (unsigned int af=0; abbreviationForms[af] && endSentence; af++)
-				if (m[m.size()-1].queryForm(abbreviationForms[af])>=0)
-					endSentence=false;
+				if (m[m.size() - 1].queryForm(abbreviationForms[af]) >= 0)
+						endSentence = false;
 		}
 		tIWMM iWord=Words.end();
 		if (result==PARSE_NUM)
@@ -3184,6 +3188,7 @@ Source::Source(wchar_t *databaseServer,int _sourceType,bool generateFormStatisti
 	debugTrace.traceEVALObjects=false;
 	debugTrace.traceAnaphors=false;
 	debugTrace.traceRelations=false;
+	debugTrace.traceTestSyntacticRelations = false;
 	debugTrace.traceNyms=false;
 	debugTrace.traceRole=false;
 	debugTrace.traceWhere=false;
@@ -3268,6 +3273,7 @@ Source::Source(MYSQL *parentMysql,int _sourceType,int _sourceConfidence)
 	debugTrace.traceEVALObjects=false;
 	debugTrace.traceAnaphors=false;
 	debugTrace.traceRelations=false;
+	debugTrace.traceTestSyntacticRelations = false;
 	debugTrace.traceNyms=false;
 	debugTrace.traceRole=false;
 	debugTrace.traceWhere=false;

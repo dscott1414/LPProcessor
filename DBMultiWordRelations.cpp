@@ -284,8 +284,8 @@ void Source::getSRIMinMax(cSpaceRelation* sri)
 	sri->printMax=max(sri->printMax,sri->whereVerb);
 	sri->printMax=max(sri->printMax,gmo(sri->whereObject));
 	if (sri->whereObject>=0) sri->printMax=max(sri->printMax,gmo(m[sri->whereObject].nextCompoundPartObject));
-	if (sri->whereVerb>=0)sri-> printMax=max(sri->printMax,m[sri->whereVerb].relVerb);
-	if (sri->whereVerb>=0 && m[sri->whereVerb].relVerb>=0) sri->printMax=max(sri->printMax,gmo(m[m[sri->whereVerb].relVerb].getRelObject()));
+	if (sri->whereVerb>=0)sri-> printMax=max(sri->printMax,m[sri->whereVerb].getRelVerb());
+	if (sri->whereVerb>=0 && m[sri->whereVerb].getRelVerb()>=0) sri->printMax=max(sri->printMax,gmo(m[m[sri->whereVerb].getRelVerb()].getRelObject()));
 	set <int> relPreps;
 	for (int wp=sri->wherePrep; wp>=0 && wp<(int)m.size(); wp=m[wp].relPrep)
 	{
@@ -412,7 +412,7 @@ bool Source::advanceSentenceNum(vector <cSpaceRelation>::iterator sri,unsigned i
 		{
 				if (sri->whereVerb<0 || sri==spaceRelations.begin() || sri->whereVerb==sri[-1].whereVerb)
 					return true;
-				if (m[sri->whereVerb].relVerb==sri[-1].whereVerb)
+				if (m[sri->whereVerb].getRelVerb()==sri[-1].whereVerb)
 					return true;
 		}
 		while (s+1<sentenceStarts.size() && sri->printMin>=sentenceStarts[s] && sri->printMin>=sentenceStarts[s+1])
@@ -493,7 +493,7 @@ void Source::printSRI(wstring logPrefix,cSpaceRelation* sri,int s,int ws,int wo,
 		relationString(sri->relationType).c_str(),  // 5
 		(sri->whereQuestionType>=0) ? m[sri->whereQuestionType].word->first.c_str() : L"", // 6
 		wrti(sri->whereControllingEntity,L"controller",tmpstr,shortFormat),  // 7
-		(sri->whereControllingEntity<0) ? L"":wchr(m[sri->whereControllingEntity].relVerb), // 8
+		(sri->whereControllingEntity<0) ? L"":wchr(m[sri->whereControllingEntity].getRelVerb()), // 8
 		getWOSAdjective(ws,tmpstr2).c_str(), // 9
 		getWSAdjective(ws,0).c_str(), // 10
 		getWSAdjective(ws,1).c_str(), // 11
@@ -613,7 +613,7 @@ int Source::flushMultiWordRelations(set <int> &mwObjects)
 					audience, // 6
 					(sri->whereControllingEntity<0) ? NULLWORD:m[sri->whereControllingEntity].word->second.index, // 7
 					(sri->whereControllingEntity<0) ? -1:m[sri->whereControllingEntity].getObject(), // 8
-					(sri->whereControllingEntity<0) ? NULLWORD:getVerbIndex(m[sri->whereControllingEntity].relVerb), // 9
+					(sri->whereControllingEntity<0) ? NULLWORD:getVerbIndex(m[sri->whereControllingEntity].getRelVerb()), // 9
 					getOSAdjective(ws), // 10
 					getMSAdjective(ws,0), // 11
 					getMSAdjective(ws,1), // 12

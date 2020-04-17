@@ -1075,7 +1075,7 @@ void Source::evaluateSubjectRoleTag(int where,int which,vector <int> whereSubjec
 				m[whereVerb].relSubject=s;
 			// mark subject of infinitive verb & infinitive objects - but don't overwrite preferential objects of parent verbs with subject, except when object is not gendered.
 			// He wanted her to skip school. (don't overwrite 'her' with 'He'
-			int relTraceVerb=m[whereVerb].relVerb,tmp;
+			int relTraceVerb=m[whereVerb].getRelVerb(),tmp;
 			bool preferGenderedSubject=m[s].getObject()>=0 && relTraceVerb>=0 && m[relTraceVerb].relSubject>=0 && m[m[relTraceVerb].relSubject].getObject()>=0 &&
 				  ((objects[m[s].getObject()].isAgent(true)) || m[s].word->first==L"who") && !isAgentObject(m[tmp=m[relTraceVerb].relSubject].getObject());
 			if (debugTrace.traceRelations && relTraceVerb>=0 && m[relTraceVerb].relSubject>=0 && m[s].previousCompoundPartObject!=m[relTraceVerb].relSubject && m[relTraceVerb].relSubject!=s &&
@@ -1090,9 +1090,9 @@ void Source::evaluateSubjectRoleTag(int where,int which,vector <int> whereSubjec
 					if (m[m[relTraceVerb].getRelObject()].relNextObject>=0)
 						m[m[m[relTraceVerb].getRelObject()].relNextObject].relSubject=s;
 				}
-				if (m[relTraceVerb].relVerb<=relTraceVerb)
+				if (m[relTraceVerb].getRelVerb()<=relTraceVerb)
 					break;
-				relTraceVerb=m[relTraceVerb].relVerb;	
+				relTraceVerb=m[relTraceVerb].getRelVerb();	
 			}
 		}
 		else if (whereHVerb>=0)
@@ -1121,8 +1121,8 @@ void Source::evaluateSubjectRoleTag(int where,int which,vector <int> whereSubjec
 	bool rolePreviouslySetAsSubject=m[s].getRelObject()!=-1;
 	if (backwardsSubjects && (m[s].objectRole&FOCUS_EVALUATED))
 	{
-		if (m[where].word->first==L"to" && m[s].relVerb>=0 && m[m[s].relVerb].relVerb<0)
-			m[m[s].relVerb].relVerb=whereVerb; // link relVerb with relVerb of infinitive phrase
+		if (m[where].word->first==L"to" && m[s].getRelVerb()>=0 && m[m[s].getRelVerb()].getRelVerb()<0)
+			m[m[s].getRelVerb()].setRelVerb(whereVerb); // link relVerb with relVerb of infinitive phrase
 		return;
 	}
 	if (whereHObject<0)
@@ -1139,22 +1139,22 @@ void Source::evaluateSubjectRoleTag(int where,int which,vector <int> whereSubjec
 		if (s!=whereVerb)
 		{
 			int flags;
-			if (m[s].relVerb!=-1 && m[s].relVerb!=whereVerb && (m[s].objectRole&OBJECT_ROLE) && m[s].relVerb<s && whereVerb>s && 
+			if (m[s].getRelVerb()!=-1 && m[s].getRelVerb()!=whereVerb && (m[s].objectRole&OBJECT_ROLE) && m[s].getRelVerb()<s && whereVerb>s && 
 				  (flags=(m[whereVerb].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE)))
 			{
 				if (debugTrace.traceRole)
-					lplog(LOG_RESOLUTION,L"%06d:subject %d - verb (%d,%d) conflict [%s]",where,s,m[s].relVerb,whereVerb,(flags&VERB_PRESENT_PARTICIPLE) ? L"infinitive":L"present");
+					lplog(LOG_RESOLUTION,L"%06d:subject %d - verb (%d,%d) conflict [%s]",where,s,m[s].getRelVerb(),whereVerb,(flags&VERB_PRESENT_PARTICIPLE) ? L"infinitive":L"present");
 				m[s].relInternalVerb=whereVerb;
 			}
 			else
-				m[s].relVerb=whereVerb;
+				m[s].setRelVerb(whereVerb);
 		}
 	}
 	else
 	{
 		m[s].setRelObject(whereHObject); // used for accumulatingAdjectives - overwritten with object # in identifyRelationships
 		if (s!=whereHVerb)
-			m[s].relVerb=whereHVerb;
+			m[s].setRelVerb(whereHVerb);
 	}
 	m[s].relNextObject=((signed)whereSubjects.size()>which+1) ? whereSubjects[which+1] : ((which) ? whereSubjects[0] : -1);
 	if (ignoreSpeaker)
@@ -1256,7 +1256,7 @@ void Source::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool isI
 		if (infinitiveObjectOfPrep && whereVerb>2 && m[whereVerb-1].queryWinnerForm(possessiveDeterminerForm)>=0)
 			I=whereVerb-1;
 		// he found Albert discharging his professional duties and introduced [himself]
-		else if (I>=0 && m[I].relVerb>=0 && (m[m[I].relVerb].quoteForwardLink!=tsSense || m[I].relInternalVerb>=0) &&
+		else if (I>=0 && m[I].getRelVerb()>=0 && (m[m[I].getRelVerb()].quoteForwardLink!=tsSense || m[I].relInternalVerb>=0) &&
 			       (whereDesignatedAsInternalSubject!=I || tsSense!=VT_PRESENT))
 		{
 			// if there is another subject, that is not the same subject, return.
@@ -1266,7 +1266,7 @@ void Source::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool isI
 			if (multiSubject=(J>=0 && m[J].objectRole&SUBJECT_ROLE) && m[J].getObject()!=UNKNOWN_OBJECT && m[J].getObject()!=m[I].getObject() && m[J].word!=m[I].word && m[J].pma.queryPatternDiff(L"__S1",L"5")==-1) 
 			{
 				if (m[I].relInternalVerb>=0 && (m[m[I].relInternalVerb].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) &&
-					  m[J].relVerb>=0 && m[m[J].relVerb].quoteForwardLink==tsSense)
+					  m[J].getRelVerb()>=0 && m[m[J].getRelVerb()].quoteForwardLink==tsSense)
 				{
 					if (debugTrace.traceSpeakerResolution)
 					lplog(LOG_RESOLUTION,L"%06d:object infinitive rejection of %d in favor of subject=%d whereVerb=%d?",where,I,J,whereVerb); 
@@ -1278,12 +1278,12 @@ void Source::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool isI
 					{
 						if (!preferInfinitive && I!=whereDesignatedAsInternalSubject) return;
 						if (I==whereDesignatedAsInternalSubject && m[J].getObject()>=0 && !objects[m[J].getObject()].neuter &&
-							  m[J].relVerb>=0 && m[I].relVerb>=0 && 
-								(((m[whereVerb].verbSense&VT_TENSE_MASK)==(m[m[J].relVerb].verbSense&VT_TENSE_MASK)) || 
-								 ((m[whereVerb].verbSense&VT_TENSE_MASK)!=(m[m[I].relVerb].verbSense&VT_TENSE_MASK))))
+							  m[J].getRelVerb()>=0 && m[I].getRelVerb()>=0 && 
+								(((m[whereVerb].verbSense&VT_TENSE_MASK)==(m[m[J].getRelVerb()].verbSense&VT_TENSE_MASK)) || 
+								 ((m[whereVerb].verbSense&VT_TENSE_MASK)!=(m[m[I].getRelVerb()].verbSense&VT_TENSE_MASK))))
 						{
-							int JVerbTense=m[m[J].relVerb].verbSense;
-							int IVerbTense=m[m[I].relVerb].verbSense;
+							int JVerbTense=m[m[J].getRelVerb()].verbSense;
+							int IVerbTense=m[m[I].getRelVerb()].verbSense;
 							wstring tmpstr1,tmpstr2,tmpstr3;
 							if (debugTrace.traceSpeakerResolution)
 							lplog(LOG_RESOLUTION,L"%06d (tense=%s) overrides %d (tense=%s) as a subject of verb %d (tense=%s) (whereDesignatedAsInternalSubject)?",
@@ -1291,16 +1291,16 @@ void Source::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool isI
 							I=J;
 						}
 						int K=-1,originalI=I;
-						if (m[I].relVerb<0 || (m[m[I].relVerb].relVerb<0 && !(m[m[I].relVerb].flags&WordMatch::flagInInfinitivePhrase)))
+						if (m[I].getRelVerb()<0 || (m[m[I].getRelVerb()].getRelVerb()<0 && !(m[m[I].getRelVerb()].flags&WordMatch::flagInInfinitivePhrase)))
 						{
-							if (m[J].relVerb>=0 && m[m[J].relVerb].relVerb>=0) I=J;
+							if (m[J].getRelVerb()>=0 && m[m[J].getRelVerb()].getRelVerb()>=0) I=J;
 							else
 							{
 								// try really really hard to find that infinitive subject
 								K=J-1;
 								while (K>=0 && !isEOS(J) && m[K].word->first!=L"”" && m[K].word->first!=L"’" && m[K].word!=Words.sectionWord && m[K].word->first!=L":" && m[K].queryWinnerForm(coordinatorForm)<0 && 
 											(!(m[K].objectRole&(SUBJECT_ROLE|PREP_OBJECT_ROLE)) || m[K].getObject()==UNKNOWN_OBJECT || (m[K].flags&WordMatch::flagAdjectivalObject))) K--;
-								if (K>=0 && m[K].relVerb>=0 && m[m[K].relVerb].relVerb>=0) I=K;
+								if (K>=0 && m[K].getRelVerb()>=0 && m[m[K].getRelVerb()].getRelVerb()>=0) I=K;
 								else return;
 							}
 						}
@@ -1461,7 +1461,7 @@ void Source::markPrepositionalObjects(int where,int whereVerb,bool flagInInfinit
 					{
 						m[wp].setRelObject(wpo);
 						setRelPrep(wpo,wp,3,PREP_OBJECT_SET,whereVerb);
-						m[wp].relVerb = whereVerb;
+						m[wp].setRelVerb(whereVerb);
 						if (m[wp].word->second.flags&tFI::prepMoveType)
 							m[wpo].objectRole|=MOVEMENT_PREP_OBJECT_ROLE;
 						else
@@ -1684,17 +1684,17 @@ int Source::processInternalInfinitivePhrase(int where,int whereVerb,int wherePar
 				m[whereParentObject].relInternalVerb=whereHVerb;
 				m[whereHVerb].relSubject=whereParentObject;
 			}
-			m[whereHObject].relVerb=whereIVerb;
+			m[whereHObject].setRelVerb(whereIVerb);
 			m[whereIVerb].relSubject=whereHObject;
 			m[itoWhere].flags|=WordMatch::flagInInfinitivePhrase;
 			if (whereVerb>=0)
 			{
-				m[whereVerb].relVerb=whereHVerb;
+				m[whereVerb].setRelVerb(whereHVerb);
 				if (m[whereHVerb].previousCompoundPartObject!=-1 && m[whereHVerb].previousCompoundPartObject<whereVerb)
 				{
 					if (debugTrace.traceSpeakerResolution)
 						lplog(LOG_RESOLUTION,L"%06d:verb@%d having infinitive forward bare infinitive relVerb@%d is rejected in favor of closer parent verb@%d.",where,m[whereIVerb].previousCompoundPartObject,whereIVerb,whereVerb);
-					m[m[whereHVerb].previousCompoundPartObject].relVerb=-1; // IVERB mistakenly attached to verb of previous parent
+					m[m[whereHVerb].previousCompoundPartObject].setRelVerb(-1); // IVERB mistakenly attached to verb of previous parent
 				}
 				m[whereHVerb].previousCompoundPartObject=whereVerb;
 			}
@@ -1704,12 +1704,12 @@ int Source::processInternalInfinitivePhrase(int where,int whereVerb,int wherePar
 		}
 		if (whereIVerb>=0 && whereVerb>=0 && whereIVerb!=whereVerb)
 		{
-			m[whereVerb].relVerb=whereIVerb;
+			m[whereVerb].setRelVerb(whereIVerb);
 			if (m[whereIVerb].previousCompoundPartObject!=-1 && m[whereIVerb].previousCompoundPartObject<whereVerb)
 			{
 				if (debugTrace.traceSpeakerResolution)
 					lplog(LOG_RESOLUTION,L"%06d:verb@%d having infinitive forward relVerb@%d is rejected in favor of closer parent verb@%d.",where,m[whereIVerb].previousCompoundPartObject,whereIVerb,whereVerb);
-				m[m[whereIVerb].previousCompoundPartObject].relVerb=-1; // IVERB mistakenly attached to verb of previous parent
+				m[m[whereIVerb].previousCompoundPartObject].setRelVerb(-1); // IVERB mistakenly attached to verb of previous parent
 			}
 			m[whereIVerb].previousCompoundPartObject=whereVerb;
 			if (whereParentObject>=0)
@@ -1897,7 +1897,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 							m[whereHMVerb].quoteForwardLink=mtsSense | ((isNot) ? VT_NEGATION:0);
 							m[whereHMVerb].hasVerbRelations=true;
 						}
-						m[lastWhereMVerb].relVerb=whereMVerb;
+						m[lastWhereMVerb].setRelVerb(whereMVerb);
 						m[lastWhereMVerb].andChainType=true;
 						lastWhereMVerb=whereMVerb;
 					}
@@ -2117,14 +2117,14 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 				{
 					lplog(LOG_RESOLUTION,L"%06d:parent-less infinitive verb@%d subj@%d [NO OBJ=%s MSUBJ=%s P=%s].",where,whereVerb,whereSubjects[is],
 								(noObjects) ? L"true":L"false",(multiSubject) ? L"true":L"false",
-								((m[whereSubjects[is]].relVerb>=0 && m[m[whereSubjects[is]].relVerb].relPrep>=0) || (m[where-1].objectRole&PREP_OBJECT_ROLE)) ? L"true":L"false");
+								((m[whereSubjects[is]].getRelVerb()>=0 && m[m[whereSubjects[is]].getRelVerb()].relPrep>=0) || (m[where-1].objectRole&PREP_OBJECT_ROLE)) ? L"true":L"false");
 				}
 		}
 	}
-	if (withinInfinitivePhrase && whereSubjects.size() && m[whereSubjects[0]].getRelObject()>=0 && m[whereSubjects[0]].relVerb>=0)
+	if (withinInfinitivePhrase && whereSubjects.size() && m[whereSubjects[0]].getRelObject()>=0 && m[whereSubjects[0]].getRelVerb()>=0)
 	{
 		wstring verb;
-		unordered_map <wstring, set <int> >::iterator lvtoCi=getVerbClasses(m[whereSubjects[0]].relVerb,verb);
+		unordered_map <wstring, set <int> >::iterator lvtoCi=getVerbClasses(m[whereSubjects[0]].getRelVerb(),verb);
 		if (lvtoCi!=vbNetVerbToClassMap.end())
 			for (set <int>::iterator vbi=lvtoCi->second.begin(),vbiEnd=lvtoCi->second.end(); vbi!=vbiEnd; vbi++)
 				if (vbNetClasses[*vbi].control)
@@ -2132,7 +2132,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 					int whereParentObject=m[whereSubjects[0]].getRelObject();
 					if (debugTrace.traceRelations)
 						lplog(LOG_RESOLUTION,L"%06d:infinitive verb@%d - parent object@%d as infinitive subject overrules parent subject@%d because of parent control@%d.",
-					      where,whereVerb,whereParentObject,whereSubjects[0],m[whereSubjects[0]].relVerb);
+					      where,whereVerb,whereParentObject,whereSubjects[0],m[whereSubjects[0]].getRelVerb());
 					subjectWords.clear();
 					subjectObjects.clear();
 					whereSubjects.clear();
@@ -2249,8 +2249,8 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 					if (m[I].getObject()>=0)
 					{
 						m[I].objectRole|=THINK_ENCLOSING_ROLE; 
-						if (m[I].relVerb>=0) 
-							m[m[I].relVerb].objectRole|=THINK_ENCLOSING_ROLE;
+						if (m[I].getRelVerb()>=0) 
+							m[m[I].getRelVerb()].objectRole|=THINK_ENCLOSING_ROLE;
 					}
 			whereObject=tagSet[objectTag].sourcePosition;
 			if (m[whereObject].principalWherePosition>=0) whereObject=m[whereObject].principalWherePosition;
@@ -2364,14 +2364,14 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 		}
 		if (whereObject!=whereVerb)
 		{
-			if (m[whereObject].relVerb>=0 && m[whereObject].relInternalVerb<0 && (m[where].objectRole&SENTENCE_IN_REL_ROLE))
-				m[whereObject].relInternalVerb=m[whereObject].relVerb;
-			m[whereObject].relVerb=whereVerb;
+			if (m[whereObject].getRelVerb()>=0 && m[whereObject].relInternalVerb<0 && (m[where].objectRole&SENTENCE_IN_REL_ROLE))
+				m[whereObject].relInternalVerb=m[whereObject].getRelVerb();
+			m[whereObject].setRelVerb(whereVerb);
 		}
 		if (m[whereObject].relPrep<0 && whereObject!=wherePrepInObject)
 			setRelPrep(whereObject,wherePrepInObject,7,PREP_OBJECT_SET, whereVerb);
 		for (unsigned int mo=0; mo<whereMObjects.size(); mo++)
-			m[whereMObjects[mo]].relVerb=whereVerb;
+			m[whereMObjects[mo]].setRelVerb(whereVerb);
 		if (whereVerb>=0 && (m[whereVerb].getRelObject()<0 || m[whereVerb].getRelObject()==whereNextObject))
 			m[whereVerb].setRelObject(whereObject); // used for accumulatingAdjectives 
 		int wp,wpo;
@@ -2445,7 +2445,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 		m[whereHObject].objectRole|=FOCUS_EVALUATED;
 		m[whereHObject].relSubject=(whereSubjects.empty()) ? -1 : whereSubjects[0]; // used for plural/singular subgroup in pronoun resolution - overwritten with object # in identifyRelationships
 		if (whereHObject!=whereHVerb)
-			m[whereHObject].relVerb=whereHVerb;
+			m[whereHObject].setRelVerb(whereHVerb);
 		if (whereHVerb>=0)
 			m[whereHVerb].setRelObject(whereHObject);
 		m[whereVerb].relSubject=whereHObject;
@@ -2518,23 +2518,23 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 			wv>whereVerb && wv>whereObject)
 		{
 			m[wv].setRelObject(tagSet[qTagIndex].sourcePosition);
-			m[tagSet[qTagIndex].sourcePosition].relVerb=wv;
+			m[tagSet[qTagIndex].sourcePosition].setRelVerb(wv);
 			if (debugTrace.traceRole)
 				lplog(LOG_ROLE,L"%d:prepositional object verb@%d assigned relative object @%d.",where,wv,tagSet[qTagIndex].sourcePosition);
 		}
 		else if (noObjects || whereObject<0)
 		{ 
-			if (m[whereVerb].relVerb>=0)
+			if (m[whereVerb].getRelVerb()>=0)
 			{
-				m[m[whereVerb].relVerb].setRelObject(tagSet[qTagIndex].sourcePosition);
-				m[tagSet[qTagIndex].sourcePosition].relVerb=m[whereVerb].relVerb;
+				m[m[whereVerb].getRelVerb()].setRelObject(tagSet[qTagIndex].sourcePosition);
+				m[tagSet[qTagIndex].sourcePosition].setRelVerb(m[whereVerb].getRelVerb());
 				if (debugTrace.traceRole)
-					lplog(LOG_ROLE,L"%d:secondary verb@%d assigned relative object @%d.",where,m[whereVerb].relVerb,tagSet[qTagIndex].sourcePosition);
+					lplog(LOG_ROLE,L"%d:secondary verb@%d assigned relative object @%d.",where,m[whereVerb].getRelVerb(),tagSet[qTagIndex].sourcePosition);
 			}
 			else
 			{
 				m[whereVerb].setRelObject(tagSet[qTagIndex].sourcePosition);
-				m[tagSet[qTagIndex].sourcePosition].relVerb=whereVerb;
+				m[tagSet[qTagIndex].sourcePosition].setRelVerb(whereVerb);
 				if (debugTrace.traceRole)
 					lplog(LOG_ROLE,L"%d:verb@%d assigned relative object @%d.",where,whereVerb,tagSet[qTagIndex].sourcePosition);
 			}
@@ -2682,7 +2682,7 @@ bool Source::setAdditionalRoleTags(int where,int &firstFreePrep,vector <int> &fu
 							setRelPrep(whereVerb,wp,10,PREP_VERB_SET,whereVerb);
 					}
 					m[wp].setRelObject(wpo=m[wpo].principalWherePosition);
-					setRelPrep(wpo,wp,11,PREP_OBJECT_SET, whereLastVerb-1);
+					setRelPrep(wpo,wp,11,PREP_OBJECT_SET, (whereLastVerb<0) ? -1 : whereLastVerb-1);
 					if (firstFreePrep>=0)
 					{
 						int lastInChain=firstFreePrep,prepLoop=0;
@@ -2696,7 +2696,7 @@ bool Source::setAdditionalRoleTags(int where,int &firstFreePrep,vector <int> &fu
 								break;
 							}
 						}
-						setRelPrep(lastInChain,wp,12,PREP_PREP_SET, whereLastVerb-1);
+						setRelPrep(lastInChain,wp,12,PREP_PREP_SET, (whereLastVerb < 0) ? -1 : whereLastVerb - 1);
 					}
 					if (firstFreePrep<0)
 						firstFreePrep=wp;
@@ -2715,15 +2715,15 @@ bool Source::setAdditionalRoleTags(int where,int &firstFreePrep,vector <int> &fu
 		// must not be owned by any pattern and must be a __PNOUN followed by an __APPNOUN
 		int whereObject=-1;
 		if (patterns[pma->getPattern()]->name==L"__APPNOUN" && patterns[pma->getPattern()]->differentiator==L"2" && pma->pemaByChildPatternEnd>=0 &&
-				im->relVerb>=0 && im->getRelObject()<0 && (whereObject=m[where+pema[pma->pemaByChildPatternEnd].begin].principalWherePosition)>=0 && m[whereObject].getObject()>=0 &&
-				m[whereObject].relVerb<0)
+				im->getRelVerb()>=0 && im->getRelObject()<0 && (whereObject=m[where+pema[pma->pemaByChildPatternEnd].begin].principalWherePosition)>=0 && m[whereObject].getObject()>=0 &&
+				m[whereObject].getRelVerb()<0)
 		{
 			im->setRelObject(whereObject);
-			m[whereObject].relVerb=im->relVerb;
+			m[whereObject].setRelVerb(im->getRelVerb());
 			m[whereObject].relSubject=where;
-			m[im->relVerb].setRelObject(whereObject);
+			m[im->getRelVerb()].setRelObject(whereObject);
 			if (debugTrace.traceRole)
-				lplog(LOG_ROLE,L"%06d:Appositive subject@%d - verb@%d - object@%d.",where,where,im->relVerb,whereObject);
+				lplog(LOG_ROLE,L"%06d:Appositive subject@%d - verb@%d - object@%d.",where,where,im->getRelVerb(),whereObject);
 		}
 	}
 	return idType;
@@ -2956,9 +2956,9 @@ void Source::syntacticRelations()
 			}
 		}
 		// bind even loose prepositions with no object to the main verb - helps in stanford analysis
-		if (whereLastVerb>=0 && m[I].queryWinnerForm(prepositionForm) >= 0 && m[I].relVerb == -1 && find(futureBoundPrepositions.begin(), futureBoundPrepositions.end(), I) == futureBoundPrepositions.end())
+		if (whereLastVerb>=0 && m[I].queryWinnerForm(prepositionForm) >= 0 && m[I].getRelVerb() == -1 && find(futureBoundPrepositions.begin(), futureBoundPrepositions.end(), I) == futureBoundPrepositions.end())
 		{
-			m[I].relVerb = whereLastVerb-1;
+			m[I].setRelVerb(whereLastVerb-1);
 			if (debugTrace.traceRelations)
 				lplog(LOG_INFO, L"bound prep at %d to verb position %d.", I, whereLastVerb-1);
 		}
@@ -2970,7 +2970,7 @@ void Source::syntacticRelations()
 		{
 			bool setAlready=false;
 			int prepLoop=0;
-			lastVerb = m[m[v + 1].getRelObject()].relVerb;
+			lastVerb = m[m[v + 1].getRelObject()].getRelVerb();
 			for (int w=m[v].relPrep; w>=0 && !setAlready; w=m[w].relPrep)
 			{
 				if (prepLoop++>20)
@@ -2992,3 +2992,58 @@ void Source::syntacticRelations()
 	}
 }
 
+void Source::testSyntacticRelations()
+{
+	tIWMM primaryQuoteCloseWord = Words.gquery(L"”");
+	tIWMM secondaryQuoteCloseWord = Words.gquery(L"’");
+	for (unsigned int s = 0; s<sentenceStarts.size(); s++)
+	{
+		unsigned int begin = sentenceStarts[s];
+		if (m[begin].word == primaryQuoteCloseWord || m[begin].word == secondaryQuoteCloseWord)
+			begin++;
+		unsigned int end = (s+1==sentenceStarts.size()) ? m.size() : sentenceStarts[s + 1];
+		while (end && m[end - 1].word == Words.sectionWord)
+			end--; // cut off end of paragraphs
+		if (m[end].word == primaryQuoteCloseWord || m[end].word == secondaryQuoteCloseWord)
+			end++;
+		debugTrace = m[begin].t;
+		if (debugTrace.traceTestSyntacticRelations)
+		{
+			wstring sentence, originalIWord;
+			for (unsigned int where = begin; where < end; where++)
+			{
+				getOriginalWord(where, originalIWord, false, false);
+				sentence += originalIWord + L" ";
+			}
+			auto mc = metaCommandsEmbeddedInSource.find(begin);
+			if (mc != metaCommandsEmbeddedInSource.end())
+				lplog(LOG_INFO, L"\n*****  %s  *****", mc->second.c_str());
+			else if (end - begin > 1)
+				lplog(LOG_INFO, L"\n FAILED to find comment at sentence offset %d.", begin);
+			bool printedSentence = false;
+			for (unsigned int where = begin; where < end; where++)
+			{
+				wstring relationsPerWord;
+				if (m[where].relSubject != -1) relationsPerWord += L"relSubject='" + m[m[where].relSubject].word->first + L"' ";
+				if (m[where].getRelVerb() != -1) relationsPerWord += L"relVerb='" + m[m[where].getRelVerb()].word->first + L"' ";
+				if (m[where].getRelObject() != -1) relationsPerWord += L"relObject='" + m[m[where].getRelObject()].word->first + L"' ";
+				if (m[where].relPrep != -1) relationsPerWord += L"relPrep='" + m[m[where].relPrep].word->first + L"' ";
+				if (m[where].relInternalObject != -1) relationsPerWord += L"relInternalObject='" + m[m[where].relInternalObject].word->first + L"' ";
+				if (m[where].relInternalVerb != -1) relationsPerWord += L"relInternalVerb='" + m[m[where].relInternalVerb].word->first + L"' ";
+				if (m[where].nextCompoundPartObject != -1) relationsPerWord += L"nextCompoundPartObject='" + m[m[where].nextCompoundPartObject].word->first + L"' ";
+				if (m[where].previousCompoundPartObject != -1) relationsPerWord += L"previousCompoundPartObject='" + m[m[where].previousCompoundPartObject].word->first + L"' ";
+				if (relationsPerWord.length() > 0)
+				{
+					if (!printedSentence)
+					{
+						lplog(LOG_INFO, L"%s", sentence.c_str());
+						printedSentence = true;
+					}
+					lplog(LOG_INFO, L"~~~ %s: %s", m[where].word->first.c_str(), relationsPerWord.substr(0,relationsPerWord.length()-1).c_str());
+				}
+			}
+			if (!printedSentence && end-begin>1)
+				lplog(LOG_INFO, L"%d-%d:%s: no relations found", begin,end,sentence.c_str());
+		}
+	}
+}

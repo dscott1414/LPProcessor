@@ -141,7 +141,7 @@ void Source::resolveFirstSecondPersonPronoun(int where,unsigned __int64 flags,in
 			}
     }
   }
-  else if (m[where].getObject()<UNKNOWN_OBJECT || objectClass==PRONOUN_OBJECT_CLASS || objectClass==REFLEXIVE_PRONOUN_OBJECT_CLASS)
+  else if (m[where].getObject()<UNKNOWN_OBJECT || objectClass==PRONOUN_OBJECT_CLASS)
   {
     if (firstPerson || secondPerson)
       // FIRST_PERSON:  "my", "i", "me", "mine" -- restrict to speaker or narrator

@@ -2339,7 +2339,7 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 	}
 	if (source.m[wordSourceIndex].isOnlyWinner(prepositionForm) && source.m[wordSourceIndex].getRelObject() < 0 && !iswalpha(source.m[wordSourceIndex + 1].word->first[0]))
 	{
-		int relVerb = source.m[wordSourceIndex].relVerb;
+		int relVerb = source.m[wordSourceIndex].getRelVerb();
 		bool sentenceOfBeing =				// 4 words or less before the word must be an 'is' verb
 			((wordSourceIndex <= 0 || (source.m[wordSourceIndex - 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex - 1].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
 				(wordSourceIndex <= 1 || (source.m[wordSourceIndex - 2].queryForm(L"is") >= 0 || source.m[wordSourceIndex - 2].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
@@ -4372,7 +4372,22 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		}
 		if (source.queryPattern(wordSourceIndex, L"_VERBPAST") != -1 && source.queryPattern(wordSourceIndex, L"__S1") != -1)
 		{
-			partofspeech += L"verbpast!";
+			int relSubject = source.m[wordSourceIndex].relSubject;
+			int relObject = source.m[wordSourceIndex].getRelObject();
+			if (relSubject >= 0 && relObject < 0 && source.queryPattern(relSubject, L"__INFPT") >= 0)
+			{
+				errorMap[L"LP correct: INFPT verb is not adjective"]++;
+				return 0;
+			}
+			if (relObject < 0)
+			{
+				errorMap[L"LP correct: past of verb is not adjective"]++; // probabilistic - see distribute errors ST=21 / LP=84
+				return 0;
+			}
+			//for (int I = 0; I < source.m.size(); I++)
+			//	lplog(LOG_INFO, L"%02d:%10s:relPrep = %02d,relObject = %02d,relSubject = %02d,relVerb = %02d,relNextObject = %02d,nextCompoundPartObject = %02d,previousCompoundPartObject = %02d,relInternalVerb = %02d,relInternalObject = %02d", 
+			//		I, source.m[I].word->first.c_str(),source.m[I].relPrep, source.m[I].getRelObject(), source.m[I].relSubject, source.m[I].relVerb, source.m[I].relNextObject, source.m[I].nextCompoundPartObject, source.m[I].previousCompoundPartObject, source.m[I].relInternalVerb, source.m[I].relInternalObject);
+			
 			//errorMap[L"LP correct: passive verb is not adjective"]++;
 			//return 0;
 		}
@@ -4782,6 +4797,10 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"LP correct: ownership of noun"] = numErrors * 79 / 91;
 	errorMap[L"ST correct: ownership of noun"] = numErrors * 12 / 91;
 
+	numErrors = errorMap[L"LP correct: past of verb is not adjective"]; // 21 ST correct out of 105 total  
+	errorMap[L"LP correct: past of verb is not adjective"] = numErrors * 84 / 105;
+	errorMap[L"ST correct: past of verb is not adjective"] = numErrors * 21 / 105;
+
 }
 
 int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, bool lockPerSource)
@@ -5002,7 +5021,7 @@ int stanfordCheckMP(Source source, int step, bool pcfg, int MP)
 int stanfordCheckTest(Source source, wstring path, int sourceId, bool pcfg,wstring limitToWord,int maxSentenceLimit, wstring specialExtension)
 {
 	if (limitToWord.length() > 0)
-		printf("limited to %S!", limitToWord.c_str());
+		printf("limited to %S!\n", limitToWord.c_str());
 	JavaVM *vm;
 	JNIEnv *env;
 	createJavaVM(vm, env);
@@ -5275,7 +5294,7 @@ void wmain(int argc,wchar_t *argv[])
 		//patternOrWordAnalysis(source, step, L"__ADJECTIVE", L"MTHAN", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__NOUN", L"F", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
-		patternOrWordAnalysis(source, step, L"__ALLOBJECTS_2", L"2",L"", L"", Source::GUTENBERG_SOURCE_TYPE, true,true,L"");
+		patternOrWordAnalysis(source, step, L"_MS1", L"*",L"", L"", Source::GUTENBERG_SOURCE_TYPE, true,true,L"");
 		//patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false, specialExtension);
 		//patternOrWordAnalysis(source, step, L"worth", L"", Source::GUTENBERG_SOURCE_TYPE, false,L""); // TODO: testing weight change on _S1.
 		break;
@@ -5286,7 +5305,7 @@ void wmain(int argc,wchar_t *argv[])
 		syntaxCheck(source, step,specialExtension);
 		break;
 	case 70:
-		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"worth",50,specialExtension);
+		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"",50,specialExtension);
 		break;
 	case 71:
 	{

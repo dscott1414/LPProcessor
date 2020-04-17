@@ -329,6 +329,7 @@ public:
 		t.traceEVALObjects=trace.traceEVALObjects;
 		t.traceAnaphors=trace.traceAnaphors;
 		t.traceRelations=trace.traceRelations;
+		t.traceTestSyntacticRelations = trace.traceTestSyntacticRelations;
 		t.traceRole=trace.traceRole;
 		t.traceSpeakerResolution=trace.traceSpeakerResolution;
 		t.traceObjectResolution=trace.traceObjectResolution;
@@ -492,7 +493,16 @@ public:
 	int nextCompoundPartObject; // subject or object, links compound objects together
 	int previousCompoundPartObject; // subject or object, links compound objects together : also links an infinitive verb back to the mainVerb
 	int relSubject; // if this is an object, what subject does it relate to? (for pronoun disambiguation)
-	int relVerb; // for subjects and objects
+	int getRelVerb()
+	{
+		return relVerb;
+	}
+	void setRelVerb(int rv)
+	{
+		if (rv < -1)
+			lplog(LOG_FATAL_ERROR, L"Illegal relVerb.");
+		relVerb = rv;
+	}
 	int relPrep; // subjects, objects and verbs should have this set to the prepositions of the prep phrases, 
 							 // and prep phrases themselves have them set to the next prep phrase in the sentence
 	int setRelPrep(int rp) { 
@@ -663,6 +673,7 @@ public:
 private:
 	int object; // this is an index into the objects array.  it is set at the principalWhere of an object
 	int relObject; // if this is a subject, what object does it relate to? (for pronoun disambiguation) - also used if speaker explicitly names another speaker (flagQuoteContainsSpeaker)
+	int relVerb; // for subjects and objects
 };
 extern vector <WordMatch>::iterator wmNULL;
 
@@ -1856,7 +1867,7 @@ public:
 																// in resetCapitalizationAndProperNounUsageStatistics.  All statistics including these proper noun/lower case statistics are reset in resetUsagePatternsAndCosts.
 	intArray reverseMatchElements;
 	vector <WordMatch> m;
-	unordered_map <int, wstring> metaCommandsEmbeddedInSource;
+	unordered_map <unsigned int, wstring> metaCommandsEmbeddedInSource;
 	patternElementMatchArray pema;
 	bool parseNecessary(wchar_t *path);
 	int readSourceBuffer(wstring title, wstring etext, wstring path, wstring encoding, wstring &start, int &repeatStart);
@@ -2229,6 +2240,7 @@ int &numFirstInQuote,
 	void adjustHailRoleDuringScan(int where);
 	void adjustToHailRole(int where);
 	void syntacticRelations();
+	void testSyntacticRelations();
 	bool replaceSubsequentMatches(set <int> &so,int sgEnd);
 	bool replaceAliasesAndReplacements(set <int> &objects);
 	bool eraseAliasesAndReplacementsInSpeakerGroup(vector <cSpeakerGroup>::iterator sg,bool eraseSubsequentMatches);

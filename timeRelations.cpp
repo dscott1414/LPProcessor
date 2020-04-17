@@ -522,7 +522,7 @@ bool Source::detectTimeTransition(int where,vector <cSpaceRelation>::iterator cs
 			// 61026: It was a little after half-past five. [YES]
 			if (csr->relationType==stBE && 
 				  ((csr->whereSubject<0 || (m[csr->whereSubject].word->first!=L"it" && !(m[csr->whereSubject].word->second.timeFlags&T_UNIT))) ||
-					 m[csr->whereSubject].relVerb!=csr->whereVerb ||
+					 m[csr->whereSubject].getRelVerb()!=csr->whereVerb ||
 					// 51060: It was a beautiful day. [NO - ambiguous]
 					(timeInfo.timeCapacity==cDay && (m[timeInfo.tWhere].objectRole&OBJECT_ROLE) && (timeInfo.timeModifier<0 || m[timeInfo.timeModifier].queryWinnerForm(adjectiveForm)!=-1)) ||
 					 (timeInfo.timeModifier>=0 && (m[timeInfo.timeModifier].word->second.timeFlags&T_BEFORE))))
@@ -1593,15 +1593,15 @@ void Source::detectTimeTransition(int where,vector <int> &lastSubjects)
 	{
 		if (wot>=0) wt=wot;
 		int findSubject=wt;
-		if ((m[wt].objectRole&SUBJECT_ROLE) && m[wt].relVerb<0)
+		if ((m[wt].objectRole&SUBJECT_ROLE) && m[wt].getRelVerb()<0)
 		{
-			for (; findSubject<(signed)m.size() && (m[findSubject].objectRole&SUBJECT_ROLE) && m[findSubject].relVerb<0; findSubject++);
-			if (!(m[findSubject].objectRole&SUBJECT_ROLE) || m[findSubject].relVerb<0)
+			for (; findSubject<(signed)m.size() && (m[findSubject].objectRole&SUBJECT_ROLE) && m[findSubject].getRelVerb()<0; findSubject++);
+			if (!(m[findSubject].objectRole&SUBJECT_ROLE) || m[findSubject].getRelVerb()<0)
 				findSubject=wt;
 		}
 		int tense=-1;
-		if ((m[findSubject].objectRole&SUBJECT_ROLE) && (m[findSubject].relVerb<0 || // about an hour had passed
-			   ((tense=m[m[findSubject].relVerb].quoteForwardLink&(VT_TENSE_MASK|VT_POSSIBLE))!=VT_PAST) && (tense!=VT_PAST_PERFECT)))
+		if ((m[findSubject].objectRole&SUBJECT_ROLE) && (m[findSubject].getRelVerb()<0 || // about an hour had passed
+			   ((tense=m[m[findSubject].getRelVerb()].quoteForwardLink&(VT_TENSE_MASK|VT_POSSIBLE))!=VT_PAST) && (tense!=VT_PAST_PERFECT)))
 			return;
 		if (tense==VT_PAST_PERFECT && debugTrace.traceTime)
 			lplog(LOG_RESOLUTION,L"%06d:VT_PAST_PERFECT time subject passed.",findSubject);
@@ -1667,12 +1667,12 @@ void Source::detectTimeTransition(int where,vector <int> &lastSubjects)
 	}
 	// A neighbouring clock showed the time to be five minutes to twelve . 
 	// A neighbouring clock showed 5 o'clock . 
-	else if (m[wt].relVerb>=0 && isVerbClass(m[wt].relVerb,L"indicate") && 
-					 (m[m[wt].relVerb].quoteForwardLink&(VT_TENSE_MASK|VT_POSSIBLE))==VT_PAST && m[wt].getRelObject()>=0 && m[m[wt].getRelObject()].word->first==L"time")
+	else if (m[wt].getRelVerb()>=0 && isVerbClass(m[wt].getRelVerb(),L"indicate") && 
+					 (m[m[wt].getRelVerb()].quoteForwardLink&(VT_TENSE_MASK|VT_POSSIBLE))==VT_PAST && m[wt].getRelObject()>=0 && m[m[wt].getRelObject()].word->first==L"time")
 	{
 		int saveWhere=-1;
-		if (m[m[wt].relVerb].relVerb>=0 && m[m[m[wt].relVerb].relVerb].word->first==L"be" && m[m[m[wt].relVerb].relVerb].getRelObject()>=0 &&
-				m[m[saveWhere=m[m[m[wt].relVerb].relVerb].getRelObject()].beginObjectPosition].pma.queryPattern(L"_TIME")!=-1)
+		if (m[m[wt].getRelVerb()].getRelVerb()>=0 && m[m[m[wt].getRelVerb()].getRelVerb()].word->first==L"be" && m[m[m[wt].getRelVerb()].getRelVerb()].getRelObject()>=0 &&
+				m[m[saveWhere=m[m[m[wt].getRelVerb()].getRelVerb()].getRelObject()].beginObjectPosition].pma.queryPattern(L"_TIME")!=-1)
 			timeType=stABSTIME;
 		else if (m[wt].getRelObject()>=0 && m[m[saveWhere=m[wt].getRelObject()].beginObjectPosition].pma.queryPattern(L"_TIME")!=-1)
 			timeType=stABSTIME;
@@ -1702,7 +1702,7 @@ void Source::detectTimeTransition(int where,vector <int> &lastSubjects)
 		bool transitionSinceEOS=false; // transitionSinceEOS only applies to transitions with timeInfo, not the relation itself (stABSTIME)
 		if (timeTransition)
 			ageTransition(where,true,transitionSinceEOS,-1,-1,lastSubjects,L"TSR 2"); 
-		newSR(where,-1,-1,where,m[where].relVerb,-1,m[where].getRelObject(),-1,-1,timeType,L"time",true);
+		newSR(where,-1,-1,where,m[where].getRelVerb(),-1,m[where].getRelObject(),-1,-1,timeType,L"time",true);
 		if (m[where].getObject()>=0 && !m[where].timeColor)
 			m[where].timeColor=T_UNIT;
 		vector <cSpaceRelation>::iterator sr;

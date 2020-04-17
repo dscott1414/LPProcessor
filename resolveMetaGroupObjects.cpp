@@ -46,7 +46,7 @@ bool Source::resolveMetaGroupFormerLatter(int where,int previousS1,int latestOwn
 		   m[previousS1].pma[element].len+previousS1<where &&
 			(pw=m[previousS1].principalWherePosition)>=0 && m[pw].getObject()>=0)
 	{
-		if ((pwo=m[pw].getRelObject())<0 && (pwo=m[pw].relVerb)>=0)
+		if ((pwo=m[pw].getRelObject())<0 && (pwo=m[pw].getRelVerb())>=0)
 		{
 			pwo++;
 			while (m[pwo].queryWinnerForm(adverbForm)>=0) pwo++;
@@ -1474,7 +1474,7 @@ bool Source::resolveMetaGroupObject(int where,bool inPrimaryQuote,bool inSeconda
 				// must not match 'other hand' to anything other than another body object, unless it is a subject ('that basilisk glance' - 28602)
 				(!isExternalBodyPart(where,singularBodyPart,true) || (m[where].objectRole&(SUBJECT_ROLE|PREP_OBJECT_ROLE))==SUBJECT_ROLE) &&
 				// a meta group speaker that was already there doing something
-				 (m[where].relVerb<0 || (m[m[where].relVerb].quoteForwardLink&(VT_PAST|VT_EXTENDED))!=(VT_PAST|VT_EXTENDED)))
+				 (m[where].getRelVerb()<0 || (m[m[where].getRelVerb()].quoteForwardLink&(VT_PAST|VT_EXTENDED))!=(VT_PAST|VT_EXTENDED)))
 		{
 			chooseFromLocalFocus=resolveGenderedObject(where,definitelySpeaker|resolveForSpeaker,inPrimaryQuote,inSecondaryQuote,lastBeginS1,lastRelativePhrase,lastQ2,objectMatches,object,wordOrderSensitiveModifier,subjectCataRestriction,mixedPlurality,limitTwo,isPhysicallyPresent,physicallyEvaluated);
 			m[where].flags|=WordMatch::flagResolveMetaGroupByGender;

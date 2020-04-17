@@ -908,8 +908,8 @@ int Source::metaPatternMatch(Source *childSource,vector <cSpaceRelation>::iterat
 					}
 					tIWMM childWord;
 					wstring tmpstr;
-					if (checkVerbs.size() && childSource->m[whereAnswer].relVerb>=0)
-						childWord=childSource->m[childSource->m[whereAnswer].relVerb].getMainEntry();
+					if (checkVerbs.size() && childSource->m[whereAnswer].getRelVerb()>=0)
+						childWord=childSource->m[childSource->m[whereAnswer].getRelVerb()].getMainEntry();
 					bool foundMatch=checkVerbs.empty();
 					for (unsigned int cv=0; cv<checkVerbs.size() && !foundMatch; cv++)
 					{
@@ -2816,7 +2816,7 @@ void cSemanticMap::cSemanticEntry::printDirectRelations(int logType,Source *pare
 			wstring tmpstr,tmpstr2,tmpstr3;
 			::lplog(logType,L"%s:%d:SM %s:SUBJ[%s] VERB[%s] OBJECT[%s]",path.c_str(),where,childSource->m[where].word->first.c_str(),
 				(childSource->m[where].relSubject>=0) ? childSource->whereString(childSource->m[where].relSubject,tmpstr,true).c_str():L"",
-				(childSource->m[where].relVerb>=0) ? childSource->whereString(childSource->m[where].relVerb,tmpstr2,true).c_str():L"",
+				(childSource->m[where].getRelVerb()>=0) ? childSource->whereString(childSource->m[where].getRelVerb(),tmpstr2,true).c_str():L"",
 				(childSource->m[where].getRelObject()>=0) ? childSource->whereString(childSource->m[where].getRelObject(),tmpstr3,true).c_str():L"");
 		}
 		else
@@ -3119,7 +3119,7 @@ void Source::detectByClausePassive(vector <cSpaceRelation>::iterator sri,cSpaceR
 	}
 	// What are titles of albums featuring Jay-Z? --> what albums featured Jay-Z?
 	int verbPhraseElement=-1;
-	if (queryPattern(sri->whereQuestionType,L"__SQ",maxEnd)!=-1 && sri->whereSubject>=0 && m[sri->whereSubject].relVerb>=0 && m[m[sri->whereSubject].relVerb].queryWinnerForm(isForm)>=0 && 
+	if (queryPattern(sri->whereQuestionType,L"__SQ",maxEnd)!=-1 && sri->whereSubject>=0 && m[sri->whereSubject].getRelVerb()>=0 && m[m[sri->whereSubject].getRelVerb()].queryWinnerForm(isForm)>=0 && 
 		  (verbPhraseElement=m[sri->whereSubject].pma.queryPatternDiff(L"__NOUN",L"F"))!=-1)
 	{
 		vector < vector <tTagLocation> > tagSets;
@@ -3157,7 +3157,7 @@ void Source::detectByClausePassive(vector <cSpaceRelation>::iterator sri,cSpaceR
 int Source::detectAttachedPhrase(vector <cSpaceRelation>::iterator sri,int &relVerb)
 { LFS
 	int collectionWhere=sri->whereQuestionTypeObject;
-	if (m[collectionWhere].beginObjectPosition>=0 && m[m[collectionWhere].beginObjectPosition].pma.queryPatternDiff(L"__NOUN",L"F")!=-1 && (relVerb=m[collectionWhere].relVerb)>=0 && m[relVerb].relSubject==collectionWhere)
+	if (m[collectionWhere].beginObjectPosition>=0 && m[m[collectionWhere].beginObjectPosition].pma.queryPatternDiff(L"__NOUN",L"F")!=-1 && (relVerb=m[collectionWhere].getRelVerb())>=0 && m[relVerb].relSubject==collectionWhere)
 		return 0;
 	return -1;
 }
@@ -3175,7 +3175,7 @@ void Source::detectSubQueries(vector <cSpaceRelation>::iterator sri,vector <cSpa
 	int collectionWhere = sri->whereQuestionTypeObject;
 	if (collectionWhere<0) return;
 	int rh=m[collectionWhere].endObjectPosition,relVerb,relPrep,relObject;
-	if (rh>=0 && (((m[rh].flags&WordMatch::flagRelativeHead) && (relVerb=m[rh].relVerb)>=0) || detectAttachedPhrase(sri,relVerb)>=0))
+	if (rh>=0 && (((m[rh].flags&WordMatch::flagRelativeHead) && (relVerb=m[rh].getRelVerb())>=0) || detectAttachedPhrase(sri,relVerb)>=0))
 	{
 		printSRI(L"[collecting subqueries of]:",&(*sri),0,sri->whereSubject,sri->whereObject,sri->wherePrep,false,-1,L"");
 		// old man ran in the Olympics
@@ -3198,8 +3198,8 @@ void Source::detectSubQueries(vector <cSpaceRelation>::iterator sri,vector <cSpa
 		testQuestionType(relObject,csr.whereQuestionType,whereQuestionTypeFlags,objectQTFlag,csr.whereQuestionInformationSourceObjects);
 		if (relObject>=0)
 			testQuestionType(m[relObject].relNextObject,csr.whereQuestionType,whereQuestionTypeFlags,secondaryObjectQTFlag,csr.whereQuestionInformationSourceObjects);
-		testQuestionType(m[rh].relVerb - 1, csr.whereQuestionType, whereQuestionTypeFlags, 0, csr.whereQuestionInformationSourceObjects);
-		testQuestionType(m[rh].relVerb - 2, csr.whereQuestionType, whereQuestionTypeFlags, 0, csr.whereQuestionInformationSourceObjects);
+		testQuestionType(m[rh].getRelVerb() - 1, csr.whereQuestionType, whereQuestionTypeFlags, 0, csr.whereQuestionInformationSourceObjects);
+		testQuestionType(m[rh].getRelVerb() - 2, csr.whereQuestionType, whereQuestionTypeFlags, 0, csr.whereQuestionInformationSourceObjects);
 		if (csr.whereQuestionInformationSourceObjects.size()>0)
 			csr.whereQuestionType=*csr.whereQuestionInformationSourceObjects.begin();
 		wstring ps;

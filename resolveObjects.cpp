@@ -1677,7 +1677,7 @@ bool Source::resolveBodyObjectClass(int where,int beginEntirePosition,vector <cO
 			  (speakerGroupsEstablished && currentSpeakerGroup+1<speakerGroups.size() && 
 				 speakerGroups[currentSpeakerGroup+1].speakers.find(m[where].getObject())!=speakerGroups[currentSpeakerGroup+1].speakers.end()))
 		{
-			int whereVerb=m[where].relVerb;
+			int whereVerb=m[where].getRelVerb();
 			whereObject=m[where].getRelObject();
 			if (whereObject<0 && whereVerb>=0)
 				while (whereVerb+1<(signed)m.size() && m[whereVerb+1].queryWinnerForm(adverbForm)>=0 && m[whereVerb+1].queryWinnerForm(prepositionForm)<0) 
@@ -1873,7 +1873,7 @@ void Source::discouragePOV(int where,bool inQuote,bool definitelySpeaker)
 	bool mixedPluralityObject=pluralSubject && m[where].getRelObject()>=0 && (o=m[wo=m[where].getRelObject()].getObject())>=0 && 
 			!objects[o].plural && !objects[o].neuter && (objects[o].male || objects[o].female) && objects[o].objectClass==PRONOUN_OBJECT_CLASS;
 	// they VERB on him.
-	bool mixedPluralityPrepObject=pluralSubject && m[where].relVerb>=0 && m[m[where].relVerb].relPrep>=0 && (wo=m[m[m[where].relVerb].relPrep].getRelObject())>=0 && (o=m[wo].getObject())>=0;
+	bool mixedPluralityPrepObject=pluralSubject && m[where].getRelVerb()>=0 && m[m[where].getRelVerb()].relPrep>=0 && (wo=m[m[m[where].getRelVerb()].relPrep].getRelObject())>=0 && (o=m[wo].getObject())>=0;
 	if (mixedPluralityPrepObject)
 	//{
 		mixedPluralityPrepObject=!objects[o].plural && !objects[o].neuter && objects[o].objectClass==PRONOUN_OBJECT_CLASS;
@@ -2867,7 +2867,7 @@ int Source::coreferenceFilterLL2345(int where,int rObject,vector <int> &disallow
 		// if the where still has not been reached, return.
 		if (element<0 || searchPosition+m[searchPosition].pma[element&~matchElement::patternFlag].len<where) return 0;
 	}	
-	int whereVerb=m[where].relVerb;
+	int whereVerb=m[where].getRelVerb();
 	if (whereVerb<0)
 	{
 		for (whereVerb=where; whereVerb>=begin && !m[whereVerb].hasVerbRelations; whereVerb--);
@@ -3263,12 +3263,12 @@ bool Source::resolvePronoun(int where,bool definitelySpeaker,bool inPrimaryQuote
 	{
 		// it was opposite the door / He was near Bobby 
 		// no preposition, but incorrect parsing means prep was turned into an adverb (opposite, near means the object is NOT the subject)
-		if (m[where].relVerb>=0 && m[m[where].relVerb].relPrep<0 && (m[m[m[where].getRelObject()].beginObjectPosition-1].word->second.flags&tFI::prepMoveType))
+		if (m[where].getRelVerb()>=0 && m[m[where].getRelVerb()].relPrep<0 && (m[m[m[where].getRelObject()].beginObjectPosition-1].word->second.flags&tFI::prepMoveType))
 		{
 			int wpo=m[where].getRelObject();
 			m[wpo].objectRole&=~IS_OBJECT_ROLE;
 			m[wpo].objectRole|=PREP_OBJECT_ROLE;
-			setRelPrep(m[where].relVerb,m[wpo].beginObjectPosition-1,1,PREP_VERB_SET, m[where].relVerb);
+			setRelPrep(m[where].getRelVerb(),m[wpo].beginObjectPosition-1,1,PREP_VERB_SET, m[where].getRelVerb());
 			m[m[wpo].beginObjectPosition-1].setRelObject(wpo);
 			m[where].setRelObject(-1);
 			if (debugTrace.traceSpeakerResolution)
@@ -3292,7 +3292,7 @@ bool Source::resolvePronoun(int where,bool definitelySpeaker,bool inPrimaryQuote
 	// It was at that moment that the full realization of his[man] folly began to STAYcome home
 	int maxEnd;
 	if ((!(object->male || object->female) && object->neuter && !object->plural) && 
-		  m[where].relPrep>=0 && m[where].relPrep==m[where].relVerb+1 &&
+		  m[where].relPrep>=0 && m[where].relPrep==m[where].getRelVerb()+1 &&
 			m[m[where].relPrep].getRelObject()>=0 && m[m[m[where].relPrep].getRelObject()].endObjectPosition>=0 && queryPattern(m[m[m[where].relPrep].getRelObject()].endObjectPosition,L"_REL1",maxEnd)!=-1 &&
 		  (m[where].objectRole&(IS_OBJECT_ROLE|SUBJECT_ROLE))==(IS_OBJECT_ROLE|SUBJECT_ROLE) && 
 			 m[where].getRelObject()<0)
@@ -3323,8 +3323,8 @@ bool Source::resolvePronoun(int where,bool definitelySpeaker,bool inPrimaryQuote
 	// get the nearest localObject that has a subType
 	// it was opposite the door
 	int wp=m[where].getRelObject();
-	if ((m[where].objectRole&IS_OBJECT_ROLE) && object->neuter && !(object->male || object->female || object->plural) && m[where].getRelObject()<0 && m[where].relVerb>=0 &&
-		  (wp=m[m[where].relVerb].relPrep)>=0 && (m[wp].word->second.flags&tFI::prepMoveType) && m[wp].getRelObject()>=0 &&
+	if ((m[where].objectRole&IS_OBJECT_ROLE) && object->neuter && !(object->male || object->female || object->plural) && m[where].getRelObject()<0 && m[where].getRelVerb()>=0 &&
+		  (wp=m[m[where].getRelVerb()].relPrep)>=0 && (m[wp].word->second.flags&tFI::prepMoveType) && m[wp].getRelObject()>=0 &&
 			m[m[wp].getRelObject()].getObject()>=0 && objects[m[m[wp].getRelObject()].getObject()].getSubType()>=0)
 	{
 		for (vector <cLocalFocus>::iterator lsi=localObjects.begin(); lsi!=localObjects.end(); lsi++)
@@ -3402,8 +3402,8 @@ bool Source::resolvePronoun(int where,bool definitelySpeaker,bool inPrimaryQuote
 	// if a preposition directly follows another object, the object of the preposition points to the previous object by relNextObject.
 	vector <cLocalFocus>::iterator lsi;
 	int whereSubject=-1;
-	if ((m[where].objectRole&PREP_OBJECT_ROLE) && m[where].relPrep>=0 && m[m[where].relPrep].relVerb>=0 && m[m[m[where].relPrep].relVerb].relSubject>=0 && 
-		m[whereSubject=m[m[m[where].relPrep].relVerb].relSubject].getObject()>=0 && 
+	if ((m[where].objectRole&PREP_OBJECT_ROLE) && m[where].relPrep>=0 && m[m[where].relPrep].getRelVerb()>=0 && m[m[m[where].relPrep].getRelVerb()].relSubject>=0 && 
+		m[whereSubject=m[m[m[where].relPrep].getRelVerb()].relSubject].getObject()>=0 && 
 		objects[m[whereSubject].getObject()].objectClass==PRONOUN_OBJECT_CLASS && 
 		m[where].getObject()>=0 &&
 		(objects[m[whereSubject].getObject()].plural ^ objects[m[where].getObject()].plural) && 
@@ -3464,9 +3464,9 @@ void Source::setResolved(int where,vector <cLocalFocus>::iterator lsi,bool isPhy
 	{
 		if (!lsi->physicallyPresent && isPhysicallyPresent && 
 			  ((m[where].objectRole&SECONDARY_SPEAKER_ROLE) || 
-				 ((m[where].objectRole&IN_SECONDARY_QUOTE_ROLE) && m[where].relVerb>=0 && m[m[where].relVerb].getMainEntry()->first==L"am") ||
+				 ((m[where].objectRole&IN_SECONDARY_QUOTE_ROLE) && m[where].getRelVerb()>=0 && m[m[where].getRelVerb()].getMainEntry()->first==L"am") ||
 				 ((m[where].objectRole&IN_SECONDARY_QUOTE_ROLE) && m[where].getObject()>=0 && objects[m[where].getObject()].whereRelativeClause>=0 && 
-				  m[objects[m[where].getObject()].whereRelativeClause].relVerb>=0 && m[m[objects[m[where].getObject()].whereRelativeClause].relVerb].getMainEntry()->first==L"am")))
+				  m[objects[m[where].getObject()].whereRelativeClause].getRelVerb()>=0 && m[m[objects[m[where].getObject()].whereRelativeClause].getRelVerb()].getMainEntry()->first==L"am")))
 			isPhysicallyPresent=false;
 		else
 		{
@@ -3596,7 +3596,7 @@ void Source::resolveObject(int where,bool definitelySpeaker,bool inPrimaryQuote,
 	// if inQuotes, and relVerb is a present tense, and speakerGroupsEstablished, and immediately before lastOpeningPrimaryQuote is an unquoted paragraph,
 	//   AND there is a local object that is newly physically present in that unquoted paragraph, then allow out of quote matches
 	bool presentAssertion=false;
-	if (inPrimaryQuote && speakerGroupsEstablished && m[where].relVerb>=0 && m[m[where].relVerb].verbSense==VT_PRESENT && lastOpeningPrimaryQuote>3 &&
+	if (inPrimaryQuote && speakerGroupsEstablished && m[where].getRelVerb()>=0 && m[m[where].getRelVerb()].verbSense==VT_PRESENT && lastOpeningPrimaryQuote>3 &&
 		  !(m[lastOpeningPrimaryQuote-3].objectRole&IN_PRIMARY_QUOTE_ROLE) && m[lastOpeningPrimaryQuote].previousQuote>=0) // -1 is section break.  -2 is the end quote.  -3 is in quote (or not)
 	{
 		int begin=m[m[lastOpeningPrimaryQuote].previousQuote].endQuote,end=lastOpeningPrimaryQuote-2;
@@ -4073,7 +4073,7 @@ void Source::resolveObject(int where,bool definitelySpeaker,bool inPrimaryQuote,
 			lplog(LOG_RESOLUTION,L"%06d:%s not speaker (time)",where,objectString(object,tmpstr,false).c_str());
 	}
 	// Jay-Z says he will marry Beyonce Knowles "one day soon." - Jay-Z is the first word of the entire document
-	if (object->originalLocation==where && (or&SUBJECT_ROLE) && object->neuter && !object->male && !object->female && m[where].relVerb>=0 && m[m[where].relVerb].queryForm(thinkForm)>=0)
+	if (object->originalLocation==where && (or&SUBJECT_ROLE) && object->neuter && !object->male && !object->female && m[where].getRelVerb()>=0 && m[m[where].getRelVerb()].queryForm(thinkForm)>=0)
 	{
 		identifyISARelation(where,false);
 		if ((m[where].flags&WordMatch::flagFirstLetterCapitalized) && object->isWikiPerson)

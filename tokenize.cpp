@@ -253,6 +253,10 @@ void Source::eraseLastQuote(int &lastPSQuote,tIWMM quoteCloseWord,unsigned int &
 		if (sentenceStarts[s2]==lastPSQuote && m[sentenceStarts[s2]].word==Words.sectionWord)
 			sentenceStarts[s2]++;// corrects the setting because of a dangling quotation that has now been erased
 	}
+	unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
+	for (auto const&[where, comment] : metaCommandsEmbeddedInSource)
+		newMetaCommandsEmbeddedInSource[(where < q) ? where : where-1] = comment;
+	metaCommandsEmbeddedInSource = newMetaCommandsEmbeddedInSource;
 	lastPSQuote=q-1;
 }
 
@@ -494,6 +498,10 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 						m.erase(m.begin()+q+1);
 						for (unsigned int s2=s+1; s2<sentenceStarts.size(); s2++)
 							sentenceStarts[s2]--;
+						unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
+						for (auto const&[where, comment] : metaCommandsEmbeddedInSource)
+							newMetaCommandsEmbeddedInSource[(where < q+1) ? where : where - 1] = comment;
+						metaCommandsEmbeddedInSource = newMetaCommandsEmbeddedInSource;
 						end--;
 					}
 				}
@@ -593,6 +601,10 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 						m.insert(m.begin() + q + 1, WordMatch(Words.gquery(L"ishas"), 0, debugTrace));
 						for (unsigned int s2 = s + 1; s2 < sentenceStarts.size(); s2++)
 							sentenceStarts[s2]++;
+						unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
+						for (auto const&[where, comment] : metaCommandsEmbeddedInSource)
+							newMetaCommandsEmbeddedInSource[(where > q) ? where +1 : where ] = comment;
+						metaCommandsEmbeddedInSource = newMetaCommandsEmbeddedInSource;
 						end++;
 						if (debugTrace.traceParseInfo)
 						{
@@ -617,6 +629,10 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 			{
 				for (unsigned int s2=s+1; s2<sentenceStarts.size(); s2++)
 					sentenceStarts[s2]++;
+				unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
+				for (auto const&[where, comment] : metaCommandsEmbeddedInSource)
+					newMetaCommandsEmbeddedInSource[(where > q) ? where + 1 : where] = comment;
+				metaCommandsEmbeddedInSource = newMetaCommandsEmbeddedInSource;
 				end++;
 			}
 			// if the word 'no one' is immediately before a non capitalized word which is almost certainly a noun, or cannot be a verb, convert it to 'no' 'one'
@@ -630,6 +646,10 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 				m.insert(m.begin() + q + 1, WordMatch(Words.gquery(L"one"), 0, debugTrace));
 				for (unsigned int s2 = s + 1; s2 < sentenceStarts.size(); s2++)
 					sentenceStarts[s2]++;
+				unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
+				for (auto const&[where, comment] : metaCommandsEmbeddedInSource)
+					newMetaCommandsEmbeddedInSource[(where > q) ? where + 1 : where] = comment;
+				metaCommandsEmbeddedInSource = newMetaCommandsEmbeddedInSource;
 				end++;
 			}
 		}
@@ -677,6 +697,10 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 				m[end].flags|=WordMatch::flagInsertedQuote;
 				for (unsigned int s2=s+1; s2<sentenceStarts.size(); s2++)
 					sentenceStarts[s2]++;
+				unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
+				for (auto const&[where, comment] : metaCommandsEmbeddedInSource)
+					newMetaCommandsEmbeddedInSource[(where > end) ? where + 1 : where] = comment;
+				metaCommandsEmbeddedInSource = newMetaCommandsEmbeddedInSource;
 			}
 			if (secondaryQuotations&1)
 			{
@@ -780,6 +804,10 @@ void Source::adjustWords(void)
 			{
 				for (unsigned int s2=s+1; s2<sentenceStarts.size(); s2++)
 					sentenceStarts[s2]++;
+				unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
+				for (auto const&[where, comment] : metaCommandsEmbeddedInSource)
+					newMetaCommandsEmbeddedInSource[(where > q) ? where + 1 : where] = comment;
+				metaCommandsEmbeddedInSource = newMetaCommandsEmbeddedInSource;
 				end++;
 			}
 		}

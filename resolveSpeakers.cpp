@@ -1927,7 +1927,7 @@ void Source::adjustSaliencesByParallelRoleAndPlurality(int where,bool inPrimaryQ
 		if (lsi->includeInSalience(objectToBeMatchedInQuote,quoteIndependentAge) && lsi->om.salienceFactor>=0)
       objects[lsi->om.object].lsiOffset=lsi;
   int age=0,o=m[where].getObject(),tense=-1;
-	if (m[where].relVerb>=0 && m[m[where].relVerb].quoteForwardLink>=0) tense=m[m[where].relVerb].quoteForwardLink;
+	if (m[where].getRelVerb()>=0 && m[m[where].getRelVerb()].quoteForwardLink>=0) tense=m[m[where].getRelVerb()].quoteForwardLink;
 	unsigned __int64 objectRole=m[where].objectRole;
 	bool matchingToPlural=(o==OBJECT_UNKNOWN_PLURAL || (o>=0 && objects[o].plural)),localInPrimaryQuote=inPrimaryQuote,physicallyEvaluated,passedParagraph=false;
 	if (forSpeakerIdentification) objectRole|=SUBJECT_ROLE;
@@ -1968,14 +1968,14 @@ void Source::adjustSaliencesByParallelRoleAndPlurality(int where,bool inPrimaryQ
 			// Also, make sure plural matches, because 'they' is neuter also and so otherwise this test will succeed with any
 			// unresolvable object, when 'they' should match multiple gendered nouns (boris and whittington)
 			//  they[matters,thoughts,tommy] spoke low and the din of the traffic drowned their[tommy,matters,thoughts] voices effectually . 
-			bool tenseMatch=(m[I].relVerb>=0 && m[m[I].relVerb].quoteForwardLink>=0) ? m[m[I].relVerb].quoteForwardLink==tense : false;
+			bool tenseMatch=(m[I].getRelVerb()>=0 && m[m[I].getRelVerb()].quoteForwardLink>=0) ? m[m[I].getRelVerb()].quoteForwardLink==tense : false;
 			/*
 			bool lPP=physicallyPresentPosition(I,physicallyEvaluated); salienceNPP
 			if (where==36533 || where==18103 || where==25439)
 			{
 				wstring sRole;
 				lplog(LOG_RESOLUTION,L"%06d:%d %d %d %d pluralMatch=%s unResolvablePosition=%s lPP=%s PP=%s tenseMatch=%s lRole=%s",
-							I,m[I].relVerb,(m[I].relVerb>=0)?m[m[I].relVerb].quoteForwardLink:-1,tense,lsi->om.salienceFactor,
+							I,m[I].getRelVerb(),(m[I].getRelVerb()>=0)?m[m[I].getRelVerb()].quoteForwardLink:-1,tense,lsi->om.salienceFactor,
 							(pluralMatch) ? L"true":L"false",
 							(unResolvablePosition(m[I].beginObjectPosition)) ? L"true":L"false",
 							(lPP) ? L"true" : L"false",
@@ -2677,11 +2677,11 @@ bool Source::pushObjectIntoLocalFocus(int where, int matchingObject, bool identi
 		//    He[carter] then says : ‘[carter:tommy] Please MOVE_OBJECTtake a seat , Mr[tommy] . -- er ? ’ 
 		// a secondary speaker is never physically present, even though the verb is present tense.
 		wstring word; // for debugging
-		int ir=-1,irv=-1; // for debugging // i=m[where].relVerb,
+		int ir=-1,irv=-1; // for debugging // i=m[where].getRelVerb(),
 		if (!lsi->physicallyPresent && currentlyPhysicallyPresent && 
 			  ((m[where].objectRole&SECONDARY_SPEAKER_ROLE) || 
-				 (inSecondaryQuote && m[where].relVerb>=0 && (word=m[m[where].relVerb].getMainEntry()->first)==L"am") ||
-				 (inSecondaryQuote && m[where].getObject()>=0 && (ir=objects[m[where].getObject()].whereRelativeClause)>=0 && (irv=m[objects[m[where].getObject()].whereRelativeClause].relVerb)>=0 && (word=m[m[objects[m[where].getObject()].whereRelativeClause].relVerb].getMainEntry()->first)==L"am")))
+				 (inSecondaryQuote && m[where].getRelVerb()>=0 && (word=m[m[where].getRelVerb()].getMainEntry()->first)==L"am") ||
+				 (inSecondaryQuote && m[where].getObject()>=0 && (ir=objects[m[where].getObject()].whereRelativeClause)>=0 && (irv=m[objects[m[where].getObject()].whereRelativeClause].getRelVerb())>=0 && (word=m[m[objects[m[where].getObject()].whereRelativeClause].getRelVerb()].getMainEntry()->first)==L"am")))
 			currentlyPhysicallyPresent=false;
 		// adaptation for not breaking up secondary speaker groups
 		// if subject has not been physically present for a while, make this not physically present (but not if in speakergroup).
@@ -2721,10 +2721,10 @@ bool Source::pushObjectIntoLocalFocus(int where, int matchingObject, bool identi
 							  m[m[lsi->lastExit].getRelObject()].getObject()>=0 &&
 							  objects[m[m[lsi->lastExit].getRelObject()].getObject()].getSubType()<0) ||
 							// if the subject has an atached prepositional phrase, the object of the prepositional phrase must be a place or a time (retired for the night)
-							 (m[lsi->lastExit].relVerb>=0 && m[m[lsi->lastExit].relVerb].relPrep>=0 && 
-							  m[m[m[lsi->lastExit].relVerb].relPrep].getRelObject()>=0 &&
-							  m[m[m[m[lsi->lastExit].relVerb].relPrep].getRelObject()].getObject()>=0 && 
-								objects[m[m[m[m[lsi->lastExit].relVerb].relPrep].getRelObject()].getObject()].getSubType()<0 && !(m[m[m[m[lsi->lastExit].relVerb].relPrep].getRelObject()].word->second.timeFlags&T_UNIT))))
+							 (m[lsi->lastExit].getRelVerb()>=0 && m[m[lsi->lastExit].getRelVerb()].relPrep>=0 && 
+							  m[m[m[lsi->lastExit].getRelVerb()].relPrep].getRelObject()>=0 &&
+							  m[m[m[m[lsi->lastExit].getRelVerb()].relPrep].getRelObject()].getObject()>=0 && 
+								objects[m[m[m[m[lsi->lastExit].getRelVerb()].relPrep].getRelObject()].getObject()].getSubType()<0 && !(m[m[m[m[lsi->lastExit].getRelVerb()].relPrep].getRelObject()].word->second.timeFlags&T_UNIT))))
 					{
 						cSpaceRelation sr(lsi->lastExit,-1,-1,-1,-1,-1,-1,-1,-1,stEXIT,false,false,-1,-1,true);
 						bool comparesr( const cSpaceRelation &s1, const cSpaceRelation &s2 );
@@ -2736,7 +2736,7 @@ bool Source::pushObjectIntoLocalFocus(int where, int matchingObject, bool identi
 							deleted=L"[DELETED]";
 						}
 					}
-					if (isAgentObject(lsi->om.object) && (m[where].relVerb<0 || !isVerbClass(m[where].relVerb,stENTER)))
+					if (isAgentObject(lsi->om.object) && (m[where].getRelVerb()<0 || !isVerbClass(m[where].getRelVerb(),stENTER)))
 					{
 						/*
 						int oc=objects[m[where].getObject()].objectClass;
@@ -3117,9 +3117,9 @@ void Source::matchAdditionalObjectsIfPlural(int where,bool isPlural,bool atLeast
 // use probability of word relations to prefer some to other matches
 void Source::preferRelatedObjects(int where)
 { LFS
-	if (m[where].relVerb<0) return;
+	if (m[where].getRelVerb()<0) return;
 	int wordsWithFrequency=0,offsetWithFrequency=-1,highestFrequency=-1,lowestFrequency=-1;
-	tIWMM verb=m[m[where].relVerb].getMainEntry(),winner;
+	tIWMM verb=m[m[where].getRelVerb()].getMainEntry(),winner;
 	if (verb->first==L"am") // too common; unreliable without usage of adjectives or adverbs (later?)
 		return;
 	tFI::cRMap *rm;
@@ -3171,7 +3171,7 @@ bool Source::chooseBest(int where,bool definitelySpeaker,bool inPrimaryQuote,boo
 	bool genericGenderOverride=false;
 	// an introduction...  rule out all objects that are physically present or recently PP.  But this is not an unresolvable object either.
 	// there lay the girl
-	//bool newPhysicallyPresentObject=m[where].relVerb>=0 && m[m[where].relVerb].word->first==L"lay" && !(m[where].objectRole&SUBJECT_ROLE);
+	//bool newPhysicallyPresentObject=m[where].getRelVerb()>=0 && m[m[where].getRelVerb()].word->first==L"lay" && !(m[where].objectRole&SUBJECT_ROLE);
   vector <cLocalFocus>::iterator highest[HIGHEST];
 	int sf,I,ca;
   for (I=0; I<HIGHEST; I++) highest[I]=localObjects.end();
@@ -3881,24 +3881,24 @@ bool Source::accompanyingRolePP(int where)
 	for (I=where-1; I>0 && !isEOS(I) && (m[I].objectRole&SUBJECT_ROLE); I--);
 	if (I>0 && !isEOS(I)) 
 	{
-		for (; I>0 && !isEOS(I) && (!(m[I].objectRole&SUBJECT_ROLE) || m[I].relVerb<0); I--);
-		if (I>0 && !isEOS(I) && m[I].relVerb>=0)
+		for (; I>0 && !isEOS(I) && (!(m[I].objectRole&SUBJECT_ROLE) || m[I].getRelVerb()<0); I--);
+		if (I>0 && !isEOS(I) && m[I].getRelVerb()>=0)
 		{
-			if ((m[m[I].relVerb].quoteForwardLink&VT_TENSE_MASK)==VT_PAST_PERFECT)
-				lplog(LOG_RESOLUTION,L"%d:accompanyingRolePP blocked physical presence because of relative clause & surrounding past perfect subject=%d, PP verb=%d.",where,I,m[I].relVerb);
-			return (m[m[I].relVerb].quoteForwardLink&VT_TENSE_MASK)==VT_PAST_PERFECT;
+			if ((m[m[I].getRelVerb()].quoteForwardLink&VT_TENSE_MASK)==VT_PAST_PERFECT)
+				lplog(LOG_RESOLUTION,L"%d:accompanyingRolePP blocked physical presence because of relative clause & surrounding past perfect subject=%d, PP verb=%d.",where,I,m[I].getRelVerb());
+			return (m[m[I].getRelVerb()].quoteForwardLink&VT_TENSE_MASK)==VT_PAST_PERFECT;
 		}
 	}
 	// find subsequent subject before EOS at end of sentence.
 	for (I=where+1; I<(signed)m.size() && !isEOS(I) && (m[I].objectRole&SUBJECT_ROLE); I++);
 	if (I<(signed)m.size() && !isEOS(I)) 
 	{
-		for (; I<(signed)m.size() && !isEOS(I) && (!(m[I].objectRole&SUBJECT_ROLE) || m[I].relVerb<0); I++);
-		if (I<(signed)m.size() && !isEOS(I) && m[I].relVerb>=0)
+		for (; I<(signed)m.size() && !isEOS(I) && (!(m[I].objectRole&SUBJECT_ROLE) || m[I].getRelVerb()<0); I++);
+		if (I<(signed)m.size() && !isEOS(I) && m[I].getRelVerb()>=0)
 		{
-			if ((m[m[I].relVerb].quoteForwardLink&VT_TENSE_MASK)==VT_PAST_PERFECT)
-				lplog(LOG_RESOLUTION,L"%d:accompanyingRolePP blocked physical presence because of relative clause & surrounding past perfect subject=%d, PP verb=%d.",where,I,m[I].relVerb);
-			return (m[m[I].relVerb].quoteForwardLink&VT_TENSE_MASK)==VT_PAST_PERFECT;
+			if ((m[m[I].getRelVerb()].quoteForwardLink&VT_TENSE_MASK)==VT_PAST_PERFECT)
+				lplog(LOG_RESOLUTION,L"%d:accompanyingRolePP blocked physical presence because of relative clause & surrounding past perfect subject=%d, PP verb=%d.",where,I,m[I].getRelVerb());
+			return (m[m[I].getRelVerb()].quoteForwardLink&VT_TENSE_MASK)==VT_PAST_PERFECT;
 		}
 	}
   return false;
@@ -3943,11 +3943,11 @@ bool Source::physicallyPresentPosition(int where,int beginObjectPosition,bool &p
 	// Conrad was undoubtedly the tenant of the house .
 	/* Needs more work */
 	vector <cLocalFocus>::iterator lsi;
-	if ((or&(IN_PRIMARY_QUOTE_ROLE|IN_SECONDARY_QUOTE_ROLE))==0 && m[where].relVerb>=0 && m[m[where].relVerb].getMainEntry()->first==L"am" && (or&SUBJECT_ROLE) &&
+	if ((or&(IN_PRIMARY_QUOTE_ROLE|IN_SECONDARY_QUOTE_ROLE))==0 && m[where].getRelVerb()>=0 && m[m[where].getRelVerb()].getMainEntry()->first==L"am" && (or&SUBJECT_ROLE) &&
 			m[where].getObject()>=0 && objects[m[where].getObject()].objectClass==NAME_OBJECT_CLASS &&
 			((lsi=in(m[where].getObject()))==localObjects.end() || !lsi->physicallyPresent) &&
-		  m[m[where].relVerb].getRelObject()>=0 && m[m[m[where].relVerb].getRelObject()].getObject()>=0 && 
-			((lsi=in(m[m[m[where].relVerb].getRelObject()].getObject()))==localObjects.end() || !lsi->physicallyPresent))
+		  m[m[where].getRelVerb()].getRelObject()>=0 && m[m[m[where].getRelVerb()].getRelObject()].getObject()>=0 && 
+			((lsi=in(m[m[m[where].getRelVerb()].getRelObject()].getObject()))==localObjects.end() || !lsi->physicallyPresent))
 	{
 		// ignore POV objects
 		if (currentSpeakerGroup>=speakerGroups.size() || speakerGroups[currentSpeakerGroup].povSpeakers.find(m[where].getObject())==speakerGroups[currentSpeakerGroup].povSpeakers.end())
@@ -3955,7 +3955,7 @@ bool Source::physicallyPresentPosition(int where,int beginObjectPosition,bool &p
 			// ignore descriptions
 			// Mr. Julius P. Hersheimmer was a great deal younger than either Tommy or Tuppence had pictured him.
 			int wo;
-			if (m[where].relVerb>=0 && (wo=m[m[where].relVerb].getRelObject())>=0 && m[wo].endObjectPosition>=0 && m[wo].endObjectPosition<(signed)m.size() && m[m[wo].endObjectPosition].pma.queryPatternDiff(L"__ADJECTIVE",L"A")==-1)
+			if (m[where].getRelVerb()>=0 && (wo=m[m[where].getRelVerb()].getRelObject())>=0 && m[wo].endObjectPosition>=0 && m[wo].endObjectPosition<(signed)m.size() && m[m[wo].endObjectPosition].pma.queryPatternDiff(L"__ADJECTIVE",L"A")==-1)
 			{
 				return false;
 			}
@@ -3991,7 +3991,7 @@ bool Source::physicallyPresentPosition(int where,int beginObjectPosition,bool &p
 	}
 	/*
 	int whereOwningVerb;
-	if (inInfinitivePhrase && m[where].relVerb>=0 && (whereOwningVerb=m[m[where].relVerb].previousCompoundPartObject)>=0 && isSpecialVerb(whereOwningVerb))
+	if (inInfinitivePhrase && m[where].getRelVerb()>=0 && (whereOwningVerb=m[m[where].getRelVerb()].previousCompoundPartObject)>=0 && isSpecialVerb(whereOwningVerb))
 	{
 		or&=~(NONPAST_OBJECT_ROLE|NONPRESENT_OBJECT_ROLE);
 		int tsSense=m[whereOwningVerb].quoteForwardLink;
@@ -3999,7 +3999,7 @@ bool Source::physicallyPresentPosition(int where,int beginObjectPosition,bool &p
 			or|=NONPAST_OBJECT_ROLE;
 		if ((tsSense!=VT_PRESENT && tsSense!=VT_EXTENDED+ VT_PRESENT && tsSense!=VT_PASSIVE+ VT_PRESENT && tsSense!=VT_PASSIVE+ VT_PRESENT+VT_EXTENDED))
 			or|=NONPRESENT_OBJECT_ROLE;
-		lplog(LOG_RESOLUTION,L"Infinitive verb @%d is owned by verb @%d.",m[where].relVerb,whereOwningVerb);
+		lplog(LOG_RESOLUTION,L"Infinitive verb @%d is owned by verb @%d.",m[where].getRelVerb(),whereOwningVerb);
 	}
 	*/
 	// She[tuppence] addressed it[pencil] to LOCATIONTommy at his[tommy] club
@@ -4008,9 +4008,9 @@ bool Source::physicallyPresentPosition(int where,int beginObjectPosition,bool &p
 	//   moving something that is not physical
 	// He[prime minister] took up his[prime minister] conversation with Mr . Carter at the point it[conversation] had broken off . 
 	//   EXCEPT when the something is a conversation
-	if ((or&PREP_OBJECT_ROLE) && !(or&NO_PP_PREP_ROLE) && im->relPrep>=0 && m[im->relPrep].relVerb>=0)
+	if ((or&PREP_OBJECT_ROLE) && !(or&NO_PP_PREP_ROLE) && im->relPrep>=0 && m[im->relPrep].getRelVerb()>=0)
 	{
-		int whereVerb=m[im->relPrep].relVerb;
+		int whereVerb=m[im->relPrep].getRelVerb();
 		if (isVerbClass(whereVerb,L"send-11.1-1") || !isPhysicalActionVerb(whereVerb))
 			return false;
 		int wo=m[whereVerb].getRelObject();
@@ -4527,7 +4527,7 @@ int Source::speakerBefore(int beginQuote,bool &previousParagraph)
 		if (S1found=m[I].pma.findMaxLen(L"__S1",element) && m[I].pma[element].len+I<=beginQuote && m[I].pma[element].len+I>=where)
 			break;
 		if (S1found=m[I].pma.findMaxLen(L"_REL1",element) && m[I].pma[element].len+I<=beginQuote && m[I].pma[element].len+I>=where &&
-			  m[I].relVerb>=0 && m[m[I].relVerb].queryForm(thinkForm)>=0 && m[I].word->first==L"who")
+			  m[I].getRelVerb()>=0 && m[m[I].getRelVerb()].queryForm(thinkForm)>=0 && m[I].word->first==L"who")
 			break;
 		if (S1found=m[I].pma.findMaxLen(L"_MS1",element) && m[I].pma[element].len+I<=beginQuote && m[I].pma[element].len+I>=where)
 		{
@@ -4556,7 +4556,7 @@ int Source::speakerBefore(int beginQuote,bool &previousParagraph)
 			break;
 	}
 	if (!S1found && preference==-1) return -1;
-	if (preference<0 || (I>=0 && preference<I && m[I].relVerb>=0 && isVerbClass(m[I].relVerb,L"say")))
+	if (preference<0 || (I>=0 && preference<I && m[I].getRelVerb()>=0 && isVerbClass(m[I].getRelVerb(),L"say")))
 		preference=I;
 	int lastLargestSType=preference; // see note above as to lastLargestSType
 	if (m[lastLargestSType].objectRole&MPLURAL_ROLE) return -1; // if subject is plural this is not the speaker.
@@ -4700,7 +4700,7 @@ int Source::scanForSpeaker(int where,bool &definitelySpeaker,bool &crossedSectio
   }
   if (im->principalWherePosition<0) return -1;
 	int verbPosition;
-	thinkSayVerb=(verbPosition=m[im->principalWherePosition].relVerb)>=0 && verbPosition+1<(signed)m.size() &&
+	thinkSayVerb=(verbPosition=m[im->principalWherePosition].getRelVerb())>=0 && verbPosition+1<(signed)m.size() &&
 							 (m[verbPosition].queryForm(thinkForm)>=0 || 
 								// also include 'broke in', and 'put in'
 							  (m[verbPosition+1].word->first==L"in" && (m[verbPosition].word->first==L"put" || m[verbPosition].word->first==L"broke")));
@@ -4735,8 +4735,8 @@ int Source::scanForSpeaker(int where,bool &definitelySpeaker,bool &crossedSectio
           verbPosition=tagSets[J][vTag].sourcePosition;
 					int pwsp=speakerObjectPosition;
 					if (m[speakerObjectPosition].principalWherePosition>=0) pwsp=m[speakerObjectPosition].principalWherePosition;
-					if (m[pwsp].relVerb<0 || verbPosition!=m[pwsp].relVerb)
-						lplog(LOG_RESOLUTION,L"speaker verb disagreement! %d:speakerObjectPosition[PW]=%d: relVerb=%d vs collectTag verbPosition %d.",where,pwsp,m[pwsp].relVerb,verbPosition);
+					if (m[pwsp].getRelVerb()<0 || verbPosition!=m[pwsp].getRelVerb())
+						lplog(LOG_RESOLUTION,L"speaker verb disagreement! %d:speakerObjectPosition[PW]=%d: relVerb=%d vs collectTag verbPosition %d.",where,pwsp,m[pwsp].getRelVerb(),verbPosition);
 					int objectPosition,ao=-1;
 					if (verbPosition+1<(int)m.size() && m[verbPosition+1].queryWinnerForm(adverbForm)>=0) verbPosition++;
 					if (verbPosition+1<(int)m.size() && m[verbPosition+1].word->first==L"that") return -1;
@@ -8262,10 +8262,10 @@ void createLetterIntroPatterns(void)
 int Source::letterDetectionBegin(int where,int &whereLetterTo,int &lastLetterBegin)
 { LFS
 	if (m[where].word->first!=L"“") return -1;
-	if (m[where].speakerPosition>=0 && m[m[where].speakerPosition].relVerb>=0)
+	if (m[where].speakerPosition>=0 && m[m[where].speakerPosition].getRelVerb()>=0)
 	{
 		wchar_t *readWords[]={ L"read", NULL };
-		wstring verb=m[m[m[where].speakerPosition].relVerb].word->first;
+		wstring verb=m[m[m[where].speakerPosition].getRelVerb()].word->first;
 		for (int I=0; readWords[I]; I++)
 			if (verb==readWords[I])
 			{
@@ -8489,12 +8489,12 @@ void Source::resolveMetaReference(int speakerPosition,int quotePosition,int last
 		int whereSubject=-1,whereObject=-1;
 		for (int I=quotePosition; I<m[quotePosition].endQuote; I++)
 		{
-			if ((m[I].objectRole&SUBJECT_ROLE) && m[I].getObject()>=0 && m[I].relVerb>=0)
+			if ((m[I].objectRole&SUBJECT_ROLE) && m[I].getObject()>=0 && m[I].getRelVerb()>=0)
 			{
 				if (whereSubject>=0) return; // ambiguous
 				whereSubject=I;
 			}
-			if ((m[I].objectRole&OBJECT_ROLE) && m[I].getObject()>=0 && m[I].relVerb>=0 && m[I].relSubject==whereSubject)
+			if ((m[I].objectRole&OBJECT_ROLE) && m[I].getObject()>=0 && m[I].getRelVerb()>=0 && m[I].relSubject==whereSubject)
 			{
 				if (whereObject>=0) return; // ambiguous
 				whereObject=I;

@@ -1749,7 +1749,7 @@ int createVerbPatterns(void)
 	// L"A" structure of verb phrases from Quirk CGEL (3.54)
 	cPattern::create(L"_VERB{VERB}",L"1",
 										1,L"_COND",0,1,1,
-										3, L"__INTERS1", L"_ADVERB*2", L"predeterminer|both",0, 0, 1,
+										4, L"__INTERS1", L"_ADVERB*2", L"predeterminer|both",L"reflexive_pronoun",0, 0, 1,
 										2,L"_VERBPRESENT",L"_BE{vS:V_OBJECT:id}",0,1,1,0);
 	// L"A" structure of verb phrases from Quirk CGEL (3.54)
 	cPattern::create(L"_THINK",L"1",
@@ -1760,7 +1760,7 @@ int createVerbPatterns(void)
 	// L"A" structure of verb phrases from Quirk CGEL (3.54)
 	cPattern::create(L"_VERB{VERB}",L"3",
 										1,L"_DO{imp}",0,1,1,
-										2, L"__INTERS1", L"_ADVERB*1", 0, 0, 1,
+										3, L"__INTERS1", L"_ADVERB*1", L"reflexive_pronoun", 0, 0, 1,
 										1,L"_VERBPRESENT",0,1,1,0);
 	// I do think
 	cPattern::create(L"_THINK",L"3",
@@ -1786,7 +1786,7 @@ int createVerbPatterns(void)
 	// "B" structure of verb phrases from Quirk CGEL (3.54)
 	cPattern::create(L"_VERB{VERB}",L"5",
 										1,L"_HAVE",0,1,1,
-										2, L"__INTERS1", L"_ADVERB*1", 0, 0, 1,
+										3, L"__INTERS1", L"_ADVERB*1", L"reflexive_pronoun", 0, 0, 1,
 										2,L"_VERBPASTPART{vB}",L"_BEEN{vB:id}",0,1,1,0);
 	// I have thought
 	cPattern::create(L"_THINK",L"5",

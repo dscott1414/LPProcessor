@@ -1475,6 +1475,7 @@ int wmain(int argc,wchar_t *argv[])
 		source.analyzeWordSenses();
 		source.narrativeIsQuoted = true;
 		source.syntacticRelations();
+		source.testSyntacticRelations();
 		if (parseOnly || viterbiTest)
 		{
 			if (viterbiTest)

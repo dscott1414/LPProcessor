@@ -2026,7 +2026,8 @@ bool WordClass::parseMetaCommands(int where,wchar_t *buffer, int &endSymbol, wst
 	bool setValue = (buffer[0] != L'!');
 	int offset = (setValue) ? 0 : 1;
 	*nl = 0;
-	lplog(LOG_INFO, L"%d:setting meta %s to %d", where,buffer+offset, setValue);
+	if (buffer[offset]!='P') // embedded comment for testing 
+		lplog(LOG_INFO, L"%d:setting meta %s to %d", where,buffer+offset, setValue);
 	*nl = '\r';
 	if (!wcsncmp(buffer,L"DUMPLOCALOBJECTS",wcslen(L"DUMPLOCALOBJECTS")))
 	{
@@ -2042,7 +2043,7 @@ bool WordClass::parseMetaCommands(int where,wchar_t *buffer, int &endSymbol, wst
     t.printBeforeElimination=setValue;
 	else if (!wcsnicmp(buffer+offset, L"traceSubjectVerbAgreement", wcslen(L"traceSubjectVerbAgreement")))
 		t.traceSubjectVerbAgreement = setValue;
-	else if (!wcsnicmp(buffer+offset, L"traceTestSubjectVerbAgreement", wcslen(L"traceTestSubjectVerbAgreement")))
+	else if (!wcsnicmp(buffer + offset, L"traceTestSubjectVerbAgreement", wcslen(L"traceTestSubjectVerbAgreement")))
 		t.traceTestSubjectVerbAgreement = setValue;
 	else if (!wcsnicmp(buffer+offset,L"traceEVALObjects",wcslen(L"traceEVALObjects")))
     t.traceEVALObjects= setValue;
@@ -2050,7 +2051,9 @@ bool WordClass::parseMetaCommands(int where,wchar_t *buffer, int &endSymbol, wst
     t.traceAnaphors= setValue;
   else if (!wcsnicmp(buffer+offset,L"traceRelations",wcslen(L"traceRelations")))
     t.traceRelations= setValue;
-  else if (!wcsnicmp(buffer+offset,L"traceSpeakerResolution",wcslen(L"traceSpeakerResolution")))
+	else if (!wcsnicmp(buffer + offset, L"traceTestSyntacticRelations", wcslen(L"traceTestSyntacticRelations")))
+		t.traceTestSyntacticRelations = setValue;
+	else if (!wcsnicmp(buffer+offset,L"traceSpeakerResolution",wcslen(L"traceSpeakerResolution")))
     t.traceSpeakerResolution= setValue;
   else if (!wcsnicmp(buffer+offset,L"traceObjectResolution",wcslen(L"traceObjectResolution")))
     t.traceObjectResolution= setValue;

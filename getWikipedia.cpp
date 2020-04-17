@@ -1990,7 +1990,7 @@ void Source::accumulateSemanticEntry(unsigned int where,set <cObject::cLocation>
 		else
 			roi->second.totalDistanceFromObject+=distance;
 		// use minObjectWhere
-		if (m[where].relVerb==m[minObjectWhere].relVerb && m[where].relVerb!=-1)
+		if (m[where].getRelVerb()==m[minObjectWhere].getRelVerb() && m[where].getRelVerb()!=-1)
 		{
 			if (confidence)
 				roi->second.confidentDirectRelation++;

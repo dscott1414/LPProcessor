@@ -71,7 +71,8 @@ struct sTrace
 {
 	bool traceTime,traceTags,traceWhere;
 	bool traceWikipedia,traceWebSearch,traceQCheck;
-	bool printBeforeElimination,traceSubjectVerbAgreement, traceTestSubjectVerbAgreement, traceEVALObjects,traceAnaphors,traceRelations,traceSpeakerResolution,traceNyms,traceRole;
+	bool printBeforeElimination, traceSubjectVerbAgreement, traceTestSubjectVerbAgreement, traceEVALObjects, traceAnaphors, traceRelations,traceTestSyntacticRelations;
+	bool traceSpeakerResolution, traceNyms, traceRole;
 	bool traceObjectResolution,traceVerbObjects,traceDeterminer,traceBNCPreferences,tracePatternElimination,traceNameResolution;
 	bool traceSecondaryPEMACosting,traceMatchedSentences,traceUnmatchedSentences,traceIncludesPEMAIndex;
 	bool traceTransitoryQuestion,traceConstantQuestion,traceMapQuestion,traceCommonQuestion,traceQuestionPatternMap;

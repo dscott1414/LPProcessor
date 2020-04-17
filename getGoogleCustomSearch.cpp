@@ -490,9 +490,9 @@ int Source::appendVerb(vector <wstring> &objectStrings,int where)
 	  	m[where+1].getRelObject()<0)
 		candidate+=L"+"+m[where+1].word->first;
 	unsigned int osSize=objectStrings.size();
-	if (m[where].relVerb>=0 && (m[m[where].relVerb].flags&WordMatch::flagInInfinitivePhrase) && preferredVerb==VERB_PRESENT_THIRD_SINGULAR)
+	if (m[where].getRelVerb()>=0 && (m[m[where].getRelVerb()].flags&WordMatch::flagInInfinitivePhrase) && preferredVerb==VERB_PRESENT_THIRD_SINGULAR)
 	{
-		candidate+=L"+to+"+m[m[where].relVerb].word->first;
+		candidate+=L"+to+"+m[m[where].getRelVerb()].word->first;
 		vector <wstring> saveStrings=objectStrings;
 		objectStrings.insert(objectStrings.end(),saveStrings.begin(),saveStrings.end());
 	}
@@ -505,8 +505,8 @@ int Source::appendVerb(vector <wstring> &objectStrings,int where)
 	}
 	if (osSize!=objectStrings.size())
 	{
-		candidate=m[m[where].relVerb].word->first;
-		candidate=getTense(m[where].relVerb,candidate,VERB_PAST);
+		candidate=m[m[where].getRelVerb()].word->first;
+		candidate=getTense(m[where].getRelVerb(),candidate,VERB_PAST);
 		for (unsigned int os=osSize; os<objectStrings.size(); os++)
 		{
 			if (objectStrings[os].length()>0)
