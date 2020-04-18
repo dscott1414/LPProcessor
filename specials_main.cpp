@@ -4399,10 +4399,18 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			errorMap[L"ST correct: more or less before adverb is an adverb, not a quantifier"]++;
 			return 0;
 		}
-		if (source.m[wordSourceIndex + 1].word->first == L"than" && source.m[wordSourceIndex].queryWinnerForm(quantifierForm) != -1)
+		if (source.m[wordSourceIndex + 1].word->first == L"than")
 		{
-			errorMap[L"diff: quantifier is preferred but ST pick of adverb for more or less than is acceptable."]++;
-			return 0;
+			if (source.m[wordSourceIndex].queryWinnerForm(quantifierForm) != -1)
+			{
+				errorMap[L"diff: quantifier is preferred but ST pick of adverb for more or less than is acceptable."]++;
+				return 0;
+			}
+			if (source.m[wordSourceIndex].queryWinnerForm(adverbForm) != -1 && source.m[wordSourceIndex + 2].pma.queryPattern(L"_TIME") == -1)
+			{
+				errorMap[L"ST correct: more/less than - adjective is preferred if not followed by a time."]++;
+				return 0;
+			}
 		}
 		if (source.queryPattern(wordSourceIndex, L"_MLT") != -1 && source.m[wordSourceIndex].queryWinnerForm(adverbForm) != -1)
 		{
