@@ -4415,6 +4415,19 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"diff: goodbye/good-bye is never an adjective."]++;
 		return 0;
 	}
+	if (source.m[wordSourceIndex].queryWinnerForm(reflexivePronounForm) != -1)
+	{
+		if (primarySTLPMatch == L"noun")
+		{
+			errorMap[L"diff: reflexive pronoun form can be considered a noun."]++;
+			return 0;
+		}
+		if (primarySTLPMatch == L"adjective")
+		{
+			errorMap[L"diff: reflexive pronoun form cannot be considered an adjective."]++;
+			return 0;
+		}
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
