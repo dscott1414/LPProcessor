@@ -4392,14 +4392,27 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			//return 0;
 		}
 	}
-	if ((word == L"more" || word == L"less") && source.m[wordSourceIndex + 1].queryWinnerForm(adverbForm) >= 0)
+	if (word == L"more" || word == L"less")
 	{
-		errorMap[L"ST correct: more or less before adverb is an adverb, not a quantifier"]++;
-		return 0;
+		if (source.m[wordSourceIndex + 1].queryWinnerForm(adverbForm) >= 0)
+		{
+			errorMap[L"ST correct: more or less before adverb is an adverb, not a quantifier"]++;
+			return 0;
+		}
+		if (source.m[wordSourceIndex + 1].word->first == L"than" && source.m[wordSourceIndex].queryWinnerForm(quantifierForm) != -1)
+		{
+			errorMap[L"diff: quantifier is preferred but ST pick of adverb for more or less than is acceptable."]++;
+			return 0;
+		}
+		if (source.queryPattern(wordSourceIndex, L"_MLT") != -1 && source.m[wordSourceIndex].queryWinnerForm(adverbForm) != -1)
+		{
+			errorMap[L"LP correct: more or less is an adverb when used with expressions of time."]++;
+			return 0;
+		}
 	}
-	if ((word == L"more" || word == L"less") && source.m[wordSourceIndex + 1].word->first == L"than" && source.m[wordSourceIndex].queryWinnerForm(quantifierForm) != -1)
+	if (word == L"goodbye" || word == L"good-bye")
 	{
-		errorMap[L"diff: quantifier is preferred but ST pick of adverb for more or less than is acceptable."]++;
+		errorMap[L"diff: goodbye/good-bye is never an adjective."]++;
 		return 0;
 	}
 	wstring winnerFormsString;
