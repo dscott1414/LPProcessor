@@ -4218,9 +4218,9 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		return 0;
 	}
 	// (noun) not found in winnerForms is for word ishas
-	if (word == L"ishas")
+	if (word == L"ishas" || word == L"wouldhad" || word == L"ishasdoes")
 	{
-		errorMap[L"diff: ishas is a special word."]++;
+		errorMap[L"diff: ishas/wouldhad/ishasdoes is a special word."]++;
 		return 0;
 	}
 	if (primarySTLPMatch != L"preposition or conjunction" && source.m[wordSourceIndex].isOnlyWinner(prepositionForm) && source.m[wordSourceIndex].getRelObject()>=0)
