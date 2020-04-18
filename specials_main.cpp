@@ -4415,6 +4415,16 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"diff: goodbye/good-bye is never an adjective."]++;
 		return 0;
 	}
+	if (word == L"anyhow")
+	{
+		errorMap[L"LP correct: anyhow is always an adverb."]++;
+		return 0;
+	}
+	if (word == L"but" && source.m[wordSourceIndex].queryWinnerForm(conjunctionForm) != -1)
+	{
+		errorMap[L"LP correct: but is a conjunction."]++; // 159 examples
+		return 0;
+	}
 	if (source.m[wordSourceIndex].queryWinnerForm(reflexivePronounForm) != -1)
 	{
 		if (primarySTLPMatch == L"noun")
