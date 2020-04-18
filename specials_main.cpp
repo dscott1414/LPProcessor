@@ -4417,6 +4417,45 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			errorMap[L"LP correct: more or less is an adverb when used with expressions of time."]++;
 			return 0;
 		}
+		if ((source.m[wordSourceIndex - 1].queryWinnerForm(L"noun") >= 0 && source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") < 0))
+		{
+			if ((source.m[wordSourceIndex - 1].queryForm(L"uncertainDurationUnit") >= 0 ||
+				source.m[wordSourceIndex - 1].queryForm(L"simultaneousUnit") >= 0 ||
+				source.m[wordSourceIndex - 1].queryForm(L"dayUnit") >= 0 ||
+				source.m[wordSourceIndex - 1].queryForm(L"timeUnit") >= 0 ||
+				source.m[wordSourceIndex - 1].queryForm(L"season") >= 0 ||
+				source.m[wordSourceIndex - 1].queryForm(L"time_abbreviation") >= 0))
+			{
+				if (source.m[wordSourceIndex].queryWinnerForm(adverbForm) != -1)
+				{
+					errorMap[L"LP correct: more or less is an adverb when used with expressions of time."]++;
+					return 0;
+				}
+			}
+			else if (source.m[wordSourceIndex].queryWinnerForm(quantifierForm) != -1)
+			{
+				errorMap[L"diff: more or less is an adjective BUT Stanford pegs it as an adverb and LP as a quantifier."]++;
+				return 0;
+			}
+			else if (primarySTLPMatch == L"adjective")
+			{
+				errorMap[L"ST correct: more or less is an adjective after a noun and not before a noun."]++;
+				return 0;
+			}
+		}
+		if ((source.m[wordSourceIndex - 1].queryWinnerForm(L"uncertainDurationUnit") >= 0 ||
+			source.m[wordSourceIndex - 1].queryWinnerForm(L"simultaneousUnit") >= 0 ||
+			source.m[wordSourceIndex - 1].queryWinnerForm(L"dayUnit") >= 0 ||
+			source.m[wordSourceIndex - 1].queryWinnerForm(L"timeUnit") >= 0 ||
+			source.m[wordSourceIndex - 1].queryWinnerForm(L"season") >= 0 ||
+			source.m[wordSourceIndex - 1].queryWinnerForm(L"time_abbreviation") >= 0))
+		{
+			if (source.m[wordSourceIndex].queryWinnerForm(adverbForm) != -1)
+			{
+				errorMap[L"LP correct: more or less is an adverb when used with expressions of time."]++;
+				return 0;
+			}
+		}
 	}
 	if (word == L"goodbye" || word == L"good-bye")
 	{
