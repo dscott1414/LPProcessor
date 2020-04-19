@@ -2019,7 +2019,7 @@ unordered_map<wstring, vector <wstring> > maxentAssociationMap =
 	{ L"verb", { L"verbverb",L"SYNTAX:Accepts S as Object",L"have",L"have_negation",L"is",L"is_negation",L"does",L"does_negation",L"be",L"been",L"modal_auxiliary",L"negation_modal_auxiliary",L"future_modal_auxiliary",L"negation_future_modal_auxiliary",L"being"} }, // feel, see, watch, hear, tell etc // fancy, say (thinksay verbs)
 	// stanford maxent apparently has no indefinite pronoun, so it classes them all as nouns.
 	{ L"noun",{ L"uncertainDurationUnit",L"simultaneousUnit",L"dayUnit",L"timeUnit",L"quantifier",L"numeral_cardinal",L"indefinite_pronoun",L"season",L"time_abbreviation" } }, // all, some etc // something, everything
-	{ L"adjective",{ L"quantifier",L"numeral_ordinal" }},  // many / more
+	{ L"adjective",{ L"quantifier",L"numeral_ordinal",L"numeral_cardinal" }},  // many / more
 	{ L"adverb",{ L"not",L"never" }},  // many
 	{ L"to",{ L"preposition" }},
 	{ L"there",{ L"pronoun",L"adverb" }},
@@ -4402,7 +4402,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			//errorMap[L"LP correct: passive verb is not adjective"]++;
 			//return 0;
 		}
-		wstring excludeForms[] = { L"be", L"been", L"conjunction", L"coordinator", L"daysofweek", L"dayunit", L"future_modal_auxiliary", L"have", L"honorific", L"indefinite_pronoun", L"interjection", L"interrogative_determiner", L"interrogative_pronoun", L"is", L"modal_auxiliary", L"never", L"not"};
+		wstring excludeForms[] = { L"be", L"been", L"conjunction", L"coordinator", L"daysofweek", L"dayunit", L"future_modal_auxiliary", L"have", L"honorific", L"indefinite_pronoun", L"interjection", L"interrogative_determiner", L"interrogative_pronoun", L"is", L"modal_auxiliary", L"never", L"not",L"personal_pronoun",L"personal_pronoun_accusative",L"possessive_determiner",L"possessive_pronoun"};
 		for (auto ef : excludeForms)
 		{
 			if (source.m[wordSourceIndex].queryWinnerForm(ef) >= 0)
