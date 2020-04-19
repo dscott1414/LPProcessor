@@ -4365,6 +4365,16 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		//	//errorMap[L"LP correct: passive verb is not adjective"]++;
 		//	//return 0;
 		//}
+		if (source.m[wordSourceIndex].queryWinnerForm(nounForm) >= 0 && source.m[wordSourceIndex].getRelVerb() >= 0 && (source.m[source.m[wordSourceIndex].getRelVerb()].queryForm(isForm) >= 0 || source.m[source.m[wordSourceIndex].getRelVerb()].queryForm(isNegationForm) >= 0 ||
+			source.m[source.m[wordSourceIndex].getRelVerb()].word->first == L"be" || source.m[source.m[wordSourceIndex].getRelVerb()].word->first == L"been"))
+		{
+			errorMap[L"LP correct: ST says adjective but word does not have adjective form used with IS/BE verb"]++;
+			return 0;
+		}
+		if (!iswalpha(source.m[wordSourceIndex + 1].word->first[0]))
+		{
+			partofspeech += L"NOFOLLOW";
+		}
 		if (source.m[wordSourceIndex].queryWinnerForm(verbverbForm) >= 0 && (source.queryPattern(wordSourceIndex, L"_VERB_BARE_INF") != -1 && source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0))
 		{
 			errorMap[L"LP correct: helper verbs are not adjectives"]++;

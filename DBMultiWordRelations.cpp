@@ -284,7 +284,7 @@ void Source::getSRIMinMax(cSpaceRelation* sri)
 	sri->printMax=max(sri->printMax,sri->whereVerb);
 	sri->printMax=max(sri->printMax,gmo(sri->whereObject));
 	if (sri->whereObject>=0) sri->printMax=max(sri->printMax,gmo(m[sri->whereObject].nextCompoundPartObject));
-	if (sri->whereVerb>=0)sri-> printMax=max(sri->printMax,m[sri->whereVerb].getRelVerb());
+	if (sri->whereVerb>=0) sri->printMax=max(sri->printMax,m[sri->whereVerb].getRelVerb());
 	if (sri->whereVerb>=0 && m[sri->whereVerb].getRelVerb()>=0) sri->printMax=max(sri->printMax,gmo(m[m[sri->whereVerb].getRelVerb()].getRelObject()));
 	set <int> relPreps;
 	for (int wp=sri->wherePrep; wp>=0 && wp<(int)m.size(); wp=m[wp].relPrep)
