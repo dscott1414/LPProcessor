@@ -4402,7 +4402,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			//errorMap[L"LP correct: passive verb is not adjective"]++;
 			//return 0;
 		}
-		wstring excludeForms[] = { L"be", L"been", L"conjunction", L"coordinator", L"daysofweek", L"dayunit", L"future_modal_auxiliary", L"have", L"honorific", L"indefinite_pronoun", L"interjection", L"interrogative_determiner", L"interrogative_pronoun", L"is", L"modal_auxiliary", L"never", L"not",L"personal_pronoun",L"personal_pronoun_accusative",L"possessive_determiner",L"possessive_pronoun"};
+		wstring excludeForms[] = { L"be", L"been", L"conjunction", L"coordinator", L"daysofweek", L"dayunit", L"future_modal_auxiliary", L"have", L"honorific", L"indefinite_pronoun", L"interjection", L"interrogative_determiner", L"interrogative_pronoun", L"is", L"modal_auxiliary", L"never", L"not",L"personal_pronoun",L"personal_pronoun_accusative",L"possessive_determiner",L"possessive_pronoun",L"relativizer"};
 		for (auto ef : excludeForms)
 		{
 			if (source.m[wordSourceIndex].queryWinnerForm(ef) >= 0)
