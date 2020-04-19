@@ -4371,9 +4371,10 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			errorMap[L"LP correct: ST says adjective but word does not have adjective form used with IS/BE verb"]++;
 			return 0;
 		}
-		if (!iswalpha(source.m[wordSourceIndex + 1].word->first[0]))
+		if (!iswalpha(source.m[wordSourceIndex + 1].word->first[0]) && source.m[wordSourceIndex].queryWinnerForm(nounForm) >= 0)
 		{
-			partofspeech += L"NOFOLLOW";
+			errorMap[L"LP correct: LP says noun and ST says adjective but word does not have an adjective form"]++;
+			return 0;
 		}
 		if (source.m[wordSourceIndex].queryWinnerForm(verbverbForm) >= 0 && (source.queryPattern(wordSourceIndex, L"_VERB_BARE_INF") != -1 && source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0))
 		{
