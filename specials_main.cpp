@@ -4411,6 +4411,11 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 				return 0;
 			}
 		}
+		if (source.m[wordSourceIndex].queryWinnerForm(nounForm) >= 0)
+		{
+			errorMap[L"LP correct: ST says adjective, LP says noun"]++;
+			return 0;
+		}
 	}
 	if (word == L"more" || word == L"less")
 	{
