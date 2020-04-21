@@ -3305,35 +3305,39 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		return 0;
 		//partofspeech += L"***ADVPREP";
 	}
-	bool wordBeforeIsIs = source.m[wordSourceIndex - 1].queryWinnerForm(isForm) != -1 || source.m[wordSourceIndex - 1].queryWinnerForm(isNegationForm) != -1 || source.m[wordSourceIndex - 1].queryWinnerForm(beForm) != -1 || source.m[wordSourceIndex - 1].word->first == L"being";
-	bool wordBeforeIsVerb = source.m[wordSourceIndex - 1].hasWinnerVerbForm();
+	bool wordBeforeIsIs = wordSourceIndex >0 && (source.m[wordSourceIndex - 1].queryWinnerForm(isForm) != -1 || source.m[wordSourceIndex - 1].queryWinnerForm(isNegationForm) != -1 || source.m[wordSourceIndex - 1].queryWinnerForm(beForm) != -1 || source.m[wordSourceIndex - 1].word->first == L"being");
+	bool wordBeforeIsVerb = wordSourceIndex > 0 && source.m[wordSourceIndex - 1].hasWinnerVerbForm();
 	bool word2BeforeIsIs = wordSourceIndex>1 && (source.m[wordSourceIndex - 2].queryWinnerForm(isForm) != -1 || source.m[wordSourceIndex - 2].queryWinnerForm(isNegationForm) != -1 || source.m[wordSourceIndex - 2].queryWinnerForm(beForm) != -1 || source.m[wordSourceIndex - 2].word->first == L"being");
 	bool word2BeforeIsVerb = wordSourceIndex>1 && source.m[wordSourceIndex - 2].hasWinnerVerbForm();
 	vector<wstring> determinerTypes = { L"determiner",L"demonstrative_determiner",L"possessive_determiner",L"interrogative_determiner", L"quantifier", L"numeral_cardinal" };
 	bool wordBeforeIsDeterminer = false;
-	for (wstring dt : determinerTypes)
-		if (wordBeforeIsDeterminer = source.m[wordSourceIndex - 1].queryWinnerForm(dt) >= 0)
-			break;
+	if (wordSourceIndex > 0)
+		for (wstring dt : determinerTypes)
+			if (wordBeforeIsDeterminer = source.m[wordSourceIndex - 1].queryWinnerForm(dt) >= 0)
+				break;
 	bool word2BeforeIsDeterminer = false;
 	if (wordSourceIndex>1)
 		for (wstring dt : determinerTypes)
 			if (word2BeforeIsDeterminer = source.m[wordSourceIndex - 2].queryWinnerForm(dt) >= 0)
 				break;
 	bool wordAfterIsDeterminer = false;
-	for (wstring dt : determinerTypes)
-		if (wordAfterIsDeterminer = source.m[wordSourceIndex + 1].queryWinnerForm(dt) >= 0)
-			break;
+	if (wordSourceIndex+1 <source.m.size())
+		for (wstring dt : determinerTypes)
+			if (wordAfterIsDeterminer = source.m[wordSourceIndex + 1].queryWinnerForm(dt) >= 0)
+				break;
 	wchar_t *unmodifiableForms[] = { L"relativizer",L"preposition",L"coordinator",L"conjunction",L"quantifier", L"adverb",L"adjective",L"personal_pronoun_accusative",L"personal_pronoun_nominative",L"personal_pronoun",L"reflexive_pronoun" };
 	bool wordAfterIsUnmodifiable = false;
-	for (wstring unForm : unmodifiableForms)
-		if (wordAfterIsUnmodifiable = source.m[wordSourceIndex + 1].queryWinnerForm(unForm) >= 0)
-			break;
+	if (wordSourceIndex+1 < source.m.size())
+		for (wstring unForm : unmodifiableForms)
+			if (wordAfterIsUnmodifiable = source.m[wordSourceIndex + 1].queryWinnerForm(unForm) >= 0)
+				break;
 	wordAfterIsUnmodifiable |= !iswalpha(source.m[wordSourceIndex + 1].word->first[0]) || wordAfterIsDeterminer;
 	vector<wstring> pronounTypes = { L"personal_pronoun_accusative",L"personal_pronoun_nominative",L"personal_pronoun",L"reflexive_pronoun",L"indefinite_pronoun" };
 	bool wordBeforeIsPronoun = false;
-	for (wstring pn : pronounTypes)
-		if (wordBeforeIsPronoun = source.m[wordSourceIndex - 1].queryWinnerForm(pn) >= 0)
-			break;
+	if (wordSourceIndex > 0)
+		for (wstring pn : pronounTypes)
+			if (wordBeforeIsPronoun = source.m[wordSourceIndex - 1].queryWinnerForm(pn) >= 0)
+				break;
 	if (primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0 && wordSourceIndex + 1 < source.m.size() && wordSourceIndex>3)
 	{
 		// investigate later!
@@ -3535,9 +3539,9 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			}
 		}
 	}
-	if ((source.m[wordSourceIndex - 1].queryWinnerForm(L"modal_auxiliary") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"future_modal_auxiliary") >= 0 ||
-		source.m[wordSourceIndex - 1].queryWinnerForm(L"negation_modal_auxiliary") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"negation_future_modal_auxiliary") >= 0) &&
-		source.m[wordSourceIndex + 1].queryWinnerForm(L"verb") >= 0 && word == L"better" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
+	if ((wordSourceIndex>0 && (source.m[wordSourceIndex - 1].queryWinnerForm(L"modal_auxiliary") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"future_modal_auxiliary") >= 0 ||
+		source.m[wordSourceIndex - 1].queryWinnerForm(L"negation_modal_auxiliary") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"negation_future_modal_auxiliary") >= 0)) &&
+		wordSourceIndex+1<source.m.size() && source.m[wordSourceIndex + 1].queryWinnerForm(L"verb") >= 0 && word == L"better" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
 	{
 		errorMap[L"LP correct: LP says adverb ST says "+ primarySTLPMatch]++;
 		return 0;

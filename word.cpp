@@ -135,6 +135,7 @@ FormClass::FormClass(int indexIn,wstring nameIn,wstring shortNameIn,wstring infl
 	formCheck=formCheckIn;
 	isCommonForm=false;
 	isNonCachedForm = false;
+	isNounForm=false;
 }
 
 int FormsClass::findForm(wstring sForm)

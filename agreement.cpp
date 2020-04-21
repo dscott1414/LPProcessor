@@ -124,7 +124,7 @@ unsigned int Source::getAllLocations(unsigned int position,int parentPattern,int
 					lplog(L"%*sMC getAllLocations BEGIN REASSESS COST position %d:pattern %s[%s](%d,%d)",
 						recursionLevel * 2, " ", position, p->name.c_str(), p->differentiator.c_str(), position, position + pm->len);
 				}
-				assessCost(NULL,pm,-1,position,tagSets, tertiaryPEMAPositions,L"get all locations");
+				assessCost(NULL,pm,-1,position,tagSets, tertiaryPEMAPositions,false,L"get all locations");
 				reassessParentCosts = true;
 				if (debugTrace.tracePatternElimination)
 				{
@@ -2391,7 +2391,9 @@ void Source::sortTagLocations(vector < vector <tTagLocation> > &tagSets, vector 
 	sort(tagSetLocations.begin(), tagSetLocations.end(), tTagLocation::compareTagLocation);
 }
 
-void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vector <tTagLocation> > &tagSets,wstring purpose)
+// alternateShortTry is to allow a search for a noun determiner to occur even though there is no OBJECT, SUBJECT.  This should only be allowed on very short sentences.
+// if this is allowed on all sentences, significant differences with ST will result (most of them ST is correct)
+void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vector <tTagLocation> > &tagSets,bool alternateShortTry,wstring purpose)
 { LFS // DLFS
 	vector <int> costs;
 	if (pema[PEMAPosition].flagSet(patternElementMatchArray::COST_ROLE))
@@ -2414,20 +2416,22 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 	// honour he ought to have kept silent about made him so angry that he hated the old man he had come so far to serve.
 	// You may lay me down to sleep, my mother dear, But rock me in the cradle all the day.
 
-	if (startCollectTags(debugTrace.traceDeterminer,roleTagSet,position,PEMAPosition,tagSets,true,true,L"evaluateNounDeterminers - ROLE")>0)
+	startCollectTags(debugTrace.traceDeterminer, roleTagSet, position, PEMAPosition, tagSets, true, true, L"evaluateNounDeterminers - ROLE");
 	{
-		vector < vector <tTagLocation> > nTagSets;
-		vector <int> nCosts,traceSources;
+		if (tagSets.empty())
+			tagSets.push_back(vector <tTagLocation>());
 		if (tagSets.size()==1 && tagSets[0].empty())
 		{
 			// When a sentence is merely a command, and potentially matches a __NOUN[9], there is no OBJECT that is collected, because that is only provided by C1__S1.
 			//    In this case, without this push_back, the __NOUN[9] would skip costing completely, and would have an advantage over the VERBREL1.
 			//    If the verb can also be a noun, and the noun is less costly than the verb, the __NOUN[9] would win, because there is no extra cost associated with
 			//    not having the determiner.
-			// MOVEClimb aboard the lugger . 
-			tagSets[0].push_back(tTagLocation(0,pema[PEMAPosition].getChildPattern(),pema[PEMAPosition].getPattern(),pema[PEMAPosition].getElement(),position,pema[PEMAPosition].end,-PEMAPosition,true));
+			// Climb aboard the lugger . 
+			tagSets[0].push_back(tTagLocation(0,(alternateShortTry) ? pema[PEMAPosition].getPattern() : pema[PEMAPosition].getChildPattern(),pema[PEMAPosition].getPattern(),pema[PEMAPosition].getElement(),position,pema[PEMAPosition].end,-PEMAPosition,true));
 			pema[PEMAPosition].removeFlag(patternElementMatchArray::COST_ROLE);
 		}
+		vector < vector <tTagLocation> > nTagSets;
+		vector <int> nCosts, traceSources;
 		// for each pattern of subjects, objects and subobjects
 		vector <tTagLocation> tagLocations;
 		sortTagLocations(tagSets, tagLocations);
@@ -2647,7 +2651,7 @@ bool Source::assessEVALCost(tTagLocation &tl,int pattern,patternMatchArray::tPat
 	if (EVALpm && !EVALpm->isEval())
 	{
 		vector < vector <tTagLocation> > tTagSets;
-		assessCost(pm,EVALpm,position,EVALPosition,tTagSets, tertiaryPEMAPositions,purpose);
+		assessCost(pm,EVALpm,position,EVALPosition,tTagSets, tertiaryPEMAPositions,false,purpose);
 		EVALpm->setEval();
 		return true;
 	}
@@ -2692,7 +2696,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 	if ((infinitive) ? !getIVerb(tagSet,verbTagIndex) : !getVerb(tagSet,verbTagIndex)) 
 	{
 		if (debugTrace.traceVerbObjects)
-			lplog(L"          %d:verb is infinitive but verb not found - skipping.",position);
+			lplog(L"          %d:verb not found - skipping.",position);
 		return 0;
 	}
 	wchar_t *passiveTags[]={ L"vD",L"vrD",L"vAD",L"vBD",L"vCD",L"vABD",L"vACD",L"vBCD",L"vABCD", NULL };
@@ -3101,7 +3105,7 @@ void Source::applyTertiaryPEMAPositions(unordered_map <int, costPatternElementBy
 	}
 }
 
-int Source::assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,int parentPosition,int position,vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,wstring purpose)
+int Source::assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,int parentPosition,int position,vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,bool alternateNounDeterminerShortTry,wstring purpose)
 { LFS
 	if (debugTrace.traceVerbObjects || debugTrace.traceDeterminer || debugTrace.traceBNCPreferences || debugTrace.traceSubjectVerbAgreement)
 	{
@@ -3264,7 +3268,7 @@ int Source::assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchAr
 			}
 		}
 		tagSets.clear();
-		evaluateNounDeterminers(pm->pemaByPatternEnd,position,tagSets,purpose + L"| noun determiners"); // this does not include blocked prepositional phrases
+		evaluateNounDeterminers(pm->pemaByPatternEnd,position,tagSets, alternateNounDeterminerShortTry, purpose + L"| noun determiners");
 		tagSets.clear();
 		// finds all first-level prepositional phrases (otherwise these are blocked because PREPOBJECT is blocked inside of a PREP
 		if (startCollectTags(debugTrace.traceDeterminer,ndPrepTagSet,position,pm->pemaByPatternEnd,tagSets,true,false,purpose + L"| base noun determiner prep phrase")>0)
@@ -3273,7 +3277,7 @@ int Source::assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchAr
 				for (unsigned int K=0; K<tagSets[J].size(); K++)
 				{
 					vector < vector <tTagLocation> > ndTagSets;					
-					evaluateNounDeterminers(abs(tagSets[J][K].PEMAOffset), tagSets[J][K].sourcePosition, ndTagSets, purpose + L"| from prep phrases"); // this does not include blocked prepositional phrases
+					evaluateNounDeterminers(abs(tagSets[J][K].PEMAOffset), tagSets[J][K].sourcePosition, ndTagSets, alternateNounDeterminerShortTry, purpose + L"| from prep phrases"); // this does not include blocked prepositional phrases
 					evaluatePrepObjects(abs(tagSets[J][K].PEMAOffset), tagSets[J][K].sourcePosition, ndTagSets, purpose + L"| from prep phrases"); 
 				}
 		}
@@ -3386,12 +3390,12 @@ void Source::evaluateExplicitSubjectVerbAgreement(int position, patternMatchArra
 			lplog(L"%d:Added %d cost to %s[%s](%d,%d).", position, tFI::COST_OF_INCORRECT_VERBAL_NOUN,
 				patterns[pema[PEMAPosition].getPattern()]->name.c_str(), patterns[pema[PEMAPosition].getPattern()]->differentiator.c_str(), position + pema[PEMAPosition].begin, position + pema[PEMAPosition].end);
 	}
-	assessCost(NULL, pm, -1, position, tagSets, tertiaryPEMAPositions, L"eliminate loser patterns - explicit subject verb agreement");
+	assessCost(NULL, pm, -1, position, tagSets, tertiaryPEMAPositions, false, L"eliminate loser patterns - explicit subject verb agreement");
 }
 
 void Source::evaluateExplicitNounDeterminerAgreement(int position, patternMatchArray::tPatternMatch *pm, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions)
 {
-	assessCost(NULL, pm, -1, position, tagSets, tertiaryPEMAPositions, L"eliminate loser patterns - explicit noun determiner agreement");
+	assessCost(NULL, pm, -1, position, tagSets, tertiaryPEMAPositions, false, L"eliminate loser patterns - explicit noun determiner agreement");
 }
 
 // at each position in m:
@@ -3443,6 +3447,8 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 			unsigned int bp;
 			int len=pm->len; // COSTCALC
 			int paca=PRE_ASSESS_COST_ALLOWANCE*len/5; // adjust for length - the longer a pattern is the more other patterns
+			if (end-begin == 2) // if this is changed to len == 1, differences with ST will increase significantly
+				paca = PRE_ASSESS_COST_ALLOWANCE; // this is to allow expressions like Help! to be verbs even though the verb is more expensive than the noun, but also to allow VO and ND testing
 			// which may be better now may be hurt in the second phase, so allow for a lower bar to pass into the second phase.
 			int averageCost=(pm->getCost()-paca)*1000/len; // - to allow for patterns that aren't perfect to start with to slide in
 			// "--" is the only separator that is also a word class. if a pattern has not matched this, it should be regarded as equal to a pattern
@@ -3473,7 +3479,7 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 		for (unsigned int I=0; I<preliminaryWinnersPreAssessCost.size(); I++)
 		{
 			pm=m[position].pma.content+preliminaryWinnersPreAssessCost[I];
-			assessCost(NULL,pm,-1,position,tagSets,tertiaryPEMAPositions,L"eliminate loser patterns - preliminary winners");
+			assessCost(NULL,pm,-1,position,tagSets,tertiaryPEMAPositions,end-begin==2,L"eliminate loser patterns - preliminary winners");
 		}
 		winners.push_back(preliminaryWinnersPreAssessCost);
 		//for (int t1 = 0; t1 < preliminaryWinnersPreAssessCost.size(); t1++)

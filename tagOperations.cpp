@@ -472,6 +472,11 @@ size_t Source::startCollectTags(bool inTrace,int tagSet,int position,int PEMAPos
 	}
 	collectTags(0,PEMAPosition,position,tTagSet,tagSets,pemaMapToTagSetsByPemaByTagSet[tagSet]);
 	int numTagSets=(signed)tagSets.size();
+	if (numTagSets == 1 && tagSets[0].size() == 0)
+	{
+		numTagSets = 0;
+		tagSets.erase(tagSets.begin());
+	}
 	for (int J=secondaryPEMAPositions.size()-1; J>=0; J--)
 		if (secondaryPEMAPositions[J].getTagSet()>=numTagSets)
 			secondaryPEMAPositions.erase(secondaryPEMAPositions.begin()+J);

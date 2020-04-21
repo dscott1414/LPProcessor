@@ -2161,7 +2161,7 @@ public:
 	bool assessEVALCost(tTagLocation &tl,int pattern,patternMatchArray::tPatternMatch *pm,int position, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,wstring purpose);
 	void accumulateTertiaryPEMAPositions(int tagSetOffset,int traceSource,vector <tTagLocation>  &tagSet, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions, int tmpVOCost);
 	void applyTertiaryPEMAPositions(unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
-	int assessCost(patternMatchArray::tPatternMatch *parentpm, patternMatchArray::tPatternMatch *pm, int parentPosition, int position, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,wstring purpose);
+	int assessCost(patternMatchArray::tPatternMatch *parentpm, patternMatchArray::tPatternMatch *pm, int parentPosition, int position, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,bool alternateNounDeterminerShortTry,wstring purpose);
 	void evaluateExplicitNounDeterminerAgreement(int position, patternMatchArray::tPatternMatch *pm, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
 	void evaluateExplicitSubjectVerbAgreement(int position, patternMatchArray::tPatternMatch *pm, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
 	int eliminateLoserPatterns(unsigned int begin,unsigned int end);
@@ -3556,7 +3556,7 @@ bool inSectionHeader,
 	public: size_t startCollectTagsFromTag(bool inTrace,int tagSet,tTagLocation &tl,vector < vector <tTagLocation> > &tagSets,int rejectTag,bool obeyBlock, bool collectParentTags, wstring purpose);
 	public: size_t startCollectTags(bool trace,int tagSet,int position,int PEMAPosition,vector < vector <tTagLocation> > &tagSets,bool obeyBlock,bool collectParentTags,wstring purpose);
 	void sortTagLocations(vector < vector <tTagLocation> > &tagSets, vector <tTagLocation> &tagSetLocations);
-	void evaluateNounDeterminers(int PEMAPosition,int position,vector < vector <tTagLocation> > &tagSets,wstring purpose);
+	void evaluateNounDeterminers(int PEMAPosition,int position,vector < vector <tTagLocation> > &tagSets, bool alternateShortTry, wstring purpose);
 	void evaluatePrepObjects(int PEMAPosition, int position, vector < vector <tTagLocation> > &tagSets, wstring purpose);
 	int evaluatePrepObjectRelation(vector <tTagLocation> &tagSet,int &pIndex,tIWMM &prepWord,int &object,int &wherePrepObject,tIWMM &objectWord);
 	bool inTag(tTagLocation &innerTag,tTagLocation &outerTag);
