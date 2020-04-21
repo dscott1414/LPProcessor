@@ -3416,6 +3416,11 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 	minSeparatorCost.reserve(end-begin+1);
 	for (unsigned int I=0; I<end-begin+1 && I<m.size()-begin; I++)
 		minSeparatorCost[I]=m[begin+I].word->second.lowestSeparatorCost();
+	int effectiveSentenceLength = end - begin;
+	if (WordClass::isDoubleQuote(m[end - 1].word->first[0]) || WordClass::isSingleQuote(m[end - 1].word->first[0]))
+		effectiveSentenceLength--;
+	if (WordClass::isDoubleQuote(m[begin].word->first[0]) || WordClass::isSingleQuote(m[begin].word->first[0]))
+		effectiveSentenceLength--;
 	int matchedPositions=0;
 	for (unsigned int position=begin; position<end && !exitNow; position++)
 	{
@@ -3447,7 +3452,7 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 			unsigned int bp;
 			int len=pm->len; // COSTCALC
 			int paca=PRE_ASSESS_COST_ALLOWANCE*len/5; // adjust for length - the longer a pattern is the more other patterns
-			if (end-begin == 2) // if this is changed to len == 1, differences with ST will increase significantly
+			if (effectiveSentenceLength <= 2) // if this is changed to len == 1, differences with ST will increase significantly
 				paca = PRE_ASSESS_COST_ALLOWANCE; // this is to allow expressions like Help! to be verbs even though the verb is more expensive than the noun, but also to allow VO and ND testing
 			// which may be better now may be hurt in the second phase, so allow for a lower bar to pass into the second phase.
 			int averageCost=(pm->getCost()-paca)*1000/len; // - to allow for patterns that aren't perfect to start with to slide in
@@ -3479,7 +3484,7 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 		for (unsigned int I=0; I<preliminaryWinnersPreAssessCost.size(); I++)
 		{
 			pm=m[position].pma.content+preliminaryWinnersPreAssessCost[I];
-			assessCost(NULL,pm,-1,position,tagSets,tertiaryPEMAPositions,end-begin==2,L"eliminate loser patterns - preliminary winners");
+			assessCost(NULL,pm,-1,position,tagSets,tertiaryPEMAPositions, effectiveSentenceLength<=2,L"eliminate loser patterns - preliminary winners");
 		}
 		winners.push_back(preliminaryWinnersPreAssessCost);
 		//for (int t1 = 0; t1 < preliminaryWinnersPreAssessCost.size(); t1++)
