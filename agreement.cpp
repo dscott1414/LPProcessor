@@ -3484,7 +3484,13 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 		for (unsigned int I=0; I<preliminaryWinnersPreAssessCost.size(); I++)
 		{
 			pm=m[position].pma.content+preliminaryWinnersPreAssessCost[I];
-			assessCost(NULL,pm,-1,position,tagSets,tertiaryPEMAPositions, effectiveSentenceLength<=2,L"eliminate loser patterns - preliminary winners");
+			bool includeExtraProcessing = effectiveSentenceLength <= 2;
+			if (patterns[pm->getPattern()]->name == L"__NOUN")
+			{
+				includeExtraProcessing |= (pm->len + 1 >= effectiveSentenceLength) && effectiveSentenceLength<4;
+				//includeExtraProcessing |= (position > begin && m[position - 1].queryForm(coordinatorForm) >= 0 && (int)(position - begin + pm->len + 1) >= effectiveSentenceLength); // resulted in many errors
+			}
+			assessCost(NULL,pm,-1,position,tagSets,tertiaryPEMAPositions, includeExtraProcessing,L"eliminate loser patterns - preliminary winners");
 		}
 		winners.push_back(preliminaryWinnersPreAssessCost);
 		//for (int t1 = 0; t1 < preliminaryWinnersPreAssessCost.size(); t1++)

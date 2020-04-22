@@ -2121,6 +2121,7 @@ public:
 		int getPEMAPosition() { return PEMAPosition; }
 		int getChildPEMAPosition() { return childPEMAPosition; }
 		int getTagSet() { return tagSet; }
+		void setTagSet(int ts) { tagSet=ts; }
 		int getElement() { return patternElement; }
 		int getCost() { return cost; }
 		void setCost(int c) { cost = c; }

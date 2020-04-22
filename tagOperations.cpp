@@ -56,12 +56,14 @@ int Source::collectTags(int recursionLevel,int PEMAPosition,int position,vector 
 		if (timerForExit++==31 && !debugTrace.tracePatternElimination && (clock()-beginTime)>COLLECT_TAGS_TIME_LIMIT)
 			exitTags=true;
 		bool duplicate=false;
+		size_t duplicateTS = tagSets.size();
 		if (recursionLevel)
-			for (size_t ts=(tagSets.size()>10) ? tagSets.size()-10 : 0; ts<tagSets.size() && !duplicate; ts++)
-				duplicate=tagSetSame(tagSet,tagSets[ts]);
+			for (size_t ts = (tagSets.size() > 10) ? tagSets.size() - 10 : 0; ts < tagSets.size() && !duplicate; ts++)
+				if (duplicate = tagSetSame(tagSet, tagSets[ts]))
+					duplicateTS = ts;
 		// !duplicate && tagSet.size() if removing empty tagsets from top level EMPTAG
 		if (recursionLevel==0 && secondaryPEMAPositions.size() && secondaryPEMAPositions[secondaryPEMAPositions.size()-1].getTagSet()!=tagSets.size())
-			secondaryPEMAPositions.push_back(costPatternElementByTagSet(position,-PEMAPosition,-1,tagSets.size(),pema[-PEMAPosition].getElement()));
+			secondaryPEMAPositions.push_back(costPatternElementByTagSet(position,-PEMAPosition,-1, duplicateTS,pema[-PEMAPosition].getElement()));
 		if (!duplicate) // Eliminate empty tagsets? (recursionLevel || tagSet.size()) && (EMPTAG)
 		{
 			tagSets.push_back(tagSet);
@@ -472,14 +474,36 @@ size_t Source::startCollectTags(bool inTrace,int tagSet,int position,int PEMAPos
 	}
 	collectTags(0,PEMAPosition,position,tTagSet,tagSets,pemaMapToTagSetsByPemaByTagSet[tagSet]);
 	int numTagSets=(signed)tagSets.size();
-	if (numTagSets == 1 && tagSets[0].size() == 0)
+	for (int J = secondaryPEMAPositions.size() - 1; J >= 0; J--)
+		if (secondaryPEMAPositions[J].getTagSet() >= tagSets.size())
+		{
+			if (debugTrace.traceTags)
+			{
+				wstring sentence, originalIWord;
+				for (int w = max(0, position - 8); w < min(m.size(), position + 8); w++)
+				{
+					getOriginalWord(w, originalIWord, false, false);
+					sentence += originalIWord + L" ";
+				}
+				lplog(LOG_INFO, L"%s:%d:%d:index %d out of %d has tagSet %d! [%s]", sourcePath.c_str(), position, numTagSets, J, secondaryPEMAPositions.size(), secondaryPEMAPositions[J].getTagSet(), sentence.c_str());
+			}
+			secondaryPEMAPositions.erase(secondaryPEMAPositions.begin() + J);
+		}
+	for (int nt = numTagSets - 1; nt >= 0; nt--)
 	{
-		numTagSets = 0;
-		tagSets.erase(tagSets.begin());
+		if (tagSets[nt].empty())
+		{
+			tagSets.erase(tagSets.begin() + nt);
+			for (int J = secondaryPEMAPositions.size() - 1; J >= 0; J--)
+			{
+				if (secondaryPEMAPositions[J].getTagSet() == nt)
+					secondaryPEMAPositions.erase(secondaryPEMAPositions.begin() + J);
+				if (secondaryPEMAPositions[J].getTagSet() > nt)
+					secondaryPEMAPositions[J].setTagSet(secondaryPEMAPositions[J].getTagSet()-1);
+			}
+			numTagSets--;
+		}
 	}
-	for (int J=secondaryPEMAPositions.size()-1; J>=0; J--)
-		if (secondaryPEMAPositions[J].getTagSet()>=numTagSets)
-			secondaryPEMAPositions.erase(secondaryPEMAPositions.begin()+J);
 	if (!exitTags)
 		return tagSets.size();
 	if (debugTrace.traceMatchedSentences || debugTrace.traceUnmatchedSentences)
