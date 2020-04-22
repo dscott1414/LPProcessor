@@ -2695,9 +2695,13 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 	int verbTagIndex,nextObjectTag=-1,nextPassiveTag=-1;
 	if ((infinitive) ? !getIVerb(tagSet,verbTagIndex) : !getVerb(tagSet,verbTagIndex)) 
 	{
-		if (debugTrace.traceVerbObjects)
-			lplog(L"          %d:verb not found - skipping.",position);
-		return 0;
+		// Why should she *despair* ? - despair IS a verb, but _MQ1[4](0,4) also has __ALLOBJECTS_1 with just _COND, because ALLVERB cannot be used because of the question structure 
+		if (infinitive || !patterns[pm->getPattern()]->questionFlag || (verbTagIndex = findOneTag(tagSet, L"V_AGREE")) < 0)
+		{
+			if (debugTrace.traceVerbObjects)
+				lplog(L"          %d:verb not found - skipping.", position);
+			return 0;
+		}
 	}
 	wchar_t *passiveTags[]={ L"vD",L"vrD",L"vAD",L"vBD",L"vCD",L"vABD",L"vACD",L"vBCD",L"vABCD", NULL };
 	bool passive=false;
@@ -2727,12 +2731,21 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 	//tFI::cRMap *rm=(tFI::cRMap *)NULL;
 	tFI::cRMap::tIcRMap tr=tNULL;
 	bool success;
-	if (whereObjectTag >= 0 && nextObjectTag >= 0 && patterns[pm->getPattern()]->questionFlag && (m[tagSet[whereObjectTag].sourcePosition].word->first == L"how" || m[tagSet[whereObjectTag].sourcePosition].word->first == L"when" || m[tagSet[whereObjectTag].sourcePosition].word->first == L"why"))
+	if (whereObjectTag >= 0 && patterns[pm->getPattern()]->questionFlag && (m[tagSet[whereObjectTag].sourcePosition].word->first == L"how" || m[tagSet[whereObjectTag].sourcePosition].word->first == L"when" || m[tagSet[whereObjectTag].sourcePosition].word->first == L"why"))
 	{
-		if (debugTrace.traceVerbObjects)
-			lplog(L"          %d:verb %s is in a question, has two objects (%d,%d) and the first object is the how/when relativizer - numObjects is decremented.", tagSet[verbTagIndex].sourcePosition, verbWord->first.c_str(), tagSet[whereObjectTag].sourcePosition, tagSet[nextObjectTag].sourcePosition);
-		whereObjectTag = nextObjectTag;
-		nextObjectTag = -1;
+		if (nextObjectTag >= 0)
+		{
+			if (debugTrace.traceVerbObjects)
+				lplog(L"          %d:verb %s is in a question, has two objects (%d,%d) and the first object is the how/when/why relativizer - numObjects is decremented.", tagSet[verbTagIndex].sourcePosition, verbWord->first.c_str(), tagSet[whereObjectTag].sourcePosition, tagSet[nextObjectTag].sourcePosition);
+			whereObjectTag = nextObjectTag;
+			nextObjectTag = -1;
+		}
+		else
+		{
+			if (debugTrace.traceVerbObjects)
+				lplog(L"          %d:verb %s is in a question, has one object (%d) which is the how/when/why relativizer - numObjects is decremented.", tagSet[verbTagIndex].sourcePosition, verbWord->first.c_str(), tagSet[whereObjectTag].sourcePosition);
+			whereObjectTag = -1;
+		}
 	}
 	if (whereObjectTag>=0)
 	{
@@ -2911,7 +2924,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 			// if the particle is followed by a preposition, then don't decrease the cost of having an object because then that encourages the preposition to become an adverb.
 			// also include a case where 'to' is not a preposition because of to-day and to-morrow
 			(whereVerb + 3 >= m.size() || m[whereVerb + 2].queryForm(prepositionForm) < 0 || m[whereVerb + 3].word->first == L"-") &&
-			verbObjectCost<6)
+			verbObjectCost < 6)
 		{
 			if (debugTrace.traceVerbObjects)
 				lplog(L"          %d:decreased verbObjectCost=%d to %d for verb %s because of possible particle usage (%s)",
