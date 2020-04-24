@@ -30,8 +30,6 @@ F:\lp\Gutenberg\processGutenbergRDFtoSQL\obj\x64\Release\processGutenbergRDFtoSQ
 F:\lp\source\processGutenbergRDFtoSQL\bin\x64\Release\processGutenbergRDFtoSQL.exe.config
 F:\lp\source\processGutenbergRDFtoSQL\bin\x64\Release\processGutenbergRDFtoSQL.exe
 F:\lp\source\processGutenbergRDFtoSQL\bin\x64\Release\processGutenbergRDFtoSQL.pdb
-F:\lp\source\processGutenbergRDFtoSQL\bin\x64\Release\Google.Protobuf.pdb
-F:\lp\source\processGutenbergRDFtoSQL\bin\x64\Release\Google.Protobuf.xml
 F:\lp\source\processGutenbergRDFtoSQL\bin\x64\Release\MySql.Data.xml
 F:\lp\source\processGutenbergRDFtoSQL\obj\x64\Release\processGutenbergRDFtoSQL.csprojAssemblyReference.cache
 F:\lp\source\processGutenbergRDFtoSQL\obj\x64\Release\processGutenbergRDFtoSQL.csproj.CoreCompileInputs.cache
