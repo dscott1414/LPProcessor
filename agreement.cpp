@@ -2612,35 +2612,40 @@ void Source::evaluatePrepObjects(int PEMAPosition, int position, vector < vector
 	pema[PEMAPosition].setFlag(patternElementMatchArray::COST_PREP);
 	if (startCollectTags(debugTrace.tracePreposition, prepTagSet, position, PEMAPosition, tagSets, true, true, L"evaluatePrepositions - PREP") > 0)
 	{
-		int nPattern = pema[PEMAPosition].getPattern(), nLen = pema[PEMAPosition].end- pema[PEMAPosition].begin,traceSource=0;
+		int nPattern = pema[PEMAPosition].getPattern(), nLen = pema[PEMAPosition].end- pema[PEMAPosition].begin;
 		patternMatchArray::tPatternMatch *pm = m[position].pma.find(nPattern, nLen);
 		vector <int> costs, traceSources;
 		for (unsigned int J = 0; J < tagSets.size(); J++)
 		{
-			int nextPrepObjectTag, wherePrepObjectTag = findTag(tagSets[J], L"PREPOBJECT", nextPrepObjectTag), cost = 0;
+			int wherePrepObjectTag = findOneTag(tagSets[J], L"PREPOBJECT");
 			// incorrectly having a subject pronoun in an objective position
-			if (wherePrepObjectTag >= 0 && tagSets[J][wherePrepObjectTag].len == 1 &&
-				(m[tagSets[J][wherePrepObjectTag].sourcePosition].word->first == L"he" ||
-					m[tagSets[J][wherePrepObjectTag].sourcePosition].word->first == L"she" ||
-					m[tagSets[J][wherePrepObjectTag].sourcePosition].word->first == L"they"))
+			int cost = 0, traceSource = gTraceSource++;
+			if (wherePrepObjectTag >= 0 && tagSets[J][wherePrepObjectTag].len == 1)
 			{
-				cost = 10;
-			}
-			int nfindex;
+				int nfindex,prepObjectPosition= tagSets[J][wherePrepObjectTag].sourcePosition;
+				wstring word = m[prepObjectPosition].word->first;
+				if (word == L"he" || word == L"she" || word == L"they")
+					cost = 10;
 			// leaving a noun hanging but including its possessive
-			if (wherePrepObjectTag >= 0 && tagSets[J][wherePrepObjectTag].len == 1 &&
-				(m[tagSets[J][wherePrepObjectTag].sourcePosition].word->first == L"his" ||
-					m[tagSets[J][wherePrepObjectTag].sourcePosition].word->first == L"her") &&
-				(nfindex=m[tagSets[J][wherePrepObjectTag].sourcePosition+1].word->second.query(nounForm))>=0 &&
-				m[tagSets[J][wherePrepObjectTag].sourcePosition+1].word->second.getUsageCost(nfindex) == 0)
-			{
-				cost = 4;
+				else if ((word == L"his" || word == L"her") &&
+					(nfindex=m[prepObjectPosition +1].word->second.query(nounForm))>=0 &&
+					m[prepObjectPosition +1].word->second.getUsageCost(nfindex) == 0)
+					cost = 4;
+				if (debugTrace.tracePreposition)
+				{
+					int pattern = pema[PEMAPosition].getPattern();
+					lplog(L"%d:======== EVALUATION %06d %s %s[%s](%d,%d) cost %d %s [SOURCE=%06d]", position, PEMAPosition, desiredTagSets[prepTagSet].name.c_str(),
+						patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), position, position + pema[PEMAPosition].end, cost, purpose.c_str(), traceSource);
+				}
 			}
 			costs.push_back(cost);
-			traceSources.push_back(traceSource++);
+			traceSources.push_back(traceSource);
 		}
-		lowerPreviousElementCosts(secondaryPEMAPositions, costs, traceSources, L"prepObjects");
-		setSecondaryCosts(secondaryPEMAPositions, pm, position, L"prepObjects");
+		if (costs.size())
+		{
+			lowerPreviousElementCosts(secondaryPEMAPositions, costs, traceSources, L"prepObjects");
+			setSecondaryCosts(secondaryPEMAPositions, pm, position, L"prepObjects");
+		}
 	}
 }
 
@@ -3291,6 +3296,7 @@ int Source::assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchAr
 				{
 					vector < vector <tTagLocation> > ndTagSets;					
 					evaluateNounDeterminers(abs(tagSets[J][K].PEMAOffset), tagSets[J][K].sourcePosition, ndTagSets, alternateNounDeterminerShortTry, purpose + L"| from prep phrases"); // this does not include blocked prepositional phrases
+					ndTagSets.clear();
 					evaluatePrepObjects(abs(tagSets[J][K].PEMAOffset), tagSets[J][K].sourcePosition, ndTagSets, purpose + L"| from prep phrases"); 
 				}
 		}

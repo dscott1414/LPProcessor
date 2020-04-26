@@ -858,16 +858,16 @@ bool Source::identifyDateTime(int where,vector <cSpaceRelation>::iterator csr,in
 				}
 			}
 		}
-		if ((m[where].relPrep<0 || !t.timeRelationType) && t.timeRelationType!=T_MODIFIER &&
+		if ((m[where].relPrep<0 || t.timeRelationType==T_UNSPECIFIED || !t.timeRelationType) && t.timeRelationType!=T_MODIFIER &&
 					//coming of the light / following of the Druids
 			  (m[where].queryWinnerForm(verbForm)==-1 || m[where+1].word->first!=L"of"))
 			t.timeRelationType=(eTimeWordFlags)(m[where].word->second.timeFlags);
-		int tt=t.timeRelationType;
+		auto tt=t.timeRelationType;
 		// cancel if this word is supposed to be a preposition (its timeFlag only applies to the preposition form)
 		if ((tt==T_THROUGHOUT || tt==T_AT || tt==T_ON || tt==T_MIDWAY || tt==T_INTERVAL || 
 				 tt==(T_BEFORE|T_CARDTIME) || tt==(T_AT|T_CARDTIME) || tt==(T_AFTER|T_CARDTIME)) && 
 			  (m[where].queryWinnerForm(prepositionForm)==-1 || t.empty()))
-			tt=t.timeRelationType=(eTimeWordFlags)0;
+			tt=t.timeRelationType=T_UNSPECIFIED;
 		if (!tt && (t.timeCapacity==cUnspecified || t.empty()) && inMultiObject!=1) 
 		{
 			return false;
@@ -929,7 +929,7 @@ bool Source::identifyDateTime(int where,vector <cSpaceRelation>::iterator csr,in
 	}
 	csr->timeInfo.push_back(t);
 	if (((t.timeRelationType || t.timeCapacity!=cUnspecified) && !t.empty() && t.timeRelationType!=T_MODIFIER) || 
-		(t.timeRelationType!=cUnspecified && t.timeRelationType!=T_MODIFIER && 
+		(t.timeRelationType!=T_UNSPECIFIED && t.timeRelationType!=T_MODIFIER && 
 		 t.timeCapacity!=cUnspecified && t.timeCapacity!=cMoment && t.timeCapacity!=cMinute && t.timeCapacity!=cSecond))
 		detectTimeTransition(where,csr,t);
 	if (rtSet)

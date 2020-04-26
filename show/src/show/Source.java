@@ -996,7 +996,7 @@ public class Source {
 						chapters.add(is);
 					}
 				}
-				if (wm.object >= 0) {
+				if (wm.object >= 0 && objects.length>wm.object) {
 					inObject = wm.object;
 					if (objects[inObject].masterSpeakerIndex < 0 && objects[inObject].aliases.length > 0) {
 						for (int ai : objects[inObject].aliases)

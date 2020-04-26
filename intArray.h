@@ -56,8 +56,9 @@ public:
 		allocated=0;
 		content=NULL;
 	}
-	intArray(const intArray &rhs)
+	intArray(const intArray &rhs, bool inZeroOutSpace = false)
 	{
+		zeroOutSpace = inZeroOutSpace;
 		count=rhs.count;
 		allocated=rhs.allocated;
 		content=NULL;

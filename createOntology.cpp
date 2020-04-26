@@ -105,7 +105,7 @@ wchar_t *readTillEndOfTripleString(wchar_t *s1, FILE *fp, wchar_t *buffer, int &
 	return buffer; // take care of incorrect warning
 }
 
-bool readN3OnePropertyLine(wstring relation,wstring mapFrom, unordered_map < wstring, unordered_map <wstring, set< wstring > > > &triplets, FILE *fp, wchar_t *buffer, int &line, int &nonConformingLines)
+bool readN3OnePropertyLine(wstring ontologyRelation,wstring mapFrom, unordered_map < wstring, unordered_map <wstring, set< wstring > > > &triplets, FILE *fp, wchar_t *buffer, int &line, int &nonConformingLines)
 {
 	for (line++; fgetws(buffer, MAX_BUF, fp); line++)
 	{
@@ -137,7 +137,7 @@ bool readN3OnePropertyLine(wstring relation,wstring mapFrom, unordered_map < wst
 		*sm2 = 0;
 		if (*(sm2 + 1) == ',')
 		{
-			triplets[relation][mapFrom].insert(sm1 + 1);
+			triplets[ontologyRelation][mapFrom].insert(sm1 + 1);
 			continue;
 		}
 		else if (*(sm2 + 1) != ';' && *(sm2 + 1) != '.')
@@ -146,8 +146,8 @@ bool readN3OnePropertyLine(wstring relation,wstring mapFrom, unordered_map < wst
 			nonConformingLines++;
 			continue;
 		}
-		triplets[relation][mapFrom].insert(sm1 + 1);
-		lplog(LOG_WIKIPEDIA, L"%d:line #%d: %s %s %s", __LINE__,line, relation.c_str(),mapFrom.c_str(),sm1 + 1);
+		triplets[ontologyRelation][mapFrom].insert(sm1 + 1);
+		lplog(LOG_WIKIPEDIA, L"%d:line #%d: %s %s %s", __LINE__,line, ontologyRelation.c_str(),mapFrom.c_str(),sm1 + 1);
 		return (*(sm2 + 1) == '.');
 	}
 	return false;
@@ -184,7 +184,7 @@ int readN3TwoPropertyLine(wchar_t *path,wstring mapFrom, unordered_map < wstring
 			continue;
 		}
 		*s1 = 0;
-		wstring relation = buffer + index,mapTo;
+		wstring ontologyRelation = buffer + index,mapTo;
 		wchar_t *s2;
 		if (*(s1 + 1) == '"')
 		{
@@ -207,8 +207,8 @@ int readN3TwoPropertyLine(wchar_t *path,wstring mapFrom, unordered_map < wstring
 		*s2 = 0;
 		if (mapTo.empty())
 			mapTo = s1 + 1;
-		triplets[relation][mapFrom].insert(mapTo);
-		lplog(LOG_WIKIPEDIA, L"%d:%s:line #%d: relation=%s mapFrom=%s mapTo=%s", __LINE__, path,line, relation.c_str(), mapFrom.c_str(), mapTo.c_str());
+		triplets[ontologyRelation][mapFrom].insert(mapTo);
+		lplog(LOG_WIKIPEDIA, L"%d:%s:line #%d: relation=%s mapFrom=%s mapTo=%s", __LINE__, path,line, ontologyRelation.c_str(), mapFrom.c_str(), mapTo.c_str());
 		bool appendingDef = false,finished=false;
 		if (*(s2 + 1) == ',' && s2[wcslen(s2 + 1)] != ';' && s2[wcslen(s2 + 1)] != '.') // skips inline ,
 		{
@@ -234,7 +234,7 @@ int readN3TwoPropertyLine(wchar_t *path,wstring mapFrom, unordered_map < wstring
 		//               "AB-205"@en ;
 		if (appendingDef)
 		{
-			finished=readN3OnePropertyLine(relation,mapFrom, triplets, fp, buffer, line, nonConformingLines);
+			finished=readN3OnePropertyLine(ontologyRelation,mapFrom, triplets, fp, buffer, line, nonConformingLines);
 		}
 		if (finished)
 			break;
@@ -324,15 +324,15 @@ int readN3FileTypeIntoRelationsArray(wchar_t *path, unordered_map < wstring, uno
 		}
 		*s1 = *s2 = *s3 = 0;
 		wstring mapFrom = buffer;
-		wstring relation = s1 + 1;
+		wstring ontologyRelation = s1 + 1;
 		if (mapTo.empty())
 			mapTo = s2 + 1;
-		triplets[relation][mapFrom].insert(mapTo);
-		lplog(LOG_WIKIPEDIA, L"%d:line #%d: %s %s %s", __LINE__, line, relation.c_str(), mapFrom.c_str(), mapTo.c_str());
+		triplets[ontologyRelation][mapFrom].insert(mapTo);
+		lplog(LOG_WIKIPEDIA, L"%d:line #%d: %s %s %s", __LINE__, line, ontologyRelation.c_str(), mapFrom.c_str(), mapTo.c_str());
 		if (inTwoFieldPerLineProperty)
 			readN3TwoPropertyLine(path,mapFrom, triplets, fp, buffer, line, nonConformingLines);
 		if (inOneFieldPerLineProperty)
-			readN3OnePropertyLine(relation, mapFrom, triplets, fp, buffer, line, nonConformingLines);
+			readN3OnePropertyLine(ontologyRelation, mapFrom, triplets, fp, buffer, line, nonConformingLines);
 	}
 	lplog(LOG_WIKIPEDIA, L"relations in %s LIST: Nonconforming lines %d: total lines %d %d%%", path, nonConformingLines, line, nonConformingLines * 100 / line);
 	for (unordered_map < wstring, unordered_map <wstring, set<wstring>> >::iterator tbegin = triplets.begin(); tbegin != triplets.end(); tbegin++)
@@ -1294,10 +1294,10 @@ bool copy(unordered_map <wstring, dbs>::iterator &hint, void *buf, int &where, i
 {
 	DLFS
 		wstring key;
-	dbs predicate;
-	if (copy(key, buf, where, limit) && copy(predicate, buf, where, limit))
+	dbs dbPredicate;
+	if (copy(key, buf, where, limit) && copy(dbPredicate, buf, where, limit))
 	{
-		std::pair<unordered_map <wstring, dbs>::iterator, bool> p = hm.insert(std::pair<wstring, dbs>(key, predicate));
+		std::pair<unordered_map <wstring, dbs>::iterator, bool> p = hm.insert(std::pair<wstring, dbs>(key, dbPredicate));
 		hint = p.first;
 		return true;
 	}
@@ -1308,10 +1308,10 @@ bool copyOLD(unordered_map <wstring, dbs>::iterator &hint, void *buf, int &where
 {
 	DLFS
 		wstring key;
-	dbs predicate;
-	if (copy(key, buf, where, limit) && copyOLD(predicate, buf, where, limit))
+	dbs dbPredicate;
+	if (copy(key, buf, where, limit) && copyOLD(dbPredicate, buf, where, limit))
 	{
-		std::pair<unordered_map <wstring, dbs>::iterator, bool> p = hm.insert(std::pair<wstring, dbs>(key, predicate));
+		std::pair<unordered_map <wstring, dbs>::iterator, bool> p = hm.insert(std::pair<wstring, dbs>(key, dbPredicate));
 		hint = p.first;
 		return true;
 	}

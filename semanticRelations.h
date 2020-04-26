@@ -34,6 +34,25 @@ public:
 	bool negation;
 	int lastOpeningPrimaryQuote;
   wstring presType;
+	cTimeFlowTense()
+	{
+		speakerCommand=false;
+		speakerQuestionToAudience = false;
+		significantRelation = false;
+		beyondLocalSpace = false; // movement beyond a room or a local area
+		story = false; // also includes future stories
+		timeTransition = false;
+		nonPresentTimeTransition = false;
+		duplicateTimeTransitionFromWhere=0;
+		// futureInPastHappening is talking about the future, while the action is in the past.
+		beforePastHappening = false;
+		pastHappening = false;
+		presentHappening = false;
+		futureHappening = false;
+		futureInPastHappening = false;
+		negation = false;
+		lastOpeningPrimaryQuote=-1;
+	}
 };
 
 class cSpaceRelation
@@ -137,6 +156,17 @@ public:
 		sentenceNum=-1;
 		subQuery=false;
 		skip=false;
+		changeStateAdverb = false;
+		nonSemanticObjectTotalMatch = false;
+		nonSemanticPrepositionObjectTotalMatch = false;
+		nonSemanticSecondaryObjectTotalMatch = false;
+		nonSemanticSubjectTotalMatch = false;
+		printMax = -1;
+		printMin = -1;
+		speakerContinuation = false;
+		timeProgression = -1;
+		whereChildCandidateAnswer = -1;
+		whereQuestionTypeObject = -1;
 	}
   bool operator != (const cSpaceRelation &z)
   {

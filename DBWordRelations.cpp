@@ -126,14 +126,14 @@ int WordClass::initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, boo
 			if (iFromWord != wNULL && iToWord != wNULL)
 			{
 				wrRead++;
-				int relationSourceId = atoi(sqlrow[1]), lastWhere = atoi(sqlrow[2]), totalCount = atoi(sqlrow[5]), relation = atoi(sqlrow[6]); // index = atoi(sqlrow[0]), 
+				int relationSourceId = atoi(sqlrow[1]), lastWhere = atoi(sqlrow[2]), totalCount = atoi(sqlrow[5]), wordRelation = atoi(sqlrow[6]); // index = atoi(sqlrow[0]), 
 				if (logDetail)
-					lplog(LOG_DICTIONARY, L"word %s acquired a relation %s with %s.", iFromWord->first.c_str(), getRelStr(relation), iToWord->first.c_str());
-				iFromWord->second.allocateMap(relation);
-				iFromWord->second.relationMaps[relation]->addRelation(relationSourceId, lastWhere, iToWord, isNew, totalCount, true);
-				relation = getComplementaryRelationship((relationWOTypes)relation);
-				iToWord->second.allocateMap(relation);
-				iToWord->second.relationMaps[relation]->addRelation(relationSourceId, lastWhere, iFromWord, isNew, totalCount, true);
+					lplog(LOG_DICTIONARY, L"word %s acquired a relation %s with %s.", iFromWord->first.c_str(), getRelStr(wordRelation), iToWord->first.c_str());
+				iFromWord->second.allocateMap(wordRelation);
+				iFromWord->second.relationMaps[wordRelation]->addRelation(relationSourceId, lastWhere, iToWord, isNew, totalCount, true);
+				wordRelation = getComplementaryRelationship((relationWOTypes)wordRelation);
+				iToWord->second.allocateMap(wordRelation);
+				iToWord->second.relationMaps[wordRelation]->addRelation(relationSourceId, lastWhere, iFromWord, isNew, totalCount, true);
 				wrAdded += 2;
 			}
 			if ((where = wrSubRead++ * 100 * numWordsProcessed / (numRows*totalWRIDs)) > lastProgressPercent)

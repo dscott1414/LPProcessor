@@ -108,7 +108,13 @@ public:
     bool consolidateEndPositions; // no longer used - was for "super" patterns where remembering precise ends was no longer necessary
     patternElement(void)
     {
+        inflectionFlags=0; // see enum InflectionTypes
+        minimum=0;
+        maximum=0;
+        patternNum=0;
+        elementPosition=0;
       consolidateEndPositions=false;
+        endPosition = 0;
     };
 		void initializeUsage()
 		{

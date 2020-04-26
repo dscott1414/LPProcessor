@@ -299,7 +299,8 @@ public:
       }
       tRelation(void)
       {
-        //index=-1;
+        sourceId=0; // index into sources
+        rlastWhere=0;
         deltaFrequency=frequency=0;
       };
     };
@@ -568,7 +569,7 @@ public:
 		deltaUsagePatterns[(hasDeterminer) ? tFI::SINGULAR_NOUN_HAS_DETERMINER : tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]++;
 		int transferTotal = 0;
 		for (unsigned int I = tFI::SINGULAR_NOUN_HAS_DETERMINER; I < tFI::SINGULAR_NOUN_HAS_DETERMINER + 2; I++)
-			transferTotal += usagePatterns[tFI::SINGULAR_NOUN_HAS_DETERMINER + I];
+			transferTotal += usagePatterns[I];
 		if ((transferTotal & 15) == 15)
 			transferUsagePatternsToCosts(tFI::HIGHEST_COST_OF_INCORRECT_NOUN_DET_USAGE, tFI::SINGULAR_NOUN_HAS_DETERMINER, 2);
 	}
@@ -578,7 +579,7 @@ public:
 		deltaUsagePatterns[tFI::VERB_HAS_0_OBJECTS + numObjects]++;
 		int transferTotal = 0;
 		for (unsigned int I = tFI::VERB_HAS_0_OBJECTS; I < tFI::VERB_HAS_0_OBJECTS + 3; I++)
-			transferTotal += usagePatterns[tFI::VERB_HAS_0_OBJECTS + I];
+			transferTotal += usagePatterns[I];
 		if ((transferTotal & 15) == 15)
 			transferUsagePatternsToCosts(tFI::HIGHEST_COST_OF_INCORRECT_VERB_USAGE, tFI::VERB_HAS_0_OBJECTS, 3);
 	}

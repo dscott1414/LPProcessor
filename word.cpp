@@ -1720,7 +1720,7 @@ int WordClass::processDate(wstring &sWord,wchar_t *buffer,__int64 &cp,__int64 &b
   __int64 tempcp=cp+1;
 	bool twoDigitYear=false;
   if (!iswdigit(buffer[tempcp++])) return -1; // 8 in 7-8-90
-  if ((twoDigitYear=iswdigit(buffer[tempcp]))!=0) tempcp++; // 1 in 7-11-90
+  if (twoDigitYear=iswdigit(buffer[tempcp])!=0) tempcp++; // 1 in 7-11-90
   if (buffer[tempcp]!='/' && !isDash(buffer[tempcp]))
   {
 		int month=_wtoi(sWord.c_str());

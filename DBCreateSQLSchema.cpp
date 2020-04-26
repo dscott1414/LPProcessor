@@ -520,7 +520,7 @@ int Source::createDatabase(wchar_t *server)
 		L"mainEntryWordId INT UNSIGNED NULL, INDEX me_ind (mainEntryWordId), "
 		L"derivationRules INT DEFAULT 0, "
 		L"sourceId INT UNSIGNED DEFAULT NULL, INDEX s_ind (sourceId), " //FOREIGN KEY (sourceId) REFERENCES sources(id),
-		L"ts TIMESTAMP, ",
+		L"ts TIMESTAMP, "
 		L"INDEX ts_ind (ts)"
 		L") DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
 	{

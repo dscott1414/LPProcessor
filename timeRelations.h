@@ -11,14 +11,16 @@ enum eCapacity { cMillenium, cCentury, cDecade, cYear, cSemester, cSeason, cQuar
 // 3. time direction (one event happening in the past, is happening now or will happen in the future)
 // 4. recurring time
 // include also Points:  ON_OR_BEFORE, ON_OR_AFTER,  Durations: EQUAL_OR_LESS, EQUAL_OR_MORE
-enum eTimeWordFlags { T_ASSUME_SEQUENTIAL=0, 
+enum eTimeWordFlags {
+	T_ASSUME_SEQUENTIAL = 0,
 	// on the following lines, flags cannot be combined, only one may be active at a time
 	T_BEFORE,T_AFTER,T_PRESENT,T_THROUGHOUT,T_RECURRING, T_AT,T_MIDWAY,
 	T_IN, T_ON, T_INTERVAL, T_START, T_STOP, T_RESUME,T_FINISH,T_RANGE, T_META_RELATION, T_UNIT,
 	T_MODIFIER,
 	// on the following lines, flags can be combined
 	T_TIME=32,T_DATE=64,T_TIMEDATE=T_TIME+T_DATE,
-	T_VAGUE=128,T_LENGTH=256,T_CARDTIME=512
+	T_VAGUE = 128, T_LENGTH = 256, T_CARDTIME = 512,
+	T_UNSPECIFIED = -1
 };
 int whichCapacity(wstring w);
 int whichMonth(wstring w);
@@ -84,19 +86,15 @@ wstring holidayString(int holiday);
 // vAD+conditional                  may be examined                    VT_POSSIBLE+ VT_PRESENT_PERFECT+VT_PASSIVE
 // vABC+conditional                 may have been examining            VT_POSSIBLE+ VT_PRESENT_PERFECT+VT_EXTENDED
 
-enum verbTense {
+enum verbDimensions {
+	// verbTense
 	VT_PRESENT=1,
 	VT_PRESENT_PERFECT,
 	VT_PAST,
 	VT_PAST_PERFECT,
 	VT_FUTURE,
-	VT_FUTURE_PERFECT
-};
-
-#define VT_TENSE_MASK 7
-#define TENSE_NOT_SPECIFIED -2
-
-enum verbAspect {
+	VT_FUTURE_PERFECT,
+	// verbAspect
     VT_POSSIBLE=8,
     VT_PASSIVE=16,
     VT_EXTENDED=32,
@@ -104,6 +102,9 @@ enum verbAspect {
     VT_NEGATION=128,
     VT_IMPERATIVE=256
 };
+
+#define VT_TENSE_MASK 7
+#define TENSE_NOT_SPECIFIED -2
 
 typedef struct 
 { 
@@ -219,6 +220,16 @@ class cTimeInfo
 		if (error=!copy(md,buffer,where,total)) return; 
 		metaDescriptive=(md!=0);
 		if (error=!copy(absHoliday,buffer,where,total)) return; 
+		if (error = !copy(absMoment, buffer, where, total)) return;
+		if (error = !copy(absNamedDay, buffer, where, total)) return;
+		if (error = !copy(absNamedHoliday, buffer, where, total)) return;
+		if (error = !copy(absNamedMonth, buffer, where, total)) return;
+		if (error = !copy(absNamedSeason, buffer, where, total)) return;
+		if (error = !copy(absToday, buffer, where, total)) return;
+		if (error = !copy(absTomorrow, buffer, where, total)) return;
+		if (error = !copy(absTonight, buffer, where, total)) return;
+		if (error = !copy(absUnspecified, buffer, where, total)) return;
+		if (error = !copy(absYesterday, buffer, where, total)) return;
   }
   bool write(void *buffer,int &where,int limit)
   {
@@ -247,6 +258,16 @@ class cTimeInfo
 		char md=(metaDescriptive) ? 1 : 0;
 		if (!copy(buffer,md,where,limit)) return false; // the events of the last two days
 		if (!copy(buffer,absHoliday,where,limit)) return false; 
+		if (!copy(buffer, absMoment, where, limit)) return false;
+		if (!copy(buffer, absNamedDay, where, limit)) return false;
+		if (!copy(buffer, absNamedHoliday, where, limit)) return false;
+		if (!copy(buffer, absNamedMonth, where, limit)) return false;
+		if (!copy(buffer, absNamedSeason, where, limit)) return false;
+		if (!copy(buffer, absToday, where, limit)) return false;
+		if (!copy(buffer, absTomorrow, where, limit)) return false;
+		if (!copy(buffer, absTonight, where, limit)) return false;
+		if (!copy(buffer, absUnspecified, where, limit)) return false;
+		if (!copy(buffer, absYesterday, where, limit)) return false;
     return true;
   }
 

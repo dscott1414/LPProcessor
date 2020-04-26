@@ -53,6 +53,8 @@ public:
 	__int64 startTime,startPrivateBytes;
 	cProfile(char *function,int num=0)
 	{
+		startPrivateBytes = 0;
+		startTime = 0;
 		if (function[0]==0)
 		{
 			accumulationNetworkProfileTimer=0;

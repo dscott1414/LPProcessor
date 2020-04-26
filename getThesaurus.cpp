@@ -1055,16 +1055,16 @@ int getThesaurus(MYSQL mysql)
 			int cn;
 			for (unsigned int s = 0; s < d.accumulatedSynonyms.size(); s++)
 			{
-				string concept = d.accumulatedSynonyms[s];
-				if (isdigit(concept[concept.size() - 1]) &&	!strncmp((char *)(concept.c_str()), "concept", 7))
+				string synonymConcept = d.accumulatedSynonyms[s];
+				if (isdigit(synonymConcept[synonymConcept.size() - 1]) &&	!strncmp((char *)(synonymConcept.c_str()), "concept", 7))
 				{
 					unsigned int J = 0;
-					while (J < concept.size() && !isdigit(concept[J]))
+					while (J < synonymConcept.size() && !isdigit(synonymConcept[J]))
 						J++;
-					concept.erase(concept.begin(), concept.begin() + J);
+					synonymConcept.erase(synonymConcept.begin(), synonymConcept.begin() + J);
 					if (d.concepts.size()>0)
 						error(I);
-					if (!isNumber(concept, cn))
+					if (!isNumber(synonymConcept, cn))
 						error(I);
 					d.concepts.push_back(cn);
 					int c = s;
