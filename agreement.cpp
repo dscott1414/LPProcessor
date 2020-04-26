@@ -286,6 +286,7 @@ int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem, in
 						Forms[m[position].getFormNum(pem->getChildForm())]->shortName.c_str(), pem - pema.begin());
 				}
 			}
+			m[position].PEMAWinners.push_back(pem - pema.begin());
 			pem->setWinner();
 			setRole(position,pem);
 			numChildren++;
@@ -328,6 +329,7 @@ int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem, in
 					bool localReassessParentCosts = false;
 					numChildren+=markChildren(pema.begin()+pm->pemaByPatternEnd,position,recursionLevel+1,lowestCost, tertiaryPEMAPositions, localReassessParentCosts);
 					patterns[pm->getPattern()]->numChildrenWinners++;
+					m[position].PMAWinners.push_back(allLocations[lc]);
 					pm->setWinner();
 					if (localReassessParentCosts)
 					{
@@ -2204,7 +2206,8 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 	}
 	// I went to jail with him.
 	if (begin>0 && m[begin-1].word->first==L"to" && m[begin].queryForm(verbForm)>=0 &&
-			!(m[begin].word->second.inflectionFlags&(PLURAL|PLURAL_OWNER)) && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm))<5)  
+				(m[begin].word->second.inflectionFlags&SINGULAR) &&
+			 !(m[begin].word->second.inflectionFlags&(SINGULAR_OWNER|PLURAL_OWNER)) && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm))<5)  
 	{
 		// from face to face / rock to rock / stone to stone
 		if (begin >= 3 && m[begin - 3].word->first == L"from" && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm)) > 0)
@@ -3593,10 +3596,12 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 					if (m[bp].lastWinnerLACAACMatchPMAOffset >= 0)
 					{
 						patternMatchArray::tPatternMatch *winnerPM = m[position].pma.content + m[bp].lastWinnerLACAACMatchPMAOffset;
-						cPattern *wp = patterns[pm->getPattern()];
-						lplog(L"%d:PMOffset %d:%s[%s](%d,%d) PHASE 3 lost GMACAACW (%d>%d) (OR %d>%d) [cost=%d len=%d] against PMOffset %d:%s[%s](%d,%d).", bp, winners[position - begin][winner], p->name.c_str(), p->differentiator.c_str(), position, len + position,
+						cPattern *wp = patterns[winnerPM->getPattern()];
+						lplog(L"%d:PMOffset %d[%06d:%06d]:%s[%s](%d,%d) PHASE 3 lost GMACAACW (%d>%d) (OR %d>%d) [cost=%d len=%d] against PMOffset %d[%06d:%06d]:%s[%s](%d,%d).", 
+							bp, 
+							winners[position - begin][winner], pm->pemaByPatternEnd,pm->pemaByChildPatternEnd,p->name.c_str(), p->differentiator.c_str(), position, len + position, // PMOffset %d[%06d:%06d]:%s[%s](%d,%d)
 							minAvgCostAfterAssessCost, m[bp].minAvgCostAfterAssessCost, m[bp].maxLACAACMatch, len, pm->getCost(), len,
-							m[bp].lastWinnerLACAACMatchPMAOffset,wp->name.c_str(), wp->differentiator.c_str(), position, winnerPM->len + position);
+							m[bp].lastWinnerLACAACMatchPMAOffset, winnerPM->pemaByPatternEnd, winnerPM->pemaByChildPatternEnd, wp->name.c_str(), wp->differentiator.c_str(), position, winnerPM->len + position); // PMOffset %d[%06d:%06d]:%s[%s](%d,%d)
 					}
 					else
 						lplog(L"%d:%s[%s](%d,%d) PHASE 3 lost GMACAACW (%d>%d) (OR %d>%d) [cost=%d len=%d] (no winner set)", bp, p->name.c_str(), p->differentiator.c_str(), position, len + position,
@@ -3622,6 +3627,7 @@ int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 					bool reassessParentCosts = false;
 					markChildren(pema.begin()+pm->pemaByPatternEnd,position,0,MIN_INT, tertiaryPEMAPositions,reassessParentCosts);
 					patterns[pm->getPattern()]->numWinners++;
+					m[position].PMAWinners.push_back(pm-m[position].pma.content);
 					pm->setWinner();
 					matchedPositions+=pm->len;
 				}

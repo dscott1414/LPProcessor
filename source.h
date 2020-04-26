@@ -535,7 +535,8 @@ public:
 	short logCache;
 	wstring baseVerb;
 	wstring questionTransformationSuggestedPattern;
-
+	vector <int> PEMAWinners;
+	vector <int> PMAWinners;
 	void setWinner(int form)
 	{
 		if (form >= sizeof(tmpWinnerForms) * 8)
