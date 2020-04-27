@@ -537,6 +537,7 @@ public:
 	wstring questionTransformationSuggestedPattern;
 	vector <int> PEMAWinners;
 	vector <int> PMAWinners;
+	
 	void setWinner(int form)
 	{
 		if (form >= sizeof(tmpWinnerForms) * 8)
@@ -548,6 +549,10 @@ public:
 		if (form >= sizeof(tmpWinnerForms) * 8)
 			lplog(LOG_FATAL_ERROR, L"overFlow on tmpWinnerForms (1)!");
 		tmpWinnerForms &= ~(1 << form);
+	}
+	void unsetAllFormWinners()
+	{
+		tmpWinnerForms = 0;
 	}
 	bool setPreferredViterbiForm(wstring form,double probability)
 	{
@@ -1519,7 +1524,7 @@ extern unsigned int timeTagSet;
 extern unsigned int qtobjectTagSet;
 extern unsigned int twoObjectTestTagSet;
 
-extern unsigned int PREP_TAG,OBJECT_TAG,SUBOBJECT_TAG,REOBJECT_TAG,IOBJECT_TAG,SUBJECT_TAG,PREP_OBJECT_TAG,VERB_TAG,PLURAL_TAG,MPLURAL_TAG,GNOUN_TAG,FLOAT_TIME_TAG;
+extern unsigned int PREP_TAG,OBJECT_TAG,SUBOBJECT_TAG,REOBJECT_TAG,IOBJECT_TAG,SUBJECT_TAG,PREP_OBJECT_TAG,VERB_TAG,IVERB_TAG,PLURAL_TAG,MPLURAL_TAG,GNOUN_TAG,FLOAT_TIME_TAG;
 extern unsigned int MNOUN_TAG,PNOUN_TAG,VNOUN_TAG,HAIL_TAG,NAME_TAG,REL_TAG,SENTENCE_IN_REL_TAG;
 
 static const int NUM_SIMPLE_TENSE=16;
@@ -2166,6 +2171,7 @@ public:
 	int assessCost(patternMatchArray::tPatternMatch *parentpm, patternMatchArray::tPatternMatch *pm, int parentPosition, int position, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,bool alternateNounDeterminerShortTry,wstring purpose);
 	void evaluateExplicitNounDeterminerAgreement(int position, patternMatchArray::tPatternMatch *pm, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
 	void evaluateExplicitSubjectVerbAgreement(int position, patternMatchArray::tPatternMatch *pm, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
+	bool eliminateLoserPatternsPhase3(unsigned int begin, unsigned int end, vector <int> &minSeparatorCost, vector < vector <unsigned int> > &winners,int &matchedPositions, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
 	int eliminateLoserPatterns(unsigned int begin,unsigned int end);
 	enum prepSetEnum { PREP_PREP_SET,PREP_OBJECT_SET,PREP_VERB_SET };
 	void setRelPrep(int where,int relPrep,int fromWhere,int setType, int whereVerb);

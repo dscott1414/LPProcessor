@@ -1547,7 +1547,7 @@ void createInfinitivePhrases(void)
 										 1,L",",0,0,1,
 										 2,L"coordinator",L"conjunction|but",0,1,1,
 										 2,L"_INFP",L"__INFPT",0,1,1,0);
-	cPattern::create(L"_INFP{_FINAL_IF_ALONE}",L"2",
+	cPattern::create(L"_INFP{IVERB:_FINAL_IF_ALONE}",L"2",
 		                 1,L"_ADVERB",0,0,1,
 										 2,L"__INFP",L"__INFPT",0,1,1,0);
 }
