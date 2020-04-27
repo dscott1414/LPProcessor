@@ -3455,7 +3455,7 @@ bool Source::eliminateLoserPatternsPhase3(unsigned int begin, unsigned int end, 
 				{
 					if (m[bp].lastWinnerLACAACMatchPMAOffset >= 0)
 					{
-						patternMatchArray::tPatternMatch *winnerPM = m[position].pma.content + m[bp].lastWinnerLACAACMatchPMAOffset;
+						patternMatchArray::tPatternMatch *winnerPM = m[position - begin].pma.content + m[position - begin].lastWinnerLACAACMatchPMAOffset;
 						cPattern *wp = patterns[winnerPM->getPattern()];
 						lplog(L"%d:PMOffset %d[%06d:%06d]:%s[%s](%d,%d) PHASE 3 lost GMACAACW (%d>%d) (OR %d>%d) [cost=%d len=%d] against PMOffset %d[%06d:%06d]:%s[%s](%d,%d).",
 							bp,
