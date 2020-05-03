@@ -83,6 +83,7 @@ public:
 	bool findMaxLen(wstring pattern,int &element);
 	int findMaxLen(void);
 	int queryPatternDiff(wstring pattern,wstring differentiator,int &maxLen);
+	int queryPatternDiffLessThenLength(wstring pattern, wstring differentiator, int &maxLen);
 	int queryPatternDiff(wstring pattern,wstring differentiator);
 	int findAgent(int &element,int maximumMaxEnd,bool allowPronouns);
 	int queryPattern(wstring pattern);

@@ -433,7 +433,7 @@ int createNouns(void)
 										0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:SINGULAR:MNOUN:_BLOCK}",L"O",
 										1,L"quantifier|either*-2",0,0,1,
-										2,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",0,1,1,
+										3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"_PP",0,1,1, // he had to make the journey between the drydock and his shop *either* by automobile or aeroplane .
 										1,L"coordinator|or",0,1,1,
 										3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"__NOUNREL{MOBJECT}",0,1,1,0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:PLURAL:MNOUN:_BLOCK}", L"P",
@@ -502,7 +502,7 @@ int createNouns(void)
 										3,L"__INTERPPB[*]{_BLOCK}",L"_DATE*1{FLOATTIME}",L"_TIME*1{FLOATTIME}",0,0,1,
 										2,L"_ADVERB",L"_ADJECTIVE",0,0,1, // He gave a number *presently* which was his own in Panton Square . / I consider him primarily responsible for all the trouble that has occurred.
 										3,L"_PP",L"_REL1",L"_INFP",0,1,1,
-										3,L"_PP*1",L"_REL1*1",L"_INFP*1",0,0,2,
+										3,L"_PP*1",L"_REL1*1",L"_INFP*1",0,0,3,
 										0);
 	// and medical man written all over him
 	/* this pattern was removed because RULE 4 of L&L disallows anything in __IMPLIEDWITH from referencing the enclosing __NOUN
@@ -611,7 +611,7 @@ int createBasicPatterns(void)
 	// this morning / this very morning / some morning
 	cPattern::create(L"_ADVERB{FLOATTIME}",L"T",
 											1, L"_ADVERB[*]", 0, 0, 1, // bright and early
-											6,L"demonstrative_determiner{TIMEMODIFIER}",L"adjective{TIMEMODIFIER}", L"quantifier|some", L"quantifier|each", L"quantifier|every", L"adverb|any", 0,1,1,
+											6,L"demonstrative_determiner{TIMEMODIFIER}",L"adjective{TIMEMODIFIER}", L"quantifier|some", L"quantifier|each", L"quantifier|every", L"quantifier|any", 0,1,1,
 											1, L"adverb{ADV}", 0, 0, 1, // very
 											6,L"month{MONTH}",L"daysOfWeek{DAYWEEK}",L"season{SEASON}",L"timeUnit{TIMECAPACITY}",L"dayUnit{TIMECAPACITY}",L"noun|time",0,1,1,
 											0);
@@ -675,7 +675,7 @@ int createBasicPatterns(void)
 											1, L"__S1*1{EVAL:_BLOCK}", 0, 1, 1, 0); // this has been probabilistically checked against Stanford and 1 is optimal
 	cPattern::create(L"_ADVERB{_FINAL}", L"AT9",
 		                  1,L"determiner|the",0,0,1, // only used with 'next'
-											4, L"quantifier|every", L"quantifier|each", L"adjective|next", L"adverb|any", 0, 1, 1,
+											4, L"quantifier|every", L"quantifier|each", L"adjective|next", L"quantifier|any", 0, 1, 1,
 											1, L"noun|time",0,1,1,
 											1, L"__S1*1{EVAL:_BLOCK}", 0, 1, 1, 0);
 	// Should this be an MS1?
@@ -2085,6 +2085,7 @@ void createSecondaryPatterns1(void)
 	// the kind of man who would be afraid to meet death!
 	cPattern::create(L"__ALLOBJECTS_1",L"2",
 						4,L"_ADVERB{ADVOBJECT}",L"_PP*1",L"preposition*2",L"_ADJECTIVE*1{ADJOBJECT}",0,0,2, // hanging preposition!
+						1, L"__INTERPPB[*]{_BLOCK}", 0, 0, 1,
 						//2,L"_NOUN_OBJ{OBJECT}",L"__NOUN[*]{OBJECT}",0,0,1, // Bill
 						2,L"_INFP",L"_REL1[*]",0,1,1, // to remember (with its object which is [to thank Mrs. Smith for taking us back today])
 						0);
@@ -2148,7 +2149,7 @@ void createSecondaryPatterns1(void)
 									 1,L"_VERBPAST",0,1,1,  
 									 2,L"__NOUN[*]{SUBJECT}",L"__NOUNREL{SUBJECT}",0,1,1, 
 									 0);
-	// another voice which 'Tommy rather thought' was that of Boris replied:
+	// another voice which *Tommy rather thought* was that of Boris replied:
 	cPattern::create(L"_SUBREL2{_BLOCK}",L"",
 									 1,L"__C1__S1",0,1,1,
 									 1,L"__ALLTHINK",0,1,1,
@@ -2160,7 +2161,7 @@ void createSecondaryPatterns1(void)
 	cPattern::create(L"_REL1{_BLOCK:REL}",L"1",
 										1,L"_ADJECTIVE",0,0,1,
 										2,L"relativizer{SUBJECT}",L"demonstrative_determiner|that{SUBJECT}",0,1,1,
-									 3,L"_PP",L"_REL1[*]",L"_SUBREL2",0,0,1,
+									 3,L"_PP",L"_REL1[*]", L"_SUBREL2", 0,0,1, // 
 									 1,L"_ADJECTIVE",0,0,1,
 									 2,L"__SUB_S2",L"_VERBPASSIVE_P",0,1,1,
 									 0);
@@ -2318,7 +2319,9 @@ void createPrepositionalPhrases(void)
 	// After a moment or two Tommy's indignation got the better of him.
 	cPattern::create(L"_PP{_FINAL_IF_ALONE:_BLOCK:PREP:_NO_REPEAT}",L"2",
 									 // Why , I am not only older than you in years , I am older in soul , *older in a thousand lives* . (adjective required to match 'older' below)
-									 2, L"_ADVERB*1", L"adjective*1", 0, 0, 1, // discourage ADVERBS if they can be picked up from ALLOBJECTS instead and bound to the previous verb
+									 
+									 3, L"_ADVERB*1", L"adjective*1", // discourage ADVERBS if they can be picked up from ALLOBJECTS instead and bound to the previous verb
+		                  L"relativizer|when", 0, 0, 1, // he was home but not to lose a watch below when at sea and not a moment's time in going ashore after work hours *when* in harbour . 
 									 3,L"preposition{P}",L"verbalPreposition{P}", L"__AS_AS",0,1,1,  // this should be a particle
 									 1,L"preposition{P}",0,0,1, // from within - complex prepositions
 									 1,L"_ADVERB*3",0,0,1, // I haven't seen you for SIMPLY centuries, my dear. // adverbial use should be rare - prefer adjectives attached to the nouns over adverbs.
@@ -2625,6 +2628,13 @@ int createSecondaryPatterns2(void)
 										4, L"__ALLOBJECTS_0", L"__ALLOBJECTS_1", L"_INFP", L"_REL1[*]", 0, 0, 1,
 										1, L"__CLOSING__S1", 0, 0, 2,
 										0);
+	// attempt it I must.
+	cPattern::create(L"__S1{_FINAL:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}", L"R7",
+								1, L"_VERBPRESENT{V_OBJECT}", 0, 1, 1,
+								1, L"personal_pronoun|it{OBJECT}", 0, 1, 1,
+								1, L"personal_pronoun_nominative{SUBJECT}", 0, 1, 1,
+								1, L"modal_auxiliary{V_AGREE}", 0, 1, 1,
+								0);
 	// END OBJVERB patterns - reverse END
 	// *I* shall have to speak to *whoever is in charge * .
 	cPattern::create(L"__NOUN{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_FORWARD_REFERENCE:_BLOCK:GNOUN:VNOUN:_EXPLICIT_SUBJECT_VERB_AGREEMENT:_CHECK_IGNORABLE_FORMS}", L"Z",
@@ -3336,7 +3346,7 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"_REL1{_FINAL_IF_ALONE:_FORWARD_REFERENCE:S_IN_REL}", L"6",
 										2, L"_ADJECTIVE", L"_ADVERB", 0, 0, 1,
 										2, L"demonstrative_determiner|that",L"preposition|for",0,0,1, // for when Mama returned she told them she had heard from Mrs . Clifford , who wrote she had that day sent off a box . 
-										9, L"conjunction|if", L"conjunction|unless", L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"relativizer|whenever", 0, 1, 1,
+										10, L"conjunction|if", L"conjunction|unless", L"conjunction|whether", L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"relativizer|whenever", 0, 1, 1,
 										1, L"__INTERS1{BLOCK}",0,0,1,
 										1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
 										1, L",", 0, 0, 1,
@@ -3420,7 +3430,7 @@ int createSecondaryPatterns2(void)
 											 1,L",",0,0,1,
 											 1, L"_ADVERB", 0, 0, 1,
 											 4,L"adverb|then",L"adverb|so",L"conjunction",L"coordinator",0,1,1,
-											 1,L"adverb|then",0,0,1,
+											 2,L"adverb|then", L"conjunction|if",0,0,1, // or if
 											 3,L"_PP*2",L"_VERBREL2*2", L"_ADVERB", 0,0,1,  // Tommy did not hear Boris's reply , but [in response to it] Whittington said something that sounded like - *1 competition with __MSTAIL[9]
 		// NOUN*3 - helps with hanging nouns prevents 'eyes' used as a verb because _MS uses _MSTAIL to cover more even though it is more expensive
 											 3,L"__S1{_BLOCK:EVAL}",L"_REL1[*]", L"__NOUN*3", 0,1,1, // __NOUN must be expensive to avoid absorbing the subject of the second sentence following another sentence (and a conjunction)
@@ -3451,7 +3461,7 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}", L"4",
 												1, L",", 0, 0, 1,
 												2, L"conjunction", L"coordinator", 0, 1, 1,
-												1, L"_ADJECTIVE", 0, 0, 1,
+												2, L"_ADJECTIVE", L"_ADVERB", 0, 0, 1,
 												4, L"_PP*1", L"_VERBREL2*1{_BLOCK:EVAL}", L"_VERBREL1*1{_BLOCK:EVAL}", L"_INFP*1{_BLOCK:EVAL}", 0, 1, 1,
 												0);
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL:_ONLY_END_MATCH}", L"F",
@@ -3466,6 +3476,7 @@ int createSecondaryPatterns2(void)
 	// _FINAL: ’ said Grace , snapping *her* finger resignedly . 
 	cPattern::create(L"__MSTAIL{_FINAL:NO_MIDDLE_MATCH:_BLOCK:EVAL:_ONLY_END_MATCH}", L"G",
 												1, L",", 0, 1, 1,
+												2, L"conjunction", L"coordinator", 0, 0, 1,
 												3, L"_PP", L"_VERBREL2", L"_INFP", 0, 1, 1,
 												1, L"_ADVERB", 0, 0, 1,
 												0);
@@ -3477,12 +3488,19 @@ int createSecondaryPatterns2(void)
 										0);
 	// Joan could think of no suitable reply for this and they sat in silence , *the woman studying her face intently* .
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL:_ONLY_END_MATCH}", L"J",
-		1, L",", 0, 1, 1,
-		1, L"__NOUN", 0, 1, 1, // the woman
-		1, L"verb", VERB_PRESENT_PARTICIPLE, 1, 1, // studying
-		2, L"__ALLOBJECTS_0", L"__ALLOBJECTS_1", 0, 1, 1, // her face 
-		1, L"_ADVERB",0,0,1,
-		0);
+										1, L",", 0, 1, 1,
+										1, L"__NOUN", 0, 1, 1, // the woman
+										1, L"verb", VERB_PRESENT_PARTICIPLE, 1, 1, // studying
+										2, L"__ALLOBJECTS_0", L"__ALLOBJECTS_1", 0, 1, 1, // her face 
+										1, L"_ADVERB",0,0,1,
+										0);
+	// That ishas forty gold sovereigns , as doesn't belong to me , *nor father neither* , *but* to one of his mates as left it with him for safety . - but should not be an adverb!
+	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL:_ONLY_END_MATCH}", L"K",
+										1, L",", 0, 0, 1,
+										1, L"coordinator|nor", 0, 1, 1,
+										1, L"noun", 0, 1, 1,
+										1, L"adverb|neither", 0, 1, 1,
+										0);
 	// prevents multiplicative nesting in _MS1
 	cPattern::create(L"_MSTAIL{_NO_REPEAT}",L"",1,L"__MSTAIL[*]",0,1,4,0);
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}",L"3",

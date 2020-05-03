@@ -1578,8 +1578,8 @@ bool Source::eraseWinnerFromRecalculatingAloneness(int where, patternMatchArray:
 			if (np < 0)
 			{
 				if (debugTrace.tracePatternElimination)
-					lplog(L"position %d:pma %d:%s[%s]*%d(%d,%d) not eliminated because even though it is a FINAL_IF_ALONE and it is not alone, it will orphan position %d.",
-						where, pma - m[where].pma.content, p->name.c_str(), p->differentiator.c_str(), pma->cost, where, where + pma->len, where - pem->begin);
+					lplog(L"position %d:pma %d:%s[%s](%d,%d)*%d not eliminated because even though it is a FINAL_IF_ALONE and it is not alone, it will orphan position %d.",
+						where, pma - m[where].pma.content, p->name.c_str(), p->differentiator.c_str(), where, where + pma->len, where - pem->begin, pma->cost);
 				return false;
 			}
 		}
@@ -1590,14 +1590,14 @@ bool Source::eraseWinnerFromRecalculatingAloneness(int where, patternMatchArray:
 	else if (debugTrace.tracePatternElimination)
 	{
 		if (!(p->fillIfAloneFlag || p->onlyAloneExceptInSubPatternsFlag))
-			lplog(L"position %d:pma %d:%s[%s]*%d(%d,%d) not eliminated because it does not have alone flags.",
-				where, pma - m[where].pma.content, p->name.c_str(), p->differentiator.c_str(), pma->cost, where, where + pma->len);
+			lplog(L"position %d:pma %d:%s[%s](%d,%d)*%d not eliminated because it does not have alone flags.",
+				where, pma - m[where].pma.content, p->name.c_str(), p->differentiator.c_str(), where, where + pma->len, pma->cost);
 		else if (pema.ownedByOtherWinningPattern(m[where].beginPEMAPosition, pma->getPattern(), pma->len))
-			lplog(L"position %d:pma %d:%s[%s]*%d(%d,%d) not eliminated because it is owned by another winner pattern.",
-				where, pma - m[where].pma.content, p->name.c_str(), p->differentiator.c_str(), pma->cost, where, where + pma->len);
+			lplog(L"position %d:pma %d:%s[%s](%d,%d)*%d not eliminated because it is owned by another winner pattern.",
+				where, pma - m[where].pma.content, p->name.c_str(), p->differentiator.c_str(), where, where + pma->len, pma->cost);
 		else if (!(where && !m[where - 1].isWinnerSeparator()) && !(where + pma->len < (int)m.size() && !m[where + pma->len].isWinnerSeparator()))
-			lplog(L"position %d:pma %d:%s[%s]*%d(%d,%d) not eliminated because it is not alone.",
-				where, pma - m[where].pma.content, p->name.c_str(), p->differentiator.c_str(), pma->cost, where, where + pma->len);
+			lplog(L"position %d:pma %d:%s[%s](%d,%d)*%d not eliminated because it is not alone.",
+				where, pma - m[where].pma.content, p->name.c_str(), p->differentiator.c_str(), where, where + pma->len, pma->cost);
 	}
 	return false;
 }

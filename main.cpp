@@ -977,7 +977,7 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			switch (processKind)
 			{
 			case 0:
-				wsprintf(processParameters, L"releasex64\\lp.exe -ParseRequest \"%s\" -cacheDir %s %s%s%s%s%s%s%s%s-log %s.%d", pathInCache.c_str(), CACHEDIR,
+				wsprintf(processParameters, L"ParseAllSourcesx64\\lp.exe -ParseRequest \"%s\" -cacheDir %s %s%s%s%s%s%s%s%s-log %s.%d", pathInCache.c_str(), CACHEDIR,
 					(forceSourceReread) ? L"-forceSourceReread " : L"",
 					(sourceWrite) ? L"-SW " : L"",
 					(sourceWordNetRead) ? L"-SWNR " : L"",
@@ -988,11 +988,11 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 					(logUnmatchedSentences) ? L"-logUnmatchedSentences " : L"",
 					specialExtension.c_str(),
 					nextProcessIndex);
-				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\lp.exe", processParameters) < 0)
+				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"ParseAllSourcesx64\\lp.exe", processParameters) < 0)
 					break;
 				break;
 			case 1:
-				wsprintf(processParameters, L"releasex64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %s.%d", CACHEDIR,
+				wsprintf(processParameters, L"ParseAllSourcesx64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %s.%d", CACHEDIR,
 					(forceSourceReread) ? L"-forceSourceReread " : L"",
 					(sourceWrite) ? L"-SW " : L"",
 					(sourceWordNetRead) ? L"-SWNR " : L"",
@@ -1009,12 +1009,12 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 					wcscat(processParameters, L" -specialExtension ");
 					wcscat(processParameters, specialExtension.c_str());
 				}
-				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\lp.exe", processParameters) < 0)
+				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"ParseAllSourcesx64\\lp.exe", processParameters) < 0)
 					break;
 				break;
 			case 2:
-				wsprintf(processParameters, L"releasex64\\CorpusAnalysis.exe -step %d -numSourceLimit %d -log %s.%d", CACHEDIR, step, numSourcesPerProcess, specialExtension.c_str(),nextProcessIndex);
-				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\CorpusAnalysis.exe", processParameters) < 0)
+				wsprintf(processParameters, L"x64\\StanfordAllSources\\CorpusAnalysis.exe -step %d -numSourceLimit %d -log %s.%d", CACHEDIR, step, numSourcesPerProcess, specialExtension.c_str(),nextProcessIndex);
+				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"x64\\StanfordAllSources\\CorpusAnalysis.exe", processParameters) < 0)
 					break;
 				break;
 			default: break;

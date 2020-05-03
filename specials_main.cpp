@@ -28,7 +28,7 @@
 #include "mutex"
 #include "stacktrace.h"
 
-void getSentenceWithTags(Source source, int patternBegin, int patternEnd, int sentenceBegin, int sentenceEnd, int PEMAPosition, wstring &sentence);
+void getSentenceWithTags(Source &source, int patternBegin, int patternEnd, int sentenceBegin, int sentenceEnd, int PEMAPosition, wstring &sentence);
 
 // needed for _STLP_DEBUG - these must be set to a legal, unreachable yet never changing value
 unordered_map <wstring,tFI> static_wordMap;
@@ -1299,8 +1299,8 @@ int printUnknownsFromSource(Source source, int sourceId, wstring path, wstring e
 	return 21;
 }
 
-int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, wstring etext, wstring primaryPatternOrWordName, wstring primaryDifferentiator, wstring secondaryPatternOrWordName, wstring secondaryDifferentiator, bool isPrimaryPattern, bool isSecondaryPattern, wstring specialExtension)
-{
+int patternOrWordAnalysisFromSource(Source &source, int sourceId, wstring path, wstring etext, wstring primaryPatternOrWordName, wstring primaryDifferentiator, wstring secondaryPatternOrWordName, wstring secondaryDifferentiator, bool isPrimaryPattern, bool isSecondaryPattern, wstring specialExtension)
+{	LFS
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
 	Words.readWords(path, sourceId, false, L"");
@@ -1322,6 +1322,7 @@ int patternOrWordAnalysisFromSource(Source source, int sourceId, wstring path, w
 					(!isSecondaryPattern && secondaryPatternOrWordName == L"" && (im.flags&WordMatch::flagNotMatched) != 0))
 				{
 					primaryPMAOffset = primaryPMAOffset & ~matchElement::patternFlag;
+					secondaryPMAOffset = secondaryPMAOffset & ~matchElement::patternFlag;
 					/*additional logic begin*/
 					//if (im.pma[primaryPMAOffset].len != 1 || im.pma.queryPattern(L"__NOUN") != -1)
 					//{
@@ -1736,7 +1737,7 @@ int printUnknowns(Source source, int step, wstring specialExtension)
 }
   
 int patternOrWordAnalysis(Source source, int step, wstring primaryPatternOrWordName, wstring primaryDifferentiator, wstring secondaryPatternOrWordName, wstring secondaryDifferentiator, enum Source::sourceTypeEnum st, bool isPrimaryPattern, bool isSecondaryPattern, wstring specialExtension)
-{
+{	LFS
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
 	if (!myquery(&source.mysql, L"LOCK TABLES sources WRITE")) return -1;
@@ -1748,7 +1749,7 @@ int patternOrWordAnalysis(Source source, int step, wstring primaryPatternOrWordN
 		return -1;
 	my_ulonglong totalSource = mysql_num_rows(result);
 	lplog(LOG_INFO | LOG_ERROR | LOG_NOTMATCHED, NULL); // close all log files to change extension
-	logFileExtension = L"."+primaryPatternOrWordName;
+	logFileExtension = specialExtension+ L"."+primaryPatternOrWordName;
 	if (!primaryDifferentiator.empty() && primaryDifferentiator!=L"*")
 		logFileExtension += L"[" + primaryDifferentiator + L"]";
 	if (!secondaryPatternOrWordName.empty())
@@ -2290,7 +2291,7 @@ wstring stTokenizeWord(wstring tokenizedWord,wstring &originalWord, unsigned lon
 // return code:
 //   -1: LP class corrected.  ST prefers something other than correct class, so LP is correct
 //   -2: LP class corrected.  ST prefers correct class, so this entry should simply be removed from the output file.
-//   -3: test whether to change to correct class - set to disagree.
+//   -3: test whether to change to correct class - set to disagree, and add an arbitrary string to partofspeech to search for whatever string added as a test.
 //    0: unable to determine whether class should be corrected, or the class has been corrected. Normal processing should continue.  
 int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceIndex, unordered_map<wstring, int> &errorMap, wstring &partofspeech, int startOfSentence, map<wstring,FormDistribution>::iterator fdi)
 {
@@ -2466,6 +2467,13 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 	{
 		source.m[wordSourceIndex].setWinner(source.m[wordSourceIndex].queryForm(pronounForm));
 		source.m[wordSourceIndex].unsetWinner(source.m[wordSourceIndex].queryForm(demonstrativeDeterminerForm));
+	}
+	// a word which LP thinks is an adverb, which is before a determiner, which ST thinks is a predeterminer and which has a predeterminer form
+	if (source.m[wordSourceIndex].isOnlyWinner(adverbForm) && source.m[wordSourceIndex + 1].isOnlyWinner(determinerForm) && primarySTLPMatch == L"predeterminer" && source.m[wordSourceIndex].queryForm(predeterminerForm)!=-1)
+	{
+		source.m[wordSourceIndex].setWinner(source.m[wordSourceIndex].queryForm(predeterminerForm));
+		source.m[wordSourceIndex].unsetWinner(adverbFormOffset);
+		return -2;
 	}
 	return 0;
 }
@@ -4354,6 +4362,16 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	{
 		partofspeech += L"PARALLELNOUN";
 	}
+	if (word == L"kind" && source.m[wordSourceIndex].queryWinnerForm(nounForm) >= 0)
+	{
+		errorMap[L"ST correct: word 'kind' ST says adjective"]++;
+		return 0;
+	}
+	if (word == L"kind" && source.m[wordSourceIndex].queryWinnerForm(adjectiveForm) >= 0)
+	{
+		errorMap[L"LP correct: word 'kind' ST says adjective"]++; // C 85 W 17
+		return 0;
+	}
 	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryForm(adjectiveForm) < 0)
 	{
 		partofspeech += L"NOTADJECTIVE!";
@@ -4511,6 +4529,60 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		if (primarySTLPMatch == L"adjective")
 		{
 			errorMap[L"diff: reflexive pronoun form cannot be considered an adjective."]++;
+			return 0;
+		}
+	}
+	if (word == L"now" && ((source.m[wordSourceIndex].relPrep >= 0 && source.queryPattern(wordSourceIndex,L"_PP") != -1) || (source.m[wordSourceIndex].flags&WordMatch::flagNounOwner)!=0))
+	{
+		errorMap[L"LP correct: now in a PP is a noun."]++;
+		return 0;
+	}
+	if ((primarySTLPMatch == L"preposition or conjunction" || word==L"but") && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
+	{
+		if (source.m[wordSourceIndex + 1].queryWinnerForm(prepositionForm) != -1)
+		{
+			errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb"]++;
+			return 0;
+		}
+		if (source.m[wordSourceIndex + 1].hasWinnerVerbForm() && source.m[wordSourceIndex + 1].queryWinnerForm(nounForm) == -1)
+		{
+			if (word == L"as")
+			{
+				errorMap[L"ST correct: word 'as': ST says preposition or conjunction and LP says adverb before verb"]++;
+				return 0;
+			}
+			// *in* - most cases, the 'object' like 'in' hand, 'in' mind, 'in' turn, 'in' answer, 'in' order, 'in' love
+			errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb before verb"]++; // LP Wrong 27 / LP Correct 258  distribute errors
+			return 0;
+		}
+		if (source.m[wordSourceIndex + 1].queryWinnerForm(nounForm)!=-1 && source.m[wordSourceIndex].isOnlyWinner(adverbForm) && !WordClass::isDash(source.m[wordSourceIndex-1].word->first[0]))
+		{
+			errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb before noun"]++; // ST Wrong 6 / ST Correct 171  distribute errors
+			return 0;
+		}
+		if (source.m[wordSourceIndex].pma.queryPattern(L"_INFP") != -1)
+		{
+			errorMap[L"ST correct: ST says preposition or conjunction and LP says adverb before INFP"]++; 
+			return 0;
+		}
+		if (atStart || source.m[wordSourceIndex + 1].word->first == L".")
+		{
+			errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb as first or last word (next word may be 'there' or 'then' which may considered adverbs of time or place)"]++;
+			return 0;
+		}
+		if (source.m[wordSourceIndex + 1].word->first == L"," || source.m[wordSourceIndex + 1].queryWinnerForm(conjunctionForm) != -1 || source.m[wordSourceIndex + 1].queryWinnerForm(coordinatorForm) != -1)
+		{
+			if (word == L"but")
+			{
+				errorMap[L"ST correct: but before a conjunction"]++;
+				return 0;
+			}
+			if (word == L"as")
+			{
+				errorMap[L"ST correct: as before a conjunction or a comma"]++;
+				return 0;
+			}
+			errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb before comma or conjunction/coordinator"]++;
 			return 0;
 		}
 	}
@@ -4912,6 +4984,19 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	numErrors = errorMap[L"LP correct: past of verb is not adjective"]; // 21 ST correct out of 105 total  
 	errorMap[L"LP correct: past of verb is not adjective"] = numErrors * 84 / 105;
 	errorMap[L"ST correct: past of verb is not adjective"] = numErrors * 21 / 105;
+
+	numErrors = errorMap[L"LP correct: word 'kind' ST says adjective"]; // 17 ST correct out of 102 total  
+	errorMap[L"LP correct: word 'kind' ST says adjective"] = numErrors * 85 / 102;
+	errorMap[L"ST correct: word 'kind' ST says adjective"] = numErrors * 17 / 102;
+
+	// LP Wrong 27 / LP Correct 258  distribute errors
+	numErrors = errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb before verb"];
+	errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb before verb"]=numErrors*258/(258+27);
+	errorMap[L"ST correct: ST says preposition or conjunction and LP says adverb before verb"]=numErrors*27/(258+27);
+
+	numErrors = errorMap[L"ST correct: ST says preposition or conjunction and LP says adverb before noun"]; // LP Wrong 171 / ST Wrong 6  distribute errors
+	errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb before noun"] = numErrors * 6 / 177;
+	errorMap[L"ST correct: ST says preposition or conjunction and LP says adverb before noun"] = numErrors * 171 / 177;
 
 }
 
@@ -5402,11 +5487,11 @@ void wmain(int argc,wchar_t *argv[])
 		break;
 	case 21:
 		// Source::TEST_SOURCE_TYPE
-		//patternOrWordAnalysis(source, step, L"__S1", L"R*", Source::GUTENBERG_SOURCE_TYPE,true);
+		//patternOrWordAnalysis(source, step, L"__S1", L"R*", Source::GUTENBERG_SOURCE_TYPE,true,specialExtension);
 		//patternOrWordAnalysis(source, step, L"__ADJECTIVE", L"MTHAN", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__NOUN", L"F", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
-		patternOrWordAnalysis(source, step, L"_MS1", L"*",L"", L"", Source::GUTENBERG_SOURCE_TYPE, true,true,L"");
+		patternOrWordAnalysis(source, step, L"__C1__S1", L"1",L"__NOUN", L"9", Source::GUTENBERG_SOURCE_TYPE, true,true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false, specialExtension);
 		//patternOrWordAnalysis(source, step, L"worth", L"", Source::GUTENBERG_SOURCE_TYPE, false,L""); // TODO: testing weight change on _S1.
 		break;

@@ -416,12 +416,45 @@ bool Source::findLowCostTag(vector<tTagLocation> &tagSet,int &cost,wchar_t *tagN
 	return false;
 }
 
-int Source::getSubjectInfo(tTagLocation subjectTag,int whereSubject, int &nounPosition,int &nameLastPosition, bool &restateSet, bool &singularSet, bool &pluralSet,bool &adjectivalSet)
+int Source::getSubjectInfo(tTagLocation subjectTag, int subjectTagIndex, int &nounPosition, int &nameLastPosition, bool &restateSet, bool &singularSet, bool &pluralSet, bool &adjectivalSet, bool &embeddedS1)
 {
-	nounPosition = nameLastPosition = -1;
+	LFS
+		nounPosition = nameLastPosition = -1;
 	singularSet = pluralSet = restateSet = adjectivalSet = false;
+	embeddedS1 = false;
 	if (subjectTag.len > 1)
 	{
+		/*
+		if subject has NOUN[9]:
+			1. if contains double dash, illegal subject (cost 20)
+			2. subject should not end in he, she, they, who, i return illegal subject.
+			3. if contains __S1 and > 10 words, return illegal subject.
+		*/
+		int whereSubject = subjectTag.sourcePosition,maxLen= subjectTag.len+1;
+		int secondaryPMAOffset = m[whereSubject].pma.queryPatternDiffLessThenLength(L"__NOUN", L"9", maxLen);
+		if (secondaryPMAOffset != -1)
+		{
+			secondaryPMAOffset = secondaryPMAOffset & ~matchElement::patternFlag;
+			// scan everything in second pattern - scan for S_IN_REL tag
+			for (int ws = whereSubject + 1; ws < whereSubject + m[whereSubject].pma[secondaryPMAOffset].len - 1; ws++)
+			{
+				int S1InnerPMAOffset = m[ws].pma.queryPattern(L"__S1");
+				embeddedS1 |= (S1InnerPMAOffset != -1 && ws + m[ws].pma[S1InnerPMAOffset& ~matchElement::patternFlag].len <= whereSubject + m[whereSubject].pma[secondaryPMAOffset].len);
+				if (WordClass::isDash(m[ws].word->first[0]) && m[ws].word->first.length() > 1)
+				{
+					embeddedS1 = true; // charge 20 if NOUN[9] AND double dash, even if <10 words
+					return 0;
+				}
+			}
+			tIWMM word = m[whereSubject + subjectTag.len - 1].word;
+			if (word->first == L"he" || word->first == L"she" || word->first == L"they" || word->first == L"who" || word->first == L"i")
+			{
+				embeddedS1 = true; // charge 20 if NOUN[9] AND ENDS with he, she, they, who, I, even if <10 words
+				return 0;
+			}
+			embeddedS1 = embeddedS1 && subjectTag.len>10; // charge 20 if NOUN[9] AND embedded S1 AND > 10 words
+		}
+		// end illegal subject check
 		int nounCost = 1000000, GNounCost = 1000000, nameCost = 1000000, sTagSet = -1;
 		tTagLocation ntl(0, 0, 0, 0, 0, 0, 0, false), gtl(0, 0, 0, 0, 0, 0, 0, false), natl(0, 0, 0, 0, 0, 0, 0, false);
 		vector < vector<tTagLocation> > subjectTagSets;
@@ -443,7 +476,7 @@ int Source::getSubjectInfo(tTagLocation subjectTag,int whereSubject, int &nounPo
 					if (PEMAOffset < 0 || pem->getPattern() != p || pem->end != end || pem->begin) continue;
 					int startSize = subjectTagSets.size();
 					int parentCost = pema[abs(PEMAOffset)].getOCost();
-					startCollectTags(debugTrace.traceSubjectVerbAgreement, subjectTagSet, tagSetSubjectPosition, PEMAOffset, subjectTagSets, true, true,L"GetSubjectInfoRootPattern");
+					startCollectTags(debugTrace.traceSubjectVerbAgreement, subjectTagSet, tagSetSubjectPosition, PEMAOffset, subjectTagSets, true, true, L"GetSubjectInfoRootPattern");
 					// find lowest cost noun or gnoun reference
 					for (unsigned int K = startSize; K < subjectTagSets.size(); K++)
 					{
@@ -451,12 +484,12 @@ int Source::getSubjectInfo(tTagLocation subjectTag,int whereSubject, int &nounPo
 							printTagSet(LOG_INFO, L"AGREE-SUBJECT (1)", K, subjectTagSets[K], tagSetSubjectPosition, subjectTag.PEMAOffset);
 						// both of the below statements must execute!  (no || )
 						int nagreeNextTag, nextTag;
-						bool foundMNoun = false,foundGNoun=false,foundNAgree=false;
-						if ((foundGNoun=findLowCostTag(subjectTagSets[K], GNounCost, L"GNOUN", gtl, parentCost, nextTag)) && GNounCost < nounCost && GNounCost < nameCost) sTagSet = K;
+						bool foundMNoun = false, foundGNoun = false, foundNAgree = false;
+						if ((foundGNoun = findLowCostTag(subjectTagSets[K], GNounCost, L"GNOUN", gtl, parentCost, nextTag)) && GNounCost < nounCost && GNounCost < nameCost) sTagSet = K;
 						if ((foundMNoun = findLowCostTag(subjectTagSets[K], GNounCost, L"MNOUN", gtl, parentCost, nextTag)) && GNounCost < nounCost && GNounCost < nameCost) sTagSet = K;
 						// if there is an mnoun and 2 nagrees (or more), then don't count the nagree because the mnoun will produce 2 or more nagrees inside it and lowCost tag only counts the cost
 						//     of one of the nagrees, so it would win, when clearly the mnoun should win.
-						if ((foundNAgree=findLowCostTag(subjectTagSets[K], nounCost, L"N_AGREE", ntl, parentCost, nagreeNextTag)) && nounCost < GNounCost && nounCost < nameCost && (nagreeNextTag == -1 || !foundMNoun)) sTagSet = K;
+						if ((foundNAgree = findLowCostTag(subjectTagSets[K], nounCost, L"N_AGREE", ntl, parentCost, nagreeNextTag)) && nounCost < GNounCost && nounCost < nameCost && (nagreeNextTag == -1 || !foundMNoun)) sTagSet = K;
 						if (findLowCostTag(subjectTagSets[K], nameCost, L"NAME", natl, parentCost, nextTag) && nameCost < nounCost && nameCost < GNounCost) sTagSet = K;
 						// AGREE-SUBJECT (1) TAGSET 00000: #TAGS=2
 						// TAGSET 00000: 002 __NOUN[2] 000002 : __N1[](2, 3) TAG N_AGREE[2, 3]
@@ -497,7 +530,7 @@ int Source::getSubjectInfo(tTagLocation subjectTag,int whereSubject, int &nounPo
 		if (!subjectTagSets.size())
 		{
 			if (debugTrace.traceSubjectVerbAgreement)
-				lplog(L"%d:No tags found under subject SUBJECT=%d.", tagSetSubjectPosition, whereSubject);
+				lplog(L"%d:No tags found under subject SUBJECT tag index=%d.", tagSetSubjectPosition, subjectTagIndex);
 			return -1;
 		}
 		if (debugTrace.traceSubjectVerbAgreement)
@@ -513,8 +546,8 @@ int Source::getSubjectInfo(tTagLocation subjectTag,int whereSubject, int &nounPo
 		pluralSet = findTag(subjectTagSets[sTagSet], L"PLURAL", nextPluralTag) >= 0;
 		restateSet = findTag(subjectTagSets[sTagSet], L"RE_OBJECT", nextRE) >= 0;
 		adjectivalSet = !singularSet && GNounCost != 1000000;
-		int nextMnounTag=-1, mnounTag = findTag(subjectTagSets[sTagSet], L"MNOUN", nextMnounTag);
-		if (nounCost == GNounCost && nameCost > nounCost && ntl.len != gtl.len && mnounTag<0)
+		int nextMnounTag = -1, mnounTag = findTag(subjectTagSets[sTagSet], L"MNOUN", nextMnounTag);
+		if (nounCost == GNounCost && nameCost > nounCost && ntl.len != gtl.len && mnounTag < 0)
 		{
 			if (debugTrace.traceSubjectVerbAgreement)
 				lplog(L"%d:Tags are inconsistent for subject tagsets ntl.end=%d gtl.end=%d.", tagSetSubjectPosition, ntl.len, gtl.len);
@@ -525,12 +558,12 @@ int Source::getSubjectInfo(tTagLocation subjectTag,int whereSubject, int &nounPo
 			if (debugTrace.traceSubjectVerbAgreement)
 				lplog(L"%d:Name cost %d is <= nounCost %d.  Setting noun position to -2 and nameLastPosition to %d.", tagSetSubjectPosition, nameCost, nounCost, ntl.sourcePosition + ntl.len - 1);
 			nounPosition = -2;
-			if (nounCost==nameCost)
+			if (nounCost == nameCost)
 				nameLastPosition = ntl.sourcePosition + ntl.len - 1;
 			else
 				nameLastPosition = natl.sourcePosition + natl.len - 1;
 		}
-		else if (nounCost <= GNounCost && ntl.len>0)
+		else if (nounCost <= GNounCost && ntl.len > 0)
 			nounPosition = ntl.sourcePosition;
 		// if NAME tag is totally before N_AGREE tag, then NAME is used as an adjective.  N_AGREE should be used for agreement.
 		// How many American Girl dolls have been sold?
@@ -539,7 +572,7 @@ int Source::getSubjectInfo(tTagLocation subjectTag,int whereSubject, int &nounPo
 		// if singular is set (because mnoun has an 'OR', like 'a mouse or a horse'), but nounPosition>=0 and the noun is plural, then forget about the singular setting and mark as plural.
 		if (singularSet && !pluralSet && nounPosition >= 0 && mnounTag >= 0)
 		{
-			int nextAgreeNounTag=-1;
+			int nextAgreeNounTag = -1;
 			findTag(subjectTagSets[sTagSet], L"N_AGREE", nextAgreeNounTag);
 			if (nextAgreeNounTag >= 0)
 				nounPosition = subjectTagSets[sTagSet][nextAgreeNounTag].sourcePosition;
@@ -553,8 +586,6 @@ int Source::getSubjectInfo(tTagLocation subjectTag,int whereSubject, int &nounPo
 		nounPosition = subjectTag.sourcePosition;
 	return 0;
 }
-
-void getSentenceWithTags(Source source, int patternBegin, int patternEnd, int sentenceBegin, int sentenceEnd, int PEMAPosition, wstring &sentence);
 
 /*
 1. Compound subjects made with 'and' are plural when they are used before
@@ -639,10 +670,16 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 			}
 		}
 	}
-	bool restateSet, singularSet, pluralSet,adjectivalSet;
+	bool restateSet, singularSet, pluralSet,adjectivalSet,embeddedS1ImproperEnding=false;
 	int nounPosition, nameLastPosition;
-	if (getSubjectInfo(tagSet[subjectTag], subjectTag, nounPosition, nameLastPosition, restateSet, singularSet, pluralSet,adjectivalSet) < 0)
+	if (getSubjectInfo(tagSet[subjectTag], subjectTag, nounPosition, nameLastPosition, restateSet, singularSet, pluralSet,adjectivalSet,embeddedS1ImproperEnding) < 0)
 		return 0;
+	if (embeddedS1ImproperEnding)
+	{
+		if (debugTrace.traceSubjectVerbAgreement)
+			lplog(L"%d: subject has embedded S1 improper ending [SOURCE=%06d] cost=%d", position, traceSource = gTraceSource++, 20);
+		return 20;
+	}
 	// to block unwanted C1_S1 -> reflexive_pronoun
 	//if (tagSet[subjectTag].len == 1)
 	//{
@@ -1581,7 +1618,7 @@ int Source::cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patter
 			int len=childPM->len,avgCost=finalMinimumCost*1000/len,lowerAverageCost=childPM->getAverageCost(); // COSTCALC
 			for (unsigned int relpos=0; im!=imEnd; im++,relpos++)
 				if (im->updateMaxMatch(len,avgCost,lowerAverageCost) && debugTrace.tracePatternElimination)
-					::lplog(L"%d:Pattern %s[%s](%d,%d) established a new HIGHER maxLACMatch %d or lowest average cost %d=%d*1000/%d",
+					::lplog(L"TOP %d:Pattern %s[%s](%d,%d) established a new HIGHER maxLACMatch %d or lowest average cost %d=%d*1000/%d",
 					basePosition+relpos,
 					patterns[childPM->getPattern()]->name.c_str(),patterns[childPM->getPattern()]->differentiator.c_str(),
 					basePosition,basePosition+len,len,avgCost,finalMinimumCost,len); // COSTCALC
@@ -2985,7 +3022,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 					objectDistanceCost += 6;
 					if (debugTrace.traceVerbObjects)
 					{
-						lplog(L"          %d:increased objectDistanceCost to %d because first object has an embedded preposition clause [tagsets follow]", wo, objectDistanceCost);
+						lplog(L"          %d:increased objectDistanceCost to %d because first object has an embedded preposition/relative/infinitive clause [tagsets follow]", wo, objectDistanceCost);
 							for (auto totTagSet : twoObjectTestTagSets)
 								printTagSet(LOG_INFO, L"PrepInFirstObject", -1, totTagSet, tagSet[whereObjectTag].sourcePosition, tagSet[whereObjectTag].PEMAOffset);
 					}
@@ -3250,16 +3287,16 @@ int Source::assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchAr
 	tagSets.clear();
 	if (!preTaggedSource)
 	{
-		bool infinitive = false;
-		if (!pema[pm->pemaByPatternEnd].flagSet(patternElementMatchArray::COST_NVO) &&
-			(startCollectTags(debugTrace.traceVerbObjects, verbObjectsTagSet, position, pm->pemaByPatternEnd, tagSets, true, false, purpose + L"| base verb objects") > 0 ||
-			(infinitive = (startCollectTags(debugTrace.traceVerbObjects, iverbTagSet, position, pm->pemaByPatternEnd, tagSets, true, false, purpose + L"| infinitive clause verb objects") > 0))))
-		{
-		//bool infinitive = patterns[pm->getPattern()]->hasTag(IVERB_TAG);
+		//bool infinitive = false;
 		//if (!pema[pm->pemaByPatternEnd].flagSet(patternElementMatchArray::COST_NVO) &&
-		//	((!infinitive && startCollectTags(debugTrace.traceVerbObjects,verbObjectsTagSet,position,pm->pemaByPatternEnd,tagSets,true,false, purpose + L"| base verb objects")>0) ||
-		//	 (infinitive && startCollectTags(debugTrace.traceVerbObjects,iverbTagSet,position,pm->pemaByPatternEnd,tagSets,true,false, purpose + L"| infinitive clause verb objects")>0)))
+		//	(startCollectTags(debugTrace.traceVerbObjects, verbObjectsTagSet, position, pm->pemaByPatternEnd, tagSets, true, false, purpose + L"| base verb objects") > 0 ||
+		//	(infinitive = (startCollectTags(debugTrace.traceVerbObjects, iverbTagSet, position, pm->pemaByPatternEnd, tagSets, true, false, purpose + L"| infinitive clause verb objects") > 0))))
 		//{
+		bool infinitive = patterns[pm->getPattern()]->hasTag(IVERB_TAG);
+		if (!pema[pm->pemaByPatternEnd].flagSet(patternElementMatchArray::COST_NVO) &&
+			((!infinitive && startCollectTags(debugTrace.traceVerbObjects,verbObjectsTagSet,position,pm->pemaByPatternEnd,tagSets,true,false, purpose + L"| base verb objects")>0) ||
+			 (infinitive && startCollectTags(debugTrace.traceVerbObjects,iverbTagSet,position,pm->pemaByPatternEnd,tagSets,true,false, purpose + L"| infinitive clause verb objects")>0)))
+		{
 			pema[pm->pemaByPatternEnd].setFlag(patternElementMatchArray::COST_NVO);
 			vector <costPatternElementByTagSet> saveSecondaryPEMAPositions=secondaryPEMAPositions; // evaluateVerbObjects now calls startCollectTags as well...
 			vector <int> costs,traceSources;
@@ -3316,7 +3353,7 @@ int Source::assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchAr
 			int len=pm->len,avgCost=pm->cost+bncCost*1000/len,lowerAverageCost=pm->getAverageCost(); // COSTCALC
 			for (unsigned int relpos=0; im!=imEnd; im++,relpos++)
 				if (im->updateMaxMatch(len,avgCost,lowerAverageCost) && debugTrace.tracePatternElimination)
-					::lplog(L"%d:Pattern %s[%s](%d,%d) established a new HIGHER maxLACMatch %d or lowest average cost %d=%d*1000/%d",
+					::lplog(L"TOP %d:Pattern %s[%s](%d,%d) established a new HIGHER maxLACMatch %d or lowest average cost %d=%d*1000/%d",
 									position+relpos,
 									patterns[pm->getPattern()]->name.c_str(),patterns[pm->getPattern()]->differentiator.c_str(),
 									position,position+len,len,avgCost,pm->cost+bncCost,len); // COSTCALC
@@ -3352,24 +3389,44 @@ int Source::assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchAr
 //     set AC2=AC1 and LEN2=LEN1, return true.
 //   else return false
 // this could be done in one line, but it could be more confusing.
-bool WordMatch::compareCost(int AC1,int LEN1,int lowestSeparatorCost,int pmaOffset, bool alsoSet)
+bool WordMatch::compareCost(int AC1,int LEN1,int lowestSeparatorCost,int pmaOffset, int fromWhere, int &reason, bool alsoSet)
 { LFS
 	if (lowestSeparatorCost>=0 && AC1>=lowestSeparatorCost) return false; // prevent patterns that match only separators optimally
 	int AC2=minAvgCostAfterAssessCost,LEN2=maxLACAACMatch;
+	reason = -1;
 	bool setInternal=false;
-	if (lastWinnerLACAACMatchPMAOffset == pmaOffset) setInternal = true;
-	else if (LEN2==0) setInternal=true;
-	else if (AC2>=0 && AC1<0) setInternal=true;
+	if (lastWinnerLACAACMatchPMAOffset == pmaOffset && whereLastWinnerLACAACMatchPMAOffset == fromWhere)
+	{
+		setInternal = true;
+		reason = 1;
+	}
+	else if (LEN2 == 0)
+	{
+		setInternal = true;
+		reason = 2;
+	}
+	else if (AC2 >= 0 && AC1 < 0)
+	{
+		setInternal = true;
+		reason = 3;
+	}
 	else if (AC2<0 && AC1>=0) setInternal=false;
-	else if (AC2>=0 && AC1>=0)
-		setInternal= AC2>AC1 || (AC2==AC1 && LEN2<=LEN1);
+	else if (AC2 >= 0 && AC1 >= 0)
+	{
+		if (setInternal = AC2 > AC1 || (AC2 == AC1 && LEN2 <= LEN1))
+			reason = 4;
+	}
 	else
-		setInternal = AC2*LEN2*LEN2 >= AC1*LEN1*LEN1;
+	{
+		if (setInternal = AC2 * LEN2*LEN2 >= AC1 * LEN1*LEN1)
+			reason = 5;
+	}
 	if (setInternal && alsoSet)
 	{
 		minAvgCostAfterAssessCost=AC1;
 		maxLACAACMatch=LEN1;
 		lastWinnerLACAACMatchPMAOffset = pmaOffset;
+		whereLastWinnerLACAACMatchPMAOffset = fromWhere;
 	}
 	return setInternal;
 }
@@ -3423,7 +3480,187 @@ void Source::evaluateExplicitNounDeterminerAgreement(int position, patternMatchA
 	assessCost(NULL, pm, -1, position, tagSets, tertiaryPEMAPositions, false, L"eliminate loser patterns - explicit noun determiner agreement");
 }
 
-bool Source::eliminateLoserPatternsPhase3(unsigned int begin, unsigned int end, vector <int> &minSeparatorCost, vector < vector <unsigned int> > &winners,int &matchedPositions, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions)
+#define PRE_ASSESS_COST_ALLOWANCE 4
+void Source::eliminateLoserPatternsPhase1(unsigned int begin, unsigned int end, vector <int> &minSeparatorCost, vector < vector <unsigned int> > &winners, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions)
+{
+	vector < vector <tTagLocation> > tagSets;
+	tagSets.reserve(4096);
+	int effectiveSentenceLength = end - begin;
+	if (WordClass::isDoubleQuote(m[end - 1].word->first[0]) || WordClass::isSingleQuote(m[end - 1].word->first[0]))
+		effectiveSentenceLength--;
+	if (WordClass::isDoubleQuote(m[begin].word->first[0]) || WordClass::isSingleQuote(m[begin].word->first[0]))
+		effectiveSentenceLength--;
+	for (unsigned int position = begin; position < end && !exitNow; position++)
+	{
+		if (debugTrace.tracePatternElimination)
+			lplog(L"position %d:PMA count=%d ----------------------", position, m[position].pma.count);
+		if (debugTrace.traceTestSubjectVerbAgreement)
+		{
+			auto mc = metaCommandsEmbeddedInSource.find(position);
+			if (mc != metaCommandsEmbeddedInSource.end())
+				lplog(LOG_INFO, L"\n*****  %s  *****", mc->second.c_str());
+		}
+		vector <unsigned int> preliminaryWinnersPreAssessCost;
+		patternMatchArray::tPatternMatch *pm = m[position].pma.content;
+		for (unsigned int pmIndex = 0; pmIndex < m[position].pma.count; pmIndex++, pm++)
+		{
+			cPattern *p = patterns[pm->getPattern()];
+			bool isWinner = false;
+			if (!p->isTopLevelMatch(*this, position, position + pm->len))
+			{
+				if (debugTrace.tracePatternElimination)
+					lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) PHASE 1 not marked as winner (%s).", position, pmIndex,
+						p->name.c_str(), p->differentiator.c_str(), position, pm->len + position, (p->onlyAloneExceptInSubPatternsFlag) ? L"onlyAloneExceptInSubPatternsFlag" : L"no fill flag");
+				if (p->explicitSubjectVerbAgreement)
+					evaluateExplicitSubjectVerbAgreement(position, pm, tagSets, tertiaryPEMAPositions);
+				if (p->explicitNounDeterminerAgreement)
+					evaluateExplicitNounDeterminerAgreement(position, pm, tagSets, tertiaryPEMAPositions);
+				continue;
+			}
+			unsigned int bp;
+			int len = pm->len; // COSTCALC
+			int paca = PRE_ASSESS_COST_ALLOWANCE * len / 5; // adjust for length - the longer a pattern is the more other patterns
+			if (effectiveSentenceLength <= 2) // if this is changed to len == 1, differences with ST will increase significantly
+				paca = PRE_ASSESS_COST_ALLOWANCE; // this is to allow expressions like Help! to be verbs even though the verb is more expensive than the noun, but also to allow VO and ND testing
+			// which may be better now may be hurt in the second phase, so allow for a lower bar to pass into the second phase.
+			int averageCost = (pm->getCost() - paca) * 1000 / len; // - to allow for patterns that aren't perfect to start with to slide in
+			// "--" is the only separator that is also a word class. if a pattern has not matched this, it should be regarded as equal to a pattern
+			// that has. -- took out 11/4/2005 because it is not defined which other patterns include the dash, and if a pattern that does not include
+			// the dash is compared with another pattern that also does not include the dash, and is one less, then that lesser matching pattern is considered
+			// equal (by this dashFirst that is being removed) and that messes up the costing in the if statement below, leaving completely unmatched words
+			// potentially *--* example: father's a dear -- I am awfully fond of him -- but you have no idea how I worry him !
+			//int dashFirst=(m[position-1].word->first=="--") ? 1:0;
+			// is there even one position which the pattern matches the maximum length?
+			// ALSO, prevent patterns that match top forms like quotes, commas and so-forth but are otherwise not winners from winning.
+			for (bp = position;
+				bp < len + position && !(isWinner = (m[bp].maxWinner(len, averageCost, minSeparatorCost[bp - begin])));
+				bp++)
+			{
+				if (debugTrace.tracePatternElimination)
+					lplog(L"%d:%s[%s](%d,%d) NOT winner PHASE 1 (len=%d averageCost=%d (%d*1000/%d) isSeparator=%s lowestAverageCost=%d maxLACMatch=%d)", bp, p->name.c_str(), p->differentiator.c_str(), position, len + position,
+						len, averageCost, pm->getCost(), len, (m[bp].word->second.isSeparator()) ? L"true" : L"false", m[bp].lowestAverageCost, m[bp].maxLACMatch); // COSTCALC
+			}
+			if (isWinner && debugTrace.tracePatternElimination)
+				lplog(L"%d:%s[%s](%d,%d) WINNER PHASE 1 (len=%d averageCost=%d isSeparator=%s lowestAverageCost=%d maxLACMatch=%d)", bp, p->name.c_str(), p->differentiator.c_str(), position, len + position,
+					len, averageCost, (m[bp].word->second.isSeparator()) ? L"true" : L"false", m[bp].lowestAverageCost, m[bp].maxLACMatch);
+			if (isWinner)
+				preliminaryWinnersPreAssessCost.push_back(pmIndex);
+			else if (debugTrace.tracePatternElimination)
+				lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) PHASE 1 is not a winner (%d<%d) OR averageCost=%d.", position, pmIndex,
+					p->name.c_str(), p->differentiator.c_str(), position, len + position, len, m[position].maxLACMatch, averageCost);
+		}
+		for (unsigned int I = 0; I < preliminaryWinnersPreAssessCost.size(); I++)
+		{
+			pm = m[position].pma.content + preliminaryWinnersPreAssessCost[I];
+			bool includeExtraProcessing = effectiveSentenceLength <= 2;
+			if (patterns[pm->getPattern()]->name == L"__NOUN")
+			{
+				includeExtraProcessing |= (pm->len + 1 >= effectiveSentenceLength) && effectiveSentenceLength < 4;
+				//includeExtraProcessing |= (position > begin && m[position - 1].queryForm(coordinatorForm) >= 0 && (int)(position - begin + pm->len + 1) >= effectiveSentenceLength); // resulted in many errors
+			}
+			assessCost(NULL, pm, -1, position, tagSets, tertiaryPEMAPositions, includeExtraProcessing, L"eliminate loser patterns - preliminary winners");
+		}
+		winners.push_back(preliminaryWinnersPreAssessCost);
+		//for (int t1 = 0; t1 < preliminaryWinnersPreAssessCost.size(); t1++)
+		//	lplog(L"%d:TDLELP PHASE 1 preliminaryWinnersPreAssessCost %d", winners.size() - 1, preliminaryWinnersPreAssessCost[t1]); 
+	}
+}
+
+void Source::updateCost(unsigned int begin, unsigned int position, vector <int> &minSeparatorCost, int PMAOffset, vector <unsigned int> &preliminaryWinners,int phase)
+{
+	int maxLen = 0;
+	patternMatchArray::tPatternMatch *pm;
+	pm = m[position].pma.content + PMAOffset;
+	cPattern *p = patterns[pm->getPattern()];
+	if (!pm->isWinner() && preferVerbRel(position, PMAOffset, p))
+	{
+		int len = pm->len;
+		maxLen = max(maxLen, len);
+		bool globalMinAvgCostAfterAssessCostWinner = false;
+		int patternFlagCost = 0;
+		if (p->onlyAloneExceptInSubPatternsFlag && position && (patternFlagCost = m[position - 1].word->second.lowestSeparatorCost()) < 0)
+			patternFlagCost = 0;
+		int minAvgCostAfterAssessCost = pm->getAverageCost(patternFlagCost);
+		for (unsigned int bp = position; bp < position + len; bp++)
+		{
+			int saveWhereLastWinnerLACAACMatchPMAOffset = m[bp].whereLastWinnerLACAACMatchPMAOffset;
+			int saveLastWinnerLACAACMatchPMAOffset = m[bp].lastWinnerLACAACMatchPMAOffset;
+			int saveCost = m[bp].minAvgCostAfterAssessCost;
+			int reason;
+			if (m[bp].compareCost(minAvgCostAfterAssessCost, len, minSeparatorCost[bp - begin], PMAOffset, position, reason, true))
+			{
+				globalMinAvgCostAfterAssessCostWinner = true;
+				if (debugTrace.tracePatternElimination)
+				{
+					if (saveWhereLastWinnerLACAACMatchPMAOffset >= 0)
+					{
+						patternMatchArray::tPatternMatch *winnerPM = m[saveWhereLastWinnerLACAACMatchPMAOffset].pma.content + saveLastWinnerLACAACMatchPMAOffset;
+						cPattern *wp = patterns[winnerPM->getPattern()];
+						lplog(L"TOP %d:%s[%s](%d,%d) PHASE %d updated [reason=%d] GMACAACW (%d<%d) [cost=%d len=%d] against PMOffset %d[%06d:%06d]:%s[%s](%d,%d).", bp, p->name.c_str(), p->differentiator.c_str(), position, len + position,phase,
+							reason, minAvgCostAfterAssessCost, saveCost, pm->getCost(), len,
+							saveLastWinnerLACAACMatchPMAOffset, winnerPM->pemaByPatternEnd, winnerPM->pemaByChildPatternEnd, wp->name.c_str(), wp->differentiator.c_str(), saveWhereLastWinnerLACAACMatchPMAOffset, winnerPM->len + saveWhereLastWinnerLACAACMatchPMAOffset); // PMOffset %d[%06d:%06d]:%s[%s](%d,%d)
+					}
+					else
+						lplog(L"TOP %d:%s[%s](%d,%d) PHASE %d updated [reason=%d] GMACAACW (%d<%d) [cost=%d len=%d] NEW.", bp, p->name.c_str(), p->differentiator.c_str(), position, len + position,
+							reason, minAvgCostAfterAssessCost, saveCost, pm->getCost(), len);
+				}
+			}
+			else if (debugTrace.tracePatternElimination)
+				lplog(L"TOP %d:%s[%s](%d,%d) PHASE %d lost GMACAACW (%d>%d) (OR %d>%d) [cost=%d len=%d].", bp, p->name.c_str(), p->differentiator.c_str(), position, len + position, phase,
+					minAvgCostAfterAssessCost, m[bp].minAvgCostAfterAssessCost, m[bp].maxLACAACMatch, len, pm->getCost(), len);
+		}
+		if (globalMinAvgCostAfterAssessCostWinner)
+			preliminaryWinners.push_back(PMAOffset);
+		if (debugTrace.traceVerbObjects || debugTrace.traceDeterminer || debugTrace.traceBNCPreferences || debugTrace.tracePatternElimination)
+			lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) PHASE %d is %smarked a preliminary winner (cost=%d minAvgCostAfterAssessCost=%d.", position, PMAOffset,
+				p->name.c_str(), p->differentiator.c_str(), position, len + position, phase, (globalMinAvgCostAfterAssessCostWinner) ? L"" : L"not ", pm->getCost(), minAvgCostAfterAssessCost);
+	}
+}
+
+void Source::eliminateLoserPatternsPhase2(unsigned int begin, unsigned int end, vector <int> &minSeparatorCost, vector < vector <unsigned int> > &winners)
+{
+	for (unsigned int position = begin; position < end && !exitNow; position++)
+	{
+		vector <unsigned int> preliminaryWinners;
+		for (unsigned int I = 0; I < winners[position - begin].size(); I++)
+		{
+			if (position - begin >= winners.size() || I >= winners[position - begin].size() || m[position].pma.count <= ((int)winners[position - begin][I]))
+				lplog(LOG_FATAL_ERROR, L"%d:%d:illegal winner index found during PHASE 2 of eliminateLoserPatterns.", position, I);
+			updateCost(begin, position, minSeparatorCost, winners[position - begin][I], preliminaryWinners,2);
+		}
+		winners[position - begin] = preliminaryWinners;
+	}
+	if (debugTrace.tracePatternElimination)
+		for (unsigned int bp = begin; bp < end; bp++)
+			lplog(L"position %d: PHASE 2 cost=%d len=%d", bp, m[bp].minAvgCostAfterAssessCost, m[bp].maxLACAACMatch);
+}
+
+void Source::eliminateLoserPatternsPhase4(unsigned int begin, unsigned int end, vector <int> &minSeparatorCost, vector < vector <unsigned int> > &winners)
+{
+	for (unsigned int position = begin; position < end && !exitNow; position++)
+	{
+		vector <unsigned int> preliminaryWinners;
+		patternMatchArray::tPatternMatch *pm = m[position].pma.content;
+		for (unsigned int PMAOffset = 0; PMAOffset < m[position].pma.count; PMAOffset++, pm++)
+		{
+			cPattern *p = patterns[pm->getPattern()];
+			if (!p->isTopLevelMatch(*this, position, position + pm->len))
+			{
+				if (debugTrace.tracePatternElimination)
+					lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) PHASE 1 not marked as winner (%s).", position, PMAOffset,
+						p->name.c_str(), p->differentiator.c_str(), position, pm->len + position, (p->onlyAloneExceptInSubPatternsFlag) ? L"onlyAloneExceptInSubPatternsFlag" : L"no fill flag");
+			}
+			else
+				updateCost(begin, position, minSeparatorCost, PMAOffset, preliminaryWinners, 4);
+		}
+		winners.push_back(preliminaryWinners);
+	}
+	if (debugTrace.tracePatternElimination)
+		for (unsigned int bp = begin; bp < end; bp++)
+			lplog(L"position %d: PHASE 4 cost=%d len=%d", bp, m[bp].minAvgCostAfterAssessCost, m[bp].maxLACAACMatch);
+}
+
+bool Source::eliminateLoserPatternsPhase3OR5(unsigned int begin, unsigned int end, vector <int> &minSeparatorCost, vector < vector <unsigned int> > &winners,int &matchedPositions, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,int phase)
 {
 	bool reassessParentCosts = false;
 	for (unsigned int position = begin; position < end && !exitNow; position++)
@@ -3443,28 +3680,40 @@ bool Source::eliminateLoserPatternsPhase3(unsigned int begin, unsigned int end, 
 				patternFlagCost = 0;
 			int minAvgCostAfterAssessCost = pm->getAverageCost(patternFlagCost);
 			unsigned int bp;
+			int reason;
 			for (bp = position; bp < position + len && !globalMinAvgCostAfterAssessCostWinner; bp++)
-				if (m[bp].compareCost(minAvgCostAfterAssessCost, len, minSeparatorCost[bp - begin], winners[position - begin][winner], false))
+				if (m[bp].compareCost(minAvgCostAfterAssessCost, len, minSeparatorCost[bp - begin], winners[position - begin][winner], position, reason, false))
 				{
 					globalMinAvgCostAfterAssessCostWinner = true;
 					if (debugTrace.tracePatternElimination)
-						lplog(L"%d:%s[%s](%d,%d) PHASE 3 winner (no update) GMACAACW (%d<%d) [cost=%d len=%d].", bp, p->name.c_str(), p->differentiator.c_str(), position, len + position,
-							minAvgCostAfterAssessCost, m[bp].minAvgCostAfterAssessCost, pm->getCost(), len);
+					{
+						if (m[bp].lastWinnerLACAACMatchPMAOffset >= 0)
+						{
+							patternMatchArray::tPatternMatch *winnerPM = m[m[bp].whereLastWinnerLACAACMatchPMAOffset].pma.content + m[bp].lastWinnerLACAACMatchPMAOffset;
+							cPattern *wp = patterns[winnerPM->getPattern()];
+							lplog(L"TOP %d:%s[%s](%d,%d) PHASE %d winner (no update - %d) GMACAACW (%d<%d) [cost=%d len=%d] against PMOffset %d[%06d:%06d]:%s[%s](%d,%d).", bp, p->name.c_str(), p->differentiator.c_str(), position, len + position,phase,
+								reason, minAvgCostAfterAssessCost, m[bp].minAvgCostAfterAssessCost, pm->getCost(), len,
+								m[bp].lastWinnerLACAACMatchPMAOffset, winnerPM->pemaByPatternEnd, winnerPM->pemaByChildPatternEnd, wp->name.c_str(), wp->differentiator.c_str(), m[bp].whereLastWinnerLACAACMatchPMAOffset, winnerPM->len + m[bp].whereLastWinnerLACAACMatchPMAOffset); // PMOffset %d[%06d:%06d]:%s[%s](%d,%d)
+						}
+						else
+							lplog(L"TOP %d:%s[%s](%d,%d) PHASE %d winner (no update - %d) GMACAACW (%d<%d) [cost=%d len=%d] against [never set].", bp, p->name.c_str(), p->differentiator.c_str(), position, len + position,phase,
+								reason, minAvgCostAfterAssessCost, m[bp].minAvgCostAfterAssessCost, pm->getCost(), len);
+					}
 				}
 				else if (debugTrace.tracePatternElimination)
 				{
 					if (m[bp].lastWinnerLACAACMatchPMAOffset >= 0)
 					{
-						patternMatchArray::tPatternMatch *winnerPM = m[position - begin].pma.content + m[position - begin].lastWinnerLACAACMatchPMAOffset;
+						patternMatchArray::tPatternMatch *winnerPM = m[m[bp].whereLastWinnerLACAACMatchPMAOffset].pma.content + m[bp].lastWinnerLACAACMatchPMAOffset;
 						cPattern *wp = patterns[winnerPM->getPattern()];
-						lplog(L"%d:PMOffset %d[%06d:%06d]:%s[%s](%d,%d) PHASE 3 lost GMACAACW (%d>%d) (OR %d>%d) [cost=%d len=%d] against PMOffset %d[%06d:%06d]:%s[%s](%d,%d).",
+						lplog(L"TOP %d:PMOffset %d[%06d:%06d]:%s[%s](%d,%d) PHASE %d lost GMACAACW (%d>%d) (OR %d>%d) [cost=%d len=%d] against PMOffset %d[%06d:%06d]:%s[%s](%d,%d).",
 							bp,
 							winners[position - begin][winner], pm->pemaByPatternEnd, pm->pemaByChildPatternEnd, p->name.c_str(), p->differentiator.c_str(), position, len + position, // PMOffset %d[%06d:%06d]:%s[%s](%d,%d)
-							minAvgCostAfterAssessCost, m[bp].minAvgCostAfterAssessCost, m[bp].maxLACAACMatch, len, pm->getCost(), len,
-							m[bp].lastWinnerLACAACMatchPMAOffset, winnerPM->pemaByPatternEnd, winnerPM->pemaByChildPatternEnd, wp->name.c_str(), wp->differentiator.c_str(), position, winnerPM->len + position); // PMOffset %d[%06d:%06d]:%s[%s](%d,%d)
+							phase,minAvgCostAfterAssessCost, m[bp].minAvgCostAfterAssessCost, m[bp].maxLACAACMatch, len, pm->getCost(), len,
+							m[bp].lastWinnerLACAACMatchPMAOffset, winnerPM->pemaByPatternEnd, winnerPM->pemaByChildPatternEnd, wp->name.c_str(), wp->differentiator.c_str(), m[bp].whereLastWinnerLACAACMatchPMAOffset, winnerPM->len + m[bp].whereLastWinnerLACAACMatchPMAOffset); // PMOffset %d[%06d:%06d]:%s[%s](%d,%d)
 					}
 					else
-						lplog(L"%d:%s[%s](%d,%d) PHASE 3 lost GMACAACW (%d>%d) (OR %d>%d) [cost=%d len=%d] (no winner set)", bp, p->name.c_str(), p->differentiator.c_str(), position, len + position,
+						lplog(L"TOP %d:%s[%s](%d,%d) PHASE 3 lost GMACAACW (%d>%d) (OR %d>%d) [cost=%d len=%d] (no winner set)", bp, p->name.c_str(), p->differentiator.c_str(), position, len + position,
 							minAvgCostAfterAssessCost, m[bp].minAvgCostAfterAssessCost, m[bp].maxLACAACMatch, len, pm->getCost(), len);
 
 				}
@@ -3474,24 +3723,72 @@ bool Source::eliminateLoserPatternsPhase3(unsigned int begin, unsigned int end, 
 				if (pm->len == 1 && m[position].word->second.isSeparator() && m[position].word->second.getLowestTopLevelCost() < pm->getCost())
 				{
 					if (debugTrace.tracePatternElimination)
-						lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) PHASE 3 NOT winner separator has lower cost (%d < %d)", position, winners[position - begin][winner],
-							patterns[pm->getPattern()]->name.c_str(), patterns[pm->getPattern()]->differentiator.c_str(), position, pm->len + position,
+						lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) PHASE %d NOT winner separator has lower cost (%d < %d)", position, winners[position - begin][winner],
+							patterns[pm->getPattern()]->name.c_str(), patterns[pm->getPattern()]->differentiator.c_str(), position, pm->len + position,phase,
 							m[position].word->second.getLowestTopLevelCost(), pm->getCost());
 				}
 				else
 				{
 					if (debugTrace.tracePatternElimination)
-						lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) PHASE 3 winner (cost=%d minAvgCostAfterAssessCost %d first winning position=%d)", position, winners[position - begin][winner],
+						lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) PHASE %d winner (cost=%d minAvgCostAfterAssessCost %d first winning position=%d)", position, winners[position - begin][winner],
 							patterns[pm->getPattern()]->name.c_str(), patterns[pm->getPattern()]->differentiator.c_str(), position, pm->len + position,
-							pm->getCost(), minAvgCostAfterAssessCost, bp - 1);
+							phase,pm->getCost(), minAvgCostAfterAssessCost, bp - 1);
 					bool localReassessParentCosts=false;
 					markChildren(pema.begin() + pm->pemaByPatternEnd, position, 0, MIN_INT, tertiaryPEMAPositions, localReassessParentCosts);
 					reassessParentCosts |= localReassessParentCosts;
 					if (localReassessParentCosts)
 					{
 						minAvgCostAfterAssessCost = pm->getAverageCost(patternFlagCost);
-						for (bp = position; bp < position + len; bp++)
-							m[bp].compareCost(minAvgCostAfterAssessCost, len, minSeparatorCost[bp - begin], winners[position - begin][winner], true);
+						if (debugTrace.tracePatternElimination)
+							lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) PHASE %d reassess (cost=%d NEW minAvgCostAfterAssessCost %d first winning position=%d)", position, winners[position - begin][winner],
+								patterns[pm->getPattern()]->name.c_str(), patterns[pm->getPattern()]->differentiator.c_str(), position, pm->len + position,
+								phase,pm->getCost(), minAvgCostAfterAssessCost, bp - 1);
+						for (unsigned int reassessBP = position; reassessBP < position + len; reassessBP++)
+						{
+							int saveWhereLastWinnerLACAACMatchPMAOffset = m[reassessBP].whereLastWinnerLACAACMatchPMAOffset;
+							int saveLastWinnerLACAACMatchPMAOffset= m[reassessBP].lastWinnerLACAACMatchPMAOffset;
+							int saveCost = m[reassessBP].minAvgCostAfterAssessCost;
+							if (m[reassessBP].compareCost(minAvgCostAfterAssessCost, len, minSeparatorCost[reassessBP - begin], winners[position - begin][winner], position, reason, true))
+							{
+								globalMinAvgCostAfterAssessCostWinner = true;
+								if (debugTrace.tracePatternElimination)
+								{
+									if (saveLastWinnerLACAACMatchPMAOffset >= 0)
+									{
+										patternMatchArray::tPatternMatch *winnerPM = m[saveWhereLastWinnerLACAACMatchPMAOffset].pma.content + saveLastWinnerLACAACMatchPMAOffset;
+										cPattern *wp = patterns[winnerPM->getPattern()];
+										lplog(L"TOP %d:%s[%s](%d,%d) PHASE %d reassess winner (updated reason %d) GMACAACW (%d<%d) [cost=%d len=%d] against PMOffset %d[%06d:%06d]:%s[%s](%d,%d).", reassessBP, p->name.c_str(), p->differentiator.c_str(), position, len + position,
+											phase,reason, minAvgCostAfterAssessCost, saveCost, pm->getCost(), len,
+											saveLastWinnerLACAACMatchPMAOffset, winnerPM->pemaByPatternEnd, winnerPM->pemaByChildPatternEnd, wp->name.c_str(), wp->differentiator.c_str(), saveWhereLastWinnerLACAACMatchPMAOffset, winnerPM->len + saveWhereLastWinnerLACAACMatchPMAOffset); // PMOffset %d[%06d:%06d]:%s[%s](%d,%d)
+									}
+									else
+										lplog(L"TOP %d:%s[%s](%d,%d) PHASE reassess winner (updated reason %d) GMACAACW (%d<%d) [cost=%d len=%d] NEW.", reassessBP, p->name.c_str(), p->differentiator.c_str(), position, len + position,
+											reason, minAvgCostAfterAssessCost, saveCost, pm->getCost(), len);
+								}
+							}
+							else if (debugTrace.tracePatternElimination)
+							{
+								if (m[reassessBP].lastWinnerLACAACMatchPMAOffset >= 0)
+								{
+									patternMatchArray::tPatternMatch *winnerPM = m[m[reassessBP].whereLastWinnerLACAACMatchPMAOffset].pma.content + m[reassessBP].lastWinnerLACAACMatchPMAOffset;
+									cPattern *wp = patterns[winnerPM->getPattern()];
+									lplog(L"TOP %d:PMOffset %d[%06d:%06d]:%s[%s](%d,%d) PHASE %d reassess lost GMACAACW (%d>%d) (OR %d>%d) [cost=%d len=%d] against PMOffset %d[%06d:%06d]:%s[%s](%d,%d).",
+										reassessBP,
+										winners[position - begin][winner], pm->pemaByPatternEnd, pm->pemaByChildPatternEnd, p->name.c_str(), p->differentiator.c_str(), position, len + position, // PMOffset %d[%06d:%06d]:%s[%s](%d,%d)
+										phase,minAvgCostAfterAssessCost, m[reassessBP].minAvgCostAfterAssessCost, m[reassessBP].maxLACAACMatch, len, pm->getCost(), len,
+										m[reassessBP].lastWinnerLACAACMatchPMAOffset, winnerPM->pemaByPatternEnd, winnerPM->pemaByChildPatternEnd, wp->name.c_str(), wp->differentiator.c_str(), m[reassessBP].whereLastWinnerLACAACMatchPMAOffset, winnerPM->len + m[reassessBP].whereLastWinnerLACAACMatchPMAOffset); // PMOffset %d[%06d:%06d]:%s[%s](%d,%d)
+								}
+								else
+									lplog(L"TOP %d:%s[%s](%d,%d) PHASE %d lost GMACAACW (%d>%d) (OR %d>%d) [cost=%d len=%d] (no winner set)", reassessBP, 
+										p->name.c_str(), p->differentiator.c_str(), position, len + position,
+										phase,minAvgCostAfterAssessCost, m[reassessBP].minAvgCostAfterAssessCost, m[reassessBP].maxLACAACMatch, len, pm->getCost(), len);
+
+							}
+						}
+						if (debugTrace.tracePatternElimination)
+							lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) PHASE %d reassess DONE (cost=%d NEW minAvgCostAfterAssessCost %d first winning position=%d)", position, winners[position - begin][winner],
+								patterns[pm->getPattern()]->name.c_str(), patterns[pm->getPattern()]->differentiator.c_str(), position, pm->len + position,
+								phase,pm->getCost(), minAvgCostAfterAssessCost, bp - 1);
 					}
 					m[position].PMAWinners.push_back(((int)(pm - m[position].pma.content)));
 					pm->setWinner();
@@ -3499,9 +3796,9 @@ bool Source::eliminateLoserPatternsPhase3(unsigned int begin, unsigned int end, 
 				}
 			}
 			else if (debugTrace.tracePatternElimination)
-				lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) PHASE 3 not winner (minAvgCostAfterAssessCost %d, len=%d)", position, winners[position - begin][winner],
+				lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) PHASE %d not winner (minAvgCostAfterAssessCost %d, len=%d)", position, winners[position - begin][winner],
 					patterns[pm->getPattern()]->name.c_str(), patterns[pm->getPattern()]->differentiator.c_str(), position, pm->len + position,
-					minAvgCostAfterAssessCost, len);
+					phase,minAvgCostAfterAssessCost, len);
 		}
 	}
 	return reassessParentCosts;
@@ -3514,168 +3811,46 @@ bool Source::eliminateLoserPatternsPhase3(unsigned int begin, unsigned int end, 
 //     if pma is marked winner mark children
 //
 // copy all winners in place and minimize pema && pma
-#define PRE_ASSESS_COST_ALLOWANCE 4
 int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 { LFS
-	vector < vector <tTagLocation> > tagSets;
 	unordered_map <int, costPatternElementByTagSet> tertiaryPEMAPositions;
-	tagSets.reserve(4096);
 	vector <int> minSeparatorCost;
 	vector < vector <unsigned int> > winners; // each winner is a PMAOffset
 	minSeparatorCost.reserve(end-begin+1);
 	for (unsigned int I=0; I<end-begin+1 && I<m.size()-begin; I++)
 		minSeparatorCost[I]=m[begin+I].word->second.lowestSeparatorCost();
-	int effectiveSentenceLength = end - begin;
-	if (WordClass::isDoubleQuote(m[end - 1].word->first[0]) || WordClass::isSingleQuote(m[end - 1].word->first[0]))
-		effectiveSentenceLength--;
-	if (WordClass::isDoubleQuote(m[begin].word->first[0]) || WordClass::isSingleQuote(m[begin].word->first[0]))
-		effectiveSentenceLength--;
-	int matchedPositions=0;
-	for (unsigned int position=begin; position<end && !exitNow; position++)
-	{
-		if (debugTrace.tracePatternElimination)
-			lplog(L"position %d:PMA count=%d ----------------------",position,m[position].pma.count);
-		if (debugTrace.traceTestSubjectVerbAgreement)
-		{
-			auto mc = metaCommandsEmbeddedInSource.find(position);
-			if (mc != metaCommandsEmbeddedInSource.end())
-				lplog(LOG_INFO, L"\n*****  %s  *****", mc->second.c_str());
-		}
-		vector <unsigned int> preliminaryWinnersPreAssessCost;
-		patternMatchArray::tPatternMatch *pm=m[position].pma.content;
-		for (unsigned int pmIndex=0; pmIndex<m[position].pma.count; pmIndex++,pm++)
-		{
-			cPattern *p=patterns[pm->getPattern()];
-			bool isWinner=false;
-			if (!p->isTopLevelMatch(*this,position,position+pm->len))
-			{
-				if (debugTrace.tracePatternElimination)
-					lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) PHASE 1 not marked as winner (%s).",position,pmIndex,
-					p->name.c_str(),p->differentiator.c_str(),position,pm->len+position,(p->onlyAloneExceptInSubPatternsFlag)? L"onlyAloneExceptInSubPatternsFlag" : L"no fill flag");
-				if (p->explicitSubjectVerbAgreement)
-					evaluateExplicitSubjectVerbAgreement(position, pm, tagSets, tertiaryPEMAPositions);
-				if (p->explicitNounDeterminerAgreement)
-					evaluateExplicitNounDeterminerAgreement(position, pm, tagSets, tertiaryPEMAPositions);
-				continue;
-			}
-			unsigned int bp;
-			int len=pm->len; // COSTCALC
-			int paca=PRE_ASSESS_COST_ALLOWANCE*len/5; // adjust for length - the longer a pattern is the more other patterns
-			if (effectiveSentenceLength <= 2) // if this is changed to len == 1, differences with ST will increase significantly
-				paca = PRE_ASSESS_COST_ALLOWANCE; // this is to allow expressions like Help! to be verbs even though the verb is more expensive than the noun, but also to allow VO and ND testing
-			// which may be better now may be hurt in the second phase, so allow for a lower bar to pass into the second phase.
-			int averageCost=(pm->getCost()-paca)*1000/len; // - to allow for patterns that aren't perfect to start with to slide in
-			// "--" is the only separator that is also a word class. if a pattern has not matched this, it should be regarded as equal to a pattern
-			// that has. -- took out 11/4/2005 because it is not defined which other patterns include the dash, and if a pattern that does not include
-			// the dash is compared with another pattern that also does not include the dash, and is one less, then that lesser matching pattern is considered
-			// equal (by this dashFirst that is being removed) and that messes up the costing in the if statement below, leaving completely unmatched words
-			// potentially *--* example: father's a dear -- I am awfully fond of him -- but you have no idea how I worry him !
-			//int dashFirst=(m[position-1].word->first=="--") ? 1:0;
-			// is there even one position which the pattern matches the maximum length?
-			// ALSO, prevent patterns that match top forms like quotes, commas and so-forth but are otherwise not winners from winning.
-			for (bp=position;
-				bp<len+position && !(isWinner=(m[bp].maxWinner(len,averageCost,minSeparatorCost[bp-begin])));
-				bp++)
-			{
-				if (debugTrace.tracePatternElimination)
-					lplog(L"%d:%s[%s](%d,%d) NOT winner PHASE 1 (len=%d averageCost=%d (%d*1000/%d) isSeparator=%s lowestAverageCost=%d maxLACMatch=%d)",bp,p->name.c_str(),p->differentiator.c_str(),position,len+position,
-					len,averageCost,pm->getCost(),len,(m[bp].word->second.isSeparator()) ? L"true" : L"false",m[bp].lowestAverageCost,m[bp].maxLACMatch); // COSTCALC
-			}
-			if (isWinner && debugTrace.tracePatternElimination)
-				lplog(L"%d:%s[%s](%d,%d) WINNER PHASE 1 (len=%d averageCost=%d isSeparator=%s lowestAverageCost=%d maxLACMatch=%d)",bp,p->name.c_str(),p->differentiator.c_str(),position,len+position,
-				len,averageCost,(m[bp].word->second.isSeparator()) ? L"true" : L"false",m[bp].lowestAverageCost,m[bp].maxLACMatch);
-			if (isWinner)
-				preliminaryWinnersPreAssessCost.push_back(pmIndex);
-			else if (debugTrace.tracePatternElimination)
-				lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) PHASE 1 is not a winner (%d<%d) OR averageCost=%d.",position,pmIndex,
-				p->name.c_str(),p->differentiator.c_str(),position,len+position,len,m[position].maxLACMatch,averageCost);
-		}
-		for (unsigned int I=0; I<preliminaryWinnersPreAssessCost.size(); I++)
-		{
-			pm=m[position].pma.content+preliminaryWinnersPreAssessCost[I];
-			bool includeExtraProcessing = effectiveSentenceLength <= 2;
-			if (patterns[pm->getPattern()]->name == L"__NOUN")
-			{
-				includeExtraProcessing |= (pm->len + 1 >= effectiveSentenceLength) && effectiveSentenceLength<4;
-				//includeExtraProcessing |= (position > begin && m[position - 1].queryForm(coordinatorForm) >= 0 && (int)(position - begin + pm->len + 1) >= effectiveSentenceLength); // resulted in many errors
-			}
-			assessCost(NULL,pm,-1,position,tagSets,tertiaryPEMAPositions, includeExtraProcessing,L"eliminate loser patterns - preliminary winners");
-		}
-		winners.push_back(preliminaryWinnersPreAssessCost);
-		//for (int t1 = 0; t1 < preliminaryWinnersPreAssessCost.size(); t1++)
-		//	lplog(L"%d:TDLELP PHASE 1 preliminaryWinnersPreAssessCost %d", winners.size() - 1, preliminaryWinnersPreAssessCost[t1]); 
-	}
+	eliminateLoserPatternsPhase1(begin, end, minSeparatorCost, winners, tertiaryPEMAPositions);
 	applyTertiaryPEMAPositions(tertiaryPEMAPositions);
-	for (unsigned int position=begin; position<end && !exitNow; position++)
+	eliminateLoserPatternsPhase2(begin, end, minSeparatorCost, winners);
+	int matchedPositions=0;
+	bool reassessParentCosts = eliminateLoserPatternsPhase3OR5(begin, end, minSeparatorCost, winners, matchedPositions, tertiaryPEMAPositions,3);
+	if (reassessParentCosts)
 	{
-		patternMatchArray::tPatternMatch *pm;
-		int maxLen=0;
-		vector <unsigned int> preliminaryWinners;
-		for (unsigned int I=0; I<winners[position-begin].size(); I++)
+		// reset winners
+		for (unsigned int position = begin; position < end && !exitNow; position++)
 		{
-			if (position - begin >= winners.size() || I >= winners[position - begin].size() || m[position].pma.count <= ((int)winners[position - begin][I]))
-				lplog(LOG_FATAL_ERROR, L"%d:%d:illegal winner index found during PHASE 2 of eliminateLoserPatterns.", position, I);
-			pm=m[position].pma.content+winners[position-begin][I];
-			cPattern *p=patterns[pm->getPattern()];
-			if (pm->isWinner())
-				lplog(LOG_FATAL_ERROR, L"Shouldn't happen!");
-			if (!pm->isWinner() && preferVerbRel(position,winners[position-begin][I],p))
+			for (int pmaw : m[position].PMAWinners)
 			{
-				int len=pm->len;
-				maxLen=max(maxLen,len);
-				bool globalMinAvgCostAfterAssessCostWinner=false;
-				int patternFlagCost=0;
-				if (p->onlyAloneExceptInSubPatternsFlag && position && (patternFlagCost=m[position-1].word->second.lowestSeparatorCost())<0)
-					patternFlagCost=0;
-				int minAvgCostAfterAssessCost=pm->getAverageCost(patternFlagCost);
-				for (unsigned int bp=position; bp<position+len; bp++)
-					if (m[bp].compareCost(minAvgCostAfterAssessCost,len,minSeparatorCost[bp-begin], winners[position - begin][I],true))
-					{
-						globalMinAvgCostAfterAssessCostWinner=true;
-						if (debugTrace.tracePatternElimination)
-							lplog(L"%d:%s[%s](%d,%d) PHASE 2 updated GMACAACW (%d<%d) [cost=%d len=%d].",bp,p->name.c_str(),p->differentiator.c_str(),position,len+position,
-							minAvgCostAfterAssessCost,m[bp].minAvgCostAfterAssessCost,pm->getCost(),len);
-					}
-					else if (debugTrace.tracePatternElimination)
-						lplog(L"%d:%s[%s](%d,%d) PHASE 2 lost GMACAACW (%d>%d) (OR %d>%d) [cost=%d len=%d].",bp,p->name.c_str(),p->differentiator.c_str(),position,len+position,
-						minAvgCostAfterAssessCost,m[bp].minAvgCostAfterAssessCost,m[bp].maxLACAACMatch,len,pm->getCost(),len);
-				if (globalMinAvgCostAfterAssessCostWinner)
-					preliminaryWinners.push_back(winners[position-begin][I]);
-				if (debugTrace.traceVerbObjects || debugTrace.traceDeterminer || debugTrace.traceBNCPreferences || debugTrace.tracePatternElimination)
-					lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) PHASE 2 is %smarked a preliminary winner (cost=%d minAvgCostAfterAssessCost=%d.",position,winners[position-begin][I],
-					p->name.c_str(),p->differentiator.c_str(),position,len+position,(globalMinAvgCostAfterAssessCostWinner) ? L"":L"not ",pm->getCost(),minAvgCostAfterAssessCost);
+				m[position].pma[pmaw].removeWinnerFlag();
+				patterns[m[position].pma[pmaw].getPattern()]->numWinners--;
 			}
+			m[position].PMAWinners.clear();
+			for (int pemaw : m[position].PEMAWinners)
+				pema[pemaw].removeWinnerFlag();
+			m[position].PEMAWinners.clear();
+			m[position].unsetAllFormWinners();
+			m[position].minAvgCostAfterAssessCost = 1000000;
+			m[position].maxLACAACMatch = 0;
+			m[position].lastWinnerLACAACMatchPMAOffset = -1;
+			m[position].whereLastWinnerLACAACMatchPMAOffset = -1;
 		}
-		winners[position-begin]=preliminaryWinners;
-		//for (int t1 = 0; t1 < preliminaryWinners.size(); t1++)
-		//	lplog(L"%d:TDLELP PHASE 2 preliminaryWinners %d", position - begin, preliminaryWinners[t1]);  
+		winners.clear(); // each winner is a PMAOffset
+		eliminateLoserPatternsPhase4(begin, end, minSeparatorCost, winners);
+		matchedPositions = 0;
+		reassessParentCosts = eliminateLoserPatternsPhase3OR5(begin, end, minSeparatorCost, winners, matchedPositions, tertiaryPEMAPositions,5);
 	}
-	if (debugTrace.tracePatternElimination)
-		for (unsigned int bp=begin; bp<end; bp++)
-			lplog(L"position %d: PHASE 2 cost=%d len=%d",bp,m[bp].minAvgCostAfterAssessCost,m[bp].maxLACAACMatch);
-	bool reassessParentCosts = false;
-	int phaseCutoff = 1;
-	do
-	{
-		reassessParentCosts = eliminateLoserPatternsPhase3(begin, end, minSeparatorCost, winners, matchedPositions, tertiaryPEMAPositions);
-		if (reassessParentCosts && --phaseCutoff)
-		{
-			// reset winners
-			for (unsigned int position = begin; position < end && !exitNow; position++)
-			{
-				for (int pmaw : m[position].PMAWinners)
-				{
-					m[position].pma[pmaw].removeWinnerFlag();
-					patterns[m[position].pma[pmaw].getPattern()]->numWinners++;
-				}
-				m[position].PMAWinners.clear();
-				for (int pemaw : m[position].PEMAWinners)
-					pema[pemaw].removeWinnerFlag();
-				m[position].PEMAWinners.clear();
-				m[position].unsetAllFormWinners();
-			}
-		}
-	} while(reassessParentCosts && phaseCutoff);
+	if (debugTrace.tracePatternElimination && reassessParentCosts)
+		lplog(L"PHASE 5 *** reassessParentCosts true ***");
 	for (unsigned int position = begin; position < end && !exitNow; position++)
 	{
 		for (int pmaw : m[position].PMAWinners)

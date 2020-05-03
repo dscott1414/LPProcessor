@@ -395,13 +395,13 @@ int patternMatchArray::queryPatternDiff(wstring pattern,wstring differentiator)
 int patternMatchArray::queryPatternDiff(wstring pattern, wstring differentiator, int &maxLen)
 {
 	LFS
-  maxLen=-1;
+		maxLen = -1;
 	if (differentiator == L"*")
 		return queryPattern(pattern, maxLen);
-	int element=-1;
+	int element = -1;
 	if (differentiator.length() > 1 && differentiator[1] == L'*')
 	{
-  for (unsigned int I=0; I<count; I++)
+		for (unsigned int I = 0; I < count; I++)
 			if (patterns[content[I].getPattern()]->name == pattern && patterns[content[I].getPattern()]->differentiator[0] == differentiator[0] &&
 				content[I].len > maxLen)
 			{
@@ -412,14 +412,43 @@ int patternMatchArray::queryPatternDiff(wstring pattern, wstring differentiator,
 	else
 	{
 		for (unsigned int I = 0; I < count; I++)
-    if (patterns[content[I].getPattern()]->name==pattern && patterns[content[I].getPattern()]->differentiator==differentiator &&
-        content[I].len>maxLen)
-    {
-      maxLen=content[I].len;
-      element=I| matchElement::patternFlag;
+			if (patterns[content[I].getPattern()]->name == pattern && patterns[content[I].getPattern()]->differentiator == differentiator &&
+				content[I].len > maxLen)
+			{
+				maxLen = content[I].len;
+				element = I | matchElement::patternFlag;
 			}
-    }
-  return element;
+	}
+	return element;
+}
+
+int patternMatchArray::queryPatternDiffLessThenLength(wstring pattern, wstring differentiator, int &maxLen)
+{
+	LFS
+	int len = -1;
+	int element = -1;
+	if (differentiator.length() > 1 && differentiator[1] == L'*')
+	{
+		for (unsigned int I = 0; I < count; I++)
+			if (patterns[content[I].getPattern()]->name == pattern && patterns[content[I].getPattern()]->differentiator[0] == differentiator[0] &&
+				content[I].len < maxLen && content[I].len > len)
+			{
+				len = content[I].len;
+				element = I | matchElement::patternFlag;
+			}
+	}
+	else
+	{
+		for (unsigned int I = 0; I < count; I++)
+			if (patterns[content[I].getPattern()]->name == pattern && patterns[content[I].getPattern()]->differentiator == differentiator &&
+				content[I].len < maxLen && content[I].len > len)
+			{
+				len = content[I].len;
+				element = I | matchElement::patternFlag;
+			}
+	}
+	maxLen = len;
+	return element;
 }
 
 int patternMatchArray::queryQuestionFlagPattern()

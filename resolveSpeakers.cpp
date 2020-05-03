@@ -15,7 +15,7 @@ int possessiveDeterminerForm=-1,interrogativeDeterminerForm=-1,particleForm=-1;
 int nounForm=-1,quoteForm=-1,conjunctionForm=-1,quantifierForm=-1,dashForm=-1,bracketForm=-1;
 int demonstrativeDeterminerForm=-1,numeralCardinalForm=-1,numeralOrdinalForm=-1,romanNumeralForm=-1,moneyForm=-1,internalStateForm=-1,webAddressForm=-1;
 int indefinitePronounForm=-1,reciprocalPronounForm=-1,pronounForm=-1,verbForm=-1,thinkForm=-1,demonymForm=-1,relativeForm=-1,commonProfessionForm=-1,businessForm=-1,friendForm=-1;
-int adjectiveForm=-1,adverbForm=-1,honorificForm=-1,honorificAbbreviationForm=-1,determinerForm=-1,doesForm=-1,doesNegationForm=-1,dateForm=-1,timeForm=-1,coordinatorForm=-1;
+int adjectiveForm=-1,adverbForm=-1,honorificForm=-1,honorificAbbreviationForm=-1,determinerForm=-1,doesForm=-1,doesNegationForm=-1,dateForm=-1,timeForm=-1,coordinatorForm=-1,predeterminerForm=-1;
 int telephoneNumberForm=-1,verbverbForm=-1,abbreviationForm=-1,numberForm=-1,beForm=-1,haveForm=-1,haveNegationForm=-1,relativizerForm=-1;
 int isForm=-1,isNegationForm=-1,doForm=-1,doNegationForm=-1,prepositionForm=-1,telenumForm=-1,sa_abbForm=-1,toForm=-1,interjectionForm=-1,personalPronounForm=-1;
 int monthForm=-1,letterForm=-1,modalAuxiliaryForm=-1,futureModalAuxiliaryForm=-1,negationModalAuxiliaryForm=-1,negationFutureModalAuxiliaryForm=-1;

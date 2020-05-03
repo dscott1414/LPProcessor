@@ -297,6 +297,7 @@ public:
 		minAvgCostAfterAssessCost=1000000;
 		maxLACAACMatch=0;
 		lastWinnerLACAACMatchPMAOffset = -1;
+		whereLastWinnerLACAACMatchPMAOffset = -1;
 		maxMatch=0;
 		maxLACMatch=0;
 		lowestAverageCost=1000000;
@@ -443,6 +444,7 @@ public:
 	unsigned short maxLACMatch;
 	unsigned short maxLACAACMatch;
 	short lastWinnerLACAACMatchPMAOffset; // only used during tracing
+	int whereLastWinnerLACAACMatchPMAOffset; // only used during tracing
 	unsigned __int64 objectRole;
 	char verbSense;
 	unsigned char timeColor;
@@ -648,7 +650,7 @@ public:
 	unsigned int getFormNum(unsigned int line);
 	bool updateMaxMatch(int len,int avgCost);
 	bool updateMaxMatch(int len,int avgCost,int lowerAvgCost);
-	bool compareCost(int AC1,int LEN1,int lowestSeparatorCost,int pmaOffset, bool alsoSet);
+	bool compareCost(int AC1,int LEN1,int lowestSeparatorCost,int pmaOffset, int fromWhere, int &reason, bool alsoSet);
 	unsigned int getShortFormInflectionEntry(int line,wchar_t *entry);
 	unsigned int getShortAllFormAndInflectionLen(void);
 	int getInflectionLength(int inflection,tInflectionMap *map);
@@ -2171,7 +2173,11 @@ public:
 	int assessCost(patternMatchArray::tPatternMatch *parentpm, patternMatchArray::tPatternMatch *pm, int parentPosition, int position, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,bool alternateNounDeterminerShortTry,wstring purpose);
 	void evaluateExplicitNounDeterminerAgreement(int position, patternMatchArray::tPatternMatch *pm, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
 	void evaluateExplicitSubjectVerbAgreement(int position, patternMatchArray::tPatternMatch *pm, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
-	bool eliminateLoserPatternsPhase3(unsigned int begin, unsigned int end, vector <int> &minSeparatorCost, vector < vector <unsigned int> > &winners,int &matchedPositions, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
+	void eliminateLoserPatternsPhase1(unsigned int begin, unsigned int end, vector <int> &minSeparatorCost, vector < vector <unsigned int> > &winners, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions);
+	void updateCost(unsigned int begin, unsigned int position, vector <int> &minSeparatorCost, int PMAOffset, vector <unsigned int> &preliminaryWinners,int phase);
+	void eliminateLoserPatternsPhase2(unsigned int begin, unsigned int end, vector <int> &minSeparatorCost, vector < vector <unsigned int> > &winners);
+	bool eliminateLoserPatternsPhase3OR5(unsigned int begin, unsigned int end, vector <int> &minSeparatorCost, vector < vector <unsigned int> > &winners,int &matchedPositions, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,int phase);
+	void eliminateLoserPatternsPhase4(unsigned int begin, unsigned int end, vector <int> &minSeparatorCost, vector < vector <unsigned int> > &winners);
 	int eliminateLoserPatterns(unsigned int begin,unsigned int end);
 	enum prepSetEnum { PREP_PREP_SET,PREP_OBJECT_SET,PREP_VERB_SET };
 	void setRelPrep(int where,int relPrep,int fromWhere,int setType, int whereVerb);
@@ -3198,7 +3204,7 @@ int wherePrepObject,
 	int scanForPatternTag(int where, int tag);
 	int scanForPatternElementTag(int where, int tag);
 	int printSentence(unsigned int rowsize, unsigned int begin, unsigned int end, bool containsNotMatched);
-	int getSubjectInfo(tTagLocation subjectTagset, int whereSubject, int &nounPosition, int &nameLastPosition, bool &restateSet, bool &singularSet, bool &pluralSet, bool &adjectivalSet);
+	int getSubjectInfo(tTagLocation subjectTagset, int whereSubject, int &nounPosition, int &nameLastPosition, bool &restateSet, bool &singularSet, bool &pluralSet, bool &adjectivalSet, bool &embeddedS1);
 	bool evaluateSubjectVerbAgreement(int verbPosition, int whereSubject, bool &agreementTestable);
 	int queryPatternDiff(int position, wstring pattern, wstring differentiator);
 	int queryPattern(int position, wstring pattern, int &maxEnd);

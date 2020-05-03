@@ -1636,6 +1636,7 @@ void WordClass::initialize()
 	if (particleForm < 0) particleForm = FormsClass::gFindForm(L"particle");
 	if (relativeForm < 0) relativeForm = FormsClass::gFindForm(L"relative");
 	if (monthForm < 0) monthForm = FormsClass::gFindForm(L"month");
+	if (predeterminerForm < 0) predeterminerForm = FormsClass::gFindForm(L"predeterminer");
 
 	// set internal word variables
 	PPN = gquery(L"__ppn__"); // personal proper noun used for relations with pronouns or gendered proper nouns.

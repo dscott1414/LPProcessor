@@ -218,7 +218,7 @@ extern int indefinitePronounForm,reciprocalPronounForm,pronounForm,numeralCardin
 extern int verbForm,thinkForm,honorificForm,honorificAbbreviationForm,demonymForm,relativeForm,commonProfessionForm,businessForm,friendForm,internalStateForm;
 extern int determinerForm,doesForm,doesNegationForm,possessivePronounForm,quantifierForm,dateForm,timeForm,telephoneNumberForm,coordinatorForm;
 extern int verbverbForm,abbreviationForm,numberForm,beForm,haveForm,haveNegationForm,doForm,doNegationForm,interjectionForm,personalPronounForm,letterForm;
-extern int isForm,isNegationForm,prepositionForm,telenumForm,sa_abbForm,toForm,relativizerForm,moneyForm,particleForm,webAddressForm;
+extern int isForm,isNegationForm,prepositionForm,telenumForm,sa_abbForm,toForm,relativizerForm,moneyForm,particleForm,webAddressForm,predeterminerForm;
 extern int doForm,doNegationForm,monthForm,letterForm,modalAuxiliaryForm,futureModalAuxiliaryForm,negationModalAuxiliaryForm,negationFutureModalAuxiliaryForm;
 
 

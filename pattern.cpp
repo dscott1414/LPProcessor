@@ -690,16 +690,10 @@ bool cPattern::fillPattern(Source &source, int sourcePosition, vector <matchElem
     for (; im!=imEnd; im++) im->flags|=WordMatch::flagTopLevelPattern;
     im=source.m.begin()+sourcePosition;
     int len=endPosition-sourcePosition,avgCost=elementCost*1000/len; // COSTCALC
-    if (t.tracePatternElimination)
-    {
-      for (unsigned int relpos=0; im!=imEnd; im++,relpos++)
-        if (im->updateMaxMatch(len,avgCost))
-          ::lplog(L"%d:Pattern %s[%s](%d,%d) established a new maxLACMatch %d or lowest average cost %d=%d*1000/%d",
-          sourcePosition+relpos,name.c_str(),differentiator.c_str(),sourcePosition,endPosition,len,avgCost,elementCost,len); // COSTCALC
-    }
-    else
-      for (; im!=imEnd; im++)
-        im->updateMaxMatch(len,avgCost);
+    for (unsigned int relpos=0; im!=imEnd; im++,relpos++)
+      if (im->updateMaxMatch(len,avgCost) && t.tracePatternElimination)
+        ::lplog(L"TOP %d:Pattern %s[%s](%d,%d) established a new maxLACMatch %d or lowest average cost %d=%d*1000/%d",
+        sourcePosition+relpos,name.c_str(),differentiator.c_str(),sourcePosition,endPosition,len,avgCost,elementCost,len); // COSTCALC
   }
   bool POFlag=false;
   for (int I=numElementsMatched-1; I>=0; I--)
@@ -1770,7 +1764,7 @@ void initializeTagSets(int &startSuperTagSets)
 	//    as objects, but _ROLE tagset cannot be used because PREP is not a object type, and PREPOBJECT is blocked 
   desiredTagSets.push_back(tTS(ndPrepTagSet,L"_NDP",1,L"PREP",NULL));
   desiredTagSets.push_back(tTS(timeTagSet,L"_TIME",-10,L"TIMESPEC",L"HOUR",L"TIMEMODIFIER",L"TIMECAPACITY",L"TIMETYPE",L"DAYMONTH",L"MONTH",L"YEAR",L"DATESPEC",L"DAYWEEK",L"SEASON",L"HOLIDAY",L"MINUTE",NULL));
-	desiredTagSets.push_back(tTS(twoObjectTestTagSet, L"_TOT", -3, L"PREP", L"SUBJECT",L"REL",NULL));
+	desiredTagSets.push_back(tTS(twoObjectTestTagSet, L"_TOT", -3, L"PREP", L"SUBJECT",L"REL",L"IVERB",NULL));
 	
   startSuperTagSets=desiredTagSets.size();
   // these tagsets indicate the pattern has the descendant tagset which is blocked.
