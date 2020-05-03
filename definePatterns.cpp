@@ -182,7 +182,8 @@ int createNouns(void)
 		L"possessive_pronoun",L"interrogative_pronoun",L"pronoun",L"indefinite_pronoun", L"adjective|other{N_AGREE}",
 		L"noun",L"abbreviation",L"measurement_abbreviation*1",L"trademark", // L"country", // removed -- I've got to trust some one--and it must be a woman. (moved to _NOUN)
 		L"numeral_cardinal",L"numeral_ordinal",L"quantifier",L"Number*1",L"verb*1{VNOUN}",L"does*1{VNOUN}",L"letter",
-		L"time",L"date",L"telephone_number",VERB_PRESENT_PARTICIPLE|NO_OWNER,1,1,0);
+		L"time",L"date",L"telephone_number",VERB_PRESENT_PARTICIPLE|NO_OWNER,1,1,
+		0);
 
 	cPattern::create(L"__HIS_HER_DETERMINER",L"",
 						1,L"possessive_determiner|his{DET}",0,1,1,
@@ -2266,7 +2267,11 @@ void createPrepositionalPhrases(void)
 											 1,L"__NAMEOWNER{PREPOBJECT}",0,1,1,0);
 	// He loved himself (himself should be a direct object, not a PP)
 	cPattern::create(L"__PP",L"3",1,L"reflexive_pronoun*1",0,1,1,0); // prefer reflexive pronoun be a direct object than a preposition.
-
+	// probability analysis - prepositions were being changed to adverbs because there/again are not nouns in LP
+	cPattern::create(L"__PP", L"THAG",
+		1, L"preposition{P}", 0, 1, 1,
+		2, L"adverb|there{PREPOBJECT}", L"adverb|again{PREPOBJECT}", 0, 1, 1,
+		0);
 	// in which ... / for which...
 	// by which you intend to leave the town
 	cPattern::create(L"__PP",L"4",

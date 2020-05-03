@@ -2021,7 +2021,7 @@ unordered_map<wstring, vector <wstring> > maxentAssociationMap =
 	// stanford maxent apparently has no indefinite pronoun, so it classes them all as nouns.
 	{ L"noun",{ L"uncertainDurationUnit",L"simultaneousUnit",L"dayUnit",L"timeUnit",L"quantifier",L"numeral_cardinal",L"indefinite_pronoun",L"season",L"time_abbreviation" } }, // all, some etc // something, everything
 	{ L"adjective",{ L"quantifier",L"numeral_ordinal",L"numeral_cardinal" }},  // many / more
-	{ L"adverb",{ L"not",L"never" }},  // many
+	{ L"adverb",{ L"not",L"never",L"there" }},  // many
 	{ L"to",{ L"preposition" }},
 	{ L"there",{ L"pronoun",L"adverb" }},
 	{ L"no",{ L"adverb" }},
