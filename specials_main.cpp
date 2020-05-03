@@ -4565,7 +4565,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			errorMap[L"ST correct: ST says preposition or conjunction and LP says adverb before INFP"]++; 
 			return 0;
 		}
-		if (atStart || source.m[wordSourceIndex + 1].word->first == L".")
+		if (atStart || source.m[wordSourceIndex + 1].word->first == L"." || source.m[wordSourceIndex + 1].word->first == L"!" || source.m[wordSourceIndex + 1].word->first == L"?" || source.m[wordSourceIndex + 1].word->first == L";")
 		{
 			errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb as first or last word (next word may be 'there' or 'then' which may considered adverbs of time or place)"]++;
 			return 0;
@@ -4583,6 +4583,17 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 				return 0;
 			}
 			errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb before comma or conjunction/coordinator"]++;
+			return 0;
+		}
+		int timePEMAOffset = -1;
+		if ((timePEMAOffset = source.queryPattern(wordSourceIndex, L"_TIME")) != -1 && source.pema[timePEMAOffset].end == 1 && wordSourceIndex+ source.pema[timePEMAOffset].begin==startOfSentence)
+		{
+			errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb in TIME expression"]++;
+			return 0;
+		}
+		if (wordSourceIndex != startOfSentence && wordSourceIndex > 0 && WordClass::isDash(source.m[wordSourceIndex - 1].word->first[0]) && source.m[wordSourceIndex - 1].word->first.length() == 1)
+		{
+			errorMap[L"diff: ST says preposition or conjunction and LP says adverb after a single dash - actually an adjective"]++;
 			return 0;
 		}
 	}
