@@ -4374,6 +4374,17 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	}
 	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryForm(adjectiveForm) < 0)
 	{
+		if (source.m[wordSourceIndex].queryWinnerForm(verbForm) < 0 || !(source.m[wordSourceIndex].word->second.inflectionFlags&(VERB_PAST | VERB_PRESENT_PARTICIPLE)))
+		{
+			errorMap[L"LP correct: ST says adjective (wrong)"]++; // C 299 W 30
+			return 0;
+		}
+		// VERB_PAST after be?
+		if (source.m[wordSourceIndex].isOnlyWinner(verbForm) && source.m[wordSourceIndex - 1].word->first == L"be" && (source.m[wordSourceIndex].word->second.inflectionFlags&(VERB_PAST_PARTICIPLE | VERB_PAST)) == (VERB_PAST_PARTICIPLE | VERB_PAST))
+		{
+			errorMap[L"LP correct: ST says adjective (wrong) when verb past participle after be"]++; 
+			return 0;
+		}
 		partofspeech += L"NOTADJECTIVE!";
 		if (source.queryPattern(wordSourceIndex, L"_Q1PASSIVE") != -1)
 		{
@@ -5008,6 +5019,10 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	numErrors = errorMap[L"ST correct: ST says preposition or conjunction and LP says adverb before noun"]; // LP Wrong 171 / ST Wrong 6  distribute errors
 	errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb before noun"] = numErrors * 6 / 177;
 	errorMap[L"ST correct: ST says preposition or conjunction and LP says adverb before noun"] = numErrors * 171 / 177;
+
+	numErrors = errorMap[L"LP correct: ST says adjective (wrong)"]; // 30 ST correct out of 329 total  
+	errorMap[L"LP correct: ST says adjective (wrong)"] = numErrors * 299 / 329;
+	errorMap[L"ST correct: ST says adjective (wrong)"] = numErrors * 30 / 329;
 
 }
 
