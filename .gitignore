@@ -41,3 +41,4 @@ processGutenbergRDFtoSQL/obj/x64/Debug/processGutenbergRDFtoSQL.csproj.FileListA
 processGutenbergRDFtoSQL/obj/x64/Release/processGutenbergRDFtoSQL.csproj.FileListAbsolute.txt
 *.obj
 *.exe
+CodeGraphData

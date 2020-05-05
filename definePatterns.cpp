@@ -860,9 +860,11 @@ int createBasicPatterns(void)
 	cPattern::create(L"__ADJECTIVE",L"3",
 		1,L"_ADVERB",0,0,1,
 		6,L"adjective{ADJ}",L"numeral_ordinal{ADJ}",L"_NUMBER{ADJ}",L"preposition|ex{ADJ}",L"noun*1{ADJ}",L"no{ADJ:no}",SINGULAR,1,2,
-		1,L"dash",0,1,1,
-		7,L"adjective{ADJ}",L"verb*1{ADJ}",L"numeral_ordinal{ADJ}",L"_NUMBER{ADJ}",L"preposition|ex{ADJ}",L"noun{ADJ}",L"no{ADJ:no}",
-			VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,1,2,
+		1,L"dash|-",0,1,1,
+		7, L"adjective{ADJ}", L"verb{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"preposition|ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}",
+		VERB_PRESENT_PARTICIPLE | VERB_PAST_PARTICIPLE | SINGULAR_OWNER | PLURAL_OWNER, 1, 1,
+		5, L"adjective{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"noun{ADJ}", L"no{ADJ:no}",
+		SINGULAR_OWNER | PLURAL_OWNER, 0, 1,
 		1,L"adverb*1",0,0,1,0);
 		// first-class passengers
 	cPattern::create(L"__ADJECTIVE", L"A", 

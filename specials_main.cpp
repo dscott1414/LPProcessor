@@ -1325,7 +1325,7 @@ int patternOrWordAnalysisFromSource(Source &source, int sourceId, wstring path, 
 					secondaryPMAOffset = secondaryPMAOffset & ~matchElement::patternFlag;
 					int patternEnd = wordIndex + im.pma[primaryPMAOffset].len;
 					/*additional logic begin*/
-					if (source.m[patternEnd - 1].word->first == L"more" && (source.m[patternEnd].word->second.inflectionFlags&(VERB_PAST | VERB_PRESENT_PARTICIPLE)) != 0)
+					if ((source.m[patternEnd-1].word->second.inflectionFlags&(VERB_PRESENT_PARTICIPLE | VERB_PRESENT_PARTICIPLE)) != 0)
 					{
 						//{
 						//	wordIndex++;
@@ -4635,6 +4635,13 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			return 0;
 		}
 	}
+	int adjThreePatternPEMAOffset = -1;
+	if (primarySTLPMatch==L"noun" && source.m[wordSourceIndex].queryWinnerForm(verbForm) != -1 && (adjThreePatternPEMAOffset = source.queryPatternDiff(wordSourceIndex, L"__ADJECTIVE", L"3")) != -1 &&
+		  source.pema[adjThreePatternPEMAOffset].end==1)
+	{
+		errorMap[L"LP correct: ST says noun and LP says adjective a single dash"]++;
+		return 0;
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
@@ -5547,7 +5554,7 @@ void wmain(int argc,wchar_t *argv[])
 		//patternOrWordAnalysis(source, step, L"__ADJECTIVE", L"MTHAN", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__NOUN", L"F", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
-		patternOrWordAnalysis(source, step, L"__C1__S1", L"1",L"__NOUN", L"2", Source::GUTENBERG_SOURCE_TYPE, true,true, specialExtension);
+		patternOrWordAnalysis(source, step, L"__ADJECTIVE", L"3",L"", L"", Source::GUTENBERG_SOURCE_TYPE, true,true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false, specialExtension);
 		//patternOrWordAnalysis(source, step, L"worth", L"", Source::GUTENBERG_SOURCE_TYPE, false,L""); // TODO: testing weight change on _S1.
 		break;
