@@ -2846,6 +2846,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	// 30. 'her' when in the beginning of a __NOUN[2]
 	if (word == L"her" && source.m[wordSourceIndex].queryWinnerForm(L"possessive_determiner") >= 0 && source.m[wordSourceIndex].pma.queryPattern(L"__NOUN") != -1)
 	{
+		if (source.m[wordSourceIndex].pma.queryPatternDiff(L"__NOUN", L"COMING") != -1)
+		{
+			errorMap[L"LP correct: word 'her': [before 'COMING'] ST says personal_pronoun_accusative LP says possessive_determiner"]++; 
+			return 0;
+		}
 		int nf;
 		if ((nf = source.m[wordSourceIndex + 1].queryWinnerForm(nounForm)) >= 0)
 		{
@@ -4347,9 +4352,15 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		return 0;
 	}
 	// never mind
-	if (word == L"mind" && source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0 && source.queryPatternDiff(wordSourceIndex,L"_COMMAND1", L"8") != -1)
+	if (word == L"mind" && source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0 && source.queryPatternDiff(wordSourceIndex, L"_COMMAND1", L"8") != -1)
 	{
 		errorMap[L"LP correct: never mind!"]++;
+		return 0;
+	}
+	// their coming
+	if (word == L"coming" && source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0 && source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"COMING") != -1)
+	{
+		errorMap[L"LP correct: my coming!"]++;
 		return 0;
 	}
 	// parallel structures
