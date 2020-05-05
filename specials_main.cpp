@@ -1323,29 +1323,31 @@ int patternOrWordAnalysisFromSource(Source &source, int sourceId, wstring path, 
 				{
 					primaryPMAOffset = primaryPMAOffset & ~matchElement::patternFlag;
 					secondaryPMAOffset = secondaryPMAOffset & ~matchElement::patternFlag;
-					/*additional logic begin*/
-					//if (im.pma[primaryPMAOffset].len != 1 || im.pma.queryPattern(L"__NOUN") != -1)
-					//{
-					//	wordIndex++;
-					//	while (ss < source.sentenceStarts.size() && source.sentenceStarts[ss] < wordIndex + 1)
-					//		ss++;
-					//	continue;
-					//}
-					/*additional logic end*/
 					int patternEnd = wordIndex + im.pma[primaryPMAOffset].len;
-					wstring sentence;
-					getSentenceWithTags(source, wordIndex, patternEnd, source.sentenceStarts[ss - 1], source.sentenceStarts[ss], im.pma[primaryPMAOffset].pemaByPatternEnd, sentence);
-					wstring adiff = patterns[im.pma[primaryPMAOffset].getPattern()]->differentiator;
-					wstring path = source.sourcePath.substr(16, source.sourcePath.length() - 20);
-					if (primaryDifferentiator.find(L'*') == wstring::npos)
+					/*additional logic begin*/
+					if (source.m[patternEnd - 1].word->first == L"more" && (source.m[patternEnd].word->second.inflectionFlags&(VERB_PAST | VERB_PRESENT_PARTICIPLE)) != 0)
 					{
-						lplog(LOG_ERROR, L"%s", sentence.c_str());
-						lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, patternEnd, sentence.c_str());
-					}
-					else
-					{
-						lplog(LOG_ERROR, L"[%s]:%s", adiff.c_str(), sentence.c_str());
-						lplog(LOG_INFO, L"%s[%s](%d-%d):%s", path.c_str(), adiff.c_str(), wordIndex, patternEnd, sentence.c_str());
+						//{
+						//	wordIndex++;
+						//	while (ss < source.sentenceStarts.size() && source.sentenceStarts[ss] < wordIndex + 1)
+						//		ss++;
+						//	continue;
+						//}
+						/*additional logic end*/
+						wstring sentence;
+						getSentenceWithTags(source, wordIndex, patternEnd, source.sentenceStarts[ss - 1], source.sentenceStarts[ss], im.pma[primaryPMAOffset].pemaByPatternEnd, sentence);
+						wstring adiff = patterns[im.pma[primaryPMAOffset].getPattern()]->differentiator;
+						wstring path = source.sourcePath.substr(16, source.sourcePath.length() - 20);
+						if (primaryDifferentiator.find(L'*') == wstring::npos)
+						{
+							lplog(LOG_ERROR, L"%s", sentence.c_str());
+							lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, patternEnd, sentence.c_str());
+						}
+						else
+						{
+							lplog(LOG_ERROR, L"[%s]:%s", adiff.c_str(), sentence.c_str());
+							lplog(LOG_INFO, L"%s[%s](%d-%d):%s", path.c_str(), adiff.c_str(), wordIndex, patternEnd, sentence.c_str());
+						}
 					}
 				}
 			}
@@ -1782,9 +1784,11 @@ int patternOrWordAnalysis(Source source, int step, wstring primaryPatternOrWordN
 		__int64 processingSeconds = (clock() - startTime) / CLOCKS_PER_SEC;
 		numSourcesProcessedNow++;
 		if (processingSeconds)
+		{
 			wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d sources in %02I64d:%02I64d:%02I64d [%d sources/hour] (%-35.35s... finished)", numSourcesProcessedNow * 100 / totalSource, numSourcesProcessedNow, totalSource,
 				processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, numSourcesProcessedNow * 3600 / processingSeconds, title.c_str());
-		SetConsoleTitle(buffer);
+			SetConsoleTitle(buffer);
+		}
 	}
 	mysql_free_result(result);
 	return 0;
@@ -2830,15 +2834,14 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			source.m[wordSourceIndex + 1].queryWinnerForm(L"indefinite_pronoun") >= 0
 			))
 	{
-		errorMap[L"LP correct: word 'her': [before an adverb, determiner, personal_pronoun_nominative, coordinator, indefinite_pronoun] ST says possessive_determiner LP says personal_pronoun_accusative"]++;
+		errorMap[L"LP correct: word 'her': [before an adverb, determiner, personal_pronoun_nominative, coordinator, indefinite_pronoun] ST says possessive_determiner LP says personal_pronoun_accusative"]++; // ST 28 LP 124
 		return 0;
 	}
 	if (word == L"her" && primarySTLPMatch == L"possessive_determiner" && source.m[wordSourceIndex].queryWinnerForm(L"personal_pronoun_accusative") >= 0
 		&& source.m[wordSourceIndex].pma.queryPatternDiff(L"__NOUN",L"C") != -1 && source.m[wordSourceIndex].pma.queryPattern(L"__ALLOBJECTS_2") != -1)
 	{
-		partofspeech += L"***OBJECT2HER";
-		//errorMap[L"LP correct: word 'her': [before an adverb, determiner, personal_pronoun_nominative, coordinator, indefinite_pronoun] ST says possessive_determiner LP says personal_pronoun_accusative"]++;
-		//return 0;
+		errorMap[L"LP correct: word 'her': [before an adverb, determiner, personal_pronoun_nominative, coordinator, indefinite_pronoun] ST says possessive_determiner LP says personal_pronoun_accusative"]++;
+		return 0;
 	}
 	// 30. 'her' when in the beginning of a __NOUN[2]
 	if (word == L"her" && source.m[wordSourceIndex].queryWinnerForm(L"possessive_determiner") >= 0 && source.m[wordSourceIndex].pma.queryPattern(L"__NOUN") != -1)
@@ -3842,9 +3845,12 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: word 'plenty': ST says " + primarySTLPMatch + L" but LP says quantifier"]++;
 		return 0;
 	}
-	if (word == L"little" && source.m[wordSourceIndex - 1].word->first == L"a" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
+	if (word == L"little" && source.m[wordSourceIndex - 1].word->first == L"a")
 	{
-		errorMap[L"LP correct: word 'a little': ST says " + primarySTLPMatch + L" but LP says adverb"]++;
+		if (source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
+			errorMap[L"LP correct: word 'a little': ST says " + primarySTLPMatch + L" but LP says adverb"]++;
+		else
+			errorMap[L"diff: word 'a little': ST says " + primarySTLPMatch + L" and LP matches structural adverb"]++;
 		return 0;
 	}
 	if (primarySTLPMatch == L"personal_pronoun_accusative")
@@ -4372,6 +4378,23 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"LP correct: word 'kind' ST says adjective"]++; // C 85 W 17
 		return 0;
 	}
+	if (primarySTLPMatch == L"adjective")
+	{
+		if (source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0)
+		{
+			if (!(source.m[wordSourceIndex].word->second.inflectionFlags&(VERB_PAST | VERB_PRESENT_PARTICIPLE)))
+				partofspeech += L"NOTADJECTIVE!(1)";
+			else
+			{
+				if (source.m[wordSourceIndex].word->second.getUsageCost(tFI::VERB_HAS_1_OBJECTS) == 4)
+					partofspeech += L"NOTPASSIVE(2)!";
+				else
+					partofspeech += L"NOTADJECTIVE!";
+			}
+			//errorMap[L"LP correct: ST says adjective (wrong)"]++; // C 299 W 30
+			//return 0;
+		}
+	}
 	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryForm(adjectiveForm) < 0)
 	{
 		if (source.m[wordSourceIndex].queryWinnerForm(verbForm) < 0 || !(source.m[wordSourceIndex].word->second.inflectionFlags&(VERB_PAST | VERB_PRESENT_PARTICIPLE)))
@@ -4382,10 +4405,14 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		// VERB_PAST after be?
 		if (source.m[wordSourceIndex].isOnlyWinner(verbForm) && source.m[wordSourceIndex - 1].word->first == L"be" && (source.m[wordSourceIndex].word->second.inflectionFlags&(VERB_PAST_PARTICIPLE | VERB_PAST)) == (VERB_PAST_PARTICIPLE | VERB_PAST))
 		{
-			errorMap[L"LP correct: ST says adjective (wrong) when verb past participle after be"]++; 
-			return 0;
+			if (source.m[wordSourceIndex].word->second.getUsageCost(tFI::VERB_HAS_1_OBJECTS) == 4)
+				partofspeech += L"NOTPASSIVE(1)!";
+			else
+			{
+				errorMap[L"LP correct: ST says adjective (wrong) when verb past participle after be"]++;
+				return 0;
+			}
 		}
-		partofspeech += L"NOTADJECTIVE!";
 		if (source.queryPattern(wordSourceIndex, L"_Q1PASSIVE") != -1)
 		{
 			errorMap[L"LP correct: passive verb is not adjective"]++;
@@ -5011,12 +5038,11 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"LP correct: word 'kind' ST says adjective"] = numErrors * 85 / 102;
 	errorMap[L"ST correct: word 'kind' ST says adjective"] = numErrors * 17 / 102;
 
-	// LP Wrong 27 / LP Correct 258  distribute errors
-	numErrors = errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb before verb"];
+	numErrors = errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb before verb"]; // 27 ST correct out of 285 total
 	errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb before verb"]=numErrors*258/(258+27);
 	errorMap[L"ST correct: ST says preposition or conjunction and LP says adverb before verb"]=numErrors*27/(258+27);
 
-	numErrors = errorMap[L"ST correct: ST says preposition or conjunction and LP says adverb before noun"]; // LP Wrong 171 / ST Wrong 6  distribute errors
+	numErrors = errorMap[L"ST correct: ST says preposition or conjunction and LP says adverb before noun"]; // 171 ST correct out of 177 total
 	errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb before noun"] = numErrors * 6 / 177;
 	errorMap[L"ST correct: ST says preposition or conjunction and LP says adverb before noun"] = numErrors * 171 / 177;
 
@@ -5024,6 +5050,10 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"LP correct: ST says adjective (wrong)"] = numErrors * 299 / 329;
 	errorMap[L"ST correct: ST says adjective (wrong)"] = numErrors * 30 / 329;
 
+	numErrors = errorMap[L"LP correct : word 'her' : [before an adverb, determiner, personal_pronoun_nominative, coordinator, indefinite_pronoun] ST says possessive_determiner LP says personal_pronoun_accusative"]; // 28 ST correct out of 152 total
+	errorMap[L"LP correct : word 'her' : [before an adverb, determiner, personal_pronoun_nominative, coordinator, indefinite_pronoun] ST says possessive_determiner LP says personal_pronoun_accusative"] = numErrors * 124 / 152;
+	errorMap[L"ST correct : word 'her' : [before an adverb, determiner, personal_pronoun_nominative, coordinator, indefinite_pronoun] ST says possessive_determiner LP says personal_pronoun_accusative"] = numErrors * 28 / 152;
+	
 }
 
 int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, bool lockPerSource)
@@ -5517,7 +5547,7 @@ void wmain(int argc,wchar_t *argv[])
 		//patternOrWordAnalysis(source, step, L"__ADJECTIVE", L"MTHAN", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__NOUN", L"F", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
-		patternOrWordAnalysis(source, step, L"__C1__S1", L"1",L"__NOUN", L"9", Source::GUTENBERG_SOURCE_TYPE, true,true, specialExtension);
+		patternOrWordAnalysis(source, step, L"__C1__S1", L"1",L"__NOUN", L"2", Source::GUTENBERG_SOURCE_TYPE, true,true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false, specialExtension);
 		//patternOrWordAnalysis(source, step, L"worth", L"", Source::GUTENBERG_SOURCE_TYPE, false,L""); // TODO: testing weight change on _S1.
 		break;

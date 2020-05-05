@@ -800,7 +800,7 @@ int createBasicPatterns(void)
 										0);
 	cPattern::create(L"_ADVERB{_FINAL}", L"L",
 										1, L"determiner|a", 0, 1, 1,
-										4, L"adverb|little*1", L"adverb|bit*1", L"noun|mite", L"adjective|wee",0, 1, 1, // make it preferable for another match 
+										4, L"adverb|little", L"adverb|bit*1", L"noun|mite", L"adjective|wee",0, 1, 1, // make it preferable for another match 
 										2, L"adverb", L"uncertainDurationUnit|while",0, 0, 1,
 										0);
 	cPattern::create(L"_ADVERB{_FINAL}", L"Y",
