@@ -4363,6 +4363,13 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"LP correct: my coming!"]++;
 		return 0;
 	}
+	// neither/either/or/nor
+	if ((word == L"neither" || word == L"either" || word == L"or"  || word == L"nor" ) && 
+		  (source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"O") != -1 || source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"P") != -1 || source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"7") != -1 || source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"A") != -1))
+	{
+		errorMap[L"LP correct: either/neither/or/nor!"]++;
+		return 0;
+	}
 	// parallel structures
 	if (wordSourceIndex > 2 && source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0 && source.m[wordSourceIndex - 1].queryWinnerForm(coordinatorForm) >= 0 && source.m[wordSourceIndex - 2].queryWinnerForm(verbForm) >= 0 &&
 		(source.queryPatternDiff(wordSourceIndex, L"__INFPSUB", L"") != -1 || source.queryPatternDiff(wordSourceIndex, L"__SUB_S2", L"") != -1 || source.queryPatternDiff(wordSourceIndex, L"_VERBPASTC", L"") != -1))
