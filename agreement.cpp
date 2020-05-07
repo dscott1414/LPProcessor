@@ -747,6 +747,14 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 		//lplog(L"ZZCHECK %d:%s",position,sentence.c_str());
 		return 6;
 	}
+	// checking for 'the most' followed by a past verb
+	if (tagSet[subjectTag].len == 2 && (m[tagSet[subjectTag].sourcePosition].word->first == L"the" && m[tagSet[subjectTag].sourcePosition + 1].word->first == L"most" &&
+		m[tagSet[subjectTag].sourcePosition + 1].getRelVerb() >= 0 && m[m[tagSet[subjectTag].sourcePosition + 1].getRelVerb()].word->second.inflectionFlags&(VERB_PRESENT_PARTICIPLE | VERB_PAST)) != 0)
+	{
+		if (debugTrace.traceSubjectVerbAgreement)
+			lplog(L"%d: 'the mot' as subject with a directly following PAST verb [SOURCE=%06d] cost=%d", position, traceSource = gTraceSource++, 10);
+		return 10;
+	}
 	//if (mainVerbTag >= 0 && subjectTag >= 0)
 	//	lplog(L"ZZCHECK %d:%d<0 %d==1 %d!=-1 %d<0 %d==1 %d==%d-1 %d!=-1", position, nextSubjectTag, tagSet[subjectTag].len, m[tagSet[subjectTag].sourcePosition].queryForm(possessiveDeterminerForm),
 	//		nextVerbAgreeTag, tagSet[mainVerbTag].len, tagSet[subjectTag].sourcePosition, tagSet[mainVerbTag].sourcePosition, m[tagSet[mainVerbTag].sourcePosition].queryForm(nounForm));

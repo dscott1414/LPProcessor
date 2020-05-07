@@ -1325,7 +1325,8 @@ int patternOrWordAnalysisFromSource(Source &source, int sourceId, wstring path, 
 					secondaryPMAOffset = secondaryPMAOffset & ~matchElement::patternFlag;
 					int patternEnd = wordIndex + im.pma[primaryPMAOffset].len;
 					/*additional logic begin*/
-					if ((source.m[patternEnd-1].word->second.inflectionFlags&(VERB_PRESENT_PARTICIPLE | VERB_PRESENT_PARTICIPLE)) != 0)
+					if (im.pma[primaryPMAOffset].len==2 && (source.m[wordIndex].word->first==L"the" && source.m[wordIndex+1].word->first==L"most" && 
+						source.m[wordIndex+1].getRelVerb()>=0 && source.m[source.m[wordIndex + 1].getRelVerb()].word->second.inflectionFlags&(VERB_PRESENT_PARTICIPLE | VERB_PAST)) != 0)
 					{
 						//{
 						//	wordIndex++;
@@ -4396,22 +4397,28 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"LP correct: word 'kind' ST says adjective"]++; // C 85 W 17
 		return 0;
 	}
-	if (primarySTLPMatch == L"adjective")
+	if (source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0)
 	{
-		if (source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0)
+		// not foot by foot.  Also 'by' must have an object (Not 'he was close by')
+		if (source.m[wordSourceIndex + 1].word->first == L"by" && source.m[wordSourceIndex + 2].word->first!= source.m[wordSourceIndex].word->first && source.m[wordSourceIndex + 1].getRelObject()>=0)
 		{
-			if (!(source.m[wordSourceIndex].word->second.inflectionFlags&(VERB_PAST | VERB_PRESENT_PARTICIPLE)))
-				partofspeech += L"NOTADJECTIVE!(1)";
-			else
-			{
-				if (source.m[wordSourceIndex].word->second.getUsageCost(tFI::VERB_HAS_1_OBJECTS) == 4)
-					partofspeech += L"NOTPASSIVE(2)!";
-				else
-					partofspeech += L"NOTADJECTIVE!";
-			}
-			//errorMap[L"LP correct: ST says adjective (wrong)"]++; // C 299 W 30
-			//return 0;
+			errorMap[L"LP correct: verb is passive not adjective"]++; 
+			return 0;
 		}
+	}
+	// if ST says adjective and we say verb...
+	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0 &&
+		// and the verb is past or present participle
+			(source.m[wordSourceIndex].word->second.inflectionFlags&(VERB_PAST | VERB_PRESENT_PARTICIPLE | VERB_PAST_PARTICIPLE)) && 
+		// and it has a subject and an object
+		  source.m[wordSourceIndex].getRelObject() >= 0 && source.m[wordSourceIndex].relSubject >= 0 &&
+		// and the verb is supposed to have objects
+			source.m[wordSourceIndex].word->second.getUsageCost(tFI::VERB_HAS_1_OBJECTS) < 4 && 
+		// and the immediately preceding word is not a dash or that or her
+			!WordClass::isDash(source.m[wordSourceIndex - 1].word->first[0]) && source.m[wordSourceIndex - 1].word->first != L"that" && source.m[wordSourceIndex - 1].word->first != L"her")
+	{
+		errorMap[L"LP correct: ST says adjective, LP says verb(PAST/PRESENT_PARTICIPLE)"]++; // C 88 W 27
+		return 0;
 	}
 	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryForm(adjectiveForm) < 0)
 	{
@@ -4423,13 +4430,8 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		// VERB_PAST after be?
 		if (source.m[wordSourceIndex].isOnlyWinner(verbForm) && source.m[wordSourceIndex - 1].word->first == L"be" && (source.m[wordSourceIndex].word->second.inflectionFlags&(VERB_PAST_PARTICIPLE | VERB_PAST)) == (VERB_PAST_PARTICIPLE | VERB_PAST))
 		{
-			if (source.m[wordSourceIndex].word->second.getUsageCost(tFI::VERB_HAS_1_OBJECTS) == 4)
-				partofspeech += L"NOTPASSIVE(1)!";
-			else
-			{
-				errorMap[L"LP correct: ST says adjective (wrong) when verb past participle after be"]++;
-				return 0;
-			}
+			errorMap[L"LP correct: ST says adjective (wrong) when verb past participle after be"]++;
+			return 0;
 		}
 		if (source.queryPattern(wordSourceIndex, L"_Q1PASSIVE") != -1)
 		{
@@ -4494,6 +4496,19 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			errorMap[L"LP correct: ST says adjective, LP says noun"]++;
 			return 0;
 		}
+	}
+	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0)
+	{
+		if (word == L"bent")
+		{
+			errorMap[L"LP correct: word 'bent': ST says adjective (wrong)"]++; 
+			return 0;
+		}
+		if (!(source.m[wordSourceIndex].word->second.inflectionFlags&(VERB_PAST | VERB_PRESENT_PARTICIPLE | VERB_PAST_PARTICIPLE)))
+			partofspeech += L"ADJECTIVE+TENSE!";
+		else
+			partofspeech += L"AMBIG!";
+
 	}
 	if (word == L"more" || word == L"less")
 	{
@@ -5079,6 +5094,10 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"LP correct : word 'her' : [before an adverb, determiner, personal_pronoun_nominative, coordinator, indefinite_pronoun] ST says possessive_determiner LP says personal_pronoun_accusative"] = numErrors * 124 / 152;
 	errorMap[L"ST correct : word 'her' : [before an adverb, determiner, personal_pronoun_nominative, coordinator, indefinite_pronoun] ST says possessive_determiner LP says personal_pronoun_accusative"] = numErrors * 28 / 152;
 	
+	numErrors = errorMap[L"LP correct: ST says adjective, LP says verb(PAST/PRESENT_PARTICIPLE)"]; // 27 ST correct out of 115 total
+	errorMap[L"LP correct: ST says adjective, LP says verb(PAST/PRESENT_PARTICIPLE)"] = numErrors * 88 / 115;
+	errorMap[L"ST correct: ST says adjective, LP says verb(PAST/PRESENT_PARTICIPLE)"] = numErrors * 27 / 115;
+
 }
 
 int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, bool lockPerSource)
@@ -5572,7 +5591,7 @@ void wmain(int argc,wchar_t *argv[])
 		//patternOrWordAnalysis(source, step, L"__ADJECTIVE", L"MTHAN", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__NOUN", L"F", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
-		patternOrWordAnalysis(source, step, L"__ADJECTIVE", L"3",L"", L"", Source::GUTENBERG_SOURCE_TYPE, true,true, specialExtension);
+		patternOrWordAnalysis(source, step, L"__C1__S1", L"1",L"", L"", Source::GUTENBERG_SOURCE_TYPE, true,true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false, specialExtension);
 		//patternOrWordAnalysis(source, step, L"worth", L"", Source::GUTENBERG_SOURCE_TYPE, false,L""); // TODO: testing weight change on _S1.
 		break;
