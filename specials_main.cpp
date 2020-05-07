@@ -4359,7 +4359,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		return 0;
 	}
 	// their coming
-	if (word == L"coming" && source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0 && source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"COMING") != -1)
+	if ((word == L"coming" || word == L"being") && source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0 && source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"COMING") != -1)
 	{
 		errorMap[L"LP correct: my coming!"]++;
 		return 0;
@@ -4507,7 +4507,11 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		if (!(source.m[wordSourceIndex].word->second.inflectionFlags&(VERB_PAST | VERB_PRESENT_PARTICIPLE | VERB_PAST_PARTICIPLE)))
 			partofspeech += L"ADJECTIVE+TENSE!";
 		else
-			partofspeech += L"AMBIG!";
+		{
+			// total 1467: 125 LP correct.  106 ST correct. 89 ambiguous.  2 both wrong.
+			errorMap[L"LP correct: ST says adjective, LP says verb (highly ambiguous)"]++;
+			return 0;
+		}
 
 	}
 	if (word == L"more" || word == L"less")
@@ -5097,6 +5101,11 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	numErrors = errorMap[L"LP correct: ST says adjective, LP says verb(PAST/PRESENT_PARTICIPLE)"]; // 27 ST correct out of 115 total
 	errorMap[L"LP correct: ST says adjective, LP says verb(PAST/PRESENT_PARTICIPLE)"] = numErrors * 88 / 115;
 	errorMap[L"ST correct: ST says adjective, LP says verb(PAST/PRESENT_PARTICIPLE)"] = numErrors * 27 / 115;
+
+	numErrors = errorMap[L"LP correct: ST says adjective, LP says verb (highly ambiguous)"]; // 106 ST correct, 89 diff out of 320 total
+	errorMap[L"LP correct: ST says adjective, LP says verb (highly ambiguous)"] = numErrors * 125 / 320;
+	errorMap[L"ST correct: ST says adjective, LP says verb (highly ambiguous)"] = numErrors * 106 / 320;
+	errorMap[L"diff: ST says adjective, LP says verb (highly ambiguous)"] = numErrors * 89 / 320;
 
 }
 

@@ -2701,9 +2701,10 @@ int createSecondaryPatterns2(void)
 									 3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1*1",L"__ALLOBJECTS_2*1",0,1,1, // there must only be one adjective and it must be last (not mixed in) see *
 									 0);
 	// My *coming* from the country to stay in Paris for good marked an epoch in my life .
+	// Forgive me for not thinking of your *being* tired , mother
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_FORWARD_REFERENCE:_BLOCK:GNOUN:VNOUN:_CHECK_IGNORABLE_FORMS}", L"COMING",
 		1, L"possessive_determiner", 0, 1, 1, 
-		1, L"verb|coming", 0, 1, 1,  
+		2, L"verb|coming", L"verb|being", 0, 1, 1,
 		0);
 
 	// * When _ALLOBJECT was a single object:
