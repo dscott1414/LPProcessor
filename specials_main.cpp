@@ -4505,7 +4505,11 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			return 0;
 		}
 		if (!(source.m[wordSourceIndex].word->second.inflectionFlags&(VERB_PAST | VERB_PRESENT_PARTICIPLE | VERB_PAST_PARTICIPLE)))
-			partofspeech += L"ADJECTIVE+TENSE!";
+		{
+			// total 288: 155 LP correct.  114 ST correct. 12 ambiguous.  6 both wrong.
+			errorMap[L"LP correct: ST says adjective, LP says non-past verb (highly ambiguous)"]++;
+			return 0;
+		}
 		else
 		{
 			// total 1467: 125 LP correct.  106 ST correct. 89 ambiguous.  2 both wrong.
@@ -5106,6 +5110,11 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"LP correct: ST says adjective, LP says verb (highly ambiguous)"] = numErrors * 125 / 320;
 	errorMap[L"ST correct: ST says adjective, LP says verb (highly ambiguous)"] = numErrors * 106 / 320;
 	errorMap[L"diff: ST says adjective, LP says verb (highly ambiguous)"] = numErrors * 89 / 320;
+
+	numErrors = errorMap[L"LP correct: ST says adjective, LP says non-past verb (highly ambiguous)"]; // 114 ST correct, 12 diff, 7 both wrong out of 288 total
+	errorMap[L"LP correct: ST says adjective, LP says non-past verb (highly ambiguous)"] = numErrors * 155 / 320;
+	errorMap[L"ST correct: ST says adjective, LP says non-past verb (highly ambiguous)"] = numErrors * 114 / 320;
+	errorMap[L"diff: ST says adjective, LP says non - past verb(highly ambiguous)"] = numErrors * 12 / 320;
 
 }
 
