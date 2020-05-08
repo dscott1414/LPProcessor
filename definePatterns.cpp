@@ -772,7 +772,7 @@ int createBasicPatterns(void)
 	//                    1,L"_VERB[*]",0,1,1,
 	//                    0);
 	cPattern::create(L"_ADVERB{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_NO_REPEAT}",L"5", // used to be _FINAL
-										2,L"__ADVERB",L"__AS_AS",0,1,1, // as much as possible.
+										2,L"__ADVERB",L"__AS_AS",0,1,2, // as much as humanly possible.
 										0);
 	// better than two years, more than two years
 	cPattern::create(L"_ADVERB{_FINAL}",L"A",
