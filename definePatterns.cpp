@@ -240,6 +240,13 @@ int createNouns(void)
 										2,L"verb|called",L"verb|named",VERB_PAST_PARTICIPLE,1,1,
 										1,L"_NAME*-1{SUBOBJECT}",0,1,1,
 										0);
+	// Johann the keeper's jailer
+	cPattern::create(L"__NOUN", L"NAMED2",
+										1, L"Proper Noun", 0, 1, 1,
+										1, L"determiner{DET}", 0,1,1,
+										1, L"noun", SINGULAR_OWNER|PLURAL_OWNER, 0, 1,
+										1, L"noun", 0, 1, 1,
+										0);
 	// 'The chance offered her' was real.
 	// 14420 (14441), 24612*, 30978, 55112, 92559*, 95781*
 	// and red line drawn sideways
@@ -262,7 +269,10 @@ int createNouns(void)
 	// First thing *I* see clearly is the road through the woods , not far from the station . // added 'first'
 	/* - watch for bad matches! */
 	cPattern::create(L"__NOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}",L"R",
-										12, L"interrogative_determiner|whichever", L"interrogative_determiner|whatever", L"determiner|the{DET}", L"determiner|a{DET}", L"determiner|an{DET}", L"quantifier|every{DET}", L"adjective|many{DET}", L"demonstrative_determiner|that{DET}", L"quantifier|any{DET}", L"quantifier|some{DET}", L"adverb|too",L"numeral_ordinal|first",0,1,1, // L"demonstrative_determiner{DET}", removed - covered better by 'this' being a noun and the adjective being an ADJECTIVE_AFTER
+										// L"demonstrative_determiner{DET}", removed - covered better by 'this' being a noun and the adjective being an ADJECTIVE_AFTER
+										13, L"interrogative_determiner|whichever", L"interrogative_determiner|whatever", L"determiner|the{DET}", L"determiner|a{DET}", L"determiner|an{DET}", 
+		                    L"quantifier|every{DET}", L"adjective|many{DET}", L"demonstrative_determiner|that{DET}", L"quantifier|any{DET}", L"quantifier|some{DET}", L"adverb|too",
+												L"numeral_ordinal|first",L"numeral_cardinal",0,1,1, // My blooper had come back between *two errands she had*
 										1,L"_ADJECTIVE*2",0,0,1,  // The *only other* person I saw
 										6,L"adjective*1", L"noun{N_AGREE}",L"Proper Noun",L"indefinite_pronoun{N_AGREE}",L"numeral_cardinal{N_AGREE}",L"verb*2",VERB_PRESENT_PARTICIPLE,1,1,  // adjective may be loosed from ProperNoun improperly - prevent match in 'The little Pilgrim was startled by this tone.'
 										1, L"determiner|the{DET}",0,0,1, // the facilities *the institute* affords
@@ -315,10 +325,25 @@ int createNouns(void)
 	//									1,L",*3",0,0,1,
 	//									1,L"__APPNOUN[*]{_BLOCK:RE_OBJECT}",0,1,1,
 	//									0);
+	//You impudent young blackguard !
+	// you bad cat
+	// you wretched old man !
+	// you lazy mucker !
+	// you young ruffian .
+	// you ridiculous crab ?
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}",L"YOU",
 										1,L"personal_pronoun|you",0,1,1,
-										1,L"adjective*2",0,0,1,
+										1,L"adjective*2",0,0,2,
 										4,L"numeral_cardinal|two", L"adjective|here*-3", L"noun*1", L"indefinite_pronoun|people",FEMALE_GENDER|MALE_GENDER,1,1,
+										0);
+	// you blooper - breaker !
+	// You young word - twister !
+	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}", L"YOU2",
+										1, L"personal_pronoun|you", 0, 1, 1,
+										1, L"adjective*2", 0, 0, 2,
+										1, L"noun", 0, 1, 1,
+										1, L"dash", 0, 1, 1,
+										2, L"verb", L"noun*2", SINGULAR|VERB_PAST, 1, 1,
 										0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}", L"THEM",
 										1, L"personal_pronoun_accusative|them", 0, 1, 1,
@@ -786,6 +811,12 @@ int createBasicPatterns(void)
 										1,L"preposition|than",0,1,1,
 										2,L"adverb|once",L"adverb|twice",0,1,1,
 										0);
+	// Mr . Bennet bade her blooper gravely and *more affectionately than* was his wont .
+	cPattern::create(L"_ADVERB{_FINAL}", L"MT",
+										1, L"adverb|more", 0, 1, 1,
+										1, L"adverb", 0, 1, 1,
+										1, L"preposition|than", 0, 1, 1,
+										0);
 	// a great amount worse/ a whole lot worse / a great deal worse
 	// a little worse
 	cPattern::create(L"_ADVERB{_FINAL}", L"B",
@@ -941,6 +972,12 @@ int createBasicPatterns(void)
 		                          1,L"adjective",ADJECTIVE_COMPARATIVE,1,1,
 															1,L"preposition|than",0,1,1,
 															1,L"__S1{EVAL:_BLOCK}",0,1,1,
+															0);
+	// the nearer we advanced to our goal
+	cPattern::create(L"__ADJECTIVE", L"ACOMP",
+															1, L"determiner|the",0,1,1,
+															1, L"adjective", ADJECTIVE_COMPARATIVE, 1, 1,
+															1, L"__S1{EVAL:_BLOCK}", 0, 1, 1,
 															0);
 	// 7. helps with more .. than ... expressions
 	//cPattern::create(L"__ADJECTIVE", L"ATHAN2",
@@ -2930,6 +2967,7 @@ int createSecondaryPatterns2(void)
 									 1,L"__C1__S1",0,1,1,
 								   4, L"_IS{VERB:vS:id}", L"_WOULDBE", L"_HAVEBEEN", L"_COULDHAVEBEEN", 0, 1, 1,
 									 1,L"_ADJECTIVE*-1",0,1,1,  // calculateVerbAfterVerbUsage specifically removes this -1 incentive by matching on this pattern!
+										1, L"reflexive_pronoun", 0, 0, 1,
 									 2,L"_PP",L"_REL1[*]",0,0,1,
 										1, L"__CLOSING__S1", 0, 0, 3,
 										0);
@@ -3457,6 +3495,15 @@ int createSecondaryPatterns2(void)
 											 3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, // there must only be one adjective and it must be last (not mixed in) see *
 											 1,L"__CLOSING__S1",0,0,3,
 											 0);
+	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}", L"T",
+											1, L"_ADVERB", 0, 0, 1,
+											1, L",", 0, 0, 1,
+											4, L"conjunction|but", L"adverb|then", L"coordinator|and", L"adverb|rather", 0, 1, 1,  // assumption: 'rather than' will exist independently of the other words in the same lines
+											2, L"adverb|then", L"preposition|than", 0, 0, 1,
+											1, L"__ALLTHINK{VERB2}", 0, 1, 1,
+											1, L"__S1{OBJECT:EVAL:_BLOCK}", 0, 1, 1,
+											3, L"__INFP5SUB", L"__INFPSUB", L"__INFPT2SUB", 0, 0, 1,
+											0);
 	// Like all the darned lot of them, he wasn't going to commit himself till he was sure he could deliver the goods.
 	// he meant well , but it was terrible he did it . 
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}",L"3",
@@ -3476,6 +3523,7 @@ int createSecondaryPatterns2(void)
 												2, L"conjunction", L"coordinator", 0, 1, 1,
 												2, L"_ADJECTIVE", L"_ADVERB", 0, 0, 1,
 												4, L"_PP*1", L"_VERBREL2*1{_BLOCK:EVAL}", L"_VERBREL1*1{_BLOCK:EVAL}", L"_INFP*1{_BLOCK:EVAL}", 0, 1, 1,
+												1, L"_ADVERB", 0, 0, 1,
 												0);
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL:_ONLY_END_MATCH}", L"F",
 												1, L",", 0, 0, 1,
@@ -3490,6 +3538,7 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"__MSTAIL{_FINAL:NO_MIDDLE_MATCH:_BLOCK:EVAL:_ONLY_END_MATCH}", L"G",
 												1, L",", 0, 1, 1,
 												2, L"conjunction", L"coordinator", 0, 0, 1,
+												2, L"_ADVERB", L"_ADJECTIVE", 0, 0, 1, // he drove the car , *unable* to contain his blooper .
 												3, L"_PP", L"_VERBREL2", L"_INFP", 0, 1, 1,
 												1, L"_ADVERB", 0, 0, 1,
 												0);
@@ -3719,6 +3768,7 @@ int createSecondaryPatterns2(void)
 													1,L"_ADVERB",0,1,1,
 													2,L"_NOUN_OBJ",L"__NOUN",0,1,1,
 													1,L"_ADVERB",0,0,1,
+													1, L"preposition",0,0,1, // Rather a small blooper to begin the world *with* .
 													0);
 	// been empty for years. / been emptying for years
 	cPattern::create(L"__IMPLIEDIS{_FINAL_IF_ALONE:_STRICT_NO_MIDDLE_MATCH}",L"3",

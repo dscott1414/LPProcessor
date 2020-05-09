@@ -1429,9 +1429,10 @@ int syntaxCheckFromSource(Source source, int sourceId, wstring path, wstring ete
 	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
 	{
 		int wordIndex = 0;
-		unsigned int ss = 1;
+		unsigned int ss = 1,lastssprinted=-1;
 		for (WordMatch &im : source.m)
 		{
+			/*
 			// verb, adverb, adverb, OBJECT_1 that is composed of a single noun that does not accept adjectives
 			int pemaOffset= source.queryPatternDiff(wordIndex,L"__S1", L"1"),pmaOffset;
 			if (pemaOffset != -1 && im.hasWinnerVerbForm() && im.getNumWinners() == 1 && wordIndex < source.m.size() - 3 &&
@@ -1474,6 +1475,16 @@ int syntaxCheckFromSource(Source source, int sourceId, wstring path, wstring ete
 					lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, patternEnd, sentence.c_str());
 					lplog(LOG_ERROR, L"%s", sentence.c_str());
 				}
+			}
+		*/
+			if ((im.flags&WordMatch::flagNotMatched) && lastssprinted!=ss)
+			{
+				wstring sentence;
+				source.phraseString(source.sentenceStarts[ss - 1], source.sentenceStarts[ss], sentence, false);
+				wstring path = source.sourcePath.substr(16, source.sourcePath.length() - 20);
+				lplog(LOG_INFO, L"%s:%d:%s", path.c_str(), wordIndex, sentence.c_str());
+				lplog(LOG_ERROR, L"%s", sentence.c_str());
+				lastssprinted = ss;
 			}
 			wordIndex++;
 			while (ss < source.sentenceStarts.size() && source.sentenceStarts[ss] < wordIndex + 1)
@@ -1795,11 +1806,11 @@ int patternOrWordAnalysis(Source source, int step, wstring primaryPatternOrWordN
 	return 0;
 }
 
-int syntaxCheck(Source source, int step, wstring specialExtension)
+int syntaxCheck(Source source, int step, wstring specialExtension,bool test)
 {
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
-	enum Source::sourceTypeEnum st = Source::GUTENBERG_SOURCE_TYPE;
+	enum Source::sourceTypeEnum st = (test) ? Source::TEST_SOURCE_TYPE : Source::GUTENBERG_SOURCE_TYPE;
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	bool websterAPIRequestsExhausted = false;
 	int startTime = clock(), numSourcesProcessedNow = 0;
@@ -1817,8 +1828,12 @@ int syntaxCheck(Source source, int step, wstring specialExtension)
 			mTW(sqlrow[1], etext);
 		mTW(sqlrow[2], path);
 		mTW(sqlrow[3], title);
-		path.insert(0, L"\\").insert(0, CACHEDIR);
-		int setStep = syntaxCheckFromSource(source, sourceId, path, etext,specialExtension);
+		if (test)
+			path.insert(0, L"\\").insert(0, LMAINDIR);
+		else
+			path.insert(0, L"\\").insert(0, CACHEDIR);
+		int setStep = syntaxCheckFromSource(source, sourceId, path, etext, specialExtension);
+		if (!myquery(&source.mysql, L"LOCK TABLES sources WRITE")) return -1;
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
 			break;
@@ -5617,7 +5632,8 @@ void wmain(int argc,wchar_t *argv[])
 		stanfordCheck(source, step, true,specialExtension,true);
 		break;
 	case 61:
-		syntaxCheck(source, step,specialExtension);
+		// for test, set 27568 to 61
+		syntaxCheck(source, step,specialExtension,true);
 		break;
 	case 70:
 		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"",50,specialExtension);

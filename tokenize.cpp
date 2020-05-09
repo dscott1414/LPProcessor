@@ -68,8 +68,20 @@ bool Source::adjustWord(unsigned int q)
 		m[q+1].setPreferredForm();
 		insertedOrDeletedWord=true;
 	}
+	// twas -> it was
+	else if (WordClass::isSingleQuote(m[q].word->first[0]) && q + 1 < m.size() && m[q + 1].word->first == L"twas")
+	{
+		m[q].word = Words.gquery(L"it");
+		m[q].forms.clear();
+		m[q].forms.set(personalPronounForm);
+		m[q].flags = 0;
+		m[q + 1].word = Words.gquery(L"was");
+		m[q + 1].forms.clear();
+		m[q + 1].forms.set(FormsClass::gFindForm(L"is"));
+		m[q + 1].flags = 0;
+	}
 	// 'Tis the season --> It is the season
-	else if (m[q].word->first==L"'" && q+1<m.size() && m[q+1].word->first==L"tis")
+	else if (WordClass::isSingleQuote(m[q].word->first[0]) && q+1<m.size() && m[q+1].word->first==L"tis")
 	{
 		m[q].word=Words.gquery(L"it");
 		m[q].forms.clear();
