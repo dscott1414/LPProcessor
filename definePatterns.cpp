@@ -270,8 +270,8 @@ int createNouns(void)
 	/* - watch for bad matches! */
 	cPattern::create(L"__NOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}",L"R",
 										// L"demonstrative_determiner{DET}", removed - covered better by 'this' being a noun and the adjective being an ADJECTIVE_AFTER
-										13, L"interrogative_determiner|whichever", L"interrogative_determiner|whatever", L"determiner|the{DET}", L"determiner|a{DET}", L"determiner|an{DET}", 
-		                    L"quantifier|every{DET}", L"adjective|many{DET}", L"demonstrative_determiner|that{DET}", L"quantifier|any{DET}", L"quantifier|some{DET}", L"adverb|too",
+										14, L"interrogative_determiner|whichever", L"interrogative_determiner|whatever", L"determiner|the{DET}", L"determiner|a{DET}", L"determiner|an{DET}", 
+												L"quantifier|every{DET}", L"quantifier|each{DET}", L"adjective|many{DET}", L"demonstrative_determiner|that{DET}", L"quantifier|any{DET}", L"quantifier|some{DET}", L"adverb|too",
 												L"numeral_ordinal|first",L"numeral_cardinal",0,1,1, // My blooper had come back between *two errands she had*
 										1,L"_ADJECTIVE*2",0,0,1,  // The *only other* person I saw
 										6,L"adjective*1", L"noun{N_AGREE}",L"Proper Noun",L"indefinite_pronoun{N_AGREE}",L"numeral_cardinal{N_AGREE}",L"verb*2",VERB_PRESENT_PARTICIPLE,1,1,  // adjective may be loosed from ProperNoun improperly - prevent match in 'The little Pilgrim was startled by this tone.'
@@ -685,6 +685,17 @@ int createBasicPatterns(void)
 											1, L"determiner|the", 0, 1, 1,
 											1, L"noun|time", 0, 1, 1,
 											0);
+	// And she had *many a time* heard him declare that he was not a business man .
+	cPattern::create(L"_ADVERB{FLOATTIME}", L"AT5b",
+											1, L"quantifier|many", 0, 1, 1,
+											1, L"determiner|a", 0, 1, 1,
+											1, L"noun|time", 0, 1, 1,
+											0);
+	// Anything gone this *time* ?
+	cPattern::create(L"_ADVERB{FLOATTIME}", L"AT5c",
+											2, L"demonstrative_determiner|this", L"demonstrative_determiner|that", 0, 1, 1,
+											1, L"noun|time", 0, 1, 1,
+											0);
 	cPattern::create(L"_ADVERB{FLOATTIME}",L"AT6",
 		                    1,L"preposition|to",0,1,1,
 												1,L"dash|-*-2",0,1,1,
@@ -749,11 +760,17 @@ int createBasicPatterns(void)
 /// TIME related adverbs [end]
 	// DISTANCE related adverbs [begin]
 	// *10 feet below her* the boulder trembled.
-	// 
 	cPattern::create(L"_ADVERB{_FINAL}", L"AD1",
 											2, L"Number", L"numeral_cardinal", 0, 1, 1,
 											6, L"noun|miles", L"noun|yards", L"noun|feet",L"noun|inches",L"noun|meters",L"noun|metres",0,1,1, // this is not meant to be exhaustive, just the most common units for this saying
 											1, L"_PP",0,1,1,
+											0);
+	// A short distance ahead of them
+	cPattern::create(L"_ADVERB{_FINAL}", L"AD2",
+											1, L"determiner|a", 0, 1, 1,
+											1, L"adjective", 0, 0, 1, 
+											1, L"noun|distance",0,1,1,
+											1, L"_PP", 0, 1, 1,
 											0);
 	// DISTANCE related adverbs [end]
 	// lightly,
