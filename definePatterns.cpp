@@ -282,12 +282,24 @@ int createNouns(void)
 										0);
 	// I shall make it my business to follow her *everywhere she goes*.
 	cPattern::create(L"__NOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}", L"R2",
-										1, L"noun|everywhere", 0, 1, 1, 
+										1, L"noun|everywhere{OBJECT}", 0, 1, 1, 
 										1, L"determiner|the{DET}", 0, 0, 1, // the facilities *the institute* affords
 										4, L"Proper Noun*3{ANY:NAME:SUBJECT:PREFER_S1}", L"personal_pronoun_nominative*3{SUBJECT:PREFER_S1}", L"personal_pronoun*3{SUBJECT:PREFER_S1}", L"noun*2{N_AGREE}", NO_OWNER, 1, 1, // highly restrict and discourage to prevent unnecessary matches
 										3, L"__ALLVERB", L"_COND{VERB}", L"_VERBPASSIVE", 0, 1, 1,
 										4, L"__ALLOBJECTS_0*2", L"__ALLOBJECTS_1*2", L"_INFP*2", L"_REL1[*]*2", 0, 0, 1,
 										0);
+	//I would have done so if I had known how much *interest* you took in my plans . 
+	//Festing had seen no grass like this in Canada and wondered how much *labor* it cost .
+	//I know just how tired he was and how much *nerve* he required to keep himself going .
+	//He bounded along, careless of how much *noise* he made .
+	cPattern::create(L"__NOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}", L"R3",
+		1, L"relativizer|how{DET:OBJECT}", 0, 1, 1,
+		1, L"adverb|much", 0, 1, 1, 
+		1, L"noun{N_AGREE}", 0, 1, 1,  // noise
+		4, L"Proper Noun*1{ANY:NAME:SUBJECT:PREFER_S1}", L"personal_pronoun_nominative*1{SUBJECT:PREFER_S1}", L"personal_pronoun*1{SUBJECT:PREFER_S1}", L"noun*2{SUBJECT}", NO_OWNER, 1, 1, // highly restrict and discourage to prevent unnecessary matches
+		3, L"__ALLVERB", L"_COND{VERB}", L"_VERBPASSIVE", 0, 1, 1,
+		4, L"__ALLOBJECTS_0*2", L"__ALLOBJECTS_1*2", L"_INFP*2", L"_REL1[*]*2", 0, 0, 1,
+		0);
 	// everything she writes / those I had known / things you like
 	cPattern::create(L"__NOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}", L"S",
 										15, L"indefinite_pronoun|everybody", L"indefinite_pronoun|everyone", L"indefinite_pronoun|every one", L"indefinite_pronoun|everything", L"indefinite_pronoun|somebody", L"indefinite_pronoun|someone",
