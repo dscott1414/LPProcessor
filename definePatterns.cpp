@@ -526,11 +526,11 @@ int createNouns(void)
 										//2,L"__NOUN[*]{_BLOCK}",L"_NOUN_OBJ{_BLOCK}",0,1,1,
 										2,L"__NOUN[*]{SUBOBJECT}",L"_NOUN_OBJ{SUBOBJECT}",0,1,1,
 										3,L"__INTERPPB[*]{_BLOCK}",L"_DATE*1{FLOATTIME}",L"_TIME*1{FLOATTIME}",0,0,1,
-										2,L"_ADVERB",L"_ADJECTIVE",0,0,1, // He gave a number *presently* which was his own in Panton Square . / I consider him primarily responsible for all the trouble that has occurred.
+										2,L"_ADVERB",L"_ADJECTIVE",0,0,1, // He gave a number *presently* which was his own in Panton Square . / I consider him *primarily responsible* for all the trouble that has occurred.
 										3,L"_PP",L"_REL1",L"_INFP",0,1,1,
 										3,L"_PP*1",L"_REL1*1",L"_INFP*1",0,0,3,
 										0);
-	// and medical man written all over him
+// and medical man written all over him
 	/* this pattern was removed because RULE 4 of L&L disallows anything in __IMPLIEDWITH from referencing the enclosing __NOUN
 	// which would incorrectly exclude the noun preceding medical man from matching 'him'
 	cPattern::create(L"__IMPLIEDWITH",L"",
@@ -767,11 +767,20 @@ int createBasicPatterns(void)
 											0);
 	// A short distance ahead of them
 	cPattern::create(L"_ADVERB{_FINAL}", L"AD2",
+											1, L"adverb", 0, 0, 1,
 											1, L"determiner|a", 0, 1, 1,
 											1, L"adjective", 0, 0, 1, 
 											1, L"noun|distance",0,1,1,
 											1, L"_PP", 0, 1, 1,
 											0);
+	// nearly a foot long
+	cPattern::create(L"_ADVERB{_FINAL}", L"AD3",
+											1, L"adverb",0,0,1,
+											3, L"determiner|a", L"Number", L"numeral_cardinal", 0, 1, 1,
+											12, L"noun|mile", L"noun|yard", L"noun|foot", L"noun|inch", L"noun|meter", L"noun|metre", L"noun|miles", L"noun|yards", L"noun|feet", L"noun|inches", L"noun|meters", L"noun|metres", 0, 1, 1, // this is not meant to be exhaustive, just the most common units for this saying
+											1, L"adjective*1", 0, 1, 1,
+											0);
+
 	// DISTANCE related adverbs [end]
 	// lightly,
 	cPattern::create(L"__ADV_S1",L"",
@@ -865,6 +874,10 @@ int createBasicPatterns(void)
 											4,L"adverb|little",L"noun|inch",L"noun|step",L"noun|bit",0,1,1,
 											1,L"preposition|by",0,1,1,
 											4,L"adverb|little",L"noun|inch",L"noun|step",L"noun|bit",0,1,1,0);
+	cPattern::create(L"_ADVERB{_FINAL}", L"AMONG",
+		1, L"preposition|among", 0, 1, 1,
+		1, L"personal_pronoun_accusative|them", 0, 1, 1,
+		0);
 
 	defineNames();
 	createMetaNameEquivalencePatterns();
@@ -2891,15 +2904,15 @@ int createSecondaryPatterns2(void)
 										1, L"_HAVE", 0, 1, 1,
 										1, L"_BEEN{vAB:id}", 0, 1, 1, 0);
 	cPattern::create(L"_WOULDMAKE{VERB}", L"",
-		1, L"_COND", 0, 1, 1,
-		1, L"verb|make{vS:V_OBJECT:id}", 0, 1, 1, 0);
+										1, L"_COND", 0, 1, 1,
+										1, L"verb|make{vS:V_OBJECT:id}", 0, 1, 1, 0);
 	cPattern::create(L"_HAVEBEENMAKING{VERB}", L"",
-		1, L"_HAVEBEEN", 0, 1, 1,
-		1, L"verb|making{vB:id}", 0, 1, 1, 0);
+										1, L"_HAVEBEEN", 0, 1, 1,
+										1, L"verb|making{vB:id}", 0, 1, 1, 0);
 	cPattern::create(L"_COULDHAVEBEENMAKING{VERB}", L"",
-		1, L"_COULDHAVEBEEN", 0, 1, 1,
-		1, L"verb|making", 0, 1, 1,
-		0);
+										1, L"_COULDHAVEBEEN", 0, 1, 1,
+										1, L"verb|making", 0, 1, 1,
+										0);
 	// *I* shall make you sorry you ever came near my hickory tree
 	// A blend of R3 and 5
 	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"M4",
@@ -2986,6 +2999,13 @@ int createSecondaryPatterns2(void)
 									 1,L"_ADJECTIVE*-1",0,1,1,  // calculateVerbAfterVerbUsage specifically removes this -1 incentive by matching on this pattern!
 										1, L"reflexive_pronoun", 0, 0, 1,
 									 2,L"_PP",L"_REL1[*]",0,0,1,
+										1, L"__CLOSING__S1", 0, 0, 3,
+										0);
+	// Too expensive a piano for me.
+	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"TOO",
+										1, L"adverb|too", 0, 1, 1,
+										1, L"adjective", 0, 1, 1,
+										1, L"__NOUN", 0, 1, 1,
 										1, L"__CLOSING__S1", 0, 0, 3,
 										0);
 	// Later, in her room, she sat and read.
@@ -3503,7 +3523,11 @@ int createSecondaryPatterns2(void)
 		// NOUN*3 - helps with hanging nouns prevents 'eyes' used as a verb because _MS uses _MSTAIL to cover more even though it is more expensive
 											 3,L"__S1{_BLOCK:EVAL}",L"_REL1[*]", L"__NOUN*3", 0,1,1, // __NOUN must be expensive to avoid absorbing the subject of the second sentence following another sentence (and a conjunction)
 											 0);
-	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}",L"2",
+	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}", L"A",
+												1, L",", 0, 1, 1,
+												1, L"_ADVERB", 0, 1, 1,
+												0);
+	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}", L"2",
 												1, L"_ADVERB", 0, 0, 1,
 												1,L",",0,0,1,
 											 4,L"conjunction|but",L"adverb|then",L"coordinator|and",L"adverb|rather",0,1,1,  // assumption: 'rather than' will exist independently of the other words in the same lines

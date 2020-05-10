@@ -1325,30 +1325,23 @@ int patternOrWordAnalysisFromSource(Source &source, int sourceId, wstring path, 
 					secondaryPMAOffset = secondaryPMAOffset & ~matchElement::patternFlag;
 					int patternEnd = wordIndex + im.pma[primaryPMAOffset].len;
 					/*additional logic begin*/
-					if (im.pma[primaryPMAOffset].len==2 && (source.m[wordIndex].word->first==L"the" && source.m[wordIndex+1].word->first==L"most" && 
-						source.m[wordIndex+1].getRelVerb()>=0 && source.m[source.m[wordIndex + 1].getRelVerb()].word->second.inflectionFlags&(VERB_PRESENT_PARTICIPLE | VERB_PAST)) != 0)
-					{
-						//{
-						//	wordIndex++;
-						//	while (ss < source.sentenceStarts.size() && source.sentenceStarts[ss] < wordIndex + 1)
-						//		ss++;
-						//	continue;
-						//}
+					//if (im.pma[primaryPMAOffset].len==2 && (source.m[wordIndex].word->first==L"the" && source.m[wordIndex+1].word->first==L"most" && 
+					//	source.m[wordIndex+1].getRelVerb()>=0 && source.m[source.m[wordIndex + 1].getRelVerb()].word->second.inflectionFlags&(VERB_PRESENT_PARTICIPLE | VERB_PAST)) != 0)
+					//{
 						/*additional logic end*/
-						wstring sentence;
-						getSentenceWithTags(source, wordIndex, patternEnd, source.sentenceStarts[ss - 1], source.sentenceStarts[ss], im.pma[primaryPMAOffset].pemaByPatternEnd, sentence);
-						wstring adiff = patterns[im.pma[primaryPMAOffset].getPattern()]->differentiator;
-						wstring path = source.sourcePath.substr(16, source.sourcePath.length() - 20);
-						if (primaryDifferentiator.find(L'*') == wstring::npos)
-						{
-							lplog(LOG_ERROR, L"%s", sentence.c_str());
-							lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, patternEnd, sentence.c_str());
-						}
-						else
-						{
-							lplog(LOG_ERROR, L"[%s]:%s", adiff.c_str(), sentence.c_str());
-							lplog(LOG_INFO, L"%s[%s](%d-%d):%s", path.c_str(), adiff.c_str(), wordIndex, patternEnd, sentence.c_str());
-						}
+					wstring sentence;
+					getSentenceWithTags(source, wordIndex, patternEnd, source.sentenceStarts[ss - 1], source.sentenceStarts[ss], im.pma[primaryPMAOffset].pemaByPatternEnd, sentence);
+					wstring adiff = patterns[im.pma[primaryPMAOffset].getPattern()]->differentiator;
+					wstring path = source.sourcePath.substr(16, source.sourcePath.length() - 20);
+					if (primaryDifferentiator.find(L'*') == wstring::npos)
+					{
+						lplog(LOG_ERROR, L"%s", sentence.c_str());
+						lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, patternEnd, sentence.c_str());
+					}
+					else
+					{
+						lplog(LOG_ERROR, L"[%s]:%s", adiff.c_str(), sentence.c_str());
+						lplog(LOG_INFO, L"%s[%s](%d-%d):%s", path.c_str(), adiff.c_str(), wordIndex, patternEnd, sentence.c_str());
 					}
 				}
 			}
@@ -1357,7 +1350,7 @@ int patternOrWordAnalysisFromSource(Source &source, int sourceId, wstring path, 
 				int secondaryPMAOffset;
 				if (secondaryPatternOrWordName.empty() ||
 					(isSecondaryPattern && (secondaryPMAOffset = (secondaryDifferentiator == L"*") ? im.pma.queryPattern(secondaryPatternOrWordName) : im.pma.queryPatternDiff(secondaryPatternOrWordName, secondaryDifferentiator)) != -1) ||
-					(!isSecondaryPattern && im.word->first == secondaryPatternOrWordName) ||
+					(!isSecondaryPattern && source.m[wordIndex+1].word->first == secondaryPatternOrWordName) ||
 					(!isSecondaryPattern && secondaryPatternOrWordName == L"" && (im.flags&WordMatch::flagNotMatched) != 0))
 				{
 					wstring sentence, originalIWord;
@@ -5624,7 +5617,7 @@ void wmain(int argc,wchar_t *argv[])
 		//patternOrWordAnalysis(source, step, L"__ADJECTIVE", L"MTHAN", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__NOUN", L"F", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
-		patternOrWordAnalysis(source, step, L"__C1__S1", L"1",L"", L"", Source::GUTENBERG_SOURCE_TYPE, true,true, specialExtension);
+		patternOrWordAnalysis(source, step, L"among", L"",L"them", L"", Source::GUTENBERG_SOURCE_TYPE, false,false, specialExtension);
 		//patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false, specialExtension);
 		//patternOrWordAnalysis(source, step, L"worth", L"", Source::GUTENBERG_SOURCE_TYPE, false,L""); // TODO: testing weight change on _S1.
 		break;
