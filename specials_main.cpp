@@ -4222,7 +4222,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		return 0;
 	}
 	// LP correct 166 ST correct 33
-	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].isOnlyWinner(verbForm) &&
+	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].isOnlyWinner(verbForm) && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_FIRST_SINGULAR) == VERB_PRESENT_FIRST_SINGULAR &&
 		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(primarySTLPMatch)) == 4 &&
 		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(verbForm)) == 0)
 	{
