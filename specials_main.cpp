@@ -4221,6 +4221,14 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"LP correct: noun not verb (verb cost 4, noun cost 0)"]++; // probabilistic - see distribute errors
 		return 0;
 	}
+	// LP correct 166 ST correct 33
+	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].isOnlyWinner(verbForm) &&
+		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(primarySTLPMatch)) == 4 &&
+		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(verbForm)) == 0)
+	{
+		errorMap[L"LP correct: verb not noun (noun cost 4, verb cost 0)"]++; // probabilistic - see distribute errors
+		return 0;
+	}
 	if ((word == L"in" || word == L"since" || word==L"beyond") && primarySTLPMatch == L"preposition or conjunction" && (!iswalpha(source.m[wordSourceIndex + 1].word->first[0]) || source.m[wordSourceIndex+1].isOnlyWinner(coordinatorForm)))
 	{
 		errorMap[L"LP correct: not preposition or conjunction before punctuation or coordinator"]++; // probabilistic - see distribute errors
@@ -5061,6 +5069,11 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	numErrors = errorMap[L"LP correct: noun not verb (verb cost 4, noun cost 0)"]; // out of 135 examples, 32 were incorrect 
 	errorMap[L"LP correct: noun not verb (verb cost 4, noun cost 0)"] = numErrors * 76 / 100;
 	errorMap[L"ST correct: noun not verb (verb cost 4, noun cost 0)"] = numErrors * 24 / 100;
+
+	numErrors = errorMap[L"LP correct: verb not noun (noun cost 4, verb cost 0)"]; // 33 ST correct, 4 both wrong out of 203 total
+	errorMap[L"LP correct: verb not noun (noun cost 4, verb cost 0)"] = numErrors * 166 / 203;
+	errorMap[L"ST correct: verb not noun (noun cost 4, verb cost 0)"] = numErrors * 33 / 203;
+	errorMap[L"diff: verb not noun (noun cost 4, verb cost 0)"] = numErrors * 4 / 203;
 
 	numErrors = errorMap[L"LP correct: word 'her': [before a low cost noun] ST says personal_pronoun_accusative LP says possessive_determiner"]; // probability 6 out of 130 are ST correct
 	errorMap[L"LP correct: word 'her': [before a low cost noun] ST says personal_pronoun_accusative LP says possessive_determiner"] = numErrors * 130 / 136;
