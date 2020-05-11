@@ -660,6 +660,11 @@ int createBasicPatterns(void)
 											2, L"determiner|the{TIMEMODIFIER}", L"demonstrative_determiner{TIMEMODIFIER}", 0, 1, 1,
 											2, L"timeUnit{TIMECAPACITY}", L"noun|time", 0, 1, 1,
 											0);
+	// several times
+	cPattern::create(L"_ADVERB{FLOATTIME}", L"ST2",
+											1, L"quantifier|several", 0, 1, 1,
+											1, L"noun|times", 0, 1, 1,
+											0);
 	// The summer before
 	cPattern::create(L"_ADVERB{FLOATTIME}", L"AT1",
 											2, L"predeterminer|half*-2", L"_ADVERB[*]", 0, 0, 1, // bright an early
@@ -3346,7 +3351,7 @@ int createSecondaryPatterns2(void)
 						2, L"conjunction|but",L"interjection",0,0,1,
 						1,L",",0,0,1,
 						1, L"never", 0, 1, 1, 
-						1, L"verb|mind*-3", 0, 1, 1,
+						2, L"verb|mind*-3", L"verb|fear*-3", 0, 1, 1,
 						2, L"__ALLOBJECTS_0", L"__ALLOBJECTS_1", 0, 0, 1,
 						1, L"__CLOSING__S1", 0, 0, 3,
 						0);

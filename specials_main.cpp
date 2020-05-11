@@ -4069,11 +4069,13 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	}
 	if (partofspeech == L"VBG" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) != VERB_PRESENT_PARTICIPLE)
 	{
-		if (word == L"bleeding")
-		{
-			errorMap[L"LP correct '" + word + L"': incorrect verb usage"]++;
-			return 0;
-		}
+		//CStanford POS VBG 52
+		//WStanford POS VBG 9
+	}
+	if (partofspeech == L"VBD" && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) != VERB_PAST)
+	{
+			//CStanford POS VBD 17
+			//WStanford POS VBD 4
 	}
 	if (partofspeech == L"NN" && (source.m[wordSourceIndex].word->second.inflectionFlags&SINGULAR) != SINGULAR)
 	{
