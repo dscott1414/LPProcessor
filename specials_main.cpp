@@ -1299,7 +1299,25 @@ int printUnknownsFromSource(Source source, int sourceId, wstring path, wstring e
 	return 21;
 }
 
-int patternOrWordAnalysisFromSource(Source &source, int sourceId, wstring path, wstring etext, wstring primaryPatternOrWordName, wstring primaryDifferentiator, wstring secondaryPatternOrWordName, wstring secondaryDifferentiator, bool isPrimaryPattern, bool isSecondaryPattern, wstring specialExtension)
+bool matchEntity(Source &source, int wordIndex, int matchType, wstring patternOrWordName, wstring differentiator, int &PMAOffset)
+{
+	auto &im = source.m[wordIndex];
+	return (matchType == 4 ||
+		(matchType == 0 && (PMAOffset = im.pma.queryPatternDiff(patternOrWordName, differentiator)) != -1) ||
+		(matchType == 1 && im.queryWinnerForm(patternOrWordName)!=-1) ||
+		(matchType == 2 && im.word->first == patternOrWordName) ||
+		(matchType == 3 && (im.flags&WordMatch::flagNotMatched) != 0));
+}
+
+// primaryType, secondaryType:
+// 0: pattern - if differentiator is NOT specified, then any differentiator is ok.
+// 1: form - any formclass (string)
+// 2: word - the actual word.   
+// 3: flagNotMatched is set
+// 4: true (do not perform match)
+// if both primaryMatchType AND secondaryMatchType>0, then the secondary match location is the NEXT word.
+// if primaryMatchType == 3, then sentence highlight will encompass all words that have no match, and sentences will not be repeated.
+int patternOrWordAnalysisFromSource(Source &source, int sourceId, wstring path, wstring etext, wstring primaryPatternOrWordName, wstring primaryDifferentiator, wstring secondaryPatternOrWordName, wstring secondaryDifferentiator, int primaryMatchType, int secondaryMatchType, wstring specialExtension)
 {	LFS
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
@@ -1312,71 +1330,56 @@ int patternOrWordAnalysisFromSource(Source &source, int sourceId, wstring path, 
 		unsigned int ss = 1;
 		for (WordMatch &im : source.m)
 		{
-			int primaryPMAOffset;
-			if (isPrimaryPattern && (primaryPMAOffset = (primaryDifferentiator == L"*") ? im.pma.queryPattern(primaryPatternOrWordName) : im.pma.queryPatternDiff(primaryPatternOrWordName, primaryDifferentiator))!=-1)
+			int primaryPMAOffset,secondaryPMAOffset;
+			if (matchEntity(source, wordIndex, primaryMatchType, primaryPatternOrWordName, primaryDifferentiator, primaryPMAOffset) &&
+					matchEntity(source, (primaryMatchType>0 && secondaryMatchType>0) ? wordIndex+1:wordIndex, secondaryMatchType, secondaryPatternOrWordName, secondaryDifferentiator, secondaryPMAOffset))
 			{
-				int secondaryPMAOffset;
-				if (secondaryPatternOrWordName.empty() ||
-					(isSecondaryPattern && (secondaryPMAOffset = (secondaryDifferentiator == L"*") ? im.pma.queryPattern(secondaryPatternOrWordName) : im.pma.queryPatternDiff(secondaryPatternOrWordName, secondaryDifferentiator)) != -1) ||
-					(!isSecondaryPattern && im.word->first == secondaryPatternOrWordName) ||
-					(!isSecondaryPattern && secondaryPatternOrWordName == L"" && (im.flags&WordMatch::flagNotMatched) != 0))
+				primaryPMAOffset = primaryPMAOffset & ~matchElement::patternFlag;
+				secondaryPMAOffset = secondaryPMAOffset & ~matchElement::patternFlag;
+				wstring sentence;
+				if (primaryMatchType==0)
 				{
-					primaryPMAOffset = primaryPMAOffset & ~matchElement::patternFlag;
-					secondaryPMAOffset = secondaryPMAOffset & ~matchElement::patternFlag;
 					int patternEnd = wordIndex + im.pma[primaryPMAOffset].len;
 					/*additional logic begin*/
-					//if (im.pma[primaryPMAOffset].len==2 && (source.m[wordIndex].word->first==L"the" && source.m[wordIndex+1].word->first==L"most" && 
-					//	source.m[wordIndex+1].getRelVerb()>=0 && source.m[source.m[wordIndex + 1].getRelVerb()].word->second.inflectionFlags&(VERB_PRESENT_PARTICIPLE | VERB_PAST)) != 0)
-					//{
-						/*additional logic end*/
-					wstring sentence;
-					getSentenceWithTags(source, wordIndex, patternEnd, source.sentenceStarts[ss - 1], source.sentenceStarts[ss], im.pma[primaryPMAOffset].pemaByPatternEnd, sentence);
-					wstring adiff = patterns[im.pma[primaryPMAOffset].getPattern()]->differentiator;
-					wstring path = source.sourcePath.substr(16, source.sourcePath.length() - 20);
-					if (primaryDifferentiator.find(L'*') == wstring::npos)
+					// if the beginning word has a verb form which is PRESENT_PARTICIPLE AND the rest of the word is either PROPER_NOUN or honorific, then match!
+					if (source.m[wordIndex].queryForm(verbForm) && (source.m[wordIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE && (secondaryPMAOffset = source.m[wordIndex + 1].pma.queryPattern(L"__NAME")) != -1)
 					{
-						lplog(LOG_ERROR, L"%s", sentence.c_str());
-						lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, patternEnd, sentence.c_str());
-					}
-					else
-					{
-						lplog(LOG_ERROR, L"[%s]:%s", adiff.c_str(), sentence.c_str());
-						lplog(LOG_INFO, L"%s[%s](%d-%d):%s", path.c_str(), adiff.c_str(), wordIndex, patternEnd, sentence.c_str());
-					}
-				}
-			}
-			else if (!isPrimaryPattern && im.word->first==primaryPatternOrWordName)
-			{
-				int secondaryPMAOffset;
-				if (secondaryPatternOrWordName.empty() ||
-					(isSecondaryPattern && (secondaryPMAOffset = (secondaryDifferentiator == L"*") ? im.pma.queryPattern(secondaryPatternOrWordName) : im.pma.queryPatternDiff(secondaryPatternOrWordName, secondaryDifferentiator)) != -1) ||
-					(!isSecondaryPattern && source.m[wordIndex+1].word->first == secondaryPatternOrWordName) ||
-					(!isSecondaryPattern && secondaryPatternOrWordName == L"" && (im.flags&WordMatch::flagNotMatched) != 0))
-				{
-					wstring sentence, originalIWord;
-					if (lastSentenceIndexPrinted != source.sentenceStarts[ss - 1])
-					{
-						for (int I = source.sentenceStarts[ss - 1]; I < source.sentenceStarts[ss]; I++)
+						secondaryPMAOffset = secondaryPMAOffset & ~matchElement::patternFlag;
+						int secondaryPatternEnd = wordIndex + 1+source.m[wordIndex+1].pma[secondaryPMAOffset].len;
+						if (patternEnd == secondaryPatternEnd)
 						{
-							source.getOriginalWord(I, originalIWord, false, false);
-							if (I == wordIndex)
-								originalIWord = L"*" + originalIWord + L"*";
-							sentence += originalIWord + L" ";
+							/*additional logic end*/
+							getSentenceWithTags(source, wordIndex, patternEnd, source.sentenceStarts[ss - 1], source.sentenceStarts[ss], im.pma[primaryPMAOffset].pemaByPatternEnd, sentence);
+							wstring adiff = patterns[im.pma[primaryPMAOffset].getPattern()]->differentiator;
+							wstring path = source.sourcePath.substr(16, source.sourcePath.length() - 20);
+							if (primaryDifferentiator.find(L'*') == wstring::npos)
+							{
+								lplog(LOG_ERROR, L"%s", sentence.c_str());
+								lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, patternEnd, sentence.c_str());
+							}
+							else
+							{
+								lplog(LOG_ERROR, L"[%s]:%s", adiff.c_str(), sentence.c_str());
+								lplog(LOG_INFO, L"%s[%s](%d-%d):%s", path.c_str(), adiff.c_str(), wordIndex, patternEnd, sentence.c_str());
+							}
 						}
-						lplog(LOG_ERROR, L"%s", sentence.c_str());
-						lastSentenceIndexPrinted = source.sentenceStarts[ss - 1];
 					}
 				}
-			}
-			else if (!isPrimaryPattern && primaryPatternOrWordName == L"" && (im.flags&WordMatch::flagNotMatched) != 0)
-			{
-				int secondaryPMAOffset;
-				if (secondaryPatternOrWordName.empty() ||
-					(isSecondaryPattern && (secondaryPMAOffset = (secondaryDifferentiator == L"*") ? im.pma.queryPattern(secondaryPatternOrWordName) : im.pma.queryPatternDiff(secondaryPatternOrWordName, secondaryDifferentiator)) != -1) ||
-					(!isSecondaryPattern && im.word->first == secondaryPatternOrWordName) ||
-					(!isSecondaryPattern && secondaryPatternOrWordName == L"" && (im.flags&WordMatch::flagNotMatched) != 0))
+				else if (primaryMatchType!=3)
 				{
-					wstring sentence, originalIWord;
+					wstring originalIWord;
+					for (int I = source.sentenceStarts[ss - 1]; I < source.sentenceStarts[ss]; I++)
+					{
+						source.getOriginalWord(I, originalIWord, false, false);
+						if (I == wordIndex)
+							originalIWord = L"*" + originalIWord + L"*";
+						sentence += originalIWord + L" ";
+					}
+					lplog(LOG_ERROR, L"%s", sentence.c_str());
+				}
+				else
+				{
+					wstring originalIWord;
 					if (lastSentenceIndexPrinted != source.sentenceStarts[ss - 1])
 					{
 						bool inNoMatch = false;
@@ -1743,7 +1746,7 @@ int printUnknowns(Source source, int step, wstring specialExtension)
 	return 0;
 }
   
-int patternOrWordAnalysis(Source source, int step, wstring primaryPatternOrWordName, wstring primaryDifferentiator, wstring secondaryPatternOrWordName, wstring secondaryDifferentiator, enum Source::sourceTypeEnum st, bool isPrimaryPattern, bool isSecondaryPattern, wstring specialExtension)
+int patternOrWordAnalysis(Source source, int step, wstring primaryPatternOrWordName, wstring primaryDifferentiator, wstring secondaryPatternOrWordName, wstring secondaryDifferentiator, enum Source::sourceTypeEnum st, int primaryMatchType, int secondaryMatchType, wstring specialExtension)
 {	LFS
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
@@ -1779,7 +1782,7 @@ int patternOrWordAnalysis(Source source, int step, wstring primaryPatternOrWordN
 			path.insert(0, L"\\").insert(0, CACHEDIR);
 		else if (st == Source::TEST_SOURCE_TYPE)
 			path.insert(0, L"\\").insert(0, LMAINDIR);
-		int setStep = patternOrWordAnalysisFromSource(source, sourceId, path, etext, primaryPatternOrWordName, primaryDifferentiator, secondaryPatternOrWordName, secondaryDifferentiator, isPrimaryPattern, isSecondaryPattern, specialExtension);
+		int setStep = patternOrWordAnalysisFromSource(source, sourceId, path, etext, primaryPatternOrWordName, primaryDifferentiator, secondaryPatternOrWordName, secondaryDifferentiator, primaryMatchType, secondaryMatchType, specialExtension);
 		if (!myquery(&source.mysql, L"LOCK TABLES sources WRITE")) return -1;
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
@@ -4342,6 +4345,13 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"LP correct: (noun cost 3, adjective cost 0)"]++; // probabilistic - see distribute errors
 		return 0;
 	}
+	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].isOnlyWinner(nounForm) &&
+		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(primarySTLPMatch)) == 3 &&
+		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(nounForm)) == 0)
+	{
+		errorMap[L"LP correct: (verb cost 3, noun cost 0)"]++; // probabilistic - see distribute errors
+		return 0;
+	}
 	if (wordSourceIndex > 0 && (source.m[wordSourceIndex - 1].flags&WordMatch::flagNounOwner) && source.m[wordSourceIndex].isOnlyWinner(nounForm))
 	{
 		int pemaOffset = source.queryPattern(wordSourceIndex,L"__NOUN");
@@ -4393,6 +4403,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		return 0;
 	}
 	// parallel structures
+	/*
 	if (wordSourceIndex > 2 && source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0 && source.m[wordSourceIndex - 1].queryWinnerForm(coordinatorForm) >= 0 && source.m[wordSourceIndex - 2].queryWinnerForm(verbForm) >= 0 &&
 		(source.queryPatternDiff(wordSourceIndex, L"__INFPSUB", L"") != -1 || source.queryPatternDiff(wordSourceIndex, L"__SUB_S2", L"") != -1 || source.queryPatternDiff(wordSourceIndex, L"_VERBPASTC", L"") != -1))
 	{
@@ -4408,6 +4419,7 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	{
 		partofspeech += L"PARALLELNOUN";
 	}
+	*/
 	if (word == L"kind" && source.m[wordSourceIndex].queryWinnerForm(nounForm) >= 0)
 	{
 		errorMap[L"ST correct: word 'kind' ST says adjective"]++;
@@ -5105,6 +5117,11 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"LP correct: (noun cost 3, adjective cost 0)"] = numErrors * 332 / 403;
 	errorMap[L"ST correct: (noun cost 3, adjective cost 0)"] = numErrors * 71 / 403;
 
+	numErrors = errorMap[L"LP correct: (verb cost 3, noun cost 0)"]; // 261 ST correct, 400 LP correct, 19 neither correct, 1 ambiguous out of 681 total
+	errorMap[L"LP correct: (verb cost 3, noun cost 0)"] = numErrors * 400 / 681;
+	errorMap[L"ST correct: (verb cost 3, noun cost 0)"] = numErrors * 261 / 681;
+	errorMap[L"diff: (verb cost 3, noun cost 0)"] = numErrors * 20 / 681;
+
 	numErrors = errorMap[L"LP correct: ownership of noun"]; // 12 ST correct out of 91 total 
 	errorMap[L"LP correct: ownership of noun"] = numErrors * 79 / 91;
 	errorMap[L"ST correct: ownership of noun"] = numErrors * 12 / 91;
@@ -5640,7 +5657,7 @@ void wmain(int argc,wchar_t *argv[])
 		//patternOrWordAnalysis(source, step, L"__ADJECTIVE", L"MTHAN", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__NOUN", L"F", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
-		patternOrWordAnalysis(source, step, L"among", L"",L"them", L"", Source::GUTENBERG_SOURCE_TYPE, false,false, specialExtension);
+		patternOrWordAnalysis(source, step, L"__NOUN", L"*",L"", L"", Source::GUTENBERG_SOURCE_TYPE, 0,4, specialExtension);
 		//patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false, specialExtension);
 		//patternOrWordAnalysis(source, step, L"worth", L"", Source::GUTENBERG_SOURCE_TYPE, false,L""); // TODO: testing weight change on _S1.
 		break;
