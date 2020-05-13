@@ -4722,8 +4722,16 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	// combo list - primarySTLPMatch comes first!
 	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 0, 4, comboCostFrequency, partofspeech);
 	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 0, 3, comboCostFrequency, partofspeech);
+	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 1, 4, comboCostFrequency, partofspeech);
+	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 0, 2, comboCostFrequency, partofspeech);
+	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 1, 3, comboCostFrequency, partofspeech);
+	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 2, 4, comboCostFrequency, partofspeech);
 	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 4, 0, comboCostFrequency, partofspeech);
 	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 3, 0, comboCostFrequency, partofspeech);
+	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 4, 1, comboCostFrequency, partofspeech);
+	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 2, 0, comboCostFrequency, partofspeech);
+	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 3, 1, comboCostFrequency, partofspeech);
+	formMatrixTest(source, wordSourceIndex, primarySTLPMatch, winnerFormsString, 4, 2, comboCostFrequency, partofspeech);
 	return -1;
 }
 
@@ -4848,9 +4856,10 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 						sentence.replace(pos,originalWord.length(), L"*" + originalWord + L"*");
 					pos = sentence.find(originalWord,pos+ originalWord.length()+2);
 				}
-				if (source.m[wordSourceIndex].flags&WordMatch::flagFirstLetterCapitalized)
-					partofspeech += L"**CAP**";
-				lplog(LOG_ERROR, L"Stanford POS %s%s (%s) not found in winnerForms %s for word%s %s %07d:[%s]", partofspeech.c_str(), (sentence.length()<=maxLength) ? L"SHORT":L"",primarySTLPMatch.c_str(), winnerFormsString.c_str(), (originalWord.find(L' ')==wstring::npos) ? L"":L"[space]", originalWord.c_str(), wordSourceIndex, sentence.c_str());
+				// not useful anymore
+				//if (source.m[wordSourceIndex].flags&WordMatch::flagFirstLetterCapitalized)
+				//	partofspeech += L"**CAP**";
+				lplog(LOG_ERROR, L"Stanford POS %s%s (%s) not found in winnerForms %s for word%s %s %07d:[%s]", partofspeech.c_str(), (sentence.length()<=maxLength && maxLength!=-1) ? L"SHORT":L"",primarySTLPMatch.c_str(), winnerFormsString.c_str(), (originalWord.find(L' ')==wstring::npos) ? L"":L"[space]", originalWord.c_str(), wordSourceIndex, sentence.c_str());
 				for (int wf : winnerForms)
 				{
 					fdi->second.LPErrorFormDistribution[Forms[wf]->name]++;
@@ -5207,7 +5216,7 @@ int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, 
 		wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d sources in %02I64d:%02I64d:%02I64d [%d sources/hour] (%-35.35s...)", numSourcesProcessedNow * 100 / totalSource, numSourcesProcessedNow, totalSource,
 			processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, (processingSeconds) ? numSourcesProcessedNow * 3600 / processingSeconds : 0, title.c_str());
 		SetConsoleTitle(buffer);
-		int setStep = stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, numTotalDifferenceFromStanford, formNoMatchMap, formMisMatchMap, wordNoMatchMap,VFTMap,errorMap, comboCostFrequency,pcfg,L"",60,specialExtension,lockPerSource);
+		int setStep = stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, numTotalDifferenceFromStanford, formNoMatchMap, formMisMatchMap, wordNoMatchMap,VFTMap,errorMap, comboCostFrequency,pcfg,L"",-1,specialExtension,lockPerSource);
 		totalWords += source.m.size();
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources set proc2=%d where id=%d", setStep, sourceId);
 		if (!myquery(&source.mysql, qt))
@@ -5653,13 +5662,21 @@ void wmain(int argc,wchar_t *argv[])
 		break;
 	case 21:
 		// Source::TEST_SOURCE_TYPE
+		// 0: pattern - if differentiator is NOT specified, then any differentiator is ok.
+		// 1: form - any formclass (string)
+		// 2: word - the actual word.   
+		// 3: flagNotMatched is set
+		// 4: true (do not perform match)
+		// if both primaryMatchType AND secondaryMatchType>0, then the secondary match location is the NEXT word.
+		// if primaryMatchType == 3, then sentence highlight will encompass all words that have no match, and sentences will not be repeated.
 		//patternOrWordAnalysis(source, step, L"__S1", L"R*", Source::GUTENBERG_SOURCE_TYPE,true,specialExtension);
 		//patternOrWordAnalysis(source, step, L"__ADJECTIVE", L"MTHAN", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__NOUN", L"F", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
-		patternOrWordAnalysis(source, step, L"__NOUN", L"*",L"", L"", Source::GUTENBERG_SOURCE_TYPE, 0,4, specialExtension);
+		//patternOrWordAnalysis(source, step, L"__NOUN", L"*",L"", L"", Source::GUTENBERG_SOURCE_TYPE, 0,4, specialExtension);
 		//patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false, specialExtension);
-		//patternOrWordAnalysis(source, step, L"worth", L"", Source::GUTENBERG_SOURCE_TYPE, false,L""); // TODO: testing weight change on _S1.
+		// scans the test file for any unmatched sentences
+		patternOrWordAnalysis(source, step, L"", L"", L"", L"", Source::TEST_SOURCE_TYPE, 3,4,L""); // TODO: testing weight change on _S1.
 		break;
 	case 60:
 		stanfordCheck(source, step, true,specialExtension,true);

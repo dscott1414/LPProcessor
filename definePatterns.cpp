@@ -896,6 +896,12 @@ int createBasicPatterns(void)
 		1, L"personal_pronoun_accusative|them", 0, 1, 1,
 		0);
 
+	cPattern::create(L"_ADVERB{_FINAL}", L"AND",
+		1, L"_ADVERB", 0, 1, 1,
+		1, L"coordinator",0,1,1,
+		1, L"_ADVERB", 0, 1, 1,
+		0);
+
 	defineNames();
 	createMetaNameEquivalencePatterns();
 	cPattern::create(L"_NUMBER{_NO_REPEAT}",L"1",
