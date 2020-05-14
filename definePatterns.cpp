@@ -257,7 +257,7 @@ int createNouns(void)
 	// a small brown diary taken...
 	// consider using VERB_NO_PAST to increase match
 	// __NOUN RU is Restricted Use
-	cPattern::create(L"__NOUNRU",L"1",
+	cPattern::create(L"__NOUNRU{_BLOCK:_EXPLICIT_NOUN_DETERMINER_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}",L"1",
 										1,L"__NOUN[*]",0,1,1, 
 										1,L"_VERBPASTPART*2{_BLOCK}",0,1,1,
 										2,L"_PP",L"__ALLOBJECTS_1{SUBOBJECT:_BLOCK}",0,1,1,
@@ -293,21 +293,33 @@ int createNouns(void)
 	//I know just how tired he was and how much *nerve* he required to keep himself going .
 	//He bounded along, careless of how much *noise* he made .
 	cPattern::create(L"__NOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}", L"R3",
-		1, L"relativizer|how{DET:OBJECT}", 0, 1, 1,
-		1, L"adverb|much", 0, 1, 1, 
-		1, L"noun{N_AGREE}", 0, 1, 1,  // noise
-		4, L"Proper Noun*1{ANY:NAME:SUBJECT:PREFER_S1}", L"personal_pronoun_nominative*1{SUBJECT:PREFER_S1}", L"personal_pronoun*1{SUBJECT:PREFER_S1}", L"noun*2{SUBJECT}", NO_OWNER, 1, 1, // highly restrict and discourage to prevent unnecessary matches
-		3, L"__ALLVERB", L"_COND{VERB}", L"_VERBPASSIVE", 0, 1, 1,
-		4, L"__ALLOBJECTS_0*2", L"__ALLOBJECTS_1*2", L"_INFP*2", L"_REL1[*]*2", 0, 0, 1,
-		0);
+										1, L"relativizer|how{DET:OBJECT}", 0, 1, 1,
+										1, L"adverb|much", 0, 1, 1, 
+										1, L"noun{N_AGREE}", 0, 1, 1,  // noise
+										4, L"Proper Noun*1{ANY:NAME:SUBJECT:PREFER_S1}", L"personal_pronoun_nominative*1{SUBJECT:PREFER_S1}", L"personal_pronoun*1{SUBJECT:PREFER_S1}", L"noun*2{SUBJECT}", NO_OWNER, 1, 1, // highly restrict and discourage to prevent unnecessary matches
+										3, L"__ALLVERB", L"_COND{VERB}", L"_VERBPASSIVE", 0, 1, 1,
+										4, L"__ALLOBJECTS_0*2", L"__ALLOBJECTS_1*2", L"_INFP*2", L"_REL1[*]*2", 0, 0, 1,
+										0);
 	// everything she writes / those I had known / things you like
-	cPattern::create(L"__NOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}", L"S",
+	cPattern::create(L"__NOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}", L"R4",
 										15, L"indefinite_pronoun|everybody", L"indefinite_pronoun|everyone", L"indefinite_pronoun|every one", L"indefinite_pronoun|everything", L"indefinite_pronoun|somebody", L"indefinite_pronoun|someone",
 										L"indefinite_pronoun|something", L"indefinite_pronoun|anybody", L"indefinite_pronoun|anyone", L"indefinite_pronoun|anything", L"indefinite_pronoun|nobody", L"indefinite_pronoun|no one", L"indefinite_pronoun|nothing", L"demonstrative_determiner|those", L"noun|things",0, 1, 1,
 										4, L"Proper Noun*2{ANY:NAME:SUBJECT:PREFER_S1}", L"indefinite_pronoun*2{SUBJECT:PREFER_S1}", L"personal_pronoun_nominative*2{SUBJECT:PREFER_S1}", L"personal_pronoun*2{SUBJECT:PREFER_S1}", NO_OWNER, 1, 1, // highly restrict and discourage to prevent unnecessary matches
 										3, L"__ALLVERB", L"_COND{VERB}", L"_VERBPASSIVE", 0, 1, 1,
 										2, L"_ADVERB",L"_ADJECTIVE",0,0,1,
 										0);
+	// she told him *the shape and size she wished it* .
+	cPattern::create(L"__NOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}", L"R5",
+		6, L"interrogative_determiner|whichever", L"interrogative_determiner|whatever", L"determiner|the{DET}", L"quantifier|every{DET}", L"quantifier|each{DET}", L"quantifier|any{DET}", 0, 1, 1, 
+		1, L"noun{N_AGREE}", 0, 1, 1,  
+		1, L"coordinator", 0, 1, 1,  
+		1, L"noun{N_AGREE}", 0, 1, 1,
+		1, L"determiner|the{DET}", 0, 0, 1, // the facilities *the institute* affords
+		5, L"Proper Noun*3{ANY:NAME:SUBJECT:PREFER_S1}", L"personal_pronoun_nominative*3{SUBJECT:PREFER_S1}", L"personal_pronoun*3{SUBJECT:PREFER_S1}", L"noun*2{N_AGREE}", L"adverb|there", NO_OWNER, 1, 1, // highly restrict and discourage to prevent unnecessary matches
+		3, L"__ALLVERB", L"_COND{VERB}", L"_VERBPASSIVE", 0, 1, 1,
+		4, L"__ALLOBJECTS_0*2", L"__ALLOBJECTS_1*2", L"_INFP*2", L"_REL1[*]*2", 0, 0, 1,
+		0);
+
 	cPattern::create(L"__APPNOUN{NOUN}",L"1",
 										5,L"determiner*2{DET}",L"demonstrative_determiner*2{DET}",L"possessive_determiner*2{DET}",L"__HIS_HER_DETERMINER*3",L"_NAMEOWNER{DET}",0,0,1,
 										1,L"_ADJECTIVE_AFTER",0,0,3, // this cannot contain VERBPAST, as it is not
@@ -361,6 +373,10 @@ int createNouns(void)
 										1, L"personal_pronoun_accusative|them", 0, 1, 1,
 										4, L"numeral_cardinal|two", L"adjective|here*-3", L"noun*1", L"indefinite_pronoun|people", FEMALE_GENDER | MALE_GENDER | PLURAL, 1, 1,
 										0);
+	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}", L"WE",
+		1, L"personal_pronoun_nominative|we", 0, 1, 1,
+		1, L"noun*1", FEMALE_GENDER | MALE_GENDER|PLURAL, 1, 1,
+		0);
 	// this is the same as "5" above but it is marked as a single object so "Iraqi weapons labs" is marked as a single object
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}",L"N",
 										5,L"determiner{DET}",L"demonstrative_determiner{DET}",L"possessive_determiner{DET}",L"interrogative_determiner{DET}",L"quantifier{DET}",0,0,1,
@@ -977,6 +993,11 @@ int createBasicPatterns(void)
 		1, L"adjective",0,0,1,
 		1, L"_NAME*1", 0, 1, 1, 
 		1, L"quotes", CLOSE_INFLECTION, 1, 1, 0);
+	// somebody else's cat.
+	cPattern::create(L"__ADJECTIVE", L"ELSE",
+		1, L"indefinite_pronoun{ADJ}", NO_OWNER, 1, 1, 
+		1, L"adverb|else", SINGULAR_OWNER | PLURAL_OWNER,1,1,
+		0);                                                                
 	// _NAME will ONLY be used in a case where a proper noun is not in an owner form AND it is preceded by an adverb.
 	cPattern::create(L"__NADJECTIVE",L"",
 		2,L"_ADVERB",L"commonProfession*1",0,0,1, // cp=commonProfession What was author Jasper Fforde's first book?
@@ -2735,7 +2756,7 @@ int createSecondaryPatterns2(void)
 	// END OBJVERB patterns - reverse END
 	// *I* shall have to speak to *whoever is in charge * .
 	cPattern::create(L"__NOUN{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_FORWARD_REFERENCE:_BLOCK:GNOUN:VNOUN:_EXPLICIT_SUBJECT_VERB_AGREEMENT:_CHECK_IGNORABLE_FORMS}", L"Z",
-										5, L"interrogative_determiner|whatever", L"interrogative_determiner|whichever", L"interrogative_determiner|whosoever",L"interrogative_determiner|whoever", L"interrogative_determiner|wherever", 0, 1, 1, 
+										5, L"interrogative_determiner|whatever{SUBJECT}", L"interrogative_determiner|whichever{SUBJECT}", L"interrogative_determiner|whosoever{SUBJECT}",L"interrogative_determiner|whoever{SUBJECT}", L"interrogative_determiner|wherever{SUBJECT}", 0, 1, 1, 
 										1, L"__ALLVERB*1", 0, 1, 1, // make this more expensive than a normal__S1
 										1, L"__INTERS1*1{BLOCK}", 0, 0, 1,
 										3, L"__ALLOBJECTS_0", L"__ALLOBJECTS_1", L"__ALLOBJECTS_2", 0, 0, 1, // there must only be one adjective and it must be last (not mixed in) see *
@@ -3328,7 +3349,7 @@ int createSecondaryPatterns2(void)
 	// to the point, my friend.
 	cPattern::create(L"_COMMAND1{_FINAL:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}",L"3",
 						1,L"_PP",0,1,1,
-						1, L"__NOUN[*]{OBJECT}",0,1,1,
+						2, L"__NOUN[*]{OBJECT}",L"_VERBREL1*4",0,1,1,
 						0);
 	// let us hope so.
 	cPattern::create(L"_COMMAND1{_FINAL:_ONLY_BEGIN_MATCH}", L"7",
