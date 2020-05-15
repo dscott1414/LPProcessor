@@ -2574,7 +2574,6 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		}
 		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"preposition") >= 0 && (source.m[wordSourceIndex + 2].queryWinnerForm(L"Proper Noun") >= 0 || source.m[wordSourceIndex + 2].queryWinnerForm(L"honorific") >= 0 || source.m[wordSourceIndex + 2].queryWinnerForm(L"honorific_abbreviation") >= 0))
 		{
-			//partofspeech += L"SPV3";
 			errorMap[L"LP correct: speaking verb is not adjective, noun or Proper Noun"]++;
 			return 0;
 		}
@@ -2868,7 +2867,6 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		{
 			int nounCost = source.m[wordSourceIndex + 1].word->second.getUsageCost(nf);
 			wstring tmpstr;
-			partofspeech += L"***HERNOUNCOST"+itos(nounCost,tmpstr);
 			int af = source.m[wordSourceIndex + 1].queryForm(adverbForm);
 			if (af >= 0)
 			{
@@ -2885,10 +2883,6 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				return 0;
 			}
 		}
-		else
-			partofspeech += L"***HERNONOUN";
-		//errorMap[L"LP correct: word 'her': [before an adverb, determiner, personal_pronoun_nominative, coordinator, indefinite_pronoun] ST says possessive_determiner LP says personal_pronoun_accusative"]++;
-		//return 0;
 	}
 	// 31. 'that' when followed by an _S1 is a relativizer, not a preposition (ST wrong)
 	if (word == L"that")
@@ -3158,31 +3152,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				return 0;
 			}
 		}
-		// followed by a preposition?
-		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"preposition") >= 0)
-		{
-			partofspeech += L"**ASPREP";
-		}
-		// followed by a preposition?
-		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"verb") >= 0)
-		{
-			partofspeech += L"**ASVERB";
-		}
-		// followed by an adverb?
-		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") >= 0 && source.m[wordSourceIndex].pma.queryPattern(L"__ADJECTIVE")!=-1)
-		{
-			partofspeech += L"**ASADVERB";
-		}
 		// followed by an adjective? [2 instances where conjunction might be considered out of 100 observed]
 		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0)
 		{
 			errorMap[L"LP correct: word 'as': ST says preposition or conjunction and LP says adverb"]++;
 			return 0;
-		}
-		// followed by a noun?
-		if (source.m[wordSourceIndex + 1].pma.queryPattern(L"__NOUN") != -1)
-		{
-			partofspeech += L"**ASNOUN";
 		}
 	}
 	if ((primarySTLPMatch == L"adjective") && (source.m[wordSourceIndex].queryWinnerForm(L"honorific_abbreviation") !=-1)) // source.m[wordSourceIndex].queryWinnerForm(L"honorific") !=-1 || 
@@ -3218,7 +3192,6 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	// 49. this is correct 100% of the time in the corpus (over 100 examples).  
 	if ((primarySTLPMatch == L"interjection") && source.m[wordSourceIndex].queryForm(L"interjection") < 0)
 	{
-		//partofspeech += L"**INTERJ";
 		errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
 		return 0;
 	}
@@ -3231,7 +3204,6 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	// 51. this is correct 100% of the time 
 	if ((primarySTLPMatch == L""))
 	{
-		//partofspeech += L"***FW";
 		errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
 		return 0;
 	}
@@ -3274,21 +3246,12 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				errorMap[L"LP correct: word 'another': ST says determiner when there is no following noun form (LP says pronoun)"]++;
 				return 0;
 			}
-			if ((word == L"that" || word == L"this") && source.m[wordSourceIndex].queryWinnerForm(pronounForm) >= 0 && source.m[wordSourceIndex + 1].queryWinnerForm(nounForm) < 0 &&
-				(source.m[wordSourceIndex + 1].queryWinnerForm(prepositionForm) >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(determinerForm) >= 0 || !iswalpha(source.m[wordSourceIndex + 1].word->first[0]) ||
-					source.m[wordSourceIndex + 1].word->second.hasVerbForm() || source.m[wordSourceIndex + 1].queryWinnerForm(conjunctionForm) >= 0))
-			{
-				partofspeech += L"***PNPDET";
-				//errorMap[L"LP correct: word 'another': ST says determiner when there is no following noun form (LP says pronoun)"]++;
-				//return 0;
-			}
 			if (word == L"any" && source.m[wordSourceIndex].queryWinnerForm(adverbForm) >= 0 &&
 				(source.m[wordSourceIndex + 1].queryWinnerForm(adjectiveForm) >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(adverbForm) >= 0))
 			{
 				errorMap[L"LP correct: word 'any': ST says determiner when there is only a following adverb or adjective form (LP says adverb)"]++;
 				return 0;
 			}
-			partofspeech += L"***DT";
 		}
 	}
 	if (word == L"to-night" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
@@ -3331,7 +3294,6 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	{
 		errorMap[L"LP correct: ST says " + primarySTLPMatch + L" but LP says preposition - as the head of a _PP construct"]++;
 		return 0;
-		//partofspeech += L"***ADVPREP";
 	}
 	bool wordBeforeIsIs = wordSourceIndex >0 && (source.m[wordSourceIndex - 1].queryWinnerForm(isForm) != -1 || source.m[wordSourceIndex - 1].queryWinnerForm(isNegationForm) != -1 || source.m[wordSourceIndex - 1].queryWinnerForm(beForm) != -1 || source.m[wordSourceIndex - 1].word->first == L"being");
 	bool wordBeforeIsVerb = wordSourceIndex > 0 && source.m[wordSourceIndex - 1].hasWinnerVerbForm();
@@ -3450,12 +3412,6 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 					errorMap[L"LP correct: ST says adverb but LP says adjective with __S1[7] alone"]++;
 				return 0;
 			}
-			else if (adjectivePEMAOffset != -1 && source.queryPatternDiff(wordSourceIndex + source.pema[adjectivePEMAOffset].begin, L"__NOUN", L"2") != -1)
-			{
-				partofspeech += L"***ISADJECTIVENOTADVERBELSE?";
-			}
-			else
-				partofspeech += L"***ISADVERBELSE";
 		}
 		if (word == L"o'clock" && primarySTLPMatch == L"adverb")
 		{
@@ -3530,12 +3486,6 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				return 0;
 			}
 		}
-		//if (source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && source.m[wordSourceIndex + 2].word->first == L"and" && nounHeadPosition)
-		//	partofspeech += L"***ADJNOUNDashCorrect?";
-		//else 
-		//	partofspeech += L"***ADJNOUNDashUnknown";
-		//errorMap[L"LP correct: ST says " + primarySTLPMatch + L" but LP says adjective before dash"]++;
-		//return 0;
 	}
 	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0)
 	{
@@ -3597,13 +3547,6 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			}
 		}
 		{
-			// an *even* and noiseless step - 0 matches!
-			//if (wordBeforeIsDeterminer && source.m[wordSourceIndex + 1].queryWinnerForm(L"coordinator") >= 0 && source.m[wordSourceIndex + 2].queryWinnerForm(L"adjective") >= 0 && source.m[wordSourceIndex + 3].queryWinnerForm(L"noun") >= 0)
-			//{
-			//	partofspeech += L"***ADJADV3";
-			//	//errorMap[L"ST correct: LP says adverb but ST says adjective"]++;
-			//	//return 0;
-			//}
 			// Still sipping his coffee , he regarded her with the blithe humour which lent so *great* a charm to his expression . 
 			// The game was as old as the Garden of Eden, she had played it well or *ill* from her cradle, and at last she had begun to grow a trifle weary .
 
@@ -3632,17 +3575,9 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				errorMap[L"LP correct: LP says adverb but ST says adjective"]++;
 				return 0;
 			}
-			// much better looking - true except for IS verbs (only 58 matches)
-			else if (source.m[wordSourceIndex - 1].queryWinnerForm(L"adverb") >= 0 && source.m[wordSourceIndex + 1].hasWinnerVerbForm())
-			{
-				//partofspeech += L"***ADJADV6";
-				//errorMap[L"LP correct: LP says adverb but ST says adjective (5)"]++;
-				//return 0;
-			}
 			// correct except for the rare IS verb or a noun restatement (you measly scrub!)
 			else if ((wordBeforeIsPronoun || source.m[wordSourceIndex - 1].queryWinnerForm(L"Proper Noun") >= 0) && source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") < 0)
 			{
-				//partofspeech += L"***ADJADV7";
 				errorMap[L"LP correct: LP says adverb but ST says adjective"]++;
 				return 0;
 			}
@@ -3668,14 +3603,8 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 						errorMap[L"LP correct: LP says adverb but ST says adjective"]++;
 					return 0;
 				}
-				else
-					partofspeech += L"***CLOSINGISADV(2)";
 			}
-			if (source.queryPattern(wordSourceIndex, L"__ADVERB") != -1 && source.queryPattern(wordSourceIndex, L"__INTRO_N") != -1)
-			{
-				partofspeech += L"***INTROISADV(2)";
-			}
-			else if (word == L"much")
+			if (word == L"much")
 			{
 				// much money / much Nature / much of the road / how much he had gotten / he isn't much.
 				if (source.m[wordSourceIndex + 1].queryWinnerForm(L"Proper Noun") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"noun") >= 0 ||
@@ -3705,7 +3634,6 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				}
 				else
 				{
-					//partofspeech += L"***ENOUGHISNOTADJECTIVE";
 					errorMap[L"LP correct 'enough': LP says adverb but ST says adjective"]++; // this includes the 'how much' case - may investigate this as how much does not act like adverb nor adjective
 					return 0;
 				}
@@ -3739,7 +3667,6 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			source.m[wordSourceIndex + 1].queryWinnerForm(L"indefinite_pronoun") >= 0 ||
 			(source.m[wordSourceIndex + 1].word->first == L"of" && source.m[wordSourceIndex - 1].word->first != L"no"))
 		{
-			//partofspeech += L"***MOREISADJECTIVEQUANTIFIER";
 			if (source.m[wordSourceIndex ].queryWinnerForm(L"quantifier") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0)
 				errorMap[L"LP correct 'more': LP says quantifier/adjective but ST says "+ primarySTLPMatch]++;
 			else
@@ -3748,7 +3675,6 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		}
 		else if ((source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0 || source.m[wordSourceIndex - 1].queryWinnerForm(L"verb") >= 0) && source.m[wordSourceIndex].queryWinnerForm(L"quantifier") >= 0 && primarySTLPMatch == L"adverb")
 		{
-			//partofspeech += L"***MOREISADVERB";
 			errorMap[L"ST correct 'more': LP says quantifier but ST says adverb"]++; // this includes the 'how much' case - may investigate this as how much does not act like adverb nor adjective
 			return 0;
 		}
@@ -3763,11 +3689,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		{
 			errorMap[L"LP correct 'more': LP says quantifier but ST says " + primarySTLPMatch]++;
 			return 0;
-			//partofspeech += L"***MOREISADJECTIVE()";
 		}
-		else
-			partofspeech += L"***MOREIS()";
-
 	}
 	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && 
 		source.m[wordSourceIndex + 1].queryWinnerForm(L"coordinator")==-1 && source.m[wordSourceIndex + 1].word->first!=L"," &&
@@ -3775,9 +3697,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	{
 		bool wordAfterIsVeryUnmodifiable = wordAfterIsUnmodifiable && source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") == -1 && source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") == -1;
 		int pemaOffset=source.queryPatternDiff(wordSourceIndex, L"__NOUN",L"2");
-		if (pemaOffset >= 0 && source.pema[pemaOffset].end >= 2)
-			partofspeech += L"***ADJNOUNDET1";
-		else if (wordBeforeIsDeterminer && source.m[wordSourceIndex + 1].queryForm(L"noun") == -1)
+		if (wordBeforeIsDeterminer && source.m[wordSourceIndex + 1].queryForm(L"noun") == -1)
 		{
 			errorMap[L"LP correct: LP says noun but ST says " + primarySTLPMatch]++;
 			return 0;
@@ -3804,12 +3724,6 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"LP correct: LP says noun but ST says adjective (plural only)"]++;
 			return 0;
 		}
-		else if (source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(nounForm)) >=4)
-			partofspeech += L"***ADJNOUNDET2";
-		else
-			partofspeech += L"***ADJNOUNDET3";
-		//errorMap[L"LP correct: adverb of customary form (ending in -ly) ST says " + primarySTLPMatch + L" but LP says adverb"]++;
-		//return 0;
 	}
 	// over 100 examples checked and 99% correct except for 'only'
 	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && word.length() > 3 && word.substr(word.length() - 2) == L"ly" && word != L"only")
@@ -3824,14 +3738,12 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	{
 		errorMap[L"ST correct: ST says " + primarySTLPMatch + L" but LP says a passive construction (may be classified as diff in future)"]++;
 		return 0;
-		//partofspeech += L"***VERBPASSIVE";
 	}
 	maxEnd = -1;
 	if (primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0 && source.queryPattern(wordSourceIndex, L"__AS_AS", maxEnd) != -1)
 	{
 		errorMap[L"diff: ST says " + primarySTLPMatch + L" but LP says adjective embedded in an adverbial construction"]++;
 		return 0;
-		//partofspeech += L"***__AS_AS";
 	}
 	// Stanford POS JJ***SPadjective(adjective) not found in winnerForms verb for word bellowing
 	maxEnd = -1;
@@ -3839,7 +3751,6 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	{
 		errorMap[L"diff: ST says " + primarySTLPMatch + L" but LP says verb embedded in an adjectival construction"]++;
 		return 0;
-		//partofspeech += L"***__ADJECTIVE";
 	}
 	if ((primarySTLPMatch == L"noun" || primarySTLPMatch == L"verb") && source.m[wordSourceIndex].queryWinnerForm(L"honorific") >= 0)
 	{
@@ -3870,30 +3781,6 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"diff: word 'a little': ST says " + primarySTLPMatch + L" and LP matches structural adverb"]++;
 		return 0;
 	}
-	if (primarySTLPMatch == L"personal_pronoun_accusative")
-	{
-		vector<wstring> pronounTypes = { L"personal_pronoun_accusative",L"personal_pronoun_nominative",L"personal_pronoun",L"reflexive_pronoun" };
-		bool pnMatch = false;
-		for (wstring pn : pronounTypes)
-			if (pnMatch = source.m[wordSourceIndex].queryWinnerForm(pn) >= 0)
-				break;
-		if (!pnMatch)
-			partofspeech += L"***PN";
-		//errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
-		//return 0;
-	}
-	if (primarySTLPMatch == L"possessive_determiner")
-	{
-		vector<wstring> pronounTypes = { L"possessive_determiner" };
-		bool pnMatch = false;
-		for (wstring pn : pronounTypes)
-			if (pnMatch = source.m[wordSourceIndex].queryWinnerForm(pn) >= 0)
-				break;
-		if (!pnMatch)
-			partofspeech += L"***PNPDET";
-		//errorMap[L"LP correct: ST says interjection when no interjection form possible)"]++;
-		//return 0;
-	}
 	// 55. this is correct 100% of the time 
 	if (source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE && source.m[wordSourceIndex].pma.queryPattern(L"_ADJECTIVE") != -1)
 	{
@@ -3913,11 +3800,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"diff: ST says noun when LP says it is a verb but matching to a present participle and an __N1 pattern [acceptable]"]++;
 			return 0; // ST and LP agree
 		}
-if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
-{
-	errorMap[L"LP correct: ST says noun when LP says it is a verb but before 'to'"]++;
-	return 0;
-}
+		if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
+		{
+			errorMap[L"LP correct: ST says noun when LP says it is a verb but before 'to'"]++;
+			return 0;
+		}
 	}
 	// Rollo met the policeman *walking* towards him
 	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE &&
@@ -3929,22 +3816,6 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 	}
 	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE)
 	{
-		/*
-		int maxLen=-1,pemaIndex=-1;
-		if (source.m[wordSourceIndex].pma.queryPattern(L"__N1") != -1 && (pemaIndex = source.queryPattern(wordSourceIndex, L"__NOUN", maxLen)) != -1)
-		{
-			if (source.pema[pemaIndex].end > 1)
-			{
-				errorMap[L"diff: ST says adjective when LP says it is a verb but matching to a present participle and an __N1 inside of a __NOUN pattern [acceptable]"]++;
-				partofspeech += L"***SPADJVERB";
-			}
-			else
-			{
-				errorMap[L"LP correct: ST says adjective when LP says it is a verb but matching to a present participle and an __N1 as the front of a __NOUN pattern"]++;
-				partofspeech += L"***SPADJVERBNOUN";
-			}
-		}
-		*/
 		int maxLen = -1, pemaIndex;
 		// It will be *surprising*
 		if ((pemaIndex = source.queryPattern(wordSourceIndex, L"_VERB", maxLen)) != -1)
@@ -3999,7 +3870,6 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			errorMap[L"diff: ST says adjective and LP says verb in a adjective structure"]++;
 			return 0;
 		}
-		//partofspeech += L"***NAVING";
 	}
 	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(L"adjective") >= 0 &&
 		source.m[wordSourceIndex].queryForm(L"verb") >= 0 && (source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PAST) == VERB_PAST &&
@@ -4178,15 +4048,6 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		return 0;
 	}
 	int pemaOffset = -1;
-	if (wordSourceIndex > 0 && source.m[wordSourceIndex].queryWinnerForm(L"quantifier") >= 0 && (pemaOffset=source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"2")) != -1)
-	{
-		if (source.pema[pemaOffset].end !=1)
-		{
-			partofspeech += L"**ISQUANTIFIERADJECTIVE?";
-			//errorMap[L"LP correct: word 'more': ST says " + primarySTLPMatch + L" LP says quantifier"]++;
-			//return 0;
-		}
-	}
 	if (source.queryPatternDiff(wordSourceIndex, L"_ADVERB", L"8") != -1)
 	{
 		errorMap[L"LP correct:little by little"]++; 
@@ -4402,24 +4263,6 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 		errorMap[L"LP correct: either/neither/or/nor!"]++;
 		return 0;
 	}
-	// parallel structures
-	/*
-	if (wordSourceIndex > 2 && source.m[wordSourceIndex].queryWinnerForm(verbForm) >= 0 && source.m[wordSourceIndex - 1].queryWinnerForm(coordinatorForm) >= 0 && source.m[wordSourceIndex - 2].queryWinnerForm(verbForm) >= 0 &&
-		(source.queryPatternDiff(wordSourceIndex, L"__INFPSUB", L"") != -1 || source.queryPatternDiff(wordSourceIndex, L"__SUB_S2", L"") != -1 || source.queryPatternDiff(wordSourceIndex, L"_VERBPASTC", L"") != -1))
-	{
-		partofspeech += L"PARALLELVERB";
-		if (source.queryPatternDiff(wordSourceIndex, L"__INFPSUB", L"") != -1)
-			partofspeech += L"INFPSUB";
-		if (source.queryPatternDiff(wordSourceIndex, L"__SUB_S2", L"") != -1)
-			partofspeech += L"__SUB_S2";
-		if (source.queryPatternDiff(wordSourceIndex, L"_VERBPASTC", L"") != -1)
-			partofspeech += L"_VERBPASTC";
-	}
-	if (wordSourceIndex > 2 && source.m[wordSourceIndex].queryWinnerForm(nounForm) >= 0 && source.m[wordSourceIndex - 1].queryWinnerForm(coordinatorForm) >= 0 && source.m[wordSourceIndex - 2].queryWinnerForm(nounForm) >= 0)
-	{
-		partofspeech += L"PARALLELNOUN";
-	}
-	*/
 	if (word == L"kind" && source.m[wordSourceIndex].queryWinnerForm(nounForm) >= 0)
 	{
 		errorMap[L"ST correct: word 'kind' ST says adjective"]++;
@@ -4471,13 +4314,6 @@ if (wordSourceIndex >= 1 && source.m[wordSourceIndex - 1].word->first == L"to")
 			errorMap[L"LP correct: passive verb is not adjective"]++;
 			return 0;
 		}
-		// not specific enough and only matched 45 
-		//if (source.queryPattern(wordSourceIndex, L"__ADJECTIVE") != -1)
-		//{
-		//	partofspeech += L"_ADJ!";
-		//	//errorMap[L"LP correct: passive verb is not adjective"]++;
-		//	//return 0;
-		//}
 		if (source.m[wordSourceIndex].queryWinnerForm(nounForm) >= 0 && source.m[wordSourceIndex].getRelVerb() >= 0 && (source.m[source.m[wordSourceIndex].getRelVerb()].queryForm(isForm) >= 0 || source.m[source.m[wordSourceIndex].getRelVerb()].queryForm(isNegationForm) >= 0 ||
 			source.m[source.m[wordSourceIndex].getRelVerb()].word->first == L"be" || source.m[source.m[wordSourceIndex].getRelVerb()].word->first == L"been"))
 		{

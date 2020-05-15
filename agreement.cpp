@@ -1581,7 +1581,7 @@ void Source::findAllChains2(int PEMAPosition,int position,vector <patternElement
 // if PM cost MAY has changed, recalculate the lowest PM cost.  If it didn't change, return 0.
 // if PM is a top level match, recalculate maxMatch.
 // get all patterns from the root pattern and calculate the minimum cost including the changed cost and then not.
-int Source::cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patternMatchArray::tPatternMatch *childPM,int traceSource,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,wchar_t *fromWhere)
+int Source::cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patternMatchArray::tPatternMatch *childPM,int traceSource,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet, bool stopCascadeWhenNDAlreadySet, wchar_t *fromWhere)
 { LFS // DLFS
 	wchar_t temp[1024];
 	if (!recalculatePMCost)
@@ -1686,17 +1686,22 @@ int Source::cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patter
 				origins.insert(origin);
 				vector <patternElementMatchArray::tPatternElementMatch *> chain;
 				chain.reserve(16); // most of the time there will be less than 16 elements matched in a pattern
+				bool stopCascadeBecauseNDAlreadySet = stopCascadeWhenNDAlreadySet && pema[origin].flagSet(patternElementMatchArray::COST_ND);
+				stopCascadeBecauseNDAlreadySet = false; // TEMP DEBUG!
 				if (debugTrace.traceSecondaryPEMACosting)
-					lplog(L"%d:FINDCHAINS %s[%s](%d,%d) ORIGIN=%06d %s position=%d basePosition=%d rootPattern=%d %s[%s] len=%d deltaCost=%d.",
+					lplog(L"%d:FINDCHAINS %s[%s](%d,%d) %sORIGIN=%06d %s position=%d basePosition=%d rootPattern=%d %s[%s] len=%d deltaCost=%d.",
 					basePosition,patterns[childPM->getPattern()]->name.c_str(),patterns[childPM->getPattern()]->differentiator.c_str(),basePosition,basePosition+childPM->len,
+					(stopCascadeBecauseNDAlreadySet) ? L"STOPPED ND at origin already set ":L"",
 					origin,pema[origin].toText(parentBasePosition,temp,m),parentBasePosition,basePosition,patterns[childPM->getPattern()]->rootPattern,
 					patterns[patterns[childPM->getPattern()]->rootPattern]->name.c_str(),patterns[patterns[childPM->getPattern()]->rootPattern]->differentiator.c_str(),
 					childPM->len,deltaCost);
+				if (stopCascadeBecauseNDAlreadySet)
+					continue;
 				findAllChains2(origin,parentBasePosition,chain,PEMAPositionsSet,basePosition,patterns[childPM->getPattern()]->rootPattern,childPM->len,false,deltaCost); // sets COST_DONE
 				recalculateOCosts(recalculatePMCost,PEMAPositionsSet,firstPEMAPositionsSet,traceSource);
 				patternMatchArray::tPatternMatch *parentPM=(m[parentBasePosition].patterns.isSet(pema[PEMAOffset].getPattern())) ? m[parentBasePosition].pma.find(pema[PEMAOffset].getPattern(),pema[PEMAOffset].end-pema[PEMAOffset].begin) : NULL;
 				if (parentPM)
-					cascadeUpToAllParents(recalculatePMCost,parentBasePosition,parentPM,traceSource,PEMAPositionsSet,fromWhere);
+					cascadeUpToAllParents(recalculatePMCost,parentBasePosition,parentPM,traceSource,PEMAPositionsSet, stopCascadeWhenNDAlreadySet, fromWhere);
 				else if (debugTrace.traceSecondaryPEMACosting)
 					lplog(L"%d:%s[%s](%d,%d) NOT FOUND",parentBasePosition,
 					patterns[pema[PEMAOffset].getPattern()]->name.c_str(),patterns[pema[PEMAOffset].getPattern()]->differentiator.c_str(),
@@ -2068,7 +2073,7 @@ P:  TS#  E
 
 */
 // set the costs of the next to top tier of the pattern (secondary)
-int Source::setSecondaryCosts(vector <costPatternElementByTagSet> &PEMAPositions,patternMatchArray::tPatternMatch *pm,int basePosition, wchar_t *fromWhere)
+int Source::setSecondaryCosts(vector <costPatternElementByTagSet> &PEMAPositions,patternMatchArray::tPatternMatch *pm,int basePosition, bool stopCascadeWhenNDAlreadySet,wchar_t *fromWhere)
 { LFS
 	// assign cost to each P matching TS#.  Keep lowest E (LE) for each TS#.
 	// for each E<LE, the last P having E<LE, assign cost of P to be the minimum of the TS cost and the cost already at P.
@@ -2087,7 +2092,7 @@ int Source::setSecondaryCosts(vector <costPatternElementByTagSet> &PEMAPositions
 	}
 	bool recalculatePMCost=false;
 	recalculateOCosts(recalculatePMCost,PEMAPositionsSet,0,traceSource);
-	cascadeUpToAllParents(recalculatePMCost,basePosition,pm,traceSource,PEMAPositionsSet,fromWhere);
+	cascadeUpToAllParents(recalculatePMCost,basePosition,pm,traceSource,PEMAPositionsSet, stopCascadeWhenNDAlreadySet, fromWhere);
 	for (vector<patternElementMatchArray::tPatternElementMatch *>::iterator ppsi=PEMAPositionsSet.begin(),ppsiEnd=PEMAPositionsSet.end(); ppsi!=ppsiEnd; ppsi++)
 	{
 		(*ppsi)->removeFlag(patternElementMatchArray::COST_DONE);
@@ -2308,17 +2313,21 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 		}
 	}
 	// set the actual noun pattern that is being used, so that if __NOUN[9] comes first, for example, that the NOUNs in NOUN[9] don't get counted twice (once here, and once on their own).
-	// problem - what if _NOUN[2] needs to be evaluated separately because _NOUN[9] is not under a certain PP.
+	// problem - what if _NOUN[2] needs to be evaluated separately because _NOUN[9] is not under a certain PP.  Therefore, this flag cannot be set on this child (commented out below).
+	// This has been corrected another way - see stopCascadeWhenNDAlreadySet.  This will stop the cascade upwards of the child pattern if the parent has already been evaluated for noun determiner.
 	if (debugTrace.traceDeterminer && nounTag>=0 && !pema[abs(tagSet[nounTag].PEMAOffset)].flagSet(patternElementMatchArray::COST_ND))
 	{
+		wstring from;
+		if (fromPEMAPosition >= 0)
+			from = L"from "+patterns[pema[fromPEMAPosition].getPattern()]->name + L"[" + patterns[pema[fromPEMAPosition].getPattern()]->differentiator + L"]";
 		if (tagSet[nounTag].isPattern)
-			::lplog(LOG_INFO, L"ND NOT SET! %06d:%s[%s] %06d:%s[%s](%d,%d) TAG %s [Element=%d]", tagSet[nounTag].sourcePosition, patterns[tagSet[nounTag].parentPattern]->name.c_str(), patterns[tagSet[nounTag].parentPattern]->differentiator.c_str(),
+			::lplog(LOG_INFO, L"ND NOT SET! %06d:%s[%s] %06d:%s[%s](%d,%d) TAG %s [Element=%d] %s", tagSet[nounTag].sourcePosition, patterns[tagSet[nounTag].parentPattern]->name.c_str(), patterns[tagSet[nounTag].parentPattern]->differentiator.c_str(),
 				tagSet[nounTag].PEMAOffset, patterns[tagSet[nounTag].pattern]->name.c_str(), patterns[tagSet[nounTag].pattern]->differentiator.c_str(), tagSet[nounTag].sourcePosition, tagSet[nounTag].sourcePosition + tagSet[nounTag].len, patternTagStrings[tagSet[nounTag].tag].c_str(),
-				tagSet[nounTag].parentElement);
+				tagSet[nounTag].parentElement,from.c_str());
 		else
-			::lplog(LOG_INFO, L"ND NOT SET! %06d %s[%s] %06d:%s(%d,%d) TAG %s [Element=%d]", tagSet[nounTag].sourcePosition, patterns[tagSet[nounTag].parentPattern]->name.c_str(), patterns[tagSet[nounTag].parentPattern]->differentiator.c_str(),
+			::lplog(LOG_INFO, L"ND NOT SET! %06d %s[%s] %06d:%s(%d,%d) TAG %s [Element=%d] %s", tagSet[nounTag].sourcePosition, patterns[tagSet[nounTag].parentPattern]->name.c_str(), patterns[tagSet[nounTag].parentPattern]->differentiator.c_str(),
 				tagSet[nounTag].PEMAOffset, Forms[tagSet[nounTag].pattern]->shortName.c_str(), tagSet[nounTag].sourcePosition, tagSet[nounTag].sourcePosition + tagSet[nounTag].len, patternTagStrings[tagSet[nounTag].tag].c_str(),
-				tagSet[nounTag].parentElement);
+				tagSet[nounTag].parentElement, from.c_str());
 	}
 	//pema[tagSet[nounTag].PEMAOffset].setFlag(patternElementMatchArray::COST_ND);
 	if (nAgreeTag < 0)
@@ -2552,7 +2561,7 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 							nCosts.push_back(10);
 							traceSources.push_back(traceSource);
 							lowerPreviousElementCosts(secondaryPEMAPositions, nCosts, traceSources, L"hasEmbeddedDash");
-							setSecondaryCosts(secondaryPEMAPositions,pma,nPosition,L"hasEmbeddedDash");
+							setSecondaryCosts(secondaryPEMAPositions,pma,nPosition,false,L"hasEmbeddedDash");
 						}
 						if (patterns[pma->getPattern()]->name == L"__NOUN" && patterns[pma->getPattern()]->differentiator == L"F")
 						{
@@ -2584,7 +2593,7 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 								if (debugTrace.traceDeterminer)
 									lplog(L"%d:__NOUN[F](%d,%d) BEGIN subject with coordinators and/or determiners - %d [SOURCE=%06d]", nPosition, nPosition, nPosition + pma->len, highestPNC, traceSource);
 								lowerPreviousElementCosts(secondaryPEMAPositions, nCosts, traceSources, L"subjectHasCoordinatorsOrDeterminers");
-								setSecondaryCosts(secondaryPEMAPositions, pma, nPosition, L"subjectHasCoordinatorsOrDeterminers");
+								setSecondaryCosts(secondaryPEMAPositions, pma, nPosition, false, L"subjectHasCoordinatorsOrDeterminers");
 								if (debugTrace.traceDeterminer)
 									lplog(L"%d:__NOUN[F](%d,%d) END subject with coordinators and/or determiners - %d", nPosition, nPosition, nPosition + pma->len, highestPNC);
 							}
@@ -2609,7 +2618,7 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 						traceSources.push_back(traceSource);
 					}
 					lowerPreviousElementCosts(secondaryPEMAPositions, nCosts, traceSources, L"nounDeterminer");
-					setSecondaryCosts(secondaryPEMAPositions,pma,nPosition, L"nounDeterminer");
+					setSecondaryCosts(secondaryPEMAPositions,pma,nPosition, true, L"nounDeterminer");
 				} // for each iteration of each object
 			}
 			else if (!patterns[nPattern]->hasTag(GNOUN_TAG) && !patterns[nPattern]->hasTag(MNOUN_TAG) && tagLocations[tl].isPattern)
@@ -2636,7 +2645,7 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 					traceSources.push_back(tTraceSource);
 				}
 				lowerPreviousElementCosts(secondaryPEMAPositions, nCosts, traceSources, L"nounDeterminer2");
-				setSecondaryCosts(secondaryPEMAPositions,pma,nPosition, L"nounDeterminer2");
+				setSecondaryCosts(secondaryPEMAPositions,pma,nPosition, true, L"nounDeterminer2");
 			}
 		}
 	}
@@ -2690,7 +2699,7 @@ void Source::evaluatePrepObjects(int PEMAPosition, int position, vector < vector
 		if (costs.size())
 		{
 			lowerPreviousElementCosts(secondaryPEMAPositions, costs, traceSources, L"prepObjects");
-			setSecondaryCosts(secondaryPEMAPositions, pm, position, L"prepObjects");
+			setSecondaryCosts(secondaryPEMAPositions, pm, position, false, L"prepObjects");
 		}
 	}
 }
@@ -3286,7 +3295,7 @@ int Source::assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchAr
 						}
 					}
 			}
-			setSecondaryCosts(saveSecondaryPEMAPositions, pm, position, L"agreement");
+			setSecondaryCosts(saveSecondaryPEMAPositions, pm, position, false, L"agreement");
 		}
 		if (debugTrace.traceTags)
 			lplog(L"%d:======== END EVALUATING %06d %s %s[%s](%d,%d)", position, pm->pemaByPatternEnd, desiredTagSets[subjectVerbAgreementTagSet].name.c_str(),
@@ -3333,7 +3342,7 @@ int Source::assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchAr
 			if (tagSets.size())
 			{
 				lowerPreviousElementCosts(saveSecondaryPEMAPositions, costs, traceSources, L"verbObjects");
-				setSecondaryCosts(saveSecondaryPEMAPositions, pm, position, L"verbObjects");
+				setSecondaryCosts(saveSecondaryPEMAPositions, pm, position, false, L"verbObjects");
 			}
 		}
 		tagSets.clear();

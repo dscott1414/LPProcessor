@@ -465,7 +465,7 @@ int createNouns(void)
 										L"personal_pronoun_accusative|us{N_AGREE}", L"personal_pronoun_accusative|them{N_AGREE}", 
 										L"personal_pronoun_nominative|we{N_AGREE}", L"personal_pronoun_nominative|they{N_AGREE}", 
 										L"personal_pronoun|you{N_AGREE}", PLURAL, 1, 1,
-										1, L"predeterminer|both", 0, 1, 1,
+		2, L"predeterminer|both", L"quantifier|each*1",0, 1, 1, // You must bring us *each* a jewel.
 										0);
 	// this pattern must go after all nouns EXCEPT it must be before any noun patterns that use _NOUN as a subpattern
 	//cPattern::create(L"_NOUN",L"",1,L"__NOUN[*]",0,1,1,0);
@@ -1863,7 +1863,7 @@ int createVerbPatterns(void)
 	// L"A" structure of verb phrases from Quirk CGEL (3.54)
 	cPattern::create(L"_VERB{VERB}",L"1",
 										1,L"_COND",0,1,1,
-										4, L"__INTERS1", L"_ADVERB*2", L"predeterminer|both",L"reflexive_pronoun",0, 0, 1,
+		5, L"__INTERS1", L"_ADVERB*2", L"predeterminer|both", L"quantifier|each", L"reflexive_pronoun", 0, 0, 1, // we will *each* give of our fire .
 										2,L"_VERBPRESENT",L"_BE{vS:V_OBJECT:id}",0,1,1,0);
 	// L"A" structure of verb phrases from Quirk CGEL (3.54)
 	cPattern::create(L"_THINK",L"1",
@@ -3517,7 +3517,7 @@ int createSecondaryPatterns2(void)
 											 1,L"_INTRO_S1",0,0,1,
 											 1,L"_ADVERB",0,0,1, // even if 
 											 13, L"noun|once", L"conjunction|although", L"conjunction|though", L"conjunction|if", L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|because", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"relativizer|whenever", L"conjunction|as", 0, 1, 1,
-											 1,L"__S1{_BLOCK:EVAL}",0,1,1,
+		2, L"__S1{_BLOCK:EVAL}", L"__NOUN*4",0, 1, 1,  // __NOUN: when *a child* he suffered punishment rather than give up her society . 
 											 2,L"_ADVERB*1",L"_ADJECTIVE_AFTER*1",0,0,1, // any time between dawn and sunset / I wish to see him *alive*
 											 1,L",",0,0,1,
 											 1,L"adverb|then",0,0,1,
@@ -3574,7 +3574,8 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}", L"2",
 												1, L"_ADVERB", 0, 0, 1,
 												1,L",",0,0,1,
-											 4,L"conjunction|but",L"adverb|then",L"coordinator|and",L"adverb|rather",0,1,1,  // assumption: 'rather than' will exist independently of the other words in the same lines
+		5, L"conjunction|but", L"adverb|then", L"coordinator|and", L"adverb|rather", // assumption: 'rather than' will exist independently of the other words in the same lines
+		   L"quantifier|more", 0, 1, 1,  // either of the captives could do *more than* give utterance to moans .
 											 2,L"adverb|then",L"preposition|than",0,0,1,
 											 5,L"__ALLVERB{VERB2}",L"_COND{VERB2}",L"_VERBPASTPART*1{vB:VERB2}",L"_BEEN{vB:id:VERB2}",L"_VERBPASSIVE{VERB2}",0,1,1,
 											 3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, // there must only be one adjective and it must be last (not mixed in) see *
@@ -3647,6 +3648,11 @@ int createSecondaryPatterns2(void)
 										1, L"coordinator|nor", 0, 1, 1,
 										1, L"noun", 0, 1, 1,
 										1, L"adverb|neither", 0, 1, 1,
+		0);
+	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL:_ONLY_END_MATCH}", L"L",
+									1, L",", 0, 1, 1,
+									1, L"personal_pronoun", 0, 1, 1,
+									1, L"verb|said", 0, 1, 1,
 										0);
 	// prevents multiplicative nesting in _MS1
 	cPattern::create(L"_MSTAIL{_NO_REPEAT}",L"",1,L"__MSTAIL[*]",0,1,4,0);

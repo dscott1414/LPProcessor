@@ -2159,9 +2159,9 @@ public:
 	void findAllChains(vector <costPatternElementByTagSet> &PEMAPositions,int PEMAPosition,vector <patternElementMatchArray::tPatternElementMatch *> &chain,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int &traceSource,int &minOverallChainCost);
 	void setChain2(vector <patternElementMatchArray::tPatternElementMatch *> &chainPEMAPositions,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int deltaCost);
 	void findAllChains2(int PEMAPosition,int position,vector <patternElementMatchArray::tPatternElementMatch *> &chain,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int changedPosition,int rootPattern,int len,bool includesPatternMatch,int deltaCost);
-	int cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patternMatchArray::tPatternMatch *childPM,int traceSource,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet, wchar_t *fromWhere);
+	int cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patternMatchArray::tPatternMatch *childPM,int traceSource,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet, bool stopCascadeWhenNDAlreadySet, wchar_t *fromWhere);
 	void recalculateOCosts(bool &recalculatePMCost,vector<patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int start,int traceSource);
-	int setSecondaryCosts(vector <costPatternElementByTagSet> &secondaryPEMAPositions,patternMatchArray::tPatternMatch *pm,int basePosition,wchar_t *fromWhere);
+	int setSecondaryCosts(vector <costPatternElementByTagSet> &secondaryPEMAPositions,patternMatchArray::tPatternMatch *pm,int basePosition, bool stopCascadeWhenNDAlreadySet, wchar_t *fromWhere);
 	int getEndRelativeSourcePosition(int PEMAPosition);
 	void setPreviousElementsCostsAtIndex(vector <costPatternElementByTagSet> &PEMAPositions, int pp, int cost, int traceSource, int patternElementEndPosition, int pattern, int patternElement);
 	void lowerPreviousElementCosts(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, wchar_t *fromWhere);
