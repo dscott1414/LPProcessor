@@ -1527,7 +1527,7 @@ extern unsigned int qtobjectTagSet;
 extern unsigned int twoObjectTestTagSet;
 
 extern unsigned int PREP_TAG,OBJECT_TAG,SUBOBJECT_TAG,REOBJECT_TAG,IOBJECT_TAG,SUBJECT_TAG,PREP_OBJECT_TAG,VERB_TAG,IVERB_TAG,PLURAL_TAG,MPLURAL_TAG,GNOUN_TAG,FLOAT_TIME_TAG;
-extern unsigned int MNOUN_TAG,PNOUN_TAG,VNOUN_TAG,HAIL_TAG,NAME_TAG,REL_TAG,SENTENCE_IN_REL_TAG;
+extern unsigned int MNOUN_TAG,PNOUN_TAG,VNOUN_TAG,HAIL_TAG,NAME_TAG,REL_TAG,SENTENCE_IN_REL_TAG,NOUN_TAG;
 
 static const int NUM_SIMPLE_TENSE=16;
 static const int NUM_INF_TENSE=9;
@@ -2159,6 +2159,7 @@ public:
 	void findAllChains(vector <costPatternElementByTagSet> &PEMAPositions,int PEMAPosition,vector <patternElementMatchArray::tPatternElementMatch *> &chain,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int &traceSource,int &minOverallChainCost);
 	void setChain2(vector <patternElementMatchArray::tPatternElementMatch *> &chainPEMAPositions,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int deltaCost);
 	void findAllChains2(int PEMAPosition,int position,vector <patternElementMatchArray::tPatternElementMatch *> &chain,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int changedPosition,int rootPattern,int len,bool includesPatternMatch,int deltaCost);
+	bool notFirstNounInMultiNounConstruction(int parentPosition,int parentPEMAOffset, int childPosition,int childEnd);
 	int cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patternMatchArray::tPatternMatch *childPM,int traceSource,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet, bool stopCascadeWhenNDAlreadySet, wchar_t *fromWhere);
 	void recalculateOCosts(bool &recalculatePMCost,vector<patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int start,int traceSource);
 	int setSecondaryCosts(vector <costPatternElementByTagSet> &secondaryPEMAPositions,patternMatchArray::tPatternMatch *pm,int basePosition, bool stopCascadeWhenNDAlreadySet, wchar_t *fromWhere);
@@ -2379,6 +2380,7 @@ int wherePrepObject,
 	bool writeGWNMap(map <tIWMM,int,tFI::cRMap::wordMapCompare > &m,void *buffer,int &where,int fd,int limit);
 	void writeGWNMaps(wstring path);
 	void fillWNMaps(int where,tIWMM word,bool isAdjective);
+	void clearWNMaps();
 	bool WNMapsInitialized;
 	void addWNExtensions(void);
 	void addDefaultGenderedAssociatedNouns(int o);

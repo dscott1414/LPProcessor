@@ -134,6 +134,16 @@ bool Source::writeWNMaps(wstring path)
 	return true;
 }
 
+void Source::clearWNMaps()
+{
+	wnSynonymsNounMap.clear();
+	wnSynonymsAdjectiveMap.clear();
+	wnAntonymsNounMap.clear();
+	wnAntonymsAdjectiveMap.clear();
+	wnGenderAdjectiveMap.clear();
+	wnGenderNounMap.clear();
+}
+
 bool Source::readWNMaps(wstring path)
 {
 	LFS

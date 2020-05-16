@@ -2200,6 +2200,7 @@ void Source::clearSource(void)
 	timelineSegments.clear();
 	for (int objectLastTense = 0; objectLastTense < VERB_HISTORY; objectLastTense++)
 		lastVerbTenses[objectLastTense].clear();
+	clearWNMaps();
 	for (unordered_map <wstring, Source *>::iterator smi = sourcesMap.begin(); smi != sourcesMap.end();)
 	{
 		Source *source = smi->second;

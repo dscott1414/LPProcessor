@@ -463,7 +463,7 @@ int createNouns(void)
 												0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:PNOUN}", L"Y", 5,
 										L"personal_pronoun_accusative|us{N_AGREE}", L"personal_pronoun_accusative|them{N_AGREE}", 
-										L"personal_pronoun_nominative|we{N_AGREE}", L"personal_pronoun_nominative|they{N_AGREE}", 
+										L"personal_pronoun_nominative|we{N_AGREE}", L"personal_pronoun|they{N_AGREE}", 
 										L"personal_pronoun|you{N_AGREE}", PLURAL, 1, 1,
 		2, L"predeterminer|both", L"quantifier|each*1",0, 1, 1, // You must bring us *each* a jewel.
 										0);
@@ -653,6 +653,12 @@ int createBasicPatterns(void)
 										1, L"noun|side", 0, 1, 1,
 										1, L"preposition|by", 0, 1, 1,
 										1, L"noun|side", 0, 1, 1,
+										0);
+	// Sometimes they will dig out a ditch or canal *all the way* from the edge of the pond up close to where the aspen grows .
+	cPattern::create(L"__ADVERB{_FINAL_IF_ALONE}", L"ALLWAY",
+										1, L"predeterminer|all", 0, 1, 1,
+										1, L"determiner|the", 0, 1, 1,
+										1, L"noun|way", 0, 1, 1,
 										0);
 	// this is used as an adverb, a preposition and a subordinator (included as a REL1 syntax)
 	cPattern::create(L"__AS_AS", L"", 

@@ -1578,6 +1578,59 @@ void Source::findAllChains2(int PEMAPosition,int position,vector <patternElement
 		}
 }
 
+// covers cases where an MNOUN pattern includes a noun which is not the first noun and it doesn't have a determiner ('figure' in the next sentence).
+// The fellow did not seem to mind whether he was seen or not , but Charnock thought he knew *his walk and figure* , and when he reached the track set off with the object of overtaking him . 
+// if return true, then ignore determiner cost for this parent pattern.
+// if return false, then process normally.
+bool Source::notFirstNounInMultiNounConstruction(int parentPosition, int parentPEMAOffset, int childPosition, int childEnd)
+{
+	bool consistent = true;
+	bool setAlready = false;
+	bool isFirst = false;
+	if (childPosition == parentPosition)
+	{
+		consistent = setAlready = isFirst = true;
+	}
+	else
+	{
+		vector < vector<tTagLocation> > mnounTagSets;
+		startCollectTags(debugTrace.traceDeterminer, nounDeterminerTagSet, parentPosition, parentPEMAOffset, mnounTagSets, false, false, L"notFirstNounInMultiNounConstruction"); // MNOUN[Z] may contain NOUN[J], but NOUN[J] is BLOCK so don't obey block!
+		// currently 8 MNOUN patterns: __NOUN J,O,P,7,A; __MNOUN Y,Z  __EMNOUN[]
+		for (auto tagSet : mnounTagSets)
+		{
+			bool childFound = false;
+			int firstPosition = parentPosition + pema[parentPEMAOffset].end; // set to 1 beyond the greatest position for a child
+			for (auto tag : tagSet)
+				if (tag.tag == NOUN_TAG)
+				{
+					firstPosition = min((int)tag.sourcePosition, firstPosition);
+					if (tag.sourcePosition == childPosition)
+						childFound = true;
+				}
+			if (!childFound) // if child not found, this is an invalid MNOUN set
+				continue;
+			if (!setAlready)
+			{
+				isFirst = firstPosition == childPosition;
+				setAlready = true;
+			}
+			else
+			{
+				if (isFirst != (firstPosition == childPosition))
+					consistent = false;
+			}
+		}
+	}
+	if (consistent && setAlready)
+	{
+		wstring parentStr, childStr;
+		lplog(L"%s:%d:%sBLOCK nounDeterminer cost: CHILD(%d:%s) %s in PARENT(%d:%s)", sourcePath.c_str(),parentPosition, (isFirst) ? L"DO NOT " : L"",
+			childPosition, phraseString(childPosition, childEnd, childStr, true).c_str(),
+			(isFirst) ? L"is first" : L"is NOT first",
+			parentPosition, phraseString(parentPosition, parentPosition + pema[parentPEMAOffset].end, parentStr, true).c_str());
+	}
+	return consistent && setAlready && !isFirst;
+}
 // if PM cost MAY has changed, recalculate the lowest PM cost.  If it didn't change, return 0.
 // if PM is a top level match, recalculate maxMatch.
 // get all patterns from the root pattern and calculate the minimum cost including the changed cost and then not.
@@ -1684,6 +1737,8 @@ int Source::cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patter
 				int origin=pema[PEMAOffset].origin;
 				if (origins.find(origin)!=origins.end()) continue;
 				origins.insert(origin);
+				if (stopCascadeWhenNDAlreadySet && patterns[pema[origin].getPattern()]->hasTag(MNOUN_TAG) && notFirstNounInMultiNounConstruction(parentBasePosition,origin, basePosition, basePosition + childPM->len))
+					continue;
 				vector <patternElementMatchArray::tPatternElementMatch *> chain;
 				chain.reserve(16); // most of the time there will be less than 16 elements matched in a pattern
 				bool stopCascadeBecauseNDAlreadySet = stopCascadeWhenNDAlreadySet && pema[origin].flagSet(patternElementMatchArray::COST_ND);
@@ -2252,18 +2307,34 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 			}
 		}
 	}
+	// when they got through he kept walking abreast , *elbow to elbow* almost .
+	// this covers the first noun, the second test below covers the second noun
+	if (begin <m.size()-2 && m[begin + 1].word->first == L"to" && m[begin].queryForm(verbForm) >= 0 &&
+		(m[begin].word->second.inflectionFlags&SINGULAR) &&
+		!(m[begin].word->second.inflectionFlags&(SINGULAR_OWNER | PLURAL_OWNER)) && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm)) < 5 &&
+		((begin >= 1 && m[begin - 1].word->first == L"from" && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm)) > 0) || m[begin + 2].word->first == m[begin].word->first))
+	{
+		// from face to face / rock to rock / stone to stone
+		if (debugTrace.traceDeterminer)
+		{
+			wstring phrase;
+			lplog(L"%d:%s[%s]:(%s)%s: Noun (%d,%d) has 'from' 'to' construction OR 'noun' to 'same noun' cost-=4", begin, (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->differentiator.c_str(), m[begin - 1].word->first.c_str(), phraseString(begin, end, phrase, true).c_str(), begin, end);
+		}
+		PNC -= 4;
+	}
 	// I went to jail with him.
 	if (begin>0 && m[begin-1].word->first==L"to" && m[begin].queryForm(verbForm)>=0 &&
 				(m[begin].word->second.inflectionFlags&SINGULAR) &&
 			 !(m[begin].word->second.inflectionFlags&(SINGULAR_OWNER|PLURAL_OWNER)) && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm))<5)  
 	{
+		// this covers the second noun, the previous test above covers the first noun
 		// from face to face / rock to rock / stone to stone
-		if (begin >= 3 && m[begin - 3].word->first == L"from" && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm)) > 0)
+		if ((begin >= 3 && m[begin - 3].word->first == L"from" && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm)) > 0) || m[begin - 2].word->first == m[begin].word->first)
 		{
 			if (debugTrace.traceDeterminer)
 			{
 				wstring phrase;
-				lplog(L"%d:%s[%s]:(%s)%s: Noun (%d,%d) has 'from' 'to' construction cost-=4", begin, (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->differentiator.c_str(), m[begin - 1].word->first.c_str(), phraseString(begin, end, phrase, true).c_str(), begin, end);
+				lplog(L"%d:%s[%s]:(%s)%s: Noun (%d,%d) has 'from' 'to' construction OR 'noun' to 'same noun' cost-=4", begin, (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->differentiator.c_str(), m[begin - 1].word->first.c_str(), phraseString(begin, end, phrase, true).c_str(), begin, end);
 			}
 			PNC -= 4;
 		}
