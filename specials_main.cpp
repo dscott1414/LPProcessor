@@ -5098,7 +5098,7 @@ int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, 
 	for (auto &&[adp, multiword] : agreeCountMap)
 	{
 		for (auto word : splitString(multiword, L'*'))
-			if (formDistribution[word].agreeSTLP + formDistribution[word].disagreeSTLP > 500)
+			if (formDistribution[word].agreeSTLP + formDistribution[word].disagreeSTLP > 100)
 			{
 				printFormDistribution(word, adp, formDistribution[word], maxWord, maxForm, maxDiff,limit);
 				limit++;
