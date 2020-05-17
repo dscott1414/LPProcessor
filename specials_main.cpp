@@ -4098,6 +4098,22 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"LP correct: verb not noun (noun cost 4, verb cost 0 REST OF TENSE)"]++; // probabilistic - see distribute errors
 		return 0;
 	}
+	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].isOnlyWinner(verbForm) &&
+		(source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_FIRST_SINGULAR) == VERB_PRESENT_FIRST_SINGULAR &&
+		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(primarySTLPMatch)) == 2 &&
+		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(verbForm)) == 0)
+	{
+		errorMap[L"LP correct: verb not noun (noun cost 2, verb cost 0 1SING)"]++; // probabilistic - see distribute errors
+		return 0;
+	}
+	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].isOnlyWinner(verbForm) &&
+		(source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_FIRST_SINGULAR) == VERB_PRESENT_FIRST_SINGULAR &&
+		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(primarySTLPMatch)) == 0 &&
+		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(verbForm)) == 4)
+	{
+		errorMap[L"LP correct: verb not noun (noun cost 0, verb cost 4 1SING)"]++; // probabilistic - see distribute errors
+		return 0;
+	}
 	if ((word == L"in" || word == L"since" || word==L"beyond") && primarySTLPMatch == L"preposition or conjunction" && (!iswalpha(source.m[wordSourceIndex + 1].word->first[0]) || source.m[wordSourceIndex+1].isOnlyWinner(coordinatorForm)))
 	{
 		errorMap[L"LP correct: not preposition or conjunction before punctuation or coordinator"]++; // probabilistic - see distribute errors
@@ -4936,6 +4952,14 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"LP correct: verb not noun (noun cost 4, verb cost 0 1SING)"] = numErrors * 166 / 203;
 	errorMap[L"ST correct: verb not noun (noun cost 4, verb cost 0 1SING)"] = numErrors * 33 / 203;
 	errorMap[L"diff: verb not noun (noun cost 4, verb cost 0 1SING)"] = numErrors * 4 / 203;
+
+	numErrors = errorMap[L"LP correct: verb not noun (noun cost 2, verb cost 0 1SING)"]; // 178 ST correct, out of 429 total
+	errorMap[L"LP correct: verb not noun (noun cost 2, verb cost 0 1SING)"] = numErrors * 251 / 429;
+	errorMap[L"ST correct: verb not noun (noun cost 2, verb cost 0 1SING)"] = numErrors * 178 / 429;
+
+	numErrors = errorMap[L"LP correct: verb not noun (noun cost 0, verb cost 4 1SING)"]; // 405 ST correct out of 525 total
+	errorMap[L"LP correct: verb not noun (noun cost 0, verb cost 4 1SING)"] = numErrors * 120 / 525;
+	errorMap[L"ST correct: verb not noun (noun cost 0, verb cost 4 1SING)"] = numErrors * 405 / 525;
 
 	numErrors = errorMap[L"LP correct: verb not noun (noun cost 4, verb cost 0 REST OF TENSE)"]; // 24 ST correct, 22 wrong or ambiguous out of 160 total
 	errorMap[L"LP correct: verb not noun (noun cost 4, verb cost 0) REST OF TENSE"] = numErrors * 114 / 160;

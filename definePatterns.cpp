@@ -666,6 +666,13 @@ int createBasicPatterns(void)
 											2, L"adverb", L"adjective", 0, 1, 1,
 											1, L"__NOUN*1",0,0,1, // as brave hearts as / as silent a type as / as stern a voice as 
 											2, L"preposition|as{P}", L"conjunction|as if", 0, 1, 1, 0); // when included in a _PP, mark this as a preposition
+	cPattern::create(L"__AS_AS", L"2",
+											1, L"adverb|as*-1", 0, 1, 1,
+											2, L"adverb", L"adjective", 0, 1, 1,
+											1, L"coordinator",0,1,1,
+											2, L"adverb", L"adjective", 0, 1, 1,
+											1, L"preposition|as{P}", 0, 1, 1, 0); // when included in a _PP, mark this as a preposition
+
 
 	/// TIME related adverbs
 	// this morning / this very morning / some morning
@@ -1019,7 +1026,14 @@ int createBasicPatterns(void)
 												 // every moment *RUNNING* | every moment GAINED (verb entry below) 11/4/2005
                      		 5,L"adjective{ADJ}",L"numeral_ordinal",L"verb*2",L"_NUMBER",L"noun*2",VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE|SINGULAR_OWNER|PLURAL_OWNER,1,1,
 												 1,L"adverb*1",0,0,1,0); // he said , nodding -gravely .
-	// lightly frozen,
+	// I thought that anything so bright and *lovely* should become mine .
+	cPattern::create(L"_ADJECTIVE_AFTER", L"2",
+													1, L"adverb|so", 0, 1, 1,
+													1, L"adjective{ADJ}", 0, 1, 1,
+													1, L"coordinator",0,1,1,
+													1, L"adjective{ADJ}", 0, 1, 1,
+													0); 
+// lightly frozen,
 	cPattern::create(L"__ADJ_S2",L"",1,L"__ADJECTIVE[*]",0,1,1,
 											 1,L",",0,1,1,0);
 	// Ally's or Ally
@@ -3200,6 +3214,21 @@ int createSecondaryPatterns2(void)
 									1,L"_IS",0,1,1,
 									1,L",",0,0,1,
 									 0);
+	// For that very reason 
+	cPattern::create(L"__INTRO_S1{_ONLY_BEGIN_MATCH}", L"REASON1",
+		1, L"preposition|for", 0, 1, 1,
+		1, L"demonstrative_determiner|that", 0, 1, 1,
+		1, L"adjective|very", 0, 0, 1,
+		1, L"noun|reason", 0, 1, 1,
+		0);
+	// All the more *reason*
+	cPattern::create(L"__INTRO_S1{_ONLY_BEGIN_MATCH}", L"REASON2",
+		1, L"predeterminer|all", 0, 1, 1,
+		1, L"determiner|the", 0, 1, 1,
+		1, L"adjective|more", 0, 1, 1,
+		1, L"noun|reason", 0, 1, 1,
+		0);
+
 		// simple command
 		// come on
 		// saddle up, we need to get going.
@@ -3370,7 +3399,7 @@ int createSecondaryPatterns2(void)
 						4,L"_VERBPRESENT{VERB:V_OBJECT}",L"_VERBPRESENT_CO",L"is{vS:id:V_OBJECT:VERB}",L"is_negation{vS:id:not:V_OBJECT:VERB}",
 							VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_PLURAL,1,1,
 						3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, // L"there{OBJECT}L" removed
-						1,L"__CLOSING__S1",0,1,3,
+						1,L"__CLOSING__S1",0,0,3,
 						0);
 	// be sure you wait.
 	cPattern::create(L"_COMMAND1{_FINAL:_ONLY_BEGIN_MATCH}", L"5",
