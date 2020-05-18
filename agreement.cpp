@@ -1621,10 +1621,10 @@ bool Source::notFirstNounInMultiNounConstruction(int parentPosition, int parentP
 			}
 		}
 	}
-	if (consistent && setAlready)
+	if (debugTrace.traceSecondaryPEMACosting && consistent && setAlready)
 	{
 		wstring parentStr, childStr;
-		lplog(L"%s:%d:%sBLOCK nounDeterminer cost: CHILD(%d:%s) %s in PARENT(%d:%s)", sourcePath.c_str(),parentPosition, (isFirst) ? L"DO NOT " : L"",
+		lplog(L"%d:%sBLOCK nounDeterminer cost: CHILD(%d:%s) %s in PARENT(%d:%s)", parentPosition, (isFirst) ? L"DO NOT " : L"",
 			childPosition, phraseString(childPosition, childEnd, childStr, true).c_str(),
 			(isFirst) ? L"is first" : L"is NOT first",
 			parentPosition, phraseString(parentPosition, parentPosition + pema[parentPEMAOffset].end, parentStr, true).c_str());
@@ -1737,7 +1737,8 @@ int Source::cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patter
 				int origin=pema[PEMAOffset].origin;
 				if (origins.find(origin)!=origins.end()) continue;
 				origins.insert(origin);
-				if (stopCascadeWhenNDAlreadySet && patterns[pema[origin].getPattern()]->hasTag(MNOUN_TAG) && notFirstNounInMultiNounConstruction(parentBasePosition,origin, basePosition, basePosition + childPM->len))
+				// if cascading noun determiner cost, multiple nouns in parent, and parent < 20 words, and not first noun in parent, then skip increasing cost for this parent.
+				if (stopCascadeWhenNDAlreadySet && patterns[pema[origin].getPattern()]->hasTag(MNOUN_TAG) && pema[origin].end<20 && notFirstNounInMultiNounConstruction(parentBasePosition,origin, basePosition, basePosition + childPM->len))
 					continue;
 				vector <patternElementMatchArray::tPatternElementMatch *> chain;
 				chain.reserve(16); // most of the time there will be less than 16 elements matched in a pattern
