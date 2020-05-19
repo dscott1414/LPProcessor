@@ -4648,9 +4648,14 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			return 0;
 		}
 	}
-	if ((word == L"either" || word==L"all") && source.m[wordSourceIndex].queryWinnerForm(quantifierForm) != -1 && source.m[wordSourceIndex].pma.queryPattern(L"__ALLOBJECTS_1")!=-1)
+	if ((word == L"either" || word == L"all") && source.m[wordSourceIndex].queryWinnerForm(quantifierForm) != -1 && source.m[wordSourceIndex].pma.queryPattern(L"__ALLOBJECTS_1") != -1)
 	{
 		errorMap[L"LP correct: ST says adverb and LP says quantifier before or as object"]++;
+		return 0;
+	}
+	if (word == L"as" && source.queryPattern(wordSourceIndex,L"__AS_AS") != -1)
+	{
+		errorMap[L"LP correct: LP AS_AS construction"]++;
 		return 0;
 	}
 	//if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(verbForm) != -1

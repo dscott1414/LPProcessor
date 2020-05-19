@@ -291,101 +291,25 @@ int patternElement::matchOne(Source &source,unsigned int sourcePosition,unsigned
 #endif
     return -1;
   }
-  bool oneMatch=false;
+  bool oneMatch=false, skipPatternMatchingBecauseSpecificWordMatched=false;
   vector <WordMatch>::iterator im=source.m.begin()+sourcePosition;
-  for (unsigned int pattern=0; pattern<patternIndexes.size(); pattern++)
-  {
-    unsigned int p=patternIndexes[pattern];
-		if (im->patterns.isSet(p))
-    {
-      patternMatchArray::tPatternMatch *pm=im->pma.content;
-      int startPositions=whatMatched.size(),msize=startPositions;
-      if (msize>MAX_PATTERN_NUM_MATCH)
-      {
-        if (!overMatchMemoryExceeded && t.traceParseInfo)
-          lplog(LOG_ERROR,L"ERROR:%d:pattern %s[%s]:position %d:Match size array reached over %d entries",
-          sourcePosition,patternName.c_str(),patterns[patternNum]->differentiator.c_str(),elementPosition,msize);
-        im->maxLACMatch=-1;
-        overMatchMemoryExceeded=true;
-        return -2;
-      }
-      unsigned int count=im->pma.count;
-      patterns[patternNum]->numComparisons+=count;
-      unsigned int I=0;
-      for (; I<count && pm->getPattern()< p; I++,pm++);
-			for (; I < count && pm->getPattern() == p; I++, pm++)
-			{
-				patterns[p]->numHits++;
-				bool found = false;
-				for (int m = msize - 1; m >= startPositions && !found; m--)
-					found = (whatMatched[m].endPosition == (pm->len + sourcePosition)); // avoid saving duplicate end positions for the same pattern
-				if (!found)
-				{
-					if (patterns[p]->noRepeat && lastElement != -1 &&
-						patterns[whatMatched[lastElement].getChildPattern()]->rootPattern == patterns[p]->rootPattern &&
-						patterns[whatMatched[lastElement].getChildPattern()]->noRepeat)
-					{
-#ifdef LOG_PATTERN_MATCHING
-						if (t.tracePatternMatching)
-							lplog(L"%d:pattern %s:position %d:No REPEAT match for pattern %s", sourcePosition, patternName.c_str(), elementPosition,
-								patterns[p]->name.c_str());
-#endif
-					}
-					else
-					{
-						// we are saving p<<CHILDPATBITS +pm->end because:
-						// saving the index I (which was done before) would not work because the indexes change because
-						//    of the implementation of multiple parse passes means insertion of patterns out of order.
-						// saving p (the pattern #) because this must fit inside of a short (eventually) in the pema array and
-						//    p and the pm->end won't necessarily fit - must make sure!
-						// so this is the current compromise.
-						// if this changes - must change also the treatment of elementMatchedSubIndex in push_back_unique function in pema!
-						//                   getMaxDisplaySize and printSentence in word.cpp
-#ifdef LOG_OLD_MATCH
-						whatMatched.push_back(matchElement(I, sourcePosition, pm->len + sourcePosition, patternElementMatchArray::subIndex(p, pm->len),
-							costs[form] + pm->getCost(), true, lastElement, elementPosition, form, pm->isNew()));
-#else
-						whatMatched.push_back(matchElement(I, sourcePosition, pm->len + sourcePosition, patternElementMatchArray::subIndex(p, pm->len),
-							patternCosts[pattern] + pm->getCost(), true, lastElement, elementPosition, pattern, pm->isNew(source.pass)));
-#endif
-						msize++;
-						oneMatch = true;
-					}
-				}
-				#ifdef LOG_PATTERN_MATCHING
-					if (t.tracePatternMatching)
-					{
-						wstring s;
-						lplog(L"%d:pattern %s:position %d:whatMatched #%d:End position %d, End element matched index %d subpattern %s matchString %sinserted:%s",
-							sourcePosition, patternName.c_str(), elementPosition,
-							whatMatched.size() - 1, pm->len, I, patterns[p]->name.c_str(), (!found) ? L"" : L"NOT ", matchesToString(whatMatched, whatMatched.size() - 1, s).c_str());
-					}
-				#endif
-      }
-    }
-#ifdef LOG_PATTERN_MATCHING
-    if (t.tracePatternMatching && !oneMatch)
-      lplog(L"%d:pattern %s:position %d:No match for pattern %s[%s]",sourcePosition,patternName.c_str(),elementPosition,
-      patterns[p]->name.c_str(),patterns[p]->differentiator.c_str());
-#endif
-  }
-  for (unsigned int form=0; form<formIndexes.size(); form++)
-  {
-		unsigned int f=formIndexes[form];
-    if (!im->forms.isSet(f))
-    {
+	for (unsigned int form = 0; form < formIndexes.size(); form++)
+	{
+		unsigned int f = formIndexes[form];
+		if (!im->forms.isSet(f))
+		{
 #ifdef LOG_PATTERN_MATCHING
 			if (t.tracePatternMatching)
-				lplog(L"%d:pattern %s:position %d:No match for form %s",sourcePosition,patternName.c_str(),elementPosition,
+				lplog(L"%d:pattern %s:position %d:No match for form %s", sourcePosition, patternName.c_str(), elementPosition,
 					Forms[f]->name.c_str());
 #endif
-    }
-    else
-    {
+		}
+		else
+		{
 			if (
 				(!inflectionFlags ||
 				(Forms[f]->inflectionsClass.empty() && !((im->flags&WordMatch::flagNounOwner) && (inflectionFlags&NO_OWNER)) && !((im->flags&(WordMatch::flagAllCaps | WordMatch::flagFirstLetterCapitalized)) && (inflectionFlags&ONLY_CAPITALIZED))) ||
-					inflectionMatch(im->word->second.inflectionFlags, im->flags, Forms[f]->inflectionsClass,t)) &&
+					inflectionMatch(im->word->second.inflectionFlags, im->flags, Forms[f]->inflectionsClass, t)) &&
 					(specificWords[form].empty() || im->word->first == specificWords[form] || (im->word->second.mainEntry != wNULL && im->word->second.mainEntry->first == specificWords[form])))
 			{
 				int ME = im->queryForm(f);
@@ -417,30 +341,113 @@ int patternElement::matchOne(Source &source,unsigned int sourcePosition,unsigned
 					cost += 10;
 				whatMatched.push_back(matchElement(-1, sourcePosition, sourcePosition + 1, ME, cost, false, lastElement, elementPosition, form, false));
 				oneMatch = true;
-				#ifdef LOG_PATTERN_MATCHING
-					if (t.tracePatternMatching)
-					{
-						wstring s;
-						lplog(L"%d:pattern %s:position %d:whatMatched #%d:form %s::%s found. matchString inserted:%s",
-							sourcePosition, patternName.c_str(), elementPosition, whatMatched.size() - 1,
-							Forms[f]->name.c_str(), specificWords[form].c_str(), matchesToString(whatMatched, whatMatched.size() - 1, s).c_str());
-					}
-				#endif
+#ifdef LOG_PATTERN_MATCHING
+				if (t.tracePatternMatching)
+				{
+					wstring s;
+					lplog(L"%d:pattern %s:position %d:whatMatched #%d:form %s::%s found. matchString inserted:%s",
+						sourcePosition, patternName.c_str(), elementPosition, whatMatched.size() - 1,
+						Forms[f]->name.c_str(), specificWords[form].c_str(), matchesToString(whatMatched, whatMatched.size() - 1, s).c_str());
+				}
+#endif
 				// if a word is specifically marked as a match, no more matches will be searched.  This allows a specific word to over-rule a more general search form (own, in ALLOBJECTS_2[2])
-				if (specificWords[form].length())
+				if (skipPatternMatchingBecauseSpecificWordMatched = specificWords[form].length())
+				{
+					// IF the cost of the specific word named is 0 or negative, then assume the intent is to make the lowest cost option this particular word (thus matching more patterns won't hurt).
+					// IF the cost is positive, then assume that the intent is to make this word more expensive and thus do not match more patterns when they will match this word without more cost.
+					if (formCosts[form] <= 0)
+						skipPatternMatchingBecauseSpecificWordMatched = false;
 					break;
-      }
-			#ifdef LOG_PATTERN_MATCHING
-      else if (t.tracePatternMatching)
-      { 
-				wstring inflectionName,inflectionName2;
-				lplog(L"%d:pattern %s:position %d:Form %s:%s found inflective%s but did not match inflective%s (or form).",sourcePosition,patternName.c_str(),elementPosition,
-							Forms[f]->name.c_str(),specificWords[form].c_str(),getInflectionName(im->word->second.inflectionFlags,f,inflectionName),
-							getInflectionName(inflectionFlags,f,inflectionName2));
-      }
-			#endif
-    }
-  }
+				}
+			}
+#ifdef LOG_PATTERN_MATCHING
+			else if (t.tracePatternMatching)
+			{
+				wstring inflectionName, inflectionName2;
+				lplog(L"%d:pattern %s:position %d:Form %s:%s found inflective%s but did not match inflective%s (or form).", sourcePosition, patternName.c_str(), elementPosition,
+					Forms[f]->name.c_str(), specificWords[form].c_str(), getInflectionName(im->word->second.inflectionFlags, f, inflectionName),
+					getInflectionName(inflectionFlags, f, inflectionName2));
+			}
+#endif
+		}
+	}
+	if (!skipPatternMatchingBecauseSpecificWordMatched)
+		for (unsigned int pattern = 0; pattern < patternIndexes.size(); pattern++)
+		{
+			unsigned int p=patternIndexes[pattern];
+			if (im->patterns.isSet(p))
+			{
+				patternMatchArray::tPatternMatch *pm=im->pma.content;
+				int startPositions=whatMatched.size(),msize=startPositions;
+				if (msize>MAX_PATTERN_NUM_MATCH)
+				{
+					if (!overMatchMemoryExceeded && t.traceParseInfo)
+						lplog(LOG_ERROR,L"ERROR:%d:pattern %s[%s]:position %d:Match size array reached over %d entries",
+						sourcePosition,patternName.c_str(),patterns[patternNum]->differentiator.c_str(),elementPosition,msize);
+					im->maxLACMatch=-1;
+					overMatchMemoryExceeded=true;
+					return -2;
+				}
+				unsigned int count=im->pma.count;
+				patterns[patternNum]->numComparisons+=count;
+				unsigned int I=0;
+				for (; I<count && pm->getPattern()< p; I++,pm++);
+				for (; I < count && pm->getPattern() == p; I++, pm++)
+				{
+					patterns[p]->numHits++;
+					bool found = false;
+					for (int m = msize - 1; m >= startPositions && !found; m--)
+						found = (whatMatched[m].endPosition == (pm->len + sourcePosition)); // avoid saving duplicate end positions for the same pattern
+					if (!found)
+					{
+						if (patterns[p]->noRepeat && lastElement != -1 &&
+							patterns[whatMatched[lastElement].getChildPattern()]->rootPattern == patterns[p]->rootPattern &&
+							patterns[whatMatched[lastElement].getChildPattern()]->noRepeat)
+						{
+	#ifdef LOG_PATTERN_MATCHING
+							if (t.tracePatternMatching)
+								lplog(L"%d:pattern %s:position %d:No REPEAT match for pattern %s", sourcePosition, patternName.c_str(), elementPosition,
+									patterns[p]->name.c_str());
+	#endif
+						}
+						else
+						{
+							// we are saving p<<CHILDPATBITS +pm->end because:
+							// saving the index I (which was done before) would not work because the indexes change because
+							//    of the implementation of multiple parse passes means insertion of patterns out of order.
+							// saving p (the pattern #) because this must fit inside of a short (eventually) in the pema array and
+							//    p and the pm->end won't necessarily fit - must make sure!
+							// so this is the current compromise.
+							// if this changes - must change also the treatment of elementMatchedSubIndex in push_back_unique function in pema!
+							//                   getMaxDisplaySize and printSentence in word.cpp
+	#ifdef LOG_OLD_MATCH
+							whatMatched.push_back(matchElement(I, sourcePosition, pm->len + sourcePosition, patternElementMatchArray::subIndex(p, pm->len),
+								costs[form] + pm->getCost(), true, lastElement, elementPosition, form, pm->isNew()));
+	#else
+							whatMatched.push_back(matchElement(I, sourcePosition, pm->len + sourcePosition, patternElementMatchArray::subIndex(p, pm->len),
+								patternCosts[pattern] + pm->getCost(), true, lastElement, elementPosition, pattern, pm->isNew(source.pass)));
+	#endif
+							msize++;
+							oneMatch = true;
+						}
+					}
+					#ifdef LOG_PATTERN_MATCHING
+						if (t.tracePatternMatching)
+						{
+							wstring s;
+							lplog(L"%d:pattern %s:position %d:whatMatched #%d:End position %d, End element matched index %d subpattern %s matchString %sinserted:%s",
+								sourcePosition, patternName.c_str(), elementPosition,
+								whatMatched.size() - 1, pm->len, I, patterns[p]->name.c_str(), (!found) ? L"" : L"NOT ", matchesToString(whatMatched, whatMatched.size() - 1, s).c_str());
+						}
+					#endif
+				}
+			}
+	#ifdef LOG_PATTERN_MATCHING
+			if (t.tracePatternMatching && !oneMatch)
+				lplog(L"%d:pattern %s:position %d:No match for pattern %s[%s]",sourcePosition,patternName.c_str(),elementPosition,
+				patterns[p]->name.c_str(),patterns[p]->differentiator.c_str());
+	#endif
+		}
 	// if matched, immediately return true
 	if (oneMatch)
 		return 1;

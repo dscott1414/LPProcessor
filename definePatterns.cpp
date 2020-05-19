@@ -375,7 +375,8 @@ int createNouns(void)
 										0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}", L"WE",
 		1, L"personal_pronoun_nominative|we", 0, 1, 1,
-		1, L"noun*1", FEMALE_GENDER | MALE_GENDER|PLURAL, 1, 1,
+		1, L"numeral_cardinal",0,0,1,
+		2, L"numeral_cardinal", L"noun*1", FEMALE_GENDER | MALE_GENDER|PLURAL, 1, 1,
 		0);
 	// this is the same as "5" above but it is marked as a single object so "Iraqi weapons labs" is marked as a single object
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}",L"N",
@@ -2474,7 +2475,7 @@ void createPrepositionalPhrases(void)
 									 1,L"preposition{P}",0,0,1, // from within - complex prepositions
 									 1,L"_ADVERB*3",0,0,1, // I haven't seen you for SIMPLY centuries, my dear. // adverbial use should be rare - prefer adjectives attached to the nouns over adverbs.
 									 // Under the original act, how many judges were to be on the court? - __NOUNREL should have at least a cost of 2 because it matches too much (with its comma)
-									 6,L"_NOUN_OBJ{PREPOBJECT}",L"__NOUN[*]{PREPOBJECT}",L"__MNOUN[*]{PREPOBJECT}",L"__NOUNREL*4{PREPOBJECT}",L"_ADJECTIVE[*]*4",L"__NOUNRU{PREPOBJECT}",0,1,1,  // _NOUN* includes NOUN[D] and NOUN[E]
+									 8, L"personal_pronoun_nominative|i*6", L"personal_pronoun_nominative|we*6", L"_NOUN_OBJ{PREPOBJECT}",L"__NOUN[*]{PREPOBJECT}",L"__MNOUN[*]{PREPOBJECT}",L"__NOUNREL*4{PREPOBJECT}",L"_ADJECTIVE[*]*4",L"__NOUNRU{PREPOBJECT}",0,1,1,  // _NOUN* includes NOUN[D] and NOUN[E]
 									 0);
 	// The pursuit of managers and of players had *left* her continually alone .
 	cPattern::create(L"_PP{_FINAL_IF_ALONE:_BLOCK:PREP:_NO_REPEAT}", L"2C",

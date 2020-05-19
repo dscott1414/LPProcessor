@@ -404,6 +404,7 @@ void createQuestionPatterns(void)
 									1,L"_IS{VERB:vS:id}",0,1,1, 
 									1,L"__C1__S1",0,0,1,  // this is the subject
 									1,L"__CLOSING__S1",0,0,3,
+									1,L"__MSTAIL",0,0,1,
 									0);
 	// what is the tree green for // What is "WWE" short for?
 	cPattern::create(L"_Q2{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH:PREP:_QUESTION}",L"I",
