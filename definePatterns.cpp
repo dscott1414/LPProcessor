@@ -486,7 +486,7 @@ int createNouns(void)
 										1, L"predeterminer|both*-1", 0, 0, 1,
 										0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:SINGULAR:MNOUN:_BLOCK}",L"O",
-										1,L"quantifier|either*-2",0,0,1,
+										1,L"quantifier|either*-3",0,0,1,
 										3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"_PP",0,1,1, // he had to make the journey between the drydock and his shop *either* by automobile or aeroplane .
 										1,L"coordinator|or",0,1,1,
 										3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"__NOUNREL{MOBJECT}",0,1,1,0);
@@ -653,6 +653,20 @@ int createBasicPatterns(void)
 										1, L"noun|side", 0, 1, 1,
 										1, L"preposition|by", 0, 1, 1,
 										1, L"noun|side", 0, 1, 1,
+										0);
+	cPattern::create(L"__ADVERB", L"FACE",
+										1, L"noun|face", 0, 1, 1,
+										1, L"preposition|to", 0, 1, 1,
+										1, L"noun|face", 0, 1, 1,
+										0);
+	cPattern::create(L"__ADVERB", L"SORTOF",
+										1, L"noun|sort", 0, 1, 1,
+										1, L"preposition|of*1", 0, 1, 1,
+										0);
+	cPattern::create(L"_ADVERB{_FINAL}", L"8",
+										4, L"adverb|little", L"noun|inch", L"noun|step", L"noun|bit", 0, 1, 1,
+										1, L"preposition|by", 0, 1, 1,
+										4, L"adverb|little", L"noun|inch", L"noun|step", L"noun|bit", 0, 1, 1, 
 										0);
 	// Sometimes they will dig out a ditch or canal *all the way* from the edge of the pond up close to where the aspen grows .
 	cPattern::create(L"__ADVERB{_FINAL_IF_ALONE}", L"ALLWAY",
@@ -916,10 +930,6 @@ int createBasicPatterns(void)
 	//														1,L"adverb|much",0,1,1,
 	//														1,L"as",0,1,1,
 	//														0);
-	cPattern::create(L"_ADVERB{_FINAL}",L"8",
-											4,L"adverb|little",L"noun|inch",L"noun|step",L"noun|bit",0,1,1,
-											1,L"preposition|by",0,1,1,
-											4,L"adverb|little",L"noun|inch",L"noun|step",L"noun|bit",0,1,1,0);
 	cPattern::create(L"_ADVERB{_FINAL}", L"AMONG",
 		1, L"preposition|among", 0, 1, 1,
 		1, L"personal_pronoun_accusative|them", 0, 1, 1,
@@ -1097,7 +1107,7 @@ int createBasicPatterns(void)
 															1,L"__ANDADJ",0,1,1,
 															0);
 	cPattern::create(L"__ADJECTIVE{SINGULAR}", L"C",
-															1, L"quantifier|either*-2", 0, 0, 1, // determiner agrees with ST
+															1, L"quantifier|either*-3", 0, 0, 1, // determiner agrees with ST
 															1, L"__ADJECTIVE[*]", 0, 1, 1,
 															1, L"coordinator|or", 0, 1, 1,
 															1, L"__ADJECTIVE[*]", 0, 1, 1,
@@ -1785,7 +1795,7 @@ int createVerbPatterns(void)
 											  1,L"_VERBPRESENT",0,1,1,
 												0);
 	cPattern::create(L"_VERBPRESENTC{VERB}", L"O",
-												1, L"quantifier|either",0,1,1,
+												1, L"quantifier|either*-2",0,1,1,
 												1, L"_VERBPRESENT", 0, 1, 1,
 												1, L"coordinator|or", 0, 1, 1,
 												1, L"_VERBPRESENT", 0, 1, 1,
@@ -1836,7 +1846,7 @@ int createVerbPatterns(void)
 												1, L"_VERBPAST", 0, 1, 1,
 												0);
 	cPattern::create(L"_VERBPASTC{VERB}", L"O",
-												1, L"quantifier|either", 0, 1, 1,
+												1, L"quantifier|either*-2", 0, 1, 1,
 												1, L"_VERBPAST", 0, 1, 1,
 												1, L"coordinator|or", 0, 1, 1,
 												1, L"_VERBPAST", 0, 1, 1,
@@ -2583,7 +2593,7 @@ int createSecondaryPatterns2(void)
 				16,L"__NOUN[*]{SUBJECT}",L"__MNOUN[*]{SUBJECT}",L"_INFP*2{GNOUN:SINGULAR:SUBJECT}",L"interrogative_pronoun{N_AGREE:SINGULAR:SUBJECT}",
 						L"interrogative_determiner{N_AGREE:SINGULAR:SUBJECT}", 
 						L"there*-1{N_AGREE:SINGULAR:PLURAL:SUBJECT}",L"adverb|here*-1{N_AGREE:SINGULAR:PLURAL:SUBJECT}",
-						L"quantifier|neither{N_AGREE:PLURAL:SUBJECT}", L"quantifier|either{N_AGREE:SINGULAR:SUBJECT}",
+						L"quantifier|neither{N_AGREE:PLURAL:SUBJECT}", L"quantifier|either*-1{N_AGREE:SINGULAR:SUBJECT}",
 						L"_REL1[*]*2{SUBJECT:GNOUN:SINGULAR}",L"adjective*2{SUBJECT:GNOUN}",L"_ADJECTIVE*10{SUBJECT:GNOUN}",
 						L"_VERBREL2*2{SUBJECT:GNOUN:SINGULAR:_BLOCK:EVAL}",L"__QSUBJECT{SUBJECT:GNOUN:SINGULAR}",L"__NOUNRU{SUBJECT}",
 						L"noun{SUBJECT:N_AGREE}",SINGULAR_OWNER|PLURAL_OWNER,1,1, // Poirot's were pleasantly vague .
