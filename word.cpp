@@ -540,6 +540,15 @@ bool tFI::hasVerbForm()
 	return false;
 }
 
+bool tFI::hasWinnerNounForm(int winnerForms)
+{
+	LFS
+		for (unsigned int *f = formsArray + formsOffset, *fend = formsArray + formsOffset + count, I = 0; f != fend; f++, I++)
+			if (Forms[*f]->isNounForm && (!winnerForms || ((1 << I)&winnerForms) != 0))
+				return true;
+	return false;
+}
+
 bool tFI::hasNounForm()
 {
 	LFS

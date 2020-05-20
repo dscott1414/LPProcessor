@@ -430,6 +430,7 @@ public:
   int query(int form);
 	bool hasWinnerVerbForm(int winnerForms);
 	bool hasVerbForm();
+	bool hasWinnerNounForm(int winnerForms);
 	bool hasNounForm();
 	int query(wstring form);
   int lowestSeparatorCost();

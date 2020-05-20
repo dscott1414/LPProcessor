@@ -372,8 +372,15 @@ wstring WordMatch::patternWinnerFormString(wstring &winnerForms)
 }
 
 bool WordMatch::hasWinnerVerbForm(void)
-{ LFS
-	return word->second.hasWinnerVerbForm(tmpWinnerForms);
+{
+	LFS
+		return word->second.hasWinnerVerbForm(tmpWinnerForms);
+}
+
+bool WordMatch::hasWinnerNounForm(void)
+{
+	LFS
+		return word->second.hasWinnerNounForm(tmpWinnerForms);
 }
 
 int WordMatch::queryWinnerForm(wstring sForm)

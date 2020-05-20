@@ -1309,6 +1309,13 @@ bool matchEntity(Source &source, int wordIndex, int matchType, wstring patternOr
 		(matchType == 3 && (im.flags&WordMatch::flagNotMatched) != 0));
 }
 
+bool additionalMatchingLogic(Source &source, int wordIndex, int primaryPMAOffset, int secondaryPMAOffset)
+{
+	// if __ALLOBJECTS_1 starts with one adverb which is one word long
+	int primaryPatternEnd = wordIndex + source.m[wordIndex].pma[primaryPMAOffset].len;
+	//int secondaryPatternEnd = wordIndex + source.m[wordIndex].pma[secondaryPMAOffset].len;
+	return (source.m[wordIndex].pma[secondaryPMAOffset].len == 1 && source.queryPattern(wordIndex + 1, L"__NOUN") != -1 && source.m[wordIndex].queryForm(prepositionForm) != -1);
+}
 // primaryType, secondaryType:
 // 0: pattern - if differentiator is NOT specified, then any differentiator is ok.
 // 1: form - any formclass (string)
@@ -1341,27 +1348,21 @@ int patternOrWordAnalysisFromSource(Source &source, int sourceId, wstring path, 
 				{
 					int patternEnd = wordIndex + im.pma[primaryPMAOffset].len;
 					/*additional logic begin*/
-					// if the beginning word has a verb form which is PRESENT_PARTICIPLE AND the rest of the word is either PROPER_NOUN or honorific, then match!
-					if (source.m[wordIndex].queryForm(verbForm) && (source.m[wordIndex].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE && (secondaryPMAOffset = source.m[wordIndex + 1].pma.queryPattern(L"__NAME")) != -1)
+					if (additionalMatchingLogic(source,wordIndex, primaryPMAOffset, secondaryPMAOffset))
 					{
-						secondaryPMAOffset = secondaryPMAOffset & ~matchElement::patternFlag;
-						int secondaryPatternEnd = wordIndex + 1+source.m[wordIndex+1].pma[secondaryPMAOffset].len;
-						if (patternEnd == secondaryPatternEnd)
+						/*additional logic end*/
+						getSentenceWithTags(source, wordIndex, patternEnd, source.sentenceStarts[ss - 1], source.sentenceStarts[ss], im.pma[primaryPMAOffset].pemaByPatternEnd, sentence);
+						wstring adiff = patterns[im.pma[primaryPMAOffset].getPattern()]->differentiator;
+						wstring path = source.sourcePath.substr(16, source.sourcePath.length() - 20);
+						if (primaryDifferentiator.find(L'*') == wstring::npos)
 						{
-							/*additional logic end*/
-							getSentenceWithTags(source, wordIndex, patternEnd, source.sentenceStarts[ss - 1], source.sentenceStarts[ss], im.pma[primaryPMAOffset].pemaByPatternEnd, sentence);
-							wstring adiff = patterns[im.pma[primaryPMAOffset].getPattern()]->differentiator;
-							wstring path = source.sourcePath.substr(16, source.sourcePath.length() - 20);
-							if (primaryDifferentiator.find(L'*') == wstring::npos)
-							{
-								lplog(LOG_ERROR, L"%s", sentence.c_str());
-								lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, patternEnd, sentence.c_str());
-							}
-							else
-							{
-								lplog(LOG_ERROR, L"[%s]:%s", adiff.c_str(), sentence.c_str());
-								lplog(LOG_INFO, L"%s[%s](%d-%d):%s", path.c_str(), adiff.c_str(), wordIndex, patternEnd, sentence.c_str());
-							}
+							lplog(LOG_ERROR, L"%s", sentence.c_str());
+							lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, patternEnd, sentence.c_str());
+						}
+						else
+						{
+							lplog(LOG_ERROR, L"[%s]:%s", adiff.c_str(), sentence.c_str());
+							lplog(LOG_INFO, L"%s[%s](%d-%d):%s", path.c_str(), adiff.c_str(), wordIndex, patternEnd, sentence.c_str());
 						}
 					}
 				}
@@ -2472,7 +2473,7 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 				return 0;
 			}
 		}
-		return -3;
+		return 0;
 	}
 	if (source.m[wordSourceIndex].word->first == L"that" && (((source.m[wordSourceIndex].flags&WordMatch::flagInQuestion) && wordSourceIndex > 0 && 
 		(source.m[wordSourceIndex - 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex - 1].queryForm(L"is_negation") >= 0) &&
@@ -2490,6 +2491,43 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 		source.m[wordSourceIndex].setWinner(source.m[wordSourceIndex].queryForm(predeterminerForm));
 		source.m[wordSourceIndex].unsetWinner(adverbFormOffset);
 		return -2;
+	}
+	int primaryPMAOffset = source.m[wordSourceIndex].pma.queryPattern(L"__ALLOBJECTS_1");
+	int secondaryPMAOffset = source.m[wordSourceIndex].pma.queryPattern(L"_ADVERB");
+	if (primaryPMAOffset !=-1 && secondaryPMAOffset !=-1)
+	{
+		primaryPMAOffset = primaryPMAOffset & ~matchElement::patternFlag;
+		secondaryPMAOffset = secondaryPMAOffset & ~matchElement::patternFlag;
+		set <wstring> particles = { L"down",L"out",L"off",L"up" };
+		if (particles.find(source.m[wordSourceIndex].word->first) == particles.end() && source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(prepositionForm))<4 && source.m[wordSourceIndex].pma[secondaryPMAOffset].len == 1 && source.queryPattern(wordSourceIndex + 1, L"__NOUN") != -1 && source.m[wordSourceIndex].queryForm(prepositionForm) != -1)
+		{
+			source.m[wordSourceIndex].setWinner(source.m[wordSourceIndex].queryForm(prepositionForm));
+			source.m[wordSourceIndex].unsetWinner(adverbFormOffset);
+			return 0;
+		}
+	}
+	set <wstring> notObjects = { L"we",L"i",L"he",L"they" };
+	if (wordSourceIndex < source.m.size() - 2 && source.m[wordSourceIndex + 1].hasWinnerNounForm() && source.m[wordSourceIndex].isOnlyWinner(adverbForm) &&
+		source.m[wordSourceIndex].queryForm(prepositionForm) != -1 && source.m[wordSourceIndex].word->first != L"as" && source.m[wordSourceIndex + 1].queryWinnerForm(PROPER_NOUN_FORM) == -1)
+	{
+		if (notObjects.find(source.m[wordSourceIndex + 1].word->first) == notObjects.end() &&
+			(!iswalpha(source.m[wordSourceIndex + 2].word->first[0]) || source.m[wordSourceIndex + 2].queryWinnerForm(coordinatorForm) != -1))
+		{
+			source.m[wordSourceIndex].setWinner(source.m[wordSourceIndex].queryForm(prepositionForm));
+			source.m[wordSourceIndex].unsetWinner(adverbFormOffset);
+			errorMap[L"LP correct: preposition/conjunction NOT adverb rule"]++;
+			fdi->second.LPAlreadyAccountedFormDistribution[L"preposition"]++;
+			return -1;
+		}
+		int conjunctionFormOffset;
+		if (notObjects.find(source.m[wordSourceIndex + 1].word->first) != notObjects.end() && (conjunctionFormOffset = source.m[wordSourceIndex].queryForm(conjunctionForm))!=-1)
+		{
+			source.m[wordSourceIndex].setWinner(conjunctionFormOffset);
+			source.m[wordSourceIndex].unsetWinner(adverbFormOffset);
+			errorMap[L"LP correct: preposition/conjunction NOT adverb rule"]++;
+			fdi->second.LPAlreadyAccountedFormDistribution[L"conjunction"]++;
+			return -1;
+		}
 	}
 	return 0;
 }
@@ -2960,10 +2998,28 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	// possessive pronoun section - end
 	// 35. round is never a verb in the gutenberg corpus
-	if (word == L"round" && (source.m[wordSourceIndex].queryWinnerForm(L"preposition") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0) && primarySTLPMatch == L"verb")
+	if (word == L"round")
 	{
-		errorMap[L"LP correct: word 'round': ST says verb LP says preposition or adverb.  round as studied is never a verb in > 200 examples from corpus"]++;
-		return 0;
+		if ((source.m[wordSourceIndex].queryWinnerForm(L"preposition") >= 0 || source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0) && primarySTLPMatch == L"verb")
+		{
+			errorMap[L"LP correct: word 'round': ST says verb LP says preposition or adverb.  round as studied is never a verb in > 200 examples from corpus"]++;
+			return 0;
+		}
+		if (source.m[wordSourceIndex].isOnlyWinner(prepositionForm) && (primarySTLPMatch == L"noun" || primarySTLPMatch == L"adverb"))
+		{
+			int primaryPMAOffset = source.m[wordSourceIndex].pma.queryPattern(L"__ALLOBJECTS_1");
+			int secondaryPMAOffset = source.m[wordSourceIndex].pma.queryPattern(L"_ADVERB");
+			if (primaryPMAOffset != -1 && secondaryPMAOffset != -1)
+			{
+				primaryPMAOffset = primaryPMAOffset & ~matchElement::patternFlag;
+				secondaryPMAOffset = secondaryPMAOffset & ~matchElement::patternFlag;
+				if (source.m[wordSourceIndex].pma[secondaryPMAOffset].len == 1 && source.queryPattern(wordSourceIndex + 1, L"__NOUN") != -1 && source.m[wordSourceIndex].queryForm(prepositionForm) != -1)
+				{
+					errorMap[L"LP correct: word 'round': ST says adverb/noun LP says preposition."]++;  // ST correct 5, out of 126
+					return 0;
+				}
+			}
+		}
 	}
 	// 36. please is rarely a verb.  It is mostly used as a discourse politeness marker (Longman)
 	if (word == L"please" && source.m[wordSourceIndex].queryWinnerForm(L"politeness_discourse_marker") >= 0 && (primarySTLPMatch == L"verb" || primarySTLPMatch == L"adverb" || primarySTLPMatch == L"adjective"))
@@ -4555,7 +4611,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: now in a PP is a noun."]++;
 		return 0;
 	}
-	if ((primarySTLPMatch == L"preposition or conjunction" || word==L"but") && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
+	if ((primarySTLPMatch == L"preposition or conjunction" || word==L"but") && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 && wordSourceIndex < source.m.size() - 1)
 	{
 		if (source.m[wordSourceIndex + 1].queryWinnerForm(prepositionForm) != -1)
 		{
@@ -4573,11 +4629,29 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb before verb"]++; // LP Wrong 27 / LP Correct 258  distribute errors
 			return 0;
 		}
-		if (source.m[wordSourceIndex + 1].queryWinnerForm(nounForm)!=-1 && source.m[wordSourceIndex].isOnlyWinner(adverbForm) && !WordClass::isDash(source.m[wordSourceIndex-1].word->first[0]))
+		if (source.m[wordSourceIndex + 1].queryWinnerForm(nounForm) != -1 && source.m[wordSourceIndex].isOnlyWinner(adverbForm) && !WordClass::isDash(source.m[wordSourceIndex - 1].word->first[0]))
 		{
 			errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb before noun"]++; // ST Wrong 6 / ST Correct 171  distribute errors
 			return 0;
 		}
+		/*
+		set <wstring> notObjects = { L"we",L"i",L"he",L"they" };
+		if (wordSourceIndex < source.m.size() - 2 && source.m[wordSourceIndex + 1].hasWinnerNounForm() && source.m[wordSourceIndex].isOnlyWinner(adverbForm) &&
+			source.m[wordSourceIndex].queryForm(prepositionForm) != -1 && word != L"as" && source.m[wordSourceIndex + 1].queryWinnerForm(PROPER_NOUN_FORM)==-1)
+		{
+			if (notObjects.find(source.m[wordSourceIndex + 1].word->first) == notObjects.end() &&
+				(!iswalpha(source.m[wordSourceIndex + 2].word->first[0]) || source.m[wordSourceIndex + 2].queryWinnerForm(coordinatorForm) != -1))
+			{
+				partofspeech += L"**ADVERBPREP?";
+				//return 0;
+			}
+			if (notObjects.find(source.m[wordSourceIndex + 1].word->first) != notObjects.end())
+			{
+				partofspeech += L"**ADVERBCONJ?";
+				//return 0;
+			}
+		}
+		*/
 		if (source.m[wordSourceIndex].pma.queryPattern(L"_INFP") != -1)
 		{
 			errorMap[L"ST correct: ST says preposition or conjunction and LP says adverb before INFP"]++; 
@@ -4604,7 +4678,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			return 0;
 		}
 		int timePEMAOffset = -1;
-		if ((timePEMAOffset = source.queryPattern(wordSourceIndex, L"_TIME")) != -1 && source.pema[timePEMAOffset].end == 1 && wordSourceIndex+ source.pema[timePEMAOffset].begin==startOfSentence)
+		if ((timePEMAOffset = source.queryPattern(wordSourceIndex, L"_TIME")) != -1)
 		{
 			errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb in TIME expression"]++;
 			return 0;
@@ -5153,6 +5227,10 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"ST correct: ST says adjective, LP says non-past verb (highly ambiguous)"] = numErrors * 114 / 320;
 	errorMap[L"diff: ST says adjective, LP says non - past verb(highly ambiguous)"] = numErrors * 12 / 320;
 
+	numErrors= errorMap[L"LP correct: word 'round': ST says adverb/noun LP says preposition."]++;  // ST correct 5, out of 126
+	errorMap[L"LP correct: word 'round': ST says adverb/noun LP says preposition."] = numErrors * 121 / 126;
+	errorMap[L"ST correct: word 'round': ST says adverb/noun LP says preposition."] = numErrors * 5 / 126;
+
 }
 
 int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, bool lockPerSource)
@@ -5653,10 +5731,10 @@ void wmain(int argc,wchar_t *argv[])
 		//patternOrWordAnalysis(source, step, L"__ADJECTIVE", L"MTHAN", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__NOUN", L"F", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
-		//patternOrWordAnalysis(source, step, L"__NOUN", L"*",L"", L"", Source::GUTENBERG_SOURCE_TYPE, 0,4, specialExtension);
+		patternOrWordAnalysis(source, step, L"__ALLOBJECTS_1", L"1",L"_ADVERB", L"*", Source::GUTENBERG_SOURCE_TYPE, 0,0, specialExtension);
 		//patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false, specialExtension);
 		// scans the test file for any unmatched sentences
-		patternOrWordAnalysis(source, step, L"", L"", L"", L"", Source::TEST_SOURCE_TYPE, 3,4,L""); // TODO: testing weight change on _S1.
+		//patternOrWordAnalysis(source, step, L"", L"", L"", L"", Source::TEST_SOURCE_TYPE, 3,4,L""); // TODO: testing weight change on _S1.
 		break;
 	case 60:
 		stanfordCheck(source, step, true,specialExtension,true);

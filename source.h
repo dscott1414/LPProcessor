@@ -641,6 +641,7 @@ public:
 	void getWinnerForms(vector <int> &winnerForms);
 	int getNumWinners();
 	bool hasWinnerVerbForm(void);
+	bool hasWinnerNounForm(void);
 	bool isWinnerSeparator(void);
 	bool isPhysicalObject(void);
 	bool isTopLevel(void);
