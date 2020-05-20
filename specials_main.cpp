@@ -3468,6 +3468,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 					errorMap[L"LP correct: ST says adverb but LP says adjective with __S1[7] alone"]++;
 				return 0;
 			}
+			if (source.queryPattern(wordSourceIndex, L"_TIME") != -1)
+			{
+				errorMap[L"ST correct: ST says adverb but LP says adjective in _TIME structure"]++;
+				return 0;
+			}
 		}
 		if (word == L"o'clock" && primarySTLPMatch == L"adverb")
 		{
@@ -3714,6 +3719,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				errorMap[L"LP correct: ST says adjective but LP says adverb with dash and then a non-noun"]++;
 				return 0;
 			}
+		}
+		if (source.queryPattern(wordSourceIndex, L"_TIME") != -1)
+		{
+			errorMap[L"LP correct: ST says adjective but LP says adverb in _TIME structure"]++;
+			return 0;
 		}
 	}
 	if (word == L"more")
