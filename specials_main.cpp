@@ -4736,7 +4736,13 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	{
 		if (source.queryPattern(wordSourceIndex, L"_PP") != -1)
 		{
-			errorMap[L"diff: ST says noun, LP says numeral_ordinal matched to object of prep (_PP)"]++;
+			errorMap[L"LP correct: ST says adverb, LP says numeral_ordinal matched to object of prep (_PP)"]++;
+			return 0;
+		}
+		if (atStart || source.m[wordSourceIndex + 1].word->first == L"." || source.m[wordSourceIndex + 1].word->first == L"." || source.m[wordSourceIndex + 1].word->first == L"." ||
+			  source.m[wordSourceIndex-1].hasWinnerVerbForm())
+		{
+			errorMap[L"ST correct: ST says adverb, LP says numeral_ordinal matched first word, last word or after verb"]++;
 			return 0;
 		}
 	}
