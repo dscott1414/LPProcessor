@@ -2511,7 +2511,7 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 		source.m[wordSourceIndex].queryForm(prepositionForm) != -1 && source.m[wordSourceIndex].word->first != L"as" && source.m[wordSourceIndex + 1].queryWinnerForm(PROPER_NOUN_FORM) == -1)
 	{
 		if (notObjects.find(source.m[wordSourceIndex + 1].word->first) == notObjects.end() &&
-			(!iswalpha(source.m[wordSourceIndex + 2].word->first[0]) || source.m[wordSourceIndex + 2].queryWinnerForm(coordinatorForm) != -1))
+			(!iswalpha(source.m[wordSourceIndex + 2].word->first[0]) || source.m[wordSourceIndex + 2].queryWinnerForm(coordinatorForm) != -1 || source.m[wordSourceIndex + 2].queryWinnerForm(determinerForm) != -1))
 		{
 			source.m[wordSourceIndex].setWinner(source.m[wordSourceIndex].queryForm(prepositionForm));
 			source.m[wordSourceIndex].unsetWinner(adverbFormOffset);
@@ -4731,6 +4731,13 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	{
 		errorMap[L"LP correct: LP AS_AS construction"]++;
 		return 0;
+	}
+	if ((primarySTLPMatch == L"adverb") && source.m[wordSourceIndex].queryWinnerForm(L"numeral_ordinal") >= 0)
+	{
+		if (source.queryPattern(wordSourceIndex, L"_PP") != -1)
+			partofspeech += L"**OBJECTOFPREP?";
+		//errorMap[L"diff: ST says noun, LP says numeral_ordinal matched to _N1 (noun subpattern)"]++;
+		//return 0;
 	}
 	//if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(verbForm) != -1
 	wstring winnerFormsString;
