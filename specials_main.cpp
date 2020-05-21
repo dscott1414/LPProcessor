@@ -2367,6 +2367,29 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 		fdi->second.LPAlreadyAccountedFormDistribution[L"adjective"]++;
 		return -1;
 	}
+	// cannot be preposition, conjunction, verb, determiner, particle
+	if (source.m[wordSourceIndex].isOnlyWinner(adverbForm) && adjectiveFormOffset >= 0 && 
+		(source.m[wordSourceIndex + 1].queryWinnerForm(nounForm) >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"dayUnit") >= 0) &&
+		source.m[wordSourceIndex + 1].queryWinnerForm(adjectiveForm) < 0 &&
+		source.m[wordSourceIndex - 1].queryWinnerForm(verbForm) < 0 &&
+		source.m[wordSourceIndex].queryForm(prepositionForm)<0 &&
+		source.m[wordSourceIndex].queryForm(conjunctionForm) < 0 &&
+		source.m[wordSourceIndex].queryForm(verbForm) < 0 &&
+		source.m[wordSourceIndex].queryForm(determinerForm) < 0 &&
+		source.m[wordSourceIndex].queryForm(particleForm) < 0 && 
+		source.m[wordSourceIndex + 2].word->first!=L"-" && // There is no getting in or out of them without the greatest difficulty , and a patient , slow navigation , which is *very* heart - rending .
+		source.queryPattern(wordSourceIndex,L"_TIME")==-1) // An hour *later* supper was served . 
+	{
+		// LP correct - 1039
+		// ST correct - 19 < 2%
+		source.m[wordSourceIndex].setWinner(adjectiveFormOffset);
+		source.m[wordSourceIndex].unsetWinner(adverbFormOffset);
+		if (primarySTLPMatch == L"adjective")
+			return -2;
+		errorMap[L"LP correct: adjective-adverb rule 2"]++;
+		fdi->second.LPAlreadyAccountedFormDistribution[L"adjective"]++;
+		return -1;
+	}
 	if (source.m[wordSourceIndex].isOnlyWinner(prepositionForm) && source.m[wordSourceIndex].getRelObject() < 0 && !iswalpha(source.m[wordSourceIndex + 1].word->first[0]))
 	{
 		int relVerb = source.m[wordSourceIndex].getRelVerb();
@@ -4749,9 +4772,14 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: ST says adverb and LP says quantifier before or as object"]++;
 		return 0;
 	}
-	if (word == L"as" && source.queryPattern(wordSourceIndex,L"__AS_AS") != -1)
+	if (word == L"as" && source.queryPattern(wordSourceIndex, L"__AS_AS") != -1)
 	{
 		errorMap[L"LP correct: LP AS_AS construction"]++;
+		return 0;
+	}
+	if (word == L"grave" && source.m[wordSourceIndex].queryWinnerForm(adjectiveForm) != -1)
+	{
+		errorMap[L"LP correct: 'grave' as adjective"]++;
 		return 0;
 	}
 	if ((primarySTLPMatch == L"adverb") && source.m[wordSourceIndex].queryWinnerForm(L"numeral_ordinal") >= 0)
