@@ -2390,6 +2390,20 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 		fdi->second.LPAlreadyAccountedFormDistribution[L"adjective"]++;
 		return -1;
 	}
+	if (wordSourceIndex < source.m.size() - 3 && source.m[wordSourceIndex].word->first == L"most" &&
+		(source.m[wordSourceIndex + 1].hasWinnerNounForm() ||
+		(source.m[wordSourceIndex + 1].word->first == L"of" && 
+			(source.m[wordSourceIndex + 2].word->first == L"the" || source.m[wordSourceIndex + 2].queryWinnerForm(demonstrativeDeterminerForm) != -1 || source.m[wordSourceIndex + 2].queryWinnerForm(possessiveDeterminerForm) != -1 || source.m[wordSourceIndex + 2].queryWinnerForm(interrogativeDeterminerForm) != -1))
+			))
+	{
+		source.m[wordSourceIndex].setWinner(adjectiveFormOffset);
+		source.m[wordSourceIndex].unsetWinner(adverbFormOffset);
+		if (primarySTLPMatch == L"adjective")
+			return -2;
+		errorMap[L"LP correct: adjective-adverb 'most' rule"]++;
+		fdi->second.LPAlreadyAccountedFormDistribution[L"adjective"]++;
+		return -1;
+	}
 	if (source.m[wordSourceIndex].isOnlyWinner(prepositionForm) && source.m[wordSourceIndex].getRelObject() < 0 && !iswalpha(source.m[wordSourceIndex + 1].word->first[0]))
 	{
 		int relVerb = source.m[wordSourceIndex].getRelVerb();
@@ -3734,6 +3748,8 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 					return 0;
 				}
 			}
+			errorMap[L"LP correct: LP says adverb but ST says adjective"]++; // probabilistic ST correct 421 out of 1090 total (+ 7 temporal expressions not included)
+			return 0;
 		}
 		int maxlen = -1;
 		if ((source.queryPattern(wordSourceIndex - 1, L"_BE", maxlen) != -1 || source.m[wordSourceIndex - 1].queryWinnerForm(L"is") >= 0) &&
@@ -5224,6 +5240,7 @@ void distributeErrorsByCost(unordered_map<wstring, int> &errorMap)
 	numErrors = errorMap[L"LP correct: (adverb cost 3, adjective cost 0)"]; // 98 ST correct, out of 243 total
 	errorMap[L"LP correct: (adverb cost 3, adjective cost 0)"] = numErrors * 145 / 243;
 	errorMap[L"ST correct: (adverb cost 3, adjective cost 0)"] = numErrors * 98 / 243;
+
 }
 
 void distributeErrors(unordered_map<wstring, int> &errorMap)
@@ -5237,6 +5254,10 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	numErrors = errorMap[L"LP correct: adverb not noun"];  // out of 233 examples studied, 7 were incorrect
 	errorMap[L"LP correct: adverb not noun"] = numErrors * 97 / 100;
 	errorMap[L"ST correct: adverb not noun"] = numErrors * 3 / 100;
+
+	numErrors=errorMap[L"LP correct: adverb not adjective"]; // ST correct 421 out of 1090 total (+ 7 temporal expressions not included)
+	errorMap[L"LP correct: adverb not adjective"] = numErrors * 669 / 1090;
+	errorMap[L"ST correct: adverb not adjective"] = numErrors * 421 / 1090;
 
 	numErrors = errorMap[L"LP correct: word 'her': [before a low cost noun] ST says personal_pronoun_accusative LP says possessive_determiner"]; // probability 6 out of 130 are ST correct
 	errorMap[L"LP correct: word 'her': [before a low cost noun] ST says personal_pronoun_accusative LP says possessive_determiner"] = numErrors * 130 / 136;
