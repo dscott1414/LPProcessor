@@ -2344,16 +2344,28 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 					break;
 		}
 		// The door that faced her stood *open*
-		if (!isDeterminer && primarySTLPMatch != L"Proper Noun" && source.m[wordSourceIndex - 1].queryWinnerForm(L"verb") >= 0) // Proper Noun is already well controlled
+		if (!isDeterminer && primarySTLPMatch != L"Proper Noun" && source.m[wordSourceIndex - 1].queryWinnerForm(L"verb") >= 0 && adverbFormOffset>=0 && adjectiveFormOffset>=0) // Proper Noun is already well controlled
 		{
-			source.m[wordSourceIndex].setWinner(source.m[wordSourceIndex].queryForm(adverbForm));
-			source.m[wordSourceIndex].unsetWinner(source.m[wordSourceIndex].queryForm(adjectiveForm));
+			source.m[wordSourceIndex].setWinner(adverbFormOffset);
+			source.m[wordSourceIndex].unsetWinner(adjectiveFormOffset);
 			if (primarySTLPMatch == L"adverb")
 				return -2;
 			errorMap[L"LP correct: adverb rule"]++;
 			fdi->second.LPAlreadyAccountedFormDistribution[L"adverb"]++;
 			return -1;
 		}
+	}
+	// RULE CHANGE - change an adverb to an adjective?
+	if (source.m[wordSourceIndex].isOnlyWinner(adverbForm) && adjectiveFormOffset >= 0 && source.m[wordSourceIndex].word->second.getUsageCost(adverbFormOffset) - source.m[wordSourceIndex].word->second.getUsageCost(adjectiveFormOffset) >= 3 &&
+		source.m[wordSourceIndex + 1].queryWinnerForm(determinerForm) >= 0 && source.m[wordSourceIndex - 1].queryWinnerForm(verbForm) < 0)
+	{
+		source.m[wordSourceIndex].setWinner(adjectiveFormOffset);
+		source.m[wordSourceIndex].unsetWinner(adverbFormOffset);
+		if (primarySTLPMatch == L"adjective")
+			return -2;
+		errorMap[L"LP correct: adjective-adverb rule"]++;
+		fdi->second.LPAlreadyAccountedFormDistribution[L"adjective"]++;
+		return -1;
 	}
 	if (source.m[wordSourceIndex].isOnlyWinner(prepositionForm) && source.m[wordSourceIndex].getRelObject() < 0 && !iswalpha(source.m[wordSourceIndex + 1].word->first[0]))
 	{
