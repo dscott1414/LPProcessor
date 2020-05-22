@@ -2451,9 +2451,7 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 			fdi->second.LPAlreadyAccountedFormDistribution[L"adjective"]++;
 			return -1;
 		}
-		else
-			return 0;
-		return -3;
+		return 0;
 	}
 	if (source.m[wordSourceIndex].isOnlyWinner(prepositionForm) && source.m[wordSourceIndex].getRelObject() < 0 && !iswalpha(source.m[wordSourceIndex + 1].word->first[0]))
 	{
@@ -4873,6 +4871,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"ST correct: ST says adverb, LP says numeral_ordinal matched first word, last word or after verb"]++;
 			return 0;
 		}
+	}
+	if ((primarySTLPMatch == L"adverb") && source.m[wordSourceIndex].queryWinnerForm(L"preposition") >= 0 && word == L"before" && source.queryPatternDiff(wordSourceIndex, L"_ADVERB",L"AT13") != -1)
+	{
+		errorMap[L"diff: 'before' in _ADVERB[AT13] "]++;
+		return 0;
 	}
 	//if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(verbForm) != -1
 	wstring winnerFormsString;

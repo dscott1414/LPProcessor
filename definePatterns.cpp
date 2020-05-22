@@ -716,6 +716,12 @@ int createBasicPatterns(void)
 											6, L"month{MONTH}", L"daysOfWeek{DAYWEEK}", L"season{SEASON}", L"timeUnit*2{TIMECAPACITY}", L"dayUnit*1{TIMECAPACITY}", L"noun|time", 0, 1, 1,
 											2, L"conjunction|before",L"conjunction|after",0,1,1,
 											0);
+	// long before
+	cPattern::create(L"_ADVERB{FLOATTIME}", L"AT1b",
+											1, L"adverb|long", 0, 1, 1,
+											2, L"conjunction|before", L"conjunction|after", 0, 1, 1,
+											1, L"dayUnit",0,0,1,
+											0);
 	// The next summer 
 	cPattern::create(L"_ADVERB{FLOATTIME}", L"AT2",
 											2, L"predeterminer|half*-2",L"_ADVERB[*]",0,0,1, // bright an early
@@ -816,9 +822,14 @@ int createBasicPatterns(void)
 	// after July, after Tuesday, after summer, after dawn, before dusk
 	cPattern::create(L"_ADVERB{_FINAL}", L"AT13",
 											2, L"preposition|before*-1", L"preposition|after*-1", 0, 1, 1,
-											4, L"month{MONTH}", L"daysOfWeek{DAYWEEK}", L"season{SEASON}", L"dayUnit{TIMECAPACITY}", 0, 1, 1,
+											5, L"month{MONTH}", L"daysOfWeek{DAYWEEK}", L"season{SEASON}", L"dayUnit{TIMECAPACITY}", L"adverb|long",0, 1, 1,
 											0);
-/// TIME related adverbs [end]
+	cPattern::create(L"_ADVERB{_FINAL}", L"AT14",
+											1, L"not",0,0,1,
+											1, L"preposition|for", 0, 1, 1,
+											1, L"adverb|long", 0, 1, 1,
+											0);
+	/// TIME related adverbs [end]
 	// DISTANCE related adverbs [begin]
 	// *10 feet below her* the boulder trembled.
 	cPattern::create(L"_ADVERB{_FINAL}", L"AD1",
@@ -920,6 +931,10 @@ int createBasicPatterns(void)
 										1, L"determiner|a", 0, 1, 1,
 										4, L"adverb|little", L"adverb|bit*1", L"noun|mite", L"adjective|wee",0, 1, 1, // make it preferable for another match 
 										2, L"adverb", L"uncertainDurationUnit|while",0, 0, 1,
+										0);
+	cPattern::create(L"_ADVERB{_FINAL}", L"TL",
+										1, L"preposition|but", 0, 1, 1,
+										1, L"adverb|little", 0, 1, 1,
 										0);
 	cPattern::create(L"_ADVERB{_FINAL}", L"Y",
 										1, L"predeterminer|all", 0, 1, 1,
