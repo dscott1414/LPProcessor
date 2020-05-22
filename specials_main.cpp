@@ -2312,10 +2312,11 @@ wstring stTokenizeWord(wstring tokenizedWord,wstring &originalWord, unsigned lon
 //    0: unable to determine whether class should be corrected, or the class has been corrected. Normal processing should continue.  
 int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceIndex, unordered_map<wstring, int> &errorMap, wstring &partofspeech, int startOfSentence, map<wstring,FormDistribution>::iterator fdi)
 {
-	int adverbFormOffset = source.m[wordSourceIndex].queryForm(adverbForm);
-	int adjectiveFormOffset = source.m[wordSourceIndex].queryForm(adjectiveForm);
-	int particleFormOffset = source.m[wordSourceIndex].queryForm(particleForm);
+	int adverbFormOffset = source.m[wordSourceIndex].word->second.query(adverbForm);
+	int adjectiveFormOffset = source.m[wordSourceIndex].word->second.query(adjectiveForm);
+	int particleFormOffset = source.m[wordSourceIndex].word->second.query(particleForm);
 	int nounPlusOneFormOffset = source.m[wordSourceIndex + 1].word->second.query(nounForm);
+	int conjunctionFormOffset = source.m[wordSourceIndex].word->second.query(conjunctionForm);
 	// RULE CHANGE - change an adjective to an adverb?
 	if (source.m[wordSourceIndex].word->first != L"that" && // 'that' is very ambiguous
 		source.m[wordSourceIndex].isOnlyWinner(adjectiveForm) && 
@@ -2397,12 +2398,62 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 			))
 	{
 		source.m[wordSourceIndex].setWinner(adjectiveFormOffset);
-		source.m[wordSourceIndex].unsetWinner(adverbFormOffset);
+		source.m[wordSourceIndex].unsetAllFormWinners();
 		if (primarySTLPMatch == L"adjective")
 			return -2;
 		errorMap[L"LP correct: adjective-adverb 'most' rule"]++;
 		fdi->second.LPAlreadyAccountedFormDistribution[L"adjective"]++;
 		return -1;
+	}
+	if (source.m[wordSourceIndex].word->first == L"only")
+	{
+		if (source.m[wordSourceIndex + 1].pma.queryPattern(L"__S1") != -1)
+		{
+			if (wordSourceIndex == startOfSentence || wordSourceIndex == startOfSentence+1)
+			{
+				source.m[wordSourceIndex].setWinner(adverbFormOffset);
+				source.m[wordSourceIndex].unsetAllFormWinners();
+				if (primarySTLPMatch == L"adverb")
+					return -2;
+				errorMap[L"LP correct: adverb 'only' rule"]++;
+				fdi->second.LPAlreadyAccountedFormDistribution[L"adverb"]++;
+				return -1;
+			}
+			else
+			{
+				source.m[wordSourceIndex].setWinner(conjunctionFormOffset);
+				source.m[wordSourceIndex].unsetAllFormWinners();
+				if (primarySTLPMatch == L"conjunction" || primarySTLPMatch == L"preposition or conjunction")
+					return -2;
+				errorMap[L"LP correct: conjunction 'only' rule"]++;
+				fdi->second.LPAlreadyAccountedFormDistribution[L"conjunction"]++;
+				return -1;
+
+			}
+		}
+		else if (source.m[wordSourceIndex + 1].pma.queryPattern(L"__INFP") != -1)
+		{
+			source.m[wordSourceIndex].setWinner(adverbFormOffset);
+			source.m[wordSourceIndex].unsetAllFormWinners();
+			if (primarySTLPMatch == L"adverb")
+				return -2;
+			errorMap[L"LP correct: adverb 'only' rule"]++;
+			fdi->second.LPAlreadyAccountedFormDistribution[L"adverb"]++;
+			return -1;
+		}
+		else if (source.m[wordSourceIndex + 1].queryWinnerForm(determinerForm) != -1)
+		{
+			source.m[wordSourceIndex].setWinner(adjectiveFormOffset);
+			source.m[wordSourceIndex].unsetAllFormWinners();
+			if (primarySTLPMatch == L"adjective")
+				return -2;
+			errorMap[L"LP correct: adjective 'only' rule"]++;
+			fdi->second.LPAlreadyAccountedFormDistribution[L"adjective"]++;
+			return -1;
+		}
+		else
+			return 0;
+		return -3;
 	}
 	if (source.m[wordSourceIndex].isOnlyWinner(prepositionForm) && source.m[wordSourceIndex].getRelObject() < 0 && !iswalpha(source.m[wordSourceIndex + 1].word->first[0]))
 	{
@@ -3848,6 +3899,17 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: adverb of customary form (ending in -ly) ST says " + primarySTLPMatch + L" but LP says adverb"]++;
 		return 0;
 	}
+	/*
+	if (word == L"only")
+	{
+		if (source.m[wordSourceIndex+1].pma.queryPattern(L"__S1") != -1)
+			partofspeech += L"**ONLYCONJUNCTION";
+		else if (source.m[wordSourceIndex + 1].pma.queryPattern(L"__INFP") != -1)
+			partofspeech += L"**ONLYADVERB";
+		else if (source.m[wordSourceIndex + 1].queryWinnerForm(determinerForm) != -1)
+			partofspeech += L"**ONLYADJECTIVE";
+	}
+	*/
 	// POS JJ (adjective) not found in winnerForms verb for word annoyed 0006301:[Miss Farrar now was more than bored , she was *annoyed* . ]
 	// in the future may attempt to correct ishas constuction which is actually ownership
 	int maxEnd = -1;
