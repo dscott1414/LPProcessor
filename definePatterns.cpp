@@ -722,6 +722,11 @@ int createBasicPatterns(void)
 											2, L"conjunction|before", L"conjunction|after", 0, 1, 1,
 											1, L"dayUnit",0,0,1,
 											0);
+	// He was *no longer* studying the ground for Lightfoot's tracks.
+	cPattern::create(L"_ADVERB{FLOATTIME}", L"AT1c",
+											1, L"no",0,1,1,
+											1, L"adverb|longer", 0, 1, 1,
+											0);
 	// The next summer 
 	cPattern::create(L"_ADVERB{FLOATTIME}", L"AT2",
 											2, L"predeterminer|half*-2",L"_ADVERB[*]",0,0,1, // bright an early
@@ -934,7 +939,7 @@ int createBasicPatterns(void)
 										0);
 	cPattern::create(L"_ADVERB{_FINAL}", L"TL",
 										1, L"preposition|but", 0, 1, 1,
-										1, L"adverb|little", 0, 1, 1,
+										1, L"adverb|little*-1", 0, 1, 1,
 										0);
 	cPattern::create(L"_ADVERB{_FINAL}", L"Y",
 										1, L"predeterminer|all", 0, 1, 1,

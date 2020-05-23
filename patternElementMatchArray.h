@@ -163,7 +163,7 @@ public:
   bool consolidateWinners(int lastPEMAConsolidationIndex,int *wa,int numWinners,sTrace &t);
   void translate(int lastPEMAConsolidationIndex,int *wa,int *position,enum chainType cType);
   void skipPastPositions(int lastPEMAConsolidationIndex,int *&nextPosition,enum chainType cType);
-	bool ownedByOtherWinningPattern(int nextPosition,int p,int len);
+	bool ownedByOtherWinningPattern(int parentPEMAPosition,int nextPosition,int p,int len);
 	bool ownedByOtherPattern(int nextPosition,int p,int len);
 	int queryTag(int nextPosition,int tag);
   int generatePEMACount(int nextPosition);

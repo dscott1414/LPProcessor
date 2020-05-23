@@ -346,11 +346,31 @@ int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem, in
 							{
 								childp = m[position].pma.content[alreadySet].getPattern();
 								if (debugTrace.tracePatternElimination)
-									lplog(L"%*sMC position %d:pattern %s[%s](%d,%d) child %s[%s](%d,%d) PMA CHANGED COST rejected WINNER REVERSED (cost %d>lowest cost %d)",
+									lplog(L"%*sMC position %d:pattern %s[%s](%d,%d) child %s[%s](%d,%d) PMA CHANGED COST rejected WINNER REVERSED BEGIN (cost %d>lowest cost %d)",
 										recursionLevel * 2, " ", position, patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), begin, end,
 										patterns[childp]->name.c_str(), patterns[childp]->differentiator.c_str(), position, position + childLen, m[position].pma.content[alreadySet].getCost(), lowestCost);
-								vector <__int64> alreadyCovered;
-								removeWinnerFlag(position, m[position].pma.content + alreadySet, 2, alreadyCovered);
+								vector <patternMatchArray::tPatternMatch *> PMAToRemoveWinner;
+								vector <int> parentPEMAToRemoveWinner;
+								if (removeWinnerFlag(position, m[position].pma.content + alreadySet, 2, PMAToRemoveWinner, parentPEMAToRemoveWinner))
+								{
+									for (auto pma : PMAToRemoveWinner)
+									{
+										pma->removeWinnerFlag();
+									}
+									for (auto pemaOffset : parentPEMAToRemoveWinner)
+									{
+										pema[pemaOffset].removeWinnerFlag();
+									}
+									if (debugTrace.tracePatternElimination)
+										lplog(L"%*sMC position %d:pattern %s[%s](%d,%d) child %s[%s](%d,%d) PMA CHANGED COST rejected WINNER REVERSED END (cost %d>lowest cost %d)",
+											recursionLevel * 2, " ", position, patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), begin, end,
+											patterns[childp]->name.c_str(), patterns[childp]->differentiator.c_str(), position, position + childLen, m[position].pma.content[alreadySet].getCost(), lowestCost);
+								}
+								else
+									if (debugTrace.tracePatternElimination)
+										lplog(L"%*sMC position %d:pattern %s[%s](%d,%d) child %s[%s](%d,%d) PMA NOT CHANGED COST kept WINNER REVERSED END (cost %d>lowest cost %d)",
+											recursionLevel * 2, " ", position, patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), begin, end,
+											patterns[childp]->name.c_str(), patterns[childp]->differentiator.c_str(), position, position + childLen, m[position].pma.content[alreadySet].getCost(), lowestCost);
 							}
 							else
 								keptWinners.push_back(alreadySet);

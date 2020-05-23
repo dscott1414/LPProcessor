@@ -478,12 +478,13 @@ int patternElementMatchArray::queryTag(int nextPosition,int tag)
 	return -1;
 }
 
-bool patternElementMatchArray::ownedByOtherWinningPattern(int nextPosition,int p,int len)
+bool patternElementMatchArray::ownedByOtherWinningPattern(int parentPEMAPosition, int nextPosition,int p,int len)
 { LFS
 	int rootPattern=patterns[p]->rootPattern;
   for (; nextPosition!=-1; nextPosition=content[nextPosition].nextByPosition)
 	{
-		if (content[nextPosition].isWinner() &&
+		if (nextPosition!=parentPEMAPosition &&
+			  content[nextPosition].isWinner() &&
 			  content[nextPosition].isChildPattern() && 
 			  patterns[content[nextPosition].getChildPattern()]->rootPattern==rootPattern && 
 				content[nextPosition].getChildLen()==len)

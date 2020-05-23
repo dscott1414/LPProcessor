@@ -814,6 +814,7 @@ int WordClass::readWordFormsFromDB(MYSQL &mysql,int maxWordId,wchar_t *qt,	int *
           ::write(testfd,wordForms,numWordForms*sizeof(int)*2);
           close(testfd);
         }
+				if (!myquery(&mysql, L"flush tables")) return -1;  // try to prevent corruption on possible power loss
       }
     #endif
   }

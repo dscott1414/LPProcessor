@@ -2195,7 +2195,7 @@ public:
 	// speaker resolution
 	void checkObject(vector <cObject>::iterator o);
 	bool eraseWinnerFromRecalculatingAloneness(int I,patternMatchArray::tPatternMatch *pma);
-	void removeWinnerFlag(int where, patternMatchArray::tPatternMatch *pma,int recursionSpaces, vector <__int64> &alreadyCovered);
+	bool removeWinnerFlag(int where, patternMatchArray::tPatternMatch *pma,int recursionSpaces, vector <patternMatchArray::tPatternMatch *> &PMAToRemoveWinner, vector <int> &parentPEMAToRemoveWinner);
 	bool isAnySeparator(int where);
 	bool addCostFromRecalculatingAloneness(int where,patternMatchArray::tPatternMatch *pma);
 	void identifyObjects(void);
