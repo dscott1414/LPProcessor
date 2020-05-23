@@ -4890,6 +4890,17 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			return 0;
 		}
 	}
+	int adverbPatternOffset;
+	// AT8 not included because it has issues - look at AT8 in the future!
+	set <wstring> adverbFixedWordPatterns = { L"8",L"T",L"ST",L"ST2",L"AT1",L"AT1b",L"AT1c",L"AT2",L"AT3",L"AT4",L"AT5",L"AT5b",L"AT5c",L"AT6",L"AT7",L"AT9",L"AT10",L"AT11",L"AT11m",L"AT11p",L"AT12",L"AT13",L"AT14",L"6",L"MT",L"B",L"M",L"L",L"TL",L"Y",L"AMONG",L"ND" };
+	if ((adverbPatternOffset = source.queryPattern(wordSourceIndex, L"_ADVERB")) != -1 && adverbFixedWordPatterns.find(patterns[source.pema[adverbPatternOffset].getPattern()]->differentiator) != adverbFixedWordPatterns.end())
+	{
+		if (word!=L"sun")
+		{
+			errorMap[L"diff: word matches specific word pattern ADVERB"]++;
+			return 0;
+		}
+	}
 	//if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(verbForm) != -1
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);

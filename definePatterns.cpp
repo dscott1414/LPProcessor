@@ -813,11 +813,12 @@ int createBasicPatterns(void)
 	cPattern::create(L"_ADVERB{_FINAL}", L"AT11m",
 											2, L"determiner|a", L"determiner|an", 0, 1, 1,
 											2, L"noun|moment", L"noun|instant", 0, 1, 1, // second is more likely an adjective
+											2, L"adverb|earlier",L"adverb|later",0,0,1,
 											0);
 	cPattern::create(L"_ADVERB{_FINAL}", L"AT11p",
 											1, L"determiner|a", 0, 0, 1,
 											1, L"adjective|few",0,0,1,
-											4, L"noun|moments*1", L"noun|seconds*1", L"noun|minutes*1", L"noun|days*1", 0, 1, 1,
+											5, L"noun|moments*1", L"noun|seconds*1", L"noun|minutes*1", L"noun|days*1", L"noun|weeks*1", 0, 1, 1,
 											3, L"adverb|earlier", L"adverb|later", L"adverb|ago", 0, 0, 1,
 											0);
 	cPattern::create(L"_ADVERB{_FINAL}", L"AT12",
