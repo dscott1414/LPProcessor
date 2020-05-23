@@ -4877,6 +4877,19 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"diff: 'before' in _ADVERB[AT13] "]++;
 		return 0;
 	}
+	if (word == L"no")
+	{
+		if (source.m[wordSourceIndex + 1].isOnlyWinner(nounForm) && source.m[wordSourceIndex].isOnlyWinner(determinerForm))
+		{
+			errorMap[L"LP correct: 'no' as determiner before noun"]++;
+			return 0;
+		}
+		if (source.m[wordSourceIndex + 1].word->first==L"sooner" && source.m[wordSourceIndex].isOnlyWinner(adverbForm))
+		{
+			errorMap[L"LP correct: 'no' as adverb before 'sooner'"]++;
+			return 0;
+		}
+	}
 	//if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(verbForm) != -1
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);

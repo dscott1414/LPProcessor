@@ -2993,7 +2993,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 		// at the same time, sometimes it really is an object:
 		// Arthur Scott Bailey\The Tale of Freddie Firefly[4325-4330]:
 		// When he saw his brothers and cousins go dancing off in **the dark he couldn't help** wanting to dance too . // what he couldn't help - object
-		if (numObjects > 0 && (m[tagSet[whereObjectTag].sourcePosition].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) != 0 && verbWord->second.getUsageCost(tFI::VERB_HAS_0_OBJECTS + numObjects) > verbWord->second.getUsageCost(tFI::VERB_HAS_0_OBJECTS+numObjects-1))
+		if (verbWord->first!=L"am" && numObjects > 0 && (m[tagSet[whereObjectTag].sourcePosition].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) != 0 && verbWord->second.getUsageCost(tFI::VERB_HAS_0_OBJECTS + numObjects) > verbWord->second.getUsageCost(tFI::VERB_HAS_0_OBJECTS+numObjects-1))
 		{
 			if (debugTrace.traceVerbObjects)
 				lplog(L"          %d:decreased numObjects=%d to %d for verb %s because the object %s is a present participle (may be adverbial usage)",
