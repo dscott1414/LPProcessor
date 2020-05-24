@@ -379,7 +379,8 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 					}
 			}
 			if (firstWordInSentence && (m[q].flags&WordMatch::flagFirstLetterCapitalized) && !(m[q].flags&WordMatch::flagAddProperNoun) && !(m[q].flags & WordMatch::flagRefuseProperNoun) &&
-				m[q].word->second.query(PROPER_NOUN_FORM_NUM) < 0 && m[q].word->second.localWordIsLowercase == 0 && m[q].word->second.localWordIsCapitalized > 2)
+				m[q].word->second.query(PROPER_NOUN_FORM_NUM) < 0 && 
+				((m[q].word->second.localWordIsLowercase == 0 && m[q].word->second.localWordIsCapitalized > 2) || m[q].word->second.localWordIsCapitalized > 20))
 			{
 				m[q].flags |= WordMatch::flagAddProperNoun;
 				if (debugTrace.traceParseInfo)

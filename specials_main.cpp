@@ -1312,13 +1312,14 @@ bool matchEntity(Source &source, int wordIndex, int matchType, wstring patternOr
 bool additionalMatchingLogic(Source &source, int wordIndex, int primaryPMAOffset, int secondaryPMAOffset)
 {
 	// if __ALLOBJECTS_1 starts with one adverb which is one word long
-	int primaryPatternEnd = wordIndex + source.m[wordIndex].pma[primaryPMAOffset].len;
+	//int primaryPatternEnd = wordIndex + source.m[wordIndex].pma[primaryPMAOffset].len;
 	//int secondaryPatternEnd = wordIndex + source.m[wordIndex].pma[secondaryPMAOffset].len;
-	return (source.m[wordIndex].pma[secondaryPMAOffset].len == 1 && source.queryPattern(wordIndex + 1, L"__NOUN") != -1 && source.m[wordIndex].queryForm(prepositionForm) != -1);
+	return (source.m[wordIndex].pma[primaryPMAOffset].len == 1 || source.m[wordIndex + 1].pma.queryPattern(L"__INTERPPB") != -1 || source.m[wordIndex + 1].pma.queryPattern(L"__C1_IP") != -1);
 }
+
 // primaryType, secondaryType:
 // 0: pattern - if differentiator is NOT specified, then any differentiator is ok.
-// 1: form - any formclass (string)
+// 1: form - any form class (noun/adjective)
 // 2: word - the actual word.   
 // 3: flagNotMatched is set
 // 4: true (do not perform match)
@@ -5906,7 +5907,8 @@ void wmain(int argc,wchar_t *argv[])
 		//patternOrWordAnalysis(source, step, L"__ADJECTIVE", L"MTHAN", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__NOUN", L"F", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
-		patternOrWordAnalysis(source, step, L"__ALLOBJECTS_1", L"1",L"_ADVERB", L"*", Source::GUTENBERG_SOURCE_TYPE, 0,0, specialExtension);
+		//patternOrWordAnalysis(source, step, L"__C1__S1", L"1", L"adjective", L"", Source::GUTENBERG_SOURCE_TYPE, 0, 1, specialExtension);
+		patternOrWordAnalysis(source, step, L"__C1__S1", L"1", L"adjective", L"", Source::TEST_SOURCE_TYPE, 0, 1, specialExtension);
 		//patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false, specialExtension);
 		// scans the test file for any unmatched sentences
 		//patternOrWordAnalysis(source, step, L"", L"", L"", L"", Source::TEST_SOURCE_TYPE, 3,4,L""); // TODO: testing weight change on _S1.

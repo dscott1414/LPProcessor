@@ -748,6 +748,18 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 			lplog(L"%d: verb capitalized [SOURCE=%06d] cost=%d",position,traceSource=gTraceSource++,20);
 		return 20;
 	}
+	if (tagSet[subjectTag].len == 1 && m[tagSet[subjectTag].sourcePosition].word->first!=L"such" && 
+		((!tagSet[subjectTag].isPattern && Forms[tagSet[subjectTag].pattern]->name == L"adjective") || (tagSet[subjectTag].isPattern && patterns[tagSet[subjectTag].pattern]->name == L"_ADJECTIVE")) &&
+		mainVerbTag >= 0 &&
+		queryPattern(tagSet[mainVerbTag].sourcePosition, L"_IS") == -1 &&
+		queryPattern(tagSet[mainVerbTag].sourcePosition, L"_WOULDBE") == -1 &&
+		queryPattern(tagSet[mainVerbTag].sourcePosition, L"_HAVEBEEN") == -1 &&
+		queryPattern(tagSet[mainVerbTag].sourcePosition, L"_COULDHAVEBEEN") == -1)
+	{
+		if (debugTrace.traceSubjectVerbAgreement)
+			lplog(L"%d: adjective subject not used with BE verb [SOURCE=%06d] cost=%d", position, traceSource = gTraceSource++, 4);
+		return 4;
+	}
 	// his sacrificed ambition / his is modifying a past verb which serves as an adjective
 	if (mainVerbTag>=0 && subjectTag>=0 && nextSubjectTag<0 && tagSet[subjectTag].len==1 && m[tagSet[subjectTag].sourcePosition].queryForm(possessiveDeterminerForm)!=-1 &&
 		  nextVerbAgreeTag<0 && tagSet[mainVerbTag].len==1 && // &&
@@ -772,7 +784,7 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 		m[tagSet[subjectTag].sourcePosition + 1].getRelVerb() >= 0 && m[m[tagSet[subjectTag].sourcePosition + 1].getRelVerb()].word->second.inflectionFlags&(VERB_PRESENT_PARTICIPLE | VERB_PAST)) != 0)
 	{
 		if (debugTrace.traceSubjectVerbAgreement)
-			lplog(L"%d: 'the mot' as subject with a directly following PAST verb [SOURCE=%06d] cost=%d", position, traceSource = gTraceSource++, 10);
+			lplog(L"%d: 'the most' as subject with a directly following PAST verb [SOURCE=%06d] cost=%d", position, traceSource = gTraceSource++, 10);
 		return 10;
 	}
 	//if (mainVerbTag >= 0 && subjectTag >= 0)

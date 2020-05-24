@@ -782,6 +782,11 @@ int createBasicPatterns(void)
 	cPattern::create(L"_ADVERB{_FINAL}", L"AT8",
 											9, L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|as", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"__AS_AS", L"quantifier|all*-1", 0, 1, 1,
 											1, L"__S1*1{EVAL:_BLOCK}", 0, 1, 1, 0); // this has been probabilistically checked against Stanford and 1 is optimal
+	cPattern::create(L"_ADVERB{_FINAL}", L"THEN",
+											8, L"preposition|from", L"preposition|before", L"preposition|after", L"coordinator|and", L"preposition|since", L"preposition|until", L"preposition|till", L"preposition|by", 0, 1, 1,
+											1, L"adverb|then", 0, 1, 1,
+											0);
+
 	cPattern::create(L"_ADVERB{_FINAL}", L"AT9",
 		                  1,L"determiner|the",0,0,1, // only used with 'next'
 											4, L"quantifier|every", L"quantifier|each", L"adjective|next", L"quantifier|any", 0, 1, 1,
@@ -2616,7 +2621,9 @@ int createSecondaryPatterns2(void)
 						L"interrogative_determiner{N_AGREE:SINGULAR:SUBJECT}", 
 						L"there*-1{N_AGREE:SINGULAR:PLURAL:SUBJECT}",L"adverb|here*-1{N_AGREE:SINGULAR:PLURAL:SUBJECT}",
 						L"quantifier|neither{N_AGREE:PLURAL:SUBJECT}", L"quantifier|either*-1{N_AGREE:SINGULAR:SUBJECT}",
-						L"_REL1[*]*2{SUBJECT:GNOUN:SINGULAR}",L"adjective*2{SUBJECT:GNOUN}",L"_ADJECTIVE*10{SUBJECT:GNOUN}",
+						L"_REL1[*]*2{SUBJECT:GNOUN:SINGULAR}",
+						L"adjective*2{SUBJECT:GNOUN}", // **few** are the mortals to whom we give this lovely gift / **such** was not the case / **above** played the clear , soft light / **hers** is organic
+						L"_ADJECTIVE*10{SUBJECT:GNOUN}",
 						L"_VERBREL2*2{SUBJECT:GNOUN:SINGULAR:_BLOCK:EVAL}",L"__QSUBJECT{SUBJECT:GNOUN:SINGULAR}",L"__NOUNRU{SUBJECT}",
 						L"noun{SUBJECT:N_AGREE}",SINGULAR_OWNER|PLURAL_OWNER,1,1, // Poirot's were pleasantly vague .
 			 1,L"__INTERPPB",0,0,1,
@@ -2740,11 +2747,11 @@ int createSecondaryPatterns2(void)
 									1, L"__ALLVERB", 0, 1, 1,
 									1, L"adverb|so",0,1,1,
 									1, L"adjective",0,1,1,
-									1, L"__ALLOBJECTS_1", 0, 1, 1, // there must only be one adjective and it must be last (not mixed in) see *
+									1, L"__ALLOBJECTS_1", 0, 1, 1, 
 									1, L"preposition",0,1,1,
 									1, L"adverb|so", 0, 1, 1,
 									1, L"adjective", 0, 1, 1,
-									1, L"__ALLOBJECTS_1", 0, 1, 1, // there must only be one adjective and it must be last (not mixed in) see *
+									1, L"__ALLOBJECTS_1", 0, 1, 1, 
 									1, L"__CLOSING__S1", 0, 0, 3,
 									0);
 	// Again against her will she made *reply* .
