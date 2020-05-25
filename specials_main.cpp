@@ -4930,7 +4930,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			return 0;
 		}
 	}
-	//if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(verbForm) != -1
+	if (primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(adjectiveForm) != -1)
+	{
+		errorMap[L"LP correct: adjective not adverb"]++; // ST 305 out of total 771
+		return 0;
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
@@ -5359,6 +5363,10 @@ void distributeErrorsByCost(unordered_map<wstring, int> &errorMap)
 	errorMap[L"LP correct: (adverb cost 3, adjective cost 0)"] = numErrors * 145 / 243;
 	errorMap[L"ST correct: (adverb cost 3, adjective cost 0)"] = numErrors * 98 / 243;
 
+	errorMap[L"LP correct: adjective not adverb"]++; // ST 305 out of total 771
+	errorMap[L"LP correct: adjective not adverb"] = numErrors * 450 / 771;
+	errorMap[L"ST correct: adjective not adverb"] = numErrors * 305 / 771;
+	errorMap[L"diff: adjective not adverb"] = numErrors * 16 / 771;
 }
 
 void distributeErrors(unordered_map<wstring, int> &errorMap)
@@ -5373,9 +5381,9 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"LP correct: adverb not noun"] = numErrors * 97 / 100;
 	errorMap[L"ST correct: adverb not noun"] = numErrors * 3 / 100;
 
-	numErrors=errorMap[L"LP correct: adverb not adjective"]; // ST correct 421 out of 1090 total (+ 7 temporal expressions not included)
-	errorMap[L"LP correct: adverb not adjective"] = numErrors * 669 / 1090;
-	errorMap[L"ST correct: adverb not adjective"] = numErrors * 421 / 1090;
+	numErrors=errorMap[L"LP correct: LP says adverb but ST says adjective"]; // ST correct 421 out of 1090 total (+ 7 temporal expressions not included)
+	errorMap[L"LP correct: LP says adverb but ST says adjective"] = numErrors * 669 / 1090;
+	errorMap[L"ST correct: LP says adverb but ST says adjective"] = numErrors * 421 / 1090;
 
 	numErrors = errorMap[L"LP correct: word 'her': [before a low cost noun] ST says personal_pronoun_accusative LP says possessive_determiner"]; // probability 6 out of 130 are ST correct
 	errorMap[L"LP correct: word 'her': [before a low cost noun] ST says personal_pronoun_accusative LP says possessive_determiner"] = numErrors * 130 / 136;
