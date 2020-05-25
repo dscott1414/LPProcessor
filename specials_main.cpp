@@ -2454,6 +2454,34 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 		}
 		return 0;
 	}
+	if (source.m[wordSourceIndex].word->first == L"better" || source.m[wordSourceIndex].word->first == L"further")
+	{
+		bool sentenceOfBeing =				// 4 words or less before the word must be an 'is' verb
+			((wordSourceIndex <= 0 || (source.m[wordSourceIndex - 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex - 1].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
+			(wordSourceIndex <= 1 || (source.m[wordSourceIndex - 2].queryForm(L"is") >= 0 || source.m[wordSourceIndex - 2].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
+				(wordSourceIndex <= 2 || (source.m[wordSourceIndex - 3].queryForm(L"is") >= 0 || source.m[wordSourceIndex - 3].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
+				(wordSourceIndex <= 3 || (source.m[wordSourceIndex - 4].queryForm(L"is") >= 0 || source.m[wordSourceIndex - 4].queryForm(L"be") >= 0))); // is/ishas before means it really is an adjective!
+		if (source.m[wordSourceIndex].word->first == L"better" && sentenceOfBeing && source.m[wordSourceIndex + 1].queryWinnerForm(verbForm) == -1)
+		{
+			source.m[wordSourceIndex].setWinner(adjectiveFormOffset);
+			source.m[wordSourceIndex].unsetAllFormWinners();
+			if (primarySTLPMatch == L"adjective")
+				return -2;
+			errorMap[L"LP correct: adjective 'only' rule"]++;
+			fdi->second.LPAlreadyAccountedFormDistribution[L"adjective"]++;
+			return -1;
+		}
+		else if (source.m[wordSourceIndex].word->first == L"better" && source.m[wordSourceIndex + 1].queryWinnerForm(nounForm) == -1 && source.m[wordSourceIndex + 1].queryWinnerForm(determinerForm) == -1)
+		{
+			source.m[wordSourceIndex].setWinner(adverbFormOffset);
+			source.m[wordSourceIndex].unsetAllFormWinners();
+			if (primarySTLPMatch == L"adverb")
+				return -2;
+			errorMap[L"LP correct: adverb 'better' rule"]++;
+			fdi->second.LPAlreadyAccountedFormDistribution[L"adverb"]++;
+			return -1;
+		}
+	}
 	if (source.m[wordSourceIndex].isOnlyWinner(prepositionForm) && source.m[wordSourceIndex].getRelObject() < 0 && !iswalpha(source.m[wordSourceIndex + 1].word->first[0]))
 	{
 		int relVerb = source.m[wordSourceIndex].getRelVerb();
