@@ -4967,6 +4967,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(verbForm) != -1)
 	{
+		errorMap[L"LP correct: verb not noun"]++; // ST 625, LP 526 (Both Wrong) 42 (Both Correct) 62 out of total 1256
+		return 0;
+	}
+	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(verbForm) != -1)
+	{
 		if (source.queryPattern(wordSourceIndex, L"_VERBONGOING") != -1 && source.queryPatternDiff(wordSourceIndex, L"_VERBREL2", L"1") != -1 && source.queryPatternDiff(wordSourceIndex, L"__S1", L"5") != -1)
 		{
 			partofspeech += L"**NOUNVERB1";
@@ -5483,14 +5488,20 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"ST correct: ST says adjective, LP says non-past verb (highly ambiguous)"] = numErrors * 114 / 320;
 	errorMap[L"diff: ST says adjective, LP says non - past verb(highly ambiguous)"] = numErrors * 12 / 320;
 
-	numErrors= errorMap[L"LP correct: word 'round': ST says adverb/noun LP says preposition."]++;  // ST correct 5, out of 126
+	numErrors= errorMap[L"LP correct: word 'round': ST says adverb/noun LP says preposition."];  // ST correct 5, out of 126
 	errorMap[L"LP correct: word 'round': ST says adverb/noun LP says preposition."] = numErrors * 121 / 126;
 	errorMap[L"ST correct: word 'round': ST says adverb/noun LP says preposition."] = numErrors * 5 / 126;
 
-	numErrors = errorMap[L"LP correct: noun not verb"]++;  // ST 655, Unknown 29 out of total 1739
+	numErrors = errorMap[L"LP correct: noun not verb"];  // ST 655, Unknown 29 out of total 1739
 	errorMap[L"LP correct: noun not verb"] = numErrors * 1055 / 1739;
 	errorMap[L"ST correct: noun not verb"] = numErrors * 655 / 1739;
 	errorMap[L"diff: noun not verb"] = numErrors * 29 / 1739;
+
+	// ST 625, LP 526 (Both Wrong) 42 (Both Correct) 62 out of total 1256
+	numErrors = errorMap[L"LP correct: verb not noun"];  // ST 655, Unknown 29 out of total 1739
+	errorMap[L"LP correct: verb not noun"] = numErrors * 526 / 1256;
+	errorMap[L"ST correct: verb not noun"] = numErrors * 625 / 1256;
+	errorMap[L"diff: verb not noun"] = numErrors * 62 / 1256;
 
 }
 
