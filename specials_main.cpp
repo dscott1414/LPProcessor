@@ -4950,20 +4950,29 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: adjective not adverb"]++; // ST 305 out of total 771
 		return 0;
 	}
-	if (word == L"north" || word == L"south" || word == L"east" || word == L"west")
-	{
-		if (source.m[wordSourceIndex].queryWinnerForm(nounForm) != -1 && source.m[wordSourceIndex].getRelVerb() >= 0 && source.m[wordSourceIndex].getRelVerb() < wordSourceIndex && source.m[source.m[wordSourceIndex].getRelVerb()].hasWinnerVerbForm())
-			partofspeech += L"direction after verb is an adverb";
-	}
-	if (word == L"half")
-	{
-		if (source.m[wordSourceIndex].queryWinnerForm(nounForm) != -1 && source.m[wordSourceIndex].getRelVerb() >= 0 && source.m[wordSourceIndex].getRelVerb() < wordSourceIndex)
-			partofspeech += L"half object is an adverb";
-	}
+	//if (word == L"north" || word == L"south" || word == L"east" || word == L"west")
+	//{
+	//	if (source.m[wordSourceIndex].queryWinnerForm(nounForm) != -1 && source.m[wordSourceIndex].getRelVerb() >= 0 && source.m[wordSourceIndex].getRelVerb() < wordSourceIndex && source.m[source.m[wordSourceIndex].getRelVerb()].hasWinnerVerbForm())
+	//		partofspeech += L"direction after verb is an adverb";
+	//}
+	//if (word == L"half")
+	//{
+	//	if (source.m[wordSourceIndex].queryWinnerForm(nounForm) != -1 && source.m[wordSourceIndex].getRelVerb() >= 0 && source.m[wordSourceIndex].getRelVerb() < wordSourceIndex)
+	//		partofspeech += L"half object is an adverb";
+	//}
 	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(nounForm) != -1)
 	{
 		errorMap[L"LP correct: noun not verb"]++; // ST 655, Unknown 29 out of total 1739
 		return 0;
+	}
+	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(verbForm) != -1)
+	{
+		if (source.queryPattern(wordSourceIndex, L"_VERBONGOING") != -1 && source.queryPatternDiff(wordSourceIndex, L"_VERBREL2", L"1") != -1 && source.queryPatternDiff(wordSourceIndex, L"__S1", L"5") != -1)
+		{
+			partofspeech += L"**NOUNVERB1";
+		}
+			//errorMap[L"LP correct: verb not noun"]++; 
+		//return 0;
 	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);

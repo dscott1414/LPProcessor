@@ -212,7 +212,7 @@ int createNouns(void)
 	// the more adjectives repeated, the more uncommon - taken out - discourages nouns taking on adjectives
 	// all these old things / all my old things / half these old things / both old things
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}",L"3",
-		                1,L"predeterminer*-1",0,1,1,  // made -1 to encourage binding this limited class as a predeterminer and not as another class such as adverb which is more common and there fore lower cost (such)
+		                2,L"predeterminer|half*-2",L"predeterminer*-1",0,1,1,  // made -1 to encourage binding this limited class as a predeterminer and not as another class such as adverb which is more common and there fore lower cost (such)
 										5,L"determiner{DET}",L"demonstrative_determiner{DET}",L"possessive_determiner{DET}",L"__HIS_HER_DETERMINER*1",L"_NAMEOWNER{DET}",0,0,1,
 										3,L"_ADJECTIVE{_BLOCK}",L"noun*1",L"Proper Noun*1",SINGULAR,0,3,
 										2,L"__N1",L"_NAME{GNOUN:NAME}",0,1,1,
