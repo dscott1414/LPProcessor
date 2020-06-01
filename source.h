@@ -185,10 +185,12 @@ public:
 	int object;
 	int salienceFactor;
 	cOM(int o,int sf) { object=o; salienceFactor=sf; };
-	cOM(char *buffer,int &where,int limit)
+	cOM(char *buffer,int &where,int limit, bool &error)
 	{
+		error = true;
 		if (!copy(object,buffer,where,limit)) return;
 		if (!copy(salienceFactor,buffer,where,limit)) return;
+		error = false;
 	}
 	bool write(void *buffer,int &where,int limit)
 	{
@@ -3046,20 +3048,20 @@ int wherePrepObject,
 			unsigned int count;
 			if (error=!copy(count,buffer,where,total)) return;
 			for (unsigned int I=0; I<count && where<(int)total; I++)
-				definiteSpeakerObjects.push_back(cOM(buffer,where,total));
-			if (error=where>=(int)total) return;
+				definiteSpeakerObjects.push_back(cOM(buffer,where,total,error));
+			if (error || (error=where>=(int)total)) return;
 			if (error=!copy(count,buffer,where,total)) return;
 			for (unsigned int I=0; I<count && where<(int)total; I++)
-				speakerObjects.push_back(cOM(buffer,where,total));
-			if (error=where>=(int)total) return;
+				speakerObjects.push_back(cOM(buffer,where,total,error));
+			if (error || (error=where>=(int)total)) return;
 			if (error=!copy(count,buffer,where,total)) return;
 			for (unsigned int I=0; I<count && where<(int)total; I++)
-				objectsSpokenAbout.push_back(cOM(buffer,where,total));
-			if (error=where>=(int)total) return;
+				objectsSpokenAbout.push_back(cOM(buffer,where,total,error));
+			if (error || (error=where>=(int)total)) return;
 			if (error=!copy(count,buffer,where,total)) return;
 			for (unsigned int I=0; I<count && where<(int)total; I++)
-				objectsInNarration.push_back(cOM(buffer,where,total));
-			if (error=where>=(int)total) return;
+				objectsInNarration.push_back(cOM(buffer,where,total,error));
+			if (error || (error=where>=(int)total)) return;
 			error=false;
 			speakersMatched=speakersNotMatched=counterSpeakersMatched=counterSpeakersNotMatched=0;
 		}

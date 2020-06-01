@@ -128,8 +128,14 @@ bool Source::matchObjectsExact(vector <cObject>::iterator parentObject,vector <c
 	return match;
 }
 
-bool Source::matchChildSourcePositionSynonym(tIWMM parentWord,Source *childSource,int childWhere)
-{ LFS
+bool Source::matchChildSourcePositionSynonym(tIWMM parentWord, Source *childSource, int childWhere)
+{
+	LFS
+	if (parentWord == Words.end())
+	{
+		lplog(LOG_ERROR, L"parent word is not in dictionary!");
+		return false;
+	}
 	set <wstring> childSynonyms,parentSynonyms;
 	getSynonyms(parentWord->first,parentSynonyms, NOUN);
 	tIWMM parentME=parentWord->second.mainEntry;
@@ -3795,7 +3801,7 @@ int Source::matchBasicElements(bool parseOnly)
 			{
 				vector <cTreeCat *> rdfTypes;
 				unordered_map <wstring ,int > topHierarchyClassIndexes;
-				getExtendedRDFTypesMaster(*si,-1,rdfTypes,topHierarchyClassIndexes,TEXT(__FUNCTION__),-1,false);
+				getExtendedRDFTypesMaster(*si,-1,rdfTypes,topHierarchyClassIndexes,TEXT(__FUNCTION__),-1,true);
 				Ontology::setPreferred(topHierarchyClassIndexes,rdfTypes);
 				set<wstring> abstractTypes;
 				for (unsigned int r=0; r<rdfTypes.size(); r++)

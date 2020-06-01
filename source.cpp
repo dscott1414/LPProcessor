@@ -548,12 +548,17 @@ bool WordMatch::read(char *buffer,int &where,int limit)
 	if (!copy(originalObject,buffer,where,limit)) return false;
 	unsigned int omSize;
 	if (!copy(omSize,buffer,where,limit)) return false;
-	for (unsigned int I=0; I<omSize; I++)
-		objectMatches.push_back(cOM(buffer,where,limit));
+	bool readError = false;
+	for (unsigned int I=0; I<omSize && !readError; I++)
+		objectMatches.push_back(cOM(buffer,where,limit, readError));
+	if (readError)
+		return false;
 	unsigned int omnSize;
 	if (!copy(omnSize,buffer,where,limit)) return false;
-	for (unsigned int I=0; I<omnSize; I++)
-		audienceObjectMatches.push_back(cOM(buffer,where,limit));
+	for (unsigned int I=0; I<omnSize && !readError; I++)
+		audienceObjectMatches.push_back(cOM(buffer,where,limit, readError));
+	if (readError)
+		return false;
 	if (!copy(quoteForwardLink,buffer,where,limit)) return false;
 	if (!copy(endQuote,buffer,where,limit)) return false;
 	if (!copy(nextQuote,buffer,where,limit)) return false;
@@ -1249,7 +1254,8 @@ bool Source::parseNecessary(wchar_t *path)
 #define SOURCE_ASCII 2048 // ASCII: ISO-646-US (US-ASCII), ASCII, US-ASCII  // US-ASCII (7-bit) // 20127
 #define SOURCE_UNICODE 1024
 #define ENCODING_MATCH_FAILED 4096
-bool reDecodeNecessary(wstring encodingRecordedInDocument, int &codePage)
+#define ENCODING_EXPLICIT_NOTE_DISAGREEMENT 8192
+bool reDecodeNecessary(wstring encodingRecordedInDocument, int &codePage, bool iso8859ControlCharactersFound, bool &explicitNoteDisagreement)
 {
 	int encodingRID= codePage;
 	if (encodingRecordedInDocument.find(L"UTF") != wstring::npos)
@@ -1262,9 +1268,14 @@ bool reDecodeNecessary(wstring encodingRecordedInDocument, int &codePage)
 		encodingRID = 20127;
 	if (encodingRID != codePage)
 	{
-		lplog(LOG_ERROR, L"Encoding error: %s (%d) embedded in source disagrees with decoding guess %d", encodingRecordedInDocument.c_str(), encodingRID, codePage);
-		codePage = encodingRID;
-		return true;
+		if (explicitNoteDisagreement=codePage==1252 && iso8859ControlCharactersFound && encodingRID== 28591)
+			lplog(LOG_ERROR, L"Encoding error: %s (%d) embedded in source disagrees with decoding guess %d, but control characters found so explicit encoding note in source is discarded.", encodingRecordedInDocument.c_str(), encodingRID, codePage);
+		else
+		{
+			lplog(LOG_ERROR, L"Encoding error: %s (%d) embedded in source disagrees with decoding guess %d", encodingRecordedInDocument.c_str(), encodingRID, codePage);
+			codePage = encodingRID;
+			return true;
+		}
 	}
 	return false;
 }
@@ -1310,7 +1321,8 @@ int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring
 	bufferLen <<= 1;
 	wstring wb;
 	int codepage;
-	mTW((char *)bookBuffer, wb, codepage);
+	bool iso8859ControlCharactersFound=false;
+	mTW((char *)bookBuffer, wb, codepage, iso8859ControlCharactersFound);
 	wstring sourceEncoding = L"NOT FOUND";
 	if (wb.length() <10)
 	{
@@ -1328,7 +1340,8 @@ int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring
 			trim(sourceEncoding);
 		}
 		int error = 0,desiredCodePage=codepage;
-		if (sourceEncoding != L"NOT FOUND" && (reDecodeNecessary(sourceEncoding, desiredCodePage)) && !mTWCodePage((char *)bookBuffer, wb, desiredCodePage, error))
+		bool explicitNoteDisagreement = false;
+		if (sourceEncoding != L"NOT FOUND" && (reDecodeNecessary(sourceEncoding, desiredCodePage, iso8859ControlCharactersFound, explicitNoteDisagreement)) && !mTWCodePage((char *)bookBuffer, wb, desiredCodePage, error))
 		{
 			desiredCodePage = 1252; // try ASCII
 			if (mTWCodePage((char *)bookBuffer, wb, desiredCodePage, error))
@@ -1348,6 +1361,8 @@ int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring
 			readBufferFlags |= SOURCE_8859;
 		else if (codepage == 20127) // ASCII: ISO-646-US (US-ASCII), ASCII, US-ASCII  // US-ASCII (7-bit)
 			readBufferFlags |= SOURCE_ASCII;
+		if (explicitNoteDisagreement)
+			readBufferFlags |= ENCODING_EXPLICIT_NOTE_DISAGREEMENT;
 	}
 	bool startSet = true;
 	if (start == L"**FIND**" || encodingFromDB!=sourceEncoding || (readBufferFlags & ENCODING_MATCH_FAILED)!=0)
@@ -3117,7 +3132,7 @@ void Source::reduceParents(int position,vector <unsigned int> &insertionPoints,v
 void Source::logPatternChain(int sourcePosition,int insertionPoint,enum patternElementMatchArray::chainType patternChainType)
 { LFS
 	wchar_t *chPT=L"";
-	int chain=-1,originPattern,originEnd;
+	int chain=-1,originPattern=0,originEnd=0;
 	switch (patternChainType)
 	{
 	case patternElementMatchArray::BY_PATTERN_END:

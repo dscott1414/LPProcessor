@@ -83,7 +83,7 @@ char *wTM(wstring inString,string &outString,int codePage)
 
 __declspec(thread) static void *mTWbuffer = NULL;
 __declspec(thread) static unsigned int mTWbufSize = 0;
-const wchar_t *mTW(string inString, wstring &outString, int &codepage)
+const wchar_t *mTW(string inString, wstring &outString, int &codepage,bool &iso8859ControlCharactersFound)
 {
 	LFS
 	codepage = CP_UTF8;
@@ -100,6 +100,26 @@ const wchar_t *mTW(string inString, wstring &outString, int &codepage)
 			{
 				codepage = 20127; // ASCII: ISO-646-US (US-ASCII), ASCII, US-ASCII  // US-ASCII (7-bit)
 				queryLength = MultiByteToWideChar(codepage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t *)mTWbuffer, 0);
+			}
+		}
+		else
+		{
+			// scan text for control characters 128-159.  If they exist in the text, force to 1252, because in 8859 they are legal but they are control characters.
+			int tempIndex = 0;
+			for (char ch : inString)
+			{
+				if (iso8859ControlCharactersFound = (((unsigned char)ch) >= 128 && ((unsigned char)ch) <= 159))
+					break;
+				tempIndex++;
+			}
+			if (iso8859ControlCharactersFound)
+			{
+				int tempQueryLength = MultiByteToWideChar(1252, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t *)mTWbuffer, 0);
+				if (tempQueryLength > 0)
+				{
+					codepage = 1252;
+					queryLength = tempQueryLength;
+				}
 			}
 		}
 	}
@@ -119,6 +139,12 @@ const wchar_t *mTW(string inString, wstring &outString, int &codepage)
 		lplog(LOG_FATAL_ERROR, L"Error (3) (%d) in translating buffer: %S", GetLastError(), inString.c_str());
 	outString = (wchar_t *)mTWbuffer;
 	return outString.c_str();
+}
+
+const wchar_t *mTW(string inString, wstring &outString, int &codepage)
+{
+	bool iso8859ControlCharactersFound;
+	return mTW(inString, outString, codepage, iso8859ControlCharactersFound);
 }
 
 const wchar_t *mTWCodePage(string inString, wstring &outString, int codepage,int &error)

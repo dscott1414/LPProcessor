@@ -532,9 +532,12 @@ void hashWebSiteURL(wstring webSiteURL,wstring &epath)
 { LFS
 	wchar_t tmp[8];
 	wstring::iterator wsi=webSiteURL.begin();
-	wchar_t *ba=L"http://";
-	if (!wcsncmp(ba,&(*wsi),wcslen(ba)))
-		wsi+=wcslen(ba);
+	wchar_t *ba = L"http://";
+	if (!wcsncmp(ba, &(*wsi), wcslen(ba)))
+		wsi += wcslen(ba);
+	ba = L"https://";
+	if (!wcsncmp(ba, &(*wsi), wcslen(ba)))
+		wsi += wcslen(ba);
 	ba=L"www.";
 	if (!wcsncmp(ba,&(*wsi),wcslen(ba)))
 		wsi+=wcslen(ba);

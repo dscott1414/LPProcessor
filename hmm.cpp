@@ -96,6 +96,18 @@ unordered_map<wstring, vector<wstring>> pennMapToLP = {
 { L"$",{ }} //	not listed in standard PennBank tag list but emitted by Stanford
 };
 
+wstring replaceQuotes(wstring ws)
+{
+	wstring replacement;
+	replacement.reserve(ws.length());
+	for (wchar_t wsc : ws)
+		if (WordClass::isSingleQuote(wsc) || WordClass::isDoubleQuote(wsc))
+			replacement += L'"';
+		else
+			replacement += wsc;
+	return replacement;
+}
+
 bool foundParsedSentence(Source &source, wstring sentence, wstring &parse,bool lockTable)
 {
 	if (lockTable)
@@ -105,7 +117,9 @@ bool foundParsedSentence(Source &source, wstring sentence, wstring &parse,bool l
 		printf("Acquired lock. Selecting sentence.\r");
 	}
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	std::replace(sentence.begin(), sentence.end(), L'\'', L'"');
+	if (sentence.length() >= 3000)
+		sentence = sentence.substr(0, 2999);
+	sentence = replaceQuotes(sentence);
 	size_t sentencehash=std::hash<std::wstring>{}(sentence);
 	_snwprintf(qt, QUERY_BUFFER_LEN, L"select parse from stanfordPCFGParsedSentences where sentencehash = %I64d", (__int64)sentencehash); // must be %I64d because of BIGINT signed considerations
 	MYSQL_RES * result = NULL;
@@ -115,7 +129,7 @@ bool foundParsedSentence(Source &source, wstring sentence, wstring &parse,bool l
 	{
 		mTW(sqlrow[0], parse);
 		if (parse.empty())
-			lplog(LOG_FATAL_ERROR, L"Parse is empty to %s", sentence.c_str());
+			lplog(LOG_ERROR, L"Parse is empty to %s", sentence.c_str());
 		parse += L" ";
 		std::replace(parse.begin(), parse.end(), L'"', L'\'');
 	}
@@ -128,7 +142,6 @@ bool foundParsedSentence(Source &source, wstring sentence, wstring &parse,bool l
 	return parse.length() > 0;
 }
 
-
 int setParsedSentence(Source &source, wstring sentence, wstring parse,bool lockTable)
 {
 	if (lockTable)
@@ -139,12 +152,18 @@ int setParsedSentence(Source &source, wstring sentence, wstring parse,bool lockT
 		printf("Acquired lock. Inserting sentence in table.\r");
 	}
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	std::replace(sentence.begin(), sentence.end(), L'\'', L'"');
-	std::replace(parse.begin(), parse.end(), L'\'', L'"');
+	if (sentence.length() >= 3000)
+		sentence = sentence.substr(0, 2999);
+	sentence = replaceQuotes(sentence);
+	parse = replaceQuotes(parse);
 	size_t sentencehash = std::hash<std::wstring>{}(sentence);
 	_snwprintf(qt, QUERY_BUFFER_LEN, L"insert stanfordPCFGParsedSentences (parse,sentence,sentencehash) VALUES('%s','%s',%I64d)", parse.c_str(),sentence.c_str(),(__int64)sentencehash);
-	if (!myquery(&source.mysql, qt))
+	if (!myquery(&source.mysql, qt, true))
+	{
+		source.unlockTables();
+		printf("Released lock.                           \r");
 		return -1;
+	}
 	if (lockTable)
 	{
 		source.unlockTables();

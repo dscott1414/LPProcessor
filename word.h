@@ -395,6 +395,8 @@ public:
 			if (relationMaps[I]) 
 			{
 				relationMaps[I]->clear();
+				delete relationMaps[I];
+				relationMaps[I] = NULL;
 			}
 	}
 	bool illegal(int f,int maxForms,tIWMM word)

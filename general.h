@@ -120,7 +120,8 @@ wstring itos(int i, wchar_t *format, wstring &tmp);
 wstring dtos(double fl,wstring &tmp);
 char *wTM(wstring inString,string &outString,int codePage=CP_UTF8);
 const wchar_t *mTW(string inString, wstring &outString);
-const wchar_t *mTW(string inString, wstring &outString,int &codePage);
+const wchar_t *mTW(string inString, wstring &outString, int &codePage);
+const wchar_t *mTW(string inString, wstring &outString, int &codePage, bool &iso8859ControlCharactersFound);
 const wchar_t *mTWCodePage(string inString, wstring &outString, int codepage,int &error);
 vector<wstring> splitString(wstring str, wchar_t wc);
 

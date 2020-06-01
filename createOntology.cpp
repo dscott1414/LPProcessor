@@ -31,7 +31,7 @@ MYSQL Ontology::mysql;
 set<string> Ontology::rejectCategories;
 bool Ontology::cacheRdfTypes=true;
 bool Ontology::alreadyConnected=false;
-bool Ontology::forceWebReread=true;
+bool Ontology::forceWebReread=false;
 extern int logDetail;
 unordered_map <wstring, dbs> Ontology::dbPediaOntologyCategoryList;
 unordered_map<wstring, vector <cTreeCat *> > Ontology::rdfTypeMap; // protected with rdfTypeMapSRWLock

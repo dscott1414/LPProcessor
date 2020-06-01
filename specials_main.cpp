@@ -27,6 +27,7 @@
 #include "future"
 #include "mutex"
 #include "stacktrace.h"
+#include <algorithm>
 
 void getSentenceWithTags(Source &source, int patternBegin, int patternEnd, int sentenceBegin, int sentenceEnd, int PEMAPosition, wstring &sentence);
 
@@ -349,20 +350,34 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 
 void setConsoleWindowSize(int width,int height)
 {
-	HANDLE Handle = GetStdHandle(STD_OUTPUT_HANDLE);      // Get Handle 
+	HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);      // Get screen handle 
+	CONSOLE_SCREEN_BUFFER_INFO csbi;
+	bool bSuccess = GetConsoleScreenBufferInfo(hConsole, &csbi);
 	_COORD coord;
-	coord.X = max(150, width);
-	coord.Y = max(2000, height);
-	if (!SetConsoleScreenBufferSize(Handle, coord))            // Set Buffer Size 
-		printf("Cannot set console buffer info to (%d,%d) (%d) %s\n", coord.X, coord.Y, (int)GetLastError(), LastErrorStr());
+	//coord.X = std::max({ csbi.dwSize.X, width, csbi.srWindow.Right - csbi.srWindow.Left, GetSystemMetrics(SM_CXMIN), 150 });
 
+	coord.X = csbi.dwSize.X;
+	coord.Y = csbi.dwSize.Y;
+	coord.X = max(coord.X, width);
+	coord.Y = max(coord.Y, height);
+	coord.X = max(coord.X, csbi.srWindow.Right - csbi.srWindow.Left);
+	coord.Y = max(coord.Y, csbi.srWindow.Bottom - csbi.srWindow.Top);
+	coord.X = max(coord.X, GetSystemMetrics(SM_CXMIN));
+	coord.Y = max(coord.Y, GetSystemMetrics(SM_CYMIN));
+	coord.X = max(coord.X, 150);
+	coord.Y = max(coord.Y, 2000);
+	coord.X = min(coord.X, csbi.dwMaximumWindowSize.X);
+	coord.Y = min(coord.Y, csbi.dwMaximumWindowSize.Y);
+	if (!SetConsoleScreenBufferSize(hConsole, coord))            // Set Buffer Size 
+		printf("Cannot set console buffer info to (%d,%d) (%d) %s\n original size: (%d,%d) desired window size (%d,%d) current window size (%d,%d) system minimum (%d,%d) desired buffer size (%d,%d) maximum buffer size (%d,%d)", 
+			coord.X, coord.Y, (int)GetLastError(), LastErrorStr(),
+			csbi.dwSize.X,csbi.dwSize.Y, width, height, csbi.srWindow.Right - csbi.srWindow.Left, csbi.srWindow.Bottom - csbi.srWindow.Top, GetSystemMetrics(SM_CXMIN), GetSystemMetrics(SM_CYMIN), 150, 2000, csbi.dwMaximumWindowSize.X, csbi.dwMaximumWindowSize.Y);
 	_SMALL_RECT Rect;
 	Rect.Top = 0;
 	Rect.Left = 0;
 	Rect.Bottom = height - 1;
 	Rect.Right = width - 1;
-
-	if (!SetConsoleWindowInfo(Handle, TRUE, &Rect))            // Set Window Size 	SMALL_RECT srctWindow;
+	if (!SetConsoleWindowInfo(hConsole, TRUE, &Rect))            // Set Window Size 	
 		printf("Cannot set console window info to (top=%d,left=%d,bottom=%d,right=%d) (%d) %s\n", 
 			Rect.Top, Rect.Left, Rect.Bottom, Rect.Right,
 			(int)GetLastError(), LastErrorStr());
@@ -4935,6 +4950,21 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: adjective not adverb"]++; // ST 305 out of total 771
 		return 0;
 	}
+	if (word == L"north" || word == L"south" || word == L"east" || word == L"west")
+	{
+		if (source.m[wordSourceIndex].queryWinnerForm(nounForm) != -1 && source.m[wordSourceIndex].getRelVerb() >= 0 && source.m[wordSourceIndex].getRelVerb() < wordSourceIndex && source.m[source.m[wordSourceIndex].getRelVerb()].hasWinnerVerbForm())
+			partofspeech += L"direction after verb is an adverb";
+	}
+	if (word == L"half")
+	{
+		if (source.m[wordSourceIndex].queryWinnerForm(nounForm) != -1 && source.m[wordSourceIndex].getRelVerb() >= 0 && source.m[wordSourceIndex].getRelVerb() < wordSourceIndex)
+			partofspeech += L"half object is an adverb";
+	}
+	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(nounForm) != -1)
+	{
+		errorMap[L"LP correct: noun not verb"]++; // ST 655, Unknown 29 out of total 1739
+		return 0;
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
@@ -4956,6 +4986,7 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 		return 0;
 	wstring originalWordSave;
 	source.getOriginalWord(wordSourceIndex, originalWordSave, false, false);
+	std::replace(originalWordSave.begin(), originalWordSave.end(), L'’', L'\'');
 	wstring originalWord = originalWordSave;
 	int wspace;
 	wstring lookFor=stTokenizeWord(word,originalWord, source.m[wordSourceIndex].flags,parse,wspace);
@@ -5122,7 +5153,7 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 							lplog(LOG_FATAL_ERROR, L"%d:Parenthesis not found in %s (from position %d) (2).", wordSourceIndex,parse.c_str(), wow);
 					}
 					else
-						lplog(LOG_FATAL_ERROR, L"%d:Word %s not found in parse %s (2).", wordSourceIndex,lookFor.c_str(),parse.c_str());
+						lplog(LOG_ERROR, L"%d:Word %s not found in parse %s (2).", wordSourceIndex,lookFor.c_str(),parse.c_str());
 				}
 			}
 			else
@@ -5131,7 +5162,7 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 		else
 			lplog(LOG_FATAL_ERROR, L"%d:Parenthesis not found in %s (from position %d).", wordSourceIndex,parse.c_str(),wow);
 	}
-	else
+	else if (parse.length()>1)
 		lplog(LOG_ERROR, L"%d:FATAL! Word %s not found in parse %s [%s]", wordSourceIndex,originalWord.c_str(),parse.c_str(),originalParse.c_str());
 	return 1;
 }
@@ -5233,8 +5264,11 @@ int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *
 				continue;
 			}
 			wstring parse;
-			if (parseSentence(source,env, sentence, parse, pcfg, !lockPerSource) < 0)
-				return -1;
+			if (parseSentence(source, env, sentence, parse, pcfg, !lockPerSource) < 0)
+			{
+				wordSourceIndex++;
+				continue;
+			}
 			wstring originalParse = parse;
 			int start = wordSourceIndex, until = -1,pmaOffset=-1;
 			bool inRelativeClause = false, sentencePrinted = false;
@@ -5282,7 +5316,8 @@ int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *
 	}
 	else
 	{
-		lplog(LOG_FATAL_ERROR, L"Unable to read source %d:%s\n", sourceId, path.c_str());
+		lplog(LOG_ERROR, L"Unable to read source %d:%s\n", sourceId, path.c_str());
+		source.unlockTables();
 		return -1;
 	}
 	return 10;
@@ -5443,6 +5478,11 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"LP correct: word 'round': ST says adverb/noun LP says preposition."] = numErrors * 121 / 126;
 	errorMap[L"ST correct: word 'round': ST says adverb/noun LP says preposition."] = numErrors * 5 / 126;
 
+	numErrors = errorMap[L"LP correct: noun not verb"]++;  // ST 655, Unknown 29 out of total 1739
+	errorMap[L"LP correct: noun not verb"] = numErrors * 1055 / 1739;
+	errorMap[L"ST correct: noun not verb"] = numErrors * 655 / 1739;
+	errorMap[L"diff: noun not verb"] = numErrors * 29 / 1739;
+
 }
 
 int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, bool lockPerSource)
@@ -5483,7 +5523,7 @@ int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, 
 		path.insert(0, L"\\").insert(0, CACHEDIR);
 		wchar_t buffer[1024];
 		__int64 processingSeconds = (clock() - startTime) / CLOCKS_PER_SEC;
-		wsprintf(buffer, L"%%%03I64d:%5d out of %05I64d sources in %02I64d:%02I64d:%02I64d [%d sources/hour] (%-35.35s...)", numSourcesProcessedNow * 100 / totalSource, numSourcesProcessedNow, totalSource,
+		wsprintf(buffer, L"%%%03I64d:%d:%5d out of %05I64d sources in %02I64d:%02I64d:%02I64d [%d sources/hour] (%-35.35s...)", numSourcesProcessedNow * 100 / totalSource, step, numSourcesProcessedNow, totalSource,
 			processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, (processingSeconds) ? numSourcesProcessedNow * 3600 / processingSeconds : 0, title.c_str());
 		SetConsoleTitle(buffer);
 		int setStep = stanfordCheckFromSource(source, sourceId, path, vm, env, numNoMatch, numPOSNotFound, numTotalDifferenceFromStanford, formNoMatchMap, formMisMatchMap, wordNoMatchMap,VFTMap,errorMap, comboCostFrequency,pcfg,L"",-1,specialExtension,lockPerSource);
@@ -5581,12 +5621,13 @@ int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, 
 	return 0;
 }
 
+// must run update sources set proc2=100 for each source to multithread
 int stanfordCheckMP(Source source, int step, bool pcfg, int MP)
 {
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	if (!myquery(&source.mysql, L"LOCK TABLES sources WRITE, sources rs WRITE, sources rs2 WRITE"))
 		return -1;
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources,(select id,ROW_NUMBER() over w rn from sources rs2 where proc2=%d WINDOW w AS (ORDER BY id)) rs set proc2=(rs.rn%%%d)+100 where sources.id=rs.id", step,MP);
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources,(select id,ROW_NUMBER() over w rn from sources rs2 where proc2=%d WINDOW w AS (ORDER BY id)) rs set proc2=(rs.rn%%%d)+101 where sources.id=rs.id", step,MP);
 	if (!myquery(&source.mysql, qt))
 		return -1;
 	/*

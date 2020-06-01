@@ -962,6 +962,11 @@ int createBasicPatterns(void)
 		1, L"personal_pronoun_accusative|them", 0, 1, 1,
 		0);
 
+	cPattern::create(L"_ADVERB", L"KIND",
+		1, L"noun|kind", 0, 1, 1,
+		1, L"preposition|of", 0, 1, 1,
+		0);
+
 	cPattern::create(L"_ADVERB{_FINAL}", L"AND",
 		1, L"_ADVERB", 0, 1, 1,
 		1, L"coordinator",0,1,1,
@@ -2440,7 +2445,7 @@ void createPrepositionalPhrases(void)
 	// probability analysis - prepositions were being changed to adverbs because there/again are not nouns in LP
 	cPattern::create(L"__PP", L"THAG",
 		1, L"preposition{P}", 0, 1, 1,
-		2, L"adverb|there{PREPOBJECT}", L"adverb|again{PREPOBJECT}", 0, 1, 1,
+		4, L"adverb|there{PREPOBJECT}", L"adverb|again{PREPOBJECT}", L"adverb|anywhere{PREPOBJECT}", L"adverb|everywhere{PREPOBJECT}", 0, 1, 1,
 		0);
 	// in which ... / for which...
 	// by which you intend to leave the town

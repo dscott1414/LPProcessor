@@ -1535,8 +1535,17 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 			//wstring forms;
 			//for (unsigned int f = 0; f < iSave->second.formsSize(); f++)
 				//forms += iSave->second.Form(f)->name + L" ";
-			lplog(LOG_INFO, L"Word not found on source read [%s].", sWord.c_str());
-			return WORD_NOT_FOUND;
+			wstring sWordNoDashes = sWord;
+			sWordNoDashes.erase(std::remove(sWordNoDashes.begin(), sWordNoDashes.end(), L'-'), sWordNoDashes.end());
+			sWordNoDashes.erase(std::remove(sWordNoDashes.begin(), sWordNoDashes.end(), L'—'), sWordNoDashes.end());
+			tIWMM tiWord;
+			if ((tiWord = Words.query(sWordNoDashes)) == Words.end())
+			{
+				lplog(LOG_INFO, L"Word not found on source read [%s].", sWord.c_str());
+				return WORD_NOT_FOUND;
+			}
+			iWord = tiWord;
+			return 0;
 		}
 		bool containsSingleQuote = false;
 		int dashLocation = -1;
