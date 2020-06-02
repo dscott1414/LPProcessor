@@ -1311,7 +1311,11 @@ int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring
 		return PARSE_EOF;
 	sourcePath=path;
 	bufferLen/=sizeof(bookBuffer[0]);
-	bookBuffer[bufferLen+1]=0;
+	bookBuffer[bufferLen] = 0;
+	bookBuffer[bufferLen + 1] = 0;
+	bookBuffer[bufferLen + 2] = 0;
+	bookBuffer[bufferLen + 3] = 0;
+	bookBuffer[bufferLen + 4] = 0;
 	bool hasBOM=bookBuffer[0] == 0xFEFF;
 	bufferScanLocation=(hasBOM) ? 1 : 0; // detect BOM
 	if (hasBOM)

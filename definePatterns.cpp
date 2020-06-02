@@ -727,6 +727,11 @@ int createBasicPatterns(void)
 											1, L"no",0,1,1,
 											1, L"adverb|longer", 0, 1, 1,
 											0);
+	// yesterday morning/tomorrow morning
+	cPattern::create(L"_ADVERB{FLOATTIME}", L"AT1d",
+											3, L"dayUnit|tomorrow{TIMEMODIFIER}", L"dayUnit|to-morrow{TIMEMODIFIER}", L"dayUnit|yesterday{TIMEMODIFIER}", 0, 1, 1,
+											4, L"dayUnit|afternoon{TIMECAPACITY}", L"dayUnit|morning{TIMECAPACITY}", L"dayUnit|evening{TIMECAPACITY}", L"dayUnit|night{TIMECAPACITY}", 0, 1, 1,
+											0);
 	// The next summer 
 	cPattern::create(L"_ADVERB{FLOATTIME}", L"AT2",
 											2, L"predeterminer|half*-2",L"_ADVERB[*]",0,0,1, // bright an early
@@ -757,6 +762,14 @@ int createBasicPatterns(void)
 											1, L"determiner|the", 0, 1, 1,
 											1, L"noun|time", 0, 1, 1,
 											0);
+	cPattern::create(L"__ADVERB", L"AT5day1",
+											1, L"dayUnit|day", 0, 1, 1,
+											2, L"coordinator|and", L"&", 0, 1, 1,
+											1, L"dayUnit|night", 0, 1, 1, 0);
+	cPattern::create(L"__ADVERB", L"AT5day2",
+											1, L"dayUnit|night", 0, 1, 1,
+											2, L"coordinator|and", L"&", 0, 1, 1,
+											1, L"dayUnit|day", 0, 1, 1, 0);
 	// And she had *many a time* heard him declare that he was not a business man .
 	cPattern::create(L"_ADVERB{FLOATTIME}", L"AT5b",
 											1, L"quantifier|many", 0, 1, 1,

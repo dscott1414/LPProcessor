@@ -4970,6 +4970,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: verb not noun"]++; // ST 625, LP 526 (Both Wrong) 42 (Both Correct) 62 out of total 1256
 		return 0;
 	}
+	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(adjectiveForm) != -1)
+	{
+		errorMap[L"LP correct: adjective not noun"]++; // ST 240, LP 364 (Both Wrong) 19 out of total 623
+		return 0;
+	}
 	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(verbForm) != -1)
 	{
 		if (source.queryPattern(wordSourceIndex, L"_VERBONGOING") != -1 && source.queryPatternDiff(wordSourceIndex, L"_VERBREL2", L"1") != -1 && source.queryPatternDiff(wordSourceIndex, L"__S1", L"5") != -1)
@@ -5203,9 +5208,10 @@ void printFormDistribution(wstring word, double adp, FormDistribution fd, wstrin
 		// commented out: look for forms that have a high percentage of LP winners, but a low percentage of agreement.
 		// actually just look for the highest occurring forms with maximum poor agreement.
 		int diff = formCount * (100 - (fd.agreeFormDistribution[form] * 100 / formCount));//count*count / totalWordOccurrenceCount*fd.agreeFormDistribution[form];
-		if (fd.LPErrorFormDistribution[form]>10 && (fd.agreeFormDistribution[form] * 100 / formCount) < 5 && fd.LPAlreadyAccountedFormDistribution[form]<5)
+		if ((fd.LPErrorFormDistribution[form]>10 && (fd.agreeFormDistribution[form] * 100 / formCount) < 5 && fd.LPAlreadyAccountedFormDistribution[form]<5) ||
+			fd.disagreeFormDistribution[form]*1000/formCount<=5)
 		{
-			lplog(LOG_ERROR, L"%05d **%s:%3.2f (%d/%d) %s:total=%d accounted=%d agree=%d disagree=%d error=%d %d%% %d%%", 
+			lplog(LOG_ERROR, L"%05d *^*%s:%3.2f (%d/%d) %s:total=%d accounted=%d agree=%d disagree=%d error=%d %d%% %d%%", 
 				fd.LPErrorFormDistribution[form],
 				word.c_str(), adp, fd.agreeSTLP, totalWordOccurrenceCount, form.c_str(), 
 				formCount, fd.LPAlreadyAccountedFormDistribution[form], fd.agreeFormDistribution[form], fd.disagreeFormDistribution[form], fd.LPErrorFormDistribution[form],
@@ -5503,6 +5509,11 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"ST correct: verb not noun"] = numErrors * 625 / 1256;
 	errorMap[L"diff: verb not noun"] = numErrors * 62 / 1256;
 
+	// ST 240, LP 364 (Both Wrong) 19 out of total 623
+	numErrors = errorMap[L"LP correct: adjective not noun"];  
+	errorMap[L"LP correct: adjective not noun"] = numErrors * 364 / 623;
+	errorMap[L"ST correct: adjective not noun"] = numErrors * 240 / 623;
+	errorMap[L"diff: adjective not noun"] = numErrors * 19 / 623;
 }
 
 int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, bool lockPerSource)
