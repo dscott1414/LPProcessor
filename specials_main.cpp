@@ -5005,6 +5005,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: present may syntactically be considered a noun after a preposition"]++;
 		return 0;
 	}
+	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(nounForm) != -1)
+	{
+		errorMap[L"LP correct: noun not adjective"]++; // ST 353, LP 334 (Both Wrong) 16 out of total 704
+		return 0;
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
@@ -5535,6 +5540,13 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"LP correct: adjective not noun"] = numErrors * 364 / 623;
 	errorMap[L"ST correct: adjective not noun"] = numErrors * 240 / 623;
 	errorMap[L"diff: adjective not noun"] = numErrors * 19 / 623;
+
+	// ST 353, LP 334 (Both Wrong) 16 out of total 704
+	numErrors = errorMap[L"LP correct: noun not adjective"];
+	errorMap[L"LP correct: noun not adjective"] = numErrors * 334 / 704;
+	errorMap[L"ST correct: noun not adjective"] = numErrors * 353 / 704;
+	errorMap[L"diff: noun not adjective"] = numErrors * 16 / 704;
+
 }
 
 int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, bool lockPerSource)
