@@ -3474,7 +3474,13 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	if (word == L"neither" && source.m[wordSourceIndex].pma.queryPatternDiff(L"__NOUN", L"P") != -1 || source.m[wordSourceIndex].pma.queryPatternDiff(L"_VERBPRESENTC", L"P") != -1 || source.m[wordSourceIndex].pma.queryPatternDiff(L"_VERBPAST", L"P") != -1)
 	{
-		errorMap[L"LP correct: word 'either': ST says " + primarySTLPMatch + L" but LP says quantifier"]++;
+		errorMap[L"LP correct: word 'neither': ST says " + primarySTLPMatch + L" but LP says quantifier"]++;
+		return 0;
+	}
+	// almost all examples studied from 995 low numUnknown sources
+	if (word == L"neither" && primarySTLPMatch == L"determiner" && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0)
+	{
+		errorMap[L"LP correct: word 'neither': ST says " + primarySTLPMatch + L" but LP says adverb"]++;
 		return 0;
 	}
 	if (word == L"you" && primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(L"personal_pronoun") >= 0)
@@ -4983,6 +4989,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		}
 			//errorMap[L"LP correct: verb not noun"]++; 
 		//return 0;
+	}
+	if (word == L"o'clock" && primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(nounForm) != -1)
+	{
+		errorMap[L"diff: o'clock may syntactically be considered a noun"]++; 
+		return 0;
 	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
