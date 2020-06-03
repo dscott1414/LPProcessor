@@ -4992,7 +4992,17 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	if (word == L"o'clock" && primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(nounForm) != -1)
 	{
-		errorMap[L"diff: o'clock may syntactically be considered a noun"]++; 
+		errorMap[L"diff: o'clock may syntactically be considered a noun"]++;
+		return 0;
+	}
+	if (word == L"somewhere" && primarySTLPMatch == L"adverb" && source.m[wordSourceIndex - 1].queryWinnerForm(prepositionForm) != -1)
+	{
+		errorMap[L"LP correct: somewhere may syntactically be considered a noun after a preposition"]++;
+		return 0;
+	}
+	if ((word == L"present" || word == L"particular") && primarySTLPMatch == L"adjective" && source.m[wordSourceIndex - 1].queryWinnerForm(prepositionForm) != -1)
+	{
+		errorMap[L"LP correct: present may syntactically be considered a noun after a preposition"]++;
 		return 0;
 	}
 	wstring winnerFormsString;
