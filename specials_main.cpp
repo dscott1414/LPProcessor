@@ -2851,18 +2851,10 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	// 15. in the event of __AS_AS pattern, which is as (adverb) followed by an adjective or adverb followed by as (preposition)
 	// either adverb or preposition may be acceptable as both are incorporated into the pattern.  __AS_AS pattern was derived from Longman
-	if (word == L"as" && (primarySTLPMatch == L"preposition or conjunction" || primarySTLPMatch == L"adverb"))
+	if (word == L"as" && (source.m[wordSourceIndex].pma.queryPattern(L"__AS_AS") != -1 || source.queryPatternDiff(wordSourceIndex,L"__PP",L"D")!=-1))
 	{
-		if (source.m[wordSourceIndex].pma.queryPattern(L"__AS_AS") != -1)
-		{
-			errorMap[L"diff: word 'as': ST says " + primarySTLPMatch + L", LP says __AS_AS (Longman adverbial clause) - first as"]++;
-			return 0;
-		}
-		if (wordSourceIndex >= 2 && source.m[wordSourceIndex - 2].word->first == L"as" && source.m[wordSourceIndex - 2].pma.queryPattern(L"__AS_AS") != -1)
-		{
-			errorMap[L"diff: word 'as': ST says " + primarySTLPMatch + L", LP says __AS_AS (Longman adverbial clause) - second as"]++;
-			return 0;
-		}
+		errorMap[L"diff: word 'as': ST says " + primarySTLPMatch + L", LP says __AS_AS (Longman adverbial clause) "]++;
+		return 0;
 	}
 	if (source.m[wordSourceIndex].queryWinnerForm(L"does") >= 0)
 	{
@@ -5009,6 +5001,15 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	{
 		errorMap[L"LP correct: noun not adjective"]++; // ST 353, LP 334 (Both Wrong) 16 out of total 704
 		return 0;
+	}
+	if (primarySTLPMatch == L"preposition or conjunction" && source.m[wordSourceIndex].queryWinnerForm(adverbForm) != -1)
+	{
+		if (source.m[wordSourceIndex + 1].queryWinnerForm(adverbForm) != -1)
+		{
+			errorMap[L"LP correct: adverb preceding adverb"]++; // out of 100, 4 were incorrect
+			return 0;
+		}
+		//return 0;
 	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);

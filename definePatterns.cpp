@@ -678,7 +678,7 @@ int createBasicPatterns(void)
 	// this is used as an adverb, a preposition and a subordinator (included as a REL1 syntax)
 	cPattern::create(L"__AS_AS", L"", 
 											1, L"adverb|as*-1", 0, 1, 1,
-											2, L"adverb", L"adjective", 0, 1, 1,
+											2, L"adverb", L"adjective", 0, 1, 2,
 											1, L"__NOUN*1",0,0,1, // as brave hearts as / as silent a type as / as stern a voice as 
 											2, L"preposition|as{P}", L"conjunction|as if", 0, 1, 1, 0); // when included in a _PP, mark this as a preposition
 	cPattern::create(L"__AS_AS", L"2",
@@ -687,8 +687,6 @@ int createBasicPatterns(void)
 											1, L"coordinator",0,1,1,
 											2, L"adverb", L"adjective", 0, 1, 1,
 											1, L"preposition|as{P}", 0, 1, 1, 0); // when included in a _PP, mark this as a preposition
-
-
 	/// TIME related adverbs
 	// this morning / this very morning / some morning
 	cPattern::create(L"_ADVERB{FLOATTIME}",L"T",
