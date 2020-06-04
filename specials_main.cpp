@@ -4910,11 +4910,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		if (atStart || source.m[wordSourceIndex + 1].word->first == L"." || source.m[wordSourceIndex + 1].word->first == L"." || source.m[wordSourceIndex + 1].word->first == L"." ||
 			  source.m[wordSourceIndex-1].hasWinnerVerbForm())
 		{
-			errorMap[L"ST correct: ST says adverb, LP says numeral_ordinal matched first word, last word or after verb"]++;
-			return 0;
+		errorMap[L"ST correct: ST says adverb, LP says numeral_ordinal matched first word, last word or after verb"]++;
+		return 0;
 		}
 	}
-	if ((primarySTLPMatch == L"adverb") && source.m[wordSourceIndex].queryWinnerForm(L"preposition") >= 0 && word == L"before" && source.queryPatternDiff(wordSourceIndex, L"_ADVERB",L"AT13") != -1)
+	if ((primarySTLPMatch == L"adverb") && source.m[wordSourceIndex].queryWinnerForm(L"preposition") >= 0 && word == L"before" && source.queryPatternDiff(wordSourceIndex, L"_ADVERB", L"AT13") != -1)
 	{
 		errorMap[L"diff: 'before' in _ADVERB[AT13] "]++;
 		return 0;
@@ -4926,7 +4926,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"LP correct: 'no' as determiner before noun"]++;
 			return 0;
 		}
-		if (source.m[wordSourceIndex + 1].word->first==L"sooner" && source.m[wordSourceIndex].isOnlyWinner(adverbForm))
+		if (source.m[wordSourceIndex + 1].word->first == L"sooner" && source.m[wordSourceIndex].isOnlyWinner(adverbForm))
 		{
 			errorMap[L"LP correct: 'no' as adverb before 'sooner'"]++;
 			return 0;
@@ -4937,7 +4937,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	set <wstring> adverbFixedWordPatterns = { L"8",L"T",L"ST",L"ST2",L"AT1",L"AT1b",L"AT1c",L"AT2",L"AT3",L"AT4",L"AT5",L"AT5b",L"AT5c",L"AT6",L"AT7",L"AT9",L"AT10",L"AT11",L"AT11m",L"AT11p",L"AT12",L"AT13",L"AT14",L"6",L"MT",L"B",L"M",L"L",L"TL",L"Y",L"AMONG",L"ND" };
 	if ((adverbPatternOffset = source.queryPattern(wordSourceIndex, L"_ADVERB")) != -1 && adverbFixedWordPatterns.find(patterns[source.pema[adverbPatternOffset].getPattern()]->differentiator) != adverbFixedWordPatterns.end())
 	{
-		if (word!=L"sun")
+		if (word != L"sun")
 		{
 			errorMap[L"diff: word matches specific word pattern ADVERB"]++;
 			return 0;
@@ -4973,15 +4973,6 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: adjective not noun"]++; // ST 240, LP 364 (Both Wrong) 19 out of total 623
 		return 0;
 	}
-	if (primarySTLPMatch == L"noun" && source.m[wordSourceIndex].queryWinnerForm(verbForm) != -1)
-	{
-		if (source.queryPattern(wordSourceIndex, L"_VERBONGOING") != -1 && source.queryPatternDiff(wordSourceIndex, L"_VERBREL2", L"1") != -1 && source.queryPatternDiff(wordSourceIndex, L"__S1", L"5") != -1)
-		{
-			partofspeech += L"**NOUNVERB1";
-		}
-			//errorMap[L"LP correct: verb not noun"]++; 
-		//return 0;
-	}
 	if (word == L"o'clock" && primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(nounForm) != -1)
 	{
 		errorMap[L"diff: o'clock may syntactically be considered a noun"]++;
@@ -5009,7 +5000,30 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"LP correct: adverb preceding adverb"]++; // out of 100, 4 were incorrect
 			return 0;
 		}
-		//return 0;
+	}
+	int quantifierExplicitPatternPEMAOffset;
+	// _ADVERB[AT8], __ADJECTIVE[A], __INFPT[1], __NOUN[D2], __S1[5], _MS1[H], _REL1[2], _REL1[6]
+	if (source.m[wordSourceIndex].queryWinnerForm(quantifierForm) != -1 &&
+		  ((quantifierExplicitPatternPEMAOffset = source.queryPatternDiff(wordSourceIndex, L"_ADVERB", L"AT8")) != -1) ||
+			((quantifierExplicitPatternPEMAOffset = source.queryPatternDiff(wordSourceIndex, L"__ADJECTIVE", L"A")) != -1) ||
+			((quantifierExplicitPatternPEMAOffset = source.queryPatternDiff(wordSourceIndex, L"__INFPT", L"1")) != -1) ||
+			((quantifierExplicitPatternPEMAOffset = source.queryPatternDiff(wordSourceIndex, L"__NOUN", L"D2")) != -1) ||
+			((quantifierExplicitPatternPEMAOffset = source.queryPatternDiff(wordSourceIndex, L"__S1", L"5")) != -1) ||
+			((quantifierExplicitPatternPEMAOffset = source.queryPatternDiff(wordSourceIndex, L"_MS1", L"H")) != -1) ||
+			((quantifierExplicitPatternPEMAOffset = source.queryPatternDiff(wordSourceIndex, L"_REL1", L"2")) != -1) ||
+			((quantifierExplicitPatternPEMAOffset = source.queryPatternDiff(wordSourceIndex, L"_REL1", L"6")) != -1))
+	{
+		wstring patternName = patterns[source.pema[quantifierExplicitPatternPEMAOffset].getPattern()]->name;
+		wstring patternDiff = patterns[source.pema[quantifierExplicitPatternPEMAOffset].getPattern()]->differentiator;
+		for (; quantifierExplicitPatternPEMAOffset != -1; quantifierExplicitPatternPEMAOffset = source.pema[quantifierExplicitPatternPEMAOffset].nextByPosition)
+			if (patterns[source.pema[quantifierExplicitPatternPEMAOffset].getPattern()]->name == patternName && patterns[source.pema[quantifierExplicitPatternPEMAOffset].getPattern()]->differentiator == patternDiff)
+			{
+				if (!source.pema[quantifierExplicitPatternPEMAOffset].isChildPattern() && source.m[wordSourceIndex].getFormNum(source.pema[quantifierExplicitPatternPEMAOffset].getChildForm()) == quantifierForm)
+				{
+					errorMap[L"diff: LP says quantifier in an explicit construction"]++;
+					return 0;
+				}
+			}
 	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
