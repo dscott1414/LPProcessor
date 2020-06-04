@@ -4181,7 +4181,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	{
 		if (word == L"semi" || word == L"but" || word == L"oh" || word == L"hey" || word == L"yes" || source.m[wordSourceIndex].queryWinnerForm(L"reflexive_pronoun") >= 0)
 		{
-			errorMap[L"LP correct '" + word + L"': incorrect noun usage"]++;
+			errorMap[L"LP correct: incorrect noun usage"]++;
 			return 0;
 		}
 	}
@@ -4190,13 +4190,13 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		if (source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") >= 0 || source.m[wordSourceIndex + 1].queryWinnerForm(L"verb") >= 0 ||
 			(source.m[wordSourceIndex + 1].queryForm(dashForm) != -1 && source.m[wordSourceIndex + 2].queryWinnerForm(L"adjective") >= 0))
 		{
-			errorMap[L"LP correct '" + word + L"': adverb not noun"]++;
+			errorMap[L"LP correct: adverb not noun"]++;
 			return 0;
 		}
 	}
 	if ((source.m[wordSourceIndex].flags&WordMatch::flagFirstLetterCapitalized) && !iswalpha(source.m[wordSourceIndex + 1].word->first[0]) && source.m[wordSourceIndex].queryWinnerForm(L"interjection") >= 0)
 	{
-		errorMap[L"LP correct '" + word + L"': interjection not "+ primarySTLPMatch]++;
+		errorMap[L"LP correct: interjection not "+ primarySTLPMatch]++;
 		return 0;
 	}
 	if ((source.queryPatternDiff(wordSourceIndex,L"__INTRO_N", L"C") != -1 || source.queryPatternDiff(wordSourceIndex,L"_ADVERB", L"T") != -1) && 
