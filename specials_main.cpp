@@ -5030,6 +5030,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"diff: LP says quantifier in a __NOUN[9] construction"]++;
 		return 0;
 	}
+	if (word == L"right" && source.m[wordSourceIndex - 1].word->first==L"no" && primarySTLPMatch == L"adverb" && source.m[wordSourceIndex].queryWinnerForm(nounForm) != -1)
+	{
+		errorMap[L"LP correct: right is a noun after 'no'"]++;
+		return 0;
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
