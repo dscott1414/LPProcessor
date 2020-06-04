@@ -5025,6 +5025,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				}
 			}
 	}
+	if (source.m[wordSourceIndex].queryWinnerForm(quantifierForm) != -1 && source.m[wordSourceIndex].pma.queryPatternDiff(L"__NOUN", L"9") != -1 && source.queryPattern(wordSourceIndex, L"__N1") != -1)
+	{
+		errorMap[L"diff: LP says quantifier in a __NOUN[9] construction"]++;
+		return 0;
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
