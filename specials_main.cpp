@@ -4988,6 +4988,11 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: present may syntactically be considered a noun after a preposition"]++;
 		return 0;
 	}
+	if (word == L"behind" && primarySTLPMatch == L"adverb" && source.m[wordSourceIndex - 1].queryWinnerForm(prepositionForm) != -1)
+	{
+		errorMap[L"LP correct: behind may syntactically be considered a noun after a preposition"]++;
+		return 0;
+	}
 	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(nounForm) != -1)
 	{
 		errorMap[L"LP correct: noun not adjective"]++; // ST 353, LP 334 (Both Wrong) 16 out of total 704
