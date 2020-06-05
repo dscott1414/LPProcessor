@@ -901,6 +901,15 @@ int createBasicPatterns(void)
 									1, L"determiner|no", 0, 1, 1,
 									1, L"noun|doubt", 0, 1, 1,
 									0);
+	cPattern::create(L"_ADVERB{_FINAL}", L"ALLRIGHT",
+									1, L"adverb|all", 0, 1, 1,
+									1, L"adverb|right*-1", 0, 1, 1,
+									0);
+	cPattern::create(L"_ADVERB{_FINAL}", L"HALFWAY",
+									1, L"adverb|half", 0, 1, 1,
+									1, L"dash*-1", 0, 0, 1,
+									1, L"adverb|way*-1", 0, 1, 1,
+									0);
 	/* Causes incorrect parse - "Then"--Tuppence's voice shook a little--"there's a boy."
 	cPattern::create(L"_ADVERB",L"2",1,L"quotes",OPEN_INFLECTION,1,1,
 											1,L"__ADVERB",0,1,1,
@@ -929,7 +938,7 @@ int createBasicPatterns(void)
 	cPattern::create(L"_ADVERB{_FINAL}",L"6",
 										1,L"adverb|more",0,1,1,
 										1,L"preposition|than",0,1,1,
-										2,L"adverb|once",L"adverb|twice",0,1,1,
+										2,L"adverb|once*-1",L"adverb|twice",0,1,1,
 										0);
 	// Mr . Bennet bade her blooper gravely and *more affectionately than* was his wont .
 	cPattern::create(L"_ADVERB{_FINAL}", L"MT",
