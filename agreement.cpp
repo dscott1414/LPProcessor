@@ -2722,7 +2722,24 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 						traceSources.push_back(traceSource);
 					}
 					lowerPreviousElementCosts(secondaryPEMAPositions, nCosts, traceSources, L"nounDeterminer");
-					setSecondaryCosts(secondaryPEMAPositions,pma,nPosition, true, L"nounDeterminer");
+					setSecondaryCosts(secondaryPEMAPositions, pma, nPosition, true, L"nounDeterminer");
+					if (nTagSets.empty() && pema[nPEMAPosition].end == 1 && m[nPosition].word->first == L"her" && (m[nPosition + 1].word->first == L"own" || m[nPosition + 1].word->first == L"best"))
+					{
+						if (debugTrace.traceDeterminer)
+							lplog(L"%d:noun is her with probabilistic nonseperable word %s [SOURCE=%06d]", nPosition, m[nPosition + 1].word->first.c_str(), traceSource = gTraceSource++);
+						secondaryPEMAPositions.clear(); // normally cleared by startCollectTags which is not called here
+						patternElementMatchArray::tPatternElementMatch *npemi = pema.begin() + nPEMAPosition;
+						for (; nPEMAPosition >= 0 && npemi->getPattern() == p && npemi->end == nLen; nPEMAPosition = npemi->nextByPatternEnd, npemi = pema.begin() + nPEMAPosition)
+						{
+							patternElementMatchArray::tPatternElementMatch *epem = pema.begin() + nPEMAPosition;
+							for (int ePEMAPosition = nPEMAPosition; ePEMAPosition >= 0 && epem->getPattern() == p && (epem->end - epem->begin) == nLen; ePEMAPosition = epem->nextPatternElement, epem = pema.begin() + ePEMAPosition)
+								secondaryPEMAPositions.push_back(costPatternElementByTagSet(nPosition, ePEMAPosition, -1, 0, pema[ePEMAPosition].getElement()));
+						}
+						nCosts.push_back(10);
+						traceSources.push_back(traceSource);
+						lowerPreviousElementCosts(secondaryPEMAPositions, nCosts, traceSources, L"herProbabilisticNonseperable");
+						setSecondaryCosts(secondaryPEMAPositions, pma, nPosition, false, L"herProbabilisticNonseperable");
+					}
 				} // for each iteration of each object
 			}
 			else if (!patterns[nPattern]->hasTag(GNOUN_TAG) && !patterns[nPattern]->hasTag(MNOUN_TAG) && tagLocations[tl].isPattern)
