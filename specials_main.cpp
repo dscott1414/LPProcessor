@@ -5038,6 +5038,12 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: right is a noun after 'no'"]++;
 		return 0;
 	}
+	// ST 189, LP 232 out of total 421
+	if (word == L"her" && primarySTLPMatch == L"possessive_determiner" && source.m[wordSourceIndex].queryWinnerForm(personalPronounAccusativeForm) != -1)
+	{
+		errorMap[L"LP correct: LP says 'her' is NOT a possessive"]++;
+		return 0;
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
@@ -5574,6 +5580,11 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"LP correct: noun not adjective"] = numErrors * 334 / 704;
 	errorMap[L"ST correct: noun not adjective"] = numErrors * 353 / 704;
 	errorMap[L"diff: noun not adjective"] = numErrors * 16 / 704;
+
+	// ST 189, LP 232 out of total 421
+	numErrors = errorMap[L"LP correct: LP says 'her' is NOT a possessive"];
+	errorMap[L"LP correct: LP says 'her' is NOT a possessive"] = numErrors * 232 / 421;
+	errorMap[L"ST correct: LP says 'her' is NOT a possessive"] = numErrors * 189 / 421;
 
 }
 

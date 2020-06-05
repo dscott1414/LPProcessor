@@ -10,7 +10,7 @@
 #include "profile.h"
 
 // the below are all initialized
-int commaForm=-1,periodForm=-1,reflexivePronounForm=-1,possessivePronounForm=-1,nomForm=-1,accForm=-1;
+int commaForm=-1,periodForm=-1,reflexivePronounForm=-1,possessivePronounForm=-1,nomForm=-1,personalPronounAccusativeForm=-1;
 int possessiveDeterminerForm=-1,interrogativeDeterminerForm=-1,particleForm=-1;
 int nounForm=-1,quoteForm=-1,conjunctionForm=-1,quantifierForm=-1,dashForm=-1,bracketForm=-1;
 int demonstrativeDeterminerForm=-1,numeralCardinalForm=-1,numeralOrdinalForm=-1,romanNumeralForm=-1,moneyForm=-1,internalStateForm=-1,webAddressForm=-1;
@@ -3982,7 +3982,7 @@ bool Source::physicallyPresentPosition(int where,int beginObjectPosition,bool &p
 			isAdjective=false;
 		// (1328)||| (1329)Tommy (1330)sat (1331)down (1332)opposite (1333)her (1334). (1335)His (1336)bared (1337)head 
 		// At 254: (250)She (253)met (254)his (255)inquiringly (256).
-		if (at==where && (m[where].queryWinnerForm(accForm)>=0 || m[where].queryWinnerForm(possessivePronounForm)>=0))
+		if (at==where && (m[where].queryWinnerForm(personalPronounAccusativeForm)>=0 || m[where].queryWinnerForm(possessivePronounForm)>=0))
 			isAdjective=false;
 		//  Tommy's next procedure was to make a call at South Audley Mansions . 
 		if (at!=where && (m[at].objectRole&IS_OBJECT_ROLE) && 
@@ -4752,7 +4752,7 @@ int Source::scanForSpeaker(int where,bool &definitelySpeaker,bool &crossedSectio
 						// audienceObjectPosition if already set is a HAIL.  verbPosition+2 is specific, but may be him or her, so it may be gender ambiguous.
 						// “[tommy:julius] I[tommy] say , Hersheimmer ” -- Tommy turned to him[henry] -- “[tommy:julius] Tuppence has gone off sleuthing on her[tuppence] own . ”
 						if (audienceObjectPosition>=0 && (ao=m[audienceObjectPosition].getObject())>=0 &&
-							  objects[ao].objectClass==NAME_OBJECT_CLASS && m[objectPosition].queryWinnerForm(accForm)>=0 &&
+							  objects[ao].objectClass==NAME_OBJECT_CLASS && m[objectPosition].queryWinnerForm(personalPronounAccusativeForm)>=0 &&
 							  objects[ao].matchGender(objects[m[objectPosition].getObject()]))
 						{
 							m[objectPosition].objectMatches.clear();

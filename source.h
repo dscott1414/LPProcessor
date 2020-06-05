@@ -378,7 +378,7 @@ public:
 			}
 			if (word->first.length()==1) return word;
 			if (word->second.query(numeralCardinalForm)>=0 || word->second.query(NUMBER_FORM_NUM)>=0) return word;
-			if (word->second.query(nomForm)>=0 || word->second.query(accForm)>=0 || word->second.query(personalPronounForm)>=0) return word;
+			if (word->second.query(nomForm)>=0 || word->second.query(personalPronounAccusativeForm)>=0 || word->second.query(personalPronounForm)>=0) return word;
 			if (word->second.query(possessiveDeterminerForm)>=0 || word->second.query(possessivePronounForm)>=0 || word->second.query(reflexivePronounForm)>=0) return word;
 			if (isNoun && word->second.query(nounForm)<0) return word;
 			wstring in=word->first;
@@ -400,7 +400,7 @@ public:
 			}
 			if (word->first.length()==1) return word;
 			if (word->second.query(numeralCardinalForm)>=0 || word->second.query(NUMBER_FORM_NUM)>=0) return word;
-			if (word->second.query(nomForm)>=0 || word->second.query(accForm)>=0 || word->second.query(personalPronounForm)>=0) return word;
+			if (word->second.query(nomForm)>=0 || word->second.query(personalPronounAccusativeForm)>=0 || word->second.query(personalPronounForm)>=0) return word;
 			if (word->second.query(possessiveDeterminerForm)>=0 || word->second.query(possessivePronounForm)>=0 || word->second.query(reflexivePronounForm)>=0) return word;
 			if (word->second.query(nounForm)<0) return word;
 			wstring in=word->first;

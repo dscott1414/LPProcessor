@@ -1568,7 +1568,7 @@ void WordClass::initialize()
 
 	// SET internal form variables
 	// avoid looking these common forms up...
-	if (accForm < 0) accForm = FormsClass::gFindForm(L"personal_pronoun_accusative");
+	if (personalPronounAccusativeForm < 0) personalPronounAccusativeForm = FormsClass::gFindForm(L"personal_pronoun_accusative");
 	if (adverbForm < 0) adverbForm = FormsClass::gFindForm(L"adverb");
 	if (adjectiveForm < 0) adjectiveForm = FormsClass::gFindForm(L"adjective");
 	if (commaForm < 0) commaForm = FormsClass::gFindForm(L",");
@@ -1653,7 +1653,7 @@ void WordClass::initialize()
 
 	//** SET Forms
 	vector <int> commonForms =
-	{ reflexivePronounForm,nomForm,accForm,conjunctionForm,demonstrativeDeterminerForm,possessiveDeterminerForm,interrogativeDeterminerForm,
+	{ reflexivePronounForm,nomForm,personalPronounAccusativeForm,conjunctionForm,demonstrativeDeterminerForm,possessiveDeterminerForm,interrogativeDeterminerForm,
 		indefinitePronounForm,reciprocalPronounForm,pronounForm,thinkForm,relativeForm,
 		determinerForm,doesForm,doesNegationForm,possessivePronounForm,quantifierForm,coordinatorForm,
 		beForm,haveForm,haveNegationForm,doForm,doNegationForm,interjectionForm,personalPronounForm,
@@ -1664,7 +1664,7 @@ void WordClass::initialize()
 
 	// numeralCardinalForm, numeralOrdinalForm, romanNumeralForm, quantifierform, dateForm,timeForm, telephoneNumberForm, moneyForm, and webAddressForm
 	// are not closed, but they can be positively identified so they do not have to be written in the cache file
-	vector<int> nonCachedForms = { commaForm, periodForm ,reflexivePronounForm	,nomForm	,accForm	,quoteForm	,dashForm	,bracketForm	,conjunctionForm,
+	vector<int> nonCachedForms = { commaForm, periodForm ,reflexivePronounForm	,nomForm	,personalPronounAccusativeForm	,quoteForm	,dashForm	,bracketForm	,conjunctionForm,
 		demonstrativeDeterminerForm	,possessiveDeterminerForm	,interrogativeDeterminerForm	,indefinitePronounForm	,reciprocalPronounForm,
 		pronounForm	,numeralCardinalForm	,numeralOrdinalForm	,romanNumeralForm	,honorificForm	,honorificAbbreviationForm	,relativeForm	,
 		determinerForm,doesForm	,doesNegationForm	,possessivePronounForm	,quantifierForm	,dateForm	,timeForm	,telephoneNumberForm	,
@@ -1690,7 +1690,7 @@ void WordClass::initialize()
 	for (int vf : verbForms)
 		Forms[vf]->isVerbForm = true;
 
-	vector <int> nounForms = { nounForm,indefinitePronounForm,personalPronounForm,accForm,nomForm,PROPER_NOUN_FORM_NUM,reflexivePronounForm,letterForm };
+	vector <int> nounForms = { nounForm,indefinitePronounForm,personalPronounForm,personalPronounAccusativeForm,nomForm,PROPER_NOUN_FORM_NUM,reflexivePronounForm,letterForm };
 	for (int nf : nounForms)
 		Forms[nf]->isNounForm = true;
 

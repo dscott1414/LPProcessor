@@ -1259,7 +1259,7 @@ int Source::identifyObject(int tag, int where, int element, bool adjectival, int
 	else if (tagName != L"GNOUN")
 	{
 		if ((objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS || objectClass == NAME_OBJECT_CLASS) &&
-			(m[principalWhere].queryWinnerForm(nomForm) >= 0 || m[principalWhere].queryWinnerForm(accForm) >= 0 ||
+			(m[principalWhere].queryWinnerForm(nomForm) >= 0 || m[principalWhere].queryWinnerForm(personalPronounAccusativeForm) >= 0 ||
 				m[principalWhere].queryWinnerForm(personalPronounForm) >= 0 || m[principalWhere].queryWinnerForm(quantifierForm) >= 0 ||
 				m[principalWhere].queryWinnerForm(possessivePronounForm) >= 0 ||
 				m[principalWhere].queryWinnerForm(indefinitePronounForm) >= 0 || m[principalWhere].queryWinnerForm(pronounForm) >= 0 ||
@@ -1432,7 +1432,7 @@ int Source::identifyObject(int tag, int where, int element, bool adjectival, int
 				(forms->isSet(honorificForm) && m[I].queryForm(L"pinr") < 0)) &&
 				((!forms->isSet(determinerForm) && !forms->isSet(pronounForm) &&
 					!forms->isSet(indefinitePronounForm) && !forms->isSet(reciprocalPronounForm) &&
-					!forms->isSet(accForm) && !forms->isSet(nomForm)) || I == principalWhere))
+					!forms->isSet(personalPronounAccusativeForm) && !forms->isSet(nomForm)) || I == principalWhere))
 				relatedObjectsMap[m[I].word].insert(objects.size());
 		}
 		objects.push_back(thisObject);
@@ -1949,13 +1949,13 @@ void Source::identifyObjects(void)
 		// otherwise 'as' will be an adverb and Rita Vandermeyer will be split into two names
 		// We[tommy,woman] had her[marguerite] down as Rita Vandemeyer 
 		// I[julius] came over here determined to find her[jane] and fix it[here] all[all] up , and take her[jane] back as Mrs . Julius P . Hersheimmer ! 
-		if (m[I].queryWinnerForm(accForm) >= 0 && I + 1 < m.size() && m[I + 1].queryWinnerForm(adverbForm) >= 0 && maxLen > 4)
+		if (m[I].queryWinnerForm(personalPronounAccusativeForm) >= 0 && I + 1 < m.size() && m[I + 1].queryWinnerForm(adverbForm) >= 0 && maxLen > 4)
 			element = maxLen = lastTag = -1;
 		if (lastTag >= 0 || m[I].queryWinnerForm(PROPER_NOUN_FORM_NUM) >= 0 ||
 			m[I].queryWinnerForm(personalPronounForm) >= 0 ||
 			m[I].queryWinnerForm(possessivePronounForm) >= 0 ||
 			(m[I].queryForm(pronounForm) >= 0 && (m[I].queryWinnerForm(adverbForm) < 0 || I + 1 >= m.size() || m[I + 1].queryWinnerForm(PROPER_NOUN_FORM_NUM) < 0)) || // snags pronouns like 'another' which are more commonly used as adjectives but are valid objects but not 'so'
-			m[I].queryWinnerForm(accForm) >= 0)
+			m[I].queryWinnerForm(personalPronounAccusativeForm) >= 0)
 		{
 			identifyObject(lastTag, I, element, false, -1, -1);
 			if (m[I].getObject() >= 0 && objects[m[I].getObject()].objectClass == NAME_OBJECT_CLASS && debugTrace.traceNameResolution)

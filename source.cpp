@@ -402,7 +402,7 @@ bool WordMatch::isGendered(void)
 	if (queryWinnerForm(honorificForm)<0 && queryWinnerForm(honorificAbbreviationForm)<0 &&
 		queryWinnerForm(nomForm)<0 &&
 		queryWinnerForm(personalPronounForm)<0 &&
-		queryWinnerForm(accForm)<0 &&
+		queryWinnerForm(personalPronounAccusativeForm)<0 &&
 		queryWinnerForm(reflexivePronounForm)<0 &&
 		queryWinnerForm(possessivePronounForm)<0 &&
 		queryWinnerForm(PROPER_NOUN_FORM_NUM)<0 &&

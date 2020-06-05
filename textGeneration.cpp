@@ -379,7 +379,7 @@ bool Source::matchSourcePositions(Source *parentSource,int parentWhere,Source *c
 { LFS
 	vector <WordMatch>::iterator imChild=childSource->m.begin()+childWhere;
   // an unmatched pronoun matches nothing
-	if (imChild->objectMatches.empty() && (imChild->queryWinnerForm(nomForm)>=0 || imChild->queryWinnerForm(accForm)>=0 ||
+	if (imChild->objectMatches.empty() && (imChild->queryWinnerForm(nomForm)>=0 || imChild->queryWinnerForm(personalPronounAccusativeForm)>=0 ||
       imChild->queryWinnerForm(personalPronounForm)>=0 || imChild->queryWinnerForm(quantifierForm)>=0 ||
       imChild->queryWinnerForm(possessivePronounForm)>=0 ||
       imChild->queryWinnerForm(indefinitePronounForm)>=0 || imChild->queryWinnerForm(pronounForm)>=0 ||
@@ -572,7 +572,7 @@ int Source::sriMatch(Source *childSource, int parentWhere, int childWhere, int w
   if (childWhere<0)
 		return (inQuestionObject) ? -cost : 0;
 	vector <WordMatch>::iterator imChild=childSource->m.begin()+childWhere;
-	bool childIsPronoun=(imChild->objectMatches.empty() && (imChild->queryWinnerForm(nomForm)>=0 || imChild->queryWinnerForm(accForm)>=0 ||
+	bool childIsPronoun=(imChild->objectMatches.empty() && (imChild->queryWinnerForm(nomForm)>=0 || imChild->queryWinnerForm(personalPronounAccusativeForm)>=0 ||
       imChild->queryWinnerForm(personalPronounForm)>=0 || imChild->queryWinnerForm(quantifierForm)>=0 ||
       imChild->queryWinnerForm(possessivePronounForm)>=0 ||
       imChild->queryWinnerForm(indefinitePronounForm)>=0 || imChild->queryWinnerForm(pronounForm)>=0 ||

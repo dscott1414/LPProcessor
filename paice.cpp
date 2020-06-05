@@ -330,7 +330,7 @@ bool Stemmer::wordIsNotUnknownAndOpen(tIWMM iWord,bool log)
 		unacceptableCombinationForms.insert(periodForm);
 		unacceptableCombinationForms.insert(reflexivePronounForm);
 		unacceptableCombinationForms.insert(nomForm);
-		unacceptableCombinationForms.insert(accForm);
+		unacceptableCombinationForms.insert(personalPronounAccusativeForm);
 		unacceptableCombinationForms.insert(quoteForm);
 		unacceptableCombinationForms.insert(dashForm);
 		unacceptableCombinationForms.insert(bracketForm);

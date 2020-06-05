@@ -864,7 +864,7 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 							temp,nounPosition,nounWord->first.c_str(),tr->second.frequency,verbWord->first.c_str());
 		}
 	}
-	if (nounPosition>=0 && m[nounPosition].queryForm(accForm) >= 0)
+	if (nounPosition>=0 && m[nounPosition].queryForm(personalPronounAccusativeForm) >= 0)
 	{
 		if (debugTrace.traceSubjectVerbAgreement)
 			lplog(L"%d:Noun phrase at %d is accusative pronoun [additional cost of 4]!", position, nounPosition);
@@ -3078,7 +3078,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 			if (isAdverb && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len == whereVerb + 3)
 			{
 				bool isPreposition = m[whereVerb + 1].forms.isSet(prepositionForm);
-				bool objectDoesntTakeAdjectives = (m[whereVerb + 2].queryForm(accForm) != -1 || m[whereVerb + 2].queryForm(personalPronounForm) != -1) &&
+				bool objectDoesntTakeAdjectives = (m[whereVerb + 2].queryForm(personalPronounAccusativeForm) != -1 || m[whereVerb + 2].queryForm(personalPronounForm) != -1) &&
 					m[whereVerb + 2].word->first != L"he" && m[whereVerb + 2].word->first != L"she";
 				if (isPreposition && objectDoesntTakeAdjectives)
 				{
@@ -3091,7 +3091,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 			{
 				isAdverb = m[whereVerb + 2].forms.isSet(adverbForm) && m[whereVerb + 2].word->second.getUsageCost(m[whereVerb + 2].queryForm(adverbForm)) < 4; // is it possibly an adverb?
 				bool isPreposition = m[whereVerb + 2].forms.isSet(prepositionForm);
-				bool objectDoesntTakeAdjectives = (m[whereVerb + 3].queryForm(accForm) != -1 || m[whereVerb + 3].queryForm(personalPronounForm) != -1) &&
+				bool objectDoesntTakeAdjectives = (m[whereVerb + 3].queryForm(personalPronounAccusativeForm) != -1 || m[whereVerb + 3].queryForm(personalPronounForm) != -1) &&
 					m[whereVerb + 3].word->first != L"he" && m[whereVerb + 3].word->first != L"she";
 				if (isAdverb && isPreposition && objectDoesntTakeAdjectives)
 				{

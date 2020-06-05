@@ -524,7 +524,7 @@ bool WordMatch::isPPN(void)
 	return !(word->second.inflectionFlags&NEUTER_GENDER) &&
 		((word->second.inflectionFlags&(FIRST_PERSON|SECOND_PERSON|THIRD_PERSON)) ||
 		queryWinnerForm(indefinitePronounForm)>=0 || queryWinnerForm(reciprocalPronounForm)>=0 ||
-		queryWinnerForm(accForm)>=0 || queryWinnerForm(nomForm)>=0) ||
+		queryWinnerForm(personalPronounAccusativeForm)>=0 || queryWinnerForm(nomForm)>=0) ||
 		((((word->second.inflectionFlags&MALE_GENDER)==MALE_GENDER) ^ ((word->second.inflectionFlags&FEMALE_GENDER)==FEMALE_GENDER)) &&
 		((flags&flagOnlyConsiderProperNounForms) || (flags && queryWinnerForm(PROPER_NOUN_FORM_NUM)>=0)));
 }

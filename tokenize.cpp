@@ -14,7 +14,7 @@ bool Source::adjustWord(unsigned int q)
 	{
 		m[q].flags&=~WordMatch::flagNounOwner;
 		m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"us"),0,debugTrace));
-		m[q+1].forms.set(accForm);
+		m[q+1].forms.set(personalPronounAccusativeForm);
 		insertedOrDeletedWord=true;
 	}
 	// d'ye -> do you
@@ -532,7 +532,7 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 				// must be single or have a determiner AFTER the word
 				(!(m[q].word->second.inflectionFlags&PLURAL) || (q+1<lastWord && m[q+1].queryWinnerForm(determinerForm)>=0)) &&
 				// must be a nounType, that, a pronoun (nominal (one, I, we) acc (him, them...), indefinite or quantifier 
-				(m[q].isNounType() || m[q].word->first==L"that" || m[q].queryForm(nomForm)>=0 || m[q].queryForm(accForm)>=0 || m[q].queryForm(indefinitePronounForm)>=0 || m[q].queryForm(quantifierForm)>=0) &&
+				(m[q].isNounType() || m[q].word->first==L"that" || m[q].queryForm(nomForm)>=0 || m[q].queryForm(personalPronounAccusativeForm)>=0 || m[q].queryForm(indefinitePronounForm)>=0 || m[q].queryForm(quantifierForm)>=0) &&
 				// and NOT "let" (because of "let's")
 				m[q].word->first!=L"let" &&
 				(q+1<lastWord && m[q+1].word!=Words.sectionWord &&

@@ -2156,7 +2156,7 @@ bool Source::matchByAppositivity(int where,int nextPosition)
 	int object=m[where].getObject(),reObject=m[nextPosition].getObject();
 	if (reObject<0) return false;
 	// 'him, the man of my dreams' but not 'him, Ivan.'
-	if (m[where].queryWinnerForm(accForm)>=0 && objects[reObject].objectClass==NAME_OBJECT_CLASS)
+	if (m[where].queryWinnerForm(personalPronounAccusativeForm)>=0 && objects[reObject].objectClass==NAME_OBJECT_CLASS)
 		return false;
 	// an appositive match for the use of inQuote, wiping out the HAIL_ROLE, must not have an I or you (but 'one' is OK)
 	if ((m[where].word->second.inflectionFlags&(FIRST_PERSON|SECOND_PERSON)) && !(m[where].word->second.inflectionFlags&THIRD_PERSON))
@@ -2997,7 +2997,7 @@ int Source::coreferenceFilterLL2345(int where,int rObject,vector <int> &disallow
 					if (disallowReference(m[I].getObject(),disallowedReferences) && debugTrace.traceSpeakerResolution)
 						lplog(LOG_RESOLUTION,L"%06d: L&L 2.1.1 RULE 2 or 3 (multipleSubject MNOUN) ruled out subjectObject %s",where,objectString(m[I].getObject(),tmpstr,false).c_str());
 				// if personalPronoun, this must not be of form she..her or he..him, where subject has been matched with more than one object.
-				if ((m[whereSubject].queryForm(personalPronounForm)>=0 && m[where].queryForm(accForm)<0) ||// must tightly constrict this, because it must not be an indefinite pronoun
+				if ((m[whereSubject].queryForm(personalPronounForm)>=0 && m[where].queryForm(personalPronounAccusativeForm)<0) ||// must tightly constrict this, because it must not be an indefinite pronoun
 					  (m[whereSubject].objectMatches.size()==1 &&
 						 (!objects[subjectObject].plural || objects[subjectObject].objectClass==BODY_OBJECT_CLASS)))
 					for (vector<cOM>::iterator mo=m[whereSubject].objectMatches.begin(),moEnd=m[whereSubject].objectMatches.end(); mo!=moEnd; mo++)
@@ -3054,7 +3054,7 @@ int Source::coreferenceFilterLL2345(int where,int rObject,vector <int> &disallow
 	// NOT: He looked for all that was good in the world.
 	for (IP=begin; IP<endS1; IP++)
 		if ((o=m[IP].getObject())>=0 && objects[o].objectClass==PRONOUN_OBJECT_CLASS && 
-			  (m[IP].queryForm(personalPronounForm)>=0 || m[IP].queryForm(accForm)>=0))
+			  (m[IP].queryForm(personalPronounForm)>=0 || m[IP].queryForm(personalPronounAccusativeForm)>=0))
 		{
 			singularPronounEncountered|=!objects[o].plural;
 			pluralPronounEncountered|=objects[o].plural;
