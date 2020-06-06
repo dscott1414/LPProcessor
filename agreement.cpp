@@ -2978,7 +2978,10 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 			voRelationsFound++;
 		int verbObjectCost=0,verbAfterVerbCost=0,objectDistanceCost=0,prepForm=-1;
 		unsigned int whereVerb=tagSet[verbTagIndex].sourcePosition+tagSet[verbTagIndex].len-1,nextWord=whereVerb+1;
-		if (nextWord + 1 < m.size() && m[nextWord].word->first != L"no" && // There was no thought to which rocket to launch. / thought is a past verb, and no is an adverb of cost < 4.  But still should not be considered a verbafterverb.
+		if (nextWord + 1 < m.size() && 
+			m[nextWord].word->first != L"no" && // There was no thought to which rocket to launch. / thought is a past verb, and no is an adverb of cost < 4.  But still should not be considered a verbafterverb.
+			m[nextWord].word->first != L"any" && // See __NOUN[ANY] - 'all' dropped because of a probabilistic analysis
+			m[nextWord].word->first != L"either" &&
 			(m[nextWord].word->first == L"not" || m[nextWord].word->first == L"never" || // is it a not or never?
 			(m[nextWord].forms.isSet(adverbForm) && m[nextWord].word->second.getUsageCost(m[nextWord].queryForm(adverbForm)) < 4 &&  // is it possibly an adverb?
 				(!m[nextWord].forms.isSet(verbForm) ||                                 // and definitely not a verb (don't skip it unnecessarily)

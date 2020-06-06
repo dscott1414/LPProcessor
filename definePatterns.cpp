@@ -369,8 +369,9 @@ int createNouns(void)
 										1, L"dash", 0, 1, 1,
 										2, L"verb", L"noun*2", SINGULAR|VERB_PAST, 1, 1,
 										0);
+	// us lads
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}", L"THEM",
-										1, L"personal_pronoun_accusative|them", 0, 1, 1,
+										2, L"personal_pronoun_accusative|them", L"personal_pronoun_accusative|us", 0, 1, 1,
 										4, L"numeral_cardinal|two", L"adjective|here*-3", L"noun*1", L"indefinite_pronoun|people", FEMALE_GENDER | MALE_GENDER | PLURAL, 1, 1,
 										0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}", L"WE",
@@ -466,7 +467,7 @@ int createNouns(void)
 										L"personal_pronoun_accusative|us{N_AGREE}", L"personal_pronoun_accusative|them{N_AGREE}", 
 										L"personal_pronoun_nominative|we{N_AGREE}", L"personal_pronoun|they{N_AGREE}", 
 										L"personal_pronoun|you{N_AGREE}", PLURAL, 1, 1,
-		2, L"predeterminer|both", L"quantifier|each*1",0, 1, 1, // You must bring us *each* a jewel.
+										2, L"predeterminer|both", L"quantifier|each*1",0, 1, 1, // You must bring us *each* a jewel.
 										0);
 	// this pattern must go after all nouns EXCEPT it must be before any noun patterns that use _NOUN as a subpattern
 	//cPattern::create(L"_NOUN",L"",1,L"__NOUN[*]",0,1,1,0);
@@ -559,7 +560,14 @@ int createNouns(void)
 										3,L"_PP",L"_REL1",L"_INFP",0,1,1,
 										3,L"_PP*1",L"_REL1*1",L"_INFP*1",0,0,3,
 										0);
-// and medical man written all over him
+	// encourage any/all/either to be quantifiers when followed by 'of'
+	cPattern::create(L"__NOUN{_FINAL_IF_ALONE}", L"ANY",
+										3, L"quantifier|any*-2{OBJECT}", L"quantifier|all*-1{OBJECT}", L"quantifier|either*-2{OBJECT}", 0, 1, 1,
+										1, L"preposition|of{PREP}",0,1,1,
+										2, L"__NOUN[*]{_BLOCK}", L"_NOUN_OBJ{_BLOCK}", 0, 1, 1,
+										1, L"adjective|left*-3",0,0,1,
+										0);
+	// and medical man written all over him
 	/* this pattern was removed because RULE 4 of L&L disallows anything in __IMPLIEDWITH from referencing the enclosing __NOUN
 	// which would incorrectly exclude the noun preceding medical man from matching 'him'
 	cPattern::create(L"__IMPLIEDWITH",L"",

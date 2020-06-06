@@ -3974,9 +3974,9 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	if ((primarySTLPMatch == L"noun" || primarySTLPMatch == L"verb") && source.m[wordSourceIndex].queryWinnerForm(L"honorific") >= 0)
 	{
 		if (primarySTLPMatch == L"noun")
-			errorMap[L"diff: word '"+word+L"': ST says " + primarySTLPMatch + L" but LP says honorific"]++;
+			errorMap[L"diff: ST says noun but LP says honorific"]++;
 		if (primarySTLPMatch == L"verb")
-			errorMap[L"LP correct: word '"+word+L"': ST says verb but LP says honorific"]++;
+			errorMap[L"LP correct: ST says verb but LP says honorific"]++;
 		return 0;
 	}
 	if (word == L"his" && primarySTLPMatch == L"possessive_determiner" && source.m[wordSourceIndex].queryWinnerForm(L"possessive_pronoun") >= 0 &&
@@ -5044,6 +5044,12 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: LP says 'her' is NOT a possessive"]++;
 		return 0;
 	}
+	// ST 99, LP 310, (Both wrong) 13 out of total 422
+	if (word != L"that" && primarySTLPMatch == L"determiner" && source.m[wordSourceIndex].queryWinnerForm(adverbForm) != -1)
+	{
+		errorMap[L"LP correct: LP says adverb not a determiner"]++;
+		return 0;
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
@@ -5586,6 +5592,11 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"LP correct: LP says 'her' is NOT a possessive"] = numErrors * 232 / 421;
 	errorMap[L"ST correct: LP says 'her' is NOT a possessive"] = numErrors * 189 / 421;
 
+	// ST 99, LP 310, (Both wrong) 13 out of total 422
+	numErrors = errorMap[L"LP correct: LP says adverb not a determiner"];
+	errorMap[L"LP correct: LP says adverb not a determiner"] = numErrors * 310 / 422;
+	errorMap[L"ST correct: LP says adverb not a determiner"] = numErrors * 99 / 422;
+	errorMap[L"diff: LP says adverb not a determiner"] = numErrors * 13 / 422;
 }
 
 int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, bool lockPerSource)
