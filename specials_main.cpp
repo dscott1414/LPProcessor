@@ -5050,6 +5050,18 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: LP says adverb not a determiner"]++;
 		return 0;
 	}
+	// 
+	if (primarySTLPMatch == L"personal_pronoun_accusative" && source.m[wordSourceIndex].queryWinnerForm(possessiveDeterminerForm) != -1)
+	{
+		if ((source.m[wordSourceIndex + 1].queryWinnerForm(verbForm) != -1 || source.m[wordSourceIndex + 1].word->first == L"being" || source.m[wordSourceIndex + 1].word->first == L"doing" || source.m[wordSourceIndex + 1].word->first == L"having") &&
+			(source.m[wordSourceIndex + 1].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE && !WordClass::isDash(source.m[wordSourceIndex + 2].word->first[0]))
+		{
+			errorMap[L"ST correct: LP says determiner, ST says accusative.  It is a participial phrase that modifies the previous pronoun"]++;
+			return 0;
+		}
+		errorMap[L"LP correct: LP says possessive not an accusative"]++;
+		return 0;
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
@@ -5597,6 +5609,11 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"LP correct: LP says adverb not a determiner"] = numErrors * 310 / 422;
 	errorMap[L"ST correct: LP says adverb not a determiner"] = numErrors * 99 / 422;
 	errorMap[L"diff: LP says adverb not a determiner"] = numErrors * 13 / 422;
+
+	// ST - 49, LP - 119 out of total 168
+	numErrors = errorMap[L"LP correct: LP says possessive not an accusative"];
+	errorMap[L"LP correct: LP says possessive not an accusative"] = numErrors * 119 / 168;
+	errorMap[L"ST correct: LP says possessive not an accusative"] = numErrors * 49 / 168;
 }
 
 int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, bool lockPerSource)

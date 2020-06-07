@@ -2260,16 +2260,16 @@ int Source::calculateVerbAfterVerbUsage(int whereVerb,unsigned int nextWord,bool
 int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCost, int &traceSource, int begin, int end, int fromPEMAPosition)
 {
 	LFS
-	int nounTag = -1, nextNounTag = -1, nAgreeTag = -1, nextNAgreeTag = -1, nextDet = -1, PNC = 0;// , nextName = -1, subObjectTag = -1;
-	if ((nounTag=findTag(tagSet,L"NOUN",nextNounTag))>=0) // PNOUN not included because personal pronouns do not have determiners and the patterns cannot match for them, so this case will not occur.
-		nAgreeTag=findTagConstrained(tagSet,L"N_AGREE",nextNAgreeTag,tagSet[nounTag]);
+		int nounTag = -1, nextNounTag = -1, nAgreeTag = -1, nextNAgreeTag = -1, nextDet = -1, PNC = 0;// , nextName = -1, subObjectTag = -1;
+	if ((nounTag = findTag(tagSet, L"NOUN", nextNounTag)) >= 0) // PNOUN not included because personal pronouns do not have determiners and the patterns cannot match for them, so this case will not occur.
+		nAgreeTag = findTagConstrained(tagSet, L"N_AGREE", nextNAgreeTag, tagSet[nounTag]);
 	else
 	{
 		if (debugTrace.traceDeterminer)
 			lplog(L"%d:Noun (%d,%d) has no noun tag (cost=%d) [SOURCE=%06d].", begin, begin, end, PNC, traceSource = gTraceSource++);
 		return PNC;
 	}
-	if (fromPEMAPosition!= abs(tagSet[nounTag].PEMAOffset) && pema[abs(tagSet[nounTag].PEMAOffset)].flagSet(patternElementMatchArray::COST_ND))
+	if (fromPEMAPosition != abs(tagSet[nounTag].PEMAOffset) && pema[abs(tagSet[nounTag].PEMAOffset)].flagSet(patternElementMatchArray::COST_ND))
 	{
 		if (debugTrace.traceDeterminer)
 		{
@@ -2278,7 +2278,7 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 		}
 		return 0;
 	}
-	if (nAgreeTag >= 0 && nAgreeTag < end - 1 && calculateVerbAfterVerbUsage(end - 1, end,false)) // if nAgreeTag<end-1, it is more likely a compound noun
+	if (nAgreeTag >= 0 && nAgreeTag < end - 1 && calculateVerbAfterVerbUsage(end - 1, end, false)) // if nAgreeTag<end-1, it is more likely a compound noun
 	{
 		if (debugTrace.traceDeterminer)
 		{
@@ -2290,8 +2290,8 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 	}
 	// for nouns where the immediately preceding adjective in the noun is a verb, and that verb has a relation to the head noun.
 	// He had *one stinging cut*.  So - does the *cut* *sting*? - head noun is subject, adjective is verb
-	if (end - begin > 1 && end-begin<4 && m[end - 2].queryForm(verbForm) >= 0 && (m[end - 2].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) && 
-		 m[end - 1].queryForm(nounForm)>=0 && m[end - 1].word->first != L"that" && m[end - 1].queryForm(adverbForm) < 0)
+	if (end - begin > 1 && end - begin < 4 && m[end - 2].queryForm(verbForm) >= 0 && (m[end - 2].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) &&
+		m[end - 1].queryForm(nounForm) >= 0 && m[end - 1].word->first != L"that" && m[end - 1].queryForm(adverbForm) < 0)
 	{
 		vector<wstring> determinerTypes = { L"determiner",L"demonstrative_determiner",L"possessive_determiner",L"interrogative_determiner", L"quantifier", L"numeral_cardinal" };
 		bool beginIsDeterminer = false;
@@ -2307,9 +2307,9 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 			tFI::cRMap::tIcRMap tr = (rm) ? rm->r.find(verbWord) : tNULL;
 			wstring patternName = (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getPattern()]->name;
 			if (patternName != L"__S1" && patternName != L"__INTRO_N" && rm != (tFI::cRMap *)NULL && tr != rm->r.end() &&
-				subjectWord->second.getUsageCost(m[end - 1].queryForm(nounForm))>0)
+				subjectWord->second.getUsageCost(m[end - 1].queryForm(nounForm)) > 0)
 			{
-				PNC -= subjectWord->second.getUsageCost(m[end-1].queryForm(nounForm));
+				PNC -= subjectWord->second.getUsageCost(m[end - 1].queryForm(nounForm));
 				if (debugTrace.traceDeterminer)
 				{
 					wstring logres;
@@ -2342,7 +2342,7 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 	}
 	// when they got through he kept walking abreast , *elbow to elbow* almost .
 	// this covers the first noun, the second test below covers the second noun
-	if (begin <m.size()-2 && m[begin + 1].word->first == L"to" && m[begin].queryForm(verbForm) >= 0 &&
+	if (begin < m.size() - 2 && m[begin + 1].word->first == L"to" && m[begin].queryForm(verbForm) >= 0 &&
 		(m[begin].word->second.inflectionFlags&SINGULAR) &&
 		!(m[begin].word->second.inflectionFlags&(SINGULAR_OWNER | PLURAL_OWNER)) && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm)) < 5 &&
 		((begin >= 1 && m[begin - 1].word->first == L"from" && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm)) > 0) || m[begin + 2].word->first == m[begin].word->first))
@@ -2356,9 +2356,9 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 		PNC -= 4;
 	}
 	// I went to jail with him.
-	if (begin>0 && m[begin-1].word->first==L"to" && m[begin].queryForm(verbForm)>=0 &&
-				(m[begin].word->second.inflectionFlags&SINGULAR) &&
-			 !(m[begin].word->second.inflectionFlags&(SINGULAR_OWNER|PLURAL_OWNER)) && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm))<5)  
+	if (begin > 0 && m[begin - 1].word->first == L"to" && m[begin].queryForm(verbForm) >= 0 &&
+		(m[begin].word->second.inflectionFlags&SINGULAR) &&
+		!(m[begin].word->second.inflectionFlags&(SINGULAR_OWNER | PLURAL_OWNER)) && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm)) < 5)
 	{
 		// this covers the second noun, the previous test above covers the first noun
 		// from face to face / rock to rock / stone to stone
@@ -2389,14 +2389,26 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 	}
 	//__int64 or=m[begin].objectRole;
 	// Quick as a flash Tommy / in a moment Edith
-	if (end-begin==3 && 
-			m[end-1].forms.isSet(PROPER_NOUN_FORM_NUM) && (m[end-2].word->second.timeFlags&T_UNIT) && (m[begin].word->first==L"a" || m[begin].word->first==L"the") &&
-			begin && m[begin-1].queryForm(prepositionForm)>=0)
+	if (end - begin == 3 &&
+		m[end - 1].forms.isSet(PROPER_NOUN_FORM_NUM) && (m[end - 2].word->second.timeFlags&T_UNIT) && (m[begin].word->first == L"a" || m[begin].word->first == L"the") &&
+		begin && m[begin - 1].queryForm(prepositionForm) >= 0)
 	{
 		if (debugTrace.traceDeterminer)
-			lplog(L"%d:Noun (%d,%d) has a time value after a preposition",begin,begin,end);
-		PNC+=6;
+			lplog(L"%d:Noun (%d,%d) has a time value after a preposition", begin, begin, end);
+		PNC += 6;
 	}
+	// disallow incorrect ordering of determiners after 'her'
+	for (int h = begin; h < end; h++)
+		if (m[h].word->first == L"her" && h + 1 < end)
+		{
+			set <wstring> notDeterminer = { L"so",L"any",L"a",L"all",L"another",L"any",L"as",L"in",L"more",L"most",L"no",L"off",L"some",L"what",L"wherever" };
+			if (notDeterminer.find(m[h + 1].word->first) != notDeterminer.end() || WordClass::isDash(m[h + 1].word->first[0]))
+			{
+				if (debugTrace.traceDeterminer)
+					lplog(L"%d:Noun (%d,%d) has an invalid determiner %s after 'her'", begin, begin, end, m[h + 1].word->first.c_str());
+				PNC += 6;
+			}
+		}
 	// disallow adjectives after nouns!
 	// her cold
 	// P.N.C. He
