@@ -5062,6 +5062,18 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: LP says possessive not an accusative"]++;
 		return 0;
 	}
+	// check for any pattern specified explicit word checks
+	for (int pemaPosition=source.m[wordSourceIndex].beginPEMAPosition; pemaPosition != -1; pemaPosition = source.pema[pemaPosition].nextByPosition)
+		if (!source.pema[pemaPosition].isChildPattern() && patterns[source.pema[pemaPosition].getPattern()]->getElement(source.pema[pemaPosition].getElement())->specificWords[source.pema[pemaPosition].getElementIndex()]==word)
+		{
+			if (source.m[wordSourceIndex].queryWinnerForm(predeterminerForm) != -1)
+			{
+				errorMap[L"LP correct: LP says predeterminer in an explicit construction"]++;
+				return 0;
+			}
+			//partofspeech += L"EXPLICIT - "+ patterns[source.pema[pemaPosition].getPattern()]->name + L"["+ patterns[source.pema[pemaPosition].getPattern()]->differentiator +L"]";
+			break; 
+		}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis

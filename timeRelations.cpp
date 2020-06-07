@@ -81,7 +81,7 @@ void defineTimePatterns()
   cPattern::create(L"_TIME",L"6",
 		1,L"adverb",0,0,1, // they had lunch [together] two weeks ago today
 		1,L"determiner{DET}",0,0,1,
-		2,L"noun|quarter{TIMEMODIFIER}",L"noun|half{TIMEMODIFIER}",0,0,1,
+		2,L"noun|quarter{TIMEMODIFIER}",L"predeterminer|half{TIMEMODIFIER}",0,0,1,
 		1,L"preposition|of",0,0,1,
 		1,L"determiner{DET}",0,1,1,
 		3,L"noun|hour*-2{TIMECAPACITY}",L"noun|minute*-2{TIMECAPACITY}",L"noun|second*-2{TIMECAPACITY}",0,1,1,

@@ -1061,7 +1061,7 @@ int createBasicPatterns(void)
 		1, L"_ADVERB", 0, 0, 1,
 		1, L"verb{ADJ}", VERB_PAST_PARTICIPLE, 1, 1, // hunched-up
 		1, L"dash", 0, 0, 1,
-		1, L"preposition|up", 0, 1, 1,
+		1, L"adverb|up", 0, 1, 1,
 		1, L"adjective{ADJ}", 0, 0, 2,
 		0);
 	// 6. correction to __NOUN[F] after studying matches to increase cost with long subjects - comment out __NOUN[H]
