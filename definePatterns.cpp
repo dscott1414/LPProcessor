@@ -2184,7 +2184,7 @@ int createVerbPatterns(void)
 		 2,L"_ADVERB",L"__BELIEVE",0,0,1,
 		10,L"_VERB",L"_VERBPAST{V_OBJECT}",L"_VERBPASTC{V_OBJECT}",L"_VERBPASTCORR{V_OBJECT}",L"_VERBPRESENT{VERB}",L"_VERBPRESENTC{VERB}",L"_BE*4{vS:V_OBJECT:id:VERB}",L"_VERB_BARE_INF",
 				L"is{vS:id:V_AGREE:V_OBJECT:VERB}",L"is_negation{vS:id:not:V_AGREE:V_OBJECT:VERB}",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_PLURAL,1,1,
-		 2, L"particle|in{PT}", L"particle|on{PT}", 0,0,1,
+		 2, L"particle|in*1{PT}", L"particle|on{PT}", 0,0,1,
 		0);
 	// __ALLOBJECTS - should L"_ADJECTIVE" really be an object?  If so, it overlaps with _NOUN, so if it is added back this overlap
 	// must be avoided.
@@ -2906,8 +2906,19 @@ int createSecondaryPatterns2(void)
 	// My *coming* from the country to stay in Paris for good marked an epoch in my life .
 	// Forgive me for not thinking of your *being* tired , mother
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_FORWARD_REFERENCE:_BLOCK:GNOUN:VNOUN:_CHECK_IGNORABLE_FORMS}", L"COMING",
-		1, L"possessive_determiner", 0, 1, 1, 
+		1, L"possessive_determiner", 0, 1, 1,
 		2, L"verb|coming", L"verb|being", 0, 1, 1,
+		0);
+	// Desborough was not so imposing and extensive *a* place as Pemberley 
+	// How could he afford to retain so eminent *a* lawyer ? 
+	// I did not believe that Turner had strength enough to fell so vigorous *a* man
+	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_FORWARD_REFERENCE:_CHECK_IGNORABLE_FORMS}", L"SO",
+		1, L"adverb|so",0,1,1,
+		1, L"adjective", 0, 1, 1,
+		1, L"coordinator", 0, 0, 1,
+		1, L"adjective", 0, 0, 1,
+		1, L"determiner|a{DET}", 0, 1, 1,
+		1, L"noun{N_AGREE}", 0, 1, 1,
 		0);
 
 	// * When _ALLOBJECT was a single object:
