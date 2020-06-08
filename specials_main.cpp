@@ -5084,6 +5084,12 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			//partofspeech += L"EXPLICIT - "+ patterns[source.pema[pemaPosition].getPattern()]->name + L"["+ patterns[source.pema[pemaPosition].getPattern()]->differentiator +L"]";
 			break; 
 		}
+	// ST 57, LP 145, (Both wrong) 14 out of total 216
+	if (primarySTLPMatch == L"verb" && source.m[wordSourceIndex].queryWinnerForm(adverbForm) != -1)
+	{
+		errorMap[L"LP correct: LP says adverb not a verb"]++;
+		return 0;
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
@@ -5632,10 +5638,17 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"ST correct: LP says adverb not a determiner"] = numErrors * 99 / 422;
 	errorMap[L"diff: LP says adverb not a determiner"] = numErrors * 13 / 422;
 
-	// ST - 49, LP - 119 out of total 168
+	// ST 49, LP 119 out of total 168
 	numErrors = errorMap[L"LP correct: LP says possessive not an accusative"];
 	errorMap[L"LP correct: LP says possessive not an accusative"] = numErrors * 119 / 168;
 	errorMap[L"ST correct: LP says possessive not an accusative"] = numErrors * 49 / 168;
+
+	// ST 57, LP 145, (Both wrong) 14 out of total 216
+	numErrors = errorMap[L"LP correct: LP says adverb not a verb"];
+	errorMap[L"LP correct: LP says adverb not a verb"] = numErrors * 145 / 216;
+	errorMap[L"ST correct: LP says adverb not a verb"] = numErrors * 57 / 216;
+	errorMap[L"diff: LP says adverb not a verb"] = numErrors * 14 / 216;
+
 }
 
 int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, bool lockPerSource)
