@@ -2988,7 +2988,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 			voRelationsFound++;
 		if (numObjects==2 && object2Word!=wNULL && checkRelation(parentpm,pm,parentPosition,position,verbWord,object2Word,VerbWithIndirectWord))
 			voRelationsFound++;
-		int verbObjectCost=0,verbAfterVerbCost=0,objectDistanceCost=0,prepForm=-1;
+		int verbAfterVerbCost=0,objectDistanceCost=0,prepForm=-1;
 		unsigned int whereVerb=tagSet[verbTagIndex].sourcePosition+tagSet[verbTagIndex].len-1,nextWord=whereVerb+1;
 		if (nextWord + 1 < m.size() && 
 			m[nextWord].word->first != L"no" && // There was no thought to which rocket to launch. / thought is a past verb, and no is an adverb of cost < 4.  But still should not be considered a verbafterverb.
@@ -3045,7 +3045,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 			numObjects--;
 		}
 		// increase parent pattern cost at verb
-		verbObjectCost=verbWord->second.getUsageCost(tFI::VERB_HAS_0_OBJECTS+numObjects);
+		int verbObjectCost=verbWord->second.getUsageCost(tFI::VERB_HAS_0_OBJECTS+numObjects);
 		if (numObjects == 0 && verbWord->second.query(isForm) >= 0 && adjObjectTag >= 0)
 		{
 			if (debugTrace.traceVerbObjects)
@@ -3075,6 +3075,14 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 					tagSet[verbTagIndex].sourcePosition,verbWord->first.c_str(),objectDistanceCost);
 				voRelationsFound=0;
 			}
+		}
+		int particleTagIndex = -1;
+		if ((verbWord->second.query(isForm) != -1 || verbWord->second.query(isNegationForm) != -1 || verbWord->first == L"being" || verbWord->first == L"be" || verbWord->first == L"been") &&
+			(particleTagIndex=findOneTag(tagSet, L"PT")) >= 0)
+		{
+			if (debugTrace.traceVerbObjects)
+				lplog(L"          %d:be verb %s should not have a particle %s.", tagSet[verbTagIndex].sourcePosition,verbWord->first.c_str(),m[tagSet[particleTagIndex].sourcePosition].word->first.c_str());
+			verbObjectCost += 6;
 		}
 		// they were all alike
 		// if there is one object, and the object is 'all' and there is a match for __S1[7] (but this is not __S1[7]), and the word after the object could be an adjective, then increase cost greatly.

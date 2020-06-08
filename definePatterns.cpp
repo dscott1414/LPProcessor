@@ -2184,7 +2184,7 @@ int createVerbPatterns(void)
 		 2,L"_ADVERB",L"__BELIEVE",0,0,1,
 		10,L"_VERB",L"_VERBPAST{V_OBJECT}",L"_VERBPASTC{V_OBJECT}",L"_VERBPASTCORR{V_OBJECT}",L"_VERBPRESENT{VERB}",L"_VERBPRESENTC{VERB}",L"_BE*4{vS:V_OBJECT:id:VERB}",L"_VERB_BARE_INF",
 				L"is{vS:id:V_AGREE:V_OBJECT:VERB}",L"is_negation{vS:id:not:V_AGREE:V_OBJECT:VERB}",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_PLURAL,1,1,
-		 2, L"particle|in", L"particle|on", 0,0,1,
+		 2, L"particle|in{PT}", L"particle|on{PT}", 0,0,1,
 		0);
 	// __ALLOBJECTS - should L"_ADJECTIVE" really be an object?  If so, it overlaps with _NOUN, so if it is added back this overlap
 	// must be avoided.

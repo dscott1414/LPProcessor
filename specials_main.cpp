@@ -5071,6 +5071,16 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				errorMap[L"LP correct: LP says predeterminer in an explicit construction"]++;
 				return 0;
 			}
+			if (patterns[source.pema[pemaPosition].getPattern()]->name == L"_NOUN" && patterns[source.pema[pemaPosition].getPattern()]->differentiator == L"ANY")
+			{
+				errorMap[L"LP correct: LP says quantifier in an explicit construction"]++;
+				return 0;
+			}
+			if (patterns[source.pema[pemaPosition].getPattern()]->name == L"_REL1")
+			{
+				errorMap[L"diff: LP says demonstrative determiner and ST says adverb to head a relative phrase"]++;
+				return 0;
+			}
 			//partofspeech += L"EXPLICIT - "+ patterns[source.pema[pemaPosition].getPattern()]->name + L"["+ patterns[source.pema[pemaPosition].getPattern()]->differentiator +L"]";
 			break; 
 		}

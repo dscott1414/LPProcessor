@@ -35,7 +35,7 @@ void defineTimePatterns()
   // 2 o'clock / two o'clock 
   cPattern::create(L"_TIME",L"3",
 		3,L"adverb|well{TIMEMODIFIER}",L"adverb|almost{TIMEMODIFIER}",L"adverb|nearly{TIMEMODIFIER}",0,0,1,
-		3,L"adverb|before{TIMEMODIFIER}",L"adverb|after{TIMEMODIFIER}",L"adjective|past{TIMEMODIFIER}",0,0,1,
+		3,L"adverb|before{TIMEMODIFIER}",L"adverb|after{TIMEMODIFIER}",L"preposition|past*-1{TIMEMODIFIER}",0,0,1,
 		2,L"numeral_cardinal{HOUR}",L"Number{HOUR}",0,1,1,
     1,L"adverb|o'clock*-2",0,1,1,0);
   // 'some' 5 minutes to/till _TIME / 12
@@ -52,7 +52,7 @@ void defineTimePatterns()
 		9,L"month*-2{MONTH}",L"daysOfWeek*-2{DAYWEEK}",L"season*-2{SEASON}",L"timeUnit*-2{TIMECAPACITY}",L"dayUnit*-2{TIMECAPACITY}",L"numeral_cardinal*-1{MINUTE}",
 		  L"adjective|half*-2{TIMEMODIFIER}",L"adverb|little{TIMEMODIFIER}",L"noun|quarter{TIMEMODIFIER}",0,1,1, // half past noon // a little after 11
 		// to, past, before, till, etc
-		3,L"_ADVERB{TIMETYPE}",L"adjective|past{TIMETYPE}",L"preposition{TIMETYPE}",0,1,1,
+		3,L"_ADVERB{TIMETYPE}",L"preposition|past*-1{TIMETYPE}",L"preposition{TIMETYPE}",0,1,1,
 		9,L"_TIME[*]*-1",L"_DATE[*]*-1",L"numeral_cardinal*-1{HOUR}",L"Number*-1{HOUR}",L"adverb|now{HOUR}",L"daysOfWeek*-2{DAYWEEK}",L"season*-2{SEASON}",L"holiday*-2{HOLIDAY}",L"dayUnit*-2{TIMECAPACITY}",0,1,1,
 		0);
 	// early one Friday night in Fall 1998.
@@ -63,7 +63,7 @@ void defineTimePatterns()
 		1,L"daysOfWeek*-2{DAYWEEK}",0,1,1,
 		1,L"dayUnit*-2{TIMECAPACITY}",0,1,1,
 		// to, past, before, till, etc
-		3,L"_ADVERB{TIMETYPE}",L"adjective|past{TIMETYPE}",L"preposition{TIMETYPE}",0,1,1,
+		3,L"_ADVERB{TIMETYPE}",L"preposition|past*-1{TIMETYPE}",L"preposition{TIMETYPE}",0,1,1,
 		8,L"_TIME[*]*-1",L"_DATE[*]*-1",L"numeral_cardinal*-1{HOUR}",L"Number*-1{HOUR}",L"adverb|now{HOUR}",L"daysOfWeek*-2{DAYWEEK}",L"season*-2{SEASON}",L"holiday*-2{HOLIDAY}",0,1,1,
 		0);
 	// three hours after the meeting 
@@ -134,7 +134,7 @@ void defineTimePatterns()
 		7,L"numeral_ordinal*-1{TIMEMODIFIER}",L"numeral_cardinal*-1{TIMEMODIFIER}",L"Number*-1{TIMEMODIFIER}",L"demonstrative_determiner{TIMEMODIFIER}",L"quantifier{TIMEMODIFIER}",L"determiner|a",L"adjective|other{TIMEMODIFIER}",0,1,1,
 		6,L"month*-1{MONTH}",L"daysOfWeek*-1{DAYWEEK}",L"season*-1{SEASON}",L"timeUnit*-1{TIMECAPACITY}",L"dayUnit*-1{TIMECAPACITY}",L"holiday*-1{HOLIDAY}",0,1,1,
 		// to, past, before, till, ago, etc
-		3,L"adverb{TIMETYPE}",L"to{TIMETYPE}",L"adjective|past{TIMETYPE}",0,0,1,
+		3,L"adverb{TIMETYPE}",L"to{TIMETYPE}",L"preposition|past*-1{TIMETYPE}",0,0,1,
 		1,L"adverb|today{TIMECAPACITY}",0,0,1, // two weeks ago today
 		0);
 	// 11 in the morning

@@ -1743,7 +1743,7 @@ void initializeTagSets(int &startSuperTagSets)
 	desiredTagSets.push_back(tTS(specificAnaphorTagSet,L"_SPECIFIC_ANAPHOR",-3,L"N_AGREE",L"GNOUN",L"MNOUN",L"PLURAL",L"SUBJECT",L"V_AGREE",NULL));
   // VERB_OBJECTS_TAGSET: although a verb does not need to have objects to be assessed for the # of objects it has, the pattern must allow for objects.
   desiredTagSets.push_back(tTS(verbObjectsTagSet,L"_VERB_OBJECTS",3,L"VERB",L"V_OBJECT",L"OBJECT",L"HOBJECT", L"ADVOBJECT", L"ADJOBJECT", L"V_AGREE",
-		                       L"vD",L"vrD",L"vAD",L"vBD",L"vCD",L"vABD",L"vACD",L"vBCD",L"vABCD",L"IVERB",NULL));
+		                       L"vD",L"vrD",L"vAD",L"vBD",L"vCD",L"vABD",L"vACD",L"vBCD",L"vABCD",L"IVERB",L"PT",NULL));
   desiredTagSets.push_back(tTS(iverbTagSet,L"_IVERB",1,L"ITO",L"V_OBJECT",L"OBJECT",L"IVERB",L"PREP",L"REL",L"ADJ",L"ADV",L"HOBJECT",L"V_AGREE",L"V_HOBJECT",L"VERB2",L"ADJOBJECT",L"ADVOBJECT",L"MNOUN",L"MVERB",L"S_IN_REL",NULL)); // ITO is simply a infinitive marker
   desiredTagSets.push_back(tTS(nounDeterminerTagSet,L"_NOUN_DETERMINER",2,L"NOUN",L"N_AGREE",L"DET",L"SUBOBJECT",NULL));
   // VNOUN: noun which is an activity (running, or Bill running down the street)
