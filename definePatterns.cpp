@@ -2293,6 +2293,11 @@ void createSecondaryPatterns1(void)
 						//2,L"_NOUN_OBJ{OBJECT}",L"__NOUN[*]{OBJECT}",0,0,1, // Bill
 						2,L"_INFP",L"_REL1[*]",0,1,1, // to remember (with its object which is [to thank Mrs. Smith for taking us back today])
 						0);
+	cPattern::create(L"__ALLOBJECTS_1", L"3",
+						1, L"preposition", 0, 1, 1, 
+						3, L"personal_pronoun_accusative|her*6", L"personal_pronoun_accusative", L"personal_pronoun|you", 0, 1, 1, // her resulted in many false matches
+						2, L"_NOUN_OBJ{OBJECT}", L"__NOUN[*]{OBJECT}", 0, 1, 1,
+						0);
 	// by creating a second pattern for two objects, we push one object or two objects up another notch to make it more costable
 	// by secondaryCosts
 	cPattern::create(L"__ALLOBJECTS_2",L"",

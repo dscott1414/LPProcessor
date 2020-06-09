@@ -2980,6 +2980,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 			lplog(L"          %d:verb is passive and no objects detected in pattern %s[%s] - skipping.",position,patterns[pm->getPattern()]->name.c_str(),patterns[pm->getPattern()]->differentiator.c_str());
 		return 0;
 	}
+
 	// report cost
 	if (assessCost)
 	{
@@ -3054,6 +3055,14 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 		}
 		if (numObjects>0)
 		{
+			//if (numObjects == 1 && whereObjectTag >= 0 && patterns[tagSet[whereObjectTag].parentPattern]->name == L"__ALLOBJECTS_1" && patterns[tagSet[whereObjectTag].parentPattern]->differentiator == L"3" &&
+			//	m[tagSet[whereObjectTag].sourcePosition - 1].word->first == L"her" && (m[tagSet[whereObjectTag].sourcePosition].queryForm(adjectiveForm) != -1 || m[tagSet[whereObjectTag].sourcePosition].queryForm(nounForm) != -1))
+			//{
+			//	verbObjectCost += 6;
+			//	if (debugTrace.traceVerbObjects)
+			//		lplog(L"          %d:objectWord %s is preceded by a short prepositional phrase ending in 'her'.",
+			//			tagSet[whereObjectTag].sourcePosition, (object1Word != wNULL) ? object1Word->first.c_str() : L"");
+			//}
 			wstring w=m[tagSet[whereObjectTag].sourcePosition].word->first;
 			if (tagSet[whereObjectTag].len==1 && (w==L"i" || w==L"he" || w==L"she" || w==L"we" || w==L"they") && !patterns[pm->getPattern()]->questionFlag && 
 				  (w != L"i" || (verbWord->first != L"is" && verbWord->first != L"do"))) // It is I!  So do I!
@@ -3061,7 +3070,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 				verbObjectCost+=6;
 				if (debugTrace.traceVerbObjects)
 					lplog(L"          %d:objectWord %s is a nominative pronoun used as an accusative.",
-					tagSet[whereObjectTag].sourcePosition,(object1Word != wNULL) ? object1Word->first.c_str():L"",verbObjectCost);
+					tagSet[whereObjectTag].sourcePosition,(object1Word != wNULL) ? object1Word->first.c_str():L"");
 			}
 			int distance=tagSet[whereObjectTag].sourcePosition-(tagSet[verbTagIndex].sourcePosition+tagSet[verbTagIndex].len);
 			if (distance>2) objectDistanceCost=distance-2;
