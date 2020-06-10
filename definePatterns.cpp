@@ -208,7 +208,13 @@ int createNouns(void)
 			1,L"_ADJECTIVE{_BLOCK}",0,0,1,
 			1,L"noun|friend{N_AGREE}",0,1,1,
 			0);
-// this also encourages a word identified as both adverb and adjective to be an adverb if identified before an adjective.
+	// her will / the last will / the new will/ this will
+	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}", L"WILL",
+		7, L"determiner{DET}", L"demonstrative_determiner{DET}", L"possessive_determiner{DET:ADJ}", L"interrogative_determiner{DET}", L"__HIS_HER_DETERMINER*1", L"_NAMEOWNER{DET}", L"adjective|ill*-2",0, 1, 1,
+		2, L"adjective|last", L"adjective|new", 0, 0, 1,
+		1, L"noun|will*-3{N_AGREE}", SINGULAR, 1, 1, 
+		0);
+	// this also encourages a word identified as both adverb and adjective to be an adverb if identified before an adjective.
 	// the more adjectives repeated, the more uncommon - taken out - discourages nouns taking on adjectives
 	// all these old things / all my old things / half these old things / both old things
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:NOUN}",L"3",
