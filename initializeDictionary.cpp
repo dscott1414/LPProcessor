@@ -1515,6 +1515,19 @@ bool tFI::toLowestCost(int form)
 	return false;
 }
 
+bool tFI::toLowestCostPreferForm(int form,int preferForm)
+{
+	LFS
+	int hf,pf;
+	if ((hf = query(form)) >= 0 && (pf = query(preferForm)) >= 0)
+	{
+		usagePatterns[hf] = usagePatterns[pf];
+		usageCosts[hf] = usageCosts[pf];
+		return true;
+	}
+	return toLowestCost(form);
+}
+
 bool tFI::setCost(int form,int cost)
 { LFS
 	int hf;
@@ -1715,7 +1728,7 @@ void WordClass::initialize()
 		// reset these counts, which are more relevant on a per-source basis
 		iWord->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN] = iWord->second.usagePatterns[tFI::LOWER_CASE_USAGE_PATTERN] = 0;
 		// make honorifics not costly (honorifics are not reflected out of BNC properly so they are underweighted)
-		iWord->second.toLowestCost(honorificForm);
+		iWord->second.toLowestCostPreferForm(honorificForm,nounForm);
 		if (!iWord->second.toLowestCost(demonstrativeDeterminerForm) && iWord->second.query(relativizerForm) < 0 && 
 			  iWord->first != L"there" && iWord->first != L"another" && iWord->first != L"so" && iWord->first != L"each" && iWord->first != L"every" && iWord->first != L"either" && iWord->first != L"neither" && iWord->first != L"other")
 			iWord->second.toLowestCost(pronounForm);

@@ -420,6 +420,7 @@ public:
   tFI(void);
 
   bool costEquivalentSubClass(int subclassForm,int parentForm);
+	bool toLowestCostPreferForm(int form,int preferForm);
 	bool toLowestCost(int form);
 	bool setCost(int form,int cost);
   void mainEntryCheck(const wstring first,int where);
