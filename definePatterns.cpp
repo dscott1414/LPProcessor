@@ -1516,7 +1516,7 @@ void createInfinitivePhrases(void)
 		                1,L"to{ITO}",0,1,1,
 										1,L"_ADVERB",0,0,1,
 										1,L"verbal_auxiliary{V_AGREE}",0,0,1, // to help eat this
-										5,L"be{vS:id:V_OBJECT}",L"verb{vS:V_OBJECT}",L"does{vS:V_OBJECT}",L"have{vS:V_OBJECT}",L"SYNTAX:Accepts S as Object|make sure",
+										6,L"verb|like*-3",L"be{vS:id:V_OBJECT}",L"verb{vS:V_OBJECT}",L"does{vS:V_OBJECT}",L"have{vS:V_OBJECT}",L"SYNTAX:Accepts S as Object|make sure",
 											VERB_PRESENT_FIRST_SINGULAR,1,1,
 										3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, 
 										3,L"__INFP5SUB",L"__INFPSUB",L"__INFPT2SUB",0,0,1,

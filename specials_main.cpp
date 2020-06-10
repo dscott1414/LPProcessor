@@ -2672,6 +2672,14 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 			return -1;
 		}
 	}
+	int nounPMAIndex = -1;
+	if (adverbFormOffset>=0 && wordSourceIndex > 0 && (nounPMAIndex = source.m[wordSourceIndex - 1].pma.queryPatternDiff(L"__NOUN", L"2")) != -1 && source.m[wordSourceIndex - 1].word->first == L"the" && source.m[wordSourceIndex - 1].pma[nounPMAIndex & ~matchElement::patternFlag].len == 3 &&
+		source.m[wordSourceIndex + 1].pma.queryPattern(L"_ADJECTIVE_AFTER") != -1)
+	{
+		source.m[wordSourceIndex].unsetAllFormWinners();
+		source.m[wordSourceIndex].setWinner(adverbFormOffset);
+		return 0;
+	}
 	return 0;
 }
 
