@@ -3155,10 +3155,10 @@ int createSecondaryPatterns2(void)
 									 1,L"__C1__S1",0,1,1,
 								   4, L"_IS{VERB:vS:id}", L"_WOULDBE", L"_HAVEBEEN", L"_COULDHAVEBEEN", 0, 1, 1,
 									 1,L"_ADJECTIVE*-1",0,1,1,  // calculateVerbAfterVerbUsage specifically removes this -1 incentive by matching on this pattern!
-										1, L"reflexive_pronoun", 0, 0, 1,
-									 2,L"_PP",L"_REL1[*]",0,0,1,
-										1, L"__CLOSING__S1", 0, 0, 3,
-										0);
+									 1, L"reflexive_pronoun", 0, 0, 1,
+									 3,L"_PP",L"_REL1[*]",L"_INFP",0,0,1,
+									 1, L"__CLOSING__S1", 0, 0, 3,
+									 0);
 	// Too expensive a piano for me.
 	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"TOO",
 										1, L"adverb|too", 0, 1, 1,
