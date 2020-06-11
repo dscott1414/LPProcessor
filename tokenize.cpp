@@ -536,8 +536,8 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 				// and NOT "let" (because of "let's")
 				m[q].word->first!=L"let" &&
 				(q+1<lastWord && m[q+1].word!=Words.sectionWord &&
-				// the next word must be "been" or (NOT is and NOT punctuation).
-				(m[q+1].word->first==L"been" || (m[q+1].queryForm(L"is")<0 && m[q+1].queryForm(L"is_negation")<0 && iswalpha(m[q+1].word->first[0])))) &&
+				// the next word must be "been" or (NOT is and NOT punctuation and NOT 'will').
+				(m[q+1].word->first==L"been" || (m[q+1].queryForm(L"is")<0 && m[q+1].queryForm(L"is_negation")<0 && iswalpha(m[q+1].word->first[0]) && m[q + 1].word->first != L"will"))) &&
 				// the previous word must not be "not" / (not Whittington's one) and not "is"
 				(!q || (m[q-1].word->first!=L"not" && m[q-1].queryForm(isForm)<0)))
 			{
