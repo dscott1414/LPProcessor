@@ -5109,9 +5109,14 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: LP says pronoun NOT determiner"]++;
 		return 0;
 	}
-	if (word == L"how" && !iswalpha(source.m[wordSourceIndex+1].word->first[0]))
+	if (word == L"how" && !iswalpha(source.m[wordSourceIndex + 1].word->first[0]))
 	{
 		errorMap[L"LP correct: LP says 'how' is interjection"]++;
+		return 0;
+	}
+	if (word == L"quite" && source.m[wordSourceIndex].queryWinnerForm(predeterminerForm) != -1)
+	{
+		errorMap[L"LP correct: LP says 'quite' is predeterminer"]++;
 		return 0;
 	}
 	wstring winnerFormsString;

@@ -330,8 +330,9 @@ int patternElement::matchOne(Source &source,unsigned int sourcePosition,unsigned
 					cost += 10;
 				// refuse any other form for this very common word if the next word is not punctuation.
 				if (im->word->first == L"i" && f != nomForm &&
-					sourcePosition + 1 < source.m.size() && (signed)source.m[sourcePosition + 1].word->first[0] > 0 && iswalpha(source.m[sourcePosition + 1].word->first[0]))
-					cost += 10;
+					sourcePosition + 1 < source.m.size() && (signed)source.m[sourcePosition + 1].word->first[0] > 0 && iswalpha(source.m[sourcePosition + 1].word->first[0]) &&
+					(sourcePosition==0 || (source.m[sourcePosition - 1].word->first != L"chapter" && source.m[sourcePosition - 1].word->first != L"book")))
+					continue;
 				if (im->word->first == L"a" && f != determinerForm &&
 					sourcePosition + 1 < source.m.size() && (signed)source.m[sourcePosition + 1].word->first[0] > 0 &&
 					(iswalpha(source.m[sourcePosition + 1].word->first[0]) || source.m[sourcePosition + 1].queryForm(quoteForm) >= 0) && source.m[sourcePosition + 1].word->first != L"is" && (sourcePosition==0 || source.m[sourcePosition - 1].word->first != L"letter"))
