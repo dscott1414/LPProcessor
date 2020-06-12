@@ -334,8 +334,8 @@ int patternElement::matchOne(Source &source,unsigned int sourcePosition,unsigned
 					cost += 10;
 				if (im->word->first == L"a" && f != determinerForm &&
 					sourcePosition + 1 < source.m.size() && (signed)source.m[sourcePosition + 1].word->first[0] > 0 &&
-					(iswalpha(source.m[sourcePosition + 1].word->first[0]) || source.m[sourcePosition + 1].queryForm(quoteForm) >= 0) && source.m[sourcePosition + 1].word->first != L"is")
-					cost += 10;
+					(iswalpha(source.m[sourcePosition + 1].word->first[0]) || source.m[sourcePosition + 1].queryForm(quoteForm) >= 0) && source.m[sourcePosition + 1].word->first != L"is" && (sourcePosition==0 || source.m[sourcePosition - 1].word->first != L"letter"))
+					continue;
 				if ((im->word->first == L"if" || im->word->first == L"and" || im->word->first == L"but") && (f == nounForm || f == adjectiveForm || f == PROPER_NOUN_FORM_NUM || f == abbreviationForm) &&
 					!(im->word->second.inflectionFlags&PLURAL))
 					cost += 10;

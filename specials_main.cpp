@@ -5104,6 +5104,16 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: LP says possessive pronoun NOT personal_pronoun_accusative"]++;
 		return 0;
 	}
+	if (primarySTLPMatch == L"determiner" && source.m[wordSourceIndex].queryWinnerForm(pronounForm) != -1)
+	{
+		errorMap[L"LP correct: LP says pronoun NOT determiner"]++;
+		return 0;
+	}
+	if (word == L"how" && !iswalpha(source.m[wordSourceIndex+1].word->first[0]))
+	{
+		errorMap[L"LP correct: LP says 'how' is interjection"]++;
+		return 0;
+	}
 	wstring winnerFormsString;
 	source.m[wordSourceIndex].winnerFormString(winnerFormsString, false);
 	// matrix analysis
@@ -5663,6 +5673,11 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	errorMap[L"ST correct: LP says adverb not a verb"] = numErrors * 57 / 216;
 	errorMap[L"diff: LP says adverb not a verb"] = numErrors * 14 / 216;
 
+	// ST 25, LP 91 out of total 116
+	numErrors = errorMap[L"LP correct: LP says pronoun NOT determiner"];
+	errorMap[L"LP correct: LP says pronoun NOT determiner"] = numErrors * 91 / 116;
+	errorMap[L"ST correct: LP says pronoun NOT determiner"] = numErrors * 25 / 116;
+	
 }
 
 int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, bool lockPerSource)
