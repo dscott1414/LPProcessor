@@ -500,6 +500,8 @@ void Source::getSynonyms(wstring word, vector <set <wstring> > &synonyms, int sy
 		for (int I = 0; I<word.length(); I++)
 			if (!iswalpha(word[I]) && word[I] != L'_') // two words has a _ in it
 				return;
+	if (word.find(L"http")!=wstring::npos)
+		return;
 	unordered_map <wstring, vector < set <wstring> > >::iterator smi = internalSynonymMap[synonymType].find(word);
 	if (smi != internalSynonymMap[synonymType].end())
 	{

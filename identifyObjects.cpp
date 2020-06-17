@@ -1452,7 +1452,8 @@ int Source::identifyObject(int tag, int where, int element, bool adjectival, int
 	}
 	m[principalWhere].beginObjectPosition = where;
 	m[principalWhere].endObjectPosition = end;
-	accumulateAdjectives(principalWhere);
+	if (!WordClass::illegalWord(&mysql,m[principalWhere].word->first))
+		accumulateAdjectives(principalWhere);
 	objects[m[principalWhere].getObject()].setSubType(identifySubType(principalWhere, objects[m[principalWhere].getObject()].partialMatch));
 	if (objects[m[principalWhere].getObject()].getSubType() < 0 && (end - where) == 1 && (m[where].word->second.timeFlags&T_UNIT))
 		objects[m[principalWhere].getObject()].isNotAPlace = true; // this is a time, not a place

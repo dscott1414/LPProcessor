@@ -196,7 +196,7 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 	int numProcesses = 0, errorCode = 0, numSourcesProcessedOriginally = 0;
 	__int64 wordsProcessedOriginally = 0, sentencesProcessedOriginally = 0;
 	getNumSourcesProcessed(source, numSourcesProcessedOriginally, wordsProcessedOriginally, sentencesProcessedOriginally);
-	int numSourcesLeft = source.getNumSources(st, true);
+	int numSourcesLeft = source.getNumSources(true);
 	maxProcesses = min(maxProcesses, numSourcesLeft);
 	wstring tmpstr;
 	while (!errorCode)
@@ -246,8 +246,8 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			switch (processKind)
 			{
 			case 0:result = source.getNextUnprocessedParseRequest(prId, pathInCache); break;
-			case 1:result = source.getNextUnprocessedSource(beginSource, endSource, st, false, id, path, encoding, start, repeatStart, etext, author, title); break;
-			case 2:result = source.anymoreUnprocessedForUnknown(st, step); break;
+			case 1:result = source.getNextUnprocessedSource(beginSource, endSource, false, id, path, encoding, start, repeatStart, etext, author, title); break;
+			case 2:result = source.anymoreUnprocessedForUnknown(step); break;
 			default:result = false; break;
 			}
 		}

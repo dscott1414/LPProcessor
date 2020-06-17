@@ -779,6 +779,9 @@ int Source::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat 
 		return -1;
 	if (numWords >= 1)
 		phraseString(m[where].beginObjectPosition, m[where].beginObjectPosition + numWords, newObjectName, true);
+	// protects from buffer overrun and also very unlikely that legal names are > 200 in length
+	if (newObjectName.length() > 200)
+		return -1;
 	unordered_map<wstring, int >::iterator rdfni;
 	if ((rdfni = extendedRdfTypeNumMap.find(newObjectName)) == extendedRdfTypeNumMap.end() || !fileCaching)
 		extendedRdfTypeNumMap[newObjectName] = 1;
@@ -1285,6 +1288,7 @@ int Source::processPath(const wchar_t *path,Source *&source,Source::sourceTypeEn
 		wstring wpath=path,start=L"~~BEGIN";
 		int repeatStart = 1;
 		bool justParsed = false;
+		Words.readWords(wpath, -1, false, L"");
 		if (!source->readSource(wpath,false, justParsed,false,parseOnly, L"") || (justParsed && !parseOnly))
 		{
 			lplog(LOG_WIKIPEDIA|LOG_RESOLUTION|LOG_RESCHECK|LOG_WHERE,L"Begin Processing %s...",path);
@@ -1295,8 +1299,8 @@ int Source::processPath(const wchar_t *path,Source *&source,Source::sourceTypeEn
 				int globalOverMatchedPositionsTotal=0;
 				string cPath;
 				wTM(path,cPath);
-				source->tokenize(L"",L"",wpath, L"", start, repeatStart,unknownCount,false);
-				source->doQuotesOwnershipAndContractions(totalQuotations,false);
+				source->tokenize(L"",L"",wpath, L"", start, repeatStart,unknownCount);
+				source->doQuotesOwnershipAndContractions(totalQuotations);
 				unlockTables();
 				if (source->m.empty()) 
 				{
@@ -1315,6 +1319,7 @@ int Source::processPath(const wchar_t *path,Source *&source,Source::sourceTypeEn
 				logUnmatchedSentences=s2;
 				lplog();
 				source->write(path,false, false, L"");
+				source->writeWords(path, L"");
 				limitProcessingForProfiling=0;
 				puts("");
 			}
@@ -1346,6 +1351,7 @@ int Source::processPath(const wchar_t *path,Source *&source,Source::sourceTypeEn
 				source->resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
 			}
 			source->write(path,!parseOnly, false, L"");
+			source->writeWords(path, L"");
 			lplog(LOG_WIKIPEDIA|LOG_RESOLUTION|LOG_RESCHECK|LOG_WHERE,L"End Processing %s...",path);
 		}
 		sourcesMap[path]=source;

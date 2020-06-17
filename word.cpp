@@ -715,7 +715,7 @@ void tFI::cloneForms(tFI fromWord)
 }
 
 // this is a dynamic addForm routine, called from BNC routines, addForm or addNewOrModify.  insertNewForms flag is necessary.
-int tFI::addForm(int form,const wstring &word)
+int tFI::addForm(int form,const wstring &word,bool illegal)
 { LFS
   if (count>=MAX_FORM_USAGE_PATTERNS)
   {
@@ -746,7 +746,8 @@ int tFI::addForm(int form,const wstring &word)
 		formsArray[fACount++] = saveForm;
 		::lplog(LOG_FATAL_ERROR, L"Test this - %d!", formsArray[formsOffset]);
 	}
-	::lplog(L"XXADDFORM form %d added to word %s!", form, word.c_str());
+	if (!illegal)
+		::lplog(L"XXADDFORM form %d added to word %s!", form, word.c_str());
   return 0;
 }
 
@@ -1237,7 +1238,7 @@ bool WordClass::addInflectionFlag(wstring sWord,int flag)
   return false;
 }
 
-tIWMM WordClass::addNewOrModify(MYSQL *mysql, wstring sWord, int flags, int form, int inflection, int derivationRules, wstring sME, int sourceId, bool &added)
+tIWMM WordClass::addNewOrModify(MYSQL *mysql, wstring sWord, int flags, int form, int inflection, int derivationRules, wstring sME, int sourceId, bool &added,bool markUndefined)
 {
 	LFS
   bool firstLetterCapitalized=sWord[0]>0 && iswupper(sWord[0])!=0;
@@ -1278,7 +1279,7 @@ tIWMM WordClass::addNewOrModify(MYSQL *mysql, wstring sWord, int flags, int form
   }
   else
   {
-    if (iWMM->second.query(form)<0) iWMM->second.addForm(form,sWord);
+    if (iWMM->second.query(form)<0) iWMM->second.addForm(form,sWord,markUndefined);
     iWMM->second.inflectionFlags|=inflection;
         // flags&=~tFI::queryOnAnyAppearance; // don't query if not a new word. - 5/3/2007 no way to tell...
     iWMM->second.flags|=flags|tFI::updateMainInfo;
@@ -1302,10 +1303,10 @@ tIWMM WordClass::query(wstring sWord)
   return WMM.find(sWord);
 }
 
-int WordClass::addWordToForm(wstring sWord,tIWMM &iWord,int flag,wstring sForm,wstring shortForm,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added)
+int WordClass::addWordToForm(wstring sWord,tIWMM &iWord,int flag,wstring sForm,wstring shortForm,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added,bool markUndefined)
 { LFS
   unsigned int iForm=FormsClass::addNewForm(sForm,shortForm,true);
-  iWord=addNewOrModify(NULL, sWord,flag,iForm,inflection,derivationRules,mainEntry,sourceId,added);
+  iWord=addNewOrModify(NULL, sWord,flag,iForm,inflection,derivationRules,mainEntry,sourceId,added,markUndefined);
   return iForm;
 }
 
@@ -1355,25 +1356,27 @@ int WordClass::markWordUndefined(tIWMM &iWord,wstring sWord,int flag,bool firstW
 { LFS
   bool added;
   tIWMM iW;
-  addWordToForm(sWord,iWord,flag,UNDEFINED_FORM,L"",0,0,L"",sourceId,added);
+  addWordToForm(sWord,iWord,flag,UNDEFINED_FORM,L"",0,0,L"",sourceId,added, true);
   //if (iswupper(sWord[0])) // this is already done by other code
   //  addWordToForm(sWord,iW,flag,PROPER_NOUN_FORM,"",0,0,"",added);
-  addWordToForm(sWord,iW,flag,L"noun",L"",SINGULAR,0,L"",sourceId,added);
+  addWordToForm(sWord,iW,flag,L"noun",L"",SINGULAR,0,L"",sourceId,added, true);
 	if (!nounOwner && !firstWordCapitalized)
   {
     if (sWord.length()>3 && sWord.substr(sWord.length()-3,3)==L"ing")
-      addWordToForm(sWord,iW,flag,L"verb",L"",VERB_PRESENT_PARTICIPLE,0,L"",sourceId,added);
+      addWordToForm(sWord,iW,flag,L"verb",L"",VERB_PRESENT_PARTICIPLE,0,L"",sourceId,added,true);
     else
     {
-      addWordToForm(sWord,iW,flag,L"verb",L"",VERB_PAST,0,L"",sourceId,added);
-      addWordToForm(sWord,iW,flag,L"verb",L"",VERB_PRESENT_FIRST_SINGULAR,0,L"",sourceId,added);
+      addWordToForm(sWord,iW,flag,L"verb",L"",VERB_PAST,0,L"",sourceId,added, true);
+      addWordToForm(sWord,iW,flag,L"verb",L"",VERB_PRESENT_FIRST_SINGULAR,0,L"",sourceId,added, true);
     }
-    addWordToForm(sWord,iW,flag,L"adverb",L"",ADVERB_NORMATIVE,0,L"",sourceId,added);
-    addWordToForm(sWord,iW,flag,L"adjective",L"",ADJECTIVE_NORMATIVE,0,L"",sourceId,added);
+    addWordToForm(sWord,iW,flag,L"adverb",L"",ADVERB_NORMATIVE,0,L"",sourceId,added, true);
+    addWordToForm(sWord,iW,flag,L"adjective",L"",ADJECTIVE_NORMATIVE,0,L"",sourceId,added, true);
   }
   if (sWord.find_first_of(L"aeiou")==wstring::npos)
-    addWordToForm(sWord,iW,flag,L"abbreviation",L"",0,0,L"",sourceId,added);
+    addWordToForm(sWord,iW,flag,L"abbreviation",L"",0,0,L"",sourceId,added, true);
   if (!firstWordCapitalized) lplog(LOG_DICTIONARY,L"ERROR:Word %s was not found",sWord.c_str());
+	if (sWord.length() > 20)
+		lplog(LOG_ERROR, L"Illegal word marked undefined - %s!",sWord.c_str());
   return 0;
 }
 
@@ -2628,17 +2631,21 @@ bool WordClass::findWordInDB(MYSQL *mysql, wstring &sWord, int &wordId, tIWMM &i
 	int selfFormNum = FormsClass::findForm(sWord);
 	if (Words.query(sWord) != Words.end())
 	{
-		lplog(LOG_FATAL_ERROR, L"word %s double insertion attempted", sWord.c_str());
-	}
-	iWord = Words.WMM.insert(WordClass::tWFIMap(sWord, tFI(wordForms, count / 2, iInflectionFlags, iFlags, iTimeFlags, iMainEntryWordId, iDerivationRules, iSourceId, selfFormNum, sWord))).first;
-	Words.mapWordIdToWordStructure(wordId, iWord);
-	if (Words.wordStructureGivenWordIdExists(iMainEntryWordId) == wNULL)
-	{
-		wstring sMainEntryWord;
-		findWordInDB(mysql, sMainEntryWord, iMainEntryWordId, iWord->second.mainEntry);
+		if (wordId==-1)
+			lplog(LOG_FATAL_ERROR, L"word %s double insertion attempted", sWord.c_str());
 	}
 	else
-		iWord->second.mainEntry = Words.wordStructureGivenWordIdExists(iMainEntryWordId);
+	{
+		iWord = Words.WMM.insert(WordClass::tWFIMap(sWord, tFI(wordForms, count / 2, iInflectionFlags, iFlags, iTimeFlags, iMainEntryWordId, iDerivationRules, iSourceId, selfFormNum, sWord))).first;
+		Words.mapWordIdToWordStructure(wordId, iWord);
+		if (Words.wordStructureGivenWordIdExists(iMainEntryWordId) == wNULL)
+		{
+			wstring sMainEntryWord;
+			findWordInDB(mysql, sMainEntryWord, iMainEntryWordId, iWord->second.mainEntry);
+		}
+		else
+			iWord->second.mainEntry = Words.wordStructureGivenWordIdExists(iMainEntryWordId);
+	}
 	tfree(count * sizeof(int), wordForms);
 	return iWord != Words.end();
 }
@@ -2646,8 +2653,10 @@ bool WordClass::findWordInDB(MYSQL *mysql, wstring &sWord, int &wordId, tIWMM &i
 tIWMM WordClass::fullQuery(MYSQL *mysql, wstring word, int sourceId)
 {
 	tIWMM iWord = Words.end();
+	if ((iWord = Words.query(word)) != Words.end() || mysql==NULL)
+		return iWord;
 	int wordId = -1;
-	if ((iWord = Words.query(word)) == Words.end() && !findWordInDB(mysql, word, wordId, iWord))
+	if (!findWordInDB(mysql, word, wordId, iWord))
 		getForms(mysql,iWord, word, sourceId,false);
 	return iWord;
 }

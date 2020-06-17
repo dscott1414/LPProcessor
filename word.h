@@ -441,7 +441,7 @@ public:
   int queryForSeparator(void);
   bool remove(int form);
   bool remove(wchar_t *formName);
-  int addForm(int form,const wstring &word);
+  int addForm(int form,const wstring &word,bool illegal=false);
 	void cloneForms(tFI fromWord);
   int adjustFormsInflections(wstring originalWord,unsigned __int64 &flags,bool isFirstWord,int nounOwner,bool allCaps,bool firstLetterCapitalized, bool log);
   bool isUnknown(void);
@@ -673,9 +673,10 @@ public:
 	int parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool log);
 	static int attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId,bool log);
 	static int parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLetterCapitalized, int nounOwner, int sourceId, bool log);
-  static tIWMM addNewOrModify(MYSQL *mysql,wstring sWord,int flags,int form,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added); // only used for adding a name
+  static tIWMM addNewOrModify(MYSQL *mysql,wstring sWord,int flags,int form,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added,bool markUndefined=false); // only used for adding a name
   // generic utilities
-  bool isAllUpper(wstring &sWord);
+	static bool illegalWord(MYSQL *mysql, wstring sWord);
+	bool isAllUpper(wstring &sWord);
   bool remove(wstring sWord);
 	static void resetUsagePatternsAndCosts(sTrace debugTrace);
 	static void resetCapitalizationAndProperNounUsageStatistics(sTrace debugTrace);
@@ -772,7 +773,7 @@ private:
   static tIWMM hasFormInflection(tIWMM iWord,wstring sForm,int inflection);
   static bool handleExtendedParseWords(wchar_t *word);
   int continueParse(wchar_t *buffer,__int64 begincp,__int64 bufferLen,vector<wchar_t *> &multiWords);
-  static int addWordToForm(wstring sWord,tIWMM &iWord,int flags,wstring sForm,wstring shortForm,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added);
+  static int addWordToForm(wstring sWord,tIWMM &iWord,int flags,wstring sForm,wstring shortForm,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added,bool markUndefined=false);
   int predefineWords(InflectionsRoot words[],wstring form,wstring shortForm,wstring inflectionsClass=L"",int flags=0,bool properNounSubClass=false);
   bool closeConnection(void);
   static int checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,wstring sForm,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool log);

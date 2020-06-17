@@ -1309,15 +1309,17 @@ int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring
 	CloseHandle(fd);
 	if (bufferLen<0 || bufferLen==0) 
 		return PARSE_EOF;
-	sourcePath=path;
-	bufferLen/=sizeof(bookBuffer[0]);
+	bool hasBOM = bookBuffer[0] == 0xFEFF;
+	bufferScanLocation = (hasBOM) ? 1 : 0; // detect BOM
+	sourcePath = path;
+	bufferLen /= sizeof(bookBuffer[0]);
+	if (sourceType == Source::WEB_SEARCH_SOURCE_TYPE)
+		return 0;
 	bookBuffer[bufferLen] = 0;
 	bookBuffer[bufferLen + 1] = 0;
 	bookBuffer[bufferLen + 2] = 0;
 	bookBuffer[bufferLen + 3] = 0;
 	bookBuffer[bufferLen + 4] = 0;
-	bool hasBOM=bookBuffer[0] == 0xFEFF;
-	bufferScanLocation=(hasBOM) ? 1 : 0; // detect BOM
 	if (hasBOM)
 		readBufferFlags += HAS_BOM;
 	int bl = (int)bufferLen;
@@ -1400,7 +1402,7 @@ int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring
 	return 0;
 }
 
-int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
+int Source::parseBuffer(wstring &path,unsigned int &unknownCount)
 { LFS
 	int lastProgressPercent=0,result=0,runOnSentences=0;
 	bool alreadyAtEnd=false,previousIsProperNoun=false;
@@ -1452,12 +1454,12 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 				alreadyAtEnd=true;
 				break;
 			}
-			if (result==PARSE_END_PARAGRAPH && (!newsBank || numParagraphsInSection++<2))
+			if (result==PARSE_END_PARAGRAPH && (sourceType!=NEWS_BANK_SOURCE_TYPE || numParagraphsInSection++<2))
 			{
 				sentenceStarts.push_back(lastSentenceEnd);
 				lastSentenceEnd=m.size();
 			}
-			if (newsBank && result==PARSE_END_BOOK)
+			if (sourceType == NEWS_BANK_SOURCE_TYPE && result==PARSE_END_BOOK)
 				numParagraphsInSection=0;
 			if (m.size()==lastSentenceEnd) lastSentenceEnd++;
 			m.push_back(WordMatch(Words.sectionWord,(result==PARSE_DUMP_LOCAL_OBJECTS) ? 1 : 0,debugTrace));
@@ -1636,7 +1638,7 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 			if (flagAlphaBeforeHint) flags|=WordMatch::flagAlphaBeforeHint;
 			if (flagAlphaAfterHint) flags|=WordMatch::flagAlphaAfterHint;
 		}
-		if (newsBank && numParagraphsInSection<3)
+		if (sourceType==NEWS_BANK_SOURCE_TYPE && numParagraphsInSection<3)
 			flags|=WordMatch::flagMetaData;
 		// The description of a green toque , a coat with a handkerchief in the pocket marked P.L.C. He looked an agonized question at Mr . Carter .
 		if (firstLetterCapitalized && (sWord==L"he" || sWord==L"she" || sWord==L"it" || sWord==L"they" || sWord==L"we" || sWord==L"you") && m.size() && 
@@ -1707,13 +1709,13 @@ int Source::parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank)
 	return 0;
 }
 
-int Source::tokenize(wstring title,wstring etext,wstring path,wstring encoding, wstring &start,int &repeatStart,unsigned int &unknownCount,bool newsBank)
+int Source::tokenize(wstring title,wstring etext,wstring path,wstring encoding, wstring &start,int &repeatStart,unsigned int &unknownCount)
 { LFS
 	int ret=0;
   if ((ret=readSourceBuffer(title, etext, path, encoding, start, repeatStart))>=0)
 	{
 		if (wcsncmp(bookBuffer,L"%PDF-",wcslen(L"%PDF-")))
-			ret=parseBuffer(path,unknownCount,newsBank);
+			ret=parseBuffer(path,unknownCount);
 		else
 			lplog(LOG_ERROR,L"%s: Skipped parsing PDF file",path.c_str());
 		tfree((int)bufferLen,bookBuffer);
@@ -2888,6 +2890,13 @@ bool Source::readSource(wstring &path,bool checkOnly,bool &parsedOnly,bool print
 		CloseHandle(fd);
 		return false;
 	}
+	// if unable to parse previously, the source is saved as an empty file.
+	if (!bufferlen)
+	{
+		lplog(LOG_INFO, L"empty file %s - previous attempt at parsing failed so not retrying.", path.c_str());
+		CloseHandle(fd);
+		return true;
+	}
 	buffer=(void *)tmalloc(bufferlen+10);
 	//::read(fd,buffer,bufferlen);
 	DWORD NumberOfBytesRead;
@@ -3256,7 +3265,8 @@ Source::Source(wchar_t *databaseServer,int _sourceType,bool generateFormStatisti
 	}
 	else 
 	{
-		if (Words.readWordsFromDB(mysql,generateFormStatistics, printProgress, skipWordInitialization))
+		// only read words if it hasn't already been done (lastReadfromDBTime).  This will have to change if we want to read words that have been changed during program execution.
+		if (Words.lastReadfromDBTime<0 && Words.readWordsFromDB(mysql,generateFormStatistics, printProgress, skipWordInitialization))
 				lplog(LOG_FATAL_ERROR,L"Cannot read database.");
 	}
 	unlockTables();

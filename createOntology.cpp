@@ -2164,7 +2164,7 @@ bool Ontology::inNoERDFTypesDBTable(wstring newObjectName)
 	}
 	if (!myquery(&mysql, L"UNLOCK TABLES"))
 		return false;
-	lplog(LOG_INFO, L"*** inNoERDFTypesDBTable Temp: statement %s resulted in numRows=%d.", qt, numResults);
+	//lplog(LOG_INFO, L"*** inNoERDFTypesDBTable Temp: statement %s resulted in numRows=%d.", qt, numResults);
 	return numResults > 0;
 }
 

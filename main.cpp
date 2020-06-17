@@ -839,8 +839,7 @@ bool signalCtrl(DWORD dwProcessId, DWORD dwCtrlEvent)
 	return success;
 }
 
-int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st,
- int maxProcesses, int numSourcesPerProcess, 
+int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum processSourceType, int maxProcesses, int numSourcesPerProcess,
 	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite,bool makeCopyBeforeSourceWrite,bool parseOnly, wstring specialExtension)
 {
 	LFS
@@ -851,7 +850,7 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 	int numProcesses = 0, errorCode = 0,numSourcesProcessedOriginally =0;
 	__int64 wordsProcessedOriginally = 0, sentencesProcessedOriginally = 0;
 	getNumSourcesProcessed(source, numSourcesProcessedOriginally, wordsProcessedOriginally, sentencesProcessedOriginally);
-	int numSourcesLeft = source.getNumSources(st, true);
+	int numSourcesLeft = source.getNumSources(true);
 	maxProcesses = min(maxProcesses, numSourcesLeft);
 	wstring tmpstr;
 	while (!errorCode)
@@ -904,8 +903,8 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			switch (processKind)
 			{
 			case 0:result = source.getNextUnprocessedParseRequest(prId, pathInCache); break;
-			case 1:result = source.getNextUnprocessedSource(beginSource, endSource, st, false, id, path, encoding, start, repeatStart, etext, author, title); break;
-			case 2:result = source.anymoreUnprocessedForUnknown(st, step); break;
+			case 1:result = source.getNextUnprocessedSource(beginSource, endSource, false, id, path, encoding, start, repeatStart, etext, author, title); break;
+			case 2:result = source.anymoreUnprocessedForUnknown(step); break;
 			default:result = false; break;
 			}
 		}
@@ -1025,7 +1024,7 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			printf("\nCreated process %d:%d", nextProcessIndex, (int)processId);
 		}
 	}
-	if (st != Source::REQUEST_TYPE)
+	if (processSourceType != Source::REQUEST_TYPE)
 	{
 		freeCounter();
 		_exit(0); // fast exit
@@ -1205,7 +1204,7 @@ int wmain(int argc,wchar_t *argv[])
 	*/
 	vector <int> badSpeakers;
 	int sourceArgs = -1;
-	enum Source::sourceTypeEnum st= Source::NO_SOURCE_TYPE;
+	enum Source::sourceTypeEnum sourceType= Source::NO_SOURCE_TYPE;
 	const wchar_t *where;
 	for (int I = 1; I < numCommandLineParameters - 1; I++)
 	{
@@ -1213,7 +1212,7 @@ int wmain(int argc,wchar_t *argv[])
 		std::transform(arg.begin(), arg.end(), arg.begin(), ::tolower);
 		if ((where = wcsstr(L"1-test 2-book 3-newsbank 4-bnc 5-script 6-websearch 7-wikipedia 8-interactive 9-parserequest", arg.c_str())))
 		{
-			st = (enum Source::sourceTypeEnum)(where[-1] - '0');
+			sourceType = (enum Source::sourceTypeEnum)(where[-1] - '0');
 			sourceArgs = I;
 			break;
 		}
@@ -1222,7 +1221,7 @@ int wmain(int argc,wchar_t *argv[])
 		lplog(LOG_FATAL_ERROR,L"Source type not found.");
 	if (_waccess(cacheDir,0)<0)
 		lplog(LOG_FATAL_ERROR,L"Cache directory %s does not exist!",cacheDir);
-	Source source(sourceHost,st,generateFormStatistics,multiProcess>0,true);
+	Source source(sourceHost,sourceType,generateFormStatistics,multiProcess>0,true);
 	if (multiProcess > 0 || numSourceLimit == 0) // controller or a single process not under control
 		WRMemoryCheck(source.mysql);
 
@@ -1251,7 +1250,7 @@ int wmain(int argc,wchar_t *argv[])
 	source.pemaMapToTagSetsByPemaByTagSet.reserve(desiredTagSets.size());
 	for (unsigned int ts=0; ts<desiredTagSets.size(); ts++)
 		source.pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
-	if (st == Source::sourceTypeEnum::PATTERN_TRANSFORM_TYPE)
+	if (sourceType == Source::sourceTypeEnum::PATTERN_TRANSFORM_TYPE)
 	{
 		wchar_t consoleTitle[1500];
 #ifdef _DEBUG
@@ -1282,19 +1281,19 @@ int wmain(int argc,wchar_t *argv[])
 		{
 			HWND consoleWindowHandle = GetConsoleWindow();
 			SetWindowPos(consoleWindowHandle, HWND_NOTOPMOST, 900, 0, 700, 180, SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-			startProcesses(source, 1,0,beginSource, endSource, st, multiProcess, numSourcesPerProcess, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite,makeCopyBeforeSourceWrite,parseOnly,specialExtension);
+			startProcesses(source, 1,0,beginSource, endSource, sourceType, multiProcess, numSourcesPerProcess, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite,makeCopyBeforeSourceWrite,parseOnly,specialExtension);
 			return 0;
 		}
 		wprintf(L"Getting number of sources to process...               \r");
-		int numSources = source.getNumSources(st, false);
+		int numSources = source.getNumSources(false);
 		int numSourcesProcessed=0,pid= GetCurrentProcessId();
 		while (!exitNow && !exitEventually && (numSourceLimit==0 || numSourcesProcessed++<numSourceLimit))
 		{
 			int sourceId, repeatStart;
 			wstring path, encoding, etext, author, title, start;
 			wprintf(L"Getting number of sources left...               \r");
-			int numSourcesLeft = source.getNumSources(st,true);
-			if (!source.getNextUnprocessedSource(beginSource, endSource, st, true, sourceId, path, encoding, start, repeatStart, etext, author, title))
+			int numSourcesLeft = source.getNumSources(true);
+			if (!source.getNextUnprocessedSource(beginSource, endSource, true, sourceId, path, encoding, start, repeatStart, etext, author, title))
 				break;
 			path.insert(0, L"\\");
 			path=path.insert(0,TEXTDIR);
@@ -1313,23 +1312,20 @@ int wmain(int argc,wchar_t *argv[])
 			if (forceSourceReread || !source.readSource(path,false, parsedOnly, true,true, specialExtension))
 			{
 				unknownCount=0;
-				switch (st)
+				switch (sourceType)
 				{
 				case Source::TEST_SOURCE_TYPE:
 				case Source::GUTENBERG_SOURCE_TYPE:
 				case Source::WIKIPEDIA_SOURCE_TYPE:
 				case Source::INTERACTIVE_SOURCE_TYPE:
 				case Source::WEB_SEARCH_SOURCE_TYPE:
-					if ((ret=source.tokenize(title,etext,path,encoding,start,repeatStart,unknownCount,false))<0) 
+				case Source::NEWS_BANK_SOURCE_TYPE:
+					if ((ret=source.tokenize(title,etext,path,encoding,start,repeatStart,unknownCount))<0)
 					{
 						lplog(LOG_ERROR,L"ERROR:Unable to parse %s - %d (start=%s, repeatStart=%d).",path.c_str(),ret,start.c_str(),repeatStart);
 						continue;
 					}
-					quotationExceptions=source.doQuotesOwnershipAndContractions(totalQuotations,false);
-					break;
-				case Source::NEWS_BANK_SOURCE_TYPE:
-					if (source.tokenize(title, etext,path, encoding, start,repeatStart,unknownCount,true)<0) continue;
-					quotationExceptions=source.doQuotesOwnershipAndContractions(totalQuotations,true);
+					quotationExceptions=source.doQuotesOwnershipAndContractions(totalQuotations);
 					break;
 				case Source::BNC_SOURCE_TYPE:
 				{
@@ -1347,7 +1343,7 @@ int wmain(int argc,wchar_t *argv[])
 				default: break;
 				}
 				//int cap=source.m.capacity();
-				std::vector<WordMatch>(source.m).swap(source.m);
+				source.m.shrink_to_fit(); // C++ 11 only
 				//int cap2=source.m.capacity();
 				source.sourceId = sourceId;
 				int totalUnmatched = source.printSentences(true, unknownCount, quotationExceptions, totalQuotations, globalOverMatchedPositionsTotal);
@@ -1358,9 +1354,7 @@ int wmain(int argc,wchar_t *argv[])
 			else
 			{
 				lplog(LOG_INFO,L"%s already parsed.",path.c_str());
-				//int cap=source.m.capacity();
-				std::vector<WordMatch>(source.m).swap(source.m);
-				//int cap2=source.m.capacity();
+				source.m.shrink_to_fit(); // C++ 11 only
 				source.printSentencesCheck(false);
 			}
 			numWords+=source.m.size();
@@ -1379,7 +1373,7 @@ int wmain(int argc,wchar_t *argv[])
 			source.identifyObjects();
 			vector <int> secondaryQuotesResolutions;
 			source.analyzeWordSenses();
-			source.narrativeIsQuoted = st != Source::GUTENBERG_SOURCE_TYPE;
+			source.narrativeIsQuoted = sourceType != Source::GUTENBERG_SOURCE_TYPE;
 			source.syntacticRelations();
 			lplog();
 			if (sourceWrite)
@@ -1428,7 +1422,7 @@ int wmain(int argc,wchar_t *argv[])
 			}
 			lplog();
 			if (source.sourceInPast=source.sourceType==Source::INTERACTIVE_SOURCE_TYPE)
-				source.matchBasicElements(parseOnly);
+				source.matchBasicElements(parseOnly,false);
 			if (!exitNow) source.signalFinishedProcessingSource(sourceId);
 			source.clearSource();
 			if (source.updateWordUsageCostsDynamically)
@@ -1462,12 +1456,12 @@ int wmain(int argc,wchar_t *argv[])
 		bool parsedOnly;
 		if (forceSourceReread || !source.readSource(path, false, parsedOnly, true, true, specialExtension))
 		{
-			if (source.tokenize(title,etext,path,encoding, start,repeatStart,unknownCount,false)<0)
+			if (source.tokenize(title,etext,path,encoding, start,repeatStart,unknownCount)<0)
 				exit(0);
 			lplog();
 			source.write(path,false, false,specialExtension);
 		}
-		quotationExceptions=source.doQuotesOwnershipAndContractions(totalQuotations,false);
+		quotationExceptions=source.doQuotesOwnershipAndContractions(totalQuotations);
 		globalTotalUnmatched+=source.printSentences(false,unknownCount,quotationExceptions,totalQuotations,globalOverMatchedPositionsTotal);
 		puts("");
 		source.identifyObjects();

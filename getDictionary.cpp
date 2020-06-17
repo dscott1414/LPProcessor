@@ -42,6 +42,8 @@ void distributeToSubDirectories(wchar_t *fullPath,int pathlen,bool createDirs)
 	{
 		memmove(path+4,path,(wcslen(path)+1)*sizeof(path[0]));
 		path[0]=path[5];
+		if (path[0] == L'.')
+			path[0] = L'!';
 		path[1]='\\';
 		if (createDirs)
 		{
@@ -49,6 +51,8 @@ void distributeToSubDirectories(wchar_t *fullPath,int pathlen,bool createDirs)
 			_wmkdir(fullPath);
 		}
 		path[2]=path[6];
+		if (path[2] == L'.')
+			path[2] = L'!';
 		path[3]='\\';
 		if (createDirs)
 		{
@@ -1226,23 +1230,31 @@ int discoverInflections(set <int> posSet, bool plural, wstring word)
 	return 0;
 }
 
+bool WordClass::illegalWord(MYSQL *mysql, wstring sWord)
+{
+	// non English word?
+	if (detectNonEuropeanWord(sWord) || sWord.find_first_of(L"ãâäáàæçêéèêëîíïñôóòöõôûüùú") != wstring::npos)
+		return true;
+	// embedded quote?
+	size_t whereQuote = sWord.find('\'');
+	if (whereQuote != wstring::npos && whereQuote > 0 && whereQuote < sWord.length() - 1)
+		return true;
+	// check dictionary.com for a sanity check
+	bool networkAccessed;
+	if (!existsInDictionaryDotCom(mysql, sWord, networkAccessed))
+		return true;
+	return false;
+}
+
 // this routine should look up words from wiktionary or some other dictionary
 // this returns >0 if word is found or WORD_NOT_FOUND if word lookup fails.
 int WordClass::getForms(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId,bool logEverything)
 {
 	LFS
-	// non English word?
-	if (detectNonEuropeanWord(sWord) || sWord.find_first_of(L"ãâäáàæçêéèêëîíïñôóòöõôûüùú") != wstring::npos)
-		return WORD_NOT_FOUND;
-	// embedded quote?
-	size_t whereQuote = sWord.find('\'');
-	if (whereQuote != wstring::npos && whereQuote > 0 && whereQuote < sWord.length() - 1)
-		return WORD_NOT_FOUND;
-	// check dictionary.com for a sanity check
-	bool plural,networkAccessed, existsDM = existsInDictionaryDotCom(mysql, sWord, networkAccessed);
-	if (!existsDM)
+	if (illegalWord(mysql, sWord))
 		return WORD_NOT_FOUND;
 	changedWords=true;
+	bool plural, networkAccessed;
 	// check webster for a list of the forms (because of their API)
 	set <int> posSet;
 	if (!getMerriamWebsterDictionaryAPIForms(sWord, posSet, plural, networkAccessed,logEverything))

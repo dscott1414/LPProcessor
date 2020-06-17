@@ -1866,6 +1866,11 @@ public:
 	Source(wchar_t *databaseServer,int _sourceType,bool generateFormStatistics,bool skipWordInitialization,bool printProgress);
 	int beginClock;
 	int pass;
+	enum sourceTypeEnum {
+		NO_SOURCE_TYPE, TEST_SOURCE_TYPE, GUTENBERG_SOURCE_TYPE, NEWS_BANK_SOURCE_TYPE, BNC_SOURCE_TYPE, SCRIPT_SOURCE_TYPE,
+		WEB_SEARCH_SOURCE_TYPE, WIKIPEDIA_SOURCE_TYPE, INTERACTIVE_SOURCE_TYPE, PATTERN_TRANSFORM_TYPE, REQUEST_TYPE
+	};
+	//enum sourceType {NoType,TestType,BookType,NewsBankType,BNCType,ScriptType};
 	inline static bool updateWordUsageCostsDynamically=false;  // this is turned of by default.  Do NOT turn this back on unless a great deal of testing is done, as this will
 																// upset carefully defined weights of word forms usages, and it will also accumulate usages into costs which will make results nonreproducible
 	                              // from actual to test because the exact parsing history from the beginning of Source initialization must be followed
@@ -1882,8 +1887,8 @@ public:
 	patternElementMatchArray pema;
 	bool parseNecessary(wchar_t *path);
 	int readSourceBuffer(wstring title, wstring etext, wstring path, wstring encoding, wstring &start, int &repeatStart);
-	int parseBuffer(wstring &path,unsigned int &unknownCount,bool newsBank);
-	int tokenize(wstring title, wstring etext, wstring path, wstring encoding, wstring &start, int &repeatStart, unsigned int &unknownCount, bool newsBank);
+	int parseBuffer(wstring &path,unsigned int &unknownCount);
+	int tokenize(wstring title, wstring etext, wstring path, wstring encoding, wstring &start, int &repeatStart, unsigned int &unknownCount);
 	bool write(IOHANDLE file);
 	bool read(char *buffer,int &where,unsigned int total, bool &parsedOnly, bool printProgress, bool readOnlyParsed, wstring specialExtension);
 	bool flush(int fd,void *buffer,int &where);
@@ -2036,9 +2041,6 @@ public:
 		return tmpstr.c_str();
 	}
 	wstring sourcePath;
-	enum sourceTypeEnum { NO_SOURCE_TYPE,TEST_SOURCE_TYPE,GUTENBERG_SOURCE_TYPE, NEWS_BANK_SOURCE_TYPE,BNC_SOURCE_TYPE,SCRIPT_SOURCE_TYPE,
-		WEB_SEARCH_SOURCE_TYPE, WIKIPEDIA_SOURCE_TYPE, INTERACTIVE_SOURCE_TYPE, PATTERN_TRANSFORM_TYPE, REQUEST_TYPE };
-	//enum sourceType {NoType,TestType,BookType,NewsBankType,BNCType,ScriptType};
 	int sourceType;
 	bool sourceInPast;
 	int sourceConfidence; // dbPedia/wikipedia sources have higher confidence
@@ -2433,7 +2435,7 @@ int wherePrepObject,
 	void eraseLastQuote(int &lastQuote,tIWMM quoteCloseWord,unsigned int &q);
 	bool testConversionToDoubleQuotes();
 	bool getFormFlags(int where, bool &maybeVerb, bool &maybeNoun, bool &maybeAdjective, bool &preferNoun);
-	unsigned int doQuotesOwnershipAndContractions(unsigned int &quotations,bool newsBank);
+	unsigned int doQuotesOwnershipAndContractions(unsigned int &quotations);
 	int reportUnmatchedElements(int begin,int end,bool logElements);
 	void clearTagSetMaps(void);
 	int WRMemoryCheck();
@@ -2591,12 +2593,12 @@ int wherePrepObject,
 	};
 	unordered_map <wstring, cAnswerConfidence> childCandidateAnswerMap;
 	int	parseSubQueriesParallel(Source *childSource, vector <cSpaceRelation> &subQueries, int whereChildCandidateAnswer);
-	int	matchSubQueries(wstring derivation, Source *childSource, int &semanticMismatch, bool &subQueryNoMatch, vector <cSpaceRelation> &subQueries, int whereChildCandidateAnswer, int whereChildCandidateAnswerEnd, int numConsideredParentAnswer, int semMatchValue, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion);
-	int questionTypeCheck(wstring derivation, cSpaceRelation* parentSRI, cAS &childCAS, int &semanticMismatch, bool &unableToDoquestionTypeCheck,bool &subQueryNoMatch, vector <cSpaceRelation> &subQueries, int numConsideredParentAnswer, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion);
+	int	matchSubQueries(wstring derivation, Source *childSource, int &semanticMismatch, bool &subQueryNoMatch, vector <cSpaceRelation> &subQueries, int whereChildCandidateAnswer, int whereChildCandidateAnswerEnd, int numConsideredParentAnswer, int semMatchValue, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion,bool useParallelQuery);
+	int questionTypeCheck(wstring derivation, cSpaceRelation* parentSRI, cAS &childCAS, int &semanticMismatch, bool &unableToDoquestionTypeCheck,bool &subQueryNoMatch, vector <cSpaceRelation> &subQueries, int numConsideredParentAnswer, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion,bool useParallelQuery);
 	void verbTenseMatch(cSpaceRelation* parentSRI, cAS &childCAS, bool &tenseMismatch);
-	int semanticMatch(wstring derivation,cSpaceRelation* parentSRI,cAS &childCAS,int &semanticMismatch,bool &subQueryNoMatch,vector <cSpaceRelation> &subQueries,int numConsideredParentAnswer,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion);
+	int semanticMatch(wstring derivation,cSpaceRelation* parentSRI,cAS &childCAS,int &semanticMismatch,bool &subQueryNoMatch,vector <cSpaceRelation> &subQueries,int numConsideredParentAnswer,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion,bool useParallelQuery);
 	int semanticMatchSingle(wstring derivation,cSpaceRelation* parentSRI,Source *childSource,int whereChild,int childObject,int &semanticMismatch,bool &subQueryNoMatch,
-	                        vector <cSpaceRelation> &subQueries,int numConsideredParentAnswer,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion);
+	                        vector <cSpaceRelation> &subQueries,int numConsideredParentAnswer,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion,bool useParallelQuery);
 	bool checkIdentical(cSpaceRelation* sri,cAS &cas1,cAS &cas2);
 	bool checkObjectIdentical(Source *source1,Source *source2,int object1,int object2);
 	bool checkParticularPartIdentical(Source *source1,Source *source2,int where1,int where2);
@@ -2612,7 +2614,7 @@ int wherePrepObject,
 	void setWhereChildCandidateAnswer(cAS &childCAS, cSpaceRelation* parentSRI);
 	void matchAnswersToQuestionType(cSpaceRelation*  sri, vector < cAS > &answerSRIs, int maxAnswer, vector <cSpaceRelation> &subQueries,
 		vector <int> &uniqueAnswers,vector <int> &uniqueAnswersPopularity,vector <int> &uniqueAnswersConfidence,
-		int &highestPopularity,int &lowestConfidence,int &lowestSourceConfidence,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion);
+		int &highestPopularity,int &lowestConfidence,int &lowestSourceConfidence,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion,bool useParallelQuery);
 	bool isModifiedGeneric(cAS &sri);
 	int printAnswers(cSpaceRelation*  sri, vector < cAS > &answerSRIs, vector <int> &uniqueAnswers, vector <int> &uniqueAnswersPopularity, vector <int> &uniqueAnswersConfidence,
 		               int highestPopularity,int lowestConfidence,int lowestSourceConfidence);
@@ -3016,8 +3018,8 @@ int wherePrepObject,
 		};
 	int searchWebSearchQueries(wchar_t derivation[1024],cSpaceRelation* ssri, unordered_map <int,WikipediaTableCandidateAnswers * > &wikiTableMap,
 	                               vector <cSpaceRelation> &subQueries,vector < cAS > &answerSRIs,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion,
-																 vector <wstring> &webSearchQueryStrings,bool parseOnly,bool answerPluralSpecification,int &finalAnswer,int &maxAnswer);
-	int matchBasicElements(bool parseOnly);
+																 vector <wstring> &webSearchQueryStrings,bool parseOnly,bool answerPluralSpecification,int &finalAnswer,int &maxAnswer,bool useParallelQuery);
+	int matchBasicElements(bool parseOnly,bool useParallelQuery);
 	int matchAnswersOfPreviousQuestion(cSpaceRelation *ssri,vector <int> &wherePossibleAnswers);
 	int findConstrainedAnswers(vector < cAS > &answerSRIs,vector <int> &wherePossibleAnswers);
 	bool compareObjectString(int whereObject1,int whereObject2);
@@ -3144,7 +3146,7 @@ int wherePrepObject,
 	MYSQL mysql;
 	bool alreadyConnected;
 	int sourceId;
-	int getNumSources(enum Source::sourceTypeEnum st, bool left);
+	int getNumSources(bool left);
 	int createDatabase(wchar_t *server);
 	int insertWordRelationTypes(void);
 	bool signalBeginProcessingSource(int sourceId);
@@ -3152,8 +3154,8 @@ int wherePrepObject,
 	bool updateSourceEncoding(int readBufferType, wstring sourceEncoding, wstring etext);
 	bool updateSourceStart(wstring &start, int repeatStart, wstring &etext, __int64 actualLenInBytes);
 	bool updateSource(wstring &path,wstring &start,int repeatStart,wstring &etext,int actualLenInBytes);
-	bool getNextUnprocessedSource(int begin, int end, enum Source::sourceTypeEnum st, bool setUsed, int &id, wstring &path, wstring &encoding, wstring &start, int &repeatStart, wstring &etext, wstring &author, wstring &title);
-	bool anymoreUnprocessedForUnknown(enum Source::sourceTypeEnum st, int step);
+	bool getNextUnprocessedSource(int begin, int end, bool setUsed, int &id, wstring &path, wstring &encoding, wstring &start, int &repeatStart, wstring &etext, wstring &author, wstring &title);
+	bool anymoreUnprocessedForUnknown(int step);
 	bool getNextUnprocessedParseRequest(int &prId, wstring &pathInCache);
 	int createThesaurusTables(void);
 	int createGroupTables(void);
@@ -3622,7 +3624,7 @@ bool inSectionHeader,
 	int analyzeQuestionFromSource(wchar_t *derivation,wstring sourceType,Source *source, cSpaceRelation *parentSRI,vector < cAS > &answerSRIs,int &maxAnswer,int rejectDuplicatesFrom,bool eraseIfNoAnswers,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion);
 	int scanColumnEntry(int whereQuestionType,Source *wikipediaSource,int &I,bool &matchFound);
 
-	int	searchTableForAnswer(wchar_t derivation[1024],cSpaceRelation* sri, unordered_map <int,WikipediaTableCandidateAnswers * > &wikiTableMap,vector <cSpaceRelation> &subQueries,vector < cAS > &answerSRIs,int &maxAnswer,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion);
+	int	searchTableForAnswer(wchar_t derivation[1024],cSpaceRelation* sri, unordered_map <int,WikipediaTableCandidateAnswers * > &wikiTableMap,vector <cSpaceRelation> &subQueries,vector < cAS > &answerSRIs,int &maxAnswer,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion,bool useParallelQuery);
 	bool analyzeTitle(unsigned int where,int &numWords,int &numPrepositions);
 	bool isEntryInvalid(int tableNum, int beginColumn, vector <int> &wikiColumns);
 	bool getTableFromSource(int I, int tableStart, int whereQuestionTypeObject, SourceTable &wikiTable);

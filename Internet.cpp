@@ -476,6 +476,11 @@ int Internet::getWebPath(int where, wstring webAddress, wstring &buffer, wstring
 		_close(fd);
 		string outbuf;
 		if ((exitCode = runJavaJerichoHTML(path, path, outbuf)) < 0) return -1; // changed to write file to disk twice because Java can no longer reliably scrape thesaurus.com due to cookie
+		if (outbuf.find("Could not find") != string::npos)
+		{
+			lplog(LOG_FATAL_ERROR, L"Jericho library call on %s resulted in illegal error:%s", path, outbuf.c_str());
+			_wremove(path);
+		}
 		lplog(LOG_WIKIPEDIA, L"getWebPath:Java wrote page %s:%S", path, outbuf.c_str());
 		if (outbuf.find("Exception") != string::npos)
 		{
@@ -580,7 +585,7 @@ int Internet::runJavaJerichoHTML(wstring webAddress, wstring outputPath, string 
 		TCHAR NPath[MAX_PATH];
 	GetCurrentDirectory(MAX_PATH, NPath);
 	_wchdir(LMAINDIR);
-	wstring baseCommandLine = L"java -classpath jericho-html-3.2\\classes;jericho-html-3.2\\dist\\jericho-html-3.2.jar;TextRenderer\\bin RenderToText ";
+	wstring baseCommandLine = L"java -classpath jericho-html-3.4\\classes;jericho-html-3.4\\dist\\jericho-html-3.4.jar;TextRenderer\\bin RenderToText ";
 	wstring commandLine = baseCommandLine + webAddress + L" " + outputPath;
 
 	HANDLE hOutputReadTmp, hOutputRead, hOutputWrite;

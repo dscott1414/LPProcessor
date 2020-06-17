@@ -1677,14 +1677,14 @@ void WordClass::initialize()
 
 	// numeralCardinalForm, numeralOrdinalForm, romanNumeralForm, quantifierform, dateForm,timeForm, telephoneNumberForm, moneyForm, and webAddressForm
 	// are not closed, but they can be positively identified so they do not have to be written in the cache file
-	vector<int> nonCachedForms = { commaForm, periodForm ,reflexivePronounForm	,nomForm	,personalPronounAccusativeForm	,quoteForm	,dashForm	,bracketForm	,conjunctionForm,
-		demonstrativeDeterminerForm	,possessiveDeterminerForm	,interrogativeDeterminerForm	,indefinitePronounForm	,reciprocalPronounForm,
-		pronounForm	,numeralCardinalForm	,numeralOrdinalForm	,romanNumeralForm	,honorificForm	,honorificAbbreviationForm	,relativeForm	,
-		determinerForm,doesForm	,doesNegationForm	,possessivePronounForm	,quantifierForm	,dateForm	,timeForm	,telephoneNumberForm	,
-		coordinatorForm,numberForm	,beForm	,haveForm	,haveNegationForm	,doForm	,doNegationForm	,
-		personalPronounForm	,letterForm	,isForm	,isNegationForm	, telenumForm	,sa_abbForm	,toForm,relativizerForm	,
-		moneyForm	,particleForm	,webAddressForm	,doForm	,doNegationForm	,monthForm	,letterForm,modalAuxiliaryForm	,futureModalAuxiliaryForm	,
-		negationModalAuxiliaryForm	,negationFutureModalAuxiliaryForm };
+	vector<int> nonCachedForms = { 
+				beForm,bracketForm,commaForm,conjunctionForm,coordinatorForm,dashForm,dateForm,demonstrativeDeterminerForm,determinerForm,
+				doForm,doNegationForm,doesForm,doesNegationForm,futureModalAuxiliaryForm,haveForm,haveNegationForm,honorificAbbreviationForm,
+				honorificForm,indefinitePronounForm,interrogativeDeterminerForm,isForm,isNegationForm,letterForm,modalAuxiliaryForm,
+				moneyForm,monthForm,negationFutureModalAuxiliaryForm,negationModalAuxiliaryForm,nomForm,numberForm,numeralCardinalForm,
+				numeralOrdinalForm,particleForm,periodForm,personalPronounAccusativeForm,personalPronounForm,possessiveDeterminerForm,
+				possessivePronounForm,pronounForm,quantifierForm,quoteForm,reciprocalPronounForm,reflexivePronounForm,relativeForm,
+				relativizerForm,romanNumeralForm,sa_abbForm,telenumForm,telephoneNumberForm,timeForm,toForm,webAddressForm };
 	for (int form : nonCachedForms)
 		Forms[form]->isNonCachedForm = true;
 

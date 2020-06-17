@@ -9184,7 +9184,8 @@ void Source::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 		if (m[I].word->first == L"lptable" || m[I].word->first == L"lpendcolumn")
 		{
 			localObjects.clear();
-			lplog(LOG_RESOLUTION, L"%06d:cleared local objects (%s)", I, m[I].word->first.c_str());
+			if (debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%06d:cleared local objects (%s)", I, m[I].word->first.c_str());
 		}
 		// CMREADME33
 		if (m[I].word->first == L"“")
@@ -9276,7 +9277,8 @@ void Source::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 			if (m[I].flags & 1)
 			{
 				localObjects.clear();
-				lplog(LOG_RESOLUTION, L"%06d:cleared local objects", I);
+				if (debugTrace.traceSpeakerResolution)
+					lplog(LOG_RESOLUTION, L"%06d:cleared local objects", I);
 			}
 			endOfSentence = false;
 			immediatelyAfterEndOfParagraph = true;

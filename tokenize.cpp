@@ -291,7 +291,7 @@ bool Source::getFormFlags(int where, bool &maybeVerb, bool &maybeNoun, bool &may
 // executed after tokenization but before pattern matching.
 // also handle Let's = Let us and What's he want = What does he want?
 // also handle 'Tis as in 'Tis the time for all good men... (It is)
-unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuotations,bool newsBank)
+unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuotations)
 { LFS
 	unsigned int quotationExceptions=0;
 	unsigned int secondaryQuotations=0;
@@ -321,7 +321,7 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 			continue;
 		}
 		unsigned int sectionEnd;
-		if (!newsBank && isSectionHeader(begin,end,sectionEnd))
+		if (sourceType!=NEWS_BANK_SOURCE_TYPE && isSectionHeader(begin,end,sectionEnd))
 			if (end!=sectionEnd) sentenceStarts.insert(s+1,sectionEnd);
 		for (unsigned int q=begin; q<end; q++)
 		{

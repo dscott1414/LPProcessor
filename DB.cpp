@@ -150,13 +150,13 @@ bool Source::signalFinishedProcessingSource(int thisSourceId)
 }
 
 
-bool Source::getNextUnprocessedSource(int begin, int end, enum Source::sourceTypeEnum st, bool setUsed, int &id, wstring &path, wstring &encoding, wstring &start, int &repeatStart, wstring &etext, wstring &author, wstring &title)
+bool Source::getNextUnprocessedSource(int begin, int end, bool setUsed, int &id, wstring &path, wstring &encoding, wstring &start, int &repeatStart, wstring &etext, wstring &author, wstring &title)
 {
 	LFS
 	MYSQL_RES * result=NULL;
 	if (!myquery(&mysql, L"LOCK TABLES sources WRITE")) return false;
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"select id, path, encoding, start, repeatStart, etext, author, title from sources where id>=%d and sourceType=%d and processed IS NULL and processing IS NULL and start!='**SKIP**' and start!='**START NOT FOUND**'", begin, st);
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select id, path, encoding, start, repeatStart, etext, author, title from sources where id>=%d and sourceType=%d and processed IS NULL and processing IS NULL and start!='**SKIP**' and start!='**START NOT FOUND**'", begin, sourceType);
 	if (end >= 0)
 		_snwprintf(qt + wcslen(qt), QUERY_BUFFER_LEN - wcslen(qt), L" and id<%d", end);
 	wcscat(qt + wcslen(qt), L" order by numWords desc limit 1");
@@ -189,14 +189,14 @@ bool Source::getNextUnprocessedSource(int begin, int end, enum Source::sourceTyp
 	return sqlrow != NULL;
 }
 
-bool Source::anymoreUnprocessedForUnknown(enum Source::sourceTypeEnum st, int step)
+bool Source::anymoreUnprocessedForUnknown(int step)
 {
 	LFS
 	if (!myquery(&mysql, L"LOCK TABLES sources WRITE")) return false;
 	MYSQL_RES * result;
 	_int64 numResults = 0;
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"select id, etext, path, title from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' and proc2=%d order by id limit 1", st,step);
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select id, etext, path, title from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' and proc2=%d order by id limit 1", sourceType,step);
 	if (myquery(&mysql, qt, result))
 	{
 		numResults = mysql_num_rows(result);
@@ -216,14 +216,14 @@ bool Source::getNextUnprocessedParseRequest(int &prId, wstring &pathInCache)
 	{
 		if ((sqlrow = mysql_fetch_row(result)))
 		{
+			prId = atoi(sqlrow[0]);
+			mTW(sqlrow[1], pathInCache);
 			wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-			_snwprintf(qt, QUERY_BUFFER_LEN, L"update parseRequests set status=1 where prId=%S", sqlrow[0]);
+			_snwprintf(qt, QUERY_BUFFER_LEN, L"update parseRequests set status=1 where prId=%d", prId);
 			myquery(&mysql, qt);
 		}
-		prId = atoi(sqlrow[0]);
-		mTW(sqlrow[1], pathInCache);
+		mysql_free_result(result);
 	}
-	mysql_free_result(result);
 	unlockTables();
 	return sqlrow!=NULL;
 }
@@ -260,13 +260,13 @@ bool Source::updateSourceEncoding(int readBufferType, wstring sourceEncoding,wst
 }
 
 
-int Source::getNumSources(enum Source::sourceTypeEnum st,bool left)
+int Source::getNumSources(bool left)
 { LFS
 	MYSQL_RES *result = NULL;
 	MYSQL_ROW sqlrow;
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
   if (!myquery(&mysql,L"LOCK TABLES sources READ")) return -1;
-  _snwprintf(qt,QUERY_BUFFER_LEN,L"select COUNT(*) FROM sources where sourceType=%d and start!='**START NOT FOUND**' and start!='**SKIP**'%s",st,(left) ? L" and processed is null":L"");
+  _snwprintf(qt,QUERY_BUFFER_LEN,L"select COUNT(*) FROM sources where sourceType=%d and start!='**START NOT FOUND**' and start!='**SKIP**'%s",sourceType,(left) ? L" and processed is null":L"");
   if (!myquery(&mysql,qt,result)) return -1;
   unlockTables();
 	int numSources = 0;

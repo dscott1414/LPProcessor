@@ -47,6 +47,25 @@ int flushString(wstring &buffer,wchar_t *path)
 	return 0;
  }
 
+// <http://rdf.freebase.com/ns/m.0zcqcv2>
+wstring stripWeb(wstring &name)
+{
+	if (name[0] == '<') 
+		name = name.substr(1, name.length() - 1);
+	if (name[name.length() - 1] == '>') 
+		name = name.substr(0, name.length() - 1);
+	int hcut = name.find(L"://");
+	if (hcut != wstring::npos)
+		name = name.substr(hcut + 3, name.length() - hcut - 3);
+	int rdfcut = name.find(L"rdf.freebase.com/");
+	if (rdfcut != wstring::npos)
+		name = name.substr(rdfcut + 17, name.length() - rdfcut - 17);
+	int nscut = name.find(L"ns/");
+	if (nscut != wstring::npos)
+		name = name.substr(nscut + 3, name.length() - nscut - 3);
+	return name;
+}
+
 //		unknownQTFlag=1,whichQTFlag=2,whereQTFlag=3,whatQTFlag=4,whoseQTFlag=5,howQTFlag=6,whenQTFlag=7,whomQTFlag=8,
 //		referencingObjectQTFlag=16,subjectQTFlag=17,objectQTFlag=18,secondaryObjectQTFlag=19,prepObjectQTFlag=20,
 //		referencingObjectQTAFlag=32,subjectQTAFlag=33,objectQTAFlag=34,secondaryObjectQTAFlag=35,prepObjectQTAFlag=36 
@@ -56,7 +75,8 @@ int Source::processAbstract(cTreeCat *rdfType,Source *&source,bool parseOnly)
   wchar_t path[1024];
 	int pathlen=_snwprintf(path,MAX_LEN,L"%s\\dbPediaCache",CACHEDIR)+1;
 	_wmkdir(path);
-	_snwprintf(path,MAX_LEN,L"%s\\dbPediaCache\\_%s.abstract.txt",CACHEDIR,rdfType->typeObject.c_str());
+	wstring typeObject(stripWeb(rdfType->typeObject));
+	_snwprintf(path,MAX_LEN,L"%s\\dbPediaCache\\_%s.abstract.txt",CACHEDIR,typeObject.c_str());
 	convertIllegalChars(path+pathlen);
 	distributeToSubDirectories(path,pathlen,true);
 	if (logTraceOpen)
@@ -2467,9 +2487,8 @@ int	Source::parseSubQueriesParallel(Source *childSource, vector <cSpaceRelation>
 //    The answer [object or object of prep] of the dynamic query must match the object or object of prep of the relative clause/infinitive
 //       A. Olympics
 //       B. Spain
-int	Source::matchSubQueries(wstring derivation,Source *childSource,int &anySemanticMismatch,bool &subQueryNoMatch,
-vector <cSpaceRelation> &subQueries,
-	int whereChildCandidateAnswer,int whereChildCandidateAnswerEnd,int numConsideredParentAnswer,int semMatchValue,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion)
+int	Source::matchSubQueries(wstring derivation,Source *childSource,int &anySemanticMismatch,bool &subQueryNoMatch,vector <cSpaceRelation> &subQueries,
+	int whereChildCandidateAnswer,int whereChildCandidateAnswerEnd,int numConsideredParentAnswer,int semMatchValue,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion,bool useParallelQuery)
 { LFS
 	wstring childWhereString;
 	int numWords;
@@ -2560,7 +2579,10 @@ vector <cSpaceRelation> &subQueries,
 		getWebSearchQueries(&(*sqi),webSearchQueryStrings);
 		for (int webSearchOffset=0; webSearchOffset<(signed)webSearchQueryStrings.size(); webSearchOffset++)
 		{
-			webSearchForQueryParallel((wchar_t *)derivation.c_str(), &(*sqi), false, answerSRIs, maxAnswer, 10, 1, true, webSearchQueryStrings, webSearchOffset, mapPatternAnswer, mapPatternQuestion);
+			if (useParallelQuery)
+				webSearchForQueryParallel((wchar_t *)derivation.c_str(), &(*sqi), false, answerSRIs, maxAnswer, 10, 1, true, webSearchQueryStrings, webSearchOffset, mapPatternAnswer, mapPatternQuestion);
+			else
+				webSearchForQuerySerial((wchar_t *)derivation.c_str(), &(*sqi), false, answerSRIs, maxAnswer, 10, 1, true, webSearchQueryStrings, webSearchOffset, mapPatternAnswer, mapPatternQuestion);
 			bool anyMatch=false;
 			for (unsigned int I=0; I<answerSRIs.size(); I++)
 			{
@@ -2615,7 +2637,7 @@ vector <cSpaceRelation> &subQueries,
 }
 
 int Source::questionTypeCheck(wstring derivation, cSpaceRelation* parentSRI, cAS &childCAS, int &semanticMismatch, bool &unableToDoquestionTypeCheck,
-	bool &subQueryNoMatch, vector <cSpaceRelation> &subQueries, int numConsideredParentAnswer, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion)
+	bool &subQueryNoMatch, vector <cSpaceRelation> &subQueries, int numConsideredParentAnswer, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion,bool useParallelQuery)
 {
 	LFS
 	unableToDoquestionTypeCheck = true;
@@ -2670,7 +2692,7 @@ int Source::questionTypeCheck(wstring derivation, cSpaceRelation* parentSRI, cAS
 	}
 	if (semanticMismatch || subQueries.empty())
 		return semMatchValue;
-	int subQueryConfidenceMatch=matchSubQueries(derivation,childCAS.source,semanticMismatch,subQueryNoMatch,subQueries,childCAS.sri->whereChildCandidateAnswer,-1,numConsideredParentAnswer,semMatchValue,mapPatternAnswer,mapPatternQuestion);
+	int subQueryConfidenceMatch=matchSubQueries(derivation,childCAS.source,semanticMismatch,subQueryNoMatch,subQueries,childCAS.sri->whereChildCandidateAnswer,-1,numConsideredParentAnswer,semMatchValue,mapPatternAnswer,mapPatternQuestion,useParallelQuery);
 	wstring tmpstr1,tmpstr2;
 	int numWords=0;
 	lplog(LOG_WHERE,L"%d:subquery comparison between and whereChildCandidateAnswer=%d:%s yields semanticMismatch=%d subQueryNoMatch=%s confidence=%d",numConsideredParentAnswer-1,
@@ -2707,7 +2729,7 @@ void Source::verbTenseMatch(cSpaceRelation* parentSRI, cAS &childCAS,bool &tense
 }
 
 int Source::semanticMatch(wstring derivation,cSpaceRelation* parentSRI,cAS &childCAS,int &semanticMismatch,bool &subQueryNoMatch,
-	                        vector <cSpaceRelation> &subQueries,int numConsideredParentAnswer,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion)
+	                        vector <cSpaceRelation> &subQueries,int numConsideredParentAnswer,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion,bool useParallelQuery)
 { LFS
 	// check if verb tenses match!
 	int semMatchValue=1;
@@ -2769,7 +2791,7 @@ int Source::semanticMatch(wstring derivation,cSpaceRelation* parentSRI,cAS &chil
 	}
 	if (subQueries.empty())
 		return semMatchValue;
-	int subQueryConfidenceMatch=matchSubQueries(derivation,childCAS.source,semanticMismatch,subQueryNoMatch,subQueries,childCAS.sri->whereChildCandidateAnswer,-1,numConsideredParentAnswer,semMatchValue,mapPatternAnswer,mapPatternQuestion);
+	int subQueryConfidenceMatch=matchSubQueries(derivation,childCAS.source,semanticMismatch,subQueryNoMatch,subQueries,childCAS.sri->whereChildCandidateAnswer,-1,numConsideredParentAnswer,semMatchValue,mapPatternAnswer,mapPatternQuestion,useParallelQuery);
 	wstring tmpstr1,tmpstr2;
 	int numWords=0;
 	lplog(LOG_WHERE,L"%d:subquery comparison between whereQuestionTypeObject=%d:%s and whereChildCandidateAnswer=%d:%s yields semanticMismatch=%d subQueryNoMatch=%s confidence=%d",numConsideredParentAnswer-1,
@@ -2831,14 +2853,14 @@ void cSemanticMap::cSemanticEntry::printDirectRelations(int logType,Source *pare
 }
 
 int Source::semanticMatchSingle(wstring derivation,cSpaceRelation* parentSRI,Source *childSource,int whereChild,int childObject,int &semanticMismatch,bool &subQueryNoMatch,
-	                        vector <cSpaceRelation> &subQueries,int numConsideredParentAnswer,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion)
+	                        vector <cSpaceRelation> &subQueries,int numConsideredParentAnswer,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion,bool useParallelQuery)
 { LFS
 	int semMatchValue=1;
 	bool synonym=false;
 	semMatchValue=checkParticularPartSemanticMatch(LOG_WHERE,parentSRI->whereSubject,childSource,whereChild,childObject,synonym,semanticMismatch);
 	if (subQueries.empty())
 		return semMatchValue;
-	int subQueryConfidenceMatch=matchSubQueries(derivation,childSource,semanticMismatch,subQueryNoMatch,subQueries,whereChild,-1,numConsideredParentAnswer,semMatchValue,mapPatternAnswer,mapPatternQuestion);
+	int subQueryConfidenceMatch=matchSubQueries(derivation,childSource,semanticMismatch,subQueryNoMatch,subQueries,whereChild,-1,numConsideredParentAnswer,semMatchValue,mapPatternAnswer,mapPatternQuestion,useParallelQuery);
 	wstring tmpstr1,tmpstr2;
 	int numWords=0;
 	lplog(LOG_WHERE,L"%d:subquery comparison between whereQuestionTypeObject=%d:%s and whereChildCandidateAnswer=%d:%s yields semanticMismatch=%d subQueryNoMatch=%s confidence=%d",numConsideredParentAnswer-1,
@@ -2918,8 +2940,8 @@ bool Source::processPathToPattern(const wchar_t *path,Source *&source)
 		// id, path, start, repeatStart, etext, author, title from sources 
 		//char *sqlrow[]={ "1", (char *)cPath.c_str(), "~~BEGIN","1","","",(char *)cPath.c_str() };
 		wstring wpath = path, start = L"~~BEGIN",title,etext;
-		source->tokenize(title,etext,wpath,L"",start,repeatStart,unknownCount,false);
-		source->doQuotesOwnershipAndContractions(totalQuotations,false);
+		source->tokenize(title,etext,wpath,L"",start,repeatStart,unknownCount);
+		source->doQuotesOwnershipAndContractions(totalQuotations);
 		source->printSentences(false,unknownCount,quotationExceptions,totalQuotations,globalOverMatchedPositionsTotal);
 		source->addWNExtensions();
 		source->identifyObjects();
@@ -3223,7 +3245,7 @@ He taught at Yale University, MIT, UC Berkeley, the London School of Economics, 
 */
 void Source::matchAnswersToQuestionType(cSpaceRelation*  sri,vector < cAS > &answerSRIs,int maxAnswer,vector <cSpaceRelation> &subQueries,
 	   vector <int> &uniqueAnswers,vector <int> &uniqueAnswersPopularity,vector <int> &uniqueAnswersConfidence,
-		 int &highestPopularity,int &lowestConfidence,int &lowestSourceConfidence,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion)
+		 int &highestPopularity,int &lowestConfidence,int &lowestSourceConfidence,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion,bool useParallelQuery)
 { LFS
 	while (maxAnswer>-1)
 	{
@@ -3263,14 +3285,14 @@ void Source::matchAnswersToQuestionType(cSpaceRelation*  sri,vector < cAS > &ans
 				if (!identical && answerSRIs[I].matchSum > 16)
 				{
 					setWhereChildCandidateAnswer(answerSRIs[I], &(*sri));
-					answerSRIs[I].confidence = questionTypeCheck(derivation, &(*sri), answerSRIs[I], semanticMismatch, unableToDoQuestionTypeCheck, subQueryNoMatch, subQueries, I, mapPatternAnswer, mapPatternQuestion);
+					answerSRIs[I].confidence = questionTypeCheck(derivation, &(*sri), answerSRIs[I], semanticMismatch, unableToDoQuestionTypeCheck, subQueryNoMatch, subQueries, I, mapPatternAnswer, mapPatternQuestion,useParallelQuery);
 					verbTenseMatch(&(*sri), answerSRIs[I], tenseMismatch);
 					// if questionTypeCheck said:
 					// CONFIDENCE_NOMATCH: no chance this could be the answer
 					// 1: definitely matches the type of the answer
 					// !QTAFlag - no semantic match to a where or who because where or who has nothing it is modifying so questionTypeCheck has done all the work possible
 					if ((sri->questionType&QTAFlag) && (unableToDoQuestionTypeCheck || (answerSRIs[I].confidence != CONFIDENCE_NOMATCH && (answerSRIs[I].confidence != 1 || sri->questionType == unknownQTFlag))))
-						answerSRIs[I].confidence = semanticMatch(derivation, &(*sri), answerSRIs[I], semanticMismatch, subQueryNoMatch, subQueries, I, mapPatternAnswer, mapPatternQuestion);
+						answerSRIs[I].confidence = semanticMatch(derivation, &(*sri), answerSRIs[I], semanticMismatch, subQueryNoMatch, subQueries, I, mapPatternAnswer, mapPatternQuestion,useParallelQuery);
 					else
 						if (unableToDoQuestionTypeCheck)
 							answerSRIs[I].confidence = CONFIDENCE_NOMATCH / 2; // unable to do any semantic checking
@@ -3406,7 +3428,7 @@ int Source::printAnswers(cSpaceRelation*  sri,vector < cAS > &answerSRIs,vector 
 }
 
 int	Source::searchTableForAnswer(wchar_t derivation[1024],cSpaceRelation* sri, unordered_map <int,WikipediaTableCandidateAnswers * > &wikiTableMap,
-	                               vector <cSpaceRelation> &subQueries,vector < cAS > &answerSRIs,int &minConfidence,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion)
+	                               vector <cSpaceRelation> &subQueries,vector < cAS > &answerSRIs,int &minConfidence,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion,bool useParallelQuery)
 { LFS
 	// look for the questionType object and its synonyms in the freebase properties of the questionInformationSourceObject.
 	int whereQuestionTypeObject=sri->whereQuestionTypeObject,numConsideredParentAnswer=0;
@@ -3507,7 +3529,7 @@ int	Source::searchTableForAnswer(wchar_t derivation[1024],cSpaceRelation* sri, u
 								StringCbPrintf(sqDerivation, 2048 * sizeof(wchar_t), L"%s whereQuestionInformationSourceObject(%d:%s) wikiQuestionTypeObjectAnswer(%d:%s)", derivation, *si, whereString(*si, tmpstr2, true, 6, L" ", numWords).c_str(),
 									whereChildCandidateAnswer, wtmi->second->wikipediaSource->phraseString(whereChildCandidateAnswer, whereLastEntryEnd, tmpstr3, false).c_str());
 								// run a subquery which substitutes the value for the object in a part of the sentence.
-								matchSubQueries(sqDerivation, wtmi->second->wikipediaSource, semanticMismatch, subQueryNoMatch, subQueries, whereChildCandidateAnswer, whereLastEntryEnd, numConsideredParentAnswer, confidence, mapPatternAnswer, mapPatternQuestion);
+								matchSubQueries(sqDerivation, wtmi->second->wikipediaSource, semanticMismatch, subQueryNoMatch, subQueries, whereChildCandidateAnswer, whereLastEntryEnd, numConsideredParentAnswer, confidence, mapPatternAnswer, mapPatternQuestion,useParallelQuery);
 								if (subQueryNoMatch)
 								{
 									as.confidence += 1000;
@@ -3683,19 +3705,22 @@ int Source::matchAnswersOfPreviousQuestion(cSpaceRelation *ssri,vector <int> &wh
 extern int limitProcessingForProfiling;
 int Source::searchWebSearchQueries(wchar_t derivation[1024],cSpaceRelation* ssri, unordered_map <int,WikipediaTableCandidateAnswers * > &wikiTableMap,
 	                               vector <cSpaceRelation> &subQueries,vector < cAS > &answerSRIs,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion,
-																 vector <wstring> &webSearchQueryStrings,bool parseOnly,bool answerPluralSpecification,int &finalAnswer,int &maxAnswer)
+																 vector <wstring> &webSearchQueryStrings,bool parseOnly,bool answerPluralSpecification,int &finalAnswer,int &maxAnswer,bool useParallelQuery)
 { LFS
 	bool lastSearchPage=false,googleSearch=true,tablesNotChecked=true;
 	for (int trySearchIndex = 1; true; trySearchIndex += 10)
 	{
 		StringCbPrintf(derivation,1024*sizeof(wchar_t),L"PW %06d",ssri->where);
 		int webSearchOffset=0;
-		lastSearchPage = webSearchForQueryParallel(derivation, ssri, parseOnly, answerSRIs, maxAnswer, 10, trySearchIndex, googleSearch, webSearchQueryStrings, webSearchOffset, mapPatternAnswer, mapPatternQuestion)<10;
+		if (useParallelQuery)
+			lastSearchPage = webSearchForQueryParallel(derivation, ssri, parseOnly, answerSRIs, maxAnswer, 10, trySearchIndex, googleSearch, webSearchQueryStrings, webSearchOffset, mapPatternAnswer, mapPatternQuestion)<10;
+		else
+			lastSearchPage = webSearchForQuerySerial(derivation, ssri, parseOnly, answerSRIs, maxAnswer, 10, trySearchIndex, googleSearch, webSearchQueryStrings, webSearchOffset, mapPatternAnswer, mapPatternQuestion) < 10;
 		if (limitProcessingForProfiling)
 			return 0;
 		vector <int> uniqueAnswers,uniqueAnswersPopularity,uniqueAnswersConfidence;
 		int lowestConfidence=100000-1,highestPopularity=-1,lowestSourceConfidence=10000;
-		matchAnswersToQuestionType(ssri,answerSRIs,maxAnswer,subQueries,uniqueAnswers,uniqueAnswersPopularity,uniqueAnswersConfidence,highestPopularity,lowestConfidence,lowestSourceConfidence,mapPatternAnswer,mapPatternQuestion);
+		matchAnswersToQuestionType(ssri,answerSRIs,maxAnswer,subQueries,uniqueAnswers,uniqueAnswersPopularity,uniqueAnswersConfidence,highestPopularity,lowestConfidence,lowestSourceConfidence,mapPatternAnswer,mapPatternQuestion,useParallelQuery);
 		finalAnswer=printAnswers(ssri,answerSRIs,uniqueAnswers,uniqueAnswersPopularity,uniqueAnswersConfidence,highestPopularity,lowestConfidence,lowestSourceConfidence);
 		if (finalAnswer >= 0 && (!answerPluralSpecification || uniqueAnswers.size() >= 1))
 			break;
@@ -3711,7 +3736,7 @@ int Source::searchWebSearchQueries(wchar_t derivation[1024],cSpaceRelation* ssri
 			{
 				lowestConfidence=100000-1;
 				highestPopularity=1;
-				searchTableForAnswer(derivation,ssri,wikiTableMap,subQueries,answerSRIs,lowestConfidence,mapPatternAnswer,mapPatternQuestion);
+				searchTableForAnswer(derivation,ssri,wikiTableMap,subQueries,answerSRIs,lowestConfidence,mapPatternAnswer,mapPatternQuestion,useParallelQuery);
 				for (unsigned int I=0; I<answerSRIs.size(); I++)
 					if (answerSRIs[I].confidence==lowestConfidence)
 					{
@@ -3739,7 +3764,7 @@ int Source::searchWebSearchQueries(wchar_t derivation[1024],cSpaceRelation* ssri
 }
 
 extern int limitProcessingForProfiling;
-int Source::matchBasicElements(bool parseOnly)
+int Source::matchBasicElements(bool parseOnly,bool useParallelQuery)
 { LFS
 	int lastProgressPercent=-1,where;
 	vector <int> wherePossibleAnswers;
@@ -3859,7 +3884,7 @@ int Source::matchBasicElements(bool parseOnly)
 				}
 			}
 			else
-				matchAnswersToQuestionType(ssri,answerSRIs,maxAnswer,subQueries,uniqueAnswers,uniqueAnswersPopularity,uniqueAnswersConfidence,highestPopularity,lowestConfidence,lowestSourceConfidence,mapPatternAnswer,mapPatternQuestion);
+				matchAnswersToQuestionType(ssri,answerSRIs,maxAnswer,subQueries,uniqueAnswers,uniqueAnswersPopularity,uniqueAnswersConfidence,highestPopularity,lowestConfidence,lowestSourceConfidence,mapPatternAnswer,mapPatternQuestion,useParallelQuery);
 			finalAnswer=printAnswers(ssri,answerSRIs,uniqueAnswers,uniqueAnswersPopularity,uniqueAnswersConfidence,highestPopularity,lowestConfidence,lowestSourceConfidence);
 			vector < cAS > saveAnswerSRIs;
 			vector <wstring> webSearchQueryStrings;
@@ -3867,7 +3892,7 @@ int Source::matchBasicElements(bool parseOnly)
 			{
 				getWebSearchQueries(ssri,webSearchQueryStrings);
 				searchWebSearchQueries(derivation,ssri,wikiTableMap,subQueries,saveAnswerSRIs,mapPatternAnswer,mapPatternQuestion,
-																 webSearchQueryStrings,parseOnly,answerPluralSpecification,finalAnswer,maxAnswer);
+																 webSearchQueryStrings,parseOnly,answerPluralSpecification,finalAnswer,maxAnswer,useParallelQuery);
 				if (limitProcessingForProfiling)
 					return 0;
 				if (saveAnswerSRIs.empty())
@@ -3885,7 +3910,7 @@ int Source::matchBasicElements(bool parseOnly)
 							{
 								enhanceWebSearchQueries(webSearchQueryStrings,(*sai)->first);
 								searchWebSearchQueries(derivation,ssri,wikiTableMap,subQueries,saveAnswerSRIs,mapPatternAnswer,mapPatternQuestion,
-																				 webSearchQueryStrings,parseOnly,answerPluralSpecification,finalAnswer,maxAnswer);
+																				 webSearchQueryStrings,parseOnly,answerPluralSpecification,finalAnswer,maxAnswer,useParallelQuery);
 								if (limitProcessingForProfiling)
 									return 0;
 								lplog(LOG_WHERE|LOG_QCHECK,L"    *****Enhanced semantic map.");

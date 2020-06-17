@@ -503,7 +503,7 @@ cOM Source::createObject(wstring derivation,wstring wordstr,OC objectClass)
 	bookBuffer=(wchar_t *)wordstr.c_str();
 	bufferLen=wordstr.length();
 	bufferScanLocation=0;
-	int ret = parseBuffer(derivation, unknownCount, false);
+	int ret = parseBuffer(derivation, unknownCount);
 	if (ret<0 || originalSize == m.size())
 		return cOM(ret,-1);
 	int whereObject=m.size()-1;
