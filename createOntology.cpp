@@ -32,7 +32,7 @@ set<string> Ontology::rejectCategories;
 bool Ontology::cacheRdfTypes=true;
 bool Ontology::alreadyConnected=false;
 bool Ontology::forceWebReread=false;
-extern int logDetail;
+extern int logOntologyDetail;
 unordered_map <wstring, dbs> Ontology::dbPediaOntologyCategoryList;
 unordered_map<wstring, vector <cTreeCat *> > Ontology::rdfTypeMap; // protected with rdfTypeMapSRWLock
 unordered_map<wstring, int > Ontology::rdfTypeNumMap; // protected with rdfTypeMapSRWLock
@@ -534,7 +534,7 @@ int Ontology::getDescription(wstring label, wstring objectName, wstring &abstrac
 		label = L"%3A" + label;
 	}
 	wstring dbPediaQueryString = getDescriptionString(label),temp,buffer;
-	if (rdfDetail)
+	if (logRDFDetail)
 		lplog(LOG_WIKIPEDIA, L"%s\nENCODED WEBADDRESS:%s\nDECODED WEBADDRESS:%s",
 			objectName.c_str(), dbPediaQueryString.c_str(), decodeURL(dbPediaQueryString, temp).c_str() + decodedbasehttpquery.length());
 	int numRows = 0;
@@ -1563,7 +1563,7 @@ bool Ontology::extractResults(wstring begin,wstring uobject,wstring end,wstring 
 	int whereQuery=temp.find(L"query=");
 	if (whereQuery!=wstring::npos)
 		temp.erase(0,whereQuery+6);
-	if (rdfDetail)
+	if (logRDFDetail)
 		lplog(LOG_WIKIPEDIA,L"%s:%s:%s\nENCODED WEBADDRESS:%s\nDECODED WEBADDRESS%s",
 		  qtype.c_str(),parentObject.c_str(),fpobject.c_str(),webAddress.c_str(),temp.c_str());
 	unordered_map <wstring, dbs>::iterator dbSeparator=dbPediaOntologyCategoryList.find(SEPARATOR);
@@ -1603,7 +1603,7 @@ int Ontology::enterCategory(string &id,string &k,string &propertyValue,string &d
 		}
 		if (cli!=dbPediaOntologyCategoryList.end())
 		{
-			if (logDetail)
+			if (logOntologyDetail)
 				lplog(LOG_WHERE|LOG_WIKIPEDIA,L"object=%s objectType=%S id=%S name=%S",object.c_str(),objectType.c_str(),id.c_str(),name.c_str());
 			cTreeCat *tc;
 			if (slobject==name || slobject==k)
@@ -1614,12 +1614,12 @@ int Ontology::enterCategory(string &id,string &k,string &propertyValue,string &d
 		}
 		else
 		{
-			if (logDetail)
+			if (logOntologyDetail)
 				lplog(LOG_WHERE|LOG_WIKIPEDIA,L"NOT FOUND: object=%s objectType=%S id=%S",object.c_str(),objectType.c_str(),id.c_str());
 			return -2;
 		}
 	}
-	else if (logDetail)
+	else if (logOntologyDetail)
 		lplog(LOG_WHERE|LOG_WIKIPEDIA,L"REJECTED: object=%s objectType=%S id=%S propertyValue=%S",object.c_str(),objectType.c_str(),id.c_str(),propertyValue.c_str());
 	return -3;
 }
@@ -1858,7 +1858,7 @@ int Ontology::lookupInFreebase(wstring object,vector <cTreeCat *> &rdfTypes)
 		if (k2!=k)
 			q+=L" OR k='"+k2+L"'";
 	}
-	if (logDetail)
+	if (logOntologyDetail)
 		::lplog(LOG_WHERE,L"%s",q.c_str());
 	return lookupInFreebaseQuery(object,slobject,q,rdfTypes,true);
 }
@@ -2028,7 +2028,7 @@ void Ontology::getRDFTypesFromDbPedia(wstring object,vector <cTreeCat *> &rdfTyp
 		extractResults(start,resources[I],L"%3E+a+%3Fv+%0D%0A%7D&format=text%2Fxml&timeout=0&debug=on",L"4 DISAMBIGUATE(RESOURCES)",rdfTypes,recursiveResources2,object);
 	}
 	lookupInFreebase(object,rdfTypes);
-	if (!rdfTypes.size() && rdfDetail) 
+	if (!rdfTypes.size() && logRDFDetail)
 		lplog(LOG_WIKIPEDIA|LOG_INFO,L"No rdf types in dbpedia:%s:%s",parentObject.c_str(),object.c_str());
 }
 
@@ -2361,7 +2361,7 @@ void Ontology::includeAllSuperClasses(unordered_map <wstring ,int > &topHierarch
 	for (unsigned int I=rdfBaseTypeOffset; I<rdfOriginalSize; I++)
 	{
 		wstring object=rdfTypes[I]->typeObject;
-		if (recursionLevel==1 && logDetail)
+		if (recursionLevel==1 && logOntologyDetail)
 			rdfTypes[I]->logIdentity(LOG_WIKIPEDIA,object,false);
 		//if (rdfTypes[I]->cli->second.superClasses.empty())
 		//	wprintf(L"%d:%s:%s [no superclasses]\n",I,rdfTypes[I]->object.c_str(),rdfTypes[I]->cli->first.c_str());
@@ -2374,7 +2374,7 @@ void Ontology::includeAllSuperClasses(unordered_map <wstring ,int > &topHierarch
 				for (vector <cTreeCat *>::iterator ri=rdfTypes.begin(),riEnd=rdfTypes.end(); ri!=riEnd && !(alreadyThere=(*ri)->cli==cli); ri++);
 				if (!alreadyThere)
 				{
-					if (logDetail)
+					if (logOntologyDetail)
 					{
 						//wprintf(L"  %d %s:%s:%s %s found %s\n",I,rdfTypes[I]->qtype.c_str(),rdfTypes[I]->object.c_str(),rdfTypes[I]->cli->first.c_str(),sci->c_str(),cli->first.c_str());
 						lplog(LOG_WIKIPEDIA,L"%*s%s:(%s)ISTYPE %s:%s:%s:[%s]:rank %d(%s IASC)",
@@ -2426,9 +2426,9 @@ bool detectNonEnglish(wstring word)
 
 void Ontology::rdfIdentify(wstring object,vector <cTreeCat *> &rdfTypes,wstring fromWhere, bool fileCaching)
 { LFS
-	if (object.size()>40 && logDetail)
+	if (object.size()>40 && logOntologyDetail)
 		lplog(LOG_ERROR,L"rdfIdentify:object too long - %s",object.c_str());
-	else if (object.size()==1 && logDetail)
+	else if (object.size()==1 && logOntologyDetail)
 		lplog(LOG_ERROR,L"rdfIdentify:object too short - %s",object.c_str());
 	else if (detectNonEuropean(object) || object.find_first_of(L"ãâäáàæçêéèêëîíïñôóòöõôûüùú")!=wstring::npos) 
 		lplog(LOG_ERROR, L"rdfIdentify:object having non european character set (or non English characters) - %s", object.c_str());

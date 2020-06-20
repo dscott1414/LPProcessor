@@ -26,6 +26,16 @@ import java.util.Vector;
 		byte timeFrequency;
 		boolean metaDescriptive;
 		short absHoliday;
+		byte absMoment;
+		byte absNamedDay;
+		byte absNamedHoliday;
+		byte absNamedMonth;
+		byte absNamedSeason;
+		byte absToday;
+		byte absTomorrow;
+		byte absTonight;
+		byte absUnspecified;
+		byte absYesterday;
 
 
 		public final static int cMillenium = 0;
@@ -289,6 +299,16 @@ import java.util.Vector;
 			timeFrequency = rs.readByte(); // daily
 			metaDescriptive = rs.readByte()!=0;
 		  absHoliday= rs.readShort();
+			absMoment = rs.readByte();
+			absNamedDay = rs.readByte();
+			absNamedHoliday = rs.readByte();
+			absNamedMonth = rs.readByte();
+			absNamedSeason = rs.readByte();
+			absToday = rs.readByte();
+			absTomorrow = rs.readByte();
+			absTonight = rs.readByte();
+			absUnspecified = rs.readByte();
+			absYesterday = rs.readByte();
 		}
 	}
 

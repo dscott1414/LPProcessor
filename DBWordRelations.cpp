@@ -125,10 +125,13 @@ int WordClass::initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, boo
 			tIWMM iFromWord= wordStructureGivenWordIdExists(fromId), iToWord= wordStructureGivenWordIdExists(toId);
 			if (iFromWord != wNULL && iToWord != wNULL)
 			{
+				// CHECK
+				// logCache = 0;
+				// lplog(LOG_INFO, L"toWord=%s fromWord=%s", iFromWord->first.c_str(), iToWord->first.c_str());
 				wrRead++;
 				int relationSourceId = atoi(sqlrow[1]), lastWhere = atoi(sqlrow[2]), totalCount = atoi(sqlrow[5]), wordRelation = atoi(sqlrow[6]); // index = atoi(sqlrow[0]), 
-				if (logDetail)
-					lplog(LOG_DICTIONARY, L"word %s acquired a relation %s with %s.", iFromWord->first.c_str(), getRelStr(wordRelation), iToWord->first.c_str());
+				//if (logDetail)
+				//	lplog(LOG_DICTIONARY, L"word %s acquired a relation %s with %s.", iFromWord->first.c_str(), getRelStr(wordRelation), iToWord->first.c_str());
 				iFromWord->second.allocateMap(wordRelation);
 				iFromWord->second.relationMaps[wordRelation]->addRelation(relationSourceId, lastWhere, iToWord, isNew, totalCount, true);
 				wordRelation = getComplementaryRelationship((relationWOTypes)wordRelation);

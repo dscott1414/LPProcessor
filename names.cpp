@@ -101,8 +101,18 @@ void defineNames(void)
                     1,L".",0,0,1,
                     1,L"Proper Noun{LAST}",NO_OWNER,1,1,
                     0);
+	// B.A. Summa cum laude
+	cPattern::create(L"__NAME", L"DEGREESCL",
+		1, L"letter*-2", 0, 1, 1,
+		1, L".", 0, 0, 1,
+		1, L"letter*-2", 0, 1, 1,
+		1, L".", 0, 0, 1,
+		2, L"noun|summa*-1", L"noun|magna*-1", 0, 0, 1,
+		1, L"adjective|cum", 0, 1, 1,
+		1, L"adjective|laude", 0, 1, 1,
+		0);
 
-  // Mr. --
+	// Mr. --
   cPattern::create(L"__NAME",L"E",
 		2,L"honorific{SINGULAR:HON}",L"_HON_ABB{SINGULAR:HON}",0,1,1, // if this is made optional, -- will always match __NAME, which is often not correct
                      1,L"--",0,1,1,

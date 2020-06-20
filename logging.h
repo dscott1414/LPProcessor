@@ -82,10 +82,10 @@ struct sTrace
 extern int logQuestionProfileTime;
 extern int logSynonymDetail;
 extern int logTableDetail;
-extern int equivalenceLogDetail;
+extern int logEquivalenceDetail;
 extern int logDetail;
 extern int logSemanticMap;
-extern int rdfDetail;
+extern int logRDFDetail;
 extern bool log_net;  
 extern bool logTraceOpen;
 

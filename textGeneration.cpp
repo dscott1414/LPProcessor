@@ -680,14 +680,14 @@ int Source::equivalenceClassCheck(Source *childSource,vector <cSpaceRelation>::i
 	// professor -> profess
 	if (nvi==nounVerbMap.end()) 
 	{
-		if (equivalenceLogDetail)
+		if (logEquivalenceDetail)
 			lplog(LOG_WHERE,L"%d:noun %s not found",whereChildSpecificObject,childSource->m[whereChildSpecificObject].word->first.c_str());
 		return 0;
 	}
 	tIWMM childConvertedVerb=Words.query(*nvi->second.begin());
 	if (childConvertedVerb==Words.end()) 
 	{
-		if (equivalenceLogDetail)
+		if (logEquivalenceDetail)
 			lplog(LOG_WHERE,L"%d:verb %s from noun %s not found",whereChildSpecificObject,nvi->second.begin()->c_str(),childSource->m[whereChildSpecificObject].word->first.c_str());
 		return 0;
 	}
@@ -760,7 +760,7 @@ int Source::equivalenceClassCheck2(Source *childSource,vector <cSpaceRelation>::
 		tIWMM childConvertedVerbME=(childConvertedVerb->second.mainEntry==wNULL) ? childConvertedVerb : childConvertedVerb->second.mainEntry;
 		if (childConvertedVerbME!=m[parentSRI->whereVerb].getMainEntry())
 		{
-			if (equivalenceLogDetail)
+			if (logEquivalenceDetail)
 				lplog(LOG_WHERE,L"%d:convertedVerb %s[ME %s] doesn't match parentVerb %s[ME %s].",whereChildSpecificObject,
 					childConvertedVerb->first.c_str(),childConvertedVerbME->first.c_str(),m[parentSRI->whereVerb].word->first.c_str(),m[parentSRI->whereVerb].getMainEntry()->first.c_str());
 			continue;
@@ -1213,10 +1213,8 @@ int Source::analyzeQuestionFromSource(wchar_t *derivation,wstring childSourceTyp
 					{
 						wstring ps;
 						if (*rpi!=-1)
-						{
 							childSource->prepPhraseToString(*rpi,ps);
-							childSource->printSRI(L"", &(*childSRI),0,ws,wo,ps,false,matchSum,matchInfo);
-						}
+						childSource->printSRI(L"", &(*childSRI),0,ws,wo,ps,false,matchSum,matchInfo);
 					}
 				}
 				if (wo<0 || childSource->m[wo].nextCompoundPartObject<0 || wo>=childSource->m.size()) break;

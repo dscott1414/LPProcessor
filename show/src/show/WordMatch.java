@@ -297,6 +297,8 @@ public class WordMatch {
 	}
 
 	public int queryForm(int form) {
+		if (Form.forms==null)
+			return -1;
 		if ((flags & flagAddProperNoun) != 0 && form == Source.PROPER_NOUN_FORM_NUM)
 		{
 			tFI tfi=getWordtFI();

@@ -466,7 +466,7 @@ int Internet::getWebPath(int where, wstring webAddress, wstring &buffer, wstring
 		{
 			_write(fd, buffer.c_str(), buffer.length() * sizeof(buffer[0]));
 			_close(fd);
-			if (rdfDetail)
+			if (logRDFDetail)
 				lplog(LOG_WIKIPEDIA, L"getWebPath:nonJava wrote page %s", path);
 			return 0;
 		}

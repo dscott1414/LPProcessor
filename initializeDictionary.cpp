@@ -445,7 +445,7 @@ int WordClass::readWords(wstring oPath, int sourceId, bool disqualifyWords, wstr
 				 w->second.query(adverbForm)>=0))
 		{
 			if (logDetail)
-				lplog(LOG_FATAL_ERROR,L"Word %s has no mainEntry after reading wordcache!",w->first.c_str());
+				lplog(LOG_ERROR,L"Word %s has no mainEntry after reading wordcache!",w->first.c_str());
 			w->second.flags|=tFI::queryOnAnyAppearance;
 			w->second.mainEntry=w;
 		}

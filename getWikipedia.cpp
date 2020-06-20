@@ -1964,7 +1964,7 @@ void Source::accumulateSemanticEntry(unsigned int where,set <cObject::cLocation>
 			if (end > m.size())
 				end = m.size();
 			phraseString((begin>10) ? begin-10 : 0, end, objectStr, true);
-			lplog(LOG_QCHECK, L"%s:%d:%d:%s", objectStr.c_str(), begin, roi->second.inSource, sourcePath.c_str());
+			lplog(LOG_QCHECK, L"accumulateSemanticEntry context %s:%d:%d:%s", objectStr.c_str(), begin, roi->second.inSource, sourcePath.c_str());
 		}
 		//lplog(LOG_WHERE,L"WSM %s:%d:%s [%d:%d]",sourcePath.c_str(),where,objectStr.c_str(),roi->second.inSource,roi->second.confidentInSource);
 

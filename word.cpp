@@ -295,7 +295,7 @@ int mTD(int p)
 }
 
 // copies the same logic as transferDBUsagePatternsToUsagePattern
-// instead of transferring some flat array read rfom the database into an internal usagePatterns,
+// instead of transferring some flat array read from the database into an internal usagePatterns,
 // this transforms the counts in a map parameter.
 // transferDBUsagePatternsToUsagePattern(128, UPDB, 0, iCount);
 // transferDBUsagePatternsToUsagePattern(64, UPDB, SINGULAR_NOUN_HAS_DETERMINER, 2);
@@ -1006,6 +1006,21 @@ void tFI::resetCapitalizationAndProperNounUsageStatistics()
 	localWordIsCapitalized = 0;
 	localWordIsLowercase = 0;
 	numProperNounUsageAsAdjective = 0;
+}
+
+int tFI::scanAllRelations(tIWMM verbWord)
+{
+	int numAllRelations=0;
+	for (int r = 0; r < numRelationWOTypes; r++)
+	{
+		if (relationMaps[r] != NULL)
+		{
+			tFI::cRMap::tIcRMap tmp = relationMaps[r]->r.find(verbWord);
+			if (tmp != relationMaps[r]->r.end())
+				numAllRelations += tmp->second.frequency;
+		}
+	}
+	return numAllRelations;
 }
 
 // used during matching, printing, updatePEMA (cost reduction), updating usage patterns

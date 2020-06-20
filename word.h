@@ -466,6 +466,7 @@ public:
 	void resetCapitalizationAndProperNounUsageStatistics();
 	char getUsageCost(int formIndex) { return (formIndex>= MAX_USAGE_PATTERNS || formIndex<0) ? -1 : usageCosts[formIndex]; }
 	char getUsagePattern(int formIndex) { return (formIndex >= MAX_USAGE_PATTERNS || formIndex<0) ? -1 : usagePatterns[formIndex]; }
+	// controlled by the updateWordUsageCostsDynamically flag, currently globally set to false
 	void incrementTransferCount()
 	{
 		deltaUsagePatterns[tFI::TRANSFER_COUNT]++;
@@ -480,6 +481,7 @@ public:
 		}
 		return (tmpWinnerForms) ? ((1 << form)&tmpWinnerForms) != 0 : true;
 	}
+	// controlled by the updateWordUsageCostsDynamically flag, currently globally set to false
 	bool updateFormUsagePatterns(int tmpWinnerForms,wstring sWord)
 	{
 		int numWinnerForms = 0, sameNameForm = -1, properNounForm = -1;
@@ -609,6 +611,8 @@ public:
 	}
 
 
+	int scanAllRelations(tIWMM verbWord);
+	unsigned int wordFrequency;
 protected:
   static unsigned int *formsArray; // must not change after initialization or this must be protected by SRWLock
   static unsigned int allocated; // must not change after initialization or this must be protected by SRWLock

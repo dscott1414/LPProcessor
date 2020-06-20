@@ -559,6 +559,7 @@ public class Show implements ActionListener, ItemListener {
 				timelineFrame.setVisible(false);
 				agentFrame.setVisible(false);
 				wordInfoFrame.setVisible(false);
+				Words.readSpecificWordCache(new LittleEndianDataInputStream(sourcePath + ".wordCacheFile"));
 				source = new Source(Words, new LittleEndianDataInputStream(sourcePath + ".SourceCache"));
 				SwingUtilities.invokeLater(new Runnable() {
 					public void run() {

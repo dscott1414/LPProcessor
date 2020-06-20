@@ -587,6 +587,7 @@ void tFI::transferFormsAndUsage(unsigned int *forms, unsigned int &iCount, int f
   // transfer LOWER_CASE_USAGE_PATTERN,PROPER_NOUN_USAGE_PATTERN,
   usagePatterns[LOWER_CASE_USAGE_PATTERN]=min(127,UPDB[LOWER_CASE_USAGE_PATTERN]);
   usagePatterns[PROPER_NOUN_USAGE_PATTERN]=min(127,UPDB[PROPER_NOUN_USAGE_PATTERN]);
+	wordFrequency = UPDB[TRANSFER_COUNT];
 }
 
 // update tFI from the DB.  So, don't mark this with insertNewForms flag

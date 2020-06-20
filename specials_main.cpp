@@ -1324,11 +1324,84 @@ bool matchEntity(Source &source, int wordIndex, int matchType, wstring patternOr
 		(matchType == 3 && (im.flags&WordMatch::flagNotMatched) != 0));
 }
 
-bool additionalMatchingLogic(Source &source, int wordIndex, int primaryPMAOffset, int secondaryPMAOffset)
+bool additionalMatchingLogic(Source &source, int wordIndex, int primaryPMAOffset, int secondaryPMAOffset,wstring &logicResults)
 {
+	logicResults = L"";
 	// if __ALLOBJECTS_1 starts with one adverb which is one word long
-	//int primaryPatternEnd = wordIndex + source.m[wordIndex].pma[primaryPMAOffset].len;
+	int primaryPatternEnd = wordIndex + source.m[wordIndex].pma[primaryPMAOffset].len;
 	//int secondaryPatternEnd = wordIndex + source.m[wordIndex].pma[secondaryPMAOffset].len;
+	if (source.m[wordIndex].pma[primaryPMAOffset].len<15)
+		return false;
+	// compare the noun at the beginning and the noun at the end
+	// get positions
+	int beginObjectPosition = source.m[wordIndex].principalWherePosition;
+	int lastObjectPosition = primaryPatternEnd - 1;
+	if (beginObjectPosition<0)
+	{
+		logicResults += L"NO_PRINCIPAL:";
+	}
+	else if (source.m[beginObjectPosition].queryForm(nounForm)==-1)
+	{
+		logicResults += L"NO_BEGIN_NOUN:";
+	}
+	if (source.m[lastObjectPosition].queryForm(nounForm) == -1)
+	{
+		logicResults += L"NO_END_NOUN:";
+	}
+	int verbPosition = source.m[source.m[wordIndex].principalWherePosition].getRelVerb();
+	if (verbPosition<0)
+	{
+		logicResults += L"NO_VERB:";
+	}
+	if (logicResults.length())
+		return true;
+	// get relations
+	tIWMM beginObjectWord = source.m[beginObjectPosition].getMainEntry();
+	tIWMM lastObjectWord = source.m[lastObjectPosition].getMainEntry();
+	tIWMM verbWord = source.m[verbPosition].getMainEntry();
+	if (verbWord->first==L"would" || verbWord->first == L"am" || verbWord->first == L"do" || verbWord->first == L"be" || verbWord->first == L"have")
+	{
+		logicResults += L"COMMON_VERB:";
+	}
+	tFI::cRMap::tIcRMap tr = tNULL;
+	int numBeginRelations = beginObjectWord->second.scanAllRelations(verbWord);
+	int numLastRelations = lastObjectWord->second.scanAllRelations(verbWord);
+	wstring br, lr;
+	itos(numBeginRelations, br);
+	itos(numLastRelations, lr);
+	// the numRelations are a sum of all relations over all classes.  Therefore using TRANSFER_COUNT which is the total count over all classes.
+	int numBeginFrequency = beginObjectWord->second.wordFrequency;
+	int numLastFrequency = lastObjectWord->second.wordFrequency;
+	wstring bf, lf;
+	itos(numBeginFrequency, bf);
+	itos(numLastFrequency, lf);
+	// bias using word frequency but only for ruling out 
+	if (numBeginRelations > 0 && numBeginFrequency > 0 && numLastFrequency / numBeginFrequency>1)
+		numBeginRelations = (numBeginRelations*numLastFrequency) / numBeginFrequency;
+	else if (numLastRelations > 0 && numLastFrequency > 0 && numBeginFrequency / numLastFrequency < 1)
+		numLastRelations = (numLastRelations*numBeginFrequency) / numLastFrequency;
+	if (numBeginRelations == 0 && numLastRelations == 0)
+	{
+		logicResults += L"BOTH_ZERO:";
+	}
+	if (numBeginRelations > 0 && numLastRelations > 0)
+	{
+		if (numBeginRelations > numLastRelations)
+		{
+			logicResults += L"BEGIN_IS_CORRECT:";
+		}
+		if (numLastRelations > numBeginRelations && numLastRelations*100/numBeginRelations<600)
+		{
+			logicResults += L"BEGIN_IS_NOT_CERTAIN:";
+		}
+	}
+	if (verbPosition!=lastObjectPosition+1 || (source.m[verbPosition].word->second.inflectionFlags&VERB_PAST_PARTICIPLE) == 0)
+	{
+		logicResults += L"VERB_WRONG_POSITION_OR_TENSE:";
+	}
+	if (logicResults.length())
+		return true;
+	logicResults = L"BEGIN("+beginObjectWord->first+L")[" + br + L" f "+ bf + L"]LAST(" + lastObjectWord->first + L")[" + lr + L" f " + lf + L"]+VERB("+verbWord->first+L")";
 	return true;
 	//return (source.m[wordIndex].pma[primaryPMAOffset].len == 1 || source.m[wordIndex + 1].pma.queryPattern(L"__INTERPPB") != -1 || source.m[wordIndex + 1].pma.queryPattern(L"__C1_IP") != -1);
 }
@@ -1350,6 +1423,10 @@ int patternOrWordAnalysisFromSource(Source &source, int sourceId, wstring path, 
 	int lastSentenceIndexPrinted = -1;
 	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
 	{
+		set <int> wordIds;
+		source.readWordIdsNeedingWordRelations(wordIds);
+		if (Words.initializeWordRelationsFromDB(source.mysql, wordIds, true, source.debugTrace.traceParseInfo) < 0)
+			return -1;
 		int wordIndex = 0;
 		unsigned int ss = 1;
 		for (WordMatch &im : source.m)
@@ -1364,8 +1441,9 @@ int patternOrWordAnalysisFromSource(Source &source, int sourceId, wstring path, 
 				if (primaryMatchType==0)
 				{
 					int patternEnd = wordIndex + im.pma[primaryPMAOffset].len;
+					wstring logicResults;
 					/*additional logic begin*/
-					if (additionalMatchingLogic(source,wordIndex, primaryPMAOffset, secondaryPMAOffset))
+					if (additionalMatchingLogic(source,wordIndex, primaryPMAOffset, secondaryPMAOffset, logicResults))
 					{
 						/*additional logic end*/
 						getSentenceWithTags(source, wordIndex, patternEnd, source.sentenceStarts[ss - 1], source.sentenceStarts[ss], im.pma[primaryPMAOffset].pemaByPatternEnd, sentence);
@@ -1374,12 +1452,12 @@ int patternOrWordAnalysisFromSource(Source &source, int sourceId, wstring path, 
 						if (primaryDifferentiator.find(L'*') == wstring::npos)
 						{
 							lplog(LOG_ERROR, L"%s", sentence.c_str());
-							lplog(LOG_INFO, L"%s[%d-%d]:%s", path.c_str(), wordIndex, patternEnd, sentence.c_str());
+							lplog(LOG_INFO, L"%s[%d-%d]:%s%s", path.c_str(), wordIndex, patternEnd, logicResults.c_str(),sentence.c_str());
 						}
 						else
 						{
 							lplog(LOG_ERROR, L"[%s]:%s", adiff.c_str(), sentence.c_str());
-							lplog(LOG_INFO, L"%s[%s](%d-%d):%s", path.c_str(), adiff.c_str(), wordIndex, patternEnd, sentence.c_str());
+							lplog(LOG_INFO, L"%s[%s](%d-%d):%s%s", path.c_str(), adiff.c_str(), wordIndex, patternEnd, logicResults.c_str(),sentence.c_str());
 						}
 					}
 				}
@@ -6185,7 +6263,7 @@ void wmain(int argc,wchar_t *argv[])
 		//patternOrWordAnalysis(source, step, L"__NOUN", L"F", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
 		//patternOrWordAnalysis(source, step, L"__C1__S1", L"1", L"adjective", L"", Source::GUTENBERG_SOURCE_TYPE, 0, 1, specialExtension);
-		patternOrWordAnalysis(source, step, L"__ALLOBJECTS_1", L"3", L"", L"", Source::GUTENBERG_SOURCE_TYPE, 0, 4, specialExtension);
+		patternOrWordAnalysis(source, step, L"__C1__S1", L"1", L"", L"", Source::GUTENBERG_SOURCE_TYPE, 0, 4, specialExtension);
 		//patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false, specialExtension);
 		// scans the test file for any unmatched sentences
 		//patternOrWordAnalysis(source, step, L"", L"", L"", L"", Source::TEST_SOURCE_TYPE, 3,4,L""); // TODO: testing weight change on _S1.

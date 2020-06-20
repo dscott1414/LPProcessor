@@ -1313,7 +1313,7 @@ int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring
 	bufferScanLocation = (hasBOM) ? 1 : 0; // detect BOM
 	sourcePath = path;
 	bufferLen /= sizeof(bookBuffer[0]);
-	if (sourceType == Source::WEB_SEARCH_SOURCE_TYPE)
+	if (sourceType == Source::WEB_SEARCH_SOURCE_TYPE || sourceType == WIKIPEDIA_SOURCE_TYPE || sourceType == INTERACTIVE_SOURCE_TYPE || sourceType == PATTERN_TRANSFORM_TYPE)
 		return 0;
 	bookBuffer[bufferLen] = 0;
 	bookBuffer[bufferLen + 1] = 0;
