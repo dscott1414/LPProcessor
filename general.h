@@ -180,7 +180,7 @@ public:
 	}
 };
 
-void getSynonyms(wstring word,set <wstring> &synonyms, int synonymType,sTrace &t);
+//void getSynonyms(wstring word,set <wstring> &synonyms, int synonymType,sTrace &t);
 void getAntonyms(wstring word,set <wstring> &synonyms,sTrace &t);
 int getFamiliarity(wstring word,bool isAdjective);
 int getHighestFamiliarity(wstring word);
@@ -221,4 +221,4 @@ extern wstring webSearchKey;
 char * LastErrorStr(void);
 extern SRWLOCK rdfTypeMapSRWLock,mySQLTotalTimeSRWLock,mySQLQueryBufferSRWLock,orderedHyperNymsMapSRWLock;
 void positionConsole(bool controller);
-	
+

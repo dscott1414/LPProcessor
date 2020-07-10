@@ -1015,7 +1015,7 @@ int tFI::scanAllRelations(tIWMM verbWord)
 	{
 		if (relationMaps[r] != NULL)
 		{
-			tFI::cRMap::tIcRMap tmp = relationMaps[r]->r.find(verbWord);
+			tFI::cRMap::tIcRMap tmp = relationMaps[r]->r.find(verbWord->first);
 			if (tmp != relationMaps[r]->r.end())
 				numAllRelations += tmp->second.frequency;
 		}
@@ -2432,9 +2432,9 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
   else
   {
     __int64 begincp=cp;
-    int numChars,extend=continueParse(buffer,begincp,bufferLen,multiElementWords);
+    int numChars=0,extend=continueParse(buffer,begincp,bufferLen,multiElementWords);
     bool wasSpace=false,isSpace=false;
-    while (true)
+    while (cp<bufferLen)
     {
       numChars=extend;
       for (wchar_t *b=buffer+cp; cp<bufferLen; cp++,b++)
@@ -2452,12 +2452,12 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
         else
           break;
       if (numChars>=0 && cp-begincp==numChars) break;
-      if (isSingleQuote(buffer[cp]) && evaluateIncludedSingleQuote(buffer,cp,begincp))
+      if (isSingleQuote(buffer[cp]) && cp+2<bufferLen && evaluateIncludedSingleQuote(buffer,cp,begincp))
       {
         extend=(int)(cp-begincp+1);
         continue;
       }
-      if (isSingleQuote(buffer[cp]) && (extend=continueParse(buffer,begincp,bufferLen,quotedWords))>numChars)
+      if (isSingleQuote(buffer[cp]) && cp + 2 < bufferLen && (extend=continueParse(buffer,begincp,bufferLen,quotedWords))>numChars)
         continue;
       else if (buffer[cp]=='.' && (extend=continueParse(buffer,begincp,bufferLen,periodWords))>numChars) continue;
       //else if (buffer[cp]=='-' && (extend=continueParse(buffer,begincp,dashWords))>numChars) continue;

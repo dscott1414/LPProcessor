@@ -403,7 +403,7 @@ He[tommy] recognized it[voice] at once for that of the bearded and efficient Ger
 53154: other [side]
 53262,53330: Conrad (the evil-faced doorkeeper) - context - referring to bearded man and 'the man'
 53563: Dear old Conrad - Conrad still hasn't said anything
-53618: several different phrases before quote, but the one behind the primary has 'said', which should be preferred.
+53618: several different phrases before quote, but the one behind the primary has 'said', which should be lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms.
 53650, 53652: Conrad - context
 53801: captor - new profession?
 53813: the existence of 'we' and 'you' in the same sentence as subject and object should suggest another group

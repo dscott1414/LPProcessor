@@ -17,6 +17,7 @@
 #include "sys/stat.h"
 #include "profile.h"
 #include "mysqldb.h"
+#include "QuestionAnswering.h"
 
 bool checkFull(MYSQL *mysql,wchar_t *qt,size_t &len,bool flush,wchar_t *qualifier);
 
@@ -425,6 +426,24 @@ int generateTestSources(MYSQL &mysql)
   return 0;
 }
 
+int generateParseRequestSources(MYSQL &mysql,vector <cQuestionAnswering::searchSource>::iterator pri)
+{
+	wchar_t qt[16384];
+	wstring pathInCache = pri->pathInCache;
+	pathInCache = pathInCache.substr(wcslen(TEXTDIR)+1,pathInCache.length()- wcslen(TEXTDIR)-1);
+	escapeStr(pathInCache);
+	wsprintf(qt, L"INSERT INTO sources (sourceType, etext, path, start, repeatStart, author, title, processing, processed) VALUES (%d,\"%s\",\"%s\",\"\",0,\"\",\"%s\",NULL,NULL)",
+		Source::REQUEST_TYPE, (pri->isSnippet) ? L"snippet" : L"full", pathInCache.c_str(), pri->fullWebPath.c_str());
+		return myquery(&mysql, qt);
+}
+
+int deleteGeneratedParseRequests(MYSQL &mysql)
+{
+	wchar_t qt[1024];
+	wsprintf(qt, L"delete from sources where sourceType=%d",Source::REQUEST_TYPE);
+	return myquery(&mysql,qt);
+}
+
 int Source::insertWordRelationTypes(void)
 { LFS
   wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
@@ -574,18 +593,5 @@ int Source::createDatabase(wchar_t *server)
     return -1;
   }
   return 0;
-}
-
-int Source::createParseRequestTable(void)
-{
-	LFS
-	if (!myquery(&mysql, L"CREATE TABLE IF NOT EXISTS parseRequests ("
-		  L"prId int(11) unsigned NOT NULL auto_increment unique,  "
-			L"typeId SMALLINT UNSIGNED NOT NULL, INDEX t_ind(typeId), "
-			L"status SMALLINT UNSIGNED NOT NULL," // 0 created, 1 processing, 2 processed
-			L"fullWebPath VARCHAR (1024) CHARACTER SET utf8mb4 NOT NULL,"
-			L"pathInCache VARCHAR (1024) CHARACTER SET utf8mb4 NOT NULL,"
-			L"ts TIMESTAMP)")) return -1;
-	return 0;
 }
 

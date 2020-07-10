@@ -7,6 +7,7 @@
 #include "time.h"
 #include "profile.h"
 #include <iterator>
+#include "QuestionAnswering.h"
 
 wstring relationString(int r)
 { LFS
@@ -133,7 +134,7 @@ bool Source::followerPOVToObserverConversion(vector <cSpaceRelation>::iterator s
 	}
 	// follow them!
 	else if ((m[sr->where].objectRole&IN_PRIMARY_QUOTE_ROLE) && 
-		     (m[sr->whereVerb].quoteForwardLink&(VT_TENSE_MASK|VT_EXTENDED))==VT_PRESENT && !(m[sr->whereVerb].flags&WordMatch::flagInInfinitivePhrase) && 
+		     (m[sr->whereVerb].verbSense&(VT_TENSE_MASK|VT_EXTENDED))==VT_PRESENT && !(m[sr->whereVerb].flags&WordMatch::flagInInfinitivePhrase) && 
 				 sr->whereControllingEntity<0 && sr->tft.lastOpeningPrimaryQuote>=0 && m[sr->tft.lastOpeningPrimaryQuote].audienceObjectMatches.size()>=1)
 		subjects=m[sr->tft.lastOpeningPrimaryQuote].audienceObjectMatches;
 	if ((sr->tft.futureHappening || sr->tft.presentHappening) && sg<(signed)speakerGroups.size() && 
@@ -168,8 +169,8 @@ bool Source::isSpeaker(int where,int esg,int tempCSG)
 		isSpeaker|=(currentSpeakerGroup>1 && intersect(where,csg->speakers,allIn,oneIn));
 		isSpeaker|=(m[where].word->second.inflectionFlags&(FIRST_PERSON|SECOND_PERSON))!=0;
 		isSpeaker|=(esg>=0 && ((unsigned)esg)<csg->embeddedSpeakerGroups.size() && intersect(where,csg->embeddedSpeakerGroups[esg].speakers,allIn,oneIn));
-		isSpeaker|=(isVoice(where) && m[where].getObject()>=0 && objects[m[where].getObject()].ownerWhere>=0 &&
-		  (currentSpeakerGroup>0 && intersect(objects[m[where].getObject()].ownerWhere,csg->speakers,allIn,oneIn)));
+		isSpeaker|=(isVoice(where) && m[where].getObject()>=0 && objects[m[where].getObject()].getOwnerWhere()>=0 &&
+		  (currentSpeakerGroup>0 && intersect(objects[m[where].getObject()].getOwnerWhere(),csg->speakers,allIn,oneIn)));
 		for (int oi=0; oi<(signed)m[where].objectMatches.size() && !isSpeaker; oi++) 
 			isSpeaker|=objects[m[where].objectMatches[oi].object].numIdentifiedAsSpeaker>0;
 	}
@@ -221,13 +222,13 @@ int wherePrepObject,
 	// vCD                              is being examined                  VT_PASSIVE+ VT_PRESENT+VT_EXTENDED
 	tft.speakerCommand=whereVerb>=0 && ((m[whereVerb].objectRole&IN_PRIMARY_QUOTE_ROLE) && 
 		 (whereSubject<0 || (m[whereSubject].word->first==L"you")) && 
-		(m[whereVerb].quoteForwardLink&(VT_TENSE_MASK|VT_EXTENDED))==VT_PRESENT) &&
+		(m[whereVerb].verbSense&(VT_TENSE_MASK|VT_EXTENDED))==VT_PRESENT) &&
 			(m[whereVerb].word->second.inflectionFlags&(VERB_PRESENT_FIRST_SINGULAR))!=0 &&  // NOT / calls herself Rita.
 		!(m[whereVerb].flags&(WordMatch::flagInInfinitivePhrase)) &&
 		(!(m[whereVerb].flags&(WordMatch::flagInQuestion))); //  || isEOS(whereVerb-1) || m[whereVerb-1].queryForm(quoteForm)>=0
 	tft.speakerQuestionToAudience=whereVerb>=0 && ((m[whereVerb].objectRole&IN_PRIMARY_QUOTE_ROLE) && 
 		(whereSubject<0 || (m[whereSubject].word->first==L"you")) && 
-		(m[whereVerb].quoteForwardLink&(VT_TENSE_MASK|VT_EXTENDED))==VT_PAST) &&
+		(m[whereVerb].verbSense&(VT_TENSE_MASK|VT_EXTENDED))==VT_PAST) &&
 		!(m[whereVerb].flags&(WordMatch::flagInInfinitivePhrase)) &&
 		((m[whereVerb].flags&(WordMatch::flagInQuestion))); //  || isEOS(whereVerb-1) || m[whereVerb-1].queryForm(quoteForm)>=0
 	tft.significantRelation=((genderedLocationRelation && currentSpeakerGroup<speakerGroups.size() &&
@@ -236,16 +237,16 @@ int wherePrepObject,
 			establishingLocation || futureLocation || tft.speakerCommand || tft.speakerQuestionToAudience);
 	//if (tft.significantRelation || !forSpaceRelation)
 	{
-		int vt=(whereVerb>=0) ? m[whereVerb].quoteForwardLink : 0;
+		int vt=(whereVerb>=0) ? m[whereVerb].verbSense : 0;
 		if (whereControllingEntity>=0 && m[whereControllingEntity].getRelVerb()>=0 && m[whereControllingEntity].getRelVerb()!=whereVerb)
-			vt=m[tmp=m[whereControllingEntity].getRelVerb()].quoteForwardLink;
+			vt=m[tmp=m[whereControllingEntity].getRelVerb()].verbSense;
 		// if infinitive phrase, take the tense of the main clause
 		else if (whereVerb>=0 && (m[whereVerb].flags&WordMatch::flagInInfinitivePhrase))
 		{
 			if (whereSubject>=0 && m[whereSubject].getRelVerb()>=0 && m[whereSubject].getRelVerb()!=whereVerb)
-				vt=m[m[whereSubject].getRelVerb()].quoteForwardLink;
+				vt=m[m[whereSubject].getRelVerb()].verbSense;
 			if (m[whereVerb].previousCompoundPartObject>=0)
-				vt=m[m[whereVerb].previousCompoundPartObject].quoteForwardLink;
+				vt=m[m[whereVerb].previousCompoundPartObject].verbSense;
 		}
 		if (vt==-1) vt=0;
 		bool inStory=(m[location].objectRole&IN_EMBEDDED_STORY_OBJECT_ROLE)!=0;
@@ -309,7 +310,7 @@ int wherePrepObject,
 			int lOPQ=lastOpeningPrimaryQuote;
 			for (; m[lOPQ].quoteBackLink>=0 && lOPQ>location; lOPQ=m[lOPQ].quoteBackLink);
 			for (; lOPQ>location; lOPQ=m[lOPQ].previousQuote);
-			for (; lOPQ>=0 && m[lOPQ].quoteForwardLink<location && m[lOPQ].quoteForwardLink>=0; lOPQ=m[lOPQ].quoteForwardLink);
+			for (; lOPQ>=0 && m[lOPQ].getQuoteForwardLink()<location && m[lOPQ].getQuoteForwardLink()>=0; lOPQ=m[lOPQ].getQuoteForwardLink());
 			tft.lastOpeningPrimaryQuote=lOPQ;
 			story=lOPQ>=0 && (m[lOPQ].flags&WordMatch::flagEmbeddedStoryResolveSpeakers)!=0;
 		}
@@ -617,7 +618,7 @@ void Source::correctSRIEntry(cSpaceRelation &sri)
 		processQuestion(sri.whereVerb,sri.whereControllingEntity,sri.questionType,sri.whereQuestionType,sri.whereQuestionInformationSourceObjects);
 		// if a where clause, put where in a prepositional clause / did Jay-Z grow up?
 		// if a when clause, also put where in a prepositional clause / when was Darrell Hammond born?
-		if (((sri.questionType&Source::typeQTMask)==Source::whereQTFlag || (sri.questionType&Source::typeQTMask)==Source::whenQTFlag) && 
+		if (((sri.questionType&cQuestionAnswering::typeQTMask)== cQuestionAnswering::whereQTFlag || (sri.questionType&cQuestionAnswering::typeQTMask)== cQuestionAnswering::whenQTFlag) &&
 			  inObject(sri.whereObject,sri.whereQuestionType) && sri.whereVerb>=0)
 		{
 			tIWMM inWord=Words.query(L"in");
@@ -856,19 +857,18 @@ void Source::newSR(int where,int _o,int whereControllingEntity,int whereSubject,
 		objectIsAcceptable=true;
 	bool ofNegation=(prepTypeCancelled && !prepObjectIsAcceptable && !objectIsAcceptable);
 //	vector <cLocalFocus>::iterator lsi;
-	bool not=whereVerb>=0 && (m[whereVerb].quoteForwardLink&VT_NEGATION)!=0;
+	bool not=whereVerb>=0 && (m[whereVerb].verbSense&VT_NEGATION)!=0;
 	not|=whereVerb>=0 && m[whereVerb].previousCompoundPartObject>=0 && (m[m[whereVerb].previousCompoundPartObject].verbSense&VT_NEGATION)!=0; // trace back to main verb
 	//bool alreadyTaken=whereVerb>=0 && m[whereVerb].spaceRelation;
 	bool there=(whereSubject>=0 && m[whereSubject].word->first==L"there" && (m[whereSubject].objectRole&IN_PRIMARY_QUOTE_ROLE));
 	there|=(whereControllingEntity>=0 && m[whereControllingEntity].word->first==L"there" && (m[whereControllingEntity].objectRole&IN_PRIMARY_QUOTE_ROLE));
 	// where his[tommy] CONTACTcolleague[tuppence] would meet him[tommy] at ten o'clock . 
-	if (whereVerb>=0 && (m[whereVerb].quoteForwardLink&VT_POSSIBLE) && whereVerb>0 && m[whereVerb-1].word->first==L"would")
+	if (whereVerb>=0 && (m[whereVerb].verbSense&VT_POSSIBLE) && whereVerb>0 && m[whereVerb-1].word->first==L"would")
 	{
-		m[whereVerb].quoteForwardLink&=~VT_POSSIBLE;
-		m[whereVerb].quoteForwardLink|=VT_FUTURE;
-		m[whereVerb].verbSense=m[whereVerb].quoteForwardLink;
+		m[whereVerb].verbSense &= ~VT_POSSIBLE; 
+		m[whereVerb].verbSense |= VT_FUTURE;
 	}
-	int vt=(whereVerb>=0) ? m[whereVerb].quoteForwardLink : 0;
+	int vt=(whereVerb>=0) ? m[whereVerb].verbSense : 0;
 	if (vt==VT_PAST && whereSubject<0 && whereControllingEntity<0 && whereVerb>0 && isEOS(whereVerb-1) && 
 		  (m[whereVerb].objectRole&IN_PRIMARY_QUOTE_ROLE)!=0 && (whereObject<0 || m[whereObject].word->first!=L"me"))
 	{
@@ -1075,7 +1075,7 @@ bool Source::moveIdentifiedSubject(int where,bool inPrimaryQuote,int whereContro
 	// if povSpeaker, age all other objects.  
 	bool nowTense=(inPrimaryQuote || !(m[whereSubject].objectRole&NONPAST_OBJECT_ROLE));
 	if (inPrimaryQuote && whereVerb>=0) 
-		nowTense=m[whereVerb].queryWinnerForm(isForm)>=0 || m[whereVerb].quoteForwardLink==VT_EXTENDED+ VT_PRESENT || m[whereVerb].quoteForwardLink==VT_PASSIVE+ VT_PRESENT+VT_EXTENDED;
+		nowTense=m[whereVerb].queryWinnerForm(isForm)>=0 || m[whereVerb].verbSense==VT_EXTENDED+ VT_PRESENT || m[whereVerb].verbSense==VT_PASSIVE+ VT_PRESENT+VT_EXTENDED;
 	if (povOneIn)
 	{
 		for (set<int>::iterator pvi=povSpeakers.begin(),pviEnd=povSpeakers.end(); pvi!=pviEnd; pvi++)
@@ -1935,13 +1935,13 @@ bool Source::placeIdentification(int where,bool inPrimaryQuote,int whereControll
 	    //(whereObject<0 || (whereObject>=0 && m[whereObject].relNextObject<0 && (m[whereObject].word->second.timeFlags&T_UNIT))) && // command - come to-morrow
 		  (tmp2=whereSubject<0 && !(m[whereVerb].flags&WordMatch::flagInInfinitivePhrase)) &&
 		  (tmp3=(exit || stay || move || moveObject || moveInPlace || contiguous || enter || contact || _near)) && 
-			(tmp4=(m[whereVerb].quoteForwardLink&(VT_TENSE_MASK|VT_EXTENDED))==VT_PRESENT) &&
+			(tmp4=(m[whereVerb].verbSense&(VT_TENSE_MASK|VT_EXTENDED))==VT_PRESENT) &&
 			(tmp5=((flags=m[whereVerb].word->second.inflectionFlags)&(VERB_PRESENT_FIRST_SINGULAR))!=0 || m[whereVerb].word->first==L"be"))
 	{
 		if (debugTrace.traceSpeakerResolution)
 		{
 			wstring ss;
-			lplog(LOG_RESOLUTION,L"%06d:PLACE command:verb %s [%s]",where,m[whereVerb].word->first.c_str(),senseString(ss,m[whereVerb].quoteForwardLink).c_str());
+			lplog(LOG_RESOLUTION,L"%06d:PLACE command:verb %s [%s]",where,m[whereVerb].word->first.c_str(),senseString(ss,m[whereVerb].verbSense).c_str());
 		}
 		int srType=(stay) ? stSTAY:stESTABLISH;
 		if (move && srType==stESTABLISH) srType=stMOVE;
@@ -2008,8 +2008,8 @@ void Source::detectTenseAndFirstPersonUsage(int where, int lastBeginS1, int last
 	{
 		wstring tmpstr;
 		bool isSubject = (m[where].objectRole&(OBJECT_ROLE | SUBJECT_ROLE)) == SUBJECT_ROLE; // only count the verb tense once
-		// quoteForwardLink is overloaded with tsSense only for verbs
-		int tsSense = m[m[where].getRelVerb()].quoteForwardLink;
+		// getQuoteForwardLink() is overloaded with tsSense only for verbs
+		int tsSense = m[m[where].getRelVerb()].verbSense;
 		//lplog(LOG_RESOLUTION,L"%06d:L Sense %s",where,senseString(tmpstr,tsSense).c_str());
 		if ((tsSense&VT_TENSE_MASK) == VT_PAST || (tsSense&VT_TENSE_MASK) == VT_PAST_PERFECT)
 		{
@@ -2205,9 +2205,9 @@ void Source::processEndOfPrimaryQuote(int where, int lastSentenceEndBeforeAndNot
 			lastSpeakerPosition = determineSpeaker(lastOpeningPrimaryQuote, where, true, noSpeakerAfterward, definitelySpeaker, audienceObjectPosition);
 			// the boots of Albert
 			if (lastSpeakerPosition >= 0 && m[lastSpeakerPosition].getObject() >= 0 && objects[m[lastSpeakerPosition].getObject()].objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS &&
-				objects[m[lastSpeakerPosition].getObject()].ownerWhere >= 0 && m[objects[m[lastSpeakerPosition].getObject()].ownerWhere].getObject() >= 0 &&
-				(objects[m[objects[m[lastSpeakerPosition].getObject()].ownerWhere].getObject()].male || objects[m[objects[m[lastSpeakerPosition].getObject()].ownerWhere].getObject()].female))
-				lastSpeakerPosition = objects[m[lastSpeakerPosition].getObject()].ownerWhere;
+				objects[m[lastSpeakerPosition].getObject()].getOwnerWhere() >= 0 && m[objects[m[lastSpeakerPosition].getObject()].getOwnerWhere()].getObject() >= 0 &&
+				(objects[m[objects[m[lastSpeakerPosition].getObject()].getOwnerWhere()].getObject()].male || objects[m[objects[m[lastSpeakerPosition].getObject()].getOwnerWhere()].getObject()].female))
+				lastSpeakerPosition = objects[m[lastSpeakerPosition].getObject()].getOwnerWhere();
 			if (lastSpeakerPosition >= 0)
 			{
 				int definiteSpeakerUnnecessary = -1;
@@ -2271,7 +2271,7 @@ void Source::processEndOfPrimaryQuote(int where, int lastSentenceEndBeforeAndNot
 		{
 			if (previousPrimaryQuote != lastOpeningPrimaryQuote)
 			{
-				m[previousPrimaryQuote].quoteForwardLink = lastOpeningPrimaryQuote; // resolve unknown speakers
+				m[previousPrimaryQuote].setQuoteForwardLink(lastOpeningPrimaryQuote); // resolve unknown speakers
 				m[lastOpeningPrimaryQuote].quoteBackLink = previousPrimaryQuote; // resolve unknown speakers
 			}
 			else
@@ -2457,13 +2457,13 @@ void Source::srd(int where,wstring spd,wstring &description)
 			int mObject=m[where].getObject();
 			switch (mObject)
 			{
-			case UNKNOWN_OBJECT:  description+=L"UNK"; break;
-			case OBJECT_UNKNOWN_MALE:  description+=L"UNK_M"; break;
-			case OBJECT_UNKNOWN_FEMALE: description+=L"UNK_F"; break;
-			case OBJECT_UNKNOWN_MALE_OR_FEMALE: description+=L"UNK_M_OR_F"; break;
-			case OBJECT_UNKNOWN_NEUTER: description+=L"UNK_N"; break;
-			case OBJECT_UNKNOWN_PLURAL: description+=L"UNK_P"; break;
-			case OBJECT_UNKNOWN_ALL: description+=L"ALL"; break;
+			case cObject::eOBJECTS::UNKNOWN_OBJECT:  description+=L"UNK"; break;
+			case cObject::eOBJECTS::OBJECT_UNKNOWN_MALE:  description+=L"UNK_M"; break;
+			case cObject::eOBJECTS::OBJECT_UNKNOWN_FEMALE: description+=L"UNK_F"; break;
+			case cObject::eOBJECTS::OBJECT_UNKNOWN_MALE_OR_FEMALE: description+=L"UNK_M_OR_F"; break;
+			case cObject::eOBJECTS::OBJECT_UNKNOWN_NEUTER: description+=L"UNK_N"; break;
+			case cObject::eOBJECTS::OBJECT_UNKNOWN_PLURAL: description+=L"UNK_P"; break;
+			case cObject::eOBJECTS::OBJECT_UNKNOWN_ALL: description+=L"ALL"; break;
 			default:
 				int objectWhere=objects[mObject].originalLocation;
 				if (objectWhere<0)
@@ -2509,7 +2509,7 @@ wstring Source::srToText(int &spr,wstring &description)
 		description+=L"[GMOVE]";
 	srd(spri->whereControllingEntity,L"C[",description);
   // take the packet - a command - but NOT takes the packet / calls herself Rita
-	bool present=spri->whereVerb>=0 && (m[spri->whereVerb].quoteForwardLink&(VT_TENSE_MASK|VT_EXTENDED))==VT_PRESENT && 
+	bool present=spri->whereVerb>=0 && (m[spri->whereVerb].verbSense&(VT_TENSE_MASK|VT_EXTENDED))==VT_PRESENT && 
 		spri->whereSubject<0 && !(m[spri->whereVerb].flags&WordMatch::flagInInfinitivePhrase) &&
 		(m[spri->whereVerb].word->second.inflectionFlags&(VERB_PRESENT_FIRST_SINGULAR))!=0;
 	if (spri->whereControllingEntity<0 && spri->tft.lastOpeningPrimaryQuote>=0 && m[spri->tft.lastOpeningPrimaryQuote].objectMatches.size()>=1)
@@ -2865,7 +2865,7 @@ void Source::detectSpaceRelation(int where,int backInitialPosition,vector <int> 
 		if (m[whereSubject].queryWinnerForm(prepositionForm)>=0) // prevent prepositions within subject from being considered the subject itself
 			return;
 	}
-	else if ((m[where].objectRole&OBJECT_ROLE) && m[where].quoteForwardLink==0) // quoteForwardLink is tsSense for a verb
+	else if ((m[where].objectRole&OBJECT_ROLE) && m[where].verbSense==0) // getQuoteForwardLink() is tsSense for a verb
 	{
 		return; // should have already been taken care of with a subject or verb
 	}
@@ -2927,7 +2927,7 @@ void Source::detectSpaceRelation(int where,int backInitialPosition,vector <int> 
 		ws=objects[o].originalLocation;
 	}
 	int st=(o>=0) ? objects[o].getSubType() : -1,tmp1=-1,tmp2=-1,tmp3=-1,tmp4=-1;
-	if (o>=0 && (tmp1=whereVerb<0 || primaryLocationLastPosition<0 || (tmp4=m[whereVerb].quoteForwardLink&VT_TENSE_MASK)==VT_PAST) &&
+	if (o>=0 && (tmp1=whereVerb<0 || primaryLocationLastPosition<0 || (tmp4=m[whereVerb].verbSense&VT_TENSE_MASK)==VT_PAST) &&
 			 !(m[ws].flags&WordMatch::flagAdjectivalObject) && 
 			 // the ship
 			 (m[m[ws].beginObjectPosition].word->first==L"the" || m[m[ws].beginObjectPosition].queryWinnerForm(adjectiveForm)>=0 || 
@@ -2941,9 +2941,9 @@ void Source::detectSpaceRelation(int where,int backInitialPosition,vector <int> 
 			 // Carshalton Terrace proved to be an unimpeachable row
 			 objects[o].objectClass==NON_GENDERED_NAME_OBJECT_CLASS || 
 			 // Tuppence's hostel
-			  (objects[o].ownerWhere>=0 && 
-				 ((currentSpeakerGroup<speakerGroups.size() && intersect(objects[o].ownerWhere,speakerGroups[currentSpeakerGroup].speakers,allIn,oneIn)) ||
-				   (m[objects[o].ownerWhere].getObject()>=0 && objects[m[objects[o].ownerWhere].getObject()].numIdentifiedAsSpeaker>0)))) &&
+			  (objects[o].getOwnerWhere()>=0 && 
+				 ((currentSpeakerGroup<speakerGroups.size() && intersect(objects[o].getOwnerWhere(),speakerGroups[currentSpeakerGroup].speakers,allIn,oneIn)) ||
+				   (m[objects[o].getOwnerWhere()].getObject()>=0 && objects[m[objects[o].getOwnerWhere()].getObject()].numIdentifiedAsSpeaker>0)))) &&
 				// The MayFair streets
 			 (tmp3=!objects[o].plural || (m[ws].endObjectPosition-m[ws].beginObjectPosition)>2 || acceptableThere) &&
 		  (st==MOVING || st==TRAVEL || st==GEOGRAPHICAL_URBAN_FEATURE || st==GEOGRAPHICAL_URBAN_SUBFEATURE || st==BY_ACTIVITY || st==COUNTRY || st==ISLAND || 
@@ -2960,14 +2960,14 @@ void Source::detectSpaceRelation(int where,int backInitialPosition,vector <int> 
 		bool lastWherePP=false,sgOccurredAfter=false,audienceOccurredAfter=false,speakerOccurredAfter=false,noMove=false,speakerContinuation=false;
 		spaceRelationDetected=!continuesMoving && st==MOVING;
 		// the hostel was put in Bagravia - allow passives
-		noMove=st!=MOVING && whereVerb>=0 && isSpecialVerb(whereVerb,true) && !(m[whereVerb].quoteForwardLink&VT_PASSIVE);
+		noMove=st!=MOVING && whereVerb>=0 && isSpecialVerb(whereVerb,true) && !(m[whereVerb].verbSense&VT_PASSIVE);
 		cancel=noMove;
 		set <int> speakers,povSpeakers;
 		getCurrentSpeakers(speakers,povSpeakers);
 		wstring ss,sRole;
 		for (set <int>::iterator si=speakers.begin(),siEnd=speakers.end(); si!=siEnd && !cancel && !speakerContinuation; si++)
 			speakerContinuation=isSpeakerContinued(where,*si,lastWherePP,sgOccurredAfter,audienceOccurredAfter,speakerOccurredAfter);
-		int tense=(m[where].getRelVerb()>=0) ? m[m[where].getRelVerb()].quoteForwardLink&(VT_TENSE_MASK|VT_POSSIBLE|VT_NEGATION) : 0;
+		int tense=(m[where].getRelVerb()>=0) ? m[m[where].getRelVerb()].verbSense&(VT_TENSE_MASK|VT_POSSIBLE|VT_NEGATION) : 0;
 		bool wrongTense=(tense&VT_PASSIVE) || (m[where].objectRole&THINK_ENCLOSING_ROLE);
 		cancel|=wrongTense;
 		if (debugTrace.traceSpeakerResolution)
@@ -2981,7 +2981,7 @@ void Source::detectSpaceRelation(int where,int backInitialPosition,vector <int> 
 				whereString(where,tmpstr,false).c_str(),
 				(continues) ? L"continues":L"establishes",
 				(primaryLocationLastPosition<0) ? L"NULL":whereString(primaryLocationLastPosition,tmpstr2,false).c_str(),primaryLocationLastPosition,
-				whereString(m[where].getRelObject(),tmpstr3,false).c_str(),(m[where].getRelVerb()>=0) ? senseString(tmpstr4,m[m[where].getRelVerb()].quoteForwardLink).c_str() : L"(no verb)");
+				whereString(m[where].getRelObject(),tmpstr3,false).c_str(),(m[where].getRelVerb()>=0) ? senseString(tmpstr4,m[m[where].getRelVerb()].verbSense).c_str() : L"(no verb)");
 		bool location=false,timeUnit=false;
 		int wherePrepObject=-1,wherePrep=-1;
 		if (whereVerb>=0 && m[whereVerb].getRelVerb()<0 && m[whereVerb].relPrep>=0) 
@@ -2994,7 +2994,7 @@ void Source::detectSpaceRelation(int where,int backInitialPosition,vector <int> 
 		for (set<int>::iterator pvi=speakers.begin(),pviEnd=speakers.end(); pvi!=pviEnd; pvi++)
 			newSR(where,*pvi,-1,whereSubject,whereVerb,wherePrep,m[where].getRelObject(),wherePrepObject,-1,stLOCATION,L"location move",true);
 		if (speakers.empty())
-			newSR(where,OBJECT_UNKNOWN_ALL,-1,whereSubject,whereVerb,wherePrep,m[where].getRelObject(),wherePrepObject,-1,stLOCATION,L"location move",true);
+			newSR(where, cObject::eOBJECTS::OBJECT_UNKNOWN_ALL,-1,whereSubject,whereVerb,wherePrep,m[where].getRelObject(),wherePrepObject,-1,stLOCATION,L"location move",true);
 		for (; originalSize<(signed)spaceRelations.size(); originalSize++)
 		{
 			spaceRelations[originalSize].establishingLocation=!cancel;
@@ -3003,7 +3003,7 @@ void Source::detectSpaceRelation(int where,int backInitialPosition,vector <int> 
 	}
 	bool acceptableSubject=whereSubject>=0 && (m[whereSubject].objectRole&SUBJECT_ROLE) && ((m[whereSubject].getObject())>=0 || m[whereSubject].word->first==L"who");
 	// command - don't make me do this!
-	if (inPrimaryQuote && whereSubject<0 && whereVerb>=0 && (m[whereVerb].quoteForwardLink&(VT_TENSE_MASK|VT_EXTENDED))==VT_PRESENT &&
+	if (inPrimaryQuote && whereSubject<0 && whereVerb>=0 && (m[whereVerb].verbSense&(VT_TENSE_MASK|VT_EXTENDED))==VT_PRESENT &&
 			(m[whereVerb].word->second.inflectionFlags&(VERB_PRESENT_FIRST_SINGULAR))!=0)
 		acceptableSubject=true;
 		   /*(!(m[whereSubject].objectRole&PRIMARY_SPEAKER_ROLE) || m[whereSubject].relObject>=0) && */ //  && !(m[where].objectRole&PRIMARY_SPEAKER_ROLE)
@@ -3012,7 +3012,7 @@ void Source::detectSpaceRelation(int where,int backInitialPosition,vector <int> 
 	// letters might be expected to arrive at Tommy's rooms
 	int whereControllingEntity=-1;
 	if (whereVerb>=0 && acceptableSubject && (whereSubject<0 || (m[whereSubject].getObject()>=0 &&
-		  ((objects[m[whereSubject].getObject()].male || objects[m[whereSubject].getObject()].female) || (m[whereVerb].quoteForwardLink&VT_PASSIVE)))))
+		  ((objects[m[whereSubject].getObject()].male || objects[m[whereSubject].getObject()].female) || (m[whereVerb].verbSense&VT_PASSIVE)))))
 	{
 		wstring verb;
 		unordered_map <wstring, set <int> >::iterator lvtoCi=getVerbClasses(whereVerb,verb);
@@ -3360,7 +3360,7 @@ void Source::processExit(int where,vector <cSpaceRelation>::iterator sri,int bac
 	int tense;
 	if ((sri->relationType==stEXIT || sri->relationType==stENTER) && !inPrimaryQuote && !inSecondaryQuote && 
 			sri->whereSubject>=0 && !(m[sri->whereSubject].objectRole&THINK_ENCLOSING_ROLE) && !(m[sri->whereSubject].flags&WordMatch::flagInQuestion) &&
-		  sri->whereVerb>=0 && ((tense=m[sri->whereVerb].quoteForwardLink)&(VT_TENSE_MASK|VT_POSSIBLE|VT_NEGATION))==VT_PAST)
+		  sri->whereVerb>=0 && ((tense=m[sri->whereVerb].verbSense)&(VT_TENSE_MASK|VT_POSSIBLE|VT_NEGATION))==VT_PAST)
 	{
 		// For a minute Tuppence [thought] she was going to spring upon her - if EXIT is owned by a "think" verb, don't exit
 		int so=m[sri->whereSubject].getObject();
@@ -3371,7 +3371,7 @@ void Source::processExit(int where,vector <cSpaceRelation>::iterator sri,int bac
 		if (m[sri->whereSubject].word->first==L"all" || (so>=0 && objects[so].objectClass==BODY_OBJECT_CLASS && m[sri->whereSubject].word->first!=L"footsteps")) acceptableSubject=false;
 		// 'Left to himself', Tommy would probably have sat down to think things out for a good half-hour before he decided on a plan of action.
 		if (m[sri->whereSubject].getRelVerb()>=0 && sri->whereVerb<sri->whereSubject && m[sri->whereSubject].getRelVerb()!=sri->whereVerb &&
-			  ((m[m[sri->whereSubject].getRelVerb()].quoteForwardLink)&(VT_TENSE_MASK|VT_POSSIBLE|VT_NEGATION))!=VT_PAST)
+			  ((m[m[sri->whereSubject].getRelVerb()].verbSense)&(VT_TENSE_MASK|VT_POSSIBLE|VT_NEGATION))!=VT_PAST)
 			acceptableSubject=false;
 		if (acceptableSubject)
 		{
@@ -3482,11 +3482,11 @@ void Source::processExit(int where,vector <cSpaceRelation>::iterator sri,int bac
 			int subjectObject=m[sri->whereSubject].getObject();
 			if (subjectObject>=0) 
 			{
-				int wo=objects[subjectObject].ownerWhere;
+				int wo=objects[subjectObject].getOwnerWhere();
 				/* the subject is an exact count of people and the number of people matched does not equal the count */
-				if (wo<0 && wo!=-1 && wstring(wordOrderWords[-2-wo])==L"two" && m[sri->whereSubject].objectMatches.size()!=2)
+				if (wo<0 && wo!=-1 && cObject::wordOrderWords[-2-wo]==L"two" && m[sri->whereSubject].objectMatches.size()!=2)
 					cancel=true;
-				if (wo<0 && wo!=-1 && wstring(wordOrderWords[-2-wo])==L"three" && m[sri->whereSubject].objectMatches.size()!=3)
+				if (wo<0 && wo!=-1 && cObject::wordOrderWords[-2-wo]==L"three" && m[sri->whereSubject].objectMatches.size()!=3)
 					cancel=true;
 				if (m[where].queryWinnerForm(numeralCardinalForm)>=0 && m[where].word->first==L"two" && m[sri->whereSubject].objectMatches.size()!=2)
 					cancel=true;

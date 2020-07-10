@@ -1063,6 +1063,13 @@ int createBasicPatterns(void)
 		3, L"noun*1{ADJ}", L"adjective|best*-4", L"noun|class*-4", SINGULAR, 1, 1,
 		8, L"adverb*1", L"adjective{ADJ}", L"verb*1{ADJ}", L"numeral_ordinal{ADJ}", L"_NUMBER{ADJ}", L"preposition|ex{ADJ}", L"noun{ADJ}", L"no{ADJ:no}", 0, 0, 2,
 		0);
+	// Nobel Prize-winning
+	cPattern::create(L"__ADJECTIVE", L"WIN",
+		1, L"Proper Noun", 0, 0, 1,
+		2, L"Proper Noun|prize", L"Proper Noun|award", 0, 1, 1, // new all-metal construction
+		1, L"dash", 0, 0, 1,
+		1, L"verb|winning*-3{ADJ}", 0, 1, 1,
+		0);
 	cPattern::create(L"__ADJECTIVE", L"UP",
 		1, L"_ADVERB", 0, 0, 1,
 		1, L"verb{ADJ}", VERB_PAST_PARTICIPLE, 1, 1, // hunched-up
@@ -1341,7 +1348,7 @@ int createBareInfinitives(void)
 		// Harry felt her [hearing the glass slide] underneath the fitting.
 		// Hillary thought [watching them float] under the water was quite wonderful.
 		// David liked [making him do] that.
-		// I preferred helping her finish the table.
+		// I lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms helping her finish the table.
 	cPattern::create(L"_VERB_BARE_INF{VERB}",L"6",
 										1,L"_IS",0,1,1,
 										2,L"verbverb{vC:V_HOBJECT}",L"have|having{vS:V_HOBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
@@ -1463,7 +1470,7 @@ int createThinkBareInfinitives(void)
 		// Harry felt her [hearing the glass slide] underneath the fitting.
 		// Hillary thought [watching them float] under the water was quite wonderful.
 		// David liked [making him do] that.
-		// I preferred helping her finish the table.
+		// I lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms helping her finish the table.
 	cPattern::create(L"_THINK_BARE_INF{VERB}", L"6",
 		1, L"_IS", 0, 1, 1,
 		2, L"verbverb{vC:V_HOBJECT}", L"have|having{vS:V_HOBJECT}", VERB_PRESENT_PARTICIPLE, 1, 1,
@@ -2858,7 +2865,7 @@ int createSecondaryPatterns2(void)
 								0);
 	// END OBJVERB patterns - reverse END
 	// *I* shall have to speak to *whoever is in charge * .
-	cPattern::create(L"__NOUN{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_FORWARD_REFERENCE:_BLOCK:GNOUN:VNOUN:_EXPLICIT_SUBJECT_VERB_AGREEMENT:_CHECK_IGNORABLE_FORMS}", L"Z",
+	cPattern::create(L"__NOUN{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_BLOCK:GNOUN:VNOUN:_EXPLICIT_SUBJECT_VERB_AGREEMENT:_CHECK_IGNORABLE_FORMS}", L"Z",
 										5, L"interrogative_determiner|whatever{SUBJECT}", L"interrogative_determiner|whichever{SUBJECT}", L"interrogative_determiner|whosoever{SUBJECT}",L"interrogative_determiner|whoever{SUBJECT}", L"interrogative_determiner|wherever{SUBJECT}", 0, 1, 1, 
 										1, L"__ALLVERB*1", 0, 1, 1, // make this more expensive than a normal__S1
 										1, L"__INTERS1*1{BLOCK}", 0, 0, 1,
@@ -2866,7 +2873,7 @@ int createSecondaryPatterns2(void)
 										0);
 	// I will give you *five dollars a week*
 	// You must produce 5 bushels of grain a day.
-	cPattern::create(L"__NOUN{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_FORWARD_REFERENCE:_BLOCK:GNOUN:VNOUN}", L"MO",
+	cPattern::create(L"__NOUN{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_BLOCK:GNOUN:VNOUN}", L"MO",
 										2, L"numeral_cardinal", L"Number", 0, 1, 1,
 										1, L"noun*1", 0, 1, 1, 
 										1, L"_PP*2",0,0,1,
@@ -2876,7 +2883,7 @@ int createSecondaryPatterns2(void)
 	// __NOUN[D], __NOUN[E], and __NOUN[F] will function as subjects or objects by themselves.
 	// they are split this way so that only "E" and "F" are checked for _AGREEMENT, and only "D" and "F" are checked for verb usage.
 	// Otherwise, excessive time is wasted.
-	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_FORWARD_REFERENCE:_BLOCK:GNOUN:VNOUN}",L"D",
+	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_BLOCK:GNOUN:VNOUN}",L"D",
 									 1,L"_VERBONGOING*1{VERB:vE}",0,1,1,  // from C2__S1 - also matches _N1// this pattern should not be common
 									 //1,L"_INFP{OBJECT}",0,0,1,         // from C2__S1   RINFP 6/7/06
 									 //1,L"_PP",0,0,1,         // from C2__S1 - __PP after noun is absorbed into the noun itself through NOUN 9
@@ -2897,7 +2904,7 @@ int createSecondaryPatterns2(void)
 	/* RINFP - INFP removed after VERB and placed in ALLOBJECTS as an object of the verb.
 		 if a verb has an infinitive phrase after it, objects occurring after to-verb belong to the infinitive phrase NOT the main verb.
 		 only one object is permitted before the infinitive phrase, and that is optional
-	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_FORWARD_REFERENCE:_BLOCK:GNOUN:VNOUN}",L"E",
+	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_BLOCK:GNOUN:VNOUN}",L"E",
 									 // if the following is made optional this pattern can match _NOUN[9] with an embedded _NOUN[2]
 									 1,L"__C1__S1",0,1,1, // changed to cost *2 5/17 to avoid being the same cost as _NOUN[2]
 									 1,L"_VERBONGOING*2{VERB:vE}",0,1,1,  // from C2__S1 - also matches _N1// this pattern should not be common
@@ -2906,7 +2913,7 @@ int createSecondaryPatterns2(void)
 									 0);
  */
 	// this pattern differentiator is specifically checked for in evaluateNounDeterminer!
-	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_FORWARD_REFERENCE:_BLOCK:GNOUN:VNOUN:_CHECK_IGNORABLE_FORMS}",L"F",
+	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_BLOCK:GNOUN:VNOUN:_CHECK_IGNORABLE_FORMS}",L"F",
 									 1,L"__C1__S1",0,1,1, // changed to cost *2 5/17 to avoid being the same cost as _NOUN[2]
 									 1,L"_VERBONGOING*1{VERB:vE}",0,1,1,  // from C2__S1 - also matches _N1// this pattern should not be common
 									 //1,L"_INFP{OBJECT}",0,0,1,         // from C2__S1   RINFP 6/7/06
@@ -2916,14 +2923,14 @@ int createSecondaryPatterns2(void)
 									 0);
 	// My *coming* from the country to stay in Paris for good marked an epoch in my life .
 	// Forgive me for not thinking of your *being* tired , mother
-	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_FORWARD_REFERENCE:_BLOCK:GNOUN:VNOUN:_CHECK_IGNORABLE_FORMS}", L"COMING",
+	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_BLOCK:GNOUN:VNOUN:_CHECK_IGNORABLE_FORMS}", L"COMING",
 		1, L"possessive_determiner", 0, 1, 1,
 		2, L"verb|coming", L"verb|being", 0, 1, 1,
 		0);
 	// Desborough was not so imposing and extensive *a* place as Pemberley 
 	// How could he afford to retain so eminent *a* lawyer ? 
 	// I did not believe that Turner had strength enough to fell so vigorous *a* man
-	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_FORWARD_REFERENCE:_CHECK_IGNORABLE_FORMS}", L"SO",
+	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_CHECK_IGNORABLE_FORMS}", L"SO",
 		1, L"adverb|so",0,1,1,
 		1, L"adjective", 0, 1, 1,
 		1, L"coordinator", 0, 0, 1,
@@ -3551,7 +3558,7 @@ int createSecondaryPatterns2(void)
 	// Do NOT add REL tag here - the REL tag is only for relative phrases that be attached to objects
 	// REMOVED: as and __AS_AS - they are not relativizers! and cause overlap with __PP[A].  'as' is a subordinator
 	// REMOVED __AS_AS = *As* soon as he saw that his companion was afraid of the dark (from ST comparison - ) -the second 'as' is the relativizer
-	cPattern::create(L"_REL1{_FINAL_IF_ALONE:_FORWARD_REFERENCE:S_IN_REL}",L"2",//3,L"demonstrative_determiner",L"personal_pronoun_nominative",L"indefinite_pronoun",0,0,1, // *he* whom you await taken out - how is this different than _NOUN[9]?
+	cPattern::create(L"_REL1{_FINAL_IF_ALONE:S_IN_REL}",L"2",//3,L"demonstrative_determiner",L"personal_pronoun_nominative",L"indefinite_pronoun",0,0,1, // *he* whom you await taken out - how is this different than _NOUN[9]?
 										2,L"_ADJECTIVE",L"_ADVERB",0,0,1,
 										// when matching as and __AS_AS, this REL1 is a subordinating clause, not a relative clause
 										3,L"relativizer",L"interrogative_determiner",L"demonstrative_determiner|that",0,1,1, 
@@ -3563,7 +3570,7 @@ int createSecondaryPatterns2(void)
 	// how fast he can give Tom books
 	// how giving the author says he is
 	// Do NOT add REL tag here - the REL tag is only for relative phrases that be attached to objects
-	cPattern::create(L"_REL1{_FINAL_IF_ALONE:_FORWARD_REFERENCE:S_IN_REL}",L"3",//3,L"demonstrative_determiner",L"personal_pronoun_nominative",L"indefinite_pronoun",0,0,1, // *he* whom you await taken out - how is this different than _NOUN[9]?
+	cPattern::create(L"_REL1{_FINAL_IF_ALONE:S_IN_REL}",L"3",//3,L"demonstrative_determiner",L"personal_pronoun_nominative",L"indefinite_pronoun",0,0,1, // *he* whom you await taken out - how is this different than _NOUN[9]?
 										1,L"how",0,1,1,
 										1,L"_ADJECTIVE",0,1,1,
 										1,L"__S1{_BLOCK:EVAL}",0,1,1,
@@ -3572,7 +3579,7 @@ int createSecondaryPatterns2(void)
 	// what things he boasts about
 	// whose people they can boss about every day
 	// Do NOT add REL tag here - the REL tag is only for relative phrases that be attached to objects
-	cPattern::create(L"_REL1{_FINAL_IF_ALONE:_FORWARD_REFERENCE:S_IN_REL}",L"4",//3,L"demonstrative_determiner",L"personal_pronoun_nominative",L"indefinite_pronoun",0,0,1, // *he* whom you await taken out - how is this different than _NOUN[9]?
+	cPattern::create(L"_REL1{_FINAL_IF_ALONE:S_IN_REL}",L"4",//3,L"demonstrative_determiner",L"personal_pronoun_nominative",L"indefinite_pronoun",0,0,1, // *he* whom you await taken out - how is this different than _NOUN[9]?
 										3,L"which",L"what",L"whose",0,1,1,
 										2,L"__NOUN[*]{_BLOCK}",L"__MNOUN[*]{_BLOCK}",0,1,1,
 										1,L"__S1{_BLOCK:EVAL}",0,1,1,
@@ -3604,7 +3611,7 @@ int createSecondaryPatterns2(void)
 	// There was a possibility *that* if the scientists moved him , his new tank would be shielded so *that* it would be impossible to enjoy himself as he now was . 
 	// “ I can see *that* if she had , maybe a hundred dollars , say -- of her own , unexpected like -- when she left the hospital -- I can just see the things she would do with it ! 
 	// and tell sister Ann , *that* if she can write as well as you tell of , I wish she would write me a letter . 
-	cPattern::create(L"_REL1{_FINAL_IF_ALONE:_FORWARD_REFERENCE:S_IN_REL}", L"6",
+	cPattern::create(L"_REL1{_FINAL_IF_ALONE:S_IN_REL}", L"6",
 										2, L"_ADJECTIVE", L"_ADVERB", 0, 0, 1,
 										2, L"demonstrative_determiner|that",L"preposition|for",0,0,1, // for when Mama returned she told them she had heard from Mrs . Clifford , who wrote she had that day sent off a box . 
 										10, L"conjunction|if", L"conjunction|unless", L"conjunction|whether", L"relativizer|when", L"conjunction|before", L"conjunction|after", L"conjunction|since", L"conjunction|until", L"conjunction|while", L"relativizer|whenever", 0, 1, 1,
@@ -3631,7 +3638,7 @@ int createSecondaryPatterns2(void)
 		// moved to __C1_IP
 	// restatement / this woman, whoever she was, was saved
 	// this woman, master of disguise,
-	//cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_FORWARD_REFERENCE}",L"",
+	//cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"",
 	//                 1,L"__NOUN[*]",0,1,1,
 	//                 1,L",",0,1,1,
 	//                 2,L"__NOUN[*]{_BLOCK:RE_OBJECT}",L"_REL1[*]{_BLOCK}",0,1,1,

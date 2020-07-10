@@ -82,7 +82,7 @@ int Source::collectTags(int recursionLevel,int PEMAPosition,int position,vector 
 		// end eliminate empty tagsets section
 		return tagSets.size();
 	}
-	int pattern=pema[PEMAPosition].getPattern(),patternElement=pema[PEMAPosition].getElement();
+	int pattern=pema[PEMAPosition].getParentPattern(),patternElement=pema[PEMAPosition].getElement();
 	int begin=pema[PEMAPosition].begin+position,end=pema[PEMAPosition].end+position;
 	size_t relativeEnd=end-position,originalTagSetSize=tagSet.size();
 	int relativeBegin=begin-position;
@@ -91,7 +91,7 @@ int Source::collectTags(int recursionLevel,int PEMAPosition,int position,vector 
 		lplog(L"%*s%d:%06d %s[%s](%d,%d) element #%d #tags collected=%d",recursionLevel*2," ",position,PEMAPosition,
 		patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),begin,end,patternElement,tagSet.size());
 	tagSet.reserve(6);
-	for (;  PEMAPosition>=0 && pem->getPattern()==pattern && pem->end==relativeEnd && !exitTags; PEMAPosition=pem->nextByPatternEnd,pem=pema.begin()+PEMAPosition)
+	for (;  PEMAPosition>=0 && pem->getParentPattern()==pattern && pem->end==relativeEnd && !exitTags; PEMAPosition=pem->nextByPatternEnd,pem=pema.begin()+PEMAPosition)
 		if (pem->begin==relativeBegin)
 		{
 			if (recursionLevel==0) // pushing down PEMAPositions to gain more accuracy
@@ -134,9 +134,9 @@ int Source::collectTags(int recursionLevel,int PEMAPosition,int position,vector 
 					if (pma==NULL) continue;
 					int childPEMAPosition=pma->pemaByPatternEnd;
 					patternElementMatchArray::tPatternElementMatch *childPem=pema.begin()+childPEMAPosition;
-					for (; childPEMAPosition>=0 && childPem->getPattern()==p && childPem->end==childEnd; childPEMAPosition=childPem->nextByPatternEnd,childPem=pema.begin()+childPEMAPosition)
+					for (; childPEMAPosition>=0 && childPem->getParentPattern()==p && childPem->end==childEnd; childPEMAPosition=childPem->nextByPatternEnd,childPem=pema.begin()+childPEMAPosition)
 						if (!childPem->begin) break;
-					if (childPEMAPosition<0 || childPem->getPattern()!=p || childPem->end!=childEnd || childPem->begin) continue;
+					if (childPEMAPosition<0 || childPem->getParentPattern()!=p || childPem->end!=childEnd || childPem->begin) continue;
 					//if (recursionLevel==0) // pushing down PEMAPositions to gain more accuracy
 					//  secondaryPEMAPositions.push_back(costPatternElementByTagSet(position,PEMAPosition,childPEMAPosition,tagSets.size(),patternElement));
 					beginTag=0;
@@ -409,9 +409,9 @@ size_t Source::startCollectTagsFromTag(bool inTrace,int tagSet,tTagLocation &tl,
 			if (pma==NULL) continue;
 			PEMAOffset=pma->pemaByPatternEnd;
 			patternElementMatchArray::tPatternElementMatch *pem=pema.begin()+PEMAOffset;
-			for (; PEMAOffset>=0 && pem->getPattern()==p && pem->end==end; PEMAOffset=pem->nextByPatternEnd,pem=pema.begin()+PEMAOffset)
+			for (; PEMAOffset>=0 && pem->getParentPattern()==p && pem->end==end; PEMAOffset=pem->nextByPatternEnd,pem=pema.begin()+PEMAOffset)
 				if (!pem->begin) break;
-			if (PEMAOffset<0 || pem->getPattern()!=p || pem->end!=end || pem->begin) continue;
+			if (PEMAOffset<0 || pem->getParentPattern()!=p || pem->end!=end || pem->begin) continue;
 			startCollectTags(inTrace,tagSet,position,PEMAOffset,tagSets, obeyBlock,collectSelfTags,purpose + L"| from tag ");
 		}
 	}
@@ -432,7 +432,7 @@ size_t Source::startCollectTags(bool inTrace,int tagSet,int position,int PEMAPos
 		return 0;
 	}
 	debugTrace.traceTags=inTrace && debugTrace.traceTagSetCollection;
-	int pattern=pema[PEMAPosition].getPattern();
+	int pattern=pema[PEMAPosition].getParentPattern();
 	if (collectSelfTags && !(patterns[pattern]->includesDescendantsAndSelfAllOfTagSet&((__int64)1<<tagSet)))
 	{
 		if (debugTrace.traceTags)
@@ -462,7 +462,7 @@ size_t Source::startCollectTags(bool inTrace,int tagSet,int position,int PEMAPos
 	if (collectSelfTags)
 	{
 		int tag;
-		unsigned int beginTag=0,p=pema[PEMAPosition].getPattern(),recursionLevel=0;
+		unsigned int beginTag=0,p=pema[PEMAPosition].getParentPattern(),recursionLevel=0;
 		//bool found=false;
 		while ((tag=patterns[p]->hasTagInSet(desiredTagSetNum,beginTag))>=0)
 		{

@@ -19,6 +19,7 @@
 #include "profile.h"
 #include "mysqldb.h"
 #include "internet.h"
+#include "questionAnswering.h"
 
 #define NULLWORD 187
 bool checkFull(MYSQL *mysql,wchar_t *qt,size_t &len,bool flush,wchar_t *qualifier);
@@ -70,17 +71,6 @@ int WordClass::initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, boo
 	/* // this 'optimization' increased time from 19 seconds to 81 seconds
 	// set all ct bits in wordRelations to false
 	if (!myquery(&mysql,L"UPDATE wordRelations set ct=false")) return -1;
-	// set all ct bits for the words we are interested in wordRelations to true
-	while (I<totalWRIDs)
-	{
-	  int len=0;
-	  for (; I<totalWRIDs && len<QUERY_BUFFER_LEN; I++)
-		len+=_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L"%d,",wordIds[I]);
-	  if (!len) break;
-	  qt[len-1]=0; //erase last ,
-	  wstring sqt="update wordRelations set ct=true where toWordId in (" + wstring(qt) + ")";
-	  if (!myquery(&mysql,(wchar_t *)sqt.c_str())) return -1;
-	}
 	*/
 	// read all wordRelations for words that have never had their wordRelations read
 	//int justMySqlTime = 0; performance testing

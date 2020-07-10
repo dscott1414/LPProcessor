@@ -253,10 +253,7 @@ int WordClass::writeWord(tIWMM iWord, void *buffer, int &where, int limit)
 {
 	LFS
 		if (iWord->second.mainEntry == wNULL)
-		{
-			logCache = 0;
 			lplog(LOG_ERROR, L"mainentry is NULL for word %s!", iWord->first.c_str());
-		}
 	if (!copy(buffer, iWord->first, where, limit))
 		return -1;
 	iWord->second.write(buffer,where,limit);
@@ -1662,6 +1659,7 @@ void WordClass::initialize()
 	TABLE = predefineWord(L"lpTABLE"); // used to start the table section which is extracted from <table> and table-like constructions in HTML
 	END_COLUMN = predefineWord(L"lpENDCOLUMN"); // used to end each column string which is extracted from <table> and table-like constructions in HTML
 	END_COLUMN_HEADERS = predefineWord(L"lpENDCOLUMNHEADERS"); // used to start the table section which is extracted from <table> and table-like constructions in HTML
+	TOC_HEADER = predefineWord(L"lpTOC"); // notes a table which is the table of contents for the page
 	MISSING_COLUMN = predefineWord(L"lpMISSINGCOLUMN"); // used to start the table section which is extracted from <table> and table-like constructions in HTML
 
 	//** SET Forms

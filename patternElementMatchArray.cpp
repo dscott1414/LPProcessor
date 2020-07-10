@@ -193,7 +193,7 @@ int patternElementMatchArray::push_back(int oCost,int iCost,unsigned int p,int b
     content=(tPatternElementMatch *)trealloc(8,content,oldAllocated*sizeof(*content),allocated*sizeof(*content));
   }
   tPatternElementMatch *c=content+count-1;
-  c->setPattern(p);
+  c->setParentPattern(p);
   c->setOCost(oCost);
   c->setIncrementalCost(iCost);
   c->removeWinnerFlag();
@@ -443,7 +443,7 @@ bool patternElementMatchArray::consolidateWinners(int lastPEMAConsolidationIndex
 	{
 		if (wa[I-lastPEMAConsolidationIndex]>=0)
 		{
-			patterns[content[I].getPattern()]->incrementUse(content[I].__patternElement,content[I].__patternElementIndex,content[I].getIsPattern());
+			patterns[content[I].getParentPattern()]->incrementUse(content[I].__patternElement,content[I].__patternElementIndex,content[I].isChildPattern());
 			translate(lastPEMAConsolidationIndex,wa,&content[I].nextByPosition,BY_POSITION);
 			translate(lastPEMAConsolidationIndex,wa,&content[I].nextByPatternEnd,BY_PATTERN_END);
 			translate(lastPEMAConsolidationIndex,wa,&content[I].nextByChildPatternEnd,BY_CHILD_PATTERN_END);
@@ -512,11 +512,11 @@ __int64 patternElementMatchArray::tPatternElementMatch::getRole(__int64 &tagRole
 	int tag;
 	__int64 childTagRole=0;
 	unsigned int tagNumBySet=0;
-	tagRole=(patterns[getPattern()]->tags.find(MPLURAL_TAG)!=patterns[getPattern()]->tags.end()) ? MPLURAL_ROLE : 0;
+	tagRole=(patterns[getParentPattern()]->tags.find(MPLURAL_TAG)!=patterns[getParentPattern()]->tags.end()) ? MPLURAL_ROLE : 0;
 	// a noun could have multiple nouns in it but still be singular - NOUN "O"
-	tagRole+=(patterns[getPattern()]->tags.find(MNOUN_TAG)!=patterns[getPattern()]->tags.end()) ? MNOUN_ROLE : 0;
-	tagRole+=(patterns[getPattern()]->tags.find(SENTENCE_IN_REL_TAG)!=patterns[getPattern()]->tags.end()) ? SENTENCE_IN_REL_ROLE : 0;
-	while ((tag=patterns[getPattern()]->elementHasTagInSet(__patternElement,__patternElementIndex,roleTagSet,tagNumBySet,isChildPattern()))>=0)
+	tagRole+=(patterns[getParentPattern()]->tags.find(MNOUN_TAG)!=patterns[getParentPattern()]->tags.end()) ? MNOUN_ROLE : 0;
+	tagRole+=(patterns[getParentPattern()]->tags.find(SENTENCE_IN_REL_TAG)!=patterns[getParentPattern()]->tags.end()) ? SENTENCE_IN_REL_ROLE : 0;
+	while ((tag=patterns[getParentPattern()]->elementHasTagInSet(__patternElement,__patternElementIndex,roleTagSet,tagNumBySet,isChildPattern()))>=0)
 	{
 		if (tag==HAIL_TAG) childTagRole|=HAIL_ROLE;
 		if (tag==SUBJECT_TAG) childTagRole|=SUBJECT_ROLE;
@@ -532,7 +532,7 @@ __int64 patternElementMatchArray::tPatternElementMatch::getRole(__int64 &tagRole
 wchar_t *patternElementMatchArray::tPatternElementMatch::toText(unsigned int position,wchar_t *temp,vector <WordMatch> &m)
 { LFS
 	int len=wsprintf(temp,L"%s[%s](%d,%d) child",
-		patterns[getPattern()]->name.c_str(),patterns[getPattern()]->differentiator.c_str(),position+begin,position+end);
+		patterns[getParentPattern()]->name.c_str(),patterns[getParentPattern()]->differentiator.c_str(),position+begin,position+end);
 	if (isChildPattern())
 		len+=wsprintf(temp+len,L" %s[*](%d,%d)",patterns[getChildPattern()]->name.c_str(),position,position+getChildLen());
 	else

@@ -167,7 +167,7 @@ bool Internet::LPInternetOpen(int timer)
 		ReleaseSRWLockExclusive(&cProfile::networkTimeSRWLock);
 		return false;
 	}
-	InetOption(false, INTERNET_OPTION_CONNECT_TIMEOUT, L"Connect Timeout", 6000000);
+	InetOption(false, INTERNET_OPTION_CONNECT_TIMEOUT, L"Connect Timeout", 5000); // in milliseconds
 	return true;
 }
 
@@ -244,6 +244,7 @@ int Internet::readPage(const wchar_t *str, wstring &buffer, wstring &headers)
 			if (!InternetCheckConnection(str, FLAG_ICC_FORCE_CONNECTION, 0))
 				lplog(LOG_ERROR, L"ERROR:Cannot force URL %s - %s.\r", str, getLastErrorMessage(ioe));
 			InternetCloseHandle(hINet);
+			wprintf(L"\nrestarting internet connection for URL %s...\n",str);
 			hINet = 0;
 			LPInternetOpen(timer);
 			lplog(LOG_ERROR, NULL);
@@ -420,11 +421,9 @@ int Internet::getWebPath(int where, wstring webAddress, wstring &buffer, wstring
 	LFS
 		if (webAddress.find(L".pdf") != wstring::npos || webAddress.find(L".php") != wstring::npos) // Nobel Prize abstract is 2 bytes / also don't bother with pdf or php files for now
 			return -1;
-	//if (webAddress.find(L"_andrewcusack.com_2010_09_21_stereotype_2d_map_.11") != wstring::npos)
-	//	printf("LHEELO!"); // TMP DEBUG
 	if (logTraceOpen)
 		lplog(LOG_WHERE, L"TRACEOPEN %s %s", epath.c_str(), __FUNCTIONW__);
-	if (logDetail)
+	if (logQuestionDetail)
 		lplog(LOG_WIKIPEDIA, L"accessing page: %s", epath.c_str());
 	wchar_t path[MAX_LEN];
 	int pathlen = _snwprintf(path, MAX_LEN, L"%s\\%s", (cacheTypePath==L"webSearchCache") ? WEBSEARCH_CACHEDIR:CACHEDIR, cacheTypePath.c_str());

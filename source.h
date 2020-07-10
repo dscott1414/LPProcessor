@@ -2,6 +2,7 @@
 #include "syntacticRelations.h"
 #include "names.h"
 #include "bitObject.h"
+#include "tableColumn.h"
 
 class cSpaceRelation;
 #define MAX_LEN 2048
@@ -14,157 +15,6 @@ typedef struct {
 	vector <int> concepts;
 	vector <string> rest;
 } sDefinition;
-
-// accumulateSemanticMaps
-// accumulateSemanticEntry
-// semanticCheck
-class cSemanticMap
-{
-public:
-	wstring SMPrincipalObject;
-	set <wstring> sourcePaths;
-	class cSemanticEntry
-	{
-	public:
-		int inSource;
-		int totalDistanceFromObject;
-		int directRelation;
-		int confidentInSource;
-		int confidentTotalDistanceFromObject;
-		int confidentDirectRelation;
-		int confidenceSE;
-		wstring fullDescriptor; 
-		int semanticMismatch;
-		bool subQueryNoMatch,tenseMismatch,confidenceCheck;
-		Source *childSource;
-		set <wstring> childSourcePaths;
-		vector <wstring> relationSourcePaths;
-		vector <int> relationWheres;
-		wstring lastChildSourcePath;
-		int childWhere2;
-		int childObject;
-		float score;
-		// this is called from the parent
-		int semanticCheck(cSpaceRelation* parentSRI,Source *parentSource);
-		//void cSemanticMap::cSemanticEntry::printDirectRelations(int logType,Source *parentSource,wstring &path,int where);
-		void printDirectRelations(int logType,Source *parentSource,wstring &path,int where);
-		cSemanticEntry()
-		{
-			inSource=0;
-			totalDistanceFromObject=0;
-			directRelation=0;
-			confidentInSource=0;
-			confidentTotalDistanceFromObject=0;
-			confidentDirectRelation=0;
-			confidenceSE=0;
-			childWhere2=0;
-			childSource=0;
-			score=0.0;
-			semanticMismatch=0;
-			subQueryNoMatch=false;
-			tenseMismatch=false;
-			confidenceCheck=false;
-		}
-		void lplogSM(int logType,wstring objectStr)
-		{
-			wstring tmpstr;
-			::lplog(logType,L"SM object: %s: score=%f inSource=%d totalDistanceFromObject=%d directRelation=%d confidentInSource=%d confidentTotalDistanceFromObject=%d confidentDirectRelation=%d confidence=%d semanticMismatch=%d subQueryNoMatch=%s tenseMismatch=%s confidenceCheck=%s numSources=%d",
-				  objectStr.c_str(),score,inSource,totalDistanceFromObject,directRelation,confidentInSource,confidentTotalDistanceFromObject,confidentDirectRelation,confidenceSE,
-					semanticMismatch,(subQueryNoMatch) ? L"true":L"false", (tenseMismatch) ? L"true":L"false",(confidenceCheck) ? L"true":L"false",childSourcePaths.size());
-		}
-		void calculateScore()
-		{
-			int occurrence=(inSource+confidentInSource*2+directRelation*2+confidentDirectRelation*4);
-			if (childSourcePaths.size()==1)
-				occurrence>>=1;
-			if (totalDistanceFromObject+confidentTotalDistanceFromObject)
-				score=(float)((occurrence*occurrence)*1.0/(totalDistanceFromObject+confidentTotalDistanceFromObject));
-		}
-	};
-	struct semanticSetCompare
-	{
-		bool operator()(unordered_map <wstring,cSemanticEntry>::iterator lhs, unordered_map <wstring,cSemanticEntry>::iterator rhs) const
-		{
-			if (lhs->second.confidentInSource+lhs->second.inSource==rhs->second.confidentInSource+rhs->second.inSource)
-				return lhs->first<rhs->first;
-			return lhs->second.confidentInSource+lhs->second.inSource>rhs->second.confidentInSource+rhs->second.inSource;
-		}
-	};
-	struct semanticSetCompare2
-	{
-		bool operator()(unordered_map <wstring,cSemanticEntry>::iterator lhs, unordered_map <wstring,cSemanticEntry>::iterator rhs) const
-		{
-			return lhs->second.score>rhs->second.score;
-		}
-	};
-	unordered_map <wstring,cSemanticEntry> relativeObjects;
-	set < unordered_map <wstring,cSemanticEntry>::iterator,semanticSetCompare> relativeObjectsSorted;
-	set < unordered_map <wstring,cSemanticEntry>::iterator,semanticSetCompare2> relativeObjectsSorted2;
-	set < unordered_map <wstring,cSemanticEntry>::iterator,semanticSetCompare > suggestedAnswers;
-	void sortAndCheck(cSpaceRelation* parentSRI,Source *parentSource)
-	{
-		relativeObjectsSorted.clear();
-		relativeObjectsSorted2.clear();
-		for (unordered_map <wstring,cSemanticEntry>::iterator roi=relativeObjects.begin(),roiEnd=relativeObjects.end(); roi!=roiEnd; roi++)
-		{
-			roi->second.calculateScore();
-			relativeObjectsSorted.insert(roi);
-			relativeObjectsSorted2.insert(roi);
-		}
-		int onlyTopResults=0;
-		for (set < unordered_map <wstring,cSemanticEntry>::iterator,semanticSetCompare>::iterator sroi=relativeObjectsSorted.begin(),sroiEnd=relativeObjectsSorted.end(); sroi!=sroiEnd && onlyTopResults<20; sroi++)
-		{
-				onlyTopResults++;
-				if ((*sroi)->second.semanticCheck(parentSRI,parentSource)<CONFIDENCE_NOMATCH)
-					suggestedAnswers.insert((*sroi));
-		}
-		onlyTopResults=0;
-		for (set < unordered_map <wstring,cSemanticEntry>::iterator,semanticSetCompare2>::iterator sroi=relativeObjectsSorted2.begin(),sroiEnd=relativeObjectsSorted2.end(); sroi!=sroiEnd && onlyTopResults<20; sroi++)
-		{
-			onlyTopResults++;
-			if ((*sroi)->second.semanticCheck(parentSRI,parentSource)<CONFIDENCE_NOMATCH)
-				suggestedAnswers.insert((*sroi));
-		}
-	}
-	void lplogSM(int logType,Source *parentSource,bool enhanced)
-	{
-		::lplog(logType,L"SM%s SEMANTIC MAP %d objects %d sources principalObject %s ****************************************************************************",
-			(enhanced) ? L"E":L"",relativeObjects.size(),sourcePaths.size(),SMPrincipalObject.c_str());
-		extern int logDetail;
-		if (logDetail)
-			for (set <wstring>::iterator spi=sourcePaths.begin(),spiEnd=sourcePaths.end(); spi!=spiEnd; spi++)
-				::lplog(logType,L"SM%s sourcePath: %s",(enhanced) ? L"E":L"",spi->c_str());
-		int onlyTopResults=0;
-		::lplog(logType,L"SM%s by frequency ***************",(enhanced) ? L"E":L"");
-		for (set < unordered_map <wstring,cSemanticEntry>::iterator,semanticSetCompare>::iterator sroi=relativeObjectsSorted.begin(),sroiEnd=relativeObjectsSorted.end(); sroi!=sroiEnd && onlyTopResults<20; sroi++)
-		{
-			onlyTopResults++;
-			(*sroi)->second.lplogSM(logType,(*sroi)->first);
-		}
-		::lplog(logType,L"SM%s by score ***************",(enhanced) ? L"E":L"");
-		onlyTopResults=0;
-		for (set < unordered_map <wstring,cSemanticEntry>::iterator,semanticSetCompare>::iterator sroi=relativeObjectsSorted2.begin(),sroiEnd=relativeObjectsSorted2.end(); sroi!=sroiEnd && onlyTopResults<20; sroi++)
-		{
-			onlyTopResults++;
-			(*sroi)->second.lplogSM(logType,(*sroi)->first);
-		}
-		if (suggestedAnswers.empty())
-			::lplog(logType,L"SM%s no suggested answers.",(enhanced) ? L"E":L"");
-		else
-		{
-			::lplog(logType,L"SM%s suggested answers ***************",(enhanced) ? L"E":L"");
-			for (set < unordered_map <wstring,cSemanticEntry>::iterator,semanticSetCompare >::iterator sai=suggestedAnswers.begin(),saiEnd=suggestedAnswers.end(); sai!=saiEnd; sai++)
-			{
-				relativeObjects[(*sai)->first].lplogSM(LOG_WHERE,(*sai)->first);
-				if (logSemanticMap)
-					for (unsigned int I=0; I<(*sai)->second.relationSourcePaths.size(); I++)
-						(*sai)->second.printDirectRelations(logType,parentSource,(*sai)->second.relationSourcePaths[I],(*sai)->second.relationWheres[I]);
-			}
-		}
-		::lplog(logType,L"SM%s END SEMANTIC MAP %d objects %d sources principalObject %s ****************************************************************************",
-			(enhanced) ? L"E":L"",relativeObjects.size(),sourcePaths.size(),SMPrincipalObject.c_str());
-	}
-};
 
 #include "semanticRelations.h"
 
@@ -448,7 +298,7 @@ public:
 	short lastWinnerLACAACMatchPMAOffset; // only used during tracing
 	int whereLastWinnerLACAACMatchPMAOffset; // only used during tracing
 	unsigned __int64 objectRole;
-	char verbSense;
+	int verbSense;
 	unsigned char timeColor;
 	int beginPEMAPosition;
 	int endPEMAPosition;
@@ -520,8 +370,8 @@ public:
 	int beginObjectPosition,endObjectPosition; // where is the object defined on this position begin and end?
 	vector <cOM> objectMatches;
 	vector <cOM> audienceObjectMatches;
-	// the next field is also used to store tsSense for verbs
-	int quoteForwardLink; // next quote in same paragraph (or tsSense)
+	int getQuoteForwardLink() { return quoteForwardLink; }
+	void setQuoteForwardLink(int qfl) { quoteForwardLink = qfl; }
 	int quoteBackLink; // previous quote in same paragraph 
 	int nextQuote; // set at the beginning of the quote to the beginning of the next quote in a separate paragraph
 	                    // if the word is a preposition, this points to the head of the preposition phrase
@@ -685,6 +535,8 @@ private:
 	int object; // this is an index into the objects array.  it is set at the principalWhere of an object
 	int relObject; // if this is a subject, what object does it relate to? (for pronoun disambiguation) - also used if speaker explicitly names another speaker (flagQuoteContainsSpeaker)
 	int relVerb; // for subjects and objects
+	// the next field is also used to store tsSense for verbs
+	int quoteForwardLink; // next quote in same paragraph (or tsSense)
 };
 extern vector <WordMatch>::iterator wmNULL;
 
@@ -893,15 +745,11 @@ bool copy(cName &a,void *buf,int &where,int limit);
 //                   (NON_GENDERED_GENERAL_OBJECT_CLASS begin=0 end=2 at=1 adjectival=false ownerGendered=true)
 // my old father     (PRONOUN_OBJECT_CLASS              begin=0 end=1 at=0 adjectival=true  ownerGendered=false)
 //                   (GENDERED_GENERAL_OBJECT_CLASS     begin=0 end=3 at=2 adjectival=false ownerGendered=false)
-extern wchar_t *wordOrderWords[];
 class cObject
 {
 public:
-	int index;
+	int dbIndex;
 	enum OC objectClass;
-private:
-	int subType;
-public:
 	int begin,end,originalLocation;
 	int PMAElement;
 	int numEncounters;
@@ -913,9 +761,7 @@ public:
 	int numDefinitelyIdentifiedAsSpeakerInSection;
 	int PISSubject,PISHail,PISDefinite;
 	int replacedBy;
-	int ownerWhere;
 	int firstLocation; // the very first location for this object including replacements
-	int firstSpeakerGroup;
 	int firstPhysicalManifestation; // used for matching against unresolvable objects
 	int lastSpeakerGroup; // used for subgrouping
 	int ageSinceLastSpeakerGroup;
@@ -963,6 +809,11 @@ public:
 	bool isWikiWork;
 
 	cLastVerbTenses lastVerbTenses[VERB_HISTORY];
+	inline static vector <wstring> wordOrderWords = { L"other", L"another", L"second", L"first", L"third", L"former", L"latter", L"that", L"this", L"two", L"three", L"one", L"four", L"five", L"six", L"seven", L"eight" };
+	enum eOBJECTS {
+		UNKNOWN_OBJECT = -1, OBJECT_UNKNOWN_MALE = -2, OBJECT_UNKNOWN_FEMALE = -3,
+		OBJECT_UNKNOWN_MALE_OR_FEMALE = -4, OBJECT_UNKNOWN_NEUTER = -5, OBJECT_UNKNOWN_PLURAL = -6, OBJECT_UNKNOWN_ALL = -7
+	};
 
 	cName name;
 
@@ -981,6 +832,45 @@ public:
     }
 
 	};
+	int getFirstSpeakerGroup() { return firstSpeakerGroup; }
+	void setFirstSpeakerGroup(int fsg) { firstSpeakerGroup = fsg; }
+	int sanityCheck(int maxSourcePosition, int maxObjectIndex, int maxSpeakerGroupsIndex, vector <WordMatch> &m)
+	{
+		if (objectClass< PRONOUN_OBJECT_CLASS || objectClass>GENDERED_RELATIVE_OBJECT_CLASS) return 300;
+		if (subType >= NUM_SUBTYPES) return 301;
+		if (begin < 0 || begin >= maxSourcePosition) 
+			return 302;
+		if (end < 0 || end > maxSourcePosition) return 303; // the end of an object may = m.size()
+		if (originalLocation < 0 || originalLocation >= maxSourcePosition) return 304;
+		if (PMAElement < -1 || PMAElement >= (signed)m[begin].pma.count) return 305;
+		if (replacedBy < -1 || replacedBy >= maxObjectIndex) return 306;
+		if (ownerWhere < -2 - (signed)cObject::wordOrderWords.size() || ownerWhere >= maxSourcePosition) return 307;
+		if (firstLocation < -1 || firstLocation >= maxSourcePosition) return 308;
+		if (firstSpeakerGroup < -1 || firstSpeakerGroup >= maxSpeakerGroupsIndex) return 309;
+		if (firstPhysicalManifestation < -1 || firstPhysicalManifestation >= maxSourcePosition) return 310;
+		if (lastSpeakerGroup < -1 || lastSpeakerGroup >= maxSpeakerGroupsIndex) return 311;
+		if (whereRelativeClause < -1 || whereRelativeClause >= maxSourcePosition) return 312;
+		if (relativeClausePM < -1 || (relativeClausePM>=0 && relativeClausePM >= (signed)m[whereRelativeClause].pma.count)) return 313;
+		if (whereRelSubjectClause < -1 || whereRelSubjectClause >= maxSourcePosition) return 314;
+		if (lastWhereLocation < -1 || lastWhereLocation >= maxSourcePosition) return 315;
+		for (int di : duplicates)
+			if (di < 0 || di >= maxObjectIndex) return 316;
+		for (int di : aliases)
+			if (di < 0 || di >= maxObjectIndex) return 317;
+		/*
+		for (tIWMM n : associatedNouns)
+		{
+			if (n != wNULL && (n - beginWord) >= maxWordIndex) return false;
+		}
+		for (tIWMM n : associatedAdjectives)
+		{
+			if (n != wNULL && (n - beginWord) >= maxWordIndex) return false;
+		}
+		for (map <tIWMM, int, tFI::cRMap::wordMapCompare>::iterator gnm = genericNounMap.begin(), gnmEnd = genericNounMap.end(); gnm != gnmEnd; gnm++)
+			if (gnm->first != wNULL && (gnm->first - beginWord) >= maxWordIndex) return false;
+			*/
+		return 0;
+	}
 	void setSubType(int st) { subType=st; }
 	void resetSubType() { subType=-1; }
 	int getSubType() { return subType; }
@@ -1071,6 +961,7 @@ public:
 		masterSpeakerIndex=-1;
 		htmlLinkCount=0;
 		lsiOffset=cNULL;
+		subType = -1;
 		partialMatch=false;
 		isKindOf=false;
 		wikipediaAccessed=false;
@@ -1094,7 +985,7 @@ public:
 	};
 	cObject(char *buffer,int &where,unsigned int total,bool &error)
 	{
-		if (error=!copy(index,buffer,where,total)) return; 
+		if (error=!copy(dbIndex,buffer,where,total)) return; 
 		int tmp;
 		if (error=!copy(tmp,buffer,where,total)) return; 
 		objectClass=(OC)tmp;
@@ -1197,7 +1088,7 @@ public:
 	}
 	bool write(void *buffer,int &where,unsigned int limit)
 	{
-		if (!copy(buffer,index,where,limit)) return false; 
+		if (!copy(buffer,dbIndex,where,limit)) return false; 
 		if (!copy(buffer,(int)objectClass,where,limit)) return false; 
 		if (!copy(buffer,subType,where,limit)) return false; 
 		if (!copy(buffer,begin,where,limit)) return false; 
@@ -1285,7 +1176,6 @@ public:
 		if (!copy(buffer,name,where,limit)) return false;
 		return true;
 	}
-
 	void erase(void) { begin=end=firstLocation=originalLocation=-1; };
 	bool isPronounLike(void) { return objectClass==PRONOUN_OBJECT_CLASS || objectClass==REFLEXIVE_PRONOUN_OBJECT_CLASS || objectClass==RECIPROCAL_PRONOUN_OBJECT_CLASS; }
 	bool cataphoricMatch(cObject *obj);
@@ -1396,6 +1286,8 @@ public:
 	}
 	bool nameMatchExact(cObject &o)
 	{
+		if (name.isCompletelyNull() || o.name.isCompletelyNull())
+			return false;
 		if (name.first!=o.name.first || name.last!=o.name.last || name.any!=o.name.any || 
 			  name.middle!=o.name.middle || name.middle2!=o.name.middle2 || name.suffix!=o.name.suffix)
 			return false;
@@ -1409,12 +1301,13 @@ public:
 	int setGenericAge(vector <WordMatch> &m);
 	bool updateGenericGender(int where,tIWMM w,int fromAge,wchar_t *fromWhere,sTrace &t);
 	void updateGenericGenders(map <tIWMM,int,tFI::cRMap::wordMapCompare> &genericNounMap,int *replacedGenericAge);
+
 	static int whichOrderWord(tIWMM word)
 	{
-		for (unsigned int J=0; wordOrderWords[J]; J++)
-			if (word->first==wordOrderWords[J])
-				return J;
-		return -1;
+		auto f = find(wordOrderWords.begin(),wordOrderWords.end(),word->first);
+		if (f == wordOrderWords.end())
+			return -1;
+		return f-wordOrderWords.begin();
 	}
 	int wordOrderSensitive(int at,vector <WordMatch> &m)
 	{
@@ -1457,6 +1350,7 @@ public:
 		mostMatchedAge=-1;
 		aliases.clear(); // re-analyze meta naming
 		lastSpeakerGroup=-1;
+		subType = -1;
 		ageSinceLastSpeakerGroup=-1;
 		if (!webSearch)
 			isPossibleSubType(true);
@@ -1497,10 +1391,13 @@ public:
 		}
 		return false;
 	}
+	int getOwnerWhere() { return ownerWhere; }
+	void setOwnerWhere(int ow) { ownerWhere = ow; }
+private:
+	int subType;
+	int ownerWhere;
+	int firstSpeakerGroup;
 };
-
-enum eOBJECTS { UNKNOWN_OBJECT=-1,OBJECT_UNKNOWN_MALE=-2, OBJECT_UNKNOWN_FEMALE=-3,
-								OBJECT_UNKNOWN_MALE_OR_FEMALE=-4, OBJECT_UNKNOWN_NEUTER=-5, OBJECT_UNKNOWN_PLURAL=-6,OBJECT_UNKNOWN_ALL=-7 };
 
 extern unsigned int verbObjectsTagSet;
 extern unsigned int iverbTagSet;
@@ -1890,6 +1787,7 @@ public:
 	int parseBuffer(wstring &path,unsigned int &unknownCount);
 	int tokenize(wstring title, wstring etext, wstring path, wstring encoding, wstring &start, int &repeatStart, unsigned int &unknownCount);
 	bool write(IOHANDLE file);
+	int sanityCheck(int &wordIndex);
 	bool read(char *buffer,int &where,unsigned int total, bool &parsedOnly, bool printProgress, bool readOnlyParsed, wstring specialExtension);
 	bool flush(int fd,void *buffer,int &where);
 	bool FlushFile(HANDLE fd, void *buffer, int &where);
@@ -2008,6 +1906,48 @@ public:
 			metaNameOthers.erase(s);
 			observers.erase(s);
 		}
+		int sanityCheck(int maxSourcePosition,int maxSection,int maxObjectIndex, int maxSpeakerGroupsIndex)
+		{
+			if (sgBegin < 0 || sgBegin >= maxSourcePosition) return 100;
+			if ((sgEnd < 0 && sgEnd!=-2 && sgEnd!=-3) || sgEnd > maxSourcePosition) 
+				return 101; // in embedded speaker groups, sgEnd may also be set to -2 or -3 or = m.size()
+			if (section < -1 || section >= maxSection) return 102;
+			if (previousSubsetSpeakerGroup < CURRENT_SUBSET_SG || previousSubsetSpeakerGroup >= maxSpeakerGroupsIndex) return 103;  // CURRENT_SUBSET_SG = -2
+			if (saveNonNameObject < -1 || saveNonNameObject >= maxObjectIndex) return 104;
+			for (int si : speakers)
+				if (si < 0 || si >= maxObjectIndex) 
+					return 105;
+			for (int si : fromNextSpeakerGroup)
+				if (si < 0 || si >= maxObjectIndex) return 106;
+			for (int si = 0; si < replacedSpeakers.size(); si++)
+				if (replacedSpeakers[si].object < 0 || replacedSpeakers[si].object >= maxObjectIndex) return 107;
+			for (int si : singularSpeakers)
+				if (si < 0 || si >= maxObjectIndex) return 108;
+			for (int si : groupedSpeakers)
+				if (si < 0 || si >= maxObjectIndex) return 109;
+			for (int si : povSpeakers)
+				if (si < 0 || si >= maxObjectIndex) return 110;
+			for (int si : dnSpeakers)
+				if (si < 0 || si >= maxObjectIndex) return 111;
+			for (int si : metaNameOthers)
+				if (si < 0 || si >= maxObjectIndex) return 112;
+			for (int si : observers)
+				if (si < 0 || si >= maxObjectIndex) return 113;
+			for (auto esg : embeddedSpeakerGroups)
+			{
+				int sanityCheckReturnCode = 0;
+				if (sanityCheckReturnCode=esg.sanityCheck(maxSourcePosition, maxSection, maxObjectIndex, maxSpeakerGroupsIndex))
+					return sanityCheckReturnCode+20;
+			}
+			for (auto g : groups)
+			{
+				if (g.where < 0 || g.where >= maxSourcePosition) return 115;
+				for (int oi : g.objects)
+					if (oi < 0 || oi >= maxObjectIndex)	return 116;
+			}
+			return 0;
+		}
+
 	};
 	const wchar_t *toText(cSpeakerGroup &sg,wstring &tmpstr)
 	{
@@ -2044,7 +1984,6 @@ public:
 	int sourceType;
 	bool sourceInPast;
 	int sourceConfidence; // dbPedia/wikipedia sources have higher confidence
-	unordered_map <wstring,Source *> sourcesMap;
 	vector <cSpeakerGroup> speakerGroups;
 	vector <int> povInSpeakerGroups; // keeps track of point-of-view objects throughout text to be dropped into speakerGroups
 	vector <int> metaNameOthersInSpeakerGroups; // keeps track of objects named as a third person throughout text to be dropped into speakerGroups
@@ -2194,6 +2133,14 @@ public:
 	void printResolutionCheck(vector <int> &badSpeakers);
 	bool isSpeaker(int where,int esg,int tempCSG);
 	void evaluateSpaceRelation(int where,int endSpeakerGroup,int &spri);
+	bool appendPrepositionalPhrase(int where, vector <wstring> &prepPhraseStrings, int relPrep, bool nonMixed, bool lowerCase, wchar_t *separator, int atNumPP);
+	int appendPrepositionalPhrases(int where, wstring &wsoStr, vector <wstring> &prepPhraseStrings, int &numWords, bool nonMixed, wchar_t *separator, int atNumPP);
+	int getObjectStrings(int where, int object, vector <wstring> &wsoStrs, bool &alreadyDidPlainCopy);
+	int appendVerb(vector <wstring> &objects, int where);
+	int appendWord(vector <wstring> &objects, int where);
+	int appendObject(__int64 questionType, int whereQuestionType, vector <wstring> &objects, int where);
+	tIWMM getTense(tIWMM verb, tIWMM subject, int tenseDesired);
+	wstring getTense(int where, wstring candidate, int preferredVerb);
 	void analyzeWordSenses(void);
 	void printVerbFrequency();
 	// speaker resolution
@@ -2396,18 +2343,12 @@ int wherePrepObject,
 	bool questionAgreement(int where,int whereFirstSubjectInParagraph,int questionSpeakerLastParagraph,vector <cOM> &objectMatches,bool &subjectDefinitelyResolved,bool audience,wchar_t *fromWhere);
 	void setSecondaryQuestion(vector <WordMatch>::iterator im);
 	void setQuestion(vector <WordMatch>::iterator im,bool inQuote,int &questionSpeakerLastSentence,int &questionSpeaker,bool &currentIsQuestion);
-	void correctBySpeakerInversionIfQuestion(int where,
-
-
-					int whereFirstSubjectInParagraph);
+	void correctBySpeakerInversionIfQuestion(int where,int whereFirstSubjectInParagraph);
+	bool matchChildSourcePositionSynonym(tIWMM parentWord, Source *childSource, int childWhere);
+	int determineKindBitField(Source *source, int where, int &wikiBitField);
+	int determineKindBitFieldFromObject(Source *source, int object, int &wikiBitField);
 	bool testQuestionType(int where,int &whereQuestionType,int &whereQuestionTypeFlags,int setType,set <int> &whereQuestionInformationSourceObjects);
 	void processQuestion(int whereVerb,int whereReferencingObject,__int64 &questionType,int &whereQuestionType,set <int> &whereQuestionInformationSourceObjects);
-	enum qtf { 
-		unknownQTFlag = 1, whichQTFlag = 2, whereQTFlag = 3, whatQTFlag = 4, whoseQTFlag = 5, howQTFlag = 6, whenQTFlag = 7, whomQTFlag = 8, whyQTFlag = 9, wikiBusinessQTFlag=10, wikiWorkQTFlag=11, typeQTMask = (1 << 4) - 1,
-		referencingObjectQTFlag=1<<4,subjectQTFlag=2<<4,objectQTFlag=3<<4,secondaryObjectQTFlag=4<<4,prepObjectQTFlag=5<<4,
-		QTAFlag=1<<8
-	};
-
 
 	void resolveQuotedPOVObjects(int lastOpeningPrimaryQuote,int lastClosingPrimaryQuote);
 	void setEmbeddedStorySpeaker(int where,int &lastDefiniteSpeaker);
@@ -2478,38 +2419,6 @@ int wherePrepObject,
 	void printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &tagSet,int position,int PEMAPosition);
 	void printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &tagSet,int position,int PEMAPosition,vector <wstring> &words);
 
-	class cAS
-	{
-	public:
-		wstring sourceType;
-		wstring rejectAnswer;
-		int confidence;
-		int matchSum;
-		wstring matchInfo;
-		Source *source;
-		cSpaceRelation* sri;
-		int equivalenceClass;
-		int ws,wo,wp; // used to differentiate compound nouns
-		int identityWith;
-		bool finalAnswer;
-		bool identicalWithAnswerFromAnotherSource;
-		cAS(wstring _sourceType,Source *_source,int _confidence,int _matchSum,wstring _matchInfo,cSpaceRelation* _sri,int _equivalenceClass,int _ws,int _wo,int _wp) 
-		{
-			sourceType=_sourceType;
-			source=_source;
-			confidence=_confidence;
-			matchSum=_matchSum;
-			matchInfo=_matchInfo;
-			sri=_sri;
-			equivalenceClass=_equivalenceClass;
-			ws=_ws;
-			wo=_wo;
-			wp=_wp;
-			identityWith=-1;
-			finalAnswer=false;
-		}
-	};
-
 	// wikipedia
 	Source(MYSQL *parentMysql,int _sourceType,int _sourceConfidence);
 	void reduceLocalFreebase(wchar_t *path,wchar_t *filename);
@@ -2522,7 +2431,7 @@ int wherePrepObject,
 	class extendedMapType
 	{
 	public:
-		unordered_map <wstring,int> wordAssociationMap;
+		unordered_map <wstring,int> RDFTypeSimplificationToWordAssociationWithObjectMap;
 		vector <cTreeCat *> rdfTypes;
 		unordered_map <wstring ,int > topHierarchyClassIndexes;
 	};
@@ -2531,502 +2440,37 @@ int wherePrepObject,
 	int readExtendedRDFTypes(wchar_t path[4096],vector <cTreeCat *> &rdfTypes,unordered_map <wstring ,int > &topHierarchyClassIndexes);
 	int writeExtendedRDFTypes(wchar_t path[4096],vector <cTreeCat *> &rdfTypes,unordered_map <wstring ,int > &topHierarchyClassIndexes);
 	bool categoryMultiWord(wstring &childWord, wstring &lastWord);
-	void getWordAssociationMap(wstring object, vector <cTreeCat *> &rdfTypes, unordered_map<wstring, int> &wordAssociationMap);
+	void getRDFTypeSimplificationToWordAssociationWithObjectMap(wstring object, vector <cTreeCat *> &rdfTypes, unordered_map<wstring, int> &wordAssociationMap);
 	int getAssociationMapMaster(int where, int numWords, unordered_map <wstring, int > &associationMap, wstring fromWhere);
 	bool noRDFTypes();
 	int getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat *> &rdfTypes, unordered_map <wstring, int > &topHierarchyClassIndexes, wstring fromWhere, int extendNumPP = -1, bool fileCaching = true, bool ignoreMatches=false);
 	void testWikipedia();
 	int getRDFWhereString(int where, wstring &oStr, wchar_t *separator, int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool ignoreMatches=false);
+	bool analyzeRDFTitle(unsigned int where, int &numWords, int &numPrepositions, wstring tableName);
 	int getRDFTypes(int where, vector <cTreeCat *> &rdfTypes, wstring fromWhere, int extendNumPP = -1, bool ignoreMatches=false, bool fileCaching=true);
 	int identifyISARelation(int principalWhere,bool initialTenseOnly);
 	bool checkForUppercaseSources(int questionInformationSourceObject);
 	bool skipSentenceForUpperCase(unsigned int &sentenceEnd);
-	void accumulateSemanticMaps(cSpaceRelation* parentSRI,Source *childSource,bool confidence);
-	void accumulateSemanticEntry(unsigned int where,set <cObject::cLocation> &principalObjectLocations,set <cObject::cLocation>::iterator &polIndex,bool confidence,cSpaceRelation* parentSRI,cSemanticMap *semanticMap,unordered_set <wstring> & whereQuestionInformationSourceObjectsStrings);
 	bool mixedCaseObject(int begin,int len);
 	bool capitalizationCheck(int begin, int len);
 	bool rejectISARelation(int principalWhere);
-	bool rejectPath(const wchar_t *path);
-	int processPath(const wchar_t *path,Source *&source,Source::sourceTypeEnum st,int sourceConfidence,bool parseOnly);
-	int identifyISARelationTextAnalysis(int principalWhere,bool parseOnly);
-	int determineKindBitFieldFromObject(Source *source,int object,int &wikiBitField);
-	int determineKindBitField(Source *source,int where,int &wikiBitField);
-	void checkParticularPartSemanticMatchWord(int logType,int parentWhere,bool &synonym,set <wstring> &parentSynonyms,wstring pw,wstring pwme,int &lowestConfidence,unordered_map <wstring ,int >::iterator ami);
-	class SemanticMatchInfo
-	{
-	public:
-		bool synonym;
-		int semanticMismatch;
-		int confidence;
-		SemanticMatchInfo(bool synonym,int semanticMismatch,int confidence)
-		{
-			this->synonym=synonym;
-			this->semanticMismatch=semanticMismatch;
-			this->confidence=confidence;
-		};
-		SemanticMatchInfo()
-		{
-			this->synonym=false;
-			this->semanticMismatch=0;
-			this->confidence=CONFIDENCE_NOMATCH;
-		};
-	};
-	unordered_map<wstring,SemanticMatchInfo> questionGroupMap;
-	int checkParentGroup(int parentWhere,Source *childSource,int childWhere,int childObject,bool &synonym,int &semanticMismatch);
-	int checkParticularPartSemanticMatch(int logType,int parentWhere,Source *childSource,int childWhere,int childObject,bool &synonym,int &semanticMismatch);
-	int checkParticularPartQuestionTypeCheck(__int64 questionType,int childWhere,int childObject,int &semanticMismatch);
+	bool isDefiniteObject(int where, wchar_t *definiteObjectType, int &ownerWhere, bool recursed);
+	int identifyISARelationTextAnalysis(cQuestionAnswering &qa, int principalWhere,bool parseOnly);
+	int checkParticularPartSemanticMatch(int logType, int parentWhere, Source *childSource, int childWhere, int childObject, bool &synonym, int &semanticMismatch);
+	void checkParticularPartSemanticMatchWord(int logType, int parentWhere, bool &synonym, set <wstring> &parentSynonyms, wstring pw, wstring pwme, int &lowestConfidence, unordered_map <wstring, int >::iterator ami);
+	int checkParticularPartQuestionTypeCheck(__int64 questionType, int childWhere, int childObject, int &semanticMismatch);
 	bool isObjectCapitalized(int where);
 	bool ppExtensionAvailable(int where,int &numPPAvailable,bool nonMixed);
 	void copySource(Source *childSource,int begin,int end);
-	void copySource(cSpaceRelation *originalQuestionSRI,cPattern *originalQuestionPattern,cPattern *constantQuestionPattern, unordered_map <int,int> &sourceMap, unordered_map <wstring, wstring> &parseVariables);
 	vector <cSpaceRelation>::iterator copySRI(Source *childSource,vector <cSpaceRelation>::iterator sri);
 	int copyDirectlyAttachedPrepositionalPhrase(Source *childSource,int relPrep);
 	int copyDirectlyAttachedPrepositionalPhrases(int whereParentObject,Source *childSource,int whereChild);
 	void adjustOffsets(int childWhere,bool keepObjects=false);
 	int copyChildIntoParent(Source *childSource,int whereChild);
-	class cAnswerConfidence
-	{
-	public:
-		int anySemanticMismatch;
-		bool subQueryNoMatch;
-		int confidence;
-	};
-	unordered_map <wstring, cAnswerConfidence> childCandidateAnswerMap;
-	int	parseSubQueriesParallel(Source *childSource, vector <cSpaceRelation> &subQueries, int whereChildCandidateAnswer);
-	int	matchSubQueries(wstring derivation, Source *childSource, int &semanticMismatch, bool &subQueryNoMatch, vector <cSpaceRelation> &subQueries, int whereChildCandidateAnswer, int whereChildCandidateAnswerEnd, int numConsideredParentAnswer, int semMatchValue, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion,bool useParallelQuery);
-	int questionTypeCheck(wstring derivation, cSpaceRelation* parentSRI, cAS &childCAS, int &semanticMismatch, bool &unableToDoquestionTypeCheck,bool &subQueryNoMatch, vector <cSpaceRelation> &subQueries, int numConsideredParentAnswer, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion,bool useParallelQuery);
-	void verbTenseMatch(cSpaceRelation* parentSRI, cAS &childCAS, bool &tenseMismatch);
-	int semanticMatch(wstring derivation,cSpaceRelation* parentSRI,cAS &childCAS,int &semanticMismatch,bool &subQueryNoMatch,vector <cSpaceRelation> &subQueries,int numConsideredParentAnswer,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion,bool useParallelQuery);
-	int semanticMatchSingle(wstring derivation,cSpaceRelation* parentSRI,Source *childSource,int whereChild,int childObject,int &semanticMismatch,bool &subQueryNoMatch,
-	                        vector <cSpaceRelation> &subQueries,int numConsideredParentAnswer,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion,bool useParallelQuery);
-	bool checkIdentical(cSpaceRelation* sri,cAS &cas1,cAS &cas2);
-	bool checkObjectIdentical(Source *source1,Source *source2,int object1,int object2);
-	bool checkParticularPartIdentical(Source *source1,Source *source2,int where1,int where2);
-	int getWhereQuestionTypeObject(cSpaceRelation* sri);
-	bool processPathToPattern(const wchar_t *path,Source *&source);
-	Source *transformSource;
-	void initializeTransformations(unordered_map <wstring, wstring> &parseVariables);
-	bool detectTransitoryAnswer(cSpaceRelation* sri,cSpaceRelation * &ssri,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion);
-	void detectByClausePassive(vector <cSpaceRelation>::iterator sri,cSpaceRelation * &substitute);
 	int detectAttachedPhrase(vector <cSpaceRelation>::iterator sri,int &relVerb);
-	void detectSubQueries(vector <cSpaceRelation>::iterator sri,vector <cSpaceRelation> &subQueries);
 	bool hasProperty(int where,int whereQuestionTypeObject, unordered_map <int,vector < vector <int> > > &wikiTableMap,vector <wstring> &propertyValues);
-	void setWhereChildCandidateAnswer(cAS &childCAS, cSpaceRelation* parentSRI);
-	void matchAnswersToQuestionType(cSpaceRelation*  sri, vector < cAS > &answerSRIs, int maxAnswer, vector <cSpaceRelation> &subQueries,
-		vector <int> &uniqueAnswers,vector <int> &uniqueAnswersPopularity,vector <int> &uniqueAnswersConfidence,
-		int &highestPopularity,int &lowestConfidence,int &lowestSourceConfidence,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion,bool useParallelQuery);
-	bool isModifiedGeneric(cAS &sri);
-	int printAnswers(cSpaceRelation*  sri, vector < cAS > &answerSRIs, vector <int> &uniqueAnswers, vector <int> &uniqueAnswersPopularity, vector <int> &uniqueAnswersConfidence,
-		               int highestPopularity,int lowestConfidence,int lowestSourceConfidence);
-	class Column
-	{
-	public:
-		class CA
-		{
-		public:
-			wstring word;
-			int frequency;
-			bool queryObjectMatch;
-			bool titleObjectMatch;
-			CA(wstring w, int f, bool qom = false, bool tom = false)
-			{
-				word = w;
-				frequency = f;
-				queryObjectMatch = qom;
-				titleObjectMatch = tom;
-			}
-		};
-		struct associationTypeMapCompare
-		{
-			bool operator()(CA lhs, CA rhs) const
-			{
-				if (lhs.frequency == rhs.frequency)
-					return lhs.word > rhs.word;
-				return lhs.frequency>rhs.frequency;
-			}
-		};
-		class Entry
-		{
-		public:
-			Entry(int b, int o, int n)
-			{
-				begin = b;
-				adaptiveWhere = o;
-				numWords = n;
-				titleFound = 0;
-				preferred = false;
-				wordMatchesTitle = false;
-			};
-			int begin;
-			int adaptiveWhere; // if an object, this is where the object is declared (not necessarily its beginning), if not an object then adaptiveWhere=begin
-			int numWords;
-			int titleFound;
-			bool wordMatchesTitle;
-			bool preferred;
-			int queryAssociationsMatched;
-			int titleAssociationsMatched;
-		};
-
-		vector <vector <Entry> > rows; // there are multiple entries for each row
-		int invalidEntries;
-		int emptyEntries;
-		class AssociationType
-		{
-		public:
-			int frequency;
-			bool queryObjectMatch;
-			bool titleObjectMatch;
-		};
-		unordered_map < wstring, AssociationType > commonAssociationTypeMap;
-		set < CA, associationTypeMapCompare > mostCommonAssociationTypeSet;
-		int numDefinite;
-		int numNumerical;
-		int numPunctuation;
-		int numMaxEntries;
-		int gMaxFrequency;
-		int mostCommonRatio;
-		bool matchedHeader;
-		int queryAssociationsMatched;
-		int titleAssociationsMatched;
-		int preferredRowsFound;
-		int rowsWithAnyIdentificationFound;
-		int numCommonObjectAssociations;
-		int coherencyPercentage;
-		bool invalidColumn;
-		Column()
-		{
-			numDefinite = 0;
-			numNumerical = 0;
-			numPunctuation = 0;
-			gMaxFrequency = 1;
-			mostCommonRatio = 0;
-			numCommonObjectAssociations = 0;
-			invalidEntries = 0;
-			emptyEntries = 0;
-			matchedHeader = false;
-			queryAssociationsMatched = 0;
-			titleAssociationsMatched = 0;
-			preferredRowsFound = 0;
-			rowsWithAnyIdentificationFound = 0;
-		}
-		void removeDomain(wchar_t * domainAssociations[])
-		{
-			for (int ma = 0; domainAssociations[ma][0]; ma++)
-			{
-				unordered_map < wstring, AssociationType >::iterator catmi = commonAssociationTypeMap.find(domainAssociations[ma]);
-				if (catmi != commonAssociationTypeMap.end())
-					catmi->second.frequency = 0;
-			}
-		}
-		bool determineColumnCoherency(Source *wikipediaSource, int title, set <wstring> &titleSynonyms, bool keepMusicDomain, bool keepFilmDomain)
-		{
-			int sumMaxEntries = 0;
-			for (int row = 0; row < rows.size(); row++)
-				sumMaxEntries += rows[row].size();
-			if (sumMaxEntries / rows.size() > 3) // if there are more than 3 entries, the number of possible combinations is too large to make sure it is actually a valid list.
-			{
-				lplog(LOG_WHERE, L"table coherency averageEntrySize=%d", sumMaxEntries / rows.size());
-				//return false; // TMP DEBUG
-			}
-			// accumulate all the types of all the entries in the column together into commonAssociationTypeMap
-			vector <int> noPreferences;
-			accumulateColumnAssociationTypes(wikipediaSource, titleSynonyms, keepMusicDomain, keepFilmDomain, false);
-			getMostCommonAssociationTypes(L"BEFORE");
-			// prefer the entry in each row of each column that matches with the most common types OR title
-			if (!testTitlePreference(wikipediaSource, titleSynonyms))
-				setRowPreference(wikipediaSource);
-			zeroColumnAssociationTypes();
-			// accumulate all the types of ONLY the preferred entries in the table together
-			accumulateColumnAssociationTypes(wikipediaSource, titleSynonyms, keepMusicDomain, keepFilmDomain, true);
-			if (calculateColumnCoherence(wikipediaSource,title) < 90)
-				return true; // TMP DEBUG
-			// accumulate all the types of all the entries in the column together
-			//getMostCommonAssociationTypes(queryWordAssociationMap, titleWordAssociationMap, L"AFTER");
-			return true;
-		}
-		void accumulateColumnAssociationTypes(Source *wikipediaSource,set <wstring> &titleSynonyms, bool keepMusicDomain, bool keepFilmDomain, bool onlyPreferred)
-		{
-			wchar_t *musicAssociations[] = { L"single", L"recording", L"music", L"release", L"album", L"" };
-			wchar_t *filmAssociations[] = { L"film", L"" };
-			for (int row = 0; row < rows.size(); row++)
-			{
-				for (int entry = 0; entry < rows[row].size(); entry++)
-					if (!onlyPreferred || rows[row][entry].preferred)
-						accumulateColumnAssociationTypes(wikipediaSource, row, entry, titleSynonyms);
-			}
-			if (!keepMusicDomain)
-				removeDomain(musicAssociations);
-			if (!keepFilmDomain)
-				removeDomain(filmAssociations);
-		}
-		void accumulateColumnAssociationTypes(Source *wikipediaSource, int row, int entry, set <wstring> &titleSynonyms)
-		{
-			rows[row][entry].queryAssociationsMatched = 0;
-			rows[row][entry].titleAssociationsMatched = 0;
-			unordered_map <wstring, int > wordAssociationMap;
-			wikipediaSource->getAssociationMapMaster(rows[row][entry].adaptiveWhere, rows[row][entry].numWords, wordAssociationMap, TEXT(__FUNCTION__));
-			for (unordered_map <wstring, int >::iterator ri = wordAssociationMap.begin(), riEnd = wordAssociationMap.end(); ri != riEnd; ri++)
-			{
-				if (ri->second == 1)
-				{
-					unordered_map < wstring, AssociationType >::iterator cmi = commonAssociationTypeMap.find(ri->first);
-					if (cmi == commonAssociationTypeMap.end())
-					{
-						commonAssociationTypeMap[ri->first].frequency = 1;
-						set <wstring >::iterator wami;
-						if (commonAssociationTypeMap[ri->first].titleObjectMatch = (wami = titleSynonyms.find(ri->first)) != titleSynonyms.end())
-							rows[row][entry].titleAssociationsMatched++;
-					}
-					else
-						cmi->second.frequency++;
-				}
-			}
-		}
-		int getAccumulatedAssociationValue(Source *wikipediaSource, int row, int entry, int &maxFrequency, wstring &maxAssociation)
-		{
-			unordered_map <wstring, int > wordAssociationMapForEntry;
-			wikipediaSource->getAssociationMapMaster(rows[row][entry].adaptiveWhere, rows[row][entry].numWords, wordAssociationMapForEntry, TEXT(__FUNCTION__));
-			int accumulatedAssociationValue = 0;
-			maxFrequency = 0;
-			for (unordered_map <wstring, int >::iterator ri = wordAssociationMapForEntry.begin(), riEnd = wordAssociationMapForEntry.end(); ri != riEnd; ri++)
-			{
-				if (ri->second == 1)
-				{
-					unordered_map < wstring, AssociationType >::iterator cmi = commonAssociationTypeMap.find(ri->first);
-					if (cmi == commonAssociationTypeMap.end())
-						lplog(LOG_FATAL_ERROR, L"association for word %s not found in common column map!", ri->first.c_str());
-					accumulatedAssociationValue += cmi->second.frequency;
-					if (maxFrequency < cmi->second.frequency)
-					{
-						maxFrequency = cmi->second.frequency;
-						maxAssociation = cmi->first;
-					}
-				}
-			}
-			return accumulatedAssociationValue;
-		}
-		void zeroColumnAssociationTypes()
-		{
-			commonAssociationTypeMap.clear();
-		}
-		bool testTitlePreference(Source *wikipediaSource, set <wstring> &titleSynonyms)
-		{
-			if (titleSynonyms.empty())
-				return false;
-			// if title exists, and is positively associated with 75% or more of the selected words in each row, make those the preferredEntries.
-			for (int row = 0; row < rows.size(); row++)
-			{
-				int preferredEntriesFound = 0;
-				int identificationFound = 0;
-				int maxTitleFound = 0;
-				int wordMatchesTitleFound = 0;
-				for (int entry = 0; entry < rows[row].size(); entry++)
-				{
-					unordered_map <wstring, int > wordAssociationMapForEntry;
-					wikipediaSource->getAssociationMapMaster(rows[row][entry].adaptiveWhere, rows[row][entry].numWords, wordAssociationMapForEntry, TEXT(__FUNCTION__));
-					if (wordAssociationMapForEntry.size()>0)
-						identificationFound++;
-					wstring tmpstr2;
-					int titleFound = 0;
-					for (unordered_map <wstring, int >::iterator ri = wordAssociationMapForEntry.begin(), riEnd = wordAssociationMapForEntry.end(); ri != riEnd; ri++)
-					{
-						//if (ri->second == 1)
-						{
-							tmpstr2 += L" " + ri->first;
-							set < wstring >::iterator cmi = titleSynonyms.find(ri->first);
-							if (cmi != titleSynonyms.end())
-								titleFound++;
-						}
-					}
-					rows[row][entry].titleFound = titleFound;
-					if (titleFound > maxTitleFound)
-						maxTitleFound = titleFound;
-					int lastWord = wikipediaSource->m[rows[row][entry].adaptiveWhere].endObjectPosition - 1;
-					if (rows[row][entry].wordMatchesTitle = (titleSynonyms.find(wikipediaSource->m[lastWord].getMainEntry()->first) != titleSynonyms.end()))
-						wordMatchesTitleFound++;
-					lplog(LOG_WHERE, L"table coherency [%d] row=%d[%d] lastWord=%d[%s] wordMatchesTitle=%s", 
-						rows[row][entry].adaptiveWhere, row, entry, lastWord, wikipediaSource->m[lastWord].word->first.c_str(), (rows[row][entry].wordMatchesTitle) ? L"true":L"false");
-				}
-				for (int entry = 0; entry < rows[row].size(); entry++)
-				{
-					if (rows[row][entry].preferred=(maxTitleFound>0 && rows[row][entry].titleFound >= maxTitleFound) || rows[row][entry].wordMatchesTitle)
-						preferredEntriesFound++;
-				}
-				if (preferredEntriesFound > 0)
-					preferredRowsFound++;
-				if (identificationFound > 0)
-					rowsWithAnyIdentificationFound++;
-				for (int entry = 0; entry < rows[row].size(); entry++)
-				{
-					if (preferredEntriesFound > 1 && wordMatchesTitleFound>0)
-						rows[row][entry].preferred = rows[row][entry].wordMatchesTitle;
-					unordered_map <wstring, int > wordAssociationMapForEntry;
-					wikipediaSource->getAssociationMapMaster(rows[row][entry].adaptiveWhere, rows[row][entry].numWords, wordAssociationMapForEntry, TEXT(__FUNCTION__));
-					wstring tmpstr2,tmpstr4;
-					for (unordered_map <wstring, int >::iterator ri = wordAssociationMapForEntry.begin(), riEnd = wordAssociationMapForEntry.end(); ri != riEnd; ri++)
-					{
-						if (ri->second == 1)
-						{
-							tmpstr2 += L" '" + ri->first + L"'";
-						}
-						tmpstr4 += L" '" + ri->first + L"'";
-					}
-					if (tmpstr2.empty())
-						tmpstr2 = tmpstr4;
-					wstring tmpstr3;
-					wikipediaSource->phraseString(rows[row][entry].begin, rows[row][entry].begin + rows[row][entry].numWords, tmpstr3, false);
-					lplog(LOG_WHERE, L"table coherency %s[%d] %s row=%d[%d] associatedWords=%s", tmpstr3.c_str(), rows[row][entry].adaptiveWhere, (rows[row][entry].preferred) ? L"PREFERRED" : L"", row, entry, tmpstr2.c_str());
-				}
-			}
-			lplog(LOG_WHERE, L"title preference: %d entries preferred in %d[%d] rows.", preferredRowsFound, rowsWithAnyIdentificationFound,rows.size());
-			return preferredRowsFound > rowsWithAnyIdentificationFound * 3 / 4;
-		}
-		void setRowPreference(Source *wikipediaSource)
-		{
-			for (int row = 0; row < rows.size(); row++)
-			{
-				int preferredEntry = -1;
-				int maxOfMaxFrequency = -1;
-				int maxAccumulatedAssociationValue = -1;
-				wstring maxOfMaxAssociation;
-				for (int entry = 0; entry < rows[row].size(); entry++)
-				{
-					wstring maxAssociation;
-					int accumulatedAssociationValue, maxFrequency;
-					accumulatedAssociationValue = getAccumulatedAssociationValue(wikipediaSource, row, entry, maxFrequency, maxAssociation);
-					if (maxFrequency>maxOfMaxFrequency || (maxFrequency == maxOfMaxFrequency && accumulatedAssociationValue > maxAccumulatedAssociationValue))
-					{
-						maxAccumulatedAssociationValue = accumulatedAssociationValue;
-						preferredEntry = entry;
-						maxOfMaxFrequency = maxFrequency;
-						maxOfMaxAssociation = maxAssociation;
-					}
-				}
-				if (preferredEntry >= 0)
-				{
-					rows[row][preferredEntry].preferred = true;
-					wstring tmpstr;
-					wikipediaSource->phraseString(rows[row][preferredEntry].begin, rows[row][preferredEntry].begin + rows[row][preferredEntry].numWords, tmpstr, false);
-					lplog(LOG_WHERE, L"table coherency setRowPreference %s row=%d preferredEntry=%d maxOfMaxFrequency=%d[%s] maxAssociationValue=%d", tmpstr.c_str(),
-								row, preferredEntry, maxOfMaxFrequency, maxOfMaxAssociation.c_str(), maxAccumulatedAssociationValue);
-				}
-			}
-		}
-		// each preferred entry has two values:
-		//   the average of the associationValue
-		//   the number of values/the size of the 
-		int calculateColumnCoherence(Source *wikipediaSource,int title)
-		{
-			int sumAssociationValue = 0, sumMaxFrequencies = 0;
-			for (int row = 0; row < rows.size(); row++)
-			{
-				for (int entry = 0; entry < rows[row].size(); entry++)
-				{
-					if (rows[row][entry].preferred)
-					{
-						wstring maxAssociation;
-						int maxFrequency=0, associationValue;
-						associationValue = getAccumulatedAssociationValue(wikipediaSource, row, entry, maxFrequency, maxAssociation);
-						if (!maxFrequency && title>=0)
-						{
-							maxFrequency = rows.size();
-							maxAssociation = wikipediaSource->m[title].getMainEntry()->first;
-						}
-						wstring tmpstr;
-						wikipediaSource->phraseString(rows[row][entry].begin, rows[row][entry].begin + rows[row][entry].numWords, tmpstr, false);
-						lplog(LOG_WHERE, L"table coherency %s row=%d entry=%d associationValue=%d maxFrequency=%d[%s]", tmpstr.c_str(),
-							row, entry, associationValue, maxFrequency, maxAssociation.c_str());
-						sumAssociationValue += associationValue;
-						sumMaxFrequencies += maxFrequency;
-					}
-				}
-			}
-			if (rows.size())
-			{
-				if (rowsWithAnyIdentificationFound < rows.size() && rowsWithAnyIdentificationFound>0)
-					coherencyPercentage = 100 * sumMaxFrequencies / (rowsWithAnyIdentificationFound*rowsWithAnyIdentificationFound);
-				else
-					coherencyPercentage = 100 * sumMaxFrequencies / (rows.size()*rows.size());
-				lplog(LOG_WHERE, L"table coherency coherence=%d%% [%d/%d]", coherencyPercentage, rowsWithAnyIdentificationFound, rows.size());
-			}
-			return coherencyPercentage;
-		}
-		void getMostCommonAssociationTypes(wchar_t *when)
-		{
-			mostCommonAssociationTypeSet.clear();
-			numCommonObjectAssociations = 0;
-			for (unordered_map < wstring, AssociationType >::iterator cmi = commonAssociationTypeMap.begin(), cmiEnd = commonAssociationTypeMap.end(); cmi != cmiEnd; cmi++)
-			{
-				if (cmi->second.frequency>rows.size() - 1)
-				{
-					lplog(LOG_WHERE, L"Processing table [table coherency] %s numRows= %d cmi->first=%s cmi->second=%d",
-						when, rows.size(), cmi->first.c_str(), cmi->second);
-					numCommonObjectAssociations++;
-					mostCommonAssociationTypeSet.insert(CA(cmi->first, cmi->second.frequency, cmi->second.queryObjectMatch, cmi->second.titleObjectMatch));
-					queryAssociationsMatched++;
-					if (cmi->second.titleObjectMatch)
-						titleAssociationsMatched++;
-				}
-				else if (cmi->second.titleObjectMatch && cmi->second.frequency > rows.size() / 2)
-				{
-					mostCommonAssociationTypeSet.insert(CA(cmi->first, cmi->second.frequency, false, cmi->second.titleObjectMatch));
-					titleAssociationsMatched++;
-				}
-			}
-			lplog(LOG_WHERE, L"Processing table [table coherency] %s numRows= %d numCommonObjectAssociations=%d queryAssociationsMatched=%d titleAssociationsMatched=%d",
-				when, rows.size(), numCommonObjectAssociations, queryAssociationsMatched, titleAssociationsMatched);
-			if (mostCommonAssociationTypeSet.size() > 0 && rows.size()>0)
-				mostCommonRatio = ((mostCommonAssociationTypeSet.begin()))->frequency * 100 / rows.size();
-			logColumn(LOG_WHERE,when);
-		}
-		void logColumn(int logType,wchar_t *when)
-		{
-			if (rows.size()>2 || (rows.size()>1 && matchedHeader))
-				lplog(logType, L"Processing table [table coherency] %s numRows=%d numDefinite=%d maxFrequency=%d mostCommonRatio=%d%% matchedHeader=%s "
-											L"table coherency [%d out of %d:%d%%] "
-											L"table query associations matched=[%d out of %d:%d%%] "
-											L"table title associations matched=[%d out of %d:%d%%]",
-							when, (int)rows.size(), numDefinite, gMaxFrequency, mostCommonRatio, (matchedHeader) ? L"true" : L"false",
-							numCommonObjectAssociations, (int)commonAssociationTypeMap.size(), (int)(numCommonObjectAssociations * 100 / ((commonAssociationTypeMap.size()) ? commonAssociationTypeMap.size() : 1)), 
-							queryAssociationsMatched, numCommonObjectAssociations, queryAssociationsMatched * 100 / ((numCommonObjectAssociations) ? numCommonObjectAssociations : 1),
-							titleAssociationsMatched, numCommonObjectAssociations, titleAssociationsMatched * 100 / ((numCommonObjectAssociations) ? numCommonObjectAssociations : 1));
-			for (set < CA >::iterator si = mostCommonAssociationTypeSet.begin(), siEnd = mostCommonAssociationTypeSet.end(); si != siEnd; si++)
-			{
-				lplog(logType, L"Processing table [table coherency] %d:%s [queryMatch=%s,titleMatch=%s]", si->frequency, si->word.c_str(), (si->queryObjectMatch) ? L"true" : L"false", (si->titleObjectMatch) ? L"true" : L"false");
-			}
-		}
-	};
-	class SourceTable
-	{
-	public:
-		vector <Column> columns;
-		int title;
-		int columnHeaderMatchTitle;
-		vector <int> headers;
-	};
-
-	class WikipediaTableCandidateAnswers
-	{
-		public:
-			vector < SourceTable > wikiQuestionTypeObjectAnswers;
-			Source *wikipediaSource;
-			WikipediaTableCandidateAnswers(Source *wikipediaSource, vector < SourceTable > wikiQuestionTypeObjectAnswers)
-			{
-				this->wikipediaSource=wikipediaSource;
-				this->wikiQuestionTypeObjectAnswers=wikiQuestionTypeObjectAnswers;
-			}
-		};
-	int searchWebSearchQueries(wchar_t derivation[1024],cSpaceRelation* ssri, unordered_map <int,WikipediaTableCandidateAnswers * > &wikiTableMap,
-	                               vector <cSpaceRelation> &subQueries,vector < cAS > &answerSRIs,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion,
-																 vector <wstring> &webSearchQueryStrings,bool parseOnly,bool answerPluralSpecification,int &finalAnswer,int &maxAnswer,bool useParallelQuery);
-	int matchBasicElements(bool parseOnly,bool useParallelQuery);
-	int matchAnswersOfPreviousQuestion(cSpaceRelation *ssri,vector <int> &wherePossibleAnswers);
-	int findConstrainedAnswers(vector < cAS > &answerSRIs,vector <int> &wherePossibleAnswers);
 	bool compareObjectString(int whereObject1,int whereObject2);
 	bool objectContainedIn(int whereObject,set <int> whereObjects);
-	bool matchParticularAnswer(cSpaceRelation *ssri,int whereMatch,int wherePossibleAnswer,set <int> &addWhereQuestionInformationSourceObjects);
-	bool matchAnswerSourceMatch(cSpaceRelation *ssri,int whereMatch,int wherePossibleAnswer,set <int> &addWhereQuestionInformationSourceObjects);
-	static bool matchSourcePositions(Source *parentSource,int parentWhere,Source *childSource,int childWhere,bool &namedNoMatch,bool &synonym,bool parentInQuestionObject,int &semanticMismatch,sTrace debugTrace);
 
 	void setForms(void);
 	intArray sentenceStarts;
@@ -3146,7 +2590,6 @@ int wherePrepObject,
 	MYSQL mysql;
 	bool alreadyConnected;
 	int sourceId;
-	int getNumSources(bool left);
 	int createDatabase(wchar_t *server);
 	int insertWordRelationTypes(void);
 	bool signalBeginProcessingSource(int sourceId);
@@ -3154,22 +2597,17 @@ int wherePrepObject,
 	bool updateSourceEncoding(int readBufferType, wstring sourceEncoding, wstring etext);
 	bool updateSourceStart(wstring &start, int repeatStart, wstring &etext, __int64 actualLenInBytes);
 	bool updateSource(wstring &path,wstring &start,int repeatStart,wstring &etext,int actualLenInBytes);
-	bool getNextUnprocessedSource(int begin, int end, bool setUsed, int &id, wstring &path, wstring &encoding, wstring &start, int &repeatStart, wstring &etext, wstring &author, wstring &title);
-	bool anymoreUnprocessedForUnknown(int step);
-	bool getNextUnprocessedParseRequest(int &prId, wstring &pathInCache);
 	int createThesaurusTables(void);
 	int createGroupTables(void);
 	int writeThesaurusEntry(sDefinition &d);
 	bool resetAllSource(void);
 	bool resetSource(int beginSource,int endSource);
-	bool unlockTables(void);
 	void resetProcessingFlags(void);
 	void updateSourceStatistics(int numSentences, int matchedSentences, int numWords, int numUnknown,
 		int numUnmatched,int numOvermatched, int numQuotations, int quotationExceptions, int numTicks, int averagePatternMatch);
 	void updateSourceStatistics2(int sizeInBytes, int numWordRelations);
 	void updateSourceStatistics3(int numMultiWordRelations);
 	void logPatternChain(int sourcePosition,int insertionPoint,enum patternElementMatchArray::chainType patternChainType);
-	void printCAS(wstring logPrefix,cAS &childCAS);
 	void printSRI(wstring logPrefix,cSpaceRelation* sri,int s,int ws,int wo,int ps,bool overWrote,int matchSum,wstring matchInfo,int logDestination=LOG_WHERE);
 	void printSRI(wstring logPrefix,cSpaceRelation* sri,int s,int ws,int wo,wstring ps,bool overWrote,int matchSum,wstring matchInfo,int logDestination=LOG_WHERE);
 	int checkInsertPrep(set <int> &relPreps,int wp,int wo);
@@ -3212,10 +2650,13 @@ int wherePrepObject,
 	int scanForPatternElementTag(int where, int tag);
 	int printSentence(unsigned int rowsize, unsigned int begin, unsigned int end, bool containsNotMatched);
 	int getSubjectInfo(tTagLocation subjectTagset, int whereSubject, int &nounPosition, int &nameLastPosition, bool &restateSet, bool &singularSet, bool &pluralSet, bool &adjectivalSet, bool &embeddedS1);
+	bool longSubjectBindingMismatch(int wordIndex, int principalWherePosition, int primaryPMAOffset, int whereVerb);
 	bool evaluateSubjectVerbAgreement(int verbPosition, int whereSubject, bool &agreementTestable);
 	int queryPatternDiff(int position, wstring pattern, wstring differentiator);
 	int queryPattern(int position, wstring pattern, int &maxEnd);
 	int queryPattern(int position, wstring pattern);
+	bool matchPattern(cPattern *p, int begin, int end, bool fill);
+	vector <cObject> objects; // each object has only one position within the text
 
 private:
 	wstring primaryQuoteType,secondaryQuoteType;
@@ -3248,7 +2689,6 @@ private:
 	int updatePEMACosts(int PEMAPosition,int pattern,int begin,int end,int position,vector<patternElementMatchArray::tPatternElementMatch *> &ppema);
 	void reduceParent(int position,unsigned int PMAOffset,int diffCost);
 
-	bool matchPattern(cPattern *p,int begin,int end,bool fill);
 	bool matchPatternAgainstSentence(cPattern *p,int s,bool fill);
 	int matchIgnoredPatternsAgainstSentence(unsigned int s,unsigned int &patternsTried,bool fill);
 	int matchPatternsAgainstSentence(unsigned int s,unsigned int &patternsTried);
@@ -3259,7 +2699,6 @@ private:
 	int getMinCost(patternElementMatchArray::tPatternElementMatch *pem, int &minPEMAOffset);
 
 	// speaker resolution   - resolving quotes, speakers and pronouns
-	vector <cObject> objects; // each object has only one position within the text
 	unordered_map <int,int> postProcessLinkedTimeExpressions;
 	vector <cTimelineSegment> timelineSegments;
 	vector <int> singularizedObjects; // objects created during resolve that are singular versions of plural objects
@@ -3546,8 +2985,8 @@ bool &comparableName,
 	int properNounCheck(int &traceSource,int begin,int end,int whereDet);
 	int evaluateNounDeterminer(vector <tTagLocation> &tagSet,bool assessCost,int &traceSource,int begin,int end, int fromPEMAPosition);
 	bool hasTimeObject(int where);
-	int attachAdjectiveRelation(vector <tTagLocation> &tagSet,int whereObject);
-	int attachAdverbRelation(vector <tTagLocation> &tagSet,int verbTagIndex,tIWMM verbWord);
+	//int attachAdjectiveRelation(vector <tTagLocation> &tagSet,int whereObject);  see dynamicallyUpdateWordRelations.cpp
+	//int attachAdverbRelation(vector <tTagLocation> &tagSet,int verbTagIndex,tIWMM verbWord); see dynamicallyUpdateWordRelations.cpp
 	bool resolveObjectTagBeforeObjectResolution(vector <tTagLocation> &tagSet,int tag,tIWMM &word,wstring purpose);
 	tIWMM resolveToClass(int position);
 	tIWMM resolveObjectToClass(int where,int o);
@@ -3594,82 +3033,13 @@ bool inSectionHeader,
 	bool ageDetection(int where,int primary,int secondary);
 	bool evaluateMetaNameEquivalence(int where,vector <tTagLocation> &tagSet,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb);
 
-	int processSnippet(wstring snippet,wstring object,Source *&source,bool parseOnly);
-	int processAbstract(cTreeCat *rdfType,Source *&source,bool parseOnly);	
-	int processWikipedia(int principalWhere,Source *&source,vector <wstring> &wikipediaLinks,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases,bool parseOnly);	
-	bool matchObjectsExact(vector <cObject>::iterator parentObject,vector <cObject>::iterator childObject,bool &namedNoMatch);
-	static bool matchObjects(Source *parentSource,vector <cObject>::iterator parentObject,Source *childSource,vector <cObject>::iterator childObject,bool &namedNoMatch, sTrace debugTrace);
-	bool matchChildSourcePositionSynonym(tIWMM parentWord,Source *childSource,int childWhere);
-	static bool matchChildSourcePosition(Source *parentSource,vector <cObject>::iterator parentObject,Source *childSource,int childWhere,bool &namedNoMatch, sTrace debugTrace);
-	bool isDefiniteObject(int where,wchar_t *definiteObjectType,int &ownerWhere,bool recursed);
-	static bool matchTimeObjects(Source *parentSource,int parentWhere,Source *childSource,int childWhere);
-	tIWMM getTense(tIWMM verb,tIWMM subject,int tenseDesired);
-	wstring getTense(int where,wstring candidate,int preferredVerb);
-	int appendVerb(vector <wstring> &objects,int where);
-	int appendWord(vector <wstring> &objects,int where);
-	bool inObject(int where,int whereQuestionType);
-	bool appendPrepositionalPhrase(int where,vector <wstring> &prepPhraseStrings,int relPrep,bool nonMixed,bool lowerCase,wchar_t *separator,int atNumPP);
-	int appendPrepositionalPhrases(int where,wstring &wsoStr,vector <wstring> &prepPhraseStrings,int &numWords,bool nonMixed,wchar_t *separator,int atNumPP);
-	int getObjectStrings(int where,int object,vector <wstring> &wsoStrs,bool &alreadyDidPlainCopy);
-	int appendObject(__int64 questionType, int whereQuestionType, vector <wstring> &objects, int where);
-	int sriPrepMatch(Source *childSource,int parentWhere,int childWhere,int cost);
-	int sriVerbMatch(Source *childSource,int parentWhere,int childWhere,int cost);
-	int sriMatch(Source *source, int whereParentComponent, int whereChildComponent, int whereQuestionType, __int64 questionType, bool &totalMatch, int cost);
-	int equivalenceClassCheck(Source *childSource,vector <cSpaceRelation>::iterator childSRI,cSpaceRelation* parentSRI,int whereChildSpecificObject,int &equivalenceClass,int matchSum);	
-	int equivalenceClassCheck2(Source *childSource,vector <cSpaceRelation>::iterator childSRI,cSpaceRelation* parentSRI,int whereChildSpecificObject,int &equivalenceClass,int matchSum);
-	void analyzeQuestionFromSpecificSource(wstring childSourceType,Source *childSource, cSpaceRelation * parentSRI,bool parseOnly,vector < cAS > &answerSRIs,int &maxAnswer,int rejectDuplicatesFrom,int ws,int wo);
-	void enterAnswer(wchar_t *derivation,wstring childSourceType,Source *childSource,cSpaceRelation* parentSRI,vector < cAS > &answerSRIs,int &maxAnswer,int rejectDuplicatesFrom,int matchSum,
-	                       wstring matchInfo,vector <cSpaceRelation>::iterator childSRI,int equivalenceClass,int ws,int wo,int wp,int &answersContainedInSource);
-	int metaPatternMatch(Source *childSource,vector <cSpaceRelation>::iterator childSRI,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion);
-	int analyzeQuestionFromSource(wchar_t *derivation,wstring sourceType,Source *source, cSpaceRelation *parentSRI,vector < cAS > &answerSRIs,int &maxAnswer,int rejectDuplicatesFrom,bool eraseIfNoAnswers,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion);
-	int scanColumnEntry(int whereQuestionType,Source *wikipediaSource,int &I,bool &matchFound);
+	bool inObject(int where, int whereQuestionType);
 
-	int	searchTableForAnswer(wchar_t derivation[1024],cSpaceRelation* sri, unordered_map <int,WikipediaTableCandidateAnswers * > &wikiTableMap,vector <cSpaceRelation> &subQueries,vector < cAS > &answerSRIs,int &maxAnswer,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion,bool useParallelQuery);
-	bool analyzeTitle(unsigned int where,int &numWords,int &numPrepositions);
-	bool isEntryInvalid(int tableNum, int beginColumn, vector <int> &wikiColumns);
-	bool getTableFromSource(int I, int tableStart, int whereQuestionTypeObject, SourceTable &wikiTable);
-	void addTable(int &I, int whereQuestionType, Source *wikipediaSource, SourceTable &wikiTable);
-	void addTables(int whereQuestionType, Source *wikipediaSource, vector < SourceTable > &wikiTables);
-	void getPrepositionalPhraseNonMixMatch(int whereQuestionContextSuggestion,int &minPrepositionalPhraseNonMixMatch,int &maxPrepositionalPhraseNonMixMatch);
-	void analyzeQuestion(wchar_t *derivation,int whereQuestionContextSuggestion, cSpaceRelation * parentSRI,cTreeCat *rdfType,bool parseOnly,vector < cAS > &answerSRIs,int &maxAnswer, unordered_map <int,WikipediaTableCandidateAnswers *> &wikiTableMap,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion);
-	void enhanceWebSearchQueries(vector <wstring> &webSearchQueryStrings,wstring semanticSuggestion);
-	void getWebSearchQueries(cSpaceRelation* parentSRI,vector <wstring> &objects);
-
-	class searchSource
-	{
-	public:
-		bool isSnippet; // snippet
-		bool skipFullPath; // skip full path if snippet has good answer
-		bool hasCorrespondingSnippet; // is a full article with a corresponding snippet in dbPedia
-		int fullPathIndex; // location of corresponding fullPath
-		wstring fullWebPath;
-		wstring pathInCache;
-	};
-	int writeParseRequestToDatabase(vector <searchSource>::iterator pri);
-	int spinParses(vector <searchSource> &accumulatedParseRequests);
-	int accumulateParseRequests(cSpaceRelation* parentSRI, int webSitesAskedFor, int index, bool googleSearch, vector <wstring> &webSearchQueryStrings, int &offset, vector <searchSource> &accumulatedParseRequests);
-	int analyzeAccumulatedRequests(wchar_t *derivation, cSpaceRelation *parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, vector <searchSource> &accumulatedParseRequests,
- cPattern *&mapPatternAnswer,
-		cPattern *&mapPatternQuestion);
-	int webSearchForQueryParallel(wchar_t *derivation,cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
- vector <wstring> &webSearchQueryStrings,
-		int &offset, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion);
-	int webSearchForQuerySerial(wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
- vector <wstring> &webSearchQueryStrings,
-		int &offset, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion);
-	int createParseRequestTable(void);
-
-	bool matchOwnershipDbMusicBrainz(wchar_t *derivation, cSpaceRelation* parentSRI);
 	bool pushWhereEntities(wchar_t *derivation,int where,wstring matchEntityType,wstring byWhatType,int whatWhere,bool filterNameDuplicates);
 	bool pushEntities(wchar_t *derivation,int where,wstring matchEntityType,wstring byWhatType,wstring what,bool filterNameDuplicates);
-	bool dbSearchMusicBrainzSearchType(wchar_t *derivation,cSpaceRelation* parentSRI,vector < cAS > &answerSRIs,
-	                                        int firstWhere,wstring firstMatchListType,int secondWhere,wstring secondMatchListType,const wchar_t *matchVerbsList[]);
 	bool matchedList(const wchar_t *matchList[], int where, int objectClass);
+	void createObject(cObject object);
 	cOM createObject(wstring derivation,wstring wordstr,OC objectClass);
-	bool matchOwnershipDbMusicBrainzObject(wchar_t *derivation,int whereObject);
-	bool dbSearchMusicBrainz(wchar_t *derivation, cSpaceRelation* parentSRI,vector < cAS > &answerSRIs);
-	bool matchOwnershipDbQuery(wchar_t *derivation, cSpaceRelation* parentSRI);
-	bool dbSearchForQuery(wchar_t *derivation, cSpaceRelation* parentSRI,vector < cAS > &answerSRIs);
 
 	// MYSQL Database
 	int createLocationTables(void);
@@ -3722,7 +3092,6 @@ bool inSectionHeader,
 	void accumulateNewPattern(unsigned int w,int pc,int wordcount);
 	bool primitiveMatch(vector<int> elements,int w,wstring &patternMatch);
 	void printAccumulatedPatterns(void);
-	map <vector <cSpaceRelation>::iterator,vector <cPattern *> > transformationPatternMap;
 };
 
 extern vector <Source::cSpeakerGroup>::iterator sgNULL;

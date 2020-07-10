@@ -69,7 +69,7 @@ void Source::removeSpeakers(int mI,vector <cOM> &speakers)
   {
 		bool allIn,oneIn;
 		// remove the speaker and any of speakers body
-		if (in(I->object,speakers)!=speakers.end() || (objects[I->object].ownerWhere>=0 && objects[I->object].objectClass==BODY_OBJECT_CLASS && intersect(m[objects[I->object].ownerWhere].objectMatches,speakers,allIn,oneIn)))
+		if (in(I->object,speakers)!=speakers.end() || (objects[I->object].getOwnerWhere()>=0 && objects[I->object].objectClass==BODY_OBJECT_CLASS && intersect(m[objects[I->object].getOwnerWhere()].objectMatches,speakers,allIn,oneIn)))
     {
       if (debugTrace.traceSpeakerResolution)
       {
@@ -89,7 +89,7 @@ void Source::removeSpeakers(int mI,set <int> &speakers)
   {
 		bool allIn,oneIn;
 		// remove the speaker and any of speakers body
-		if (speakers.find(I->object)!=speakers.end() || (objects[I->object].ownerWhere>=0 && objects[I->object].objectClass==BODY_OBJECT_CLASS && intersect(m[objects[I->object].ownerWhere].objectMatches,speakers,allIn,oneIn)))
+		if (speakers.find(I->object)!=speakers.end() || (objects[I->object].getOwnerWhere()>=0 && objects[I->object].objectClass==BODY_OBJECT_CLASS && intersect(m[objects[I->object].getOwnerWhere()].objectMatches,speakers,allIn,oneIn)))
     {
       if (debugTrace.traceSpeakerResolution)
       {
@@ -141,7 +141,7 @@ void Source::resolveFirstSecondPersonPronoun(int where,unsigned __int64 flags,in
 			}
     }
   }
-  else if (m[where].getObject()<UNKNOWN_OBJECT || objectClass==PRONOUN_OBJECT_CLASS)
+  else if (m[where].getObject()< cObject::eOBJECTS::UNKNOWN_OBJECT || objectClass==PRONOUN_OBJECT_CLASS)
   {
     if (firstPerson || secondPerson)
       // FIRST_PERSON:  "my", "i", "me", "mine" -- restrict to speaker or narrator
@@ -261,13 +261,13 @@ void Source::resolveFirstSecondPersonPronouns(vector <int> &secondaryQuotesResol
 		if (im->getObject()>=0 && objects[im->getObject()].objectClass==META_GROUP_OBJECT_CLASS && inPrimaryQuote)
 		{
 			// my friend / your friend / friend of mine
-			if (objects[im->getObject()].ownerWhere>=0 && (m[objects[im->getObject()].ownerWhere].word->second.inflectionFlags&(FIRST_PERSON|SECOND_PERSON))!=0 &&
+			if (objects[im->getObject()].getOwnerWhere()>=0 && (m[objects[im->getObject()].getOwnerWhere()].word->second.inflectionFlags&(FIRST_PERSON|SECOND_PERSON))!=0 &&
 					 // if identity relationship created a match, don't rematch
 					 (m[I].objectMatches.empty() || 
 					 (!(m[I].objectRole&RE_OBJECT_ROLE) && (m[I].objectRole&(SUBJECT_ROLE|IS_OBJECT_ROLE|SUBJECT_PLEONASTIC_ROLE))!=(SUBJECT_ROLE|IS_OBJECT_ROLE)))) // Copular
 			{
-				if (objects[im->getObject()].ownerWhere>I)
-					resolveFirstSecondPersonPronoun(objects[im->getObject()].ownerWhere,
+				if (objects[im->getObject()].getOwnerWhere()>I)
+					resolveFirstSecondPersonPronoun(objects[im->getObject()].getOwnerWhere(),
 						(inSecondaryQuote) ? lastOpeningSecondaryQuoteIM->flags: lastOpeningPrimaryQuoteIM->flags,lastEmbeddedStoryBegin,
 						(inSecondaryQuote) ? lastOpeningSecondaryQuoteIM->objectMatches: lastOpeningPrimaryQuoteIM->objectMatches,
 						(inSecondaryQuote) ? lastOpeningSecondaryQuoteIM->audienceObjectMatches: lastOpeningPrimaryQuoteIM->audienceObjectMatches);
@@ -277,7 +277,7 @@ void Source::resolveFirstSecondPersonPronouns(vector <int> &secondaryQuotesResol
 				wstring tmpstr,tmpstr2;
 				if (debugTrace.traceSpeakerResolution)
 					lplog(LOG_RESOLUTION,L"%06d:RESOLVING metagroup %s%s",I,objectString(im->getObject(),tmpstr,false).c_str(),m[I].roleString(tmpstr2).c_str());
-				resolveMetaGroupByAssociation(I,(im->objectRole&IN_PRIMARY_QUOTE_ROLE)!=0,objectMatches,objects[im->getObject()].ownerWhere);
+				resolveMetaGroupByAssociation(I,(im->objectRole&IN_PRIMARY_QUOTE_ROLE)!=0,objectMatches,objects[im->getObject()].getOwnerWhere());
 				if (objectMatches.size()) im->objectMatches=objectMatches;
 			}
 			else if (im->objectMatches.empty() && objects[im->getObject()].wordOrderSensitive(I,m)!=0)
@@ -290,7 +290,7 @@ void Source::resolveFirstSecondPersonPronouns(vector <int> &secondaryQuotesResol
 		if ((im->objectRole&HAIL_ROLE) && im->objectMatches.size()>1 && inPrimaryQuote && lastOpeningPrimaryQuoteIM->audienceObjectMatches.size() &&
 			intersect(lastOpeningPrimaryQuoteIM->audienceObjectMatches,im->objectMatches,allIn,oneIn))
 			unMatchObjects(I,lastOpeningPrimaryQuoteIM->audienceObjectMatches,false);
-		if ((im->getObject()>=0 || im->getObject()<UNKNOWN_OBJECT) && inSecondaryQuote && (im->objectRole&HAIL_ROLE) && 
+		if ((im->getObject()>=0 || im->getObject()< cObject::eOBJECTS::UNKNOWN_OBJECT) && inSecondaryQuote && (im->objectRole&HAIL_ROLE) &&
 			  lastOpeningSecondaryQuoteIM->audienceObjectMatches.size())
 		{
 			unMatchObjects(I,lastOpeningSecondaryQuoteIM->audienceObjectMatches,false);
@@ -301,7 +301,7 @@ void Source::resolveFirstSecondPersonPronouns(vector <int> &secondaryQuotesResol
     // narrative you and I are resolved earlier.  But may not include both speakers.
 		if ((im->word->second.inflectionFlags&(FIRST_PERSON|SECOND_PERSON))==(FIRST_PERSON|SECOND_PERSON) &&
 			(im->queryWinnerForm(PROPER_NOUN_FORM_NUM)<0 && im->queryWinnerForm(nounForm)<0) && // US can be a proper noun, mine can be a noun
-			  (im->getObject()>=0 || im->getObject()<UNKNOWN_OBJECT) && !inPrimaryQuote && !inSecondaryQuote && im->objectMatches.size()<=1)
+			  (im->getObject()>=0 || im->getObject()< cObject::eOBJECTS::UNKNOWN_OBJECT) && !inPrimaryQuote && !inSecondaryQuote && im->objectMatches.size()<=1)
 		{
       // are any speakers grouped with the Narrator?  If so, include only this.
 			if (speakerGroups[currentSpeakerGroup].groupedSpeakers.find(0)!=speakerGroups[currentSpeakerGroup].groupedSpeakers.end())
@@ -318,7 +318,7 @@ void Source::resolveFirstSecondPersonPronouns(vector <int> &secondaryQuotesResol
 						im->objectMatches.push_back(cOM(*si,0));
 			}
 		}
-    if ((im->getObject()>=0 || im->getObject()<UNKNOWN_OBJECT) && (inPrimaryQuote || inSecondaryQuote))
+    if ((im->getObject()>=0 || im->getObject()< cObject::eOBJECTS::UNKNOWN_OBJECT) && (inPrimaryQuote || inSecondaryQuote))
       resolveFirstSecondPersonPronoun(I,
 				(inSecondaryQuote) ? lastOpeningSecondaryQuoteIM->flags: lastOpeningPrimaryQuoteIM->flags,lastEmbeddedStoryBegin,
 				(inSecondaryQuote) ? lastOpeningSecondaryQuoteIM->objectMatches: lastOpeningPrimaryQuoteIM->objectMatches,
@@ -334,7 +334,7 @@ void Source::resolveFirstSecondPersonPronouns(vector <int> &secondaryQuotesResol
 			bool audienceFilled=false;
 			if (secondarySpeaker>=0)
 			{
-		    if ((m[secondarySpeaker].getObject()>=0 || m[secondarySpeaker].getObject()<UNKNOWN_OBJECT) && lastOpeningPrimaryQuoteIM!=wmNULL)
+		    if ((m[secondarySpeaker].getObject()>=0 || m[secondarySpeaker].getObject()< cObject::eOBJECTS::UNKNOWN_OBJECT) && lastOpeningPrimaryQuoteIM!=wmNULL)
 			    resolveFirstSecondPersonPronoun(secondarySpeaker,
 						lastOpeningPrimaryQuoteIM->flags,lastEmbeddedStoryBegin,
 						lastOpeningPrimaryQuoteIM->objectMatches,
@@ -394,7 +394,7 @@ void Source::resolveFirstSecondPersonPronouns(vector <int> &secondaryQuotesResol
 			}
 			if (audienceObjectPosition>=0)
 			{
-		    if ((m[audienceObjectPosition].getObject()>=0 || m[audienceObjectPosition].getObject()<UNKNOWN_OBJECT) && lastOpeningPrimaryQuoteIM!=wmNULL)
+		    if ((m[audienceObjectPosition].getObject()>=0 || m[audienceObjectPosition].getObject()< cObject::eOBJECTS::UNKNOWN_OBJECT) && lastOpeningPrimaryQuoteIM!=wmNULL)
 		      resolveFirstSecondPersonPronoun(audienceObjectPosition,
 						lastOpeningPrimaryQuoteIM->flags,lastEmbeddedStoryBegin,
 						lastOpeningPrimaryQuoteIM->objectMatches, 

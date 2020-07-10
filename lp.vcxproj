@@ -41,6 +41,14 @@
       <Configuration>RerunSingleSource</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="test|Win32">
+      <Configuration>test</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="test|x64">
+      <Configuration>test</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{F184BE18-A6FB-4734-9410-0C90436071BB}</ProjectGuid>
@@ -56,6 +64,12 @@
     <PlatformToolset>v141</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <PlatformToolset>v141</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='test|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>Unicode</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -80,6 +94,12 @@
     <PlatformToolset>v141</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <PlatformToolset>v141</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='test|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>Unicode</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -116,6 +136,9 @@
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|Win32'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='test|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='QuestionAnswering|Win32'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
@@ -126,6 +149,9 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='test|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='QuestionAnswering|x64'" Label="PropertySheets">
@@ -151,34 +177,42 @@
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</LinkIncremental>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='ParseAllSources|Win32'">$(Configuration)/</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|Win32'">$(Configuration)/</OutDir>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='test|Win32'">$(Configuration)/</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='QuestionAnswering|Win32'">$(Configuration)/</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='ParseTest(Optimized)|Win32'">$(Configuration)/</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='ParseAllSources|x64'">$(Configuration)$(Platform)\</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|x64'">$(Configuration)$(Platform)\</OutDir>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='test|x64'">$(Configuration)$(Platform)\</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='QuestionAnswering|x64'">$(Configuration)$(Platform)\</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='ParseTest(Optimized)|x64'">$(Configuration)$(Platform)\</OutDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='ParseAllSources|Win32'">$(Configuration)/</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|Win32'">$(Configuration)/</IntDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='test|Win32'">$(Configuration)/</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='QuestionAnswering|Win32'">$(Configuration)/</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='ParseTest(Optimized)|Win32'">$(Configuration)/</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='ParseAllSources|x64'">$(Configuration)$(Platform)\</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|x64'">$(Configuration)$(Platform)\</IntDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='test|x64'">$(Configuration)$(Platform)\</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='QuestionAnswering|x64'">$(Configuration)$(Platform)\</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='ParseTest(Optimized)|x64'">$(Configuration)$(Platform)\</IntDir>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='ParseAllSources|Win32'">false</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|Win32'">false</LinkIncremental>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='test|Win32'">false</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='QuestionAnswering|Win32'">false</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='ParseTest(Optimized)|Win32'">false</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='ParseAllSources|x64'">false</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|x64'">false</LinkIncremental>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='test|x64'">false</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='QuestionAnswering|x64'">false</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='ParseTest(Optimized)|x64'">false</LinkIncremental>
     <ExecutablePath Condition="'$(Configuration)|$(Platform)'=='ParseAllSources|Win32'">C:\Program Files\Java\jdk1.8.0_181\bin;F:\Program Files\MySQL\MySQL Server 8.0\lib;$(ExecutablePath)</ExecutablePath>
     <ExecutablePath Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|Win32'">C:\Program Files\Java\jdk1.8.0_181\bin;F:\Program Files\MySQL\MySQL Server 8.0\lib;$(ExecutablePath)</ExecutablePath>
+    <ExecutablePath Condition="'$(Configuration)|$(Platform)'=='test|Win32'">C:\Program Files\Java\jdk1.8.0_181\bin;F:\Program Files\MySQL\MySQL Server 8.0\lib;$(ExecutablePath)</ExecutablePath>
     <ExecutablePath Condition="'$(Configuration)|$(Platform)'=='QuestionAnswering|Win32'">C:\Program Files\Java\jdk1.8.0_181\bin;F:\Program Files\MySQL\MySQL Server 8.0\lib;$(ExecutablePath)</ExecutablePath>
     <ExecutablePath Condition="'$(Configuration)|$(Platform)'=='ParseTest(Optimized)|Win32'">C:\Program Files\Java\jdk1.8.0_181\bin;F:\Program Files\MySQL\MySQL Server 8.0\lib;$(ExecutablePath)</ExecutablePath>
     <ExecutablePath Condition="'$(Configuration)|$(Platform)'=='ParseAllSources|x64'">C:\Program Files\Java\jdk1.8.0_181\bin;F:\lp\tempMySQL;$(ExecutablePath)</ExecutablePath>
     <ExecutablePath Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|x64'">C:\Program Files\Java\jdk1.8.0_181\bin;F:\lp\tempMySQL;$(ExecutablePath)</ExecutablePath>
+    <ExecutablePath Condition="'$(Configuration)|$(Platform)'=='test|x64'">C:\Program Files\Java\jdk1.8.0_181\bin;F:\lp\tempMySQL;$(ExecutablePath)</ExecutablePath>
     <ExecutablePath Condition="'$(Configuration)|$(Platform)'=='QuestionAnswering|x64'">C:\Program Files\Java\jdk1.8.0_181\bin;F:\lp\tempMySQL;$(ExecutablePath)</ExecutablePath>
     <ExecutablePath Condition="'$(Configuration)|$(Platform)'=='ParseTest(Optimized)|x64'">C:\Program Files\Java\jdk1.8.0_181\bin;F:\lp\tempMySQL;$(ExecutablePath)</ExecutablePath>
     <ExecutablePath Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">C:\Program Files\Java\jdk1.8.0_181\bin;F:\Program Files\MySQL\MySQL Server 8.0\lib;$(ExecutablePath)</ExecutablePath>
@@ -189,6 +223,10 @@
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\\yajl\ParseAllSources;F:\lp\tempMySQL;F:\lp\source\ParseAllSourcesx64;C:\Program Files\Java\jdk1.8.0_181\lib</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|x64'">
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);F:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-66cb08c\src\api;F:\lp\source\tinyxml2-master;C:\Program Files\Java\jdk1.8.0_181\include\win32;C:\Program Files\Java\jdk1.8.0_181\include</IncludePath>
+    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\\yajl\Release;F:\lp\tempMySQL;F:\lp\source\Releasex64;C:\Program Files\Java\jdk1.8.0_181\lib;F:\lp\source\RerunSingleSourcex64;F:\lp\source\yajl\RerunSingleSource</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='test|x64'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);F:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-66cb08c\src\api;F:\lp\source\tinyxml2-master;C:\Program Files\Java\jdk1.8.0_181\include\win32;C:\Program Files\Java\jdk1.8.0_181\include</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\\yajl\Release;F:\lp\tempMySQL;F:\lp\source\Releasex64;C:\Program Files\Java\jdk1.8.0_181\lib;F:\lp\source\RerunSingleSourcex64;F:\lp\source\yajl\RerunSingleSource</LibraryPath>
   </PropertyGroup>
@@ -213,6 +251,10 @@
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\lloyd-yajl-f4b2b1a\yajl\Release;F:\Program Files\MySQL\MySQL Server 8.0\lib;F:\lp\source\Releasex64</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|Win32'">
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);F:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-f4b2b1a\src\yajl-2.0.1\include;F:\lp\source\tinyxml2-master</IncludePath>
+    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\lloyd-yajl-f4b2b1a\yajl\Release;F:\Program Files\MySQL\MySQL Server 8.0\lib;F:\lp\source\Releasex64</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='test|Win32'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);F:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-f4b2b1a\src\yajl-2.0.1\include;F:\lp\source\tinyxml2-master</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\lloyd-yajl-f4b2b1a\yajl\Release;F:\Program Files\MySQL\MySQL Server 8.0\lib;F:\lp\source\Releasex64</LibraryPath>
   </PropertyGroup>
@@ -333,6 +375,44 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|Win32'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <OmitFramePointers>true</OmitFramePointers>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_STLP_NO_IOSTREAMS;_CRT_SECURE_NO_WARNINGS;YAJL_SHARED;%(PreprocessorDefinitions);ANDROID_NDK</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <TreatWChar_tAsBuiltInType>true</TreatWChar_tAsBuiltInType>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <ProgramDataBaseFileName>$(TargetDir)$(TargetName).pdb</ProgramDataBaseFileName>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>winInet.lib;Ws2_32.lib;libmysql.lib;ole32.lib;oleaut32.lib;..\source\release\wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;..\source\release\yajl.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>$(OutDir)$(ProjectName).exe</OutputFile>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Console</SubSystem>
+      <LargeAddressAware>true</LargeAddressAware>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <DataExecutionPrevention>
+      </DataExecutionPrevention>
+      <TargetMachine>MachineX86</TargetMachine>
+      <StackReserveSize>21097152</StackReserveSize>
+      <StackCommitSize>21097152</StackCommitSize>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='test|Win32'">
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -537,9 +617,54 @@
       <AdditionalManifestFiles>longpaths.manifest %(AdditionalManifestFiles)</AdditionalManifestFiles>
     </Manifest>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='test|x64'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <OmitFramePointers>true</OmitFramePointers>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_STLP_NO_IOSTREAMS;_STLP_NO_EXCEPTIONS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions);ANDROID_NDK</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <TreatWChar_tAsBuiltInType>true</TreatWChar_tAsBuiltInType>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <ProgramDataBaseFileName>$(TargetDir)$(TargetName).pdb</ProgramDataBaseFileName>
+      <WarningLevel>EnableAllWarnings</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <DisableSpecificWarnings>4389;4242;4388;4820;4365;4710;4668;4626;4625;4571;4245;4244;5039;5027;5026;4514;4774;4623;4706;4711;5045;4834;4574;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>winInet.lib;Ws2_32.lib;ole32.lib;oleaut32.lib;wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;yajl.lib;libmysql.lib;jvm.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>$(OutDir)$(ProjectName).exe</OutputFile>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Console</SubSystem>
+      <LargeAddressAware>true</LargeAddressAware>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <DataExecutionPrevention>
+      </DataExecutionPrevention>
+      <StackReserveSize>21097152</StackReserveSize>
+      <StackCommitSize>21097152</StackCommitSize>
+      <HeapReserveSize>21097152</HeapReserveSize>
+    </Link>
+    <Manifest>
+      <AdditionalManifestFiles>longpaths.manifest %(AdditionalManifestFiles)</AdditionalManifestFiles>
+    </Manifest>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='QuestionAnswering|x64'">
     <ClCompile>
-      <Optimization>Disabled</Optimization>
+      <Optimization>MaxSpeed</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <OmitFramePointers>true</OmitFramePointers>
@@ -584,7 +709,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ParseTest(Optimized)|x64'">
     <ClCompile>
-      <Optimization>MaxSpeed</Optimization>
+      <Optimization>Disabled</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <OmitFramePointers>true</OmitFramePointers>
@@ -633,6 +758,7 @@
     <ClCompile Include="agreement.cpp">
       <ShowIncludes Condition="'$(Configuration)|$(Platform)'=='ParseAllSources|x64'">false</ShowIncludes>
       <ShowIncludes Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|x64'">false</ShowIncludes>
+      <ShowIncludes Condition="'$(Configuration)|$(Platform)'=='test|x64'">false</ShowIncludes>
       <ShowIncludes Condition="'$(Configuration)|$(Platform)'=='QuestionAnswering|x64'">false</ShowIncludes>
       <ShowIncludes Condition="'$(Configuration)|$(Platform)'=='ParseTest(Optimized)|x64'">false</ShowIncludes>
     </ClCompile>
@@ -640,12 +766,12 @@
     <ClCompile Include="createOntology.cpp">
       <ShowIncludes Condition="'$(Configuration)|$(Platform)'=='ParseAllSources|x64'">false</ShowIncludes>
       <ShowIncludes Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|x64'">false</ShowIncludes>
+      <ShowIncludes Condition="'$(Configuration)|$(Platform)'=='test|x64'">false</ShowIncludes>
       <ShowIncludes Condition="'$(Configuration)|$(Platform)'=='QuestionAnswering|x64'">false</ShowIncludes>
       <ShowIncludes Condition="'$(Configuration)|$(Platform)'=='ParseTest(Optimized)|x64'">false</ShowIncludes>
     </ClCompile>
     <ClCompile Include="DB.cpp" />
     <ClCompile Include="DBCreateSQLSchema.cpp" />
-    <ClCompile Include="DBMultiWordRelations.cpp" />
     <ClCompile Include="dbQuerySearch.cpp" />
     <ClCompile Include="DBUtility.cpp" />
     <ClCompile Include="DBWordRelations.cpp" />
@@ -653,7 +779,6 @@
     <ClCompile Include="evaluateTagSetCombinatorials.cpp" />
     <ClCompile Include="getBNC.cpp" />
     <ClCompile Include="getDictionary.cpp" />
-    <ClCompile Include="getInterviewTranscripts.cpp" />
     <ClCompile Include="getMusicBrainz.cpp" />
     <ClCompile Include="getThesaurus.cpp" />
     <ClCompile Include="getTwitter.cpp" />
@@ -662,6 +787,7 @@
     <ClCompile Include="getGoogleCustomSearch.cpp">
       <ShowIncludes Condition="'$(Configuration)|$(Platform)'=='ParseAllSources|x64'">false</ShowIncludes>
       <ShowIncludes Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|x64'">false</ShowIncludes>
+      <ShowIncludes Condition="'$(Configuration)|$(Platform)'=='test|x64'">false</ShowIncludes>
       <ShowIncludes Condition="'$(Configuration)|$(Platform)'=='QuestionAnswering|x64'">false</ShowIncludes>
       <ShowIncludes Condition="'$(Configuration)|$(Platform)'=='ParseTest(Optimized)|x64'">false</ShowIncludes>
     </ClCompile>
@@ -687,7 +813,9 @@
     <ClCompile Include="resolveSpeakers.cpp" />
     <ClCompile Include="semanticRelations.cpp" />
     <ClCompile Include="source.cpp" />
+    <ClCompile Include="spaceRelations.cpp" />
     <ClCompile Include="syntacticRelations.cpp" />
+    <ClCompile Include="tableColumn.cpp" />
     <ClCompile Include="tagOperations.cpp" />
     <ClCompile Include="textGeneration.cpp" />
     <ClCompile Include="timeRelations.cpp" />
@@ -715,11 +843,13 @@
     <ClInclude Include="patternElementMatchArray.h" />
     <ClInclude Include="patternMatchArray.h" />
     <ClInclude Include="profile.h" />
+    <ClInclude Include="QuestionAnswering.h" />
     <ClInclude Include="relationTypes.h" />
     <ClInclude Include="semanticRelations.h" />
     <ClInclude Include="source.h" />
     <ClInclude Include="stacktrace.h" />
     <ClInclude Include="syntacticRelations.h" />
+    <ClInclude Include="tableColumn.h" />
     <ClInclude Include="timeRelations.h" />
     <ClInclude Include="vcXML.h" />
     <ClInclude Include="word.h" />

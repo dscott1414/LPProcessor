@@ -195,11 +195,7 @@ int patternMatchArray::push_back_unique(int pass,short cost,unsigned short p,sho
     }
     return (int)(c-content);
   }
-#ifdef LOG_OLD_MATCH
-  if (pass>=1 || patterns[p]->firstPassForwardReference)
-#else
   if (pass>=1)
-#endif
   {
     // this pass is predicated on that patterns are always bunched together.
     // Therefore, a pattern using a child pattern that was not already there must be on the second pass (or be using a forward reference).
@@ -478,7 +474,7 @@ int patternMatchArray::getNextPosition(int w)
 int compare( patternMatchArray::tPatternMatch *pm1, patternMatchArray::tPatternMatch *pm2 )
 { DLFS
   //if (t.tracePatternElimination)
-  //  lplog(L"    PMA comparing p=%d end=%d to p=%d end=%d",pm1->pattern,pm1->end,pm2->getPattern(),pm2->end);
+  //  lplog(L"    PMA comparing p=%d end=%d to p=%d end=%d",pm1->pattern,pm1->end,pm2->getParentPattern(),pm2->end);
   if (pm1->getPattern()<pm2->getPattern()) return -1;
   if (pm1->getPattern()>pm2->getPattern()) return 1;
   if (pm1->len<pm2->len) return -1;

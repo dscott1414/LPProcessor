@@ -54,7 +54,7 @@ bool copy(void *buf,vector <cOM> &s,int &where,int limit)
 Source::cSpeakerGroup::cSpeakerGroup(void)
 { LFS
   sgBegin=sgEnd=0;
-  section=0;
+  section=-1;
   previousSubsetSpeakerGroup=-1;
 	saveNonNameObject=-1;
 	conversationalQuotes=0;
@@ -191,9 +191,9 @@ bool Source::unMergable(int where,int o,set <int> &speakers,bool &uniquelyMergab
     // only resolve with body objects              // physically present
     uniquelyMergable=true;
     save=speakers.find(o);
-    if (save==speakers.end() && objects[o].ownerWhere>=0 && objects[o].objectClass==BODY_OBJECT_CLASS)
+    if (save==speakers.end() && objects[o].getOwnerWhere() >=0 && objects[o].objectClass==BODY_OBJECT_CLASS)
     {
-      save=speakers.find(m[objects[o].ownerWhere].getObject());
+      save=speakers.find(m[objects[o].getOwnerWhere()].getObject());
       if (save!=speakers.end())
       {
         speakers.erase(save);
@@ -214,17 +214,17 @@ bool Source::unMergable(int where,int o,set <int> &speakers,bool &uniquelyMergab
     save=speakers.end();
     uniquelyMergable=true;
 		int ownerObject=-1;
-		if (objects[o].ownerWhere>=0 && m[objects[o].ownerWhere].objectMatches.size()==1) 
-			ownerObject=m[objects[o].ownerWhere].objectMatches[0].object;
-		if (objects[o].ownerWhere>=0 && m[objects[o].ownerWhere].objectMatches.empty() && m[objects[o].ownerWhere].getObject()>=0) 
-			ownerObject=m[objects[o].ownerWhere].getObject();
+		if (objects[o].getOwnerWhere()>=0 && m[objects[o].getOwnerWhere()].objectMatches.size()==1) 
+			ownerObject=m[objects[o].getOwnerWhere()].objectMatches[0].object;
+		if (objects[o].getOwnerWhere()>=0 && m[objects[o].getOwnerWhere()].objectMatches.empty() && m[objects[o].getOwnerWhere()].getObject()>=0) 
+			ownerObject=m[objects[o].getOwnerWhere()].getObject();
     for (set<int>::iterator i=speakers.begin(),iEnd=speakers.end(); i!=iEnd; i++)
 		{
 			int speakerOwnerObject=-1;
-			if (objects[*i].ownerWhere>=0 && m[objects[*i].ownerWhere].objectMatches.size()==1) 
-				speakerOwnerObject=m[objects[*i].ownerWhere].objectMatches[0].object;
-			if (objects[*i].ownerWhere>=0 && m[objects[*i].ownerWhere].objectMatches.empty() && m[objects[*i].ownerWhere].getObject()>=0) 
-				speakerOwnerObject=m[objects[*i].ownerWhere].getObject();
+			if (objects[*i].getOwnerWhere()>=0 && m[objects[*i].getOwnerWhere()].objectMatches.size()==1) 
+				speakerOwnerObject=m[objects[*i].getOwnerWhere()].objectMatches[0].object;
+			if (objects[*i].getOwnerWhere()>=0 && m[objects[*i].getOwnerWhere()].objectMatches.empty() && m[objects[*i].getOwnerWhere()].getObject()>=0) 
+				speakerOwnerObject=m[objects[*i].getOwnerWhere()].getObject();
 			// if the current speaker group has crossed over into a new section, only merge with
 			// those objects which have already appeared in the new section.
       if ((!crossedSection || objects[*i].numEncountersInSection || objects[*i].numIdentifiedAsSpeakerInSection) && 
@@ -261,9 +261,9 @@ bool Source::unMergable(int where,int o,vector <int> &speakers,bool &uniquelyMer
     // only resolve with body objects
     uniquelyMergable=true;
     save=find(speakers.begin(),speakers.end(),o);
-    if (save==speakers.end() && objects[o].ownerWhere>=0 && objects[o].objectClass==BODY_OBJECT_CLASS)
+    if (save==speakers.end() && objects[o].getOwnerWhere()>=0 && objects[o].objectClass==BODY_OBJECT_CLASS)
     {
-      save=find(speakers.begin(),speakers.end(),m[objects[o].ownerWhere].getObject());
+      save=find(speakers.begin(),speakers.end(),m[objects[o].getOwnerWhere()].getObject());
       if (save!=speakers.end())
       {
         speakers.erase(save);
@@ -959,8 +959,8 @@ bool Source::createSpeakerGroup(int begin,int end,bool endOfSection,int &lastSpe
 			// new object's first mention must be after the previous one
 			else if (uniquelyMergable && mergedSpeakerObject!=lastSG->speakers.end() &&
 					objects[*s].objectClass==NAME_OBJECT_CLASS && objects[*mergedSpeakerObject].objectClass!=NAME_OBJECT_CLASS && objects[*mergedSpeakerObject].objectClass!=BODY_OBJECT_CLASS &&
-					objects[*s].firstSpeakerGroup>=0 &&
-					speakerGroups[objects[*s].firstSpeakerGroup].sgBegin<objects[*mergedSpeakerObject].begin)
+					objects[*s].getFirstSpeakerGroup()>=0 &&
+					speakerGroups[objects[*s].getFirstSpeakerGroup()].sgBegin<objects[*mergedSpeakerObject].begin)
 			{
 			  if (debugTrace.traceSpeakerResolution)
 					lplog(LOG_SG,L"%06d-%06d:%02d   Speaker %s of current group unmergable (Unique but without new object) with last speaker group %s.",
@@ -982,7 +982,7 @@ bool Source::createSpeakerGroup(int begin,int end,bool endOfSection,int &lastSpe
 		if (lastSG!=speakerGroups.end() && m[lastSG->sgBegin+1].word->first==L"“")
 		{
 			int q=lastSG->sgBegin+1;
-			while (m[q].quoteForwardLink>=0) q=m[q].quoteForwardLink;
+			while (m[q].getQuoteForwardLink()>=0) q=m[q].getQuoteForwardLink();
 			lastSGNotClosable=m[q].endQuote+1==lastSG->sgEnd;
 		}
 		if (lastSGNotClosable || !speakersNotMergable || (speakersNotMergable==1 && lastSG->speakers.size()==1))
@@ -1023,8 +1023,8 @@ bool Source::createSpeakerGroup(int begin,int end,bool endOfSection,int &lastSpe
 						tempSpeakerGroup.speakers.erase(saveObject); // must use *mergedSpeakerObject before it is replaced
 						replaceSpeaker(lastSG->sgBegin,end,saveObject,*s);
 						// if the replaced object is 'man's voice' then replace man as well as man's voice
-						if (objects[saveObject].objectClass==BODY_OBJECT_CLASS && objects[saveObject].ownerWhere>=0 && m[objects[saveObject].ownerWhere].getObject()>=0)
-							replaceSpeaker(lastSG->sgBegin,end,m[objects[saveObject].ownerWhere].getObject(),*s);
+						if (objects[saveObject].objectClass==BODY_OBJECT_CLASS && objects[saveObject].getOwnerWhere()>=0 && m[objects[saveObject].getOwnerWhere()].getObject()>=0)
+							replaceSpeaker(lastSG->sgBegin,end,m[objects[saveObject].getOwnerWhere()].getObject(),*s);
 						speakerAges[*s]=0;
 						atLeastOneMerged=true;
 						s=tempSpeakerGroup.speakers.begin();
@@ -1133,8 +1133,8 @@ bool Source::createSpeakerGroup(int begin,int end,bool endOfSection,int &lastSpe
 		speakerAges.clear();
     for (set <int>::iterator s=tempSpeakerGroup.speakers.begin(),sEnd=tempSpeakerGroup.speakers.end(); s!=sEnd; s++)
     {
-      if (objects[*s].firstSpeakerGroup==-1)
-        objects[*s].firstSpeakerGroup=currentSpeakerGroup-1;
+			if (objects[*s].getFirstSpeakerGroup() == -1)
+				objects[*s].setFirstSpeakerGroup(currentSpeakerGroup - 1);
       objects[*s].lastSpeakerGroup=currentSpeakerGroup-1;
       objects[*s].ageSinceLastSpeakerGroup=0;
 			speakerAges.insert(tSA(*s,0));
@@ -1178,19 +1178,19 @@ bool Source::setPOVStatus(int where,bool inPrimaryQuote,bool inSecondaryQuote)
 			where=m[I].principalWherePosition;
 	}
 	// To have boasted that she[tuppence] knew a lot might have raised doubts in his[mr] mind[mr] . (tuppence is POV,but not mr)
-	if (m[where].getObject()>=0 && objects[m[where].getObject()].ownerWhere>=0 && isInternalBodyPart(where) &&
+	if (m[where].getObject()>=0 && objects[m[where].getObject()].getOwnerWhere()>=0 && isInternalBodyPart(where) &&
 		  (!(m[where].objectRole&(OBJECT_ROLE|PREP_OBJECT_ROLE)) || !(m[where].flags&WordMatch::flagInPStatement)))
 	{
-		povInSpeakerGroups.push_back(objects[m[where].getObject()].ownerWhere);
+		povInSpeakerGroups.push_back(objects[m[where].getObject()].getOwnerWhere());
 		m[where].objectRole|=POV_OBJECT_ROLE; // used in determining point of view/observer status for speakerGroups
-		m[objects[m[where].getObject()].ownerWhere].objectRole|=POV_OBJECT_ROLE;
+		m[objects[m[where].getObject()].getOwnerWhere()].objectRole|=POV_OBJECT_ROLE;
     if (debugTrace.traceSpeakerResolution)
-	    lplog(LOG_SG|LOG_RESOLUTION,L"%06d:%02d   speaker %s has pov status [1].",where,section,objectString(m[objects[m[where].getObject()].ownerWhere].getObject(),tmpstr,true).c_str());
+	    lplog(LOG_SG|LOG_RESOLUTION,L"%06d:%02d   speaker %s has pov status [1].",where,section,objectString(m[objects[m[where].getObject()].getOwnerWhere()].getObject(),tmpstr,true).c_str());
 		return true;
 	}
-	if (!inPrimaryQuote && !inSecondaryQuote && m[where].getObject()>=0 && objects[m[where].getObject()].ownerWhere<0 && m[where].getRelObject()>=0 && 
+	if (!inPrimaryQuote && !inSecondaryQuote && m[where].getObject()>=0 && objects[m[where].getObject()].getOwnerWhere()<0 && m[where].getRelObject()>=0 && 
 		  m[m[where].getRelObject()].relNextObject<0 &&   // rules out Jules gave Tuppence a feeling of support (Tuppence had the feeling)
-		  m[m[where].getRelObject()].getObject()>=0 && objects[m[m[where].getRelObject()].getObject()].ownerWhere<0 &&
+		  m[m[where].getRelObject()].getObject()>=0 && objects[m[m[where].getRelObject()].getObject()].getOwnerWhere()<0 &&
 			isInternalBodyPart(m[where].getRelObject()))
 	{
 		povInSpeakerGroups.push_back(where);
@@ -1200,7 +1200,7 @@ bool Source::setPOVStatus(int where,bool inPrimaryQuote,bool inSecondaryQuote)
 		return true;
 	}
 	// he was conscious
-	if (!inPrimaryQuote && !inSecondaryQuote && m[where].getObject()>=0 && objects[m[where].getObject()].ownerWhere<0 && m[where].getRelObject()<0 && 
+	if (!inPrimaryQuote && !inSecondaryQuote && m[where].getObject()>=0 && objects[m[where].getObject()].getOwnerWhere()<0 && m[where].getRelObject()<0 && 
 		  ((m[where].objectRole&(SUBJECT_ROLE|IS_OBJECT_ROLE|PREP_OBJECT_ROLE))==(SUBJECT_ROLE|IS_OBJECT_ROLE)) && m[where].getRelVerb()>=0 && m[where].getRelVerb()+1<(signed)m.size() &&
 		  isInternalDescription(m[where].getRelVerb()+1))
 	{
@@ -1293,7 +1293,7 @@ bool Source::isFocus(int where,bool inPrimaryQuote,bool inSecondaryQuote,int o,b
 		objectClass==META_GROUP_OBJECT_CLASS && !objects[o].neuter &&
 		((cObject::whichOrderWord(m[where].word)==-1 || 
 		 (objectRole&(IS_OBJECT_ROLE|SUBJECT_PLEONASTIC_ROLE))!=IS_OBJECT_ROLE && 
-		  (objects[o].ownerWhere!=-1 || m[m[where].beginObjectPosition].word->first==L"the")));
+		  (objects[o].getOwnerWhere()!=-1 || m[m[where].beginObjectPosition].word->first==L"the")));
 	 // exclude "the memory of Aunt Jane" and "picture of Jane Finn"
 	 // but include META_GROUP objects because they are not resolved till later, and most of the time they will be resolved and disappear
 	bool allowablePrepObject=subjectAllowPrep &&
@@ -1611,20 +1611,20 @@ void Source::translateBodyObjects(cSpeakerGroup &sg)
 	wstring tmpstr;
 	vector <int> translatedBodyObjects;
   for (set<int>::iterator i=sg.speakers.begin(); i!=sg.speakers.end(); )
-		if (objects[*i].objectClass==BODY_OBJECT_CLASS && objects[*i].ownerWhere>=0)
+		if (objects[*i].objectClass==BODY_OBJECT_CLASS && objects[*i].getOwnerWhere()>=0)
 		{
 			int o;
-			if (m[objects[*i].ownerWhere].getObject()<0)
+			if (m[objects[*i].getOwnerWhere()].getObject()<0)
 			{
-				if (m[objects[*i].ownerWhere].objectMatches.size()>1 || m[objects[*i].ownerWhere].objectMatches.empty())
+				if (m[objects[*i].getOwnerWhere()].objectMatches.size()>1 || m[objects[*i].getOwnerWhere()].objectMatches.empty())
 				{
 					i++;
 					continue;
 				}
-				o=m[objects[*i].ownerWhere].objectMatches[0].object;
+				o=m[objects[*i].getOwnerWhere()].objectMatches[0].object;
 			}
 			else
-				o=m[objects[*i].ownerWhere].getObject();
+				o=m[objects[*i].getOwnerWhere()].getObject();
 			translatedBodyObjects.push_back(o);
 			sg.speakers.erase(i++);
 		}
@@ -1758,7 +1758,7 @@ void Source::associateNyms(int where)
 	wstring tmpstr;
   //int o=(m[where].objectMatches.size()==1) ? m[where].objectMatches[0].object : m[where].getObject(); this routine should be used BEFORE object is resolved
 	// at speakerResolution, because this is used before resolveObject the object matched is the old object from the last phase, so it is invalid.
-  int o=m[where].getObject(),wv=m[where].getRelVerb(),tsSense=(wv>=0) ? m[wv].quoteForwardLink : 0; // rs=m[where].relSubject,ro=m[where].getRelObject(),
+  int o=m[where].getObject(),wv=m[where].getRelVerb(),tsSense=(wv>=0) ? m[wv].verbSense : 0; // rs=m[where].relSubject,ro=m[where].getRelObject(),
 	__int64 or=m[where].objectRole,ror=-1;
 	// vS                               simple examine                     VT_PRESENT                                          R=E=S
 	// vS+past                          examined                           VT_PAST                                             R=E<S
@@ -2060,11 +2060,11 @@ void Source::distributePOV(void)
 				else
 					found=true;
 			}
-			if (!found && o>=0 && objects[o].objectClass==BODY_OBJECT_CLASS && objects[o].ownerWhere>=0)
+			if (!found && o>=0 && objects[o].objectClass==BODY_OBJECT_CLASS && objects[o].getOwnerWhere()>=0)
 			{
-				int oo=m[objects[o].ownerWhere].getObject(),oow;
+				int oo=m[objects[o].getOwnerWhere()].getObject(),oow;
 				found=speakerGroups[sgi].speakers.find(oo)!=speakerGroups[sgi].speakers.end();
-				if (!found && oo>=0 && (oow=objects[oo].ownerWhere)>=0 && m[oow].objectMatches.size()==1 &&
+				if (!found && oo>=0 && (oow=objects[oo].getOwnerWhere())>=0 && m[oow].objectMatches.size()==1 &&
 					(found=speakerGroups[sgi].speakers.find(m[oow].objectMatches[0].object)!=speakerGroups[sgi].speakers.end()))
 					o=m[oow].objectMatches[0].object;
 			}
@@ -2645,7 +2645,18 @@ void Source::eraseAliasesAndReplacementsInSpeakerGroups(void)
 			(sg+1)->sgBegin=sg->sgBegin;
 			(sg+1)->conversationalQuotes+=sg->conversationalQuotes;
 			(sg+1)->dnSpeakers.insert(sg->dnSpeakers.begin(),sg->dnSpeakers.end());
-			lplog(LOG_RESOLUTION,L"speakerGroup erased: %d",sg-speakerGroups.begin());
+			int numSG = sg - speakerGroups.begin();
+			for (auto &tsg:speakerGroups)
+				if (tsg.previousSubsetSpeakerGroup >= numSG)
+					tsg.previousSubsetSpeakerGroup--;
+			for (cObject &o : objects)
+			{
+				if (o.getFirstSpeakerGroup() >= numSG)
+					o.setFirstSpeakerGroup(o.getFirstSpeakerGroup() - 1);
+				if (o.lastSpeakerGroup >= numSG)
+					o.lastSpeakerGroup --;
+			}
+			lplog(LOG_RESOLUTION, L"speakerGroup erased: %d", sg - speakerGroups.begin());
 			sg=speakerGroups.erase(sg);
 		}
 		else
@@ -2681,7 +2692,7 @@ bool Source::blockSpeakerGroupCreation(int endSection,bool quotesSeenSinceLastSe
 			{
 				int firstQuoteAfter=speakerGroups[speakerGroups.size()-1].sgBegin+1;
 				for (; firstQuoteAfter<lastOpeningPrimaryQuote && m[firstQuoteAfter].word->first!=L"“"; firstQuoteAfter++);
-				while (m[firstQuoteAfter].quoteForwardLink>=0) firstQuoteAfter=m[firstQuoteAfter].quoteForwardLink;
+				while (m[firstQuoteAfter].getQuoteForwardLink()>=0) firstQuoteAfter=m[firstQuoteAfter].getQuoteForwardLink();
 				block|=firstQuoteAfter==lastOpeningPrimaryQuote;
 			}
 		}
@@ -2895,15 +2906,22 @@ void Source::identifySpeakerGroups()
 		//   should likely not be added to localObjects.
 		// There was a man who would unerringly ferret out Tuppence's whereabouts .
 		if ((m[I].objectRole&SUBJECT_PLEONASTIC_ROLE) && m[I].getObject()>=0 && objects[m[I].getObject()].whereRelativeClause>=0 &&
-			  m[objects[m[I].getObject()].whereRelativeClause].getRelVerb()>=0 && (m[m[objects[m[I].getObject()].whereRelativeClause].getRelVerb()].quoteForwardLink&VT_POSSIBLE))
+			  m[objects[m[I].getObject()].whereRelativeClause].getRelVerb()>=0 && (m[m[objects[m[I].getObject()].whereRelativeClause].getRelVerb()].verbSense&VT_POSSIBLE))
 		{
 			m[I].objectRole&=~SUBJECT_PLEONASTIC_ROLE;
 			if (debugTrace.traceSpeakerResolution)
 				lplog(LOG_RESOLUTION,L"%06d:Removed pleonastic role",I);
 		}
 		int element;
-    if (m[I].pma.queryPattern(L"_REL1")!=-1)
-			lastRelativePhrase=I;
+		if (m[I].pma.queryPattern(L"_REL1") != -1)
+		{
+			lastRelativePhrase = I;
+			if (m[I].word->first == L"whose")
+			{
+				cLocalFocus::setSalienceAgeMethod(inSecondaryQuote || inPrimaryQuote, m[I].getObject() == cObject::eOBJECTS::OBJECT_UNKNOWN_NEUTER, objectToBeMatchedInQuote, quoteIndependentAge);
+				resolveAdjectivalObject(I, false, inPrimaryQuote, inSecondaryQuote, lastBeginS1, false);
+			}
+		}
 		if (m[I].pma.queryPattern(L"_Q2")!=-1)
 			lastQ2=I;
 		if (m[I].pma.queryPattern(L"_COMMAND1")!=-1)
@@ -2940,7 +2958,7 @@ void Source::identifySpeakerGroups()
 					m[I].beginObjectPosition && m[m[I].beginObjectPosition-1].word->first==L"“" &&	m[m[I].endObjectPosition].word->first==L"," && m[m[I].endObjectPosition+1].word->first==L"”";
     if ((!inPrimaryQuote && !inSecondaryQuote) || (possibleHail && !objects[m[I].getObject()].PISDefinite))
       resolveObject(I,false,inPrimaryQuote,inSecondaryQuote,lastBeginS1,lastRelativePhrase,lastQ2,lastVerb,false,false,false); // could change object at I!
-		if (m[I].getObject()!=UNKNOWN_OBJECT && lastCommand>=0)
+		if (m[I].getObject()!= cObject::eOBJECTS::UNKNOWN_OBJECT && lastCommand>=0)
 			m[I].objectRole|=IN_COMMAND_OBJECT_ROLE;
 		if (!narrativeIsQuoted)
 			adjustHailRoleDuringScan(I);

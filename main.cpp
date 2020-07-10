@@ -21,11 +21,12 @@
 #include "mysqldb.h"
 #include "internet.h"
 #include "stacktrace.h"
+#include "QuestionAnswering.h"
 
 // needed for _STLP_DEBUG - these must be set to a legal, unreachable yet never changing value
 unordered_map <wstring,tFI> static_wordMap;
 tIWMM wNULL=static_wordMap.begin();
-map<tIWMM, tFI::cRMap::tRelation, Source::wordMapCompare> static_tIcMap;
+unordered_map<wstring, tFI::cRMap::tRelation> static_tIcMap;
 tFI::cRMap::tIcRMap tNULL=(tFI::cRMap::tIcRMap)static_tIcMap.begin();
 vector <cLocalFocus> static_cLocalFocus;
 vector <cLocalFocus>::iterator cNULL=static_cLocalFocus.begin();
@@ -60,6 +61,7 @@ unordered_map < wstring, __int64 > cProfile::netAndSleepTimes,cProfile::onlyNetT
 
 
 typedef long long (FAR WINAPI *MINIDUMPWRITEDUMP)(HANDLE hProcess, DWORD dwPid, HANDLE hFile, MINIDUMP_TYPE DumpType, CONST PMINIDUMP_EXCEPTION_INFORMATION ExceptionParam, CONST PMINIDUMP_USER_STREAM_INFORMATION UserStreamParam, CONST PMINIDUMP_CALLBACK_INFORMATION CallbackParam);
+bool unlockTables(MYSQL &mysql);
 
 void createMinidump(struct _EXCEPTION_POINTERS* apExceptionInfo)
 {
@@ -652,7 +654,7 @@ test BNC pattern violation and general BNC sentence parse correctness - eliminat
 run through matching process.
 run eliminateLoserPatterns
 for each position in sentence:
-if no preferred forms, next position.
+if no lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms forms, next position.
 for beginPEMAPosition of m[position] till endPEMAPosition
 if pema position returns isChildPattern false
 if form is incorrect:
@@ -785,11 +787,14 @@ int createLPProcess(int numProcess, HANDLE &processHandle, DWORD &processId, wch
 	return 0;
 }
 
-int getNumSourcesProcessed(Source &source, int &numSourcesProcessed, __int64 &wordsProcessed, __int64 &sentencesProcessed)
+
+int getNumSourcesProcessed(MYSQL &mysql, int sourceType, int &numSourcesProcessed, __int64 &wordsProcessed, __int64 &sentencesProcessed)
 {
 	MYSQL_RES * result;
-	if (!myquery(&source.mysql, L"LOCK TABLES sources WRITE")) return -1;
-	if (myquery(&source.mysql, L"select COUNT(id), SUM(numWords), SUM(numSentences) from sources where sourceType = 2 and processed IS not NULL and processing IS NULL and start != '**SKIP**' and start != '**START NOT FOUND**'",result))
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	if (!myquery(&mysql, L"LOCK TABLES sources WRITE")) return -1;
+	wsprintf(qt, L"select COUNT(id), SUM(numWords), SUM(numSentences) from sources where sourceType = %d and processed IS not NULL and processing IS NULL and start != '**SKIP**' and start != '**START NOT FOUND**'", sourceType);
+	if (myquery(&mysql, qt, result))
 	{
 		MYSQL_ROW sqlrow = NULL;
 		if (sqlrow = mysql_fetch_row(result))
@@ -800,7 +805,7 @@ int getNumSourcesProcessed(Source &source, int &numSourcesProcessed, __int64 &wo
 		}
 		mysql_free_result(result);
 	}
-	if (!myquery(&source.mysql, L"UNLOCK TABLES")) return -1;
+	if (!myquery(&mysql, L"UNLOCK TABLES")) return -1;
 	return 0;
 }
 
@@ -839,7 +844,10 @@ bool signalCtrl(DWORD dwProcessId, DWORD dwCtrlEvent)
 	return success;
 }
 
-int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum processSourceType, int maxProcesses, int numSourcesPerProcess,
+bool getNextUnprocessedSource(MYSQL &mysql,int begin, int end, int sourceType, bool setUsed, int &id, wstring &path, wstring &encoding, wstring &start, int &repeatStart, wstring &etext, wstring &author, wstring &title);
+int getNumSources(MYSQL &mysql, int sourceType, bool left);
+bool anymoreUnprocessedForUnknown(MYSQL &mysql, int sourceType, int step);
+int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum processSourceType, int maxProcesses, int numSourcesPerProcess,
 	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite,bool makeCopyBeforeSourceWrite,bool parseOnly, wstring specialExtension)
 {
 	LFS
@@ -847,10 +855,12 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 	bool sentBreakSignals = false;
 	int startTime = clock();
 	HANDLE *handles = (HANDLE *)calloc(maxProcesses, sizeof(HANDLE));
-	int numProcesses = 0, errorCode = 0,numSourcesProcessedOriginally =0;
+	int numProcesses = 0, errorCode = 0,numSourcesProcessedOriginally =0,numSourcesLeft;
 	__int64 wordsProcessedOriginally = 0, sentencesProcessedOriginally = 0;
-	getNumSourcesProcessed(source, numSourcesProcessedOriginally, wordsProcessedOriginally, sentencesProcessedOriginally);
-	int numSourcesLeft = source.getNumSources(true);
+	if (processKind==0)
+		sourceType = Source::REQUEST_TYPE;
+	getNumSourcesProcessed(mysql, sourceType, numSourcesProcessedOriginally, wordsProcessedOriginally, sentencesProcessedOriginally);
+	numSourcesLeft = getNumSources(mysql,sourceType,true);
 	maxProcesses = min(maxProcesses, numSourcesLeft);
 	wstring tmpstr;
 	while (!errorCode)
@@ -868,7 +878,7 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			numSourcesLeft = 0;
 			int numSourcesProcessedNow = 0;
 			__int64 wordsProcessedNow = 0, sentencesProcessedNow = 0;
-			getNumSourcesProcessed(source, numSourcesProcessedNow, wordsProcessedNow, sentencesProcessedNow);
+			getNumSourcesProcessed(mysql, sourceType, numSourcesProcessedNow, wordsProcessedNow, sentencesProcessedNow);
 			int processingSeconds=(clock() - startTime) / CLOCKS_PER_SEC;
 			wchar_t consoleTitle[1500];
 			numSourcesProcessedNow -= numSourcesProcessedOriginally;
@@ -893,7 +903,7 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 				CloseHandle(handles[nextProcessIndex]);
 			}
 		}
-		int id, repeatStart, prId;
+		int id, repeatStart;
 		wstring start, path, encoding, etext, author, title, pathInCache;
 		bool result=true;
 		if (processKind == 1 && numSourcesLeft > 0)
@@ -902,9 +912,9 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 		{
 			switch (processKind)
 			{
-			case 0:result = source.getNextUnprocessedParseRequest(prId, pathInCache); break;
-			case 1:result = source.getNextUnprocessedSource(beginSource, endSource, false, id, path, encoding, start, repeatStart, etext, author, title); break;
-			case 2:result = source.anymoreUnprocessedForUnknown(step); break;
+			case 0:
+			case 1:result = getNextUnprocessedSource(mysql,beginSource, endSource, sourceType,false, id, path, encoding, start, repeatStart, etext, author, title); break;
+			case 2:result = anymoreUnprocessedForUnknown(mysql,sourceType,step); break;
 			default:result = false; break;
 			}
 		}
@@ -925,7 +935,7 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 						lplog(LOG_FATAL_ERROR, L"\nWaitForMultipleObjectsEx failed with error %s", getLastErrorMessage(tmpstr));
 					int numSourcesProcessedNow = 0;
 					__int64 wordsProcessedNow = 0, sentencesProcessedNow = 0;
-					getNumSourcesProcessed(source, numSourcesProcessedNow, wordsProcessedNow, sentencesProcessedNow);
+					getNumSourcesProcessed(mysql, sourceType, numSourcesProcessedNow, wordsProcessedNow, sentencesProcessedNow);
 					int processingSeconds = (clock() - startTime) / CLOCKS_PER_SEC;
 					wchar_t consoleTitle[1500];
 					numSourcesProcessedNow -= numSourcesProcessedOriginally;
@@ -976,7 +986,7 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			switch (processKind)
 			{
 			case 0:
-				wsprintf(processParameters, L"ParseAllSourcesx64\\lp.exe -ParseRequest \"%s\" -cacheDir %s %s%s%s%s%s%s%s%s-log %s.%d", pathInCache.c_str(), CACHEDIR,
+				wsprintf(processParameters, L"QuestionAnsweringx64\\lp.exe -ParseRequest 0 + -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %s.%d", CACHEDIR,
 					(forceSourceReread) ? L"-forceSourceReread " : L"",
 					(sourceWrite) ? L"-SW " : L"",
 					(sourceWordNetRead) ? L"-SWNR " : L"",
@@ -985,9 +995,10 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 					(makeCopyBeforeSourceWrite) ? L"-MCSW " : L"",
 					(logMatchedSentences) ? L"-logMatchedSentences " : L"",
 					(logUnmatchedSentences) ? L"-logUnmatchedSentences " : L"",
+					numSourcesPerProcess,
 					specialExtension.c_str(),
 					nextProcessIndex);
-				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"ParseAllSourcesx64\\lp.exe", processParameters) < 0)
+				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"QuestionAnsweringx64\\lp.exe", processParameters) < 0)
 					break;
 				break;
 			case 1:
@@ -1126,12 +1137,14 @@ int wmain(int argc,wchar_t *argv[])
 	//void extractFromWiktionary(wchar_t *f);
 	//extractFromWiktionary(LMAINDIR+L"\\Linguistics information\\TEMP-E20120211.tsv");
 	/* test over */
+	/*
 	if (argc>2 && !_wcsicmp(argv[1],L"-acquireMovieList"))
 		return acquireList(argv[2]);
 	if (argc>2 && !_wcsicmp(argv[1],L"-acquireInterviewTranscript"))
 		return getInterviewTranscript();
 	if (argc==2 && wcsstr(argv[1],L"-acquireTwitter"))
 		return getTwitterEntries(argv[1]);
+		*/
 	int numCommandLineParameters=argc;
 	wchar_t *sourceHost=L"localhost";
 	cacheDir=CACHEDIR;
@@ -1210,7 +1223,7 @@ int wmain(int argc,wchar_t *argv[])
 	{
 		wstring arg = argv[I];
 		std::transform(arg.begin(), arg.end(), arg.begin(), ::tolower);
-		if ((where = wcsstr(L"1-test 2-book 3-newsbank 4-bnc 5-script 6-websearch 7-wikipedia 8-interactive 9-parserequest", arg.c_str())))
+		if ((where = wcsstr(L"1-test 2-book 3-newsbank 4-bnc 5-script 6-websearch 7-wikipedia 8-interactive :-parserequest", arg.c_str())))
 		{
 			sourceType = (enum Source::sourceTypeEnum)(where[-1] - '0');
 			sourceArgs = I;
@@ -1262,10 +1275,11 @@ int wmain(int argc,wchar_t *argv[])
 		_putws(consoleTitle);
 		lplog(LOG_INFO | LOG_ERROR, L"%s\n", consoleTitle);
 		SetConsoleTitle(consoleTitle);
-		source.unlockTables();
+		unlockTables(source.mysql);
 		Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 		Source *requestedSource;
-		return source.processPath(argv[sourceArgs+1], requestedSource, Source::WEB_SEARCH_SOURCE_TYPE, 1, false);
+		cQuestionAnswering qa;
+		return qa.processPath(&source,argv[sourceArgs+1], requestedSource, Source::WEB_SEARCH_SOURCE_TYPE, 1, false);
 	}
 	int globalTotalUnmatched=0,globalOverMatchedPositionsTotal=0,numWords=0;
 	if (iswdigit(argv[sourceArgs+1][0]))
@@ -1281,19 +1295,19 @@ int wmain(int argc,wchar_t *argv[])
 		{
 			HWND consoleWindowHandle = GetConsoleWindow();
 			SetWindowPos(consoleWindowHandle, HWND_NOTOPMOST, 900, 0, 700, 180, SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-			startProcesses(source, 1,0,beginSource, endSource, sourceType, multiProcess, numSourcesPerProcess, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite,makeCopyBeforeSourceWrite,parseOnly,specialExtension);
+			startProcesses(source.mysql, source.sourceType, 1,0,beginSource, endSource, sourceType, multiProcess, numSourcesPerProcess, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite,makeCopyBeforeSourceWrite,parseOnly,specialExtension);
 			return 0;
 		}
 		wprintf(L"Getting number of sources to process...               \r");
-		int numSources = source.getNumSources(false);
+		int numSources = getNumSources(source.mysql,source.sourceType,false);
 		int numSourcesProcessed=0,pid= GetCurrentProcessId();
 		while (!exitNow && !exitEventually && (numSourceLimit==0 || numSourcesProcessed++<numSourceLimit))
 		{
 			int sourceId, repeatStart;
 			wstring path, encoding, etext, author, title, start;
 			wprintf(L"Getting number of sources left...               \r");
-			int numSourcesLeft = source.getNumSources(true);
-			if (!source.getNextUnprocessedSource(beginSource, endSource, true, sourceId, path, encoding, start, repeatStart, etext, author, title))
+			int numSourcesLeft = getNumSources(source.mysql,source.sourceType,true);
+			if (!getNextUnprocessedSource(source.mysql,beginSource, endSource, source.sourceType, true, sourceId, path, encoding, start, repeatStart, etext, author, title))
 				break;
 			path.insert(0, L"\\");
 			path=path.insert(0,TEXTDIR);
@@ -1302,7 +1316,7 @@ int wmain(int argc,wchar_t *argv[])
 			_putws(consoleTitle);
 			lplog(LOG_INFO|LOG_ERROR,L"%s\n", consoleTitle);
 			SetConsoleTitle(consoleTitle);
-			source.unlockTables();
+			unlockTables(source.mysql);
 			if (start == L"**SKIP**")
 				continue;
 			Words.addMultiWordObjects(source.multiWordStrings,source.multiWordObjects);
@@ -1320,6 +1334,7 @@ int wmain(int argc,wchar_t *argv[])
 				case Source::INTERACTIVE_SOURCE_TYPE:
 				case Source::WEB_SEARCH_SOURCE_TYPE:
 				case Source::NEWS_BANK_SOURCE_TYPE:
+				case Source::REQUEST_TYPE:
 					if ((ret=source.tokenize(title,etext,path,encoding,start,repeatStart,unknownCount))<0)
 					{
 						lplog(LOG_ERROR,L"ERROR:Unable to parse %s - %d (start=%s, repeatStart=%d).",path.c_str(),ret,start.c_str(),repeatStart);
@@ -1339,7 +1354,6 @@ int wmain(int argc,wchar_t *argv[])
 				case Source::NO_SOURCE_TYPE:
 				case Source::SCRIPT_SOURCE_TYPE:
 				case Source::PATTERN_TRANSFORM_TYPE:
-				case Source::REQUEST_TYPE:
 				default: break;
 				}
 				//int cap=source.m.capacity();
@@ -1370,11 +1384,13 @@ int wmain(int argc,wchar_t *argv[])
 			//bool isNoun=false,isVerb=true,isAdjective=false,isAdverb=false;
 			//analyzeSense(false,L"draft",proposedSubstitute,numIrregular,inflectionFlags,isNoun,isVerb,isAdjective,isAdverb);
 			puts("");
-			source.identifyObjects();
-			vector <int> secondaryQuotesResolutions;
-			source.analyzeWordSenses();
-			source.narrativeIsQuoted = sourceType != Source::GUTENBERG_SOURCE_TYPE;
-			source.syntacticRelations();
+			if (source.m.size())
+			{
+				source.identifyObjects();
+				source.analyzeWordSenses();
+				source.narrativeIsQuoted = sourceType != Source::GUTENBERG_SOURCE_TYPE;
+				source.syntacticRelations();
+			}
 			lplog();
 			if (sourceWrite)
 			{
@@ -1397,12 +1413,16 @@ int wmain(int argc,wchar_t *argv[])
 				if (!exitNow) source.signalFinishedProcessingSource(sourceId);
 				continue;
 			}
-			//source.printVerbFrequency();
-			source.identifySpeakerGroups(); 
-			source.resolveSpeakers(secondaryQuotesResolutions);
-			source.resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
-			source.printObjects();
-			source.resolveWordRelations();
+			if (source.m.size())
+			{
+				//source.printVerbFrequency();
+				source.identifySpeakerGroups();
+				vector <int> secondaryQuotesResolutions;
+				source.resolveSpeakers(secondaryQuotesResolutions);
+				source.resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
+			}
+			//source.printObjects(); // only necessary if printing objects
+			//source.resolveWordRelations(); // this resolves word relations to add to words - these will be erased unless future plans to update word relations dynamically.
 			if (sourceWrite && !source.write(path,true, false,specialExtension))
 				lplog(LOG_FATAL_ERROR,L"buffer overrun");
 			source.printResolutionCheck(badSpeakers);
@@ -1421,8 +1441,12 @@ int wmain(int argc,wchar_t *argv[])
 					source.printSectionStatistics();
 			}
 			lplog();
-			if (source.sourceInPast=source.sourceType==Source::INTERACTIVE_SOURCE_TYPE)
-				source.matchBasicElements(parseOnly,false);
+			if (source.sourceInPast = source.sourceType == Source::INTERACTIVE_SOURCE_TYPE)
+			{
+				cQuestionAnswering qa;
+				qa.matchBasicElements(&source,parseOnly, true);
+			}
+
 			if (!exitNow) source.signalFinishedProcessingSource(sourceId);
 			source.clearSource();
 			if (source.updateWordUsageCostsDynamically)

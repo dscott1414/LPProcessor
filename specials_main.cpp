@@ -34,7 +34,7 @@ void getSentenceWithTags(Source &source, int patternBegin, int patternEnd, int s
 // needed for _STLP_DEBUG - these must be set to a legal, unreachable yet never changing value
 unordered_map <wstring,tFI> static_wordMap;
 tIWMM wNULL=static_wordMap.end();
-map<tIWMM, tFI::cRMap::tRelation, Source::wordMapCompare> static_tIcMap;
+unordered_map<wstring, tFI::cRMap::tRelation> static_tIcMap;
 tFI::cRMap::tIcRMap tNULL=(tFI::cRMap::tIcRMap)static_tIcMap.begin();
 vector <cLocalFocus> static_cLocalFocus;
 vector <cLocalFocus>::iterator cNULL=static_cLocalFocus.begin();
@@ -236,7 +236,7 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 				CloseHandle(handles[nextProcessIndex]);
 			}
 		}
-		int id, repeatStart, prId;
+		int id, repeatStart;
 		wstring start, path, encoding, etext, author, title, pathInCache;
 		bool result = true;
 		if (processKind == 1 && numSourcesLeft > 0)
@@ -245,7 +245,7 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 		{
 			switch (processKind)
 			{
-			case 0:result = source.getNextUnprocessedParseRequest(prId, pathInCache); break;
+			case 0:
 			case 1:result = source.getNextUnprocessedSource(beginSource, endSource, false, id, path, encoding, start, repeatStart, etext, author, title); break;
 			case 2:result = source.anymoreUnprocessedForUnknown(step); break;
 			default:result = false; break;
@@ -1380,9 +1380,9 @@ bool additionalMatchingLogic(Source &source, int wordIndex, int primaryPMAOffset
 		numBeginRelations = (numBeginRelations*numLastFrequency) / numBeginFrequency;
 	else if (numLastRelations > 0 && numLastFrequency > 0 && numBeginFrequency / numLastFrequency < 1)
 		numLastRelations = (numLastRelations*numBeginFrequency) / numLastFrequency;
-	if (numBeginRelations == 0 && numLastRelations == 0)
+	if (numLastRelations == 0)
 	{
-		logicResults += L"BOTH_ZERO:";
+		logicResults += L"LAST_ZERO:";
 	}
 	if (numBeginRelations > 0 && numLastRelations > 0)
 	{
@@ -3150,7 +3150,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		{
 			for (int nextByPosition = source.m[wordSourceIndex].beginPEMAPosition; nextByPosition != -1; nextByPosition = source.pema[nextByPosition].nextByPosition)
 			{
-				cPattern *p = patterns[source.pema[nextByPosition].getPattern()];
+				cPattern *p = patterns[source.pema[nextByPosition].getParentPattern()];
 				if (p->name == L"__S1" && p->differentiator == L"5" && (source.pema[nextByPosition].getElement() == 2 || source.pema[nextByPosition].getElement() == 3))
 				{
 					errorMap[L"LP correct: word 'that': [embedded in _S1[5]] ST says preposition LP says demonstrative_determiner (relativizer)"]++;
@@ -3787,7 +3787,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 				return 0;
 			}
 			for (; pemaPosition != -1; pemaPosition = source.pema[pemaPosition].nextByPosition)
-				if (patterns[source.pema[pemaPosition].getPattern()]->name == L"__NOUN" && patterns[source.pema[pemaPosition].getPattern()]->differentiator == L"2")
+				if (patterns[source.pema[pemaPosition].getParentPattern()]->name == L"__NOUN" && patterns[source.pema[pemaPosition].getParentPattern()]->differentiator == L"2")
 				{
 					if (!source.pema[pemaPosition].isChildPattern() && source.m[wordSourceIndex].getFormNum(source.pema[pemaPosition].getChildForm()) == nounForm)
 					{
@@ -4216,7 +4216,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		if (source.m[wordSourceIndex].isOnlyWinner(verbForm) && verbCost==L"0")
 		{
 			// letting her hands *fall*
-			if (pemaOffset >= 0 && source.pema[pemaOffset].end == 1 && patterns[source.pema[pemaOffset].getPattern()]->differentiator==L"6")
+			if (pemaOffset >= 0 && source.pema[pemaOffset].end == 1 && patterns[source.pema[pemaOffset].getParentPattern()]->differentiator==L"6")
 			{
 				errorMap[L"diff: LP says verb in head part of NOUN struct and ST says noun"]++;
 				return 0;
@@ -5022,7 +5022,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	int adverbPatternOffset;
 	// AT8 not included because it has issues - look at AT8 in the future!
 	set <wstring> adverbFixedWordPatterns = { L"8",L"T",L"ST",L"ST2",L"AT1",L"AT1b",L"AT1c",L"AT2",L"AT3",L"AT4",L"AT5",L"AT5b",L"AT5c",L"AT6",L"AT7",L"AT9",L"AT10",L"AT11",L"AT11m",L"AT11p",L"AT12",L"AT13",L"AT14",L"6",L"MT",L"B",L"M",L"L",L"TL",L"Y",L"AMONG",L"ND" };
-	if ((adverbPatternOffset = source.queryPattern(wordSourceIndex, L"_ADVERB")) != -1 && adverbFixedWordPatterns.find(patterns[source.pema[adverbPatternOffset].getPattern()]->differentiator) != adverbFixedWordPatterns.end())
+	if ((adverbPatternOffset = source.queryPattern(wordSourceIndex, L"_ADVERB")) != -1 && adverbFixedWordPatterns.find(patterns[source.pema[adverbPatternOffset].getParentPattern()]->differentiator) != adverbFixedWordPatterns.end())
 	{
 		if (word != L"sun")
 		{
@@ -5103,10 +5103,10 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			((quantifierExplicitPatternPEMAOffset = source.queryPatternDiff(wordSourceIndex, L"_REL1", L"2")) != -1) ||
 			((quantifierExplicitPatternPEMAOffset = source.queryPatternDiff(wordSourceIndex, L"_REL1", L"6")) != -1))
 	{
-		wstring patternName = patterns[source.pema[quantifierExplicitPatternPEMAOffset].getPattern()]->name;
-		wstring patternDiff = patterns[source.pema[quantifierExplicitPatternPEMAOffset].getPattern()]->differentiator;
+		wstring patternName = patterns[source.pema[quantifierExplicitPatternPEMAOffset].getParentPattern()]->name;
+		wstring patternDiff = patterns[source.pema[quantifierExplicitPatternPEMAOffset].getParentPattern()]->differentiator;
 		for (; quantifierExplicitPatternPEMAOffset != -1; quantifierExplicitPatternPEMAOffset = source.pema[quantifierExplicitPatternPEMAOffset].nextByPosition)
-			if (patterns[source.pema[quantifierExplicitPatternPEMAOffset].getPattern()]->name == patternName && patterns[source.pema[quantifierExplicitPatternPEMAOffset].getPattern()]->differentiator == patternDiff)
+			if (patterns[source.pema[quantifierExplicitPatternPEMAOffset].getParentPattern()]->name == patternName && patterns[source.pema[quantifierExplicitPatternPEMAOffset].getParentPattern()]->differentiator == patternDiff)
 			{
 				if (!source.pema[quantifierExplicitPatternPEMAOffset].isChildPattern() && source.m[wordSourceIndex].getFormNum(source.pema[quantifierExplicitPatternPEMAOffset].getChildForm()) == quantifierForm)
 				{
@@ -5151,19 +5151,19 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	// check for any pattern specified explicit word checks
 	for (int pemaPosition=source.m[wordSourceIndex].beginPEMAPosition; pemaPosition != -1; pemaPosition = source.pema[pemaPosition].nextByPosition)
-		if (!source.pema[pemaPosition].isChildPattern() && patterns[source.pema[pemaPosition].getPattern()]->getElement(source.pema[pemaPosition].getElement())->specificWords[source.pema[pemaPosition].getElementIndex()]==word)
+		if (!source.pema[pemaPosition].isChildPattern() && patterns[source.pema[pemaPosition].getParentPattern()]->getElement(source.pema[pemaPosition].getElement())->specificWords[source.pema[pemaPosition].getElementIndex()]==word)
 		{
 			if (source.m[wordSourceIndex].queryWinnerForm(predeterminerForm) != -1)
 			{
 				errorMap[L"LP correct: LP says predeterminer in an explicit construction"]++;
 				return 0;
 			}
-			if (patterns[source.pema[pemaPosition].getPattern()]->name == L"_NOUN" && patterns[source.pema[pemaPosition].getPattern()]->differentiator == L"ANY")
+			if (patterns[source.pema[pemaPosition].getParentPattern()]->name == L"_NOUN" && patterns[source.pema[pemaPosition].getParentPattern()]->differentiator == L"ANY")
 			{
 				errorMap[L"LP correct: LP says quantifier in an explicit construction"]++;
 				return 0;
 			}
-			if (patterns[source.pema[pemaPosition].getPattern()]->name == L"_REL1")
+			if (patterns[source.pema[pemaPosition].getParentPattern()]->name == L"_REL1")
 			{
 				errorMap[L"diff: LP says demonstrative determiner and ST says adverb to head a relative phrase"]++;
 				return 0;

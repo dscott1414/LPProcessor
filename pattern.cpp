@@ -736,7 +736,7 @@ bool cPattern::fillPattern(Source &source, int sourcePosition, vector <matchElem
         patternMatchArray::tPatternMatch *pm=mb->pma.content;
         if (thisMatch->PMAIndex>=(int)mb->pma.count)
         ::lplog(LOG_FATAL_ERROR,L"    %d:RP PMA pattern offset %d is >= %d - ILLEGAL",subMatchBegin,thisMatch->PMAIndex,mb->pma.count);
-        unsigned int childPattern=pm[thisMatch->PMAIndex].getPattern();
+        unsigned int childPattern=pm[thisMatch->PMAIndex].getParentPattern();
         int childEnd=pm[thisMatch->PMAIndex].end;
         patternElementMatchArray::tPatternElementMatch *pem=source.pema.begin()+pm[thisMatch->PMAIndex].pemaByChildPatternEnd;
         if (patterns[childPattern]->name!=patterns[pem->getChildPattern()]->name ||
@@ -744,7 +744,7 @@ bool cPattern::fillPattern(Source &source, int sourcePosition, vector <matchElem
         ::lplog(L"INCONSISTENT PMAOffset %d pemaByChildPatternEnd=%d %s[%s](%d,%d) leads to %s[%s](%d,%d) CHILD %s[%s](%d,%d)!",
         thisMatch->PMAIndex,pm[thisMatch->PMAIndex].pemaByChildPatternEnd,
         patterns[childPattern]->name.c_str(),patterns[childPattern]->differentiator.c_str(),subMatchBegin,subMatchBegin+childEnd,
-        patterns[pem->getPattern()]->name.c_str(),patterns[pem->getPattern()]->differentiator.c_str(),subMatchBegin,subMatchBegin+pem->end,
+        patterns[pem->getParentPattern()]->name.c_str(),patterns[pem->getParentPattern()]->differentiator.c_str(),subMatchBegin,subMatchBegin+pem->end,
         patterns[pem->getChildPattern()]->name.c_str(),patterns[pem->getChildPattern()]->differentiator.c_str(),subMatchBegin,subMatchBegin+pem->getChildLen());
         */
       }
@@ -1018,8 +1018,7 @@ void cPattern::writeABNF(FILE *fh,unsigned int lastTag)
   if (onlyBeginMatch) len+=_snwprintf(buf+len,1024-len,L"_ONLY_BEGIN_MATCH:");
   if (onlyAfterQuote) len+=_snwprintf(buf+len,1024-len,L"_AFTER_QUOTE:");
 	if (strictNoMiddleMatch) len+=_snwprintf(buf+len,1024-len,L"_STRICT_NO_MIDDLE_MATCH:");
-	if (onlyEndMatch) len+=_snwprintf(buf+len,1024-len,L"__ONLY_END_MATCH:");
-  if (firstPassForwardReference) len+=_snwprintf(buf+len,1024-len,L"_FORWARD_REFERENCE:");
+	if (onlyEndMatch) len+=_snwprintf(buf+len,1024-len,L"_ONLY_END_MATCH:");
   if (noRepeat) len+=_snwprintf(buf+len,1024-len,L"_NO_REPEAT:");
   if (ignoreFlag) len+=_snwprintf(buf+len,1024-len,L"_IGNORE:");
   if (questionFlag) len+=_snwprintf(buf+len,1024-len,L"_QUESTION:");
@@ -1107,7 +1106,6 @@ cPattern::cPattern(FILE *fh,bool &valid)
       else if (!wcscmp(tag,L"_AFTER_QUOTE")) afterQuote=true;
 			else if (!wcscmp(tag,L"_STRICT_NO_MIDDLE_MATCH")) strictNoMiddleMatch=true;
 			else if (!wcscmp(tag,L"_ONLY_END_MATCH")) onlyEndMatch=true;
-      else if (!wcscmp(tag,L"_FORWARD_REFERENCE")) firstPassForwardReference=true;
       else if (!wcscmp(tag,L"_NO_REPEAT")) noRepeat=true;
       else if (!wcscmp(tag,L"_IGNORE")) ignoreFlag=true;
       else if (!wcscmp(tag,L"_QUESTION")) questionFlag=true;
@@ -1155,7 +1153,6 @@ bool cPattern::create(wstring patternName, wstring differentiator, int numForms,
   p->afterQuote=p->eliminateTag(L"_AFTER_QUOTE");
 	p->strictNoMiddleMatch=p->eliminateTag(L"_STRICT_NO_MIDDLE_MATCH");
 	p->onlyEndMatch=p->eliminateTag(L"_ONLY_END_MATCH");
-  p->firstPassForwardReference=p->eliminateTag(L"_FORWARD_REFERENCE");
   p->noRepeat=p->eliminateTag(L"_NO_REPEAT");
   p->ignoreFlag=p->eliminateTag(L"_IGNORE");
   p->questionFlag=p->eliminateTag(L"_QUESTION");
@@ -1740,7 +1737,7 @@ void initializeTagSets(int &startSuperTagSets)
   desiredTagSets.push_back(tTS(subjectVerbAgreementTagSet,L"_AGREEMENT",3,L"SUBJECT",L"VERB",L"V_AGREE",L"V_OBJECT",L"conditional",L"future",L"past",L"SUBJUNCTIVE",NULL)); // V_OBJECT used for relations
   // "N_AGREE",L"GNOUN",L"SINGULAR",L"PLURAL" were put into SUBJECT_TAGSET because these tags also belong in OBJECTS which are after the verb, have nothing to
   // do with agreement and yet greatly multiply the number of tagsets.
-	desiredTagSets.push_back(tTS(subjectTagSet,L"_SUBJECT",-4,L"N_AGREE",L"GNOUN",L"MNOUN",L"NAME",L"SINGULAR",L"PLURAL",L"RE_OBJECT",NULL));
+	desiredTagSets.push_back(tTS(subjectTagSet,L"_SUBJECT",-4,L"N_AGREE",L"GNOUN",L"MNOUN",L"NAME",L"SINGULAR",L"PLURAL",L"RE_OBJECT",L"MOBJECT",NULL));
 	desiredTagSets.push_back(tTS(specificAnaphorTagSet,L"_SPECIFIC_ANAPHOR",-3,L"N_AGREE",L"GNOUN",L"MNOUN",L"PLURAL",L"SUBJECT",L"V_AGREE",NULL));
   // VERB_OBJECTS_TAGSET: although a verb does not need to have objects to be assessed for the # of objects it has, the pattern must allow for objects.
   desiredTagSets.push_back(tTS(verbObjectsTagSet,L"_VERB_OBJECTS",3,L"VERB",L"V_OBJECT",L"OBJECT",L"HOBJECT", L"ADVOBJECT", L"ADJOBJECT", L"V_AGREE",
@@ -2254,7 +2251,7 @@ int Source::queryPattern(int position, wstring pattern, int &maxEnd)
 	LFS
 		int maxLen = -1, pemaPosition = -1, nextByPosition = m[position].beginPEMAPosition;
 	for (; nextByPosition != -1; nextByPosition = pema[nextByPosition].nextByPosition)
-		if (patterns[pema[nextByPosition].getPattern()]->name == pattern && (pema[nextByPosition].end - pema[nextByPosition].begin) > maxLen)
+		if (patterns[pema[nextByPosition].getParentPattern()]->name == pattern && (pema[nextByPosition].end - pema[nextByPosition].begin) > maxLen)
 			maxLen = pema[pemaPosition = nextByPosition].end - pema[nextByPosition].begin;
 	if (pemaPosition != -1) maxEnd = pema[pemaPosition].end;
 	return pemaPosition;
@@ -2265,7 +2262,7 @@ int Source::queryPatternDiff(int position, wstring pattern, wstring differentiat
 {
 	LFS
 		for (int nextByPosition = m[position].beginPEMAPosition; nextByPosition != -1; nextByPosition = pema[nextByPosition].nextByPosition)
-			if (patterns[pema[nextByPosition].getPattern()]->name == pattern && patterns[pema[nextByPosition].getPattern()]->differentiator == differentiator)
+			if (patterns[pema[nextByPosition].getParentPattern()]->name == pattern && patterns[pema[nextByPosition].getParentPattern()]->differentiator == differentiator)
 				return nextByPosition;
 	return -1;
 }
@@ -2275,7 +2272,7 @@ int Source::queryPattern(int position, wstring pattern)
 {
 	LFS
 		for (int nextByPosition = m[position].beginPEMAPosition; nextByPosition != -1; nextByPosition = pema[nextByPosition].nextByPosition)
-			if (patterns[pema[nextByPosition].getPattern()]->name == pattern)
+			if (patterns[pema[nextByPosition].getParentPattern()]->name == pattern)
 				return nextByPosition;
 	return -1;
 }
@@ -2286,7 +2283,7 @@ void Source::printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLoca
   if (descriptor) wcscpy(temp,descriptor);
 	if (PEMAPosition >= 0 && position >= 0)
 		wsprintf(temp + ((descriptor == NULL) ? 0 : wcslen(descriptor)), L"%s[%s](%d,%d)",
-			patterns[pema[PEMAPosition].getPattern()]->name.c_str(), patterns[pema[PEMAPosition].getPattern()]->differentiator.c_str(), position + pema[PEMAPosition].begin, position + pema[PEMAPosition].end);
+			patterns[pema[PEMAPosition].getParentPattern()]->name.c_str(), patterns[pema[PEMAPosition].getParentPattern()]->differentiator.c_str(), position + pema[PEMAPosition].begin, position + pema[PEMAPosition].end);
   ::printTagSet(logType,temp,ts,tagSet);
 }
 

@@ -14,17 +14,17 @@ cWordGroup::cWordGroup(void)
 	addedFromWords=addedToWords=addedSubGroups=false;
 }
 
-cWordGroup::cWordGroup(vector <tIWMM> &inFromWords,set <tIWMM,tFI::wordSetCompare> &inToWords,tIWMM word)
+cWordGroup::cWordGroup(vector <wstring> &inFromWords,set <wstring> &inToWords, wstring word)
 { LFS
 	fromWords=inFromWords;
 	toWords=inToWords;
-	if (word!=wNULL) toWords.insert(word);
+	toWords.insert(word);
 #ifdef LOG_RELATION_GROUPING
 	::lplog(L"Created group %s",summary().c_str());
 #endif
 }
 
-cWordGroup::cWordGroup(tIWMM fromWord1,tIWMM fromWord2,tIWMM toWord1,tIWMM toWord2)
+cWordGroup::cWordGroup(wstring fromWord1, wstring fromWord2, wstring toWord1, wstring toWord2)
 { LFS
 	fromWords.push_back(fromWord1);
 	fromWords.push_back(fromWord2);
@@ -32,7 +32,7 @@ cWordGroup::cWordGroup(tIWMM fromWord1,tIWMM fromWord2,tIWMM toWord1,tIWMM toWor
 	toWords.insert(toWord2);
 }
 
-cWordGroup::cWordGroup(tIWMM self,tFI::cRMap::tcRMap *inToWords)
+cWordGroup::cWordGroup(wstring self,tFI::cRMap::tcRMap *inToWords)
 { LFS
 	fromWords.push_back(self);
 	for (tFI::cRMap::tIcRMap twi=inToWords->begin(),twiEnd=inToWords->end(); twi!=twiEnd; twi++)
@@ -355,11 +355,11 @@ bool tFI::intersect(relationWOTypes relationType,tIWMM word,tIWMM self,tIWMM &fr
 // which refer to tIcRMap, and then again.
 tFI::cRMap::tIcRMap tFI::cRMap::addRelation(int sourceId,int fromWhere,tIWMM toWord,bool &isNew,int count,bool fromDB)
 { LFS
-	typedef pair <tIWMM,tRelation> ptcRMap;
+	typedef pair <wstring,tRelation> ptcRMap;
 	tIcRMap mri;
-	if (isNew=(mri=r.find(toWord))==r.end())
+	if (isNew=(mri=r.find(toWord->first))==r.end())
 	{
-		pair <tIcRMap,bool> mr=r.insert(ptcRMap(toWord,tRelation(sourceId,fromWhere,count,fromDB)));
+		pair <tIcRMap,bool> mr=r.insert(ptcRMap(toWord->first,tRelation(sourceId,fromWhere,count,fromDB)));
 		mri=mr.first;
 	}
 	else
@@ -450,14 +450,6 @@ int Source::makeRelationHash(int num1,int num2,int num3)
 	return num1+(num2<<14)+(num3<<28); // num3 must be small
 }
 
-void Source::addDelayedWordRelations(int where,int fromWhere,int toWhere,int relationType)
-{ LFS
-	delayedWordRelations.push_back(where);
-	delayedWordRelations.push_back(fromWhere);
-	delayedWordRelations.push_back(toWhere);
-	delayedWordRelations.push_back(relationType);
-}
-
 /*
   int where
 	int fromWhere
@@ -487,97 +479,6 @@ void Source::reportProbableRelationsAccuracy()
 	// log sum (1), sum (2), average (1), average (2), low (1), high (1), low (2), high (2)
 }
 
-void Source::resolveWordRelations()
-{ LFS 
-	unsigned int sni=0;
-	//logCache=0;
-	for (int I=0; I<(int)delayedWordRelations.size(); I+=4)
-	{
-		int where=delayedWordRelations[I];
-		int fromWhere=delayedWordRelations[I+1];
-		int toWhere=delayedWordRelations[I+2];
-		int relationType=delayedWordRelations[I+3];
-		if (I>4 && 
-				where==delayedWordRelations[I-4] && 
-				fromWhere==delayedWordRelations[I-3] && 
-				toWhere==delayedWordRelations[I-2] && 
-				relationType==delayedWordRelations[I-1])
-			continue;
-		//lplog(L"where=%d from=%d to=%d rt=%d",where,fromWhere,toWhere,relationType);
-		while (sni+1<subNarratives.size() && subNarratives[sni+1]<=where)
-			sni++;
-		// if not in narrative but in quotes, narrativeNum=-1
-		// if in narrative and in quotes, narrativeNum=sni
-		// if not in quotes, narrativeNum=0
-		switch (relationType)
-		{
-		case PrepWithPWord:						
-			addRelations(where,m[fromWhere].word,fullyResolveToClass(toWhere),relationType);
-			break;
-		case AWordWithPrep: 			
-		case WordWithPrep:
-			addRelations(where,fullyResolveToClass(fromWhere),m[toWhere].word,relationType);
-			break;
-		case DirectWordWithIndirectWord:
-			addRelations(where,fullyResolveToClass(fromWhere),fullyResolveToClass(toWhere),relationType);
-			break;
-		case VerbWithPrep:
-			addRelations(where,m[fromWhere].getVerbME(fromWhere,13,lastNounNotFound,lastVerbNotFound),m[toWhere].word,VerbWithPrep);
-			break;
-		case VerbWithIndirectWord:
-		case VerbWithDirectWord:
-		case NotVerbWithSubjectWord:
-		case VerbWithSubjectWord:
-			unsigned __int64 or=m[toWhere].objectRole;
-			int narrativeNum=(or&(IN_PRIMARY_QUOTE_ROLE|IN_SECONDARY_QUOTE_ROLE)) ? -1:0;
-			if (or&IN_EMBEDDED_STORY_OBJECT_ROLE) narrativeNum=(signed)sni;
-			int subject=-1;
-			if (m[fromWhere].relSubject>=0) 
-			{
-				subject=m[m[fromWhere].relSubject].getObject();
-				if (m[m[fromWhere].relSubject].objectMatches.size()>0)
-					subject=m[m[fromWhere].relSubject].objectMatches[0].object;
-			}
-			tFI::cRMap::tIcRMap r=addRelations(where,m[fromWhere].getVerbME(fromWhere,1,lastNounNotFound,lastVerbNotFound),fullyResolveToClass(toWhere),relationType);
-			bool physicallyEvaluated;
-			int pp=(toWhere>=0 && m[toWhere].getObject()>=0 && m[toWhere].beginObjectPosition>=0 && m[m[toWhere].beginObjectPosition].principalWherePosition>=0 &&
-				  (physicallyPresentPosition(toWhere,physicallyEvaluated) && physicallyEvaluated));
-			relationHistory.push_back(cRelationHistory(r,toWhere,narrativeNum,subject,pp));
-			break;
-		}
-	}
-	delayedWordRelations.clear();
-}
-
-// the beginning preposition binds to subject, if in subject
-//   if not in subject, binds to subject and object
-// if not beginning prep, binds to immediately previous object of prep.
-// fills in these relation tags:
-//   VerbWithTimePrep: if subobject a DATE or TIME
-//   AWordWithPrep (A=ambiguous, is if binding objects>1), WordWithPrep; preposition with its binding object
-//   SubjectWordWithNotVerb,SubjectWordWithVerb: if prep is 'by' and verb sense is passive
-//	 PrepWithPWord: preposition with its object
-//	 AVerbWithPrep : VerbWithPrep: verb with its preposition
-tFI::cRMap::tIcRMap Source::addRelations(int where,tIWMM from,tIWMM to,int relationType)
-{ LFS
-	//tIWMM fromME=from->second.mainEntry,toME=to->second.mainEntry;
-	//tIWMM fromFinal=(fromME==wNULL) ? from:fromME,toFinal=(toME==wNULL) ? to:toME;
-	/*
-	pair< set<int>::iterator, bool > pr = nrr.insert(makeRelationHash(fromFinal->second.index,toFinal->second.index,relationType));
-	tFI::cRMap::tIcRMap tmp;
-	if (!pr.second && fromFinal->second.relationMaps[relationType]!=NULL &&
-		(tmp=fromFinal->second.relationMaps[relationType]->r.find(toFinal))!=
-		fromFinal->second.relationMaps[relationType]->r.end())
-		return tmp;
-		*/
-   from->second.changedSinceLastWordRelationFlush=true;
-   to->second.changedSinceLastWordRelationFlush=true;
-	 if (debugTrace.traceRelations) 
-		lplog(L"%06d:TRQQQ %s:%s -> %s",where,getRelStr(relationType),from->first.c_str(),to->first.c_str());
-	to->second.addRelation(where,getComplementaryRelationship(relationType),from);
-	return from->second.addRelation(where,relationType,to);
-}
-
 bool Source::inTag(tTagLocation &innerTag,tTagLocation &outerTag)
 { LFS
 	return innerTag.sourcePosition>=outerTag.sourcePosition && (innerTag.sourcePosition+innerTag.len<=outerTag.sourcePosition+outerTag.len);
@@ -592,7 +493,7 @@ void Source::adjustToHailRole(int where)
 	unsigned __int64 or=im->objectRole&(HAIL_ROLE|MPLURAL_ROLE|RE_OBJECT_ROLE);
 	int oc=(im->getObject()>=0) ? objects[im->getObject()].objectClass:-1;
 	if ((or&HAIL_ROLE) && ((im->flags&WordMatch::flagAdjectivalObject)  ||
-		  (im->getObject()>=0 && objects[im->getObject()].ownerWhere>=0 && (m[objects[im->getObject()].ownerWhere].word->second.inflectionFlags&SECOND_PERSON)) || // your cousin
+		  (im->getObject()>=0 && objects[im->getObject()].getOwnerWhere()>=0 && (m[objects[im->getObject()].getOwnerWhere()].word->second.inflectionFlags&SECOND_PERSON)) || // your cousin
 		  ((/*oc==GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS && */im->beginObjectPosition>=0 && m[im->beginObjectPosition].queryForm(determinerForm)>=0) || // a maid
 			 oc==NON_GENDERED_GENERAL_OBJECT_CLASS || oc==NON_GENDERED_BUSINESS_OBJECT_CLASS || oc==VERB_OBJECT_CLASS || oc==NON_GENDERED_NAME_OBJECT_CLASS) ||
 			 oc==PRONOUN_OBJECT_CLASS ||
@@ -814,43 +715,6 @@ void Source::trackVerbTenses(int where,vector <tTagLocation> &tagSet,bool inQuot
 		lastSense=sense;
 		if (debugTrace.traceRelations)
 			lplog(L"%06d:set lastSense to %s (TVT 2) (inQuote=%s).",where,senseString(tmpstr,lastSense).c_str(),(inQuote) ? L"true":L"false");
-	}
-}
-
-void Source::recordVerbTenseRelations(int where,int sense,int subjectObject,int whereVerb)
-{ LFS
-	// just present, past or future
-	int pureTense=(getSimplifiedTense(sense)&7)/2;
-	// skip should/could verbs
-	if (subjectObject>=0 && !(sense&(VT_POSSIBLE|VT_VERB_CLAUSE)))
-	{
-		cLastVerbTenses *lastVerbTense=objects[subjectObject].lastVerbTenses;
-		for (int objectLastTense=0; objectLastTense<VERB_HISTORY; objectLastTense++,lastVerbTense++)
-		{
-			if (lastVerbTense->lastTense!=pureTense ||
-				lastVerbTense->lastVerb<0 ||
-				abs(whereVerb-lastVerbTense->lastVerb)<200)
-				break;
-			// not delayed because the arguments are two verbs
-			addRelations(where,m[whereVerb].getVerbME(where,4,lastNounNotFound,lastVerbNotFound),m[lastVerbTense->lastVerb].getVerbME(where,20,lastNounNotFound,lastVerbNotFound),VerbWithNext1MainVerbSameSubject+objectLastTense*2);
-		}
-		lastVerbTense=objects[subjectObject].lastVerbTenses;
-		memmove(lastVerbTense+1,lastVerbTense,(VERB_HISTORY-1)*sizeof(lastVerbTense[0]));
-		lastVerbTense[0].lastVerb=whereVerb;
-		lastVerbTense[0].lastTense=pureTense;
-		// must have a subject, though doesn't have to match.
-		for (int objectLastTense=0; objectLastTense<VERB_HISTORY; objectLastTense++)
-		{
-			if (lastVerbTenses[objectLastTense].lastTense!=pureTense ||
-				lastVerbTenses[objectLastTense].lastVerb<0 ||
-				abs(whereVerb-lastVerbTenses[objectLastTense].lastVerb)<200)
-				break;
-			// not delayed because the arguments are two verbs
-			addRelations(where,m[whereVerb].getVerbME(where,5,lastNounNotFound,lastVerbNotFound),m[lastVerbTenses[objectLastTense].lastVerb].getVerbME(where,6,lastNounNotFound,lastVerbNotFound),VerbWithNext1MainVerb+objectLastTense*2);
-		}
-		memmove(lastVerbTenses+1,lastVerbTenses,(VERB_HISTORY-1)*sizeof(lastVerbTenses[0]));
-		lastVerbTenses[0].lastVerb=whereVerb;
-		lastVerbTenses[0].lastTense=pureTense;
 	}
 }
 
@@ -1173,7 +1037,7 @@ void Source::evaluateSubjectRoleTag(int where,int which,vector <int> whereSubjec
 	bool inRelativeClause=(m[s].objectRole&(EXTENDED_ENCLOSING_ROLE|NONPAST_ENCLOSING_ROLE|NONPRESENT_ENCLOSING_ROLE|SENTENCE_IN_REL_ROLE|SENTENCE_IN_ALT_REL_ROLE))!=0;
 	// if the verb is simply extended, it acts like a modifier
 	//  another knock[comer] sent him[tommy] *scuttling* back to cover
-	bool verbInPhraseIsPresentExtended=m[s].relInternalVerb>=0 && (m[m[s].relInternalVerb].quoteForwardLink&(VT_PRESENT|VT_EXTENDED))==(VT_PRESENT|VT_EXTENDED);
+	bool verbInPhraseIsPresentExtended=m[s].relInternalVerb>=0 && (m[m[s].relInternalVerb].verbSense&(VT_PRESENT|VT_EXTENDED))==(VT_PRESENT|VT_EXTENDED);
 	if (isNonPast && (inPrimaryQuote || inSecondaryQuote || !(m[s].objectRole&FOCUS_EVALUATED)))
 	{
 		m[s].objectRole|=NONPAST_OBJECT_ROLE; // used in mergeFocus, for identifying speaker groups
@@ -1239,13 +1103,13 @@ void Source::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool isI
 	// From the shelter of the doorway ESTABhe[tommy] watched him[boris] EXITgo up the steps of a particularly evil - looking house and MOVErap sharply , with a peculiar rhythm , on the door
 	int whereDesignatedAsInternalSubject=-1;
 	while (I>0 && skipQuote(I) && !isEOS(I) && m[I].word->first!=L"’" && m[I].word!=Words.sectionWord && m[I].word->first!=L":" && m[I].word->first!=L"--" && 
-	    (!(m[I].objectRole&SUBJECT_ROLE) || (m[I].objectRole&PASSIVE_SUBJECT_ROLE) || m[I].getObject()==UNKNOWN_OBJECT) && I!=whereDesignatedAsInternalSubject) 
+	    (!(m[I].objectRole&SUBJECT_ROLE) || (m[I].objectRole&PASSIVE_SUBJECT_ROLE) || m[I].getObject()== cObject::eOBJECTS::UNKNOWN_OBJECT) && I!=whereDesignatedAsInternalSubject)
 	{
 		if (m[I].verbSense>=0 && m[I].relSubject>=0 && !(m[m[I].relSubject].objectRole&SUBJECT_ROLE) && !(m[m[I].relSubject].objectRole&PASSIVE_SUBJECT_ROLE))
 			whereDesignatedAsInternalSubject=m[I].relSubject;
 		I--;
 	}
-	bool searchValid=I>=0 && ((m[I].objectRole&SUBJECT_ROLE) && !(m[I].objectRole&PASSIVE_SUBJECT_ROLE) && m[I].getObject()!=UNKNOWN_OBJECT) || I==whereDesignatedAsInternalSubject;
+	bool searchValid=I>=0 && ((m[I].objectRole&SUBJECT_ROLE) && !(m[I].objectRole&PASSIVE_SUBJECT_ROLE) && m[I].getObject()!= cObject::eOBJECTS::UNKNOWN_OBJECT) || I==whereDesignatedAsInternalSubject;
 	if (searchValid || MSTechnique>=0)
 	{
 		if (!searchValid) 
@@ -1256,17 +1120,17 @@ void Source::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool isI
 		if (infinitiveObjectOfPrep && whereVerb>2 && m[whereVerb-1].queryWinnerForm(possessiveDeterminerForm)>=0)
 			I=whereVerb-1;
 		// he found Albert discharging his professional duties and introduced [himself]
-		else if (I>=0 && m[I].getRelVerb()>=0 && (m[m[I].getRelVerb()].quoteForwardLink!=tsSense || m[I].relInternalVerb>=0) &&
+		else if (I>=0 && m[I].getRelVerb()>=0 && (m[m[I].getRelVerb()].verbSense!=tsSense || m[I].relInternalVerb>=0) &&
 			       (whereDesignatedAsInternalSubject!=I || tsSense!=VT_PRESENT))
 		{
 			// if there is another subject, that is not the same subject, return.
 			int J=I-1,element;
 			while (J>=0 && !isEOS(J) && m[J].word->first!=L"”" && m[J].word->first!=L"’" && m[J].word!=Words.sectionWord && m[J].word->first!=L":" && m[J].queryWinnerForm(coordinatorForm)<0 && 
-						(!(m[J].objectRole&SUBJECT_ROLE) || m[J].getObject()==UNKNOWN_OBJECT || (m[J].flags&WordMatch::flagAdjectivalObject))) J--;
-			if (multiSubject=(J>=0 && m[J].objectRole&SUBJECT_ROLE) && m[J].getObject()!=UNKNOWN_OBJECT && m[J].getObject()!=m[I].getObject() && m[J].word!=m[I].word && m[J].pma.queryPatternDiff(L"__S1",L"5")==-1) 
+						(!(m[J].objectRole&SUBJECT_ROLE) || m[J].getObject()==cObject::eOBJECTS::UNKNOWN_OBJECT || (m[J].flags&WordMatch::flagAdjectivalObject))) J--;
+			if (multiSubject=(J>=0 && m[J].objectRole&SUBJECT_ROLE) && m[J].getObject()!= cObject::eOBJECTS::UNKNOWN_OBJECT && m[J].getObject()!=m[I].getObject() && m[J].word!=m[I].word && m[J].pma.queryPatternDiff(L"__S1",L"5")==-1)
 			{
 				if (m[I].relInternalVerb>=0 && (m[m[I].relInternalVerb].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) &&
-					  m[J].getRelVerb()>=0 && m[m[J].getRelVerb()].quoteForwardLink==tsSense)
+					  m[J].getRelVerb()>=0 && m[m[J].getRelVerb()].verbSense==tsSense)
 				{
 					if (debugTrace.traceSpeakerResolution)
 					lplog(LOG_RESOLUTION,L"%06d:object infinitive rejection of %d in favor of subject=%d whereVerb=%d?",where,I,J,whereVerb); 
@@ -1299,7 +1163,7 @@ void Source::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool isI
 								// try really really hard to find that infinitive subject
 								K=J-1;
 								while (K>=0 && !isEOS(J) && m[K].word->first!=L"”" && m[K].word->first!=L"’" && m[K].word!=Words.sectionWord && m[K].word->first!=L":" && m[K].queryWinnerForm(coordinatorForm)<0 && 
-											(!(m[K].objectRole&(SUBJECT_ROLE|PREP_OBJECT_ROLE)) || m[K].getObject()==UNKNOWN_OBJECT || (m[K].flags&WordMatch::flagAdjectivalObject))) K--;
+											(!(m[K].objectRole&(SUBJECT_ROLE|PREP_OBJECT_ROLE)) || m[K].getObject()== cObject::eOBJECTS::UNKNOWN_OBJECT || (m[K].flags&WordMatch::flagAdjectivalObject))) K--;
 								if (K>=0 && m[K].getRelVerb()>=0 && m[m[K].getRelVerb()].getRelVerb()>=0) I=K;
 								else return;
 							}
@@ -1514,7 +1378,7 @@ void Source::markPrepositionalObjects(int where,int whereVerb,bool flagInInfinit
 						// preposition may have a GNOUN object - that peace had been effected by [following their counsels]
 						m[wpo].objectRole|=SUBJECT_ROLE|PASSIVE_SUBJECT_ROLE|FOCUS_EVALUATED;
 						// taken out because resolveToClass must be delayed because of speaker resolution - also passive verb usage may blur relation results
-						//addRelations(where,resolveToClass(wpo),m[whereVerb].getVerbME(),(m[whereVerb].quoteForwardLink&VT_NEGATION) ? SubjectWordWithNotVerb:SubjectWordWithVerb,nrr);
+						//addRelations(where,resolveToClass(wpo),m[whereVerb].getVerbME(),(m[whereVerb].verbSense&VT_NEGATION) ? SubjectWordWithNotVerb:SubjectWordWithVerb,nrr);
 						if (debugTrace.traceRole)
 						{
 							wstring tmpstr2,tmpstr3;
@@ -1524,7 +1388,7 @@ void Source::markPrepositionalObjects(int where,int whereVerb,bool flagInInfinit
 					}
 					else
 					{
-						addDelayedWordRelations(where,wp,wpo,PrepWithPWord);
+						//addDelayedWordRelations(where,wp,wpo,PrepWithPWord);
 					}
 					__int64 or=m[wpo].objectRole;
 					while ((wpo=m[wpo].nextCompoundPartObject)>=0)
@@ -1719,7 +1583,7 @@ int Source::processInternalInfinitivePhrase(int where,int whereVerb,int wherePar
 			}
 			m[itoWhere].flags|=WordMatch::flagInInfinitivePhrase;
 			// not delayed because the arguments are two verbs
-			addRelations(where,m[whereVerb].getVerbME(where,8,lastNounNotFound,lastVerbNotFound),m[whereIVerb].getVerbME(where,7,lastNounNotFound,lastVerbNotFound),VerbWithInfinitive);
+			//addRelations(where,m[whereVerb].getVerbME(where,8,lastNounNotFound,lastVerbNotFound),m[whereIVerb].getVerbME(where,7,lastNounNotFound,lastVerbNotFound),VerbWithInfinitive);
 			evaluateAdditionalRoleTags(itoWhere,tagSets[K],parentTagLen,firstFreePrep,futureBoundPrepositions,inPrimaryQuote,inSecondaryQuote,outsideQuoteTruth,inQuoteTruth,true,true,nextVerbInSeries,sense,whereLastVerb,ambiguousSense,inQuotedString,inSectionHeader,begin,end);
 			break;
 		}
@@ -1753,38 +1617,6 @@ int Source::findPrepRole(int whereLastPrep,int role,int rejectRole)
 		}
 	}
 	return save;
-}
-
-int Source::attachAdjectiveRelation(vector <tTagLocation> &tagSet,int whereObject)
-{ LFS
-	int begin=m[whereObject].beginObjectPosition,end=m[whereObject].endObjectPosition;
-	tIWMM modifiedWord=resolveToClass(whereObject);
-	int nextAdjectiveTag=-1,adjectiveTag=findTagConstrained(tagSet,L"ADJ",nextAdjectiveTag,begin,end);
-	while (adjectiveTag>=0 && tagIsCertain(tagSet[adjectiveTag].sourcePosition))
-	{
-		tIWMM adjectiveWord=m[tagSet[adjectiveTag].sourcePosition].word;
-		if (m[tagSet[adjectiveTag].sourcePosition].isPPN())
-			adjectiveWord=Words.PPN;
-		// not delayed because the arguments are not subject to enhanced resolution (not an object)
-		addRelations(tagSet[adjectiveTag].sourcePosition,modifiedWord,adjectiveWord,WordWithAdjective);
-		adjectiveTag=nextAdjectiveTag;
-		nextAdjectiveTag=findTagConstrained(tagSet,L"ADJ",nextAdjectiveTag,begin,end);
-	}
-	return 0;
-}
-
-int Source::attachAdverbRelation(vector <tTagLocation> &tagSet,int verbTagIndex,tIWMM verbWord)
-{ LFS
-	int nextAdverbTag=-1,adverbTag=findTagConstrained(tagSet,L"ADV",nextAdverbTag,tagSet[verbTagIndex]);
-	tIWMM adverbWord;
-	if (adverbTag>=0 && tagIsCertain(tagSet[adverbTag].sourcePosition) && (adverbWord=resolveToClass(tagSet[adverbTag].sourcePosition))!=wNULL)
-	{
-		// not delayed because the arguments are not subject to enhanced resolution (not an object)
-		addRelations(tagSet[adverbTag].sourcePosition,verbWord,adverbWord,VerbWithAdverb);
-		if (nextAdverbTag>=0 && tagIsCertain(tagSet[adverbTag].sourcePosition) && (adverbWord=resolveToClass(tagSet[nextAdverbTag].sourcePosition))!=wNULL)
-			addRelations(tagSet[nextAdverbTag].sourcePosition,verbWord,adverbWord,VerbWithAdverb);
-	}
-	return 0;
 }
 
 // mark OBJECT with NONPAST_OBJECT_ROLE if VERB is NOT a simple non-negative past tense (VT_PAST, VT_EXTENDED+VT_PAST, VT_PASSIVE+VT_PAST, VT_PASSIVE+VT_PAST+VT_EXTENDED)
@@ -1840,7 +1672,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 		if (hverbTagIndex>=0) 
 		{
 			whereHVerb=tagSet[hverbTagIndex].sourcePosition;
-			attachAdverbRelation(tagSet,hverbTagIndex,m[whereHVerb].getVerbME(where,9,lastNounNotFound,lastVerbNotFound));
+			//attachAdverbRelation(tagSet,hverbTagIndex,m[whereHVerb].getVerbME(where,9,lastNounNotFound,lastVerbNotFound)); see dynamicallyUpdateWordRelations.cpp
   		m[whereHVerb].hasVerbRelations=true;
 		}
 		if (whereVerb<0)
@@ -1849,7 +1681,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 			whereLastVerb = whereVerb + 1;
 		if (whereHVerb > whereLastVerb)
 			whereLastVerb = whereHVerb + 1;
-		attachAdverbRelation(tagSet,verbTagIndex,m[whereVerb].getVerbME(where,10,lastNounNotFound,lastVerbNotFound));
+		//attachAdverbRelation(tagSet,verbTagIndex,m[whereVerb].getVerbME(where,10,lastNounNotFound,lastVerbNotFound)); see dynamicallyUpdateWordRelations.cpp
 		for (int mverbTag=findOneTag(tagSet,L"MVERB",-1); mverbTag>=0; mverbTag=findOneTag(tagSet,L"MVERB",mverbTag))
 		{
 			vector < vector <tTagLocation> > mverbTagSets;
@@ -1889,12 +1721,12 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 						if (isPossible(whereMVerb)) mtsSense|=VT_POSSIBLE;
 						if (whereMVerb>=0) 
 						{
-							m[whereMVerb].quoteForwardLink=mtsSense | ((isNot) ? VT_NEGATION:0);
+							m[whereMVerb].setQuoteForwardLink(mtsSense | ((isNot) ? VT_NEGATION:0));
 							m[whereMVerb].hasVerbRelations=true;
 						}
 						if (whereHMVerb>=0) 
 						{
-							m[whereHMVerb].quoteForwardLink=mtsSense | ((isNot) ? VT_NEGATION:0);
+							m[whereHMVerb].setQuoteForwardLink(mtsSense | ((isNot) ? VT_NEGATION:0));
 							m[whereHMVerb].hasVerbRelations=true;
 						}
 						m[lastWhereMVerb].setRelVerb(whereMVerb);
@@ -1923,14 +1755,14 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 		if (hverbTagIndex>=0) 
 		{
 			whereHVerb=tagSet[hverbTagIndex].sourcePosition;
-			attachAdverbRelation(tagSet,hverbTagIndex,m[whereHVerb].getVerbME(where,11,lastNounNotFound,lastVerbNotFound));
+			//attachAdverbRelation(tagSet,hverbTagIndex,m[whereHVerb].getVerbME(where,11,lastNounNotFound,lastVerbNotFound)); see dynamicallyUpdateWordRelations.cpp
   		m[whereHVerb].hasVerbRelations=true;
 		}
 		if (whereVerb<0)
 			return false;
 		if (whereVerb > whereLastVerb)
 			whereLastVerb = whereVerb + 1;
-		attachAdverbRelation(tagSet,verbTagIndex,m[whereVerb].getVerbME(where,12,lastNounNotFound,lastVerbNotFound));
+		//attachAdverbRelation(tagSet,verbTagIndex,m[whereVerb].getVerbME(where,12,lastNounNotFound,lastVerbNotFound)); see dynamicallyUpdateWordRelations.cpp
 		nextTag=-1;
 		// check for INFPSUB - pattern may match non-infinitive phrases
 		int itoTag=findTag(tagSet,L"ITO",nextTag),sp=(itoTag>=0) ? tagSet[itoTag].sourcePosition : -1;
@@ -1958,12 +1790,12 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 		tsSense=VT_PAST;
 	if (whereVerb>=0) 
 	{
-		m[whereVerb].verbSense=m[whereVerb].quoteForwardLink=tsSense | ((isNot) ? VT_NEGATION:0);
+		m[whereVerb].verbSense = tsSense | ((isNot) ? VT_NEGATION : 0);
 		m[whereVerb].hasVerbRelations=true;
 	}
 	if (whereHVerb>=0) 
 	{
-		m[whereHVerb].verbSense=m[whereHVerb].quoteForwardLink=tsSense | ((isNot) ? VT_NEGATION:0);
+		m[whereHVerb].verbSense = tsSense | ((isNot) ? VT_NEGATION : 0);
 		m[whereHVerb].hasVerbRelations=true;
 		m[whereHVerb].relInternalVerb=whereVerb;
 	}
@@ -1971,7 +1803,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 		whereLastVerb = whereVerb + 1;
 	if (whereHVerb > whereLastVerb)
 		whereLastVerb = whereHVerb + 1;
-	attachAdverbRelation(tagSet,verbTagIndex,m[whereVerb].getVerbME(where,30,lastNounNotFound,lastVerbNotFound));
+	//attachAdverbRelation(tagSet,verbTagIndex,m[whereVerb].getVerbME(where,30,lastNounNotFound,lastVerbNotFound)); see dynamicallyUpdateWordRelations.cpp
 	tIWMM masterVerbWord=wNULL;
 	bool possibleCompoundVerb=(whereVerb>0 && m[whereVerb-1].queryWinnerForm(coordinatorForm)>=0 && m[whereVerb-1].pma.queryPattern(L"__INFPSUB")!=-1);
 	if (!checkAmbiguousVerbTense(whereVerb,tsSense,inPrimaryQuote,masterVerbWord) && tsSense!=-1 && !withinInfinitivePhrase && !possibleCompoundVerb)
@@ -2159,22 +1991,23 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 		(m[whereVerb].queryForm(thinkForm)>=0 || m[whereVerb].queryForm(internalStateForm)>=0))
 		whereSubjects.clear();
 	markPrepositionalObjects(where,whereVerb,withinInfinitivePhrase,subjectIsPleonastic,objectAsSubject,isId,inPrimaryQuote,inSecondaryQuote,isNot,isNonPast,isNonPresent,noObjects,delayedReceiver,tsSense,tagSet);
+	// this is for dynamically adding word relations, which is no longer supported.
 	// if this is the only prepositional phrase, and it is not in the subject, then record a verb-prep relation
-	int relPrep;
-	if ((relPrep=m[whereVerb].relPrep)!=-1 && m[relPrep].relPrep==-1)
-	{
-		bool ambiguous;
-		// not delayed because the arguments are not subject to enhanced resolution (not an object)
-		if (ambiguous=!(m[relPrep].objectRole&SUBJECT_ROLE))
-			addDelayedWordRelations(where,whereVerb,relPrep,VerbWithPrep);
-		// if a preposition (PREP2) directly follows another object (O1) of another preposition (PREP1), the object (O2) of the preposition PREP2 points to the previous object (O1) by relNextObject.
-		int relObject=m[relPrep].getRelObject();
-		if (relObject>=0 && m[relObject].relNextObject>=0)
-		{
-			// delayed because the second argument is subject to enhanced resolution 
-			addDelayedWordRelations(where,m[relObject].relNextObject,relPrep,(ambiguous) ? AWordWithPrep : WordWithPrep);
-		}
-	}
+	//int relPrep;
+	//if ((relPrep=m[whereVerb].relPrep)!=-1 && m[relPrep].relPrep==-1)
+	//{
+	//	bool ambiguous;
+	//	// not delayed because the arguments are not subject to enhanced resolution (not an object)
+	//	if (ambiguous=!(m[relPrep].objectRole&SUBJECT_ROLE))
+	//		addDelayedWordRelations(where,whereVerb,relPrep,VerbWithPrep);
+	//	// if a preposition (PREP2) directly follows another object (O1) of another preposition (PREP1), the object (O2) of the preposition PREP2 points to the previous object (O1) by relNextObject.
+	//	int relObject=m[relPrep].getRelObject();
+	//	if (relObject>=0 && m[relObject].relNextObject>=0)
+	//	{
+	//		// delayed because the second argument is subject to enhanced resolution 
+	//		addDelayedWordRelations(where,m[relObject].relNextObject,relPrep,(ambiguous) ? AWordWithPrep : WordWithPrep);
+	//	}
+	//}
 	// Occasionally PREP may not be visible from the S1 structure
 	// He[man] indicated the place he[man] had been occupying at the head of the table[table] .
 	if (m[whereVerb].relPrep<0 && whereVerb+2<(signed)m.size() && m[whereVerb+1].pma.queryPattern(L"_PP")!=-1 && m[whereVerb+1].isOnlyWinner(prepositionForm) &&
@@ -2328,7 +2161,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 		m[whereObject].objectRole|=FOCUS_EVALUATED;
 		if (m[whereObject].flags&WordMatch::flagInQuestion)
 			m[whereVerb].flags|=WordMatch::flagInQuestion;
-		attachAdjectiveRelation(tagSet,whereObject);
+		// attachAdjectiveRelation(tagSet,whereObject); see dynamicallyUpdateWordRelations.cpp
 		if (whereVerb>0 && (reverseObjectSpeaker=!(m[whereObject].objectRole&(IN_PRIMARY_QUOTE_ROLE|IN_SECONDARY_QUOTE_ROLE)) && m[whereVerb-1].word->first==L"”" && 
 				((tsSense&VT_TENSE_MASK)==VT_PAST) && m[whereVerb].pma.queryPattern(L"_VERBREL1")!=-1 && m[whereObject].getObject()>=0 && objects[m[whereObject].getObject()].isAgent(true)))
 		{
@@ -2349,7 +2182,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 			m[whereObject].relSubject=whereHObject; 
 			for (unsigned int mo=0; mo<whereMObjects.size(); mo++)
 				m[whereMObjects[mo]].relSubject=whereHObject;
-			attachAdjectiveRelation(tagSet,whereHObject);
+			// attachAdjectiveRelation(tagSet,whereHObject); see dynamicallyUpdateWordRelations.cpp
 		}
 		else if (whereSubjects.size())
 		{
@@ -2429,17 +2262,18 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 		if (debugTrace.traceRole)
 			lplog(LOG_RESOLUTION,L"%06d:Reassign subject/object (leading PP)",where);
 	} 
+	// This is for dynamically updating word relations in DB which is no longer supported.
 	// if meta-speaker verbrel clause, ignore object relations
-	if (whereObject>=0 && !(whereVerb>0 && m[whereVerb-1].forms.isSet(quoteForm) && (m[whereVerb-1].word->second.inflectionFlags&CLOSE_INFLECTION)==CLOSE_INFLECTION &&
-			m[whereVerb].forms.isSet(thinkForm) && numObjects==1))
-	{
-		addDelayedWordRelations(where,whereVerb,whereObject,VerbWithDirectWord);
-		if (whereNextObject>=0)
-		{
-			addDelayedWordRelations(where,whereVerb,whereNextObject,VerbWithIndirectWord);
-			addDelayedWordRelations(where,whereObject,whereNextObject,DirectWordWithIndirectWord);
-		}
-	}
+	//if (whereObject>=0 && !(whereVerb>0 && m[whereVerb-1].forms.isSet(quoteForm) && (m[whereVerb-1].word->second.inflectionFlags&CLOSE_INFLECTION)==CLOSE_INFLECTION &&
+	//		m[whereVerb].forms.isSet(thinkForm) && numObjects==1))
+	//{
+	//	addDelayedWordRelations(where,whereVerb,whereObject,VerbWithDirectWord);
+	//	if (whereNextObject>=0)
+	//	{
+	//		addDelayedWordRelations(where,whereVerb,whereNextObject,VerbWithIndirectWord);
+	//		addDelayedWordRelations(where,whereObject,whereNextObject,DirectWordWithIndirectWord);
+	//	}
+	//}
 	if (whereHObject>=0)
 	{
 		m[whereHObject].objectRole|=FOCUS_EVALUATED;
@@ -2488,24 +2322,25 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 	}
 	// hObjects are for use with _VERB_BARE_INF - I make/made you approach him, where there is only a relationship between the subject (I) and (you)
 	int wherePrepInSubject=findPrepRole(whereVerb,SUBJECT_ROLE,0); // don't necessarily reject a prep phrase on the object side of the sentence
-	for (unsigned int K=0; K<whereSubjects.size(); K++)
+	for (unsigned int K = 0; K < whereSubjects.size(); K++)
 	{
-		attachAdjectiveRelation(tagSet,whereSubjects[K]);
-		evaluateSubjectRoleTag(where,K,whereSubjects,whereObject,whereHObject,whereVerb,whereHVerb,subjectObjects,tsSense,!inPrimaryQuote && !inSecondaryQuote && (isNonPast || isNot || numObjects>0),isNot,isNonPast,isNonPresent,isId,subjectIsPleonastic,inPrimaryQuote,inSecondaryQuote,backwardsSubjects);
-		if (m[whereSubjects[K]].relPrep<0 && whereSubjects[K]!=wherePrepInSubject)
-			setRelPrep(whereSubjects[K],wherePrepInSubject,9,PREP_OBJECT_SET,whereVerb);
-		if (whereSubjects[K]!=whereVerb) 
-		{
-			if (tsSense&VT_PASSIVE)
-			{
-				addDelayedWordRelations(where,whereVerb,whereSubjects[K],VerbWithDirectWord);
-			}
-			else
-			{
-				addDelayedWordRelations(where,whereVerb,whereSubjects[K],(isNot) ? NotVerbWithSubjectWord:VerbWithSubjectWord);
-				recordVerbTenseRelations(where,tsSense,subjectObjects[K],whereVerb);
-			}
-		}
+		// attachAdjectiveRelation(tagSet, whereSubjects[K]); see dynamicallyUpdateWordRelations.cpp
+		evaluateSubjectRoleTag(where, K, whereSubjects, whereObject, whereHObject, whereVerb, whereHVerb, subjectObjects, tsSense, !inPrimaryQuote && !inSecondaryQuote && (isNonPast || isNot || numObjects > 0), isNot, isNonPast, isNonPresent, isId, subjectIsPleonastic, inPrimaryQuote, inSecondaryQuote, backwardsSubjects);
+		if (m[whereSubjects[K]].relPrep < 0 && whereSubjects[K] != wherePrepInSubject)
+			setRelPrep(whereSubjects[K], wherePrepInSubject, 9, PREP_OBJECT_SET, whereVerb);
+		// This is for dynamically updating word relations in DB which is no longer supported.
+		//	if (whereSubjects[K]!=whereVerb) 
+		//	{
+		//		if (tsSense&VT_PASSIVE)
+		//		{
+		//			addDelayedWordRelations(where,whereVerb,whereSubjects[K],VerbWithDirectWord);
+		//		}
+		//		else
+		//		{
+		//			addDelayedWordRelations(where,whereVerb,whereSubjects[K],(isNot) ? NotVerbWithSubjectWord:VerbWithSubjectWord);
+		//			recordVerbTenseRelations(where,tsSense,subjectObjects[K],whereVerb);
+		//		}
+		//	}
 	}
 	int qTagIndex=findTag(tagSet,L"QTYPE",nextTag);
 	// relativizer doesn't have an object, so will not be assigned unless through this special case

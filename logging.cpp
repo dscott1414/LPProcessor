@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include "profile.h"
+#include "QuestionAnswering.h"
 
 __declspec(thread) static int lastInfoClock=0,lastErrorClock=0,lastNomatchClock=0,lastResolutionClock=0,lastWhereClock=0,lastResCheckClock=0,lastSGClock=0,lastWNClock=0,lastWPClock=0,lastWSClock=0,lastRoleClock=0,lastWCClock=0,lastTimeClock=0,lastDictionaryClock=0,lastQCClock=0; 		// per thread
 #ifdef LOG_BUFFER
@@ -24,10 +25,11 @@ short logCache=40; // initialized
 int logDatabaseDetails = 0; 
 int logQuestionProfileTime = 0;
 int logSynonymDetail=0;
-int logTableDetail=0;
+int logTableDetail=1;
 int logEquivalenceDetail=0;
 int logOntologyDetail = 0;
-int logDetail=1;
+int logDetail=0;
+int logQuestionDetail = 0;
 int logRDFDetail = 0;
 int logSemanticMap = 0;
 bool logTraceOpen = false;

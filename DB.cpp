@@ -99,17 +99,18 @@ where subjectCounts.totalSubjectCount>2 and subjectVerbCount.subjectVerbCount>2 
 HAVING lowerCaseCount IS NOT NULL and (upperCaseCount IS NULL OR upperCaseCount/lowerCaseCount<0.1)
 order by subjectVerbCount.subjectVerbCount/subjectCounts.totalSubjectCount desc;
 */
+bool unlockTables(MYSQL &mysql)
+{
+	LFS
+		return myquery(&mysql, L"UNLOCK TABLES");
+}
+
 bool Source::resetAllSource()
 { LFS
   if (!myquery(&mysql,L"LOCK TABLES sources WRITE")) return false;
   myquery(&mysql,L"update sources set processed=NULL,processing=NULL");
-  unlockTables();
+  unlockTables(mysql);
   return true;
-}
-
-bool Source::unlockTables(void)
-{ LFS
-  return myquery(&mysql,L"UNLOCK TABLES");
 }
 
 bool Source::resetSource(int beginSource,int endSource)
@@ -118,7 +119,7 @@ bool Source::resetSource(int beginSource,int endSource)
   wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
   _snwprintf(qt,QUERY_BUFFER_LEN,L"update sources set processed=NULL,processing=NULL where id>=%d and id<%d",beginSource,endSource);
   myquery(&mysql,qt);
-  unlockTables();
+  unlockTables(mysql);
   return true;
 }
 
@@ -126,7 +127,7 @@ void Source::resetProcessingFlags(void)
 { LFS
   if (!myquery(&mysql,L"LOCK TABLES sources WRITE")) return;
   myquery(&mysql,L"update sources set processing=NULL");
-  unlockTables();
+  unlockTables(mysql);
 }
 
 bool Source::signalBeginProcessingSource(int thisSourceId)
@@ -135,7 +136,7 @@ bool Source::signalBeginProcessingSource(int thisSourceId)
   wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
   _snwprintf(qt,QUERY_BUFFER_LEN,L"update sources set processing=true where id=%d", thisSourceId);
   myquery(&mysql,qt);
-  unlockTables();
+  unlockTables(mysql);
   return true;
 }
 
@@ -145,12 +146,12 @@ bool Source::signalFinishedProcessingSource(int thisSourceId)
   wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
   _snwprintf(qt,QUERY_BUFFER_LEN,L"update sources set processing=NULL, processed=true, lastProcessedTime=NOW() where id=%d", thisSourceId);
   myquery(&mysql,qt);
-  unlockTables();
+  unlockTables(mysql);
   return true;
 }
 
 
-bool Source::getNextUnprocessedSource(int begin, int end, bool setUsed, int &id, wstring &path, wstring &encoding, wstring &start, int &repeatStart, wstring &etext, wstring &author, wstring &title)
+bool getNextUnprocessedSource(MYSQL &mysql,int begin, int end, int sourceType, bool setUsed, int &id, wstring &path, wstring &encoding, wstring &start, int &repeatStart, wstring &etext, wstring &author, wstring &title)
 {
 	LFS
 	MYSQL_RES * result=NULL;
@@ -159,7 +160,7 @@ bool Source::getNextUnprocessedSource(int begin, int end, bool setUsed, int &id,
 	_snwprintf(qt, QUERY_BUFFER_LEN, L"select id, path, encoding, start, repeatStart, etext, author, title from sources where id>=%d and sourceType=%d and processed IS NULL and processing IS NULL and start!='**SKIP**' and start!='**START NOT FOUND**'", begin, sourceType);
 	if (end >= 0)
 		_snwprintf(qt + wcslen(qt), QUERY_BUFFER_LEN - wcslen(qt), L" and id<%d", end);
-	wcscat(qt + wcslen(qt), L" order by numWords desc limit 1");
+	wcscat(qt + wcslen(qt), L" order by numWords asc limit 1"); // TEMP DEBUG change back to desc!
 	MYSQL_ROW sqlrow = NULL;
 	if (myquery(&mysql, qt, result))
 	{
@@ -170,7 +171,7 @@ bool Source::getNextUnprocessedSource(int begin, int end, bool setUsed, int &id,
 		}
 		if (sqlrow != NULL)
 		{
-			sourceId = id = atoi(sqlrow[0]);
+			id = atoi(sqlrow[0]);
 			mTW(sqlrow[1], path);
 			if (sqlrow[2] != NULL)
 				mTW(sqlrow[2], encoding);
@@ -185,11 +186,11 @@ bool Source::getNextUnprocessedSource(int begin, int end, bool setUsed, int &id,
 		}
 	}
 	mysql_free_result(result);
-	unlockTables();
+	unlockTables(mysql);
 	return sqlrow != NULL;
 }
 
-bool Source::anymoreUnprocessedForUnknown(int step)
+bool anymoreUnprocessedForUnknown(MYSQL &mysql, int sourceType, int step)
 {
 	LFS
 	if (!myquery(&mysql, L"LOCK TABLES sources WRITE")) return false;
@@ -202,30 +203,8 @@ bool Source::anymoreUnprocessedForUnknown(int step)
 		numResults = mysql_num_rows(result);
 		mysql_free_result(result);
 	}
-	unlockTables();
+	unlockTables(mysql);
 	return numResults>0;
-}
-
-bool Source::getNextUnprocessedParseRequest(int &prId, wstring &pathInCache)
-{
-	LFS
-	MYSQL_RES * result=NULL;
-	if (!myquery(&mysql, L"LOCK TABLES parseRequests WRITE")) return false;
-	MYSQL_ROW sqlrow = NULL;
-	if (myquery(&mysql, L"select prId,pathInCache from parseRequests where status=0 order by prId ASC limit 1", result))
-	{
-		if ((sqlrow = mysql_fetch_row(result)))
-		{
-			prId = atoi(sqlrow[0]);
-			mTW(sqlrow[1], pathInCache);
-			wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-			_snwprintf(qt, QUERY_BUFFER_LEN, L"update parseRequests set status=1 where prId=%d", prId);
-			myquery(&mysql, qt);
-		}
-		mysql_free_result(result);
-	}
-	unlockTables();
-	return sqlrow!=NULL;
 }
 
 bool Source::updateSource(wstring &path, wstring &start, int repeatStart, wstring &etext, int actualLenInBytes)
@@ -260,7 +239,7 @@ bool Source::updateSourceEncoding(int readBufferType, wstring sourceEncoding,wst
 }
 
 
-int Source::getNumSources(bool left)
+int getNumSources(MYSQL &mysql,int sourceType,bool left)
 { LFS
 	MYSQL_RES *result = NULL;
 	MYSQL_ROW sqlrow;
@@ -268,7 +247,7 @@ int Source::getNumSources(bool left)
   if (!myquery(&mysql,L"LOCK TABLES sources READ")) return -1;
   _snwprintf(qt,QUERY_BUFFER_LEN,L"select COUNT(*) FROM sources where sourceType=%d and start!='**START NOT FOUND**' and start!='**SKIP**'%s",sourceType,(left) ? L" and processed is null":L"");
   if (!myquery(&mysql,qt,result)) return -1;
-  unlockTables();
+  unlockTables(mysql);
 	int numSources = 0;
 	if ((sqlrow = mysql_fetch_row(result)))
 		numSources = atoi(sqlrow[0]);
@@ -352,7 +331,7 @@ int Source::readMultiSourceObjects(tIWMM *wordMap,int numWords)
     cName nm;
     nm.nickName=atoi(sqlrow[2]);
     cObject o((OC)atoi(sqlrow[1]),nm,-1,-1,-1,-1,atoi(sqlrow[3]),sqlrow[4][0]==1,sqlrow[5][0]==1,sqlrow[6][0]==1,sqlrow[7][0]==1,false);
-    o.index=atoi(sqlrow[0]);
+    o.dbIndex=atoi(sqlrow[0]);
     o.multiSource=true;
     objects.push_back(o);
   }
@@ -416,7 +395,7 @@ int Source::flushObjects(set <int> &objectsToFlush)
 		cObject *o=&(objects[*oi]);
     len+=_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L"(%d,%d,%d,%d,%d,%d,%d,%d,%d,NULL,%d,%d,%d,%d,%d,%d,%d),",
 			sourceId,*oi,
-      o->objectClass,o->numEncounters,o->numIdentifiedAsSpeaker,o->name.nickName,o->ownerWhere,o->firstSpeakerGroup,
+      o->objectClass,o->numEncounters,o->numIdentifiedAsSpeaker,o->name.nickName,o->getOwnerWhere(),o->getFirstSpeakerGroup(),
 			getProfession(*oi),
       o->identified==true ? 1 : 0,o->plural==true ? 1 : 0,o->male==true ? 1 : 0,o->female==true ? 1 : 0,o->neuter==true ? 1 : 0,
 			/*multiSource*/0,
@@ -1018,16 +997,4 @@ int readWikiNominalizations(MYSQL &mysql, unordered_map <wstring,set < wstring >
 	return 0;
 }
 
-int Source::writeParseRequestToDatabase(vector <searchSource>::iterator pri)
-{
-	wchar_t qt[16384];
-	wstring pathInCache = pri->pathInCache;
-	escapeStr(pathInCache);
-	wsprintf(qt, L"INSERT INTO parseRequests (typeId, status, fullWebPath, pathInCache) VALUES (%d,%d,\"%s\",\"%s\")",
-		(pri->isSnippet) ? 0 : 1,
-		0,
-		pri->fullWebPath.c_str(),
-		pathInCache.c_str());
-	return myquery(&mysql, qt);
-}
 

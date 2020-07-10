@@ -1551,27 +1551,27 @@ void Source::equivocateObjects(int where,int eTo,int eFrom)
 	bool ambiguousGender=objects[eTo].male && objects[eTo].female;
 	switch (eFrom)
 	{
-	case UNKNOWN_OBJECT: return;
-	case OBJECT_UNKNOWN_MALE:  
+	case cObject::eOBJECTS::UNKNOWN_OBJECT: return;
+	case cObject::eOBJECTS::OBJECT_UNKNOWN_MALE:
 		objects[eTo].male=true;
 		objects[eTo].female=objects[eTo].neuter=objects[eTo].plural=false;
 		if (ambiguousGender)
 			addDefaultGenderedAssociatedNouns(eTo);
 		return;
-	case OBJECT_UNKNOWN_FEMALE:
+	case cObject::eOBJECTS::OBJECT_UNKNOWN_FEMALE:
 		objects[eTo].female=true;
 		objects[eTo].male=objects[eTo].neuter=objects[eTo].plural=false;
 		if (ambiguousGender)
 			addDefaultGenderedAssociatedNouns(eTo);
 		return;
-	case OBJECT_UNKNOWN_MALE_OR_FEMALE:
+	case cObject::eOBJECTS::OBJECT_UNKNOWN_MALE_OR_FEMALE:
 		objects[eTo].neuter=objects[eTo].plural=false;
 		return;
-	case OBJECT_UNKNOWN_NEUTER:
+	case cObject::eOBJECTS::OBJECT_UNKNOWN_NEUTER:
 		objects[eTo].neuter=true;
 		objects[eTo].female=objects[eTo].male=objects[eTo].plural=false;
 		return;
-	case OBJECT_UNKNOWN_PLURAL:
+	case cObject::eOBJECTS::OBJECT_UNKNOWN_PLURAL:
 		objects[eTo].plural=true;
 		return;
 	default:;
@@ -1734,7 +1734,7 @@ bool Source::evaluateMetaNameEquivalence(int where,vector <tTagLocation> &tagSet
 	objectsResolved.push_back(wherePrimary);
 	if (m[wherePrimary].objectMatches.size()==1)
 		primaryNameObject=m[wherePrimary].objectMatches[0].object;
-	if (primaryNameObject==UNKNOWN_OBJECT) 
+	if (primaryNameObject== cObject::eOBJECTS::UNKNOWN_OBJECT)
 	{
 		m[wherePrimary].flags&=~WordMatch::flagObjectResolved;
 		return false;
@@ -2767,7 +2767,7 @@ bool Source::resolveNameObject(int where,vector <cObject>::iterator &object,vect
 			// 'Porsche' should be matched with 'her Porsche' - but not replaced.
 			// if not in local and number of parts don't match 
 			wchar_t *reason=NULL;
-			if ((objects[*mo].ownerWhere!=-1 && object->ownerWhere==-1)) reason=L"preferUnOwnedObjects";
+			if ((objects[*mo].getOwnerWhere() !=-1 && object->getOwnerWhere()==-1)) reason=L"preferUnOwnedObjects";
 			if (object->name.justHonorific()) reason=L"justHonorific";
 			if (!object->matchGenderIncludingNeuter(objects[*mo],unambiguousGenderFound)) reason=L"genderConflict";
 			if (globallyAmbiguous) reason=L"globallyAmbiguous";

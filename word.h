@@ -311,8 +311,8 @@ public:
         return lhs->first<rhs->first;
       }
     };
-    typedef map<tIWMM,tRelation,wordMapCompare>::iterator tIcRMap;
-    typedef map<tIWMM,tRelation,wordMapCompare> tcRMap;
+    typedef unordered_map<wstring,tRelation>::iterator tIcRMap;
+    typedef unordered_map<wstring,tRelation> tcRMap;
     tcRMap r;
     struct mapSequenceCompare
     {
@@ -659,6 +659,7 @@ public:
 	tIWMM TABLE; // used to start the table section which is extracted from <table> and table-like constructions in HTML
 	tIWMM END_COLUMN; // used to end each column string which is extracted from <table> and table-like constructions in HTML
 	tIWMM END_COLUMN_HEADERS; // used to end the column header section in the table section which is extracted from <table> and table-like constructions in HTML
+	tIWMM TOC_HEADER;
 	tIWMM MISSING_COLUMN; // used to mark missing columns in the table section which is extracted from <table> and table-like constructions in HTML
   static tIWMM begin(void)
   {

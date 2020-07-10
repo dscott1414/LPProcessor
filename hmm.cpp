@@ -28,6 +28,7 @@ double alpha = 0.001;
 // from Melanie Tosik
 // NLP, Viterbi part - of - speech(POS) tagger
 //http://www.melanietosik.com/posts/Viterbi-POS-tagger
+bool unlockTables(MYSQL &mysql);
 
 int createJavaVM(JavaVM *&vm, JNIEnv *&env)
 {
@@ -136,7 +137,7 @@ bool foundParsedSentence(Source &source, wstring sentence, wstring &parse,bool l
 	mysql_free_result(result);
 	if (lockTable)
 	{
-		source.unlockTables(); // moved out to higher level for performance
+		unlockTables(source.mysql); // moved out to higher level for performance
 		printf("Released lock.                           \r");
 	}
 	return parse.length() > 0;
@@ -160,13 +161,13 @@ int setParsedSentence(Source &source, wstring sentence, wstring parse,bool lockT
 	_snwprintf(qt, QUERY_BUFFER_LEN, L"insert stanfordPCFGParsedSentences (parse,sentence,sentencehash) VALUES('%s','%s',%I64d)", parse.c_str(),sentence.c_str(),(__int64)sentencehash);
 	if (!myquery(&source.mysql, qt, true))
 	{
-		source.unlockTables();
+		unlockTables(source.mysql);
 		printf("Released lock.                           \r");
 		return -1;
 	}
 	if (lockTable)
 	{
-		source.unlockTables();
+		unlockTables(source.mysql);
 		printf("Released lock.                           \r");
 	}
 	return 0;
@@ -1041,7 +1042,7 @@ void compareViterbiAgainstStructuredTagging(Source &source,
 		//	lplog(LOG_ERROR, L"%d:preferredViterbiForms %s is/are among the winner forms %s for word %s [%f]",
 		//		wordSourceIndex, viterbiForms.c_str(), im->winnerFormString(winnerForms).c_str(), im->word->first.c_str(), im->preferredViterbiProbability);
 	}
-	source.unlockTables();
+	unlockTables(source.mysql);
 	map<int, wstring, std::greater<int>> orderedFormCountMap;
 	for (auto const&[winnerForm, count] : winnerViolationFormCountMap)
 		orderedFormCountMap[count] = winnerForm;

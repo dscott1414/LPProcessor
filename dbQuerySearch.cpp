@@ -15,6 +15,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include "profile.h"
+#include "QuestionAnswering.h"
 
 #include <typeinfo>
 #include <algorithm>
@@ -24,12 +25,12 @@
 #include <set>
 using namespace std;
 
-bool Source::matchOwnershipDbQuery(wchar_t *derivation,cSpaceRelation* parentSRI)
+bool cQuestionAnswering::matchOwnershipDbQuery(Source *questionSource,wchar_t *derivation,cSpaceRelation* parentSRI)
 { LFS
-	return matchOwnershipDbMusicBrainz(derivation,parentSRI);
+	return matchOwnershipDbMusicBrainz(questionSource,derivation,parentSRI);
 }
 
-bool Source::dbSearchForQuery(wchar_t *derivation,cSpaceRelation* parentSRI,vector < cAS > &answerSRIs)
+bool cQuestionAnswering::dbSearchForQuery(Source *questionSource, wchar_t *derivation,cSpaceRelation* parentSRI,vector < cAS > &answerSRIs)
 { LFS
-	return dbSearchMusicBrainz(derivation,parentSRI,answerSRIs);
+	return dbSearchMusicBrainz(questionSource, derivation,parentSRI,answerSRIs);
 }

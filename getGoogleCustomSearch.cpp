@@ -12,10 +12,13 @@
 #include <share.h>
 #include "profile.h"
 #include "internet.h"
+#include "QuestionAnswering.h"
 
 #define MAX_PATH_LEN 2048
 #define MAX_BUF 2000000
 bool myquery(MYSQL *mysql, wchar_t *q, bool allowFailure = false);
+int generateParseRequestSources(MYSQL &mysql, vector <cQuestionAnswering::searchSource>::iterator pri);
+int deleteGeneratedParseRequests(MYSQL &mysql);
 
 /* 
    base64.cpp 
@@ -114,9 +117,9 @@ std::string base64_encode(unsigned char const* bytes_to_encode, unsigned int in_
 // with the words WITH QUOTES "Paul Krugman writes for"
 // https://www.googleapis.com/customsearch/v1?key=AIzaSyDOCHy1bm-46kJkgV2hqPjFJ6Ce8FfR_AE&cx=006746333365901280215:2cxb1obqj6u&q=%22Paul+Krugman+writes+for%22
 wstring googleBaseWebSearchAddress=L"https://www.googleapis.com/customsearch/v1";
-wstring BINGBaseWebSearchAddress=L"https://api.datamarket.azure.com/Bing/SearchWeb/Web";
+wstring BINGBaseWebSearchAddress=L"https://api.cognitive.microsoft.com/bing/v7.0/search";
 wstring webSearchKey=L"AIzaSyDOCHy1bm-46kJkgV2hqPjFJ6Ce8FfR_AE";
-string BINGAccountKey="joRjSURyb6u9B9XFGUb87mjTsvZ+Zhoq9437ARj8eKU=";
+wstring BINGAccountKey=L"345820954c834fa08a227260862bbfe5";
 wstring cseContext=L"006746333365901280215:2cxb1obqj6u";
 
 void encodeURL(wstring winput,wstring &wencodedURL);
@@ -144,19 +147,19 @@ int getBINGSearchJSON(int where,wstring object,wstring &buffer,wstring &filePath
 	if (uobject.find(L"%27") == wstring::npos)
 		uobject = L"%27" + uobject + L"%27";
 	//https://api.datamarket.azure.com/Bing/SearchWeb/Web?$format=json&Query=%27Xbox%27
-	wstring webAddress=BINGBaseWebSearchAddress+L"?$format=json&Query="+uobject+L"&$top="+itos(numWebSitesAskedFor,numWebSitesAskedForStr);
+	wstring webAddress = BINGBaseWebSearchAddress + L"?q=" + uobject + L"&responseFilter=webPages,Entities,News,RelatedSearches&mkt=en-US&setLang=en-US&promote=Webpages";
 	if (index>1)
 	{
 		wstring start;
 		itos(index,start);
-		webAddress+=L"&$skip="+start;
+		webAddress+=L"&offset="+start;
 	}
-	string userPassword=BINGAccountKey+":"+BINGAccountKey;
-	string encodedUserPassword=base64_encode((const unsigned char *)userPassword.c_str(),userPassword.length());
-	wstring wEncodedUserPassword;
-	mTW(encodedUserPassword,wEncodedUserPassword);
-	wstring headers=L"Authorization: Basic "+wEncodedUserPassword;
-	int errCode= Internet::getWebPath(where,webAddress,buffer,object+L"_BING",L"webSearchCache",filePathOut,headers,index,false,true);
+	if (numWebSitesAskedFor >= 0)
+	{
+		webAddress += L"&answerCount=10";
+	}
+	wstring headers=L"Ocp-Apim-Subscription-Key:"+BINGAccountKey;
+	int errCode= Internet::getWebPath(where,webAddress,buffer,object+L"_BING",L"webSearchCache",filePathOut,headers,index,false,true); 
 	lplog(LOG_WEBSEARCH|LOG_WHERE|LOG_ERROR,L"searching BING: %s [%s] searchIndex=%d [%s]",object.c_str(),filePathOut.c_str(),index,webAddress.c_str());
 	if (buffer == L"Parameter: Query is not of type String")
 	{
@@ -281,7 +284,7 @@ int Source::appendObject(__int64 questionType,int whereQuestionType,vector <wstr
 	if (where<0) return 0;
 	if (whereQuestionType == where || (whereQuestionType >= 0 && inObject(where, whereQuestionType)))
 	{
-		if (questionType&QTAFlag)
+		if (questionType&cQuestionAnswering::QTAFlag)
 		{
 			vector <wstring> saveStrings;
 			saveStrings = objectStrings;
@@ -442,7 +445,7 @@ wstring Source::getTense(int where,wstring candidate,int preferredVerb)
 int Source::appendVerb(vector <wstring> &objectStrings,int where)
 { LFS
 	wstring candidate=m[where].word->first;
-	int fullTense=m[where].quoteForwardLink;
+	int fullTense=m[where].verbSense;
 	int tense=fullTense&VT_TENSE_MASK;
 	//int relPrep = m[where].relPrep;// , msize = m.size();
 	bool isPassive=(fullTense&VT_PASSIVE)==VT_PASSIVE && (m[where].relPrep<0 || (m[where].relPrep>=0 && m[m[where].relPrep].word->first!=L"by"));
@@ -825,6 +828,17 @@ int extractGoogleWebSites(wstring jsonBuffer,vector <wstring> &webSites,vector <
 		"__next": "https://api.datamarket.azure.com/Data.ashx/Bing/SearchWeb/Web?Query=\u0027Xbox\u0027&$skip=50"
 	}
 }
+// easy testing code in main():
+	chdir(".."); // so that log files end up in the right place
+	int getBINGSearchJSON(int where, wstring object, wstring &buffer, wstring &filePathOut, int numWebSitesAskedFor, int index);
+	int extractBINGWebSites(wstring jsonBuffer, vector <wstring> &webSites, vector <wstring> &snippets);
+	int w=0, numWebSitesAskedFor=10, index=0;
+	wstring object = L"Paul Krugman", jsonBuffer, filePathOut;
+	vector <wstring> webSites, snippets;
+	if (!getBINGSearchJSON(w, object, jsonBuffer, filePathOut, numWebSitesAskedFor, index))
+		extractBINGWebSites(jsonBuffer, webSites, snippets);
+	if (argc >= 0)
+		return 0;
 */
 int extractBINGWebSites(wstring jsonBuffer,vector <wstring> &webSites,vector <wstring> &snippets)
 { LFS
@@ -839,11 +853,11 @@ int extractBINGWebSites(wstring jsonBuffer,vector <wstring> &webSites,vector <ws
   yajl_val node = yajl_tree_parse((const char *) fileData.c_str(), errbuf, sizeof(errbuf));
   /* parse error handling */
   if (node == NULL) {
-		lplog(LOG_ERROR,L"FreeBase parse error (2):%s\n %S", jsonBuffer.c_str(),errbuf);
+		lplog(LOG_ERROR,L"BING parse error:%s\n %S", jsonBuffer.c_str(),errbuf);
     return -1;
   }
   /* ... and extract a nested value from the config file */
-	const char * path[] = { "d","results", (const char *) 0 };
+	const char * path[] = { "webPages","value", (const char *) 0 };
 	yajl_val v4 = yajl_tree_get(node, path, yajl_t_array);
 	if (v4!=NULL)
 	{
@@ -853,13 +867,13 @@ int extractBINGWebSites(wstring jsonBuffer,vector <wstring> &webSites,vector <ws
 			yajl_val v5=v4->u.array.values[i3];
 			if (v5->type==yajl_t_object)
 			{
-				const char * idpath[] = { "Description", (const char *) 0 };
+				const char * idpath[] = { "snippet", (const char *) 0 };
 				yajl_val vid = yajl_tree_get(v5, idpath, yajl_t_string);
 				wstring snippet;
 				if (vid!=NULL && YAJL_IS_STRING(vid))
 					mTW(YAJL_GET_STRING(vid),snippet);
 				wstring link;
-				const char * upath[] = { "Url", (const char *) 0 };
+				const char * upath[] = { "url", (const char *) 0 };
 				vid = yajl_tree_get(v5, upath, yajl_t_string);
 				if (vid!=NULL && YAJL_IS_STRING(vid))
 				{
@@ -902,7 +916,7 @@ bool sortWebQueryStrings(wstring i,wstring j) {
 }
 
 
-void Source::enhanceWebSearchQueries(vector <wstring> &webSearchQueryStrings,wstring semanticSuggestion)
+void cQuestionAnswering::enhanceWebSearchQueries(vector <wstring> &webSearchQueryStrings,wstring semanticSuggestion)
 { LFS
 	wstring ss=L"+"+semanticSuggestion;
 	for (vector <wstring>::iterator wqsi=webSearchQueryStrings.begin(),wqsiEnd=webSearchQueryStrings.end(); wqsi!=wqsiEnd; wqsi++)
@@ -911,17 +925,17 @@ void Source::enhanceWebSearchQueries(vector <wstring> &webSearchQueryStrings,wst
 	}
 }
 
-void Source::getWebSearchQueries(cSpaceRelation* parentSRI,vector <wstring> &webSearchQueryStrings)
+void cQuestionAnswering::getWebSearchQueries(Source *questionSource,cSpaceRelation* parentSRI,vector <wstring> &webSearchQueryStrings)
 { LFS
 	webSearchQueryStrings.push_back(L"");
-	appendObject(parentSRI->questionType,parentSRI->whereQuestionType, webSearchQueryStrings, parentSRI->whereSubject);
+	questionSource->appendObject(parentSRI->questionType,parentSRI->whereQuestionType, webSearchQueryStrings, parentSRI->whereSubject);
 	if (parentSRI->whereVerb>=0)
-		appendVerb(webSearchQueryStrings,parentSRI->whereVerb);
-	bool noQuotes = (appendObject(parentSRI->questionType, parentSRI->whereQuestionType, webSearchQueryStrings, parentSRI->whereObject)<0);
-	if (parentSRI->wherePrep>=0 && !parentSRI->prepositionUncertain && (parentSRI->whereObject<0 || m[parentSRI->whereObject].relPrep<0 || m[m[parentSRI->whereObject].relPrep].nextQuote!=parentSRI->whereObject))
+		questionSource->appendVerb(webSearchQueryStrings,parentSRI->whereVerb);
+	bool noQuotes = (questionSource->appendObject(parentSRI->questionType, parentSRI->whereQuestionType, webSearchQueryStrings, parentSRI->whereObject)<0);
+	if (parentSRI->wherePrep>=0 && !parentSRI->prepositionUncertain && (parentSRI->whereObject<0 || questionSource->m[parentSRI->whereObject].relPrep<0 || questionSource->m[questionSource->m[parentSRI->whereObject].relPrep].nextQuote!=parentSRI->whereObject))
 	{
-		appendWord(webSearchQueryStrings,parentSRI->wherePrep);
-		appendObject(parentSRI->questionType, parentSRI->whereQuestionType, webSearchQueryStrings, parentSRI->wherePrepObject);
+		questionSource->appendWord(webSearchQueryStrings,parentSRI->wherePrep);
+		questionSource->appendObject(parentSRI->questionType, parentSRI->whereQuestionType, webSearchQueryStrings, parentSRI->wherePrepObject);
 	}
 	else
 		noQuotes=false;
@@ -945,11 +959,13 @@ wstring quoteLess(wstring &qo,wstring &qlo)
   return qlo;
 }
 
-int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st, int maxProcesses, int numSourcesPerProcess, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool makeCopyBeforeSourceWrite, bool parseOnly, wstring specialExtension);
+int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum processSourceType, int maxProcesses, int numSourcesPerProcess,
+	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool makeCopyBeforeSourceWrite, bool parseOnly, wstring specialExtension);
 
-int Source::spinParses(vector <searchSource> &accumulatedParseRequests)
+int cQuestionAnswering::spinParses(MYSQL &mysql,vector <searchSource> &accumulatedParseRequests)
 {
-	createParseRequestTable();
+	deleteGeneratedParseRequests(mysql);
+	int generatedRequests = 0;
 	for (vector <searchSource>::iterator pri = accumulatedParseRequests.begin(), priEnd = accumulatedParseRequests.end(); pri != priEnd; pri++)
 	{
 		wstring path = pri->pathInCache + L".SourceCache";
@@ -981,13 +997,19 @@ int Source::spinParses(vector <searchSource> &accumulatedParseRequests)
 			}
 		}
 		if (processOldFile || (_waccess(path.c_str(), 0) && !rejectPath(pri->pathInCache.c_str())))
-			writeParseRequestToDatabase(pri);
+		{
+			generateParseRequestSources(mysql, pri);
+			generatedRequests++;
+		}
 	}
-	return startProcesses(*this, 0,0,-1, -1, Source::REQUEST_TYPE, 5,5,false,true,true,true,false,false,L"");
+	if (generatedRequests > 1)
+		return startProcesses(mysql, Source::REQUEST_TYPE, 0, 0, -1, -1, Source::REQUEST_TYPE, 6, 5, false, true, true, true, false, false, L"");
+	else
+		return -1;
 }
 
 extern int limitProcessingForProfiling;
-int Source::accumulateParseRequests(cSpaceRelation* parentSRI, int webSitesAskedFor, int index, bool googleSearch, vector <wstring> &webSearchQueryStrings, int &offset, vector <searchSource> &accumulatedParseRequests)
+int cQuestionAnswering::accumulateParseRequests(cSpaceRelation* parentSRI, int webSitesAskedFor, int index, bool googleSearch, vector <wstring> &webSearchQueryStrings, int &offset, vector <searchSource> &accumulatedParseRequests)
 {
 	LFS
 	int maxWebSitesFound = -1;
@@ -1008,6 +1030,9 @@ int Source::accumulateParseRequests(cSpaceRelation* parentSRI, int webSitesAsked
 		maxWebSitesFound = max(maxWebSitesFound, (signed)webSites.size());
 		for (vector <wstring>::iterator ssi = snippets.begin(), wsi = webSites.begin(), ssiEnd = snippets.end(), wsiEnd = webSites.end(); ssi != ssiEnd; ssi++, wsi++)
 		{
+			// prevent searching wikipedia as that has already been done
+			if (wsi->find(L"https://en.wikipedia.org/") != wstring::npos)
+				continue;
 			wstring webSiteBuffer, epath, headers;
 			hashWebSiteURL(*wsi, epath);
 			searchSource pr;
@@ -1057,7 +1082,7 @@ int Source::accumulateParseRequests(cSpaceRelation* parentSRI, int webSitesAsked
 	return maxWebSitesFound;
 }
 
-int Source::analyzeAccumulatedRequests(wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, vector <searchSource> &accumulatedParseRequests,
+int cQuestionAnswering::analyzeAccumulatedRequests(Source *questionSource,wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, vector <searchSource> &accumulatedParseRequests,
  cPattern *&mapPatternAnswer,
 	cPattern *&mapPatternQuestion)
 {
@@ -1071,8 +1096,8 @@ int Source::analyzeAccumulatedRequests(wchar_t *derivation, cSpaceRelation* pare
 		int sMaxAnswer = -1;
 		if (oi->isSnippet || !oi->hasCorrespondingSnippet)
 			check = answerSRIs.size();
-		if (processPath(oi->pathInCache.c_str(), source, Source::WEB_SEARCH_SOURCE_TYPE, (oi->isSnippet) ? 50 : 100, parseOnly) >= 0)
-			analyzeQuestionFromSource(derivation, oi->fullWebPath, source, parentSRI, answerSRIs, sMaxAnswer, check, true, mapPatternAnswer, mapPatternQuestion);
+		if (processPath(questionSource,oi->pathInCache.c_str(), source, Source::WEB_SEARCH_SOURCE_TYPE, (oi->isSnippet) ? 50 : 100, parseOnly) >= 0)
+			analyzeQuestionFromSource(questionSource,derivation, oi->fullWebPath, source, parentSRI, answerSRIs, sMaxAnswer, check, true, mapPatternAnswer, mapPatternQuestion);
 		maxAnswer = max(maxAnswer, sMaxAnswer);
 		if (sMaxAnswer >= 24 && oi->isSnippet && oi->fullPathIndex >= 0)
 			accumulatedParseRequests[oi->fullPathIndex].skipFullPath = true;
@@ -1080,20 +1105,17 @@ int Source::analyzeAccumulatedRequests(wchar_t *derivation, cSpaceRelation* pare
 	return 0;
 }
 
-int Source::webSearchForQueryParallel(wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
- vector <wstring> &webSearchQueryStrings,
-	int &offset, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion)
+int cQuestionAnswering::webSearchForQueryParallel(Source *questionSource,wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
+ vector <wstring> &webSearchQueryStrings,int &offset, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion)
 {
 	vector <searchSource> accumulatedParseRequests;
 	int maxWebSitesFound = accumulateParseRequests(parentSRI, webSitesAskedFor, index, googleSearch, webSearchQueryStrings, offset, accumulatedParseRequests);
-	spinParses(accumulatedParseRequests);
-	if (!myquery(&mysql, L"DROP table parseRequests"))
-		return -1;
-	analyzeAccumulatedRequests(derivation, parentSRI, parseOnly, answerSRIs, maxAnswer, accumulatedParseRequests, mapPatternAnswer, mapPatternQuestion);
+	spinParses(questionSource->mysql,accumulatedParseRequests);
+	analyzeAccumulatedRequests(questionSource,derivation, parentSRI, parseOnly, answerSRIs, maxAnswer, accumulatedParseRequests, mapPatternAnswer, mapPatternQuestion);
 	return maxWebSitesFound;
 }
 
-int Source::webSearchForQuerySerial(wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
+int cQuestionAnswering::webSearchForQuerySerial(Source *questionSource, wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
  vector <wstring> &webSearchQueryStrings,
 	int &offset, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion)
 {
@@ -1124,18 +1146,18 @@ int Source::webSearchForQuerySerial(wchar_t *derivation, cSpaceRelation* parentS
 			if (!ssi->empty())
 			{
 				Source *source = NULL;
-				if (processSnippet(*ssi, epath, source, parseOnly) >= 0)
+				if (processSnippet(questionSource,*ssi, epath, source, parseOnly) >= 0)
 				{
-					analyzeQuestionFromSource(derivation, *wsi + L" abstract", source, parentSRI, answerSRIs, sMaxAnswer, check, true, mapPatternAnswer, mapPatternQuestion);
+					analyzeQuestionFromSource(questionSource,derivation, *wsi + L" abstract", source, parentSRI, answerSRIs, sMaxAnswer, check, true, mapPatternAnswer, mapPatternQuestion);
 				}
 			}
 			maxAnswer = max(maxAnswer, sMaxAnswer);
 			if (sMaxAnswer<24 && Internet::getWebPath(parentSRI->where, *wsi, webSiteBuffer, epath, L"webSearchCache", filePathOut, headers, index, true, false) == 0)
 			{
 				Source *source = NULL;
-				if (processPath((wchar_t *)filePathOut.c_str(), source, Source::WEB_SEARCH_SOURCE_TYPE, 100, parseOnly) >= 0)
+				if (processPath(questionSource,(wchar_t *)filePathOut.c_str(), source, Source::WEB_SEARCH_SOURCE_TYPE, 100, parseOnly) >= 0)
 				{
-					analyzeQuestionFromSource(derivation, *wsi, source, parentSRI, answerSRIs, maxAnswer, check, true, mapPatternAnswer, mapPatternQuestion);
+					analyzeQuestionFromSource(questionSource,derivation, *wsi, source, parentSRI, answerSRIs, maxAnswer, check, true, mapPatternAnswer, mapPatternQuestion);
 					if (limitProcessingForProfiling)
 						return maxWebSitesFound;
 				}

@@ -25,11 +25,12 @@ using namespace std;
 #include "sys/stat.h"
 #include "vcXML.h"
 #include "profile.h"
+#include "questionAnswering.h"
 
 void defineNames(void);
 void defineTimePatterns(void);
 void createMetaNameEquivalencePatterns(void);
-extern int logDetail;
+extern int logQuestionDetail;
 
 void createQuestionPatterns(void)
 { LFS
@@ -37,7 +38,7 @@ void createQuestionPatterns(void)
 	// the following is a copy of NOUN[D], and __ALLOBJECTS_1 includes it.  But in a question, the relativizer is already 
 	// included as an object of the verb, so this would lead to the main verb having two objects, which is so expensive that it will never match.
 	// this pattern will be included as an alternative to __ALLOBJECTS_1, and not as an OBJECT.
-	cPattern::create(L"__QNOUN{_FINAL_IF_ALONE:_FORWARD_REFERENCE:_BLOCK:GNOUN:VNOUN}",L"D",
+	cPattern::create(L"__QNOUN{_FINAL_IF_ALONE:_BLOCK:GNOUN:VNOUN}",L"D",
 									 1,L"_VERBONGOING*1{VERB:vE}",0,1,1,  // from C2__S1 - also matches _N1// this pattern should not be common
 									 // if the following is made optional this pattern can match _NOUN[9] with an embedded _NOUN[2]
 									 3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,1,1, // there must only be one adjective and it must be last (not mixed in) see *
@@ -507,7 +508,7 @@ void createQuestionPatterns(void)
 									1, L"_ADVERB", 0, 0, 1,
 									1, L"__ALLVERB*2", 0, 1, 1,
 									0);
-	cPattern::create(L"_RELQ{_FINAL_IF_ALONE:_FORWARD_REFERENCE:S_IN_REL:_QUESTION}", L"",
+	cPattern::create(L"_RELQ{_FINAL_IF_ALONE:S_IN_REL:_QUESTION}", L"",
 									3, L"_ADJECTIVE", L"_ADVERB", L"conjunction|but", 0, 0, 1,
 									1, L"relativizer*-1", 0, 1, 1, // this is necessary to beat Q1[J] which matches the same but incorrectly
 									1, L"_ADVERB", 0, 0, 1, // where simply every one is bound to turn up sooner or later
@@ -761,7 +762,7 @@ bool Source::testQuestionType(int where,int &whereQuestionType,int &whereQuestio
 			if (oc==NAME_OBJECT_CLASS || oc==GENDERED_DEMONYM_OBJECT_CLASS || oc==NON_GENDERED_BUSINESS_OBJECT_CLASS || oc==NON_GENDERED_NAME_OBJECT_CLASS)
 			{
 				whereQuestionInformationSourceObjects.insert(where);
-				if (logDetail)
+				if (logQuestionDetail)
 					lplog(LOG_WHERE,L"picked %d:%s as resolved context suggestion",where,objectString(m[where].objectMatches[om].object,tmpstr,false).c_str());
 				break;
 			}
@@ -773,16 +774,16 @@ bool Source::testQuestionType(int where,int &whereQuestionType,int &whereQuestio
 			if (oc==NAME_OBJECT_CLASS || oc==GENDERED_DEMONYM_OBJECT_CLASS || oc==NON_GENDERED_BUSINESS_OBJECT_CLASS || oc==NON_GENDERED_NAME_OBJECT_CLASS)
 			{
 				whereQuestionInformationSourceObjects.insert(where);
-				if (logDetail)
+				if (logQuestionDetail)
 					lplog(LOG_WHERE,L"picked %d:%s as context suggestion",where,objectString(m[where].getObject(),tmpstr,false).c_str());
 			}
 	}
-	if (!(setType&QTAFlag) && m[where].beginObjectPosition >= 0)
+	if (!(setType&cQuestionAnswering::QTAFlag) && m[where].beginObjectPosition >= 0)
 	{
 		if (m[where].beginObjectPosition>0)
-			testQuestionType(m[where].beginObjectPosition-1,whereQuestionType,whereQuestionTypeFlags,setType|QTAFlag,whereQuestionInformationSourceObjects);
+			testQuestionType(m[where].beginObjectPosition-1,whereQuestionType,whereQuestionTypeFlags,setType| cQuestionAnswering::QTAFlag,whereQuestionInformationSourceObjects);
 		for (int I=m[where].beginObjectPosition; I<where; I++)
-			testQuestionType(I,whereQuestionType,whereQuestionTypeFlags,setType|QTAFlag,whereQuestionInformationSourceObjects);
+			testQuestionType(I,whereQuestionType,whereQuestionTypeFlags,setType| cQuestionAnswering::QTAFlag,whereQuestionInformationSourceObjects);
 	}
 	if (whereQuestionType<0 && where>=0 && (m[where].queryForm(relativizerForm)>=0 || m[where].queryForm(interrogativeDeterminerForm)>=0))
 	{
@@ -835,7 +836,7 @@ void Source::processQuestion(int whereVerb,int whereReferencingObject,__int64 &q
 	while (wp>=0 && wp<(int)m.size())
 	{
 		if (m[wp].getRelObject()>=0 && (bp=m[wpo=m[wp].getRelObject()].beginObjectPosition)>0 &&
-			  testQuestionType(wpo,whereQuestionType,whereQuestionTypeFlags,prepObjectQTFlag+prepLoop,whereQuestionInformationSourceObjects))
+			  testQuestionType(wpo,whereQuestionType,whereQuestionTypeFlags,cQuestionAnswering::prepObjectQTFlag+prepLoop,whereQuestionInformationSourceObjects))
 				break;
 		if (prepLoop++>30)
 		{
@@ -845,11 +846,11 @@ void Source::processQuestion(int whereVerb,int whereReferencingObject,__int64 &q
 		}
 		wp=m[wp].relPrep;
 	}
-	testQuestionType(relObject=m[whereVerb].getRelObject(),whereQuestionType,whereQuestionTypeFlags,objectQTFlag,whereQuestionInformationSourceObjects);
+	testQuestionType(relObject=m[whereVerb].getRelObject(),whereQuestionType,whereQuestionTypeFlags, cQuestionAnswering::objectQTFlag,whereQuestionInformationSourceObjects);
 	if (relObject>=0)
-		testQuestionType(m[relObject].relNextObject,whereQuestionType,whereQuestionTypeFlags,secondaryObjectQTFlag,whereQuestionInformationSourceObjects);
-	testQuestionType(whereReferencingObject,whereQuestionType,whereQuestionTypeFlags,referencingObjectQTFlag,whereQuestionInformationSourceObjects);
-	testQuestionType(m[whereVerb].relSubject,whereQuestionType,whereQuestionTypeFlags,subjectQTFlag,whereQuestionInformationSourceObjects);
+		testQuestionType(m[relObject].relNextObject,whereQuestionType,whereQuestionTypeFlags, cQuestionAnswering::secondaryObjectQTFlag,whereQuestionInformationSourceObjects);
+	testQuestionType(whereReferencingObject,whereQuestionType,whereQuestionTypeFlags, cQuestionAnswering::referencingObjectQTFlag,whereQuestionInformationSourceObjects);
+	testQuestionType(m[whereVerb].relSubject,whereQuestionType,whereQuestionTypeFlags, cQuestionAnswering::subjectQTFlag,whereQuestionInformationSourceObjects);
 	if (m[whereVerb].endPEMAPosition>=0 && whereVerb+pema[m[whereVerb].endPEMAPosition].begin>0)
 	{
 		int mb;
@@ -858,26 +859,26 @@ void Source::processQuestion(int whereVerb,int whereReferencingObject,__int64 &q
 	}
 	if (whereQuestionType>=0)
 	{
-		questionType=unknownQTFlag;
+		questionType=cQuestionAnswering::unknownQTFlag;
 		wstring questionTypeWord=m[whereQuestionType].word->first;
 		if (questionTypeWord==L"which")
-			questionType=whichQTFlag; 
+			questionType= cQuestionAnswering::whichQTFlag;
 		else if (questionTypeWord==L"where")
-			questionType=whereQTFlag;
+			questionType= cQuestionAnswering::whereQTFlag;
 		else if (questionTypeWord==L"what")
-			questionType=whatQTFlag;
+			questionType= cQuestionAnswering::whatQTFlag;
 		else if (questionTypeWord==L"whose")
-			questionType=whoseQTFlag;
+			questionType= cQuestionAnswering::whoseQTFlag;
 		else if (questionTypeWord==L"how")
-			questionType=howQTFlag;
+			questionType= cQuestionAnswering::howQTFlag;
 		else if (questionTypeWord==L"when")
-			questionType=whenQTFlag;
+			questionType= cQuestionAnswering::whenQTFlag;
 		else if (questionTypeWord==L"whom")
-			questionType=whomQTFlag;
+			questionType= cQuestionAnswering::whomQTFlag;
 		else if (questionTypeWord==L"who")
-			questionType=whomQTFlag;
+			questionType= cQuestionAnswering::whomQTFlag;
 		else if (questionTypeWord==L"why")
-			questionType=whyQTFlag;
+			questionType= cQuestionAnswering::whyQTFlag;
 		questionType+=whereQuestionTypeFlags; // questionType is max 8 bits
 	}
 }

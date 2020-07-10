@@ -250,7 +250,7 @@ void Source::addWNExtensions(void)
 		// "Mr. Whittington" should match to "man" the same as "Tommy", even though Tommy may have acquired "man"
 		// in a previous match.  Other gendered objects like "A young American" should not have "man" associated with them
 		// even though it acquires male characteristics because "Tommy" will match against "young" and "man" and 
-		// Julius against "man" and "American" and so both will be equal, even though "Julius" should be preferred.
+		// Julius against "man" and "American" and so both will be equal, even though "Julius" should be lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms.
 void Source::addDefaultGenderedAssociatedNouns(int o)
 {
 	LFS
@@ -461,7 +461,7 @@ void Source::accumulateAdjectives(int where)
 		// "Mr. Whittington" should match to "man" the same as "Tommy", even though Tommy may have acquired "man"
 		// in a previous match.  Other gendered objects like "A young American" should not have "man" associated with them
 		// even though it acquires male characteristics because "Tommy" will match against "young" and "man" and 
-		// Julius against "man" and "American" and so both will be equal, even though "Julius" should be preferred.
+		// Julius against "man" and "American" and so both will be equal, even though "Julius" should be lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms.
 		if (originallyGendered && !genderSet)
 			addDefaultGenderedAssociatedNouns(adjectiveObject);
 		// is there an intersection between the adjectives in nouns & antonyms for adjectives
@@ -721,7 +721,7 @@ int Source::nymMatch(vector <cObject>::iterator o, vector <cObject>::iterator ls
 		((nymMapMatch(o->associatedNouns, wnSynonymsNounMap, lso->associatedNouns, wnSynonymsNounMap, false, getFromMatch, traceNymMatch, logMatch, fromMatch, toMatch, toMapMatch, type, L"o noun syn <-> lso noun syn")) ? 1 : 0) +
 		// this should not check for genericGenderIgnoreMatch because we still want 'man' to match a 'man' more than someone named 'Tommy'
 		// don't allow 'the voice' to force match (because of matching heads) to 'his voice' 
-		((headsMatch && ((o->objectClass != BODY_OBJECT_CLASS || o->ownerWhere < 0))) ? 2 : 0); // && !(m[o->originalLocation].word->second.flags&tFI::genericGenderIgnoreMatch)) ? 1 : 0);
+		((headsMatch && ((o->objectClass != BODY_OBJECT_CLASS || o->getOwnerWhere() < 0))) ? 2 : 0); // && !(m[o->originalLocation].word->second.flags&tFI::genericGenderIgnoreMatch)) ? 1 : 0);
    // matching against original locations will work if they are the same class.  But if they are different classes
 	if (traceNymMatch)
 		lplog(LOG_RESOLUTION, L"nounsMatched[*3]=%d adjectivesMatched[*3]=%d originals match (%d,%d) %s=%s yields a total [%d] - explicitOccupationMatch=%s", nounsMatched, adjectivesMatched,
@@ -1095,10 +1095,12 @@ int Source::identifyObject(int tag, int where, int element, bool adjectival, int
 			// prevent 'that' and 'this' from relative phrases from concatenating onto the beginning of objects
 			if ((plural ^ singular) && (principalWhere - where < 2 || !(m[where + 1].flags&WordMatch::flagNounOwner)))
 			{
-				if (plural && (m[where].word->first == L"that" || m[where].word->first == L"this"))
-				where++;
-				else if (!plural && (m[where].word->first == L"these" || m[where].word->first == L"those"))
-				where++;
+				if ((plural && (m[where].word->first == L"that" || m[where].word->first == L"this")) ||
+					(!plural && (m[where].word->first == L"these" || m[where].word->first == L"those")))
+				{
+					element = -1;
+					where++;
+				}
 			}
 		}
 		if (tagName == L"NOUN" || tagName == L"PNOUN")
@@ -1205,17 +1207,17 @@ int Source::identifyObject(int tag, int where, int element, bool adjectival, int
 				hasDeterminer = true;
 				int inflectionFlags = m[I].word->second.inflectionFlags;
 				if ((inflectionFlags&(MALE_GENDER | FEMALE_GENDER)) == MALE_GENDER)
-					m[I].setObject(OBJECT_UNKNOWN_MALE);
+					m[I].setObject(cObject::eOBJECTS::OBJECT_UNKNOWN_MALE);
 				else if ((inflectionFlags&(MALE_GENDER | FEMALE_GENDER)) == FEMALE_GENDER)
-					m[I].setObject(OBJECT_UNKNOWN_FEMALE);
+					m[I].setObject(cObject::eOBJECTS::OBJECT_UNKNOWN_FEMALE);
 				else if ((inflectionFlags&(MALE_GENDER | FEMALE_GENDER)) == (MALE_GENDER | FEMALE_GENDER))
-					m[I].setObject(OBJECT_UNKNOWN_MALE_OR_FEMALE);
+					m[I].setObject(cObject::eOBJECTS::OBJECT_UNKNOWN_MALE_OR_FEMALE);
 				else if ((inflectionFlags&NEUTER_GENDER) == NEUTER_GENDER)
-					m[I].setObject(OBJECT_UNKNOWN_NEUTER);
+					m[I].setObject(cObject::eOBJECTS::OBJECT_UNKNOWN_NEUTER);
 				else if ((inflectionFlags&(PLURAL | PLURAL_OWNER)) != 0)
-					m[I].setObject(OBJECT_UNKNOWN_PLURAL);
+					m[I].setObject(cObject::eOBJECTS::OBJECT_UNKNOWN_PLURAL);
 				else
-					m[I].setObject(OBJECT_UNKNOWN_MALE_OR_FEMALE);
+					m[I].setObject(cObject::eOBJECTS::OBJECT_UNKNOWN_MALE_OR_FEMALE);
 				if ((inflectionFlags&(MALE_GENDER | FEMALE_GENDER)) != 0 || (inflectionFlags&(FIRST_PERSON | SECOND_PERSON)) != 0)
 					ownerWhere = I;
 				m[I].beginObjectPosition = I;
@@ -1232,11 +1234,11 @@ int Source::identifyObject(int tag, int where, int element, bool adjectival, int
 			isOwnerGendered = ownerWhere != -1;
 			if (ownerWhere >= 0 && tagName != L"VNOUN" && tagName != L"GNOUN" && isOwnerGendered && isExternalBodyPart(principalWhere, singularBodyPart, (m[ownerWhere].word->second.inflectionFlags&(PLURAL_OWNER | PLURAL)) != 0))
 			{
-				if (m[ownerWhere].getObject() <= UNKNOWN_OBJECT)
+				if (m[ownerWhere].getObject() <= cObject::eOBJECTS::UNKNOWN_OBJECT)
 				{
-					isOwnerMale = m[ownerWhere].getObject() == OBJECT_UNKNOWN_MALE;
-					isOwnerFemale = m[ownerWhere].getObject() == OBJECT_UNKNOWN_FEMALE;
-					if (m[ownerWhere].getObject() == OBJECT_UNKNOWN_MALE_OR_FEMALE)
+					isOwnerMale = m[ownerWhere].getObject() == cObject::eOBJECTS::OBJECT_UNKNOWN_MALE;
+					isOwnerFemale = m[ownerWhere].getObject() == cObject::eOBJECTS::OBJECT_UNKNOWN_FEMALE;
+					if (m[ownerWhere].getObject() == cObject::eOBJECTS::OBJECT_UNKNOWN_MALE_OR_FEMALE)
 						isOwnerMale = isOwnerFemale = true;
 				}
 				else
@@ -1399,15 +1401,15 @@ int Source::identifyObject(int tag, int where, int element, bool adjectival, int
 		objectClass = META_GROUP_OBJECT_CLASS;
 	if (isBusiness || (objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS && m[principalWhere].queryWinnerForm(businessForm) >= 0))
 		objectClass = NON_GENDERED_BUSINESS_OBJECT_CLASS;
-	cObject thisObject(objectClass, name, where, end, principalWhere, ((element&matchElement::patternFlag) && element != -1) ? element & ~matchElement::patternFlag : -1, ownerWhere,
-		isMale, isFemale, isNeuter, plural, false);
+	int PMAElement = ((element&matchElement::patternFlag) && element != -1) ? element & ~matchElement::patternFlag : -1;
+	cObject thisObject(objectClass, name, where, end, principalWhere, PMAElement, ownerWhere, isMale, isFemale, isNeuter, plural, false);
 	if (ownerWhere >= 0)
 	{
-		if (m[ownerWhere].getObject() <= UNKNOWN_OBJECT)
+		if (m[ownerWhere].getObject() <= cObject::eOBJECTS::UNKNOWN_OBJECT)
 		{
-			thisObject.ownerMale = m[ownerWhere].getObject() == OBJECT_UNKNOWN_MALE;
-			thisObject.ownerFemale = m[ownerWhere].getObject() == OBJECT_UNKNOWN_FEMALE;
-			if (m[ownerWhere].getObject() == OBJECT_UNKNOWN_MALE_OR_FEMALE)
+			thisObject.ownerMale = m[ownerWhere].getObject() == cObject::eOBJECTS::OBJECT_UNKNOWN_MALE;
+			thisObject.ownerFemale = m[ownerWhere].getObject() == cObject::eOBJECTS::OBJECT_UNKNOWN_FEMALE;
+			if (m[ownerWhere].getObject() == cObject::eOBJECTS::OBJECT_UNKNOWN_MALE_OR_FEMALE)
 				thisObject.ownerMale = thisObject.ownerFemale = true;
 		}
 		else
@@ -1572,7 +1574,7 @@ bool Source::eraseWinnerFromRecalculatingAloneness(int where, patternMatchArray:
 		int nPEMAPosition = pma->pemaByPatternEnd, np;
 		patternElementMatchArray::tPatternElementMatch *pem = pema.begin() + nPEMAPosition;
 		// check all children of this pattern
-		for (; nPEMAPosition >= 0 && pem->getPattern() == pma->getPattern() && (pem->end - pem->begin) == pma->len; nPEMAPosition = pem->nextPatternElement, pem = pema.begin() + nPEMAPosition)
+		for (; nPEMAPosition >= 0 && pem->getParentPattern() == pma->getPattern() && (pem->end - pem->begin) == pma->len; nPEMAPosition = pem->nextPatternElement, pem = pema.begin() + nPEMAPosition)
 		{
 			// go to where the child begin position is. scan all 
 			for (np = m[where - pem->begin].beginPEMAPosition; np >= 0 && (np == nPEMAPosition || !pema[np].isWinner()); np = pema[np].nextByPosition);
@@ -1644,13 +1646,13 @@ bool Source::removeWinnerFlag(int where, patternMatchArray::tPatternMatch *pma,i
 		{
 			if (debugTrace.tracePatternElimination)
 			{
-				cPattern *pemp = patterns[pem->getPattern()];
+				cPattern *pemp = patterns[pem->getParentPattern()];
 				lplog(L"%*sposition %d:pema %d:%s[%s](%d,%d)*%d not a winner!", recursionSpaces - 2, L" ",
 					where, pem - pema.begin(), pemp->name.c_str(), pemp->differentiator.c_str(), where+pem->begin, where + pem->end, pem->getOCost());
 			}
 			//continue;
 		}
-		for (; nPEMAPositionByPatternElement >= 0 && pem->getPattern() == pma->getPattern() && (pem->end - pem->begin) == pma->len; nPEMAPositionByPatternElement = pem->nextPatternElement, pem = pema.begin() + nPEMAPositionByPatternElement)
+		for (; nPEMAPositionByPatternElement >= 0 && pem->getParentPattern() == pma->getPattern() && (pem->end - pem->begin) == pma->len; nPEMAPositionByPatternElement = pem->nextPatternElement, pem = pema.begin() + nPEMAPositionByPatternElement)
 		{
 			// go to where the child begin position is. scan all 
 			int np;
@@ -1668,13 +1670,13 @@ bool Source::removeWinnerFlag(int where, patternMatchArray::tPatternMatch *pma,i
 		pem = pema.begin() + nPEMAPositionByPatternElement;
 		vector <int> temporaryPEMAToRemove;
 		bool childrenRemovalComplete = true;
-		for (; nPEMAPositionByPatternElement >= 0 && pem->getPattern() == pma->getPattern() && (pem->end - pem->begin) == pma->len && childrenRemovalComplete; nPEMAPositionByPatternElement = pem->nextPatternElement, pem = pema.begin() + nPEMAPositionByPatternElement)
+		for (; nPEMAPositionByPatternElement >= 0 && pem->getParentPattern() == pma->getPattern() && (pem->end - pem->begin) == pma->len && childrenRemovalComplete; nPEMAPositionByPatternElement = pem->nextPatternElement, pem = pema.begin() + nPEMAPositionByPatternElement)
 		{
 			if (!pem->isWinner()) /* OPTION */
 			{
 				if (debugTrace.tracePatternElimination)
 				{
-					cPattern *pemp = patterns[pem->getPattern()];
+					cPattern *pemp = patterns[pem->getParentPattern()];
 					lplog(L"%*sposition %d:pema %d:%s[%s](%d,%d)*%d not a winner!", recursionSpaces - 2, L" ",
 						where, pem - pema.begin(), pemp->name.c_str(), pemp->differentiator.c_str(), where + pem->begin, where + pem->end, pem->getOCost());
 				}
@@ -1755,7 +1757,7 @@ bool Source::addCostFromRecalculatingAloneness(int where, patternMatchArray::tPa
 	//lplog(L"%d:%s[%s]*%d(%d,%d) not alone? fill=%s not owned=%s sep begin=%s sep end=%s.",
 	//			where,p->name.c_str(),p->differentiator.c_str(),pma->cost,where,where+pma->len,
 	//				(p->fillIfAloneFlag || p->onlyAloneExceptInSubPatternsFlag) ? L"true":L"false",
-	//								(!pema.ownedByOtherPattern(m[where].beginPEMAPosition,pma->getPattern(),pma->len)) ? L"true":L"false",
+	//								(!pema.ownedByOtherPattern(m[where].beginPEMAPosition,pma->getParentPattern(),pma->len)) ? L"true":L"false",
 	//			(where && !isAnySeparator(where-1)) ? L"true":L"false",
 	//			(where+pma->len<(int)m.size() && !isAnySeparator(where+pma->len)) ? L"true":L"false");
 	if ((p->fillIfAloneFlag || p->onlyAloneExceptInSubPatternsFlag) &&
@@ -1773,7 +1775,7 @@ bool Source::addCostFromRecalculatingAloneness(int where, patternMatchArray::tPa
 			if (debugTrace.traceParseInfo)
 				lplog(L"%d:%s[%s]*%d(%d,%d) added cost %d because it is a FINAL_IF_ALONE and it is not alone.",
 			where, p->name.c_str(), p->differentiator.c_str(), pma->cost, where, where + pma->len, cost);
-			for (; nPEMAPosition >= 0 && pem->getPattern() == pma->getPattern() && (pem->end - pem->begin) == pma->len; nPEMAPosition = pem->nextPatternElement, pem = pema.begin() + nPEMAPosition)
+			for (; nPEMAPosition >= 0 && pem->getParentPattern() == pma->getPattern() && (pem->end - pem->begin) == pma->len; nPEMAPosition = pem->nextPatternElement, pem = pema.begin() + nPEMAPosition)
 				pem->addOCostTillMax(cost);
 			pma->addCostTillMax(cost);
 			return true;

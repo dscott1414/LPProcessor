@@ -9,7 +9,7 @@ void createSecondaryPatterns1(void);
 int createSecondaryPatterns2(void);
 void createQuestionPatterns(void);
 
-#define SOURCE_VERSION 29
+#define SOURCE_VERSION 3
 /*
 EXAMPLE
 cPattern::create(L"XX{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"Y",
@@ -282,7 +282,6 @@ public:
 				explicitNounDeterminerAgreement = false;
 				metaPattern=false;
         onlyAloneExceptInSubPatternsFlag=false;
-        firstPassForwardReference=false;
         blockDescendants=false;
         includesOneOfTagSet=0;
         includesOnlyDescendantsAllOfTagSet=0;
@@ -387,7 +386,6 @@ public:
     bool isFutureReference;
     bool containsFutureReference;
     bool indirectFutureReference;
-    bool firstPassForwardReference;
     bool noRepeat; // cannot be repeated
     bool ignoreFlag; // ignore pattern - do not consider pattern in costing 
 		bool checkIgnorableForms; // during the matching of this pattern, check all forms even if they are marked ignore (such as dash), so if a dash is in the middle of this pattern, it won't match.

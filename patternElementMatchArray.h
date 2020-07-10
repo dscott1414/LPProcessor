@@ -17,10 +17,6 @@ public:
     unsigned char __patternElementIndex;
     unsigned char getElement(void) { return __patternElement; }
     unsigned char getElementIndex(void) { return __patternElementIndex; }
-		bool getIsPattern()
-		{
-			return PEMAElementMatchedSubIndex & matchElement::patternFlag;
-		}
     void setElementAndIndex(unsigned char patternElement,unsigned char patternElementIndex)
     {
       __patternElement=patternElement;
@@ -54,9 +50,9 @@ public:
       return false;
     }
     void removeFlag(int flag) { flags&=~flag; }
-		bool hasTag(int tag) { return patterns[getPattern()]->elementHasTag(__patternElement,__patternElementIndex,tag,isChildPattern()); }
-    unsigned int getPattern() { return pattern; }
-    void setPattern(int p) { pattern=p; flags=0; }
+		bool hasTag(int tag) { return patterns[getParentPattern()]->elementHasTag(__patternElement,__patternElementIndex,tag,isChildPattern()); }
+    unsigned int getParentPattern() { return pattern; }
+    void setParentPattern(int p) { pattern=p; flags=0; }
     int getOCost() { return cost; }
 		// this incremental cost is only used in reduceParent!
 		short getIncrementalCost() {
@@ -102,7 +98,7 @@ public:
 		}
     __int64 getRole(__int64 &tagRole); 
     bool isChildPattern(void) { return (PEMAElementMatchedSubIndex&matchElement::patternFlag)== matchElement::patternFlag; }
-    unsigned int getChildPattern(void) { return (PEMAElementMatchedSubIndex&~matchElement::patternFlag)>>CHILDPATBITS; }
+		unsigned int getChildPattern(void) { return (PEMAElementMatchedSubIndex&~matchElement::patternFlag)>>CHILDPATBITS; }
     unsigned int getChildLen(void) { return PEMAElementMatchedSubIndex&((1<<CHILDPATBITS)-1); }
     unsigned int getChildForm(void) { return PEMAElementMatchedSubIndex; }
     void setSubIndex(unsigned int subIndexPattern,unsigned int endPosition) { PEMAElementMatchedSubIndex=(subIndexPattern <<CHILDPATBITS)+endPosition; }

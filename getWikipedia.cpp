@@ -14,9 +14,11 @@
 #include "ontology.h"
 #include <share.h>
 #include "internet.h"
+#include "QuestionAnswering.h"
 
-extern int logDetail; // not protected - too intensive to protect and doesn't matter
+extern int logQuestionDetail; // not protected - too intensive to protect and doesn't matter
 extern int logSemanticMap; // not protected - too intensive to protect and doesn't matter
+bool unlockTables(MYSQL &mysql);
 #define MAX_PATH_LEN 2048
 #define MAX_BUF 2000000
 //extern wstring basehttpquery; // initialized
@@ -112,27 +114,32 @@ void convertUnderlines(wstring &buffer)
 void eliminateHTML(wstring &buffer);
 // process the immediately preceding header: <h2>Contents</h2>
 // also process this: <div id="toctitle"><h2>Contents</h2></div>
-void processHeader(wstring &buffer,size_t &whereHeadingEnd,wstring &header)
+void processHeader(wstring &buffer,size_t &whereHeadingEnd,wstring &header,bool &tableOfContentsFlag)
 { LFS
   size_t beginPos=0;
   wstring tableMetaHeader,match; // a header table that comes on the right and can be ignored for now.
 	firstMatch(buffer,L"<table class=\"metadata plainlinks mbox-small",L"</table>",beginPos,match,true);
-	while (whereHeadingEnd && iswspace(buffer[whereHeadingEnd])) whereHeadingEnd--;
-	if (whereHeadingEnd>10 && buffer[whereHeadingEnd-5]==L'<' && buffer[whereHeadingEnd-4]==L'/' && buffer[whereHeadingEnd-3]==L'd' && buffer[whereHeadingEnd-2]==L'i' && buffer[whereHeadingEnd-1]==L'v' && buffer[whereHeadingEnd]==L'>')
+	while (true)
 	{
-		whereHeadingEnd-=6;
 		while (whereHeadingEnd && iswspace(buffer[whereHeadingEnd])) whereHeadingEnd--;
+		if (whereHeadingEnd > 10 && buffer[whereHeadingEnd - 5] == L'<' && buffer[whereHeadingEnd - 4] == L'/' && buffer[whereHeadingEnd - 3] == L'd' && buffer[whereHeadingEnd - 2] == L'i' && buffer[whereHeadingEnd - 1] == L'v' && buffer[whereHeadingEnd] == L'>')
+		{
+			whereHeadingEnd -= 6;
+			while (whereHeadingEnd && iswspace(buffer[whereHeadingEnd])) whereHeadingEnd--;
+		}
+		else break;
 	}
 	if (whereHeadingEnd>10 && buffer[whereHeadingEnd]==L'>' && buffer[whereHeadingEnd-2]==L'h' && buffer[whereHeadingEnd-3]==L'/' && buffer[whereHeadingEnd-4]==L'<')
 	{
 		// scan for the start of the header
-		wstring headerStart=L"<h >";
-		headerStart[2]=buffer[whereHeadingEnd-1];
+		wstring headerStart=L"<h";
+		headerStart+=buffer[whereHeadingEnd-1];
 		size_t whereHeadingBegin=buffer.rfind(headerStart,whereHeadingEnd);
 		if (whereHeadingBegin!=wstring::npos)
 		{
-			header=buffer.substr(whereHeadingBegin,whereHeadingEnd-whereHeadingBegin);
-			buffer.erase(whereHeadingBegin,whereHeadingEnd-whereHeadingBegin);
+			header=buffer.substr(whereHeadingBegin,whereHeadingEnd-whereHeadingBegin+1);
+			tableOfContentsFlag = header.find(L"mw-toc-heading") != wstring::npos;
+			buffer.erase(whereHeadingBegin,whereHeadingEnd-whereHeadingBegin+1);
 			whereHeadingEnd=whereHeadingBegin;
 			wstring title;
 			takeLastMatch(header,L"<span class=\"mw-headline\"",L"</span>",title,false);
@@ -175,7 +182,8 @@ void interpretHTMLTable(wstring &buffer,size_t &whereHeadingEnd,wstring &match,v
 { LFS
 	vector <wstring> table;
 	wstring tableHeader;
-	processHeader(buffer,whereHeadingEnd,tableHeader);
+	bool tableOfContentsFlag=false;
+	processHeader(buffer,whereHeadingEnd,tableHeader,tableOfContentsFlag);
 	table.push_back(tableHeader);
 	wstring columnHeaders,columnHeader;
 	size_t rowPosition=0,beginColumnHeader=0;
@@ -245,8 +253,9 @@ void eliminateHTML(wstring &buffer)
 //<ul> OR <ol>
 //<li>1997: <a href="/wiki/Nestl%C3%A9_Smarties_Book_Prize" title="Nestlé Smarties Book Prize">Nestlé Smarties Book Prize</a>, Gold Award for <i>Harry Potter and the Philosopher's Stone</i></li>
 // <h3> is not consistent.  <li> must be consecutive.
-void scanForTables(wstring &buffer,vector < vector <wstring> > &tables,bool unordered)
-{ LFS
+void scanForTables(wstring &buffer, vector < vector <wstring> > &tables, bool unordered)
+{
+	LFS
 	size_t tablePosition=0;
 	wstring tableHtml;
 	wchar_t *beginTable,*endTable;
@@ -264,7 +273,10 @@ void scanForTables(wstring &buffer,vector < vector <wstring> > &tables,bool unor
 	{
 		vector <wstring> table;
 		wstring tableHeader,column;
-		processHeader(buffer,tablePosition,tableHeader);
+		bool tableOfContentsFlag = false;
+		processHeader(buffer,tablePosition,tableHeader,tableOfContentsFlag);
+		if (tableOfContentsFlag)
+			tableHeader=Words.TOC_HEADER->first+ L" " + tableHeader;
 		table.push_back(tableHeader);
 		table.push_back(Words.END_COLUMN_HEADERS->first);
 		size_t rowPosition=0;
@@ -312,11 +324,15 @@ int reduceWikipediaPage(wstring &buffer)
 		buffer=match;
 	takeLastMatch(buffer,L"<!-- printfooter -->",L"<!-- /printfooter -->",match,false);
 	takeLastMatch(buffer,L"<!-- catlinks -->",L"<!-- /catlinks -->",match,false);
+	while (takeLastMatch(buffer, L"<style", L"</style>", match, false) >= 0);
 	takeLastMatch(buffer,L"<div class=\"floatnone\">",L"</div>",match,false);
 	takeLastMatch(buffer,L"<div style=\"float: left;\">",L"</div>",match,false);
 	takeLastMatch(buffer,L"<div style=\"margin-left: 60px;\">",L"</div>",match,false);
 	takeLastMatch(buffer,L"<div class=\"infobox sisterproject\" style=\"float:right;\">",L"</div>",match,false);
+	takeLastMatch(buffer,L"<div id=\"mwe_player", L"</div>", match, false);
+	while (takeLastMatch(buffer, L"<div class=\"thumb", L"</div>", match, false) >= 0);
 	takeLastMatch(buffer,L"<form id=\"powersearch\" method=\"get\" action=\"/wiki/Special:Search\">",L"</form>",match,false);
+	takeLastMatch(buffer, L"<span class=\"toctogglespan\">", L"</span>", match, false);
 	//takeLastMatch(buffer,L"<ol ",L"</ol>",match,false);
 	size_t pos=wstring::npos;
 	while (firstMatch(buffer,L"<!--",L"-->",pos,match,false)>=0);
@@ -525,7 +541,7 @@ int Source::getExtendedRDFTypes(int where, vector <cTreeCat *> &rdfTypes, unorde
 			break;
 	}
 	Ontology::includeSuperClasses(topHierarchyClassIndexes, rdfTypes);
-	// reset preferred
+	// reset lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms
 	for (int I=0; I<rdfTypes.size(); I++)
 		rdfTypes[I]->preferred=false;
 	Ontology::setPreferred(topHierarchyClassIndexes,rdfTypes);
@@ -538,7 +554,7 @@ int Source::getObjectRDFTypes(int object,vector <cTreeCat *> &rdfTypes,unordered
   objectString(object,tmpstr,true);
   Ontology::rdfIdentify(tmpstr,rdfTypes,fromWhere);
 	Ontology::includeSuperClasses(topHierarchyClassIndexes, rdfTypes);
-	// reset preferred
+	// reset lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms
 	for (int I=0; I<rdfTypes.size(); I++)
 		rdfTypes[I]->preferred=false;
 	Ontology::setPreferred(topHierarchyClassIndexes,rdfTypes);
@@ -677,7 +693,8 @@ bool Source::categoryMultiWord(wstring &childWord, wstring &lastWord)
 	return true;
 }
 
-void Source::getWordAssociationMap(wstring object,vector <cTreeCat *> &rdfTypes,unordered_map<wstring,int> &wordAssociationMap)
+// attempt to transform rdf types, wikipedia links and profession links into single words which can be matched to other words
+void Source::getRDFTypeSimplificationToWordAssociationWithObjectMap(wstring object,vector <cTreeCat *> &rdfTypes,unordered_map<wstring,int> &RDFTypeSimplificationToWordAssociationWithObjectMap)
 {
 	for (vector <cTreeCat *>::iterator rdfi=rdfTypes.begin(),rdfiEnd=rdfTypes.end(); rdfi!=rdfiEnd; rdfi++)
 	{
@@ -685,28 +702,46 @@ void Source::getWordAssociationMap(wstring object,vector <cTreeCat *> &rdfTypes,
 			continue;
 		wstring childWord=(*rdfi)->cli->first,transformedChildWord,lastWord;
 		if (categoryMultiWord(childWord, lastWord))
-			wordAssociationMap[lastWord] = (*rdfi)->confidence << 1;
-		wordAssociationMap[transformedChildWord = transformRDFTypeName(childWord)] = (*rdfi)->confidence;
+		{
+			if (logQuestionDetail)
+				lplog(LOG_WHERE, L"RDFSimplificationToWordMapping MultiWord %-32s->%s confidence %d", childWord.c_str(), lastWord.c_str(), (*rdfi)->confidence << 1);
+			RDFTypeSimplificationToWordAssociationWithObjectMap[lastWord] = (*rdfi)->confidence << 1;
+		}
+		RDFTypeSimplificationToWordAssociationWithObjectMap[transformedChildWord = transformRDFTypeName(childWord)] = (*rdfi)->confidence;
+		if (logQuestionDetail)
+			lplog(LOG_WHERE, L"RDFSimplificationToWordMapping %-32s->%s confidence %d", childWord.c_str(), transformedChildWord.c_str(), (*rdfi)->confidence );
 		//(*rdfi)->lplog(LOG_WHERE,object+L" LLDEBUGQQ ["+transformedChildWord+L"]");
 
 		for (vector <wstring>::iterator wli=(*rdfi)->wikipediaLinks.begin(),wliEnd=(*rdfi)->wikipediaLinks.end(); wli!=wliEnd; wli++)
 		{
 			childWord=*wli;
 			if (categoryMultiWord(childWord, lastWord))
-				wordAssociationMap[lastWord] = (*rdfi)->confidence << 1;
-			wordAssociationMap[transformRDFTypeName(childWord)] = (*rdfi)->confidence;
+			{
+				if (logQuestionDetail)
+					lplog(LOG_WHERE, L"RDFSimplificationToWordMapping MultiWordWikipediaLink %-32s->%s confidence %d", childWord.c_str(), lastWord.c_str(), (*rdfi)->confidence << 1);
+				RDFTypeSimplificationToWordAssociationWithObjectMap[lastWord] = (*rdfi)->confidence << 1;
+			}
+			RDFTypeSimplificationToWordAssociationWithObjectMap[transformedChildWord = transformRDFTypeName(childWord)] = (*rdfi)->confidence;
+			if (logQuestionDetail)
+				lplog(LOG_WHERE, L"RDFSimplificationToWordMapping WikipediaLink %-32s->%s confidence %d", childWord.c_str(), transformedChildWord.c_str(), (*rdfi)->confidence);
 		}
 		for (vector <wstring>::iterator pli=(*rdfi)->professionLinks.begin(),pliEnd=(*rdfi)->professionLinks.end(); pli!=pliEnd; pli++)
 		{
 			childWord=*pli;
 			if (categoryMultiWord(childWord, lastWord))
-				wordAssociationMap[lastWord] = (*rdfi)->confidence << 1;
-			wordAssociationMap[transformRDFTypeName(childWord)] = (*rdfi)->confidence;
+			{
+				if (logQuestionDetail)
+					lplog(LOG_WHERE, L"RDFSimplificationToWordMapping MultiWordProfessionLink %-32s->%s confidence %d", childWord.c_str(), lastWord.c_str(), (*rdfi)->confidence << 1);
+				RDFTypeSimplificationToWordAssociationWithObjectMap[lastWord] = (*rdfi)->confidence << 1;
+			}
+			RDFTypeSimplificationToWordAssociationWithObjectMap[transformedChildWord = transformRDFTypeName(childWord)] = (*rdfi)->confidence;
+			if (logQuestionDetail)
+				lplog(LOG_WHERE, L"RDFSimplificationToWordMapping WikipediaLink %-32s->%s confidence %d", childWord.c_str(), transformedChildWord.c_str(), (*rdfi)->confidence);
 		}
 	}
 }
 
-int Source::getAssociationMapMaster(int where,int numWords,unordered_map <wstring ,int > &associationMap,wstring fromWhere)
+int Source::getAssociationMapMaster(int where,int numWords,unordered_map <wstring ,int > &RDFTypeSimplificationToWordAssociationWithObjectMap,wstring fromWhere)
 { LFS
 	wstring newObjectName;
 	bool isObject = m[where].getObject() >= 0;
@@ -729,8 +764,8 @@ int Source::getAssociationMapMaster(int where,int numWords,unordered_map <wstrin
 	}
 	else
 		(*rdfni).second++;
-	associationMap = extendedRdfTypeMap[newObjectName].wordAssociationMap;
-	//lplog(LOG_WHERE, L"%s results in %d words.", newObjectName.c_str(), extendedRdfTypeMap[newObjectName].wordAssociationMap.size());
+	RDFTypeSimplificationToWordAssociationWithObjectMap = extendedRdfTypeMap[newObjectName].RDFTypeSimplificationToWordAssociationWithObjectMap;
+	//lplog(LOG_WHERE, L"%s results in %d words.", newObjectName.c_str(), extendedRdfTypeMap[newObjectName].RDFTypeSimplificationToWordAssociationWithObjectMap.size());
 	return 0;
 }
 
@@ -769,6 +804,9 @@ bool Source::noRDFTypes()
 	return false;
 }
 
+// get all RDF types associated with the object which is defined by the words consecutively from position (where) to position (where+numWords) in source.
+// this may be extended by some prepositional phrases as determined by extendNumPP
+// return results in rdfTypes and topHierarchyClassIndexes
 int Source::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat *> &rdfTypes, unordered_map <wstring, int > &topHierarchyClassIndexes, wstring fromWhere, int extendNumPP, bool fileCaching, bool ignoreMatches)
 {
 	LFS
@@ -782,6 +820,7 @@ int Source::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat 
 	// protects from buffer overrun and also very unlikely that legal names are > 200 in length
 	if (newObjectName.length() > 200)
 		return -1;
+	// cache rdf types for an object.
 	unordered_map<wstring, int >::iterator rdfni;
 	if ((rdfni = extendedRdfTypeNumMap.find(newObjectName)) == extendedRdfTypeNumMap.end() || !fileCaching)
 		extendedRdfTypeNumMap[newObjectName] = 1;
@@ -792,6 +831,7 @@ int Source::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat 
 		topHierarchyClassIndexes = extendedRdfTypeMap[newObjectName].topHierarchyClassIndexes;
 		return 0;
 	}
+	// An object may not have any rdf types, this is kept in a table for efficiency
 	if (Ontology::inNoERDFTypesDBTable(newObjectName))
 	{
 		rdfTypes.clear();
@@ -800,6 +840,7 @@ int Source::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat 
 		extendedRdfTypeMap[newObjectName].topHierarchyClassIndexes = topHierarchyClassIndexes;
 		return 0;
 	}
+	// if it is not in the in memory cache, check if it is cached on disk.  Either by an old name or a new name.
 	getOldRDFName(sourcePath, where, extendNumPP, object);
 	wchar_t path[4096], newPath[4096];
 	makePath(object, path);
@@ -809,6 +850,7 @@ int Source::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat 
 		  (_waccess(path, 0)<0 && _waccess(newPath, 0)<0) || 
 			((retCode = readExtendedRDFTypes(path, rdfTypes, topHierarchyClassIndexes))<0 && (newRetCode = readExtendedRDFTypes(newPath, rdfTypes, topHierarchyClassIndexes))<0))
 	{
+		// not in memory cache, not cached on disk.  Get all rdf types.
 		rdfTypes.clear();
 		topHierarchyClassIndexes.clear();
 		unordered_map <wstring, dbs>::iterator dbSeparator=Ontology::dbPediaOntologyCategoryList.find(SEPARATOR);
@@ -868,8 +910,8 @@ int Source::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat 
 	}
 	extendedRdfTypeMap[newObjectName].rdfTypes = rdfTypes;
 	extendedRdfTypeMap[newObjectName].topHierarchyClassIndexes = topHierarchyClassIndexes;
-	getWordAssociationMap(newObjectName, rdfTypes, extendedRdfTypeMap[newObjectName].wordAssociationMap);
-	//lplog(LOG_WHERE, L"getExtendedRDFTypesMaster %s derived words %d from rdfTypes %d.", newObjectName.c_str(), extendedRdfTypeMap[newObjectName].wordAssociationMap.size(), rdfTypes.size());
+	getRDFTypeSimplificationToWordAssociationWithObjectMap(newObjectName, rdfTypes, extendedRdfTypeMap[newObjectName].RDFTypeSimplificationToWordAssociationWithObjectMap);
+	//lplog(LOG_WHERE, L"getExtendedRDFTypesMaster %s derived words %d from rdfTypes %d.", newObjectName.c_str(), extendedRdfTypeMap[newObjectName].RDFTypeSimplificationToWordAssociationWithObjectMap.size(), rdfTypes.size());
 	if (retCode >= 0)
 		lplog(LOG_WHERE, L"getExtendedRDFTypesMaster used path %s for object %s.", path, object.c_str());
 //	if (newRetCode>=0)
@@ -1197,7 +1239,7 @@ bool Source::capitalizationCheck(int begin,int len)
 		(len > 2 && wordsCapitalized < len / 2))
 	{
 		wstring tmpstr;
-		if (logDetail)
+		if (logQuestionDetail)
 			lplog(LOG_ERROR, L"capitalizationCheck rejected %s", phraseString(begin, begin + len, tmpstr, true).c_str());
 		return true;
 	}
@@ -1244,7 +1286,7 @@ bool Source::rejectISARelation(int principalWhere)
 		*/
 }
 
-bool Source::rejectPath(const wchar_t *path)
+bool cQuestionAnswering::rejectPath(const wchar_t *path)
 {
 	struct _stat64 buf;
 	_wstati64(path, &buf);
@@ -1252,113 +1294,114 @@ bool Source::rejectPath(const wchar_t *path)
 }
 
 int limitProcessingForProfiling=0;
-int Source::processPath(const wchar_t *path,Source *&source,Source::sourceTypeEnum st,int pathSourceConfidence,bool parseOnly)
-{ LFS
-	if (logTraceOpen)
-		lplog(LOG_WHERE, L"TRACEOPEN %s %s", path, __FUNCTIONW__);
-	unordered_map <wstring,Source *>::iterator smi=sourcesMap.find(path);
+int cQuestionAnswering::processPath(Source *parentSource,const wchar_t *path, Source *&source, Source::sourceTypeEnum st, int pathSourceConfidence, bool parseOnly)
+{
+	LFS
+		if (logTraceOpen)
+			lplog(LOG_WHERE, L"TRACEOPEN %s %s", path, __FUNCTIONW__);
+	unordered_map <wstring, Source *>::iterator smi = sourcesMap.find(path);
 	wchar_t sourcesParsedTitle[1024];
-	GetConsoleTitle(sourcesParsedTitle,1024);
-	wchar_t *ch=wcsstr(sourcesParsedTitle,L"...");
+	GetConsoleTitle(sourcesParsedTitle, 1024);
+	wchar_t *ch = wcsstr(sourcesParsedTitle, L"...");
 	extern int questionProgress;
-	if (smi!=sourcesMap.end())
+	if (smi != sourcesMap.end())
 	{
-		source=smi->second;
+		source = smi->second;
 		source->numSearchedInMemory++;
 		if (ch)
 		{
-			wsprintf(ch+3,L"[%d%%] %d sources processed:%s[%d]",questionProgress,sourcesMap.size(),path,source->numSearchedInMemory);
+			wsprintf(ch + 3, L"[%d%%] %d sources processed:%s[%d]", questionProgress, sourcesMap.size(), path, source->numSearchedInMemory);
 			SetConsoleTitle(sourcesParsedTitle);
 		}
 		return 0;
 	}
 	if (rejectPath(path))
 		return -1;
-		if (ch)
+	if (ch)
+	{
+		wsprintf(ch + 3, L"[%d%%]  %d sources processed:%s", questionProgress, sourcesMap.size(), path);
+		SetConsoleTitle(sourcesParsedTitle);
+	}
+	source = new Source(&parentSource->mysql, st, pathSourceConfidence);
+	source->numSearchedInMemory = 1;
+	source->isFormsProcessed = false;
+	source->processOrder = ++parentSource->processOrder;
+	source->multiWordStrings = parentSource->multiWordStrings;
+	source->multiWordObjects = parentSource->multiWordObjects;
+	wstring wpath = path, start = L"~~BEGIN";
+	int repeatStart = 1;
+	bool justParsed = false;
+	Words.readWords(wpath, -1, false, L"");
+	if (!source->readSource(wpath, false, justParsed, false, parseOnly, L"") || (justParsed && !parseOnly))
+	{
+		lplog(LOG_WIKIPEDIA | LOG_RESOLUTION | LOG_RESCHECK | LOG_WHERE, L"Begin Processing %s...", path);
+		if (!justParsed)
 		{
-			wsprintf(ch+3,L"[%d%%]  %d sources processed:%s",questionProgress,sourcesMap.size(),path);
-			SetConsoleTitle(sourcesParsedTitle);
-		}
-		source=new Source(&mysql,st,pathSourceConfidence);
-		source->numSearchedInMemory=1;
-		source->isFormsProcessed=false;
-		source->processOrder=++processOrder;
-		source->multiWordStrings=multiWordStrings;
-		source->multiWordObjects=multiWordObjects;
-		wstring wpath=path,start=L"~~BEGIN";
-		int repeatStart = 1;
-		bool justParsed = false;
-		Words.readWords(wpath, -1, false, L"");
-		if (!source->readSource(wpath,false, justParsed,false,parseOnly, L"") || (justParsed && !parseOnly))
-		{
-			lplog(LOG_WIKIPEDIA|LOG_RESOLUTION|LOG_RESCHECK|LOG_WHERE,L"Begin Processing %s...",path);
-			if (!justParsed)
-			{
-				wprintf(L"\nParsing %s...\n",path);
-				unsigned int unknownCount=0,quotationExceptions=0,totalQuotations=0;
-				int globalOverMatchedPositionsTotal=0;
-				string cPath;
-				wTM(path,cPath);
-				source->tokenize(L"",L"",wpath, L"", start, repeatStart,unknownCount);
-				source->doQuotesOwnershipAndContractions(totalQuotations);
-				unlockTables();
-				if (source->m.empty()) 
-				{
-					wstring failurePath = path;
-					failurePath += L".SourceCache";
-					int fd;
-					_wsopen_s(&fd, failurePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE); // , errorCode = 
-					if (fd >= 0)
-						close(fd);
-					return -1;
-				}
-				bool s1=logMatchedSentences,s2=logUnmatchedSentences;
-				logMatchedSentences=logUnmatchedSentences=true;
-				source->printSentences(false,unknownCount,quotationExceptions,totalQuotations,globalOverMatchedPositionsTotal);
-				logMatchedSentences=s1;
-				logUnmatchedSentences=s2;
-				lplog();
-				source->write(path,false, false, L"");
-				source->writeWords(path, L"");
-				limitProcessingForProfiling=0;
-				puts("");
-			}
-			else
-			{
-				source->printSentencesCheck(true);
-				lplog();
-			}
-			if (source->m.empty()) 
+			wprintf(L"\nParsing %s...\n", path);
+			unsigned int unknownCount = 0, quotationExceptions = 0, totalQuotations = 0;
+			int globalOverMatchedPositionsTotal = 0;
+			string cPath;
+			wTM(path, cPath);
+			source->tokenize(L"", L"", wpath, L"", start, repeatStart, unknownCount);
+			source->doQuotesOwnershipAndContractions(totalQuotations);
+			unlockTables(parentSource->mysql);
+			if (source->m.empty())
 			{
 				wstring failurePath = path;
 				failurePath += L".SourceCache";
-				int fd = _wopen(failurePath.c_str(), O_CREAT);
+				int fd;
+				_wsopen_s(&fd, failurePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE); // , errorCode = 
 				if (fd >= 0)
 					close(fd);
 				return -1;
 			}
-			if (!parseOnly)
-			{
-				source->parentSource = this;
-				source->identifyObjects();
-				vector <int> secondaryQuotesResolutions;
-				source->analyzeWordSenses();
-				source->narrativeIsQuoted = true;
-				source->syntacticRelations();
-				//Words.writeWords(path);  not necessary and wastes huge amount of space
-				source->identifySpeakerGroups();
-				source->resolveSpeakers(secondaryQuotesResolutions);
-				source->resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
-			}
-			source->write(path,!parseOnly, false, L"");
+			bool s1 = logMatchedSentences, s2 = logUnmatchedSentences;
+			logMatchedSentences = logUnmatchedSentences = true;
+			source->printSentences(false, unknownCount, quotationExceptions, totalQuotations, globalOverMatchedPositionsTotal);
+			logMatchedSentences = s1;
+			logUnmatchedSentences = s2;
+			lplog();
+			source->write(path, false, false, L"");
 			source->writeWords(path, L"");
-			lplog(LOG_WIKIPEDIA|LOG_RESOLUTION|LOG_RESCHECK|LOG_WHERE,L"End Processing %s...",path);
+			limitProcessingForProfiling = 0;
+			puts("");
 		}
-		sourcesMap[path]=source;
-		return 0;
+		else
+		{
+			source->printSentencesCheck(true);
+			lplog();
+		}
+		if (source->m.empty())
+		{
+			wstring failurePath = path;
+			failurePath += L".SourceCache";
+			int fd = _wopen(failurePath.c_str(), O_CREAT);
+			if (fd >= 0)
+				close(fd);
+			return -1;
+		}
+		if (!parseOnly)
+		{
+			source->parentSource = parentSource;
+			source->identifyObjects();
+			vector <int> secondaryQuotesResolutions;
+			source->analyzeWordSenses();
+			source->narrativeIsQuoted = true;
+			source->syntacticRelations();
+			//Words.writeWords(path);  not necessary and wastes huge amount of space
+			source->identifySpeakerGroups();
+			source->resolveSpeakers(secondaryQuotesResolutions);
+			source->resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
+		}
+		source->write(path, !parseOnly, false, L"");
+		source->writeWords(path, L"");
+		lplog(LOG_WIKIPEDIA | LOG_RESOLUTION | LOG_RESCHECK | LOG_WHERE, L"End Processing %s...", path);
+	}
+	sourcesMap[path] = source;
+	return 0;
 }
 
-int Source::identifyISARelationTextAnalysis(int principalWhere, bool parseOnly)
+int Source::identifyISARelationTextAnalysis(cQuestionAnswering &qa,int principalWhere, bool parseOnly)
 {
 	LFS
 		// must be a name
@@ -1372,7 +1415,7 @@ int Source::identifyISARelationTextAnalysis(int principalWhere, bool parseOnly)
 	if (!readAttribs(path,OCTypes))
 	{
 		Source *source = NULL;
-		processPath(path,source,Source::WIKIPEDIA_SOURCE_TYPE,2,parseOnly);
+		qa.processPath(this,path,source,Source::WIKIPEDIA_SOURCE_TYPE,2,parseOnly);
 		vector <WordMatch>::iterator im=source->m.begin(),imEnd=source->m.end();
 		vector < vector <tTagLocation> > tagSets;
 		for (int I=0; im!=imEnd; im++,I++)
@@ -1461,6 +1504,8 @@ int Source::getRDFWhereString(int where, wstring &oStr, wchar_t *separator, int 
 		wstring logres=oStr;
 		int numWords;
 		appendPrepositionalPhrases(where,logres,prepPhraseStrings,numWords,true,separator,includeNonMixedCaseDirectlyAttachedPrepositionalPhrases);
+		if (prepPhraseStrings.empty())
+			return -1;
 		oStr=prepPhraseStrings[0];
 	}
 	//lplog(LOG_WHERE, L"getRDFWhereString yields %s after includeNonMixedCaseDirectlyAttachedPrepositionalPhrases=%d", oStr.c_str(), includeNonMixedCaseDirectlyAttachedPrepositionalPhrases);
@@ -1468,6 +1513,58 @@ int Source::getRDFWhereString(int where, wstring &oStr, wchar_t *separator, int 
 	if (oStr.length() > 2 && oStr[oStr.length() - 1] == L's' && oStr[oStr.length() - 2] == L'\'')
 		oStr.erase(oStr.length() - 2);
 	return 0;
+}
+
+bool Source::analyzeRDFTitle(unsigned int where, int &numWords, int &numPrepositions, wstring tableName)
+{
+	LFS
+		numWords = 0;
+	// check if from begin to end there is only capitalized words except for determiners or prepositions - 
+	// What Do We Need to Know About the International Monetary System? (Paul Krugman)
+	// be sensitive to breaks, like / Fundación De Asturias [7047][name][N][F:Fundación M1:De L:Asturias ][region] ( Spain ) , Prince of Asturias Awards in Social Sciences[7051-7062].
+	bool allCapitalized = true;
+	numPrepositions = 0;
+	int lastComma = -1, lastConjunction = -1, firstComma = -1;
+	for (unsigned int I = where; I < m.size() && m[I].word != Words.END_COLUMN && m[I].word != Words.TABLE && allCapitalized && !isEOS(I) && m[I].queryForm(bracketForm) < 0 &&
+		(m[I].queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (m[I].flags&WordMatch::flagFirstLetterCapitalized) || (m[I].flags&WordMatch::flagAllCaps) ||
+			m[I].word->first[0] == L',' || m[I].word->first[0] == L':' || m[I].word->first[0] == L';' || m[I].queryForm(determinerForm) >= 0 || m[I].queryForm(numeralOrdinalForm) >= 0 || m[I].queryForm(prepositionForm) >= 0 || m[I].queryForm(coordinatorForm) >= 0);
+		I++, numWords++)
+	{
+		if (m[I].queryForm(prepositionForm) >= 0)
+			numPrepositions++;
+		if (m[I].getObject() > 0)
+		{
+			numWords += (m[I].endObjectPosition - 1 - I);
+			I = m[I].endObjectPosition - 1; // skip objects and periods associated with abbreviations and names
+		}
+		if (m[I].word->first[0] == L',')
+		{
+			lastComma = I;
+			if (firstComma<0 || lastConjunction>firstComma)
+				firstComma = I;
+		}
+		if (m[I].queryForm(conjunctionForm) >= 0)
+			lastConjunction = I;
+	}
+	if (lastComma >= 0 && lastConjunction != lastComma + 1 && lastConjunction != lastComma + 2)
+	{
+		if (logQuestionDetail)
+		{
+			wstring tmpstr, tmpstr2;
+			lplog(LOG_WHERE, L"Processing table %s: %d:title %s rejected words after comma resulting in %s", tableName.c_str(), where, phraseString(where, where + numWords, tmpstr, true, L" ").c_str(), phraseString(where, firstComma, tmpstr2, true, L" ").c_str());
+		}
+		numWords = firstComma - where;
+	}
+	while (numWords > 1 && (m[where + numWords - 1].word->first[0] == L',' || m[where + numWords - 1].queryForm(determinerForm) >= 0 || m[where + numWords - 1].queryForm(prepositionForm) >= 0 || m[where + numWords - 1].queryForm(coordinatorForm) >= 0))
+		numWords--;
+	if (m[where].endObjectPosition > (int)where + numWords)
+		numWords = m[where].endObjectPosition - where;
+	if (numWords == 0)
+	{
+		numWords = 1;
+		return false;
+	}
+	return true;
 }
 
 // rdfTypes calls rdfIdentify, which then caches the rdfTypes of each individual string into the dbpedia cache.
@@ -1512,7 +1609,7 @@ int Source::getRDFTypes(int where, vector <cTreeCat *> &rdfTypes, wstring fromWh
 	// even though this should never be necessary because if ignoreMatches is true, then objectMatches will not be empty.
 	if (m[where].objectMatches.empty() && !ignoreMatches)
 	{
-		analyzeTitle(begin,numWords,numPrepositions);
+		analyzeRDFTitle(begin,numWords,numPrepositions,L"");
 		if (m[where].endObjectPosition - m[where].beginObjectPosition > numWords)
 			numWords = m[where].endObjectPosition - m[where].beginObjectPosition;
 		wstring tmpstr;
@@ -1522,7 +1619,7 @@ int Source::getRDFTypes(int where, vector <cTreeCat *> &rdfTypes, wstring fromWh
 			tmpstr.erase(tmpstr.length()-2);
 		if (tmpstr.size()>oStr.length())
 		{
-			if (logDetail)
+			if (logQuestionDetail)
 				lplog(LOG_WHERE,L"%d:replaced %s with %s",where,oStr.c_str(),tmpstr.c_str());
 			oStr=tmpstr;
 		}
@@ -1623,7 +1720,7 @@ int Source::identifyISARelation(int principalWhere,bool initialTenseOnly)
 	// must be a name
 	if (rejectISARelation(principalWhere) || o < 0)
 	{
-		if (o >= 0 && logDetail)
+		if (o >= 0 && logQuestionDetail)
 		{
 			wstring tmpstr;
 			lplog(LOG_INFO, L"ISARelation declined:%s", objectString(o, tmpstr, false).c_str());
@@ -1653,7 +1750,7 @@ int Source::identifyISARelation(int principalWhere,bool initialTenseOnly)
 				r++;
 			}
 	}
-	if (logDetail)
+	if (logQuestionDetail)
 		for (unsigned int r=0; r<rdfTypes.size(); r++)
 			if ((rdfTypes[r]->preferred || rdfTypes[r]->preferredUnknownClass || rdfTypes[r]->exactMatch))
 				rdfTypes[r]->logIdentity(LOG_WHERE,L"ISARelation",false);
@@ -1665,10 +1762,10 @@ int Source::identifyISARelation(int principalWhere,bool initialTenseOnly)
 	int placeTypeFound=-1;
 	for (unordered_map <wstring ,int >::iterator idi=topHierarchyClassIndexes.begin(),idiEnd=topHierarchyClassIndexes.end(); idi!=idiEnd; idi++)
 	{
-		if (logDetail)
+		if (logQuestionDetail)
 			rdfTypes[idi->second]->logIdentity(LOG_WHERE,L"ISARelationIdOffset",false);
 		wstring tmpstr;
-		if (logDetail)
+		if (logQuestionDetail)
 			lplog(LOG_WHERE,L"ISADEBUG %s:%s:%d:%s",objectString(o,tmpstr,false).c_str(),rdfTypes[idi->second]->cli->first.c_str(),rdfTypes[idi->second]->confidence,idi->first.c_str());
 		if (rdfTypes[idi->second]->confidence==p)
 		{
@@ -1777,7 +1874,7 @@ bool Source::skipSentenceForUpperCase(unsigned int &I)
 			numWordsCapitalized++;
 	if (numWordsChecked && 100*numWordsCapitalized/numWordsChecked>90)
 	{
-		if (logDetail)
+		if (logQuestionDetail)
 			lplog(LOG_WHERE,L"tossing out all cap source %d:%s.",I,sourcePath.c_str());
 		I=s; // skip to the next sentence
 		return true;
@@ -1785,7 +1882,7 @@ bool Source::skipSentenceForUpperCase(unsigned int &I)
   return false;
 }
 
-void Source::accumulateSemanticMaps(cSpaceRelation* parentSRI,Source *childSource,bool confidence)
+void cQuestionAnswering::accumulateSemanticMaps(Source *questionSource,cSpaceRelation* parentSRI,Source *childSource,bool confidence)
 { LFS
 	/*
 	class cSemanticMap
@@ -1808,7 +1905,7 @@ void Source::accumulateSemanticMaps(cSpaceRelation* parentSRI,Source *childSourc
 	unordered_set <wstring> whereQuestionInformationSourceObjectsStrings;
 	for (set <int>::iterator si=parentSRI->whereQuestionInformationSourceObjects.begin(),siEnd=parentSRI->whereQuestionInformationSourceObjects.end(); si!=siEnd; si++)
 	{
-		whereString(*si,tmpstr,true);
+		questionSource->whereString(*si,tmpstr,true);
 		bool isAllUpper=true, containsNonAlpha=false,containsPeriod=false;
 		if (tmpstr.length()<4)
 		{
@@ -1839,12 +1936,12 @@ void Source::accumulateSemanticMaps(cSpaceRelation* parentSRI,Source *childSourc
 			parentSRI->semanticMaps[*si]=new cSemanticMap();
 		cSemanticMap *semanticMap=parentSRI->semanticMaps[*si];
 		if (semanticMap->SMPrincipalObject.empty())
-			semanticMap->SMPrincipalObject=whereString(*si,tmpstr,true);
+			semanticMap->SMPrincipalObject= questionSource->whereString(*si,tmpstr,true);
 		if (semanticMap->sourcePaths.find(childSource->sourcePath)!=semanticMap->sourcePaths.end())
 			continue;
 		semanticMap->sourcePaths.insert(childSource->sourcePath);
-		int parentObject=m[*si].getObject();
-		vector <cOM> parentObjects=m[*si].objectMatches;
+		int parentObject=questionSource->m[*si].getObject();
+		vector <cOM> parentObjects= questionSource->m[*si].objectMatches;
 		if (parentObjects.empty())
 		{
 			if (parentObject<0)
@@ -1853,18 +1950,18 @@ void Source::accumulateSemanticMaps(cSpaceRelation* parentSRI,Source *childSourc
 		}
 		for (vector <cOM>::iterator poi=parentObjects.begin(),poiEnd=parentObjects.end(); poi!=poiEnd; poi++)
 		{
-			bool checkForUpperCase=(checkForUppercaseSources(poi->object));
-			int parentObjectClass=objects[poi->object].objectClass;
+			bool checkForUpperCase=(questionSource->checkForUppercaseSources(poi->object));
+			int parentObjectClass= questionSource->objects[poi->object].objectClass;
 			set <cObject::cLocation> principalObjectLocations;
 			bool namedNoMatch=false;
 			if (logSemanticMap)
-				lplog(LOG_WHERE,L"%s:? SM",objectString(*poi,tmpstr,false).c_str());
+				lplog(LOG_WHERE,L"%s:? SM", questionSource->objectString(*poi,tmpstr,false).c_str());
 			for (unsigned int I=0; I<childSource->objects.size(); I++)
 			{
 				wstring tmpstr2;
 				//if (logSemanticMap)
 				//	lplog(LOG_WHERE,L"==%s? SM",childSource->objectString(I,tmpstr2,false).c_str());
-				if (childSource->objects[I].objectClass==parentObjectClass && matchObjects(this,objects.begin()+poi->object,childSource,childSource->objects.begin()+I,namedNoMatch,debugTrace))
+				if (childSource->objects[I].objectClass==parentObjectClass && matchObjects(questionSource, questionSource->objects.begin()+poi->object,childSource,childSource->objects.begin()+I,namedNoMatch, questionSource->debugTrace))
 				{
 					principalObjectLocations.insert(childSource->objects[I].locations.begin(),childSource->objects[I].locations.end());
 					for (vector <int>::iterator oai=childSource->objects[I].aliases.begin(),oaiEnd=childSource->objects[I].aliases.end(); oai!=oaiEnd; oai++)
@@ -1882,52 +1979,52 @@ void Source::accumulateSemanticMaps(cSpaceRelation* parentSRI,Source *childSourc
 					continue;
 				if (childSource->m[mI].getObject()<0 && childSource->m[mI].objectMatches.empty())
 					continue;
-				childSource->parentSource=this;
-				childSource->accumulateSemanticEntry(mI,principalObjectLocations,polIndex,confidence,parentSRI,semanticMap,whereQuestionInformationSourceObjectsStrings);
+				childSource->parentSource= questionSource;
+				accumulateSemanticEntry(childSource,mI,principalObjectLocations,polIndex,confidence,parentSRI,semanticMap,whereQuestionInformationSourceObjectsStrings);
 				childSource->parentSource=0;
 			}
 		}
 	}
 }
 
-void Source::accumulateSemanticEntry(unsigned int where,set <cObject::cLocation> &principalObjectLocations,set <cObject::cLocation>::iterator &polIndex,bool confidence,cSpaceRelation* parentSRI,cSemanticMap *semanticMap,unordered_set <wstring> & whereQuestionInformationSourceObjectsStrings)
+void cQuestionAnswering::accumulateSemanticEntry(Source *questionSource,unsigned int where,set <cObject::cLocation> &principalObjectLocations,set <cObject::cLocation>::iterator &polIndex,bool confidence,cSpaceRelation* parentSRI,cSemanticMap *semanticMap,unordered_set <wstring> & whereQuestionInformationSourceObjectsStrings)
 { LFS
-	vector <cOM> objectMatches=m[where].objectMatches;
-	if (m[where].objectMatches.empty())
-		objectMatches.push_back(cOM(m[where].getObject(),-1));
+	vector <cOM> objectMatches= questionSource->m[where].objectMatches;
+	if (questionSource->m[where].objectMatches.empty())
+		objectMatches.push_back(cOM(questionSource->m[where].getObject(),-1));
 	for (unsigned int I=0; I<objectMatches.size(); I++)
 	{
 		int o=objectMatches[I].object;
 		// remove all classes of objects other than names including Narrator and Audience
 		if (o<2 || 
-			objects[o].objectClass==PRONOUN_OBJECT_CLASS ||
-			objects[o].objectClass==REFLEXIVE_PRONOUN_OBJECT_CLASS || 
-			objects[o].objectClass==RECIPROCAL_PRONOUN_OBJECT_CLASS || 
-			objects[o].objectClass==VERB_OBJECT_CLASS || 
-			objects[o].objectClass==PLEONASTIC_OBJECT_CLASS ||
-			objects[o].objectClass == META_GROUP_OBJECT_CLASS)
+			questionSource->objects[o].objectClass==PRONOUN_OBJECT_CLASS ||
+			questionSource->objects[o].objectClass==REFLEXIVE_PRONOUN_OBJECT_CLASS ||
+			questionSource->objects[o].objectClass==RECIPROCAL_PRONOUN_OBJECT_CLASS ||
+			questionSource->objects[o].objectClass==VERB_OBJECT_CLASS ||
+			questionSource->objects[o].objectClass==PLEONASTIC_OBJECT_CLASS ||
+			questionSource->objects[o].objectClass == META_GROUP_OBJECT_CLASS)
 			continue;
 		// remove determiners like 'this' or 'that', 'there' or 'so'
-		if (objects[o].end-objects[o].begin==1 && 
-			  (m[objects[o].begin].queryWinnerForm(demonstrativeDeterminerForm)>=0 || m[objects[o].begin].queryWinnerForm(letterForm)>=0 || 
-				 m[objects[o].begin].word->first==L"there" || m[objects[o].begin].word->first==L"so"))
+		if (questionSource->objects[o].end- questionSource->objects[o].begin==1 &&
+			  (questionSource->m[questionSource->objects[o].begin].queryWinnerForm(demonstrativeDeterminerForm)>=0 || questionSource->m[questionSource->objects[o].begin].queryWinnerForm(letterForm)>=0 ||
+					questionSource->m[questionSource->objects[o].begin].word->first==L"there" || questionSource->m[questionSource->objects[o].begin].word->first==L"so"))
 			continue;
 		wstring objectStr,formWinnerStr;
-		unsigned int begin=m[objects[o].originalLocation].beginObjectPosition;
+		unsigned int begin= questionSource->m[questionSource->objects[o].originalLocation].beginObjectPosition;
 		// this increases the hit rate by not making a distinction with determiners.
-		while (begin<m.size() && (m[begin].queryWinnerForm(determinerForm)>=0 ||
-				m[begin].queryWinnerForm(possessiveDeterminerForm)>=0 ||
-				m[begin].queryWinnerForm(demonstrativeDeterminerForm)>=0 ||
-				m[begin].queryWinnerForm(interrogativeDeterminerForm) >= 0 ||
-				m[begin].queryWinnerForm(relativizerForm) >= 0 ||
-				m[begin].queryWinnerForm(pronounForm) >= 0 ||
-				m[begin].queryWinnerForm(quantifierForm)>=0 ||
-				m[begin].word->first==L"which"))
+		while (begin< questionSource->m.size() && (questionSource->m[begin].queryWinnerForm(determinerForm)>=0 ||
+			questionSource->m[begin].queryWinnerForm(possessiveDeterminerForm)>=0 ||
+			questionSource->m[begin].queryWinnerForm(demonstrativeDeterminerForm)>=0 ||
+			questionSource->m[begin].queryWinnerForm(interrogativeDeterminerForm) >= 0 ||
+			questionSource->m[begin].queryWinnerForm(relativizerForm) >= 0 ||
+			questionSource->m[begin].queryWinnerForm(pronounForm) >= 0 ||
+			questionSource->m[begin].queryWinnerForm(quantifierForm)>=0 ||
+			questionSource->m[begin].word->first==L"which"))
 			begin++;
 
-		if (begin==m[objects[o].originalLocation].endObjectPosition)
+		if (begin== questionSource->m[questionSource->objects[o].originalLocation].endObjectPosition)
 			continue;
-		phraseString(begin,m[objects[o].originalLocation].endObjectPosition,objectStr,true);
+		questionSource->phraseString(begin, questionSource->m[questionSource->objects[o].originalLocation].endObjectPosition,objectStr,true);
 		// ownership objects are converted
 		if (objectStr.length()>2 && objectStr[objectStr.length()-2]==L'\'')
 			objectStr.erase(objectStr.length()-2);
@@ -1957,14 +2054,14 @@ void Source::accumulateSemanticEntry(unsigned int where,set <cObject::cLocation>
 			roi->second.confidentInSource++;
 		else
 			roi->second.inSource++;
-		if (objectStr == L"br" || (objectStr == L"com" && begin > 0 && m[begin - 1].word->first == L".") || objectStr == L"http" || objectStr == L"href" || objectStr == L"span" || objectStr == L"div" ||
+		if (objectStr == L"br" || (objectStr == L"com" && begin > 0 && questionSource->m[begin - 1].word->first == L".") || objectStr == L"http" || objectStr == L"href" || objectStr == L"span" || objectStr == L"div" ||
 			objectStr == L"html" || objectStr == L"which" || objectStr == L"that")
 		{
-			int end = m[objects[o].originalLocation].endObjectPosition + 10;
-			if (end > m.size())
-				end = m.size();
-			phraseString((begin>10) ? begin-10 : 0, end, objectStr, true);
-			lplog(LOG_QCHECK, L"accumulateSemanticEntry context %s:%d:%d:%s", objectStr.c_str(), begin, roi->second.inSource, sourcePath.c_str());
+			int end = questionSource->m[questionSource->objects[o].originalLocation].endObjectPosition + 10;
+			if (end > questionSource->m.size())
+				end = questionSource->m.size();
+			questionSource->phraseString((begin>10) ? begin-10 : 0, end, objectStr, true);
+			lplog(LOG_WHERE, L"accumulateSemanticEntry context %s:%d:%d:%s", objectStr.c_str(), begin, roi->second.inSource, questionSource->sourcePath.c_str());
 		}
 		//lplog(LOG_WHERE,L"WSM %s:%d:%s [%d:%d]",sourcePath.c_str(),where,objectStr.c_str(),roi->second.inSource,roi->second.confidentInSource);
 
@@ -1996,27 +2093,27 @@ void Source::accumulateSemanticEntry(unsigned int where,set <cObject::cLocation>
 		else
 			roi->second.totalDistanceFromObject+=distance;
 		// use minObjectWhere
-		if (m[where].getRelVerb()==m[minObjectWhere].getRelVerb() && m[where].getRelVerb()!=-1)
+		if (questionSource->m[where].getRelVerb()== questionSource->m[minObjectWhere].getRelVerb() && questionSource->m[where].getRelVerb()!=-1)
 		{
 			if (confidence)
 				roi->second.confidentDirectRelation++;
 			else
 				roi->second.directRelation++;
-			roi->second.relationSourcePaths.push_back(sourcePath);
+			roi->second.relationSourcePaths.push_back(questionSource->sourcePath);
 			roi->second.relationWheres.push_back(where);
 		}
-		roi->second.childSourcePaths.insert(sourcePath);
+		roi->second.childSourcePaths.insert(questionSource->sourcePath);
 		if (initialize)
 		{
 			int qt=parentSRI->questionType&typeQTMask;
-			bool parentQuestionTypeValid=((parentSRI->questionType&QTAFlag) || (qt!=whereQTFlag && qt!=whoseQTFlag && qt!=whenQTFlag && qt!=whomQTFlag));
-			bool questionTypeCheck=parentQuestionTypeValid &&	checkParticularPartQuestionTypeCheck(qt,where,o,roi->second.semanticMismatch);
-			roi->second.confidenceCheck=(questionTypeCheck || parentSRI->questionType==unknownQTFlag);
-			roi->second.lastChildSourcePath=sourcePath;
+			bool parentQuestionTypeValid=((parentSRI->questionType&QTAFlag) || (qt!= whereQTFlag && qt!= whoseQTFlag && qt!= whenQTFlag && qt!= whomQTFlag));
+			bool questionTypeCheck=parentQuestionTypeValid && questionSource->checkParticularPartQuestionTypeCheck(qt,where,o,roi->second.semanticMismatch);
+			roi->second.confidenceCheck=(questionTypeCheck || parentSRI->questionType== unknownQTFlag);
+			roi->second.lastChildSourcePath= questionSource->sourcePath;
 			roi->second.childWhere2=where;
-			objectString(o,roi->second.fullDescriptor,false);
-			if (objects[o].end-objects[o].begin==1)
-				roi->second.fullDescriptor+=m[objects[o].begin].winnerFormString(formWinnerStr);
+			questionSource->objectString(o,roi->second.fullDescriptor,false);
+			if (questionSource->objects[o].end-questionSource->objects[o].begin==1)
+				roi->second.fullDescriptor+= questionSource->m[questionSource->objects[o].begin].winnerFormString(formWinnerStr);
 			roi->second.childObject=o;
 		}
 	}

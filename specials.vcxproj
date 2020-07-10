@@ -290,7 +290,7 @@
     <ClCompile>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <WarningLevel>Level3</WarningLevel>
-      <Optimization>MaxSpeed</Optimization>
+      <Optimization>Disabled</Optimization>
       <EnablePREfast>false</EnablePREfast>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <OmitFramePointers>true</OmitFramePointers>
@@ -431,7 +431,6 @@
     <ClCompile Include="logging.cpp" />
     <ClCompile Include="memoryStat.cpp" />
     <ClCompile Include="names.cpp" />
-    <ClCompile Include="newPatternDetection.cpp" />
     <ClCompile Include="paice.cpp" />
     <ClCompile Include="pattern.cpp" />
     <ClCompile Include="patternElementMatchArray.cpp" />
@@ -443,8 +442,10 @@
     <ClCompile Include="resolveSpeakers.cpp" />
     <ClCompile Include="semanticRelations.cpp" />
     <ClCompile Include="source.cpp" />
+    <ClCompile Include="spaceRelations.cpp" />
     <ClCompile Include="specials_main.cpp" />
     <ClCompile Include="syntacticRelations.cpp" />
+    <ClCompile Include="tableColumn.cpp" />
     <ClCompile Include="tagOperations.cpp" />
     <ClCompile Include="textGeneration.cpp" />
     <ClCompile Include="timeRelations.cpp" />

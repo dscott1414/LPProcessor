@@ -1473,13 +1473,13 @@ void Source::appendTime(vector <cSpaceRelation>::iterator csr)
 		progression=2;
 	if (csr->tft.presentHappening)
 	{
-		progression=(m[csr->whereVerb].quoteForwardLink&VT_EXTENDED) ? 0 : 2;
+		progression=(m[csr->whereVerb].verbSense&VT_EXTENDED) ? 0 : 2;
 		if (progression==2 && 
 			(isVerbClass(csr->whereVerb,L"am") || csr->relationType==stCONTACT))
 			progression=0;
 	}
 	// 0 - advances a action based amount of time from the last statement / He brushed his teeth.   [ +15 minutes? ]
-	// 1 - still keeping the current time flow but not advancing the action / He was fat / He preferred the ham.
+	// 1 - still keeping the current time flow but not advancing the action / He was fat / He lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms the ham.
 	// 2 - establishes a new time not related to the previous time flow / At Christmas, they opened fifty presents - each.
 	// 3 - establishes a new time relative to the current time flow / after two weeks, he was tired. / He ran for two hours.
 	// 4 - an action that describes something happening up to and including the moment ; not advancing time / He was running past the stop sign. / He was driving his new car.
@@ -1566,7 +1566,7 @@ void Source::appendTime(vector <cSpaceRelation>::iterator csr)
 			}
 			if (maxEnd!=-1 && I<(unsigned)maxEnd && identifyDateTime(I,csr,maxEnd,0) && maxEnd>0)
 			{
-				//int pattern=pema[element].getPattern();
+				//int pattern=pema[element].getParentPattern();
 				//lplog(LOG_TIME,L"%d:%s[%s](%d,%d)",csr->where,
 				//	patterns[pattern]->name.c_str(),patterns[pattern]->differentiator.c_str(),I,I+pema[element].end);
 			  I+=maxEnd-1;
@@ -1601,7 +1601,7 @@ void Source::detectTimeTransition(int where,vector <int> &lastSubjects)
 		}
 		int tense=-1;
 		if ((m[findSubject].objectRole&SUBJECT_ROLE) && (m[findSubject].getRelVerb()<0 || // about an hour had passed
-			   ((tense=m[m[findSubject].getRelVerb()].quoteForwardLink&(VT_TENSE_MASK|VT_POSSIBLE))!=VT_PAST) && (tense!=VT_PAST_PERFECT)))
+			   ((tense=m[m[findSubject].getRelVerb()].verbSense&(VT_TENSE_MASK|VT_POSSIBLE))!=VT_PAST) && (tense!=VT_PAST_PERFECT)))
 			return;
 		if (tense==VT_PAST_PERFECT && debugTrace.traceTime)
 			lplog(LOG_RESOLUTION,L"%06d:VT_PAST_PERFECT time subject passed.",findSubject);
@@ -1668,7 +1668,7 @@ void Source::detectTimeTransition(int where,vector <int> &lastSubjects)
 	// A neighbouring clock showed the time to be five minutes to twelve . 
 	// A neighbouring clock showed 5 o'clock . 
 	else if (m[wt].getRelVerb()>=0 && isVerbClass(m[wt].getRelVerb(),L"indicate") && 
-					 (m[m[wt].getRelVerb()].quoteForwardLink&(VT_TENSE_MASK|VT_POSSIBLE))==VT_PAST && m[wt].getRelObject()>=0 && m[m[wt].getRelObject()].word->first==L"time")
+					 (m[m[wt].getRelVerb()].verbSense&(VT_TENSE_MASK|VT_POSSIBLE))==VT_PAST && m[wt].getRelObject()>=0 && m[m[wt].getRelObject()].word->first==L"time")
 	{
 		int saveWhere=-1;
 		if (m[m[wt].getRelVerb()].getRelVerb()>=0 && m[m[m[wt].getRelVerb()].getRelVerb()].word->first==L"be" && m[m[m[wt].getRelVerb()].getRelVerb()].getRelObject()>=0 &&
