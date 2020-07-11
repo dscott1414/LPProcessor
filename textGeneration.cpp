@@ -1288,7 +1288,7 @@ int cQuestionAnswering::analyzeQuestionFromSource(Source *questionSource,wchar_t
 	return answersContainedInSource;
  }
 
-void cQuestionAnswering::analyzeQuestion(Source *questionSource,wchar_t *derivation,int whereQuestionContextSuggestion,cSpaceRelation *parentSRI,cTreeCat *rdfType,bool parseOnly,vector < cAS > &answerSRIs,int &maxAnswer,
+void cQuestionAnswering::analyzeQuestionFromRDFType(Source *questionSource,wchar_t *derivation,int whereQuestionContextSuggestion,cSpaceRelation *parentSRI,cTreeCat *rdfType,bool parseOnly,vector < cAS > &answerSRIs,int &maxAnswer,
 		unordered_map <int,WikipediaTableCandidateAnswers *> &wikiTableMap,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion, set <wstring> &wikipediaLinksAlreadyScanned)
 { LFS
 	if (rdfType!=NULL)
@@ -2125,6 +2125,61 @@ int	cQuestionAnswering::parseSubQueriesParallel(Source *questionSource,Source *c
 	return 0;
 }
 
+bool cQuestionAnswering::analyzeRDFTypes(Source *questionSource, vector <cSpaceRelation>::iterator sri, cSpaceRelation *ssri, wstring derivation,vector < cAS > &answerSRIs, int &maxAnswer, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion, unordered_map <int, WikipediaTableCandidateAnswers * > &wikiTableMap,bool subQueryFlag)
+{
+	wchar_t sqderivation[1024];
+	wstring tmpstr;
+	bool whereQuestionInformationSourceObjectsSkipped=true;
+	for (set <int>::iterator si = sri->whereQuestionInformationSourceObjects.begin(), siEnd = sri->whereQuestionInformationSourceObjects.end(); si != siEnd; si++)
+	{
+		if (questionSource->m[*si].getObject() < 0 && questionSource->m[*si].objectMatches.empty())
+		{
+			lplog(LOG_WHERE, L"%s: Information Source Object is null!", derivation.c_str());
+			continue;
+		}
+		vector <cTreeCat *> rdfTypes;
+		unordered_map <wstring, int > topHierarchyClassIndexes;
+		questionSource->getExtendedRDFTypesMaster(*si, -1, rdfTypes, topHierarchyClassIndexes, TEXT(__FUNCTION__));
+		if (rdfTypes.empty() && sri->wherePrep >= 0)
+		{
+			questionSource->getExtendedRDFTypesMaster(*si, -1, rdfTypes, topHierarchyClassIndexes, TEXT(__FUNCTION__), 1);
+			if (rdfTypes.empty() && sri->wherePrep >= 0 && questionSource->m[sri->wherePrep].relPrep >= 0)
+				questionSource->getExtendedRDFTypesMaster(*si, -1, rdfTypes, topHierarchyClassIndexes, TEXT(__FUNCTION__), 2);
+		}
+		Ontology::setPreferred(topHierarchyClassIndexes, rdfTypes);
+		set<wstring> preferredTypes;
+		set <wstring> wikipediaLinksAlreadyScanned;
+		for (unsigned int r = 0; r < rdfTypes.size(); r++)
+		{
+			if ((rdfTypes[r]->preferred || rdfTypes[r]->preferredUnknownClass || rdfTypes[r]->exactMatch) && preferredTypes.find(rdfTypes[r]->typeObject) == preferredTypes.end())
+			{
+				preferredTypes.insert(rdfTypes[r]->typeObject);
+				rdfTypes[r]->logIdentity(LOG_WHERE, (subQueryFlag) ? L"subQueries":L"processQuestionSource", false);
+				// find subject or object without question
+				int numWords;
+				wstring tmpstr2;
+				StringCbPrintf(sqderivation, 1024 * sizeof(wchar_t), L"%s:%06d: informationSourceObject %s:rdfType %d:%s:", derivation.c_str(), sri->where, questionSource->whereString(*si, tmpstr, false, 6, L" ", numWords).c_str(), r, rdfTypes[r]->toString(tmpstr2).c_str());
+				analyzeQuestionFromRDFType(questionSource, sqderivation, *si, ssri, rdfTypes[r], false, answerSRIs, maxAnswer, wikiTableMap, mapPatternAnswer, mapPatternQuestion, wikipediaLinksAlreadyScanned);
+				whereQuestionInformationSourceObjectsSkipped = false;
+			}
+			else 
+				rdfTypes[r]->logIdentity(LOG_WHERE, (subQueryFlag) ? L"subQueriesNP":L"processQuestionSourceNP", false);
+		}
+		if (preferredTypes.empty() && rdfTypes.size() > 0)
+		{
+			lplog(LOG_WHERE, L"%s:SKIPPED - NO PREFERRED RDF TYPES (%d)", sqderivation, rdfTypes.size());
+			for (unsigned int r = 0; r < rdfTypes.size(); r++)
+				if (rdfTypes[r]->cli->first != SEPARATOR)
+					rdfTypes[r]->logIdentity(LOG_WHERE, L"NO PREFERRED RDF:", false);
+		}
+		if (!Ontology::cacheRdfTypes)
+			for (unsigned int r = 0; r < rdfTypes.size(); r++)
+				delete rdfTypes[r]; // now caching them
+		// send to web search for scraping and parsing of open domain
+	}
+	return whereQuestionInformationSourceObjectsSkipped;
+}
+
 // qualify a answer with a subquery derived from the original question
 // 
 // original question - What prize which originated in Spain has Krugman won?
@@ -2158,11 +2213,14 @@ int	cQuestionAnswering::matchSubQueries(Source *questionSource,wstring derivatio
 	int whereChildCandidateAnswer,int whereChildCandidateAnswerEnd,int numConsideredParentAnswer,int semMatchValue,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion,bool useParallelQuery)
 { LFS
 	wstring childWhereString;
-	int numWords;
+	int numWords=0;
 	if (whereChildCandidateAnswerEnd < 0)
 		childSource->whereString(whereChildCandidateAnswer, childWhereString, true, 6, L" ", numWords);
 	else
+	{
 		childSource->phraseString(whereChildCandidateAnswer, whereChildCandidateAnswerEnd, childWhereString, true);
+		numWords = whereChildCandidateAnswerEnd - whereChildCandidateAnswer;
+	}
 	if (childCandidateAnswerMap.find(childWhereString)!=childCandidateAnswerMap.end())
 	{
 		anySemanticMismatch=childCandidateAnswerMap[childWhereString].anySemanticMismatch;
@@ -2202,53 +2260,8 @@ int	cQuestionAnswering::matchSubQueries(Source *questionSource,wstring derivatio
 		lplog(LOG_WHERE,L"parent considered answer %d:child subject=%s BEGIN",numConsideredParentAnswer,childWhereString.c_str());
 		StringCbPrintf(sqderivation,1024*sizeof(wchar_t),L"%s:SUBQUERY #%d",derivation.c_str(),sqi-subQueries.begin());
 		questionSource->printSRI(sqderivation,&(*sqi),0,sqi->whereSubject,sqi->whereObject,ps,false,-1,tmpMatchInfo);
-		unordered_map <int,WikipediaTableCandidateAnswers * > wikiTableMap;
-		bool whereQuestionInformationSourceObjectsSkipped=true;
-		for (set <int>::iterator si=sqi->whereQuestionInformationSourceObjects.begin(),siEnd=sqi->whereQuestionInformationSourceObjects.end(); si!=siEnd; si++)
-		{
-			if (questionSource->m[*si].getObject()<0)
-			{
-				lplog(LOG_WHERE,L"%s: NO OBJECT",derivation.c_str());
-				continue;
-			}
-			StringCbPrintf(sqderivation,1024*sizeof(wchar_t),L"%s:SUBQUERY #%d informationSourceObject:%s",derivation.c_str(),sqi-subQueries.begin(), questionSource->whereString(*si,tmpstr,false,6,L" ",numWords).c_str());
-			//wprintf(L"%s\n",sqderivation);
-			vector <cTreeCat *> rdfTypes;
-			unordered_map <wstring ,int > topHierarchyClassIndexes;
-			questionSource->getExtendedRDFTypesMaster(*si,-1, rdfTypes,topHierarchyClassIndexes,TEXT(__FUNCTION__));
-			if (rdfTypes.empty() && sqi->wherePrep >= 0)
-			{
-				questionSource->getExtendedRDFTypesMaster(*si, -1, rdfTypes, topHierarchyClassIndexes, TEXT(__FUNCTION__), 1);
-				if (rdfTypes.empty() && sqi->wherePrep >= 0 && questionSource->m[sqi->wherePrep].relPrep >= 0)
-					questionSource->getExtendedRDFTypesMaster(*si, -1, rdfTypes, topHierarchyClassIndexes, TEXT(__FUNCTION__), 2);
-			}
-			bool noPreferenceFound = true;
-			set<wstring> abstractTypes;
-			set <wstring> wikipediaLinksAlreadyScanned;
-			for (unsigned int r=0; r<rdfTypes.size(); r++)
-				if ((rdfTypes[r]->preferred || rdfTypes[r]->preferredUnknownClass || rdfTypes[r]->exactMatch) && abstractTypes.find(rdfTypes[r]->typeObject)==abstractTypes.end())
-				{
-					abstractTypes.insert(rdfTypes[r]->typeObject);
-					rdfTypes[r]->logIdentity(LOG_WHERE, L"subQueries", false);
-					// find subject or object without question
-					analyzeQuestion(questionSource,sqderivation,*si,&(*sqi),rdfTypes[r],false,answerSRIs,maxAnswer,wikiTableMap,mapPatternAnswer,mapPatternQuestion,wikipediaLinksAlreadyScanned);
-					noPreferenceFound=false;
-					whereQuestionInformationSourceObjectsSkipped=false;
-				}
-				else
-					rdfTypes[r]->logIdentity(LOG_WHERE, L"subQueriesNP", false);
-			if (noPreferenceFound && rdfTypes.size()>0)
-			{
-					lplog(LOG_WHERE,L"%s:SKIPPED - NO PREFERRED RDF TYPES (%d)",sqderivation,rdfTypes.size());
-					for (unsigned int r=0; r<rdfTypes.size(); r++)
-						if (rdfTypes[r]->cli->first!=SEPARATOR)
-							rdfTypes[r]->logIdentity(LOG_WHERE,L"NO PREFERRED RDF:",false);
-			}
-			if (!Ontology::cacheRdfTypes)
-			  for (unsigned int r=0; r<rdfTypes.size(); r++)
-			  	delete rdfTypes[r]; // now caching them
-			// send to web search for scraping and parsing of open domain
-		}
+		unordered_map <int, WikipediaTableCandidateAnswers * > wikiTableMap;
+		bool whereQuestionInformationSourceObjectsSkipped=analyzeRDFTypes(questionSource, sqi, &(*sqi),derivation, answerSRIs, maxAnswer, mapPatternAnswer, mapPatternQuestion, wikiTableMap,true);
 		lplog(LOG_WHERE,L"%s:SEARCHING WEB%s ************************************************************",derivation.c_str(),(whereQuestionInformationSourceObjectsSkipped) ? L" (SKIPPED ALL informationSourceObjects)":L"");
 		sqi->whereQuestionInformationSourceObjects=saveQISO;
 		vector <wstring> webSearchQueryStrings;
@@ -2813,6 +2826,7 @@ void cQuestionAnswering::detectByClausePassive(Source *questionSource,vector <cS
 			return;
 		ssri=new cSpaceRelation(sri->where, questionSource->m[sri->where].getObject(),-1, questionSource->m[subclausePrep].getRelObject(),sri->whereVerb, questionSource->m[subclausePrep].relPrep,nearestObject,(questionSource->m[subclausePrep].relPrep>=0) ? questionSource->m[questionSource->m[subclausePrep].relPrep].getRelObject() : -1,-1,stNORELATION,false,false,-1,-1,false);
 		ssri->whereQuestionType=nearestObject;
+		ssri->whereQuestionTypeObject = sri->whereQuestionTypeObject;
 		ssri->questionType=sri->questionType|QTAFlag;
 		ssri->isConstructedRelative=true;
 		ssri->changeStateAdverb=false;
@@ -3451,13 +3465,16 @@ int cQuestionAnswering::searchWebSearchQueries(Source *questionSource,wchar_t de
 }
 
 extern int limitProcessingForProfiling;
-int cQuestionAnswering::matchBasicElements(Source *questionSource,bool parseOnly,bool useParallelQuery)
+int cQuestionAnswering::processQuestionSource(Source *questionSource,bool parseOnly,bool useParallelQuery)
 { LFS
 	int lastProgressPercent=-1,where;
 	vector <int> wherePossibleAnswers;
+	wstring derivation;
 	for (vector <cSpaceRelation>::iterator sri= questionSource->spaceRelations.begin(), sriEnd= questionSource->spaceRelations.end(); sri!=sriEnd; sri++)
 	{
-		// memory optimization
+		if (!sri->questionType || sri->skip)
+			continue;
+			// memory optimization
 		for (unordered_map <wstring, Source *>::iterator smi = sourcesMap.begin(); smi != sourcesMap.end(); )
 		{
 			Source *source = smi->second;
@@ -3471,158 +3488,120 @@ int cQuestionAnswering::matchBasicElements(Source *questionSource,bool parseOnly
 			smi = sourcesMap.begin();
 		}
 		childCandidateAnswerMap.clear();
-		if (sri->skip)
-			continue;
     if ((where=(sri- questionSource->spaceRelations.begin())*100/ questionSource->spaceRelations.size())>lastProgressPercent)
     {
       wprintf(L"PROGRESS: %03d%% questions processed with %04d seconds elapsed \r",where,clocksec());
       lastProgressPercent=where;
 			questionProgress=lastProgressPercent;
     }
+		sri->whereQuestionTypeObject = getWhereQuestionTypeObject(questionSource, &(*sri));
 		cSpaceRelation *ssri;
 		// For which newspaper does Krugman write?
 		detectByClausePassive(questionSource,sri,ssri);
+		ssri->whereQuestionTypeObject = getWhereQuestionTypeObject(questionSource, ssri);
 		// detect How and transitory answers
 		cPattern *mapPatternAnswer=NULL,*mapPatternQuestion=NULL;
-		if (sri->questionType)
-			detectTransitoryAnswer(questionSource,&(*sri),ssri,mapPatternAnswer,mapPatternQuestion);
-		wstring ps,tmpstr,tmpstr2;
-		itos(ssri->where,tmpstr);
+		detectTransitoryAnswer(questionSource,&(*sri),ssri,mapPatternAnswer,mapPatternQuestion);
+		wstring ps, parentNum,tmpstr,tmpstr2;
+		itos(ssri->where, parentNum);
 		//if (ssri->where==69) 
 			//logDatabaseDetails = logQuestionProfileTime = logSynonymDetail = logTableDetail = equivalenceLogDetail = logQuestionDetail = logSemanticMap = 1;
 
-		tmpstr+=L":Q ";
+		parentNum +=L":Q ";
 		questionSource->prepPhraseToString(ssri->wherePrep,ps);
-		questionSource->printSRI(tmpstr,ssri,-1,ssri->whereSubject,ssri->whereObject,ps,false,-1,L"QUESTION",(ssri->questionType) ? LOG_WHERE|LOG_QCHECK : LOG_WHERE);
-		sri->whereQuestionTypeObject = getWhereQuestionTypeObject(questionSource,&(*sri));
-		vector <cSpaceRelation> subQueries;
-		if (&(*sri)==ssri)
-			detectSubQueries(questionSource,sri,subQueries);
-		if (sri->questionType)
+		questionSource->printSRI(parentNum,ssri,-1,ssri->whereSubject,ssri->whereObject,ps,false,-1,L"QUESTION",(ssri->questionType) ? LOG_WHERE|LOG_QCHECK : LOG_WHERE);
+		if (wherePossibleAnswers.size())
 		{
-			if (wherePossibleAnswers.size())
-			{
-				matchAnswersOfPreviousQuestion(questionSource,ssri,wherePossibleAnswers);
-				wherePossibleAnswers.clear();
-			}
-			int maxAnswer=-1;
-			vector < cAS > answerSRIs;
-			wchar_t derivation[4096];
-			unordered_map <int,WikipediaTableCandidateAnswers * > wikiTableMap;
-			for (set <int>::iterator si=sri->whereQuestionInformationSourceObjects.begin(),siEnd=sri->whereQuestionInformationSourceObjects.end(); si!=siEnd; si++)
-			{
-				vector <cTreeCat *> rdfTypes;
-				unordered_map <wstring ,int > topHierarchyClassIndexes;
-				questionSource->getExtendedRDFTypesMaster(*si,-1,rdfTypes,topHierarchyClassIndexes,TEXT(__FUNCTION__),-1,true);
-				Ontology::setPreferred(topHierarchyClassIndexes,rdfTypes);
-				set<wstring> abstractTypes;
-				set <wstring> wikipediaLinksAlreadyScanned;
-				for (unsigned int r=0; r<rdfTypes.size(); r++)
-				{
-					if ((rdfTypes[r]->preferred || rdfTypes[r]->preferredUnknownClass || rdfTypes[r]->exactMatch) && abstractTypes.find(rdfTypes[r]->typeObject)==abstractTypes.end())
-					{
-						abstractTypes.insert(rdfTypes[r]->typeObject);
-						rdfTypes[r]->logIdentity(LOG_WHERE,L"matchBasicElements",false);
-						// find subject or object without question
-						switch (sri->questionType&typeQTMask)
-						{
-						case whereQTFlag:
-						case whichQTFlag:
-						case whoseQTFlag:
-						case whatQTFlag:
-							StringCbPrintf(derivation,1024*sizeof(wchar_t),L"PW %06d:QuestionInformationSourceObject %s:rdfType %d:%s:",sri->where, questionSource->whereString(*si,tmpstr,false).c_str(),r,rdfTypes[r]->toString(tmpstr2).c_str());
-							analyzeQuestion(questionSource,derivation,*si,ssri,rdfTypes[r],parseOnly,answerSRIs,maxAnswer,wikiTableMap,mapPatternAnswer,mapPatternQuestion, wikipediaLinksAlreadyScanned);
-						default:
-							break;
-						}
-					}
-					if (!Ontology::cacheRdfTypes)
-					  delete rdfTypes[r]; 
-				}
-			}
-			ssri->whereQuestionTypeObject = getWhereQuestionTypeObject(questionSource, ssri);
-			if (ssri->whereQuestionTypeObject < 0)
-				continue;
-			bool answerPluralSpecification = (questionSource->m[ssri->whereQuestionTypeObject].word->second.inflectionFlags&PLURAL) == PLURAL;
-			lplog(LOG_WHERE,L"Answer for:");
-			wstring parentNum;
-			questionSource->prepPhraseToString(sri->wherePrep,ps);
-			questionSource->printSRI(itos(sri->where,parentNum),&(*sri),0,sri->whereSubject,sri->whereObject,ps,false,-1,L"");
-			// detect subqueries
-			if (&(*sri)!=ssri)
-			{
-				lplog(LOG_WHERE,L"Transformed:");
-				questionSource->prepPhraseToString(ssri->wherePrep,ps);
-				questionSource->printSRI(itos(ssri->where,parentNum),ssri,0,ssri->whereSubject,ssri->whereObject,ps,false,-1,L"");
-			}
-			int finalAnswer=-1;
-			matchOwnershipDbQuery(questionSource,derivation,ssri);
-			int lastAnswer=answerSRIs.size();
-			vector <int> uniqueAnswers,uniqueAnswersPopularity,uniqueAnswersConfidence;
-			int lowestConfidence=100000-1,highestPopularity=-1,lowestSourceConfidence=10000;
-			if (dbSearchForQuery(questionSource,derivation,ssri,answerSRIs))
-			{
-				lowestSourceConfidence=1;
-				for (unsigned int a=lastAnswer; a<answerSRIs.size(); a++)
-				{
-					answerSRIs[a].source->sourceConfidence=1;
-					uniqueAnswers.push_back(a);
-					uniqueAnswersPopularity.push_back(highestPopularity=10);
-					uniqueAnswersConfidence.push_back(lowestConfidence=1);
-				}
-			}
-			else
-				matchAnswersToQuestionType(questionSource,ssri,answerSRIs,maxAnswer,subQueries,uniqueAnswers,uniqueAnswersPopularity,uniqueAnswersConfidence,highestPopularity,lowestConfidence,lowestSourceConfidence,mapPatternAnswer,mapPatternQuestion,useParallelQuery);
-			finalAnswer=printAnswers(ssri,answerSRIs,uniqueAnswers,uniqueAnswersPopularity,uniqueAnswersConfidence,highestPopularity,lowestConfidence,lowestSourceConfidence);
-			vector < cAS > saveAnswerSRIs;
-			vector <wstring> webSearchQueryStrings;
-			if (finalAnswer<0 || (answerPluralSpecification && uniqueAnswers.size() <= 1))
-			{
-				getWebSearchQueries(questionSource, ssri,webSearchQueryStrings);
-				searchWebSearchQueries(questionSource, derivation,ssri,wikiTableMap,subQueries,saveAnswerSRIs,mapPatternAnswer,mapPatternQuestion,
-																 webSearchQueryStrings,parseOnly,answerPluralSpecification,finalAnswer,maxAnswer,useParallelQuery);
-				if (limitProcessingForProfiling)
-					return 0;
-				if (saveAnswerSRIs.empty())
-				{
-					lplog(LOG_WHERE|LOG_QCHECK,L"    *****Trying semantic map.");
-					for (set <int>::iterator si=ssri->whereQuestionInformationSourceObjects.begin(),siEnd=ssri->whereQuestionInformationSourceObjects.end(); si!=siEnd; si++)
-					{
-						unordered_map <int,cSemanticMap *>::iterator msi=ssri->semanticMaps.find(*si);
-						if (msi!=ssri->semanticMaps.end())
-						{
-							msi->second->sortAndCheck(*this,ssri,questionSource);
-							msi->second->lplogSM(*this, LOG_WHERE, questionSource,false);
-							set < unordered_map <wstring,cSemanticMap::cSemanticEntry>::iterator,cSemanticMap::semanticSetCompare > suggestedAnswers=msi->second->suggestedAnswers;
-							for (set < unordered_map <wstring,cSemanticMap::cSemanticEntry>::iterator,cSemanticMap::semanticSetCompare >::iterator sai=suggestedAnswers.begin(),saiEnd=suggestedAnswers.end(); sai!=saiEnd; sai++)
-							{
-								enhanceWebSearchQueries(webSearchQueryStrings,(*sai)->first);
-								searchWebSearchQueries(questionSource, derivation,ssri,wikiTableMap,subQueries,saveAnswerSRIs,mapPatternAnswer,mapPatternQuestion,
-																				 webSearchQueryStrings,parseOnly,answerPluralSpecification,finalAnswer,maxAnswer,useParallelQuery);
-								if (limitProcessingForProfiling)
-									return 0;
-								lplog(LOG_WHERE|LOG_QCHECK,L"    *****Enhanced semantic map.");
-								msi->second->sortAndCheck(*this,ssri, questionSource);
-								msi->second->lplogSM(*this,LOG_WHERE, questionSource,true);
-							}
-						}
-						else
-							lplog(LOG_WHERE|LOG_QCHECK,L"    No entries in semantic map for %s.", questionSource->whereString(*si,tmpstr,true).c_str());
-					}
-					if (saveAnswerSRIs.empty())
-						lplog(LOG_WHERE|LOG_QCHECK,L"    *****No answers found.");
-				}
-			}
-			else
-			{
-				saveAnswerSRIs.insert(saveAnswerSRIs.end(),answerSRIs.begin(),answerSRIs.end());
-			}
-			findConstrainedAnswers(questionSource,saveAnswerSRIs, wherePossibleAnswers);
-			if (wherePossibleAnswers.size()>0 && ssri->whereQuestionTypeObject >= 0 && ssri->whereQuestionTypeObject<(int)questionSource->m.size())
-				wherePossibleAnswers.insert(wherePossibleAnswers.begin(), ssri->whereQuestionTypeObject);
-			else
-				wherePossibleAnswers.clear();
+			matchAnswersOfPreviousQuestion(questionSource,ssri,wherePossibleAnswers);
+			wherePossibleAnswers.clear();
 		}
+		int maxAnswer=-1;
+		vector < cAS > answerSRIs;
+		unordered_map <int, WikipediaTableCandidateAnswers * > wikiTableMap;
+		analyzeRDFTypes(questionSource, sri, ssri, derivation, answerSRIs, maxAnswer, mapPatternAnswer, mapPatternQuestion, wikiTableMap, false);
+		wchar_t sqderivation[4096];
+		if (ssri->whereQuestionTypeObject < 0)
+			continue;
+		bool answerPluralSpecification = (questionSource->m[ssri->whereQuestionTypeObject].word->second.inflectionFlags&PLURAL) == PLURAL;
+		// detect subqueries
+		vector <cSpaceRelation> subQueries;
+		if (&(*sri) == ssri)
+		{
+			questionSource->printSRI(parentNum, &(*sri), 0, sri->whereSubject, sri->whereObject, ps, false, -1, L"");
+			detectSubQueries(questionSource, sri, subQueries);
+		}
+		else
+		{
+			lplog(LOG_WHERE,L"Transformed:");
+			questionSource->printSRI(parentNum,ssri,0,ssri->whereSubject,ssri->whereObject,ps,false,-1,L"");
+		}
+		int finalAnswer=-1;
+		matchOwnershipDbQuery(questionSource, sqderivation,ssri);
+		int lastAnswer=answerSRIs.size();
+		vector <int> uniqueAnswers,uniqueAnswersPopularity,uniqueAnswersConfidence;
+		int lowestConfidence=100000-1,highestPopularity=-1,lowestSourceConfidence=10000;
+		if (dbSearchForQuery(questionSource, sqderivation,ssri,answerSRIs))
+		{
+			lowestSourceConfidence=1;
+			for (unsigned int a=lastAnswer; a<answerSRIs.size(); a++)
+			{
+				answerSRIs[a].source->sourceConfidence=1;
+				uniqueAnswers.push_back(a);
+				uniqueAnswersPopularity.push_back(highestPopularity=10);
+				uniqueAnswersConfidence.push_back(lowestConfidence=1);
+			}
+		}
+		else
+			matchAnswersToQuestionType(questionSource,ssri,answerSRIs,maxAnswer,subQueries,uniqueAnswers,uniqueAnswersPopularity,uniqueAnswersConfidence,highestPopularity,lowestConfidence,lowestSourceConfidence,mapPatternAnswer,mapPatternQuestion,useParallelQuery);
+		finalAnswer=printAnswers(ssri,answerSRIs,uniqueAnswers,uniqueAnswersPopularity,uniqueAnswersConfidence,highestPopularity,lowestConfidence,lowestSourceConfidence);
+		vector < cAS > saveAnswerSRIs;
+		vector <wstring> webSearchQueryStrings;
+		if (finalAnswer<0 || (answerPluralSpecification && uniqueAnswers.size() <= 1))
+		{
+			getWebSearchQueries(questionSource, ssri,webSearchQueryStrings);
+			searchWebSearchQueries(questionSource, sqderivation,ssri,wikiTableMap,subQueries,saveAnswerSRIs,mapPatternAnswer,mapPatternQuestion,
+																webSearchQueryStrings,parseOnly,answerPluralSpecification,finalAnswer,maxAnswer,useParallelQuery);
+			if (limitProcessingForProfiling)
+				return 0;
+			if (saveAnswerSRIs.empty())
+			{
+				lplog(LOG_WHERE|LOG_QCHECK,L"    *****Trying semantic map.");
+				for (set <int>::iterator si=ssri->whereQuestionInformationSourceObjects.begin(),siEnd=ssri->whereQuestionInformationSourceObjects.end(); si!=siEnd; si++)
+				{
+					unordered_map <int,cSemanticMap *>::iterator msi=ssri->semanticMaps.find(*si);
+					if (msi!=ssri->semanticMaps.end())
+					{
+						msi->second->sortAndCheck(*this,ssri,questionSource);
+						msi->second->lplogSM(*this, LOG_WHERE, questionSource,false);
+						set < unordered_map <wstring,cSemanticMap::cSemanticEntry>::iterator,cSemanticMap::semanticSetCompare > suggestedAnswers=msi->second->suggestedAnswers;
+						for (set < unordered_map <wstring,cSemanticMap::cSemanticEntry>::iterator,cSemanticMap::semanticSetCompare >::iterator sai=suggestedAnswers.begin(),saiEnd=suggestedAnswers.end(); sai!=saiEnd; sai++)
+						{
+							enhanceWebSearchQueries(webSearchQueryStrings,(*sai)->first);
+							searchWebSearchQueries(questionSource, sqderivation,ssri,wikiTableMap,subQueries,saveAnswerSRIs,mapPatternAnswer,mapPatternQuestion,
+																				webSearchQueryStrings,parseOnly,answerPluralSpecification,finalAnswer,maxAnswer,useParallelQuery);
+							if (limitProcessingForProfiling)
+								return 0;
+							lplog(LOG_WHERE|LOG_QCHECK,L"    *****Enhanced semantic map.");
+							msi->second->sortAndCheck(*this,ssri, questionSource);
+							msi->second->lplogSM(*this,LOG_WHERE, questionSource,true);
+						}
+					}
+					else
+						lplog(LOG_WHERE|LOG_QCHECK,L"    No entries in semantic map for %s.", questionSource->whereString(*si,tmpstr,true).c_str());
+				}
+				if (saveAnswerSRIs.empty())
+					lplog(LOG_WHERE|LOG_QCHECK,L"    *****No answers found.");
+			}
+		}
+		else
+		{
+			saveAnswerSRIs.insert(saveAnswerSRIs.end(),answerSRIs.begin(),answerSRIs.end());
+		}
+		findConstrainedAnswers(questionSource,saveAnswerSRIs, wherePossibleAnswers);
+		if (wherePossibleAnswers.size()>0 && ssri->whereQuestionTypeObject >= 0 && ssri->whereQuestionTypeObject<(int)questionSource->m.size())
+			wherePossibleAnswers.insert(wherePossibleAnswers.begin(), ssri->whereQuestionTypeObject);
+		else
+			wherePossibleAnswers.clear();
 	}
 	wprintf(L"\n%d total sources processed", (int)sourcesMap.size());
 	return 0;

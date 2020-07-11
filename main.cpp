@@ -1444,7 +1444,7 @@ int wmain(int argc,wchar_t *argv[])
 			if (source.sourceInPast = source.sourceType == Source::INTERACTIVE_SOURCE_TYPE)
 			{
 				cQuestionAnswering qa;
-				qa.matchBasicElements(&source,parseOnly, true);
+				qa.processQuestionSource(&source,parseOnly, true);
 			}
 
 			if (!exitNow) source.signalFinishedProcessingSource(sourceId);

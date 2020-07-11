@@ -18,7 +18,7 @@ public:
 		QTAFlag = 1 << 8
 	};
 
-	int matchBasicElements(Source *questionSource, bool parseOnly, bool useParallelQuery);
+	int processQuestionSource(Source *questionSource, bool parseOnly, bool useParallelQuery);
 	int processPath(Source *parentSource, const wchar_t *path, Source *&source, Source::sourceTypeEnum st, int sourceConfidence, bool parseOnly);
 	bool matchSourcePositions(Source *parentSource, int parentWhere, Source *childSource, int childWhere, bool &namedNoMatch, bool &synonym, bool parentInQuestionObject, int &semanticMismatch, int &adjectivalMatch, sTrace &debugTrace);
 
@@ -120,12 +120,13 @@ public:
 	int	searchTableForAnswer(Source *questionSource, wchar_t derivation[1024], cSpaceRelation* sri, unordered_map <int, WikipediaTableCandidateAnswers * > &wikiTableMap, vector <cSpaceRelation> &subQueries, vector < cAS > &answerSRIs, int &maxAnswer, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion, bool useParallelQuery);
 	void addTables(Source *questionSource, int whereQuestionType, Source *wikipediaSource, vector < SourceTable > &wikiTables);
 	void getPrepositionalPhraseNonMixMatch(Source *questionSource, int whereQuestionContextSuggestion, int &minPrepositionalPhraseNonMixMatch, int &maxPrepositionalPhraseNonMixMatch);
-	void analyzeQuestion(Source *questionSource, wchar_t *derivation, int whereQuestionContextSuggestion, cSpaceRelation * parentSRI, cTreeCat *rdfType, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, unordered_map <int, WikipediaTableCandidateAnswers *> &wikiTableMap, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion, set <wstring> &wikipediaLinksAlreadyScanned);
+	void analyzeQuestionFromRDFType(Source *questionSource, wchar_t *derivation, int whereQuestionContextSuggestion, cSpaceRelation * parentSRI, cTreeCat *rdfType, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, unordered_map <int, WikipediaTableCandidateAnswers *> &wikiTableMap, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion, set <wstring> &wikipediaLinksAlreadyScanned);
 	void enhanceWebSearchQueries(vector <wstring> &webSearchQueryStrings, wstring semanticSuggestion);
 	void getWebSearchQueries(Source *questionSource, cSpaceRelation* parentSRI, vector <wstring> &objects);
 	void accumulateSemanticMaps(Source *questionSource,cSpaceRelation* parentSRI, Source *childSource, bool confidence);
 	void accumulateSemanticEntry(Source *questionSource, unsigned int where, set <cObject::cLocation> &principalObjectLocations, set <cObject::cLocation>::iterator &polIndex, bool confidence, cSpaceRelation* parentSRI, cSemanticMap *semanticMap, unordered_set <wstring> & whereQuestionInformationSourceObjectsStrings);
 	int	parseSubQueriesParallel(Source *questionSource,Source *childSource, vector <cSpaceRelation> &subQueries, int whereChildCandidateAnswer, set <wstring> &wikipediaLinksAlreadyScanned);
+	bool analyzeRDFTypes(Source *questionSource, vector <cSpaceRelation>::iterator sqi, cSpaceRelation *ssri, wstring derivation,vector < cAS > &answerSRIs, int &maxAnswer, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion, unordered_map <int, WikipediaTableCandidateAnswers * > &wikiTableMap,bool rejectEmptyObjects);
 	int	matchSubQueries(Source *questionSource, wstring derivation, Source *childSource, int &semanticMismatch, bool &subQueryNoMatch, vector <cSpaceRelation> &subQueries, int whereChildCandidateAnswer, int whereChildCandidateAnswerEnd, int numConsideredParentAnswer, int semMatchValue, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion, bool useParallelQuery);
 	bool checkObjectIdentical(Source *source1, Source *source2, int object1, int object2);
 	bool checkParticularPartIdentical(Source *source1, Source *source2, int where1, int where2);
