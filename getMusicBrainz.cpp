@@ -449,15 +449,14 @@ bool cQuestionAnswering::dbSearchMusicBrainzSearchType(Source *questionSource, w
 		wstring logres;
 		if (questionSource->inObject(firstWhere,parentSRI->whereQuestionType) && questionSource->pushWhereEntities(derivation,firstWhere,firstMatchListType,secondMatchListType,secondWhere,true))
 		{
-			cAS cas(L"dbMusicBrainz",questionSource,0,1000,firstMatchListType,NULL,0,firstWhere,0,0);
-			answerSRIs.push_back(cas);
-			foundMatch=true;
+			
+			answerSRIs.push_back(cAS(L"dbMusicBrainz", questionSource, 1, 1000, firstMatchListType, NULL, 0, firstWhere, 0, 0));
+			answerSRIs[answerSRIs.size() - 1].finalAnswer = foundMatch=true;
 		}
 		if (questionSource->inObject(secondWhere,parentSRI->whereQuestionType) && questionSource->pushWhereEntities(derivation,secondWhere,secondMatchListType,firstMatchListType,firstWhere,true))
 		{
-			cAS cas(L"dbMusicBrainz", questionSource,0,1000,secondMatchListType,NULL,0,secondWhere,0,0);
-			answerSRIs.push_back(cas);
-			foundMatch=true;
+			answerSRIs.push_back(cAS(L"dbMusicBrainz", questionSource, 1, 1000, secondMatchListType, NULL, 0, secondWhere, 0, 0));
+			answerSRIs[answerSRIs.size() - 1].finalAnswer = foundMatch = true;
 		}
 	}
 	return foundMatch;

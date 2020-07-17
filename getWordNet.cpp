@@ -667,7 +667,7 @@ bool initHyperNym(wstring word,SynsetPtr &sp)
 	return sp!=NULL;
 }
 
-bool hasHyperNym(SynsetPtr sp,string MBCSHyperNum,bool &found)
+bool hasHyperNym(SynsetPtr sp,string MBCSHyperNum,bool &found,bool trace)
 { LFS
 	int numSenses=0,numHypernymFound=0;
 	for (; sp; sp=sp->nextss,numSenses++)
@@ -677,26 +677,32 @@ bool hasHyperNym(SynsetPtr sp,string MBCSHyperNum,bool &found)
 		{
 			int index=o->ptrlist->hereiam;
 			o=read_synset(NOUN,index,0);
-			for (int w=0; w<o->wcount; w++) 
-				if (MBCSHyperNum==o->words[w]) 
+			for (int w = 0; w < o->wcount; w++)
+			{
+				if (MBCSHyperNum == o->words[w])
 				{
 					numHypernymFound++;
-					found=true;
-					break;
+					found = true;
+					if (!trace) break;
 				}
+				if (trace)
+					lplog(LOG_WHERE, L"  SENSE %d:HYPERNYM %S [%d found]", numSenses,o->words[w], numHypernymFound);
+			}
 			o->ptrlist = traceptrs_ds(o, o->searchtype=HYPERPTR, NOUN,0);
 		}
 	}
-	return numSenses==numHypernymFound;
+	return numSenses>0 && numSenses==numHypernymFound;
 }
 
-bool hasHyperNym(wstring word,wstring hyperNym,bool &found)
+bool hasHyperNym(wstring word,wstring hyperNym,bool &found,bool trace)
 { LFS
   SynsetPtr sp;
 	initHyperNym(word,sp);
 	string MBCSHyperNym;
 	wTM(hyperNym,MBCSHyperNym);
-	return hasHyperNym(sp,MBCSHyperNym,found);
+	if (trace && sp)
+		lplog(LOG_WHERE, L"HYPERNYMS of %s:", word.c_str());
+	return hasHyperNym(sp,MBCSHyperNym,found,trace);
 }
 
 void splitMultiWord(string MBCSMultiWord,vector <wstring> &words)

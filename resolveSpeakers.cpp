@@ -7902,7 +7902,7 @@ void Source::ageIntoNewSpeakerGroup(int where)
 		(sg+1)->conversationalQuotes+=sg->conversationalQuotes;
 		(sg+1)->dnSpeakers.insert(sg->dnSpeakers.begin(),sg->dnSpeakers.end());
 		lplog(LOG_RESOLUTION,L"speakerGroup erased: %d",sg-speakerGroups.begin());
-		int numSG = sg - speakerGroups.begin();
+		int numSG = (int)(sg - speakerGroups.begin());
 		for (auto &tsg : speakerGroups)
 			if (tsg.previousSubsetSpeakerGroup >= numSG)
 				tsg.previousSubsetSpeakerGroup--;

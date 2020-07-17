@@ -1452,12 +1452,13 @@ int Ontology::findCategoryRank(wstring &qtype,wstring &parentObject,wstring &obj
 	size_t pos = 0, pos2 = 0;
 	if ((cli == dbPediaOntologyCategoryList.end() || cli->second.ontologyHierarchicalRank == 100) && foundYAGOCategory)
 	{
-		if (ret = getDBPediaPath(-1, uri, buffer, object + L"_cR" + qtype + L".html")) return -1;
+		if (ret = getDBPediaPath(-1, uri, buffer, object + L"_cR" + qtype + cat + L".html")) return -1;
 		// <a class="uri" rel="rdfs:subClassOf" xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#" href="http://dbpedia.org/class/yago/Alumnus109786338">
 		if (firstMatch(buffer, L"<a class=\"uri\" rel=\"rdfs:subClassOf\"", L">", pos, temp, false) >= 0 &&
 			firstMatch(temp, L"href=\"http://dbpedia.org/class/yago/", L"\"", pos2, superClass, false) >= 0)
 		{
-			dbPediaOntologyCategoryList[cat].superClasses.push_back(superClass);
+			if (find(dbPediaOntologyCategoryList[cat].superClasses.begin(), dbPediaOntologyCategoryList[cat].superClasses.end(),superClass)== dbPediaOntologyCategoryList[cat].superClasses.end())
+				dbPediaOntologyCategoryList[cat].superClasses.push_back(superClass);
 			cli = dbPediaOntologyCategoryList.find(cat);
 			cli->second.ontologyType = YAGO_Ontology_Type;
 		}
@@ -1467,10 +1468,11 @@ int Ontology::findCategoryRank(wstring &qtype,wstring &parentObject,wstring &obj
 	// <rdf:Description rdf:about="http://umbel.org/umbel/rc/EukaryoticCell"><rdfs:subClassOf rdf:resource="http://umbel.org/umbel/rc/Cell"/></rdf:Description>
 	if ((cli == dbPediaOntologyCategoryList.end() || cli->second.ontologyHierarchicalRank == 100) && foundUMBELCategory)
 	{
-		if (ret = getDBPediaPath(-1, uri, buffer, object + L"_cR" + qtype + L".html")) return -1;
+		if (ret = getDBPediaPath(-1, uri, buffer, object + L"_cR" + qtype + cat + L".html")) return -1;
 		if (firstMatch(buffer, L"<rdfs:subClassOf rdf:resource=\"http://umbel.org/umbel/rc/", L"\"", pos, superClass, false) >= 0)
 		{
-			dbPediaOntologyCategoryList[cat].superClasses.push_back(superClass);
+			if (find(dbPediaOntologyCategoryList[cat].superClasses.begin(), dbPediaOntologyCategoryList[cat].superClasses.end(), superClass) == dbPediaOntologyCategoryList[cat].superClasses.end())
+				dbPediaOntologyCategoryList[cat].superClasses.push_back(superClass);
 			cli = dbPediaOntologyCategoryList.find(cat);
 			cli->second.ontologyType = UMBEL_Ontology_Type;
 		}
@@ -1530,25 +1532,7 @@ bool Ontology::extractResults(wstring begin,wstring uobject,wstring end,wstring 
 	{
 		lplog(LOG_WIKIPEDIA,L"%s:%s:%s:%s",qtype.c_str(),parentObject.c_str(),fpobject.c_str(),uri.c_str());
 		if (uri.find(L"http://dbpedia.org/resource/")!=wstring::npos)
-		{
 			resources.push_back(uri);
-			/*
-			// extractResults already encodes the object, but Virtuoso requires () to be encoded still
-			wstring decodedURI;
-			decodeURL(uri,decodedURI);
-			replace(decodedURI.begin(),decodedURI.end(),L' ',L'_');
-			// but replace () with %28,%29:
-			wstring rlabel;
-			for (unsigned int I=0; I<decodedURI.length(); I++)
-				if (decodedURI[I]==L'(')
-					rlabel+=L"%28";
-				else if (decodedURI[I]==L')')
-					rlabel+=L"%29";
-				else
-					rlabel+=decodedURI[I];
-			decodedURI=rlabel;
-			*/
-		}
 		else
 			findCategoryRank(qtype,parentObject,fpobject,rdfTypes,uri);
 	}
@@ -1888,6 +1872,7 @@ int Ontology::lookupInFreebaseQuery(wstring &object,string &slobject,wstring &q,
 		lplog(LOG_FATAL_ERROR, L"freebaseQuery SQL error: %s\n%s\n%S", q.c_str(), object.c_str(), slobject.c_str());
 		return -1;
 	}
+	set <string> simpleCommonTypes; // this is to keep 1000 songs about Paris from clogging up the file
 	vector<string> aliases;
   while ((sqlrow=mysql_fetch_row(result))!=NULL) 
 	{
@@ -1961,7 +1946,25 @@ int Ontology::lookupInFreebaseQuery(wstring &object,string &slobject,wstring &q,
 			int whereLastPeriod=objectType.find_last_of('.');
 			string lastPropertyValue=objectType.substr(whereLastPeriod+1);
 			string familyPropertyValue=objectType.substr(0,whereLastPeriod);
-			if (enterCategory(id,k,lastPropertyValue,description,slobject,object,objectType,name,wikipediaLinks,professionLinks,rdfTypes)!=-3)
+			string simple;
+			// simplifying extremely common combinations
+			if ((lastPropertyValue == "recording" || lastPropertyValue == "single" || lastPropertyValue == "album" || lastPropertyValue == "composition" || lastPropertyValue == "release") && familyPropertyValue == "music")
+				simple = "song";
+			if (lastPropertyValue == "musical_group" && familyPropertyValue == "music")
+				simple = "band";
+			if (lastPropertyValue == "artist" && familyPropertyValue == "music")
+				simple = "musician";
+			if ((lastPropertyValue == "written_work" || lastPropertyValue == "book" || lastPropertyValue == "published_work" || lastPropertyValue == "composition") && familyPropertyValue == "book")
+				simple = "song";
+			if (simpleCommonTypes.find(simple) != simpleCommonTypes.end())
+				continue;
+			simpleCommonTypes.insert(simple);
+			// this is adding information but it is not what the item IS
+			if ((lastPropertyValue == "award_winning_work" || lastPropertyValue == "award_nominated_work") && familyPropertyValue == "award")
+				continue;
+			if (!simple.empty())
+				enterCategory(id, k, simple, description, slobject, object, objectType, name, wikipediaLinks, professionLinks, rdfTypes);
+			else if (enterCategory(id,k,lastPropertyValue,description,slobject,object,objectType,name,wikipediaLinks,professionLinks,rdfTypes)!=-3)
 				enterCategory(id,k,familyPropertyValue,description,slobject,object,objectType,name,wikipediaLinks,professionLinks,rdfTypes);
 			unordered_map <wstring, dbs>::iterator dbSeparator=dbPediaOntologyCategoryList.find(SEPARATOR);
 			if (rdfTypes.size() && rdfTypes[rdfTypes.size()-1]->cli!=dbSeparator)

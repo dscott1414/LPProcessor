@@ -1323,7 +1323,7 @@ int wmain(int argc,wchar_t *argv[])
 			wstring rt1,rt2;
 			int ret=0;
 			bool parsedOnly = false;
-			if (forceSourceReread || !source.readSource(path,false, parsedOnly, true,true, specialExtension))
+			if (forceSourceReread || !source.readSource(path,false, parsedOnly, true,specialExtension))
 			{
 				unknownCount=0;
 				switch (sourceType)
@@ -1478,7 +1478,7 @@ int wmain(int argc,wchar_t *argv[])
 			start = argv[sourceArgs + 2];
 		int repeatStart=1;
 		bool parsedOnly;
-		if (forceSourceReread || !source.readSource(path, false, parsedOnly, true, true, specialExtension))
+		if (forceSourceReread || !source.readSource(path, false, parsedOnly, true, specialExtension))
 		{
 			if (source.tokenize(title,etext,path,encoding, start,repeatStart,unknownCount)<0)
 				exit(0);

@@ -679,7 +679,7 @@ void Source::newSR(int where,int _o,int whereControllingEntity,int whereSubject,
 	if (wherePrepObject>=0 && wherePrep==-1)
 		lplog(LOG_ERROR,L"%d:subject@%d wherePrepObject=%d but no prep!",where,whereSubject,wherePrepObject);
 
-	bool found=false,convertToStay=(relationType==stENTER && wherePrep>=0 && m[wherePrep].word->first==L"to" && wherePrepObject>=0 && (hasHyperNym(m[wherePrepObject].word->first,L"inaction",found) || found));
+	bool found=false,convertToStay=(relationType==stENTER && wherePrep>=0 && m[wherePrep].word->first==L"to" && wherePrepObject>=0 && (hasHyperNym(m[wherePrepObject].word->first,L"inaction",found,false) || found));
 	if (speakerGroupsEstablished && m[where].spaceRelation && !convertToStay) 
 	{
 		cSpaceRelation sr(where,_o,whereControllingEntity,whereSubject,whereVerb,wherePrep,whereObject,wherePrepObject,whereMovingRelativeTo,relationType,false,false,-1,-1,physicalRelation);
@@ -3077,11 +3077,11 @@ void Source::detectSpaceRelation(int where,int backInitialPosition,vector <int> 
 			// subject 'see, sight' object's conversation[hyperNym auditory communication] in Lyon's
 			int relPartObject=-1,whereOwner=-1;
 			if (m[whereVerb].getRelVerb()<0 && relObject>=0 && wherePrepObject>=0 && location && !timeUnit &&
-				  ((hasHyperNym(m[relObject].word->first,L"auditory_communication",found) && 
+				  ((hasHyperNym(m[relObject].word->first,L"auditory_communication",found,false) && 
 					 hasAgentObjectOwner(relObject,whereOwner)) ||
 					((m[relObject].word->first==L"part" || m[relObject].word->first==L"portion") &&
 					 m[relObject+1].word->first==L"of" && (relPartObject=m[relObject+1].getRelObject())>=0 &&
-					(hasHyperNym(m[relPartObject].word->first,L"auditory_communication",found) && 
+					(hasHyperNym(m[relPartObject].word->first,L"auditory_communication",found,false) && 
 					 hasAgentObjectOwner(relPartObject,whereOwner)))))
 			{
 				whereControllingEntity=whereSubject;

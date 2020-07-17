@@ -406,7 +406,6 @@
     <ClCompile Include="createOntology.cpp" />
     <ClCompile Include="DB.cpp" />
     <ClCompile Include="DBCreateSQLSchema.cpp" />
-    <ClCompile Include="DBMultiWordRelations.cpp" />
     <ClCompile Include="dbQuerySearch.cpp" />
     <ClCompile Include="DBUtility.cpp" />
     <ClCompile Include="DBWordRelations.cpp" />

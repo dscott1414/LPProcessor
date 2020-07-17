@@ -1855,7 +1855,7 @@ int Source::cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patter
 				vector <patternElementMatchArray::tPatternElementMatch *> chain;
 				chain.reserve(16); // most of the time there will be less than 16 elements matched in a pattern
 				bool stopCascadeBecauseNDAlreadySet = stopCascadeWhenNDAlreadySet && pema[origin].flagSet(patternElementMatchArray::COST_ND);
-				stopCascadeBecauseNDAlreadySet = false; // TEMP DEBUG!
+				//stopCascadeBecauseNDAlreadySet = false; 
 				if (debugTrace.traceSecondaryPEMACosting)
 					lplog(L"%d:FINDCHAINS %s[%s](%d,%d) %sORIGIN=%06d %s position=%d basePosition=%d rootPattern=%d %s[%s] len=%d deltaCost=%d.",
 					basePosition,patterns[childPM->getPattern()]->name.c_str(),patterns[childPM->getPattern()]->differentiator.c_str(),basePosition,basePosition+childPM->len,

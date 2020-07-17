@@ -1332,7 +1332,7 @@ int cQuestionAnswering::processPath(Source *parentSource,const wchar_t *path, So
 	int repeatStart = 1;
 	bool justParsed = false;
 	Words.readWords(wpath, -1, false, L"");
-	if (!source->readSource(wpath, false, justParsed, false, parseOnly, L"") || (justParsed && !parseOnly))
+	if (!source->readSource(wpath, false, justParsed, false, L"") || (justParsed && !parseOnly))
 	{
 		lplog(LOG_WIKIPEDIA | LOG_RESOLUTION | LOG_RESCHECK | LOG_WHERE, L"Begin Processing %s...", path);
 		if (!justParsed)

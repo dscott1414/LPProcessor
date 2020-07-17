@@ -184,7 +184,7 @@ public:
 void getAntonyms(wstring word,set <wstring> &synonyms,sTrace &t);
 int getFamiliarity(wstring word,bool isAdjective);
 int getHighestFamiliarity(wstring word);
-bool hasHyperNym(wstring word,wstring hyperNym,bool &found);
+bool hasHyperNym(wstring word,wstring hyperNym,bool &found,bool trace);
 void splitMultiWord(wstring multiWord,vector <wstring> &words);
 void splitMultiWord(string multiWord,vector <wstring> &words);
 bool addHyponyms(wchar_t *word,vector <tmWS > &objects,wchar_t *preferredSense,set <string> &ignoreCategories,bool print);

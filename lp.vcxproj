@@ -664,7 +664,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='QuestionAnswering|x64'">
     <ClCompile>
-      <Optimization>MaxSpeed</Optimization>
+      <Optimization>Disabled</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <OmitFramePointers>true</OmitFramePointers>
@@ -776,7 +776,6 @@
     <ClCompile Include="DBUtility.cpp" />
     <ClCompile Include="DBWordRelations.cpp" />
     <ClCompile Include="definePatterns.cpp" />
-    <ClCompile Include="evaluateTagSetCombinatorials.cpp" />
     <ClCompile Include="getBNC.cpp" />
     <ClCompile Include="getDictionary.cpp" />
     <ClCompile Include="getMusicBrainz.cpp" />
@@ -817,7 +816,7 @@
     <ClCompile Include="syntacticRelations.cpp" />
     <ClCompile Include="tableColumn.cpp" />
     <ClCompile Include="tagOperations.cpp" />
-    <ClCompile Include="textGeneration.cpp" />
+    <ClCompile Include="questionAnswering.cpp" />
     <ClCompile Include="timeRelations.cpp" />
     <ClCompile Include="tinyxml2-master\tinyxml2.cpp" />
     <ClCompile Include="tokenize.cpp" />

@@ -43,9 +43,9 @@ void Column::accumulateColumnRDFTypes(Source *wikipediaSource, set <wstring> &ti
 	wchar_t *filmAssociations[] = { L"film", L"" };
 	for (int row = 0; row < rows.size(); row++)
 	{
-		for (int entry = 0; entry < rows[row].size(); entry++)
-			if (!onlyPreferred || rows[row][entry].lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms)
-				rows[row][entry].accumulateEntryRDFTypes(wikipediaSource, titleSynonyms, accumulatedRDFTypesMap);
+		for (int entry = 0; entry < rows[row].entries.size(); entry++)
+			if (!onlyPreferred || rows[row].entries[entry].lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms)
+				rows[row].entries[entry].accumulateEntryRDFTypes(wikipediaSource, titleSynonyms, accumulatedRDFTypesMap);
 	}
 	if (!keepMusicDomain)
 		removeDomainFromAccumulatedRDFTypesMap(musicAssociations);
@@ -122,7 +122,7 @@ void Column::zeroColumnAccumulatedRDFTypes()
 int Column::getSumOfAllFullyConfidentRDFTypeFrequencies(Source *wikipediaSource, int row, int entry, int &maxOfAllFullyConfidentRDFTypeFrequencies, wstring &fullyConfidentSimplifiedRDFTypeWithMaximumFrequency)
 {
 	unordered_map <wstring, int > RDFTypeSimplificationToWordAssociationWithObjectMap;
-	wikipediaSource->getAssociationMapMaster(rows[row][entry].adaptiveWhere, rows[row][entry].numWords, RDFTypeSimplificationToWordAssociationWithObjectMap, TEXT(__FUNCTION__));
+	wikipediaSource->getAssociationMapMaster(rows[row].entries[entry].adaptiveWhere, rows[row].entries[entry].numWords, RDFTypeSimplificationToWordAssociationWithObjectMap, TEXT(__FUNCTION__));
 	int sumOfAllFullyConfidentRDFTypeFrequencies = 0;
 	maxOfAllFullyConfidentRDFTypeFrequencies = 0;
 	for (unordered_map <wstring, int >::iterator ri = RDFTypeSimplificationToWordAssociationWithObjectMap.begin(), riEnd = RDFTypeSimplificationToWordAssociationWithObjectMap.end(); ri != riEnd; ri++)
@@ -149,9 +149,9 @@ int Column::calculateColumnRDFTypeCoherence(Source *wikipediaSource, Column::Ent
 	int sumOfAllFullyConfidentRDFTypeFrequenciesInOnlyPreferredColumnEntries = 0, sumOfMaxOfAllFullyConfidentRDFTypeFrequenciesInOnlyPreferredColumnEntries = 0;
 	for (int row = 0; row < rows.size(); row++)
 	{
-		for (int entry = 0; entry < rows[row].size(); entry++)
+		for (int entry = 0; entry < rows[row].entries.size(); entry++)
 		{
-			if (rows[row][entry].lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms)
+			if (rows[row].entries[entry].lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms)
 			{
 				wstring fullyConfidentSimplifiedRDFTypeWithMaximumFrequencyInEntry;
 				int maxOfAllFullyConfidentRDFTypeFrequenciesInEntry = 0, sumOfAllFullyConfidentRDFTypeFrequenciesInEntry;
@@ -162,7 +162,7 @@ int Column::calculateColumnRDFTypeCoherence(Source *wikipediaSource, Column::Ent
 					wikipediaSource->phraseString(titleEntry.begin, titleEntry.begin + titleEntry.numWords, fullyConfidentSimplifiedRDFTypeWithMaximumFrequencyInEntry, true);
 				}
 				wstring tmpstr;
-				wikipediaSource->phraseString(rows[row][entry].begin, rows[row][entry].begin + rows[row][entry].numWords, tmpstr, false);
+				wikipediaSource->phraseString(rows[row].entries[entry].begin, rows[row].entries[entry].begin + rows[row].entries[entry].numWords, tmpstr, false);
 				if (logQuestionDetail)
 					lplog(LOG_WHERE, L"Processing table %s: table coherency %s row=%d entry=%d associationValue=%d maxFrequency=%d[%s]", tableName.c_str(), tmpstr.c_str(),
 					row, entry, sumOfAllFullyConfidentRDFTypeFrequenciesInEntry, maxOfAllFullyConfidentRDFTypeFrequenciesInEntry, fullyConfidentSimplifiedRDFTypeWithMaximumFrequencyInEntry.c_str());
@@ -190,16 +190,13 @@ bool Column::testTitlePreference(Source *wikipediaSource, wstring tableName, set
 	// if title exists, and is positively associated with 75% or more of the selected words in each row, make those the preferredEntries.
 	for (int row = 0; row < rows.size(); row++)
 	{
-		int numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow = 0;
-		int numSimplifiedRDFTypesFoundForRow = 0;
-		int maxTitleFound = 0;
-		int numLastWordsFoundInTitleSynonymsInRow = 0;
-		for (int entry = 0; entry < rows[row].size(); entry++)
+		// accumulate RDFTypeSimplifiedToWordFoundInTitleSynonyms and lastWordFoundInTitleSynonyms for the next test
+		for (int entry = 0; entry < rows[row].entries.size(); entry++)
 		{
 			unordered_map <wstring, int > RDFTypeSimplificationToWordAssociationWithObjectMap;
-			wikipediaSource->getAssociationMapMaster(rows[row][entry].adaptiveWhere, rows[row][entry].numWords, RDFTypeSimplificationToWordAssociationWithObjectMap, TEXT(__FUNCTION__));
+			wikipediaSource->getAssociationMapMaster(rows[row].entries[entry].adaptiveWhere, rows[row].entries[entry].numWords, RDFTypeSimplificationToWordAssociationWithObjectMap, TEXT(__FUNCTION__));
 			if (RDFTypeSimplificationToWordAssociationWithObjectMap.size() > 0)
-				numSimplifiedRDFTypesFoundForRow++;
+				rows[row].numSimplifiedRDFTypesFoundForRow++;
 			wstring confidentSimplifiedRDFTypes, simplifiedRDFTypes;
 			for (unordered_map <wstring, int >::iterator ri = RDFTypeSimplificationToWordAssociationWithObjectMap.begin(), riEnd = RDFTypeSimplificationToWordAssociationWithObjectMap.end(); ri != riEnd; ri++)
 			{
@@ -208,38 +205,46 @@ bool Column::testTitlePreference(Source *wikipediaSource, wstring tableName, set
 				else
 					simplifiedRDFTypes += L" '" + ri->first + L"'";
 				if (titleSynonyms.find(ri->first) != titleSynonyms.end())
-					rows[row][entry].RDFTypeSimplifiedToWordFoundInTitleSynonyms++;
+				{
+					if (logQuestionDetail) 
+					{
+						wstring tmpstr; 
+						lplog(LOG_WHERE, L"Processing table %s: row=%d[%d] titleSynonyms=%s simplifiedRDFType=%s", tableName.c_str(), row, entry, setString(titleSynonyms,tmpstr,L" ").c_str(), ri->first.c_str()); 
+					}
+					rows[row].entries[entry].RDFTypeSimplifiedToWordFoundInTitleSynonyms++;
+				}
 			}
-			rows[row][entry].simplifiedRDFTypes = (confidentSimplifiedRDFTypes.empty()) ? simplifiedRDFTypes : confidentSimplifiedRDFTypes;
-			if (rows[row][entry].RDFTypeSimplifiedToWordFoundInTitleSynonyms > maxTitleFound)
-				maxTitleFound = rows[row][entry].RDFTypeSimplifiedToWordFoundInTitleSynonyms;
-			int lastWord = wikipediaSource->m[rows[row][entry].adaptiveWhere].endObjectPosition - 1;
-			if (rows[row][entry].lastWordFoundInTitleSynonyms = (titleSynonyms.find(wikipediaSource->m[lastWord].getMainEntry()->first) != titleSynonyms.end()))
-				numLastWordsFoundInTitleSynonymsInRow++;
+			rows[row].entries[entry].simplifiedRDFTypes = (confidentSimplifiedRDFTypes.empty()) ? simplifiedRDFTypes : confidentSimplifiedRDFTypes;
+			if (rows[row].entries[entry].RDFTypeSimplifiedToWordFoundInTitleSynonyms > rows[row].maxTitleFound)
+				rows[row].maxTitleFound = rows[row].entries[entry].RDFTypeSimplifiedToWordFoundInTitleSynonyms;
+			int lastWord = wikipediaSource->m[rows[row].entries[entry].adaptiveWhere].endObjectPosition - 1;
+			if (rows[row].entries[entry].lastWordFoundInTitleSynonyms = (titleSynonyms.find(wikipediaSource->m[lastWord].getMainEntry()->first) != titleSynonyms.end()))
+				rows[row].numLastWordsFoundInTitleSynonymsInRow++;
 			if (logQuestionDetail)
 				lplog(LOG_WHERE, L"Processing table %s: row=%d[%d] table coherency %d:lastWord=%d:%s matchesTitle=%s", tableName.c_str(), row, entry,
-				rows[row][entry].adaptiveWhere, lastWord, wikipediaSource->m[lastWord].word->first.c_str(), (rows[row][entry].lastWordFoundInTitleSynonyms) ? L"true" : L"false");
+				rows[row].entries[entry].adaptiveWhere, lastWord, wikipediaSource->m[lastWord].word->first.c_str(), (rows[row].entries[entry].lastWordFoundInTitleSynonyms) ? L"true" : L"false");
 		}
-		for (int entry = 0; entry < rows[row].size(); entry++)
+		// accumulate numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow for the next test
+		for (int entry = 0; entry < rows[row].entries.size(); entry++)
 		{
 			// the maximum number of title synonyms matched for this entry (out of all entries for this row) or last word found in title synonyms
-			if (rows[row][entry].lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms = (maxTitleFound > 0 && rows[row][entry].RDFTypeSimplifiedToWordFoundInTitleSynonyms >= maxTitleFound) || rows[row][entry].lastWordFoundInTitleSynonyms)
-				numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow++;
+			if (rows[row].entries[entry].lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms = (rows[row].maxTitleFound > 0 && rows[row].entries[entry].RDFTypeSimplifiedToWordFoundInTitleSynonyms >= rows[row].maxTitleFound) || rows[row].entries[entry].lastWordFoundInTitleSynonyms)
+				rows[row].numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow++;
 		}
-		if (numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow > 0)
+		if (rows[row].numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow > 0)
 			numRowsWhereLastWordOrSimplifiedRDFTypesFoundInTitleSynonyms++;
-		if (numSimplifiedRDFTypesFoundForRow > 0)
-			numRowsWhereSimplifiedRDFTypesFound++;
-		for (int entry = 0; entry < rows[row].size(); entry++)
+		for (int entry = 0; entry < rows[row].entries.size(); entry++)
 		{
 			// it is more likely that the row belongs to the category suggested by the title if the last word of the entry is in the title synonyms, rather than the RDF types.
-			if (numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow > 1 && numLastWordsFoundInTitleSynonymsInRow > 0)
-				rows[row][entry].lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms = rows[row][entry].lastWordFoundInTitleSynonyms;
+			if (rows[row].numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow > 1 && rows[row].numLastWordsFoundInTitleSynonymsInRow > 0)
+				rows[row].entries[entry].lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms = rows[row].entries[entry].lastWordFoundInTitleSynonyms;
 			wstring tmpstr3;
-			wikipediaSource->phraseString(rows[row][entry].begin, rows[row][entry].begin + rows[row][entry].numWords, tmpstr3, false);
+			wikipediaSource->phraseString(rows[row].entries[entry].begin, rows[row].entries[entry].begin + rows[row].entries[entry].numWords, tmpstr3, false);
 			if (logQuestionDetail)
-				lplog(LOG_WHERE, L"Processing table %s: row=%d[%d] table coherency of entry %d:%s %s with simplifiedRDFTypes=%s", tableName.c_str(), row, entry, rows[row][entry].adaptiveWhere, tmpstr3.c_str(), (rows[row][entry].lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms) ? L"lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms!" : L"", rows[row][entry].simplifiedRDFTypes.c_str());
+				lplog(LOG_WHERE, L"Processing table %s: row=%d[%d] table coherency of entry %d:%s %s with simplifiedRDFTypes=%s", tableName.c_str(), row, entry, rows[row].entries[entry].adaptiveWhere, tmpstr3.c_str(), (rows[row].entries[entry].lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms) ? L"lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms!" : L"", rows[row].entries[entry].simplifiedRDFTypes.c_str());
 		}
+		if (rows[row].numSimplifiedRDFTypesFoundForRow > 0)
+			numRowsWhereSimplifiedRDFTypesFound++;
 	}
 	lplog(LOG_WHERE, L"Processing table %s: title preference: %d entries preferred in %d[out of %d] rows.", tableName.c_str(), numRowsWhereLastWordOrSimplifiedRDFTypesFoundInTitleSynonyms, numRowsWhereSimplifiedRDFTypesFound, rows.size());
 	return numRowsWhereLastWordOrSimplifiedRDFTypesFoundInTitleSynonyms > numRowsWhereSimplifiedRDFTypesFound * 3 / 4;
@@ -253,7 +258,7 @@ void Column::setRowPreference(Source *wikipediaSource, wstring tableName)
 		int maxOfMaxFrequency = -1;
 		int maxAccumulatedAssociationValue = -1;
 		wstring maxOfMaxAssociation;
-		for (int entry = 0; entry < rows[row].size(); entry++)
+		for (int entry = 0; entry < rows[row].entries.size(); entry++)
 		{
 			wstring maxAssociation;
 			int accumulatedAssociationValue, maxFrequency;
@@ -268,9 +273,9 @@ void Column::setRowPreference(Source *wikipediaSource, wstring tableName)
 		}
 		if (preferredEntry >= 0)
 		{
-			rows[row][preferredEntry].lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms = true;
+			rows[row].entries[preferredEntry].lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms = true;
 			wstring tmpstr;
-			wikipediaSource->phraseString(rows[row][preferredEntry].begin, rows[row][preferredEntry].begin + rows[row][preferredEntry].numWords, tmpstr, false);
+			wikipediaSource->phraseString(rows[row].entries[preferredEntry].begin, rows[row].entries[preferredEntry].begin + rows[row].entries[preferredEntry].numWords, tmpstr, false);
 			if (logQuestionDetail)
 				lplog(LOG_WHERE, L"Processing table %s: table coherency setRowPreference %s row=%d preferredEntry=%d maxOfMaxFrequency=%d[%s] maxAssociationValue=%d", tableName.c_str(), tmpstr.c_str(),
 				row, preferredEntry, maxOfMaxFrequency, maxOfMaxAssociation.c_str(), maxAccumulatedAssociationValue);
@@ -282,7 +287,7 @@ bool Column::determineColumnRDFTypeCoherency(Source *wikipediaSource, Column::En
 	{
 		int sumMaxEntries = 0;
 		for (int row = 0; row < rows.size(); row++)
-			sumMaxEntries += rows[row].size();
+			sumMaxEntries += rows[row].entries.size();
 		if (sumMaxEntries / rows.size() > 3) // if there are more than 3 entries, the number of possible combinations is too large to make sure it is actually a valid list.
 		{
 			if (logQuestionDetail)
@@ -540,7 +545,7 @@ bool Column::determineColumnRDFTypeCoherency(Source *wikipediaSource, Column::En
 							I++;
 						}
 					}
-					columns[numColumn].rows.push_back(entries);
+					columns[numColumn].rows.push_back(Column::cRow(entries));
 					if (invalidEntry)
 						columns[numColumn].invalidEntries++;
 					if (entries.empty() || entries.size() == 1 && !entries[0].numWords)
@@ -703,11 +708,17 @@ bool Column::determineColumnRDFTypeCoherency(Source *wikipediaSource, Column::En
 				set <wstring> childSynonyms;
 				wikipediaSource->getSynonyms(wikipediaSource->m[where].getMainEntry()->first, childSynonyms, NOUN);
 				if (matchFound = childSynonyms.find(questionSource->m[whereQuestionTypeObject].getMainEntry()->first) != childSynonyms.end() ||
-					hasHyperNym(wikipediaSource->m[where].getMainEntry()->first, questionSource->m[whereQuestionTypeObject].getMainEntry()->first, matchFound))
+					hasHyperNym(wikipediaSource->m[where].getMainEntry()->first, questionSource->m[whereQuestionTypeObject].getMainEntry()->first, matchFound, false)) 
 				{
-					if (logTableDetail)
+					if (logTableDetail) 
+					{
 						// we do this test but this was not accurate for 'Awards' matching 'prizes'
-						lplog(LOG_WHERE, L"Processing table %s: %d:%s hypernym matches %d:%s.", tableName.c_str(), where, wikipediaSource->m[where].getMainEntry()->first.c_str(), whereQuestionTypeObject, questionSource->m[whereQuestionTypeObject].getMainEntry()->first.c_str());
+						wstring tmpstr3;
+						if (childSynonyms.find(questionSource->m[whereQuestionTypeObject].getMainEntry()->first) != childSynonyms.end())
+							lplog(LOG_WHERE, L"Processing table %s: synonyms of %d:%s (%s) matched %d:%s.", tableName.c_str(), where, wikipediaSource->m[where].getMainEntry()->first.c_str(), setString(childSynonyms,tmpstr3,L" ").c_str(),whereQuestionTypeObject, questionSource->m[whereQuestionTypeObject].getMainEntry()->first.c_str());
+						if (hasHyperNym(wikipediaSource->m[where].getMainEntry()->first, questionSource->m[whereQuestionTypeObject].getMainEntry()->first, matchFound, false))
+							lplog(LOG_WHERE, L"Processing table %s: %d:%s has a hypernym of %d:%s.", tableName.c_str(), where, wikipediaSource->m[where].getMainEntry()->first.c_str(), whereQuestionTypeObject, questionSource->m[whereQuestionTypeObject].getMainEntry()->first.c_str());
+					}
 					columnEntry.synonymMatchedQuestionObject.push_back(where);
 				}
 				if (logSynonymDetail)

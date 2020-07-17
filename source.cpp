@@ -12,6 +12,8 @@
 #include "profile.h"
 #include "paice.h"
 #include "internet.h"
+#include "wn.h"
+#include "QuestionAnswering.h"
 
 bool unlockTables(MYSQL &mysql);
 
@@ -428,9 +430,9 @@ bool WordMatch::isPhysicalObject(void)
 	if (w->second.mainEntry!=wNULL) w=w->second.mainEntry;
 	if (!(w->second.flags&(tFI::physicalObjectByWN|tFI::notPhysicalObjectByWN|tFI::uncertainPhysicalObjectByWN)))
 	{
-		if (hasHyperNym(w->first,L"physical_object",found) || hasHyperNym(w->first,L"physical_entity",found))
+		if (hasHyperNym(w->first,L"physical_object",found,false) || hasHyperNym(w->first,L"physical_entity",found,false))
 			w->second.flags|=tFI::physicalObjectByWN;
-		else if (hasHyperNym(word->first,L"psychological_feature",found) && !hasHyperNym(word->first,L"cognitive_state",found))
+		else if (hasHyperNym(word->first,L"psychological_feature",found,false) && !hasHyperNym(word->first,L"cognitive_state",found,false))
 			w->second.flags|=tFI::notPhysicalObjectByWN;
 		else
 			w->second.flags|=tFI::uncertainPhysicalObjectByWN;
@@ -1963,8 +1965,11 @@ int Source::sanityCheck(int &generalizedIndex)
 			if (mi.pma[pmi].getPattern() >= patterns.size()) return 6;
 		}
 		// enum eOBJECTS { UNKNOWN_OBJECT=-1,OBJECT_UNKNOWN_MALE=-2, OBJECT_UNKNOWN_FEMALE=-3, OBJECT_UNKNOWN_MALE_OR_FEMALE = -4, OBJECT_UNKNOWN_NEUTER = -5, OBJECT_UNKNOWN_PLURAL = -6, OBJECT_UNKNOWN_ALL = -7
-		if (mi.getObject() < cObject::eOBJECTS::OBJECT_UNKNOWN_ALL || mi.getObject() >= (int)objects.size()) 
+		if (mi.getObject() < cObject::eOBJECTS::OBJECT_UNKNOWN_ALL || mi.getObject() >= (int)objects.size())
+		{
+			lplog(LOG_ERROR, L"Sanity check failure for source position %d.  object=%d out of %d objects.", generalizedIndex, mi.getObject(), objects.size());
 			return 7;
+		}
 		if (mi.principalWherePosition < -1 || mi.principalWherePosition >= (int)m.size()) return 8;
 		if (mi.principalWhereAdjectivalPosition < -1 || (int)mi.principalWhereAdjectivalPosition >= (int)m.size()) return 9;
 		if (mi.originalObject < cObject::eOBJECTS::OBJECT_UNKNOWN_ALL || mi.originalObject >= (int)objects.size()) return 10;
@@ -2092,7 +2097,7 @@ int Source::sanityCheck(int &generalizedIndex)
 	return 0;
 }
 
-bool Source::read(char *buffer,int &where,unsigned int total, bool &parsedOnly, bool printProgress, bool readOnlyParsed, wstring specialExtension)
+bool Source::read(char *buffer,int &where,unsigned int total, bool &parsedOnly, bool printProgress, wstring specialExtension)
 { LFS
   int sourceVersion;
 	if (!copy(sourceVersion,buffer,where,total)) return false;
@@ -2131,7 +2136,7 @@ bool Source::read(char *buffer,int &where,unsigned int total, bool &parsedOnly, 
 	for (unsigned int I=0; I<count && !error; I++)
 		speakerGroups.push_back(cSpeakerGroup(buffer,where,total,error));
 	if (error || !pema.read(buffer,where,total)) return false;
-	if (where == total || readOnlyParsed)
+	if (where == total)
 	{
 		parsedOnly = where == total;
 		int sanityReturnCode = 0, generalizedIndex;
@@ -2541,7 +2546,7 @@ void unescapeStr(wstring &str)
 	str=ess;
 }
 
-bool Source::readSource(wstring &path,bool checkOnly,bool &parsedOnly,bool printProgress,bool readOnlyParsed, wstring specialExtension)
+bool Source::readSource(wstring &path,bool checkOnly,bool &parsedOnly,bool printProgress,wstring specialExtension)
 { LFS
 	//unescapeStr(path); // doesn't work on 'Twixt Land & Sea: Tales
 	wstring locationCache=path+L".SourceCache"+specialExtension;
@@ -2587,7 +2592,7 @@ bool Source::readSource(wstring &path,bool checkOnly,bool &parsedOnly,bool print
 	CloseHandle(fd);
 	int where=0;
 	sourcePath = path;
-	bool success = read((char *)buffer, where, bufferlen, parsedOnly,printProgress,readOnlyParsed,specialExtension);
+	bool success = read((char *)buffer, where, bufferlen, parsedOnly,printProgress,specialExtension);
 	if (!success)
 		lplog(LOG_ERROR, L"Error while reading file %s at position %d.", path.c_str(),m.size());
 	tfree(bufferlen,buffer);
@@ -2893,6 +2898,7 @@ Source::Source(wchar_t *databaseServer,int _sourceType,bool generateFormStatisti
 	lastSourcePositionSet=-1;
 	gTraceSource=0;
 	alreadyConnected=false;
+	answerContainedInSource = 0;
 	numTotalNarratorFullVerbTenses=numTotalNarratorVerbTenses=0;
 	numTotalSpeakerFullVerbTenses=numTotalSpeakerVerbTenses=0;
 	debugTrace.printBeforeElimination=false;
@@ -2979,6 +2985,8 @@ Source::Source(MYSQL *parentMysql,int _sourceType,int _sourceConfidence)
 	lastPEMAConsolidationIndex=1; // minimum PEMA offset is 1 - not 0
 	lastSourcePositionSet=-1;
 	gTraceSource=0;
+	alreadyConnected = true;
+	answerContainedInSource = 0;
 	numTotalNarratorFullVerbTenses=numTotalNarratorVerbTenses=0;
 	numTotalSpeakerFullVerbTenses=numTotalSpeakerVerbTenses=0;
 	debugTrace.printBeforeElimination=false;
@@ -3016,7 +3024,6 @@ Source::Source(MYSQL *parentMysql,int _sourceType,int _sourceConfidence)
 	debugTrace.traceParseInfo = false;
 	debugTrace.tracePreposition = false;
 	debugTrace.tracePatternMatching = false;
-	alreadyConnected=true;
 	pass=-1;
 	repeatReplaceObjectInSectionPosition=-1;
 	accumulateLocationLastLocation=-1;
@@ -3087,5 +3094,681 @@ void Source::writeWords(wstring oPath, wstring specialExtension)
 	if (where)
 		::write(fd, buffer, where);
 	close(fd);
+}
+
+bool Source::matchChildSourcePositionSynonym(tIWMM parentWord, Source *childSource, int childWhere)
+{
+	LFS
+		if (parentWord == Words.end())
+		{
+			lplog(LOG_ERROR, L"parent word is not in dictionary!");
+			return false;
+		}
+	set <wstring> childSynonyms, parentSynonyms;
+	getSynonyms(parentWord->first, parentSynonyms, NOUN);
+	tIWMM parentME = parentWord->second.mainEntry;
+	if (parentME == wNULL)
+		parentME = parentWord;
+	if (childSource->m[childWhere].objectMatches.empty())
+	{
+		if (childSource->m[childWhere].endObjectPosition >= 0)
+			childWhere = childSource->m[childWhere].endObjectPosition - 1;
+		wstring childWord = childSource->m[childWhere].getMainEntry()->first;
+		if (childWord.find('%') != wstring::npos)
+			return false;
+		wstring tmpstr;
+		if (parentWord->first == childWord || parentME->first == childWord)
+		{
+			if (logSynonymDetail && childSource->debugTrace.traceWhere)
+				lplog(LOG_WHERE, L"TSYM [1] comparing PARENT %s[%s] against CHILD [%s]", parentWord->first.c_str(), parentME->first.c_str(), childWord.c_str());
+			return true;
+		}
+		if (logSynonymDetail &&childSource->debugTrace.traceWhere)
+			lplog(LOG_WHERE, L"TSYM [1] comparing CHILD %s against synonyms [%s]%s", childWord.c_str(), parentWord->first.c_str(), setString(parentSynonyms, tmpstr, L"|").c_str());
+		if (parentSynonyms.find(childWord) != parentSynonyms.end())
+			return true;
+		getSynonyms(childWord, childSynonyms, NOUN);
+		if (logSynonymDetail && childSource->debugTrace.traceWhere)
+			lplog(LOG_WHERE, L"TSYM [1] comparing PARENT %s against synonyms [%s]%s", parentME->first.c_str(), childWord.c_str(), setString(childSynonyms, tmpstr, L"|").c_str());
+		if (childSynonyms.find(parentME->first) != childSynonyms.end())
+			return true;
+	}
+	for (unsigned int mo = 0; mo < childSource->m[childWhere].objectMatches.size(); mo++)
+	{
+		int cw, ownerWhere;
+		if ((cw = childSource->objects[childSource->m[childWhere].objectMatches[mo].object].originalLocation) >= 0 && !childSource->isDefiniteObject(cw, L"CHILD MATCHED", ownerWhere, false))
+		{
+			if (childSource->m[cw].endObjectPosition >= 0)
+				cw = childSource->m[cw].endObjectPosition - 1;
+			wstring tmpstr;
+			getSynonyms(childSource->m[cw].word->first, childSynonyms, NOUN);
+			bool childFound = childSynonyms.find(parentWord->first) != childSynonyms.end();
+			if (logSynonymDetail && childSource->debugTrace.traceWhere)
+				lplog(LOG_WHERE, L"TSYM [2CHILD] comparing %s against synonyms [%s]%s (%s)", parentWord->first.c_str(), childSource->m[cw].word->first.c_str(), setString(childSynonyms, tmpstr, L"|").c_str(), (childFound) ? L"true" : L"false");
+			if (childFound)
+				return true;
+			bool parentFound = parentSynonyms.find(childSource->m[cw].word->first) != parentSynonyms.end();
+			if (logSynonymDetail && childSource->debugTrace.traceWhere)
+				lplog(LOG_WHERE, L"TSYM [2PARENT] comparing %s against synonyms [%s]%s (%s)", childSource->m[cw].word->first.c_str(), parentWord->first.c_str(), setString(parentSynonyms, tmpstr, L"|").c_str(), (parentFound) ? L"true" : L"false");
+			if (parentFound)
+				return true;
+		}
+	}
+	return false;
+}
+
+// does this represent a definite noun, like Sting or MIT?  If so, disallow synonyms (or perhaps use another kind of synonym which is not yet supported)
+// also people are not allowed
+// also include subjects which follow immediately after relativizers which have resolved to an object.
+bool Source::isDefiniteObject(int where, wchar_t *definiteObjectType, int &ownerWhere, bool recursed)
+{
+	LFS
+		int object = m[where].getObject();
+	if (object < 0) return false;
+	wstring tmpstr;
+	int bp = m[where].beginObjectPosition;
+	switch (objects[object].objectClass)
+	{
+	case PRONOUN_OBJECT_CLASS:
+		if (m[bp].queryWinnerForm(indefinitePronounForm) >= 0)
+		{
+			if (logSynonymDetail)
+				lplog(LOG_WHERE, L"%06d:TSYM %s %s is %sa definite object [byIndefiniteClass].", where, definiteObjectType, objectString(object, tmpstr, false).c_str(), L"NOT ");
+			return false;
+		}
+	case REFLEXIVE_PRONOUN_OBJECT_CLASS:
+	case RECIPROCAL_PRONOUN_OBJECT_CLASS:
+		if (logSynonymDetail)
+			lplog(LOG_WHERE, L"%06d:TSYM %s %s is %sa definite object [byClassGender].", where, definiteObjectType, objectString(object, tmpstr, false).c_str(), (objects[object].neuter && !objects[object].male && !objects[object].female) ? L"NOT " : L"");
+		return !objects[object].neuter || objects[object].male || objects[object].female;
+	case GENDERED_DEMONYM_OBJECT_CLASS: // the Italians
+		if (logSynonymDetail)
+			lplog(LOG_WHERE, L"%06d:TSYM %s %s is %sa definite object [byDemonym].", where, definiteObjectType, objectString(object, tmpstr, false).c_str(), (m[bp].word->first == L"a" || m[bp].word->first == L"an") ? L"" : L"NOT ");
+		return (m[bp].word->first == L"a" || m[bp].word->first == L"an");
+	case PLEONASTIC_OBJECT_CLASS: // it, which is not matched and so is meaningless
+		return false;
+	case NON_GENDERED_BUSINESS_OBJECT_CLASS: // G.M.
+	case GENDERED_RELATIVE_OBJECT_CLASS: // sister ; brother / these have different kinds of synonyms which are more like isKindOf
+		if (logSynonymDetail)
+			lplog(LOG_WHERE, L"%06d:TSYM %s %s is a definite object [byClass].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
+		return true;
+	case VERB_OBJECT_CLASS: // the news I brought / running -- objects that contain verbs
+	case GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS: // occupation=plumber;role=leader;activity=runner
+	case META_GROUP_OBJECT_CLASS: // different kinds of friend words friendForm/groupJoiner/etc
+	case BODY_OBJECT_CLASS: // arm/leg
+	case GENDERED_GENERAL_OBJECT_CLASS: // the man/the woman
+	case NON_GENDERED_GENERAL_OBJECT_CLASS: // anything else that is not capitalized and not in any other category
+		// check for an 'owned' object: his plumber / my specialty / her ship // this organization
+		// his rabbit hole / the baby's name
+		// my academic [S My academic specialty[17-20]{OWNER:UNK_M_OR_F}[19][nongen][N][OGEN]]  is international constitutional [O international constitutional law[21-24][23][nongen][N]]for   [PO 20[28-29][28][nongen][N]].
+		if (m[where].endObjectPosition - bp > 1 &&
+			(m[ownerWhere = bp].queryWinnerForm(possessiveDeterminerForm) >= 0 ||
+				m[bp].queryWinnerForm(demonstrativeDeterminerForm) >= 0 ||
+				(m[bp].word->second.inflectionFlags&(SINGULAR_OWNER | PLURAL_OWNER)) ||
+				(m[bp].flags&WordMatch::flagNounOwner) ||
+				(m[ownerWhere = where].endObjectPosition - bp > 2 &&
+				(m[m[where].endObjectPosition - 2].word->second.inflectionFlags&(SINGULAR_OWNER | PLURAL_OWNER)) ||
+					(m[m[where].endObjectPosition - 2].flags&WordMatch::flagNounOwner))))
+		{
+			if (logQuestionDetail)
+				lplog(LOG_WHERE, L"%06d:TSYM %s %s is a definite object [byOwner].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
+			return true;
+		}
+		if (bp > 0 && m[bp - 1].queryWinnerForm(relativizerForm) != -1 && m[bp - 1].objectMatches.size() > 0)
+		{
+			ownerWhere = bp - 1;
+			wstring tmpstr2;
+			if (logQuestionDetail)
+				lplog(LOG_WHERE, L"%06d:TSYM %s %s is a definite object [byRelativizer - %s].", where, definiteObjectType, objectString(object, tmpstr, false).c_str(), objectString(m[bp - 1].objectMatches[0].object, tmpstr2, false).c_str());
+			return true;
+		}
+		ownerWhere = -1;
+		{
+			bool accumulatedDefiniteObject = false, accumulatedNotDefiniteObject = false;
+			int omsize = m[where].objectMatches.size();
+			for (int I = 0; I < omsize; I++)
+				if (m[where].objectMatches[I].object != object && objects[m[where].objectMatches[I].object].originalLocation != where && !recursed)
+				{
+					if (isDefiniteObject(objects[m[where].objectMatches[I].object].originalLocation, definiteObjectType, ownerWhere, true))
+						accumulatedDefiniteObject |= true;
+					else
+						accumulatedNotDefiniteObject |= true;
+				}
+			if (logSynonymDetail)
+			{
+				if (omsize > 0)
+					lplog(LOG_WHERE, L"%06d:TSYM %s %s is%s a definite object [byClass (2)].", where, definiteObjectType, objectString(object, tmpstr, false).c_str(), (accumulatedDefiniteObject) ? L"" : L" NOT");
+				else
+					lplog(LOG_WHERE, L"%06d:TSYM %s %s is NOT a definite object [byClass].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
+			}
+			if (omsize && accumulatedDefiniteObject)
+				return true;
+		}
+		return false;
+	case NAME_OBJECT_CLASS:
+	case NON_GENDERED_NAME_OBJECT_CLASS:
+	default:;
+	}
+	if (!objects[object].dbPediaAccessed)
+		identifyISARelation(where, false);
+	if (objects[object].isWikiBusiness || objects[object].isWikiPerson || objects[object].isWikiPlace || objects[object].isWikiWork)
+	{
+		if (logSynonymDetail)
+			lplog(LOG_WHERE, L"%06d:TSYM %s %s is a definite object [byWiki].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
+		return true;
+	}
+	if (objects[object].name.hon != wNULL)
+	{
+		if (logSynonymDetail)
+			lplog(LOG_WHERE, L"%06d:TSYM %s %s is a definite object [byHonorific].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
+		return true;
+	}
+	switch (objects[object].getSubType())
+	{
+	case CANADIAN_PROVINCE_CITY:
+	case COUNTRY:
+	case ISLAND:
+	case MOUNTAIN_RANGE_PEAK_LANDFORM:
+	case OCEAN_SEA:
+	case PARK_MONUMENT:
+	case REGION:
+	case RIVER_LAKE_WATERWAY:
+	case US_CITY_TOWN_VILLAGE:
+	case US_STATE_TERRITORY_REGION:
+	case WORLD_CITY_TOWN_VILLAGE:
+		if (logSynonymDetail)
+			lplog(LOG_WHERE, L"%06d:TSYM %s %s is a definite object [bySubType].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
+		return true;
+	}
+	if (m[where].endObjectPosition - m[where].beginObjectPosition > 1 &&
+		(m[m[where].beginObjectPosition].queryWinnerForm(possessiveDeterminerForm) >= 0 ||
+		(m[m[where].beginObjectPosition].word->second.inflectionFlags&(SINGULAR_OWNER | PLURAL_OWNER)) ||
+			(m[m[where].beginObjectPosition].flags&WordMatch::flagNounOwner)))
+	{
+		if (logSynonymDetail)
+			lplog(LOG_WHERE, L"%06d:TSYM %s %s is a definite object [byOwner].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
+		ownerWhere = m[where].beginObjectPosition;
+		return true;
+	}
+	// the Nobel Prize
+	if (m[m[where].beginObjectPosition].word->first == L"the")
+	{
+		if (logSynonymDetail)
+			lplog(LOG_WHERE, L"%06d:TSYM %s %s is a definite object [byThe].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
+		return true;
+	}
+	if (logSynonymDetail)
+		lplog(LOG_WHERE, L"%06d:TSYM %s %s is NOT a definite object [default].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
+	return false;
+}
+
+int Source::determineKindBitFieldFromObject(Source *source, int object, int &wikiBitField)
+{
+	LFS
+		if (source->objects[object].isWikiBusiness) wikiBitField |= 1;
+	if (source->objects[object].isWikiPerson) wikiBitField |= 2;
+	if (source->objects[object].isWikiPlace) wikiBitField |= 4;
+	if (source->objects[object].isWikiWork) wikiBitField |= 8;
+	return 0;
+}
+
+int Source::determineKindBitField(Source *source, int where, int &wikiBitField)
+{
+	LFS
+		if (source->m[where].getObject() < 0 && source->m[where].objectMatches.size() == 0)
+		{
+			if (matchChildSourcePositionSynonym(Words.query(L"business"), source, where) || source->m[where].getMainEntry()->first == L"business")
+				return wikiBitField |= 1;
+			if (matchChildSourcePositionSynonym(Words.query(L"person"), source, where) || source->m[where].getMainEntry()->first == L"person")
+				return wikiBitField |= 2;
+			if (matchChildSourcePositionSynonym(Words.query(L"place"), source, where) || source->m[where].getMainEntry()->first == L"place")
+				return wikiBitField |= 4;
+			return -1;
+		}
+	if (source->m[where].objectMatches.size() >= 1)
+	{
+		for (unsigned int om = 0; om < source->m[where].objectMatches.size(); om++)
+			determineKindBitFieldFromObject(source, source->m[where].objectMatches[om].object, wikiBitField);
+	}
+	else
+	{
+		determineKindBitFieldFromObject(source, source->m[where].getObject(), wikiBitField);
+		if (source->objects[source->m[where].getObject()].objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS &&
+			(source->m[where].endObjectPosition - source->m[where].beginObjectPosition == 1 ||
+			(source->m[where].endObjectPosition - source->m[where].beginObjectPosition == 2 && source->m[source->m[where].beginObjectPosition].queryForm(determinerForm) != -1)))
+		{
+			if (matchChildSourcePositionSynonym(Words.query(L"business"), source, where) || source->m[where].getMainEntry()->first == L"business")
+				return wikiBitField |= 1;
+			if (matchChildSourcePositionSynonym(Words.query(L"person"), source, where) || source->m[where].getMainEntry()->first == L"person")
+				return wikiBitField |= 2;
+			if (matchChildSourcePositionSynonym(Words.query(L"place"), source, where) || source->m[where].getMainEntry()->first == L"place")
+				return wikiBitField |= 4;
+		}
+	}
+	return 0;
+}
+
+int Source::checkParticularPartQuestionTypeCheck(__int64 questionType, int childWhere, int childObject, int &semanticMismatch)
+{
+	LFS
+		wstring tmpstr;
+	int oc = objects[childObject].objectClass;
+	if (oc == PRONOUN_OBJECT_CLASS ||
+		oc == REFLEXIVE_PRONOUN_OBJECT_CLASS ||
+		oc == RECIPROCAL_PRONOUN_OBJECT_CLASS ||
+		oc == PLEONASTIC_OBJECT_CLASS ||
+		oc == META_GROUP_OBJECT_CLASS ||
+		oc == VERB_OBJECT_CLASS)
+	{
+		semanticMismatch = 1;
+		return CONFIDENCE_NOMATCH;
+	}
+	if ((questionType == cQuestionAnswering::whereQTFlag || questionType == cQuestionAnswering::whoseQTFlag || questionType == cQuestionAnswering::whomQTFlag || questionType == cQuestionAnswering::wikiBusinessQTFlag || questionType == cQuestionAnswering::wikiWorkQTFlag) &&
+		!objects[childObject].dbPediaAccessed)
+		identifyISARelation(childWhere, true);
+	bool wikiDetermined =
+		(objects[childObject].isWikiPlace || objects[childObject].isWikiPerson || objects[childObject].isWikiBusiness || objects[childObject].isWikiWork);
+	switch (questionType)
+	{
+	case cQuestionAnswering::whereQTFlag:
+		if (oc == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS ||
+			oc == GENDERED_DEMONYM_OBJECT_CLASS ||
+			oc == GENDERED_RELATIVE_OBJECT_CLASS ||
+			oc == BODY_OBJECT_CLASS ||
+			oc == NON_GENDERED_BUSINESS_OBJECT_CLASS)
+		{
+			semanticMismatch = 2;
+			return CONFIDENCE_NOMATCH;
+		}
+		if (oc == GENDERED_GENERAL_OBJECT_CLASS && wikiDetermined)
+		{
+			semanticMismatch = 3;
+			return CONFIDENCE_NOMATCH;
+		}
+		if (oc == NON_GENDERED_GENERAL_OBJECT_CLASS ||
+			oc == NON_GENDERED_NAME_OBJECT_CLASS ||
+			oc == NAME_OBJECT_CLASS)
+		{
+			if (objects[childObject].isLocationObject ||
+				objects[childObject].isWikiPlace)
+				return 1;
+			if (objects[childObject].getSubType() == NOT_A_PLACE ||
+				objects[childObject].isTimeObject ||
+				objects[childObject].isWikiPerson ||
+				objects[childObject].isWikiWork ||
+				objects[childObject].isWikiBusiness)
+			{
+				semanticMismatch = 4;
+				return CONFIDENCE_NOMATCH;
+			}
+			// if object of [location preposition]
+			if (m[childWhere].relPrep >= 0)
+			{
+				wstring prep = m[m[childWhere].relPrep].word->first;
+				if (prepTypesMap[prep] == tprNEAR || prepTypesMap[prep] == tprIN || prepTypesMap[prep] == tprSPAT)
+					return 1;
+			}
+		}
+		break;
+	case cQuestionAnswering::whoseQTFlag:
+	case cQuestionAnswering::whomQTFlag:
+		if (oc == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS ||
+			oc == GENDERED_DEMONYM_OBJECT_CLASS ||
+			oc == GENDERED_GENERAL_OBJECT_CLASS ||
+			oc == GENDERED_RELATIVE_OBJECT_CLASS ||
+			oc == BODY_OBJECT_CLASS)
+			return 1;
+		if ((oc == NON_GENDERED_GENERAL_OBJECT_CLASS || oc == NON_GENDERED_NAME_OBJECT_CLASS) && wikiDetermined && !objects[childObject].isWikiPerson)
+		{
+			semanticMismatch = 5;
+			return CONFIDENCE_NOMATCH;
+		}
+		if (oc == NON_GENDERED_BUSINESS_OBJECT_CLASS && wikiDetermined && !objects[childObject].isWikiPerson)
+		{
+			semanticMismatch = 6;
+			return CONFIDENCE_NOMATCH;
+		}
+		if (oc == NAME_OBJECT_CLASS || oc == NON_GENDERED_NAME_OBJECT_CLASS)
+		{
+			if (objects[childObject].getSubType() != NOT_A_PLACE && wikiDetermined && !objects[childObject].isWikiPerson)
+			{
+				semanticMismatch = 7;
+				return CONFIDENCE_NOMATCH;
+			}
+			if (wikiDetermined && !objects[childObject].isWikiPerson && (objects[childObject].isTimeObject || objects[childObject].isLocationObject || objects[childObject].isWikiPlace || objects[childObject].isWikiBusiness))
+			{
+				semanticMismatch = 8;
+				return CONFIDENCE_NOMATCH;
+			}
+			if (objects[childObject].isWikiPerson)
+				return 1;
+			if (oc == NAME_OBJECT_CLASS)
+				return CONFIDENCE_NOMATCH / 2;
+		}
+		return CONFIDENCE_NOMATCH;
+	case cQuestionAnswering::whenQTFlag:
+		if (!objects[childObject].isTimeObject)
+		{
+			semanticMismatch = 9;
+			return CONFIDENCE_NOMATCH;
+		}
+		else
+			return 1;
+	case cQuestionAnswering::wikiBusinessQTFlag:
+		if (oc == NON_GENDERED_BUSINESS_OBJECT_CLASS || objects[childObject].isWikiBusiness)
+			return 1;
+		break;
+	case cQuestionAnswering::wikiWorkQTFlag:
+		if (objects[childObject].isWikiWork)
+			return 1;
+		break;
+	}
+	return CONFIDENCE_NOMATCH / 2;
+}
+
+void Source::checkParticularPartSemanticMatchWord(int logType, int parentWhere, bool &synonym, set <wstring> &parentSynonyms, wstring pw, wstring pwme, int &lowestConfidence, unordered_map <wstring, int >::iterator ami)
+{
+	LFS // DLFS
+ //if (logQuestionDetail)
+ //	lplog(logType,L"checkParticularPartSemanticMatchWord child=%s",ami->first.c_str());	
+		bool rememberSynonym = false;
+	if (ami->first == pw || ami->first == pwme || (rememberSynonym = parentSynonyms.find(ami->first) != parentSynonyms.end()))
+	{
+		if (lowestConfidence > ami->second)
+		{
+			lowestConfidence = (ami->second);
+			synonym = rememberSynonym;
+			if (logQuestionDetail)
+			{
+				wstring tmpstr;
+				lplog(logType, L"object %s:(primary match:%s[%s]) MATCH %s%s", whereString(parentWhere, tmpstr, false).c_str(), pw.c_str(), pwme.c_str(), ami->first.c_str(), (synonym) ? L" SYNONYM" : L"");
+			}
+		}
+	}
+}
+
+// may be passed a childObject which is -1, in which case it will try to derive it from childWhere.  This is only recommended if the resolution of the object location is simple (no multiple matches).
+int Source::checkParticularPartSemanticMatch(int logType, int parentWhere, Source *childSource, int childWhere, int childObject, bool &synonym, int &semanticMismatch)
+{
+	LFS
+		if (childWhere < 0)
+			return CONFIDENCE_NOMATCH;
+	if (childObject < 0)
+		childObject = (childSource->m[childWhere].objectMatches.size() > 0) ? childSource->m[childWhere].objectMatches[0].object : childSource->m[childWhere].getObject();
+	if (childObject < 0)
+		return CONFIDENCE_NOMATCH;
+
+	unordered_map <wstring, int > associationMap;
+	childSource->getAssociationMapMaster(childSource->objects[childObject].originalLocation, -1, associationMap, TEXT(__FUNCTION__));
+	wstring tmpstr, tmpstr2, pw = m[parentWhere].word->first;
+	transform(pw.begin(), pw.end(), pw.begin(), (int(*)(int)) tolower);
+	wstring pwme = m[parentWhere].getMainEntry()->first;
+	set <wstring> parentSynonyms;
+	getSynonyms(pw, parentSynonyms, NOUN);
+	getSynonyms(pwme, parentSynonyms, NOUN);
+	int lowestConfidence = CONFIDENCE_NOMATCH;
+	setString(parentSynonyms, tmpstr2, L"|");
+	tmpstr.clear();
+	for (unordered_map <wstring, int >::iterator ami = associationMap.begin(), amiEnd = associationMap.end(); ami != amiEnd; ami++)
+		tmpstr += ami->first + L"|";
+	wstring tmp1, tmp2, tmp3;
+	if (logSynonymDetail)
+		lplog(LOG_WHERE, L"Comparing [%d, %d] %s and %s(%s)\nassociationMap for %s: %s\nparentSynonyms for %s: %s.",
+			parentWhere, childWhere, whereString(parentWhere, tmp1, false).c_str(), childSource->whereString(childWhere, tmp2, false).c_str(), childSource->whereString(childSource->objects[childObject].originalLocation, tmp3, false).c_str(),
+			tmp2.c_str(), tmpstr.c_str(), pw.c_str(), tmpstr2.c_str());
+	for (unordered_map <wstring, int >::iterator ami = associationMap.begin(), amiEnd = associationMap.end(); ami != amiEnd && lowestConfidence > 1; ami++)
+		checkParticularPartSemanticMatchWord(logType, parentWhere, synonym, parentSynonyms, pw, pwme, lowestConfidence, ami);
+	//if (childWhere==886)
+	//{
+	//	logQuestionDetail=0;
+	//	if (saveConfidence>lowestConfidence)
+	//		lplog(LOG_WHERE,L"Comparing [%d, %d] %s and %s(%s)\nassociationMap for %s: %s\nparentSynonyms for %s: %s.",
+	//				parentWhere,childWhere,whereString(parentWhere,tmp1,false).c_str(),childSource->whereString(childWhere,tmp2,false).c_str(),childSource->whereString(childSource->objects[childObject].originalLocation,tmp3,false).c_str(),
+	//				tmp2.c_str(),tmpstr.c_str(),pw.c_str(),tmpstr2.c_str());
+	//}
+	if (lowestConfidence == CONFIDENCE_NOMATCH)
+	{
+		int lastChildWhere = childSource->objects[childObject].originalLocation;
+		if (childSource->objects[childObject].objectClass == NAME_OBJECT_CLASS || childSource->objects[childObject].objectClass == NON_GENDERED_NAME_OBJECT_CLASS)
+			lastChildWhere = childSource->m[childSource->objects[childObject].originalLocation].endObjectPosition - 1;
+		wstring cw = childSource->m[lastChildWhere].word->first;
+		transform(cw.begin(), cw.end(), cw.begin(), (int(*)(int)) tolower);
+		wstring cwme = childSource->m[lastChildWhere].getMainEntry()->first;
+		if (logQuestionDetail && ((logType == LOG_WHERE && debugTrace.traceWhere) || (logType == LOG_RESOLUTION && debugTrace.traceSpeakerResolution)))
+			lplog(logType, L"checkParticularPartSemanticMatch child alternate=%s[%s]", cw.c_str(), cwme.c_str());
+		if (pw == cw || pwme == cwme)
+		{
+			if (logQuestionDetail && ((logType == LOG_WHERE && debugTrace.traceWhere) || (logType == LOG_RESOLUTION && debugTrace.traceSpeakerResolution)))
+				lplog(logType, L"parent word %s:(primary match:%s[%s]) MATCH %s[%s]", whereString(parentWhere, tmpstr, false).c_str(), pw.c_str(), pwme.c_str(), cw.c_str(), cwme.c_str());
+			lowestConfidence = CONFIDENCE_NOMATCH / 4;
+		}
+		if (synonym = lowestConfidence == CONFIDENCE_NOMATCH && (parentSynonyms.find(cw) != parentSynonyms.end() || parentSynonyms.find(cwme) != parentSynonyms.end()))
+		{
+			if (logSynonymDetail && ((logType == LOG_WHERE && debugTrace.traceWhere) || (logType == LOG_RESOLUTION && debugTrace.traceSpeakerResolution)))
+				lplog(logType, L"word %s MATCH %s[%s] SYNONYM", whereString(parentWhere, tmpstr, false).c_str(), cw.c_str(), cwme.c_str());
+			lowestConfidence = CONFIDENCE_NOMATCH / 2;
+		}
+	}
+	if (lowestConfidence == CONFIDENCE_NOMATCH)
+	{
+		int parentWikiBitField = 0, childWikiBitField = 0;
+		determineKindBitField(this, parentWhere, parentWikiBitField);
+		determineKindBitField(childSource, childWhere, childWikiBitField);
+		if (parentWikiBitField && childWikiBitField && !(parentWikiBitField&childWikiBitField))
+		{
+			semanticMismatch = 10;
+			if (logQuestionDetail && ((logType == LOG_WHERE && debugTrace.traceWhere) || (logType == LOG_RESOLUTION && debugTrace.traceSpeakerResolution)))
+				lplog(logType, L"object parent [%s]:(primary match:%s[%s]) child [%s] BitField mismatch", whereString(parentWhere, tmpstr, false).c_str(), pw.c_str(), pwme.c_str(), childSource->objectString(childObject, tmpstr2, false).c_str(), parentWikiBitField, childWikiBitField);
+		}
+		// profession
+		wchar_t *professionLimitedSynonyms[] = { L"avocation", L"calling", L"career", L"employment", L"occupation", L"vocation", L"job", L"livelihood", L"profession", L"work", NULL };
+		bool parentIsProfession = false;
+		for (int I = 0; professionLimitedSynonyms[I] && !parentIsProfession; I++)
+			parentIsProfession |= m[parentWhere].word->first == professionLimitedSynonyms[I];
+		if (parentIsProfession && childSource->m[childWhere].queryForm(commonProfessionForm) < 0)
+		{
+			semanticMismatch = 11;
+			if (logQuestionDetail && ((logType == LOG_WHERE && debugTrace.traceWhere) || (logType == LOG_RESOLUTION && debugTrace.traceSpeakerResolution)))
+				lplog(logType, L"object parent [%s]:(primary match:%s[%s]) child [%s] profession mismatch", whereString(parentWhere, tmpstr, false).c_str(), pw.c_str(), pwme.c_str(), childSource->objectString(childObject, tmpstr2, false).c_str(), parentWikiBitField, childWikiBitField);
+		}
+		if (logQuestionDetail && ((logType == LOG_WHERE && debugTrace.traceWhere) || (logType == LOG_RESOLUTION && debugTrace.traceSpeakerResolution)))
+			lplog(logType, L"object parent [%s]:(primary match:%s[%s]) child [%s] NO MATCH", whereString(parentWhere, tmpstr, false).c_str(), pw.c_str(), pwme.c_str(), childSource->objectString(childObject, tmpstr2, false).c_str(), parentWikiBitField, childWikiBitField);
+	}
+	else if (logQuestionDetail && ((logType == LOG_WHERE && debugTrace.traceWhere) || (logType == LOG_RESOLUTION && debugTrace.traceSpeakerResolution)))
+		lplog(logType, L"object parent [%s]:(primary match:%s[%s]) child [%s] lowest confidence %d", whereString(parentWhere, tmpstr, false).c_str(), pw.c_str(), pwme.c_str(), childSource->objectString(childObject, tmpstr2, false).c_str(), lowestConfidence);
+	return lowestConfidence;
+}
+
+void Source::copySource(Source *childSource, int begin, int end)
+{
+	LFS
+		for (int I = begin; I < end; I++)
+		{
+			m.push_back(childSource->m[I]);
+			adjustOffsets(I);
+		}
+}
+
+int Source::copyDirectlyAttachedPrepositionalPhrase(Source *childSource, int relPrep)
+{
+	LFS
+		int relObject = childSource->m[relPrep].getRelObject();
+	if (relObject >= relPrep && childSource->m[relObject].endObjectPosition >= 0)
+	{
+		copySource(childSource, relPrep, childSource->m[relObject].endObjectPosition);
+		return childSource->m[relObject].endObjectPosition - relPrep;
+	}
+	return 0;
+}
+
+bool Source::isObjectCapitalized(int where)
+{
+	LFS
+		if (where < 0)
+			return false;
+	int lastWord = m[where].endObjectPosition - 1;
+	return (lastWord >= 0 && (m[lastWord].queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (m[lastWord].flags&WordMatch::flagFirstLetterCapitalized) || (m[lastWord].flags&WordMatch::flagAllCaps)));
+}
+
+// if getUntilNumPP==-1, this gets the maximum number of available directly attached non-mixed case prepositional phrases
+bool Source::ppExtensionAvailable(int where, int &getUntilNumPP, bool nonMixed)
+{
+	LFS
+		if (getUntilNumPP == 0) return true;
+	int relPrep = m[where].endObjectPosition;
+	if (where >= 0 && where < (signed)m.size() && relPrep >= 0 && relPrep < (signed)m.size() && m[relPrep].queryWinnerForm(prepositionForm) >= 0)
+	{
+		if (m[relPrep].nextQuote == -1)
+			m[relPrep].nextQuote = where;
+		if (m[relPrep].nextQuote == where || m[relPrep].relNextObject == where)
+		{
+			bool isCapitalized = isObjectCapitalized(where);
+			int numPP;
+			for (numPP = 0; relPrep >= 0 && m[relPrep].getRelObject() >= 0 && m[relPrep].getRelObject() < (signed)m.size() && (m[relPrep].nextQuote == where || m[relPrep].relNextObject == where) && (numPP < getUntilNumPP || getUntilNumPP == -1); numPP++)
+			{
+				if ((getUntilNumPP == -1 || numPP < getUntilNumPP) && nonMixed && (isObjectCapitalized(m[relPrep].getRelObject()) ^ isCapitalized))
+				{
+					if (getUntilNumPP == -1)
+						getUntilNumPP = numPP;
+					return false;
+				}
+				relPrep = m[relPrep].relPrep;
+			}
+			if (getUntilNumPP == -1)
+				getUntilNumPP = numPP;
+			return numPP >= getUntilNumPP;
+		}
+	}
+	if (getUntilNumPP == -1)
+		getUntilNumPP = 0;
+	return false;
+}
+
+int Source::copyDirectlyAttachedPrepositionalPhrases(int whereParentObject, Source *childSource, int whereChild)
+{
+	LFS
+		int relPrep = childSource->m[whereChild].endObjectPosition;
+	if (relPrep < 0 || relPrep >= (signed)childSource->m.size() || childSource->m[relPrep].queryWinnerForm(prepositionForm) < 0 || childSource->m[relPrep].nextQuote != whereChild) return 0;
+	m[whereParentObject].relPrep = m.size();
+	while (relPrep >= 0 && (childSource->m[relPrep].nextQuote == whereChild || childSource->m[relPrep].relNextObject == whereChild))
+	{
+		copyDirectlyAttachedPrepositionalPhrase(childSource, relPrep);
+		relPrep = childSource->m[relPrep].relPrep;
+	}
+	return m.size() - m[whereParentObject].relPrep;
+}
+
+void Source::adjustOffsets(int childWhere, bool keepObjects)
+{
+	LFS
+		int parentWhere = m.size() - 1;
+	int offset = parentWhere - childWhere;
+	if (m[parentWhere].beginObjectPosition >= 0)
+		m[parentWhere].beginObjectPosition += offset;
+	if (m[parentWhere].endObjectPosition >= 0)
+		m[parentWhere].endObjectPosition += offset;
+	if (m[parentWhere].relPrep >= 0)
+		m[parentWhere].relPrep += offset;
+	if (m[parentWhere].getRelObject() >= 0)
+		m[parentWhere].setRelObject(m[parentWhere].getRelObject() + offset);
+	if (m[parentWhere].nextQuote >= 0)
+		m[parentWhere].nextQuote += offset;
+	if (m[parentWhere].principalWherePosition >= 0)
+		m[parentWhere].principalWherePosition += offset;
+	m[parentWhere].beginPEMAPosition = -1;
+	m[parentWhere].endPEMAPosition = -1;
+	if (!keepObjects)
+	{
+		m[parentWhere].setObject(-1);
+		m[parentWhere].objectMatches.clear();
+	}
+	if (logQuestionDetail)
+		lplog(LOG_WHERE, L"parentWhere %d:COPY CHILD->PARENT %s beginObjectPosition=%d endObjectPosition=%d relPrep=%d relObject=%d nextQuote=%d offset=%d",
+			parentWhere, m[parentWhere].word->first.c_str(), m[parentWhere].beginObjectPosition, m[parentWhere].endObjectPosition, m[parentWhere].relPrep, m[parentWhere].getRelObject(), m[parentWhere].nextQuote, offset);
+}
+
+// copy the answer into the parent
+int Source::copyChildIntoParent(Source *childSource, int whereChild)
+{
+	LFS
+		if (childSource->m[whereChild].getObject() < 0 || childSource->m[whereChild].beginObjectPosition < 0 || childSource->m[whereChild].endObjectPosition < 0)
+		{
+			m.push_back(childSource->m[whereChild]);
+			adjustOffsets(whereChild);
+			return m.size() - 1;
+		}
+		else
+		{
+			int copyChildObject = -1, whereObject = -1;
+			if (childSource->m[whereChild].objectMatches.size() > 0)
+			{
+				copyChildObject = childSource->m[whereChild].objectMatches[0].object;
+				whereObject = childSource->objects[copyChildObject].originalLocation;
+				copySource(childSource, childSource->m[whereObject].beginObjectPosition, childSource->m[whereObject].endObjectPosition);
+			}
+			else
+			{
+				copyChildObject = childSource->m[whereChild].getObject();
+				whereObject = whereChild;
+				copySource(childSource, childSource->m[whereChild].beginObjectPosition, childSource->m[whereChild].endObjectPosition);
+			}
+			// copy childObject
+			objects.push_back(childSource->objects[copyChildObject]);
+			int whereParentObject = m.size() - childSource->m[whereObject].endObjectPosition + whereObject;
+			int parentObject = objects.size() - 1;
+			m[whereParentObject].setObject(parentObject);
+			m[whereParentObject].objectMatches.clear();
+			if (childSource->objects[copyChildObject].getOwnerWhere() >= 0)
+			{
+				m.push_back(childSource->m[childSource->objects[copyChildObject].getOwnerWhere()]);
+				adjustOffsets(childSource->objects[copyChildObject].getOwnerWhere());
+				objects[parentObject].setOwnerWhere(m.size() - 1);
+			}
+			objects[parentObject].begin = m[whereParentObject].beginObjectPosition = whereParentObject - (whereObject - childSource->m[whereObject].beginObjectPosition);
+			objects[parentObject].end = m[whereParentObject].endObjectPosition = whereParentObject + (childSource->m[whereObject].endObjectPosition - whereObject);
+			objects[parentObject].originalLocation = whereParentObject;
+			objects[parentObject].relativeClausePM = -1; // should copy later
+			objects[parentObject].whereRelativeClause = -1; // should copy later
+			objects[parentObject].locations.clear();
+			objects[parentObject].replacedBy = -1;
+			objects[parentObject].duplicates.clear();
+			objects[parentObject].eliminated = false;
+			copyDirectlyAttachedPrepositionalPhrases(whereParentObject, childSource, whereObject);
+			wstring tmpstr, tmpstr2;
+			lplog(LOG_WHERE, L"Transferred %d:%s to %d:%s", whereChild, childSource->whereString(whereChild, tmpstr, true).c_str(), whereParentObject, whereString(whereParentObject, tmpstr2, true).c_str());
+			return whereParentObject;
+		}
+}
+
+int Source::detectAttachedPhrase(vector <cSpaceRelation>::iterator sri, int &relVerb)
+{
+	LFS
+		int collectionWhere = sri->whereQuestionTypeObject;
+	if (m[collectionWhere].beginObjectPosition >= 0 && m[m[collectionWhere].beginObjectPosition].pma.queryPatternDiff(L"__NOUN", L"F") != -1 && (relVerb = m[collectionWhere].getRelVerb()) >= 0 && m[relVerb].relSubject == collectionWhere)
+		return 0;
+	return -1;
+}
+
+bool Source::compareObjectString(int whereObject1, int whereObject2)
+{
+	LFS
+		wstring whereObject1Str, whereObject2Str;
+	whereString(whereObject1, whereObject1Str, true);
+	whereString(whereObject2, whereObject2Str, true);
+	return whereObject1Str == whereObject2Str;
+}
+
+bool Source::objectContainedIn(int whereObject, set <int> whereObjects)
+{
+	LFS
+		for (set <int>::iterator woi = whereObjects.begin(), woiEnd = whereObjects.end(); woi != woiEnd; woi++)
+		{
+			if (compareObjectString(whereObject, *woi))
+				return true;
+			for (unsigned int I = 0; I < m[*woi].objectMatches.size(); I++)
+				if (compareObjectString(whereObject, objects[m[*woi].objectMatches[I].object].originalLocation))
+					return true;
+		}
+	return false;
 }
 

@@ -76,8 +76,24 @@ public:
 		void logEntry(int logType, const wchar_t *tableName, int row, int entryIndex, Source *source);
 		void accumulateEntryRDFTypes(Source *wikipediaSource, set <wstring> &titleSynonyms, unordered_map < wstring, AssociationType > &accumulatedRDFTypesMap);
 	};
-
-	vector <vector <Entry> > rows; // there are multiple entries for each row
+	class cRow
+	{
+	public:
+		int numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow = 0;
+		int numSimplifiedRDFTypesFoundForRow = 0;
+		int maxTitleFound = 0;
+		int numLastWordsFoundInTitleSynonymsInRow = 0;
+		vector <Entry> entries;
+		cRow(vector <Entry> &e)
+		{
+			entries = e;
+			numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow = 0;
+			numSimplifiedRDFTypesFoundForRow = 0;
+			maxTitleFound = 0;
+			numLastWordsFoundInTitleSynonymsInRow = 0;
+		}
+	};
+	vector <cRow > rows; // there are multiple entries for each row
 	int invalidEntries;
 	int emptyEntries;
 	unordered_map < wstring, AssociationType > accumulatedRDFTypesMap;

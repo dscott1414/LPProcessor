@@ -1009,11 +1009,12 @@ int cQuestionAnswering::spinParses(MYSQL &mysql,vector <searchSource> &accumulat
 }
 
 extern int limitProcessingForProfiling;
-int cQuestionAnswering::accumulateParseRequests(cSpaceRelation* parentSRI, int webSitesAskedFor, int index, bool googleSearch, vector <wstring> &webSearchQueryStrings, int &offset, vector <searchSource> &accumulatedParseRequests)
+int cQuestionAnswering::accumulateParseRequests(cSpaceRelation* parentSRI, int webSitesAskedFor, int index, bool googleSearch, vector <wstring> &webSearchQueryStrings, int &webSearchQueryStringOffset, vector <searchSource> &accumulatedParseRequests)
 {
 	LFS
 	int maxWebSitesFound = -1;
-	for (vector <wstring>::iterator oi = webSearchQueryStrings.begin() + offset, oiEnd = webSearchQueryStrings.end(); oi != oiEnd; oi++, offset++)
+	set <wstring> pathsAccumulated;
+	for (vector <wstring>::iterator oi = webSearchQueryStrings.begin() + webSearchQueryStringOffset, oiEnd = webSearchQueryStrings.end(); oi != oiEnd; oi++, webSearchQueryStringOffset++)
 	{
 		wstring object = *oi, jsonBuffer, filePathOut;
 		vector <wstring> webSites, snippets;
@@ -1030,8 +1031,8 @@ int cQuestionAnswering::accumulateParseRequests(cSpaceRelation* parentSRI, int w
 		maxWebSitesFound = max(maxWebSitesFound, (signed)webSites.size());
 		for (vector <wstring>::iterator ssi = snippets.begin(), wsi = webSites.begin(), ssiEnd = snippets.end(), wsiEnd = webSites.end(); ssi != ssiEnd; ssi++, wsi++)
 		{
-			// prevent searching wikipedia as that has already been done
-			if (wsi->find(L"https://en.wikipedia.org/") != wstring::npos)
+			// prevent searching wikipedia as that has already been done.  This will also include canadian and other wikipedias
+			if (wsi->find(L"wikipedia.org/") != wstring::npos)
 				continue;
 			wstring webSiteBuffer, epath, headers;
 			hashWebSiteURL(*wsi, epath);
@@ -1047,7 +1048,7 @@ int cQuestionAnswering::accumulateParseRequests(cSpaceRelation* parentSRI, int w
 				distributeToSubDirectories(path, pathlen, true);
 				path[MAX_PATH - 28] = 0; // extensions
 				wcscat(path, L".snippet.txt");
-				if (!_waccess(path, 0) || flushString(*ssi, path) >= 0)
+				if ((!_waccess(path, 0) || flushString(*ssi, path) >= 0) && pathsAccumulated.find(path)==pathsAccumulated.end())
 				{
 					pr.isSnippet = true;
 					pr.pathInCache = path;
@@ -1058,9 +1059,10 @@ int cQuestionAnswering::accumulateParseRequests(cSpaceRelation* parentSRI, int w
 					snippetLocation = accumulatedParseRequests.size();
 					pr.fullPathIndex = -1;
 					accumulatedParseRequests.push_back(pr);
+					pathsAccumulated.insert(path);
 				}
 			}
-			if (Internet::getWebPath(parentSRI->where, *wsi, webSiteBuffer, epath, L"webSearchCache", filePathOut, headers, index, true, false) == 0)
+			if (Internet::getWebPath(parentSRI->where, *wsi, webSiteBuffer, epath, L"webSearchCache", filePathOut, headers, index, true, false) == 0 && pathsAccumulated.find(filePathOut) == pathsAccumulated.end())
 			{
 				pr.isSnippet = false;
 				pr.pathInCache = filePathOut;
@@ -1069,13 +1071,14 @@ int cQuestionAnswering::accumulateParseRequests(cSpaceRelation* parentSRI, int w
 				if (pr.hasCorrespondingSnippet=snippetLocation >= 0)
 					accumulatedParseRequests[snippetLocation].fullPathIndex = accumulatedParseRequests.size();
 				accumulatedParseRequests.push_back(pr);
+				pathsAccumulated.insert(filePathOut);
 			}
 		}
 		if (webSites.size()>2)
 		{
 			wstring quoteLessObject, qlo;
 			quoteLess(*oi, quoteLessObject);
-			for (oi++; oi != oiEnd && quoteLessObject == quoteLess(*oi, qlo); oi++, offset++);
+			for (oi++; oi != oiEnd && quoteLessObject == quoteLess(*oi, qlo); oi++, webSearchQueryStringOffset++);
 			oi--;
 		}
 	}
@@ -1083,8 +1086,7 @@ int cQuestionAnswering::accumulateParseRequests(cSpaceRelation* parentSRI, int w
 }
 
 int cQuestionAnswering::analyzeAccumulatedRequests(Source *questionSource,wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, vector <searchSource> &accumulatedParseRequests,
- cPattern *&mapPatternAnswer,
-	cPattern *&mapPatternQuestion)
+ cPattern *&mapPatternAnswer,	cPattern *&mapPatternQuestion)
 {
 	LFS
 	int check = answerSRIs.size();
@@ -1097,7 +1099,7 @@ int cQuestionAnswering::analyzeAccumulatedRequests(Source *questionSource,wchar_
 		if (oi->isSnippet || !oi->hasCorrespondingSnippet)
 			check = answerSRIs.size();
 		if (processPath(questionSource,oi->pathInCache.c_str(), source, Source::WEB_SEARCH_SOURCE_TYPE, (oi->isSnippet) ? 50 : 100, parseOnly) >= 0)
-			analyzeQuestionFromSource(questionSource,derivation, oi->fullWebPath, source, parentSRI, answerSRIs, sMaxAnswer, check, true, mapPatternAnswer, mapPatternQuestion);
+			analyzeQuestionFromSource(questionSource,derivation, oi->fullWebPath, source, parentSRI, answerSRIs, sMaxAnswer, true, mapPatternAnswer, mapPatternQuestion);
 		maxAnswer = max(maxAnswer, sMaxAnswer);
 		if (sMaxAnswer >= 24 && oi->isSnippet && oi->fullPathIndex >= 0)
 			accumulatedParseRequests[oi->fullPathIndex].skipFullPath = true;
@@ -1106,10 +1108,10 @@ int cQuestionAnswering::analyzeAccumulatedRequests(Source *questionSource,wchar_
 }
 
 int cQuestionAnswering::webSearchForQueryParallel(Source *questionSource,wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
- vector <wstring> &webSearchQueryStrings,int &offset, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion)
+ vector <wstring> &webSearchQueryStrings,int &webSearchQueryStringOffset, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion)
 {
 	vector <searchSource> accumulatedParseRequests;
-	int maxWebSitesFound = accumulateParseRequests(parentSRI, webSitesAskedFor, index, googleSearch, webSearchQueryStrings, offset, accumulatedParseRequests);
+	int maxWebSitesFound = accumulateParseRequests(parentSRI, webSitesAskedFor, index, googleSearch, webSearchQueryStrings, webSearchQueryStringOffset, accumulatedParseRequests);
 	spinParses(questionSource->mysql,accumulatedParseRequests);
 	analyzeAccumulatedRequests(questionSource,derivation, parentSRI, parseOnly, answerSRIs, maxAnswer, accumulatedParseRequests, mapPatternAnswer, mapPatternQuestion);
 	return maxWebSitesFound;
@@ -1117,11 +1119,11 @@ int cQuestionAnswering::webSearchForQueryParallel(Source *questionSource,wchar_t
 
 int cQuestionAnswering::webSearchForQuerySerial(Source *questionSource, wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
  vector <wstring> &webSearchQueryStrings,
-	int &offset, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion)
+	int &webSearchQueryStringOffset, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion)
 {
 	LFS
 	int maxWebSitesFound = -1;
-	for (vector <wstring>::iterator oi = webSearchQueryStrings.begin() + offset, oiEnd = webSearchQueryStrings.end(); oi != oiEnd; oi++, offset++)
+	for (vector <wstring>::iterator oi = webSearchQueryStrings.begin() + webSearchQueryStringOffset, oiEnd = webSearchQueryStrings.end(); oi != oiEnd; oi++, webSearchQueryStringOffset++)
 	{
 		wstring object = *oi, jsonBuffer, filePathOut;
 		vector <wstring> webSites, snippets;
@@ -1142,13 +1144,13 @@ int cQuestionAnswering::webSearchForQuerySerial(Source *questionSource, wchar_t 
 			int sMaxAnswer = -1;
 			wstring webSiteBuffer, epath, headers;
 			hashWebSiteURL(*wsi, epath);
-			int check = answerSRIs.size();
+			//int check = answerSRIs.size();
 			if (!ssi->empty())
 			{
 				Source *source = NULL;
 				if (processSnippet(questionSource,*ssi, epath, source, parseOnly) >= 0)
 				{
-					analyzeQuestionFromSource(questionSource,derivation, *wsi + L" abstract", source, parentSRI, answerSRIs, sMaxAnswer, check, true, mapPatternAnswer, mapPatternQuestion);
+					analyzeQuestionFromSource(questionSource,derivation, *wsi + L" abstract", source, parentSRI, answerSRIs, sMaxAnswer, true, mapPatternAnswer, mapPatternQuestion);
 				}
 			}
 			maxAnswer = max(maxAnswer, sMaxAnswer);
@@ -1157,7 +1159,7 @@ int cQuestionAnswering::webSearchForQuerySerial(Source *questionSource, wchar_t 
 				Source *source = NULL;
 				if (processPath(questionSource,(wchar_t *)filePathOut.c_str(), source, Source::WEB_SEARCH_SOURCE_TYPE, 100, parseOnly) >= 0)
 				{
-					analyzeQuestionFromSource(questionSource,derivation, *wsi, source, parentSRI, answerSRIs, maxAnswer, check, true, mapPatternAnswer, mapPatternQuestion);
+					analyzeQuestionFromSource(questionSource,derivation, *wsi, source, parentSRI, answerSRIs, maxAnswer, true, mapPatternAnswer, mapPatternQuestion);
 					if (limitProcessingForProfiling)
 						return maxWebSitesFound;
 				}
@@ -1167,7 +1169,7 @@ int cQuestionAnswering::webSearchForQuerySerial(Source *questionSource, wchar_t 
 		{
 			wstring quoteLessObject, qlo;
 			quoteLess(*oi, quoteLessObject);
-			for (oi++; oi != oiEnd && quoteLessObject == quoteLess(*oi, qlo); oi++, offset++);
+			for (oi++; oi != oiEnd && quoteLessObject == quoteLess(*oi, qlo); oi++, webSearchQueryStringOffset++);
 			oi--;
 		}
 	}

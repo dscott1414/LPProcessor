@@ -160,7 +160,7 @@ bool getNextUnprocessedSource(MYSQL &mysql,int begin, int end, int sourceType, b
 	_snwprintf(qt, QUERY_BUFFER_LEN, L"select id, path, encoding, start, repeatStart, etext, author, title from sources where id>=%d and sourceType=%d and processed IS NULL and processing IS NULL and start!='**SKIP**' and start!='**START NOT FOUND**'", begin, sourceType);
 	if (end >= 0)
 		_snwprintf(qt + wcslen(qt), QUERY_BUFFER_LEN - wcslen(qt), L" and id<%d", end);
-	wcscat(qt + wcslen(qt), L" order by numWords asc limit 1"); // TEMP DEBUG change back to desc!
+	wcscat(qt + wcslen(qt), L" order by numWords desc limit 1"); 
 	MYSQL_ROW sqlrow = NULL;
 	if (myquery(&mysql, qt, result))
 	{

@@ -30,6 +30,7 @@
 #include <algorithm>
 
 void getSentenceWithTags(Source &source, int patternBegin, int patternEnd, int sentenceBegin, int sentenceEnd, int PEMAPosition, wstring &sentence);
+bool unlockTables(MYSQL &mysql);
 
 // needed for _STLP_DEBUG - these must be set to a legal, unreachable yet never changing value
 unordered_map <wstring,tFI> static_wordMap;
@@ -132,11 +133,13 @@ int createLPProcess(int numProcess, HANDLE &processHandle, DWORD &processId, wch
 	return 0;
 }
 
-int getNumSourcesProcessed(Source &source, int &numSourcesProcessed, __int64 &wordsProcessed, __int64 &sentencesProcessed)
+int getNumSourcesProcessed(MYSQL &mysql, int sourceType, int &numSourcesProcessed, __int64 &wordsProcessed, __int64 &sentencesProcessed)
 {
 	MYSQL_RES * result;
-	if (!myquery(&source.mysql, L"LOCK TABLES sources WRITE")) return -1;
-	if (myquery(&source.mysql, L"select COUNT(id), SUM(numWords), SUM(numSentences) from sources where sourceType = 2 and processed IS not NULL and processing IS NULL and start != '**SKIP**' and start != '**START NOT FOUND**'", result))
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	if (!myquery(&mysql, L"LOCK TABLES sources WRITE")) return -1;
+	wsprintf(qt, L"select COUNT(id), SUM(numWords), SUM(numSentences) from sources where sourceType = %d and processed IS not NULL and processing IS NULL and start != '**SKIP**' and start != '**START NOT FOUND**'", sourceType);
+	if (myquery(&mysql, qt, result))
 	{
 		MYSQL_ROW sqlrow = NULL;
 		if (sqlrow = mysql_fetch_row(result))
@@ -147,7 +150,7 @@ int getNumSourcesProcessed(Source &source, int &numSourcesProcessed, __int64 &wo
 		}
 		mysql_free_result(result);
 	}
-	if (!myquery(&source.mysql, L"UNLOCK TABLES")) return -1;
+	if (!myquery(&mysql, L"UNLOCK TABLES")) return -1;
 	return 0;
 }
 
@@ -186,7 +189,11 @@ bool signalCtrl(DWORD dwProcessId, DWORD dwCtrlEvent)
 	return success;
 }
 
-int startProcesses(Source &source, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum st, int maxProcesses, int numSourcesPerProcess, bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool makeCopyBeforeSourceWrite, bool parseOnly, wstring specialExtension)
+bool getNextUnprocessedSource(MYSQL &mysql, int begin, int end, int sourceType, bool setUsed, int &id, wstring &path, wstring &encoding, wstring &start, int &repeatStart, wstring &etext, wstring &author, wstring &title);
+int getNumSources(MYSQL &mysql, int sourceType, bool left);
+bool anymoreUnprocessedForUnknown(MYSQL &mysql, int sourceType, int step);
+int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum processSourceType, int maxProcesses, int numSourcesPerProcess,
+	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool makeCopyBeforeSourceWrite, bool parseOnly, wstring specialExtension)
 {
 	LFS
 		chdir("source");
@@ -195,8 +202,8 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 	HANDLE *handles = (HANDLE *)calloc(maxProcesses, sizeof(HANDLE));
 	int numProcesses = 0, errorCode = 0, numSourcesProcessedOriginally = 0;
 	__int64 wordsProcessedOriginally = 0, sentencesProcessedOriginally = 0;
-	getNumSourcesProcessed(source, numSourcesProcessedOriginally, wordsProcessedOriginally, sentencesProcessedOriginally);
-	int numSourcesLeft = source.getNumSources(true);
+	getNumSourcesProcessed(mysql,sourceType,numSourcesProcessedOriginally, wordsProcessedOriginally, sentencesProcessedOriginally);
+	int numSourcesLeft = getNumSources(mysql,sourceType,true);
 	maxProcesses = min(maxProcesses, numSourcesLeft);
 	wstring tmpstr;
 	while (!errorCode)
@@ -208,7 +215,7 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			numSourcesLeft = 0;
 			int numSourcesProcessedNow = 0;
 			__int64 wordsProcessedNow = 0, sentencesProcessedNow = 0;
-			getNumSourcesProcessed(source, numSourcesProcessedNow, wordsProcessedNow, sentencesProcessedNow);
+			getNumSourcesProcessed(mysql,sourceType,numSourcesProcessedNow, wordsProcessedNow, sentencesProcessedNow);
 			int processingSeconds = (clock() - startTime) / CLOCKS_PER_SEC;
 			wchar_t consoleTitle[1500];
 			numSourcesProcessedNow -= numSourcesProcessedOriginally;
@@ -246,8 +253,8 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			switch (processKind)
 			{
 			case 0:
-			case 1:result = source.getNextUnprocessedSource(beginSource, endSource, false, id, path, encoding, start, repeatStart, etext, author, title); break;
-			case 2:result = source.anymoreUnprocessedForUnknown(step); break;
+			case 1:result = getNextUnprocessedSource(mysql, beginSource, endSource, sourceType, false, id, path, encoding, start, repeatStart, etext, author, title); break;
+			case 2:result = anymoreUnprocessedForUnknown(mysql, sourceType, step); break;
 			default:result = false; break;
 			}
 		}
@@ -338,7 +345,7 @@ int startProcesses(Source &source, int processKind, int step, int beginSource, i
 			printf("\nCreated process %d:%d", nextProcessIndex, (int)processId);
 		}
 	}
-	if (st != Source::REQUEST_TYPE)
+	if (processSourceType != Source::REQUEST_TYPE)
 	{
 		freeCounter();
 		_exit(0); // fast exit
@@ -1655,7 +1662,7 @@ int populateWordFrequencyTableFromSource(Source source, int sourceId, wstring pa
 								form = atoi(sqlrow[0]);
 							mysql_free_result(result);
 						}
-						source.unlockTables();
+						unlockTables(source.mysql);;
 						if (form == 4)
 							return -2;
 					}
@@ -1677,7 +1684,7 @@ int populateWordFrequencyTableFromSource(Source source, int sourceId, wstring pa
 		wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 		_snwprintf(qt, QUERY_BUFFER_LEN, L"UPDATE sources SET numUnknown=%d,numIllegalWords=%d where id=%d",numUnknown, numIllegalWords,sourceId);
 		myquery(&source.mysql, qt);
-		source.unlockTables();
+		unlockTables(source.mysql);;
 	}
 	else
 	{
@@ -2407,6 +2414,8 @@ wstring stTokenizeWord(wstring tokenizedWord,wstring &originalWord, unsigned lon
 //    0: unable to determine whether class should be corrected, or the class has been corrected. Normal processing should continue.  
 int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceIndex, unordered_map<wstring, int> &errorMap, wstring &partofspeech, int startOfSentence, map<wstring,FormDistribution>::iterator fdi)
 {
+	if (wordSourceIndex + 1 >= source.m.size())
+		return 0;
 	int adverbFormOffset = source.m[wordSourceIndex].word->second.query(adverbForm);
 	int adjectiveFormOffset = source.m[wordSourceIndex].word->second.query(adjectiveForm);
 	int particleFormOffset = source.m[wordSourceIndex].word->second.query(particleForm);
@@ -5545,12 +5554,12 @@ int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *
 			if (source.m[wordSourceIndex].word == Words.sectionWord)
 				wordSourceIndex++;
 		}
-		source.unlockTables();
+		unlockTables(source.mysql);;
 	}
 	else
 	{
 		lplog(LOG_ERROR, L"Unable to read source %d:%s\n", sourceId, path.c_str());
-		source.unlockTables();
+		unlockTables(source.mysql);;
 		return -1;
 	}
 	return 10;
@@ -5935,7 +5944,7 @@ int stanfordCheckMP(Source source, int step, bool pcfg, int MP)
 		}
 	} 
 	*/
-	source.unlockTables();
+	unlockTables(source.mysql);;
 	chdir("source");
 	wchar_t processParameters[1024];
 	int numProcesses = MP;
@@ -6204,7 +6213,7 @@ void wmain(int argc,wchar_t *argv[])
 		break;
 	case 3:
 		{
-			source.unlockTables();
+			unlockTables(source.mysql);;
 			int numFilesProcessed = 0, numNotOpenable = 0, numNewestVersion = 0, numOldVersion = 0, removeErrors = 0, populatedRDFs = 0, numERDFRemoved = 0;
 			if (!myquery(&source.mysql, L"LOCK TABLES noRDFTypes WRITE, noERDFTypes WRITE"))
 				return;
@@ -6224,7 +6233,7 @@ void wmain(int argc,wchar_t *argv[])
 		}
 		break;
 	case 4:
-		source.unlockTables();
+		unlockTables(source.mysql);;
 		{
 			int numFilesProcessed = 0, numNotOpenable = 0, filesRemoved = 0, removeErrors = 0;
 			if (!myquery(&source.mysql, L"LOCK TABLES notwords WRITE"))
@@ -6233,11 +6242,11 @@ void wmain(int argc,wchar_t *argv[])
 		}
 		break;
 	case 5:
-		source.unlockTables();
+		unlockTables(source.mysql);;
 		removeIllegalNames(L"M:\\dbPediaCache");
 		break;
 	case 6:
-		source.unlockTables();
+		unlockTables(source.mysql);;
 		removeOldCacheFiles(source);
 		break;
 	case 7:
@@ -6321,7 +6330,7 @@ void wmain(int argc,wchar_t *argv[])
 		stanfordCheckMP(source, step, true,12);
 		break;
 	}
-	source.unlockTables();
+	unlockTables(source.mysql);;
 }
 
 

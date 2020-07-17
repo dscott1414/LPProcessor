@@ -1307,7 +1307,7 @@ public:
 		auto f = find(wordOrderWords.begin(),wordOrderWords.end(),word->first);
 		if (f == wordOrderWords.end())
 			return -1;
-		return f-wordOrderWords.begin();
+		return (int)(f-wordOrderWords.begin());
 	}
 	int wordOrderSensitive(int at,vector <WordMatch> &m)
 	{
@@ -1788,7 +1788,7 @@ public:
 	int tokenize(wstring title, wstring etext, wstring path, wstring encoding, wstring &start, int &repeatStart, unsigned int &unknownCount);
 	bool write(IOHANDLE file);
 	int sanityCheck(int &wordIndex);
-	bool read(char *buffer,int &where,unsigned int total, bool &parsedOnly, bool printProgress, bool readOnlyParsed, wstring specialExtension);
+	bool read(char *buffer,int &where,unsigned int total, bool &parsedOnly, bool printProgress, wstring specialExtension);
 	bool flush(int fd,void *buffer,int &where);
 	bool FlushFile(HANDLE fd, void *buffer, int &where);
 	bool writeCheck(wstring path);
@@ -1796,8 +1796,9 @@ public:
 	bool write(wstring file,bool S2, bool saveOld, wstring specialExtension);
 	bool findStart(wstring &buffer,wstring &start,int &repeatStart,wstring &title);
 	bool retrieveText(wstring &path,wstring etext,wstring &start,int &repeatStart,wstring author,wstring title);
-	bool readSource(wstring &path,bool checkOnly, bool &parsedOnly, bool printProgress,bool readOnlyParsed, wstring specialExtension);
+	bool readSource(wstring &path,bool checkOnly, bool &parsedOnly, bool printProgress,wstring specialExtension);
 	Source *parentSource;
+	int answerContainedInSource;
 	vector <matchElement> whatMatched;
 	struct wordMapCompare
 	{
