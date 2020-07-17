@@ -8,7 +8,7 @@
 #include "math.h"
 #include "profile.h"
 
-class cohereInfo
+class cCohereInfo
 {
 	int lastLocation;
 	int age;
@@ -26,7 +26,7 @@ void cSource::identifyConversations()
 	for (int I=firstQuote; I>=0; I=m[I].nextQuote,numQuotes++)
 	{
 		// is this an extended embedded story?  if so, skip.
-		if ((m[I].flags&WordMatch::flagEmbeddedStoryResolveSpeakers) && !(m[I].flags&WordMatch::flagEmbeddedStoryBeginResolveSpeakers))
+		if ((m[I].flags&cWordMatch::flagEmbeddedStoryResolveSpeakers) && !(m[I].flags&cWordMatch::flagEmbeddedStoryBeginResolveSpeakers))
 			continue;
 		// does this quote refer to more than one person (speaker and audience)?  if not, skip, this is not a conversation between two or more people.
 		if (m[I].audienceObjectMatches.empty() || m[I].objectMatches.empty() || (intersect(m[I].audienceObjectMatches,m[I].objectMatches,allIn,oneIn) && allIn))
@@ -64,9 +64,9 @@ void cSource::identifyConversations()
 		// c. relations
 
 		// first level map word 
-		map<tIWMM,cohereInfo> coherenceWords;
+		map<tIWMM,cCohereInfo> coherenceWords;
 		// second level map noun/adjective/adverb synonyms and verb verbNet classes
-		map<tIWMM,cohereInfo> coherenceSecondary;
+		map<tIWMM,cCohereInfo> coherenceSecondary;
 		// third level map 
 		// this maps verb/noun/adj/adv relations
 		// rich - millionaire/ rich - money

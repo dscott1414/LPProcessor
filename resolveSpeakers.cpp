@@ -197,11 +197,11 @@ const wchar_t *cSource::getOriginalWord(int I, wstring &out, bool concat, bool m
 	}
 	else
 		out+=m[I].word->first;
-  if (m[I].queryForm(PROPER_NOUN_FORM_NUM)>=0 || (m[I].flags&WordMatch::flagFirstLetterCapitalized))
+  if (m[I].queryForm(PROPER_NOUN_FORM_NUM)>=0 || (m[I].flags&cWordMatch::flagFirstLetterCapitalized))
     out[len]=towupper(out[len]);
-  if (m[I].flags&WordMatch::flagNounOwner)
+  if (m[I].flags&cWordMatch::flagNounOwner)
     out+=L"'s";
-  if (m[I].flags&WordMatch::flagAllCaps)
+  if (m[I].flags&cWordMatch::flagAllCaps)
     for (; out[len]; len++) out[len]=towupper(out[len]);
   return out.c_str();
 }
@@ -212,7 +212,7 @@ void cSource::getOriginalWords(int where,vector <wstring> &wsoStrs,bool notFirst
 	oStr[0]=0;
 	if (notFirst)
 		oStr+=L"+";
-	if (m[where].flags&WordMatch::flagAdjectivalObject)
+	if (m[where].flags&cWordMatch::flagAdjectivalObject)
 	{
 		vector <wstring> originalWsoStrs=wsoStrs;
 		bool makeCopy=false;
@@ -246,7 +246,7 @@ void cSource::getOriginalWords(int where,vector <wstring> &wsoStrs,bool notFirst
 				wsoStrs.push_back(L"");
 			wstring logres;
 			objectString(objects.begin()+m[where].getObject(),logres,true);
-			if (m[m[where].endObjectPosition-1].flags&WordMatch::flagNounOwner)
+			if (m[m[where].endObjectPosition-1].flags&cWordMatch::flagNounOwner)
 			{
 				if (logres[logres.size()-1]==L' ')
 					logres.erase(logres.size()-1);
@@ -347,7 +347,7 @@ wstring cSource::whereString(int where,wstring &logres,bool shortFormat,int incl
 		lastWord+=numWords;
 	lastWord--;
 	if (lastWord<0) lastWord=where;
-	bool isLastUpper=m[lastWord].queryForm(PROPER_NOUN_FORM_NUM)>=0 || (m[lastWord].flags&WordMatch::flagFirstLetterCapitalized) || (m[lastWord].flags&WordMatch::flagAllCaps);
+	bool isLastUpper=m[lastWord].queryForm(PROPER_NOUN_FORM_NUM)>=0 || (m[lastWord].flags&cWordMatch::flagFirstLetterCapitalized) || (m[lastWord].flags&cWordMatch::flagAllCaps);
 	if (!isLastUpper) return logres;
 	int I=where;
 	if (m[I].endObjectPosition>(signed)I)
@@ -356,7 +356,7 @@ wstring cSource::whereString(int where,wstring &logres,bool shortFormat,int incl
 	for (; I<(signed)m.size() && isLastUpper && m[I].word!=Words.TABLE && m[I].word!=Words.END_COLUMN && m[I].word!=Words.END_COLUMN_HEADERS && m[I].word!=Words.MISSING_COLUMN  && !m[I].word->second.isSeparator() && m[I].word->first[0]!=L'.'; I++)
 	{
 		isLastUpper=!iswalpha(m[I].word->first[0]) || m[I].queryWinnerForm(prepositionForm)>=0 || m[I].queryWinnerForm(coordinatorForm)>=0 || m[I].queryWinnerForm(determinerForm)>=0 || 
-			((m[I].queryForm(PROPER_NOUN_FORM_NUM)>=0 || (m[I].flags&WordMatch::flagFirstLetterCapitalized) || (m[I].flags&WordMatch::flagAllCaps)));
+			((m[I].queryForm(PROPER_NOUN_FORM_NUM)>=0 || (m[I].flags&cWordMatch::flagFirstLetterCapitalized) || (m[I].flags&cWordMatch::flagAllCaps)));
 		if (!isLastUpper)
 			break;
 		//if (!isUpper)
@@ -478,11 +478,11 @@ void cSource::printSpeakerQueue(int where)
 // and textBefore OR textAfter, quotedString is true.
 bool cSource::quotedString(unsigned int beginQuote,unsigned int endQuote,bool &noTextBeforeOrAfter,bool &noSpeakerAfterward)
 { LFS
-  if (noSpeakerAfterward=((m[endQuote].flags&WordMatch::flagInsertedQuote)!=0)) return false;
+  if (noSpeakerAfterward=((m[endQuote].flags&cWordMatch::flagInsertedQuote)!=0)) return false;
   bool EOSEmbeddedInside=m[endQuote-1].word->first==L"." || m[endQuote-1].word->first==L"?" || m[endQuote-1].word->first==L"!";
 	if (endQuote-beginQuote>5 && !EOSEmbeddedInside)
 	{
-		for (vector <WordMatch>::iterator im=m.begin()+beginQuote+1,imEnd=m.begin()+endQuote-1; im!=imEnd; im++)
+		for (vector <cWordMatch>::iterator im=m.begin()+beginQuote+1,imEnd=m.begin()+endQuote-1; im!=imEnd; im++)
 			if (EOSEmbeddedInside=im->word->first==L"." || im->word->first==L"?" || im->word->first==L"!")
 				break;
 	}
@@ -628,23 +628,23 @@ bool cSource::isPsychologicalFeature(int where)
 			if (w!=Words.end() && w->second.mainEntry!=wNULL) 
 			{
 				if (w!=Words.end() && w->second.query(nounForm)<0) continue;
-				w->second.flags|=tFI::physicalObjectByWN;
+				w->second.flags|=cSourceWordInfo::physicalObjectByWN;
 				w=w->second.mainEntry;
 			}
 			if (w!=Words.end() && w->second.query(nounForm)<0) continue;
 			if (w!=Words.end()) 
-				w->second.flags|=tFI::physicalObjectByWN;
+				w->second.flags|=cSourceWordInfo::physicalObjectByWN;
 		}
 		for (unsigned int I=0; measurableObject[I]; I++)
 		{
 			w=Words.query(measurableObject[I]);
 			if (w!=Words.end() && w->second.mainEntry!=wNULL) 
 			{
-				w->second.flags|=tFI::physicalObjectByWN;
+				w->second.flags|=cSourceWordInfo::physicalObjectByWN;
 				w=w->second.mainEntry;
 			}
 			if (w!=Words.end()) 
-				w->second.flags|=tFI::physicalObjectByWN;
+				w->second.flags|=cSourceWordInfo::physicalObjectByWN;
 		}
 		for (set <wstring>::iterator pi=psychological.begin(),piEnd=psychological.end(); pi!=piEnd; pi++)
 		{
@@ -652,33 +652,33 @@ bool cSource::isPsychologicalFeature(int where)
 			if (w!=Words.end() && w->second.mainEntry!=wNULL) 
 			{
 				if (w!=Words.end() && w->second.query(nounForm)<0) continue;
-				if (!(w->second.flags&tFI::physicalObjectByWN)) 
-					w->second.flags|=tFI::notPhysicalObjectByWN;
+				if (!(w->second.flags&cSourceWordInfo::physicalObjectByWN)) 
+					w->second.flags|=cSourceWordInfo::notPhysicalObjectByWN;
 				w=w->second.mainEntry;
 			}
 			if (w!=Words.end() && w->second.query(nounForm)<0) continue;
-			if (w!=Words.end() && !(w->second.flags&tFI::physicalObjectByWN)) 
-				w->second.flags|=tFI::notPhysicalObjectByWN;
+			if (w!=Words.end() && !(w->second.flags&cSourceWordInfo::physicalObjectByWN)) 
+				w->second.flags|=cSourceWordInfo::notPhysicalObjectByWN;
 		}
 		for (unsigned int I=0; notMeasurableObject[I]; I++)
 		{
 			w=Words.query(notMeasurableObject[I]);
 			if (w!=Words.end() && w->second.mainEntry!=wNULL) 
 			{
-				w->second.flags&=~tFI::physicalObjectByWN;
-				w->second.flags|=tFI::notPhysicalObjectByWN;
+				w->second.flags&=~cSourceWordInfo::physicalObjectByWN;
+				w->second.flags|=cSourceWordInfo::notPhysicalObjectByWN;
 				w=w->second.mainEntry;
 			}
 			if (w!=Words.end()) 
 			{
-				w->second.flags&=~tFI::physicalObjectByWN;
-				w->second.flags|=tFI::notPhysicalObjectByWN;
+				w->second.flags&=~cSourceWordInfo::physicalObjectByWN;
+				w->second.flags|=cSourceWordInfo::notPhysicalObjectByWN;
 			}
 		}
 	}
 	w=m[where].word;
-	if (w->second.mainEntry!=wNULL) return (w->second.mainEntry->second.flags&tFI::notPhysicalObjectByWN)!=0;
-	return (w->second.flags&tFI::notPhysicalObjectByWN)!=0;
+	if (w->second.mainEntry!=wNULL) return (w->second.mainEntry->second.flags&cSourceWordInfo::notPhysicalObjectByWN)!=0;
+	return (w->second.flags&cSourceWordInfo::notPhysicalObjectByWN)!=0;
 }
 */
 
@@ -1150,12 +1150,12 @@ void cSource::adjustSaliencesByGenderNumberAndOccurrenceAgeAdjust(int where,int 
   }
 }
 
-void cSource::printNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,tFI::cRMap::wordMapCompare > &wnMap,wchar_t *type,wchar_t *subtype,wchar_t *subsubtype)
+void cSource::printNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap,wchar_t *type,wchar_t *subtype,wchar_t *subsubtype)
 { LFS
 	wstring nyms;
 	for (vector <tIWMM>::iterator ni=nyms1.begin(),niEnd=nyms1.end(); ni!=niEnd; ni++)
 	{
-		if ((*ni)->second.flags&tFI::genericGenderIgnoreMatch) continue;
+		if ((*ni)->second.flags&cSourceWordInfo::genericGenderIgnoreMatch) continue;
 		nyms+=(*ni)->first+L" (";
 		for (vector <tIWMM>::iterator cni=wnMap[*ni].begin(),cniEnd=wnMap[*ni].end(); cni!=cniEnd; cni++)
 			nyms+=(*cni)->first+L" ";
@@ -1164,14 +1164,14 @@ void cSource::printNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,tFI::cR
 	lplog(LOG_RESOLUTION,L"NYMS %s %s %s: %s",type,subtype,subsubtype,nyms.c_str());
 }
 
-void cSource::printNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,tFI::cRMap::wordMapCompare > &wnMap1,
-											 vector <tIWMM> &nyms2, map <tIWMM,vector <tIWMM>,tFI::cRMap::wordMapCompare > &wnMap2,wchar_t *type,wchar_t *subtype,
+void cSource::printNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap1,
+											 vector <tIWMM> &nyms2, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap2,wchar_t *type,wchar_t *subtype,
 											 int sharedMembers,wstring &logMatch)
 { LFS
 	wstring nyms,nextLine;
 	for (vector <tIWMM>::iterator ni=nyms1.begin(),niEnd=nyms1.end(); ni!=niEnd; ni++)
 	{
-		if ((*ni)->second.flags&tFI::genericGenderIgnoreMatch) continue;
+		if ((*ni)->second.flags&cSourceWordInfo::genericGenderIgnoreMatch) continue;
 		nyms+=(*ni)->first+L" ";
 		nextLine+=L"     "+(*ni)->first+L":(";
 		for (vector <tIWMM>::iterator cni=wnMap1[*ni].begin(),cniEnd=wnMap1[*ni].end(); cni!=cniEnd; cni++)
@@ -1181,7 +1181,7 @@ void cSource::printNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,tFI::cR
 	nyms+=L" <-> ";
 	for (vector <tIWMM>::iterator ni=nyms2.begin(),niEnd=nyms2.end(); ni!=niEnd; ni++)
 	{
-		if ((*ni)->second.flags&tFI::genericGenderIgnoreMatch) continue;
+		if ((*ni)->second.flags&cSourceWordInfo::genericGenderIgnoreMatch) continue;
 		nyms+=(*ni)->first+L" ";
 		nextLine+=L"     "+(*ni)->first+L":(";
 		for (vector <tIWMM>::iterator cni=wnMap2[*ni].begin(),cniEnd=wnMap2[*ni].end(); cni!=cniEnd; cni++)
@@ -1191,33 +1191,33 @@ void cSource::printNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,tFI::cR
 	lplog(LOG_RESOLUTION,L"NYMS %s %s: %s [%d %s]\n%s",type,subtype,nyms.c_str(),sharedMembers,logMatch.c_str(),nextLine.c_str());
 }
 
-bool cSource::setNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,tFI::cRMap::wordMapCompare > &wnMap)
+bool cSource::setNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap)
 { LFS
 	for (vector <tIWMM>::iterator ni=nyms1.begin(),niEnd=nyms1.end(); ni!=niEnd; ni++)
 	{
-		if (!((*ni)->second.flags&tFI::alreadyTaken))
+		if (!((*ni)->second.flags&cSourceWordInfo::alreadyTaken))
 		{
-			(*ni)->second.flags|=tFI::intersectionGroup;
+			(*ni)->second.flags|=cSourceWordInfo::intersectionGroup;
 			for (vector <tIWMM>::iterator cni=wnMap[*ni].begin(),cniEnd=wnMap[*ni].end(); cni!=cniEnd; cni++)
-				if (!((*cni)->second.flags&tFI::alreadyTaken))
-					(*cni)->second.flags|=tFI::intersectionGroup;
+				if (!((*cni)->second.flags&cSourceWordInfo::alreadyTaken))
+					(*cni)->second.flags|=cSourceWordInfo::intersectionGroup;
 		}
 	}
 	return !nyms1.empty();
 }
 
-void cSource::clearNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,tFI::cRMap::wordMapCompare > &wnMap)
+void cSource::clearNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap)
 { LFS
 	for (vector <tIWMM>::iterator ni=nyms1.begin(),niEnd=nyms1.end(); ni!=niEnd; ni++)
 	{
-		(*ni)->second.flags&=~tFI::intersectionGroup;
+		(*ni)->second.flags&=~cSourceWordInfo::intersectionGroup;
 		for (vector <tIWMM>::iterator cni=wnMap[*ni].begin(),cniEnd=wnMap[*ni].end(); cni!=cniEnd; cni++)
-			(*cni)->second.flags&=~tFI::intersectionGroup;
+			(*cni)->second.flags&=~cSourceWordInfo::intersectionGroup;
 	}
 }
 
-int cSource::nymMapMatch(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,tFI::cRMap::wordMapCompare > &wnMap1,
-										 vector <tIWMM> &nyms2, map <tIWMM,vector <tIWMM>,tFI::cRMap::wordMapCompare > &wnMap2,
+int cSource::nymMapMatch(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap1,
+										 vector <tIWMM> &nyms2, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap2,
 										 bool mapOnly,bool getFromMatch,bool traceNymMatch,
 										 wstring &logMatch,tIWMM &fromMatch,tIWMM &toMatch,tIWMM &toMapMatch,wchar_t *type,wchar_t *subtype)
 { LFS
@@ -1227,8 +1227,8 @@ int cSource::nymMapMatch(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,tFI::c
 	// are there any destinations set?
 	for (vector <tIWMM>::iterator ni2=nyms2.begin(),ni2End=nyms2.end(); ni2!=ni2End; ni2++)
 	{
-		if ((*ni2)->second.flags&tFI::genericGenderIgnoreMatch) continue;
-		if (!mapOnly && ((*ni2)->second.flags&(tFI::intersectionGroup|tFI::alreadyTaken))==tFI::intersectionGroup)
+		if ((*ni2)->second.flags&cSourceWordInfo::genericGenderIgnoreMatch) continue;
+		if (!mapOnly && ((*ni2)->second.flags&(cSourceWordInfo::intersectionGroup|cSourceWordInfo::alreadyTaken))==cSourceWordInfo::intersectionGroup)
 		{
 			if (getFromMatch)
 				for (vector <tIWMM>::iterator ni1=nyms1.begin(),ni1End=nyms1.end(); ni1!=ni1End; ni1++)
@@ -1246,13 +1246,13 @@ int cSource::nymMapMatch(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,tFI::c
 			toMapMatch=*ni2;
 			if (traceNymMatch)
 				logMatch+=L"TO[O]:"+(*ni2)->first+L" ";
-			(*ni2)->second.flags|=tFI::alreadyTaken;
+			(*ni2)->second.flags|=cSourceWordInfo::alreadyTaken;
 			markedTaken.push_back(*ni2);
 		}
-		if (!((*ni2)->second.flags&tFI::alreadyTaken))
+		if (!((*ni2)->second.flags&cSourceWordInfo::alreadyTaken))
 		{
 			for (vector <tIWMM>::iterator cni2=wnMap2[*ni2].begin(),cni2End=wnMap2[*ni2].end(); cni2!=cni2End; cni2++)
-				if (((*cni2)->second.flags&(tFI::intersectionGroup|tFI::alreadyTaken|tFI::genericGenderIgnoreMatch))==tFI::intersectionGroup)
+				if (((*cni2)->second.flags&(cSourceWordInfo::intersectionGroup|cSourceWordInfo::alreadyTaken|cSourceWordInfo::genericGenderIgnoreMatch))==cSourceWordInfo::intersectionGroup)
 				{
 					if (getFromMatch)
 						for (vector <tIWMM>::iterator ni1=nyms1.begin(),ni1End=nyms1.end(); ni1!=ni1End; ni1++)
@@ -1272,26 +1272,26 @@ int cSource::nymMapMatch(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,tFI::c
 						logMatch+=L"TO[M]:"+(*ni2)->first+L" ("+(*cni2)->first+L") ";
 					if (!mapOnly)
 					{
-						(*cni2)->second.flags|=tFI::alreadyTaken;
+						(*cni2)->second.flags|=cSourceWordInfo::alreadyTaken;
 						markedTaken.push_back(*cni2);
 					}
 				}
 				else if (traceNymMatch)
-					lplog(LOG_RESOLUTION,L"(*cni2)->first=%s ((*cni2)->second.flags&(tFI::intersectionGroup|tFI::alreadyTaken|tFI::genericGenderIgnoreMatch))=%s %s %s",
+					lplog(LOG_RESOLUTION,L"(*cni2)->first=%s ((*cni2)->second.flags&(cSourceWordInfo::intersectionGroup|cSourceWordInfo::alreadyTaken|cSourceWordInfo::genericGenderIgnoreMatch))=%s %s %s",
 					      (*cni2)->first.c_str(),
-								((*cni2)->second.flags&(tFI::intersectionGroup)) ? L"true" : L"false",
-								((*cni2)->second.flags&(tFI::alreadyTaken)) ? L"true" : L"false",
-								((*cni2)->second.flags&(tFI::genericGenderIgnoreMatch)) ? L"true" : L"false");
+								((*cni2)->second.flags&(cSourceWordInfo::intersectionGroup)) ? L"true" : L"false",
+								((*cni2)->second.flags&(cSourceWordInfo::alreadyTaken)) ? L"true" : L"false",
+								((*cni2)->second.flags&(cSourceWordInfo::genericGenderIgnoreMatch)) ? L"true" : L"false");
 		}
 		else if (traceNymMatch)
-			lplog(LOG_RESOLUTION,L"(*ni2)->first=%s ((*ni2)->second.flags&tFI::alreadyTaken)=%s",(*ni2)->first.c_str(),((*ni2)->second.flags&tFI::alreadyTaken) ? L"true" : L"false");
+			lplog(LOG_RESOLUTION,L"(*ni2)->first=%s ((*ni2)->second.flags&cSourceWordInfo::alreadyTaken)=%s",(*ni2)->first.c_str(),((*ni2)->second.flags&cSourceWordInfo::alreadyTaken) ? L"true" : L"false");
 
 	}
 	clearNyms(nyms1,wnMap1); // clear source
 	if (traceNymMatch)
     printNyms(nyms1,wnMap1,nyms2,wnMap2,type,subtype,sharedMembers,logMatch);
 	for (vector <tIWMM>::iterator mi=markedTaken.begin(),miEnd=markedTaken.end(); mi!=miEnd; mi++)
-		(*mi)->second.flags&=~tFI::alreadyTaken;
+		(*mi)->second.flags&=~cSourceWordInfo::alreadyTaken;
 	return sharedMembers;	
 }
 
@@ -1333,7 +1333,7 @@ void cSource::adjustSaliencesByGenderNumberAndOccurrence(int where,int object,bo
   {
     int inflectionFlags=m[where].word->second.inflectionFlags; // only valid if object<0
     plural=(inflectionFlags&PLURAL_OWNER)==PLURAL_OWNER;
-    if (m[where].queryWinnerForm(PROPER_NOUN_FORM_NUM)>=0 || (m[where].flags&WordMatch::flagFirstLetterCapitalized)!=0 ||
+    if (m[where].queryWinnerForm(PROPER_NOUN_FORM_NUM)>=0 || (m[where].flags&cWordMatch::flagFirstLetterCapitalized)!=0 ||
       (inflectionFlags&(MALE_GENDER_ONLY_CAPITALIZED|FEMALE_GENDER_ONLY_CAPITALIZED))==0)
     {
       matchMale=male=(inflectionFlags&(MALE_GENDER|MALE_GENDER_ONLY_CAPITALIZED))!=0;
@@ -1447,7 +1447,7 @@ void cSource::adjustSaliencesByGenderNumberAndOccurrence(int where,int object,bo
 			if (inPrimaryQuote && currentSpeakerGroup<speakerGroups.size() && sg->speakers.size()<=2 && 
 			   (((object>=0 && o->objectClass==PRONOUN_OBJECT_CLASS) || object<0) && (m[where].word->second.inflectionFlags&THIRD_PERSON)) &&
 					(sg->speakers.find(lsi->om.object)!=sg->speakers.end() || matchAliases(where,lsi->om.object,sg->speakers)) &&
-          (!(m[lastOpeningPrimaryQuote].flags&WordMatch::flagQuoteContainsSpeaker) || !in(lsi->om.object,m[lastOpeningPrimaryQuote].getRelObject())))
+          (!(m[lastOpeningPrimaryQuote].flags&cWordMatch::flagQuoteContainsSpeaker) || !in(lsi->om.object,m[lastOpeningPrimaryQuote].getRelObject())))
 				lsi->res+=L"-3rdPersonInSPGroup[10000]";
 			if (inSecondaryQuote && esg!=sgNULL && esg->speakers.size()<=2 &&
 			   ((((object>=0 && o->objectClass==PRONOUN_OBJECT_CLASS) || object<0) && (m[where].word->second.inflectionFlags&THIRD_PERSON)) || 
@@ -1582,7 +1582,7 @@ void cSource::adjustSaliencesByGenderNumberAndOccurrence(int where,int object,bo
 			  ((object>=0 && o->objectClass==PRONOUN_OBJECT_CLASS) || object<0) && 
 			  (m[where].word->second.inflectionFlags&THIRD_PERSON) && 
 				(sg->speakers.find(lsi->om.object)!=sg->speakers.end() || matchAliases(where,lsi->om.object,sg->speakers)) &&
-        (!(m[lastOpeningPrimaryQuote].flags&WordMatch::flagQuoteContainsSpeaker) || !in(lsi->om.object,m[lastOpeningPrimaryQuote].getRelObject())))
+        (!(m[lastOpeningPrimaryQuote].flags&cWordMatch::flagQuoteContainsSpeaker) || !in(lsi->om.object,m[lastOpeningPrimaryQuote].getRelObject())))
 			lsi->om.salienceFactor-=10000;
 		if (inSecondaryQuote && esg!=sgNULL && esg->speakers.size()<=2 &&
 		   ((((object>=0 && o->objectClass==PRONOUN_OBJECT_CLASS) || object<0) && (m[where].word->second.inflectionFlags&THIRD_PERSON)) || 
@@ -2321,7 +2321,7 @@ void cSource::moveNyms(int where,int toObject,int fromObject,wchar_t *fromWhere)
 			objects[toObject].associatedAdjectives.push_back(*si);
 	objects[toObject].duplicates.insert(objects[fromObject].duplicates.begin(),objects[fromObject].duplicates.end());
 	objects[toObject].updateGenericGenders(objects[fromObject].genericNounMap,objects[fromObject].genericAge);
-	if (!(m[objects[toObject].originalLocation].word->second.flags&tFI::genericGenderIgnoreMatch) && 
+	if (!(m[objects[toObject].originalLocation].word->second.flags&cSourceWordInfo::genericGenderIgnoreMatch) && 
 		  objects[toObject].updateGenericGender(where,m[objects[fromObject].originalLocation].word,objects[fromObject].objectGenericAge,L"replaceObject",debugTrace))
 	{
 		if (objects[toObject].objectGenericAge==-1 && objects[fromObject].objectGenericAge!=-1)
@@ -2604,7 +2604,7 @@ bool cSource::pushObjectIntoLocalFocus(int where, int matchingObject, bool ident
 		return false;
 	wstring tmpstr;
 	int beginEntirePosition=m[where].beginObjectPosition; // if this is an adjectival object 
-	if (m[where].flags&WordMatch::flagAdjectivalObject) 
+	if (m[where].flags&cWordMatch::flagAdjectivalObject) 
 		for (; beginEntirePosition>=0 && m[beginEntirePosition].principalWherePosition<0; beginEntirePosition--);
 	bool physicallyEvaluated;
   if ((lsi=in(matchingObject))==localObjects.end() || (lsi->numEncounters==0 && lsi->numIdentifiedAsSpeaker==0))
@@ -2622,7 +2622,7 @@ bool cSource::pushObjectIntoLocalFocus(int where, int matchingObject, bool ident
 				(oc!=META_GROUP_OBJECT_CLASS || currentSpeakerGroup<speakerGroups.size()) &&
 				// pushObjectIntoLocalFocus may be called in a hail situation with inPrimaryQuote==false, though it really is in a quote.
 				!(m[where].objectRole&HAIL_ROLE) &&
-				!(m[where].flags&WordMatch::flagAdjectivalObject) &&
+				!(m[where].flags&cWordMatch::flagAdjectivalObject) &&
 				!objects[matchingObject].neuter && 
 			  (section>=sections.size() || where>=(signed)sections[section].endHeader))
 		{
@@ -2638,11 +2638,11 @@ bool cSource::pushObjectIntoLocalFocus(int where, int matchingObject, bool ident
 													 physicallyPresentPosition(where,beginEntirePosition,physicallyEvaluated,false) && physicallyEvaluated && !objects[matchingObject].isTimeObject));
     lsi=localObjects.begin()+localObjects.size()-1;
 		if (lsi->physicallyPresent && notSpeaker && (m[where].endObjectPosition-m[where].beginObjectPosition)==1 &&
-			(m[where].word->second.timeFlags&T_UNIT) && (m[where].flags&WordMatch::flagFirstLetterCapitalized))
+			(m[where].word->second.timeFlags&T_UNIT) && (m[where].flags&cWordMatch::flagFirstLetterCapitalized))
 			lsi->physicallyPresent=false;
 		testLocalFocus(where,lsi);
 		if (!notSpeaker && 
-			  ((m[where].flags&WordMatch::flagUnresolvableObjectResolvedThroughSpeakerGroup) || 
+			  ((m[where].flags&cWordMatch::flagUnresolvableObjectResolvedThroughSpeakerGroup) || 
 			   ((m[where].objectRole&IN_PRIMARY_QUOTE_ROLE) && (m[where].objectRole&(HAIL_ROLE|PP_OBJECT_ROLE|IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE|IN_QUOTE_REFERRING_AUDIENCE_ROLE)))))
 			lsi->physicallyPresent=lsi->occurredOutsidePrimaryQuote=true;
     if (debugTrace.traceSpeakerResolution)
@@ -2665,10 +2665,10 @@ bool cSource::pushObjectIntoLocalFocus(int where, int matchingObject, bool ident
 		if (identifiedAsSpeaker && !notSpeaker && !currentlyPhysicallyPresent && m[where].getObject()>=0 && objects[m[where].getObject()].objectClass==NAME_OBJECT_CLASS) 
 			currentlyPhysicallyPresent=physicallyEvaluated=true;
 		if (!lsi->physicallyPresent && currentlyPhysicallyPresent && notSpeaker && (m[where].endObjectPosition-m[where].beginObjectPosition)==1 &&
-			(m[where].word->second.timeFlags&T_UNIT) && (m[where].flags&WordMatch::flagFirstLetterCapitalized))
+			(m[where].word->second.timeFlags&T_UNIT) && (m[where].flags&cWordMatch::flagFirstLetterCapitalized))
 			currentlyPhysicallyPresent=false;
 		testLocalFocus(where,lsi);
-		//if (m[where].getObject()>=0 && objects[m[where].getObject()].objectClass==BODY_OBJECT_CLASS && (m[where].word->second.flags&tFI::physicalObjectByWN)==0)
+		//if (m[where].getObject()>=0 && objects[m[where].getObject()].objectClass==BODY_OBJECT_CLASS && (m[where].word->second.flags&cSourceWordInfo::physicalObjectByWN)==0)
 		//{
 		//	currentlyPhysicallyPresent=false;
 		//}
@@ -2865,7 +2865,7 @@ void cSource::narrowGender(int where,int toObject)
     int inflectionFlags=m[where].word->second.inflectionFlags;
     if ((inflectionFlags&(MALE_GENDER|MALE_GENDER_ONLY_CAPITALIZED)) ^ (inflectionFlags&(FEMALE_GENDER|FEMALE_GENDER_ONLY_CAPITALIZED)))
     {
-      if (m[where].queryWinnerForm(PROPER_NOUN_FORM_NUM)>=0 ||  (m[where].flags&WordMatch::flagFirstLetterCapitalized)!=0 ||
+      if (m[where].queryWinnerForm(PROPER_NOUN_FORM_NUM)>=0 ||  (m[where].flags&cWordMatch::flagFirstLetterCapitalized)!=0 ||
         (inflectionFlags&(MALE_GENDER_ONLY_CAPITALIZED|FEMALE_GENDER_ONLY_CAPITALIZED))==0)
       {
         objects[toObject].male=(inflectionFlags&(MALE_GENDER|MALE_GENDER_ONLY_CAPITALIZED))!=0;
@@ -2998,7 +2998,7 @@ void cSource::matchAdditionalObjectsIfPlural(int where,bool isPlural,bool atLeas
 		vector <int> &lsOffsets)
 { LFS
 	int I;
-  vector <WordMatch>::iterator im=m.begin()+where;
+  vector <cWordMatch>::iterator im=m.begin()+where;
   int object=im->getObject();
 	// if a plural pronoun, and at least one object has matched, and what is being matched is not a gendered body object,
 	// and what has been matched is single and either only one object has been matched or one object could merge into the other object
@@ -3121,13 +3121,13 @@ void cSource::preferRelatedObjects(int where)
 	tIWMM verb=m[m[where].getRelVerb()].getMainEntry(),winner;
 	if (verb->first==L"am") // too common; unreliable without usage of adjectives or adverbs (later?)
 		return;
-	tFI::cRMap *rm;
+	cSourceWordInfo::cRMap *rm;
 	int relationType=(m[where].objectRole&SUBJECT_ROLE) ? SubjectWordWithVerb : DirectWordWithVerb;
 	vector <int> frequencies;
 	for (int I=0; I<(signed)m[where].objectMatches.size(); I++)
 	{
 		tIWMM w=resolveToClass(objects[m[where].objectMatches[I].object].originalLocation);
-		tFI::cRMap::tIcRMap tr=tNULL;
+		cSourceWordInfo::cRMap::tIcRMap tr=tNULL;
 		if ((rm=w->second.relationMaps[relationType]) && ((tr=rm->r.find(verb->first))!=rm->r.end()))
 		{
 			wordsWithFrequency++;
@@ -3166,7 +3166,7 @@ bool cSource::chooseBest(int where,bool definitelySpeaker,bool inPrimaryQuote,bo
 	int beginPosition=where;
 	while (beginPosition>0 && m[beginPosition].principalWherePosition<0) beginPosition--;
 	bool physicallyEvaluated,physicallyPresent=physicallyPresentPosition(where,beginPosition,physicallyEvaluated,false);
-	bool genericGender=(m[where].word->second.flags&tFI::genericGenderIgnoreMatch) && (m[where].endObjectPosition-m[where].beginObjectPosition)==2 && m[m[where].beginObjectPosition].word->first==L"the";
+	bool genericGender=(m[where].word->second.flags&cSourceWordInfo::genericGenderIgnoreMatch) && (m[where].endObjectPosition-m[where].beginObjectPosition)==2 && m[m[where].beginObjectPosition].word->first==L"the";
 	bool genericGenderOverride=false;
 	// an introduction...  rule out all objects that are physically present or recently PP.  But this is not an unresolvable object either.
 	// there lay the girl
@@ -3174,7 +3174,7 @@ bool cSource::chooseBest(int where,bool definitelySpeaker,bool inPrimaryQuote,bo
   vector <cLocalFocus>::iterator highest[HIGHEST];
 	int sf,I,ca;
   for (I=0; I<HIGHEST; I++) highest[I]=localObjects.end();
-  vector <WordMatch>::iterator im=m.begin()+where;
+  vector <cWordMatch>::iterator im=m.begin()+where;
   int object=im->getObject();
   bool neuter=(object>=0 && objects[object].neuter) || (im->word->second.inflectionFlags&NEUTER_GENDER)==NEUTER_GENDER;
   vector <cSpeakerGroup>::iterator csg=speakerGroups.begin()+currentSpeakerGroup;
@@ -3227,7 +3227,7 @@ bool cSource::chooseBest(int where,bool definitelySpeaker,bool inPrimaryQuote,bo
 		//   otherwise it will block local objects introduced in the speech prior to the embedded story.
 		bool loInEmbeddedStory=lsi->lastWhere>=0 && (m[lsi->lastWhere].objectRole&IN_EMBEDDED_STORY_OBJECT_ROLE);
 		// if notSpeaker && adjective, then don't match (lady==lady's)@18246 should be matched to Mrs. Vandermeyer
-		if (ca && !lsi->physicallyPresent && physicallyPresent && (sf<0 || (lsi->notSpeaker && lsi->lastWhere>=0 && (m[lsi->lastWhere].flags&WordMatch::flagAdjectivalObject))) && 
+		if (ca && !lsi->physicallyPresent && physicallyPresent && (sf<0 || (lsi->notSpeaker && lsi->lastWhere>=0 && (m[lsi->lastWhere].flags&cWordMatch::flagAdjectivalObject))) && 
 			 (loInEmbeddedStory || !inEmbeddedStory))
 			continue;
 		// if this object has a negative salience and positive common adjectives (so it is an old object that wouldn't
@@ -3343,7 +3343,7 @@ bool cSource::chooseBest(int where,bool definitelySpeaker,bool inPrimaryQuote,bo
 		/*
 		// if choosing between two speakers, and quote has embeddedStory and the quote before also has embedded story, then prefer the previous speaker
 		else if (resolveForSpeaker && 
-				(m[lastOpeningPrimaryQuote].flags&WordMatch::flagEmbeddedStoryResolveSpeakers) && previousPrimaryQuote>=0 && (m[previousPrimaryQuote].flags&WordMatch::flagEmbeddedStoryResolveSpeakers) &&
+				(m[lastOpeningPrimaryQuote].flags&cWordMatch::flagEmbeddedStoryResolveSpeakers) && previousPrimaryQuote>=0 && (m[previousPrimaryQuote].flags&cWordMatch::flagEmbeddedStoryResolveSpeakers) &&
 				m[previousPrimaryQuote].objectMatches.size()==1 &&
 				((highest[0]->om.object==m[previousPrimaryQuote].objectMatches[0].object) ^ (highest[1]->om.object==m[previousPrimaryQuote].objectMatches[0].object)))
 		{
@@ -3379,15 +3379,15 @@ bool cSource::chooseBest(int where,bool definitelySpeaker,bool inPrimaryQuote,bo
 							speakerResolutionFlagsString(m[trackBack].flags,tmpstr3).c_str(),
 							m[previousPrimaryQuote].getQuoteForwardLink(),lastOpeningPrimaryQuote,
 							m[trackBack].nextQuote,lastOpeningPrimaryQuote,
-							(m[previousPrimaryQuote].flags&WordMatch::flagLastContinuousQuote) ? L"true":L"false",
+							(m[previousPrimaryQuote].flags&cWordMatch::flagLastContinuousQuote) ? L"true":L"false",
 							roleString(where,tmpstr).c_str(),
 							objectString(m[previousPrimaryQuote].objectMatches,tmpstr2,true).c_str());
 			}
 			*/
-			if (((m[trackBack].flags&WordMatch::flagDefiniteResolveSpeakers) || 
+			if (((m[trackBack].flags&cWordMatch::flagDefiniteResolveSpeakers) || 
 				   (m[trackBack].speakerPosition>=0 && m[m[trackBack].speakerPosition].getObject()>=0 && objects[m[m[trackBack].speakerPosition].getObject()].objectClass==NAME_OBJECT_CLASS)) && 
 				m[previousPrimaryQuote].getQuoteForwardLink()!=lastOpeningPrimaryQuote && // just in case this is introduced in the same paragraph but in a second quote
-				m[trackBack].nextQuote==lastOpeningPrimaryQuote && !(m[previousPrimaryQuote].flags&WordMatch::flagLastContinuousQuote) && // quote immediately before - no intervening paragraph
+				m[trackBack].nextQuote==lastOpeningPrimaryQuote && !(m[previousPrimaryQuote].flags&cWordMatch::flagLastContinuousQuote) && // quote immediately before - no intervening paragraph
 				m[previousPrimaryQuote].objectMatches.size()==1 && (ambiguousHail=in(m[previousPrimaryQuote].objectMatches[0].object))!=localObjects.end() &&
 				ambiguousHail->om.salienceFactor>=SALIENCE_THRESHOLD)
 			{
@@ -3398,9 +3398,9 @@ bool cSource::chooseBest(int where,bool definitelySpeaker,bool inPrimaryQuote,bo
 					lplog(LOG_RESOLUTION,L"%06d:Ambiguous hail disagreeing with last definite speaker (@%d) resolved to %s.",where,previousPrimaryQuote,objectString(highest[0]->om,tmpstr,true).c_str());
 			}
 			// if this is an ambiguous HAIL - delete the last definite quote audience match 
-			if ((m[trackBack].flags&(WordMatch::flagHailedResolveAudience|WordMatch::flagSpecifiedResolveAudience)) && 
+			if ((m[trackBack].flags&(cWordMatch::flagHailedResolveAudience|cWordMatch::flagSpecifiedResolveAudience)) && 
 					m[previousPrimaryQuote].getQuoteForwardLink()!=lastOpeningPrimaryQuote && // just in case this is introduced in the same paragraph but in a second quote
-					m[trackBack].nextQuote==lastOpeningPrimaryQuote && !(m[previousPrimaryQuote].flags&WordMatch::flagLastContinuousQuote) && // quote immediately before - no intervening paragraph
+					m[trackBack].nextQuote==lastOpeningPrimaryQuote && !(m[previousPrimaryQuote].flags&cWordMatch::flagLastContinuousQuote) && // quote immediately before - no intervening paragraph
 					m[previousPrimaryQuote].audienceObjectMatches.size()==1 && (ambiguousHail=in(m[previousPrimaryQuote].audienceObjectMatches[0].object))!=localObjects.end() &&
 					ambiguousHail->om.salienceFactor>=SALIENCE_THRESHOLD)
 			{
@@ -3431,7 +3431,7 @@ bool cSource::chooseBest(int where,bool definitelySpeaker,bool inPrimaryQuote,bo
 			wstring tmpstr,tmpstr2,sRole;
 			lplog(LOG_RESOLUTION,L"%06d:beforePreviousSpeakers=%s previousSpeakers=%s resolveForSpeaker=%s role=%s lastOpeningPrimaryQuote=%d fl=%s previousPrimaryQuote=%d m[previousPrimaryQuote].getQuoteForwardLink()=%d whereSubjectsInPreviousUnquotedSection=%d.",
 				where,objectString(beforePreviousSpeakers,tmpstr).c_str(),objectString(previousSpeakers,tmpstr2).c_str(),(resolveForSpeaker) ? L"true":L"false",
-					roleString(where,sRole).c_str(),lastOpeningPrimaryQuote,(m[lastOpeningPrimaryQuote].flags&WordMatch::flagForwardLinkResolveSpeakers) ? L"true":L"false",
+					roleString(where,sRole).c_str(),lastOpeningPrimaryQuote,(m[lastOpeningPrimaryQuote].flags&cWordMatch::flagForwardLinkResolveSpeakers) ? L"true":L"false",
 					previousPrimaryQuote,m[previousPrimaryQuote].getQuoteForwardLink(),whereSubjectsInPreviousUnquotedSection);
 		}
 		*/
@@ -3455,7 +3455,7 @@ bool cSource::chooseBest(int where,bool definitelySpeaker,bool inPrimaryQuote,bo
 			  ((m[where].objectRole&HAIL_ROLE) && !(m[where].objectRole&IN_SECONDARY_QUOTE_ROLE) && beforePreviousSpeakers.size()<=1)) &&
 			   currentSpeakerGroup<speakerGroups.size() && previousPrimaryQuote>=0 &&
 			   m[previousPrimaryQuote].getQuoteForwardLink()!=lastOpeningPrimaryQuote && // beforePreviousSpeakers is not useful if a forward link because it is set in the first link
-				!(m[lastOpeningPrimaryQuote].flags&WordMatch::flagForwardLinkResolveSpeakers) && // must have both this AND the previous test (for HAIL and SPEAKER_ROLE)
+				!(m[lastOpeningPrimaryQuote].flags&cWordMatch::flagForwardLinkResolveSpeakers) && // must have both this AND the previous test (for HAIL and SPEAKER_ROLE)
 				(beforePreviousSpeakers.size() || 
 				 (subjectsInPreviousUnquotedSectionUsableForImmediateResolution && subjectsInPreviousUnquotedSection.size()==1 && m[whereSubjectsInPreviousUnquotedSection].objectMatches.size()<=1 &&
 				// subjectsInPreviousUnquotedSection must not be plural!
@@ -3467,7 +3467,7 @@ bool cSource::chooseBest(int where,bool definitelySpeaker,bool inPrimaryQuote,bo
 		  if (debugTrace.traceSpeakerResolution)
 				lplog(LOG_RESOLUTION,L"%06d:beforePreviousSpeakers=%s previousSpeakers=%s resolveForSpeaker=%s role=%s lastOpeningPrimaryQuote=%d fl=%s previousPrimaryQuote=%d m[previousPrimaryQuote].getQuoteForwardLink()=%d.",
 					where,objectString(beforePreviousSpeakers,tmpstr).c_str(),objectString(previousSpeakers,tmpstr2).c_str(),(resolveForSpeaker) ? L"true":L"false",
-						m[where].roleString(sRole).c_str(),lastOpeningPrimaryQuote,(m[lastOpeningPrimaryQuote].flags&WordMatch::flagForwardLinkResolveSpeakers) ? L"true":L"false",
+						m[where].roleString(sRole).c_str(),lastOpeningPrimaryQuote,(m[lastOpeningPrimaryQuote].flags&cWordMatch::flagForwardLinkResolveSpeakers) ? L"true":L"false",
 						previousPrimaryQuote,m[previousPrimaryQuote].getQuoteForwardLink());
 			//bool hailPreviousSpeaker=false;
 			for (int h=0; h<HIGHEST; h++)
@@ -3502,10 +3502,10 @@ bool cSource::chooseBest(int where,bool definitelySpeaker,bool inPrimaryQuote,bo
 							int trackBack=previousPrimaryQuote;
 							while (m[trackBack].quoteBackLink>=0) trackBack=m[trackBack].quoteBackLink;
 							vector <int>::iterator bs;
-							if (((m[trackBack].flags&WordMatch::flagDefiniteResolveSpeakers) || 
+							if (((m[trackBack].flags&cWordMatch::flagDefiniteResolveSpeakers) || 
 									 (m[trackBack].speakerPosition>=0 && m[m[trackBack].speakerPosition].getObject()>=0 && objects[m[m[trackBack].speakerPosition].getObject()].objectClass==NAME_OBJECT_CLASS)) && 
 									m[previousPrimaryQuote].getQuoteForwardLink()!=lastOpeningPrimaryQuote && // just in case this is introduced in the same paragraph but in a second quote
-									m[trackBack].nextQuote==lastOpeningPrimaryQuote && !(m[previousPrimaryQuote].flags&WordMatch::flagLastContinuousQuote) && // quote immediately before - no intervening paragraph
+									m[trackBack].nextQuote==lastOpeningPrimaryQuote && !(m[previousPrimaryQuote].flags&cWordMatch::flagLastContinuousQuote) && // quote immediately before - no intervening paragraph
 									m[previousPrimaryQuote].objectMatches.size()==1 && 
 									(bs=find(beforePreviousSpeakers.begin(),beforePreviousSpeakers.end(),m[previousPrimaryQuote].objectMatches[0].object))!=beforePreviousSpeakers.end())
 								beforePreviousSpeakers.erase(bs);
@@ -3720,7 +3720,7 @@ bool cSource::chooseBest(int where,bool definitelySpeaker,bool inPrimaryQuote,bo
 		  speakerGroups[currentSpeakerGroup].speakers.find(im->objectMatches[0].object)!=speakerGroups[currentSpeakerGroup].speakers.end() &&
 		  //speakerGroups[currentSpeakerGroup].observers.find(im->objectMatches[0].object)==speakerGroups[currentSpeakerGroup].observers.end() &&
 		  speakerGroups[currentSpeakerGroup].povSpeakers.empty() &&
-		  !objects[im->objectMatches[0].object].plural && !(im->flags&WordMatch::flagInQuestion))
+		  !objects[im->objectMatches[0].object].plural && !(im->flags&cWordMatch::flagInQuestion))
 	{
 		speakerGroups[currentSpeakerGroup].povSpeakers.insert(im->objectMatches[0].object);
 		wstring tmpstr,tmpstr2;
@@ -3822,8 +3822,8 @@ int cSource::scanForPatternTag(int where, int tag)
 	LFS
 		if (where >= (int)m.size()) return -1;
 	int maxLen = -1;
-	patternMatchArray::tPatternMatch *maxpm = NULL;
-	for (patternMatchArray::tPatternMatch *pm = m[where].pma.content, *pmend = pm + m[where].pma.count; pm != pmend; pm++)
+	cPatternMatchArray::tPatternMatch *maxpm = NULL;
+	for (cPatternMatchArray::tPatternMatch *pm = m[where].pma.content, *pmend = pm + m[where].pma.count; pm != pmend; pm++)
 		if (patterns[pm->getPattern()]->tags.find(tag) != patterns[pm->getPattern()]->tags.end() && pm->len > maxLen)
 		{
 			maxpm = pm;
@@ -3861,7 +3861,7 @@ void cSource::scanForLocation(bool check,bool &relAsObject,int &whereRelClause,i
 bool cSource::physicallyPresentPosition(int where,bool &physicallyEvaluated)
 { LFS
 	int beginEntirePosition=m[where].beginObjectPosition; // if this is an adjectival object 
-  if (m[where].flags&WordMatch::flagAdjectivalObject) 
+  if (m[where].flags&cWordMatch::flagAdjectivalObject) 
 		for (; beginEntirePosition>=0 && m[beginEntirePosition].principalWherePosition<0; beginEntirePosition--);
 	return physicallyPresentPosition(where,beginEntirePosition,physicallyEvaluated,false);
 }
@@ -3906,7 +3906,7 @@ bool cSource::accompanyingRolePP(int where)
 bool cSource::physicallyPresentPosition(int where,int beginObjectPosition,bool &physicallyEvaluated,bool ignoreTense)
 { LFS
 	if (beginObjectPosition<0) return false;
-  vector <WordMatch>::iterator im=m.begin()+beginObjectPosition;
+  vector <cWordMatch>::iterator im=m.begin()+beginObjectPosition;
 	int at=im->principalWherePosition;
 	if (at>=0 && m[at].getObject()>=0 && objects[m[at].getObject()].isTimeObject) 
 	{
@@ -3923,9 +3923,9 @@ bool cSource::physicallyPresentPosition(int where,int beginObjectPosition,bool &
 	physicallyEvaluated=(or&FOCUS_EVALUATED)!=0;
 	if (or&SUBJECT_PLEONASTIC_ROLE) or&=~IS_OBJECT_ROLE; // if the subject of an object is pleonastic (there, etc), then ignore the verb being 'is'
 	bool inQuote=((or&IN_PRIMARY_QUOTE_ROLE)!=0 && !(or&IN_EMBEDDED_STORY_OBJECT_ROLE)) || (or&IN_SECONDARY_QUOTE_ROLE); // embedded story will only be set in quote, but an embedded story is set in the past, so it is equivalent to out of quote.
-	bool inQuestion=(flags&WordMatch::flagInQuestion)!=0;
-	bool inPStatement=(flags&WordMatch::flagInPStatement)!=0;
-	bool inInfinitivePhrase=(flags&WordMatch::flagInInfinitivePhrase)!=0 && !(or&SENTENCE_IN_ALT_REL_ROLE);
+	bool inQuestion=(flags&cWordMatch::flagInQuestion)!=0;
+	bool inPStatement=(flags&cWordMatch::flagInPStatement)!=0;
+	bool inInfinitivePhrase=(flags&cWordMatch::flagInInfinitivePhrase)!=0 && !(or&SENTENCE_IN_ALT_REL_ROLE);
 	bool inRelClause=(or&SENTENCE_IN_REL_ROLE)!=0;
 	//if (inRelClause && accompanyingRolePP(where))
 	//	lplog(LOG_INFO,L"%d:pp connected to rel detected!",where);
@@ -3933,10 +3933,10 @@ bool cSource::physicallyPresentPosition(int where,int beginObjectPosition,bool &
 			 m[where].queryForm(relativizerForm)<0 && m[where].queryForm(demonstrativeDeterminerForm)<0 &&
 			 !(or&THINK_ENCLOSING_ROLE) && !(or&POSSIBLE_ENCLOSING_ROLE) && (or&FOCUS_EVALUATED) && !accompanyingRolePP(where);
 	bool isAdjective=m[where].principalWhereAdjectivalPosition>=0 || (m[where].word->second.inflectionFlags&(SINGULAR_OWNER|PLURAL_OWNER)) ||
-	  (m[where].flags&WordMatch::flagNounOwner);
+	  (m[where].flags&cWordMatch::flagNounOwner);
 	// in the answer/appeal/letter/missive
 	if (notPhysicallyPresentByMissive(where)) return false;
-	bool notPhysicallyPresentObject=(m[where].word->second.flags&tFI::notPhysicalObjectByWN) && 
+	bool notPhysicallyPresentObject=(m[where].word->second.flags&cSourceWordInfo::notPhysicalObjectByWN) && 
 		   ((m[where].getObject()>=0 && objects[m[where].getObject()].neuter && !objects[m[where].getObject()].isAgent(true)) || isInternalBodyPart(where));
 	// a statement of state (he was) is not certain of physical presence
 	// Conrad was undoubtedly the tenant of the house .
@@ -3976,7 +3976,7 @@ bool cSource::physicallyPresentPosition(int where,int beginObjectPosition,bool &
 		// Ben's statue's eyes followed her everywhere. (statue has flagNounOwner set)
 		bool interveningObject=false;
 		for (int owner=where+1; owner<at && !interveningObject; owner++)
-			interveningObject=m[owner].getObject()>=0 && (objects[m[owner].getObject()].male || objects[m[owner].getObject()].female || (m[at].flags&WordMatch::flagNounOwner));
+			interveningObject=m[owner].getObject()>=0 && (objects[m[owner].getObject()].male || objects[m[owner].getObject()].female || (m[at].flags&cWordMatch::flagNounOwner));
 		if (!interveningObject && m[at].getObject()>=0 && objects[m[at].getObject()].objectClass==BODY_OBJECT_CLASS)
 			isAdjective=false;
 		// (1328)||| (1329)Tommy (1330)sat (1331)down (1332)opposite (1333)her (1334). (1335)His (1336)bared (1337)head 
@@ -4014,7 +4014,7 @@ bool cSource::physicallyPresentPosition(int where,int beginObjectPosition,bool &
 			return false;
 		int wo=m[whereVerb].getRelObject();
 		if (wo>=0 && m[wo].getObject()>=0 && (lsi=in(m[wo].getObject()))!=localObjects.end() && !lsi->physicallyPresent &&
-			  (m[wo].word->second.flags&tFI::notPhysicalObjectByWN))
+			  (m[wo].word->second.flags&cSourceWordInfo::notPhysicalObjectByWN))
 		{
 			set <wstring> synonyms;
   		getSynonyms(L"conversation",synonyms,ADJ);
@@ -4047,7 +4047,7 @@ bool cSource::unResolvablePosition(int where)
 	LFS
 		if (where < 0)
 			return false;
-  vector <WordMatch>::iterator im=m.begin()+where;
+  vector <cWordMatch>::iterator im=m.begin()+where;
 	int at=im->principalWherePosition;
 	if (at<0) at=im->principalWhereAdjectivalPosition;
 	if (at<0) return false;
@@ -4534,7 +4534,7 @@ int cSource::speakerBefore(int beginQuote,bool &previousParagraph)
 			// if contains SUBJECT, return SUBJECT-1.
 			if ((((patterns[m[I].pma[element].getPattern()]->includesOnlyDescendantsAllOfTagSet)&((__int64)1<<subjectVerbRelationTagSet))!=0))
 			{
-		    vector < vector <tTagLocation> > tagSets;
+		    vector < vector <cTagLocation> > tagSets;
 				tagSets.clear();
 				if (startCollectTags(debugTrace.traceRelations,subjectVerbRelationTagSet,where,m[I].pma[element].pemaByPatternEnd,tagSets,true,false,L"verb relation - speaker before")>0)
 				{
@@ -4603,7 +4603,7 @@ int cSource::scanForSpeaker(int where,bool &definitelySpeaker,bool &crossedSecti
   if ((unsigned)where+1>=m.size()) return -1;
   definitelySpeaker=true;
 	crossedSectionBoundary=false;
-  vector <WordMatch>::iterator im=m.begin()+where+1;
+  vector <cWordMatch>::iterator im=m.begin()+where+1;
   int element,end=-1,speakerObjectPosition=-1;
 	bool speakerSet=false,atSectionWord=false;
   while (im->word->first==L"," || im->word->first==L"--" || im->word->second.query(dashForm)>=0)
@@ -4710,7 +4710,7 @@ int cSource::scanForSpeaker(int where,bool &definitelySpeaker,bool &crossedSecti
 		  isVoice(im->principalWherePosition) || m[im->principalWherePosition].word->first==L"who");
   if (!thinkSayVerb && !isAgent) return -1;
   definitelySpeaker=false;
-	if (im->flags&WordMatch::flagIgnoreAsSpeaker) 
+	if (im->flags&cWordMatch::flagIgnoreAsSpeaker) 
 	{
 		if (crossedSectionBoundary || objects[m[im->principalWherePosition].getObject()].neuter) return -1;
 		setSameAudience(verbPosition,speakerObjectPosition,audienceObjectPosition);
@@ -4721,7 +4721,7 @@ int cSource::scanForSpeaker(int where,bool &definitelySpeaker,bool &crossedSecti
   if (im->pma.findMaxLen(L"__S1",element)==true && (patterns[im->pma[element].getPattern()]->differentiator[0]=='1' || patterns[im->pma[element].getPattern()]->differentiator[0]=='4'))
   {
 		if (atSectionWord) return -1;
-    vector < vector <tTagLocation> > tagSets;
+    vector < vector <cTagLocation> > tagSets;
     int nextObjectTag=-1,vTag=-1;
     if (startCollectTags(debugTrace.traceVerbObjects,verbObjectsTagSet,where+1,im->pma.content[element].pemaByPatternEnd,tagSets,true,false,L"verb objects - scan for speaker")>0)
       for (unsigned int J=0; J<tagSets.size(); J++)
@@ -4755,7 +4755,7 @@ int cSource::scanForSpeaker(int where,bool &definitelySpeaker,bool &crossedSecti
 							  objects[ao].matchGender(objects[m[objectPosition].getObject()]))
 						{
 							m[objectPosition].objectMatches.clear();
-							m[objectPosition].flags|=WordMatch::flagObjectResolved;
+							m[objectPosition].flags|=cWordMatch::flagObjectResolved;
 							m[objectPosition].objectMatches.push_back(cOM(ao,SALIENCE_THRESHOLD));
 							objects[ao].locations.push_back(objectPosition);
 							objects[ao].updateFirstLocation(objectPosition);
@@ -4780,7 +4780,7 @@ void cSource::addCataSpeaker(int where,int lastBeginS1,int lastRelativePhrase,in
 { LFS
   int element,speakerObjectPosition=-1,speakerObject;
   // skip past verb
-  vector <WordMatch>::iterator im=m.begin()+where+2;
+  vector <cWordMatch>::iterator im=m.begin()+where+2;
   if ((element=im->pma.queryPattern(L"_VERBPAST",speakerObjectPosition))!=-1)
     speakerObjectPosition+=where+1;
   else
@@ -4805,7 +4805,7 @@ void cSource::setSpeakerMatchesFromPosition(int where,vector <cOM> &objectsToSet
     objectsToSet.clear();
     objectsToSet.push_back(cOM(m[fromPosition].getObject(),SALIENCE_THRESHOLD));
   }
-	if (flag&(WordMatch::flagSpecifiedResolveAudience|WordMatch::flagDefiniteResolveSpeakers))
+	if (flag&(cWordMatch::flagSpecifiedResolveAudience|cWordMatch::flagDefiniteResolveSpeakers))
 	{
 		int os=(m[fromPosition].objectMatches.size()==1) ? m[fromPosition].objectMatches[0].object : m[fromPosition].getObject();
 		vector <cLocalFocus>::iterator lsi=in(os);
@@ -4817,7 +4817,7 @@ void cSource::setSpeakerMatchesFromPosition(int where,vector <cOM> &objectsToSet
   if (debugTrace.traceSpeakerResolution)
 	{
 	  wstring tmpstr,tmpstr2;
-		bool audience=(flag&(WordMatch::flagForwardLinkAlternateResolveAudience|WordMatch::flagHailedResolveAudience|WordMatch::flagSpecifiedResolveAudience|WordMatch::flagFromLastDefiniteResolveAudience|WordMatch::flagGenderIsAmbiguousResolveAudience|WordMatch::flagMostLikelyResolveAudience))!=0;
+		bool audience=(flag&(cWordMatch::flagForwardLinkAlternateResolveAudience|cWordMatch::flagHailedResolveAudience|cWordMatch::flagSpecifiedResolveAudience|cWordMatch::flagFromLastDefiniteResolveAudience|cWordMatch::flagGenderIsAmbiguousResolveAudience|cWordMatch::flagMostLikelyResolveAudience))!=0;
 		lplog(LOG_RESOLUTION,L"%06d:Set %s to %d:%s (%s) with flags=%s",where,(audience) ? L"audience":L"speaker",
 			 fromPosition,objectString(objectsToSet,tmpstr,true).c_str(),fromWhere,speakerResolutionFlagsString(flag,tmpstr2).c_str());
 	}
@@ -4907,7 +4907,7 @@ void cSource::resolveSpeakersUsingPreviousSubject(int where)
 		    speakersFound.push_back(subjectsInPreviousUnquotedSection[I]);
   wstring tmpstr;
 	bool oneIn,allIn;
-	if (intersect(whereSubjectsInPreviousUnquotedSection,speakerGroups[sg].povSpeakers,allIn,oneIn) && (m[firstUnresolved].flags&WordMatch::flagGenderIsAmbiguousResolveSpeakers) &&
+	if (intersect(whereSubjectsInPreviousUnquotedSection,speakerGroups[sg].povSpeakers,allIn,oneIn) && (m[firstUnresolved].flags&cWordMatch::flagGenderIsAmbiguousResolveSpeakers) &&
 		  m[firstUnresolved].objectMatches.size()==1)
 		return;
   if (speakersFound.size()!=1) 
@@ -4929,11 +4929,11 @@ void cSource::resolveSpeakersUsingPreviousSubject(int where)
 	// get speaker group at the point right after the subject
 	for (sgAt=0; sgAt<(signed)speakerGroups.size() && speakerGroups[sgAt].sgEnd<immediatelyAfterSubject; sgAt++);
 	if (speakersFound.size()==1 && 
-			!((m[immediatelyAfterSubject].flags)&WordMatch::flagDefiniteResolveSpeakers) &&
+			!((m[immediatelyAfterSubject].flags)&cWordMatch::flagDefiniteResolveSpeakers) &&
 			sgAt<(signed)speakerGroups.size() && (speakerGroups[sgAt].speakers.size())>2 &&
-			((m[immediatelyAfterSubject].flags&(WordMatch::flagAlternateResolveBackwardFromDefiniteSpeakers|WordMatch::flagEmbeddedStoryResolveSpeakers)) ||
+			((m[immediatelyAfterSubject].flags&(cWordMatch::flagAlternateResolveBackwardFromDefiniteSpeakers|cWordMatch::flagEmbeddedStoryResolveSpeakers)) ||
 			unresolvedSpeakers[urs]<0) &&
-			(!((m[immediatelyAfterSubject].flags)&WordMatch::flagSpecifiedResolveAudience) || m[m[immediatelyAfterSubject].audiencePosition].getObject()!=speakersFound[0]))
+			(!((m[immediatelyAfterSubject].flags)&cWordMatch::flagSpecifiedResolveAudience) || m[m[immediatelyAfterSubject].audiencePosition].getObject()!=speakersFound[0]))
 	{
 		// verify that if a speaker was defined, that the gender of the speaker match the gender of speakersFound.
 		if (m[immediatelyAfterSubject].speakerPosition>=0 && !objects[m[m[immediatelyAfterSubject].speakerPosition].getObject()].matchGender(objects[speakersFound[0]]))
@@ -4946,18 +4946,18 @@ void cSource::resolveSpeakersUsingPreviousSubject(int where)
 		}
 		if (debugTrace.traceSpeakerResolution)
 			lplog(LOG_RESOLUTION,L"%06d:ZXZ RESOLVESPEAKERS override using previous subject of %s",where,objectString(speakersFound,tmpstr).c_str());
-		setObjectsFromMatchedAtPosition(immediatelyAfterSubject,m[immediatelyAfterSubject].objectMatches,objects[speakersFound[0]].originalLocation,false,WordMatch::flagAlternateResolveForwardFromLastSubjectSpeakers);
+		setObjectsFromMatchedAtPosition(immediatelyAfterSubject,m[immediatelyAfterSubject].objectMatches,objects[speakersFound[0]].originalLocation,false,cWordMatch::flagAlternateResolveForwardFromLastSubjectSpeakers);
 		removeMatchedFromObjects(immediatelyAfterSubject,m[immediatelyAfterSubject].audienceObjectMatches,objects[speakersFound[0]].originalLocation,false);
 		if (m[immediatelyAfterSubject].audienceObjectMatches.empty())
 		{
       for (set <int>::iterator si=speakerGroups[currentSpeakerGroup].speakers.begin(),siEnd=speakerGroups[currentSpeakerGroup].speakers.end(); si!=siEnd; si++)
         if (in(*si,m[immediatelyAfterSubject].objectMatches)==m[immediatelyAfterSubject].objectMatches.end())
           m[immediatelyAfterSubject].audienceObjectMatches.push_back(cOM(*si,SALIENCE_THRESHOLD));
-			m[immediatelyAfterSubject].flags|=WordMatch::flagAudienceFromSpeakerGroupResolveAudience;
+			m[immediatelyAfterSubject].flags|=cWordMatch::flagAudienceFromSpeakerGroupResolveAudience;
 		}
 	  for (vector <cOM>::iterator nmi=m[immediatelyAfterSubject].objectMatches.begin(),nmiEnd=m[immediatelyAfterSubject].objectMatches.end(); nmi!=nmiEnd; nmi++)
 			objects[nmi->object].speakerLocations.insert(immediatelyAfterSubject);
-		m[immediatelyAfterSubject].flags|=WordMatch::flagAlternateResolveForwardFromLastSubjectSpeakers;
+		m[immediatelyAfterSubject].flags|=cWordMatch::flagAlternateResolveForwardFromLastSubjectSpeakers;
 		if (m[immediatelyAfterSubject].audienceObjectMatches.size()==1 && m[immediatelyAfterSubject].audienceObjectMatches[0].object==speakersFound[0])
 		{
 			// get any other agreement speaker in currentSpeakerGroup except for current speaker
@@ -4969,8 +4969,8 @@ void cSource::resolveSpeakersUsingPreviousSubject(int where)
 					objects[*si].speakerLocations.insert(immediatelyAfterSubject);
 		      for (int forwardLink=m[immediatelyAfterSubject].getQuoteForwardLink(); forwardLink>=0; forwardLink=m[forwardLink].getQuoteForwardLink())
 						objects[*si].speakerLocations.insert(forwardLink);
-					if (m[immediatelyAfterSubject].flags&WordMatch::flagEmbeddedStoryResolveSpeakers)
-						for (int embeddedStoryLink=m[immediatelyAfterSubject].nextQuote; embeddedStoryLink>=0 && (m[embeddedStoryLink].flags&WordMatch::flagEmbeddedStoryResolveSpeakers) && (m[embeddedStoryLink].speakerPosition<0 || (m[embeddedStoryLink].flags&WordMatch::flagGenderIsAmbiguousResolveSpeakers)); embeddedStoryLink=m[embeddedStoryLink].nextQuote)
+					if (m[immediatelyAfterSubject].flags&cWordMatch::flagEmbeddedStoryResolveSpeakers)
+						for (int embeddedStoryLink=m[immediatelyAfterSubject].nextQuote; embeddedStoryLink>=0 && (m[embeddedStoryLink].flags&cWordMatch::flagEmbeddedStoryResolveSpeakers) && (m[embeddedStoryLink].speakerPosition<0 || (m[embeddedStoryLink].flags&cWordMatch::flagGenderIsAmbiguousResolveSpeakers)); embeddedStoryLink=m[embeddedStoryLink].nextQuote)
 						{
 							objects[*si].speakerLocations.insert(embeddedStoryLink);
 							if (m[embeddedStoryLink].speakerPosition>=0)
@@ -4983,25 +4983,25 @@ void cSource::resolveSpeakersUsingPreviousSubject(int where)
 							}
 						}
 				}
-			m[immediatelyAfterSubject].flags|=WordMatch::flagAlternateResolveForwardFromLastSubjectAudience;
+			m[immediatelyAfterSubject].flags|=cWordMatch::flagAlternateResolveForwardFromLastSubjectAudience;
 		}
     for (int forwardLink=m[immediatelyAfterSubject].getQuoteForwardLink(); forwardLink>=0; forwardLink=m[forwardLink].getQuoteForwardLink())
     {
-			setSpeakerMatchesFromPosition(where,m[forwardLink].objectMatches,immediatelyAfterSubject,L"override using previous subject",m[immediatelyAfterSubject].flags|WordMatch::flagForwardLinkResolveSpeakers);
+			setSpeakerMatchesFromPosition(where,m[forwardLink].objectMatches,immediatelyAfterSubject,L"override using previous subject",m[immediatelyAfterSubject].flags|cWordMatch::flagForwardLinkResolveSpeakers);
 			m[forwardLink].audienceObjectMatches=m[immediatelyAfterSubject].audienceObjectMatches;
     }
-		if (m[immediatelyAfterSubject].flags&WordMatch::flagEmbeddedStoryResolveSpeakers)
-			for (int embeddedStoryLink=m[immediatelyAfterSubject].nextQuote; embeddedStoryLink>=0 && (m[embeddedStoryLink].flags&WordMatch::flagEmbeddedStoryResolveSpeakers) && (m[embeddedStoryLink].speakerPosition<0 || (m[embeddedStoryLink].flags&WordMatch::flagGenderIsAmbiguousResolveSpeakers)); embeddedStoryLink=m[embeddedStoryLink].nextQuote)
+		if (m[immediatelyAfterSubject].flags&cWordMatch::flagEmbeddedStoryResolveSpeakers)
+			for (int embeddedStoryLink=m[immediatelyAfterSubject].nextQuote; embeddedStoryLink>=0 && (m[embeddedStoryLink].flags&cWordMatch::flagEmbeddedStoryResolveSpeakers) && (m[embeddedStoryLink].speakerPosition<0 || (m[embeddedStoryLink].flags&cWordMatch::flagGenderIsAmbiguousResolveSpeakers)); embeddedStoryLink=m[embeddedStoryLink].nextQuote)
 			{
-				setSpeakerMatchesFromPosition(where,m[embeddedStoryLink].objectMatches,immediatelyAfterSubject,L"override using previous subject",m[immediatelyAfterSubject].flags|WordMatch::flagForwardLinkResolveSpeakers);
+				setSpeakerMatchesFromPosition(where,m[embeddedStoryLink].objectMatches,immediatelyAfterSubject,L"override using previous subject",m[immediatelyAfterSubject].flags|cWordMatch::flagForwardLinkResolveSpeakers);
 				if (m[embeddedStoryLink].speakerPosition>=0)
-					setSpeakerMatchesFromPosition(where,m[m[embeddedStoryLink].speakerPosition].objectMatches,immediatelyAfterSubject,L"override using previous subject",m[immediatelyAfterSubject].flags|WordMatch::flagForwardLinkResolveSpeakers);
+					setSpeakerMatchesFromPosition(where,m[m[embeddedStoryLink].speakerPosition].objectMatches,immediatelyAfterSubject,L"override using previous subject",m[immediatelyAfterSubject].flags|cWordMatch::flagForwardLinkResolveSpeakers);
 				m[embeddedStoryLink].audienceObjectMatches=m[immediatelyAfterSubject].audienceObjectMatches;
 				for (int forwardLink=m[embeddedStoryLink].getQuoteForwardLink(); forwardLink>=0; forwardLink=m[forwardLink].getQuoteForwardLink())
 				{
-					setSpeakerMatchesFromPosition(where,m[forwardLink].objectMatches,immediatelyAfterSubject,L"override using previous subject",m[immediatelyAfterSubject].flags|WordMatch::flagForwardLinkResolveSpeakers);
+					setSpeakerMatchesFromPosition(where,m[forwardLink].objectMatches,immediatelyAfterSubject,L"override using previous subject",m[immediatelyAfterSubject].flags|cWordMatch::flagForwardLinkResolveSpeakers);
 					if (m[forwardLink].speakerPosition>=0)
-						setSpeakerMatchesFromPosition(where,m[m[forwardLink].speakerPosition].objectMatches,immediatelyAfterSubject,L"override using previous subject",m[immediatelyAfterSubject].flags|WordMatch::flagForwardLinkResolveSpeakers);
+						setSpeakerMatchesFromPosition(where,m[m[forwardLink].speakerPosition].objectMatches,immediatelyAfterSubject,L"override using previous subject",m[immediatelyAfterSubject].flags|cWordMatch::flagForwardLinkResolveSpeakers);
 					m[forwardLink].audienceObjectMatches=m[immediatelyAfterSubject].audienceObjectMatches;
 				}
 			}
@@ -5033,10 +5033,10 @@ void cSource::setAudience(int where,int whereQuote,int currentSpeakerWhere)
 		if (debugTrace.traceSpeakerResolution)
 			lplog(LOG_RESOLUTION,L"%06d:set audience matches rejected because audience found in quote @%d",where,whereQuote);
 	}
-	else if (!(m[whereQuote].flags&(WordMatch::flagSpecifiedResolveAudience|WordMatch::flagForwardLinkAlternateResolveAudience)) ||
+	else if (!(m[whereQuote].flags&(cWordMatch::flagSpecifiedResolveAudience|cWordMatch::flagForwardLinkAlternateResolveAudience)) ||
 			m[whereQuote].audienceObjectMatches.size()!=1)
 	{
-		setSpeakerMatchesFromPosition(whereQuote,m[whereQuote].audienceObjectMatches,currentSpeakerWhere,L"audience forward link",m[where].flags|WordMatch::flagForwardLinkAlternateResolveAudience);
+		setSpeakerMatchesFromPosition(whereQuote,m[whereQuote].audienceObjectMatches,currentSpeakerWhere,L"audience forward link",m[where].flags|cWordMatch::flagForwardLinkAlternateResolveAudience);
 		if (m[whereQuote].objectMatches.size()!=1)
 			subtract(m[whereQuote].objectMatches,m[whereQuote].audienceObjectMatches);
 	}
@@ -5047,14 +5047,14 @@ void cSource::setAudience(int where,int whereQuote,int currentSpeakerWhere)
 void cSource::resolveAudienceByAlternation(int currentSpeakerWhere,bool definitelySpeaker,int urs,bool forwards)
 { LFS
   wstring tmpstr;
-	unsigned __int64 flagAlternation=(forwards) ? WordMatch::flagAlternateResolveForwardFromLastSubjectAudience : WordMatch::flagAlternateResolveBackwardFromDefiniteAudience; // reject alternate only if going backward, not forward from last subject
+	unsigned __int64 flagAlternation=(forwards) ? cWordMatch::flagAlternateResolveForwardFromLastSubjectAudience : cWordMatch::flagAlternateResolveBackwardFromDefiniteAudience; // reject alternate only if going backward, not forward from last subject
   int ursWhere=abs(unresolvedSpeakers[urs]);
   // reject this resolution if removing the speaker would result in no speakers at all
   if (m[ursWhere].objectMatches.size()!=1 || 
-		  (definitelySpeaker && (m[ursWhere].flags&(WordMatch::flagMostLikelyResolveAudience|
-				WordMatch::flagDefiniteResolveSpeakers|WordMatch::flagAlternateResolveBackwardFromDefiniteSpeakers|WordMatch::flagAlternateResolveForwardAfterDefinite|
-				WordMatch::flagFromLastDefiniteResolveAudience|WordMatch::flagSpecifiedResolveAudience|WordMatch::flagAlternateResolveBackwardFromDefiniteAudience|
-				WordMatch::flagFromPreviousHailResolveSpeakers|WordMatch::flagAlternateResolveForwardFromLastSubjectSpeakers))==WordMatch::flagMostLikelyResolveAudience) ||
+		  (definitelySpeaker && (m[ursWhere].flags&(cWordMatch::flagMostLikelyResolveAudience|
+				cWordMatch::flagDefiniteResolveSpeakers|cWordMatch::flagAlternateResolveBackwardFromDefiniteSpeakers|cWordMatch::flagAlternateResolveForwardAfterDefinite|
+				cWordMatch::flagFromLastDefiniteResolveAudience|cWordMatch::flagSpecifiedResolveAudience|cWordMatch::flagAlternateResolveBackwardFromDefiniteAudience|
+				cWordMatch::flagFromPreviousHailResolveSpeakers|cWordMatch::flagAlternateResolveForwardFromLastSubjectSpeakers))==cWordMatch::flagMostLikelyResolveAudience) ||
       (m[ursWhere].objectMatches[0].object!=m[currentSpeakerWhere].getObject() &&
        in(m[ursWhere].objectMatches[0].object,m[currentSpeakerWhere].objectMatches)==m[currentSpeakerWhere].objectMatches.end()))
   {
@@ -5073,9 +5073,9 @@ void cSource::resolveAudienceByAlternation(int currentSpeakerWhere,bool definite
 			if (debugTrace.traceSpeakerResolution)
 				lplog(LOG_RESOLUTION,L"%06d:set audience matches rejected because audience is speaker",ursWhere);
 		}
-		else if (propagateForward=!(m[ursWhere].flags&(flagAlternation|WordMatch::flagAlternateResolveForwardAfterDefinite|
-							WordMatch::flagFromLastDefiniteResolveAudience|WordMatch::flagSpecifiedResolveAudience|
-							WordMatch::flagFromPreviousHailResolveSpeakers)) ||
+		else if (propagateForward=!(m[ursWhere].flags&(flagAlternation|cWordMatch::flagAlternateResolveForwardAfterDefinite|
+							cWordMatch::flagFromLastDefiniteResolveAudience|cWordMatch::flagSpecifiedResolveAudience|
+							cWordMatch::flagFromPreviousHailResolveSpeakers)) ||
 						m[ursWhere].audienceObjectMatches.empty() ||
 						(m[ursWhere].audienceObjectMatches.size()>1 && 
 						 intersect(currentSpeakerWhere,m[ursWhere].audienceObjectMatches,allIn,oneIn)))
@@ -5087,7 +5087,7 @@ void cSource::resolveAudienceByAlternation(int currentSpeakerWhere,bool definite
 		}
 		else if (debugTrace.traceSpeakerResolution)
       lplog(LOG_RESOLUTION,L"%06d:set audience matches rejected because alternate already set",ursWhere);
-		if (!audienceIsSpeaker && (!(m[ursWhere].flags&(WordMatch::flagAlternateResolveBackwardFromDefiniteSpeakers|WordMatch::flagAlternateResolveForwardFromLastSubjectSpeakers)) || (m[ursWhere].objectMatches.size()!=1)))
+		if (!audienceIsSpeaker && (!(m[ursWhere].flags&(cWordMatch::flagAlternateResolveBackwardFromDefiniteSpeakers|cWordMatch::flagAlternateResolveForwardFromLastSubjectSpeakers)) || (m[ursWhere].objectMatches.size()!=1)))
 		{
       propagateForward|=removeMatchedFromObjects(abs(unresolvedSpeakers[urs]),m[ursWhere].objectMatches,currentSpeakerWhere,true);
 			if (m[ursWhere].speakerPosition>=0 && m[m[ursWhere].speakerPosition].objectMatches.size()>1)
@@ -5102,13 +5102,13 @@ void cSource::resolveAudienceByAlternation(int currentSpeakerWhere,bool definite
 		{
 			for (int forwardLink=m[ursWhere].getQuoteForwardLink(); forwardLink>=0; forwardLink=m[forwardLink].getQuoteForwardLink())
 				setAudience(ursWhere,forwardLink,currentSpeakerWhere);
-			if (m[ursWhere].flags&WordMatch::flagEmbeddedStoryResolveSpeakers)
+			if (m[ursWhere].flags&cWordMatch::flagEmbeddedStoryResolveSpeakers)
 			{
-				unsigned __int64 embeddedStoryType=m[ursWhere].flags&(WordMatch::flagSecondEmbeddedStory|WordMatch::flagFirstEmbeddedStory);
+				unsigned __int64 embeddedStoryType=m[ursWhere].flags&(cWordMatch::flagSecondEmbeddedStory|cWordMatch::flagFirstEmbeddedStory);
 				for (int embeddedStoryLink=m[ursWhere].nextQuote; embeddedStoryLink>=0 && 
-					(m[embeddedStoryLink].flags&WordMatch::flagEmbeddedStoryResolveSpeakers) && 
-					embeddedStoryType==(m[embeddedStoryLink].flags&(WordMatch::flagSecondEmbeddedStory|WordMatch::flagFirstEmbeddedStory)) &&
-					(m[embeddedStoryLink].speakerPosition<0 || (m[embeddedStoryLink].flags&WordMatch::flagGenderIsAmbiguousResolveSpeakers)); embeddedStoryLink=m[embeddedStoryLink].nextQuote)
+					(m[embeddedStoryLink].flags&cWordMatch::flagEmbeddedStoryResolveSpeakers) && 
+					embeddedStoryType==(m[embeddedStoryLink].flags&(cWordMatch::flagSecondEmbeddedStory|cWordMatch::flagFirstEmbeddedStory)) &&
+					(m[embeddedStoryLink].speakerPosition<0 || (m[embeddedStoryLink].flags&cWordMatch::flagGenderIsAmbiguousResolveSpeakers)); embeddedStoryLink=m[embeddedStoryLink].nextQuote)
 				{
 					setAudience(ursWhere,embeddedStoryLink,currentSpeakerWhere);
 		      for (int forwardLink=m[embeddedStoryLink].getQuoteForwardLink(); forwardLink>=0; forwardLink=m[forwardLink].getQuoteForwardLink())
@@ -5122,7 +5122,7 @@ void cSource::resolveAudienceByAlternation(int currentSpeakerWhere,bool definite
 			(m[currentSpeakerWhere].objectMatches.size()) ? objectString(m[currentSpeakerWhere].objectMatches,tmpstr,false).c_str() : objectString(m[currentSpeakerWhere].getObject(),tmpstr,false).c_str());
   if (m[ursWhere].objectMatches.size()<=1 && definitelySpeaker && 
 		  (currentSpeakerGroup>=speakerGroups.size() || speakerGroups[currentSpeakerGroup].speakers.size()<=2))
-		m[ursWhere].flags|=WordMatch::flagAlternateResolutionFinishedSpeakers;
+		m[ursWhere].flags|=cWordMatch::flagAlternateResolutionFinishedSpeakers;
 }
 
 bool cSource::matchedObjectsEqual(vector <cOM> &match1,vector <cOM> &match2)
@@ -5138,23 +5138,23 @@ bool cSource::resolveMatchesByAlternation(int currentSpeakerWhere,bool definitel
   wstring tmpstr;
   int ursWhere=abs(unresolvedSpeakers[urs]),o;
 	bool notSpeakersResolved=false;
-	if (!(m[ursWhere].flags&(WordMatch::flagAlternateResolveBackwardFromDefiniteSpeakers|WordMatch::flagAlternateResolveForwardAfterDefinite|WordMatch::flagAlternateResolveForwardFromLastSubjectSpeakers)) || (m[ursWhere].objectMatches.size()!=1))
+	if (!(m[ursWhere].flags&(cWordMatch::flagAlternateResolveBackwardFromDefiniteSpeakers|cWordMatch::flagAlternateResolveForwardAfterDefinite|cWordMatch::flagAlternateResolveForwardFromLastSubjectSpeakers)) || (m[ursWhere].objectMatches.size()!=1))
 	{
 		if (m[ursWhere].audienceObjectMatches.size()==1 &&
 		    (m[ursWhere].audienceObjectMatches[0].object==m[currentSpeakerWhere].getObject() ||
 			   in(m[ursWhere].audienceObjectMatches[0].object,m[currentSpeakerWhere].objectMatches)!=m[currentSpeakerWhere].objectMatches.end()))
 		{
-			// if marked WordMatch::flagMostLikelyResolveSpeakers, and speakerGroup > 1 speaker with matching gender, allow this, hoping that the reresolve would solve it.
+			// if marked cWordMatch::flagMostLikelyResolveSpeakers, and speakerGroup > 1 speaker with matching gender, allow this, hoping that the reresolve would solve it.
 			bool allIn,oneIn;
 			int genderAgreement=0;
-			if ((m[ursWhere].flags&WordMatch::flagMostLikelyResolveSpeakers) && speakerGroups[currentSpeakerGroup].speakers.size()>2)
+			if ((m[ursWhere].flags&cWordMatch::flagMostLikelyResolveSpeakers) && speakerGroups[currentSpeakerGroup].speakers.size()>2)
 				for (set<int>::iterator si=speakerGroups[currentSpeakerGroup].speakers.begin(),siEnd=speakerGroups[currentSpeakerGroup].speakers.end(); si!=siEnd; si++)
 					genderAgreement+=(objects[*si].matchGender(objects[m[ursWhere].audienceObjectMatches[0].object])) ? 1 : 0;
 			if (genderAgreement<=1)
 			{
-				bool fromLikely=(m[ursWhere].flags&(WordMatch::flagMostLikelyResolveSpeakers|WordMatch::flagMostLikelyResolveAudience))==(WordMatch::flagMostLikelyResolveSpeakers|WordMatch::flagMostLikelyResolveAudience);
+				bool fromLikely=(m[ursWhere].flags&(cWordMatch::flagMostLikelyResolveSpeakers|cWordMatch::flagMostLikelyResolveAudience))==(cWordMatch::flagMostLikelyResolveSpeakers|cWordMatch::flagMostLikelyResolveAudience);
 				// only pure most likely, going forwards and the previous connected quote does not have the same speaker
-				bool overrideLikely=fromLikely && m[ursWhere].previousQuote>=0 && forwards && !(m[m[ursWhere].previousQuote].flags&WordMatch::flagLastContinuousQuote) && 
+				bool overrideLikely=fromLikely && m[ursWhere].previousQuote>=0 && forwards && !(m[m[ursWhere].previousQuote].flags&cWordMatch::flagLastContinuousQuote) && 
 					  !intersect(currentSpeakerWhere,m[m[ursWhere].previousQuote].objectMatches,allIn,oneIn);
 				if (!overrideLikely)
 				{
@@ -5184,7 +5184,7 @@ bool cSource::resolveMatchesByAlternation(int currentSpeakerWhere,bool definitel
 				lplog(LOG_RESOLUTION,L"%06d:Reject resolveForwardFromLastSubject because audience is set and conflicts.",ursWhere);
 			return false;
 		}
-		if (!(m[ursWhere].flags&WordMatch::flagFromPreviousHailResolveSpeakers) ||
+		if (!(m[ursWhere].flags&cWordMatch::flagFromPreviousHailResolveSpeakers) ||
 			   // previous hail could have been ambiguous
 			  (m[ursWhere].objectMatches.size()!=1 && 
 				 ((m[currentSpeakerWhere].objectMatches.empty() && in(m[currentSpeakerWhere].getObject(),m[ursWhere].objectMatches)!=m[ursWhere].objectMatches.end()) ||
@@ -5193,7 +5193,7 @@ bool cSource::resolveMatchesByAlternation(int currentSpeakerWhere,bool definitel
 			if (m[ursWhere].speakerPosition<0 || m[m[ursWhere].speakerPosition].getObject()<0 || 
 				  (m[currentSpeakerWhere].objectMatches.empty() && objects[m[currentSpeakerWhere].getObject()].matchGender(objects[m[m[ursWhere].speakerPosition].getObject()])) ||
 					(m[currentSpeakerWhere].objectMatches.size()==1 && objects[m[currentSpeakerWhere].objectMatches[0].object].matchGender(objects[m[m[ursWhere].speakerPosition].getObject()])))
-				setObjectsFromMatchedAtPosition(ursWhere,m[ursWhere].objectMatches,currentSpeakerWhere,false,(forwards) ? WordMatch::flagAlternateResolveForwardFromLastSubjectSpeakers : WordMatch::flagAlternateResolveBackwardFromDefiniteSpeakers);
+				setObjectsFromMatchedAtPosition(ursWhere,m[ursWhere].objectMatches,currentSpeakerWhere,false,(forwards) ? cWordMatch::flagAlternateResolveForwardFromLastSubjectSpeakers : cWordMatch::flagAlternateResolveBackwardFromDefiniteSpeakers);
 			else
 			{
 				if (debugTrace.traceSpeakerResolution)
@@ -5202,10 +5202,10 @@ bool cSource::resolveMatchesByAlternation(int currentSpeakerWhere,bool definitel
 			}
 		}
 		if (definitelySpeaker)
-			m[ursWhere].flags|=(forwards) ? WordMatch::flagAlternateResolveForwardFromLastSubjectSpeakers : WordMatch::flagAlternateResolveBackwardFromDefiniteSpeakers;
+			m[ursWhere].flags|=(forwards) ? cWordMatch::flagAlternateResolveForwardFromLastSubjectSpeakers : cWordMatch::flagAlternateResolveBackwardFromDefiniteSpeakers;
 		notSpeakersResolved=reEvaluateHailedObjects(ursWhere,true);
 		for (int forwardLink=m[ursWhere].getQuoteForwardLink(); forwardLink>=0; forwardLink=m[forwardLink].getQuoteForwardLink())
-			setSpeakerMatchesFromPosition(forwardLink,m[forwardLink].objectMatches,currentSpeakerWhere,L"resolve speakers forward Link",m[ursWhere].flags|WordMatch::flagForwardLinkAlternateResolveSpeakers);
+			setSpeakerMatchesFromPosition(forwardLink,m[forwardLink].objectMatches,currentSpeakerWhere,L"resolve speakers forward Link",m[ursWhere].flags|cWordMatch::flagForwardLinkAlternateResolveSpeakers);
 		for (unsigned int I=0; I<m[ursWhere].objectMatches.size(); I++)
 		{
 			objects[o=m[ursWhere].objectMatches[I].object].numIdentifiedAsSpeaker++;
@@ -5218,7 +5218,7 @@ bool cSource::resolveMatchesByAlternation(int currentSpeakerWhere,bool definitel
 		}
 	  if (m[ursWhere].audienceObjectMatches.size()<=1 && definitelySpeaker && 
 			  (currentSpeakerGroup>=speakerGroups.size() || speakerGroups[currentSpeakerGroup].speakers.size()<=2))
-			m[ursWhere].flags|=WordMatch::flagAlternateResolutionFinishedSpeakers;
+			m[ursWhere].flags|=cWordMatch::flagAlternateResolutionFinishedSpeakers;
 	}
 	else if (debugTrace.traceSpeakerResolution)
     lplog(LOG_RESOLUTION,L"%06d:set matches rejected because alternate already set",ursWhere);
@@ -5227,7 +5227,7 @@ bool cSource::resolveMatchesByAlternation(int currentSpeakerWhere,bool definitel
       (m[ursWhere].audienceObjectMatches[0].object!=m[currentSpeakerWhere].getObject() &&
        in(m[ursWhere].audienceObjectMatches[0].object,m[currentSpeakerWhere].objectMatches)==m[currentSpeakerWhere].objectMatches.end()))
 	{
-		if (!(m[ursWhere].flags&WordMatch::flagAlternateResolveBackwardFromDefiniteAudience) || (m[ursWhere].audienceObjectMatches.size()!=1))
+		if (!(m[ursWhere].flags&cWordMatch::flagAlternateResolveBackwardFromDefiniteAudience) || (m[ursWhere].audienceObjectMatches.size()!=1))
 			notSpeakersResolved|=removeMatchedFromObjects(ursWhere,m[ursWhere].audienceObjectMatches,currentSpeakerWhere,false);
 		else if (debugTrace.traceSpeakerResolution)
 			lplog(LOG_RESOLUTION,L"%06d:remove from not matches rejected because alternate already set",ursWhere);
@@ -5242,29 +5242,29 @@ struct sFlagString {
 	unsigned __int64 flag;
 	wchar_t *s;
 } RSFlagStrings[] = {
-	{ WordMatch::flagAlternateResolveForwardAfterDefinite, L"AlternateForwardAfterDefinite " },
+	{ cWordMatch::flagAlternateResolveForwardAfterDefinite, L"AlternateForwardAfterDefinite " },
 
-	{ WordMatch::flagFromPreviousHailResolveSpeakers, L"FromPreviousHail " },
-	{ WordMatch::flagMostLikelyResolveSpeakers, L"MostLikely " },
-	{ WordMatch::flagGenderIsAmbiguousResolveSpeakers, L"GenderAmbiguous " },
-	{ WordMatch::flagForwardLinkAlternateResolveSpeakers, L"ForwardLinkAlternate " },
-	{ WordMatch::flagForwardLinkResolveSpeakers, L"ForwardLink " },
-	{ WordMatch::flagDefiniteResolveSpeakers, L"Definite " },
-	{ WordMatch::flagAlternateResolveForwardFromLastSubjectSpeakers, L"AlternateForwardFromLastSubject " },
-	{ WordMatch::flagAlternateResolveBackwardFromDefiniteSpeakers, L"AlternateBackwardFromDefinite " },
-	{ WordMatch::flagAlternateResolutionFinishedSpeakers, L"AlternateFinished " },
-	{ WordMatch::flagEmbeddedStoryResolveSpeakers, L"EmbeddedStory " },
+	{ cWordMatch::flagFromPreviousHailResolveSpeakers, L"FromPreviousHail " },
+	{ cWordMatch::flagMostLikelyResolveSpeakers, L"MostLikely " },
+	{ cWordMatch::flagGenderIsAmbiguousResolveSpeakers, L"GenderAmbiguous " },
+	{ cWordMatch::flagForwardLinkAlternateResolveSpeakers, L"ForwardLinkAlternate " },
+	{ cWordMatch::flagForwardLinkResolveSpeakers, L"ForwardLink " },
+	{ cWordMatch::flagDefiniteResolveSpeakers, L"Definite " },
+	{ cWordMatch::flagAlternateResolveForwardFromLastSubjectSpeakers, L"AlternateForwardFromLastSubject " },
+	{ cWordMatch::flagAlternateResolveBackwardFromDefiniteSpeakers, L"AlternateBackwardFromDefinite " },
+	{ cWordMatch::flagAlternateResolutionFinishedSpeakers, L"AlternateFinished " },
+	{ cWordMatch::flagEmbeddedStoryResolveSpeakers, L"EmbeddedStory " },
 	{ 0,NULL },
-	{ WordMatch::flagMostLikelyResolveAudience, L"MostLikely " },
-	{ WordMatch::flagGenderIsAmbiguousResolveAudience, L"GenderAmbiguous " },
-	{ WordMatch::flagForwardLinkResolveAudience, L"ForwardLink " },
-	{ WordMatch::flagForwardLinkAlternateResolveAudience, L"ForwardLinkAlternate " },
-	{ WordMatch::flagFromLastDefiniteResolveAudience, L"FromLastDefinite " },
-	{ WordMatch::flagSpecifiedResolveAudience, L"Audience " },
-	{ WordMatch::flagHailedResolveAudience, L"Hailed " },
-	{ WordMatch::flagAlternateResolveForwardFromLastSubjectAudience, L"AlternateForwardFromLastSubject " },
-	{ WordMatch::flagAlternateResolveBackwardFromDefiniteAudience, L"AlternateBackwardFromDefinite " },
-	{ WordMatch::flagAudienceFromSpeakerGroupResolveAudience, L"AudienceFromSpeakerGroup " },
+	{ cWordMatch::flagMostLikelyResolveAudience, L"MostLikely " },
+	{ cWordMatch::flagGenderIsAmbiguousResolveAudience, L"GenderAmbiguous " },
+	{ cWordMatch::flagForwardLinkResolveAudience, L"ForwardLink " },
+	{ cWordMatch::flagForwardLinkAlternateResolveAudience, L"ForwardLinkAlternate " },
+	{ cWordMatch::flagFromLastDefiniteResolveAudience, L"FromLastDefinite " },
+	{ cWordMatch::flagSpecifiedResolveAudience, L"Audience " },
+	{ cWordMatch::flagHailedResolveAudience, L"Hailed " },
+	{ cWordMatch::flagAlternateResolveForwardFromLastSubjectAudience, L"AlternateForwardFromLastSubject " },
+	{ cWordMatch::flagAlternateResolveBackwardFromDefiniteAudience, L"AlternateBackwardFromDefinite " },
+	{ cWordMatch::flagAudienceFromSpeakerGroupResolveAudience, L"AudienceFromSpeakerGroup " },
 	{ 0,NULL }
 };
 
@@ -5285,7 +5285,7 @@ wstring cSource::speakerResolutionFlagsString(__int64 flags,wstring &tmpstr)
 void cSource::printUnresolvedLocation(int urs)
 { LFS
 	int ursWhere=abs(unresolvedSpeakers[urs]);
-	bool finished=(m[ursWhere].flags&WordMatch::flagAlternateResolutionFinishedSpeakers)!=0,notMatched=(unresolvedSpeakers[urs]<0); // objectsNotMatched is unresolved;
+	bool finished=(m[ursWhere].flags&cWordMatch::flagAlternateResolutionFinishedSpeakers)!=0,notMatched=(unresolvedSpeakers[urs]<0); // objectsNotMatched is unresolved;
 	wstring tmpstr,tmpstr2,tmpstr3;
 	lplog(LOG_RESOLUTION,L"%06d:--%s %s--  %s//%s %s",ursWhere,(finished) ? L"finished":L"unresolved",(notMatched) ? L"audience":L"speaker",
 					objectString(m[ursWhere].objectMatches,tmpstr,true).c_str(),objectString(m[ursWhere].audienceObjectMatches,tmpstr2,true).c_str(),
@@ -5312,9 +5312,9 @@ void cSource::resolveSpeakersByAlternationForwards(int where,int currentSpeakerW
   {
 		int ursWhere=abs(unresolvedSpeakers[urs]);
 		// check to see whether this differs from more reliable checks:
-		if (!(m[ursWhere].flags&WordMatch::flagAlternateResolutionFinishedSpeakers))
+		if (!(m[ursWhere].flags&cWordMatch::flagAlternateResolutionFinishedSpeakers))
 		{
-			if ((m[ursWhere].flags&(WordMatch::flagDefiniteResolveSpeakers|WordMatch::flagAudienceFromSpeakerGroupResolveAudience|WordMatch::flagEmbeddedStoryResolveSpeakers)) &&
+			if ((m[ursWhere].flags&(cWordMatch::flagDefiniteResolveSpeakers|cWordMatch::flagAudienceFromSpeakerGroupResolveAudience|cWordMatch::flagEmbeddedStoryResolveSpeakers)) &&
 				  m[ursWhere].objectMatches.size()<=1)
 			{
 			  if (debugTrace.traceSpeakerResolution)
@@ -5322,7 +5322,7 @@ void cSource::resolveSpeakersByAlternationForwards(int where,int currentSpeakerW
 				break;
 			}
 			// if the next quote is set definitely to the same speaker on this quote as we are setting alternatively, reject.
-			if (m[ursWhere].nextQuote>=0 && (m[m[ursWhere].nextQuote].flags&WordMatch::flagDefiniteResolveSpeakers) &&
+			if (m[ursWhere].nextQuote>=0 && (m[m[ursWhere].nextQuote].flags&cWordMatch::flagDefiniteResolveSpeakers) &&
 				  m[m[ursWhere].nextQuote].objectMatches.size()==1 && 
 					m[m[ursWhere].nextQuote].objectMatches[0].object==m[currentSpeakerWhere].getObject())
 			{
@@ -5348,7 +5348,7 @@ void cSource::resolveSpeakersByAlternationForwards(int where,int currentSpeakerW
 			break;
 		}
 		urs++;
-		if (urs<(signed)unresolvedSpeakers.size() && !(m[ursWhere=abs(unresolvedSpeakers[urs])].flags&WordMatch::flagAlternateResolutionFinishedSpeakers))
+		if (urs<(signed)unresolvedSpeakers.size() && !(m[ursWhere=abs(unresolvedSpeakers[urs])].flags&cWordMatch::flagAlternateResolutionFinishedSpeakers))
 		{
 			if (counterSpeakerEstablishedPosition>=0)
 			{
@@ -5363,7 +5363,7 @@ void cSource::resolveSpeakersByAlternationForwards(int where,int currentSpeakerW
 			}
 			if (matchedObjectsEqual(objectsSet,m[ursWhere].objectMatches))
 			{
-				if ((m[ursWhere].flags&(WordMatch::flagMostLikelyResolveAudience|WordMatch::flagMostLikelyResolveSpeakers))==(WordMatch::flagMostLikelyResolveAudience|WordMatch::flagMostLikelyResolveSpeakers))
+				if ((m[ursWhere].flags&(cWordMatch::flagMostLikelyResolveAudience|cWordMatch::flagMostLikelyResolveSpeakers))==(cWordMatch::flagMostLikelyResolveAudience|cWordMatch::flagMostLikelyResolveSpeakers))
 				{
 					vector <cOM> om=m[ursWhere].objectMatches;
 					m[ursWhere].objectMatches=m[ursWhere].audienceObjectMatches;
@@ -5390,7 +5390,7 @@ void cSource::resolveSpeakersByAlternationForwards(int where,int currentSpeakerW
 					{
 						lplog(LOG_RESOLUTION,L"%06d:set speaker to %s (from %d)",ursWhere,objectString(m[ursWhere].objectMatches,tmpstr,true).c_str(),counterSpeakerEstablished);
 					}
-					m[ursWhere].flags|=WordMatch::flagAlternateResolveForwardFromLastSubjectSpeakers;
+					m[ursWhere].flags|=cWordMatch::flagAlternateResolveForwardFromLastSubjectSpeakers;
 					counterSpeakerEstablishedPosition=ursWhere;
 				}
 				else
@@ -5428,27 +5428,27 @@ void cSource::resolvePreviousSpeakersByAlternationBackwards(int where,int curren
     for (int urs=unresolvedSpeakers.size()-1; urs>=0; urs--)
 			printUnresolvedLocation(urs);
   }
-	__int64 inEmbeddedStory=m[where].flags&(WordMatch::flagEmbeddedStoryResolveSpeakers|WordMatch::flagSecondEmbeddedStory|WordMatch::flagFirstEmbeddedStory);
+	__int64 inEmbeddedStory=m[where].flags&(cWordMatch::flagEmbeddedStoryResolveSpeakers|cWordMatch::flagSecondEmbeddedStory|cWordMatch::flagFirstEmbeddedStory);
   for (int urs=unresolvedSpeakers.size()-1; urs>=0; )
   {
-		for (; urs>=0 && inEmbeddedStory && !(m[abs(unresolvedSpeakers[urs])].flags&WordMatch::flagAlternateResolutionFinishedSpeakers) && 
-					 (m[abs(unresolvedSpeakers[urs])].flags&(WordMatch::flagEmbeddedStoryResolveSpeakers|WordMatch::flagSecondEmbeddedStory|WordMatch::flagFirstEmbeddedStory))==inEmbeddedStory; urs--)
+		for (; urs>=0 && inEmbeddedStory && !(m[abs(unresolvedSpeakers[urs])].flags&cWordMatch::flagAlternateResolutionFinishedSpeakers) && 
+					 (m[abs(unresolvedSpeakers[urs])].flags&(cWordMatch::flagEmbeddedStoryResolveSpeakers|cWordMatch::flagSecondEmbeddedStory|cWordMatch::flagFirstEmbeddedStory))==inEmbeddedStory; urs--)
 			resolveMatchesByAlternation(currentSpeakerWhere,definitelySpeaker,urs,false);
 		if (urs<0) break;
     //      assign speaker (S) to all even previous unknown objects.
     //      subtract speaker (S) from all odd previous unknown objects. (1 before, 3 before, etc)
-    if (!(m[abs(unresolvedSpeakers[urs])].flags&WordMatch::flagAlternateResolutionFinishedSpeakers))
+    if (!(m[abs(unresolvedSpeakers[urs])].flags&cWordMatch::flagAlternateResolutionFinishedSpeakers))
 			resolveAudienceByAlternation(currentSpeakerWhere,definitelySpeaker,urs,false);
-		inEmbeddedStory=m[abs(unresolvedSpeakers[urs])].flags&(WordMatch::flagEmbeddedStoryResolveSpeakers|WordMatch::flagSecondEmbeddedStory|WordMatch::flagFirstEmbeddedStory);
+		inEmbeddedStory=m[abs(unresolvedSpeakers[urs])].flags&(cWordMatch::flagEmbeddedStoryResolveSpeakers|cWordMatch::flagSecondEmbeddedStory|cWordMatch::flagFirstEmbeddedStory);
 		urs--;
 		if (urs<0) break;
-		for (; urs>=0 && inEmbeddedStory && !(m[abs(unresolvedSpeakers[urs])].flags&WordMatch::flagAlternateResolutionFinishedSpeakers) && 
-					 (m[abs(unresolvedSpeakers[urs])].flags&(WordMatch::flagEmbeddedStoryResolveSpeakers|WordMatch::flagSecondEmbeddedStory|WordMatch::flagFirstEmbeddedStory))==inEmbeddedStory; urs--)
+		for (; urs>=0 && inEmbeddedStory && !(m[abs(unresolvedSpeakers[urs])].flags&cWordMatch::flagAlternateResolutionFinishedSpeakers) && 
+					 (m[abs(unresolvedSpeakers[urs])].flags&(cWordMatch::flagEmbeddedStoryResolveSpeakers|cWordMatch::flagSecondEmbeddedStory|cWordMatch::flagFirstEmbeddedStory))==inEmbeddedStory; urs--)
 			resolveAudienceByAlternation(currentSpeakerWhere,definitelySpeaker,urs,false);
 		if (urs<0) break;
-    if (unresolvedSpeakers[urs]>=0 && !(m[abs(unresolvedSpeakers[urs])].flags&WordMatch::flagAlternateResolutionFinishedSpeakers))
+    if (unresolvedSpeakers[urs]>=0 && !(m[abs(unresolvedSpeakers[urs])].flags&cWordMatch::flagAlternateResolutionFinishedSpeakers))
 			resolveMatchesByAlternation(currentSpeakerWhere,definitelySpeaker,urs,false);
-		inEmbeddedStory=m[abs(unresolvedSpeakers[urs])].flags&(WordMatch::flagEmbeddedStoryResolveSpeakers|WordMatch::flagSecondEmbeddedStory|WordMatch::flagFirstEmbeddedStory);
+		inEmbeddedStory=m[abs(unresolvedSpeakers[urs])].flags&(cWordMatch::flagEmbeddedStoryResolveSpeakers|cWordMatch::flagSecondEmbeddedStory|cWordMatch::flagFirstEmbeddedStory);
 		urs--;
   }
   // push one more speaker back (flip speakers, so that the next time the previousSpeakers or currentSpeaker is resolved,
@@ -5462,7 +5462,7 @@ void cSource::resolvePreviousSpeakersByAlternationBackwards(int where,int curren
 bool cSource::quotationsImmediatelyBefore(int beginQuote)
 { LFS
   if (!beginQuote) return false;
-  vector <WordMatch>::iterator im;
+  vector <cWordMatch>::iterator im;
   for (im=m.begin()+beginQuote-1; im!=m.begin() && im->word==Words.sectionWord; im--);
   return im!=m.begin() && im->queryForm(quoteForm)>=0;
 }
@@ -5543,7 +5543,7 @@ bool cSource::reEvaluateHailedObjects(int beginQuote,bool setMatched)
 						m[I].objectMatches.push_back(cOM(*si,SALIENCE_THRESHOLD));
 				if (m[I].objectMatches.size()==1)
 				{
-					setSpeakerMatchesFromPosition(beginQuote,m[beginQuote].audienceObjectMatches,I,L"Unique reresolve of gender HAIL object audience",WordMatch::flagHailedResolveAudience);
+					setSpeakerMatchesFromPosition(beginQuote,m[beginQuote].audienceObjectMatches,I,L"Unique reresolve of gender HAIL object audience",cWordMatch::flagHailedResolveAudience);
 					reEvaluationOccurred=true;
 				}
 			}
@@ -5590,10 +5590,10 @@ void cSource::boostRecentSpeakers(int where,int beginQuote,int speakersConsidere
 				lsi->res+=L"+RECENT[+15000]";
 			}
 		//}
-		m[where].flags|=WordMatch::flagResolvedByRecent;
+		m[where].flags|=cWordMatch::flagResolvedByRecent;
 	}
 	if (speakerGroups[currentSpeakerGroup].speakers.size()>2 && speakersConsidered>1 && 
-		  previousPrimaryQuote>=0 && m[previousPrimaryQuote].nextQuote==beginQuote && !(m[previousPrimaryQuote].flags&WordMatch::flagLastContinuousQuote) &&
+		  previousPrimaryQuote>=0 && m[previousPrimaryQuote].nextQuote==beginQuote && !(m[previousPrimaryQuote].flags&cWordMatch::flagLastContinuousQuote) &&
 		  m[previousPrimaryQuote].objectMatches.size()==1 && m[previousPrimaryQuote].audienceObjectMatches.size()==1)
 	{
 		if (getMostLikelyAudience)
@@ -5614,10 +5614,10 @@ void cSource::boostRecentSpeakers(int where,int beginQuote,int speakersConsidere
 				lsi->res+=L"+RECENT2[+30000]";
 			}
 		}
-		m[where].flags|=WordMatch::flagResolvedByRecent;
+		m[where].flags|=cWordMatch::flagResolvedByRecent;
 	}
 	if (speakerGroups[currentSpeakerGroup].speakers.size()>2 && speakersConsidered>2 && previousPrimaryQuote>=0 && m[previousPrimaryQuote].nextQuote==beginQuote &&
-		  m[previousPrimaryQuote].objectMatches.size()==2 && (m[previousPrimaryQuote].flags&WordMatch::flagResolvedByRecent))
+		  m[previousPrimaryQuote].objectMatches.size()==2 && (m[previousPrimaryQuote].flags&cWordMatch::flagResolvedByRecent))
 	{
 		lsi=in(m[previousPrimaryQuote].objectMatches[0].object);
 		if (lsi!=localObjects.end() && lsi->om.salienceFactor>=500)
@@ -5631,7 +5631,7 @@ void cSource::boostRecentSpeakers(int where,int beginQuote,int speakersConsidere
 			lsi->om.salienceFactor+=10000;
 			lsi->res+=L"+RECENT3[+10000]";
 		}
-		m[where].flags|=WordMatch::flagResolvedByRecent;
+		m[where].flags|=cWordMatch::flagResolvedByRecent;
 	}
 }
 
@@ -5755,7 +5755,7 @@ void cSource::getMostLikelySpeakers(unsigned int beginQuote,unsigned int endQuot
 		if (lsi->om.salienceFactor>=500 && speakersConsidered>=0)
 		{
 			if ((previousPrimaryQuote>=0 && lsi->lastWhere>m[previousPrimaryQuote].endQuote) && 
-				  (m[previousPrimaryQuote].nextQuote!=beginQuote || (m[previousPrimaryQuote].flags&WordMatch::flagLastContinuousQuote)))
+				  (m[previousPrimaryQuote].nextQuote!=beginQuote || (m[previousPrimaryQuote].flags&cWordMatch::flagLastContinuousQuote)))
 				speakersMentionedInLastParagraph++;
 			speakersConsidered++;
 		}
@@ -5782,8 +5782,8 @@ void cSource::getMostLikelySpeakers(unsigned int beginQuote,unsigned int endQuot
 			      objectString(beforePreviousSpeakers,tmpstr).c_str(),objectString(previousSpeakers,tmpstr2).c_str());
 		// preferredSpeaker is normally the speaker who spoke two quotes ago (beforePreviousSpeakers).  However, this may be overridden by a defined audience of the last quote.
 		int preferredSpeaker=(beforePreviousSpeakers.size()==1) ? beforePreviousSpeakers[0] : -1;
-		if (previousPrimaryQuote>=0 && !(m[previousPrimaryQuote].flags&WordMatch::flagLastContinuousQuote) && 
-			  (m[previousPrimaryQuote].flags&(WordMatch::flagSpecifiedResolveAudience|WordMatch::flagHailedResolveAudience)) && 
+		if (previousPrimaryQuote>=0 && !(m[previousPrimaryQuote].flags&cWordMatch::flagLastContinuousQuote) && 
+			  (m[previousPrimaryQuote].flags&(cWordMatch::flagSpecifiedResolveAudience|cWordMatch::flagHailedResolveAudience)) && 
 			  m[previousPrimaryQuote].audienceObjectMatches.size()==1 && m[previousPrimaryQuote].audienceObjectMatches[0].object!=preferredSpeaker)
 			preferredSpeaker=m[previousPrimaryQuote].audienceObjectMatches[0].object;
 		if (currentSpeakerGroup<speakerGroups.size() && speakerGroups[currentSpeakerGroup].speakers.find(preferredSpeaker)==speakerGroups[currentSpeakerGroup].speakers.end())
@@ -5891,7 +5891,7 @@ void cSource::getMostLikelySpeakers(unsigned int beginQuote,unsigned int endQuot
          objects[o].objectClass==GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS) &&
          intersect(m[I].objectMatches,previousSpeakers,allIn,oneIn))
     {
-       m[I].flags&=~WordMatch::flagObjectResolved;
+       m[I].flags&=~cWordMatch::flagObjectResolved;
        resolveObject(I,true,true,false,lastBeginS1,lastRelativePhrase,lastQ2,lastVerb,true,true,false);
        if (m[I].objectMatches.size()==1 && saveBlockedObject<0)
        {
@@ -6063,7 +6063,7 @@ bool cSource::genderedBodyPartSubstitution(int where,int &speakerObject)
       //if (currentSpeakerGroup<speakerGroups.size())
       //  replaceObject(substituteObject,speakerObject,speakerGroups[currentSpeakerGroup].speakers,"SPEAKERGROUP",currentSpeakerGroup,"genderedBodyPartSubstitution");
       if (objects[substituteObject].objectClass==NAME_OBJECT_CLASS)
-        m[at].flags|=WordMatch::flagObjectResolved;
+        m[at].flags|=cWordMatch::flagObjectResolved;
       speakerObject=substituteObject;
       return true;
     }
@@ -6347,11 +6347,11 @@ void cSource::imposeSpeaker(int beginQuote,int endQuote,int &lastDefiniteSpeaker
 	// set speaker and audience.  If the speaker is definitively specified, but the speaker object is a gendered pronoun, for which there is more than one matching gender, then flag as ambiguous.
   if (beginQuote>=0)
   {
-		__int64 flag=WordMatch::flagMostLikelyResolveSpeakers;
+		__int64 flag=cWordMatch::flagMostLikelyResolveSpeakers;
 		if (definitelySpeaker)
 		{
 			int o=m[speakerObjectAt].getObject(),begin=m[speakerObjectAt].beginObjectPosition;
-			flag=WordMatch::flagDefiniteResolveSpeakers;
+			flag=cWordMatch::flagDefiniteResolveSpeakers;
 			// if speaker is definite (that is if the quote is specifically attributed - he said, she said etc.
 			// but the speaker is a pronoun that is ambiguous in that there is more than one speaker associated with that gender
 			// if speakers are ambiguous and there is no hint from the previous subject
@@ -6363,18 +6363,18 @@ void cSource::imposeSpeaker(int beginQuote,int endQuote,int &lastDefiniteSpeaker
 					(!subjectsInPreviousUnquotedSectionUsableForImmediateResolution || subjectsInPreviousUnquotedSection.size()!=1 ||
 				   m[speakerObjectAt].objectMatches.size()!=1 || m[speakerObjectAt].objectMatches[0].object!=subjectsInPreviousUnquotedSection[0]) &&
 					 numMatchingGenderInSpeakerGroup(o)>1)
-				flag=WordMatch::flagGenderIsAmbiguousResolveSpeakers|WordMatch::flagMostLikelyResolveSpeakers;
+				flag=cWordMatch::flagGenderIsAmbiguousResolveSpeakers|cWordMatch::flagMostLikelyResolveSpeakers;
 		}
 		setSpeakerMatchesFromPosition(beginQuote,m[beginQuote].objectMatches,speakerObjectAt,L"speaker",flag);
     // set NOT speaker to matches of audienceObjectPosition (if set)
     if (audienceObjectPosition>=0)
 		{
-			flag=WordMatch::flagSpecifiedResolveAudience;
+			flag=cWordMatch::flagSpecifiedResolveAudience;
 			int o=m[audienceObjectPosition].getObject();
 			// if audience is a hail, and there is more than one match and the number of matching gendered objects in the speaker group > the number of audience objects, mark as ambiguous
 			if ((m[audienceObjectPosition].objectRole&HAIL_ROLE) && m[audienceObjectPosition].objectMatches.size()>1 && (objects[o].male ^ objects[o].female) &&
 				  numMatchingGenderInSpeakerGroup(o)>m[audienceObjectPosition].objectMatches.size())
-				flag=WordMatch::flagGenderIsAmbiguousResolveAudience|WordMatch::flagMostLikelyResolveAudience;
+				flag=cWordMatch::flagGenderIsAmbiguousResolveAudience|cWordMatch::flagMostLikelyResolveAudience;
       setSpeakerMatchesFromPosition(beginQuote,m[beginQuote].audienceObjectMatches,audienceObjectPosition,L"audiencePosition (2)",flag);
 		}
   }
@@ -6467,11 +6467,11 @@ void cSource::imposeSpeaker(int beginQuote,int endQuote,int &lastDefiniteSpeaker
     // set NOT speaker to matches of audienceObjectPosition (if set)
     if (audienceObjectPosition>=0)
 		{
-			__int64 flag=WordMatch::flagSpecifiedResolveAudience;
+			__int64 flag=cWordMatch::flagSpecifiedResolveAudience;
 			int o=m[audienceObjectPosition].getObject();
 			if ((m[audienceObjectPosition].objectRole&HAIL_ROLE) && m[audienceObjectPosition].objectMatches.size()>1 && (objects[o].male ^ objects[o].female) &&
 				  numMatchingGenderInSpeakerGroup(o)>m[audienceObjectPosition].objectMatches.size())
-				flag=WordMatch::flagGenderIsAmbiguousResolveAudience|WordMatch::flagMostLikelyResolveAudience;
+				flag=cWordMatch::flagGenderIsAmbiguousResolveAudience|cWordMatch::flagMostLikelyResolveAudience;
       setSpeakerMatchesFromPosition(beginQuote,m[beginQuote].audienceObjectMatches,audienceObjectPosition,howDerived=L"audiencePosition (2)",flag);
 		}
 		// if a speaker is definitely identified, that is the lastDefiniteSpeaker for the next statement.
@@ -6480,7 +6480,7 @@ void cSource::imposeSpeaker(int beginQuote,int endQuote,int &lastDefiniteSpeaker
 		{
 			if (!intersect(m[beginQuote].objectMatches,m[lastDefiniteSpeaker].objectMatches,allIn,oneIn))
 			{
-				setSpeakerMatchesFromPosition(beginQuote,m[beginQuote].audienceObjectMatches,lastDefiniteSpeaker,howDerived=L"lastDefiniteSpeaker",WordMatch::flagFromLastDefiniteResolveAudience);
+				setSpeakerMatchesFromPosition(beginQuote,m[beginQuote].audienceObjectMatches,lastDefiniteSpeaker,howDerived=L"lastDefiniteSpeaker",cWordMatch::flagFromLastDefiniteResolveAudience);
 				if (unresolvedSpeakers.size())
 					unresolvedSpeakers[unresolvedSpeakers.size()-1]=-beginQuote; // objectsNotMatched may be more definitely resolved later...
 			}
@@ -6503,12 +6503,12 @@ void cSource::imposeSpeaker(int beginQuote,int endQuote,int &lastDefiniteSpeaker
 				//listenerAssociationPreference();
         if (unresolvedSpeakers.size()>0)
           unresolvedSpeakers[unresolvedSpeakers.size()-1]=-beginQuote;
-				m[beginQuote].flags|=WordMatch::flagMostLikelyResolveAudience;
+				m[beginQuote].flags|=cWordMatch::flagMostLikelyResolveAudience;
 			}
 			else if (previousSpeakers.size()!=1)  
-				m[beginQuote].flags|=WordMatch::flagMostLikelyResolveAudience;
+				m[beginQuote].flags|=cWordMatch::flagMostLikelyResolveAudience;
 			else
-				m[beginQuote].flags|=WordMatch::flagAlternateResolveBackwardFromDefiniteAudience; // will block other alternate speakers
+				m[beginQuote].flags|=cWordMatch::flagAlternateResolveBackwardFromDefiniteAudience; // will block other alternate speakers
 			vector <int> bodyObjects;
 			int o;
 			for (unsigned int I=0; I<m[beginQuote].objectMatches.size(); I++)
@@ -6603,14 +6603,14 @@ void cSource::imposeMostLikelySpeakers(unsigned int beginQuote,int &lastDefinite
 	int addResolveFlag=0;
 	wstring tmpstr,tmpstr2;
 	// check if this speaker is set because it is hailed in the immediately preceding quote.  If so, increase the certainty of the match.
-	if (!previousSpeakersEmpty && previousPrimaryQuote!=-1 && (m[previousPrimaryQuote].flags&WordMatch::flagSpecifiedResolveAudience))
+	if (!previousSpeakersEmpty && previousPrimaryQuote!=-1 && (m[previousPrimaryQuote].flags&cWordMatch::flagSpecifiedResolveAudience))
 	{
 		// make sure the previousPrimaryQuote is immediately before beginQuote
 		unsigned int endOfParagraph=m[previousPrimaryQuote].endQuote;
 		while (endOfParagraph<m.size() && m[endOfParagraph].word!=Words.sectionWord) endOfParagraph++;
 		if (endOfParagraph+1<m.size() && endOfParagraph+1==beginQuote && intersect(m[previousPrimaryQuote].audienceObjectMatches,previousSpeakers,allIn,oneIn) && allIn)
 		{
-			addResolveFlag=WordMatch::flagFromPreviousHailResolveSpeakers;
+			addResolveFlag=cWordMatch::flagFromPreviousHailResolveSpeakers;
 			if (m[previousPrimaryQuote].audienceObjectMatches.size()<previousSpeakers.size())
 			{
 			  if (debugTrace.traceSpeakerResolution)
@@ -6623,8 +6623,8 @@ void cSource::imposeMostLikelySpeakers(unsigned int beginQuote,int &lastDefinite
 		}
 	}
   // set objectMatches at beginQuote to previousSpeakers
-	if (setFlagAlternateResolveForwardAfterDefinite) addResolveFlag|=WordMatch::flagAlternateResolveForwardAfterDefinite;
-	addSpeakerObjects(beginQuote,true,beginQuote,previousSpeakers,WordMatch::flagMostLikelyResolveSpeakers|addResolveFlag);
+	if (setFlagAlternateResolveForwardAfterDefinite) addResolveFlag|=cWordMatch::flagAlternateResolveForwardAfterDefinite;
+	addSpeakerObjects(beginQuote,true,beginQuote,previousSpeakers,cWordMatch::flagMostLikelyResolveSpeakers|addResolveFlag);
   for (unsigned s=0; s<previousSpeakers.size(); s++)
   {
     int o=previousSpeakers[s];
@@ -6647,11 +6647,11 @@ void cSource::imposeMostLikelySpeakers(unsigned int beginQuote,int &lastDefinite
 	// it, as it will end up rejecting all speakers.
   if (audienceObjectPosition>=0 && (currentSpeakerGroup>=speakerGroups.size() || m[audienceObjectPosition].objectMatches.size()<speakerGroups[currentSpeakerGroup].speakers.size()))
 	{
-    setSpeakerMatchesFromPosition(beginQuote,m[beginQuote].audienceObjectMatches,audienceObjectPosition,L"audienceObjectPosition",WordMatch::flagSpecifiedResolveAudience);
+    setSpeakerMatchesFromPosition(beginQuote,m[beginQuote].audienceObjectMatches,audienceObjectPosition,L"audienceObjectPosition",cWordMatch::flagSpecifiedResolveAudience);
 		if (m[beginQuote].objectMatches.size()==1)
 			subtract(m[beginQuote].objectMatches[0].object,m[beginQuote].audienceObjectMatches);
 		if (previousPrimaryQuote!=(unsigned int)-1 && m[previousPrimaryQuote].nextQuote==beginQuote && 
-			  !(m[previousPrimaryQuote].flags&(WordMatch::flagFromPreviousHailResolveSpeakers|WordMatch::flagDefiniteResolveSpeakers)) &&
+			  !(m[previousPrimaryQuote].flags&(cWordMatch::flagFromPreviousHailResolveSpeakers|cWordMatch::flagDefiniteResolveSpeakers)) &&
 				m[beginQuote].audienceObjectMatches.size()==1 &&
 				m[previousPrimaryQuote].objectMatches.size()>1 && in(m[beginQuote].audienceObjectMatches[0].object,m[previousPrimaryQuote].objectMatches)!=m[previousPrimaryQuote].objectMatches.end())
 		{
@@ -6677,23 +6677,23 @@ void cSource::imposeMostLikelySpeakers(unsigned int beginQuote,int &lastDefinite
 	}
   else if (lastDefiniteSpeaker>=0)
     setSpeakerMatchesFromPosition(beginQuote,m[beginQuote].audienceObjectMatches,lastDefiniteSpeaker,L"definite previous speaker",
-			(m[lastDefiniteSpeaker].flags&WordMatch::flagDefiniteResolveSpeakers) ? WordMatch::flagFromLastDefiniteResolveAudience : (WordMatch::flagGenderIsAmbiguousResolveSpeakers|WordMatch::flagMostLikelyResolveAudience));
+			(m[lastDefiniteSpeaker].flags&cWordMatch::flagDefiniteResolveSpeakers) ? cWordMatch::flagFromLastDefiniteResolveAudience : (cWordMatch::flagGenderIsAmbiguousResolveSpeakers|cWordMatch::flagMostLikelyResolveAudience));
   else if (beforePreviousSpeakers.size())
 	{
 		vector <int>::iterator audienceInQuote;
 		// exclude audiences that are mentioned in the quote, if there are more than 2 speakers
 		if (currentSpeakerGroup<speakerGroups.size() && speakerGroups[currentSpeakerGroup].speakers.size()>2 && m[lastOpeningPrimaryQuote].getRelObject()>=0 &&
-			 (m[lastOpeningPrimaryQuote].flags&WordMatch::flagQuoteContainsSpeaker) && 
+			 (m[lastOpeningPrimaryQuote].flags&cWordMatch::flagQuoteContainsSpeaker) && 
 			 (audienceInQuote=find(beforePreviousSpeakers.begin(),beforePreviousSpeakers.end(),m[m[lastOpeningPrimaryQuote].getRelObject()].getObject()))!=beforePreviousSpeakers.end())
 			beforePreviousSpeakers.erase(audienceInQuote);
-		if ((addResolveFlag&WordMatch::flagAlternateResolveForwardAfterDefinite) && intersect(previousSpeakers,beforePreviousSpeakers,allIn,oneIn) && currentSpeakerGroup<speakerGroups.size())
+		if ((addResolveFlag&cWordMatch::flagAlternateResolveForwardAfterDefinite) && intersect(previousSpeakers,beforePreviousSpeakers,allIn,oneIn) && currentSpeakerGroup<speakerGroups.size())
 		{
 			beforePreviousSpeakers.clear();
 			for (set <int>::iterator si=speakerGroups[currentSpeakerGroup].speakers.begin(),siEnd=speakerGroups[currentSpeakerGroup].speakers.end(); si!=siEnd; si++)
 				if (find(previousSpeakers.begin(),previousSpeakers.end(),*si)==previousSpeakers.end())
 					beforePreviousSpeakers.push_back(*si);
 		}
-    addSpeakerObjects(beginQuote,false,beginQuote,beforePreviousSpeakers,WordMatch::flagMostLikelyResolveAudience);
+    addSpeakerObjects(beginQuote,false,beginQuote,beforePreviousSpeakers,cWordMatch::flagMostLikelyResolveAudience);
 	}
   else // if no history, no definite current speaker - guess!
     m[beginQuote].audienceObjectMatches=m[beginQuote].objectMatches;
@@ -6829,7 +6829,7 @@ bool cSource::anyAcceptableLocations(int where,int object)
 { LFS
   for (vector <cObject::cLocation>::iterator loc=objects[object].locations.begin(),locEnd=objects[object].locations.end();
        loc!=locEnd; loc++)
-     if (loc->at<where && !(m[loc->at].flags&(WordMatch::flagInQuestion|WordMatch::flagInPStatement)) && !(m[loc->at].objectRole&RE_OBJECT_ROLE))
+     if (loc->at<where && !(m[loc->at].flags&(cWordMatch::flagInQuestion|cWordMatch::flagInPStatement)) && !(m[loc->at].objectRole&RE_OBJECT_ROLE))
 				return true;
   return false;
 }
@@ -6878,7 +6878,7 @@ int cSource::locationBefore(int object,int where,bool plural,bool notInQuestion)
 	{
 		if ((o=m[loc->at].getObject())>=0 && plural!=objects[o].plural) continue;
 		if (o<0 && plural!=((m[loc->at].word->second.inflectionFlags&(PLURAL|PLURAL_OWNER))!=0)) continue;
-		if (notInQuestion && (m[loc->at].flags&WordMatch::flagInQuestion)) continue;
+		if (notInQuestion && (m[loc->at].flags&cWordMatch::flagInQuestion)) continue;
     if (loc->at<where && loc->at>maxLocation) maxLocation=loc->at;
 	}
   return (maxLocation!=-1) ? maxLocation : objects[object].originalLocation;
@@ -7068,7 +7068,7 @@ void cSource::mergeFocusResolution(int o,int I,vector <int> &lastSubjects,bool &
 //   if false, add all other members of the group - don't restrict the choice to the matches already there.
 void cSource::preferSubgroupMatch(int where,int objectClass,int inflectionFlags,bool inQuote,int speakerObject,bool restrictToAlreadyMatched)
 { LFS
-  vector <WordMatch>::iterator im=m.begin()+where;
+  vector <cWordMatch>::iterator im=m.begin()+where;
 	int o;
   if ((o=im->getObject())== cObject::eOBJECTS::UNKNOWN_OBJECT || currentSpeakerGroup==0 ||
       (o>=0 &&
@@ -7343,7 +7343,7 @@ bool cSource::hasAgentObjectOwner(int where,int &ownerWhere)
 					 (m[ownerWhere].getObject()== cObject::eOBJECTS::OBJECT_UNKNOWN_MALE || m[ownerWhere].getObject()== cObject::eOBJECTS::OBJECT_UNKNOWN_FEMALE || m[ownerWhere].getObject()== cObject::eOBJECTS::OBJECT_UNKNOWN_MALE_OR_FEMALE));
 }
 
-void cSource::checkInfinitivePhraseForLocation(vector <tTagLocation> &tagSet,bool locationTense)
+void cSource::checkInfinitivePhraseForLocation(vector <cTagLocation> &tagSet,bool locationTense)
 { LFS
 	int nextTag=-1;
 	int iverbTag=findTag(tagSet,L"IVERB",nextTag);
@@ -7352,7 +7352,7 @@ void cSource::checkInfinitivePhraseForLocation(vector <tTagLocation> &tagSet,boo
 	int subjectTag=findOneTag(tagSet,L"SUBJECT",-1),subjectObject=-1,whereSubjectObject=-1;
 	if (!resolveTag(tagSet,subjectTag,subjectObject,whereSubjectObject,subjectWord)) return;
 	// find verb of IVERB to associate with verb
-	vector < vector <tTagLocation> > iTagSets;
+	vector < vector <cTagLocation> > iTagSets;
 	if (startCollectTagsFromTag(debugTrace.traceRelations,iverbTagSet,tagSet[iverbTag],iTagSets,-1,true, false, L"check infinitive phrase for location")>0)
 	for (unsigned int K=0; K<iTagSets.size(); K++)
 	{
@@ -7379,11 +7379,11 @@ void cSource::preparePrepMap(void)
 	tIWMM p;
 	for (pmi=prepTypesMap.begin(),pmiEnd=prepTypesMap.end(); pmi!=pmiEnd; pmi++)
 		if (movementPrepTypes.find(pmi->second)!=movementPrepTypes.end() && (p=Words.query(pmi->first))!=Words.end())
-			p->second.flags|=tFI::prepMoveType;
+			p->second.flags|=cSourceWordInfo::prepMoveType;
 }
 
 // "P","PREPOBJECT","VERBSUBOBJECT"
-int cSource::evaluatePrepObjectRelation(vector <tTagLocation> &tagSet,int &pIndex,tIWMM &prepWord,int &object,int &wherePrepObject,tIWMM &objectWord)
+int cSource::evaluatePrepObjectRelation(vector <cTagLocation> &tagSet,int &pIndex,tIWMM &prepWord,int &object,int &wherePrepObject,tIWMM &objectWord)
 { LFS
 	// find preposition
 	int tag,nextTag=-1;
@@ -7406,7 +7406,7 @@ int cSource::evaluatePrepObjectRelation(vector <tTagLocation> &tagSet,int &pInde
 // tprNEAR,tprX,tprIN,tprAT,tprY,tprSPAT,tprFROM,tprTO
 // this tagSet is from subjectVerbRelationTagSet
 // this is only called if the verbTense is narrative and true.
-void cSource::accumulateLocation(int where,vector <tTagLocation> &tagSet,int subjectObject,bool locationTense)
+void cSource::accumulateLocation(int where,vector <cTagLocation> &tagSet,int subjectObject,bool locationTense)
 { LFS
 	if (accumulateLocationLastLocation==where) return;
 	wstring reason;
@@ -7414,8 +7414,8 @@ void cSource::accumulateLocation(int where,vector <tTagLocation> &tagSet,int sub
 	// get preposition and subobject
 	int prepTag=findTag(tagSet,L"PREP",nextTag);
 	if (prepTag<0) return;
-	vector < vector <tTagLocation> > tagSets;
-	tTagLocation ts=tagSet[prepTag],nts=ts;
+	vector < vector <cTagLocation> > tagSets;
+	cTagLocation ts=tagSet[prepTag],nts=ts;
 	if (m[ts.sourcePosition].objectRole&SUBJECT_ROLE)
 		return; // no prepositions in subjects are meaningful for this application
 	tIWMM prepWord=wNULL,subObjectWord=wNULL;
@@ -7428,7 +7428,7 @@ void cSource::accumulateLocation(int where,vector <tTagLocation> &tagSet,int sub
 				if (debugTrace.traceRelations)
 					::printTagSet(LOG_RESOLUTION,L"PREP",K,tagSets[K]);
 				subobject=-1;
-				if (evaluatePrepObjectRelation(tagSets[K],pIndex,prepWord,subobject,wherePrepObject,subObjectWord)>=0 && (prepWord->second.flags&tFI::prepMoveType)!=0)
+				if (evaluatePrepObjectRelation(tagSets[K],pIndex,prepWord,subobject,wherePrepObject,subObjectWord)>=0 && (prepWord->second.flags&cSourceWordInfo::prepMoveType)!=0)
 					movementPrepType=1;
 				if (movementPrepType>=0) break;
 				nextTag=-1;
@@ -7496,7 +7496,7 @@ void cSource::accumulateLocation(int where,vector <tTagLocation> &tagSet,int sub
 	if (m[wherePrepObject].word->second.timeFlags&T_UNIT) reason+=L" time unit";
 	// don't allow "a, an" or quantifiers (all, every, etc)
 	// may allow "a" or "an" in the future if statistics can be collected on the principal noun 
-	vector <WordMatch>::iterator im=m.begin()+objects[subobject].begin;
+	vector <cWordMatch>::iterator im=m.begin()+objects[subobject].begin;
 	// allow England
 	if (objects[subobject].objectClass!=NAME_OBJECT_CLASS && 
 		im->word->first!=L"the" && im->queryWinnerForm(demonstrativeDeterminerForm)<0 && im->queryWinnerForm(possessiveDeterminerForm)<0) 
@@ -7570,7 +7570,7 @@ void cSource::accumulateLocation(int where,vector <tTagLocation> &tagSet,int sub
 
 // is this OK?  there is only one object slot, so we are being opportunistic
 // in not checking if the object occupies the entire tag...
-int cSource::findObject(tTagLocation &tag,int &objectPosition)
+int cSource::findObject(cTagLocation &tag,int &objectPosition)
 { LFS
 	if ((objectPosition=m[tag.sourcePosition].principalWherePosition)<0)
 		objectPosition=m[tag.sourcePosition].principalWhereAdjectivalPosition;
@@ -7582,14 +7582,14 @@ int cSource::findObject(tTagLocation &tag,int &objectPosition)
 		objectPosition=tag.sourcePosition+1;
 	//int object=m[objectPosition=tag.sourcePosition].principalWherePosition;
 	//if (object<0) object=m[tag.sourcePosition].principalWhereAdjectivalPosition;
-	//vector <WordMatch>::iterator im=m.begin()+tag.sourcePosition,imEnd=m.begin()+tag.sourcePosition+tag.len;
+	//vector <cWordMatch>::iterator im=m.begin()+tag.sourcePosition,imEnd=m.begin()+tag.sourcePosition+tag.len;
 	//for (; im!=imEnd && im->getObject()!=object; im++,objectPosition++);
 	//return (im!=imEnd && im->getObject()!=UNKNOWN_OBJECT && im->endObjectPosition-im->beginObjectPosition<=tag.len) ? object : -1;
 	if (objectPosition<0) return -1;
 	return m[objectPosition].getObject();
 }
 
-void cSource::assignMetaQueryAudience(int beginQuote,int previousQuote,int primaryObject,int secondaryObject,int secondaryTag,vector <tTagLocation> &tagSet)
+void cSource::assignMetaQueryAudience(int beginQuote,int previousQuote,int primaryObject,int secondaryObject,int secondaryTag,vector <cTagLocation> &tagSet)
 { LFS
 	wstring tmpstr,tmpstr2,tmpstr3;
 	if (secondaryObject<0 || objects[secondaryObject].objectClass!=NAME_OBJECT_CLASS || 
@@ -7615,7 +7615,7 @@ void cSource::assignMetaQueryAudience(int beginQuote,int previousQuote,int prima
 				findObject(tagSet[secondaryTag],whereSecondaryObject);
 				m[whereSecondaryObject].objectMatches.push_back(cOM(secondaryObject=m[previousQuote].objectMatches[0].object,SALIENCE_THRESHOLD));
 				objects[secondaryObject].locations.push_back(whereSecondaryObject);
-			  m[whereSecondaryObject].flags|=WordMatch::flagObjectResolved;
+			  m[whereSecondaryObject].flags|=cWordMatch::flagObjectResolved;
 			}
 		}
 		else if (secondaryTag>=0)
@@ -7634,9 +7634,9 @@ void cSource::assignMetaQueryAudience(int beginQuote,int previousQuote,int prima
 //   create an alias for the speaker.
 bool cSource::processMetaSpeakerQueryAnswer(int beginQuote,int previousQuote,int lastQuery)
 { LFS
-	vector < vector<tTagLocation> > tagSets;
+	vector < vector<cTagLocation> > tagSets;
 	int element=m[lastQuery].pma.queryPattern(L"_META_SPEAKER_QUERY");
-	if (element==-1 || startCollectTags(debugTrace.traceNameResolution,metaNameEquivalenceTagSet,lastQuery,m[lastQuery].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,true,L"name equivalence - meta speaker query answer [query]")==0)
+	if (element==-1 || startCollectTags(debugTrace.traceNameResolution,metaNameEquivalenceTagSet,lastQuery,m[lastQuery].pma[element&~cMatchElement::patternFlag].pemaByPatternEnd,tagSets,true,true,L"name equivalence - meta speaker query answer [query]")==0)
 		return false;
 	wstring tmpstr,tmpstr2,tmpstr3;
 	tIWMM aboutWord=wNULL;
@@ -7644,19 +7644,19 @@ bool cSource::processMetaSpeakerQueryAnswer(int beginQuote,int previousQuote,int
 	for (unsigned int I=0; I<tagSets.size(); I++)
 	{
 		if (debugTrace.traceNameResolution)
-			printTagSet(LOG_RESOLUTION,L"MSQ",I,tagSets[I],lastQuery,m[lastQuery].pma[element&~matchElement::patternFlag].pemaByPatternEnd);
+			printTagSet(LOG_RESOLUTION,L"MSQ",I,tagSets[I],lastQuery,m[lastQuery].pma[element&~cMatchElement::patternFlag].pemaByPatternEnd);
 		if ((aboutTag=findOneTag(tagSets[I],L"NAME_ABOUT",-1))>=0)
 			aboutObject=m[whereAboutObject=tagSets[I][aboutTag].sourcePosition].getObject();
 	}
 	tagSets.clear();
 	element=m[beginQuote+1].pma.queryPattern(L"_META_SPEAKER_QUERY_RESPONSE");
-	if (element==-1 || startCollectTags(debugTrace.traceNameResolution,metaNameEquivalenceTagSet,beginQuote+1,m[beginQuote+1].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,true, L"name equivalence - meta speaker query answer [response]")==0)
+	if (element==-1 || startCollectTags(debugTrace.traceNameResolution,metaNameEquivalenceTagSet,beginQuote+1,m[beginQuote+1].pma[element&~cMatchElement::patternFlag].pemaByPatternEnd,tagSets,true,true, L"name equivalence - meta speaker query answer [response]")==0)
 		return false;
 	int whereAboutResponseObject=-1,aboutResponseObject=-1,aboutResponseTag=-1;
 	for (unsigned int I=0; I<tagSets.size(); I++)
 	{
 		if (debugTrace.traceNameResolution)
-			printTagSet(LOG_RESOLUTION,L"MSQR",I,tagSets[I],beginQuote+1,m[beginQuote+1].pma[element&~matchElement::patternFlag].pemaByPatternEnd);
+			printTagSet(LOG_RESOLUTION,L"MSQR",I,tagSets[I],beginQuote+1,m[beginQuote+1].pma[element&~cMatchElement::patternFlag].pemaByPatternEnd);
 		if ((aboutResponseTag=findOneTag(tagSets[I],L"NAME_ABOUT",-1))>=0)
 			aboutResponseObject=m[whereAboutResponseObject=tagSets[I][aboutResponseTag].sourcePosition].getObject();
 		int primaryTag=findOneTag(tagSets[I],L"NAME_PRIMARY",-1),secondaryTag=findOneTag(tagSets[I],L"NAME_SECONDARY",-1);
@@ -7719,13 +7719,13 @@ bool cSource::processMetaSpeakerQueryAnswer(int beginQuote,int previousQuote,int
 		{
 			m[beginQuote].objectMatches.push_back(cOM(primaryObject,SALIENCE_THRESHOLD));
 		  objects[primaryObject].speakerLocations.insert(beginQuote);
-			m[beginQuote].flags|=WordMatch::flagDefiniteResolveSpeakers;
+			m[beginQuote].flags|=cWordMatch::flagDefiniteResolveSpeakers;
 		}
     if (debugTrace.traceSpeakerResolution)
       lplog(LOG_RESOLUTION,L"%06d:beginQuote=%d previousQuote=%d primaryObject=%s secondaryObject=%s aboutObject=%s",I,beginQuote,previousQuote,objectString(primaryObject,tmpstr,true).c_str(),objectString(secondaryObject,tmpstr2,true).c_str(),objectString(aboutObject,tmpstr2,true).c_str());
 		assignMetaQueryAudience(beginQuote,previousQuote,primaryObject,secondaryObject,secondaryTag,tagSets[I]);
 		if (secondaryObject>=0)
-			m[beginQuote].flags|=WordMatch::flagSpecifiedResolveAudience;
+			m[beginQuote].flags|=cWordMatch::flagSpecifiedResolveAudience;
 		if (debugTrace.traceSpeakerResolution)
 			lplog(LOG_RESOLUTION,L"%06d:MSQA  %s//%s %s",beginQuote,
 					objectString(m[beginQuote].objectMatches,tmpstr,true).c_str(),objectString(m[beginQuote].audienceObjectMatches,tmpstr2,true).c_str(),
@@ -7868,7 +7868,7 @@ void cSource::setEmbeddedStorySpeaker(int where,int &lastDefiniteSpeaker)
 			lsi->numIdentifiedAsSpeaker++;
 	}
 	lastDefiniteSpeaker=where; 
-	setSpeakerMatchesFromPosition(where,m[where].objectMatches,m[where].embeddedStorySpeakerPosition,L"embeddedStorySpeaker",WordMatch::flagEmbeddedStoryResolveSpeakers);
+	setSpeakerMatchesFromPosition(where,m[where].objectMatches,m[where].embeddedStorySpeakerPosition,L"embeddedStorySpeaker",cWordMatch::flagEmbeddedStoryResolveSpeakers);
 	// set NOT speaker to the rest of the speaker group
 	vector <cLocalFocus>::iterator lsi;
   for (set <int>::iterator si=speakerGroups[currentSpeakerGroup].speakers.begin(),siEnd=speakerGroups[currentSpeakerGroup].speakers.end(); si!=siEnd; si++)
@@ -7877,7 +7877,7 @@ void cSource::setEmbeddedStorySpeaker(int where,int &lastDefiniteSpeaker)
       m[where].audienceObjectMatches.push_back(cOM(*si,SALIENCE_THRESHOLD));
 			objects[*si].speakerLocations.insert(where);
 		}
-	m[where].flags|=WordMatch::flagAudienceFromSpeakerGroupResolveAudience;
+	m[where].flags|=cWordMatch::flagAudienceFromSpeakerGroupResolveAudience;
 	if (debugTrace.traceSpeakerResolution)
 		lplog(LOG_RESOLUTION,L"%06d:Set last definite speaker to %d.",where,where);
 }
@@ -7940,7 +7940,7 @@ void cSource::ageIntoNewSpeakerGroup(int where)
 			if (lfi->lastWhere>=0)
 			{
 				beginEntirePosition=m[lfi->lastWhere].beginObjectPosition; // if this is an adjectival object 
-				if (m[lfi->lastWhere].flags&WordMatch::flagAdjectivalObject) 
+				if (m[lfi->lastWhere].flags&cWordMatch::flagAdjectivalObject) 
 					for (; beginEntirePosition>=0 && m[beginEntirePosition].principalWherePosition<0; beginEntirePosition--);
 			}
 			bool physicallyEvaluated=false;
@@ -8018,7 +8018,7 @@ void cSource::resetObjects(void)
   localObjects.clear();
 	subjectsInPreviousUnquotedSection.clear();
 	// re-associate the objects - initialize the adjectives from the objects themselves
-	vector <WordMatch>::iterator im=m.begin(),imend=m.end();
+	vector <cWordMatch>::iterator im=m.begin(),imend=m.end();
 	unsigned int I=0;
 	for (; im!=imend; im++,I++)
 	{
@@ -8034,7 +8034,7 @@ void cSource::resetObjects(void)
 				addDefaultGenderedAssociatedNouns(o);
 			objects[o].setGenericAge(m);
 		}
-    im->flags&=~WordMatch::flagObjectResolved;
+    im->flags&=~cWordMatch::flagObjectResolved;
 	}
 }
 
@@ -8069,7 +8069,7 @@ bool cSource::setSecondaryQuoteString(int I,vector <int> &secondaryQuotesResolut
   }
 	else
 	{
-    m[lastOpeningSecondaryQuote].flags|=WordMatch::flagQuotedString;
+    m[lastOpeningSecondaryQuote].flags|=cWordMatch::flagQuotedString;
 		#ifdef LOG_QUOTATIONS
 			lplog(L"%d-%d QS %s",lastOpeningSecondaryQuote,I,str.c_str());
 		#endif
@@ -8287,14 +8287,14 @@ int cSource::letterDetectionBegin(int where,int &whereLetterTo,int &lastLetterBe
 			}
 	}
 	int element=-1,maxLen=-1;
-  vector < vector <tTagLocation> > tagSets;
+  vector < vector <cTagLocation> > tagSets;
 	if (where<(signed)m.size() && (element=m[where].pma.queryPattern(L"_LETTER_BEGIN",maxLen))!=-1 && 
-		  startCollectTags(true,metaSpeakerTagSet,where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,true,L"letter detection")>0)
+		  startCollectTags(true,metaSpeakerTagSet,where,m[where].pma[element&~cMatchElement::patternFlag].pemaByPatternEnd,tagSets,true,true,L"letter detection")>0)
 	{
     for (unsigned int J=0; J<tagSets.size(); J++)
     {
       if (debugTrace.traceNameResolution)
-        printTagSet(LOG_RESOLUTION,L"LDB",J,tagSets[J],where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd);
+        printTagSet(LOG_RESOLUTION,L"LDB",J,tagSets[J],where,m[where].pma[element&~cMatchElement::patternFlag].pemaByPatternEnd);
 			int primaryTag;
 			int wherePrimary=tagSets[J][primaryTag=findOneTag(tagSets[J],L"NAME_PRIMARY",-1)].sourcePosition;
 			if (tagSets[J][primaryTag].len>1 && m[wherePrimary].principalWherePosition>=0) // make sure to bypass any adjectives
@@ -8346,7 +8346,7 @@ bool cSource::letterDetectionEnd(int where,int whereLetterTo,int lastLetterBegin
 	}
 	// twopence is not a recognized name (it was not seen before or after in the text)
 	// 	END: Yours , “Unresolved[tommy:tommy,carter] TWOPENCE . ” 
-	if (whereLetterTo>=0 && m[where].word->first==L"“" && (m[where+1].flags&WordMatch::flagAllCaps) &&
+	if (whereLetterTo>=0 && m[where].word->first==L"“" && (m[where+1].flags&cWordMatch::flagAllCaps) &&
 		  ((m[where+2].word->first==L"." && m[where+3].word->first==L"”") || m[where+2].word->first==L"”"))
 	{
 		// leads to doubles - future investigation
@@ -8408,7 +8408,7 @@ bool cSource::letterDetectionEnd(int where,int whereLetterTo,int lastLetterBegin
 				m[whereLetterTo].objectMatches.push_back(cOM(letterTo,SALIENCE_THRESHOLD));
 			}
 		}
-		bool toAllSpeakers=whereLetterTo>=0 && (m[whereLetterTo].objectMatches.empty() && (m[whereLetterTo].word->second.flags&tFI::genericGenderIgnoreMatch) &&
+		bool toAllSpeakers=whereLetterTo>=0 && (m[whereLetterTo].objectMatches.empty() && (m[whereLetterTo].word->second.flags&cSourceWordInfo::genericGenderIgnoreMatch) &&
 			  currentSpeakerGroup<speakerGroups.size() && letterTo==m[whereLetterTo].getObject());
 		wstring tmpstr,tmpstr2;
 		if (debugTrace.traceNameResolution || debugTrace.traceObjectResolution)
@@ -8439,7 +8439,7 @@ bool cSource::letterDetectionEnd(int where,int whereLetterTo,int lastLetterBegin
 					}
 					if (debugTrace.traceNameResolution || debugTrace.traceObjectResolution)
 						lplog(LOG_RESOLUTION,L"%06d:matches set@%d from %d",where,linkQuote,letterQuote);
-					m[linkQuote].flags|=WordMatch::flagDefiniteResolveSpeakers|WordMatch::flagSpecifiedResolveAudience;
+					m[linkQuote].flags|=cWordMatch::flagDefiniteResolveSpeakers|cWordMatch::flagSpecifiedResolveAudience;
 				}
 			}
 		return true;
@@ -8465,7 +8465,7 @@ void cSource::resolveMetaReference(int speakerPosition,int quotePosition,int las
 		  m[speakerPosition+3].word->first!=L"to" || m[speakerPosition+4].word->first!=L"the") return;
 	if (m[speakerPosition+4].principalWherePosition<0 || m[m[speakerPosition+4].principalWherePosition].getObject()<0) return;
 	int whereReferredToObject=m[speakerPosition+4].principalWherePosition,referredToObject,whereAddObject;
-	m[whereReferredToObject].flags&=~WordMatch::flagObjectResolved;
+	m[whereReferredToObject].flags&=~cWordMatch::flagObjectResolved;
 	resolveObject(whereReferredToObject,true,true,false,lastBeginS1,lastRelativePhrase,lastQ2,lastVerb,false,true,false);
 	if (m[whereReferredToObject].objectMatches.size()>0)
 		referredToObject=m[whereReferredToObject].objectMatches[0].object;
@@ -8560,7 +8560,7 @@ void cSource::printResolutionCheck(vector <int> &badSpeakers)
 {
 	LFS
 		wstring tmpstr1, tmpstr2, tmpstr3;
-	vector <WordMatch>::iterator im = m.begin(), imend = m.end();
+	vector <cWordMatch>::iterator im = m.begin(), imend = m.end();
 	remove("rescheck.lplog");
 	for (currentSpeakerGroup = 0; currentSpeakerGroup < speakerGroups.size(); currentSpeakerGroup++)
 	{
@@ -8588,7 +8588,7 @@ void cSource::printResolutionCheck(vector <int> &badSpeakers)
 			}
 			else if (m[I].objectMatches.size() || m[I].audienceObjectMatches.size())
 				lplog(LOG_RESCHECK, L"%06d:(%s//%s)", I, objectSortedString(m[I].objectMatches, tmpstr2).c_str(), objectSortedString(m[I].audienceObjectMatches, tmpstr3).c_str());
-			if (m[I].word->first == L"“" && !(m[I].flags&WordMatch::flagQuotedString))
+			if (m[I].word->first == L"“" && !(m[I].flags&cWordMatch::flagQuotedString))
 			{
 				if (m[I].objectMatches.size() != 1)
 					lplog(LOG_RESCHECK, L"%06d:Invalid Speaker", I);
@@ -8629,15 +8629,15 @@ void cSource::processEndOfPrimaryQuoteRS(int where, int lastSentenceEndBeforeAnd
 	lastClosingPrimaryQuote = where;
 	wstring tmpstr,tmpstr2;
 	// if the previous end quote was inserted, and this end quote was also inserted, then this quote has the same speakers as the last
-	bool previousEndQuoteInserted = previousPrimaryQuote >= 0 && m[previousPrimaryQuote].endQuote >= 0 && (m[m[previousPrimaryQuote].endQuote].flags&WordMatch::flagInsertedQuote) != 0 && (m[where].flags&WordMatch::flagInsertedQuote) != 0;
+	bool previousEndQuoteInserted = previousPrimaryQuote >= 0 && m[previousPrimaryQuote].endQuote >= 0 && (m[m[previousPrimaryQuote].endQuote].flags&cWordMatch::flagInsertedQuote) != 0 && (m[where].flags&cWordMatch::flagInsertedQuote) != 0;
 	// immediatelyAfterEndOfParagraph is set if there has been an end of paragraph seen since the last close quote.
 	bool noTextBeforeOrAfter, quotedStringSeen = false, multipleQuoteInSentence = (previousPrimaryQuote > lastSentenceEndBeforeAndNotIncludingCurrentQuote), noSpeakerAfterward = false, audienceInSubQuote = false, audienceFromSpeakerGroup = false;
 	if (!(quotedStringSeen = quotedString(lastOpeningPrimaryQuote, where, noTextBeforeOrAfter, noSpeakerAfterward)))
 	{
-		if (!(m[lastOpeningPrimaryQuote].flags&WordMatch::flagQuotedString) &&
+		if (!(m[lastOpeningPrimaryQuote].flags&cWordMatch::flagQuotedString) &&
 			(multipleQuoteInSentence || !immediatelyAfterEndOfParagraph || previousEndQuoteInserted))
 		{
-			addSpeakerObjects(lastOpeningPrimaryQuote, true, lastOpeningPrimaryQuote, previousSpeakers, m[lastOpeningPrimaryQuote].flags | WordMatch::flagForwardLinkResolveSpeakers);
+			addSpeakerObjects(lastOpeningPrimaryQuote, true, lastOpeningPrimaryQuote, previousSpeakers, m[lastOpeningPrimaryQuote].flags | cWordMatch::flagForwardLinkResolveSpeakers);
 			if (previousPrimaryQuote >= 0)
 			{
 				m[lastOpeningPrimaryQuote].audienceObjectMatches = m[previousPrimaryQuote].audienceObjectMatches;
@@ -8658,16 +8658,16 @@ void cSource::processEndOfPrimaryQuoteRS(int where, int lastSentenceEndBeforeAnd
 								m[lastOpeningPrimaryQuote].audienceObjectMatches.push_back(cOM(*si, SALIENCE_THRESHOLD));
 						if (debugTrace.traceSpeakerResolution)
 							lplog(LOG_RESOLUTION, L"%06d:audience speaker of %s corrected to %s [audience appears in quote@%d].", lastOpeningPrimaryQuote, objectString(audienceObjectMatches, tmpstr, true).c_str(), objectString(m[lastOpeningPrimaryQuote].audienceObjectMatches, tmpstr2, true).c_str(), ai);
-						m[lastOpeningPrimaryQuote].flags |= WordMatch::flagSpecifiedResolveAudience;
+						m[lastOpeningPrimaryQuote].flags |= cWordMatch::flagSpecifiedResolveAudience;
 						for (unsigned int J = 0; J < m[lastOpeningPrimaryQuote].audienceObjectMatches.size(); J++)
 							objects[m[lastOpeningPrimaryQuote].audienceObjectMatches[J].object].speakerLocations.insert(lastOpeningPrimaryQuote);
-						if (!(m[previousPrimaryQuote].flags&WordMatch::flagSpecifiedResolveAudience) &&
+						if (!(m[previousPrimaryQuote].flags&cWordMatch::flagSpecifiedResolveAudience) &&
 							!intersect(lastOpeningPrimaryQuote, m[previousPrimaryQuote].audienceObjectMatches, allIn, oneIn))
 						{
 							if (debugTrace.traceSpeakerResolution)
 								lplog(LOG_RESOLUTION, L"%06d:original audience %s corrected [audience appears in forwardLink quote].", previousPrimaryQuote, objectString(m[previousPrimaryQuote].audienceObjectMatches, tmpstr, true).c_str());
 							m[previousPrimaryQuote].audienceObjectMatches = m[lastOpeningPrimaryQuote].audienceObjectMatches;
-							m[previousPrimaryQuote].flags |= WordMatch::flagSpecifiedResolveAudience;
+							m[previousPrimaryQuote].flags |= cWordMatch::flagSpecifiedResolveAudience;
 							for (vector <cOM>::iterator aomi = m[previousPrimaryQuote].audienceObjectMatches.begin(), aomiEnd = m[previousPrimaryQuote].audienceObjectMatches.end(); aomi != aomiEnd; aomi++)
 								objects[aomi->object].speakerLocations.insert(previousPrimaryQuote);
 						}
@@ -8708,7 +8708,7 @@ void cSource::processEndOfPrimaryQuoteRS(int where, int lastSentenceEndBeforeAnd
 					{
 						audienceInSubQuote = true;
 						resolveObject(audienceObjectPosition, false, false, false, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, false, false, false);
-						setSpeakerMatchesFromPosition(lastOpeningPrimaryQuote, m[lastOpeningPrimaryQuote].audienceObjectMatches, audienceObjectPosition, L"audienceObjectPositionSubQuote(2)", WordMatch::flagSpecifiedResolveAudience);
+						setSpeakerMatchesFromPosition(lastOpeningPrimaryQuote, m[lastOpeningPrimaryQuote].audienceObjectMatches, audienceObjectPosition, L"audienceObjectPositionSubQuote(2)", cWordMatch::flagSpecifiedResolveAudience);
 						subtract(m[audienceObjectPosition].getObject(), m[lastOpeningPrimaryQuote].objectMatches);
 						if (intersect(m[lastOpeningPrimaryQuote].audienceObjectMatches, m[lastOpeningPrimaryQuote].objectMatches, allIn, oneIn) && !allIn)
 							subtract(m[lastOpeningPrimaryQuote].audienceObjectMatches, m[lastOpeningPrimaryQuote].objectMatches);
@@ -8723,18 +8723,18 @@ void cSource::processEndOfPrimaryQuoteRS(int where, int lastSentenceEndBeforeAnd
 						for (set <int>::iterator si = speakerGroups[currentSpeakerGroup].speakers.begin(), siEnd = speakerGroups[currentSpeakerGroup].speakers.end(); si != siEnd; si++)
 							if (in(*si, m[previousPrimaryQuote].objectMatches) == m[previousPrimaryQuote].objectMatches.end())
 								m[lastOpeningPrimaryQuote].audienceObjectMatches.push_back(cOM(*si, SALIENCE_THRESHOLD));
-						m[lastOpeningPrimaryQuote].flags |= WordMatch::flagAudienceFromSpeakerGroupResolveAudience;
+						m[lastOpeningPrimaryQuote].flags |= cWordMatch::flagAudienceFromSpeakerGroupResolveAudience;
 					}
 					// resolve the primary link with help from the forwardLink audience
 					// if definite (audienceInSubQuote) and only one entity and previous is not one entity and not definitely resolved
 					if (audienceInSubQuote &&
 						m[lastOpeningPrimaryQuote].audienceObjectMatches.size() == 1 && m[previousPrimaryQuote].audienceObjectMatches.size() != 1 &&
-						!(m[previousPrimaryQuote].flags&WordMatch::flagSpecifiedResolveAudience))
+						!(m[previousPrimaryQuote].flags&cWordMatch::flagSpecifiedResolveAudience))
 					{
 						// if the objectMatches of the primaryLink includes the audience, delete the audience
 						subtract(m[lastOpeningPrimaryQuote].audienceObjectMatches[0].object, m[previousPrimaryQuote].objectMatches);
 						wstring tmpstr3;
-						setSpeakerMatchesFromPosition(previousPrimaryQuote, m[previousPrimaryQuote].audienceObjectMatches, audienceObjectPosition, L"audienceObjectPositionSubQuote", WordMatch::flagSpecifiedResolveAudience);
+						setSpeakerMatchesFromPosition(previousPrimaryQuote, m[previousPrimaryQuote].audienceObjectMatches, audienceObjectPosition, L"audienceObjectPositionSubQuote", cWordMatch::flagSpecifiedResolveAudience);
 						if (intersect(m[previousPrimaryQuote].audienceObjectMatches, m[previousPrimaryQuote].objectMatches, allIn, oneIn) && !allIn)
 							subtract(m[previousPrimaryQuote].audienceObjectMatches, m[previousPrimaryQuote].objectMatches);
 						if (debugTrace.traceSpeakerResolution)
@@ -8756,8 +8756,8 @@ void cSource::processEndOfPrimaryQuoteRS(int where, int lastSentenceEndBeforeAnd
 				}
 				else
 					lplog(LOG_ERROR, L"%06d:previousPrimaryQuote and lastOpeningPrimaryQuote are the same (2)!", previousPrimaryQuote);
-				if (m[previousPrimaryQuote].flags&WordMatch::flagEmbeddedStoryResolveSpeakers)
-					m[lastOpeningPrimaryQuote].flags |= WordMatch::flagEmbeddedStoryResolveSpeakers;
+				if (m[previousPrimaryQuote].flags&cWordMatch::flagEmbeddedStoryResolveSpeakers)
+					m[lastOpeningPrimaryQuote].flags |= cWordMatch::flagEmbeddedStoryResolveSpeakers;
 				if (debugTrace.traceSpeakerResolution)
 				{
 					wstring reason;
@@ -8776,7 +8776,7 @@ void cSource::processEndOfPrimaryQuoteRS(int where, int lastSentenceEndBeforeAnd
 			int lastDefinedOpenEmbeddedSpeakerGroup = currentEmbeddedSpeakerGroup, ldsg = currentSpeakerGroup;
 			if (lastDefinedOpenEmbeddedSpeakerGroup < 0 && ldsg>0 && speakerGroups[ldsg - 1].embeddedSpeakerGroups.size() > 0)
 				lastDefinedOpenEmbeddedSpeakerGroup = speakerGroups[ldsg = ldsg - 1].embeddedSpeakerGroups.size() - 1;
-			if (lastDefinedOpenEmbeddedSpeakerGroup >= 0 && !(m[lastOpeningPrimaryQuote].flags&(WordMatch::flagEmbeddedStoryResolveSpeakers | WordMatch::flagEmbeddedStoryResolveSpeakersGap)) &&
+			if (lastDefinedOpenEmbeddedSpeakerGroup >= 0 && !(m[lastOpeningPrimaryQuote].flags&(cWordMatch::flagEmbeddedStoryResolveSpeakers | cWordMatch::flagEmbeddedStoryResolveSpeakersGap)) &&
 				speakerGroups[ldsg].embeddedSpeakerGroups[lastDefinedOpenEmbeddedSpeakerGroup].sgEnd <= 0 && previousPrimaryQuote >= 0)
 			{
 				int forwardLink = previousPrimaryQuote;
@@ -8818,7 +8818,7 @@ void cSource::processEndOfPrimaryQuoteRS(int where, int lastSentenceEndBeforeAnd
 			}
 			else
 			{
-				if ((m[lastOpeningPrimaryQuote].flags&WordMatch::flagEmbeddedStoryResolveSpeakers) && m[lastOpeningPrimaryQuote].embeddedStorySpeakerPosition >= 0)
+				if ((m[lastOpeningPrimaryQuote].flags&cWordMatch::flagEmbeddedStoryResolveSpeakers) && m[lastOpeningPrimaryQuote].embeddedStorySpeakerPosition >= 0)
 					setEmbeddedStorySpeaker(lastOpeningPrimaryQuote, lastDefiniteSpeaker);
 				else if (noTextBeforeOrAfter)
 				{
@@ -8968,7 +8968,7 @@ void cSource::processEndOfSentenceRS(int where,
 				// find next ending secondaryquote after last Where 
 				int J = lsi->lastWhere, begin = speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].sgBegin;
 				for (; J >= begin && (m[J].word->first != L"“" || m[J].nextQuote < 0); J--);
-				if (J >= begin && (m[m[J].nextQuote].flags&(WordMatch::flagEmbeddedStoryResolveSpeakers | WordMatch::flagEmbeddedStoryResolveSpeakersGap)))
+				if (J >= begin && (m[m[J].nextQuote].flags&(cWordMatch::flagEmbeddedStoryResolveSpeakers | cWordMatch::flagEmbeddedStoryResolveSpeakersGap)))
 				{
 					int getForwardLinkedEnd = J;
 					while (m[getForwardLinkedEnd].getQuoteForwardLink() >= 0) getForwardLinkedEnd = m[getForwardLinkedEnd].getQuoteForwardLink();
@@ -9200,7 +9200,7 @@ void cSource::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 		// CMREADME33
 		if (m[I].word->first == L"“")
 		{
-			if (m[I].flags&WordMatch::flagEmbeddedStoryBeginResolveSpeakers)
+			if (m[I].flags&cWordMatch::flagEmbeddedStoryBeginResolveSpeakers)
 			{
 				int lastDefinedOpenEmbeddedSpeakerGroup = currentEmbeddedSpeakerGroup, ldsg = currentSpeakerGroup;
 				if (lastDefinedOpenEmbeddedSpeakerGroup<0 && ldsg>0 && speakerGroups[ldsg - 1].embeddedSpeakerGroups.size() > 0)
@@ -9223,7 +9223,7 @@ void cSource::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 					lplog(LOG_RESOLUTION, L"%06d:mark start of embedded speaker group[%d,%d]:%s",
 					I, currentSpeakerGroup, currentEmbeddedSpeakerGroup, toText(speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup], tmpstr));
 			}
-			if (!(m[I].flags&WordMatch::flagQuotedString))
+			if (!(m[I].flags&cWordMatch::flagQuotedString))
 			{
 				lastSentenceEndBeforeAndNotIncludingCurrentQuote = lastSentenceEnd;
 				inPrimaryQuote = true;
@@ -9253,7 +9253,7 @@ void cSource::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 		else if (m[I].word->first == L"‘")
 		{
 			lastOpeningSecondaryQuote = I;
-			if (!(m[I].flags&WordMatch::flagQuotedString))
+			if (!(m[I].flags&cWordMatch::flagQuotedString))
 			{
 				inSecondaryQuote = true;
 				inPrimaryQuote = false;
@@ -9301,7 +9301,7 @@ void cSource::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 				whereLetterTo = -1;
 				setFlagAlternateResolveForwardAfterDefinite = false; // no definite speakers
 				if (lastOpeningPrimaryQuote >= 0)
-					m[lastOpeningPrimaryQuote].flags |= WordMatch::flagLastContinuousQuote;
+					m[lastOpeningPrimaryQuote].flags |= cWordMatch::flagLastContinuousQuote;
 				lastDefiniteSpeaker = -1;
 				if (debugTrace.traceSpeakerResolution)
 					lplog(LOG_RESOLUTION, L"%06d:Reset last definite speaker.", I);

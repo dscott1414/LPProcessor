@@ -1,16 +1,16 @@
 class cSource;
 
-class Column
+class cColumn
 {
 public:
-	class CA
+	class cWordFrequencyMatch
 	{
 	public:
 		wstring word;
 		int frequency;
 		bool queryObjectMatch;
 		bool titleObjectMatch;
-		CA(wstring w, int f, bool qom = false, bool tom = false)
+		cWordFrequencyMatch(wstring w, int f, bool qom = false, bool tom = false)
 		{
 			word = w;
 			frequency = f;
@@ -20,24 +20,24 @@ public:
 	};
 	struct associationTypeMapCompare
 	{
-		bool operator()(CA lhs, CA rhs) const
+		bool operator()(cWordFrequencyMatch lhs, cWordFrequencyMatch rhs) const
 		{
 			if (lhs.frequency == rhs.frequency)
 				return lhs.word > rhs.word;
 			return lhs.frequency > rhs.frequency;
 		}
 	};
-	class AssociationType
+	class cAssociationType
 	{
 	public:
 		int frequency;
 		bool queryObjectMatch;
 		bool titleObjectMatch;
 	};
-	class Entry
+	class cEntry
 	{
 	public:
-		Entry(int b, int o, int n)
+		cEntry(int b, int o, int n)
 		{
 			begin = b;
 			adaptiveWhere = o;
@@ -49,7 +49,7 @@ public:
 			titleAssociationsMatched = 0;
 			tableOfContentsFlag = false;
 		};
-		Entry()
+		cEntry()
 		{
 			begin = -1;
 			adaptiveWhere = -1;
@@ -74,7 +74,7 @@ public:
 		vector <int> synonymMatchedQuestionObject;
 		wstring simplifiedRDFTypes;
 		void logEntry(int logType, const wchar_t *tableName, int row, int entryIndex, cSource *source);
-		void accumulateEntryRDFTypes(cSource *wikipediaSource, set <wstring> &titleSynonyms, unordered_map < wstring, AssociationType > &accumulatedRDFTypesMap);
+		void accumulateEntryRDFTypes(cSource *wikipediaSource, set <wstring> &titleSynonyms, unordered_map < wstring, cAssociationType > &accumulatedRDFTypesMap);
 	};
 	class cRow
 	{
@@ -83,8 +83,8 @@ public:
 		int numSimplifiedRDFTypesFoundForRow = 0;
 		int maxTitleFound = 0;
 		int numLastWordsFoundInTitleSynonymsInRow = 0;
-		vector <Entry> entries;
-		cRow(vector <Entry> &e)
+		vector <cEntry> entries;
+		cRow(vector <cEntry> &e)
 		{
 			entries = e;
 			numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow = 0;
@@ -96,8 +96,8 @@ public:
 	vector <cRow > rows; // there are multiple entries for each row
 	int invalidEntries;
 	int emptyEntries;
-	unordered_map < wstring, AssociationType > accumulatedRDFTypesMap;
-	set < CA, associationTypeMapCompare > mostCommonAssociationTypeSet;
+	unordered_map < wstring, cAssociationType > accumulatedRDFTypesMap;
+	set < cWordFrequencyMatch, associationTypeMapCompare > mostCommonAssociationTypeSet;
 	int numDefinite;
 	int numNumerical;
 	int numPunctuation;
@@ -112,9 +112,9 @@ public:
 	int numCommonObjectAssociations;
 	int coherencyPercentage;
 	bool invalidColumn;
-	Column();
+	cColumn();
 	void removeDomainFromAccumulatedRDFTypesMap(wchar_t * domainAssociations[]);
-	bool determineColumnRDFTypeCoherency(cSource *wikipediaSource, Column::Entry titleEntry, set <wstring> &titleSynonyms, wstring tableName,bool keepMusicDomain, bool keepFilmDomain);
+	bool determineColumnRDFTypeCoherency(cSource *wikipediaSource, cColumn::cEntry titleEntry, set <wstring> &titleSynonyms, wstring tableName,bool keepMusicDomain, bool keepFilmDomain);
 	void zeroColumnAccumulatedRDFTypes();
 	void accumulateColumnRDFTypes(cSource *wikipediaSource, set <wstring> &titleSynonyms, bool keepMusicDomain, bool keepFilmDomain, bool onlyPreferred);
 	void getMostCommonRDFTypes(wchar_t *when, wstring tableName);
@@ -124,17 +124,17 @@ public:
 	// each lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms entry has two values:
 	//   the average of the associationValue
 	//   the number of values/the size of the 
-	int calculateColumnRDFTypeCoherence(cSource *wikipediaSource, Column::Entry titleEntry, wstring tableName);
+	int calculateColumnRDFTypeCoherence(cSource *wikipediaSource, cColumn::cEntry titleEntry, wstring tableName);
 	void logColumn(int logType, wchar_t *when, wstring tableName);
-	static Column::Entry scanColumnEntry(int whereQuestionType, cSource *wikipediaSource, cSource *questionSource, int &I, bool &matchFound, wstring tableName);
+	static cColumn::cEntry scanColumnEntry(int whereQuestionType, cSource *wikipediaSource, cSource *questionSource, int &I, bool &matchFound, wstring tableName);
 };
 
 class cSourceTable
 {
 public:
-	vector <Column> columns;
-	vector <Column::Entry> columnHeaders;
-	Column::Entry tableTitleEntry;
+	vector <cColumn> columns;
+	vector <cColumn::cEntry> columnHeaders;
+	cColumn::cEntry tableTitleEntry;
 	wstring num;
 	cSource *source;
 	int columnHeaderMatchTitle;
@@ -149,12 +149,12 @@ public:
 	bool analyzeTitle(unsigned int where, int &numWords, int &numPrepositions, wstring tableName, cSource *wikipediaSource);
 };
 
-class WikipediaTableCandidateAnswers
+class cWikipediaTableCandidateAnswers
 {
 public:
 	vector < cSourceTable > wikiQuestionTypeObjectAnswers;
 	cSource *wikipediaSource;
-	WikipediaTableCandidateAnswers(cSource *wikipediaSource, vector < cSourceTable > wikiQuestionTypeObjectAnswers)
+	cWikipediaTableCandidateAnswers(cSource *wikipediaSource, vector < cSourceTable > wikiQuestionTypeObjectAnswers)
 	{
 		this->wikipediaSource = wikipediaSource;
 		this->wikiQuestionTypeObjectAnswers = wikiQuestionTypeObjectAnswers;

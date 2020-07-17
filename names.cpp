@@ -761,7 +761,7 @@ int cName::insertSQL(wchar_t *buffer,int sourceId,int index,int maxbuf)
   return buflen;
 }
 
-bool cSource::evaluateName(vector <tTagLocation> &tagSet,cName &name,bool &isMale,bool &isFemale,bool &isPlural,bool &isBusiness)
+bool cSource::evaluateName(vector <cTagLocation> &tagSet,cName &name,bool &isMale,bool &isFemale,bool &isPlural,bool &isBusiness)
 { LFS
   name.hon=name.hon2=name.hon3=name.first=name.middle=name.middle2=name.last=name.suffix=name.any=wNULL;
   name.nickName=-1;
@@ -826,7 +826,7 @@ bool cSource::identifyNameAdjective(int where,cName &name,bool &isMale,bool &isF
   int element,nameEnd=-1;
   if ((element=m[where].pma.queryPattern(L"__NAMEOWNER",nameEnd))==-1) 
 	{
-		if (m[where].queryWinnerForm(PROPER_NOUN_FORM_NUM)>=0 && (m[where].flags&WordMatch::flagNounOwner))
+		if (m[where].queryWinnerForm(PROPER_NOUN_FORM_NUM)>=0 && (m[where].flags&cWordMatch::flagNounOwner))
 		{
 			name.hon=name.hon2=name.hon3=name.first=name.middle=name.middle2=name.last=name.suffix=wNULL;
 			name.any=m[where].word;
@@ -837,12 +837,12 @@ bool cSource::identifyNameAdjective(int where,cName &name,bool &isMale,bool &isF
 		}
 		return false;
 	}
-  vector < vector <tTagLocation> > tagSets;
-  if (startCollectTags(false,nameTagSet,where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,true,L"identify name adjective")>0)
+  vector < vector <cTagLocation> > tagSets;
+  if (startCollectTags(false,nameTagSet,where,m[where].pma[element&~cMatchElement::patternFlag].pemaByPatternEnd,tagSets,true,true,L"identify name adjective")>0)
     for (unsigned int J=0; J<tagSets.size(); J++)
     {
       if (debugTrace.traceNameResolution)
-        printTagSet(LOG_RESOLUTION,L"NR",J,tagSets[J],where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd);
+        printTagSet(LOG_RESOLUTION,L"NR",J,tagSets[J],where,m[where].pma[element&~cMatchElement::patternFlag].pemaByPatternEnd);
       if (evaluateNameAdjective(tagSets[J],name,isMale,isFemale))
         return true;
     }
@@ -861,12 +861,12 @@ bool cSource::identifyName(int where,int &element,cName &name,bool &isMale,bool 
   // if last letter is 's', preceded by The or quantifier, then plural
   isPlural=(m[nameEnd-1].word->first[m[nameEnd-1].word->first.size()-1]==L's' &&
       (m[where].word->first==L"the" || (m[where].queryForm(L"quantifier")>=0 && m[where].word->first!=L"one")));
-  vector < vector <tTagLocation> > tagSets;
-  if (startCollectTags(false,nameTagSet,where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,true,L"identify name")>0)
+  vector < vector <cTagLocation> > tagSets;
+  if (startCollectTags(false,nameTagSet,where,m[where].pma[element&~cMatchElement::patternFlag].pemaByPatternEnd,tagSets,true,true,L"identify name")>0)
     for (unsigned int J=0; J<tagSets.size(); J++)
     {
       if (debugTrace.traceNameResolution)
-        printTagSet(LOG_RESOLUTION,L"NR",J,tagSets[J],where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd);
+        printTagSet(LOG_RESOLUTION,L"NR",J,tagSets[J],where,m[where].pma[element&~cMatchElement::patternFlag].pemaByPatternEnd);
       if (evaluateName(tagSets[J],name,isMale,isFemale,isPlural,isBusiness))
         return true;
     }
@@ -920,7 +920,7 @@ bool cSource::identifyName(int begin,int principalWhere,int end,int &nameElement
 			for (int I=begin; I<principalWhere && !ownedByName; I++)
 				if (m[I].queryWinnerForm(PROPER_NOUN_FORM_NUM)>=0 && 
 					  (((m[I].word->second.inflectionFlags)&(PLURAL_OWNER|SINGULAR_OWNER)) ||
-						((m[I].flags)&WordMatch::flagNounOwner)))
+						((m[I].flags)&cWordMatch::flagNounOwner)))
 					ownedByName=true;
 		}
 		bool isDemonym=m[end-1].queryForm(demonymForm)>=0 && (m[begin].queryForm(determinerForm)>=0 || m[begin].queryWinnerForm(demonstrativeDeterminerForm)>=0);
@@ -932,7 +932,7 @@ bool cSource::identifyName(int begin,int principalWhere,int end,int &nameElement
 		{
 			for (set<int>::iterator s=relatedObjectsMap[name.any].begin(),send=relatedObjectsMap[name.any].end(); s!=send && !isSingleName; s++)
 				if (objects[*s].firstLocation<begin && objects[*s].objectClass==NAME_OBJECT_CLASS && 
-				              !(m[objects[*s].firstLocation].flags&WordMatch::flagAdjectivalObject))
+				              !(m[objects[*s].firstLocation].flags&cWordMatch::flagAdjectivalObject))
 				{
 					for (vector <cObject::cLocation>::iterator I=objects[*s].locations.begin(),IEnd=objects[*s].locations.end(); I!=IEnd && !isSingleName; I++)
 					  isSingleName=(m[I->at].objectRole&SUBJECT_ROLE)!=0;
@@ -945,7 +945,7 @@ bool cSource::identifyName(int begin,int principalWhere,int end,int &nameElement
 		{
 			for (set<int>::iterator s=relatedObjectsMap[name.last].begin(),send=relatedObjectsMap[name.last].end(); s!=send && !isLastName; s++)
 				isLastName=(objects[*s].firstLocation<begin && objects[*s].objectClass==NAME_OBJECT_CLASS && objects[*s].name.last==name.last && 
-				            !(m[objects[*s].firstLocation].flags&WordMatch::flagAdjectivalObject)); //  && (m[objects[*s].firstLocation].objectRole&SUBJECT_ROLE)
+				            !(m[objects[*s].firstLocation].flags&cWordMatch::flagAdjectivalObject)); //  && (m[objects[*s].firstLocation].objectRole&SUBJECT_ROLE)
 		}
 		wstring nw;
 		if (!isLastName && !isSingleName && !name.justHonorific() && !isDemonym && 
@@ -968,7 +968,7 @@ bool cSource::identifyName(int begin,int principalWhere,int end,int &nameElement
 			}
 			// must only be one word, in a position where it doesn't have to be a proper noun,
 			// not an indefinitePronoun or there
-			else if (end!=principalWhere+1 || (m[principalWhere].flags&(WordMatch::flagOnlyConsiderProperNounForms)) ||
+			else if (end!=principalWhere+1 || (m[principalWhere].flags&(cWordMatch::flagOnlyConsiderProperNounForms)) ||
 				(m[principalWhere].queryForm(indefinitePronounForm)<0 && m[principalWhere].word->first!=L"there"))
 				objectClass=NAME_OBJECT_CLASS;
 			if (!isMale && !isFemale) isMale=isFemale=true;
@@ -984,7 +984,7 @@ bool cSource::identifyName(int begin,int principalWhere,int end,int &nameElement
 	return false;
 }
 
-tIWMM cSource::setSex(vector <tTagLocation> &tagSet,int where,bool &isMale,bool &isFemale,bool isPlural)
+tIWMM cSource::setSex(vector <cTagLocation> &tagSet,int where,bool &isMale,bool &isFemale,bool isPlural)
 { LFS
   if (where<0) return wNULL;
   tIWMM word=m[tagSet[where].sourcePosition].word;
@@ -1000,7 +1000,7 @@ tIWMM cSource::setSex(vector <tTagLocation> &tagSet,int where,bool &isMale,bool 
 		isMale=(inflectionFlags&MALE_GENDER)!=0;
 		isFemale=(inflectionFlags&FEMALE_GENDER)!=0;
 	}
-	if ((m[tagSet[where].sourcePosition].flags&WordMatch::flagFirstLetterCapitalized)!=0)
+	if ((m[tagSet[where].sourcePosition].flags&cWordMatch::flagFirstLetterCapitalized)!=0)
 	{
 		if (isPlural)
 		{
@@ -1023,7 +1023,7 @@ tIWMM cSource::setSex(vector <tTagLocation> &tagSet,int where,bool &isMale,bool 
 // ignore the next two for now
 // a __NAME of diff 'A' / Al's Shack
 // a __PP where the last element is a PROPER_NOUN with an owner / at old Red's
-bool cSource::evaluateNameAdjective(vector <tTagLocation> &tagSet,cName &name,bool &isMale,bool &isFemale)
+bool cSource::evaluateNameAdjective(vector <cTagLocation> &tagSet,cName &name,bool &isMale,bool &isFemale)
 { LFS
   name.hon=name.hon2=name.hon3=name.first=name.middle=name.middle2=name.last=name.suffix=name.any=wNULL;
   isMale=isFemale=false;
@@ -1682,7 +1682,7 @@ bool cSource::ageDetection(int where,int primary,int secondary)
 	return true;
 }
 // in secondary quotes, inPrimaryQuote=false
-bool cSource::evaluateMetaNameEquivalence(int where,vector <tTagLocation> &tagSet,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb)
+bool cSource::evaluateMetaNameEquivalence(int where,vector <cTagLocation> &tagSet,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb)
 { LFS
 	int primaryTag=findOneTag(tagSet,L"NAME_PRIMARY",-1),secondaryTag=findOneTag(tagSet,L"NAME_SECONDARY",-1);
 	if (primaryTag<0 || secondaryTag<0) return false;
@@ -1707,7 +1707,7 @@ bool cSource::evaluateMetaNameEquivalence(int where,vector <tTagLocation> &tagSe
 	bool scanForMultiple=false;
 	if (tagSet[secondaryTag].len>1) // could be an adjective
 	{
-		patternMatchArray::tPatternMatch *pma=m[whereSecondary].pma.content;
+		cPatternMatchArray::tPatternMatch *pma=m[whereSecondary].pma.content;
 		for (unsigned int PMAElement=0; PMAElement<m[whereSecondary].pma.count && !scanForMultiple; PMAElement++,pma++)
 			if (pma->len==tagSet[secondaryTag].len && patterns[pma->getPattern()]->hasTag(MNOUN_TAG))
 				scanForMultiple=true;
@@ -1718,7 +1718,7 @@ bool cSource::evaluateMetaNameEquivalence(int where,vector <tTagLocation> &tagSe
 	// primary could also be a MNOUN
 	if (tagSet[primaryTag].len>1) 
 	{
-		patternMatchArray::tPatternMatch *pma=m[wherePrimary].pma.content;
+		cPatternMatchArray::tPatternMatch *pma=m[wherePrimary].pma.content;
 		for (unsigned int PMAElement=0; PMAElement<m[wherePrimary].pma.count; PMAElement++,pma++)
 			if (pma->len==tagSet[primaryTag].len && patterns[pma->getPattern()]->hasTag(MNOUN_TAG))
 			{
@@ -1736,7 +1736,7 @@ bool cSource::evaluateMetaNameEquivalence(int where,vector <tTagLocation> &tagSe
 		primaryNameObject=m[wherePrimary].objectMatches[0].object;
 	if (primaryNameObject== cObject::eOBJECTS::UNKNOWN_OBJECT)
 	{
-		m[wherePrimary].flags&=~WordMatch::flagObjectResolved;
+		m[wherePrimary].flags&=~cWordMatch::flagObjectResolved;
 		return false;
 	}
 	vector <int> secondaryNameObjects,eraseREObjects;
@@ -1856,7 +1856,7 @@ bool cSource::evaluateMetaNameEquivalence(int where,vector <tTagLocation> &tagSe
 				// the overall object is nongen, but the specific referring object is a name
 				int maxLen=1,element=-1;
 				if ((objects[secondaryNameObject].begin!=whereSecondary && secondaryClass==NON_GENDERED_GENERAL_OBJECT_CLASS && 
-					  ((element=m[whereSecondary].pma.queryPattern(L"_NAME",maxLen))!=-1)) || (tagSet[secondaryTag].len==1 && (m[whereSecondary].flags&WordMatch::flagFirstLetterCapitalized)))
+					  ((element=m[whereSecondary].pma.queryPattern(L"_NAME",maxLen))!=-1)) || (tagSet[secondaryTag].len==1 && (m[whereSecondary].flags&cWordMatch::flagFirstLetterCapitalized)))
 				{
 					if (m[wherePrimary].objectMatches.empty() || objects[m[wherePrimary].objectMatches[0].object].begin!=whereSecondary)
 					{
@@ -1881,7 +1881,7 @@ bool cSource::evaluateMetaNameEquivalence(int where,vector <tTagLocation> &tagSe
 					if (eraseREObjects[sno]!=-1)
 						m[eraseREObjects[sno]].objectRole&=~RE_OBJECT_ROLE;
 					for (unsigned int J=0; J<	objectsResolved.size(); J++)
-						m[objectsResolved[J]].flags&=~WordMatch::flagObjectResolved;
+						m[objectsResolved[J]].flags&=~cWordMatch::flagObjectResolved;
 					continue;
 				}
 			}
@@ -1930,7 +1930,7 @@ bool cSource::evaluateMetaNameEquivalence(int where,vector <tTagLocation> &tagSe
 			wherePrimary=tmp3;
 		}
 		atLeastOneSecondarySucceeded=true;
-		for (vector <WordMatch>::iterator im=m.begin()+m[wherePrimary].beginObjectPosition,imEnd=m.begin()+m[wherePrimary].endObjectPosition; im!=imEnd; im++)
+		for (vector <cWordMatch>::iterator im=m.begin()+m[wherePrimary].beginObjectPosition,imEnd=m.begin()+m[wherePrimary].endObjectPosition; im!=imEnd; im++)
 		{
 			im->objectRole|=META_NAME_EQUIVALENCE;
 			if (debugTrace.traceRole)
@@ -1956,7 +1956,7 @@ bool cSource::evaluateMetaNameEquivalence(int where,vector <tTagLocation> &tagSe
 			for (vector <tIWMM>::iterator ai=objects[secondaryNameObject].associatedNouns.begin(),aiEnd=objects[secondaryNameObject].associatedNouns.end(); ai!=aiEnd; ai++)
 				if (find(objects[primaryNameObject].associatedNouns.begin(),objects[primaryNameObject].associatedNouns.end(),*ai)==objects[primaryNameObject].associatedNouns.end())
 					objects[primaryNameObject].associatedNouns.push_back(*ai);
-			if (!(m[wherePrimary].word->second.flags&tFI::genericGenderIgnoreMatch)) 
+			if (!(m[wherePrimary].word->second.flags&cSourceWordInfo::genericGenderIgnoreMatch)) 
 				objects[primaryNameObject].updateGenericGender(where,m[whereSecondary].word,objects[secondaryNameObject].objectGenericAge,L"metaNameEquivalence",debugTrace);
 			if ((objects[secondaryNameObject].associatedNouns.size() || objects[secondaryNameObject].associatedAdjectives.size()) && debugTrace.traceSpeakerResolution)
 			{
@@ -2095,7 +2095,7 @@ bool cSource::evaluateMetaNameEquivalence(int where,vector <tTagLocation> &tagSe
 			}
 			continue;
 		}
-		for (vector <WordMatch>::iterator im=m.begin()+m[wherePrimary].beginObjectPosition,imEnd=m.begin()+m[wherePrimary].endObjectPosition; im!=imEnd; im++)
+		for (vector <cWordMatch>::iterator im=m.begin()+m[wherePrimary].beginObjectPosition,imEnd=m.begin()+m[wherePrimary].endObjectPosition; im!=imEnd; im++)
 		{
 			im->objectRole|=META_NAME_EQUIVALENCE;
 			if (debugTrace.traceRole)
@@ -2158,7 +2158,7 @@ bool cSource::identifyMetaNameEquivalence(int where,bool inPrimaryQuote,bool inS
   int element,startAt=0; // nameEnd=-1,
   while ((element=m[where].pma.queryAllPattern(L"_META_NAME_EQUIVALENCE",startAt))!=-1) 
 	{
-		vector < vector <tTagLocation> > tagSets;
+		vector < vector <cTagLocation> > tagSets;
 		// obeyBlock must be false because of _META_NAME_EQUIVALENCE[8]
 		if (startCollectTags(true,metaNameEquivalenceTagSet,where,m[where].pma[element].pemaByPatternEnd,tagSets,false,true,L"name equivalence")>0)
 			for (unsigned int J=0; J<tagSets.size(); J++)
@@ -2173,7 +2173,7 @@ bool cSource::identifyMetaNameEquivalence(int where,bool inPrimaryQuote,bool inS
   return false;
 }
 
-bool cSource::evaluateMetaSpeaker(int where,vector <tTagLocation> &tagSet)
+bool cSource::evaluateMetaSpeaker(int where,vector <cTagLocation> &tagSet)
 { LFS
 	int primaryTag,secondaryTag=findOneTag(tagSet,L"NAME_SECONDARY",-1);
   unsigned int wherePrimary=tagSet[primaryTag=findOneTag(tagSet,L"NAME_PRIMARY",-1)].sourcePosition;
@@ -2195,19 +2195,19 @@ bool cSource::identifyMetaSpeaker(int where,bool inQuote)
 	if (!inQuote) return false; // these patterns only apply in a quote
   int element,nameEnd=-1;
   if ((element=m[where].pma.queryPattern(L"_META_SPEAKER",nameEnd))==-1) return false;
-  vector < vector <tTagLocation> > tagSets;
-  if (startCollectTags(true,metaNameEquivalenceTagSet,where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,true,L"meta speaker identification")>0)
+  vector < vector <cTagLocation> > tagSets;
+  if (startCollectTags(true,metaNameEquivalenceTagSet,where,m[where].pma[element&~cMatchElement::patternFlag].pemaByPatternEnd,tagSets,true,true,L"meta speaker identification")>0)
     for (unsigned int J=0; J<tagSets.size(); J++)
     {
       if (debugTrace.traceNameResolution)
-        printTagSet(LOG_RESOLUTION,L"MS",J,tagSets[J],where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd);
+        printTagSet(LOG_RESOLUTION,L"MS",J,tagSets[J],where,m[where].pma[element&~cMatchElement::patternFlag].pemaByPatternEnd);
       if (evaluateMetaSpeaker(where,tagSets[J]))
         return true;
     }
   return false;
 }
 
-bool cSource::evaluateAnnounce(int where,vector <tTagLocation> &tagSet)
+bool cSource::evaluateAnnounce(int where,vector <cTagLocation> &tagSet)
 { LFS
 	int primaryTag;
   unsigned int wherePrimary=tagSet[primaryTag=findOneTag(tagSet,L"NAME_PRIMARY",-1)].sourcePosition;
@@ -2234,19 +2234,19 @@ bool cSource::identifyAnnounce(int where,bool inQuote)
 	if (!inQuote) return false; // these patterns only apply in a quote
   int element,nameEnd=-1;
   if ((element=m[where].pma.queryPattern(L"_META_ANNOUNCE",nameEnd))==-1) return false;
-  vector < vector <tTagLocation> > tagSets;
-  if (startCollectTags(true,metaSpeakerTagSet,where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,true, L"meta announce")>0)
+  vector < vector <cTagLocation> > tagSets;
+  if (startCollectTags(true,metaSpeakerTagSet,where,m[where].pma[element&~cMatchElement::patternFlag].pemaByPatternEnd,tagSets,true,true, L"meta announce")>0)
     for (unsigned int J=0; J<tagSets.size(); J++)
     {
       if (debugTrace.traceNameResolution)
-        printTagSet(LOG_RESOLUTION,L"MA",J,tagSets[J],where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd);
+        printTagSet(LOG_RESOLUTION,L"MA",J,tagSets[J],where,m[where].pma[element&~cMatchElement::patternFlag].pemaByPatternEnd);
       if (evaluateAnnounce(where,tagSets[J]))
         return true;
     }
   return false;
 }
 
-bool cSource::evaluateMetaGroup(int where,vector <tTagLocation> &tagSet,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb)
+bool cSource::evaluateMetaGroup(int where,vector <cTagLocation> &tagSet,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb)
 { LFS
 	int primaryTag,secondaryTag;
   int wherePrimary=tagSet[primaryTag=findOneTag(tagSet,L"NAME_PRIMARY",-1)].sourcePosition;
@@ -2309,12 +2309,12 @@ bool cSource::identifyMetaGroup(int where,bool inPrimaryQuote,bool inSecondaryQu
 	if (inPrimaryQuote || inSecondaryQuote) return false; // these patterns only apply to speakers
   int element,nameEnd=-1;
   if ((element=m[where].pma.queryPattern(L"_META_GROUP",nameEnd))==-1) return false;
-  vector < vector <tTagLocation> > tagSets;
-  if (startCollectTags(true,metaNameEquivalenceTagSet,where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,true, L"meta group identification")>0)
+  vector < vector <cTagLocation> > tagSets;
+  if (startCollectTags(true,metaNameEquivalenceTagSet,where,m[where].pma[element&~cMatchElement::patternFlag].pemaByPatternEnd,tagSets,true,true, L"meta group identification")>0)
     for (unsigned int J=0; J<tagSets.size(); J++)
     {
       if (debugTrace.traceNameResolution)
-        printTagSet(LOG_RESOLUTION,L"MG",J,tagSets[J],where,m[where].pma[element&~matchElement::patternFlag].pemaByPatternEnd);
+        printTagSet(LOG_RESOLUTION,L"MG",J,tagSets[J],where,m[where].pma[element&~cMatchElement::patternFlag].pemaByPatternEnd);
       if (evaluateMetaGroup(where,tagSets[J],lastBeginS1,lastRelativePhrase,lastQ2,lastVerb))
         return true;
     }
@@ -2591,7 +2591,7 @@ bool cSource::resolveNameObject(int where,vector <cObject>::iterator &object,vec
 				// is inQuotes.  We should be very cautious about replacing objects in the identifySpeakerGroups phase because it is not reversed.
 				if (rObject->objectClass==NAME_OBJECT_CLASS || rObject->objectClass==NON_GENDERED_NAME_OBJECT_CLASS)
 				{
-					if (!(m[rObject->originalLocation].flags&WordMatch::flagObjectResolved) && forwardCallingObject<0)
+					if (!(m[rObject->originalLocation].flags&cWordMatch::flagObjectResolved) && forwardCallingObject<0)
 					{
 						int lastSpeakerGroupEnd=(speakerGroups.size()>0) ? speakerGroups[speakerGroups.size()-1].sgEnd : 0;
 						bool moreQualified=rObject->name.first!=wNULL && rObject->name.last!=wNULL;

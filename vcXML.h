@@ -1,37 +1,37 @@
-class tAttr 
+class cXMLAttribute 
 {
 public:
 	wstring a;
 	wstring as;
-	tAttr(wstring &ina,wstring &inas)
+	cXMLAttribute(wstring &ina,wstring &inas)
 	{
 		a=ina;
 		as=inas;
 	}
 };
 
-class tXC {
+class cXMLClass {
 public:
 	wstring XClass;
-	vector <tAttr> av;
-	vector <tXC> vxc;
+	vector <cXMLAttribute> av;
+	vector <cXMLClass> vxc;
 };
 
-class tFrame
+class cXMLFrame
 {
 public:
-	vector <tXC> description;
-	vector <tXC> examples;
-	vector <tXC> syntax;
-	vector <tXC> semantics;
+	vector <cXMLClass> description;
+	vector <cXMLClass> examples;
+	vector <cXMLClass> syntax;
+	vector <cXMLClass> semantics;
 };
 
-class tVN {
+class cVerbNet {
 public:
-	vector <tXC> id;
-	vector <tXC> members;
-	vector <tXC> themroles;
-	vector <tFrame> frames;
+	vector <cXMLClass> id;
+	vector <cXMLClass> members;
+	vector <cXMLClass> themroles;
+	vector <cXMLFrame> frames;
 	bool establish;
 	bool noPhysicalAction;
 	bool control;
@@ -74,7 +74,7 @@ public:
 	bool am;
 	int totalFrequency;
 	unordered_map <wstring,int> frequencyByMember;
-	tVN()
+	cVerbNet()
 	{
 		establish=false;
 		noPhysicalAction=false;
@@ -219,4 +219,4 @@ public:
 };
 
 extern unordered_map <wstring,set <int> > vbNetVerbToClassMap;
-extern vector < tVN > vbNetClasses;
+extern vector < cVerbNet > vbNetClasses;

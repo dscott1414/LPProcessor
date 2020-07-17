@@ -1,8 +1,8 @@
-class Ontology
+class cOntology
 {
 public:
 	static bool cacheRdfTypes;
-	static unordered_map <wstring, dbs> dbPediaOntologyCategoryList;
+	static unordered_map <wstring, cOntologyEntry> dbPediaOntologyCategoryList;
 	static void initialize();
 	static bool setPreferred(unordered_map <wstring ,int > &topHierarchyClassIndexes,vector <cTreeCat *> &rdfTypes);
 	static void rdfIdentify(wstring object, vector <cTreeCat *> &rdfTypes, wstring fromWhere, bool fileCaching=true);
@@ -34,8 +34,8 @@ private:
 
 	static int fillOntologyList(bool reInitialize);
 	static int getAcronyms(wstring &object,vector <wstring> &acronyms);
-	static unordered_map <wstring, dbs>::iterator findAnyYAGOSuperClass(wstring cl);
-	static unordered_map <wstring, dbs>::iterator findCategory(wstring &icat);
+	static unordered_map <wstring, cOntologyEntry>::iterator findAnyYAGOSuperClass(wstring cl);
+	static unordered_map <wstring, cOntologyEntry>::iterator findCategory(wstring &icat);
 	static int findCategoryRank(wstring &qtype,wstring &parentObject,wstring &object,vector <cTreeCat *> &rdfTypes,wstring &uri);
 	static bool extractResults(wstring begin,wstring uobject,wstring end,wstring qtype, vector <cTreeCat *> &rdfTypes,vector <wstring> &resources,wstring parentObject);
 	static bool inRDFTypeNotFoundTable(wchar_t *object);
@@ -56,11 +56,11 @@ private:
 	static wstring extractLinkedFreebaseDescription(string &properties,wstring &description);
 	static void cutFinalDigits(wstring &cat);
 	static wstring decodeURL(wstring input,wstring &decodedURL);
-	static bool copy(void *buf,dbs &dbsn,int &where,int limit);
-	static bool copy(void *buf,unordered_map <wstring, dbs>::iterator dbsi,int &where,int limit);
+	static bool copy(void *buf,cOntologyEntry &dbsn,int &where,int limit);
+	static bool copy(void *buf,unordered_map <wstring, cOntologyEntry>::iterator dbsi,int &where,int limit);
 	static int getDBPediaPath(int where,wstring webAddress,wstring &buffer,wstring epath);
 	static int getDescription(wstring label,wstring objectName,wstring &abstract,wstring &comment,wstring &infoPage);
-	static int getDescription(unordered_map <wstring, dbs>::iterator cli);
+	static int getDescription(unordered_map <wstring, cOntologyEntry>::iterator cli);
 	static int getDescription(vector <wstring> labels,wstring objectName,wstring &abstract,wstring &comment,wstring &infoPage);
 	static int writeRDFTypes(wchar_t path[4096],vector <cTreeCat *> &rdfTypes);
 	//test
@@ -71,8 +71,8 @@ private:
 	static void testWikipedia();
 	static void printIdentities(wchar_t *objects[]);
 	static void printIdentity(wstring object);
-	static bool copy(dbs &dbsn,void *buf,int &where,int limit);
-	//static bool copy(unordered_map <wstring, dbs>::iterator &hint,void *buf,int &where,int limit,unordered_map <wstring, dbs> &hm);
+	static bool copy(cOntologyEntry &dbsn,void *buf,int &where,int limit);
+	//static bool copy(unordered_map <wstring, cOntologyEntry>::iterator &hint,void *buf,int &where,int limit,unordered_map <wstring, cOntologyEntry> &hm);
 	static int readDbPediaOntology();
 };
 

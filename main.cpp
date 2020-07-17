@@ -24,16 +24,16 @@
 #include "QuestionAnswering.h"
 
 // needed for _STLP_DEBUG - these must be set to a legal, unreachable yet never changing value
-unordered_map <wstring,tFI> static_wordMap;
+unordered_map <wstring,cSourceWordInfo> static_wordMap;
 tIWMM wNULL=static_wordMap.begin();
-unordered_map<wstring, tFI::cRMap::tRelation> static_tIcMap;
-tFI::cRMap::tIcRMap tNULL=(tFI::cRMap::tIcRMap)static_tIcMap.begin();
+unordered_map<wstring, cSourceWordInfo::cRMap::cRelation> static_tIcMap;
+cSourceWordInfo::cRMap::tIcRMap tNULL=(cSourceWordInfo::cRMap::tIcRMap)static_tIcMap.begin();
 vector <cLocalFocus> static_cLocalFocus;
 vector <cLocalFocus>::iterator cNULL=static_cLocalFocus.begin();
 vector <cSource::cSpeakerGroup> static_cSpeakerGroup;
 vector <cSource::cSpeakerGroup>::iterator sgNULL = (vector <cSource::cSpeakerGroup>::iterator)static_cSpeakerGroup.begin();
-vector <WordMatch> static_wm;
-vector <WordMatch>::iterator wmNULL=static_wm.begin();
+vector <cWordMatch> static_wm;
+vector <cWordMatch>::iterator wmNULL=static_wm.begin();
 set<int> static_setInt;
 set<int>::iterator sNULL= static_setInt.begin();
 
@@ -125,7 +125,7 @@ int acquireList(wchar_t *filename)
 			int destfile=_wopen(path,O_RDWR|O_BINARY|O_CREAT);
 			if (destfile)
 			{
-				if (Internet::readBinaryPage(url,destfile,total))
+				if (cInternet::readBinaryPage(url,destfile,total))
 					lplog(LOG_ERROR,L"error retrieving %s.",url);
 				close(destfile);
 			}
@@ -1179,7 +1179,7 @@ int wmain(int argc,wchar_t *argv[])
 		else if ((!_wcsicmp(argv[I],L"-LC") || !_wcsicmp(argv[I],L"-logCache")) && I<argc-1)
 			logCache=_wtoi(argv[I+1]);
 		else if ((!_wcsicmp(argv[I],L"-BC")) && I<argc-1) // bandwidth control
-			Internet::bandwidthControl=_wtoi(argv[I+1]);
+			cInternet::bandwidthControl=_wtoi(argv[I+1]);
 		else if (!_wcsicmp(argv[I],L"-logMatchedSentences"))
 			logMatchedSentences=true;
 		else if (!_wcsicmp(argv[I],L"-logUnmatchedSentences"))
@@ -1259,7 +1259,7 @@ int wmain(int argc,wchar_t *argv[])
 			//printf("%d:%S\n", I, ss->c_str());
 	if (multiProcess==0)
 		initializePatterns();
-	unordered_map <int, vector < vector <tTagLocation> > > emptyMap;
+	unordered_map <int, vector < vector <cTagLocation> > > emptyMap;
 	source.pemaMapToTagSetsByPemaByTagSet.reserve(desiredTagSets.size());
 	for (unsigned int ts=0; ts<desiredTagSets.size(); ts++)
 		source.pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
@@ -1407,9 +1407,9 @@ int wmain(int argc,wchar_t *argv[])
 				}
 				source.clearSource();
 				if (source.updateWordUsageCostsDynamically)
-					WordClass::resetUsagePatternsAndCosts(source.debugTrace);
+					cWord::resetUsagePatternsAndCosts(source.debugTrace);
 				else
-					WordClass::resetCapitalizationAndProperNounUsageStatistics(source.debugTrace);
+					cWord::resetCapitalizationAndProperNounUsageStatistics(source.debugTrace);
 				if (!exitNow) source.signalFinishedProcessingSource(sourceId);
 				continue;
 			}
@@ -1450,9 +1450,9 @@ int wmain(int argc,wchar_t *argv[])
 			if (!exitNow) source.signalFinishedProcessingSource(sourceId);
 			source.clearSource();
 			if (source.updateWordUsageCostsDynamically)
-				WordClass::resetUsagePatternsAndCosts(source.debugTrace);
+				cWord::resetUsagePatternsAndCosts(source.debugTrace);
 			else
-				WordClass::resetCapitalizationAndProperNounUsageStatistics(source.debugTrace);
+				cWord::resetCapitalizationAndProperNounUsageStatistics(source.debugTrace);
 		}
 #ifdef LOG_PATTERNS
 		cPattern::printPatternStatistics();

@@ -165,12 +165,12 @@ enum NET_ERR {
 	PARSE_WEB_ADDRESS=-45
 };
 
-// in flags of WordMatch
+// in flags of cWordMatch
 //enum formsAdjustmentFlags { flagNounOwner=(1<<31), flagAddProperNoun=(1<<30), flagOnlyConsiderProperNounForms=(1<<29),
 //                            flagAllCaps=(1<<28), flagTopLevelPattern=(1<<27), flagPossiblePluralNounOwner=(1<<26),
 //                            flagNotMatched=(1<<25)};
 
-class FormClass
+class cForm
 {
 public:
   wstring name;
@@ -205,13 +205,13 @@ public:
     if (!copy(buffer,(short)formCheck,where,limit)) return false;
 		return true;
 	}
-	FormClass(int indexIn,wstring nameIn,wstring shortNameIn,wstring inflectionsClassIn,bool hasInflectionsIn,
+	cForm(int indexIn,wstring nameIn,wstring shortNameIn,wstring inflectionsClassIn,bool hasInflectionsIn,
 										 bool properNounSubClassIn=false,bool isTopLevelIn=false,bool isIgnoreIn=false,bool verbFormIn=false,bool blockProperNounRecognitionIn=false,bool formCheckI=false);
 
-	//FormClass(int indexIn,wstring newForm,wstring shortForm,bool setInflections,wstring inflectionsClassIn=L"",bool properNounSubClass,bool isTopLevel=false,bool blockProperNounRecognition=false);
+	//cForm(int indexIn,wstring newForm,wstring shortForm,bool setInflections,wstring inflectionsClassIn=L"",bool properNounSubClass,bool isTopLevel=false,bool blockProperNounRecognition=false);
 };
 
-extern vector <FormClass *> Forms;
+extern vector <cForm *> Forms;
 extern int commaForm,periodForm,reflexivePronounForm,nomForm,personalPronounAccusativeForm;
 extern int nounForm,quoteForm,dashForm,bracketForm,conjunctionForm,demonstrativeDeterminerForm,possessiveDeterminerForm,interrogativeDeterminerForm;
 extern int indefinitePronounForm,reciprocalPronounForm,pronounForm,numeralCardinalForm,numeralOrdinalForm,romanNumeralForm,adverbForm,adjectiveForm;
@@ -222,7 +222,7 @@ extern int isForm,isNegationForm,prepositionForm,telenumForm,sa_abbForm,toForm,r
 extern int doForm,doNegationForm,monthForm,letterForm,modalAuxiliaryForm,futureModalAuxiliaryForm,negationModalAuxiliaryForm,negationFutureModalAuxiliaryForm;
 
 
-class FormsClass
+class cForms
 {
 public:
   static int findForm(wstring form);
@@ -233,21 +233,21 @@ public:
 	static unordered_map <wstring ,int > formMap;
 };
 
-class WordClass;
-extern WordClass Words;
+class cWord;
+extern cWord Words;
 extern tInflectionMap shortNounInflectionMap[];
 extern tInflectionMap shortVerbInflectionMap[];
 extern tInflectionMap shortAdjectiveInflectionMap[];
 extern tInflectionMap shortAdverbInflectionMap[];
-class tFI;
-typedef unordered_map <wstring,tFI>::iterator tIWMM;
+class cSourceWordInfo;
+typedef unordered_map <wstring,cSourceWordInfo>::iterator tIWMM;
 extern tIWMM wNULL;
 wchar_t *firstMatch(wchar_t *buffer, wchar_t *beginString, wchar_t *endString);
 char *firstMatch(char *buffer, char *beginString, char *endString);
 
-class tFI
+class cSourceWordInfo
 {
-friend class WordClass;
+friend class cWord;
 public:
   struct wordSetCompare
   {
@@ -259,7 +259,7 @@ public:
   class cRMap
   {
   public:
-    class tRelation
+    class cRelation
     {
     public:
       int frequency;
@@ -269,7 +269,7 @@ public:
 			int rlastWhere;
       // if fromDB is true, then this relation is being read from the database.
       // if not, it is generated from the text.
-			tRelation(short _sourceId,int _lastWhere,int iFrequency,bool fromDB)
+			cRelation(short _sourceId,int _lastWhere,int iFrequency,bool fromDB)
       {
         if (fromDB)
         {
@@ -297,7 +297,7 @@ public:
 				sourceId=_sourceId;
 				rlastWhere=_lastWhere;
       }
-      tRelation(void)
+      cRelation(void)
       {
         sourceId=0; // index into sources
         rlastWhere=0;
@@ -311,8 +311,8 @@ public:
         return lhs->first<rhs->first;
       }
     };
-    typedef unordered_map<wstring,tRelation>::iterator tIcRMap;
-    typedef unordered_map<wstring,tRelation> tcRMap;
+    typedef unordered_map<wstring,cRelation>::iterator tIcRMap;
+    typedef unordered_map<wstring,cRelation> tcRMap;
     tcRMap r;
     struct mapSequenceCompare
     {
@@ -376,14 +376,14 @@ public:
   #endif
   int tmpMainEntryWordId; // stores main entry temporarily for DB routines
   bool changedSinceLastWordRelationFlush;
-  bool operator==(tFI &other) const;
+  bool operator==(cSourceWordInfo &other) const;
 
   unsigned int *forms()
   {
     return formsArray+formsOffset;
   }
   void eraseForms(void);
-  FormClass *Form(unsigned int offset);
+  cForm *Form(unsigned int offset);
 	int getFormNum(unsigned int offset);
   unsigned int formsSize()
   {
@@ -409,15 +409,15 @@ public:
 		}
 		return false;
 	}
-	tFI(int iForm,int iInflectionFlags,int iFlags,int iTimeFlags,int derivationRules,tIWMM iMainEntry,int sourceId);
-  tFI(char *buffer,int &where,int limit,wstring &ME,int sourceId);
+	cSourceWordInfo(int iForm,int iInflectionFlags,int iFlags,int iTimeFlags,int derivationRules,tIWMM iMainEntry,int sourceId);
+  cSourceWordInfo(char *buffer,int &where,int limit,wstring &ME,int sourceId);
   bool updateFromDisk(char *buffer,int &where,int limit,wstring &ME);
 	void computeDBUsagePatternsToUsagePattern(unordered_map <int, int> &dbUsagePatterns);
-	bool retrieveWordFromDatabase(wstring &sWord, MYSQL &mysql, tFI &dbWordInfo, unordered_map <int, int> &dbUsagePatterns,int &dbMainEntryWordId);
+	bool retrieveWordFromDatabase(wstring &sWord, MYSQL &mysql, cSourceWordInfo &dbWordInfo, unordered_map <int, int> &dbUsagePatterns,int &dbMainEntryWordId);
 	bool write(void *buffer,int &where,int limit);
   // MYSQL database
-  tFI(unsigned int *forms,unsigned int iCount,int iInflectionFlags,int iFlags,int iTimeFlags,int mainEntryWordId,int iDerivationRules,int sourceId,int formNum,wstring &word);
-  tFI(void);
+  cSourceWordInfo(unsigned int *forms,unsigned int iCount,int iInflectionFlags,int iFlags,int iTimeFlags,int mainEntryWordId,int iDerivationRules,int sourceId,int formNum,wstring &word);
+  cSourceWordInfo(void);
 
   bool costEquivalentSubClass(int subclassForm,int parentForm);
 	bool toLowestCostPreferForm(int form,int preferForm);
@@ -442,7 +442,7 @@ public:
   bool remove(int form);
   bool remove(wchar_t *formName);
   int addForm(int form,const wstring &word,bool illegal=false);
-	void cloneForms(tFI fromWord);
+	void cloneForms(cSourceWordInfo fromWord);
   int adjustFormsInflections(wstring originalWord,unsigned __int64 &flags,bool isFirstWord,int nounOwner,bool allCaps,bool firstLetterCapitalized, bool log);
   bool isUnknown(void);
   bool isCommonWord(void);
@@ -457,7 +457,7 @@ public:
   bool notCostable(wstring word,int flags);
   void logFormUsageCosts(wstring w);
   void createGroup(relationWOTypes relationType,tIWMM toWord);
-	tFI::cRMap::tIcRMap addRelation(int where,int rType,tIWMM word);
+	cSourceWordInfo::cRMap::tIcRMap addRelation(int where,int rType,tIWMM word);
   bool intersect(relationWOTypes relationType,tIWMM word,tIWMM self,tIWMM &fromWord,tIWMM &toWord);
   void transferUsagePatternsToCosts(int highestCost,unsigned int upStart,unsigned int upLength);
   void transferFormUsagePatternsToCosts(int sameNameForm,int properNounForm,int iCount);
@@ -469,8 +469,8 @@ public:
 	// controlled by the updateWordUsageCostsDynamically flag, currently globally set to false
 	void incrementTransferCount()
 	{
-		deltaUsagePatterns[tFI::TRANSFER_COUNT]++;
-		usagePatterns[tFI::TRANSFER_COUNT]++;
+		deltaUsagePatterns[cSourceWordInfo::TRANSFER_COUNT]++;
+		usagePatterns[cSourceWordInfo::TRANSFER_COUNT]++;
 		changedSinceLastWordRelationFlush = true;
 	}
 	bool isWinner(int form,int tmpWinnerForms)
@@ -507,12 +507,12 @@ public:
 		if (properNounForm >= 0) add--;
 		if (!numWinnerForms || add <= 0)
 		{
-			deltaUsagePatterns[tFI::TRANSFER_COUNT]++;
-			usagePatterns[tFI::TRANSFER_COUNT]++;
+			deltaUsagePatterns[cSourceWordInfo::TRANSFER_COUNT]++;
+			usagePatterns[cSourceWordInfo::TRANSFER_COUNT]++;
 			changedSinceLastWordRelationFlush = true;
 			return false;
 		}
-		unsigned int topAllowableUsageCount = min(count, tFI::MAX_USAGE_PATTERNS);
+		unsigned int topAllowableUsageCount = min(count, cSourceWordInfo::MAX_USAGE_PATTERNS);
 		bool reduce = false;
 		for (unsigned int f = 0; f < topAllowableUsageCount; f++)
 			if (f != sameNameForm && f != properNounForm)
@@ -537,13 +537,13 @@ public:
 				deltaUsagePatterns[f] += add;
 			}
 		}
-		deltaUsagePatterns[tFI::TRANSFER_COUNT]++;
+		deltaUsagePatterns[cSourceWordInfo::TRANSFER_COUNT]++;
 		changedSinceLastWordRelationFlush = true;
-		if (usagePatterns[tFI::TRANSFER_COUNT]++ < 63)
+		if (usagePatterns[cSourceWordInfo::TRANSFER_COUNT]++ < 63)
 			return false;
 		transferFormUsagePatternsToCosts(sameNameForm, properNounForm, count);
-		usagePatterns[tFI::TRANSFER_COUNT] = 1; // so writeUnknownWords knows this word is used more than once
-		deltaUsagePatterns[tFI::TRANSFER_COUNT] = 1; // so writeUnknownWords knows this word is used more than once
+		usagePatterns[cSourceWordInfo::TRANSFER_COUNT] = 1; // so writeUnknownWords knows this word is used more than once
+		deltaUsagePatterns[cSourceWordInfo::TRANSFER_COUNT] = 1; // so writeUnknownWords knows this word is used more than once
 		return true;
 
 	}
@@ -569,25 +569,25 @@ public:
 	}
 	void updateNounDeterminerUsageCost(bool hasDeterminer)
 	{
-		normalize(usagePatterns, tFI::SINGULAR_NOUN_HAS_DETERMINER, 2);
-		normalize(deltaUsagePatterns, tFI::SINGULAR_NOUN_HAS_DETERMINER, 2);
-		usagePatterns[(hasDeterminer) ? tFI::SINGULAR_NOUN_HAS_DETERMINER : tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]++;
-		deltaUsagePatterns[(hasDeterminer) ? tFI::SINGULAR_NOUN_HAS_DETERMINER : tFI::SINGULAR_NOUN_HAS_NO_DETERMINER]++;
+		normalize(usagePatterns, cSourceWordInfo::SINGULAR_NOUN_HAS_DETERMINER, 2);
+		normalize(deltaUsagePatterns, cSourceWordInfo::SINGULAR_NOUN_HAS_DETERMINER, 2);
+		usagePatterns[(hasDeterminer) ? cSourceWordInfo::SINGULAR_NOUN_HAS_DETERMINER : cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER]++;
+		deltaUsagePatterns[(hasDeterminer) ? cSourceWordInfo::SINGULAR_NOUN_HAS_DETERMINER : cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER]++;
 		int transferTotal = 0;
-		for (unsigned int I = tFI::SINGULAR_NOUN_HAS_DETERMINER; I < tFI::SINGULAR_NOUN_HAS_DETERMINER + 2; I++)
+		for (unsigned int I = cSourceWordInfo::SINGULAR_NOUN_HAS_DETERMINER; I < cSourceWordInfo::SINGULAR_NOUN_HAS_DETERMINER + 2; I++)
 			transferTotal += usagePatterns[I];
 		if ((transferTotal & 15) == 15)
-			transferUsagePatternsToCosts(tFI::HIGHEST_COST_OF_INCORRECT_NOUN_DET_USAGE, tFI::SINGULAR_NOUN_HAS_DETERMINER, 2);
+			transferUsagePatternsToCosts(cSourceWordInfo::HIGHEST_COST_OF_INCORRECT_NOUN_DET_USAGE, cSourceWordInfo::SINGULAR_NOUN_HAS_DETERMINER, 2);
 	}
 	void updateVerbObjectsUsageCost(int numObjects)
 	{
-		usagePatterns[tFI::VERB_HAS_0_OBJECTS + numObjects]++;
-		deltaUsagePatterns[tFI::VERB_HAS_0_OBJECTS + numObjects]++;
+		usagePatterns[cSourceWordInfo::VERB_HAS_0_OBJECTS + numObjects]++;
+		deltaUsagePatterns[cSourceWordInfo::VERB_HAS_0_OBJECTS + numObjects]++;
 		int transferTotal = 0;
-		for (unsigned int I = tFI::VERB_HAS_0_OBJECTS; I < tFI::VERB_HAS_0_OBJECTS + 3; I++)
+		for (unsigned int I = cSourceWordInfo::VERB_HAS_0_OBJECTS; I < cSourceWordInfo::VERB_HAS_0_OBJECTS + 3; I++)
 			transferTotal += usagePatterns[I];
 		if ((transferTotal & 15) == 15)
-			transferUsagePatternsToCosts(tFI::HIGHEST_COST_OF_INCORRECT_VERB_USAGE, tFI::VERB_HAS_0_OBJECTS, 3);
+			transferUsagePatternsToCosts(cSourceWordInfo::HIGHEST_COST_OF_INCORRECT_VERB_USAGE, cSourceWordInfo::VERB_HAS_0_OBJECTS, 3);
 	}
 	int getLowestTopLevelCost(void)
 	{
@@ -621,13 +621,13 @@ protected:
 private:
   unsigned int count;
   static int uniqueNewIndex; // use to insure every word has a unique index, even though it hasn't been consigned to the database yet.  
-	unsigned char usagePatterns[tFI::MAX_USAGE_PATTERNS]; // usage counts for every class of this word
-	unsigned char usageCosts[tFI::MAX_USAGE_PATTERNS];
-	unsigned char deltaUsagePatterns[tFI::MAX_USAGE_PATTERNS];
+	unsigned char usagePatterns[cSourceWordInfo::MAX_USAGE_PATTERNS]; // usage counts for every class of this word
+	unsigned char usageCosts[cSourceWordInfo::MAX_USAGE_PATTERNS];
+	unsigned char deltaUsagePatterns[cSourceWordInfo::MAX_USAGE_PATTERNS];
 	// must not change after initialization or this must be protected by SRWLock 
 };
 
-extern tFI::cRMap::tIcRMap tNULL;
+extern cSourceWordInfo::cRMap::tIcRMap tNULL;
 
 bool loosesort( const wchar_t *s1, const wchar_t *s2 );
 
@@ -640,15 +640,15 @@ int getInflection(wstring sWord,wstring form,wstring mainEntry,wstring iform,vec
 int nextMatch(wstring &buffer,wstring begin_string,wstring end_string,size_t &begin_pos,wstring &match,bool include_begin_and_end);
 int getPath(const wchar_t *pathname,void *buffer,int maxlen,int &actualLen);
 
-class WordClass
+class cWord
 {
-  friend class tFI;
+  friend class cSourceWordInfo;
 
 public:
-  WordClass(void);
+  cWord(void);
   void initialize();
 	void initializeChangeStateVerbs();
-  ~WordClass();
+  ~cWord();
   tIWMM sectionWord; // special word only for section breaks
   tIWMM PPN; // special word only for personal/gendered proper nouns (relations)
   tIWMM TELENUM; // special word only for telephone numbers
@@ -702,7 +702,7 @@ public:
   void releaseLock(MYSQL &mysql);
 
   size_t numWords(void) { return WMM.size(); }
-  // if word is a new word discovered since last flush, the index in tFI will be -1.
+  // if word is a new word discovered since last flush, the index in cSourceWordInfo will be -1.
 	bool readWordsOfMultiWordObjects(vector < vector < tmWS > > &multiWordStrings,vector < vector < vector <tIWMM> > > &multiWordObjects);
 	void addMultiWordObjects(vector < vector < tmWS > > &multiWordStrings,vector < vector < vector <tIWMM> > > &multiWordObjects);
   int wordCheck(void);
@@ -740,7 +740,7 @@ protected:
 private:
 	tIWMM *idToMap;
 	int idsAllocated;
-  typedef pair <wstring, tFI> tWFIMap;
+  typedef pair <wstring, cSourceWordInfo> tWFIMap;
   static int lastWordWrittenClock;
 	bool isWordFormCacheValid(MYSQL &mysql);
 	int readWordFormsFromDB(MYSQL &mysql,int maxWordId,wchar_t *qt,int *words,int *counts,int &numWordForms,unsigned int * &wordForms, bool printProgress, bool skipWordInitialization, wstring specialExtension);
@@ -759,7 +759,7 @@ private:
   static vector <wchar_t *> multiElementWords;
   static vector <wchar_t *> quotedWords;
   static vector <wchar_t *> periodWords;
-  static unordered_map <wstring, tFI> WMM;
+  static unordered_map <wstring, cSourceWordInfo> WMM;
   // filled during program execution
 	static int disinclinationRecursionCount;
 
@@ -785,7 +785,7 @@ private:
 
   #ifdef CHECK_WORD_CACHE
     // test routines
-    int checkWord(WordClass &Words2,tIWMM originalIWord,tIWMM newWord,int ret);
+    int checkWord(cWord &Words2,tIWMM originalIWord,tIWMM newWord,int ret);
   #endif
 
   int addProperNamesFile(wstring path);
@@ -800,7 +800,7 @@ private:
 
 #include "pattern.h"
 
-class WordMatch;
+class cWordMatch;
 
 #include "patternElementMatchArray.h"
 #include "patternMatchArray.h"

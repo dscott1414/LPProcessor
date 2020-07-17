@@ -102,7 +102,7 @@ wstring replaceQuotes(wstring ws)
 	wstring replacement;
 	replacement.reserve(ws.length());
 	for (wchar_t wsc : ws)
-		if (WordClass::isSingleQuote(wsc) || WordClass::isDoubleQuote(wsc))
+		if (cWord::isSingleQuote(wsc) || cWord::isDoubleQuote(wsc))
 			replacement += L'"';
 		else
 			replacement += wsc;
@@ -314,7 +314,7 @@ vector <wstring> generateVocabFromSource(cSource &source, int min_cnt = 2)
 	//Generate vocabulary
 	unordered_map <wstring, int> vocabAll;
 
-	for (WordMatch &im: source.m)
+	for (cWordMatch &im: source.m)
 		vocabAll[im.word->first] += 1;
 	vector <wstring> vocabvector;
 	// Remove words appearing only once
@@ -336,7 +336,7 @@ void trainModelFromSource(cSource &source, unordered_map <wstring, int> &wordTag
 	// Start state
 	vector<wstring> previousTags = { startTag };
 	tagCountsMap[startTag] = 1;
-	for (WordMatch im:source.m)
+	for (cWordMatch im:source.m)
 	{
 		vector <int> winnerForms;
 		im.getWinnerForms(winnerForms);
@@ -647,7 +647,7 @@ void forwardFromSource(cSource &source,vector<vector<double>> &tagTransitionProb
 				double prob = probMult * probabilityMatrix.get(prevTagIndex,wordSourceIndex - 1) * tagTransitionProbabilityMatrix[prevTagIndex][tagIndex] * wordTagProbabilityMatrix[tagIndex][wordVocabIndex];
 				if (prob<0)
 					lplog(LOG_ERROR, L"probability:%d:%s%s:tag %s:previous %.14f*tag transition %.14f*word tag %.14f=%.14f", wordSourceIndex, source.m[wordSourceIndex].word->first.c_str(), 
-						(source.m[wordSourceIndex].flags&WordMatch::flagOnlyConsiderProperNounForms) ? L"[onlyProperNounSet]":L"",
+						(source.m[wordSourceIndex].flags&cWordMatch::flagOnlyConsiderProperNounForms) ? L"[onlyProperNounSet]":L"",
 						Forms[tag]->name.c_str(),probabilityMatrix.get(prevTagIndex,wordSourceIndex - 1),tagTransitionProbabilityMatrix[prevTagIndex][tagIndex],wordTagProbabilityMatrix[tagIndex][wordVocabIndex],prob);
 				if (prob > best_prob)
 				{
@@ -679,11 +679,11 @@ void forwardFromSource(cSource &source,vector<vector<double>> &tagTransitionProb
 		}
 		if (maximumProbabilityPerWordIndex < 0.000000001)
 		{
-			if (source.m[wordSourceIndex].flags&WordMatch::flagOnlyConsiderProperNounForms)
+			if (source.m[wordSourceIndex].flags&cWordMatch::flagOnlyConsiderProperNounForms)
 			{
 				int duplicateSkip=0;
 				lplog(LOG_ERROR, L"%d:MAXREDO forceProperNoun incorrect:[%s]", wordSourceIndex, getContext(source, wordSourceIndex,true, duplicateSkip).c_str());
-				source.m[wordSourceIndex].flags &= ~WordMatch::flagOnlyConsiderProperNounForms;
+				source.m[wordSourceIndex].flags &= ~cWordMatch::flagOnlyConsiderProperNounForms;
 				wordSourceIndex--;
 				continue;
 			}
@@ -770,7 +770,7 @@ void appendAssociatedFormsToViterbiTags(cSource &source)
 			viterbiAssociationMap[f].push_back(form);
 
 	int wordIndex=0;
-	for (WordMatch &im : source.m)
+	for (cWordMatch &im : source.m)
 	{
 		if (wordIndex % 5000 == 0)
 			printf("Appending associated forms: %03I64d%%:%09d\r", (__int64)(((__int64)100) * wordIndex / source.m.size()), wordIndex);
@@ -803,7 +803,7 @@ void appendAssociatedFormsToViterbiTags(cSource &source)
 				{
 					for (wstring associatedForm : mi->second)
 					{
-						int formOffset = im.queryForm(FormsClass::findForm(associatedForm));
+						int formOffset = im.queryForm(cForms::findForm(associatedForm));
 						if (formOffset >= 0)
 						{
 							im.preferredViterbiForms.push_back(formOffset);
@@ -814,7 +814,7 @@ void appendAssociatedFormsToViterbiTags(cSource &source)
 				}
 			}
 			// never exclude the word itself from possibile match
-			int selfForm = FormsClass::findForm(im.word->first);
+			int selfForm = cForms::findForm(im.word->first);
 			if (selfForm >= 0)
 			{
 				int formOffset = im.queryForm(selfForm);
@@ -872,7 +872,7 @@ void compareViterbiAgainstStructuredTagging(cSource &source,
 	int stanfordNotIdentifiedNum=0, stanfordIsLPWinnerNum=0, stanfordIsViterbiWinnerNum=0;
 	if (!myquery(&source.mysql, L"LOCK TABLES stanfordPCFGParsedSentences WRITE")) // moved out parseSentence (actually in foundParseSentence and setParsedSentence) for performance
 		return;
-	for (vector <WordMatch>::iterator im = source.m.begin(), imEnd = source.m.end(); im != imEnd; im++, wordSourceIndex++)
+	for (vector <cWordMatch>::iterator im = source.m.begin(), imEnd = source.m.end(); im != imEnd; im++, wordSourceIndex++)
 	{
 		if (wordSourceIndex % 5000 == 0)
 			printf("Comparing viterbi against structured tagging: %03I64d%%:%09d\r", (__int64)(((__int64)100) * wordSourceIndex / source.m.size()), wordSourceIndex);

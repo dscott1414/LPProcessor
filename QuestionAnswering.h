@@ -2,7 +2,7 @@
 class cQuestionAnswering
 {
 public:
-	class searchSource
+	class cSearchSource
 	{
 	public:
 		bool isSnippet; // snippet
@@ -65,19 +65,19 @@ public:
 				popularity = 0;
 			}
 		};
-		class SemanticMatchInfo
+		class cSemanticMatchInfo
 		{
 		public:
 			bool synonym;
 			int semanticMismatch;
 			int confidence;
-			SemanticMatchInfo(bool synonym, int semanticMismatch, int confidence)
+			cSemanticMatchInfo(bool synonym, int semanticMismatch, int confidence)
 			{
 				this->synonym = synonym;
 				this->semanticMismatch = semanticMismatch;
 				this->confidence = confidence;
 			};
-			SemanticMatchInfo()
+			cSemanticMatchInfo()
 			{
 				this->synonym = false;
 				this->semanticMismatch = 0;
@@ -116,25 +116,25 @@ public:
 	int findConstrainedAnswers(cSource *questionSource, vector < cAS > &answerSRIs, vector <int> &wherePossibleAnswers);
 	void analyzeQuestionFromSpecificSource(cSource *questionSource, wstring childSourceType, cSource *childSource, cSpaceRelation * parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, int rejectDuplicatesFrom, int ws, int wo);
 	int metaPatternMatch(cSource *questionSource, cSource *childSource, vector <cSpaceRelation>::iterator childSRI, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion);
-	int	searchTableForAnswer(cSource *questionSource, wchar_t derivation[1024], cSpaceRelation* sri, unordered_map <int, WikipediaTableCandidateAnswers * > &wikiTableMap, vector <cSpaceRelation> &subQueries, vector < cAS > &answerSRIs, int &maxAnswer, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion, bool useParallelQuery);
+	int	searchTableForAnswer(cSource *questionSource, wchar_t derivation[1024], cSpaceRelation* sri, unordered_map <int, cWikipediaTableCandidateAnswers * > &wikiTableMap, vector <cSpaceRelation> &subQueries, vector < cAS > &answerSRIs, int &maxAnswer, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion, bool useParallelQuery);
 	void addTables(cSource *questionSource, int whereQuestionType, cSource *wikipediaSource, vector < cSourceTable > &wikiTables);
 	void getPrepositionalPhraseNonMixMatch(cSource *questionSource, int whereQuestionContextSuggestion, int &minPrepositionalPhraseNonMixMatch, int &maxPrepositionalPhraseNonMixMatch);
-	void analyzeQuestionThroughAbstractAndWikipediaFromRDFType(cSource *questionSource, wchar_t *derivation, int whereQuestionContextSuggestion, cSpaceRelation * parentSRI, cTreeCat *rdfType, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, unordered_map <int, WikipediaTableCandidateAnswers *> &wikiTableMap, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion, set <wstring> &wikipediaLinksAlreadyScanned);
+	void analyzeQuestionThroughAbstractAndWikipediaFromRDFType(cSource *questionSource, wchar_t *derivation, int whereQuestionContextSuggestion, cSpaceRelation * parentSRI, cTreeCat *rdfType, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, unordered_map <int, cWikipediaTableCandidateAnswers *> &wikiTableMap, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion, set <wstring> &wikipediaLinksAlreadyScanned);
 	void enhanceWebSearchQueries(vector <wstring> &webSearchQueryStrings, wstring semanticSuggestion);
 	void getWebSearchQueries(cSource *questionSource, cSpaceRelation* parentSRI, vector <wstring> &objects);
 	void accumulateSemanticMaps(cSource *questionSource,cSpaceRelation* parentSRI, cSource *childSource, bool confidence);
 	void accumulateSemanticEntry(cSource *questionSource, unsigned int where, set <cObject::cLocation> &principalObjectLocations, set <cObject::cLocation>::iterator &polIndex, bool confidence, cSpaceRelation* parentSRI, cSemanticMap *semanticMap, unordered_set <wstring> & whereQuestionInformationSourceObjectsStrings);
 	int	parseSubQueriesParallel(cSource *questionSource,cSource *childSource, vector <cSpaceRelation> &subQueries, int whereChildCandidateAnswer, set <wstring> &wikipediaLinksAlreadyScanned);
-	bool analyzeRDFTypes(cSource *questionSource, vector <cSpaceRelation>::iterator sqi, cSpaceRelation *ssri, wstring derivation,vector < cAS > &answerSRIs, int &maxAnswer, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion, unordered_map <int, WikipediaTableCandidateAnswers * > &wikiTableMap,bool rejectEmptyObjects);
+	bool analyzeRDFTypes(cSource *questionSource, vector <cSpaceRelation>::iterator sqi, cSpaceRelation *ssri, wstring derivation,vector < cAS > &answerSRIs, int &maxAnswer, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion, unordered_map <int, cWikipediaTableCandidateAnswers * > &wikiTableMap,bool rejectEmptyObjects);
 	int	matchSubQueries(cSource *questionSource, wstring derivation, cSource *childSource, int &semanticMismatch, bool &subQueryNoMatch, vector <cSpaceRelation> &subQueries, int whereChildCandidateAnswer, int whereChildCandidateAnswerEnd, int numConsideredParentAnswer, int semMatchValue, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion, bool useParallelQuery);
 	bool checkObjectIdentical(cSource *source1, cSource *source2, int object1, int object2);
 	bool checkParticularPartIdentical(cSource *source1, cSource *source2, int where1, int where2);
-	unordered_map<wstring, SemanticMatchInfo> questionGroupMap;
+	unordered_map<wstring, cSemanticMatchInfo> questionGroupMap;
 	int checkParentGroup(cSource *parentSource, int parentWhere, cSource *childSource, int childWhere, int childObject, bool &synonym, int &semanticMismatch);
 	void printCAS(wstring logPrefix, cAS &childCAS);
-	int spinParses(MYSQL &mysql, vector <searchSource> &accumulatedParseRequests);
-	int accumulateParseRequests(cSpaceRelation* parentSRI, int webSitesAskedFor, int index, bool googleSearch, vector <wstring> &webSearchQueryStrings, int &offset, vector <searchSource> &accumulatedParseRequests);
-	int analyzeAccumulatedRequests(cSource *questionSource,wchar_t *derivation, cSpaceRelation *parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, vector <searchSource> &accumulatedParseRequests,
+	int spinParses(MYSQL &mysql, vector <cSearchSource> &accumulatedParseRequests);
+	int accumulateParseRequests(cSpaceRelation* parentSRI, int webSitesAskedFor, int index, bool googleSearch, vector <wstring> &webSearchQueryStrings, int &offset, vector <cSearchSource> &accumulatedParseRequests);
+	int analyzeAccumulatedRequests(cSource *questionSource,wchar_t *derivation, cSpaceRelation *parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, vector <cSearchSource> &accumulatedParseRequests,
 		cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion);
 	int webSearchForQueryParallel(cSource *questionSource, wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
 		vector <wstring> &webSearchQueryStrings,int &offset, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion);

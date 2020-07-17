@@ -134,7 +134,7 @@ bool cSource::followerPOVToObserverConversion(vector <cSpaceRelation>::iterator 
 	}
 	// follow them!
 	else if ((m[sr->where].objectRole&IN_PRIMARY_QUOTE_ROLE) && 
-		     (m[sr->whereVerb].verbSense&(VT_TENSE_MASK|VT_EXTENDED))==VT_PRESENT && !(m[sr->whereVerb].flags&WordMatch::flagInInfinitivePhrase) && 
+		     (m[sr->whereVerb].verbSense&(VT_TENSE_MASK|VT_EXTENDED))==VT_PRESENT && !(m[sr->whereVerb].flags&cWordMatch::flagInInfinitivePhrase) && 
 				 sr->whereControllingEntity<0 && sr->tft.lastOpeningPrimaryQuote>=0 && m[sr->tft.lastOpeningPrimaryQuote].audienceObjectMatches.size()>=1)
 		subjects=m[sr->tft.lastOpeningPrimaryQuote].audienceObjectMatches;
 	if ((sr->tft.futureHappening || sr->tft.presentHappening) && sg<(signed)speakerGroups.size() && 
@@ -224,13 +224,13 @@ int wherePrepObject,
 		 (whereSubject<0 || (m[whereSubject].word->first==L"you")) && 
 		(m[whereVerb].verbSense&(VT_TENSE_MASK|VT_EXTENDED))==VT_PRESENT) &&
 			(m[whereVerb].word->second.inflectionFlags&(VERB_PRESENT_FIRST_SINGULAR))!=0 &&  // NOT / calls herself Rita.
-		!(m[whereVerb].flags&(WordMatch::flagInInfinitivePhrase)) &&
-		(!(m[whereVerb].flags&(WordMatch::flagInQuestion))); //  || isEOS(whereVerb-1) || m[whereVerb-1].queryForm(quoteForm)>=0
+		!(m[whereVerb].flags&(cWordMatch::flagInInfinitivePhrase)) &&
+		(!(m[whereVerb].flags&(cWordMatch::flagInQuestion))); //  || isEOS(whereVerb-1) || m[whereVerb-1].queryForm(quoteForm)>=0
 	tft.speakerQuestionToAudience=whereVerb>=0 && ((m[whereVerb].objectRole&IN_PRIMARY_QUOTE_ROLE) && 
 		(whereSubject<0 || (m[whereSubject].word->first==L"you")) && 
 		(m[whereVerb].verbSense&(VT_TENSE_MASK|VT_EXTENDED))==VT_PAST) &&
-		!(m[whereVerb].flags&(WordMatch::flagInInfinitivePhrase)) &&
-		((m[whereVerb].flags&(WordMatch::flagInQuestion))); //  || isEOS(whereVerb-1) || m[whereVerb-1].queryForm(quoteForm)>=0
+		!(m[whereVerb].flags&(cWordMatch::flagInInfinitivePhrase)) &&
+		((m[whereVerb].flags&(cWordMatch::flagInQuestion))); //  || isEOS(whereVerb-1) || m[whereVerb-1].queryForm(quoteForm)>=0
 	tft.significantRelation=((genderedLocationRelation && currentSpeakerGroup<speakerGroups.size() &&
 		  (isSpeaker(whereSubject,esg,currentSpeakerGroup) || isSpeaker(whereObject,esg,currentSpeakerGroup) || isSpeaker(whereControllingEntity,esg,currentSpeakerGroup) || 
 			 (whereSubject>=0 && m[whereSubject].getObject()>=0 && isAgentObject(m[whereSubject].getObject())))) || 
@@ -241,7 +241,7 @@ int wherePrepObject,
 		if (whereControllingEntity>=0 && m[whereControllingEntity].getRelVerb()>=0 && m[whereControllingEntity].getRelVerb()!=whereVerb)
 			vt=m[tmp=m[whereControllingEntity].getRelVerb()].verbSense;
 		// if infinitive phrase, take the tense of the main clause
-		else if (whereVerb>=0 && (m[whereVerb].flags&WordMatch::flagInInfinitivePhrase))
+		else if (whereVerb>=0 && (m[whereVerb].flags&cWordMatch::flagInInfinitivePhrase))
 		{
 			if (whereSubject>=0 && m[whereSubject].getRelVerb()>=0 && m[whereSubject].getRelVerb()!=whereVerb)
 				vt=m[m[whereSubject].getRelVerb()].verbSense;
@@ -286,14 +286,14 @@ int wherePrepObject,
 		// 'the house may go on the market' but NOT 'she may be dead' - the second phrase is in reference to what is a present state (or perhaps even past state).
 		futureHappeningSR|=futureLocation || tft.speakerCommand || ((vt&VT_POSSIBLE) && whereVerb>=0 && !isVerbClass(whereVerb,L"am"));
 		bool futureInPastHappeningSR=false;
-		if (whereSubject>=0 && whereVerb>=0 && m[whereSubject].getRelVerb()==whereVerb && (m[whereVerb].flags&WordMatch::flagInInfinitivePhrase))
+		if (whereSubject>=0 && whereVerb>=0 && m[whereSubject].getRelVerb()==whereVerb && (m[whereVerb].flags&cWordMatch::flagInInfinitivePhrase))
 		{
-			m[whereVerb].flags&=~WordMatch::flagInInfinitivePhrase;
+			m[whereVerb].flags&=~cWordMatch::flagInInfinitivePhrase;
 			if (debugTrace.traceWhere)
 			lplog(LOG_WHERE,L"%06d:infinitive phrase cancelled.",whereVerb,whereSubject,m[whereSubject].getRelVerb());
 		}
 		// I happened to overhear you - happened is an occurrence, and so is dominant over the infinitive phrase
-		if (whereVerb>=0 && (m[whereVerb].flags&WordMatch::flagInInfinitivePhrase) && whereSubject>=0 && m[whereSubject].getRelVerb()>=0 && !isVerbClass(m[whereSubject].getRelVerb(),L"occurrence-48.3"))
+		if (whereVerb>=0 && (m[whereVerb].flags&cWordMatch::flagInInfinitivePhrase) && whereSubject>=0 && m[whereSubject].getRelVerb()>=0 && !isVerbClass(m[whereSubject].getRelVerb(),L"occurrence-48.3"))
 		{
 			if ((beforePastHappeningSR || pastHappeningSR) && !futureHappeningSR)
 			{
@@ -312,14 +312,14 @@ int wherePrepObject,
 			for (; lOPQ>location; lOPQ=m[lOPQ].previousQuote);
 			for (; lOPQ>=0 && m[lOPQ].getQuoteForwardLink()<location && m[lOPQ].getQuoteForwardLink()>=0; lOPQ=m[lOPQ].getQuoteForwardLink());
 			tft.lastOpeningPrimaryQuote=lOPQ;
-			story=lOPQ>=0 && (m[lOPQ].flags&WordMatch::flagEmbeddedStoryResolveSpeakers)!=0;
+			story=lOPQ>=0 && (m[lOPQ].flags&cWordMatch::flagEmbeddedStoryResolveSpeakers)!=0;
 		}
 		else
 			tft.lastOpeningPrimaryQuote=-1;
 		// ESTABUshered into the presence of Mr . Carter , he[carter] and I[tommy] *wish* each other good morning as is customary
 		bool monitorPresentToFutureHappeningSR=futureHappeningSR;
 		futureHappeningSR|=(inPrimaryQuote && !presentlyHappeningSR && !pastHappeningSR && (vt&~VT_VERB_CLAUSE)==VT_PRESENT) && 
-			whereSubject>=0 && whereVerb>=0 && (m[whereVerb].queryForm(thinkForm)<0) && !(m[whereSubject].flags&WordMatch::flagInQuestion);
+			whereSubject>=0 && whereVerb>=0 && (m[whereVerb].queryForm(thinkForm)<0) && !(m[whereSubject].flags&cWordMatch::flagInQuestion);
 		monitorPresentToFutureHappeningSR=(futureHappeningSR && !monitorPresentToFutureHappeningSR);
 		// ESTABUshered into the presence of Mr . Carter , he[carter] and I[tommy] wish each other good morning as is customary
 		// BUT NOT /  MOVETook a car across the town -- mighty pretty place by the way , I[julius] guess MOVE_OBJECTI[julius] shall take Jane there for a spell when CONTACTI[julius] find her[jane]
@@ -388,9 +388,9 @@ int wherePrepObject,
 				tft.presType+=L"[REL]";
 			if (m[maxWO].objectRole&IN_COMMAND_OBJECT_ROLE)
 				tft.presType+=L"[COMMAND]";
-			if (m[maxWO].flags&WordMatch::flagInQuestion)
+			if (m[maxWO].flags&cWordMatch::flagInQuestion)
 				tft.presType+=L"[Q]";
-			if (m[maxWO].flags&WordMatch::flagInPStatement)
+			if (m[maxWO].flags&cWordMatch::flagInPStatement)
 				tft.presType+=L"[P]";
 		}
 		if (whereSubject>=0 && m[whereSubject].beginObjectPosition>0 && m[m[whereSubject].beginObjectPosition-1].queryForm(conjunctionForm)!=-1 &&
@@ -604,8 +604,8 @@ void cSource::correctSRIEntry(cSpaceRelation &sri)
 	}
 	if (sri.whereSecondaryPrep<0 && sri.whereSecondaryVerb>=0 && sri.wherePrep!=m[sri.whereSecondaryVerb].relPrep)
 		sri.whereSecondaryPrep=m[sri.whereSecondaryVerb].relPrep;
-	bool inQuestion=(sri.whereSubject>=0 && (m[sri.whereSubject].flags&WordMatch::flagInQuestion));
-	inQuestion|=(sri.whereObject>=0 && (m[sri.whereObject].flags&WordMatch::flagInQuestion));
+	bool inQuestion=(sri.whereSubject>=0 && (m[sri.whereSubject].flags&cWordMatch::flagInQuestion));
+	inQuestion|=(sri.whereObject>=0 && (m[sri.whereObject].flags&cWordMatch::flagInQuestion));
 	if (inQuestion && sri.whereVerb>=0) // search for _Q2PREP
 	{
 		// what is his academic specialty?
@@ -623,7 +623,7 @@ void cSource::correctSRIEntry(cSpaceRelation &sri)
 		{
 			tIWMM inWord=Words.query(L"in");
 			if (inWord!=Words.end()) {
-				m.push_back(WordMatch(inWord,0,debugTrace));
+				m.push_back(cWordMatch(inWord,0,debugTrace));
 				m[m.size()-1].relPrep=m[sri.whereVerb].relPrep;
 				m[m.size()-1].setRelObject(sri.whereObject);
 				m[sri.whereVerb].relPrep=m.size()-1;
@@ -759,7 +759,7 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 				(whereSubject>=2 && m[whereSubject-2].word->first==L"two" && m[whereSubject].word->first==L"three"))
 			subjectGendered=false;
 	}	
-	else subjectGendered=(whereVerb>=0 && m[whereVerb].objectRole&IN_PRIMARY_QUOTE_ROLE)!=0 && (m[whereVerb].verbSense&VT_TENSE_MASK)==VT_PRESENT && !(m[whereVerb].flags&WordMatch::flagInInfinitivePhrase);
+	else subjectGendered=(whereVerb>=0 && m[whereVerb].objectRole&IN_PRIMARY_QUOTE_ROLE)!=0 && (m[whereVerb].verbSense&VT_TENSE_MASK)==VT_PRESENT && !(m[whereVerb].flags&cWordMatch::flagInInfinitivePhrase);
 	bool controllerGendered=false;
 	if (whereControllingEntity>=0) 
 	{
@@ -895,7 +895,7 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 	movingSpecialCase|=(objectSubType>=0 && objectSubType<UNKNOWN_PLACE_SUBTYPE);
 	// moved down the stairs / down may be misparsed as a particle
 	if (relationType==stMOVE && !prepObjectIsAcceptable && objectIsAcceptable && whereVerb>=0 && 
-		  (m[whereVerb+1].word->second.flags&tFI::prepMoveType) && m[whereVerb+1].queryWinnerForm(adverbForm)!=-1)
+		  (m[whereVerb+1].word->second.flags&cSourceWordInfo::prepMoveType) && m[whereVerb+1].queryWinnerForm(adverbForm)!=-1)
 		movingSpecialCase=true;
 	bool genderedLocationRelation=whereVerb>=0 && 
 		// state of confusion - objects of a subType that are negated by being 'of' an object which indicates they are not
@@ -909,7 +909,7 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 		(relationType!=stMOVE_OBJECT || objectSubType>=0 || o==so || (po==so && o<0) || (whereObject>=0 && (m[whereObject].word->second.inflectionFlags&(FIRST_PERSON|SECOND_PERSON)) ||
 		 (o>=0 && (objects[o].numIdentifiedAsSpeaker>0 || objects[o].PISHail>0 || objects[o].PISDefinite>0)))) && 
 		 // object must be physical
-	  //((relationType!=stMOVE_OBJECT && relationType!=stMOVE) || whereObject<0 || objectSubType>=0 || !((tmp1=m[whereObject].word->second.getMainEntry(m[whereObject].word)->second.flags)&tFI::notPhysicalObjectByWN)) && 
+	  //((relationType!=stMOVE_OBJECT && relationType!=stMOVE) || whereObject<0 || objectSubType>=0 || !((tmp1=m[whereObject].word->second.getMainEntry(m[whereObject].word)->second.flags)&cSourceWordInfo::notPhysicalObjectByWN)) && 
 		// but 'not' He thrust his hands in his pockets
 		(relationType!=stMOVE_OBJECT || whereObject<0 || m[whereObject].getObject()<0 || objects[m[whereObject].getObject()].objectClass!=BODY_OBJECT_CLASS) && 
 		// gendered subject, controller
@@ -919,7 +919,7 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 		// if contact, must be contacting something.  If ESTAB, must be somewhere
 		((relationType!=stCONTACT && relationType!=stNEAR && relationType!=stESTABLISH) || objectIsAcceptable || prepObjectIsAcceptable) &&
 		// if moving, must be moving somewhere?
-		(relationType!=stMOVE || prepObjectIsAcceptable || movingSpecialCase || convertToMove || (po<0 && o<0 && !(m[whereVerb].flags&WordMatch::flagInInfinitivePhrase)));
+		(relationType!=stMOVE || prepObjectIsAcceptable || movingSpecialCase || convertToMove || (po<0 && o<0 && !(m[whereVerb].flags&cWordMatch::flagInInfinitivePhrase)));
 		// if entering, must be the first time this is locally mentioned.
 		// if contact, if both object and subject are already mentioned, this is not a significant movement (it doesn't add any information), unless a location is specific
 		//((relationType!=stENTER && relationType!=stCONTACT) || (lsi=in(m[whereSubject].getObject()))==localObjects.end() || lsi->previousWhere<0 || lsi->previousWhere>=where || prepObjectSubType>=0);
@@ -1120,7 +1120,7 @@ int cSource::findAnyLocationPrepObject(int whereVerb,int &wherePrep,bool &locati
 			lplog(LOG_ERROR,L"%06d:Prep loop occurred (5) %s.",wherePrep,loopString(wherePrep,tmpstr));
 			return wherePrepObject;
 		}
-		if (((m[wherePrep].word->second.flags&tFI::prepMoveType) || m[wherePrep].word->first==L"for") && !rejectPrepPhrase(wherePrep))
+		if (((m[wherePrep].word->second.flags&cSourceWordInfo::prepMoveType) || m[wherePrep].word->first==L"for") && !rejectPrepPhrase(wherePrep))
 		{
 			wherePrepObject=m[wherePrep].getRelObject();
 			if (m[wherePrep].relPrep>=0 && m[m[wherePrep].relPrep].getRelObject()>=0 && m[m[m[wherePrep].relPrep].getRelObject()].getObject()>=0 &&
@@ -1142,7 +1142,7 @@ int cSource::findAnyLocationPrepObject(int whereVerb,int &wherePrep,bool &locati
 					(m[whereVerb=m[wherePrepObject].getRelVerb()].getMainEntry()->first==L"call" || m[whereVerb=m[wherePrepObject].getRelVerb()].getMainEntry()->first==L"name"))
 				wherePrepObject=m[wherePrepObject].getRelObject();
 			po=m[wherePrepObject].getObject();
-			if (//(m[wherePrepObject].word->second.flags&tFI::notPhysicalObjectByWN)==0 ||
+			if (//(m[wherePrepObject].word->second.flags&cSourceWordInfo::notPhysicalObjectByWN)==0 ||
 				  (timeUnit=(m[wherePrepObject].word->second.timeFlags&T_UNIT)!=0) || // she remained for some minutes
 					(timeUnit=(m[wherePrepObject].queryWinnerForm(numeralCardinalForm)>=0) && (m[wherePrep].word->second.timeFlags&T_CARDTIME)) || // I will arrive at 10.
 					(timeUnit=(m[wherePrepObject].beginObjectPosition>=0 && m[m[wherePrepObject].beginObjectPosition].pma.queryPattern(L"_TIME")!=-1)) ||
@@ -1336,7 +1336,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 	// London where he obtained the fish
 	if (whereObject<0 && (m[where].objectRole&SENTENCE_IN_REL_ROLE) && whereSubject>=0 && m[whereSubject].beginObjectPosition>0 && 
 		  m[m[whereSubject].beginObjectPosition-1].queryWinnerForm(relativizerForm)>=0 && 
-			(m[m[whereSubject].beginObjectPosition-1].flags&WordMatch::flagRelativeObject))
+			(m[m[whereSubject].beginObjectPosition-1].flags&cWordMatch::flagRelativeObject))
 		whereObject=m[m[whereSubject].beginObjectPosition-1].getRelObject();
 	int afterVerb=whereVerb+1;
 	while (m[afterVerb].queryWinnerForm(adverbForm)>=0 && m[afterVerb].queryWinnerForm(prepositionForm)<0 && afterVerb+1<(signed)m.size() && !adverbialPlace(afterVerb)) afterVerb++;
@@ -1357,7 +1357,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 		else if (m[whereVerb].getRelObject()>=0 && m[m[whereVerb].getRelObject()].endObjectPosition>=0 && m[m[m[whereVerb].getRelObject()].endObjectPosition].pma.queryPattern(L"_PP")==-1)
 			afterVerb=m[m[whereVerb].getRelObject()].endObjectPosition;
 		while (afterVerb>=0 && (m[afterVerb].queryWinnerForm(adverbForm)>=0 || m[afterVerb].queryWinnerForm(prepositionForm)>=0) && 
-			     afterVerb+1<(signed)m.size() && afterVerb<whereVerb+3 && !(m[afterVerb].word->second.flags&tFI::prepMoveType)) afterVerb++;
+			     afterVerb+1<(signed)m.size() && afterVerb<whereVerb+3 && !(m[afterVerb].word->second.flags&cSourceWordInfo::prepMoveType)) afterVerb++;
 		// is there a recent location associated with the subject?
 		if (afterVerb>=0 && (prepTypesMap[m[afterVerb].word->first]==tprIN || (adverbialPlace(afterVerb) && m[afterVerb].queryForm(prepositionForm)!=-1)) && 
 			  m[afterVerb].word->first!=L"out" && (whereSubject<0 || !(m[whereSubject].objectRole&PRIMARY_SPEAKER_ROLE) || isSpecialVerb(whereVerb,false)))
@@ -1430,7 +1430,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 			// verbclass afterward (NOUN[D])
 			whereObject>=0 && m[whereObject].relNextObject<0 && (pmaOffset=scanForPatternTag(whereObject,VNOUN_TAG))>=0)
 	{
-		vector < vector <tTagLocation> > tagSets;
+		vector < vector <cTagLocation> > tagSets;
 		startCollectTags(debugTrace.traceVerbObjects,verbObjectsTagSet,whereObject,m[whereObject].pma[pmaOffset].pemaByPatternEnd,tagSets,true,false,L"place identification");
 		for (int J=0; J<(signed)tagSets.size(); J++)
 		{
@@ -1442,7 +1442,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 			st=objects[o=oObject].getSubType();
 			if (whereObject>=0 && m[whereObject].endObjectPosition<(signed)m.size() && m[whereObject].endObjectPosition>=0 && 
 				  m[m[whereObject].endObjectPosition].queryWinnerForm(prepositionForm)>=0 && 
-					((m[m[whereObject].endObjectPosition].word->second.flags&tFI::prepMoveType) || (m[m[whereObject].endObjectPosition].word->first==L"for")) &&
+					((m[m[whereObject].endObjectPosition].word->second.flags&cSourceWordInfo::prepMoveType) || (m[m[whereObject].endObjectPosition].word->first==L"for")) &&
 					(wpd=m[m[whereObject].endObjectPosition].getRelObject())>=0 &&
 					(pd=m[wpd].getObject())>=0)
 			{
@@ -1454,7 +1454,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 		}
 	}
 	if (start && m[whereVerb].getMainEntry()->first==L"start" && 
-			whereSubject>=0 && whereObject<0 && whereVerb+1<(signed)m.size() && (m[whereVerb+1].word->second.flags&tFI::prepMoveType) && m[whereVerb+1].word->first!=L"to")
+			whereSubject>=0 && whereObject<0 && whereVerb+1<(signed)m.size() && (m[whereVerb+1].word->second.flags&cSourceWordInfo::prepMoveType) && m[whereVerb+1].word->first!=L"to")
 	{
 		newSR(where,-1,whereControllingEntity,whereSubject,whereVerb,whereVerb+1,whereObject,-1,-1,stMOVE,L"start",pr);
 		return true;
@@ -1462,10 +1462,10 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 	bool physicalSubject=true;
 	if (whereSubject>=0 && m[whereSubject].getObject()>=0 && objects[m[whereSubject].getObject()].neuter && !objects[m[whereSubject].getObject()].female && !objects[m[whereSubject].getObject()].male)
 	{
-		if (m[whereSubject].flags&WordMatch::flagRelativeHead)
+		if (m[whereSubject].flags&cWordMatch::flagRelativeHead)
 			whereSubject=objects[m[whereSubject].getObject()].firstLocation;
 		tIWMM me=(m[whereSubject].word->second.mainEntry==wNULL) ? m[whereSubject].word : m[whereSubject].word->second.mainEntry;
-		physicalSubject=m[whereSubject].getObject()>=0 && objects[m[whereSubject].getObject()].getSubType()>=0 || !(me->second.flags&tFI::notPhysicalObjectByWN);
+		physicalSubject=m[whereSubject].getObject()>=0 && objects[m[whereSubject].getObject()].getSubType()>=0 || !(me->second.flags&cSourceWordInfo::notPhysicalObjectByWN);
 		if (m[whereSubject].objectMatches.size())
 		{
 			if (m[whereSubject].getObject()>=0)
@@ -1475,7 +1475,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 			{
 				w=objects[m[whereSubject].objectMatches[I].object].originalLocation;
 				me=(m[w].word->second.mainEntry==wNULL) ? m[w].word : m[w].word->second.mainEntry;
-				physicalSubject=(subType=objects[m[whereSubject].objectMatches[I].object].getSubType())>=0 || !(flags=me->second.flags&tFI::notPhysicalObjectByWN);
+				physicalSubject=(subType=objects[m[whereSubject].objectMatches[I].object].getSubType())>=0 || !(flags=me->second.flags&cSourceWordInfo::notPhysicalObjectByWN);
 			}
 		}
 		if (!physicalSubject)
@@ -1483,8 +1483,8 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 			if (debugTrace.traceSpeakerResolution)
 				lplog(LOG_RESOLUTION,L"%06d:PLACE identification:rejected subject %s (mainEntry %s) - not physical",where,whereString(whereSubject,tmpstr,true).c_str(),me->first.c_str());
 			pr=false;
-			//if (!(think || communicate || startRelationType || cos || (m[whereVerb].flags&WordMatch::flagUsedBeRelation) || vbNetClasses[vnClass].am || stay ||
-			//	m[whereVerb].flags&WordMatch::flagUsedPossessionRelation || metaInfo || vbNetClasses[vnClass].enter || vbNetClasses[vnClass].metaProfession))
+			//if (!(think || communicate || startRelationType || cos || (m[whereVerb].flags&cWordMatch::flagUsedBeRelation) || vbNetClasses[vnClass].am || stay ||
+			//	m[whereVerb].flags&cWordMatch::flagUsedPossessionRelation || metaInfo || vbNetClasses[vnClass].enter || vbNetClasses[vnClass].metaProfession))
 			//	return false;
 		}
 	}
@@ -1497,12 +1497,12 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 	// which Tuppence had retained
 	// Tuppence took (bring-11.3) it.  Tuppence received (obtain) it
 	if ((!(m[where].objectRole&PRIMARY_SPEAKER_ROLE) || whereObject>=0) && 
-		  (whereSubject>=0 || ((m[where].flags&WordMatch::flagInQuestion)!=0 && inPrimaryQuote)) && (exit || enter || stay || move || moveObject || moveInPlace || contiguous)) 
+		  (whereSubject>=0 || ((m[where].flags&cWordMatch::flagInQuestion)!=0 && inPrimaryQuote)) && (exit || enter || stay || move || moveObject || moveInPlace || contiguous)) 
 	{
 		bool wpoPhysicalObject=true,wpoTimeUnit;
 		int wherePrep=-1,wherePrepObject=findAnyLocationPrepObject(whereVerb,wherePrep,wpoPhysicalObject,wpoTimeUnit);
 		bool woPhysicalObject=whereObject<0 || proLocation || (m[whereObject].getObject()>=0 && objects[m[whereObject].getObject()].getSubType()>=0) ||
-			  (m[whereObject].relNextObject<0 && !(m[whereObject].word->second.flags&tFI::notPhysicalObjectByWN) && m[whereObject].getObject()>=0 && objects[m[whereObject].getObject()].objectClass!=BODY_OBJECT_CLASS);
+			  (m[whereObject].relNextObject<0 && !(m[whereObject].word->second.flags&cSourceWordInfo::notPhysicalObjectByWN) && m[whereObject].getObject()>=0 && objects[m[whereObject].getObject()].objectClass!=BODY_OBJECT_CLASS);
 		// get is special case - for 'get' MUST be going somewhere which is a 'place'
 		if (id==L"escape-51.1-5" && m[whereVerb].getMainEntry()->first==L"get" && !proLocation && (whereObject<0 || m[whereObject].relNextObject<0))
 		{
@@ -1545,7 +1545,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 				if (st==UNKNOWN_PLACE_SUBTYPE) srType=stMOVE_OBJECT;
 			}
 			if ((contiguous || contact) && (srType!=stMOVE_IN_PLACE || whereObject>=0)) srType=stCONTACT;
-			if ((srType==stMOVE_OBJECT || srType==stCONTACT) && (whereObject>=0 && (m[whereObject].word->second.flags&tFI::notPhysicalObjectByWN)) && (!wpoPhysicalObject || wpoTimeUnit))
+			if ((srType==stMOVE_OBJECT || srType==stCONTACT) && (whereObject>=0 && (m[whereObject].word->second.flags&cSourceWordInfo::notPhysicalObjectByWN)) && (!wpoPhysicalObject || wpoTimeUnit))
 				pr=false;
 			if (_near) srType=stNEAR;
 			if (enter) srType=stENTER;
@@ -1600,7 +1600,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 	}
 	if (whereObject>=0 && m[whereObject].relNextObject<0 && isMatchedLocation && id!=L"escape-51.1-5" &&
 		  acceptableVerbForm && !prepLocation && !prepMustBeLocation &&
-			((st>=0 && st!=UNKNOWN_PLACE_SUBTYPE) || ((move || moveObject || moveInPlace || transfer || contact || _near || contiguous || stay) && !(m[whereObject].word->second.flags&tFI::notPhysicalObjectByWN)) || 
+			((st>=0 && st!=UNKNOWN_PLACE_SUBTYPE) || ((move || moveObject || moveInPlace || transfer || contact || _near || contiguous || stay) && !(m[whereObject].word->second.flags&cSourceWordInfo::notPhysicalObjectByWN)) || 
 			 (o>=0 && (objects[o].objectClass==PRONOUN_OBJECT_CLASS || objects[o].objectClass==GENDERED_GENERAL_OBJECT_CLASS) && (objects[o].male || objects[o].female))))
 	{
 		wchar_t *whereType;
@@ -1673,12 +1673,12 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 		return true;
 	}				  
 	// physical object has been defined above
-	bool physicalObject=whereObject>=0 && !(m[whereObject].word->second.flags&tFI::notPhysicalObjectByWN);
+	bool physicalObject=whereObject>=0 && !(m[whereObject].word->second.flags&cSourceWordInfo::notPhysicalObjectByWN);
 	if (physicalObject && m[whereObject].objectMatches.size())
 	{
 		physicalObject=false;
 		for (int I=0; I<(signed)m[whereObject].objectMatches.size(); I++)
-			if (!(m[objects[m[whereObject].objectMatches[I].object].originalLocation].word->second.flags&tFI::notPhysicalObjectByWN) &&
+			if (!(m[objects[m[whereObject].objectMatches[I].object].originalLocation].word->second.flags&cSourceWordInfo::notPhysicalObjectByWN) &&
 					m[objects[m[whereObject].objectMatches[I].object].originalLocation].queryWinnerForm(demonstrativeDeterminerForm)<0)
 				physicalObject=true;
 	}
@@ -1709,7 +1709,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 		multiWordMovement|=wherePrep>=2 && m[wherePrep].word->first==L"for" && m[wherePrep-1].word->first==L"route" && m[wherePrep-2].word->first==L"en";
 		multiWordMovement|=wherePrep>=2 && m[wherePrep].word->first==L"with" && (m[wherePrep-1].word->first==L"level" || m[wherePrep-1].word->first==L"even");
 		bool withStart=start && m[wherePrep].word->first==L"with"; // We[tuppence,tommy] shall start with the London area 
-		if (!multiWordMovement && !withStart && !(m[wherePrep].word->second.flags&tFI::prepMoveType) && (contact || _near || m[wherePrep].word->first!=L"for")) continue;
+		if (!multiWordMovement && !withStart && !(m[wherePrep].word->second.flags&cSourceWordInfo::prepMoveType) && (contact || _near || m[wherePrep].word->first!=L"for")) continue;
 		int prepType=prepTypesMap[m[wherePrep].word->first],wpoo=-1,wherePrepObject=m[wherePrep].getRelObject(),stType;
 		if (wherePrepObject<0 || rejectPrepPhrase(wherePrep)) continue;
 		whereLastPrepObject=wherePrepObject;
@@ -1728,7 +1728,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 							(!objects[o].male && !objects[o].female) &&
 					     m[m[m[wherePrep].relPrep].getRelObject()].getObject()>=0 && objects[m[m[m[wherePrep].relPrep].getRelObject()].getObject()].isPossibleSubType(false)) ||
 				  (ot2=((objects[o].male || objects[o].female) && m[wherePrepObject].queryWinnerForm(indefinitePronounForm)<0 && acceptableVerbForm && (!prepMustBeLocation || specificVerb))) ||
-				  (ot3=((m[wherePrepObject].word->second.flags&tFI::physicalObjectByWN) && !prepMustBeLocation && acceptableVerbForm && 
+				  (ot3=((m[wherePrepObject].word->second.flags&cSourceWordInfo::physicalObjectByWN) && !prepMustBeLocation && acceptableVerbForm && 
 					  (m[m[wherePrepObject].beginObjectPosition].queryForm(determinerForm)>=0 || m[m[wherePrepObject].beginObjectPosition].queryForm(possessiveDeterminerForm)>=0 || 
 						 m[m[wherePrepObject].beginObjectPosition].queryForm(demonstrativeDeterminerForm)>=0 || objects[o].plural))))) ||
 				 (m[wherePrepObject].queryWinnerForm(relativizerForm)>=0 && (wpoo=m[wherePrepObject].getRelObject())>=0 && (o=m[wpoo].getObject())>=0 && objects[o].isPossibleSubType(false))))
@@ -1755,9 +1755,9 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 			if (ot2) otTypeStr+=L"[2]";
 			if (ot3) otTypeStr+=L"[3]";
 			if (ot4) otTypeStr+=L"[4]";
-			if (m[wherePrepObject].word->second.flags&tFI::physicalObjectByWN) otTypeStr+=L"[PO]";
-			if (m[wherePrepObject].word->second.flags&tFI::notPhysicalObjectByWN) otTypeStr+=L"[NPO]";
-			if (m[wherePrepObject].word->second.flags&tFI::uncertainPhysicalObjectByWN) otTypeStr+=L"[UPO]";
+			if (m[wherePrepObject].word->second.flags&cSourceWordInfo::physicalObjectByWN) otTypeStr+=L"[PO]";
+			if (m[wherePrepObject].word->second.flags&cSourceWordInfo::notPhysicalObjectByWN) otTypeStr+=L"[NPO]";
+			if (m[wherePrepObject].word->second.flags&cSourceWordInfo::uncertainPhysicalObjectByWN) otTypeStr+=L"[UPO]";
 			int stpo;
 			if (stType==stESTABLISH && wherePrepObject>=0 && m[wherePrepObject].getObject()>=0 && ((stpo=objects[m[wherePrepObject].getObject()].getSubType())==MOVING || stpo==MOVING_NATURAL)) 
 				// the two young ESTABmen[man,conrad] were seated in a first - class carriage en route for Chester . 
@@ -1794,9 +1794,9 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 		else
 			pd=m[wpd].getObject();
 		if (whereObject>=0 && acceptableVerbForm && physicalObject && pd>=0 && (id!=L"escape-51.1-5" || whereObject<0 || (m[whereObject].word->second.timeFlags&T_UNIT)!=0 || proLocation) &&
-				(objects[pd].isPossibleSubType(false) || objects[pd].male || objects[pd].female || (!prepMustBeLocation && !(m[wpd].word->second.flags&tFI::notPhysicalObjectByWN))))
+				(objects[pd].isPossibleSubType(false) || objects[pd].male || objects[pd].female || (!prepMustBeLocation && !(m[wpd].word->second.flags&cSourceWordInfo::notPhysicalObjectByWN))))
 		{
-			if ((m[wpd].word->second.flags&tFI::notPhysicalObjectByWN) || (m[wpd].word->second.timeFlags&T_UNIT)!=0 || objects[pd].objectClass==VERB_OBJECT_CLASS)
+			if ((m[wpd].word->second.flags&cSourceWordInfo::notPhysicalObjectByWN) || (m[wpd].word->second.timeFlags&T_UNIT)!=0 || objects[pd].objectClass==VERB_OBJECT_CLASS)
 			{
 				if (debugTrace.traceSpeakerResolution)
 					lplog(LOG_RESOLUTION,L"%06d:PLACE direct object and prep: rejected (prep object not physical) subject %s verb %s object %d:%s prep object %d:%s",where,
@@ -1804,7 +1804,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 				continue;
 			}
 			bool rejectObject=true,rejectPrep=true;
-			if (objectMustBeLocation && (rejectObject=(!(m[whereObject].word->second.flags&tFI::physicalObjectByWN) && (m[whereObject].getObject()<0 || !objects[m[whereObject].getObject()].isPossibleSubType(false)))))
+			if (objectMustBeLocation && (rejectObject=(!(m[whereObject].word->second.flags&cSourceWordInfo::physicalObjectByWN) && (m[whereObject].getObject()<0 || !objects[m[whereObject].getObject()].isPossibleSubType(false)))))
 			{
 
 				if (debugTrace.traceSpeakerResolution)
@@ -1812,7 +1812,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 						whereString(whereSubject,tmpstr,true).c_str(),m[whereVerb].word->first.c_str(),whereObject,whereString(whereObject,tmpstr2,true).c_str());
 				if (!prepMustBeLocation) continue;
 			}
-			if (prepMustBeLocation && (rejectPrep=(!(m[wpd].word->second.flags&tFI::physicalObjectByWN) && !objects[pd].isPossibleSubType(false))))
+			if (prepMustBeLocation && (rejectPrep=(!(m[wpd].word->second.flags&cSourceWordInfo::physicalObjectByWN) && !objects[pd].isPossibleSubType(false))))
 			{
 				if (debugTrace.traceSpeakerResolution)
 					lplog(LOG_RESOLUTION,L"%06d:PLACE direct object and prep: rejected (prep object not location) subject %s verb %s prep object %d:%s",where,
@@ -1914,7 +1914,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 	int nwo=-1;
 	if (transfer && whereObject>=0 && (nwo=m[whereObject].relNextObject)>=0)
 	{
-		if (m[nwo].word->second.flags&tFI::notPhysicalObjectByWN) // || objects[m[nwo].getObject()].isAgent(true))
+		if (m[nwo].word->second.flags&cSourceWordInfo::notPhysicalObjectByWN) // || objects[m[nwo].getObject()].isAgent(true))
 		{
 			if (debugTrace.traceSpeakerResolution)
 				lplog(LOG_RESOLUTION,L"%06d:PLACE transfer: rejected (nwo not physical) subject %s verb %s object %d:%s %d:%s",where,
@@ -1933,7 +1933,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 	int flags;
 	if ((tmp1=(m[where].objectRole&IN_PRIMARY_QUOTE_ROLE)!=0) && 
 	    //(whereObject<0 || (whereObject>=0 && m[whereObject].relNextObject<0 && (m[whereObject].word->second.timeFlags&T_UNIT))) && // command - come to-morrow
-		  (tmp2=whereSubject<0 && !(m[whereVerb].flags&WordMatch::flagInInfinitivePhrase)) &&
+		  (tmp2=whereSubject<0 && !(m[whereVerb].flags&cWordMatch::flagInInfinitivePhrase)) &&
 		  (tmp3=(exit || stay || move || moveObject || moveInPlace || contiguous || enter || contact || _near)) && 
 			(tmp4=(m[whereVerb].verbSense&(VT_TENSE_MASK|VT_EXTENDED))==VT_PRESENT) &&
 			(tmp5=((flags=m[whereVerb].word->second.inflectionFlags)&(VERB_PRESENT_FIRST_SINGULAR))!=0 || m[whereVerb].word->first==L"be"))
@@ -1960,7 +1960,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 	//if ((move || exit) && speakerGroupsEstablished)
 	//{
 	//	for (wherePrep=m[whereVerb].relPrep; wherePrep>=0; wherePrep=m[wherePrep].relPrep)
-	//		if (((m[wherePrep].word->second.flags&tFI::prepMoveType) || m[wherePrep].word->first==L"for") && !rejectPrepPhrase(wherePrep))
+	//		if (((m[wherePrep].word->second.flags&cSourceWordInfo::prepMoveType) || m[wherePrep].word->first==L"for") && !rejectPrepPhrase(wherePrep))
 	//			lplog(LOG_WHERE,L"%06d:activity noun PLACE:verb %s %s object %s",where,m[whereVerb].word->first.c_str(),m[wherePrep].word->first.c_str(),whereString(m[wherePrep].relObject,tmpstr,false).c_str());
 	//}
 	vector <cSpaceRelation>::iterator sri=findSpaceRelation(where);
@@ -2038,7 +2038,7 @@ void cSource::identifyHailObjects(int where, int o, int lastBeginS1, int lastRel
 	wstring tmpstr,tmpstr2;
 	set <int>::iterator stsi;
 	if (inPrimaryQuote && o >= 0 && (m[where].objectRole&(HAIL_ROLE | IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE | IN_QUOTE_REFERRING_AUDIENCE_ROLE)) &&
-		!(m[where].flags&WordMatch::flagAdjectivalObject) &&
+		!(m[where].flags&cWordMatch::flagAdjectivalObject) &&
 		objects[o].objectClass == NAME_OBJECT_CLASS && !objects[o].plural)
 	{
 		bool appMatch = false;
@@ -2155,7 +2155,7 @@ void cSource::processEndOfSentence(int where,int &lastBeginS1, int &lastRelative
 	{
 		if (debugTrace.traceSpeakerResolution)
 			lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d     aging speakers (%s) EOS", where, section, (inPrimaryQuote) ? L"inQuote" : L"outsideQuote");
-		m[where].flags |= WordMatch::flagAge;
+		m[where].flags |= cWordMatch::flagAge;
 		for (vector <cLocalFocus>::iterator lfi = localObjects.begin(); lfi != localObjects.end(); )
 			ageSpeakerWithoutSpeakerInfo(where, inPrimaryQuote, inSecondaryQuote, lfi, 1);
 	}
@@ -2194,7 +2194,7 @@ void cSource::processEndOfPrimaryQuote(int where, int lastSentenceEndBeforeAndNo
 	m[lastOpeningPrimaryQuote].endQuote = where;
 	inPrimaryQuote = false;
 	// if the previous end quote was inserted, and this end quote was also inserted, then this quote has the same speakers as the last
-	bool previousEndQuoteInserted = previousPrimaryQuote >= 0 && (m[m[previousPrimaryQuote].endQuote].flags&WordMatch::flagInsertedQuote) != 0 && (m[where].flags&WordMatch::flagInsertedQuote) != 0;
+	bool previousEndQuoteInserted = previousPrimaryQuote >= 0 && (m[m[previousPrimaryQuote].endQuote].flags&cWordMatch::flagInsertedQuote) != 0 && (m[where].flags&cWordMatch::flagInsertedQuote) != 0;
 	bool noTextBeforeOrAfter, quotedStringSeen = false, multipleQuoteInSentence = (previousPrimaryQuote > lastSentenceEndBeforeAndNotIncludingCurrentQuote), noSpeakerAfterward = false;
 	if (!(quotedStringSeen = quotedString(lastOpeningPrimaryQuote, where, noTextBeforeOrAfter, noSpeakerAfterward)))
 	{
@@ -2231,7 +2231,7 @@ void cSource::processEndOfPrimaryQuote(int where, int lastSentenceEndBeforeAndNo
 						mergeObjectIntoSpeakerGroup(lastSpeakerPosition, m[lastSpeakerPosition].objectMatches[s].object);
 				}
 			}
-			else if ((m[where].flags&WordMatch::flagInsertedQuote) == 0) // definitely not a quoted string if it is completed only by an inserted quote.
+			else if ((m[where].flags&cWordMatch::flagInsertedQuote) == 0) // definitely not a quoted string if it is completed only by an inserted quote.
 			{
 				// but it is an inserted quote from the speaker before the definite speaker.
 				// “[tuppence:julius] Well , luckily for me[tuppence] , I[tuppence] pitched down into a good soft bed of earth -- but it[bed,earth] put me[tuppence] out of action for the time[time] , sure enough .
@@ -2262,7 +2262,7 @@ void cSource::processEndOfPrimaryQuote(int where, int lastSentenceEndBeforeAndNo
 		quotedStringSeen = true;
 	if (quotedStringSeen)
 	{
-		m[lastOpeningPrimaryQuote].flags |= WordMatch::flagQuotedString;
+		m[lastOpeningPrimaryQuote].flags |= cWordMatch::flagQuotedString;
 		lastQuotedString = lastOpeningPrimaryQuote;
 	}
 	else
@@ -2276,8 +2276,8 @@ void cSource::processEndOfPrimaryQuote(int where, int lastSentenceEndBeforeAndNo
 			}
 			else
 				lplog(LOG_ERROR, L"%06d:previousPrimaryQuote and lastOpeningPrimaryQuote are the same (1)!", previousPrimaryQuote);
-			if (m[previousPrimaryQuote].flags&WordMatch::flagEmbeddedStoryResolveSpeakers)
-				m[lastOpeningPrimaryQuote].flags |= WordMatch::flagEmbeddedStoryResolveSpeakers;
+			if (m[previousPrimaryQuote].flags&cWordMatch::flagEmbeddedStoryResolveSpeakers)
+				m[lastOpeningPrimaryQuote].flags |= cWordMatch::flagEmbeddedStoryResolveSpeakers;
 			if (debugTrace.traceSpeakerResolution)
 			{
 				wstring reason,tmpstr2;
@@ -2326,7 +2326,7 @@ void cSource::processEndOfPrimaryQuote(int where, int lastSentenceEndBeforeAndNo
 void cSource::evaluateMetaWhereQuery(int where, bool inPrimaryQuote, int &currentMetaWhereQuery)
 {
 	LFS
-	vector <WordMatch>::iterator im=m.begin()+where;
+	vector <cWordMatch>::iterator im=m.begin()+where;
 	// Tuppence expressed a preference for the latter[go down to the restaurant]
 	if (m[where].spaceRelation && !inPrimaryQuote && m[where].getRelVerb()>=0 && lastOpeningPrimaryQuote>=0 &&
 		  isVerbClass(m[where].getRelVerb(),L"reflexive_appearance") && isNounClass(where,L"liking"))
@@ -2359,7 +2359,7 @@ void cSource::evaluateMetaWhereQuery(int where, bool inPrimaryQuote, int &curren
 				vector <cSpaceRelation>::iterator location = findSpaceRelation(where);
 				if (location!=spaceRelations.end() && location!=spaceRelations.begin() && location->where>where)
 					location--;
-				if (!(m[where].flags&WordMatch::flagAlreadyTimeAnalyzed) && evaluateTimePattern(where,maxLen,timeInfo,rt,rtSet))
+				if (!(m[where].flags&cWordMatch::flagAlreadyTimeAnalyzed) && evaluateTimePattern(where,maxLen,timeInfo,rt,rtSet))
 				{
 					cSpaceRelation sr(where,-1,-1,-1,-1,-1,-1,-1,-1,stABSTIME,false,false,-1,-1,true);
 					rt.tWhere=timeInfo.tWhere=timeInfo.timeRTAnchor=rt.timeRTAnchor=where;
@@ -2412,7 +2412,7 @@ void cSource::evaluateMetaWhereQuery(int where, bool inPrimaryQuote, int &curren
 				}
 			}
 		}
-		if (im->flags&WordMatch::flagInQuestion)
+		if (im->flags&cWordMatch::flagInQuestion)
 		{
 			if ((im->word->first==L"where" || im->word->first==L"when") && (where<1 || m[where-1].getObject()<0))
 				currentMetaWhereQuery=where;
@@ -2510,12 +2510,12 @@ wstring cSource::srToText(int &spr,wstring &description)
 	srd(spri->whereControllingEntity,L"C[",description);
   // take the packet - a command - but NOT takes the packet / calls herself Rita
 	bool present=spri->whereVerb>=0 && (m[spri->whereVerb].verbSense&(VT_TENSE_MASK|VT_EXTENDED))==VT_PRESENT && 
-		spri->whereSubject<0 && !(m[spri->whereVerb].flags&WordMatch::flagInInfinitivePhrase) &&
+		spri->whereSubject<0 && !(m[spri->whereVerb].flags&cWordMatch::flagInInfinitivePhrase) &&
 		(m[spri->whereVerb].word->second.inflectionFlags&(VERB_PRESENT_FIRST_SINGULAR))!=0;
 	if (spri->whereControllingEntity<0 && spri->tft.lastOpeningPrimaryQuote>=0 && m[spri->tft.lastOpeningPrimaryQuote].objectMatches.size()>=1)
 		srd(spri->tft.lastOpeningPrimaryQuote,(present) ? L"C[" : L"SP[",description);
 	srd(spri->whereSubject,L"S[",description);
-	if (spri->whereControllingEntity<0 && spri->tft.lastOpeningPrimaryQuote>=0 && (present || (spri->whereSubject<0 && (m[spri->where].flags&WordMatch::flagInQuestion)!=0)) &&
+	if (spri->whereControllingEntity<0 && spri->tft.lastOpeningPrimaryQuote>=0 && (present || (spri->whereSubject<0 && (m[spri->where].flags&cWordMatch::flagInQuestion)!=0)) &&
 		   m[spri->tft.lastOpeningPrimaryQuote].audienceObjectMatches.size()>=1)
 	{
 		description+=L"S[";
@@ -2578,7 +2578,7 @@ void cSource::cancelSubType(int object)
 	vector <cObject>::iterator o=objects.begin()+object;
 	for (vector <cObject::cLocation>::iterator li=o->locations.begin(),liEnd=o->locations.end(); li!=liEnd && o->getSubType()>=0; li++)
 	{
-		vector <WordMatch>::iterator im=m.begin()+li->at;
+		vector <cWordMatch>::iterator im=m.begin()+li->at;
 		if (im->objectRole&NON_MOVEMENT_PREP_OBJECT_ROLE)
 		{
 			if (o->originalLocation==li->at && o->getSubType()==UNKNOWN_PLACE_SUBTYPE)
@@ -2591,7 +2591,7 @@ void cSource::cancelSubType(int object)
 		if (o->getSubType()==UNKNOWN_PLACE_SUBTYPE && !(im->objectRole&MOVEMENT_PREP_OBJECT_ROLE) &&
 				o->usedAsLocation<5 &&
 			  ((im->endObjectPosition-im->beginObjectPosition==2 && m[im->beginObjectPosition].queryWinnerForm(determinerForm)>=0) ||
-				  im->endObjectPosition-im->beginObjectPosition==1) && (im->flags&tFI::notPhysicalObjectByWN))
+				  im->endObjectPosition-im->beginObjectPosition==1) && (im->flags&cSourceWordInfo::notPhysicalObjectByWN))
 		{
 			if (debugTrace.traceSpeakerResolution)
 				lplog(LOG_RESOLUTION,L"%06d:%d:%s is NOT PLACE?",*li,o->usedAsLocation,objectString(object,tmpstr,false).c_str());
@@ -2772,16 +2772,16 @@ void cSource::detectSpaceLocation(int where,int lastBeginS1)
 { LFS
 	int wp,wpo,prepType,whereVerb=m[where].getRelVerb();
 	if (m[where].getObject()>=0 && m[wp=m[where].endObjectPosition].queryWinnerForm(prepositionForm)>=0 && (wpo=m[wp].getRelObject())>=0 &&
-		 ((m[where].word->second.flags&tFI::physicalObjectByWN) || objects[m[where].getObject()].getSubType()>=0 || objects[m[where].getObject()].isAgent(false)))
+		 ((m[where].word->second.flags&cSourceWordInfo::physicalObjectByWN) || objects[m[where].getObject()].getSubType()>=0 || objects[m[where].getObject()].isAgent(false)))
 	{
 		//bool setPhysicalRelation=((whereVerb>=0 && m[whereVerb].spaceRelation) || m[wp].spaceRelation);
 		// moment is also a 'force', which is considered a physical object.  But overrule it by including the T_UNIT restriction.
-		if ((m[wp].word->second.flags&tFI::prepMoveType) && (prepType=prepTypesMap[m[wp].word->first])!= tprTO && prepType!=tprFROM && !(m[wpo].word->second.timeFlags&T_UNIT))
+		if ((m[wp].word->second.flags&cSourceWordInfo::prepMoveType) && (prepType=prepTypesMap[m[wp].word->first])!= tprTO && prepType!=tprFROM && !(m[wpo].word->second.timeFlags&T_UNIT))
 		{
-			if ((m[wpo].word->second.flags&tFI::physicalObjectByWN) || (m[wpo].getObject()>=0 && objects[m[wpo].getObject()].isPossibleSubType(false)))
+			if ((m[wpo].word->second.flags&cSourceWordInfo::physicalObjectByWN) || (m[wpo].getObject()>=0 && objects[m[wpo].getObject()].isPossibleSubType(false)))
 				newSR(where,-1,-1,-1,whereVerb,wp,wpo,-1,-1,-stLOCATION,L"spaceLocation",true);
 			else if (m[wpo].endObjectPosition>=0 && m[m[wpo].endObjectPosition].word->first==L"of" && (wpo=m[m[wpo].endObjectPosition].getRelObject())>=0 && 
-				       ((m[wpo].word->second.flags&tFI::physicalObjectByWN) || (m[wpo].getObject()>=0 && objects[m[wpo].getObject()].isPossibleSubType(false))))
+				       ((m[wpo].word->second.flags&cSourceWordInfo::physicalObjectByWN) || (m[wpo].getObject()>=0 && objects[m[wpo].getObject()].isPossibleSubType(false))))
 				newSR(where,-1,-1,-1,whereVerb,wp,-1,wpo,-1,-stLOCATION,L"spaceLocation (OF2)",true);
 		}
 		if (objects[m[where].getObject()].isAgent(false) && ((prepType=prepTypesMap[m[wp].word->first])==tprFROM || prepType==tprOF) &&
@@ -2790,8 +2790,8 @@ void cSource::detectSpaceLocation(int where,int lastBeginS1)
 	}
 	// How about the Savoy?
 	// the Ritz?
-	if ((m[where].flags&WordMatch::flagInQuestion)!=0 && m[where].getObject()>=0 && objects[m[where].getObject()].getSubType()>=0 && whereVerb<0 &&
-		  !(m[where].flags&WordMatch::flagAdjectivalObject) && m[m[where].beginObjectPosition].pma.queryPattern(L"__INTRO_S1")==-1 &&
+	if ((m[where].flags&cWordMatch::flagInQuestion)!=0 && m[where].getObject()>=0 && objects[m[where].getObject()].getSubType()>=0 && whereVerb<0 &&
+		  !(m[where].flags&cWordMatch::flagAdjectivalObject) && m[m[where].beginObjectPosition].pma.queryPattern(L"__INTRO_S1")==-1 &&
 			// if in prepositional phrase, must be a preposition of movement
 			(!(m[where].objectRole&PREP_OBJECT_ROLE) || (m[where].objectRole&MOVEMENT_PREP_OBJECT_ROLE) || objects[m[where].getObject()].getSubType()!=UNKNOWN_PLACE_SUBTYPE) &&
 			!m[where].spaceRelation)
@@ -2801,12 +2801,12 @@ void cSource::detectSpaceLocation(int where,int lastBeginS1)
 			newSR(where,-1,-1,where,-1,-1,-1,-1,-1,-stLOCATION,L"questionLocation",true);
 	}
 	// I prefer the Piccadilly.
-	if ((m[where].flags&WordMatch::flagInQuestion)==0 && whereVerb>=0 && m[whereVerb].getRelObject()==where &&
+	if ((m[where].flags&cWordMatch::flagInQuestion)==0 && whereVerb>=0 && m[whereVerb].getRelObject()==where &&
 		  m[where].getObject()>=0 && objects[m[where].getObject()].getSubType()>=0 && objects[m[where].getObject()].getSubType()!=BY_ACTIVITY &&
 		  isVerbClass(whereVerb,L"want"))
 		newSR(where,-1,-1,where,-1,-1,-1,-1,-1,-stLOCATION,L"locationPreference",true);
 	// Tuppence expressed a preference for the latter[go down to the restaurant]
-	if ((m[where].flags&WordMatch::flagInQuestion)==0 && whereVerb>=0 && m[whereVerb].relPrep>=0 && m[whereVerb].getRelObject()==where && m[m[whereVerb].relPrep].getRelObject()>=0 &&
+	if ((m[where].flags&cWordMatch::flagInQuestion)==0 && whereVerb>=0 && m[whereVerb].relPrep>=0 && m[whereVerb].getRelObject()==where && m[m[whereVerb].relPrep].getRelObject()>=0 &&
 		   locationMatched(m[m[whereVerb].relPrep].getRelObject()) && isVerbClass(whereVerb,L"reflexive_appearance") && isNounClass(where,L"liking"))
 		newSR(where,-1,-1,m[m[whereVerb].relPrep].getRelObject(),-1,-1,-1,-1,-1,-stLOCATION,L"locationExtendedPreference",true);
 }
@@ -2889,7 +2889,7 @@ void cSource::detectSpaceRelation(int where,int backInitialPosition,vector <int>
 		// in the presence of XX
 		multiWordMovement|=m[wherePrep].word->first==L"of" && wherePrep>4 &&
 			  m[wherePrep-3].word->first==L"in" && m[wherePrep-2].word->first==L"the" && m[wherePrep-1].word->first==L"presence";
-		if (!rejectPrepPhrase(wherePrep) && (multiWordMovement || (m[wherePrep].word->second.flags&tFI::prepMoveType)))
+		if (!rejectPrepPhrase(wherePrep) && (multiWordMovement || (m[wherePrep].word->second.flags&cSourceWordInfo::prepMoveType)))
 			whereVerb=where;
 	}
 	else if (m[where].relSubject<0 && inPrimaryQuote)
@@ -2920,7 +2920,7 @@ void cSource::detectSpaceRelation(int where,int backInitialPosition,vector <int>
 		physicallyPresentPosition(whereSubject,m[whereSubject].beginObjectPosition,physicallyEvaluated,true);
 	int o=(whereSubject>=0) ? m[whereSubject].getObject() : -1,ws=whereSubject;
 	bool acceptableThere=whereSubject>=0 && m[whereSubject].word->first==L"there" && m[whereSubject].getRelObject()>=0 && m[m[whereSubject].getRelObject()].getObject()>=0 && 
-		   (m[m[whereSubject].getRelObject()].word->second.flags&tFI::physicalObjectByWN);
+		   (m[m[whereSubject].getRelObject()].word->second.flags&cSourceWordInfo::physicalObjectByWN);
 	if (o>=0 && m[whereSubject].objectMatches.size())
 	{
 		o=m[whereSubject].objectMatches[0].object;
@@ -2928,7 +2928,7 @@ void cSource::detectSpaceRelation(int where,int backInitialPosition,vector <int>
 	}
 	int st=(o>=0) ? objects[o].getSubType() : -1,tmp1=-1,tmp2=-1,tmp3=-1,tmp4=-1;
 	if (o>=0 && (tmp1=whereVerb<0 || primaryLocationLastPosition<0 || (tmp4=m[whereVerb].verbSense&VT_TENSE_MASK)==VT_PAST) &&
-			 !(m[ws].flags&WordMatch::flagAdjectivalObject) && 
+			 !(m[ws].flags&cWordMatch::flagAdjectivalObject) && 
 			 // the ship
 			 (m[m[ws].beginObjectPosition].word->first==L"the" || m[m[ws].beginObjectPosition].queryWinnerForm(adjectiveForm)>=0 || 
 			 //  just opposite to that window , there was a tree growing.
@@ -3152,7 +3152,7 @@ void cSource::detectSpaceRelation(int where,int backInitialPosition,vector <int>
 	}
 }
 
-bool addVCFrequency(int where,int fromWhere,vector <WordMatch>::iterator im,bool helperVerb,sTrace &t,wstring &lastNounNotFound,wstring &lastVerbNotFound)
+bool addVCFrequency(int where,int fromWhere,vector <cWordMatch>::iterator im,bool helperVerb,sTrace &t,wstring &lastNounNotFound,wstring &lastVerbNotFound)
 { LFS
 	tIWMM w=(im->word->second.mainEntry==wNULL) ? im->word : im->word->second.mainEntry;
 	wstring in=w->first;
@@ -3161,7 +3161,7 @@ bool addVCFrequency(int where,int fromWhere,vector <WordMatch>::iterator im,bool
 	unordered_map <wstring, set<int> >::iterator inlvtoCi=vbNetVerbToClassMap.find(in);
 	if (inlvtoCi!=vbNetVerbToClassMap.end())
 	{
-		im->flags|=WordMatch::flagTempVNReAnalysis;
+		im->flags|=cWordMatch::flagTempVNReAnalysis;
 		for (set<int>::iterator vbi=inlvtoCi->second.begin(),vbiEnd=inlvtoCi->second.end(); vbi!=vbiEnd; vbi++)
 		{
 			if (helperVerb)
@@ -3188,7 +3188,7 @@ void cSource::analyzeWordSenses(void)
 { LFS 
 	int endObject=0,inObject=-1,numAdjectivesAdverbs=0,numTimeNouns=0,numTimeVerbs=0,numIrregular=0,numPhysicalObjects=0,numNotPhysicalObjects=0,numBodyPartNouns=0;
 	set <wstring> differentWords,differentVerbs,differentNouns,differentCommonWords;
-	vector <WordMatch>::iterator im=m.begin(),imend=m.end();
+	vector <cWordMatch>::iterator im=m.begin(),imend=m.end();
 	int lastProgressPercent=-1,tmpPercent;
 	for (int I=0; im!=imend; im++,I++)
 	{
@@ -3225,7 +3225,7 @@ void cSource::analyzeWordSenses(void)
 				if (!isNoun && addVCFrequency(I,1,im,false,debugTrace,lastNounNotFound,lastVerbNotFound))
 				{
 					verbsMappedToVerbNet++;
-					im->flags|=WordMatch::flagVAnalysis;
+					im->flags|=cWordMatch::flagVAnalysis;
 				}
 				continue;
 			}
@@ -3252,15 +3252,15 @@ void cSource::analyzeWordSenses(void)
 				if (measurableObject)
 				{
 					numPhysicalObjects++;
-					w->second.flags|=tFI::physicalObjectByWN;
+					w->second.flags|=cSourceWordInfo::physicalObjectByWN;
 				}
 				else if (notMeasurableObject)
 				{
 					numNotPhysicalObjects++;
-					w->second.flags|=tFI::notPhysicalObjectByWN;
+					w->second.flags|=cSourceWordInfo::notPhysicalObjectByWN;
 				}
 				else
-					w->second.flags|=tFI::uncertainPhysicalObjectByWN;
+					w->second.flags|=cSourceWordInfo::uncertainPhysicalObjectByWN;
 			}
 			if (isVerb)
 			{
@@ -3269,7 +3269,7 @@ void cSource::analyzeWordSenses(void)
 				if (addVCFrequency(I,1,im,false,debugTrace,lastNounNotFound,lastVerbNotFound))
 				{
 					verbsMappedToVerbNet++;
-					im->flags|=WordMatch::flagVAnalysis;
+					im->flags|=cWordMatch::flagVAnalysis;
 				}
 			}
 			if (proposedSubstitute.length())
@@ -3296,16 +3296,16 @@ void cSource::analyzeWordSenses(void)
 void cSource::printVerbFrequency()
 { LFS
 	int totalNumVerbs=0;
-	vector <WordMatch>::iterator im=m.begin(),imend=m.end();
+	vector <cWordMatch>::iterator im=m.begin(),imend=m.end();
 	for (int I=0; im!=imend; im++,I++)
 	{
-		if ((im->flags&WordMatch::flagTempVNReAnalysis) && 
+		if ((im->flags&cWordMatch::flagTempVNReAnalysis) && 
 			  ((im->relSubject<0 && im->getRelObject()<0 && im->queryWinnerForm(verbForm)<0 && im->queryWinnerForm(thinkForm)<0) || im->queryWinnerForm(verbverbForm)>=0))
 		{
 			// eliminate helper verbs
 			addVCFrequency(I,1,im,true,debugTrace,lastNounNotFound,lastVerbNotFound);
 			verbsMappedToVerbNet--;
-			im->flags&=~WordMatch::flagVAnalysis;
+			im->flags&=~cWordMatch::flagVAnalysis;
 		}
 		else if (im->hasWinnerVerbForm() && im->queryWinnerForm(nounForm)<0 && // don't count confused words (in reference to verbNet mapping)
 			!((im->relSubject<0 && im->getRelObject()<0 && im->queryWinnerForm(verbForm)<0 && im->queryWinnerForm(thinkForm)<0) || im->queryWinnerForm(verbverbForm)>=0)) 
@@ -3314,10 +3314,10 @@ void cSource::printVerbFrequency()
 			if (im->word->first==L"ishas" || im->word->first==L"wouldhad")
 			{
 				verbsMappedToVerbNet++;
-				im->flags|=WordMatch::flagVAnalysis;
+				im->flags|=cWordMatch::flagVAnalysis;
 			}
 			// words that are not covered by verbNet
-			//if (!(im->flags&WordMatch::flagVAnalysis))
+			//if (!(im->flags&cWordMatch::flagVAnalysis))
 			//	lplog(LOG_TIME,L"XXR %06d %s",I,im->getMainEntry()->first.c_str());
 		}
 	}
@@ -3359,7 +3359,7 @@ void cSource::processExit(int where,vector <cSpaceRelation>::iterator sri,int ba
 	wstring tmpstr;
 	int tense;
 	if ((sri->relationType==stEXIT || sri->relationType==stENTER) && !inPrimaryQuote && !inSecondaryQuote && 
-			sri->whereSubject>=0 && !(m[sri->whereSubject].objectRole&THINK_ENCLOSING_ROLE) && !(m[sri->whereSubject].flags&WordMatch::flagInQuestion) &&
+			sri->whereSubject>=0 && !(m[sri->whereSubject].objectRole&THINK_ENCLOSING_ROLE) && !(m[sri->whereSubject].flags&cWordMatch::flagInQuestion) &&
 		  sri->whereVerb>=0 && ((tense=m[sri->whereVerb].verbSense)&(VT_TENSE_MASK|VT_POSSIBLE|VT_NEGATION))==VT_PAST)
 	{
 		// For a minute Tuppence [thought] she was going to spring upon her - if EXIT is owned by a "think" verb, don't exit
@@ -3625,14 +3625,14 @@ void cSource::processExit(int where,vector <cSpaceRelation>::iterator sri,int ba
 				{
 					// Tuppence brought in the coffee and liqueurs and unwillingly EXITretired . As she[tuppence] did so , she[tuppence] heard Boris say
 					// cancel this EXIT regardless of whether if it is a POV
-					if (m[sri->whereSubject].flags&WordMatch::flagInLingeringStatement)
+					if (m[sri->whereSubject].flags&cWordMatch::flagInLingeringStatement)
 					{
 						lplog(LOG_RESOLUTION,L"%06d:EXIT cancelled (lingering)!",sri->where);
 						return;
 					}
 					for (int S1=sri->whereSubject; S1<(signed)m.size() && S1<sri->whereSubject+50; S1++)
 					{
-						if (m[S1].pma.queryPattern(L"__S1")!=-1 && (m[S1].flags&WordMatch::flagInLingeringStatement))
+						if (m[S1].pma.queryPattern(L"__S1")!=-1 && (m[S1].flags&cWordMatch::flagInLingeringStatement))
 							for (int S2=S1; S2<(signed)m.size() && S2<sri->whereSubject+50; S2++)
 							{
 								if ((m[S2].objectRole&SUBJECT_ROLE) && m[S2].getObject()>=0)

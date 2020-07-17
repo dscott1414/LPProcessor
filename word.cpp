@@ -72,23 +72,23 @@ tInflectionMap bracketInflectionMap[]=
   { -1,NULL}
 };
 
-unsigned int *tFI::formsArray; // change possible but shut off
-unsigned int tFI::allocated; // change possible but shut off
-unsigned int tFI::fACount; // change possible but shut off
-int tFI::uniqueNewIndex; // use to insure every word has a unique index, even though it hasn't been
-int WordClass::lastWordWrittenClock; /// not used
+unsigned int *cSourceWordInfo::formsArray; // change possible but shut off
+unsigned int cSourceWordInfo::allocated; // change possible but shut off
+unsigned int cSourceWordInfo::fACount; // change possible but shut off
+int cSourceWordInfo::uniqueNewIndex; // use to insure every word has a unique index, even though it hasn't been
+int cWord::lastWordWrittenClock; /// not used
 unordered_map <wstring,int> nicknameEquivalenceMap; // initialized 
-bool FormsClass::changedForms; // change possible but shut off
-unordered_map <wstring,int> FormsClass::formMap; // change possible but shut off
+bool cForms::changedForms; // change possible but shut off
+unordered_map <wstring,int> cForms::formMap; // change possible but shut off
 wchar_t *cacheDir; // initialize
-vector <wchar_t *> WordClass::multiElementWords;
-vector <wchar_t *> WordClass::quotedWords;
-vector <wchar_t *> WordClass::periodWords;
-unordered_map <wstring, tFI> WordClass::WMM;
-unordered_map <wstring, vector <tIWMM>> WordClass::mainEntryMap;
-bool WordClass::changedWords;
-bool WordClass::inCreateDictionaryPhase;
-int WordClass::disinclinationRecursionCount;
+vector <wchar_t *> cWord::multiElementWords;
+vector <wchar_t *> cWord::quotedWords;
+vector <wchar_t *> cWord::periodWords;
+unordered_map <wstring, cSourceWordInfo> cWord::WMM;
+unordered_map <wstring, vector <tIWMM>> cWord::mainEntryMap;
+bool cWord::changedWords;
+bool cWord::inCreateDictionaryPhase;
+int cWord::disinclinationRecursionCount;
 
 // maximum forms for one word to have (to guard against corruption)
 #define MAX_FORMS 30
@@ -117,9 +117,9 @@ const wchar_t *getInflectionName(int inflection,int form,wstring &temp)
   return L"";
 }
 
-vector <FormClass *> Forms;
+vector <cForm *> Forms;
 
-FormClass::FormClass(int indexIn,wstring nameIn,wstring shortNameIn,wstring inflectionsClassIn,bool hasInflectionsIn,
+cForm::cForm(int indexIn,wstring nameIn,wstring shortNameIn,wstring inflectionsClassIn,bool hasInflectionsIn,
 										 bool properNounSubClassIn,bool isTopLevelIn,bool isIgnoreIn,bool verbFormIn,bool blockProperNounRecognitionIn,bool formCheckIn)
 { LFS
   index=indexIn;
@@ -138,13 +138,13 @@ FormClass::FormClass(int indexIn,wstring nameIn,wstring shortNameIn,wstring infl
 	isNounForm=false;
 }
 
-int FormsClass::findForm(wstring sForm)
+int cForms::findForm(wstring sForm)
 { LFS
 unordered_map <wstring,int>::iterator fmi=formMap.find(sForm);
 	return (fmi==formMap.end()) ? -1 : fmi->second;
 }
 
-int FormsClass::gFindForm(wstring sForm)
+int cForms::gFindForm(wstring sForm)
 { LFS
   int f=findForm(sForm);
   if (f<0)
@@ -152,7 +152,7 @@ int FormsClass::gFindForm(wstring sForm)
   return f;
 }
 
-int FormsClass::addNewForm(wstring sForm,wstring shortForm,bool message,bool properNounSubClass)
+int cForms::addNewForm(wstring sForm,wstring shortForm,bool message,bool properNounSubClass)
 { LFS
 unordered_map <wstring,int>::iterator fmi=formMap.find(sForm);
 	if (fmi==formMap.end())
@@ -184,7 +184,7 @@ unordered_map <wstring,int>::iterator fmi=formMap.find(sForm);
 				lplog(LOG_ERROR,L"Create new form attempt:%s",sForm.c_str());
 				return 0; // new forms are not allowed
 			}
-			FormClass *newForm=new FormClass(-1,sForm,shortForm,L"",true,properNounSubClass); // iForm removed
+			cForm *newForm=new cForm(-1,sForm,shortForm,L"",true,properNounSubClass); // iForm removed
       Forms.push_back(newForm);
       changedForms=true;
 			return formMap[sForm]=Forms.size()-1;
@@ -200,9 +200,9 @@ unordered_map <wstring,int>::iterator fmi=formMap.find(sForm);
   return iForm;
 }
 
-int FormsClass::createForm(wstring sForm,wstring shortName,bool inflectionsFlag,wstring inflectionsClass,bool properNounSubClass)
+int cForms::createForm(wstring sForm,wstring shortName,bool inflectionsFlag,wstring inflectionsClass,bool properNounSubClass)
 { LFS
-  FormClass *newForm;
+  cForm *newForm;
   size_t iForm;
   if ((iForm=findForm(sForm))!=-1)
   {
@@ -213,7 +213,7 @@ int FormsClass::createForm(wstring sForm,wstring shortName,bool inflectionsFlag,
   }
   else
   {
-		newForm=new FormClass(-1,sForm,shortName,inflectionsClass,inflectionsFlag,properNounSubClass);
+		newForm=new cForm(-1,sForm,shortName,inflectionsClass,inflectionsFlag,properNounSubClass);
     Forms.push_back(newForm);
     iForm=Forms.size()-1;
 		formMap[sForm]=iForm;
@@ -221,10 +221,10 @@ int FormsClass::createForm(wstring sForm,wstring shortName,bool inflectionsFlag,
 	return iForm;
 }
 
-WordClass Words;
+cWord Words;
 
-// this is coming from either WordClass::addCopy OR addNewOrModify.  Therefore, insertNewForms flag must be added.
-tFI::tFI(int iForm,int iInflectionFlags,int iFlags,int iTimeFlags,int iDerivationRules,tIWMM iMainEntry,int iSourceId)
+// this is coming from either cWord::addCopy OR addNewOrModify.  Therefore, insertNewForms flag must be added.
+cSourceWordInfo::cSourceWordInfo(int iForm,int iInflectionFlags,int iFlags,int iTimeFlags,int iDerivationRules,tIWMM iMainEntry,int iSourceId)
 { LFS
   count=1;
   int oldAllocated=allocated;
@@ -234,7 +234,7 @@ tFI::tFI(int iForm,int iInflectionFlags,int iFlags,int iTimeFlags,int iDerivatio
   formsArray[fACount++]=iForm;
   inflectionFlags=iInflectionFlags;
   derivationRules=iDerivationRules;
-  flags=iFlags|tFI::insertNewForms;
+  flags=iFlags|cSourceWordInfo::insertNewForms;
   timeFlags=iTimeFlags;
   mainEntry=iMainEntry;
   index=-uniqueNewIndex++;
@@ -252,7 +252,7 @@ tFI::tFI(int iForm,int iInflectionFlags,int iFlags,int iTimeFlags,int iDerivatio
 
 
 // this is from disk.  The source has already been flushed to the database.  Don't add insertNewForms flag.
-tFI::tFI(char *buffer,int &where,int limit,wstring &ME,int iSourceId)
+cSourceWordInfo::cSourceWordInfo(char *buffer,int &where,int limit,wstring &ME,int iSourceId)
 { LFS
   count=*((int *)(buffer+where));
   if (count>MAX_FORMS)
@@ -291,7 +291,7 @@ tFI::tFI(char *buffer,int &where,int limit,wstring &ME,int iSourceId)
 
 int mTD(int p)
 {
-	return p + tFI::patternFormNumOffset - tFI::TRANSFER_COUNT;
+	return p + cSourceWordInfo::patternFormNumOffset - cSourceWordInfo::TRANSFER_COUNT;
 }
 
 // copies the same logic as transferDBUsagePatternsToUsagePattern
@@ -302,7 +302,7 @@ int mTD(int p)
 // transferDBUsagePatternsToUsagePattern(64, UPDB, VERB_HAS_0_OBJECTS, 3);
 // usagePatterns[LOWER_CASE_USAGE_PATTERN] = max(127, UPDB[LOWER_CASE_USAGE_PATTERN]);
 // usagePatterns[PROPER_NOUN_USAGE_PATTERN] = max(127, UPDB[PROPER_NOUN_USAGE_PATTERN]);
-void tFI::computeDBUsagePatternsToUsagePattern(unordered_map <int, int> &dbUsagePatterns)
+void cSourceWordInfo::computeDBUsagePatternsToUsagePattern(unordered_map <int, int> &dbUsagePatterns)
 {
 	LFS
 	int highest = -1, highestPatternCount=128;
@@ -350,7 +350,7 @@ void tFI::computeDBUsagePatternsToUsagePattern(unordered_map <int, int> &dbUsage
 		dbUsagePatterns[mTD(TRANSFER_COUNT)] = 0;
 }
 
-wstring tFI::patternString(int p)
+wstring cSourceWordInfo::patternString(int p)
 {
 	switch (p)
 	{
@@ -366,7 +366,7 @@ wstring tFI::patternString(int p)
 	};
 }
 
-bool tFI::write(void *buffer,int &where,int limit)
+bool cSourceWordInfo::write(void *buffer,int &where,int limit)
 { LFS
   if (!copy(buffer,(int)count,where,limit)) return false;
   memcpy(((char *)buffer)+where,forms(),count*sizeof(int));
@@ -387,14 +387,14 @@ bool tFI::write(void *buffer,int &where,int limit)
 			query(adverbForm) >= 0)
 		{
 			::lplog(LOG_INFO,L"QueryOnAnyAppearance added to word because it has no mainEntry and has open class!");
-			flags |= tFI::queryOnAnyAppearance;
+			flags |= cSourceWordInfo::queryOnAnyAppearance;
 		}
 		wstring empty;
 		if (!copy(buffer, empty, where, limit)) return false;
 	}
 	else
 		if (!copy(buffer, mainEntry->first, where, limit)) return false;
-	if (where+tFI::MAX_USAGE_PATTERNS*2>limit) 
+	if (where+cSourceWordInfo::MAX_USAGE_PATTERNS*2>limit) 
 		::lplog(LOG_FATAL_ERROR,L"Maximum copy limit of %d bytes reached (4)!",limit);
   memcpy(((char *)buffer)+where,usagePatterns,MAX_USAGE_PATTERNS);
   where+=MAX_USAGE_PATTERNS;
@@ -404,7 +404,7 @@ bool tFI::write(void *buffer,int &where,int limit)
 }
 
 // this is called from readWords, which reads the wordCache file.  So this has also been committed/processed already.  No insertNewForms flag.
-bool tFI::updateFromDisk(char *buffer,int &where,int limit,wstring &ME)
+bool cSourceWordInfo::updateFromDisk(char *buffer,int &where,int limit,wstring &ME)
 { LFS
   int iCount=*((int *)(buffer+where));
 	if (iCount > MAX_FORMS)
@@ -445,7 +445,7 @@ bool tFI::updateFromDisk(char *buffer,int &where,int limit,wstring &ME)
   return true;
 }
 
-bool tFI::operator==(tFI &other) const
+bool cSourceWordInfo::operator==(cSourceWordInfo &other) const
 { LFS
   bool identical=true;
   if (inflectionFlags!=other.inflectionFlags)
@@ -483,17 +483,17 @@ bool tFI::operator==(tFI &other) const
     return identical;
 }
 
-void tFI::setTopLevel(void)
+void cSourceWordInfo::setTopLevel(void)
 { LFS
   for (unsigned int *f=formsArray+formsOffset,*fend=formsArray+formsOffset+count; f!=fend; f++)
     if (Forms[*f]->isTopLevel)
 		{
-			flags|=tFI::topLevelSeparator;
+			flags|=cSourceWordInfo::topLevelSeparator;
 			break;
 		}
 }
 
-void tFI::removeIllegalForms(void)
+void cSourceWordInfo::removeIllegalForms(void)
 { LFS
 	for (unsigned int *f=formsArray+formsOffset,*fend=formsArray+formsOffset+count; f!=fend; f++)
 		if (((int)*f)<0 || *f>=Forms.size())
@@ -503,18 +503,18 @@ void tFI::removeIllegalForms(void)
 		}
 }
 
-void tFI::setIgnore(void)
+void cSourceWordInfo::setIgnore(void)
 { LFS
   for (unsigned int *f=formsArray+formsOffset,*fend=formsArray+formsOffset+count; f!=fend; f++)
     if (Forms[*f]->isIgnore)
 		{
-			flags|=tFI::ignoreFlag;
+			flags|=cSourceWordInfo::ignoreFlag;
       return;
 		}
-	flags &= ~tFI::ignoreFlag;
+	flags &= ~cSourceWordInfo::ignoreFlag;
 }
 
-int tFI::query(int form)
+int cSourceWordInfo::query(int form)
 { LFS
   for (unsigned int *f=formsArray+formsOffset,*fend=formsArray+formsOffset+count; f!=fend; f++)
     if (*f==form)
@@ -522,7 +522,7 @@ int tFI::query(int form)
   return -1;
 }
 
-bool tFI::hasWinnerVerbForm(int winnerForms)
+bool cSourceWordInfo::hasWinnerVerbForm(int winnerForms)
 {
 	LFS
 		for (unsigned int *f = formsArray + formsOffset, *fend = formsArray + formsOffset + count, I = 0; f != fend; f++, I++)
@@ -531,7 +531,7 @@ bool tFI::hasWinnerVerbForm(int winnerForms)
 	return false;
 }
 
-bool tFI::hasVerbForm()
+bool cSourceWordInfo::hasVerbForm()
 {
 	LFS
 		for (unsigned int *f = formsArray + formsOffset, *fend = formsArray + formsOffset + count, I = 0; f != fend; f++, I++)
@@ -540,7 +540,7 @@ bool tFI::hasVerbForm()
 	return false;
 }
 
-bool tFI::hasWinnerNounForm(int winnerForms)
+bool cSourceWordInfo::hasWinnerNounForm(int winnerForms)
 {
 	LFS
 		for (unsigned int *f = formsArray + formsOffset, *fend = formsArray + formsOffset + count, I = 0; f != fend; f++, I++)
@@ -549,7 +549,7 @@ bool tFI::hasWinnerNounForm(int winnerForms)
 	return false;
 }
 
-bool tFI::hasNounForm()
+bool cSourceWordInfo::hasNounForm()
 {
 	LFS
 		for (unsigned int *f = formsArray + formsOffset, *fend = formsArray + formsOffset + count, I = 0; f != fend; f++, I++)
@@ -558,14 +558,14 @@ bool tFI::hasNounForm()
 	return false;
 }
 
-int tFI::query(wstring sForm)
+int cSourceWordInfo::query(wstring sForm)
 { LFS
   int form;
-  if ((form=FormsClass::findForm(sForm))<=0) return -1;
+  if ((form=cForms::findForm(sForm))<=0) return -1;
   return query(form);
 }
 
-int tFI::queryForSeparator(void)
+int cSourceWordInfo::queryForSeparator(void)
 { LFS
   for (unsigned int *f=formsArray+formsOffset,*fend=formsArray+formsOffset+count; f!=fend; f++)
     if (Forms[*f]->isTopLevel)
@@ -573,7 +573,7 @@ int tFI::queryForSeparator(void)
   return -1;
 }
 
-int tFI::lowestSeparatorCost()
+int cSourceWordInfo::lowestSeparatorCost()
 { LFS
   int lowestCost=10000;
   for (unsigned int *f=formsArray+formsOffset,*fend=formsArray+formsOffset+count,I=0; f!=fend; f++,I++)
@@ -583,7 +583,7 @@ int tFI::lowestSeparatorCost()
   return 1000*lowestCost;
 }
 
-bool tFI::isLowestCost(int form)
+bool cSourceWordInfo::isLowestCost(int form)
 { LFS
   int lowestCost=10000,formCost=-1;
   for (unsigned int *f=formsArray+formsOffset,*fend=formsArray+formsOffset+count,I=0; f!=fend; f++,I++)
@@ -596,7 +596,7 @@ bool tFI::isLowestCost(int form)
   return lowestCost!=10000 && formCost!=-1 && formCost==lowestCost;
 }
 
-bool tFI::isRareWord(void)
+bool cSourceWordInfo::isRareWord(void)
 { LFS
   bool containsUndefined=false,containsCombination=false;
   for (unsigned int *f=formsArray+formsOffset,*fend=formsArray+formsOffset+count; f!=fend; f++)
@@ -611,15 +611,15 @@ bool tFI::isRareWord(void)
     (inflectionFlags&(MALE_GENDER|FEMALE_GENDER|NEUTER_GENDER))==0);
 }
 
-bool tFI::remove(wchar_t *formName)
+bool cSourceWordInfo::remove(wchar_t *formName)
 { LFS
-  int form=FormsClass::findForm(formName);
+  int form=cForms::findForm(formName);
   if (form<0)
     ::lplog(LOG_FATAL_ERROR,L"Form %s not found.",formName);
   return remove(form);
 }
 
-bool tFI::remove(int form)
+bool cSourceWordInfo::remove(int form)
 { LFS
   unsigned int *f,*f2,*fend,whichOffset;
   for (f=formsArray+formsOffset,f2=f,fend=f+count; f!=fend; f++)
@@ -644,7 +644,7 @@ bool tFI::remove(int form)
   return false;
 }
 
-bool tFI::isProperNounSubClass(void)
+bool cSourceWordInfo::isProperNounSubClass(void)
 { LFS
   for (unsigned int c=formsOffset; c<formsOffset+count; c++)
     if (Forms[formsArray[c]]->properNounSubClass)
@@ -652,7 +652,7 @@ bool tFI::isProperNounSubClass(void)
   return false;
 }
 
-bool tFI::blockProperNounRecognition(void)
+bool cSourceWordInfo::blockProperNounRecognition(void)
 { LFS
   for (unsigned int c=formsOffset; c<formsOffset+count; c++)
     if (Forms[formsArray[c]]->blockProperNounRecognition)
@@ -660,13 +660,13 @@ bool tFI::blockProperNounRecognition(void)
   return false;
 }
 
-FormClass *tFI::Form(unsigned int offset)
+cForm *cSourceWordInfo::Form(unsigned int offset)
 {
 	LFS
 	return Forms[getFormNum(offset)];
 }
 
-int tFI::getFormNum(unsigned int offset)
+int cSourceWordInfo::getFormNum(unsigned int offset)
 {
 	LFS
 		if (offset == count)
@@ -689,13 +689,13 @@ int tFI::getFormNum(unsigned int offset)
 	return formsArray[formsOffset + offset];
 }
 
-void tFI::eraseForms(void)
+void cSourceWordInfo::eraseForms(void)
 { LFS
   count=0;
   formsOffset=fACount;
 }
 
-void tFI::cloneForms(tFI fromWord)
+void cSourceWordInfo::cloneForms(cSourceWordInfo fromWord)
 {
   // make sure this has enough forms space
 	if (count < fromWord.count)
@@ -715,7 +715,7 @@ void tFI::cloneForms(tFI fromWord)
 }
 
 // this is a dynamic addForm routine, called from BNC routines, addForm or addNewOrModify.  insertNewForms flag is necessary.
-int tFI::addForm(int form,const wstring &word,bool illegal)
+int cSourceWordInfo::addForm(int form,const wstring &word,bool illegal)
 { LFS
   if (count>=MAX_FORM_USAGE_PATTERNS)
   {
@@ -734,7 +734,7 @@ int tFI::addForm(int form,const wstring &word,bool illegal)
 		formsOffset=fACount;
 		fACount+=count;
   }
-	flags|=tFI::insertNewForms;
+	flags|=cSourceWordInfo::insertNewForms;
   count++;
 	if (form || count==1)
 		formsArray[fACount++]=form;
@@ -751,26 +751,26 @@ int tFI::addForm(int form,const wstring &word,bool illegal)
   return 0;
 }
 
-int tFI::adjustFormsInflections(wstring originalWord,unsigned __int64 &wmflags,bool isFirstWord,int nounOwner,bool allCaps,bool firstLetterCapitalized, bool log)
+int cSourceWordInfo::adjustFormsInflections(wstring originalWord,unsigned __int64 &wmflags,bool isFirstWord,int nounOwner,bool allCaps,bool firstLetterCapitalized, bool log)
 { LFS
   //flags=(1<<count)-1;
   wmflags=0;
-  if (nounOwner==2) wmflags|=WordMatch::flagNounOwner;
-  else if (nounOwner==1) wmflags|=WordMatch::flagPossiblePluralNounOwner;
+  if (nounOwner==2) wmflags|=cWordMatch::flagNounOwner;
+  else if (nounOwner==1) wmflags|=cWordMatch::flagPossiblePluralNounOwner;
   // If it is capitalized and not a letter and not proper noun subclass and (not first word or never seen uncapitalized):
   // allow only a proper noun form
   if (firstLetterCapitalized && !allCaps && originalWord[1] && query(numeralOrdinalForm)==-1 && query(numeralCardinalForm)==-1 && !isFirstWord)
   {
-    //(!isFirstWord || (flags&WordClass::queryOnLowerCase))) took out 5/17/2006 sentence starts out with unknown verb 'Loving is a good thing.'
-		//::lplog(L"%s:DEBUG PNU %d %d",originalWord.c_str(),numProperNounUsageAsAdjective,(int)usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN]);
+    //(!isFirstWord || (flags&cWord::queryOnLowerCase))) took out 5/17/2006 sentence starts out with unknown verb 'Loving is a good thing.'
+		//::lplog(L"%s:DEBUG PNU %d %d",originalWord.c_str(),numProperNounUsageAsAdjective,(int)usagePatterns[cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN]);
     if (blockProperNounRecognition())
 		{
 			if (query(nounForm)==-1) // don't block pronouns that can be used like nouns (What company owned the Sago Mine?)
-				wmflags|=WordMatch::flagOnlyConsiderOtherNounForms;
+				wmflags|=cWordMatch::flagOnlyConsiderOtherNounForms;
 		}
 		else
 		{
-			wmflags |= WordMatch::flagOnlyConsiderProperNounForms;
+			wmflags |= cWordMatch::flagOnlyConsiderProperNounForms;
 		}
   }
   // if it is capitalized and is not already a proper noun
@@ -778,7 +778,7 @@ int tFI::adjustFormsInflections(wstring originalWord,unsigned __int64 &wmflags,b
   if (firstLetterCapitalized || allCaps)
   {
     int costingOffset=-1;
-    if (!preTaggedSource && originalWord.length()>0 && !blockProperNounRecognition() && formsSize()<tFI::MAX_USAGE_PATTERNS && // lord is a very special word!  It is not only an interjection, but can be used as a title.  But let's not block Lord as a proper noun because of that!
+    if (!preTaggedSource && originalWord.length()>0 && !blockProperNounRecognition() && formsSize()<cSourceWordInfo::MAX_USAGE_PATTERNS && // lord is a very special word!  It is not only an interjection, but can be used as a title.  But let's not block Lord as a proper noun because of that!
       //formsArray[formsOffset]!=UNDEFINED_FORM_NUM && // DR. BAURSTEIN (a chapter heading)
       query(PROPER_NOUN_FORM_NUM)==-1 &&
       // if a proper noun is not all caps, and not the first word, it probably needs to be a noun, abbreviation or proper noun sub-class.
@@ -786,13 +786,13 @@ int tFI::adjustFormsInflections(wstring originalWord,unsigned __int64 &wmflags,b
       (costingOffset=query(abbreviationForm))!=-1 || (costingOffset=query(sa_abbForm))!=-1 || isProperNounSubClass())) // more general in the future?
       // Cambridge is classified as an adjective by Websters
     {
-      wmflags|=WordMatch::flagAddProperNoun;
+      wmflags|=cWordMatch::flagAddProperNoun;
       usageCosts[formsSize()]=(costingOffset<0) ? 0 : usageCosts[costingOffset];
 #ifdef LOG_PATTERN_COST_CHECK
       ::lplog(L"Added ProperNoun to word %s (form #%d) at cost %d.",originalWord.c_str(),formsSize(),usageCosts[formsSize()]);
 #endif
     }
-    if (((wmflags&WordMatch::flagAddProperNoun) || query(PROPER_NOUN_FORM_NUM)!=-1) && !allCaps && !isFirstWord && usagePatterns[PROPER_NOUN_USAGE_PATTERN]<255)
+    if (((wmflags&cWordMatch::flagAddProperNoun) || query(PROPER_NOUN_FORM_NUM)!=-1) && !allCaps && !isFirstWord && usagePatterns[PROPER_NOUN_USAGE_PATTERN]<255)
     {
       usagePatterns[PROPER_NOUN_USAGE_PATTERN]++;
       deltaUsagePatterns[PROPER_NOUN_USAGE_PATTERN]++;
@@ -802,9 +802,9 @@ int tFI::adjustFormsInflections(wstring originalWord,unsigned __int64 &wmflags,b
 			localWordIsCapitalized++;
 		}
     if (firstLetterCapitalized) 
-			wmflags|=WordMatch::flagFirstLetterCapitalized;
+			wmflags|=cWordMatch::flagFirstLetterCapitalized;
     if (allCaps) 
-			wmflags|=WordMatch::flagAllCaps;
+			wmflags|=cWordMatch::flagAllCaps;
   }
 	else
 	{
@@ -827,12 +827,12 @@ int tFI::adjustFormsInflections(wstring originalWord,unsigned __int64 &wmflags,b
 	return 0;
 }
 
-bool tFI::isUnknown(void)
+bool cSourceWordInfo::isUnknown(void)
 { LFS
   return count>0 && formsArray[formsOffset]==UNDEFINED_FORM_NUM;
 }
 
-bool tFI::isCommonWord(void)
+bool cSourceWordInfo::isCommonWord(void)
 {
 	LFS
 		unsigned int fscount = formsSize();
@@ -841,7 +841,7 @@ bool tFI::isCommonWord(void)
 	return false;
 }
 
-bool tFI::isNonCachedWord(void)
+bool cSourceWordInfo::isNonCachedWord(void)
 {
 	LFS
 		unsigned int fscount = formsSize();
@@ -850,17 +850,17 @@ bool tFI::isNonCachedWord(void)
 	return false;
 }
 
-bool tFI::isSeparator(void)
+bool cSourceWordInfo::isSeparator(void)
 { LFS
   return (flags&topLevelSeparator)!=0;
 }
 
-bool tFI::isIgnore(void)
+bool cSourceWordInfo::isIgnore(void)
 { LFS
   return (flags&ignoreFlag)!=0;
 }
 
-void tFI::preferVerbPresentParticiple(void)
+void cSourceWordInfo::preferVerbPresentParticiple(void)
 { LFS
   int whichForm;
   if (inflectionFlags&VERB_PRESENT_PARTICIPLE)
@@ -892,7 +892,7 @@ void tFI::preferVerbPresentParticiple(void)
   }
 }
 
-void tFI::transferUsagePatternsToCosts(int highestCost, unsigned int upStart, unsigned int upLength)
+void cSourceWordInfo::transferUsagePatternsToCosts(int highestCost, unsigned int upStart, unsigned int upLength)
 {
 	LFS
 		int highest = -1, lowest = 255, K = 0;
@@ -928,7 +928,7 @@ void tFI::transferUsagePatternsToCosts(int highestCost, unsigned int upStart, un
 // If K>FORM_USAGE_PATTERN_HIGHEST_COST, for every value L, L2=FORM_USAGE_PATTERN_HIGHEST_COST-(FORM_USAGE_PATTERN_HIGHEST_COST*L/I).
 // if K<2, exit (no clear advantage).
 // if K>=2 && K<=FORM_USAGE_PATTERN_HIGHEST_COST, for every value L, L2=K-(L/J).
-void tFI::transferFormUsagePatternsToCosts(int sameNameForm,int properNounForm,int iCount)
+void cSourceWordInfo::transferFormUsagePatternsToCosts(int sameNameForm,int properNounForm,int iCount)
 { LFS
   unsigned int topAllowableUsageCount=min(iCount,MAX_USAGE_PATTERNS);
   int highest=-1,lowest=255,K=0;
@@ -965,7 +965,7 @@ void tFI::transferFormUsagePatternsToCosts(int sameNameForm,int properNounForm,i
     //preferVerbPresentParticiple();
 }
 
-void tFI::resetUsagePatternsAndCosts(wstring sWord)
+void cSourceWordInfo::resetUsagePatternsAndCosts(wstring sWord)
 {
 	localWordIsCapitalized = 0;
 	localWordIsLowercase = 0;
@@ -988,7 +988,7 @@ void tFI::resetUsagePatternsAndCosts(wstring sWord)
 	transferUsagePatternsToCosts(HIGHEST_COST_OF_INCORRECT_VERB_USAGE, VERB_HAS_0_OBJECTS, 3);
 }
 
-void tFI::logReset(wstring sWord)
+void cSourceWordInfo::logReset(wstring sWord)
 {
 	if (deltaUsagePatterns[LOWER_CASE_USAGE_PATTERN] || deltaUsagePatterns[PROPER_NOUN_USAGE_PATTERN] || localWordIsCapitalized || localWordIsLowercase)
 		::lplog(L"resetting word %s to lower case=%d (=%d-%d) and proper noun=%d (=%d-%d) and localWordIsCapitalized=%d and localWordIsLowercase=%d", sWord.c_str(),
@@ -997,7 +997,7 @@ void tFI::logReset(wstring sWord)
 			localWordIsCapitalized, localWordIsLowercase);
 }
 
-void tFI::resetCapitalizationAndProperNounUsageStatistics()
+void cSourceWordInfo::resetCapitalizationAndProperNounUsageStatistics()
 {
 	usagePatterns[LOWER_CASE_USAGE_PATTERN] -= deltaUsagePatterns[LOWER_CASE_USAGE_PATTERN];
 	deltaUsagePatterns[LOWER_CASE_USAGE_PATTERN] = 0;
@@ -1008,14 +1008,14 @@ void tFI::resetCapitalizationAndProperNounUsageStatistics()
 	numProperNounUsageAsAdjective = 0;
 }
 
-int tFI::scanAllRelations(tIWMM verbWord)
+int cSourceWordInfo::scanAllRelations(tIWMM verbWord)
 {
 	int numAllRelations=0;
 	for (int r = 0; r < numRelationWOTypes; r++)
 	{
 		if (relationMaps[r] != NULL)
 		{
-			tFI::cRMap::tIcRMap tmp = relationMaps[r]->r.find(verbWord->first);
+			cSourceWordInfo::cRMap::tIcRMap tmp = relationMaps[r]->r.find(verbWord->first);
 			if (tmp != relationMaps[r]->r.end())
 				numAllRelations += tmp->second.frequency;
 		}
@@ -1027,28 +1027,28 @@ int tFI::scanAllRelations(tIWMM verbWord)
 // if flagOnlyConsiderProperNounForms, cost should not be considered in matching, printing, or updating
 // if there is a possibility of proper noun (flagAddProperNoun), consider cost in matching, printing and updating PEMA
 //    AND if the winner form is not a proper noun, update usage patterns.
-bool WordMatch::costable(void)
+bool cWordMatch::costable(void)
 { LFS
   if (preTaggedSource)
-    return word->second.formsSize()!=1 && !(flags&WordMatch::flagAddProperNoun);
+    return word->second.formsSize()!=1 && !(flags&cWordMatch::flagAddProperNoun);
   else
-    return (word->second.formsSize()!=1 && !(flags&(WordMatch::flagOnlyConsiderProperNounForms|WordMatch::flagOnlyConsiderOtherNounForms))) ||
+    return (word->second.formsSize()!=1 && !(flags&(cWordMatch::flagOnlyConsiderProperNounForms|cWordMatch::flagOnlyConsiderOtherNounForms))) ||
     word->first==L"i"; // || word->second.blockProperNounRecognition();
 }
 
-void WordMatch::setSeparatorWinner(void)
+void cWordMatch::setSeparatorWinner(void)
 { LFS
   int offset=word->second.queryForSeparator();
   if (offset>=0) setWinner(offset);
 }
 
-bool WordMatch::isWinnerSeparator(void)
+bool cWordMatch::isWinnerSeparator(void)
 { LFS
   int offset=word->second.queryForSeparator();
 	return (offset>=0) ? isWinner(offset) : word->second.isSeparator(); 
 }
 
-bool WordMatch::maxWinner(int len,int avgCost,int lowestSeparatorCost)
+bool cWordMatch::maxWinner(int len,int avgCost,int lowestSeparatorCost)
 { LFS
   if (lowestSeparatorCost>=0 && avgCost>=lowestSeparatorCost) return false; // prevent patterns that match only separators optimally
   return avgCost<lowestAverageCost || (avgCost==lowestAverageCost && len>=maxLACMatch);
@@ -1059,7 +1059,7 @@ bool WordMatch::maxWinner(int len,int avgCost,int lowestSeparatorCost)
 //   if 1 out of 4, add 3.  if 2 out of 4, add 2.  if 3 out of 4, add 1.
 //   if overflow, divide all usage pattern counts by 2.
 // CMREADME017
-bool WordMatch::updateFormUsagePatterns(void)
+bool cWordMatch::updateFormUsagePatterns(void)
 { LFS
   if (!costable() || !preTaggedSource) // these words are capitalized whenever they are used (honorifics and 'I')
   {
@@ -1069,7 +1069,7 @@ bool WordMatch::updateFormUsagePatterns(void)
 	return word->second.updateFormUsagePatterns(tmpWinnerForms,word->first);
 }
 
-void tFI::logFormUsageCosts(wstring w)
+void cSourceWordInfo::logFormUsageCosts(wstring w)
 { LFS
   wstring formStr;
   for (unsigned I=0; I<count; I++)
@@ -1087,7 +1087,7 @@ void tFI::logFormUsageCosts(wstring w)
   ::lplog(L"%s (%s)",w.c_str(),formStr.c_str());
 }
 
-tIWMM WordClass::addCopy(wstring sWord,tIWMM iWord,bool &added)
+tIWMM cWord::addCopy(wstring sWord,tIWMM iWord,bool &added)
 { LFS
   tIWMM iWordCopy;
   int start=0;
@@ -1095,7 +1095,7 @@ tIWMM WordClass::addCopy(wstring sWord,tIWMM iWord,bool &added)
   if ((iWordCopy=query(sWord))==WMM.end())
   {
     pair < tIWMM, bool > pr;
-    pr=WMM.insert(tWFIMap(sWord,tFI(iWord->second.forms()[0],iWord->second.inflectionFlags,iWord->second.flags,iWord->second.timeFlags,iWord->second.derivationRules,iWord->second.mainEntry,iWord->second.sourceId)));
+    pr=WMM.insert(tWFIMap(sWord,cSourceWordInfo(iWord->second.forms()[0],iWord->second.inflectionFlags,iWord->second.flags,iWord->second.timeFlags,iWord->second.derivationRules,iWord->second.mainEntry,iWord->second.sourceId)));
     added=pr.second;
     iWordCopy=pr.first;
     start=1; // already inserted the first form
@@ -1114,7 +1114,7 @@ tIWMM WordClass::addCopy(wstring sWord,tIWMM iWord,bool &added)
   return iWordCopy;
 }
 
-tIWMM WordClass::query(wstring sWord,int form,int inflection,int &offset)
+tIWMM cWord::query(wstring sWord,int form,int inflection,int &offset)
 { LFS
   for (unsigned int I=0; I<sWord.length(); I++) sWord[I]=towlower(sWord[I]);
   tIWMM iWMM;
@@ -1128,7 +1128,7 @@ tIWMM WordClass::query(wstring sWord,int form,int inflection,int &offset)
   return iWMM;
 }
 
-bool WordClass::remove(wstring sWord)
+bool cWord::remove(wstring sWord)
 { LFS
   vector<wchar_t *>::iterator index;
   if (wcschr(sWord.c_str(),L' '))
@@ -1163,11 +1163,11 @@ bool WordClass::remove(wstring sWord)
   return false;
 }
 
-void WordClass::resetUsagePatternsAndCosts(sTrace debugTrace)
+void cWord::resetUsagePatternsAndCosts(sTrace debugTrace)
 {
 	for (tIWMM w = begin(), wEnd = end(); w != wEnd; )
 	{
-		if (w->second.flags&tFI::deleteWordAfterSourceProcessing)
+		if (w->second.flags&cSourceWordInfo::deleteWordAfterSourceProcessing)
 		{
 			if (w->second.index < 0 || w->second.index >= Words.idsAllocated)
 			{
@@ -1186,27 +1186,27 @@ void WordClass::resetUsagePatternsAndCosts(sTrace debugTrace)
 	}
 }
 
-void WordClass::resetCapitalizationAndProperNounUsageStatistics(sTrace debugTrace)
+void cWord::resetCapitalizationAndProperNounUsageStatistics(sTrace debugTrace)
 {
 	// mainEntry processing must be completed before any words are deleted.
 	for (tIWMM w = begin(), wEnd = end(); w != wEnd; w++)
 	{
-		if (w->second.mainEntry != wNULL && (w->second.mainEntry->second.flags&tFI::deleteWordAfterSourceProcessing) && !(w->second.flags&tFI::deleteWordAfterSourceProcessing))
+		if (w->second.mainEntry != wNULL && (w->second.mainEntry->second.flags&cSourceWordInfo::deleteWordAfterSourceProcessing) && !(w->second.flags&cSourceWordInfo::deleteWordAfterSourceProcessing))
 		{
 			if (debugTrace.traceParseInfo)
 				lplog(LOG_INFO, L"Removing deletion of word %s because it is a main entry of another word which is not going to be deleted.", w->second.mainEntry->first.c_str());
-			w->second.mainEntry->second.flags &= ~tFI::deleteWordAfterSourceProcessing;
+			w->second.mainEntry->second.flags &= ~cSourceWordInfo::deleteWordAfterSourceProcessing;
 		}
-		if ((w->second.flags&tFI::deleteWordAfterSourceProcessing) && w->second.sourceId<0)
+		if ((w->second.flags&cSourceWordInfo::deleteWordAfterSourceProcessing) && w->second.sourceId<0)
 		{
 			if (debugTrace.traceParseInfo)
 				lplog(LOG_INFO, L"Removing deletion of word %s because it is has a NULL sourceId.", w->first.c_str());
-			w->second.flags &= ~tFI::deleteWordAfterSourceProcessing;
+			w->second.flags &= ~cSourceWordInfo::deleteWordAfterSourceProcessing;
 		}
 	}
 	for (tIWMM w = begin(), wEnd = end(); w != wEnd; )
 	{
-		if (w->second.flags&tFI::deleteWordAfterSourceProcessing)
+		if (w->second.flags&cSourceWordInfo::deleteWordAfterSourceProcessing)
 		{
 			if (debugTrace.traceParseInfo)
 				lplog(LOG_INFO, L"Deleting word %s post source processing", w->first.c_str());
@@ -1229,7 +1229,7 @@ void WordClass::resetCapitalizationAndProperNounUsageStatistics(sTrace debugTrac
 	}
 }
 
-bool WordClass::removeInflectionFlag(wstring sWord,int flag)
+bool cWord::removeInflectionFlag(wstring sWord,int flag)
 { LFS
   tIWMM iWMM;
   if ((iWMM=WMM.find(sWord))!=WMM.end() && (iWMM->second.inflectionFlags&flag)==flag)
@@ -1241,7 +1241,7 @@ bool WordClass::removeInflectionFlag(wstring sWord,int flag)
   return false;
 }
 
-bool WordClass::addInflectionFlag(wstring sWord,int flag)
+bool cWord::addInflectionFlag(wstring sWord,int flag)
 { LFS
   tIWMM iWMM;
   if ((iWMM=WMM.find(sWord))!=WMM.end() && (iWMM->second.inflectionFlags&flag)!=flag)
@@ -1253,7 +1253,7 @@ bool WordClass::addInflectionFlag(wstring sWord,int flag)
   return false;
 }
 
-tIWMM WordClass::addNewOrModify(MYSQL *mysql, wstring sWord, int flags, int form, int inflection, int derivationRules, wstring sME, int sourceId, bool &added,bool markUndefined)
+tIWMM cWord::addNewOrModify(MYSQL *mysql, wstring sWord, int flags, int form, int inflection, int derivationRules, wstring sME, int sourceId, bool &added,bool markUndefined)
 {
 	LFS
   bool firstLetterCapitalized=sWord[0]>0 && iswupper(sWord[0])!=0;
@@ -1282,9 +1282,9 @@ tIWMM WordClass::addNewOrModify(MYSQL *mysql, wstring sWord, int flags, int form
   if (iWMM==WMM.end())
   {
     pair< tIWMM, bool > pr;
-    pr=WMM.insert(tWFIMap(sWord,tFI(form,inflection,flags,0,derivationRules,mainEntry,sourceId)));
+    pr=WMM.insert(tWFIMap(sWord,cSourceWordInfo(form,inflection,flags,0,derivationRules,mainEntry,sourceId)));
     if (Forms[form]->isTopLevel)
-      pr.first->second.flags|=tFI::topLevelSeparator;
+      pr.first->second.flags|=cSourceWordInfo::topLevelSeparator;
     if (equivalentIfIgnoreDashSpaceCase(sME,sWord)) pr.first->second.mainEntry=pr.first;
 		if (mainEntry!=wNULL)
 			mainEntryMap[mainEntry->first].push_back(pr.first);
@@ -1296,8 +1296,8 @@ tIWMM WordClass::addNewOrModify(MYSQL *mysql, wstring sWord, int flags, int form
   {
     if (iWMM->second.query(form)<0) iWMM->second.addForm(form,sWord,markUndefined);
     iWMM->second.inflectionFlags|=inflection;
-        // flags&=~tFI::queryOnAnyAppearance; // don't query if not a new word. - 5/3/2007 no way to tell...
-    iWMM->second.flags|=flags|tFI::updateMainInfo;
+        // flags&=~cSourceWordInfo::queryOnAnyAppearance; // don't query if not a new word. - 5/3/2007 no way to tell...
+    iWMM->second.flags|=flags|cSourceWordInfo::updateMainInfo;
     if (iWMM->second.mainEntry ==wNULL)
     {
       if (mainEntry==wNULL)
@@ -1311,21 +1311,21 @@ tIWMM WordClass::addNewOrModify(MYSQL *mysql, wstring sWord, int flags, int form
   return iWMM;
 }
 
-tIWMM WordClass::query(wstring sWord)
+tIWMM cWord::query(wstring sWord)
 { LFS
   wcslwr((wchar_t *)sWord.c_str());
   // make sure not already there
   return WMM.find(sWord);
 }
 
-int WordClass::addWordToForm(wstring sWord,tIWMM &iWord,int flag,wstring sForm,wstring shortForm,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added,bool markUndefined)
+int cWord::addWordToForm(wstring sWord,tIWMM &iWord,int flag,wstring sForm,wstring shortForm,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added,bool markUndefined)
 { LFS
-  unsigned int iForm=FormsClass::addNewForm(sForm,shortForm,true);
+  unsigned int iForm=cForms::addNewForm(sForm,shortForm,true);
   iWord=addNewOrModify(NULL, sWord,flag,iForm,inflection,derivationRules,mainEntry,sourceId,added,markUndefined);
   return iForm;
 }
 
-bool WordClass::handleExtendedParseWords(wchar_t *word)
+bool cWord::handleExtendedParseWords(wchar_t *word)
 { LFS
   if (!word[1]) return false;
   wchar_t *ch;
@@ -1367,7 +1367,7 @@ bool WordClass::handleExtendedParseWords(wchar_t *word)
 	return false;
 }
 
-int WordClass::markWordUndefined(tIWMM &iWord,wstring sWord,int flag,bool firstWordCapitalized,int nounOwner,int sourceId)
+int cWord::markWordUndefined(tIWMM &iWord,wstring sWord,int flag,bool firstWordCapitalized,int nounOwner,int sourceId)
 { LFS
   bool added;
   tIWMM iW;
@@ -1395,7 +1395,7 @@ int WordClass::markWordUndefined(tIWMM &iWord,wstring sWord,int flag,bool firstW
   return 0;
 }
 
-bool WordClass::isAllUpper(wstring &sWord)
+bool cWord::isAllUpper(wstring &sWord)
 { LFS
   bool allNonAlpha=true;
   const wchar_t *ch;
@@ -1408,10 +1408,10 @@ bool WordClass::isAllUpper(wstring &sWord)
   return !allNonAlpha;
 }
 
-tIWMM WordClass::hasFormInflection(tIWMM iWord,wstring sForm,int inflection)
+tIWMM cWord::hasFormInflection(tIWMM iWord,wstring sForm,int inflection)
 { LFS
   if (iWord==WMM.end()) return iWord;
-  int form=FormsClass::findForm(sForm);
+  int form=cForms::findForm(sForm);
   if (form>=0 && iWord->second.query(form)>=0 && (!inflection || (iWord->second.inflectionFlags&inflection)==inflection)) return iWord;
   if (form<0)
     lplog(LOG_ERROR,L"Dictionary lookup unable to find form %s.",sForm.c_str());
@@ -1421,22 +1421,22 @@ tIWMM WordClass::hasFormInflection(tIWMM iWord,wstring sForm,int inflection)
 // find sWord with prefix or suffix.
 // if prefix, add all forms of base word to iWord.
 // if suffix, add specific suffix form to iWord.
-int WordClass::attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId,bool log)
+int cWord::attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId,bool log)
 {
 	LFS
 	if (mysql == NULL)
 		return WORD_NOT_FOUND;
-	vector <Stemmer::tSuffixRule> rulesUsed;
-	intArray iaTrail;
+	vector <cStemmer::cSuffixRule> rulesUsed;
+	cIntArray iaTrail;
 	wstring inflectionName;
-	if (Stemmer::stem(*mysql, sWord.c_str(), rulesUsed, iaTrail, -1))
+	if (cStemmer::stem(*mysql, sWord.c_str(), rulesUsed, iaTrail, -1))
 	{
-		vector <Stemmer::tSuffixRule>::iterator r;
+		vector <cStemmer::cSuffixRule>::iterator r;
 		wstring trail;
 		if (logDetail)
 			for (r = rulesUsed.begin(); r != rulesUsed.end(); r++)
 				lplog(LOG_DICTIONARY, L"stem rules %s%d on %s lead to %s form %s inflection%s",
-					r->trail.concatToString(trail).c_str(), r->rulenum, sWord.c_str(), r->text.c_str(), r->form.c_str(), (r->inflection <= 0 || r->form == L"PREVIOUS") ? L" (None)" : getInflectionName(r->inflection, FormsClass::gFindForm(r->form), inflectionName));
+					r->trail.concatToString(trail).c_str(), r->rulenum, sWord.c_str(), r->text.c_str(), r->form.c_str(), (r->inflection <= 0 || r->form == L"PREVIOUS") ? L" (None)" : getInflectionName(r->inflection, cForms::gFindForm(r->form), inflectionName));
 		for (r = rulesUsed.begin(); r != rulesUsed.end(); r++)
 		{
 			if (iswdigit(r->text[r->text.length() - 1]) && iswdigit(r->text[r->text.length() - 2]))
@@ -1459,7 +1459,7 @@ int WordClass::attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, 
 			/* suffix only - prefix processing does not write anything */
 			wstring form;
 			int inflection = -1;
-			Stemmer::findLastFormInflection(rulesUsed, r, form, inflection);
+			cStemmer::findLastFormInflection(rulesUsed, r, form, inflection);
 			int derivationRules = r->trail.encode();
 			if (form != L"ORIGINAL")
 			{
@@ -1496,7 +1496,7 @@ int WordClass::attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, 
 // returns a 0 if no error.  
 // tries to find a word in the dictionary, in the DB, by stemming or splitting the word. 
 // if the word is not found this still returns 0, but it will add all open word classes and mark the word as unknown.
-int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLetterCapitalized, int nounOwner, int sourceId,bool log)
+int cWord::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLetterCapitalized, int nounOwner, int sourceId,bool log)
 {
 	LFS
 	bool stopDisInclination = disinclinationRecursionCount>2;
@@ -1507,11 +1507,11 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 		if (!mysql) // can get here calling parseWord on a mainEntry as well.
 			return 0;
 		dontMarkUndefined = true;
-		if (!firstLetterCapitalized && (iWord->second.flags&tFI::queryOnLowerCase) == tFI::queryOnLowerCase)
+		if (!firstLetterCapitalized && (iWord->second.flags&cSourceWordInfo::queryOnLowerCase) == cSourceWordInfo::queryOnLowerCase)
 		{
 			changedWords = true;
-			iWord->second.flags &= ~tFI::queryOnLowerCase;
-			iWord->second.flags |= tFI::updateMainInfo;
+			iWord->second.flags &= ~cSourceWordInfo::queryOnLowerCase;
+			iWord->second.flags |= cSourceWordInfo::updateMainInfo;
 			//iWord->second.remove(PROPER_NOUN_FORM_NUM);
 			wordComplete = false;
 			if (iWord->second.isUnknown())
@@ -1520,18 +1520,18 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 				dontMarkUndefined = false;
 			}
 		}
-		else if (iWord != end() && (iWord->second.flags&tFI::queryOnAnyAppearance) && inCreateDictionaryPhase == false)
+		else if (iWord != end() && (iWord->second.flags&cSourceWordInfo::queryOnAnyAppearance) && inCreateDictionaryPhase == false)
 		{
 			changedWords = true;
-			iWord->second.flags &= ~tFI::queryOnAnyAppearance;
-			iWord->second.flags |= tFI::updateMainInfo;
+			iWord->second.flags &= ~cSourceWordInfo::queryOnAnyAppearance;
+			iWord->second.flags |= cSourceWordInfo::updateMainInfo;
 			if (firstLetterCapitalized)
 			{
 				// this assumes a predefined word.  If encountered in an upper case, previously
 				// this would go on and mark it undefined, like a normal Proper Noun.  However,
 				// this is NOT undefined, because it already has a definition by virtue of it
 				// having been predefined.
-				iWord->second.flags |= tFI::queryOnLowerCase;
+				iWord->second.flags |= cSourceWordInfo::queryOnLowerCase;
 				return 0;
 			}
 			stopDisInclination = true;
@@ -1603,7 +1603,7 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 		{
 			if (dontMarkUndefined)
 				return 0;
-			markWordUndefined(iWord, sWord, tFI::queryOnLowerCase, firstLetterCapitalized, nounOwner, sourceId);
+			markWordUndefined(iWord, sWord, cSourceWordInfo::queryOnLowerCase, firstLetterCapitalized, nounOwner, sourceId);
 		}
 		// make some attempt at getting past French words like d'affaires l'etat etc
 		else if (sWord.length() > 1 && sWord[1] == '\'' && (sWord[0] == 'd' || sWord[0] == 'l'))
@@ -1628,7 +1628,7 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 			{
 				if (dontMarkUndefined)
 					return 0;
-				markWordUndefined(iWord, sWord, tFI::queryOnLowerCase, firstLetterCapitalized, nounOwner, sourceId);
+				markWordUndefined(iWord, sWord, cSourceWordInfo::queryOnLowerCase, firstLetterCapitalized, nounOwner, sourceId);
 			}
 			else if (ret = attemptDisInclination(mysql,iWord, sWord, sourceId,log)) // returns 0 if found or WORD_NOT_FOUND if not found
 			{
@@ -1648,7 +1648,7 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 						// the parse for the capitalized version is different than if the lower case version was never encountered previously, leading to 
 						// a dependency on order of capitalization.  To get rid of this dependency and ensure that parses are identical no matter what order, this word must be deleted after source processing.
 						if (!(ret = Words.attemptDisInclination(mysql, iWord, sWordNoDashes, sourceId,log))) // returns 0 if found or WORD_NOT_FOUND if not found
-							iWord->second.flags |= tFI::deleteWordAfterSourceProcessing; 
+							iWord->second.flags |= cSourceWordInfo::deleteWordAfterSourceProcessing; 
 					}
 					else
 					{
@@ -1659,14 +1659,14 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 						}
 						iWord->second.cloneForms(tiWord->second);
 						ret = 0; // don't mark undefined!
-						iWord->second.flags |= tFI::deleteWordAfterSourceProcessing;
+						iWord->second.flags |= cSourceWordInfo::deleteWordAfterSourceProcessing;
 					}
 				}
 				if (ret && !dontMarkUndefined)
 					ret = markWordUndefined(iWord, sWord, 0, firstLetterCapitalized, nounOwner, sourceId);
 			}
 			else if (newWordIsUnknown)
-				iWord->second.flags |= tFI::deleteWordAfterSourceProcessing;
+				iWord->second.flags |= cSourceWordInfo::deleteWordAfterSourceProcessing;
 
 		}
 		if (iWord!=WMM.end())
@@ -1676,7 +1676,7 @@ int WordClass::parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLe
 }
 
 // 
-int WordClass::parseWord(MYSQL *mysql,wstring sWord, tIWMM &iWord,bool log)
+int cWord::parseWord(MYSQL *mysql,wstring sWord, tIWMM &iWord,bool log)
 {
 	LFS
 	bool firstLetterCapitalized = false;
@@ -1719,7 +1719,7 @@ int WordClass::parseWord(MYSQL *mysql,wstring sWord, tIWMM &iWord,bool log)
 // any words that have punctuation (iswpunct) must be included here.
 // also all section headers.
 #define MAX_MULTI_WORD_LENGTH 20
-int WordClass::continueParse(wchar_t *buffer,__int64 begincp,__int64 bufferLen,vector<wchar_t *> &multiWords)
+int cWord::continueParse(wchar_t *buffer,__int64 begincp,__int64 bufferLen,vector<wchar_t *> &multiWords)
 { LFS
   wchar_t temp[MAX_MULTI_WORD_LENGTH+2],*b=buffer+begincp;
   temp[0]=0;
@@ -1751,7 +1751,7 @@ int WordClass::continueParse(wchar_t *buffer,__int64 begincp,__int64 bufferLen,v
 // 7-8-90 OR 7/8/90
 // 7-90 OR 7/90
 // deleted 7-90 on 4/7/2006 on account of ambiguity
-int WordClass::processDate(wstring &sWord,wchar_t *buffer,__int64 &cp,__int64 &bufferScanLocation)
+int cWord::processDate(wstring &sWord,wchar_t *buffer,__int64 &cp,__int64 &bufferScanLocation)
 { LFS
   __int64 tempcp=cp+1;
 	bool twoDigitYear=false;
@@ -1784,7 +1784,7 @@ int WordClass::processDate(wstring &sWord,wchar_t *buffer,__int64 &cp,__int64 &b
 // 7-8-90 OR 7/8/90
 // 7-90 OR 7/90
 // deleted 7-90 on 4/7/2006 on account of ambiguity
-int WordClass::processDate(wstring sWord,short &year,char &month,char &dayOfMonth)
+int cWord::processDate(wstring sWord,short &year,char &month,char &dayOfMonth)
 { LFS
 	// mid-1989
 	if (sWord.find(L"mid")!=wstring::npos || sWord.find(L"over")!=wstring::npos || sWord.find(L"under")!=wstring::npos || sWord.find(L"early")!=wstring::npos)
@@ -1821,7 +1821,7 @@ int WordClass::processDate(wstring sWord,short &year,char &month,char &dayOfMont
 }
 
 // 3:45
-int WordClass::processTime(wstring &sWord, wchar_t *buffer, __int64 &cp, __int64 &bufferScanLocation)
+int cWord::processTime(wstring &sWord, wchar_t *buffer, __int64 &cp, __int64 &bufferScanLocation)
 {
 	LFS
 	int hour = _wtoi(sWord.c_str());
@@ -1869,7 +1869,7 @@ int WordClass::processTime(wstring &sWord, wchar_t *buffer, __int64 &cp, __int64
 //  12            3  4          5       6  7        8 9
 // scheme ":" hier-part [ "?" query ] [ "#" fragment ]
 // ** does not handle web addresses split by whitespace
-int WordClass::processWebAddress(wstring &sWord,wchar_t *buffer, __int64 &cp, __int64 bufferLen)
+int cWord::processWebAddress(wstring &sWord,wchar_t *buffer, __int64 &cp, __int64 bufferLen)
 {
 	LFS
 		// non-space characters
@@ -1966,7 +1966,7 @@ int WordClass::processWebAddress(wstring &sWord,wchar_t *buffer, __int64 &cp, __
 	return 0;
 }
 
-int WordClass::processTime(wstring sWord, char &hour, char &minute)
+int cWord::processTime(wstring sWord, char &hour, char &minute)
 { LFS
 	hour=_wtoi(sWord.c_str());
 	minute=-1;
@@ -1978,7 +1978,7 @@ int WordClass::processTime(wstring sWord, char &hour, char &minute)
 	return (hour>0 && hour<24 && minute>=0 && minute<=59) ? 0 : -1;
 }
 
-int WordClass::processFootnote(wchar_t *buffer,__int64 bufferLen,__int64 &cp)
+int cWord::processFootnote(wchar_t *buffer,__int64 bufferLen,__int64 &cp)
 { LFS
   while ((!wcsncmp(buffer+cp,L"[Footnote ",10) || buffer[cp]==L'^') && cp<bufferLen-10)
   {
@@ -2026,7 +2026,7 @@ int WordClass::processFootnote(wchar_t *buffer,__int64 bufferLen,__int64 &cp)
 }
 
 // is this actually part of a word, and not the start of a quote?
-bool WordClass::evaluateIncludedSingleQuote(wchar_t *buffer,__int64 cp,__int64 begincp)
+bool cWord::evaluateIncludedSingleQuote(wchar_t *buffer,__int64 cp,__int64 begincp)
 { LFS
   if (cp<=begincp) // quote is the first character
     return false;
@@ -2052,7 +2052,7 @@ bool WordClass::evaluateIncludedSingleQuote(wchar_t *buffer,__int64 cp,__int64 b
   return iswalpha(buffer[cp+1])!=0; // is there a letter right after this quote?
 }
 
-bool WordClass::parseMetaCommands(int where,wchar_t *buffer, int &endSymbol, wstring &comment, sTrace &t)
+bool cWord::parseMetaCommands(int where,wchar_t *buffer, int &endSymbol, wstring &comment, sTrace &t)
 {
 	LFS
 	if (buffer[0] != '!' && !iswalpha(buffer[0]))
@@ -2204,7 +2204,7 @@ int readDate(wchar_t *buffer, __int64 bufferLen, __int64 &bufferScanLocation, __
 	// mid-1989, mid-60s, mid-1860s, mid-90s, late-40s, early-10s
 	vector <wstring> dateStart = { L"mid",L"over",L"early",L"late" };
 	for (wstring d : dateStart)
-		if (!wcsnicmp(buffer + cp, d.c_str(), d.length()) && WordClass::isDash(buffer[cp+d.length()]) && iswdigit(buffer[cp+d.length()+1]) && iswdigit(buffer[cp + d.length() + 2]))
+		if (!wcsnicmp(buffer + cp, d.c_str(), d.length()) && cWord::isDash(buffer[cp+d.length()]) && iswdigit(buffer[cp+d.length()+1]) && iswdigit(buffer[cp + d.length() + 2]))
 		{
 			__int64 ocp = cp;
 			ocp += d.length() + 3;
@@ -2238,7 +2238,7 @@ The confusion arises because character 151 is a dash in Windows code page 1252 (
 Many people think cp1252 is the same thing as ISO-8859-1, but in reality it's not: the characters in the C1 range (128 to 159) are different.
 The first application is reading your “ASCII” file* as ISO-8859-1, but actually it's probably cp1252 and you'll need a way to clue the app in about what encoding it has to expect.
 */
-bool WordClass::isDash(wchar_t ch)
+bool cWord::isDash(wchar_t ch)
 {
 	// \u expects 4 hexadecimal digits
 	// 0097 encodes to 
@@ -2249,7 +2249,7 @@ bool WordClass::isDash(wchar_t ch)
 	return false;
 }
 
-bool WordClass::isSingleQuote(wchar_t ch)
+bool cWord::isSingleQuote(wchar_t ch)
 {
 	// L'\x16F51', L'\x16F52', multicharacter does not for now work with VC++?
 	wchar_t singleQuotes[] = { L'\'',L'`',L'´', L'ʹ', L'ʻ', L'ʼ', L'ʽ', L'ʾ', L'ˈ', L'ˊ', L'ˋ', L'˴', L'ʹ', L'΄', L'՚', L'՝', L'י', L'׳', L'ߴ', L'ߵ', L'ᑊ', L'ᛌ', L'᾽', L'᾿', L'`', L'´', L'῾', L'‘', L'’', L'‛', L'′',L'‵', L'ꞌ',L'\xFF07', L'\xFF40' };
@@ -2261,7 +2261,7 @@ bool WordClass::isSingleQuote(wchar_t ch)
 
 // from http://unicode.org/cldr/utility/confusables.jsp?a=%22&r=None
 // \x22 \xff02 \x3003 \x2ee \x5f2 \x2033 \x5f4 \x2036 \x2f6 \x2ba \x201c \x201d \x2dd \x201f
-bool WordClass::isDoubleQuote(wchar_t ch)
+bool cWord::isDoubleQuote(wchar_t ch)
 {
 	wchar_t doubleQuotes[] = { L'"', L'＂',L'〃',L'ˮ',L'ײ',L'″',L'״',L'‶',L'˶',L'ʺ',L'“',L'”',L'˝',L'‟',L'᳓'};
 	for (wchar_t dq : doubleQuotes)
@@ -2270,7 +2270,7 @@ bool WordClass::isDoubleQuote(wchar_t ch)
 	return false;
 }
 
-int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocation,
+int cWord::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocation,
                         wstring &sWord,wstring &comment,int &nounOwner,bool scanForSection,bool webScrapeParse,sTrace &t, MYSQL *mysql,int sourceId)
 { LFS
   __int64 cp=bufferScanLocation;
@@ -2584,7 +2584,7 @@ int WordClass::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLoc
   return 0;
 }
 
-WordClass::~WordClass()
+cWord::~cWord()
 { LFS
   WMM.clear();
   for (unsigned int I=0; I<Forms.size(); I++)
@@ -2594,12 +2594,12 @@ WordClass::~WordClass()
   for (sw=quotedWords.begin(),swend=quotedWords.end(); sw!=swend; sw++) free((void *)(*sw));
   for (sw=periodWords.begin(),swend=periodWords.end(); sw!=swend; sw++) free((void *)(*sw));
   //for (sw=dashWords.begin(),swend=dashWords.end(); sw!=swend; sw++) free((void *)(*sw));
-  tfree(tFI::allocated*sizeof(*tFI::formsArray),tFI::formsArray);
-  tFI::allocated=0;
-  tFI::fACount=0;
+  tfree(cSourceWordInfo::allocated*sizeof(*cSourceWordInfo::formsArray),cSourceWordInfo::formsArray);
+  cSourceWordInfo::allocated=0;
+  cSourceWordInfo::fACount=0;
 }
 
-bool WordClass::findWordInDB(MYSQL *mysql, wstring &sWord, int &wordId, tIWMM &iWord)
+bool cWord::findWordInDB(MYSQL *mysql, wstring &sWord, int &wordId, tIWMM &iWord)
 {
 	if (mysql == NULL)
 		return false;
@@ -2642,8 +2642,8 @@ bool WordClass::findWordInDB(MYSQL *mysql, wstring &sWord, int &wordId, tIWMM &i
 	mysql_free_result(result);
 	if (!myquery(mysql, L"UNLOCK TABLES"))
 		return false;
-	//tFI::tFI(unsigned int *forms, unsigned int iCount, int iInflectionFlags, int iFlags, int iTimeFlags, int mainEntryWordId, int iDerivationRules, int iSourceId, int formNum, wstring &word)
-	int selfFormNum = FormsClass::findForm(sWord);
+	//cSourceWordInfo::cSourceWordInfo(unsigned int *forms, unsigned int iCount, int iInflectionFlags, int iFlags, int iTimeFlags, int mainEntryWordId, int iDerivationRules, int iSourceId, int formNum, wstring &word)
+	int selfFormNum = cForms::findForm(sWord);
 	if (Words.query(sWord) != Words.end())
 	{
 		if (wordId==-1)
@@ -2651,7 +2651,7 @@ bool WordClass::findWordInDB(MYSQL *mysql, wstring &sWord, int &wordId, tIWMM &i
 	}
 	else
 	{
-		iWord = Words.WMM.insert(WordClass::tWFIMap(sWord, tFI(wordForms, count / 2, iInflectionFlags, iFlags, iTimeFlags, iMainEntryWordId, iDerivationRules, iSourceId, selfFormNum, sWord))).first;
+		iWord = Words.WMM.insert(cWord::tWFIMap(sWord, cSourceWordInfo(wordForms, count / 2, iInflectionFlags, iFlags, iTimeFlags, iMainEntryWordId, iDerivationRules, iSourceId, selfFormNum, sWord))).first;
 		Words.mapWordIdToWordStructure(wordId, iWord);
 		if (Words.wordStructureGivenWordIdExists(iMainEntryWordId) == wNULL)
 		{
@@ -2665,7 +2665,7 @@ bool WordClass::findWordInDB(MYSQL *mysql, wstring &sWord, int &wordId, tIWMM &i
 	return iWord != Words.end();
 }
 
-tIWMM WordClass::fullQuery(MYSQL *mysql, wstring word, int sourceId)
+tIWMM cWord::fullQuery(MYSQL *mysql, wstring word, int sourceId)
 {
 	tIWMM iWord = Words.end();
 	if ((iWord = Words.query(word)) != Words.end() || mysql==NULL)

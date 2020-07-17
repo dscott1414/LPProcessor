@@ -171,13 +171,13 @@ bool cSource::resolveMetaGroupPlural(int latestOwnerWhere,bool inQuote,vector <c
 bool cSource::resolveMetaGroupSpecifiedOther(int where,int latestOwnerWhere,bool inQuote,vector <cOM> &objectMatches)
 { LFS
 	// make sure it is an 'other' metagroup object and other is not the principal word.
-	if (latestOwnerWhere!=-2 || m[where].word->first==L"other" || (m[where].word->second.flags&tFI::genericGenderIgnoreMatch))
+	if (latestOwnerWhere!=-2 || m[where].word->first==L"other" || (m[where].word->second.flags&cSourceWordInfo::genericGenderIgnoreMatch))
 		 return false;
 	int otherWhere=-1;
 	for (int I=m[where].beginObjectPosition; I<m[where].endObjectPosition; I++)
 		if (m[I].word->first==L"other")
 			otherWhere=I;
-  if (otherWhere<0 || (m[otherWhere].flags&WordMatch::flagNounOwner)) return false;
+  if (otherWhere<0 || (m[otherWhere].flags&cWordMatch::flagNounOwner)) return false;
 	// get principal word and search through local objects to see whether there is a plural of that
 	tIWMM word=m[where].word->second.mainEntry;
 	int whereMatches=-1;
@@ -266,14 +266,14 @@ bool cSource::resolveMetaGroupGenericOther(int where,int latestOwnerWhere,bool i
 		return true;
 	}
 	if ((m[where].objectRole&PRIMARY_SPEAKER_ROLE) || 
-		  (!(m[where].flags&WordMatch::flagAdjectivalObject) && !inQuote && physicallyPresent && csg->povSpeakers.size() &&
+		  (!(m[where].flags&cWordMatch::flagAdjectivalObject) && !inQuote && physicallyPresent && csg->povSpeakers.size() &&
 			 (csg->speakers.size()==2 || (csg->speakers.size()==3 && csg->speakers.find(m[where].getObject())!=csg->speakers.end()))))
 	{
 		// go back to the preceding sentence.  If this sentence passes across a sectionWord, and the preceding sentence has beginning quote, with a definite speaker, this is the last speaker. 
 		// if immediately preceding last speaker was not povSpeaker, then skip this routine.
 		// “[edgerton:dr] That remains to be seen , ” said Sir James gravely .
 		// The other[dr] hesitated .
-		if (lastOpeningPrimaryQuote>=0 && (m[lastOpeningPrimaryQuote].flags&WordMatch::flagDefiniteResolveSpeakers) && 
+		if (lastOpeningPrimaryQuote>=0 && (m[lastOpeningPrimaryQuote].flags&cWordMatch::flagDefiniteResolveSpeakers) && 
 			  m[lastOpeningPrimaryQuote].speakerPosition>=0 && csg->povSpeakers.size()==1)
 		{
 			if (numEOS==1 && numSectionWord==1 && !in(*csg->povSpeakers.begin(),m[lastOpeningPrimaryQuote].speakerPosition))
@@ -776,7 +776,7 @@ bool cSource::resolveMetaGroupOne(int where,bool inPrimaryQuote,vector <cOM> &ob
 			  !nymNoMatch(where,objects.begin()+o,objects.begin()+lsi->om.object,true,false,logMatch,fromMatch,toMatch,toMapMatch,L"NoMatch MG(1) PL") &&
 				(latestOwnerWhere<0 || (m[latestOwnerWhere].getObject()!=lsi->om.object && in(lsi->om.object,m[latestOwnerWhere].objectMatches)==m[latestOwnerWhere].objectMatches.end())) &&
 				// exclude audience if in an ES1 story
-				(!inPrimaryQuote || (m[lastOpeningPrimaryQuote].flags&(WordMatch::flagFirstEmbeddedStory|WordMatch::flagSecondEmbeddedStory))!=WordMatch::flagFirstEmbeddedStory || 
+				(!inPrimaryQuote || (m[lastOpeningPrimaryQuote].flags&(cWordMatch::flagFirstEmbeddedStory|cWordMatch::flagSecondEmbeddedStory))!=cWordMatch::flagFirstEmbeddedStory || 
 					find(beforePreviousSpeakers.begin(),beforePreviousSpeakers.end(),lsi->om.object)==beforePreviousSpeakers.end()) &&
 				// one does not refer to the speaker if in quotes
 				(!inPrimaryQuote || find(previousSpeakers.begin(),previousSpeakers.end(),lsi->om.object)==previousSpeakers.end())
@@ -1211,7 +1211,7 @@ bool cSource::resolveMetaGroupByAssociation(int where,bool inPrimaryQuote,vector
 					((isSubset=isSubsetOfSpeakers(where,latestOwnerWhere,speakerGroups[sg].speakers,inPrimaryQuote,atLeastOneInSpeakerGroup)) || atLeastOneInSpeakerGroup)) 
 					break;
 	// took best guess based on gender (Thomas Beresford) at 6159: instead of guessing friends based on last association (clerk)
-	if ((m[where].flags&WordMatch::flagResolveMetaGroupByGender) && m[where].objectMatches.size()==1 && sg>=0)
+	if ((m[where].flags&cWordMatch::flagResolveMetaGroupByGender) && m[where].objectMatches.size()==1 && sg>=0)
 	{
 		int preferGenderMatchSG,preferredGenderObject=m[where].objectMatches[0].object;
 		for (preferGenderMatchSG=sg-1; preferGenderMatchSG>=0; preferGenderMatchSG--)
@@ -1233,7 +1233,7 @@ bool cSource::resolveMetaGroupByAssociation(int where,bool inPrimaryQuote,vector
 		saveCSG=csg; // but save just in case there is no other reference
 		csg=-1;                                          // refer to them by friend, and say they are doing something.
 	}
-	if ((m[where].flags&WordMatch::flagResolveMetaGroupByGender) && m[where].objectMatches.size()==1 && csg>=0 &&
+	if ((m[where].flags&cWordMatch::flagResolveMetaGroupByGender) && m[where].objectMatches.size()==1 && csg>=0 &&
 	  speakerGroups[csg].speakers.find(m[where].objectMatches[0].object)!=speakerGroups[csg].speakers.end())
 	  sg=csg;
 	if (inPrimaryQuote && (m[where].objectRole&HAIL_ROLE) && csg>=0) // if we are inQuote, the speaker must be in the current speaker group
@@ -1385,7 +1385,7 @@ bool cSource::resolveMetaGroupByAssociation(int where,bool inPrimaryQuote,vector
         objectString(m[latestOwnerWhere].getObject(),tmpstr,true).c_str(),toText(speakerGroups[sg],tmpstr2),objectString(objectMatches,tmpstr3,true).c_str());
   }
 	if (eraseOwnerWhereMatches) m[latestOwnerWhere].objectMatches.clear();
-	if (objectMatches.size() && (m[where].flags&WordMatch::flagResolveMetaGroupByGender)) m[where].objectMatches.clear();
+	if (objectMatches.size() && (m[where].flags&cWordMatch::flagResolveMetaGroupByGender)) m[where].objectMatches.clear();
   if (objectMatches.size()==1)
     replaceObjectInSection(where,objectMatches[0].object,m[where].getObject(),L"resolveMetaGroupObject");
   return true;
@@ -1401,7 +1401,7 @@ bool cSource::resolveMetaGroupObject(int where,bool inPrimaryQuote,bool inSecond
 	int wo,end;
   vector <cObject>::iterator object=objects.begin()+m[where].getObject();
 	int beginEntirePosition=m[where].beginObjectPosition; // if this is an adjectival object 
-	if (m[where].flags&WordMatch::flagAdjectivalObject) 
+	if (m[where].flags&cWordMatch::flagAdjectivalObject) 
 		for (; beginEntirePosition>=0 && m[beginEntirePosition].principalWherePosition<0; beginEntirePosition--);
 	bool partiallySpecified=object->getOwnerWhere()==-1 && isMetaGroupWord(where) && m[end=m[where].endObjectPosition].word->first==L"of" && 
 			 (wo=m[end+1].getObject())!=-1 && (wo<0 || objects[wo].isAgent(true));
@@ -1478,7 +1478,7 @@ bool cSource::resolveMetaGroupObject(int where,bool inPrimaryQuote,bool inSecond
 				 (m[where].getRelVerb()<0 || (m[m[where].getRelVerb()].verbSense&(VT_PAST|VT_EXTENDED))!=(VT_PAST|VT_EXTENDED)))
 		{
 			chooseFromLocalFocus=resolveGenderedObject(where,definitelySpeaker|resolveForSpeaker,inPrimaryQuote,inSecondaryQuote,lastBeginS1,lastRelativePhrase,lastQ2,objectMatches,object,wordOrderSensitiveModifier,subjectCataRestriction,mixedPlurality,limitTwo,isPhysicallyPresent,physicallyEvaluated);
-			m[where].flags|=WordMatch::flagResolveMetaGroupByGender;
+			m[where].flags|=cWordMatch::flagResolveMetaGroupByGender;
 		}
 		// if this is a definite speaker, yet the answer is not within the current speaker group, make an equivalence, if a unique mapping can be established through gender.
 		if (definitelySpeaker && !chooseFromLocalFocus && objectMatches.size()==1 && currentSpeakerGroup<speakerGroups.size() && 
@@ -1575,7 +1575,7 @@ bool cSource::resolveMetaGroupObject(int where,bool inPrimaryQuote,bool inSecond
 				replaceObjectInSection(where,objectMatches[0].object,m[where].getObject(),L"resolveMetaGroupWordOrderedFutureObject");
 		}
 		if (objectMatches.empty() && (m[where].objectRole&(SUBJECT_ROLE|PREP_OBJECT_ROLE))==SUBJECT_ROLE && 
-			  !(m[where].flags&WordMatch::flagAdjectivalObject)) // see isFocus
+			  !(m[where].flags&cWordMatch::flagAdjectivalObject)) // see isFocus
 			m[where].objectRole|=UNRESOLVABLE_FROM_IMPLICIT_OBJECT_ROLE;
 	}
 	return objectMatches.size()>0;

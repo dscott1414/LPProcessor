@@ -30,12 +30,12 @@
 
 #define maxlinelength 1024 /* Maximum length of line read from file */
 enum states { s_notapply,s_stop,s_continue };
-vector <Stemmer::tSuffixRule> Stemmer::stemRules;
-vector <Stemmer::tPrefixRule> Stemmer::prefixRules;
-unordered_set<int> Stemmer::unacceptableCombinationForms;
+vector <cStemmer::cSuffixRule> cStemmer::stemRules;
+vector <cStemmer::tPrefixRule> cStemmer::prefixRules;
+unordered_set<int> cStemmer::unacceptableCombinationForms;
 
 /* * * APPLYRULE()  * * * * * * * */
-int Stemmer::applyStemRule(wstring word,tSuffixRule rule,vector <tSuffixRule> &rulesUsed,intArray trail)
+int cStemmer::applyStemRule(wstring word,cSuffixRule rule,vector <cSuffixRule> &rulesUsed,cIntArray trail)
 { LFS
   /* Apply the rule r to word,leaving results in word.Return stop,continue */
   /* or notapply as appropriate */
@@ -83,7 +83,7 @@ int Stemmer::applyStemRule(wstring word,tSuffixRule rule,vector <tSuffixRule> &r
   return (rule.cont) ? s_continue:s_stop;/* If continue flag is set,return cont */
 }
 
-int Stemmer::getInflectionNum(wchar_t const *inflection)
+int cStemmer::getInflectionNum(wchar_t const *inflection)
 { LFS
   if (!inflection[0]) return 0;
   int temp=0;
@@ -99,7 +99,7 @@ int Stemmer::getInflectionNum(wchar_t const *inflection)
   return temp;
 }
 
-int Stemmer::readStemRules(void)
+int cStemmer::readStemRules(void)
 { LFS
   /* Format is: keystr,repstr,flags where keystr and repstr are strings,and */
   /* flags are:"protect","intact","continue" (without the inverted commas in the actual file).  */
@@ -111,7 +111,7 @@ int Stemmer::readStemRules(void)
 		return NO_SUFFIX_RULES_FILE;
 	}
   wchar_t s[maxlinelength];
-  tSuffixRule temp;
+  cSuffixRule temp;
   int line;
   /* Read a line at a time until eof */
   for (line=1; fgetws(s,maxlinelength,fp); line++)
@@ -170,7 +170,7 @@ int Stemmer::readStemRules(void)
   return 0;
 }
 
-int Stemmer::readPrefixRules(void)
+int cStemmer::readPrefixRules(void)
 { LFS
   /* Format is: keystr,repstr where keystr and repstr are strings */
 
@@ -202,14 +202,14 @@ int Stemmer::readPrefixRules(void)
   return 0;
 }
 
-bool sortRuleGreater(Stemmer::tSuffixRule a, Stemmer::tSuffixRule b)
+bool sortRuleGreater(cStemmer::cSuffixRule a, cStemmer::cSuffixRule b)
 { LFS
   if (a.trail.count==b.trail.count)
     return a.text.length() > b.text.length();
   return a.trail.count < b.trail.count;
 }
 
-int Stemmer::stem(MYSQL mysql, wstring word, vector <tSuffixRule> &rulesUsed,intArray &trail,int addRule)
+int cStemmer::stem(MYSQL mysql, wstring word, vector <cSuffixRule> &rulesUsed,cIntArray &trail,int addRule)
 { LFS
   int state=s_continue;
   int ret;
@@ -225,7 +225,7 @@ int Stemmer::stem(MYSQL mysql, wstring word, vector <tSuffixRule> &rulesUsed,int
   return rulesUsed.size();
 }
 
-bool Stemmer::isWordDBUnknown(MYSQL mysql,wstring word)
+bool cStemmer::isWordDBUnknown(MYSQL mysql,wstring word)
 {
 	tIWMM iWord = Words.query(word);
 	if (iWord != Words.end() && iWord->second.query(UNDEFINED_FORM_NUM) >= 0)
@@ -249,11 +249,11 @@ bool Stemmer::isWordDBUnknown(MYSQL mysql,wstring word)
 	return count > 0;
 }
 
-int Stemmer::applyPrefixRule(MYSQL mysql, tPrefixRule r,vector <tSuffixRule> &rulesUsed,int originalSize,wstring word)
+int cStemmer::applyPrefixRule(MYSQL mysql, tPrefixRule r,vector <cSuffixRule> &rulesUsed,int originalSize,wstring word)
 { LFS
   // word must have sufficient length over the prefix as well as matching it over the prefix length.
   if (word.length()<=r.keystr.length()+2 || r.keystr!=word.substr(0,r.keystr.length())) return 0;
-  tSuffixRule tmp;
+  cSuffixRule tmp;
   tmp.text=word.substr(r.keystr.length(),word.length()-r.keystr.length());
 	// does this word exist and is known?
 	if (isWordDBUnknown(mysql,tmp.text))
@@ -280,7 +280,7 @@ int Stemmer::applyPrefixRule(MYSQL mysql, tPrefixRule r,vector <tSuffixRule> &ru
 
 // prefixes are not nestable
 // apply all prefixes to all rulesUsed
-int Stemmer::stripPrefix(MYSQL mysql, wstring word, vector <tSuffixRule> &rulesUsed)
+int cStemmer::stripPrefix(MYSQL mysql, wstring word, vector <cSuffixRule> &rulesUsed)
 { LFS
   if (!prefixRules.size() && readPrefixRules()<0) return -1;
   int originalSize=rulesUsed.size();
@@ -289,7 +289,7 @@ int Stemmer::stripPrefix(MYSQL mysql, wstring word, vector <tSuffixRule> &rulesU
   return 0;
 }
 
-int Stemmer::findLastFormInflection(vector <tSuffixRule> rulesUsed, vector <tSuffixRule>::iterator &r, wstring &form, int &inflection)
+int cStemmer::findLastFormInflection(vector <cSuffixRule> rulesUsed, vector <cSuffixRule>::iterator &r, wstring &form, int &inflection)
 {
 	LFS
 		form = L"ORIGINAL";
@@ -314,14 +314,14 @@ int Stemmer::findLastFormInflection(vector <tSuffixRule> rulesUsed, vector <tSuf
 	return 0;
 }
 
-Stemmer::~Stemmer()
+cStemmer::~cStemmer()
 {
 	LFS
 	stemRules.clear();
 	prefixRules.clear();
 }
 
-bool Stemmer::wordIsNotUnknownAndOpen(tIWMM iWord,bool log)
+bool cStemmer::wordIsNotUnknownAndOpen(tIWMM iWord,bool log)
 {
 	if (unacceptableCombinationForms.empty())
 	{

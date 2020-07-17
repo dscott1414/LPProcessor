@@ -24,7 +24,7 @@
 #define NULLWORD 187
 bool checkFull(MYSQL *mysql,wchar_t *qt,size_t &len,bool flush,wchar_t *qualifier);
 
-void tFI::allocateMap(int relationType)
+void cSourceWordInfo::allocateMap(int relationType)
 { LFS
   if (relationMaps[relationType]==NULL)
     relationMaps[relationType]=new cRMap;
@@ -42,7 +42,7 @@ int cSource::readWordIdsNeedingWordRelations(set <int> &wordIdsAndMainEntryIdsIn
 		specials[I]->second.clearRelationMaps();
 	}
   tIWMM tWord;
-  vector <WordMatch>::iterator im=m.begin(),imEnd=m.end();
+  vector <cWordMatch>::iterator im=m.begin(),imEnd=m.end();
   for (int I=0; im!=imEnd; im++,I++)
   {
 		if (wordIdsAndMainEntryIdsInSourceNeedingWordRelations.insert(im->word->second.index).second)
@@ -57,7 +57,7 @@ int cSource::readWordIdsNeedingWordRelations(set <int> &wordIdsAndMainEntryIdsIn
   return 0;
 }
 
-int WordClass::initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, bool inSourceFlagSet,bool log)
+int cWord::initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, bool inSourceFlagSet,bool log)
 {
 	int startTime = clock();
 	size_t wrRead = 0, wrAdded = 0, totalWRIDs = wordIds.size(),numWordsProcessed=0;
@@ -109,7 +109,7 @@ int WordClass::initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, boo
 			if ((sqlrow = mysql_fetch_row(result)) == NULL)
 				break;
 			// justMySqlTime += clock() - tempSQLTime; performance testing
-			// testWordRelations.push_back(testWordRelation(atoi(sqlrow[0]), atoi(sqlrow[1]), atoi(sqlrow[2]), atoi(sqlrow[3]), atoi(sqlrow[4]), atoi(sqlrow[5]), atoi(sqlrow[6]))); performance testing
+			// testWordRelations.push_back(cTestWordRelation(atoi(sqlrow[0]), atoi(sqlrow[1]), atoi(sqlrow[2]), atoi(sqlrow[3]), atoi(sqlrow[4]), atoi(sqlrow[5]), atoi(sqlrow[6]))); performance testing
 			bool isNew;
 			int fromId = atoi(sqlrow[3]), toId = atoi(sqlrow[4]);
 			tIWMM iFromWord= wordStructureGivenWordIdExists(fromId), iToWord= wordStructureGivenWordIdExists(toId);
@@ -138,8 +138,8 @@ int WordClass::initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, boo
 		}
 		mysql_free_result(result);
 	}
-	//for (vector <WordMatch>::iterator im = m.begin(), imEnd = m.end(); im != imEnd; im++)
-	//	im->getMainEntry()->second.flags &= ~tFI::inSourceFlag;
+	//for (vector <cWordMatch>::iterator im = m.begin(), imEnd = m.end(); im != imEnd; im++)
+	//	im->getMainEntry()->second.flags &= ~cSourceWordInfo::inSourceFlag;
 	if ((wrRead || wrAdded) && logDatabaseDetails)
 		lplog(L"Reading %d (%d added) word relations took %d seconds.", wrRead, wrAdded, (int)((clock() - startTime) / CLOCKS_PER_SEC));
 	if (totalWRIDs > 10)

@@ -116,7 +116,7 @@ bool checkexist(char *word)
 }
 
 // checks to see that all words in WordNet are defined in
-int WordClass::wordCheck(void)
+int cWord::wordCheck(void)
 { LFS
 	initWordNet();
   //SynsetPtr sp=findtheinfo_ds("entity", NOUN, HYPOPTR, ALLSENSES);
@@ -144,9 +144,9 @@ int WordClass::wordCheck(void)
     {
       if (w->second.isUnknown())
         unknown++;
-      else if (!w->second.isRareWord() && !(w->second.flags&tFI::queryOnLowerCase) && !checkexist((char *)w->first.c_str()))
+      else if (!w->second.isRareWord() && !(w->second.flags&cSourceWordInfo::queryOnLowerCase) && !checkexist((char *)w->first.c_str()))
       {
-        tFI *fi=&w->second;
+        cSourceWordInfo *fi=&w->second;
         if (fi->query(COMBINATION_FORM_NUM)<0)
         {
           if (fi->mainEntry!=wNULL)
@@ -154,7 +154,7 @@ int WordClass::wordCheck(void)
           else
           {
             notInWordNet++;
-            //wprintf(L"\nWord %s was not found in WordNet - (%d) ",w->first.c_str(),fi->usagePatterns[tFI::TRANSFER_COUNT]);
+            //wprintf(L"\nWord %s was not found in WordNet - (%d) ",w->first.c_str(),fi->usagePatterns[cSourceWordInfo::TRANSFER_COUNT]);
             //for (unsigned int f=0; f<fi->count; f++)
             //  wprintf(L"%s ",fi->Form(f)->name.c_str());
           }
@@ -198,7 +198,7 @@ void scrapeOldThesaurus(wstring word,set <wstring> &synonyms, int synonymType,bo
 		webAddress[space]='+';
 	while ((space=epath.find(' '))!=wstring::npos) 
 		epath[space]='+';
-	Internet::getWebPath(-1,webAddress,buffer,epath,L"webSearchCache",filePathOut,headers,synonymType+1,true,true, forceWebReread);
+	cInternet::getWebPath(-1,webAddress,buffer,epath,L"webSearchCache",filePathOut,headers,synonymType+1,true,true, forceWebReread);
 	size_t beginPos=buffer.find(L"Main Entry:",0);
 	if (beginPos==wstring::npos) 
 		return;
@@ -281,7 +281,7 @@ void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition> &vd)
 		webAddress[space] = '+';
 	while ((space = epath.find(' ')) != wstring::npos)
 		epath[space] = '+';
-	Internet::getWebPath(-1, webAddress, buffer, epath, L"webSearchCache", filePathOut, headers, synonymType, false, true);
+	cInternet::getWebPath(-1, webAddress, buffer, epath, L"webSearchCache", filePathOut, headers, synonymType, false, true);
 	if (buffer.find(L"<li id=\"words-gallery-no-results\">no thesaurus results</li>") != wstring::npos ||
 		buffer.find(L"there's not a match") != wstring::npos)
 		return;
@@ -1201,11 +1201,11 @@ void deriveMainEntry(int where,int fromWhere,wstring &in,int &inflectionFlags,bo
 		{
 			wstring sFlags;
 			tIWMM meError=Words.gquery(in);
-			if (!(meError->second.flags&tFI::mainEntryErrorNoted))
+			if (!(meError->second.flags&cSourceWordInfo::mainEntryErrorNoted))
 				lplog(LOG_DICTIONARY,L"%06d:%s irregular verb [mainEntry %s] (%s,%d).",where,in.c_str(),
 					(meError->second.mainEntry!=wNULL) ? meError->second.mainEntry->first.c_str() : L"",
 						inflectionFlagsToStr(inflectionFlags&VERB_INFLECTIONS_MASK,sFlags),fromWhere);
-			meError->second.flags|=tFI::mainEntryErrorNoted;
+			meError->second.flags|=cSourceWordInfo::mainEntryErrorNoted;
 			lastVerbNotFound=in;
 		}
 	}

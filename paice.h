@@ -14,11 +14,11 @@ using namespace std;
 //#include "intarray.h"
 
 #pragma once
-class Stemmer
+class cStemmer
 {
 
 public:
-	class tSuffixRule
+	class cSuffixRule
 	{
 	public:
 		wstring text; /* To return stemmer output */
@@ -30,14 +30,14 @@ public:
 		bool intact; /* Boolean-must word be intact? */
 		bool cont; /* Boolean-continue with another rule? */
 		bool protect; /* Boolean-protect this ending? */
-		intArray trail;
-		tSuffixRule()
+		cIntArray trail;
+		cSuffixRule()
 		{
 		}
-		~tSuffixRule()
+		~cSuffixRule()
 		{
 		}
-		tSuffixRule(const tSuffixRule &rhs)
+		cSuffixRule(const cSuffixRule &rhs)
 		{
 			text = rhs.text; /* To return stemmer output */
 			keystr = rhs.keystr; /* Key wstring,ie,suffix to remove */
@@ -58,20 +58,20 @@ public:
 		int rulenum; /* Line number of rule in rule list file */
 	} tPrefixRule;
 
-	static int findLastFormInflection(vector <tSuffixRule> rulesUsed, vector <tSuffixRule>::iterator &r, wstring &form, int &inflection);
-	static int stem(MYSQL mysql, wstring s, vector <tSuffixRule> &rulesUsed, intArray &trail, int addRule);
-	~Stemmer();
+	static int findLastFormInflection(vector <cSuffixRule> rulesUsed, vector <cSuffixRule>::iterator &r, wstring &form, int &inflection);
+	static int stem(MYSQL mysql, wstring s, vector <cSuffixRule> &rulesUsed, cIntArray &trail, int addRule);
+	~cStemmer();
 	static bool isWordDBUnknown(MYSQL mysql, wstring word);
 	static bool wordIsNotUnknownAndOpen(tIWMM iWord, bool log);
 
 private:
 	static unordered_set<int> unacceptableCombinationForms;
-	static vector <tSuffixRule> stemRules;
+	static vector <cSuffixRule> stemRules;
 	static vector <tPrefixRule> prefixRules;
-	static int applyStemRule(wstring sWord, tSuffixRule rule, vector <tSuffixRule> &rulesUsed, intArray trail);
-	static int applyPrefixRule(MYSQL mysql, tPrefixRule r, vector <tSuffixRule> &rulesUsed, int originalSize, wstring sWord);
+	static int applyStemRule(wstring sWord, cSuffixRule rule, vector <cSuffixRule> &rulesUsed, cIntArray trail);
+	static int applyPrefixRule(MYSQL mysql, tPrefixRule r, vector <cSuffixRule> &rulesUsed, int originalSize, wstring sWord);
 	static int readStemRules(void);
 	static int readPrefixRules(void);
 	static int getInflectionNum(wchar_t const *inflection);
-	static int stripPrefix(MYSQL mysql, wstring s, vector <tSuffixRule> &rulesUsed);
+	static int stripPrefix(MYSQL mysql, wstring s, vector <cSuffixRule> &rulesUsed);
 };

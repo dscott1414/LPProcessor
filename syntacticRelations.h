@@ -14,18 +14,18 @@ public:
 	bool incorporateMapping(relationWOTypes relationType, wstring word,vector <wstring> &subGroup);
 	cWordGroup(vector <wstring> &subGroup,set <wstring> &toWords, wstring word);
   cWordGroup(wstring fromWord1, wstring fromWord2, wstring toWord1, wstring toWord2);
-	cWordGroup(wstring self,tFI::cRMap::tcRMap *toWords);
+	cWordGroup(wstring self,cSourceWordInfo::cRMap::tcRMap *toWords);
 	cWordGroup(void);
 	wstring summary(void);
 };
 
-class relc 
+class cRelationCombo 
 {
 public:
 	relationComboTypes rcType;
-	tFI::cRMap::tIcRMap rel1;
-	tFI::cRMap::tIcRMap rel2;
-	relc(relationComboTypes inrcType,tFI::cRMap::tIcRMap inrel1,tFI::cRMap::tIcRMap inrel2)
+	cSourceWordInfo::cRMap::tIcRMap rel1;
+	cSourceWordInfo::cRMap::tIcRMap rel2;
+	cRelationCombo(relationComboTypes inrcType,cSourceWordInfo::cRMap::tIcRMap inrel1,cSourceWordInfo::cRMap::tIcRMap inrel2)
 	{
 		rcType=inrcType;
 		rel1=inrel1;
@@ -33,5 +33,5 @@ public:
 	}
 };
 
-extern vector <relc> relationCombos;
+extern vector <cRelationCombo> relationCombos;
 relationWOTypes getComplementaryRelationship(int rType);

@@ -2,7 +2,7 @@
 int lplog(const wchar_t *format,...);
 extern short logCache;
 
-class patternElementMatchArray
+class cPatternElementMatchArray
 {
 public:
   unsigned int count;
@@ -17,9 +17,9 @@ public:
     unsigned char __patternElementIndex;
     unsigned char getElement(void) { return __patternElement; }
     unsigned char getElementIndex(void) { return __patternElementIndex; }
-    void setElementAndIndex(unsigned char patternElement,unsigned char patternElementIndex)
+    void setElementAndIndex(unsigned char cPatternElement,unsigned char patternElementIndex)
     {
-      __patternElement=patternElement;
+      __patternElement=cPatternElement;
       __patternElementIndex=patternElementIndex;
     }
     void setElementMatchedSubIndex(int EMSI)
@@ -97,20 +97,20 @@ public:
 			return temp.c_str();
 		}
     __int64 getRole(__int64 &tagRole); 
-    bool isChildPattern(void) { return (PEMAElementMatchedSubIndex&matchElement::patternFlag)== matchElement::patternFlag; }
-		unsigned int getChildPattern(void) { return (PEMAElementMatchedSubIndex&~matchElement::patternFlag)>>CHILDPATBITS; }
+    bool isChildPattern(void) { return (PEMAElementMatchedSubIndex&cMatchElement::patternFlag)== cMatchElement::patternFlag; }
+		unsigned int getChildPattern(void) { return (PEMAElementMatchedSubIndex&~cMatchElement::patternFlag)>>CHILDPATBITS; }
     unsigned int getChildLen(void) { return PEMAElementMatchedSubIndex&((1<<CHILDPATBITS)-1); }
     unsigned int getChildForm(void) { return PEMAElementMatchedSubIndex; }
     void setSubIndex(unsigned int subIndexPattern,unsigned int endPosition) { PEMAElementMatchedSubIndex=(subIndexPattern <<CHILDPATBITS)+endPosition; }
-    wchar_t *toText(unsigned int position,wchar_t *temp,vector <WordMatch> &m); 
+    wchar_t *toText(unsigned int position,wchar_t *temp,vector <cWordMatch> &m); 
     bool processTempCost(int maxOCost)
     {
       bool savePosition;
-	    if ((savePosition=!testAndSet(patternElementMatchArray::COST_DONE)) || tempCost>maxOCost)
+	    if ((savePosition=!testAndSet(cPatternElementMatchArray::COST_DONE)) || tempCost>maxOCost)
 		    tempCost=maxOCost;
       return savePosition;
     }
-    // char *toText(char *temp,vector <WordMatch> &m);  BPM
+    // char *toText(char *temp,vector <cWordMatch> &m);  BPM
   private:
     unsigned int PEMAElementMatchedSubIndex; // points to a pattern #/end OR a form #
     unsigned short pattern;
@@ -119,13 +119,13 @@ public:
 		// this incremental cost is only used in reduceParent!
 		short iCost; // lowest cost of PMA element
 	} tPatternElementMatch;
-  patternElementMatchArray();
-  ~patternElementMatchArray();
-  patternElementMatchArray(const patternElementMatchArray &rhs);
+  cPatternElementMatchArray();
+  ~cPatternElementMatchArray();
+  cPatternElementMatchArray(const cPatternElementMatchArray &rhs);
 
   static unsigned int PATMASK(int elementMatchedSubIndex)
   {
-    return (unsigned int)((elementMatchedSubIndex&~matchElement::patternFlag)>>CHILDPATBITS);
+    return (unsigned int)((elementMatchedSubIndex&~cMatchElement::patternFlag)>>CHILDPATBITS);
   }
   static unsigned int ENDMASK(int elementMatchedSubIndex)
   {
@@ -144,15 +144,15 @@ public:
   bool read(IOHANDLE file);
   bool write(void *buffer,int &where,unsigned int limit);
   bool read(char *buffer,int &where,unsigned int limit);
-  bool operator==(const patternElementMatchArray other) const;
-  patternElementMatchArray& operator=(const patternElementMatchArray &rhs);
-  bool operator!=(const patternElementMatchArray other) const;
+  bool operator==(const cPatternElementMatchArray other) const;
+  cPatternElementMatchArray& operator=(const cPatternElementMatchArray &rhs);
+  bool operator!=(const cPatternElementMatchArray other) const;
   typedef allocator<tPatternElementMatch>::reference reference;
   typedef allocator<tPatternElementMatch>::const_reference const_reference;
   reference operator[](unsigned int _P0);
   const_reference operator[](unsigned int _P0) const;
   int push_back_unique(int *firstPosition,unsigned int position,int oCost,int iCost,unsigned int p,int begin,int end,int elementMatchedSubIndex,
-    unsigned int patternElement,unsigned int patternElementIndex,int allocationHint,bool &newElement,bool POFlag);
+    unsigned int cPatternElement,unsigned int patternElementIndex,int allocationHint,bool &newElement,bool POFlag);
   void getNextValidPosition(int lastPEMAConsolidationIndex,int *wa,int *nextPosition,enum chainType cType);
   int getNextValidByPosition(int lastPEMAConsolidationIndex,int *wa,int &nextPosition);
   void generateWinnerConsolidationArray(int lastPEMAConsolidationIndex,int *&wa,int &numWinners);
@@ -166,6 +166,6 @@ public:
   tPatternElementMatch *begin(void) { return content; }
   tPatternElementMatch *end(void) { return content+count; }
 private:
-  int push_back(int oCost,int iCost,unsigned int p,int begin,int end,int subIndex,unsigned int patternElement,unsigned int patternElementIndex,int allocationHint);
+  int push_back(int oCost,int iCost,unsigned int p,int begin,int end,int subIndex,unsigned int cPatternElement,unsigned int patternElementIndex,int allocationHint);
   tPatternElementMatch *content;
 };

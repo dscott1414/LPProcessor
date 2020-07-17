@@ -18,7 +18,7 @@ cPattern::create(L"XX{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"Y",
 										0);
 */
 class cSource;
-class matchElement
+class cMatchElement
 {
 public:
     enum { NEW_FLAG=1 };
@@ -37,8 +37,8 @@ public:
     int previousMatch;
     int PMAIndex;
 
-    unsigned int patternElement; // could be a short but int is better for alignment
-    matchElement(int inPMAIndex,unsigned int inBeginPosition,unsigned int inEndPosition,unsigned int inElementMatchedIndex,short inCost,bool isPattern,
+    unsigned int cPatternElement; // could be a short but int is better for alignment
+    cMatchElement(int inPMAIndex,unsigned int inBeginPosition,unsigned int inEndPosition,unsigned int inElementMatchedIndex,short inCost,bool isPattern,
         int inPreviousMatch,unsigned int inPatternElement,unsigned int inPatternElementIndex,bool inNew)
     {
         // INSERTION of beginPosition - why is it necessary?
@@ -53,7 +53,7 @@ public:
         elementMatchedIndex=inElementMatchedIndex | ((isPattern) ? patternFlag : 0);
         cost=inCost;
         previousMatch=inPreviousMatch;
-        patternElement=inPatternElement;
+        cPatternElement=inPatternElement;
         patternElementIndex=inPatternElementIndex;
         flags=((inNew) ? NEW_FLAG : 0);
         PMAIndex=inPMAIndex;
@@ -78,9 +78,9 @@ public:
 
 class cPattern;
 extern vector <cPattern *> patterns;
-extern bitObject<32, 5, unsigned int, 32> patternsWithNoParents,patternsWithNoChildren;
+extern cBitObject<32, 5, unsigned int, 32> patternsWithNoParents,patternsWithNoChildren;
 
-class patternElement {
+class cPatternElement {
 public:
     int inflectionFlags; // see enum InflectionTypes
     int minimum;
@@ -90,14 +90,14 @@ public:
     int elementPosition;
     vector <wstring> formStr;
     vector <wstring> specificWords;
-    intArray formIndexes;
-    intArray formCosts;
+    cIntArray formIndexes;
+    cIntArray formCosts;
 
     vector < set <unsigned int> > formTags;
     vector <bool> formStopDescendingSearch;
     vector <wstring> patternStr;
-    intArray patternIndexes;
-    intArray patternCosts;
+    cIntArray patternIndexes;
+    cIntArray patternCosts;
     vector < set <unsigned int> > patternTags;
     vector <bool> patternStopDescendingSearch;
 		vector <int> usageFormFinalMatch;
@@ -106,7 +106,7 @@ public:
 		vector <int> usagePatternEverMatched;
 		set <int> endPositionsSet;
     bool consolidateEndPositions; // no longer used - was for "super" patterns where remembering precise ends was no longer necessary
-    patternElement(void)
+    cPatternElement(void)
     {
         inflectionFlags=0; // see enum InflectionTypes
         minimum=0;
@@ -124,9 +124,9 @@ public:
 			usagePatternEverMatched.reserve(patternIndexes.size());
 		}
     //patternElement(string patternName,string differentiator,int elementNum,set <unsigned int> &descendantTags,char *&buf);
-    int matchOne(cSource &source,unsigned int sourcePosition,unsigned int lastElement,vector <matchElement> &whatMatched, sTrace &t);
-    bool matchRange(cSource &source,int begin,int end,vector <matchElement> &whatMatched, sTrace &t);
-    bool matchFirst(cSource &source,int sourcePosition,vector <matchElement> &whatMatched, sTrace &t);
+    int matchOne(cSource &source,unsigned int sourcePosition,unsigned int lastElement,vector <cMatchElement> &whatMatched, sTrace &t);
+    bool matchRange(cSource &source,int begin,int end,vector <cMatchElement> &whatMatched, sTrace &t);
+    bool matchFirst(cSource &source,int sourcePosition,vector <cMatchElement> &whatMatched, sTrace &t);
     bool inflectionMatch(int inflectionFlags,__int64 flags,wstring formStr, sTrace &t);
     wstring formsStr(void);
     bool contains(int pn)
@@ -153,7 +153,7 @@ public:
 void initializePatterns(void);
 void printPatternsInABNF(string filePath);
 
-class tTagLocation {
+class cTagLocation {
 public:
     unsigned short tag;
     unsigned short parentPattern;
@@ -163,7 +163,7 @@ public:
     unsigned short len;
     short isPattern;
     int PEMAOffset; // offset into pema.  if negative, indicates this tag is for any pattern matching the root of 'pattern'
-    tTagLocation(unsigned short inTag,unsigned short inPattern,unsigned short inParentPattern,unsigned short inParentElement,
+    cTagLocation(unsigned short inTag,unsigned short inPattern,unsigned short inParentPattern,unsigned short inParentElement,
         unsigned long insourcePosition,unsigned short inLen,unsigned int inPEMAOffset,bool inIsPattern)
     {
         tag=inTag;
@@ -175,7 +175,7 @@ public:
         PEMAOffset=inPEMAOffset;
         isPattern=inIsPattern;
     };
-    bool operator == (const tTagLocation& o)
+    bool operator == (const cTagLocation& o)
     {
         return tag==o.tag &&
             pattern==o.pattern &&
@@ -186,7 +186,7 @@ public:
             PEMAOffset==o.PEMAOffset &&
             isPattern==o.isPattern;
     }
-    bool operator < (const tTagLocation& o)
+    bool operator < (const cTagLocation& o)
     {
         if (tag!=o.tag) return tag<o.tag;
         if (pattern!=o.pattern) return pattern<o.pattern;
@@ -198,7 +198,7 @@ public:
         if (isPattern!=o.isPattern) return isPattern<o.isPattern;
         return false;
     }
-    bool operator != (const tTagLocation& o)
+    bool operator != (const cTagLocation& o)
     {
         return tag!=o.tag ||
             pattern!=o.pattern ||
@@ -209,7 +209,7 @@ public:
             PEMAOffset!=o.PEMAOffset ||
             isPattern!=o.isPattern;
     }
-    tTagLocation& operator=(const tTagLocation &o)
+    cTagLocation& operator=(const cTagLocation &o)
     {
         tag=o.tag;
         pattern=o.pattern;
@@ -221,36 +221,36 @@ public:
         isPattern=o.isPattern;
         return *this;
     }
-		static bool compareTagLocation(tTagLocation tl1, tTagLocation tl2)
+		static bool compareTagLocation(cTagLocation tl1, cTagLocation tl2)
 		{
 			return tl1.len < tl2.len;
 		}
 } ;
 
-class tTS
+class cTagSet
 {
 public:
     wstring name;
     unsigned int NAME_TAG;
     int required;
     vector <unsigned int> tags;
-    tTS(unsigned int &tagSetNum,wchar_t *tag,int,...);
+    cTagSet(unsigned int &tagSetNum,wchar_t *tag,int,...);
     void addTagSet(int tagSet);
 };
 
-extern vector < tTS > desiredTagSets;
+extern vector < cTagSet > desiredTagSets;
 
-int findTag(vector <tTagLocation> &tagSet,wchar_t *tagName,int &nextTag);
+int findTag(vector <cTagLocation> &tagSet,wchar_t *tagName,int &nextTag);
 int findTag(wchar_t *tagName);
-int findOneTag(vector <tTagLocation> &tagSet,wchar_t *tagName,int start=-1);
-int findTagConstrained(vector <tTagLocation> &tagSet,wchar_t *tagName,int &nextTag,tTagLocation &parentTag);
-int findTagConstrained(vector <tTagLocation> &tagSet,wchar_t *tagName,int &nextTag,unsigned int searchBegin,unsigned int searchEnd);
-void findTagSetConstrained(vector <tTagLocation> &tagSet,unsigned int desiredTagSetNum,char *tagFilledArray,tTagLocation &parentTag);
-void findTagSet(vector <tTagLocation> &tagSet,unsigned int desiredTagSetNum,char *tagFilledArray);
-void printTagSet(int logType,wchar_t *tagSetType,int ts,vector <tTagLocation> &tagSet,vector <wstring> &words);
-void printTagSet(int logType,wchar_t *tagSetType,int ts,vector <tTagLocation> &tagSet);
-bool tagSetSame(vector <tTagLocation> &tagSet,vector <tTagLocation> &tagSetNew);
-void minimizeTagSet(vector  <tTagLocation> &tagSet);
+int findOneTag(vector <cTagLocation> &tagSet,wchar_t *tagName,int start=-1);
+int findTagConstrained(vector <cTagLocation> &tagSet,wchar_t *tagName,int &nextTag,cTagLocation &parentTag);
+int findTagConstrained(vector <cTagLocation> &tagSet,wchar_t *tagName,int &nextTag,unsigned int searchBegin,unsigned int searchEnd);
+void findTagSetConstrained(vector <cTagLocation> &tagSet,unsigned int desiredTagSetNum,char *tagFilledArray,cTagLocation &parentTag);
+void findTagSet(vector <cTagLocation> &tagSet,unsigned int desiredTagSetNum,char *tagFilledArray);
+void printTagSet(int logType,wchar_t *tagSetType,int ts,vector <cTagLocation> &tagSet,vector <wstring> &words);
+void printTagSet(int logType,wchar_t *tagSetType,int ts,vector <cTagLocation> &tagSet);
+bool tagSetSame(vector <cTagLocation> &tagSet,vector <cTagLocation> &tagSetNew);
+void minimizeTagSet(vector  <cTagLocation> &tagSet);
 
 unsigned int findPattern(wstring form);
 unsigned int findPattern(wstring form,unsigned int &startingPattern);
@@ -310,8 +310,8 @@ public:
             delete elements[e];
     }
     bool matchPatternPosition(cSource &source,const unsigned int position,bool fill,sTrace &t);
-    bool fillPattern(cSource &source,int sourcePosition,vector <matchElement> &whatMatched,int elementMatched,unsigned int &insertionPoint,int &reducedCost,bool &pushed,sTrace &t);
-    cPattern(string patternName,patternElement *element);
+    bool fillPattern(cSource &source,int sourcePosition,vector <cMatchElement> &whatMatched,int elementMatched,unsigned int &insertionPoint,int &reducedCost,bool &pushed,sTrace &t);
+    cPattern(string patternName,cPatternElement *element);
     void replace(int elementNum,int patternNum);
     void replace(int elementNum,string patternName);
 		void reportUsage(void);
@@ -344,7 +344,7 @@ public:
 
     // descendantTagSets only used during test procedure -
     bool descendantsPopulated,referencing,doubleReferencing;
-    vector < vector<tTagLocation> > descendantTagSets;
+    vector < vector<cTagLocation> > descendantTagSets;
     vector < vector<wstring> > descendantWordSets;
 
     unsigned __int64 includesOneOfTagSet;
@@ -395,11 +395,11 @@ public:
 		bool explicitNounDeterminerAgreement; // contains a NOUN with determiner within itself (blocked otherwise by _BLOCK or otherwise not implicitly processed)
 		bool metaPattern;
     int numPushes,numComparisons,numHits,numWinners,numChildrenWinners;
-    bitObject<> allElementTags;
-		bitObject<32, 5, unsigned int, 32> childPatterns,mandatoryChildPatterns;
-		bitObject<32, 5, unsigned int, 32> parentPatterns,mandatoryParentPatterns;
+    cBitObject<> allElementTags;
+		cBitObject<32, 5, unsigned int, 32> childPatterns,mandatoryChildPatterns;
+		cBitObject<32, 5, unsigned int, 32> parentPatterns,mandatoryParentPatterns;
     bool ancestorsSet,mandatoryAncestorsSet;
-    bitObject<32, 5, unsigned int, 32> ancestorPatterns,mandatoryAncestorPatterns;
+    cBitObject<32, 5, unsigned int, 32> ancestorPatterns,mandatoryAncestorPatterns;
     bool contains(int patternNum,int &elementStart)
     {
         for (elementStart++; elementStart<(signed)elements.size(); elementStart++)
@@ -438,29 +438,29 @@ public:
         //  ::lplog(LOG_INFO,L"next element of pattern %s[%s] after element #%d will be element #%d-#%d.",name.c_str(),differentiator.c_str(),currentElement,low,high);
         return low<elements.size();
     }
-    bool containsOneOfTagSet(tTS &desiredTagSet,unsigned int limit,bool includeSelf);
-    bool setCheckDescendantsForTagSet(tTS &desiredTagSet,bool includeSelf);
+    bool containsOneOfTagSet(cTagSet &desiredTagSet,unsigned int limit,bool includeSelf);
+    bool setCheckDescendantsForTagSet(cTagSet &desiredTagSet,bool includeSelf);
     void evaluateTagSets(unsigned int start,unsigned int end);
 		void initializeUsage();
     bool hasDescendantTag(unsigned int tag);
     bool onlyDescendant(unsigned int parent,vector <unsigned int> &ancestors);
     bool hasTag(unsigned int tag);
-    int elementHasTagInSet(unsigned char patternElement,unsigned char patternIndex,unsigned int desiredTagSetNum,unsigned int &tagNumBySet,bool isPattern);
-    bool elementHasTag(unsigned char patternElement,unsigned char patternIndex,int tag,bool isPattern);
+    int elementHasTagInSet(unsigned char cPatternElement,unsigned char patternIndex,unsigned int desiredTagSetNum,unsigned int &tagNumBySet,bool isPattern);
+    bool elementHasTag(unsigned char cPatternElement,unsigned char patternIndex,int tag,bool isPattern);
     int hasTagInSet(int desiredTagSetNum,unsigned int &tag);
     int generateTags(bool blocking,bool repeat,int desiredTagSetNum,vector <unsigned int> futureParentElements,
-        vector   <tTagLocation> tagSet,vector <wstring> words,vector < vector <tTagLocation> > &tagSets,vector < vector <wstring> > &wordSets,int  position,int loopCounter);
+        vector   <cTagLocation> tagSet,vector <wstring> words,vector < vector <cTagLocation> > &tagSets,vector < vector <wstring> > &wordSets,int  position,int loopCounter);
     void addGeneratedPatterns(int p,int originalTagSetSize,bool   blocking,bool   repeat,int desiredTagSetNum,vector <unsigned int>   futureParentElements,
-        vector   <tTagLocation> tagSet,vector <wstring> words,vector < vector <tTagLocation> > &tagSets,vector < vector <wstring> > &wordSets,int  position);
+        vector   <cTagLocation> tagSet,vector <wstring> words,vector < vector <cTagLocation> > &tagSets,vector < vector <wstring> > &wordSets,int  position);
     void addGeneratedPatternsRecursively(int p,int originalTagSetSize,bool    blocking,bool   repeat,int desiredTagSetNum,vector <unsigned int>   futureParentElements,
-        vector   <tTagLocation> tagSet,vector <wstring> words,vector < vector <tTagLocation> > &tagSets,vector < vector <wstring> > &wordSets,int  position,int loopCounter);
+        vector   <cTagLocation> tagSet,vector <wstring> words,vector < vector <cTagLocation> > &tagSets,vector < vector <wstring> > &wordSets,int  position,int loopCounter);
     void evaluateAllTagPatternsForAgreement(unsigned int desiredTagSetNum);
     void setAncestorPatterns(int childPattern);
     void establishMandatoryChildPatterns(void);
     void setMandatoryAncestorPatterns(int childPattern);
     bool similarSets(set <unsigned int> &tags,set <unsigned int> &tags2);
-    bool equivalentTagSet(vector <tTagLocation> &tagSet,vector <tTagLocation> &tagSet2);
-		patternElement *getElement(int I)
+    bool equivalentTagSet(vector <cTagLocation> &tagSet,vector <cTagLocation> &tagSet2);
+		cPatternElement *getElement(int I)
 		{
 			return elements[I];
 		}
@@ -468,8 +468,8 @@ public:
 		static void printPatternStatistics(void);
 
 private:
-    vector <patternElement *> elements;
-//    static vector <matchElement> whatMatched;
+    vector <cPatternElement *> elements;
+//    static vector <cMatchElement> whatMatched;
     void static processForm(wstring &form,wstring &specificWord,int &cost,set <unsigned int> &tags,bool &explicitFutureReference,bool &blockDescendants, bool &allowRecursiveMatch);
     void firstForm(void);
     void lastForm(void);
@@ -477,11 +477,11 @@ private:
     void lastNonMandatoryForm(void);
 };
 
-class patternReference
+class cPatternReference
 {
 public:
     static int firstPatternReference,lastPatternReference;
-    patternReference(wstring inForm,int inPatternNum,int inDiffNum,int inElementNum,int inCost,set <unsigned int> inTags, bool inBlockDescendants, bool inAllowRecursiveMatch, bool inLogFutureReferences)
+    cPatternReference(wstring inForm,int inPatternNum,int inDiffNum,int inElementNum,int inCost,set <unsigned int> inTags, bool inBlockDescendants, bool inAllowRecursiveMatch, bool inLogFutureReferences)
     {
         form=inForm;
         patternNum=inPatternNum;
@@ -506,5 +506,5 @@ public:
 		bool allowRecursiveMatch;
 private:
 };
-extern vector <patternReference *> patternReferences;
+extern vector <cPatternReference *> patternReferences;
 

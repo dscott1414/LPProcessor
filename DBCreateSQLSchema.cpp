@@ -184,7 +184,7 @@ int cSource::createTimeRelationTables(void)
 //       count++;
 //       time is time of sentence
 //       sense is "present tense, active"
-//       add to vector <tRelation> cr:
+//       add to vector <cRelation> cr:
 //         index is objectId to Mary
 //         count++;
 // Mary object:
@@ -195,7 +195,7 @@ int cSource::createTimeRelationTables(void)
 //       count++;
 //       time is time of sentence
 //       sense is "present tense, active"
-//       add to vector <tRelation> cr:
+//       add to vector <cRelation> cr:
 //         index is objectId to Larry
 //         count++;
 // loves word:
@@ -207,7 +207,7 @@ int cSource::createTimeRelationTables(void)
 //       count++;
 //       time is time of sentence
 //       sense is "present tense, active"
-//       add to vector <tRelation> cr:
+//       add to vector <cRelation> cr:
 //         index is objectId to Mary
 //         count++;
 //   RelationsWithObjects DirectWordWithVerb
@@ -217,7 +217,7 @@ int cSource::createTimeRelationTables(void)
 //       count++;
 //       time is time of sentence
 //       sense is "present tense, active"
-//       add to vector <tRelation> cr:
+//       add to vector <cRelation> cr:
 //         index is objectId to Larry
 //         count++;
 
@@ -426,7 +426,7 @@ int generateTestSources(MYSQL &mysql)
   return 0;
 }
 
-int generateParseRequestSources(MYSQL &mysql,vector <cQuestionAnswering::searchSource>::iterator pri)
+int generateParseRequestSources(MYSQL &mysql,vector <cQuestionAnswering::cSearchSource>::iterator pri)
 {
 	wchar_t qt[16384];
 	wstring pathInCache = pri->pathInCache;

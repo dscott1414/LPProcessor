@@ -11,10 +11,10 @@ bool cSource::adjustWord(unsigned int q)
 { LFS
 	bool insertedOrDeletedWord=false;
 	// let's have some dinner!
-	if ((m[q].flags&WordMatch::flagNounOwner) && m[q].word->first==L"let")
+	if ((m[q].flags&cWordMatch::flagNounOwner) && m[q].word->first==L"let")
 	{
-		m[q].flags&=~WordMatch::flagNounOwner;
-		m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"us"),0,debugTrace));
+		m[q].flags&=~cWordMatch::flagNounOwner;
+		m.insert(m.begin()+q+1,cWordMatch(Words.gquery(L"us"),0,debugTrace));
 		m[q+1].forms.set(personalPronounAccusativeForm);
 		insertedOrDeletedWord=true;
 	}
@@ -23,10 +23,10 @@ bool cSource::adjustWord(unsigned int q)
 	{
 		m[q].word = Words.gquery(L"do");
 		m[q].forms.clear();
-		m[q].forms.set(FormsClass::gFindForm(L"does"));
+		m[q].forms.set(cForms::gFindForm(L"does"));
 		m[q].flags = 0;
-		m.insert(m.begin() + q, WordMatch(Words.gquery(L"you"), 0, debugTrace));
-		m[q + 1].forms.set(FormsClass::gFindForm(L"personal_pronoun"));
+		m.insert(m.begin() + q, cWordMatch(Words.gquery(L"you"), 0, debugTrace));
+		m[q + 1].forms.set(cForms::gFindForm(L"personal_pronoun"));
 		insertedOrDeletedWord = true;
 	}
 	// t'other -> the other
@@ -34,10 +34,10 @@ bool cSource::adjustWord(unsigned int q)
 	{
 		m[q].word = Words.gquery(L"the");
 		m[q].forms.clear();
-		m[q].forms.set(FormsClass::gFindForm(L"determiner"));
+		m[q].forms.set(cForms::gFindForm(L"determiner"));
 		m[q].flags = 0;
-		m.insert(m.begin() + q, WordMatch(Words.gquery(L"other"), 0, debugTrace));
-		m[q + 1].forms.set(FormsClass::gFindForm(L"pronoun"));
+		m.insert(m.begin() + q, cWordMatch(Words.gquery(L"other"), 0, debugTrace));
+		m[q + 1].forms.set(cForms::gFindForm(L"pronoun"));
 		insertedOrDeletedWord = true;
 	}
 	// more'n -> more than
@@ -45,32 +45,32 @@ bool cSource::adjustWord(unsigned int q)
 	{
 		m[q].word = Words.gquery(L"more");
 		m[q].forms.clear();
-		m[q].forms.set(FormsClass::gFindForm(L"adverb"));
+		m[q].forms.set(cForms::gFindForm(L"adverb"));
 		m[q].flags = 0;
-		m.insert(m.begin() + q, WordMatch(Words.gquery(L"than"), 0, debugTrace));
-		m[q + 1].forms.set(FormsClass::gFindForm(L"conjunction"));
-		m[q + 1].forms.set(FormsClass::gFindForm(L"preposition"));
+		m.insert(m.begin() + q, cWordMatch(Words.gquery(L"than"), 0, debugTrace));
+		m[q + 1].forms.set(cForms::gFindForm(L"conjunction"));
+		m[q + 1].forms.set(cForms::gFindForm(L"preposition"));
 		insertedOrDeletedWord = true;
 	}
 	// What's he want? --> What does he want?
 	// What's for dinner? --> What is for dinner?
 	// What's that got to do with it? --> What has that got to do with it?
-	else if ((m[q].flags&WordMatch::flagNounOwner) && (m[q].word->first==L"what"))
+	else if ((m[q].flags&cWordMatch::flagNounOwner) && (m[q].word->first==L"what"))
 	{
-		m[q].flags&=~WordMatch::flagNounOwner;
-		m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"ishasdoes"),0,debugTrace));
+		m[q].flags&=~cWordMatch::flagNounOwner;
+		m.insert(m.begin()+q+1,cWordMatch(Words.gquery(L"ishasdoes"),0,debugTrace));
 		m[q+1].setPreferredForm();
 		insertedOrDeletedWord=true;
 	}
-	else if ((m[q].flags&WordMatch::flagNounOwner) && (m[q].word->first==L"that"))
+	else if ((m[q].flags&cWordMatch::flagNounOwner) && (m[q].word->first==L"that"))
 	{
-		m[q].flags&=~WordMatch::flagNounOwner;
-		m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"is"),0,debugTrace));
+		m[q].flags&=~cWordMatch::flagNounOwner;
+		m.insert(m.begin()+q+1,cWordMatch(Words.gquery(L"is"),0,debugTrace));
 		m[q+1].setPreferredForm();
 		insertedOrDeletedWord=true;
 	}
 	// twas -> it was
-	else if (WordClass::isSingleQuote(m[q].word->first[0]) && q + 1 < m.size() && m[q + 1].word->first == L"twas")
+	else if (cWord::isSingleQuote(m[q].word->first[0]) && q + 1 < m.size() && m[q + 1].word->first == L"twas")
 	{
 		m[q].word = Words.gquery(L"it");
 		m[q].forms.clear();
@@ -78,11 +78,11 @@ bool cSource::adjustWord(unsigned int q)
 		m[q].flags = 0;
 		m[q + 1].word = Words.gquery(L"was");
 		m[q + 1].forms.clear();
-		m[q + 1].forms.set(FormsClass::gFindForm(L"is"));
+		m[q + 1].forms.set(cForms::gFindForm(L"is"));
 		m[q + 1].flags = 0;
 	}
 	// 'Tis the season --> It is the season
-	else if (WordClass::isSingleQuote(m[q].word->first[0]) && q+1<m.size() && m[q+1].word->first==L"tis")
+	else if (cWord::isSingleQuote(m[q].word->first[0]) && q+1<m.size() && m[q+1].word->first==L"tis")
 	{
 		m[q].word=Words.gquery(L"it");
 		m[q].forms.clear();
@@ -90,7 +90,7 @@ bool cSource::adjustWord(unsigned int q)
 		m[q].flags=0;
 		m[q+1].word=Words.gquery(L"is");
 		m[q+1].forms.clear();
-		m[q+1].forms.set(FormsClass::gFindForm(L"is"));
+		m[q+1].forms.set(cForms::gFindForm(L"is"));
 		m[q+1].flags=0;
 	}
 	else if (m[q].word->first == L"gotta")
@@ -104,12 +104,12 @@ bool cSource::adjustWord(unsigned int q)
 		m[q].setPreferredForm();
 		if (m[q + 1].queryForm(verbForm) < 0)
 		{
-			m.insert(m.begin() + q + 1, WordMatch(Words.gquery(L"a"), 0, debugTrace));
+			m.insert(m.begin() + q + 1, cWordMatch(Words.gquery(L"a"), 0, debugTrace));
 			m[q + 1].forms.set(determinerForm);
 		}
 		else
 		{
-			m.insert(m.begin() + q + 1, WordMatch(Words.gquery(L"to"), 0, debugTrace));
+			m.insert(m.begin() + q + 1, cWordMatch(Words.gquery(L"to"), 0, debugTrace));
 			m[q + 1].forms.set(toForm);
 		}
 		insertedOrDeletedWord = true;
@@ -120,37 +120,37 @@ bool cSource::adjustWord(unsigned int q)
 		m[q].flags = 0;
 		m[q].forms.clear();
 		m[q].forms.set(doForm);
-		m.insert(m.begin() + q + 1, WordMatch(Words.gquery(L"you"), 0, debugTrace));
-		m[q + 1].forms.set(FormsClass::gFindForm(L"personal_pronoun"));
+		m.insert(m.begin() + q + 1, cWordMatch(Words.gquery(L"you"), 0, debugTrace));
+		m[q + 1].forms.set(cForms::gFindForm(L"personal_pronoun"));
 		insertedOrDeletedWord = true;
 	}
 	// I lived at 23 Beek St.  That was a nice block.
 	else if (q>0 && m[q].queryForm(sa_abbForm)>=0 &&
-		(m[q-1].flags&WordMatch::flagFirstLetterCapitalized) &&
-		(m[q+1].flags&WordMatch::flagFirstLetterCapitalized))
+		(m[q-1].flags&cWordMatch::flagFirstLetterCapitalized) &&
+		(m[q+1].flags&cWordMatch::flagFirstLetterCapitalized))
 	{
-		m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"."),0,debugTrace));
+		m.insert(m.begin()+q+1,cWordMatch(Words.gquery(L"."),0,debugTrace));
 		insertedOrDeletedWord=true;
 	}
 	// 2:30 A.M.
 	else if (q>0 && (m[q].word->first==L"a.m." || m[q].word->first==L"p.m.") && (m[q-1].queryForm(timeForm)>=0 || m[q-1].queryForm(NUMBER_FORM_NUM)>=0) &&
-		(m[q+1].flags&WordMatch::flagFirstLetterCapitalized) && m[q+1].queryForm(L"daysOfWeek")<0)
+		(m[q+1].flags&cWordMatch::flagFirstLetterCapitalized) && m[q+1].queryForm(L"daysOfWeek")<0)
 	{
-		m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"."),0,debugTrace));
+		m.insert(m.begin()+q+1,cWordMatch(Words.gquery(L"."),0,debugTrace));
 		insertedOrDeletedWord=true;
 	}
 	// 2390 B.C.
 	else if (q>0 && (m[q].word->first==L"a.d." || m[q].word->first==L"b.c.") && m[q-1].queryForm(numberForm)>=0 &&
-		(m[q+1].flags&WordMatch::flagFirstLetterCapitalized))
+		(m[q+1].flags&cWordMatch::flagFirstLetterCapitalized))
 	{
-		m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"."),0,debugTrace));
+		m.insert(m.begin()+q+1,cWordMatch(Words.gquery(L"."),0,debugTrace));
 		insertedOrDeletedWord=true;
 	}
 	else if (q>0 && m[q].word->first==L"no." &&
 		m[q+1].queryForm(numberForm)<0 && m[q+1].queryForm(numeralCardinalForm)<0 && m[q+1].queryForm(romanNumeralForm)<0 &&
-		(m[q+1].flags&WordMatch::flagFirstLetterCapitalized))
+		(m[q+1].flags&cWordMatch::flagFirstLetterCapitalized))
 	{
-		m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"."),0,debugTrace));
+		m.insert(m.begin()+q+1,cWordMatch(Words.gquery(L"."),0,debugTrace));
 		insertedOrDeletedWord=true;
 	}
 	else if (m[q].word->first==L"had" && m[q+1].word->first==L"better" && m[q+2].queryForm(verbForm)>=0)
@@ -172,7 +172,7 @@ bool cSource::adjustWord(unsigned int q)
 		m[q].flags=0;
 		m[q].forms.clear();
 		m[q].setPreferredForm();
-		m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"to"),0,debugTrace));
+		m.insert(m.begin()+q+1,cWordMatch(Words.gquery(L"to"),0,debugTrace));
 		insertedOrDeletedWord=true;
 		m[q+1].forms.set(toForm);
 	}
@@ -200,8 +200,8 @@ void cSource::secondaryQuoteTest(int q,unsigned int &secondaryQuotations,int &la
 { LFS
 	// if space before quote, it should be an open quote.  if space after quote, it should be a close quote.
 	// if two open quotes follow each other, delete the first open quote.
-	bool preferCloseQuoteBySpace=(m[q].flags&WordMatch::flagAlphaBeforeHint) && !(m[q].flags&WordMatch::flagAlphaAfterHint);
-	bool preferOpenQuoteBySpace=!(m[q].flags&WordMatch::flagAlphaBeforeHint) && (m[q].flags&WordMatch::flagAlphaAfterHint);
+	bool preferCloseQuoteBySpace=(m[q].flags&cWordMatch::flagAlphaBeforeHint) && !(m[q].flags&cWordMatch::flagAlphaAfterHint);
+	bool preferOpenQuoteBySpace=!(m[q].flags&cWordMatch::flagAlphaBeforeHint) && (m[q].flags&cWordMatch::flagAlphaAfterHint);
 	bool preferOpenQuoteByCount=!(secondaryQuotations&1);
 	bool preferCloseQuoteByCount=(secondaryQuotations&1);
 	if (preferOpenQuoteBySpace && q+1<(signed)m.size() && 
@@ -278,7 +278,7 @@ bool cSource::getFormFlags(int where, bool &maybeVerb, bool &maybeNoun, bool &ma
 	int verbFormOffset= m[where].queryForm(verbForm),nounFormOffset,adjectiveFormOffset;
 	// does this position have any verb form other than verbForm itself (then check if it does have verbForm, that it is a probable verbForm)
 	maybeVerb = (m[where].word->second.hasVerbForm() && verbFormOffset<0) || (verbFormOffset >= 0 && m[where].word->second.getUsageCost(verbFormOffset) < 4);
-	if ((m[where].flags&WordMatch::flagFirstLetterCapitalized) && !(m[where].flags&WordMatch::flagAllCaps))
+	if ((m[where].flags&cWordMatch::flagFirstLetterCapitalized) && !(m[where].flags&cWordMatch::flagAllCaps))
 		maybeVerb = false;
 	maybeNoun = (nounFormOffset = m[where].queryForm(nounForm)) >= 0 && m[where].word->second.getUsageCost(nounFormOffset) < 4;
 	maybeAdjective = (adjectiveFormOffset = m[where].queryForm(adjectiveForm)) >= 0 && m[where].word->second.getUsageCost(adjectiveFormOffset) < 4;
@@ -345,88 +345,88 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int &primaryQuot
 			// [mightBeName] if (the previous word is a .) AND (the word before that is an honorific and capitalized) St. Pancras
 			bool mightBeName=q>2 && m[q-1].word->first==L"." && 
 				   (m[q-2].word->second.query(honorificForm)>=0 || m[q-2].word->second.query(honorificAbbreviationForm)>=0 || m[q-2].word->second.query(letterForm)>=0) && 
-					 (m[q-2].flags&(WordMatch::flagFirstLetterCapitalized));
+					 (m[q-2].flags&(cWordMatch::flagFirstLetterCapitalized));
 			// added q>0 because in abstracts, most of the other criteria is invalid (see Curveball - Rafid Ahmed Alwan al-Janabi, known by the Central Intelligence Agency cryptonym "Curveball")
-			if (((firstWordInSentence && q>0) || m[q].flags&WordMatch::flagAllCaps) && !mightBeName &&
-				  (m[q].word->second.getUsagePattern(tFI::PROPER_NOUN_USAGE_PATTERN)==0 ||
-				   (m[q].word->second.numProperNounUsageAsAdjective==m[q].word->second.getUsagePattern(tFI::PROPER_NOUN_USAGE_PATTERN) &&
-					  (q+1>=m.size() || (m[q+1].flags&(WordMatch::flagFirstLetterCapitalized|WordMatch::flagAllCaps))==0))) &&
+			if (((firstWordInSentence && q>0) || m[q].flags&cWordMatch::flagAllCaps) && !mightBeName &&
+				  (m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN)==0 ||
+				   (m[q].word->second.numProperNounUsageAsAdjective==m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN) &&
+					  (q+1>=m.size() || (m[q+1].flags&(cWordMatch::flagFirstLetterCapitalized|cWordMatch::flagAllCaps))==0))) &&
 					//m[q].word->second.relatedSubTypeObjects.size()==0 && // not a known common place 
-					(q<1 || (m[q-1].word->first!=L"the" && !(m[q-1].flags&WordMatch::flagAllCaps))) && 
-					!((m[q].flags&WordMatch::flagAllCaps) && m[q].word->second.formsSize()==0) && // The US / that IRS tax form
+					(q<1 || (m[q-1].word->first!=L"the" && !(m[q-1].flags&cWordMatch::flagAllCaps))) && 
+					!((m[q].flags&cWordMatch::flagAllCaps) && m[q].word->second.formsSize()==0) && // The US / that IRS tax form
 				  // must NOT be queryForm because of test
-				  (m[q].word->second.getUsagePattern(tFI::LOWER_CASE_USAGE_PATTERN)>0 || m[q].word->second.query(PROPER_NOUN_FORM_NUM)<0))
+				  (m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN)>0 || m[q].word->second.query(PROPER_NOUN_FORM_NUM)<0))
 			{
 				// if flagAddProperNoun and first word, check if usage pattern is 0.  If it is, unflag word.
-				if (m[q].flags&WordMatch::flagAddProperNoun)
+				if (m[q].flags&cWordMatch::flagAddProperNoun)
 				{
-					m[q].flags&=~WordMatch::flagAddProperNoun;
+					m[q].flags&=~cWordMatch::flagAddProperNoun;
 					if (debugTrace.traceParseInfo)
 						lplog(LOG_INFO, L"%d:%s:removed flagAddProperNoun asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
 							q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
-							m[q].word->second.getUsagePattern(tFI::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(tFI::PROPER_NOUN_USAGE_PATTERN),
+							m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
 							m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
 				}
-				// refuse to make it proper noun, even if it is listed as one.  see WordMatch::queryForm(int form)
+				// refuse to make it proper noun, even if it is listed as one.  see cWordMatch::queryForm(int form)
 				else
-					if ((m[q].flags&WordMatch::flagFirstLetterCapitalized) && !afterPossibleAbbreviation && !(m[q].flags&WordMatch::flagAllCaps) && m[q].word->second.localWordIsLowercase > 0)
+					if ((m[q].flags&cWordMatch::flagFirstLetterCapitalized) && !afterPossibleAbbreviation && !(m[q].flags&cWordMatch::flagAllCaps) && m[q].word->second.localWordIsLowercase > 0)
 					{
-						m[q].flags|=WordMatch::flagRefuseProperNoun;
+						m[q].flags|=cWordMatch::flagRefuseProperNoun;
 						if (debugTrace.traceParseInfo)
 							lplog(LOG_INFO, L"%d:%s:added flagRefuseProperNoun asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.", 
 								q, getOriginalWord(q, originalWord,false),m[q].word->second.numProperNounUsageAsAdjective,
-								m[q].word->second.getUsagePattern(tFI::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(tFI::PROPER_NOUN_USAGE_PATTERN),
+								m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
 								m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
 					}
 			}
-			if (firstWordInSentence && (m[q].flags&WordMatch::flagFirstLetterCapitalized) && !(m[q].flags&WordMatch::flagAddProperNoun) && !(m[q].flags & WordMatch::flagRefuseProperNoun) &&
+			if (firstWordInSentence && (m[q].flags&cWordMatch::flagFirstLetterCapitalized) && !(m[q].flags&cWordMatch::flagAddProperNoun) && !(m[q].flags & cWordMatch::flagRefuseProperNoun) &&
 				m[q].word->second.query(PROPER_NOUN_FORM_NUM) < 0 && 
 				((m[q].word->second.localWordIsLowercase == 0 && m[q].word->second.localWordIsCapitalized > 2) || m[q].word->second.localWordIsCapitalized > 20))
 			{
-				m[q].flags |= WordMatch::flagAddProperNoun;
+				m[q].flags |= cWordMatch::flagAddProperNoun;
 				if (debugTrace.traceParseInfo)
 					lplog(LOG_INFO, L"%d:%s:added flagAddProperNoun (from local) asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
 						q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
-						m[q].word->second.getUsagePattern(tFI::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(tFI::PROPER_NOUN_USAGE_PATTERN),
+						m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
 						m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
 
 			}
-			if (m[q].word->first == L"lord" && (m[q].flags&WordMatch::flagFirstLetterCapitalized) && !(m[q].flags&WordMatch::flagAddProperNoun) && q + 1 < m.size() && !(m[q + 1].flags&WordMatch::flagFirstLetterCapitalized))
+			if (m[q].word->first == L"lord" && (m[q].flags&cWordMatch::flagFirstLetterCapitalized) && !(m[q].flags&cWordMatch::flagAddProperNoun) && q + 1 < m.size() && !(m[q + 1].flags&cWordMatch::flagFirstLetterCapitalized))
 			{
-				m[q].flags |= WordMatch::flagAddProperNoun;
+				m[q].flags |= cWordMatch::flagAddProperNoun;
 				if (debugTrace.traceParseInfo)
 					lplog(LOG_INFO, L"%d:%s:added flagAddProperNoun (SPECIAL CASE lord) asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
 						q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
-						m[q].word->second.getUsagePattern(tFI::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(tFI::PROPER_NOUN_USAGE_PATTERN),
+						m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
 						m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
 			}
 			// if capitalized, not all caps, at least 2 letters long, not a cardinal or ordinal number
 			// does not already have flagRefuseProperNoun or flagAddProperNoun or flagOnlyConsiderProperNounForms or flagOnlyConsiderOtherNounForms set
 			// is never used in the lower case, and has been used as a proper noun unambiguously
-			if ((m[q].flags&WordMatch::flagFirstLetterCapitalized) && !(m[q].flags&WordMatch::flagAllCaps) && m[q].word->first[1] &&
+			if ((m[q].flags&cWordMatch::flagFirstLetterCapitalized) && !(m[q].flags&cWordMatch::flagAllCaps) && m[q].word->first[1] &&
 				m[q].word->second.query(numeralOrdinalForm)==-1 && m[q].word->second.query(numeralCardinalForm)==-1 &&
-				!(m[q].flags&(WordMatch::flagRefuseProperNoun|WordMatch::flagOnlyConsiderProperNounForms|WordMatch::flagOnlyConsiderOtherNounForms)) &&
-				(m[q].word->second.getUsagePattern(tFI::PROPER_NOUN_USAGE_PATTERN)>0 || m[q].word->second.localWordIsCapitalized>0) &&  // PROPER_NOUN_USAGE_PATTERN is only updated if proper noun form is added 
-				m[q].word->second.getUsagePattern(tFI::LOWER_CASE_USAGE_PATTERN)==0 &&
+				!(m[q].flags&(cWordMatch::flagRefuseProperNoun|cWordMatch::flagOnlyConsiderProperNounForms|cWordMatch::flagOnlyConsiderOtherNounForms)) &&
+				(m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN)>0 || m[q].word->second.localWordIsCapitalized>0) &&  // PROPER_NOUN_USAGE_PATTERN is only updated if proper noun form is added 
+				m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN)==0 &&
 				// word was found capitalized alone (the number of times being a capitalized adjective is < the number of times being capitalized)
-				(m[q].word->second.numProperNounUsageAsAdjective<m[q].word->second.getUsagePattern(tFI::PROPER_NOUN_USAGE_PATTERN) ||
+				(m[q].word->second.numProperNounUsageAsAdjective<m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN) ||
 				// OR this particular position is followed by a capitalized word (Peel Edgerton) - peel is also a verb!
-				 (q+1<m.size() && (m[q+1].flags&(WordMatch::flagFirstLetterCapitalized|WordMatch::flagAllCaps))!=0)))
+				 (q+1<m.size() && (m[q+1].flags&(cWordMatch::flagFirstLetterCapitalized|cWordMatch::flagAllCaps))!=0)))
 			{
 				// if word serves only as an adjective in a proper noun ('New' York), don't mark as only proper noun
-				//lplog(L"%d:DEBUG PNU %d %d",q,m[q].word->second.numProperNounUsageAsAdjective,(int)m[q].word->second.usagePatterns[tFI::PROPER_NOUN_USAGE_PATTERN]);
-				bool atLeastOneProperNounForm=(m[q].flags&WordMatch::flagAddProperNoun)!=0;
+				//lplog(L"%d:DEBUG PNU %d %d",q,m[q].word->second.numProperNounUsageAsAdjective,(int)m[q].word->second.usagePatterns[cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN]);
+				bool atLeastOneProperNounForm=(m[q].flags&cWordMatch::flagAddProperNoun)!=0;
 				for (unsigned int I=0; I<m[q].word->second.formsSize() && !atLeastOneProperNounForm; I++)
 					if (m[q].word->second.Form(I)->properNounSubClass || m[q].word->second.forms()[I]==PROPER_NOUN_FORM_NUM)
 						atLeastOneProperNounForm=true;
 				if (atLeastOneProperNounForm)
 				{
-					m[q].flags|=WordMatch::flagOnlyConsiderProperNounForms;
+					m[q].flags|=cWordMatch::flagOnlyConsiderProperNounForms;
 					if (debugTrace.traceParseInfo)
 						lplog(LOG_INFO,L"%d:%s:added flagOnlyConsiderProperNounForms (2).",q, getOriginalWord(q, originalWord, false));
 				}
 			}
-			if ((m[q].flags&WordMatch::flagOnlyConsiderProperNounForms) && end-begin>4 && !m[q].word->second.isUnknown())
+			if ((m[q].flags&cWordMatch::flagOnlyConsiderProperNounForms) && end-begin>4 && !m[q].word->second.isUnknown())
 			{
 				// check if from begin to end there is only capitalized words except for determiners or prepositions
 				// What Do We Need to Know About the International Monetary System? (Paul Krugman)
@@ -442,7 +442,7 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int &primaryQuot
 					}
 					termLength++;
 					longestContinuousTerm=max(longestContinuousTerm,termLength);
-					bool isCapitalized=(m[si].queryForm(PROPER_NOUN_FORM_NUM)>=0 || (m[si].flags&WordMatch::flagFirstLetterCapitalized) || (m[si].flags&WordMatch::flagAllCaps));
+					bool isCapitalized=(m[si].queryForm(PROPER_NOUN_FORM_NUM)>=0 || (m[si].flags&cWordMatch::flagFirstLetterCapitalized) || (m[si].flags&cWordMatch::flagAllCaps));
 					if (m[si].word->second.isCommonWord() && isCapitalized)
 						numCommonClassCapitalizedWords++;
 					if (!isCapitalized && m[si].queryForm(determinerForm)<0 && m[si].queryForm(prepositionForm)<0)
@@ -453,7 +453,7 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int &primaryQuot
 				if ((allCapitalized && longestContinuousTerm>4 && numCommonClassCapitalizedWords>0) ||
 						((end-begin)>(unsigned)numCapitalized && longestContinuousTerm>4 && (unsigned)numCommonClassCapitalizedWords>=((end-begin)-numCapitalized))) // take care of small errors / How Jay-Z Went from Street Corner to Corner Office by Zack O'Malley Greenburg (2011: Portfolio (Penguin), 240 pages) ISBN 978-1-59184-381-8
 				{
-					m[q].flags&=~WordMatch::flagOnlyConsiderProperNounForms;
+					m[q].flags&=~cWordMatch::flagOnlyConsiderProperNounForms;
 					if (debugTrace.traceParseInfo)
 						lplog(LOG_INFO,L"%d:%s:removed flagOnlyConsiderProperNounForms [allCapitalized longestContinuousTerm=%d numCommonClassCapitalizedWords=%d numCapitalized=%d totalLength=%d].",
 									q, getOriginalWord(q, originalWord, false), longestContinuousTerm,numCommonClassCapitalizedWords,numCapitalized,end-begin);
@@ -496,13 +496,13 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int &primaryQuot
 					secondaryQuoteTest(q,secondaryQuotations,lastSecondaryQuote,secondaryQuoteWord,secondaryQuoteOpenWord,secondaryQuoteCloseWord);
 			}
 			// do plural ownership
-			if (m[q].flags&WordMatch::flagPossiblePluralNounOwner)
+			if (m[q].flags&cWordMatch::flagPossiblePluralNounOwner)
 			{
-				m[q].flags&=~WordMatch::flagPossiblePluralNounOwner;
+				m[q].flags&=~cWordMatch::flagPossiblePluralNounOwner;
 				// only if the word is a plural noun type and their is no unresolved single quote
 				if (((m[q].word->second.inflectionFlags&PLURAL) || m[q].word->first[m[q].word->first.length()-1]==L's') && !(secondaryQuotations&1))
 				{
-					m[q].flags|=WordMatch::flagNounOwner;
+					m[q].flags|=cWordMatch::flagNounOwner;
 					if (m[q+1].word->first==L"\'")
 					{
 #ifdef LOG_QUOTATIONS
@@ -529,7 +529,7 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int &primaryQuot
 			// no one's been there.
            // must be owner (have 's after it) 
 			// Jay-Z's planning to marry Beyonce?
-			else if ((m[q].flags&WordMatch::flagNounOwner) &&
+			else if ((m[q].flags&cWordMatch::flagNounOwner) &&
 				// must be single or have a determiner AFTER the word
 				(!(m[q].word->second.inflectionFlags&PLURAL) || (q+1<lastWord && m[q+1].queryWinnerForm(determinerForm)>=0)) &&
 				// must be a nounType, that, a pronoun (nominal (one, I, we) acc (him, them...), indefinite or quantifier 
@@ -561,8 +561,8 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int &primaryQuot
 						// other's reform.
 						if ((I<(int)lastWord && !m[I].isNounType()) || ((numForm=m[q].queryForm(relativizerForm))>=0 && m[q].word->second.getUsageCost(numForm)<3))
 						{
-							m[q].flags&=~WordMatch::flagNounOwner;
-							m.insert(m.begin()+q+1,WordMatch(Words.gquery(L"ishas"),0,debugTrace));
+							m[q].flags&=~cWordMatch::flagNounOwner;
+							m.insert(m.begin()+q+1,cWordMatch(Words.gquery(L"ishas"),0,debugTrace));
 							for (unsigned int s2=s+1; s2<sentenceStarts.size(); s2++)
 								sentenceStarts[s2]++;
 							end++;
@@ -573,11 +573,11 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int &primaryQuot
 			// The captain's right.
 			// if there is no verb before the owning noun, and no verb after the owned word, and the word is more likely an adjective, then convert.
 			// Also a title (which will be in all caps) is more likely to be a noun phrase, so don't expand an ownership.  Also 'worth' is a strange adjective, which tends to be owned (a thousand pound's worth)
-			if (m[q].word->first != L"let" && (q+1>=m.size() || m[q+1].word->first != L"worth") && (m[q].flags&WordMatch::flagNounOwner) && !(m[q].flags&WordMatch::flagAllCaps))
+			if (m[q].word->first != L"let" && (q+1>=m.size() || m[q+1].word->first != L"worth") && (m[q].flags&cWordMatch::flagNounOwner) && !(m[q].flags&cWordMatch::flagAllCaps))
 			{
 				int capitalizedWords = 0;
 				for (unsigned int I = begin; I < end; I++)
-					if (m[I].flags&WordMatch::flagFirstLetterCapitalized)
+					if (m[I].flags&cWordMatch::flagFirstLetterCapitalized)
 						capitalizedWords++;
 				// detect titles - titles tend to be noun phrases
 				// David Lloyd's Last Will . 
@@ -594,10 +594,10 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int &primaryQuot
 					int whereLastNoun = -1, whereLastAdjective = -1;
 					// don't go beyond the double quote, as it will probably have a verb after it (said) which should not be counted in this analysis.
 					// sentenceStarts may not include an end of sentence!
-					for (unsigned int I = q + 1; I < end && !isEOS(I) && !maybeVerb && !WordClass::isDoubleQuote(m[I].word->first[0]); I++)
+					for (unsigned int I = q + 1; I < end && !isEOS(I) && !maybeVerb && !cWord::isDoubleQuote(m[I].word->first[0]); I++)
 					{
 						getFormFlags(I, maybeVerb, maybeNoun, maybeAdjective, preferNoun);
-						if (!maybeNoun && !maybeAdjective && !WordClass::isDash(m[I].word->first[0]))
+						if (!maybeNoun && !maybeAdjective && !cWord::isDash(m[I].word->first[0]))
 							detectNoun = false;
 						if (detectNoun)
 						{
@@ -611,8 +611,8 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int &primaryQuot
 					// and if there is no probable noun after the ownership, and there is at least one adjective, then convert.
 					if (!maybeVerb && whereLastNoun < 0 && whereLastAdjective >= 0)
 					{
-						m[q].flags &= ~WordMatch::flagNounOwner;
-						m.insert(m.begin() + q + 1, WordMatch(Words.gquery(L"ishas"), 0, debugTrace));
+						m[q].flags &= ~cWordMatch::flagNounOwner;
+						m.insert(m.begin() + q + 1, cWordMatch(Words.gquery(L"ishas"), 0, debugTrace));
 						for (unsigned int s2 = s + 1; s2 < sentenceStarts.size(); s2++)
 							sentenceStarts[s2]++;
 						unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
@@ -657,7 +657,7 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int &primaryQuot
 				(!m[q + 1].word->second.hasVerbForm() || ((verbFormOffset = m[q + 1].queryForm(L"verb")) >= 0 && m[q + 1].word->second.getUsageCost(verbFormOffset) > m[q + 1].word->second.getUsageCost(nounFormOffset)))) // next word is not a verb, or the cost of the verb is > cost of noun
 			{
 				m[q].word = Words.gquery(L"no");
-				m.insert(m.begin() + q + 1, WordMatch(Words.gquery(L"one"), 0, debugTrace));
+				m.insert(m.begin() + q + 1, cWordMatch(Words.gquery(L"one"), 0, debugTrace));
 				for (unsigned int s2 = s + 1; s2 < sentenceStarts.size(); s2++)
 					sentenceStarts[s2]++;
 				unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
@@ -707,8 +707,8 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int &primaryQuot
 #ifdef LOG_QUOTATIONS
 				lplog(L"%d-%d:Quotations odd upon reaching end-of-section (2).  Inserted quotation at %d. Increasing total primaryQuotations to %d.",begin,end,end,primaryQuotations);
 #endif
-				m.insert(m.begin()+end,WordMatch(primaryQuoteCloseWord,0,debugTrace));
-				m[end].flags|=WordMatch::flagInsertedQuote;
+				m.insert(m.begin()+end,cWordMatch(primaryQuoteCloseWord,0,debugTrace));
+				m[end].flags|=cWordMatch::flagInsertedQuote;
 				for (unsigned int s2=s+1; s2<sentenceStarts.size(); s2++)
 					sentenceStarts[s2]++;
 				unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
@@ -726,8 +726,8 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int &primaryQuot
 				lplog(L"%d-%d:Secondary quotations odd upon reaching end-of-section (4).  Reverted quotation at %d. Decreasing total secondaryQuotations to %d.",begin,end,lastSecondaryQuote,secondaryQuotations);
 #endif
 				lastSecondaryQuote=-1;
-				//m.insert(m.begin()+end,WordMatch(secondaryQuoteCloseWord,0));
-				//m[end].flags|=WordMatch::flagInsertedQuote;
+				//m.insert(m.begin()+end,cWordMatch(secondaryQuoteCloseWord,0));
+				//m[end].flags|=cWordMatch::flagInsertedQuote;
 				//for (unsigned int s2=s+1; s2<sentenceStarts.size(); s2++)
 				//	sentenceStarts[s2]++;
 			}
@@ -738,7 +738,7 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int &primaryQuot
 		}
 	}
 	puts("");
-	vector <WordMatch>::iterator im=m.begin(),imEnd=m.end();
+	vector <cWordMatch>::iterator im=m.begin(),imEnd=m.end();
 	int outerPrimaryQuotes=0,outerSecondaryQuotes=0;
 	int innerPrimaryQuotes=0,innerSecondaryQuotes=0;
 	bool inSecondaryQuote=false;
@@ -1055,7 +1055,7 @@ int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 			if (sourceType == NEWS_BANK_SOURCE_TYPE && result == PARSE_END_BOOK)
 				numParagraphsInSection = 0;
 			if (m.size() == lastSentenceEnd) lastSentenceEnd++;
-			m.push_back(WordMatch(Words.sectionWord, (result == PARSE_DUMP_LOCAL_OBJECTS) ? 1 : 0, debugTrace));
+			m.push_back(cWordMatch(Words.sectionWord, (result == PARSE_DUMP_LOCAL_OBJECTS) ? 1 : 0, debugTrace));
 			result = 0;
 			continue;
 		}
@@ -1063,7 +1063,7 @@ int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 		int numDash = 0, offset = 0;
 		for (wchar_t dq : sWord)
 		{
-			if (WordClass::isDash(dq))
+			if (cWord::isDash(dq))
 			{
 				numDash++;
 				// if the word contains two dashes that follow right after each other or are of different types, split word immediately.
@@ -1107,8 +1107,8 @@ int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 		// Handle cases like 10-15 or 10-60,000 which are returned as PARSE_NUM
 		if (dash != wstring::npos && result == 0 && // if (not date or number)
 			sWord[1] != 0 && // not a single dash
-			!WordClass::isDash(sWord[dash + 1]) && // not '--'
-			!(sWord[0] == L'a' && WordClass::isDash(sWord[1]) && numDash == 1) // a-working
+			!cWord::isDash(sWord[dash + 1]) && // not '--'
+			!(sWord[0] == L'a' && cWord::isDash(sWord[1]) && numDash == 1) // a-working
 			 // state-of-the-art
 			)
 		{
@@ -1121,10 +1121,10 @@ int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 			{
 				wstring lowerSubWord = subWord;
 				transform(lowerSubWord.begin(), lowerSubWord.end(), lowerSubWord.begin(), (int(*)(int)) tolower);
-				tIWMM iWord = WordClass::fullQuery(&mysql, lowerSubWord, sourceId);
-				if (iWord == WordClass::end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0)
+				tIWMM iWord = cWord::fullQuery(&mysql, lowerSubWord, sourceId);
+				if (iWord == cWord::end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0)
 					unknownWords++;
-				if (iWord != WordClass::end() && Stemmer::wordIsNotUnknownAndOpen(iWord, debugTrace.traceParseInfo))
+				if (iWord != cWord::end() && cStemmer::wordIsNotUnknownAndOpen(iWord, debugTrace.traceParseInfo))
 					openWords++;
 				if (subWord.length() > 1 && iswupper(subWord[0]) && !iswupper(subWord[1]))  // al-Jazeera, not BALL-PLAYING
 					capitalizedWords++;
@@ -1133,8 +1133,8 @@ int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 				removeDashesWord += lowerSubWord;
 			}
 			// if this does not qualify as a dashed word, back up to just AFTER the dash
-			tIWMM iWord = WordClass::fullQuery(&mysql, lowerWord, sourceId);
-			tIWMM iWordNoDashes = WordClass::fullQuery(&mysql, removeDashesWord, sourceId);
+			tIWMM iWord = cWord::fullQuery(&mysql, lowerWord, sourceId);
+			tIWMM iWordNoDashes = cWord::fullQuery(&mysql, removeDashesWord, sourceId);
 			//bool notCapitalized = (capitalizedWords == 0 || (capitalizedWords == 1 && firstWordInSentence));
 			// break apart if it is not capitalized, there are no unknown words, and the dashed word is unknown.
 			// however, there may be cases like I-THE, which webster/dictionary.com incorrectly say are defined.
@@ -1193,31 +1193,31 @@ int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 		}
 		unsigned __int64 flags;
 		iWord->second.adjustFormsInflections(sWord, flags, firstWordInSentence, nounOwner, allCaps, firstLetterCapitalized, false);
-		if (allCaps && m.size() && ((m[m.size() - 1].word->first == L"the" && !(m[m.size() - 1].flags&WordMatch::flagAllCaps)) || iWord->second.formsSize() == 0))
+		if (allCaps && m.size() && ((m[m.size() - 1].word->first == L"the" && !(m[m.size() - 1].flags&cWordMatch::flagAllCaps)) || iWord->second.formsSize() == 0))
 		{
-			flags |= WordMatch::flagAddProperNoun;
+			flags |= cWordMatch::flagAddProperNoun;
 			iWord->second.zeroNewProperNounCostIfUsedAllCaps();
 #ifdef LOG_PATTERN_COST_CHECK
 			::lplog(L"Added ProperNoun [from the] to word %s (form #%d) at cost %d.", originalWord.c_str(), formsSize(), usageCosts[formsSize()]);
 #endif
 		}
-		if ((flags&WordMatch::flagAddProperNoun) && debugTrace.traceParseInfo)
+		if ((flags&cWordMatch::flagAddProperNoun) && debugTrace.traceParseInfo)
 			lplog(LOG_INFO, L"%d:%s:added flagAddProperNoun.", m.size(), sWord.c_str());
-		if ((flags&WordMatch::flagOnlyConsiderProperNounForms) && debugTrace.traceParseInfo)
+		if ((flags&cWordMatch::flagOnlyConsiderProperNounForms) && debugTrace.traceParseInfo)
 			lplog(LOG_INFO, L"%d:%s:added flagOnlyConsiderProperNounForms.", m.size(), sWord.c_str());
-		if ((flags&WordMatch::flagOnlyConsiderOtherNounForms) && debugTrace.traceParseInfo)
+		if ((flags&cWordMatch::flagOnlyConsiderOtherNounForms) && debugTrace.traceParseInfo)
 			lplog(LOG_INFO, L"%d:%s:added flagOnlyConsiderOtherNounForms.", m.size(), sWord.c_str());
 		// does not necessarily have to be a proper noun after a word with a . at the end (P.N.C.)
 		// The description of a green toque , a coat with a handkerchief in the pocket marked P.L.C. He looked an agonized question at Mr . Carter .
-		if ((flags&WordMatch::flagOnlyConsiderProperNounForms) && m.size() && m[m.size() - 1].word->first.length() > 1 && m[m.size() - 1].word->first[m[m.size() - 1].word->first.length() - 1] == L'.')
+		if ((flags&cWordMatch::flagOnlyConsiderProperNounForms) && m.size() && m[m.size() - 1].word->first.length() > 1 && m[m.size() - 1].word->first[m[m.size() - 1].word->first.length() - 1] == L'.')
 		{
-			flags &= ~WordMatch::flagOnlyConsiderProperNounForms;
+			flags &= ~cWordMatch::flagOnlyConsiderProperNounForms;
 			if (debugTrace.traceParseInfo)
 				lplog(LOG_INFO, L"%d:removed flagOnlyConsiderProperNounForms.", m.size());
 		}
 		// if a word is capitalized, but is always followed by another word that is also capitalized, then 
 		// don't treat it as an automatic proper noun ('New' York)
-		bool isProperNoun = (flags&WordMatch::flagAddProperNoun) && !allCaps && !firstWordInSentence;
+		bool isProperNoun = (flags&cWordMatch::flagAddProperNoun) && !allCaps && !firstWordInSentence;
 		if (isProperNoun && previousIsProperNoun)
 		{
 			m[m.size() - 1].word->second.numProperNounUsageAsAdjective++;
@@ -1228,38 +1228,38 @@ int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 		// used in disambiguating abbreviated quotes from nested quotes
 		if (sWord == secondaryQuoteType)
 		{
-			if (flagAlphaBeforeHint) flags |= WordMatch::flagAlphaBeforeHint;
-			if (flagAlphaAfterHint) flags |= WordMatch::flagAlphaAfterHint;
+			if (flagAlphaBeforeHint) flags |= cWordMatch::flagAlphaBeforeHint;
+			if (flagAlphaAfterHint) flags |= cWordMatch::flagAlphaAfterHint;
 		}
 		if (sourceType == NEWS_BANK_SOURCE_TYPE && numParagraphsInSection < 3)
-			flags |= WordMatch::flagMetaData;
+			flags |= cWordMatch::flagMetaData;
 		// The description of a green toque , a coat with a handkerchief in the pocket marked P.L.C. He looked an agonized question at Mr . Carter .
 		if (firstLetterCapitalized && (sWord == L"he" || sWord == L"she" || sWord == L"it" || sWord == L"they" || sWord == L"we" || sWord == L"you") && m.size() &&
 			m[m.size() - 1].word->first.length() > 1 && m[m.size() - 1].word->first[m[m.size() - 1].word->first.length() - 1] == L'.')
 		{
-			m[m.size() - 1].word->second.flags |= tFI::topLevelSeparator;
+			m[m.size() - 1].word->second.flags |= cSourceWordInfo::topLevelSeparator;
 			sentenceStarts.push_back(lastSentenceEnd);
 			lastSentenceEnd = m.size();
 		}
-		if (flagNewLineBeforeHint) flags |= WordMatch::flagNewLineBeforeHint;
+		if (flagNewLineBeforeHint) flags |= cWordMatch::flagNewLineBeforeHint;
 		m.emplace_back(iWord, flags, debugTrace);
 		// check for By artist
-		if (webScrapeParse && m.size() > 2 && m[m.size() - 3].word->first == L"by" && (m[m.size() - 3].flags&WordMatch::flagNewLineBeforeHint) &&
-			(m[m.size() - 1].flags&WordMatch::flagFirstLetterCapitalized) && (m[m.size() - 2].flags&WordMatch::flagFirstLetterCapitalized))
+		if (webScrapeParse && m.size() > 2 && m[m.size() - 3].word->first == L"by" && (m[m.size() - 3].flags&cWordMatch::flagNewLineBeforeHint) &&
+			(m[m.size() - 1].flags&cWordMatch::flagFirstLetterCapitalized) && (m[m.size() - 2].flags&cWordMatch::flagFirstLetterCapitalized))
 		{
 			sentenceStarts.push_back(lastSentenceEnd);
 			lastSentenceEnd = m.size() + 1;
-			m.push_back(WordMatch(Words.sectionWord, 0, debugTrace));
+			m.push_back(cWordMatch(Words.sectionWord, 0, debugTrace));
 		}
 		// Last modified: 2012-01-29T21:38:56Z
 		// Published: Saturday, Jan. 28, 2012 - 12:00 am | Page 11A
 		// Last Modified: Sunday, Jan. 29, 2012 - 1:38 pm
-		if (webScrapeParse && m.size() > 2 && (m[m.size() - 3].flags&WordMatch::flagNewLineBeforeHint) &&
-			(m[m.size() - 1].flags&WordMatch::flagFirstLetterCapitalized) && (m[m.size() - 2].flags&WordMatch::flagFirstLetterCapitalized) && bookBuffer[bufferScanLocation] == L':')
+		if (webScrapeParse && m.size() > 2 && (m[m.size() - 3].flags&cWordMatch::flagNewLineBeforeHint) &&
+			(m[m.size() - 1].flags&cWordMatch::flagFirstLetterCapitalized) && (m[m.size() - 2].flags&cWordMatch::flagFirstLetterCapitalized) && bookBuffer[bufferScanLocation] == L':')
 		{
 			sentenceStarts.push_back(lastSentenceEnd);
 			lastSentenceEnd = m.size() + 1;
-			m.push_back(WordMatch(Words.sectionWord, 0, debugTrace));
+			m.push_back(cWordMatch(Words.sectionWord, 0, debugTrace));
 		}
 		int numWords = m.size() - lastSentenceEnd;
 		if (numWords > 150 || (numWords > 100 && (iWord->second.query(conjunctionForm) >= 0 || iWord->first == L";")))

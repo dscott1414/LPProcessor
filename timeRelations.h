@@ -327,5 +327,5 @@ class cTimeInfo
 		if (field!=-1)
 			itos(name,field,appendStr,L" ");
 	}
-	wstring toString(vector <WordMatch> &m,wstring &tmpstr);
+	wstring toString(vector <cWordMatch> &m,wstring &tmpstr);
 };

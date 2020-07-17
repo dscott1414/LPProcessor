@@ -49,7 +49,7 @@ int getMusicBrainzPage(wstring entitySearchedFor,wstring entityTypeReturned,wstr
 	// http://www.musicbrainz.org/ws/2/release/?query=artist:Jay-Z
 	wsprintf(str,MB_BASE,entitySearchedFor.c_str(),entityTypeReturned.c_str(),entity.c_str());
 	int ret;
-	if (ret= Internet::readPage(str,buffer)) return ret;
+	if (ret= cInternet::readPage(str,buffer)) return ret;
 	//lplog(LOG_WHERE, L"TRACEOPEN %s %s", path, __FUNCTIONW__);
 	int fd = _wopen(path, O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE); 
 	if (fd<0)
@@ -63,7 +63,7 @@ int getMusicBrainzPage(wstring entitySearchedFor,wstring entityTypeReturned,wstr
 		if ((fd=_wopen(path,O_CREAT|O_RDWR|O_BINARY,_S_IREAD | _S_IWRITE ))<0) 
 		{
 			lplog(LOG_ERROR,L"ERROR:Cannot create path %s - %S (10).",path,sys_errlist[errno]);
-			return Internet::GETPAGE_CANNOT_CREATE;
+			return cInternet::GETPAGE_CANNOT_CREATE;
 		}
 	}
 	_write(fd,buffer.c_str(),buffer.length()*sizeof(buffer[0]));

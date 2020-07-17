@@ -1,5 +1,5 @@
 #pragma once
-class Internet
+class cInternet
 {
 
 	typedef struct

@@ -45,7 +45,7 @@ bool aH(wchar_t *buf,__int64 &offset,wstring &s,wchar_t endChar)
 }
 
 // ID="say-37.7"
-bool tA(wchar_t *buf,__int64 &offset,vector <tAttr> &attr)
+bool tA(wchar_t *buf,__int64 &offset,vector <cXMLAttribute> &attr)
 { LFS
 	if ((buf[offset]==L'/' && buf[offset+1]==L'>') || (buf[offset]==L'?' && buf[offset+1]==L'>') || buf[offset]==L'>')
 		return false;
@@ -56,12 +56,12 @@ bool tA(wchar_t *buf,__int64 &offset,vector <tAttr> &attr)
 	offset++;
 	if (!tX(buf,offset,as,L'\"')) return false;
 	if (buf[offset]==L' ') offset++;
-	attr.push_back(tAttr(a,as));
+	attr.push_back(cXMLAttribute(a,as));
 	return true;
 }
 
 // <VNCLASS ID="say-37.7" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="vn_schema-3.xsd">
-bool lineX(wchar_t *buf,__int64 &offset,vector <tXC> &vxc,wstring expectedClass,bool absorbNonExpectedClassAnyway=false)
+bool lineX(wchar_t *buf,__int64 &offset,vector <cXMLClass> &vxc,wstring expectedClass,bool absorbNonExpectedClassAnyway=false)
 { LFS
 	while (iswspace(buf[offset])) offset++;
 	if (buf[offset]!=L'<') return false;
@@ -80,7 +80,7 @@ bool lineX(wchar_t *buf,__int64 &offset,vector <tXC> &vxc,wstring expectedClass,
 		offset=ch-buf+endOfComment.length()+1;
 		return lineX(buf,offset,vxc,expectedClass,absorbNonExpectedClassAnyway);
 	}
-	tXC xc;
+	cXMLClass xc;
 	__int64 classOffset=offset+1;
 	if (!aH(buf,classOffset,xc.XClass,' ')) return false;
 	if (xc.XClass!=expectedClass && !absorbNonExpectedClassAnyway)
@@ -118,7 +118,7 @@ wstring endX(wchar_t *buf,__int64 &offset,wstring &tmp)
 	return tmp;
 }
 
-bool aVNSEL(wchar_t *buf,__int64 &offset,vector <tXC> &vxc)
+bool aVNSEL(wchar_t *buf,__int64 &offset,vector <cXMLClass> &vxc)
 { LFS
 	int atLeastOne=false;
 	while (lineX(buf,offset,vxc,L"SELRESTRS"))
@@ -133,7 +133,7 @@ bool aVNSEL(wchar_t *buf,__int64 &offset,vector <tXC> &vxc)
 // <SYNRESTRS>
 //   <SYNRESTR Value="+" type="quotation"/>
 // </SYNRESTRS>
-bool aVNSYN(wchar_t *buf,__int64 &offset,vector <tXC> &vxc)
+bool aVNSYN(wchar_t *buf,__int64 &offset,vector <cXMLClass> &vxc)
 { LFS
 	while (lineX(buf,offset,vxc,L"SYNRESTRS"))
 		while (lineX(buf,offset,vxc[vxc.size()-1].vxc,L"SYNRESTR"));
@@ -141,7 +141,7 @@ bool aVNSYN(wchar_t *buf,__int64 &offset,vector <tXC> &vxc)
 	return lineX(buf,offset,vxc,L"SYNRESTRS/") || endX(buf,offset,tmp)==L"SYNRESTRS";
 }
 
-bool aSUBCLASS(wchar_t *buf,__int64 &offset,vector <tXC> &vxc)
+bool aSUBCLASS(wchar_t *buf,__int64 &offset,vector <cXMLClass> &vxc)
 { LFS
 	while (lineX(buf,offset,vxc,L"SUBCLASSES"))
 		while (lineX(buf,offset,vxc[vxc.size()-1].vxc,L"SUBCLASS"));
@@ -154,7 +154,7 @@ bool aSUBCLASS(wchar_t *buf,__int64 &offset,vector <tXC> &vxc)
 //          <SYNRESTR Value="+" type="quotation"/>
 //        </SYNRESTRS>
 //      </NP>
-bool aVNNP(wchar_t *buf,__int64 &offset,vector <tXC> &vxc)
+bool aVNNP(wchar_t *buf,__int64 &offset,vector <cXMLClass> &vxc)
 { LFS
 	if (!lineX(buf,offset,vxc,L"NP")) return false;
 	if (!aVNSYN(buf,offset,vxc) && !aVNSEL(buf,offset,vxc)) return false;
@@ -164,7 +164,7 @@ bool aVNNP(wchar_t *buf,__int64 &offset,vector <tXC> &vxc)
 
 bool aVNLEAF(wchar_t *buf,__int64 &offset,wchar_t *str)
 { LFS
-	vector <tXC> tempxc;
+	vector <cXMLClass> tempxc;
 	__int64 advOffset=offset;
 	if (lineX(buf,advOffset,tempxc,str))
 	{
@@ -177,7 +177,7 @@ bool aVNLEAF(wchar_t *buf,__int64 &offset,wchar_t *str)
 // <PREP value="with">
 //   <SELRESTRS/>
 // </PREP>
-bool aVNPREP(wchar_t *buf,__int64 &offset,vector <tXC> &vxc)
+bool aVNPREP(wchar_t *buf,__int64 &offset,vector <cXMLClass> &vxc)
 { LFS
 	if (!lineX(buf,offset,vxc,L"PREP")) return false;
 	if (!aVNSEL(buf,offset,vxc)) return false;
@@ -196,9 +196,9 @@ bool aVNPREP(wchar_t *buf,__int64 &offset,vector <tXC> &vxc)
 //          <SYNRESTRS/>
 //      </NP>
 //  </SYNTAX>
-bool aVNSyntax(wchar_t *buf,__int64 &offset,vector <tXC> &vxc)
+bool aVNSyntax(wchar_t *buf,__int64 &offset,vector <cXMLClass> &vxc)
 { LFS
-	vector <tXC> tempxc;
+	vector <cXMLClass> tempxc;
 	if (!lineX(buf,offset,tempxc,L"SYNTAX")) return false;
 	// NP, ADV, ADJ, PREP or LEX
 	while (aVNNP(buf,offset,vxc) || aVNLEAF(buf,offset,L"ADV/") || aVNLEAF(buf,offset,L"ADJ/") || aVNPREP(buf,offset,vxc) || lineX(buf,offset,vxc,L"LEX"));
@@ -217,9 +217,9 @@ bool aVNSyntax(wchar_t *buf,__int64 &offset,vector <tXC> &vxc)
 //          </ARGS>
 //      </PRED>
 //  </SEMANTICS>
-bool aVNSemantics(wchar_t *buf,__int64 &offset,vector <tXC> &vxc)
+bool aVNSemantics(wchar_t *buf,__int64 &offset,vector <cXMLClass> &vxc)
 { LFS
-	vector <tXC> tempxc;
+	vector <cXMLClass> tempxc;
 	if (!lineX(buf,offset,tempxc,L"SEMANTICS")) return false;
 	wstring tmp;
 	while (lineX(buf,offset,vxc,L"PRED"))
@@ -237,8 +237,8 @@ bool aVNSemantics(wchar_t *buf,__int64 &offset,vector <tXC> &vxc)
 
 bool aVNCLASS(wchar_t *buf,__int64 &offset)
 { LFS
-	tVN vn;
-	vector <tXC> tempxc;
+	cVerbNet vn;
+	vector <cXMLClass> tempxc;
 	// <?xml version="1.0" encoding="UTF-8"?>
 	lineX(buf,offset,tempxc,L"?xml");
 	// <!DOCTYPE VNCLASS SYSTEM "vn_class-3.dtd">
@@ -340,7 +340,7 @@ bool aVNCLASS(wchar_t *buf,__int64 &offset)
   //    </FRAME>
 	if (!lineX(buf,offset,tempxc,L"FRAMES/")) 
 	{
-		tFrame frame;
+		cXMLFrame frame;
 		if (!lineX(buf,offset,tempxc,L"FRAMES")) return false;
 		while (lineX(buf,offset,frame.description,L"FRAME"))
 		{
@@ -352,7 +352,7 @@ bool aVNCLASS(wchar_t *buf,__int64 &offset)
 				while (lineX(buf,offset,frame.examples,L"EXAMPLE"))
 				{
 					if (!tX(buf,offset,example,L'<')) return false;
-					frame.examples[frame.examples.size()-1].av.push_back(tAttr(tmp,example));
+					frame.examples[frame.examples.size()-1].av.push_back(cXMLAttribute(tmp,example));
 					offset--;
 					if (endX(buf,offset,tmp)!=L"EXAMPLE") return false;
 				}
@@ -375,7 +375,7 @@ bool aVNCLASS(wchar_t *buf,__int64 &offset)
 	return endX(buf,offset,tmp)==L"VNCLASS" || tmp==L"VNSUBCLASS";
 }
 
-vector < tVN > vbNetClasses;
+vector < cVerbNet > vbNetClasses;
 
 void readVBNet(void)
 { LFS
@@ -415,9 +415,9 @@ void readVBNet(void)
 	// he would be at the courthouse
 	vbNetVerbToClassMap[L"be"].insert(vbNetClasses.size());
 	wstring a,as=L"am";
-	tXC id;
-	id.av.push_back(tAttr(a,as));
-	tVN vn;
+	cXMLClass id;
+	id.av.push_back(cXMLAttribute(a,as));
+	cVerbNet vn;
 	vn.prepLocation=true;
 	vn.prepMustBeLocation=true;
 	vn.noPrepTo=true;

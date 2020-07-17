@@ -2,7 +2,7 @@
 int lplog(const wchar_t *format,...);
 extern short logCache;
 
-class patternMatchArray
+class cPatternMatchArray
 {
 public:
 	unsigned int count;
@@ -55,19 +55,19 @@ public:
 		unsigned short pattern;
 		unsigned short flags;
 	} tPatternMatch;
-	patternMatchArray();
-	~patternMatchArray();
+	cPatternMatchArray();
+	~cPatternMatchArray();
 	void clear(void);
-	patternMatchArray(const patternMatchArray &rhs);
+	cPatternMatchArray(const cPatternMatchArray &rhs);
 
 	tPatternMatch *content;
 	void minimize(void);
 	bool write(IOHANDLE file);
 	bool read(char *buffer,int &where,unsigned int limit);
 	bool write(void *buffer,int &where,unsigned int limit);
-	bool operator==(const patternMatchArray other) const;
-	patternMatchArray& operator=(const patternMatchArray &rhs);
-	bool operator!=(const patternMatchArray other) const;
+	bool operator==(const cPatternMatchArray other) const;
+	cPatternMatchArray& operator=(const cPatternMatchArray &rhs);
+	bool operator!=(const cPatternMatchArray other) const;
 	typedef allocator<tPatternMatch>::reference reference;
 	typedef allocator<tPatternMatch>::const_reference const_reference;
 	reference operator[](unsigned int _P0);
@@ -79,7 +79,7 @@ public:
 	int erase(void);
 	tPatternMatch *find(unsigned int p,short end);
 	tPatternMatch *lower_bound(unsigned int p,short end);
-	bool consolidateWinners(int lastPEMAConsolidationIndex,patternElementMatchArray &pema,int *wa,int position,int &maxMatch,sTrace &t);
+	bool consolidateWinners(int lastPEMAConsolidationIndex,cPatternElementMatchArray &pema,int *wa,int position,int &maxMatch,sTrace &t);
 	bool findMaxLen(wstring pattern,int &element);
 	int findMaxLen(void);
 	int queryPatternDiff(wstring pattern,wstring differentiator,int &maxLen);

@@ -229,11 +229,11 @@ bool cSource::evaluateHOUR(int where,cTimeInfo &t)
 			return false;
 	}
 	else 
-		WordClass::processTime(m[where].word->first,t.absHour,t.absMinute);
+		cWord::processTime(m[where].word->first,t.absHour,t.absMinute);
 	return true;
 }
 
-bool cSource::evaluateDateTime(vector <tTagLocation> &tagSet,cTimeInfo &t,cTimeInfo &rt,bool &rtSet)
+bool cSource::evaluateDateTime(vector <cTagLocation> &tagSet,cTimeInfo &t,cTimeInfo &rt,bool &rtSet)
 { LFS
 	t.clear();
 	rt.clear();
@@ -385,10 +385,10 @@ bool cSource::evaluateDateTime(vector <tTagLocation> &tagSet,cTimeInfo &t,cTimeI
 	}
 	}
 	nextTag=-1;
-	if ((ti=findTag(tagSet,L"SEASON",nextTag))>=0 && (m[tagSet[ti].sourcePosition].flags&WordMatch::flagFirstLetterCapitalized)) // season
+	if ((ti=findTag(tagSet,L"SEASON",nextTag))>=0 && (m[tagSet[ti].sourcePosition].flags&cWordMatch::flagFirstLetterCapitalized)) // season
 	{
 		tSet=(t.absSeason=whichSeason(m[tagSet[ti].sourcePosition].getMainEntry()->first))>=0;
-		if (nextTag>=0 && (m[tagSet[nextTag].sourcePosition].flags&WordMatch::flagFirstLetterCapitalized)) // season
+		if (nextTag>=0 && (m[tagSet[nextTag].sourcePosition].flags&cWordMatch::flagFirstLetterCapitalized)) // season
 			rtSet=(rt.absSeason=whichSeason(m[tagSet[nextTag].sourcePosition].getMainEntry()->first))>=0;
 	}
 	nextTag=-1;
@@ -590,13 +590,13 @@ void cSource::markTime(int where,int begin,int len)
 	{
 		if (color)
 			m[m[where].relPrep].timeColor=color;
-		m[m[where].relPrep].flags|=WordMatch::flagAlreadyTimeAnalyzed;
+		m[m[where].relPrep].flags|=cWordMatch::flagAlreadyTimeAnalyzed;
 	}
-	for (vector <WordMatch>::iterator im=m.begin()+begin,imEnd=m.begin()+begin+len; im!=imEnd; im++,begin++) // so begin can match a location!
+	for (vector <cWordMatch>::iterator im=m.begin()+begin,imEnd=m.begin()+begin+len; im!=imEnd; im++,begin++) // so begin can match a location!
 	{
 		if (color)
 			im->timeColor=color;
-		im->flags|=WordMatch::flagAlreadyTimeAnalyzed;
+		im->flags|=cWordMatch::flagAlreadyTimeAnalyzed;
 	}
 }
 
@@ -608,8 +608,8 @@ bool cSource::evaluateTimePattern(int beginObjectPosition,int &maxLen,cTimeInfo 
 			(element=m[beginObjectPosition].pma.queryPattern(L"__INTRO_N",maxLen))!=-1 || 
 			(element=m[beginObjectPosition].pma.queryPattern(L"_ADVERB",maxLen))!=-1)
 	{
-		vector < vector <tTagLocation> > tagSets;
-		if (startCollectTags(false,timeTagSet,beginObjectPosition,m[beginObjectPosition].pma[element&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,true,L"time pattern")>0)
+		vector < vector <cTagLocation> > tagSets;
+		if (startCollectTags(false,timeTagSet,beginObjectPosition,m[beginObjectPosition].pma[element&~cMatchElement::patternFlag].pemaByPatternEnd,tagSets,true,true,L"time pattern")>0)
 			for (unsigned int J=0; J<tagSets.size(); J++)
 			{
 				//printTagSet(LOG_TIME,L"LT",J,tagSets[J],beginObjectPosition,m[beginObjectPosition].pma[element&~patternFlag].pemaByPatternEnd);
@@ -622,7 +622,7 @@ bool cSource::evaluateTimePattern(int beginObjectPosition,int &maxLen,cTimeInfo 
 
 bool cSource::identifyDateTime(int where,vector <cSpaceRelation>::iterator csr,int &maxLen,int inMultiObject)
 { LFS
-	if (where<0 || (m[where].flags&WordMatch::flagAlreadyTimeAnalyzed)) return false;
+	if (where<0 || (m[where].flags&cWordMatch::flagAlreadyTimeAnalyzed)) return false;
 	bool rtSet=false;
 	cTimeInfo t,rt;
 	rt.tWhere=t.tWhere=where;
@@ -702,7 +702,7 @@ bool cSource::identifyDateTime(int where,vector <cSpaceRelation>::iterator csr,i
 		t.timeCapacity=cNamedDay;
 		t.absDayOfWeek=whichDayOfWeek(m[where].word->first);
 	}
-	else if (m[where].queryForm(L"season")>=0 && (m[where].flags&WordMatch::flagFirstLetterCapitalized))
+	else if (m[where].queryForm(L"season")>=0 && (m[where].flags&cWordMatch::flagFirstLetterCapitalized))
 	{
 		t.timeCapacity=cNamedSeason;
 		t.absSeason=whichSeason(m[where].word->first);
@@ -716,11 +716,11 @@ bool cSource::identifyDateTime(int where,vector <cSpaceRelation>::iterator csr,i
 	}
 	else if (m[where].queryForm(timeForm)>=0)
 	{
-		WordClass::processTime(m[where].word->first,t.absHour,t.absMinute);
+		cWord::processTime(m[where].word->first,t.absHour,t.absMinute);
 	}
 	else if (m[where].queryForm(dateForm)>=0)
 	{
-		WordClass::processDate(m[where].word->first,t.absYear,t.absMonth,t.absDayOfMonth);
+		cWord::processDate(m[where].word->first,t.absYear,t.absMonth,t.absDayOfMonth);
 	}
 	else 
 	{ // the 1994 crisis
@@ -746,7 +746,7 @@ bool cSource::identifyDateTime(int where,vector <cSpaceRelation>::iterator csr,i
 					t.timeRelationType=T_MODIFIER;
 					break;
 				}
-				else if (m[I].word->second.query(L"season")>=0 && (m[I].flags&WordMatch::flagFirstLetterCapitalized))
+				else if (m[I].word->second.query(L"season")>=0 && (m[I].flags&cWordMatch::flagFirstLetterCapitalized))
 				{
 					t.timeCapacity=cNamedSeason;
 					t.absSeason=whichSeason(m[I].word->first);
@@ -875,7 +875,7 @@ bool cSource::identifyDateTime(int where,vector <cSpaceRelation>::iterator csr,i
 		if (t.timeRelationType==T_RECURRING || word==L"time")
 		{
 			t.timeFrequency=whichRecurrence(m[where].word->first);
-			if (m[where].word->first==L"times" && (m[where].flags&WordMatch::flagFirstLetterCapitalized))
+			if (m[where].word->first==L"times" && (m[where].flags&cWordMatch::flagFirstLetterCapitalized))
 				return false; // the Times (of London)
 			// five times better!
 			if (where+1<(int)m.size() && m[where].word->first==L"times" && m[where-1].queryWinnerForm(numeralCardinalForm)>=0 && 
@@ -1158,7 +1158,7 @@ tPrepRelation prepRelations[] =
   {NULL,-1}
 };
 
-void WordClass::addTimeFlag(int flag,Inflections words[])
+void cWord::addTimeFlag(int flag,Inflections words[])
 { LFS
 	for (int I=0; words[I].word[0]; I++)
 	{
@@ -1167,14 +1167,14 @@ void WordClass::addTimeFlag(int flag,Inflections words[])
 			if (parseWord(NULL,words[I].word,iWord,false,false, -1,false)<0)
 				lplog(LOG_FATAL_ERROR,L"Error getting forms for time word %s",words[I].word);
 		iWord->second.timeFlags|=flag;
-    iWord->second.flags|=tFI::updateMainInfo;
+    iWord->second.flags|=cSourceWordInfo::updateMainInfo;
 	}
 }
 
-void WordClass::usageCostToNoun(Inflections words[], wchar_t *nounSubclass)
+void cWord::usageCostToNoun(Inflections words[], wchar_t *nounSubclass)
 {
 	LFS
-		int nounSubclassForm = FormsClass::gFindForm(nounSubclass);
+		int nounSubclassForm = cForms::gFindForm(nounSubclass);
 	for (int I = 0; words[I].word[0]; I++)
 	{
 		tIWMM iWord = query(words[I].word);
@@ -1184,10 +1184,10 @@ void WordClass::usageCostToNoun(Inflections words[], wchar_t *nounSubclass)
 	}
 }
 
-void WordClass::toLowestUsageCost(Inflections words[], wchar_t *formClass)
+void cWord::toLowestUsageCost(Inflections words[], wchar_t *formClass)
 {
 	LFS
-	int form = FormsClass::gFindForm(formClass);
+	int form = cForms::gFindForm(formClass);
 	for (int I = 0; words[I].word[0]; I++)
 	{
 		tIWMM iWord = query(words[I].word);
@@ -1196,7 +1196,7 @@ void WordClass::toLowestUsageCost(Inflections words[], wchar_t *formClass)
 	}
 }
 
-bool tFI::costEquivalentSubClass(int subclassForm,int parentForm)
+bool cSourceWordInfo::costEquivalentSubClass(int subclassForm,int parentForm)
 { LFS
 	int subclassFormNum=query(subclassForm);
 	if (subclassFormNum<0) return false;
@@ -1207,7 +1207,7 @@ bool tFI::costEquivalentSubClass(int subclassForm,int parentForm)
 	return true;
 }
 
-void WordClass::addTimeFlag(int flag,wchar_t *words[])
+void cWord::addTimeFlag(int flag,wchar_t *words[])
 { LFS
 	for (int I=0; words[I]!=NULL; I++)
 	{
@@ -1222,9 +1222,9 @@ void WordClass::addTimeFlag(int flag,wchar_t *words[])
 	}
 }
 
-void WordClass::usageCostToNoun(wchar_t *words[],wchar_t *nounSubclass)
+void cWord::usageCostToNoun(wchar_t *words[],wchar_t *nounSubclass)
 { LFS
-	int nounSubclassForm=FormsClass::gFindForm(nounSubclass);
+	int nounSubclassForm=cForms::gFindForm(nounSubclass);
 	for (int I=0; words[I]; I++)
 	{
 		tIWMM iWord=query(words[I]);
@@ -1260,7 +1260,7 @@ bool cSource::ageTransition(int where,bool timeTransition,bool &transitionSinceE
 	wstring tmpstr,sRole;
 	bool inPrimaryQuote=(m[where].objectRole&IN_PRIMARY_QUOTE_ROLE)!=0;
 	bool inSecondaryQuote=(m[where].objectRole&IN_SECONDARY_QUOTE_ROLE)!=0;
-	if (inPrimaryQuote && lastOpeningPrimaryQuote>=0 && (m[lastOpeningPrimaryQuote].flags&WordMatch::flagEmbeddedStoryResolveSpeakers))
+	if (inPrimaryQuote && lastOpeningPrimaryQuote>=0 && (m[lastOpeningPrimaryQuote].flags&cWordMatch::flagEmbeddedStoryResolveSpeakers))
 		return false;  // don't age out any speakers
 	if (debugTrace.traceSpeakerResolution)
 		lplog(LOG_SG|LOG_RESOLUTION,L"%06d:%02d %s aging - %s %s transition %s%s",where,section,
@@ -1355,7 +1355,7 @@ bool cSource::rejectTimeWord(int where,int begin)
 			return true;
 		if ((moment==L"day" || moment==L"time") && m[where].beginObjectPosition==m[where].endObjectPosition-1)
 			return true;
-		if (m[where].beginObjectPosition==m[where].endObjectPosition && where>2 && m[where-1].word->first!=L"-" && !(m[where].flags&WordMatch::flagFirstLetterCapitalized))
+		if (m[where].beginObjectPosition==m[where].endObjectPosition && where>2 && m[where-1].word->first!=L"-" && !(m[where].flags&cWordMatch::flagFirstLetterCapitalized))
 			return true;
 		return false;
 }
@@ -1363,7 +1363,7 @@ bool cSource::rejectTimeWord(int where,int begin)
 bool cSource::resolveTimeRange(int where,int pmaOffset,vector <cSpaceRelation>::iterator csr)
 { LFS
 	vector <int> objectPositions;
-	vector < vector <tTagLocation> > mobjectTagSets;
+	vector < vector <cTagLocation> > mobjectTagSets;
 	if (startCollectTags(true,mobjectTagSet,where,m[where].pma[pmaOffset].pemaByPatternEnd,mobjectTagSets,true,false,L"resolve time range")>0)
 		for (unsigned int J=0; J<mobjectTagSets.size(); J++)
 		{
@@ -1401,7 +1401,7 @@ bool cSource::resolveTimeRange(int where,int pmaOffset,vector <cSpaceRelation>::
 
 bool cSource::stopSearch(int I)
 { LFS
-	return isEOS(I) || m[I].word==Words.sectionWord || ((m[I].word->first==L"“" || m[I].word->first==L"”") && !(m[I].flags&WordMatch::flagQuotedString));
+	return isEOS(I) || m[I].word==Words.sectionWord || ((m[I].word->first==L"“" || m[I].word->first==L"”") && !(m[I].flags&cWordMatch::flagQuotedString));
 }
 
 // the previous relation has already taken everything in the sentence.
@@ -1465,9 +1465,9 @@ void cSource::appendTime(vector <cSpaceRelation>::iterator csr)
 	int wherePrep=m[csr->whereVerb].relPrep,prepLoop=0,progression=-1;
 	if (csr->relationType==stABSTIME)
 		progression=0;
-	if (m[csr->whereVerb].word->second.flags&tFI::stateVerb)
+	if (m[csr->whereVerb].word->second.flags&cSourceWordInfo::stateVerb)
 		progression=0;
-	else if (m[csr->whereVerb].word->second.flags&tFI::possibleStateVerb)
+	else if (m[csr->whereVerb].word->second.flags&cSourceWordInfo::possibleStateVerb)
 		progression=1;
 	else
 		progression=2;
@@ -1555,7 +1555,7 @@ void cSource::appendTime(vector <cSpaceRelation>::iterator csr)
 			// We were still talking about work three hours [after] the meeting broke up.
 			if ((element=m[I].queryWinnerForm(conjunctionForm))!=-1 && m[I].word->second.timeFlags && debugTrace.traceTime)
 				lplog(LOG_TIME,L"%06d:conjunction!",I);
-			if (m[I].flags&WordMatch::flagAlreadyTimeAnalyzed)
+			if (m[I].flags&cWordMatch::flagAlreadyTimeAnalyzed)
 				continue;
 			if ((maxEnd==-1 || I>=(unsigned)maxEnd) && m[I].relPrep<0)
 			{
@@ -1717,7 +1717,7 @@ void cSource::detectTimeTransition(int where,vector <int> &lastSubjects)
 	}
 }
 
-int cSource::getVerbTense(vector <tTagLocation> &tagSet,int verbTagIndex,bool &isId)
+int cSource::getVerbTense(vector <cTagLocation> &tagSet,int verbTagIndex,bool &isId)
 { LFS
 	if (!tagSetTimeArraySize)
 		tagSetTimeArray=(char *)tmalloc(tagSetTimeArraySize=desiredTagSets[verbSenseTagSet].tags.size());
@@ -1997,7 +1997,7 @@ int whichRecurrence(wstring w)
 	return cUnspecified;
 }
 
-wstring cTimeInfo::toString(vector <WordMatch> &m,wstring &tmpstr)
+wstring cTimeInfo::toString(vector <cWordMatch> &m,wstring &tmpstr)
 { LFS
 	tmpstr.clear();
 	wstring s;
@@ -2058,7 +2058,7 @@ int whichSeason(wstring w)
 	return -1;
 }
 
-void WordClass::createTimeCategories(bool normalize)
+void cWord::createTimeCategories(bool normalize)
 { LFS
 	// TYPE 1 - expressions that denote a specific time or a specific relative time
 	// In an expression (_NOUN), this is the main noun
@@ -2088,23 +2088,23 @@ void WordClass::createTimeCategories(bool normalize)
 		toLowestUsageCost(uncertainDurationUnits, L"uncertainDurationUnit");
 		return;
 	}
-	predefineWords(months,L"month",L"month",L"noun",tFI::queryOnAnyAppearance,true);
+	predefineWords(months,L"month",L"month",L"noun",cSourceWordInfo::queryOnAnyAppearance,true);
 	addTimeFlag(T_UNIT,months);
-	predefineWords(months_abb,L"month",L"month",tFI::queryOnAnyAppearance,true);
+	predefineWords(months_abb,L"month",L"month",cSourceWordInfo::queryOnAnyAppearance,true);
 	addTimeFlag(T_UNIT,months_abb);
-	predefineWords(daysOfWeek_abb,L"daysOfWeek",L"daysOfWeek",tFI::queryOnAnyAppearance,true);
+	predefineWords(daysOfWeek_abb,L"daysOfWeek",L"daysOfWeek",cSourceWordInfo::queryOnAnyAppearance,true);
 	addTimeFlag(T_UNIT,daysOfWeek_abb);
-	predefineWords(daysOfWeek,L"daysOfWeek",L"daysOfWeek",L"noun",tFI::queryOnAnyAppearance,true);
+	predefineWords(daysOfWeek,L"daysOfWeek",L"daysOfWeek",L"noun",cSourceWordInfo::queryOnAnyAppearance,true);
 	addTimeFlag(T_UNIT,daysOfWeek);
-	predefineWords(seasons,L"season",L"season",L"noun",tFI::queryOnAnyAppearance,true);
+	predefineWords(seasons,L"season",L"season",L"noun",cSourceWordInfo::queryOnAnyAppearance,true);
 	addTimeFlag(T_UNIT,seasons);
-	predefineWords(timeUnits,L"timeUnit",L"timeUnit",L"noun",tFI::queryOnAnyAppearance,true);
+	predefineWords(timeUnits,L"timeUnit",L"timeUnit",L"noun",cSourceWordInfo::queryOnAnyAppearance,true);
 	addTimeFlag(T_UNIT|T_LENGTH,timeUnits);
-	predefineWords(dayUnits,L"dayUnit",L"dayUnit",L"noun",tFI::queryOnAnyAppearance,true);
+	predefineWords(dayUnits,L"dayUnit",L"dayUnit",L"noun",cSourceWordInfo::queryOnAnyAppearance,true);
 	addTimeFlag(T_UNIT,simultaneousUnits);
-	predefineWords(simultaneousUnits, L"simultaneousUnit", L"simultaneousUnit", L"noun", tFI::queryOnAnyAppearance, true);
+	predefineWords(simultaneousUnits, L"simultaneousUnit", L"simultaneousUnit", L"noun", cSourceWordInfo::queryOnAnyAppearance, true);
 	addTimeFlag(T_UNIT, dayUnits);
-	predefineWords(uncertainDurationUnits, L"uncertainDurationUnit", L"uncertainDurationUnit", L"noun", tFI::queryOnAnyAppearance, true);
+	predefineWords(uncertainDurationUnits, L"uncertainDurationUnit", L"uncertainDurationUnit", L"noun", cSourceWordInfo::queryOnAnyAppearance, true);
 	addTimeFlag(T_UNIT, uncertainDurationUnits);
 	wchar_t *times[]={L"3:45",NULL};
 	predefineWords(times,L"time",L"time",0,false);
@@ -2113,7 +2113,7 @@ void WordClass::createTimeCategories(bool normalize)
 	addTimeFlags();
 }
 
-void WordClass::addTimeFlags()
+void cWord::addTimeFlags()
 { LFS
 	/******************************************************************************************/
 	// ABSOLUTE TIME
@@ -2358,7 +2358,7 @@ wstring holidayString(int holiday)
 	return L"illegal";
 }
 
-void WordClass::extendedParseHolidays()
+void cWord::extendedParseHolidays()
 {
 	LFS
 		for (int I = 0; holidayDays[I].name; I++)
@@ -2372,9 +2372,9 @@ void WordClass::extendedParseHolidays()
 }
 
 
-int WordClass::predefineHolidays()
+int cWord::predefineHolidays()
 { LFS
-  unsigned int iForm=FormsClass::addNewForm(L"holiday",L"hol",false,true);
+  unsigned int iForm=cForms::addNewForm(L"holiday",L"hol",false,true);
   for (int I=0; holidayDays[I].name; I++)
   {
     handleExtendedParseWords(holidayDays[I].name);

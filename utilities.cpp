@@ -334,7 +334,7 @@ bool copy(void *buf,set <wstring> &s,int &where,int limit)
 	return true;
 }
 
-bool copy(void *buf,intArray &a,int &where,int limit)
+bool copy(void *buf,cIntArray &a,int &where,int limit)
 { DLFS
 	if (where+sizeof(a.size())+a.size()*sizeof(int)>(unsigned)limit) 
 		lplog(LOG_FATAL_ERROR,L"Maximum copy limit of %d bytes reached! (16)",limit);
@@ -570,7 +570,7 @@ bool copy(set <wstring> &s,void *buf,int &where,int limit)
 	return true;
 }
 
-bool copy(intArray &a,void *buf,int &where,int limit)
+bool copy(cIntArray &a,void *buf,int &where,int limit)
 { DLFS
 	if (where+(int)sizeof(int)>limit) return false;
 	int num=*((int *)(((char *)buf)+where));
@@ -729,7 +729,7 @@ vector<wstring> splitString(wstring str, wchar_t wc)
 }
 
 
-int addTagMark(wstring tag, vector<tTagLocation> tagSet, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
+int addTagMark(wstring tag, vector<cTagLocation> tagSet, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
 {
 	int nextTagIndex = -1, tagIndex = findTag(tagSet, (wchar_t *)tag.c_str(), nextTagIndex);
 	if (tagIndex >= 0)
@@ -740,7 +740,7 @@ int addTagMark(wstring tag, vector<tTagLocation> tagSet, map <int, set<wstring>>
 	return tagIndex;
 }
 
-void addTagConstrainedMark(wstring tag, int constrainByTag, vector<tTagLocation> tagSet, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
+void addTagConstrainedMark(wstring tag, int constrainByTag, vector<cTagLocation> tagSet, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
 {
 	int nextConstrainedTagIndex = -1, constrainedTagIndex = (constrainByTag >= 0) ? findTagConstrained(tagSet, (wchar_t *)tag.c_str(), nextConstrainedTagIndex, tagSet[constrainByTag]) : -1;
 	if (constrainedTagIndex >= 0)
@@ -750,7 +750,7 @@ void addTagConstrainedMark(wstring tag, int constrainByTag, vector<tTagLocation>
 	}
 }
 
-void getTagPositionsFromTagSet(vector<tTagLocation> tagSet, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
+void getTagPositionsFromTagSet(vector<cTagLocation> tagSet, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
 {
 	if (addTagMark(L"SUBJECT", tagSet, tagBeginPositionMap, tagEndPositionMap) < 0)
 		return;
@@ -767,7 +767,7 @@ void getTagPositionsFromTagSet(vector<tTagLocation> tagSet, map <int, set<wstrin
 
 void getTagPositions(cSource &source, int position, int pemaByPatternEnd, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
 {
-	vector < vector <tTagLocation> > tagSets;
+	vector < vector <cTagLocation> > tagSets;
 	if (source.startCollectTags(false, subjectVerbRelationTagSet, position, pemaByPatternEnd, tagSets, true, false, L"tags for debugging") > 0)
 	{
 		for (unsigned int J = 0; J < tagSets.size(); J++)

@@ -32,10 +32,10 @@ cWordGroup::cWordGroup(wstring fromWord1, wstring fromWord2, wstring toWord1, ws
 	toWords.insert(toWord2);
 }
 
-cWordGroup::cWordGroup(wstring self,tFI::cRMap::tcRMap *inToWords)
+cWordGroup::cWordGroup(wstring self,cSourceWordInfo::cRMap::tcRMap *inToWords)
 { LFS
 	fromWords.push_back(self);
-	for (tFI::cRMap::tIcRMap twi=inToWords->begin(),twiEnd=inToWords->end(); twi!=twiEnd; twi++)
+	for (cSourceWordInfo::cRMap::tIcRMap twi=inToWords->begin(),twiEnd=inToWords->end(); twi!=twiEnd; twi++)
 		toWords.insert(twi->first);
 }
 
@@ -84,7 +84,7 @@ relationWOTypes getComplementaryRelationship(int rType)
 
 vector <cWordGroup> groups[numRelationWOTypes]; // not used yet
 
-vector <relc> relationCombos; // not used yet
+vector <cRelationCombo> relationCombos; // not used yet
 
 #ifdef ACCUMULATE_GROUPS
 /*
@@ -230,7 +230,7 @@ wstring cWordGroup::summary(void)
 	for (vector<tIWMM>::iterator fw=fromWords.begin(),fwEnd=fromWords.end(); fw!=fwEnd; fw++)
 		temp+=(*fw)->first+L" ";
 	temp+=L"-> ";
-	for (set <tIWMM,tFI::wordSetCompare>::iterator tw=toWords.begin(),twEnd=toWords.end(); tw!=twEnd; tw++)
+	for (set <tIWMM,cSourceWordInfo::wordSetCompare>::iterator tw=toWords.begin(),twEnd=toWords.end(); tw!=twEnd; tw++)
 		temp+=(*tw)->first+L" ";
 	return temp;
 }
@@ -280,7 +280,7 @@ bool cWordGroup::incorporateMapping(relationWOTypes relationType,tIWMM word,vect
 // for each word in setY (Y) except banker:
 //   if there is exactly one word in complementary relation of Y (X2) already set, successful group creation.
 //
-bool tFI::intersect(relationWOTypes relationType,tIWMM word,tIWMM self,tIWMM &fromWord,tIWMM &toWord)
+bool cSourceWordInfo::intersect(relationWOTypes relationType,tIWMM word,tIWMM self,tIWMM &fromWord,tIWMM &toWord)
 { LFS
 	relationWOTypes crType=getComplementaryRelationship(relationType);
 	if (!word->second.relationMaps[relationType] || word->second.relationMaps[relationType]->r.size()<2 ||
@@ -351,15 +351,15 @@ bool tFI::intersect(relationWOTypes relationType,tIWMM word,tIWMM self,tIWMM &fr
 #endif // ACCUMULATE_GROUPS
 
 // this return value is pointer to iterator (and mri is static) because
-// tIcRMap refers to wordMapCompare, which refers to tIWMM, which refers to tFI, which has a map of cRMaps in it
+// tIcRMap refers to wordMapCompare, which refers to tIWMM, which refers to cSourceWordInfo, which has a map of cRMaps in it
 // which refer to tIcRMap, and then again.
-tFI::cRMap::tIcRMap tFI::cRMap::addRelation(int sourceId,int fromWhere,tIWMM toWord,bool &isNew,int count,bool fromDB)
+cSourceWordInfo::cRMap::tIcRMap cSourceWordInfo::cRMap::addRelation(int sourceId,int fromWhere,tIWMM toWord,bool &isNew,int count,bool fromDB)
 { LFS
-	typedef pair <wstring,tRelation> ptcRMap;
+	typedef pair <wstring,cRelation> ptcRMap;
 	tIcRMap mri;
 	if (isNew=(mri=r.find(toWord->first))==r.end())
 	{
-		pair <tIcRMap,bool> mr=r.insert(ptcRMap(toWord->first,tRelation(sourceId,fromWhere,count,fromDB)));
+		pair <tIcRMap,bool> mr=r.insert(ptcRMap(toWord->first,cRelation(sourceId,fromWhere,count,fromDB)));
 		mri=mr.first;
 	}
 	else
@@ -401,11 +401,11 @@ if the entire group uses it, add chef to the group.
 
 treat individual words as groups.
 */
-tFI::cRMap::tIcRMap tFI::addRelation(int where,int relationType,tIWMM word)
+cSourceWordInfo::cRMap::tIcRMap cSourceWordInfo::addRelation(int where,int relationType,tIWMM word)
 { LFS
 	allocateMap(relationType);
 	bool isNew;
-	tFI::cRMap::tIcRMap p=relationMaps[relationType]->addRelation(sourceId,where,word,isNew,1,false);
+	cSourceWordInfo::cRMap::tIcRMap p=relationMaps[relationType]->addRelation(sourceId,where,word,isNew,1,false);
 #ifdef ACCUMULATE_GROUPS
 	if (!isNew || word==this) return p;
 	// example: The banker stopped.  self=stopped rType=VerbWithSubjectWord word=banker
@@ -479,20 +479,20 @@ void cSource::reportProbableRelationsAccuracy()
 	// log sum (1), sum (2), average (1), average (2), low (1), high (1), low (2), high (2)
 }
 
-bool cSource::inTag(tTagLocation &innerTag,tTagLocation &outerTag)
+bool cSource::inTag(cTagLocation &innerTag,cTagLocation &outerTag)
 { LFS
 	return innerTag.sourcePosition>=outerTag.sourcePosition && (innerTag.sourcePosition+innerTag.len<=outerTag.sourcePosition+outerTag.len);
 }
 
 void cSource::adjustToHailRole(int where)
 { LFS
-	vector <WordMatch>::iterator im=m.begin()+where;
+	vector <cWordMatch>::iterator im=m.begin()+where;
 	// additional hail check if gendered object is in between two commas and is not in a larger pattern (lastBeginS1==-1)
 	// “[tuppence:tommy] yes , little lady[cousin,jane] , out with it[yarn] . ”  Secret Adversary
 	// cannot already be a hail, or part of a multiple noun construction, or an appositive
 	unsigned __int64 or=im->objectRole&(HAIL_ROLE|MPLURAL_ROLE|RE_OBJECT_ROLE);
 	int oc=(im->getObject()>=0) ? objects[im->getObject()].objectClass:-1;
-	if ((or&HAIL_ROLE) && ((im->flags&WordMatch::flagAdjectivalObject)  ||
+	if ((or&HAIL_ROLE) && ((im->flags&cWordMatch::flagAdjectivalObject)  ||
 		  (im->getObject()>=0 && objects[im->getObject()].getOwnerWhere()>=0 && (m[objects[im->getObject()].getOwnerWhere()].word->second.inflectionFlags&SECOND_PERSON)) || // your cousin
 		  ((/*oc==GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS && */im->beginObjectPosition>=0 && m[im->beginObjectPosition].queryForm(determinerForm)>=0) || // a maid
 			 oc==NON_GENDERED_GENERAL_OBJECT_CLASS || oc==NON_GENDERED_BUSINESS_OBJECT_CLASS || oc==VERB_OBJECT_CLASS || oc==NON_GENDERED_NAME_OBJECT_CLASS) ||
@@ -595,7 +595,7 @@ void cSource::adjustToHailRole(int where)
 					m[w+1].getObject()>=0 && objects[m[w+1].getObject()].objectClass==NAME_OBJECT_CLASS)
 			{
 				m[where].objectRole|=IN_QUOTE_REFERRING_AUDIENCE_ROLE;
-				m[where].flags&=~WordMatch::flagAdjectivalObject; // caused by misparse - this object is not an adjective of the next object
+				m[where].flags&=~cWordMatch::flagAdjectivalObject; // caused by misparse - this object is not an adjective of the next object
 				m[secondObject].objectRole|=IN_QUOTE_REFERRING_AUDIENCE_ROLE;
 				m[w+1].objectRole|=HAIL_ROLE;
 				if (debugTrace.traceRole)
@@ -644,7 +644,7 @@ bool cSource::checkAmbiguousVerbTense(int whereVerb,int &sense,bool inQuote,tIWM
 	return false;
 }
 
-void cSource::trackVerbTenses(int where,vector <tTagLocation> &tagSet,bool inQuote,bool inQuotedString,bool inSectionHeader,
+void cSource::trackVerbTenses(int where,vector <cTagLocation> &tagSet,bool inQuote,bool inQuotedString,bool inSectionHeader,
 														 bool ambiguousSense,int sense,bool &tenseError)
 { LFS
 	if (sense<0 || ambiguousSense) // not TENSE_NOT_SPECIFIED
@@ -718,7 +718,7 @@ void cSource::trackVerbTenses(int where,vector <tTagLocation> &tagSet,bool inQuo
 	}
 }
 
-void cSource::getCompoundPositions(int where,vector <tTagLocation> &multipleObjectTagSet,vector < int > &objectPositions)
+void cSource::getCompoundPositions(int where,vector <cTagLocation> &multipleObjectTagSet,vector < int > &objectPositions)
 { LFS
 	objectPositions.clear();
 	tIWMM w;
@@ -730,7 +730,7 @@ void cSource::getCompoundPositions(int where,vector <tTagLocation> &multipleObje
 				(objectPositions.empty() || wo>objectPositions[objectPositions.size()-1]) &&
 				o!=-1)
 		{
-			vector < vector <tTagLocation> > ndTagSets;
+			vector < vector <cTagLocation> > ndTagSets;
 			ndTagSets.clear();
 			// and medical man written all over him
 			//   source: a hospital nurse ( not Whittington's one[tuppence,nurse] ) on one side of me[julius] , and a little black - bearded man[mr] with gold glasses , and medical man[mr] written all[all] over him
@@ -759,8 +759,8 @@ void cSource::getCompoundPositions(int where,vector <tTagLocation> &multipleObje
 void cSource::markMultipleObjects(int where)
 {
 	LFS
-  vector <WordMatch>::iterator im=m.begin()+where;
-	patternMatchArray::tPatternMatch *pma=im->pma.content;
+  vector <cWordMatch>::iterator im=m.begin()+where;
+	cPatternMatchArray::tPatternMatch *pma=im->pma.content;
 	for (unsigned PMAElement=0; PMAElement<im->pma.count; PMAElement++,pma++)
 	{
 		// link together multiple nouns.  If lists overlap, prefer the lists that have more items, and if they contain the same # of items, prefer those that having
@@ -768,7 +768,7 @@ void cSource::markMultipleObjects(int where)
 		if (patterns[pma->getPattern()]->hasTag(MNOUN_TAG))
 		{
 			bool allNeuter=true,allGendered=true,mixedGender,nonCombinant,nameGenderUncertainty=false;
-			vector < vector <tTagLocation> > mobjectTagSets,ndTagSets;
+			vector < vector <cTagLocation> > mobjectTagSets,ndTagSets;
 			vector < int > objectPositions;
 			if (startCollectTags(true,mobjectTagSet,where,pma->pemaByPatternEnd,mobjectTagSets,true,false,L"multiobjects")>0)
 				for (unsigned int J=0; J<mobjectTagSets.size(); J++)
@@ -1022,7 +1022,7 @@ void cSource::evaluateSubjectRoleTag(int where,int which,vector <int> whereSubje
 	}
 	m[s].relNextObject=((signed)whereSubjects.size()>which+1) ? whereSubjects[which+1] : ((which) ? whereSubjects[0] : -1);
 	if (ignoreSpeaker)
-		m[s].flags|=WordMatch::flagIgnoreAsSpeaker; // used in scanSpeaker
+		m[s].flags|=cWordMatch::flagIgnoreAsSpeaker; // used in scanSpeaker
 	if (tsSense&VT_EXTENDED)
 		m[s].objectRole|=EXTENDED_OBJECT_ROLE;
 	if (isNot)
@@ -1115,7 +1115,7 @@ void cSource::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool is
 		if (!searchValid) 
 			I=MSTechnique;
 		// That man[danvers] , Danvers , was shadowed on the way over , wasn't he[danvers] ? 
-		if (I>=0 && (m[I].flags&WordMatch::flagInQuestion) && (m[where].pma.queryPattern(L"_Q1")>=0 || m[where].pma.queryPattern(L"_Q2")>=0)) return;
+		if (I>=0 && (m[I].flags&cWordMatch::flagInQuestion) && (m[where].pma.queryPattern(L"_Q1")>=0 || m[where].pma.queryPattern(L"_Q2")>=0)) return;
 		bool infinitiveObjectOfPrep=(m[whereVerb].objectRole&(PREP_OBJECT_ROLE|OBJECT_ROLE)) && (m[whereVerb].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE);
 		if (infinitiveObjectOfPrep && whereVerb>2 && m[whereVerb-1].queryWinnerForm(possessiveDeterminerForm)>=0)
 			I=whereVerb-1;
@@ -1126,7 +1126,7 @@ void cSource::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool is
 			// if there is another subject, that is not the same subject, return.
 			int J=I-1,element;
 			while (J>=0 && !isEOS(J) && m[J].word->first!=L"”" && m[J].word->first!=L"’" && m[J].word!=Words.sectionWord && m[J].word->first!=L":" && m[J].queryWinnerForm(coordinatorForm)<0 && 
-						(!(m[J].objectRole&SUBJECT_ROLE) || m[J].getObject()==cObject::eOBJECTS::UNKNOWN_OBJECT || (m[J].flags&WordMatch::flagAdjectivalObject))) J--;
+						(!(m[J].objectRole&SUBJECT_ROLE) || m[J].getObject()==cObject::eOBJECTS::UNKNOWN_OBJECT || (m[J].flags&cWordMatch::flagAdjectivalObject))) J--;
 			if (multiSubject=(J>=0 && m[J].objectRole&SUBJECT_ROLE) && m[J].getObject()!= cObject::eOBJECTS::UNKNOWN_OBJECT && m[J].getObject()!=m[I].getObject() && m[J].word!=m[I].word && m[J].pma.queryPatternDiff(L"__S1",L"5")==-1)
 			{
 				if (m[I].relInternalVerb>=0 && (m[m[I].relInternalVerb].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) &&
@@ -1155,7 +1155,7 @@ void cSource::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool is
 							I=J;
 						}
 						int K=-1,originalI=I;
-						if (m[I].getRelVerb()<0 || (m[m[I].getRelVerb()].getRelVerb()<0 && !(m[m[I].getRelVerb()].flags&WordMatch::flagInInfinitivePhrase)))
+						if (m[I].getRelVerb()<0 || (m[m[I].getRelVerb()].getRelVerb()<0 && !(m[m[I].getRelVerb()].flags&cWordMatch::flagInInfinitivePhrase)))
 						{
 							if (m[J].getRelVerb()>=0 && m[m[J].getRelVerb()].getRelVerb()>=0) I=J;
 							else
@@ -1163,7 +1163,7 @@ void cSource::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool is
 								// try really really hard to find that infinitive subject
 								K=J-1;
 								while (K>=0 && !isEOS(J) && m[K].word->first!=L"”" && m[K].word->first!=L"’" && m[K].word!=Words.sectionWord && m[K].word->first!=L":" && m[K].queryWinnerForm(coordinatorForm)<0 && 
-											(!(m[K].objectRole&(SUBJECT_ROLE|PREP_OBJECT_ROLE)) || m[K].getObject()== cObject::eOBJECTS::UNKNOWN_OBJECT || (m[K].flags&WordMatch::flagAdjectivalObject))) K--;
+											(!(m[K].objectRole&(SUBJECT_ROLE|PREP_OBJECT_ROLE)) || m[K].getObject()== cObject::eOBJECTS::UNKNOWN_OBJECT || (m[K].flags&cWordMatch::flagAdjectivalObject))) K--;
 								if (K>=0 && m[K].getRelVerb()>=0 && m[m[K].getRelVerb()].getRelVerb()>=0) I=K;
 								else return;
 							}
@@ -1177,7 +1177,7 @@ void cSource::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool is
 				// I and J are within the same subject, but J is a time that should not be considered a subject
 				// the following morning the indefatigable Albert ...
 				else if ((element=m[m[J].beginObjectPosition].pma.queryPatternDiff(L"__NOUN",L"5"))!=-1 && 
-					  I>J && I<m[J].beginObjectPosition+m[m[J].beginObjectPosition].pma[element&~matchElement::patternFlag].len &&
+					  I>J && I<m[J].beginObjectPosition+m[m[J].beginObjectPosition].pma[element&~cMatchElement::patternFlag].len &&
 						(m[J].word->second.timeFlags&T_UNIT)!=0)
 				{
 					if (debugTrace.traceSpeakerResolution)
@@ -1200,7 +1200,7 @@ void cSource::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool is
 		objectAsSubject=false;
 		if (isId && (isPleonastic(subjectWord) || isPleonastic(I)))
 		{
-			m[I].flags|=WordMatch::flagObjectPleonastic; // it was a good day.  What was New England?
+			m[I].flags|=cWordMatch::flagObjectPleonastic; // it was a good day.  What was New England?
 			subjectIsPleonastic=true;
 		}
 		wstring tmpstr;
@@ -1218,7 +1218,7 @@ void cSource::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool is
 	*/
 }
 
-void cSource::discoverSubjects(int where,vector <tTagLocation> &tagSet,int subjectTag,bool isId,bool &objectAsSubject,bool &subjectIsPleonastic,vector <tIWMM> &subjectWords,vector <int> &subjectObjects,vector <int> &whereSubjects)
+void cSource::discoverSubjects(int where,vector <cTagLocation> &tagSet,int subjectTag,bool isId,bool &objectAsSubject,bool &subjectIsPleonastic,vector <tIWMM> &subjectWords,vector <int> &subjectObjects,vector <int> &whereSubjects)
 { LFS
 	tIWMM subjectWord=wNULL;
 	int subjectObject,whereSubject=-1,nextTag=-1,whereObject=-1,mnounTag;
@@ -1226,7 +1226,7 @@ void cSource::discoverSubjects(int where,vector <tTagLocation> &tagSet,int subje
 	if ((mnounTag=findTagConstrained(tagSet,L"MNOUN",nextTag,tagSet[subjectTag]))>=0)
 	{	
 		whereObject=-1;
-		vector < vector <tTagLocation> > mobjectTagSets;
+		vector < vector <cTagLocation> > mobjectTagSets;
 		if (startCollectTagsFromTag(true,mobjectTagSet,tagSet[mnounTag],mobjectTagSets,false,true, true, L"discover subjects - compound objects")>0)
 		{
 			for (unsigned int J=0; J<mobjectTagSets.size(); J++)
@@ -1240,7 +1240,7 @@ void cSource::discoverSubjects(int where,vector <tTagLocation> &tagSet,int subje
 					if (whereSubject<0) whereSubject=tagSet[subjectTag].sourcePosition;
 					if (resolveTag(mobjectTagSets[J],oTag,subjectObject,whereSubject,subjectWord) && isId && (isPleonastic(subjectWord) || isPleonastic(whereSubject)))
 					{
-						m[whereSubject].flags|=WordMatch::flagObjectPleonastic; // it was a good day.  What was New England?
+						m[whereSubject].flags|=cWordMatch::flagObjectPleonastic; // it was a good day.  What was New England?
 						subjectIsPleonastic=true;
 					}
 					// if subject is a time // three minutes later came another
@@ -1269,7 +1269,7 @@ void cSource::discoverSubjects(int where,vector <tTagLocation> &tagSet,int subje
 		if (whereSubject<0) whereSubject=tagSet[subjectTag].sourcePosition;
 		if (resolveTag(tagSet,subjectTag,subjectObject,whereSubject,subjectWord) && isId && (isPleonastic(subjectWord) || isPleonastic(whereSubject)))
 		{
-			m[whereSubject].flags|=WordMatch::flagObjectPleonastic; // it was a good day.  What was New England?
+			m[whereSubject].flags|=cWordMatch::flagObjectPleonastic; // it was a good day.  What was New England?
 			subjectIsPleonastic=true;
 		}
 		// The following morning the indefatigable Albert , having cemented an alliance with the greengrocer's boy[tommy,albert] 
@@ -1302,12 +1302,12 @@ void cSource::discoverSubjects(int where,vector <tTagLocation> &tagSet,int subje
 // each object points to its preposition by relPrep.
 // if a preposition directly follows another object of a preposition, the object of the preposition points to the previous object by relNextObject.
 // an infinitive verb points to its owning verb with previousCompoundPartObject
-void cSource::markPrepositionalObjects(int where,int whereVerb,bool flagInInfinitivePhrase,bool subjectIsPleonastic,bool objectAsSubject,bool isId,bool inPrimaryQuote,bool inSecondaryQuote,bool isNot,bool isNonPast,bool isNonPresent,bool noObjects,bool delayedReceiver,int tsSense,vector <tTagLocation> &tagSet)
+void cSource::markPrepositionalObjects(int where,int whereVerb,bool flagInInfinitivePhrase,bool subjectIsPleonastic,bool objectAsSubject,bool isId,bool inPrimaryQuote,bool inSecondaryQuote,bool isNot,bool isNonPast,bool isNonPresent,bool noObjects,bool delayedReceiver,int tsSense,vector <cTagLocation> &tagSet)
 { LFS
 	wstring tmpstr;
 	for (int prepTag=findOneTag(tagSet,L"PREP",-1); prepTag>=0; prepTag=findOneTag(tagSet,L"PREP",prepTag))
 	{
-		vector < vector <tTagLocation> > tagSets;
+		vector < vector <cTagLocation> > tagSets;
 		if (startCollectTagsFromTag(debugTrace.traceRelations,prepTagSet,tagSet[prepTag],tagSets,-1,true, false, L"mark prepositional objects")>0)
 			for (unsigned int K=0; K<tagSets.size(); K++)
 			{
@@ -1326,7 +1326,7 @@ void cSource::markPrepositionalObjects(int where,int whereVerb,bool flagInInfini
 						m[wp].setRelObject(wpo);
 						setRelPrep(wpo,wp,3,PREP_OBJECT_SET,whereVerb);
 						m[wp].setRelVerb(whereVerb);
-						if (m[wp].word->second.flags&tFI::prepMoveType)
+						if (m[wp].word->second.flags&cSourceWordInfo::prepMoveType)
 							m[wpo].objectRole|=MOVEMENT_PREP_OBJECT_ROLE;
 						else
 							m[wpo].objectRole|=NON_MOVEMENT_PREP_OBJECT_ROLE;
@@ -1449,7 +1449,7 @@ void cSource::addRoleTagsAt(int where,int I,bool inRelativeClause,bool withinInf
 				I,objectString(m[I].getObject(),tmpstr,true).c_str(),senseString(tmpstr2,tsSense).c_str(),(inRelativeClause) ? L" in relative clause":L"",fromWhere,where);
 	}
 	if (withinInfinitivePhrase)
-		m[I].flags|=WordMatch::flagInInfinitivePhrase;
+		m[I].flags|=cWordMatch::flagInInfinitivePhrase;
 	if (!inRelativeClause)
 		m[I].objectRole|=FOCUS_EVALUATED;
 	if ((tsSense&VT_POSSIBLE) && inRelativeClause)
@@ -1489,10 +1489,10 @@ void cSource::addRoleTagsAt(int where,int I,bool inRelativeClause,bool withinInf
 // relation as subjectObject to main verb: An extra candle to give away is always a good idea.
 int cSource::processInternalInfinitivePhrase(int where,int whereVerb,int whereParentObject,int iverbTag,int firstFreePrep,vector <int> &futureBoundPrepositions,
 																						bool inPrimaryQuote,bool inSecondaryQuote,bool &nextVerbInSeries,int &sense,
-																						int &whereLastVerb,bool &ambiguousSense,bool inQuotedString,bool inSectionHeader,int begin,int end,int infpElement,vector <tTagLocation> &tagSet)
+																						int &whereLastVerb,bool &ambiguousSense,bool inQuotedString,bool inSectionHeader,int begin,int end,int infpElement,vector <cTagLocation> &tagSet)
 { LFS
 	int whereIVerb=-1,whereHVerb=-1,nextTag=-1,parentTagLen=-1;
-	vector < vector <tTagLocation> > tagSets;
+	vector < vector <cTagLocation> > tagSets;
 	if (iverbTag>=0)
 	{
 		startCollectTagsFromTag(debugTrace.traceRelations,iverbTagSet,tagSet[iverbTag],tagSets,-1,true, false, L"internal infinitive phrase");
@@ -1500,8 +1500,8 @@ int cSource::processInternalInfinitivePhrase(int where,int whereVerb,int wherePa
 	}
 	else
 	{
-		startCollectTags(debugTrace.traceRelations,iverbTagSet,where,m[where].pma[infpElement&~matchElement::patternFlag].pemaByPatternEnd,tagSets,true,false,L"internal infinitive phrase");
-		parentTagLen=m[where].pma[infpElement&~matchElement::patternFlag].len;
+		startCollectTags(debugTrace.traceRelations,iverbTagSet,where,m[where].pma[infpElement&~cMatchElement::patternFlag].pemaByPatternEnd,tagSets,true,false,L"internal infinitive phrase");
+		parentTagLen=m[where].pma[infpElement&~cMatchElement::patternFlag].len;
 	}
 	for (unsigned int K=0; K<tagSets.size(); K++)
 	{
@@ -1522,7 +1522,7 @@ int cSource::processInternalInfinitivePhrase(int where,int whereVerb,int wherePa
 		if (whereIVerb>=0)
 		{
 			m[whereIVerb].hasVerbRelations=true;
-			m[whereIVerb].flags|=WordMatch::flagInInfinitivePhrase;
+			m[whereIVerb].flags|=cWordMatch::flagInInfinitivePhrase;
 		}
 		if (whereIVerb > whereLastVerb)
 		{
@@ -1550,7 +1550,7 @@ int cSource::processInternalInfinitivePhrase(int where,int whereVerb,int wherePa
 			}
 			m[whereHObject].setRelVerb(whereIVerb);
 			m[whereIVerb].relSubject=whereHObject;
-			m[itoWhere].flags|=WordMatch::flagInInfinitivePhrase;
+			m[itoWhere].flags|=cWordMatch::flagInInfinitivePhrase;
 			if (whereVerb>=0)
 			{
 				m[whereVerb].setRelVerb(whereHVerb);
@@ -1581,7 +1581,7 @@ int cSource::processInternalInfinitivePhrase(int where,int whereVerb,int wherePa
 				m[whereParentObject].relInternalVerb=whereIVerb;
 				m[whereIVerb].relSubject=whereParentObject;
 			}
-			m[itoWhere].flags|=WordMatch::flagInInfinitivePhrase;
+			m[itoWhere].flags|=cWordMatch::flagInInfinitivePhrase;
 			// not delayed because the arguments are two verbs
 			//addRelations(where,m[whereVerb].getVerbME(where,8,lastNounNotFound,lastVerbNotFound),m[whereIVerb].getVerbME(where,7,lastNounNotFound,lastVerbNotFound),VerbWithInfinitive);
 			evaluateAdditionalRoleTags(itoWhere,tagSets[K],parentTagLen,firstFreePrep,futureBoundPrepositions,inPrimaryQuote,inSecondaryQuote,outsideQuoteTruth,inQuoteTruth,true,true,nextVerbInSeries,sense,whereLastVerb,ambiguousSense,inQuotedString,inSectionHeader,begin,end);
@@ -1591,7 +1591,7 @@ int cSource::processInternalInfinitivePhrase(int where,int whereVerb,int wherePa
 		{
 			m[whereParentObject].relInternalVerb=whereIVerb;
 			m[whereIVerb].relSubject=whereParentObject;
-			m[itoWhere].flags|=WordMatch::flagInInfinitivePhrase;
+			m[itoWhere].flags|=cWordMatch::flagInInfinitivePhrase;
 			evaluateAdditionalRoleTags(itoWhere,tagSets[K],parentTagLen,firstFreePrep,futureBoundPrepositions,inPrimaryQuote,inSecondaryQuote,outsideQuoteTruth,inQuoteTruth,true,true,nextVerbInSeries,sense,whereLastVerb,ambiguousSense,inQuotedString,inSectionHeader,begin,end);
 			break;
 		}
@@ -1635,7 +1635,7 @@ int cSource::findPrepRole(int whereLastPrep,int role,int rejectRole)
 //		go - relSubject [him] relVerb XX relObject [steps] relInternalVerb XX
 //		steps - relSubject XX relVerb [go] relPrep [house]
 //    house - relNextObject [steps]
-bool cSource::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,int len,int firstFreePrep,vector <int> &futureBoundPrepositions,
+bool cSource::evaluateAdditionalRoleTags(int where,vector <cTagLocation> &tagSet,int len,int firstFreePrep,vector <int> &futureBoundPrepositions,
 																				bool inPrimaryQuote,bool inSecondaryQuote,bool &outsideQuoteTruth,bool &inQuoteTruth,bool withinInfinitivePhrase,bool internalInfinitivePhrase,
 																				bool &nextVerbInSeries,int &sense,int &whereLastVerb,bool &ambiguousSense,bool inQuotedString,bool inSectionHeader,int begin,int end)
 { LFS
@@ -1684,7 +1684,7 @@ bool cSource::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet
 		//attachAdverbRelation(tagSet,verbTagIndex,m[whereVerb].getVerbME(where,10,lastNounNotFound,lastVerbNotFound)); see dynamicallyUpdateWordRelations.cpp
 		for (int mverbTag=findOneTag(tagSet,L"MVERB",-1); mverbTag>=0; mverbTag=findOneTag(tagSet,L"MVERB",mverbTag))
 		{
-			vector < vector <tTagLocation> > mverbTagSets;
+			vector < vector <cTagLocation> > mverbTagSets;
 			if (startCollectTagsFromTag(true,verbObjectRelationTagSet,tagSet[mverbTag],mverbTagSets,false,true, true, L"additional role tags - compound verbs")>0)
 			{
 				for (unsigned int J=0; J<mverbTagSets.size(); J++)
@@ -1766,12 +1766,12 @@ bool cSource::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet
 		nextTag=-1;
 		// check for INFPSUB - pattern may match non-infinitive phrases
 		int itoTag=findTag(tagSet,L"ITO",nextTag),sp=(itoTag>=0) ? tagSet[itoTag].sourcePosition : -1;
-		if (withinInfinitivePhrase&=((sp>=0 && m[sp].word->first==L"to") || (sp>=1 && m[sp-1].flags&WordMatch::flagInInfinitivePhrase) || 
-			  (sp>=2 && m[sp-2].flags&WordMatch::flagInInfinitivePhrase) || (sp>=3 && m[sp-3].flags&WordMatch::flagInInfinitivePhrase)))
+		if (withinInfinitivePhrase&=((sp>=0 && m[sp].word->first==L"to") || (sp>=1 && m[sp-1].flags&cWordMatch::flagInInfinitivePhrase) || 
+			  (sp>=2 && m[sp-2].flags&cWordMatch::flagInInfinitivePhrase) || (sp>=3 && m[sp-3].flags&cWordMatch::flagInInfinitivePhrase)))
 		{
-			m[whereVerb].flags|=WordMatch::flagInInfinitivePhrase;
+			m[whereVerb].flags|=cWordMatch::flagInInfinitivePhrase;
 			if (whereHVerb>=0)
-				m[whereHVerb].flags|=WordMatch::flagInInfinitivePhrase;
+				m[whereHVerb].flags|=cWordMatch::flagInInfinitivePhrase;
 		}
 	}
 	else return false;
@@ -1865,11 +1865,11 @@ bool cSource::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet
 		{
 			// Did he[julius] mean that , after all[tuppence,julius] , he[julius] had not abandoned the case (no question mark)
 			int imperativeTag=-1;
-			if (!(m[tagSet[subjectTag].sourcePosition].flags&WordMatch::flagInQuestion) && (tsSense&VT_IMPERATIVE) && 
+			if (!(m[tagSet[subjectTag].sourcePosition].flags&cWordMatch::flagInQuestion) && (tsSense&VT_IMPERATIVE) && 
 					(imperativeTag=findOneTag(tagSet,L"imp",-1))>=0 && (tagSet[imperativeTag].sourcePosition<tagSet[subjectTag].sourcePosition))
-				m[tagSet[subjectTag].sourcePosition].flags|=WordMatch::flagInQuestion;
-			if (m[tagSet[subjectTag].sourcePosition].flags&WordMatch::flagInQuestion)
-				m[whereVerb].flags|=WordMatch::flagInQuestion;
+				m[tagSet[subjectTag].sourcePosition].flags|=cWordMatch::flagInQuestion;
+			if (m[tagSet[subjectTag].sourcePosition].flags&cWordMatch::flagInQuestion)
+				m[whereVerb].flags|=cWordMatch::flagInQuestion;
 		}
 	}
 	// subject has not already been found for this verb
@@ -1884,11 +1884,11 @@ bool cSource::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet
 		// don't scan forwards in questions [MOVE_OBJECTBrought a message from Mrs . Vandemeyer , I[master] suppose ? ]
 		// but accept forwards in these questions: Brought a telephone message to the man Whittington , did he[brown,whittington] ?
 		if (whereSubjects.empty() && 
-			  (m[where].pma.queryPattern(L"_INTRO_S1",maxLen)!=-1 && pema.queryTag(m[where+maxLen].beginPEMAPosition,SUBJECT_TAG)!=-1 && !(m[where].flags&WordMatch::flagInQuestion)) ||
-			  ((m[where].flags&WordMatch::flagInQuestion) && m[where].pma.queryPattern(L"__INTRO_S1",maxLen)!=-1 && m[where+maxLen].word->first==L"did" && m[where+maxLen+1].getObject()>=0))
+			  (m[where].pma.queryPattern(L"_INTRO_S1",maxLen)!=-1 && pema.queryTag(m[where+maxLen].beginPEMAPosition,SUBJECT_TAG)!=-1 && !(m[where].flags&cWordMatch::flagInQuestion)) ||
+			  ((m[where].flags&cWordMatch::flagInQuestion) && m[where].pma.queryPattern(L"__INTRO_S1",maxLen)!=-1 && m[where+maxLen].word->first==L"did" && m[where+maxLen+1].getObject()>=0))
 		{
 			int whereSubject=where+maxLen;
-			if (m[where].flags&WordMatch::flagInQuestion)
+			if (m[where].flags&cWordMatch::flagInQuestion)
 				whereSubject++;
 			if (m[whereSubject].principalWherePosition>=0)
 				whereSubject=m[whereSubject].principalWherePosition;
@@ -2101,7 +2101,7 @@ bool cSource::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet
 		{	
 			bool notbutFound=false;
 			whereObject=-1;
-			vector < vector <tTagLocation> > notTagSets;
+			vector < vector <cTagLocation> > notTagSets;
 			if (startCollectTagsFromTag(false,notbutTagSet,tagSet[mnounTag],notTagSets,false,true, false, L"compound objects - 'not' detection")>0)
 			{
 				for (unsigned int J=0; J<notTagSets.size(); J++)
@@ -2124,7 +2124,7 @@ bool cSource::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet
 									whereObject,objectString(m[whereObject].getObject(),tmpstr,true).c_str());
 				}
 			}
-			vector < vector <tTagLocation> > mobjectTagSets;
+			vector < vector <cTagLocation> > mobjectTagSets;
 			if (startCollectTagsFromTag(true,mobjectTagSet,tagSet[mnounTag],mobjectTagSets,false,true, true, L"compound objects")>0)
 			{
 				for (unsigned int J=0; J<mobjectTagSets.size(); J++)
@@ -2159,8 +2159,8 @@ bool cSource::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet
 		}
 		// the {document} itself , ” [said] the *german* bluntly.
 		m[whereObject].objectRole|=FOCUS_EVALUATED;
-		if (m[whereObject].flags&WordMatch::flagInQuestion)
-			m[whereVerb].flags|=WordMatch::flagInQuestion;
+		if (m[whereObject].flags&cWordMatch::flagInQuestion)
+			m[whereVerb].flags|=cWordMatch::flagInQuestion;
 		// attachAdjectiveRelation(tagSet,whereObject); see dynamicallyUpdateWordRelations.cpp
 		if (whereVerb>0 && (reverseObjectSpeaker=!(m[whereObject].objectRole&(IN_PRIMARY_QUOTE_ROLE|IN_SECONDARY_QUOTE_ROLE)) && m[whereVerb-1].word->first==L"”" && 
 				((tsSense&VT_TENSE_MASK)==VT_PAST) && m[whereVerb].pma.queryPattern(L"_VERBREL1")!=-1 && m[whereObject].getObject()>=0 && objects[m[whereObject].getObject()].isAgent(true)))
@@ -2443,15 +2443,15 @@ bool cSource::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet
 }
 
 bool cSource::setAdditionalRoleTags(int where,int &firstFreePrep,vector <int> &futureBoundPrepositions,bool inPrimaryQuote,bool inSecondaryQuote,
-																	 bool &nextVerbInSeries,int &sense,int &whereLastVerb,bool &ambiguousSense,bool inQuotedString,bool inSectionHeader,int begin,int end,vector < vector <tTagLocation> > &tagSets)
+																	 bool &nextVerbInSeries,int &sense,int &whereLastVerb,bool &ambiguousSense,bool inQuotedString,bool inSectionHeader,int begin,int end,vector < vector <cTagLocation> > &tagSets)
 { LFS
-  vector <WordMatch>::iterator im=m.begin()+where;
-	patternMatchArray::tPatternMatch *pma=im->pma.content;
+  vector <cWordMatch>::iterator im=m.begin()+where;
+	cPatternMatchArray::tPatternMatch *pma=im->pma.content;
 	bool idType=false;
 	for (unsigned PMAElement=0; PMAElement<im->pma.count; PMAElement++,pma++)
 	{
-		//  desiredTagSets.push_back(tTS(subjectVerbRelationTagSet,"_SUBJECT_VERB_RELATION",3,"VERB","V_OBJECT","SUBJECT","OBJECT","PREP","IVERB","REL","ADJ","ADV","HOBJECT","V_AGREE","V_HOBJECT",NULL));
-		//  desiredTagSets.push_back(tTS(verbObjectRelationTagSet,"_VERB_OBJECT_RELATION",3,"VERB","V_OBJECT","OBJECT","SUBJECT","PREP","IVERB","REL","ADJ","ADV","HOBJECT","V_AGREE","V_HOBJECT","VERB2",NULL));
+		//  desiredTagSets.push_back(cTagSet(subjectVerbRelationTagSet,"_SUBJECT_VERB_RELATION",3,"VERB","V_OBJECT","SUBJECT","OBJECT","PREP","IVERB","REL","ADJ","ADV","HOBJECT","V_AGREE","V_HOBJECT",NULL));
+		//  desiredTagSets.push_back(cTagSet(verbObjectRelationTagSet,"_VERB_OBJECT_RELATION",3,"VERB","V_OBJECT","OBJECT","SUBJECT","PREP","IVERB","REL","ADJ","ADV","HOBJECT","V_AGREE","V_HOBJECT","VERB2",NULL));
 		__int64 descendants=patterns[pma->getPattern()]->includesOnlyDescendantsAllOfTagSet;
 		int preferredTagSet=-1;
 		if (descendants&((__int64)1<<subjectVerbRelationTagSet)) preferredTagSet=subjectVerbRelationTagSet;
@@ -2536,7 +2536,7 @@ bool cSource::setAdditionalRoleTags(int where,int &firstFreePrep,vector <int> &f
 					if (firstFreePrep<0)
 						firstFreePrep=wp;
 					m[wpo].objectRole|=PREP_OBJECT_ROLE;
-					if (im->word->second.flags&tFI::prepMoveType)
+					if (im->word->second.flags&cSourceWordInfo::prepMoveType)
 						m[wpo].objectRole|=MOVEMENT_PREP_OBJECT_ROLE;
 					else
 						m[wpo].objectRole|=NON_MOVEMENT_PREP_OBJECT_ROLE;
@@ -2589,8 +2589,8 @@ bool cSource::setAdditionalRoleTags(int where,int &firstFreePrep,vector <int> &f
 		*/
 void cSource::syntacticRelations()
 { LFS 
-	vector < vector <tTagLocation> > tagSets;
-  vector <WordMatch>::iterator im=m.begin(),imend=m.end();
+	vector < vector <cTagLocation> > tagSets;
+  vector <cWordMatch>::iterator im=m.begin(),imend=m.end();
 	vector <int> futureBoundPrepositions;
 	bool inPrimaryQuote=narrativeIsQuoted,inSecondaryQuote=false;
 	int whereLastVerb=-1,s=0;
@@ -2642,12 +2642,12 @@ void cSource::syntacticRelations()
 			if (I && (m[I-1].word->first==L"if" || m[I-1].word->first==L"unless"))
 			{
 				for (unsigned int J=I; J<m.size() && !isEOS(J) && m[J].word!=Words.sectionWord; J++)
-					m[J].flags|=WordMatch::flagInPStatement;
+					m[J].flags|=cWordMatch::flagInPStatement;
 			}
 			if (I && (m[I-1].word->first==L"as"))
 			{
 				for (unsigned int J=I; J<m.size() && !isEOS(J) && m[J].word!=Words.sectionWord; J++)
-					m[J].flags|=WordMatch::flagInLingeringStatement;
+					m[J].flags|=cWordMatch::flagInLingeringStatement;
 			}
       lastBeginS1=I;
 		}
@@ -2691,7 +2691,7 @@ void cSource::syntacticRelations()
 		{
       inPrimaryQuote=true;
 			lastVerb=firstFreePrep=-1;
-			if (im->flags&WordMatch::flagQuotedString)
+			if (im->flags&cWordMatch::flagQuotedString)
 				inQuotedString=true;
 			else
 			{
@@ -2717,7 +2717,7 @@ void cSource::syntacticRelations()
 		}
     if (im->word->first==L"‘")
 		{
-			if (im->flags&WordMatch::flagQuotedString)
+			if (im->flags&cWordMatch::flagQuotedString)
 				inQuotedString=true;
 			else
 			{
@@ -2764,7 +2764,7 @@ void cSource::syntacticRelations()
 		int sense=TENSE_NOT_SPECIFIED;
     if (setAdditionalRoleTags(I,firstFreePrep,futureBoundPrepositions,inPrimaryQuote,inSecondaryQuote,nextVerbInSeries,sense,whereLastVerb,ambiguousSense,inQuotedString,inSectionHeader,begin,end,tagSets) && lastBeginS1>=0)
       m[lastBeginS1].objectRole|=ID_SENTENCE_TYPE;
-		patternMatchArray::tPatternMatch *pma=im->pma.content;
+		cPatternMatchArray::tPatternMatch *pma=im->pma.content;
 		for (unsigned PMAElement=0; PMAElement<im->pma.count; PMAElement++,pma++)
 		{
 			int voRelationsFound,traceSource;

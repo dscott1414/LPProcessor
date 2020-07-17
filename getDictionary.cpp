@@ -661,10 +661,10 @@ bool equivalentIfIgnoreDashSpaceCase(wstring sWord,wstring sWord2)
 	return false;
 }
 
-int WordClass::checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,wstring sForm,int inflection,int derivationRules,wstring definitionEntry,int sourceId,bool log)
+int cWord::checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,wstring sForm,int inflection,int derivationRules,wstring definitionEntry,int sourceId,bool log)
 { LFS
 	int iForm;
-	vector <FormClass *>::iterator ifc,ifcend=Forms.end();
+	vector <cForm *>::iterator ifc,ifcend=Forms.end();
 	for (iForm=0,ifc=Forms.begin(); ifc!=ifcend && (*ifc)->name!=sForm; ifc++,iForm++);
 	if (ifc==ifcend)
 	{
@@ -710,7 +710,7 @@ int WordClass::checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,
 			return 0;
 		}
 	}
-	iForm=FormsClass::findForm(sForm);
+	iForm=cForms::findForm(sForm);
 	if (iForm<0)
 	{
 		if (log)
@@ -772,7 +772,7 @@ int getPath(const wchar_t *pathname,void *buffer,int maxlen,int &actualLen)
 	return 0;
 }
 
-int WordClass::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId,bool log)
+int cWord::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId,bool log)
 { LFS
 	if (sWord.length()<5) 
 		return -1;
@@ -784,7 +784,7 @@ int WordClass::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId,bo
 		if ((iWordComponent = fullQuery(mysql, w, sourceId)) == WMM.end())
 			break;
 	// don't split a word with a dash in it
-	if (components.size()==1 && (iWordComponent == WMM.end() || !Stemmer::wordIsNotUnknownAndOpen(iWordComponent,log) || rejectSplitEndings.find(components[components.size() - 1]) != rejectSplitEndings.end())) // not found or unknown
+	if (components.size()==1 && (iWordComponent == WMM.end() || !cStemmer::wordIsNotUnknownAndOpen(iWordComponent,log) || rejectSplitEndings.find(components[components.size() - 1]) != rejectSplitEndings.end())) // not found or unknown
 	{
 		for (unsigned int I = 2; I < sWord.length() - 2; I++)
 		{
@@ -793,14 +793,14 @@ int WordClass::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId,bo
 			components.push_back(sWord.substr(I, sWord.length() - I));
 			tIWMM firstQIWord;
 			// with splitting word this way, the previous word must also be known and of an open word type. 
-			if (((firstQIWord = fullQuery(mysql, firstWord, sourceId)) != WMM.end() && Stemmer::wordIsNotUnknownAndOpen(firstQIWord,log)) &&
-				((iWordComponent = fullQuery(mysql, components[components.size() - 1], sourceId)) != WMM.end() && Stemmer::wordIsNotUnknownAndOpen(iWordComponent,log)) &&
+			if (((firstQIWord = fullQuery(mysql, firstWord, sourceId)) != WMM.end() && cStemmer::wordIsNotUnknownAndOpen(firstQIWord,log)) &&
+				((iWordComponent = fullQuery(mysql, components[components.size() - 1], sourceId)) != WMM.end() && cStemmer::wordIsNotUnknownAndOpen(iWordComponent,log)) &&
 				(rejectSplitEndings.find(components[components.size() - 1]) == rejectSplitEndings.end()))
 					break;
 			iWordComponent = WMM.end();
 		}
 	}
-	if (iWordComponent != WMM.end() && Stemmer::wordIsNotUnknownAndOpen(iWordComponent,log) && rejectSplitEndings.find(components[components.size() - 1]) == rejectSplitEndings.end())
+	if (iWordComponent != WMM.end() && cStemmer::wordIsNotUnknownAndOpen(iWordComponent,log) && rejectSplitEndings.find(components[components.size() - 1]) == rejectSplitEndings.end())
 	{
 		// (SW) word bone-cracking( main: verb present part)
 		// (SW) word white-maned(main: verb past)
@@ -1015,8 +1015,8 @@ void identifyFormClass(set<int> &posSet, wstring pos, bool &plural)
 	plural = pos.find(L"noun") != wstring::npos && pos.find(L"plural") != wstring::npos;
 	if (pos == L"idiom")
 	{
-		posSet.insert(FormsClass::gFindForm(L"noun"));
-		posSet.insert(FormsClass::gFindForm(L"adjective"));
+		posSet.insert(cForms::gFindForm(L"noun"));
+		posSet.insert(cForms::gFindForm(L"adjective"));
 	}
 	else if (pos.find(L"name") != wstring::npos)
 	{
@@ -1024,11 +1024,11 @@ void identifyFormClass(set<int> &posSet, wstring pos, bool &plural)
 	}
 	else if (pos == L"certification mark" || pos == L"service mark")
 	{
-		posSet.insert(FormsClass::gFindForm(L"symbol"));
+		posSet.insert(cForms::gFindForm(L"symbol"));
 	}
 	else if (pos.find(L"communications") != wstring::npos)
 	{
-		posSet.insert(FormsClass::gFindForm(L"noun"));
+		posSet.insert(cForms::gFindForm(L"noun"));
 	}
 	for (auto c : ignoreBefore)
 		if (pos.find(c.c_str()) != wstring::npos)
@@ -1040,7 +1040,7 @@ void identifyFormClass(set<int> &posSet, wstring pos, bool &plural)
 		{
 			// this is enough to differentiate between noun, pronoun, verb and adverb
 			if (where == 0 || iswspace(pos[where - 1]))
-				posSet.insert(FormsClass::gFindForm(c.c_str()));
+				posSet.insert(cForms::gFindForm(c.c_str()));
 		}
 	}
 	for (auto c : ignoreAfter)
@@ -1078,9 +1078,9 @@ bool existsInDictionaryDotCom(MYSQL *mysql,wstring word, bool &networkAccessed)
 		return false;
 
 	wstring buffer,diskPath;
-	if (Internet::cacheWebPath(L"https://www.dictionary.com/browse/" + word, buffer, word, L"DictionaryDotCom", false, networkAccessed,diskPath))
+	if (cInternet::cacheWebPath(L"https://www.dictionary.com/browse/" + word, buffer, word, L"DictionaryDotCom", false, networkAccessed,diskPath))
 		return false;
-	if ((networkAccessed && Internet::redirectUrl.find(L"noresults")!=wstring::npos) || 
+	if ((networkAccessed && cInternet::redirectUrl.find(L"noresults")!=wstring::npos) || 
 		  buffer.find(L"No results found") != wstring::npos || 
 		  buffer.find(L"dcom-no-result") != wstring::npos ||
 			buffer.find(L"dcom-misspell") != wstring::npos)
@@ -1126,7 +1126,7 @@ bool getMerriamWebsterDictionaryAPIForms(wstring sWord, set <int> &posSet, bool 
 	wstring pageURL = L"https://www.dictionaryapi.com/api/v3/references/collegiate/json/";
 	pageURL += sWord + L"?key=ba4ac476-dac1-4b38-ad6b-fe36e8416e07";
 	wstring jsonWideBuffer, diskPath;
-	if (!Internet::cacheWebPath(pageURL, jsonWideBuffer, sWord, L"Webster", false, networkAccessed,diskPath))
+	if (!cInternet::cacheWebPath(pageURL, jsonWideBuffer, sWord, L"Webster", false, networkAccessed,diskPath))
 	{
 		if (jsonWideBuffer.find(L'{') == wstring::npos)
 		{
@@ -1230,7 +1230,7 @@ int discoverInflections(set <int> posSet, bool plural, wstring word)
 	return 0;
 }
 
-bool WordClass::illegalWord(MYSQL *mysql, wstring sWord)
+bool cWord::illegalWord(MYSQL *mysql, wstring sWord)
 {
 	// non English word?
 	if (detectNonEuropeanWord(sWord) || sWord.find_first_of(L"ãâäáàæçêéèêëîíïñôóòöõôûüùú") != wstring::npos)
@@ -1248,7 +1248,7 @@ bool WordClass::illegalWord(MYSQL *mysql, wstring sWord)
 
 // this routine should look up words from wiktionary or some other dictionary
 // this returns >0 if word is found or WORD_NOT_FOUND if word lookup fails.
-int WordClass::getForms(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId,bool logEverything)
+int cWord::getForms(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId,bool logEverything)
 {
 	LFS
 	if (illegalWord(mysql, sWord))
@@ -1295,7 +1295,7 @@ const wchar_t *getLastErrorMessage(wstring &out)
 
 #ifdef CHECK_WORD_CACHE
 
-int WordClass::checkWord(WordClass &Words2,tIWMM originalIWord,tIWMM newWord,int ret)
+int cWord::checkWord(cWord &Words2,tIWMM originalIWord,tIWMM newWord,int ret)
 { LFS
 	int wait=0;
 	if (ret==WORD_NOT_FOUND || newWord==WMM.end()) return WORD_NOT_FOUND;

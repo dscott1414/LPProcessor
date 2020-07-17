@@ -122,7 +122,7 @@ Returns 1 if the lock was obtained successfully,
         NULL if an error occurred (such as running out of memory or the thread was killed with mysqladmin kill).
 If you have a lock obtained with GET_LOCK(), it is released when you execute RELEASE_LOCK(), execute a new GET_LOCK(), or your connection terminates (either normally or abnormally).
 */
-bool WordClass::acquireLock(MYSQL &mysql,bool persistent)
+bool cWord::acquireLock(MYSQL &mysql,bool persistent)
 { LFS
   int startTime=clock();
   wprintf(L"Acquiring lock on database...\r");
@@ -157,7 +157,7 @@ Returns 1 if the lock was released, 0 if the lock was not established by this th
 The lock does not exist if it was never obtained by a call to GET_LOCK() or if it has previously been released.
 */
 #ifdef WRITE_WORDS_AND_FORMS_TO_DB
-void WordClass::releaseLock(MYSQL &mysql)
+void cWord::releaseLock(MYSQL &mysql)
 { LFS
   MYSQL_RES *result=NULL;
   if (!myquery(&mysql,L"SELECT RELEASE_LOCK('lp_lock')",result)) return;
@@ -234,7 +234,7 @@ void escapeStr(wstring &str)
 	str=ess;
 }
 
-void WordClass::generateFormStatistics(void)
+void cWord::generateFormStatistics(void)
 { LFS
   int *formsCount=(int *)tmalloc(Forms.size()*sizeof(int));
   bool *formAlone=(bool *)tmalloc(Forms.size()*sizeof(bool));

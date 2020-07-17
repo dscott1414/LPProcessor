@@ -1,8 +1,8 @@
 #pragma once
-template <int sizeOfInteger = 32, int bitsPerInteger = 5, class T = unsigned int, int storeSize = 16> class bitObject
+template <int sizeOfInteger = 32, int bitsPerInteger = 5, class T = unsigned int, int storeSize = 16> class cBitObject
 {
 public:
-	bitObject(void)
+	cBitObject(void)
 	{
 		memset(bits, 0, sizeof(bits));
 		byteIndex = bitIndex = -1;
@@ -29,29 +29,29 @@ public:
 	{
 		return (bits[bit >> bitsPerInteger] & (1 << (bit&(sizeOfInteger - 1)))) != 0;
 	}
-	bool operator != (const bitObject &o)
+	bool operator != (const cBitObject &o)
 	{
 		for (unsigned int I = 0; I < sizeof(bits) / sizeof(*bits); I++)
 			if (bits[I] != o.bits[I]) return true;
 		return false;
 	}
-	bool operator == (const bitObject &o)
+	bool operator == (const cBitObject &o)
 	{
 		for (unsigned int I = 0; I < sizeof(bits) / sizeof(*bits); I++)
 			if (bits[I] != o.bits[I]) return false;
 		return true;
 	}
-	void operator |= (const bitObject &o)
+	void operator |= (const cBitObject &o)
 	{
 		for (unsigned int I = 0; I < sizeof(bits) / sizeof(*bits); I++)
 			bits[I] |= o.bits[I];
 	}
-	void operator &= (const bitObject &o)
+	void operator &= (const cBitObject &o)
 	{
 		for (unsigned int I = 0; I < sizeof(bits) / sizeof(*bits); I++)
 			bits[I] &= o.bits[I];
 	}
-	void operator -= (const bitObject &o)
+	void operator -= (const cBitObject &o)
 	{
 		for (unsigned int I = 0; I < sizeof(bits) / sizeof(*bits); I++)
 			bits[I] &= ~o.bits[I];
@@ -80,13 +80,13 @@ public:
 		bitIndex = -1;
 		return -1;
 	}
-	int firstNotIn(const bitObject &o)
+	int firstNotIn(const cBitObject &o)
 	{
 		byteIndex = 0;
 		bitIndex = -1;
 		return nextNotIn(o);
 	}
-	int nextNotIn(const bitObject &o)
+	int nextNotIn(const cBitObject &o)
 	{
 		if (++bitIndex >= sizeOfInteger)
 		{
@@ -106,7 +106,7 @@ public:
 	}
 	// bitObject must find all of itself in o
 	// patterns[p]->mandatoryPatterns.hasAll(matchedPatterns)
-	bool hasAll(const bitObject &o)
+	bool hasAll(const cBitObject &o)
 	{
 		for (unsigned int I = 0; I < sizeof(bits) / sizeof(*bits); I++)
 			if ((bits[I] & o.bits[I]) != bits[I])

@@ -33,20 +33,20 @@ using namespace std;
 #include "general.h"
 
 const wchar_t *getLastErrorMessage(wstring &out);
-void * Internet::hINet;
-int Internet::bandwidthControl;
-bool Internet::readTimeoutError;
-struct _RTL_SRWLOCK Internet::totalInternetTimeWaitBandwidthControlSRWLock;
-wstring Internet::redirectUrl;
+void * cInternet::hINet;
+int cInternet::bandwidthControl;
+bool cInternet::readTimeoutError;
+struct _RTL_SRWLOCK cInternet::totalInternetTimeWaitBandwidthControlSRWLock;
+wstring cInternet::redirectUrl;
 
-int Internet::readPage(const wchar_t *str, wstring &buffer)
+int cInternet::readPage(const wchar_t *str, wstring &buffer)
 {
 	LFS
 		wstring headers;
 	return readPage(str, buffer, headers);
 }
 
-bool Internet::InetOption(bool global, int option, wchar_t *description, unsigned long value)
+bool cInternet::InetOption(bool global, int option, wchar_t *description, unsigned long value)
 {
 	LFS
 		HINTERNET hI = (global) ? 0 : hINet;
@@ -65,7 +65,7 @@ bool Internet::InetOption(bool global, int option, wchar_t *description, unsigne
 	return true;
 }
 
-void Internet::InternetStatusCallback(
+void cInternet::InternetStatusCallback(
 	HINTERNET , // hInternet
 	DWORD_PTR , // dwContext
 	DWORD dwInternetStatus,
@@ -132,7 +132,7 @@ void Internet::InternetStatusCallback(
 	}
 }
 
-bool Internet::LPInternetOpen(int timer)
+bool cInternet::LPInternetOpen(int timer)
 {
 	if (!hINet)
 	{
@@ -172,7 +172,7 @@ bool Internet::LPInternetOpen(int timer)
 }
 
 #define MAX_BUF 200000
-int Internet::readPage(const wchar_t *str, wstring &buffer, wstring &headers)
+int cInternet::readPage(const wchar_t *str, wstring &buffer, wstring &headers)
 {
 	LFS
 		int timer = clock();
@@ -260,7 +260,7 @@ int Internet::readPage(const wchar_t *str, wstring &buffer, wstring &headers)
 	return (errors) ? INTERNET_OPEN_URL_FAILED : 0;
 }
 
-int Internet::readBinaryPage(wchar_t *str, int destfile, int &total)
+int cInternet::readBinaryPage(wchar_t *str, int destfile, int &total)
 {
 	LFS
 		AcquireSRWLockShared(&cProfile::networkTimeSRWLock);
@@ -312,14 +312,14 @@ int Internet::readBinaryPage(wchar_t *str, int destfile, int &total)
 	return 0;
 }
 
-bool Internet::closeConnection(void)
+bool cInternet::closeConnection(void)
 {
 	LFS
 		if (hINet) InternetCloseHandle(hINet);
 	return true;
 }
 
-int Internet::cacheWebPath(wstring webAddress, wstring &buffer, wstring epath, wstring cacheTypePath, bool forceWebReread, bool &networkAccessed,wstring &diskPath)
+int cInternet::cacheWebPath(wstring webAddress, wstring &buffer, wstring epath, wstring cacheTypePath, bool forceWebReread, bool &networkAccessed,wstring &diskPath)
 {
 	LFS
 		wchar_t path[MAX_LEN];
@@ -361,7 +361,7 @@ int Internet::cacheWebPath(wstring webAddress, wstring &buffer, wstring epath, w
 }
 
 
-DWORD WINAPI Internet::InternetReadFile_Child(void *vThreadParm)
+DWORD WINAPI cInternet::InternetReadFile_Child(void *vThreadParm)
 {
 	tIRFW *p = (tIRFW *)vThreadParm;
 	if (!InternetReadFile(p->RequestHandle, p->buffer, p->bufsize, p->dwRead))
@@ -373,7 +373,7 @@ DWORD WINAPI Internet::InternetReadFile_Child(void *vThreadParm)
 	return 0;
 }
 
-bool Internet::InternetReadFile_Wait(HINTERNET RequestHandle, char *buffer, int bufsize, DWORD *dwRead)
+bool cInternet::InternetReadFile_Wait(HINTERNET RequestHandle, char *buffer, int bufsize, DWORD *dwRead)
 {
 	tIRFW p;
 	readTimeoutError = false;
@@ -416,7 +416,7 @@ bool Internet::InternetReadFile_Wait(HINTERNET RequestHandle, char *buffer, int 
 	return dwExitCode == 0;
 }
 
-int Internet::getWebPath(int where, wstring webAddress, wstring &buffer, wstring epath, wstring cacheTypePath, wstring &filePathOut, wstring &headers, int index, bool clean, bool readInfoBuffer, bool forceWebReread)
+int cInternet::getWebPath(int where, wstring webAddress, wstring &buffer, wstring epath, wstring cacheTypePath, wstring &filePathOut, wstring &headers, int index, bool clean, bool readInfoBuffer, bool forceWebReread)
 {
 	LFS
 		if (webAddress.find(L".pdf") != wstring::npos || webAddress.find(L".php") != wstring::npos) // Nobel Prize abstract is 2 bytes / also don't bother with pdf or php files for now
@@ -459,7 +459,7 @@ int Internet::getWebPath(int where, wstring webAddress, wstring &buffer, wstring
 		if ((fd = _wopen(path, O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE)) < 0)
 		{
 			lplog(LOG_ERROR, L"%06d:ERROR:getWebPath:Cannot create dbPedia path %s - %S.", where, path, sys_errlist[errno]);
-			return Internet::GETPAGE_CANNOT_CREATE;
+			return cInternet::GETPAGE_CANNOT_CREATE;
 		}
 		if (!clean)
 		{
@@ -536,7 +536,7 @@ int Internet::getWebPath(int where, wstring webAddress, wstring &buffer, wstring
 
 // ReadAndHandleOutput
 // Monitors handle for input. Exits when child exits or pipe breaks.
-void Internet::ReadAndHandleOutput(HANDLE hPipeRead, string &outbuf)
+void cInternet::ReadAndHandleOutput(HANDLE hPipeRead, string &outbuf)
 {
 	LFS
 		CHAR lpBuffer[257];
@@ -553,7 +553,7 @@ void Internet::ReadAndHandleOutput(HANDLE hPipeRead, string &outbuf)
 
 // PrepAndLaunchRedirectedChild
 // Sets up STARTUPINFO structure, and launches redirected child.
-HANDLE Internet::PrepAndLaunchRedirectedChild(wstring commandLine,
+HANDLE cInternet::PrepAndLaunchRedirectedChild(wstring commandLine,
 	HANDLE hChildStdOut, HANDLE hChildStdIn, HANDLE hChildStdErr)
 {
 	LFS
@@ -578,7 +578,7 @@ HANDLE Internet::PrepAndLaunchRedirectedChild(wstring commandLine,
 	return pi.hProcess;
 }
 
-int Internet::runJavaJerichoHTML(wstring webAddress, wstring outputPath, string &outbuf)
+int cInternet::runJavaJerichoHTML(wstring webAddress, wstring outputPath, string &outbuf)
 {
 	LFS
 		TCHAR NPath[MAX_PATH];

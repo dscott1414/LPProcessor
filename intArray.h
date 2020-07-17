@@ -1,6 +1,6 @@
 #pragma warning (disable: 4996)
 #pragma warning (disable: 4503)
-class intArray
+class cIntArray
 {
 public:
 
@@ -37,26 +37,26 @@ public:
 	bool zeroOutSpace;
 	unsigned int count;
 	unsigned int allocated;
-	intArray(IOHANDLE file)
+	cIntArray(IOHANDLE file)
 	{
 		read(file);
 		zeroOutSpace=false;
 	};
-	intArray(bool inZeroOutSpace=false)
+	cIntArray(bool inZeroOutSpace=false)
 	{
 		zeroOutSpace=inZeroOutSpace;
 		count=0;
 		allocated=0;
 		content=NULL;
 	};
-	~intArray() 
+	~cIntArray() 
 	{
 		if (allocated) tfree(allocated*sizeof(*content),content);
 		count=0;
 		allocated=0;
 		content=NULL;
 	}
-	intArray(const intArray &rhs, bool inZeroOutSpace = false)
+	cIntArray(const cIntArray &rhs, bool inZeroOutSpace = false)
 	{
 		zeroOutSpace = inZeroOutSpace;
 		count=rhs.count;
@@ -110,12 +110,12 @@ public:
 		where+=count*sizeof(*content);
 		return true;
 	}
-  bool operator==(const intArray other) const
+  bool operator==(const cIntArray other) const
   {
 		if (count!=other.count) return false;
     return memcmp(content, other.content,count*sizeof(*content))==0;
   }
-  intArray& operator=(const intArray &rhs) 
+  cIntArray& operator=(const cIntArray &rhs) 
   {
 		if (allocated) tfree(allocated*sizeof(*content),content);
 		count=rhs.count;
@@ -130,7 +130,7 @@ public:
 		}
 		return *this;
   }
-  bool operator!=(const intArray other) const
+  bool operator!=(const cIntArray other) const
   {
 		if (count!=other.count) return true;
     return memcmp(content, other.content,count*sizeof(*content))!=0;
@@ -306,5 +306,5 @@ public:
 
 };
 
-bool copy(void *buf,intArray &a,int &where,int limit);
-bool copy(intArray &a,void *buf,int &where,int limit);
+bool copy(void *buf,cIntArray &a,int &where,int limit);
+bool copy(cIntArray &a,void *buf,int &where,int limit);

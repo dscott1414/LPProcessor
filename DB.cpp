@@ -440,7 +440,7 @@ int cSource::flushObjects(set <int> &objectsToFlush)
   return 0;
 }
 
-tFI::tFI(void)
+cSourceWordInfo::cSourceWordInfo(void)
 { LFS
   count=0;
   inflectionFlags=0;
@@ -464,7 +464,7 @@ tFI::tFI(void)
 // called by transferFormsAndUsage (in this file)
 // this procedure does not make a high pattern count into a low cost.
 // it makes a high pattern count received from the DB into a count which will fit into the usagePatterns array (max 128)
-void tFI::transferDBUsagePatternsToUsagePattern(int highestPatternCount,int *DBUsagePatterns,unsigned int upStart,unsigned int upLength)
+void cSourceWordInfo::transferDBUsagePatternsToUsagePattern(int highestPatternCount,int *DBUsagePatterns,unsigned int upStart,unsigned int upLength)
 { LFS
   int highest=-1;
   for (unsigned int up=upStart; up<upStart+upLength; up++)
@@ -479,8 +479,8 @@ void tFI::transferDBUsagePatternsToUsagePattern(int highestPatternCount,int *DBU
   }
 
 // formNum is the form that is the word itself, if that form exists.
-// read the tFI from the DB.  So, don't mark this with insertNewForms flag
-tFI::tFI(unsigned int *forms,unsigned int iCount,int iInflectionFlags,int iFlags,int iTimeFlags,int mainEntryWordId,int iDerivationRules,int iSourceId,int formNum,wstring &word)
+// read the cSourceWordInfo from the DB.  So, don't mark this with insertNewForms flag
+cSourceWordInfo::cSourceWordInfo(unsigned int *forms,unsigned int iCount,int iInflectionFlags,int iFlags,int iTimeFlags,int mainEntryWordId,int iDerivationRules,int iSourceId,int formNum,wstring &word)
 { LFS
   count=iCount;
   int oldAllocated=allocated;
@@ -506,7 +506,7 @@ tFI::tFI(unsigned int *forms,unsigned int iCount,int iInflectionFlags,int iFlags
 	localWordIsLowercase = 0;
 }
 
-void tFI::transferFormsAndUsage(unsigned int *forms, unsigned int &iCount, int formNum, wstring &word)
+void cSourceWordInfo::transferFormsAndUsage(unsigned int *forms, unsigned int &iCount, int formNum, wstring &word)
 {
 	LFS
   memset(usagePatterns,0,MAX_USAGE_PATTERNS);
@@ -569,8 +569,8 @@ void tFI::transferFormsAndUsage(unsigned int *forms, unsigned int &iCount, int f
 	wordFrequency = UPDB[TRANSFER_COUNT];
 }
 
-// update tFI from the DB.  So, don't mark this with insertNewForms flag
-bool tFI::updateFromDB(int wordId,unsigned int *forms,unsigned int iCount,int iInflectionFlags,int iFlags,int iTimeFlags,int iMainEntryWordId,int iDerivationRules,int iSourceId,int formNum,wstring &word)
+// update cSourceWordInfo from the DB.  So, don't mark this with insertNewForms flag
+bool cSourceWordInfo::updateFromDB(int wordId,unsigned int *forms,unsigned int iCount,int iInflectionFlags,int iFlags,int iTimeFlags,int iMainEntryWordId,int iDerivationRules,int iSourceId,int formNum,wstring &word)
 { LFS
   index=wordId;
   if ((!(flags&queryOnLowerCase) && !(flags&queryOnAnyAppearance)) || ((iFlags&queryOnLowerCase) || (iFlags&queryOnAnyAppearance))) // update rejected.
@@ -598,7 +598,7 @@ bool tFI::updateFromDB(int wordId,unsigned int *forms,unsigned int iCount,int iI
 }
 
 #define NUM_WORD_ALLOCATION 102400
-void WordClass::mapWordIdToWordStructure(int wordId, tIWMM iWord)
+void cWord::mapWordIdToWordStructure(int wordId, tIWMM iWord)
 { LFS
 		while (idsAllocated <= wordId)
 		{
@@ -618,24 +618,24 @@ void WordClass::mapWordIdToWordStructure(int wordId, tIWMM iWord)
 	iWord->second.index = wordId;
 }
 
-tIWMM WordClass::wordStructureGivenWordIdExists(int wordId)
+tIWMM cWord::wordStructureGivenWordIdExists(int wordId)
 {
 	if (wordId >= idsAllocated || wordId < 0)
 		return wNULL;
 	return idToMap[wordId];
 }
 
-void tFI::mainEntryCheck(const wstring first,int where)
+void cSourceWordInfo::mainEntryCheck(const wstring first,int where)
 { LFS
   if (mainEntry==wNULL && (query(nounForm)>=0 || query(verbForm)>=0 || query(adjectiveForm)>=0 || query(adverbForm)>=0))
   {
 		if (!iswalpha(first[0])) return;
     ::lplog(LOG_INFO,L"Word %s has no mainEntry CHECK(%d)!",first.c_str(),where);
-    flags|=tFI::queryOnAnyAppearance;
+    flags|=cSourceWordInfo::queryOnAnyAppearance;
   }
 }
 
-void WordClass::readForms(MYSQL &mysql, wchar_t *qt)
+void cWord::readForms(MYSQL &mysql, wchar_t *qt)
 { LFS
   MYSQL_RES *result=NULL;
   MYSQL_ROW sqlrow;
@@ -652,7 +652,7 @@ void WordClass::readForms(MYSQL &mysql, wchar_t *qt)
 		mTW(sqlrow[3],inflectionsClass);
     unsigned int index=atoi(sqlrow[0]);
     numDbForms=max(numDbForms,index);
-    if (FormsClass::findForm(name)<0)
+    if (cForms::findForm(name)<0)
     {
       int hasInflections=sqlrow[4][0],isTopLevel=sqlrow[5][0],properNounSubClass=sqlrow[6][0],blockProperNounRecognition=sqlrow[7][0];
       #ifdef LOG_WORD_FLOW
@@ -660,8 +660,8 @@ void WordClass::readForms(MYSQL &mysql, wchar_t *qt)
           name.c_str(),shortName.c_str(),inflectionsClass.c_str(),hasInflections,properNounSubClass,isTopLevel,blockProperNounRecognition);
       #endif
       newDbForms++;
-			Forms.push_back(new FormClass(index,name,shortName,inflectionsClass,hasInflections!=0,properNounSubClass!=0,isTopLevel!=0,false,false,blockProperNounRecognition!=0)); // ,Forms.size() removed
-			FormsClass::formMap[name]=Forms.size()-1;
+			Forms.push_back(new cForm(index,name,shortName,inflectionsClass,hasInflections!=0,properNounSubClass!=0,isTopLevel!=0,false,false,blockProperNounRecognition!=0)); // ,Forms.size() removed
+			cForms::formMap[name]=Forms.size()-1;
     }
   }
   mysql_free_result(result);
@@ -670,7 +670,7 @@ void WordClass::readForms(MYSQL &mysql, wchar_t *qt)
     lplog(LOG_FATAL_ERROR,L"New forms discovered in db AND new forms already in memory!  Exiting!");
 }
 
-bool WordClass::isWordFormCacheValid(MYSQL &mysql)
+bool cWord::isWordFormCacheValid(MYSQL &mysql)
 {
 	HANDLE hFile = CreateFile(L"wordFormCache", GENERIC_READ, FILE_SHARE_READ, NULL,OPEN_EXISTING, 0, NULL);
 	if (hFile == INVALID_HANDLE_VALUE)
@@ -726,7 +726,7 @@ bool WordClass::isWordFormCacheValid(MYSQL &mysql)
 // if return code is 0, parent calling this procedure should return with a 0.
 // if return code is 2, parent calling this procedure should continue.
 // qt is a scratch query buffer.
-int WordClass::readWordFormsFromDB(MYSQL &mysql,int maxWordId,wchar_t *qt,	int *words,int *counts,int &numWordForms,unsigned int * &wordForms, bool printProgress, bool skipWordInitialization, wstring specialExtension)
+int cWord::readWordFormsFromDB(MYSQL &mysql,int maxWordId,wchar_t *qt,	int *words,int *counts,int &numWordForms,unsigned int * &wordForms, bool printProgress, bool skipWordInitialization, wstring specialExtension)
 { LFS
   memset(words,-1,maxWordId*sizeof(int));
   memset(counts,0,maxWordId*sizeof(int));
@@ -812,7 +812,7 @@ int getMaxWordId(MYSQL &mysql)
 	return maxWordId;
 }
 
-int WordClass::initializeWordsFromDB(MYSQL &mysql, int *words, int *counts, unsigned int * &wordForms, int &numWordsInserted, int &numWordsModified, bool printProgress)
+int cWord::initializeWordsFromDB(MYSQL &mysql, int *words, int *counts, unsigned int * &wordForms, int &numWordsInserted, int &numWordsModified, bool printProgress)
 {
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
   MYSQL_RES *result=NULL;
@@ -844,7 +844,7 @@ int WordClass::initializeWordsFromDB(MYSQL &mysql, int *words, int *counts, unsi
 				lplog(LOG_ERROR,L"No forms for %s (wordId=%d) found!",sWord.c_str(),wordId);
 		  continue;
 		}
-    int selfFormNum=FormsClass::findForm(sWord);
+    int selfFormNum=cForms::findForm(sWord);
 		tIWMM tryWord;
     if (lastReadfromDBTime>=0 && (tryWord=WMM.find(sWord))!=WMM.end())
     {
@@ -859,7 +859,7 @@ int WordClass::initializeWordsFromDB(MYSQL &mysql, int *words, int *counts, unsi
     }
     else
     {
-      iWord=WMM.insert(tWFIMap(sWord,tFI(wordForms+words[wordId],counts[wordId],inflectionFlags,flags,timeFlags,mainEntryWordId,derivationRules,-1,selfFormNum,sWord))).first;
+      iWord=WMM.insert(tWFIMap(sWord,cSourceWordInfo(wordForms+words[wordId],counts[wordId],inflectionFlags,flags,timeFlags,mainEntryWordId,derivationRules,-1,selfFormNum,sWord))).first;
       numWordsInserted++;
       #ifdef LOG_WORD_FLOW
         lplog(L"Inserted (from sourceId %d) read word %s.",sourceId,sWord.c_str());
@@ -900,7 +900,7 @@ int WordClass::initializeWordsFromDB(MYSQL &mysql, int *words, int *counts, unsi
   if ((sectionWord=WMM.find(L"|||"))==WMM.end())
   {
     bool added;
-    addNewOrModify(NULL,wstring(L"|||"),tFI::topLevelSeparator,SECTION_FORM_NUM,0,0,L"section",-1,added);
+    addNewOrModify(NULL,wstring(L"|||"),cSourceWordInfo::topLevelSeparator,SECTION_FORM_NUM,0,0,L"section",-1,added);
     sectionWord=WMM.find(L"|||");
   }
 		if (!myquery(&mysql, L"select UNIX_TIMESTAMP(NOW())", result)) 
@@ -920,7 +920,7 @@ int WordClass::initializeWordsFromDB(MYSQL &mysql, int *words, int *counts, unsi
 }
 
 // update read: read NULL source since lastReadfromDBTime and update or insert the entries into memory (lastReadfromDBTime>0)
-int WordClass::readWordsFromDB(MYSQL &mysql,bool generateFormStatisticsFlag,bool printProgress,bool skipWordInitialization)
+int cWord::readWordsFromDB(MYSQL &mysql,bool generateFormStatisticsFlag,bool printProgress,bool skipWordInitialization)
 { LFS
 int startTime = clock();
 int numWordsInserted = 0, numWordsModified = 0;
@@ -929,13 +929,13 @@ int numWordsInserted = 0, numWordsModified = 0;
   //lplog(L"TIME DB READ START for source %d:%s",sourceId,getTimeStamp());
   wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
     readForms(mysql,qt);
-  if (nounForm==-1) nounForm=FormsClass::gFindForm(L"noun");
-  if (verbForm==-1) verbForm=FormsClass::gFindForm(L"verb");
-  if (adjectiveForm<0) adjectiveForm=FormsClass::gFindForm(L"adjective");
-  if (adverbForm<0) adverbForm=FormsClass::gFindForm(L"adverb");
-  if (timeForm<0) timeForm=FormsClass::gFindForm(L"time");
+  if (nounForm==-1) nounForm=cForms::gFindForm(L"noun");
+  if (verbForm==-1) verbForm=cForms::gFindForm(L"verb");
+  if (adjectiveForm<0) adjectiveForm=cForms::gFindForm(L"adjective");
+  if (adverbForm<0) adverbForm=cForms::gFindForm(L"adverb");
+  if (timeForm<0) timeForm=cForms::gFindForm(L"time");
   numberForm=NUMBER_FORM_NUM;
-  FormsClass::changedForms=false;
+  cForms::changedForms=false;
 	int maxWordId=getMaxWordId(mysql);
 	if (maxWordId<=0) return maxWordId;
   // read wordForms of the words

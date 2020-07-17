@@ -43,7 +43,7 @@ bool unlockTables(MYSQL &mysql);
 	//reduceWikipediaPage(buffer);
 
 extern wchar_t *lpOntologySuperClasses[]; // initialized
-bool copy(unordered_map <wstring, dbs>::iterator &hint,void *buf,int &where,int limit,unordered_map <wstring, dbs> &hm);
+bool copy(unordered_map <wstring, cOntologyEntry>::iterator &hint,void *buf,int &where,int limit,unordered_map <wstring, cOntologyEntry> &hm);
 
 
 // lastErrorMsg
@@ -396,13 +396,13 @@ int reduceWikipediaPage(wstring &buffer)
 				lplog(LOG_WIKIPEDIA,L"%s",webAddress);
 				int ret; 
 				wstring secondaryBuffer;
-				if (ret= Internet::readPage(webAddress,secondaryBuffer)) return ret;
+				if (ret= cInternet::readPage(webAddress,secondaryBuffer)) return ret;
 				reduceWikipediaPage(secondaryBuffer);
 				int fd=_wopen(path,O_CREAT|O_RDWR|O_BINARY,_S_IREAD | _S_IWRITE );
 				if (fd<0)
 				{
 					lplog(LOG_ERROR,L"ERROR:Cannot create path %s - %S (5).",path,sys_errlist[errno]);
-					return Internet::GETPAGE_CANNOT_CREATE;
+					return cInternet::GETPAGE_CANNOT_CREATE;
 				}
 				_write(fd,secondaryBuffer.c_str(),secondaryBuffer.length()*sizeof(secondaryBuffer[0]));
 				_close(fd);
@@ -540,11 +540,11 @@ int cSource::getExtendedRDFTypes(int where, vector <cTreeCat *> &rdfTypes, unord
 		if (contextualBase && rdfTypes.size() > 0)
 			break;
 	}
-	Ontology::includeSuperClasses(topHierarchyClassIndexes, rdfTypes);
+	cOntology::includeSuperClasses(topHierarchyClassIndexes, rdfTypes);
 	// reset lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms
 	for (int I=0; I<rdfTypes.size(); I++)
 		rdfTypes[I]->preferred=false;
-	Ontology::setPreferred(topHierarchyClassIndexes,rdfTypes);
+	cOntology::setPreferred(topHierarchyClassIndexes,rdfTypes);
 	return rdfTypes.size();
 }
 
@@ -552,12 +552,12 @@ int cSource::getObjectRDFTypes(int object,vector <cTreeCat *> &rdfTypes,unordere
 { LFS
 	wstring tmpstr;
   objectString(object,tmpstr,true);
-  Ontology::rdfIdentify(tmpstr,rdfTypes,fromWhere);
-	Ontology::includeSuperClasses(topHierarchyClassIndexes, rdfTypes);
+  cOntology::rdfIdentify(tmpstr,rdfTypes,fromWhere);
+	cOntology::includeSuperClasses(topHierarchyClassIndexes, rdfTypes);
 	// reset lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms
 	for (int I=0; I<rdfTypes.size(); I++)
 		rdfTypes[I]->preferred=false;
-	Ontology::setPreferred(topHierarchyClassIndexes,rdfTypes);
+	cOntology::setPreferred(topHierarchyClassIndexes,rdfTypes);
 	return rdfTypes.size();
 }
 
@@ -587,7 +587,7 @@ int cSource::readExtendedRDFTypes(wchar_t path[4096],vector <cTreeCat *> &rdfTyp
 	for (int c=0; c<rdfTypeCount; c++)
 	{
 		cTreeCat *tc=new cTreeCat();
-		if (!tc->copy(Ontology::dbPediaOntologyCategoryList,buffer,where,bufferlen)) 
+		if (!tc->copy(cOntology::dbPediaOntologyCategoryList,buffer,where,bufferlen)) 
 			lplog(LOG_FATAL_ERROR, L"Cannot read tree cat of extended rdfTypes (%s) - %S (%d).", path, _sys_errlist[errno], errno);
 		rdfTypes.push_back(tc);
 	}
@@ -791,7 +791,7 @@ void makePath(wstring &object, wchar_t *path)
 	convertIllegalChars(path + pathlen + 1);
 	distributeToSubDirectories(path, pathlen + 1, true);
 	if (wcslen(path) + 12>MAX_PATH)
-		Ontology::compressPath(path);
+		cOntology::compressPath(path);
 	path[MAX_PATH - 12] = 0;
 	path[pathlen + 2 + 244] = 0;// to guard against a filename that is too long
 	wcscat(path, L".eRdfTypes");
@@ -832,7 +832,7 @@ int cSource::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat
 		return 0;
 	}
 	// An object may not have any rdf types, this is kept in a table for efficiency
-	if (Ontology::inNoERDFTypesDBTable(newObjectName))
+	if (cOntology::inNoERDFTypesDBTable(newObjectName))
 	{
 		rdfTypes.clear();
 		topHierarchyClassIndexes.clear();
@@ -853,10 +853,10 @@ int cSource::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat
 		// not in memory cache, not cached on disk.  Get all rdf types.
 		rdfTypes.clear();
 		topHierarchyClassIndexes.clear();
-		unordered_map <wstring, dbs>::iterator dbSeparator=Ontology::dbPediaOntologyCategoryList.find(SEPARATOR);
+		unordered_map <wstring, cOntologyEntry>::iterator dbSeparator=cOntology::dbPediaOntologyCategoryList.find(SEPARATOR);
 		getExtendedRDFTypes(where, rdfTypes, topHierarchyClassIndexes, fromWhere, ignoreMatches, fileCaching);
 		if (rdfTypes.empty() && numWords>0)
-			Ontology::rdfIdentify(newObjectName.c_str(), rdfTypes, L"O");
+			cOntology::rdfIdentify(newObjectName.c_str(), rdfTypes, L"O");
 		//lplog(LOG_WHERE, L"%s results in %d rdfTypes.", newObjectName.c_str(), rdfTypes.size()); 
 		for (unordered_map <wstring, int >::iterator tI = topHierarchyClassIndexes.begin(), tIEnd = topHierarchyClassIndexes.end(); tI != tIEnd; tI++)
 		{
@@ -887,7 +887,7 @@ int cSource::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat
 						urs[u]->professionLinks=rdfTypes[r]->professionLinks;
 					if (rdfTypes[r]->preferred)
 						urs[u]->preferred=rdfTypes[r]->preferred;
-					if (!Ontology::cacheRdfTypes)
+					if (!cOntology::cacheRdfTypes)
 						delete rdfTypes[r];
 				}
 			if (!found)
@@ -902,7 +902,7 @@ int cSource::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat
 	//	uniqueRdfs+=(int)urs.size();
 	//	lplog(LOG_INFO,L"getExtendedRDFTypesMaster RDFTypes compression %d %d %d %d",rdfTypes.size(),urs.size(),totalRdfs,uniqueRdfs);
 		if (urs.empty())
-			Ontology::insertNoERDFTypesDBTable(newObjectName);
+			cOntology::insertNoERDFTypesDBTable(newObjectName);
 		else if (writeExtendedRDFTypes(newPath,urs,topHierarchyClassIndexes)<0)
 			return -1;
 		newRetCode = 0;
@@ -956,14 +956,14 @@ void cSource::getObjectString(int where,wstring &object,vector <wstring> &lookFo
 	{
 		int len=object.length();
 		object+=m[I].word->first;
-    if (m[I].flags&(WordMatch::flagAddProperNoun|WordMatch::flagOnlyConsiderProperNounForms|WordMatch::flagFirstLetterCapitalized))
+    if (m[I].flags&(cWordMatch::flagAddProperNoun|cWordMatch::flagOnlyConsiderProperNounForms|cWordMatch::flagFirstLetterCapitalized))
       object[len]=towupper(object[len]);
-    if (m[I].flags&(WordMatch::flagNounOwner))
+    if (m[I].flags&(cWordMatch::flagNounOwner))
     {
       object+='\'';
       if (object[object.length()-2]!='s') object+='s';
     }
-    if (m[I].flags&WordMatch::flagAllCaps)
+    if (m[I].flags&cWordMatch::flagAllCaps)
       for (unsigned int J=len; object[J]; J++) object[J]=towupper(object[J]);
 		if (I<end-1)
 			object+=L"_";
@@ -1028,7 +1028,7 @@ int cSource::getWikipediaPath(int principalWhere,vector <wstring> &wikipediaLink
 	if (object.empty())
 		return -1;
 	// remove ownership if the last word (Curveball's) should also check for adjectival object
-	if (principalWhere>=0 && (m[principalWhere].flags&WordMatch::flagAdjectivalObject) && object.length()>2 && object[object.length() - 1] == L's' && object[object.length() - 2] == L'\'')
+	if (principalWhere>=0 && (m[principalWhere].flags&cWordMatch::flagAdjectivalObject) && object.length()>2 && object[object.length() - 1] == L's' && object[object.length() - 2] == L'\'')
 			object.erase(object.length()-2);
 	int pathlen=_snwprintf(path,MAX_LEN,L"%s\\wikipediaCache",CACHEDIR)+1;
 	_wmkdir(path);
@@ -1045,13 +1045,13 @@ int cSource::getWikipediaPath(int principalWhere,vector <wstring> &wikipediaLink
 		lplog(LOG_WIKIPEDIA,L"PRIMARY:  %s",webAddress);
 		int ret; 
 		wstring buffer;
-		if (ret= Internet::readPage(webAddress,buffer)) return ret;
+		if (ret= cInternet::readPage(webAddress,buffer)) return ret;
 		reduceWikipediaPage(buffer);
 		int fd=_wopen(path,O_CREAT|O_RDWR|O_BINARY,_S_IREAD | _S_IWRITE ); 
 		if (fd<0)
 		{
 			lplog(LOG_ERROR,L"ERROR:Cannot create path %s - %S (6).",path,sys_errlist[errno]);
-			return Internet::GETPAGE_CANNOT_CREATE;
+			return cInternet::GETPAGE_CANNOT_CREATE;
 		}
 		_write(fd,buffer.c_str(),buffer.length()*sizeof(buffer[0]));
 		_close(fd);
@@ -1060,7 +1060,7 @@ int cSource::getWikipediaPath(int principalWhere,vector <wstring> &wikipediaLink
 }
 
 // if subject object matches, and verb is IS, evaluate object for an OCType.
-int cSource::evaluateISARelation(int parentSourceWhere,int where,vector <tTagLocation> &tagSet,vector <wstring> &lookForSubject)
+int cSource::evaluateISARelation(int parentSourceWhere,int where,vector <cTagLocation> &tagSet,vector <wstring> &lookForSubject)
 { LFS
 	int nextTag=-1,verbTagIndex;
 	if ((verbTagIndex=findOneTag(tagSet,L"VERB",-1))<0) return -1;
@@ -1085,7 +1085,7 @@ int cSource::evaluateISARelation(int parentSourceWhere,int where,vector <tTagLoc
 	for (int I=m[whereSubjectObject].beginObjectPosition; I<m[whereSubjectObject].endObjectPosition; I++)
 	{
 		wstring w=(m[I].word->second.mainEntry!=wNULL) ? m[I].word->second.mainEntry->first : m[I].word->first;
-		if (find(lookForSubject.begin(),lookForSubject.end(),w)!=lookForSubject.end() && !(m[I].flags&WordMatch::flagAdjectivalObject))
+		if (find(lookForSubject.begin(),lookForSubject.end(),w)!=lookForSubject.end() && !(m[I].flags&cWordMatch::flagAdjectivalObject))
 			elementsFound++;
 		else if (I>=whereSubjectObject)
 			mainEntryMatch=false;
@@ -1141,13 +1141,13 @@ int cSource::evaluateISARelation(int parentSourceWhere,int where,vector <tTagLoc
 	return (objects[objectObject].getSubType()<0) ? NUM_SUBTYPES : objects[objectObject].getSubType();
 }
 
-bool cSource::getISARelations(int parentSourceWhere,int where,vector < vector <tTagLocation> > &tagSets,vector <int> &OCTypes,vector <wstring> &lookForSubject)
+bool cSource::getISARelations(int parentSourceWhere,int where,vector < vector <cTagLocation> > &tagSets,vector <int> &OCTypes,vector <wstring> &lookForSubject)
 { LFS
-  vector <WordMatch>::iterator im=m.begin()+where;
-	patternMatchArray::tPatternMatch *pma=im->pma.content;
+  vector <cWordMatch>::iterator im=m.begin()+where;
+	cPatternMatchArray::tPatternMatch *pma=im->pma.content;
 	for (unsigned PMAElement=0; PMAElement<im->pma.count; PMAElement++,pma++)
 	{
-		//  desiredTagSets.push_back(tTS(subjectVerbRelationTagSet,"_SUBJECT_VERB_RELATION",3,"VERB","V_OBJECT","SUBJECT","OBJECT","PREP","IVERB","REL","ADJ","ADV","HOBJECT","V_AGREE","V_HOBJECT",NULL));
+		//  desiredTagSets.push_back(cTagSet(subjectVerbRelationTagSet,"_SUBJECT_VERB_RELATION",3,"VERB","V_OBJECT","SUBJECT","OBJECT","PREP","IVERB","REL","ADJ","ADV","HOBJECT","V_AGREE","V_HOBJECT",NULL));
 		if ((((patterns[pma->getPattern()]->includesOnlyDescendantsAllOfTagSet)&((__int64)1<<subjectVerbRelationTagSet))!=0))
 		{
 			tagSets.clear();
@@ -1200,8 +1200,8 @@ bool cSource::mixedCaseObject(int begin,int len)
 	{
 		if (iswalpha(m[I].word->first[0]))
 		{
-			lowerCaseFound|=!(m[I].flags&(WordMatch::flagAllCaps|WordMatch::flagFirstLetterCapitalized));
-			if (m[I].flags&(WordMatch::flagAllCaps))
+			lowerCaseFound|=!(m[I].flags&(cWordMatch::flagAllCaps|cWordMatch::flagFirstLetterCapitalized));
+			if (m[I].flags&(cWordMatch::flagAllCaps))
 			{
 				for (unsigned int w=0; w<m[I].word->first.length() && !allUpperCaseWithVowelsFound; w++)
 				{
@@ -1228,10 +1228,10 @@ bool cSource::capitalizationCheck(int begin,int len)
 	int wordsCapitalized = 0;
 	for (int I = begin; I < begin + len; I++)
 	{
-		if (m[I].queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (m[I].flags&WordMatch::flagFirstLetterCapitalized) || (m[I].flags&WordMatch::flagAllCaps))
+		if (m[I].queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (m[I].flags&cWordMatch::flagFirstLetterCapitalized) || (m[I].flags&cWordMatch::flagAllCaps))
 			wordsCapitalized++;
 	}
-	bool firstWordCapitalized = (m[begin].queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (m[begin].flags&WordMatch::flagFirstLetterCapitalized) || (m[begin].flags&WordMatch::flagAllCaps));
+	bool firstWordCapitalized = (m[begin].queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (m[begin].flags&cWordMatch::flagFirstLetterCapitalized) || (m[begin].flags&cWordMatch::flagAllCaps));
 	if ((len == 1 && !firstWordCapitalized) ||
 		// only word capitalized is the determiner
 		(len == 2 && wordsCapitalized == 1 && firstWordCapitalized && m[begin].queryForm(determinerForm) >= 0) ||
@@ -1265,7 +1265,7 @@ bool cSource::rejectISARelation(int principalWhere)
 			// STORIES_Tina_Fey_Announces / PLAYLISTBYAOL_On_Valentine's day
 			(tmp8=mixedCaseObject(begin,len)) ||
 			// his_new_memoir / her_hit_Torn / your_Horoscope -- may alternatively cut the possessives off
-			(tmp9=m[begin].queryForm(possessiveDeterminerForm)>=0 && !(m[begin].flags&(WordMatch::flagAllCaps|WordMatch::flagFirstLetterCapitalized))) ||
+			(tmp9=m[begin].queryForm(possessiveDeterminerForm)>=0 && !(m[begin].flags&(cWordMatch::flagAllCaps|cWordMatch::flagFirstLetterCapitalized))) ||
 			// Subway_Hero_Describes_Saving_Man_From_Tracks_:
 			(tmp10=m[begin+len-1].word->first==L":") ||
 			// last Friday
@@ -1416,8 +1416,8 @@ int cSource::identifyISARelationTextAnalysis(cQuestionAnswering &qa,int principa
 	{
 		cSource *source = NULL;
 		qa.processPath(this,path,source,cSource::WIKIPEDIA_SOURCE_TYPE,2,parseOnly);
-		vector <WordMatch>::iterator im=source->m.begin(),imEnd=source->m.end();
-		vector < vector <tTagLocation> > tagSets;
+		vector <cWordMatch>::iterator im=source->m.begin(),imEnd=source->m.end();
+		vector < vector <cTagLocation> > tagSets;
 		for (int I=0; im!=imEnd; im++,I++)
 			source->getISARelations(principalWhere,I,tagSets,OCTypes,lookForSubject);
 		writeAttribs(path,OCTypes);
@@ -1526,7 +1526,7 @@ bool cSource::analyzeRDFTitle(unsigned int where, int &numWords, int &numPreposi
 	numPrepositions = 0;
 	int lastComma = -1, lastConjunction = -1, firstComma = -1;
 	for (unsigned int I = where; I < m.size() && m[I].word != Words.END_COLUMN && m[I].word != Words.TABLE && allCapitalized && !isEOS(I) && m[I].queryForm(bracketForm) < 0 &&
-		(m[I].queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (m[I].flags&WordMatch::flagFirstLetterCapitalized) || (m[I].flags&WordMatch::flagAllCaps) ||
+		(m[I].queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (m[I].flags&cWordMatch::flagFirstLetterCapitalized) || (m[I].flags&cWordMatch::flagAllCaps) ||
 			m[I].word->first[0] == L',' || m[I].word->first[0] == L':' || m[I].word->first[0] == L';' || m[I].queryForm(determinerForm) >= 0 || m[I].queryForm(numeralOrdinalForm) >= 0 || m[I].queryForm(prepositionForm) >= 0 || m[I].queryForm(coordinatorForm) >= 0);
 		I++, numWords++)
 	{
@@ -1624,10 +1624,10 @@ int cSource::getRDFTypes(int where, vector <cTreeCat *> &rdfTypes, wstring fromW
 			oStr=tmpstr;
 		}
 	}
-	Ontology::rdfIdentify(oStr, rdfTypes, L"1", fileCaching);
+	cOntology::rdfIdentify(oStr, rdfTypes, L"1", fileCaching);
 	if (numPrepositions>extendNumPP && rdfTypes.empty())
 	{
-		Ontology::rdfIdentify(saveStr.c_str(), rdfTypes, L"a", fileCaching);
+		cOntology::rdfIdentify(saveStr.c_str(), rdfTypes, L"a", fileCaching);
 		 if (!rdfTypes.empty())
 			 oStr=saveStr;
 	}
@@ -1642,7 +1642,7 @@ int cSource::getRDFTypes(int where, vector <cTreeCat *> &rdfTypes, wstring fromW
 			getOriginalWord(I, oStr, true);
 			oStr[len]=towupper(oStr[len]);
 		}
-		Ontology::rdfIdentify(oStr, rdfTypes, L"2", fileCaching);
+		cOntology::rdfIdentify(oStr, rdfTypes, L"2", fileCaching);
 	}
 	// The Humanist Antonio+de+Nebrija
 	if (rdfTypes.empty() && !wcsncmp(oStr.c_str(),L"The_",4))
@@ -1657,7 +1657,7 @@ int cSource::getRDFTypes(int where, vector <cTreeCat *> &rdfTypes, wstring fromW
 				getOriginalWord(I, oStr, true);
 				oStr[len]=towupper(oStr[len]);
 			}
-			Ontology::rdfIdentify(oStr, rdfTypes, L"3", fileCaching);
+			cOntology::rdfIdentify(oStr, rdfTypes, L"3", fileCaching);
 		}
 	}
 	int colon;
@@ -1665,7 +1665,7 @@ int cSource::getRDFTypes(int where, vector <cTreeCat *> &rdfTypes, wstring fromW
 	{
 		if (colon && oStr[colon-1]==L'_')
 			oStr.erase(colon-1);
-		Ontology::rdfIdentify(oStr, rdfTypes, L"4", fileCaching);
+		cOntology::rdfIdentify(oStr, rdfTypes, L"4", fileCaching);
 	}
 	int lowestConfidence=CONFIDENCE_NOMATCH;
 	for (unsigned int I=0; I<rdfTypes.size(); I++)
@@ -1674,40 +1674,40 @@ int cSource::getRDFTypes(int where, vector <cTreeCat *> &rdfTypes, wstring fromW
 	if (lowestConfidence>1 && (!wcsncmp(oStr.c_str(), L"The_", 4) || !wcsncmp(oStr.c_str(), L"the_", 4)))
 	{
 		oStr.erase(0, 4);
-		Ontology::rdfIdentify(oStr, rdfTypes, L"5", fileCaching);
+		cOntology::rdfIdentify(oStr, rdfTypes, L"5", fileCaching);
 	}
 	// 3 M
 	if (rdfTypes.empty() && objectWordLength==2 && m[begin].queryWinnerForm(NUMBER_FORM_NUM)>=0 && m[begin+1].word->first.length()==1)
 	{
 		getOriginalWord(begin,oStr,false);
 		getOriginalWord(begin + 1, oStr, true);
-		Ontology::rdfIdentify(oStr, rdfTypes, L"6", fileCaching);
+		cOntology::rdfIdentify(oStr, rdfTypes, L"6", fileCaching);
 	}
 	// Rihanna [6][name][M][F][A:Rihanna ] record compactLabel [PO (Rihanna's record compactLabel Def Jam[6-11]{OWNER:Rihanna }[9][ngname][N][OGEN]) def].
 	// strip out begin adjectival object
 	// noun that is left must have at least two words
 	for (int I=begin; I<begin+objectWordLength-2 && rdfTypes.empty(); I++)
-		if ((m[I].flags&WordMatch::flagAdjectivalObject) && m[I].endObjectPosition<=begin+objectWordLength-2)
+		if ((m[I].flags&cWordMatch::flagAdjectivalObject) && m[I].endObjectPosition<=begin+objectWordLength-2)
 		{
 			wstring tmpstr;
 			if (m[I].endObjectPosition>=0)
 				phraseString(m[I].endObjectPosition, begin + objectWordLength, tmpstr, true, L"_");
 			else
 				phraseString(I+1, begin + objectWordLength, tmpstr, true, L"_");
-			Ontology::rdfIdentify(tmpstr, rdfTypes, L"7", fileCaching);
+			cOntology::rdfIdentify(tmpstr, rdfTypes, L"7", fileCaching);
 		}
-		else if (!(m[I].flags&WordMatch::flagFirstLetterCapitalized) && (m[I+1].flags&WordMatch::flagFirstLetterCapitalized) && I<begin+objectWordLength+2)
+		else if (!(m[I].flags&cWordMatch::flagFirstLetterCapitalized) && (m[I+1].flags&cWordMatch::flagFirstLetterCapitalized) && I<begin+objectWordLength+2)
 		{
 			wstring tmpstr;
 			phraseString(I+1,begin+objectWordLength,tmpstr,true,L"_");
-			Ontology::rdfIdentify(tmpstr, rdfTypes, L"8", fileCaching);
+			cOntology::rdfIdentify(tmpstr, rdfTypes, L"8", fileCaching);
 		}
 	return 0;
 }
 
 int cSource::identifyISARelation(int principalWhere,bool initialTenseOnly)
 { LFS
-	Ontology::initialize();
+	cOntology::initialize();
 	int o=m[principalWhere].getObject(),begin=m[principalWhere].beginObjectPosition,len=m[principalWhere].endObjectPosition-begin;
 	// save time calling getExtendedRDFTypesMaster - we are pretty sure this is a person
 	if (o>=0 && ((objects[o].name.hon!=wNULL && !objects[o].name.justHonorific()) || objects[o].numIdentifiedAsSpeaker>0 || objects[o].PISHail>0 || objects[o].PISDefinite>0))
@@ -1732,7 +1732,7 @@ int cSource::identifyISARelation(int principalWhere,bool initialTenseOnly)
 	vector <cTreeCat *> rdfTypes;
 	unordered_map <wstring ,int > topHierarchyClassIndexes;
 	getExtendedRDFTypesMaster(principalWhere,-1,rdfTypes,topHierarchyClassIndexes,TEXT(__FUNCTION__));
-	if (len==1 && !(m[principalWhere].flags&WordMatch::flagFirstLetterCapitalized)) // lower case 'prize'
+	if (len==1 && !(m[principalWhere].flags&cWordMatch::flagFirstLetterCapitalized)) // lower case 'prize'
 	{
 		for (unsigned int r=0; r<rdfTypes.size(); r++)
 			rdfTypes[r]->top.clear();
@@ -1794,7 +1794,7 @@ int cSource::identifyISARelation(int principalWhere,bool initialTenseOnly)
 			numPreferred++;
 		}
 	}
-	if (!Ontology::cacheRdfTypes)
+	if (!cOntology::cacheRdfTypes)
 	  for (vector <cTreeCat *>::iterator rdfi=rdfTypes.begin(),rdfiEnd=rdfTypes.end(); rdfi!=rdfiEnd; rdfi++)
 	  	delete (*rdfi); // now caching them
 	isPlace|=(placeTypeFound>=0);
@@ -1856,7 +1856,7 @@ int cSource::identifyISARelation(int principalWhere,bool initialTenseOnly)
 bool cSource::checkForUppercaseSources(int questionInformationSourceObject)
 {
 	if (questionInformationSourceObject<0 || objects[questionInformationSourceObject].end-objects[questionInformationSourceObject].begin!=1 || 
-		!(m[objects[questionInformationSourceObject].begin].flags&WordMatch::flagAllCaps))
+		!(m[objects[questionInformationSourceObject].begin].flags&cWordMatch::flagAllCaps))
 		return false;
 	tIWMM w=m[objects[questionInformationSourceObject].begin].word;
 	bool otherThanNoun=false;
@@ -1870,7 +1870,7 @@ bool cSource::skipSentenceForUpperCase(unsigned int &I)
 	// is childSource primarily capitalized around I?
 	unsigned int numWordsCapitalized=0,numWordsChecked=0,s;
 	for (s=I+1; s<m.size() && !isEOS(s); s++,numWordsChecked++)
-		if (m[s].flags&WordMatch::flagAllCaps)
+		if (m[s].flags&cWordMatch::flagAllCaps)
 			numWordsCapitalized++;
 	if (numWordsChecked && 100*numWordsCapitalized/numWordsChecked>90)
 	{
@@ -2124,7 +2124,7 @@ void cQuestionAnswering::accumulateSemanticEntry(cSource *questionSource,unsigne
 int runJavaJerichoHTML(wstring webAddress, wstring outputPath, string &outbuf);
 
 // a routine derived from readPage which uses Windows HTTP routines – not used
-int WordClass::readPageWinHTTP(wchar_t *str, wstring &buffer)
+int cWord::readPageWinHTTP(wchar_t *str, wstring &buffer)
 {
 	LFS
 		wstring lem;
@@ -2136,7 +2136,7 @@ int WordClass::readPageWinHTTP(wchar_t *str, wstring &buffer)
 		hConnect = NULL,
 		hRequest = NULL;
 	// http://umbel.org/umbel/rc/MusicalPerformer
-	if (!Internet::readPage(L"http://umbel.org/umbel/rc/MusicalPerformer.rdf", buffer)) return 0;
+	if (!cInternet::readPage(L"http://umbel.org/umbel/rc/MusicalPerformer.rdf", buffer)) return 0;
 
 	wchar_t server[1024];
 	wcscpy(server, L"umbel.org");

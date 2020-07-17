@@ -10,14 +10,14 @@
 #include "source.h"
 #include "profile.h"
 
-patternElementMatchArray::patternElementMatchArray()
+cPatternElementMatchArray::cPatternElementMatchArray()
 { LFS
     count=0;
     allocated=0;
     content=NULL;
 };
 
-patternElementMatchArray::~patternElementMatchArray()
+cPatternElementMatchArray::~cPatternElementMatchArray()
 { LFS
     if (allocated) tfree(allocated*sizeof(*content),content);
     count=0;
@@ -25,7 +25,7 @@ patternElementMatchArray::~patternElementMatchArray()
     content=NULL;
 }
 
-void patternElementMatchArray::clear(void)
+void cPatternElementMatchArray::clear(void)
 { LFS
     if (allocated) tfree(allocated*sizeof(*content),content);
     allocated=0;
@@ -33,7 +33,7 @@ void patternElementMatchArray::clear(void)
   content=NULL;
 }
 
-patternElementMatchArray::patternElementMatchArray(const patternElementMatchArray &rhs)
+cPatternElementMatchArray::cPatternElementMatchArray(const cPatternElementMatchArray &rhs)
 { LFS
     count=rhs.count;
     allocated=rhs.allocated;
@@ -47,14 +47,14 @@ patternElementMatchArray::patternElementMatchArray(const patternElementMatchArra
     }
 }
 
-void patternElementMatchArray::minimize(void)
+void cPatternElementMatchArray::minimize(void)
 { LFS
     int oldAllocated=allocated;
     allocated=count;
     content=(tPatternElementMatch *)trealloc(6,content,oldAllocated*sizeof(*content),allocated*sizeof(*content));
 }
 
-bool patternElementMatchArray::write(IOHANDLE file)
+bool cPatternElementMatchArray::write(IOHANDLE file)
 {
 	LFS
 		_write(file, &count, sizeof(count));
@@ -62,7 +62,7 @@ bool patternElementMatchArray::write(IOHANDLE file)
 	return true;
 }
 
-bool patternElementMatchArray::WriteFile(HANDLE file)
+bool cPatternElementMatchArray::WriteFile(HANDLE file)
 {
 	LFS
 	DWORD dwBytesWritten;
@@ -71,7 +71,7 @@ bool patternElementMatchArray::WriteFile(HANDLE file)
 	return true;
 }
 
-bool patternElementMatchArray::read(IOHANDLE file)
+bool cPatternElementMatchArray::read(IOHANDLE file)
 { LFS
     _read(file,&count,sizeof(count));
     allocated=count;
@@ -90,7 +90,7 @@ bool patternElementMatchArray::read(IOHANDLE file)
     return true;
 }
 
-bool patternElementMatchArray::write(void *buffer,int &where,unsigned int limit)
+bool cPatternElementMatchArray::write(void *buffer,int &where,unsigned int limit)
 { LFS
   if (!copy(buffer,count,where,limit)) return false;
 	if (where+count*sizeof(*content)>limit) 
@@ -100,7 +100,7 @@ bool patternElementMatchArray::write(void *buffer,int &where,unsigned int limit)
   return true;
 }
 
-bool patternElementMatchArray::read(char *buffer,int &where,unsigned int limit)
+bool cPatternElementMatchArray::read(char *buffer,int &where,unsigned int limit)
 { LFS
   if (!copy(count,buffer,where,limit)) return false;
 	if (where+count*sizeof(*content)>limit) 
@@ -121,13 +121,13 @@ bool patternElementMatchArray::read(char *buffer,int &where,unsigned int limit)
   return true;
 }
 
-bool patternElementMatchArray::operator==(const patternElementMatchArray other) const
+bool cPatternElementMatchArray::operator==(const cPatternElementMatchArray other) const
 { LFS
     if (count!=other.count) return false;
   return memcmp(content, other.content,count*sizeof(*content))==0;
 }
 
-patternElementMatchArray& patternElementMatchArray::operator=(const patternElementMatchArray &rhs)
+cPatternElementMatchArray& cPatternElementMatchArray::operator=(const cPatternElementMatchArray &rhs)
 { LFS
     if (allocated) tfree(allocated*sizeof(*content),content);
     count=rhs.count;
@@ -143,13 +143,13 @@ patternElementMatchArray& patternElementMatchArray::operator=(const patternEleme
     return *this;
 }
 
-bool patternElementMatchArray::operator!=(const patternElementMatchArray other) const
+bool cPatternElementMatchArray::operator!=(const cPatternElementMatchArray other) const
 { LFS
     if (count!=other.count) return true;
   return memcmp(content, other.content,count*sizeof(*content))!=0;
 }
 
-patternElementMatchArray::reference patternElementMatchArray::operator[](unsigned int _P0)
+cPatternElementMatchArray::reference cPatternElementMatchArray::operator[](unsigned int _P0)
 { LFS
     #ifdef INDEX_CHECK
         static int catchError=0;
@@ -160,7 +160,7 @@ patternElementMatchArray::reference patternElementMatchArray::operator[](unsigne
     return (content[_P0]);
 }
 
-patternElementMatchArray::const_reference patternElementMatchArray::operator[](unsigned int _P0) const
+cPatternElementMatchArray::const_reference cPatternElementMatchArray::operator[](unsigned int _P0) const
 { LFS
     #ifdef INDEX_CHECK
         if (_P0>=count || _P0<0)
@@ -174,8 +174,8 @@ patternElementMatchArray::const_reference patternElementMatchArray::operator[](u
     return (content[_P0]);
 }
 
-int patternElementMatchArray::push_back(int oCost,int iCost,unsigned int p,int begin,int end,int elementMatchedSubIndex,
-                                        unsigned int patternElement,unsigned int patternElementIndex,int allocationHint)
+int cPatternElementMatchArray::push_back(int oCost,int iCost,unsigned int p,int begin,int end,int elementMatchedSubIndex,
+                                        unsigned int cPatternElement,unsigned int patternElementIndex,int allocationHint)
 { LFS
   if (!count) count++; // make sure no PEMA offset can be zero, because of a limitation in collectTags that uses the negation of PEMAPosition
   count++;
@@ -199,7 +199,7 @@ int patternElementMatchArray::push_back(int oCost,int iCost,unsigned int p,int b
   c->removeWinnerFlag();
   c->begin=begin;
   c->end=end;
-  c->setElementAndIndex(patternElement,patternElementIndex);
+  c->setElementAndIndex(cPatternElement,patternElementIndex);
   c->setElementMatchedSubIndex(elementMatchedSubIndex);
   c->nextByPosition=-1;
   c->nextByPatternEnd=-1;
@@ -223,12 +223,12 @@ int patternElementMatchArray::push_back(int oCost,int iCost,unsigned int p,int b
 //     i. entry match found
 //     ii. entry match not found
 //   c. begin is < than any in list
-int patternElementMatchArray::push_back_unique(int *firstPosition,unsigned int position,int oCost,int iCost,unsigned int p,int begin,int end,int elementMatchedSubIndex,
-                                               unsigned int patternElement,unsigned int patternElementIndex,int allocationHint,bool &newElement,bool POFlag)
+int cPatternElementMatchArray::push_back_unique(int *firstPosition,unsigned int position,int oCost,int iCost,unsigned int p,int begin,int end,int elementMatchedSubIndex,
+                                               unsigned int cPatternElement,unsigned int patternElementIndex,int allocationHint,bool &newElement,bool POFlag)
 { LFS
   bool isPattern;
   unsigned int referredPattern=-1,endPoint=-1;
-  if (isPattern=(elementMatchedSubIndex&matchElement::patternFlag)== matchElement::patternFlag)
+  if (isPattern=(elementMatchedSubIndex&cMatchElement::patternFlag)== cMatchElement::patternFlag)
   {
     if (PATMASK(elementMatchedSubIndex)>=patterns.size())
     {
@@ -247,7 +247,7 @@ int patternElementMatchArray::push_back_unique(int *firstPosition,unsigned int p
     int nextByPatternEnd=*firstPosition;
     tPatternElementMatch *c=content+nextByPatternEnd;
     if (nextByPatternEnd<0 || c->begin<begin) break;
-    if (c->begin==begin && c->getElement()==patternElement &&
+    if (c->begin==begin && c->getElement()==cPatternElement &&
       ((isPattern && c->isChildPattern() && patterns[c->getChildPattern()]->rootPattern==referredPattern &&   c->getChildLen()==endPoint) ||
       (!isPattern && c->getChildForm()==elementMatchedSubIndex)))
     {
@@ -291,7 +291,7 @@ int patternElementMatchArray::push_back_unique(int *firstPosition,unsigned int p
   int keepOffset=0,keepFirstOffset=0;
   if (savePOFlag) keepFirstOffset=(int)(saveFirstPosition-((int *)content));
   if (POFlag)     keepOffset=(int)(firstPosition-((int *)content));
-  int PEMAOffset=push_back(oCost,iCost,p,begin,end,elementMatchedSubIndex,patternElement,patternElementIndex,allocationHint);
+  int PEMAOffset=push_back(oCost,iCost,p,begin,end,elementMatchedSubIndex,cPatternElement,patternElementIndex,allocationHint);
   //  content[PEMAOffset].sourcePosition=position; // for CHECKPEER BPM
   if (savePOFlag) saveFirstPosition=((int *)content)+keepFirstOffset;
   if (POFlag)     firstPosition=((int *)content)+keepOffset;
@@ -339,7 +339,7 @@ int patternElementMatchArray::push_back_unique(int *firstPosition,unsigned int p
   return PEMAOffset;
 }
 
-int patternElementMatchArray::getNextValidByPosition(int lastPEMAConsolidationIndex,int *wa,int &nextPosition)
+int cPatternElementMatchArray::getNextValidByPosition(int lastPEMAConsolidationIndex,int *wa,int &nextPosition)
 { LFS
   if (nextPosition<lastPEMAConsolidationIndex && nextPosition>=0)
   {
@@ -354,14 +354,14 @@ int patternElementMatchArray::getNextValidByPosition(int lastPEMAConsolidationIn
   return nextPosition;
 }
 
-void patternElementMatchArray::check(void)
+void cPatternElementMatchArray::check(void)
 { LFS
   for (unsigned int I=0; I<count; I++)
     if (content[I].nextByPosition>=(signed)count || content[I].nextByPatternEnd>=(signed)count || content[I].nextByChildPatternEnd>=(signed)count)
       lplog(LOG_FATAL_ERROR,L"FATAL!");
 }
 
-void patternElementMatchArray::skipPastPositions(int lastPEMAConsolidationIndex,int *&nextPosition,enum chainType cType)
+void cPatternElementMatchArray::skipPastPositions(int lastPEMAConsolidationIndex,int *&nextPosition,enum chainType cType)
 { LFS
   // skip positions established with last sentence
   if (*nextPosition<lastPEMAConsolidationIndex && *nextPosition>=0)
@@ -384,7 +384,7 @@ void patternElementMatchArray::skipPastPositions(int lastPEMAConsolidationIndex,
   }
 }
 
-void patternElementMatchArray::getNextValidPosition(int lastPEMAConsolidationIndex,int *wa,int *nextPosition,enum chainType cType)
+void cPatternElementMatchArray::getNextValidPosition(int lastPEMAConsolidationIndex,int *wa,int *nextPosition,enum chainType cType)
 { LFS
   skipPastPositions(lastPEMAConsolidationIndex,nextPosition,cType);
   while (*nextPosition>=lastPEMAConsolidationIndex && (unsigned int)*nextPosition<count && wa[*nextPosition-lastPEMAConsolidationIndex]==-1)
@@ -398,7 +398,7 @@ void patternElementMatchArray::getNextValidPosition(int lastPEMAConsolidationInd
   }
 }
 
-void patternElementMatchArray::translate(int lastPEMAConsolidationIndex,int *wa,int *position,enum chainType cType)
+void cPatternElementMatchArray::translate(int lastPEMAConsolidationIndex,int *wa,int *position,enum chainType cType)
 { LFS
 	bool translateLoopedPositions=false;
 	if (translateLoopedPositions=*position<0 && *position!=-1)
@@ -417,7 +417,7 @@ void patternElementMatchArray::translate(int lastPEMAConsolidationIndex,int *wa,
 		*position=-*position;
 }
 
-void patternElementMatchArray::generateWinnerConsolidationArray(int lastPEMAConsolidationIndex,int *&wa,int &numWinners)
+void cPatternElementMatchArray::generateWinnerConsolidationArray(int lastPEMAConsolidationIndex,int *&wa,int &numWinners)
 { LFS
 	if ((signed)count-lastPEMAConsolidationIndex<=0) return;
 	wa=(int *)tmalloc((count-lastPEMAConsolidationIndex)*sizeof(*wa));
@@ -435,7 +435,7 @@ void patternElementMatchArray::generateWinnerConsolidationArray(int lastPEMACons
 	}
 }
 
-bool patternElementMatchArray::consolidateWinners(int lastPEMAConsolidationIndex,int *wa,int numWinners,sTrace &t)
+bool cPatternElementMatchArray::consolidateWinners(int lastPEMAConsolidationIndex,int *wa,int numWinners,sTrace &t)
 { LFS
 	if (lastPEMAConsolidationIndex>=(signed)count) return true;
 	// consolidate winners
@@ -461,7 +461,7 @@ bool patternElementMatchArray::consolidateWinners(int lastPEMAConsolidationIndex
 	return numWinners>1;
 }
 
-int patternElementMatchArray::generatePEMACount(int nextPosition)
+int cPatternElementMatchArray::generatePEMACount(int nextPosition)
 { LFS
   int I=0;
   for (; nextPosition!=-1; I++,nextPosition=content[nextPosition].nextByPosition)
@@ -470,7 +470,7 @@ int patternElementMatchArray::generatePEMACount(int nextPosition)
   return I;
 }
 
-int patternElementMatchArray::queryTag(int nextPosition,int tag)
+int cPatternElementMatchArray::queryTag(int nextPosition,int tag)
 { LFS
   for (; nextPosition!=-1; nextPosition=content[nextPosition].nextByPosition)
 		if (content[nextPosition].hasTag(tag))
@@ -478,7 +478,7 @@ int patternElementMatchArray::queryTag(int nextPosition,int tag)
 	return -1;
 }
 
-bool patternElementMatchArray::ownedByOtherWinningPattern(int parentPEMAPosition, int nextPosition,int p,int len)
+bool cPatternElementMatchArray::ownedByOtherWinningPattern(int parentPEMAPosition, int nextPosition,int p,int len)
 { LFS
 	int rootPattern=patterns[p]->rootPattern;
   for (; nextPosition!=-1; nextPosition=content[nextPosition].nextByPosition)
@@ -493,7 +493,7 @@ bool patternElementMatchArray::ownedByOtherWinningPattern(int parentPEMAPosition
 	return false;
 }
 
-bool patternElementMatchArray::ownedByOtherPattern(int nextPosition,int p,int len)
+bool cPatternElementMatchArray::ownedByOtherPattern(int nextPosition,int p,int len)
 { LFS
 	int rootPattern=patterns[p]->rootPattern;
   for (; nextPosition!=-1; nextPosition=content[nextPosition].nextByPosition)
@@ -506,7 +506,7 @@ bool patternElementMatchArray::ownedByOtherPattern(int nextPosition,int p,int le
 	return false;
 }
 
-__int64 patternElementMatchArray::tPatternElementMatch::getRole(__int64 &tagRole)
+__int64 cPatternElementMatchArray::tPatternElementMatch::getRole(__int64 &tagRole)
 { LFS
 	// role tags must ONLY be child tags, not tags assigned to the whole pattern
 	int tag;
@@ -529,7 +529,7 @@ __int64 patternElementMatchArray::tPatternElementMatch::getRole(__int64 &tagRole
 	return childTagRole;
 }
 
-wchar_t *patternElementMatchArray::tPatternElementMatch::toText(unsigned int position,wchar_t *temp,vector <WordMatch> &m)
+wchar_t *cPatternElementMatchArray::tPatternElementMatch::toText(unsigned int position,wchar_t *temp,vector <cWordMatch> &m)
 { LFS
 	int len=wsprintf(temp,L"%s[%s](%d,%d) child",
 		patterns[getParentPattern()]->name.c_str(),patterns[getParentPattern()]->differentiator.c_str(),position+begin,position+end);

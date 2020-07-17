@@ -12,11 +12,11 @@
 #include "profile.h"
 
 vector <cPattern *> patterns; // initialized
-int patternReference::firstPatternReference=-1,patternReference::lastPatternReference=-1; // initialized
-vector <patternReference *> patternReferences; // initialized
-bitObject<32, 5, unsigned int, 32> patternsWithNoParents,patternsWithNoChildren; // initialized
+int cPatternReference::firstPatternReference=-1,cPatternReference::lastPatternReference=-1; // initialized
+vector <cPatternReference *> patternReferences; // initialized
+cBitObject<32, 5, unsigned int, 32> patternsWithNoParents,patternsWithNoChildren; // initialized
 bool overMatchMemoryExceeded=false; // used only in error - one way 
-vector < tTS > desiredTagSets; // initialized
+vector < cTagSet > desiredTagSets; // initialized
 vector <wstring> patternTagStrings; // initialized
 
 struct {
@@ -57,17 +57,17 @@ struct {
 {-1,NULL}
 };
 
-unsigned int matchElement::getChildPattern()
+unsigned int cMatchElement::getChildPattern()
 { LFS
-  return patternElementMatchArray::PATMASK(elementMatchedIndex);
+  return cPatternElementMatchArray::PATMASK(elementMatchedIndex);
 };
 
-unsigned int matchElement::getChildLen()
+unsigned int cMatchElement::getChildLen()
 { LFS
-  return patternElementMatchArray::ENDMASK(elementMatchedIndex);
+  return cPatternElementMatchArray::ENDMASK(elementMatchedIndex);
 };
 
-wstring patternElement::formsStr(void)
+wstring cPatternElement::formsStr(void)
 { LFS
   wstring allForms;
   int index;
@@ -88,13 +88,13 @@ wstring patternElement::formsStr(void)
   return allForms;
 }
 
-wstring matchesToString(vector <matchElement> &whatMatched,int elementMatched,wstring &s)
+wstring matchesToString(vector <cMatchElement> &whatMatched,int elementMatched,wstring &s)
 { LFS
   wchar_t temp[100];
   s.clear();
   while (elementMatched>=0)
   {
-    if (whatMatched[elementMatched].elementMatchedIndex&matchElement::patternFlag)
+    if (whatMatched[elementMatched].elementMatchedIndex&cMatchElement::patternFlag)
     {
       if (whatMatched[elementMatched].getChildPattern()>=patterns.size())
         lplog(LOG_FATAL_ERROR,L"Illegal pattern #%d at elementMatched %d!",whatMatched[elementMatched].getChildPattern(),elementMatched);
@@ -111,14 +111,14 @@ wstring matchesToString(vector <matchElement> &whatMatched,int elementMatched,ws
   return s;
 }
 
-bool patternElement::matchRange(cSource &source,int matchBegin,int matchEnd,vector <matchElement> &whatMatched,sTrace &t)
+bool cPatternElement::matchRange(cSource &source,int matchBegin,int matchEnd,vector <cMatchElement> &whatMatched,sTrace &t)
 { LFS // DLFS
   int rep;
   if (minimum==0)
   {
 		for (int matchPosition = matchBegin; matchPosition < matchEnd; matchPosition++)
 		{
-			whatMatched.push_back(matchElement(-1, whatMatched[matchPosition].endPosition, whatMatched[matchPosition].endPosition, 0, 0, false, matchPosition, elementPosition, -2, false));
+			whatMatched.push_back(cMatchElement(-1, whatMatched[matchPosition].endPosition, whatMatched[matchPosition].endPosition, 0, 0, false, matchPosition, elementPosition, -2, false));
 #ifdef LOG_PATTERN_MATCHING
 			if (t.tracePatternMatching)
 			{
@@ -159,13 +159,13 @@ bool patternElement::matchRange(cSource &source,int matchBegin,int matchEnd,vect
   return matchBegin!=matchEnd || rep>1 || minimum==0; // if no matches, only return success if the element is optional
 }
 
-bool patternElement::matchFirst(cSource &source,int sourcePosition,vector <matchElement> &whatMatched, sTrace &t)
+bool cPatternElement::matchFirst(cSource &source,int sourcePosition,vector <cMatchElement> &whatMatched, sTrace &t)
 { LFS
   int rep;
 if (minimum == 0)
 {
 	// if minimum==0 and not matched (this is a placeholder) then the cost should be 0.
-	whatMatched.push_back(matchElement(-1, sourcePosition, sourcePosition, 0, 0, false, -1, elementPosition, -3, false));  // sourcePosition matched, elementMatched, patternFlag, previous match matchPosition
+	whatMatched.push_back(cMatchElement(-1, sourcePosition, sourcePosition, 0, 0, false, -1, elementPosition, -3, false));  // sourcePosition matched, elementMatched, patternFlag, previous match matchPosition
 	#ifdef LOG_PATTERN_MATCHING
 		if (t.tracePatternMatching)
 		{
@@ -233,7 +233,7 @@ int retCode = 0;
 // inflectionFlagsFromWord are the inflections of the word in the source
 // flags are the flags to match in the patternElement.
 // sourceFormStr is the form of the word of the source
-bool patternElement::inflectionMatch(int inflectionFlagsFromWord, __int64 flags, wstring sourceFormStr, sTrace &t)
+bool cPatternElement::inflectionMatch(int inflectionFlagsFromWord, __int64 flags, wstring sourceFormStr, sTrace &t)
 {
 	LFS
 	#ifdef LOG_PATTERN_MATCHING
@@ -242,12 +242,12 @@ bool patternElement::inflectionMatch(int inflectionFlagsFromWord, __int64 flags,
 			wstring sInflectionFlagsFromWord, sInflectionFlags;
 			::lplog(L"   pattern %s:inflectionMatch:inflectionFlagsFromWord=%s inflectionFlags=%s flags owner=%s capitalized=%s sourceFormStr=%s",
 				patternName.c_str(), ::inflectionFlagsToStr(inflectionFlagsFromWord, sInflectionFlagsFromWord), ::inflectionFlagsToStr(inflectionFlags, sInflectionFlags),
-				(flags&WordMatch::flagNounOwner) ? L"TRUE" : L"FALSE",
-				(flags&(WordMatch::flagAllCaps | WordMatch::flagFirstLetterCapitalized)) ? L"TRUE" : L"FALSE",
+				(flags&cWordMatch::flagNounOwner) ? L"TRUE" : L"FALSE",
+				(flags&(cWordMatch::flagAllCaps | cWordMatch::flagFirstLetterCapitalized)) ? L"TRUE" : L"FALSE",
 				sourceFormStr.c_str());
 		}
 	#endif
-	if (sourceFormStr==L"noun" && (flags&WordMatch::flagNounOwner))
+	if (sourceFormStr==L"noun" && (flags&cWordMatch::flagNounOwner))
   {
     if (inflectionFlagsFromWord&SINGULAR)
       inflectionFlagsFromWord=SINGULAR_OWNER|(inflectionFlagsFromWord&~SINGULAR);
@@ -257,7 +257,7 @@ bool patternElement::inflectionMatch(int inflectionFlagsFromWord, __int64 flags,
     // if word is owner, but element flags doesn't specify that, fail!  Gives ability to specify __N1 and __NAMEs do NOT match ownership nouns.
     if (inflectionFlags&NO_OWNER) return false;
   }
-	if ((inflectionFlags&ONLY_CAPITALIZED) && !(flags&(WordMatch::flagAllCaps|WordMatch::flagFirstLetterCapitalized)))
+	if ((inflectionFlags&ONLY_CAPITALIZED) && !(flags&(cWordMatch::flagAllCaps|cWordMatch::flagFirstLetterCapitalized)))
     return false;
 	int matchingInflectionFlags = (inflectionFlags&inflectionFlagsFromWord);
 	if ((sourceFormStr == L"verb" && (matchingInflectionFlags&VERB_INFLECTIONS_MASK)!=0) ||
@@ -280,7 +280,7 @@ bool patternElement::inflectionMatch(int inflectionFlagsFromWord, __int64 flags,
 #define MAX_PATTERN_NUM_MATCH 4000 // Charles Dickens may require a lower limit.
 // because endPositionMatches is being pushed back into whatMatched, endPositionMatches must be a COPY
 // of the position of whatMatched it started out as.  Do not pass endPositionMatches as a reference.
-int patternElement::matchOne(cSource &source,unsigned int sourcePosition,unsigned int lastElement,vector <matchElement> &whatMatched, sTrace &t)
+int cPatternElement::matchOne(cSource &source,unsigned int sourcePosition,unsigned int lastElement,vector <cMatchElement> &whatMatched, sTrace &t)
 { LFS
   if (sourcePosition>=source.m.size())
   {
@@ -292,7 +292,7 @@ int patternElement::matchOne(cSource &source,unsigned int sourcePosition,unsigne
     return -1;
   }
   bool oneMatch=false, skipPatternMatchingBecauseSpecificWordMatched=false;
-  vector <WordMatch>::iterator im=source.m.begin()+sourcePosition;
+  vector <cWordMatch>::iterator im=source.m.begin()+sourcePosition;
 	for (unsigned int form = 0; form < formIndexes.size(); form++)
 	{
 		unsigned int f = formIndexes[form];
@@ -308,7 +308,7 @@ int patternElement::matchOne(cSource &source,unsigned int sourcePosition,unsigne
 		{
 			if (
 				(!inflectionFlags ||
-				(Forms[f]->inflectionsClass.empty() && !((im->flags&WordMatch::flagNounOwner) && (inflectionFlags&NO_OWNER)) && !((im->flags&(WordMatch::flagAllCaps | WordMatch::flagFirstLetterCapitalized)) && (inflectionFlags&ONLY_CAPITALIZED))) ||
+				(Forms[f]->inflectionsClass.empty() && !((im->flags&cWordMatch::flagNounOwner) && (inflectionFlags&NO_OWNER)) && !((im->flags&(cWordMatch::flagAllCaps | cWordMatch::flagFirstLetterCapitalized)) && (inflectionFlags&ONLY_CAPITALIZED))) ||
 					inflectionMatch(im->word->second.inflectionFlags, im->flags, Forms[f]->inflectionsClass, t)) &&
 					(specificWords[form].empty() || im->word->first == specificWords[form] || (im->word->second.mainEntry != wNULL && im->word->second.mainEntry->first == specificWords[form])))
 			{
@@ -322,11 +322,11 @@ int patternElement::matchOne(cSource &source,unsigned int sourcePosition,unsigne
 				int cost = formCosts[form];
 				if (!preTaggedSource && im->costable())
 					cost += im->word->second.getUsageCost(ME);
-				//if (f==PROPER_NOUN_FORM_NUM && (im->flags&(WordMatch::flagAllCaps|WordMatch::flagAddProperNoun))==(WordMatch::flagAllCaps|WordMatch::flagAddProperNoun)) // make this proper noun a little expensive
+				//if (f==PROPER_NOUN_FORM_NUM && (im->flags&(cWordMatch::flagAllCaps|cWordMatch::flagAddProperNoun))==(cWordMatch::flagAllCaps|cWordMatch::flagAddProperNoun)) // make this proper noun a little expensive
 				//  cost++;
 				if (f == abbreviationForm && sourcePosition + 1 < source.m.size() && source.m[sourcePosition + 1].word->first[0] != L'.')
 					cost += 5;
-				if (f == abbreviationForm && !(im->flags&(WordMatch::flagAllCaps | WordMatch::flagFirstLetterCapitalized)))
+				if (f == abbreviationForm && !(im->flags&(cWordMatch::flagAllCaps | cWordMatch::flagFirstLetterCapitalized)))
 					cost += 10;
 				// refuse any other form for this very common word if the next word is not punctuation.
 				if (im->word->first == L"i" && f != nomForm &&
@@ -340,7 +340,7 @@ int patternElement::matchOne(cSource &source,unsigned int sourcePosition,unsigne
 				if ((im->word->first == L"if" || im->word->first == L"and" || im->word->first == L"but") && (f == nounForm || f == adjectiveForm || f == PROPER_NOUN_FORM_NUM || f == abbreviationForm) &&
 					!(im->word->second.inflectionFlags&PLURAL))
 					cost += 10;
-				whatMatched.push_back(matchElement(-1, sourcePosition, sourcePosition + 1, ME, cost, false, lastElement, elementPosition, form, false));
+				whatMatched.push_back(cMatchElement(-1, sourcePosition, sourcePosition + 1, ME, cost, false, lastElement, elementPosition, form, false));
 				oneMatch = true;
 #ifdef LOG_PATTERN_MATCHING
 				if (t.tracePatternMatching)
@@ -378,7 +378,7 @@ int patternElement::matchOne(cSource &source,unsigned int sourcePosition,unsigne
 			unsigned int p=patternIndexes[pattern];
 			if (im->patterns.isSet(p))
 			{
-				patternMatchArray::tPatternMatch *pm=im->pma.content;
+				cPatternMatchArray::tPatternMatch *pm=im->pma.content;
 				int startPositions=whatMatched.size(),msize=startPositions;
 				if (msize>MAX_PATTERN_NUM_MATCH)
 				{
@@ -422,10 +422,10 @@ int patternElement::matchOne(cSource &source,unsigned int sourcePosition,unsigne
 							// if this changes - must change also the treatment of elementMatchedSubIndex in push_back_unique function in pema!
 							//                   getMaxDisplaySize and printSentence in word.cpp
 	#ifdef LOG_OLD_MATCH
-							whatMatched.push_back(matchElement(I, sourcePosition, pm->len + sourcePosition, patternElementMatchArray::subIndex(p, pm->len),
+							whatMatched.push_back(cMatchElement(I, sourcePosition, pm->len + sourcePosition, cPatternElementMatchArray::subIndex(p, pm->len),
 								costs[form] + pm->getCost(), true, lastElement, elementPosition, form, pm->isNew()));
 	#else
-							whatMatched.push_back(matchElement(I, sourcePosition, pm->len + sourcePosition, patternElementMatchArray::subIndex(p, pm->len),
+							whatMatched.push_back(cMatchElement(I, sourcePosition, pm->len + sourcePosition, cPatternElementMatchArray::subIndex(p, pm->len),
 								patternCosts[pattern] + pm->getCost(), true, lastElement, elementPosition, pattern, pm->isNew(source.pass)));
 	#endif
 							msize++;
@@ -487,7 +487,7 @@ bool cPattern::matchPatternPosition(cSource &source, const unsigned int sourcePo
   source.whatMatched.clear();
   source.whatMatched.reserve(10000);
   overMatchMemoryExceeded=false;
-  vector <patternElement *>::iterator e=elements.begin(),eEnd=elements.end();
+  vector <cPatternElement *>::iterator e=elements.begin(),eEnd=elements.end();
   if (!(*e)->matchFirst(source,sourcePosition,source.whatMatched,t)) return false;
   int begin=0;
   for (e++; e!=eEnd; e++)
@@ -563,7 +563,7 @@ bool cPattern::matchPatternPosition(cSource &source, const unsigned int sourcePo
   return additionalMatch;
 }
 
-bool cPattern::fillPattern(cSource &source, int sourcePosition, vector <matchElement> &whatMatched, int elementMatched, unsigned int &insertionPoint, int &reducedCost, bool &pushed, sTrace &t)
+bool cPattern::fillPattern(cSource &source, int sourcePosition, vector <cMatchElement> &whatMatched, int elementMatched, unsigned int &insertionPoint, int &reducedCost, bool &pushed, sTrace &t)
 {
 	LFS // DLFS
 		int endPosition = whatMatched[elementMatched].endPosition;
@@ -573,7 +573,7 @@ bool cPattern::fillPattern(cSource &source, int sourcePosition, vector <matchEle
 	if ((strictNoMiddleMatch || onlyEndMatch) && endPosition < (signed)source.m.size())
 	{
 		if (iswalpha(source.m[endPosition].word->first[0]))	return false;
-		if (endPosition && (source.m[endPosition - 1].flags&WordMatch::flagFirstLetterCapitalized))
+		if (endPosition && (source.m[endPosition - 1].flags&cWordMatch::flagFirstLetterCapitalized))
 		{
 			bool endSentence = true;
 			// also if next is a period, but before that is an honorific
@@ -664,7 +664,7 @@ bool cPattern::fillPattern(cSource &source, int sourcePosition, vector <matchEle
 	if (pushed)
 	{
 		source.m[sourcePosition].patterns.set(num);
-		vector <matchElement>::iterator iMatch = whatMatched.begin(), iMatchEnd = whatMatched.end();
+		vector <cMatchElement>::iterator iMatch = whatMatched.begin(), iMatchEnd = whatMatched.end();
 		for (; iMatch != iMatchEnd; iMatch++)
 			if (iMatch->beginPosition == sourcePosition && iMatch->PMAIndex >= (int)insertionPoint)
 				iMatch->PMAIndex++;
@@ -694,8 +694,8 @@ bool cPattern::fillPattern(cSource &source, int sourcePosition, vector <matchEle
   // every match will be removed and the words will end up being unmatched.
   if (isTopLevelMatch(source,sourcePosition,endPosition))
   {
-    vector <WordMatch>::iterator im=source.m.begin()+sourcePosition,imEnd=source.m.begin()+endPosition;
-    for (; im!=imEnd; im++) im->flags|=WordMatch::flagTopLevelPattern;
+    vector <cWordMatch>::iterator im=source.m.begin()+sourcePosition,imEnd=source.m.begin()+endPosition;
+    for (; im!=imEnd; im++) im->flags|=cWordMatch::flagTopLevelPattern;
     im=source.m.begin()+sourcePosition;
     int len=endPosition-sourcePosition,avgCost=elementCost*1000/len; // COSTCALC
     for (unsigned int relpos=0; im!=imEnd; im++,relpos++)
@@ -706,22 +706,22 @@ bool cPattern::fillPattern(cSource &source, int sourcePosition, vector <matchEle
   bool POFlag=false;
   for (int I=numElementsMatched-1; I>=0; I--)
   {
-    vector <matchElement>::iterator thisMatch=whatMatched.begin()+source.reverseMatchElements[I];
+    vector <cMatchElement>::iterator thisMatch=whatMatched.begin()+source.reverseMatchElements[I];
     int subMatchBegin=thisMatch->beginPosition;
     bool newElement;
     unsigned int PEMAOffset=source.pema.push_back_unique(formerPosition,subMatchBegin,elementCost,thisMatch->cost,
-      num,sourcePosition-subMatchBegin,endPosition-subMatchBegin,thisMatch->elementMatchedIndex,thisMatch->patternElement,
+      num,sourcePosition-subMatchBegin,endPosition-subMatchBegin,thisMatch->elementMatchedIndex,thisMatch->cPatternElement,
       thisMatch->patternElementIndex,source.m.size()-sourcePosition,newElement,POFlag);
     if (newElement)
     {
-			if (thisMatch->elementMatchedIndex&matchElement::patternFlag)
-				elements[thisMatch->patternElement]->usagePatternEverMatched[thisMatch->patternElementIndex]++;
+			if (thisMatch->elementMatchedIndex&cMatchElement::patternFlag)
+				elements[thisMatch->cPatternElement]->usagePatternEverMatched[thisMatch->patternElementIndex]++;
 			else
-				elements[thisMatch->patternElement]->usageFormEverMatched[thisMatch->patternElementIndex]++;
+				elements[thisMatch->cPatternElement]->usageFormEverMatched[thisMatch->patternElementIndex]++;
       source.pema[PEMAOffset].origin=*firstPosition;
       if (source.pema[*firstPosition].begin!=0)
         break;
-      vector <WordMatch>::iterator mb=source.m.begin()+subMatchBegin;
+      vector <cWordMatch>::iterator mb=source.m.begin()+subMatchBegin;
       if (mb->beginPEMAPosition<0) mb->beginPEMAPosition=PEMAOffset;
       if (mb->endPEMAPosition>=0)
         source.pema[mb->endPEMAPosition].nextByPosition=PEMAOffset;
@@ -733,12 +733,12 @@ bool cPattern::fillPattern(cSource &source, int sourcePosition, vector <matchEle
         mb->pma[thisMatch->PMAIndex].pemaByChildPatternEnd=PEMAOffset;
         // check inconsistent PMAOffsets
         /*
-        patternMatchArray::tPatternMatch *pm=mb->pma.content;
+        cPatternMatchArray::tPatternMatch *pm=mb->pma.content;
         if (thisMatch->PMAIndex>=(int)mb->pma.count)
         ::lplog(LOG_FATAL_ERROR,L"    %d:RP PMA pattern offset %d is >= %d - ILLEGAL",subMatchBegin,thisMatch->PMAIndex,mb->pma.count);
         unsigned int childPattern=pm[thisMatch->PMAIndex].getParentPattern();
         int childEnd=pm[thisMatch->PMAIndex].end;
-        patternElementMatchArray::tPatternElementMatch *pem=source.pema.begin()+pm[thisMatch->PMAIndex].pemaByChildPatternEnd;
+        cPatternElementMatchArray::tPatternElementMatch *pem=source.pema.begin()+pm[thisMatch->PMAIndex].pemaByChildPatternEnd;
         if (patterns[childPattern]->name!=patterns[pem->getChildPattern()]->name ||
         childEnd!=pem->getChildLen())
         ::lplog(L"INCONSISTENT PMAOffset %d pemaByChildPatternEnd=%d %s[%s](%d,%d) leads to %s[%s](%d,%d) CHILD %s[%s](%d,%d)!",
@@ -749,9 +749,9 @@ bool cPattern::fillPattern(cSource &source, int sourcePosition, vector <matchEle
         */
       }
 #ifdef LOG_PATTERN_CHAINS
-      source.logPatternChain(sourcePosition,insertionPoint,patternElementMatchArray::BY_PATTERN_END);
-      source.logPatternChain(subMatchBegin,mb->beginPEMAPosition,patternElementMatchArray::BY_POSITION);
-      source.logPatternChain(subMatchBegin,PEMAOffset,patternElementMatchArray::BY_CHILD_PATTERN_END);
+      source.logPatternChain(sourcePosition,insertionPoint,cPatternElementMatchArray::BY_PATTERN_END);
+      source.logPatternChain(subMatchBegin,mb->beginPEMAPosition,cPatternElementMatchArray::BY_POSITION);
+      source.logPatternChain(subMatchBegin,PEMAOffset,cPatternElementMatchArray::BY_CHILD_PATTERN_END);
 #endif
       numPushes++;
       additionalMatch=true;
@@ -759,7 +759,7 @@ bool cPattern::fillPattern(cSource &source, int sourcePosition, vector <matchEle
 #ifdef LOG_PATTERN_MATCHING
 		if (t.tracePatternMatching)
 		{
-			if (thisMatch->elementMatchedIndex&(matchElement::patternFlag))
+			if (thisMatch->elementMatchedIndex&(cMatchElement::patternFlag))
 				::lplog(L"%d:pattern %s[%s](%d,%d) %s[%s](%d,%d) cost=%d%s",
 					subMatchBegin, name.c_str(), differentiator.c_str(), sourcePosition, endPosition,
 					patterns[thisMatch->getChildPattern()]->name.c_str(), patterns[thisMatch->getChildPattern()]->differentiator.c_str(),
@@ -781,7 +781,7 @@ unsigned int findPattern(wstring form)
   return findPattern(form,startingPattern);
 }
 
-void findPatterns(wstring form,bitObject<> &patternsFound)
+void findPatterns(wstring form,cBitObject<> &patternsFound)
 { LFS
   unsigned int startingPattern=0;
   int p;
@@ -881,7 +881,7 @@ bool cPattern::eliminateTag(wstring tag)
 }
 
 #ifdef ABNF
-int patternElement::writeABNFElementTag(wchar_t *buf,wstring sForm,int num,int cost,vector <unsigned int> &tags,int maxBuf,bool printNum)
+int cPatternElement::writeABNFElementTag(wchar_t *buf,wstring sForm,int num,int cost,vector <unsigned int> &tags,int maxBuf,bool printNum)
 { LFS
   int len=0;
   if (printNum)
@@ -902,7 +902,7 @@ int patternElement::writeABNFElementTag(wchar_t *buf,wstring sForm,int num,int c
 // ABNF patterns include all pattern #s (NOUN#2, NOUN#3), whereas the hardcoded patterns include only the main form (NOUN)
 // This is because ABNF patterns include costing data for each NOUN# individually (original purpose)
 //
-void patternElement::readABNFElementTag(wstring patternName,wstring differentiator,int elementNum,set <unsigned int> &descendantTags,wchar_t *buf)
+void cPatternElement::readABNFElementTag(wstring patternName,wstring differentiator,int elementNum,set <unsigned int> &descendantTags,wchar_t *buf)
 { LFS
   wchar_t *c_diff=wcschr(buf,L'#'),*c_cost=wcschr(buf,L'$'),*c_tags=wcschr(buf,L'[');
   if (c_diff) *c_diff=0;
@@ -929,10 +929,10 @@ void patternElement::readABNFElementTag(wstring patternName,wstring differentiat
     }
   }
   if (form[0]==L'_')
-    patternReferences.push_back(new patternReference(form,patterns.size(),diffNum,elementNum,cost,elementTags,blockDescendants,false));
+    patternReferences.push_back(new cPatternReference(form,patterns.size(),diffNum,elementNum,cost,elementTags,blockDescendants,false));
   else
   {
-    if ((f=FormsClass::findForm(form))<0)
+    if ((f=cForms::findForm(form))<0)
       ::lplog(LOG_FATAL_ERROR|LOG_ERROR,"FATAL_ERROR:Pattern %s[%s] uses an undefined form %s.",patternName.c_str(),differentiator.c_str(),form.c_str());
     formStr.push_back(form);
     costs.push_back(cost);
@@ -945,7 +945,7 @@ void patternElement::readABNFElementTag(wstring patternName,wstring differentiat
     descendantTags.insert(elementTags[I]);
 }
 
-void patternElement::writeABNF(wchar_t *buf,int &len,int maxBuf)
+void cPatternElement::writeABNF(wchar_t *buf,int &len,int maxBuf)
 { LFS
   if (minimum!=1 || maximum!=1) len+=_snwprintf(buf+len,maxBuf-len,L"%d*%d",minimum,maximum);
   wstring sFlags;
@@ -961,7 +961,7 @@ void patternElement::writeABNF(wchar_t *buf,int &len,int maxBuf)
 }
 
 // readABNF
-patternElement::patternElement(wstring patternName,wstring differentiator,int elementNum,set <unsigned int> &descendantTags,wchar_t *&buf)
+cPatternElement::cPatternElement(wstring patternName,wstring differentiator,int elementNum,set <unsigned int> &descendantTags,wchar_t *&buf)
 { LFS
   wchar_t *c_tags=wcschr(buf,L'(');
   if (!c_tags) return;
@@ -1125,7 +1125,7 @@ cPattern::cPattern(FILE *fh,bool &valid)
     while (true)
     {
       if (wcschr(c_element,L')'))
-        elements.push_back(new patternElement(name,differentiator,elementNum++,descendantTags,c_element));
+        elements.push_back(new cPatternElement(name,differentiator,elementNum++,descendantTags,c_element));
       else
         break;
       while (iswspace(*c_element)) c_element++;
@@ -1181,7 +1181,7 @@ bool cPattern::create(wstring patternName, wstring differentiator, int numForms,
   int elementPosition=0;
   while (numForms)
   {
-    patternElement *element=new patternElement;
+    cPatternElement *element=new cPatternElement;
     element->patternName=patternName;
 		vector <int> predefinedForms;
     while (numForms>0)
@@ -1196,15 +1196,15 @@ bool cPattern::create(wstring patternName, wstring differentiator, int numForms,
         p->allElementTags.set(*et);
       bool isPattern;
       if (isPattern=form[0]==L'_') //specificWord is not valid for _PATTERNS
-        patternReferences.push_back(new patternReference(form,p->num,-1,p->elements.size(),elementCost,elementTags,blockDescendants, allowRecursiveMatch, !explicitFutureReference));
+        patternReferences.push_back(new cPatternReference(form,p->num,-1,p->elements.size(),elementCost,elementTags,blockDescendants, allowRecursiveMatch, !explicitFutureReference));
       else
       {
-        if ((f=FormsClass::findForm(form))<0)
+        if ((f=cForms::findForm(form))<0)
 				{
 					if (!freeForm)
 						::lplog(LOG_FATAL_ERROR|LOG_ERROR,L"FATAL_ERROR:Pattern %s[%s] uses an undefined form %s (1).",p->name.c_str(),p->differentiator.c_str(),form.c_str());
-				  Words.predefineWord(form.c_str(),tFI::queryOnAnyAppearance);
-					f=FormsClass::findForm(form);
+				  Words.predefineWord(form.c_str(),cSourceWordInfo::queryOnAnyAppearance);
+					f=cForms::findForm(form);
 					predefinedForms.push_back(f);
 				}
         element->formStr.push_back(form);
@@ -1218,7 +1218,7 @@ bool cPattern::create(wstring patternName, wstring differentiator, int numForms,
       numForms--;
     }
     if (element->patternIndexes.size()>255)
-      ::lplog(LOG_FATAL_ERROR,L"Pattern %s[%s] has >255 indexes (%d) - see patternElementNum member of patternElementMatchArray class",p->name.c_str(),p->differentiator.c_str(),element->patternIndexes.size());
+      ::lplog(LOG_FATAL_ERROR,L"Pattern %s[%s] has >255 indexes (%d) - see patternElementNum member of cPatternElementMatchArray class",p->name.c_str(),p->differentiator.c_str(),element->patternIndexes.size());
     element->inflectionFlags=va_arg( patternMarker, int);
 		if (predefinedForms.size())
 		{
@@ -1242,7 +1242,7 @@ bool cPattern::create(wstring patternName, wstring differentiator, int numForms,
     numForms=va_arg( patternMarker, int);
   }
   if (p->elements.size()>255)
-    ::lplog(LOG_FATAL_ERROR,L"Pattern %s[%s] has too many elements >255 (%d) - see patternElementNum member of patternElementMatchArray class",p->name.c_str(),p->differentiator.c_str(),p->elements.size());
+    ::lplog(LOG_FATAL_ERROR,L"Pattern %s[%s] has too many elements >255 (%d) - see patternElementNum member of cPatternElementMatchArray class",p->name.c_str(),p->differentiator.c_str(),p->elements.size());
   if (((int)findPattern(patternName,p->rootPattern))<0)
     p->rootPattern=p->num;
   if (p->rootPattern!=p->num)
@@ -1256,8 +1256,8 @@ bool cPattern::create(wstring patternName, wstring differentiator, int numForms,
   }
   for (unsigned int e=0; e<p->elements.size(); e++)
     p->elements[e]->patternNum=p->num;
-  if (patternReference::firstPatternReference==-1)
-    patternReference::firstPatternReference=p->num;
+  if (cPatternReference::firstPatternReference==-1)
+    cPatternReference::firstPatternReference=p->num;
   va_end( patternMarker );              /* Reset variable arguments.      */
   if (patterns.size()>65535)
     ::lplog(LOG_FATAL_ERROR|LOG_ERROR,L"FATAL ERROR:# Patterns exceeds allowable 65536 patterns storable in patternElement array on pattern %s[%s].",
@@ -1278,7 +1278,7 @@ cPattern *cPattern::create(cSource *source,wstring patternName,int num,int where
   int elementPosition=0;
 	for (int I=whereBegin; I<whereEnd; I++)
 	{
-    patternElement *element=new patternElement;
+    cPatternElement *element=new cPatternElement;
     element->patternName=patternName;
 		unordered_map < int,wstring>::iterator substitutePattern=source->temporaryPatternBuffer.find(I);
 		wstring forms,tmpstr;
@@ -1331,10 +1331,10 @@ cPattern *cPattern::create(cSource *source,wstring patternName,int num,int where
 			bool isPattern;
 			if (isPattern=form[0]==L'_')
 				//specificWord is not valid for _PATTERNS 
-				patternReferences.push_back(new patternReference(form,p->num,-1,p->elements.size(),elementCost,elementTags,blockDescendants,allowRecursiveMatch,!explicitFutureReference));
+				patternReferences.push_back(new cPatternReference(form,p->num,-1,p->elements.size(),elementCost,elementTags,blockDescendants,allowRecursiveMatch,!explicitFutureReference));
 			else
 			{
-				if ((f=FormsClass::findForm(form))<0)
+				if ((f=cForms::findForm(form))<0)
 					::lplog(LOG_FATAL_ERROR|LOG_ERROR,L"FATAL_ERROR:Pattern %s[%s] uses an undefined form %s (2).",p->name.c_str(),p->differentiator.c_str(),form.c_str());
 				element->formStr.push_back(form);
 				element->specificWords.push_back(specificWord);
@@ -1346,7 +1346,7 @@ cPattern *cPattern::create(cSource *source,wstring patternName,int num,int where
 			p->descendantTags.insert(elementTags.begin(),elementTags.end());
 		}
     if (element->patternIndexes.size()>255)
-      ::lplog(LOG_FATAL_ERROR,L"Pattern %s[%s] has >255 indexes (%d) - see patternElementNum member of patternElementMatchArray class",p->name.c_str(),p->differentiator.c_str(),element->patternIndexes.size());
+      ::lplog(LOG_FATAL_ERROR,L"Pattern %s[%s] has >255 indexes (%d) - see patternElementNum member of cPatternElementMatchArray class",p->name.c_str(),p->differentiator.c_str(),element->patternIndexes.size());
     element->inflectionFlags=0;
     element->minimum=1;
     element->maximum=1;
@@ -1359,7 +1359,7 @@ cPattern *cPattern::create(cSource *source,wstring patternName,int num,int where
   return p;
 }
 
-const wchar_t *patternElement::inflectionFlagsToStr(wstring &sFlags)
+const wchar_t *cPatternElement::inflectionFlagsToStr(wstring &sFlags)
 { LFS
   sFlags.clear();
   for (int I=0; inflectionFlagList[I].sFlag; I++)
@@ -1382,27 +1382,27 @@ struct {
 	wchar_t *sFlag;
 } wordFlagList[] =
 {
-	{tFI::topLevelSeparator,L"topLevelSeparator"},
-	{tFI::ignoreFlag,L"ignoreFlag"},
-	{tFI::queryOnLowerCase,L"queryOnLowerCase"},
-	{tFI::queryOnAnyAppearance,L"queryOnAnyAppearance"},
-	{tFI::updateMainInfo,L"updateMainInfo"},
-	{tFI::updateMainEntry,L"updateMainEntry"},
-	{tFI::insertNewForms,L"insertNewForms"},
-	{tFI::isMainEntry,L"isMainEntry"},
-	{tFI::intersectionGroup,L"intersectionGroup"},
-	{tFI::newWordFlag,L"newWordFlag"},
-	{tFI::inSourceFlag,L"inSourceFlag"},
-	{tFI::alreadyTaken,L"alreadyTaken"},
-	{tFI::physicalObjectByWN,L"physicalObjectByWN"},
-	{tFI::notPhysicalObjectByWN,L"notPhysicalObjectByWN"},
-	{tFI::uncertainPhysicalObjectByWN,L"uncertainPhysicalObjectByWN"},
-	{tFI::genericGenderIgnoreMatch,L"genericGenderIgnoreMatch"},
-	{tFI::prepMoveType,L"prepMoveType"},
-	{tFI::genericAgeGender,L"genericAgeGender"},
-	{tFI::stateVerb,L"stateVerb"},
-	{tFI::possibleStateVerb,L"possibleStateVerb"},
-	{tFI::mainEntryErrorNoted,L"mainEntryErrorNoted"},
+	{cSourceWordInfo::topLevelSeparator,L"topLevelSeparator"},
+	{cSourceWordInfo::ignoreFlag,L"ignoreFlag"},
+	{cSourceWordInfo::queryOnLowerCase,L"queryOnLowerCase"},
+	{cSourceWordInfo::queryOnAnyAppearance,L"queryOnAnyAppearance"},
+	{cSourceWordInfo::updateMainInfo,L"updateMainInfo"},
+	{cSourceWordInfo::updateMainEntry,L"updateMainEntry"},
+	{cSourceWordInfo::insertNewForms,L"insertNewForms"},
+	{cSourceWordInfo::isMainEntry,L"isMainEntry"},
+	{cSourceWordInfo::intersectionGroup,L"intersectionGroup"},
+	{cSourceWordInfo::newWordFlag,L"newWordFlag"},
+	{cSourceWordInfo::inSourceFlag,L"inSourceFlag"},
+	{cSourceWordInfo::alreadyTaken,L"alreadyTaken"},
+	{cSourceWordInfo::physicalObjectByWN,L"physicalObjectByWN"},
+	{cSourceWordInfo::notPhysicalObjectByWN,L"notPhysicalObjectByWN"},
+	{cSourceWordInfo::uncertainPhysicalObjectByWN,L"uncertainPhysicalObjectByWN"},
+	{cSourceWordInfo::genericGenderIgnoreMatch,L"genericGenderIgnoreMatch"},
+	{cSourceWordInfo::prepMoveType,L"prepMoveType"},
+	{cSourceWordInfo::genericAgeGender,L"genericAgeGender"},
+	{cSourceWordInfo::stateVerb,L"stateVerb"},
+	{cSourceWordInfo::possibleStateVerb,L"possibleStateVerb"},
+	{cSourceWordInfo::mainEntryErrorNoted,L"mainEntryErrorNoted"},
 	{-1,NULL}
 };
 
@@ -1526,8 +1526,8 @@ bool cPattern::add(int elementNum,wstring patternName,bool logFutureReferences,i
   {
     if (p!=num || elementAllowRecursiveMatch)
     {
-      if (patternReference::lastPatternReference<(int)p)
-        patternReference::lastPatternReference=p;
+      if (cPatternReference::lastPatternReference<(int)p)
+        cPatternReference::lastPatternReference=p;
       elements[elementNum]->patternStr.push_back(patternName);
       childPatterns.set(p);
       patterns[p]->parentPatterns.set(num);
@@ -1623,17 +1623,17 @@ match until the LAST pattern
 while (true)
 match over all patterns having future references.
 if no matches, exit.
-match over all patterns incorporating these patterns up to the last patternReference (LAST)
+match over all patterns incorporating these patterns up to the last cPatternReference (LAST)
 repeat
 continue matching patterns after LAST pattern
 */
 
-void patternReference::resolve(bool &patternError)
+void cPatternReference::resolve(bool &patternError)
 { LFS
   patternError|=patterns[patternNum]->add(elementNum,form,logFutureReferences,cost,tags,blockDescendants,allowRecursiveMatch);
 }
 
-void patternReference::resolve(vector <cPattern *> &transformPatterns,bool &patternError)
+void cPatternReference::resolve(vector <cPattern *> &transformPatterns,bool &patternError)
 { LFS
   patternError|=transformPatterns[patternNum]->add(elementNum,form,logFutureReferences,cost,tags,blockDescendants, allowRecursiveMatch);
 }
@@ -1655,7 +1655,7 @@ bool cPattern::hasTag(unsigned int tag)
 }
 
 // a pattern may only contain some elements.  Only if it has no elements of the tag set will it be marked false.
-bool cPattern::containsOneOfTagSet(tTS &desiredTagSet,unsigned int limit,bool includeSelf)
+bool cPattern::containsOneOfTagSet(cTagSet &desiredTagSet,unsigned int limit,bool includeSelf)
 { LFS
   if (includeSelf)
   {
@@ -1669,7 +1669,7 @@ bool cPattern::containsOneOfTagSet(tTS &desiredTagSet,unsigned int limit,bool in
   return false;
 }
 
-bool cPattern::setCheckDescendantsForTagSet(tTS &desiredTagSet,bool includeSelf)
+bool cPattern::setCheckDescendantsForTagSet(cTagSet &desiredTagSet,bool includeSelf)
 { LFS
   if (desiredTagSet.required<0)
     return containsOneOfTagSet(desiredTagSet,(unsigned)(-desiredTagSet.required),includeSelf);
@@ -1722,7 +1722,7 @@ unsigned int twoObjectTestTagSet;
 
 unsigned int PREP_TAG,OBJECT_TAG,SUBOBJECT_TAG,REOBJECT_TAG,IOBJECT_TAG,SUBJECT_TAG,PREP_OBJECT_TAG,VERB_TAG,IVERB_TAG,PLURAL_TAG,MPLURAL_TAG,GNOUN_TAG,MNOUN_TAG,PNOUN_TAG,VNOUN_TAG,HAIL_TAG,NAME_TAG,REL_TAG,SENTENCE_IN_REL_TAG,FLOAT_TIME_TAG,NOUN_TAG;
 
-void tTS::addTagSet(int tagSet)
+void cTagSet::addTagSet(int tagSet)
 { LFS
   for (unsigned int I=0; I<desiredTagSets[tagSet].tags.size(); I++)
     tags.push_back(desiredTagSets[tagSet].tags[I]);
@@ -1732,48 +1732,48 @@ void tTS::addTagSet(int tagSet)
 // for the tagset.  If the first number is negative it indicates the number of AT LEAST ONE of the arguments that must be in the pattern.
 void initializeTagSets(int &startSuperTagSets)
 { LFS
-	desiredTagSets.push_back(tTS(verbSenseTagSet,L"_VERB_SENSE",-28,
+	desiredTagSets.push_back(cTagSet(verbSenseTagSet,L"_VERB_SENSE",-28,
     L"no",L"never",L"not",L"past",L"imp",L"future",L"id",L"conditional",L"vS",L"vAC",L"vC",L"vD",L"vB",L"vAB",L"vBC",L"vABC",L"vCD",L"vBD",L"vABD",L"vACD",L"vBCD",L"vABCD",L"vE",L"vrBD",L"vrB",L"vrBC",L"vrD",L"vAD",NULL));
-  desiredTagSets.push_back(tTS(subjectVerbAgreementTagSet,L"_AGREEMENT",3,L"SUBJECT",L"VERB",L"V_AGREE",L"V_OBJECT",L"conditional",L"future",L"past",L"SUBJUNCTIVE",NULL)); // V_OBJECT used for relations
+  desiredTagSets.push_back(cTagSet(subjectVerbAgreementTagSet,L"_AGREEMENT",3,L"SUBJECT",L"VERB",L"V_AGREE",L"V_OBJECT",L"conditional",L"future",L"past",L"SUBJUNCTIVE",NULL)); // V_OBJECT used for relations
   // "N_AGREE",L"GNOUN",L"SINGULAR",L"PLURAL" were put into SUBJECT_TAGSET because these tags also belong in OBJECTS which are after the verb, have nothing to
   // do with agreement and yet greatly multiply the number of tagsets.
-	desiredTagSets.push_back(tTS(subjectTagSet,L"_SUBJECT",-4,L"N_AGREE",L"GNOUN",L"MNOUN",L"NAME",L"SINGULAR",L"PLURAL",L"RE_OBJECT",L"MOBJECT",NULL));
-	desiredTagSets.push_back(tTS(specificAnaphorTagSet,L"_SPECIFIC_ANAPHOR",-3,L"N_AGREE",L"GNOUN",L"MNOUN",L"PLURAL",L"SUBJECT",L"V_AGREE",NULL));
+	desiredTagSets.push_back(cTagSet(subjectTagSet,L"_SUBJECT",-4,L"N_AGREE",L"GNOUN",L"MNOUN",L"NAME",L"SINGULAR",L"PLURAL",L"RE_OBJECT",L"MOBJECT",NULL));
+	desiredTagSets.push_back(cTagSet(specificAnaphorTagSet,L"_SPECIFIC_ANAPHOR",-3,L"N_AGREE",L"GNOUN",L"MNOUN",L"PLURAL",L"SUBJECT",L"V_AGREE",NULL));
   // VERB_OBJECTS_TAGSET: although a verb does not need to have objects to be assessed for the # of objects it has, the pattern must allow for objects.
-  desiredTagSets.push_back(tTS(verbObjectsTagSet,L"_VERB_OBJECTS",3,L"VERB",L"V_OBJECT",L"OBJECT",L"HOBJECT", L"ADVOBJECT", L"ADJOBJECT", L"V_AGREE",
+  desiredTagSets.push_back(cTagSet(verbObjectsTagSet,L"_VERB_OBJECTS",3,L"VERB",L"V_OBJECT",L"OBJECT",L"HOBJECT", L"ADVOBJECT", L"ADJOBJECT", L"V_AGREE",
 		                       L"vD",L"vrD",L"vAD",L"vBD",L"vCD",L"vABD",L"vACD",L"vBCD",L"vABCD",L"IVERB",L"PT",NULL));
-  desiredTagSets.push_back(tTS(iverbTagSet,L"_IVERB",1,L"ITO",L"V_OBJECT",L"OBJECT",L"IVERB",L"PREP",L"REL",L"ADJ",L"ADV",L"HOBJECT",L"V_AGREE",L"V_HOBJECT",L"VERB2",L"ADJOBJECT",L"ADVOBJECT",L"MNOUN",L"MVERB",L"S_IN_REL",NULL)); // ITO is simply a infinitive marker
-  desiredTagSets.push_back(tTS(nounDeterminerTagSet,L"_NOUN_DETERMINER",2,L"NOUN",L"N_AGREE",L"DET",L"SUBOBJECT",NULL));
+  desiredTagSets.push_back(cTagSet(iverbTagSet,L"_IVERB",1,L"ITO",L"V_OBJECT",L"OBJECT",L"IVERB",L"PREP",L"REL",L"ADJ",L"ADV",L"HOBJECT",L"V_AGREE",L"V_HOBJECT",L"VERB2",L"ADJOBJECT",L"ADVOBJECT",L"MNOUN",L"MVERB",L"S_IN_REL",NULL)); // ITO is simply a infinitive marker
+  desiredTagSets.push_back(cTagSet(nounDeterminerTagSet,L"_NOUN_DETERMINER",2,L"NOUN",L"N_AGREE",L"DET",L"SUBOBJECT",NULL));
   // VNOUN: noun which is an activity (running, or Bill running down the street)
   // PNOUN: only personal nouns such as he, she, herself, them, etc.
   // GNOUN: address, date, time, telephone number, number,
 	// MNOUN: a noun represented syntactically by a single entity but which is made up of multiple nouns (blue, gray and purple)
 	// ADJOBJECT: the latter, the former
-  desiredTagSets.push_back(tTS(objectTagSet,L"_OBJECTS",-6,L"NOUN",L"VNOUN",L"PNOUN",L"GNOUN",L"NAME",L"ADJOBJECT",L"NAMEOWNER",NULL));
+  desiredTagSets.push_back(cTagSet(objectTagSet,L"_OBJECTS",-6,L"NOUN",L"VNOUN",L"PNOUN",L"GNOUN",L"NAME",L"ADJOBJECT",L"NAMEOWNER",NULL));
   // RE_OBJECT is an object restated, IOBJECT is an immediate object of an infinitive phrase, PREPOBJECT is an object of a prepositional phrase, and SUBOBJECT is everything else.
-  desiredTagSets.push_back(tTS(roleTagSet,L"_ROLE",-6,L"SUBJECT",L"OBJECT",L"RE_OBJECT",L"SUBOBJECT",L"IOBJECT",L"PREPOBJECT",L"HAIL",NULL));
-  desiredTagSets.push_back(tTS(subjectVerbRelationTagSet,L"_SUBJECT_VERB_RELATION",3,L"VERB",L"V_OBJECT",L"SUBJECT",L"OBJECT",L"PREP",L"IVERB",L"REL",L"ADJ",L"ADV",L"HOBJECT",L"V_AGREE",L"V_HOBJECT",L"VERB2",L"ADJOBJECT",L"ADVOBJECT",L"MNOUN",L"MVERB",L"S_IN_REL",L"QTYPE",L"not",NULL));
-	desiredTagSets.push_back(tTS(verbObjectRelationTagSet,L"_VERB_OBJECT_RELATION",3,L"VERB",L"V_OBJECT",L"OBJECT",L"SUBJECT",L"PREP",L"IVERB",L"REL",L"ADJ",L"ADV",L"HOBJECT",L"V_AGREE",L"V_HOBJECT",L"VERB2",L"ADJOBJECT",L"ADVOBJECT",L"MNOUN",L"MVERB",L"S_IN_REL",L"QTYPE",NULL));
-  desiredTagSets.push_back(tTS(nameTagSet,L"_NAME",-7,L"FIRST",L"MIDDLE",L"LAST",L"QLAST",L"ANY",L"HON",L"BUS",L"HON2",L"HON3",L"SUFFIX",L"SINGULAR",L"PLURAL",NULL));
-  desiredTagSets.push_back(tTS(metaNameEquivalenceTagSet,L"_META_NAME_EQUIVALENCE",-3,L"NAME_PRIMARY",L"NAME_SECONDARY",L"NAME_ABOUT",NULL));
-  desiredTagSets.push_back(tTS(metaSpeakerTagSet,L"_META_SPEAKER",1,L"NAME_PRIMARY",NULL));
-  desiredTagSets.push_back(tTS(prepTagSet,L"_PREP",1,L"P",L"PREPOBJECT",L"PREP",L"REL",L"S_IN_REL",NULL));
-  desiredTagSets.push_back(tTS(BNCPreferencesTagSet,L"_BNC_PREFERENCES_TAGSET",-4,L"NOUN",L"VERB",L"ADJ",L"ADV",NULL));
-  desiredTagSets.push_back(tTS(nAgreeTagSet,L"_N_AGREE_TAGSET",1,L"N_AGREE",NULL));
-  desiredTagSets.push_back(tTS(EVALTagSet,L"_EVAL_TAGSET",-3,L"EVAL",L"REL",L"IVERB",NULL));
-  desiredTagSets.push_back(tTS(idRelationTagSet,L"_ID_RELATION_TAGSET",3,L"id",L"OBJECT",L"SUBJECT",NULL));
-  desiredTagSets.push_back(tTS(notbutTagSet,L"_NOTBUT_TAGSET",1,L"not",L"but",NULL));
-  desiredTagSets.push_back(tTS(mobjectTagSet,L"_MOBJECT_TAGSET",1,L"MOBJECT",NULL));
-  desiredTagSets.push_back(tTS(qtobjectTagSet,L"_QUESTION",1,L"QTYPE",NULL));
+  desiredTagSets.push_back(cTagSet(roleTagSet,L"_ROLE",-6,L"SUBJECT",L"OBJECT",L"RE_OBJECT",L"SUBOBJECT",L"IOBJECT",L"PREPOBJECT",L"HAIL",NULL));
+  desiredTagSets.push_back(cTagSet(subjectVerbRelationTagSet,L"_SUBJECT_VERB_RELATION",3,L"VERB",L"V_OBJECT",L"SUBJECT",L"OBJECT",L"PREP",L"IVERB",L"REL",L"ADJ",L"ADV",L"HOBJECT",L"V_AGREE",L"V_HOBJECT",L"VERB2",L"ADJOBJECT",L"ADVOBJECT",L"MNOUN",L"MVERB",L"S_IN_REL",L"QTYPE",L"not",NULL));
+	desiredTagSets.push_back(cTagSet(verbObjectRelationTagSet,L"_VERB_OBJECT_RELATION",3,L"VERB",L"V_OBJECT",L"OBJECT",L"SUBJECT",L"PREP",L"IVERB",L"REL",L"ADJ",L"ADV",L"HOBJECT",L"V_AGREE",L"V_HOBJECT",L"VERB2",L"ADJOBJECT",L"ADVOBJECT",L"MNOUN",L"MVERB",L"S_IN_REL",L"QTYPE",NULL));
+  desiredTagSets.push_back(cTagSet(nameTagSet,L"_NAME",-7,L"FIRST",L"MIDDLE",L"LAST",L"QLAST",L"ANY",L"HON",L"BUS",L"HON2",L"HON3",L"SUFFIX",L"SINGULAR",L"PLURAL",NULL));
+  desiredTagSets.push_back(cTagSet(metaNameEquivalenceTagSet,L"_META_NAME_EQUIVALENCE",-3,L"NAME_PRIMARY",L"NAME_SECONDARY",L"NAME_ABOUT",NULL));
+  desiredTagSets.push_back(cTagSet(metaSpeakerTagSet,L"_META_SPEAKER",1,L"NAME_PRIMARY",NULL));
+  desiredTagSets.push_back(cTagSet(prepTagSet,L"_PREP",1,L"P",L"PREPOBJECT",L"PREP",L"REL",L"S_IN_REL",NULL));
+  desiredTagSets.push_back(cTagSet(BNCPreferencesTagSet,L"_BNC_PREFERENCES_TAGSET",-4,L"NOUN",L"VERB",L"ADJ",L"ADV",NULL));
+  desiredTagSets.push_back(cTagSet(nAgreeTagSet,L"_N_AGREE_TAGSET",1,L"N_AGREE",NULL));
+  desiredTagSets.push_back(cTagSet(EVALTagSet,L"_EVAL_TAGSET",-3,L"EVAL",L"REL",L"IVERB",NULL));
+  desiredTagSets.push_back(cTagSet(idRelationTagSet,L"_ID_RELATION_TAGSET",3,L"id",L"OBJECT",L"SUBJECT",NULL));
+  desiredTagSets.push_back(cTagSet(notbutTagSet,L"_NOTBUT_TAGSET",1,L"not",L"but",NULL));
+  desiredTagSets.push_back(cTagSet(mobjectTagSet,L"_MOBJECT_TAGSET",1,L"MOBJECT",NULL));
+  desiredTagSets.push_back(cTagSet(qtobjectTagSet,L"_QUESTION",1,L"QTYPE",NULL));
 	// the following is used because noun determiners need to scan in a sentence and find all prepositional phrases as well
 	//    as objects, but _ROLE tagset cannot be used because PREP is not a object type, and PREPOBJECT is blocked 
-  desiredTagSets.push_back(tTS(ndPrepTagSet,L"_NDP",1,L"PREP",NULL));
-  desiredTagSets.push_back(tTS(timeTagSet,L"_TIME",-10,L"TIMESPEC",L"HOUR",L"TIMEMODIFIER",L"TIMECAPACITY",L"TIMETYPE",L"DAYMONTH",L"MONTH",L"YEAR",L"DATESPEC",L"DAYWEEK",L"SEASON",L"HOLIDAY",L"MINUTE",NULL));
-	desiredTagSets.push_back(tTS(twoObjectTestTagSet, L"_TOT", -3, L"PREP", L"SUBJECT",L"REL",L"IVERB",NULL));
+  desiredTagSets.push_back(cTagSet(ndPrepTagSet,L"_NDP",1,L"PREP",NULL));
+  desiredTagSets.push_back(cTagSet(timeTagSet,L"_TIME",-10,L"TIMESPEC",L"HOUR",L"TIMEMODIFIER",L"TIMECAPACITY",L"TIMETYPE",L"DAYMONTH",L"MONTH",L"YEAR",L"DATESPEC",L"DAYWEEK",L"SEASON",L"HOLIDAY",L"MINUTE",NULL));
+	desiredTagSets.push_back(cTagSet(twoObjectTestTagSet, L"_TOT", -3, L"PREP", L"SUBJECT",L"REL",L"IVERB",NULL));
 	
   startSuperTagSets=desiredTagSets.size();
   // these tagsets indicate the pattern has the descendant tagset which is blocked.
-  desiredTagSets.push_back(tTS(descendantAgreementTagSet,L"_DESCENDANTS_HAVE_AGREEMENT",1,L"_AGREEMENT",NULL));
+  desiredTagSets.push_back(cTagSet(descendantAgreementTagSet,L"_DESCENDANTS_HAVE_AGREEMENT",1,L"_AGREEMENT",NULL));
 
 #ifdef LOG_UNUSED_TAGS
   bool *tagUsed=(bool *)tcalloc(patternTagStrings.size(),sizeof(bool));
@@ -1821,7 +1821,7 @@ int cPattern::hasTagInSet(int desiredTagSetNum,unsigned int &tag)
   return -1;
 }
 
-wchar_t *patternElement::toText(wchar_t *temp, int J, bool isPattern, int maxBuf)
+wchar_t *cPatternElement::toText(wchar_t *temp, int J, bool isPattern, int maxBuf)
 {
 	LFS
 		if (isPattern)
@@ -1852,7 +1852,7 @@ wchar_t *patternElement::toText(wchar_t *temp, int J, bool isPattern, int maxBuf
 	return temp;
 }
 
-bool patternElement::copyUsage(void *buf, int &where, int limit)
+bool cPatternElement::copyUsage(void *buf, int &where, int limit)
 {
 	if (!::copy(buf, usageFormEverMatched, where, limit)) return false;
 	if (!::copy(buf, usageFormFinalMatch, where, limit)) return false;
@@ -1861,7 +1861,7 @@ bool patternElement::copyUsage(void *buf, int &where, int limit)
 	return true;
 }
 
-void patternElement::zeroUsage()
+void cPatternElement::zeroUsage()
 {
 	std::fill(usageFormEverMatched.begin(), usageFormEverMatched.end(), 0);
 	std::fill(usageFormFinalMatch.begin(), usageFormFinalMatch.end(), 0);
@@ -1869,7 +1869,7 @@ void patternElement::zeroUsage()
 	std::fill(usagePatternFinalMatch.begin(), usagePatternFinalMatch.end(), 0);
 }
 
-void patternElement::reportUsage(wchar_t *temp, int J, bool isPattern)
+void cPatternElement::reportUsage(wchar_t *temp, int J, bool isPattern)
 {
 	LFS
 	int len = wcslen(temp);
@@ -1889,7 +1889,7 @@ void patternElement::reportUsage(wchar_t *temp, int J, bool isPattern)
 	temp[len] = 0;
 }
 
-bool patternElement::hasTag(unsigned int tag)
+bool cPatternElement::hasTag(unsigned int tag)
 { LFS
   for (vector < set <unsigned int> >::iterator I=patternTags.begin(),IEnd=patternTags.end(); I!=IEnd; I++)
     if (I->find(tag)!=I->end())
@@ -1900,7 +1900,7 @@ bool patternElement::hasTag(unsigned int tag)
   return false;
 }
 
-bool patternElement::hasTag(unsigned int elementIndex,unsigned int tag,bool isPattern)
+bool cPatternElement::hasTag(unsigned int elementIndex,unsigned int tag,bool isPattern)
 { LFS
 	if (isPattern)
 	{
@@ -1913,7 +1913,7 @@ bool patternElement::hasTag(unsigned int elementIndex,unsigned int tag,bool isPa
   return false;
 }
 
-int patternElement::hasTagInSet(unsigned int elementIndex,unsigned int desiredTagSetNum,unsigned int &tagNumBySet,bool isPattern)
+int cPatternElement::hasTagInSet(unsigned int elementIndex,unsigned int desiredTagSetNum,unsigned int &tagNumBySet,bool isPattern)
 { LFS
   if (isPattern)
   {
@@ -1930,15 +1930,15 @@ int patternElement::hasTagInSet(unsigned int elementIndex,unsigned int desiredTa
   return -1;
 }
 
-int cPattern::elementHasTagInSet(unsigned char patternElement,unsigned char elementIndex,unsigned int desiredTagSetNum,unsigned int &tagNumBySet,bool isPattern)
+int cPattern::elementHasTagInSet(unsigned char cPatternElement,unsigned char elementIndex,unsigned int desiredTagSetNum,unsigned int &tagNumBySet,bool isPattern)
 { DLFS
   if (((signed char)elementIndex)==-2) return -1;
-  return elements[patternElement]->hasTagInSet(elementIndex,desiredTagSetNum,tagNumBySet,isPattern);
+  return elements[cPatternElement]->hasTagInSet(elementIndex,desiredTagSetNum,tagNumBySet,isPattern);
 }
 
-bool cPattern::elementHasTag(unsigned char patternElement,unsigned char elementIndex,int tag,bool isPattern)
+bool cPattern::elementHasTag(unsigned char cPatternElement,unsigned char elementIndex,int tag,bool isPattern)
 { LFS
-	return (((signed char)elementIndex)==-2 || !elements[patternElement]->hasTag(elementIndex,tag,isPattern)) ? false : true;
+	return (((signed char)elementIndex)==-2 || !elements[cPatternElement]->hasTag(elementIndex,tag,isPattern)) ? false : true;
 }
 
 // the only descendant who is a leaf in the tree is the pattern itself.
@@ -2012,7 +2012,7 @@ void cPattern::initializeUsage()
 
 void cPattern::establishMandatoryChildPatterns(void)
 { LFS
-  for (vector <patternElement *>::iterator e=elements.begin(),eEnd=elements.end(); e!=eEnd; e++)
+  for (vector <cPatternElement *>::iterator e=elements.begin(),eEnd=elements.end(); e!=eEnd; e++)
     if ((*e)->minimum && (*e)->patternIndexes.size()==1 && (*e)->formIndexes.size()==0)
     {
       int p=(*e)->patternIndexes[0];
@@ -2101,7 +2101,7 @@ void initializePatterns(void)
 #endif
 }
 
-tTS::tTS(unsigned int &tagSetNum,wchar_t *tag,int requiredNumOfTags,...)
+cTagSet::cTagSet(unsigned int &tagSetNum,wchar_t *tag,int requiredNumOfTags,...)
 { LFS
   va_list tagMarker;
   va_start( tagMarker,requiredNumOfTags );     /* Initialize variable arguments. */
@@ -2128,7 +2128,7 @@ int findTag(wchar_t *tagName)
   return -1;
 }
 
-int findTag(vector <tTagLocation> &tagSet, wchar_t *tagName, int &nextTag)
+int findTag(vector <cTagLocation> &tagSet, wchar_t *tagName, int &nextTag)
 {
 	LFS
 		for (unsigned int I = nextTag + 1; I < tagSet.size(); I++)
@@ -2146,16 +2146,16 @@ int findTag(vector <tTagLocation> &tagSet, wchar_t *tagName, int &nextTag)
 	return -1;
 }
 
-int findOneTag(vector <tTagLocation> &tagSet,wchar_t *tagName,int start)
+int findOneTag(vector <cTagLocation> &tagSet,wchar_t *tagName,int start)
 { LFS
   for (unsigned int I=start+1; I<tagSet.size(); I++)
     if (patternTagStrings[tagSet[I].tag]==tagName) return I;
   return -1;
 }
 
-int findTagConstrained(vector <tTagLocation> &tagSet,wchar_t *tagName,int &nextTag,unsigned int parentBegin,unsigned int parentEnd)
+int findTagConstrained(vector <cTagLocation> &tagSet,wchar_t *tagName,int &nextTag,unsigned int parentBegin,unsigned int parentEnd)
 { LFS
-  vector <tTagLocation>::iterator tsi=tagSet.begin()+nextTag+1,tsiEnd=tagSet.end();
+  vector <cTagLocation>::iterator tsi=tagSet.begin()+nextTag+1,tsiEnd=tagSet.end();
   for (unsigned int I=nextTag+1; tsi!=tsiEnd; I++,tsi++)
     if (tsi->sourcePosition>=parentBegin &&
       tsi->sourcePosition+tsi->len<=parentEnd &&
@@ -2172,7 +2172,7 @@ int findTagConstrained(vector <tTagLocation> &tagSet,wchar_t *tagName,int &nextT
     return -1;
 }
 
-int findTagConstrained(vector <tTagLocation> &tagSet,wchar_t *tagName,int &nextTag,tTagLocation &parentTag)
+int findTagConstrained(vector <cTagLocation> &tagSet,wchar_t *tagName,int &nextTag,cTagLocation &parentTag)
 { LFS
   unsigned int parentBegin=parentTag.sourcePosition,parentEnd=parentBegin+parentTag.len;
 	return findTagConstrained(tagSet,tagName,nextTag,parentBegin,parentEnd);
@@ -2185,7 +2185,7 @@ int inSet(unsigned int desiredTagSetNum,int desiredTag)
   return (I<numTags) ? I : -1;
 }
 
-void findTagSetConstrained(vector <tTagLocation> &tagSet,unsigned int desiredTagSetNum,char *tagFilledArray,tTagLocation &parentTag)
+void findTagSetConstrained(vector <cTagLocation> &tagSet,unsigned int desiredTagSetNum,char *tagFilledArray,cTagLocation &parentTag)
 { LFS
   unsigned int parentBegin=parentTag.sourcePosition,parentEnd=parentBegin+parentTag.len;
   int setOffset;
@@ -2196,7 +2196,7 @@ void findTagSetConstrained(vector <tTagLocation> &tagSet,unsigned int desiredTag
       tagFilledArray[setOffset]=1;
 }
 
-void findTagSet(vector <tTagLocation> &tagSet,unsigned int desiredTagSetNum,char *tagFilledArray)
+void findTagSet(vector <cTagLocation> &tagSet,unsigned int desiredTagSetNum,char *tagFilledArray)
 { LFS
   int setOffset;
   for (unsigned int I=0; I<tagSet.size(); I++)
@@ -2204,20 +2204,20 @@ void findTagSet(vector <tTagLocation> &tagSet,unsigned int desiredTagSetNum,char
       tagFilledArray[setOffset]=1;
 }
 
-bool cPattern::equivalentTagSet(vector <tTagLocation> &tagSet,vector <tTagLocation> &tagSet2)
+bool cPattern::equivalentTagSet(vector <cTagLocation> &tagSet,vector <cTagLocation> &tagSet2)
 { LFS
   if (tagSet.size()!=tagSet2.size()) return false;
-  vector <tTagLocation>::iterator t=tagSet.begin(),tEnd=tagSet.end(),t2=tagSet2.begin();
+  vector <cTagLocation>::iterator t=tagSet.begin(),tEnd=tagSet.end(),t2=tagSet2.begin();
   for (; t!=tEnd; t++,t2++)
     if (t->tag!=t2->tag)
       return false;
   return true;
 }
 
-void printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &tagSet)
+void printTagSet(int logType,wchar_t *descriptor,int ts,vector <cTagLocation> &tagSet)
 { LFS
-  vector <tTagLocation>::iterator its=tagSet.begin();
-  vector <tTagLocation>::iterator itsEnd=tagSet.end();
+  vector <cTagLocation>::iterator its=tagSet.begin();
+  vector <cTagLocation>::iterator itsEnd=tagSet.end();
   if (ts>=0 && descriptor) ::lplog(logType,L"%s TAGSET %05d: #TAGS=%d",descriptor,ts,tagSet.size());
   if (ts>=0)
     for (; its!=itsEnd; its++)
@@ -2277,7 +2277,7 @@ int cSource::queryPattern(int position, wstring pattern)
 	return -1;
 }
 
-void cSource::printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &tagSet,int position,int PEMAPosition)
+void cSource::printTagSet(int logType,wchar_t *descriptor,int ts,vector <cTagLocation> &tagSet,int position,int PEMAPosition)
 { LFS
   wchar_t temp[1024];
   if (descriptor) wcscpy(temp,descriptor);
@@ -2287,7 +2287,7 @@ void cSource::printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLoc
   ::printTagSet(logType,temp,ts,tagSet);
 }
 
-void printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &tagSet,vector <wstring> &words)
+void printTagSet(int logType,wchar_t *descriptor,int ts,vector <cTagLocation> &tagSet,vector <wstring> &words)
 { LFS
   wstring clause;
   for (unsigned I=0; I<words.size(); I++)
@@ -2296,7 +2296,7 @@ void printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &t
   printTagSet(logType,NULL,ts,tagSet);
 }
 
-void cSource::printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &tagSet,int position,int PEMAPosition,vector <wstring> &words)
+void cSource::printTagSet(int logType,wchar_t *descriptor,int ts,vector <cTagLocation> &tagSet,int position,int PEMAPosition,vector <wstring> &words)
 { LFS
   wstring clause;
   for (unsigned I=0; I<words.size(); I++)

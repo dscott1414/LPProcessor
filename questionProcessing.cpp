@@ -570,12 +570,12 @@ void createQuestionPatterns(void)
 //   the next subject matching should be the opposite of the speaker of the question.
 //   AND the previous speaker of the question should be the opposite of the next subject.
 // exception: if the last sentence ends in a ... .
-void cSource::setQuestion(vector <WordMatch>::iterator im,bool inQuote,int &questionSpeakerLastSentence,int &questionSpeaker,bool &currentIsQuestion)
+void cSource::setQuestion(vector <cWordMatch>::iterator im,bool inQuote,int &questionSpeakerLastSentence,int &questionSpeaker,bool &currentIsQuestion)
 { LFS
 	currentIsQuestion=false;
 	int openingQuote=lastOpeningPrimaryQuote;
 	bool forwardInQuote=inQuote;
-  vector <WordMatch>::iterator imEOS;
+  vector <cWordMatch>::iterator imEOS;
   for (imEOS=im,imEOS++; imEOS!=m.end(); imEOS++)
 	{
 		// skip secondary quotes
@@ -596,7 +596,7 @@ void cSource::setQuestion(vector <WordMatch>::iterator im,bool inQuote,int &ques
 			imEOS++;
 		}
 		if (imEOS==m.end()) break;
-    if (imEOS->word->first==L"“" && !(imEOS->flags&WordMatch::flagQuotedString))
+    if (imEOS->word->first==L"“" && !(imEOS->flags&cWordMatch::flagQuotedString))
 		{
 			openingQuote=(int)(imEOS-m.begin());
 			forwardInQuote=true;
@@ -613,9 +613,9 @@ void cSource::setQuestion(vector <WordMatch>::iterator im,bool inQuote,int &ques
 			{
 				currentIsQuestion=true;
 				// not needed because of logic in identifyObject
-				//for (vector <WordMatch>::iterator imtmp=im; imtmp!=imEOS; imtmp++)
+				//for (vector <cWordMatch>::iterator imtmp=im; imtmp!=imEOS; imtmp++)
 				//	if (imtmp->getObject()!=-1)
-				//		imtmp->flags|=WordMatch::flagInQuestion;
+				//		imtmp->flags|=cWordMatch::flagInQuestion;
 				if (forwardInQuote) 
 					questionSpeaker=openingQuote;
 			}
@@ -631,9 +631,9 @@ void cSource::setQuestion(vector <WordMatch>::iterator im,bool inQuote,int &ques
 	}
 }
 
-void cSource::setSecondaryQuestion(vector <WordMatch>::iterator im)
+void cSource::setSecondaryQuestion(vector <cWordMatch>::iterator im)
 { LFS
-  for (vector <WordMatch>::iterator imEOS=++im; imEOS!=m.end() && (imEOS->word->first!=L"’"); imEOS++)
+  for (vector <cWordMatch>::iterator imEOS=++im; imEOS!=m.end() && (imEOS->word->first!=L"’"); imEOS++)
 	{
 		// checking for the sectionWord makes it more likely ':' is not in the middle of a sentence.
 		// The purpose is to detect the end of a sentence, not an utterance, because this section only 
@@ -644,7 +644,7 @@ void cSource::setSecondaryQuestion(vector <WordMatch>::iterator im)
 			if (imEOS->word->first==L"?")
 				for (; im!=imEOS; im++)
 					if (im->getObject()!=-1)
-						im->flags|=WordMatch::flagInQuestion;
+						im->flags|=cWordMatch::flagInQuestion;
       break;
     }
 	}
@@ -754,7 +754,7 @@ bool cSource::testQuestionType(int where,int &whereQuestionType,int &whereQuesti
 	if (where<0)
 		return false;
 	wstring tmpstr;
-	if (m[where].objectMatches.size()>0 && !(m[where].flags&WordMatch::flagRelativeHead))
+	if (m[where].objectMatches.size()>0 && !(m[where].flags&cWordMatch::flagRelativeHead))
 	{
 		for (unsigned int om=0; om<m[where].objectMatches.size(); om++)
 		{
@@ -768,7 +768,7 @@ bool cSource::testQuestionType(int where,int &whereQuestionType,int &whereQuesti
 			}
 		}
 	}
-	else if (m[where].getObject()>=0 && !(m[where].flags&WordMatch::flagRelativeHead))
+	else if (m[where].getObject()>=0 && !(m[where].flags&cWordMatch::flagRelativeHead))
 	{
 			oc=objects[m[where].getObject()].objectClass;
 			if (oc==NAME_OBJECT_CLASS || oc==GENDERED_DEMONYM_OBJECT_CLASS || oc==NON_GENDERED_BUSINESS_OBJECT_CLASS || oc==NON_GENDERED_NAME_OBJECT_CLASS)

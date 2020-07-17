@@ -409,7 +409,7 @@ struct
   {L"VVZ",L"NN2"}
 };
 
-bool bncc::findMultiplePreferredForm(vector <WordMatch>::iterator im,int tag,const wchar_t *location,int sentence,int &f,bool reportNotFound)
+bool bncc::findMultiplePreferredForm(vector <cWordMatch>::iterator im,int tag,const wchar_t *location,int sentence,int &f,bool reportNotFound)
 {
   f=-1;
   wstring sForm=tagList[tag].sForm,nextForm;
@@ -422,7 +422,7 @@ bool bncc::findMultiplePreferredForm(vector <WordMatch>::iterator im,int tag,con
       nextForm=sForm.substr(where,next-where);
     else
       nextForm=sForm.substr(where,sForm.length()-where);
-    int tf=FormsClass::findForm(nextForm);
+    int tf=cForms::findForm(nextForm);
     if (tf<0)
       lplog(LOG_FATAL_ERROR,L"Form %s not found in BNC processing.",nextForm.c_str());
     if (im->word->second.query(tf)>=0)
@@ -442,7 +442,7 @@ bool bncc::findMultiplePreferredForm(vector <WordMatch>::iterator im,int tag,con
     where=0;
     int next=sForm.find(L"//",where);
     nextForm=sForm.substr(where,next-where);
-    int nf=FormsClass::findForm(nextForm);
+    int nf=cForms::findForm(nextForm);
     if (nf<0)
       lplog(LOG_FATAL_ERROR,L"Form %s not found in BNC processing.",nextForm.c_str());
     im->word->second.addForm(nf,im->word->first);
@@ -464,11 +464,11 @@ bool bncc::findMultiplePreferredForm(vector <WordMatch>::iterator im,int tag,con
   }
 }
 
-int bncc::findPreferredForm(vector <WordMatch>::iterator im,int tag,bool optional,const wchar_t *location,int sentence,bool depositPreferences,bool reportNotFound)
+int bncc::findPreferredForm(vector <cWordMatch>::iterator im,int tag,bool optional,const wchar_t *location,int sentence,bool depositPreferences,bool reportNotFound)
 {
   if (tag==TAG_NOT_SET)
   {
-    im->flags|=WordMatch::flagBNCFormNotCertain;
+    im->flags|=cWordMatch::flagBNCFormNotCertain;
     return -1;
   }
   int f=tagList[tag].form;
@@ -478,7 +478,7 @@ int bncc::findPreferredForm(vector <WordMatch>::iterator im,int tag,bool optiona
   if (optional || !depositPreferences) return -31;
   if (f==adjectiveForm)
   {
-    im->flags|=WordMatch::flagBNCPreferAdjectivePatternMatch;
+    im->flags|=cWordMatch::flagBNCPreferAdjectivePatternMatch;
     // refuse adding adjective to:
     // "verb*1",
     if (im->word->second.query(verbForm)>=0 && (im->word->second.inflectionFlags&(VERB_PRESENT_PARTICIPLE|VERB_PAST_PARTICIPLE))!=0)
@@ -503,7 +503,7 @@ int bncc::findPreferredForm(vector <WordMatch>::iterator im,int tag,bool optiona
       #endif
       return -34;
     }
-    im->flags&=~WordMatch::flagBNCPreferAdjectivePatternMatch;
+    im->flags&=~cWordMatch::flagBNCPreferAdjectivePatternMatch;
   }
   if (f==nounForm)
   {
@@ -515,7 +515,7 @@ int bncc::findPreferredForm(vector <WordMatch>::iterator im,int tag,bool optiona
       im->word->second.query(telephoneNumberForm)>=0 ||
       im->word->second.query(monthForm)>=0)
       return -35;
-    im->flags|=WordMatch::flagBNCPreferNounPatternMatch;
+    im->flags|=cWordMatch::flagBNCPreferNounPatternMatch;
     // refuse adding noun to
     // "verb*1",L"does*1",VERB_PRESENT_PARTICIPLE
     if ((im->word->second.query(verbForm)>=0 || im->word->second.query(doesForm)>=0) &&
@@ -526,9 +526,9 @@ int bncc::findPreferredForm(vector <WordMatch>::iterator im,int tag,bool optiona
       #endif
       return -36;
     }
-    im->flags&=~WordMatch::flagBNCPreferNounPatternMatch;
+    im->flags&=~cWordMatch::flagBNCPreferNounPatternMatch;
   }
-  if (letterForm<0) letterForm=FormsClass::gFindForm(L"letter");
+  if (letterForm<0) letterForm=cForms::gFindForm(L"letter");
   // refuse adding Proper Noun to:
   // letters
   if (f==PROPER_NOUN_FORM_NUM && im->word->second.query(letterForm)>=0)
@@ -537,7 +537,7 @@ int bncc::findPreferredForm(vector <WordMatch>::iterator im,int tag,bool optiona
   // Number
   if (f==adverbForm)
   {
-    im->flags|=WordMatch::flagBNCPreferAdverbPatternMatch;
+    im->flags|=cWordMatch::flagBNCPreferAdverbPatternMatch;
     if (im->word->second.query(numberForm)>=0)
     {
       #ifdef LOG_BNC_PATTERNS_CHECK
@@ -552,7 +552,7 @@ int bncc::findPreferredForm(vector <WordMatch>::iterator im,int tag,bool optiona
       #endif
       return -41;
     }
-    im->flags&=~WordMatch::flagBNCPreferAdverbPatternMatch;
+    im->flags&=~cWordMatch::flagBNCPreferAdverbPatternMatch;
   }
   // refuse adding modal_auxiliary to
   // future_modal_auxiliary, negation_modal_auxiliary, negation_future_modal_auxiliary
@@ -565,18 +565,18 @@ int bncc::findPreferredForm(vector <WordMatch>::iterator im,int tag,bool optiona
   if (!wcscmp(tagList[tag].sForm,L"is") && im->word->first==L"be")
     return -40;
   // when adding PROPER_NOUN_FORM_NUM, add flags flagAddProperNoun
-  if (f==PROPER_NOUN_FORM_NUM) im->flags|=WordMatch::flagAddProperNoun;
+  if (f==PROPER_NOUN_FORM_NUM) im->flags|=cWordMatch::flagAddProperNoun;
   else
   {
-    if (f==adjectiveForm) im->flags|=WordMatch::flagBNCPreferAdjectivePatternMatch;
-    else if (f==nounForm) im->flags|=WordMatch::flagBNCPreferNounPatternMatch;
-    else if (f==adverbForm) im->flags|=WordMatch::flagBNCPreferAdverbPatternMatch;
-    else if (f==verbForm) im->flags|=WordMatch::flagBNCPreferVerbPatternMatch;
+    if (f==adjectiveForm) im->flags|=cWordMatch::flagBNCPreferAdjectivePatternMatch;
+    else if (f==nounForm) im->flags|=cWordMatch::flagBNCPreferNounPatternMatch;
+    else if (f==adverbForm) im->flags|=cWordMatch::flagBNCPreferAdverbPatternMatch;
+    else if (f==verbForm) im->flags|=cWordMatch::flagBNCPreferVerbPatternMatch;
     else
     {
       if (f==prepositionForm && im->word->second.query(verbForm)>=0 && (im->word->second.inflectionFlags&(VERB_PRESENT_PARTICIPLE)))
       {
-          int vp=FormsClass::gFindForm(L"verbalPreposition");
+          int vp=cForms::gFindForm(L"verbalPreposition");
         if (vp<0) lplog(LOG_FATAL_ERROR,L"verbalPreposition form not found.");
         if (im->word->second.query(vp)<0) im->word->second.addForm(vp,im->word->first);
         return -43;
@@ -606,14 +606,14 @@ void printWord(tIWMM iWord,int flags,int &printLocation,bool firstWordInSentence
   wchar_t temp[100];
   size_t len=iWord->first.length();
   wcscpy(temp,iWord->first.c_str());
-  if ((flags&(WordMatch::flagAddProperNoun|WordMatch::flagOnlyConsiderProperNounForms)) || firstWordInSentence)
+  if ((flags&(cWordMatch::flagAddProperNoun|cWordMatch::flagOnlyConsiderProperNounForms)) || firstWordInSentence)
     *temp=towupper(*temp);
-  if (flags&(WordMatch::flagNounOwner))
+  if (flags&(cWordMatch::flagNounOwner))
   {
     temp[len++]=L'\'';
     if (temp[len-2]!=L's') temp[len++]=L's';
   }
-  if (flags&WordMatch::flagAllCaps)
+  if (flags&cWordMatch::flagAllCaps)
     for (wchar_t *ch=temp; *ch && (ch-temp)<100; ch++) *ch=towupper(*ch);
   if (printLocation>100)
   {
@@ -624,9 +624,9 @@ void printWord(tIWMM iWord,int flags,int &printLocation,bool firstWordInSentence
   printLocation+=wcslen(temp)+1;
 }
 
-void WordMatch::setPreferredForm(void)
+void cWordMatch::setPreferredForm(void)
 {
-  if (flags&WordMatch::flagOnlyConsiderProperNounForms)
+  if (flags&cWordMatch::flagOnlyConsiderProperNounForms)
   {
     forms.set(PROPER_NOUN_FORM_NUM);
     for (unsigned int I=0; I<word->second.formsSize(); I++)
@@ -634,7 +634,7 @@ void WordMatch::setPreferredForm(void)
         forms.set(word->second.forms()[I]);
     return;
   }
-  if (flags&WordMatch::flagAddProperNoun)
+  if (flags&cWordMatch::flagAddProperNoun)
     forms.set(PROPER_NOUN_FORM_NUM);
   // determine highest use pattern count
   /* removed - not reliable
@@ -654,14 +654,14 @@ void WordMatch::setPreferredForm(void)
   */
     for (unsigned int f=0,*fp=word->second.forms(),*fpEnd=word->second.forms()+word->second.formsSize(); fp!=fpEnd; fp++,f++)
       forms.set(*fp);
-  if (!(flags&WordMatch::flagFirstLetterCapitalized) || (flags&WordMatch::flagRefuseProperNoun))
+  if (!(flags&cWordMatch::flagFirstLetterCapitalized) || (flags&cWordMatch::flagRefuseProperNoun))
     forms.reset(PROPER_NOUN_FORM_NUM);
 }
 
-void WordMatch::setForm(void)
+void cWordMatch::setForm(void)
 {
   // adjust words that are honorifics that are capitalized so that they are only recognized as honorifics
-  if (flags&WordMatch::flagOnlyConsiderOtherNounForms)
+  if (flags&cWordMatch::flagOnlyConsiderOtherNounForms)
   {
 		// since it is a determiner, and also capitalized, the flagOnlyConsiderOtherNounForms was set, since we do not usually want a determiner to be considered a proper noun.
 		// HOWEVER, the word no is both a determiner, which has block proper noun on it, and an abbreviation, which is a proper noun subclass.  In this case, recognize it as an abbreviation.
@@ -675,7 +675,7 @@ void WordMatch::setForm(void)
 					forms.set(word->second.forms()[I]);
     return;
   }
-  if (flags&WordMatch::flagOnlyConsiderProperNounForms)
+  if (flags&cWordMatch::flagOnlyConsiderProperNounForms)
   {
     forms.set(PROPER_NOUN_FORM_NUM);
     for (unsigned int I=0; I<word->second.formsSize(); I++)
@@ -683,10 +683,10 @@ void WordMatch::setForm(void)
         forms.set(word->second.forms()[I]);
     return;
   }
-  if (flags&WordMatch::flagAddProperNoun)
+  if (flags&cWordMatch::flagAddProperNoun)
     forms.set(PROPER_NOUN_FORM_NUM);
   // if something has a 's after it, it can only be a noun
-  if (queryForm(nounForm)>=0 && (flags&WordMatch::flagNounOwner)!=0)
+  if (queryForm(nounForm)>=0 && (flags&cWordMatch::flagNounOwner)!=0)
   {
     for (unsigned int f=0,*fp=word->second.forms(),*fpEnd=word->second.forms()+word->second.formsSize(); fp!=fpEnd; fp++,f++)
       if (Forms[*fp]->properNounSubClass || *fp==nounForm || *fp==PROPER_NOUN_FORM_NUM)
@@ -703,7 +703,7 @@ void WordMatch::setForm(void)
 		else
 			forms.set(*fp);
 	}
-  if (!(flags&WordMatch::flagFirstLetterCapitalized) || (flags&WordMatch::flagRefuseProperNoun))
+  if (!(flags&cWordMatch::flagFirstLetterCapitalized) || (flags&cWordMatch::flagRefuseProperNoun))
     forms.reset(PROPER_NOUN_FORM_NUM);
 }
 
@@ -786,7 +786,7 @@ int bncc::processWord(cSource &source,int sourceId,wchar_t *buffer,int tag,int s
   {
     source.m[source.m.size()-1].word=Words.gquery(L"would");
     source.m[source.m.size()-1].forms.clear();
-    source.m[source.m.size()-1].forms.set(FormsClass::gFindForm(L"modal_auxiliary"));
+    source.m[source.m.size()-1].forms.set(cForms::gFindForm(L"modal_auxiliary"));
     return 0;
   }
   if (!wcsicmp(sWord.c_str(),L"aged") && tag!=TAG_NOT_SET && !wcscmp(tagList[tag].tag,L"PRP"))
@@ -823,7 +823,7 @@ int bncc::processWord(cSource &source,int sourceId,wchar_t *buffer,int tag,int s
   {
     if (sWord[0]==L'-' && sWord[1]==0)
     {
-      source.m.push_back(WordMatch(Words.gquery(L"-"),0,source.debugTrace));
+      source.m.push_back(cWordMatch(Words.gquery(L"-"),0,source.debugTrace));
       source.m[source.m.size()-1].setForm();
       if (buffer[bufferScanLocation] && buffer[bufferScanLocation]!=L'*')
         return processWord(source,sourceId,buffer+bufferScanLocation,tag,secondTag,lastSentenceEnd,printLocation,sentence);
@@ -867,7 +867,7 @@ int bncc::processWord(cSource &source,int sourceId,wchar_t *buffer,int tag,int s
         return 0;
       if (insertDashes)
       {
-        source.m.push_back(WordMatch(Words.gquery(L"-"),0,source.debugTrace));
+        source.m.push_back(cWordMatch(Words.gquery(L"-"),0,source.debugTrace));
         source.m[source.m.size()-1].setForm();
       }
       return processWord(source,sourceId,buffer+bufferScanLocation+1,tag,secondTag,lastSentenceEnd,printLocation,sentence);
@@ -940,18 +940,18 @@ int bncc::processWord(cSource &source,int sourceId,wchar_t *buffer,int tag,int s
   if (iWord->second.isUnknown()) unknownCount++;
   unsigned __int64 flags;
   iWord->second.adjustFormsInflections(sWord,flags,firstWordInSentence,nounOwner,allCaps,firstLetterCapitalized, false);
-  //source.m.push_back(WordMatch(iWord,flags));
+  //source.m.push_back(cWordMatch(iWord,flags));
   if (!wcsicmp(iWord->first.c_str(),L"ca") || !wcsicmp(iWord->first.c_str(),L"wo") || !wcsicmp(iWord->first.c_str(),L"sha"))
   {
-    source.m.push_back(WordMatch(iWord,flags,source.debugTrace));
+    source.m.push_back(cWordMatch(iWord,flags,source.debugTrace));
     return 0; // BNC has ca as the stem of n't, which is fixed in the next word.
   }
   //  ignore | and $, skip only in BNCC
   if (tag>=0 && !wcscmp(tagList[tag].tag,L"UNC") && (iWord->first[0]<0 || !iswalpha(iWord->first[0])))
     return 0;
   // make "both" possibly a predeterminer and more an adjective
-  source.m.push_back(WordMatch(iWord,flags,source.debugTrace));
-  vector <WordMatch>::iterator im=source.m.begin()+source.m.size()-1;
+  source.m.push_back(cWordMatch(iWord,flags,source.debugTrace));
+  vector <cWordMatch>::iterator im=source.m.begin()+source.m.size()-1;
   int f2=-1,f=findPreferredForm(im,tag,false,source.storageLocation.c_str(),sentence,secondTag<0,secondTag<0);
   if (secondTag>=0) f2=findPreferredForm(im,secondTag,true,source.storageLocation.c_str(),sentence,false,f<0);
   if (f<0 && f2<0 && tag>=0 && (iWord->second.isUnknown() || !iWord->second.formsSize()) && tagList[tag].form>=0)
@@ -964,28 +964,28 @@ int bncc::processWord(cSource &source,int sourceId,wchar_t *buffer,int tag,int s
     if (f>=0) im->forms.set(f);
     if (f2>=0) im->forms.set(f2);
 
-    if (im->flags&WordMatch::flagOnlyConsiderProperNounForms)
+    if (im->flags&cWordMatch::flagOnlyConsiderProperNounForms)
     {
-      im->flags|=WordMatch::flagAddProperNoun;
-      im->flags&=~WordMatch::flagOnlyConsiderProperNounForms;
+      im->flags|=cWordMatch::flagAddProperNoun;
+      im->flags&=~cWordMatch::flagOnlyConsiderProperNounForms;
     }
-    if (im->flags&WordMatch::flagAddProperNoun)
+    if (im->flags&cWordMatch::flagAddProperNoun)
     {
       im->forms.set(PROPER_NOUN_FORM_NUM);
       if (im->word->second.query(PROPER_NOUN_FORM_NUM)>=0)
-        im->flags&=~WordMatch::flagAddProperNoun; // flag is unnecessary if already has form
+        im->flags&=~cWordMatch::flagAddProperNoun; // flag is unnecessary if already has form
     }
-    if (!(im->flags&WordMatch::flagFirstLetterCapitalized) || (im->flags&WordMatch::flagRefuseProperNoun))
+    if (!(im->flags&cWordMatch::flagFirstLetterCapitalized) || (im->flags&cWordMatch::flagRefuseProperNoun))
     {
       im->forms.reset(PROPER_NOUN_FORM_NUM);
-      im->flags&=~WordMatch::flagAddProperNoun;
+      im->flags&=~cWordMatch::flagAddProperNoun;
     }
     if (!im->word->second.blockProperNounRecognition() && im->word->second.query(PROPER_NOUN_FORM_NUM)==-1 && im->word->first!=L"there" &&
       // if a proper noun is not all caps, and not the first word, it probably needs to be a noun, abbreviation or proper noun sub-class.
        firstLetterCapitalized && !allCaps &&
        (im->forms.isSet(nounForm) || im->forms.isSet(abbreviationForm) || im->forms.isSet(sa_abbForm) || im->word->second.isProperNounSubClass())) // more general in the future?
     {
-      flags|=WordMatch::flagAddProperNoun;
+      flags|=cWordMatch::flagAddProperNoun;
       im->forms.set(PROPER_NOUN_FORM_NUM);
     }
 
@@ -999,7 +999,7 @@ int bncc::processWord(cSource &source,int sourceId,wchar_t *buffer,int tag,int s
   }
   else
     im->setPreferredForm();
-  int selfForm=FormsClass::findForm(im->word->first);
+  int selfForm=cForms::findForm(im->word->first);
   if (selfForm>=0 && im->word->first!=L"to")
     im->forms.set(selfForm);
   if (im->word->first==L"here")
@@ -1070,7 +1070,7 @@ int bncc::processSentence(cSource &source,int sourceId,wchar_t *s,int &lastSente
     }
     if (tagList[tag].sForm!=NULL && !wcscmp(tagList[tag].sForm,L"COMBINE") && !wcscmp(tagList[tag].tag,L"POS"))
     {
-      source.m[source.m.size()-1].flags|=WordMatch::flagNounOwner;
+      source.m[source.m.size()-1].flags|=cWordMatch::flagNounOwner;
       //wprintf(L"'s ");
       printLocation+=2;
       if (!nextTag) return 0;
@@ -1202,7 +1202,7 @@ int bncc::process(cSource &source,int sourceId,wstring id)
     where=(int)(sentenceEnd-buffer)+1;
     int returnSentence=processSentence(source,sourceId,end+2,lastSentenceEnd,printLocation,check);
     if (!source.m[source.m.size()-1].word->second.isSeparator())
-      source.m.push_back(WordMatch(Words.sectionWord,PARSE_END_SENTENCE,source.debugTrace));
+      source.m.push_back(cWordMatch(Words.sectionWord,PARSE_END_SENTENCE,source.debugTrace));
     source.sentenceStarts.push_back(lastSentenceEnd);
     if (returnSentence==PARSE_EOF) 
 			break;
@@ -1225,7 +1225,7 @@ bncc::bncc(void)
     else if (wcsstr(tagList[I].sForm,L"//"))
       tagList[I].form=-3;
     else
-      tagList[I].form=FormsClass::findForm(tagList[I].sForm);
+      tagList[I].form=cForms::findForm(tagList[I].sForm);
 }
 
 /*

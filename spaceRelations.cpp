@@ -218,7 +218,7 @@ int cSource::getMSAdjective(int whereVerb, int where, int numOrder)
 	if (numOrder != 0) return NULLWORD;
 	int i;
 	// How old is Darrell Hammond?
-	//if (where<0 && whereVerb>=0 && (m[whereVerb].flags&WordMatch::flagInQuestion) && m[whereVerb].relSubject<0 &&
+	//if (where<0 && whereVerb>=0 && (m[whereVerb].flags&cWordMatch::flagInQuestion) && m[whereVerb].relSubject<0 &&
 	//	  m[whereVerb-1].queryWinnerForm(adjectiveForm)>=0 && m[whereVerb-1].getObject()<0)
 	//	return ((i=m[whereVerb-1].word->second.index)<0) ? NULLWORD : i;
 	if (whereVerb < 0 || (whereVerb + 1 >= where && where >= 0)) return NULLWORD;
@@ -362,8 +362,8 @@ void cSource::printSRI(wstring logPrefix, cSpaceRelation* sri, int s, int ws, in
 		if (sri == NULL)
 			return;
 	wstring tmpstr, tmpstr2, tmpstr3, tmpstr4, tmpstr5, tmpstr6, tmpstr7, tmpstr8, tmpstr9, tmpstr10, tmpstr11, tmpstr12, tmpstr14;
-	bool inQuestion = (sri->whereSubject >= 0 && (m[sri->whereSubject].flags&WordMatch::flagInQuestion));
-	inQuestion |= (sri->whereObject >= 0 && (m[sri->whereObject].flags&WordMatch::flagInQuestion));
+	bool inQuestion = (sri->whereSubject >= 0 && (m[sri->whereSubject].flags&cWordMatch::flagInQuestion));
+	inQuestion |= (sri->whereObject >= 0 && (m[sri->whereObject].flags&cWordMatch::flagInQuestion));
 	//if (SRIDebugCounter==464)
 	//{
 	//	extern int logQuestionProfileTime,logSynonymDetail,logTableDetail,equivalenceLogDetail,logDetail;
@@ -673,7 +673,7 @@ bool cSpaceRelation::write(void *buffer, int &w, int limit)
 	if (!copy(buffer, whereQuestionType, w, limit)) return false;
 	if (!copy(buffer, sentenceNum, w, limit)) return false;
 	// flags
-	__int64 flags = convertFlags(false, false, false, 0); // while on disk, questions can be queried by the flag WordMatch::inQuestion
+	__int64 flags = convertFlags(false, false, false, 0); // while on disk, questions can be queried by the flag cWordMatch::inQuestion
 	if (!copy(buffer, flags, w, limit)) return false;
 	if (!copy(buffer, tft.lastOpeningPrimaryQuote, w, limit)) return false;
 	if (!copy(buffer, tft.duplicateTimeTransitionFromWhere, w, limit)) return false;
