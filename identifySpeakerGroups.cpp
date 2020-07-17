@@ -51,7 +51,7 @@ bool copy(void *buf,vector <cOM> &s,int &where,int limit)
   return true;
 }
 
-Source::cSpeakerGroup::cSpeakerGroup(void)
+cSource::cSpeakerGroup::cSpeakerGroup(void)
 { LFS
   sgBegin=sgEnd=0;
   section=-1;
@@ -61,7 +61,7 @@ Source::cSpeakerGroup::cSpeakerGroup(void)
 	speakersAreNeverGroupedTogether=true;
 }
 
-Source::cSpeakerGroup::cSpeakerGroup(char *buffer,int &where,unsigned int limit,bool &error)
+cSource::cSpeakerGroup::cSpeakerGroup(char *buffer,int &where,unsigned int limit,bool &error)
 { LFS
 	if (error=!::copy(sgBegin,buffer,where,limit)) return;
   if (error=!::copy(sgEnd,buffer,where,limit)) return;
@@ -94,7 +94,7 @@ Source::cSpeakerGroup::cSpeakerGroup(char *buffer,int &where,unsigned int limit,
   error=where>(signed)limit;
 }
 
-bool Source::cSpeakerGroup::copy(void *buffer,int &where,int limit)
+bool cSource::cSpeakerGroup::copy(void *buffer,int &where,int limit)
 { LFS
 	if (!::copy(buffer,sgBegin,where,limit)) return false;
   if (!::copy(buffer,sgEnd,where,limit)) return false;
@@ -112,7 +112,7 @@ bool Source::cSpeakerGroup::copy(void *buffer,int &where,int limit)
   if (!::copy(buffer,metaNameOthers,where,limit)) return false;
   if (!::copy(buffer,observers,where,limit)) return false;
   if (!::copy(buffer,(int)embeddedSpeakerGroups.size(),where,limit)) return false;
-	for (vector <Source::cSpeakerGroup>::iterator esgi=embeddedSpeakerGroups.begin(), esgEnd=embeddedSpeakerGroups.end(); esgi!=esgEnd; esgi++)
+	for (vector <cSource::cSpeakerGroup>::iterator esgi=embeddedSpeakerGroups.begin(), esgEnd=embeddedSpeakerGroups.end(); esgi!=esgEnd; esgi++)
     if (!esgi->copy(buffer,where,limit)) return false;
   if (!::copy(buffer,(int)groups.size(),where,limit)) return false;
 	for (unsigned int I=0; I<groups.size(); I++)
@@ -123,7 +123,7 @@ bool Source::cSpeakerGroup::copy(void *buffer,int &where,int limit)
   return true;
 }
 
-void Source::ageSpeakerWithoutSpeakerInfo(int where,bool inPrimaryQuote,bool inSecondaryQuote,vector <cLocalFocus>::iterator &lfi,int amount)
+void cSource::ageSpeakerWithoutSpeakerInfo(int where,bool inPrimaryQuote,bool inSecondaryQuote,vector <cLocalFocus>::iterator &lfi,int amount)
 { LFS
   lfi->increaseAge(inPrimaryQuote,inSecondaryQuote,amount);
   if (objects[lfi->om.object].objectClass!=NAME_OBJECT_CLASS &&
@@ -141,7 +141,7 @@ void Source::ageSpeakerWithoutSpeakerInfo(int where,bool inPrimaryQuote,bool inS
     lfi++;
 }
 
-void Source::mergeName(int where,int &o,set <int> &speakers)
+void cSource::mergeName(int where,int &o,set <int> &speakers)
 { LFS
   vector <cObject>::iterator object=objects.begin()+o;
   for (set<int>::iterator i=speakers.begin(); i!=speakers.end(); i++)
@@ -155,7 +155,7 @@ void Source::mergeName(int where,int &o,set <int> &speakers)
     }
 }
 
-bool Source::mergableBySex(int o,set <int> &speakers,bool &uniquelyMergable,set<int>::iterator &mergedObject)
+bool cSource::mergableBySex(int o,set <int> &speakers,bool &uniquelyMergable,set<int>::iterator &mergedObject)
 { LFS
   bool genderUncertainMatch,physicallyEvaluated;
   mergedObject=sNULL;
@@ -172,7 +172,7 @@ bool Source::mergableBySex(int o,set <int> &speakers,bool &uniquelyMergable,set<
   return mergedObject!=sNULL;
 }
 
-bool Source::unMergable(int where,int o,set <int> &speakers,bool &uniquelyMergable,bool insertObject,bool crossedSection,bool allowBothToBeSpeakers,bool checkUnmergableSpeaker,set <int>::iterator &save)
+bool cSource::unMergable(int where,int o,set <int> &speakers,bool &uniquelyMergable,bool insertObject,bool crossedSection,bool allowBothToBeSpeakers,bool checkUnmergableSpeaker,set <int>::iterator &save)
 { LFS
 	if (o<=1) return true;
   followObjectChain(o);
@@ -244,7 +244,7 @@ bool Source::unMergable(int where,int o,set <int> &speakers,bool &uniquelyMergab
   return save==speakers.end();
 }
 
-bool Source::unMergable(int where,int o,vector <int> &speakers,bool &uniquelyMergable,bool insertObject,bool crossedSection,bool allowBothToBeSpeakers,bool checkUnmergableSpeaker,vector <int>::iterator &save)
+bool cSource::unMergable(int where,int o,vector <int> &speakers,bool &uniquelyMergable,bool insertObject,bool crossedSection,bool allowBothToBeSpeakers,bool checkUnmergableSpeaker,vector <int>::iterator &save)
 { LFS
 	if (o<=1) return true;
   followObjectChain(o);
@@ -294,7 +294,7 @@ bool Source::unMergable(int where,int o,vector <int> &speakers,bool &uniquelyMer
   return save==speakers.end();
 }
 
-void Source::replaceSpeaker(int begin,int end,int fromObject,int toObject)
+void cSource::replaceSpeaker(int begin,int end,int fromObject,int toObject)
 { LFS
   wstring tmpstr,tmpstr2,tmpstr3;
   vector <cSpeakerGroup>::iterator lastSG=(speakerGroups.size()) ? speakerGroups.begin()+speakerGroups.size()-1 : speakerGroups.end();
@@ -354,7 +354,7 @@ void Source::replaceSpeaker(int begin,int end,int fromObject,int toObject)
 //   newSG.begin=speakerSection.
 //   remove S from newSG.
 //   make lastSG point to newSG.
-void Source::determineSpeakerRemoval(int where)
+void cSource::determineSpeakerRemoval(int where)
 { LFS
 	if (speakerGroups.empty()) return;
   vector <cSpeakerGroup>::iterator lastSG=speakerGroups.begin()+speakerGroups.size()-1;
@@ -460,14 +460,14 @@ void Source::determineSpeakerRemoval(int where)
 	}
 }
 
-void Source::subtract(set <int> &bigSet,set <int> &subtractSet,set <int> &resultSet)
+void cSource::subtract(set <int> &bigSet,set <int> &subtractSet,set <int> &resultSet)
 { LFS
 	for (set <int>::iterator bi=bigSet.begin(),biEnd=bigSet.end(); bi!=biEnd; bi++)
 		if (subtractSet.find(*bi)==subtractSet.end())
 			resultSet.insert(*bi);
 }
 
-void Source::subtract(vector <cOM> &bigSet,vector <cOM> &subtractSet)
+void cSource::subtract(vector <cOM> &bigSet,vector <cOM> &subtractSet)
 { LFS
 	vector <cOM> resultSet;
 	for (vector <cOM>::iterator bi=bigSet.begin(),biEnd=bigSet.end(); bi!=biEnd; bi++)
@@ -476,7 +476,7 @@ void Source::subtract(vector <cOM> &bigSet,vector <cOM> &subtractSet)
 	bigSet=resultSet;
 }
 
-void Source::subtract(vector <cOM> &bigSet,vector <int> &subtractSet)
+void cSource::subtract(vector <cOM> &bigSet,vector <int> &subtractSet)
 { LFS
 	vector <cOM> resultSet;
 	for (vector <cOM>::iterator bi=bigSet.begin(),biEnd=bigSet.end(); bi!=biEnd; bi++)
@@ -485,7 +485,7 @@ void Source::subtract(vector <cOM> &bigSet,vector <int> &subtractSet)
 	bigSet=resultSet;
 }
 
-void Source::subtract(vector <cOM> &bigSet,set <int> &subtractSet)
+void cSource::subtract(vector <cOM> &bigSet,set <int> &subtractSet)
 { LFS
 	vector <cOM> resultSet;
 	for (vector <cOM>::iterator bi=bigSet.begin(),biEnd=bigSet.end(); bi!=biEnd; bi++)
@@ -494,14 +494,14 @@ void Source::subtract(vector <cOM> &bigSet,set <int> &subtractSet)
 	bigSet=resultSet;
 }
 
-void Source::subtract(int o,vector <cOM> &objectMatches)
+void cSource::subtract(int o,vector <cOM> &objectMatches)
 { LFS
 	vector <cOM>::iterator w=in(o,objectMatches);
 	if (w!=objectMatches.end())
 		objectMatches.erase(w);
 }
 
-int Source::getLastSpeakerGroup(int o,int lastSG)
+int cSource::getLastSpeakerGroup(int o,int lastSG)
 { LFS
 	lastSG--;
   for (vector <cSpeakerGroup>::iterator sg=speakerGroups.begin()+lastSG; lastSG>=0; sg--,lastSG--)
@@ -510,7 +510,7 @@ int Source::getLastSpeakerGroup(int o,int lastSG)
 	return -1;
 }
 
-void Source::determineSubgroupFromGroups(cSpeakerGroup &sg)
+void cSource::determineSubgroupFromGroups(cSpeakerGroup &sg)
 { LFS
 	wstring tmpstr;
 	for (vector < cSpeakerGroup::cGroup >::iterator gi=sg.groups.begin(),giEnd=sg.groups.end(); gi!=giEnd; gi++)
@@ -535,7 +535,7 @@ void Source::determineSubgroupFromGroups(cSpeakerGroup &sg)
 	}
 }
 
-void Source::determinePreviousSubgroup(int where,int whichSG,cSpeakerGroup *lastSG)
+void cSource::determinePreviousSubgroup(int where,int whichSG,cSpeakerGroup *lastSG)
 { LFS
 	if (whichSG<0) return;
 	vector <int> preferredMPluralGroup;
@@ -728,7 +728,7 @@ void Source::determinePreviousSubgroup(int where,int whichSG,cSpeakerGroup *last
 }
 
 // remove hail objects that have not been detected any other way than through hail.
-void Source::eliminateSpuriousHailSpeakers(int begin,int end,cSpeakerGroup &sg,bool speakerGroupCrossesSectionBoundary)
+void cSource::eliminateSpuriousHailSpeakers(int begin,int end,cSpeakerGroup &sg,bool speakerGroupCrossesSectionBoundary)
 { LFS
 	wstring tmpstr;
 	// eliminate all speakers having only PISHail counts
@@ -777,7 +777,7 @@ void Source::eliminateSpuriousHailSpeakers(int begin,int end,cSpeakerGroup &sg,b
 
 // take the intersection between the current and future speaker groups.  If the current has an unresolvable object,
 // and the next speakerGroup has an object not contained in the previous speakerGroup, allow the current to be merged into the future.
-int Source::detectUnresolvableObjectsResolvableThroughSpeakerGroup(void)
+int cSource::detectUnresolvableObjectsResolvableThroughSpeakerGroup(void)
 { LFS
 	if (speakerGroups.empty()) return false;
 	set <int> futureSpeakers=tempSpeakerGroup.speakers,currentSpeakers=speakerGroups[speakerGroups.size()-1].speakers;
@@ -832,7 +832,7 @@ int Source::detectUnresolvableObjectsResolvableThroughSpeakerGroup(void)
 // if all of tempSpeakerGroup occurred in the last speaker group, merge all and extend last speaker group.
 // if all but one occurred in last speaker group and last speaker group only contained one speaker, add the one that did not occur to last speaker group and extend last speaker group
 // if more than one did not occur in last speaker group or last speaker group contained more than one speaker, create a new speaker group.
-bool Source::createSpeakerGroup(int begin,int end,bool endOfSection,int &lastSpeakerGroupOfPreviousSection)
+bool cSource::createSpeakerGroup(int begin,int end,bool endOfSection,int &lastSpeakerGroupOfPreviousSection)
 { LFS
 	if (begin==end)
 		return false;
@@ -1167,7 +1167,7 @@ bool Source::createSpeakerGroup(int begin,int end,bool endOfSection,int &lastSpe
 
 wchar_t *metaResponse[]={ L"reply",L"response", L"answer", NULL }; // initialized
 
-bool Source::setPOVStatus(int where,bool inPrimaryQuote,bool inSecondaryQuote)
+bool cSource::setPOVStatus(int where,bool inPrimaryQuote,bool inSecondaryQuote)
 { LFS
 	wstring tmpstr;
 	if (m[where].flags&WordMatch::flagAdjectivalObject)
@@ -1213,7 +1213,7 @@ bool Source::setPOVStatus(int where,bool inPrimaryQuote,bool inSecondaryQuote)
 	return false;
 }
 
-bool Source::notPhysicallyPresentByMissive(int where)
+bool cSource::notPhysicallyPresentByMissive(int where)
 { LFS
 	if (m[where].getRelVerb()>=0 && m[m[where].getRelVerb()].relPrep>=0 && m[m[m[where].getRelVerb()].relPrep].word->first==L"in" && 
 		  m[m[m[where].getRelVerb()].relPrep].getRelObject()>=0 && m[m[m[m[where].getRelVerb()].relPrep].getRelObject()].getObject()>=0)
@@ -1254,7 +1254,7 @@ bool Source::notPhysicallyPresentByMissive(int where)
 }
 
 // in secondary quotes, inPrimaryQuote=false
-bool Source::isFocus(int where,bool inPrimaryQuote,bool inSecondaryQuote,int o,bool &isNotPhysicallyPresent,bool subjectAllowPrep)
+bool cSource::isFocus(int where,bool inPrimaryQuote,bool inSecondaryQuote,int o,bool &isNotPhysicallyPresent,bool subjectAllowPrep)
 { LFS
 	if (o<0 || objects[o].isKindOf) return false;
 	wstring tmpstr,tmpstr2;
@@ -1443,7 +1443,7 @@ bool Source::isFocus(int where,bool inPrimaryQuote,bool inSecondaryQuote,int o,b
 }
 
 // in secondary quotes, inPrimaryQuote=false
-bool Source::mergeFocus(bool inPrimaryQuote,bool inSecondaryQuote,int o,int where,vector <int> &lastSubjects,bool &clearBeforeSet)
+bool cSource::mergeFocus(bool inPrimaryQuote,bool inSecondaryQuote,int o,int where,vector <int> &lastSubjects,bool &clearBeforeSet)
 { LFS
   // if subject or (object of preposition "to", if mentioned previously)
 	bool isNotPhysicallyPresent=false,anySubject=false;
@@ -1519,7 +1519,7 @@ bool Source::mergeFocus(bool inPrimaryQuote,bool inSecondaryQuote,int o,int wher
 	return anySubject;
 }
 
-void Source::mergeObjectIntoSpeakerGroup(int where,int speakerObject)
+void cSource::mergeObjectIntoSpeakerGroup(int where,int speakerObject)
 { LFS
   wstring tmpstr,tmpstr2;
   set <int>::iterator mergedSpeakerObject;
@@ -1579,7 +1579,7 @@ void Source::mergeObjectIntoSpeakerGroup(int where,int speakerObject)
 // if this is punctuation, but it is actually matched by a pattern, then
 //    the punctuation is really not the end of a sentence. (abbreviation)
 // also if there is : followed by an paragraph end or a dash or period followed by a quote.
-bool Source::isEOS(int where)
+bool cSource::isEOS(int where)
 { LFS
   vector <WordMatch>::iterator im=m.begin()+where;
   return (im->word->first==L"?" || im->word->first==L"!" || im->word->first==L";" || (im->word->first==L"." && !im->PEMACount) ||
@@ -1588,14 +1588,14 @@ bool Source::isEOS(int where)
             (m[where+1].word->first==L"”" || m[where+1].word->first==L"’")));
 }
 
-bool Source::isPleonastic(tIWMM w)
+bool cSource::isPleonastic(tIWMM w)
 { LFS
   return /*w->first==L"it" || */w->first==L"what" || w->first==L"where" || w->first==L"there" || w->first==L"here"; // || w->first==L"that"; // 'this and 'that' refers to something immediately before, and so are resolvable. || subjectWord->first==L"this" || subjectWord->first==L"that"))
 }
 
 // the following has two subchains: (Siebel and his flowers), (Faust and Mephistopheles)
 // Marguerite with her box of jewels, the church scene, Siebel and his flowers, and Faust and Mephistopheles.
-bool Source::compoundObjectSubChain(vector < int > &objectPositions)
+bool cSource::compoundObjectSubChain(vector < int > &objectPositions)
 { LFS
 	if (objectPositions.empty()) return false;
 	if (m[objectPositions[0]].previousCompoundPartObject>=0 && m[objectPositions[0]].nextCompoundPartObject<0 && objectPositions.size()==2)
@@ -1606,7 +1606,7 @@ bool Source::compoundObjectSubChain(vector < int > &objectPositions)
 	return I==objectPositions.size();
 }
 
-void Source::translateBodyObjects(cSpeakerGroup &sg)
+void cSource::translateBodyObjects(cSpeakerGroup &sg)
 { LFS
 	wstring tmpstr;
 	vector <int> translatedBodyObjects;
@@ -1635,7 +1635,7 @@ void Source::translateBodyObjects(cSpeakerGroup &sg)
 }
 
 // if the subject of the only sentence in the paragraph indicates the character of the response, then don't split speakerGroup
-int Source::detectMetaResponse(int I,int element)
+int cSource::detectMetaResponse(int I,int element)
 { LFS
 	wstring tmpstr;
 	if (m[I].skipResponse>=0) 
@@ -1722,14 +1722,14 @@ int Source::detectMetaResponse(int I,int element)
 	return -1;
 }
 
-bool Source::skipMetaResponse(int &I)
+bool cSource::skipMetaResponse(int &I)
 { LFS
 	if (m[I].skipResponse<0) return false;
 	I=m[I].skipResponse;
 	return true;
 }
 
-void Source::associatePossessions(int where)
+void cSource::associatePossessions(int where)
 { LFS
 	if (m[where].objectMatches.size()>1 || (m[where].flags&WordMatch::flagInPStatement)) return;
   int o=m[where].getObject(),ro=m[where].getRelObject(),wv=m[where].getRelVerb(); // rs=m[where].relSubject,
@@ -1752,7 +1752,7 @@ void Source::associatePossessions(int where)
 	}
 }
 
-void Source::associateNyms(int where)
+void cSource::associateNyms(int where)
 { LFS
 	if (m[where].objectMatches.size()>1 || (m[where].flags&WordMatch::flagInPStatement)) return;
 	wstring tmpstr;
@@ -1886,7 +1886,7 @@ void Source::associateNyms(int where)
 }
 
 // recognize environmentally implicit objects
-bool Source::implicitObject(int where)
+bool cSource::implicitObject(int where)
 { LFS
 	if (where>=0 && m[where].getObject()>=0 && ((m[where].objectRole&SUBJECT_ROLE) || (m[where].objectRole&(IS_OBJECT_ROLE|SUBJECT_PLEONASTIC_ROLE))==(IS_OBJECT_ROLE|SUBJECT_PLEONASTIC_ROLE)) && 
 		  unResolvablePosition(m[where].beginObjectPosition))
@@ -1920,7 +1920,7 @@ const wchar_t *intString(int startPOVI,int povi,vector <int> &povInSpeakerGroups
 
 // distribute povInSpeakerGroups and definitelyIdentifiedAsSpeakerInSpeakerGroups
 // to povSpeakers and dnSpeakers in speakerGroups.
-void Source::distributePOV(void)
+void cSource::distributePOV(void)
 { LFS
 	// distribute people named as others in conversations (to lessen the risk of named supposedly hailed objects actually being talked about, rather than physically there)
 	int povi=0,dni=0,sgi=0,mi,currentQuote=firstQuote;
@@ -2306,7 +2306,7 @@ void Source::distributePOV(void)
 	}
 }
 
-bool Source::invalidGroupObjectClass(int oc)
+bool cSource::invalidGroupObjectClass(int oc)
 { LFS
 	  return oc!=NAME_OBJECT_CLASS && oc!=GENDERED_GENERAL_OBJECT_CLASS && 
 	   oc!=BODY_OBJECT_CLASS && oc!=GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS && 
@@ -2314,7 +2314,7 @@ bool Source::invalidGroupObjectClass(int oc)
 		 oc!=META_GROUP_OBJECT_CLASS;
 }
 
-void Source::accumulateGroups(int where, vector <int> &groupedObjects, int &lastWhereMPluralGroupedObject)
+void cSource::accumulateGroups(int where, vector <int> &groupedObjects, int &lastWhereMPluralGroupedObject)
 {
 	LFS
 	vector <WordMatch>::iterator im = m.begin() + where;
@@ -2469,7 +2469,7 @@ void Source::accumulateGroups(int where, vector <int> &groupedObjects, int &last
 	}
 }
 
-bool Source::sameSpeaker(int sWhere1,int sWhere2)
+bool cSource::sameSpeaker(int sWhere1,int sWhere2)
 { LFS
 	if (sWhere1==-1 || sWhere2==-1)
 		return true;
@@ -2485,7 +2485,7 @@ bool Source::sameSpeaker(int sWhere1,int sWhere2)
 }
 
 // CMREADME019
-void Source::embeddedStory(int where,int &numPastSinceLastQuote,int &numNonPastSinceLastQuote,int &numSecondInQuote,int &numFirstInQuote,
+void cSource::embeddedStory(int where,int &numPastSinceLastQuote,int &numNonPastSinceLastQuote,int &numSecondInQuote,int &numFirstInQuote,
 													 int &lastEmbeddedStory,int &lastEmbeddedImposedSpeakerPosition,int lastSpeakerPosition)
 { LFS
 	bool mustBeExtension=false;
@@ -2575,7 +2575,7 @@ void Source::embeddedStory(int where,int &numPastSinceLastQuote,int &numNonPastS
 	numPastSinceLastQuote=numNonPastSinceLastQuote=numSecondInQuote=numFirstInQuote=0;
 }
 
-void Source::adjustHailRoleDuringScan(int where)
+void cSource::adjustHailRoleDuringScan(int where)
 { LFS
 	vector <WordMatch>::iterator im=m.begin()+where;
 	unsigned __int64 or=im->objectRole&(HAIL_ROLE|MPLURAL_ROLE|RE_OBJECT_ROLE);
@@ -2635,7 +2635,7 @@ void Source::adjustHailRoleDuringScan(int where)
 	}
 }
 
-void Source::eraseAliasesAndReplacementsInSpeakerGroups(void)
+void cSource::eraseAliasesAndReplacementsInSpeakerGroups(void)
 { LFS
 	for (vector <cSpeakerGroup>::iterator sg=speakerGroups.begin(); sg!=speakerGroups.end() && (sg+1)!=speakerGroups.end(); )
 		if (eraseAliasesAndReplacementsInSpeakerGroup(sg,false) && sg->speakers.size()==1 && 
@@ -2663,7 +2663,7 @@ void Source::eraseAliasesAndReplacementsInSpeakerGroups(void)
 			sg++;
 }
 
-bool Source::blockSpeakerGroupCreation(int endSection,bool quotesSeenSinceLastSentence,int nsAfter)
+bool cSource::blockSpeakerGroupCreation(int endSection,bool quotesSeenSinceLastSentence,int nsAfter)
 { LFS
 	bool block=false;
 	if (quotesSeenSinceLastSentence) // if the previous paragraph was a quote
@@ -2701,7 +2701,7 @@ bool Source::blockSpeakerGroupCreation(int endSection,bool quotesSeenSinceLastSe
 	return block|(endSection && m[endSection-1].word->first==L":");
 }
 
-int Source::getSpeakersToKeep(vector<cSpaceRelation>::iterator sr)
+int cSource::getSpeakersToKeep(vector<cSpaceRelation>::iterator sr)
 { LFS
 	vector <cLocalFocus>::iterator llsi;
 	int numPPSpeakers=0,keepPPSpeakerWhere=sr->whereSubject; // lastPPSpeaker=-1,
@@ -2725,7 +2725,7 @@ int Source::getSpeakersToKeep(vector<cSpaceRelation>::iterator sr)
 	return keepPPSpeakerWhere;
 }
 
-void Source::beginSection(int &lastSpeakerGroupPositionConsidered, int &lastSpeakerGroupOfPreviousSection, int I, vector <int> &previousLastSubjects, vector <int> &lastSubjects)
+void cSource::beginSection(int &lastSpeakerGroupPositionConsidered, int &lastSpeakerGroupOfPreviousSection, int I, vector <int> &previousLastSubjects, vector <int> &lastSubjects)
 {
 	wstring tmpstr, tmpstr2, tmpstr3, tmpstr4, tmpstr5, tmpstr6;
 	if (debugTrace.traceSpeakerResolution)
@@ -2771,7 +2771,7 @@ void Source::beginSection(int &lastSpeakerGroupPositionConsidered, int &lastSpea
 	clearNextSection(I, section - 1);
 }
 
-void Source::endSection(int &questionSpeakerLastParagraph, int &questionSpeakerLastSentence, int &whereFirstSubjectInParagraph, int &lastSpeakerGroupPositionConsidered, int &lastSpeakerGroupOfPreviousSection, int I,
+void cSource::endSection(int &questionSpeakerLastParagraph, int &questionSpeakerLastSentence, int &whereFirstSubjectInParagraph, int &lastSpeakerGroupPositionConsidered, int &lastSpeakerGroupOfPreviousSection, int I,
 	bool &endOfSentence, bool &immediatelyAfterEndOfParagraph, bool &quotesSeenSinceLastSentence, bool inSecondaryQuote, bool inPrimaryQuote, bool &quotesSeen, bool &firstQuotedSentenceOfSpeakerGroupNotSeen,
 	vector <int> previousLastSubjects)
 {
@@ -2867,7 +2867,7 @@ void Source::endSection(int &questionSpeakerLastParagraph, int &questionSpeakerL
 // in the previous series, then extend the previous series to the end of the current one.
 // if the series has the same speakers as the previous, extend the previous one.
 // resolve all objects outside quotes.
-void Source::identifySpeakerGroups()
+void cSource::identifySpeakerGroups()
 { LFS 
   bool quotesSeen=false,quotesSeenSinceLastSentence=false,endOfSentence=false,immediatelyAfterEndOfParagraph=true,inPrimaryQuote=false,inSecondaryQuote=false,currentIsQuestion=false;
 	bool firstQuotedSentenceOfSpeakerGroupNotSeen=true,transitionSinceEOS=false;

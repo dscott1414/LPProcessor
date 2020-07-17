@@ -205,7 +205,7 @@ void defineTimePatterns()
 												2,L"noun|day{TIMECAPACITY}",L"noun|morrow{TIMECAPACITY}",0,1,1,0);
 }
 
-bool Source::evaluateHOUR(int where,cTimeInfo &t)
+bool cSource::evaluateHOUR(int where,cTimeInfo &t)
 { LFS
 	if (m[where].queryWinnerForm(L"Number")>=0)
 	{
@@ -233,7 +233,7 @@ bool Source::evaluateHOUR(int where,cTimeInfo &t)
 	return true;
 }
 
-bool Source::evaluateDateTime(vector <tTagLocation> &tagSet,cTimeInfo &t,cTimeInfo &rt,bool &rtSet)
+bool cSource::evaluateDateTime(vector <tTagLocation> &tagSet,cTimeInfo &t,cTimeInfo &rt,bool &rtSet)
 { LFS
 	t.clear();
 	rt.clear();
@@ -440,7 +440,7 @@ bool Source::evaluateDateTime(vector <tTagLocation> &tagSet,cTimeInfo &t,cTimeIn
 
 // only copy previous time
 // the next year or two.
-void Source::copyTimeInfoNum(vector <cTimeInfo>::iterator previousTime,cTimeInfo &t,int num)
+void cSource::copyTimeInfoNum(vector <cTimeInfo>::iterator previousTime,cTimeInfo &t,int num)
 { LFS
 	t.timeCapacity=previousTime->timeCapacity;
 	if (previousTime->absDayOfMonth>=0)
@@ -487,7 +487,7 @@ void Source::copyTimeInfoNum(vector <cTimeInfo>::iterator previousTime,cTimeInfo
 	}
 }
 
-bool Source::detectTimeTransition(int where,vector <cSpaceRelation>::iterator csr,cTimeInfo &timeInfo)
+bool cSource::detectTimeTransition(int where,vector <cSpaceRelation>::iterator csr,cTimeInfo &timeInfo)
 { LFS
 	if (m[where].getObject()>=0)
 	{
@@ -578,7 +578,7 @@ bool Source::detectTimeTransition(int where,vector <cSpaceRelation>::iterator cs
 	return csr->tft.timeTransition;
 }
 
-void Source::markTime(int where,int begin,int len)
+void cSource::markTime(int where,int begin,int len)
 { LFS
 	int color=m[where].getMainEntry()->second.timeFlags;
 	if (!color && m[where].relPrep>=0)
@@ -600,7 +600,7 @@ void Source::markTime(int where,int begin,int len)
 	}
 }
 
-bool Source::evaluateTimePattern(int beginObjectPosition,int &maxLen,cTimeInfo &t,cTimeInfo &rt,bool &rtSet)
+bool cSource::evaluateTimePattern(int beginObjectPosition,int &maxLen,cTimeInfo &t,cTimeInfo &rt,bool &rtSet)
 { LFS
 	int element;
 	if ((element=m[beginObjectPosition].pma.queryPattern(L"_TIME",maxLen))!=-1 ||
@@ -620,7 +620,7 @@ bool Source::evaluateTimePattern(int beginObjectPosition,int &maxLen,cTimeInfo &
 	return false;
 }
 
-bool Source::identifyDateTime(int where,vector <cSpaceRelation>::iterator csr,int &maxLen,int inMultiObject)
+bool cSource::identifyDateTime(int where,vector <cSpaceRelation>::iterator csr,int &maxLen,int inMultiObject)
 { LFS
 	if (where<0 || (m[where].flags&WordMatch::flagAlreadyTimeAnalyzed)) return false;
 	bool rtSet=false;
@@ -1252,7 +1252,7 @@ wstring senseString(wstring &s,int verbSense)
 	return s;
 };
 
-bool Source::ageTransition(int where,bool timeTransition,bool &transitionSinceEOS,int duplicateFromWhere,int exceptWhere,vector <int> &lastSubjects,wchar_t *fromWhere)
+bool cSource::ageTransition(int where,bool timeTransition,bool &transitionSinceEOS,int duplicateFromWhere,int exceptWhere,vector <int> &lastSubjects,wchar_t *fromWhere)
 { LFS
 	if (duplicateFromWhere>=0 && transitionSinceEOS)
 		return false;
@@ -1330,7 +1330,7 @@ bool Source::ageTransition(int where,bool timeTransition,bool &transitionSinceEO
 	return true;
 }
 
-bool Source::rejectTimeWord(int where,int begin)
+bool cSource::rejectTimeWord(int where,int begin)
 { LFS
 		wstring moment=m[where].getMainEntry()->first;
 		// second or minute doesn't work because the assumption of everyone being somewhere else is not necessarily true
@@ -1360,7 +1360,7 @@ bool Source::rejectTimeWord(int where,int begin)
 		return false;
 }
 
-bool Source::resolveTimeRange(int where,int pmaOffset,vector <cSpaceRelation>::iterator csr)
+bool cSource::resolveTimeRange(int where,int pmaOffset,vector <cSpaceRelation>::iterator csr)
 { LFS
 	vector <int> objectPositions;
 	vector < vector <tTagLocation> > mobjectTagSets;
@@ -1399,7 +1399,7 @@ bool Source::resolveTimeRange(int where,int pmaOffset,vector <cSpaceRelation>::i
 	return false;
 }
 
-bool Source::stopSearch(int I)
+bool cSource::stopSearch(int I)
 { LFS
 	return isEOS(I) || m[I].word==Words.sectionWord || ((m[I].word->first==L"“" || m[I].word->first==L"”") && !(m[I].flags&WordMatch::flagQuotedString));
 }
@@ -1408,7 +1408,7 @@ bool Source::stopSearch(int I)
 // if there is no conjunction between them, simply copy all time expressions.
 // if there is a conjunction between them, then move all time expressions after the current space relation
 //    from the previous time relation to the current one.
-void Source::distributeTimeRelations(vector <cSpaceRelation>::iterator csr,vector <cSpaceRelation>::iterator previousRelation,int conjunctionPassed)
+void cSource::distributeTimeRelations(vector <cSpaceRelation>::iterator csr,vector <cSpaceRelation>::iterator previousRelation,int conjunctionPassed)
 { LFS
 	if (conjunctionPassed==-1)
 	{
@@ -1438,7 +1438,7 @@ void Source::distributeTimeRelations(vector <cSpaceRelation>::iterator csr,vecto
 		previousRelation->tft.timeTransition=false;
 }
 
-void Source::appendTime(vector <cSpaceRelation>::iterator csr)
+void cSource::appendTime(vector <cSpaceRelation>::iterator csr)
 { LFS
 	if (csr->timeInfoSet) return;
 	int maxLen=-1;
@@ -1577,7 +1577,7 @@ void Source::appendTime(vector <cSpaceRelation>::iterator csr)
 }
 
 // will change source.m (invalidate all iterators through the use of newSR)
-void Source::detectTimeTransition(int where,vector <int> &lastSubjects)
+void cSource::detectTimeTransition(int where,vector <int> &lastSubjects)
 { LFS
 	int timeType=-1,whereTime=-1;
 	bool timeTransition=false;
@@ -1717,7 +1717,7 @@ void Source::detectTimeTransition(int where,vector <int> &lastSubjects)
 	}
 }
 
-int Source::getVerbTense(vector <tTagLocation> &tagSet,int verbTagIndex,bool &isId)
+int cSource::getVerbTense(vector <tTagLocation> &tagSet,int verbTagIndex,bool &isId)
 { LFS
 	if (!tagSetTimeArraySize)
 		tagSetTimeArray=(char *)tmalloc(tagSetTimeArraySize=desiredTagSets[verbSenseTagSet].tags.size());
@@ -1808,7 +1808,7 @@ int Source::getVerbTense(vector <tTagLocation> &tagSet,int verbTagIndex,bool &is
 	return tense;
 }
 
-int Source::getSimplifiedTense(int tense)
+int cSource::getSimplifiedTense(int tense)
 { LFS
 	if (tense==-1) return -1;
 	wstring tmp;
@@ -2405,7 +2405,7 @@ VT_EXTENDED + VT_PRESENT_PERFECT,VT_PASSIVE+ VT_PRESENT_PERFECT,VT_PASSIVE+ VT_P
 VT_PASSIVE+ VT_PRESENT_PERFECT+VT_EXTENDED,VT_PASSIVE+ VT_PRESENT+VT_EXTENDED+VT_VERB_CLAUSE};
 
 
-void Source::printTenseStatistic(cTenseStat &tenseStatistics,int sense,int numTotal)
+void cSource::printTenseStatistic(cTenseStat &tenseStatistics,int sense,int numTotal)
 { LFS
 	wstring followedByStr,infinitiveStr;
 	for (unsigned int J=0; J<NUM_SIMPLE_TENSE; J++)
@@ -2444,7 +2444,7 @@ void Source::printTenseStatistic(cTenseStat &tenseStatistics,int sense,int numTo
 					tenseStatistics.occurrence,tenseStatistics.occurrence*100/numTotal,tenseStatistics.passiveOccurrence,followedByStr.c_str(),infinitiveStr.c_str());
 }
 
-void Source::printTenseStatistics(wchar_t *fromWhere,cTenseStat tenseStatistics[],int numTotal)
+void cSource::printTenseStatistics(wchar_t *fromWhere,cTenseStat tenseStatistics[],int numTotal)
 { LFS
 	int numPrintTotal=0;
 	for (unsigned int I=0; I<NUM_SIMPLE_TENSE; I++)
@@ -2455,7 +2455,7 @@ void Source::printTenseStatistics(wchar_t *fromWhere,cTenseStat tenseStatistics[
 		printTenseStatistic(tenseStatistics[I],sts[I],numTotal);
 }
 
-void Source::printTenseStatistics(wchar_t *fromWhere, unordered_map <int,cTenseStat> &tenseStatistics,int numTotal)
+void cSource::printTenseStatistics(wchar_t *fromWhere, unordered_map <int,cTenseStat> &tenseStatistics,int numTotal)
 { LFS
 	if (!tenseStatistics.size()) return;
 	lplog(L"%s: %d Total",fromWhere,numTotal);
@@ -2477,7 +2477,7 @@ wstring timeString(int timeWordFlags,wstring &s)
 }
 
 // look up last timeline segment belonging to speakers
-bool Source::determineTimelineSegmentLink()
+bool cSource::determineTimelineSegmentLink()
 { LFS
 	return false;
 }
@@ -2486,7 +2486,7 @@ bool Source::determineTimelineSegmentLink()
 // people to another separate group in another location/time.
 // executed before marking any speaker non-physical (as part of the transition aging to any new speaker group).
 // sets tlTransition flag of speaker group.
-bool Source::speakerGroupTransition(int where,int sg,bool forwardTransition)
+bool cSource::speakerGroupTransition(int where,int sg,bool forwardTransition)
 { LFS
 	if (!sg) return false;
 	bool allNew=true,allNotPhysicallyPresent=true;
@@ -2535,7 +2535,7 @@ bool Source::speakerGroupTransition(int where,int sg,bool forwardTransition)
         then continue existing SPT.  If no speaker entered, or if established place (must be near the beginning of the SG) is different than current
         place, then set SPT to last SPT for any speaker.
 */
-void Source::initializeTimelineSegments(void)
+void cSource::initializeTimelineSegments(void)
 { LFS
 	cTimelineSegment ts;
 	ts.begin=0;
@@ -2545,7 +2545,7 @@ void Source::initializeTimelineSegments(void)
 	timelineSegments.push_back(ts);
 }
 
-void Source::createTimelineSegment(int where)
+void cSource::createTimelineSegment(int where)
 { LFS
   vector <cSpaceRelation>::iterator sr = findSpaceRelation(where);
 	if (sr!=spaceRelations.end() && sr->where==where)

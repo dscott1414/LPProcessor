@@ -570,7 +570,7 @@ void createQuestionPatterns(void)
 //   the next subject matching should be the opposite of the speaker of the question.
 //   AND the previous speaker of the question should be the opposite of the next subject.
 // exception: if the last sentence ends in a ... .
-void Source::setQuestion(vector <WordMatch>::iterator im,bool inQuote,int &questionSpeakerLastSentence,int &questionSpeaker,bool &currentIsQuestion)
+void cSource::setQuestion(vector <WordMatch>::iterator im,bool inQuote,int &questionSpeakerLastSentence,int &questionSpeaker,bool &currentIsQuestion)
 { LFS
 	currentIsQuestion=false;
 	int openingQuote=lastOpeningPrimaryQuote;
@@ -631,7 +631,7 @@ void Source::setQuestion(vector <WordMatch>::iterator im,bool inQuote,int &quest
 	}
 }
 
-void Source::setSecondaryQuestion(vector <WordMatch>::iterator im)
+void cSource::setSecondaryQuestion(vector <WordMatch>::iterator im)
 { LFS
   for (vector <WordMatch>::iterator imEOS=++im; imEOS!=m.end() && (imEOS->word->first!=L"’"); imEOS++)
 	{
@@ -651,7 +651,7 @@ void Source::setSecondaryQuestion(vector <WordMatch>::iterator im)
 }
 
 // returns true if the question speaker is different than the subject of the next paragraph.
-bool Source::questionAgreement(int where,int whereFirstSubjectInParagraph,int questionSpeakerLastParagraph,vector <cOM> &objectMatches,bool &subjectDefinitelyResolved,bool audience,wchar_t *fromWhere)
+bool cSource::questionAgreement(int where,int whereFirstSubjectInParagraph,int questionSpeakerLastParagraph,vector <cOM> &objectMatches,bool &subjectDefinitelyResolved,bool audience,wchar_t *fromWhere)
 { LFS
 	if (whereFirstSubjectInParagraph>=0 && 
 		  m[whereFirstSubjectInParagraph].getObject()>=0 && !objects[m[whereFirstSubjectInParagraph].getObject()].plural)
@@ -682,7 +682,7 @@ bool Source::questionAgreement(int where,int whereFirstSubjectInParagraph,int qu
 }
 
 // if a question is rhetorical, this inversion should be cancelled (future - how to tell whether a question is rhetorical)
-void Source::correctBySpeakerInversionIfQuestion(int where,int whereFirstSubjectInParagraph)
+void cSource::correctBySpeakerInversionIfQuestion(int where,int whereFirstSubjectInParagraph)
 { LFS
 	wstring tmpstr;
 	bool subjectDefinitelyResolved;
@@ -748,7 +748,7 @@ void Source::correctBySpeakerInversionIfQuestion(int where,int whereFirstSubject
 	}
 }
 
-bool Source::testQuestionType(int where,int &whereQuestionType,int &whereQuestionTypeFlags,int setType,set <int> &whereQuestionInformationSourceObjects)
+bool cSource::testQuestionType(int where,int &whereQuestionType,int &whereQuestionTypeFlags,int setType,set <int> &whereQuestionInformationSourceObjects)
 { LFS
 	int oc;
 	if (where<0)
@@ -794,7 +794,7 @@ bool Source::testQuestionType(int where,int &whereQuestionType,int &whereQuestio
 	return false;
 }
 
-int Source::getMinPosition(int where)
+int cSource::getMinPosition(int where)
 { LFS
 	int p=m[where].beginPEMAPosition;
 	if (p<0) return 0;
@@ -808,7 +808,7 @@ int Source::getMinPosition(int where)
 	return mp;
 }
 
-int Source::maxBackwards(int where)
+int cSource::maxBackwards(int where)
 { LFS
 	int w=getMinPosition(where)+where;
 	while (w<where)
@@ -829,7 +829,7 @@ int Source::maxBackwards(int where)
 // whereQuestionType flag 
 //   referencingObject, subject, object, secondary object, prep object, etc
 //   OR an adjective OF same
-void Source::processQuestion(int whereVerb,int whereReferencingObject,__int64 &questionType,int &whereQuestionType,set <int> &whereQuestionInformationSourceObjects)
+void cSource::processQuestion(int whereVerb,int whereReferencingObject,__int64 &questionType,int &whereQuestionType,set <int> &whereQuestionInformationSourceObjects)
 { LFS
 	int wp=m[whereVerb].relPrep,prepLoop=0,bp,wpo,whereQuestionTypeFlags=0,relObject;
 	//bool wqtAdjective=false;

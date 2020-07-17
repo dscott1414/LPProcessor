@@ -26,7 +26,7 @@ bool checkFull(MYSQL *mysql,wchar_t *qt,size_t &len,bool flush,wchar_t *qualifie
 //maxPrimarySynonymAccumulatedSize = 86
 //maxConceptSize = 35
 
-int Source::createThesaurusTables()
+int cSource::createThesaurusTables()
 {
 	if (!myquery(&mysql, L"CREATE TABLE thesaurus ("
 		L"mainEntry CHAR(32) CHARACTER SET utf8mb4 NOT NULL, INDEX me_ind (mainEntry), "
@@ -50,7 +50,7 @@ vector <string> rest;
 } sDefinition;
 
 */
-int Source::writeThesaurusEntry(sDefinition &d)
+int cSource::writeThesaurusEntry(sDefinition &d)
 {
 	wchar_t qt[4096];
 	char *wt[] = { "adj", "adv", "prep", "pron", "conj", "det", "interj", "n", "v", NULL };
@@ -80,7 +80,7 @@ int Source::writeThesaurusEntry(sDefinition &d)
 }
 
 // thse are not used and do not exist within the database
-int Source::createGroupTables(void)
+int cSource::createGroupTables(void)
 { LFS
   if (!myquery(&mysql,L"CREATE TABLE groups (groupId int(11) unsigned NOT NULL, "
     L"typeId SMALLINT UNSIGNED NOT NULL, INDEX t_ind(typeId), "
@@ -96,7 +96,7 @@ int Source::createGroupTables(void)
 }
 
 // thse are not used and do not exist within the database
-int Source::createLocationTables(void)
+int cSource::createLocationTables(void)
 { LFS
 	/*
 		locations table:
@@ -122,7 +122,7 @@ int Source::createLocationTables(void)
 	return 0;
 }
 
-int Source::createObjectTables(void)
+int cSource::createObjectTables(void)
 { LFS
   // the name bit will be set so that objectWordMap orderOrType will be defined as a type,
   // hon,hon2,hon3; first; middle,middle2; last; suffix; any;
@@ -151,7 +151,7 @@ int Source::createObjectTables(void)
   return 0;
 }
 
-int Source::createTimeRelationTables(void)
+int cSource::createTimeRelationTables(void)
 { LFS
   // timeGroupMembers: timeRelationId foreign key to timeRelations, objectId, wordRelationId
   if (!myquery(&mysql,L"CREATE TABLE timeGroupMembers ("
@@ -221,7 +221,7 @@ int Source::createTimeRelationTables(void)
 //         index is objectId to Larry
 //         count++;
 
-int Source::createRelationTables(void)
+int cSource::createRelationTables(void)
 { LFS
   if (!myquery(&mysql,L"CREATE TABLE objectRelations (id int(11) unsigned NOT NULL auto_increment unique, "
     L"fromObjectId INT UNSIGNED NOT NULL, INDEX fo_ind (fromObjectId), FOREIGN KEY (fromObjectId) REFERENCES objects(id), "
@@ -378,7 +378,7 @@ int generateBNCSources(MYSQL &mysql,wstring indexFile) // note this is slightly 
       where=(docEnd-buffer)+wcslen(L"</doc>");
     if (genre[wcslen(L"<genre>")]!='W')
       continue;
-		len+=_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L"(%d, \"%s\", \"\", 0),",Source::BNC_SOURCE_TYPE,id);
+		len+=_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L"(%d, \"%s\", \"\", 0),",cSource::BNC_SOURCE_TYPE,id);
     if (!checkFull(&mysql,qt,len,false,NULL)) return -20;
   }
   if (!checkFull(&mysql,qt,len,true,NULL)) return -21;
@@ -398,7 +398,7 @@ int generateNewsBankSources(MYSQL &mysql)
   {
     time_t timer=I*24*3600;
     struct tm *day=gmtime(&timer);
-		len+=_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L"(%d, \"newsbank\\%d\\%I64d.txt\", \"\", 0),",Source::NEWS_BANK_SOURCE_TYPE,day->tm_year+1900,timer/(24*3600));
+		len+=_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L"(%d, \"newsbank\\%d\\%I64d.txt\", \"\", 0),",cSource::NEWS_BANK_SOURCE_TYPE,day->tm_year+1900,timer/(24*3600));
     if (!checkFull(&mysql,qt,len,false,NULL)) return -1;
   }
   if (!checkFull(&mysql,qt,len,true,NULL)) return -1;
@@ -417,7 +417,7 @@ int generateTestSources(MYSQL &mysql)
                        L"verb object",NULL};     
   for (unsigned int I=0; testSources[I]; I++)
   {
-		len+=_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L"(%d, \"tests\\\\%s.txt\", \"~~BEGIN\", 1),",Source::TEST_SOURCE_TYPE,testSources[I]);
+		len+=_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L"(%d, \"tests\\\\%s.txt\", \"~~BEGIN\", 1),",cSource::TEST_SOURCE_TYPE,testSources[I]);
     if (!checkFull(&mysql,qt,len,false,NULL)) return -1;
   }
   if (!checkFull(&mysql,qt,len,true,NULL)) return -1;
@@ -433,18 +433,18 @@ int generateParseRequestSources(MYSQL &mysql,vector <cQuestionAnswering::searchS
 	pathInCache = pathInCache.substr(wcslen(TEXTDIR)+1,pathInCache.length()- wcslen(TEXTDIR)-1);
 	escapeStr(pathInCache);
 	wsprintf(qt, L"INSERT INTO sources (sourceType, etext, path, start, repeatStart, author, title, processing, processed) VALUES (%d,\"%s\",\"%s\",\"\",0,\"\",\"%s\",NULL,NULL)",
-		Source::REQUEST_TYPE, (pri->isSnippet) ? L"snippet" : L"full", pathInCache.c_str(), pri->fullWebPath.c_str());
+		cSource::REQUEST_TYPE, (pri->isSnippet) ? L"snippet" : L"full", pathInCache.c_str(), pri->fullWebPath.c_str());
 		return myquery(&mysql, qt);
 }
 
 int deleteGeneratedParseRequests(MYSQL &mysql)
 {
 	wchar_t qt[1024];
-	wsprintf(qt, L"delete from sources where sourceType=%d",Source::REQUEST_TYPE);
+	wsprintf(qt, L"delete from sources where sourceType=%d",cSource::REQUEST_TYPE);
 	return myquery(&mysql,qt);
 }
 
-int Source::insertWordRelationTypes(void)
+int cSource::insertWordRelationTypes(void)
 { LFS
   wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	wcscpy(qt,L"INSERT INTO wordRelationType VALUES ");
@@ -458,7 +458,7 @@ int Source::insertWordRelationTypes(void)
   return 0;
 }
 
-int Source::createDatabase(wchar_t *server)
+int cSource::createDatabase(wchar_t *server)
 { LFS
   if (!initializeDatabaseHandle(mysql,server,alreadyConnected))
   {

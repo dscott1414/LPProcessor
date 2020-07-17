@@ -21,7 +21,7 @@ public:
 		wstring fullDescriptor;
 		int semanticMismatch;
 		bool subQueryNoMatch, tenseMismatch, confidenceCheck;
-		Source *childSource;
+		cSource *childSource;
 		set <wstring> childSourcePaths;
 		vector <wstring> relationSourcePaths;
 		vector <int> relationWheres;
@@ -30,9 +30,9 @@ public:
 		int childObject;
 		float score;
 		// this is called from the parent
-		int semanticCheck(cQuestionAnswering &qa, cSpaceRelation* parentSRI, Source *parentSource);
-		//void cSemanticMap::cSemanticEntry::printDirectRelations(int logType,Source *parentSource,wstring &path,int where);
-		void printDirectRelations(cQuestionAnswering &qa, int logType, Source *parentSource, wstring &path, int where);
+		int semanticCheck(cQuestionAnswering &qa, cSpaceRelation* parentSRI, cSource *parentSource);
+		//void cSemanticMap::cSemanticEntry::printDirectRelations(int logType,cSource *parentSource,wstring &path,int where);
+		void printDirectRelations(cQuestionAnswering &qa, int logType, cSource *parentSource, wstring &path, int where);
 		cSemanticEntry()
 		{
 			inSource = 0;
@@ -86,7 +86,7 @@ public:
 	set < unordered_map <wstring, cSemanticEntry>::iterator, semanticSetCompare> relativeObjectsSorted;
 	set < unordered_map <wstring, cSemanticEntry>::iterator, semanticSetCompare2> relativeObjectsSorted2;
 	set < unordered_map <wstring, cSemanticEntry>::iterator, semanticSetCompare > suggestedAnswers;
-	void sortAndCheck(cQuestionAnswering &qa,cSpaceRelation* parentSRI, Source *parentSource)
+	void sortAndCheck(cQuestionAnswering &qa,cSpaceRelation* parentSRI, cSource *parentSource)
 	{
 		relativeObjectsSorted.clear();
 		relativeObjectsSorted2.clear();
@@ -111,7 +111,7 @@ public:
 				suggestedAnswers.insert((*sroi));
 		}
 	}
-	void lplogSM(cQuestionAnswering &qa, int logType, Source *parentSource, bool enhanced)
+	void lplogSM(cQuestionAnswering &qa, int logType, cSource *parentSource, bool enhanced)
 	{
 		::lplog(logType, L"SM%s SEMANTIC MAP %d objects %d sources principalObject %s ****************************************************************************",
 			(enhanced) ? L"E" : L"", relativeObjects.size(), sourcePaths.size(), SMPrincipalObject.c_str());

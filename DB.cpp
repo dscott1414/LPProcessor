@@ -105,7 +105,7 @@ bool unlockTables(MYSQL &mysql)
 		return myquery(&mysql, L"UNLOCK TABLES");
 }
 
-bool Source::resetAllSource()
+bool cSource::resetAllSource()
 { LFS
   if (!myquery(&mysql,L"LOCK TABLES sources WRITE")) return false;
   myquery(&mysql,L"update sources set processed=NULL,processing=NULL");
@@ -113,7 +113,7 @@ bool Source::resetAllSource()
   return true;
 }
 
-bool Source::resetSource(int beginSource,int endSource)
+bool cSource::resetSource(int beginSource,int endSource)
 { LFS
   if (!myquery(&mysql,L"LOCK TABLES sources WRITE")) return false;
   wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
@@ -123,14 +123,14 @@ bool Source::resetSource(int beginSource,int endSource)
   return true;
 }
 
-void Source::resetProcessingFlags(void)
+void cSource::resetProcessingFlags(void)
 { LFS
   if (!myquery(&mysql,L"LOCK TABLES sources WRITE")) return;
   myquery(&mysql,L"update sources set processing=NULL");
   unlockTables(mysql);
 }
 
-bool Source::signalBeginProcessingSource(int thisSourceId)
+bool cSource::signalBeginProcessingSource(int thisSourceId)
 {  LFS
   if (!myquery(&mysql,L"LOCK TABLES sources WRITE")) return false;
   wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
@@ -140,7 +140,7 @@ bool Source::signalBeginProcessingSource(int thisSourceId)
   return true;
 }
 
-bool Source::signalFinishedProcessingSource(int thisSourceId)
+bool cSource::signalFinishedProcessingSource(int thisSourceId)
 { LFS
   if (!myquery(&mysql,L"LOCK TABLES sources WRITE")) return false;
   wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
@@ -207,7 +207,7 @@ bool anymoreUnprocessedForUnknown(MYSQL &mysql, int sourceType, int step)
 	return numResults>0;
 }
 
-bool Source::updateSource(wstring &path, wstring &start, int repeatStart, wstring &etext, int actualLenInBytes)
+bool cSource::updateSource(wstring &path, wstring &start, int repeatStart, wstring &etext, int actualLenInBytes)
 {
 	LFS
 		wstring tmp, tmp2, sqlStatement;
@@ -217,7 +217,7 @@ bool Source::updateSource(wstring &path, wstring &start, int repeatStart, wstrin
 	return myquery(&mysql, (wchar_t *)sqlStatement.c_str());
 }
 
-bool Source::updateSourceStart(wstring &start, int repeatStart, wstring &etext, __int64 actualLenInBytes)
+bool cSource::updateSourceStart(wstring &start, int repeatStart, wstring &etext, __int64 actualLenInBytes)
 {
 	LFS
 	wstring tmp, tmp2, sqlStatement;
@@ -228,7 +228,7 @@ bool Source::updateSourceStart(wstring &start, int repeatStart, wstring &etext, 
 	return myquery(&mysql, (wchar_t *)sqlStatement.c_str());
 }
 
-bool Source::updateSourceEncoding(int readBufferType, wstring sourceEncoding,wstring etext)
+bool cSource::updateSourceEncoding(int readBufferType, wstring sourceEncoding,wstring etext)
 {
 	LFS
 	wstring tmp, sqlStatement;
@@ -292,7 +292,7 @@ int initializeDatabaseHandle(MYSQL &mysql,wchar_t *where,bool &alreadyConnected)
 	return -1;
 }
 
-void Source::updateSourceStatistics(int numSentences, int matchedSentences, int numWords, int numUnknown,
+void cSource::updateSourceStatistics(int numSentences, int matchedSentences, int numWords, int numUnknown,
     int numUnmatched,int numOvermatched, int numQuotations, int quotationExceptions, int numTicks, int numPatternMatches)
 { LFS
   wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
@@ -304,7 +304,7 @@ void Source::updateSourceStatistics(int numSentences, int matchedSentences, int 
   myquery(&mysql,qt);
 }
 
-void Source::updateSourceStatistics2(int sizeInBytes, int numWordRelations)
+void cSource::updateSourceStatistics2(int sizeInBytes, int numWordRelations)
 { LFS
   wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
   if (!myquery(&mysql,L"LOCK TABLES sources WRITE")) return;
@@ -312,7 +312,7 @@ void Source::updateSourceStatistics2(int sizeInBytes, int numWordRelations)
   myquery(&mysql,qt);
 }
 
-void Source::updateSourceStatistics3(int numMultiWordRelations)
+void cSource::updateSourceStatistics3(int numMultiWordRelations)
 { LFS
   wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
   if (!myquery(&mysql,L"LOCK TABLES sources WRITE")) return;
@@ -320,7 +320,7 @@ void Source::updateSourceStatistics3(int numMultiWordRelations)
   myquery(&mysql,qt);
 }
 
-int Source::readMultiSourceObjects(tIWMM *wordMap,int numWords)
+int cSource::readMultiSourceObjects(tIWMM *wordMap,int numWords)
 { LFS
   int startTime=clock();
   MYSQL_RES *result=NULL;
@@ -377,7 +377,7 @@ int Source::readMultiSourceObjects(tIWMM *wordMap,int numWords)
 // right now it is assumed that all objects from books are kept separate,
 // so there is no check for merging information between info sources
 // but there is a 'common' list consisting of all multiple-word objects, usually locations.
-int Source::flushObjects(set <int> &objectsToFlush)
+int cSource::flushObjects(set <int> &objectsToFlush)
 {
 	LFS
   wprintf(L"Writing objects to database...\r");

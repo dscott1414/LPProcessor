@@ -485,7 +485,7 @@ bool getSynonymsFromDB(MYSQL mysql,wstring word, vector < set <wstring> > &synon
 }
 
 unordered_map <wstring,vector < set <wstring> > > internalSynonymMap[4];
-void Source::getSynonyms(wstring word, set <wstring> &synonyms, int synonymType)
+void cSource::getSynonyms(wstring word, set <wstring> &synonyms, int synonymType)
 {
 	vector <set <wstring> > synonymsSenses;
 	getSynonyms(word, synonymsSenses, synonymType);
@@ -493,7 +493,7 @@ void Source::getSynonyms(wstring word, set <wstring> &synonyms, int synonymType)
 		synonyms.insert(synonymsSenses[s].begin(), synonymsSenses[s].end());
 }
 
-void Source::getSynonyms(wstring word, vector <set <wstring> > &synonyms, int synonymType)
+void cSource::getSynonyms(wstring word, vector <set <wstring> > &synonyms, int synonymType)
 {
 	LFS
 		// check if word is legal
@@ -549,7 +549,7 @@ void Source::getSynonyms(wstring word, vector <set <wstring> > &synonyms, int sy
 	internalSynonymMap[synonymType][word] = synonyms;
 }
 
-void Source::getWordNetSynonymsOnly(wstring word, vector <set <wstring> > &synonyms, int synonymType)
+void cSource::getWordNetSynonymsOnly(wstring word, vector <set <wstring> > &synonyms, int synonymType)
 {
 	LFS
 	initWordNet();
@@ -1593,7 +1593,7 @@ void analyzeVerbNetClass(int where,wstring in,wstring &proposedSubstitute,int &n
 		proposedSubstitute=coordFamiliarity;
 }
 
-int Source::initializeNounVerbMapping(void)
+int cSource::initializeNounVerbMapping(void)
 { LFS
 	wchar_t *path=L"source\\lists\\nounVerbMapping";
 	initWordNet();

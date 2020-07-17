@@ -708,7 +708,7 @@ void WordMatch::setForm(void)
 }
 
 
-int bncc::processWord(Source &source,int sourceId,wchar_t *buffer,int tag,int secondTag,int &lastSentenceEnd,int &printLocation,int sentence)
+int bncc::processWord(cSource &source,int sourceId,wchar_t *buffer,int tag,int secondTag,int &lastSentenceEnd,int &printLocation,int sentence)
 {
   bool anotherWord=false;
   wstring sWord,comment;
@@ -1020,7 +1020,7 @@ int bncc::processWord(Source &source,int sourceId,wchar_t *buffer,int tag,int se
   return 0;
 }
 
-int bncc::processSentence(Source &source,int sourceId,wchar_t *s,int &lastSentenceEnd,int &printLocation,int sentence)
+int bncc::processSentence(cSource &source,int sourceId,wchar_t *s,int &lastSentenceEnd,int &printLocation,int sentence)
 {
   //unsigned int where=0;
   wchar_t *beginTag=wcschr(s,L'<');
@@ -1135,7 +1135,7 @@ int bncc::processSentence(Source &source,int sourceId,wchar_t *s,int &lastSenten
   }
 }
 
-int bncc::process(Source &source,int sourceId,wstring id)
+int bncc::process(cSource &source,int sourceId,wstring id)
 {
   preTaggedSource=true;
   int printLocation=0;

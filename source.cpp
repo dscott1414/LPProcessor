@@ -737,7 +737,7 @@ void WordMatch::logFormUsageCosts(void)
 	word->second.logFormUsageCosts(word->first);
 }
 
-bool Source::sumMaxLength(unsigned int begin,unsigned int end,unsigned int &matchedTripletSumTotal,int &matchedSentences,bool &containsUnmatchedElement)
+bool cSource::sumMaxLength(unsigned int begin,unsigned int end,unsigned int &matchedTripletSumTotal,int &matchedSentences,bool &containsUnmatchedElement)
 { LFS
 	vector <WordMatch>::iterator im,imend=m.begin()+end;
 	unsigned int matchedTripletSum=0;
@@ -771,7 +771,7 @@ bool Source::sumMaxLength(unsigned int begin,unsigned int end,unsigned int &matc
 	return true;
 }
 
-void Source::setRelPrep(int where,int relPrep,int fromWhere,int setType,int whereVerb)
+void cSource::setRelPrep(int where,int relPrep,int fromWhere,int setType,int whereVerb)
 { LFS
 	int original=m[where].relPrep;
 	m[where].relPrep = relPrep;
@@ -802,7 +802,7 @@ void Source::setRelPrep(int where,int relPrep,int fromWhere,int setType,int wher
 
 // PROLOGUE(0)[1]
 // 000161 _VERBREL1[1](3,4)*0 __ALLVERB[*](4)
-unsigned int Source::getMaxDisplaySize(vector <WordMatch>::iterator &im,int numPosition)
+unsigned int cSource::getMaxDisplaySize(vector <WordMatch>::iterator &im,int numPosition)
 { LFS
 	size_t size=im->word->first.length()+3; // 2 is for the parens
 	if (numPosition>9) size++;
@@ -849,7 +849,7 @@ unsigned int Source::getMaxDisplaySize(vector <WordMatch>::iterator &im,int numP
 	return size;
 }
 
-bool Source::matchPattern(cPattern *p,int begin,int end,bool fill)
+bool cSource::matchPattern(cPattern *p,int begin,int end,bool fill)
 { LFS // DLFS
 	int expense=clock();
 	bool matchFound=false;
@@ -879,13 +879,13 @@ bool Source::matchPattern(cPattern *p,int begin,int end,bool fill)
 	return matchFound;
 }
 
-bool Source::matchPatternAgainstSentence(cPattern *p,int s,bool fill)
+bool cSource::matchPatternAgainstSentence(cPattern *p,int s,bool fill)
 { LFS // DLFS
 	return matchPattern(p,sentenceStarts[s],sentenceStarts[s+1],fill);
 }
 
 
-void Source::logOptimizedString(wchar_t *line,unsigned int lineBufferLen,unsigned int &linepos)
+void cSource::logOptimizedString(wchar_t *line,unsigned int lineBufferLen,unsigned int &linepos)
 { LFS
 	wchar_t dest[2048];
 	if (!linepos)
@@ -923,7 +923,7 @@ void Source::logOptimizedString(wchar_t *line,unsigned int lineBufferLen,unsigne
 	wmemset(line, L' ', lineBufferLen);
 }
 
-int Source::getPEMAPosition(int position,int line)
+int cSource::getPEMAPosition(int position,int line)
 { LFS
 	int PEMAPosition,offset=line;
 	for (PEMAPosition=m[position].beginPEMAPosition; offset>0 && PEMAPosition!=-1; PEMAPosition=pema[PEMAPosition].nextByPosition,offset--);
@@ -937,7 +937,7 @@ int Source::getPEMAPosition(int position,int line)
 // print a sentence
 // end should normally be set to words.size();
 #define LINE_BUFFER_LEN 2048
-int Source::printSentence(unsigned int rowsize,unsigned int begin,unsigned int end,bool containsNotMatched)
+int cSource::printSentence(unsigned int rowsize,unsigned int begin,unsigned int end,bool containsNotMatched)
 { LFS
 	wchar_t printLine[LINE_BUFFER_LEN];
 	wchar_t bufferZone[2048];
@@ -1097,7 +1097,7 @@ bool aloneOnLine(wchar_t *buffer,wchar_t *loc,const wchar_t *pattern,wchar_t *&s
 	return true;
 }
 
-int Source::scanUntil(const wchar_t *start,int repeat,bool printError)
+int cSource::scanUntil(const wchar_t *start,int repeat,bool printError)
 { LFS
 	wchar_t *loc=bookBuffer-1;
 	while ((loc-bookBuffer)<bufferLen)
@@ -1148,7 +1148,7 @@ bool checkIsolated(wchar_t *word,vector <WordMatch> &m,int I)
 // or THE END all in caps, on one line, alone
 // or FOOTNOTES all in caps, on one line, alone
 // or INDEX all in caps, on one line, alone
-bool Source::analyzeEnd(wstring &path,int begin,int end,bool &multipleEnds)
+bool cSource::analyzeEnd(wstring &path,int begin,int end,bool &multipleEnds)
 { LFS
 	int w=0;
 	bool endFound;
@@ -1218,7 +1218,7 @@ bool Source::analyzeEnd(wstring &path,int begin,int end,bool &multipleEnds)
 
 // if date of dictionary or date of cache is before date of source, return true
 // if date of dictionary > date of cache return true
-bool Source::parseNecessary(wchar_t *path)
+bool cSource::parseNecessary(wchar_t *path)
 { LFS
 #ifdef ALWAYS_PARSE
 	return true;
@@ -1247,7 +1247,7 @@ bool Source::parseNecessary(wchar_t *path)
 // the end is an abbreviation
 // it is an expected extension of another chapter heading 
 // the end is NOT in a list of endings
-bool Source::isSectionHeader(unsigned int begin,unsigned int end,unsigned int &sectionEnd)
+bool cSource::isSectionHeader(unsigned int begin,unsigned int end,unsigned int &sectionEnd)
 { LFS
 	if (begin>0 && m[begin-1].word!=Words.sectionWord) return false; // less than two lines before section header - reject
 	if (m[end].word!=Words.sectionWord) return false; // less than two lines after section header - reject
@@ -1280,7 +1280,7 @@ bool Source::isSectionHeader(unsigned int begin,unsigned int end,unsigned int &s
 	return true;
 }
 
-int Source::reportUnmatchedElements(int begin,int end,bool logElements)
+int cSource::reportUnmatchedElements(int begin,int end,bool logElements)
 { LFS
 	if (!debugTrace.traceParseInfo)
 		return 0;
@@ -1325,7 +1325,7 @@ int Source::reportUnmatchedElements(int begin,int end,bool logElements)
 		return totalUnmatched;
 }
 
-void Source::consolidateWinners(int begin)
+void cSource::consolidateWinners(int begin)
 { LFS
 	int *wa=NULL,numWinners=0,position=begin,maxMatch=0;
 	pema.generateWinnerConsolidationArray(lastPEMAConsolidationIndex,wa,numWinners);
@@ -1363,13 +1363,13 @@ void Source::consolidateWinners(int begin)
 	lastSourcePositionSet=-1;
 }
 
-void Source::clearTagSetMaps(void)
+void cSource::clearTagSetMaps(void)
 { LFS
 	for (unsigned int ts=0; ts<desiredTagSets.size(); ts++)
 		pemaMapToTagSetsByPemaByTagSet[ts].clear();
 }
 
-int Source::printSentences(bool updateStatistics,unsigned int unknownCount,unsigned int quotationExceptions,unsigned int totalQuotations,int &globalOverMatchedPositionsTotal)
+int cSource::printSentences(bool updateStatistics,unsigned int unknownCount,unsigned int quotationExceptions,unsigned int totalQuotations,int &globalOverMatchedPositionsTotal)
 { LFS
 	if (!sentenceStarts.size() || sentenceStarts[sentenceStarts.size()-1]!=m.size())
 		sentenceStarts.push_back(m.size());
@@ -1506,7 +1506,7 @@ int Source::printSentences(bool updateStatistics,unsigned int unknownCount,unsig
 	return totalUnmatched;
 }
 
-int Source::printSentencesCheck(bool skipCheck)
+int cSource::printSentencesCheck(bool skipCheck)
 { LFS
 	struct __stat64 buffer;
 	wchar_t logFilename[1024];
@@ -1536,7 +1536,7 @@ int Source::printSentencesCheck(bool skipCheck)
 	return 0;
 }
 
-int Source::matchIgnoredPatternsAgainstSentence(unsigned int s,unsigned int &patternsTried,bool fill)
+int cSource::matchIgnoredPatternsAgainstSentence(unsigned int s,unsigned int &patternsTried,bool fill)
 { LFS
 	int numPatternsMatched=0;
 	for (unsigned int p=0; p<patterns.size(); p++)
@@ -1550,7 +1550,7 @@ int Source::matchIgnoredPatternsAgainstSentence(unsigned int s,unsigned int &pat
 }
 
 #ifdef LOG_OLD_MATCH
-int Source::matchPatternsAgainstSentence(unsigned int s,unsigned int &patternsTried)
+int cSource::matchPatternsAgainstSentence(unsigned int s,unsigned int &patternsTried)
 { LFS
 	bool match=false;
 	pass=0;
@@ -1633,7 +1633,7 @@ int Source::matchPatternsAgainstSentence(unsigned int s,unsigned int &patternsTr
 // for each pattern in primaryPatterns
 //   matchPattern
 //#define LOG_IPATTERN
-int Source::matchPatternsAgainstSentence(unsigned int s,unsigned int &patternsTried)
+int cSource::matchPatternsAgainstSentence(unsigned int s,unsigned int &patternsTried)
 { LFS
 	int numPatternsMatched=0;
 	bitObject<32, 5, unsigned int, 32> patternsToTry,patternsToTryLast,patternsToTryNext=patternsWithNoChildren,patternsMatched;
@@ -1689,14 +1689,14 @@ int Source::matchPatternsAgainstSentence(unsigned int s,unsigned int &patternsTr
 }
 #endif
 
-void Source::setForms(void)
+void cSource::setForms(void)
 { LFS
 	m[0].forms.check(L"forms",Forms.size());
 	m[0].patterns.check(L"patterns",patterns.size());
 	for (vector <WordMatch>::iterator I=m.begin(),IEnd=m.end(); I!=IEnd; I++) I->setForm();
 }
 
-void Source::clearSource(void)
+void cSource::clearSource(void)
 { LFS
 	storageLocation.clear();
 	relatedObjectsMap.clear();
@@ -1777,7 +1777,7 @@ int read(string &str,IOHANDLE file)
 }
 
 #define MAX_BUF (10*1024*1024)
-bool Source::flush(int fd, void *buffer, int &where)
+bool cSource::flush(int fd, void *buffer, int &where)
 {
 	LFS
 		if (where > MAX_BUF - 64 * 1024)
@@ -1788,7 +1788,7 @@ bool Source::flush(int fd, void *buffer, int &where)
 	return true;
 }
 
-bool Source::FlushFile(HANDLE fd, void *buffer, int &where)
+bool cSource::FlushFile(HANDLE fd, void *buffer, int &where)
 {
 	LFS
 	if (where > MAX_BUF - 64 * 1024)
@@ -1801,14 +1801,14 @@ bool Source::FlushFile(HANDLE fd, void *buffer, int &where)
 	return true;
 }
 
-bool Source::writeCheck(wstring path)
+bool cSource::writeCheck(wstring path)
 { LFS
 	path+=L".SourceCache";
 	//return _waccess(path.c_str(),0)==0; // long path limitation
 	return GetFileAttributesW(path.c_str())!= INVALID_FILE_ATTRIBUTES;
 }
 
-bool Source::writePatternUsage(wstring path,bool zeroOutPatternUsage)
+bool cSource::writePatternUsage(wstring path,bool zeroOutPatternUsage)
 {
 	path += L".patternUsage";
 	HANDLE fd = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
@@ -1838,7 +1838,7 @@ bool Source::writePatternUsage(wstring path,bool zeroOutPatternUsage)
 }
 
 // if returning false, the file will not be closed.
-bool Source::write(wstring path,bool S2, bool makeCopyBeforeSourceWrite, wstring specialExtension)
+bool cSource::write(wstring path,bool S2, bool makeCopyBeforeSourceWrite, wstring specialExtension)
 { LFS
 	int sanityReturnCode = 0, generalizedIndex = 0;
 	if (sanityReturnCode = sanityCheck(generalizedIndex))
@@ -1950,7 +1950,7 @@ bool Source::write(wstring path,bool S2, bool makeCopyBeforeSourceWrite, wstring
 }
 
 // concentrates on index underflow and overflow
-int Source::sanityCheck(int &generalizedIndex)
+int cSource::sanityCheck(int &generalizedIndex)
 {
 	generalizedIndex = 0;
 	for (auto mi : m)
@@ -2097,7 +2097,7 @@ int Source::sanityCheck(int &generalizedIndex)
 	return 0;
 }
 
-bool Source::read(char *buffer,int &where,unsigned int total, bool &parsedOnly, bool printProgress, wstring specialExtension)
+bool cSource::read(char *buffer,int &where,unsigned int total, bool &parsedOnly, bool printProgress, wstring specialExtension)
 { LFS
   int sourceVersion;
 	if (!copy(sourceVersion,buffer,where,total)) return false;
@@ -2477,7 +2477,7 @@ bool testStart(wstring &buffer,wchar_t *str,int &where,bool checkAlone=true)
 	return false;
 }
 
-bool Source::findStart(wstring &buffer,wstring &start,int &repeatStart,wstring &title)
+bool cSource::findStart(wstring &buffer,wstring &start,int &repeatStart,wstring &title)
 { LFS
 	// go to the first paragraph without any ignoreWords, with at least two consecutive sentences (periods).
 	// then go to the previous title, if it doesn't have any ignoreWords.  If the start occurs before, count repeatStart.
@@ -2546,7 +2546,7 @@ void unescapeStr(wstring &str)
 	str=ess;
 }
 
-bool Source::readSource(wstring &path,bool checkOnly,bool &parsedOnly,bool printProgress,wstring specialExtension)
+bool cSource::readSource(wstring &path,bool checkOnly,bool &parsedOnly,bool printProgress,wstring specialExtension)
 { LFS
 	//unescapeStr(path); // doesn't work on 'Twixt Land & Sea: Tales
 	wstring locationCache=path+L".SourceCache"+specialExtension;
@@ -2608,7 +2608,7 @@ bool Source::readSource(wstring &path,bool checkOnly,bool &parsedOnly,bool print
 }
 
 // Updates costs of parent patterns when a child PMA element has been reduced after parent PEMA costs have been calculated.
-int Source::updatePEMACosts(int PEMAPosition,int pattern,int begin,int end,int position,
+int cSource::updatePEMACosts(int PEMAPosition,int pattern,int begin,int end,int position,
 														vector<patternElementMatchArray::tPatternElementMatch *> &ppema)
 { LFS
 #ifdef LOG_PATTERN_COST_CHECK
@@ -2722,7 +2722,7 @@ int Source::updatePEMACosts(int PEMAPosition,int pattern,int begin,int end,int p
 //      if current cost A > current cost B,
 //        remove A
 //  call reduceParent with B and reducedCost=current cost B
-void Source::reduceParent(int position,unsigned int PMAOffset,int reducedCost)
+void cSource::reduceParent(int position,unsigned int PMAOffset,int reducedCost)
 { LFS // DLFS
 	patternMatchArray::tPatternMatch *pm=m[position].pma.content;
 	if (PMAOffset>=m[position].pma.count)
@@ -2818,13 +2818,13 @@ void Source::reduceParent(int position,unsigned int PMAOffset,int reducedCost)
 	}
 }
 
-void Source::reduceParents(int position,vector <unsigned int> &insertionPoints,vector <int> &reducedCosts)
+void cSource::reduceParents(int position,vector <unsigned int> &insertionPoints,vector <int> &reducedCosts)
 { LFS
 	for (unsigned int I=0; I<insertionPoints.size(); I++)
 		reduceParent(position,insertionPoints[I],reducedCosts[I]);
 }
 
-void Source::logPatternChain(int sourcePosition,int insertionPoint,enum patternElementMatchArray::chainType patternChainType)
+void cSource::logPatternChain(int sourcePosition,int insertionPoint,enum patternElementMatchArray::chainType patternChainType)
 { LFS
 	wchar_t *chPT=L"";
 	int chain=-1,originPattern=0,originEnd=0;
@@ -2888,7 +2888,7 @@ void Source::logPatternChain(int sourcePosition,int insertionPoint,enum patternE
 	}
 }
 
-Source::Source(wchar_t *databaseServer,int _sourceType,bool generateFormStatistics,bool skipWordInitialization,bool printProgress)
+cSource::cSource(wchar_t *databaseServer,int _sourceType,bool generateFormStatistics,bool skipWordInitialization,bool printProgress)
 { LFS
 	sourceType=_sourceType;
 	primaryQuoteType=L"\"";
@@ -2975,7 +2975,7 @@ Source::Source(wchar_t *databaseServer,int _sourceType,bool generateFormStatisti
 	updateWordUsageCostsDynamically = false;
 }
 
-Source::Source(MYSQL *parentMysql,int _sourceType,int _sourceConfidence)
+cSource::cSource(MYSQL *parentMysql,int _sourceType,int _sourceConfidence)
 { LFS
 	sourceType=_sourceType;
 	sourceConfidence=_sourceConfidence;
@@ -3041,7 +3041,7 @@ Source::Source(MYSQL *parentMysql,int _sourceType,int _sourceConfidence)
 	updateWordUsageCostsDynamically = false;
 }
 
-void Source::writeWords(wstring oPath, wstring specialExtension)
+void cSource::writeWords(wstring oPath, wstring specialExtension)
 {
 	LFS
 		wchar_t path[1024];
@@ -3096,7 +3096,7 @@ void Source::writeWords(wstring oPath, wstring specialExtension)
 	close(fd);
 }
 
-bool Source::matchChildSourcePositionSynonym(tIWMM parentWord, Source *childSource, int childWhere)
+bool cSource::matchChildSourcePositionSynonym(tIWMM parentWord, cSource *childSource, int childWhere)
 {
 	LFS
 		if (parentWord == Words.end())
@@ -3160,7 +3160,7 @@ bool Source::matchChildSourcePositionSynonym(tIWMM parentWord, Source *childSour
 // does this represent a definite noun, like Sting or MIT?  If so, disallow synonyms (or perhaps use another kind of synonym which is not yet supported)
 // also people are not allowed
 // also include subjects which follow immediately after relativizers which have resolved to an object.
-bool Source::isDefiniteObject(int where, wchar_t *definiteObjectType, int &ownerWhere, bool recursed)
+bool cSource::isDefiniteObject(int where, wchar_t *definiteObjectType, int &ownerWhere, bool recursed)
 {
 	LFS
 		int object = m[where].getObject();
@@ -3302,7 +3302,7 @@ bool Source::isDefiniteObject(int where, wchar_t *definiteObjectType, int &owner
 	return false;
 }
 
-int Source::determineKindBitFieldFromObject(Source *source, int object, int &wikiBitField)
+int cSource::determineKindBitFieldFromObject(cSource *source, int object, int &wikiBitField)
 {
 	LFS
 		if (source->objects[object].isWikiBusiness) wikiBitField |= 1;
@@ -3312,7 +3312,7 @@ int Source::determineKindBitFieldFromObject(Source *source, int object, int &wik
 	return 0;
 }
 
-int Source::determineKindBitField(Source *source, int where, int &wikiBitField)
+int cSource::determineKindBitField(cSource *source, int where, int &wikiBitField)
 {
 	LFS
 		if (source->m[where].getObject() < 0 && source->m[where].objectMatches.size() == 0)
@@ -3348,7 +3348,7 @@ int Source::determineKindBitField(Source *source, int where, int &wikiBitField)
 	return 0;
 }
 
-int Source::checkParticularPartQuestionTypeCheck(__int64 questionType, int childWhere, int childObject, int &semanticMismatch)
+int cSource::checkParticularPartQuestionTypeCheck(__int64 questionType, int childWhere, int childObject, int &semanticMismatch)
 {
 	LFS
 		wstring tmpstr;
@@ -3466,7 +3466,7 @@ int Source::checkParticularPartQuestionTypeCheck(__int64 questionType, int child
 	return CONFIDENCE_NOMATCH / 2;
 }
 
-void Source::checkParticularPartSemanticMatchWord(int logType, int parentWhere, bool &synonym, set <wstring> &parentSynonyms, wstring pw, wstring pwme, int &lowestConfidence, unordered_map <wstring, int >::iterator ami)
+void cSource::checkParticularPartSemanticMatchWord(int logType, int parentWhere, bool &synonym, set <wstring> &parentSynonyms, wstring pw, wstring pwme, int &lowestConfidence, unordered_map <wstring, int >::iterator ami)
 {
 	LFS // DLFS
  //if (logQuestionDetail)
@@ -3488,7 +3488,7 @@ void Source::checkParticularPartSemanticMatchWord(int logType, int parentWhere, 
 }
 
 // may be passed a childObject which is -1, in which case it will try to derive it from childWhere.  This is only recommended if the resolution of the object location is simple (no multiple matches).
-int Source::checkParticularPartSemanticMatch(int logType, int parentWhere, Source *childSource, int childWhere, int childObject, bool &synonym, int &semanticMismatch)
+int cSource::checkParticularPartSemanticMatch(int logType, int parentWhere, cSource *childSource, int childWhere, int childObject, bool &synonym, int &semanticMismatch)
 {
 	LFS
 		if (childWhere < 0)
@@ -3579,7 +3579,7 @@ int Source::checkParticularPartSemanticMatch(int logType, int parentWhere, Sourc
 	return lowestConfidence;
 }
 
-void Source::copySource(Source *childSource, int begin, int end)
+void cSource::copySource(cSource *childSource, int begin, int end)
 {
 	LFS
 		for (int I = begin; I < end; I++)
@@ -3589,7 +3589,7 @@ void Source::copySource(Source *childSource, int begin, int end)
 		}
 }
 
-int Source::copyDirectlyAttachedPrepositionalPhrase(Source *childSource, int relPrep)
+int cSource::copyDirectlyAttachedPrepositionalPhrase(cSource *childSource, int relPrep)
 {
 	LFS
 		int relObject = childSource->m[relPrep].getRelObject();
@@ -3601,7 +3601,7 @@ int Source::copyDirectlyAttachedPrepositionalPhrase(Source *childSource, int rel
 	return 0;
 }
 
-bool Source::isObjectCapitalized(int where)
+bool cSource::isObjectCapitalized(int where)
 {
 	LFS
 		if (where < 0)
@@ -3611,7 +3611,7 @@ bool Source::isObjectCapitalized(int where)
 }
 
 // if getUntilNumPP==-1, this gets the maximum number of available directly attached non-mixed case prepositional phrases
-bool Source::ppExtensionAvailable(int where, int &getUntilNumPP, bool nonMixed)
+bool cSource::ppExtensionAvailable(int where, int &getUntilNumPP, bool nonMixed)
 {
 	LFS
 		if (getUntilNumPP == 0) return true;
@@ -3644,7 +3644,7 @@ bool Source::ppExtensionAvailable(int where, int &getUntilNumPP, bool nonMixed)
 	return false;
 }
 
-int Source::copyDirectlyAttachedPrepositionalPhrases(int whereParentObject, Source *childSource, int whereChild)
+int cSource::copyDirectlyAttachedPrepositionalPhrases(int whereParentObject, cSource *childSource, int whereChild)
 {
 	LFS
 		int relPrep = childSource->m[whereChild].endObjectPosition;
@@ -3658,7 +3658,7 @@ int Source::copyDirectlyAttachedPrepositionalPhrases(int whereParentObject, Sour
 	return m.size() - m[whereParentObject].relPrep;
 }
 
-void Source::adjustOffsets(int childWhere, bool keepObjects)
+void cSource::adjustOffsets(int childWhere, bool keepObjects)
 {
 	LFS
 		int parentWhere = m.size() - 1;
@@ -3688,7 +3688,7 @@ void Source::adjustOffsets(int childWhere, bool keepObjects)
 }
 
 // copy the answer into the parent
-int Source::copyChildIntoParent(Source *childSource, int whereChild)
+int cSource::copyChildIntoParent(cSource *childSource, int whereChild)
 {
 	LFS
 		if (childSource->m[whereChild].getObject() < 0 || childSource->m[whereChild].beginObjectPosition < 0 || childSource->m[whereChild].endObjectPosition < 0)
@@ -3740,7 +3740,7 @@ int Source::copyChildIntoParent(Source *childSource, int whereChild)
 		}
 }
 
-int Source::detectAttachedPhrase(vector <cSpaceRelation>::iterator sri, int &relVerb)
+int cSource::detectAttachedPhrase(vector <cSpaceRelation>::iterator sri, int &relVerb)
 {
 	LFS
 		int collectionWhere = sri->whereQuestionTypeObject;
@@ -3749,7 +3749,7 @@ int Source::detectAttachedPhrase(vector <cSpaceRelation>::iterator sri, int &rel
 	return -1;
 }
 
-bool Source::compareObjectString(int whereObject1, int whereObject2)
+bool cSource::compareObjectString(int whereObject1, int whereObject2)
 {
 	LFS
 		wstring whereObject1Str, whereObject2Str;
@@ -3758,7 +3758,7 @@ bool Source::compareObjectString(int whereObject1, int whereObject2)
 	return whereObject1Str == whereObject2Str;
 }
 
-bool Source::objectContainedIn(int whereObject, set <int> whereObjects)
+bool cSource::objectContainedIn(int whereObject, set <int> whereObjects)
 {
 	LFS
 		for (set <int>::iterator woi = whereObjects.begin(), woiEnd = whereObjects.end(); woi != woiEnd; woi++)

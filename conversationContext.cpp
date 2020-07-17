@@ -17,7 +17,7 @@ class cohereInfo
 
 // this is to identify all conversations in the source and to trace all nouns/verbs/adjectives/adverbs through exact match, synonyms, and relations.
 // a conversation is currently defined as being between more than one person.
-void Source::identifyConversations()
+void cSource::identifyConversations()
 {
 	LFS
 	int numQuotes=0,numQuotesInConversations=0,numConversations=0;

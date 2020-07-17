@@ -18,7 +18,7 @@
 //   common number of 2, which will give it an advantage over any other object merely matching to 'man'.
 //   If the primary nouns and adjectives are kept track of, then any match associated with them can be counted
 //   accurately.
-bool Source::writeWNMap(map <tIWMM, vector <tIWMM>, tFI::cRMap::wordMapCompare > &sourceWordMap, void *buffer, int &where, int fd, int limit)
+bool cSource::writeWNMap(map <tIWMM, vector <tIWMM>, tFI::cRMap::wordMapCompare > &sourceWordMap, void *buffer, int &where, int fd, int limit)
 {
 	LFS
 		if (!copy(buffer, (int)sourceWordMap.size(), where, limit)) return false;
@@ -39,7 +39,7 @@ bool Source::writeWNMap(map <tIWMM, vector <tIWMM>, tFI::cRMap::wordMapCompare >
 	return true;
 }
 
-int Source::readWNMap(map <tIWMM, vector <tIWMM>, tFI::cRMap::wordMapCompare > &sourceWordMap, void *buffer, int &where, int bufferlen)
+int cSource::readWNMap(map <tIWMM, vector <tIWMM>, tFI::cRMap::wordMapCompare > &sourceWordMap, void *buffer, int &where, int bufferlen)
 {
 	LFS
 		unsigned int count;
@@ -71,7 +71,7 @@ int Source::readWNMap(map <tIWMM, vector <tIWMM>, tFI::cRMap::wordMapCompare > &
 	return (where > bufferlen) ? -1 : 0;
 }
 
-bool Source::writeGWNMap(map <tIWMM, int, tFI::cRMap::wordMapCompare > &wnMap, void *buffer, int &where, int fd, int limit)
+bool cSource::writeGWNMap(map <tIWMM, int, tFI::cRMap::wordMapCompare > &wnMap, void *buffer, int &where, int fd, int limit)
 {
 	LFS
 		if (!copy(buffer, (int)wnMap.size(), where, limit)) return false;
@@ -84,7 +84,7 @@ bool Source::writeGWNMap(map <tIWMM, int, tFI::cRMap::wordMapCompare > &wnMap, v
 	return true;
 }
 
-int Source::readGWNMap(map <tIWMM, int, tFI::cRMap::wordMapCompare > &wnMap, void *buffer, int &where, int bufferlen)
+int cSource::readGWNMap(map <tIWMM, int, tFI::cRMap::wordMapCompare > &wnMap, void *buffer, int &where, int bufferlen)
 {
 	LFS
 		unsigned int count;
@@ -102,7 +102,7 @@ int Source::readGWNMap(map <tIWMM, int, tFI::cRMap::wordMapCompare > &wnMap, voi
 	return (where > bufferlen) ? -1 : 0;
 }
 
-bool Source::writeWNMaps(wstring path)
+bool cSource::writeWNMaps(wstring path)
 {
 	LFS
 		path += L".WNCache";
@@ -134,7 +134,7 @@ bool Source::writeWNMaps(wstring path)
 	return true;
 }
 
-void Source::clearWNMaps()
+void cSource::clearWNMaps()
 {
 	wnSynonymsNounMap.clear();
 	wnSynonymsAdjectiveMap.clear();
@@ -144,7 +144,7 @@ void Source::clearWNMaps()
 	wnGenderNounMap.clear();
 }
 
-bool Source::readWNMaps(wstring path)
+bool cSource::readWNMaps(wstring path)
 {
 	LFS
 		path += L".WNCache";

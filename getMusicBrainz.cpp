@@ -313,7 +313,7 @@ int getWork(wstring work)
 }
 
 
-bool Source::pushWhereEntities(wchar_t *derivation,int where,wstring matchEntityType,wstring byWhatType,int whatWhere,bool filterNameDuplicates)
+bool cSource::pushWhereEntities(wchar_t *derivation,int where,wstring matchEntityType,wstring byWhatType,int whatWhere,bool filterNameDuplicates)
 { LFS
 	unordered_map <wstring,int > mapCount;
 	wstring logres;
@@ -363,7 +363,7 @@ bool Source::pushWhereEntities(wchar_t *derivation,int where,wstring matchEntity
 	return !winners.empty();
 }
 
-bool Source::pushEntities(wchar_t *derivation, int where, wstring matchEntityType, wstring byWhatType, wstring what, bool filterNameDuplicates)
+bool cSource::pushEntities(wchar_t *derivation, int where, wstring matchEntityType, wstring byWhatType, wstring what, bool filterNameDuplicates)
 {
 	LFS
 	unsigned int originalSize=m[where].objectMatches.size();
@@ -400,7 +400,7 @@ const wchar_t *labelMatchList[]={L"label",L"company",L"studio",L"conglomerate",N
 const wchar_t *artistMatchList[]={L"artist",L"singer",L"songwriter",L"lyricist",L"composer",L"lyrist",L"musician",L"songsmith",NULL  };
 const wchar_t *releaseMatchList[]={L"release",L"record",L"CD",L"album",L"recording",L"song",L"rap",L"CD",L"compilation",L"track",L"disc",NULL  };
 
-bool cQuestionAnswering::dbSearchMusicBrainzSearchType(Source *questionSource, wchar_t *derivation, cSpaceRelation* parentSRI, vector < cAS > &answerSRIs,
+bool cQuestionAnswering::dbSearchMusicBrainzSearchType(cSource *questionSource, wchar_t *derivation, cSpaceRelation* parentSRI, vector < cAS > &answerSRIs,
 	int firstWhere, wstring firstMatchListType, int secondWhere, wstring secondMatchListType, const wchar_t *matchVerbsList[])
 {
 	LFS
@@ -484,7 +484,7 @@ bool cQuestionAnswering::dbSearchMusicBrainzSearchType(Source *questionSource, w
 //    release: object verbs: owns/distributes/produces
 // no ownership of compactLabel known within this KB
 
-bool Source::matchedList(const wchar_t *matchList[],int where,int objectClass)
+bool cSource::matchedList(const wchar_t *matchList[],int where,int objectClass)
 { LFS
 	if (where<0)
 		return false;
@@ -496,7 +496,7 @@ bool Source::matchedList(const wchar_t *matchList[],int where,int objectClass)
 	return m[where].getObject() >= 0 && ((oc = objects[m[where].getObject()].objectClass) == objectClass);
 }
 
-void Source::createObject(cObject object)
+void cSource::createObject(cObject object)
 {
 	objects.push_back(object);
 	objects[objects.size() - 1].originalLocation = object.begin;
@@ -506,7 +506,7 @@ void Source::createObject(cObject object)
 	m[object.begin].endObjectPosition = object.end;
 }
 
-cOM Source::createObject(wstring derivation,wstring wordstr,OC objectClass)
+cOM cSource::createObject(wstring derivation,wstring wordstr,OC objectClass)
 { LFS
 	unsigned int unknownCount=0,originalSize=m.size();
 	bookBuffer=(wchar_t *)wordstr.c_str();
@@ -547,7 +547,7 @@ cOM Source::createObject(wstring derivation,wstring wordstr,OC objectClass)
 }
 
 // add to objects if ownership of trigger
-bool cQuestionAnswering::matchOwnershipDbMusicBrainzObject(Source *questionSource,wchar_t *derivation,int whereObject)
+bool cQuestionAnswering::matchOwnershipDbMusicBrainzObject(cSource *questionSource,wchar_t *derivation,int whereObject)
 { LFS
 	if (whereObject<0)
 		return false;
@@ -564,7 +564,7 @@ bool cQuestionAnswering::matchOwnershipDbMusicBrainzObject(Source *questionSourc
 	return ownershipMatched;
 }
 
-bool cQuestionAnswering::matchOwnershipDbMusicBrainz(Source *questionSource, wchar_t *derivation,cSpaceRelation* parentSRI)
+bool cQuestionAnswering::matchOwnershipDbMusicBrainz(cSource *questionSource, wchar_t *derivation,cSpaceRelation* parentSRI)
 { LFS
 	return matchOwnershipDbMusicBrainzObject(questionSource,derivation,parentSRI->whereControllingEntity) ||
 		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRI->whereSubject) ||
@@ -576,7 +576,7 @@ bool cQuestionAnswering::matchOwnershipDbMusicBrainz(Source *questionSource, wch
 
 // example:what companies produce his records?
 //   
-bool cQuestionAnswering::dbSearchMusicBrainz(Source *questionSource,wchar_t *derivation, cSpaceRelation* parentSRI, vector < cAS > &answerSRIs)
+bool cQuestionAnswering::dbSearchMusicBrainz(cSource *questionSource,wchar_t *derivation, cSpaceRelation* parentSRI, vector < cAS > &answerSRIs)
 {
 	LFS
 	wstring logres;

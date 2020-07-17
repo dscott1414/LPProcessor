@@ -21,20 +21,20 @@
 int SRIDebugCounter = 0;
 #define NULLWORD 187
 
-const wchar_t *Source::wchr(int where)
+const wchar_t *cSource::wchr(int where)
 {
 	LFS
 		return (where < 0) ? L"" : m[where].word->first.c_str();
 }
 
-int Source::gmo(int wo)
+int cSource::gmo(int wo)
 {
 	LFS
 		if (wo < 0) return wo;
 	return (m[wo].endObjectPosition > wo) ? m[wo].endObjectPosition : wo;
 }
 
-const wchar_t *Source::wrti(int where, wchar_t *id, wstring &tmpstr, bool shortFormat)
+const wchar_t *cSource::wrti(int where, wchar_t *id, wstring &tmpstr, bool shortFormat)
 {
 	LFS
 		if (where < 0) return L"";
@@ -55,7 +55,7 @@ const wchar_t *Source::wrti(int where, wchar_t *id, wstring &tmpstr, bool shortF
 // Krugman earned his B.A. in economics from Yale University summa cum laude in 1974 and his PhD from the Massachusetts Institute of Technology (MIT) in 1977.
 // please also see http://aclweb.org/anthology-new/J/J06/J06-3002.pdf
 // 
-void Source::getAllPreps(cSpaceRelation* sri, set <int> &relPreps, int wo)
+void cSource::getAllPreps(cSpaceRelation* sri, set <int> &relPreps, int wo)
 {
 	LFS
 		if (sri->whereVerb >= 0 && sri->wherePrep != m[sri->whereVerb].relPrep)
@@ -76,7 +76,7 @@ void Source::getAllPreps(cSpaceRelation* sri, set <int> &relPreps, int wo)
 	}
 }
 
-void Source::prepPhraseToString(int wherePrep, wstring &ps)
+void cSource::prepPhraseToString(int wherePrep, wstring &ps)
 {
 	LFS
 		if (wherePrep < 0) return;
@@ -90,7 +90,7 @@ void Source::prepPhraseToString(int wherePrep, wstring &ps)
 		ps += wchr(wherePrep) + getWOSAdjective(wherePrepObject, tmpstr1) + L" " + getWSAdjective(wherePrepObject, 0) + L" " + getWSAdjective(wherePrepObject, 1) + L" " + wrti(wherePrepObject, L"POC", tmpstr2);
 }
 
-int Source::checkInsertPrep(set <int> &relPreps, int wp, int wo)
+int cSource::checkInsertPrep(set <int> &relPreps, int wp, int wo)
 {
 	if (wp >= m.size() || relPreps.find(wp) != relPreps.end())
 		return -1;
@@ -99,7 +99,7 @@ int Source::checkInsertPrep(set <int> &relPreps, int wp, int wo)
 	return 0;
 }
 
-int Source::getProfession(int object)
+int cSource::getProfession(int object)
 {
 	LFS
 		if (object < 0) return NULLWORD;
@@ -113,7 +113,7 @@ int Source::getProfession(int object)
 	return NULLWORD;
 }
 
-void Source::getSRIMinMax(cSpaceRelation* sri)
+void cSource::getSRIMinMax(cSpaceRelation* sri)
 {
 	LFS
 		sri->printMin = 10000;
@@ -164,7 +164,7 @@ void Source::getSRIMinMax(cSpaceRelation* sri)
 	if (sri->whereQuestionType >= 0) sri->printMin = min(sri->printMin, sri->whereQuestionType);
 }
 
-wstring Source::getWSAdjective(int where, int numOrder)
+wstring cSource::getWSAdjective(int where, int numOrder)
 {
 	LFS
 		if (where < 0) return L"";
@@ -183,7 +183,7 @@ wstring Source::getWSAdjective(int where, int numOrder)
 	return L"";
 }
 
-int Source::getOSAdjective(int whereVerb, int where)
+int cSource::getOSAdjective(int whereVerb, int where)
 {
 	LFS
 		if (where >= 0)
@@ -196,7 +196,7 @@ int Source::getOSAdjective(int whereVerb, int where)
 	return -1;
 }
 
-wstring Source::getWOSAdjective(int whereVerb, int where, wstring &tmpstr)
+wstring cSource::getWOSAdjective(int whereVerb, int where, wstring &tmpstr)
 {
 	LFS
 		getWOSAdjective(where, tmpstr);
@@ -210,7 +210,7 @@ wstring Source::getWOSAdjective(int whereVerb, int where, wstring &tmpstr)
 	return tmpstr;
 }
 
-int Source::getMSAdjective(int whereVerb, int where, int numOrder)
+int cSource::getMSAdjective(int whereVerb, int where, int numOrder)
 {
 	LFS
 		if (where >= 0)
@@ -233,7 +233,7 @@ int Source::getMSAdjective(int whereVerb, int where, int numOrder)
 	return NULLWORD;
 }
 
-wstring Source::getWSAdjective(int whereVerb, int where, int numOrder, wstring &tmpstr)
+wstring cSource::getWSAdjective(int whereVerb, int where, int numOrder, wstring &tmpstr)
 {
 	LFS
 		tmpstr = getWSAdjective(where, numOrder);
@@ -253,7 +253,7 @@ wstring Source::getWSAdjective(int whereVerb, int where, int numOrder, wstring &
 	return tmpstr;
 }
 
-int Source::getMSAdverb(int whereVerb, bool changeStateAdverb)
+int cSource::getMSAdverb(int whereVerb, bool changeStateAdverb)
 {
 	LFS
 		int i = -1;
@@ -270,7 +270,7 @@ int Source::getMSAdverb(int whereVerb, bool changeStateAdverb)
 	return i;
 }
 
-const wchar_t *Source::getWSAdverb(int whereVerb, bool changeStateAdverb)
+const wchar_t *cSource::getWSAdverb(int whereVerb, bool changeStateAdverb)
 {
 	LFS
 		if (whereVerb > 0 && m[whereVerb - 1].queryWinnerForm(adverbForm) >= 0)
@@ -282,7 +282,7 @@ const wchar_t *Source::getWSAdverb(int whereVerb, bool changeStateAdverb)
 	return L"";
 }
 
-bool Source::acceptableObjectPosition(int where)
+bool cSource::acceptableObjectPosition(int where)
 {
 	LFS
 		return m[where].objectMatches.size() > 0 ||
@@ -290,7 +290,7 @@ bool Source::acceptableObjectPosition(int where)
 		(m[where].endObjectPosition - m[where].beginObjectPosition > 1 || objects[m[where].getObject()].objectClass != NON_GENDERED_GENERAL_OBJECT_CLASS || objects[m[where].getObject()].numEncounters > 1));
 }
 
-bool Source::acceptableAdjective(int where)
+bool cSource::acceptableAdjective(int where)
 {
 	LFS
 		return m[where].queryWinnerForm(adjectiveForm) >= 0 || m[where].queryWinnerForm(nounForm) >= 0 || m[where].pma.queryPattern(L"__ADJECTIVE") != -1 ||
@@ -298,7 +298,7 @@ bool Source::acceptableAdjective(int where)
 }
 
 // return the first adjective that is an object
-int Source::getOSAdjective(int where)
+int cSource::getOSAdjective(int where)
 {
 	LFS
 		if (where < 0) return -1;
@@ -312,7 +312,7 @@ int Source::getOSAdjective(int where)
 	return -1;
 }
 
-wstring Source::getWOSAdjective(int where, wstring &tmpstr)
+wstring cSource::getWOSAdjective(int where, wstring &tmpstr)
 {
 	LFS
 		if (where < 0) return L"";
@@ -327,7 +327,7 @@ wstring Source::getWOSAdjective(int where, wstring &tmpstr)
 }
 
 // return the first adjective that is not an object
-int Source::getMSAdjective(int where, int numOrder)
+int cSource::getMSAdjective(int where, int numOrder)
 {
 	LFS
 		if (where < 0) return NULLWORD;
@@ -348,7 +348,7 @@ int Source::getMSAdjective(int where, int numOrder)
 	return NULLWORD;
 }
 
-void Source::printSRI(wstring logPrefix, cSpaceRelation* sri, int s, int ws, int wo, int ps, bool overWrote, int matchSum, wstring matchInfo, int logDestination)
+void cSource::printSRI(wstring logPrefix, cSpaceRelation* sri, int s, int ws, int wo, int ps, bool overWrote, int matchSum, wstring matchInfo, int logDestination)
 {
 	LFS
 		wstring tmpstr;
@@ -356,7 +356,7 @@ void Source::printSRI(wstring logPrefix, cSpaceRelation* sri, int s, int ws, int
 	printSRI(logPrefix, sri, s, ws, wo, tmpstr, overWrote, matchSum, matchInfo, logDestination);
 }
 
-void Source::printSRI(wstring logPrefix, cSpaceRelation* sri, int s, int ws, int wo, wstring ps, bool overWrote, int matchSum, wstring matchInfo, int logDestination)
+void cSource::printSRI(wstring logPrefix, cSpaceRelation* sri, int s, int ws, int wo, wstring ps, bool overWrote, int matchSum, wstring matchInfo, int logDestination)
 {
 	LFS
 		if (sri == NULL)

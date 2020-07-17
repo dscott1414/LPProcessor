@@ -9,7 +9,7 @@
 // meta group object types:
 // example:        latestOwnerWhere
 // another ally    -3                 metagroup word at principalWhere, with a wordOrder word (another) as modifier
-bool Source::resolveMetaGroupWordOrderedFutureObject(int where,vector <cOM> &objectMatches)
+bool cSource::resolveMetaGroupWordOrderedFutureObject(int where,vector <cOM> &objectMatches)
 { LFS
 	// for now, just match all speakers in the currentSpeakerGroup that appear for the first time in the speakerGroup after where.
 	if (currentSpeakerGroup>=speakerGroups.size()) return false;
@@ -23,7 +23,7 @@ bool Source::resolveMetaGroupWordOrderedFutureObject(int where,vector <cOM> &obj
 	return objectMatches.size()>0;
 }
 
-bool Source::resolveMetaGroupFormerLatter(int where,int previousS1,int latestOwnerWhere,vector <cOM> &objectMatches)
+bool cSource::resolveMetaGroupFormerLatter(int where,int previousS1,int latestOwnerWhere,vector <cOM> &objectMatches)
 { LFS
 	int secondaryChoice=previousS1,pw=-1,pwo=-1,element=-1;
 	for (secondaryChoice--; secondaryChoice>=0 && !isEOS(secondaryChoice) && !m[secondaryChoice].pma.findMaxLen(L"__INFPSUB",element); secondaryChoice--);
@@ -84,7 +84,7 @@ bool Source::resolveMetaGroupFormerLatter(int where,int previousS1,int latestOwn
 // wchar_t *wordOrderWords[]={L"other",L"another",L"second",L"first",L"third",L"former",L"latter",L"that",L"this",L"two",L"three",NULL};
 //                            -2       -3         -4        -5       -6       -7        -8        -9      -10     -11    -12
 // the latter, the first
-bool Source::resolveMetaGroupFirstSecondThirdWordOrderedObject(int where,int lastBeginS1,vector <cOM> &objectMatches,int latestOwnerWhere)
+bool cSource::resolveMetaGroupFirstSecondThirdWordOrderedObject(int where,int lastBeginS1,vector <cOM> &objectMatches,int latestOwnerWhere)
 { LFS
 	if (latestOwnerWhere>-4 || latestOwnerWhere<-8) return false;
 	if ((latestOwnerWhere==-7 || latestOwnerWhere==-8) && currentSpeakerGroup<speakerGroups.size() && lastBeginS1>=0)
@@ -144,7 +144,7 @@ bool Source::resolveMetaGroupFirstSecondThirdWordOrderedObject(int where,int las
 	return false;
 }
 
-bool Source::resolveMetaGroupPlural(int latestOwnerWhere,bool inQuote,vector <cOM> &objectMatches)
+bool cSource::resolveMetaGroupPlural(int latestOwnerWhere,bool inQuote,vector <cOM> &objectMatches)
 { LFS
 	vector <cSpeakerGroup>::iterator csg=speakerGroups.begin()+currentSpeakerGroup;
 	// a young couple
@@ -168,7 +168,7 @@ bool Source::resolveMetaGroupPlural(int latestOwnerWhere,bool inQuote,vector <cO
 // the other crook
 // not used for generic others, like 'the other man'
 // not used for ownership, like 'the other's face'
-bool Source::resolveMetaGroupSpecifiedOther(int where,int latestOwnerWhere,bool inQuote,vector <cOM> &objectMatches)
+bool cSource::resolveMetaGroupSpecifiedOther(int where,int latestOwnerWhere,bool inQuote,vector <cOM> &objectMatches)
 { LFS
 	// make sure it is an 'other' metagroup object and other is not the principal word.
 	if (latestOwnerWhere!=-2 || m[where].word->first==L"other" || (m[where].word->second.flags&tFI::genericGenderIgnoreMatch))
@@ -218,7 +218,7 @@ bool Source::resolveMetaGroupSpecifiedOther(int where,int latestOwnerWhere,bool 
 	return false;
 }
 
-int Source::checkIfOne(int I,int latestObject,set <int> *speakers)
+int cSource::checkIfOne(int I,int latestObject,set <int> *speakers)
 { LFS
 	if (m[I].word->first==L"one" && m[I].objectMatches.size() && speakers->find(latestObject)!=speakers->end())
 	{
@@ -235,7 +235,7 @@ int Source::checkIfOne(int I,int latestObject,set <int> *speakers)
 	return -1;
 }
 
-bool Source::resolveMetaGroupGenericOther(int where,int latestOwnerWhere,bool inQuote,vector <cOM> &objectMatches)
+bool cSource::resolveMetaGroupGenericOther(int where,int latestOwnerWhere,bool inQuote,vector <cOM> &objectMatches)
 { LFS
 	// the other hand, the other leg, etc should be matched to another body object only
 	bool singularBodyPart;
@@ -481,7 +481,7 @@ bool Source::resolveMetaGroupGenericOther(int where,int latestOwnerWhere,bool in
 // if no grouped speakers, is there a meta
 // look for matching metagroup object in localObjects - does "his companion" match "the second man"?
 // if this is a "second" was there a "first"?
-bool Source::resolveMetaGroupInLocalObjects(int where,int o,vector <cOM> &objectMatches,bool onlyFirst)
+bool cSource::resolveMetaGroupInLocalObjects(int where,int o,vector <cOM> &objectMatches,bool onlyFirst)
 { LFS
 	int latestOwnerWhere=objects[o].getOwnerWhere();
 	if (latestOwnerWhere==-1 && (latestOwnerWhere=cObject::whichOrderWord(m[objects[o].originalLocation].word))!=-1)
@@ -511,7 +511,7 @@ bool Source::resolveMetaGroupInLocalObjects(int where,int o,vector <cOM> &object
 }
 
 // a metagroup name may be matched by another metagroup name
-bool Source::resolveMetaGroupNonNameObject(int where,bool inQuote,vector <cOM> &objectMatches,int &latestOwnerWhere)
+bool cSource::resolveMetaGroupNonNameObject(int where,bool inQuote,vector <cOM> &objectMatches,int &latestOwnerWhere)
 { LFS
 	if (inQuote) return false;
 	int o=m[where].getObject(),nonNameObject=-1;
@@ -563,7 +563,7 @@ bool Source::resolveMetaGroupNonNameObject(int where,bool inQuote,vector <cOM> &
 }
 
 // the two men OR the other two OR the two
-bool Source::resolveMetaGroupTwo(int where,bool inQuote,vector <cOM> &objectMatches)
+bool cSource::resolveMetaGroupTwo(int where,bool inQuote,vector <cOM> &objectMatches)
 { LFS
 	int o=m[where].getObject();
 	if (o<0) return false;
@@ -757,7 +757,7 @@ bool Source::resolveMetaGroupTwo(int where,bool inQuote,vector <cOM> &objectMatc
 // the one man OR the big one
 // NOT this one man
 // in secondary quotes, inPrimaryQuote=false
-bool Source::resolveMetaGroupOne(int where,bool inPrimaryQuote,vector <cOM> &objectMatches,bool &chooseBest)
+bool cSource::resolveMetaGroupOne(int where,bool inPrimaryQuote,vector <cOM> &objectMatches,bool &chooseBest)
 { LFS
 	int o=m[where].getObject(),latestOwnerWhere=objects[o].getOwnerWhere();
 	// rule out some one and twenty one
@@ -809,7 +809,7 @@ bool Source::resolveMetaGroupOne(int where,bool inPrimaryQuote,vector <cOM> &obj
 	return true;
 }
 
-bool Source::resolveMetaGroupJoiner(int where,vector <cOM> &objectMatches)
+bool cSource::resolveMetaGroupJoiner(int where,vector <cOM> &objectMatches)
 { LFS
 	int latestOwnerWhere=objects[m[where].getObject()].getOwnerWhere();
 	if (latestOwnerWhere==-10 && currentSpeakerGroup<speakerGroups.size()) // this
@@ -835,7 +835,7 @@ bool Source::resolveMetaGroupJoiner(int where,vector <cOM> &objectMatches)
 	return false;
 }
 
-void Source::getPOVSpeakers(set <int> &povSpeakers)
+void cSource::getPOVSpeakers(set <int> &povSpeakers)
 { LFS
 	if (speakerGroupsEstablished)
 		povSpeakers=speakerGroups[currentSpeakerGroup].povSpeakers;
@@ -885,7 +885,7 @@ void Source::getPOVSpeakers(set <int> &povSpeakers)
 	}
 }
 
-void Source::getCurrentSpeakers(set <int> &speakers,set <int> &povSpeakers)
+void cSource::getCurrentSpeakers(set <int> &speakers,set <int> &povSpeakers)
 { LFS
 	int csg=currentSpeakerGroup;
 	if (((unsigned)csg)>=speakerGroups.size()) csg--;
@@ -937,7 +937,7 @@ void Source::getCurrentSpeakers(set <int> &speakers,set <int> &povSpeakers)
 // he[german,boris] indicated the place he[german] had been occupying at the head[head] of the table[table] . 
 // the Russian[boris] demurred , but the other insisted .
 // if the speakerGroup contains 2 or 3 (and the 3rd one is the generic other)
-bool Source::resolveMetaGroupOther(int where,vector <cOM> &objectMatches)
+bool cSource::resolveMetaGroupOther(int where,vector <cOM> &objectMatches)
 { LFS
 	set <int> speakers,povSpeakers;
 	if (speakerGroupsEstablished && currentSpeakerGroup<speakerGroups.size())
@@ -1012,7 +1012,7 @@ bool Source::resolveMetaGroupOther(int where,vector <cOM> &objectMatches)
 //   the man      -1                 gendered word at principalWhere, no owner
 //   his girl     positive           gendered word at principalWhere, resolvable owner
 // in secondary quotes, inPrimaryQuote=false
-bool Source::resolveMetaGroupSpecificObject(int where,bool inPrimaryQuote,bool inSecondaryQuote,bool definitelyResolveSpeaker,int lastBeginS1,int lastRelativePhrase,vector <cOM> &objectMatches,bool &chooseFromLocalFocus)
+bool cSource::resolveMetaGroupSpecificObject(int where,bool inPrimaryQuote,bool inSecondaryQuote,bool definitelyResolveSpeaker,int lastBeginS1,int lastRelativePhrase,vector <cOM> &objectMatches,bool &chooseFromLocalFocus)
 { LFS
 	//if (where==22323) return false; // TEMP DEBUG
 	int o=m[where].getObject();
@@ -1129,7 +1129,7 @@ bool Source::resolveMetaGroupSpecificObject(int where,bool inPrimaryQuote,bool i
 	return false;
 }
 
-void Source::setMatched(int where,vector <int> &objs)
+void cSource::setMatched(int where,vector <int> &objs)
 { LFS
 	for (unsigned int I=0; I< objs.size(); I++)
 		m[where].objectMatches.push_back(cOM(objs[I],SALIENCE_THRESHOLD));
@@ -1143,7 +1143,7 @@ void Source::setMatched(int where,vector <int> &objs)
 //    the metagroup object resolution will return other speaker in the speaker group other than Bob,
 //    which will be 'friend', which will not be useful.  We want the last speaker group
 //    to contain Bob and one other entity which is not self (friend).
-bool Source::isSubsetOfSpeakers(int where,int ownerWhere,set <int> &speakers,bool inPrimaryQuote,bool &atLeastOneInSpeakerGroup)
+bool cSource::isSubsetOfSpeakers(int where,int ownerWhere,set <int> &speakers,bool inPrimaryQuote,bool &atLeastOneInSpeakerGroup)
 { LFS
 	atLeastOneInSpeakerGroup=false;
 	bool allInSpeakerGroup=false,selfInSpeakerGroup=speakers.find(m[where].getObject())!=speakers.end();
@@ -1158,7 +1158,7 @@ bool Source::isSubsetOfSpeakers(int where,int ownerWhere,set <int> &speakers,boo
 // A=group of other objects other than ownerWhere in the speakerGroup
 // if inPrimaryQuote, is the current speaker (from lastOpeningPrimaryQuote) the only object in A?  If so reject.
 // if !inPrimaryQuote, is the current povSpeaker group matching A?  If so, reject.
-bool Source::rejectSG(int ownerWhere,set <int> &speakers,bool inPrimaryQuote)
+bool cSource::rejectSG(int ownerWhere,set <int> &speakers,bool inPrimaryQuote)
 { LFS
 	if (inPrimaryQuote && (lastOpeningPrimaryQuote<0 || m[lastOpeningPrimaryQuote].objectMatches.empty()))
 		return false;
@@ -1172,7 +1172,7 @@ bool Source::rejectSG(int ownerWhere,set <int> &speakers,bool inPrimaryQuote)
 	return true;
 }
 
-bool Source::resolveMetaGroupByAssociation(int where,bool inPrimaryQuote,vector <cOM> &objectMatches,int latestOwnerWhere)
+bool cSource::resolveMetaGroupByAssociation(int where,bool inPrimaryQuote,vector <cOM> &objectMatches,int latestOwnerWhere)
 { LFS
 	int o=m[where].getObject(),saveCSG=-1;
 	bool eraseOwnerWhereMatches=false;
@@ -1391,7 +1391,7 @@ bool Source::resolveMetaGroupByAssociation(int where,bool inPrimaryQuote,vector 
   return true;
 }
 
-bool Source::resolveMetaGroupObject(int where,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,
+bool cSource::resolveMetaGroupObject(int where,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,
 													bool definitelySpeaker,bool resolveForSpeaker,bool avoidCurrentSpeaker,bool &mixedPlurality,bool limitTwo,vector <cOM> &objectMatches,bool &chooseFromLocalFocus)
 { LFS
 	if (m[where].word->first==L"this" || m[where].word->first==L"that")

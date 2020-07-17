@@ -75,7 +75,7 @@ wstring relationString(int r)
 //   of a banana truck.
 
 
-bool Source::like(wstring str1,wstring str2)
+bool cSource::like(wstring str1,wstring str2)
 { LFS
 	return wcsncmp(str1.c_str(),str2.c_str(),min(str1.length(),str2.length()))==0;
 }
@@ -85,7 +85,7 @@ bool comparesr( const cSpaceRelation &s1, const cSpaceRelation &s2 )
 	return s1.where<s2.where;
 }
 
-void Source::getMaxWhereSR(vector <cSpaceRelation>::iterator csr,int &begin,int &end)
+void cSource::getMaxWhereSR(vector <cSpaceRelation>::iterator csr,int &begin,int &end)
 { LFS
 		begin=100000000;
 		end=-1;
@@ -103,14 +103,14 @@ void Source::getMaxWhereSR(vector <cSpaceRelation>::iterator csr,int &begin,int 
 		end=max(end,csr->wherePrepObject);
 }
 
-vector <cSpaceRelation>::iterator Source::findSpaceRelation(int where)
+vector <cSpaceRelation>::iterator cSource::findSpaceRelation(int where)
 { LFS
 		cSpaceRelation sr(where,-1,-1,-1,-1,-1,-1,-1,-1,-1,false,false,-1,-1,false);
 		return lower_bound(spaceRelations.begin(), spaceRelations.end(), sr, comparesr);
 }
 
 // space relation component
-const wchar_t *Source::src(int where,wstring description,wstring &tmpstr)
+const wchar_t *cSource::src(int where,wstring description,wstring &tmpstr)
 { LFS
 	if (where<0) return L"";
 	wchar_t temp[100];
@@ -120,7 +120,7 @@ const wchar_t *Source::src(int where,wstring description,wstring &tmpstr)
 	return tmpstr.c_str();
 }
 
-bool Source::followerPOVToObserverConversion(vector <cSpaceRelation>::iterator sr,int sg)
+bool cSource::followerPOVToObserverConversion(vector <cSpaceRelation>::iterator sr,int sg)
 { LFS
 	if (sr->whereVerb<0 || sr->whereObject<0) return false;
 	bool allIn,oneIn,converted=false;
@@ -159,7 +159,7 @@ bool Source::followerPOVToObserverConversion(vector <cSpaceRelation>::iterator s
 	return converted;
 }
 
-bool Source::isSpeaker(int where,int esg,int tempCSG)
+bool cSource::isSpeaker(int where,int esg,int tempCSG)
 { LFS
 	bool isSpeaker=false,allIn,oneIn;
 	if (where>=0)
@@ -177,7 +177,7 @@ bool Source::isSpeaker(int where,int esg,int tempCSG)
 	return isSpeaker;
 }
 
-void Source::srSetTimeFlowTense(int spri)
+void cSource::srSetTimeFlowTense(int spri)
 { LFS
 	if (spaceRelations[spri].agentLocationRelationSet) return;
 	vector <cSpaceRelation>::iterator sr=spaceRelations.begin()+spri;
@@ -199,7 +199,7 @@ sr->wherePrepObject,
 }
 
 // returns true if VT_NEGATIVE
-bool Source::setTimeFlowTense(int where,int whereControllingEntity,int whereSubject,int whereVerb,int whereObject,
+bool cSource::setTimeFlowTense(int where,int whereControllingEntity,int whereSubject,int whereVerb,int whereObject,
 int wherePrepObject,
 	int prepObjectSubType,int objectSubType,bool establishingLocation,bool futureLocation,bool genderedLocationRelation,cTimeFlowTense &tft)
 { LFS
@@ -430,7 +430,7 @@ int wherePrepObject,
 	}
 }
 
-bool Source::isRelativeLocation(wstring word)
+bool cSource::isRelativeLocation(wstring word)
 { LFS
 		bool location=false;
 		// in front of the hotel / at the end of the street / at the angle of the corner / at the bend of the staircase    
@@ -439,7 +439,7 @@ bool Source::isRelativeLocation(wstring word)
 		return location;
 }
 
-void Source::insertCompoundObjects(int wo,set <int> &relPreps, unordered_map <int,int> &principalObjectEndPoints)
+void cSource::insertCompoundObjects(int wo,set <int> &relPreps, unordered_map <int,int> &principalObjectEndPoints)
 { LFS
 	for (; wo>=0; wo=m[wo].nextCompoundPartObject)
 	{
@@ -493,7 +493,7 @@ I want you to spread yourself this evening
 
 */
 // will change source.m (invalidate all iterators)
-void Source::correctSRIEntry(cSpaceRelation &sri)
+void cSource::correctSRIEntry(cSpaceRelation &sri)
 { LFS
 	if (sri.relationType==stNORELATION)
 	{
@@ -669,7 +669,7 @@ void Source::correctSRIEntry(cSpaceRelation &sri)
 }
 
 // will change source.m (invalidate all iterators)
-void Source::newSR(int where,int _o,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int wherePrepObject,int whereMovingRelativeTo,int relationType,const wchar_t *whereType,bool physicalRelation)
+void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int wherePrepObject,int whereMovingRelativeTo,int relationType,const wchar_t *whereType,bool physicalRelation)
 { LFS
 	if (whereSubject>=0 && m[whereSubject].queryWinnerForm(prepositionForm)>=0 && m[whereSubject].queryWinnerForm(nounForm)<0)
 	{
@@ -1028,7 +1028,7 @@ void Source::newSR(int where,int _o,int whereControllingEntity,int whereSubject,
 
 // subject is moving to a destination
 // will change source.m (invalidate all iterators through the use of newSR)
-bool Source::moveIdentifiedSubject(int where,bool inPrimaryQuote,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int at,int whereMovingRelativeTo,int spaceRelation,const wchar_t *whereType,bool physicalRelation)
+bool cSource::moveIdentifiedSubject(int where,bool inPrimaryQuote,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int at,int whereMovingRelativeTo,int spaceRelation,const wchar_t *whereType,bool physicalRelation)
 { LFS
 	wstring tmpstr;
 	set <int> speakers,povSpeakers;
@@ -1094,7 +1094,7 @@ bool Source::moveIdentifiedSubject(int where,bool inPrimaryQuote,int whereContro
 
 // subject will move the object at whereObject to a destination
 // will change source.m (invalidate all iterators through the use of newSR)
-bool Source::srMoveObject(int where,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int wherePrepObject,int whereMovingRelativeTo,int spaceRelation,wchar_t *whereType,bool physicalRelation)
+bool cSource::srMoveObject(int where,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int wherePrepObject,int whereMovingRelativeTo,int spaceRelation,wchar_t *whereType,bool physicalRelation)
 { LFS
 	wstring tmpstr;
 	for (int I=0; I<(signed)m[whereObject].objectMatches.size(); I++)
@@ -1104,7 +1104,7 @@ bool Source::srMoveObject(int where,int whereControllingEntity,int whereSubject,
 	return true;
 }
 
-int Source::findAnyLocationPrepObject(int whereVerb,int &wherePrep,bool &location,bool &timeUnit)
+int cSource::findAnyLocationPrepObject(int whereVerb,int &wherePrep,bool &location,bool &timeUnit)
 { LFS
 	if (wherePrep<0)
 		wherePrep=m[whereVerb].relPrep;
@@ -1159,7 +1159,7 @@ int Source::findAnyLocationPrepObject(int whereVerb,int &wherePrep,bool &locatio
 }
 
 // reject in the end/at the end of three days/on the other hand
-bool Source::rejectPrepPhrase(int wherePrep)
+bool cSource::rejectPrepPhrase(int wherePrep)
 { LFS
 	if (m[wherePrep].getRelObject()<0) return true;
 	wstring po=m[m[wherePrep].getRelObject()].word->first;
@@ -1195,7 +1195,7 @@ bool Source::rejectPrepPhrase(int wherePrep)
 	return false;
 }
 
-bool Source::adverbialPlace(int where)
+bool cSource::adverbialPlace(int where)
 { LFS
 	if (where<0) return false;
 	wchar_t *locations[]={L"there",L"where",L"here",L"ashore",L"alight",L"aboard",L"abroad",L"back",L"away",NULL}; // ,L"out" may have negative conseuqnces
@@ -1204,7 +1204,7 @@ bool Source::adverbialPlace(int where)
 	return (word==L"down" || word==L"up") && where+1<(signed)m.size() && (m[where+1].word->first==L"there" || m[where+1].word->first==L"here");
 }
 
-bool Source::adjectivalExit(int where)
+bool cSource::adjectivalExit(int where)
 { LFS
 	if (m[where].word->first==L"off" && m[where-1].word->first==L"well") return false;
 	wchar_t *gone[]={L"gone",L"kaput",L"absent",L"deceased",L"departed",L"dead",L"lost",L"off",NULL};
@@ -1213,7 +1213,7 @@ bool Source::adjectivalExit(int where)
 	return false;
 }
 
-bool Source::intersect(int where1,int where2)
+bool cSource::intersect(int where1,int where2)
 { LFS
 	if (where1<0 || where2<0) return false;
 	if (m[where1].objectMatches.empty() && m[where2].objectMatches.empty())
@@ -1226,7 +1226,7 @@ bool Source::intersect(int where1,int where2)
 	return intersect(m[where1].objectMatches,m[where2].objectMatches,allIn,oneIn);
 }
 
-bool Source::exitConversion(int whereObject,int whereSubject,int wherePrepObject)
+bool cSource::exitConversion(int whereObject,int whereSubject,int wherePrepObject)
 { LFS
 	int st;
 	if (wherePrepObject<0 || m[wherePrepObject].getObject()<0) return false;
@@ -1243,7 +1243,7 @@ bool Source::exitConversion(int whereObject,int whereSubject,int wherePrepObject
 			whereObject<0);
 }
 
-bool Source::whereSubType(int where)
+bool cSource::whereSubType(int where)
 { LFS
 	if (where<0) return false;
 	int st;
@@ -1265,7 +1265,7 @@ bool Source::whereSubType(int where)
 // spacially hierarchical structures 
 //   a house is larger than a room, so when a person moves into a room, they are still in the same house.
 // will change source.m (invalidate all iterators through the use of newSR)
-bool Source::placeIdentification(int where,bool inPrimaryQuote,int whereControllingEntity,int whereSubject,int whereVerb,int vnClass)
+bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControllingEntity,int whereSubject,int whereVerb,int vnClass)
 { LFS
 	wstring id=vbNetClasses[vnClass].name(),tmpstr,tmpstr2,tmpstr3;
 	bool acceptableVerbForm=!vbNetClasses[vnClass].noPhysicalAction;
@@ -1973,7 +1973,7 @@ bool Source::placeIdentification(int where,bool inPrimaryQuote,int whereControll
 	return false;
 }
 
-void Source::defineObjectAsSpatial(int where)
+void cSource::defineObjectAsSpatial(int where)
 { LFS
 		wstring tmpstr,tmpstr2;
 	int o=m[where].getObject();
@@ -2002,7 +2002,7 @@ void Source::defineObjectAsSpatial(int where)
 	} 
 }     
 
-void Source::detectTenseAndFirstPersonUsage(int where, int lastBeginS1, int lastRelativePhrase, int &numPastSinceLastQuote, int &numNonPastSinceLastQuote, int &numFirstInQuote, int &numSecondInQuote, bool inPrimaryQuote)
+void cSource::detectTenseAndFirstPersonUsage(int where, int lastBeginS1, int lastRelativePhrase, int &numPastSinceLastQuote, int &numNonPastSinceLastQuote, int &numFirstInQuote, int &numSecondInQuote, bool inPrimaryQuote)
 {
 	if (inPrimaryQuote && m[where].getRelVerb() >= 0 && lastBeginS1 > lastRelativePhrase && (m[where].objectRole&(OBJECT_ROLE | SUBJECT_ROLE)) > 0)
 	{
@@ -2031,7 +2031,7 @@ void Source::detectTenseAndFirstPersonUsage(int where, int lastBeginS1, int last
 	}
 }
 
-void Source::identifyHailObjects(int where, int o, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool inPrimaryQuote, bool inSecondaryQuote)
+void cSource::identifyHailObjects(int where, int o, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool inPrimaryQuote, bool inSecondaryQuote)
 {
 	LFS
 	bool uniquelyMergable;
@@ -2096,7 +2096,7 @@ void Source::identifyHailObjects(int where, int o, int lastBeginS1, int lastRela
 	}
 }
 
-void Source::processEndOfSentence(int where,int &lastBeginS1, int &lastRelativePhrase, int &lastCommand, int &lastSentenceEnd, int &uqPreviousToLastSentenceEnd, int &uqLastSentenceEnd,
+void cSource::processEndOfSentence(int where,int &lastBeginS1, int &lastRelativePhrase, int &lastCommand, int &lastSentenceEnd, int &uqPreviousToLastSentenceEnd, int &uqLastSentenceEnd,
 																	int &questionSpeakerLastSentence,int &questionSpeaker,bool &currentIsQuestion,
 																	bool inPrimaryQuote, bool inSecondaryQuote,bool &endOfSentence, bool &transitionSinceEOS,
 																	unsigned int &agingStructuresSeen,bool quotesSeenSinceLastSentence,
@@ -2184,7 +2184,7 @@ void Source::processEndOfSentence(int where,int &lastBeginS1, int &lastRelativeP
 	}
 }
 
-void Source::processEndOfPrimaryQuote(int where, int lastSentenceEndBeforeAndNotIncludingCurrentQuote,
+void cSource::processEndOfPrimaryQuote(int where, int lastSentenceEndBeforeAndNotIncludingCurrentQuote,
 																			int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, int &lastSpeakerPosition, int &lastQuotedString, int &quotedObjectCounter,
 																			bool &inPrimaryQuote, bool &immediatelyAfterEndOfParagraph, bool &firstQuotedSentenceOfSpeakerGroupNotSeen, bool &quotesSeenSinceLastSentence,
 																			vector <int> &lastSubjects)
@@ -2323,7 +2323,7 @@ void Source::processEndOfPrimaryQuote(int where, int lastSentenceEndBeforeAndNot
 
 }
 
-void Source::evaluateMetaWhereQuery(int where, bool inPrimaryQuote, int &currentMetaWhereQuery)
+void cSource::evaluateMetaWhereQuery(int where, bool inPrimaryQuote, int &currentMetaWhereQuery)
 {
 	LFS
 	vector <WordMatch>::iterator im=m.begin()+where;
@@ -2431,7 +2431,7 @@ void Source::evaluateMetaWhereQuery(int where, bool inPrimaryQuote, int &current
 	}
 }
 
-void Source::srd(int where,wstring spd,wstring &description)
+void cSource::srd(int where,wstring spd,wstring &description)
 { LFS
 	if (where>=0 && (m[where].objectMatches.size() || m[where].getObject()!=-1))
 	{
@@ -2483,7 +2483,7 @@ void Source::srd(int where,wstring spd,wstring &description)
 	}
 }
 
-wstring Source::wsrToText(int where,wstring &description)
+wstring cSource::wsrToText(int where,wstring &description)
 { LFS
 	cSpaceRelation sr(where,-1,-1,-1,-1,-1,-1,-1,-1,stEXIT,false,false,-1,-1,false);
 	vector <cSpaceRelation>::iterator location = lower_bound(spaceRelations.begin(), spaceRelations.end(), sr, comparesr);
@@ -2492,7 +2492,7 @@ wstring Source::wsrToText(int where,wstring &description)
 	return srToText(spr,description);
 }
 
-wstring Source::srToText(int &spr,wstring &description)
+wstring cSource::srToText(int &spr,wstring &description)
 { LFS
 	wstring names,tmpstr;
 	vector <cSpaceRelation>::iterator spri=spaceRelations.begin()+spr,keep=spri;
@@ -2572,7 +2572,7 @@ wstring Source::srToText(int &spr,wstring &description)
 	return description;
 }
 
-void Source::cancelSubType(int object)
+void cSource::cancelSubType(int object)
 { LFS
   wstring tmpstr,tmpstr2;
 	vector <cObject>::iterator o=objects.begin()+object;
@@ -2600,7 +2600,7 @@ void Source::cancelSubType(int object)
 	}
 }
 
-unordered_map <wstring, set <int> >::iterator Source::getVerbClasses(int whereVerb,wstring &verb)
+unordered_map <wstring, set <int> >::iterator cSource::getVerbClasses(int whereVerb,wstring &verb)
 { LFS
 unordered_map <wstring, set <int> >::iterator lvtoCi=vbNetVerbToClassMap.find(getBaseVerb(whereVerb,13,verb));
 	// get_out is very different from get by itself
@@ -2621,7 +2621,7 @@ unordered_map <wstring, set <int> >::iterator lvtoCi=vbNetVerbToClassMap.find(ge
 	return lvtoCi;
 }
 
-wstring Source::getBaseVerb(int where,int fromWhere,wstring &verb)
+wstring cSource::getBaseVerb(int where,int fromWhere,wstring &verb)
 { LFS
 	if (m[where].queryWinnerForm(beForm)==-1 &&  
 		  (!(m[where].word->second.inflectionFlags&(VERB_PAST|VERB_PAST_PARTICIPLE|VERB_PRESENT_PARTICIPLE|VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR|VERB_PRESENT_PLURAL|VERB_PAST_THIRD_SINGULAR|VERB_PAST_PLURAL|VERB_PRESENT_SECOND_SINGULAR)) ||
@@ -2646,7 +2646,7 @@ wstring Source::getBaseVerb(int where,int fromWhere,wstring &verb)
 	return verb;
 }
 
-bool Source::isSpecialVerb(int where,bool moveOnly)
+bool cSource::isSpecialVerb(int where,bool moveOnly)
 { LFS
 	wstring verb;
 unordered_map <wstring, set <int> >::iterator lvtoCi=getVerbClasses(where,verb);
@@ -2661,7 +2661,7 @@ unordered_map <wstring, set <int> >::iterator lvtoCi=getVerbClasses(where,verb);
 	return false;
 }
 
-bool Source::isPhysicalActionVerb(int where)
+bool cSource::isPhysicalActionVerb(int where)
 { LFS
 	wstring verb;
 unordered_map <wstring, set <int> >::iterator lvtoCi=getVerbClasses(where,verb);
@@ -2671,7 +2671,7 @@ unordered_map <wstring, set <int> >::iterator lvtoCi=getVerbClasses(where,verb);
 	return false;
 }
 
-bool Source::isSelfMoveVerb(int where,bool &exitOnly)
+bool cSource::isSelfMoveVerb(int where,bool &exitOnly)
 { LFS
 	wstring verb;
 	bool moveOrExit=false;
@@ -2689,7 +2689,7 @@ bool Source::isSelfMoveVerb(int where,bool &exitOnly)
 	return moveOrExit;
 }
 
-bool Source::isControlVerb(int where)
+bool cSource::isControlVerb(int where)
 { LFS
 	wstring verb;
 unordered_map <wstring, set <int> >::iterator lvtoCi=getVerbClasses(where,verb);
@@ -2699,7 +2699,7 @@ unordered_map <wstring, set <int> >::iterator lvtoCi=getVerbClasses(where,verb);
 	return false;
 }
 
-bool Source::isVerbClass(int where,int verbClass)
+bool cSource::isVerbClass(int where,int verbClass)
 { LFS
 	wstring verb;
 unordered_map <wstring, set <int> >::iterator lvtoCi=getVerbClasses(where,verb);
@@ -2726,7 +2726,7 @@ unordered_map <wstring, set <int> >::iterator lvtoCi=getVerbClasses(where,verb);
 	return false;
 }
 
-bool Source::isVerbClass(int where,wstring verbClass)
+bool cSource::isVerbClass(int where,wstring verbClass)
 { LFS
 	wstring verb;
 unordered_map <wstring, set <int> >::iterator lvtoCi=getVerbClasses(where,verb);
@@ -2736,7 +2736,7 @@ unordered_map <wstring, set <int> >::iterator lvtoCi=getVerbClasses(where,verb);
 	return false;
 }
 
-bool Source::isNounClass(int where,wstring group)
+bool cSource::isNounClass(int where,wstring group)
 { LFS
 	tIWMM word=m[where].word;
 	if (word->first.length()==1) return false;
@@ -2749,7 +2749,7 @@ bool Source::isNounClass(int where,wstring group)
 }
 
 // does the object, or its matches, designate a location, or a verb clause leading to a location?
-bool Source::locationMatched(int where)
+bool cSource::locationMatched(int where)
 { LFS
 	if (m[where].getObject()<0) return false;
 	if (objects[m[where].getObject()].getSubType()>=0) return true;
@@ -2768,7 +2768,7 @@ bool Source::locationMatched(int where)
 
 // corral prepositional references to objects that wouldn't already be picked up by detectSpaceRelation (which keys off of verbs)
 // will change source.m (invalidate all iterators through the use of newSR)
-void Source::detectSpaceLocation(int where,int lastBeginS1)
+void cSource::detectSpaceLocation(int where,int lastBeginS1)
 { LFS
 	int wp,wpo,prepType,whereVerb=m[where].getRelVerb();
 	if (m[where].getObject()>=0 && m[wp=m[where].endObjectPosition].queryWinnerForm(prepositionForm)>=0 && (wpo=m[wp].getRelObject())>=0 &&
@@ -2811,7 +2811,7 @@ void Source::detectSpaceLocation(int where,int lastBeginS1)
 		newSR(where,-1,-1,m[m[whereVerb].relPrep].getRelObject(),-1,-1,-1,-1,-1,-stLOCATION,L"locationExtendedPreference",true);
 }
 
-bool Source::isSpeakerContinued(int where,int o,int lastWherePP,bool &sgOccurredAfter,bool &audienceOccurredAfter,bool &speakerOccurredAfter)
+bool cSource::isSpeakerContinued(int where,int o,int lastWherePP,bool &sgOccurredAfter,bool &audienceOccurredAfter,bool &speakerOccurredAfter)
 { LFS
 	bool physicallyEvaluated;
 	vector <cLocalFocus>::iterator lsi=in(o);
@@ -2831,7 +2831,7 @@ bool Source::isSpeakerContinued(int where,int o,int lastWherePP,bool &sgOccurred
 // in opposite directions
 // separately
 // their own way
-bool Source::isSpatialSeparation(int whereVerb)
+bool cSource::isSpatialSeparation(int whereVerb)
 { LFS
 	if (whereVerb<0 || m[whereVerb].relSubject<0 || m[m[whereVerb].relSubject].getObject()<0 || !objects[m[m[whereVerb].relSubject].getObject()].plural) return false;
 	int prepLoop=0;
@@ -2850,7 +2850,7 @@ bool Source::isSpatialSeparation(int whereVerb)
 }
 
 // will change source.m (invalidate all iterators through the use of newSR)
-void Source::detectSpaceRelation(int where,int backInitialPosition,vector <int> &lastSubjects)
+void cSource::detectSpaceRelation(int where,int backInitialPosition,vector <int> &lastSubjects)
 { LFS
 	wstring tmpstr,tmpstr2,tmpstr3,tmpstr4;
 	bool spaceRelationDetected=false;
@@ -3184,7 +3184,7 @@ bool addVCFrequency(int where,int fromWhere,vector <WordMatch>::iterator im,bool
 }
 
 extern int numVbNetClassFound,numOneSenseVbNetClassFound,numMultiSenseVbNetClassFound,verbsMappedToVerbNet;
-void Source::analyzeWordSenses(void)
+void cSource::analyzeWordSenses(void)
 { LFS 
 	int endObject=0,inObject=-1,numAdjectivesAdverbs=0,numTimeNouns=0,numTimeVerbs=0,numIrregular=0,numPhysicalObjects=0,numNotPhysicalObjects=0,numBodyPartNouns=0;
 	set <wstring> differentWords,differentVerbs,differentNouns,differentCommonWords;
@@ -3293,7 +3293,7 @@ void Source::analyzeWordSenses(void)
 	wprintf(L"PROGRESS: 100%% words analyzed with %d seconds elapsed \n",clocksec());
 }
 
-void Source::printVerbFrequency()
+void cSource::printVerbFrequency()
 { LFS
 	int totalNumVerbs=0;
 	vector <WordMatch>::iterator im=m.begin(),imend=m.end();
@@ -3351,7 +3351,7 @@ void Source::printVerbFrequency()
 	}
 }
 
-void Source::processExit(int where,vector <cSpaceRelation>::iterator sri,int backInitialPosition,vector <int> &lastSubjects)
+void cSource::processExit(int where,vector <cSpaceRelation>::iterator sri,int backInitialPosition,vector <int> &lastSubjects)
 { LFS
 	bool inPrimaryQuote=(m[where].objectRole&IN_PRIMARY_QUOTE_ROLE)!=0;
 	bool inSecondaryQuote=(m[where].objectRole&IN_SECONDARY_QUOTE_ROLE)!=0;
@@ -3670,7 +3670,7 @@ void Source::processExit(int where,vector <cSpaceRelation>::iterator sri,int bac
 	}
 }
 
-void Source::logSpaceCheck(void)
+void cSource::logSpaceCheck(void)
 { LFS
 	wstring tmpstr,tmpstr2;
 	int lastSPTAnchor=-1;

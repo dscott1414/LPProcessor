@@ -6,7 +6,7 @@
 #include "source.h"
 #include "profile.h"
 
-void Source::pushSpeaker(int where,int s, int sf,wchar_t *fromWhere)
+void cSource::pushSpeaker(int where,int s, int sf,wchar_t *fromWhere)
 { LFS
   wstring tmpstr;
   m[where].objectMatches.push_back(cOM(s,sf));
@@ -18,7 +18,7 @@ void Source::pushSpeaker(int where,int s, int sf,wchar_t *fromWhere)
     lplog(LOG_RESOLUTION,L"%06d:FPP %s of %s",where,fromWhere,objectString(s,tmpstr,true).c_str());
 }
 
-bool Source::matchObjectToSpeakers(int mI,vector <cOM> &currentSpeaker,vector <cOM> &previousSpeaker,int inflectionFlags,unsigned __int64 quoteFlags,int lastEmbeddedStoryBegin)
+bool cSource::matchObjectToSpeakers(int mI,vector <cOM> &currentSpeaker,vector <cOM> &previousSpeaker,int inflectionFlags,unsigned __int64 quoteFlags,int lastEmbeddedStoryBegin)
 { LFS
 	if (m[mI].flags&WordMatch::flagObjectResolved) return false; // if secondary speaker
 	m[mI].flags|=WordMatch::flagObjectResolved; 
@@ -62,7 +62,7 @@ bool Source::matchObjectToSpeakers(int mI,vector <cOM> &currentSpeaker,vector <c
 }
 
 // THIRD_PERSON cannot involve either speaker.
-void Source::removeSpeakers(int mI,vector <cOM> &speakers)
+void cSource::removeSpeakers(int mI,vector <cOM> &speakers)
 { LFS
 	if (m[mI].objectMatches.size()<=1) return;
 	for (vector <cOM>::iterator I=m[mI].objectMatches.begin(); I!=m[mI].objectMatches.end(); )
@@ -83,7 +83,7 @@ void Source::removeSpeakers(int mI,vector <cOM> &speakers)
   }
 }
 
-void Source::removeSpeakers(int mI,set <int> &speakers)
+void cSource::removeSpeakers(int mI,set <int> &speakers)
 { LFS
   for (vector <cOM>::iterator I=m[mI].objectMatches.begin(); I!=m[mI].objectMatches.end(); )
   {
@@ -103,7 +103,7 @@ void Source::removeSpeakers(int mI,set <int> &speakers)
   }
 }
 
-void Source::resolveFirstSecondPersonPronoun(int where,unsigned __int64 flags,int lastEmbeddedStoryBegin,vector <cOM> &currentSpeaker,vector <cOM> &previousSpeaker)
+void cSource::resolveFirstSecondPersonPronoun(int where,unsigned __int64 flags,int lastEmbeddedStoryBegin,vector <cOM> &currentSpeaker,vector <cOM> &previousSpeaker)
 { LFS
   if (currentSpeaker.size()==1 && currentSpeaker[0].object==-1) return; // Quoted String
   vector <cObject>::iterator object=objects.begin()+m[where].getObject();
@@ -222,7 +222,7 @@ bool masterCompare(const vector<cObject>::iterator &lhs,const vector<cObject>::i
   return lhs->numIdentifiedAsSpeaker+lhs->numDefinitelyIdentifiedAsSpeaker > rhs->numIdentifiedAsSpeaker+rhs->numDefinitelyIdentifiedAsSpeaker;
 }
 
-void Source::resolveFirstSecondPersonPronouns(vector <int> &secondaryQuotesResolutions)
+void cSource::resolveFirstSecondPersonPronouns(vector <int> &secondaryQuotesResolutions)
 { LFS
 	if (speakerGroups.empty()) return;
   bool inPrimaryQuote=false,inSecondaryQuote=false;

@@ -17,7 +17,7 @@ cPattern::create(L"XX{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"Y",
 										3, L"_NOUN_OBJ{OBJECT}", L"__NOUN[*]{OBJECT}", L"_ADJECTIVE", 0, 0, 1, ** patternElement 1, patternElementIndex=0, patternElement 1, patternElementIndex=1, patternElement 1, patternElementIndex=2
 										0);
 */
-class Source;
+class cSource;
 class matchElement
 {
 public:
@@ -124,9 +124,9 @@ public:
 			usagePatternEverMatched.reserve(patternIndexes.size());
 		}
     //patternElement(string patternName,string differentiator,int elementNum,set <unsigned int> &descendantTags,char *&buf);
-    int matchOne(Source &source,unsigned int sourcePosition,unsigned int lastElement,vector <matchElement> &whatMatched, sTrace &t);
-    bool matchRange(Source &source,int begin,int end,vector <matchElement> &whatMatched, sTrace &t);
-    bool matchFirst(Source &source,int sourcePosition,vector <matchElement> &whatMatched, sTrace &t);
+    int matchOne(cSource &source,unsigned int sourcePosition,unsigned int lastElement,vector <matchElement> &whatMatched, sTrace &t);
+    bool matchRange(cSource &source,int begin,int end,vector <matchElement> &whatMatched, sTrace &t);
+    bool matchFirst(cSource &source,int sourcePosition,vector <matchElement> &whatMatched, sTrace &t);
     bool inflectionMatch(int inflectionFlags,__int64 flags,wstring formStr, sTrace &t);
     wstring formsStr(void);
     bool contains(int pn)
@@ -300,7 +300,7 @@ public:
 				destinationPatternType=false;
     };
     static bool create(wstring patternName,wstring differentiator,int numForms,...);
-		static cPattern *create(Source *source,wstring patternName,int num,int whereBegin,int whereEnd,unordered_map <wstring, wstring> &parseVariables,bool destinationPatternType);
+		static cPattern *create(cSource *source,wstring patternName,int num,int whereBegin,int whereEnd,unordered_map <wstring, wstring> &parseVariables,bool destinationPatternType);
     bool eliminateTag(wstring tag);
     bool resolveDescendants(bool circular);
     cPattern(cPattern *p);
@@ -309,8 +309,8 @@ public:
         for (unsigned int e=0; e<elements.size(); e++)
             delete elements[e];
     }
-    bool matchPatternPosition(Source &source,const unsigned int position,bool fill,sTrace &t);
-    bool fillPattern(Source &source,int sourcePosition,vector <matchElement> &whatMatched,int elementMatched,unsigned int &insertionPoint,int &reducedCost,bool &pushed,sTrace &t);
+    bool matchPatternPosition(cSource &source,const unsigned int position,bool fill,sTrace &t);
+    bool fillPattern(cSource &source,int sourcePosition,vector <matchElement> &whatMatched,int elementMatched,unsigned int &insertionPoint,int &reducedCost,bool &pushed,sTrace &t);
     cPattern(string patternName,patternElement *element);
     void replace(int elementNum,int patternNum);
     void replace(int elementNum,string patternName);
@@ -423,7 +423,7 @@ public:
     {
         return (isPattern) ? elements[elementNum]->patternCosts[offset] : elements[elementNum]->formCosts[offset];
     }
-    bool isTopLevelMatch(Source &source,unsigned int beginPosition,unsigned int endPosition);
+    bool isTopLevelMatch(cSource &source,unsigned int beginPosition,unsigned int endPosition);
     bool nextPossibleElementRange(int currentElement)
     {
         unsigned int low,high;

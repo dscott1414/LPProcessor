@@ -109,7 +109,7 @@ wstring replaceQuotes(wstring ws)
 	return replacement;
 }
 
-bool foundParsedSentence(Source &source, wstring sentence, wstring &parse,bool lockTable)
+bool foundParsedSentence(cSource &source, wstring sentence, wstring &parse,bool lockTable)
 {
 	if (lockTable)
 	{
@@ -143,7 +143,7 @@ bool foundParsedSentence(Source &source, wstring sentence, wstring &parse,bool l
 	return parse.length() > 0;
 }
 
-int setParsedSentence(Source &source, wstring sentence, wstring parse,bool lockTable)
+int setParsedSentence(cSource &source, wstring sentence, wstring parse,bool lockTable)
 {
 	if (lockTable)
 	{
@@ -173,7 +173,7 @@ int setParsedSentence(Source &source, wstring sentence, wstring parse,bool lockT
 	return 0;
 }
 
-int parseSentence(Source &source,JNIEnv *env, wstring sentence, wstring &parse, bool pcfg, bool lockTable)
+int parseSentence(cSource &source,JNIEnv *env, wstring sentence, wstring &parse, bool pcfg, bool lockTable)
 {
 	static jclass parserDemoClass;
 	static jmethodID parseSentenceMethod;
@@ -309,7 +309,7 @@ void destroyJavaVM(JavaVM *vm)
 	vm->DestroyJavaVM();
 }
 
-vector <wstring> generateVocabFromSource(Source &source, int min_cnt = 2)
+vector <wstring> generateVocabFromSource(cSource &source, int min_cnt = 2)
 {
 	//Generate vocabulary
 	unordered_map <wstring, int> vocabAll;
@@ -329,7 +329,7 @@ vector <wstring> generateVocabFromSource(Source &source, int min_cnt = 2)
 }
 
 wstring startTag = L"--s--";
-void trainModelFromSource(Source &source, unordered_map <wstring, int> &wordTagCountsMap, unordered_map <wstring, int> &tagTransitionCountsMap, unordered_map <wstring, int> &tagCountsMap)
+void trainModelFromSource(cSource &source, unordered_map <wstring, int> &wordTagCountsMap, unordered_map <wstring, int> &tagTransitionCountsMap, unordered_map <wstring, int> &tagCountsMap)
 {
 	// Train part-of-speech (POS) tagger model
 	set<wstring> taggedWords, allWords;
@@ -577,7 +577,7 @@ void initViterbiStartProbabilities(int numWords,wstring firstWord,vector<wstring
 	}
 }
 
-wstring getContext(Source &source, int wordSourceIndex,bool star,int &duplicateSkip)
+wstring getContext(cSource &source, int wordSourceIndex,bool star,int &duplicateSkip)
 {
 	wstring context;
 	int begin=max(0,wordSourceIndex-20), end=min(source.m.size(),wordSourceIndex+20);
@@ -613,7 +613,7 @@ wstring getContext(Source &source, int wordSourceIndex,bool star,int &duplicateS
 // numWordsInSource = number of words in text 
 // order numWordsInSource*numTags*numTags
 // --- output in probabilityMatrix and pathMatrix
-void forwardFromSource(Source &source,vector<vector<double>> &tagTransitionProbabilityMatrix, vector<vector<double>> &wordTagProbabilityMatrix, DIYDiskArray<double> &probabilityMatrix, DIYDiskArray<int> &pathMatrix,
+void forwardFromSource(cSource &source,vector<vector<double>> &tagTransitionProbabilityMatrix, vector<vector<double>> &wordTagProbabilityMatrix, DIYDiskArray<double> &probabilityMatrix, DIYDiskArray<int> &pathMatrix,
 												vector <wstring> &tags, unordered_map <wstring, int> &wordSourceIndexLookup, unordered_map <wstring, int> &tagLookup)
 {
 	int numWordsInSource = source.m.size();
@@ -702,7 +702,7 @@ void forwardFromSource(Source &source,vector<vector<double>> &tagTransitionProba
 	}
 }
 
-int backwardFromSource(Source &source,vector <wstring> &tags, unordered_map <wstring, int> &tagLookup, DIYDiskArray<double> &probabilityMatrix, DIYDiskArray<int> &pathMatrix)
+int backwardFromSource(cSource &source,vector <wstring> &tags, unordered_map <wstring, int> &tagLookup, DIYDiskArray<double> &probabilityMatrix, DIYDiskArray<int> &pathMatrix)
 {
 	int numWordsInSource = source.m.size(),criticalErrors=0;
 	vector <int> z = vector(numWordsInSource, (int)-1);
@@ -762,7 +762,7 @@ unordered_map<wstring, vector <wstring> > viterbiAssociationMap = {
 // include subclasses of forms with their parents.
 // include the word itself if viterbi doesn't include it.
 // if viterbi specifies the word as the form, specify every form (as in that case the viterbi pick is ambiguous)
-void appendAssociatedFormsToViterbiTags(Source &source)
+void appendAssociatedFormsToViterbiTags(cSource &source)
 {
 	unordered_map<wstring, vector <wstring> > originalViterbiAssociationMap = viterbiAssociationMap;
 	for (auto const&[form, vectorforms] : originalViterbiAssociationMap)
@@ -836,7 +836,7 @@ void appendAssociatedFormsToViterbiTags(Source &source)
 	}
 }
 
-void getInternalViterbiInfo(Source &source, int viterbiOriginalTagIndex, int wordSourceIndex, wstring &prevTag, wstring &tag, int &tagTransitionCount, int &wordTagCount,
+void getInternalViterbiInfo(cSource &source, int viterbiOriginalTagIndex, int wordSourceIndex, wstring &prevTag, wstring &tag, int &tagTransitionCount, int &wordTagCount,
 	vector <wstring> &tags, //vector <wstring> &vocab,
 	DIYDiskArray<int> &pathMatrix,
 	unordered_map <wstring, int> &wordTagCountsMap, unordered_map <wstring, int> &tagTransitionCountsMap)
@@ -855,7 +855,7 @@ void getInternalViterbiInfo(Source &source, int viterbiOriginalTagIndex, int wor
 		wordTagCount = ei->second;
 }
 
-void compareViterbiAgainstStructuredTagging(Source &source, 
+void compareViterbiAgainstStructuredTagging(cSource &source, 
 	vector<vector<double>> &tagTransitionProbabilityMatrix, vector<vector<double>> &wordTagProbabilityMatrix, DIYDiskArray<double> &probabilityMatrix, DIYDiskArray<int> &pathMatrix,
 	unordered_map <wstring, int> &wordSourceIndexLookup, 
 	unordered_map <wstring, int> &tagLookup,
@@ -1081,7 +1081,7 @@ void compareViterbiAgainstStructuredTagging(Source &source,
 
 // Decode sequences
 // wordCountLimit - use words that occur across the corpus no less than this number
-void tagFromSource(Source &source, vector <wstring> &model,int wordCountLimit, JNIEnv *env,bool compare)
+void tagFromSource(cSource &source, vector <wstring> &model,int wordCountLimit, JNIEnv *env,bool compare)
 {
 	unordered_map <wstring, int> wordTagCountsMap, tagTransitionCountsMap, tagCountsMap;
 	loadModel(model, wordTagCountsMap, tagTransitionCountsMap, tagCountsMap);
@@ -1120,7 +1120,7 @@ void tagFromSource(Source &source, vector <wstring> &model,int wordCountLimit, J
 	}
 }
 
-void createModelFromSource(Source &source, vector <wstring> &model)
+void createModelFromSource(cSource &source, vector <wstring> &model)
 {
 	wstring modelPath = source.sourcePath+L".model.txt";
 	if (_waccess(modelPath.c_str(), 0) != 0)
@@ -1137,7 +1137,7 @@ void createModelFromSource(Source &source, vector <wstring> &model)
 	}
 }
 
-void testViterbiFromSource(Source &source)
+void testViterbiFromSource(cSource &source)
 {
 	vector <wstring> model;
 	createModelFromSource(source, model);

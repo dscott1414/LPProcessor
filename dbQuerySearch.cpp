@@ -25,12 +25,12 @@
 #include <set>
 using namespace std;
 
-bool cQuestionAnswering::matchOwnershipDbQuery(Source *questionSource,wchar_t *derivation,cSpaceRelation* parentSRI)
+bool cQuestionAnswering::matchOwnershipDbQuery(cSource *questionSource,wchar_t *derivation,cSpaceRelation* parentSRI)
 { LFS
 	return matchOwnershipDbMusicBrainz(questionSource,derivation,parentSRI);
 }
 
-bool cQuestionAnswering::dbSearchForQuery(Source *questionSource, wchar_t *derivation,cSpaceRelation* parentSRI,vector < cAS > &answerSRIs)
+bool cQuestionAnswering::dbSearchForQuery(cSource *questionSource, wchar_t *derivation,cSpaceRelation* parentSRI,vector < cAS > &answerSRIs)
 { LFS
 	return dbSearchMusicBrainz(questionSource, derivation, parentSRI, answerSRIs);
 }

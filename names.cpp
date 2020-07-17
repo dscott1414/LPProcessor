@@ -761,7 +761,7 @@ int cName::insertSQL(wchar_t *buffer,int sourceId,int index,int maxbuf)
   return buflen;
 }
 
-bool Source::evaluateName(vector <tTagLocation> &tagSet,cName &name,bool &isMale,bool &isFemale,bool &isPlural,bool &isBusiness)
+bool cSource::evaluateName(vector <tTagLocation> &tagSet,cName &name,bool &isMale,bool &isFemale,bool &isPlural,bool &isBusiness)
 { LFS
   name.hon=name.hon2=name.hon3=name.first=name.middle=name.middle2=name.last=name.suffix=name.any=wNULL;
   name.nickName=-1;
@@ -821,7 +821,7 @@ bool Source::evaluateName(vector <tTagLocation> &tagSet,cName &name,bool &isMale
   return true;
 }
 
-bool Source::identifyNameAdjective(int where,cName &name,bool &isMale,bool &isFemale)
+bool cSource::identifyNameAdjective(int where,cName &name,bool &isMale,bool &isFemale)
 { LFS
   int element,nameEnd=-1;
   if ((element=m[where].pma.queryPattern(L"__NAMEOWNER",nameEnd))==-1) 
@@ -853,7 +853,7 @@ bool Source::identifyNameAdjective(int where,cName &name,bool &isMale,bool &isFe
 // A
 // H1 or H1 && H2 or H1 && H2 && H3
 // F or F&L or F&L&M1 or F&L&M1&M2
-bool Source::identifyName(int where,int &element,cName &name,bool &isMale,bool &isFemale,bool &isPlural,bool &isBusiness)
+bool cSource::identifyName(int where,int &element,cName &name,bool &isMale,bool &isFemale,bool &isPlural,bool &isBusiness)
 { LFS
   int nameEnd=-1;
   if ((element=m[where].pma.queryPattern(L"_NAME",nameEnd))==-1) return false;
@@ -873,7 +873,7 @@ bool Source::identifyName(int where,int &element,cName &name,bool &isMale,bool &
   return false;
 }
 
-bool Source::identifyName(int begin,int principalWhere,int end,int &nameElement,cName &name,bool &isMale,
+bool cSource::identifyName(int begin,int principalWhere,int end,int &nameElement,cName &name,bool &isMale,
 													bool &isFemale,bool &isNeuter,bool &isPlural,bool &isBusiness,bool &comparableName,
 													bool &comparableNameAdjective,bool &requestWikiAgreement,OC &objectClass)
 { LFS
@@ -984,7 +984,7 @@ bool Source::identifyName(int begin,int principalWhere,int end,int &nameElement,
 	return false;
 }
 
-tIWMM Source::setSex(vector <tTagLocation> &tagSet,int where,bool &isMale,bool &isFemale,bool isPlural)
+tIWMM cSource::setSex(vector <tTagLocation> &tagSet,int where,bool &isMale,bool &isFemale,bool isPlural)
 { LFS
   if (where<0) return wNULL;
   tIWMM word=m[tagSet[where].sourcePosition].word;
@@ -1023,7 +1023,7 @@ tIWMM Source::setSex(vector <tTagLocation> &tagSet,int where,bool &isMale,bool &
 // ignore the next two for now
 // a __NAME of diff 'A' / Al's Shack
 // a __PP where the last element is a PROPER_NOUN with an owner / at old Red's
-bool Source::evaluateNameAdjective(vector <tTagLocation> &tagSet,cName &name,bool &isMale,bool &isFemale)
+bool cSource::evaluateNameAdjective(vector <tTagLocation> &tagSet,cName &name,bool &isMale,bool &isFemale)
 { LFS
   name.hon=name.hon2=name.hon3=name.first=name.middle=name.middle2=name.last=name.suffix=name.any=wNULL;
   isMale=isFemale=false;
@@ -1545,7 +1545,7 @@ void createMetaNameEquivalencePatterns(void)
 		0);
 }
 
-void Source::equivocateObjects(int where,int eTo,int eFrom)
+void cSource::equivocateObjects(int where,int eTo,int eFrom)
 { LFS
 	if (eTo<0) return;
 	bool ambiguousGender=objects[eTo].male && objects[eTo].female;
@@ -1644,7 +1644,7 @@ int mapNumeralOrdinal(const wstring &word)
 }
 
 // Julius was about thirty-five.
-bool Source::ageDetection(int where,int primary,int secondary)
+bool cSource::ageDetection(int where,int primary,int secondary)
 { LFS
 	// This was one of the ...
 	if (m[objects[secondary].originalLocation].relPrep>=0 && m[m[objects[secondary].originalLocation].relPrep].word->first==L"of")
@@ -1682,7 +1682,7 @@ bool Source::ageDetection(int where,int primary,int secondary)
 	return true;
 }
 // in secondary quotes, inPrimaryQuote=false
-bool Source::evaluateMetaNameEquivalence(int where,vector <tTagLocation> &tagSet,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb)
+bool cSource::evaluateMetaNameEquivalence(int where,vector <tTagLocation> &tagSet,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb)
 { LFS
 	int primaryTag=findOneTag(tagSet,L"NAME_PRIMARY",-1),secondaryTag=findOneTag(tagSet,L"NAME_SECONDARY",-1);
 	if (primaryTag<0 || secondaryTag<0) return false;
@@ -1999,7 +1999,7 @@ bool Source::evaluateMetaNameEquivalence(int where,vector <tTagLocation> &tagSet
 				continue;
 			}
 		}
-		if (sourceType==Source::INTERACTIVE_SOURCE_TYPE)
+		if (sourceType==cSource::INTERACTIVE_SOURCE_TYPE)
 		{
 			// check if already there
 			if (in(secondaryNameObject,m[wherePrimary].objectMatches)==m[wherePrimary].objectMatches.end())
@@ -2153,7 +2153,7 @@ bool Source::evaluateMetaNameEquivalence(int where,vector <tTagLocation> &tagSet
 }
 
 // in secondary quotes, inPrimaryQuote=false
-bool Source::identifyMetaNameEquivalence(int where,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb)
+bool cSource::identifyMetaNameEquivalence(int where,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb)
 { LFS
   int element,startAt=0; // nameEnd=-1,
   while ((element=m[where].pma.queryAllPattern(L"_META_NAME_EQUIVALENCE",startAt))!=-1) 
@@ -2173,7 +2173,7 @@ bool Source::identifyMetaNameEquivalence(int where,bool inPrimaryQuote,bool inSe
   return false;
 }
 
-bool Source::evaluateMetaSpeaker(int where,vector <tTagLocation> &tagSet)
+bool cSource::evaluateMetaSpeaker(int where,vector <tTagLocation> &tagSet)
 { LFS
 	int primaryTag,secondaryTag=findOneTag(tagSet,L"NAME_SECONDARY",-1);
   unsigned int wherePrimary=tagSet[primaryTag=findOneTag(tagSet,L"NAME_PRIMARY",-1)].sourcePosition;
@@ -2190,7 +2190,7 @@ bool Source::evaluateMetaSpeaker(int where,vector <tTagLocation> &tagSet)
 	return true;
 }
 
-bool Source::identifyMetaSpeaker(int where,bool inQuote)
+bool cSource::identifyMetaSpeaker(int where,bool inQuote)
 { LFS
 	if (!inQuote) return false; // these patterns only apply in a quote
   int element,nameEnd=-1;
@@ -2207,7 +2207,7 @@ bool Source::identifyMetaSpeaker(int where,bool inQuote)
   return false;
 }
 
-bool Source::evaluateAnnounce(int where,vector <tTagLocation> &tagSet)
+bool cSource::evaluateAnnounce(int where,vector <tTagLocation> &tagSet)
 { LFS
 	int primaryTag;
   unsigned int wherePrimary=tagSet[primaryTag=findOneTag(tagSet,L"NAME_PRIMARY",-1)].sourcePosition;
@@ -2229,7 +2229,7 @@ bool Source::evaluateAnnounce(int where,vector <tTagLocation> &tagSet)
 }
 
 // Here is Bob!  / Here is another knock.
-bool Source::identifyAnnounce(int where,bool inQuote)
+bool cSource::identifyAnnounce(int where,bool inQuote)
 { LFS
 	if (!inQuote) return false; // these patterns only apply in a quote
   int element,nameEnd=-1;
@@ -2246,7 +2246,7 @@ bool Source::identifyAnnounce(int where,bool inQuote)
   return false;
 }
 
-bool Source::evaluateMetaGroup(int where,vector <tTagLocation> &tagSet,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb)
+bool cSource::evaluateMetaGroup(int where,vector <tTagLocation> &tagSet,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb)
 { LFS
 	int primaryTag,secondaryTag;
   int wherePrimary=tagSet[primaryTag=findOneTag(tagSet,L"NAME_PRIMARY",-1)].sourcePosition;
@@ -2304,7 +2304,7 @@ bool Source::evaluateMetaGroup(int where,vector <tTagLocation> &tagSet,int lastB
 }
 
 // Here is Bob!  / Here is another knock.
-bool Source::identifyMetaGroup(int where,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb)
+bool cSource::identifyMetaGroup(int where,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb)
 { LFS
 	if (inPrimaryQuote || inSecondaryQuote) return false; // these patterns only apply to speakers
   int element,nameEnd=-1;
@@ -2379,8 +2379,8 @@ struct wordMapCompare
   }
 };
 
-map <tIWMM,vector <tIWMM>,Source::wordMapCompare> abbreviationMap;
-void Source::buildMap(void)
+map <tIWMM,vector <tIWMM>,cSource::wordMapCompare> abbreviationMap;
+void cSource::buildMap(void)
 { LFS
 	if (abbreviationMap.empty())
 	{
@@ -2396,10 +2396,10 @@ void Source::buildMap(void)
 	}
 }
 
-void Source::addWordAbbreviationMap(tIWMM w,vector <tIWMM> &nouns)
+void cSource::addWordAbbreviationMap(tIWMM w,vector <tIWMM> &nouns)
 { LFS
 	if (w==wNULL) return;
-map <tIWMM,vector <tIWMM>,Source::wordMapCompare>::iterator iMap=abbreviationMap.find(w);
+map <tIWMM,vector <tIWMM>,cSource::wordMapCompare>::iterator iMap=abbreviationMap.find(w);
 	if (iMap==abbreviationMap.end()) return;
 	if (find(nouns.begin(),nouns.end(),w)==nouns.end()) nouns.push_back(w);
 	for (vector <tIWMM>::iterator ami=iMap->second.begin(),amiEnd=iMap->second.end(); ami!=amiEnd; ami++)
@@ -2407,7 +2407,7 @@ map <tIWMM,vector <tIWMM>,Source::wordMapCompare>::iterator iMap=abbreviationMap
 }
 
 // detect any mapping not already there due to title-abbreviations
-void Source::addAssociatedNounsFromTitle(int o)
+void cSource::addAssociatedNounsFromTitle(int o)
 { LFS
 	if (objects[o].objectClass==NAME_OBJECT_CLASS) 
 	{
@@ -2424,7 +2424,7 @@ void Source::addAssociatedNounsFromTitle(int o)
 	}
 }
 
-bool Source::abbreviationEquivalent(tIWMM w,tIWMM w2)
+bool cSource::abbreviationEquivalent(tIWMM w,tIWMM w2)
 { LFS
 	// even if generic, we want to make sure a matching head will get rewarded (the big man)
 	if (w==w2) return true;
@@ -2434,7 +2434,7 @@ bool Source::abbreviationEquivalent(tIWMM w,tIWMM w2)
 	return find(iMap->second.begin(),iMap->second.end(),w2)!=iMap->second.end();
 }
 
-bool Source::accumulateRelatedObjects(int object,set <int> &relatedObjects)
+bool cSource::accumulateRelatedObjects(int object,set <int> &relatedObjects)
 { LFS
   int begin=objects[object].begin,end=objects[object].end;
 	buildMap();
@@ -2443,7 +2443,7 @@ bool Source::accumulateRelatedObjects(int object,set <int> &relatedObjects)
 		tIWMM w=m[I].word;
 		wstring tmpstr,tmpstr2;
     relatedObjects.insert(relatedObjectsMap[w].begin(),relatedObjectsMap[w].end());
-		map <tIWMM,vector<tIWMM>,Source::wordMapCompare>::iterator ami=abbreviationMap.find(w);
+		map <tIWMM,vector<tIWMM>,cSource::wordMapCompare>::iterator ami=abbreviationMap.find(w);
 		if (ami!=abbreviationMap.end())
 			for (vector <tIWMM>::iterator wi=ami->second.begin(),wiEnd=ami->second.end(); wi!=wiEnd; wi++)
 				relatedObjects.insert(relatedObjectsMap[*wi].begin(),relatedObjectsMap[*wi].end());
@@ -2452,7 +2452,7 @@ bool Source::accumulateRelatedObjects(int object,set <int> &relatedObjects)
 }
 
 // detect a Janet Vandermeyer and a Rita Vandermeyer
-void Source::accumulateNameLikeStats(vector <cObject>::iterator &object,int o,bool &firstNameAmbiguous,bool &lastNameAmbiguous,tIWMM &ambiguousFirst,int &ambiguousNickName,tIWMM &ambiguousLast)
+void cSource::accumulateNameLikeStats(vector <cObject>::iterator &object,int o,bool &firstNameAmbiguous,bool &lastNameAmbiguous,tIWMM &ambiguousFirst,int &ambiguousNickName,tIWMM &ambiguousLast)
 { LFS
 	bool ga=firstNameAmbiguous || lastNameAmbiguous;
 	// if the object contains both a first and last name
@@ -2493,7 +2493,7 @@ void Source::accumulateNameLikeStats(vector <cObject>::iterator &object,int o,bo
 // merge current object onto matched object.  change all references (m and ls)
 //                       of the current object to the new object.
 //    if a name is not mentioned definitively as a speaker, try to match it to a speaker.
-bool Source::resolveNameObject(int where,vector <cObject>::iterator &object,vector <cOM> &objectMatches,int forwardCallingObject)
+bool cSource::resolveNameObject(int where,vector <cObject>::iterator &object,vector <cOM> &objectMatches,int forwardCallingObject)
 { LFS
 	// don't match 'sir' to anything using this 'relatedObjects' kind of resolution
 	if (object->name.justHonorific() && object->name.hon->second.query(L"pinr")>=0) return false;
@@ -2627,7 +2627,7 @@ bool Source::resolveNameObject(int where,vector <cObject>::iterator &object,vect
 					// any honorific of the name object must be related to the principal where position of rObject
 					// so rObject==doc or the doctor, so w=doc or w=doctor
 					tIWMM w=m[rObject->originalLocation].word;
-					map <tIWMM,vector<tIWMM>,Source::wordMapCompare>::iterator ami=abbreviationMap.find(w);
+					map <tIWMM,vector<tIWMM>,cSource::wordMapCompare>::iterator ami=abbreviationMap.find(w);
 					// if Dr. Hall (hon=Dr.) matches doc
 					if (object->name.hon==w || object->name.hon2==w || object->name.hon3==w || 
 							(ami!=abbreviationMap.end() && 

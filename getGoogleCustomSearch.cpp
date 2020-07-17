@@ -191,7 +191,7 @@ int getGoogleSearchJSON(int where,wstring object,wstring &buffer,wstring &filePa
 	return errCode;
 }
 
-bool Source::inObject(int where,int whereQuestionType)
+bool cSource::inObject(int where,int whereQuestionType)
 { LFS
 	if (where==whereQuestionType)
 		return true;
@@ -200,7 +200,7 @@ bool Source::inObject(int where,int whereQuestionType)
 }
 
 // this is deliberately noncombinatorial - each prepositional phrase only has one predecessor
-bool Source::appendPrepositionalPhrase(int where,vector <wstring> &prepPhraseStrings,int relPrep,bool nonMixedCase,bool lowerCase,wchar_t *separator,int atNumPP)
+bool cSource::appendPrepositionalPhrase(int where,vector <wstring> &prepPhraseStrings,int relPrep,bool nonMixedCase,bool lowerCase,wchar_t *separator,int atNumPP)
 { LFS
 	int relObject=m[relPrep].getRelObject();
 	if (relObject>=relPrep && m[relObject].endObjectPosition>=0 && (m[relPrep].nextQuote==where || m[relPrep].relNextObject==where))
@@ -230,7 +230,7 @@ bool Source::appendPrepositionalPhrase(int where,vector <wstring> &prepPhraseStr
 	return false;
 }
 
-int Source::appendPrepositionalPhrases(int where,wstring &wsoStr,vector <wstring> &prepPhraseStrings,int &numWords,bool noMixedCase,wchar_t *separator,int atNumPP)
+int cSource::appendPrepositionalPhrases(int where,wstring &wsoStr,vector <wstring> &prepPhraseStrings,int &numWords,bool noMixedCase,wchar_t *separator,int atNumPP)
 { LFS
 	int relPrep;
 	numWords=0;
@@ -252,7 +252,7 @@ int Source::appendPrepositionalPhrases(int where,wstring &wsoStr,vector <wstring
 	return prepPhraseStrings.size();
 }
 
-int Source::getObjectStrings(int where,int object,vector <wstring> &wsoStrs,bool &alreadyDidPlainCopy)
+int cSource::getObjectStrings(int where,int object,vector <wstring> &wsoStrs,bool &alreadyDidPlainCopy)
 { LFS
 	wstring wsoStr;
 	if (objects[object].objectClass==NAME_OBJECT_CLASS && (m[where].endObjectPosition-m[where].beginObjectPosition>1 || objects[object].name.first!=wNULL))
@@ -279,7 +279,7 @@ int Source::getObjectStrings(int where,int object,vector <wstring> &wsoStrs,bool
 	return 0;
 }
 
-int Source::appendObject(__int64 questionType,int whereQuestionType,vector <wstring> &objectStrings,int where)
+int cSource::appendObject(__int64 questionType,int whereQuestionType,vector <wstring> &objectStrings,int where)
 { LFS
 	if (where<0) return 0;
 	if (whereQuestionType == where || (whereQuestionType >= 0 && inObject(where, whereQuestionType)))
@@ -388,7 +388,7 @@ int Source::appendObject(__int64 questionType,int whereQuestionType,vector <wstr
 
 // PAST:VERB_PAST, VERB_PAST_PARTICIPLE,VERB_PAST_THIRD_SINGULAR,VERB_PAST_PLURAL
 // PRESENT:VERB_PRESENT_THIRD_SINGULAR=128,VERB_PRESENT_FIRST_SINGULAR=256, VERB_PRESENT_PLURAL=2048,VERB_PRESENT_SECOND_SINGULAR=4096,VERB_PRESENT_PARTICIPLE
-tIWMM Source::getTense(tIWMM verb,tIWMM subject,int tenseDesired)
+tIWMM cSource::getTense(tIWMM verb,tIWMM subject,int tenseDesired)
 { LFS
 	int inflectionFlags=verb->second.inflectionFlags,desiredInflectionFlags=0;
 	bool verbIsPast=((inflectionFlags&(VERB_PAST|VERB_PAST_PARTICIPLE|VERB_PAST_THIRD_SINGULAR|VERB_PAST_PLURAL))>0);
@@ -417,7 +417,7 @@ tIWMM Source::getTense(tIWMM verb,tIWMM subject,int tenseDesired)
 	return verb;
 }
 
-wstring Source::getTense(int where,wstring candidate,int preferredVerb)
+wstring cSource::getTense(int where,wstring candidate,int preferredVerb)
 { LFS
 	tIWMM mainEntry=m[where].getMainEntry();
 	unordered_map <wstring, vector <tIWMM>>::iterator mEMI;
@@ -442,7 +442,7 @@ wstring Source::getTense(int where,wstring candidate,int preferredVerb)
 	return candidate;
 }
 // possibly adjust tense
-int Source::appendVerb(vector <wstring> &objectStrings,int where)
+int cSource::appendVerb(vector <wstring> &objectStrings,int where)
 { LFS
 	wstring candidate=m[where].word->first;
 	int fullTense=m[where].verbSense;
@@ -521,7 +521,7 @@ int Source::appendVerb(vector <wstring> &objectStrings,int where)
 	return 0;
 }
 
-int Source::appendWord(vector <wstring> &objectStrings,int where)
+int cSource::appendWord(vector <wstring> &objectStrings,int where)
 { LFS
 	for (unsigned int os=0; os<objectStrings.size(); os++)
 		if (objectStrings[os].length()>0)
@@ -925,7 +925,7 @@ void cQuestionAnswering::enhanceWebSearchQueries(vector <wstring> &webSearchQuer
 	}
 }
 
-void cQuestionAnswering::getWebSearchQueries(Source *questionSource,cSpaceRelation* parentSRI,vector <wstring> &webSearchQueryStrings)
+void cQuestionAnswering::getWebSearchQueries(cSource *questionSource,cSpaceRelation* parentSRI,vector <wstring> &webSearchQueryStrings)
 { LFS
 	webSearchQueryStrings.push_back(L"");
 	questionSource->appendObject(parentSRI->questionType,parentSRI->whereQuestionType, webSearchQueryStrings, parentSRI->whereSubject);
@@ -959,7 +959,7 @@ wstring quoteLess(wstring &qo,wstring &qlo)
   return qlo;
 }
 
-int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum processSourceType, int maxProcesses, int numSourcesPerProcess,
+int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int beginSource, int endSource, cSource::sourceTypeEnum processSourceType, int maxProcesses, int numSourcesPerProcess,
 	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool makeCopyBeforeSourceWrite, bool parseOnly, wstring specialExtension);
 
 int cQuestionAnswering::spinParses(MYSQL &mysql,vector <searchSource> &accumulatedParseRequests)
@@ -1003,7 +1003,7 @@ int cQuestionAnswering::spinParses(MYSQL &mysql,vector <searchSource> &accumulat
 		}
 	}
 	if (generatedRequests > 1)
-		return startProcesses(mysql, Source::REQUEST_TYPE, 0, 0, -1, -1, Source::REQUEST_TYPE, 6, 5, false, true, true, true, false, false, L"");
+		return startProcesses(mysql, cSource::REQUEST_TYPE, 0, 0, -1, -1, cSource::REQUEST_TYPE, 6, 5, false, true, true, true, false, false, L"");
 	else
 		return -1;
 }
@@ -1085,7 +1085,7 @@ int cQuestionAnswering::accumulateParseRequests(cSpaceRelation* parentSRI, int w
 	return maxWebSitesFound;
 }
 
-int cQuestionAnswering::analyzeAccumulatedRequests(Source *questionSource,wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, vector <searchSource> &accumulatedParseRequests,
+int cQuestionAnswering::analyzeAccumulatedRequests(cSource *questionSource,wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, vector <searchSource> &accumulatedParseRequests,
  cPattern *&mapPatternAnswer,	cPattern *&mapPatternQuestion)
 {
 	LFS
@@ -1094,11 +1094,11 @@ int cQuestionAnswering::analyzeAccumulatedRequests(Source *questionSource,wchar_
 	{
 		if (oi->skipFullPath)
 			continue;
-		Source *source = NULL;
+		cSource *source = NULL;
 		int sMaxAnswer = -1;
 		if (oi->isSnippet || !oi->hasCorrespondingSnippet)
 			check = answerSRIs.size();
-		if (processPath(questionSource,oi->pathInCache.c_str(), source, Source::WEB_SEARCH_SOURCE_TYPE, (oi->isSnippet) ? 50 : 100, parseOnly) >= 0)
+		if (processPath(questionSource,oi->pathInCache.c_str(), source, cSource::WEB_SEARCH_SOURCE_TYPE, (oi->isSnippet) ? 50 : 100, parseOnly) >= 0)
 			analyzeQuestionFromSource(questionSource,derivation, oi->fullWebPath, source, parentSRI, answerSRIs, sMaxAnswer, true, mapPatternAnswer, mapPatternQuestion);
 		maxAnswer = max(maxAnswer, sMaxAnswer);
 		if (sMaxAnswer >= 24 && oi->isSnippet && oi->fullPathIndex >= 0)
@@ -1107,7 +1107,7 @@ int cQuestionAnswering::analyzeAccumulatedRequests(Source *questionSource,wchar_
 	return 0;
 }
 
-int cQuestionAnswering::webSearchForQueryParallel(Source *questionSource,wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
+int cQuestionAnswering::webSearchForQueryParallel(cSource *questionSource,wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
  vector <wstring> &webSearchQueryStrings,int &webSearchQueryStringOffset, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion)
 {
 	vector <searchSource> accumulatedParseRequests;
@@ -1117,7 +1117,7 @@ int cQuestionAnswering::webSearchForQueryParallel(Source *questionSource,wchar_t
 	return maxWebSitesFound;
 }
 
-int cQuestionAnswering::webSearchForQuerySerial(Source *questionSource, wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
+int cQuestionAnswering::webSearchForQuerySerial(cSource *questionSource, wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
  vector <wstring> &webSearchQueryStrings,
 	int &webSearchQueryStringOffset, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion)
 {
@@ -1147,7 +1147,7 @@ int cQuestionAnswering::webSearchForQuerySerial(Source *questionSource, wchar_t 
 			//int check = answerSRIs.size();
 			if (!ssi->empty())
 			{
-				Source *source = NULL;
+				cSource *source = NULL;
 				if (processSnippet(questionSource,*ssi, epath, source, parseOnly) >= 0)
 				{
 					analyzeQuestionFromSource(questionSource,derivation, *wsi + L" abstract", source, parentSRI, answerSRIs, sMaxAnswer, true, mapPatternAnswer, mapPatternQuestion);
@@ -1156,8 +1156,8 @@ int cQuestionAnswering::webSearchForQuerySerial(Source *questionSource, wchar_t 
 			maxAnswer = max(maxAnswer, sMaxAnswer);
 			if (sMaxAnswer<24 && Internet::getWebPath(parentSRI->where, *wsi, webSiteBuffer, epath, L"webSearchCache", filePathOut, headers, index, true, false) == 0)
 			{
-				Source *source = NULL;
-				if (processPath(questionSource,(wchar_t *)filePathOut.c_str(), source, Source::WEB_SEARCH_SOURCE_TYPE, 100, parseOnly) >= 0)
+				cSource *source = NULL;
+				if (processPath(questionSource,(wchar_t *)filePathOut.c_str(), source, cSource::WEB_SEARCH_SOURCE_TYPE, 100, parseOnly) >= 0)
 				{
 					analyzeQuestionFromSource(questionSource,derivation, *wsi, source, parentSRI, answerSRIs, maxAnswer, true, mapPatternAnswer, mapPatternQuestion);
 					if (limitProcessingForProfiling)

@@ -7,7 +7,7 @@
 #include "profile.h"
 
 // for a NAME that is both male and female (uncertain) make this NAME a male if the NAME is the only NAME matching the current object.
-void Source::resolveNameGender(int where,bool male,bool female)
+void cSource::resolveNameGender(int where,bool male,bool female)
 { LFS
   if ((male && female) || (!male && !female)) return;
   int onlyOneName=-1;
@@ -43,7 +43,7 @@ void Source::resolveNameGender(int where,bool male,bool female)
   }
 }
 
-bool Source::resolveNonGenderedGeneralObjectAgainstOneObject(int where,vector <cObject>::iterator object,vector <cOM> &objectMatches,int o,int sf,int lastWhere,int &mostRecentMatch)
+bool cSource::resolveNonGenderedGeneralObjectAgainstOneObject(int where,vector <cObject>::iterator object,vector <cOM> &objectMatches,int o,int sf,int lastWhere,int &mostRecentMatch)
 { LFS
   vector <cObject>::iterator genS=objects.begin() + o;
 	// don't match anything to time objects or location objects
@@ -178,7 +178,7 @@ bool Source::resolveNonGenderedGeneralObjectAgainstOneObject(int where,vector <c
 // try harder to accurately group compound objects.
 // group preferentially by gender, whether the objects are numbers,plural, or 
 // if only 2 objects - if chain is not minimal (the first object endPosition!=coordinator [and]) and the first object is not an object of a preposition)
-unsigned int Source::getNumCompoundObjects(int where,int &combinantScore,wstring &combinantStr)
+unsigned int cSource::getNumCompoundObjects(int where,int &combinantScore,wstring &combinantStr)
 { LFS
 	unsigned int chainCount=0;
 	int minPosition=-1,maxPosition=-1,numNumberObjects=0,numPluralObjects=0,noObjectCount=0,numVerbObjects=0;
@@ -296,7 +296,7 @@ unsigned int Source::getNumCompoundObjects(int where,int &combinantScore,wstring
 	return chainCount;
 }
 
-void Source::resolveNonGenderedGeneralObject(int where,vector <cObject>::iterator &object,vector <cOM> &objectMatches,int wordOrderSensitiveModifier)
+void cSource::resolveNonGenderedGeneralObject(int where,vector <cObject>::iterator &object,vector <cOM> &objectMatches,int wordOrderSensitiveModifier)
 { LFS
   // mappings: OBJECT             acceptable ls mapping                               unacceptable
   //           a doctor           NONE
@@ -572,7 +572,7 @@ bool cObject::hasAttribute(int where,vector <WordMatch> &m)
   return false;
 }
 
-vector <Source::cSpeakerGroup>::iterator Source::containingSpeakerGroup()
+vector <cSource::cSpeakerGroup>::iterator cSource::containingSpeakerGroup()
 { LFS
 	for (int I=0; I<(signed)speakerGroups.size(); I++)
 		if (speakerGroups[I].sgBegin>=I && speakerGroups[I].sgEnd<I)
@@ -591,7 +591,7 @@ vector <Source::cSpeakerGroup>::iterator Source::containingSpeakerGroup()
 // "the" may also be demonstrative_determiner, possessive_determiner, quantifier
 // one noun phrase has adjectives and the other does not, otherwise reject.
 // compare the principal - this assumes unknown speakers have determiners.
-bool Source::resolveOccRoleActivityObject(int where,vector <cOM> &objectMatches,vector <cObject>::iterator object,int wordOrderSensitiveModifier,bool physicallyPresent)
+bool cSource::resolveOccRoleActivityObject(int where,vector <cOM> &objectMatches,vector <cObject>::iterator object,int wordOrderSensitiveModifier,bool physicallyPresent)
 { LFS
 	bool chooseFromLocalFocus=false,traceThisNym=(where==13031);
 	// look for localObjects having the occupation
@@ -813,7 +813,7 @@ struct {
 	{ "boss","employee" },
 	{ "grandmother:grandfather","granddaughter:grandson" }
 };
-void Source::resolveRelativeObject(int where,vector <cOM> &objectMatches,vector <cObject>::iterator object,int wordOrderSensitiveModifier)
+void cSource::resolveRelativeObject(int where,vector <cOM> &objectMatches,vector <cObject>::iterator object,int wordOrderSensitiveModifier)
 { LFS
 	// look ahead for the next paragraph and compile all new matching objects
 	if (wordOrderSensitiveModifier>=0 && cObject::wordOrderWords[wordOrderSensitiveModifier]==L"another")
@@ -852,7 +852,7 @@ void Source::resolveRelativeObject(int where,vector <cOM> &objectMatches,vector 
 }
 
 // the two men
-bool Source::tryGenderedSubgroup(int where,vector <cOM> &objectMatches,vector <cObject>::iterator object,int whereGenderedSubgroupCount,bool limitTwo)
+bool cSource::tryGenderedSubgroup(int where,vector <cOM> &objectMatches,vector <cObject>::iterator object,int whereGenderedSubgroupCount,bool limitTwo)
 { LFS
 	int genderedSubgroupCount;
 	wstring tmpstr,tmpstr2;
@@ -929,7 +929,7 @@ bool Source::tryGenderedSubgroup(int where,vector <cOM> &objectMatches,vector <c
 	return sg>=0;
 }
 
-bool Source::matchOtherObjects(vector <int> &otherGroupedObjects,int speakerGroup,vector <cOM> &objectMatches)
+bool cSource::matchOtherObjects(vector <int> &otherGroupedObjects,int speakerGroup,vector <cOM> &objectMatches)
 { LFS
 	vector <cSpeakerGroup>::iterator sg=speakerGroups.begin()+speakerGroup;
 	// get any groups in current speaker group otherGroupedObjects are in.
@@ -970,7 +970,7 @@ bool Source::matchOtherObjects(vector <int> &otherGroupedObjects,int speakerGrou
 //       really treated like "other" and its owner should change.
 //   if "another" is used in a plural object (MPLURAL_ROLE) AND if the other object is in a group in the current 
 //   speaker group then use this object instead.
-bool Source::scanFutureGenderedMatchingObjects(int where,bool inQuote,vector <cObject>::iterator object,vector <cOM> &objectMatches)
+bool cSource::scanFutureGenderedMatchingObjects(int where,bool inQuote,vector <cObject>::iterator object,vector <cOM> &objectMatches)
 { LFS
 	// if in a group get the other member
 	// if not inQuote, search only future groupings
@@ -1031,7 +1031,7 @@ bool Source::scanFutureGenderedMatchingObjects(int where,bool inQuote,vector <cO
 	return false;
 }
 
-void Source::includeWordOrderPreferences(int where,int wordOrderSensitiveModifier)
+void cSource::includeWordOrderPreferences(int where,int wordOrderSensitiveModifier)
 { LFS
 	bool plural=objects[m[where].getObject()].plural;
 	int mostRecentLocation=-1,mostRecentLsiOffset=-1,ca=-1;
@@ -1091,7 +1091,7 @@ void Source::includeWordOrderPreferences(int where,int wordOrderSensitiveModifie
 // definitelySpeaker is from scanForSpeaker.  It is set to true unless the speaker was detected after the
 // quote in an _S1 pattern with a verb with a nonpast tense, or the verb had one or more objects.
 // in secondary quotes, inPrimaryQuote=false
-bool Source::resolveGenderedObject(int where,bool definitelyResolveSpeaker,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,
+bool cSource::resolveGenderedObject(int where,bool definitelyResolveSpeaker,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,
 vector <cOM> &objectMatches,
                                    vector <cObject>::iterator object,
 int wordOrderSensitiveModifier,
@@ -1282,7 +1282,7 @@ int wordOrderSensitiveModifier,
   return true;
 }
 
-void Source::addPreviousDemonyms(int where)
+void cSource::addPreviousDemonyms(int where)
 { LFS
 	// if in analyzing "the russian", there are russians that have been mentioned before in the text (and may not be in local objects)
 	// if there are other russians, and none of the localObjects are russian, then add the most recently mentioned russian.
@@ -1394,7 +1394,7 @@ void Source::addPreviousDemonyms(int where)
 }
 }
 
-bool Source::addNewNumberedSpeakers(int where,vector <cOM> &objectMatches)
+bool cSource::addNewNumberedSpeakers(int where,vector <cOM> &objectMatches)
 { LFS
 	if (m[where].getObject()<0 || (!objects[m[where].getObject()].male && !objects[m[where].getObject()].female) || 
 		  (m[where].endObjectPosition-m[where].beginObjectPosition)==1)
@@ -1435,7 +1435,7 @@ bool Source::addNewNumberedSpeakers(int where,vector <cOM> &objectMatches)
 }
 
 // this object is new, so subtract all the current speakers from the future speakers, and if there is one left, then assign.
-bool Source::addNewSpeaker(int where,vector <cOM> &objectMatches)
+bool cSource::addNewSpeaker(int where,vector <cOM> &objectMatches)
 { LFS
 	wstring tmpstr,tmpstr2;
 	bool physicallyEvaluated;
@@ -1587,7 +1587,7 @@ bool Source::addNewSpeaker(int where,vector <cOM> &objectMatches)
 }
 
 // in secondary quotes, inPrimaryQuote=false
-bool Source::resolveBodyObjectClass(int where,int beginEntirePosition,vector <cObject>::iterator object,bool definitelySpeaker,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,bool resolveForSpeaker,bool avoidCurrentSpeaker,int wordOrderSensitiveModifier,int subjectCataRestriction,bool &mixedPlurality,bool limitTwo,bool isPhysicallyPresent,bool physicallyEvaluated,bool &changeClass,vector <cOM> &objectMatches)
+bool cSource::resolveBodyObjectClass(int where,int beginEntirePosition,vector <cObject>::iterator object,bool definitelySpeaker,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,bool resolveForSpeaker,bool avoidCurrentSpeaker,int wordOrderSensitiveModifier,int subjectCataRestriction,bool &mixedPlurality,bool limitTwo,bool isPhysicallyPresent,bool physicallyEvaluated,bool &changeClass,vector <cOM> &objectMatches)
 { LFS
 	changeClass=false;
 	wstring tmpstr,tmpstr2;
@@ -1777,7 +1777,7 @@ bool Source::resolveBodyObjectClass(int where,int beginEntirePosition,vector <cO
 	return resolveGenderedObject(where,definitelySpeaker|resolveForSpeaker,inPrimaryQuote,inSecondaryQuote,lastBeginS1,lastRelativePhrase,lastQ2,objectMatches,object,wordOrderSensitiveModifier,subjectCataRestriction,mixedPlurality,limitTwo,isPhysicallyPresent,physicallyEvaluated);
 }
 
-void Source::excludePOVSpeakers(int where,wchar_t *fromWhere)
+void cSource::excludePOVSpeakers(int where,wchar_t *fromWhere)
 { LFS
 	vector <cLocalFocus>::iterator lsi;
 	wstring tmpstr;
@@ -1820,7 +1820,7 @@ void Source::excludePOVSpeakers(int where,wchar_t *fromWhere)
 	}
 }
 
-void Source::excludeObservers(int where,bool inQuote,bool definitelySpeaker)
+void cSource::excludeObservers(int where,bool inQuote,bool definitelySpeaker)
 { LFS
 	if (currentSpeakerGroup<speakerGroups.size() && speakerGroups[currentSpeakerGroup].observers.size() && !inQuote)
 	{
@@ -1863,7 +1863,7 @@ void Source::excludeObservers(int where,bool inQuote,bool definitelySpeaker)
 // if this not in a quote, not a speaker and is a descriptive sentence (IS) which does not specifically match the POV
 // and if there is a new entity having been introduced within 2 sentences (newPPAge<2)
 // discourage POV
-void Source::discouragePOV(int where,bool inQuote,bool definitelySpeaker)
+void cSource::discouragePOV(int where,bool inQuote,bool definitelySpeaker)
 { LFS
 	set <int> povSpeakers;
 	int o=-1,wo;
@@ -1918,7 +1918,7 @@ void Source::discouragePOV(int where,bool inQuote,bool definitelySpeaker)
 	}
 }
 
-void Source::excludeSpeakers(int where,bool inPrimaryQuote,bool inSecondaryQuote)
+void cSource::excludeSpeakers(int where,bool inPrimaryQuote,bool inSecondaryQuote)
 { LFS
 	//mixedPluralityUsageSubGroupEnhancement(where);
 	// if inQuote and !HAIL, diminish match of any objects in currentSpeakerGroup
@@ -1971,7 +1971,7 @@ void Source::excludeSpeakers(int where,bool inPrimaryQuote,bool inSecondaryQuote
 
 // wchar_t *wordOrderWords[]={L"other",L"another",L"second",L"first",L"third",L"former",L"latter",L"that",L"this",L"two",L"three",NULL};
 //                            -2       -3         -4        -5       -6       -7        -8        -9      -10     -11    -12
-bool Source::resolveWordOrderOfObject(int where,int wo,int ofObjectWhere,vector <cOM> &objectMatches)
+bool cSource::resolveWordOrderOfObject(int where,int wo,int ofObjectWhere,vector <cOM> &objectMatches)
 { LFS
 	int ofObjectWhereObject=m[ofObjectWhere].getObject(),object=m[where].getObject();
 	if (ofObjectWhereObject>=0 && (objects[ofObjectWhereObject].male ^ objects[ofObjectWhereObject].female))
@@ -2066,7 +2066,7 @@ bool Source::resolveWordOrderOfObject(int where,int wo,int ofObjectWhere,vector 
 }
 
 // check for a phrase immediately after the object that agrees in gender and number and is not a subject
-int Source::checkSubsequent(int where,bool definitelySpeaker,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,bool resolveForSpeaker,bool avoidCurrentSpeaker,vector <cOM> &objectMatches)
+int cSource::checkSubsequent(int where,bool definitelySpeaker,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,bool resolveForSpeaker,bool avoidCurrentSpeaker,vector <cOM> &objectMatches)
 { LFS
   int nextPosition=m[where].endObjectPosition;
 	wstring word=m[where].word->first,tmpstr;
@@ -2146,7 +2146,7 @@ int Source::checkSubsequent(int where,bool definitelySpeaker,bool inPrimaryQuote
 	return -1;
 }
 
-bool Source::matchByAppositivity(int where,int nextPosition)
+bool cSource::matchByAppositivity(int where,int nextPosition)
 { LFS
   if (m[nextPosition].objectRole&(SUBJECT_ROLE|MNOUN_ROLE) || (m[where].objectRole&MNOUN_ROLE))
 		return false;
@@ -2219,7 +2219,7 @@ bool Source::matchByAppositivity(int where,int nextPosition)
 	return true;
 }
 
-void Source::setQuoteContainsSpeaker(int where,bool inPrimaryQuote)
+void cSource::setQuoteContainsSpeaker(int where,bool inPrimaryQuote)
 { LFS
 	bool allIn,oneIn;
 	if (inPrimaryQuote && speakerGroupsEstablished && !(m[where].objectRole&(HAIL_ROLE|IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE)) && 
@@ -2234,7 +2234,7 @@ void Source::setQuoteContainsSpeaker(int where,bool inPrimaryQuote)
 	}
 }
 
-vector <cLocalFocus>::iterator Source::ownerObjectInLocal(int o)
+vector <cLocalFocus>::iterator cSource::ownerObjectInLocal(int o)
 { LFS
 	if (objects[o].getOwnerWhere()<0 || objects[o].objectClass!=BODY_OBJECT_CLASS) return localObjects.end();
 	vector <cLocalFocus>::iterator olsi;
@@ -2341,7 +2341,7 @@ void cObject::updateGenericGenders(map <tIWMM,int,tFI::cRMap::wordMapCompare> &r
 // for each of these objects, 
 //   if HEAD is not mapped, or if HEAD<MMG/2, AND numHavingSalience==numGenericObjects decrease salience.
 //   if HEAD == MMG, increase salience.
-void Source::includeGenericGenderPreferences(int where,vector <cObject>::iterator object)
+void cSource::includeGenericGenderPreferences(int where,vector <cObject>::iterator object)
 { LFS
 	tIWMM w=m[object->originalLocation].getMainEntry(),localw;
 	wstring word=w->first;
@@ -2522,7 +2522,7 @@ void Source::includeGenericGenderPreferences(int where,vector <cObject>::iterato
 }
 
 // in secondary quotes, inPrimaryQuote=false
-int Source::resolveAdjectivalObject(int where,bool definitelySpeaker,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,bool resolveForSpeaker)
+int cSource::resolveAdjectivalObject(int where,bool definitelySpeaker,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,bool resolveForSpeaker)
 { LFS
   if (m[where].word->second.inflectionFlags&(FIRST_PERSON|SECOND_PERSON)) 
 	{
@@ -2616,7 +2616,7 @@ int Source::resolveAdjectivalObject(int where,bool definitelySpeaker,bool inPrim
 //   or (ii) Q is in the adjunct domain of N.
 //   John and Mary like each other's portraits.
 // Possible parents: _NOUN_OBJ, _NOUN"C", single element __PP"3"
-int Source::reflexivePronounCoreference(int where, int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,bool inPrimaryQuote,bool inSecondaryQuote)
+int cSource::reflexivePronounCoreference(int where, int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,bool inPrimaryQuote,bool inSecondaryQuote)
 { LFS
 	int futureReference=where,verbRel=-1;
 	if (lastBeginS1<0) 
@@ -2753,7 +2753,7 @@ int Source::reflexivePronounCoreference(int where, int lastBeginS1,int lastRelat
   return 0;
 }
 
-wchar_t *Source::loopString(int where, wstring &tmpstr)
+wchar_t *cSource::loopString(int where, wstring &tmpstr)
 { LFS
 	int relPrep=where;
 	wstring tmp2;
@@ -2800,7 +2800,7 @@ wchar_t *Source::loopString(int where, wstring &tmpstr)
 // lastBeginS1 is the index of the start of the pattern S1 which contains P.
 // rObject is P in LL procedure outlined above.
 // subjectCataRestriction occurs when the subject is singular and has more than one match.
-int Source::coreferenceFilterLL2345(int where,int rObject,vector <int> &disallowedReferences,
+int cSource::coreferenceFilterLL2345(int where,int rObject,vector <int> &disallowedReferences,
 																		int lastBeginS1,int lastRelativePhrase,int lastQ2,bool &mixedPlurality,int &subjectCataRestriction)
 { LFS
 	if (lastRelativePhrase==-1 && lastBeginS1==-1 && lastQ2==-1) return 0;
@@ -3104,7 +3104,7 @@ int Source::coreferenceFilterLL2345(int where,int rObject,vector <int> &disallow
 // 5. P is in the NP domain of N (included in the same _NOUN pattern)
 //    John's portait of him in interesting.
 // for possessives in a prepositional clause 'her hand in his' OR 'a relative of hers'
-void Source::coreferenceFilterLL5(int where,vector <int> &disallowedReferences)
+void cSource::coreferenceFilterLL5(int where,vector <int> &disallowedReferences)
 { LFS
 	if ((m[where].objectRole&PREP_OBJECT_ROLE))
 	{
@@ -3129,7 +3129,7 @@ void Source::coreferenceFilterLL5(int where,vector <int> &disallowedReferences)
 // Additional - based on Lappin and Leass 2.1.1 (2)
 //             (His eyes were fixed on Mr. Carter)
 //             If body object in subject, then this determiner cannot resolve to object, or prep object for the rest of _S1.
-int Source::pronounCoreferenceFilterLL6(int P,int lastBeginS1, vector <int> &disallowedReferences)
+int cSource::pronounCoreferenceFilterLL6(int P,int lastBeginS1, vector <int> &disallowedReferences)
 { LFS
 	wstring tmpstr;
 	if (lastBeginS1<0) 
@@ -3190,7 +3190,7 @@ int Source::pronounCoreferenceFilterLL6(int P,int lastBeginS1, vector <int> &dis
   return 0;
 }
 
-bool Source::resolvePronoun(int where,bool definitelySpeaker,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,int beginEntirePosition,
+bool cSource::resolvePronoun(int where,bool definitelySpeaker,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,int beginEntirePosition,
 													  bool resolveForSpeaker,bool avoidCurrentSpeaker,bool &mixedPlurality,bool limitTwo,bool isPhysicallyPresent,bool physicallyEvaluated,
 														int &subjectCataRestriction,vector <cOM> &objectMatches)
 { LFS
@@ -3454,7 +3454,7 @@ bool Source::resolvePronoun(int where,bool definitelySpeaker,bool inPrimaryQuote
 	return true;
 }
 
-void Source::setResolved(int where,vector <cLocalFocus>::iterator lsi,bool isPhysicallyPresent)
+void cSource::setResolved(int where,vector <cLocalFocus>::iterator lsi,bool isPhysicallyPresent)
 { LFS
 	if (m[where].getObject()!=lsi->om.object || objects[lsi->om.object].firstLocation!=where) // if this is not the first time the object is encountered
 		lsi->resetAge(objectToBeMatchedInQuote);
@@ -3519,7 +3519,7 @@ void Source::setResolved(int where,vector <cLocalFocus>::iterator lsi,bool isPhy
 // if it cannot resolve the object, it passes back m[where].object.
 // the object that is resolved is the object set at the position 'where', field 'object' in WordMatch.
 // in secondary quotes, inPrimaryQuote=false
-void Source::resolveObject(int where,bool definitelySpeaker,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,
+void cSource::resolveObject(int where,bool definitelySpeaker,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,
 													 bool resolveForSpeaker,bool avoidCurrentSpeaker,bool limitTwo)
 { LFS
   if (m[where].getObject()== cObject::eOBJECTS::UNKNOWN_OBJECT)

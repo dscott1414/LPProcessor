@@ -37,7 +37,7 @@ void Column::removeDomainFromAccumulatedRDFTypesMap(wchar_t * domainAssociations
 }
 
 // accumulate all rdf types of all entries of all rows in a column.
-void Column::accumulateColumnRDFTypes(Source *wikipediaSource, set <wstring> &titleSynonyms, bool keepMusicDomain, bool keepFilmDomain, bool onlyPreferred)
+void Column::accumulateColumnRDFTypes(cSource *wikipediaSource, set <wstring> &titleSynonyms, bool keepMusicDomain, bool keepFilmDomain, bool onlyPreferred)
 {
 	wchar_t *musicAssociations[] = { L"single", L"recording", L"music", L"release", L"album", L"" };
 	wchar_t *filmAssociations[] = { L"film", L"" };
@@ -57,7 +57,7 @@ void Column::accumulateColumnRDFTypes(Source *wikipediaSource, set <wstring> &ti
 // the RDFTypeSimplificationToWordAssociationWithObjectMap map takes all the RDF types associated with a given sequence of words (adaptiveWhere to adaptiveWhere+numWords) and 
 //   returns a list of words with confidences estimating how much the RDF type the word is simplified from is associated with the sequence of words.
 // take the list of words simplified from RDF types which are associated with the entry, and accumulate the ones with highest confidence into the accumulatedRDFTypesMap for the column.
-void Column::Entry::accumulateEntryRDFTypes(Source *wikipediaSource, set <wstring> &titleSynonyms, unordered_map < wstring, AssociationType > &accumulatedRDFTypesMap)
+void Column::Entry::accumulateEntryRDFTypes(cSource *wikipediaSource, set <wstring> &titleSynonyms, unordered_map < wstring, AssociationType > &accumulatedRDFTypesMap)
 {
 	queryAssociationsMatched = 0;
 	titleAssociationsMatched = 0;
@@ -119,7 +119,7 @@ void Column::zeroColumnAccumulatedRDFTypes()
 	accumulatedRDFTypesMap.clear();
 }
 
-int Column::getSumOfAllFullyConfidentRDFTypeFrequencies(Source *wikipediaSource, int row, int entry, int &maxOfAllFullyConfidentRDFTypeFrequencies, wstring &fullyConfidentSimplifiedRDFTypeWithMaximumFrequency)
+int Column::getSumOfAllFullyConfidentRDFTypeFrequencies(cSource *wikipediaSource, int row, int entry, int &maxOfAllFullyConfidentRDFTypeFrequencies, wstring &fullyConfidentSimplifiedRDFTypeWithMaximumFrequency)
 {
 	unordered_map <wstring, int > RDFTypeSimplificationToWordAssociationWithObjectMap;
 	wikipediaSource->getAssociationMapMaster(rows[row].entries[entry].adaptiveWhere, rows[row].entries[entry].numWords, RDFTypeSimplificationToWordAssociationWithObjectMap, TEXT(__FUNCTION__));
@@ -144,7 +144,7 @@ int Column::getSumOfAllFullyConfidentRDFTypeFrequencies(Source *wikipediaSource,
 }
 
 // singling out only the entries that are marked lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms, accumulate the confident RDF type frequencies and divide by the number of rows, thus arriving at a coherence percentage.
-int Column::calculateColumnRDFTypeCoherence(Source *wikipediaSource, Column::Entry titleEntry, wstring tableName)
+int Column::calculateColumnRDFTypeCoherence(cSource *wikipediaSource, Column::Entry titleEntry, wstring tableName)
 {
 	int sumOfAllFullyConfidentRDFTypeFrequenciesInOnlyPreferredColumnEntries = 0, sumOfMaxOfAllFullyConfidentRDFTypeFrequenciesInOnlyPreferredColumnEntries = 0;
 	for (int row = 0; row < rows.size(); row++)
@@ -183,7 +183,7 @@ int Column::calculateColumnRDFTypeCoherence(Source *wikipediaSource, Column::Ent
 	return coherencyPercentage;
 }
 
-bool Column::testTitlePreference(Source *wikipediaSource, wstring tableName, set <wstring> &titleSynonyms)
+bool Column::testTitlePreference(cSource *wikipediaSource, wstring tableName, set <wstring> &titleSynonyms)
 {
 	if (titleSynonyms.empty())
 		return false;
@@ -250,7 +250,7 @@ bool Column::testTitlePreference(Source *wikipediaSource, wstring tableName, set
 	return numRowsWhereLastWordOrSimplifiedRDFTypesFoundInTitleSynonyms > numRowsWhereSimplifiedRDFTypesFound * 3 / 4;
 }
 
-void Column::setRowPreference(Source *wikipediaSource, wstring tableName)
+void Column::setRowPreference(cSource *wikipediaSource, wstring tableName)
 {
 	for (int row = 0; row < rows.size(); row++)
 	{
@@ -283,7 +283,7 @@ void Column::setRowPreference(Source *wikipediaSource, wstring tableName)
 	}
 }
 
-bool Column::determineColumnRDFTypeCoherency(Source *wikipediaSource, Column::Entry titleEntry, set <wstring> &titleSynonyms, wstring tableName, bool keepMusicDomain, bool keepFilmDomain)
+bool Column::determineColumnRDFTypeCoherency(cSource *wikipediaSource, Column::Entry titleEntry, set <wstring> &titleSynonyms, wstring tableName, bool keepMusicDomain, bool keepFilmDomain)
 	{
 		int sumMaxEntries = 0;
 		for (int row = 0; row < rows.size(); row++)
@@ -342,7 +342,7 @@ bool Column::determineColumnRDFTypeCoherency(Source *wikipediaSource, Column::En
 		vector <int> synonymMatchedQuestionObject;
 		wstring simplifiedRDFTypes;
 */
-	void Column::Entry::logEntry(int logType, const wchar_t *tableName, int row, int entryIndex, Source *source)
+	void Column::Entry::logEntry(int logType, const wchar_t *tableName, int row, int entryIndex, cSource *source)
 	{
 		wstring tmp;
 		if (row<0)
@@ -370,7 +370,7 @@ bool Column::determineColumnRDFTypeCoherency(Source *wikipediaSource, Column::En
 		L"Dansk", L"Deutsch", L"Español", L"Esperanto", L"Français", L"Italiano", L"Nederlands", L"Polski", L"Svenska", L"Íslenska", L"Scots", L"Română", L"Português", L"Edit links", NULL, NULL }; // languages
 	unordered_map <wstring, int> wikiInvalidTableEntriesMap;
 	vector <int> expectedNumEntries;
-	bool SourceTable::isEntryInvalid(int beginEntry, vector <int> &wikiColumns,Source *wikipediaSource)
+	bool cSourceTable::isEntryInvalid(int beginEntry, vector <int> &wikiColumns,cSource *wikipediaSource)
 	{
 		if (wikiInvalidTableEntriesMap.empty())
 		{
@@ -419,7 +419,7 @@ bool Column::determineColumnRDFTypeCoherency(Source *wikipediaSource, Column::En
 		return false;
 	}
 
-	bool SourceTable::getTableFromSource(int I, int whereQuestionTypeObject, Source *wikipediaSource, Source *questionSource)
+	bool cSourceTable::getTableFromSource(int I, int whereQuestionTypeObject, cSource *wikipediaSource, cSource *questionSource)
 	{
 		wstring tmpstr, tmpstr2;
 		int row = 0;
@@ -592,7 +592,7 @@ bool Column::determineColumnRDFTypeCoherency(Source *wikipediaSource, Column::En
 		return true;
 	}
 
-	bool coherentTitle(int begin,int end, Source *wikipediaSource)
+	bool coherentTitle(int begin,int end, cSource *wikipediaSource)
 	{
 		for (int I = begin; I < end; I++)
 			if (wikipediaSource->m[I].word->first == L"index" || wikipediaSource->m[I].word->first == L"contents" || wikipediaSource->m[I].word->first == Words.TOC_HEADER->first)
@@ -603,7 +603,7 @@ bool Column::determineColumnRDFTypeCoherency(Source *wikipediaSource, Column::En
 	//   for each table with a table header, does the table header match the questionTypeObject or its synonyms?
 	//     if not, and the table has column headers, does any column header match the questionTypeObject or its synonyms?
 	//    if matched, feed the table or only the selected column into propertyValues.
-	SourceTable::SourceTable(int &I, int whereQuestionTypeObject, Source *wikipediaSource, Source *questionSource)
+	cSourceTable::cSourceTable(int &I, int whereQuestionTypeObject, cSource *wikipediaSource, cSource *questionSource)
 	{
 		LFS
 			wstring tmpstr, tmpstr2, whereQuestionTypeObjectString;
@@ -666,20 +666,20 @@ bool Column::determineColumnRDFTypeCoherency(Source *wikipediaSource, Column::En
 		}
 	}
 
-	void cQuestionAnswering::addTables(Source *questionSource,int whereQuestionTypeObject, Source *wikipediaSource, vector < SourceTable > &wikiTables)
+	void cQuestionAnswering::addTables(cSource *questionSource,int whereQuestionTypeObject, cSource *wikipediaSource, vector < cSourceTable > &wikiTables)
 	{
 		LFS
 			for (int where = 0; where < (signed)wikipediaSource->m.size(); where++)
 				if (wikipediaSource->m[where].word == Words.TABLE)
 				{
-					SourceTable wikiTable(where, whereQuestionTypeObject, wikipediaSource, questionSource);
+					cSourceTable wikiTable(where, whereQuestionTypeObject, wikipediaSource, questionSource);
 					if ((wikiTable.columns.size() > 1 || !wikiTable.columns[0].invalidColumn) && (wikiTable.columns.size() > 1 || (wikiTable.columns.size() == 1 && wikiTable.columns[0].rows.size() > 1)))
 						wikiTables.push_back(wikiTable);
 				}
 	}
 
 
-	Column::Entry Column::scanColumnEntry(int whereQuestionTypeObject, Source *wikipediaSource, Source *questionSource, int &where, bool &matchFound, wstring tableName)
+	Column::Entry Column::scanColumnEntry(int whereQuestionTypeObject, cSource *wikipediaSource, cSource *questionSource, int &where, bool &matchFound, wstring tableName)
 	{
 		LFS
 			Entry columnEntry;
@@ -732,7 +732,7 @@ bool Column::determineColumnRDFTypeCoherency(Source *wikipediaSource, Column::En
 		return columnEntry;
 	}
 
-	bool SourceTable::analyzeTitle(unsigned int where, int &numWords, int &numPrepositions,wstring tableName,Source *wikipediaSource)
+	bool cSourceTable::analyzeTitle(unsigned int where, int &numWords, int &numPrepositions,wstring tableName,cSource *wikipediaSource)
 	{
 		LFS
 			numWords = 0;

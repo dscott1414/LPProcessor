@@ -1757,10 +1757,10 @@ private:
 	wstring comment;
 };
 
-class Source
+class cSource
 {
 public:
-	Source(wchar_t *databaseServer,int _sourceType,bool generateFormStatistics,bool skipWordInitialization,bool printProgress);
+	cSource(wchar_t *databaseServer,int _sourceType,bool generateFormStatistics,bool skipWordInitialization,bool printProgress);
 	int beginClock;
 	int pass;
 	enum sourceTypeEnum {
@@ -1797,7 +1797,7 @@ public:
 	bool findStart(wstring &buffer,wstring &start,int &repeatStart,wstring &title);
 	bool retrieveText(wstring &path,wstring etext,wstring &start,int &repeatStart,wstring author,wstring title);
 	bool readSource(wstring &path,bool checkOnly, bool &parsedOnly, bool printProgress,wstring specialExtension);
-	Source *parentSource;
+	cSource *parentSource;
 	int answerContainedInSource;
 	vector <matchElement> whatMatched;
 	struct wordMapCompare
@@ -2345,9 +2345,9 @@ int wherePrepObject,
 	void setSecondaryQuestion(vector <WordMatch>::iterator im);
 	void setQuestion(vector <WordMatch>::iterator im,bool inQuote,int &questionSpeakerLastSentence,int &questionSpeaker,bool &currentIsQuestion);
 	void correctBySpeakerInversionIfQuestion(int where,int whereFirstSubjectInParagraph);
-	bool matchChildSourcePositionSynonym(tIWMM parentWord, Source *childSource, int childWhere);
-	int determineKindBitField(Source *source, int where, int &wikiBitField);
-	int determineKindBitFieldFromObject(Source *source, int object, int &wikiBitField);
+	bool matchChildSourcePositionSynonym(tIWMM parentWord, cSource *childSource, int childWhere);
+	int determineKindBitField(cSource *source, int where, int &wikiBitField);
+	int determineKindBitFieldFromObject(cSource *source, int object, int &wikiBitField);
 	bool testQuestionType(int where,int &whereQuestionType,int &whereQuestionTypeFlags,int setType,set <int> &whereQuestionInformationSourceObjects);
 	void processQuestion(int whereVerb,int whereReferencingObject,__int64 &questionType,int &whereQuestionType,set <int> &whereQuestionInformationSourceObjects);
 
@@ -2421,7 +2421,7 @@ int wherePrepObject,
 	void printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &tagSet,int position,int PEMAPosition,vector <wstring> &words);
 
 	// wikipedia
-	Source(MYSQL *parentMysql,int _sourceType,int _sourceConfidence);
+	cSource(MYSQL *parentMysql,int _sourceType,int _sourceConfidence);
 	void reduceLocalFreebase(wchar_t *path,wchar_t *filename);
 	void getObjectString(int where,wstring &object,vector <wstring> &lookForSubject,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases);
 	int getWikipediaPath(int principalWhere,vector <wstring> &wikipediaLinks,wchar_t *path,vector <wstring> &lookForSubject,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases);
@@ -2457,17 +2457,17 @@ int wherePrepObject,
 	bool rejectISARelation(int principalWhere);
 	bool isDefiniteObject(int where, wchar_t *definiteObjectType, int &ownerWhere, bool recursed);
 	int identifyISARelationTextAnalysis(cQuestionAnswering &qa, int principalWhere,bool parseOnly);
-	int checkParticularPartSemanticMatch(int logType, int parentWhere, Source *childSource, int childWhere, int childObject, bool &synonym, int &semanticMismatch);
+	int checkParticularPartSemanticMatch(int logType, int parentWhere, cSource *childSource, int childWhere, int childObject, bool &synonym, int &semanticMismatch);
 	void checkParticularPartSemanticMatchWord(int logType, int parentWhere, bool &synonym, set <wstring> &parentSynonyms, wstring pw, wstring pwme, int &lowestConfidence, unordered_map <wstring, int >::iterator ami);
 	int checkParticularPartQuestionTypeCheck(__int64 questionType, int childWhere, int childObject, int &semanticMismatch);
 	bool isObjectCapitalized(int where);
 	bool ppExtensionAvailable(int where,int &numPPAvailable,bool nonMixed);
-	void copySource(Source *childSource,int begin,int end);
-	vector <cSpaceRelation>::iterator copySRI(Source *childSource,vector <cSpaceRelation>::iterator sri);
-	int copyDirectlyAttachedPrepositionalPhrase(Source *childSource,int relPrep);
-	int copyDirectlyAttachedPrepositionalPhrases(int whereParentObject,Source *childSource,int whereChild);
+	void copySource(cSource *childSource,int begin,int end);
+	vector <cSpaceRelation>::iterator copySRI(cSource *childSource,vector <cSpaceRelation>::iterator sri);
+	int copyDirectlyAttachedPrepositionalPhrase(cSource *childSource,int relPrep);
+	int copyDirectlyAttachedPrepositionalPhrases(int whereParentObject,cSource *childSource,int whereChild);
 	void adjustOffsets(int childWhere,bool keepObjects=false);
-	int copyChildIntoParent(Source *childSource,int whereChild);
+	int copyChildIntoParent(cSource *childSource,int whereChild);
 	int detectAttachedPhrase(vector <cSpaceRelation>::iterator sri,int &relVerb);
 	bool hasProperty(int where,int whereQuestionTypeObject, unordered_map <int,vector < vector <int> > > &wikiTableMap,vector <wstring> &propertyValues);
 	bool compareObjectString(int whereObject1,int whereObject2);
@@ -3095,5 +3095,5 @@ bool inSectionHeader,
 	void printAccumulatedPatterns(void);
 };
 
-extern vector <Source::cSpeakerGroup>::iterator sgNULL;
+extern vector <cSource::cSpeakerGroup>::iterator sgNULL;
 

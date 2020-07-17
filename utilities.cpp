@@ -765,7 +765,7 @@ void getTagPositionsFromTagSet(vector<tTagLocation> tagSet, map <int, set<wstrin
 	addTagConstrainedMark(L"future", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
 }
 
-void getTagPositions(Source &source, int position, int pemaByPatternEnd, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
+void getTagPositions(cSource &source, int position, int pemaByPatternEnd, map <int, set<wstring>> &tagBeginPositionMap, map <int, set<wstring>> &tagEndPositionMap)
 {
 	vector < vector <tTagLocation> > tagSets;
 	if (source.startCollectTags(false, subjectVerbRelationTagSet, position, pemaByPatternEnd, tagSets, true, false, L"tags for debugging") > 0)
@@ -778,7 +778,7 @@ void getTagPositions(Source &source, int position, int pemaByPatternEnd, map <in
 	}
 }
 
-void getSentenceWithTags(Source &source, int patternBegin, int patternEnd, int sentenceBegin, int sentenceEnd, int PEMAPosition, wstring &sentence)
+void getSentenceWithTags(cSource &source, int patternBegin, int patternEnd, int sentenceBegin, int sentenceEnd, int PEMAPosition, wstring &sentence)
 {
 	map <int, set<wstring>> tagBeginPositionMap, tagEndPositionMap;
 	getTagPositions(source, patternBegin, PEMAPosition, tagBeginPositionMap, tagEndPositionMap);

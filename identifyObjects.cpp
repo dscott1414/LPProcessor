@@ -12,7 +12,7 @@
 #include "bitObject.h"
 #define MAX_BUF 10240000
 
-bool Source::findSpecificAnaphor(wstring tagName, int where, int element, int &specificWhere, bool &pluralNounOverride, bool &embeddedName)
+bool cSource::findSpecificAnaphor(wstring tagName, int where, int element, int &specificWhere, bool &pluralNounOverride, bool &embeddedName)
 {
 	LFS
 		specificWhere = where;
@@ -102,7 +102,7 @@ bool Source::findSpecificAnaphor(wstring tagName, int where, int element, int &s
 // It is thanks to NP that S [It is thanks _PP _REL1]
 // It MEANS (that) S [ It MEANS S1 or REL1]
 // NP makes/finds it MA (for NP) to VP
-bool Source::isPleonastic(unsigned int where)
+bool cSource::isPleonastic(unsigned int where)
 {
 	LFS
 		if (m[where].word->first != L"it" || where + 4 > m.size()) return false;
@@ -147,7 +147,7 @@ bool Source::isPleonastic(unsigned int where)
 	return true;
 }
 
-bool Source::searchExactMatch(cObject &object, int position)
+bool cSource::searchExactMatch(cObject &object, int position)
 {
 	LFS
 		if (object.objectClass != NAME_OBJECT_CLASS &&
@@ -171,7 +171,7 @@ bool Source::searchExactMatch(cObject &object, int position)
 	return false;
 }
 
-void Source::accumulateAdjective(const wstring &fromWord, set <wstring> &words, vector <tIWMM> &validList, bool isAdjective, wstring &aa, bool &containsMale, bool &containsFemale)
+void cSource::accumulateAdjective(const wstring &fromWord, set <wstring> &words, vector <tIWMM> &validList, bool isAdjective, wstring &aa, bool &containsMale, bool &containsFemale)
 {
 	LFS
 		for (set <wstring>::iterator wi = words.begin(), wiEnd = words.end(); wi != wiEnd; wi++)
@@ -226,7 +226,7 @@ void Source::accumulateAdjective(const wstring &fromWord, set <wstring> &words, 
 
 
 
-void Source::addWNExtensions(void)
+void cSource::addWNExtensions(void)
 {
 	LFS
 		tIWMM w_tall = Words.query(L"tall"), w_small = Words.query(L"small"), mainEntry;
@@ -251,7 +251,7 @@ void Source::addWNExtensions(void)
 		// in a previous match.  Other gendered objects like "A young American" should not have "man" associated with them
 		// even though it acquires male characteristics because "Tommy" will match against "young" and "man" and 
 		// Julius against "man" and "American" and so both will be equal, even though "Julius" should be lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms.
-void Source::addDefaultGenderedAssociatedNouns(int o)
+void cSource::addDefaultGenderedAssociatedNouns(int o)
 {
 	LFS
 		if ((objects[o].objectClass == NAME_OBJECT_CLASS ||
@@ -285,7 +285,7 @@ void Source::addDefaultGenderedAssociatedNouns(int o)
 		}
 }
 
-void Source::fillWNMaps(int where, tIWMM word, bool isAdjective)
+void cSource::fillWNMaps(int where, tIWMM word, bool isAdjective)
 {
 	LFS
 		set <wstring> synonyms, antonyms;
@@ -348,7 +348,7 @@ void Source::fillWNMaps(int where, tIWMM word, bool isAdjective)
 //    synonyms, antonyms
 // for the principalWhere, for each sense, for each adjective associated with the sense, look up
 //    synonyms, antonyms
-void Source::accumulateAdjectives(int where)
+void cSource::accumulateAdjectives(int where)
 {
 	LFS
 		wstring tmpstr;
@@ -514,7 +514,7 @@ void Source::accumulateAdjectives(int where)
 		addDefaultGenderedAssociatedNouns(adjectiveObject);
 }
 
-bool Source::objectClassComparable(vector <cObject>::iterator o, vector <cObject>::iterator lso)
+bool cSource::objectClassComparable(vector <cObject>::iterator o, vector <cObject>::iterator lso)
 {
 	LFS
 		int primaryObjectClass = o->objectClass, secondaryObjectClass = lso->objectClass;
@@ -539,7 +539,7 @@ bool Source::objectClassComparable(vector <cObject>::iterator o, vector <cObject
 	return !(isPrimaryGendered ^ isSecondaryGendered);
 }
 
-bool Source::hasDemonyms(vector <cObject>::iterator o)
+bool cSource::hasDemonyms(vector <cObject>::iterator o)
 {
 	LFS
 		if (o->objectClass == GENDERED_DEMONYM_OBJECT_CLASS) return true;
@@ -549,7 +549,7 @@ bool Source::hasDemonyms(vector <cObject>::iterator o)
 	return false;
 }
 
-bool Source::sharedDemonyms(int where, bool traceNymMatch, vector <cObject>::iterator o, vector <cObject>::iterator lso, tIWMM &fromMatch, tIWMM &toMatch, tIWMM &toMapMatch)
+bool cSource::sharedDemonyms(int where, bool traceNymMatch, vector <cObject>::iterator o, vector <cObject>::iterator lso, tIWMM &fromMatch, tIWMM &toMatch, tIWMM &toMapMatch)
 {
 	LFS
 		wstring tmpstr, tmpstr2;
@@ -610,7 +610,7 @@ bool Source::sharedDemonyms(int where, bool traceNymMatch, vector <cObject>::ite
 // C. one other object is 'big' having synonyms 'astronomic' 'big' and antonyms 'little'
 // so A&B are truly opposites: A's synonyms and B's antonyms AND A's antonyms and B's synonyms have common members
 //    A&C should be ignored: A's synonyms and B's antonyms are common but NOT A's antonyms and B's synonyms
-bool Source::nymNoMatch(vector <cObject>::iterator o, tIWMM adj)
+bool cSource::nymNoMatch(vector <cObject>::iterator o, tIWMM adj)
 {
 	LFS
 		vector <tIWMM> associatedAdjectives;
@@ -631,7 +631,7 @@ bool Source::nymNoMatch(vector <cObject>::iterator o, tIWMM adj)
 // C. one other object is 'big' having synonyms 'astronomic' 'big' and antonyms 'little'
 // so A&B are truly opposites: A's synonyms and B's antonyms AND A's antonyms and B's synonyms have common members
 //    A&C should be ignored: A's synonyms and B's antonyms are common but NOT A's antonyms and B's synonyms
-bool Source::nymNoMatch(int where, vector <cObject>::iterator o, vector <cObject>::iterator lso, bool getFromMatch, bool traceThisMatch, wstring &logMatch, tIWMM &fromMatch, tIWMM &toMatch, tIWMM &toMapMatch, wchar_t *type)
+bool cSource::nymNoMatch(int where, vector <cObject>::iterator o, vector <cObject>::iterator lso, bool getFromMatch, bool traceThisMatch, wstring &logMatch, tIWMM &fromMatch, tIWMM &toMatch, tIWMM &toMapMatch, wchar_t *type)
 {
 	LFS
 		//if (!objectClassComparable(o,lso)) return false;
@@ -659,7 +659,7 @@ bool Source::nymNoMatch(int where, vector <cObject>::iterator o, vector <cObject
 }
 
 // heavily limit gendered body object comparisons
-int Source::limitedNymMatch(vector <cObject>::iterator o, vector <cObject>::iterator lso, bool traceNymMatch)
+int cSource::limitedNymMatch(vector <cObject>::iterator o, vector <cObject>::iterator lso, bool traceNymMatch)
 {
 	LFS
 		// count a match of the head to be more than a match of adjectives
@@ -679,7 +679,7 @@ int Source::limitedNymMatch(vector <cObject>::iterator o, vector <cObject>::iter
 	return total;
 }
 
-int Source::nymMatch(vector <cObject>::iterator o, vector <cObject>::iterator lso, bool getFromMatch, bool traceNymMatch, bool &explicitOccupationMatch, wstring &logMatch, tIWMM &fromMatch, tIWMM &toMatch, tIWMM &toMapMatch, wchar_t *type)
+int cSource::nymMatch(vector <cObject>::iterator o, vector <cObject>::iterator lso, bool getFromMatch, bool traceNymMatch, bool &explicitOccupationMatch, wstring &logMatch, tIWMM &fromMatch, tIWMM &toMatch, tIWMM &toMapMatch, wchar_t *type)
 {
 	LFS
 		// limit flow of adjectives and nouns from body objects
@@ -731,7 +731,7 @@ int Source::nymMatch(vector <cObject>::iterator o, vector <cObject>::iterator ls
 	return total;
 }
 
-int Source::identifySubType(int principalWhere, bool &partialMatch)
+int cSource::identifySubType(int principalWhere, bool &partialMatch)
 {
 	LFS
 		unsigned int oc = objects[m[principalWhere].getObject()].objectClass, maxObjectsPerType = 0;
@@ -859,7 +859,7 @@ int Source::identifySubType(int principalWhere, bool &partialMatch)
 //       The book Thomas gave was expensive.
 //     The verb 'gave' actually has an object 'the book'.  Therefore, we must count that possibility in the verbobject statistics and
 //     costs.
-bool Source::assignRelativeClause(int where)
+bool cSource::assignRelativeClause(int where)
 {
 	LFS
 		int checkEnd, o = m[where].getObject();
@@ -1004,7 +1004,7 @@ bool Source::assignRelativeClause(int where)
 
 // if adjectival is false, where and element point to the full multi-word object
 // if adjectival is true, previousOwnerWhere points to the ownerWhere of the previous adjective (if any)
-int Source::identifyObject(int tag, int where, int element, bool adjectival, int previousOwnerWhere, int ownerBegin)
+int cSource::identifyObject(int tag, int where, int element, bool adjectival, int previousOwnerWhere, int ownerBegin)
 {
 	LFS
 		wstring tagName = (tag < 0) ? L"NAME" : patternTagStrings[tag];
@@ -1472,7 +1472,7 @@ int Source::identifyObject(int tag, int where, int element, bool adjectival, int
 // suspect - for any of the Form elements at the bottom of what the Noun comes down to, if any Form is of cost 4.
 // very suspect - if all of the elements are of cost 4
 // ambiguous - if any of the elements have more than one form
-void Source::checkObject(vector <cObject>::iterator o)
+void cSource::checkObject(vector <cObject>::iterator o)
 {
 	LFS
 		bool unambiguousHighCost = false, highCost = false;
@@ -1520,7 +1520,7 @@ void Source::checkObject(vector <cObject>::iterator o)
 	o->suspect = highCost;
 }
 
-void Source::printObjects(void)
+void cSource::printObjects(void)
 {
 	LFS
 		wstring tmp;
@@ -1562,7 +1562,7 @@ void Source::printObjects(void)
 
 // determine whether a pattern that is not owned by any other pattern and has finalIfAlone set
 // still has isSeparator on both sides.  If not, flag to eliminate.
-bool Source::eraseWinnerFromRecalculatingAloneness(int where, patternMatchArray::tPatternMatch *pma)
+bool cSource::eraseWinnerFromRecalculatingAloneness(int where, patternMatchArray::tPatternMatch *pma)
 {
 	LFS
 	cPattern *p = patterns[pma->getPattern()];
@@ -1620,7 +1620,7 @@ bool Source::eraseWinnerFromRecalculatingAloneness(int where, patternMatchArray:
 	return false;
 }
 
-bool Source::removeWinnerFlag(int where, patternMatchArray::tPatternMatch *pma,int recursionSpaces,vector <patternMatchArray::tPatternMatch *> &PMAToRemoveWinner, vector <int> &parentPEMAToRemoveWinner)
+bool cSource::removeWinnerFlag(int where, patternMatchArray::tPatternMatch *pma,int recursionSpaces,vector <patternMatchArray::tPatternMatch *> &PMAToRemoveWinner, vector <int> &parentPEMAToRemoveWinner)
 {
 	if (find(PMAToRemoveWinner.begin(), PMAToRemoveWinner.end(), pma) != PMAToRemoveWinner.end())
 		return true;
@@ -1738,7 +1738,7 @@ bool Source::removeWinnerFlag(int where, patternMatchArray::tPatternMatch *pma,i
 // used before winners are determined.  
 // if there are any patterns matching a separator form, or 
 // if there are no patterns matching on position and the separator for has lowest cost
-bool Source::isAnySeparator(int where)
+bool cSource::isAnySeparator(int where)
 {
 	DLFS
 		for (int np = m[where].beginPEMAPosition; np >= 0; np = pema[np].nextByPosition)
@@ -1750,7 +1750,7 @@ bool Source::isAnySeparator(int where)
 // determine whether a pattern that is not owned by any other pattern and has finalIfAlone set
 // still has isSeparator on both sides.  separator is determined by all patterns matching.  If there are no patterns matching, then if lowest cost.
 // if not, add high cost.
-bool Source::addCostFromRecalculatingAloneness(int where, patternMatchArray::tPatternMatch *pma)
+bool cSource::addCostFromRecalculatingAloneness(int where, patternMatchArray::tPatternMatch *pma)
 {
 	LFS // DLFS
 		cPattern *p = patterns[pma->getPattern()];
@@ -1811,7 +1811,7 @@ bool Source::addCostFromRecalculatingAloneness(int where, patternMatchArray::tPa
 // the largest NOUN that is not of type '7', 'A', or 'B', a DATE, or in a sectionHEADER
 //                  or is a NOUN_OBJ or NAME or NAMEOWNER 'A' or 'B'
 // identify second objects of type '5'
-void Source::identifyObjects(void)
+void cSource::identifyObjects(void)
 {
 	LFS
 		preparePrepMap();

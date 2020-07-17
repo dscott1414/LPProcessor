@@ -445,7 +445,7 @@ tFI::cRMap::tIcRMap tFI::addRelation(int where,int relationType,tIWMM word)
 	return p;
 }
 
-int Source::makeRelationHash(int num1,int num2,int num3)
+int cSource::makeRelationHash(int num1,int num2,int num3)
 { LFS
 	return num1+(num2<<14)+(num3<<28); // num3 must be small
 }
@@ -459,7 +459,7 @@ int Source::makeRelationHash(int num1,int num2,int num3)
 	int finalRelation (default value -1)
 
 */
-void Source::createProbableRelationsList()
+void cSource::createProbableRelationsList()
 { LFS
 	// for each sentence
   //   create a map tIWMM->where for each word in sentence
@@ -470,7 +470,7 @@ void Source::createProbableRelationsList()
 }
 
 // 
-void Source::reportProbableRelationsAccuracy()
+void cSource::reportProbableRelationsAccuracy()
 { LFS
 	// for each sentence
 	//   (1) count how many relations were proper and add up their count.
@@ -479,12 +479,12 @@ void Source::reportProbableRelationsAccuracy()
 	// log sum (1), sum (2), average (1), average (2), low (1), high (1), low (2), high (2)
 }
 
-bool Source::inTag(tTagLocation &innerTag,tTagLocation &outerTag)
+bool cSource::inTag(tTagLocation &innerTag,tTagLocation &outerTag)
 { LFS
 	return innerTag.sourcePosition>=outerTag.sourcePosition && (innerTag.sourcePosition+innerTag.len<=outerTag.sourcePosition+outerTag.len);
 }
 
-void Source::adjustToHailRole(int where)
+void cSource::adjustToHailRole(int where)
 { LFS
 	vector <WordMatch>::iterator im=m.begin()+where;
 	// additional hail check if gendered object is in between two commas and is not in a larger pattern (lastBeginS1==-1)
@@ -619,7 +619,7 @@ void Source::adjustToHailRole(int where)
 }
 
 // is innerTag in outerTag?
-bool Source::checkAmbiguousVerbTense(int whereVerb,int &sense,bool inQuote,tIWMM masterVerbWord)
+bool cSource::checkAmbiguousVerbTense(int whereVerb,int &sense,bool inQuote,tIWMM masterVerbWord)
 { LFS
 	// tense statistics
 	// if the tense is ambiguous between past and present (due to verb form being identical between present and past forms)
@@ -644,7 +644,7 @@ bool Source::checkAmbiguousVerbTense(int whereVerb,int &sense,bool inQuote,tIWMM
 	return false;
 }
 
-void Source::trackVerbTenses(int where,vector <tTagLocation> &tagSet,bool inQuote,bool inQuotedString,bool inSectionHeader,
+void cSource::trackVerbTenses(int where,vector <tTagLocation> &tagSet,bool inQuote,bool inQuotedString,bool inSectionHeader,
 														 bool ambiguousSense,int sense,bool &tenseError)
 { LFS
 	if (sense<0 || ambiguousSense) // not TENSE_NOT_SPECIFIED
@@ -718,7 +718,7 @@ void Source::trackVerbTenses(int where,vector <tTagLocation> &tagSet,bool inQuot
 	}
 }
 
-void Source::getCompoundPositions(int where,vector <tTagLocation> &multipleObjectTagSet,vector < int > &objectPositions)
+void cSource::getCompoundPositions(int where,vector <tTagLocation> &multipleObjectTagSet,vector < int > &objectPositions)
 { LFS
 	objectPositions.clear();
 	tIWMM w;
@@ -756,7 +756,7 @@ void Source::getCompoundPositions(int where,vector <tTagLocation> &multipleObjec
 }
 
 #define MAX_COMBINANT_SCORE 100000
-void Source::markMultipleObjects(int where)
+void cSource::markMultipleObjects(int where)
 {
 	LFS
   vector <WordMatch>::iterator im=m.begin()+where;
@@ -923,7 +923,7 @@ void Source::markMultipleObjects(int where)
 	}
 }
 
-void Source::evaluateSubjectRoleTag(int where,int which,vector <int> whereSubjects,int whereObject,int whereHObject,int whereVerb,int whereHVerb,vector <int> subjectObjects,int tsSense,
+void cSource::evaluateSubjectRoleTag(int where,int which,vector <int> whereSubjects,int whereObject,int whereHObject,int whereVerb,int whereHVerb,vector <int> subjectObjects,int tsSense,
 														bool ignoreSpeaker,bool isNot,bool isNonPast,bool isNonPresent,bool isId,bool subjectIsPleonastic,bool inPrimaryQuote,bool inSecondaryQuote,bool backwardsSubjects)
 { LFS
 	// don't overwrite the subjects relationships with verbs and objects if they have already been established with other verbs and objects.
@@ -1080,7 +1080,7 @@ void Source::evaluateSubjectRoleTag(int where,int which,vector <int> whereSubjec
 }
 
 // return true if we can continue with the scan backwards for subject.
-bool Source::skipQuote(int &where)
+bool cSource::skipQuote(int &where)
 { LFS
 	if (m[where].word->first!=L"”") return true;
 	int maxEnd,maxLen,quoteCheck=queryPattern(where,L"__NOUN",maxEnd);
@@ -1091,7 +1091,7 @@ bool Source::skipQuote(int &where)
 	return true;
 }
 
-void Source::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool isId,bool &objectAsSubject,bool &subjectIsPleonastic,vector <tIWMM> &subjectWords,
+void cSource::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool isId,bool &objectAsSubject,bool &subjectIsPleonastic,vector <tIWMM> &subjectWords,
 																								vector <int> &subjectObjects,vector <int> &whereSubjects,int tsSense,bool &multiSubject,bool preferInfinitive)
 { LFS
 	int I=where,maxEnd=-1,PEMAOffset,MSTechnique=-1,saveBeginMST=-1;
@@ -1218,7 +1218,7 @@ void Source::scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool isI
 	*/
 }
 
-void Source::discoverSubjects(int where,vector <tTagLocation> &tagSet,int subjectTag,bool isId,bool &objectAsSubject,bool &subjectIsPleonastic,vector <tIWMM> &subjectWords,vector <int> &subjectObjects,vector <int> &whereSubjects)
+void cSource::discoverSubjects(int where,vector <tTagLocation> &tagSet,int subjectTag,bool isId,bool &objectAsSubject,bool &subjectIsPleonastic,vector <tIWMM> &subjectWords,vector <int> &subjectObjects,vector <int> &whereSubjects)
 { LFS
 	tIWMM subjectWord=wNULL;
 	int subjectObject,whereSubject=-1,nextTag=-1,whereObject=-1,mnounTag;
@@ -1302,7 +1302,7 @@ void Source::discoverSubjects(int where,vector <tTagLocation> &tagSet,int subjec
 // each object points to its preposition by relPrep.
 // if a preposition directly follows another object of a preposition, the object of the preposition points to the previous object by relNextObject.
 // an infinitive verb points to its owning verb with previousCompoundPartObject
-void Source::markPrepositionalObjects(int where,int whereVerb,bool flagInInfinitivePhrase,bool subjectIsPleonastic,bool objectAsSubject,bool isId,bool inPrimaryQuote,bool inSecondaryQuote,bool isNot,bool isNonPast,bool isNonPresent,bool noObjects,bool delayedReceiver,int tsSense,vector <tTagLocation> &tagSet)
+void cSource::markPrepositionalObjects(int where,int whereVerb,bool flagInInfinitivePhrase,bool subjectIsPleonastic,bool objectAsSubject,bool isId,bool inPrimaryQuote,bool inSecondaryQuote,bool isNot,bool isNonPast,bool isNonPresent,bool noObjects,bool delayedReceiver,int tsSense,vector <tTagLocation> &tagSet)
 { LFS
 	wstring tmpstr;
 	for (int prepTag=findOneTag(tagSet,L"PREP",-1); prepTag>=0; prepTag=findOneTag(tagSet,L"PREP",prepTag))
@@ -1420,7 +1420,7 @@ void Source::markPrepositionalObjects(int where,int whereVerb,bool flagInInfinit
 	}
 }
 
-void Source::addRoleTagsAt(int where,int I,bool inRelativeClause,bool withinInfinitivePhrase,bool subjectIsPleonastic,bool isNot,bool objectNot,int tsSense,bool isNonPast,bool isNonPresent,bool objectAsSubject,bool isId,bool inPrimaryQuote,bool inSecondaryQuote,wchar_t *fromWhere)
+void cSource::addRoleTagsAt(int where,int I,bool inRelativeClause,bool withinInfinitivePhrase,bool subjectIsPleonastic,bool isNot,bool objectNot,int tsSense,bool isNonPast,bool isNonPresent,bool objectAsSubject,bool isId,bool inPrimaryQuote,bool inSecondaryQuote,wchar_t *fromWhere)
 { LFS
 	wstring tmpstr,tmpstr2;
 	if (isNot || objectNot)
@@ -1487,7 +1487,7 @@ void Source::addRoleTagsAt(int where,int I,bool inRelativeClause,bool withinInfi
 //   I want Bill to remember to thank Mrs. Smith for taking us back today. (single object, multiple infinitive phrase and so on)
 // relation to noun: I use language to suit the occasion.
 // relation as subjectObject to main verb: An extra candle to give away is always a good idea.
-int Source::processInternalInfinitivePhrase(int where,int whereVerb,int whereParentObject,int iverbTag,int firstFreePrep,vector <int> &futureBoundPrepositions,
+int cSource::processInternalInfinitivePhrase(int where,int whereVerb,int whereParentObject,int iverbTag,int firstFreePrep,vector <int> &futureBoundPrepositions,
 																						bool inPrimaryQuote,bool inSecondaryQuote,bool &nextVerbInSeries,int &sense,
 																						int &whereLastVerb,bool &ambiguousSense,bool inQuotedString,bool inSectionHeader,int begin,int end,int infpElement,vector <tTagLocation> &tagSet)
 { LFS
@@ -1602,7 +1602,7 @@ int Source::processInternalInfinitivePhrase(int where,int whereVerb,int wherePar
 // if whereLastPrep==-1, return -1.
 //   the first prep that contains the role, return.
 //   if no prep that contains the role, return a prep that does not contain the rejectRole
-int Source::findPrepRole(int whereLastPrep,int role,int rejectRole)
+int cSource::findPrepRole(int whereLastPrep,int role,int rejectRole)
 { LFS
 	int save=-1,prepLoop=0;
 	while ((whereLastPrep=m[whereLastPrep].relPrep)>=0) 
@@ -1635,7 +1635,7 @@ int Source::findPrepRole(int whereLastPrep,int role,int rejectRole)
 //		go - relSubject [him] relVerb XX relObject [steps] relInternalVerb XX
 //		steps - relSubject XX relVerb [go] relPrep [house]
 //    house - relNextObject [steps]
-bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,int len,int firstFreePrep,vector <int> &futureBoundPrepositions,
+bool cSource::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,int len,int firstFreePrep,vector <int> &futureBoundPrepositions,
 																				bool inPrimaryQuote,bool inSecondaryQuote,bool &outsideQuoteTruth,bool &inQuoteTruth,bool withinInfinitivePhrase,bool internalInfinitivePhrase,
 																				bool &nextVerbInSeries,int &sense,int &whereLastVerb,bool &ambiguousSense,bool inQuotedString,bool inSectionHeader,int begin,int end)
 { LFS
@@ -2442,7 +2442,7 @@ bool Source::evaluateAdditionalRoleTags(int where,vector <tTagLocation> &tagSet,
 	return isId;
 }
 
-bool Source::setAdditionalRoleTags(int where,int &firstFreePrep,vector <int> &futureBoundPrepositions,bool inPrimaryQuote,bool inSecondaryQuote,
+bool cSource::setAdditionalRoleTags(int where,int &firstFreePrep,vector <int> &futureBoundPrepositions,bool inPrimaryQuote,bool inSecondaryQuote,
 																	 bool &nextVerbInSeries,int &sense,int &whereLastVerb,bool &ambiguousSense,bool inQuotedString,bool inSectionHeader,int begin,int end,vector < vector <tTagLocation> > &tagSets)
 { LFS
   vector <WordMatch>::iterator im=m.begin()+where;
@@ -2587,7 +2587,7 @@ bool Source::setAdditionalRoleTags(int where,int &firstFreePrep,vector <int> &fu
 		attachInfinitivePhrase
 		attachAdditionalPrepositionalPhrases
 		*/
-void Source::syntacticRelations()
+void cSource::syntacticRelations()
 { LFS 
 	vector < vector <tTagLocation> > tagSets;
   vector <WordMatch>::iterator im=m.begin(),imend=m.end();
@@ -2827,7 +2827,7 @@ void Source::syntacticRelations()
 	}
 }
 
-void Source::testSyntacticRelations()
+void cSource::testSyntacticRelations()
 {
 	tIWMM primaryQuoteCloseWord = Words.gquery(L"”");
 	tIWMM secondaryQuoteCloseWord = Words.gquery(L"’");

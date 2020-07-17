@@ -8,7 +8,7 @@
 #include <algorithm>    // std::lower_bound, std::upper_bound, std::sort
 
 // (CMREADME018)
-void Source::setRole(int position,patternElementMatchArray::tPatternElementMatch *pem)
+void cSource::setRole(int position,patternElementMatchArray::tPatternElementMatch *pem)
 { LFS
 	int end=position+pem->end;
 	__int64 tagRole=0,childRole=pem->getRole(tagRole);
@@ -105,7 +105,7 @@ void Source::setRole(int position,patternElementMatchArray::tPatternElementMatch
 // 1. Are the lowest cost patterns
 // 2. have the same rootPattern
 // 4. have the same end as childend
-unsigned int Source::getAllLocations(unsigned int position,int parentPattern,int rootPattern,int childLen,int parentLen,vector <unsigned int> &allLocations, int recursionLevel, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,bool &reassessParentCosts)
+unsigned int cSource::getAllLocations(unsigned int position,int parentPattern,int rootPattern,int childLen,int parentLen,vector <unsigned int> &allLocations, int recursionLevel, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,bool &reassessParentCosts)
 { LFS
 	int minCost=MAX_COST;
 	patternMatchArray::tPatternMatch *pm;
@@ -157,7 +157,7 @@ unsigned int Source::getAllLocations(unsigned int position,int parentPattern,int
 //   agreement costs are only attributed to each individual disagreeing element within the pattern,
 //   not necessarily percolating up to the top pattern on each position (although it will always percolate up to the
 //     FIRST position of each pattern that only contains disagreeing positions)
-int Source::getMinCost(patternElementMatchArray::tPatternElementMatch *pem, int &minPEMAOffset)
+int cSource::getMinCost(patternElementMatchArray::tPatternElementMatch *pem, int &minPEMAOffset)
 { LFS
 	int minCost=MAX_COST,pattern=pem->getParentPattern(),relativeEnd=pem->end,relativeBegin=pem->begin;
 	for (; pem && pem->getParentPattern()==pattern && pem->end==relativeEnd; pem=(pem->nextByPatternEnd<0) ? NULL : pema.begin()+pem->nextByPatternEnd)
@@ -233,7 +233,7 @@ int Source::getMinCost(patternElementMatchArray::tPatternElementMatch *pem, int 
 // __S1[1](71,76)*0 __ALLOBJECTS[*](76)   __S1[1](71,76)*0 __C2__S1[*](76)       CORRECT - agrees with S1 having a childEnd of 73
 // __S1[1](71,76)*0 __C2__S1[*](76)
 // mark a pattern with a begin and end, begin at source position position.
-int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem, int position, int recursionLevel, int allRootsLowestCost, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,bool &reassessParentCosts)
+int cSource::markChildren(patternElementMatchArray::tPatternElementMatch *pem, int position, int recursionLevel, int allRootsLowestCost, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,bool &reassessParentCosts)
 {
 	LFS
 		// find first position with pattern and relativeEnd
@@ -413,7 +413,7 @@ int Source::markChildren(patternElementMatchArray::tPatternElementMatch *pem, in
 		return numChildren;
 }
 
-bool Source::findLowCostTag(vector<tTagLocation> &tagSet,int &cost,wchar_t *tagName,tTagLocation &lowestCostTag,int parentCost,int &nextTag)
+bool cSource::findLowCostTag(vector<tTagLocation> &tagSet,int &cost,wchar_t *tagName,tTagLocation &lowestCostTag,int parentCost,int &nextTag)
 { LFS
 	nextTag=-1;
 	int where=findTag(tagSet,tagName,nextTag);
@@ -436,7 +436,7 @@ bool Source::findLowCostTag(vector<tTagLocation> &tagSet,int &cost,wchar_t *tagN
 	return false;
 }
 
-int Source::getSubjectInfo(tTagLocation subjectTag, int subjectTagIndex, int &nounPosition, int &nameLastPosition, bool &restateSet, bool &singularSet, bool &pluralSet, bool &adjectivalSet, bool &embeddedS1)
+int cSource::getSubjectInfo(tTagLocation subjectTag, int subjectTagIndex, int &nounPosition, int &nameLastPosition, bool &restateSet, bool &singularSet, bool &pluralSet, bool &adjectivalSet, bool &embeddedS1)
 {
 	LFS
 		nounPosition = nameLastPosition = -1;
@@ -619,7 +619,7 @@ int Source::getSubjectInfo(tTagLocation subjectTag, int subjectTagIndex, int &no
 }
 
 // for long subjects, check to see if the verb is preferentially bound to a word closer to the verb, thus making this an incorrect subject.
-bool Source::longSubjectBindingMismatch(int wordIndex, int beginObjectPosition, int primaryPatternEnd, int whereVerb)
+bool cSource::longSubjectBindingMismatch(int wordIndex, int beginObjectPosition, int primaryPatternEnd, int whereVerb)
 {
 	if (primaryPatternEnd-wordIndex < 15)
 		return false;
@@ -687,7 +687,7 @@ The number of applications was huge.
 A number of teenagers now hold full-time jobs.
 */
 // tagSet is modified during this procedure!  Do not pass by address!
-int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *parentpm, patternMatchArray::tPatternMatch *pm, unsigned parentPosition, unsigned int position, vector<tTagLocation> tagSet, int &traceSource)
+int cSource::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *parentpm, patternMatchArray::tPatternMatch *pm, unsigned parentPosition, unsigned int position, vector<tTagLocation> tagSet, int &traceSource)
 {
 	LFS
 	int nextSubjectTag = -1, subjectTag = findTag(tagSet, L"SUBJECT", nextSubjectTag);
@@ -1257,7 +1257,7 @@ int Source::evaluateSubjectVerbAgreement(patternMatchArray::tPatternMatch *paren
 // FIRST_PERSON - I / we
 // SECOND_PERSON - you
 // THIRD_PERSON - he/she/it/they
-bool Source::evaluateSubjectVerbAgreement(int verbPosition,int whereSubject,bool &agreementTestable)
+bool cSource::evaluateSubjectVerbAgreement(int verbPosition,int whereSubject,bool &agreementTestable)
 { LFS
 	if (whereSubject < 0)
 		return true;
@@ -1306,7 +1306,7 @@ bool Source::evaluateSubjectVerbAgreement(int verbPosition,int whereSubject,bool
 // this was created to help speaker resolution, after a closed quote or a comma
 // this is very helpful when a word is both a verb and an adjective, so that the pattern is very ambiguous
 // see also: evaluateVerbObjects
-bool Source::preferVerbRel(int position,unsigned int J,cPattern *p)
+bool cSource::preferVerbRel(int position,unsigned int J,cPattern *p)
 { LFS
 	vector <WordMatch>::iterator im=m.begin()+position-1;
 	if (!position || (im->word->first!=L"," &&
@@ -1331,7 +1331,7 @@ bool Source::preferVerbRel(int position,unsigned int J,cPattern *p)
 // eliminate patterns based on a little semantic help
 // this was created to help speaker resolution
 // this is very helpful when a word is both a verb and an adjective, so that the pattern is very ambiguous
-bool Source::preferS1(int position,unsigned int J)
+bool cSource::preferS1(int position,unsigned int J)
 { LFS
 	vector <WordMatch>::iterator im=m.begin()+position;
 	cPattern *p=patterns[im->pma[J].getPattern()];
@@ -1358,7 +1358,7 @@ wchar_t *flagStr(int flag)
 	return NULL;
 }
 
-int Source::evaluateBNCPreferenceForPosition(int position,int patternPreference,int flag,bool remove)
+int cSource::evaluateBNCPreferenceForPosition(int position,int patternPreference,int flag,bool remove)
 { LFS
 	if (position<0 || position>=(int)m.size())
 		lplog(LOG_FATAL_ERROR,L"evaluateBNCPreferences - bad data!");
@@ -1387,7 +1387,7 @@ int Source::evaluateBNCPreferenceForPosition(int position,int patternPreference,
 	return cost;
 }
 
-int Source::evaluateBNCPreference(vector <tTagLocation> &tagSet,wchar_t *tag,int patternPreference,bool remove)
+int cSource::evaluateBNCPreference(vector <tTagLocation> &tagSet,wchar_t *tag,int patternPreference,bool remove)
 { LFS
 	int cost=0;
 	for (unsigned int I=0; I<tagSet.size(); I++)
@@ -1414,7 +1414,7 @@ int Source::evaluateBNCPreference(vector <tTagLocation> &tagSet,wchar_t *tag,int
 // is there, also remove that.
 // check that the areas of the NOUN tags are not flagged by adjective, adverb, or verb preferences
 // check that the areas of the VERB tags are not flagged by adjective, adverb, or noun preferences
-int Source::evaluateBNCPreferences(int position,int PEMAPosition,vector <tTagLocation> &tagSet)
+int cSource::evaluateBNCPreferences(int position,int PEMAPosition,vector <tTagLocation> &tagSet)
 { LFS
 	int cost=evaluateBNCPreference(tagSet,L"ADV",WordMatch::flagBNCPreferAdverbPatternMatch,true);
 	cost+=evaluateBNCPreference(tagSet,L"ADJ",WordMatch::flagBNCPreferAdjectivePatternMatch,true);
@@ -1432,7 +1432,7 @@ int Source::evaluateBNCPreferences(int position,int PEMAPosition,vector <tTagLoc
 	return cost;
 }
 
-int Source::BNCPatternViolation(int position,int PEMAPosition,vector < vector <tTagLocation> > &tagSets)
+int cSource::BNCPatternViolation(int position,int PEMAPosition,vector < vector <tTagLocation> > &tagSets)
 { LFS
 	int lowestCost=30;
 	if (PEMAPosition<0 || PEMAPosition>=(int)pema.count ||
@@ -1458,7 +1458,7 @@ int Source::BNCPatternViolation(int position,int PEMAPosition,vector < vector <t
 }
 
 // include every member of PEMAPositions which has the same or lower element # and has a lower index than I
-bool Source::tagSetAllIn(vector <costPatternElementByTagSet> &PEMAPositions,int I)
+bool cSource::tagSetAllIn(vector <costPatternElementByTagSet> &PEMAPositions,int I)
 { LFS
 	while (I>=0)
 	{
@@ -1479,7 +1479,7 @@ bool Source::tagSetAllIn(vector <costPatternElementByTagSet> &PEMAPositions,int 
 //   PEMAPositionsSet - set eith elements from chainPEMAPositions, with tempCost set to the minimum of the maximum cost (maxOCost)
 //     maxOCost is the maximum of the original cost of the element (the cost of just the words and the cost associated with the element of the pattern explicitly set in the pattern definition) PLUS the cumulativeDeltaCost
 #define MIN_CHAIN_COST -MAX_COST
-void Source::setChain(vector <patternElementMatchArray::tPatternElementMatch *> chainPEMAPositions,vector <costPatternElementByTagSet> &PEMAPositions,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int &traceSource,int &minOverallChainCost)
+void cSource::setChain(vector <patternElementMatchArray::tPatternElementMatch *> chainPEMAPositions,vector <costPatternElementByTagSet> &PEMAPositions,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int &traceSource,int &minOverallChainCost)
 { LFS
 	if (debugTrace.traceSecondaryPEMACosting && PEMAPositions.size() > 0 && chainPEMAPositions.size() > 0)
 		lplog(L"*** BEGIN set chain TS#%03d [SOURCE=%06d] %06d", PEMAPositions[0].getTagSet(), PEMAPositions[0].getTraceSource(), chainPEMAPositions[0] - pema.begin());
@@ -1594,7 +1594,7 @@ void Source::setChain(vector <patternElementMatchArray::tPatternElementMatch *> 
 		lplog(L"*** END set chain TS#%03d [SOURCE=%06d] %06d", PEMAPositions[0].getTagSet(), PEMAPositions[0].getTraceSource(), chainPEMAPositions[0] - pema.begin());
 }
 
-void Source::findAllChains(vector <costPatternElementByTagSet> &PEMAPositions,int PEMAPosition,vector <patternElementMatchArray::tPatternElementMatch *> &chain,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int &traceSource,int &minOverallChainCost)
+void cSource::findAllChains(vector <costPatternElementByTagSet> &PEMAPositions,int PEMAPosition,vector <patternElementMatchArray::tPatternElementMatch *> &chain,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int &traceSource,int &minOverallChainCost)
 { LFS // DLFS
 	// find first position with pattern and relativeEnd
 	patternElementMatchArray::tPatternElementMatch *pem=pema.begin()+PEMAPosition;
@@ -1623,7 +1623,7 @@ void Source::findAllChains(vector <costPatternElementByTagSet> &PEMAPositions,in
 // for all positions:
 //   set tempCost to highest OCost (if already set, set if lower than already set tempCost)
 //   add to PEMAPositionsSet.
-void Source::setChain2(vector <patternElementMatchArray::tPatternElementMatch *> &chainPEMAPositions,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int deltaCost)
+void cSource::setChain2(vector <patternElementMatchArray::tPatternElementMatch *> &chainPEMAPositions,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int deltaCost)
 { LFS
 	int maxOCost=MIN_CHAIN_COST;
 	for (vector <patternElementMatchArray::tPatternElementMatch *>::iterator cPI=chainPEMAPositions.begin(),cPIEnd=chainPEMAPositions.end(); cPI!=cPIEnd; cPI++)
@@ -1659,7 +1659,7 @@ void Source::setChain2(vector <patternElementMatchArray::tPatternElementMatch *>
 
 
 // from origin, accumulate all chains till end.
-void Source::findAllChains2(int PEMAPosition,int position,vector <patternElementMatchArray::tPatternElementMatch *> &chain,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int changedPosition,int rootPattern,int len,bool includesPatternMatch,int deltaCost)
+void cSource::findAllChains2(int PEMAPosition,int position,vector <patternElementMatchArray::tPatternElementMatch *> &chain,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int changedPosition,int rootPattern,int len,bool includesPatternMatch,int deltaCost)
 { LFS
 	// find first position with pattern and relativeEnd
 	patternElementMatchArray::tPatternElementMatch *pem=pema.begin()+PEMAPosition;
@@ -1694,7 +1694,7 @@ void Source::findAllChains2(int PEMAPosition,int position,vector <patternElement
 // The fellow did not seem to mind whether he was seen or not , but Charnock thought he knew *his walk and figure* , and when he reached the track set off with the object of overtaking him . 
 // if return true, then ignore determiner cost for this parent pattern.
 // if return false, then process normally.
-bool Source::notFirstNounInMultiNounConstruction(int parentPosition, int parentPEMAOffset, int childPosition, int childEnd)
+bool cSource::notFirstNounInMultiNounConstruction(int parentPosition, int parentPEMAOffset, int childPosition, int childEnd)
 {
 	bool consistent = true;
 	bool setAlready = false;
@@ -1746,7 +1746,7 @@ bool Source::notFirstNounInMultiNounConstruction(int parentPosition, int parentP
 // if PM cost MAY has changed, recalculate the lowest PM cost.  If it didn't change, return 0.
 // if PM is a top level match, recalculate maxMatch.
 // get all patterns from the root pattern and calculate the minimum cost including the changed cost and then not.
-int Source::cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patternMatchArray::tPatternMatch *childPM,int traceSource,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet, bool stopCascadeWhenNDAlreadySet, wchar_t *fromWhere)
+int cSource::cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patternMatchArray::tPatternMatch *childPM,int traceSource,vector <patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet, bool stopCascadeWhenNDAlreadySet, wchar_t *fromWhere)
 { LFS // DLFS
 	wchar_t temp[1024];
 	if (!recalculatePMCost)
@@ -1930,7 +1930,7 @@ int Source::cascadeUpToAllParents(bool recalculatePMCost,int basePosition,patter
 // 	000005: 001793 17 02 000  000  034  true  - this is not less than the cost of the occurrence of the previous element #
 // this is obsolete!  replaced by lowerPreviousElementCosts
 /*
-void Source::lowerPreviousElementCostsOld(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, wchar_t *fromWhere)
+void cSource::lowerPreviousElementCostsOld(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, wchar_t *fromWhere)
 {
 	LFS
 		vector <costPatternElementByTagSet>::iterator IPBegin = PEMAPositions.begin(), IPEnd = PEMAPositions.end(), IP;
@@ -2038,7 +2038,7 @@ void Source::lowerPreviousElementCostsOld(vector <costPatternElementByTagSet> &P
 //         call setPreviousElementsCostsAtIndex(pp)
 
 // get relative source position of the end of the element matched.  So we have to go to the next element and see where that is.
-int Source::getEndRelativeSourcePosition(int PEMAPosition)
+int cSource::getEndRelativeSourcePosition(int PEMAPosition)
 {
 	int nextPEMAPosition = pema[PEMAPosition].nextPatternElement;
 	if (nextPEMAPosition < 0)
@@ -2052,7 +2052,7 @@ int Source::getEndRelativeSourcePosition(int PEMAPosition)
 //   and that its cost is > than the cost passed in.
 //   and also that the element matched for that position is >= the nearest preceding non-optional element 
 //   and it is less than the element of the calling procedure (which could have been recursive)
-void Source::setPreviousElementsCostsAtIndex(vector <costPatternElementByTagSet> &PEMAPositions, int pp, int cost, int traceSource, int patternElementEndPosition,int pattern,int patternElement)
+void cSource::setPreviousElementsCostsAtIndex(vector <costPatternElementByTagSet> &PEMAPositions, int pp, int cost, int traceSource, int patternElementEndPosition,int pattern,int patternElement)
 {
 	int lme = 0;
 	for (int pe = patternElement - 1; pe >= 0; pe--)
@@ -2087,7 +2087,7 @@ void Source::setPreviousElementsCostsAtIndex(vector <costPatternElementByTagSet>
 	}
 }
 
-void Source::lowerPreviousElementCosts(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costsPerTagSet, vector <int> &traceSources, wchar_t *fromWhere)
+void cSource::lowerPreviousElementCosts(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costsPerTagSet, vector <int> &traceSources, wchar_t *fromWhere)
 {
 	LFS
 	if (debugTrace.traceSecondaryPEMACosting)
@@ -2142,7 +2142,7 @@ void Source::lowerPreviousElementCosts(vector <costPatternElementByTagSet> &PEMA
 
 // this is obsolete!  replaced by lowerPreviousElementCosts
 /*
-void Source::lowerPreviousElementCostsLowerRegardlessOfPosition(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, wchar_t *fromWhere)
+void cSource::lowerPreviousElementCostsLowerRegardlessOfPosition(vector <costPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, wchar_t *fromWhere)
 {
 	LFS
 		vector <costPatternElementByTagSet>::iterator IPBegin, IPEnd = PEMAPositions.end(), IP, originSetEnd = PEMAPositions.begin();
@@ -2182,7 +2182,7 @@ void Source::lowerPreviousElementCostsLowerRegardlessOfPosition(vector <costPatt
 }
 */
 
-void Source::recalculateOCosts(bool &recalculatePMCost,vector<patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int start,int traceSource)
+void cSource::recalculateOCosts(bool &recalculatePMCost,vector<patternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int start,int traceSource)
 { LFS
 	recalculatePMCost=false;
 	for (vector<patternElementMatchArray::tPatternElementMatch *>::iterator ppsi=PEMAPositionsSet.begin()+start,ppsiEnd=PEMAPositionsSet.end(); ppsi!=ppsiEnd; ppsi++)
@@ -2241,7 +2241,7 @@ P:  TS#  E
 
 */
 // set the costs of the next to top tier of the pattern (secondary)
-int Source::setSecondaryCosts(vector <costPatternElementByTagSet> &PEMAPositions,patternMatchArray::tPatternMatch *pm,int basePosition, bool stopCascadeWhenNDAlreadySet,wchar_t *fromWhere)
+int cSource::setSecondaryCosts(vector <costPatternElementByTagSet> &PEMAPositions,patternMatchArray::tPatternMatch *pm,int basePosition, bool stopCascadeWhenNDAlreadySet,wchar_t *fromWhere)
 { LFS
 	// assign cost to each P matching TS#.  Keep lowest E (LE) for each TS#.
 	// for each E<LE, the last P having E<LE, assign cost of P to be the minimum of the TS cost and the cost already at P.
@@ -2275,7 +2275,7 @@ int Source::setSecondaryCosts(vector <costPatternElementByTagSet> &PEMAPositions
 	return 0;
 }
 
-int Source::calculateVerbAfterVerbUsage(int whereVerb,unsigned int nextWord,bool adverbialObject)
+int cSource::calculateVerbAfterVerbUsage(int whereVerb,unsigned int nextWord,bool adverbialObject)
 { LFS
 	if (nextWord<m.size() && (m[nextWord].forms.isSet(verbForm) || adverbialObject))
 	{
@@ -2337,7 +2337,7 @@ int Source::calculateVerbAfterVerbUsage(int whereVerb,unsigned int nextWord,bool
 }
 
 //  desiredTagSets.push_back(tTS(NOUN_DETERMINER_TAGSET,1,"N_AGREE",NULL));
-int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCost, int &traceSource, int begin, int end, int fromPEMAPosition)
+int cSource::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCost, int &traceSource, int begin, int end, int fromPEMAPosition)
 {
 	LFS
 		int nounTag = -1, nextNounTag = -1, nAgreeTag = -1, nextNAgreeTag = -1, nextDet = -1, PNC = 0;// , nextName = -1, subObjectTag = -1;
@@ -2634,7 +2634,7 @@ int Source::evaluateNounDeterminer(vector <tTagLocation> &tagSet, bool assessCos
 	return 0;
 }
 
-void Source::sortTagLocations(vector < vector <tTagLocation> > &tagSets, vector <tTagLocation> &tagSetLocations)
+void cSource::sortTagLocations(vector < vector <tTagLocation> > &tagSets, vector <tTagLocation> &tagSetLocations)
 {
 	for (auto ts:tagSets)
 		for (auto tl:ts)
@@ -2644,7 +2644,7 @@ void Source::sortTagLocations(vector < vector <tTagLocation> > &tagSets, vector 
 
 // alternateShortTry is to allow a search for a noun determiner to occur even though there is no OBJECT, SUBJECT.  This should only be allowed on very short sentences.
 // if this is allowed on all sentences, significant differences with ST will result (most of them ST is correct)
-void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vector <tTagLocation> > &tagSets,bool alternateShortTry,wstring purpose)
+void cSource::evaluateNounDeterminers(int PEMAPosition,int position,vector < vector <tTagLocation> > &tagSets,bool alternateShortTry,wstring purpose)
 { LFS // DLFS
 	vector <int> costs;
 	if (pema[PEMAPosition].flagSet(patternElementMatchArray::COST_ROLE))
@@ -2864,7 +2864,7 @@ void Source::evaluateNounDeterminers(int PEMAPosition,int position,vector < vect
 	}
 }
 
-void Source::evaluatePrepObjects(int PEMAPosition, int position, vector < vector <tTagLocation> > &tagSets, wstring purpose)
+void cSource::evaluatePrepObjects(int PEMAPosition, int position, vector < vector <tTagLocation> > &tagSets, wstring purpose)
 {
 	LFS // DLFS
 	if (pema[PEMAPosition].flagSet(patternElementMatchArray::COST_PREP))
@@ -2917,7 +2917,7 @@ void Source::evaluatePrepObjects(int PEMAPosition, int position, vector < vector
 	}
 }
 
-bool Source::assessEVALCost(tTagLocation &tl,int pattern,patternMatchArray::tPatternMatch *pm,int position, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,wstring purpose)
+bool cSource::assessEVALCost(tTagLocation &tl,int pattern,patternMatchArray::tPatternMatch *pm,int position, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,wstring purpose)
 { LFS // DLFS
 	int EVALPosition=tl.sourcePosition;
 	patternMatchArray::tPatternMatch *EVALpm=m[EVALPosition].pma.find(pattern,tl.len);
@@ -2931,7 +2931,7 @@ bool Source::assessEVALCost(tTagLocation &tl,int pattern,patternMatchArray::tPat
 	return false;
 }
 
-bool Source::checkRelation(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,int parentPosition,int position,tIWMM verbWord,tIWMM objectWord,int relationType)
+bool cSource::checkRelation(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,int parentPosition,int position,tIWMM verbWord,tIWMM objectWord,int relationType)
 { LFS
 	if (objectWord==wNULL) return false;
 	if (objectWord->second.mainEntry!=wNULL) objectWord=objectWord->second.mainEntry;
@@ -2953,7 +2953,7 @@ bool Source::checkRelation(patternMatchArray::tPatternMatch *parentpm,patternMat
 }
 
 //  desiredTagSets.push_back(tTS(VERB_OBJECTS_TAGSET,3,"VERB","V_OBJECT","OBJECT","V_AGREE","vD","vrD","IVERB",NULL));
-int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,int parentPosition,int position,
+int cSource::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,int parentPosition,int position,
 																vector <tTagLocation> &tagSet,bool infinitive,bool assessCost,int &voRelationsFound,int &traceSource,wstring purpose)
 { DLFS
 	voRelationsFound=0;
@@ -3368,7 +3368,7 @@ int Source::evaluateVerbObjects(patternMatchArray::tPatternMatch *parentpm,patte
 }
 
 // accumulate pema positions with their lowest additional cost
-void Source::accumulateTertiaryPEMAPositions(int tagSetOffset, int traceSource, vector <tTagLocation>  &tagSet, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions, int tmpVOCost)
+void cSource::accumulateTertiaryPEMAPositions(int tagSetOffset, int traceSource, vector <tTagLocation>  &tagSet, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions, int tmpVOCost)
 {
 	for (tTagLocation its: tagSet)
 	{
@@ -3391,7 +3391,7 @@ void Source::accumulateTertiaryPEMAPositions(int tagSetOffset, int traceSource, 
 	}
 }
 
-void Source::applyTertiaryPEMAPositions(unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions)
+void cSource::applyTertiaryPEMAPositions(unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions)
 {
 	for (auto its : tertiaryPEMAPositions)
 	{
@@ -3411,7 +3411,7 @@ void Source::applyTertiaryPEMAPositions(unordered_map <int, costPatternElementBy
 	}
 }
 
-int Source::assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,int parentPosition,int position,vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,bool alternateNounDeterminerShortTry,wstring purpose)
+int cSource::assessCost(patternMatchArray::tPatternMatch *parentpm,patternMatchArray::tPatternMatch *pm,int parentPosition,int position,vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,bool alternateNounDeterminerShortTry,wstring purpose)
 { LFS
 	if (debugTrace.traceVerbObjects || debugTrace.traceDeterminer || debugTrace.traceBNCPreferences || debugTrace.traceSubjectVerbAgreement)
 	{
@@ -3681,7 +3681,7 @@ bool WordMatch::compareCost(int AC1,int LEN1,int lowestSeparatorCost,int pmaOffs
 	return setInternal;
 }
 
-void Source::evaluateExplicitSubjectVerbAgreement(int position, patternMatchArray::tPatternMatch *pm, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions)
+void cSource::evaluateExplicitSubjectVerbAgreement(int position, patternMatchArray::tPatternMatch *pm, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions)
 {
 	// this is for NOUN[R]
 	int nextWord = position + pm->len;
@@ -3728,13 +3728,13 @@ void Source::evaluateExplicitSubjectVerbAgreement(int position, patternMatchArra
 	assessCost(NULL, pm, -1, position, tagSets, tertiaryPEMAPositions, false, L"eliminate loser patterns - explicit subject verb agreement");
 }
 
-void Source::evaluateExplicitNounDeterminerAgreement(int position, patternMatchArray::tPatternMatch *pm, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions)
+void cSource::evaluateExplicitNounDeterminerAgreement(int position, patternMatchArray::tPatternMatch *pm, vector < vector <tTagLocation> > &tagSets, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions)
 {
 	assessCost(NULL, pm, -1, position, tagSets, tertiaryPEMAPositions, false, L"eliminate loser patterns - explicit noun determiner agreement");
 }
 
 #define PRE_ASSESS_COST_ALLOWANCE 4
-void Source::eliminateLoserPatternsPhase1(unsigned int begin, unsigned int end, vector <int> &minSeparatorCost, vector < vector <unsigned int> > &winners, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions)
+void cSource::eliminateLoserPatternsPhase1(unsigned int begin, unsigned int end, vector <int> &minSeparatorCost, vector < vector <unsigned int> > &winners, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions)
 {
 	vector < vector <tTagLocation> > tagSets;
 	tagSets.reserve(4096);
@@ -3819,7 +3819,7 @@ void Source::eliminateLoserPatternsPhase1(unsigned int begin, unsigned int end, 
 	}
 }
 
-void Source::updateCost(unsigned int begin, unsigned int position, vector <int> &minSeparatorCost, int PMAOffset, vector <unsigned int> &preliminaryWinners,int phase)
+void cSource::updateCost(unsigned int begin, unsigned int position, vector <int> &minSeparatorCost, int PMAOffset, vector <unsigned int> &preliminaryWinners,int phase)
 {
 	int maxLen = 0;
 	patternMatchArray::tPatternMatch *pm;
@@ -3870,7 +3870,7 @@ void Source::updateCost(unsigned int begin, unsigned int position, vector <int> 
 	}
 }
 
-void Source::eliminateLoserPatternsPhase2(unsigned int begin, unsigned int end, vector <int> &minSeparatorCost, vector < vector <unsigned int> > &winners)
+void cSource::eliminateLoserPatternsPhase2(unsigned int begin, unsigned int end, vector <int> &minSeparatorCost, vector < vector <unsigned int> > &winners)
 {
 	for (unsigned int position = begin; position < end && !exitNow; position++)
 	{
@@ -3888,7 +3888,7 @@ void Source::eliminateLoserPatternsPhase2(unsigned int begin, unsigned int end, 
 			lplog(L"position %d: PHASE 2 cost=%d len=%d", bp, m[bp].minAvgCostAfterAssessCost, m[bp].maxLACAACMatch);
 }
 
-void Source::eliminateLoserPatternsPhase4(unsigned int begin, unsigned int end, vector <int> &minSeparatorCost, vector < vector <unsigned int> > &winners)
+void cSource::eliminateLoserPatternsPhase4(unsigned int begin, unsigned int end, vector <int> &minSeparatorCost, vector < vector <unsigned int> > &winners)
 {
 	for (unsigned int position = begin; position < end && !exitNow; position++)
 	{
@@ -3913,7 +3913,7 @@ void Source::eliminateLoserPatternsPhase4(unsigned int begin, unsigned int end, 
 			lplog(L"position %d: PHASE 4 cost=%d len=%d", bp, m[bp].minAvgCostAfterAssessCost, m[bp].maxLACAACMatch);
 }
 
-bool Source::eliminateLoserPatternsPhase3OR5(unsigned int begin, unsigned int end, vector <int> &minSeparatorCost, vector < vector <unsigned int> > &winners,int &matchedPositions, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,int phase)
+bool cSource::eliminateLoserPatternsPhase3OR5(unsigned int begin, unsigned int end, vector <int> &minSeparatorCost, vector < vector <unsigned int> > &winners,int &matchedPositions, unordered_map <int, costPatternElementByTagSet> &tertiaryPEMAPositions,int phase)
 {
 	bool reassessParentCosts = false;
 	for (unsigned int position = begin; position < end && !exitNow; position++)
@@ -4064,7 +4064,7 @@ bool Source::eliminateLoserPatternsPhase3OR5(unsigned int begin, unsigned int en
 //     if pma is marked winner mark children
 //
 // copy all winners in place and minimize pema && pma
-int Source::eliminateLoserPatterns(unsigned int begin,unsigned int end)
+int cSource::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 { LFS
 	unordered_map <int, costPatternElementByTagSet> tertiaryPEMAPositions;
 	vector <int> minSeparatorCost;

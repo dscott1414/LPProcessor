@@ -111,7 +111,7 @@ wstring matchesToString(vector <matchElement> &whatMatched,int elementMatched,ws
   return s;
 }
 
-bool patternElement::matchRange(Source &source,int matchBegin,int matchEnd,vector <matchElement> &whatMatched,sTrace &t)
+bool patternElement::matchRange(cSource &source,int matchBegin,int matchEnd,vector <matchElement> &whatMatched,sTrace &t)
 { LFS // DLFS
   int rep;
   if (minimum==0)
@@ -159,7 +159,7 @@ bool patternElement::matchRange(Source &source,int matchBegin,int matchEnd,vecto
   return matchBegin!=matchEnd || rep>1 || minimum==0; // if no matches, only return success if the element is optional
 }
 
-bool patternElement::matchFirst(Source &source,int sourcePosition,vector <matchElement> &whatMatched, sTrace &t)
+bool patternElement::matchFirst(cSource &source,int sourcePosition,vector <matchElement> &whatMatched, sTrace &t)
 { LFS
   int rep;
 if (minimum == 0)
@@ -280,7 +280,7 @@ bool patternElement::inflectionMatch(int inflectionFlagsFromWord, __int64 flags,
 #define MAX_PATTERN_NUM_MATCH 4000 // Charles Dickens may require a lower limit.
 // because endPositionMatches is being pushed back into whatMatched, endPositionMatches must be a COPY
 // of the position of whatMatched it started out as.  Do not pass endPositionMatches as a reference.
-int patternElement::matchOne(Source &source,unsigned int sourcePosition,unsigned int lastElement,vector <matchElement> &whatMatched, sTrace &t)
+int patternElement::matchOne(cSource &source,unsigned int sourcePosition,unsigned int lastElement,vector <matchElement> &whatMatched, sTrace &t)
 { LFS
   if (sourcePosition>=source.m.size())
   {
@@ -481,7 +481,7 @@ int patternElement::matchOne(Source &source,unsigned int sourcePosition,unsigned
 }
 
 // this assumes that optional or multiple elements cannot have a next element that could match
-bool cPattern::matchPatternPosition(Source &source, const unsigned int sourcePosition, bool fill, sTrace &t)
+bool cPattern::matchPatternPosition(cSource &source, const unsigned int sourcePosition, bool fill, sTrace &t)
 {
 	LFS  // DLFS
   source.whatMatched.clear();
@@ -563,7 +563,7 @@ bool cPattern::matchPatternPosition(Source &source, const unsigned int sourcePos
   return additionalMatch;
 }
 
-bool cPattern::fillPattern(Source &source, int sourcePosition, vector <matchElement> &whatMatched, int elementMatched, unsigned int &insertionPoint, int &reducedCost, bool &pushed, sTrace &t)
+bool cPattern::fillPattern(cSource &source, int sourcePosition, vector <matchElement> &whatMatched, int elementMatched, unsigned int &insertionPoint, int &reducedCost, bool &pushed, sTrace &t)
 {
 	LFS // DLFS
 		int endPosition = whatMatched[elementMatched].endPosition;
@@ -1266,7 +1266,7 @@ bool cPattern::create(wstring patternName, wstring differentiator, int numForms,
   return OK;
 }
 
-cPattern *cPattern::create(Source *source,wstring patternName,int num,int whereBegin,int whereEnd, unordered_map <wstring, wstring> &parseVariables,bool destinationPatternType)
+cPattern *cPattern::create(cSource *source,wstring patternName,int num,int whereBegin,int whereEnd, unordered_map <wstring, wstring> &parseVariables,bool destinationPatternType)
 { LFS
   bool explicitFutureReference; // nonOptionalElementFound=false,OK=true,
   cPattern *p=new cPattern();
@@ -1601,7 +1601,7 @@ void cPattern::setMandatoryAncestorPatterns(int childPattern)
 // if the pattern will be eliminated on these grounds DO NOT set maxMatch
 // otherwise, patterns not matching up to these # of elements will be eliminated even though they are
 //   the winners. - used in eliminateLoserPatterns
-bool cPattern::isTopLevelMatch(Source &source,unsigned int beginPosition,unsigned int endPosition)
+bool cPattern::isTopLevelMatch(cSource &source,unsigned int beginPosition,unsigned int endPosition)
 { LFS
   return fillFlag ||
     ((fillIfAloneFlag || onlyAloneExceptInSubPatternsFlag) &&
@@ -2246,7 +2246,7 @@ void printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &t
 }
 
 // exactly like pema::queryPattern
-int Source::queryPattern(int position, wstring pattern, int &maxEnd)
+int cSource::queryPattern(int position, wstring pattern, int &maxEnd)
 {
 	LFS
 		int maxLen = -1, pemaPosition = -1, nextByPosition = m[position].beginPEMAPosition;
@@ -2258,7 +2258,7 @@ int Source::queryPattern(int position, wstring pattern, int &maxEnd)
 }
 
 // exactly like pema::queryPattern
-int Source::queryPatternDiff(int position, wstring pattern, wstring differentiator)
+int cSource::queryPatternDiff(int position, wstring pattern, wstring differentiator)
 {
 	LFS
 		for (int nextByPosition = m[position].beginPEMAPosition; nextByPosition != -1; nextByPosition = pema[nextByPosition].nextByPosition)
@@ -2268,7 +2268,7 @@ int Source::queryPatternDiff(int position, wstring pattern, wstring differentiat
 }
 
 // exactly like pema::queryPattern
-int Source::queryPattern(int position, wstring pattern)
+int cSource::queryPattern(int position, wstring pattern)
 {
 	LFS
 		for (int nextByPosition = m[position].beginPEMAPosition; nextByPosition != -1; nextByPosition = pema[nextByPosition].nextByPosition)
@@ -2277,7 +2277,7 @@ int Source::queryPattern(int position, wstring pattern)
 	return -1;
 }
 
-void Source::printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &tagSet,int position,int PEMAPosition)
+void cSource::printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &tagSet,int position,int PEMAPosition)
 { LFS
   wchar_t temp[1024];
   if (descriptor) wcscpy(temp,descriptor);
@@ -2296,7 +2296,7 @@ void printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &t
   printTagSet(logType,NULL,ts,tagSet);
 }
 
-void Source::printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &tagSet,int position,int PEMAPosition,vector <wstring> &words)
+void cSource::printTagSet(int logType,wchar_t *descriptor,int ts,vector <tTagLocation> &tagSet,int position,int PEMAPosition,vector <wstring> &words)
 { LFS
   wstring clause;
   for (unsigned I=0; I<words.size(); I++)

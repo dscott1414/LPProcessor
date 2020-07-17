@@ -7,7 +7,7 @@
 #include "profile.h"
 #include "paice.h"
 
-bool Source::adjustWord(unsigned int q)
+bool cSource::adjustWord(unsigned int q)
 { LFS
 	bool insertedOrDeletedWord=false;
 	// let's have some dinner!
@@ -179,7 +179,7 @@ bool Source::adjustWord(unsigned int q)
 	return insertedOrDeletedWord;
 }
 
-bool Source::quoteTest(int q,unsigned int &quoteCount,int &lastPSQuote,tIWMM quoteType,tIWMM quoteOpenType,tIWMM quoteCloseType)
+bool cSource::quoteTest(int q,unsigned int &quoteCount,int &lastPSQuote,tIWMM quoteType,tIWMM quoteOpenType,tIWMM quoteCloseType)
 { LFS
   if (m[q].word!=quoteType) return false;
   quoteCount++;
@@ -195,7 +195,7 @@ bool Source::quoteTest(int q,unsigned int &quoteCount,int &lastPSQuote,tIWMM quo
   return true;
 }
 
-void Source::secondaryQuoteTest(int q,unsigned int &secondaryQuotations,int &lastSecondaryQuote,
+void cSource::secondaryQuoteTest(int q,unsigned int &secondaryQuotations,int &lastSecondaryQuote,
 																tIWMM secondaryQuoteWord,tIWMM secondaryQuoteOpenWord,tIWMM secondaryQuoteCloseWord)
 { LFS
 	// if space before quote, it should be an open quote.  if space after quote, it should be a close quote.
@@ -253,7 +253,7 @@ void Source::secondaryQuoteTest(int q,unsigned int &secondaryQuotations,int &las
 	}
 }
 
-void Source::eraseLastQuote(int &lastPSQuote,tIWMM quoteCloseWord,unsigned int &q)
+void cSource::eraseLastQuote(int &lastPSQuote,tIWMM quoteCloseWord,unsigned int &q)
 { LFS
 	while (lastPSQuote>0 && m[lastPSQuote].word!=quoteCloseWord) lastPSQuote--;
 	m.erase(m.begin()+lastPSQuote);
@@ -273,7 +273,7 @@ void Source::eraseLastQuote(int &lastPSQuote,tIWMM quoteCloseWord,unsigned int &
 	lastPSQuote=q-1;
 }
 
-bool Source::getFormFlags(int where, bool &maybeVerb, bool &maybeNoun, bool &maybeAdjective, bool &preferNoun)
+bool cSource::getFormFlags(int where, bool &maybeVerb, bool &maybeNoun, bool &maybeAdjective, bool &preferNoun)
 {
 	int verbFormOffset= m[where].queryForm(verbForm),nounFormOffset,adjectiveFormOffset;
 	// does this position have any verb form other than verbForm itself (then check if it does have verbForm, that it is a probable verbForm)
@@ -292,7 +292,7 @@ bool Source::getFormFlags(int where, bool &maybeVerb, bool &maybeNoun, bool &may
 // executed after tokenization but before pattern matching.
 // also handle Let's = Let us and What's he want = What does he want?
 // also handle 'Tis as in 'Tis the time for all good men... (It is)
-unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuotations)
+unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int &primaryQuotations)
 { LFS
 	unsigned int quotationExceptions=0;
 	unsigned int secondaryQuotations=0;
@@ -327,7 +327,7 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 		for (unsigned int q=begin; q<end; q++)
 		{
 			bool afterPossibleAbbreviation=(q>1 && m[q-1].word->first==L"." && (m[q-2].queryForm(abbreviationForm)>=0 || m[q-2].queryForm(honorificAbbreviationForm)>=0 || m[q-2].queryForm(letterForm)>=0));
-			// logic copied from Source::parse
+			// logic copied from cSource::parse
 			tIWMM w=(q) ? m[q-1].word : wNULL;
 			bool firstWordInSentence=q==begin || w->first==L"." || // include "." because the last word may be a contraction
 				w==Words.sectionWord ||	w->first==L"--" /* Ulysses */ || w->first==L"?" || w->first==L"!" || 
@@ -784,7 +784,7 @@ unsigned int Source::doQuotesOwnershipAndContractions(unsigned int &primaryQuota
 	return quotationExceptions;
 }
 
-void Source::adjustWords(void)
+void cSource::adjustWords(void)
 { LFS
 	// rearrange quotes, also figure out plural ownership and more on would/had is/has
 	for (unsigned int s=0; s+1<sentenceStarts.size(); s++)
@@ -873,7 +873,7 @@ bool reDecodeNecessary(wstring encodingRecordedInDocument, int &codePage, bool i
 }
 
 
-int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring encodingFromDB, wstring &start, int &repeatStart)
+int cSource::readSourceBuffer(wstring title, wstring etext, wstring path, wstring encodingFromDB, wstring &start, int &repeatStart)
 {
 	LFS
 		beginClock = clock();
@@ -905,7 +905,7 @@ int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring
 	bufferScanLocation = (hasBOM) ? 1 : 0; // detect BOM
 	sourcePath = path;
 	bufferLen /= sizeof(bookBuffer[0]);
-	if (sourceType == Source::WEB_SEARCH_SOURCE_TYPE || sourceType == WIKIPEDIA_SOURCE_TYPE || sourceType == INTERACTIVE_SOURCE_TYPE || sourceType == PATTERN_TRANSFORM_TYPE || sourceType == REQUEST_TYPE)
+	if (sourceType == cSource::WEB_SEARCH_SOURCE_TYPE || sourceType == WIKIPEDIA_SOURCE_TYPE || sourceType == INTERACTIVE_SOURCE_TYPE || sourceType == PATTERN_TRANSFORM_TYPE || sourceType == REQUEST_TYPE)
 		return 0;
 	bookBuffer[bufferLen] = 0;
 	bookBuffer[bufferLen + 1] = 0;
@@ -994,7 +994,7 @@ int Source::readSourceBuffer(wstring title, wstring etext, wstring path, wstring
 	return 0;
 }
 
-int Source::parseBuffer(wstring &path, unsigned int &unknownCount)
+int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 {
 	LFS
 		int lastProgressPercent = 0, result = 0, runOnSentences = 0;
@@ -1302,7 +1302,7 @@ int Source::parseBuffer(wstring &path, unsigned int &unknownCount)
 	return 0;
 }
 
-int Source::tokenize(wstring title, wstring etext, wstring path, wstring encoding, wstring &start, int &repeatStart, unsigned int &unknownCount)
+int cSource::tokenize(wstring title, wstring etext, wstring path, wstring encoding, wstring &start, int &repeatStart, unsigned int &unknownCount)
 {
 	LFS
 		int ret = 0;

@@ -8,7 +8,7 @@
 #include "malloc.h"
 #include "profile.h"
 
-bool Source::tagInFocus(int begin,int end)
+bool cSource::tagInFocus(int begin,int end)
 { LFS
 	for (unsigned I=0; I<collectTagsFocusPositions.size(); I++)
 		if (begin<=collectTagsFocusPositions[I] && end>collectTagsFocusPositions[I])
@@ -23,7 +23,7 @@ bool Source::tagInFocus(int begin,int end)
 #endif
 
 
-int Source::replicate(int recursionLevel,int PEMAPosition,int position,vector <tTagLocation> &tagSet,vector < vector <tTagLocation> > &childTagSets,vector < vector <tTagLocation> > &tagSets, unordered_map <int, vector < vector <tTagLocation> > > &TagSetMap)
+int cSource::replicate(int recursionLevel,int PEMAPosition,int position,vector <tTagLocation> &tagSet,vector < vector <tTagLocation> > &childTagSets,vector < vector <tTagLocation> > &tagSets, unordered_map <int, vector < vector <tTagLocation> > > &TagSetMap)
 { LFS
 	size_t originalTagSetSize=tagSet.size();
 	for (unsigned I=0; I<childTagSets.size(); I++)
@@ -49,7 +49,7 @@ bool tagSetSame(vector <tTagLocation> &tagSet,vector <tTagLocation> &tagSetNew)
 	return true;
 }
 
-int Source::collectTags(int recursionLevel,int PEMAPosition,int position,vector <tTagLocation> &tagSet,vector < vector <tTagLocation> > &tagSets, unordered_map <int, vector < vector <tTagLocation> > > &TagSetMap)
+int cSource::collectTags(int recursionLevel,int PEMAPosition,int position,vector <tTagLocation> &tagSet,vector < vector <tTagLocation> > &tagSets, unordered_map <int, vector < vector <tTagLocation> > > &TagSetMap)
 { LFS
 	if (PEMAPosition<0)
 	{
@@ -223,7 +223,7 @@ int Source::collectTags(int recursionLevel,int PEMAPosition,int position,vector 
 		return tagSets.size();
 }
 
-bool Source::getVerb(vector <tTagLocation> &tagSet,int &tag)
+bool cSource::getVerb(vector <tTagLocation> &tagSet,int &tag)
 { LFS
 	int nextVerbTag=-1,nextVObjectTag=-1,nextVAgreeTag=-1;
 	int whereVerbTag=findTag(tagSet,L"VERB",nextVerbTag);
@@ -242,7 +242,7 @@ bool Source::getVerb(vector <tTagLocation> &tagSet,int &tag)
 	return true;
 }
 
-bool Source::getIVerb(vector <tTagLocation> &tagSet,int &tag)
+bool cSource::getIVerb(vector <tTagLocation> &tagSet,int &tag)
 { LFS
 	int nextVObjectTag=-1;
 	int whereVObjectTag=findTag(tagSet,L"V_OBJECT",nextVObjectTag);
@@ -253,12 +253,12 @@ bool Source::getIVerb(vector <tTagLocation> &tagSet,int &tag)
 	return true;
 }
 
-bool Source::tagIsCertain(int position)
+bool cSource::tagIsCertain(int position)
 { LFS
 	return !preTaggedSource || (m[position].flags&WordMatch::flagBNCFormNotCertain)==0;
 }
 
-bool Source::resolveObjectTagBeforeObjectResolution(vector <tTagLocation> &tagSet,int tag,tIWMM &word,wstring purpose)
+bool cSource::resolveObjectTagBeforeObjectResolution(vector <tTagLocation> &tagSet,int tag,tIWMM &word,wstring purpose)
 { LFS
 	if (tag<0) return false;
 	if (tagSet[tag].len==1)
@@ -297,7 +297,7 @@ bool Source::resolveObjectTagBeforeObjectResolution(vector <tTagLocation> &tagSe
 // 65396:added Tommy[65396-65398][65397][name  ][MALE  ]**[A:tommy [193]]**[ambiguous]
 // ALSO:
 // 87682:Tommy boy[87682-87684][87683][gender][MALE  ][OGEN]
-int Source::properNounCheck(int &traceSource,int begin,int end,int whereDet)
+int cSource::properNounCheck(int &traceSource,int begin,int end,int whereDet)
 { LFS
 	int howManyProperNouns=0,lastProperNoun=-1;
 	for (int I=begin; I<end; I++)
@@ -388,7 +388,7 @@ void compareTagSets(vector < vector <tTagLocation> > tagSets,vector < vector <tT
 	}
 }
 
-size_t Source::startCollectTagsFromTag(bool inTrace,int tagSet,tTagLocation &tl,vector < vector <tTagLocation> > &tagSets,int rejectTag,bool obeyBlock, bool collectSelfTags, wstring purpose)
+size_t cSource::startCollectTagsFromTag(bool inTrace,int tagSet,tTagLocation &tl,vector < vector <tTagLocation> > &tagSets,int rejectTag,bool obeyBlock, bool collectSelfTags, wstring purpose)
 { LFS
 	int pattern=tl.pattern,position=tl.sourcePosition,end=tl.len,PEMAOffset=tl.PEMAOffset;
 	if (obeyBlock) // in this case, if we check for descendants even with obeyBlock on, _NOUN[9] will not appear to contain prepTagSet because _PP is blocked in that pattern.  It will only contain PREP.
@@ -423,7 +423,7 @@ size_t Source::startCollectTagsFromTag(bool inTrace,int tagSet,tTagLocation &tl,
 	return 0;
 }
 
-size_t Source::startCollectTags(bool inTrace,int tagSet,int position,int PEMAPosition,vector < vector <tTagLocation> > &tagSets,bool obeyBlock,bool collectSelfTags,wstring purpose)
+size_t cSource::startCollectTags(bool inTrace,int tagSet,int position,int PEMAPosition,vector < vector <tTagLocation> > &tagSets,bool obeyBlock,bool collectSelfTags,wstring purpose)
 {  LFS
 	secondaryPEMAPositions.clear();
 	if (PEMAPosition<0)
@@ -548,7 +548,7 @@ tIWMM WordMatch::resolveToClass()
 }
 
 // this is used before any objects are resolved, or marked for time or location
-tIWMM Source::resolveToClass(int where)
+tIWMM cSource::resolveToClass(int where)
 { LFS  
   tIWMM o=wNULL;
 	if (m[where].getObject()>=0)
@@ -580,7 +580,7 @@ tIWMM Source::resolveToClass(int where)
 	return m[where].resolveToClass();
 }
 
-tIWMM Source::resolveObjectToClass(int where,int o)
+tIWMM cSource::resolveObjectToClass(int where,int o)
 { LFS
 		int objectClass=objects[o].objectClass;
 		if (objects[o].isLocationObject)
@@ -605,7 +605,7 @@ tIWMM Source::resolveObjectToClass(int where,int o)
 }
 
 // this is used before any objects are resolved, or marked for time or location
-tIWMM Source::fullyResolveToClass(int where)
+tIWMM cSource::fullyResolveToClass(int where)
 { LFS
 	tIWMM w=resolveToClass(where);
 	wstring word=m[where].word->first;
@@ -628,7 +628,7 @@ tIWMM Source::fullyResolveToClass(int where)
 	return w;
 }
 
-bool Source::forcePrepObject(vector <tTagLocation> &tagSet,int tag,int &object,int &whereObject,tIWMM &word)
+bool cSource::forcePrepObject(vector <tTagLocation> &tagSet,int tag,int &object,int &whereObject,tIWMM &word)
 { LFS
 	if (identifyObject(findTag(L"NOUN"),tagSet[tag].sourcePosition,-1,false,-1,-1)>=0 &&
 			resolveTag(tagSet,tag,object,whereObject,word))
@@ -645,7 +645,7 @@ bool Source::forcePrepObject(vector <tTagLocation> &tagSet,int tag,int &object,i
 All 4-digit numbers replaced with 'date'.
 Gendered proper nouns or personal pronouns are replaced with PPN.
 */
-bool Source::resolveTag(vector <tTagLocation> &tagSet,int tag,int &object,int &whereObject,tIWMM &word)
+bool cSource::resolveTag(vector <tTagLocation> &tagSet,int tag,int &object,int &whereObject,tIWMM &word)
 { LFS
 	if (tag<0) return false;
 	word=wNULL;

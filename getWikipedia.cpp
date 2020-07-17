@@ -504,7 +504,7 @@ void cTreeCat::lplogTC(int whichLog,wstring ofWhichObject)
 		::lplog(whichLog,L"%s",toString(tmpstr).c_str());
 }
 
-int Source::getExtendedRDFTypes(int where, vector <cTreeCat *> &rdfTypes, unordered_map <wstring, int > &topHierarchyClassIndexes, wstring fromWhere, bool ignoreMatches, bool fileCaching)
+int cSource::getExtendedRDFTypes(int where, vector <cTreeCat *> &rdfTypes, unordered_map <wstring, int > &topHierarchyClassIndexes, wstring fromWhere, bool ignoreMatches, bool fileCaching)
 {
 	LFS
 		int lastLowestConfidence = -1;
@@ -548,7 +548,7 @@ int Source::getExtendedRDFTypes(int where, vector <cTreeCat *> &rdfTypes, unorde
 	return rdfTypes.size();
 }
 
-int Source::getObjectRDFTypes(int object,vector <cTreeCat *> &rdfTypes,unordered_map <wstring ,int > &topHierarchyClassIndexes,wstring fromWhere)
+int cSource::getObjectRDFTypes(int object,vector <cTreeCat *> &rdfTypes,unordered_map <wstring ,int > &topHierarchyClassIndexes,wstring fromWhere)
 { LFS
 	wstring tmpstr;
   objectString(object,tmpstr,true);
@@ -561,7 +561,7 @@ int Source::getObjectRDFTypes(int object,vector <cTreeCat *> &rdfTypes,unordered
 	return rdfTypes.size();
 }
 
-int Source::readExtendedRDFTypes(wchar_t path[4096],vector <cTreeCat *> &rdfTypes,unordered_map <wstring ,int > &topHierarchyClassIndexes)
+int cSource::readExtendedRDFTypes(wchar_t path[4096],vector <cTreeCat *> &rdfTypes,unordered_map <wstring ,int > &topHierarchyClassIndexes)
 { LFS
 	int fd,errorCode=_wsopen_s(&fd,path,O_RDWR|O_BINARY,_SH_DENYNO,_S_IREAD|_S_IWRITE );
 	if (errorCode!=0)
@@ -608,7 +608,7 @@ int Source::readExtendedRDFTypes(wchar_t path[4096],vector <cTreeCat *> &rdfType
 }
 
 #define EMAX_BUF MAX_BUF*10
-int Source::writeExtendedRDFTypes(wchar_t path[4096],vector <cTreeCat *> &rdfTypes,unordered_map <wstring ,int > &topHierarchyClassIndexes)
+int cSource::writeExtendedRDFTypes(wchar_t path[4096],vector <cTreeCat *> &rdfTypes,unordered_map <wstring ,int > &topHierarchyClassIndexes)
 { LFS
 	int fd,errorCode=_wsopen_s(&fd,path,O_WRONLY|O_CREAT|O_TRUNC|O_BINARY,_SH_DENYNO,_S_IREAD|_S_IWRITE );
 	if (errorCode!=0)
@@ -670,7 +670,7 @@ wstring transformRDFTypeName(wstring &RDFType)
 	return RDFType;
 }
 
-bool Source::categoryMultiWord(wstring &childWord, wstring &lastWord)
+bool cSource::categoryMultiWord(wstring &childWord, wstring &lastWord)
 {
 	int lastSpace = -1;
 	// contains capitalized word?
@@ -694,7 +694,7 @@ bool Source::categoryMultiWord(wstring &childWord, wstring &lastWord)
 }
 
 // attempt to transform rdf types, wikipedia links and profession links into single words which can be matched to other words
-void Source::getRDFTypeSimplificationToWordAssociationWithObjectMap(wstring object,vector <cTreeCat *> &rdfTypes,unordered_map<wstring,int> &RDFTypeSimplificationToWordAssociationWithObjectMap)
+void cSource::getRDFTypeSimplificationToWordAssociationWithObjectMap(wstring object,vector <cTreeCat *> &rdfTypes,unordered_map<wstring,int> &RDFTypeSimplificationToWordAssociationWithObjectMap)
 {
 	for (vector <cTreeCat *>::iterator rdfi=rdfTypes.begin(),rdfiEnd=rdfTypes.end(); rdfi!=rdfiEnd; rdfi++)
 	{
@@ -741,7 +741,7 @@ void Source::getRDFTypeSimplificationToWordAssociationWithObjectMap(wstring obje
 	}
 }
 
-int Source::getAssociationMapMaster(int where,int numWords,unordered_map <wstring ,int > &RDFTypeSimplificationToWordAssociationWithObjectMap,wstring fromWhere)
+int cSource::getAssociationMapMaster(int where,int numWords,unordered_map <wstring ,int > &RDFTypeSimplificationToWordAssociationWithObjectMap,wstring fromWhere)
 { LFS
 	wstring newObjectName;
 	bool isObject = m[where].getObject() >= 0;
@@ -798,7 +798,7 @@ void makePath(wstring &object, wchar_t *path)
 }
 
 // may reject 'his contributions' in the future
-bool Source::noRDFTypes()
+bool cSource::noRDFTypes()
 {
 	//int begin = m[where].beginObjectPosition,end=m[where].endObjectPosition;
 	return false;
@@ -807,7 +807,7 @@ bool Source::noRDFTypes()
 // get all RDF types associated with the object which is defined by the words consecutively from position (where) to position (where+numWords) in source.
 // this may be extended by some prepositional phrases as determined by extendNumPP
 // return results in rdfTypes and topHierarchyClassIndexes
-int Source::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat *> &rdfTypes, unordered_map <wstring, int > &topHierarchyClassIndexes, wstring fromWhere, int extendNumPP, bool fileCaching, bool ignoreMatches)
+int cSource::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat *> &rdfTypes, unordered_map <wstring, int > &topHierarchyClassIndexes, wstring fromWhere, int extendNumPP, bool fileCaching, bool ignoreMatches)
 {
 	LFS
 	if (noRDFTypes())
@@ -928,7 +928,7 @@ int Source::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat 
 	return retCode;
 }
 
-void Source::getObjectString(int where,wstring &object,vector <wstring> &lookForSubject,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases)
+void cSource::getObjectString(int where,wstring &object,vector <wstring> &lookForSubject,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases)
 { LFS
 	int o,begin,end;
 	if (m[where].objectMatches.size()>0)
@@ -1010,7 +1010,7 @@ void convertFromWikilinkEscape(wstring &wikilink)
 	wikilink=wl;
 }
 
-int Source::getWikipediaPath(int principalWhere,vector <wstring> &wikipediaLinks,wchar_t *path,vector <wstring> &lookForSubject,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases)
+int cSource::getWikipediaPath(int principalWhere,vector <wstring> &wikipediaLinks,wchar_t *path,vector <wstring> &lookForSubject,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases)
 { LFS
 	wstring object; 
 	if (principalWhere>=0)
@@ -1060,7 +1060,7 @@ int Source::getWikipediaPath(int principalWhere,vector <wstring> &wikipediaLinks
 }
 
 // if subject object matches, and verb is IS, evaluate object for an OCType.
-int Source::evaluateISARelation(int parentSourceWhere,int where,vector <tTagLocation> &tagSet,vector <wstring> &lookForSubject)
+int cSource::evaluateISARelation(int parentSourceWhere,int where,vector <tTagLocation> &tagSet,vector <wstring> &lookForSubject)
 { LFS
 	int nextTag=-1,verbTagIndex;
 	if ((verbTagIndex=findOneTag(tagSet,L"VERB",-1))<0) return -1;
@@ -1141,7 +1141,7 @@ int Source::evaluateISARelation(int parentSourceWhere,int where,vector <tTagLoca
 	return (objects[objectObject].getSubType()<0) ? NUM_SUBTYPES : objects[objectObject].getSubType();
 }
 
-bool Source::getISARelations(int parentSourceWhere,int where,vector < vector <tTagLocation> > &tagSets,vector <int> &OCTypes,vector <wstring> &lookForSubject)
+bool cSource::getISARelations(int parentSourceWhere,int where,vector < vector <tTagLocation> > &tagSets,vector <int> &OCTypes,vector <wstring> &lookForSubject)
 { LFS
   vector <WordMatch>::iterator im=m.begin()+where;
 	patternMatchArray::tPatternMatch *pma=im->pma.content;
@@ -1193,7 +1193,7 @@ bool writeAttribs(wstring path,vector <int> &OCTypes)
 	return true;
 }
 
-bool Source::mixedCaseObject(int begin,int len)
+bool cSource::mixedCaseObject(int begin,int len)
 { LFS
   bool lowerCaseFound=false,allUpperCaseWithVowelsFound=false;
   for (int I=begin; I<begin+len; I++)
@@ -1222,7 +1222,7 @@ bool Source::mixedCaseObject(int begin,int len)
 }
 
 // return true if object SHOULD NOT be identified through extensive web methods
-bool Source::capitalizationCheck(int begin,int len)
+bool cSource::capitalizationCheck(int begin,int len)
 {
 	// count # of capitalized words
 	int wordsCapitalized = 0;
@@ -1246,7 +1246,7 @@ bool Source::capitalizationCheck(int begin,int len)
 	return false;
 }
 
-bool Source::rejectISARelation(int principalWhere)
+bool cSource::rejectISARelation(int principalWhere)
 {
 	LFS
 	int o=m[principalWhere].getObject(),begin=m[principalWhere].beginObjectPosition,len=m[principalWhere].endObjectPosition-begin;
@@ -1294,12 +1294,12 @@ bool cQuestionAnswering::rejectPath(const wchar_t *path)
 }
 
 int limitProcessingForProfiling=0;
-int cQuestionAnswering::processPath(Source *parentSource,const wchar_t *path, Source *&source, Source::sourceTypeEnum st, int pathSourceConfidence, bool parseOnly)
+int cQuestionAnswering::processPath(cSource *parentSource,const wchar_t *path, cSource *&source, cSource::sourceTypeEnum st, int pathSourceConfidence, bool parseOnly)
 {
 	LFS
 		if (logTraceOpen)
 			lplog(LOG_WHERE, L"TRACEOPEN %s %s", path, __FUNCTIONW__);
-	unordered_map <wstring, Source *>::iterator smi = sourcesMap.find(path);
+	unordered_map <wstring, cSource *>::iterator smi = sourcesMap.find(path);
 	wchar_t sourcesParsedTitle[1024];
 	GetConsoleTitle(sourcesParsedTitle, 1024);
 	wchar_t *ch = wcsstr(sourcesParsedTitle, L"...");
@@ -1322,7 +1322,7 @@ int cQuestionAnswering::processPath(Source *parentSource,const wchar_t *path, So
 		wsprintf(ch + 3, L"[%d%%]  %d sources processed:%s", questionProgress, sourcesMap.size(), path);
 		SetConsoleTitle(sourcesParsedTitle);
 	}
-	source = new Source(&parentSource->mysql, st, pathSourceConfidence);
+	source = new cSource(&parentSource->mysql, st, pathSourceConfidence);
 	source->numSearchedInMemory = 1;
 	source->isFormsProcessed = false;
 	source->processOrder = ++parentSource->processOrder;
@@ -1401,7 +1401,7 @@ int cQuestionAnswering::processPath(Source *parentSource,const wchar_t *path, So
 	return 0;
 }
 
-int Source::identifyISARelationTextAnalysis(cQuestionAnswering &qa,int principalWhere, bool parseOnly)
+int cSource::identifyISARelationTextAnalysis(cQuestionAnswering &qa,int principalWhere, bool parseOnly)
 {
 	LFS
 		// must be a name
@@ -1414,8 +1414,8 @@ int Source::identifyISARelationTextAnalysis(cQuestionAnswering &qa,int principal
 	vector <int> OCTypes;
 	if (!readAttribs(path,OCTypes))
 	{
-		Source *source = NULL;
-		qa.processPath(this,path,source,Source::WIKIPEDIA_SOURCE_TYPE,2,parseOnly);
+		cSource *source = NULL;
+		qa.processPath(this,path,source,cSource::WIKIPEDIA_SOURCE_TYPE,2,parseOnly);
 		vector <WordMatch>::iterator im=source->m.begin(),imEnd=source->m.end();
 		vector < vector <tTagLocation> > tagSets;
 		for (int I=0; im!=imEnd; im++,I++)
@@ -1460,7 +1460,7 @@ int Source::identifyISARelationTextAnalysis(cQuestionAnswering &qa,int principal
 	return 0;
 }
 
-int Source::getRDFWhereString(int where, wstring &oStr, wchar_t *separator, int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool ignoreMatches)
+int cSource::getRDFWhereString(int where, wstring &oStr, wchar_t *separator, int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool ignoreMatches)
 { LFS
 	int o,begin,len;
 	if (m[where].objectMatches.size()>0 && !ignoreMatches)
@@ -1515,7 +1515,7 @@ int Source::getRDFWhereString(int where, wstring &oStr, wchar_t *separator, int 
 	return 0;
 }
 
-bool Source::analyzeRDFTitle(unsigned int where, int &numWords, int &numPrepositions, wstring tableName)
+bool cSource::analyzeRDFTitle(unsigned int where, int &numWords, int &numPrepositions, wstring tableName)
 {
 	LFS
 		numWords = 0;
@@ -1568,7 +1568,7 @@ bool Source::analyzeRDFTitle(unsigned int where, int &numWords, int &numPreposit
 }
 
 // rdfTypes calls rdfIdentify, which then caches the rdfTypes of each individual string into the dbpedia cache.
-int Source::getRDFTypes(int where, vector <cTreeCat *> &rdfTypes, wstring fromWhere, int extendNumPP, bool ignoreMatches, bool fileCaching)
+int cSource::getRDFTypes(int where, vector <cTreeCat *> &rdfTypes, wstring fromWhere, int extendNumPP, bool ignoreMatches, bool fileCaching)
 { LFS
 	int o,begin,objectWordLength,pw;
 	if (m[where].objectMatches.size()>0 && !ignoreMatches)
@@ -1705,7 +1705,7 @@ int Source::getRDFTypes(int where, vector <cTreeCat *> &rdfTypes, wstring fromWh
 	return 0;
 }
 
-int Source::identifyISARelation(int principalWhere,bool initialTenseOnly)
+int cSource::identifyISARelation(int principalWhere,bool initialTenseOnly)
 { LFS
 	Ontology::initialize();
 	int o=m[principalWhere].getObject(),begin=m[principalWhere].beginObjectPosition,len=m[principalWhere].endObjectPosition-begin;
@@ -1853,7 +1853,7 @@ int Source::identifyISARelation(int principalWhere,bool initialTenseOnly)
 
 // is questionInformationSourceObject entirely uppercase, single word and having another class other than noun? (US - as in the acronym for the United States)
 // is childSource primarily capitalized?  If so, throw out this source because matching is not reliable in this case.
-bool Source::checkForUppercaseSources(int questionInformationSourceObject)
+bool cSource::checkForUppercaseSources(int questionInformationSourceObject)
 {
 	if (questionInformationSourceObject<0 || objects[questionInformationSourceObject].end-objects[questionInformationSourceObject].begin!=1 || 
 		!(m[objects[questionInformationSourceObject].begin].flags&WordMatch::flagAllCaps))
@@ -1865,7 +1865,7 @@ bool Source::checkForUppercaseSources(int questionInformationSourceObject)
 	return otherThanNoun;
 }
 
-bool Source::skipSentenceForUpperCase(unsigned int &I)
+bool cSource::skipSentenceForUpperCase(unsigned int &I)
 {
 	// is childSource primarily capitalized around I?
 	unsigned int numWordsCapitalized=0,numWordsChecked=0,s;
@@ -1882,7 +1882,7 @@ bool Source::skipSentenceForUpperCase(unsigned int &I)
   return false;
 }
 
-void cQuestionAnswering::accumulateSemanticMaps(Source *questionSource,cSpaceRelation* parentSRI,Source *childSource,bool confidence)
+void cQuestionAnswering::accumulateSemanticMaps(cSource *questionSource,cSpaceRelation* parentSRI,cSource *childSource,bool confidence)
 { LFS
 	/*
 	class cSemanticMap
@@ -1987,7 +1987,7 @@ void cQuestionAnswering::accumulateSemanticMaps(Source *questionSource,cSpaceRel
 	}
 }
 
-void cQuestionAnswering::accumulateSemanticEntry(Source *questionSource,unsigned int where,set <cObject::cLocation> &principalObjectLocations,set <cObject::cLocation>::iterator &polIndex,bool confidence,cSpaceRelation* parentSRI,cSemanticMap *semanticMap,unordered_set <wstring> & whereQuestionInformationSourceObjectsStrings)
+void cQuestionAnswering::accumulateSemanticEntry(cSource *questionSource,unsigned int where,set <cObject::cLocation> &principalObjectLocations,set <cObject::cLocation>::iterator &polIndex,bool confidence,cSpaceRelation* parentSRI,cSemanticMap *semanticMap,unordered_set <wstring> & whereQuestionInformationSourceObjectsStrings)
 { LFS
 	vector <cOM> objectMatches= questionSource->m[where].objectMatches;
 	if (questionSource->m[where].objectMatches.empty())

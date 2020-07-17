@@ -32,7 +32,7 @@ void tFI::allocateMap(int relationType)
 
 // main entries from all words in source must already exist in memory (Words array)
 // return a set of wordIds for all words including the mainEntries, except for special words that do not already have wordRelations
-int Source::readWordIdsNeedingWordRelations(set <int> &wordIdsAndMainEntryIdsInSourceNeedingWordRelations)
+int cSource::readWordIdsNeedingWordRelations(set <int> &wordIdsAndMainEntryIdsInSourceNeedingWordRelations)
 	{
 	LFS
 	tIWMM specials[] = { Words.PPN,Words.TELENUM,Words.NUM,Words.DATE,Words.TIME,Words.LOCATION,Words.sectionWord };

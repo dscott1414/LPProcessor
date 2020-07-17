@@ -30,8 +30,8 @@ unordered_map<wstring, tFI::cRMap::tRelation> static_tIcMap;
 tFI::cRMap::tIcRMap tNULL=(tFI::cRMap::tIcRMap)static_tIcMap.begin();
 vector <cLocalFocus> static_cLocalFocus;
 vector <cLocalFocus>::iterator cNULL=static_cLocalFocus.begin();
-vector <Source::cSpeakerGroup> static_cSpeakerGroup;
-vector <Source::cSpeakerGroup>::iterator sgNULL = (vector <Source::cSpeakerGroup>::iterator)static_cSpeakerGroup.begin();
+vector <cSource::cSpeakerGroup> static_cSpeakerGroup;
+vector <cSource::cSpeakerGroup>::iterator sgNULL = (vector <cSource::cSpeakerGroup>::iterator)static_cSpeakerGroup.begin();
 vector <WordMatch> static_wm;
 vector <WordMatch>::iterator wmNULL=static_wm.begin();
 set<int> static_setInt;
@@ -847,7 +847,7 @@ bool signalCtrl(DWORD dwProcessId, DWORD dwCtrlEvent)
 bool getNextUnprocessedSource(MYSQL &mysql,int begin, int end, int sourceType, bool setUsed, int &id, wstring &path, wstring &encoding, wstring &start, int &repeatStart, wstring &etext, wstring &author, wstring &title);
 int getNumSources(MYSQL &mysql, int sourceType, bool left);
 bool anymoreUnprocessedForUnknown(MYSQL &mysql, int sourceType, int step);
-int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum processSourceType, int maxProcesses, int numSourcesPerProcess,
+int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int beginSource, int endSource, cSource::sourceTypeEnum processSourceType, int maxProcesses, int numSourcesPerProcess,
 	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite,bool makeCopyBeforeSourceWrite,bool parseOnly, wstring specialExtension)
 {
 	LFS
@@ -858,7 +858,7 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 	int numProcesses = 0, errorCode = 0,numSourcesProcessedOriginally =0,numSourcesLeft;
 	__int64 wordsProcessedOriginally = 0, sentencesProcessedOriginally = 0;
 	if (processKind==0)
-		sourceType = Source::REQUEST_TYPE;
+		sourceType = cSource::REQUEST_TYPE;
 	getNumSourcesProcessed(mysql, sourceType, numSourcesProcessedOriginally, wordsProcessedOriginally, sentencesProcessedOriginally);
 	numSourcesLeft = getNumSources(mysql,sourceType,true);
 	maxProcesses = min(maxProcesses, numSourcesLeft);
@@ -1035,7 +1035,7 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 			printf("\nCreated process %d:%d", nextProcessIndex, (int)processId);
 		}
 	}
-	if (processSourceType != Source::REQUEST_TYPE)
+	if (processSourceType != cSource::REQUEST_TYPE)
 	{
 		freeCounter();
 		_exit(0); // fast exit
@@ -1127,7 +1127,7 @@ int wmain(int argc,wchar_t *argv[])
 	// test gutenberg by generating usage statistics
 	//if (argc>1 && !wcscmp(argv[1],L"-tg"))
 	//{
-	//	Source source2(L"localhost",0,false,true,true);
+	//	cSource source2(L"localhost",0,false,true,true);
 	//	source2.testStartCode();
 	//	return 0;
 	//}
@@ -1217,7 +1217,7 @@ int wmain(int argc,wchar_t *argv[])
 	*/
 	vector <int> badSpeakers;
 	int sourceArgs = -1;
-	enum Source::sourceTypeEnum sourceType= Source::NO_SOURCE_TYPE;
+	enum cSource::sourceTypeEnum sourceType= cSource::NO_SOURCE_TYPE;
 	const wchar_t *where;
 	for (int I = 1; I < numCommandLineParameters - 1; I++)
 	{
@@ -1225,7 +1225,7 @@ int wmain(int argc,wchar_t *argv[])
 		std::transform(arg.begin(), arg.end(), arg.begin(), ::tolower);
 		if ((where = wcsstr(L"1-test 2-book 3-newsbank 4-bnc 5-script 6-websearch 7-wikipedia 8-interactive :-parserequest", arg.c_str())))
 		{
-			sourceType = (enum Source::sourceTypeEnum)(where[-1] - '0');
+			sourceType = (enum cSource::sourceTypeEnum)(where[-1] - '0');
 			sourceArgs = I;
 			break;
 		}
@@ -1234,7 +1234,7 @@ int wmain(int argc,wchar_t *argv[])
 		lplog(LOG_FATAL_ERROR,L"Source type not found.");
 	if (_waccess(cacheDir,0)<0)
 		lplog(LOG_FATAL_ERROR,L"Cache directory %s does not exist!",cacheDir);
-	Source source(sourceHost,sourceType,generateFormStatistics,multiProcess>0,true);
+	cSource source(sourceHost,sourceType,generateFormStatistics,multiProcess>0,true);
 	if (multiProcess > 0 || numSourceLimit == 0) // controller or a single process not under control
 		WRMemoryCheck(source.mysql);
 
@@ -1263,7 +1263,7 @@ int wmain(int argc,wchar_t *argv[])
 	source.pemaMapToTagSetsByPemaByTagSet.reserve(desiredTagSets.size());
 	for (unsigned int ts=0; ts<desiredTagSets.size(); ts++)
 		source.pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
-	if (sourceType == Source::sourceTypeEnum::PATTERN_TRANSFORM_TYPE)
+	if (sourceType == cSource::sourceTypeEnum::PATTERN_TRANSFORM_TYPE)
 	{
 		wchar_t consoleTitle[1500];
 #ifdef _DEBUG
@@ -1277,9 +1277,9 @@ int wmain(int argc,wchar_t *argv[])
 		SetConsoleTitle(consoleTitle);
 		unlockTables(source.mysql);
 		Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
-		Source *requestedSource;
+		cSource *requestedSource;
 		cQuestionAnswering qa;
-		return qa.processPath(&source,argv[sourceArgs+1], requestedSource, Source::WEB_SEARCH_SOURCE_TYPE, 1, false);
+		return qa.processPath(&source,argv[sourceArgs+1], requestedSource, cSource::WEB_SEARCH_SOURCE_TYPE, 1, false);
 	}
 	int globalTotalUnmatched=0,globalOverMatchedPositionsTotal=0,numWords=0;
 	if (iswdigit(argv[sourceArgs+1][0]))
@@ -1328,13 +1328,13 @@ int wmain(int argc,wchar_t *argv[])
 				unknownCount=0;
 				switch (sourceType)
 				{
-				case Source::TEST_SOURCE_TYPE:
-				case Source::GUTENBERG_SOURCE_TYPE:
-				case Source::WIKIPEDIA_SOURCE_TYPE:
-				case Source::INTERACTIVE_SOURCE_TYPE:
-				case Source::WEB_SEARCH_SOURCE_TYPE:
-				case Source::NEWS_BANK_SOURCE_TYPE:
-				case Source::REQUEST_TYPE:
+				case cSource::TEST_SOURCE_TYPE:
+				case cSource::GUTENBERG_SOURCE_TYPE:
+				case cSource::WIKIPEDIA_SOURCE_TYPE:
+				case cSource::INTERACTIVE_SOURCE_TYPE:
+				case cSource::WEB_SEARCH_SOURCE_TYPE:
+				case cSource::NEWS_BANK_SOURCE_TYPE:
+				case cSource::REQUEST_TYPE:
 					if ((ret=source.tokenize(title,etext,path,encoding,start,repeatStart,unknownCount))<0)
 					{
 						lplog(LOG_ERROR,L"ERROR:Unable to parse %s - %d (start=%s, repeatStart=%d).",path.c_str(),ret,start.c_str(),repeatStart);
@@ -1342,7 +1342,7 @@ int wmain(int argc,wchar_t *argv[])
 					}
 					quotationExceptions=source.doQuotesOwnershipAndContractions(totalQuotations);
 					break;
-				case Source::BNC_SOURCE_TYPE:
+				case cSource::BNC_SOURCE_TYPE:
 				{
 					source.beginClock = clock();
 					bncc bnc;
@@ -1351,9 +1351,9 @@ int wmain(int argc,wchar_t *argv[])
 					unknownCount = bnc.unknownCount;
 					break;
 				}
-				case Source::NO_SOURCE_TYPE:
-				case Source::SCRIPT_SOURCE_TYPE:
-				case Source::PATTERN_TRANSFORM_TYPE:
+				case cSource::NO_SOURCE_TYPE:
+				case cSource::SCRIPT_SOURCE_TYPE:
+				case cSource::PATTERN_TRANSFORM_TYPE:
 				default: break;
 				}
 				//int cap=source.m.capacity();
@@ -1388,7 +1388,7 @@ int wmain(int argc,wchar_t *argv[])
 			{
 				source.identifyObjects();
 				source.analyzeWordSenses();
-				source.narrativeIsQuoted = sourceType != Source::GUTENBERG_SOURCE_TYPE;
+				source.narrativeIsQuoted = sourceType != cSource::GUTENBERG_SOURCE_TYPE;
 				source.syntacticRelations();
 			}
 			lplog();
@@ -1402,7 +1402,7 @@ int wmain(int argc,wchar_t *argv[])
 			{
 				if (viterbiTest)
 				{
-					void testViterbiFromSource(Source &source);
+					void testViterbiFromSource(cSource &source);
 					testViterbiFromSource(source);
 				}
 				source.clearSource();
@@ -1441,7 +1441,7 @@ int wmain(int argc,wchar_t *argv[])
 					source.printSectionStatistics();
 			}
 			lplog();
-			if (source.sourceInPast = source.sourceType == Source::INTERACTIVE_SOURCE_TYPE)
+			if (source.sourceInPast = source.sourceType == cSource::INTERACTIVE_SOURCE_TYPE)
 			{
 				cQuestionAnswering qa;
 				qa.processQuestionSource(&source,parseOnly, true);
@@ -1498,7 +1498,7 @@ int wmain(int argc,wchar_t *argv[])
 		{
 			if (viterbiTest)
 			{
-				void testViterbiFromSource(Source &source);
+				void testViterbiFromSource(cSource &source);
 				testViterbiFromSource(source);
 			}
 			source.write(path, true, false,specialExtension);
