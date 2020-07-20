@@ -1,3 +1,4 @@
+#pragma once
 void defineNames(void);
 void createMetaNameEquivalencePatterns(void);
 void createLetterIntroPatterns(void);

@@ -17,7 +17,7 @@
 #include "QuestionAnswering.h"
 
 extern int logQuestionDetail; // not protected - too intensive to protect and doesn't matter
-extern int logSemanticMap; // not protected - too intensive to protect and doesn't matter
+extern int logProximityMap; // not protected - too intensive to protect and doesn't matter
 bool unlockTables(MYSQL &mysql);
 #define MAX_PATH_LEN 2048
 #define MAX_BUF 2000000

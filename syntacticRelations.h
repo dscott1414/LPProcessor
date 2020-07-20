@@ -1,3 +1,4 @@
+#pragma once
 #define MAX_TAGSETS 500
 
 // each of the 'from Words' are related to ALL of the toWords by a relation in relationWOType.

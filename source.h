@@ -1,4 +1,5 @@
 #pragma warning (disable: 4503)
+#pragma once
 #include "syntacticRelations.h"
 #include "names.h"
 #include "bitObject.h"

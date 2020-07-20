@@ -28,6 +28,7 @@ using namespace std;
 #include "profile.h"
 #include "ontology.h"
 #include "strsafe.h"
+#include "source.h"
 #include "QuestionAnswering.h"
 
 int questionProgress=-1; // shared but update is not important
@@ -781,12 +782,188 @@ int cQuestionAnswering::metaPatternMatch(cSource *questionSource,cSource *childS
 	return -1;
 }
 
-// 
-void cQuestionAnswering::accumulateSemanticMaps(cSource *questionSource, cSpaceRelation* parentSRI, cSource *childSource, bool confidence)
+// process a child object in the child source as a string and return whether it should be processed by comparing it to the strings that have already been processed or illegal
+//   input: childSource, childObject and whereQuestionInformationSourceObjectsStrings.
+//   output: childObjectString
+//     1. remove irrelevant object classes
+//     2. remove determiners 'this' or 'that', 'there' or 'so'
+//     3. skip determiners
+//     4. create string with the rest of the words belonging to object.  
+//     5. remove ownership
+//     6. transform to all lower case.
+//     7. if already in the considered list (whereQuestionInformationSourceObjectsStrings) return false.
+//     8. log the context around certain illegal text words
+//     9. if this string contains any of the others as a separate word string (whereQuestionInformationSourceObjectsStrings), return false.
+bool cQuestionAnswering::processChildObjectIntoString(cSource *childSource, int childObject, unordered_set <wstring> & whereQuestionInformationSourceObjectsStrings,wstring &childObjectString)
+{
+	// ****************************
+	// process childObject into a string
+	// ****************************
+	// remove all classes of objects other than names including Narrator and Audience
+	if (childObject < 2 ||
+		childSource->objects[childObject].objectClass == PRONOUN_OBJECT_CLASS ||
+		childSource->objects[childObject].objectClass == REFLEXIVE_PRONOUN_OBJECT_CLASS ||
+		childSource->objects[childObject].objectClass == RECIPROCAL_PRONOUN_OBJECT_CLASS ||
+		childSource->objects[childObject].objectClass == VERB_OBJECT_CLASS ||
+		childSource->objects[childObject].objectClass == PLEONASTIC_OBJECT_CLASS ||
+		childSource->objects[childObject].objectClass == META_GROUP_OBJECT_CLASS)
+		return false;
+	// remove determiners like 'this' or 'that', 'there' or 'so'
+	if (childSource->objects[childObject].end - childSource->objects[childObject].begin == 1 &&
+		(childSource->m[childSource->objects[childObject].begin].queryWinnerForm(demonstrativeDeterminerForm) >= 0 || childSource->m[childSource->objects[childObject].begin].queryWinnerForm(letterForm) >= 0 ||
+			childSource->m[childSource->objects[childObject].begin].word->first == L"there" || childSource->m[childSource->objects[childObject].begin].word->first == L"so"))
+		return false;
+	unsigned int begin = childSource->m[childSource->objects[childObject].originalLocation].beginObjectPosition;
+	// this increases the hit rate by not making a distinction with determiners.
+	while (begin < childSource->m.size() && (childSource->m[begin].queryWinnerForm(determinerForm) >= 0 ||
+		childSource->m[begin].queryWinnerForm(possessiveDeterminerForm) >= 0 ||
+		childSource->m[begin].queryWinnerForm(demonstrativeDeterminerForm) >= 0 ||
+		childSource->m[begin].queryWinnerForm(interrogativeDeterminerForm) >= 0 ||
+		childSource->m[begin].queryWinnerForm(relativizerForm) >= 0 ||
+		childSource->m[begin].queryWinnerForm(pronounForm) >= 0 ||
+		childSource->m[begin].queryWinnerForm(quantifierForm) >= 0 ||
+		childSource->m[begin].word->first == L"which"))
+		begin++;
+	if (begin == childSource->m[childSource->objects[childObject].originalLocation].endObjectPosition)
+		return false;
+	childSource->phraseString(begin, childSource->m[childSource->objects[childObject].originalLocation].endObjectPosition, childObjectString, true);
+	// ownership objects are converted
+	if (childObjectString.length() > 2 && childObjectString[childObjectString.length() - 2] == L'\'')
+		childObjectString.erase(childObjectString.length() - 2);
+	// exclude from semantic map any objects which include the whereQuestionInformationSourceObjects
+	wstring objectStrLwr = childObjectString;
+	transform(objectStrLwr.begin(), objectStrLwr.end(), objectStrLwr.begin(), (int(*)(int)) tolower);
+	if (whereQuestionInformationSourceObjectsStrings.find(objectStrLwr) != whereQuestionInformationSourceObjectsStrings.end())
+		return false;
+	// log the context around certain illegal text words
+	if (childObjectString == L"br" || (childObjectString == L"com" && begin > 0 && childSource->m[begin - 1].word->first == L".") || childObjectString == L"http" || childObjectString == L"href" || childObjectString == L"span" || childObjectString == L"div" ||
+		childObjectString == L"html" || childObjectString == L"which" || childObjectString == L"that")
+	{
+		int end = childSource->m[childSource->objects[childObject].originalLocation].endObjectPosition + 10;
+		if (end > childSource->m.size())
+			end = childSource->m.size();
+		childSource->phraseString((begin > 10) ? begin - 10 : 0, end, childObjectString, true);
+		lplog(LOG_WHERE, L"accumulateProximityEntry[processChildObjectIntoString] context %s:%d:%s", childObjectString.c_str(), begin, childSource->sourcePath.c_str());
+		return false;
+	}
+	// does this lowered string contain any other object string?  If so, continue
+	// search for each string as a separate word 
+	bool wqiFound = false;
+	for (unordered_set <wstring>::iterator wqi = whereQuestionInformationSourceObjectsStrings.begin(), wqiEnd = whereQuestionInformationSourceObjectsStrings.end(); wqi != wqiEnd && !wqiFound; wqi++)
+	{
+		size_t pos = objectStrLwr.find(*wqi);
+		wqiFound = (pos != wstring::npos && ((pos == 0 || !iswalpha(objectStrLwr[pos - 1])) && (pos + wqi->length() >= objectStrLwr.length() || !iswalpha(objectStrLwr[pos + wqi->length()]))));
+	}
+	return !wqiFound;
+}
+
+// record distance into the entry in proximity map (belonging to each QuestionInformationSourceObject in parentSRI) for childObjectString (closestObjectIterator) to how near it is to questionObjectMatchIndex (that matches the questionInformationObject in the child source)
+//     2. find or create an entry in proximityMap relativeObjects corresponding to the object string.
+//     4. get the closest principalWhere location to where and calculate distance
+//     5. add the distance to the nearest principalWhere object to the sum in the relativeObjects entry corresponding to this lowered string (which is calculated from the object at where)
+//     6. if the principalWhere and the where positions share a relative verb location, record in the number of direct relations, with a source path and which location (where)
+void cQuestionAnswering::recordDistanceIntoProximityMap(cSource *childSource, unsigned int childSourceIndex, set <cObject::cLocation> &questionObjectMatchInChildSourceLocations,
+	set <cObject::cLocation>::iterator &questionObjectMatchIndex, bool confidence, unordered_map <wstring, cProximityMap::cProximityEntry>::iterator closestObjectIterator)
+{
+	//lplog(LOG_WHERE,L"WSM %s:%d:%s [%d:%d]",sourcePath.c_str(),where,childObjectString.c_str(),roi->second.inSource,roi->second.confidentInSource);
+
+	// get the closest principalWhere location to where and calculate distance
+	// 1 4 8 CASES: where==0, where==1 where==2 where==4 where===6 where==8 where==9
+	// index               0         0        1        1         2        2        3
+	// calculate distance and minObjectWhere
+	for (; questionObjectMatchIndex != questionObjectMatchInChildSourceLocations.end() && questionObjectMatchIndex->at < (int)childSourceIndex; questionObjectMatchIndex++);
+	int distance = 0, minObjectWhere = -1;
+	if (questionObjectMatchIndex == questionObjectMatchInChildSourceLocations.end())
+	{
+		set <cObject::cLocation>::iterator poliEnd2 = questionObjectMatchInChildSourceLocations.end();
+		distance = childSourceIndex - (minObjectWhere = (--poliEnd2)->at);
+	}
+	else if (questionObjectMatchIndex == questionObjectMatchInChildSourceLocations.begin())
+		distance = (minObjectWhere = questionObjectMatchInChildSourceLocations.begin()->at) - childSourceIndex;
+	else
+	{
+		int d1 = questionObjectMatchIndex->at - childSourceIndex;
+		set <cObject::cLocation>::iterator pi = questionObjectMatchIndex;
+		pi--;
+		int d2 = childSourceIndex - pi->at;
+		minObjectWhere = (d1 < d2) ? questionObjectMatchIndex->at : pi->at;
+		distance = min(d1, d2);
+	}
+	// add the distance to the nearest principalWhere object to the sum in the relativeObjects entry corresponding to this lowered string (which is calculated from the object at where)
+	if (confidence)
+		closestObjectIterator->second.confidentTotalDistanceFromObject += distance;
+	else
+		closestObjectIterator->second.totalDistanceFromObject += distance;
+	// if the principalWhere and the where positions share a relative verb location, record in the number of direct relations, with a source path and which location (where)
+	if (childSource->m[childSourceIndex].getRelVerb() == childSource->m[minObjectWhere].getRelVerb() && childSource->m[childSourceIndex].getRelVerb() != -1)
+	{
+		if (confidence)
+			closestObjectIterator->second.confidentDirectRelation++;
+		else
+			closestObjectIterator->second.directRelation++;
+		closestObjectIterator->second.relationSourcePaths.push_back(childSource->sourcePath);
+		closestObjectIterator->second.relationWheres.push_back(childSourceIndex);
+	}
+	closestObjectIterator->second.childSourcePaths.insert(childSource->sourcePath);
+}
+
+// accumulate in the proximityMap a list of all 
+// at the position 'childSourceIndex', for each object that has matched at this position:
+//     1. process child object into a string.
+//     2. record distance into the proximity map (the one for each QuestionInformationSourceObject in parentSRI) for childObjectString (closestObjectIterator) to how near it is to questionObjectMatchIndex (that matches the questionInformationObject in the child source)
+void cQuestionAnswering::accumulateProximityEntry(cSource *childSource, unsigned int childSourceIndex, set <cObject::cLocation> &questionObjectMatchInChildSourceLocations, 
+	set <cObject::cLocation>::iterator &questionObjectMatchIndex, bool confidence, cSpaceRelation* parentSRI, cProximityMap *proximityMap, unordered_set <wstring> & whereQuestionInformationSourceObjectsStrings)
 {
 	LFS
-	wstring tmpstr;
+		vector <cOM> childObjectMatches = childSource->m[childSourceIndex].objectMatches;
+	if (childSource->m[childSourceIndex].objectMatches.empty())
+		childObjectMatches.push_back(cOM(childSource->m[childSourceIndex].getObject(), -1));
+	for (unsigned int I = 0; I < childObjectMatches.size(); I++)
+	{
+		wstring childObjectString;
+		int childObject = childObjectMatches[I].object;
+		if (processChildObjectIntoString(childSource, childObject, whereQuestionInformationSourceObjectsStrings, childObjectString))
+		{
+			// ****************************
+			// record distance into the proximity map (the one for each QuestionInformationSourceObject in parentSRI) for childObjectString (closestObjectIterator) to how near it is to questionObjectMatchIndex (that matches the questionInformationObject in the child source)
+			// ****************************
+			// find or create an entry in proximityMap relativeObjects corresponding to the object string.
+			unordered_map <wstring, cProximityMap::cProximityEntry>::iterator closestObjectIterator = proximityMap->closestObjects.find(childObjectString);
+			if (closestObjectIterator == proximityMap->closestObjects.end())
+			{
+				proximityMap->closestObjects[childObjectString] = cProximityMap::cProximityEntry(childSource, childSourceIndex, childObject,parentSRI);
+				closestObjectIterator = proximityMap->closestObjects.find(childObjectString);
+			}
+			if (confidence)
+				closestObjectIterator->second.confidentInSource++;
+			else
+				closestObjectIterator->second.inSource++;
+			recordDistanceIntoProximityMap(childSource, childSourceIndex, questionObjectMatchInChildSourceLocations, questionObjectMatchIndex, confidence, closestObjectIterator);
+		}
+	}
+}
+
+// accumulate additional words to use in web search strings to accumulate information to answer question.
+// these additional words come from each child source, based on how often and how close these objects are to the original question information source objects.
+// 1. for each question information object, 
+//      create a string that is all lower case.  
+//      If it was all upper case, and very short, make it into an acronym
+// 2. for each question information object, 
+//      create a map object   
+//      3. If the source has already been scanned, skip this object.
+//			4. accumulate objects pertaining to this question information source in parentObjects.
+//			5. for each parent object
+//					6. for every object in a child source
+//							7. if the child source object matches the parentObject, accumulate the locations for this child source object in questionObjectMatchInChildSourceLocations.
+//				8. for every object location in the child, call accumulateProximityEntry
+void cQuestionAnswering::accumulateProximityMaps(cSource *questionSource, cSpaceRelation* parentSRI, cSource *childSource, bool confidence)
+{
+	LFS
+		wstring tmpstr;
 	unordered_set <wstring> whereQuestionInformationSourceObjectsStrings;
+	// 1. for each question information object, 
+	//      create a string that is all lower case.  
+	//      If it was all upper case, and very short, make it into an acronym
 	for (set <int>::iterator si = parentSRI->whereQuestionInformationSourceObjects.begin(), siEnd = parentSRI->whereQuestionInformationSourceObjects.end(); si != siEnd; si++)
 	{
 		questionSource->whereString(*si, tmpstr, true);
@@ -816,14 +993,17 @@ void cQuestionAnswering::accumulateSemanticMaps(cSource *questionSource, cSpaceR
 	}
 	for (set <int>::iterator si = parentSRI->whereQuestionInformationSourceObjects.begin(), siEnd = parentSRI->whereQuestionInformationSourceObjects.end(); si != siEnd; si++)
 	{
-		if (parentSRI->semanticMaps.find(*si) == parentSRI->semanticMaps.end())
-			parentSRI->semanticMaps[*si] = new cSemanticMap();
-		cSemanticMap *semanticMap = parentSRI->semanticMaps[*si];
-		if (semanticMap->SMPrincipalObject.empty())
-			semanticMap->SMPrincipalObject = questionSource->whereString(*si, tmpstr, true);
-		if (semanticMap->sourcePaths.find(childSource->sourcePath) != semanticMap->sourcePaths.end())
+		// 2. for each question information object, create a semantic map.  
+		if (parentSRI->proximityMaps.find(*si) == parentSRI->proximityMaps.end())
+			parentSRI->proximityMaps[*si] = new cProximityMap();
+		cProximityMap *proximityMap = parentSRI->proximityMaps[*si];
+		if (proximityMap->SMPrincipalObject.empty())
+			proximityMap->SMPrincipalObject = questionSource->whereString(*si, tmpstr, true);
+		// 3. If the source has already been scanned, skip this object.
+		if (proximityMap->sourcePaths.find(childSource->sourcePath) != proximityMap->sourcePaths.end())
 			continue;
-		semanticMap->sourcePaths.insert(childSource->sourcePath);
+		proximityMap->sourcePaths.insert(childSource->sourcePath);
+		// 4. accumulate objects pertaining to this question information source in parentObjects.
 		int parentObject = questionSource->m[*si].getObject();
 		vector <cOM> parentObjects = questionSource->m[*si].objectMatches;
 		if (parentObjects.empty())
@@ -832,195 +1012,44 @@ void cQuestionAnswering::accumulateSemanticMaps(cSource *questionSource, cSpaceR
 				continue;
 			parentObjects.push_back(cOM(parentObject, -1));
 		}
+		// 5. for each parent object
 		for (vector <cOM>::iterator poi = parentObjects.begin(), poiEnd = parentObjects.end(); poi != poiEnd; poi++)
 		{
 			bool checkForUpperCase = (questionSource->checkForUppercaseSources(poi->object));
 			int parentObjectClass = questionSource->objects[poi->object].objectClass;
-			set <cObject::cLocation> principalObjectLocations;
+			set <cObject::cLocation> questionObjectMatchInChildSourceLocations;
 			bool namedNoMatch = false;
-			if (logSemanticMap)
+			if (logProximityMap)
 				lplog(LOG_WHERE, L"%s:? SM", questionSource->objectString(*poi, tmpstr, false).c_str());
+			// 6. for every object in a child source
 			for (unsigned int I = 0; I < childSource->objects.size(); I++)
 			{
 				wstring tmpstr2;
-				//if (logSemanticMap)
+				//if (logProximityMap)
 				//	lplog(LOG_WHERE,L"==%s? SM",childSource->objectString(I,tmpstr2,false).c_str());
+				// 7. if the child source object matches the parentObject, accumulate the locations for this child source object in primcipalObjectLocations.
 				if (childSource->objects[I].objectClass == parentObjectClass && matchObjects(questionSource, questionSource->objects.begin() + poi->object, childSource, childSource->objects.begin() + I, namedNoMatch, questionSource->debugTrace))
 				{
-					principalObjectLocations.insert(childSource->objects[I].locations.begin(), childSource->objects[I].locations.end());
+					questionObjectMatchInChildSourceLocations.insert(childSource->objects[I].locations.begin(), childSource->objects[I].locations.end());
 					for (vector <int>::iterator oai = childSource->objects[I].aliases.begin(), oaiEnd = childSource->objects[I].aliases.end(); oai != oaiEnd; oai++)
-						principalObjectLocations.insert(childSource->objects[*oai].locations.begin(), childSource->objects[*oai].locations.end());
-					if (logSemanticMap)
-						lplog(LOG_WHERE, L"principalObjectLocations=%d SM", principalObjectLocations.size());
+						questionObjectMatchInChildSourceLocations.insert(childSource->objects[*oai].locations.begin(), childSource->objects[*oai].locations.end());
 				}
 			}
-			if (principalObjectLocations.empty())
+			if (questionObjectMatchInChildSourceLocations.empty())
 				continue;
-			set <cObject::cLocation>::iterator polIndex = principalObjectLocations.begin();
-			for (unsigned int mI = 0; mI < childSource->m.size(); mI++)
+			// 8. for every object location in the child, call accumulateProximityEntry
+			set <cObject::cLocation>::iterator polIndex = questionObjectMatchInChildSourceLocations.begin();
+			for (unsigned int childSourceIndex = 0; childSourceIndex < childSource->m.size(); childSourceIndex++)
 			{
-				if (checkForUpperCase && childSource->isEOS(mI) && childSource->skipSentenceForUpperCase(mI))
+				if (checkForUpperCase && childSource->isEOS(childSourceIndex) && childSource->skipSentenceForUpperCase(childSourceIndex))
 					continue;
-				if (childSource->m[mI].getObject() < 0 && childSource->m[mI].objectMatches.empty())
+				if (childSource->m[childSourceIndex].getObject() < 0 && childSource->m[childSourceIndex].objectMatches.empty())
 					continue;
 				childSource->parentSource = questionSource;
-				accumulateSemanticEntry(childSource, mI, principalObjectLocations, polIndex, confidence, parentSRI, semanticMap, whereQuestionInformationSourceObjectsStrings);
+				// how close is childSourcIndex to each of the questionObjectMatchInChildSourceLocations?
+				accumulateProximityEntry(childSource, childSourceIndex, questionObjectMatchInChildSourceLocations, polIndex, confidence, parentSRI, proximityMap, whereQuestionInformationSourceObjectsStrings);
 				childSource->parentSource = 0;
 			}
-		}
-	}
-}
-
-// at the position 'where':
-//   for each object that has matched at this position:
-//     1. remove irrelevant object classes
-//     2. remove determiners 'this' or 'that', 'there' or 'so'
-//     3. skip determiners
-//     4. create string with the rest of the words belonging to object.  
-//     5. remove ownership
-//     6. transform to all lower case.
-//     7. if already in the considered list (whereQuestionInformationSourceObjectsStrings) continue.
-//     8. if this string contains any of the others as a separate word string (whereQuestionInformationSourceObjectsStrings), continue.
-//     9. find or create an entry in semanticMap relativeObjects corresponding to the object string.
-//    10. log the context around certain illegal text words
-//    11. get the closest principalWhere location to where and calculate distance
-//    12. add the distance to the nearest principalWhere object to the sum in the relativeObjects entry corresponding to this lowered string (which is calculated from the object at where)
-//    13. if the principalWhere and the where positions share a relative verb location, record in the number of direct relations, with a source path and which location (where)
-//    14. finish initializing semanticMap entry if it was created in step 9.
-void cQuestionAnswering::accumulateSemanticEntry(cSource *questionSource, unsigned int where, set <cObject::cLocation> &principalObjectLocations, 
-	set <cObject::cLocation>::iterator &polIndex, bool confidence, cSpaceRelation* parentSRI, cSemanticMap *semanticMap, unordered_set <wstring> & whereQuestionInformationSourceObjectsStrings)
-{
-	LFS
-		vector <cOM> objectMatches = questionSource->m[where].objectMatches;
-	if (questionSource->m[where].objectMatches.empty())
-		objectMatches.push_back(cOM(questionSource->m[where].getObject(), -1));
-	for (unsigned int I = 0; I < objectMatches.size(); I++)
-	{
-		int o = objectMatches[I].object;
-		// remove all classes of objects other than names including Narrator and Audience
-		if (o < 2 ||
-			questionSource->objects[o].objectClass == PRONOUN_OBJECT_CLASS ||
-			questionSource->objects[o].objectClass == REFLEXIVE_PRONOUN_OBJECT_CLASS ||
-			questionSource->objects[o].objectClass == RECIPROCAL_PRONOUN_OBJECT_CLASS ||
-			questionSource->objects[o].objectClass == VERB_OBJECT_CLASS ||
-			questionSource->objects[o].objectClass == PLEONASTIC_OBJECT_CLASS ||
-			questionSource->objects[o].objectClass == META_GROUP_OBJECT_CLASS)
-			continue;
-		// remove determiners like 'this' or 'that', 'there' or 'so'
-		if (questionSource->objects[o].end - questionSource->objects[o].begin == 1 &&
-			(questionSource->m[questionSource->objects[o].begin].queryWinnerForm(demonstrativeDeterminerForm) >= 0 || questionSource->m[questionSource->objects[o].begin].queryWinnerForm(letterForm) >= 0 ||
-				questionSource->m[questionSource->objects[o].begin].word->first == L"there" || questionSource->m[questionSource->objects[o].begin].word->first == L"so"))
-			continue;
-		wstring objectStr, formWinnerStr;
-		unsigned int begin = questionSource->m[questionSource->objects[o].originalLocation].beginObjectPosition;
-		// this increases the hit rate by not making a distinction with determiners.
-		while (begin < questionSource->m.size() && (questionSource->m[begin].queryWinnerForm(determinerForm) >= 0 ||
-			questionSource->m[begin].queryWinnerForm(possessiveDeterminerForm) >= 0 ||
-			questionSource->m[begin].queryWinnerForm(demonstrativeDeterminerForm) >= 0 ||
-			questionSource->m[begin].queryWinnerForm(interrogativeDeterminerForm) >= 0 ||
-			questionSource->m[begin].queryWinnerForm(relativizerForm) >= 0 ||
-			questionSource->m[begin].queryWinnerForm(pronounForm) >= 0 ||
-			questionSource->m[begin].queryWinnerForm(quantifierForm) >= 0 ||
-			questionSource->m[begin].word->first == L"which"))
-			begin++;
-
-		if (begin == questionSource->m[questionSource->objects[o].originalLocation].endObjectPosition)
-			continue;
-		questionSource->phraseString(begin, questionSource->m[questionSource->objects[o].originalLocation].endObjectPosition, objectStr, true);
-		// ownership objects are converted
-		if (objectStr.length() > 2 && objectStr[objectStr.length() - 2] == L'\'')
-			objectStr.erase(objectStr.length() - 2);
-		// exclude from semantic map any objects which include the whereQuestionInformationSourceObjects
-		wstring objectStrLwr = objectStr;
-		transform(objectStrLwr.begin(), objectStrLwr.end(), objectStrLwr.begin(), (int(*)(int)) tolower);
-		if (whereQuestionInformationSourceObjectsStrings.find(objectStrLwr) != whereQuestionInformationSourceObjectsStrings.end())
-			continue;
-		// does this lowered string contain any other object string?  If so, continue
-		// search for each string as a separate word 
-		bool wqiFound = false;
-		for (unordered_set <wstring>::iterator wqi = whereQuestionInformationSourceObjectsStrings.begin(), wqiEnd = whereQuestionInformationSourceObjectsStrings.end(); wqi != wqiEnd && !wqiFound; wqi++)
-		{
-			size_t pos = objectStrLwr.find(*wqi);
-			wqiFound = (pos != wstring::npos && ((pos == 0 || !iswalpha(objectStrLwr[pos - 1])) && (pos + wqi->length() >= objectStrLwr.length() || !iswalpha(objectStrLwr[pos + wqi->length()]))));
-		}
-		if (wqiFound)
-			continue;
-		// find or create an entry in semanticMap relativeObjects corresponding to the object string.
-		unordered_map <wstring, cSemanticMap::cSemanticEntry>::iterator roi = semanticMap->relativeObjects.find(objectStr);
-		bool initialize;
-		if (initialize = roi == semanticMap->relativeObjects.end())
-		{
-			cSemanticMap::cSemanticEntry semEntry;
-			semanticMap->relativeObjects[objectStr] = semEntry;
-			roi = semanticMap->relativeObjects.find(objectStr);
-		}
-		if (confidence)
-			roi->second.confidentInSource++;
-		else
-			roi->second.inSource++;
-		// log the context around certain illegal text words
-		if (objectStr == L"br" || (objectStr == L"com" && begin > 0 && questionSource->m[begin - 1].word->first == L".") || objectStr == L"http" || objectStr == L"href" || objectStr == L"span" || objectStr == L"div" ||
-			objectStr == L"html" || objectStr == L"which" || objectStr == L"that")
-		{
-			int end = questionSource->m[questionSource->objects[o].originalLocation].endObjectPosition + 10;
-			if (end > questionSource->m.size())
-				end = questionSource->m.size();
-			questionSource->phraseString((begin > 10) ? begin - 10 : 0, end, objectStr, true);
-			lplog(LOG_WHERE, L"accumulateSemanticEntry context %s:%d:%d:%s", objectStr.c_str(), begin, roi->second.inSource, questionSource->sourcePath.c_str());
-		}
-		//lplog(LOG_WHERE,L"WSM %s:%d:%s [%d:%d]",sourcePath.c_str(),where,objectStr.c_str(),roi->second.inSource,roi->second.confidentInSource);
-
-		// get the closest principalWhere location to where and calculate distance
-		// 1 4 8 CASES: where==0, where==1 where==2 where==4 where===6 where==8 where==9
-		// index               0         0        1        1         2        2        3
-		// calculate distance and minObjectWhere
-		set <cObject::cLocation>::iterator poliEnd = principalObjectLocations.end();
-		for (; polIndex != poliEnd && polIndex->at < (int)where; polIndex++);
-		int distance = 0, minObjectWhere = -1;
-		if (polIndex == poliEnd)
-		{
-			set <cObject::cLocation>::iterator poliEnd2 = principalObjectLocations.end();
-			distance = where - (minObjectWhere = (--poliEnd2)->at);
-		}
-		else if (polIndex == principalObjectLocations.begin())
-			distance = (minObjectWhere = principalObjectLocations.begin()->at) - where;
-		else
-		{
-			int d1 = polIndex->at - where;
-			set <cObject::cLocation>::iterator pi = polIndex;
-			pi--;
-			int d2 = where - pi->at;
-			minObjectWhere = (d1 < d2) ? polIndex->at : pi->at;
-			distance = min(d1, d2);
-		}
-		// add the distance to the nearest principalWhere object to the sum in the relativeObjects entry corresponding to this lowered string (which is calculated from the object at where)
-		if (confidence)
-			roi->second.confidentTotalDistanceFromObject += distance;
-		else
-			roi->second.totalDistanceFromObject += distance;
-		// if the principalWhere and the where positions share a relative verb location, record in the number of direct relations, with a source path and which location (where)
-		if (questionSource->m[where].getRelVerb() == questionSource->m[minObjectWhere].getRelVerb() && questionSource->m[where].getRelVerb() != -1)
-		{
-			if (confidence)
-				roi->second.confidentDirectRelation++;
-			else
-				roi->second.directRelation++;
-			roi->second.relationSourcePaths.push_back(questionSource->sourcePath);
-			roi->second.relationWheres.push_back(where);
-		}
-		roi->second.childSourcePaths.insert(questionSource->sourcePath);
-		if (initialize)
-		{
-			int qt = parentSRI->questionType&typeQTMask;
-			bool parentQuestionTypeValid = ((parentSRI->questionType&QTAFlag) || (qt != whereQTFlag && qt != whoseQTFlag && qt != whenQTFlag && qt != whomQTFlag));
-			bool questionTypeCheck = parentQuestionTypeValid && questionSource->checkParticularPartQuestionTypeCheck(qt, where, o, roi->second.semanticMismatch);
-			roi->second.confidenceCheck = (questionTypeCheck || parentSRI->questionType == unknownQTFlag);
-			roi->second.lastChildSourcePath = questionSource->sourcePath;
-			roi->second.childWhere2 = where;
-			questionSource->objectString(o, roi->second.fullDescriptor, false);
-			if (questionSource->objects[o].end - questionSource->objects[o].begin == 1)
-				roi->second.fullDescriptor += questionSource->m[questionSource->objects[o].begin].winnerFormString(formWinnerStr);
-			roi->second.childObject = o;
 		}
 	}
 }
@@ -1038,7 +1067,7 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 	else
 		lplog(LOG_WHERE,L"********[%s] %s:",derivation,childSource->sourcePath.c_str());
 	childSource->parentSource=NULL; // this is set so we can investigate child sources through identification of ISA types
-	accumulateSemanticMaps(questionSource,parentSRI,childSource,childSource->sourceType==cSource::WIKIPEDIA_SOURCE_TYPE);
+	accumulateProximityMaps(questionSource,parentSRI,childSource,childSource->sourceType==cSource::WIKIPEDIA_SOURCE_TYPE);
 	if (!childSource->isFormsProcessed)
 	{
 		childSource->isFormsProcessed=true;
@@ -2013,7 +2042,7 @@ int cQuestionAnswering::semanticMatch(cSource *questionSource, wstring derivatio
 }
 
 // this is called from the parent
-int cSemanticMap::cSemanticEntry::semanticCheck(cQuestionAnswering &qa,cSpaceRelation* parentSRI,cSource *parentSource)
+int cProximityMap::cProximityEntry::semanticCheck(cQuestionAnswering &qa,cSpaceRelation* parentSRI,cSource *parentSource)
 { LFS
 	if (confidenceCheck && childSource==0)
 	{
@@ -2041,9 +2070,44 @@ int cSemanticMap::cSemanticEntry::semanticCheck(cQuestionAnswering &qa,cSpaceRel
 		}
 		if (namedNoMatch)
 			return confidenceSE=CONFIDENCE_NOMATCH;
-//		confidence=parentSource->semanticMatchSingle(L"accumulateSemanticEntry",parentSRI,childSource,childWhere2,childObject,semanticMismatch,subQueryNoMatch,subQueries,-1,mapPatternAnswer,mapPatternQuestion);
+//		confidence=parentSource->semanticMatchSingle(L"accumulateProximityEntry",parentSRI,childSource,childWhere2,childObject,semanticMismatch,subQueryNoMatch,subQueries,-1,mapPatternAnswer,mapPatternQuestion);
 	}
 	return confidenceSE=CONFIDENCE_NOMATCH;
+}
+
+cProximityMap::cProximityEntry::cProximityEntry()
+{
+	inSource = 0;
+	totalDistanceFromObject = 0;
+	directRelation = 0;
+	confidentInSource = 0;
+	confidentTotalDistanceFromObject = 0;
+	confidentDirectRelation = 0;
+	confidenceSE = 0;
+	childWhere2 = 0;
+	childSource = 0;
+	score = 0.0;
+	semanticMismatch = 0;
+	subQueryNoMatch = false;
+	tenseMismatch = false;
+	confidenceCheck = false;
+}
+
+cProximityMap::cProximityEntry::cProximityEntry(cSource *childSource, unsigned int childSourceIndex, int childObject, cSpaceRelation* parentSRI) : cProximityEntry()
+{
+	int qt = parentSRI->questionType&cQuestionAnswering::typeQTMask;
+	bool parentQuestionTypeValid = ((parentSRI->questionType&cQuestionAnswering::QTAFlag) || (qt != cQuestionAnswering::whereQTFlag && qt != cQuestionAnswering::whoseQTFlag && qt != cQuestionAnswering::whenQTFlag && qt != cQuestionAnswering::whomQTFlag));
+	bool questionTypeCheck = parentQuestionTypeValid && childSource->checkParticularPartQuestionTypeCheck(qt, childSourceIndex, childObject, semanticMismatch);
+	confidenceCheck = (questionTypeCheck || parentSRI->questionType == cQuestionAnswering::unknownQTFlag);
+	lastChildSourcePath = childSource->sourcePath;
+	childWhere2 = childSourceIndex;
+	childSource->objectString(childObject, fullDescriptor, false);
+	if (childSource->objects[childObject].end - childSource->objects[childObject].begin == 1)
+	{
+		wstring formWinnerStr;
+		fullDescriptor += childSource->m[childSource->objects[childObject].begin].winnerFormString(formWinnerStr);
+	}
+	childObject = childObject;
 }
 
 bool cQuestionAnswering::verbTenseMatch(cSource *questionSource, cSpaceRelation* parentSRI, cAS &childCAS)
@@ -2074,7 +2138,7 @@ bool cQuestionAnswering::verbTenseMatch(cSource *questionSource, cSpaceRelation*
 	return tenseMismatch;
 }
 
-void cSemanticMap::cSemanticEntry::printDirectRelations(cQuestionAnswering &qa, int logType,cSource *parentSource,wstring &path,int where)
+void cProximityMap::cProximityEntry::printDirectRelations(cQuestionAnswering &qa, int logType,cSource *parentSource,wstring &path,int where)
 { LFS
 	if (qa.processPath(parentSource,path.c_str(),childSource,cSource::WEB_SEARCH_SOURCE_TYPE,1,false)>=0)
 	{
@@ -3018,7 +3082,7 @@ int cQuestionAnswering::processQuestionSource(cSource *questionSource,bool parse
 		wstring ps, parentNum,tmpstr,tmpstr2;
 		itos(ssri->where, parentNum);
 		//if (ssri->where==69) 
-			//logDatabaseDetails = logQuestionProfileTime = logSynonymDetail = logTableDetail = equivalenceLogDetail = logQuestionDetail = logSemanticMap = 1;
+			//logDatabaseDetails = logQuestionProfileTime = logSynonymDetail = logTableDetail = equivalenceLogDetail = logQuestionDetail = logProximityMap = 1;
 		parentNum +=L":Q ";
 		questionSource->prepPhraseToString(ssri->wherePrep,ps);
 		questionSource->printSRI(parentNum,ssri,-1,ssri->whereSubject,ssri->whereObject,ps,false,-1,L"QUESTION",(ssri->questionType) ? LOG_WHERE|LOG_QCHECK : LOG_WHERE);
@@ -3128,13 +3192,13 @@ int cQuestionAnswering::processQuestionSource(cSource *questionSource,bool parse
 					lplog(LOG_WHERE | LOG_QCHECK, L"    *****Trying semantic map.");
 					for (set <int>::iterator si = ssri->whereQuestionInformationSourceObjects.begin(), siEnd = ssri->whereQuestionInformationSourceObjects.end(); si != siEnd; si++)
 					{
-						unordered_map <int, cSemanticMap *>::iterator msi = ssri->semanticMaps.find(*si);
-						if (msi != ssri->semanticMaps.end())
+						unordered_map <int, cProximityMap *>::iterator msi = ssri->proximityMaps.find(*si);
+						if (msi != ssri->proximityMaps.end())
 						{
 							msi->second->sortAndCheck(*this, ssri, questionSource);
 							msi->second->lplogSM(*this, LOG_WHERE, questionSource, false);
-							set < unordered_map <wstring, cSemanticMap::cSemanticEntry>::iterator, cSemanticMap::semanticSetCompare > suggestedAnswers = msi->second->suggestedAnswers;
-							for (set < unordered_map <wstring, cSemanticMap::cSemanticEntry>::iterator, cSemanticMap::semanticSetCompare >::iterator sai = suggestedAnswers.begin(), saiEnd = suggestedAnswers.end(); sai != saiEnd; sai++)
+							set < unordered_map <wstring, cProximityMap::cProximityEntry>::iterator, cProximityMap::semanticSetCompare > suggestedAnswers = msi->second->suggestedAnswers;
+							for (set < unordered_map <wstring, cProximityMap::cProximityEntry>::iterator, cProximityMap::semanticSetCompare >::iterator sai = suggestedAnswers.begin(), saiEnd = suggestedAnswers.end(); sai != saiEnd; sai++)
 							{
 								vector < cAS > enhancedWebSearchAnswerSRIs;
 								vector <wstring> enhancedWebSearchQueryStrings = webSearchQueryStrings;

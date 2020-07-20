@@ -1,14 +1,15 @@
+#pragma once
 #include "timeRelations.h"
-// accumulateSemanticMaps
-// accumulateSemanticEntry
+// accumulateProximityMaps
+// accumulateProximityEntry
 // semanticCheck
 class cQuestionAnswering;
-class cSemanticMap
+class cProximityMap
 {
 public:
 	wstring SMPrincipalObject;
 	set <wstring> sourcePaths;
-	class cSemanticEntry
+	class cProximityEntry
 	{
 	public:
 		int inSource;
@@ -31,25 +32,9 @@ public:
 		float score;
 		// this is called from the parent
 		int semanticCheck(cQuestionAnswering &qa, cSpaceRelation* parentSRI, cSource *parentSource);
-		//void cSemanticMap::cSemanticEntry::printDirectRelations(int logType,cSource *parentSource,wstring &path,int where);
 		void printDirectRelations(cQuestionAnswering &qa, int logType, cSource *parentSource, wstring &path, int where);
-		cSemanticEntry()
-		{
-			inSource = 0;
-			totalDistanceFromObject = 0;
-			directRelation = 0;
-			confidentInSource = 0;
-			confidentTotalDistanceFromObject = 0;
-			confidentDirectRelation = 0;
-			confidenceSE = 0;
-			childWhere2 = 0;
-			childSource = 0;
-			score = 0.0;
-			semanticMismatch = 0;
-			subQueryNoMatch = false;
-			tenseMismatch = false;
-			confidenceCheck = false;
-		}
+		cProximityEntry();
+		cProximityEntry(cSource *childSource, unsigned int childSourceIndex, int childObject, cSpaceRelation* parentSRI);
 		void lplogSM(int logType, wstring objectStr)
 		{
 			wstring tmpstr;
@@ -68,43 +53,43 @@ public:
 	};
 	struct semanticSetCompare
 	{
-		bool operator()(unordered_map <wstring, cSemanticEntry>::iterator lhs, unordered_map <wstring, cSemanticEntry>::iterator rhs) const
+		bool operator()(unordered_map <wstring, cProximityEntry>::iterator lhs, unordered_map <wstring, cProximityEntry>::iterator rhs) const
 		{
 			if (lhs->second.confidentInSource + lhs->second.inSource == rhs->second.confidentInSource + rhs->second.inSource)
 				return lhs->first < rhs->first;
 			return lhs->second.confidentInSource + lhs->second.inSource > rhs->second.confidentInSource + rhs->second.inSource;
 		}
 	};
-	struct semanticSetCompare2
+	struct proximityScoreCompare
 	{
-		bool operator()(unordered_map <wstring, cSemanticEntry>::iterator lhs, unordered_map <wstring, cSemanticEntry>::iterator rhs) const
+		bool operator()(unordered_map <wstring, cProximityEntry>::iterator lhs, unordered_map <wstring, cProximityEntry>::iterator rhs) const
 		{
 			return lhs->second.score > rhs->second.score;
 		}
 	};
-	unordered_map <wstring, cSemanticEntry> relativeObjects;
-	set < unordered_map <wstring, cSemanticEntry>::iterator, semanticSetCompare> relativeObjectsSorted;
-	set < unordered_map <wstring, cSemanticEntry>::iterator, semanticSetCompare2> relativeObjectsSorted2;
-	set < unordered_map <wstring, cSemanticEntry>::iterator, semanticSetCompare > suggestedAnswers;
+	unordered_map <wstring, cProximityEntry> closestObjects;
+	set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare> relativeObjectsSorted;
+	set < unordered_map <wstring, cProximityEntry>::iterator, proximityScoreCompare> objectsSortedByProximityScore;
+	set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare > suggestedAnswers;
 	void sortAndCheck(cQuestionAnswering &qa,cSpaceRelation* parentSRI, cSource *parentSource)
 	{
 		relativeObjectsSorted.clear();
-		relativeObjectsSorted2.clear();
-		for (unordered_map <wstring, cSemanticEntry>::iterator roi = relativeObjects.begin(), roiEnd = relativeObjects.end(); roi != roiEnd; roi++)
+		objectsSortedByProximityScore.clear();
+		for (unordered_map <wstring, cProximityEntry>::iterator roi = closestObjects.begin(), roiEnd = closestObjects.end(); roi != roiEnd; roi++)
 		{
 			roi->second.calculateScore();
 			relativeObjectsSorted.insert(roi);
-			relativeObjectsSorted2.insert(roi);
+			objectsSortedByProximityScore.insert(roi);
 		}
 		int onlyTopResults = 0;
-		for (set < unordered_map <wstring, cSemanticEntry>::iterator, semanticSetCompare>::iterator sroi = relativeObjectsSorted.begin(), sroiEnd = relativeObjectsSorted.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
+		for (set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare>::iterator sroi = relativeObjectsSorted.begin(), sroiEnd = relativeObjectsSorted.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
 		{
 			onlyTopResults++;
 			if ((*sroi)->second.semanticCheck(qa,parentSRI, parentSource) < CONFIDENCE_NOMATCH)
 				suggestedAnswers.insert((*sroi));
 		}
 		onlyTopResults = 0;
-		for (set < unordered_map <wstring, cSemanticEntry>::iterator, semanticSetCompare2>::iterator sroi = relativeObjectsSorted2.begin(), sroiEnd = relativeObjectsSorted2.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
+		for (set < unordered_map <wstring, cProximityEntry>::iterator, proximityScoreCompare>::iterator sroi = objectsSortedByProximityScore.begin(), sroiEnd = objectsSortedByProximityScore.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
 		{
 			onlyTopResults++;
 			if ((*sroi)->second.semanticCheck(qa,parentSRI, parentSource) < CONFIDENCE_NOMATCH)
@@ -114,21 +99,21 @@ public:
 	void lplogSM(cQuestionAnswering &qa, int logType, cSource *parentSource, bool enhanced)
 	{
 		::lplog(logType, L"SM%s SEMANTIC MAP %d objects %d sources principalObject %s ****************************************************************************",
-			(enhanced) ? L"E" : L"", relativeObjects.size(), sourcePaths.size(), SMPrincipalObject.c_str());
+			(enhanced) ? L"E" : L"", closestObjects.size(), sourcePaths.size(), SMPrincipalObject.c_str());
 		extern int logDetail;
 		if (logDetail)
 			for (set <wstring>::iterator spi = sourcePaths.begin(), spiEnd = sourcePaths.end(); spi != spiEnd; spi++)
 				::lplog(logType, L"SM%s sourcePath: %s", (enhanced) ? L"E" : L"", spi->c_str());
 		int onlyTopResults = 0;
 		::lplog(logType, L"SM%s by frequency ***************", (enhanced) ? L"E" : L"");
-		for (set < unordered_map <wstring, cSemanticEntry>::iterator, semanticSetCompare>::iterator sroi = relativeObjectsSorted.begin(), sroiEnd = relativeObjectsSorted.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
+		for (set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare>::iterator sroi = relativeObjectsSorted.begin(), sroiEnd = relativeObjectsSorted.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
 		{
 			onlyTopResults++;
 			(*sroi)->second.lplogSM(logType, (*sroi)->first);
 		}
 		::lplog(logType, L"SM%s by score ***************", (enhanced) ? L"E" : L"");
 		onlyTopResults = 0;
-		for (set < unordered_map <wstring, cSemanticEntry>::iterator, semanticSetCompare>::iterator sroi = relativeObjectsSorted2.begin(), sroiEnd = relativeObjectsSorted2.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
+		for (set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare>::iterator sroi = objectsSortedByProximityScore.begin(), sroiEnd = objectsSortedByProximityScore.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
 		{
 			onlyTopResults++;
 			(*sroi)->second.lplogSM(logType, (*sroi)->first);
@@ -138,16 +123,16 @@ public:
 		else
 		{
 			::lplog(logType, L"SM%s suggested answers ***************", (enhanced) ? L"E" : L"");
-			for (set < unordered_map <wstring, cSemanticEntry>::iterator, semanticSetCompare >::iterator sai = suggestedAnswers.begin(), saiEnd = suggestedAnswers.end(); sai != saiEnd; sai++)
+			for (set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare >::iterator sai = suggestedAnswers.begin(), saiEnd = suggestedAnswers.end(); sai != saiEnd; sai++)
 			{
-				relativeObjects[(*sai)->first].lplogSM(LOG_WHERE, (*sai)->first);
-				if (logSemanticMap)
+				closestObjects[(*sai)->first].lplogSM(LOG_WHERE, (*sai)->first);
+				if (logProximityMap)
 					for (unsigned int I = 0; I < (*sai)->second.relationSourcePaths.size(); I++)
 						(*sai)->second.printDirectRelations(qa,logType, parentSource, (*sai)->second.relationSourcePaths[I], (*sai)->second.relationWheres[I]);
 			}
 		}
 		::lplog(logType, L"SM%s END SEMANTIC MAP %d objects %d sources principalObject %s ****************************************************************************",
-			(enhanced) ? L"E" : L"", relativeObjects.size(), sourcePaths.size(), SMPrincipalObject.c_str());
+			(enhanced) ? L"E" : L"", closestObjects.size(), sourcePaths.size(), SMPrincipalObject.c_str());
 	}
 };
 
@@ -236,7 +221,7 @@ public:
 	int printMin;
 	int printMax;
 	set <int> whereQuestionInformationSourceObjects;
-	unordered_map <int,cSemanticMap *> semanticMaps;
+	unordered_map <int,cProximityMap *> proximityMaps;
 	bool genderedEntityMove;
 	bool genderedLocationRelation;
 	bool establishingLocation;

@@ -32,7 +32,7 @@ int logOntologyDetail = 0;
 int logDetail=0;
 int logQuestionDetail = 0;
 int logRDFDetail = 0;
-int logSemanticMap = 0;
+int logProximityMap = 0;
 bool logTraceOpen = false;
 bool log_net=false;  
 

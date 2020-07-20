@@ -1,3 +1,4 @@
+#pragma once
 enum eCapacity { cMillenium, cCentury, cDecade, cYear, cSemester, cSeason, cQuarter, cMonth, cWeek, cDay,
                  cHour, cMinute, cSecond, cMoment,
 								 cMorning, cNoon, cAfternoon, cEvening, cDusk, cNight, cMidnight, cDawn,

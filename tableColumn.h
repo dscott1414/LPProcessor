@@ -1,3 +1,4 @@
+#pragma once
 class cSource;
 
 class cColumn

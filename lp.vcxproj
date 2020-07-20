@@ -783,7 +783,7 @@
     <ClCompile Include="getTwitter.cpp" />
     <ClCompile Include="getWikipedia.cpp" />
     <ClCompile Include="getWordNet.cpp" />
-    <ClCompile Include="getGoogleCustomSearch.cpp">
+    <ClCompile Include="questionAnsweringWebSearch.cpp">
       <ShowIncludes Condition="'$(Configuration)|$(Platform)'=='ParseAllSources|x64'">false</ShowIncludes>
       <ShowIncludes Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|x64'">false</ShowIncludes>
       <ShowIncludes Condition="'$(Configuration)|$(Platform)'=='test|x64'">false</ShowIncludes>
