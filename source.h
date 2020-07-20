@@ -2432,7 +2432,7 @@ int wherePrepObject,
 	class cExtendedMapType
 	{
 	public:
-		unordered_map <wstring,int> RDFTypeSimplificationToWordAssociationWithObjectMap;
+		unordered_map <wstring,int> RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap;
 		vector <cTreeCat *> rdfTypes;
 		unordered_map <wstring ,int > topHierarchyClassIndexes;
 	};

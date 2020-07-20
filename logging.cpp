@@ -26,6 +26,7 @@ int logDatabaseDetails = 0;
 int logQuestionProfileTime = 0;
 int logSynonymDetail=0;
 int logTableDetail=1;
+int logTableCoherenceDetail=1;
 int logEquivalenceDetail=0;
 int logOntologyDetail = 0;
 int logDetail=0;

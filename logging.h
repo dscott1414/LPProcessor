@@ -85,6 +85,7 @@ extern int logTableDetail;
 extern int logEquivalenceDetail;
 extern int logDetail;
 extern int logQuestionDetail;
+extern int logTableCoherenceDetail;
 extern int logSemanticMap;
 extern int logRDFDetail;
 extern bool log_net;  

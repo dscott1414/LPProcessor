@@ -15,6 +15,7 @@ public:
 	static bool insertNoERDFTypesDBTable(wstring newPath);
 	static int printRDFTypes(wchar_t *kind, vector <cTreeCat *> &rdfTypes);
 	static int printExtendedRDFTypes(wchar_t *kind, vector <cTreeCat *> &rdfTypes, unordered_map <wstring, int > &topHierarchyClassIndexes);
+	static void readOpenLibraryInternetArchiveWorksDump();
 
 private:
 	static unordered_map<wstring, vector <cTreeCat *> > rdfTypeMap; 

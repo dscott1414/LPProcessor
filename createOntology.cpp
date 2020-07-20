@@ -2521,6 +2521,101 @@ void cOntology::printIdentities(wchar_t *objects[])
 		printIdentity(objects[I]);
 }
 
+int hextonum(wchar_t h)
+{
+	if (iswdigit(h))
+		return h - '0';
+	if (iswlower(h))
+		return 10+ (h - 'a');
+	if (iswupper(h))
+		return 10+(h - 'A');
+	return -1;
+}
+
+void convertCodePoints(wchar_t *buffer)
+{
+	if (!wcsstr(buffer, L"\\u"))
+		return;
+	wchar_t buffer2[100000];
+	int c2=0;
+	for (int c = 0; buffer[c]; c++)
+	{
+		if (buffer[c] != L'\\' || buffer[c + 1] != L'u' || !iswxdigit(buffer[c + 2]) || !iswxdigit(buffer[c + 3]) || !iswxdigit(buffer[c + 4]) || !iswxdigit(buffer[c + 5]))
+		{
+			buffer2[c2++] = buffer[c];
+			continue;
+		}
+		buffer2[c2++]=(hextonum(buffer[c + 2]) << 12) + (hextonum(buffer[c + 3]) << 8) + (hextonum(buffer[c + 4]) << 4) + (hextonum(buffer[c+5]));
+		c += 5;
+	}
+	buffer2[c2] = 0;
+	wcscpy(buffer, buffer2);
+}
+
+// this just reads the titles of books and feeds them into the books table.
+void cOntology::readOpenLibraryInternetArchiveWorksDump()
+{
+	initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
+	if (!myquery(&mysql, L"LOCK TABLES openLibraryInternetArchiveBooksDump WRITE"))
+		return;
+	FILE *fp = _wfopen(L"M:\\ol_dump_works_2020-06-30.txt", L"rtS,ccs=UNICODE");
+	if (fp)
+	{
+		__int64 numBytesTotal = _filelengthi64(_fileno(fp)),numBytesRead=0;
+		wchar_t buffer[100000];
+		int startTime = clock(), numValuesToInsert=0;
+		wstring qt=L"INSERT IGNORE INTO openLibraryInternetArchiveBooksDump(title) VALUES";
+		for (int printCounter = 0; fgetws(buffer, 99000, fp); printCounter++)
+		{
+			convertCodePoints(buffer);
+			wstring buf = buffer;
+			wchar_t *searchTitle = L"\"title\": \"";
+			int whereTitle=buf.find(searchTitle);
+			if (whereTitle!=wstring::npos)
+			{
+				whereTitle += wcslen(searchTitle);
+				// find next non-escaped double quote
+			  int nextDoubleQuote=buf.find(L"\"",whereTitle);
+				while (nextDoubleQuote != wstring::npos)
+				{
+					int ne= nextDoubleQuote-1;
+					while (ne > 0 && buf[ne] == L'\\') ne--;
+					// if ne-nextDoubleQuote is odd (number of slashes is even), then break
+					if (((ne-nextDoubleQuote)&1)==1)
+						break;
+					nextDoubleQuote = buf.find(L"\"", nextDoubleQuote + 1);
+				}
+				// insert into MYSQL
+				if (nextDoubleQuote!=wstring::npos && nextDoubleQuote-whereTitle<950 && nextDoubleQuote - whereTitle>1)
+				{
+					numValuesToInsert++;
+					qt+=L"(\"" + buf.substr(whereTitle, nextDoubleQuote - whereTitle) + L"\"),";
+					if (numValuesToInsert > 200)
+					{
+						qt[qt.length()-1] = 0;
+						if (!myquery(&mysql, (wchar_t *)qt.c_str(), false))
+							return;
+						qt = L"INSERT IGNORE INTO openLibraryInternetArchiveBooksDump(title) VALUES";
+						numValuesToInsert = 0;
+					}
+				}
+			}
+			int numUnicodeCharsRead = buf.length();
+			numBytesRead += numUnicodeCharsRead << 1;
+			if ((printCounter & 127) == 0)
+			{
+				int seconds = (clock() - startTime) / CLOCKS_PER_SEC;
+				int estimateSeconds = seconds * numBytesTotal / numBytesRead;
+				printf("%I64d out of %I64d read (%06.3f%%) %03d:%02d:%02d out of %03d:%02d:%02d\r", numBytesRead, numBytesTotal, (float)(numBytesRead * 100.0 / numBytesTotal), seconds/3600,(seconds%3600)/60,seconds%60, estimateSeconds / 3600, (estimateSeconds % 3600) / 60, estimateSeconds % 60);
+
+			}
+		}
+		myquery(&mysql, L"UNLOCK TABLES");
+		fclose(fp);
+	}
+
+}
+
 #ifdef TEST_CODE
 void cOntology::compareRDFTypes()
 {
