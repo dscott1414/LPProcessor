@@ -29,20 +29,20 @@
 #include "stacktrace.h"
 #include <algorithm>
 
-void getSentenceWithTags(Source &source, int patternBegin, int patternEnd, int sentenceBegin, int sentenceEnd, int PEMAPosition, wstring &sentence);
+void getSentenceWithTags(cSource &source, int patternBegin, int patternEnd, int sentenceBegin, int sentenceEnd, int PEMAPosition, wstring &sentence);
 bool unlockTables(MYSQL &mysql);
 
 // needed for _STLP_DEBUG - these must be set to a legal, unreachable yet never changing value
-unordered_map <wstring,tFI> static_wordMap;
+unordered_map <wstring,cSourceWordInfo> static_wordMap;
 tIWMM wNULL=static_wordMap.end();
-unordered_map<wstring, tFI::cRMap::tRelation> static_tIcMap;
-tFI::cRMap::tIcRMap tNULL=(tFI::cRMap::tIcRMap)static_tIcMap.begin();
+unordered_map<wstring, cSourceWordInfo::cRMap::cRelation> static_tIcMap;
+cSourceWordInfo::cRMap::tIcRMap tNULL=(cSourceWordInfo::cRMap::tIcRMap)static_tIcMap.begin();
 vector <cLocalFocus> static_cLocalFocus;
 vector <cLocalFocus>::iterator cNULL=static_cLocalFocus.begin();
-vector <Source::cSpeakerGroup> static_cSpeakerGroup;
-vector <Source::cSpeakerGroup>::iterator sgNULL = (vector <Source::cSpeakerGroup>::iterator)static_cSpeakerGroup.begin();
-vector <WordMatch> static_wm;
-vector <WordMatch>::iterator wmNULL=static_wm.begin();
+vector <cSource::cSpeakerGroup> static_cSpeakerGroup;
+vector <cSource::cSpeakerGroup>::iterator sgNULL = (vector <cSource::cSpeakerGroup>::iterator)static_cSpeakerGroup.begin();
+vector <cWordMatch> static_wm;
+vector <cWordMatch>::iterator wmNULL=static_wm.begin();
 set<int> static_setInt;
 set<int>::iterator sNULL= static_setInt.begin();
 SRWLOCK rdfTypeMapSRWLock, mySQLTotalTimeSRWLock, totalInternetTimeWaitBandwidthControlSRWLock, mySQLQueryBufferSRWLock, orderedHyperNymsMapSRWLock;
@@ -192,7 +192,7 @@ bool signalCtrl(DWORD dwProcessId, DWORD dwCtrlEvent)
 bool getNextUnprocessedSource(MYSQL &mysql, int begin, int end, int sourceType, bool setUsed, int &id, wstring &path, wstring &encoding, wstring &start, int &repeatStart, wstring &etext, wstring &author, wstring &title);
 int getNumSources(MYSQL &mysql, int sourceType, bool left);
 bool anymoreUnprocessedForUnknown(MYSQL &mysql, int sourceType, int step);
-int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int beginSource, int endSource, Source::sourceTypeEnum processSourceType, int maxProcesses, int numSourcesPerProcess,
+int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int beginSource, int endSource, cSource::sourceTypeEnum processSourceType, int maxProcesses, int numSourcesPerProcess,
 	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool makeCopyBeforeSourceWrite, bool parseOnly, wstring specialExtension)
 {
 	LFS
@@ -345,7 +345,7 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 			printf("\nCreated process %d:%d", nextProcessIndex, (int)processId);
 		}
 	}
-	if (processSourceType != Source::REQUEST_TYPE)
+	if (processSourceType != cSource::REQUEST_TYPE)
 	{
 		freeCounter();
 		_exit(0); // fast exit
@@ -445,14 +445,14 @@ int getWordPOS(MYSQL *mysql,wstring word, set <int> &posSet, int &inflections, b
 	return 0;
 }
 
-int testDisInclineAndSplit(MYSQL *mysql, Source &source, int sourceId, WordMatch &word, bool capitalized, int totalFrequency, int capitalizedFrequency, int allCapsFrequency, set <int> &posSet,
+int testDisInclineAndSplit(MYSQL *mysql, cSource &source, int sourceId, cWordMatch &word, bool capitalized, int totalFrequency, int capitalizedFrequency, int allCapsFrequency, set <int> &posSet,
 	int &inflections, bool &isNonEuropean, bool &queryOnLowerCase, int &dictionaryComQueried, int &dictionaryComCacheQueried, bool &websterAPIRequestsExhausted)
 {
 	if (queryOnLowerCase = (totalFrequency > 5 && ((capitalizedFrequency + allCapsFrequency)*100.0 / totalFrequency) > 95.0))
-		posSet.insert(FormsClass::gFindForm(L"noun"));
+		posSet.insert(cForms::gFindForm(L"noun"));
 	else
 		getWordPOS(mysql,word.word->first, posSet, inflections, false, isNonEuropean, dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted,false);
-	bool caps = word.queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (word.flags&WordMatch::flagFirstLetterCapitalized) || (word.flags&WordMatch::flagAllCaps);
+	bool caps = word.queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (word.flags&cWordMatch::flagFirstLetterCapitalized) || (word.flags&cWordMatch::flagAllCaps);
 	if (posSet.empty())
 	{
 		tIWMM iWord = Words.end();
@@ -521,8 +521,8 @@ int	analyzeFormsUsageVSNewForms(MYSQL mysql, int wordId, wstring word, bool prop
 	if (existingWord)
 	{
 		wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-		_snwprintf(qt, QUERY_BUFFER_LEN, L"select formId,count from wordforms where wordId=%d and (formId<=%d or formId=%d)", wordId, tFI::patternFormNumOffset,
-			tFI::PROPER_NOUN_USAGE_PATTERN - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset); // formId in (1,101,102,103,104)
+		_snwprintf(qt, QUERY_BUFFER_LEN, L"select formId,count from wordforms where wordId=%d and (formId<=%d or formId=%d)", wordId, cSourceWordInfo::patternFormNumOffset,
+			cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset); // formId in (1,101,102,103,104)
 		MYSQL_RES * result;
 		MYSQL_ROW sqlrow = NULL;
 		if (!myquery(&mysql, qt, result))
@@ -532,13 +532,13 @@ int	analyzeFormsUsageVSNewForms(MYSQL mysql, int wordId, wstring word, bool prop
 			int formId = atoi(sqlrow[0]);
 			int count = atoi(sqlrow[1]);
 			// record maximum usage count
-			if (formId == tFI::patternFormNumOffset)
+			if (formId == cSourceWordInfo::patternFormNumOffset)
 			{
 				maxcount = count;
 				continue;
 			}
 			// keep proper noun usage count if set as proper noun
-			if (formId == tFI::PROPER_NOUN_USAGE_PATTERN - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset)
+			if (formId == cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset)
 			{
 				properNounFormFound = true;
 				if (properNoun)
@@ -561,14 +561,14 @@ int	analyzeFormsUsageVSNewForms(MYSQL mysql, int wordId, wstring word, bool prop
 				keep.insert(formId);
 				if (formId == nounForm+1)
 				{
-					keep.insert(tFI::SINGULAR_NOUN_HAS_DETERMINER - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
-					keep.insert(tFI::SINGULAR_NOUN_HAS_NO_DETERMINER - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+					keep.insert(cSourceWordInfo::SINGULAR_NOUN_HAS_DETERMINER - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset);
+					keep.insert(cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset);
 				}
 				if (formId == verbForm+1)
 				{
-					keep.insert(tFI::VERB_HAS_0_OBJECTS - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
-					keep.insert(tFI::VERB_HAS_1_OBJECTS - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
-					keep.insert(tFI::VERB_HAS_2_OBJECTS - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+					keep.insert(cSourceWordInfo::VERB_HAS_0_OBJECTS - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset);
+					keep.insert(cSourceWordInfo::VERB_HAS_1_OBJECTS - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset);
+					keep.insert(cSourceWordInfo::VERB_HAS_2_OBJECTS - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset);
 				}
 			}
 			else
@@ -576,23 +576,23 @@ int	analyzeFormsUsageVSNewForms(MYSQL mysql, int wordId, wstring word, bool prop
 				remove.insert(formId);
 				if (formId == nounForm + 1)
 				{
-					remove.insert(tFI::SINGULAR_NOUN_HAS_DETERMINER - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
-					remove.insert(tFI::SINGULAR_NOUN_HAS_NO_DETERMINER - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+					remove.insert(cSourceWordInfo::SINGULAR_NOUN_HAS_DETERMINER - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset);
+					remove.insert(cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset);
 				}
 				if (formId == verbForm + 1)
 				{
-					remove.insert(tFI::VERB_HAS_0_OBJECTS - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
-					remove.insert(tFI::VERB_HAS_1_OBJECTS - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
-					remove.insert(tFI::VERB_HAS_2_OBJECTS - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+					remove.insert(cSourceWordInfo::VERB_HAS_0_OBJECTS - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset);
+					remove.insert(cSourceWordInfo::VERB_HAS_1_OBJECTS - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset);
+					remove.insert(cSourceWordInfo::VERB_HAS_2_OBJECTS - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset);
 				}
 			}
 		}
 	}
 	else
-		add.insert(tFI::patternFormNumOffset);
+		add.insert(cSourceWordInfo::patternFormNumOffset);
 	if (properNoun && !properNounFormFound)
 	{
-		add.insert(tFI::PROPER_NOUN_USAGE_PATTERN - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+		add.insert(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset);
 	}
 	for (int formId : posSetDB)
 	{
@@ -601,14 +601,14 @@ int	analyzeFormsUsageVSNewForms(MYSQL mysql, int wordId, wstring word, bool prop
 		add.insert(formId);
 		if (formId == nounForm + 1)
 		{
-			add.insert(tFI::SINGULAR_NOUN_HAS_DETERMINER - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
-			add.insert(tFI::SINGULAR_NOUN_HAS_NO_DETERMINER - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+			add.insert(cSourceWordInfo::SINGULAR_NOUN_HAS_DETERMINER - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset);
+			add.insert(cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset);
 		}
 		if (formId == verbForm + 1)
 		{
-			add.insert(tFI::VERB_HAS_0_OBJECTS - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
-			add.insert(tFI::VERB_HAS_1_OBJECTS - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
-			add.insert(tFI::VERB_HAS_2_OBJECTS - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+			add.insert(cSourceWordInfo::VERB_HAS_0_OBJECTS - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset);
+			add.insert(cSourceWordInfo::VERB_HAS_1_OBJECTS - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset);
+			add.insert(cSourceWordInfo::VERB_HAS_2_OBJECTS - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset);
 		}
 	}
 	//LOWER_CASE_USAGE_PATTERN = 32756
@@ -640,9 +640,9 @@ int overwriteWordFormsInDB(MYSQL mysql, int wordId, wstring word, set <int> &pos
 		else if (removeFormString.length()>0)
 			lplog(LOG_INFO, L"DB statement [%s delete]: %s", word.c_str(), removeFormString.c_str());
 		formsDeleted = mysql_affected_rows(&mysql);
-		if (keep.find(tFI::PROPER_NOUN_USAGE_PATTERN - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset) != keep.end())
+		if (keep.find(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset) != keep.end())
 		{
-			_snwprintf(qt, QUERY_BUFFER_LEN, L"update wordforms set count=%d where wordId=%d and formId=%d", maxcount,wordId, tFI::PROPER_NOUN_USAGE_PATTERN - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset);
+			_snwprintf(qt, QUERY_BUFFER_LEN, L"update wordforms set count=%d where wordId=%d and formId=%d", maxcount,wordId, cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset);
 			if (actuallyExecuteAgainstDB && !myquery(&mysql, qt))
 				return -1;
 			else if (logEverything || !maxcount)
@@ -656,9 +656,9 @@ int overwriteWordFormsInDB(MYSQL mysql, int wordId, wstring word, set <int> &pos
 		// insert wordForms(wordId, formId, count) VALUES(2, 33, 4), (5, 6, 7)
 		for (int form : add)
 		{
-			// if transfer count (tFI::patternFormNumOffset) or tFI::PROPER_NOUN_USAGE_PATTERN, set this to maxcount
+			// if transfer count (cSourceWordInfo::patternFormNumOffset) or cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN, set this to maxcount
 			// else set to 0.
-			if (form == tFI::patternFormNumOffset || form == tFI::PROPER_NOUN_USAGE_PATTERN - tFI::MAX_FORM_USAGE_PATTERNS + tFI::patternFormNumOffset)
+			if (form == cSourceWordInfo::patternFormNumOffset || form == cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN - cSourceWordInfo::MAX_FORM_USAGE_PATTERNS + cSourceWordInfo::patternFormNumOffset)
 				len += wsprintf(qt + len, L"(%d,%d,%d),", wordId, form, maxcount);
 			else
 				len += wsprintf(qt + len, L"(%d,%d,%d),", wordId, form, 0);
@@ -671,7 +671,7 @@ int overwriteWordFormsInDB(MYSQL mysql, int wordId, wstring word, set <int> &pos
 		{
 			wstring forms;
 			for (int form : add)
-				if (form < tFI::patternFormNumOffset && (!properNoun || form!=(nounForm+1)))
+				if (form < cSourceWordInfo::patternFormNumOffset && (!properNoun || form!=(nounForm+1)))
 					forms += Forms[form-1]->name + L" ";
 			if (forms.length()>0)
 				lplog(LOG_INFO, L"DB statement [%s forms insert]: %s (%s)", word.c_str(), forms.c_str(), qt);
@@ -687,7 +687,7 @@ int overwriteWordFlagsInDB(MYSQL mysql, wstring word, bool actuallyExecuteAgains
 	LFS
 	// erase all wordforms associated with wordId in wordforms
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"update words set flags=flags|%d where word=\"%s\"", tFI::queryOnLowerCase, word.c_str());
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"update words set flags=flags|%d where word=\"%s\"", cSourceWordInfo::queryOnLowerCase, word.c_str());
 	if (actuallyExecuteAgainstDB && !myquery(&mysql, qt))
 		return -1;
 	else if (logEverything)
@@ -1172,13 +1172,13 @@ void writeSourceWordFrequency(MYSQL *mysql,unordered_map<wstring, wordInfo> wf, 
 	}
 }
 
-int analyzeEnd(Source source, int sourceId, wstring path, wstring etext, wstring title,bool &reprocess,bool &nosource,wstring specialExtension)
+int analyzeEnd(cSource source, int sourceId, wstring path, wstring etext, wstring title,bool &reprocess,bool &nosource,wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE")) 
 		return -1;
 	Words.readWords(path, sourceId, false,L"");
 	bool parsedOnly = false;
-	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
+	if (source.readSource(path, false, parsedOnly, false, specialExtension))
 	{
 		bool multipleEnds = false;
 		for (unsigned int I = 0; I < source.sentenceStarts.size(); I++)
@@ -1249,7 +1249,7 @@ int writeWordFormsFromCorpusWideAnalysis(MYSQL mysql,bool actuallyExecuteAgainst
 		bool isNonEuropean, setProperNoun;
 		int inflections=0;
 		if (setProperNoun = (totalFrequency > 4 && ((capitalizedFrequency + allCapsFrequency)*100.0 / totalFrequency) > 95.0))
-			posSet.insert(FormsClass::gFindForm(L"noun"));
+			posSet.insert(cForms::gFindForm(L"noun"));
 		else
 			getWordPOS(&mysql,word, posSet, inflections, false, isNonEuropean, dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted,true);
 		if (posSet.size() > 0)
@@ -1285,17 +1285,17 @@ int writeWordFormsFromCorpusWideAnalysis(MYSQL mysql,bool actuallyExecuteAgainst
 	return 0;
 }
 
-int printUnknownsFromSource(Source source, int sourceId, wstring path, wstring etext, wstring specialExtension)
+int printUnknownsFromSource(cSource source, int sourceId, wstring path, wstring etext, wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
 	Words.readWords(path, sourceId, false, L"");
 	bool parsedOnly = false, firstIllegal = false;
 	int numIllegalWords = 0;
-	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
+	if (source.readSource(path, false, parsedOnly, false, specialExtension))
 	{
 		int wordIndex = 0;
-		for (WordMatch &im : source.m)
+		for (cWordMatch &im : source.m)
 		{
 			if (im.word->second.isUnknown())
 			{
@@ -1321,17 +1321,17 @@ int printUnknownsFromSource(Source source, int sourceId, wstring path, wstring e
 	return 21;
 }
 
-bool matchEntity(Source &source, int wordIndex, int matchType, wstring patternOrWordName, wstring differentiator, int &PMAOffset)
+bool matchEntity(cSource &source, int wordIndex, int matchType, wstring patternOrWordName, wstring differentiator, int &PMAOffset)
 {
 	auto &im = source.m[wordIndex];
 	return (matchType == 4 ||
 		(matchType == 0 && (PMAOffset = im.pma.queryPatternDiff(patternOrWordName, differentiator)) != -1) ||
 		(matchType == 1 && im.queryWinnerForm(patternOrWordName)!=-1) ||
 		(matchType == 2 && im.word->first == patternOrWordName) ||
-		(matchType == 3 && (im.flags&WordMatch::flagNotMatched) != 0));
+		(matchType == 3 && (im.flags&cWordMatch::flagNotMatched) != 0));
 }
 
-bool additionalMatchingLogic(Source &source, int wordIndex, int primaryPMAOffset, int secondaryPMAOffset,wstring &logicResults)
+bool additionalMatchingLogic(cSource &source, int wordIndex, int primaryPMAOffset, int secondaryPMAOffset,wstring &logicResults)
 {
 	logicResults = L"";
 	// if __ALLOBJECTS_1 starts with one adverb which is one word long
@@ -1370,7 +1370,7 @@ bool additionalMatchingLogic(Source &source, int wordIndex, int primaryPMAOffset
 	{
 		logicResults += L"COMMON_VERB:";
 	}
-	tFI::cRMap::tIcRMap tr = tNULL;
+	cSourceWordInfo::cRMap::tIcRMap tr = tNULL;
 	int numBeginRelations = beginObjectWord->second.scanAllRelations(verbWord);
 	int numLastRelations = lastObjectWord->second.scanAllRelations(verbWord);
 	wstring br, lr;
@@ -1421,14 +1421,14 @@ bool additionalMatchingLogic(Source &source, int wordIndex, int primaryPMAOffset
 // 4: true (do not perform match)
 // if both primaryMatchType AND secondaryMatchType>0, then the secondary match location is the NEXT word.
 // if primaryMatchType == 3, then sentence highlight will encompass all words that have no match, and sentences will not be repeated.
-int patternOrWordAnalysisFromSource(Source &source, int sourceId, wstring path, wstring etext, wstring primaryPatternOrWordName, wstring primaryDifferentiator, wstring secondaryPatternOrWordName, wstring secondaryDifferentiator, int primaryMatchType, int secondaryMatchType, wstring specialExtension)
+int patternOrWordAnalysisFromSource(cSource &source, int sourceId, wstring path, wstring etext, wstring primaryPatternOrWordName, wstring primaryDifferentiator, wstring secondaryPatternOrWordName, wstring secondaryDifferentiator, int primaryMatchType, int secondaryMatchType, wstring specialExtension)
 {	LFS
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
 	Words.readWords(path, sourceId, false, L"");
 	bool parsedOnly = false;
 	int lastSentenceIndexPrinted = -1;
-	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
+	if (source.readSource(path, false, parsedOnly, false, specialExtension))
 	{
 		set <int> wordIds;
 		source.readWordIdsNeedingWordRelations(wordIds);
@@ -1436,14 +1436,14 @@ int patternOrWordAnalysisFromSource(Source &source, int sourceId, wstring path, 
 			return -1;
 		int wordIndex = 0;
 		unsigned int ss = 1;
-		for (WordMatch &im : source.m)
+		for (cWordMatch &im : source.m)
 		{
 			int primaryPMAOffset,secondaryPMAOffset;
 			if (matchEntity(source, wordIndex, primaryMatchType, primaryPatternOrWordName, primaryDifferentiator, primaryPMAOffset) &&
 					matchEntity(source, (primaryMatchType>0 && secondaryMatchType>0) ? wordIndex+1:wordIndex, secondaryMatchType, secondaryPatternOrWordName, secondaryDifferentiator, secondaryPMAOffset))
 			{
-				primaryPMAOffset = primaryPMAOffset & ~matchElement::patternFlag;
-				secondaryPMAOffset = secondaryPMAOffset & ~matchElement::patternFlag;
+				primaryPMAOffset = primaryPMAOffset & ~cMatchElement::patternFlag;
+				secondaryPMAOffset = secondaryPMAOffset & ~cMatchElement::patternFlag;
 				wstring sentence;
 				if (primaryMatchType==0)
 				{
@@ -1494,7 +1494,7 @@ int patternOrWordAnalysisFromSource(Source &source, int sourceId, wstring path, 
 								originalIWord = L"*" + originalIWord;
 								inNoMatch = true;
 							}
-							if (inNoMatch && (I + 1 >= source.sentenceStarts[ss] || (source.m[I + 1].flags&WordMatch::flagNotMatched) == 0))
+							if (inNoMatch && (I + 1 >= source.sentenceStarts[ss] || (source.m[I + 1].flags&cWordMatch::flagNotMatched) == 0))
 							{
 								originalIWord += L"*";
 								inNoMatch = false;
@@ -1519,17 +1519,17 @@ int patternOrWordAnalysisFromSource(Source &source, int sourceId, wstring path, 
 	return 22;
 }
 
-int syntaxCheckFromSource(Source source, int sourceId, wstring path, wstring etext, wstring specialExtension)
+int syntaxCheckFromSource(cSource source, int sourceId, wstring path, wstring etext, wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
 	Words.readWords(path, sourceId, false, L"");
 	bool parsedOnly = false;
-	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
+	if (source.readSource(path, false, parsedOnly, false, specialExtension))
 	{
 		int wordIndex = 0;
 		unsigned int ss = 1,lastssprinted=-1;
-		for (WordMatch &im : source.m)
+		for (cWordMatch &im : source.m)
 		{
 			/*
 			// verb, adverb, adverb, OBJECT_1 that is composed of a single noun that does not accept adjectives
@@ -1537,7 +1537,7 @@ int syntaxCheckFromSource(Source source, int sourceId, wstring path, wstring ete
 			if (pemaOffset != -1 && im.hasWinnerVerbForm() && im.getNumWinners() == 1 && wordIndex < source.m.size() - 3 &&
 				(pmaOffset = source.m[wordIndex + 1].pma.queryPatternDiff(L"__ALLOBJECTS_1", L"1")) != -1)
 			{
-				pmaOffset &= ~matchElement::patternFlag;
+				pmaOffset &= ~cMatchElement::patternFlag;
 				bool twoAdverbs =
 					source.m[wordIndex + 1].pma[pmaOffset].len == 3 &&
 					source.m[wordIndex + 1].isOnlyWinner(adverbForm) &&
@@ -1576,7 +1576,7 @@ int syntaxCheckFromSource(Source source, int sourceId, wstring path, wstring ete
 				}
 			}
 		*/
-			if ((im.flags&WordMatch::flagNotMatched) && lastssprinted!=ss)
+			if ((im.flags&cWordMatch::flagNotMatched) && lastssprinted!=ss)
 			{
 				wstring sentence;
 				source.phraseString(source.sentenceStarts[ss - 1], source.sentenceStarts[ss], sentence, false);
@@ -1598,19 +1598,19 @@ int syntaxCheckFromSource(Source source, int sourceId, wstring path, wstring ete
 	return 62;
 }
 
-int populateWordFrequencyTableFromSource(Source source, int sourceId, wstring path, wstring etext, wstring specialExtension)
+int populateWordFrequencyTableFromSource(cSource source, int sourceId, wstring path, wstring etext, wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
 	Words.readWords(path, sourceId, false, L"");
 	bool parsedOnly = false;
 	int numIllegalWords = 0;
-	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
+	if (source.readSource(path, false, parsedOnly, false, specialExtension))
 	{
 		unordered_map<wstring, wordInfo> wf;
 		int numUnknown = 0;
 		wf.reserve(source.m.size());
-		for (WordMatch &im : source.m)
+		for (cWordMatch &im : source.m)
 		{
 			wstring word = im.word->first;
 			if (word.empty() || word[word.length() - 1] == L'\\' || word.length() > 32)
@@ -1639,14 +1639,14 @@ int populateWordFrequencyTableFromSource(Source source, int sourceId, wstring pa
 					numUnknown++;
 					int numCharsIncorrect = 0;
 					for (wchar_t c : word)
-						if (!iswalnum(c) && !WordClass::isDoubleQuote(c) && !WordClass::isSingleQuote(c) && !WordClass::isDash(c) && c != '.' && c != ' ')
+						if (!iswalnum(c) && !cWord::isDoubleQuote(c) && !cWord::isSingleQuote(c) && !cWord::isDash(c) && c != '.' && c != ' ')
 							numCharsIncorrect++;
 					if (numCharsIncorrect >= 1)
 					{
 						lplog(LOG_INFO, L"%s: word %s is suspicious - rejecting source.", path.c_str(), word.c_str());
 						numIllegalWords++;
 					}
-					if (im.flags&WordMatch::flagFirstLetterCapitalized)
+					if (im.flags&cWordMatch::flagFirstLetterCapitalized)
 					{
 						if (!myquery(&source.mysql, L"LOCK TABLES words w READ,wordforms wf READ"))
 							return -1;
@@ -1672,9 +1672,9 @@ int populateWordFrequencyTableFromSource(Source source, int sourceId, wstring pa
 			if (im.word->second.query(UNDEFINED_FORM_NUM) > 0) // im.word->second.isUnknown())
 			{
 				wfi->second.unknownFrequency++;
-				if (im.queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (im.flags&WordMatch::flagFirstLetterCapitalized))
+				if (im.queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (im.flags&cWordMatch::flagFirstLetterCapitalized))
 					wfi->second.unknownCapitalizedFrequency++;
-				if (im.flags&WordMatch::flagAllCaps)
+				if (im.flags&cWordMatch::flagAllCaps)
 					wfi->second.unknownAllCapsFrequency++;
 			}
 		}
@@ -1694,12 +1694,12 @@ int populateWordFrequencyTableFromSource(Source source, int sourceId, wstring pa
 	return (numIllegalWords == 0) ? 2 : -(numIllegalWords + 10);
 }
 
-int populateWordFrequencyTableMP(Source source, wstring specialExtension)
+int populateWordFrequencyTableMP(cSource source, wstring specialExtension)
 {
 	int step = 1;
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
-	enum Source::sourceTypeEnum st = Source::GUTENBERG_SOURCE_TYPE;
+	enum cSource::sourceTypeEnum st = cSource::GUTENBERG_SOURCE_TYPE;
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	_snwprintf(qt, QUERY_BUFFER_LEN, L"select COUNT(*) from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**'", st);
 	__int64 totalSource;
@@ -1769,11 +1769,11 @@ int populateWordFrequencyTableMP(Source source, wstring specialExtension)
 	return 0;
 }
 
-int populateWordFrequencyTable(Source source, int step, wstring specialExtension)
+int populateWordFrequencyTable(cSource source, int step, wstring specialExtension)
 {
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
-	enum Source::sourceTypeEnum st = Source::GUTENBERG_SOURCE_TYPE;
+	enum cSource::sourceTypeEnum st = cSource::GUTENBERG_SOURCE_TYPE;
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	bool websterAPIRequestsExhausted = false;
 	int startTime = clock(), numSourcesProcessedNow = 0;
@@ -1809,11 +1809,11 @@ int populateWordFrequencyTable(Source source, int step, wstring specialExtension
 	return 0;
 }
 
-int printUnknowns(Source source, int step, wstring specialExtension)
+int printUnknowns(cSource source, int step, wstring specialExtension)
 {
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
-	enum Source::sourceTypeEnum st = Source::GUTENBERG_SOURCE_TYPE;
+	enum cSource::sourceTypeEnum st = cSource::GUTENBERG_SOURCE_TYPE;
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	bool websterAPIRequestsExhausted = false;
 	int startTime = clock(), numSourcesProcessedNow = 0;
@@ -1849,7 +1849,7 @@ int printUnknowns(Source source, int step, wstring specialExtension)
 	return 0;
 }
   
-int patternOrWordAnalysis(Source source, int step, wstring primaryPatternOrWordName, wstring primaryDifferentiator, wstring secondaryPatternOrWordName, wstring secondaryDifferentiator, enum Source::sourceTypeEnum st, int primaryMatchType, int secondaryMatchType, wstring specialExtension)
+int patternOrWordAnalysis(cSource source, int step, wstring primaryPatternOrWordName, wstring primaryDifferentiator, wstring secondaryPatternOrWordName, wstring secondaryDifferentiator, enum cSource::sourceTypeEnum st, int primaryMatchType, int secondaryMatchType, wstring specialExtension)
 {	LFS
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
@@ -1881,9 +1881,9 @@ int patternOrWordAnalysis(Source source, int step, wstring primaryPatternOrWordN
 			mTW(sqlrow[1], etext);
 		mTW(sqlrow[2], path);
 		mTW(sqlrow[3], title);
-		if (st== Source::GUTENBERG_SOURCE_TYPE)
+		if (st== cSource::GUTENBERG_SOURCE_TYPE)
 			path.insert(0, L"\\").insert(0, CACHEDIR);
-		else if (st == Source::TEST_SOURCE_TYPE)
+		else if (st == cSource::TEST_SOURCE_TYPE)
 			path.insert(0, L"\\").insert(0, LMAINDIR);
 		int setStep = patternOrWordAnalysisFromSource(source, sourceId, path, etext, primaryPatternOrWordName, primaryDifferentiator, secondaryPatternOrWordName, secondaryDifferentiator, primaryMatchType, secondaryMatchType, specialExtension);
 		if (!myquery(&source.mysql, L"LOCK TABLES sources WRITE")) return -1;
@@ -1905,11 +1905,11 @@ int patternOrWordAnalysis(Source source, int step, wstring primaryPatternOrWordN
 	return 0;
 }
 
-int syntaxCheck(Source source, int step, wstring specialExtension,bool test)
+int syntaxCheck(cSource source, int step, wstring specialExtension,bool test)
 {
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
-	enum Source::sourceTypeEnum st = (test) ? Source::TEST_SOURCE_TYPE : Source::GUTENBERG_SOURCE_TYPE;
+	enum cSource::sourceTypeEnum st = (test) ? cSource::TEST_SOURCE_TYPE : cSource::GUTENBERG_SOURCE_TYPE;
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	bool websterAPIRequestsExhausted = false;
 	int startTime = clock(), numSourcesProcessedNow = 0;
@@ -1952,7 +1952,7 @@ int syntaxCheck(Source source, int step, wstring specialExtension,bool test)
 // delete files associated with sources that have been marked skipped
 // update sources set proc2 = 0;
 // update sources set proc2 = 6 where start = '**SKIP**';
-int removeOldCacheFiles(Source source)
+int removeOldCacheFiles(cSource source)
 {
 	int step = 6;
 	MYSQL_RES * result;
@@ -2015,16 +2015,16 @@ int removeOldCacheFiles(Source source)
 	return 0;
 }
 
-void testRDFType(Source &source, wstring specialExtension)
+void testRDFType(cSource &source, wstring specialExtension)
 {
 	int sourceId = 25291;
 	wstring path = L"J:\\caches\\texts\\Schoonover, Frank E\\Jules of the Great Heart  Free Trapper and Outlaw in the Hudson Bay Region in the Early Days.txt";
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE")) return;
 	Words.readWords(path, sourceId, false, L"");
 	vector <cTreeCat *> rdfTypes;
-	Ontology::rdfIdentify(L"clackamas", rdfTypes, L"Z", true);
+	cOntology::rdfIdentify(L"clackamas", rdfTypes, L"Z", true);
 	bool parsedOnly = false;
-	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
+	if (source.readSource(path, false, parsedOnly, false, specialExtension))
 	{
 		int where = 0;
 		for (auto im : source.m)
@@ -2153,7 +2153,7 @@ unordered_map<wstring, vector <wstring> > maxentAssociationMap =
 
 // checks if the part of speech indicated in parse from the Stanford Maxent POS tagger matches the winner forms at wordSourceIndex.
 // returns yes=0, no=1
-int checkStanfordMaxentAgainstWinner(Source &source, int wordSourceIndex, wstring originalParse, wstring &parse, int &numPOSNotFound, unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &wordNoMatchMap, bool inRelativeClause)
+int checkStanfordMaxentAgainstWinner(cSource &source, int wordSourceIndex, wstring originalParse, wstring &parse, int &numPOSNotFound, unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &wordNoMatchMap, bool inRelativeClause)
 {
 	if (!iswalpha(source.m[wordSourceIndex].word->first[0]))
 		return 0;
@@ -2229,7 +2229,7 @@ int checkStanfordMaxentAgainstWinner(Source &source, int wordSourceIndex, wstrin
 	{
 		for (wstring form : pnExceptionForms)
 		{
-			if (std::find(winnerForms.begin(), winnerForms.end(), FormsClass::findForm(form)) != winnerForms.end())
+			if (std::find(winnerForms.begin(), winnerForms.end(), cForms::findForm(form)) != winnerForms.end())
 				return 0;
 		}
 	}
@@ -2260,7 +2260,7 @@ int checkStanfordMaxentAgainstWinner(Source &source, int wordSourceIndex, wstrin
 	return 1;
 }
 
-void formMatrixTest(Source &source, int wordSourceIndex, wstring X, wstring Y, int costX, int costY, unordered_map<wstring,int> &comboCostFrequency, wstring &partofspeech)
+void formMatrixTest(cSource &source, int wordSourceIndex, wstring X, wstring Y, int costX, int costY, unordered_map<wstring,int> &comboCostFrequency, wstring &partofspeech)
 {
 	if (source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(X)) != costX ||
 		source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(Y)) != costY)
@@ -2295,7 +2295,7 @@ void formMatrixTest(Source &source, int wordSourceIndex, wstring X, wstring Y, i
 
 // perform tests to make sure that the noun according to LP is not a verb (that ST says).
 // that smells / those smell - these agree by verb
-bool isStanfordDeterminerType(Source &source, int wordNounVerbDisagreementSourceIndex, int wordDeterminerSourceIndex)
+bool isStanfordDeterminerType(cSource &source, int wordNounVerbDisagreementSourceIndex, int wordDeterminerSourceIndex)
 {
 	// test for agreement - the two must agree (that smells / those smell) and not potentially disagree (ambiguousness)
 	if (source.m[wordDeterminerSourceIndex].queryWinnerForm(demonstrativeDeterminerForm) >= 0)
@@ -2398,7 +2398,7 @@ wstring stTokenizeWord(wstring tokenizedWord,wstring &originalWord, unsigned lon
 						lookFor = L" to)";
 					else
 						lookFor = L" " + originalWord.substr(0, wspace) + L")";
-		if (lookFor.length() > 0 && (flags&WordMatch::flagAllCaps))
+		if (lookFor.length() > 0 && (flags&cWordMatch::flagAllCaps))
 			for (int len = 0; lookFor[len]; len++) lookFor[len] = towupper(lookFor[len]);
 	}
 	else
@@ -2412,7 +2412,7 @@ wstring stTokenizeWord(wstring tokenizedWord,wstring &originalWord, unsigned lon
 //   -2: LP class corrected.  ST prefers correct class, so this entry should simply be removed from the output file.
 //   -3: test whether to change to correct class - set to disagree, and add an arbitrary string to partofspeech to search for whatever string added as a test.
 //    0: unable to determine whether class should be corrected, or the class has been corrected. Normal processing should continue.  
-int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceIndex, unordered_map<wstring, int> &errorMap, wstring &partofspeech, int startOfSentence, map<wstring,FormDistribution>::iterator fdi)
+int ruleCorrectLPClass(wstring primarySTLPMatch, cSource &source, int wordSourceIndex, unordered_map<wstring, int> &errorMap, wstring &partofspeech, int startOfSentence, map<wstring,FormDistribution>::iterator fdi)
 {
 	if (wordSourceIndex + 1 >= source.m.size())
 		return 0;
@@ -2595,7 +2595,7 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 				(wordSourceIndex <= 3 || (source.m[wordSourceIndex - 4].queryForm(L"is") >= 0 || source.m[wordSourceIndex - 4].queryForm(L"be") >= 0))); // is/ishas before means it really is an adjective!
 		if (adverbFormOffset < 0)
 		{
-			if (!(WordClass::isSingleQuote(source.m[wordSourceIndex + 1].word->first[0]) || WordClass::isDoubleQuote(source.m[wordSourceIndex + 1].word->first[0])) && primarySTLPMatch == L"to")
+			if (!(cWord::isSingleQuote(source.m[wordSourceIndex + 1].word->first[0]) || cWord::isDoubleQuote(source.m[wordSourceIndex + 1].word->first[0])) && primarySTLPMatch == L"to")
 			{
 				errorMap[L"LP correct: 'to' preposition rule"]++;
 				fdi->second.LPAlreadyAccountedFormDistribution[L"preposition"]++;
@@ -2603,7 +2603,7 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 			}
 			if (source.m[wordSourceIndex].word->first == L"like" && sentenceOfBeing &&
 					// the word before must NOT be a dash
-					(wordSourceIndex <= 0 || !WordClass::isDash((source.m[wordSourceIndex - 1].word->first[0]))))
+					(wordSourceIndex <= 0 || !cWord::isDash((source.m[wordSourceIndex - 1].word->first[0]))))
 			{
 				source.m[wordSourceIndex].setWinner(adjectiveFormOffset);
 				source.m[wordSourceIndex].unsetWinner(source.m[wordSourceIndex].queryForm(prepositionForm));
@@ -2641,7 +2641,7 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 				{
 					if (adjectiveFormOffset < 0)
 					{
-						if (particleFormOffset > 0 && !WordClass::isDash((source.m[wordSourceIndex + 1].word->first[0])))
+						if (particleFormOffset > 0 && !cWord::isDash((source.m[wordSourceIndex + 1].word->first[0])))
 						{
 							source.m[wordSourceIndex].setWinner(particleFormOffset);
 							source.m[wordSourceIndex].unsetWinner(source.m[wordSourceIndex].queryForm(prepositionForm));
@@ -2690,7 +2690,7 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 			}
 			else
 			{
-				if (particleFormOffset > 0 && !WordClass::isDash((source.m[wordSourceIndex + 1].word->first[0])))
+				if (particleFormOffset > 0 && !cWord::isDash((source.m[wordSourceIndex + 1].word->first[0])))
 				{
 					source.m[wordSourceIndex].setWinner(particleFormOffset);
 					source.m[wordSourceIndex].unsetWinner(source.m[wordSourceIndex].queryForm(prepositionForm));
@@ -2705,10 +2705,10 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 		}
 		return 0;
 	}
-	if (source.m[wordSourceIndex].word->first == L"that" && (((source.m[wordSourceIndex].flags&WordMatch::flagInQuestion) && wordSourceIndex > 0 && 
+	if (source.m[wordSourceIndex].word->first == L"that" && (((source.m[wordSourceIndex].flags&cWordMatch::flagInQuestion) && wordSourceIndex > 0 && 
 		(source.m[wordSourceIndex - 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex - 1].queryForm(L"is_negation") >= 0) &&
 		source.m[wordSourceIndex].queryWinnerForm(demonstrativeDeterminerForm)>=0 && source.m[wordSourceIndex + 1].queryWinnerForm(nounForm) < 0) ||
-		(source.m[wordSourceIndex].word->first == L"that" && !(source.m[wordSourceIndex].flags&WordMatch::flagInQuestion) && wordSourceIndex > 0 && (source.m[wordSourceIndex + 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex + 1].queryForm(L"is_negation") >= 0) &&
+		(source.m[wordSourceIndex].word->first == L"that" && !(source.m[wordSourceIndex].flags&cWordMatch::flagInQuestion) && wordSourceIndex > 0 && (source.m[wordSourceIndex + 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex + 1].queryForm(L"is_negation") >= 0) &&
 		(!iswalpha(source.m[wordSourceIndex - 1].word->first[0]) || wordSourceIndex == startOfSentence)) ||
 		(source.m[wordSourceIndex].queryWinnerForm(demonstrativeDeterminerForm) >= 0 && !iswalpha(source.m[wordSourceIndex + 1].word->first[0]))))
 	{
@@ -2726,8 +2726,8 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 	int secondaryPMAOffset = source.m[wordSourceIndex].pma.queryPattern(L"_ADVERB");
 	if (primaryPMAOffset !=-1 && secondaryPMAOffset !=-1)
 	{
-		primaryPMAOffset = primaryPMAOffset & ~matchElement::patternFlag;
-		secondaryPMAOffset = secondaryPMAOffset & ~matchElement::patternFlag;
+		primaryPMAOffset = primaryPMAOffset & ~cMatchElement::patternFlag;
+		secondaryPMAOffset = secondaryPMAOffset & ~cMatchElement::patternFlag;
 		set <wstring> particles = { L"down",L"out",L"off",L"up" };
 		if (particles.find(source.m[wordSourceIndex].word->first) == particles.end() && source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(prepositionForm))<4 && source.m[wordSourceIndex].pma[secondaryPMAOffset].len == 1 && source.queryPattern(wordSourceIndex + 1, L"__NOUN") != -1 && source.m[wordSourceIndex].queryForm(prepositionForm) != -1)
 		{
@@ -2760,7 +2760,7 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 		}
 	}
 	int nounPMAIndex = -1;
-	if (adverbFormOffset>=0 && wordSourceIndex > 0 && (nounPMAIndex = source.m[wordSourceIndex - 1].pma.queryPatternDiff(L"__NOUN", L"2")) != -1 && source.m[wordSourceIndex - 1].word->first == L"the" && source.m[wordSourceIndex - 1].pma[nounPMAIndex & ~matchElement::patternFlag].len == 3 &&
+	if (adverbFormOffset>=0 && wordSourceIndex > 0 && (nounPMAIndex = source.m[wordSourceIndex - 1].pma.queryPatternDiff(L"__NOUN", L"2")) != -1 && source.m[wordSourceIndex - 1].word->first == L"the" && source.m[wordSourceIndex - 1].pma[nounPMAIndex & ~cMatchElement::patternFlag].len == 3 &&
 		source.m[wordSourceIndex + 1].pma.queryPattern(L"_ADJECTIVE_AFTER") != -1)
 	{
 		source.m[wordSourceIndex].unsetAllFormWinners();
@@ -2770,7 +2770,7 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, Source &source, int wordSourceI
 	return 0;
 }
 
-int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceIndex, unordered_map<wstring, int> &errorMap, unordered_map<wstring, int> &comboCostFrequency, wstring &partofspeech, int startOfSentence)
+int attributeErrors(wstring primarySTLPMatch, cSource &source, int wordSourceIndex, unordered_map<wstring, int> &errorMap, unordered_map<wstring, int> &comboCostFrequency, wstring &partofspeech, int startOfSentence)
 {
 	wstring word = source.m[wordSourceIndex].word->first;
 	//////////////////////////////
@@ -2958,7 +2958,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		return 0;
 	}
 	// 16. So as matched in the beginning of a phrase is a linking adverbial (Longman) but is usually marked as a preposition by Stanford.
-	bool atStart = wordSourceIndex == startOfSentence || (wordSourceIndex == startOfSentence + 1 && WordClass::isDoubleQuote(source.m[wordSourceIndex - 1].word->first[0]));
+	bool atStart = wordSourceIndex == startOfSentence || (wordSourceIndex == startOfSentence + 1 && cWord::isDoubleQuote(source.m[wordSourceIndex - 1].word->first[0]));
 	if ((word == L"so" || word==L"either") && source.m[wordSourceIndex].queryWinnerForm(L"adverb") >= 0 &&
 		(primarySTLPMatch == L"preposition or conjunction" || primarySTLPMatch == L"conjunction") && atStart)
 	{
@@ -3241,8 +3241,8 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			int secondaryPMAOffset = source.m[wordSourceIndex].pma.queryPattern(L"_ADVERB");
 			if (primaryPMAOffset != -1 && secondaryPMAOffset != -1)
 			{
-				primaryPMAOffset = primaryPMAOffset & ~matchElement::patternFlag;
-				secondaryPMAOffset = secondaryPMAOffset & ~matchElement::patternFlag;
+				primaryPMAOffset = primaryPMAOffset & ~cMatchElement::patternFlag;
+				secondaryPMAOffset = secondaryPMAOffset & ~cMatchElement::patternFlag;
 				if (source.m[wordSourceIndex].pma[secondaryPMAOffset].len == 1 && source.queryPattern(wordSourceIndex + 1, L"__NOUN") != -1 && source.m[wordSourceIndex].queryForm(prepositionForm) != -1)
 				{
 					errorMap[L"LP correct: word 'round': ST says adverb/noun LP says preposition."]++;  // ST correct 5, out of 126
@@ -3320,7 +3320,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	// worth while
 	if (word == L"while" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && wordSourceIndex>=2 &&
-		  ((WordClass::isDash(source.m[wordSourceIndex-1].word->first[0]) && source.m[wordSourceIndex - 2].word->first==L"worth") || source.m[wordSourceIndex - 1].word->first==L"worth"))
+		  ((cWord::isDash(source.m[wordSourceIndex-1].word->first[0]) && source.m[wordSourceIndex - 2].word->first==L"worth") || source.m[wordSourceIndex - 1].word->first==L"worth"))
 	{
 		errorMap[L"LP correct: word 'while': ST says " + primarySTLPMatch + L" LP says noun [worthwhile]"]++;
 		return 0;
@@ -3742,7 +3742,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"LP correct: ST says " + primarySTLPMatch + L" but LP says adjective in an __ADJECTIVE construction"]++;
 			return 0;
 		}
-		if (pemaOffset>=0 && WordClass::isDash((source.m[wordSourceIndex + 1].word->first[0])) && source.m[wordSourceIndex + 1].word->first.length()==1)
+		if (pemaOffset>=0 && cWord::isDash((source.m[wordSourceIndex + 1].word->first[0])) && source.m[wordSourceIndex + 1].word->first.length()==1)
 		{
 			errorMap[L"LP correct: ST says " + primarySTLPMatch + L" but LP says adjective before dash"]++;
 			return 0;
@@ -3753,7 +3753,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			return 0;
 		}
 	}
-	if (wordSourceIndex + 2 < source.m.size() && WordClass::isDash((source.m[wordSourceIndex + 1].word->first[0])) && source.m[wordSourceIndex + 1].word->first.length() == 1)
+	if (wordSourceIndex + 2 < source.m.size() && cWord::isDash((source.m[wordSourceIndex + 1].word->first[0])) && source.m[wordSourceIndex + 1].word->first.length() == 1)
 	{
 		int pemaOffset = source.queryPattern(wordSourceIndex, L"__NOUN");
 		bool adjectivePosition = (pemaOffset >= 0) ? (source.pema[pemaOffset].end > 1) : false, nounHeadPosition = (pemaOffset >= 0) ? (source.pema[pemaOffset].end == 1) : false;
@@ -3807,7 +3807,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		}
 		if (source.queryPattern(wordSourceIndex, L"__ADJECTIVE") != -1)
 		{
-			if (WordClass::isDash(source.m[wordSourceIndex + 1].word->first[0]))
+			if (cWord::isDash(source.m[wordSourceIndex + 1].word->first[0]))
 			{
 				errorMap[L"diff: ST says adjective and LP says noun in an __ADJECTIVE construction"]++;
 				return 0;
@@ -3997,7 +3997,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	}
 	if (primarySTLPMatch == L"adjective" && source.m[wordSourceIndex].queryWinnerForm(L"noun") >= 0 && 
 		source.m[wordSourceIndex + 1].queryWinnerForm(L"coordinator")==-1 && source.m[wordSourceIndex + 1].word->first!=L"," &&
-		!WordClass::isDash(source.m[wordSourceIndex + 1].word->first[0]) && !WordClass::isDoubleQuote(source.m[wordSourceIndex + 1].word->first[0]) && !WordClass::isSingleQuote(source.m[wordSourceIndex + 1].word->first[0]))
+		!cWord::isDash(source.m[wordSourceIndex + 1].word->first[0]) && !cWord::isDoubleQuote(source.m[wordSourceIndex + 1].word->first[0]) && !cWord::isSingleQuote(source.m[wordSourceIndex + 1].word->first[0]))
 	{
 		bool wordAfterIsVeryUnmodifiable = wordAfterIsUnmodifiable && source.m[wordSourceIndex + 1].queryWinnerForm(L"adverb") == -1 && source.m[wordSourceIndex + 1].queryWinnerForm(L"adjective") == -1;
 		int pemaOffset=source.queryPatternDiff(wordSourceIndex, L"__NOUN",L"2");
@@ -4290,7 +4290,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			return 0;
 		}
 	}
-	if ((source.m[wordSourceIndex].flags&WordMatch::flagFirstLetterCapitalized) && !iswalpha(source.m[wordSourceIndex + 1].word->first[0]) && source.m[wordSourceIndex].queryWinnerForm(L"interjection") >= 0)
+	if ((source.m[wordSourceIndex].flags&cWordMatch::flagFirstLetterCapitalized) && !iswalpha(source.m[wordSourceIndex + 1].word->first[0]) && source.m[wordSourceIndex].queryWinnerForm(L"interjection") >= 0)
 	{
 		errorMap[L"LP correct: interjection not "+ primarySTLPMatch]++;
 		return 0;
@@ -4505,7 +4505,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"ST correct: preposition preposition (other than to)"]++;
 			return 0;
 		}
-		if (wordSourceIndex > 0 && (WordClass::isDash(source.m[wordSourceIndex - 1].word->first[0]) || WordClass::isDash(source.m[wordSourceIndex + 1].word->first[0])))
+		if (wordSourceIndex > 0 && (cWord::isDash(source.m[wordSourceIndex - 1].word->first[0]) || cWord::isDash(source.m[wordSourceIndex + 1].word->first[0])))
 		{
 			errorMap[L"ST correct: dash preposition"]++;
 			return 0;
@@ -4536,7 +4536,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		(source.m[wordSourceIndex].word->second.inflectionFlags&VERB_PRESENT_FIRST_SINGULAR) == VERB_PRESENT_FIRST_SINGULAR)
 	{
 		bool dashed = (wordSourceIndex > 0 && wordSourceIndex < source.m.size() - 1 &&
-			(WordClass::isDash(source.m[wordSourceIndex - 1].word->first[0]) || WordClass::isDash(source.m[wordSourceIndex + 1].word->first[0])));
+			(cWord::isDash(source.m[wordSourceIndex - 1].word->first[0]) || cWord::isDash(source.m[wordSourceIndex + 1].word->first[0])));
 		bool previousWords = (source.m[wordSourceIndex - 2].word->first == L"a" || 
 			source.m[wordSourceIndex - 1].word->first == L"that" || source.m[wordSourceIndex - 1].word->first == L"this");
 		if (dashed || previousWords)
@@ -4598,7 +4598,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		errorMap[L"LP correct: (verb cost 2, noun cost 0 1SING)"]++; // probabilistic - see distribute errors
 		return 0;
 	}
-	if (wordSourceIndex > 0 && (source.m[wordSourceIndex - 1].flags&WordMatch::flagNounOwner) && source.m[wordSourceIndex].isOnlyWinner(nounForm))
+	if (wordSourceIndex > 0 && (source.m[wordSourceIndex - 1].flags&cWordMatch::flagNounOwner) && source.m[wordSourceIndex].isOnlyWinner(nounForm))
 	{
 		int pemaOffset = source.queryPattern(wordSourceIndex,L"__NOUN");
 		if (pemaOffset >= 0 && source.pema[pemaOffset].end > 1 && primarySTLPMatch==L"verb")
@@ -4613,8 +4613,8 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		}
 	}
 	if (word == L"that" && source.m[wordSourceIndex].queryWinnerForm(pronounForm) >= 0 && 
-		(((source.m[wordSourceIndex].flags&WordMatch::flagInQuestion) && wordSourceIndex > 0 && (source.m[wordSourceIndex - 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex - 1].queryForm(L"is_negation") >= 0)) ||
-		 (!(source.m[wordSourceIndex].flags&WordMatch::flagInQuestion) && wordSourceIndex > 0 && (source.m[wordSourceIndex + 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex + 1].queryForm(L"is_negation") >= 0) &&
+		(((source.m[wordSourceIndex].flags&cWordMatch::flagInQuestion) && wordSourceIndex > 0 && (source.m[wordSourceIndex - 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex - 1].queryForm(L"is_negation") >= 0)) ||
+		 (!(source.m[wordSourceIndex].flags&cWordMatch::flagInQuestion) && wordSourceIndex > 0 && (source.m[wordSourceIndex + 1].queryForm(L"is") >= 0 || source.m[wordSourceIndex + 1].queryForm(L"is_negation") >= 0) &&
 			(!iswalpha(source.m[wordSourceIndex - 1].word->first[0]) || wordSourceIndex == startOfSentence)) ||
 				!iswalpha(source.m[wordSourceIndex + 1].word->first[0])))
 	{
@@ -4674,9 +4674,9 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 		// and it has a subject and an object
 		  source.m[wordSourceIndex].getRelObject() >= 0 && source.m[wordSourceIndex].relSubject >= 0 &&
 		// and the verb is supposed to have objects
-			source.m[wordSourceIndex].word->second.getUsageCost(tFI::VERB_HAS_1_OBJECTS) < 4 && 
+			source.m[wordSourceIndex].word->second.getUsageCost(cSourceWordInfo::VERB_HAS_1_OBJECTS) < 4 && 
 		// and the immediately preceding word is not a dash or that or her
-			!WordClass::isDash(source.m[wordSourceIndex - 1].word->first[0]) && source.m[wordSourceIndex - 1].word->first != L"that" && source.m[wordSourceIndex - 1].word->first != L"her")
+			!cWord::isDash(source.m[wordSourceIndex - 1].word->first[0]) && source.m[wordSourceIndex - 1].word->first != L"that" && source.m[wordSourceIndex - 1].word->first != L"her")
 	{
 		errorMap[L"LP correct: ST says adjective, LP says verb(PAST/PRESENT_PARTICIPLE)"]++; // C 88 W 27
 		return 0;
@@ -4865,7 +4865,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			return 0;
 		}
 	}
-	if (word == L"now" && ((source.m[wordSourceIndex].relPrep >= 0 && source.queryPattern(wordSourceIndex,L"_PP") != -1) || (source.m[wordSourceIndex].flags&WordMatch::flagNounOwner)!=0))
+	if (word == L"now" && ((source.m[wordSourceIndex].relPrep >= 0 && source.queryPattern(wordSourceIndex,L"_PP") != -1) || (source.m[wordSourceIndex].flags&cWordMatch::flagNounOwner)!=0))
 	{
 		errorMap[L"LP correct: now in a PP is a noun."]++;
 		return 0;
@@ -4888,7 +4888,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb before verb"]++; // LP Wrong 27 / LP Correct 258  distribute errors
 			return 0;
 		}
-		if (source.m[wordSourceIndex + 1].queryWinnerForm(nounForm) != -1 && source.m[wordSourceIndex].isOnlyWinner(adverbForm) && !WordClass::isDash(source.m[wordSourceIndex - 1].word->first[0]))
+		if (source.m[wordSourceIndex + 1].queryWinnerForm(nounForm) != -1 && source.m[wordSourceIndex].isOnlyWinner(adverbForm) && !cWord::isDash(source.m[wordSourceIndex - 1].word->first[0]))
 		{
 			errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb before noun"]++; // ST Wrong 6 / ST Correct 171  distribute errors
 			return 0;
@@ -4942,7 +4942,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 			errorMap[L"LP correct: ST says preposition or conjunction and LP says adverb in TIME expression"]++;
 			return 0;
 		}
-		if (wordSourceIndex != startOfSentence && wordSourceIndex > 0 && WordClass::isDash(source.m[wordSourceIndex - 1].word->first[0]) && source.m[wordSourceIndex - 1].word->first.length() == 1)
+		if (wordSourceIndex != startOfSentence && wordSourceIndex > 0 && cWord::isDash(source.m[wordSourceIndex - 1].word->first[0]) && source.m[wordSourceIndex - 1].word->first.length() == 1)
 		{
 			errorMap[L"diff: ST says preposition or conjunction and LP says adverb after a single dash - actually an adjective"]++;
 			return 0;
@@ -5150,7 +5150,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 	if (primarySTLPMatch == L"personal_pronoun_accusative" && source.m[wordSourceIndex].queryWinnerForm(possessiveDeterminerForm) != -1)
 	{
 		if ((source.m[wordSourceIndex + 1].queryWinnerForm(verbForm) != -1 || source.m[wordSourceIndex + 1].word->first == L"being" || source.m[wordSourceIndex + 1].word->first == L"doing" || source.m[wordSourceIndex + 1].word->first == L"having") &&
-			(source.m[wordSourceIndex + 1].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE && !WordClass::isDash(source.m[wordSourceIndex + 2].word->first[0]))
+			(source.m[wordSourceIndex + 1].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE) == VERB_PRESENT_PARTICIPLE && !cWord::isDash(source.m[wordSourceIndex + 2].word->first[0]))
 		{
 			errorMap[L"ST correct: LP says determiner, ST says accusative.  It is a participial phrase that modifies the previous pronoun"]++;
 			return 0;
@@ -5218,7 +5218,7 @@ int attributeErrors(wstring primarySTLPMatch, Source &source, int wordSourceInde
 
 // checks if the part of speech indicated in parse from the Stanford POS tagger matches the winner forms at wordSourceIndex.
 // returns yes=0, no=1
-int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numTimesWordOccurred, wstring originalParse, wstring sentence, wstring &parse, int &numTotalDifferenceFromStanford, 
+int checkStanfordPCFGAgainstWinner(cSource &source, int wordSourceIndex, int numTimesWordOccurred, wstring originalParse, wstring sentence, wstring &parse, int &numTotalDifferenceFromStanford, 
 	unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &formMisMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap,
 	bool inRelativeClause, unordered_map<wstring, int> &errorMap, unordered_map<wstring, int> &comboCostFrequency,int startOfSentence,int maxLength)
 {
@@ -5339,7 +5339,7 @@ int checkStanfordPCFGAgainstWinner(Source &source, int wordSourceIndex, int numT
 					pos = sentence.find(originalWord,pos+ originalWord.length()+2);
 				}
 				// not useful anymore
-				//if (source.m[wordSourceIndex].flags&WordMatch::flagFirstLetterCapitalized)
+				//if (source.m[wordSourceIndex].flags&cWordMatch::flagFirstLetterCapitalized)
 				//	partofspeech += L"**CAP**";
 				lplog(LOG_ERROR, L"Stanford POS %s%s (%s) not found in winnerForms %s for word%s %s %07d:[%s]", partofspeech.c_str(), (sentence.length()<=maxLength && maxLength!=-1) ? L"SHORT":L"",primarySTLPMatch.c_str(), winnerFormsString.c_str(), (originalWord.find(L' ')==wstring::npos) ? L"":L"[space]", originalWord.c_str(), wordSourceIndex, sentence.c_str());
 				for (int wf : winnerForms)
@@ -5451,7 +5451,7 @@ void printFormDistribution(wstring word, double adp, FormDistribution fd, wstrin
 			lplog(LOG_ERROR, L"  ST %s:%d %d%% %d%%", form.c_str(), count, 100 * count / (fd.agreeSTLP + fd.disagreeSTLP), fd.agreeFormDistribution[form] * 100 / count);
 }
 
-int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *vm,JNIEnv *env, int &numNoMatch, int &numPOSNotFound, int &numTotalDifferenceFromStanford,unordered_map<wstring, int> &formNoMatchMap,
+int stanfordCheckFromSource(cSource &source, int sourceId, wstring path, JavaVM *vm,JNIEnv *env, int &numNoMatch, int &numPOSNotFound, int &numTotalDifferenceFromStanford,unordered_map<wstring, int> &formNoMatchMap,
 	                          unordered_map<wstring, int> &formMisMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, 
 	                          unordered_map<wstring, int> &errorMap, unordered_map<wstring, int> &comboCostFrequency, bool pcfg,wstring limitToWord,int maxLength, wstring specialExtension,bool lockPerSource)
 {
@@ -5460,7 +5460,7 @@ int stanfordCheckFromSource(Source &source, int sourceId, wstring path, JavaVM *
 	Words.readWords(path, sourceId, false, L""); 
 	bool parsedOnly = false,bearFound=false;
 	int numIllegalWords = 0;
-	if (source.readSource(path, false, parsedOnly, false, true,specialExtension))
+	if (source.readSource(path, false, parsedOnly, false, specialExtension))
 	{
 		lplog(LOG_INFO| LOG_ERROR, L"source*** %d:%s", sourceId, path.c_str());
 		int lastPercent=-1;
@@ -5772,11 +5772,11 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	
 }
 
-int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, bool lockPerSource)
+int stanfordCheck(cSource source, int step, bool pcfg, wstring specialExtension, bool lockPerSource)
 {
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
-	enum Source::sourceTypeEnum st = Source::GUTENBERG_SOURCE_TYPE;
+	enum cSource::sourceTypeEnum st = cSource::GUTENBERG_SOURCE_TYPE;
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	bool websterAPIRequestsExhausted = false;
 	int startTime = clock(), numSourcesProcessedNow = 0;
@@ -5909,7 +5909,7 @@ int stanfordCheck(Source source, int step, bool pcfg, wstring specialExtension, 
 }
 
 // must run update sources set proc2=100 for each source to multithread
-int stanfordCheckMP(Source source, int step, bool pcfg, int MP)
+int stanfordCheckMP(cSource source, int step, bool pcfg, int MP)
 {
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	if (!myquery(&source.mysql, L"LOCK TABLES sources WRITE, sources rs WRITE, sources rs2 WRITE"))
@@ -5988,7 +5988,7 @@ int stanfordCheckMP(Source source, int step, bool pcfg, int MP)
 	return 0;
 }
 
-int stanfordCheckTest(Source source, wstring path, int sourceId, bool pcfg,wstring limitToWord,int maxSentenceLimit, wstring specialExtension)
+int stanfordCheckTest(cSource source, wstring path, int sourceId, bool pcfg,wstring limitToWord,int maxSentenceLimit, wstring specialExtension)
 {
 	if (limitToWord.length() > 0)
 		printf("limited to %S!\n", limitToWord.c_str());
@@ -6060,11 +6060,11 @@ int stanfordCheckTest(Source source, wstring path, int sourceId, bool pcfg,wstri
 }
 
 // this would be easier if you had all the sources in memory at once!
-int testViterbiHMMMultiSource(Source &source,wchar_t *databaseHost,int step, wstring specialExtension)
+int testViterbiHMMMultiSource(cSource &source,wchar_t *databaseHost,int step, wstring specialExtension)
 {
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
-	enum Source::sourceTypeEnum st = Source::GUTENBERG_SOURCE_TYPE;
+	enum cSource::sourceTypeEnum st = cSource::GUTENBERG_SOURCE_TYPE;
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	int startTime = clock(), numSourcesProcessedNow = 0;
 
@@ -6073,7 +6073,7 @@ int testViterbiHMMMultiSource(Source &source,wchar_t *databaseHost,int step, wst
 		return -1;
 	my_ulonglong totalSource = mysql_num_rows(result);
 	//Generate vocabulary
-	Source childSource(databaseHost, st, false, false, true);
+	cSource childSource(databaseHost, st, false, false, true);
 	childSource.initializeNounVerbMapping();
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -1;
@@ -6086,10 +6086,10 @@ int testViterbiHMMMultiSource(Source &source,wchar_t *databaseHost,int step, wst
 		path.insert(0, L"\\").insert(0, CACHEDIR);
 		bool parsedOnly = false;
 		Words.readWords(path, sourceId, false, L"");
-		//unordered_map <int, vector < vector <tTagLocation> > > emptyMap;
+		//unordered_map <int, vector < vector <cTagLocation> > > emptyMap;
 		//for (unsigned int ts = 0; ts < desiredTagSets.size(); ts++)
 		//	childSource.pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
-		if (childSource.readSource(path, false, parsedOnly, false, true,specialExtension))
+		if (childSource.readSource(path, false, parsedOnly, false, specialExtension))
 		{
 			lplog(LOG_ERROR,L"Beginning child source %d:%s at offset %d.", sourceId,path.c_str(), source.m.size());
 			source.copySource(&childSource, 0, childSource.m.size());
@@ -6109,7 +6109,7 @@ int testViterbiHMMMultiSource(Source &source,wchar_t *databaseHost,int step, wst
 	}
 	mysql_free_result(result);
 	int wordNum = 0;
-	for (WordMatch im : source.m)
+	for (cWordMatch im : source.m)
 	{
 		if (im.formsSize() == 0)
 		{
@@ -6118,7 +6118,7 @@ int testViterbiHMMMultiSource(Source &source,wchar_t *databaseHost,int step, wst
 		}
 		if (im.getForms().size()==0)
 		{
-			if (im.flags&WordMatch::flagOnlyConsiderProperNounForms)
+			if (im.flags&cWordMatch::flagOnlyConsiderProperNounForms)
 			{
 				lplog(LOG_ERROR, L"Viterbi proper noun form mandatory added %d:%s", wordNum, im.word->first.c_str());
 				im.word->second.addForm(PROPER_NOUN_FORM_NUM, im.word->first);
@@ -6149,12 +6149,12 @@ void wmain(int argc,wchar_t *argv[])
 	initializeCounter();
 	cacheDir = CACHEDIR;
 	wchar_t *databaseHost = L"localhost";
-	enum Source::sourceTypeEnum st = Source::GUTENBERG_SOURCE_TYPE;
-	Source source(databaseHost, st, false, false, true);
+	enum cSource::sourceTypeEnum st = cSource::GUTENBERG_SOURCE_TYPE;
+	cSource source(databaseHost, st, false, false, true);
 	source.initializeNounVerbMapping();
 	initializePatterns();
-	Internet::bandwidthControl = CLOCKS_PER_SEC / 2;
-	unordered_map <int, vector < vector <tTagLocation> > > emptyMap;
+	cInternet::bandwidthControl = CLOCKS_PER_SEC / 2;
+	unordered_map <int, vector < vector <cTagLocation> > > emptyMap;
 	for (unsigned int ts = 0; ts < desiredTagSets.size(); ts++)
 		source.pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
 	if (!myquery(&source.mysql, L"LOCK TABLES sources READ"))
@@ -6164,10 +6164,10 @@ void wmain(int argc,wchar_t *argv[])
 	//writeFrequenciesToDB(source);
 	//if (true)
 	//	return;
-	nounForm = FormsClass::gFindForm(L"noun");
-	verbForm = FormsClass::gFindForm(L"verb");
-	adjectiveForm = FormsClass::gFindForm(L"adjective");
-	adverbForm = FormsClass::gFindForm(L"adverb");
+	nounForm = cForms::gFindForm(L"noun");
+	verbForm = cForms::gFindForm(L"verb");
+	adjectiveForm = cForms::gFindForm(L"adjective");
+	adverbForm = cForms::gFindForm(L"adverb");
 	int step=-1;
 	bool actuallyExecuteAgainstDB=false;
 	for (int I = 0; I < argc; I++)
@@ -6259,7 +6259,7 @@ void wmain(int argc,wchar_t *argv[])
 		printUnknowns(source, step,specialExtension);
 		break;
 	case 21:
-		// Source::TEST_SOURCE_TYPE
+		// cSource::TEST_SOURCE_TYPE
 		// 0: pattern - if differentiator is NOT specified, then any differentiator is ok.
 		// 1: form - any formclass (string)
 		// 2: word - the actual word.   
@@ -6267,15 +6267,15 @@ void wmain(int argc,wchar_t *argv[])
 		// 4: true (do not perform match)
 		// if both primaryMatchType AND secondaryMatchType>0, then the secondary match location is the NEXT word.
 		// if primaryMatchType == 3, then sentence highlight will encompass all words that have no match, and sentences will not be repeated.
-		//patternOrWordAnalysis(source, step, L"__S1", L"R*", Source::GUTENBERG_SOURCE_TYPE,true,specialExtension);
-		//patternOrWordAnalysis(source, step, L"__ADJECTIVE", L"MTHAN", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
-		//patternOrWordAnalysis(source, step, L"__NOUN", L"F", Source::GUTENBERG_SOURCE_TYPE, true, specialExtension);
+		//patternOrWordAnalysis(source, step, L"__S1", L"R*", cSource::GUTENBERG_SOURCE_TYPE,true,specialExtension);
+		//patternOrWordAnalysis(source, step, L"__ADJECTIVE", L"MTHAN", cSource::GUTENBERG_SOURCE_TYPE, true, specialExtension);
+		//patternOrWordAnalysis(source, step, L"__NOUN", L"F", cSource::GUTENBERG_SOURCE_TYPE, true, specialExtension);
 		//patternOrWordAnalysis(source, step, L"__S1", L"5", true);
-		//patternOrWordAnalysis(source, step, L"__C1__S1", L"1", L"adjective", L"", Source::GUTENBERG_SOURCE_TYPE, 0, 1, specialExtension);
-		patternOrWordAnalysis(source, step, L"__C1__S1", L"1", L"", L"", Source::GUTENBERG_SOURCE_TYPE, 0, 4, specialExtension);
-		//patternOrWordAnalysis(source, step, L"", L"", Source::GUTENBERG_SOURCE_TYPE, false, specialExtension);
+		//patternOrWordAnalysis(source, step, L"__C1__S1", L"1", L"adjective", L"", cSource::GUTENBERG_SOURCE_TYPE, 0, 1, specialExtension);
+		patternOrWordAnalysis(source, step, L"__C1__S1", L"1", L"", L"", cSource::GUTENBERG_SOURCE_TYPE, 0, 4, specialExtension);
+		//patternOrWordAnalysis(source, step, L"", L"", cSource::GUTENBERG_SOURCE_TYPE, false, specialExtension);
 		// scans the test file for any unmatched sentences
-		//patternOrWordAnalysis(source, step, L"", L"", L"", L"", Source::TEST_SOURCE_TYPE, 3,4,L""); // TODO: testing weight change on _S1.
+		//patternOrWordAnalysis(source, step, L"", L"", L"", L"", cSource::TEST_SOURCE_TYPE, 3,4,L""); // TODO: testing weight change on _S1.
 		break;
 	case 60:
 		stanfordCheck(source, step, true,specialExtension,true);

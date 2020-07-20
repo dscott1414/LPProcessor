@@ -413,8 +413,6 @@
     <ClCompile Include="evaluateTagSetCombinatorials.cpp" />
     <ClCompile Include="getBNC.cpp" />
     <ClCompile Include="getDictionary.cpp" />
-    <ClCompile Include="getGoogleCustomSearch.cpp" />
-    <ClCompile Include="getInterviewTranscripts.cpp" />
     <ClCompile Include="getMusicBrainz.cpp" />
     <ClCompile Include="getThesaurus.cpp" />
     <ClCompile Include="getTwitter.cpp" />
@@ -434,6 +432,8 @@
     <ClCompile Include="pattern.cpp" />
     <ClCompile Include="patternElementMatchArray.cpp" />
     <ClCompile Include="patternMatchArray.cpp" />
+    <ClCompile Include="questionAnswering.cpp" />
+    <ClCompile Include="questionAnsweringWebSearch.cpp" />
     <ClCompile Include="questionProcessing.cpp" />
     <ClCompile Include="resolveFirstSecondPersonPronouns.cpp" />
     <ClCompile Include="resolveMetaGroupObjects.cpp" />
@@ -446,7 +446,6 @@
     <ClCompile Include="syntacticRelations.cpp" />
     <ClCompile Include="tableColumn.cpp" />
     <ClCompile Include="tagOperations.cpp" />
-    <ClCompile Include="textGeneration.cpp" />
     <ClCompile Include="timeRelations.cpp" />
     <ClCompile Include="tinyxml2-master\tinyxml2.cpp" />
     <ClCompile Include="tokenize.cpp" />
