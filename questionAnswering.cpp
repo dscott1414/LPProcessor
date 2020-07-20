@@ -3185,20 +3185,20 @@ int cQuestionAnswering::processQuestionSource(cSource *questionSource,bool parse
 					}
 				}
 				// **************************************************************
-				// if there are no answers or more than one answer is asked for and there is only one, search the first 10 results from Google and BING using an enhanced search string.
+				// if there are no answers or more than one answer is asked for and there is only one, search the first 10 results from Google and BING using more information sources from proximity mapping.
 				// **************************************************************
 				if (!webSearchOrWikipediaTableSuccess)
 				{
-					lplog(LOG_WHERE | LOG_QCHECK, L"    *****Trying semantic map.");
+					lplog(LOG_WHERE | LOG_QCHECK, L"    ***** proximity map");
 					for (set <int>::iterator si = ssri->whereQuestionInformationSourceObjects.begin(), siEnd = ssri->whereQuestionInformationSourceObjects.end(); si != siEnd; si++)
 					{
 						unordered_map <int, cProximityMap *>::iterator msi = ssri->proximityMaps.find(*si);
 						if (msi != ssri->proximityMaps.end())
 						{
-							msi->second->sortAndCheck(*this, ssri, questionSource);
-							msi->second->lplogSM(*this, LOG_WHERE, questionSource, false);
-							set < unordered_map <wstring, cProximityMap::cProximityEntry>::iterator, cProximityMap::semanticSetCompare > suggestedAnswers = msi->second->suggestedAnswers;
-							for (set < unordered_map <wstring, cProximityMap::cProximityEntry>::iterator, cProximityMap::semanticSetCompare >::iterator sai = suggestedAnswers.begin(), saiEnd = suggestedAnswers.end(); sai != saiEnd; sai++)
+							msi->second->sortByFrequencyAndProximity(*this, ssri, questionSource);
+							msi->second->lplogFrequentOrProximateObjects(*this, LOG_WHERE, questionSource, false);
+							set < unordered_map <wstring, cProximityMap::cProximityEntry>::iterator, cProximityMap::semanticSetCompare > frequentOrProximateObjects = msi->second->frequentOrProximateObjects;
+							for (set < unordered_map <wstring, cProximityMap::cProximityEntry>::iterator, cProximityMap::semanticSetCompare >::iterator sai = frequentOrProximateObjects.begin(), saiEnd = frequentOrProximateObjects.end(); sai != saiEnd; sai++)
 							{
 								vector < cAS > enhancedWebSearchAnswerSRIs;
 								vector <wstring> enhancedWebSearchQueryStrings = webSearchQueryStrings;
@@ -3223,13 +3223,10 @@ int cQuestionAnswering::processQuestionSource(cSource *questionSource,bool parse
 									printAnswers(ssri, enhancedWebSearchAnswerSRIs); // print all rejected answers
 								if (numFinalAnswers > 0 && (!answerPluralSpecification || numFinalAnswers >= 1))
 									break;
-								lplog(LOG_WHERE | LOG_QCHECK, L"    *****Enhanced semantic map.");
-								msi->second->sortAndCheck(*this, ssri, questionSource);
-								msi->second->lplogSM(*this, LOG_WHERE, questionSource, true);
 							}
 						}
 						else
-							lplog(LOG_WHERE | LOG_QCHECK, L"    No entries in semantic map for %s.", questionSource->whereString(*si, tmpstr, true).c_str());
+							lplog(LOG_WHERE | LOG_QCHECK, L"    No entries in proximity map for %s.", questionSource->whereString(*si, tmpstr, true).c_str());
 					}
 				}
 			}

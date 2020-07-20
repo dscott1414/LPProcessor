@@ -35,7 +35,7 @@ public:
 		void printDirectRelations(cQuestionAnswering &qa, int logType, cSource *parentSource, wstring &path, int where);
 		cProximityEntry();
 		cProximityEntry(cSource *childSource, unsigned int childSourceIndex, int childObject, cSpaceRelation* parentSRI);
-		void lplogSM(int logType, wstring objectStr)
+		void lplogFrequentOrProximateObjects(int logType, wstring objectStr)
 		{
 			wstring tmpstr;
 			::lplog(logType, L"SM object: %s: score=%f inSource=%d totalDistanceFromObject=%d directRelation=%d confidentInSource=%d confidentTotalDistanceFromObject=%d confidentDirectRelation=%d confidence=%d semanticMismatch=%d subQueryNoMatch=%s tenseMismatch=%s confidenceCheck=%s numSources=%d",
@@ -68,35 +68,35 @@ public:
 		}
 	};
 	unordered_map <wstring, cProximityEntry> closestObjects;
-	set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare> relativeObjectsSorted;
+	set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare> objectsSortedByFrequency;
 	set < unordered_map <wstring, cProximityEntry>::iterator, proximityScoreCompare> objectsSortedByProximityScore;
-	set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare > suggestedAnswers;
-	void sortAndCheck(cQuestionAnswering &qa,cSpaceRelation* parentSRI, cSource *parentSource)
+	set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare > frequentOrProximateObjects;
+	void sortByFrequencyAndProximity(cQuestionAnswering &qa,cSpaceRelation* parentSRI, cSource *parentSource)
 	{
-		relativeObjectsSorted.clear();
+		objectsSortedByFrequency.clear();
 		objectsSortedByProximityScore.clear();
 		for (unordered_map <wstring, cProximityEntry>::iterator roi = closestObjects.begin(), roiEnd = closestObjects.end(); roi != roiEnd; roi++)
 		{
 			roi->second.calculateScore();
-			relativeObjectsSorted.insert(roi);
+			objectsSortedByFrequency.insert(roi);
 			objectsSortedByProximityScore.insert(roi);
 		}
 		int onlyTopResults = 0;
-		for (set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare>::iterator sroi = relativeObjectsSorted.begin(), sroiEnd = relativeObjectsSorted.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
+		for (set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare>::iterator sroi = objectsSortedByFrequency.begin(), sroiEnd = objectsSortedByFrequency.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
 		{
 			onlyTopResults++;
 			if ((*sroi)->second.semanticCheck(qa,parentSRI, parentSource) < CONFIDENCE_NOMATCH)
-				suggestedAnswers.insert((*sroi));
+				frequentOrProximateObjects.insert((*sroi));
 		}
 		onlyTopResults = 0;
 		for (set < unordered_map <wstring, cProximityEntry>::iterator, proximityScoreCompare>::iterator sroi = objectsSortedByProximityScore.begin(), sroiEnd = objectsSortedByProximityScore.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
 		{
 			onlyTopResults++;
 			if ((*sroi)->second.semanticCheck(qa,parentSRI, parentSource) < CONFIDENCE_NOMATCH)
-				suggestedAnswers.insert((*sroi));
+				frequentOrProximateObjects.insert((*sroi));
 		}
 	}
-	void lplogSM(cQuestionAnswering &qa, int logType, cSource *parentSource, bool enhanced)
+	void lplogFrequentOrProximateObjects(cQuestionAnswering &qa, int logType, cSource *parentSource, bool enhanced)
 	{
 		::lplog(logType, L"SM%s SEMANTIC MAP %d objects %d sources principalObject %s ****************************************************************************",
 			(enhanced) ? L"E" : L"", closestObjects.size(), sourcePaths.size(), SMPrincipalObject.c_str());
@@ -106,26 +106,26 @@ public:
 				::lplog(logType, L"SM%s sourcePath: %s", (enhanced) ? L"E" : L"", spi->c_str());
 		int onlyTopResults = 0;
 		::lplog(logType, L"SM%s by frequency ***************", (enhanced) ? L"E" : L"");
-		for (set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare>::iterator sroi = relativeObjectsSorted.begin(), sroiEnd = relativeObjectsSorted.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
+		for (set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare>::iterator sroi = objectsSortedByFrequency.begin(), sroiEnd = objectsSortedByFrequency.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
 		{
 			onlyTopResults++;
-			(*sroi)->second.lplogSM(logType, (*sroi)->first);
+			(*sroi)->second.lplogFrequentOrProximateObjects(logType, (*sroi)->first);
 		}
 		::lplog(logType, L"SM%s by score ***************", (enhanced) ? L"E" : L"");
 		onlyTopResults = 0;
-		for (set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare>::iterator sroi = objectsSortedByProximityScore.begin(), sroiEnd = objectsSortedByProximityScore.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
+		for (set < unordered_map <wstring, cProximityEntry>::iterator, proximityScoreCompare>::iterator sroi = objectsSortedByProximityScore.begin(), sroiEnd = objectsSortedByProximityScore.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
 		{
 			onlyTopResults++;
-			(*sroi)->second.lplogSM(logType, (*sroi)->first);
+			(*sroi)->second.lplogFrequentOrProximateObjects(logType, (*sroi)->first);
 		}
-		if (suggestedAnswers.empty())
+		if (frequentOrProximateObjects.empty())
 			::lplog(logType, L"SM%s no suggested answers.", (enhanced) ? L"E" : L"");
 		else
 		{
 			::lplog(logType, L"SM%s suggested answers ***************", (enhanced) ? L"E" : L"");
-			for (set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare >::iterator sai = suggestedAnswers.begin(), saiEnd = suggestedAnswers.end(); sai != saiEnd; sai++)
+			for (set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare >::iterator sai = frequentOrProximateObjects.begin(), saiEnd = frequentOrProximateObjects.end(); sai != saiEnd; sai++)
 			{
-				closestObjects[(*sai)->first].lplogSM(LOG_WHERE, (*sai)->first);
+				closestObjects[(*sai)->first].lplogFrequentOrProximateObjects(LOG_WHERE, (*sai)->first);
 				if (logProximityMap)
 					for (unsigned int I = 0; I < (*sai)->second.relationSourcePaths.size(); I++)
 						(*sai)->second.printDirectRelations(qa,logType, parentSource, (*sai)->second.relationSourcePaths[I], (*sai)->second.relationWheres[I]);
