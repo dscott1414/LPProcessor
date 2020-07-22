@@ -15,6 +15,7 @@ public:
 	enum qtf {
 		unknownQTFlag = 1, whichQTFlag = 2, whereQTFlag = 3, whatQTFlag = 4, whoseQTFlag = 5, howQTFlag = 6, whenQTFlag = 7, whomQTFlag = 8, whyQTFlag = 9, wikiBusinessQTFlag = 10, wikiWorkQTFlag = 11, typeQTMask = (1 << 4) - 1,
 		referencingObjectQTFlag = 1 << 4, subjectQTFlag = 2 << 4, objectQTFlag = 3 << 4, secondaryObjectQTFlag = 4 << 4, prepObjectQTFlag = 5 << 4,
+		// answer must be an adjective - whose book?
 		QTAFlag = 1 << 8
 	};
 
@@ -47,7 +48,14 @@ public:
 			bool subQueryMatch;
 			bool subQueryExisted;
 			int popularity;
-			cAS(wstring _sourceType, cSource *_source, int _confidence, int _matchSum, wstring _matchInfo, cSpaceRelation* _sri, int _equivalenceClass, int _ws, int _wo, int _wp)
+			bool fromTable;
+			wstring tableNum;
+			wstring tableName;
+			int columnIndex;
+			int rowIndex;
+			int entryIndex;
+			cColumn::cEntry entry;
+			cAS(wstring _sourceType, cSource *_source, int _confidence, int _matchSum, wstring _matchInfo, cSpaceRelation* _sri, int _equivalenceClass, int _ws, int _wo, int _wp, bool _fromTable, wstring _tableNum, wstring _tableName, int _columnIndex, int _rowIndex, int _entryIndex, cColumn::cEntry *_entry)
 			{
 				sourceType = _sourceType;
 				source = _source;
@@ -59,6 +67,14 @@ public:
 				ws = _ws;
 				wo = _wo;
 				wp = _wp;
+				fromTable = _fromTable;
+				tableNum = _tableNum;
+				tableName = _tableName;
+				columnIndex = _columnIndex;
+				rowIndex = _rowIndex;
+				entryIndex = _entryIndex;
+				if (_entry)
+					entry = *_entry;
 				finalAnswer = false;
 				subQueryMatch = false;
 				subQueryExisted = false;
@@ -107,10 +123,8 @@ public:
 	int  determineBestAnswers(cSource *questionSource, cSpaceRelation*  sri,vector < cAS > &answerSRIs,int maxAnswer,vector <cSpaceRelation> &subQueries,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion,bool useParallelQuery);
 	bool isModifiedGeneric(cAS &sri);
 	int printAnswers(cSpaceRelation*  sri, vector < cAS > &answerSRIs);
-	int searchWebSearchQueries(cSource *questionSource, wchar_t derivation[1024], cSpaceRelation* ssri,
- vector <cSpaceRelation> &subQueries,
-		vector < cAS > &answerSRIs, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion,
- vector <wstring> &webSearchQueryStrings,
+	int searchWebSearchQueries(cSource *questionSource, wchar_t derivation[1024], cSpaceRelation* ssri,vector <cSpaceRelation> &subQueries,
+		vector < cAS > &answerSRIs, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion,vector <wstring> &webSearchQueryStrings,
 		bool parseOnly, int &finalAnswer, int &maxAnswer, bool useParallelQuery, int &trySearchIndex, bool useGoogleSearch,bool &lastResultPage);
 	int matchAnswersOfPreviousQuestion(cSource *questionSource, cSpaceRelation *ssri, vector <int> &wherePossibleAnswers);
 	int findConstrainedAnswers(cSource *questionSource, vector < cAS > &answerSRIs, vector <int> &wherePossibleAnswers);
@@ -156,7 +170,7 @@ public:
 	static bool matchTimeObjects(cSource *parentSource, int parentWhere, cSource *childSource, int childWhere);
 	int sriPrepMatch(cSource *parentSource, cSource *childSource, int parentWhere, int childWhere, int cost);
 	int sriVerbMatch(cSource *parentSource, cSource *childSource, int parentWhere, int childWhere, int cost);
-	int sriMatch(cSource *questionSource, cSource *childSource, int parentWhere, int childWhere, int whereQuestionType, __int64 questionType, bool &totalMatch, int cost);
+	int sriMatch(cSource *questionSource, cSource *childSource, int parentWhere, int childWhere, int whereQuestionType, __int64 questionType, bool &totalMatch, wstring &matchInfoDetail, int cost);
 	int equivalenceClassCheck(cSource *questionSource, cSource *childSource, vector <cSpaceRelation>::iterator childSRI, cSpaceRelation* parentSRI, int whereChildSpecificObject, int &equivalenceClass, int matchSum);
 	int equivalenceClassCheck2(cSource *questionSource, cSource *childSource, vector <cSpaceRelation>::iterator childSRI, cSpaceRelation* parentSRI, int whereChildSpecificObject, int &equivalenceClass, int matchSum);
 	bool rejectPath(const wchar_t *path);

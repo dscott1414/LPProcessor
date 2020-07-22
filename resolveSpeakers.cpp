@@ -123,63 +123,63 @@ wstring cSource::objectString(vector <cObject>::iterator object,wstring &logres,
     object->name.print(logres,true);
   else
     phraseString(object->begin,object->end,logres,shortFormat);
-	int ow=object->getOwnerWhere();
-  if (ow>=0)
-  {
-	  wstring tmpstr;
-    bool selfOwn=object==(objects.begin()+m[ow].getObject());
-    for (unsigned int I=0; I<m[ow].objectMatches.size(); I++)
-      if (object==(objects.begin()+m[ow].objectMatches[I].object))
-      {
-        tmpstr=L"Self-owning object!";
-        selfOwn=true;
-      }
-    if (!selfOwn && !objectOwnerRecursionFlag)
-    {
-			if (m[ow].objectMatches.size())
-				objectString(m[ow].objectMatches,tmpstr,true,true);
-			else
-				objectString(m[ow].getObject(),tmpstr,true,true);
-    }
-    logres+=L"{OWNER:"+tmpstr+L"}";
-  }
-	if (object->getOwnerWhere()<-1)
-	{
-		logres+=wstring(L"{WO:")+cObject::wordOrderWords[-2-object->getOwnerWhere()]+L"}";
-	}
 	if (!shortFormat)
 	{
-		wchar_t temp[1024];
-		_itow(object->originalLocation,temp,10);
-		logres+=L"["+wstring(temp)+L"]";
-		logres+=L"["+getClass(object->objectClass)+L"]";
-		if (object->male) logres+=L"[M]";
-		if (object->female) logres+=L"[F]";
-		if (object->neuter) logres+=L"[N]";
-		if (object->plural) logres+=L"[PL]";
-		if (object->getOwnerWhere()!=-1) logres+=L"[OGEN]";
-		//logres+=roleString(object->originalLocation,tmpstr);
-		if (object->objectClass==NAME_OBJECT_CLASS)
+		int ow = object->getOwnerWhere();
+		if (ow >= 0)
 		{
 			wstring tmpstr;
-			logres+=L"["+object->name.print(tmpstr,false)+L"]";
+			bool selfOwn = object == (objects.begin() + m[ow].getObject());
+			for (unsigned int I = 0; I < m[ow].objectMatches.size(); I++)
+				if (object == (objects.begin() + m[ow].objectMatches[I].object))
+				{
+					tmpstr = L"Self-owning object!";
+					selfOwn = true;
+				}
+			if (!selfOwn && !objectOwnerRecursionFlag)
+			{
+				if (m[ow].objectMatches.size())
+					objectString(m[ow].objectMatches, tmpstr, true, true);
+				else
+					objectString(m[ow].getObject(), tmpstr, true, true);
+			}
+			logres += L"{OWNER:" + tmpstr + L"}";
 		}
-		if (object->suspect) logres+=L"[suspect]";
-		if (object->verySuspect) logres+=L"[verySuspect]";
-		if (object->ambiguous) logres+=L"[ambiguous]";
-		if (object->eliminated) logres+=L"[ELIMINATED]";
-		if (object->isTimeObject) logres+=L"[TimeObject]";
-		if (object->isLocationObject) logres+=L"[LocationObject]";
-		if (object->isWikiBusiness) logres+=L"[WikiBusiness]";
-		if (object->isWikiPerson) logres+=L"[WikiPerson]";
-		if (object->isWikiPlace) logres+=L"[WikiPlace]";
-		if (object->isWikiWork) logres+=L"[WikiWork]";
-		if (object->getSubType()>=0) logres+=wstring(L"[")+OCSubTypeStrings[object->getSubType()]+L"]";
-	}
-	if (object->relativeClausePM>=0 && object->objectClass!=NAME_OBJECT_CLASS)
-	{
-		wstring tmpstr2;
-		logres+=L"["+phraseString(object->whereRelativeClause,object->whereRelativeClause+m[object->whereRelativeClause].pma[object->relativeClausePM].len,tmpstr2,shortFormat)+L"]";
+		if (object->getOwnerWhere() < -1)
+		{
+			logres += wstring(L"{WO:") + cObject::wordOrderWords[-2 - object->getOwnerWhere()] + L"}";
+		}
+		wchar_t temp[1024];
+		_itow(object->originalLocation, temp, 10);
+		logres += L"[" + wstring(temp) + L"]";
+		logres += L"[" + getClass(object->objectClass) + L"]";
+		if (object->male) logres += L"[M]";
+		if (object->female) logres += L"[F]";
+		if (object->neuter) logres += L"[N]";
+		if (object->plural) logres += L"[PL]";
+		if (object->getOwnerWhere() != -1) logres += L"[OGEN]";
+		//logres+=roleString(object->originalLocation,tmpstr);
+		if (object->objectClass == NAME_OBJECT_CLASS)
+		{
+			wstring tmpstr;
+			logres += L"[" + object->name.print(tmpstr, false) + L"]";
+		}
+		if (object->suspect) logres += L"[suspect]";
+		if (object->verySuspect) logres += L"[verySuspect]";
+		if (object->ambiguous) logres += L"[ambiguous]";
+		if (object->eliminated) logres += L"[ELIMINATED]";
+		if (object->isTimeObject) logres += L"[TimeObject]";
+		if (object->isLocationObject) logres += L"[LocationObject]";
+		if (object->isWikiBusiness) logres += L"[WikiBusiness]";
+		if (object->isWikiPerson) logres += L"[WikiPerson]";
+		if (object->isWikiPlace) logres += L"[WikiPlace]";
+		if (object->isWikiWork) logres += L"[WikiWork]";
+		if (object->getSubType() >= 0) logres += wstring(L"[") + OCSubTypeStrings[object->getSubType()] + L"]";
+		if (object->relativeClausePM >= 0 && object->objectClass != NAME_OBJECT_CLASS)
+		{
+			wstring tmpstr2;
+			logres += L"[" + phraseString(object->whereRelativeClause, object->whereRelativeClause + m[object->whereRelativeClause].pma[object->relativeClausePM].len, tmpstr2, shortFormat) + L"]";
+		}
 	}
   return logres;
 }

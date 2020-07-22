@@ -49,6 +49,7 @@ public:
 			queryAssociationsMatched = 0;
 			titleAssociationsMatched = 0;
 			tableOfContentsFlag = false;
+			coherentTable = false;
 		};
 		cEntry()
 		{
@@ -61,6 +62,7 @@ public:
 			queryAssociationsMatched = 0;
 			titleAssociationsMatched = 0;
 			tableOfContentsFlag = false;
+			coherentTable = false;
 		}
 		int begin;
 		int adaptiveWhere; // if an object, this is where the object is declared (not necessarily its beginning), if not an object then adaptiveWhere=begin
@@ -68,12 +70,14 @@ public:
 		int RDFTypeSimplifiedToWordFoundInTitleSynonyms;
 		bool lastWordFoundInTitleSynonyms;
 		bool lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms;
-		bool tableOfContentsFlag; 
+		bool tableOfContentsFlag;  // applies only to title entry
+		bool coherentTable;  // applies only to title entry
 		int queryAssociationsMatched;
 		int titleAssociationsMatched;
 		vector <int> matchedQuestionObject;
 		vector <int> synonymMatchedQuestionObject;
 		wstring simplifiedRDFTypes;
+		wstring sprint(cSource *source, wstring &buffer);
 		void logEntry(int logType, const wchar_t *tableName, int row, int entryIndex, cSource *source);
 		void accumulateEntryRDFTypes(cSource *wikipediaSource, wstring tableName, int row, int entry, set <wstring> &titleSynonyms, unordered_map < wstring, cAssociationType > &accumulatedRDFTypesMap);
 	};

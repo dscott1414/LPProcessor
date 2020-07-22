@@ -958,6 +958,25 @@ int numWordsInserted = 0, numWordsModified = 0;
 	return 0;
 }
 
+bool isBookTitle(MYSQL &mysql,wstring proposedTitle)
+{
+	if (!myquery(&mysql, L"LOCK TABLES openlibraryinternetarchivebooksdump READ"))
+		return false;
+	MYSQL_RES * result;
+	_int64 numResults = 0;
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select 1 from openlibraryinternetarchivebooksdump where title = \"%s\"", proposedTitle.c_str());
+	if (myquery(&mysql, qt, result))
+	{
+		numResults = mysql_num_rows(result);
+		mysql_free_result(result);
+	}
+	if (!myquery(&mysql, L"UNLOCK TABLES"))
+		return false;
+	lplog(LOG_INFO, L"*** isBookTitle: statement %s resulted in numRows=%d.", qt, numResults);
+	return numResults > 0;
+}
+
 int readWikiNominalizations(MYSQL &mysql, unordered_map <wstring,set < wstring > > &agentiveNominalizations)
 { LFS
 	MYSQL_RES *result=NULL;
@@ -996,5 +1015,3 @@ int readWikiNominalizations(MYSQL &mysql, unordered_map <wstring,set < wstring >
 	}
 	return 0;
 }
-
-

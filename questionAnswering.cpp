@@ -32,6 +32,7 @@ using namespace std;
 #include "QuestionAnswering.h"
 
 int questionProgress=-1; // shared but update is not important
+bool isBookTitle(MYSQL &mysql, wstring proposedTitle);
 
 int flushString(wstring &buffer,wchar_t *path)
 { LFS
@@ -415,7 +416,7 @@ bool cQuestionAnswering::matchSourcePositions(cSource *parentSource, int parentW
 	return false;
 }
 
-int cQuestionAnswering::sriMatch(cSource *questionSource,cSource *childSource, int parentWhere, int childWhere, int whereQuestionType, __int64 questionType, bool &totalMatch, int cost)
+int cQuestionAnswering::sriMatch(cSource *questionSource,cSource *childSource, int parentWhere, int childWhere, int whereQuestionType, __int64 questionType, bool &totalMatch, wstring &matchInfoDetail, int cost)
 {
 	LFS
 	totalMatch = false;
@@ -425,33 +426,122 @@ int cQuestionAnswering::sriMatch(cSource *questionSource,cSource *childSource, i
   if (childWhere<0)
 		return (inQuestionObject) ? -cost : 0;
 	vector <cWordMatch>::iterator imChild=childSource->m.begin()+childWhere;
-	bool childIsPronoun=(imChild->objectMatches.empty() && (imChild->queryWinnerForm(nomForm)>=0 || imChild->queryWinnerForm(personalPronounAccusativeForm)>=0 ||
+	bool childIsPronoun=(imChild->queryWinnerForm(nomForm)>=0 || imChild->queryWinnerForm(personalPronounAccusativeForm)>=0 ||
       imChild->queryWinnerForm(personalPronounForm)>=0 || imChild->queryWinnerForm(quantifierForm)>=0 ||
       imChild->queryWinnerForm(possessivePronounForm)>=0 ||
       imChild->queryWinnerForm(indefinitePronounForm)>=0 || imChild->queryWinnerForm(pronounForm)>=0 ||
 			imChild->queryWinnerForm(demonstrativeDeterminerForm)>=0 ||
 			imChild->queryWinnerForm(reflexivePronounForm)>=0 ||
-			imChild->queryWinnerForm(reciprocalPronounForm)>=0));
-  if (childIsPronoun)
+			imChild->queryWinnerForm(reciprocalPronounForm)>=0);
+	// if childIsPronoun, and there are no matches, or the only matches are narrator and audience, then keep childIsPronoun = true.
+	if (childIsPronoun && imChild->objectMatches.size())
+	{
+		if (imChild->objectMatches.size() > 2)
+			childIsPronoun = false;
+		else if (imChild->objectMatches[0].object != 0 && imChild->objectMatches[0].object != 1)
+			childIsPronoun = false;
+		else if (imChild->objectMatches.size() == 2 && imChild->objectMatches[1].object != 0 && imChild->objectMatches[1].object != 1)
+			childIsPronoun = false;
+	}
+	if (childIsPronoun)
+	{
+		matchInfoDetail += L"[PRONOUN]";
 		return (inQuestionObject) ? -cost : 0;
-	if (inQuestionObject && !(questionType&QTAFlag) && questionType!=unknownQTFlag) // if in subquery, wait to see if it is a match, if so, boost
-			return cost>>1;
+	}
+	if (inQuestionObject)
+	{
+		// What are titles of books written by Krugman? - transformed into 'Krugman wrote what book?'
+		// answer cannot be a book or a synonym of book 
+		if (questionSource->m[parentWhere].getMainEntry() == childSource->m[childWhere].getMainEntry())
+		{
+			matchInfoDetail += L"[QUESTION_OBJECT_EXACT_MATCH]";
+			return -cost;
+		}
+		// questions with acceptable answers
+		// which books did Krugman write?  'A Man for All Seasons'.  
+		// these answers must come from highly local sources, of which we have none, so therefore these answers are tabled for now:
+		// which books did you put on the table? The big books.  The white ones.
+		// which book did you put on the table? A big book.
+		set <wstring> bookSynonyms;
+		questionSource->getSynonyms(L"book", bookSynonyms, NOUN);
+		if (questionSource->m[parentWhere].getMainEntry()->first == L"book" || bookSynonyms.find(questionSource->m[parentWhere].getMainEntry()->first) != bookSynonyms.end())
+		{
+			int childObject = childSource->m[childWhere].getObject();
+			if (childObject < 0)
+			{
+				matchInfoDetail += L"[QUESTION_OBJECT_NO_BOOK_MATCH_NO_OBJECT]";
+				return -cost;
+			}
+			int begin = childSource->objects[childObject].begin, end= childSource->objects[childObject].end;
+			bool isBeginQuote = (cWord::isDoubleQuote(childSource->m[begin].word->first[0]));
+			if (begin>0)
+				isBeginQuote |= (cWord::isDoubleQuote(childSource->m[begin-1].word->first[0]));
+			bool isEndQuote= (cWord::isDoubleQuote(childSource->m[end-1].word->first[0]));
+			if (end<childSource->m.size())
+				isEndQuote |= (cWord::isDoubleQuote(childSource->m[end].word->first[0]));
+			if (!isBeginQuote || !isEndQuote)
+			{
+				matchInfoDetail += L"[QUESTION_OBJECT_NO_BOOK_MATCH_NO_QUOTE]";
+				return -cost;
+			}
+			wstring bookTitle;
+			childSource->objectString(childObject,bookTitle,true);
+			if (cWord::isDoubleQuote(bookTitle[0]))
+				bookTitle = bookTitle.substr(1);
+			if (cWord::isDoubleQuote(bookTitle[bookTitle.size() - 1]))
+				bookTitle = bookTitle.substr(0, bookTitle.size() - 1);
+			if (bookTitle[bookTitle.size() - 1]==L',')
+				bookTitle = bookTitle.substr(0, bookTitle.size() - 1);
+			if (isBookTitle(questionSource->mysql,bookTitle))
+			{
+				matchInfoDetail += L"[QUESTION_OBJECT_BOOK_MATCH]";
+				lplog(LOG_WHERE, L"Found Title %s", bookTitle.c_str());
+				return cost;
+			}
+			else
+			{
+				matchInfoDetail += L"[QUESTION_OBJECT_NO_BOOK_MATCH]";
+				return -cost;
+			}
+		}
+		set <wstring> synonyms;
+		questionSource->getSynonyms(questionSource->m[parentWhere].getMainEntry()->first, synonyms, NOUN);
+		if (synonyms.find(childSource->m[childWhere].getMainEntry()->first) != synonyms.end())
+		{
+			matchInfoDetail += L"[QUESTION_OBJECT_SYNONYM_MATCH]";
+			return -cost;
+		}
+		if (!(questionType&QTAFlag) && questionType != unknownQTFlag)
+		{
+			matchInfoDetail += L"[NOT_QTA (so half cost)]";
+			return cost >> 1;
+		}
+	}
 	bool namedNoMatch=false,synonym=false;
 	int semanticMismatch=0, adjectivalMatch=-1;
-	//if (inQuestionObject && questionType==unknownQTFlag) // in subquery - boost
+	// if in subquery, wait to see if it is a match, if so, boost
+	//if (inQuestionObject && questionType==unknownQTFlag) 
 	//		cost<<=1;
-	if (matchSourcePositions(questionSource,parentWhere,childSource,childWhere,namedNoMatch,synonym,inQuestionObject,semanticMismatch,adjectivalMatch, questionSource->debugTrace))
+	if (matchSourcePositions(questionSource, parentWhere, childSource, childWhere, namedNoMatch, synonym, inQuestionObject, semanticMismatch, adjectivalMatch, questionSource->debugTrace))
 	{
 		//if (inQuestionObject && questionType==unknownQTFlag) // in subquery - boost
 		//	lplog(LOG_WHERE,L"%d:Boost found subquery match position - cost=%d!",childWhere,(synonym) ? cost*3/4 : cost);
 		if (semanticMismatch)
+		{
+			matchInfoDetail += L"[SEMANTIC_MISMATCH]";
 			return -cost;
+		}
+		if (synonym)
+			matchInfoDetail += L"[MATCH_SYNONYM]";
 		totalMatch = !synonym;
 		if (synonym)
 			return cost * 3 / 4;
 		// adjectives match exactly
 		if (adjectivalMatch == 1)
+		{
+			matchInfoDetail += L"[ADJECTIVE_EXACT_MATCH]";
 			return cost * 2;
+		}
 		// adjectives are synonyms
 		if (adjectivalMatch == 2)
 			return (int)(cost * 1.3);
@@ -1118,7 +1208,7 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 			continue;
 		int whereMetaPatternAnswer=-1;
 		if (mapPatternAnswer != NULL && (whereMetaPatternAnswer = metaPatternMatch(questionSource, childSource, childSRI, mapPatternAnswer, mapPatternQuestion)) >= 0)
-			enterAnswerAccumulatingPopularity(questionSource, parentSRI, cAS(childSourceType, childSource, -1, maxAnswer, L"META_PATTERN", &(*childSRI), 0, whereMetaPatternAnswer, -1, -1), maxAnswer, answerSRIs);
+			enterAnswerAccumulatingPopularity(questionSource, parentSRI, cAS(childSourceType, childSource, -1, maxAnswer, L"META_PATTERN", &(*childSRI), 0, whereMetaPatternAnswer, -1, -1, false, L"", L"", 0, 0, 0, NULL), maxAnswer, answerSRIs);
 		for (int ws=childSRI->whereSubject; true; ws=childSource->m[ws].nextCompoundPartObject)
 		{ LFSL
 			if ((ws != childSRI->whereSubject && ws<0) || ws >= (int)childSource->m.size()) break;
@@ -1130,7 +1220,7 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 				matchInfoDetailSubject=(matchSumSubject<0) ? L"[SUBQUERY_NOT_IDENTICAL]":L"[SUBQUERY_IDENTICAL]";
 			}
 			else
-				matchSumSubject = sriMatch(questionSource,childSource, parentSRI->whereSubject, ws, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticSubjectTotalMatch, 8);
+				matchSumSubject = sriMatch(questionSource,childSource, parentSRI->whereSubject, ws, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticSubjectTotalMatch, matchInfoDetailSubject, 8);
 			if (parentSRI->whereQuestionInformationSourceObjects.find(parentSRI->whereSubject)!=parentSRI->whereQuestionInformationSourceObjects.end() && matchSumSubject<8)
 			{
 				matchSumSubject=0;
@@ -1173,7 +1263,7 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 				set<int> whereAnswerMatchSubquery;
 				wstring matchInfoDetail=matchInfoDetailSubject;
 				int objectMatch=0,secondaryVerbMatch=0,secondaryObjectMatch=0;
-				objectMatch = sriMatch(questionSource, childSource, parentSRI->whereObject, wo, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticObjectTotalMatch,8);
+				objectMatch = sriMatch(questionSource, childSource, parentSRI->whereObject, wo, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticObjectTotalMatch, matchInfoDetail, 8);
 				if (parentSRI->subQuery && questionTypeObject && objectMatch>0)
 					whereAnswerMatchSubquery.insert(childSRI->whereObject);
 
@@ -1188,12 +1278,12 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 					else
 						verbMatch=0;
 				}
-				secondaryObjectMatch = sriMatch(questionSource, childSource, parentSRI->whereSecondaryObject, childSRI->whereSecondaryObject, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticSecondaryObjectTotalMatch, 4);
+				secondaryObjectMatch = sriMatch(questionSource, childSource, parentSRI->whereSecondaryObject, childSRI->whereSecondaryObject, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticSecondaryObjectTotalMatch, matchInfoDetail, 4);
 				if (parentSRI->subQuery && questionTypeObject && secondaryObjectMatch>0)
 					whereAnswerMatchSubquery.insert(childSRI->whereSecondaryObject);
 				if (parentSRI->whereSecondaryObject>=0 && (secondaryObjectMatch==0 || childSRI->whereSecondaryObject<0))
 				{
-					if (childSRI->whereSecondaryObject >= 0 || (secondaryObjectMatch = sriMatch(questionSource, childSource, parentSRI->whereSecondaryObject, wo, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticSecondaryObjectTotalMatch, 8)) == 0)
+					if (childSRI->whereSecondaryObject >= 0 || (secondaryObjectMatch = sriMatch(questionSource, childSource, parentSRI->whereSecondaryObject, wo, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticSecondaryObjectTotalMatch, matchInfoDetail, 8)) == 0)
 					{
 						secondaryObjectMatch=-objectMatch;
 						matchInfoDetail+=L"[SECONDARY_OBJECT_MATCH_FAILED]";
@@ -1222,7 +1312,7 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 					if (*rpi!=-1)
 					{
 						if (prepMatch=sriPrepMatch(questionSource,childSource,parentSRI->wherePrep,*rpi,2)==2) prepMatch=2;
-						prepObjectMatch = sriMatch(questionSource, childSource, parentSRI->wherePrepObject, childSource->m[*rpi].getRelObject(), parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticPrepositionObjectTotalMatch, 4);
+						prepObjectMatch = sriMatch(questionSource, childSource, parentSRI->wherePrepObject, childSource->m[*rpi].getRelObject(), parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticPrepositionObjectTotalMatch, matchInfoDetail, 4);
 						if (parentSRI->subQuery && questionTypePrepObject && prepObjectMatch > 0)
 							whereAnswerMatchSubquery.insert(childSource->m[*rpi].getRelObject());
 						if (prepObjectMatch<=0 && questionSource->inObject(parentSRI->wherePrepObject,parentSRI->whereQuestionType))
@@ -1287,7 +1377,7 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 								}
 							}
 						}
-						enterAnswerAccumulatingPopularity(questionSource, parentSRI, cAS(childSourceType, childSource, -1, matchSum, matchInfo, &(*childSRI), equivalenceClass, ws, wo, *rpi), maxAnswer, answerSRIs);
+						enterAnswerAccumulatingPopularity(questionSource, parentSRI, cAS(childSourceType, childSource, -1, matchSum, matchInfo, &(*childSRI), equivalenceClass, ws, wo, *rpi, false, L"", L"", 0, 0, 0, NULL), maxAnswer, answerSRIs);
 					}
 					if (logQuestionDetail)
 					{
@@ -2696,7 +2786,7 @@ bool cQuestionAnswering::isModifiedGeneric(cAS &as)
 
 int cQuestionAnswering::printAnswers(cSpaceRelation*  sri,vector < cAS > &answerSRIs)
 { LFS
-	int numFinalAnswers=0,numWords;
+	int numFinalAnswers=0;
 	if (answerSRIs.size()>0)
 	{
 		lplog(LOG_WHERE,L"P%06d:ANSWER LIST  ************************************************************",sri->where);
@@ -2710,12 +2800,12 @@ int cQuestionAnswering::printAnswers(cSpaceRelation*  sri,vector < cAS > &answer
 				{
 					wstring ps;
 					as->source->prepPhraseToString(as->wp, ps);
-					as->source->printSRI(L"      ", as->sri, 0, as->ws, as->wo, ps, false, as->matchSum, as->matchInfo, LOG_WHERE | LOG_QCHECK);
+					as->source->printSRI(L"        ", as->sri, 0, as->ws, as->wo, ps, false, as->matchSum, as->matchInfo, LOG_WHERE | LOG_QCHECK);
 				}
 				else
 				{
 					wstring tmpstr;
-					lplog(LOG_WHERE | LOG_QCHECK, L"    TABLE %d:%s", as->ws, as->source->whereString(as->ws, tmpstr, false, 6, L" ", numWords).c_str());
+					lplog(LOG_WHERE | LOG_QCHECK, L"       [TABLE %s %s:%d:%d:%d] %d:%s", as->tableNum.c_str(), as->tableName.c_str(), as->columnIndex, as->rowIndex, as->entryIndex, as->ws, as->source->phraseString(as->entry.begin, as->entry.begin+ as->entry.numWords, tmpstr, true).c_str());
 				}
 				numFinalAnswers++;
 			}
@@ -2736,7 +2826,7 @@ int cQuestionAnswering::printAnswers(cSpaceRelation*  sri,vector < cAS > &answer
 				else
 				{
 					wstring tmpstr;
-					lplog(LOG_WHERE, L"    TABLE %d:%s", as->ws, as->source->whereString(as->ws, tmpstr, false, 6, L" ", numWords).c_str());
+					lplog(LOG_WHERE, L"       [TABLE %s %s:%d:%d:%d] %d:%s", as->tableNum.c_str(), as->tableName.c_str(), as->columnIndex, as->rowIndex, as->entryIndex, as->ws, as->source->phraseString(as->entry.begin, as->entry.begin + as->entry.numWords, tmpstr, true).c_str());
 				}
 			}
 		}
@@ -2788,31 +2878,31 @@ int	cQuestionAnswering::searchTableForAnswer(cSource *questionSource,wchar_t der
 		if ((wtmi=wikiTableMap.find(*si))!=wikiTableMap.end())
 		{
 			// if found, for each table in source:
-			for (vector < cSourceTable >::iterator wtvi=wtmi->second->wikiQuestionTypeObjectAnswers.begin(),wtviEnd=wtmi->second->wikiQuestionTypeObjectAnswers.end(); wtvi!=wtviEnd; wtvi++)
+			for (vector < cSourceTable >::iterator tableIterator=wtmi->second->wikiQuestionTypeObjectAnswers.begin(),wtviEnd=wtmi->second->wikiQuestionTypeObjectAnswers.end(); tableIterator!=wtviEnd; tableIterator++)
 			{
 				int answersFromOneEntry=0,whereLastEntryEnd=-1;
-				wstring tableTitle = wtmi->second->wikipediaSource->phraseString(wtvi->tableTitleEntry.begin, wtvi->tableTitleEntry.begin+ wtvi->tableTitleEntry.numWords,tmpstr,false);
-				wtvi->tableTitleEntry.logEntry(LOG_WHERE, wtvi->num.c_str(),-1,-1, wtvi->source);
+				wstring tableTitle = wtmi->second->wikipediaSource->phraseString(tableIterator->tableTitleEntry.begin, tableIterator->tableTitleEntry.begin+ tableIterator->tableTitleEntry.numWords,tmpstr,false);
+				tableIterator->tableTitleEntry.logEntry(LOG_WHERE, tableIterator->num.c_str(),-1,-1, tableIterator->source);
 				// for each column in table
-				for (vector <cColumn>::iterator wtci = wtvi->columns.begin(), wtciEnd = wtvi->columns.end(); wtci != wtciEnd; wtci++)
+				for (vector <cColumn>::iterator columnIterator = tableIterator->columns.begin(), wtciEnd = tableIterator->columns.end(); columnIterator != wtciEnd; columnIterator++)
 				{
-					if (wtci->coherencyPercentage < 50)
+					if (columnIterator->coherencyPercentage < 50)
 					{
-						wtci->logColumn(LOG_WHERE, L"REJECTED - COHERENCY", tableTitle.c_str());
+						columnIterator->logColumn(LOG_WHERE, L"REJECTED - COHERENCY", tableTitle.c_str());
 						continue;
 					}
-					wtci->logColumn(LOG_WHERE,L"INITIALIZE", tableTitle);
-					for (vector < cColumn::cRow >::iterator wtri = wtci->rows.begin(), wtriEnd = wtci->rows.end(); wtri != wtriEnd; wtri++)
+					columnIterator->logColumn(LOG_WHERE,L"INITIALIZE", tableTitle);
+					for (vector < cColumn::cRow >::iterator rowIterator = columnIterator->rows.begin(), wtriEnd = columnIterator->rows.end(); rowIterator != wtriEnd; rowIterator++)
 					{
-						if (wtri == wtci->rows.begin())
+						if (rowIterator == columnIterator->rows.begin())
 						{
 							continue; // skip header of column
 						}
-						for (vector <cColumn::cEntry>::iterator wti = wtri->entries.begin(), wtiEnd = wtri->entries.end(); wti != wtiEnd; wti++)
+						for (vector <cColumn::cEntry>::iterator entryIterator = rowIterator->entries.begin(), wtiEnd = rowIterator->entries.end(); entryIterator != wtiEnd; entryIterator++)
 						{
 							wstring tmpstr1, tmpstr2, tmpstr3;
-							int whereChildCandidateAnswer = wti->begin;
-							whereLastEntryEnd = wti->begin + wti->numWords;
+							int whereChildCandidateAnswer = entryIterator->begin;
+							whereLastEntryEnd = entryIterator->begin + entryIterator->numWords;
 							if (whereChildCandidateAnswer < 0)
 							{
 								answersFromOneEntry = 0;
@@ -2829,31 +2919,60 @@ int	cQuestionAnswering::searchTableForAnswer(cSource *questionSource,wchar_t der
 							bool synonym = false;
 							int semanticMismatch = 0;
 							lplog(LOG_WHERE, L"processing table %s: Q%d %s semantic comparison START whereChildCandidateAnswer=%d:%s:", 
-								wtvi->num.c_str(), numConsideredParentAnswer, (wtvi->tableTitleEntry.lastWordFoundInTitleSynonyms) ? L" [matches question object]":L"",whereChildCandidateAnswer, wtmi->second->wikipediaSource->phraseString(whereChildCandidateAnswer, whereLastEntryEnd, tmpstr2, false).c_str());
-							wti->logEntry(LOG_WHERE, wtvi->num.c_str(),(int)(wtri-wtci->rows.begin()),(int)(wti-wtri->entries.begin()),wtvi->source);
+								tableIterator->num.c_str(), numConsideredParentAnswer, (tableIterator->tableTitleEntry.lastWordFoundInTitleSynonyms) ? L" [matches question object]":L"",whereChildCandidateAnswer, wtmi->second->wikipediaSource->phraseString(whereChildCandidateAnswer, whereLastEntryEnd, tmpstr2, false).c_str());
+							entryIterator->logEntry(LOG_WHERE, tableIterator->num.c_str(),(int)(rowIterator-columnIterator->rows.begin()),(int)(entryIterator-rowIterator->entries.begin()),tableIterator->source);
 							int confidence = CONFIDENCE_NOMATCH;
 							if (logQuestionDetail) 
-								lplog(LOG_WHERE, L"processing table %s: Q%d	maxTitleFound=%d, entry RDFTypeSimplifiedToWordFoundInTitleSynonyms=%d entry lastWordFoundInTitleSynonyms=%d numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow=%d, numLastWordsFoundInTitleSynonymsInRow=%d, numSimplifiedRDFTypesFoundForRow=%d", wtvi->num.c_str(), numConsideredParentAnswer,
-									wtri->maxTitleFound, wti->RDFTypeSimplifiedToWordFoundInTitleSynonyms, wti->lastWordFoundInTitleSynonyms, 
-									wtri->numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow, wtri->numLastWordsFoundInTitleSynonymsInRow, wtri->numSimplifiedRDFTypesFoundForRow);
+								lplog(LOG_WHERE, L"processing table %s: Q%d	maxTitleFound=%d, entry RDFTypeSimplifiedToWordFoundInTitleSynonyms=%d entry lastWordFoundInTitleSynonyms=%d numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow=%d, numLastWordsFoundInTitleSynonymsInRow=%d, numSimplifiedRDFTypesFoundForRow=%d", tableIterator->num.c_str(), numConsideredParentAnswer,
+									rowIterator->maxTitleFound, entryIterator->RDFTypeSimplifiedToWordFoundInTitleSynonyms, entryIterator->lastWordFoundInTitleSynonyms, 
+									rowIterator->numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow, rowIterator->numLastWordsFoundInTitleSynonymsInRow, rowIterator->numSimplifiedRDFTypesFoundForRow);
 							/*
 									logic copied from testTitlePreference to help debug setting lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms
 									rows[row].entries[entry].lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms = (rows[row].maxTitleFound > 0 && rows[row].entries[entry].RDFTypeSimplifiedToWordFoundInTitleSynonyms >= rows[row].maxTitleFound) || rows[row].entries[entry].lastWordFoundInTitleSynonyms
 									if (rows[row].numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow > 1 && rows[row].numLastWordsFoundInTitleSynonymsInRow > 0)
 										rows[row].entries[entry].lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms = rows[row].entries[entry].lastWordFoundInTitleSynonyms;
 							*/
-							if (wti->lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms && (wtvi->tableTitleEntry.matchedQuestionObject.size() || wtvi->tableTitleEntry.synonymMatchedQuestionObject.size()))
-								confidence = (wtvi->tableTitleEntry.matchedQuestionObject.size()) ? 1 : 2;
-							else
-								confidence = questionSource->checkParticularPartSemanticMatch(LOG_WHERE, whereQuestionTypeObject, wtmi->second->wikipediaSource, whereChildCandidateAnswer, -1, synonym, semanticMismatch);
-							lplog(LOG_WHERE, L"processing table %s: Q%d semantic comparison FINISHED between whereQuestionTypeObject=%d:%s and whereChildCandidateAnswer=%d:%s yields confidence %d [%d].", 
-								wtvi->num.c_str(), numConsideredParentAnswer++, whereQuestionTypeObject, questionSource->whereString(whereQuestionTypeObject, tmpstr1, false).c_str(), whereChildCandidateAnswer, wtmi->second->wikipediaSource->phraseString(whereChildCandidateAnswer, whereLastEntryEnd, tmpstr2, false).c_str(), confidence, answersFromOneEntry);
+							wstring matchInfo;
+							if (tableIterator->tableTitleEntry.matchedQuestionObject.size() || tableIterator->tableTitleEntry.synonymMatchedQuestionObject.size())
+							{
+								if (tableIterator->tableTitleEntry.matchedQuestionObject.size())
+								{
+									matchInfo += L"[title matches desired answer]";
+									confidence = 3;
+								}
+								else if (tableIterator->tableTitleEntry.synonymMatchedQuestionObject.size())
+								{
+									matchInfo += L"[title matches desired answer synonym]";
+									confidence = 4;
+								};
+								if (entryIterator->RDFTypeSimplifiedToWordFoundInTitleSynonyms)
+								{
+									matchInfo += L"[RDF type of entry matches title synonym]";
+									confidence--;
+								}
+								if (entryIterator->lastWordFoundInTitleSynonyms)
+								{
+									matchInfo += L"[last word of entry matches title synonym]";
+									confidence--;
+								}
+							}
+							else if (tableIterator->tableTitleEntry.begin < 0)
+							{
+								matchInfo += L"[no table title - matching against desired answer]";
+								// make it less confident than if we know the title of the table
+								confidence = questionSource->checkParticularPartSemanticMatch(LOG_WHERE, whereQuestionTypeObject, wtmi->second->wikipediaSource, whereChildCandidateAnswer, -1, synonym, semanticMismatch) + 4;
+							}
+							lplog(LOG_WHERE, L"processing table %s: Q%d semantic comparison FINISHED between whereQuestionTypeObject=%d:%s and whereChildCandidateAnswer=%d:%s yields confidence %d [%d] [title entry=%s].", 
+								tableIterator->num.c_str(), numConsideredParentAnswer++, whereQuestionTypeObject, questionSource->whereString(whereQuestionTypeObject, tmpstr1, false).c_str(), whereChildCandidateAnswer, wtmi->second->wikipediaSource->phraseString(whereChildCandidateAnswer, whereLastEntryEnd, tmpstr2, false).c_str(), confidence, answersFromOneEntry, tableIterator->tableTitleEntry.sprint(tableIterator->source,tmpstr3).c_str());
 							bool secondarySentencePosition = (answersFromOneEntry > 1 && (wtmi->second->wikipediaSource->m[whereChildCandidateAnswer].objectRole&(OBJECT_ROLE | PREP_OBJECT_ROLE)));
 							if (secondarySentencePosition)
+							{
+								matchInfo += L"[secondary sentence position]";
 								confidence += CONFIDENCE_NOMATCH / 2;
+							}
 							if (confidence < CONFIDENCE_NOMATCH)
 							{
-								cAS as(L"TABLE", wtmi->second->wikipediaSource, confidence, 1, L"CONFIDENCE_MATCH[" + itos(confidence, tmpstr1) + L"]", NULL, 1, whereChildCandidateAnswer, 0, 0);
+								cAS as(L"TABLE", wtmi->second->wikipediaSource, confidence, 1, matchInfo, NULL, 1, whereChildCandidateAnswer, 0, 0, true, tableIterator->num, tableTitle, columnIterator-tableIterator->columns.end(),rowIterator-columnIterator->rows.begin(), entryIterator-rowIterator->entries.begin(),&(*entryIterator));
 								if (subQueries.empty())
 								{
 									minConfidence = min(minConfidence, confidence);
@@ -3174,7 +3293,9 @@ int cQuestionAnswering::processQuestionSource(cSource *questionSource,bool parse
 						bool atLeastOneFinalAnswer = false;
 						for (unsigned int I = 0; I < wikipediaTableAnswerSRIs.size(); I++)
 							if (wikipediaTableAnswerSRIs[I].confidence == lowestConfidence)
-								atLeastOneFinalAnswer=wikipediaTableAnswerSRIs[I].finalAnswer = true;
+								atLeastOneFinalAnswer = wikipediaTableAnswerSRIs[I].finalAnswer = true;
+							else
+								wikipediaTableAnswerSRIs[I].rejectAnswer += L"[low confidence]";
 						if (webSearchOrWikipediaTableSuccess = atLeastOneFinalAnswer)
 						{
 							answerSRIs.insert(answerSRIs.end(), wikipediaTableAnswerSRIs.begin(), wikipediaTableAnswerSRIs.end());

@@ -1206,8 +1206,8 @@ int wmain(int argc,wchar_t *argv[])
 			continue;
 		numCommandLineParameters=min(numCommandLineParameters,I);
 	}
-	cOntology ontology;
-	ontology.readOpenLibraryInternetArchiveWorksDump();
+	//cOntology ontology;
+	//ontology.readOpenLibraryInternetArchiveWorksDump();
 	/*
 	vector <mbInfoRecordingType> mbRecordingsTypes;
 	vector <mbInfoReleaseType> mbReleasesTypes;

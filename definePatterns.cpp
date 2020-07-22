@@ -214,6 +214,11 @@ int createNouns(void)
 		2, L"adjective|last", L"adjective|new", 0, 0, 1,
 		1, L"noun|will*-3{N_AGREE}", SINGULAR, 1, 1, 
 		0);
+	cPattern::create(L"__NOUN{_FINAL_IF_ALONE}", L"MTHAN",
+		1, L"_ADJECTIVE", 0, 1, 1,
+		1, L"preposition|than*-1", 0, 1, 1,
+		2, L"_NOUN_OBJ{OBJECT}", L"__NOUN[*]{OBJECT}", 0, 1, 1,
+		0);
 	// this also encourages a word identified as both adverb and adjective to be an adverb if identified before an adjective.
 	// the more adjectives repeated, the more uncommon - taken out - discourages nouns taking on adjectives
 	// all these old things / all my old things / half these old things / both old things
@@ -440,9 +445,9 @@ int createNouns(void)
 	// created subobject so that address is not seen as a single object (so that the name in the address can be visible)
 	// changed to _BLOCK so that __NOUN can be captured as a single object
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:GNOUN:SINGULAR}",L"8",
-		9,L"_LINE2ADDRESS{_BLOCK}",L"_LINE3ADDRESS{_BLOCK}",L"_POADDRESS",L"_MADDRESS",
-			L"_DATE",L"_TIME", // He took office a year ago with a pledge
-			L"_TELENUM",L"_NUMBER",
+		10,L"_LINE2ADDRESS{_BLOCK}",L"_LINE3ADDRESS{_BLOCK}",L"_POADDRESS",L"_MADDRESS",
+		 	 L"_DATE",L"_TIME",L"_ISBN", // He took office a year ago with a pledge
+			 L"_TELENUM",L"_NUMBER",
 		L"demonstrative_determiner",0,1,1,
 									 0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:PNOUN}",L"C",3,

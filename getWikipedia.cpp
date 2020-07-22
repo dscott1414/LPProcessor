@@ -200,20 +200,20 @@ void interpretHTMLTable(wstring &buffer,size_t &whereHeadingEnd,wstring &match,v
 	if (!numColumns)
 		return;
 	table.push_back(Words.END_COLUMN_HEADERS->first);
-	wstring columns,column;
+	wstring columns,columnIndex;
 	while (firstMatch(match,L"<tr ",L"</tr>",rowPosition,columns,false)>=0) 
 	{
 		int numColumn;
-		for (numColumn=0,beginColumn=0; numColumn<numColumns && firstMatch(columns,L"<td",L"</td>",beginColumn,column,false)>=0; numColumn++)
+		for (numColumn=0,beginColumn=0; numColumn<numColumns && firstMatch(columns,L"<td",L"</td>",beginColumn,columnIndex,false)>=0; numColumn++)
 		{
 			// eliminate until the '>'
-			size_t gt=column.find(L'>');
+			size_t gt=columnIndex.find(L'>');
 			if (gt!=wstring::npos)
-				column.erase(0,gt+1);
-			scanForTables(column,tables,true);
-			scanForTables(column,tables,false);
-			eliminateHTML(column);
-			table.push_back(column);
+				columnIndex.erase(0,gt+1);
+			scanForTables(columnIndex,tables,true);
+			scanForTables(columnIndex,tables,false);
+			eliminateHTML(columnIndex);
+			table.push_back(columnIndex);
 		}
 		for (; numColumn<numColumns; numColumn++)
 			table.push_back(Words.MISSING_COLUMN->first);
@@ -232,8 +232,13 @@ void eliminateHTML(wstring &buffer)
 	for (unsigned int I=0; I<buffer.length(); I++)
 		if (buffer[I]==L'<')
 			inHTML=true;
-		else if (buffer[I]==L'>')
-			inHTML=false;
+		else if (buffer[I] == L'>')
+		{
+			// make sure there is space between entities that have both been linked like "ISBN" and the ISBN number.
+			if (!iswspace(buffer[buffer.size() - 1]))
+				noHTML += L" ";
+			inHTML = false;
+		}
 		else if (!inHTML)
 		{
 			// eliminate footnotes
@@ -246,6 +251,56 @@ void eliminateHTML(wstring &buffer)
 			noHTML+=buffer[I];
 		}
 	buffer=noHTML;
+}
+
+// this is to skip nested tables, instead of turning nested tables into another entry in the parent table (what firstMatch would do)
+// this only works for one level of nesting!  The nested table can have any number of entries
+// beginString can be <li value= OR <li>
+int firstMatchTableDeleteNested(wstring &buffer, size_t &beginPos, wstring &match)
+{
+	wstring beginString=L"<li>", endString=L"</li>";
+	LFS
+	int tempBeginPos = buffer.find(beginString, (beginPos == wstring::npos) ? 0 : beginPos);
+	if (tempBeginPos==wstring::npos)
+		beginPos = buffer.find(L"<li value=", (beginPos == wstring::npos) ? 0 : beginPos);
+	int findEndOfBegin = buffer.find(L">", beginPos);
+	if (findEndOfBegin == wstring::npos)
+		return -1;
+	int endPos;
+	if (beginPos != wstring::npos && (endPos = buffer.find(endString, findEndOfBegin +1)) != wstring::npos)
+	{
+		int len = endPos - beginPos + endString.length();  // amount to cut, which includes begin and end
+		match = buffer.substr(findEndOfBegin+1, endPos-(findEndOfBegin + 1)); // do not include begin or end
+		do {
+			int nestedBeginPos = buffer.find(beginString, findEndOfBegin + 1);
+			if (nestedBeginPos == wstring::npos)
+				nestedBeginPos = buffer.find(L"<li value=", findEndOfBegin + 1);
+			if (nestedBeginPos != wstring::npos && nestedBeginPos < endPos)
+			{
+				int newEndPos = buffer.find(endString, endPos + endString.length());
+				if (newEndPos != wstring::npos)
+				{
+					int nestedEndPos = endPos;
+					endPos = newEndPos;
+					int nestedLen = nestedEndPos - nestedBeginPos + endString.length(); // amount to cut, which includes begin and end
+					if (nestedLen >= 1)
+						buffer.erase(nestedBeginPos, nestedLen);
+					endPos -= nestedLen;
+					len = endPos - beginPos + endString.length(); // amount to cut, which includes begin and end
+					//findEndOfBegin = buffer.find(L">", beginPos);
+					//if (findEndOfBegin == wstring::npos)
+					//	return -1;
+					match = buffer.substr(findEndOfBegin + 1, endPos - (findEndOfBegin + 1)); // do not include begin or end
+				}
+			}
+			else
+				break;
+		}	while(true);
+		if (len >= 1)
+			buffer.erase(beginPos, len);
+		return beginPos;
+	}
+	return beginPos = wstring::npos;
 }
 
 // JK Rowling / Paul Krugman
@@ -272,7 +327,7 @@ void scanForTables(wstring &buffer, vector < vector <wstring> > &tables, bool un
 	while (firstMatchNonEmbedded(buffer,beginTable,endTable,tablePosition,tableHtml,false)>=0) 
 	{
 		vector <wstring> table;
-		wstring tableHeader,column;
+		wstring tableHeader,columnIndex;
 		bool tableOfContentsFlag = false;
 		processHeader(buffer,tablePosition,tableHeader,tableOfContentsFlag);
 		if (tableOfContentsFlag)
@@ -281,10 +336,8 @@ void scanForTables(wstring &buffer, vector < vector <wstring> > &tables, bool un
 		table.push_back(Words.END_COLUMN_HEADERS->first);
 		size_t rowPosition=0;
 		wstring row;
-		while (firstMatch(tableHtml,L"<li",L"</li>",rowPosition,row,false)>=0) 
+		while (firstMatchTableDeleteNested(tableHtml,rowPosition,row)>=0)
 		{
-			int wh=row.find(L">");
-			if (wh>=0) row.erase(0,wh+1);
 			eliminateHTML(row);
 			table.push_back(row);
 		}

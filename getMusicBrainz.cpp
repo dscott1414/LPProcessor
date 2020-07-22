@@ -450,12 +450,12 @@ bool cQuestionAnswering::dbSearchMusicBrainzSearchType(cSource *questionSource, 
 		if (questionSource->inObject(firstWhere,parentSRI->whereQuestionType) && questionSource->pushWhereEntities(derivation,firstWhere,firstMatchListType,secondMatchListType,secondWhere,true))
 		{
 			
-			answerSRIs.push_back(cAS(L"dbMusicBrainz", questionSource, 1, 1000, firstMatchListType, NULL, 0, firstWhere, 0, 0));
+			answerSRIs.push_back(cAS(L"dbMusicBrainz", questionSource, 1, 1000, firstMatchListType, NULL, 0, firstWhere, 0, 0, false, L"", L"", 0,0,0,NULL));
 			answerSRIs[answerSRIs.size() - 1].finalAnswer = foundMatch=true;
 		}
 		if (questionSource->inObject(secondWhere,parentSRI->whereQuestionType) && questionSource->pushWhereEntities(derivation,secondWhere,secondMatchListType,firstMatchListType,firstWhere,true))
 		{
-			answerSRIs.push_back(cAS(L"dbMusicBrainz", questionSource, 1, 1000, secondMatchListType, NULL, 0, secondWhere, 0, 0));
+			answerSRIs.push_back(cAS(L"dbMusicBrainz", questionSource, 1, 1000, secondMatchListType, NULL, 0, secondWhere, 0, 0, false, L"", L"", 0, 0, 0,NULL));
 			answerSRIs[answerSRIs.size() - 1].finalAnswer = foundMatch = true;
 		}
 	}

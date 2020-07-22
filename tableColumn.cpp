@@ -66,7 +66,7 @@ void cColumn::cEntry::accumulateEntryRDFTypes(cSource *wikipediaSource, wstring 
 	for (unordered_map <wstring, int >::iterator ri = RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap.begin(), riEnd = RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap.end(); ri != riEnd; ri++)
 	{
 		if (logTableCoherenceDetail)
-			lplog(LOG_WHERE, L"Processing table %s: row %d entry %d accumulateEntryRDFTypes RDF type %s", tableName.c_str(),row, entry, ri->first.c_str());
+			lplog(LOG_WHERE, L"Processing table %s: rowIndex %d entry %d accumulateEntryRDFTypes RDF type %s", tableName.c_str(),row, entry, ri->first.c_str());
 		if (ri->second == 1) // only if confidence is 1
 		{
 			unordered_map < wstring, cAssociationType >::iterator cmi = accumulatedRDFTypesMap.find(ri->first);
@@ -133,7 +133,7 @@ int cColumn::getSumOfAllFullyConfidentRDFTypeFrequencies(cSource *wikipediaSourc
 		{
 			unordered_map < wstring, cAssociationType >::iterator cmi = accumulatedRDFTypesMap.find(ri->first);
 			if (cmi == accumulatedRDFTypesMap.end())
-				lplog(LOG_FATAL_ERROR, L"association for word %s not found in common column map!", ri->first.c_str());
+				lplog(LOG_FATAL_ERROR, L"association for word %s not found in common columnIndex map!", ri->first.c_str());
 			sumOfAllFullyConfidentRDFTypeFrequencies += cmi->second.frequency;
 			if (maxOfAllFullyConfidentRDFTypeFrequencies < cmi->second.frequency)
 			{
@@ -169,7 +169,7 @@ int cColumn::calculateColumnRDFTypeCoherence(cSource *wikipediaSource, cColumn::
 				wstring tmpstr;
 				wikipediaSource->phraseString(rows[row].entries[entry].begin, rows[row].entries[entry].begin + rows[row].entries[entry].numWords, tmpstr, false);
 				if (logQuestionDetail)
-					lplog(LOG_WHERE, L"Processing table %s: table coherency %s row=%d entry=%d associationValue=%d maxFrequency=%d[%s]", tableName.c_str(), tmpstr.c_str(),
+					lplog(LOG_WHERE, L"Processing table %s: table coherency %s rowIndex=%d entry=%d associationValue=%d maxFrequency=%d[%s]", tableName.c_str(), tmpstr.c_str(),
 					row, entry, sumOfAllFullyConfidentRDFTypeFrequenciesInEntry, maxOfAllFullyConfidentRDFTypeFrequenciesInEntry, fullyConfidentSimplifiedRDFTypeWithMaximumFrequencyInEntry.c_str());
 				sumOfAllFullyConfidentRDFTypeFrequenciesInOnlyPreferredColumnEntries += sumOfAllFullyConfidentRDFTypeFrequenciesInEntry;
 				sumOfMaxOfAllFullyConfidentRDFTypeFrequenciesInOnlyPreferredColumnEntries += maxOfAllFullyConfidentRDFTypeFrequenciesInEntry;
@@ -183,7 +183,7 @@ int cColumn::calculateColumnRDFTypeCoherence(cSource *wikipediaSource, cColumn::
 		else
 			coherencyPercentage = 100 * sumOfMaxOfAllFullyConfidentRDFTypeFrequenciesInOnlyPreferredColumnEntries / (rows.size()*rows.size());
 		if (logQuestionDetail)
-			lplog(LOG_WHERE, L"Processing table %s: table coherency coherence=%d%% [%d/%d]", tableName.c_str(), coherencyPercentage, numRowsWhereSimplifiedRDFTypesFound, rows.size());
+			lplog(LOG_WHERE, L"Processing table %s: table coherence=%d%% [%d/%d]", tableName.c_str(), coherencyPercentage, numRowsWhereSimplifiedRDFTypesFound, rows.size());
 	}
 	return coherencyPercentage;
 }
@@ -214,7 +214,7 @@ bool cColumn::testTitlePreference(cSource *wikipediaSource, wstring tableName, s
 					if (logQuestionDetail) 
 					{
 						wstring tmpstr; 
-						lplog(LOG_WHERE, L"Processing table %s: row=%d[%d] titleSynonyms=%s simplifiedRDFType=%s", tableName.c_str(), row, entry, setString(titleSynonyms,tmpstr,L" ").c_str(), ri->first.c_str()); 
+						lplog(LOG_WHERE, L"Processing table %s: rowIndex=%d[%d] titleSynonyms=%s simplifiedRDFType=%s", tableName.c_str(), row, entry, setString(titleSynonyms,tmpstr,L" ").c_str(), ri->first.c_str()); 
 					}
 					rows[row].entries[entry].RDFTypeSimplifiedToWordFoundInTitleSynonyms++;
 				}
@@ -226,7 +226,7 @@ bool cColumn::testTitlePreference(cSource *wikipediaSource, wstring tableName, s
 			if (rows[row].entries[entry].lastWordFoundInTitleSynonyms = (titleSynonyms.find(wikipediaSource->m[lastWord].getMainEntry()->first) != titleSynonyms.end()))
 				rows[row].numLastWordsFoundInTitleSynonymsInRow++;
 			if (logQuestionDetail)
-				lplog(LOG_WHERE, L"Processing table %s: row=%d[%d] table coherency %d:lastWord=%d:%s matchesTitle=%s", tableName.c_str(), row, entry,
+				lplog(LOG_WHERE, L"Processing table %s: rowIndex=%d[%d] table coherency %d:lastWord=%d:%s matchesTitle=%s", tableName.c_str(), row, entry,
 				rows[row].entries[entry].adaptiveWhere, lastWord, wikipediaSource->m[lastWord].word->first.c_str(), (rows[row].entries[entry].lastWordFoundInTitleSynonyms) ? L"true" : L"false");
 		}
 		// accumulate numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow for the next test
@@ -246,7 +246,7 @@ bool cColumn::testTitlePreference(cSource *wikipediaSource, wstring tableName, s
 			wstring tmpstr3;
 			wikipediaSource->phraseString(rows[row].entries[entry].begin, rows[row].entries[entry].begin + rows[row].entries[entry].numWords, tmpstr3, false);
 			if (logQuestionDetail)
-				lplog(LOG_WHERE, L"Processing table %s: row=%d[%d] table coherency of entry %d:%s %s with simplifiedRDFTypes=%s", tableName.c_str(), row, entry, rows[row].entries[entry].adaptiveWhere, tmpstr3.c_str(), (rows[row].entries[entry].lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms) ? L"lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms!" : L"", rows[row].entries[entry].simplifiedRDFTypes.c_str());
+				lplog(LOG_WHERE, L"Processing table %s: rowIndex=%d[%d] table coherency of entry %d:%s %s with simplifiedRDFTypes=%s", tableName.c_str(), row, entry, rows[row].entries[entry].adaptiveWhere, tmpstr3.c_str(), (rows[row].entries[entry].lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms) ? L"lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms!" : L"", rows[row].entries[entry].simplifiedRDFTypes.c_str());
 		}
 		if (rows[row].numSimplifiedRDFTypesFoundForRow > 0)
 			numRowsWhereSimplifiedRDFTypesFound++;
@@ -282,7 +282,7 @@ void cColumn::setRowPreference(cSource *wikipediaSource, wstring tableName)
 			wstring tmpstr;
 			wikipediaSource->phraseString(rows[row].entries[preferredEntry].begin, rows[row].entries[preferredEntry].begin + rows[row].entries[preferredEntry].numWords, tmpstr, false);
 			if (logQuestionDetail)
-				lplog(LOG_WHERE, L"Processing table %s: table coherency setRowPreference %s row=%d preferredEntry=%d maxOfMaxFrequency=%d[%s] maxAssociationValue=%d", tableName.c_str(), tmpstr.c_str(),
+				lplog(LOG_WHERE, L"Processing table %s: table coherency setRowPreference %s rowIndex=%d preferredEntry=%d maxOfMaxFrequency=%d[%s] maxAssociationValue=%d", tableName.c_str(), tmpstr.c_str(),
 				row, preferredEntry, maxOfMaxFrequency, maxOfMaxAssociation.c_str(), maxAccumulatedAssociationValue);
 		}
 	}
@@ -353,8 +353,18 @@ void cColumn::cEntry::logEntry(int logType, const wchar_t *tableName, int row, i
 		lplog(logType, L"Processing table %s: TITLE entry %d:%s matchedToQuery=%d synonymsMatchedToQuery=%d", tableName, adaptiveWhere, source->phraseString(begin, begin + numWords, tmp, false).c_str(),
 			matchedQuestionObject.size(), synonymMatchedQuestionObject.size());
 	else
-		lplog(logType, L"Processing table %s: row %d[%d] entry %d:%s%s matchedToQuery=%d synonymsMatchedToQuery=%d", tableName, row, entryIndex, adaptiveWhere, source->phraseString(begin, begin + numWords, tmp, false).c_str(),
+		lplog(logType, L"Processing table %s: rowIndex %d[%d] entry %d:%s%s matchedToQuery=%d synonymsMatchedToQuery=%d", tableName, row, entryIndex, adaptiveWhere, source->phraseString(begin, begin + numWords, tmp, false).c_str(),
 			(lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms) ? L" [lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms]" : L"", matchedQuestionObject.size(), synonymMatchedQuestionObject.size());
+}
+
+wstring cColumn::cEntry::sprint(cSource *source,wstring &buffer)
+{
+	wstring phrase,whereStr, matchedQuestionObjectStr, synonymMatchedQuestionObjectStr;
+	source->phraseString(begin, begin + numWords, phrase, false).c_str();
+	itos(adaptiveWhere, whereStr);
+	itos(matchedQuestionObject.size(), matchedQuestionObjectStr);
+	itos(synonymMatchedQuestionObject.size(), synonymMatchedQuestionObjectStr);
+	return buffer= whereStr +L":"+phrase+L" [# matched question object=" + matchedQuestionObjectStr + L" # synonym matched question object="+ matchedQuestionObjectStr+L"]";
 }
 
 wchar_t *wikiInvalidTableEntries[] = {
@@ -442,12 +452,12 @@ bool cSourceTable::isEntryInvalid(int beginEntry, vector <int> &wikiColumns,cSou
 			}
 			columnHeaders.push_back(headerEntry);
 			if (logTableDetail)
-				lplog(LOG_WHERE, L"Processing table %s: of source %s: header column %d:%s found=%s.", num.c_str(), wikipediaSource->sourcePath.c_str(),
+				lplog(LOG_WHERE, L"Processing table %s: of source %s: header columnIndex %d:%s found=%s.", num.c_str(), wikipediaSource->sourcePath.c_str(),
 					numColumnHeaders, wikipediaSource->phraseString(beginColumnHeader, I - 3, tmpstr, false).c_str(), wikipediaSource->phraseString(headerEntry.begin, headerEntry.begin+headerEntry.numWords, tmpstr2, false).c_str());
 		}
 		I += 3;
 		if (logTableDetail)
-			lplog(LOG_WHERE, L"Processing table %s: of source %s: %d columns found [matching column #%d]", num.c_str(), wikipediaSource->sourcePath.c_str(), columns.size(), columnHeaderMatchTitle);
+			lplog(LOG_WHERE, L"Processing table %s: of source %s: %d columns found [matching columnIndex #%d]", num.c_str(), wikipediaSource->sourcePath.c_str(), columns.size(), columnHeaderMatchTitle);
 		// column going across (row order) (each column ends with .).  If there is no column header, there is only one column.
 		if (columnHeaders.size() == 0)
 			columns.push_back(cColumn());
@@ -509,7 +519,7 @@ bool cSourceTable::isEntryInvalid(int beginEntry, vector <int> &wikiColumns,cSou
 								else
 								{
 									if (wikipediaSource->m[I].principalWherePosition < 0)
-										lplog(LOG_WHERE, L"Processing table %s: of source %s: REJECTED [missing principalWherePosition] row %d columnData %d %s.", num.c_str(), wikipediaSource->sourcePath.c_str(), row,
+										lplog(LOG_WHERE, L"Processing table %s: of source %s: REJECTED [missing principalWherePosition] rowIndex %d columnData %d %s.", num.c_str(), wikipediaSource->sourcePath.c_str(), row,
 											numColumn, wikipediaSource->phraseString(I, I + 1, tmpstr2, false).c_str());
 									I++;
 								}
@@ -535,10 +545,10 @@ bool cSourceTable::isEntryInvalid(int beginEntry, vector <int> &wikiColumns,cSou
 								if (logTableDetail)
 								{
 									if (columns.size() > 1)
-										lplog(LOG_WHERE, L"Processing table %s: of source %s: row %d columnData %d data found=%s object[%d-%d][%d] numPrepositions=%d", num.c_str(), wikipediaSource->sourcePath.c_str(), row,
+										lplog(LOG_WHERE, L"Processing table %s: of source %s: rowIndex %d columnData %d data found=%s object[%d-%d][%d] numPrepositions=%d", num.c_str(), wikipediaSource->sourcePath.c_str(), row,
 											numColumn, wikipediaSource->phraseString(wikipediaSource->m[I].beginObjectPosition, wikipediaSource->m[I].beginObjectPosition + numWords, tmpstr2, false).c_str(), wikipediaSource->m[I].beginObjectPosition, wikipediaSource->m[I].endObjectPosition, I, numPrepositions);
 									else
-										lplog(LOG_WHERE, L"Processing table %s: of source %s: row %d data found=%s object[%d-%d][%d] numPrepositions=%d", num.c_str(), wikipediaSource->sourcePath.c_str(), row,
+										lplog(LOG_WHERE, L"Processing table %s: of source %s: rowIndex %d data found=%s object[%d-%d][%d] numPrepositions=%d", num.c_str(), wikipediaSource->sourcePath.c_str(), row,
 											wikipediaSource->phraseString(wikipediaSource->m[I].beginObjectPosition, wikipediaSource->m[I].beginObjectPosition + numWords, tmpstr2, false).c_str(), wikipediaSource->m[I].beginObjectPosition, wikipediaSource->m[I].endObjectPosition, I, numPrepositions);
 								}
 								if (numWords <= 0 || wikipediaSource->m[I].beginObjectPosition + numWords < I + 1)
@@ -561,10 +571,10 @@ bool cSourceTable::isEntryInvalid(int beginEntry, vector <int> &wikiColumns,cSou
 						invalidEntry = true;
 					}
 					if (columns.size() > 1)
-						lplog(LOG_WHERE, L"Processing table %s: of source %s: row %d %sFINISHED:columnData %d:%s.", num.c_str(), wikipediaSource->sourcePath.c_str(), row, (invalidEntry) ? L"INVALID " : L"",
+						lplog(LOG_WHERE, L"Processing table %s: of source %s: rowIndex %d %sFINISHED:columnData %d:%s.", num.c_str(), wikipediaSource->sourcePath.c_str(), row, (invalidEntry) ? L"INVALID " : L"",
 							numColumn, wikipediaSource->phraseString(beginColumn, I - 1, tmpstr, false).c_str());
 					else
-						lplog(LOG_WHERE, L"Processing table %s: of source %s: row %d %sFINISHED:%s.", num.c_str(), wikipediaSource->sourcePath.c_str(), row, (invalidEntry) ? L"INVALID " : L"",
+						lplog(LOG_WHERE, L"Processing table %s: of source %s: rowIndex %d %sFINISHED:%s.", num.c_str(), wikipediaSource->sourcePath.c_str(), row, (invalidEntry) ? L"INVALID " : L"",
 							wikipediaSource->phraseString(beginColumn, I - 1, tmpstr, false).c_str());
 					I++; // skip period
 				}
@@ -574,7 +584,7 @@ bool cSourceTable::isEntryInvalid(int beginEntry, vector <int> &wikiColumns,cSou
 					// skip column
 					for (; I < wikipediaSource->m.size() && wikipediaSource->m[I].word != Words.END_COLUMN && wikipediaSource->m[I].word != Words.TABLE; I++);
 					if (logTableDetail)
-						lplog(LOG_WHERE, L"Processing table %s: of source %s: row %d columnData %d:%s SKIPPED.", num.c_str(), wikipediaSource->sourcePath.c_str(), row,
+						lplog(LOG_WHERE, L"Processing table %s: of source %s: rowIndex %d columnData %d:%s SKIPPED.", num.c_str(), wikipediaSource->sourcePath.c_str(), row,
 							numColumn, wikipediaSource->phraseString(beginColumn, I - 1, tmpstr, false).c_str());
 					I++; // skip period
 				}
@@ -641,7 +651,8 @@ bool cSourceTable::isEntryInvalid(int beginEntry, vector <int> &wikiColumns,cSou
 			lplog(LOG_WHERE, L"Processing table %s: REJECTED, all columns invalid", num.c_str());
 			return;
 		}
-		if (coherentTitle(tableTitleEntry.begin, tableTitleEntry.begin + tableTitleEntry.numWords, wikipediaSource) && !tableTitleEntry.tableOfContentsFlag)
+		tableTitleEntry.coherentTable = coherentTitle(tableTitleEntry.begin, tableTitleEntry.begin + tableTitleEntry.numWords, wikipediaSource) && !tableTitleEntry.tableOfContentsFlag;
+		if (tableTitleEntry.coherentTable)
 		{
 			set <wstring> titleSynonyms;
 			for (int ti = tableTitleEntry.begin; ti < tableTitleEntry.begin + tableTitleEntry.numWords; ti++)
@@ -657,11 +668,15 @@ bool cSourceTable::isEntryInvalid(int beginEntry, vector <int> &wikiColumns,cSou
 			}
 			// ****************************************
 			// assess how coherent the table is.  Can we guess a common type for each column of the table?
+			bool isAnyColumnCoherent = false;
 			for (vector <cColumn>::iterator ci = columns.begin(), ciEnd = columns.end(); ci != ciEnd; ci++)
 			{
 				if (ci->rows.size() <= 1 || !ci->determineColumnRDFTypeCoherency(wikipediaSource, tableTitleEntry, titleSynonyms, num, false, false))
 					ci->rows.clear();
+				else
+					isAnyColumnCoherent = true;
 			}
+			tableTitleEntry.coherentTable = isAnyColumnCoherent;
 			if (logTableDetail)
 				lplog(LOG_WHERE, L"Processing table %s: END", num.c_str());
 		}

@@ -173,6 +173,17 @@ void defineNames(void)
             1,L"_NAME*-3",0,1,1, // quoted nouns should be rare in general
             2,L",",L".",0,0,1,
             1,L"quotes",CLOSE_INFLECTION,1,1,0);
+	// ISBN 0-393-07101-4
+	cPattern::create(L"_ISBN", L"", 
+		1, L"abbreviation|isbn", 0, 1, 1,
+		1, L"number", 0, 1, 1,
+		1, L"dash", 0, 0, 1,
+		1, L"number", 0, 1, 1,
+		1, L"dash", 0, 0, 1,
+		1, L"number", 0, 1, 1,
+		1, L"dash", 0, 0, 1,
+		1, L"number", 0, 1, 1,
+		0);
 
   // Mrs. Pinkerton, 
   cPattern::create(L"_LINE1ADDRESS",L"",
