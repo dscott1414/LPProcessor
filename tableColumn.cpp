@@ -695,7 +695,7 @@ bool cSourceTable::isEntryInvalid(int beginEntry, vector <int> &wikiColumns,cSou
 				if (wikipediaSource->m[where].word == Words.TABLE)
 				{
 					cSourceTable wikiTable(where, whereQuestionTypeObject, wikipediaSource, questionSource);
-					if ((wikiTable.columns.size() > 1 || !wikiTable.columns[0].invalidColumn) && (wikiTable.columns.size() > 1 || (wikiTable.columns.size() == 1 && wikiTable.columns[0].rows.size() > 1)))
+					if (wikiTable.columns.size() > 0 && ((wikiTable.columns.size() > 1 || !wikiTable.columns[0].invalidColumn) && (wikiTable.columns.size() > 1 || (wikiTable.columns.size() == 1 && wikiTable.columns[0].rows.size() > 1))))
 						wikiTables.push_back(wikiTable);
 				}
 	}

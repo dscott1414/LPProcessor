@@ -1412,7 +1412,8 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
  }
 
  // process RDFType abstract, then go through the wikipedia source and wikipedia links in the RDF type, also going through any tables in the sources.
-void cQuestionAnswering::analyzeQuestionThroughAbstractAndWikipediaFromRDFType(cSource *questionSource,wchar_t *derivation,int whereQuestionContextSuggestion,cSpaceRelation *parentSRI,cTreeCat *rdfType,bool parseOnly,vector < cAS > &answerSRIs,int &maxAnswer,
+void cQuestionAnswering::analyzeQuestionThroughAbstractAndWikipediaFromRDFType(cSource *questionSource,wchar_t *derivation,int whereQuestionContextSuggestion,cSpaceRelation *parentSRI,
+	  cTreeCat *rdfType,bool parseOnly,vector < cAS > &answerSRIs,int &maxAnswer,
 		unordered_map <int,cWikipediaTableCandidateAnswers *> &wikiTableMap,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion, set <wstring> &wikipediaLinksAlreadyScanned)
 { LFS
 	if (rdfType!=NULL)
