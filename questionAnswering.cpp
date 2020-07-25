@@ -416,7 +416,7 @@ bool cQuestionAnswering::matchSourcePositions(cSource *parentSource, int parentW
 	return false;
 }
 
-int cQuestionAnswering::sriMatch(cSource *questionSource,cSource *childSource, int parentWhere, int childWhere, int whereQuestionType, __int64 questionType, bool &totalMatch, wstring &matchInfoDetail, int cost)
+int cQuestionAnswering::sriMatch(cSource *questionSource,cSource *childSource, int parentWhere, int childWhere, int whereQuestionType, __int64 questionType, bool &totalMatch, wstring &matchInfoDetail, int cost, bool subQuery)
 {
 	LFS
 	totalMatch = false;
@@ -452,10 +452,12 @@ int cQuestionAnswering::sriMatch(cSource *questionSource,cSource *childSource, i
 	{
 		// What are titles of books written by Krugman? - transformed into 'Krugman wrote what book?'
 		// answer cannot be a book or a synonym of book 
+		// however, in subquery, it is the opposite.  If it is the same, then it is good.
+		// The Prize is awarded in [Spain].
 		if (questionSource->m[parentWhere].getMainEntry() == childSource->m[childWhere].getMainEntry())
 		{
 			matchInfoDetail += L"[QUESTION_OBJECT_EXACT_MATCH]";
-			return -cost;
+			return (subQuery) ? cost:-cost;
 		}
 		// questions with acceptable answers
 		// which books did Krugman write?  'A Man for All Seasons'.  
@@ -509,7 +511,7 @@ int cQuestionAnswering::sriMatch(cSource *questionSource,cSource *childSource, i
 		if (synonyms.find(childSource->m[childWhere].getMainEntry()->first) != synonyms.end())
 		{
 			matchInfoDetail += L"[QUESTION_OBJECT_SYNONYM_MATCH]";
-			return -cost;
+			return (subQuery) ? cost : -cost;
 		}
 		if (!(questionType&QTAFlag) && questionType != unknownQTFlag)
 		{
@@ -1220,7 +1222,7 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 				matchInfoDetailSubject=(matchSumSubject<0) ? L"[SUBQUERY_NOT_IDENTICAL]":L"[SUBQUERY_IDENTICAL]";
 			}
 			else
-				matchSumSubject = sriMatch(questionSource,childSource, parentSRI->whereSubject, ws, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticSubjectTotalMatch, matchInfoDetailSubject, 8);
+				matchSumSubject = sriMatch(questionSource,childSource, parentSRI->whereSubject, ws, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticSubjectTotalMatch, matchInfoDetailSubject, 8, parentSRI->subQuery);
 			if (parentSRI->whereQuestionInformationSourceObjects.find(parentSRI->whereSubject)!=parentSRI->whereQuestionInformationSourceObjects.end() && matchSumSubject<8)
 			{
 				matchSumSubject=0;
@@ -1263,7 +1265,7 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 				set<int> whereAnswerMatchSubquery;
 				wstring matchInfoDetail=matchInfoDetailSubject;
 				int objectMatch=0,secondaryVerbMatch=0,secondaryObjectMatch=0;
-				objectMatch = sriMatch(questionSource, childSource, parentSRI->whereObject, wo, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticObjectTotalMatch, matchInfoDetail, 8);
+				objectMatch = sriMatch(questionSource, childSource, parentSRI->whereObject, wo, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticObjectTotalMatch, matchInfoDetail, 8, parentSRI->subQuery);
 				if (parentSRI->subQuery && questionTypeObject && objectMatch>0)
 					whereAnswerMatchSubquery.insert(childSRI->whereObject);
 
@@ -1278,12 +1280,12 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 					else
 						verbMatch=0;
 				}
-				secondaryObjectMatch = sriMatch(questionSource, childSource, parentSRI->whereSecondaryObject, childSRI->whereSecondaryObject, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticSecondaryObjectTotalMatch, matchInfoDetail, 4);
+				secondaryObjectMatch = sriMatch(questionSource, childSource, parentSRI->whereSecondaryObject, childSRI->whereSecondaryObject, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticSecondaryObjectTotalMatch, matchInfoDetail, 4, parentSRI->subQuery);
 				if (parentSRI->subQuery && questionTypeObject && secondaryObjectMatch>0)
 					whereAnswerMatchSubquery.insert(childSRI->whereSecondaryObject);
 				if (parentSRI->whereSecondaryObject>=0 && (secondaryObjectMatch==0 || childSRI->whereSecondaryObject<0))
 				{
-					if (childSRI->whereSecondaryObject >= 0 || (secondaryObjectMatch = sriMatch(questionSource, childSource, parentSRI->whereSecondaryObject, wo, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticSecondaryObjectTotalMatch, matchInfoDetail, 8)) == 0)
+					if (childSRI->whereSecondaryObject >= 0 || (secondaryObjectMatch = sriMatch(questionSource, childSource, parentSRI->whereSecondaryObject, wo, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticSecondaryObjectTotalMatch, matchInfoDetail, 8, parentSRI->subQuery)) == 0)
 					{
 						secondaryObjectMatch=-objectMatch;
 						matchInfoDetail+=L"[SECONDARY_OBJECT_MATCH_FAILED]";
@@ -1312,7 +1314,7 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 					if (*rpi!=-1)
 					{
 						if (prepMatch=sriPrepMatch(questionSource,childSource,parentSRI->wherePrep,*rpi,2)==2) prepMatch=2;
-						prepObjectMatch = sriMatch(questionSource, childSource, parentSRI->wherePrepObject, childSource->m[*rpi].getRelObject(), parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticPrepositionObjectTotalMatch, matchInfoDetail, 4);
+						prepObjectMatch = sriMatch(questionSource, childSource, parentSRI->wherePrepObject, childSource->m[*rpi].getRelObject(), parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticPrepositionObjectTotalMatch, matchInfoDetail, 4, parentSRI->subQuery);
 						if (parentSRI->subQuery && questionTypePrepObject && prepObjectMatch > 0)
 							whereAnswerMatchSubquery.insert(childSource->m[*rpi].getRelObject());
 						if (prepObjectMatch<=0 && questionSource->inObject(parentSRI->wherePrepObject,parentSRI->whereQuestionType))
@@ -1337,6 +1339,12 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 						appendSum(prepMatch,L"+PREP[",matchInfo);
 						appendSum(prepObjectMatch,L"+PREPOBJ[",matchInfo);
 						appendSum(equivalenceMatch,L"+EM[",matchInfo);
+					}
+					if (logQuestionDetail)
+					{
+						wstring ps;
+						childSource->prepPhraseToString(childSRI->wherePrep, ps);
+						childSource->printSRI(L"    [printall] "+matchInfo, &(*childSRI), 0, childSRI->whereSubject, childSRI->whereObject, ps, false, -1, L"");
 					}
 					if (matchSum>8+6 && ((parentSRI->subQuery && subjectMatch) || (subjectMatch && (verbMatch>0 || secondaryVerbMatch>0)))) // a single element match and 3/4 of another (sym match)
 					{

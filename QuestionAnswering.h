@@ -170,7 +170,7 @@ public:
 	static bool matchTimeObjects(cSource *parentSource, int parentWhere, cSource *childSource, int childWhere);
 	int sriPrepMatch(cSource *parentSource, cSource *childSource, int parentWhere, int childWhere, int cost);
 	int sriVerbMatch(cSource *parentSource, cSource *childSource, int parentWhere, int childWhere, int cost);
-	int sriMatch(cSource *questionSource, cSource *childSource, int parentWhere, int childWhere, int whereQuestionType, __int64 questionType, bool &totalMatch, wstring &matchInfoDetail, int cost);
+	int sriMatch(cSource *questionSource, cSource *childSource, int parentWhere, int childWhere, int whereQuestionType, __int64 questionType, bool &totalMatch, wstring &matchInfoDetail, int cost, bool subQuery);
 	int equivalenceClassCheck(cSource *questionSource, cSource *childSource, vector <cSpaceRelation>::iterator childSRI, cSpaceRelation* parentSRI, int whereChildSpecificObject, int &equivalenceClass, int matchSum);
 	int equivalenceClassCheck2(cSource *questionSource, cSource *childSource, vector <cSpaceRelation>::iterator childSRI, cSpaceRelation* parentSRI, int whereChildSpecificObject, int &equivalenceClass, int matchSum);
 	bool rejectPath(const wchar_t *path);
