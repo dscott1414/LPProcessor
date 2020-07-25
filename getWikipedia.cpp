@@ -1810,19 +1810,23 @@ int cSource::identifyISARelation(int principalWhere,bool initialTenseOnly)
 			}
 	}
 	if (logQuestionDetail)
-		for (unsigned int r=0; r<rdfTypes.size(); r++)
+	{
+		wstring rdfInfoPrinted;
+		for (unsigned int r = 0; r < rdfTypes.size(); r++)
 			if ((rdfTypes[r]->preferred || rdfTypes[r]->preferredUnknownClass || rdfTypes[r]->exactMatch))
-				rdfTypes[r]->logIdentity(LOG_WHERE,L"ISARelation",false);
+				rdfTypes[r]->logIdentity(LOG_WHERE, L"ISARelation", false, rdfInfoPrinted);
+	}
 	int p=100;
 	for (unordered_map <wstring ,int >::iterator idi=topHierarchyClassIndexes.begin(),idiEnd=topHierarchyClassIndexes.end(); idi!=idiEnd; idi++)
 		p=min(p,rdfTypes[idi->second]->confidence);
 	int numPreferred=0;
 	bool isPerson=false,isPlace=false,isBusiness=false,isWork=false;
 	int placeTypeFound=-1;
+	wstring rdfInfoPrinted;
 	for (unordered_map <wstring ,int >::iterator idi=topHierarchyClassIndexes.begin(),idiEnd=topHierarchyClassIndexes.end(); idi!=idiEnd; idi++)
 	{
 		if (logQuestionDetail)
-			rdfTypes[idi->second]->logIdentity(LOG_WHERE,L"ISARelationIdOffset",false);
+			rdfTypes[idi->second]->logIdentity(LOG_WHERE,L"ISARelationIdOffset",false, rdfInfoPrinted);
 		wstring tmpstr;
 		if (logQuestionDetail)
 			lplog(LOG_WHERE,L"ISADEBUG %s:%s:%d:%s",objectString(o,tmpstr,false).c_str(),rdfTypes[idi->second]->cli->first.c_str(),rdfTypes[idi->second]->confidence,idi->first.c_str());

@@ -1741,7 +1741,7 @@ public:
 		return true;
 	}
 
-	void logIdentity(int logType,wstring object,bool printOnlyPreferred)
+	void logIdentity(int logType,wstring object,bool printOnlyPreferred, wstring &rdfInfoPrinted)
 	{ 
 		if (printOnlyPreferred && !preferred && !exactMatch) return;
 		wstring tmpstr,tmpstr2,tmpstr3;
@@ -1749,8 +1749,12 @@ public:
 			object.c_str(), (preferred) ? L":PREFERRED " : L"", (exactMatch) ? L"EM " : L"", (preferredUnknownClass) ? L"PU " : L"", confidence,
 			cli->first.c_str(),ontologyTypeString(cli->second.ontologyType, cli->second.resourceType,tmpstr3),qtype.c_str(),cli->second.compactLabel.c_str(),cli->second.ontologyHierarchicalRank,
 			vectorString(cli->second.superClasses,tmpstr,L" ").c_str(),parentObject.c_str());
-		::lplog(logType,L"    %s:%s:%s:%s",
-			parentObject.c_str(),typeObject.c_str(),infoPage.c_str(),abstract.c_str());
+		if (rdfInfoPrinted != abstract)
+		{
+			::lplog(logType, L"    %s:%s:%s:%s",
+				parentObject.c_str(), typeObject.c_str(), infoPage.c_str(), abstract.c_str());
+			rdfInfoPrinted = abstract;
+		}
 	}
 
 private:

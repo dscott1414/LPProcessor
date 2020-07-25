@@ -2361,11 +2361,12 @@ void cOntology::includeAllSuperClasses(unordered_map <wstring ,int > &topHierarc
 		return;
 	wstring tmpstr,tmpstr2;
 	unsigned int rdfOriginalSize=rdfTypes.size();
+	wstring rdfInfoPrinted;
 	for (unsigned int I=rdfBaseTypeOffset; I<rdfOriginalSize; I++)
 	{
 		wstring object=rdfTypes[I]->typeObject;
 		if (recursionLevel==1 && logOntologyDetail)
-			rdfTypes[I]->logIdentity(LOG_WIKIPEDIA,object,false);
+			rdfTypes[I]->logIdentity(LOG_WIKIPEDIA,object,false, rdfInfoPrinted);
 		//if (rdfTypes[I]->cli->second.superClasses.empty())
 		//	wprintf(L"%d:%s:%s [no superclasses]\n",I,rdfTypes[I]->object.c_str(),rdfTypes[I]->cli->first.c_str());
 		for (vector <wstring>::iterator sci=rdfTypes[I]->cli->second.superClasses.begin(),sciEnd=rdfTypes[I]->cli->second.superClasses.end(); sci!=sciEnd; sci++)
@@ -2498,8 +2499,9 @@ void cOntology::printIdentity(wstring object)
 				//}
 			}
 		}
+	wstring rdfInfoPrinted;
 	for (unordered_map <wstring ,int >::iterator idi=topHierarchyClassIndexes.begin(),idiEnd=topHierarchyClassIndexes.end(); idi!=idiEnd; idi++)
-		rdfTypes[idi->second]->logIdentity(LOG_INFO,object,true);
+		rdfTypes[idi->second]->logIdentity(LOG_INFO,object,true, rdfInfoPrinted);
 	if (topHierarchyClassIndexes.empty() && rdfTypes.size())
 	{
 		unsigned int ontologyHierarchicalRank=rdfTypes[0]->cli->second.ontologyHierarchicalRank;
@@ -2508,7 +2510,7 @@ void cOntology::printIdentity(wstring object)
 			ontologyHierarchicalRank=min(ontologyHierarchicalRank,(unsigned)rdfTypes[I]->cli->second.ontologyHierarchicalRank);
 		for (unsigned int I=0; I<rdfTypes.size(); I++)
 			if (ontologyHierarchicalRank>=(unsigned)rdfTypes[I]->cli->second.ontologyHierarchicalRank)
-				rdfTypes[I]->logIdentity(LOG_INFO,object,false);
+				rdfTypes[I]->logIdentity(LOG_INFO,object,false, rdfInfoPrinted);
 	}
 	if (!cOntology::cacheRdfTypes)
 	  for (unsigned int I=0; I<rdfTypes.size(); I++)

@@ -1597,12 +1597,13 @@ int cQuestionAnswering::checkParentGroup(cSource *parentSource,int parentWhere,c
 			childSource->whereString(childWhere, tmpstr2, false).c_str(), setString(parentSynonyms, tmpstr3, L"|").c_str(), associations.c_str());
 	}
   int confidenceMatch=CONFIDENCE_NOMATCH;
+	wstring rdfInfoPrinted;
 	// first professions
 	for (unsigned int r=0; r<rdfTypes.size(); r++)
 	{
 		if (logQuestionDetail)
 			if ((rdfTypes[r]->preferred || rdfTypes[r]->preferredUnknownClass || rdfTypes[r]->exactMatch))
-				rdfTypes[r]->logIdentity(LOG_WHERE,L"checkParentGroup",false);
+				rdfTypes[r]->logIdentity(LOG_WHERE,L"checkParentGroup",false, rdfInfoPrinted);
 		for (unsigned int p=0; p<rdfTypes[r]->professionLinks.size(); p++)
 		{
 			// politician,businessman, etc
@@ -1856,12 +1857,13 @@ bool cQuestionAnswering::analyzeRDFTypes(cSource *questionSource, vector <cSpace
 		cOntology::setPreferred(topHierarchyClassIndexes, rdfTypes);
 		set<wstring> preferredTypes;
 		set <wstring> wikipediaLinksAlreadyScanned;
+		wstring rdfInfoPrinted;
 		for (unsigned int r = 0; r < rdfTypes.size(); r++)
 		{
 			if ((rdfTypes[r]->preferred || rdfTypes[r]->preferredUnknownClass || rdfTypes[r]->exactMatch) && preferredTypes.find(rdfTypes[r]->typeObject) == preferredTypes.end())
 			{
 				preferredTypes.insert(rdfTypes[r]->typeObject);
-				rdfTypes[r]->logIdentity(LOG_WHERE, (subQueryFlag) ? L"subQueries":L"processQuestionSource", false);
+				rdfTypes[r]->logIdentity(LOG_WHERE, (subQueryFlag) ? L"subQueries":L"processQuestionSource", false, rdfInfoPrinted);
 				// find subject or object without question
 				int numWords;
 				wstring tmpstr2;
@@ -1870,14 +1872,14 @@ bool cQuestionAnswering::analyzeRDFTypes(cSource *questionSource, vector <cSpace
 				whereQuestionInformationSourceObjectsSkipped = false;
 			}
 			else 
-				rdfTypes[r]->logIdentity(LOG_WHERE, (subQueryFlag) ? L"subQueriesNP":L"processQuestionSourceNP", false);
+				rdfTypes[r]->logIdentity(LOG_WHERE, (subQueryFlag) ? L"subQueriesNP":L"processQuestionSourceNP", false, rdfInfoPrinted);
 		}
 		if (preferredTypes.empty() && rdfTypes.size() > 0)
 		{
 			lplog(LOG_WHERE, L"%s:SKIPPED - NO PREFERRED RDF TYPES (%d)", sqderivation, rdfTypes.size());
 			for (unsigned int r = 0; r < rdfTypes.size(); r++)
 				if (rdfTypes[r]->cli->first != SEPARATOR)
-					rdfTypes[r]->logIdentity(LOG_WHERE, L"NO PREFERRED RDF:", false);
+					rdfTypes[r]->logIdentity(LOG_WHERE, L"NO PREFERRED RDF:", false, rdfInfoPrinted);
 		}
 		if (!cOntology::cacheRdfTypes)
 			for (unsigned int r = 0; r < rdfTypes.size(); r++)
