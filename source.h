@@ -2248,6 +2248,7 @@ int wherePrepObject,
 	void srSetTimeFlowTense(int spri);
 	bool isRelativeLocation(wstring word);
 	void newSR(int where,int o,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int at,int whereMovingRelativeTo,int relationType,const wchar_t *whereType,bool physicalRelation);
+	void logSpaceRelation(cSpaceRelation &sr, const wchar_t *whereType);
 	bool moveIdentifiedSubject(int where,bool inPrimaryQuote,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int at,int whereMovingRelativeTo,int spaceRelation,const wchar_t *whereType,bool physicalRelation);
 	int findAnyLocationPrepObject(int whereVerb,int &wherePrep,bool &location,bool &timeUnit);
 	bool rejectPrepPhrase(int wherePrep);

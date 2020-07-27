@@ -1495,7 +1495,6 @@ int wmain(int argc,wchar_t *argv[])
 		source.analyzeWordSenses();
 		source.narrativeIsQuoted = true;
 		source.syntacticRelations();
-		source.testSyntacticRelations();
 		if (parseOnly || viterbiTest)
 		{
 			if (viterbiTest)
@@ -1515,6 +1514,7 @@ int wmain(int argc,wchar_t *argv[])
 			source.write(path, true, false,specialExtension);
 			source.printResolutionCheck(badSpeakers);
 			source.logSpaceCheck();
+			source.testSyntacticRelations();
 			lplog();
 		}
 	}

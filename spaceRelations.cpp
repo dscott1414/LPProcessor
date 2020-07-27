@@ -385,7 +385,7 @@ void cSource::printSRI(wstring logPrefix, cSpaceRelation* sri, int s, int ws, in
 	}
 	const wchar_t *tmp1 = 0, *tmp2 = 0, *tmp3 = 0, *tmp4 = 0, *tmp5 = 0, *tmp6 = 0;
 	bool shortFormat = (logDestination&LOG_QCHECK) != 0;
-	wchar_t *f1 = L"%s:%06d:%s%s%s %s %s%s %s %s %s %s %s%s %s%s%s%s %s %s%s%s%s%s%s%s%s%s%s%s%s";
+	wchar_t *f1 = L"%s:%06d:%s%s%s %s %s%s %s %s %s %s %s%s [V %d:%s]%s%s%s %s %s%s%s%s%s%s%s%s%s%s%s%s";
 	//wchar_t *f2 = L"%s:%06d:1%s2%s3%s 4%s 5%s6%s 7%s 8%s 9%s a%s b%sc%s d%se%sf%sg%s h%s i%sj%sk%sl%sm%sn%so%sp%sq%sr%ss%st%su";
 	//0  1   2  3 4  5  6 7  8  9 10 11 1213 14151617 18 192021222324252627282930
 	lplog(logDestination, f1, logPrefix.c_str(),
@@ -402,6 +402,7 @@ void cSource::printSRI(wstring logPrefix, cSpaceRelation* sri, int s, int ws, in
 		getWSAdjective(ws, 1).c_str(), // 11
 		wrti(ws, L"S", tmpstr3, shortFormat), // 12
 		(sri->tft.negation) ? L"[NOT]" : L"", // 13
+		sri->whereVerb,
 		wchr(sri->whereVerb), // 14
 		tmp1 = getWSAdverb(sri->whereVerb, sri->changeStateAdverb), // 15
 		tmp2 = getWOSAdjective(sri->whereVerb, wo, tmpstr4).c_str(), // 16
@@ -563,6 +564,17 @@ cSpaceRelation::cSpaceRelation(char *buffer, int &w, unsigned int total, bool &e
 	timeInfo.reserve(count);
 	while (count-- && !error && w < (signed)total)
 		timeInfo.emplace_back(buffer, w, total, error);
+	skip = false;
+	changeStateAdverb = false;
+	nonSemanticObjectTotalMatch = false;
+	nonSemanticPrepositionObjectTotalMatch = false;
+	nonSemanticSecondaryObjectTotalMatch = false;
+	nonSemanticSubjectTotalMatch = false;
+	printMax = -1;
+	printMin = -1;
+	speakerContinuation = false;
+	whereChildCandidateAnswer = -1;
+	whereQuestionTypeObject = -1;
 }
 
 int cSpaceRelation::sanityCheck(int maxSourcePosition, int maxObjectIndex)

@@ -393,10 +393,10 @@ size_t cSource::startCollectTagsFromTag(bool inTrace,int tagSet,cTagLocation &tl
 	int pattern=tl.pattern,position=tl.sourcePosition,end=tl.len,PEMAOffset=tl.PEMAOffset;
 	if (obeyBlock) // in this case, if we check for descendants even with obeyBlock on, _NOUN[9] will not appear to contain prepTagSet because _PP is blocked in that pattern.  It will only contain PREP.
 	{
-	if (collectSelfTags && !(patterns[pattern]->includesDescendantsAndSelfAllOfTagSet&((__int64)1<<tagSet)))
-		return 0;
-	if (!collectSelfTags && !(patterns[pattern]->includesOnlyDescendantsAllOfTagSet&((__int64)1<<tagSet)))
-		return 0;
+		if (collectSelfTags && !(patterns[pattern]->includesDescendantsAndSelfAllOfTagSet&((__int64)1<<tagSet)))
+			return 0;
+		if (!collectSelfTags && !(patterns[pattern]->includesOnlyDescendantsAllOfTagSet&((__int64)1<<tagSet)))
+			return 0;
 	}
 	if (PEMAOffset<0)
 	{

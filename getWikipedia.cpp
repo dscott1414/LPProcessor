@@ -1417,6 +1417,13 @@ int cQuestionAnswering::processPath(cSource *parentSource,const wchar_t *path, c
 			bool s1 = logMatchedSentences, s2 = logUnmatchedSentences;
 			logMatchedSentences = logUnmatchedSentences = true;
 			source->printSentences(false, unknownCount, quotationExceptions, totalQuotations, globalOverMatchedPositionsTotal);
+			if (source->m.size())
+			{
+				source->identifyObjects();
+				source->analyzeWordSenses();
+				source->narrativeIsQuoted = source->sourceType != cSource::GUTENBERG_SOURCE_TYPE;
+				source->syntacticRelations();
+			}
 			logMatchedSentences = s1;
 			logUnmatchedSentences = s2;
 			lplog();
@@ -1779,7 +1786,7 @@ int cSource::identifyISARelation(int principalWhere,bool initialTenseOnly)
 	// must be a name
 	if (rejectISARelation(principalWhere) || o < 0)
 	{
-		if (o >= 0 && logQuestionDetail)
+		if (o >= 0 && logQuestionDetail && debugTrace.traceRelations)
 		{
 			wstring tmpstr;
 			lplog(LOG_INFO, L"ISARelation declined:%s", objectString(o, tmpstr, false).c_str());

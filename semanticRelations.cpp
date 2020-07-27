@@ -529,8 +529,8 @@ void cSource::correctSRIEntry(cSpaceRelation &sri)
 		sri.whereVerb=m[sri.whereObject].relInternalVerb;
 		sri.whereObject=saveWhereObject;
 	}
-	// is he planning to marry?
-	if (sri.whereControllingEntity<0 && sri.whereSubject>=0 && sri.whereVerb>=0 && m[sri.whereVerb].previousCompoundPartObject>=0) // CASE 4
+	// CASE 4. is he planning to marry?
+	if (sri.whereControllingEntity<0 && sri.whereSubject>=0 && sri.whereVerb>=0 && m[sri.whereVerb].previousCompoundPartObject>=0 && (m[sri.whereSubject].flags&cWordMatch::flagInQuestion)) // CASE 4
 	{
 		sri.whereObject=m[sri.whereSubject].getRelObject();
 		sri.whereVerb=m[sri.whereSubject].getRelVerb();
@@ -556,7 +556,7 @@ void cSource::correctSRIEntry(cSpaceRelation &sri)
 	}
 	if (sri.whereObject<0 && sri.whereVerb>=0) 
 		sri.whereObject=m[sri.whereVerb].getRelObject();
-	// How many years transpired between world championships for the winning team ?
+	// How many years transpired between world championships for the winning team ? CASE 6
 	if (sri.whereControllingEntity<0 && sri.whereSubject>=0 && m[sri.whereSubject].queryWinnerForm(relativizerForm)!=-1 && 
 			sri.whereVerb>=0 && m[sri.whereVerb].relSubject>=0 && m[sri.whereVerb].relSubject!=sri.whereSubject)
 			sri.whereSubject=m[sri.whereVerb].relSubject;
@@ -569,7 +569,7 @@ void cSource::correctSRIEntry(cSpaceRelation &sri)
 		sri.whereObject=m[sri.whereVerb].getRelObject();
 		sri.whereSubject=m[sri.whereVerb].relSubject;
 	}
-	// On what date did the court begin screening potential jurors?
+	// On what date did the court begin screening potential jurors? CASE 7
 	sri.changeStateAdverb=false;
 	if (sri.whereVerb>=0 && m[sri.whereVerb].getRelVerb()<0 && sri.whereVerb+1<(signed)m.size() && (m[sri.whereVerb+1].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE)!=0)
 	{
@@ -586,7 +586,7 @@ void cSource::correctSRIEntry(cSpaceRelation &sri)
 			}
 		}
 	}
-	if (sri.whereVerb>=0 && m[sri.whereVerb].getRelVerb()>=0 && m[m[sri.whereVerb].getRelVerb()].previousCompoundPartObject==sri.whereVerb) // CASE 6
+	if (sri.whereVerb>=0 && m[sri.whereVerb].getRelVerb()>=0 && m[m[sri.whereVerb].getRelVerb()].previousCompoundPartObject==sri.whereVerb) // CASE 8
 	{
 		sri.whereSecondaryVerb=m[sri.whereVerb].getRelVerb();
 		sri.whereSecondaryObject=m[m[sri.whereVerb].getRelVerb()].getRelObject();
@@ -608,7 +608,7 @@ void cSource::correctSRIEntry(cSpaceRelation &sri)
 	inQuestion|=(sri.whereObject>=0 && (m[sri.whereObject].flags&cWordMatch::flagInQuestion));
 	if (inQuestion && sri.whereVerb>=0) // search for _Q2PREP
 	{
-		// what is his academic specialty?
+		// what is his academic specialty? CASE 9
 		if (m[sri.whereVerb].queryWinnerForm(isForm)>=0 && sri.whereObject>=0 && sri.whereSubject>=0 && (m[sri.whereSubject].queryForm(relativizerForm)>=0 || m[sri.whereSubject].queryForm(interrogativeDeterminerForm)>=0))
 		{
 			int wo=sri.whereObject;
@@ -616,8 +616,8 @@ void cSource::correctSRIEntry(cSpaceRelation &sri)
 			sri.whereSubject=wo;
 		}
 		processQuestion(sri.whereVerb,sri.whereControllingEntity,sri.questionType,sri.whereQuestionType,sri.whereQuestionInformationSourceObjects);
-		// if a where clause, put where in a prepositional clause / did Jay-Z grow up?
-		// if a when clause, also put where in a prepositional clause / when was Darrell Hammond born?
+		// if a where clause, put where in a prepositional clause / did Jay-Z grow up? CASE 10
+		// if a when clause, also put where in a prepositional clause / when was Darrell Hammond born? CASE 11
 		if (((sri.questionType&cQuestionAnswering::typeQTMask)== cQuestionAnswering::whereQTFlag || (sri.questionType&cQuestionAnswering::typeQTMask)== cQuestionAnswering::whenQTFlag) &&
 			  inObject(sri.whereObject,sri.whereQuestionType) && sri.whereVerb>=0)
 		{
@@ -718,7 +718,7 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 			return;
 		}
 	}
-	bool logSR=false,genderedEntityMove=false,convertToMove=false;
+	bool shouldLogSpaceRelation=false,genderedEntityMove=false,convertToMove=false;
 	wstring tmpstr,tmpstr2,tmpstr3,tmpstr4,tmpstr5,tmpstr6;
 	// came to a halt
 	if (convertToStay) relationType=stSTAY;
@@ -926,6 +926,8 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 	if (speakerGroupsEstablished)
 	{
 		cSpaceRelation sr(where,_o,whereControllingEntity,whereSubject,whereVerb,wherePrep,whereObject,wherePrepObject,whereMovingRelativeTo,relationType,genderedEntityMove,genderedLocationRelation,objectSubType,prepObjectSubType,physicalRelation);
+		if (debugTrace.traceRelations)
+			logSpaceRelation(sr, L"BEFORE CORRECTION");
 		correctSRIEntry(sr);
 		vector <cSpaceRelation>::iterator location = lower_bound(spaceRelations.begin(), spaceRelations.end(), sr, comparesr),forward=location,firstLocation=location;
 		// there can be multiple space relations in one position - one for each object
@@ -938,7 +940,7 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 			}
 			forward++;
 		}
-		if (spaceRelations.empty() || location==spaceRelations.end() || (logSR=sr!=*location))
+		if (spaceRelations.empty() || location==spaceRelations.end() || (shouldLogSpaceRelation=sr!=*location))
 		{
 			if (spaceRelations.empty())
 				location=spaceRelations.insert(spaceRelations.begin(),sr);
@@ -985,6 +987,8 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 					objects[m[whereSubject].getObject()].spaceRelations.push_back((int) (location-spaceRelations.begin()));
 			}
 		}
+		if (debugTrace.traceRelations)
+			logSpaceRelation(sr, whereType);
 	}
 	else
 	{
@@ -1001,29 +1005,42 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 				spaceRelations[insertionPoint].relationType=stENTER;
 				convertToMove=false;
 			}
-			logSR=true;
+			shouldLogSpaceRelation=true;
+			if (debugTrace.traceRelations)
+				logSpaceRelation(sr,whereType);
 		}
 	}
 	if (whereVerb>=0) m[whereVerb].spaceRelation=true;
 	if (wherePrepObject>=0) m[wherePrepObject].spaceRelation=true;
 	m[where].spaceRelation=true;
-	if (logSR && debugTrace.traceWhere)
-		lplog(LOG_WHERE,L"%06d:PLACE%s%s %s %s:%s %s %s%s%s%s%s%s%s%s",
-			where,
-			(genderedLocationRelation) ? L" GENDERED" : L"",
-			(prepObjectSubType==GEOGRAPHICAL_URBAN_SUBSUBFEATURE) ? L"":L" FULL",
-			whereType,
-			relationString(relationType).c_str(),
-			src(whereSubject,L"S",tmpstr),
-			(whereVerb<0 || relationType==-stLOCATION) ? L"":m[whereVerb].word->first.c_str(),
-			src(whereObject,L"O",tmpstr2),
-			(objectSubType>=0) ? OCSubTypeStrings[objectSubType] : ((whereObject<0) ? L"":L"STU"),
-			(whereObject<0) ? L"" : src(m[whereObject].relNextObject,L"nextObject",tmpstr3),
-			(wherePrep<0) ? L"":m[wherePrep].word->first.c_str(),
-			src(wherePrepObject,L"PO",tmpstr4),
-			(prepObjectSubType>=0) ? OCSubTypeStrings[prepObjectSubType] : ((wherePrepObject<0) ? L"":L"STU"),
-			src(whereControllingEntity,L"controller",tmpstr5),
-			src(whereMovingRelativeTo,L"moving relative to",tmpstr6));
+}
+
+void cSource::logSpaceRelation(cSpaceRelation &sr,const wchar_t *whereType)
+{
+	set <int> relPreps;
+	getAllPreps(&sr, relPreps, sr.whereObject);
+	wstring tmpstr, tmpstr2, tmpstr3, tmpstr4, tmpstr5, tmpstr6, extendedPrep;
+	for (set <int>::iterator rpi = relPreps.begin(), rpiEnd = relPreps.end(); rpi != rpiEnd; rpi++)
+		if (*rpi!=sr.wherePrep && *rpi>=0)
+			extendedPrep += m[*rpi].word->first + L" "+src(m[*rpi].getRelObject(), L"PO", tmpstr4)+L" ";
+
+	lplog(LOG_INFO, L"%06d:%s %s %s:%s V[%d:%s] %s%s%s %s%s%s%s%s%s",
+		sr.where,
+		whereType,
+		(sr.genderedLocationRelation) ? L" GENDERED" : L"",
+		relationString(sr.relationType).c_str(),
+		src(sr.whereSubject, L"S", tmpstr),
+		sr.whereVerb,
+		(sr.whereVerb < 0 || sr.relationType == -stLOCATION) ? L"" : m[sr.whereVerb].word->first.c_str(),
+		src(sr.whereObject, L"O", tmpstr2),
+		(sr.objectSubType >= 0) ? OCSubTypeStrings[sr.objectSubType] : ((sr.whereObject < 0) ? L"" : L"SubtypeUndefined "),
+		(sr.whereObject < 0) ? L"" : src(m[sr.whereObject].relNextObject, L"nextObject", tmpstr3),
+		(sr.wherePrep < 0) ? L"" : m[sr.wherePrep].word->first.c_str(),
+		src(sr.wherePrepObject, L"PO", tmpstr4),
+		(sr.prepObjectSubType >= 0) ? OCSubTypeStrings[sr.prepObjectSubType] : ((sr.wherePrepObject < 0) ? L"" : L"SubtypeUndefined "),
+		extendedPrep.c_str(),
+		src(sr.whereControllingEntity, L"controller", tmpstr5),
+		src(sr.whereMovingRelativeTo, L"moving relative to", tmpstr6));
 }
 
 // subject is moving to a destination

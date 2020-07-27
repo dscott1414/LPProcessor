@@ -3082,7 +3082,7 @@ int cSource::coreferenceFilterLL2345(int where,int rObject,vector <int> &disallo
 	}
 	else
 		wcpBegin=m[wcpBegin].beginObjectPosition;
-	if (queryPattern(m[wcpEnd].beginObjectPosition,L"__NOUN",maxEnd)!=-1)
+	if (m[wcpEnd].beginObjectPosition>=0 && queryPattern(m[wcpEnd].beginObjectPosition,L"__NOUN",maxEnd)!=-1)
 		wcpEnd=m[wcpEnd].beginObjectPosition+maxEnd;
 	else
 		wcpEnd=m[wcpEnd].endObjectPosition;

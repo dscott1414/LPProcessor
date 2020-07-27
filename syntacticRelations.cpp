@@ -1560,7 +1560,8 @@ int cSource::processInternalInfinitivePhrase(int where,int whereVerb,int wherePa
 						lplog(LOG_RESOLUTION,L"%06d:verb@%d having infinitive forward bare infinitive relVerb@%d is rejected in favor of closer parent verb@%d.",where,m[whereIVerb].previousCompoundPartObject,whereIVerb,whereVerb);
 					m[m[whereHVerb].previousCompoundPartObject].setRelVerb(-1); // IVERB mistakenly attached to verb of previous parent
 				}
-				m[whereHVerb].previousCompoundPartObject=whereVerb;
+				m[whereHVerb].previousCompoundPartObject = whereVerb;
+				m[whereVerb].nextCompoundPartObject = whereHVerb;
 			}
 			evaluateAdditionalRoleTags(itoWhere,tagSets[K],parentTagLen,firstFreePrep,futureBoundPrepositions,inPrimaryQuote,inSecondaryQuote,outsideQuoteTruth,inQuoteTruth,true,true,nextVerbInSeries,sense,whereLastVerb,ambiguousSense,inQuotedString,inSectionHeader,begin,end);
 			whereIVerb=whereHVerb;
@@ -1575,7 +1576,8 @@ int cSource::processInternalInfinitivePhrase(int where,int whereVerb,int wherePa
 					lplog(LOG_RESOLUTION,L"%06d:verb@%d having infinitive forward relVerb@%d is rejected in favor of closer parent verb@%d.",where,m[whereIVerb].previousCompoundPartObject,whereIVerb,whereVerb);
 				m[m[whereIVerb].previousCompoundPartObject].setRelVerb(-1); // IVERB mistakenly attached to verb of previous parent
 			}
-			m[whereIVerb].previousCompoundPartObject=whereVerb;
+			m[whereIVerb].previousCompoundPartObject = whereVerb;
+			m[whereVerb].nextCompoundPartObject = whereIVerb;
 			if (whereParentObject>=0)
 			{
 				m[whereParentObject].relInternalVerb=whereIVerb;
@@ -2831,6 +2833,7 @@ void cSource::testSyntacticRelations()
 {
 	tIWMM primaryQuoteCloseWord = Words.gquery(L"”");
 	tIWMM secondaryQuoteCloseWord = Words.gquery(L"’");
+	vector <cSpaceRelation>::iterator sri= spaceRelations.begin();
 	for (unsigned int s = 0; s<sentenceStarts.size(); s++)
 	{
 		unsigned int begin = sentenceStarts[s];
@@ -2879,6 +2882,8 @@ void cSource::testSyntacticRelations()
 			}
 			if (!printedSentence && end-begin>1)
 				lplog(LOG_INFO, L"%d-%d:%s: no relations found", begin,end,sentence.c_str());
+			for (; sri != spaceRelations.end() && ((unsigned)sri->where) < end; sri++)
+				logSpaceRelation(*sri, L"~~~");
 		}
 	}
 }

@@ -101,7 +101,7 @@ public class WordMatch {
 	short maxLACMatch;
 	short maxLACAACMatch;
 	long objectRole;
-	byte verbSense;
+	int verbSense;
 	byte timeColor;
 	int beginPEMAPosition;
 	int endPEMAPosition;
@@ -189,7 +189,7 @@ public class WordMatch {
 		maxLACMatch = rs.readShort();
 		maxLACAACMatch = rs.readShort();
 		objectRole = rs.readLong();
-		verbSense = rs.readByte();
+		verbSense = rs.readInteger();
 		timeColor = rs.readByte();
 		beginPEMAPosition = rs.readInteger();
 		endPEMAPosition = rs.readInteger();

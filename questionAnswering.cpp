@@ -258,24 +258,27 @@ bool cQuestionAnswering::matchSourcePositions(cSource *parentSource, int parentW
 	}
 	// parent=the Nobel Peace Prize / child=the prize
 	// parent=Jay-z [31][name][M][A:Jay-z ][WikiPerson] / child=4082:a story[4081-4083][4082][nongen][N]
+	// parent=From which university did he receive his doctorate? / child=a Phd 
 	if (parentIsDefiniteObject && !childIsDefiniteObject)
 	{
-		if (parentOwnerWhere>=0)
-		{
-			int parentOwnerObject=(parentSource->m[parentOwnerWhere].objectMatches.size()>0) ? parentSource->m[parentOwnerWhere].objectMatches[0].object:parentSource->m[parentOwnerWhere].getObject();
-			if (parentOwnerWhere>=0 && (parentSource->objects[parentOwnerObject].objectClass==NAME_OBJECT_CLASS || (parentSource->m[parentOwnerWhere].flags&cWordMatch::flagNounOwner)))
-				return false;
-		}
+		// if the parent has a definite owner, but if the child doesn't have a different owner, we should not return false?
+		//if (parentOwnerWhere>=0)
+		//{
+		//	int parentOwnerObject=(parentSource->m[parentOwnerWhere].objectMatches.size()>0) ? parentSource->m[parentOwnerWhere].objectMatches[0].object:parentSource->m[parentOwnerWhere].getObject();
+		//	if (parentOwnerWhere>=0 && (parentSource->objects[parentOwnerObject].objectClass==NAME_OBJECT_CLASS || (parentSource->m[parentOwnerWhere].flags&cWordMatch::flagNounOwner)))
+		//		return false;
+		//}
 		if (parentSource->m[parentSource->m[parentWhere].endObjectPosition-1].word->first==imChild->word->first)
 			return true;
 		int confidence=-1;
 		if ((confidence=childSource->checkParticularPartSemanticMatch(LOG_WHERE,childWhere,parentSource,parentWhere,-1,synonym,semanticMismatch))<CONFIDENCE_NOMATCH)
 		{
-			if (imChild->beginObjectPosition>=0 && childSource->m[imChild->beginObjectPosition].word->first==L"a")
-			{
-				if (confidence>1 || synonym) return false;
-				synonym=true; // decrease match
-			}
+			// why are we insisting on 'a'?
+			//if (imChild->beginObjectPosition>=0 && childSource->m[imChild->beginObjectPosition].word->first==L"a")
+			//{
+			//	if (confidence>1 || synonym) return false;
+			//	synonym=true; // decrease match
+			//}
 			return true;
 		}
 		return false;
@@ -559,31 +562,74 @@ int cQuestionAnswering::sriMatch(cSource *questionSource,cSource *childSource, i
 	return 0;
 }
 
-int cQuestionAnswering::sriVerbMatch(cSource *parentSource,cSource *childSource,int parentWhere,int childWhere,int cost)
+int cQuestionAnswering::sriVerbMatch(cSource *parentSource,cSource *childSource,int parentWhere,int childWhere,wstring &matchInfoDetailVerb, wstring verbTypeMatch, int cost)
 { LFS
-	if (parentWhere<0 || childWhere<0)
+	if (parentWhere < 0 || childWhere < 0)
+	{
+		matchInfoDetailVerb += L"["+ verbTypeMatch+L" where is negative]";
 		return 0;
+	}
 	tIWMM childWord,parentWord;
-	if ((childWord=childSource->m[childWhere].getMainEntry())==(parentWord=parentSource->m[parentWhere].getMainEntry()))
+	if ((childWord = childSource->m[childWhere].getMainEntry()) == (parentWord = parentSource->m[parentWhere].getMainEntry()))
+	{
+		matchInfoDetailVerb += L"[" + verbTypeMatch + L" verb exact match]";
 		return cost;
+	}
 	set <wstring> childSynonyms;
 	wstring tmpstr;
 	childSource->getSynonyms(childWord->first,childSynonyms, VERB);
 	if (logSynonymDetail)
 		lplog(LOG_WHERE, L"TSYM [VERB] comparing PARENT %s against synonyms [%s]%s", parentWord->first.c_str(), childWord->first.c_str(), setString(childSynonyms, tmpstr, L"|").c_str());
-	if (childSynonyms.find(parentWord->first)!=childSynonyms.end())
-		return cost*3/4;
+	if (childSynonyms.find(parentWord->first) != childSynonyms.end())
+	{
+		matchInfoDetailVerb += L"[" + verbTypeMatch + L" verb parent in child synonym match]";
+		return cost * 3 / 4;
+	}
 	set <wstring> parentSynonyms;
 	childSource->getSynonyms(parentWord->first,parentSynonyms, VERB);
 	if (logSynonymDetail)
-		lplog(LOG_WHERE, L"TSYM [VERB] comparing CHILD %s against synonyms [%s]%s", childWord->first.c_str(), parentWord->first.c_str(), setString(parentSynonyms, tmpstr, L"|").c_str());
-	if (parentSynonyms.find(childWord->first)!=parentSynonyms.end())
-		return cost*3/4;
+		lplog(LOG_WHERE, L"%s TSYM [VERB] comparing CHILD %s against synonyms [%s]%s", verbTypeMatch.c_str(),childWord->first.c_str(), parentWord->first.c_str(), setString(parentSynonyms, tmpstr, L"|").c_str());
+	if (parentSynonyms.find(childWord->first) != parentSynonyms.end())
+	{
+		matchInfoDetailVerb += L"[" + verbTypeMatch + L" verb child in parent synonym match]";
+		return cost * 3 / 4;
+	}
 	if ((childWord->first==L"am" && (parentWord->second.timeFlags&31)==T_START) || (parentWord->first==L"am" && (childWord->second.timeFlags&31)==T_START))
 	{
 		if (logSynonymDetail)
-			lplog(LOG_WHERE,L"TSYM [VERBBEGINBEING] matched CHILD %s against PARENT %s",childWord->first.c_str(),parentWord->first.c_str());
-	  return cost/2;
+			lplog(LOG_WHERE,L"%s TSYM [VERBBEGINBEING] matched CHILD %s against PARENT %s",verbTypeMatch.c_str(),childWord->first.c_str(),parentWord->first.c_str());
+		matchInfoDetailVerb += L"[" + verbTypeMatch + L" verb AM match]";
+		return cost/2;
+	}
+	wstring parentVerb, parentVerbClassInfo, childVerb, childVerbClassInfo;
+	unordered_map <wstring, set <int> >::iterator parentVerbClasses = parentSource->getVerbClasses(parentWhere, parentVerb);
+	if (parentVerbClasses != vbNetVerbToClassMap.end())
+	{
+		parentVerbClassInfo = parentVerbClasses->first + L":";
+		for (set <int>::iterator vbi = parentVerbClasses->second.begin(), vbiEnd = parentVerbClasses->second.end(); vbi != vbiEnd; vbi++)
+			parentVerbClassInfo += vbNetClasses[*vbi].name() + L" ";
+	}
+	unordered_map <wstring, set <int> >::iterator childVerbClasses = childSource->getVerbClasses(childWhere, childVerb);
+	if (childVerbClasses != vbNetVerbToClassMap.end())
+	{
+		childVerbClassInfo = childVerbClasses->first + L":";
+		for (set <int>::iterator vbi = childVerbClasses->second.begin(), vbiEnd = childVerbClasses->second.end(); vbi != vbiEnd; vbi++)
+			childVerbClassInfo += vbNetClasses[*vbi].name() + L" ";
+	}
+	lplog(LOG_WHERE, L"%s VerbNet comparing PARENT verb %s [class=%s] against CHILD verb %s [class=%s]", verbTypeMatch.c_str(),parentVerb.c_str(), parentVerbClassInfo.c_str(), childVerb.c_str(), childVerbClassInfo.c_str());
+	if (parentVerbClasses != vbNetVerbToClassMap.end() && childVerbClasses != vbNetVerbToClassMap.end())
+	{
+		if (parentVerbClasses->first == childVerbClasses->first)
+		{
+			matchInfoDetailVerb += L"[" + verbTypeMatch + L" verb match verb class]";
+			return cost / 2;
+		}
+		if ((parentVerbClasses->first == L"receive" && childVerbClasses->first == L"pursue") ||
+			(parentVerbClasses->first == L"pursue" && childVerbClasses->first == L"receive"))
+		{
+			matchInfoDetailVerb += L"[" + verbTypeMatch + L" verb match verb class receive/pursue]";
+			return cost / 2;
+		}
 	}
 	return 0;
 }
@@ -1240,162 +1286,170 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 				if (ws<0) break;
 				continue;
 			}
-			int verbMatch=sriVerbMatch(questionSource,childSource,parentSRI->whereVerb,childSRI->whereVerb,8);
-			bool subjectMatch=matchSumSubject>0;
-			bool inSubQuery=parentSRI->questionType==unknownQTFlag;
-			if (verbMatch<=0 && !subjectMatch && !questionTypeSubject && !inSubQuery)
+			for (int vi = childSRI->whereVerb; true; vi = childSource->m[vi].nextCompoundPartObject)
 			{
-				if (ws<0 || childSource->m[ws].nextCompoundPartObject<0 || ws>=childSource->m.size()) break;
-				continue;
-			}
-			//if (matchSumSubject>0 && inSubQuery)
-			//{
-			//	wstring tmp1,tmp2;
-			//	lplog(LOG_WHERE,L"Comparing subjects %d [%d, %d] %s and %s.",matchSumSubject,parentSRI->whereSubject,ws,whereString(parentSRI->whereSubject,tmp1,false).c_str(),childSource->whereString(ws,tmp2,false).c_str());
-			//}
-			for (int wo=childSRI->whereObject; true; wo=childSource->m[wo].nextCompoundPartObject)
-			{ LFSL
-				if ((wo!=childSRI->whereObject && wo<0) || wo>=(int)childSource->m.size()) break;
-				if (wo!=childSRI->whereObject && logQuestionDetail)
+				wstring matchInfoDetailVerb;
+				int verbMatch=sriVerbMatch(questionSource,childSource,parentSRI->whereVerb,vi, matchInfoDetailVerb, L"PRIMARY", 8);
+				bool subjectMatch=matchSumSubject>0;
+				bool inSubQuery=parentSRI->questionType==unknownQTFlag;
+				if (verbMatch<=0 && !subjectMatch && !questionTypeSubject && !inSubQuery)
 				{
-					wstring ps;
-					childSource->prepPhraseToString(childSRI->wherePrep,ps);
-					childSource->printSRI(L"    [printallCO] ",&(*childSRI),0,ws,wo,ps,false,-1,L"");
+					if (ws<0 || childSource->m[ws].nextCompoundPartObject<0 || ws>=childSource->m.size()) break;
+					if (vi < 0 || childSource->m[vi].nextCompoundPartObject < 0 || vi >= childSource->m.size()) break;
+					continue;
 				}
-				set<int> whereAnswerMatchSubquery;
-				wstring matchInfoDetail=matchInfoDetailSubject;
-				int objectMatch=0,secondaryVerbMatch=0,secondaryObjectMatch=0;
-				objectMatch = sriMatch(questionSource, childSource, parentSRI->whereObject, wo, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticObjectTotalMatch, matchInfoDetail, 8, parentSRI->subQuery);
-				if (parentSRI->subQuery && questionTypeObject && objectMatch>0)
-					whereAnswerMatchSubquery.insert(childSRI->whereObject);
-
-				secondaryVerbMatch=sriVerbMatch(questionSource,childSource,parentSRI->whereSecondaryVerb,childSRI->whereSecondaryVerb,4);
-				if (parentSRI->whereSecondaryVerb>=0 && (secondaryVerbMatch==0 || childSRI->whereSecondaryVerb<0))
-				{
-					if (childSRI->whereSecondaryVerb>=0 || (secondaryVerbMatch=sriVerbMatch(questionSource,childSource,parentSRI->whereSecondaryVerb,childSRI->whereVerb,8))==0)
-					{
-						secondaryVerbMatch=-verbMatch;
-						matchInfoDetail+=L"[SECONDARY_VERB_MATCH_FAILED]";
-					}
-					else
-						verbMatch=0;
-				}
-				secondaryObjectMatch = sriMatch(questionSource, childSource, parentSRI->whereSecondaryObject, childSRI->whereSecondaryObject, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticSecondaryObjectTotalMatch, matchInfoDetail, 4, parentSRI->subQuery);
-				if (parentSRI->subQuery && questionTypeObject && secondaryObjectMatch>0)
-					whereAnswerMatchSubquery.insert(childSRI->whereSecondaryObject);
-				if (parentSRI->whereSecondaryObject>=0 && (secondaryObjectMatch==0 || childSRI->whereSecondaryObject<0))
-				{
-					if (childSRI->whereSecondaryObject >= 0 || (secondaryObjectMatch = sriMatch(questionSource, childSource, parentSRI->whereSecondaryObject, wo, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticSecondaryObjectTotalMatch, matchInfoDetail, 8, parentSRI->subQuery)) == 0)
-					{
-						secondaryObjectMatch=-objectMatch;
-						matchInfoDetail+=L"[SECONDARY_OBJECT_MATCH_FAILED]";
-					}
-					else
-						objectMatch=0;
-				}
-				// PARENT: what     [S Darrell Hammond]  featured   on [PO Comedy Central program[12-15][14][nongen][N]]?
-				// CHILD: [S Darrell Hammond]  was [O a featured cast member[67-71][70][nongen][N]] on   [PO Saturday Night Live[72-75][72][ngname][N][WikiWork]].
-				int cob=-1,coe;
-				if (verbMatch<=0 && parentSRI->whereVerb>=0 && childSRI->whereVerb>=0 && childSRI->whereObject>=0 &&
-					childSource->m[childSRI->whereVerb].forms.isSet(isForm) && (cob=childSource->m[childSRI->whereObject].beginObjectPosition)>=0 && (coe=childSource->m[childSRI->whereObject].endObjectPosition)>=0 &&
-					(coe-cob)>2 && childSource->m[cob].queryForm(determinerForm)>=0 && childSource->m[cob+1].getMainEntry()==questionSource->m[parentSRI->whereVerb].getMainEntry())
-				{
-					verbMatch=8;
-					matchInfoDetail+=L"[MOVED_VERB_TO_OBJECT]";
-				}
-				set <int> relPreps;
-				childSource->getAllPreps(&(*childSRI),relPreps,wo);
-				if (relPreps.empty())
-					relPreps.insert(-1);	
-				for (set <int>::iterator rpi=relPreps.begin(),rpiEnd=relPreps.end(); rpi!=rpiEnd; rpi++)
+				//if (matchSumSubject>0 && inSubQuery)
+				//{
+				//	wstring tmp1,tmp2;
+				//	lplog(LOG_WHERE,L"Comparing subjects %d [%d, %d] %s and %s.",matchSumSubject,parentSRI->whereSubject,ws,whereString(parentSRI->whereSubject,tmp1,false).c_str(),childSource->whereString(ws,tmp2,false).c_str());
+				//}
+				for (int wo=childSRI->whereObject; true; wo=childSource->m[wo].nextCompoundPartObject)
 				{ LFSL
-				  wstring matchInfo=matchInfoDetail;
-				  int prepObjectMatch=0,prepMatch=0;
-					if (*rpi!=-1)
-					{
-						if (prepMatch=sriPrepMatch(questionSource,childSource,parentSRI->wherePrep,*rpi,2)==2) prepMatch=2;
-						prepObjectMatch = sriMatch(questionSource, childSource, parentSRI->wherePrepObject, childSource->m[*rpi].getRelObject(), parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticPrepositionObjectTotalMatch, matchInfoDetail, 4, parentSRI->subQuery);
-						if (parentSRI->subQuery && questionTypePrepObject && prepObjectMatch > 0)
-							whereAnswerMatchSubquery.insert(childSource->m[*rpi].getRelObject());
-						if (prepObjectMatch<=0 && questionSource->inObject(parentSRI->wherePrepObject,parentSRI->whereQuestionType))
-							prepObjectMatch=-8;
-					}
-					else if (questionSource->inObject(parentSRI->wherePrepObject,parentSRI->whereQuestionType))
-						prepObjectMatch=-8;
-					int equivalenceClass=0,equivalenceMatch=0;
-					if (verbMatch<=0 && (subjectMatch || (questionTypeSubject && !(parentSRI->questionType&QTAFlag))) && (*rpi==-1 || (prepMatch>0 && (prepObjectMatch>0 || questionSource->inObject(parentSRI->wherePrepObject,parentSRI->whereQuestionType)))))
-					{
-						if (equivalenceClassCheck(questionSource, childSource,childSRI,parentSRI,wo,equivalenceClass,8)==0)
-							equivalenceMatch=equivalenceClassCheck2(questionSource,childSource,childSRI,parentSRI,wo,equivalenceClass,8);
-					}
-					int matchSum=matchSumSubject+verbMatch+objectMatch+secondaryVerbMatch+secondaryObjectMatch+prepMatch+prepObjectMatch+equivalenceMatch;
-					if (logQuestionDetail || matchSum>=8+6)
-					{
-						appendSum(matchSumSubject,L"+SUBJ[",matchInfo);
-						appendSum(verbMatch,L"+VERB[",matchInfo);
-						appendSum(objectMatch,L"+OBJ[",matchInfo);
-						appendSum(secondaryVerbMatch,L"+VERB2[",matchInfo);
-						appendSum(secondaryObjectMatch,L"+OBJ2[",matchInfo);
-						appendSum(prepMatch,L"+PREP[",matchInfo);
-						appendSum(prepObjectMatch,L"+PREPOBJ[",matchInfo);
-						appendSum(equivalenceMatch,L"+EM[",matchInfo);
-					}
-					if (logQuestionDetail)
+					if ((wo!=childSRI->whereObject && wo<0) || wo>=(int)childSource->m.size()) break;
+					if (wo!=childSRI->whereObject && logQuestionDetail)
 					{
 						wstring ps;
-						childSource->prepPhraseToString(childSRI->wherePrep, ps);
-						childSource->printSRI(L"    [printall] "+matchInfo, &(*childSRI), 0, childSRI->whereSubject, childSRI->whereObject, ps, false, -1, L"");
+						childSource->prepPhraseToString(childSRI->wherePrep,ps);
+						childSource->printSRI(L"    [printallCO] ",&(*childSRI),0,ws,wo,ps,false,-1,L"");
 					}
-					if (matchSum>8+6 && ((parentSRI->subQuery && subjectMatch) || (subjectMatch && (verbMatch>0 || secondaryVerbMatch>0)))) // a single element match and 3/4 of another (sym match)
+					set<int> whereAnswerMatchSubquery;
+					wstring matchInfoDetail=matchInfoDetailSubject+ matchInfoDetailVerb;
+					int objectMatch = 0, secondaryVerbMatch = 0, secondaryObjectMatch = 0;
+					objectMatch = sriMatch(questionSource, childSource, parentSRI->whereObject, wo, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticObjectTotalMatch, matchInfoDetail, 8, parentSRI->subQuery);
+					if (parentSRI->subQuery && questionTypeObject && objectMatch > 0)
+						whereAnswerMatchSubquery.insert(childSRI->whereObject);
+
+					secondaryVerbMatch = sriVerbMatch(questionSource, childSource, parentSRI->whereSecondaryVerb, childSRI->whereSecondaryVerb, matchInfoDetail, L"SECONDARY TO SECONDARY", 4);
+					if (parentSRI->whereSecondaryVerb >= 0 && (secondaryVerbMatch == 0 || childSRI->whereSecondaryVerb < 0))
 					{
-						if (parentSRI->subQuery)
+						if (childSRI->whereSecondaryVerb >= 0 || (secondaryVerbMatch = sriVerbMatch(questionSource, childSource, parentSRI->whereSecondaryVerb, vi, matchInfoDetail, L"SECONDARY TO PRIMARY", 8)) == 0)
 						{
-							for (int wc: whereAnswerMatchSubquery)
+							secondaryVerbMatch = -verbMatch;
+							matchInfoDetail += L"[SECONDARY_VERB_MATCH_FAILED]";
+						}
+						else
+							verbMatch = 0;
+					}
+					secondaryObjectMatch = sriMatch(questionSource, childSource, parentSRI->whereSecondaryObject, childSRI->whereSecondaryObject, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticSecondaryObjectTotalMatch, matchInfoDetail, 4, parentSRI->subQuery);
+					if (parentSRI->subQuery && questionTypeObject && secondaryObjectMatch > 0)
+						whereAnswerMatchSubquery.insert(childSRI->whereSecondaryObject);
+					if (parentSRI->whereSecondaryObject >= 0 && (secondaryObjectMatch == 0 || childSRI->whereSecondaryObject < 0))
+					{
+						if (childSRI->whereSecondaryObject >= 0 || (secondaryObjectMatch = sriMatch(questionSource, childSource, parentSRI->whereSecondaryObject, wo, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticSecondaryObjectTotalMatch, matchInfoDetail, 8, parentSRI->subQuery)) == 0)
+						{
+							secondaryObjectMatch = -objectMatch;
+							matchInfoDetail += L"[SECONDARY_OBJECT_MATCH_FAILED]";
+						}
+						else
+							objectMatch = 0;
+					}
+					// PARENT: what     [S Darrell Hammond]  featured   on [PO Comedy Central program[12-15][14][nongen][N]]?
+					// CHILD: [S Darrell Hammond]  was [O a featured cast member[67-71][70][nongen][N]] on   [PO Saturday Night Live[72-75][72][ngname][N][WikiWork]].
+					int cob = -1, coe;
+					if (verbMatch <= 0 && parentSRI->whereVerb >= 0 && vi >= 0 && childSRI->whereObject >= 0 &&
+						childSource->m[vi].forms.isSet(isForm) && (cob = childSource->m[childSRI->whereObject].beginObjectPosition) >= 0 && (coe = childSource->m[childSRI->whereObject].endObjectPosition) >= 0 &&
+						(coe - cob) > 2 && childSource->m[cob].queryForm(determinerForm) >= 0 && childSource->m[cob + 1].getMainEntry() == questionSource->m[parentSRI->whereVerb].getMainEntry())
+					{
+						verbMatch = 8;
+						matchInfoDetail += L"[MOVED_VERB_TO_OBJECT]";
+					}
+					set <int> relPreps;
+					childSource->getAllPreps(&(*childSRI), relPreps, wo);
+					if (relPreps.empty())
+						relPreps.insert(-1);
+					for (set <int>::iterator rpi = relPreps.begin(), rpiEnd = relPreps.end(); rpi != rpiEnd; rpi++)
+					{
+						LFSL
+							wstring matchInfo = matchInfoDetail;
+						int prepObjectMatch = 0, prepMatch = 0;
+						if (*rpi != -1)
+						{
+							if (prepMatch = sriPrepMatch(questionSource, childSource, parentSRI->wherePrep, *rpi, 2) == 2) prepMatch = 2;
+							prepObjectMatch = sriMatch(questionSource, childSource, parentSRI->wherePrepObject, childSource->m[*rpi].getRelObject(), parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticPrepositionObjectTotalMatch, matchInfoDetail, 4, parentSRI->subQuery);
+							if (parentSRI->subQuery && questionTypePrepObject && prepObjectMatch > 0)
+								whereAnswerMatchSubquery.insert(childSource->m[*rpi].getRelObject());
+							if (prepObjectMatch <= 0 && questionSource->inObject(parentSRI->wherePrepObject, parentSRI->whereQuestionType))
+								prepObjectMatch = -8;
+						}
+						else if (questionSource->inObject(parentSRI->wherePrepObject, parentSRI->whereQuestionType))
+							prepObjectMatch = -8;
+						int equivalenceClass = 0, equivalenceMatch = 0;
+						if (verbMatch <= 0 && (subjectMatch || (questionTypeSubject && !(parentSRI->questionType&QTAFlag))) && (*rpi == -1 || (prepMatch > 0 && (prepObjectMatch > 0 || questionSource->inObject(parentSRI->wherePrepObject, parentSRI->whereQuestionType)))))
+						{
+							if (equivalenceClassCheck(questionSource, childSource, childSRI, parentSRI, wo, equivalenceClass, 8) == 0)
+								equivalenceMatch = equivalenceClassCheck2(questionSource, childSource, childSRI, parentSRI, wo, equivalenceClass, 8);
+						}
+						int matchSum = matchSumSubject + verbMatch + objectMatch + secondaryVerbMatch + secondaryObjectMatch + prepMatch + prepObjectMatch + equivalenceMatch;
+						if (logQuestionDetail || matchSum >= 8 + 6)
+						{
+							appendSum(matchSumSubject, L"+SUBJ[", matchInfo);
+							appendSum(verbMatch, L"+VERB[", matchInfo);
+							appendSum(objectMatch, L"+OBJ[", matchInfo);
+							appendSum(secondaryVerbMatch, L"+VERB2[", matchInfo);
+							appendSum(secondaryObjectMatch, L"+OBJ2[", matchInfo);
+							appendSum(prepMatch, L"+PREP[", matchInfo);
+							appendSum(prepObjectMatch, L"+PREPOBJ[", matchInfo);
+							appendSum(equivalenceMatch, L"+EM[", matchInfo);
+						}
+						if (logQuestionDetail)
+						{
+							wstring ps;
+							childSource->prepPhraseToString(childSRI->wherePrep, ps);
+							childSource->printSRI(L"    [printall] " + matchInfo, &(*childSRI), 0, childSRI->whereSubject, childSRI->whereObject, ps, false, -1, L"");
+						}
+						if (matchSum > 8 + 6 && ((parentSRI->subQuery && subjectMatch) || (subjectMatch && (verbMatch > 0 || secondaryVerbMatch > 0)))) // a single element match and 3/4 of another (sym match)
+						{
+							if (parentSRI->subQuery)
 							{
-								bool match;
-								if (match=checkParticularPartIdentical(questionSource,childSource,parentSRI->whereQuestionType,wc))
+								for (int wc : whereAnswerMatchSubquery)
 								{
-										matchSum+=8;
-										matchInfo+=L"ANSWER_MATCH[+8]";
-								}
-								int parentObject,childObject;
-								if ((parentObject= questionSource->m[parentSRI->whereQuestionType].getObject())>=0 && (childObject=childSource->m[wc].getObject())>=0)
-								{
-									if (!childSource->objects[childObject].dbPediaAccessed)
-										childSource->identifyISARelation(wc,false);
-									bool areBothPlaces=false,wikiTypeMatch=false;
-									if (wikiTypeMatch=(questionSource->objects[parentObject].isWikiBusiness && childSource->objects[childObject].isWikiBusiness) ||
+									bool match;
+									if (match = checkParticularPartIdentical(questionSource, childSource, parentSRI->whereQuestionType, wc))
+									{
+										matchSum += 8;
+										matchInfo += L"ANSWER_MATCH[+8]";
+									}
+									int parentObject, childObject;
+									if ((parentObject = questionSource->m[parentSRI->whereQuestionType].getObject()) >= 0 && (childObject = childSource->m[wc].getObject()) >= 0)
+									{
+										if (!childSource->objects[childObject].dbPediaAccessed)
+											childSource->identifyISARelation(wc, false);
+										bool areBothPlaces = false, wikiTypeMatch = false;
+										if (wikiTypeMatch = (questionSource->objects[parentObject].isWikiBusiness && childSource->objects[childObject].isWikiBusiness) ||
 											(questionSource->objects[parentObject].isWikiPerson && childSource->objects[childObject].isWikiPerson) ||
-											(areBothPlaces=(questionSource->objects[parentObject].isWikiPlace && childSource->objects[childObject].isWikiPlace) ||
+											(areBothPlaces = (questionSource->objects[parentObject].isWikiPlace && childSource->objects[childObject].isWikiPlace) ||
 											(questionSource->objects[parentObject].isWikiWork && childSource->objects[childObject].isWikiWork)))
-									{
-											matchSum+=4;
-											matchInfo+=L"ANSWER_MATCH_WIKITYPE[+4]";
-									}
-									if (areBothPlaces && questionSource->objects[parentObject].getSubType()==childSource->objects[childObject].getSubType() &&
-										questionSource->objects[parentObject].getSubType()!=UNKNOWN_PLACE_SUBTYPE && questionSource->objects[parentObject].getSubType()>=0)
-									{
-											matchSum+=4;
-											matchInfo+=L"ANSWER_MATCH_OBJECT_SUBTYPE[+4]";
-									}
-									if (wikiTypeMatch && !match && matchSum>16)
-									{
-											matchInfo+=L"WIKI_OTHER_ANSWER[0]";
+										{
+											matchSum += 4;
+											matchInfo += L"ANSWER_MATCH_WIKITYPE[+4]";
+										}
+										if (areBothPlaces && questionSource->objects[parentObject].getSubType() == childSource->objects[childObject].getSubType() &&
+											questionSource->objects[parentObject].getSubType() != UNKNOWN_PLACE_SUBTYPE && questionSource->objects[parentObject].getSubType() >= 0)
+										{
+											matchSum += 4;
+											matchInfo += L"ANSWER_MATCH_OBJECT_SUBTYPE[+4]";
+										}
+										if (wikiTypeMatch && !match && matchSum > 16)
+										{
+											matchInfo += L"WIKI_OTHER_ANSWER[0]";
+										}
 									}
 								}
 							}
+							enterAnswerAccumulatingPopularity(questionSource, parentSRI, cAS(childSourceType, childSource, -1, matchSum, matchInfo, &(*childSRI), equivalenceClass, ws, wo, *rpi, false, L"", L"", 0, 0, 0, NULL), maxAnswer, answerSRIs);
 						}
-						enterAnswerAccumulatingPopularity(questionSource, parentSRI, cAS(childSourceType, childSource, -1, matchSum, matchInfo, &(*childSRI), equivalenceClass, ws, wo, *rpi, false, L"", L"", 0, 0, 0, NULL), maxAnswer, answerSRIs);
+						if (logQuestionDetail)
+						{
+							wstring ps;
+							if (*rpi != -1)
+								childSource->prepPhraseToString(*rpi, ps);
+							childSource->printSRI(L"", &(*childSRI), 0, ws, wo, ps, false, matchSum, matchInfo);
+						}
 					}
-					if (logQuestionDetail)
-					{
-						wstring ps;
-						if (*rpi!=-1)
-							childSource->prepPhraseToString(*rpi,ps);
-						childSource->printSRI(L"", &(*childSRI),0,ws,wo,ps,false,matchSum,matchInfo);
-					}
+					if (wo < 0 || childSource->m[wo].nextCompoundPartObject < 0 || wo >= childSource->m.size()) break;
 				}
-				if (wo<0 || childSource->m[wo].nextCompoundPartObject<0 || wo>=childSource->m.size()) break;
+				break;
+				//if (vi < 0 || childSource->m[vi].nextCompoundPartObject < 0 || vi >= childSource->m.size()) break;
 			}
 			if (ws<0 || childSource->m[ws].nextCompoundPartObject<0 || ws>=childSource->m.size()) break;
 		}

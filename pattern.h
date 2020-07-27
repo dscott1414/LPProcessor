@@ -9,7 +9,7 @@ void createSecondaryPatterns1(void);
 int createSecondaryPatterns2(void);
 void createQuestionPatterns(void);
 
-#define SOURCE_VERSION 5
+#define SOURCE_VERSION 6
 /*
 EXAMPLE
 cPattern::create(L"XX{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"Y",

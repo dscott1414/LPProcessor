@@ -8921,8 +8921,8 @@ void cSource::processEndOfSentenceRS(int where,
 		spaceRelations.insert(location, lastSR);
 	}
 	uqPreviousToLastSentenceEnd = uqLastSentenceEnd;
-	uqLastSentenceEnd = where;
-	lastSentenceEnd = where;
+	uqLastSentenceEnd = where+1;
+	lastSentenceEnd = where+1;
 	// reset subjectsInPreviousUnquotedSectionUsableForImmediateResolution
 	accumulateMultipleSubjects = false;
 	if (!inPrimaryQuote && !inSecondaryQuote && subjectsInPreviousUnquotedSectionUsableForImmediateResolution)
@@ -9083,6 +9083,7 @@ void cSource::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 	wstring tmpstr,tmpstr2;
 	for (int I = 0; I<m.size() && !exitNow; I++)
 	{
+		debugTrace = m[I].t;
 		if ((int)(I * 100 / m.size())>lastProgressPercent)
 		{
 			lastProgressPercent = (int)I * 100 / m.size();
@@ -9103,9 +9104,6 @@ void cSource::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 					lplog(LOG_RESOLUTION, L"%06d-%06d:Detected meta-response [subject %d:%s].", I, m[I].skipResponse, whereSubjectsInPreviousUnquotedSection, whereString(whereSubjectsInPreviousUnquotedSection, tmpstr, true).c_str());
 			}
 		}
-		debugTrace.traceObjectResolution = m[I].t.traceObjectResolution ^ flipTOROverride;
-		debugTrace.traceNameResolution = m[I].t.traceNameResolution ^ flipTNROverride;
-		debugTrace.traceSpeakerResolution = m[I].t.traceSpeakerResolution || TSROverride;
 		logCache = m[I].logCache;
 		if (m[I].pma.queryPattern(L"_REL1") != -1)
 			lastRelativePhrase = I;
@@ -9406,6 +9404,7 @@ void cSource::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 	// (CMREADME44)
 	int whereLastObject=-1;
 	bool anySpaceRelation=false;
+	debugTrace = m[uqPreviousToLastSentenceEnd].t;
 	for (int J=uqPreviousToLastSentenceEnd; J<uqLastSentenceEnd; J++)
 	{
 		detectSpaceRelation(J,m.size(),lastSubjects); // so that space relations use disambiguated objects
