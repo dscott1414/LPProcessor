@@ -24,7 +24,7 @@ bool showAllSpeakersResolution=false; // temporary
 // in secondary quotes, inPrimaryQuote=false
 void cSource::printLocalFocusedObjects(int where,int forObjectClass)
 { LFS
-  showAllSpeakersResolution=(where==3); // also change at 'traceThisNym'
+  showAllSpeakersResolution=(where==11); // also change at 'traceThisNym'
   if (!debugTrace.traceSpeakerResolution) return;
   bool headerShown=false;
   vector <cLocalFocus>::iterator lsi=localObjects.begin();
@@ -267,6 +267,8 @@ void cSource::getOriginalWords(int where,vector <wstring> &wsoStrs,bool notFirst
 	}
 }
 
+// create a string from the m array range from begin to end, using separator
+// if short format is on and the separator is a space, if there is a space before a comma, a period or a ) or a :, or a space after a (, eliminate it so the string will more closely conform to the original string.
 wstring cSource::phraseString(int begin,int end,wstring &logres,bool shortFormat,wchar_t *separator)
 { LFS
 	if (end>=(signed)m.size())
@@ -275,8 +277,12 @@ wstring cSource::phraseString(int begin,int end,wstring &logres,bool shortFormat
 	for (int K = begin; K<end && logres.length()<900; K++)
   {
     getOriginalWord(K,logres,true);
-		if (K<end - 1) logres += separator;
-  }
+		// this is so that the short format of this phrase derived from the m array more closely matches the original string
+		if (K>begin && shortFormat && separator[0] == L' ' && (m[K].word->first == L"," || m[K].word->first == L"." || m[K].word->first == L")" || m[K].word->first == L":" || m[K].word->first == L"..."))
+			logres.erase(logres.size() - 1 - m[K].word->first.length(), 1);
+		if (K < end - 1 && (!shortFormat || separator[0]!=L' ' || m[K].word->first != L"(")) // this is so that the short format of this phrase derived from the m array more closely matches the original string
+			logres += separator;
+	}
 	if (begin != end && !shortFormat)
 	{
 		wchar_t temp[1024];

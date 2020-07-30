@@ -42,7 +42,7 @@ private:
 	static bool inRDFTypeNotFoundTable(wchar_t *object);
 	static bool insertRDFTypeNotFoundTable(wchar_t *object);
 	static int getRDFTypesMaster(wstring object, vector <cTreeCat *> &rdfTypes, wstring fromWhere, bool fileCaching=true);
-	static bool isolateKnownClasses(unordered_map <wstring, int > &topHierarchyClassIndexes, vector <cTreeCat *> &rdfTypes, int rdfBaseTypeOffset);
+	static bool topClassesAvailableToBeAdded(unordered_map <wstring, int > &topHierarchyClassIndexes, vector <cTreeCat *> &rdfTypes, int rdfBaseTypeOffset);
 	static void includeAllSuperClasses(unordered_map <wstring, int > &topHierarchyClassIndexes, vector <cTreeCat *> &rdfTypes, int recursionLevel, int rdfBaseTypeOffset);
 	static int fillRanks(int ontologyType);
 	static void getRDFTypesFromDbPedia(wstring object,vector <cTreeCat *> &rdfTypes,wstring parentObject,wstring fromWhere);

@@ -1,3 +1,4 @@
+#pragma once
 // http://www.musicbrainz.org/ws/2/release/?query=artist:Jay-Z
 typedef struct 
 {

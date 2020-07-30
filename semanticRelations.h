@@ -222,6 +222,7 @@ public:
 	int printMax;
 	set <int> whereQuestionInformationSourceObjects;
 	unordered_map <int,cProximityMap *> proximityMaps;
+	vector <mbInfoReleaseType> mbs;
 	bool genderedEntityMove;
 	bool genderedLocationRelation;
 	bool establishingLocation;

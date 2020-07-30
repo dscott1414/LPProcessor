@@ -43,6 +43,7 @@ int getMusicBrainzPage(wstring entitySearchedFor,wstring entityTypeReturned,wstr
 	{
 		cBuffer[actualLenInBytes/sizeof(cBuffer[0])]=0;
 		buffer=cBuffer;
+		lplog(LOG_WHERE, L"MUSICBRAINZ:searchEntity=%s returnEntityType=%s entity=%s:\n%s", entitySearchedFor.c_str(), entityTypeReturned.c_str(), entity.c_str(), buffer.c_str());
 		return 0;
 	}
 	wchar_t str[1024];
@@ -68,6 +69,7 @@ int getMusicBrainzPage(wstring entitySearchedFor,wstring entityTypeReturned,wstr
 	}
 	_write(fd,buffer.c_str(),buffer.length()*sizeof(buffer[0]));
 	_close(fd);
+	lplog(LOG_WHERE, L"MUSICBRAINZ:searchEntity=%s returnEntityType=%s entity=%s:\n%s", entitySearchedFor.c_str(), entityTypeReturned.c_str(), entity.c_str(), buffer.c_str());
 	return 0;
 }
 
@@ -145,16 +147,31 @@ void absorbReleases(tinyxml2::XMLHandle &releaseListHandle,vector <mbInfoRelease
 		mbInfoReleaseType mb;
 		wstring t;
 		mb.releaseId=mTWNull(node.ToElement()->FindAttribute("id")->Value(),t);
-		mb.title=mTWNull(node.FirstChildElement("title").ToElement()->GetText(),t);
-		mb.status=mTWNull(node.FirstChildElement("status").ToElement()->GetText(),t);
-		mb.artistId=mTWNull(node.FirstChildElement("artist-credit").FirstChildElement("name-credit").FirstChildElement("artist").ToElement()->FindAttribute("id")->Value(),t);
-		mb.artistName=mTWNull(node.FirstChildElement("artist-credit").FirstChildElement("name-credit").FirstChildElement("artist").FirstChildElement("name").ToElement()->GetText(),t);
-		mb.releaseGroupId=mTWNull(node.FirstChildElement("release-group").ToElement()->FindAttribute("id")->Value(),t);
-		mb.releaseGroupType=mTWNull(node.FirstChildElement("release-group").ToElement()->FindAttribute("type")->Value(),t);
-		mb.date=mTWNull(node.FirstChildElement("date").ToElement()->GetText(),t);
-		mb.country=mTWNull(node.FirstChildElement("country").ToElement()->GetText(),t);
-		mb.labelId=mTWNull(node.FirstChildElement("label-info-list").FirstChildElement("label-info").FirstChildElement("label").ToElement()->FindAttribute("id")->Value(),t);
-		mb.labelName=mTWNull(node.FirstChildElement("label-info-list").FirstChildElement("label-info").FirstChildElement("label").FirstChildElement("name").ToElement()->GetText(),t);
+		if (node.FirstChildElement("title").ToElement())
+			mb.title=mTWNull(node.FirstChildElement("title").ToElement()->GetText(),t);
+		if (node.FirstChildElement("status").ToElement())
+			mb.status=mTWNull(node.FirstChildElement("status").ToElement()->GetText(),t);
+		if (node.FirstChildElement("artist-credit").FirstChildElement("name-credit").FirstChildElement("artist").ToElement() && 
+			node.FirstChildElement("artist-credit").FirstChildElement("name-credit").FirstChildElement("artist").ToElement()->FindAttribute("id"))
+			mb.artistId=mTWNull(node.FirstChildElement("artist-credit").FirstChildElement("name-credit").FirstChildElement("artist").ToElement()->FindAttribute("id")->Value(),t);
+		if (node.FirstChildElement("artist-credit").FirstChildElement("name-credit").FirstChildElement("artist").FirstChildElement("name").ToElement())
+			mb.artistName=mTWNull(node.FirstChildElement("artist-credit").FirstChildElement("name-credit").FirstChildElement("artist").FirstChildElement("name").ToElement()->GetText(),t);
+		if (node.FirstChildElement("release-group").ToElement())
+		{
+			if (node.FirstChildElement("release-group").ToElement()->FindAttribute("id"))
+			mb.releaseGroupId = mTWNull(node.FirstChildElement("release-group").ToElement()->FindAttribute("id")->Value(), t);
+			if (node.FirstChildElement("release-group").ToElement()->FindAttribute("type"))
+				mb.releaseGroupType = mTWNull(node.FirstChildElement("release-group").ToElement()->FindAttribute("type")->Value(), t);
+		}
+		if (node.FirstChildElement("date").ToElement())
+			mb.date=mTWNull(node.FirstChildElement("date").ToElement()->GetText(),t);
+		if (node.FirstChildElement("country").ToElement())
+			mb.country=mTWNull(node.FirstChildElement("country").ToElement()->GetText(),t);
+		if (node.FirstChildElement("label-info-list").FirstChildElement("label-info").FirstChildElement("label").ToElement() && 
+				node.FirstChildElement("label-info-list").FirstChildElement("label-info").FirstChildElement("label").ToElement()->FindAttribute("id"))
+			mb.labelId=mTWNull(node.FirstChildElement("label-info-list").FirstChildElement("label-info").FirstChildElement("label").ToElement()->FindAttribute("id")->Value(),t);
+		if (node.FirstChildElement("label-info-list").FirstChildElement("label-info").FirstChildElement("label").FirstChildElement("name").ToElement())
+			mb.labelName=mTWNull(node.FirstChildElement("label-info-list").FirstChildElement("label-info").FirstChildElement("label").FirstChildElement("name").ToElement()->GetText(),t);
 		if (mbs.empty() || !filterNameDuplicates || !isDuplicateByName(mbs[mbs.size()-1],mb))
 			mbs.push_back(mb);
 	}
@@ -182,6 +199,7 @@ bool isDuplicateByName(mbInfoArtistType &t1,mbInfoArtistType &t2)
 	return (t1.artistId==t2.artistId);
 }
 
+// not currently used
 int getArtists(wstring byWhatType,wstring what,vector <mbInfoArtistType> &mbs,bool filterNameDuplicates)
 { LFS
 	wstring buffer;
@@ -239,6 +257,7 @@ bool isDuplicateByName(mbInfoRecordingType &t1,mbInfoRecordingType &t2)
     </recording-list>
 </metadata>
 */
+// not currently used
 int getRecordings(wstring byWhatType,wstring what,vector <mbInfoRecordingType> &mbs,bool filterNameDuplicates)
 { LFS
 	wstring buffer;
@@ -283,6 +302,7 @@ bool isDuplicateByName(mbInfoLabelType &t1,mbInfoLabelType &t2)
    </compactLabel-list>
 </metadata>
 */
+// not curently used
 int getLabels(wstring byWhatType,wstring what,vector <mbInfoLabelType> &mbs,bool filterNameDuplicates)
 { LFS
 	wstring buffer;
@@ -312,38 +332,74 @@ int getWork(wstring work)
 	return 0;
 }
 
+void printMBInfo(mbInfoReleaseType &mbi)
+{
+	lplog(LOG_WHERE, L"MUSICBRAINZ  releaseId=%s title=%s status=%s artistId=%s artistName=%s releaseGroupId=%s releaseGroupType=%s date=%s country=%s labelName=%s labelId=%s",
+		mbi.releaseId.c_str(), mbi.title.c_str(), mbi.status.c_str(), mbi.artistId.c_str(), mbi.artistName.c_str(), mbi.releaseGroupId.c_str(), mbi.releaseGroupType.c_str(), mbi.date.c_str(), mbi.country.c_str(), mbi.labelName.c_str(), mbi.labelId.c_str());
+}
 
-bool cSource::pushWhereEntities(wchar_t *derivation,int where,wstring matchEntityType,wstring byWhatType,int whatWhere,bool filterNameDuplicates)
+
+int filter(wstring byWhatType, wstring what, vector <mbInfoReleaseType> &mbs)
+{
+	for (vector <mbInfoReleaseType>::iterator mbi = mbs.begin(); mbi != mbs.end(); )
+	{
+		wstring filterName;
+		if (byWhatType == L"artist")
+			filterName = mbi->artistName;
+		else if (byWhatType == L"label")
+			filterName = mbi->labelName;
+		else if (byWhatType == L"release")
+			filterName = mbi->title;
+		//lplog(LOG_WHERE, L"filtering musicBrainz results: %s: %s=%s?", byWhatType.c_str(),what.c_str(), filterName.c_str());
+		if (filterName != what)
+			mbi = mbs.erase(mbi);
+		else
+			mbi++;
+	}
+	lplog(LOG_WHERE, L"filtering musicBrainz results: %s: %s [%s]", byWhatType.c_str(), what.c_str(),(mbs.empty()) ? L"NOT FOUND":L"FOUND");
+	return mbs.size();
+}
+
+bool cSource::pushWhereEntities(wchar_t *derivation,int where,wstring matchEntityType,wstring byWhatType,int whatWhere,bool filterNameDuplicates, vector <mbInfoReleaseType> mbs)
 { LFS
 	unordered_map <wstring,int > mapCount;
 	wstring logres;
 	if (m[whatWhere].objectMatches.empty())
-		return pushEntities(derivation,where,matchEntityType,byWhatType,whereString(whatWhere,logres,true),filterNameDuplicates);
+	{
+		if (filter(byWhatType, whereString(whatWhere, logres, true), mbs) <= 0)
+			getReleases(byWhatType, logres, mbs, filterNameDuplicates);
+		for (auto mbi : mbs)
+			printMBInfo(mbi);
+		return pushEntities(derivation, where, matchEntityType, mbs);
+	}
 	OC defaultClass= NAME_OBJECT_CLASS;
 	for (unsigned int om=0; om<m[whatWhere].objectMatches.size(); om++)
 	{
-		vector <mbInfoReleaseType> mbs;
-		getReleases(byWhatType,objectString(m[whatWhere].objectMatches[om].object,logres,true),mbs,filterNameDuplicates);
-		if (matchEntityType==L"artist")
+		vector <mbInfoReleaseType> filteredMbs = mbs;
+		if (filter(byWhatType, objectString(m[whatWhere].objectMatches[om].object, logres, true), filteredMbs) <= 0)
+			getReleases(byWhatType, objectString(m[whatWhere].objectMatches[om].object, logres, true), filteredMbs, filterNameDuplicates);
+		for (auto mbi : filteredMbs)
+			printMBInfo(mbi);
+		if (matchEntityType == L"artist")
 		{
-			defaultClass=NAME_OBJECT_CLASS;
-			for (unsigned int I=0; I<mbs.size(); I++)
-				mapCount[mbs[I].artistName]++;
+			defaultClass = NAME_OBJECT_CLASS;
+			for (unsigned int I = 0; I < filteredMbs.size(); I++)
+				mapCount[filteredMbs[I].artistName]++;
 		}
-		if (matchEntityType==L"label")
+		else if (matchEntityType == L"label")
 		{
-			defaultClass=NON_GENDERED_BUSINESS_OBJECT_CLASS;
-			for (unsigned int I=0; I<mbs.size(); I++)
-				mapCount[mbs[I].labelName]++;
+			defaultClass = NON_GENDERED_BUSINESS_OBJECT_CLASS;
+			for (unsigned int I = 0; I < filteredMbs.size(); I++)
+				mapCount[filteredMbs[I].labelName]++;
 		}
-		if (matchEntityType == L"release")
+		else if (matchEntityType == L"release")
 		{
 			defaultClass = NON_GENDERED_NAME_OBJECT_CLASS;
-			for (unsigned int I = 0; I < mbs.size(); I++)
-				mapCount[mbs[I].title]++;
+			for (unsigned int I = 0; I < filteredMbs.size(); I++)
+				mapCount[filteredMbs[I].title]++;
 		}
 		else
-			return 0;
+			continue;
 	}
 	vector <wstring> winners;
 	int gc=0;
@@ -360,15 +416,13 @@ bool cSource::pushWhereEntities(wchar_t *derivation,int where,wstring matchEntit
 	for (unsigned int w=0; w<winners.size(); w++)
 		if (winners[w].size()>0)
 			m[where].objectMatches.push_back(createObject(derivation,winners[w],defaultClass));
-	return !winners.empty();
+	return winners.size()>0;
 }
 
-bool cSource::pushEntities(wchar_t *derivation, int where, wstring matchEntityType, wstring byWhatType, wstring what, bool filterNameDuplicates)
+bool cSource::pushEntities(wchar_t *derivation, int where, wstring matchEntityType, vector <mbInfoReleaseType> &mbs)
 {
 	LFS
 	unsigned int originalSize=m[where].objectMatches.size();
-	vector <mbInfoReleaseType> mbs;
-	getReleases(byWhatType,what,mbs,filterNameDuplicates);
 	if (matchEntityType == L"artist")
 	{
 		for (unsigned int I = 0; I < mbs.size(); I++)
@@ -396,16 +450,16 @@ bool cSource::pushEntities(wchar_t *derivation, int where, wstring matchEntityTy
 	return originalSize<m[where].objectMatches.size();
 }
 
-const wchar_t *labelMatchList[]={L"label",L"company",L"studio",L"conglomerate",NULL };
-const wchar_t *artistMatchList[]={L"artist",L"singer",L"songwriter",L"lyricist",L"composer",L"lyrist",L"musician",L"songsmith",NULL  };
-const wchar_t *releaseMatchList[]={L"release",L"record",L"CD",L"album",L"recording",L"song",L"rap",L"CD",L"compilation",L"track",L"disc",NULL  };
+set <wstring> labelMatchList={L"label",L"company",L"studio",L"conglomerate"};
+set <wstring> artistMatchList={L"artist",L"singer",L"songwriter",L"lyricist",L"composer",L"lyrist",L"musician",L"songsmith"};
+set <wstring> releaseMatchList={L"release",L"record",L"CD",L"album",L"recording",L"song",L"rap",L"CD",L"compilation",L"track",L"disc"};
 
 bool cQuestionAnswering::dbSearchMusicBrainzSearchType(cSource *questionSource, wchar_t *derivation, cSpaceRelation* parentSRI, vector < cAS > &answerSRIs,
-	int firstWhere, wstring firstMatchListType, int secondWhere, wstring secondMatchListType, const wchar_t *matchVerbsList[])
+	int firstWhere, wstring firstMatchListType, int secondWhere, wstring secondMatchListType, set <wstring> &matchVerbsList)
 {
 	LFS
 	bool foundMatch = false;
-	const wchar_t **firstMatchList;
+	set <wstring> firstMatchList;
 	int firstObjectClass;
 	if (firstMatchListType == L"artist")
 	{
@@ -424,7 +478,7 @@ bool cQuestionAnswering::dbSearchMusicBrainzSearchType(cSource *questionSource, 
 	}
 	else
 		return false;
-	const wchar_t **secondMatchList;
+	set <wstring> secondMatchList;
 	int secondObjectClass;
 	if (secondMatchListType == L"artist")
 	{
@@ -443,17 +497,16 @@ bool cQuestionAnswering::dbSearchMusicBrainzSearchType(cSource *questionSource, 
 	}
 	else
 		return false;
-	if (questionSource->matchedList(firstMatchList, firstWhere,firstObjectClass) && questionSource->matchedList(secondMatchList, secondWhere,secondObjectClass) &&
-		questionSource->matchedList(matchVerbsList,parentSRI->whereVerb,-1))
+	if (questionSource->matchedList(firstMatchList, firstWhere,firstObjectClass,L"first") && questionSource->matchedList(secondMatchList, secondWhere,secondObjectClass, L"second") &&
+		questionSource->matchedList(matchVerbsList,parentSRI->whereVerb,-1,L"verb"))
 	{
 		wstring logres;
-		if (questionSource->inObject(firstWhere,parentSRI->whereQuestionType) && questionSource->pushWhereEntities(derivation,firstWhere,firstMatchListType,secondMatchListType,secondWhere,true))
+		if (questionSource->inObject(firstWhere,parentSRI->whereQuestionType) && questionSource->pushWhereEntities(derivation,firstWhere,firstMatchListType,secondMatchListType,secondWhere,true,parentSRI->mbs))
 		{
-			
 			answerSRIs.push_back(cAS(L"dbMusicBrainz", questionSource, 1, 1000, firstMatchListType, NULL, 0, firstWhere, 0, 0, false, L"", L"", 0,0,0,NULL));
 			answerSRIs[answerSRIs.size() - 1].finalAnswer = foundMatch=true;
 		}
-		if (questionSource->inObject(secondWhere,parentSRI->whereQuestionType) && questionSource->pushWhereEntities(derivation,secondWhere,secondMatchListType,firstMatchListType,firstWhere,true))
+		if (questionSource->inObject(secondWhere,parentSRI->whereQuestionType) && questionSource->pushWhereEntities(derivation,secondWhere,secondMatchListType,firstMatchListType,firstWhere,true, parentSRI->mbs))
 		{
 			answerSRIs.push_back(cAS(L"dbMusicBrainz", questionSource, 1, 1000, secondMatchListType, NULL, 0, secondWhere, 0, 0, false, L"", L"", 0, 0, 0,NULL));
 			answerSRIs[answerSRIs.size() - 1].finalAnswer = foundMatch = true;
@@ -484,16 +537,15 @@ bool cQuestionAnswering::dbSearchMusicBrainzSearchType(cSource *questionSource, 
 //    release: object verbs: owns/distributes/produces
 // no ownership of compactLabel known within this KB
 
-bool cSource::matchedList(const wchar_t *matchList[],int where,int objectClass)
+bool cSource::matchedList(set <wstring> &matchList,int where,int objectClass, wchar_t *fromWhere)
 { LFS
 	if (where<0)
 		return false;
-	for (int I=0; matchList[I]; I++)
-		if (m[where].getMainEntry()->first==matchList[I])
-			return true;
+	wstring tmpstr;
+	lplog(LOG_WHERE, L"matchedList: %s in [%s] or class %s = %s [%s match type]?", m[where].getMainEntry()->first.c_str(),setString(matchList,tmpstr,L",").c_str(),
+		(m[where].getObject()>=0) ? getClass(objects[m[where].getObject()].objectClass).c_str():L"-1", (objectClass>=0) ? getClass(objectClass).c_str():L"-1",fromWhere);
 	// or Proper Noun, which can match artist, compactLabel or release. - non gendered business objects may not be capitalized (fix?)
-	int oc;
-	return m[where].getObject() >= 0 && ((oc = objects[m[where].getObject()].objectClass) == objectClass);
+	return matchList.find(m[where].getMainEntry()->first) != matchList.end() || (m[where].getObject() >= 0 && (objects[m[where].getObject()].objectClass == objectClass));
 }
 
 void cSource::createObject(cObject object)
@@ -547,31 +599,42 @@ cOM cSource::createObject(wstring derivation,wstring wordstr,OC objectClass)
 }
 
 // add to objects if ownership of trigger
-bool cQuestionAnswering::matchOwnershipDbMusicBrainzObject(cSource *questionSource,wchar_t *derivation,int whereObject)
+bool cQuestionAnswering::matchOwnershipDbMusicBrainzObject(cSource *questionSource,wchar_t *derivation,int whereObject, vector <mbInfoReleaseType> &mbs)
 { LFS
 	if (whereObject<0)
 		return false;
 	int o= questionSource->m[whereObject].getObject(),ow;
 	bool ownershipMatched=false;
 	if (o>=0 && questionSource->m[whereObject].objectMatches.empty() && (ow= questionSource->objects[o].getOwnerWhere())>=0 && (questionSource->objects[o].ownerFemale || questionSource->objects[o].ownerMale) &&
-		questionSource->matchedList(releaseMatchList, whereObject, NON_GENDERED_NAME_OBJECT_CLASS) &&
+		questionSource->matchedList(releaseMatchList, whereObject, NON_GENDERED_NAME_OBJECT_CLASS,L"ownership") &&
 		questionSource->m[ow].queryWinnerForm(possessiveDeterminerForm)>=0 && questionSource->m[ow].objectMatches.size()>0)
 	{
-		wstring logres;
-		for (unsigned int om=0; om< questionSource->m[ow].objectMatches.size(); om++)
-			ownershipMatched|= questionSource->pushEntities(derivation,whereObject,L"release",L"artist", questionSource->objectString(questionSource->m[ow].objectMatches[om].object,logres,true),true);
+		// query musicBrainz for each owning object (Jay-Z), as an artist
+		// his records - Jay-Z's records
+		for (unsigned int om = 0; om < questionSource->m[ow].objectMatches.size(); om++)
+		{
+			wstring ownershipObject,lookingForObject;
+			questionSource->whereString(whereObject, lookingForObject, true);
+			questionSource->objectString(questionSource->m[ow].objectMatches[om].object, ownershipObject, true);
+			lplog(LOG_WHERE, L"matchOwnershipDbMusicBrainzObject: artist: %s has what release: %s?", ownershipObject.c_str(),lookingForObject.c_str());
+			getReleases(L"artist", ownershipObject, mbs, true);
+			for (auto mbi : mbs)
+				printMBInfo(mbi);
+			// wstring matchEntityType, wstring byWhatType, wstring what
+			ownershipMatched |= questionSource->pushEntities(derivation, whereObject, L"release", mbs);
+		}
 	}
 	return ownershipMatched;
 }
 
 bool cQuestionAnswering::matchOwnershipDbMusicBrainz(cSource *questionSource, wchar_t *derivation,cSpaceRelation* parentSRI)
 { LFS
-	return matchOwnershipDbMusicBrainzObject(questionSource,derivation,parentSRI->whereControllingEntity) ||
-		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRI->whereSubject) ||
-		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRI->whereObject) ||
-		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRI->wherePrepObject) ||
-		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRI->whereSecondaryObject) ||
-		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRI->whereNextSecondaryObject);
+	return matchOwnershipDbMusicBrainzObject(questionSource,derivation,parentSRI->whereControllingEntity, parentSRI->mbs) ||
+		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRI->whereSubject, parentSRI->mbs) ||
+		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRI->whereObject, parentSRI->mbs) ||
+		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRI->wherePrepObject, parentSRI->mbs) ||
+		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRI->whereSecondaryObject, parentSRI->mbs) ||
+		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRI->whereNextSecondaryObject, parentSRI->mbs);
 }
 
 // example:what companies produce his records?
@@ -582,37 +645,45 @@ bool cQuestionAnswering::dbSearchMusicBrainz(cSource *questionSource,wchar_t *de
 	wstring logres;
 	// artist: subject 
 	//    compactLabel:prepobject verbs/prep: belong to/signed with   
-  const wchar_t *artistLabelVerbs[]={ L"belong",L"signed",NULL };
+  set <wstring> artistLabelVerbs={ L"belong",L"signed" };
 	if (dbSearchMusicBrainzSearchType(questionSource,derivation,parentSRI,answerSRIs,parentSRI->whereSubject,L"artist",parentSRI->wherePrepObject,L"label",artistLabelVerbs))
 		return true;
 	// artist: subject 
 	//    release:object?  verbs: wrote/created/made + synonyms
-  const wchar_t *artistReleaseVerbs[]={ L"wrote",L"create",L"made",NULL };
+	set <wstring> artistReleaseVerbs={ L"wrote",L"create",L"made"};
 	if (dbSearchMusicBrainzSearchType(questionSource, derivation,parentSRI,answerSRIs,parentSRI->whereSubject,L"artist",parentSRI->whereObject,L"release",artistReleaseVerbs))
 		return true;
 	// release: subject
 	//    artist:prepobject  verbs/prep: written/created/made by      
-  const wchar_t *releaseArtistVerbs[]={ L"write",L"create",L"make",NULL };
+	set <wstring> releaseArtistVerbs={ L"write",L"create",L"make" };
 	if (dbSearchMusicBrainzSearchType(questionSource, derivation,parentSRI,answerSRIs,parentSRI->whereSubject,L"release",parentSRI->wherePrepObject,L"artist",releaseArtistVerbs))
 		return true;
+	// 
 	// release: subject
-	//    artist:object  verbs: featured      
-  const wchar_t *releaseArtist2Verbs[]={ L"feature",NULL };
+  // verbs: featured
+	// artist:object  
+	set <wstring> releaseArtist2Verbs={ L"feature" };
 	if (dbSearchMusicBrainzSearchType(questionSource, derivation,parentSRI,answerSRIs,parentSRI->whereSubject,L"release",parentSRI->whereObject,L"artist",releaseArtist2Verbs))
 		return true;
+	// what song [release] was produced by George Martin [label]?
 	// release: subject
-	//    compactLabel:prepobject verbs/prep: owned by/distributed by/released by/released on/produce by  
-  const wchar_t *releaseLabelVerbs[]={ L"own",L"distribute",L"release",L"produce",NULL };
+	//    verbs/prep: owned by/distributed by/released by/released on/produce by  
+	// compactLabel:prepobject 
+	set <wstring> releaseLabelVerbs={ L"own",L"distribute",L"release",L"produce" };
 	if (dbSearchMusicBrainzSearchType(questionSource, derivation,parentSRI,answerSRIs,parentSRI->whereSubject,L"release",parentSRI->wherePrepObject,L"label",releaseLabelVerbs))
 		return true;
+	// what company signed Elton John?
 	// compactLabel: subject
-	//    artist: object verbs: owned/signed
-  const wchar_t *labelArtistVerbs[]={ L"own",L"sign",NULL };
+	// verbs: owned/signed
+	// artist: object 
+	set <wstring> labelArtistVerbs={ L"own",L"sign" };
 	if (dbSearchMusicBrainzSearchType(questionSource, derivation,parentSRI,answerSRIs,parentSRI->whereSubject,L"label",parentSRI->whereObject,L"artist",labelArtistVerbs))
 		return true;
-	// compactLabel: subject
-	//    release: object verbs: owns/distributes/produces
-  const wchar_t *labelReleaseVerbs[]={ L"own",L"distribute",L"produce",NULL };
+	// What company [label] produces his records [release]?
+	// compactLabel: subject 
+	// verbs: owns/distributes/produces
+	// release: object 
+	set <wstring> labelReleaseVerbs={ L"own",L"distribute",L"produce" };
 	if (dbSearchMusicBrainzSearchType(questionSource, derivation,parentSRI,answerSRIs,parentSRI->whereSubject,L"label",parentSRI->whereObject,L"release",labelReleaseVerbs))
 		return true;
   return false;

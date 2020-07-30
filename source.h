@@ -4,6 +4,7 @@
 #include "names.h"
 #include "bitObject.h"
 #include "tableColumn.h"
+#include "getMusicBrainz.h"
 
 class cSpaceRelation;
 #define MAX_LEN 2048
@@ -3042,9 +3043,9 @@ bool inSectionHeader,
 
 	bool inObject(int where, int whereQuestionType);
 
-	bool pushWhereEntities(wchar_t *derivation,int where,wstring matchEntityType,wstring byWhatType,int whatWhere,bool filterNameDuplicates);
-	bool pushEntities(wchar_t *derivation,int where,wstring matchEntityType,wstring byWhatType,wstring what,bool filterNameDuplicates);
-	bool matchedList(const wchar_t *matchList[], int where, int objectClass);
+	bool pushWhereEntities(wchar_t *derivation,int where,wstring matchEntityType,wstring byWhatType,int whatWhere,bool filterNameDuplicates, vector <mbInfoReleaseType> mbs);
+	bool pushEntities(wchar_t *derivation,int where,wstring matchEntityType, vector <mbInfoReleaseType> &mbs);
+	bool matchedList(set <wstring> &matchList, int where, int objectClass,wchar_t *fromWhere);
 	void createObject(cObject object);
 	cOM createObject(wstring derivation,wstring wordstr,OC objectClass);
 

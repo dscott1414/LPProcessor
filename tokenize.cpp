@@ -1102,7 +1102,7 @@ int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 			w->second.query(bracketForm) >= 0 || // BNC (c) Complete the ...
 			(m.size() - 3 == lastSentenceEnd && m[m.size() - 2].word->second.query(quoteForm) >= 0 && w->first == L"(") || // Pay must be good.' (We might as well make that clear from the start.)
 			(m.size() - 2 == lastSentenceEnd && w->first == L"(");   // The bag dropped.  (If you didn't know).
-		// keep names like al-Jazeera or dashed words incorporating first words that are unknown like fierro-regni
+		// keep names like al-Jazeera or dashed words incorporating first words that are unknown like fierro-regni or Jay-Z
 		// preserve dashes by setting insertDashes to true.
 		// Handle cases like 10-15 or 10-60,000 which are returned as PARSE_NUM
 		if (dash != wstring::npos && result == 0 && // if (not date or number)
@@ -1140,6 +1140,7 @@ int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 			// however, there may be cases like I-THE, which webster/dictionary.com incorrectly say are defined.
 			if ((unknownWords <= capitalizedWords || unknownWords <= dashedWords.size() / 2) &&
 				(iWord == Words.end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0) &&
+				(capitalizedWords!=1 || letters!=1 || dashedWords.size()!=2 || dashedWords[1].length()!=1) && // keep Jay-Z
 				(iWordNoDashes == Words.end() || iWordNoDashes->second.query(UNDEFINED_FORM_NUM) >= 0 || letters != dashedWords.size() || letters < 3))
 			{
 				bufferScanLocation -= sWord.length() - firstDash;
@@ -1295,10 +1296,13 @@ int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 	}
 	else
 		sentenceStarts.push_back(lastSentenceEnd);
-	lastProgressPercent = (int)(bufferScanLocation * 100 / bufferLen);
-	wprintf(L"PROGRESS: %03d%% (%06zu words) %I64d out of %I64d bytes read with %d seconds elapsed (%I64d bytes) \r", lastProgressPercent, m.size(), bufferScanLocation, bufferLen, clocksec(), memoryAllocated);
-	if (runOnSentences > 0)
-		lplog(LOG_ERROR, L"ERROR:%s:%d sentence early terminations (%d%%)...", path.c_str(), runOnSentences, 100 * runOnSentences / sentenceStarts.size());
+	if (bufferLen > 0)
+	{
+		lastProgressPercent = (int)(bufferScanLocation * 100 / bufferLen);
+		wprintf(L"PROGRESS: %03d%% (%06zu words) %I64d out of %I64d bytes read with %d seconds elapsed (%I64d bytes) \r", lastProgressPercent, m.size(), bufferScanLocation, bufferLen, clocksec(), memoryAllocated);
+		if (runOnSentences > 0)
+			lplog(LOG_ERROR, L"ERROR:%s:%d sentence early terminations (%d%%)...", path.c_str(), runOnSentences, 100 * runOnSentences / sentenceStarts.size());
+	}
 	return 0;
 }
 

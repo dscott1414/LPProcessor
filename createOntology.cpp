@@ -2292,7 +2292,9 @@ int cOntology::getRDFTypesMaster(wstring object, vector <cTreeCat *> &rdfTypes, 
 	return retCode;
 }
 
-bool checkInsert(wchar_t *fromCategory,wchar_t *finalCategory,unordered_map <wstring ,int > &topHierarchyClassIndexes,vector <cTreeCat *> &rdfTypes,unsigned int &I,int &minIdentifiedQType)
+// insert the rdfType (cli->first) into topHierarchyClassIndexes, if it matches a known top class.
+//   if the top class is already there, make sure the topHierarchyClassIndexes are pointing to the rdfType with the lowest confidence (the MOST confident entry)
+bool checkInsert(wchar_t *fromCategory,wchar_t *finalCategory,unordered_map <wstring ,int > &topHierarchyClassIndexes,vector <cTreeCat *> &rdfTypes,unsigned int &I)
 { LFS
 	//rdfTypes[I]->lplog(LOG_WHERE);
 	if (rdfTypes[I]->cli->first!=fromCategory)
@@ -2308,7 +2310,6 @@ bool checkInsert(wchar_t *fromCategory,wchar_t *finalCategory,unordered_map <wst
 	}
 	if (found)
 	{
-		minIdentifiedQType=min(minIdentifiedQType,rdfTypes[I]->confidence);
 		// advance to end of separator, if any - take the first type (Vijay Singh) first type is person, which is correct, not sports_team,which is listed afterwards
 		for (; I<rdfTypes.size(); I++)
 			if (rdfTypes[I]->cli->first==SEPARATOR)
@@ -2330,29 +2331,41 @@ bool knownClass(wstring c)
 }
 set <wstring> knownClassesSet;
 
-// only return true if an entry was found belonging to the lowest qtype
-bool cOntology::isolateKnownClasses(unordered_map <wstring ,int > &topHierarchyClassIndexes,vector <cTreeCat *> &rdfTypes,int rdfBaseTypeOffset)
+// only return true if all entries have either no super classes or are a known class (above)
+bool cOntology::topClassesAvailableToBeAdded(unordered_map <wstring ,int > &topHierarchyClassIndexes,vector <cTreeCat *> &rdfTypes,int rdfBaseTypeOffset)
 { LFS
   if (knownClassesSet.empty())
 	{
 		for (int k=0; knownClasses[k]; k++)
 			knownClassesSet.insert(knownClasses[k]);
 	}
-	// get lowest qtype
-	int minQType=100;
-	for (unsigned int I=rdfBaseTypeOffset; I<rdfTypes.size(); I++)
-		if (rdfTypes[I]->confidence>0)
-			minQType=min(minQType,rdfTypes[I]->confidence);
-	int minIdentifiedQType=100;
-	for (unsigned int I=rdfBaseTypeOffset; I<rdfTypes.size(); I++)
+bool superClassMissingFromList = false;
+for (unsigned int I=rdfBaseTypeOffset; I<rdfTypes.size(); I++)
 	{
-		if (rdfTypes[I]->cli->first==SEPARATOR || knownClassesSet.find(rdfTypes[I]->cli->first)==knownClassesSet.end()) continue;
+		if (rdfTypes[I]->cli->first==SEPARATOR) continue;
+		if (knownClassesSet.find(rdfTypes[I]->cli->first) == knownClassesSet.end())
+		{
+			for (wstring wc : rdfTypes[I]->cli->second.superClasses)
+			{
+				bool superClassFound = topHierarchyClassIndexes.find(wc) != topHierarchyClassIndexes.end();
+				if (!superClassFound)
+				{
+					for (cTreeCat *tc : rdfTypes)
+						if (superClassFound = tc->cli->first == wc)
+							break;
+				}
+				if (!superClassFound)
+					superClassMissingFromList = true;
+			}
+			// does the entry have super classes that are not already in the rdfTypes?
+			continue;
+		}
 		for (int k=0; knownClasses[k]; k++)
-			if (checkInsert(knownClasses[k],knownMapToClasses[k],topHierarchyClassIndexes,rdfTypes,I,minIdentifiedQType)) 
+			if (checkInsert(knownClasses[k],knownMapToClasses[k],topHierarchyClassIndexes,rdfTypes,I))
 				break;
-		//wprintf(L"%s not found!\n",rdfTypes[I]->cli->first);
+		
 	}
-	return topHierarchyClassIndexes.size()>0; //  && minIdentifiedQType==minQType
+	return superClassMissingFromList; //  && minIdentifiedQType==minQType
 }
 
 void cOntology::includeAllSuperClasses(unordered_map <wstring ,int > &topHierarchyClassIndexes,vector <cTreeCat *> &rdfTypes,int recursionLevel,int rdfBaseTypeOffset)
@@ -2372,7 +2385,7 @@ void cOntology::includeAllSuperClasses(unordered_map <wstring ,int > &topHierarc
 		for (vector <wstring>::iterator sci=rdfTypes[I]->cli->second.superClasses.begin(),sciEnd=rdfTypes[I]->cli->second.superClasses.end(); sci!=sciEnd; sci++)
 		{
 			unordered_map <wstring, cOntologyEntry>::iterator cli=findCategory(*sci);
-			if (cli!=dbPediaOntologyCategoryList.end() && cli->second.ontologyHierarchicalRank<rdfTypes[I]->cli->second.ontologyHierarchicalRank)
+			if (cli!=dbPediaOntologyCategoryList.end() && cli->second.ontologyHierarchicalRank<=rdfTypes[I]->cli->second.ontologyHierarchicalRank)
 			{
 				bool alreadyThere=false;
 				for (vector <cTreeCat *>::iterator ri=rdfTypes.begin(),riEnd=rdfTypes.end(); ri!=riEnd && !(alreadyThere=(*ri)->cli==cli); ri++);
@@ -2391,14 +2404,14 @@ void cOntology::includeAllSuperClasses(unordered_map <wstring ,int > &topHierarc
 			//	wprintf(L"  %d:%s:%s %s NOT found or of >= rank\n",I,rdfTypes[I]->object.c_str(),rdfTypes[I]->cli->first.c_str(),sci->c_str());
 		}
 	}
-	if (rdfTypes.size()>rdfOriginalSize && !isolateKnownClasses(topHierarchyClassIndexes,rdfTypes,rdfOriginalSize))
+	if (rdfTypes.size()>rdfOriginalSize && topClassesAvailableToBeAdded(topHierarchyClassIndexes,rdfTypes,rdfOriginalSize))
 		includeAllSuperClasses(topHierarchyClassIndexes,rdfTypes,++recursionLevel,rdfOriginalSize);
 }
 
 void cOntology::includeSuperClasses(unordered_map <wstring, int > &topHierarchyClassIndexes, vector <cTreeCat *> &rdfTypes)
 {
 	int recursionLevel = 1, rdfBaseTypeOffset = 0;
-	if (!isolateKnownClasses(topHierarchyClassIndexes, rdfTypes, rdfBaseTypeOffset))
+	if (topClassesAvailableToBeAdded(topHierarchyClassIndexes, rdfTypes, rdfBaseTypeOffset))
 		includeAllSuperClasses(topHierarchyClassIndexes, rdfTypes, recursionLevel, rdfBaseTypeOffset);
 }
 
@@ -2476,7 +2489,7 @@ void cOntology::printIdentity(wstring object)
 	vector <cTreeCat *> rdfTypes;
 	cOntology::rdfIdentify(object,rdfTypes,L"0");
 	unordered_map <wstring ,int > topHierarchyClassIndexes;
-	if (!isolateKnownClasses(topHierarchyClassIndexes,rdfTypes,0))
+	if (topClassesAvailableToBeAdded(topHierarchyClassIndexes,rdfTypes,0))
 		includeAllSuperClasses(topHierarchyClassIndexes,rdfTypes,1,0);
 	setPreferred(topHierarchyClassIndexes,rdfTypes);
 	if (rdfTypes.empty())

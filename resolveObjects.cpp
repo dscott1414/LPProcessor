@@ -3064,7 +3064,7 @@ int cSource::coreferenceFilterLL2345(int where,int rObject,vector <int> &disallo
 	compoundLoop=0;
 	for (wcpBegin=where; m[wcpBegin].previousCompoundPartObject>=0 && compoundLoop<10; wcpBegin=m[wcpBegin].previousCompoundPartObject,compoundLoop++);
 	for (wcpEnd=where; m[wcpEnd].nextCompoundPartObject>=0 && compoundLoop<10; wcpEnd=m[wcpEnd].nextCompoundPartObject,compoundLoop++);
-	if ((m[wcpBegin].objectRole&PREP_OBJECT_ROLE) && m[wcpBegin].relPrep>=0 && ((m[m[wcpBegin].relPrep-1].objectRole)&(OBJECT_ROLE|SUBJECT_ROLE)))
+	if ((m[wcpBegin].objectRole&PREP_OBJECT_ROLE) && m[wcpBegin].relPrep>0 && ((m[m[wcpBegin].relPrep-1].objectRole)&(OBJECT_ROLE|SUBJECT_ROLE)))
 	{
 		wcpBegin=m[wcpBegin].relPrep-1;
 		while (wcpBegin>0 && m[wcpBegin].objectRole&(OBJECT_ROLE|SUBJECT_ROLE)) 
@@ -4101,7 +4101,8 @@ void cSource::resolveObject(int where,bool definitelySpeaker,bool inPrimaryQuote
 		// don't include if inside of an IS sentence, but make sure names are included: 
 		// The words uttered by Boris were: "Mr. Brown".
 		if (!(or&(SUBJECT_ROLE|OBJECT_ROLE|SUBOBJECT_ROLE|HAIL_ROLE)) && lastBeginS1>=0 && 
-			  (m[lastBeginS1].objectRole&ID_SENTENCE_TYPE) && !(m[lastBeginS1].objectRole&SUBJECT_PLEONASTIC_ROLE))
+			  (m[lastBeginS1].objectRole&ID_SENTENCE_TYPE) && !(m[lastBeginS1].objectRole&SUBJECT_PLEONASTIC_ROLE) &&
+				m[where].relPrep < 0)
 		{
 			// don't make this a speaker if it is new or it was previously not a speaker
 			if (objects[m[where].getObject()].objectClass==NAME_OBJECT_CLASS)

@@ -91,8 +91,7 @@ void defineNames(void)
                          1,L"letter{LAST}",0,1,1,
                          1,L".",0,1,1,
                          0);
-
-  // M. A. Wycliffe, M A Wycliff, A Wycliff
+	// M. A. Wycliffe, M A Wycliff, A Wycliff
   cPattern::create(L"__NAME",L"D",
                     1,L"__NAMEINTRO",0,0,1,
                      1,L"letter{FIRST}",0,1,1,
@@ -177,11 +176,11 @@ void defineNames(void)
 	cPattern::create(L"_ISBN", L"", 
 		1, L"abbreviation|isbn", 0, 1, 1,
 		1, L"number", 0, 1, 1,
-		1, L"dash", 0, 0, 1,
+		1, L"dash|-", 0, 0, 1,
 		1, L"number", 0, 1, 1,
-		1, L"dash", 0, 0, 1,
+		1, L"dash|-", 0, 0, 1,
 		1, L"number", 0, 1, 1,
-		1, L"dash", 0, 0, 1,
+		1, L"dash|-", 0, 0, 1,
 		1, L"number", 0, 1, 1,
 		0);
 
@@ -289,7 +288,7 @@ void defineNames(void)
 										1,L"honorific{SINGULAR:HON}",SINGULAR_OWNER|PLURAL_OWNER,1,1,
 										0);
 
-	cPattern::create(L"__NAMEOWNER{__NAMEOWNER:SINGULAR}",L"R",
+	cPattern::create(L"__NAMEOWNER{NAMEOWNER:SINGULAR}",L"R",
 										1,L"letter",0,1,1,
 										1,L"dash*-2",0,0,1,
 										1,L"Number",SINGULAR_OWNER,1,2,
@@ -364,9 +363,9 @@ wstring cName::print(wstring &message,bool printShort)
   hn(L"M1",middle,message,printShort);
   hn(L"M2",middle2,message,printShort);
   hn(L"L",last,message,printShort);
-  hn(L"S",suffix,message,printShort);
   hn(L"A",any,message,printShort);
-  if (nickName>=0 && !printShort)
+	hn(L"S", suffix, message, printShort);
+	if (nickName>=0 && !printShort)
   {
     wchar_t temp[10];
     wsprintf(temp,L"[%d]",nickName);
@@ -794,6 +793,8 @@ bool cSource::evaluateName(vector <cTagLocation> &tagSet,cName &name,bool &isMal
 	{
 		if (whereFirst==-1 && whereAny==-1 && whereLast==-1)
 			return false;
+		if (whereSuffix != -1)
+			name.suffix = m[tagSet[whereSuffix].sourcePosition].word;
 		if ((whereFirst!=-1) ^ (whereLast!=-1))
 		{
 			if ((name.any=setSex(tagSet,max(whereFirst,whereLast),isMale,isFemale,isPlural))!=wNULL)

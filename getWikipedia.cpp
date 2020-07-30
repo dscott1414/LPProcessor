@@ -515,6 +515,8 @@ wstring setString(set <wstring> &sstr,wstring &tmpstr,wchar_t *separator)
 	tmpstr.clear();
 	for (set <wstring>::iterator sci=sstr.begin(),sciEnd=sstr.end(); sci!=sciEnd; sci++)
 		tmpstr+=separator+*sci;
+	if (tmpstr.length())
+		tmpstr = tmpstr.substr(1);
 	return tmpstr;
 }
 
@@ -1449,11 +1451,7 @@ int cQuestionAnswering::processPath(cSource *parentSource,const wchar_t *path, c
 		if (!parseOnly)
 		{
 			source->parentSource = parentSource;
-			source->identifyObjects();
 			vector <int> secondaryQuotesResolutions;
-			source->analyzeWordSenses();
-			source->narrativeIsQuoted = true;
-			source->syntacticRelations();
 			//Words.writeWords(path);  not necessary and wastes huge amount of space
 			source->identifySpeakerGroups();
 			source->resolveSpeakers(secondaryQuotesResolutions);
