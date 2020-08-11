@@ -352,7 +352,7 @@ int cPatternElement::matchOne(cSource &source,unsigned int sourcePosition,unsign
 				}
 #endif
 				// if a word is specifically marked as a match, no more matches will be searched.  This allows a specific word to over-rule a more general search form (own, in ALLOBJECTS_2[2])
-				if (skipPatternMatchingBecauseSpecificWordMatched = specificWords[form].length())
+				if (skipPatternMatchingBecauseSpecificWordMatched = specificWords[form].length()>0)
 				{
 					// IF the cost of the specific word named is 0 or negative, then assume the intent is to make the lowest cost option this particular word (thus matching more patterns won't hurt).
 					// IF the cost is positive, then assume that the intent is to make this word more expensive and thus do not match more patterns when they will match this word without more cost.

@@ -1206,6 +1206,9 @@ int wmain(int argc,wchar_t *argv[])
 			continue;
 		numCommandLineParameters=min(numCommandLineParameters,I);
 	}
+	//cOntology::fillOntologyList(true);
+	//cOntology::maxFieldLengths();
+	//cOntology::writeOntologyList();
 	//cOntology ontology;
 	//ontology.readOpenLibraryInternetArchiveWorksDump();
 	/*

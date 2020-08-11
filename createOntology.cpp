@@ -14,6 +14,7 @@
 #include "mysqldb.h"
 #include "mysqld_error.h"
 #include "internet.h"
+#include <sstream>
 
 wstring basehttpquery = L"http://localhost:8890/sparql?default-graph-uri=http%3A%2F%2Fdbpedia.org&query=";
 wstring decodedbasehttpquery = L"http://localhost:8890/sparql?default-graph-uri=http://dbpedia.org&query=";
@@ -28,7 +29,7 @@ wstring selectWhere=L"SELECT+%3Fv+%0D%0AWHERE+%7B%0D%0A";
 
 
 MYSQL cOntology::mysql;
-set<string> cOntology::rejectCategories;
+set<string> cOntology::rejectCategories= { "topic","track","document","edition","word","image","episode","title","subject","term","category","content","focus","type","base"};
 bool cOntology::cacheRdfTypes=true;
 bool cOntology::alreadyConnected=false;
 bool cOntology::forceWebReread=false;
@@ -36,7 +37,7 @@ extern int logOntologyDetail;
 unordered_map <wstring, cOntologyEntry> cOntology::dbPediaOntologyCategoryList;
 unordered_map<wstring, vector <cTreeCat *> > cOntology::rdfTypeMap; // protected with rdfTypeMapSRWLock
 unordered_map<wstring, int > cOntology::rdfTypeNumMap; // protected with rdfTypeMapSRWLock
-bool cOntology::superClassesAllPopulated;
+bool cOntology::superClassesAllPopulated=false;
 
 /***
   Read N3 files (begin) - used for reading UMBEL ontology
@@ -116,7 +117,7 @@ bool readN3OnePropertyLine(wstring ontologyRelation,wstring mapFrom, unordered_m
 		int index2 = wcsspn(buffer, L" ");
 		if (!index2)
 		{
-			lplog(LOG_WIKIPEDIA, L"line #%d: Nonconforming #%d:(code line %d) %s", line, nonConformingLines, __LINE__, buffer);
+			lplog(LOG_WIKIPEDIA, L"UMBEL line #%d: Nonconforming #%d:(code line %d) %s", line, nonConformingLines, __LINE__, buffer);
 			nonConformingLines++;
 			continue;
 		}
@@ -130,7 +131,7 @@ bool readN3OnePropertyLine(wstring ontologyRelation,wstring mapFrom, unordered_m
 			sm2 = wcschr(sm1 + 1, ' ');
 		if (!sm2)
 		{
-			lplog(LOG_WIKIPEDIA, L"line #%d: Nonconforming #%d:(code line %d) %s", line, nonConformingLines, __LINE__, buffer);
+			lplog(LOG_WIKIPEDIA, L"UMBEL line #%d: Nonconforming #%d:(code line %d) %s", line, nonConformingLines, __LINE__, buffer);
 			nonConformingLines++;
 			continue;
 		}
@@ -142,12 +143,12 @@ bool readN3OnePropertyLine(wstring ontologyRelation,wstring mapFrom, unordered_m
 		}
 		else if (*(sm2 + 1) != ';' && *(sm2 + 1) != '.')
 		{
-			lplog(LOG_WIKIPEDIA, L"line #%d: Nonconforming #%d:(code line %d) %s [%d %c]", line, nonConformingLines, __LINE__, buffer, index2, sm1[1]);
+			lplog(LOG_WIKIPEDIA, L"UMBEL line #%d: Nonconforming #%d:(code line %d) %s [%d %c]", line, nonConformingLines, __LINE__, buffer, index2, sm1[1]);
 			nonConformingLines++;
 			continue;
 		}
 		triplets[ontologyRelation][mapFrom].insert(sm1 + 1);
-		lplog(LOG_WIKIPEDIA, L"%d:line #%d: %s %s %s", __LINE__,line, ontologyRelation.c_str(),mapFrom.c_str(),sm1 + 1);
+		lplog(LOG_WIKIPEDIA, L"UMBEL line #%d: %s %s %s", line, ontologyRelation.c_str(),mapFrom.c_str(),sm1 + 1);
 		return (*(sm2 + 1) == '.');
 	}
 	return false;
@@ -172,14 +173,14 @@ int readN3TwoPropertyLine(wchar_t *path,wstring mapFrom, unordered_map < wstring
 			continue;
 		if (!index)
 		{
-			lplog(LOG_WIKIPEDIA, L"line #%d: Nonconforming #%d:(code line %d) %s", line,nonConformingLines, __LINE__, buffer);
+			lplog(LOG_WIKIPEDIA, L"UMBEL line #%d: Nonconforming #%d:(code line %d) %s", line,nonConformingLines, __LINE__, buffer);
 			nonConformingLines++;
 			continue;
 		}
 		wchar_t *s1 = wcschr(buffer+index, ' ');
 		if (!s1)
 		{
-			lplog(LOG_WIKIPEDIA, L"line #%d: Nonconforming #%d:(code line %d) %s", line,nonConformingLines, __LINE__, buffer);
+			lplog(LOG_WIKIPEDIA, L"UMBEL line #%d: Nonconforming #%d:(code line %d) %s", line,nonConformingLines, __LINE__, buffer);
 			nonConformingLines++;
 			continue;
 		}
@@ -200,21 +201,29 @@ int readN3TwoPropertyLine(wchar_t *path,wstring mapFrom, unordered_map < wstring
 			s2 = wcschr(s1 + 1, ' ');
 		if (!s2)
 		{
-			lplog(LOG_WIKIPEDIA, L"line #%d: Nonconforming #%d:(code line %d) %s", line,nonConformingLines, __LINE__, buffer);
+			lplog(LOG_WIKIPEDIA, L"UMBEL line #%d: Nonconforming #%d:(code line %d) %s", line,nonConformingLines, __LINE__, buffer);
 			nonConformingLines++;
 			continue;
 		}
 		*s2 = 0;
 		if (mapTo.empty())
+		{
+			wchar_t *dropAt = wcschr(s1 + 1, L'@');
+			if (dropAt) *dropAt = 0;
+			if (s1[1] == L':') s1++;
+			if (s1[1] == L'\"') s1++;
+			dropAt = wcschr(s1 + 1, L'\"');
+			if (dropAt) *dropAt = 0;
 			mapTo = s1 + 1;
+		}
 		triplets[ontologyRelation][mapFrom].insert(mapTo);
-		lplog(LOG_WIKIPEDIA, L"%d:%s:line #%d: relation=%s mapFrom=%s mapTo=%s", __LINE__, path,line, ontologyRelation.c_str(), mapFrom.c_str(), mapTo.c_str());
+		lplog(LOG_WIKIPEDIA, L"UMBEL %s:line #%d: relation=%s mapFrom=%s mapTo=%s", path,line, ontologyRelation.c_str(), mapFrom.c_str(), mapTo.c_str());
 		bool appendingDef = false,finished=false;
 		if (*(s2 + 1) == ',' && s2[wcslen(s2 + 1)] != ';' && s2[wcslen(s2 + 1)] != '.') // skips inline ,
 		{
 			if (*(s2 + 2) != 0)
 			{
-				lplog(LOG_WIKIPEDIA, L"line #%d: Nonconforming #%d:(code line %d) %s", line, nonConformingLines, __LINE__, buffer);
+				lplog(LOG_WIKIPEDIA, L"UMBEL line #%d: Nonconforming #%d:(code line %d) %s", line, nonConformingLines, __LINE__, buffer);
 				nonConformingLines++;
 				continue;
 			}
@@ -226,7 +235,7 @@ int readN3TwoPropertyLine(wchar_t *path,wstring mapFrom, unordered_map < wstring
 		}
 		else if (*(s2 + 1) != ';' && s2[wcslen(s2+1)] != ';') // skips inline ,
 		{
-			lplog(LOG_WIKIPEDIA, L"line #%d: Nonconforming #%d:(code line %d) %s", line,nonConformingLines, __LINE__, buffer);
+			lplog(LOG_WIKIPEDIA, L"UMBEL line #%d: Nonconforming #%d:(code line %d) %s", line,nonConformingLines, __LINE__, buffer);
 			nonConformingLines++;
 			continue;
 		}
@@ -252,7 +261,7 @@ int readN3TwoPropertyLine(wchar_t *path,wstring mapFrom, unordered_map < wstring
 									 skos:definition "License-built version of the U.S. Bell 205 helicopter."@en ;
 									 rdfs:isDefinedBy : .
 */
-int readN3FileTypeIntoRelationsArray(wchar_t *path, unordered_map < wstring, unordered_map <wstring, set< wstring > > > &triplets)
+int readN3FileIntoTripletMap(wchar_t *path, unordered_map < wstring, unordered_map <wstring, set< wstring > > > &triplets)
 {
 	FILE *fp = _wfopen(path, L"r");
 	if (!fp)
@@ -280,14 +289,14 @@ int readN3FileTypeIntoRelationsArray(wchar_t *path, unordered_map < wstring, uno
 		wchar_t *s1 = wcschr(buffer, ' ');
 		if (!s1)
 		{
-			lplog(LOG_WIKIPEDIA, L"line #%d: Nonconforming #%d:(code line %d) %s", line,nonConformingLines, __LINE__, buffer);
+			lplog(LOG_WIKIPEDIA, L"UMBEL line #%d: Nonconforming #%d:(code line %d) %s", line,nonConformingLines, __LINE__, buffer);
 			nonConformingLines++;
 			continue;
 		}
 		wchar_t *s2 = wcschr(s1 + 1, ' ');
 		if (!s2)
 		{
-			lplog(LOG_WIKIPEDIA, L"line #%d: Nonconforming #%d:(code line %d) %s", line,nonConformingLines, __LINE__, buffer);
+			lplog(LOG_WIKIPEDIA, L"UMBEL line #%d: Nonconforming #%d:(code line %d) %s", line,nonConformingLines, __LINE__, buffer);
 			nonConformingLines++;
 			continue;
 		}
@@ -307,7 +316,7 @@ int readN3FileTypeIntoRelationsArray(wchar_t *path, unordered_map < wstring, uno
 			s3 = wcschr(s2 + 1, ' ');
 		if (!s3)
 		{
-			lplog(LOG_WIKIPEDIA, L"line #%d: Nonconforming #%d:(code line %d) %s", line,nonConformingLines, __LINE__, buffer);
+			lplog(LOG_WIKIPEDIA, L"UMBEL line #%d: Nonconforming #%d:(code line %d) %s", line,nonConformingLines, __LINE__, buffer);
 			nonConformingLines++;
 			continue;
 		}
@@ -318,17 +327,17 @@ int readN3FileTypeIntoRelationsArray(wchar_t *path, unordered_map < wstring, uno
 			inOneFieldPerLineProperty = true;
 		else if (*(s3 + 1) != '.')
 		{
-			lplog(LOG_WIKIPEDIA, L"line #%d: Nonconforming #%d:(code line %d) [%c %d] [%c %d] %s", line,nonConformingLines, __LINE__, *(s2+1), s2-buffer, *(s3 + 1), s3-buffer, buffer);
+			lplog(LOG_WIKIPEDIA, L"UMBEL line #%d: Nonconforming #%d:(code line %d) [%c %d] [%c %d] %s", line,nonConformingLines, __LINE__, *(s2+1), s2-buffer, *(s3 + 1), s3-buffer, buffer);
 			nonConformingLines++;
 			continue;
 		}
 		*s1 = *s2 = *s3 = 0;
-		wstring mapFrom = buffer;
+		wstring mapFrom = (buffer[0]==L':') ? buffer+1 : buffer;
 		wstring ontologyRelation = s1 + 1;
 		if (mapTo.empty())
 			mapTo = s2 + 1;
 		triplets[ontologyRelation][mapFrom].insert(mapTo);
-		lplog(LOG_WIKIPEDIA, L"%d:line #%d: %s %s %s", __LINE__, line, ontologyRelation.c_str(), mapFrom.c_str(), mapTo.c_str());
+		lplog(LOG_WIKIPEDIA, L"UMBEL line #%d: %s %s %s", line, ontologyRelation.c_str(), mapFrom.c_str(), mapTo.c_str());
 		if (inTwoFieldPerLineProperty)
 			readN3TwoPropertyLine(path,mapFrom, triplets, fp, buffer, line, nonConformingLines);
 		if (inOneFieldPerLineProperty)
@@ -340,7 +349,7 @@ int readN3FileTypeIntoRelationsArray(wchar_t *path, unordered_map < wstring, uno
 	return 0;
 }
 
-int scanDirectory(wchar_t *basepath,wchar_t *extension, unordered_map < wstring, unordered_map <wstring, set< wstring > > > &triplets)
+void cOntology::importUMBELN3Files(wchar_t *basepath, wchar_t *extension, unordered_map < wstring, unordered_map <wstring, set< wstring > > > &triplets)
 {
 	WIN32_FIND_DATA FindFileData;
 	wchar_t path[1024];
@@ -348,24 +357,64 @@ int scanDirectory(wchar_t *basepath,wchar_t *extension, unordered_map < wstring,
 	HANDLE hFind = FindFirstFile(path, &FindFileData);
 	if (hFind == INVALID_HANDLE_VALUE)
 	{
-		wprintf(L"FindFirstFile failed on directory %s (%d)\r", path, (int)GetLastError());
-		return -1;
+		lplog(LOG_FATAL_ERROR,L"UMBEL import FindFirstFile failed on directory %s (%d)\r", path, (int)GetLastError());
+		return;
 	}
 	do
 	{
 		if (FindFileData.cFileName[0] == '.') continue;
 		wchar_t completePath[1024];
-		wsprintf(completePath,L"%s\\%s",basepath, FindFileData.cFileName);
+		wsprintf(completePath, L"%s\\%s", basepath, FindFileData.cFileName);
 		if ((FindFileData.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY)
-			scanDirectory(completePath,extension,triplets);
+			importUMBELN3Files(completePath, extension, triplets);
 		else
 		{
 			wchar_t *ext = wcsrchr(completePath, '.');
-			if (!wcscmp(ext,extension))
-				readN3FileTypeIntoRelationsArray(completePath,triplets);
+			if (!wcscmp(ext, extension))
+				readN3FileIntoTripletMap(completePath, triplets);
 		}
 	} while (FindNextFile(hFind, &FindFileData) != 0);
 	FindClose(hFind);
+}
+
+bool cOntology::readUMBELSuperClasses()
+{
+	unordered_map < wstring, unordered_map <wstring, set<wstring>> > triplets;
+	importUMBELN3Files(L"umbel downloads", L".n3", triplets);
+	unordered_map <wstring, set<wstring>> subClasses = triplets[L"rdfs:subClassOf"];
+	for (auto ti : triplets[L"umbel:superClassOf"])
+	{
+		for (auto iSubClass: ti.second)
+			subClasses[iSubClass].insert(ti.first);
+	}
+	for (auto ti : subClasses)
+	{
+		wstring labelWithSpace, compactLabel;
+		int UMBELType;
+		stripUmbel(ti.first, compactLabel, labelWithSpace, UMBELType);
+		unordered_set <wstring> superClasses;
+		for (auto iSuperClass : ti.second)
+		{
+			wstring labelWithSpaceSC, compactLabelSC;
+			int UMBELTypeSC;
+			stripUmbel(iSuperClass, compactLabelSC, labelWithSpaceSC, UMBELTypeSC);
+			superClasses.insert(labelWithSpaceSC);
+		}
+		unordered_map <wstring, cOntologyEntry>::iterator cli = dbPediaOntologyCategoryList.find(labelWithSpace);
+		if (cli == dbPediaOntologyCategoryList.end())
+		{
+			dbPediaOntologyCategoryList[labelWithSpace] = cOntologyEntry();
+			cli = dbPediaOntologyCategoryList.find(labelWithSpace);
+		}
+		wstring description;
+		cli->second.abstractDescription = setString(triplets[L"skos:definition"][compactLabel], description, L" ");
+		cli->second.superClasses.insert(superClasses.begin(), superClasses.end());
+		cli->second.compactLabel = compactLabel;
+		cli->second.ontologyType = UMBEL_Ontology_Type;
+		cli->second.resourceType = UMBELType;
+	}
+	for (auto ti: triplets[L""])
+	fillRanks(UMBEL_Ontology_Type);
 	return 0;
 }
 
@@ -424,14 +473,6 @@ int cOntology::getDBPediaPath(int where,wstring webAddress,wstring &buffer,wstri
 		return -1;
 	}
 	return retValue;
-}
-
-void cOntology::initialize()
-{
-	char *commonMeaninglessCategories[]={ "topic","track","document","edition","word","image","episode","title","subject","term","category","content","focus","type","base",NULL };
-	for (int cmc=0; commonMeaninglessCategories[cmc]; cmc++) rejectCategories.insert(commonMeaninglessCategories[cmc]);
-	superClassesAllPopulated=false;
-	fillOntologyList(false);
 }
 
 unordered_map <wstring, cOntologyEntry>::iterator cOntology::findCategory(wstring &icat)
@@ -535,7 +576,7 @@ int cOntology::getDescription(wstring label, wstring objectName, wstring &abstra
 	}
 	wstring dbPediaQueryString = getDescriptionString(label),temp,buffer;
 	if (logRDFDetail)
-		lplog(LOG_WIKIPEDIA, L"%s\nENCODED WEBADDRESS:%s\nDECODED WEBADDRESS:%s",
+		lplog(LOG_WIKIPEDIA|LOG_RESOLUTION, L"%s\nENCODED WEBADDRESS:%s\nDECODED WEBADDRESS:%s",
 			objectName.c_str(), dbPediaQueryString.c_str(), decodeURL(dbPediaQueryString, temp).c_str() + decodedbasehttpquery.length());
 	int numRows = 0;
 	objectName += L"_getDescription.xml";
@@ -594,7 +635,7 @@ unordered_map <wstring, cOntologyEntry>::iterator cOntology::findAnyYAGOSuperCla
 		for (size_t pos=0; firstMatch(buffer,L"<uri>",L"</uri>",pos,uri,false)!=wstring::npos; )
 		{
 			wstring scat=uri.c_str()+wcslen(L"http://dbpedia.org/class/yago/");
-			cli->second.superClasses.push_back(scat);
+			cli->second.superClasses.insert(scat);
 			lplog(LOG_WIKIPEDIA,L"%s:%s:%s:%s",L"YSC",uri.c_str(),cl.c_str(),scat.c_str());
 			if (findCategory(scat)==dbPediaOntologyCategoryList.end())
 				findAnyYAGOSuperClass(scat);
@@ -633,13 +674,13 @@ int cOntology::fillRanks(int ontologyType)
 				else 
 				{
 					unordered_map <wstring, cOntologyEntry>::iterator scli;
-					for (vector <wstring>::iterator sci = cli->second.superClasses.begin(), sciEnd = cli->second.superClasses.end(); sci != sciEnd; sci++)
+					for (auto sci : cli->second.superClasses)
 					{
-						scli = dbPediaOntologyCategoryList.find(*sci);
+						scli = dbPediaOntologyCategoryList.find(sci);
 						if (scli == dbPediaOntologyCategoryList.end())
-							scli = findCategory(*sci);
-						if (scli == dbPediaOntologyCategoryList.end() && (*sci!=L"orphans" || cli->second.ontologyType!=UMBEL_Ontology_Type))
-							lplog(L"looking for superclass %s of object %s failed.", sci->c_str(),cli->second.toString(tmpstr,cli->first).c_str());
+							scli = findCategory(sci);
+						if (scli == dbPediaOntologyCategoryList.end() && (sci!=L"orphans" || cli->second.ontologyType!=UMBEL_Ontology_Type))
+							lplog(LOG_WIKIPEDIA,L"fillRanks: looking for superclass %s of object %s failed.", sci.c_str(),cli->second.toString(tmpstr,cli->first).c_str());
 						else
 							break;
 						//if (scli != dbPediaOntologyCategoryList.end() && (scli = findAnyYAGOSuperClass(scli->second.compactLabel)) != dbPediaOntologyCategoryList.end())
@@ -693,14 +734,14 @@ void stripEndOfLine(wchar_t *s,wchar_t &ch)
 }
 
 /*
-labelWithSpace        <http://umbel.org/umbel/rc/WeatherAttributes_Weather_Topic> rdf:type owl:Class ;
-superClasses		    																												rdfs:subClassOf :TopicsCategories ,
-																																						<http://umbel.org/umbel/rc/Weather_Topic> ;
-				            																										skos:definition "A CycVocabularyTopic and a KBDependentCollection."@en ;
-compactLabel						    																								skos:compactLabel "weather attributes weather topic"@en .
+labelWithSpace   <http://umbel.org/umbel/rc/WeatherAttributes_Weather_Topic> rdf:type owl:Class ;
+superClasses		 rdfs:subClassOf :TopicsCategories ,
+									<http://umbel.org/umbel/rc/Weather_Topic> ;
+				          skos:definition "A CycVocabularyTopic and a KBDependentCollection."@en ;
+compactLabel			skos:compactLabel "weather attributes weather topic"@en .
 */
 
-wstring stripUmbel(wstring umbelClass,wstring &compactLabel,wstring &labelWithSpace,int &UMBELType)
+wstring cOntology::stripUmbel(wstring umbelClass,wstring &compactLabel,wstring &labelWithSpace,int &UMBELType)
 {
 	wchar_t *prefixes[] = { L"<http://umbel.org/umbel/rc/", L"<http://umbel.org/umbel#", L"<http://schema.org/", L"<http://www.geonames.org/ontology#", L"<http://dbpedia.org/ontology/",
 		L"<http://purl.org/dc/dcmitype/",		L"<http://purl.org/dc/terms/",		L"<http://purl.org/goodrelations/v1#",		L"<http://purl.org/openorg/",
@@ -725,10 +766,7 @@ wstring stripUmbel(wstring umbelClass,wstring &compactLabel,wstring &labelWithSp
 	}
 	if (compactLabel.empty())
 	{
-		if (umbelClass[0] != L':')
-			lplog(LOG_ERROR, L"Pattern not found: %s", umbelClass.c_str());
-		else
-			compactLabel = umbelClass;
+		compactLabel = umbelClass;
 	}
 	if (compactLabel[0]==':')
 		compactLabel = compactLabel.substr(1);
@@ -749,130 +787,6 @@ wstring stripUmbel(wstring umbelClass,wstring &compactLabel,wstring &labelWithSp
 		labelWithSpace += pc;
 	}
 	return labelWithSpace;
-}
-
-int cOntology::readUMBELNS()
-{ LFS
-	wchar_t path[1024];
-	wsprintf(path,L"source\\lists\\umbel_superClassCache");
-	int fd = _wopen(path, O_RDWR | O_BINARY);
-	if (fd >= 0)
-	{
-		wchar_t version;
-		::read(fd, &version, sizeof(version));
-		_close(fd);
-		if (version == UMBEL_CACHE_VERSION) // version
-			return 0;
-	}
-	fd = _wopen(path, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, _S_IREAD | _S_IWRITE);
-	if (fd < 0)
-	{
-		lplog(L"Cannot write umbel_superClassCache - %S.", _sys_errlist[errno]);
-		return -1;
-	}
-	int where = 0, numUMBELClasses=0;
-	wstring temp;
-	// look for ###
-	// skip one line, look for the same
-	// skip one line, look for rdfs:subClass and take the rest of the line (end in ;?)
-	// take more lines until the line ends in a ; or the line doesn't end in a ,
-	unordered_map < wstring, unordered_map <wstring, set<wstring>> > triplets;
-	scanDirectory(L"F:\\lp\\umbel downloads", L".n3",triplets);
-	unordered_map <wstring, set<wstring>> subClasses = triplets[L"rdfs:subClassOf"];
-	unordered_map <wstring, set<wstring>> superClasses = triplets[L"umbel:superClassOf"];
-	wchar_t buffer[MAX_BUF];
-	*((wchar_t *)buffer) = UMBEL_CACHE_VERSION;
-	where += sizeof(wchar_t);
-	for (unordered_map <wstring, set<wstring>>::iterator ti = superClasses.begin(); ti != superClasses.end(); ti++)
-	{
-		for (set<wstring>::iterator iSubClass = ti->second.begin(); iSubClass != ti->second.end(); iSubClass++)
-		{
-			lplog(LOG_WIKIPEDIA, L"UMBEL SUPERCLASS %s:%s", ti->first.c_str(), iSubClass->c_str());
-			subClasses[*iSubClass].insert(ti->first);
-		}
-	}
-	for (unordered_map <wstring, set<wstring>>::iterator ti = subClasses.begin(); ti != subClasses.end(); ti++)
-	{
-		wstring labelWithSpace,compactLabel;
-		int UMBELType;
-		stripUmbel(ti->first, compactLabel, labelWithSpace, UMBELType);
-		if (!::copy(buffer, labelWithSpace, where, MAX_BUF) || // labelWithSpace
-		    !::copy(buffer, compactLabel, where, MAX_BUF) || // compactLabel
-				!::copy(buffer, UMBELType, where, MAX_BUF) || // UMBEL resource type
-				!::copy(buffer, (int)ti->second.size(), where, MAX_BUF))
-			lplog(LOG_FATAL_ERROR,L"Cannot create UMBEL cache - subclasses");
-		lplog(LOG_WIKIPEDIA, L"WRITE UMBEL [%s]:%s->%s:%d", ti->first.c_str(),compactLabel.c_str(), labelWithSpace.c_str(), ti->second.size());
-		for (set<wstring>::iterator iSuperClass = ti->second.begin(); iSuperClass != ti->second.end(); iSuperClass++)
-		{
-			stripUmbel(*iSuperClass, compactLabel, labelWithSpace, UMBELType);
-			lplog(LOG_WIKIPEDIA, L"  WRITE UMBEL SC [%s]:%s->%s", iSuperClass->c_str(), compactLabel.c_str(), labelWithSpace.c_str());
-			if (!::copy(buffer, labelWithSpace, where, MAX_BUF) ||
-					!::copy(buffer, UMBELType, where, MAX_BUF))
-				lplog(LOG_FATAL_ERROR,L"Cannot create UMBEL cache - superclasses"); 
-		}
-		if (where>MAX_BUF-40960)
-		{
-			::write(fd,buffer,where);
-			where=0;
-		}
-	}
-	if (where)
-		::write(fd,buffer,where);
-	close(fd);
-	return numUMBELClasses;
-}
-
-bool cOntology::readUMBELSuperClasses()
-{
-	LFS
-	int beginEntries = dbPediaOntologyCategoryList.size();
-	readUMBELNS();
-	IOHANDLE fd=_wopen(L"source\\lists\\umbel_superClassCache",O_RDWR|O_BINARY);
-  if (fd<0) 
-			return false;
-  void *buffer;
-  int bufferlen=filelength(fd);
-  buffer=(void *)tmalloc(bufferlen+10);
-  ::read(fd,buffer,bufferlen);
-  close(fd);
-  int where=0,line;
-	wchar_t version;
-	::read(fd, &version, sizeof(version));
-	if (version == UMBEL_CACHE_VERSION) // version
-		return 0;
-	where += sizeof(wchar_t);
-	for (line=0; where<bufferlen; line++)
-	{
-		wstring labelWithSpace,compactLabel;
-		int UMBELType,numSuperClasses;
-		vector <wstring> superClasses;
-		vector <int> superClassUMBELTypes;
-		if (!::copy(labelWithSpace, buffer, where, bufferlen)) return false;
-		if (!::copy(compactLabel, buffer, where, bufferlen)) return false;
-		if (!::copy(UMBELType, buffer, where, bufferlen)) return false;
-		if (!::copy(numSuperClasses, buffer, where, bufferlen)) return false;
-		for (int I=0; I<numSuperClasses; I++)
-		{
-			wstring superClass;
-			int scType;
-			if (!::copy(superClass, buffer, where, bufferlen)) return false;
-			if (!::copy(scType, buffer, where, bufferlen)) return false;
-			superClasses.push_back(superClass);
-			superClassUMBELTypes.push_back(scType);
-		}
-		dbPediaOntologyCategoryList[labelWithSpace].superClasses = superClasses;
-		dbPediaOntologyCategoryList[labelWithSpace].superClassResourceTypes = superClassUMBELTypes;
-		unordered_map <wstring, cOntologyEntry>::iterator cli=dbPediaOntologyCategoryList.find(labelWithSpace);
-		cli->second.compactLabel = compactLabel;
-		//getDescription(cli);  getDescription is only for the dbpedia ontology
-		cli->second.numLine=line;
-		cli->second.ontologyType=UMBEL_Ontology_Type;
-		cli->second.resourceType = UMBELType;
-	}
-  tfree(bufferlen,buffer);
-	fillRanks(UMBEL_Ontology_Type);
-	lplog(LOG_WIKIPEDIA, L"UMBEL ontology inserted %d entries.", dbPediaOntologyCategoryList.size() - beginEntries);
-	return where<=bufferlen;
 }
 
 wchar_t *bufferedGetws(wchar_t *s,int maxLen,int fd,wchar_t *fileBuffer,__int64 &bufferLength,__int64 &bufferOffset,__int64 &fileOffset,__int64 totalFileLength)
@@ -985,7 +899,7 @@ int cOntology::readYAGOOntology(wchar_t *filepath, int &numYAGOEntries, int &num
 	// <http://dbpedia.org/class/yago/Canal102947212> <http://www.w3.org/2002/07/owl#equivalentClass> <http://yago-knowledge.org/resource/wordnet_canal_102947212> . in yago_type_links.ttl
 	// <http://dbpedia.org/class/yago/Aa114931472> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://dbpedia.org/class/yago/Lava114930989>. in yago_taxonomy.ttl
 	int oldPercent = -1, newPercent = 0;
-	for (line = 1; ; line++)
+	for (line = 1; bufferOffset != bufferLength || bufferLength==0; line++)
 	{
 		if (bufferOffset > bufferLength - maxCategoryLength)
 		{
@@ -997,8 +911,6 @@ int cOntology::readYAGOOntology(wchar_t *filepath, int &numYAGOEntries, int &num
 			if (!success)
 				lplog(LOG_ERROR,L"%S:%d:%s",__FUNCTION__, __LINE__,lastErrorMsg().c_str());
 			totalFileOffset += newBufferLength;
-			if (newBufferLength <= 0 || !success)
-				break;
 			newBufferLength /= sizeof(char);
 			fileBuffer[bufferLength = newBufferLength + bufferLength] = 0;
 			bufferOffset = 0;
@@ -1025,25 +937,21 @@ int cOntology::readYAGOOntology(wchar_t *filepath, int &numYAGOEntries, int &num
 			continue;
 		}
 		char *ic = name + strlen(name) + 2, *label, *superClass;
-		string nameIC;
-		transform(name, nameIC);
 		int resourceType = 0;
 		// wikicat people from tambov oblast
-		if (nameIC.find("wikicat ") == 0)
+		if (strncmp(name,"wikicat ",strlen("wikicat ")) == 0)
 		{
-			nameIC = nameIC.substr(strlen("wikicat "));
+			name += strlen("wikicat ");
 			resourceType = 1;
 		}
 		// example: <http://yago-knowledge.org/resource/wordnet_carousel_102966193>
 		if ((label = firstMatch(ic, "<http://www.w3.org/2002/07/owl#equivalentClass> <http://yago-knowledge.org/resource/", ">")) != NULL) // yago_type_links.ttl
 		{
 			// cut until the first _
-			char *firstUnderscore = strchr(label, '_'),*lastUnderscore = strrchr(label, '_');
+			char *firstUnderscore = strchr(label, '_');
 			if (firstUnderscore)
 				label = firstUnderscore + 1;
-			if (lastUnderscore)
-				*lastUnderscore = 0;
-			mTW(nameIC, tmpstr);
+			mTW(name, tmpstr);
 			dbPediaOntologyCategoryList[tmpstr].compactLabel = mTW(label, tmpstr2);
 			unordered_map <wstring, cOntologyEntry>::iterator cli = dbPediaOntologyCategoryList.find(tmpstr);
 			cli->second.numLine = line;
@@ -1054,10 +962,8 @@ int cOntology::readYAGOOntology(wchar_t *filepath, int &numYAGOEntries, int &num
 		}
 		if ((superClass = firstMatch(ic, "<http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://dbpedia.org/class/yago/", ">")) != NULL)
 		{
-			string superClassIC;
-			transform(superClass, superClassIC);
-			mTW(nameIC, tmpstr);
-			dbPediaOntologyCategoryList[tmpstr].superClasses.push_back(mTW(superClassIC, tmpstr3));
+			mTW(name, tmpstr);
+			dbPediaOntologyCategoryList[tmpstr].superClasses.insert(mTW(superClass, tmpstr3));
 			unordered_map <wstring, cOntologyEntry>::iterator cli = dbPediaOntologyCategoryList.find(tmpstr);
 			cli->second.numLine = line;
 			cli->second.ontologyType = YAGO_Ontology_Type;
@@ -1097,7 +1003,7 @@ int cOntology::readDbPediaOntology()
 { LFS
 	unordered_map <int,wstring> lastRank;
 	unordered_map <wstring, wstring> labelMap;
-  FILE *fp=_wfopen(L"dbpedia_downloads\\dbpedia_2016-10.nt",L"rt");
+  FILE *fp=_wfopen(L"dbpedia_downloads\\2016-10\\dbpedia_2016-10.nt",L"rt");
   if (!fp) 
 	{
 		lplog(LOG_FATAL_ERROR,L"dbPedia Ontology file not found.");
@@ -1162,22 +1068,22 @@ int cOntology::readDbPediaOntology()
 			if ((pf = wcsstr(nextField, DBP_PREFIX)) && (lt = wcschr(pf + wcslen(DBP_PREFIX), L'>')))
 			{
 				*lt = 0;
-				dbp.superClasses.push_back(nextField + wcslen(DBP_SCO) + 1 + wcslen(DBP_PREFIX));
+				dbp.superClasses.insert(nextField + wcslen(DBP_SCO) + 1 + wcslen(DBP_PREFIX));
 			}
 			else if ((pf = wcsstr(nextField, DBP_PREFIX2)) && (lt = wcschr(pf + wcslen(DBP_PREFIX2), L'>')))
 			{
 				*lt = 0;
-				dbp.superClasses.push_back(nextField + wcslen(DBP_SCO) + 1 + wcslen(DBP_PREFIX2));
+				dbp.superClasses.insert(nextField + wcslen(DBP_SCO) + 1 + wcslen(DBP_PREFIX2));
 			}
 			else if ((pf = wcsstr(nextField, DBP_PREFIX3)) && (lt = wcschr(pf + wcslen(DBP_PREFIX3), L'>')))
 			{
 				*lt = 0;
-				dbp.superClasses.push_back(nextField + wcslen(DBP_SCO) + 1 + wcslen(DBP_PREFIX3));
+				dbp.superClasses.insert(nextField + wcslen(DBP_SCO) + 1 + wcslen(DBP_PREFIX3));
 			}
 			else if ((pf = wcsstr(nextField, DBP_PREFIX4)) && (lt = wcschr(pf + wcslen(DBP_PREFIX4), L'>')))
 			{
 				*lt = 0;
-				dbp.superClasses.push_back(nextField + wcslen(DBP_SCO) + 1 + wcslen(DBP_PREFIX4));
+				dbp.superClasses.insert(nextField + wcslen(DBP_SCO) + 1 + wcslen(DBP_PREFIX4));
 			}
 			else
 				lplog(LOG_WIKIPEDIA, L"%s prefix not recognized", nextField);
@@ -1201,16 +1107,16 @@ int cOntology::readDbPediaOntology()
 	{
 		if (dboci->second.ontologyType == dbPedia_Ontology_Type)
 		{
-			vector <wstring> superClasses;
-			for (vector<wstring>::iterator sci = dboci->second.superClasses.begin(), sciEnd = dboci->second.superClasses.end(); sci != sciEnd; sci++)
+			unordered_set <wstring> superClasses;
+			for (auto sci:dboci->second.superClasses)
 			{
-				unordered_map<wstring, wstring>::iterator lm = labelMap.find(*sci);
+				unordered_map<wstring, wstring>::iterator lm = labelMap.find(sci);
 				if (lm != labelMap.end())
 				{
-					superClasses.push_back(lm->second);
+					superClasses.insert(lm->second);
 				}
 				else
-					lplog(LOG_WIKIPEDIA, L"superclass %s of %s not found.", sci->c_str(), dboci->second.compactLabel.c_str());
+					lplog(LOG_WIKIPEDIA, L"superclass %s of %s not found.", sci.c_str(), dboci->second.compactLabel.c_str());
 			}
 			dboci->second.superClasses = superClasses;
 		}
@@ -1282,34 +1188,12 @@ bool copyOLD(cOntologyEntry &dbsn, void *buf, int &where, int limit)
 	return true;
 }
 
-bool cOntology::copy(void *buf, unordered_map <wstring, cOntologyEntry>::iterator dbsi, int &where, int limit)
-{
-	DLFS
-		if (!::copy(buf, dbsi->first, where, limit)) return false;
-	if (!copy(buf, dbsi->second, where, limit)) return false;
-	return true;
-}
-
 bool copy(unordered_map <wstring, cOntologyEntry>::iterator &hint, void *buf, int &where, int limit, unordered_map <wstring, cOntologyEntry> &hm)
 {
 	DLFS
 		wstring key;
 	cOntologyEntry dbPredicate;
 	if (copy(key, buf, where, limit) && copy(dbPredicate, buf, where, limit))
-	{
-		std::pair<unordered_map <wstring, cOntologyEntry>::iterator, bool> p = hm.insert(std::pair<wstring, cOntologyEntry>(key, dbPredicate));
-		hint = p.first;
-		return true;
-	}
-	return false;
-}
-
-bool copyOLD(unordered_map <wstring, cOntologyEntry>::iterator &hint, void *buf, int &where, int limit, unordered_map <wstring, cOntologyEntry> &hm)
-{
-	DLFS
-		wstring key;
-	cOntologyEntry dbPredicate;
-	if (copy(key, buf, where, limit) && copyOLD(dbPredicate, buf, where, limit))
 	{
 		std::pair<unordered_map <wstring, cOntologyEntry>::iterator, bool> p = hm.insert(std::pair<wstring, cOntologyEntry>(key, dbPredicate));
 		hint = p.first;
@@ -1332,6 +1216,7 @@ int clocksec()
 
 int cOntology::fillOntologyList(bool reInitialize)
 { LFS
+	initializeDatabaseHandle(cOntology::mysql, L"localhost", cOntology::alreadyConnected);
 	if (dbPediaOntologyCategoryList.empty())
 	{
 		wchar_t path[4096];
@@ -1343,8 +1228,12 @@ int cOntology::fillOntologyList(bool reInitialize)
 		if (_waccess(path,0)<0 || reInitialize)
 		{
 			char buffer[MAX_BUF];
-			readYAGOOntology();
-			readDbPediaOntology();
+			readYAGOOntology(); 
+			readDbPediaOntology(); 
+			// look for ###
+			// skip one line, look for the same
+			// skip one line, look for rdfs:subClass and take the rest of the line (end in ;?)
+			// take more lines until the line ends in a ; or the line doesn't end in a ,
 			readUMBELSuperClasses();
 			int fd=_wopen(path,O_WRONLY|O_CREAT|O_TRUNC|O_BINARY,_S_IREAD | _S_IWRITE );
 			if (fd<0)
@@ -1355,12 +1244,11 @@ int cOntology::fillOntologyList(bool reInitialize)
 			int where=0;
 			*((wchar_t *)buffer)=RDFLIBRARYTYPE_VERSION;
 			where+=2;
-			int numCategories = dbPediaOntologyCategoryList.size() , categoriesProcessed = 0;
-			for (unordered_map <wstring, cOntologyEntry>::iterator ri=dbPediaOntologyCategoryList.begin(),riEnd=dbPediaOntologyCategoryList.end(); ri!=riEnd; ri++,categoriesProcessed++)
+			for (auto ri:dbPediaOntologyCategoryList)
 			{
 				wstring tmpstr;
-				lplog(LOG_WIKIPEDIA,L"%d%%:category %s",categoriesProcessed*100/numCategories,ri->second.toString(tmpstr,ri->first).c_str());
-				if (!copy(buffer,ri,where,MAX_BUF))
+				lplog(LOG_WIKIPEDIA,L"category %s",ri.second.toString(tmpstr,ri.first).c_str());
+				if (!::copy(buffer, ri.first, where, MAX_BUF) || !copy(buffer, ri.second, where, MAX_BUF))
 				{
 					lplog(LOG_FATAL_ERROR, L"Cannot write rdfTypes dbPediaCache - %S.", _sys_errlist[errno]);
 					return -1;
@@ -1437,6 +1325,66 @@ int cOntology::fillOntologyList(bool reInitialize)
 	return 0;
 }
 
+bool writeDbOntologyEntry(MYSQL &mysql,const wstring key, cOntologyEntry &dbPredicate);
+bool readDbOntologyEntry(MYSQL &mysql, wstring key, cOntologyEntry &oncologyEntry);
+
+void maxFieldLengths(const wstring key, cOntologyEntry &dbPredicate, int &maxKey, int &maxCompactLabel, int &maxInfoPage, int &maxAbstractDescription, int &maxCommentDescription, int &maxSuperClasses, int &numGTA, int &numGTB, int &numGTC);
+
+bool cOntology::maxFieldLengths()
+{
+	int maxKey=-1, maxCompactLabel = -1, maxInfoPage = -1, maxAbstractDescription = -1, maxCommentDescription = -1, maxSuperClasses = -1;
+	int numGT150=0, numGT170=0, numGT190=0;
+	for (auto dbp : dbPediaOntologyCategoryList)
+		::maxFieldLengths(dbp.first, dbp.second, maxKey, maxCompactLabel, maxInfoPage, maxAbstractDescription, maxCommentDescription, maxSuperClasses, numGT150, numGT170, numGT190);
+	lplog(LOG_INFO, L"maxKey=%d maxCompactLabel =%d maxInfoPage =%d maxAbstractDescription =%d maxCommentDescription =%d maxSuperClasses =%d", maxKey, maxCompactLabel, maxInfoPage, maxAbstractDescription, maxCommentDescription, maxSuperClasses);
+	lplog(LOG_INFO, L"numGT150=%d numGT170 =%d numGT190 =%d ", numGT150, numGT170, numGT190);
+	return true;
+}
+
+bool cOntology::writeOntologyList()
+{
+	if (!myquery(&mysql, L"LOCK TABLES ontology WRITE"))
+		return false;
+	for (auto dbp : dbPediaOntologyCategoryList)
+		writeDbOntologyEntry(mysql, dbp.first, dbp.second);
+	if (!myquery(&mysql, L"UNLOCK TABLES"))
+		return false;
+	return true;
+}
+
+bool cOntology::readOntologyList()
+{
+	if (!myquery(&mysql, L"LOCK TABLES ontology READ"))
+		return false;
+	MYSQL_RES * result = NULL;
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select onkey,compactLabel,commentDescription,numLine,ontologyHierarchicalRank,ontologyType,superClasses from ontology");
+	MYSQL_ROW sqlrow = NULL;
+	if (myquery(&mysql, qt, result))
+	{
+		if ((sqlrow = mysql_fetch_row(result)))
+		{
+			cOntologyEntry ontologyEntry;
+			wstring onkey, superClassesToSplit,s;
+			mTW(sqlrow[0], onkey);
+			mTW(sqlrow[1], ontologyEntry.compactLabel);
+			mTW(sqlrow[2], ontologyEntry.commentDescription);
+			ontologyEntry.numLine = atoi(sqlrow[3]);
+			ontologyEntry.ontologyHierarchicalRank = atoi(sqlrow[4]);
+			ontologyEntry.ontologyType = atoi(sqlrow[5]);
+			mTW(sqlrow[6], superClassesToSplit);
+			std::wistringstream scss(superClassesToSplit);
+			while (std::getline(scss, s, L'|'))
+				ontologyEntry.superClasses.insert(s);
+			dbPediaOntologyCategoryList[onkey] = ontologyEntry;
+		}
+	}
+	mysql_free_result(result);
+	if (!myquery(&mysql, L"UNLOCK TABLES"))
+		return false;
+	return true;
+}
+
 int cOntology::findCategoryRank(wstring &qtype,wstring &parentObject,wstring &object,vector <cTreeCat *> &rdfTypes,wstring &uri)
 { LFS
 	bool foundDBPediaCategory=false,foundYAGOCategory=false,foundUMBELCategory=false,foundOpenGISCategory=false;
@@ -1458,7 +1406,7 @@ int cOntology::findCategoryRank(wstring &qtype,wstring &parentObject,wstring &ob
 			firstMatch(temp, L"href=\"http://dbpedia.org/class/yago/", L"\"", pos2, superClass, false) >= 0)
 		{
 			if (find(dbPediaOntologyCategoryList[cat].superClasses.begin(), dbPediaOntologyCategoryList[cat].superClasses.end(),superClass)== dbPediaOntologyCategoryList[cat].superClasses.end())
-				dbPediaOntologyCategoryList[cat].superClasses.push_back(superClass);
+				dbPediaOntologyCategoryList[cat].superClasses.insert(superClass);
 			cli = dbPediaOntologyCategoryList.find(cat);
 			cli->second.ontologyType = YAGO_Ontology_Type;
 		}
@@ -1472,7 +1420,7 @@ int cOntology::findCategoryRank(wstring &qtype,wstring &parentObject,wstring &ob
 		if (firstMatch(buffer, L"<rdfs:subClassOf rdf:resource=\"http://umbel.org/umbel/rc/", L"\"", pos, superClass, false) >= 0)
 		{
 			if (find(dbPediaOntologyCategoryList[cat].superClasses.begin(), dbPediaOntologyCategoryList[cat].superClasses.end(), superClass) == dbPediaOntologyCategoryList[cat].superClasses.end())
-				dbPediaOntologyCategoryList[cat].superClasses.push_back(superClass);
+				dbPediaOntologyCategoryList[cat].superClasses.insert(superClass);
 			cli = dbPediaOntologyCategoryList.find(cat);
 			cli->second.ontologyType = UMBEL_Ontology_Type;
 		}
@@ -1487,7 +1435,7 @@ int cOntology::findCategoryRank(wstring &qtype,wstring &parentObject,wstring &ob
 	}
 	if (cli!=dbPediaOntologyCategoryList.end())
 	{
-		rdfTypes.push_back(new cTreeCat(cli,object,parentObject,qtype,qtype[0]-L'0'));
+		rdfTypes.push_back(new cTreeCat(cli,object,parentObject,qtype,qtype[0]-L'0',parentObject));
 		return cli->second.ontologyHierarchicalRank;
 	}
 	return -1;
@@ -1548,7 +1496,7 @@ bool cOntology::extractResults(wstring begin,wstring uobject,wstring end,wstring
 	if (whereQuery!=wstring::npos)
 		temp.erase(0,whereQuery+6);
 	if (logRDFDetail)
-		lplog(LOG_WIKIPEDIA,L"%s:%s:%s\nENCODED WEBADDRESS:%s\nDECODED WEBADDRESS%s",
+		lplog(LOG_WIKIPEDIA|LOG_RESOLUTION,L"%s:%s:%s\nENCODED WEBADDRESS:%s\nDECODED WEBADDRESS%s",
 		  qtype.c_str(),parentObject.c_str(),fpobject.c_str(),webAddress.c_str(),temp.c_str());
 	unordered_map <wstring, cOntologyEntry>::iterator dbSeparator=dbPediaOntologyCategoryList.find(SEPARATOR);
 	if (dbSeparator==dbPediaOntologyCategoryList.end())
@@ -1843,7 +1791,7 @@ int cOntology::lookupInFreebase(wstring object,vector <cTreeCat *> &rdfTypes)
 			q+=L" OR k='"+k2+L"'";
 	}
 	if (logOntologyDetail)
-		::lplog(LOG_WHERE,L"%s",q.c_str());
+		::lplog(LOG_RESOLUTION,L"freebase lookup: %s",q.c_str());
 	return lookupInFreebaseQuery(object,slobject,q,rdfTypes,true);
 }
 
@@ -1877,6 +1825,8 @@ int cOntology::lookupInFreebaseQuery(wstring &object,string &slobject,wstring &q
   while ((sqlrow=mysql_fetch_row(result))!=NULL) 
 	{
 		string k=(sqlrow[0]==NULL) ? "" : sqlrow[0],id=(sqlrow[1]==NULL) ? "" : sqlrow[1],properties=(sqlrow[2]==NULL) ? "" : sqlrow[2];
+		if (logOntologyDetail)
+			::lplog(LOG_RESOLUTION, L"freebase lookup: k=%S id=%S properties=%S", k.c_str(), id.c_str(), properties.c_str());
 		if (properties.empty())
 		{
 			if (accumulateAliases)
@@ -1993,16 +1943,16 @@ freebase end
 //   d. its disambiguations derived from its base entry
 //   e. the resources derived from each of the disambiguations derived from its base entry
 //   f. look up in freebase
-void cOntology::getRDFTypesFromDbPedia(wstring object,vector <cTreeCat *> &rdfTypes,wstring parentObject,wstring fromWhere)
+void cOntology::getRDFTypesFromDbPedia(wstring object,vector <cTreeCat *> &rdfTypes,wstring fromWhere)
 { LFS
 	wstring buffer,start;
 	vector <wstring> resources;
-	lplog(LOG_WIKIPEDIA,L"%s:%s",parentObject.c_str(),object.c_str());
+	lplog(LOG_WIKIPEDIA,L"%s",object.c_str());
 	// Irving Berlin
 	// SELECT+%3Fv+%0D%0AWHERE+%7B%3AIrving_Berlin+a+%3Fv%7D
-	extractResults(prefix_colon+L"SELECT+%3Fv+%0D%0AWHERE+%7B%3A",object,L"+a+%3Fv%7D",L"1 TYPES",rdfTypes,resources,parentObject);
+	extractResults(prefix_colon+L"SELECT+%3Fv+%0D%0AWHERE+%7B%3A",object,L"+a+%3Fv%7D",L"1 TYPES",rdfTypes,resources,L"");
 	// get any redirects from object
-	extractResults(prefix_colon+prefix_owl_ontology+selectWhere+L"+%7B%3A",object,L"+dbpedia-owl%3AwikiPageRedirects+%3Fv+%7D%0D%0A%7D",L"2 REDIRECT",rdfTypes,resources,parentObject);
+	extractResults(prefix_colon+prefix_owl_ontology+selectWhere+L"+%7B%3A",object,L"+dbpedia-owl%3AwikiPageRedirects+%3Fv+%7D%0D%0A%7D",L"2 REDIRECT",rdfTypes,resources,L"");
 	// for each redirect, start over.
 	for (unsigned int I=0; I<resources.size(); I++)
 	{
@@ -2011,7 +1961,7 @@ void cOntology::getRDFTypesFromDbPedia(wstring object,vector <cTreeCat *> &rdfTy
 		vector <wstring> recursiveResources;
 		extractResults(start,resources[I],L"%3E+a+%3Fv+%7D%0D%0A%7D&format=text%2Fxml&timeout=0&debug=on",L"3 REDIRECT(RESOURCES)",rdfTypes,recursiveResources,object);
 		// get any disambiguating references from resource
-		extractResults(start,resources[I],L"%3E+dbpedia-owl%3AwikiPageDisambiguates+%3Fv+%7D%0D%0A%7D",L"4 DISAMBIGUATE from REDIRECT",rdfTypes,recursiveResources,parentObject);
+		extractResults(start,resources[I],L"%3E+dbpedia-owl%3AwikiPageDisambiguates+%3Fv+%7D%0D%0A%7D",L"4 DISAMBIGUATE from REDIRECT",rdfTypes,recursiveResources,L"");
 		for (unsigned int J=0; J<recursiveResources.size(); J++)
 		{
 			// DISAMBIGUATE:http://dbpedia.org/resource/Blondie_%28film%29
@@ -2022,7 +1972,7 @@ void cOntology::getRDFTypesFromDbPedia(wstring object,vector <cTreeCat *> &rdfTy
 	}
 	resources.clear();
 	start=prefix_colon+prefix_owl_ontology+selectWhere+L"+%7B%3A";
-	extractResults(start,object,L"+dbpedia-owl%3AwikiPageDisambiguates+%3Fv+%7D%0D%0A%7D",L"3 DISAMBIGUATE",rdfTypes,resources,parentObject);
+	extractResults(start,object,L"+dbpedia-owl%3AwikiPageDisambiguates+%3Fv+%7D%0D%0A%7D",L"3 DISAMBIGUATE",rdfTypes,resources,L"");
 	// for each disambiguation, start over.
 	for (unsigned int I=0; I<resources.size(); I++)
 	{
@@ -2031,8 +1981,8 @@ void cOntology::getRDFTypesFromDbPedia(wstring object,vector <cTreeCat *> &rdfTy
 		extractResults(start,resources[I],L"%3E+a+%3Fv+%0D%0A%7D&format=text%2Fxml&timeout=0&debug=on",L"4 DISAMBIGUATE(RESOURCES)",rdfTypes,recursiveResources2,object);
 	}
 	lookupInFreebase(object,rdfTypes);
-	if (!rdfTypes.size() && logRDFDetail)
-		lplog(LOG_WIKIPEDIA|LOG_INFO,L"No rdf types in dbpedia:%s:%s",parentObject.c_str(),object.c_str());
+	if (logRDFDetail)
+		lplog(LOG_WIKIPEDIA|LOG_INFO,L"%s:%d rdf types in dbpedia",object.c_str(),rdfTypes.size());
 }
 
 int cOntology::readRDFTypes(wchar_t path[4096], vector <cTreeCat *> &rdfTypes)
@@ -2242,7 +2192,7 @@ int cOntology::getRDFTypesMaster(wstring object, vector <cTreeCat *> &rdfTypes, 
 	wcscat(path,L".rdfTypes");
 	if (!fileCaching || _waccess(path,0)<0 || (retCode=readRDFTypes(path,rdfTypes))<0)
 	{
-		getRDFTypesFromDbPedia(object,rdfTypes,L"",fromWhere);
+		getRDFTypesFromDbPedia(object,rdfTypes,fromWhere);
 		vector <wstring> acronyms;
 		cOntology::getAcronyms(object,acronyms);
 		if (acronyms.size())
@@ -2339,14 +2289,15 @@ bool cOntology::topClassesAvailableToBeAdded(unordered_map <wstring ,int > &topH
 		for (int k=0; knownClasses[k]; k++)
 			knownClassesSet.insert(knownClasses[k]);
 	}
-bool superClassMissingFromList = false;
-for (unsigned int I=rdfBaseTypeOffset; I<rdfTypes.size(); I++)
+	bool superClassMissingFromList = false;
+	for (unsigned int I=rdfBaseTypeOffset; I<rdfTypes.size(); I++)
 	{
 		if (rdfTypes[I]->cli->first==SEPARATOR) continue;
 		if (knownClassesSet.find(rdfTypes[I]->cli->first) == knownClassesSet.end())
 		{
 			for (wstring wc : rdfTypes[I]->cli->second.superClasses)
 			{
+				// does the entry have super classes that are not already in topHierarchyClassIndexes or the rdfTypes?
 				bool superClassFound = topHierarchyClassIndexes.find(wc) != topHierarchyClassIndexes.end();
 				if (!superClassFound)
 				{
@@ -2357,17 +2308,19 @@ for (unsigned int I=rdfBaseTypeOffset; I<rdfTypes.size(); I++)
 				if (!superClassFound)
 					superClassMissingFromList = true;
 			}
-			// does the entry have super classes that are not already in the rdfTypes?
 			continue;
 		}
 		for (int k=0; knownClasses[k]; k++)
 			if (checkInsert(knownClasses[k],knownMapToClasses[k],topHierarchyClassIndexes,rdfTypes,I))
 				break;
-		
 	}
 	return superClassMissingFromList; //  && minIdentifiedQType==minQType
 }
 
+set<wstring>  doNotFollow = {L"artifact",L"computer",L"device" ,L"instrumentality" ,L"unit" ,L"object" ,L"product" ,L"website",L"whole",L"work",L"abstraction",L"symbol",L"symbols",L"music",L"song",L"partially intangible individual",L"intangible",
+L"artifact-generic",L"agent-non geographical",L"orphans",SEPARATOR,L"agent-generic",L"spatial thing-localized",L"organizations",L"organisation",L"organization",L"business",L"property",L"employer",L"creative work",L"individual",L"periodical",L"credential",
+L"food",L"concept",L"model",L"fashion model",L"pipeline",L"resource",L"architecture",L"influence",L"war",L"musician",L"SocialGroup107950920",L"field of study",L"constitution",L"short story",L"adaptation",L"human language",L"place",L"natural language",
+L"attribute values",L"settlement",L"publishing company" };
 void cOntology::includeAllSuperClasses(unordered_map <wstring ,int > &topHierarchyClassIndexes,vector <cTreeCat *> &rdfTypes,int recursionLevel,int rdfBaseTypeOffset)
 { LFS
 	if (rdfTypes.empty())
@@ -2377,14 +2330,22 @@ void cOntology::includeAllSuperClasses(unordered_map <wstring ,int > &topHierarc
 	wstring rdfInfoPrinted;
 	for (unsigned int I=rdfBaseTypeOffset; I<rdfOriginalSize; I++)
 	{
-		wstring object=rdfTypes[I]->typeObject;
+		if (doNotFollow.find(rdfTypes[I]->cli->first) != doNotFollow.end())
+			continue;
+		wstring object = rdfTypes[I]->typeObject;
 		if (recursionLevel==1 && logOntologyDetail)
-			rdfTypes[I]->logIdentity(LOG_WIKIPEDIA,object,false, rdfInfoPrinted);
+			rdfTypes[I]->logIdentity(LOG_RESOLUTION|LOG_WIKIPEDIA,object,false, rdfInfoPrinted);
 		//if (rdfTypes[I]->cli->second.superClasses.empty())
 		//	wprintf(L"%d:%s:%s [no superclasses]\n",I,rdfTypes[I]->object.c_str(),rdfTypes[I]->cli->first.c_str());
-		for (vector <wstring>::iterator sci=rdfTypes[I]->cli->second.superClasses.begin(),sciEnd=rdfTypes[I]->cli->second.superClasses.end(); sci!=sciEnd; sci++)
+		for (auto sci:rdfTypes[I]->cli->second.superClasses)
 		{
-			unordered_map <wstring, cOntologyEntry>::iterator cli=findCategory(*sci);
+			if (doNotFollow.find(sci) != doNotFollow.end())
+				continue;
+			unordered_map <wstring, cOntologyEntry>::iterator cli;
+			if (recursionLevel)
+				cli = dbPediaOntologyCategoryList.find(sci);
+			else
+				cli= findCategory(sci);
 			if (cli!=dbPediaOntologyCategoryList.end() && cli->second.ontologyHierarchicalRank<=rdfTypes[I]->cli->second.ontologyHierarchicalRank)
 			{
 				bool alreadyThere=false;
@@ -2394,14 +2355,14 @@ void cOntology::includeAllSuperClasses(unordered_map <wstring ,int > &topHierarc
 					if (logOntologyDetail)
 					{
 						//wprintf(L"  %d %s:%s:%s %s found %s\n",I,rdfTypes[I]->qtype.c_str(),rdfTypes[I]->object.c_str(),rdfTypes[I]->cli->first.c_str(),sci->c_str(),cli->first.c_str());
-						lplog(LOG_WIKIPEDIA,L"%*s%s:(%s)ISTYPE %s:%s:%s:[%s]:rank %d(%s IASC)",
-							recursionLevel<<1,L" ",object.c_str(),sci->c_str(),cli->first.c_str(),ontologyTypeString(cli->second.ontologyType, cli->second.resourceType,tmpstr2),cli->second.compactLabel.c_str(),vectorString(cli->second.superClasses,tmpstr,L" ").c_str(),cli->second.ontologyHierarchicalRank,rdfTypes[I]->qtype.c_str());
+						lplog(LOG_RESOLUTION|LOG_WIKIPEDIA,L"%*s%s:(%s)ISTYPE %s:%s:%s:[%s]:rank %d(%s IASC [%s])",
+							recursionLevel<<1,L" ",object.c_str(),sci.c_str(),cli->first.c_str(),ontologyTypeString(cli->second.ontologyType, cli->second.resourceType,tmpstr2),cli->second.compactLabel.c_str(),setString(cli->second.superClasses,tmpstr,L" ").c_str(),cli->second.ontologyHierarchicalRank,rdfTypes[I]->qtype.c_str(), rdfTypes[I]->derivation.c_str());
 					}
-					rdfTypes.push_back(new cTreeCat(cli,object,*sci,rdfTypes[I]->qtype+L" IASC",rdfTypes[I]->qtype[0]-L'0'));
+					rdfTypes.push_back(new cTreeCat(cli,object,sci,rdfTypes[I]->qtype,rdfTypes[I]->qtype[0]-L'0', rdfTypes[I]->derivation+L"*"+ rdfTypes[I]->cli->first));
 				}
 			}
-			//else
-			//	wprintf(L"  %d:%s:%s %s NOT found or of >= rank\n",I,rdfTypes[I]->object.c_str(),rdfTypes[I]->cli->first.c_str(),sci->c_str());
+			else if (cli == dbPediaOntologyCategoryList.end())
+				lplog(LOG_RESOLUTION,L"%*s%s:superclass NOT found: %s", recursionLevel << 1, L" ", object.c_str(),sci.c_str());
 		}
 	}
 	if (rdfTypes.size()>rdfOriginalSize && topClassesAvailableToBeAdded(topHierarchyClassIndexes,rdfTypes,rdfOriginalSize))
@@ -2441,8 +2402,10 @@ bool detectNonEnglish(wstring word)
 	return false;
 }
 
-void cOntology::rdfIdentify(wstring object,vector <cTreeCat *> &rdfTypes,wstring fromWhere, bool fileCaching)
-{ LFS
+void cOntology::rdfIdentify(wstring object, vector <cTreeCat *> &rdfTypes, wstring fromWhere, bool fileCaching)
+{
+	LFS
+	fillOntologyList(false);
 	if (object.size()>40 && logOntologyDetail)
 		lplog(LOG_ERROR,L"rdfIdentify:object too long - %s",object.c_str());
 	else if (object.size()==1 && logOntologyDetail)

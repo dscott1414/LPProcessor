@@ -5,6 +5,7 @@
 #include <set>
 #include <mysql.h>
 #include <unordered_map>
+#include <unordered_set>
 using namespace std;
 
 #include "logging.h"

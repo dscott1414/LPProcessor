@@ -616,7 +616,7 @@ int cQuestionAnswering::sriVerbMatch(cSource *parentSource,cSource *childSource,
 		for (set <int>::iterator vbi = childVerbClasses->second.begin(), vbiEnd = childVerbClasses->second.end(); vbi != vbiEnd; vbi++)
 			childVerbClassInfo += vbNetClasses[*vbi].name() + L" ";
 	}
-	lplog(LOG_WHERE, L"%s VerbNet comparing PARENT verb %s [class=%s] against CHILD verb %s [class=%s]", verbTypeMatch.c_str(),parentVerb.c_str(), parentVerbClassInfo.c_str(), childVerb.c_str(), childVerbClassInfo.c_str());
+	lplog(LOG_WHERE, L"%s VerbNet comparing PARENT verb %s [class=%s] against CHILD verb %d:%s [class=%s]", verbTypeMatch.c_str(),parentVerb.c_str(), parentVerbClassInfo.c_str(), childWhere,childVerb.c_str(), childVerbClassInfo.c_str());
 	if (parentVerbClasses != vbNetVerbToClassMap.end() && childVerbClasses != vbNetVerbToClassMap.end())
 	{
 		if (parentVerbClasses->first == childVerbClasses->first)
@@ -1256,7 +1256,7 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 			continue;
 		int whereMetaPatternAnswer=-1;
 		if (mapPatternAnswer != NULL && (whereMetaPatternAnswer = metaPatternMatch(questionSource, childSource, childSRI, mapPatternAnswer, mapPatternQuestion)) >= 0)
-			enterAnswerAccumulatingPopularity(questionSource, parentSRI, cAS(childSourceType, childSource, -1, maxAnswer, L"META_PATTERN", &(*childSRI), 0, whereMetaPatternAnswer, -1, -1, false, L"", L"", 0, 0, 0, NULL), maxAnswer, answerSRIs);
+			enterAnswerAccumulatingIdenticalAnswers(questionSource, parentSRI, cAS(childSourceType, childSource, -1, maxAnswer, L"META_PATTERN", &(*childSRI), 0, whereMetaPatternAnswer, -1, -1, false, L"", L"", 0, 0, 0, NULL), maxAnswer, answerSRIs);
 		for (int ws=childSRI->whereSubject; true; ws=childSource->m[ws].nextCompoundPartObject)
 		{ LFSL
 			if ((ws != childSRI->whereSubject && ws<0) || ws >= (int)childSource->m.size()) break;
@@ -1436,7 +1436,7 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 									}
 								}
 							}
-							enterAnswerAccumulatingPopularity(questionSource, parentSRI, cAS(childSourceType, childSource, -1, matchSum, matchInfo, &(*childSRI), equivalenceClass, ws, wo, *rpi, false, L"", L"", 0, 0, 0, NULL), maxAnswer, answerSRIs);
+							enterAnswerAccumulatingIdenticalAnswers(questionSource, parentSRI, cAS(childSourceType, childSource, -1, matchSum, matchInfo, &(*childSRI), equivalenceClass, ws, wo, *rpi, false, L"", L"", 0, 0, 0, NULL), maxAnswer, answerSRIs);
 						}
 						if (logQuestionDetail)
 						{
@@ -2265,32 +2265,45 @@ cProximityMap::cProximityEntry::cProximityEntry(cSource *childSource, unsigned i
 	childObject = childObject;
 }
 
-bool cQuestionAnswering::verbTenseMatch(cSource *questionSource, cSpaceRelation* parentSRI, cAS &childCAS)
+int cQuestionAnswering::verbTenseMatch(cSource *questionSource, cSpaceRelation* parentSRI, cAS &childCAS)
 {
-	int pvs = 0, cvs = 0;
-	bool tenseMismatch = (parentSRI->whereVerb >= 0 && childCAS.sri->whereVerb >= 0 &&
-		(pvs = questionSource->m[parentSRI->whereVerb].verbSense&~VT_POSSIBLE) != (cvs = childCAS.source->m[childCAS.sri->whereVerb].verbSense));
-	if (parentSRI->isConstructedRelative)
-		tenseMismatch = cvs != VT_PAST;
-	if (tenseMismatch)
+	if (parentSRI->whereVerb < 0 || childCAS.sri->whereVerb < 0)
+		return 6;
+	int questionVerbSense = questionSource->m[parentSRI->whereVerb].verbSense&~(VT_EXTENDED|VT_PASSIVE|VT_POSSIBLE|VT_VERB_CLAUSE), childVerbSense = childCAS.source->m[childCAS.sri->whereVerb].verbSense&~(VT_EXTENDED | VT_PASSIVE | VT_POSSIBLE | VT_VERB_CLAUSE);
+	int tenseMatchReason = 0;
+	if ((questionVerbSense&VT_NEGATION) ^ (childVerbSense&VT_NEGATION))
+		childCAS.rejectAnswer += (questionVerbSense&VT_NEGATION) ? L"[question is negated and child is not]" : L"[question is not negated and child is negated]";
+	// VT_PRESENT/VT_PAST/VT_PRESENT_PERFECT/VT_PAST_PERFECT/VT_FUTURE/VT_FUTURE_PERFECT
+	// if child and parent are matched in tense
+	else if ((parentSRI->isConstructedRelative) ? childVerbSense == VT_PAST : questionVerbSense == childVerbSense)
+		tenseMatchReason = 1;
+	// has won and won are the same in this context
+	// (pvs==VT_PRESENT && cvs==VT_PRESENT_PERFECT) - parent is On what TV show does Hammond regularly appear child is 'appeared eight  [O eight times[109-111]{WO:eight}[110][nongen][N][PL][OGEN]]on   [PO (Saturday Night Live[26-29][26][ngname][N][WikiWork]-4620) show]'
+	else if (((!questionSource->sourceInPast && !childCAS.source->sourceInPast) || (questionSource->sourceInPast && childCAS.source->sourceInPast)) && (questionVerbSense == VT_PRESENT_PERFECT && childVerbSense == VT_PAST) || (childVerbSense == VT_PRESENT_PERFECT && questionVerbSense == VT_PAST))
+		tenseMatchReason = 2;
+	// if questionSource in past, and childSource not in past, then the only problem would be if the child said it would be in the future.
+	else if (questionSource->sourceInPast && !childCAS.source->sourceInPast && childVerbSense != VT_FUTURE && childVerbSense != VT_FUTURE_PERFECT)
+		tenseMatchReason = 3;
+	// if questionSource in present, and childSource in past, then the only problem would be if the parent said it would be in the future.
+	else if (!questionSource->sourceInPast && childCAS.source->sourceInPast && questionVerbSense != VT_FUTURE && questionVerbSense != VT_FUTURE_PERFECT)
+		tenseMatchReason = 4;
+	// PARENT: what     [S Darrell Hammond]  featured   on [PO Comedy Central program[12-15][14][nongen][N]]?
+	// CHILD: [S Darrell Hammond]  was [O a featured cast member[67-71][70][nongen][N]] on   [PO Saturday Night Live[72-75][72][ngname][N][WikiWork]].
+	else if (childCAS.matchInfo.find(L"MOVED_VERB_TO_OBJECT") != wstring::npos)
+		tenseMatchReason = 5;
+	else
 	{
-		// has won and won are the same in this context
-		// (pvs==VT_PRESENT && cvs==VT_PRESENT_PERFECT) - parent is On what TV show does Hammond regularly appear child is 'appeared eight  [O eight times[109-111]{WO:eight}[110][nongen][N][PL][OGEN]]on   [PO (Saturday Night Live[26-29][26][ngname][N][WikiWork]-4620) show]'
-		// if the questions are in the past, and the web search is in the present, then 
-		if ((pvs == VT_PRESENT_PERFECT && cvs == VT_PAST) || (cvs == VT_PRESENT_PERFECT && pvs == VT_PAST) || (questionSource->sourceInPast && pvs == VT_PRESENT && cvs == VT_PRESENT_PERFECT))
-			tenseMismatch = false;
-		// PARENT: what     [S Darrell Hammond]  featured   on [PO Comedy Central program[12-15][14][nongen][N]]?
-		// CHILD: [S Darrell Hammond]  was [O a featured cast member[67-71][70][nongen][N]] on   [PO Saturday Night Live[72-75][72][ngname][N][WikiWork]].
-		else if (childCAS.matchInfo.find(L"MOVED_VERB_TO_OBJECT") != wstring::npos)
-			tenseMismatch = false;
-		else
-		{
-			wstring tmpstr1, tmpstr2;
-			lplog(LOG_WHERE, L"tense mismatch between parent=%d:%s and child=%d:%s.",
-				parentSRI->whereVerb, senseString(tmpstr1, questionSource->m[parentSRI->whereVerb].verbSense).c_str(), childCAS.sri->whereVerb, senseString(tmpstr2, childCAS.source->m[childCAS.sri->whereVerb].verbSense).c_str());
-		}
+		wstring tmpstr1, tmpstr2;
+		lplog(LOG_WHERE, L"tense mismatch between parent=%d:%s and child=%d:%s.",
+			parentSRI->whereVerb, senseString(tmpstr1, questionSource->m[parentSRI->whereVerb].verbSense).c_str(), childCAS.sri->whereVerb, senseString(tmpstr2, childCAS.source->m[childCAS.sri->whereVerb].verbSense).c_str());
+		wstring questionVerbSenseString, childVerbSenseString;
+		if (parentSRI->isConstructedRelative)
+			childCAS.rejectAnswer += L"[QuestionIsConstructedRelative]";
+		childCAS.rejectAnswer += (questionSource->sourceInPast) ? L"[question source in past]":L"";
+		childCAS.rejectAnswer += (childCAS.source->sourceInPast) ? L"[child source in past]":L"";
+		childCAS.rejectAnswer += L"[questionVerbSense=" + senseString(questionVerbSenseString, questionVerbSense) + L" childVerbSense=" + senseString(childVerbSenseString, childVerbSense)+L"]";
 	}
-	return tenseMismatch;
+	return tenseMatchReason;
 }
 
 void cProximityMap::cProximityEntry::printDirectRelations(cQuestionAnswering &qa, int logType,cSource *parentSource,wstring &path,int where)
@@ -2690,14 +2703,14 @@ void cQuestionAnswering::detectSubQueries(cSource *questionSource, vector <cSpac
 	}
 }
 
-bool cQuestionAnswering::enterAnswerAccumulatingPopularity(cSource *questionSource,cSpaceRelation *sri,cAS candidateAnswer, int &maxAnswer, vector < cAS > &answerSRIs)
+bool cQuestionAnswering::enterAnswerAccumulatingIdenticalAnswers(cSource *questionSource,cSpaceRelation *sri,cAS candidateAnswer, int &maxAnswer, vector < cAS > &answerSRIs)
 {
 	vector <int> identicalAnswers;
 	for (unsigned int I = 0; I < answerSRIs.size(); I++)
 		if (checkIdentical(questionSource, &(*sri), answerSRIs[I], candidateAnswer) && answerSRIs[I].equivalenceClass == candidateAnswer.equivalenceClass)
 			identicalAnswers.push_back(I);
 	for (unsigned int I = 0; I < identicalAnswers.size(); I++)
-		answerSRIs[identicalAnswers[I]].popularity = identicalAnswers.size();
+		answerSRIs[identicalAnswers[I]].numIdenticalAnswers = identicalAnswers.size();
 	maxAnswer = max(maxAnswer, candidateAnswer.matchSum);
 	answerSRIs.push_back(candidateAnswer);
 	candidateAnswer.source->answerContainedInSource++;
@@ -2718,13 +2731,13 @@ int cQuestionAnswering::determineBestAnswers(cSource *questionSource, cSpaceRela
 		return 0;
 	lplog(LOG_WHERE, L"(maxCertainty=%d):", maxAnswer);
 	int lowestConfidence = 1000000;
-	int highestPopularity = -1;
+	int highestIdenticalAnswers = -1;
 	int lowestSourceConfidence = 1000000;
 	int maxRecomputedAnswer = -1, maxAlternativeAnswer = -1;
 	for (unsigned int I = 0; I < answerSRIs.size(); I++)
 	{
 		vector <cAS>::iterator as = answerSRIs.begin() + I;
-		as->matchSumWithConfidenceAndPopularityScored = -1;
+		as->matchSumWithConfidenceAndNumIdenticalAnswersScored = -1;
 		setWhereChildCandidateAnswer(questionSource, *as, &(*sri));
 		// ************************************
 		// check all answers that are most likely
@@ -2755,54 +2768,58 @@ int cQuestionAnswering::determineBestAnswers(cSource *questionSource, cSpaceRela
 					as->sri->whereChildCandidateAnswer, as->source->whereString(as->sri->whereChildCandidateAnswer, tmpstr2, false, 6, L" ", numWords).c_str(),
 					semanticMismatch, (subQueryNoMatch) ? L"true" : L"false", as->confidence);
 			}
-			bool tenseMismatch = verbTenseMatch(questionSource, &(*sri), *as);
+			int tenseMatchReason = verbTenseMatch(questionSource, &(*sri), *as);
 			if (isModifiedGeneric(*as))
 				as->confidence = CONFIDENCE_NOMATCH / 2;
-			if (as->confidence < CONFIDENCE_NOMATCH && (!tenseMismatch || as->confidence == 1 || as->matchSum > 20) && !semanticMismatch && !subQueryNoMatch)
+			if (as->confidence < CONFIDENCE_NOMATCH && (tenseMatchReason>0 || as->confidence == 1 || as->matchSum > 20) && !semanticMismatch && !subQueryNoMatch)
 			{
-				if (tenseMismatch)
+				if (tenseMatchReason==0)
 					as->confidence = CONFIDENCE_NOMATCH / 2;
 				lowestConfidence = min(lowestConfidence, as->confidence);
 				lowestSourceConfidence = min(lowestSourceConfidence, as->source->sourceConfidence);
-				highestPopularity = max(highestPopularity, as->popularity);
+				highestIdenticalAnswers = max(highestIdenticalAnswers, as->numIdenticalAnswers);
 				maxRecomputedAnswer = max(maxRecomputedAnswer, as->matchSum);
+				lplog(LOG_WHERE, L"(maxRecomputedAnswer=%d [%d %d %d %d %d %s %s %d]):", maxRecomputedAnswer, answerSRIs.size(), as->confidence,tenseMatchReason,as->confidence,as->matchSum,(semanticMismatch) ? L"semanticMismatch":L"",(subQueryNoMatch) ? L"subQueryNoMatch":L"", tenseMatchReason);
 			}
 			else
 			{
-				if (as->matchSum <= 16) as->rejectAnswer += L"matchSum too low ";
-				as->rejectAnswer += (sri->questionType&QTAFlag) ? L"adjectival" : L"not adjectival";
-				as->rejectAnswer += (sri->questionType == unknownQTFlag) ? L"unknown QT" : L"known QT";
-				as->rejectAnswer += (tenseMismatch) ? L"tense Mismatch" : L"tense match";
-				as->rejectAnswer += (semanticMismatch) ? L"semantic Mismatch" : L"semantic match";
-				as->rejectAnswer += (subQueryNoMatch) ? L"subQuery NoMatch" : L"subQuery match";
+				if (as->matchSum <= 16) as->rejectAnswer += L"[matchSum too low]";
+				as->rejectAnswer += (sri->questionType&QTAFlag) ? L"[adjectival]" : L"[not adjectival]";
+				as->rejectAnswer += (sri->questionType == unknownQTFlag) ? L"[unknown QT]" : L"[known QT]";
+				as->rejectAnswer += (tenseMatchReason) ? L"[tense Match]" : L"[tense mismatch]";
+				as->rejectAnswer += (semanticMismatch) ? L"[semantic Mismatch]" : L"[semantic match]";
+				as->rejectAnswer += (subQueryNoMatch) ? L"[subQuery NoMatch]" : L"[subQuery match]";
 				maxAlternativeAnswer = max(maxAlternativeAnswer, as->matchSum);
+				lplog(LOG_WHERE, L"(maxAlternativeAnswer=%d [%d %d %d %d %d %s %s]):", maxAlternativeAnswer, answerSRIs.size(), as->confidence, tenseMatchReason, as->confidence, as->matchSum, (semanticMismatch) ? L"semanticMismatch" : L"", (subQueryNoMatch) ? L"subQueryNoMatch" : L"");
 			}
 		}
 		else
 		{
 			if (maxAnswer > as->matchSum)
 				maxAlternativeAnswer = max(maxAlternativeAnswer, as->matchSum);
-			as->rejectAnswer += L"matchSum too low ";
+			as->rejectAnswer += L"[matchSum too low]";
+			lplog(LOG_WHERE, L"(maxAlternativeAnswer (2)=%d [%d]):", maxAlternativeAnswer, answerSRIs.size());
 		}
 	}
+	lplog(LOG_WHERE, L"(final maxRecomputedAnswer=%d [%d]):", maxRecomputedAnswer, answerSRIs.size());
 	if (maxRecomputedAnswer < 0)
 		return 0;
 	bool highCertaintyAnswer = false;
-	int maxRecomputedAnswerWithConfidenceAndPopularityScored=-1;
+	int maxRecomputedAnswerWithConfidenceAndNumIdenticalAnswersScored=-1;
 	for (unsigned int I = 0; I < answerSRIs.size(); I++)
 	{
 		vector <cAS>::iterator as = answerSRIs.begin() + I;
 		if (maxRecomputedAnswer == as->matchSum)
 		{
-			highCertaintyAnswer |= as->popularity == highestPopularity && as->confidence == lowestConfidence &&
+			highCertaintyAnswer |= as->numIdenticalAnswers == highestIdenticalAnswers && as->confidence == lowestConfidence &&
 				as->source->sourceConfidence == lowestSourceConfidence && lowestConfidence < CONFIDENCE_NOMATCH / 2 &&
 				(!as->subQueryExisted || as->subQueryMatch) && !isModifiedGeneric(*as);
-			as->matchSumWithConfidenceAndPopularityScored = as->matchSum;
-			if (as->popularity == highestPopularity)
-				as->matchSumWithConfidenceAndPopularityScored += 4;
+			as->matchSumWithConfidenceAndNumIdenticalAnswersScored = as->matchSum;
+			if (as->numIdenticalAnswers == highestIdenticalAnswers)
+				as->matchSumWithConfidenceAndNumIdenticalAnswersScored += 4;
 			if (as->confidence == lowestConfidence)
-				as->matchSumWithConfidenceAndPopularityScored += 6;
-			maxRecomputedAnswerWithConfidenceAndPopularityScored = max(maxRecomputedAnswerWithConfidenceAndPopularityScored, as->matchSumWithConfidenceAndPopularityScored);
+				as->matchSumWithConfidenceAndNumIdenticalAnswersScored += 6;
+			maxRecomputedAnswerWithConfidenceAndNumIdenticalAnswersScored = max(maxRecomputedAnswerWithConfidenceAndNumIdenticalAnswersScored, as->matchSumWithConfidenceAndNumIdenticalAnswersScored);
 		}
 	}
 	int numFinalAnswers = 0;
@@ -2810,7 +2827,7 @@ int cQuestionAnswering::determineBestAnswers(cSource *questionSource, cSpaceRela
 	for (unsigned int I = 0; I < answerSRIs.size(); I++)
 	{
 		vector <cAS>::iterator as = answerSRIs.begin() + I;
-		if (maxRecomputedAnswerWithConfidenceAndPopularityScored == as->matchSumWithConfidenceAndPopularityScored && (!highCertaintyAnswer || as->source->sourceConfidence == lowestSourceConfidence))
+		if (maxRecomputedAnswerWithConfidenceAndNumIdenticalAnswersScored == as->matchSumWithConfidenceAndNumIdenticalAnswersScored && (!highCertaintyAnswer || as->source->sourceConfidence == lowestSourceConfidence))
 		{
 			bool identicalFound = false;
 			for (unsigned int fa = 0; fa < finalAnswers.size() && !identicalFound; fa++)
@@ -2828,8 +2845,8 @@ int cQuestionAnswering::determineBestAnswers(cSource *questionSource, cSpaceRela
 		else
 		{
 			wstring tmpstr1, tmpstr2;
-			if (as->popularity < highestPopularity) 
-				as->rejectAnswer += L"low popularity " + itos(as->popularity, tmpstr1) + L"<" + itos(highestPopularity, tmpstr2) + L" ";
+			if (as->numIdenticalAnswers < highestIdenticalAnswers) 
+				as->rejectAnswer += L"low identical answers " + itos(as->numIdenticalAnswers, tmpstr1) + L"<" + itos(highestIdenticalAnswers, tmpstr2) + L" ";
 			if (as->confidence > lowestConfidence) 
 				as->rejectAnswer += L"confidence " + itos(as->confidence, tmpstr1) + L">" + itos(lowestConfidence, tmpstr2) + L" ";
 			if (as->matchSum< maxRecomputedAnswer)
@@ -2860,7 +2877,7 @@ int cQuestionAnswering::printAnswers(cSpaceRelation*  sri,vector < cAS > &answer
 			vector <cAS>::iterator as = answerSRIs.begin() + J;
 			if (as->finalAnswer)
 			{
-				lplog(LOG_WHERE | LOG_QCHECK, L"    ANSWER %d:Popularity:%d:Object Match Confidence:%d:Source:%s:Source Confidence:%d", J, answerSRIs[J].popularity, answerSRIs[J].confidence, as->sourceType.c_str(), as->source->sourceConfidence);
+				lplog(LOG_WHERE | LOG_QCHECK, L"    ANSWER %d:Identical Answers:%d:Object Match Confidence:%d:Source:%s:Source Confidence:%d", J, answerSRIs[J].numIdenticalAnswers, answerSRIs[J].confidence, as->sourceType.c_str(), as->source->sourceConfidence);
 				if (as->sri)
 				{
 					wstring ps;
@@ -2880,8 +2897,8 @@ int cQuestionAnswering::printAnswers(cSpaceRelation*  sri,vector < cAS > &answer
 			vector <cAS>::iterator as=answerSRIs.begin()+J;
 			if (!as->finalAnswer)
 			{
-				lplog(LOG_WHERE ,L"  REJECTED (%s%s) %d:Popularity:%d:Object Match Confidence:%d:Source:%s:Source Confidence:%d",
-					as->rejectAnswer.c_str(),as->matchInfo.c_str(),J,as->popularity,as->confidence,as->sourceType.c_str(),as->source->sourceConfidence);
+				lplog(LOG_WHERE ,L"  REJECTED (%s%s) %d:Identical Answers:%d:Object Match Confidence:%d:Source:%s:Source Confidence:%d",
+					as->rejectAnswer.c_str(),as->matchInfo.c_str(),J,as->numIdenticalAnswers,as->confidence,as->sourceType.c_str(),as->source->sourceConfidence);
 				if (as->sri)
 				{
 					wstring ps;
@@ -3041,7 +3058,7 @@ int	cQuestionAnswering::searchTableForAnswer(cSource *questionSource,wchar_t der
 								if (subQueries.empty())
 								{
 									minConfidence = min(minConfidence, confidence);
-									enterAnswerAccumulatingPopularity(questionSource, sri, as, maxAnswer, answerSRIs);
+									enterAnswerAccumulatingIdenticalAnswers(questionSource, sri, as, maxAnswer, answerSRIs);
 									continue;
 								}
 								semanticMismatch = 0;
@@ -3064,7 +3081,7 @@ int	cQuestionAnswering::searchTableForAnswer(cSource *questionSource,wchar_t der
 									whereQuestionTypeObject, questionSource->whereString(whereQuestionTypeObject, tmpstr1, false).c_str(), whereChildCandidateAnswer, wtmi->second->wikipediaSource->phraseString(whereChildCandidateAnswer, whereLastEntryEnd, tmpstr2, false).c_str(),
 									semanticMismatch, (subQueryNoMatch) ? L"true" : L"false", confidence, as.matchInfo.c_str());
 								minConfidence = min(minConfidence, confidence);
-								enterAnswerAccumulatingPopularity(questionSource, sri, as, maxAnswer, answerSRIs);
+								enterAnswerAccumulatingIdenticalAnswers(questionSource, sri, as, maxAnswer, answerSRIs);
 							}
 						}
 					}

@@ -167,7 +167,7 @@ bool cInternet::LPInternetOpen(int timer)
 		ReleaseSRWLockExclusive(&cProfile::networkTimeSRWLock);
 		return false;
 	}
-	InetOption(false, INTERNET_OPTION_CONNECT_TIMEOUT, L"Connect Timeout", 5000); // in milliseconds
+	InetOption(false, INTERNET_OPTION_CONNECT_TIMEOUT, L"Connect Timeout", 3000); // in milliseconds
 	return true;
 }
 
@@ -248,7 +248,7 @@ int cInternet::readPage(const wchar_t *str, wstring &buffer, wstring &headers)
 			hINet = 0;
 			LPInternetOpen(timer);
 			lplog(LOG_ERROR, NULL);
-			Sleep(2000);
+			Sleep(1000);
 			AcquireSRWLockExclusive(&cProfile::networkTimeSRWLock);
 			cProfile::lastNetClock = clock();
 			ReleaseSRWLockExclusive(&cProfile::networkTimeSRWLock);

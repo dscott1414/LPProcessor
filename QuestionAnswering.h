@@ -39,7 +39,7 @@ public:
 			wstring rejectAnswer;
 			int confidence;
 			int matchSum;
-			int matchSumWithConfidenceAndPopularityScored;
+			int matchSumWithConfidenceAndNumIdenticalAnswersScored;
 			wstring matchInfo;
 			cSource *source;
 			cSpaceRelation* sri;
@@ -48,7 +48,7 @@ public:
 			bool finalAnswer;
 			bool subQueryMatch;
 			bool subQueryExisted;
-			int popularity;
+			int numIdenticalAnswers;
 			bool fromTable;
 			wstring tableNum;
 			wstring tableName;
@@ -79,7 +79,7 @@ public:
 				finalAnswer = false;
 				subQueryMatch = false;
 				subQueryExisted = false;
-				popularity = 0;
+				numIdenticalAnswers = 0;
 			}
 		};
 		class cSemanticMatchInfo
@@ -114,13 +114,13 @@ public:
 	int getWhereQuestionTypeObject(cSource *questionSource, cSpaceRelation* sri);
 	int analyzeQuestionFromSource(cSource *questionSource, wchar_t *derivation, wstring childSourceType, cSource *childSource, cSpaceRelation * parentSRI, vector < cAS > &answerSRIs, int &maxAnswer, bool eraseIfNoAnswers, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion);
 	int questionTypeCheck(cSource *questionSource, wstring derivation, cSpaceRelation* parentSRI, cAS &childCAS, int &semanticMismatch, bool &unableToDoquestionTypeCheck);
-	bool verbTenseMatch(cSource *questionSource, cSpaceRelation* parentSRI, cAS &childCAS);
+	int verbTenseMatch(cSource *questionSource, cSpaceRelation* parentSRI, cAS &childCAS);
 	int semanticMatch(cSource *questionSource, wstring derivation, cSpaceRelation* parentSRI, cAS &childCAS, int &semanticMismatch);
 	int semanticMatchSingle(cSource *questionSource, wstring derivation, cSpaceRelation* parentSRI, cSource *childSource, int whereChild, int childObject, int &semanticMismatch, bool &subQueryNoMatch,
 		vector <cSpaceRelation> &subQueries, int numConsideredParentAnswer, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion, bool useParallelQuery);
 	bool checkIdentical(cSource *questionSource, cSpaceRelation* sri, cAS &cas1, cAS &cas2);
 	void setWhereChildCandidateAnswer(cSource *questionSource, cAS &childCAS, cSpaceRelation* parentSRI);
-	bool enterAnswerAccumulatingPopularity(cSource *questionSource, cSpaceRelation *sri, cAS candidateAnswer, int &maxAnswer, vector < cAS > &answerSRIs);
+	bool enterAnswerAccumulatingIdenticalAnswers(cSource *questionSource, cSpaceRelation *sri, cAS candidateAnswer, int &maxAnswer, vector < cAS > &answerSRIs);
 	int  determineBestAnswers(cSource *questionSource, cSpaceRelation*  sri,vector < cAS > &answerSRIs,int maxAnswer,vector <cSpaceRelation> &subQueries,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion,bool useParallelQuery);
 	bool isModifiedGeneric(cAS &sri);
 	int printAnswers(cSpaceRelation*  sri, vector < cAS > &answerSRIs);

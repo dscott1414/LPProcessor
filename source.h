@@ -1536,7 +1536,7 @@ public:
 	int ontologyType; 
 	int resourceType;
 	int descriptionFilled;
-	vector <wstring> superClasses;
+	unordered_set <wstring> superClasses;
 	vector <int> superClassResourceTypes;
 	cOntologyEntry()
 	{
@@ -1554,7 +1554,7 @@ public:
 			tmpstr += L"\nabstract:" + abstractDescription;
 		if (commentDescription.length() > 0)
 			tmpstr += L"\ncomment:" + commentDescription;
-		vectorString(superClasses, tmpstr2, L" ");
+		setString(superClasses, tmpstr2, L" ");
 		if (tmpstr2.length()>0)
 			tmpstr+=L"["+tmpstr2+L"]";
 		if (ontologyHierarchicalRank>0)
@@ -1598,6 +1598,7 @@ public:
 	wstring key;
 	wstring top; // temporary used for back mapping of top class types
 	wstring parentObject; 
+	wstring derivation; // which classes lead to most superclasses? (attempt to go up the heirarchy of types in the ontology may result in a multiplicity of types which is unhelpful.  This helps track which types lend most to the multiplicity)
 	vector <wstring> wikipediaLinks;
 	vector <wstring> professionLinks;
 	bool preferred;
@@ -1619,13 +1620,14 @@ public:
 		this->exactMatch=exactMatch;
 		preferredUnknownClass=false;
 	}
-	cTreeCat(unordered_map <wstring, cOntologyEntry>::iterator cli,wstring typeObject,wstring &parentObject,wstring qtype,int confidence)
+	cTreeCat(unordered_map <wstring, cOntologyEntry>::iterator cli,wstring typeObject,wstring &parentObject,wstring qtype,int confidence,wstring derivation)
 	{
 		this->cli=cli;
 		this->typeObject=typeObject;
 		this->parentObject=parentObject;
 		this->qtype=qtype;
 		this->confidence=confidence;
+		this->derivation = derivation;
 		preferred=false;
 		exactMatch=false;
 		preferredUnknownClass=false;
@@ -1749,7 +1751,7 @@ public:
 		::lplog(logType,L"%s%s%s%s[%d]ISTYPE[LI] %s:%s(%s):%s:rank %d (%s,%s)",
 			object.c_str(), (preferred) ? L":PREFERRED " : L"", (exactMatch) ? L"EM " : L"", (preferredUnknownClass) ? L"PU " : L"", confidence,
 			cli->first.c_str(),ontologyTypeString(cli->second.ontologyType, cli->second.resourceType,tmpstr3),qtype.c_str(),cli->second.compactLabel.c_str(),cli->second.ontologyHierarchicalRank,
-			vectorString(cli->second.superClasses,tmpstr,L" ").c_str(),parentObject.c_str());
+			setString(cli->second.superClasses,tmpstr,L" ").c_str(),parentObject.c_str());
 		if (rdfInfoPrinted != abstract)
 		{
 			::lplog(logType, L"    %s:%s:%s:%s",

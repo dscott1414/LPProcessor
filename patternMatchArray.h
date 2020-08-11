@@ -7,7 +7,7 @@ class cPatternMatchArray
 public:
 	unsigned int count;
 	unsigned int allocated;
-	typedef struct
+	typedef struct _tPatternMatch
 	{
 		short len;
 		short cost;

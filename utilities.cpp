@@ -325,12 +325,32 @@ bool copy(void *buf,set <string> &s,int &where,int limit)
 	return true;
 }
 
+bool copy(void *buf, unordered_set <string> &s, int &where, int limit)
+{
+	DLFS
+		int count = s.size();
+	if (!copy(buf, count, where, limit)) return false;
+	for (auto is:s)
+		if (!copy(buf, is, where, limit)) return false;
+	return true;
+}
+
 bool copy(void *buf,set <wstring> &s,int &where,int limit)
 { DLFS
 	int count=s.size();
 	if (!copy(buf,count,where,limit)) return false;
 	for (set<wstring>::iterator is=s.begin(),isEnd=s.end(); is!=isEnd; is++)
 		if (!copy(buf,*is,where,limit)) return false;
+	return true;
+}
+
+bool copy(void *buf, unordered_set <wstring> &s, int &where, int limit)
+{
+	DLFS
+		int count = s.size();
+	if (!copy(buf, count, where, limit)) return false;
+	for (auto is :s)
+		if (!copy(buf, is, where, limit)) return false;
 	return true;
 }
 
@@ -552,19 +572,39 @@ bool copy(set <string> &s,void *buf,int &where,int limit)
 	return true;
 }
 
-bool copy(set <wstring> &s,void *buf,int &where,int limit)
-{ DLFS
-	int count;
-	if (!copy(count,buf,where,limit)) return false;
-	if (count<0)
+bool copy(set <wstring> &s, void *buf, int &where, int limit)
+{
+	DLFS
+		int count;
+	if (!copy(count, buf, where, limit)) return false;
+	if (count < 0)
 	{
-		lplog(LOG_ERROR,L"negative count on read!");
+		lplog(LOG_ERROR, L"negative count on read!");
 		return false;
 	}
-	for (int I=0; I<count; I++)
+	for (int I = 0; I < count; I++)
 	{
 		wstring str;
-		if (!copy(str,buf,where,limit)) return false;
+		if (!copy(str, buf, where, limit)) return false;
+		s.insert(str);
+	}
+	return true;
+}
+
+bool copy(unordered_set <wstring> &s, void *buf, int &where, int limit)
+{
+	DLFS
+	int count;
+	if (!copy(count, buf, where, limit)) return false;
+	if (count < 0)
+	{
+		lplog(LOG_ERROR, L"negative count on read!");
+		return false;
+	}
+	for (int I = 0; I < count; I++)
+	{
+		wstring str;
+		if (!copy(str, buf, where, limit)) return false;
 		s.insert(str);
 	}
 	return true;

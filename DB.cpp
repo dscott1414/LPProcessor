@@ -1015,3 +1015,65 @@ int readWikiNominalizations(MYSQL &mysql, unordered_map <wstring,set < wstring >
 	}
 	return 0;
 }
+
+void maxFieldLengths(const wstring key, cOntologyEntry &dbPredicate,int &maxKey, int &maxCompactLabel, int &maxInfoPage, int &maxAbstractDescription, int &maxCommentDescription, int &maxSuperClasses, int &numGT150, int &numGT170, int &numGT190)
+{
+	wstring superClasses;
+	for (auto sc : dbPredicate.superClasses)
+		superClasses += sc + L"|";
+	maxKey = max(maxKey, (signed)key.length());
+	maxCompactLabel = max(maxCompactLabel, (signed)dbPredicate.compactLabel.length());
+	maxInfoPage = max(maxInfoPage, (signed)dbPredicate.infoPage.length());
+	maxAbstractDescription = max(maxAbstractDescription, (signed)dbPredicate.abstractDescription.length());
+	maxCommentDescription = max(maxCommentDescription, (signed)dbPredicate.commentDescription.length());
+	maxSuperClasses = max(maxSuperClasses, (signed)superClasses.length());
+	if (superClasses.length() > 150)
+		numGT150++;
+	if (superClasses.length() > 170)
+		numGT170++;
+	if (superClasses.length() > 190)
+		numGT190++;
+}
+
+void escapeAllQuote(wstring &str)
+{
+	LFS
+		wstring ess;
+	for (unsigned int I = 0; I < str.length(); I++)
+	{
+		if (str[I] == '\'' || str[I] == '\"') ess += '\\';
+		ess += str[I];
+		if (str[I] == '\\') ess += '\\';
+	}
+	str = ess;
+}
+
+bool writeDbOntologyEntry(MYSQL &mysql, const wstring key, cOntologyEntry &dbPredicate)
+{
+	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	wstring superClasses;
+	for (auto sc : dbPredicate.superClasses)
+		superClasses += sc + L"|";
+	wstring onkey = key;
+	escapeAllQuote(onkey);
+	escapeAllQuote(dbPredicate.compactLabel);
+	escapeAllQuote(dbPredicate.abstractDescription);
+	if (dbPredicate.numLine < 0)
+		dbPredicate.numLine = 0;
+	if (dbPredicate.ontologyHierarchicalRank < 0)
+		dbPredicate.ontologyHierarchicalRank = 100;
+	if (dbPredicate.ontologyType < 0)
+		dbPredicate.ontologyType = 100;
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"insert into ontology (onkey,compactLabel,infoPage,abstractDescription,commentDescription,numLine,ontologyHierarchicalRank,ontologyType,superClasses) VALUES (\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",%d,%d,%d,\"%s\")",
+		onkey.c_str(), dbPredicate.compactLabel.c_str(), dbPredicate.infoPage.c_str(), dbPredicate.abstractDescription.c_str(), dbPredicate.commentDescription.c_str(), dbPredicate.numLine, dbPredicate.ontologyHierarchicalRank,
+		dbPredicate.ontologyType, superClasses.c_str());
+	if (superClasses.length() > 10000)
+		lplog(LOG_INFO, L"SUPER CLASSES TOO LONG:\n%s", qt);
+	else
+	{
+		bool success = (myquery(&mysql, qt, true) || mysql_errno(&mysql) == ER_DUP_ENTRY);
+		return success;
+	}
+	return false;
+}
+

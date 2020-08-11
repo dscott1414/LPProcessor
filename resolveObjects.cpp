@@ -97,6 +97,7 @@ bool cSource::resolveNonGenderedGeneralObjectAgainstOneObject(int where,vector <
 	//		"%06d:Unknown resolution mapped %s to (unknown) %s.",where,objectString(object,tmpstr,true).c_str(),objectString(o,tmpstr2,false).c_str());
 	bool synonym=false;
 	int semanticMismatch=0;
+	extern int logOntologyDetail;
 	if (genS->objectClass == NON_GENDERED_NAME_OBJECT_CLASS && object->objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS &&
 			(m[object->begin].word->first==L"the" || (object->begin>0 && m[object->begin-1].word->first==L"the")) &&
 		checkParticularPartSemanticMatch(LOG_RESOLUTION,object->originalLocation,this,genS->originalLocation,(int)(genS-objects.begin()),synonym,semanticMismatch)<CONFIDENCE_NOMATCH && 

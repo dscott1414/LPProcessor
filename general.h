@@ -139,7 +139,8 @@ bool copy(void *buf,vector <int> &s,int &where,int limit);
 bool copy(void *buf,vector <wstring> &s,int &where,int limit);
 bool copy(void *buf,vector <string> &s,int &where,int limit);
 bool copy(void *buf,set <string> &s,int &where,int limit);
-bool copy(void *buf,set <wstring> &s,int &where,int limit);
+bool copy(void *buf, set <wstring> &s, int &where, int limit);
+bool copy(void *buf, unordered_set <wstring> &s, int &where, int limit);
 
 bool copy(const wchar_t *str,void *buf,int &where,int limit);
 bool copy(wstring &str,void *buf,int &where,int limit);
@@ -156,7 +157,8 @@ bool copy(vector <int> &s,void *buf,int &where,int limit);
 bool copy(vector <wstring> &s,void *buf,int &where,int limit);
 bool copy(vector <string> &s,void *buf,int &where,int limit);
 bool copy(set <string> &s,void *buf,int &where,int limit);
-bool copy(set <wstring> &s,void *buf,int &where,int limit);
+bool copy(set <wstring> &s, void *buf, int &where, int limit);
+bool copy(unordered_set <wstring> &s, void *buf, int &where, int limit);
 
 void escapeSingleQuote(wstring &lobject);
 void removeSingleQuote(wstring &lobject);
@@ -210,6 +212,7 @@ extern unordered_map <wstring,set < wstring > > nounVerbMap;
 wstring vectorString(vector <wstring> &vstr,wstring &tmpstr,wstring separator);
 wstring vectorString(vector < vector <wstring> > &vstr,wstring &tmpstr,wstring separator);
 wstring setString(set <wstring> &sstr,wstring &tmpstr,wchar_t *separator);
+wstring setString(unordered_set <wstring> &sstr, wstring &tmpstr, wchar_t *separator);
 string setString(set <string> &sstr,string &tmpstr,char *separator);
 const wchar_t *ontologyTypeString(int ontologyType,int resourceType, wstring &Btmpstr);
 #define SEPARATOR L"SEPARATOR|||"

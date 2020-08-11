@@ -510,11 +510,23 @@ wstring vectorString(vector < vector <wstring> > &vstr, wstring &tmpstr, wstring
 	return tmpstr;
 }
 
-wstring setString(set <wstring> &sstr,wstring &tmpstr,wchar_t *separator)
-{ LFS
-	tmpstr.clear();
-	for (set <wstring>::iterator sci=sstr.begin(),sciEnd=sstr.end(); sci!=sciEnd; sci++)
-		tmpstr+=separator+*sci;
+wstring setString(set <wstring> &sstr, wstring &tmpstr, wchar_t *separator)
+{
+	LFS
+		tmpstr.clear();
+	for (set <wstring>::iterator sci = sstr.begin(), sciEnd = sstr.end(); sci != sciEnd; sci++)
+		tmpstr += separator + *sci;
+	if (tmpstr.length())
+		tmpstr = tmpstr.substr(1);
+	return tmpstr;
+}
+
+wstring setString(unordered_set <wstring> &sstr, wstring &tmpstr, wchar_t *separator)
+{
+	LFS
+		tmpstr.clear();
+	for (auto ws:sstr)
+		tmpstr += separator + ws;
 	if (tmpstr.length())
 		tmpstr = tmpstr.substr(1);
 	return tmpstr;
@@ -547,7 +559,7 @@ wstring cTreeCat::toString(wstring &tmpstr)
 		ontologyTypeString(cli->second.ontologyType, cli->second.resourceType,tmpstr8)+L":"+cli->second.compactLabel+
 		L"Wikipedia:"+vectorString(wikipediaLinks,tmpstr5,L",")+
 		L"Professions:"+vectorString(professionLinks,tmpstr6,L",")+
-		L"[SUPER "+vectorString(cli->second.superClasses,tmpstr,L" ")+L"]:confidence,ontologyHierarchicalRank "+itos(cli->second.ontologyHierarchicalRank,tmpstr3)+L","+itos(confidence,tmpstr7)+L"("+qtype+L")";
+		L"[SUPER "+setString(cli->second.superClasses,tmpstr,L" ")+L"]:confidence,ontologyHierarchicalRank "+itos(cli->second.ontologyHierarchicalRank,tmpstr3)+L","+itos(confidence,tmpstr7)+L"("+qtype+L")";
 }
 
 void cTreeCat::lplogTC(int whichLog,wstring ofWhichObject)
@@ -595,7 +607,23 @@ int cSource::getExtendedRDFTypes(int where, vector <cTreeCat *> &rdfTypes, unord
 		if (contextualBase && rdfTypes.size() > 0)
 			break;
 	}
+	int originalRDFTypesSize = rdfTypes.size();
+	{ 
+		wstring oStr;
+		getRDFWhereString(where, oStr, L"_", 0, ignoreMatches);
+		lplog(LOG_RESOLUTION, L"%d:SUPERCLASSES of %s BEGIN %d", where, oStr.c_str()); 
+	}
+	//extern int logOntologyDetail;
+	//logSynonymDetail = logQuestionDetail = logOntologyDetail = logRDFDetail = 1;
 	cOntology::includeSuperClasses(topHierarchyClassIndexes, rdfTypes);
+	{ 
+		wstring oStr;
+		getRDFWhereString(where, oStr, L"_", 0, ignoreMatches);
+		lplog(LOG_RESOLUTION, L"%d:SUPERCLASSES of %s END %d->%d", where, oStr.c_str(), originalRDFTypesSize, rdfTypes.size()); 
+		if (originalRDFTypesSize && (rdfTypes.size()/ originalRDFTypesSize>2 || rdfTypes.size()- originalRDFTypesSize>10))
+			lplog(LOG_RESOLUTION, L"%d:SUPERCLASSES GROWTH! of %s %d->%d", where, oStr.c_str(), originalRDFTypesSize, rdfTypes.size()); 
+	}
+	//logSynonymDetail = logQuestionDetail = logOntologyDetail = 0;
 	// reset lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms
 	for (int I=0; I<rdfTypes.size(); I++)
 		rdfTypes[I]->preferred=false;
@@ -603,8 +631,10 @@ int cSource::getExtendedRDFTypes(int where, vector <cTreeCat *> &rdfTypes, unord
 	return rdfTypes.size();
 }
 
-int cSource::getObjectRDFTypes(int object,vector <cTreeCat *> &rdfTypes,unordered_map <wstring ,int > &topHierarchyClassIndexes,wstring fromWhere)
-{ LFS
+int cSource::getObjectRDFTypes(int object, vector <cTreeCat *> &rdfTypes, unordered_map <wstring, int > &topHierarchyClassIndexes, wstring fromWhere)
+{
+	LFS
+	cOntology::fillOntologyList(false);
 	wstring tmpstr;
   objectString(object,tmpstr,true);
   cOntology::rdfIdentify(tmpstr,rdfTypes,fromWhere);
@@ -873,6 +903,7 @@ int cSource::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat
 	LFS
 	if (noRDFTypes())
 		return 0;
+	cOntology::fillOntologyList(false);
 	wstring tmp1, tmp2, object,newObjectName;
 	if (numWords<0 && getRDFWhereString(where, newObjectName, L"_", extendNumPP, ignoreMatches) < 0)
 		return -1;
@@ -1769,9 +1800,9 @@ int cSource::getRDFTypes(int where, vector <cTreeCat *> &rdfTypes, wstring fromW
 	return 0;
 }
 
-int cSource::identifyISARelation(int principalWhere,bool initialTenseOnly)
-{ LFS
-	cOntology::initialize();
+int cSource::identifyISARelation(int principalWhere, bool initialTenseOnly)
+{
+	LFS
 	int o=m[principalWhere].getObject(),begin=m[principalWhere].beginObjectPosition,len=m[principalWhere].endObjectPosition-begin;
 	// save time calling getExtendedRDFTypesMaster - we are pretty sure this is a person
 	if (o>=0 && ((objects[o].name.hon!=wNULL && !objects[o].name.justHonorific()) || objects[o].numIdentifiedAsSpeaker>0 || objects[o].PISHail>0 || objects[o].PISDefinite>0))

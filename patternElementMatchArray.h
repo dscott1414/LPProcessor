@@ -9,7 +9,7 @@ public:
   unsigned int allocated;
   enum chainType { BY_PATTERN_END=0, BY_POSITION=1, BY_CHILD_PATTERN_END=2 };
 	enum eFlags { WINNER_FLAG = 1, CHILDPATBITS = 15, COST_EVAL = 2, COST_ND = 4, COST_AGREE = 8, COST_NVO = 16, COST_DONE = 32, IN_CHAIN = 64, ELIMINATED = 128, COST_TERTIARY = 256, COST_ROLE = 512, COST_PREP = 1024 };
-  typedef struct
+  typedef struct _tPatternElementMatch 
   {
     short begin;
     short end;

@@ -3,19 +3,20 @@ class cOntology
 public:
 	static bool cacheRdfTypes;
 	static unordered_map <wstring, cOntologyEntry> dbPediaOntologyCategoryList;
-	static void initialize();
+	static bool maxFieldLengths();
+	static bool writeOntologyList();
+	static bool readOntologyList();
 	static bool setPreferred(unordered_map <wstring ,int > &topHierarchyClassIndexes,vector <cTreeCat *> &rdfTypes);
 	static void rdfIdentify(wstring object, vector <cTreeCat *> &rdfTypes, wstring fromWhere, bool fileCaching=true);
-	static void logIdentity(int logType,wstring object,cTreeCat *cat,bool printOnlyPreferred);
 	static void includeSuperClasses(unordered_map <wstring, int > &topHierarchyClassIndexes, vector <cTreeCat *> &rdfTypes);
 	static void compressPath(wchar_t *path);
 	static void compareRDFTypes();
-	static int readUMBELNS();
 	static bool inNoERDFTypesDBTable(wstring newPath);
 	static bool insertNoERDFTypesDBTable(wstring newPath);
 	static int printRDFTypes(wchar_t *kind, vector <cTreeCat *> &rdfTypes);
 	static int printExtendedRDFTypes(wchar_t *kind, vector <cTreeCat *> &rdfTypes, unordered_map <wstring, int > &topHierarchyClassIndexes);
 	static void readOpenLibraryInternetArchiveWorksDump();
+	static int fillOntologyList(bool reInitialize);
 
 private:
 	static unordered_map<wstring, vector <cTreeCat *> > rdfTypeMap; 
@@ -33,7 +34,6 @@ private:
 	static wstring getFBDescription(wstring id,wstring name);
 	static int lookupInFreebase(wstring object,vector <cTreeCat *> &rdfTypes);
 
-	static int fillOntologyList(bool reInitialize);
 	static int getAcronyms(wstring &object,vector <wstring> &acronyms);
 	static unordered_map <wstring, cOntologyEntry>::iterator findAnyYAGOSuperClass(wstring cl);
 	static unordered_map <wstring, cOntologyEntry>::iterator findCategory(wstring &icat);
@@ -45,14 +45,15 @@ private:
 	static bool topClassesAvailableToBeAdded(unordered_map <wstring, int > &topHierarchyClassIndexes, vector <cTreeCat *> &rdfTypes, int rdfBaseTypeOffset);
 	static void includeAllSuperClasses(unordered_map <wstring, int > &topHierarchyClassIndexes, vector <cTreeCat *> &rdfTypes, int recursionLevel, int rdfBaseTypeOffset);
 	static int fillRanks(int ontologyType);
-	static void getRDFTypesFromDbPedia(wstring object,vector <cTreeCat *> &rdfTypes,wstring parentObject,wstring fromWhere);
+	static void getRDFTypesFromDbPedia(wstring object,vector <cTreeCat *> &rdfTypes,wstring fromWhere);
 	static int enterCategory(string &id,string &k,string &propertyValue,string &description,string &slobject,wstring &object,string &objectType,string &name,vector <wstring> &wikipediaLinks,vector <wstring> &professionLinks,vector <cTreeCat *> &rdfTypes);
 	static int lookupInFreebaseQuery(wstring &object,string &slobject,wstring &q,vector <cTreeCat *> &rdfTypes,bool accumulateAliases);
 	static int lookupLinks(vector <wstring> &links);
+	static wstring stripUmbel(wstring umbelClass, wstring &compactLabel, wstring &labelWithSpace, int &UMBELType);
+	static void importUMBELN3Files(wchar_t *basepath, wchar_t *extension, unordered_map < wstring, unordered_map <wstring, set< wstring > > > &triplets);
 	static bool readUMBELSuperClasses();
 	static int readYAGOOntology(wchar_t *filepath, int &numYAGOEntries, int &numSuperClasses);
 	static int readYAGOOntology();
-//	static int readDbPediaOntology();
 	static int readRDFTypes(wchar_t path[4096],vector <cTreeCat *> &rdfTypes);
 	static wstring extractLinkedFreebaseDescription(string &properties,wstring &description);
 	static void cutFinalDigits(wstring &cat);
@@ -73,7 +74,6 @@ private:
 	static void printIdentities(wchar_t *objects[]);
 	static void printIdentity(wstring object);
 	static bool copy(cOntologyEntry &dbsn,void *buf,int &where,int limit);
-	//static bool copy(unordered_map <wstring, cOntologyEntry>::iterator &hint,void *buf,int &where,int limit,unordered_map <wstring, cOntologyEntry> &hm);
 	static int readDbPediaOntology();
 };
 

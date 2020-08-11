@@ -2941,6 +2941,7 @@ cSource::cSource(wchar_t *databaseServer,int _sourceType,bool generateFormStatis
 	accumulateLocationLastLocation=-1;
 	tagSetTimeArray=NULL;
 	tagSetTimeArraySize=0;
+	sourceInPast = false;
 	if (initializeDatabaseHandle(mysql,databaseServer,alreadyConnected)<0)
 	{
 		createDatabase(databaseServer);
@@ -3039,6 +3040,7 @@ cSource::cSource(MYSQL *parentMysql,int _sourceType,int _sourceConfidence)
 	for (unsigned int ts=0; ts<desiredTagSets.size(); ts++)
 		pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
 	updateWordUsageCostsDynamically = false;
+	sourceInPast = false;
 }
 
 void cSource::writeWords(wstring oPath, wstring specialExtension)
@@ -3511,11 +3513,16 @@ int cSource::checkParticularPartSemanticMatch(int logType, int parentWhere, cSou
 	tmpstr.clear();
 	for (unordered_map <wstring, int >::iterator ami = associationMap.begin(), amiEnd = associationMap.end(); ami != amiEnd; ami++)
 		tmpstr += ami->first + L"|";
-	wstring tmp1, tmp2, tmp3;
 	if (logSynonymDetail)
-		lplog(LOG_WHERE, L"Comparing [%d, %d] %s and %s(%s)\nassociationMap for %s: %s\nparentSynonyms for %s: %s.",
-			parentWhere, childWhere, whereString(parentWhere, tmp1, false).c_str(), childSource->whereString(childWhere, tmp2, false).c_str(), childSource->whereString(childSource->objects[childObject].originalLocation, tmp3, false).c_str(),
-			tmp2.c_str(), tmpstr.c_str(), pw.c_str(), tmpstr2.c_str());
+	{
+		wstring parentObject, childObjectStr, childObjectOriginalLocation;
+		whereString(parentWhere, parentObject, false);
+		childSource->whereString(childWhere, childObjectStr, false);
+		childSource->whereString(childSource->objects[childObject].originalLocation, childObjectOriginalLocation, false);
+		lplog(logType, L"%d:Comparing [%d, %d] %s and %s(%s)\nassociationMap for %s: %s\nparentSynonyms for %s: %s.", parentWhere,
+			parentWhere, childWhere, parentObject.c_str(), childObjectStr.c_str(), childObjectOriginalLocation.c_str(),
+			childObjectStr.c_str(), tmpstr.c_str(), pw.c_str(), tmpstr2.c_str());
+	}
 	for (unordered_map <wstring, int >::iterator ami = associationMap.begin(), amiEnd = associationMap.end(); ami != amiEnd && lowestConfidence > 1; ami++)
 		checkParticularPartSemanticMatchWord(logType, parentWhere, synonym, parentSynonyms, pw, pwme, lowestConfidence, ami);
 	//if (childWhere==886)
