@@ -1014,7 +1014,6 @@ bool cSource::resolveMetaGroupOther(int where,vector <cOM> &objectMatches)
 // in secondary quotes, inPrimaryQuote=false
 bool cSource::resolveMetaGroupSpecificObject(int where,bool inPrimaryQuote,bool inSecondaryQuote,bool definitelyResolveSpeaker,int lastBeginS1,int lastRelativePhrase,vector <cOM> &objectMatches,bool &chooseFromLocalFocus)
 { LFS
-	//if (where==22323) return false; // TEMP DEBUG
 	int o=m[where].getObject();
 	int latestOwnerWhere=objects[o].getOwnerWhere();
 	if (currentSpeakerGroup>=speakerGroups.size())

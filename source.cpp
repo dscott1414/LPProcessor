@@ -1434,6 +1434,9 @@ int cSource::printSentences(bool updateStatistics,unsigned int unknownCount,unsi
 		clearTagSetMaps();
 		//if (section<sections.size() && sections[section].begin==begin)
 		//  section++;
+		// correct source from probabilistic Stanford testing
+		for (unsigned int I = begin; I < end && !exitNow; I++)
+			ruleCorrectLPClass(I, begin);
 		unsigned int unmatchedElements=reportUnmatchedElements(begin,end,true);
 		unsigned int ignoredPatternsTried=0;
 		matchIgnoredPatternsAgainstSentence(s,ignoredPatternsTried,true);
@@ -3695,40 +3698,41 @@ void cSource::adjustOffsets(int childWhere, bool keepObjects)
 }
 
 // copy the answer into the parent
-int cSource::copyChildIntoParent(cSource *childSource, int whereChild)
+vector <int> cSource::copyChildrenIntoParent(cSource *childSource, int whereChild)
 {
 	LFS
-		if (childSource->m[whereChild].getObject() < 0 || childSource->m[whereChild].beginObjectPosition < 0 || childSource->m[whereChild].endObjectPosition < 0)
-		{
-			m.push_back(childSource->m[whereChild]);
-			adjustOffsets(whereChild);
-			return m.size() - 1;
-		}
+	vector <int> parentLocations;
+	if (childSource->m[whereChild].getObject() < 0 || childSource->m[whereChild].beginObjectPosition < 0 || childSource->m[whereChild].endObjectPosition < 0)
+	{
+		m.push_back(childSource->m[whereChild]);
+		adjustOffsets(whereChild);
+		parentLocations.push_back(m.size() - 1);
+		wstring tmpstr, tmpstr2;
+		lplog(LOG_WHERE, L"Transferred %d:%s to %d:%s", whereChild, childSource->whereString(whereChild, tmpstr, true).c_str(), m.size() - 1, whereString(m.size() - 1, tmpstr2, true).c_str());
+	}
+	else
+	{
+		vector <cOM> childObjects;
+		if (childSource->m[whereChild].objectMatches.size() > 0)
+			childObjects = childSource->m[whereChild].objectMatches;
 		else
+			childObjects.push_back(cOM(childSource->m[whereChild].getObject(), 0));
+		for (cOM coOM : childObjects)
 		{
-			int copyChildObject = -1, whereObject = -1;
-			if (childSource->m[whereChild].objectMatches.size() > 0)
-			{
-				copyChildObject = childSource->m[whereChild].objectMatches[0].object;
-				whereObject = childSource->objects[copyChildObject].originalLocation;
-				copySource(childSource, childSource->m[whereObject].beginObjectPosition, childSource->m[whereObject].endObjectPosition);
-			}
-			else
-			{
-				copyChildObject = childSource->m[whereChild].getObject();
-				whereObject = whereChild;
-				copySource(childSource, childSource->m[whereChild].beginObjectPosition, childSource->m[whereChild].endObjectPosition);
-			}
+			int co = coOM.object;
+			int whereObject = childSource->objects[co].originalLocation;
+			copySource(childSource, childSource->m[whereObject].beginObjectPosition, childSource->m[whereObject].endObjectPosition);
 			// copy childObject
-			objects.push_back(childSource->objects[copyChildObject]);
+			objects.push_back(childSource->objects[co]);
 			int whereParentObject = m.size() - childSource->m[whereObject].endObjectPosition + whereObject;
+			parentLocations.push_back(whereParentObject);
 			int parentObject = objects.size() - 1;
 			m[whereParentObject].setObject(parentObject);
 			m[whereParentObject].objectMatches.clear();
-			if (childSource->objects[copyChildObject].getOwnerWhere() >= 0)
+			if (childSource->objects[co].getOwnerWhere() >= 0)
 			{
-				m.push_back(childSource->m[childSource->objects[copyChildObject].getOwnerWhere()]);
-				adjustOffsets(childSource->objects[copyChildObject].getOwnerWhere());
+				m.push_back(childSource->m[childSource->objects[co].getOwnerWhere()]);
+				adjustOffsets(childSource->objects[co].getOwnerWhere());
 				objects[parentObject].setOwnerWhere(m.size() - 1);
 			}
 			objects[parentObject].begin = m[whereParentObject].beginObjectPosition = whereParentObject - (whereObject - childSource->m[whereObject].beginObjectPosition);
@@ -3742,9 +3746,10 @@ int cSource::copyChildIntoParent(cSource *childSource, int whereChild)
 			objects[parentObject].eliminated = false;
 			copyDirectlyAttachedPrepositionalPhrases(whereParentObject, childSource, whereObject);
 			wstring tmpstr, tmpstr2;
-			lplog(LOG_WHERE, L"Transferred %d:%s to %d:%s", whereChild, childSource->whereString(whereChild, tmpstr, true).c_str(), whereParentObject, whereString(whereParentObject, tmpstr2, true).c_str());
-			return whereParentObject;
+			lplog(LOG_WHERE, L"Transferred %d:%s to %d:%s", whereObject, childSource->objectString(co, tmpstr, true).c_str(), whereParentObject, whereString(whereParentObject, tmpstr2, true).c_str());
 		}
+	}
+	return parentLocations;
 }
 
 int cSource::detectAttachedPhrase(vector <cSpaceRelation>::iterator sri, int &relVerb)
@@ -3777,5 +3782,279 @@ bool cSource::objectContainedIn(int whereObject, set <int> whereObjects)
 					return true;
 		}
 	return false;
+}
+
+// correct from Stanford analysis - see specials_main::ruleCorrectLPClass
+// see if LP class can be corrected.
+// return code:
+//   -1: LP class corrected.  ST prefers something other than correct class, so LP is correct
+//   -2: LP class corrected.  ST prefers correct class, so this entry should simply be removed from the output file.
+//   -3: test whether to change to correct class - set to disagree, and add an arbitrary string to partofspeech to search for whatever string added as a test.
+//    0: unable to determine whether class should be corrected, or the class has been corrected. Normal processing should continue.  
+int cSource::ruleCorrectLPClass(int wordSourceIndex, int startOfSentence)
+{
+	if (wordSourceIndex + 1 >= m.size())
+		return 0;
+	int adverbFormOffset = m[wordSourceIndex].word->second.query(adverbForm);
+	int adjectiveFormOffset = m[wordSourceIndex].word->second.query(adjectiveForm);
+	int particleFormOffset = m[wordSourceIndex].word->second.query(particleForm);
+	int nounPlusOneFormOffset = m[wordSourceIndex + 1].word->second.query(nounForm);
+	int conjunctionFormOffset = m[wordSourceIndex].word->second.query(conjunctionForm);
+	// RULE CHANGE - change an adjective to an adverb?
+	if (m[wordSourceIndex].word->first != L"that" && // 'that' is very ambiguous
+		m[wordSourceIndex].isOnlyWinner(adjectiveForm) &&
+		m[wordSourceIndex + 1].queryWinnerForm(L"noun") < 0 &&
+		m[wordSourceIndex + 1].queryWinnerForm(L"Proper Noun") < 0 &&
+		m[wordSourceIndex + 1].queryWinnerForm(L"indefinite_pronoun") < 0 &&
+		m[wordSourceIndex + 1].queryWinnerForm(L"numeral_cardinal") < 0 &&
+		m[wordSourceIndex + 1].queryWinnerForm(L"adjective") < 0 && // only an adjective, not before a noun
+		(nounPlusOneFormOffset < 0 || m[wordSourceIndex + 1].word->second.getUsageCost(nounPlusOneFormOffset) == 4) &&
+		(adverbFormOffset = m[wordSourceIndex].queryForm(L"adverb")) >= 0 && m[wordSourceIndex].word->second.getUsageCost(adverbFormOffset) < 2 &&
+		m[wordSourceIndex].queryForm(L"interjection") < 0 && // interjection acts similarly to adverb
+		(iswalpha(m[wordSourceIndex + 1].word->first[0]) || wordSourceIndex == 0 || iswalpha(m[wordSourceIndex - 1].word->first[0])) && // not alone in the sentence
+		(wordSourceIndex <= 0 || (m[wordSourceIndex - 1].queryForm(L"is") < 0 && m[wordSourceIndex - 1].word->first != L"be" && m[wordSourceIndex - 1].word->first != L"being")) && // is/ishas before means it really is an adjective!
+		(wordSourceIndex <= 1 || (m[wordSourceIndex - 2].queryForm(L"is") < 0 && m[wordSourceIndex - 2].word->first != L"be" && m[wordSourceIndex - 2].word->first != L"being")) && // is/ishas before means it really is an adjective!
+		(wordSourceIndex <= 2 || (m[wordSourceIndex - 3].queryForm(L"is") < 0 && m[wordSourceIndex - 3].word->first != L"be" && m[wordSourceIndex - 3].word->first != L"being")) && // is/ishas before means it really is an adjective!
+		(wordSourceIndex <= 3 || (m[wordSourceIndex - 4].queryForm(L"is") < 0 && m[wordSourceIndex - 4].word->first != L"be" && m[wordSourceIndex - 4].word->first != L"being")) && // is/ishas before means it really is an adjective!
+		(wordSourceIndex < m.size() - 1 || (m[wordSourceIndex + 1].queryForm(L"is") < 0 && m[wordSourceIndex + 1].word->first != L"be")) && // is/ishas before means it really is an adjective!
+		(m[wordSourceIndex].queryForm(L"preposition") < 0) && (m[wordSourceIndex].queryForm(L"relativizer") < 0)) // || m[wordSourceIndex + 1].queryWinnerForm(L"numeral_cardinal") < 0)) // before one o'clock
+	{
+		bool isDeterminer = false;
+		if (wordSourceIndex > 0)
+		{
+			vector<wstring> determinerTypes = { L"determiner",L"demonstrative_determiner",L"possessive_determiner",L"interrogative_determiner", L"quantifier", L"numeral_cardinal" };
+			for (wstring dt : determinerTypes)
+				if (isDeterminer = m[wordSourceIndex - 1].queryWinnerForm(dt) >= 0)
+					break;
+		}
+		// The door that faced her stood *open*
+		if (!isDeterminer && !m[wordSourceIndex].forms.isSet(PROPER_NOUN_FORM_NUM) && wordSourceIndex>0 && m[wordSourceIndex - 1].queryWinnerForm(L"verb") >= 0 && adverbFormOffset >= 0 && adjectiveFormOffset >= 0) // Proper Noun is already well controlled
+		{
+			m[wordSourceIndex].setWinner(adverbFormOffset);
+			m[wordSourceIndex].unsetWinner(adjectiveFormOffset);
+			return -1;
+		}
+	}
+	// RULE CHANGE - change an adverb to an adjective?
+	if (m[wordSourceIndex].isOnlyWinner(adverbForm) && adjectiveFormOffset >= 0 && m[wordSourceIndex].word->second.getUsageCost(adverbFormOffset) - m[wordSourceIndex].word->second.getUsageCost(adjectiveFormOffset) >= 3 &&
+		m[wordSourceIndex + 1].queryWinnerForm(determinerForm) >= 0 && wordSourceIndex > 0 && m[wordSourceIndex - 1].queryWinnerForm(verbForm) < 0)
+	{
+		m[wordSourceIndex].setWinner(adjectiveFormOffset);
+		m[wordSourceIndex].unsetWinner(adverbFormOffset);
+		return -1;
+	}
+	// cannot be preposition, conjunction, verb, determiner, particle
+	if (m[wordSourceIndex].isOnlyWinner(adverbForm) && adjectiveFormOffset >= 0 &&
+		(m[wordSourceIndex + 1].queryWinnerForm(nounForm) >= 0 || m[wordSourceIndex + 1].queryWinnerForm(L"dayUnit") >= 0) &&
+		m[wordSourceIndex + 1].queryWinnerForm(adjectiveForm) < 0 &&
+		wordSourceIndex > 0 && 
+		m[wordSourceIndex - 1].queryWinnerForm(verbForm) < 0 &&
+		m[wordSourceIndex].queryForm(prepositionForm) < 0 &&
+		m[wordSourceIndex].queryForm(conjunctionForm) < 0 &&
+		m[wordSourceIndex].queryForm(verbForm) < 0 &&
+		m[wordSourceIndex].queryForm(determinerForm) < 0 &&
+		m[wordSourceIndex].queryForm(particleForm) < 0 &&
+		m[wordSourceIndex + 2].word->first != L"-" && // There is no getting in or out of them without the greatest difficulty , and a patient , slow navigation , which is *very* heart - rending .
+		queryPattern(wordSourceIndex, L"_TIME") == -1) // An hour *later* supper was served . 
+	{
+		// LP correct - 1039
+		// ST correct - 19 < 2%
+		m[wordSourceIndex].setWinner(adjectiveFormOffset);
+		m[wordSourceIndex].unsetWinner(adverbFormOffset);
+		return -1;
+	}
+	if (wordSourceIndex < m.size() - 3 && m[wordSourceIndex].word->first == L"most" &&
+		(m[wordSourceIndex + 1].hasWinnerNounForm() ||
+			(m[wordSourceIndex + 1].word->first == L"of" &&
+				(m[wordSourceIndex + 2].word->first == L"the" || m[wordSourceIndex + 2].queryWinnerForm(demonstrativeDeterminerForm) != -1 || m[wordSourceIndex + 2].queryWinnerForm(possessiveDeterminerForm) != -1 || m[wordSourceIndex + 2].queryWinnerForm(interrogativeDeterminerForm) != -1))
+			))
+	{
+		m[wordSourceIndex].setWinner(adjectiveFormOffset);
+		m[wordSourceIndex].unsetAllFormWinners();
+		return -1;
+	}
+	if (m[wordSourceIndex].word->first == L"only")
+	{
+		if (m[wordSourceIndex + 1].pma.queryPattern(L"__S1") != -1)
+		{
+			if (wordSourceIndex == startOfSentence || wordSourceIndex == startOfSentence + 1)
+			{
+				m[wordSourceIndex].setWinner(adverbFormOffset);
+				m[wordSourceIndex].unsetAllFormWinners();
+				return -1;
+			}
+			else
+			{
+				m[wordSourceIndex].setWinner(conjunctionFormOffset);
+				m[wordSourceIndex].unsetAllFormWinners();
+				return -1;
+
+			}
+		}
+		else if (m[wordSourceIndex + 1].pma.queryPattern(L"__INFP") != -1)
+		{
+			m[wordSourceIndex].setWinner(adverbFormOffset);
+			m[wordSourceIndex].unsetAllFormWinners();
+			return -1;
+		}
+		else if (m[wordSourceIndex + 1].queryWinnerForm(determinerForm) != -1)
+		{
+			m[wordSourceIndex].setWinner(adjectiveFormOffset);
+			m[wordSourceIndex].unsetAllFormWinners();
+			return -1;
+		}
+		return 0;
+	}
+	if (m[wordSourceIndex].word->first == L"better" || m[wordSourceIndex].word->first == L"further")
+	{
+		bool sentenceOfBeing =				// 4 words or less before the word must be an 'is' verb
+			((wordSourceIndex <= 0 || (m[wordSourceIndex - 1].queryForm(L"is") >= 0 || m[wordSourceIndex - 1].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
+				(wordSourceIndex <= 1 || (m[wordSourceIndex - 2].queryForm(L"is") >= 0 || m[wordSourceIndex - 2].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
+				(wordSourceIndex <= 2 || (m[wordSourceIndex - 3].queryForm(L"is") >= 0 || m[wordSourceIndex - 3].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
+				(wordSourceIndex <= 3 || (m[wordSourceIndex - 4].queryForm(L"is") >= 0 || m[wordSourceIndex - 4].queryForm(L"be") >= 0))); // is/ishas before means it really is an adjective!
+		if (m[wordSourceIndex].word->first == L"better" && sentenceOfBeing && m[wordSourceIndex + 1].queryWinnerForm(verbForm) == -1)
+		{
+			m[wordSourceIndex].setWinner(adjectiveFormOffset);
+			m[wordSourceIndex].unsetAllFormWinners();
+			return -1;
+		}
+		else if (m[wordSourceIndex].word->first == L"better" && m[wordSourceIndex + 1].queryWinnerForm(nounForm) == -1 && m[wordSourceIndex + 1].queryWinnerForm(determinerForm) == -1)
+		{
+			m[wordSourceIndex].setWinner(adverbFormOffset);
+			m[wordSourceIndex].unsetAllFormWinners();
+			return -1;
+		}
+	}
+	if (m[wordSourceIndex].isOnlyWinner(prepositionForm) && m[wordSourceIndex].getRelObject() < 0 && !iswalpha(m[wordSourceIndex + 1].word->first[0]))
+	{
+		int relVerb = m[wordSourceIndex].getRelVerb();
+		bool sentenceOfBeing =				// 4 words or less before the word must be an 'is' verb
+			((wordSourceIndex <= 0 || (m[wordSourceIndex - 1].queryForm(L"is") >= 0 || m[wordSourceIndex - 1].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
+				(wordSourceIndex <= 1 || (m[wordSourceIndex - 2].queryForm(L"is") >= 0 || m[wordSourceIndex - 2].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
+				(wordSourceIndex <= 2 || (m[wordSourceIndex - 3].queryForm(L"is") >= 0 || m[wordSourceIndex - 3].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
+				(wordSourceIndex <= 3 || (m[wordSourceIndex - 4].queryForm(L"is") >= 0 || m[wordSourceIndex - 4].queryForm(L"be") >= 0))); // is/ishas before means it really is an adjective!
+		if (adverbFormOffset < 0)
+		{
+			if (!(cWord::isSingleQuote(m[wordSourceIndex + 1].word->first[0]) || cWord::isDoubleQuote(m[wordSourceIndex + 1].word->first[0])) && m[wordSourceIndex].word->first == L"to")
+			{
+				return -1;
+			}
+			if (m[wordSourceIndex].word->first == L"like" && sentenceOfBeing &&
+				// the word before must NOT be a dash
+				(wordSourceIndex <= 0 || !cWord::isDash((m[wordSourceIndex - 1].word->first[0]))))
+			{
+				m[wordSourceIndex].setWinner(adjectiveFormOffset);
+				m[wordSourceIndex].unsetWinner(m[wordSourceIndex].queryForm(prepositionForm));
+				return -1;
+			}
+			else
+				return 0; // In other cases the STLPMatch is already a preposition, so ST and LP agree anyway
+		}
+		else
+		{
+			wstring nextWord = m[wordSourceIndex + 1].word->first;
+			if (nextWord == L"." || nextWord == L"," || nextWord == L";" || nextWord == L"--")
+			{
+				if (relVerb >= 0 && (m[relVerb].queryForm(L"is") >= 0 || m[relVerb].queryForm(L"be") >= 0))
+				{
+					if (adjectiveFormOffset < 0)
+					{
+						if (particleFormOffset > 0 && !cWord::isDash((m[wordSourceIndex + 1].word->first[0])))
+						{
+							m[wordSourceIndex].setWinner(particleFormOffset);
+							m[wordSourceIndex].unsetWinner(m[wordSourceIndex].queryForm(prepositionForm));
+							return -1;
+						}
+						if (adverbFormOffset >= 0)
+						{
+							m[wordSourceIndex].setWinner(adverbFormOffset);
+							m[wordSourceIndex].unsetWinner(m[wordSourceIndex].queryForm(prepositionForm));
+							return -1;
+						}
+						return 0;
+					}
+					//if (relVerb >= 0)
+					//	partofspeech += m[relVerb].word->first;
+					m[wordSourceIndex].setWinner(adjectiveFormOffset);
+					m[wordSourceIndex].unsetWinner(m[wordSourceIndex].queryForm(prepositionForm));
+					return -1;
+				}
+				else
+				{
+					m[wordSourceIndex].setWinner(adverbFormOffset);
+					m[wordSourceIndex].unsetWinner(m[wordSourceIndex].queryForm(prepositionForm));
+					return -1;
+				}
+			}
+			else
+			{
+				if (particleFormOffset > 0 && !cWord::isDash((m[wordSourceIndex + 1].word->first[0])))
+				{
+					m[wordSourceIndex].setWinner(particleFormOffset);
+					m[wordSourceIndex].unsetWinner(m[wordSourceIndex].queryForm(prepositionForm));
+					return -1;
+				}
+				return 0;
+			}
+		}
+	}
+	if (m[wordSourceIndex].word->first == L"that" && (((m[wordSourceIndex].flags & cWordMatch::flagInQuestion) && wordSourceIndex > 0 &&
+		wordSourceIndex > 0 && (m[wordSourceIndex - 1].queryForm(L"is") >= 0 || m[wordSourceIndex - 1].queryForm(L"is_negation") >= 0) &&
+		m[wordSourceIndex].queryWinnerForm(demonstrativeDeterminerForm) >= 0 && m[wordSourceIndex + 1].queryWinnerForm(nounForm) < 0) ||
+		(m[wordSourceIndex].word->first == L"that" && !(m[wordSourceIndex].flags & cWordMatch::flagInQuestion) && wordSourceIndex > 0 && (m[wordSourceIndex + 1].queryForm(L"is") >= 0 || m[wordSourceIndex + 1].queryForm(L"is_negation") >= 0) &&
+			(!iswalpha(m[wordSourceIndex - 1].word->first[0]) || wordSourceIndex == startOfSentence)) ||
+		(m[wordSourceIndex].queryWinnerForm(demonstrativeDeterminerForm) >= 0 && !iswalpha(m[wordSourceIndex + 1].word->first[0]))))
+	{
+		m[wordSourceIndex].setWinner(m[wordSourceIndex].queryForm(pronounForm));
+		m[wordSourceIndex].unsetWinner(m[wordSourceIndex].queryForm(demonstrativeDeterminerForm));
+	}
+	// a word which LP thinks is an adverb, which is before a determiner, which has a predeterminer form
+	if (m[wordSourceIndex].isOnlyWinner(adverbForm) && m[wordSourceIndex + 1].isOnlyWinner(determinerForm) && m[wordSourceIndex].queryForm(predeterminerForm) != -1)
+	{
+		m[wordSourceIndex].setWinner(m[wordSourceIndex].queryForm(predeterminerForm));
+		m[wordSourceIndex].unsetWinner(adverbFormOffset);
+		return -2;
+	}
+	int primaryPMAOffset = m[wordSourceIndex].pma.queryPattern(L"__ALLOBJECTS_1");
+	int secondaryPMAOffset = m[wordSourceIndex].pma.queryPattern(L"_ADVERB");
+	if (primaryPMAOffset != -1 && secondaryPMAOffset != -1)
+	{
+		primaryPMAOffset = primaryPMAOffset & ~cMatchElement::patternFlag;
+		secondaryPMAOffset = secondaryPMAOffset & ~cMatchElement::patternFlag;
+		set <wstring> particles = { L"down",L"out",L"off",L"up" };
+		if (particles.find(m[wordSourceIndex].word->first) == particles.end() && m[wordSourceIndex].word->second.getUsageCost(m[wordSourceIndex].queryForm(prepositionForm)) < 4 && m[wordSourceIndex].pma[secondaryPMAOffset].len == 1 && queryPattern(wordSourceIndex + 1, L"__NOUN") != -1 && m[wordSourceIndex].queryForm(prepositionForm) != -1)
+		{
+			m[wordSourceIndex].setWinner(m[wordSourceIndex].queryForm(prepositionForm));
+			m[wordSourceIndex].unsetWinner(adverbFormOffset);
+			return 0;
+		}
+	}
+	set <wstring> notObjects = { L"we",L"i",L"he",L"they" };
+	if (wordSourceIndex < m.size() - 2 && m[wordSourceIndex + 1].hasWinnerNounForm() && m[wordSourceIndex].isOnlyWinner(adverbForm) &&
+		m[wordSourceIndex].queryForm(prepositionForm) != -1 && m[wordSourceIndex].word->first != L"as" && m[wordSourceIndex + 1].queryWinnerForm(PROPER_NOUN_FORM) == -1)
+	{
+		if (notObjects.find(m[wordSourceIndex + 1].word->first) == notObjects.end() &&
+			(!iswalpha(m[wordSourceIndex + 2].word->first[0]) || m[wordSourceIndex + 2].queryWinnerForm(coordinatorForm) != -1 || m[wordSourceIndex + 2].queryWinnerForm(determinerForm) != -1))
+		{
+			m[wordSourceIndex].setWinner(m[wordSourceIndex].queryForm(prepositionForm));
+			m[wordSourceIndex].unsetWinner(adverbFormOffset);
+			return -1;
+		}
+		if (notObjects.find(m[wordSourceIndex + 1].word->first) != notObjects.end() && (conjunctionFormOffset = m[wordSourceIndex].queryForm(conjunctionForm)) != -1)
+		{
+			m[wordSourceIndex].setWinner(conjunctionFormOffset);
+			m[wordSourceIndex].unsetWinner(adverbFormOffset);
+			return -1;
+		}
+	}
+	int nounPMAIndex = -1;
+	if (adverbFormOffset >= 0 && wordSourceIndex > 0 && (nounPMAIndex = m[wordSourceIndex - 1].pma.queryPatternDiff(L"__NOUN", L"2")) != -1 && m[wordSourceIndex - 1].word->first == L"the" && m[wordSourceIndex - 1].pma[nounPMAIndex & ~cMatchElement::patternFlag].len == 3 &&
+		m[wordSourceIndex + 1].pma.queryPattern(L"_ADJECTIVE_AFTER") != -1)
+	{
+		m[wordSourceIndex].unsetAllFormWinners();
+		m[wordSourceIndex].setWinner(adverbFormOffset);
+		return 0;
+	}
+	return 0;
 }
 

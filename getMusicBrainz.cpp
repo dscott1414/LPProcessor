@@ -56,10 +56,12 @@ int getMusicBrainzPage(wstring entitySearchedFor,wstring entityTypeReturned,wstr
 	if (fd<0)
 	{
 		path[wcslen(cacheDir)+wcslen(L"\\musicBrainzCache\\")+1]=0;
-		_wmkdir(path);
+		if (_wmkdir(path) < 0 && errno == ENOENT)
+			lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
 		path[wcslen(cacheDir)+wcslen(L"\\musicBrainzCache\\")+1]='\\';
 		path[wcslen(cacheDir)+wcslen(L"\\musicBrainzCache\\")+3]=0;
-		_wmkdir(path);
+		if (_wmkdir(path) < 0 && errno == ENOENT)
+			lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
 		path[wcslen(cacheDir)+wcslen(L"\\musicBrainzCache\\")+3]='\\';
 		if ((fd=_wopen(path,O_CREAT|O_RDWR|O_BINARY,_S_IREAD | _S_IWRITE ))<0) 
 		{
@@ -452,7 +454,7 @@ bool cSource::pushEntities(wchar_t *derivation, int where, wstring matchEntityTy
 
 set <wstring> labelMatchList={L"label",L"company",L"studio",L"conglomerate"};
 set <wstring> artistMatchList={L"artist",L"singer",L"songwriter",L"lyricist",L"composer",L"lyrist",L"musician",L"songsmith"};
-set <wstring> releaseMatchList={L"release",L"record",L"CD",L"album",L"recording",L"song",L"rap",L"CD",L"compilation",L"track",L"disc"};
+set <wstring> releaseMatchList={L"release",L"record",L"CD",L"album",L"recording",L"song",L"rap",L"compilation",L"track",L"disc",L"title"};
 
 bool cQuestionAnswering::dbSearchMusicBrainzSearchType(cSource *questionSource, wchar_t *derivation, cSpaceRelation* parentSRI, vector < cAS > &answerSRIs,
 	int firstWhere, wstring firstMatchListType, int secondWhere, wstring secondMatchListType, set <wstring> &matchVerbsList)
@@ -542,10 +544,11 @@ bool cSource::matchedList(set <wstring> &matchList,int where,int objectClass, wc
 	if (where<0)
 		return false;
 	wstring tmpstr;
-	lplog(LOG_WHERE, L"matchedList: %s in [%s] or class %s = %s [%s match type]?", m[where].getMainEntry()->first.c_str(),setString(matchList,tmpstr,L",").c_str(),
-		(m[where].getObject()>=0) ? getClass(objects[m[where].getObject()].objectClass).c_str():L"-1", (objectClass>=0) ? getClass(objectClass).c_str():L"-1",fromWhere);
 	// or Proper Noun, which can match artist, compactLabel or release. - non gendered business objects may not be capitalized (fix?)
-	return matchList.find(m[where].getMainEntry()->first) != matchList.end() || (m[where].getObject() >= 0 && (objects[m[where].getObject()].objectClass == objectClass));
+	bool matched = matchList.find(m[where].getMainEntry()->first) != matchList.end() || (m[where].getObject() >= 0 && (objects[m[where].getObject()].objectClass == objectClass));
+	lplog(LOG_WHERE, L"matchedDbBrainzList: %s in [%s] or class %s = %s [%s match type] - %s", m[where].getMainEntry()->first.c_str(),setString(matchList,tmpstr,L",").c_str(),
+		(m[where].getObject()>=0) ? getClass(objects[m[where].getObject()].objectClass).c_str():L"-1", (objectClass>=0) ? getClass(objectClass).c_str():L"-1",fromWhere,(matched) ? L"matched":L"NOT matched");
+	return matched;
 }
 
 void cSource::createObject(cObject object)

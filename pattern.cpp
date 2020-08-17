@@ -822,7 +822,7 @@ void cPattern::processForm(wstring &form,wstring &specificWord,int &cost,set <un
   if (*ch==L'[')
   {
     explicitFutureReference=true;
-		allowRecursiveMatch = (ch[1] == L'R');
+    allowRecursiveMatch = (ch[1] == L'R');
     ch+=3;
   }
   if (*ch==L'*')
@@ -1144,7 +1144,7 @@ bool cPattern::create(wstring patternName, wstring differentiator, int numForms,
   bool OK=true,explicitFutureReference; // nonOptionalElementFound=false,
   cPattern *p=new cPattern();
   va_list patternMarker;
-	wstring specificPatternWord; //specificPatternWord is not valid for pattern names
+	wstring specificPatternWord; //specificPatternWord and deleteSelectedMatchingPatterns are not valid for pattern names
   processForm(patternName,specificPatternWord,p->cost,p->tags,explicitFutureReference,p->blockDescendants,p->allowRecursiveMatch);
   p->fillIfAloneFlag=p->eliminateTag(L"_FINAL_IF_ALONE");
   p->fillFlag=p->eliminateTag(L"_FINAL");
@@ -1169,7 +1169,7 @@ bool cPattern::create(wstring patternName, wstring differentiator, int numForms,
 	// (or it was but then was never updated to the database for some reason), 
 	// then this pattern will never be used because there are no words associated
 	// with the form.
-	// Moreover, this feature, thogh convenient, leads to a proliferation of forms.
+	// Moreover, this feature, though convenient, leads to a proliferation of forms.
 	bool freeForm=p->eliminateTag(L"_FREE_FORM");
   p->name=patternName;
 	p->differentiator=differentiator;
@@ -1324,7 +1324,7 @@ cPattern *cPattern::create(cSource *source,wstring patternName,int num,int where
 			set <unsigned int> elementTags;
 			bool blockDescendants,allowRecursiveMatch;
 			int elementCost,f=-1;
-			wstring specificWord;
+      wstring specificWord;
 			processForm(form,specificWord,elementCost,elementTags,explicitFutureReference,blockDescendants,allowRecursiveMatch);
 			for (set <unsigned int>::iterator et=elementTags.begin(),etEnd=elementTags.end(); et!=etEnd; et++)
 				p->allElementTags.set(*et);

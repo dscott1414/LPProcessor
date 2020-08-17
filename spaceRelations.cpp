@@ -481,7 +481,6 @@ cSpaceRelation::cSpaceRelation(int _where, int _o, int _whereControllingEntity, 
 	printMin = -1;
 	speakerContinuation = false;
 	timeProgression = -1;
-	whereChildCandidateAnswer = -1;
 	whereQuestionTypeObject = -1;
 }
 
@@ -573,7 +572,6 @@ cSpaceRelation::cSpaceRelation(char *buffer, int &w, unsigned int total, bool &e
 	printMax = -1;
 	printMin = -1;
 	speakerContinuation = false;
-	whereChildCandidateAnswer = -1;
 	whereQuestionTypeObject = -1;
 }
 

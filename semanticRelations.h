@@ -216,7 +216,6 @@ public:
 	__int64 questionType;
 	int whereQuestionType;
 	int whereQuestionTypeObject;
-	int whereChildCandidateAnswer;
 	int sentenceNum;
 	int printMin;
 	int printMax;

@@ -80,12 +80,14 @@ public:
 	}
 	bool read(IOHANDLE file)
 	{
-		_read(file,&count,sizeof(count));
+		if (_read(file, &count, sizeof(count)) < sizeof(count))
+			return false;
 		allocated=count;
 		content=(int *)tmalloc(count*sizeof(*content));
 		if (!content) 
       lplog(LOG_FATAL_ERROR,L"OUT OF MEMORY (10)");
-		_read(file,content,count*sizeof(*content));
+		if (_read(file, content, count * sizeof(*content)) < count * sizeof(*content))
+			return false;
 		return true;
 	}
 	bool write(void *buffer,int &where,unsigned int limit)

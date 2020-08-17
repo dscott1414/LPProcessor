@@ -45,6 +45,7 @@ public:
 			cSpaceRelation* sri;
 			int equivalenceClass;
 			int ws, wo, wp; // used to differentiate compound nouns
+			int whereChildCandidateAnswer;
 			bool finalAnswer;
 			bool subQueryMatch;
 			bool subQueryExisted;
@@ -80,6 +81,7 @@ public:
 				subQueryMatch = false;
 				subQueryExisted = false;
 				numIdenticalAnswers = 0;
+				whereChildCandidateAnswer = 0;
 			}
 		};
 		class cSemanticMatchInfo

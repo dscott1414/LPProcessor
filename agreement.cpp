@@ -2986,7 +2986,7 @@ int cSource::evaluateVerbObjects(cPatternMatchArray::tPatternMatch *parentpm,cPa
 			lplog(L"          %d:verb is passive in pattern %s[%s] - skipping.",position,patterns[pm->getPattern()]->name.c_str(),patterns[pm->getPattern()]->differentiator.c_str());
 		return 0;
 	}
-	int whereObjectTag=findTag(tagSet,L"OBJECT",nextObjectTag);
+	int whereObjectTag = findTag(tagSet, L"OBJECT", nextObjectTag);
 	// hObjects are for use with _VERB_BARE_INF - I make/made you approach him, where there is only a relationship between the subject (I) and (you)
 	//int wherehObjectTag=findOneTag(tagSet,L"HOBJECT",-1); this is incorrect - the main verb doesn't have the hobject as an object, leading to incorrect cost assessment.
 	//if (wherehObjectTag>=0)
@@ -4121,7 +4121,7 @@ int cSource::eliminateLoserPatterns(unsigned int begin,unsigned int end)
 					{
 						m[bp].lastWinnerLACAACMatchPMAOffset = -1;
 						if (debugTrace.tracePatternElimination)
-							lplog(L"%d:%s[%s](%d,%d) PHASE 4 Marked lastWinnerLACAACMatchPMAOffset to -1.", bp, patterns[pm->getPattern()]->name.c_str(), patterns[pm->getPattern()]->differentiator.c_str(), position, pm->len + position);
+							lplog(L"%d:%s[%s](%d,%d) PHASE 6 Marked lastWinnerLACAACMatchPMAOffset to -1.", bp, patterns[pm->getPattern()]->name.c_str(), patterns[pm->getPattern()]->differentiator.c_str(), position, pm->len + position);
 					}
 			}
 		m[position].maxMatch = 0;

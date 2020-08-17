@@ -9,7 +9,7 @@ void createSecondaryPatterns1(void);
 int createSecondaryPatterns2(void);
 void createQuestionPatterns(void);
 
-#define SOURCE_VERSION 6
+#define SOURCE_VERSION 7 // increment on any format or pattern change
 /*
 EXAMPLE
 cPattern::create(L"XX{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"Y",
@@ -448,13 +448,6 @@ public:
     int elementHasTagInSet(unsigned char cPatternElement,unsigned char patternIndex,unsigned int desiredTagSetNum,unsigned int &tagNumBySet,bool isPattern);
     bool elementHasTag(unsigned char cPatternElement,unsigned char patternIndex,int tag,bool isPattern);
     int hasTagInSet(int desiredTagSetNum,unsigned int &tag);
-    int generateTags(bool blocking,bool repeat,int desiredTagSetNum,vector <unsigned int> futureParentElements,
-        vector   <cTagLocation> tagSet,vector <wstring> words,vector < vector <cTagLocation> > &tagSets,vector < vector <wstring> > &wordSets,int  position,int loopCounter);
-    void addGeneratedPatterns(int p,int originalTagSetSize,bool   blocking,bool   repeat,int desiredTagSetNum,vector <unsigned int>   futureParentElements,
-        vector   <cTagLocation> tagSet,vector <wstring> words,vector < vector <cTagLocation> > &tagSets,vector < vector <wstring> > &wordSets,int  position);
-    void addGeneratedPatternsRecursively(int p,int originalTagSetSize,bool    blocking,bool   repeat,int desiredTagSetNum,vector <unsigned int>   futureParentElements,
-        vector   <cTagLocation> tagSet,vector <wstring> words,vector < vector <cTagLocation> > &tagSets,vector < vector <wstring> > &wordSets,int  position,int loopCounter);
-    void evaluateAllTagPatternsForAgreement(unsigned int desiredTagSetNum);
     void setAncestorPatterns(int childPattern);
     void establishMandatoryChildPatterns(void);
     void setMandatoryAncestorPatterns(int childPattern);

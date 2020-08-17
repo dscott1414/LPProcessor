@@ -218,7 +218,7 @@ int createNouns(void)
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE}", L"MTHAN",
 		1, L"_ADJECTIVE", 0, 1, 1,
 		1, L"preposition|than*-1", 0, 1, 1,
-		2, L"_NOUN_OBJ{OBJECT}", L"__NOUN[*]{OBJECT}", 0, 1, 1,
+		3, L"_NOUN_OBJ{OBJECT}", L"__NOUN[*]{OBJECT}", L"__VERBALPHRASENOUN[*]{OBJECT}", 0, 1, 1,
 		0);
 	// this also encourages a word identified as both adverb and adjective to be an adverb if identified before an adjective.
 	// the more adjectives repeated, the more uncommon - taken out - discourages nouns taking on adjectives
@@ -493,55 +493,55 @@ int createNouns(void)
 	// black beans and head lettuce
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:PLURAL:MPLURAL:MNOUN:_BLOCK}",L"J",
 										1,L"predeterminer|both*-1",0,0,1,
-										2,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ",0,1,1,
+										3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ", L"__VERBALPHRASENOUN[*]{OBJECT}", 0,1,1,
 										2,L"coordinator|and",L"&",0,1,1,
 										1,L"not",0,0,1, // I want to be the party that pulls the wires and not the figures *that* dance on the front of the stage .
-										3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"__NOUNREL{MOBJECT}",0,1,1,
+										4,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"__NOUNREL{MOBJECT}", L"__VERBALPHRASENOUN[*]{OBJECT}", 0,1,1,
 										1, L"predeterminer|both*-1", 0, 0, 1,
 										0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:SINGULAR:MNOUN:_BLOCK}",L"O",
 										1,L"quantifier|either*-3",0,0,1,
-										3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"_PP",0,1,1, // he had to make the journey between the drydock and his shop *either* by automobile or aeroplane .
+										4,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"_PP", L"__VERBALPHRASENOUN[*]{MOBJECT}",0,1,1, // he had to make the journey between the drydock and his shop *either* by automobile or aeroplane .
 										1,L"coordinator|or",0,1,1,
-										3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"__NOUNREL{MOBJECT}",0,1,1,0);
+										4,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"__NOUNREL{MOBJECT}", L"__VERBALPHRASENOUN[*]{MOBJECT}",0,1,1,0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:PLURAL:MNOUN:_BLOCK}", L"P",
 										1, L"quantifier|neither*-4", 0, 0, 1,
-										2, L"__NOUN[*]{MOBJECT}", L"_NOUN_OBJ{MOBJECT}", 0, 1, 1,
+										3, L"__NOUN[*]{MOBJECT}", L"_NOUN_OBJ{MOBJECT}", L"__VERBALPHRASENOUN[*]{MOBJECT}", 0, 1, 1,
 										1, L"coordinator|nor", 0, 1, 1,
-										3, L"__NOUN[*]{MOBJECT}", L"_NOUN_OBJ{MOBJECT}", L"__NOUNREL{MOBJECT}", 0, 1, 1, 0);
+										4, L"__NOUN[*]{MOBJECT}", L"_NOUN_OBJ{MOBJECT}", L"__NOUNREL{MOBJECT}", L"__VERBALPHRASENOUN[*]{MOBJECT}", 0, 1, 1, 0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:SINGULAR:not:MNOUN:_BLOCK}",L"7",
 										1,L"adverb|neither*-2",0,0,1,
-										2,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",0,1,1,
+										3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}", L"__VERBALPHRASENOUN[*]{MOBJECT}", 0,1,1,
 										1,L"coordinator|nor",0,1,1,
-										3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"__NOUNREL{MOBJECT}",0,1,1,0);
+										4,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"__NOUNREL{MOBJECT}", L"__VERBALPHRASENOUN[*]{MOBJECT}", 0,1,1,0);
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:SINGULAR:MNOUN:_BLOCK}",L"A",
 										1,L"adverb|neither*-2",0,0,1,
-										2,L"__NOUN[*]{not:MOBJECT}",L"_NOUN_OBJ{not:MOBJECT}",0,1,1,
+										3,L"__NOUN[*]{not:MOBJECT}",L"_NOUN_OBJ{not:MOBJECT}", L"__VERBALPHRASENOUN[*]{MOBJECT}", 0,1,1,
 										1,L"coordinator|nor",0,1,1,
-										3,L"__NOUN[*]{not:MOBJECT}",L"_NOUN_OBJ{not:MOBJECT}",L"__NOUNREL{not:MOBJECT}",0,1,1,
+										4,L"__NOUN[*]{not:MOBJECT}",L"_NOUN_OBJ{not:MOBJECT}",L"__NOUNREL{not:MOBJECT}", L"__VERBALPHRASENOUN[*]{MOBJECT}", 0,1,1,
 										1,L",",0,0,1,
 										1,L"conjunction|but*-2",0,1,1,
-										3,L"__NOUN[*]{but:MOBJECT}",L"_NOUN_OBJ{but:MOBJECT}",L"__NOUNREL{but:MOBJECT}",0,1,1,
+										4,L"__NOUN[*]{but:MOBJECT}",L"_NOUN_OBJ{but:MOBJECT}",L"__NOUNREL{but:MOBJECT}", L"__VERBALPHRASENOUN[*]{MOBJECT}", 0,1,1,
 										0);
 	// beans, |  he,
 	cPattern::create(L"__NOUN_S1",L"",
 														1,L"coordinator",0,0,1,
-														2,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",0,1,1,
+														3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}", L"__VERBALPHRASENOUN[*]{MOBJECT}", 0,1,1,
 														1,L"__INTERPPB[*]{_BLOCK}",0,0,1, 
 														1,L",",0,1,1,0);
 	// black beans, head lettuce, horribly rotten bananas and cheese
 	// black beans, and head lettuce, horribly rotten bananas and cheese
 	// N1, N2, N3, and N4 and N5. // N4 and N5 is a NOUN[J]
 	cPattern::create(L"__MNOUN{_FINAL_IF_ALONE:PLURAL:MPLURAL:MNOUN:_BLOCK}",L"Y",
-												 2,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",0,1,1,
+												 3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}", L"__VERBALPHRASENOUN[*]{MOBJECT}", 0,1,1,
 												 1,L"__INTERPPB[*]{_BLOCK}",0,0,1, 
 												 1,L",",0,1,1,
 												 1,L"__NOUN_S1",0,0,4,
-												 2,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",0,1,1,
+												 3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}", L"__VERBALPHRASENOUN[*]{MOBJECT}", 0,1,1,
 												 1,L"__INTERPPB[*]{_BLOCK}",0,0,1, 
 												 1,L",",0,0,1,
 												 1,L"coordinator",0,1,1,
-												 3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"__NOUNREL{MOBJECT}",0,1,1,0);
+												 4,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"__NOUNREL{MOBJECT}", L"__VERBALPHRASENOUN[*]{MOBJECT}", 0,1,1,0);
 	// black beans, and head lettuce, horribly rotten bananas, and cheese // note extra comma which should be rare
 		// this extra cost makes it less likely that this pattern will match the object of a verb and a
 		// relativizer which most likely is the start of a relative phrase.
@@ -549,16 +549,16 @@ int createNouns(void)
 	// EMNOUN is the only case where extra cost is not required because in this case the , is used to offset
 	//   a subchained compound noun at the end (Faust and Meph).
 	cPattern::create(L"__EMNOUN{_FINAL_IF_ALONE:PLURAL:MPLURAL:MNOUN:_BLOCK}",L"",
-										2,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ",0,1,1,
+										3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ", L"__VERBALPHRASENOUN[*]{MOBJECT}",0,1,1,
 										2,L"coordinator|and",L"&",0,1,1,
-										3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"__NOUNREL{MOBJECT}",0,1,1,0);
+										4,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",L"__NOUNREL{MOBJECT}", L"__VERBALPHRASENOUN[*]{MOBJECT}",0,1,1,0);
 	cPattern::create(L"__MNOUN{_FINAL_IF_ALONE:PLURAL:MPLURAL:MNOUN:_BLOCK}",L"Z",
-												 2,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}",0,1,1,
+												 3,L"__NOUN[*]{MOBJECT}",L"_NOUN_OBJ{MOBJECT}", L"__VERBALPHRASENOUN[*]{MOBJECT}", 0,1,1,
 												 1,L"__INTERPPB[*]{_BLOCK}",0,0,1, 
 												 1,L",",0,1,1, // The tea came at last, and Tuppence, rousing herself ...
 												 1,L"__NOUN_S1",0,0,4,
 												 1,L"coordinator",0,1,1,
-												 4,L"__NOUN[*]*3{MOBJECT}",L"_NOUN_OBJ*3{MOBJECT}",L"__NOUNREL*3{MOBJECT}",L"__EMNOUN{MOBJECT}",0,1,1,0);
+												 5,L"__NOUN[*]*3{MOBJECT}",L"_NOUN_OBJ*3{MOBJECT}",L"__NOUNREL*3{MOBJECT}",L"__EMNOUN{MOBJECT}", L"__VERBALPHRASENOUN[*]{MOBJECT}", 0,1,1,0);
 	// my son of the east Village (PP)
 	// anxiety which underlay his tone (REL1)
 	// the right to lay down arms (INFP)
@@ -605,7 +605,7 @@ int createNouns(void)
 	cPattern::create(L"__NOUN{_FINAL_IF_ALONE}",L"B",
 										1,L"_ADJECTIVE",0,0,3,
 										1,L"quotes",OPEN_INFLECTION,1,1,
-										3,L"__NOUN[*]*2",L"__MNOUN[*]*2",L"_NAME",0,1,1, // quoted nouns should be rare in general
+										4,L"__NOUN[*]*2",L"__MNOUN[*]*2",L"_NAME", L"__VERBALPHRASENOUN[*]", 0,1,1, // quoted nouns should be rare in general
 										1,L"adverb",0,0,1, // her " afternoon out . "
 										2,L",*2",L".",0,0,1, // *s discourages match of “ *Send* for the lookout , ” ordered Tom . 
 										1,L"quotes",CLOSE_INFLECTION,1,1,0);
@@ -613,7 +613,7 @@ int createNouns(void)
 										7,L"determiner{DET}",L"demonstrative_determiner{DET}",L"possessive_determiner{DET}",L"interrogative_determiner{DET}",L"quantifier{DET}",L"__HIS_HER_DETERMINER*1",L"_NAMEOWNER{DET}",0,1,1,
 										1,L"_ADJECTIVE",0,0,3,
 										1,L"quotes",OPEN_INFLECTION,1,1,
-										3,L"__NOUN[*]*-1",L"__MNOUN[*]",L"_NAME{GNOUN:NAME}",0,1,1, // compensate for possible missing determiner cost from internal __NOUN
+										4,L"__NOUN[*]*-1",L"__MNOUN[*]",L"_NAME{GNOUN:NAME}", L"__VERBALPHRASENOUN[*]",0,1,1, // compensate for possible missing determiner cost from internal __NOUN
 										1,L"adverb",0,0,1, // her " afternoon out . "
 										2,L",",L".",0,0,1,
 										1,L"quotes",CLOSE_INFLECTION,1,1,0);
@@ -1088,7 +1088,7 @@ int createBasicPatterns(void)
 	cPattern::create(L"__ADJECTIVE{_FINAL_IF_ALONE}", L"MTHAN",
 		1, L"_ADJECTIVE", 0, 1, 1,
 		1, L"preposition|than", 0, 1, 1,
-		4, L"_NOUN_OBJ{SUBOBJECT}", L"__NOUN[*]{SUBOBJECT}", L"__NOUNREL{SUBOBJECT}", L"__S1*2{BLOCK:EVAL}", 0, 1, 1,    // I shall treat you **worse than I have yet **. / he was only a year **older than I** am at present .
+		5, L"_NOUN_OBJ{SUBOBJECT}", L"__NOUN[*]{SUBOBJECT}", L"__NOUNREL{SUBOBJECT}", L"__S1*2{BLOCK:EVAL}", L"__VERBALPHRASENOUN[*]{SUBOBJECT}", 0, 1, 1,    // I shall treat you **worse than I have yet **. / he was only a year **older than I** am at present .
 		0);
 	cPattern::create(L"__ADJECTIVE{_FINAL_IF_ALONE}", L"QN",
 		1, L"quotes", OPEN_INFLECTION, 1, 1,
@@ -1229,20 +1229,20 @@ int createBasicPatterns(void)
 	// , from the very first,
 	cPattern::create(L"__INTERPP",L"1",
 									 1,L",*2",0,1,1, // a cost so that this doesn't interfere with commas used for compound adverbs, adjectives, and nouns
-									 6, L"_PP", L"__NOUN[*]*1",L"interjection",L"conjunction",L"_VERBREL1", L"_ADVERB",0,1,1,
+									 7, L"_PP", L"__NOUN[*]*1",L"interjection",L"conjunction",L"_VERBREL1", L"_ADVERB", L"__VERBALPHRASENOUN", 0,1,1,
 									 1,L",",0,1,1,
 									 0);
 	cPattern::create(L"__INTERPP",L"2",
 									 1,L",",0,1,1,
-									 4,L"__NOUN[*]",L"_PP",L"interjection",L"conjunction",0,1,1,
+									 5,L"__NOUN[*]",L"_PP",L"interjection",L"conjunction", L"__VERBALPHRASENOUN", 0,1,1,
 									 1,L",",0,1,1,
-									 4,L"__NOUN[*]",L"_PP",L"interjection",L"conjunction",0,1,1,
+									 5,L"__NOUN[*]",L"_PP",L"interjection",L"conjunction", L"__VERBALPHRASENOUN", 0,1,1,
 									 1,L",",0,1,1,
 									 0);
 	// Rafid Ahmed Alwan al-Janabi (Arabic: رافد أحمد علوان‎, Rāfid Aḥmad Alwān; born 1968), known 
 	cPattern::create(L"__INTERPPB",L"3",
 									 1,L"brackets",OPEN_INFLECTION,1,1,
-									 10,L"__NOUN[*]",L"_PP",L"__S1{_BLOCK}",L"_ADJECTIVE[*]",L"interjection",L"conjunction",L"coordinator",L":",L",",L";",0,1,5,
+									 11,L"__NOUN[*]",L"_PP",L"__S1{_BLOCK}",L"_ADJECTIVE[*]",L"interjection",L"conjunction",L"coordinator",L":",L",",L";", L"__VERBALPHRASENOUN", 0,1,5,
 									 1,L"brackets",CLOSE_INFLECTION,1,1,
 									 0);
 	cPattern::create(L"__INTERPP",L"4",
@@ -2302,7 +2302,7 @@ void createSecondaryPatterns1(void)
 																			 // then reprocess later to analyze which prepositions actually belong with their verbs.
 																			 // __PP already has an adverb as the first element.
 						1, L"_ADVERB", 0, 0, 1, // I seemed for him *almost* a recluse.
-						5,L"_NOUN_OBJ{OBJECT}",L"__NOUN[*]{OBJECT}",L"__MNOUN[*]{OBJECT}",L"__NOUNREL*3{OBJECT}",L"__NOUNRU{OBJECT}",0,1,1,
+						6,L"_NOUN_OBJ{OBJECT}",L"__NOUN[*]{OBJECT}",L"__MNOUN[*]{OBJECT}",L"__NOUNREL*3{OBJECT}",L"__NOUNRU{OBJECT}", L"__VERBALPHRASENOUN[*]{OBJECT}", 0,1,1,
 						0);
 	// I want to remember to thank Mrs. Smith for taking us back today.
 	// the kind of man who would be afraid to meet death!
@@ -2324,9 +2324,9 @@ void createSecondaryPatterns1(void)
 																			 // L"hang up" the phone and L"hang" up the phone, so resolve to a prepositional phrase and
 																			 // then reprocess later to analyze which prepositions actually belong with their verbs.
 																			 // __PP already has an adverb as the first element.
-						3,L"_NOUN_OBJ{OBJECT}",L"__NOUN[*]{OBJECT}",L"__MNOUN[*]{OBJECT}",0,1,1,
+						4,L"_NOUN_OBJ{OBJECT}",L"__NOUN[*]{OBJECT}",L"__MNOUN[*]{OBJECT}", L"__VERBALPHRASENOUN[*]{OBJECT}", 0,1,1,
 						2,L"_ADVERB*1",L"preposition*2",0,0,1, // hanging preposition!
-						4,L"_NOUN_OBJ{OBJECT}",L"__NOUN[*]{OBJECT}",L"__MNOUN[*]{OBJECT}",L"__NOUNREL{OBJECT}",0,1,1,
+						4,L"_NOUN_OBJ{OBJECT}",L"__NOUN[*]{OBJECT}",L"__MNOUN[*]{OBJECT}",L"__NOUNREL{OBJECT}",0,1,1, // missing "__VERBALPHRASENOUN"?
 						0);
 	// It left her flushed and silent.
 	cPattern::create(L"__ALLOBJECTS_2", L"2",
@@ -2368,14 +2368,14 @@ void createSecondaryPatterns1(void)
 	cPattern::create(L"_VERBREL1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_BLOCK:EVAL}",L"2",
 									 2,L"_PRE_VR1",L"politeness_discourse_marker",0,0,1,
 									 1,L"__ALLTHINK*1{VERB}",0,1,1, // L"think" for all active tenses! - possibly add INTRO_S1.
-									 2,L"__NOUN[*]{OBJECT}",L"_NOUN_OBJ{OBJECT}",0,0,1,
+									 2,L"__NOUN[*]{OBJECT}",L"_NOUN_OBJ{OBJECT}",0,0,1, // missing "__VERBALPHRASENOUN"?
 									 1,L"__S1{OBJECT:EVAL:_BLOCK}",0,1,1,
 									 1,L"_NAME_INJECT",0,0,1,
 									 0);
 	// only after quotes
 	cPattern::create(L"_VERBREL1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_BLOCK:EVAL:_AFTER_QUOTE}",L"3",
 									 1,L"_VERBPAST",0,1,1,  
-									 2,L"__NOUN[*]{SUBJECT}",L"__NOUNREL{SUBJECT}",0,1,1, 
+									 2,L"__NOUN[*]{SUBJECT}",L"__NOUNREL{SUBJECT}",0,1,1, // missing "__VERBALPHRASENOUN"?
 									 0);
 	// another voice which *Tommy rather thought* was that of Boris replied:
 	cPattern::create(L"_SUBREL2{_BLOCK}",L"",
@@ -2466,7 +2466,7 @@ void createSecondaryPatterns1(void)
 									 1,L"__PVERBREL2",0,1,1,
 									 2,L"_PP",L"_REL1[*]",0,0,1,
 									 // verbs in passive clauses only have one object maximum
-									 5,L"__NOUN[*]{OBJECT}",L"__MNOUN[*]{OBJECT}",L"_NOUN_OBJ{OBJECT}",L"__NOUNREL{OBJECT}",L"_ADJECTIVE",0,0,1,
+									 5,L"__NOUN[*]{OBJECT}",L"__MNOUN[*]{OBJECT}",L"_NOUN_OBJ{OBJECT}",L"__NOUNREL{OBJECT}",L"_ADJECTIVE",0,0,1,// missing "__VERBALPHRASENOUN"?
 									 1,L"_ADVERB",0,0,1,
 									 0);
 }
@@ -2558,16 +2558,16 @@ void createPrepositionalPhrases(void)
 									 1,L"preposition{P}",0,0,1, // from within - complex prepositions
 									 1,L"_ADVERB*3",0,0,1, // I haven't seen you for SIMPLY centuries, my dear. // adverbial use should be rare - prefer adjectives attached to the nouns over adverbs.
 									 // Under the original act, how many judges were to be on the court? - __NOUNREL should have at least a cost of 2 because it matches too much (with its comma)
-									 8, L"personal_pronoun_nominative|i*6", L"personal_pronoun_nominative|we*6", L"_NOUN_OBJ{PREPOBJECT}",L"__NOUN[*]{PREPOBJECT}",L"__MNOUN[*]{PREPOBJECT}",L"__NOUNREL*4{PREPOBJECT}",L"_ADJECTIVE[*]*4",L"__NOUNRU{PREPOBJECT}",0,1,1,  // _NOUN* includes NOUN[D] and NOUN[E]
+									 9, L"personal_pronoun_nominative|i*6", L"personal_pronoun_nominative|we*6", L"_NOUN_OBJ{PREPOBJECT}",L"__NOUN[*]{PREPOBJECT}",L"__MNOUN[*]{PREPOBJECT}",L"__NOUNREL*4{PREPOBJECT}",L"_ADJECTIVE[*]*4",L"__NOUNRU{PREPOBJECT}", L"__VERBALPHRASENOUN[*]{PREPOBJECT}", 0,1,1,  
 									 0);
 	// The pursuit of managers and of players had *left* her continually alone .
 	cPattern::create(L"_PP{_FINAL_IF_ALONE:_BLOCK:PREP:_NO_REPEAT}", L"2C",
 										2, L"_ADVERB*1", L"adjective*1", 0, 0, 1, 
 										1, L"preposition|of{P}", 0, 1, 1,  
-										1, L"__NOUN[*]{PREPOBJECT}", 0, 1, 1,
+										2, L"__NOUN[*]{PREPOBJECT}", L"__VERBALPHRASENOUN[*]{PREPOBJECT}", 0, 1, 1,
 										1, L"coordinator",0,1,1,
 										1, L"preposition|of{P}", 0, 1, 1,  
-										1, L"__NOUN[*]{PREPOBJECT}", 0, 1, 1,
+										2, L"__NOUN[*]{PREPOBJECT}", L"__VERBALPHRASENOUN[*]{PREPOBJECT}", 0, 1, 1,
 										0);
 	// We are nearer to finding Tuppence.
 	//  This is not an infinitive phrase.  'to' is a participle, and finding is an verb with a subject Tuppence
@@ -2645,7 +2645,7 @@ int createSecondaryPatterns2(void)
 	// this woman, master of disguise,
 	cPattern::create(L"__C1_IP{_BLOCK:EVAL}",L"3",
 									 1,L",",0,1,1,
-									 3,L"__NOUN[*]{_BLOCK:RE_OBJECT:NAME_SECONDARY}",L"__MNOUN[*]{_BLOCK:RE_OBJECT:NAME_SECONDARY}",L"_REL1[*]",0,1,1,
+									 4,L"__NOUN[*]{_BLOCK:RE_OBJECT:NAME_SECONDARY}",L"__MNOUN[*]{_BLOCK:RE_OBJECT:NAME_SECONDARY}",L"_REL1[*]", L"__VERBALPHRASENOUN[*]{_BLOCK:RE_OBJECT}", 0,1,1,
 									 1,L",",0,1,1, // period deleted because of the '.' at end - swallows up the period
 									 0);
 	// This woman, as an American, would always prevail.
@@ -2674,7 +2674,7 @@ int createSecondaryPatterns2(void)
 	// parsed as a VERB clause, which then is more expensive.
 	cPattern::create(L"__C1__S1",L"1",
 				1,L"__INTRO_NP",0,0,1,
-				16,L"__NOUN[*]{SUBJECT}",L"__MNOUN[*]{SUBJECT}",L"_INFP*2{GNOUN:SINGULAR:SUBJECT}",L"interrogative_pronoun{N_AGREE:SINGULAR:SUBJECT}",
+				17,L"__NOUN[*]{SUBJECT}",L"__MNOUN[*]{SUBJECT}",L"_INFP*2{GNOUN:SINGULAR:SUBJECT}",L"interrogative_pronoun{N_AGREE:SINGULAR:SUBJECT}",
 						L"interrogative_determiner{N_AGREE:SINGULAR:SUBJECT}", 
 						L"there*-1{N_AGREE:SINGULAR:PLURAL:SUBJECT}",L"adverb|here*-1{N_AGREE:SINGULAR:PLURAL:SUBJECT}",
 						L"quantifier|neither{N_AGREE:PLURAL:SUBJECT}", L"quantifier|either*-1{N_AGREE:SINGULAR:SUBJECT}",
@@ -2682,7 +2682,7 @@ int createSecondaryPatterns2(void)
 						L"adjective*2{SUBJECT:GNOUN}", // **few** are the mortals to whom we give this lovely gift / **such** was not the case / **above** played the clear , soft light / **hers** is organic
 						L"_ADJECTIVE*10{SUBJECT:GNOUN}",
 						L"_VERBREL2*2{SUBJECT:GNOUN:SINGULAR:_BLOCK:EVAL}",L"__QSUBJECT{SUBJECT:GNOUN:SINGULAR}",L"__NOUNRU{SUBJECT}",
-						L"noun{SUBJECT:N_AGREE}",SINGULAR_OWNER|PLURAL_OWNER,1,1, // Poirot's were pleasantly vague .
+						L"noun{SUBJECT:N_AGREE}", L"__VERBALPHRASENOUN[*]{SUBJECT}", SINGULAR_OWNER|PLURAL_OWNER,1,1, // Poirot's were pleasantly vague .
 			 1,L"__INTERPPB",0,0,1,
 			 1,L"__C1_IP",0,0,1, // her father, Neptune, lives in a beautiful castle
 			0);
@@ -2889,7 +2889,7 @@ int createSecondaryPatterns2(void)
 	// __NOUN[D], __NOUN[E], and __NOUN[F] will function as subjects or objects by themselves.
 	// they are split this way so that only "E" and "F" are checked for _AGREEMENT, and only "D" and "F" are checked for verb usage.
 	// Otherwise, excessive time is wasted.
-	cPattern::create(L"__NOUN{_FINAL_IF_ALONE:_BLOCK:GNOUN:VNOUN}",L"D",
+	cPattern::create(L"__VERBALPHRASENOUN{_FINAL_IF_ALONE:_BLOCK:GNOUN:VNOUN}",L"D",
 									 1,L"_VERBONGOING*1{VERB:vE}",0,1,1,  // from C2__S1 - also matches _N1// this pattern should not be common
 									 //1,L"_INFP{OBJECT}",0,0,1,         // from C2__S1   RINFP 6/7/06
 									 //1,L"_PP",0,0,1,         // from C2__S1 - __PP after noun is absorbed into the noun itself through NOUN 9
@@ -2898,7 +2898,7 @@ int createSecondaryPatterns2(void)
 									 1,L"__ADJECTIVE",0,0,1,
 									 0);
 	// I can't help *wishing my legs were like Mr . Grouse's *. 
-	cPattern::create(L"__NOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}", L"D2",
+	cPattern::create(L"__VERBALPHRASENOUN{_BLOCK:_EXPLICIT_SUBJECT_VERB_AGREEMENT:NOUN:_CHECK_IGNORABLE_FORMS}", L"D2",
 									1, L"SYNTAX:Accepts S as Object{vS:V_OBJECT}", VERB_PRESENT_PARTICIPLE, 1, 1,
 									3, L"_NOUN_OBJ*1", L"__NOUN[*]*1", L"_PP*2", 0, 0, 1, // telling me you were with monsieur Poirot. 
 									2, L"_ADJECTIVE", L"_ADVERB", 0, 0, 1, // feeling confident he was there.
@@ -3034,7 +3034,7 @@ int createSecondaryPatterns2(void)
 										1, L"__C1__S1", 0, 1, 1,
 										1, L"__ALLTHINK{VERB}", 0, 1, 1, // L"think" for all active tenses! - possibly add INTRO_S1.
 										// removed OBJECT from _NOUN as this will cause IS to have two objects (including the one from _S1) which is wrong and will cause elimination of this pattern
-										3, L"_NOUN_OBJ", L"__NOUN[*]", L"_PP",0, 0, 1, // Lawrence told *me* you were with monsieur Poirot. /  She felt confident he was there.
+										4, L"_NOUN_OBJ", L"__NOUN[*]", L"_PP", L"__VERBALPHRASENOUN", 0, 0, 1, // Lawrence told *me* you were with monsieur Poirot. /  She felt confident he was there.
 										2, L"_ADJECTIVE", L"_ADVERB",0,0,1,  // I tell you frankly, she would hate you.
 										3, L"demonstrative_determiner|that{S_IN_REL}", L"quantifier|all*-2",L",",0, 0, 1,
 										// __VERBREL2 below: she has long forgotten having given me an invitation . 
@@ -3089,7 +3089,7 @@ int createSecondaryPatterns2(void)
 	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"M4",
 										1, L"__C1__S1", 0, 1, 1,
 										4, L"verb|make{VERB:vS:id}", L"_WOULDMAKE", L"_HAVEBEENMAKING", L"_COULDHAVEBEENMAKING", 0, 1, 1,
-										2, L"_NOUN_OBJ", L"__NOUN[*]", 0, 1, 1, // Lawrence told me you were with monsieur Poirot. 
+										3, L"_NOUN_OBJ", L"__NOUN[*]", L"__VERBALPHRASENOUN", 0, 1, 1, // Lawrence told me you were with monsieur Poirot. 
 										1, L"_ADJECTIVE", 0, 1, 1, 
 										3, L"_PP", L"_ADVERB", L"demonstrative_determiner|that{S_IN_REL}", 0, 0, 2,
 										1, L"__S1[*]*1{_BLOCK:OBJECT:EVAL}", 0, 1, 1, 
@@ -3475,14 +3475,14 @@ int createSecondaryPatterns2(void)
 						1,L",",0,0,1,
 						2,L"_DO{imp}",L"_INTROCOMMAND1",0,0,1,
 						1,L"_BE{VERB:vS:id}",0,1,1,
-						5,L"__NOUN[*]{OBJECT}",L"_NOUN_OBJ{OBJECT}",L"__NOUNREL{OBJECT}",L"_VERBPASTPART",L"_ADJECTIVE",0,0,1,0);
+						6,L"__NOUN[*]{OBJECT}",L"_NOUN_OBJ{OBJECT}",L"__NOUNREL{OBJECT}",L"_VERBPASTPART",L"_ADJECTIVE", L"__VERBALPHRASENOUN[*]{OBJECT}",0,0,1,0);
 	// make Ben help me.
 	cPattern::create(L"_COMMAND1{_FINAL:_ONLY_BEGIN_MATCH}",L"2",
 						2,L"_ADVERB",L"_NAME",0,0,1, // pray / please / Yes (ADVERB) / Tommy
 						1,L",",0,0,1,
 						1,L"_INTROCOMMAND1",0,0,1,
 						1,L"verbverb{vS:V_HOBJECT}",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_SECOND_SINGULAR|VERB_PRESENT_PLURAL,1,1,
-						3,L"_NOUN_OBJ{HOBJECT}",L"__NOUN[*]{HOBJECT}",L"__MNOUN[*]{HOBJECT}",0,1,1,
+						4,L"_NOUN_OBJ{HOBJECT}",L"__NOUN[*]{HOBJECT}",L"__MNOUN[*]{HOBJECT}", L"__VERBALPHRASENOUN[*]{HOBJECT}",0,1,1,
 						2,L"_ADVERB",L"_PP",0,0,2,
 						1,L"_VERBPRESENT{VERB}",0,1,1,
 						3,L"__ALLOBJECTS_0",L"__ALLOBJECTS_1",L"__ALLOBJECTS_2",0,0,1, // there must only be one adjective and it must be last (not mixed in) see *
@@ -3804,7 +3804,7 @@ int createSecondaryPatterns2(void)
 												1,L"adverb|more",0,1,1,
 												1, L"adverb*1", 0, 0, 1, // he will hate us *more heartily than ever now *. 
 												1,L"preposition|than",0,1,1,
-												4,L"__S1{_BLOCK:EVAL}",L"__NOUN",L"__MNOUN",L"_ADVERB",0,1,1, // _ADVERB=*ever now*
+												5,L"__S1{_BLOCK:EVAL}",L"__NOUN",L"__MNOUN",L"_ADVERB", L"__VERBALPHRASENOUN",0,1,1, // _ADVERB=*ever now*
 												0);
 	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_STRICT_NO_MIDDLE_MATCH}",L"4",
 											 1,L"_INTRO_S1",0,0,1,

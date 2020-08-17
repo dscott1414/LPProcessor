@@ -360,7 +360,7 @@ void cColumn::cEntry::logEntry(int logType, const wchar_t *tableName, int row, i
 wstring cColumn::cEntry::sprint(cSource *source,wstring &buffer)
 {
 	wstring phrase,whereStr, matchedQuestionObjectStr, synonymMatchedQuestionObjectStr;
-	source->phraseString(begin, begin + numWords, phrase, false).c_str();
+	source->phraseString(begin, begin + numWords, phrase, false);
 	itos(adaptiveWhere, whereStr);
 	itos(matchedQuestionObject.size(), matchedQuestionObjectStr);
 	itos(synonymMatchedQuestionObject.size(), synonymMatchedQuestionObjectStr);

@@ -65,7 +65,7 @@ void createQuestionPatterns(void)
 	// INTERROGATIVES p.803 CGEL
 	cPattern::create(L"_Q1{VERB}",L"A",
 									1,L"_COND",0,1,1,
-									1,L"__NOUN[*]{SUBJECT}",0,1,1,
+									2,L"__NOUN[*]{SUBJECT}", L"__VERBALPHRASENOUN[*]{SUBJECT}",0,1,1,
 									1,L"_ADVERB",0,0,2,
 									1,L"_HAVE",0,1,1,
 									2,L"_VERBPASTPART{vAB:V_OBJECT}",L"_BEEN{vAB:id}",0,1,1,
@@ -81,7 +81,7 @@ void createQuestionPatterns(void)
 	cPattern::create(L"_Q1S{_FINAL_IF_ALONE}", L"3",
 									2, L"have|had", L"have_negation|hadn't{not}", 0, 1, 1,
 									1, L"not",0,0,1,
-									3, L"_NOUN_OBJ{SUBJECT}", L"__NOUN[*]{SUBJECT}", L"__NOUNREL{SUBJECT}", 0, 1, 1,
+									4, L"_NOUN_OBJ{SUBJECT}", L"__NOUN[*]{SUBJECT}", L"__NOUNREL{SUBJECT}", L"__VERBALPHRASENOUN[*]{OBJECT}", 0, 1, 1,
 									1, L"not", 0, 0, 1,
 									2, L"adverb|better", L"adverb|best", 0, 1, 1,
 									1, L"not{not}", 0, 0, 1,
@@ -92,11 +92,15 @@ void createQuestionPatterns(void)
 									2,L"_VERBPRESENT",L"_BE{vS:V_OBJECT:id}",0,1,1,0);
 	// are you? // aren't you covered by a combination of 
 	// also covered by _Q2[F] __ALLOBJECTS, except __ALLOBJECTS are objects, and this is a subject (which is correct)
-	cPattern::create(L"_Q1",L"4", 
+	cPattern::create(L"_Q1",L"4",
+									1, L"_IS{VERB:vS:id}", 0, 1, 1,
+									1, L"__NOUN[*]{SUBJECT}", 0, 1, 1,
+									0);
+	cPattern::create(L"_Q2{_ONLY_BEGIN_MATCH:_FINAL_IF_ALONE}",L"4",
+									1, L"relativizer|when{QTYPE:OBJECT}", L"relativizer|why{QTYPE:OBJECT}", L"relativizer|how{QTYPE:OBJECT}", 0, 0, 1,
 									1,L"_IS{VERB:vS:id}",0,1,1,
 									1,L"__NOUN[*]{SUBJECT}",0,1,1, 
-									1,L"__ALLOBJECTS_1",0,0,1, // is he president? / now covered in _Q2[J] because allowing _Q1[4] to have its own object will
-									// allow the verb in a _Q2 to have two effective objects
+									1,L"__NOUN[*]{OBJECT}",0,1,1, // is he president? / also covered in _Q2[J] 
 									0);
 	// would you be running?
 	cPattern::create(L"_Q1{VERB}",L"5",
@@ -128,7 +132,7 @@ void createQuestionPatterns(void)
 		// do I go? / don't you be afraid //
 	cPattern::create(L"_Q1{VERB}",L"7",1,L"_ADVERB",0,0,1,
 									1,L"_DO*-2{imp}",0,1,1, // -4 is to encourage _VERBPRESENT from not becoming a noun (the object of _DO) in an _SQ or _Q2[G]
-									1,L"__NOUN[*]{SUBJECT}",0,1,1,
+									2,L"__NOUN[*]{SUBJECT}", L"__VERBALPHRASENOUN[*]{SUBJECT}", 0,1,1,
 									1,L"_ADVERB",0,0,2,
 									2,L"_VERBPRESENT",L"_BE{vS:V_OBJECT:id}",0,1,1,
 									0);
@@ -136,7 +140,7 @@ void createQuestionPatterns(void)
 	cPattern::create(L"_QT1{_FINAL_IF_ALONE:VERB}",L"7",
 									1,L"_ADVERB",0,0,1,
 									1,L"_DO{imp}",0,1,1,
-									1,L"__NOUN[*]{SUBJECT}",0,1,1,
+									2, L"__NOUN[*]{SUBJECT}", L"__VERBALPHRASENOUN[*]{SUBJECT}", 0, 1, 1,
 									1,L"_ADVERB",0,0,2,
 									1,L"_THINKPRESENTFIRST",0,1,1,
 									1,L"__S1{OBJECT:EVAL:_BLOCK}",0,1,1,
@@ -145,7 +149,7 @@ void createQuestionPatterns(void)
 	cPattern::create(L"_QT1{_FINAL_IF_ALONE:VERB}", L"B",
 									1, L"_ADVERB", 0, 0, 1,
 									1, L"_DO*-2{imp}", 0, 1, 1,
-									1, L"__NOUN[*]{SUBJECT}", 0, 1, 1,
+									2, L"__NOUN[*]{SUBJECT}", L"__VERBALPHRASENOUN[*]{SUBJECT}", 0, 1, 1,
 									1, L"verb|mean", 0, 1, 1,
 									1, L"_Q1[*]{OBJECT:EVAL:_BLOCK}", 0, 1, 1,
 									0);
@@ -155,7 +159,7 @@ void createQuestionPatterns(void)
 	cPattern::create(L"_QT1{_FINAL_IF_ALONE:VERB}", L"V",
 									1, L"_ADVERB", 0, 0, 1,
 									2, L"_DO{imp}", L"_COND", 0, 1, 1, // this is the only V_AGREE
-									1, L"__NOUN[*]{SUBJECT}", 0, 1, 1,
+									2, L"__NOUN[*]{SUBJECT}", L"__VERBALPHRASENOUN[*]{SUBJECT}", 0, 1, 1,
 									1, L"_ADVERB", 0, 0, 2,
 									// _VERB_BARE_INF - copied here because there are too many other BARE_INF that don't fit this pattern, and V_AGREE must be deleted
 									1, L"verbverb{vS:V_HOBJECT}", VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_SECOND_SINGULAR | VERB_PRESENT_THIRD_SINGULAR | VERB_PRESENT_PLURAL, 1, 1,
@@ -166,8 +170,8 @@ void createQuestionPatterns(void)
 									0);
 	// am/was I going? was I being?
 	// "C" structure of verb phrases from Quirk CGEL (3.54)
-	cPattern::create(L"_Q1{VERB}",L"8",
-									1,L"_IS",0,1,1,
+	cPattern::create(L"_Q1{_ONLY_BEGIN_MATCH:VERB}",L"8", // _ONLY_BEGIN_MATCH because this must not have a relativizer in front of it!
+									1,L"_IS",0,1,1,												// _Q1[8] must not match starting with the 'are' in: "what are the titles of the albums featuring Jay-Z?"
 									1,L"__NOUN[*]{SUBJECT}",0,1,1,
 									1,L"_ADVERB",0,0,2,
 									2,L"verb{vC:V_OBJECT}",L"being{vC:id:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
@@ -239,7 +243,7 @@ void createQuestionPatterns(void)
 	// INTERROGATIVES p.803 CGEL
 	cPattern::create(L"_Q1{VERB}",L"C",
 									1,L"_COND",0,1,1,
-									1,L"__NOUN[*]{SUBJECT}",0,1,1,
+									2, L"__NOUN[*]{SUBJECT}", L"__VERBALPHRASENOUN[*]{SUBJECT}", 0, 1, 1,
 									1,L"_ADVERB",0,0,2,
 									1,L"_BE{_BLOCK}",0,1,1,
 									3,L"verb{vAC:V_OBJECT}",L"does{vAC:V_OBJECT}",L"have{vAC:V_OBJECT}",VERB_PRESENT_PARTICIPLE,1,1,
@@ -248,7 +252,7 @@ void createQuestionPatterns(void)
 	// INTERROGATIVES p.803 CGEL
 	cPattern::create(L"_Q1{VERB}",L"D",
 									1,L"_COND",0,1,1,
-									1,L"__NOUN[*]{SUBJECT}",0,1,1,
+									2, L"__NOUN[*]{SUBJECT}", L"__VERBALPHRASENOUN[*]{SUBJECT}", 0, 1, 1,
 									1,L"_ADVERB",0,0,2,
 									1,L"_HAVE",0,1,1,
 									2,L"_VERBPASTPART{vAB:V_OBJECT}",L"_BEEN{vAB}",0,1,1,0);
@@ -256,7 +260,7 @@ void createQuestionPatterns(void)
 	// INTERROGATIVES p.803 CGEL
 	cPattern::create(L"_QT1{_FINAL_IF_ALONE:VERB}",L"D",
 									1,L"_COND",0,1,1,
-									1,L"__NOUN[*]{SUBJECT}",0,1,1,
+									2, L"__NOUN[*]{SUBJECT}", L"__VERBALPHRASENOUN[*]{SUBJECT}", 0, 1, 1,
 									1,L"_ADVERB",0,0,2,
 									1,L"_HAVE",0,1,1,
 									1,L"_THINKPASTPART{vAB}",0,1,1,
@@ -266,7 +270,7 @@ void createQuestionPatterns(void)
 	// INTERROGATIVES p.803 CGEL
 	cPattern::create(L"_Q1{VERB}",L"E",
 												1,L"_COND",0,1,1,
-												1,L"__NOUN[*]{SUBJECT}",0,1,1,
+												2, L"__NOUN[*]{SUBJECT}", L"__VERBALPHRASENOUN[*]{SUBJECT}", 0, 1, 1,
 												1,L"_ADVERB",0,0,1,
 												1,L"_HAVE",0,1,1, // {_BLOCK} removed 8/17 will block negation
 												1,L"_BEEN",0,1,1,
@@ -291,8 +295,8 @@ void createQuestionPatterns(void)
 	// INTERROGATIVES p.803 CGEL
 	cPattern::create(L"_Q1PASSIVE{VERB}",L"3",
 												1,L"_COND",0,1,1,
-												 1,L"__NOUN[*]{SUBJECT}",0,1,1,
-												 1,L"_ADVERB",0,0,2,
+												2, L"__NOUN[*]{SUBJECT}", L"__VERBALPHRASENOUN[*]{SUBJECT}", 0, 1, 1,
+												1,L"_ADVERB",0,0,2,
 												 1,L"_BE{_BLOCK}",0,1,1,
 												 3,L"verb{vAD:V_OBJECT}",L"does{vAD:V_OBJECT}",L"have{vAD:V_OBJECT}",VERB_PAST_PARTICIPLE,1,1,
 												 2,L"_ADVERB",L"preposition*2",0,0,1,0); // preposition use should be rare!
@@ -300,8 +304,8 @@ void createQuestionPatterns(void)
 	// INTERROGATIVES p.803 CGEL
 	cPattern::create(L"_Q1PASSIVE{VERB}",L"4",1,L"_ADVERB",0,0,1,
 													1,L"_HAVE",0,1,1,
-													 1,L"__NOUN[*]{SUBJECT}",0,1,1,
-													 1,L"_ADVERB",0,0,2,
+													2, L"__NOUN[*]{SUBJECT}", L"__VERBALPHRASENOUN[*]{SUBJECT}", 0, 1, 1,
+													1,L"_ADVERB",0,0,2,
 													 1,L"_BEEN",0,1,1,
 													 3,L"verb{vBD:V_OBJECT}",L"does{vBD:V_OBJECT}",L"have{vBD:V_OBJECT}",VERB_PAST_PARTICIPLE,1,1,
 													 2,L"_ADVERB",L"preposition*2",0,0,1,0); // preposition use should be rare!
@@ -309,8 +313,8 @@ void createQuestionPatterns(void)
 	// INTERROGATIVES p.803 CGEL
 	cPattern::create(L"_Q1PASSIVE{VERB}",L"5",
 														1,L"_COND",0,1,1,
-													 1,L"__NOUN[*]{SUBJECT}",0,1,1,
-													 1,L"_ADVERB",0,0,1,
+														2, L"__NOUN[*]{SUBJECT}", L"__VERBALPHRASENOUN[*]{SUBJECT}", 0, 1, 1,
+														1,L"_ADVERB",0,0,1,
 													 1,L"_HAVE",0,1,1, // {_BLOCK} removed 8/17 will block negation
 													 1,L"_BEEN",0,1,1,
 													 3,L"verb{vABD:V_OBJECT}",L"does{vABD:V_OBJECT}",L"have{vABD:V_OBJECT}",VERB_PAST_PARTICIPLE,1,1,
@@ -319,8 +323,8 @@ void createQuestionPatterns(void)
 	// INTERROGATIVES p.803 CGEL
 	cPattern::create(L"_Q1PASSIVE{VERB}",L"7",1,L"_ADVERB",0,0,1,
 													1,L"_HAVE",0,1,1,
-													 1,L"__NOUN[*]{SUBJECT}",0,1,1,
-													 1,L"_ADVERB",0,0,1,
+													2, L"__NOUN[*]{SUBJECT}", L"__VERBALPHRASENOUN[*]{SUBJECT}", 0, 1, 1,
+													1,L"_ADVERB",0,0,1,
 													 1,L"_BEEN",0,1,1,
 													 3,L"verb{vBD:V_OBJECT}",L"does{vBD:V_OBJECT}",L"have{vBD:V_OBJECT}",VERB_PAST_PARTICIPLE,1,1,
 													 2,L"_ADVERB",L"preposition*2",0,0,1,0);
@@ -346,13 +350,14 @@ void createQuestionPatterns(void)
 	// re-added _ALLVERB because _Q2 is altered by the _QUESTION characteristic which alters the weight against _VERBREL1.
 	cPattern::create(L"_Q2{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH:_QUESTION}",L"F",
 									1,L"_INTRO_S1{_BLOCK:EVAL}",0,0,1, 
+									// _Q2PREP is used 90 times in 104 sources, high confidence
 									3,L"relativizer*-1{QTYPE:OBJECT}",L"_Q2PREP*-1",L"interrogative_pronoun{QTYPE:OBJECT}",0,0,1, 
-									1,L"__INTERPPB",0,0,1,
 									2,L"_Q1",L"_Q1PASSIVE",0,1,1, 
 									// __ALLOBJECTS_0 would be harmful here "(" ALLOBJECTS_0 could resolve to a NAME, which must be an object, but will not be registered as one if
 									//   __ALLOBJECTS_0 is its parent. This is especially important because the relativizer will be registered also as an object
 									1,L"adjective{ADJ}",0,0,1,
-									5,L"__QNOUN",L"_PP", L"_ADJECTIVE",L"__ALLOBJECTS_1", L"__ALLOBJECTS_2*1", 0,0,1, // ,L"_INFP{OBJECT:_BLOCK}" RINFP 6/7/2006 -- *1 encourages the object to be in Q1, not outside.
+									// without __ALLOBJECTS_1, the sentence "will you have some **water**" is covered by _MQ1[4].  Otherwise all other uses out of 104 sources are not useful or wrong.
+									2,L"_PP", L"_ADJECTIVE",0,0,1, //L"__ALLOBJECTS_1", L"__ALLOBJECTS_2*1", 0,0,1,  // ,L"_INFP{OBJECT:_BLOCK}" RINFP 6/7/2006 -- *1 encourages the object to be in Q1, not outside.
 									1,L"__CLOSING__S1",0,0,3,
 									0);
 	cPattern::create(L"_Q2{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH:_QUESTION}",L"A",
@@ -504,7 +509,7 @@ void createQuestionPatterns(void)
 									1, L"__ALLOBJECTS_1", 0, 1, 1,
 									1, L"_ADVERB", 0, 0, 1,
 									2, L"_DO{imp}", L"future_modal_auxiliary",0, 1, 1,
-									1, L"__NOUN[*]{SUBJECT}", 0, 1, 1,
+									2, L"__NOUN[*]{SUBJECT}", L"__VERBALPHRASENOUN[*]{SUBJECT}", 0, 1, 1,
 									1, L"_ADVERB", 0, 0, 1,
 									1, L"__ALLVERB*2", 0, 1, 1,
 									0);

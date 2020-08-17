@@ -208,6 +208,11 @@ public:
 		t.tracePreposition = trace.tracePreposition;
 		t.tracePatternMatching = trace.tracePatternMatching;
 		logCache=::logCache;
+		originalPreferredViterbiForm = 0;
+		preferredViterbiCurrentTagOfHighestProbability = 0;
+		preferredViterbiMaximumProbability = 0;
+		preferredViterbiPreviousTagOfHighestProbability = 0;
+		preferredViterbiProbability = 0;
 	};
 	tIWMM word;  // points to WMM array
 	tIWMM getMainEntry(void)
@@ -532,6 +537,55 @@ public:
 	}
 	cWordMatch(void)
 	{
+			PEMACount=0;
+			andChainType=0;
+			audiencePosition=0;
+			beginObjectPosition=0;
+			beginPEMAPosition=0;
+			embeddedStorySpeakerPosition=0;
+			endObjectPosition=0;
+			endPEMAPosition=0;
+			endQuote=0;
+			flags=0;
+			hasVerbRelations=0;
+			lastWinnerLACAACMatchPMAOffset=0;
+			logCache=0;
+			lowestAverageCost=0;
+			maxLACAACMatch=0;
+			maxLACMatch=0;
+			maxMatch=0;
+			minAvgCostAfterAssessCost=0;
+			nextCompoundPartObject=0;
+			nextQuote=0;
+			notFreePrep=0;
+			object=0;
+			objectRole=0;
+			originalObject=0;
+			originalPreferredViterbiForm=0;
+			preferredViterbiCurrentTagOfHighestProbability=0;
+			preferredViterbiMaximumProbability=0;
+			preferredViterbiPreviousTagOfHighestProbability=0;
+			preferredViterbiProbability=0;
+			previousCompoundPartObject=0;
+			previousQuote=0;
+			principalWhereAdjectivalPosition=0;
+			principalWherePosition=0;
+			quoteBackLink=0;
+			quoteForwardLink=0;
+			relInternalObject=0;
+			relInternalVerb=0;
+			relNextObject=0;
+			relObject=0;
+			relPrep=0;
+			relSubject=0;
+			relVerb=0;
+			skipResponse=0;
+			spaceRelation=0;
+			speakerPosition=0;
+			timeColor=0;
+			tmpWinnerForms=0;
+			verbSense=0;
+			whereLastWinnerLACAACMatchPMAOffset=0;
 	}
 private:
 	int object; // this is an index into the objects array.  it is set at the principalWhere of an object
@@ -2476,11 +2530,12 @@ int wherePrepObject,
 	int copyDirectlyAttachedPrepositionalPhrase(cSource *childSource,int relPrep);
 	int copyDirectlyAttachedPrepositionalPhrases(int whereParentObject,cSource *childSource,int whereChild);
 	void adjustOffsets(int childWhere,bool keepObjects=false);
-	int copyChildIntoParent(cSource *childSource,int whereChild);
+	vector <int> copyChildrenIntoParent(cSource *childSource,int whereChild);
 	int detectAttachedPhrase(vector <cSpaceRelation>::iterator sri,int &relVerb);
 	bool hasProperty(int where,int whereQuestionTypeObject, unordered_map <int,vector < vector <int> > > &wikiTableMap,vector <wstring> &propertyValues);
 	bool compareObjectString(int whereObject1,int whereObject2);
 	bool objectContainedIn(int whereObject,set <int> whereObjects);
+	int ruleCorrectLPClass(int wordSourceIndex, int startOfSentence);
 
 	void setForms(void);
 	cIntArray sentenceStarts;
@@ -3083,25 +3138,13 @@ bool inSectionHeader,
 	wstring getWSAdjective(int whereVerb,int where,int numOrder,wstring &tmpstr);
 	wstring getWSAdjective(int where,int numOrder);
 	int getProfession(int object);
-	int getVerbIndex(int whereVerb);
-	int getMatchedObject(int where,set <int> &objects);
 	int maxBackwards(int where);
 	int getMinPosition(int where);
 	int gmo(int wo);
 	void getSRIMinMax(cSpaceRelation *sri);
 	void prepPhraseToString(int wherePrep,wstring &ps);
-	void insertPrepPhrase(vector <cSpaceRelation>::iterator sri,int where,int wherePrep,int whereSecondaryVerb,int whereSecondaryObject,set <int> &relPreps,wchar_t *pnqt,size_t &pnlen,set <int> &objects,wstring &ps);
-	void testPFlag(int where,int wp,int &prepositionFlags,int flag,int &nearestLocation);
-	void processPrepositionFlags(vector <cSpaceRelation>::iterator sri,int &prepositionFlags);
 	void insertCompoundObjects(int wo,set <int> &relPreps, unordered_map <int,int> &principalObjectEndPoints);
 	void correctSRIEntry(cSpaceRelation &sri);
-	bool advanceSentenceNum(vector <cSpaceRelation>::iterator sri,unsigned int &s,int lastMin,int lastMax,bool inQuestion);
-	// accumulate new patterns
-	bool printPattern(int patternLength,int pc);
-	bool printPatterns(int patternLength,unsigned int topLimit);
-	void accumulateNewPattern(unsigned int w,int pc,int wordcount);
-	bool primitiveMatch(vector<int> elements,int w,wstring &patternMatch);
-	void printAccumulatedPatterns(void);
 };
 
 extern vector <cSource::cSpeakerGroup>::iterator sgNULL;
