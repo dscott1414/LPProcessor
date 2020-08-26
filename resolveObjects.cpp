@@ -3,6 +3,7 @@
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
 #include <io.h>
 #include "word.h"
+#include "ontology.h"
 #include "source.h"
 #include "profile.h"
 
@@ -100,7 +101,7 @@ bool cSource::resolveNonGenderedGeneralObjectAgainstOneObject(int where,vector <
 	extern int logOntologyDetail;
 	if (genS->objectClass == NON_GENDERED_NAME_OBJECT_CLASS && object->objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS &&
 			(m[object->begin].word->first==L"the" || (object->begin>0 && m[object->begin-1].word->first==L"the")) &&
-		checkParticularPartSemanticMatch(LOG_RESOLUTION,object->originalLocation,this,genS->originalLocation,(int)(genS-objects.begin()),synonym,semanticMismatch)<CONFIDENCE_NOMATCH && 
+		checkParticularPartSemanticMatch(LOG_RESOLUTION,object->originalLocation,this,genS->originalLocation,(int)(genS-objects.begin()),synonym,semanticMismatch, false)<CONFIDENCE_NOMATCH && 
 		(mostRecentMatch==-1 || mostRecentMatch<lastWhere))
 	{
 		if (mostRecentMatch!=-1)
@@ -4076,7 +4077,7 @@ void cSource::resolveObject(int where,bool definitelySpeaker,bool inPrimaryQuote
 	// Jay-Z says he will marry Beyonce Knowles "one day soon." - Jay-Z is the first word of the entire document
 	if (object->originalLocation==where && (or&SUBJECT_ROLE) && object->neuter && !object->male && !object->female && m[where].getRelVerb()>=0 && m[m[where].getRelVerb()].queryForm(thinkForm)>=0)
 	{
-		identifyISARelation(where,false);
+		identifyISARelation(where,false, RDFFileCaching);
 		if ((m[where].flags&cWordMatch::flagFirstLetterCapitalized) && object->isWikiPerson)
 		{
 			object->male=object->female=true;

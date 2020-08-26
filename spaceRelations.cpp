@@ -12,6 +12,7 @@
 #include "mysqld_error.h"
 #include "odbcinst.h"
 #include "time.h"
+#include "ontology.h"
 #include "source.h"
 #include <fcntl.h>
 #include "sys/stat.h"
@@ -37,7 +38,12 @@ int cSource::gmo(int wo)
 const wchar_t *cSource::wrti(int where, wchar_t *id, wstring &tmpstr, bool shortFormat)
 {
 	LFS
-		if (where < 0) return L"";
+	if (where < 0) return L"";
+	if (where >= m.size())
+	{
+		tmpstr = L"Illegal!";
+		return tmpstr.c_str();
+	}
 	wstring ws;
 	whereString(where, ws, shortFormat);
 	tIWMM w = fullyResolveToClass(where);
@@ -82,12 +88,12 @@ void cSource::prepPhraseToString(int wherePrep, wstring &ps)
 		if (wherePrep < 0) return;
 	int wherePrepObject = m[wherePrep].getRelObject();
 	if (wherePrepObject < 0) return;
-	wstring tmpstr1, tmpstr2;
-	ps += wchr(wherePrep) + getWOSAdjective(wherePrepObject, tmpstr1) + L" " + getWSAdjective(wherePrepObject, 0) + L" " + getWSAdjective(wherePrepObject, 1) + L" " + wrti(wherePrepObject, L"PO", tmpstr2);
+	wstring tmpstr1, tmpstr2,ws;
+	ps += wchr(wherePrep) + getWOSAdjective(wherePrepObject, tmpstr1) + L" " + getWSAdjective(wherePrepObject, 0) + L" " + getWSAdjective(wherePrepObject, 1) + L" " + itos(wherePrepObject,ws) + L":" + wrti(wherePrepObject, L"PO", tmpstr2);
 	// compound nouns
 	int compoundCount = 0;
 	while (wherePrep >= 0 && wherePrepObject >= 0 && (wherePrepObject = m[wherePrepObject].nextCompoundPartObject) >= 0 && compoundCount++ < 10)
-		ps += wchr(wherePrep) + getWOSAdjective(wherePrepObject, tmpstr1) + L" " + getWSAdjective(wherePrepObject, 0) + L" " + getWSAdjective(wherePrepObject, 1) + L" " + wrti(wherePrepObject, L"POC", tmpstr2);
+		ps += wchr(wherePrep) + getWOSAdjective(wherePrepObject, tmpstr1) + L" " + getWSAdjective(wherePrepObject, 0) + L" " + getWSAdjective(wherePrepObject, 1) + L" " + itos(wherePrepObject, ws) + L":" + wrti(wherePrepObject, L"POC", tmpstr2);
 }
 
 int cSource::checkInsertPrep(set <int> &relPreps, int wp, int wo)
@@ -155,9 +161,11 @@ void cSource::getSRIMinMax(cSpaceRelation* sri)
 	}
 	for (set <int>::iterator rp = relPreps.begin(), rpEnd = relPreps.end(); rp != rpEnd; rp++)
 	{
-		sri->printMin = min(sri->printMin, *rp);
+		if (*rp != sri->transformedPrep)
+			sri->printMin = min(sri->printMin, *rp);
 		if (m[*rp].getRelObject() >= 0) sri->printMin = min(sri->printMin, m[*rp].getRelObject());
-		sri->printMax = max(sri->printMax, *rp);
+		if (*rp != sri->transformedPrep)
+			sri->printMax = max(sri->printMax, *rp);
 		sri->printMax = max(sri->printMax, gmo(m[*rp].getRelObject()));
 		if (m[*rp].getRelObject() >= 0) sri->printMax = max(sri->printMax, gmo(m[m[*rp].getRelObject()].nextCompoundPartObject));
 	}
@@ -385,41 +393,42 @@ void cSource::printSRI(wstring logPrefix, cSpaceRelation* sri, int s, int ws, in
 	}
 	const wchar_t *tmp1 = 0, *tmp2 = 0, *tmp3 = 0, *tmp4 = 0, *tmp5 = 0, *tmp6 = 0;
 	bool shortFormat = (logDestination&LOG_QCHECK) != 0;
-	wchar_t *f1 = L"%s:%06d:%s%s%s %s %s%s %s %s %s %s %s%s [V %d:%s]%s%s%s %s %s%s%s%s%s%s%s%s%s%s%s%s";
-	//wchar_t *f2 = L"%s:%06d:1%s2%s3%s 4%s 5%s6%s 7%s 8%s 9%s a%s b%sc%s d%se%sf%sg%s h%s i%sj%sk%sl%sm%sn%so%sp%sq%sr%ss%st%su";
-	//0  1   2  3 4  5  6 7  8  9 10 11 1213 14151617 18 192021222324252627282930
-	lplog(logDestination, f1, logPrefix.c_str(),
-		sri->where, // 1
-		tmpstr14.c_str(), // 2
-		(sri->whereQuestionType < 0 && sri->relationType != stLOCATION && sri->relationType != -stLOCATION && sri->relationType != stNORELATION && inQuestion) ? L"***" : L"", //3
-		(overWrote) ? L" OVERWRITE" : L"", // 4
-		relationString(sri->relationType).c_str(),  // 5
-		(sri->whereQuestionType >= 0) ? m[sri->whereQuestionType].word->first.c_str() : L"", // 6
-		wrti(sri->whereControllingEntity, L"controller", tmpstr, shortFormat),  // 7
-		(sri->whereControllingEntity < 0) ? L"" : wchr(m[sri->whereControllingEntity].getRelVerb()), // 8
-		getWOSAdjective(ws, tmpstr2).c_str(), // 9
-		getWSAdjective(ws, 0).c_str(), // 10
-		getWSAdjective(ws, 1).c_str(), // 11
-		wrti(ws, L"S", tmpstr3, shortFormat), // 12
-		(sri->tft.negation) ? L"[NOT]" : L"", // 13
-		sri->whereVerb,
-		wchr(sri->whereVerb), // 14
-		tmp1 = getWSAdverb(sri->whereVerb, sri->changeStateAdverb), // 15
-		tmp2 = getWOSAdjective(sri->whereVerb, wo, tmpstr4).c_str(), // 16
-		tmp3 = getWSAdjective(sri->whereVerb, wo, 0, tmpstr5).c_str(), // 17
-		tmp4 = getWSAdjective(sri->whereVerb, wo, 1, tmpstr6).c_str(), // 18
-		tmp5 = getWSAdjective(sri->whereVerb, wo, 2, tmpstr7).c_str(), // 19
-		tmp6 = wrti(wo, L"O", tmpstr8, shortFormat), // 20
-		wchr(sri->whereSecondaryVerb), // 21
-		getWOSAdjective(sri->whereSecondaryObject, tmpstr9).c_str(), // 22
-		getWSAdjective(sri->whereSecondaryObject, 0).c_str(), // 23
-		getWSAdjective(sri->whereSecondaryObject, 1).c_str(), // 24
-		wrti(sri->whereSecondaryObject, L"O2", tmpstr10, shortFormat), // 25
-		wrti(sri->whereNextSecondaryObject, L"nextObject2", tmpstr11, shortFormat), // 26
-		(sri->objectSubType >= 0) ? OCSubTypeStrings[sri->objectSubType] : L"", // 27
-		(sri->whereObject < 0) ? L"" : wrti(m[sri->whereObject].relNextObject, L"nextObject", tmpstr12, shortFormat), // 28
-		ps.c_str(), //29
-		(inQuestion) ? L"?" : L"."); // 30
+	wchar_t *f1 = L"%s:%06d:%s%s%s %s %s%s %s %s %s %s %d:%s%s [V %d:%s]%s%s%s %s %s %d:%s%s%s%s%s%s%s%s%s%s%s";
+	lplog(logDestination, f1, 
+		logPrefix.c_str(), // 1
+		sri->where, // 2
+		tmpstr14.c_str(), // 3
+		(sri->whereQuestionType < 0 && sri->relationType != stLOCATION && sri->relationType != -stLOCATION && sri->relationType != stNORELATION && inQuestion) ? L"***" : L"", //4
+		(overWrote) ? L" OVERWRITE" : L"", // 5
+		relationString(sri->relationType).c_str(),  // 6
+		(sri->whereQuestionType >= 0) ? m[sri->whereQuestionType].word->first.c_str() : L"", // 7
+		wrti(sri->whereControllingEntity, L"controller", tmpstr, shortFormat),  // 8
+		(sri->whereControllingEntity < 0) ? L"" : wchr(m[sri->whereControllingEntity].getRelVerb()), // 9
+		getWOSAdjective(ws, tmpstr2).c_str(), // 10
+		getWSAdjective(ws, 0).c_str(), // 11
+		getWSAdjective(ws, 1).c_str(), // 12
+		ws, // 13
+		wrti(ws, L"S", tmpstr3, shortFormat), // 14
+		(sri->tft.negation) ? L"[NOT]" : L"", // 15
+		sri->whereVerb, // 16
+		wchr(sri->whereVerb), // 17
+		tmp1 = getWSAdverb(sri->whereVerb, sri->changeStateAdverb), // 18
+		tmp2 = getWOSAdjective(sri->whereVerb, wo, tmpstr4).c_str(), // 19
+		tmp3 = getWSAdjective(sri->whereVerb, wo, 0, tmpstr5).c_str(), // 20
+		tmp4 = getWSAdjective(sri->whereVerb, wo, 1, tmpstr6).c_str(), // 21
+		tmp5 = getWSAdjective(sri->whereVerb, wo, 2, tmpstr7).c_str(), // 22
+		wo, // 23
+		tmp6 = wrti(wo, L"O", tmpstr8, shortFormat), // 24
+		wchr(sri->whereSecondaryVerb), // 25
+		getWOSAdjective(sri->whereSecondaryObject, tmpstr9).c_str(), // 26
+		getWSAdjective(sri->whereSecondaryObject, 0).c_str(), // 27
+		getWSAdjective(sri->whereSecondaryObject, 1).c_str(), // 28
+		wrti(sri->whereSecondaryObject, L"O2", tmpstr10, shortFormat), // 29
+		wrti(sri->whereNextSecondaryObject, L"nextObject2", tmpstr11, shortFormat), // 30
+		(sri->objectSubType >= 0) ? OCSubTypeStrings[sri->objectSubType] : L"", // 31
+		(sri->whereObject < 0) ? L"" : wrti(m[sri->whereObject].relNextObject, L"nextObject", tmpstr12, shortFormat), // 32
+		ps.c_str(), //33
+		(inQuestion) ? L"?" : L"."); // 34
 }
 
 cSpaceRelation::cSpaceRelation(int _where, int _o, int _whereControllingEntity, int _whereSubject, int _whereVerb, int _wherePrep, int _whereObject,
@@ -482,6 +491,7 @@ cSpaceRelation::cSpaceRelation(int _where, int _o, int _whereControllingEntity, 
 	speakerContinuation = false;
 	timeProgression = -1;
 	whereQuestionTypeObject = -1;
+	transformedPrep = -1;
 }
 
 bool operator != (const cSpaceRelation &lhs, const cSpaceRelation &rhs)
@@ -569,6 +579,7 @@ cSpaceRelation::cSpaceRelation(char *buffer, int &w, unsigned int total, bool &e
 	nonSemanticPrepositionObjectTotalMatch = false;
 	nonSemanticSecondaryObjectTotalMatch = false;
 	nonSemanticSubjectTotalMatch = false;
+	transformedPrep = -1;
 	printMax = -1;
 	printMin = -1;
 	speakerContinuation = false;
@@ -697,17 +708,48 @@ bool cSpaceRelation::write(void *buffer, int &w, int limit)
 	return true;
 }
 
-cSpaceRelation::cSpaceRelation(vector <cSpaceRelation>::iterator sri, unordered_map <int, int> &sourceMap)
+bool cSpaceRelation::adjustValue(int& val, int originalVal, wstring valString, unordered_map <int, int>& sourceIndexMap)
 {
-	where = sourceMap[sri->where];
+	if (val < 0)
+		return false;
+	if (sourceIndexMap.find(originalVal) != sourceIndexMap.end())
+	{
+		val = sourceIndexMap[originalVal];
+		return true;
+	}
+	else
+	{
+		lplog(LOG_WHERE, L"Unable to translate %s of %d.", valString.c_str(), originalVal);
+		val = originalVal;
+	}
+	return false;
+}
+
+cSpaceRelation::cSpaceRelation(vector <cSpaceRelation>::iterator sri, unordered_map <int, int> &sourceIndexMap)
+{
 	o = -1;
-	whereControllingEntity = sourceMap[sri->whereControllingEntity];
-	whereSubject = sourceMap[sri->whereSubject];
-	whereVerb = sourceMap[sri->whereVerb];
-	wherePrep = sourceMap[sri->wherePrep];
-	whereObject = sourceMap[sri->whereObject];
-	wherePrepObject = sourceMap[sri->wherePrepObject];
-	whereMovingRelativeTo = sourceMap[sri->whereMovingRelativeTo];
+	adjustValue(where, sri->where, L"where", sourceIndexMap);
+	adjustValue(whereControllingEntity, sri->whereControllingEntity, L"whereControllingEntity", sourceIndexMap);
+	adjustValue(whereSubject, sri->whereSubject, L"whereSubject", sourceIndexMap);
+	adjustValue(whereVerb, sri->whereVerb, L"whereVerb", sourceIndexMap);
+	adjustValue(wherePrep, sri->wherePrep, L"wherePrep", sourceIndexMap);
+	adjustValue(whereObject, sri->whereObject, L"whereObject", sourceIndexMap);
+	adjustValue(wherePrepObject, sri->wherePrepObject, L"wherePrepObject", sourceIndexMap);
+	adjustValue(whereMovingRelativeTo, sri->whereMovingRelativeTo, L"whereMovingRelativeTo", sourceIndexMap);
+	adjustValue(whereSecondaryVerb, sri->whereSecondaryVerb, L"whereSecondaryVerb", sourceIndexMap);
+	adjustValue(whereSecondaryObject, sri->whereSecondaryObject, L"whereSecondaryObject", sourceIndexMap);
+	adjustValue(whereNextSecondaryObject, sri->whereNextSecondaryObject, L"whereNextSecondaryObject", sourceIndexMap);
+	adjustValue(whereSecondaryPrep, sri->whereSecondaryPrep, L"whereSecondaryPrep", sourceIndexMap);
+	adjustValue(whereQuestionType, sri->whereQuestionType, L"whereQuestionType", sourceIndexMap);
+	adjustValue(whereQuestionTypeObject, sri->whereQuestionTypeObject, L"whereQuestionTypeObject", sourceIndexMap);
+	for (int wo : sri->whereQuestionInformationSourceObjects)
+	{
+		int whereQuestionInformationSourceObject;
+		if (adjustValue(whereQuestionInformationSourceObject, wo, L"whereQuestionInformationSourceObject", sourceIndexMap))
+			whereQuestionInformationSourceObjects.insert(sourceIndexMap[wo]);
+	}
+	adjustValue(transformedPrep, sri->transformedPrep, L"transformedPrep", sourceIndexMap);
+
 	relationType = sri->relationType;
 	genderedEntityMove = sri->genderedEntityMove;
 	genderedLocationRelation = sri->genderedLocationRelation;
@@ -736,13 +778,9 @@ cSpaceRelation::cSpaceRelation(vector <cSpaceRelation>::iterator sri, unordered_
 	timeInfoSet = sri->timeInfoSet;
 	isConstructedRelative = sri->isConstructedRelative;
 	nextSPR = sri->nextSPR;
-	whereSecondaryVerb = sourceMap[sri->whereSecondaryVerb];
-	whereSecondaryObject = sourceMap[sri->whereSecondaryObject];
-	whereNextSecondaryObject = sourceMap[sri->whereNextSecondaryObject];
-	whereSecondaryPrep = sourceMap[sri->whereSecondaryPrep];
-	whereQuestionType = sourceMap[sri->whereQuestionType];
 	questionType = sri->questionType;
 	sentenceNum = sri->sentenceNum;
 	subQuery = sri->subQuery;
 	skip = sri->skip;
+	timeProgression = sri->timeProgression;
 }

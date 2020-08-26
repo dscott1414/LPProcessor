@@ -1,6 +1,7 @@
 ﻿#include <windows.h>
 #include <io.h>
 #include "word.h"
+#include "ontology.h"
 #include "source.h"
 #include "QuestionAnswering.h"
 #include "profile.h"
@@ -37,13 +38,13 @@ void cColumn::removeDomainFromAccumulatedRDFTypesMap(wchar_t * domainAssociation
 }
 
 // accumulate all rdf types of all entries of all rows in a column.
-void cColumn::accumulateColumnRDFTypes(cSource *wikipediaSource, wstring tableName, set <wstring> &titleSynonyms, bool keepMusicDomain, bool keepFilmDomain, bool onlyPreferred)
+void cColumn::accumulateColumnRDFTypes(cSource *wikipediaSource, wstring tableName, set <wstring> &titleSynonyms, bool keepMusicDomain, bool keepFilmDomain, bool onlyPreferred, bool fileCaching)
 {
 	for (int row = 0; row < rows.size(); row++)
 	{
 		for (int entry = 0; entry < rows[row].entries.size(); entry++)
 			if (!onlyPreferred || rows[row].entries[entry].lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms)
-				rows[row].entries[entry].accumulateEntryRDFTypes(wikipediaSource, tableName, row, entry, titleSynonyms, accumulatedRDFTypesMap);
+				rows[row].entries[entry].accumulateEntryRDFTypes(wikipediaSource, tableName, row, entry, titleSynonyms, accumulatedRDFTypesMap, fileCaching);
 	}
 	wchar_t *musicAssociations[] = { L"single", L"recording", L"music", L"release", L"album", L"" };
 	if (!keepMusicDomain)
@@ -57,12 +58,12 @@ void cColumn::accumulateColumnRDFTypes(cSource *wikipediaSource, wstring tableNa
 // the RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap map takes all the RDF types associated with a given sequence of words (adaptiveWhere to adaptiveWhere+numWords) and 
 //   returns a list of words with confidences estimating how much the RDF type the word is simplified from is associated with the sequence of words.
 // take the list of words simplified from RDF types which are associated with the entry, and accumulate the ones with highest confidence into the accumulatedRDFTypesMap for the column.
-void cColumn::cEntry::accumulateEntryRDFTypes(cSource *wikipediaSource, wstring tableName, int row,int entry,set <wstring> &titleSynonyms, unordered_map < wstring, cAssociationType > &accumulatedRDFTypesMap)
+void cColumn::cEntry::accumulateEntryRDFTypes(cSource *wikipediaSource, wstring tableName, int row,int entry,set <wstring> &titleSynonyms, unordered_map < wstring, cAssociationType > &accumulatedRDFTypesMap, bool fileCaching)
 {
 	queryAssociationsMatched = 0;
 	titleAssociationsMatched = 0;
 	unordered_map <wstring, int > RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap;
-	wikipediaSource->getAssociationMapMaster(adaptiveWhere, numWords, RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap, TEXT(__FUNCTION__));
+	wikipediaSource->getAssociationMapMaster(adaptiveWhere, numWords, RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap, TEXT(__FUNCTION__), fileCaching);
 	for (unordered_map <wstring, int >::iterator ri = RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap.begin(), riEnd = RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap.end(); ri != riEnd; ri++)
 	{
 		if (logTableCoherenceDetail)
@@ -121,10 +122,10 @@ void cColumn::zeroColumnAccumulatedRDFTypes()
 	accumulatedRDFTypesMap.clear();
 }
 
-int cColumn::getSumOfAllFullyConfidentRDFTypeFrequencies(cSource *wikipediaSource, int row, int entry, int &maxOfAllFullyConfidentRDFTypeFrequencies, wstring &fullyConfidentSimplifiedRDFTypeWithMaximumFrequency)
+int cColumn::getSumOfAllFullyConfidentRDFTypeFrequencies(cSource *wikipediaSource, int row, int entry, int &maxOfAllFullyConfidentRDFTypeFrequencies, wstring &fullyConfidentSimplifiedRDFTypeWithMaximumFrequency, bool fileCaching)
 {
 	unordered_map <wstring, int > RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap;
-	wikipediaSource->getAssociationMapMaster(rows[row].entries[entry].adaptiveWhere, rows[row].entries[entry].numWords, RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap, TEXT(__FUNCTION__));
+	wikipediaSource->getAssociationMapMaster(rows[row].entries[entry].adaptiveWhere, rows[row].entries[entry].numWords, RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap, TEXT(__FUNCTION__), fileCaching);
 	int sumOfAllFullyConfidentRDFTypeFrequencies = 0;
 	maxOfAllFullyConfidentRDFTypeFrequencies = 0;
 	for (unordered_map <wstring, int >::iterator ri = RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap.begin(), riEnd = RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap.end(); ri != riEnd; ri++)
@@ -146,7 +147,7 @@ int cColumn::getSumOfAllFullyConfidentRDFTypeFrequencies(cSource *wikipediaSourc
 }
 
 // singling out only the entries that are marked lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms, accumulate the confident RDF type frequencies and divide by the number of rows, thus arriving at a coherence percentage.
-int cColumn::calculateColumnRDFTypeCoherence(cSource *wikipediaSource, cColumn::cEntry titleEntry, wstring tableName)
+int cColumn::calculateColumnRDFTypeCoherence(cSource *wikipediaSource, cColumn::cEntry titleEntry, wstring tableName, bool fileCaching)
 {
 	int sumOfAllFullyConfidentRDFTypeFrequenciesInOnlyPreferredColumnEntries = 0, sumOfMaxOfAllFullyConfidentRDFTypeFrequenciesInOnlyPreferredColumnEntries = 0;
 	// for each row
@@ -160,7 +161,7 @@ int cColumn::calculateColumnRDFTypeCoherence(cSource *wikipediaSource, cColumn::
 			{
 				wstring fullyConfidentSimplifiedRDFTypeWithMaximumFrequencyInEntry;
 				int maxOfAllFullyConfidentRDFTypeFrequenciesInEntry = 0, sumOfAllFullyConfidentRDFTypeFrequenciesInEntry;
-				sumOfAllFullyConfidentRDFTypeFrequenciesInEntry = getSumOfAllFullyConfidentRDFTypeFrequencies(wikipediaSource, row, entry, maxOfAllFullyConfidentRDFTypeFrequenciesInEntry, fullyConfidentSimplifiedRDFTypeWithMaximumFrequencyInEntry);
+				sumOfAllFullyConfidentRDFTypeFrequenciesInEntry = getSumOfAllFullyConfidentRDFTypeFrequencies(wikipediaSource, row, entry, maxOfAllFullyConfidentRDFTypeFrequenciesInEntry, fullyConfidentSimplifiedRDFTypeWithMaximumFrequencyInEntry, fileCaching);
 				if (!maxOfAllFullyConfidentRDFTypeFrequenciesInEntry)
 				{
 					maxOfAllFullyConfidentRDFTypeFrequenciesInEntry = rows.size();
@@ -188,7 +189,7 @@ int cColumn::calculateColumnRDFTypeCoherence(cSource *wikipediaSource, cColumn::
 	return coherencyPercentage;
 }
 
-bool cColumn::testTitlePreference(cSource *wikipediaSource, wstring tableName, set <wstring> &titleSynonyms)
+bool cColumn::testTitlePreference(cSource *wikipediaSource, wstring tableName, set <wstring> &titleSynonyms, bool fileCaching)
 {
 	if (titleSynonyms.empty())
 		return false;
@@ -199,7 +200,7 @@ bool cColumn::testTitlePreference(cSource *wikipediaSource, wstring tableName, s
 		for (int entry = 0; entry < rows[row].entries.size(); entry++)
 		{
 			unordered_map <wstring, int > RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap;
-			wikipediaSource->getAssociationMapMaster(rows[row].entries[entry].adaptiveWhere, rows[row].entries[entry].numWords, RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap, TEXT(__FUNCTION__));
+			wikipediaSource->getAssociationMapMaster(rows[row].entries[entry].adaptiveWhere, rows[row].entries[entry].numWords, RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap, TEXT(__FUNCTION__), fileCaching);
 			if (RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap.size() > 0)
 				rows[row].numSimplifiedRDFTypesFoundForRow++;
 			wstring confidentSimplifiedRDFTypes, simplifiedRDFTypes;
@@ -255,7 +256,7 @@ bool cColumn::testTitlePreference(cSource *wikipediaSource, wstring tableName, s
 	return numRowsWhereLastWordOrSimplifiedRDFTypesFoundInTitleSynonyms > numRowsWhereSimplifiedRDFTypesFound * 3 / 4;
 }
 
-void cColumn::setRowPreference(cSource *wikipediaSource, wstring tableName)
+void cColumn::setRowPreference(cSource *wikipediaSource, wstring tableName, bool fileCaching)
 {
 	for (int row = 0; row < rows.size(); row++)
 	{
@@ -267,7 +268,7 @@ void cColumn::setRowPreference(cSource *wikipediaSource, wstring tableName)
 		{
 			wstring maxAssociation;
 			int accumulatedAssociationValue, maxFrequency;
-			accumulatedAssociationValue = getSumOfAllFullyConfidentRDFTypeFrequencies(wikipediaSource, row, entry, maxFrequency, maxAssociation);
+			accumulatedAssociationValue = getSumOfAllFullyConfidentRDFTypeFrequencies(wikipediaSource, row, entry, maxFrequency, maxAssociation, fileCaching);
 			if (maxFrequency > maxOfMaxFrequency || (maxFrequency == maxOfMaxFrequency && accumulatedAssociationValue > maxAccumulatedAssociationValue))
 			{
 				maxAccumulatedAssociationValue = accumulatedAssociationValue;
@@ -288,7 +289,7 @@ void cColumn::setRowPreference(cSource *wikipediaSource, wstring tableName)
 	}
 }
 
-bool cColumn::determineColumnRDFTypeCoherency(cSource *wikipediaSource, cColumn::cEntry titleEntry, set <wstring> &titleSynonyms, wstring tableName, bool keepMusicDomain, bool keepFilmDomain)
+bool cColumn::determineColumnRDFTypeCoherency(cSource *wikipediaSource, cColumn::cEntry titleEntry, set <wstring> &titleSynonyms, wstring tableName, bool keepMusicDomain, bool keepFilmDomain, bool fileCaching)
 {
 	int sumMaxEntries = 0;
 	for (int row = 0; row < rows.size(); row++)
@@ -301,16 +302,16 @@ bool cColumn::determineColumnRDFTypeCoherency(cSource *wikipediaSource, cColumn:
 	}
 	// accumulate all the types of all the entries in the column together into accumulatedRDFTypesMap
 	vector <int> noPreferences;
-	accumulateColumnRDFTypes(wikipediaSource, tableName, titleSynonyms, keepMusicDomain, keepFilmDomain, false);
+	accumulateColumnRDFTypes(wikipediaSource, tableName, titleSynonyms, keepMusicDomain, keepFilmDomain, false, fileCaching);
 	getMostCommonRDFTypes(L"BEFORE", tableName);
 	// prefer the entry in each row of each column that matches with the most common types OR title
-	if (!testTitlePreference(wikipediaSource, tableName, titleSynonyms))
-		setRowPreference(wikipediaSource, tableName);
+	if (!testTitlePreference(wikipediaSource, tableName, titleSynonyms, fileCaching))
+		setRowPreference(wikipediaSource, tableName, fileCaching);
 	zeroColumnAccumulatedRDFTypes();
 	// accumulate all the types of ONLY the lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms entries in the table together
-	accumulateColumnRDFTypes(wikipediaSource, tableName, titleSynonyms, keepMusicDomain, keepFilmDomain, true);
+	accumulateColumnRDFTypes(wikipediaSource, tableName, titleSynonyms, keepMusicDomain, keepFilmDomain, true, fileCaching);
 	getMostCommonRDFTypes(L"AFTER", tableName);
-	if (calculateColumnRDFTypeCoherence(wikipediaSource, titleEntry, tableName) < 90)
+	if (calculateColumnRDFTypeCoherence(wikipediaSource, titleEntry, tableName, fileCaching) < 90)
 		return true; 
 	return true;
 }
@@ -620,7 +621,7 @@ bool cSourceTable::isEntryInvalid(int beginEntry, vector <int> &wikiColumns,cSou
 	//   for each table with a table header, does the table header match the questionTypeObject or its synonyms?
 	//     if not, and the table has column headers, does any column header match the questionTypeObject or its synonyms?
 	//    if matched, feed the table or only the selected column into propertyValues.
-	cSourceTable::cSourceTable(int &I, int whereQuestionTypeObject, cSource *wikipediaSource, cSource *questionSource)
+	cSourceTable::cSourceTable(int &I, int whereQuestionTypeObject, cSource *wikipediaSource, cSource *questionSource,bool fileCaching)
 	{
 		LFS
 			wstring tmpstr, tmpstr2, whereQuestionTypeObjectString;
@@ -671,7 +672,7 @@ bool cSourceTable::isEntryInvalid(int beginEntry, vector <int> &wikiColumns,cSou
 			bool isAnyColumnCoherent = false;
 			for (vector <cColumn>::iterator ci = columns.begin(), ciEnd = columns.end(); ci != ciEnd; ci++)
 			{
-				if (ci->rows.size() <= 1 || !ci->determineColumnRDFTypeCoherency(wikipediaSource, tableTitleEntry, titleSynonyms, num, false, false))
+				if (ci->rows.size() <= 1 || !ci->determineColumnRDFTypeCoherency(wikipediaSource, tableTitleEntry, titleSynonyms, num, false, false, fileCaching))
 					ci->rows.clear();
 				else
 					isAnyColumnCoherent = true;
@@ -694,7 +695,7 @@ bool cSourceTable::isEntryInvalid(int beginEntry, vector <int> &wikiColumns,cSou
 			for (int where = 0; where < (signed)wikipediaSource->m.size(); where++)
 				if (wikipediaSource->m[where].word == Words.TABLE)
 				{
-					cSourceTable wikiTable(where, whereQuestionTypeObject, wikipediaSource, questionSource);
+					cSourceTable wikiTable(where, whereQuestionTypeObject, wikipediaSource, questionSource,fileCaching);
 					if (wikiTable.columns.size() > 0 && ((wikiTable.columns.size() > 1 || !wikiTable.columns[0].invalidColumn) && (wikiTable.columns.size() > 1 || (wikiTable.columns.size() == 1 && wikiTable.columns[0].rows.size() > 1))))
 						wikiTables.push_back(wikiTable);
 				}

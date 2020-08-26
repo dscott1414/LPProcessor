@@ -1,6 +1,7 @@
 ﻿#include <windows.h>
 #include <io.h>
 #include "word.h"
+#include "ontology.h"
 #include "source.h"
 #include <fcntl.h>
 #include "sys/stat.h"
@@ -10,7 +11,6 @@
 #include <Winhttp.h>
 #include <functional>
 #include "profile.h"
-#include "ontology.h"
 #include "mysqldb.h"
 #include "mysqld_error.h"
 #include "internet.h"
@@ -543,17 +543,20 @@ void encodeURL(wstring winput,wstring &wencodedURL)
 wstring getDescriptionString(wstring label)
 {
 	return basehttpquery + prefix_foaf + prefix_colon +
-		L"SELECT+DISTINCT+%3Fv1+%3Fv2+%3Fv3+%3Fv4+%0D%0AWHERE+%7B%0D%0A+"
+		L"SELECT+DISTINCT+%3Fv1+%3Fv2+%3Fv3+%3Fv4+%3Fbd+%3Fbp+%3Focc+%0D%0AWHERE+%7B%0D%0A+"
 		L"+%7B+" + label + L"+%3Chttp%3A%2F%2Fwww.w3.org%2F2002%2F07%2Fowl%23sameAs%3E+%3Fs+.+%7D%0D%0A" // OPTIONAL removed
 		L"OPTIONAL+%7B+%3Fs+%3Chttp%3A%2F%2Fwikidata.dbpedia.org%2Fontology%2Fabstract%3E+%3Fv1+.+%7D%0D%0A"
 		L"OPTIONAL+%7B+%3Fs+%3Chttp%3A%2F%2Fwww.w3.org%2F2000%2F01%2Frdf-schema%23comment%3E+%3Fv2+.+%7D%0D%0A"
 		L"OPTIONAL+%7B+" + label + L"+foaf%3Ahomepage+%3Fv3+.+%7D%0D%0A"
-		L"OPTIONAL+%7B+" + label + L"+foaf%3Apage+%3Fv4+.+%7D%0D%0A%7D";
+		//L"OPTIONAL+%7B+" + label + L"+foaf%3Apage+%3Fv4+.+%7D%0D%0A"
+		L"OPTIONAL+%7B+" + label + L"+%3Chttp%3A%2F%2Fdbpedia.org%2Fontology%2FbirthDate%3E+%3Fbd+.+%7D%0D%0A"
+		L"OPTIONAL+%7B+" + label + L"+%3Chttp%3A%2F%2Fdbpedia.org%2Fontology%2FbirthPlace%3E+%3Fbp+.+%7D%0D%0A"
+		L"OPTIONAL+%7B+" + label + L"+%3Chttp%3A%2F%2Fdbpedia.org%2Fontology%2Foccupation%3E+%3Focc+.+%7D%0D%0A%7D";
 }
 
 // these queries are not combined to look up properties of more than one object because it would go over the time limit imposed by the VIRTUOSO server.
 // when running SPARQL queries in Virtuoso Conductor ISQL, you must prepend the query with SPARQL, so it must go before even the PREFIX (and not anywhere else)
-int cOntology::getDescription(wstring label, wstring objectName, wstring &abstract, wstring &comment, wstring &infoPage)
+int cOntology::getDescription(wstring label, wstring objectName, wstring &abstract, wstring &comment, wstring &infoPage, wstring& birthDate, wstring& birthPlace, wstring& occupation)
 {
 	LFS
 	// cl=http://dbpedia.org/class/yago/HealthProfessional110165109
@@ -579,9 +582,7 @@ int cOntology::getDescription(wstring label, wstring objectName, wstring &abstra
 		lplog(LOG_WIKIPEDIA|LOG_RESOLUTION, L"%s\nENCODED WEBADDRESS:%s\nDECODED WEBADDRESS:%s",
 			objectName.c_str(), dbPediaQueryString.c_str(), decodeURL(dbPediaQueryString, temp).c_str() + decodedbasehttpquery.length());
 	int numRows = 0;
-	objectName += L"_getDescription.xml";
 	if (!cInternet::readPage(dbPediaQueryString.c_str(), buffer))
-	//if (!getDBPediaPath(0,dbPediaQueryString,buffer,objectName))
 	{
 		// get number of rows
 		for (size_t w = 0; w < buffer.size(); numRows++, w++)
@@ -603,18 +604,33 @@ int cOntology::getDescription(wstring label, wstring objectName, wstring &abstra
 				pos2 = 0;
 				firstMatch(tmpstr, L"<uri>", L"</uri>", pos2, infoPage, false);
 			}
+			if (firstMatch(buffer, L"<binding name=\"bd\">", L"</binding>", pos, tmpstr, false) >= 0)
+			{
+				pos2 = 0;
+				firstMatch(tmpstr, L">", L"</literal>", pos2, birthDate, false);
+			}
+			if (firstMatch(buffer, L"<binding name=\"bp\">", L"</binding>", pos, tmpstr, false) >= 0)
+			{
+				pos2 = 0;
+				firstMatch(tmpstr, L"<uri>", L"</uri>", pos2, birthPlace, false);
+			}
+			if (firstMatch(buffer, L"<binding name=\"occ\">", L"</binding>", pos, tmpstr, false) >= 0)
+			{
+				pos2 = 0;
+				firstMatch(tmpstr, L"<uri>", L"</uri>", pos2, occupation, false);
+			}
 		}
 	}
 	return numRows;
 }
 
 // get abstract, comment and wikipedia page, all as optional (none are required to appear)
-int cOntology::getDescription(unordered_map <wstring, cOntologyEntry>::iterator cli)
-{ LFS
-	if (cli->second.descriptionFilled>=0) return cli->second.descriptionFilled;
-	int numRows=getDescription(cli->second.compactLabel,cli->first,cli->second.abstractDescription,cli->second.commentDescription,cli->second.infoPage);
-	return cli->second.descriptionFilled=numRows;
-}
+//int cOntology::getDescription(unordered_map <wstring, cOntologyEntry>::iterator cli)
+//{ LFS
+//	if (cli->second.descriptionFilled>=0) return cli->second.descriptionFilled;
+//	int numRows=getDescription(cli->second.compactLabel,cli->first,cli->second.abstractDescription,cli->second.commentDescription,cli->second.infoPage, cli->second.birthDate, cli->second.birthPlace, cli->second.occupation);
+//	return cli->second.descriptionFilled=numRows;
+//}
 
 unordered_map <wstring, cOntologyEntry>::iterator cOntology::findAnyYAGOSuperClass(wstring cl)
 { LFS
@@ -1149,6 +1165,9 @@ bool cOntology::copy(void *buf, cOntologyEntry &dbsn, int &where, int limit)
 	DLFS
 		if (!::copy(buf, dbsn.compactLabel, where, limit)) return false;
 	if (!::copy(buf, dbsn.infoPage, where, limit)) return false;
+	if (!::copy(buf, dbsn.birthDate, where, limit)) return false;
+	if (!::copy(buf, dbsn.birthPlace, where, limit)) return false;
+	if (!::copy(buf, dbsn.occupation, where, limit)) return false;
 	if (!::copy(buf, dbsn.abstractDescription, where, limit)) return false;
 	if (!::copy(buf, dbsn.commentDescription, where, limit)) return false;
 	if (!::copy(buf, dbsn.numLine, where, limit)) return false;
@@ -1164,6 +1183,9 @@ bool copy(cOntologyEntry &dbsn, void *buf, int &where, int limit)
 	DLFS
 		if (!copy(dbsn.compactLabel, buf, where, limit)) return false;
 	if (!copy(dbsn.infoPage, buf, where, limit)) return false;
+	if (!copy(dbsn.birthDate, buf, where, limit)) return false;
+	if (!copy(dbsn.birthPlace, buf, where, limit)) return false;
+	if (!copy(dbsn.occupation, buf, where, limit)) return false;
 	if (!copy(dbsn.abstractDescription, buf, where, limit)) return false;
 	if (!copy(dbsn.commentDescription, buf, where, limit)) return false;
 	if (!copy(dbsn.numLine, buf, where, limit)) return false;
@@ -1171,20 +1193,6 @@ bool copy(cOntologyEntry &dbsn, void *buf, int &where, int limit)
 	if (!copy(dbsn.ontologyHierarchicalRank, buf, where, limit)) return false;
 	if (!copy(dbsn.superClasses, buf, where, limit)) return false;
 	if (!copy(dbsn.descriptionFilled, buf, where, limit)) return false;
-	return true;
-}
-
-bool copyOLD(cOntologyEntry &dbsn, void *buf, int &where, int limit)
-{
-	DLFS
-	if (!copy(dbsn.compactLabel, buf, where, limit)) return false;
-	if (!copy(dbsn.infoPage, buf, where, limit)) return false;
-	if (!copy(dbsn.abstractDescription, buf, where, limit)) return false;
-	if (!copy(dbsn.commentDescription, buf, where, limit)) return false;
-	if (!copy(dbsn.numLine, buf, where, limit)) return false;
-	if (!copy(dbsn.ontologyType, buf, where, limit)) return false;
-	if (!copy(dbsn.ontologyHierarchicalRank, buf, where, limit)) return false;
-	if (!copy(dbsn.superClasses, buf, where, limit)) return false;
 	return true;
 }
 
@@ -1221,7 +1229,8 @@ int cOntology::fillOntologyList(bool reInitialize)
 	{
 		wchar_t path[4096];
 		int pathlen=_snwprintf(path,MAX_LEN,L"%s\\dbPediaCache",CACHEDIR);
-		_wmkdir(path);
+		if (_wmkdir(path) < 0 && errno == ENOENT)
+			lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
 		wcsncpy(path+pathlen,L"\\_rdfTypes",MAX_LEN-pathlen);
 		convertIllegalChars(path+pathlen+1);
 		path[MAX_PATH-1]=0;
@@ -1484,11 +1493,11 @@ bool cOntology::extractResults(wstring begin,wstring uobject,wstring end,wstring
 		else
 			findCategoryRank(qtype,parentObject,fpobject,rdfTypes,uri);
 	}
-	wstring abstract,comment,infoPage;
-	getDescription(labels[0],fpobject,abstract,comment,infoPage);
+	wstring abstract,comment,infoPage,birthDate,birthPlace,occupation;
+	getDescription(labels[0],fpobject,abstract,comment,infoPage,birthDate,birthPlace,occupation);
 	for (unsigned int I=originalRDFTypesSize; I<rdfTypes.size(); I++)
 	{
-		rdfTypes[I]->assignDetails(abstract,comment,infoPage);
+		rdfTypes[I]->assignDetails(abstract,comment,infoPage,birthDate,birthPlace,occupation);
 	}
 	//if (!numResults)
 	decodeURL(webAddress,temp);
@@ -2179,7 +2188,8 @@ int cOntology::getRDFTypesMaster(wstring object, vector <cTreeCat *> &rdfTypes, 
 		return -1;
 	wchar_t path[4096];
 	int pathlen=_snwprintf(path,MAX_LEN,L"%s\\dbPediaCache",CACHEDIR),retCode=-1;
-	_wmkdir(path);
+	if (_wmkdir(path) < 0 && errno == ENOENT)
+		lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
 	_snwprintf(path+pathlen,MAX_LEN-pathlen,L"\\_%s",object.c_str());
 	convertIllegalChars(path+pathlen+1);
 	if (wcslen(path + pathlen + 1) > 127 || wcslen(path + pathlen + 1) < 2 || inRDFTypeNotFoundTable(path + pathlen + 1))

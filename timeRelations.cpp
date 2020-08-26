@@ -10,6 +10,7 @@
 #include "mysql.h"
 #include "mysqld_error.h"
 #include "odbcinst.h"
+#include "ontology.h"
 #include "source.h"
 #include "profile.h"
 

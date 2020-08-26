@@ -34,7 +34,7 @@ public:
 		int semanticCheck(cQuestionAnswering &qa, cSpaceRelation* parentSRI, cSource *parentSource);
 		void printDirectRelations(cQuestionAnswering &qa, int logType, cSource *parentSource, wstring &path, int where);
 		cProximityEntry();
-		cProximityEntry(cSource *childSource, unsigned int childSourceIndex, int childObject, cSpaceRelation* parentSRI);
+		cProximityEntry(cQuestionAnswering &qa, cSource *childSource, unsigned int childSourceIndex, int childObject, cSpaceRelation* parentSRI);
 		void lplogFrequentOrProximateObjects(int logType, wstring objectStr)
 		{
 			wstring tmpstr;
@@ -239,6 +239,7 @@ public:
 	bool nonSemanticObjectTotalMatch; 
 	bool nonSemanticSecondaryObjectTotalMatch; 
 	bool nonSemanticPrepositionObjectTotalMatch; 
+	int transformedPrep;
 	cTimeFlowTense tft;
 	wstring description;
 	int nextSPR;
@@ -280,5 +281,6 @@ public:
 	__int64 convertFlags(bool isQuestion, bool inPrimaryQuote, bool inSecondaryQuote, __int64 questionFlags);
 	bool write(void *buffer, int &w, int limit);
 	cSpaceRelation(vector <cSpaceRelation>::iterator sri, unordered_map <int, int> &sourceMap);
+	bool adjustValue(int& val, int originalVal, wstring valString, unordered_map <int, int>& sourceIndexMap);
 };
 

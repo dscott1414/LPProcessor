@@ -198,8 +198,7 @@ int cInternet::readPage(const wchar_t *str, wstring &buffer, wstring &headers)
 	wstring ioe;
 
 	//INTERNET_OPTION_CONNECT_RETRIES
-#define MAX_ERRORS 3
-	while (errors < MAX_ERRORS)
+	while (errors < internetWebSearchRetryAttempts)
 	{
 		LPVOID hFile;
 		if (hFile = InternetOpenUrl(hINet, str, headers.c_str(), headers.length(), 0, INTERNET_FLAG_NO_CACHE_WRITE))
@@ -254,7 +253,7 @@ int cInternet::readPage(const wchar_t *str, wstring &buffer, wstring &headers)
 			ReleaseSRWLockExclusive(&cProfile::networkTimeSRWLock);
 		}
 	}
-	if (errors == MAX_ERRORS)
+	if (errors == internetWebSearchRetryAttempts)
 		lplog(LOG_ERROR, L"ERROR:%d:Terminating because we cannot read URL %s - %s.", errors, str, getLastErrorMessage(ioe)); // TMP DEBUG
 	cProfile::accumulateNetworkTime(str, timer, cProfile::lastNetClock);
 	return (errors) ? INTERNET_OPEN_URL_FAILED : 0;
@@ -324,7 +323,8 @@ int cInternet::cacheWebPath(wstring webAddress, wstring &buffer, wstring epath, 
 	LFS
 		wchar_t path[MAX_LEN];
 	int pathlen = _snwprintf(path, MAX_LEN, L"%s\\%s", CACHEDIR, cacheTypePath.c_str());
-	_wmkdir(path);
+	if (_wmkdir(path) < 0 && errno == ENOENT)
+		lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
 	_snwprintf(path + pathlen, MAX_LEN - pathlen, L"\\_%s", epath.c_str());
 	path[MAX_PATH - 20] = 0; // make space for subdirectories and for file extensions
 	convertIllegalChars(path + pathlen + 1);
@@ -427,7 +427,8 @@ int cInternet::getWebPath(int where, wstring webAddress, wstring &buffer, wstrin
 		lplog(LOG_WIKIPEDIA, L"accessing page: %s", epath.c_str());
 	wchar_t path[MAX_LEN];
 	int pathlen = _snwprintf(path, MAX_LEN, L"%s\\%s", (cacheTypePath==L"webSearchCache") ? WEBSEARCH_CACHEDIR:CACHEDIR, cacheTypePath.c_str());
-	_wmkdir(path);
+	if (_wmkdir(path) < 0 && errno == ENOENT)
+		lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
 	if (index > 1)
 		_snwprintf(path + pathlen, MAX_LEN - pathlen, L"\\_%s.%d", epath.c_str(), index);
 	else
@@ -443,13 +444,16 @@ int cInternet::getWebPath(int where, wstring webAddress, wstring &buffer, wstrin
 	spath[pathlen + 1] = spath[pathlen + 6];
 	spath[pathlen + 3] = spath[pathlen + 7];
 	spath[pathlen + 2] = 0;
-	mkdir(spath.c_str());
+	if (mkdir(spath.c_str()) < 0 && errno == ENOENT)
+		lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
 	spath[pathlen + 2] = '\\';
 	spath[pathlen + 4] = 0;
-	mkdir(spath.c_str());
+	if (mkdir(spath.c_str()) < 0 && errno == ENOENT)
+		lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
 	spath[pathlen + 4] = '\\';
-	if (wcsstr(path, L"http"))
-		lplog(LOG_FATAL_ERROR, L"Please remove http addresses from web path to avoid overuse of the h/t directory!");
+	wchar_t* wp = wcsstr(path, L"http");
+	if (wp && (wp-path)<5)
+		lplog(LOG_FATAL_ERROR, L"Please remove http addresses from web path to avoid overuse of the h/t directory %s!",path);
 	if (forceWebReread || (_waccess(path, 0) < 0 && _access(spath.c_str(), 0) < 0))
 	{
 		if (!forceWebReread)
@@ -682,7 +686,8 @@ int testWebPath(int where, wstring webAddress, wstring epath, wstring cacheTypeP
 	LFS
 		wchar_t path[MAX_LEN];
 	int pathlen = _snwprintf(path, MAX_LEN, L"%s\\%s", CACHEDIR, cacheTypePath.c_str());
-	_wmkdir(path);
+	if (_wmkdir(path) < 0 && errno == ENOENT)
+		lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
 	_snwprintf(path + pathlen, MAX_LEN - pathlen, L"\\_%s", epath.c_str());
 	path[MAX_PATH - 20] = 0; // make space for subdirectories and for file extensions
 	convertIllegalChars(path + pathlen + 1);

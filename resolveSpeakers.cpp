@@ -3,6 +3,7 @@
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
 #include <io.h>
 #include "word.h"
+#include "ontology.h"
 #include "source.h"
 #include "time.h"
 #include "math.h"
@@ -372,7 +373,7 @@ wstring cSource::whereString(int where,wstring &logres,bool shortFormat,int incl
 		if (m[I].getObject()>0)
 			I=m[I].endObjectPosition-1; // skip objects and periods associated with abbreviations and names
 	}
-	while (start<I && (m[I-1].queryWinnerForm(prepositionForm)>=0 || m[I].queryWinnerForm(coordinatorForm)>=0 || m[I].queryWinnerForm(determinerForm)>=0 || (!iswalpha(m[I].word->first[0]) && m[I].word->first!=L"”")))
+	while (I < (signed)m.size() && start<I && (m[I-1].queryWinnerForm(prepositionForm)>=0 || m[I].queryWinnerForm(coordinatorForm)>=0 || m[I].queryWinnerForm(determinerForm)>=0 || (!iswalpha(m[I].word->first[0]) && m[I].word->first!=L"”")))
 		I--;
 	if (start!=I)
 	{
@@ -9164,7 +9165,7 @@ void cSource::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 		}
 		// Wikipedia
 		if (sourceType != PATTERN_TRANSFORM_TYPE)
-			identifyISARelation(I, true);
+			identifyISARelation(I, true, RDFFileCaching);
 		// CMREADME30
 		if (!(m[I].objectRole&(FOCUS_EVALUATED | HAIL_ROLE)) && (m[I].getObject() >= 0 && objects[m[I].getObject()].objectClass == NAME_OBJECT_CLASS &&
 			m[I].beginObjectPosition > 0 && (m[m[I].beginObjectPosition - 1].queryWinnerForm(conjunctionForm) >= 0 || m[m[I].beginObjectPosition - 1].queryForm(quoteForm) >= 0) &&

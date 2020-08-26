@@ -36,5 +36,6 @@ public:
 		GETPAGE_CANNOT_CREATE = -15
 	};
 	#define MAX_LEN 2048
+	static int internetWebSearchRetryAttempts;
 };
 

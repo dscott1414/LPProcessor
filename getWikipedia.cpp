@@ -1,6 +1,7 @@
 ﻿#include <windows.h>
 #include <io.h>
 #include "word.h"
+#include "ontology.h"
 #include "source.h"
 #include <fcntl.h>
 #include "sys/stat.h"
@@ -11,7 +12,6 @@
 #include <functional>
 //#include <locale>
 #include "profile.h"
-#include "ontology.h"
 #include <share.h>
 #include "internet.h"
 #include "QuestionAnswering.h"
@@ -436,7 +436,8 @@ int reduceWikipediaPage(wstring &buffer)
 				break;
 			wchar_t path[1024];
 			int pathlen=_snwprintf(path,MAX_LEN,L"%s\\wikipediaCache",CACHEDIR)+1;
-			_wmkdir(path);
+			if (_wmkdir(path) < 0 && errno == ENOENT)
+				lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
 			_snwprintf(path,MAX_LEN,L"%s\\wikipediaCache\\_%s.txt",CACHEDIR,nextWikiAddress.c_str());
 			convertIllegalChars(path+pathlen);
 			distributeToSubDirectories(path,pathlen,true);
@@ -830,7 +831,7 @@ void cSource::getRDFTypeSimplificationToWordAssociationWithObjectMap(wstring obj
 // getExtendedRDFTypesMaster accumulates RDF types in a map per source called extendedRdfTypeMap.  
 // the results are extracted from the map and returned in RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap.
 // in addition, the number of times each object RDFType is asked for is accumulated in extendedRdfTypeNumMap.
-int cSource::getAssociationMapMaster(int where,int numWords,unordered_map <wstring ,int > &RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap,wstring fromWhere)
+int cSource::getAssociationMapMaster(int where,int numWords,unordered_map <wstring ,int > &RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap,wstring fromWhere, bool fileCaching)
 { LFS
 	wstring newObjectName;
 	bool isObject = m[where].getObject() >= 0;
@@ -846,11 +847,11 @@ int cSource::getAssociationMapMaster(int where,int numWords,unordered_map <wstri
 		vector <cTreeCat *> rdfTypes;
 		unordered_map <wstring ,int > topHierarchyClassIndexes;
 		// this routine accumulates RDF types in a map per source called extendedRdfTypeMap
-		getExtendedRDFTypesMaster(where, numWords, rdfTypes, topHierarchyClassIndexes, fromWhere, -1, true, false);
+		getExtendedRDFTypesMaster(where, numWords, rdfTypes, topHierarchyClassIndexes, fromWhere, -1, fileCaching, false);
 		// if there are no rdfTypes from the matched object, perhaps from the original object?
 		if (rdfTypes.empty() && m[where].objectMatches.size()>0)
 			// this routine accumulates RDF types in a map per source called extendedRdfTypeMap
-			getExtendedRDFTypesMaster(where, -1, rdfTypes, topHierarchyClassIndexes, fromWhere, -1, true, true);
+			getExtendedRDFTypesMaster(where, -1, rdfTypes, topHierarchyClassIndexes, fromWhere, -1, fileCaching, true);
 		//lplog(LOG_WHERE, L"%s results in %d rdfTypes.", newObjectName.c_str(),rdfTypes.size());
 	}
 	else
@@ -877,7 +878,8 @@ void getOldRDFName(wstring &sourcePath, int where, int extendNumPP, wstring &obj
 void makePath(wstring &object, wchar_t *path)
 {
 	int pathlen = _snwprintf(path, MAX_LEN, L"%s\\dbPediaCache", CACHEDIR);// , retCode = -1;
-	_wmkdir(path);
+	if (_wmkdir(path) < 0 && errno == ENOENT)
+		lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
 	_snwprintf(path + pathlen, MAX_LEN - pathlen, L"\\_%s", object.c_str());
 	convertIllegalChars(path + pathlen + 1);
 	distributeToSubDirectories(path, pathlen + 1, true);
@@ -1123,7 +1125,8 @@ int cSource::getWikipediaPath(int principalWhere,vector <wstring> &wikipediaLink
 	if (principalWhere>=0 && (m[principalWhere].flags&cWordMatch::flagAdjectivalObject) && object.length()>2 && object[object.length() - 1] == L's' && object[object.length() - 2] == L'\'')
 			object.erase(object.length()-2);
 	int pathlen=_snwprintf(path,MAX_LEN,L"%s\\wikipediaCache",CACHEDIR)+1;
-	_wmkdir(path);
+	if (_wmkdir(path) < 0 && errno == ENOENT)
+		lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
 	_snwprintf(path,MAX_LEN,L"%s\\wikipediaCache\\_%s.txt",CACHEDIR,object.c_str());
 	convertIllegalChars(path+pathlen);
 	distributeToSubDirectories(path,pathlen,true);
@@ -1800,7 +1803,7 @@ int cSource::getRDFTypes(int where, vector <cTreeCat *> &rdfTypes, wstring fromW
 	return 0;
 }
 
-int cSource::identifyISARelation(int principalWhere, bool initialTenseOnly)
+int cSource::identifyISARelation(int principalWhere, bool initialTenseOnly, bool fileCaching)
 {
 	LFS
 	int o=m[principalWhere].getObject(),begin=m[principalWhere].beginObjectPosition,len=m[principalWhere].endObjectPosition-begin;
@@ -1826,7 +1829,7 @@ int cSource::identifyISARelation(int principalWhere, bool initialTenseOnly)
 	objects[o].dbPediaAccessed=true;
 	vector <cTreeCat *> rdfTypes;
 	unordered_map <wstring ,int > topHierarchyClassIndexes;
-	getExtendedRDFTypesMaster(principalWhere,-1,rdfTypes,topHierarchyClassIndexes,TEXT(__FUNCTION__));
+	getExtendedRDFTypesMaster(principalWhere,-1,rdfTypes,topHierarchyClassIndexes,TEXT(__FUNCTION__),-1,fileCaching);
 	if (len==1 && !(m[principalWhere].flags&cWordMatch::flagFirstLetterCapitalized)) // lower case 'prize'
 	{
 		for (unsigned int r=0; r<rdfTypes.size(); r++)

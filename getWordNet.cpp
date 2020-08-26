@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <io.h>
 #include "word.h"
+#include "ontology.h"
 #include "source.h"
 #include <stdlib.h>
 #include "wn.h"

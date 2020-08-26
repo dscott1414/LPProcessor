@@ -23,6 +23,7 @@ public:
 	int processQuestionSource(cSource *questionSource, bool parseOnly, bool useParallelQuery);
 	int processPath(cSource *parentSource, const wchar_t *path, cSource *&source, cSource::sourceTypeEnum st, int sourceConfidence, bool parseOnly);
 	bool matchSourcePositions(cSource *parentSource, int parentWhere, cSource *childSource, int childWhere, bool &namedNoMatch, bool &synonym, bool parentInQuestionObject, int &semanticMismatch, int &adjectivalMatch, sTrace &debugTrace);
+	int checkParticularPartQuestionTypeCheck(cSource* questionSource, __int64 questionType, int childWhere, int childObject, int& semanticMismatch);
 
 	private:
 		class cAnswerConfidence
@@ -51,13 +52,14 @@ public:
 			bool subQueryExisted;
 			int numIdenticalAnswers;
 			bool fromTable;
+			bool fromWikipediaInfoBox;
 			wstring tableNum;
 			wstring tableName;
 			int columnIndex;
 			int rowIndex;
 			int entryIndex;
 			cColumn::cEntry entry;
-			cAS(wstring _sourceType, cSource *_source, int _confidence, int _matchSum, wstring _matchInfo, cSpaceRelation* _sri, int _equivalenceClass, int _ws, int _wo, int _wp, bool _fromTable, wstring _tableNum, wstring _tableName, int _columnIndex, int _rowIndex, int _entryIndex, cColumn::cEntry *_entry)
+			cAS(wstring _sourceType, cSource *_source, int _confidence, int _matchSum, wstring _matchInfo, cSpaceRelation* _sri, int _equivalenceClass, int _ws, int _wo, int _wp, bool _fromWikipediaInfoBox, bool _fromTable, wstring _tableNum, wstring _tableName, int _columnIndex, int _rowIndex, int _entryIndex, cColumn::cEntry *_entry)
 			{
 				sourceType = _sourceType;
 				source = _source;
@@ -69,6 +71,7 @@ public:
 				ws = _ws;
 				wo = _wo;
 				wp = _wp;
+				fromWikipediaInfoBox = _fromWikipediaInfoBox;
 				fromTable = _fromTable;
 				tableNum = _tableNum;
 				tableName = _tableName;
@@ -143,6 +146,7 @@ public:
 		set <cObject::cLocation>::iterator &questionObjectMatchIndex, bool confidence, unordered_map <wstring, cProximityMap::cProximityEntry>::iterator closestObjectIterator);
 	void accumulateProximityEntry(cSource *questionSource, unsigned int where, set <cObject::cLocation> &principalObjectLocations, set <cObject::cLocation>::iterator &polIndex, bool confidence, cSpaceRelation* parentSRI, cProximityMap *semanticMap, unordered_set <wstring> & whereQuestionInformationSourceObjectsStrings);
 	int	parseSubQueriesParallel(cSource *questionSource,cSource *childSource, vector <cSpaceRelation> &subQueries, int whereChildCandidateAnswer, set <wstring> &wikipediaLinksAlreadyScanned);
+	bool analyzeRDFTypeBirthDate(cSource* questionSource, cSpaceRelation* ssri, wstring derivation, vector < cAS >& answerSRIs, int& maxAnswer, wstring birthDate);
 	bool analyzeRDFTypes(cSource *questionSource, vector <cSpaceRelation>::iterator sqi, cSpaceRelation *ssri, wstring derivation,vector < cAS > &answerSRIs, int &maxAnswer, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion, unordered_map <int, cWikipediaTableCandidateAnswers * > &wikiTableMap,bool rejectEmptyObjects);
 	int	matchSubQueries(cSource *questionSource, wstring derivation, cSource *childSource, int &semanticMismatch, bool &subQueryNoMatch, vector <cSpaceRelation> &subQueries, int whereChildCandidateAnswer, int whereChildCandidateAnswerEnd, int numConsideredParentAnswer, int semMatchValue, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion, bool useParallelQuery);
 	bool checkObjectIdentical(cSource *source1, cSource *source2, int object1, int object2);
@@ -180,6 +184,7 @@ public:
 	bool matchParticularAnswer(cSource *questionSource, cSpaceRelation *ssri, int whereMatch, int wherePossibleAnswer, set <int> &addWhereQuestionInformationSourceObjects);
 	void detectSubQueries(cSource *questionSource, vector <cSpaceRelation>::iterator sri, vector <cSpaceRelation> &subQueries);
 	bool matchAnswerSourceMatch(cSource *questionSource,cSpaceRelation *ssri, int whereMatch, int wherePossibleAnswer, set <int> &addWhereQuestionInformationSourceObjects);
+	static bool fileCaching;
 	void clear()
 	{
 		for (unordered_map <wstring, cSource *>::iterator smi = sourcesMap.begin(); smi != sourcesMap.end();)

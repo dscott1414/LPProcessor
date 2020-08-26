@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <io.h>
 #include "word.h"
+#include "ontology.h"
 #include "source.h"
 #include <fcntl.h>
 #include "sys/stat.h"
@@ -1042,7 +1043,8 @@ int cQuestionAnswering::accumulateParseRequests(cSpaceRelation* parentSRI, int w
 			{
 				wchar_t path[1024];
 				int pathlen = _snwprintf(path, MAX_LEN, L"%s\\webSearchCache", WEBSEARCH_CACHEDIR) + 1;
-				_wmkdir(path);
+				if (_wmkdir(path) < 0 && errno == ENOENT)
+					lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
 				_snwprintf(path, MAX_LEN, L"%s\\webSearchCache\\_%s", WEBSEARCH_CACHEDIR, epath.c_str());
 				convertIllegalChars(path + pathlen);
 				distributeToSubDirectories(path, pathlen, true);

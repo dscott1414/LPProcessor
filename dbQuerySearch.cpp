@@ -11,6 +11,7 @@
 #include "mysqld_error.h"
 #include "odbcinst.h"
 #include "time.h"
+#include "ontology.h"
 #include "source.h"
 #include <fcntl.h>
 #include <sys/stat.h>

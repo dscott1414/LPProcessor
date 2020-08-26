@@ -3,6 +3,7 @@
 #include "io.h"
 #include "winhttp.h"
 #include "word.h"
+#include "ontology.h"
 #include "source.h"
 #include "time.h"
 #include "vcXML.h"

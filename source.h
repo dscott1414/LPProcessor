@@ -213,6 +213,7 @@ public:
 		preferredViterbiMaximumProbability = 0;
 		preferredViterbiPreviousTagOfHighestProbability = 0;
 		preferredViterbiProbability = 0;
+		sameSourceCopy = -1;
 	};
 	tIWMM word;  // points to WMM array
 	tIWMM getMainEntry(void)
@@ -354,6 +355,7 @@ public:
 	int nextCompoundPartObject; // subject or object, links compound objects together
 	int previousCompoundPartObject; // subject or object, links compound objects together : also links an infinitive verb back to the mainVerb
 	int relSubject; // if this is an object, what subject does it relate to? (for pronoun disambiguation)
+	int sameSourceCopy;
 	int getRelVerb()
 	{
 		return relVerb;
@@ -487,6 +489,20 @@ public:
 					where,roleString(rs2).c_str(),relSubject,relVerb,relObject,relNextObject,nextCompoundPartObject,previousCompoundPartObject,relPrep,relInternalVerb,relInternalObject);
 		}
 	}
+	void clearAfterCopy()
+	{
+		originalObject = relNextObject = nextCompoundPartObject = previousCompoundPartObject = relSubject = sameSourceCopy = relPrep = relInternalVerb = relInternalObject = nextQuote = previousQuote = endQuote = embeddedStorySpeakerPosition = audiencePosition = speakerPosition = -1;
+		setRelObject(-1);
+		setRelVerb(-1);
+		setQuoteForwardLink(-1);
+		beginObjectPosition = -1;
+		endObjectPosition = -1;
+		setObject(-1);
+		objectMatches.clear();
+	}
+	void adjustReferences(int index,bool keepObjects, unordered_map <int, int>& transformSourceToQuestionSourceMap);
+	void adjustReferences(int index, int offset);
+	void adjustValue(int& val, wstring valString, unordered_map <int, int>& sourceIndexMap);
 	bool isPPN(void);
 	tIWMM resolveToClass();
 	// in the case of a proper noun, it increases the size of the form by 1
@@ -586,6 +602,7 @@ public:
 			tmpWinnerForms=0;
 			verbSense=0;
 			whereLastWinnerLACAACMatchPMAOffset=0;
+			sameSourceCopy = -1;
 	}
 private:
 	int object; // this is an index into the objects array.  it is set at the principalWhere of an object
@@ -1572,259 +1589,13 @@ public:
 	}
 };
 
-#define maxCategoryLength 1024
-#define dbPedia_Ontology_Type 1
-#define YAGO_Ontology_Type 2
-#define UMBEL_Ontology_Type 3 // <http://umbel.org/umbel/rc/, <http://umbel.org/umbel#
-#define OpenGIS_Ontology_Type 4
-
-class cOntologyEntry
-{
-public:
-	wstring compactLabel;
-	wstring infoPage;
-	wstring abstractDescription;
-	wstring commentDescription;
-	int numLine; 
-	int ontologyHierarchicalRank;
-	int ontologyType; 
-	int resourceType;
-	int descriptionFilled;
-	unordered_set <wstring> superClasses;
-	vector <int> superClassResourceTypes;
-	cOntologyEntry()
-	{
-		numLine=ontologyType= resourceType =-1;
-		ontologyHierarchicalRank=100; // ignore
-		descriptionFilled=-1; // number of rows found in ontology
-	}
-	wstring toString(wstring &tmpstr,wstring origin)
-	{ 
-		wstring tmpstr2,tmpstr3,tmpstr4,tmpstr5;
-		tmpstr = origin + L":" + ontologyTypeString(ontologyType, resourceType,tmpstr5) + L":" + compactLabel;
-		if (infoPage.length() > 0)
-			tmpstr += L"\ninfoPage:" + infoPage;
-		if (abstractDescription.length() > 0)
-			tmpstr += L"\nabstract:" + abstractDescription;
-		if (commentDescription.length() > 0)
-			tmpstr += L"\ncomment:" + commentDescription;
-		setString(superClasses, tmpstr2, L" ");
-		if (tmpstr2.length()>0)
-			tmpstr+=L"["+tmpstr2+L"]";
-		if (ontologyHierarchicalRank>0)
-			tmpstr+=L":ontologyHierarchicalRank "+itos(ontologyHierarchicalRank,tmpstr3);
-		return tmpstr;
-	}
-  bool operator == (const cOntologyEntry &o)
-	{
-		if (compactLabel!=o.compactLabel) return false;
-		if (infoPage!=o.infoPage) return false;
-		if (abstractDescription!=o.abstractDescription) return false;
-		if (commentDescription!=o.commentDescription) return false;
-		if (numLine!=o.numLine) return false;
-		if (ontologyHierarchicalRank!=o.ontologyHierarchicalRank) return false;
-		if (ontologyType!=o.ontologyType) return false;
-		if (descriptionFilled!=o.descriptionFilled) return false;
-		if (superClasses!=o.superClasses) return false;
-		return true;
-	}
-  bool operator != (const cOntologyEntry &o)
-	{
-		return !(*this==o);
-	}
-	void lplog(int whichLog,wstring origin)
-	{ 
-		wstring tmpstr;
-		::lplog(whichLog,L"%s",toString(tmpstr,origin).c_str());
-	}
-};
-
-bool copy(unordered_map <wstring, cOntologyEntry>::iterator &hint,void *buf,int &where,int limit,unordered_map <wstring, cOntologyEntry> &hm);
-
-class cTreeCat
-{
-public:
-	unordered_map <wstring, cOntologyEntry>::iterator cli;
-	wstring typeObject; 
-	int confidence;
-	wstring abstract;
-	wstring qtype;
-	wstring key;
-	wstring top; // temporary used for back mapping of top class types
-	wstring parentObject; 
-	wstring derivation; // which classes lead to most superclasses? (attempt to go up the heirarchy of types in the ontology may result in a multiplicity of types which is unhelpful.  This helps track which types lend most to the multiplicity)
-	vector <wstring> wikipediaLinks;
-	vector <wstring> professionLinks;
-	bool preferred;
-	bool exactMatch;
-	bool preferredUnknownClass;
-
-	cTreeCat(unordered_map <wstring, cOntologyEntry>::iterator cli,wstring typeObject,wstring &parentObject,wstring qtype,int confidence,string &k,string &description,vector <wstring> &wikipediaLinks,vector <wstring> &professionLinks,bool exactMatch)
-	{
-		this->cli=cli;
-		this->typeObject=typeObject;
-		this->parentObject=parentObject;
-		this->qtype=qtype;
-		this->confidence=confidence;
-		mTW(k,this->key);
-		this->wikipediaLinks=wikipediaLinks;
-		this->professionLinks=professionLinks;
-		mTW(description,this->abstract);
-		preferred=false;
-		this->exactMatch=exactMatch;
-		preferredUnknownClass=false;
-	}
-	cTreeCat(unordered_map <wstring, cOntologyEntry>::iterator cli,wstring typeObject,wstring &parentObject,wstring qtype,int confidence,wstring derivation)
-	{
-		this->cli=cli;
-		this->typeObject=typeObject;
-		this->parentObject=parentObject;
-		this->qtype=qtype;
-		this->confidence=confidence;
-		this->derivation = derivation;
-		preferred=false;
-		exactMatch=false;
-		preferredUnknownClass=false;
-	}
-	cTreeCat(unordered_map <wstring, cOntologyEntry>::iterator cli)
-	{
-		this->cli=cli;
-		preferred=false;
-		exactMatch=false;
-		preferredUnknownClass=false;
-		confidence = 0;
-	}
-	cTreeCat()
-	{
-		//this->cli=(unordered_map <wstring, cOntologyEntry>::iterator)((void *) 0);
-		preferred=false;
-		exactMatch=false;
-		preferredUnknownClass=false;
-		confidence = 0;
-	}
-	bool equals(const cTreeCat *o)
-	{
-		if (cli->first!=o->cli->first) return false;
-		if (cli->second.compactLabel!=o->cli->second.compactLabel) return false;
-		return true;
-	}
-  bool operator == (const cTreeCat &o)
-  {
-		if (cli->first!=o.cli->first) return false;
-		if (cli->second!=o.cli->second) return false;
-		if (typeObject!=o.typeObject) return false; 
-		if (parentObject!=o.parentObject) return false; 
-		if (qtype!=o.qtype) return false; 
-		if (key!=o.key) return false; 
-		if (wikipediaLinks!=o.wikipediaLinks) return false; 
-		if (professionLinks!=o.professionLinks) return false; 
-		if (confidence!=o.confidence) return false; 
-		if (infoPage!=o.infoPage) return false; 
-		if (abstract!=o.abstract) return false; 
-		if (comment!=o.comment) return false; 
-		if (preferred!=o.preferred) return false; 
-		if (exactMatch!=o.exactMatch) return false; 
-		if (preferredUnknownClass!=o.preferredUnknownClass) return false; 
-		return true;
-  }
-  bool operator != (const cTreeCat &o)
-	{
-		return !(*this==o);
-	}
-	wstring toString(wstring &tmpstr);
-	void lplogTC(int whichLog,wstring object);
-	void assignDetails(wstring &a,wstring &c,wstring &ip)
-	{
-		this->abstract=a;
-		this->comment=c;
-		this->infoPage=ip;
-	}
-
-	bool copy(void *buf,cOntologyEntry &dbsn,int &where,int limit)
-	{ 
-		if (!::copy(buf,dbsn.compactLabel,where,limit)) return false;
-		if (!::copy(buf,dbsn.infoPage,where,limit)) return false;
-		if (!::copy(buf,dbsn.abstractDescription,where,limit)) return false;
-		if (!::copy(buf,dbsn.commentDescription,where,limit)) return false;
-		if (!::copy(buf,dbsn.numLine,where,limit)) return false;
-		if (!::copy(buf,dbsn.ontologyType,where,limit)) return false;
-		if (!::copy(buf,dbsn.ontologyHierarchicalRank,where,limit)) return false;
-		if (!::copy(buf, dbsn.superClasses, where, limit)) return false;
-		if (!::copy(buf, dbsn.descriptionFilled, where, limit)) return false;
-		return true;
-	}
-
-	bool copy(void *buf,unordered_map <wstring, cOntologyEntry>::iterator dbsi,int &where,int limit)
-	{
-		if (!::copy(buf,dbsi->first,where,limit)) return false;
-		if (!copy(buf,dbsi->second,where,limit)) return false;
-		return true;
-	}
-
-	bool copy(unordered_map <wstring, cOntologyEntry> &hm,void *buf,int &where,int limit)
-	{ 
-		if (!::copy(cli,buf,where,limit,hm)) return false;
-		if (!::copy(typeObject,buf,where,limit)) return false;
-		if (!::copy(parentObject,buf,where,limit)) return false;
-		if (!::copy(qtype,buf,where,limit)) return false;
-		if (!::copy(confidence,buf,where,limit)) return false;
-		if (!::copy(infoPage,buf,where,limit)) return false;
-		if (!::copy(abstract,buf,where,limit)) return false;
-		if (!::copy(comment,buf,where,limit)) return false;
-		if (!::copy(wikipediaLinks,buf,where,limit)) return false;
-		if (!::copy(professionLinks,buf,where,limit)) return false;
-		int flags;
-		if (!::copy(flags,buf,where,limit)) return false;
-		preferred=(flags&1)!=0;
-		exactMatch=(flags&2)!=0;
-		preferredUnknownClass=(flags&4)!=0;
-		return true;
-	}
-
-	bool copy(void *buf,int &where,int limit)
-	{ 
-		if (!copy(buf,cli,where,limit)) return false;
-		if (!::copy(buf,typeObject,where,limit)) return false;
-		if (!::copy(buf,parentObject,where,limit)) return false;
-		if (!::copy(buf,qtype,where,limit)) return false;
-		if (!::copy(buf,confidence,where,limit)) return false;
-		if (!::copy(buf,infoPage,where,limit)) return false;
-		if (!::copy(buf,abstract,where,limit)) return false;
-		if (!::copy(buf,comment,where,limit)) return false;
-		if (!::copy(buf,wikipediaLinks,where,limit)) return false;
-		if (!::copy(buf,professionLinks,where,limit)) return false;
-		int flags=((preferred) ? 1:0) | (((exactMatch) ? 1:0)<<1) | ((preferredUnknownClass ? 1:0)<<2);
-		if (!::copy(buf,flags,where,limit)) return false;
-		return true;
-	}
-
-	void logIdentity(int logType,wstring object,bool printOnlyPreferred, wstring &rdfInfoPrinted)
-	{ 
-		if (printOnlyPreferred && !preferred && !exactMatch) return;
-		wstring tmpstr,tmpstr2,tmpstr3;
-		::lplog(logType,L"%s%s%s%s[%d]ISTYPE[LI] %s:%s(%s):%s:rank %d (%s,%s)",
-			object.c_str(), (preferred) ? L":PREFERRED " : L"", (exactMatch) ? L"EM " : L"", (preferredUnknownClass) ? L"PU " : L"", confidence,
-			cli->first.c_str(),ontologyTypeString(cli->second.ontologyType, cli->second.resourceType,tmpstr3),qtype.c_str(),cli->second.compactLabel.c_str(),cli->second.ontologyHierarchicalRank,
-			setString(cli->second.superClasses,tmpstr,L" ").c_str(),parentObject.c_str());
-		if (rdfInfoPrinted != abstract)
-		{
-			::lplog(logType, L"    %s:%s:%s:%s",
-				parentObject.c_str(), typeObject.c_str(), infoPage.c_str(), abstract.c_str());
-			rdfInfoPrinted = abstract;
-		}
-	}
-
-private:
-	wstring infoPage;
-	wstring comment;
-};
-
 class cSource
 {
 public:
 	cSource(wchar_t *databaseServer,int _sourceType,bool generateFormStatistics,bool skipWordInitialization,bool printProgress);
 	int beginClock;
 	int pass;
+	bool RDFFileCaching;
 	enum sourceTypeEnum {
 		NO_SOURCE_TYPE, TEST_SOURCE_TYPE, GUTENBERG_SOURCE_TYPE, NEWS_BANK_SOURCE_TYPE, BNC_SOURCE_TYPE, SCRIPT_SOURCE_TYPE,
 		WEB_SEARCH_SOURCE_TYPE, WIKIPEDIA_SOURCE_TYPE, INTERACTIVE_SOURCE_TYPE, PATTERN_TRANSFORM_TYPE, REQUEST_TYPE
@@ -2413,6 +2184,7 @@ int wherePrepObject,
 	int determineKindBitFieldFromObject(cSource *source, int object, int &wikiBitField);
 	bool testQuestionType(int where,int &whereQuestionType,int &whereQuestionTypeFlags,int setType,set <int> &whereQuestionInformationSourceObjects);
 	void processQuestion(int whereVerb,int whereReferencingObject,__int64 &questionType,int &whereQuestionType,set <int> &whereQuestionInformationSourceObjects);
+	void transformQuestionRelation(cSpaceRelation& sri);
 
 	void resolveQuotedPOVObjects(int lastOpeningPrimaryQuote,int lastClosingPrimaryQuote);
 	void setEmbeddedStorySpeaker(int where,int &lastDefiniteSpeaker);
@@ -2505,14 +2277,14 @@ int wherePrepObject,
 	int writeExtendedRDFTypes(wchar_t path[4096],vector <cTreeCat *> &rdfTypes,unordered_map <wstring ,int > &topHierarchyClassIndexes);
 	bool categoryMultiWord(wstring &childWord, wstring &lastWord);
 	void getRDFTypeSimplificationToWordAssociationWithObjectMap(wstring object, vector <cTreeCat *> &rdfTypes, unordered_map<wstring, int> &wordAssociationMap);
-	int getAssociationMapMaster(int where, int numWords, unordered_map <wstring, int > &associationMap, wstring fromWhere);
+	int getAssociationMapMaster(int where, int numWords, unordered_map <wstring, int > &associationMap, wstring fromWhere, bool fileCaching);
 	bool noRDFTypes();
 	int getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat *> &rdfTypes, unordered_map <wstring, int > &topHierarchyClassIndexes, wstring fromWhere, int extendNumPP = -1, bool fileCaching = true, bool ignoreMatches=false);
 	void testWikipedia();
 	int getRDFWhereString(int where, wstring &oStr, wchar_t *separator, int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool ignoreMatches=false);
 	bool analyzeRDFTitle(unsigned int where, int &numWords, int &numPrepositions, wstring tableName);
 	int getRDFTypes(int where, vector <cTreeCat *> &rdfTypes, wstring fromWhere, int extendNumPP = -1, bool ignoreMatches=false, bool fileCaching=true);
-	int identifyISARelation(int principalWhere,bool initialTenseOnly);
+	int identifyISARelation(int principalWhere,bool initialTenseOnly, bool fileCaching);
 	bool checkForUppercaseSources(int questionInformationSourceObject);
 	bool skipSentenceForUpperCase(unsigned int &sentenceEnd);
 	bool mixedCaseObject(int begin,int len);
@@ -2520,17 +2292,15 @@ int wherePrepObject,
 	bool rejectISARelation(int principalWhere);
 	bool isDefiniteObject(int where, wchar_t *definiteObjectType, int &ownerWhere, bool recursed);
 	int identifyISARelationTextAnalysis(cQuestionAnswering &qa, int principalWhere,bool parseOnly);
-	int checkParticularPartSemanticMatch(int logType, int parentWhere, cSource *childSource, int childWhere, int childObject, bool &synonym, int &semanticMismatch);
+	int checkParticularPartSemanticMatch(int logType, int parentWhere, cSource *childSource, int childWhere, int childObject, bool &synonym, int &semanticMismatch, bool fileCaching);
 	void checkParticularPartSemanticMatchWord(int logType, int parentWhere, bool &synonym, set <wstring> &parentSynonyms, wstring pw, wstring pwme, int &lowestConfidence, unordered_map <wstring, int >::iterator ami);
-	int checkParticularPartQuestionTypeCheck(__int64 questionType, int childWhere, int childObject, int &semanticMismatch);
 	bool isObjectCapitalized(int where);
 	bool ppExtensionAvailable(int where,int &numPPAvailable,bool nonMixed);
-	void copySource(cSource *childSource,int begin,int end);
+	void copySource(cSource* childSource, int begin, int end, unordered_map <int, int>& sourceIndexMap);
 	vector <cSpaceRelation>::iterator copySRI(cSource *childSource,vector <cSpaceRelation>::iterator sri);
-	int copyDirectlyAttachedPrepositionalPhrase(cSource *childSource,int relPrep);
-	int copyDirectlyAttachedPrepositionalPhrases(int whereParentObject,cSource *childSource,int whereChild);
-	void adjustOffsets(int childWhere,bool keepObjects=false);
-	vector <int> copyChildrenIntoParent(cSource *childSource,int whereChild);
+	int copyDirectlyAttachedPrepositionalPhrase(cSource *childSource,int relPrep, unordered_map <int, int>& sourceIndexMap,bool clear);
+	int copyDirectlyAttachedPrepositionalPhrases(int whereParentObject,cSource *childSource,int whereChild, unordered_map <int, int>& sourceIndexMap,bool clear);
+	vector <int> copyChildrenIntoParent(cSource *childSource,int whereChild, unordered_map <int, int>& sourceIndexMap, bool clear);
 	int detectAttachedPhrase(vector <cSpaceRelation>::iterator sri,int &relVerb);
 	bool hasProperty(int where,int whereQuestionTypeObject, unordered_map <int,vector < vector <int> > > &wikiTableMap,vector <wstring> &propertyValues);
 	bool compareObjectString(int whereObject1,int whereObject2);

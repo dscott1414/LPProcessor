@@ -4,6 +4,7 @@
 #include <io.h>
 #include <fcntl.h>
 #include "word.h"
+#include "ontology.h"
 #include "source.h"
 #include "time.h"
 #include "math.h"
@@ -615,6 +616,7 @@ bool cWordMatch::read(char *buffer,int &where,int limit)
 	andChainType=false;
 	notFreePrep=false;
 	hasVerbRelations=false;
+	sameSourceCopy = -1;
 	return true;
 }
 
@@ -2977,6 +2979,7 @@ cSource::cSource(wchar_t *databaseServer,int _sourceType,bool generateFormStatis
 	primaryLocationLastMovingPosition=-1;
 	primaryLocationLastPosition=-1;
 	updateWordUsageCostsDynamically = false;
+	RDFFileCaching = true;
 }
 
 cSource::cSource(MYSQL *parentMysql,int _sourceType,int _sourceConfidence)
@@ -3255,7 +3258,7 @@ bool cSource::isDefiniteObject(int where, wchar_t *definiteObjectType, int &owne
 	default:;
 	}
 	if (!objects[object].dbPediaAccessed)
-		identifyISARelation(where, false);
+		identifyISARelation(where, false, RDFFileCaching);
 	if (objects[object].isWikiBusiness || objects[object].isWikiPerson || objects[object].isWikiPlace || objects[object].isWikiWork)
 	{
 		if (logSynonymDetail)
@@ -3353,124 +3356,6 @@ int cSource::determineKindBitField(cSource *source, int where, int &wikiBitField
 	return 0;
 }
 
-int cSource::checkParticularPartQuestionTypeCheck(__int64 questionType, int childWhere, int childObject, int &semanticMismatch)
-{
-	LFS
-		wstring tmpstr;
-	int oc = objects[childObject].objectClass;
-	if (oc == PRONOUN_OBJECT_CLASS ||
-		oc == REFLEXIVE_PRONOUN_OBJECT_CLASS ||
-		oc == RECIPROCAL_PRONOUN_OBJECT_CLASS ||
-		oc == PLEONASTIC_OBJECT_CLASS ||
-		oc == META_GROUP_OBJECT_CLASS ||
-		oc == VERB_OBJECT_CLASS)
-	{
-		semanticMismatch = 1;
-		return CONFIDENCE_NOMATCH;
-	}
-	if ((questionType == cQuestionAnswering::whereQTFlag || questionType == cQuestionAnswering::whoseQTFlag || questionType == cQuestionAnswering::whomQTFlag || questionType == cQuestionAnswering::wikiBusinessQTFlag || questionType == cQuestionAnswering::wikiWorkQTFlag) &&
-		!objects[childObject].dbPediaAccessed)
-		identifyISARelation(childWhere, true);
-	bool wikiDetermined =
-		(objects[childObject].isWikiPlace || objects[childObject].isWikiPerson || objects[childObject].isWikiBusiness || objects[childObject].isWikiWork);
-	switch (questionType)
-	{
-	case cQuestionAnswering::whereQTFlag:
-		if (oc == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS ||
-			oc == GENDERED_DEMONYM_OBJECT_CLASS ||
-			oc == GENDERED_RELATIVE_OBJECT_CLASS ||
-			oc == BODY_OBJECT_CLASS ||
-			oc == NON_GENDERED_BUSINESS_OBJECT_CLASS)
-		{
-			semanticMismatch = 2;
-			return CONFIDENCE_NOMATCH;
-		}
-		if (oc == GENDERED_GENERAL_OBJECT_CLASS && wikiDetermined)
-		{
-			semanticMismatch = 3;
-			return CONFIDENCE_NOMATCH;
-		}
-		if (oc == NON_GENDERED_GENERAL_OBJECT_CLASS ||
-			oc == NON_GENDERED_NAME_OBJECT_CLASS ||
-			oc == NAME_OBJECT_CLASS)
-		{
-			if (objects[childObject].isLocationObject ||
-				objects[childObject].isWikiPlace)
-				return 1;
-			if (objects[childObject].getSubType() == NOT_A_PLACE ||
-				objects[childObject].isTimeObject ||
-				objects[childObject].isWikiPerson ||
-				objects[childObject].isWikiWork ||
-				objects[childObject].isWikiBusiness)
-			{
-				semanticMismatch = 4;
-				return CONFIDENCE_NOMATCH;
-			}
-			// if object of [location preposition]
-			if (m[childWhere].relPrep >= 0)
-			{
-				wstring prep = m[m[childWhere].relPrep].word->first;
-				if (prepTypesMap[prep] == tprNEAR || prepTypesMap[prep] == tprIN || prepTypesMap[prep] == tprSPAT)
-					return 1;
-			}
-		}
-		break;
-	case cQuestionAnswering::whoseQTFlag:
-	case cQuestionAnswering::whomQTFlag:
-		if (oc == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS ||
-			oc == GENDERED_DEMONYM_OBJECT_CLASS ||
-			oc == GENDERED_GENERAL_OBJECT_CLASS ||
-			oc == GENDERED_RELATIVE_OBJECT_CLASS ||
-			oc == BODY_OBJECT_CLASS)
-			return 1;
-		if ((oc == NON_GENDERED_GENERAL_OBJECT_CLASS || oc == NON_GENDERED_NAME_OBJECT_CLASS) && wikiDetermined && !objects[childObject].isWikiPerson)
-		{
-			semanticMismatch = 5;
-			return CONFIDENCE_NOMATCH;
-		}
-		if (oc == NON_GENDERED_BUSINESS_OBJECT_CLASS && wikiDetermined && !objects[childObject].isWikiPerson)
-		{
-			semanticMismatch = 6;
-			return CONFIDENCE_NOMATCH;
-		}
-		if (oc == NAME_OBJECT_CLASS || oc == NON_GENDERED_NAME_OBJECT_CLASS)
-		{
-			if (objects[childObject].getSubType() != NOT_A_PLACE && wikiDetermined && !objects[childObject].isWikiPerson)
-			{
-				semanticMismatch = 7;
-				return CONFIDENCE_NOMATCH;
-			}
-			if (wikiDetermined && !objects[childObject].isWikiPerson && (objects[childObject].isTimeObject || objects[childObject].isLocationObject || objects[childObject].isWikiPlace || objects[childObject].isWikiBusiness))
-			{
-				semanticMismatch = 8;
-				return CONFIDENCE_NOMATCH;
-			}
-			if (objects[childObject].isWikiPerson)
-				return 1;
-			if (oc == NAME_OBJECT_CLASS)
-				return CONFIDENCE_NOMATCH / 2;
-		}
-		return CONFIDENCE_NOMATCH;
-	case cQuestionAnswering::whenQTFlag:
-		if (!objects[childObject].isTimeObject)
-		{
-			semanticMismatch = 9;
-			return CONFIDENCE_NOMATCH;
-		}
-		else
-			return 1;
-	case cQuestionAnswering::wikiBusinessQTFlag:
-		if (oc == NON_GENDERED_BUSINESS_OBJECT_CLASS || objects[childObject].isWikiBusiness)
-			return 1;
-		break;
-	case cQuestionAnswering::wikiWorkQTFlag:
-		if (objects[childObject].isWikiWork)
-			return 1;
-		break;
-	}
-	return CONFIDENCE_NOMATCH / 2;
-}
-
 void cSource::checkParticularPartSemanticMatchWord(int logType, int parentWhere, bool &synonym, set <wstring> &parentSynonyms, wstring pw, wstring pwme, int &lowestConfidence, unordered_map <wstring, int >::iterator ami)
 {
 	LFS // DLFS
@@ -3493,7 +3378,7 @@ void cSource::checkParticularPartSemanticMatchWord(int logType, int parentWhere,
 }
 
 // may be passed a childObject which is -1, in which case it will try to derive it from childWhere.  This is only recommended if the resolution of the object location is simple (no multiple matches).
-int cSource::checkParticularPartSemanticMatch(int logType, int parentWhere, cSource *childSource, int childWhere, int childObject, bool &synonym, int &semanticMismatch)
+int cSource::checkParticularPartSemanticMatch(int logType, int parentWhere, cSource *childSource, int childWhere, int childObject, bool &synonym, int &semanticMismatch, bool fileCaching)
 {
 	LFS
 		if (childWhere < 0)
@@ -3504,7 +3389,7 @@ int cSource::checkParticularPartSemanticMatch(int logType, int parentWhere, cSou
 		return CONFIDENCE_NOMATCH;
 
 	unordered_map <wstring, int > associationMap;
-	childSource->getAssociationMapMaster(childSource->objects[childObject].originalLocation, -1, associationMap, TEXT(__FUNCTION__));
+	childSource->getAssociationMapMaster(childSource->objects[childObject].originalLocation, -1, associationMap, TEXT(__FUNCTION__), fileCaching);
 	wstring tmpstr, tmpstr2, pw = m[parentWhere].word->first;
 	transform(pw.begin(), pw.end(), pw.begin(), (int(*)(int)) tolower);
 	wstring pwme = m[parentWhere].getMainEntry()->first;
@@ -3589,23 +3474,32 @@ int cSource::checkParticularPartSemanticMatch(int logType, int parentWhere, cSou
 	return lowestConfidence;
 }
 
-void cSource::copySource(cSource *childSource, int begin, int end)
+void cSource::copySource(cSource *childSource, int begin, int end, unordered_map <int, int>& sourceIndexMap)
 {
 	LFS
 		for (int I = begin; I < end; I++)
 		{
+			sourceIndexMap[I] = m.size();
 			m.push_back(childSource->m[I]);
-			adjustOffsets(I);
 		}
 }
 
-int cSource::copyDirectlyAttachedPrepositionalPhrase(cSource *childSource, int relPrep)
+int cSource::copyDirectlyAttachedPrepositionalPhrase(cSource *childSource, int relPrep, unordered_map <int, int>& sourceIndexMap,bool clear)
 {
 	LFS
 		int relObject = childSource->m[relPrep].getRelObject();
 	if (relObject >= relPrep && childSource->m[relObject].endObjectPosition >= 0)
 	{
-		copySource(childSource, relPrep, childSource->m[relObject].endObjectPosition);
+		copySource(childSource, relPrep, childSource->m[relObject].endObjectPosition,sourceIndexMap);
+		if (clear)
+		{
+			for (int I = m.size() + relPrep - childSource->m[relObject].endObjectPosition; I < m.size(); I++)
+			{
+				m[I].clearAfterCopy();
+				m[I].principalWherePosition = -1;
+				m[I].principalWhereAdjectivalPosition = -1;
+			}
+		}
 		return childSource->m[relObject].endObjectPosition - relPrep;
 	}
 	return 0;
@@ -3654,59 +3548,94 @@ bool cSource::ppExtensionAvailable(int where, int &getUntilNumPP, bool nonMixed)
 	return false;
 }
 
-int cSource::copyDirectlyAttachedPrepositionalPhrases(int whereParentObject, cSource *childSource, int whereChild)
+int cSource::copyDirectlyAttachedPrepositionalPhrases(int whereParentObject, cSource *childSource, int whereChild, unordered_map <int, int>& sourceIndexMap,bool clear)
 {
 	LFS
-		int relPrep = childSource->m[whereChild].endObjectPosition;
+	int relPrep = childSource->m[whereChild].endObjectPosition;
 	if (relPrep < 0 || relPrep >= (signed)childSource->m.size() || childSource->m[relPrep].queryWinnerForm(prepositionForm) < 0 || childSource->m[relPrep].nextQuote != whereChild) return 0;
-	m[whereParentObject].relPrep = m.size();
+	m[whereParentObject].relPrep = relPrep;
 	while (relPrep >= 0 && (childSource->m[relPrep].nextQuote == whereChild || childSource->m[relPrep].relNextObject == whereChild))
 	{
-		copyDirectlyAttachedPrepositionalPhrase(childSource, relPrep);
+		copyDirectlyAttachedPrepositionalPhrase(childSource, relPrep,sourceIndexMap,clear);
 		relPrep = childSource->m[relPrep].relPrep;
 	}
 	return m.size() - m[whereParentObject].relPrep;
 }
 
-void cSource::adjustOffsets(int childWhere, bool keepObjects)
+void cWordMatch::adjustValue(int& val, wstring valString, unordered_map <int, int>& sourceIndexMap)
+{
+	if (val < 0)
+		return;
+	if (sourceIndexMap.find(val) != sourceIndexMap.end())
+		val = sourceIndexMap[val];
+	else
+	{
+		lplog(LOG_WHERE, L"Unable to adjust index %s of %d. Setting to -1.", valString.c_str(), val);
+		val = -1;
+	}
+}
+
+void cWordMatch::adjustReferences(int index, bool keepObjects, unordered_map <int, int>& sourceIndexMap)
 {
 	LFS
-		int parentWhere = m.size() - 1;
-	int offset = parentWhere - childWhere;
-	if (m[parentWhere].beginObjectPosition >= 0)
-		m[parentWhere].beginObjectPosition += offset;
-	if (m[parentWhere].endObjectPosition >= 0)
-		m[parentWhere].endObjectPosition += offset;
-	if (m[parentWhere].relPrep >= 0)
-		m[parentWhere].relPrep += offset;
-	if (m[parentWhere].getRelObject() >= 0)
-		m[parentWhere].setRelObject(m[parentWhere].getRelObject() + offset);
-	if (m[parentWhere].nextQuote >= 0)
-		m[parentWhere].nextQuote += offset;
-	if (m[parentWhere].principalWherePosition >= 0)
-		m[parentWhere].principalWherePosition += offset;
-	m[parentWhere].beginPEMAPosition = -1;
-	m[parentWhere].endPEMAPosition = -1;
-	if (!keepObjects)
-	{
-		m[parentWhere].setObject(-1);
-		m[parentWhere].objectMatches.clear();
-	}
+	adjustValue(beginObjectPosition, L"beginObjectPosition", sourceIndexMap);
+	adjustValue(endObjectPosition, L"endObjectPosition", sourceIndexMap);
+	adjustValue(relPrep, L"relPrep", sourceIndexMap);
+	adjustValue(relObject, L"relObject", sourceIndexMap);
+	adjustValue(nextQuote, L"nextQuote", sourceIndexMap);
+	adjustValue(principalWherePosition, L"principalWherePosition", sourceIndexMap);
+	beginPEMAPosition = -1;
+	endPEMAPosition = -1;
+	keepObjects = false;
+	//if (!keepObjects)
+	//{
+	//	setObject(-1);
+	//	objectMatches.clear();
+	//}
 	if (logQuestionDetail)
-		lplog(LOG_WHERE, L"parentWhere %d:COPY CHILD->PARENT %s beginObjectPosition=%d endObjectPosition=%d relPrep=%d relObject=%d nextQuote=%d offset=%d",
-			parentWhere, m[parentWhere].word->first.c_str(), m[parentWhere].beginObjectPosition, m[parentWhere].endObjectPosition, m[parentWhere].relPrep, m[parentWhere].getRelObject(), m[parentWhere].nextQuote, offset);
+		lplog(LOG_WHERE, L"%d:COPY CHILD->PARENT %s beginObjectPosition=%d endObjectPosition=%d relPrep=%d relObject=%d nextQuote=%d principalWherePosition=%d",
+			index, word->first.c_str(), beginObjectPosition, endObjectPosition, relPrep, getRelObject(), nextQuote, principalWherePosition);
+}
+
+void cWordMatch::adjustReferences(int index,int offset)
+{
+	LFS
+	if (beginObjectPosition >= 0)
+		beginObjectPosition += offset;
+	if (endObjectPosition >= 0)
+		endObjectPosition += offset;
+	if (relPrep >= 0)
+		relPrep += offset;
+	if (getRelObject() >= 0)
+		setRelObject(getRelObject() + offset);
+	if (nextQuote >= 0)
+		nextQuote += offset;
+	if (principalWherePosition >= 0)
+		principalWherePosition += offset;
+	beginPEMAPosition = -1;
+	endPEMAPosition = -1;
+	if (logQuestionDetail)
+		lplog(LOG_WHERE, L"parentWhere %d:COPY SELF %s beginObjectPosition=%d endObjectPosition=%d relPrep=%d relObject=%d nextQuote=%d principalWherePosition=%d offset=%d",
+			index, word->first.c_str(), beginObjectPosition, endObjectPosition, relPrep, getRelObject(), nextQuote, principalWherePosition, offset);
 }
 
 // copy the answer into the parent
-vector <int> cSource::copyChildrenIntoParent(cSource *childSource, int whereChild)
+vector <int> cSource::copyChildrenIntoParent(cSource *childSource, int whereChild, unordered_map <int, int>& sourceIndexMap,bool clear)
 {
 	LFS
 	vector <int> parentLocations;
 	if (childSource->m[whereChild].getObject() < 0 || childSource->m[whereChild].beginObjectPosition < 0 || childSource->m[whereChild].endObjectPosition < 0)
 	{
+		sourceIndexMap[whereChild] = m.size();
 		m.push_back(childSource->m[whereChild]);
-		adjustOffsets(whereChild);
 		parentLocations.push_back(m.size() - 1);
+		if (clear)
+		{
+			int I = m.size() - 1;
+			m[I].clearAfterCopy();
+			m[I].principalWherePosition = -1;
+			m[I].principalWhereAdjectivalPosition = -1;
+		}
 		wstring tmpstr, tmpstr2;
 		lplog(LOG_WHERE, L"Transferred %d:%s to %d:%s", whereChild, childSource->whereString(whereChild, tmpstr, true).c_str(), m.size() - 1, whereString(m.size() - 1, tmpstr2, true).c_str());
 	}
@@ -3721,22 +3650,40 @@ vector <int> cSource::copyChildrenIntoParent(cSource *childSource, int whereChil
 		{
 			int co = coOM.object;
 			int whereObject = childSource->objects[co].originalLocation;
-			copySource(childSource, childSource->m[whereObject].beginObjectPosition, childSource->m[whereObject].endObjectPosition);
+			// copy the words associated with the childObject
+			copySource(childSource, childSource->m[whereObject].beginObjectPosition, childSource->m[whereObject].endObjectPosition, sourceIndexMap);
 			// copy childObject
 			objects.push_back(childSource->objects[co]);
 			int whereParentObject = m.size() - childSource->m[whereObject].endObjectPosition + whereObject;
 			parentLocations.push_back(whereParentObject);
 			int parentObject = objects.size() - 1;
-			m[whereParentObject].setObject(parentObject);
-			m[whereParentObject].objectMatches.clear();
+			objects[parentObject].begin = whereParentObject - (whereObject - childSource->m[whereObject].beginObjectPosition);
+			objects[parentObject].end = whereParentObject + (childSource->m[whereObject].endObjectPosition - whereObject);
+			if (clear)
+			{
+				for (int I = objects[parentObject].begin; I < objects[parentObject].end; I++)
+				{
+					m[I].clearAfterCopy();
+					if (m[I].principalWherePosition >= 0)
+						m[I].principalWherePosition += m.size() - childSource->m[whereObject].endObjectPosition;
+					if (m[I].principalWhereAdjectivalPosition >= 0)
+						m[I].principalWhereAdjectivalPosition += m.size() - childSource->m[whereObject].endObjectPosition;
+				}
+			}
+			m[whereParentObject].setObject(parentObject); 
 			if (childSource->objects[co].getOwnerWhere() >= 0)
 			{
+				sourceIndexMap[childSource->objects[co].getOwnerWhere()] = m.size();
 				m.push_back(childSource->m[childSource->objects[co].getOwnerWhere()]);
-				adjustOffsets(childSource->objects[co].getOwnerWhere());
-				objects[parentObject].setOwnerWhere(m.size() - 1);
+				int I = m.size() - 1;
+				if (clear)
+				{
+					m[I].clearAfterCopy();
+					if (m[I].principalWhereAdjectivalPosition >= 0)
+						m[I].principalWhereAdjectivalPosition += m.size() - childSource->m[whereObject].endObjectPosition;
+				}
+				objects[parentObject].setOwnerWhere(I);
 			}
-			objects[parentObject].begin = m[whereParentObject].beginObjectPosition = whereParentObject - (whereObject - childSource->m[whereObject].beginObjectPosition);
-			objects[parentObject].end = m[whereParentObject].endObjectPosition = whereParentObject + (childSource->m[whereObject].endObjectPosition - whereObject);
 			objects[parentObject].originalLocation = whereParentObject;
 			objects[parentObject].relativeClausePM = -1; // should copy later
 			objects[parentObject].whereRelativeClause = -1; // should copy later
@@ -3744,9 +3691,12 @@ vector <int> cSource::copyChildrenIntoParent(cSource *childSource, int whereChil
 			objects[parentObject].replacedBy = -1;
 			objects[parentObject].duplicates.clear();
 			objects[parentObject].eliminated = false;
-			copyDirectlyAttachedPrepositionalPhrases(whereParentObject, childSource, whereObject);
+			copyDirectlyAttachedPrepositionalPhrases(whereParentObject, childSource, whereObject, sourceIndexMap,clear);
 			wstring tmpstr, tmpstr2;
 			lplog(LOG_WHERE, L"Transferred %d:%s to %d:%s", whereObject, childSource->objectString(co, tmpstr, true).c_str(), whereParentObject, whereString(whereParentObject, tmpstr2, true).c_str());
+			// negative objects allowed in some cases, so make it REALLY negative (past wordOrderWords and eOBJECTS)
+			if (!clear)
+				m[whereParentObject].setObject(-parentObject - 1000); // set to negative - will be reversed by scan which must always be called after this when clear is false - negative objects are allowed in some cases
 		}
 	}
 	return parentLocations;

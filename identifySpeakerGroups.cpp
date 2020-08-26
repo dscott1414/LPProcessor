@@ -3,6 +3,7 @@
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
 #include <io.h>
 #include "word.h"
+#include "ontology.h"
 #include "source.h"
 #include "time.h"
 #include "vcXML.h"
@@ -2970,7 +2971,7 @@ void cSource::identifySpeakerGroups()
     identifyMetaGroup(I,inPrimaryQuote,inSecondaryQuote,lastBeginS1,lastRelativePhrase,lastQ2,lastVerb);
 		// Wikipedia
     if (!inPrimaryQuote && !inSecondaryQuote && sourceType!=PATTERN_TRANSFORM_TYPE)
-		  identifyISARelation(I,true);
+		  identifyISARelation(I,true, RDFFileCaching);
 		detectTimeTransition(I,lastSubjects);
 		defineObjectAsSpatial(I);
 		detectTenseAndFirstPersonUsage(I, lastBeginS1, lastRelativePhrase, numPastSinceLastQuote, numNonPastSinceLastQuote, numFirstInQuote, numSecondInQuote, inPrimaryQuote);

@@ -3,6 +3,7 @@
 #include "io.h"
 #include "winhttp.h"
 #include "word.h"
+#include "ontology.h"
 #include "source.h"
 #include "time.h"
 #include <fcntl.h>
@@ -10,7 +11,6 @@
 #include "mysql.h"
 #include <direct.h>
 #include <sys/stat.h>
-#include "ontology.h"
 #include <crtdbg.h>
 	extern "C" {
 #include <yajl_tree.h>
@@ -57,6 +57,8 @@ __int64 cProfile::accumulateOnlyNetTimer;
 __int64 cProfile::lastNetworkTimePrinted;
 __int64 cProfile::accumulateNetworkTimeCount;
 int cProfile::lastNetClock;
+int cInternet::internetWebSearchRetryAttempts=1;
+bool cQuestionAnswering::fileCaching=true;
 unordered_map < wstring, __int64 > cProfile::netAndSleepTimes,cProfile::onlyNetTimes,cProfile::numTimesPerURL;
 
 

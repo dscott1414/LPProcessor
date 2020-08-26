@@ -4,6 +4,7 @@
 #include <io.h>
 #include <fcntl.h>
 #include "word.h"
+#include "ontology.h"
 #include "source.h"
 #include "time.h"
 #include "math.h"

@@ -3,6 +3,7 @@
 #include "string.h"
 #include <io.h>
 #include "word.h"
+#include "ontology.h"
 #include "source.h"
 #include "bncc.h"
 #include "time.h"

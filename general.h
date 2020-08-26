@@ -14,10 +14,9 @@
 #define TEXTDIR L"M:\\caches"
 #define MAX_COST 100000
 #define CONFIDENCE_NOMATCH 100000
-#define UMBEL_CACHE_VERSION L'J'
-#define RDFLIBRARYTYPE_VERSION L'K'
-#define RDFTYPE_VERSION L'K'
-#define EXTENDED_RDFTYPE_VERSION L'P'
+#define RDFLIBRARYTYPE_VERSION L'M'
+#define RDFTYPE_VERSION L'M'
+#define EXTENDED_RDFTYPE_VERSION L'R'
 
 // When this enum is changed, inflection calculations must also change in net.cpp
 enum InflectionTypes : unsigned int {

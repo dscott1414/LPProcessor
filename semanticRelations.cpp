@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <io.h>
 #include "word.h"
+#include "ontology.h"
 #include "source.h"
 #include "vcXML.h"
 #include "time.h"
@@ -604,36 +605,7 @@ void cSource::correctSRIEntry(cSpaceRelation &sri)
 	}
 	if (sri.whereSecondaryPrep<0 && sri.whereSecondaryVerb>=0 && sri.wherePrep!=m[sri.whereSecondaryVerb].relPrep)
 		sri.whereSecondaryPrep=m[sri.whereSecondaryVerb].relPrep;
-	bool inQuestion=(sri.whereSubject>=0 && (m[sri.whereSubject].flags&cWordMatch::flagInQuestion));
-	inQuestion|=(sri.whereObject>=0 && (m[sri.whereObject].flags&cWordMatch::flagInQuestion));
-	if (inQuestion && sri.whereVerb>=0) // search for _Q2PREP
-	{
-		// what is his academic specialty? CASE 9
-		if (m[sri.whereVerb].queryWinnerForm(isForm)>=0 && sri.whereObject>=0 && sri.whereSubject>=0 && (m[sri.whereSubject].queryForm(relativizerForm)>=0 || m[sri.whereSubject].queryForm(interrogativeDeterminerForm)>=0))
-		{
-			int wo=sri.whereObject;
-			sri.whereObject=sri.whereSubject;
-			sri.whereSubject=wo;
-		}
-		processQuestion(sri.whereVerb,sri.whereControllingEntity,sri.questionType,sri.whereQuestionType,sri.whereQuestionInformationSourceObjects);
-		// if a where clause, put where in a prepositional clause / did Jay-Z grow up? CASE 10
-		// if a when clause, also put where in a prepositional clause / when was Darrell Hammond born? CASE 11
-		if (((sri.questionType&cQuestionAnswering::typeQTMask)== cQuestionAnswering::whereQTFlag || (sri.questionType&cQuestionAnswering::typeQTMask)== cQuestionAnswering::whenQTFlag) &&
-			  inObject(sri.whereObject,sri.whereQuestionType) && sri.whereVerb>=0)
-		{
-			tIWMM inWord=Words.query(L"in");
-			if (inWord!=Words.end()) {
-				m.push_back(cWordMatch(inWord,0,debugTrace));
-				m[m.size()-1].relPrep=m[sri.whereVerb].relPrep;
-				m[m.size()-1].setRelObject(sri.whereObject);
-				m[sri.whereVerb].relPrep=m.size()-1;
-				sri.wherePrepObject=sri.whereObject;
-				sri.wherePrep=m.size()-1;
-				sri.prepositionUncertain=true;
-				sri.whereObject=-1;
-			}
-		}
-	}
+	transformQuestionRelation(sri);
 	// sets relNextObject of a prep to be the object immediately before the preposition
 	// sets principalWherePosition of a prep to be the object which is at the head of a chain of prepositions, which is itself not an object of a preposition
 	int ro;
@@ -1463,7 +1435,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 					(wpd=m[m[whereObject].endObjectPosition].getRelObject())>=0 &&
 					(pd=m[wpd].getObject())>=0)
 			{
-				identifyISARelation(wpd,false);
+				identifyISARelation(wpd,false, RDFFileCaching);
 				if (objects[pd].getSubType()<0)
 					pd=wpd=-1;
 			}

@@ -18,6 +18,7 @@
 using namespace std;
 #include <direct.h>
 #include "word.h"
+#include "ontology.h"
 #include "source.h"
 #include "internet.h"
 

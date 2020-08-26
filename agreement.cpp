@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <io.h>
 #include "word.h"
+#include "ontology.h"
 #include "source.h"
 #include "time.h"
 #include "malloc.h"
@@ -2442,7 +2443,7 @@ int cSource::evaluateNounDeterminer(vector <cTagLocation> &tagSet, bool assessCo
 	{
 		// this covers the second noun, the previous test above covers the first noun
 		// from face to face / rock to rock / stone to stone
-		if ((begin >= 3 && m[begin - 3].word->first == L"from" && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm)) > 0) || m[begin - 2].word->first == m[begin].word->first)
+		if (begin >= 3 && ((m[begin - 3].word->first == L"from" && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm)) > 0) || m[begin - 2].word->first == m[begin].word->first))
 		{
 			if (debugTrace.traceDeterminer)
 			{

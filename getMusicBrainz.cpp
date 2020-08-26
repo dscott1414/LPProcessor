@@ -11,6 +11,7 @@
 #include "mysqld_error.h"
 #include "odbcinst.h"
 #include "time.h"
+#include "ontology.h"
 #include "source.h"
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -505,12 +506,12 @@ bool cQuestionAnswering::dbSearchMusicBrainzSearchType(cSource *questionSource, 
 		wstring logres;
 		if (questionSource->inObject(firstWhere,parentSRI->whereQuestionType) && questionSource->pushWhereEntities(derivation,firstWhere,firstMatchListType,secondMatchListType,secondWhere,true,parentSRI->mbs))
 		{
-			answerSRIs.push_back(cAS(L"dbMusicBrainz", questionSource, 1, 1000, firstMatchListType, NULL, 0, firstWhere, 0, 0, false, L"", L"", 0,0,0,NULL));
+			answerSRIs.push_back(cAS(L"dbMusicBrainz", questionSource, 1, 1000, firstMatchListType, NULL, 0, firstWhere, 0, 0, false, false, L"", L"", 0,0,0,NULL));
 			answerSRIs[answerSRIs.size() - 1].finalAnswer = foundMatch=true;
 		}
 		if (questionSource->inObject(secondWhere,parentSRI->whereQuestionType) && questionSource->pushWhereEntities(derivation,secondWhere,secondMatchListType,firstMatchListType,firstWhere,true, parentSRI->mbs))
 		{
-			answerSRIs.push_back(cAS(L"dbMusicBrainz", questionSource, 1, 1000, secondMatchListType, NULL, 0, secondWhere, 0, 0, false, L"", L"", 0, 0, 0,NULL));
+			answerSRIs.push_back(cAS(L"dbMusicBrainz", questionSource, 1, 1000, secondMatchListType, NULL, 0, secondWhere, 0, 0, false, false, L"", L"", 0, 0, 0,NULL));
 			answerSRIs[answerSRIs.size() - 1].finalAnswer = foundMatch = true;
 		}
 	}
@@ -541,7 +542,7 @@ bool cQuestionAnswering::dbSearchMusicBrainzSearchType(cSource *questionSource, 
 
 bool cSource::matchedList(set <wstring> &matchList,int where,int objectClass, wchar_t *fromWhere)
 { LFS
-	if (where<0)
+	if (where<0 || where>=m.size())
 		return false;
 	wstring tmpstr;
 	// or Proper Noun, which can match artist, compactLabel or release. - non gendered business objects may not be capitalized (fix?)

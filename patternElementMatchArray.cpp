@@ -7,6 +7,7 @@
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
 #include "io.h"
 #include "word.h"
+#include "ontology.h"
 #include "source.h"
 #include "profile.h"
 

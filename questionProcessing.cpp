@@ -20,6 +20,7 @@ using namespace std;
 #include "mysqld_error.h"
 #include "odbcinst.h"
 #include "time.h"
+#include "ontology.h"
 #include "source.h"
 #include <fcntl.h>
 #include "sys/stat.h"
@@ -888,3 +889,48 @@ void cSource::processQuestion(int whereVerb,int whereReferencingObject,__int64 &
 	}
 }
 
+// this is called by correctSRIEntry
+void cSource::transformQuestionRelation(cSpaceRelation& sri)
+{
+	bool inQuestion=(sri.whereSubject>=0 && (m[sri.whereSubject].flags&cWordMatch::flagInQuestion));
+	inQuestion|=(sri.whereObject>=0 && (m[sri.whereObject].flags&cWordMatch::flagInQuestion));
+	if (inQuestion && sri.whereVerb>=0) 
+	{
+		// what is his academic specialty? CASE 9
+		if (m[sri.whereVerb].queryWinnerForm(isForm)>=0 && sri.whereObject>=0 && sri.whereSubject>=0 && (m[sri.whereSubject].queryForm(relativizerForm)>=0 || m[sri.whereSubject].queryForm(interrogativeDeterminerForm)>=0))
+		{
+			lplog(LOG_WHERE | LOG_INFO, L"Question answering: Transforming space relation of 'is' question by reversing the subject and object");
+			int wo=sri.whereObject;
+			sri.whereObject=sri.whereSubject;
+			sri.whereSubject=wo;
+		}
+		processQuestion(sri.whereVerb,sri.whereControllingEntity,sri.questionType,sri.whereQuestionType,sri.whereQuestionInformationSourceObjects);
+		// if a where clause, put where in a prepositional clause / did Jay-Z grow up? CASE 10
+		// if a when clause, also put where in a prepositional clause / when was Darrell Hammond born? CASE 11
+		if (((sri.questionType&cQuestionAnswering::typeQTMask)== cQuestionAnswering::whereQTFlag || (sri.questionType&cQuestionAnswering::typeQTMask)== cQuestionAnswering::whenQTFlag) &&
+				inObject(sri.whereObject,sri.whereQuestionType) && sri.whereVerb>=0)
+		{
+			tIWMM inWord=Words.query(L"in");
+			if (inWord!=Words.end()) {
+				lplog(LOG_WHERE | LOG_INFO, L"transformQuestionRelation: Transforming space relation of where and when question, when what is being asked for requires a preposition 'in' (grew up in, born in).  Setting object of prep '%d:in' to: '%d:%s' and erasing whereObject.", m.size(), sri.whereObject, (sri.whereObject<0) ? L"Undefined":m[sri.whereObject].word->first.c_str());
+				wstring ps;
+				prepPhraseToString(sri.wherePrep, ps);
+				printSRI(L"transformQuestionRelation - ORIGINAL", &sri, 0, sri.whereSubject, sri.whereObject, ps, false, -1, L"", LOG_INFO | LOG_WHERE);
+				// transforms 'did Jay-Z grow up?' to 'Jay-Z did grow up in X?'
+				// transforms 'when was Darrell Hammond born?' to 'Darrell Hammond was born in X?'
+				m.push_back(cWordMatch(inWord,0,debugTrace));
+				m[m.size()-1].relPrep=m[sri.whereVerb].relPrep;
+				m[m.size()-1].setRelObject(sri.whereObject);
+				m[sri.whereVerb].relPrep=m.size()-1;
+				sri.wherePrepObject=sri.whereObject;
+				sri.wherePrep=m.size()-1;
+				sri.prepositionUncertain=true;
+				sri.whereObject=-1;
+				sri.transformedPrep = m.size()-1;
+				wstring pss;
+				prepPhraseToString(sri.wherePrep, pss);
+				printSRI(L"transformQuestionRelation - QUESTIONTRANSFORMED", &sri, 0, sri.whereSubject, sri.whereObject, pss, false, -1, L"", LOG_INFO | LOG_WHERE);
+			}
+		}
+	}
+}
