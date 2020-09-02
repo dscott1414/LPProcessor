@@ -3553,9 +3553,10 @@ void cSource::resolveObject(int where,bool definitelySpeaker,bool inPrimaryQuote
 			lplog(LOG_RESOLUTION,L"%06d:object is pleonastic.",where);
     return;
 	}
-	// What women have worn Chanel clothing to award ceremonies ?
-	if (m[beginEntirePosition].queryForm(relativizerForm)>=0 ||
-		  (beginEntirePosition>0 && m[beginEntirePosition-1].queryForm(relativizerForm)>=0 && m[beginEntirePosition-1].pma.queryQuestionFlagPattern()!=-1))
+	// What *women* have worn Chanel clothing to award ceremonies ?  
+	// NOT where *he* graduated in 1978 with a degree in advertising and a 2.1 GPA
+	if ((m[where].getObject()<0 || objects[m[where].getObject()].objectClass != PRONOUN_OBJECT_CLASS) && (m[beginEntirePosition].queryForm(relativizerForm)>=0 ||
+		  (beginEntirePosition>0 && m[beginEntirePosition-1].queryForm(relativizerForm)>=0 && m[beginEntirePosition-1].pma.queryQuestionFlagPattern()!=-1)))
 	{
     if (debugTrace.traceSpeakerResolution)
 			lplog(LOG_RESOLUTION,L"%06d:object begins with a relativizer.",where);

@@ -108,11 +108,11 @@ int cQuestionAnswering::processSnippet(cSource *questionSource, wstring snippet,
 	return processPath(questionSource,path,source,cSource::WEB_SEARCH_SOURCE_TYPE,50,parseOnly);
 }
 
-int cQuestionAnswering::processWikipedia(cSource *questionSource, int principalWhere,cSource *&source,vector <wstring> &wikipediaLinks,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases,bool parseOnly, set <wstring> &wikipediaLinksAlreadyScanned)
+int cQuestionAnswering::processWikipedia(cSource *questionSource, int principalWhere,cSource *&source,vector <wstring> &wikipediaLinks,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases,bool parseOnly, set <wstring> &wikipediaLinksAlreadyScanned, bool removePrecedingUncapitalizedWordsFromProperNouns)
 { LFS
   wchar_t path[1024];
 	vector <wstring> lookForSubject;
-	if (questionSource->getWikipediaPath(principalWhere, wikipediaLinks, path, lookForSubject, includeNonMixedCaseDirectlyAttachedPrepositionalPhrases) < 0)
+	if (questionSource->getWikipediaPath(principalWhere, wikipediaLinks, path, lookForSubject, includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, removePrecedingUncapitalizedWordsFromProperNouns) < 0)
 		return -1;
 	if (wikipediaLinksAlreadyScanned.find(path) != wikipediaLinksAlreadyScanned.end())
 		return -1;
@@ -120,7 +120,7 @@ int cQuestionAnswering::processWikipedia(cSource *questionSource, int principalW
 	return processPath(questionSource,path,source,cSource::WIKIPEDIA_SOURCE_TYPE,2,parseOnly);
 }
 
-bool cQuestionAnswering::matchObjects(cSource *parentSource,vector <cObject>::iterator parentObject,cSource *childSource,vector <cObject>::iterator childObject,bool &namedNoMatch,sTrace debugTrace)
+bool cQuestionAnswering::matchObjectsByName(cSource *parentSource,vector <cObject>::iterator parentObject,cSource *childSource,vector <cObject>::iterator childObject,bool &namedNoMatch,sTrace debugTrace)
 { LFS
 	bool match=false;
 	namedNoMatch=false;
@@ -138,7 +138,7 @@ bool cQuestionAnswering::matchObjects(cSource *parentSource,vector <cObject>::it
 	return match;
 }
 
-bool cQuestionAnswering::matchObjectsExact(vector <cObject>::iterator parentObject,vector <cObject>::iterator childObject,bool &namedNoMatch)
+bool cQuestionAnswering::matchObjectsExactByName(vector <cObject>::iterator parentObject,vector <cObject>::iterator childObject,bool &namedNoMatch)
 { LFS
 	bool match=false;
 	namedNoMatch=false;
@@ -163,13 +163,13 @@ bool cQuestionAnswering::matchChildSourcePosition(cSource *parentSource,vector <
 	{
 		namedNoMatch=childSource->m[childWhere].getObject()<0;
 		return childSource->m[childWhere].getObject()>=0 &&
-			matchObjects(parentSource,parentObject,childSource,childSource->objects.begin()+childSource->m[childWhere].getObject(),namedNoMatch,debugTrace);
+			matchObjectsByName(parentSource,parentObject,childSource,childSource->objects.begin()+childSource->m[childWhere].getObject(),namedNoMatch,debugTrace);
 	}
 	bool allNoMatch=true;
 	for (unsigned int mo=0; mo<childSource->m[childWhere].objectMatches.size(); mo++)
 	{
 		namedNoMatch=false;
-		if (matchObjects(parentSource,parentObject,childSource,childSource->objects.begin()+childSource->m[childWhere].objectMatches[mo].object,namedNoMatch,debugTrace))
+		if (matchObjectsByName(parentSource,parentObject,childSource,childSource->objects.begin()+childSource->m[childWhere].objectMatches[mo].object,namedNoMatch,debugTrace))
 		{
 			if (logQuestionDetail)
 			{
@@ -206,6 +206,13 @@ bool cQuestionAnswering::matchTimeObjects(cSource *parentSource,int parentWhere,
 				return true;
 	return false;
 }
+
+// compare using multiple cases: parent and child may not be an object or may be an object with or without objectMatches.
+// 1. parent is not an object:
+//    a. compare against child not an object.
+//    b. compare against a child object and its matched objects (if any).
+// 2. parent is an object:
+//   a. compare 
 
 // adjectivalMatch does NOT include owner objects (Paul's car)
 // adjectivalMatch = -1 if the match operation was not performed
@@ -250,6 +257,11 @@ bool cQuestionAnswering::matchSourcePositions(cSource *parentSource, int parentW
 	bool parentIsDefiniteObject=parentSource->isDefiniteObject(parentWhere,L"PARENT",parentOwnerWhere,false);
 	bool childIsDefiniteObject=childSource->isDefiniteObject(childWhere,L"CHILD",childOwnerWhere,false);
 	bool matched=(!parentIsDefiniteObject && !childIsDefiniteObject);
+	if (matched && logQuestionDetail)
+	{
+		wstring tmpstr, tmpstr2;
+		lplog(LOG_WHERE, L"%d:both indefinite [no owners]: parent %d:%s child %d:%s matched=%s namedNoMatch=%s", parentWhere, parentWhere, parentSource->whereString(parentWhere, tmpstr, false).c_str(), childWhere, childSource->whereString(childWhere, tmpstr2, false).c_str(), (matched) ? L"true" : L"false", (namedNoMatch) ? L"true" : L"false");
+	}
 	if (parentIsDefiniteObject && childIsDefiniteObject && parentOwnerWhere>=0 && childOwnerWhere>=0 && (parentOwnerWhere!=parentWhere && childOwnerWhere!=childWhere))
 	{
 		wstring tmpstr,tmpstr2;
@@ -1168,7 +1180,7 @@ void cQuestionAnswering::accumulateProximityMaps(cSource *questionSource, cSpace
 				//if (logProximityMap)
 				//	lplog(LOG_WHERE,L"==%s? SM",childSource->objectString(I,tmpstr2,false).c_str());
 				// 7. if the child source object matches the parentObject, accumulate the locations for this child source object in primcipalObjectLocations.
-				if (childSource->objects[I].objectClass == parentObjectClass && matchObjects(questionSource, questionSource->objects.begin() + poi->object, childSource, childSource->objects.begin() + I, namedNoMatch, questionSource->debugTrace))
+				if (childSource->objects[I].objectClass == parentObjectClass && matchObjectsByName(questionSource, questionSource->objects.begin() + poi->object, childSource, childSource->objects.begin() + I, namedNoMatch, questionSource->debugTrace))
 				{
 					questionObjectMatchInChildSourceLocations.insert(childSource->objects[I].locations.begin(), childSource->objects[I].locations.end());
 					for (vector <int>::iterator oai = childSource->objects[I].aliases.begin(), oaiEnd = childSource->objects[I].aliases.end(); oai != oaiEnd; oai++)
@@ -1248,18 +1260,21 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 		// check for negation agreement
 		if (childSRI->tft.negation ^ parentSRI->tft.negation)
 			continue;
+		// why do we want to block this?  There are many cases where a relative clause could be useful!  where can be matched to University, which is a fact that he graduated from the university.
+		// KEEP: He went on to attend the University of Florida, *where he  graduated in 1978 with a degree in advertising and a 2.1 GPA.*
 		// check for who / who his real name is / who is object in relative clause / SRI is constructed dynamically
-		if (childSRI->whereObject>=0 && childSRI->whereSubject>=0 && childSRI->whereObject<childSRI->whereSubject &&
-			  childSource->m[childSRI->whereSubject].getRelObject()<0 && 
-				(childSource->m[childSRI->where].objectRole&SENTENCE_IN_REL_ROLE) && childSource->m[childSRI->whereSubject].beginObjectPosition>0 && 
-				childSource->m[childSource->m[childSRI->whereSubject].beginObjectPosition-1].queryWinnerForm(relativizerForm)>=0 && 
-				(childSource->m[childSource->m[childSRI->whereSubject].beginObjectPosition-1].flags&cWordMatch::flagRelativeObject) &&
-				childSRI->whereObject==childSource->m[childSource->m[childSRI->whereSubject].beginObjectPosition-1].getRelObject())
-			continue;
+		//if (childSRI->whereObject>=0 && childSRI->whereSubject>=0 && childSRI->whereObject<childSRI->whereSubject &&
+		//	  childSource->m[childSRI->whereSubject].getRelObject()<0 && 
+		//		(childSource->m[childSRI->where].objectRole&SENTENCE_IN_REL_ROLE) && childSource->m[childSRI->whereSubject].beginObjectPosition>0 && 
+		//		childSource->m[childSource->m[childSRI->whereSubject].beginObjectPosition-1].queryWinnerForm(relativizerForm)>=0 && 
+		//		(childSource->m[childSource->m[childSRI->whereSubject].beginObjectPosition-1].flags&cWordMatch::flagRelativeObject) &&
+		//		childSRI->whereObject==childSource->m[childSource->m[childSRI->whereSubject].beginObjectPosition-1].getRelObject())
+		//	continue;
 		int whereMetaPatternAnswer=-1;
 		if (mapPatternAnswer != NULL && (whereMetaPatternAnswer = metaPatternMatch(questionSource, childSource, childSRI, mapPatternAnswer, mapPatternQuestion)) >= 0)
 			enterAnswerAccumulatingIdenticalAnswers(questionSource, parentSRI, cAS(childSourceType, childSource, -1, maxAnswer, L"META_PATTERN", &(*childSRI), 0, whereMetaPatternAnswer, -1, -1, false, false, L"", L"", 0, 0, 0, NULL), maxAnswer, answerSRIs);
-		for (int ws=childSRI->whereSubject; true; ws=childSource->m[ws].nextCompoundPartObject)
+		int compoundPartLoopsSubject = 0;
+		for (int ws=childSRI->whereSubject; compoundPartLoopsSubject<4; ws=childSource->m[ws].nextCompoundPartObject, compoundPartLoopsSubject++)
 		{ LFSL
 			if ((ws != childSRI->whereSubject && ws<0) || ws >= (int)childSource->m.size()) break;
 			int matchSumSubject;
@@ -1288,7 +1303,8 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 				if (ws<0) break;
 				continue;
 			}
-			for (int vi = childSRI->whereVerb; true; vi = childSource->m[vi].nextCompoundPartObject)
+			int compoundPartLoops = 0;
+			for (int vi = childSRI->whereVerb; compoundPartLoops<4; vi = childSource->m[vi].nextCompoundPartObject, compoundPartLoops++)
 			{
 				wstring matchInfoDetailVerb;
 				int verbMatch=sriVerbMatch(questionSource,childSource,parentSRI->whereVerb,vi, matchInfoDetailVerb, L"PRIMARY", 8);
@@ -1357,26 +1373,43 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 					}
 					set <int> relPreps;
 					childSource->getAllPreps(&(*childSRI), relPreps, wo);
+					int relativizerAsPrepMatch = 0;
+					// where you went -- You went TO Prague
+					// when you went -- You went AT 12:30.
+					unordered_set<wstring> relativizerObjectsActLikePrepObjects = { L"where",L"when" };
+					if (objectMatch == 0 && wo>=0 && childSource->m[wo].queryWinnerForm(relativizerForm) != -1 && parentSRI->wherePrep >= 0 && relativizerObjectsActLikePrepObjects.find(childSource->m[wo].word->first) != relativizerObjectsActLikePrepObjects.end())
+					{
+						relativizerAsPrepMatch = sriMatch(questionSource, childSource, parentSRI->wherePrepObject, wo, parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticPrepositionObjectTotalMatch, matchInfoDetail, 4, parentSRI->subQuery);
+						//if (parentSRI->subQuery && questionTypePrepObject && relativizerAsPrepMatch > 0)
+						//	whereAnswerMatchSubquery.insert(wo);
+					}
 					if (relPreps.empty())
 						relPreps.insert(-1);
-					for (set <int>::iterator rpi = relPreps.begin(), rpiEnd = relPreps.end(); rpi != rpiEnd; rpi++)
+					for (int po:relPreps)
 					{
 						LFSL
 							wstring matchInfo = matchInfoDetail;
 						int prepObjectMatch = 0, prepMatch = 0;
-						if (*rpi != -1)
+						if (po != -1)
 						{
-							if (prepMatch = sriPrepMatch(questionSource, childSource, parentSRI->wherePrep, *rpi, 2) == 2) prepMatch = 2;
-							prepObjectMatch = sriMatch(questionSource, childSource, parentSRI->wherePrepObject, childSource->m[*rpi].getRelObject(), parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticPrepositionObjectTotalMatch, matchInfoDetail, 4, parentSRI->subQuery);
+							if (prepMatch = sriPrepMatch(questionSource, childSource, parentSRI->wherePrep, po, 2) == 2) prepMatch = 2;
+							prepObjectMatch = sriMatch(questionSource, childSource, parentSRI->wherePrepObject, childSource->m[po].getRelObject(), parentSRI->whereQuestionType, parentSRI->questionType, childSRI->nonSemanticPrepositionObjectTotalMatch, matchInfoDetail, 4, parentSRI->subQuery);
 							if (parentSRI->subQuery && questionTypePrepObject && prepObjectMatch > 0)
-								whereAnswerMatchSubquery.insert(childSource->m[*rpi].getRelObject());
+								whereAnswerMatchSubquery.insert(childSource->m[po].getRelObject());
 							if (prepObjectMatch <= 0 && questionSource->inObject(parentSRI->wherePrepObject, parentSRI->whereQuestionType))
 								prepObjectMatch = -8;
 						}
 						else if (questionSource->inObject(parentSRI->wherePrepObject, parentSRI->whereQuestionType))
 							prepObjectMatch = -8;
+						if (prepObjectMatch<=0 && relativizerAsPrepMatch > 0)
+						{
+							prepMatch = 2;
+							prepObjectMatch = relativizerAsPrepMatch;
+							po = wo;
+							matchInfo += L"[RELATIVIZER_AS_PREPOBJECT]";
+						}
 						int equivalenceClass = 0, equivalenceMatch = 0;
-						if (verbMatch <= 0 && (subjectMatch || (questionTypeSubject && !(parentSRI->questionType&QTAFlag))) && (*rpi == -1 || (prepMatch > 0 && (prepObjectMatch > 0 || questionSource->inObject(parentSRI->wherePrepObject, parentSRI->whereQuestionType)))))
+						if (verbMatch <= 0 && (subjectMatch || (questionTypeSubject && !(parentSRI->questionType&QTAFlag))) && (po == -1 || (prepMatch > 0 && (prepObjectMatch > 0 || questionSource->inObject(parentSRI->wherePrepObject, parentSRI->whereQuestionType)))))
 						{
 							if (equivalenceClassCheck(questionSource, childSource, childSRI, parentSRI, wo, equivalenceClass, 8) == 0)
 								equivalenceMatch = equivalenceClassCheck2(questionSource, childSource, childSRI, parentSRI, wo, equivalenceClass, 8);
@@ -1438,13 +1471,13 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 									}
 								}
 							}
-							enterAnswerAccumulatingIdenticalAnswers(questionSource, parentSRI, cAS(childSourceType, childSource, -1, matchSum, matchInfo, &(*childSRI), equivalenceClass, ws, wo, *rpi, false, false, L"", L"", 0, 0, 0, NULL), maxAnswer, answerSRIs);
+							enterAnswerAccumulatingIdenticalAnswers(questionSource, parentSRI, cAS(childSourceType, childSource, -1, matchSum, matchInfo, &(*childSRI), equivalenceClass, ws, wo, po, false, false, L"", L"", 0, 0, 0, NULL), maxAnswer, answerSRIs);
 						}
 						if (logQuestionDetail)
 						{
 							wstring ps;
-							if (*rpi != -1)
-								childSource->prepPhraseToString(*rpi, ps);
+							if (po != -1)
+								childSource->prepPhraseToString(po, ps);
 							childSource->printSRI(L"", &(*childSRI), 0, ws, wo, ps, false, matchSum, matchInfo);
 						}
 					}
@@ -1500,9 +1533,9 @@ void cQuestionAnswering::analyzeQuestionThroughAbstractAndWikipediaFromRDFType(c
 		{
 			if (I!=0)
 				StringCbPrintf(derivation+dlen,1024-dlen,L"P%d:",I);
-			// also process wikipedia entry
+			// process wikipedia entry - including any lower case words preceding a proper noun.
 			cSource *wikipediaSource = NULL;
-			if (processWikipedia(questionSource, whereQuestionContextSuggestion, wikipediaSource, rdfType->wikipediaLinks, I, parseOnly, wikipediaLinksAlreadyScanned) >= 0)
+			if (processWikipedia(questionSource, whereQuestionContextSuggestion, wikipediaSource, rdfType->wikipediaLinks, I, parseOnly, wikipediaLinksAlreadyScanned,false) >= 0)
 			{
 				analyzeQuestionFromSource(questionSource,derivation, L"wikipedia:" + wikipediaSource->sourcePath, wikipediaSource, parentSRI, answerSRIs, qMaxAnswer, false, mapPatternAnswer, mapPatternQuestion);
 				if (whereQuestionTypeObject >= 0)
@@ -1516,8 +1549,24 @@ void cQuestionAnswering::analyzeQuestionThroughAbstractAndWikipediaFromRDFType(c
 				if (qMaxAnswer>24)
 					return;
 			}
+			// process wikipedia entry NOT including any lower case words preceding a proper noun.
+			if (processWikipedia(questionSource, whereQuestionContextSuggestion, wikipediaSource, rdfType->wikipediaLinks, I, parseOnly, wikipediaLinksAlreadyScanned, true) >= 0)
+			{
+				analyzeQuestionFromSource(questionSource, derivation, L"wikipediaNPUW:" + wikipediaSource->sourcePath, wikipediaSource, parentSRI, answerSRIs, qMaxAnswer, false, mapPatternAnswer, mapPatternQuestion);
+				if (whereQuestionTypeObject >= 0)
+				{
+					vector < cSourceTable > wikiTables;
+					addTables(questionSource, whereQuestionTypeObject, wikipediaSource, wikiTables);
+					if (!wikiTables.empty())
+						wikiTableMap[whereQuestionContextSuggestion] = new cWikipediaTableCandidateAnswers(wikipediaSource, wikiTables);
+				}
+				maxAnswer = max(maxAnswer, qMaxAnswer);
+				if (qMaxAnswer > 24)
+					return;
+			}
+			// process wikipedia with any wikipedia links explicitly included in the RDFType (not the object in the text, as whereQuestionContextSuggestion=-1).
 			cSource *wikipediaLinkSource = NULL;
-			if (processWikipedia(questionSource,-1, wikipediaLinkSource, rdfType->wikipediaLinks, I, parseOnly, wikipediaLinksAlreadyScanned) >= 0)
+			if (processWikipedia(questionSource,-1, wikipediaLinkSource, rdfType->wikipediaLinks, I, parseOnly, wikipediaLinksAlreadyScanned,false) >= 0)
 			{
 				analyzeQuestionFromSource(questionSource,derivation, L"wikipediaLink:" + wikipediaLinkSource->sourcePath, wikipediaLinkSource, parentSRI, answerSRIs, qMaxAnswer, false, mapPatternAnswer, mapPatternQuestion);
 				if (whereQuestionTypeObject >= 0)
@@ -1906,9 +1955,13 @@ int	cQuestionAnswering::parseSubQueriesParallel(cSource *questionSource,cSource 
 					{
 						// also process wikipedia entry
 						cSource *wikipediaSource = NULL;
-						processWikipedia(questionSource,*si, wikipediaSource, rdfTypes[r]->wikipediaLinks, I, true, wikipediaLinksAlreadyScanned);
+						processWikipedia(questionSource, *si, wikipediaSource, rdfTypes[r]->wikipediaLinks, I, true, wikipediaLinksAlreadyScanned, false);
+						// also process wikipedia entry with no preceding uncapitalizedWords 
+						cSource* wikipediaSourceNUW = NULL;
+						processWikipedia(questionSource, *si, wikipediaSourceNUW, rdfTypes[r]->wikipediaLinks, I, true, wikipediaLinksAlreadyScanned, true);
+						// also process wikipedia entry with just the wikipedia links in the RDFType
 						cSource *wikipediaLinkSource = NULL;
-						processWikipedia(questionSource,-1, wikipediaLinkSource, rdfTypes[r]->wikipediaLinks, I, true, wikipediaLinksAlreadyScanned);
+						processWikipedia(questionSource,-1, wikipediaLinkSource, rdfTypes[r]->wikipediaLinks, I, true, wikipediaLinksAlreadyScanned,false);
 					}
 				}
 			if (!cOntology::cacheRdfTypes)
@@ -2073,19 +2126,8 @@ int	cQuestionAnswering::matchSubQueries(cSource *questionSource,wstring derivati
 			lplog(LOG_WHERE,L"%s:subquery %d:child subject=%s",derivation.c_str(),sqi-subQueries.begin(),childWhereString.c_str());
 		else
 			lplog(LOG_WHERE,L"%s:subquery child subject=%s",derivation.c_str(),childWhereString.c_str());
-		if (childWhereString == L"the Nobel Memorial Prize in Economics")
-			printf("HI TEMP DEBUG!");
 		unordered_map <int, int> transformSourceToQuestionSourceMap;
 		sqi->whereSubject = questionSource->copyChildrenIntoParent(childSource, whereChildCandidateAnswer, transformSourceToQuestionSourceMap,false).at(0);
-		// also change reference of end object which is (1) beyond the limit of what was pushed
-		int maxKey = -1, maxValue = -1;
-		for (auto p : transformSourceToQuestionSourceMap)
-		{
-			maxKey = max(maxKey, p.first);
-			maxValue = max(maxValue, p.second);
-		}
-		if (maxKey >= 0)
-			transformSourceToQuestionSourceMap[maxKey + 1] = maxValue + 1;
 		for (auto pair : transformSourceToQuestionSourceMap)
 		{
 			if (pair.second < 0 || pair.second>=questionSource->m.size())
@@ -2093,14 +2135,22 @@ int	cQuestionAnswering::matchSubQueries(cSource *questionSource,wstring derivati
 			else if (questionSource->m[pair.second].sameSourceCopy < 0)
 			{
 				questionSource->m[pair.second].adjustReferences(pair.second, false, transformSourceToQuestionSourceMap);
-				if (questionSource->m[pair.second].getObject()<-1000) // see copyChildrenIntoParent
-					questionSource->m[pair.second].setObject(-questionSource->m[pair.second].getObject()-1000);
+				if (questionSource->m[pair.second].getObject() < -1000)
+				{// see copyChildrenIntoParent
+					lplog(LOG_WHERE, L"Setting negative object positive in adjust references - %d->%d object %d->%d!", pair.first, pair.second, questionSource->m[pair.second].getObject(), -questionSource->m[pair.second].getObject() - 1000);
+					questionSource->m[pair.second].setObject(-questionSource->m[pair.second].getObject() - 1000);
+				}
 				else
 					questionSource->m[pair.second].setObject(-1);
 				questionSource->m[pair.second].objectMatches.clear();
 			}
 			else
 				questionSource->m[pair.second].sameSourceCopy = -1;
+		}
+		for (auto pair : transformSourceToQuestionSourceMap)
+		{
+			if (questionSource->m[pair.second].getObject() < -1000) // see copyChildrenIntoParent
+				lplog(LOG_FATAL_ERROR, L"Negative object survivor after adjust references - %d->%d!", pair.first, pair.second);
 		}
 		set<int> saveQISO=sqi->whereQuestionInformationSourceObjects;
 		sqi->whereQuestionInformationSourceObjects.insert(sqi->whereSubject);
@@ -3509,6 +3559,7 @@ int cQuestionAnswering::processQuestionSource(cSource *questionSource,bool parse
 	int lastProgressPercent=-1,where;
 	vector <int> wherePossibleAnswers;
 	wstring derivation;
+	bool disableWebSearch = false;
 	for (vector <cSpaceRelation>::iterator sri= questionSource->spaceRelations.begin(), sriEnd= questionSource->spaceRelations.end(); sri!=sriEnd; sri++)
 	{
 		if (!sri->questionType || sri->skip)
@@ -3589,8 +3640,8 @@ int cQuestionAnswering::processQuestionSource(cSource *questionSource,bool parse
 			{
 				vector <wstring> webSearchQueryStrings;
 				getWebSearchQueries(questionSource, ssri, webSearchQueryStrings);
-				bool lastGoogleResultPage = false, lastBINGResultPage = false, webSearchOrWikipediaTableSuccess = false;
-				for (int trySearchIndex = 1; trySearchIndex<=40; trySearchIndex += 10)
+				bool lastGoogleResultPage = disableWebSearch, lastBINGResultPage = disableWebSearch, webSearchOrWikipediaTableSuccess = false;
+				for (int trySearchIndex = 1; trySearchIndex<=30; trySearchIndex += 15)
 				{
 					vector < cAS > webSearchAnswerSRIs;
 					// search google with webSearchQueryStrings, starting at trySearchIndex
@@ -3642,7 +3693,7 @@ int cQuestionAnswering::processQuestionSource(cSource *questionSource,bool parse
 				// **************************************************************
 				// if there are no answers or more than one answer is asked for and there is only one, search the first 10 results from Google and BING using more information sources from proximity mapping.
 				// **************************************************************
-				if (!webSearchOrWikipediaTableSuccess)
+				if (!webSearchOrWikipediaTableSuccess && !disableWebSearch)
 				{
 					lplog(LOG_WHERE | LOG_QCHECK, L"    ***** proximity map");
 					for (set <int>::iterator si = ssri->whereQuestionInformationSourceObjects.begin(), siEnd = ssri->whereQuestionInformationSourceObjects.end(); si != siEnd; si++)

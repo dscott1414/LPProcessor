@@ -3578,8 +3578,15 @@ void cWordMatch::adjustValue(int& val, wstring valString, unordered_map <int, in
 void cWordMatch::adjustReferences(int index, bool keepObjects, unordered_map <int, int>& sourceIndexMap)
 {
 	LFS
+	if (beginObjectPosition>=0 && sourceIndexMap.find(beginObjectPosition) == sourceIndexMap.end())
+		lplog(LOG_FATAL_ERROR, L"beginObjectPosition has illegal value!");
 	adjustValue(beginObjectPosition, L"beginObjectPosition", sourceIndexMap);
-	adjustValue(endObjectPosition, L"endObjectPosition", sourceIndexMap);
+	if (endObjectPosition >= 0)
+	{
+		if (sourceIndexMap.find(endObjectPosition - 1) == sourceIndexMap.end())
+			lplog(LOG_FATAL_ERROR, L"endObjectPosition has illegal value!");
+		endObjectPosition = sourceIndexMap[endObjectPosition - 1] + 1;
+	}
 	adjustValue(relPrep, L"relPrep", sourceIndexMap);
 	adjustValue(relObject, L"relObject", sourceIndexMap);
 	adjustValue(nextQuote, L"nextQuote", sourceIndexMap);
@@ -3646,15 +3653,59 @@ vector <int> cSource::copyChildrenIntoParent(cSource *childSource, int whereChil
 			childObjects = childSource->m[whereChild].objectMatches;
 		else
 			childObjects.push_back(cOM(childSource->m[whereChild].getObject(), 0));
+		int lowestBeginPosition = m.size();
+		int highestEndPosition = -1;
 		for (cOM coOM : childObjects)
 		{
 			int co = coOM.object;
 			int whereObject = childSource->objects[co].originalLocation;
+			// cases of object overlap:
+			// 1. object beginObjectPosition > the largest endObjectPosition
+			// 2. object endObjectPosition < the smallest beginObjectPosition
+			// 3. all positions must be scanned.
+			bool makeCopy=false,skipObject=false;
+			if (childSource->m[whereObject].beginObjectPosition > highestEndPosition || childSource->m[whereObject].endObjectPosition < lowestBeginPosition)
+			{
+				makeCopy = true;
+				skipObject = false;
+			}
+			else
+			{
+				int overlappedPositions = 0;
+				for (int I = childSource->m[whereObject].beginObjectPosition; I < childSource->m[whereObject].endObjectPosition; I++)
+					if (sourceIndexMap.find(I) != sourceIndexMap.end())
+						overlappedPositions++;
+				// in between all the other objects but not overlapping any
+				if (overlappedPositions == 0)
+				{
+					makeCopy = true;
+					skipObject = false;
+				}
+				// overlapping completely, so copy has already been made
+				else if (overlappedPositions == childSource->m[whereObject].endObjectPosition - childSource->m[whereObject].beginObjectPosition)
+				{
+					makeCopy = false;
+					skipObject = false;
+				}
+				else
+				{
+					makeCopy = false;
+					skipObject = true;
+				}
+			}
+			if (skipObject)
+			{
+				wstring tmpstr, tmpstr2;
+				lplog(LOG_WHERE, L"Did NOT transfer %d:%s", whereObject, childSource->objectString(co, tmpstr, true).c_str());
+				continue;
+			}
+			lowestBeginPosition = min(lowestBeginPosition, childSource->m[whereObject].beginObjectPosition);
+			highestEndPosition = max(highestEndPosition, childSource->m[whereObject].endObjectPosition);
 			// copy the words associated with the childObject
 			copySource(childSource, childSource->m[whereObject].beginObjectPosition, childSource->m[whereObject].endObjectPosition, sourceIndexMap);
 			// copy childObject
 			objects.push_back(childSource->objects[co]);
-			int whereParentObject = m.size() - childSource->m[whereObject].endObjectPosition + whereObject;
+			int whereParentObject = sourceIndexMap[whereObject];
 			parentLocations.push_back(whereParentObject);
 			int parentObject = objects.size() - 1;
 			objects[parentObject].begin = whereParentObject - (whereObject - childSource->m[whereObject].beginObjectPosition);
@@ -3673,6 +3724,8 @@ vector <int> cSource::copyChildrenIntoParent(cSource *childSource, int whereChil
 			m[whereParentObject].setObject(parentObject); 
 			if (childSource->objects[co].getOwnerWhere() >= 0)
 			{
+				if (sourceIndexMap.find(childSource->objects[co].getOwnerWhere()) == sourceIndexMap.end())
+			{
 				sourceIndexMap[childSource->objects[co].getOwnerWhere()] = m.size();
 				m.push_back(childSource->m[childSource->objects[co].getOwnerWhere()]);
 				int I = m.size() - 1;
@@ -3684,6 +3737,9 @@ vector <int> cSource::copyChildrenIntoParent(cSource *childSource, int whereChil
 				}
 				objects[parentObject].setOwnerWhere(I);
 			}
+				else
+					objects[parentObject].setOwnerWhere(sourceIndexMap[childSource->objects[co].getOwnerWhere()]);
+			}
 			objects[parentObject].originalLocation = whereParentObject;
 			objects[parentObject].relativeClausePM = -1; // should copy later
 			objects[parentObject].whereRelativeClause = -1; // should copy later
@@ -3691,12 +3747,16 @@ vector <int> cSource::copyChildrenIntoParent(cSource *childSource, int whereChil
 			objects[parentObject].replacedBy = -1;
 			objects[parentObject].duplicates.clear();
 			objects[parentObject].eliminated = false;
+			if (makeCopy)
 			copyDirectlyAttachedPrepositionalPhrases(whereParentObject, childSource, whereObject, sourceIndexMap,clear);
 			wstring tmpstr, tmpstr2;
-			lplog(LOG_WHERE, L"Transferred %d:%s to %d:%s", whereObject, childSource->objectString(co, tmpstr, true).c_str(), whereParentObject, whereString(whereParentObject, tmpstr2, true).c_str());
+			lplog(LOG_WHERE, L"Transferred %d:%s to %d:%s [%s]", whereObject, childSource->objectString(co, tmpstr, true).c_str(), whereParentObject, whereString(whereParentObject, tmpstr2, true).c_str(),(makeCopy) ? L"copy made":L"no copy made");
 			// negative objects allowed in some cases, so make it REALLY negative (past wordOrderWords and eOBJECTS)
 			if (!clear)
+			{
+				lplog(LOG_WHERE, L"Setting negative object - %d object %d->%d!", whereParentObject, parentObject, -parentObject - 1000);
 				m[whereParentObject].setObject(-parentObject - 1000); // set to negative - will be reversed by scan which must always be called after this when clear is false - negative objects are allowed in some cases
+			}
 		}
 	}
 	return parentLocations;

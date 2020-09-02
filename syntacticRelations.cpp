@@ -2344,6 +2344,64 @@ bool cSource::evaluateAdditionalRoleTags(int where,vector <cTagLocation> &tagSet
 		//			recordVerbTenseRelations(where,tsSense,subjectObjects[K],whereVerb);
 		//		}
 		//	}
+		//
+		// Also adjust attachment of the preceding relativizer, if this sentence is part of a relative clause.  For example:
+		// (In question answering to answer question: Which University did Darrell Hammond attend)
+		//   He went on to attend the University of Florida, where he graduated in 1978 with a degree in advertising and a 2.1 GPA.
+		// where was previously attached to 'Florida' by assignRelativeClause.  This is wrong because it should be 'The University'.
+		// but we only know that because of the sentence in the relative clause which has now just been evaluated and assigned syntactic relations.
+		//
+		// So if this is in a relative clause, and that relativizer has been assigned, and that assigned object is an object of a preposition, then 
+		// get the relations between the main entry of this verb (graduate), and both this object (Florida) and its object before the preposition of this object (University)
+		// and see whether the relations of the previous object (University) are greater than the subsequent object (Florida) with the verb (graduate).
+		// if so, 
+		//   1. switch the relObject of the relativizer to point to the object of the greater relation.
+		//   2. assign the relObject of the verb (graduate) to point to the object of the greater relation.
+		// syntactic relations in the above sentence:
+		//   6:university: relSubject = 'he' relVerb = 'attend' relPrep = 'of'
+		//   7:of : relVerb = 'attend' relObject = 'florida'
+		// 	 8:florida : relVerb = 'attend' relPrep = 'of'
+		// 	10:where : relObject = 'florida'
+		// 	11:he : relVerb = 'graduated' relPrep = 'in'
+		// 	12:graduated : relSubject = 'he' relVerb = 'graduated' relPrep = 'in'
+		int whereSubject = whereSubjects[K]; // 'he'
+		int whereRelativizer=m[whereSubject].beginObjectPosition-1; // 'where'
+		int relObjectOfRelativizer = (whereRelativizer >= 0) ? m[whereRelativizer].getRelObject() : -1; // index of 'Florida'
+		if (relObjectOfRelativizer >= 0)
+		{
+			int nearestObject = m[relObjectOfRelativizer].getObject();
+			tIWMM objectImmediatelyPrecedingWord = m[relObjectOfRelativizer].getMainEntry(); // Florida
+			int relPrep = (relObjectOfRelativizer >= 0) ? m[relObjectOfRelativizer].relPrep : -1; // index of 'of'
+			int relVerb = m[whereSubject].getRelVerb();
+			if ((relPrep > 0 && m[relPrep - 1].relPrep == relPrep) && relVerb >= 0 && nearestObject>=0)
+			{
+				int fartherObject = m[relPrep - 1].getObject();
+				tIWMM objectPrepChainPrecedingWord = m[relPrep - 1].getMainEntry(); // University
+				tIWMM verbWord = m[relVerb].getMainEntry(); // graduate
+				set <wstring> commonVerbs = { L"would",L"am",L"do" ,L"be",L"have" };
+				if (commonVerbs.find(verbWord->first) == commonVerbs.end() && fartherObject>=0) // COMMON_VERB
+				{
+					int numObjectImmediatelyPrecedingWordRelations = objectImmediatelyPrecedingWord->second.scanAllRelations(verbWord);
+					int numObjectPrepChainPrecedingWordRelations = objectPrepChainPrecedingWord->second.scanAllRelations(verbWord);
+					if ((numObjectImmediatelyPrecedingWordRelations > 0) ^ (numObjectPrepChainPrecedingWordRelations > 0))
+					{
+						m[relVerb].setRelObject(whereRelativizer);
+						//   1. switch the relObject of the relativizer (where) to point to the object of the greater relation.
+						//   2. assign the relObject of the verb (graduate) to point to the object of the greater relation.
+						if (numObjectImmediatelyPrecedingWordRelations > 0)
+						{
+							m[whereRelativizer].setRelObject(relObjectOfRelativizer); // this should have already been done
+							m[whereRelativizer].objectMatches.push_back(cOM(nearestObject,0));
+						}
+						else
+						{
+							m[whereRelativizer].setRelObject(relPrep - 1);
+							m[whereRelativizer].objectMatches.push_back(cOM(fartherObject,0));
+						}
+					}
+				}
+			}
+		}
 	}
 	int qTagIndex=findTag(tagSet,L"QTYPE",nextTag);
 	// relativizer doesn't have an object, so will not be assigned unless through this special case

@@ -170,9 +170,9 @@ public:
 	bool matchOwnershipDbMusicBrainz(cSource *questionSource,wchar_t *derivation, cSpaceRelation* parentSRI);
 	int processSnippet(cSource *questionSource, wstring snippet, wstring object, cSource *&source, bool parseOnly);
 	int processAbstract(cSource *questionSource, cTreeCat *rdfType, cSource *&source, bool parseOnly);
-	int processWikipedia(cSource *questionSource, int principalWhere, cSource *&source, vector <wstring> &wikipediaLinks, int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool parseOnly, set <wstring> &wikipediaLinksAlreadyScanned);
-	bool matchObjectsExact(vector <cObject>::iterator parentObject, vector <cObject>::iterator childObject, bool &namedNoMatch);
-	static bool matchObjects(cSource *parentSource, vector <cObject>::iterator parentObject, cSource *childSource, vector <cObject>::iterator childObject, bool &namedNoMatch, sTrace debugTrace);
+	int processWikipedia(cSource *questionSource, int principalWhere, cSource *&source, vector <wstring> &wikipediaLinks, int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool parseOnly, set <wstring> &wikipediaLinksAlreadyScanned, bool removePrecedingUncapitalizedWordsFromProperNouns);
+	bool matchObjectsExactByName(vector <cObject>::iterator parentObject, vector <cObject>::iterator childObject, bool &namedNoMatch);
+	static bool matchObjectsByName(cSource *parentSource, vector <cObject>::iterator parentObject, cSource *childSource, vector <cObject>::iterator childObject, bool &namedNoMatch, sTrace debugTrace);
 	static bool matchChildSourcePosition(cSource *parentSource, vector <cObject>::iterator parentObject, cSource *childSource, int childWhere, bool &namedNoMatch, sTrace &debugTrace);
 	static bool matchTimeObjects(cSource *parentSource, int parentWhere, cSource *childSource, int childWhere);
 	int sriPrepMatch(cSource *parentSource, cSource *childSource, int parentWhere, int childWhere, int cost);

@@ -2258,8 +2258,8 @@ int wherePrepObject,
 	// wikipedia
 	cSource(MYSQL *parentMysql,int _sourceType,int _sourceConfidence);
 	void reduceLocalFreebase(wchar_t *path,wchar_t *filename);
-	void getObjectString(int where,wstring &object,vector <wstring> &lookForSubject,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases);
-	int getWikipediaPath(int principalWhere,vector <wstring> &wikipediaLinks,wchar_t *path,vector <wstring> &lookForSubject,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases);
+	void getObjectString(int where,wstring &object,vector <wstring> &lookForSubject,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool removePrecedingUncapitalizedWordsFromProperNouns=false);
+	int getWikipediaPath(int principalWhere,vector <wstring> &wikipediaLinks,wchar_t *path,vector <wstring> &lookForSubject,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases,bool removePrecedingUncapitalizedWordsFromProperNouns);
 	int evaluateISARelation(int parentSourceWhere,int where,vector <cTagLocation> &tagSet,vector <wstring> &lookForSubject);
 	bool getISARelations(int parentSourceWhere,int where,vector < vector <cTagLocation> > &tagSets,vector <int> &OCTypes,vector <wstring> &lookForSubject);
 	int getObjectRDFTypes(int object,vector <cTreeCat *> &rdfTypes,unordered_map <wstring ,int > &topHierarchyClassIndexes,wstring fromWhere);

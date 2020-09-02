@@ -1022,7 +1022,7 @@ int cSource::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat
 	return retCode;
 }
 
-void cSource::getObjectString(int where,wstring &object,vector <wstring> &lookForSubject,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases)
+void cSource::getObjectString(int where,wstring &object,vector <wstring> &lookForSubject,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool removePrecedingUncapitalizedWordsFromProperNouns)
 { LFS
 	int o,begin,end;
 	if (m[where].objectMatches.size()>0)
@@ -1045,6 +1045,21 @@ void cSource::getObjectString(int where,wstring &object,vector <wstring> &lookFo
 		object+=objects[o].name.last->first;
 		object[lastchpos]=towupper(object[lastchpos]);
 		return;
+	}
+	if (removePrecedingUncapitalizedWordsFromProperNouns)
+	{
+		// get the last uncapitalized word.
+		int lastUncapitalizedWord = -2;
+	for (int I=begin; I<end; I++)
+			if (m[I].flags & (cWordMatch::flagAddProperNoun | cWordMatch::flagOnlyConsiderProperNounForms | cWordMatch::flagFirstLetterCapitalized | cWordMatch::flagNounOwner))
+			{
+				lastUncapitalizedWord = I - 1;
+				break;
+			}
+		// if all uncapitalized words, or all capitalized words, return
+		if (lastUncapitalizedWord == -2 || lastUncapitalizedWord == end - 2)
+			return;
+		begin = lastUncapitalizedWord+1;
 	}
 	for (int I=begin; I<end; I++)
 	{
@@ -1104,11 +1119,12 @@ void convertFromWikilinkEscape(wstring &wikilink)
 	wikilink=wl;
 }
 
-int cSource::getWikipediaPath(int principalWhere,vector <wstring> &wikipediaLinks,wchar_t *path,vector <wstring> &lookForSubject,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases)
+// this is called with the understanding that removePrecedingUncapitalizedWordsFromProperNouns is set to false, then to true in a subsequent call, so that if there are no preceding uncapitalized words, nothing is done.
+int cSource::getWikipediaPath(int principalWhere,vector <wstring> &wikipediaLinks,wchar_t *path,vector <wstring> &lookForSubject,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases,bool removePrecedingUncapitalizedWordsFromProperNouns)
 { LFS
 	wstring object; 
 	if (principalWhere>=0)
-		getObjectString(principalWhere,object,lookForSubject,includeNonMixedCaseDirectlyAttachedPrepositionalPhrases);
+		getObjectString(principalWhere, object, lookForSubject, includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, removePrecedingUncapitalizedWordsFromProperNouns);
 	else if (wikipediaLinks.size()>0)
 	{
 		wstring wl=wikipediaLinks[0];
@@ -1508,7 +1524,7 @@ int cSource::identifyISARelationTextAnalysis(cQuestionAnswering &qa,int principa
 	objects[o].wikipediaAccessed=true;
   wchar_t path[1024];
 	vector <wstring> lookForSubject,wikipediaLinks;
-	getWikipediaPath(principalWhere,wikipediaLinks,path,lookForSubject,0);
+	getWikipediaPath(principalWhere,wikipediaLinks,path,lookForSubject,0,false);
 	vector <int> OCTypes;
 	if (!readAttribs(path,OCTypes))
 	{

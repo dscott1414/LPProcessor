@@ -442,11 +442,12 @@ bool cSource::isRelativeLocation(wstring word)
 
 void cSource::insertCompoundObjects(int wo,set <int> &relPreps, unordered_map <int,int> &principalObjectEndPoints)
 { LFS
-	for (; wo>=0; wo=m[wo].nextCompoundPartObject)
+	int numLoops = 0;
+	for (; wo>=0 && numLoops<30; wo=m[wo].nextCompoundPartObject, numLoops++)
 	{
 		if (m[wo].endObjectPosition>=0)
 			principalObjectEndPoints[m[wo].endObjectPosition]=wo;
-		for (int wp=m[wo].relPrep; wp>=0 && wp+1<(int)m.size(); wp=m[wp].relPrep)
+		for (int wp=m[wo].relPrep; wp>=0 && wp+1<(int)m.size() && numLoops<30; wp=m[wp].relPrep, numLoops++)
 		{
 			if (relPreps.find(wp)!=relPreps.end())
 				break;
@@ -747,7 +748,7 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 	int relPrep=-1,relObject=-1;
 	// filter out 'state of confusion' but keep 
 	// 'she ran to the door of No. 20.'
-	if (prepTypeCancelled=prepObjectSubType>=0 && (relPrep=m[wherePrepObject].endObjectPosition)<(signed)m.size() &&
+	if (prepTypeCancelled=prepObjectSubType>=0 && (relPrep=m[wherePrepObject].endObjectPosition)<(signed)m.size() && relPrep>=0 &&
 		  m[relPrep].word->first==L"of" && (relObject=m[relPrep].getRelObject())>=0 && 
 		  (m[relObject].getObject()<0 || (objects[m[relObject].getObject()].getSubType()<0 && m[relObject].queryForm(NUMBER_FORM_NUM)<0 && !isAgentObject(m[relObject].getObject()))))
 		prepObjectSubType=-1;
@@ -756,7 +757,7 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 	if (whereObject>=0) o=(m[whereObject].objectMatches.size()==1) ? m[whereObject].objectMatches[0].object : m[whereObject].getObject();
 	int objectSubType=(o>=0) ? objects[o].getSubType() : -1;
 	relPrep=relObject=-1;
-	if (objectSubType>=0 && m[relPrep=m[whereObject].endObjectPosition].word->first==L"of" && (relObject=m[relPrep].getRelObject())>=0 && 
+	if (objectSubType>=0 && (relPrep = m[whereObject].endObjectPosition)>=0 && m[relPrep].word->first==L"of" && (relObject=m[relPrep].getRelObject())>=0 &&
 		  (m[relObject].getObject()<0 || (objects[m[relObject].getObject()].getSubType()<0 && m[relObject].queryForm(NUMBER_FORM_NUM)<0 && !isAgentObject(m[relObject].getObject()))))
 		objectSubType=-1;
 	if (whereMovingRelativeTo<0 && relObject>=0 && m[relObject].getObject()>=0 && (objects[m[relObject].getObject()].getSubType()>=0 || m[relObject].queryForm(NUMBER_FORM_NUM)>=0))
@@ -2893,6 +2894,8 @@ void cSource::detectSpaceRelation(int where,int backInitialPosition,vector <int>
 		return;
 	if (whereSubject>=0 && m[whereSubject].principalWherePosition>whereSubject) 
 		return;
+	if (whereSubject < 0 && m[where].getRelVerb() >= 0 && m[m[where].getRelVerb()].relSubject >= 0)
+		whereSubject = m[m[where].getRelVerb()].relSubject;
 	int maxEnd=-1;
 	// evil-looking house
 	if (whereVerb>=0 && (m[whereVerb].verbSense&VT_VERB_CLAUSE) && queryPattern(whereVerb,L"__ADJECTIVE",maxEnd)>=0)
