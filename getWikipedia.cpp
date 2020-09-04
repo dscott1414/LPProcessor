@@ -1589,7 +1589,7 @@ int cSource::getRDFWhereString(int where, wstring &oStr, wchar_t *separator, int
 		begin=m[where].beginObjectPosition;
 		len=m[where].endObjectPosition-begin;
 	}
-	if (o < 0)
+	if (o < 0 || begin<0 || len<0)
 		return -1;
 	if (len==1 && (objects[o].objectClass==NAME_OBJECT_CLASS || objects[o].objectClass==NON_GENDERED_NAME_OBJECT_CLASS) && objects[o].name.first!=wNULL && objects[o].name.last!=wNULL)
 	{

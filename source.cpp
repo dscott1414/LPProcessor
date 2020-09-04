@@ -2002,6 +2002,7 @@ int cSource::sanityCheck(int &generalizedIndex)
 		if (mi.quoteBackLink < -1 || mi.quoteBackLink >= (int)m.size()) return 30;
 		if (mi.speakerPosition < -1 || mi.speakerPosition >= (int)m.size()) return 31;
 		if (mi.audiencePosition < -1 || mi.audiencePosition >= (int)m.size()) return 32;
+		if (mi.getObject() >= 0 && (mi.beginObjectPosition < 0 || mi.endObjectPosition < 0)) return 33;
 		for (int np = mi.beginPEMAPosition; np >= 0; np = pema[np].nextByPosition)
 			if (np < 0 || np >= (signed)pema.count) return 50;
 			else
@@ -2144,14 +2145,6 @@ bool cSource::read(char *buffer,int &where,unsigned int total, bool &parsedOnly,
 	if (where == total)
 	{
 		parsedOnly = where == total;
-		int sanityReturnCode = 0, generalizedIndex;
-		// TEMP DEBUG - delete when all sources have been checked when written
-		if (sanityReturnCode=sanityCheck(generalizedIndex))
-		{
-			wprintf(L"PROGRESS: source sanity check fail (%d@%d) with %d seconds elapsed \n", sanityReturnCode, generalizedIndex, clocksec());
-			lplog(LOG_FATAL_ERROR, L"Sanity check failed (%d@%d): source %s!", sanityReturnCode, generalizedIndex, sourcePath.c_str());
-			return false;
-		}
 		if (printProgress)
 			wprintf(L"PROGRESS: 100%% source read with %d seconds elapsed \n", clocksec());
 		return true;
@@ -2177,14 +2170,6 @@ bool cSource::read(char *buffer,int &where,unsigned int total, bool &parsedOnly,
 		for (vector <cOM>::iterator omi=im->objectMatches.begin(),omiEnd=im->objectMatches.end(); omi!=omiEnd; omi++)
 			if (omi->object>=0 && omi->object<(signed)objects.size())
 				objects[omi->object].locations.push_back(cObject::cLocation(I));
-	}
-	// TEMP DEBUG - delete when all sources have been checked when written
-	int sanityReturnCode = 0, wordIndex = 0;
-	if (sanityReturnCode=sanityCheck(wordIndex))
-	{
-		wprintf(L"PROGRESS: source sanity check fail (%d@%d) with %d seconds elapsed \n", sanityReturnCode, wordIndex, clocksec());
-		lplog(LOG_ERROR, L"Sanity check failed (%d@%d): source %s!", sanityReturnCode, wordIndex, sourcePath.c_str());
-		return false;
 	}
 	if (printProgress)
 		wprintf(L"PROGRESS: 100%% source read with %d seconds elapsed \n",clocksec());
@@ -3725,18 +3710,18 @@ vector <int> cSource::copyChildrenIntoParent(cSource *childSource, int whereChil
 			if (childSource->objects[co].getOwnerWhere() >= 0)
 			{
 				if (sourceIndexMap.find(childSource->objects[co].getOwnerWhere()) == sourceIndexMap.end())
-			{
-				sourceIndexMap[childSource->objects[co].getOwnerWhere()] = m.size();
-				m.push_back(childSource->m[childSource->objects[co].getOwnerWhere()]);
-				int I = m.size() - 1;
-				if (clear)
 				{
-					m[I].clearAfterCopy();
-					if (m[I].principalWhereAdjectivalPosition >= 0)
-						m[I].principalWhereAdjectivalPosition += m.size() - childSource->m[whereObject].endObjectPosition;
+					sourceIndexMap[childSource->objects[co].getOwnerWhere()] = m.size();
+					m.push_back(childSource->m[childSource->objects[co].getOwnerWhere()]);
+					int I = m.size() - 1;
+					if (clear)
+					{
+						m[I].clearAfterCopy();
+						if (m[I].principalWhereAdjectivalPosition >= 0)
+							m[I].principalWhereAdjectivalPosition += m.size() - childSource->m[whereObject].endObjectPosition;
+					}
+					objects[parentObject].setOwnerWhere(I);
 				}
-				objects[parentObject].setOwnerWhere(I);
-			}
 				else
 					objects[parentObject].setOwnerWhere(sourceIndexMap[childSource->objects[co].getOwnerWhere()]);
 			}
@@ -3748,7 +3733,7 @@ vector <int> cSource::copyChildrenIntoParent(cSource *childSource, int whereChil
 			objects[parentObject].duplicates.clear();
 			objects[parentObject].eliminated = false;
 			if (makeCopy)
-			copyDirectlyAttachedPrepositionalPhrases(whereParentObject, childSource, whereObject, sourceIndexMap,clear);
+				copyDirectlyAttachedPrepositionalPhrases(whereParentObject, childSource, whereObject, sourceIndexMap,clear);
 			wstring tmpstr, tmpstr2;
 			lplog(LOG_WHERE, L"Transferred %d:%s to %d:%s [%s]", whereObject, childSource->objectString(co, tmpstr, true).c_str(), whereParentObject, whereString(whereParentObject, tmpstr2, true).c_str(),(makeCopy) ? L"copy made":L"no copy made");
 			// negative objects allowed in some cases, so make it REALLY negative (past wordOrderWords and eOBJECTS)

@@ -156,7 +156,7 @@ bool cQuestionAnswering::matchObjectsExactByName(vector <cObject>::iterator pare
 	return match;
 }
 
-bool cQuestionAnswering::matchChildSourcePosition(cSource *parentSource,vector <cObject>::iterator parentObject,cSource *childSource,int childWhere,bool &namedNoMatch,sTrace &debugTrace)
+bool cQuestionAnswering::matchChildSourcePositionByName(cSource *parentSource,vector <cObject>::iterator parentObject,cSource *childSource,int childWhere,bool &namedNoMatch,sTrace &debugTrace)
 { LFS
 	namedNoMatch=false;
   if (childSource->m[childWhere].objectMatches.empty())
@@ -174,7 +174,7 @@ bool cQuestionAnswering::matchChildSourcePosition(cSource *parentSource,vector <
 			if (logQuestionDetail)
 			{
 				wstring tmpstr1,tmpstr2;
-				lplog(LOG_WHERE,L"matchChildSourcePosition:parentObject %s against child object %s succeeded",parentSource->objectString(parentObject,tmpstr1,true).c_str(),childSource->objectString(childSource->m[childWhere].objectMatches[mo].object,tmpstr2,true).c_str());
+				lplog(LOG_WHERE,L"matchChildSourcePositionByName:parentObject %s against child object %s succeeded",parentSource->objectString(parentObject,tmpstr1,true).c_str(),childSource->objectString(childSource->m[childWhere].objectMatches[mo].object,tmpstr2,true).c_str());
 			}
 			return true;
 		}
@@ -213,6 +213,95 @@ bool cQuestionAnswering::matchTimeObjects(cSource *parentSource,int parentWhere,
 //    b. compare against a child object and its matched objects (if any).
 // 2. parent is an object:
 //   a. compare 
+bool cQuestionAnswering::matchAllSourcePositions(cSource* parentSource, int parentWhere, cSource* childSource, int childWhere, bool& namedNoMatch, bool& synonym, bool parentInQuestionObject, int& semanticMismatch, int& adjectivalMatch, sTrace& debugTrace)
+{
+	class cMatchQuality
+	{
+	public:
+		int parentWhere;
+		int childWhere;
+		bool namedNoMatch;
+		bool synonym;
+		int semanticMismatch;
+		int adjectivalMatch;
+		bool overallMatch;
+		cMatchQuality(int pw, int cw)
+		{
+			parentWhere = pw;
+			childWhere = cw;
+			overallMatch = namedNoMatch = synonym = false;
+			semanticMismatch=0;
+			adjectivalMatch=-1;
+		}
+	};
+	vector <cMatchQuality> mq;
+	mq.push_back(cMatchQuality(parentWhere, childWhere));
+	for (cOM po : parentSource->m[parentWhere].objectMatches)
+		mq.push_back(cMatchQuality(parentSource->objects[po.object].originalLocation, childWhere));
+	vector <cMatchQuality> onlyParentMQ = mq;
+	for (auto mqi : onlyParentMQ)
+	{
+		for (cOM co : childSource->m[childWhere].objectMatches)
+			mq.push_back(cMatchQuality(mqi.parentWhere, childSource->objects[co.object].originalLocation));
+	}
+	for (auto &mqi : mq)
+	{
+		mqi.overallMatch = matchSourcePositions(parentSource, mqi.parentWhere, childSource, mqi.childWhere, mqi.namedNoMatch, mqi.synonym, parentInQuestionObject, mqi.semanticMismatch, mqi.adjectivalMatch, debugTrace);
+		if (logQuestionDetail)
+		{
+			wstring ws, cs, am, sm;
+			lplog(LOG_WHERE, L"matchAllSourcePositions: parent %d:%s child %d:%s %s %s %s %s %s", 
+				mqi.parentWhere, parentSource->whereString(mqi.parentWhere, ws, false).c_str(), mqi.childWhere, childSource->whereString(mqi.childWhere, cs, false).c_str(), 
+				(mqi.overallMatch) ? L"overallMatch":L"", 
+				(mqi.namedNoMatch) ? L"namedNoMatch" : L"", 
+				(mqi.semanticMismatch) ? L"semanticMismatch" : L"", (mqi.semanticMismatch) ? itos(mqi.semanticMismatch,sm).c_str() : L"",
+				(mqi.adjectivalMatch>=0) ? L"adjectivalMatch" : L"", (mqi.adjectivalMatch >= 0) ? itos(mqi.adjectivalMatch, am).c_str() : L"",
+				(mqi.synonym) ? L"synonym" : L"");
+		}
+	}
+	vector <cMatchQuality> paMQ;
+	bool atLeastOneNamedMatch = false;
+	bool atLeastOneSemanticMatch = false;
+	int saveSemanticMismatch = 0;
+	int atLeastOneAdjectivalMatch = -1;
+	for (auto mqi : mq)
+	{
+		if (mqi.overallMatch)
+		{
+			if (mqi.adjectivalMatch>=0)
+				atLeastOneAdjectivalMatch = mqi.adjectivalMatch;
+			paMQ.push_back(mqi);
+		}
+		else 
+		{
+			if (!mqi.namedNoMatch)
+				atLeastOneNamedMatch = true;
+			if (!mqi.semanticMismatch)
+				atLeastOneSemanticMatch = true;
+			else
+				saveSemanticMismatch = mqi.semanticMismatch;
+		}
+	}
+	if (paMQ.empty())
+	{
+		namedNoMatch = !atLeastOneNamedMatch;
+		semanticMismatch = !atLeastOneSemanticMatch;
+		if (logQuestionDetail)
+		{
+			wstring sm;
+			lplog(LOG_WHERE, L"matchAllSourcePositions: OVERALL %s %s %s", (namedNoMatch) ? L"namedNoMatch" : L"", (semanticMismatch) ? L"semanticMismatch" : L"", (semanticMismatch) ? itos(saveSemanticMismatch, sm).c_str() : L"");
+		}
+		return false;
+	}
+	if (atLeastOneAdjectivalMatch)
+		adjectivalMatch = atLeastOneAdjectivalMatch;
+	if (logQuestionDetail)
+	{
+		wstring am;
+		lplog(LOG_WHERE, L"matchAllSourcePositions: OVERALL overallMatch %s %s", (adjectivalMatch >= 0) ? L"adjectivalMatch" : L"", (adjectivalMatch >= 0) ? itos(adjectivalMatch, am).c_str() : L"", (synonym) ? L"synonym" : L"");
+	}
+	return true;
+}
 
 // adjectivalMatch does NOT include owner objects (Paul's car)
 // adjectivalMatch = -1 if the match operation was not performed
@@ -239,13 +328,13 @@ bool cQuestionAnswering::matchSourcePositions(cSource *parentSource, int parentW
 	int childObject=(imChild->objectMatches.empty()) ? imChild->getObject() : imChild->objectMatches[0].object;
 	namedNoMatch=false;
 	if (parentSource->m[parentWhere].objectMatches.empty() && parentSource->m[parentWhere].getObject()>=0 &&
-		  matchChildSourcePosition(parentSource,parentSource->objects.begin()+parentSource->m[parentWhere].getObject(),childSource,childWhere,namedNoMatch,debugTrace)) 
+		  matchChildSourcePositionByName(parentSource,parentSource->objects.begin()+parentSource->m[parentWhere].getObject(),childSource,childWhere,namedNoMatch,debugTrace)) 
 			return true;
 	bool allNoMatch=true;
 	for (unsigned int mo=0; mo<parentSource->m[parentWhere].objectMatches.size(); mo++)
 	{
 		namedNoMatch=false;
-		if (matchChildSourcePosition(parentSource,parentSource->objects.begin()+parentSource->m[parentWhere].objectMatches[mo].object,childSource,childWhere,namedNoMatch,debugTrace))
+		if (matchChildSourcePositionByName(parentSource,parentSource->objects.begin()+parentSource->m[parentWhere].objectMatches[mo].object,childSource,childWhere,namedNoMatch,debugTrace))
 			return true;
 		allNoMatch=allNoMatch && namedNoMatch;
 	}
@@ -541,15 +630,10 @@ int cQuestionAnswering::sriMatch(cSource *questionSource,cSource *childSource, i
 	// if in subquery, wait to see if it is a match, if so, boost
 	//if (inQuestionObject && questionType==unknownQTFlag) 
 	//		cost<<=1;
-	if (matchSourcePositions(questionSource, parentWhere, childSource, childWhere, namedNoMatch, synonym, inQuestionObject, semanticMismatch, adjectivalMatch, questionSource->debugTrace))
+	if (matchAllSourcePositions(questionSource, parentWhere, childSource, childWhere, namedNoMatch, synonym, inQuestionObject, semanticMismatch, adjectivalMatch, questionSource->debugTrace))
 	{
 		//if (inQuestionObject && questionType==unknownQTFlag) // in subquery - boost
 		//	lplog(LOG_WHERE,L"%d:Boost found subquery match position - cost=%d!",childWhere,(synonym) ? cost*3/4 : cost);
-		if (semanticMismatch)
-		{
-			matchInfoDetail += L"[SEMANTIC_MISMATCH]";
-			return -cost;
-		}
 		if (synonym)
 			matchInfoDetail += L"[MATCH_SYNONYM]";
 		totalMatch = !synonym;
@@ -573,6 +657,11 @@ int cQuestionAnswering::sriMatch(cSource *questionSource,cSource *childSource, i
 	//		return cost>>2;
 	if (namedNoMatch)
 		return -cost;
+	if (semanticMismatch)
+	{
+		matchInfoDetail += L"[SEMANTIC_MISMATCH]";
+		return -cost;
+	}
 	return 0;
 }
 
@@ -1242,7 +1331,7 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource *questionSource,wchar_
 	bool questionTypePrepObject= questionSource->inObject(parentSRI->wherePrepObject,parentSRI->whereQuestionType);
 	for (vector <cSpaceRelation>::iterator childSRI=childSource->spaceRelations.begin(), sriEnd=childSource->spaceRelations.end(); childSRI!=sriEnd; childSRI++)
 	{ LFSL
-	  if (logQuestionDetail)
+		if (logQuestionDetail)
 		{
 			wstring ps;
 			childSource->prepPhraseToString(childSRI->wherePrep,ps);
@@ -1931,6 +2020,15 @@ int	cQuestionAnswering::parseSubQueriesParallel(cSource *questionSource,cSource 
 		// copy the answer into the parent
 		unordered_map <int, int> transformSourceToQuestionSourceMap;
 		sqi->whereSubject=questionSource->copyChildrenIntoParent(childSource, whereChildCandidateAnswer, transformSourceToQuestionSourceMap,true).at(0);
+		for (auto pair : transformSourceToQuestionSourceMap)
+		{
+			if (pair.second < 0)
+				continue;
+			else if (questionSource->m[pair.second].sameSourceCopy < 0)
+				questionSource->m[pair.second].adjustReferences(pair.second, false, transformSourceToQuestionSourceMap);
+			else
+				questionSource->m[pair.second].sameSourceCopy = -1;
+		}
 		set<int> saveQISO = sqi->whereQuestionInformationSourceObjects;
 		sqi->whereQuestionInformationSourceObjects.insert(sqi->whereSubject);
 		sqi->subQuery = true;
@@ -2474,15 +2572,15 @@ int cProximityMap::cProximityEntry::semanticCheck(cQuestionAnswering &qa,cSpaceR
 			//}
 		}
 
-		if (qa.matchSourcePositions(parentSource,parentSRI->whereSubject,childSource,childWhere2,namedNoMatch,synonym,true,parentSemanticMismatch,adjectivalMatch,parentSource->debugTrace))
+		if (qa.matchAllSourcePositions(parentSource,parentSRI->whereSubject,childSource,childWhere2,namedNoMatch,synonym,true,parentSemanticMismatch,adjectivalMatch,parentSource->debugTrace))
 		{
-			if (parentSemanticMismatch)
-				return confidenceSE=CONFIDENCE_NOMATCH;
 			return confidenceSE=(synonym) ? CONFIDENCE_NOMATCH*3/4 : 0;
 		}
 		if (namedNoMatch)
 			return confidenceSE=CONFIDENCE_NOMATCH;
-//		confidence=parentSource->semanticMatchSingle(L"accumulateProximityEntry",parentSRI,childSource,childWhere2,childObject,semanticMismatch,subQueryNoMatch,subQueries,-1,mapPatternAnswer,mapPatternQuestion);
+		if (parentSemanticMismatch)
+			return confidenceSE = CONFIDENCE_NOMATCH;
+		//		confidence=parentSource->semanticMatchSingle(L"accumulateProximityEntry",parentSRI,childSource,childWhere2,childObject,semanticMismatch,subQueryNoMatch,subQueries,-1,mapPatternAnswer,mapPatternQuestion);
 	}
 	return confidenceSE=CONFIDENCE_NOMATCH;
 }
@@ -3429,8 +3527,17 @@ int cQuestionAnswering::findConstrainedAnswers(cSource *questionSource, vector <
 			if (transferAS)
 			{
 				unordered_map <int, int> transformSourceToQuestionSourceMap;
-				for (int wpa: questionSource->copyChildrenIntoParent(transferAS->source, whereChild, transformSourceToQuestionSourceMap, true))
+				for (int wpa: questionSource->copyChildrenIntoParent(transferAS->source, whereChild, transformSourceToQuestionSourceMap, false))
 					wherePossibleAnswers.insert(wherePossibleAnswers.end(), wpa);
+				for (auto pair : transformSourceToQuestionSourceMap)
+				{
+					if (pair.second < 0)
+						continue;
+					else if (questionSource->m[pair.second].sameSourceCopy < 0)
+						questionSource->m[pair.second].adjustReferences(pair.second, false, transformSourceToQuestionSourceMap);
+					else
+						questionSource->m[pair.second].sameSourceCopy = -1;
+				}
 			}
 		}
 	}
@@ -3737,7 +3844,7 @@ int cQuestionAnswering::processQuestionSource(cSource *questionSource,bool parse
 				}
 			}
 		}
-		printAnswers(ssri, answerSRIs); 
+		printAnswers(ssri, answerSRIs);
 		findConstrainedAnswers(questionSource,answerSRIs, wherePossibleAnswers);
 		// if answers were found, and the original question location does not have any matches (if it did, there would be no reason to include the original location), include in future possible answers.
 		// this is a first attempt at memory.
