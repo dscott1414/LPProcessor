@@ -1267,7 +1267,7 @@ bool cPattern::create(wstring patternName, wstring differentiator, int numForms,
   return OK;
 }
 
-cPattern *cPattern::create(cSource *source,wstring patternName,int num,int whereBegin,int whereEnd, unordered_map <wstring, wstring> &parseVariables,bool destinationPatternType)
+cPattern *cPattern::create(cSource *source,wstring patternName,int num,int whereBegin,int whereEnd, unordered_map <wstring, wstring> &parseVariables)
 { LFS
   bool explicitFutureReference; // nonOptionalElementFound=false,OK=true,
   cPattern *p=new cPattern();
@@ -1301,14 +1301,6 @@ cPattern *cPattern::create(cSource *source,wstring patternName,int num,int where
 				forms=parseVariables[element->variable=forms];
 #ifdef LOG_PATTERN_MAPPING
 				::lplog(LOG_WHERE,L"%d:pattern used mapped variable %s=(%s)",whereBegin,element->variable.c_str(),parseVariables[element->variable].c_str());
-#endif
-			}
-			if (destinationPatternType)
-			{
-				p->locationToVariableMap[I]=element->variable;
-				p->destinationPatternType=destinationPatternType;
-#ifdef LOG_PATTERN_MAPPING
-				::lplog(LOG_WHERE,L"pattern %d mapped location %d to variable %s",p->num,I,element->variable.c_str());
 #endif
 			}
 		}

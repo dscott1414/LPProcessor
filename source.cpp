@@ -2905,10 +2905,9 @@ cSource::cSource(wchar_t *databaseServer,int _sourceType,bool generateFormStatis
 	debugTrace.traceWikipedia=false;
 	debugTrace.traceWebSearch=false;
 	debugTrace.traceQCheck=false;
-	debugTrace.traceTransitoryQuestion=false;
-	debugTrace.traceConstantQuestion=false;
+	debugTrace.traceTransformDestinationQuestion=false;
+	debugTrace.traceLinkQuestion = false;
 	debugTrace.traceMapQuestion=false;
-	debugTrace.traceCommonQuestion=false;
 	debugTrace.traceQuestionPatternMap=false;
 	debugTrace.traceVerbObjects=false;
 	debugTrace.traceDeterminer=false;
@@ -2995,10 +2994,9 @@ cSource::cSource(MYSQL *parentMysql,int _sourceType,int _sourceConfidence)
 	debugTrace.traceWikipedia=false;
 	debugTrace.traceWebSearch=false;
 	debugTrace.traceQCheck=false;
-	debugTrace.traceTransitoryQuestion=false;
-	debugTrace.traceConstantQuestion=false;
+	debugTrace.traceTransformDestinationQuestion =false;
+	debugTrace.traceLinkQuestion = false;
 	debugTrace.traceMapQuestion=false;
-	debugTrace.traceCommonQuestion=false;
 	debugTrace.traceQuestionPatternMap=false;
 	debugTrace.traceVerbObjects=false;
 	debugTrace.traceDeterminer=false;

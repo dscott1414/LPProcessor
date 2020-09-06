@@ -33,6 +33,11 @@ public:
 		cIntArray trail;
 		cSuffixRule()
 		{
+			inflection=0;
+			rulenum=-1; /* Line number of rule in rule list file */
+			intact=false; /* Boolean-must word be intact? */
+			cont=false; /* Boolean-continue with another rule? */
+			protect=false; /* Boolean-protect this ending? */
 		}
 		~cSuffixRule()
 		{

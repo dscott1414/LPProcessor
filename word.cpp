@@ -2133,45 +2133,33 @@ bool cWord::parseMetaCommands(int where,wchar_t *buffer, int &endSymbol, wstring
 		t.tracePreposition = setValue;
 	else if (!wcsnicmp(buffer + offset, L"tracePatternMatching", wcslen(L"tracePatternMatching")))
 		t.tracePatternMatching = setValue;
-	else if (!wcsnicmp(buffer,L"traceTransitoryQuestion",wcslen(L"traceTransitoryQuestion")))
+	else if (!wcsnicmp(buffer, L"traceTransformDestinationQuestion", wcslen(L"traceTransformDestinationQuestion")))
 	{
-    t.traceCommonQuestion=false;
-    t.traceMapQuestion=false;
-    t.traceConstantQuestion=false;
-    t.traceTransitoryQuestion=true;
-		t.traceQuestionPatternMap=false;
+		t.traceTransformDestinationQuestion = setValue;
+		t.traceMapQuestion = false;
+		t.traceQuestionPatternMap = false;
+		t.traceLinkQuestion = false;
 	}
-  else if (!wcsnicmp(buffer,L"traceConstantQuestion",wcslen(L"traceConstantQuestion")))
+	else if (!wcsnicmp(buffer, L"traceLinkQuestion", wcslen(L"traceLinkQuestion")))
 	{
-    t.traceCommonQuestion=false;
-    t.traceMapQuestion=false;
-    t.traceConstantQuestion=true;
-    t.traceTransitoryQuestion=false;
-		t.traceQuestionPatternMap=false;
+		t.traceTransformDestinationQuestion = false;
+		t.traceMapQuestion = false;
+		t.traceQuestionPatternMap = false;
+		t.traceLinkQuestion = setValue;
 	}
-  else if (!wcsnicmp(buffer,L"traceMapQuestion",wcslen(L"traceMapQuestion")))
+	else if (!wcsnicmp(buffer,L"traceMapQuestion",wcslen(L"traceMapQuestion")))
 	{
-    t.traceCommonQuestion=false;
-    t.traceMapQuestion=true;
-    t.traceConstantQuestion=false;
-    t.traceTransitoryQuestion=false;
+    t.traceTransformDestinationQuestion=false;
+    t.traceMapQuestion= setValue;
 		t.traceQuestionPatternMap=false;
-	}
-  else if (!wcsnicmp(buffer,L"traceCommonQuestion",wcslen(L"traceCommonQuestion")))
-	{
-    t.traceCommonQuestion=true;
-    t.traceMapQuestion=false;
-    t.traceConstantQuestion=false;
-    t.traceTransitoryQuestion=false;
-		t.traceQuestionPatternMap=false;
+		t.traceLinkQuestion = false;
 	}
 	else if (!wcsnicmp(buffer, L"traceQuestionPatternMap", wcslen(L"traceQuestionPatternMap")))
 	{
-		t.traceCommonQuestion = false;
 		t.traceMapQuestion = false;
-		t.traceConstantQuestion = false;
-		t.traceTransitoryQuestion = false;
-		t.traceQuestionPatternMap = true;
+		t.traceTransformDestinationQuestion = false;
+		t.traceQuestionPatternMap = setValue;
+		t.traceLinkQuestion = false;
 	}
 	else if (!wcsnicmp(buffer, L"P ", wcslen(L"P ")))
 	{

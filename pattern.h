@@ -297,10 +297,9 @@ public:
         ignoreFlag=false;
 				checkIgnorableForms = false;
         objectTag=-1;
-				destinationPatternType=false;
     };
     static bool create(wstring patternName,wstring differentiator,int numForms,...);
-		static cPattern *create(cSource *source,wstring patternName,int num,int whereBegin,int whereEnd,unordered_map <wstring, wstring> &parseVariables,bool destinationPatternType);
+		static cPattern *create(cSource *source,wstring patternName,int num,int whereBegin,int whereEnd,unordered_map <wstring, wstring> &parseVariables);
     bool eliminateTag(wstring tag);
     bool resolveDescendants(bool circular);
     cPattern(cPattern *p);
@@ -333,7 +332,6 @@ public:
     int nextRoot;
     int objectTag;
 		bool objectContainer;
-		bool destinationPatternType;
 
     set <unsigned int> tags;
     set <unsigned int> descendantTags;

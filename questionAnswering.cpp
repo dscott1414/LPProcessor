@@ -960,46 +960,30 @@ int cQuestionAnswering::metaPatternMatch(cSource *questionSource,cSource *childS
 					if (parameterMatchesAnswer)
 						continue;
 					// test only for patterns diff 8,9,G
-					vector <tIWMM> parentWords;
 					wstring diff=patterns[childSource->m[whereMNE].pma[element&~cMatchElement::patternFlag].getPattern()]->differentiator;
 					lplog(LOG_WHERE,L"%d:meta matched pattern %s[%s]",whereMNE,patterns[childSource->m[whereMNE].pma[element&~cMatchElement::patternFlag].getPattern()]->name.c_str(),patterns[childSource->m[whereMNE].pma[element&~cMatchElement::patternFlag].getPattern()]->differentiator.c_str());
-					vector <wchar_t *> checkVerbs;
-					if (diff==L"8")
+					set <wstring> checkVerbs;
+					switch (diff[0])
 					{
-						wchar_t *checkVerbsArray[]={ L"know",L"call",L"name",0 };
-						for (int w=0; checkVerbsArray[w]; w++)
-							checkVerbs.push_back(checkVerbsArray[w]);
+					case '8':checkVerbs = { L"know",L"call",L"name" }; break;
+					case '9':checkVerbs = { L"look",L"appear" }; break;
+					case 'G':checkVerbs = { L"recognize" }; break;
 					}
-					if (diff==L"9")
-					{
-						wchar_t *checkVerbsArray[]={ L"look",L"appear",0 };
-						for (int w=0; checkVerbsArray[w]; w++)
-							checkVerbs.push_back(checkVerbsArray[w]);
-					}
-					if (diff==L"G")
-					{
-						wchar_t *checkVerbsArray[]={ L"recognize",0 };
-						for (int w=0; checkVerbsArray[w]; w++)
-							checkVerbs.push_back(checkVerbsArray[w]);
-					}
-					tIWMM childWord;
 					wstring tmpstr;
+					bool foundMatch = checkVerbs.empty();
 					if (checkVerbs.size() && childSource->m[whereAnswer].getRelVerb()>=0)
-						childWord=childSource->m[childSource->m[whereAnswer].getRelVerb()].getMainEntry();
-					bool foundMatch=checkVerbs.empty();
-					for (unsigned int cv=0; cv<checkVerbs.size() && !foundMatch; cv++)
 					{
-						tIWMM checkWord=Words.query(checkVerbs[cv]);
-						if (checkWord!=Words.end())
+						tIWMM childWord =childSource->m[childSource->m[whereAnswer].getRelVerb()].getMainEntry();
+						for (auto cv : checkVerbs)
 						{
-							if (!(foundMatch=(checkWord==childWord)))
-							{
-								set <wstring> checkSynonyms;
-								questionSource->getSynonyms(checkWord->first,checkSynonyms, VERB);
-								if (logSynonymDetail)
-									lplog(LOG_WHERE, L"TSYM [VERB] comparing CHECK %s and synonyms [%s] against %s", checkWord->first.c_str(), setString(checkSynonyms, tmpstr, L"|").c_str(), childWord->first.c_str());
-								foundMatch= (checkSynonyms.find(checkWord->first)!=checkSynonyms.end());
-							}
+							if (foundMatch = (Words.gquery(cv) == childWord))
+								break;
+							set <wstring> checkSynonyms;
+							questionSource->getSynonyms(cv, checkSynonyms, VERB);
+							if (logSynonymDetail)
+								lplog(LOG_WHERE, L"TSYM [VERB] comparing CHECK %s and synonyms [%s] against %s", cv.c_str(), setString(checkSynonyms, tmpstr, L"|").c_str(), childWord->first.c_str());
+							if (foundMatch = (checkSynonyms.find(childWord->first) != checkSynonyms.end()))
+								break;
 						}
 					}
 					if (childSource->m[whereAnswer].getObject()>=0 && childSource->objects[childSource->m[whereAnswer].getObject()].objectClass==NAME_OBJECT_CLASS && foundMatch)
@@ -2259,7 +2243,7 @@ int	cQuestionAnswering::matchSubQueries(cSource *questionSource,wstring derivati
 		questionSource->prepPhraseToString(sqi->wherePrep,ps);
 		wchar_t sqderivation[1024];
 		lplog(LOG_WHERE,L"parent considered answer %d:child subject=%s BEGIN",numConsideredParentAnswer,childWhereString.c_str());
-		StringCbPrintf(sqderivation,1024*sizeof(wchar_t),L"%s:SUBQUERY #%d",derivation.c_str(),sqi-subQueries.begin());
+		StringCbPrintf(sqderivation,1024*sizeof(wchar_t),L"%s:SUBQUERY #%d",derivation.c_str(),(int)(sqi-subQueries.begin()));
 		questionSource->printSRI(sqderivation,&(*sqi),0,sqi->whereSubject,sqi->whereObject,ps,false,-1,tmpMatchInfo);
 		unordered_map <int, cWikipediaTableCandidateAnswers * > wikiTableMap;
 		bool whereQuestionInformationSourceObjectsSkipped=analyzeRDFTypes(questionSource, sqi, &(*sqi),derivation, answerSRIs, maxAnswer, mapPatternAnswer, mapPatternQuestion, wikiTableMap,true);
@@ -2279,7 +2263,7 @@ int	cQuestionAnswering::matchSubQueries(cSource *questionSource,wstring derivati
 		{
 			if (answerSRIs[I].matchSum==maxAnswer || answerSRIs[I].matchSum >= 18)
 			{
-				StringCbPrintf(sqderivation,1024*sizeof(wchar_t),L"%s:SUBQUERY #%d answer #%d",derivation.c_str(),sqi-subQueries.begin(),I);
+				StringCbPrintf(sqderivation,1024*sizeof(wchar_t),L"%s:SUBQUERY #%d answer #%d",derivation.c_str(),(int)(sqi-subQueries.begin()),I);
 				int semanticMismatch=(answerSRIs[I].matchInfo.find(L"WIKI_OTHER_ANSWER")!=wstring::npos) ? 12 : 0;
 				bool match=answerSRIs[I].matchInfo.find(L"ANSWER_MATCH[")!=wstring::npos;
 				wchar_t *wm=L"";
@@ -2797,7 +2781,6 @@ bool cQuestionAnswering::processPathToPattern(cSource *questionSource,const wcha
 		vector <int> secondaryQuotesResolutions;
 		source->resolveSpeakers(secondaryQuotesResolutions);
 		source->resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
-		//source->resolveWordRelations(); // unnecessary because we are no longer dynamically updating word relations in DB and we are erasing updated word relations with every source read.
 		return !source->m.empty();
 }
 
@@ -2807,28 +2790,34 @@ void cQuestionAnswering::initializeTransformations(cSource *questionSource,unord
 { LFS
 	if (transformationPatternMap.size())
 		return;
-	vector <cPattern *> patternsForAssignment,transformPatterns;
+	vector <cPattern *> patternsForAssignment,transformPatterns,linkPatterns;
 	int patternNum=0,existingReferences=patternReferences.size();
 	if (processPathToPattern(questionSource,L"source\\lists\\questionTransforms.txt",transformSource))
 	{
 		for (int *I=transformSource->sentenceStarts.begin(); I!=transformSource->sentenceStarts.end(); I++)
 		{
 			if ((I+1)==transformSource->sentenceStarts.end()) break;
-			transformPatterns.push_back(cPattern::create(transformSource,L"",patternNum++,*I,*(I+1)-1,parseVariables,transformSource->m[*I].t.traceCommonQuestion || transformSource->m[*I].t.traceConstantQuestion || transformSource->m[*I].t.traceQuestionPatternMap)); 
-			transformPatterns[transformPatterns.size()-1]->metaPattern=transformSource->m[*I].t.traceQuestionPatternMap;
-			patternsForAssignment.push_back(transformPatterns[transformPatterns.size()-1]);
-			if (transformSource->m[*I].t.traceConstantQuestion || transformSource->m[*I].t.traceCommonQuestion || transformSource->m[*I].t.traceQuestionPatternMap)
+			cPattern* pattern = cPattern::create(transformSource, L"", patternNum++, *I, *(I + 1) - 1, parseVariables);
+			transformPatterns.push_back(pattern);
+			if (transformSource->m[*I].t.traceTransformDestinationQuestion || transformSource->m[*I].t.traceQuestionPatternMap)
 			{
 				vector <cSpaceRelation>::iterator sri=transformSource->findSpaceRelation(*I);
 				if (sri!=transformSource->spaceRelations.end())
 				{
 					transformSource->printSRI(L"initializeTransformations",&(*sri),-1,sri->whereSubject,sri->whereObject,sri->wherePrep,false,-1,L"",LOG_INFO);
-					transformationPatternMap[sri]=patternsForAssignment;
+					for (int w = *I; w < *(I + 1) - 1; w++)
+						pattern->locationToVariableMap[w] = pattern->getElement(w-*I)->variable;
+#ifdef LOG_PATTERN_MAPPING
+						::lplog(LOG_WHERE, L"pattern %d mapped location %d to variable %s", p->num, I, element->variable.c_str());
+#endif
+					transformationPatternMap[sri]= cTransformPatterns(patternsForAssignment, pattern, linkPatterns);
 					patternsForAssignment.clear();
 				}
 			}
-			if (transformSource->m[*I].t.traceTransitoryQuestion || transformSource->m[*I].t.traceMapQuestion)
+			else
 			{
+				pattern->metaPattern = transformSource->m[*I].t.traceQuestionPatternMap;
+				patternsForAssignment.push_back(pattern);
 			}
 		}
 		bool patternError;
@@ -2847,32 +2836,31 @@ void cQuestionAnswering::initializeTransformations(cSource *questionSource,unord
 // 
 // this question is asking for an answer which is constantly changing.
 // for best results, we must change the question into one that has a constant answer
-bool cQuestionAnswering::detectTransitoryAnswer(cSource *questionSource,cSpaceRelation* sri,cSpaceRelation * &ssri,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion)
+bool cQuestionAnswering::transformQuestion(cSource *questionSource,cSpaceRelation* sri,cSpaceRelation * &ssri,cPattern *&mapPatternAnswer,cPattern *&mapPatternQuestion)
 { LFS
 	unordered_map <wstring, wstring> parseVariables;
 	initializeTransformations(questionSource,parseVariables);
 	// for each destination space relation (When was X born?), there are multiple source patterns that map into it (How old is Darrell Hammond?, etc).
-	for (map <vector <cSpaceRelation>::iterator,vector <cPattern *> >::iterator itPM=transformationPatternMap.begin(),tPMEnd=transformationPatternMap.end(); itPM!=tPMEnd; itPM++)
+	for (auto itPM:transformationPatternMap)
 	{
-		vector <cPattern *>::iterator constantPattern=itPM->second.end()-1;
-		for (vector <cPattern *>::iterator ip=itPM->second.begin(),ipEnd=itPM->second.end(); ip!=ipEnd; ip++)
+		cPattern * destinationPattern=itPM.second.destinationPattern;
+		for (auto ip:itPM.second.sourcePatterns)
 		{
-			if ((*ip)->destinationPatternType) 
-				continue;
-			if (questionSource->matchPattern(*ip,sri->printMin,sri->printMin+2,false))
+			if (questionSource->matchPattern(ip,sri->printMin,sri->printMin+2,false))
 			{
-				if ((*constantPattern)->metaPattern)
+				if (destinationPattern->metaPattern)
 				{
-					mapPatternAnswer=*constantPattern;
-					mapPatternQuestion=*ip;
+					mapPatternAnswer=destinationPattern;
+					mapPatternQuestion=ip;
 				}
 				else
 				{
 					unordered_map <int,int> transformSourceToQuestionSourceMap;
 					// copy transformation destination space relation to questionSource
-					copySource(questionSource,&(*itPM->first),*ip,*constantPattern, transformSourceToQuestionSourceMap,parseVariables);
+					//void cQuestionAnswering::copySource(cSource * questionSource, cSpaceRelation * constantQuestionSRI, cPattern * originalQuestionPattern, cPattern * constantQuestionPattern, unordered_map <int, int> & transformSourceToQuestionSourceMap, unordered_map <wstring, wstring> & parseVariables)
+					copySource(questionSource,&(*itPM.first),ip,destinationPattern, transformSourceToQuestionSourceMap,parseVariables);
 					// create new space relation from destination space relation using the transformSourceToQuestionSourceMap.
-					ssri=new cSpaceRelation(itPM->first, transformSourceToQuestionSourceMap);
+					ssri=new cSpaceRelation(itPM.first, transformSourceToQuestionSourceMap);
 					ssri->transformedPrep = -1;
 					questionSource->getSRIMinMax(ssri);
 					wstring ps;
@@ -3682,7 +3670,7 @@ int cQuestionAnswering::processQuestionSource(cSource *questionSource,bool parse
 		isQuestionPassive(questionSource,sri,ssri);
 		// detect How and transitory answers
 		cPattern *mapPatternAnswer=NULL,*mapPatternQuestion=NULL;
-		detectTransitoryAnswer(questionSource,&(*sri),ssri,mapPatternAnswer,mapPatternQuestion);
+		transformQuestion(questionSource,&(*sri),ssri,mapPatternAnswer,mapPatternQuestion);
 		ssri->whereQuestionTypeObject = getWhereQuestionTypeObject(questionSource, ssri);
 		// **************************************************************
 		// log question

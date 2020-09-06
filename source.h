@@ -198,10 +198,9 @@ public:
 		t.traceMatchedSentences=trace.traceMatchedSentences;
 		t.traceUnmatchedSentences=trace.traceUnmatchedSentences;
 		t.traceTagSetCollection=trace.traceTagSetCollection;
-		t.traceTransitoryQuestion=trace.traceTransitoryQuestion;
-		t.traceConstantQuestion=trace.traceConstantQuestion;
+		t.traceTransformDestinationQuestion = trace.traceTransformDestinationQuestion;
+		t.traceLinkQuestion = trace.traceLinkQuestion;
 		t.traceMapQuestion=trace.traceMapQuestion;
-		t.traceCommonQuestion=trace.traceCommonQuestion;
 		t.traceQuestionPatternMap=trace.traceQuestionPatternMap;
 		t.collectPerSentenceStats=trace.collectPerSentenceStats;
 		t.traceParseInfo = trace.traceParseInfo;

@@ -1031,6 +1031,8 @@ int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 			}
 			else
 			{
+				if (parseVariables.find(sWord) == parseVariables.end())
+					::lplog(LOG_FATAL_ERROR, L"Parse variable %s not defined!", sWord.c_str());
 				::lplog(LOG_WHERE, L"%d:parse used mapped variable %s=(%s)", m.size(), sWord.c_str(), parseVariables[sWord].c_str());
 				sWord = parseVariables[sWord];
 			}

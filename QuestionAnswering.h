@@ -109,10 +109,27 @@ public:
 		};
 		void eraseSourcesMap();
 	bool isQuestionPassive(cSource *questionSource, vector <cSpaceRelation>::iterator sri, cSpaceRelation * &ssri);
-	bool detectTransitoryAnswer(cSource *questionSource, cSpaceRelation* sri, cSpaceRelation * &ssri, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion);
+	bool transformQuestion(cSource *questionSource, cSpaceRelation* sri, cSpaceRelation * &ssri, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion);
 	void initializeTransformations(cSource *questionSource, unordered_map <wstring, wstring> &parseVariables);
 	bool processPathToPattern(cSource *questionSource, const wchar_t *path, cSource *&source);
-	map <vector <cSpaceRelation>::iterator, vector <cPattern *> > transformationPatternMap;
+	class cTransformPatterns
+	{
+	public:
+		vector <cPattern*> sourcePatterns;
+		cPattern *destinationPattern;
+		vector <cPattern*> linkPatterns;
+		cTransformPatterns(vector <cPattern*> sps, cPattern* dp, vector <cPattern*> lps)
+		{
+			sourcePatterns = sps;
+			destinationPattern = dp;
+			linkPatterns = lps;
+		}
+		cTransformPatterns()
+		{
+			destinationPattern = NULL;
+		}
+	};
+	map <vector <cSpaceRelation>::iterator, cTransformPatterns > transformationPatternMap;
 	cSource *transformSource;
 	unordered_map <wstring, cSource *> sourcesMap;
 	unordered_map <wstring, cAnswerConfidence> childCandidateAnswerMap;

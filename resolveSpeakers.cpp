@@ -90,7 +90,7 @@ void cSource::printLocalFocusedObjects(int where,int forObjectClass)
 // finish the RAP description
 wstring cSource::objectString(int object,wstring &logres,bool shortNameFormat,bool objectOwnerRecursionFlag)
 { LFS
-  if (object>=(int)objects.size())
+  if (object>=(int)objects.size() || object<0)
     return logres=L"ILLEGAL!";
   switch (object)
   {

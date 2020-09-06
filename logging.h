@@ -75,7 +75,7 @@ struct sTrace
 	bool traceSpeakerResolution, traceNyms, traceRole;
 	bool traceObjectResolution,traceVerbObjects,traceDeterminer,traceBNCPreferences,tracePatternElimination,traceNameResolution;
 	bool traceSecondaryPEMACosting,traceMatchedSentences,traceUnmatchedSentences,traceIncludesPEMAIndex;
-	bool traceTransitoryQuestion,traceConstantQuestion,traceMapQuestion,traceCommonQuestion,traceQuestionPatternMap;
+	bool traceTransformDestinationQuestion,traceMapQuestion,traceQuestionPatternMap,traceLinkQuestion;
 	bool traceTagSetCollection,collectPerSentenceStats,traceParseInfo, tracePreposition, tracePatternMatching;
 };
 
