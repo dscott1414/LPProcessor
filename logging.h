@@ -67,8 +67,9 @@ int lplog(int logLevel,const wchar_t *format,...);
 int lplogNR(int logLevel,const wchar_t *format,...);
 int logstring(int logLevel,const wchar_t *s);
 #define SCREEN_WIDTH 280
-struct sTrace 
+class sTrace 
 {
+public:
 	bool traceTime,traceTags,traceWhere;
 	bool traceWikipedia,traceWebSearch,traceQCheck;
 	bool printBeforeElimination, traceSubjectVerbAgreement, traceTestSubjectVerbAgreement, traceEVALObjects, traceAnaphors, traceRelations,traceTestSyntacticRelations;
@@ -77,6 +78,44 @@ struct sTrace
 	bool traceSecondaryPEMACosting,traceMatchedSentences,traceUnmatchedSentences,traceIncludesPEMAIndex;
 	bool traceTransformDestinationQuestion,traceMapQuestion,traceQuestionPatternMap,traceLinkQuestion;
 	bool traceTagSetCollection,collectPerSentenceStats,traceParseInfo, tracePreposition, tracePatternMatching;
+	sTrace()
+	{
+		traceTime = false;
+		traceTags = false;
+		traceWhere = false;
+		traceWikipedia = false;
+		traceWebSearch = false;
+		traceQCheck = false;
+		printBeforeElimination = false;
+		traceSubjectVerbAgreement = false;
+		traceTestSubjectVerbAgreement = false;
+		traceEVALObjects = false;
+		traceAnaphors = false;
+		traceRelations = false;
+		traceTestSyntacticRelations = false;
+		traceSpeakerResolution = false;
+		traceNyms = false;
+		traceRole = false;
+		traceObjectResolution = false;
+		traceVerbObjects = false;
+		traceDeterminer = false;
+		traceBNCPreferences = false;
+		tracePatternElimination = false;
+		traceNameResolution = false;
+		traceSecondaryPEMACosting = false;
+		traceMatchedSentences = false;
+		traceUnmatchedSentences = false;
+		traceIncludesPEMAIndex = false;
+		traceTransformDestinationQuestion = false;
+		traceMapQuestion = false;
+		traceQuestionPatternMap = false;
+		traceLinkQuestion = false;
+		traceTagSetCollection = false;
+		collectPerSentenceStats = false;
+		traceParseInfo = false;
+		tracePreposition = false;
+		tracePatternMatching = false;
+	}
 };
 
 extern int logQuestionProfileTime;

@@ -301,17 +301,17 @@ public:
 				*pos=L'/';
 			}
 		}
-		if (accumulationNetworkProfileTimer>0 && (c-lastNetworkTimePrinted>120000 || timer==0))
-		{
-			lplog(LOG_WHERE,L"%07I64d:accumulated time=%09I64d MS (%I64d hours) accumulated net time=%09I64d MS (%I64d hours,%I64d MS/call)",accumulateNetworkTimeCount,
-				accumulationNetworkProfileTimer,accumulationNetworkProfileTimer/3600000,accumulateOnlyNetTimer,accumulateOnlyNetTimer/3600000,accumulateOnlyNetTimer/accumulateNetworkTimeCount);
-			for (unordered_map <wstring,__int64>::iterator nti=onlyNetTimes.begin(),ntEnd=onlyNetTimes.end(); nti!=ntEnd; nti++)
-				lplog(LOG_WHERE,L"%40s:%07I64d:%09I64d(%02I64d%%) %09I64d(%02I64d%% %I64d MS/call)",nti->first.c_str(),numTimesPerURL[nti->first.c_str()],
-							netAndSleepTimes[nti->first.c_str()],netAndSleepTimes[nti->first.c_str()]*100/accumulationNetworkProfileTimer,
-							nti->second,nti->second*100/accumulationNetworkProfileTimer,
-							(numTimesPerURL[nti->first.c_str()]) ? nti->second/numTimesPerURL[nti->first.c_str()] : 0L);
-			lastNetworkTimePrinted=c;
-		}
+		//if (accumulationNetworkProfileTimer>0 && (c-lastNetworkTimePrinted>120000 || timer==0))
+		//{
+		//	lplog(LOG_WHERE,L"%07I64d:accumulated time=%09I64d MS (%I64d hours) accumulated net time=%09I64d MS (%I64d hours,%I64d MS/call)",accumulateNetworkTimeCount,
+		//		accumulationNetworkProfileTimer,accumulationNetworkProfileTimer/3600000,accumulateOnlyNetTimer,accumulateOnlyNetTimer/3600000,accumulateOnlyNetTimer/accumulateNetworkTimeCount);
+		//	for (unordered_map <wstring,__int64>::iterator nti=onlyNetTimes.begin(),ntEnd=onlyNetTimes.end(); nti!=ntEnd; nti++)
+		//		lplog(LOG_WHERE,L"%40s:%07I64d:%09I64d(%02I64d%%) %09I64d(%02I64d%% %I64d MS/call)",nti->first.c_str(),numTimesPerURL[nti->first.c_str()],
+		//					netAndSleepTimes[nti->first.c_str()],netAndSleepTimes[nti->first.c_str()]*100/accumulationNetworkProfileTimer,
+		//					nti->second,nti->second*100/accumulationNetworkProfileTimer,
+		//					(numTimesPerURL[nti->first.c_str()]) ? nti->second/numTimesPerURL[nti->first.c_str()] : 0L);
+		//	lastNetworkTimePrinted=c;
+		//}
  		ReleaseSRWLockExclusive(&networkTimeSRWLock);
 	}
 };

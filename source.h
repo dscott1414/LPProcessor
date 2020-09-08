@@ -1640,7 +1640,7 @@ public:
 		}
 	};
 	map < tIWMM,set<int>,wordMapCompare> relatedObjectsMap;
-	unordered_map < int,wstring> temporaryPatternBuffer;
+	unordered_map < int,wstring> positionToTransformationPatternVariableMap;
 
 	int numSearchedInMemory,processOrder;
 	bool isFormsProcessed;

@@ -2285,7 +2285,7 @@ int cWord::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocatio
     return PARSE_END_PARAGRAPH;
 	}
 	// Pattern building parse
-	if (buffer[cp]==L'{' && cp+3<bufferLen && iswupper(buffer[cp+1]) && iswalpha(buffer[cp+1]) && (buffer[cp+2]==L'=' || buffer[cp+2]==L'}'))
+	if (buffer[cp]==L'{' && cp+3<bufferLen && ((iswupper(buffer[cp+1]) && iswalpha(buffer[cp+1])) || buffer[cp+1]==L'$') && (buffer[cp+2]==L'=' || buffer[cp+2]==L'}'))
 	{
 		for (cp+=1; cp<bufferLen && buffer[cp]!=L'}'; cp++)
 			sWord+=buffer[cp];

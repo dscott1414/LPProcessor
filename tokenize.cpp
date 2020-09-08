@@ -1003,6 +1003,7 @@ int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 	bool webScrapeParse = sourceType == WEB_SEARCH_SOURCE_TYPE || sourceType == REQUEST_TYPE, multipleEnds = false;
 	size_t lastSentenceEnd = m.size(), numParagraphsInSection = 0;
 	unordered_map <wstring, wstring> parseVariables;
+	parseVariables[L"$"] = L"answer";
 	if (bufferScanLocation == 0 && bookBuffer[0] == 65279)
 		bufferScanLocation = 1;
 	while (result == 0 && !exitNow && runOnSentences<20) // too many run on sentences indicate malformed source
@@ -1019,7 +1020,7 @@ int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 			break;
 		if (result == PARSE_PATTERN)
 		{
-			temporaryPatternBuffer[(int)m.size()] = sWord;
+			positionToTransformationPatternVariableMap[(int)m.size()] = sWord;
 			result = 0;
 			// [variable name]=[substitute word for parsing]:[pattern list]
 			size_t equalsPos = sWord.find(L'='), colonPos = sWord.find(L':');

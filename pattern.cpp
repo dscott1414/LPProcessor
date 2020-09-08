@@ -1281,9 +1281,9 @@ cPattern *cPattern::create(cSource *source,wstring patternName,int num,int where
 	{
     cPatternElement *element=new cPatternElement;
     element->patternName=patternName;
-		unordered_map < int,wstring>::iterator substitutePattern=source->temporaryPatternBuffer.find(I);
+		unordered_map < int,wstring>::iterator substitutePattern=source->positionToTransformationPatternVariableMap.find(I);
 		wstring forms,tmpstr;
-		if (substitutePattern!=source->temporaryPatternBuffer.end())
+		if (substitutePattern!=source->positionToTransformationPatternVariableMap.end())
 		{
 			// [variable name]=[substitute word for parsing]:[pattern list] || [variable name]
 			forms=substitutePattern->second;

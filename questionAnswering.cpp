@@ -2740,16 +2740,17 @@ int cQuestionAnswering::getWhereQuestionTypeObject(cSource *questionSource,cSpac
 		collectionWhere= questionSource->m[sri->whereSecondaryPrep].getRelObject();
 	if (collectionWhere < 0)
 	{
-		lplog(LOG_WHERE | LOG_INFO, L"Unable to map getWhereQuestionTypeObject: %d:QuestionType %d:S %d:O %d:PO %d:SO %d:SPO",
+		lplog(LOG_WHERE | LOG_INFO, L"Unable to map whereQuestionType %d: S=%d, O=%d, PO=%d, SO=%d, SPO=%d",
 			sri->whereQuestionType, sri->whereSubject, sri->whereObject, sri->wherePrepObject, sri->whereSecondaryObject, (sri->whereSecondaryPrep >= 0) ? questionSource->m[sri->whereSecondaryPrep].getRelObject() : -1);
 		wstring phrase;
 		lplog(LOG_WHERE | LOG_INFO, questionSource->phraseString(sri->printMin, sri->printMax, phrase, false).c_str());
 	}
 	else
 	{
-		lplog(LOG_WHERE | LOG_INFO, L"Successfully mapped getWhereQuestionTypeObject to %d: %d:QuestionType[%s]  %d:S %d:O %d:PO %d:SO %d:SPO",
+		lplog(LOG_WHERE | LOG_INFO, L"Successfully mapped getWhereQuestionTypeObject to %d: QuestionType[%d:%s] S=%d, O=%d, PO=%d, SO=%d, SPO=%d",
 			collectionWhere,
-			sri->whereQuestionType, questionSource->m[sri->whereQuestionType].word->first.c_str(), sri->whereSubject, sri->whereObject, sri->wherePrepObject, sri->whereSecondaryObject, (sri->whereSecondaryPrep >= 0) ? questionSource->m[sri->whereSecondaryPrep].getRelObject() : -1);
+			sri->whereQuestionType, questionSource->m[sri->whereQuestionType].word->first.c_str(), 
+			sri->whereSubject, sri->whereObject, sri->wherePrepObject, sri->whereSecondaryObject, (sri->whereSecondaryPrep >= 0) ? questionSource->m[sri->whereSecondaryPrep].getRelObject() : -1);
 	}
 	return collectionWhere;
 }
@@ -2790,6 +2791,7 @@ void cQuestionAnswering::initializeTransformations(cSource *questionSource,unord
 { LFS
 	if (transformationPatternMap.size())
 		return;
+	parseVariables[L"$"] = L"noun|answer";
 	vector <cPattern *> patternsForAssignment,transformPatterns,linkPatterns;
 	int patternNum=0,existingReferences=patternReferences.size();
 	if (processPathToPattern(questionSource,L"source\\lists\\questionTransforms.txt",transformSource))
@@ -2859,13 +2861,20 @@ bool cQuestionAnswering::transformQuestion(cSource *questionSource,cSpaceRelatio
 					// copy transformation destination space relation to questionSource
 					//void cQuestionAnswering::copySource(cSource * questionSource, cSpaceRelation * constantQuestionSRI, cPattern * originalQuestionPattern, cPattern * constantQuestionPattern, unordered_map <int, int> & transformSourceToQuestionSourceMap, unordered_map <wstring, wstring> & parseVariables)
 					copySource(questionSource,&(*itPM.first),ip,destinationPattern, transformSourceToQuestionSourceMap,parseVariables);
+					for (auto tsqm : transformSourceToQuestionSourceMap)
+					{
+						lplog(LOG_INFO | LOG_WHERE, L"transformSourceToQuestionSourceMap %d %d", tsqm.first, tsqm.second);
+					}
 					// create new space relation from destination space relation using the transformSourceToQuestionSourceMap.
 					ssri=new cSpaceRelation(itPM.first, transformSourceToQuestionSourceMap);
 					ssri->transformedPrep = -1;
 					questionSource->getSRIMinMax(ssri);
+					wstring psi;
+					transformSource->prepPhraseToString(itPM.first->wherePrep, psi);
+					transformSource->printSRI(L"TransitoryAnswer - INPUT", &(*itPM.first), 0, itPM.first->whereSubject, itPM.first->whereObject, psi, false, -1, L"", LOG_INFO | LOG_WHERE);
 					wstring ps;
 					questionSource->prepPhraseToString(sri->wherePrep, ps);
-					questionSource->printSRI(L"TransitoryAnswer - ORIGINAL", sri, 0, sri->whereSubject, sri->whereObject, ps, false, -1, L"",LOG_INFO|LOG_WHERE);
+					questionSource->printSRI(L"TransitoryAnswer - ORIGINAL", sri, 0, sri->whereSubject, sri->whereObject, ps, false, -1, L"", LOG_INFO | LOG_WHERE);
 					wstring pss;
 					questionSource->prepPhraseToString(ssri->wherePrep, pss);
 					questionSource->printSRI(L"TransitoryAnswer - QUESTIONTRANSFORMED", ssri, 0, ssri->whereSubject, ssri->whereObject, pss, false, -1, L"", LOG_INFO | LOG_WHERE);

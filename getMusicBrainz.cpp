@@ -44,7 +44,7 @@ int getMusicBrainzPage(wstring entitySearchedFor,wstring entityTypeReturned,wstr
 	{
 		cBuffer[actualLenInBytes/sizeof(cBuffer[0])]=0;
 		buffer=cBuffer;
-		lplog(LOG_WHERE, L"MUSICBRAINZ:searchEntity=%s returnEntityType=%s entity=%s:\n%s", entitySearchedFor.c_str(), entityTypeReturned.c_str(), entity.c_str(), buffer.c_str());
+		lplog(LOG_WHERE, L"MUSICBRAINZ:searchEntity=%s returnEntityType=%s entity=%s:\n.60000%s", entitySearchedFor.c_str(), entityTypeReturned.c_str(), entity.c_str(), buffer.c_str());
 		return 0;
 	}
 	wchar_t str[1024];

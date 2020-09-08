@@ -2900,7 +2900,7 @@ void cSource::identifySpeakerGroups()
       lastProgressPercent=(int)I*100/m.size();
       wprintf(L"PROGRESS: %03d%% speakers identified with %d seconds elapsed \r",lastProgressPercent,clocksec());
     }
-    debugTrace.traceSpeakerResolution=m[I].t.traceSpeakerResolution || TSROverride;
+    debugTrace=m[I].t;
     logCache=m[I].logCache;
 		// this must be done before resolveObject, because we don't want such an object to be in localObjects:
 		// an object that has PLEONASTIC_SUBJECT set, yet has a relative clause with a head that has the POS role set

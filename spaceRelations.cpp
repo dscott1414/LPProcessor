@@ -715,6 +715,7 @@ bool cSpaceRelation::adjustValue(int& val, int originalVal, wstring valString, u
 	if (sourceIndexMap.find(originalVal) != sourceIndexMap.end())
 	{
 		val = sourceIndexMap[originalVal];
+		lplog(LOG_WHERE, L"Translated %s from %d to %d.", valString.c_str(), originalVal,val);
 		return true;
 	}
 	else
