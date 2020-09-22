@@ -457,7 +457,7 @@ set <wstring> labelMatchList={L"label",L"company",L"studio",L"conglomerate"};
 set <wstring> artistMatchList={L"artist",L"singer",L"songwriter",L"lyricist",L"composer",L"lyrist",L"musician",L"songsmith"};
 set <wstring> releaseMatchList={L"release",L"record",L"CD",L"album",L"recording",L"song",L"rap",L"compilation",L"track",L"disc",L"title"};
 
-bool cQuestionAnswering::dbSearchMusicBrainzSearchType(cSource *questionSource, wchar_t *derivation, cSpaceRelation* parentSRI, vector < cAS > &answerSRIs,
+bool cQuestionAnswering::dbSearchMusicBrainzSearchType(cSource *questionSource, wchar_t *derivation, cSyntacticRelationGroup* parentSRG, vector < cAS > &answerSRIs,
 	int firstWhere, wstring firstMatchListType, int secondWhere, wstring secondMatchListType, set <wstring> &matchVerbsList)
 {
 	LFS
@@ -501,15 +501,15 @@ bool cQuestionAnswering::dbSearchMusicBrainzSearchType(cSource *questionSource, 
 	else
 		return false;
 	if (questionSource->matchedList(firstMatchList, firstWhere,firstObjectClass,L"first") && questionSource->matchedList(secondMatchList, secondWhere,secondObjectClass, L"second") &&
-		questionSource->matchedList(matchVerbsList,parentSRI->whereVerb,-1,L"verb"))
+		questionSource->matchedList(matchVerbsList,parentSRG->whereVerb,-1,L"verb"))
 	{
 		wstring logres;
-		if (questionSource->inObject(firstWhere,parentSRI->whereQuestionType) && questionSource->pushWhereEntities(derivation,firstWhere,firstMatchListType,secondMatchListType,secondWhere,true,parentSRI->mbs))
+		if (questionSource->inObject(firstWhere,parentSRG->whereQuestionType) && questionSource->pushWhereEntities(derivation,firstWhere,firstMatchListType,secondMatchListType,secondWhere,true,parentSRG->mbs))
 		{
 			answerSRIs.push_back(cAS(L"dbMusicBrainz", questionSource, 1, 1000, firstMatchListType, NULL, 0, firstWhere, 0, 0, false, false, L"", L"", 0,0,0,NULL));
 			answerSRIs[answerSRIs.size() - 1].finalAnswer = foundMatch=true;
 		}
-		if (questionSource->inObject(secondWhere,parentSRI->whereQuestionType) && questionSource->pushWhereEntities(derivation,secondWhere,secondMatchListType,firstMatchListType,firstWhere,true, parentSRI->mbs))
+		if (questionSource->inObject(secondWhere,parentSRG->whereQuestionType) && questionSource->pushWhereEntities(derivation,secondWhere,secondMatchListType,firstMatchListType,firstWhere,true, parentSRG->mbs))
 		{
 			answerSRIs.push_back(cAS(L"dbMusicBrainz", questionSource, 1, 1000, secondMatchListType, NULL, 0, secondWhere, 0, 0, false, false, L"", L"", 0, 0, 0,NULL));
 			answerSRIs[answerSRIs.size() - 1].finalAnswer = foundMatch = true;
@@ -631,64 +631,64 @@ bool cQuestionAnswering::matchOwnershipDbMusicBrainzObject(cSource *questionSour
 	return ownershipMatched;
 }
 
-bool cQuestionAnswering::matchOwnershipDbMusicBrainz(cSource *questionSource, wchar_t *derivation,cSpaceRelation* parentSRI)
+bool cQuestionAnswering::matchOwnershipDbMusicBrainz(cSource *questionSource, wchar_t *derivation,cSyntacticRelationGroup* parentSRG)
 { LFS
-	return matchOwnershipDbMusicBrainzObject(questionSource,derivation,parentSRI->whereControllingEntity, parentSRI->mbs) ||
-		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRI->whereSubject, parentSRI->mbs) ||
-		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRI->whereObject, parentSRI->mbs) ||
-		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRI->wherePrepObject, parentSRI->mbs) ||
-		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRI->whereSecondaryObject, parentSRI->mbs) ||
-		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRI->whereNextSecondaryObject, parentSRI->mbs);
+	return matchOwnershipDbMusicBrainzObject(questionSource,derivation,parentSRG->whereControllingEntity, parentSRG->mbs) ||
+		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRG->whereSubject, parentSRG->mbs) ||
+		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRG->whereObject, parentSRG->mbs) ||
+		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRG->wherePrepObject, parentSRG->mbs) ||
+		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRG->whereSecondaryObject, parentSRG->mbs) ||
+		matchOwnershipDbMusicBrainzObject(questionSource, derivation,parentSRG->whereNextSecondaryObject, parentSRG->mbs);
 }
 
 // example:what companies produce his records?
 //   
-bool cQuestionAnswering::dbSearchMusicBrainz(cSource *questionSource,wchar_t *derivation, cSpaceRelation* parentSRI, vector < cAS > &answerSRIs)
+bool cQuestionAnswering::dbSearchMusicBrainz(cSource *questionSource,wchar_t *derivation, cSyntacticRelationGroup* parentSRG, vector < cAS > &answerSRIs)
 {
 	LFS
 	wstring logres;
 	// artist: subject 
 	//    compactLabel:prepobject verbs/prep: belong to/signed with   
   set <wstring> artistLabelVerbs={ L"belong",L"signed" };
-	if (dbSearchMusicBrainzSearchType(questionSource,derivation,parentSRI,answerSRIs,parentSRI->whereSubject,L"artist",parentSRI->wherePrepObject,L"label",artistLabelVerbs))
+	if (dbSearchMusicBrainzSearchType(questionSource,derivation,parentSRG,answerSRIs,parentSRG->whereSubject,L"artist",parentSRG->wherePrepObject,L"label",artistLabelVerbs))
 		return true;
 	// artist: subject 
 	//    release:object?  verbs: wrote/created/made + synonyms
 	set <wstring> artistReleaseVerbs={ L"wrote",L"create",L"made"};
-	if (dbSearchMusicBrainzSearchType(questionSource, derivation,parentSRI,answerSRIs,parentSRI->whereSubject,L"artist",parentSRI->whereObject,L"release",artistReleaseVerbs))
+	if (dbSearchMusicBrainzSearchType(questionSource, derivation,parentSRG,answerSRIs,parentSRG->whereSubject,L"artist",parentSRG->whereObject,L"release",artistReleaseVerbs))
 		return true;
 	// release: subject
 	//    artist:prepobject  verbs/prep: written/created/made by      
 	set <wstring> releaseArtistVerbs={ L"write",L"create",L"make" };
-	if (dbSearchMusicBrainzSearchType(questionSource, derivation,parentSRI,answerSRIs,parentSRI->whereSubject,L"release",parentSRI->wherePrepObject,L"artist",releaseArtistVerbs))
+	if (dbSearchMusicBrainzSearchType(questionSource, derivation,parentSRG,answerSRIs,parentSRG->whereSubject,L"release",parentSRG->wherePrepObject,L"artist",releaseArtistVerbs))
 		return true;
 	// 
 	// release: subject
   // verbs: featured
 	// artist:object  
 	set <wstring> releaseArtist2Verbs={ L"feature" };
-	if (dbSearchMusicBrainzSearchType(questionSource, derivation,parentSRI,answerSRIs,parentSRI->whereSubject,L"release",parentSRI->whereObject,L"artist",releaseArtist2Verbs))
+	if (dbSearchMusicBrainzSearchType(questionSource, derivation,parentSRG,answerSRIs,parentSRG->whereSubject,L"release",parentSRG->whereObject,L"artist",releaseArtist2Verbs))
 		return true;
 	// what song [release] was produced by George Martin [label]?
 	// release: subject
 	//    verbs/prep: owned by/distributed by/released by/released on/produce by  
 	// compactLabel:prepobject 
 	set <wstring> releaseLabelVerbs={ L"own",L"distribute",L"release",L"produce" };
-	if (dbSearchMusicBrainzSearchType(questionSource, derivation,parentSRI,answerSRIs,parentSRI->whereSubject,L"release",parentSRI->wherePrepObject,L"label",releaseLabelVerbs))
+	if (dbSearchMusicBrainzSearchType(questionSource, derivation,parentSRG,answerSRIs,parentSRG->whereSubject,L"release",parentSRG->wherePrepObject,L"label",releaseLabelVerbs))
 		return true;
 	// what company signed Elton John?
 	// compactLabel: subject
 	// verbs: owned/signed
 	// artist: object 
 	set <wstring> labelArtistVerbs={ L"own",L"sign" };
-	if (dbSearchMusicBrainzSearchType(questionSource, derivation,parentSRI,answerSRIs,parentSRI->whereSubject,L"label",parentSRI->whereObject,L"artist",labelArtistVerbs))
+	if (dbSearchMusicBrainzSearchType(questionSource, derivation,parentSRG,answerSRIs,parentSRG->whereSubject,L"label",parentSRG->whereObject,L"artist",labelArtistVerbs))
 		return true;
 	// What company [label] produces his records [release]?
 	// compactLabel: subject 
 	// verbs: owns/distributes/produces
 	// release: object 
 	set <wstring> labelReleaseVerbs={ L"own",L"distribute",L"produce" };
-	if (dbSearchMusicBrainzSearchType(questionSource, derivation,parentSRI,answerSRIs,parentSRI->whereSubject,L"label",parentSRI->whereObject,L"release",labelReleaseVerbs))
+	if (dbSearchMusicBrainzSearchType(questionSource, derivation,parentSRG,answerSRIs,parentSRG->whereSubject,L"label",parentSRG->whereObject,L"release",labelReleaseVerbs))
 		return true;
   return false;
 }

@@ -30,7 +30,7 @@ wstring selectWhere=L"SELECT+%3Fv+%0D%0AWHERE+%7B%0D%0A";
 
 MYSQL cOntology::mysql;
 set<string> cOntology::rejectCategories= { "topic","track","document","edition","word","image","episode","title","subject","term","category","content","focus","type","base"};
-bool cOntology::cacheRdfTypes=true;
+bool cOntology::cacheRdfTypes=false;
 bool cOntology::alreadyConnected=false;
 bool cOntology::forceWebReread=false;
 extern int logOntologyDetail;
@@ -554,6 +554,30 @@ wstring getDescriptionString(wstring label)
 		L"OPTIONAL+%7B+" + label + L"+%3Chttp%3A%2F%2Fdbpedia.org%2Fontology%2Foccupation%3E+%3Focc+.+%7D%0D%0A%7D";
 }
 
+int cOntology::followDbpediaLink(wstring link, wstring property, wstring &value)
+{
+	if (wcsncmp(link.c_str(), L"http://dbpedia.org", wcslen(L"http://dbpedia.org")))
+	{
+		value = link;
+		return 0;
+	}
+	wstring buffer;
+	if (!cInternet::readPage(link.c_str(), buffer))
+	{
+		size_t pos2 = 0;
+		if (firstMatch(buffer, property, L"</span>", pos2, value, false) == wstring::npos)
+		{
+			lplog(LOG_WHERE | LOG_ERROR, L"Unable to find property %s in dbPediaLink buffer resulting from link %s.", property.c_str(), link.c_str());
+			return -1;
+		}
+		if (logRDFDetail)
+			lplog(LOG_WHERE, L"Found value %s from property %s in dbPediaLink buffer resulting from link %s.", value.c_str(), property.c_str(), link.c_str());
+		return 0;
+	}
+	value = L"Unable to follow link:" + link;
+	return -1;
+}
+
 // these queries are not combined to look up properties of more than one object because it would go over the time limit imposed by the VIRTUOSO server.
 // when running SPARQL queries in Virtuoso Conductor ISQL, you must prepend the query with SPARQL, so it must go before even the PREFIX (and not anywhere else)
 int cOntology::getDescription(wstring label, wstring objectName, wstring &abstract, wstring &comment, wstring &infoPage, wstring& birthDate, wstring& birthPlace, wstring& occupation)
@@ -612,12 +636,16 @@ int cOntology::getDescription(wstring label, wstring objectName, wstring &abstra
 			if (firstMatch(buffer, L"<binding name=\"bp\">", L"</binding>", pos, tmpstr, false) >= 0)
 			{
 				pos2 = 0;
-				firstMatch(tmpstr, L"<uri>", L"</uri>", pos2, birthPlace, false);
+				wstring birthPlaceLink;
+				firstMatch(tmpstr, L"<uri>", L"</uri>", pos2, birthPlaceLink, false);
+				followDbpediaLink(birthPlaceLink,L"<span property=\"rdfs:label\" xmlns:rdfs=\"http://www.w3.org/2000/01/rdf-schema#\" xml:lang=\"en\">",birthPlace); // if birthPlace is a reference - http://dbpedia.org/resource/Albany,_New_York
 			}
 			if (firstMatch(buffer, L"<binding name=\"occ\">", L"</binding>", pos, tmpstr, false) >= 0)
 			{
 				pos2 = 0;
-				firstMatch(tmpstr, L"<uri>", L"</uri>", pos2, occupation, false);
+				wstring occupationLink;
+				firstMatch(tmpstr, L"<uri>", L"</uri>", pos2, occupationLink, false);
+				followDbpediaLink(occupationLink, L"<span property=\"dbo:title\" xmlns:dbo=\"http://dbpedia.org/ontology/\" xml:lang=\"en\">", occupation); // if occupation is a reference - http://dbpedia.org/resource/Darrell_Hammond__1
 			}
 		}
 	}
@@ -2168,7 +2196,7 @@ int cOntology::printExtendedRDFTypes(wchar_t *kind, vector <cTreeCat *> &rdfType
 
 int cOntology::getRDFTypesMaster(wstring object, vector <cTreeCat *> &rdfTypes, wstring fromWhere, bool fileCaching)
 { LFS
-	if (cacheRdfTypes && fileCaching)
+	if (cacheRdfTypes)
 	{
 		AcquireSRWLockShared(&rdfTypeMapSRWLock);
 		unordered_map<wstring, int >::iterator rdfni;
@@ -2243,7 +2271,7 @@ int cOntology::getRDFTypesMaster(wstring object, vector <cTreeCat *> &rdfTypes, 
 		}
 		superClassesAllPopulated=!oneNotFound;
 	}
-	if (cacheRdfTypes && fileCaching)
+	if (cacheRdfTypes)
 	{
 		AcquireSRWLockExclusive(&rdfTypeMapSRWLock);
 		rdfTypeMap[object]=rdfTypes;

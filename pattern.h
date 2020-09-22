@@ -317,7 +317,8 @@ public:
 		bool copyUsage(void *buf, int &where, int limit);
 		void zeroUsage();
     bool add(int elementNum,wstring patternName,bool logFutureReferences,int cost,set <unsigned int> tags,bool blockDescendants,bool allowRecursiveMatch);
-    void lplog(void);
+    void lplog(int logTypes);
+    void lplogShort(wstring patternType, int logTypes);
     void readABNF(FILE *fh);
     void writeABNF(FILE *fh,unsigned int lastTag);
     wstring name;

@@ -998,7 +998,7 @@ int cSource::readSourceBuffer(wstring title, wstring etext, wstring path, wstrin
 int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 {
 	LFS
-		int lastProgressPercent = 0, result = 0, runOnSentences = 0;
+	int lastProgressPercent = 0, result = 0, runOnSentences = 0;
 	bool alreadyAtEnd = false, previousIsProperNoun = false;
 	bool webScrapeParse = sourceType == WEB_SEARCH_SOURCE_TYPE || sourceType == REQUEST_TYPE, multipleEnds = false;
 	size_t lastSentenceEnd = m.size(), numParagraphsInSection = 0;
@@ -1006,6 +1006,7 @@ int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 	parseVariables[L"$"] = L"answer";
 	if (bufferScanLocation == 0 && bookBuffer[0] == 65279)
 		bufferScanLocation = 1;
+	wstring lastMetaCommandEmbeddedInSource;
 	while (result == 0 && !exitNow && runOnSentences<20) // too many run on sentences indicate malformed source
 	{
 		wstring sWord, comment;
@@ -1014,7 +1015,12 @@ int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 		bool flagNewLineBeforeHint = (bufferScanLocation && bookBuffer[bufferScanLocation - 1] == 13);
 		result = Words.readWord(bookBuffer, bufferLen, bufferScanLocation, sWord, comment, nounOwner, false, webScrapeParse, debugTrace, &mysql, sourceId);
 		if (comment.size() > 0)
-			metaCommandsEmbeddedInSource[m.size()] = comment;
+			lastMetaCommandEmbeddedInSource=metaCommandsEmbeddedInSource[m.size()] = comment;
+		if (result == PARSE_TRACE)
+		{
+			result = 0;
+			continue;
+		}
 		bool flagAlphaAfterHint = (bufferScanLocation < bufferLen && iswalpha(bookBuffer[bufferScanLocation]));
 		if (result == PARSE_EOF)
 			break;
@@ -1028,14 +1034,22 @@ int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 			{
 				wstring variable = sWord.substr(0, equalsPos);
 				parseVariables[variable] = sWord = sWord.substr(equalsPos + 1, colonPos - equalsPos - 1);
-				::lplog(LOG_WHERE, L"%d:parse created mapped variable %s=(%s)", m.size(), variable.c_str(), parseVariables[variable].c_str());
+				::lplog(LOG_WHERE, L"%d:%s - parse created mapped variable %s=(%s)", m.size(), lastMetaCommandEmbeddedInSource.c_str(), variable.c_str(), parseVariables[variable].c_str());
 			}
 			else
 			{
 				if (parseVariables.find(sWord) == parseVariables.end())
-					::lplog(LOG_FATAL_ERROR, L"Parse variable %s not defined!", sWord.c_str());
-				::lplog(LOG_WHERE, L"%d:parse used mapped variable %s=(%s)", m.size(), sWord.c_str(), parseVariables[sWord].c_str());
+					::lplog(LOG_FATAL_ERROR, L"%d:Parse variable %s not defined!", m.size(),sWord.c_str());
+				::lplog(LOG_WHERE, L"%d:%s - parse used mapped variable %s=(%s)", m.size(), lastMetaCommandEmbeddedInSource.c_str(), sWord.c_str(), parseVariables[sWord].c_str());
 				sWord = parseVariables[sWord];
+			}
+			// nounOwner=0 - no ownership (Danny)
+			// nounOwner=2 - singular ownership (Danny's)
+			nounOwner = 0;
+			if (sWord.size() > 2 && sWord[sWord.size() - 1] == 's' && cWord::isSingleQuote(sWord[sWord.size() - 2]))
+			{
+				nounOwner = 2;
+				sWord.erase(sWord.size() - 2);
 			}
 		}
 		if (result == PARSE_END_SECTION || result == PARSE_END_PARAGRAPH || result == PARSE_END_BOOK || result == PARSE_DUMP_LOCAL_OBJECTS)

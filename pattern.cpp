@@ -1409,72 +1409,101 @@ const wchar_t *allWordFlags(int wordflags, wstring &sFlags)
 	return sFlags.c_str();
 }
 
-void cPattern::lplog(void)
+void cPattern::lplog(int logTypes)
 {
-	LFS
-		wchar_t temp[1024];
-	wsprintf(temp, L"\n%d:%s[%s] root=%d", num, name.c_str(), differentiator.c_str(), rootPattern);
-	if (isFutureReference) wcscat(temp, L" FUTURE_REFERENCE");
-	if (containsFutureReference) wcscat(temp, L" CONTAINS_FUTURE_REFERENCE");
-	if (indirectFutureReference) wcscat(temp, L" INDIRECT_FUTURE_REFERENCE");
+  LFS
+    wchar_t temp[1024];
+  wsprintf(temp, L"%d:%s[%s] root=%d", num, name.c_str(), differentiator.c_str(), rootPattern);
+  if (isFutureReference) wcscat(temp, L" FUTURE_REFERENCE");
+  if (containsFutureReference) wcscat(temp, L" CONTAINS_FUTURE_REFERENCE");
+  if (indirectFutureReference) wcscat(temp, L" INDIRECT_FUTURE_REFERENCE");
 
-	if (fillFlag) wcscat(temp, L" {_FINAL}");
-	if (fillIfAloneFlag) wcscat(temp, L" {_FINAL_IF_ALONE}");
-	if (onlyBeginMatch) wcscat(temp, L" {_ONLY_BEGIN_MATCH}");
-	if (afterQuote) wcscat(temp, L" {_AFTER_QUOTE}");
-	if (strictNoMiddleMatch) wcscat(temp, L" {_STRICT_NO_MIDDLE_MATCH}");
-	if (onlyEndMatch) wcscat(temp, L" {_ONLY_END_MATCH}");
-	if (onlyAloneExceptInSubPatternsFlag) wcscat(temp, L" {_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}");
-	if (blockDescendants) wcscat(temp, L" {_BLOCK}");
-	if (noRepeat) wcscat(temp, L" {_NO_REPEAT}");
-	if (ignoreFlag) wcscat(temp, L" {_IGNORE}");
-	if (questionFlag) wcscat(temp, L" {_QUESTION}");
-	if (notAfterPronoun) wcscat(temp, L" {_NOT_AFTER_PRONOUN}");
-	if (explicitSubjectVerbAgreement) wcscat(temp, L" {_EXPLICIT_SUBJECT_VERB_AGREEMENT}");
-	if (explicitNounDeterminerAgreement) wcscat(temp, L" {_EXPLICIT_NOUN_DETERMINER_AGREEMENT}");
-	for (set<unsigned int>::iterator dt = tags.begin(), dtEnd = tags.end(); dt != dtEnd; dt++)
-		_snwprintf(temp + wcslen(temp), 1024 - wcslen(temp), L"{%s}", patternTagStrings[*dt].c_str());
-	::lplog(L"%s", temp);
-	wstring temp2;
-	for (unsigned int p = 0; p < patterns.size(); p++)
-		if (ancestorPatterns.isSet(p))
-			temp2 = temp2 + wstring(L" ") + patterns[p]->name + wstring(L"[") + patterns[p]->differentiator + wstring(L"]");
-	if (temp[0]) ::lplog(L"ancestors:%s", temp2.c_str());
-	temp[0] = 0;
-	for (set<unsigned int>::iterator dt = descendantTags.begin(), dtEnd = descendantTags.end(); dt != dtEnd; dt++)
-		_snwprintf(temp + wcslen(temp), 1024 - wcslen(temp), L"%s ", patternTagStrings[*dt].c_str());
-	if (temp[0]) ::lplog(L"DESCENDANT TAGS:%s", temp);
-	temp[0] = 0;
-	for (unsigned int I = 0; I < sizeof(includesOneOfTagSet) * 8; I++)
-		if (includesOneOfTagSet&((__int64)1 << I))
-			_snwprintf(temp + wcslen(temp), 1024 - wcslen(temp), L"%s ", desiredTagSets[I].name.c_str());
-	if (temp[0]) ::lplog(L"One Of Tag Sets: %s", temp);
-	temp[0] = 0;
-	for (unsigned int I = 0; I < sizeof(includesOnlyDescendantsAllOfTagSet) * 8; I++)
-		if (includesOnlyDescendantsAllOfTagSet&((__int64)1 << I))
-			_snwprintf(temp + wcslen(temp), 1024 - wcslen(temp), L"%s ", desiredTagSets[I].name.c_str());
-	if (temp[0]) ::lplog(L"All Of Tag Sets (only descendants): %s", temp);
-	temp[0] = 0;
-	for (unsigned int I = 0; I < sizeof(includesDescendantsAndSelfAllOfTagSet) * 8; I++)
-		if (includesDescendantsAndSelfAllOfTagSet&((__int64)1 << I))
-			_snwprintf(temp + wcslen(temp), 1024 - wcslen(temp), L"%s ", desiredTagSets[I].name.c_str());
-	if (temp[0]) ::lplog(L"All Of Tag Sets (descendants and self): %s", temp);
-	for (unordered_map < wstring, int >::iterator vlpi = variableToLocationMap.begin(), vlpiEnd = variableToLocationMap.end(); vlpi != vlpiEnd; vlpi++)
-		::lplog(L"variable %s mapped to location %d.", vlpi->first.c_str(), vlpi->second);
-	for (unordered_map < wstring, int >::iterator vlpi = variableToLengthMap.begin(), vlpiEnd = variableToLengthMap.end(); vlpi != vlpiEnd; vlpi++)
-		::lplog(L"variable %s mapped to length %d.", vlpi->first.c_str(), vlpi->second);
-	for (unordered_map < int, wstring >::iterator lvmi = locationToVariableMap.begin(), lvmiEnd = locationToVariableMap.end(); lvmi != lvmiEnd; lvmi++)
-		::lplog(L"location %d mapped to variable %s.", lvmi->first, lvmi->second.c_str());
-	for (unsigned int I = 0; I < elements.size(); I++)
-	{
-		wstring formsString;
-		for (unsigned int J = 0; J < elements[I]->formCosts.size(); J++)
-			formsString = formsString + elements[I]->toText(temp, J, false, 1024) + L" ";
-		for (unsigned int J = 0; J < elements[I]->patternCosts.size(); J++)
-			formsString = formsString + elements[I]->toText(temp, J, true, 1024) + L" ";
-		wstring sFlags;
-		::lplog(L"%d:%d-%d %s %s", I, elements[I]->minimum, elements[I]->maximum, elements[I]->inflectionFlagsToStr(sFlags), formsString.c_str());
-	}
+  if (fillFlag) wcscat(temp, L" {_FINAL}");
+  if (fillIfAloneFlag) wcscat(temp, L" {_FINAL_IF_ALONE}");
+  if (onlyBeginMatch) wcscat(temp, L" {_ONLY_BEGIN_MATCH}");
+  if (afterQuote) wcscat(temp, L" {_AFTER_QUOTE}");
+  if (strictNoMiddleMatch) wcscat(temp, L" {_STRICT_NO_MIDDLE_MATCH}");
+  if (onlyEndMatch) wcscat(temp, L" {_ONLY_END_MATCH}");
+  if (onlyAloneExceptInSubPatternsFlag) wcscat(temp, L" {_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}");
+  if (blockDescendants) wcscat(temp, L" {_BLOCK}");
+  if (noRepeat) wcscat(temp, L" {_NO_REPEAT}");
+  if (ignoreFlag) wcscat(temp, L" {_IGNORE}");
+  if (questionFlag) wcscat(temp, L" {_QUESTION}");
+  if (notAfterPronoun) wcscat(temp, L" {_NOT_AFTER_PRONOUN}");
+  if (explicitSubjectVerbAgreement) wcscat(temp, L" {_EXPLICIT_SUBJECT_VERB_AGREEMENT}");
+  if (explicitNounDeterminerAgreement) wcscat(temp, L" {_EXPLICIT_NOUN_DETERMINER_AGREEMENT}");
+  for (set<unsigned int>::iterator dt = tags.begin(), dtEnd = tags.end(); dt != dtEnd; dt++)
+    _snwprintf(temp + wcslen(temp), 1024 - wcslen(temp), L"{%s}", patternTagStrings[*dt].c_str());
+  ::lplog(logTypes, L"%s", temp);
+  wstring temp2;
+  for (unsigned int p = 0; p < patterns.size(); p++)
+    if (ancestorPatterns.isSet(p))
+      temp2 += wstring(L" ") + patterns[p]->name + wstring(L"[") + patterns[p]->differentiator + wstring(L"]");
+  if (temp2.size() > 0) ::lplog(logTypes, L"ancestors:%s", temp2.c_str());
+  temp[0] = 0;
+  for (set<unsigned int>::iterator dt = descendantTags.begin(), dtEnd = descendantTags.end(); dt != dtEnd; dt++)
+    _snwprintf(temp + wcslen(temp), 1024 - wcslen(temp), L"%s ", patternTagStrings[*dt].c_str());
+  if (temp[0]) ::lplog(logTypes, L"DESCENDANT TAGS:%s", temp);
+  temp[0] = 0;
+  for (unsigned int I = 0; I < sizeof(includesOneOfTagSet) * 8; I++)
+    if (includesOneOfTagSet & ((__int64)1 << I))
+      _snwprintf(temp + wcslen(temp), 1024 - wcslen(temp), L"%s ", desiredTagSets[I].name.c_str());
+  if (temp[0]) ::lplog(logTypes, L"One Of Tag Sets: %s", temp);
+  temp[0] = 0;
+  for (unsigned int I = 0; I < sizeof(includesOnlyDescendantsAllOfTagSet) * 8; I++)
+    if (includesOnlyDescendantsAllOfTagSet & ((__int64)1 << I))
+      _snwprintf(temp + wcslen(temp), 1024 - wcslen(temp), L"%s ", desiredTagSets[I].name.c_str());
+  if (temp[0]) ::lplog(logTypes, L"All Of Tag Sets (only descendants): %s", temp);
+  temp[0] = 0;
+  for (unsigned int I = 0; I < sizeof(includesDescendantsAndSelfAllOfTagSet) * 8; I++)
+    if (includesDescendantsAndSelfAllOfTagSet & ((__int64)1 << I))
+      _snwprintf(temp + wcslen(temp), 1024 - wcslen(temp), L"%s ", desiredTagSets[I].name.c_str());
+  if (temp[0]) ::lplog(logTypes, L"All Of Tag Sets (descendants and self): %s", temp);
+  for (unordered_map < wstring, int >::iterator vlpi = variableToLocationMap.begin(), vlpiEnd = variableToLocationMap.end(); vlpi != vlpiEnd; vlpi++)
+    ::lplog(logTypes, L"variable %s mapped to location %d.", vlpi->first.c_str(), vlpi->second);
+  for (unordered_map < wstring, int >::iterator vlpi = variableToLengthMap.begin(), vlpiEnd = variableToLengthMap.end(); vlpi != vlpiEnd; vlpi++)
+    ::lplog(logTypes, L"variable %s mapped to length %d.", vlpi->first.c_str(), vlpi->second);
+  for (unordered_map < int, wstring >::iterator lvmi = locationToVariableMap.begin(), lvmiEnd = locationToVariableMap.end(); lvmi != lvmiEnd; lvmi++)
+    ::lplog(logTypes, L"location %d mapped to variable %s.", lvmi->first, lvmi->second.c_str());
+  for (unsigned int I = 0; I < elements.size(); I++)
+  {
+    wstring formsString;
+    for (unsigned int J = 0; J < elements[I]->formCosts.size(); J++)
+      formsString = formsString + elements[I]->toText(temp, J, false, 1024) + L" ";
+    for (unsigned int J = 0; J < elements[I]->patternCosts.size(); J++)
+      formsString = formsString + elements[I]->toText(temp, J, true, 1024) + L" ";
+    wstring sFlags;
+    ::lplog(logTypes, L"%d:%d-%d %s %s", I, elements[I]->minimum, elements[I]->maximum, elements[I]->inflectionFlagsToStr(sFlags), formsString.c_str());
+  }
+}
+
+void cPattern::lplogShort(wstring patternType,int logTypes)
+{
+  LFS
+  wchar_t temp[1024],logstr[1024];
+  int len = 0;
+  len+=wsprintf(logstr, L"%d:%s[%s] ", num, name.c_str(), differentiator.c_str());
+  for (unordered_map < wstring, int >::iterator vlpi = variableToLocationMap.begin(), vlpiEnd = variableToLocationMap.end(); vlpi != vlpiEnd; vlpi++)
+    len += wsprintf(logstr +len, L"%s->%d ", vlpi->first.c_str(), vlpi->second);
+  for (unordered_map < wstring, int >::iterator vlpi = variableToLengthMap.begin(), vlpiEnd = variableToLengthMap.end(); vlpi != vlpiEnd; vlpi++)
+    len += wsprintf(logstr + len, L"%s->%d ", vlpi->first.c_str(), vlpi->second);
+  for (unordered_map < int, wstring >::iterator lvmi = locationToVariableMap.begin(), lvmiEnd = locationToVariableMap.end(); lvmi != lvmiEnd; lvmi++)
+    len += wsprintf(logstr + len, L"%d->%s ", lvmi->first, lvmi->second.c_str());
+  for (unsigned int I = 0; I < elements.size(); I++)
+  {
+    wstring formsString;
+    for (unsigned int J = 0; J < elements[I]->formCosts.size(); J++)
+      formsString = formsString + elements[I]->toText(temp, J, false, 1024) + L" ";
+    for (unsigned int J = 0; J < elements[I]->patternCosts.size(); J++)
+      formsString = formsString + elements[I]->toText(temp, J, true, 1024) + L" ";
+    wstring sFlags;
+    elements[I]->inflectionFlagsToStr(sFlags);
+    if (sFlags.size())
+      sFlags += L" ";
+    len+=wsprintf(logstr + len, L"[%s%s] ", sFlags.c_str(), formsString.c_str());
+  }
+  logstr[len] = 0;
+  ::lplog(logTypes, L"%s:%s",patternType.c_str(), logstr);
 }
 
 void cPattern::reportUsage(void)

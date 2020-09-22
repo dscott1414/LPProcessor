@@ -278,7 +278,7 @@ private:
 class cOntology
 {
 public:
-	static bool cacheRdfTypes;
+	static bool cacheRdfTypes;  // determines whether rdfTypes are cached in memory.  fileCaching is whether they are cached on disk.
 	static unordered_map <wstring, cOntologyEntry> dbPediaOntologyCategoryList;
 	static bool maxFieldLengths();
 	static bool writeOntologyList();
@@ -338,7 +338,8 @@ private:
 	static bool copy(void *buf,cOntologyEntry &dbsn,int &where,int limit);
 	static bool copy(void *buf,unordered_map <wstring, cOntologyEntry>::iterator dbsi,int &where,int limit);
 	static int getDBPediaPath(int where,wstring webAddress,wstring &buffer,wstring epath);
-	static int getDescription(wstring label,wstring objectName,wstring &abstract,wstring &comment, wstring& infoPage, wstring& birthDate, wstring& birthPlace,wstring &occupation);
+	static int followDbpediaLink(wstring link, wstring property, wstring& value);
+	static int getDescription(wstring label, wstring objectName, wstring& abstract, wstring& comment, wstring& infoPage, wstring& birthDate, wstring& birthPlace, wstring& occupation);
 	//static int getDescription(unordered_map <wstring, cOntologyEntry>::iterator cli);
 	//static int getDescription(vector <wstring> labels,wstring objectName,wstring &abstract,wstring &comment,wstring &infoPage, wstring& occupation);
 	static int writeRDFTypes(wchar_t path[4096],vector <cTreeCat *> &rdfTypes);

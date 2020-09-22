@@ -2892,7 +2892,7 @@ void cSource::testSyntacticRelations()
 {
 	tIWMM primaryQuoteCloseWord = Words.gquery(L"”");
 	tIWMM secondaryQuoteCloseWord = Words.gquery(L"’");
-	vector <cSpaceRelation>::iterator sri= spaceRelations.begin();
+	vector <cSyntacticRelationGroup>::iterator sri= syntacticRelationGroups.begin();
 	for (unsigned int s = 0; s<sentenceStarts.size(); s++)
 	{
 		unsigned int begin = sentenceStarts[s];
@@ -2941,8 +2941,8 @@ void cSource::testSyntacticRelations()
 			}
 			if (!printedSentence && end-begin>1)
 				lplog(LOG_INFO, L"%d-%d:%s: no relations found", begin,end,sentence.c_str());
-			for (; sri != spaceRelations.end() && ((unsigned)sri->where) < end; sri++)
-				logSpaceRelation(*sri, L"~~~");
+			for (; sri != syntacticRelationGroups.end() && ((unsigned)sri->where) < end; sri++)
+				logSyntacticRelationGroup(*sri, L"~~~");
 		}
 	}
 }

@@ -31,10 +31,10 @@ public:
 		int childObject;
 		float score;
 		// this is called from the parent
-		int semanticCheck(cQuestionAnswering &qa, cSpaceRelation* parentSRI, cSource *parentSource);
+		int semanticCheck(cQuestionAnswering &qa, cSyntacticRelationGroup* parentSRG, cSource *parentSource);
 		void printDirectRelations(cQuestionAnswering &qa, int logType, cSource *parentSource, wstring &path, int where);
 		cProximityEntry();
-		cProximityEntry(cQuestionAnswering &qa, cSource *childSource, unsigned int childSourceIndex, int childObject, cSpaceRelation* parentSRI);
+		cProximityEntry(cQuestionAnswering &qa, cSource *childSource, unsigned int childSourceIndex, int childObject, cSyntacticRelationGroup* parentSRG);
 		void lplogFrequentOrProximateObjects(int logType, wstring objectStr)
 		{
 			wstring tmpstr;
@@ -71,7 +71,7 @@ public:
 	set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare> objectsSortedByFrequency;
 	set < unordered_map <wstring, cProximityEntry>::iterator, proximityScoreCompare> objectsSortedByProximityScore;
 	set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare > frequentOrProximateObjects;
-	void sortByFrequencyAndProximity(cQuestionAnswering &qa,cSpaceRelation* parentSRI, cSource *parentSource)
+	void sortByFrequencyAndProximity(cQuestionAnswering &qa,cSyntacticRelationGroup* parentSRG, cSource *parentSource)
 	{
 		objectsSortedByFrequency.clear();
 		objectsSortedByProximityScore.clear();
@@ -85,14 +85,14 @@ public:
 		for (set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare>::iterator sroi = objectsSortedByFrequency.begin(), sroiEnd = objectsSortedByFrequency.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
 		{
 			onlyTopResults++;
-			if ((*sroi)->second.semanticCheck(qa,parentSRI, parentSource) < CONFIDENCE_NOMATCH)
+			if ((*sroi)->second.semanticCheck(qa,parentSRG, parentSource) < CONFIDENCE_NOMATCH)
 				frequentOrProximateObjects.insert((*sroi));
 		}
 		onlyTopResults = 0;
 		for (set < unordered_map <wstring, cProximityEntry>::iterator, proximityScoreCompare>::iterator sroi = objectsSortedByProximityScore.begin(), sroiEnd = objectsSortedByProximityScore.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
 		{
 			onlyTopResults++;
-			if ((*sroi)->second.semanticCheck(qa,parentSRI, parentSource) < CONFIDENCE_NOMATCH)
+			if ((*sroi)->second.semanticCheck(qa,parentSRG, parentSource) < CONFIDENCE_NOMATCH)
 				frequentOrProximateObjects.insert((*sroi));
 		}
 	}
@@ -193,7 +193,7 @@ public:
 	}
 };
 
-class cSpaceRelation
+class cSyntacticRelationGroup
 {
 public:
 	int where;
@@ -244,11 +244,13 @@ public:
 	wstring description;
 	int nextSPR;
 	vector <cTimeInfo> timeInfo;
-
-	cSpaceRelation(int _where, int _o, int _whereControllingEntity, int _whereSubject, int _whereVerb, int _wherePrep, int _whereObject,
+	cPattern* associatedPattern; // used only with question answering, particularly with verifying transformed questions
+	cPattern* mapPatternAnswer;
+	cPattern* mapPatternQuestion;
+	cSyntacticRelationGroup(int _where, int _o, int _whereControllingEntity, int _whereSubject, int _whereVerb, int _wherePrep, int _whereObject,
 		int _wherePrepObject, int _movingRelativeTo, int _relationType,
 		bool _genderedEntityMove, bool _genderedLocationRelation, int _objectSubType, int _prepObjectSubType, bool _physicalRelation);
-	bool operator != (const cSpaceRelation &z)
+	bool operator != (const cSyntacticRelationGroup &z)
   {
     return where!=z.where || 
 			o!=z.o || 
@@ -261,7 +263,7 @@ public:
 			whereMovingRelativeTo!=z.whereMovingRelativeTo || 
 			relationType!=z.relationType;
   }
-  bool operator == (const cSpaceRelation &z)
+  bool operator == (const cSyntacticRelationGroup &z)
   {
     return where==z.where &&
 			o==z.o && 
@@ -274,13 +276,13 @@ public:
 			whereMovingRelativeTo==z.whereMovingRelativeTo && 
 			relationType==z.relationType;
   }
-	bool canUpdate(cSpaceRelation &z);
-	cSpaceRelation(char *buffer, int &w, unsigned int total, bool &error);
+	bool canUpdate(cSyntacticRelationGroup &z);
+	cSyntacticRelationGroup(char *buffer, int &w, unsigned int total, bool &error);
 	int sanityCheck(int maxSourcePosition, int maxObjectIndex);
 	void convertToFlags(__int64 flags);
 	__int64 convertFlags(bool isQuestion, bool inPrimaryQuote, bool inSecondaryQuote, __int64 questionFlags);
 	bool write(void *buffer, int &w, int limit);
-	cSpaceRelation(vector <cSpaceRelation>::iterator sri, unordered_map <int, int> &sourceMap);
+	cSyntacticRelationGroup(cSyntacticRelationGroup *sri, unordered_map <int, int> &sourceMap);
 	bool adjustValue(int& val, int originalVal, wstring valString, unordered_map <int, int>& sourceIndexMap);
 };
 

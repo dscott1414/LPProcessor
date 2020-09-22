@@ -247,14 +247,13 @@ int cInternet::readPage(const wchar_t *str, wstring &buffer, wstring &headers)
 			hINet = 0;
 			LPInternetOpen(timer);
 			lplog(LOG_ERROR, NULL);
-			Sleep(1000);
 			AcquireSRWLockExclusive(&cProfile::networkTimeSRWLock);
 			cProfile::lastNetClock = clock();
 			ReleaseSRWLockExclusive(&cProfile::networkTimeSRWLock);
 		}
 	}
 	if (errors == internetWebSearchRetryAttempts)
-		lplog(LOG_ERROR, L"ERROR:%d:Terminating because we cannot read URL %s - %s.", errors, str, getLastErrorMessage(ioe)); // TMP DEBUG
+		lplog(LOG_ERROR, L"ERROR:%d:Terminating because we cannot read URL %s - %s.", errors, str, getLastErrorMessage(ioe)); 
 	cProfile::accumulateNetworkTime(str, timer, cProfile::lastNetClock);
 	return (errors) ? INTERNET_OPEN_URL_FAILED : 0;
 }
@@ -459,7 +458,7 @@ int cInternet::getWebPath(int where, wstring webAddress, wstring &buffer, wstrin
 		if (!forceWebReread)
 			lplog(LOG_WIKIPEDIA, L"getWebPath:failed to access page %s %S", path, spath.c_str());
 		int ret, fd;
-		if (ret = readPage(webAddress.c_str(), buffer, headers)) return ret;
+		ret = readPage(webAddress.c_str(), buffer, headers);
 		if ((fd = _wopen(path, O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE)) < 0)
 		{
 			lplog(LOG_ERROR, L"%06d:ERROR:getWebPath:Cannot create dbPedia path %s - %S.", where, path, sys_errlist[errno]);
@@ -471,6 +470,11 @@ int cInternet::getWebPath(int where, wstring webAddress, wstring &buffer, wstrin
 			_close(fd);
 			if (logRDFDetail)
 				lplog(LOG_WIKIPEDIA, L"getWebPath:nonJava wrote page %s", path);
+			return 0;
+		}
+		if (ret && clean)
+		{
+			_close(fd);
 			return 0;
 		}
 		string utf8Buffer;

@@ -61,7 +61,7 @@ const wchar_t *cSource::wrti(int where, wchar_t *id, wstring &tmpstr, bool short
 // Krugman earned his B.A. in economics from Yale University summa cum laude in 1974 and his PhD from the Massachusetts Institute of Technology (MIT) in 1977.
 // please also see http://aclweb.org/anthology-new/J/J06/J06-3002.pdf
 // 
-void cSource::getAllPreps(cSpaceRelation* sri, set <int> &relPreps, int wo)
+void cSource::getAllPreps(cSyntacticRelationGroup* sri, set <int> &relPreps, int wo)
 {
 	LFS
 		if (sri->whereVerb >= 0 && sri->wherePrep != m[sri->whereVerb].relPrep)
@@ -119,7 +119,7 @@ int cSource::getProfession(int object)
 	return NULLWORD;
 }
 
-void cSource::getSRIMinMax(cSpaceRelation* sri)
+void cSource::getSRIMinMax(cSyntacticRelationGroup* sri)
 {
 	LFS
 		sri->printMin = 10000;
@@ -356,15 +356,15 @@ int cSource::getMSAdjective(int where, int numOrder)
 	return NULLWORD;
 }
 
-void cSource::printSRI(wstring logPrefix, cSpaceRelation* sri, int s, int ws, int wo, int ps, bool overWrote, int matchSum, wstring matchInfo, int logDestination)
+void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* sri, int s, int ws, int wo, int ps, bool overWrote, int matchSum, wstring matchInfo, int logDestination)
 {
 	LFS
 		wstring tmpstr;
 	prepPhraseToString(ps, tmpstr);
-	printSRI(logPrefix, sri, s, ws, wo, tmpstr, overWrote, matchSum, matchInfo, logDestination);
+	printSRG(logPrefix, sri, s, ws, wo, tmpstr, overWrote, matchSum, matchInfo, logDestination);
 }
 
-void cSource::printSRI(wstring logPrefix, cSpaceRelation* sri, int s, int ws, int wo, wstring ps, bool overWrote, int matchSum, wstring matchInfo, int logDestination)
+void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* sri, int s, int ws, int wo, wstring ps, bool overWrote, int matchSum, wstring matchInfo, int logDestination)
 {
 	LFS
 		if (sri == NULL)
@@ -431,7 +431,7 @@ void cSource::printSRI(wstring logPrefix, cSpaceRelation* sri, int s, int ws, in
 		(inQuestion) ? L"?" : L"."); // 34
 }
 
-cSpaceRelation::cSpaceRelation(int _where, int _o, int _whereControllingEntity, int _whereSubject, int _whereVerb, int _wherePrep, int _whereObject,
+cSyntacticRelationGroup::cSyntacticRelationGroup(int _where, int _o, int _whereControllingEntity, int _whereSubject, int _whereVerb, int _wherePrep, int _whereObject,
 	int _wherePrepObject, int _movingRelativeTo, int _relationType,
 	bool _genderedEntityMove, bool _genderedLocationRelation, int _objectSubType, int _prepObjectSubType, bool _physicalRelation)
 {
@@ -492,9 +492,12 @@ cSpaceRelation::cSpaceRelation(int _where, int _o, int _whereControllingEntity, 
 	timeProgression = -1;
 	whereQuestionTypeObject = -1;
 	transformedPrep = -1;
+	associatedPattern = NULL;
+	mapPatternAnswer = NULL;
+	mapPatternQuestion = NULL;
 }
 
-bool operator != (const cSpaceRelation &lhs, const cSpaceRelation &rhs)
+bool operator != (const cSyntacticRelationGroup &lhs, const cSyntacticRelationGroup &rhs)
 {
 	return lhs.where != rhs.where ||
 		lhs.o != rhs.o ||
@@ -508,7 +511,7 @@ bool operator != (const cSpaceRelation &lhs, const cSpaceRelation &rhs)
 		lhs.relationType != rhs.relationType;
 }
 
-bool operator == (const cSpaceRelation &lhs, const cSpaceRelation &rhs)
+bool operator == (const cSyntacticRelationGroup &lhs, const cSyntacticRelationGroup &rhs)
 {
 	return lhs.where == rhs.where &&
 		lhs.o == rhs.o &&
@@ -522,7 +525,7 @@ bool operator == (const cSpaceRelation &lhs, const cSpaceRelation &rhs)
 		lhs.relationType == rhs.relationType;
 }
 
-bool cSpaceRelation::canUpdate(cSpaceRelation &z)
+bool cSyntacticRelationGroup::canUpdate(cSyntacticRelationGroup &z)
 {
 	return where == z.where &&
 		(o == z.o || (z.o < 0 && o>0)) &&
@@ -536,7 +539,7 @@ bool cSpaceRelation::canUpdate(cSpaceRelation &z)
 		relationType == z.relationType;
 }
 
-cSpaceRelation::cSpaceRelation(char *buffer, int &w, unsigned int total, bool &error)
+cSyntacticRelationGroup::cSyntacticRelationGroup(char *buffer, int &w, unsigned int total, bool &error)
 {
 	if (error = !copy(where, buffer, w, total)) return;
 	if (error = !copy(o, buffer, w, total)) return;
@@ -584,9 +587,13 @@ cSpaceRelation::cSpaceRelation(char *buffer, int &w, unsigned int total, bool &e
 	printMin = -1;
 	speakerContinuation = false;
 	whereQuestionTypeObject = -1;
+	associatedPattern=NULL; // used only with question answering, particularly with verifying transformed questions
+	mapPatternAnswer = NULL;
+	mapPatternQuestion = NULL;
+
 }
 
-int cSpaceRelation::sanityCheck(int maxSourcePosition, int maxObjectIndex)
+int cSyntacticRelationGroup::sanityCheck(int maxSourcePosition, int maxObjectIndex)
 {
 	if (where < 0 || where >= maxSourcePosition) return 400;
 	if (o < cObject::eOBJECTS::OBJECT_UNKNOWN_ALL || o >= maxObjectIndex) return 401;
@@ -608,7 +615,7 @@ int cSpaceRelation::sanityCheck(int maxSourcePosition, int maxObjectIndex)
 	return 0;
 }
 
-void cSpaceRelation::convertToFlags(__int64 flags)
+void cSyntacticRelationGroup::convertToFlags(__int64 flags)
 {
 	/*bool inSecondaryQuote=flags&1; */flags >>= 1;
 	/*bool inPrimaryQuote=flags&1;*/ flags >>= 1;
@@ -639,7 +646,7 @@ void cSpaceRelation::convertToFlags(__int64 flags)
 	// 6 questionFlags bits (see convertFlags)
 }
 
-__int64 cSpaceRelation::convertFlags(bool isQuestion, bool inPrimaryQuote, bool inSecondaryQuote, __int64 questionFlags)
+__int64 cSyntacticRelationGroup::convertFlags(bool isQuestion, bool inPrimaryQuote, bool inSecondaryQuote, __int64 questionFlags)
 {
 	__int64 flags = (questionFlags << 6);
 	flags |= (genderedEntityMove) ? 1 : 0; flags <<= 1;
@@ -671,7 +678,7 @@ __int64 cSpaceRelation::convertFlags(bool isQuestion, bool inPrimaryQuote, bool 
 	return flags;
 }
 
-bool cSpaceRelation::write(void *buffer, int &w, int limit)
+bool cSyntacticRelationGroup::write(void *buffer, int &w, int limit)
 {
 	if (!copy(buffer, where, w, limit)) return false;
 	if (!copy(buffer, o, w, limit)) return false;
@@ -708,14 +715,20 @@ bool cSpaceRelation::write(void *buffer, int &w, int limit)
 	return true;
 }
 
-bool cSpaceRelation::adjustValue(int& val, int originalVal, wstring valString, unordered_map <int, int>& sourceIndexMap)
+bool cSyntacticRelationGroup::adjustValue(int& val, int originalVal, wstring valString, unordered_map <int, int>& sourceIndexMap)
 {
-	if (val < 0)
+	if (originalVal < 0)
+	{
+		if (originalVal <-1)
+			lplog(LOG_WHERE|LOG_ERROR, L"Illegal value for translating %s - %d.", valString.c_str(), originalVal);
+		val = originalVal;
 		return false;
+	}
 	if (sourceIndexMap.find(originalVal) != sourceIndexMap.end())
 	{
+		if (sourceIndexMap[originalVal] != originalVal)
+			lplog(LOG_WHERE, L"Translated %s from %d to %d.", valString.c_str(), originalVal, sourceIndexMap[originalVal]);
 		val = sourceIndexMap[originalVal];
-		lplog(LOG_WHERE, L"Translated %s from %d to %d.", valString.c_str(), originalVal,val);
 		return true;
 	}
 	else
@@ -726,7 +739,7 @@ bool cSpaceRelation::adjustValue(int& val, int originalVal, wstring valString, u
 	return false;
 }
 
-cSpaceRelation::cSpaceRelation(vector <cSpaceRelation>::iterator sri, unordered_map <int, int> &sourceIndexMap)
+cSyntacticRelationGroup::cSyntacticRelationGroup(cSyntacticRelationGroup *sri, unordered_map <int, int> &sourceIndexMap)
 {
 	o = -1;
 	adjustValue(where, sri->where, L"where", sourceIndexMap);
@@ -784,4 +797,8 @@ cSpaceRelation::cSpaceRelation(vector <cSpaceRelation>::iterator sri, unordered_
 	subQuery = sri->subQuery;
 	skip = sri->skip;
 	timeProgression = sri->timeProgression;
+	associatedPattern = sri->associatedPattern; // used only with question answering, particularly with verifying transformed questions
+	mapPatternAnswer = sri->mapPatternAnswer;
+	mapPatternQuestion = sri->mapPatternQuestion;
+
 }

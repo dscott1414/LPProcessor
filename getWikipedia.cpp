@@ -916,7 +916,7 @@ int cSource::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat
 		return -1;
 	// cache rdf types for an object.
 	unordered_map<wstring, int >::iterator rdfni;
-	if ((rdfni = extendedRdfTypeNumMap.find(newObjectName)) == extendedRdfTypeNumMap.end() || !fileCaching)
+	if ((rdfni = extendedRdfTypeNumMap.find(newObjectName)) == extendedRdfTypeNumMap.end() || !cOntology::cacheRdfTypes)
 		extendedRdfTypeNumMap[newObjectName] = 1;
 	else
 	{

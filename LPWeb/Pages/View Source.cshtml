@@ -2,18 +2,18 @@
 @model LPWeb.Pages.View_SourceModel
 @{
     ViewData["Title"] = "View Source";
-    SourceDirectories["Title"] = "View Source";
-
+    //SourceDirectories["Title"] = "View Source";
+    
 }
 <section id="main">
     <h2>Pick Source</h2>
     <div class="dropdown" style="float:left;">
         <button class="dropbtn">Left</button>
         <div class="dropdown-content" style="left:0;">
-            @foreach (var sourceDirectory in SourceDirectories)
+            @*@foreach (var sourceDirectory in SourceDirectories)
             {
                 <a href="#">@sourceDirectory</a>
-            }
+            }*@
             <a href="#">Link 2</a>
             <a href="#">Link 3</a>
         </div>

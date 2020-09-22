@@ -612,7 +612,7 @@ bool cWordMatch::read(char *buffer,int &where,int limit)
 	if (!copy(quoteBackLink,buffer,where,limit)) return false;
 	if (!copy(speakerPosition,buffer,where,limit)) return false;
 	if (!copy(audiencePosition,buffer,where,limit)) return false;
-	spaceRelation=false;
+	hasSyntacticRelationGroup=false;
 	andChainType=false;
 	notFreePrep=false;
 	hasVerbRelations=false;
@@ -1748,7 +1748,7 @@ void cSource::clearSource(void)
 	previousSpeakers.clear();
 	beforePreviousSpeakers.clear();
 	unresolvedSpeakers.clear();
-	spaceRelations.clear();
+	syntacticRelationGroups.clear();
 	timelineSegments.clear();
 	for (int objectLastTense = 0; objectLastTense < VERB_HISTORY; objectLastTense++)
 		lastVerbTenses[objectLastTense].clear();
@@ -1928,10 +1928,10 @@ bool cSource::write(wstring path,bool S2, bool makeCopyBeforeSourceWrite, wstrin
 	}
 	if (S2)
 	{
-		copy(buffer,(int)spaceRelations.size(),where,MAX_BUF);
-		for (vector <cSpaceRelation>::iterator sri=spaceRelations.begin(), sriEnd=spaceRelations.end(); sri!=sriEnd; sri++)
+		copy(buffer,(int)syntacticRelationGroups.size(),where,MAX_BUF);
+		for (vector <cSyntacticRelationGroup>::iterator sri=syntacticRelationGroups.begin(), sriEnd=syntacticRelationGroups.end(); sri!=sriEnd; sri++)
 		{
-			sri->nextSPR=(int) (sri-spaceRelations.begin());
+			sri->nextSPR=(int) (sri-syntacticRelationGroups.begin());
 			srToText(sri->nextSPR,sri->description);
 			if (!sri->write(buffer,where,MAX_BUF)) break;
 			if (!FlushFile(fd,buffer,where)) return false;
@@ -2095,7 +2095,7 @@ int cSource::sanityCheck(int &generalizedIndex)
 		generalizedIndex++;
 	}
 	generalizedIndex = 0;
-	for (auto sri : spaceRelations)
+	for (auto sri : syntacticRelationGroups)
 	{
 		if (returnSanity = sri.sanityCheck(m.size(), objects.size())) return returnSanity;
 		generalizedIndex++;
@@ -2155,8 +2155,8 @@ bool cSource::read(char *buffer,int &where,unsigned int total, bool &parsedOnly,
 	if (!copy(count, buffer, where, total)) return false;
 	for (unsigned int I = 0; I < count && !error; I++)
 	{
-		spaceRelations.push_back(cSpaceRelation(buffer, where, total, error));
-		getSRIMinMax(&spaceRelations[spaceRelations.size() - 1]);
+		syntacticRelationGroups.push_back(cSyntacticRelationGroup(buffer, where, total, error));
+		getSRIMinMax(&syntacticRelationGroups[syntacticRelationGroups.size() - 1]);
 	}
 	if (!copy(count, buffer, where, total)) return false;
 	for (unsigned int I = 0; I < count && !error; I++)
@@ -3531,6 +3531,15 @@ bool cSource::ppExtensionAvailable(int where, int &getUntilNumPP, bool nonMixed)
 	return false;
 }
 
+int cSource::numWordsOfDirectlyAttachedPrepositionalPhrases(int whereChild)
+{
+	int relPrep = m[whereChild].endObjectPosition;
+	if (relPrep < 0 || relPrep >= (signed)m.size() || m[relPrep].queryWinnerForm(prepositionForm) < 0 || m[relPrep].nextQuote != whereChild || relPrep < m[whereChild].endObjectPosition) return 0;
+	while (m[relPrep].relPrep >= 0 && m[relPrep].relPrep > m[whereChild].endObjectPosition && (m[relPrep].nextQuote == whereChild || m[relPrep].relNextObject == whereChild))
+		relPrep = m[relPrep].relPrep;
+	return relPrep - m[whereChild].endObjectPosition;
+}
+
 int cSource::copyDirectlyAttachedPrepositionalPhrases(int whereParentObject, cSource *childSource, int whereChild, unordered_map <int, int>& sourceIndexMap,bool clear)
 {
 	LFS
@@ -3562,16 +3571,18 @@ void cWordMatch::adjustReferences(int index, bool keepObjects, unordered_map <in
 {
 	LFS
 	if (beginObjectPosition>=0 && sourceIndexMap.find(beginObjectPosition) == sourceIndexMap.end())
-		lplog(LOG_FATAL_ERROR, L"beginObjectPosition has illegal value!");
+		lplog(LOG_FATAL_ERROR, L"beginObjectPosition has illegal value of %d!", beginObjectPosition);
 	adjustValue(beginObjectPosition, L"beginObjectPosition", sourceIndexMap);
 	if (endObjectPosition >= 0)
 	{
 		if (sourceIndexMap.find(endObjectPosition - 1) == sourceIndexMap.end())
-			lplog(LOG_FATAL_ERROR, L"endObjectPosition has illegal value!");
+			lplog(LOG_FATAL_ERROR, L"endObjectPosition has illegal value of %d!", endObjectPosition);
 		endObjectPosition = sourceIndexMap[endObjectPosition - 1] + 1;
 	}
 	adjustValue(relPrep, L"relPrep", sourceIndexMap);
 	adjustValue(relObject, L"relObject", sourceIndexMap);
+	adjustValue(relSubject, L"relSubject", sourceIndexMap);
+	adjustValue(relVerb, L"relVerb", sourceIndexMap);
 	adjustValue(nextQuote, L"nextQuote", sourceIndexMap);
 	adjustValue(principalWherePosition, L"principalWherePosition", sourceIndexMap);
 	beginPEMAPosition = -1;
@@ -3583,8 +3594,8 @@ void cWordMatch::adjustReferences(int index, bool keepObjects, unordered_map <in
 	//	objectMatches.clear();
 	//}
 	if (logQuestionDetail)
-		lplog(LOG_WHERE, L"%d:COPY CHILD->PARENT %s beginObjectPosition=%d endObjectPosition=%d relPrep=%d relObject=%d nextQuote=%d principalWherePosition=%d",
-			index, word->first.c_str(), beginObjectPosition, endObjectPosition, relPrep, getRelObject(), nextQuote, principalWherePosition);
+		lplog(LOG_WHERE, L"%d:COPY CHILD->PARENT %s beginObjectPosition=%d endObjectPosition=%d relSubject=%d relVerb=%d relPrep=%d relObject=%d nextQuote=%d principalWherePosition=%d",
+			index, word->first.c_str(), beginObjectPosition, endObjectPosition, relSubject, relVerb, relPrep, getRelObject(), nextQuote, principalWherePosition);
 }
 
 void cWordMatch::adjustReferences(int index,int offset)
@@ -3598,6 +3609,10 @@ void cWordMatch::adjustReferences(int index,int offset)
 		relPrep += offset;
 	if (getRelObject() >= 0)
 		setRelObject(getRelObject() + offset);
+	if (relSubject >= 0)
+		relSubject += offset;
+	if (getRelVerb() >= 0)
+		setRelVerb(getRelVerb() + offset);
 	if (nextQuote >= 0)
 		nextQuote += offset;
 	if (principalWherePosition >= 0)
@@ -3605,12 +3620,14 @@ void cWordMatch::adjustReferences(int index,int offset)
 	beginPEMAPosition = -1;
 	endPEMAPosition = -1;
 	if (logQuestionDetail)
-		lplog(LOG_WHERE, L"parentWhere %d:COPY SELF %s beginObjectPosition=%d endObjectPosition=%d relPrep=%d relObject=%d nextQuote=%d principalWherePosition=%d offset=%d",
-			index, word->first.c_str(), beginObjectPosition, endObjectPosition, relPrep, getRelObject(), nextQuote, principalWherePosition, offset);
+	{
+		lplog(LOG_WHERE, L"parentWhere %d:COPY SELF %s beginObjectPosition=%d endObjectPosition=%d relSubject=%d relVerb=%d relPrep=%d relObject=%d nextQuote=%d principalWherePosition=%d offset=%d",
+			index, word->first.c_str(), beginObjectPosition, endObjectPosition, relSubject,relVerb,relPrep, getRelObject(), nextQuote, principalWherePosition, offset);
+	}
 }
 
 // copy the answer into the parent
-vector <int> cSource::copyChildrenIntoParent(cSource *childSource, int whereChild, unordered_map <int, int>& sourceIndexMap,bool clear)
+vector <int> cSource::copyChildrenIntoParent(cSource *childSource, int whereChild, unordered_map <int, int>& sourceIndexMap,bool enclosingLoop)
 {
 	LFS
 	vector <int> parentLocations;
@@ -3619,13 +3636,6 @@ vector <int> cSource::copyChildrenIntoParent(cSource *childSource, int whereChil
 		sourceIndexMap[whereChild] = m.size();
 		m.push_back(childSource->m[whereChild]);
 		parentLocations.push_back(m.size() - 1);
-		if (clear)
-		{
-			int I = m.size() - 1;
-			m[I].clearAfterCopy();
-			m[I].principalWherePosition = -1;
-			m[I].principalWhereAdjectivalPosition = -1;
-		}
 		wstring tmpstr, tmpstr2;
 		lplog(LOG_WHERE, L"Transferred %d:%s to %d:%s", whereChild, childSource->whereString(whereChild, tmpstr, true).c_str(), m.size() - 1, whereString(m.size() - 1, tmpstr2, true).c_str());
 	}
@@ -3643,11 +3653,20 @@ vector <int> cSource::copyChildrenIntoParent(cSource *childSource, int whereChil
 			int co = coOM.object;
 			int whereObject = childSource->objects[co].originalLocation;
 			// cases of object overlap:
+			// 0. object is local to this position, so this object's positions will be copied already into parent - only applicable if this is in an enclosing loop iterating over source positions.
 			// 1. object beginObjectPosition > the largest endObjectPosition
 			// 2. object endObjectPosition < the smallest beginObjectPosition
 			// 3. all positions must be scanned.
 			bool makeCopy=false,skipObject=false;
-			if (childSource->m[whereObject].beginObjectPosition > highestEndPosition || childSource->m[whereObject].endObjectPosition < lowestBeginPosition)
+			// object is local to this position, so this object's positions will be copied already into parent.
+			if (enclosingLoop && childSource->m[whereObject].beginObjectPosition <= whereObject && childSource->m[whereObject].endObjectPosition > whereObject)
+			{
+				makeCopy = false;
+				skipObject = false;
+				copySource(childSource, whereChild, whereChild+1, sourceIndexMap); // copy just this additional word.
+			}
+			// case 1
+			else if (childSource->m[whereObject].beginObjectPosition > highestEndPosition || childSource->m[whereObject].endObjectPosition < lowestBeginPosition)
 			{
 				makeCopy = true;
 				skipObject = false;
@@ -3685,25 +3704,24 @@ vector <int> cSource::copyChildrenIntoParent(cSource *childSource, int whereChil
 			lowestBeginPosition = min(lowestBeginPosition, childSource->m[whereObject].beginObjectPosition);
 			highestEndPosition = max(highestEndPosition, childSource->m[whereObject].endObjectPosition);
 			// copy the words associated with the childObject
-			copySource(childSource, childSource->m[whereObject].beginObjectPosition, childSource->m[whereObject].endObjectPosition, sourceIndexMap);
+			if (makeCopy)
+				copySource(childSource, childSource->m[whereObject].beginObjectPosition, childSource->m[whereObject].endObjectPosition, sourceIndexMap);
 			// copy childObject
 			objects.push_back(childSource->objects[co]);
-			int whereParentObject = sourceIndexMap[whereObject];
+			int whereParentObject;
+			if (sourceIndexMap.find(whereObject) == sourceIndexMap.end())
+			{
+				if (makeCopy)
+					lplog(LOG_FATAL_ERROR, L"whereObject not found when making copy of object.");
+				else
+					whereParentObject = sourceIndexMap[whereObject-1]+1; // if not making copy, and whereObject not found, then case 0 must apply (see above)
+			}
+			else
+				whereParentObject = sourceIndexMap[whereObject];
 			parentLocations.push_back(whereParentObject);
 			int parentObject = objects.size() - 1;
 			objects[parentObject].begin = whereParentObject - (whereObject - childSource->m[whereObject].beginObjectPosition);
 			objects[parentObject].end = whereParentObject + (childSource->m[whereObject].endObjectPosition - whereObject);
-			if (clear)
-			{
-				for (int I = objects[parentObject].begin; I < objects[parentObject].end; I++)
-				{
-					m[I].clearAfterCopy();
-					if (m[I].principalWherePosition >= 0)
-						m[I].principalWherePosition += m.size() - childSource->m[whereObject].endObjectPosition;
-					if (m[I].principalWhereAdjectivalPosition >= 0)
-						m[I].principalWhereAdjectivalPosition += m.size() - childSource->m[whereObject].endObjectPosition;
-				}
-			}
 			m[whereParentObject].setObject(parentObject); 
 			if (childSource->objects[co].getOwnerWhere() >= 0)
 			{
@@ -3712,12 +3730,6 @@ vector <int> cSource::copyChildrenIntoParent(cSource *childSource, int whereChil
 					sourceIndexMap[childSource->objects[co].getOwnerWhere()] = m.size();
 					m.push_back(childSource->m[childSource->objects[co].getOwnerWhere()]);
 					int I = m.size() - 1;
-					if (clear)
-					{
-						m[I].clearAfterCopy();
-						if (m[I].principalWhereAdjectivalPosition >= 0)
-							m[I].principalWhereAdjectivalPosition += m.size() - childSource->m[whereObject].endObjectPosition;
-					}
 					objects[parentObject].setOwnerWhere(I);
 				}
 				else
@@ -3731,21 +3743,18 @@ vector <int> cSource::copyChildrenIntoParent(cSource *childSource, int whereChil
 			objects[parentObject].duplicates.clear();
 			objects[parentObject].eliminated = false;
 			if (makeCopy)
-				copyDirectlyAttachedPrepositionalPhrases(whereParentObject, childSource, whereObject, sourceIndexMap,clear);
+				copyDirectlyAttachedPrepositionalPhrases(whereParentObject, childSource, whereObject, sourceIndexMap,false);
 			wstring tmpstr, tmpstr2;
-			lplog(LOG_WHERE, L"Transferred %d:%s to %d:%s [%s]", whereObject, childSource->objectString(co, tmpstr, true).c_str(), whereParentObject, whereString(whereParentObject, tmpstr2, true).c_str(),(makeCopy) ? L"copy made":L"no copy made");
+			lplog(LOG_WHERE, L"Transferred %d:%s (and associated objects) to %d:%s [%s]", whereObject, childSource->objectString(co, tmpstr, true).c_str(), whereParentObject, whereString(whereParentObject, tmpstr2, true).c_str(),(makeCopy) ? L"copy made":L"no copy made");
 			// negative objects allowed in some cases, so make it REALLY negative (past wordOrderWords and eOBJECTS)
-			if (!clear)
-			{
-				lplog(LOG_WHERE, L"Setting negative object - %d object %d->%d!", whereParentObject, parentObject, -parentObject - 1000);
-				m[whereParentObject].setObject(-parentObject - 1000); // set to negative - will be reversed by scan which must always be called after this when clear is false - negative objects are allowed in some cases
-			}
+			lplog(LOG_WHERE, L"Setting negative object - %d object %d->%d!", whereParentObject, parentObject, -parentObject - 1000);
+			m[whereParentObject].setObject(-parentObject - 1000); // set to negative - will be reversed by scan which must always be called after this when clear is false - negative objects are allowed in some cases SON[setObjectNegative]
 		}
 	}
 	return parentLocations;
 }
 
-int cSource::detectAttachedPhrase(vector <cSpaceRelation>::iterator sri, int &relVerb)
+int cSource::detectAttachedPhrase(cSyntacticRelationGroup *sri, int &relVerb)
 {
 	LFS
 		int collectionWhere = sri->whereQuestionTypeObject;

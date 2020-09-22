@@ -617,10 +617,10 @@ bool cSource::resolveMetaGroupTwo(int where,bool inQuote,vector <cOM> &objectMat
 	// the two young men[tommy,james] were seated in a first - class carriage en route for Chester . 
 	// because a transition is automatically the POV (temporary) of the narrator
 	bool transition=false;
-	if (m[where].spaceRelation)
+	if (m[where].hasSyntacticRelationGroup)
 	{
-		vector <cSpaceRelation>::iterator sr=findSpaceRelation(where);
-		if (sr!=spaceRelations.end())
+		vector <cSyntacticRelationGroup>::iterator sr=findSyntacticRelationGroup(where);
+		if (sr!=syntacticRelationGroups.end())
 		{
 			transition=(sr->genderedLocationRelation &&sr->physicalRelation) || sr->tft.timeTransition;
 		}

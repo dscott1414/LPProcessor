@@ -488,7 +488,7 @@ void cSource::copyTimeInfoNum(vector <cTimeInfo>::iterator previousTime,cTimeInf
 	}
 }
 
-bool cSource::detectTimeTransition(int where,vector <cSpaceRelation>::iterator csr,cTimeInfo &timeInfo)
+bool cSource::detectTimeTransition(int where,vector <cSyntacticRelationGroup>::iterator csr,cTimeInfo &timeInfo)
 { LFS
 	if (m[where].getObject()>=0)
 	{
@@ -506,7 +506,7 @@ bool cSource::detectTimeTransition(int where,vector <cSpaceRelation>::iterator c
 		  csr->relationType==stABSTIME || csr->relationType==stABSDATE || csr->relationType==stADVERBTIME)
 	{
 		csr->tft.timeTransition=true;
-		int sr=(int) (csr-spaceRelations.begin());
+		int sr=(int) (csr-syntacticRelationGroups.begin());
 		wstring description=L"detectTimeTransition";
 		if (debugTrace.traceSpeakerResolution)
 			lplog(LOG_RESOLUTION,L"%06d:time transition %s",where,srToText(sr,description).c_str());
@@ -528,7 +528,7 @@ bool cSource::detectTimeTransition(int where,vector <cSpaceRelation>::iterator c
 					(timeInfo.timeCapacity==cDay && (m[timeInfo.tWhere].objectRole&OBJECT_ROLE) && (timeInfo.timeModifier<0 || m[timeInfo.timeModifier].queryWinnerForm(adjectiveForm)!=-1)) ||
 					 (timeInfo.timeModifier>=0 && (m[timeInfo.timeModifier].word->second.timeFlags&T_BEFORE))))
 			{
-				int sr=(int) (csr-spaceRelations.begin());
+				int sr=(int) (csr-syntacticRelationGroups.begin());
 				wstring description=L"detectTimeTransition";
 				if (timeInfo.absSeason>=0 || timeInfo.absMonth>=0 || timeInfo.absDayOfWeek>=0 ||
 					timeInfo.absDayOfMonth>=0 ||	timeInfo.absHour>=0 ||	timeInfo.absHoliday>=0 ||
@@ -545,7 +545,7 @@ bool cSource::detectTimeTransition(int where,vector <cSpaceRelation>::iterator c
 					(m[m[csr->whereVerb].previousCompoundPartObject].verbSense&VT_POSSIBLE))
 			{
 				wstring description=L"detectTimeTransition";
-				int sr=(int) (csr-spaceRelations.begin());
+				int sr=(int) (csr-syntacticRelationGroups.begin());
 				if (debugTrace.traceSpeakerResolution)
 				lplog(LOG_RESOLUTION,L"%06d:probable root time transition %s?",where,srToText(sr,description).c_str());
 				csr->tft.nonPresentTimeTransition=true;
@@ -558,7 +558,7 @@ bool cSource::detectTimeTransition(int where,vector <cSpaceRelation>::iterator c
 					 // no daily / monthly  
 					 timeInfo.timeFrequency==-1))
 			{
-				int sr=(int) (csr-spaceRelations.begin());
+				int sr=(int) (csr-syntacticRelationGroups.begin());
 				wstring description=L"detectTimeTransition";
 				if (debugTrace.traceSpeakerResolution)
 				{
@@ -566,7 +566,7 @@ bool cSource::detectTimeTransition(int where,vector <cSpaceRelation>::iterator c
 						!(csr->relationType==stPREPTIME || csr->relationType==stPREPDATE || csr->relationType==stSUBJDAYOFMONTHTIME || 
 							csr->relationType==stABSTIME || csr->relationType==stABSDATE || csr->relationType==stADVERBTIME))
 					lplog(LOG_RESOLUTION,L"%06d:time transition %s",where,srToText(sr,description).c_str());
-					sr=(int) (csr-spaceRelations.begin());
+					sr=(int) (csr-syntacticRelationGroups.begin());
 				if (!csr->tft.timeTransition && (m[csr->where].objectRole&(IN_PRIMARY_QUOTE_ROLE|IN_SECONDARY_QUOTE_ROLE)))
 					lplog(LOG_RESOLUTION,L"%06d:time transition [IN QUOTE] %s",csr->where,srToText(sr,description).c_str());
 				}
@@ -621,7 +621,7 @@ bool cSource::evaluateTimePattern(int beginObjectPosition,int &maxLen,cTimeInfo 
 	return false;
 }
 
-bool cSource::identifyDateTime(int where,vector <cSpaceRelation>::iterator csr,int &maxLen,int inMultiObject)
+bool cSource::identifyDateTime(int where,vector <cSyntacticRelationGroup>::iterator csr,int &maxLen,int inMultiObject)
 { LFS
 	if (where<0 || (m[where].flags&cWordMatch::flagAlreadyTimeAnalyzed)) return false;
 	bool rtSet=false;
@@ -1361,7 +1361,7 @@ bool cSource::rejectTimeWord(int where,int begin)
 		return false;
 }
 
-bool cSource::resolveTimeRange(int where,int pmaOffset,vector <cSpaceRelation>::iterator csr)
+bool cSource::resolveTimeRange(int where,int pmaOffset,vector <cSyntacticRelationGroup>::iterator csr)
 { LFS
 	vector <int> objectPositions;
 	vector < vector <cTagLocation> > mobjectTagSets;
@@ -1409,7 +1409,7 @@ bool cSource::stopSearch(int I)
 // if there is no conjunction between them, simply copy all time expressions.
 // if there is a conjunction between them, then move all time expressions after the current space relation
 //    from the previous time relation to the current one.
-void cSource::distributeTimeRelations(vector <cSpaceRelation>::iterator csr,vector <cSpaceRelation>::iterator previousRelation,int conjunctionPassed)
+void cSource::distributeTimeRelations(vector <cSyntacticRelationGroup>::iterator csr,vector <cSyntacticRelationGroup>::iterator previousRelation,int conjunctionPassed)
 { LFS
 	if (conjunctionPassed==-1)
 	{
@@ -1439,7 +1439,7 @@ void cSource::distributeTimeRelations(vector <cSpaceRelation>::iterator csr,vect
 		previousRelation->tft.timeTransition=false;
 }
 
-void cSource::appendTime(vector <cSpaceRelation>::iterator csr)
+void cSource::appendTime(vector <cSyntacticRelationGroup>::iterator csr)
 { LFS
 	if (csr->timeInfoSet) return;
 	int maxLen=-1;
@@ -1531,16 +1531,16 @@ void cSource::appendTime(vector <cSpaceRelation>::iterator csr)
 		if (csr->whereSubject<(signed)I && csr->whereSubject!=-1)
 		{
 			I=csr->whereSubject;
-			if (m[I].spaceRelation) I++; // make sure a previous space relation with the same subject isn't skipped, for time relation movement
+			if (m[I].hasSyntacticRelationGroup) I++; // make sure a previous space relation with the same subject isn't skipped, for time relation movement
 		}
 		// go back to last EOS or last beginning quote.
 		int conjunctionPassed=-1;
 		for (I=(I>0) ? I-1:I; !stopSearch(I) && I>0; I--) 
 		{
-			if (m[I].spaceRelation)
+			if (m[I].hasSyntacticRelationGroup)
 			{
-				vector <cSpaceRelation>::iterator previousRelation;
-				if ((previousRelation=findSpaceRelation(I))!=spaceRelations.end() && csr!=previousRelation)
+				vector <cSyntacticRelationGroup>::iterator previousRelation;
+				if ((previousRelation=findSyntacticRelationGroup(I))!=syntacticRelationGroups.end() && csr!=previousRelation)
 				{
 					distributeTimeRelations(csr,previousRelation,conjunctionPassed);
 					break;
@@ -1706,11 +1706,11 @@ void cSource::detectTimeTransition(int where,vector <int> &lastSubjects)
 		newSR(where,-1,-1,where,m[where].getRelVerb(),-1,m[where].getRelObject(),-1,-1,timeType,L"time",true);
 		if (m[where].getObject()>=0 && !m[where].timeColor)
 			m[where].timeColor=T_UNIT;
-		vector <cSpaceRelation>::iterator sr;
-		if ((sr=findSpaceRelation(where))!=spaceRelations.end() && sr->where==where)
+		vector <cSyntacticRelationGroup>::iterator sr;
+		if ((sr=findSyntacticRelationGroup(where))!=syntacticRelationGroups.end() && sr->where==where)
 		{
 			sr->tft.timeTransition|=timeTransition;
-			int offset=(int) (sr-spaceRelations.begin());
+			int offset=(int) (sr-syntacticRelationGroups.begin());
 			wstring description=L"detectTimeTransition";
 			if (debugTrace.traceTime)
 				lplog(LOG_RESOLUTION,L"%06d:time transition %s (%s)",where,srToText(offset,description).c_str(),(sr->tft.timeTransition) ? L"true":L"false");
@@ -2548,8 +2548,8 @@ void cSource::initializeTimelineSegments(void)
 
 void cSource::createTimelineSegment(int where)
 { LFS
-  vector <cSpaceRelation>::iterator sr = findSpaceRelation(where);
-	if (sr!=spaceRelations.end() && sr->where==where)
+  vector <cSyntacticRelationGroup>::iterator sr = findSyntacticRelationGroup(where);
+	if (sr!=syntacticRelationGroups.end() && sr->where==where)
 	{
 		int ctl=currentTimelineSegment;
 		if (currentEmbeddedTimelineSegment>=0 && currentEmbeddedSpeakerGroup>=0 && 
@@ -2559,9 +2559,9 @@ void cSource::createTimelineSegment(int where)
 				(m[where].objectRole&(IN_PRIMARY_QUOTE_ROLE|IN_SECONDARY_QUOTE_ROLE))!=0)
 			ctl=currentEmbeddedTimelineSegment;
 		if (sr->tft.timeTransition || sr->tft.nonPresentTimeTransition || sr->timeInfo.size()>0)
-			timelineSegments[ctl].timeTransitions.insert((int) (sr-spaceRelations.begin()));
+			timelineSegments[ctl].timeTransitions.insert((int) (sr-syntacticRelationGroups.begin()));
 		if (sr->establishingLocation)
-			timelineSegments[ctl].locationTransitions.push_back((int) (sr-spaceRelations.begin()));
+			timelineSegments[ctl].locationTransitions.push_back((int) (sr-syntacticRelationGroups.begin()));
 	}
 	if (currentEmbeddedSpeakerGroup>=0 && currentEmbeddedSpeakerGroup<(signed)speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups.size() && speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].sgBegin==where)
 	{
@@ -2572,7 +2572,7 @@ void cSource::createTimelineSegment(int where)
 			ts.begin=where;
 			ts.end=speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].sgEnd;
 			ts.speakerGroup=currentSpeakerGroup;
-			ts.sr=(int) (sr-spaceRelations.begin());
+			ts.sr=(int) (sr-syntacticRelationGroups.begin());
 			ts.linkage=determineTimelineSegmentLink();
 			ts.parentTimeline=currentTimelineSegment;
 			timelineSegments.push_back(ts);
@@ -2594,7 +2594,7 @@ void cSource::createTimelineSegment(int where)
 		cTimelineSegment ts;
 		ts.begin=where;
 		ts.speakerGroup=currentSpeakerGroup;
-		ts.sr=(int) (sr-spaceRelations.begin());
+		ts.sr=(int) (sr-syntacticRelationGroups.begin());
 		ts.linkage=determineTimelineSegmentLink();
 		ts.parentTimeline=-1;
 		timelineSegments.push_back(ts);

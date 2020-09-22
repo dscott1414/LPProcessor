@@ -777,10 +777,12 @@ bool cSource::testQuestionType(int where,int &whereQuestionType,int &whereQuesti
 	else if (m[where].getObject()>=0 && !(m[where].flags&cWordMatch::flagRelativeHead))
 	{
 			oc=objects[m[where].getObject()].objectClass;
+			// if this object is in positionToTransformationPatternVariableMap, it is supposed to be filled in by a variable 
 			if (oc==NAME_OBJECT_CLASS || oc==GENDERED_DEMONYM_OBJECT_CLASS || oc==NON_GENDERED_BUSINESS_OBJECT_CLASS || oc==NON_GENDERED_NAME_OBJECT_CLASS)
 			{
+
 				whereQuestionInformationSourceObjects.insert(where);
-				if (logQuestionDetail)
+				if (logQuestionDetail && positionToTransformationPatternVariableMap.find(where) == positionToTransformationPatternVariableMap.end())
 					lplog(LOG_WHERE,L"picked %d:%s as context suggestion",where,objectString(m[where].getObject(),tmpstr,false).c_str());
 			}
 	}
@@ -835,7 +837,7 @@ int cSource::maxBackwards(int where)
 // whereQuestionType flag 
 //   referencingObject, subject, object, secondary object, prep object, etc
 //   OR an adjective OF same
-void cSource::processQuestion(int whereVerb,int whereReferencingObject,__int64 &questionType,int &whereQuestionType,set <int> &whereQuestionInformationSourceObjects)
+void cSource::getQuestionTypeAndQuestionInformationSourceObjects(int whereVerb,int whereReferencingObject,__int64 &questionType,int &whereQuestionType,set <int> &whereQuestionInformationSourceObjects)
 { LFS
 	int wp=m[whereVerb].relPrep,prepLoop=0,bp,wpo,whereQuestionTypeFlags=0,relObject;
 	//bool wqtAdjective=false;
@@ -865,7 +867,7 @@ void cSource::processQuestion(int whereVerb,int whereReferencingObject,__int64 &
 	}
 	if (whereQuestionType>=0)
 	{
-		questionType=cQuestionAnswering::unknownQTFlag;
+		questionType = cQuestionAnswering::unknownQTFlag;
 		wstring questionTypeWord=m[whereQuestionType].word->first;
 		if (questionTypeWord==L"which")
 			questionType= cQuestionAnswering::whichQTFlag;
@@ -890,7 +892,7 @@ void cSource::processQuestion(int whereVerb,int whereReferencingObject,__int64 &
 }
 
 // this is called by correctSRIEntry
-void cSource::transformQuestionRelation(cSpaceRelation& sri)
+void cSource::transformQuestionRelation(cSyntacticRelationGroup& sri)
 {
 	bool inQuestion=(sri.whereSubject>=0 && (m[sri.whereSubject].flags&cWordMatch::flagInQuestion));
 	inQuestion|=(sri.whereObject>=0 && (m[sri.whereObject].flags&cWordMatch::flagInQuestion));
@@ -904,7 +906,7 @@ void cSource::transformQuestionRelation(cSpaceRelation& sri)
 			sri.whereObject=sri.whereSubject;
 			sri.whereSubject=wo;
 		}
-		processQuestion(sri.whereVerb,sri.whereControllingEntity,sri.questionType,sri.whereQuestionType,sri.whereQuestionInformationSourceObjects);
+		getQuestionTypeAndQuestionInformationSourceObjects(sri.whereVerb,sri.whereControllingEntity,sri.questionType,sri.whereQuestionType,sri.whereQuestionInformationSourceObjects);
 		// if a where clause, put where in a prepositional clause / did Jay-Z grow up? CASE 10
 		// if a when clause, also put where in a prepositional clause / when was Darrell Hammond born? CASE 11
 		if (((sri.questionType&cQuestionAnswering::typeQTMask)== cQuestionAnswering::whereQTFlag || (sri.questionType&cQuestionAnswering::typeQTMask)== cQuestionAnswering::whenQTFlag) &&
@@ -915,7 +917,7 @@ void cSource::transformQuestionRelation(cSpaceRelation& sri)
 				lplog(LOG_WHERE | LOG_INFO, L"transformQuestionRelation: Transforming space relation of where and when question, when what is being asked for requires a preposition 'in' (grew up in, born in).  Setting object of prep '%d:in' to: '%d:%s' and erasing whereObject.", m.size(), sri.whereObject, (sri.whereObject<0) ? L"Undefined":m[sri.whereObject].word->first.c_str());
 				wstring ps;
 				prepPhraseToString(sri.wherePrep, ps);
-				printSRI(L"transformQuestionRelation - ORIGINAL", &sri, 0, sri.whereSubject, sri.whereObject, ps, false, -1, L"", LOG_INFO | LOG_WHERE);
+				printSRG(L"transformQuestionRelation - ORIGINAL", &sri, 0, sri.whereSubject, sri.whereObject, ps, false, -1, L"", LOG_INFO | LOG_WHERE);
 				// transforms 'did Jay-Z grow up?' to 'Jay-Z did grow up in X?'
 				// transforms 'when was Darrell Hammond born?' to 'Darrell Hammond was born in X?'
 				m.push_back(cWordMatch(inWord,0,debugTrace));
@@ -929,7 +931,7 @@ void cSource::transformQuestionRelation(cSpaceRelation& sri)
 				sri.transformedPrep = m.size()-1;
 				wstring pss;
 				prepPhraseToString(sri.wherePrep, pss);
-				printSRI(L"transformQuestionRelation - QUESTIONTRANSFORMED", &sri, 0, sri.whereSubject, sri.whereObject, pss, false, -1, L"", LOG_INFO | LOG_WHERE);
+				printSRG(L"transformQuestionRelation - QUESTIONTRANSFORMED", &sri, 0, sri.whereSubject, sri.whereObject, pss, false, -1, L"", LOG_INFO | LOG_WHERE);
 			}
 		}
 	}

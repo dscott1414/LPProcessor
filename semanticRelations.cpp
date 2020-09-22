@@ -81,12 +81,12 @@ bool cSource::like(wstring str1,wstring str2)
 	return wcsncmp(str1.c_str(),str2.c_str(),min(str1.length(),str2.length()))==0;
 }
 
-bool comparesr( const cSpaceRelation &s1, const cSpaceRelation &s2 )
+bool comparesr( const cSyntacticRelationGroup &s1, const cSyntacticRelationGroup &s2 )
 { LFS
 	return s1.where<s2.where;
 }
 
-void cSource::getMaxWhereSR(vector <cSpaceRelation>::iterator csr,int &begin,int &end)
+void cSource::getMaxWhereSR(vector <cSyntacticRelationGroup>::iterator csr,int &begin,int &end)
 { LFS
 		begin=100000000;
 		end=-1;
@@ -104,10 +104,10 @@ void cSource::getMaxWhereSR(vector <cSpaceRelation>::iterator csr,int &begin,int
 		end=max(end,csr->wherePrepObject);
 }
 
-vector <cSpaceRelation>::iterator cSource::findSpaceRelation(int where)
+vector <cSyntacticRelationGroup>::iterator cSource::findSyntacticRelationGroup(int where)
 { LFS
-		cSpaceRelation sr(where,-1,-1,-1,-1,-1,-1,-1,-1,-1,false,false,-1,-1,false);
-		return lower_bound(spaceRelations.begin(), spaceRelations.end(), sr, comparesr);
+		cSyntacticRelationGroup sr(where,-1,-1,-1,-1,-1,-1,-1,-1,-1,false,false,-1,-1,false);
+		return lower_bound(syntacticRelationGroups.begin(), syntacticRelationGroups.end(), sr, comparesr);
 }
 
 // space relation component
@@ -121,7 +121,7 @@ const wchar_t *cSource::src(int where,wstring description,wstring &tmpstr)
 	return tmpstr.c_str();
 }
 
-bool cSource::followerPOVToObserverConversion(vector <cSpaceRelation>::iterator sr,int sg)
+bool cSource::followerPOVToObserverConversion(vector <cSyntacticRelationGroup>::iterator sr,int sg)
 { LFS
 	if (sr->whereVerb<0 || sr->whereObject<0) return false;
 	bool allIn,oneIn,converted=false;
@@ -180,8 +180,8 @@ bool cSource::isSpeaker(int where,int esg,int tempCSG)
 
 void cSource::srSetTimeFlowTense(int spri)
 { LFS
-	if (spaceRelations[spri].agentLocationRelationSet) return;
-	vector <cSpaceRelation>::iterator sr=spaceRelations.begin()+spri;
+	if (syntacticRelationGroups[spri].agentLocationRelationSet) return;
+	vector <cSyntacticRelationGroup>::iterator sr=syntacticRelationGroups.begin()+spri;
 	if (setTimeFlowTense(sr->where,sr->whereControllingEntity,sr->whereSubject,sr->whereVerb,sr->whereObject,
 sr->wherePrepObject,
 			sr->prepObjectSubType,sr->objectSubType,sr->establishingLocation || sr->relationType==-stLOCATION,sr->futureLocation,sr->genderedLocationRelation,sr->tft))
@@ -236,7 +236,7 @@ int wherePrepObject,
 		  (isSpeaker(whereSubject,esg,currentSpeakerGroup) || isSpeaker(whereObject,esg,currentSpeakerGroup) || isSpeaker(whereControllingEntity,esg,currentSpeakerGroup) || 
 			 (whereSubject>=0 && m[whereSubject].getObject()>=0 && isAgentObject(m[whereSubject].getObject())))) || 
 			establishingLocation || futureLocation || tft.speakerCommand || tft.speakerQuestionToAudience);
-	//if (tft.significantRelation || !forSpaceRelation)
+	//if (tft.significantRelation || !forSyntacticGroupRelation)
 	{
 		int vt=(whereVerb>=0) ? m[whereVerb].verbSense : 0;
 		if (whereControllingEntity>=0 && m[whereControllingEntity].getRelVerb()>=0 && m[whereControllingEntity].getRelVerb()!=whereVerb)
@@ -253,7 +253,7 @@ int wherePrepObject,
 		bool inStory=(m[location].objectRole&IN_EMBEDDED_STORY_OBJECT_ROLE)!=0;
 		bool inPrimaryQuote=(m[location].objectRole&IN_PRIMARY_QUOTE_ROLE)!=0 && !inStory;
 		bool inSecondaryQuote=(m[location].objectRole&IN_SECONDARY_QUOTE_ROLE)!=0;
-		//if ((vt&VT_NEGATION) && forSpaceRelation)
+		//if ((vt&VT_NEGATION) && forSyntacticRelationGroup)
 		//	return false;
 		// narration (which talks about what is presently happening in the past tense) OR 
 		bool presentlyHappeningSR=!inSecondaryQuote && whereVerb>=0 &&
@@ -495,7 +495,7 @@ I want you to spread yourself this evening
 
 */
 // will change source.m (invalidate all iterators)
-void cSource::correctSRIEntry(cSpaceRelation &sri)
+void cSource::correctSRIEntry(cSyntacticRelationGroup &sri)
 { LFS
 	if (sri.relationType==stNORELATION)
 	{
@@ -513,7 +513,9 @@ void cSource::correctSRIEntry(cSpaceRelation &sri)
 		sri.whereObject=m[sri.whereSubject].getRelObject();
 	}
 	// CASE 2. I felt I could not possibly remain at close quarters
-	if (sri.whereControllingEntity<0 && sri.whereSubject>=0 && m[sri.whereSubject].relInternalObject>=0 && m[sri.whereSubject].getRelVerb()>=0) // CASE 2
+	// but not 'What is Danny's profession?'
+	if (sri.whereControllingEntity<0 && sri.whereSubject>=0 && m[sri.whereSubject].relInternalObject>=0 && m[sri.whereSubject].getRelVerb()>=0 // CASE 2
+		 && sri.whereSubject<sri.whereVerb) // not a question, where the subject and object are inverted - subject must come before verb.
 	{
 		sri.whereControllingEntity=sri.whereSubject;
 		sri.whereSubject=m[sri.whereSubject].relInternalObject;
@@ -653,11 +655,11 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 		lplog(LOG_ERROR,L"%d:subject@%d wherePrepObject=%d but no prep!",where,whereSubject,wherePrepObject);
 
 	bool found=false,convertToStay=(relationType==stENTER && wherePrep>=0 && m[wherePrep].word->first==L"to" && wherePrepObject>=0 && (hasHyperNym(m[wherePrepObject].word->first,L"inaction",found,false) || found));
-	if (speakerGroupsEstablished && m[where].spaceRelation && !convertToStay) 
+	if (speakerGroupsEstablished && m[where].hasSyntacticRelationGroup && !convertToStay) 
 	{
-		cSpaceRelation sr(where,_o,whereControllingEntity,whereSubject,whereVerb,wherePrep,whereObject,wherePrepObject,whereMovingRelativeTo,relationType,false,false,-1,-1,physicalRelation);
-		vector <cSpaceRelation>::iterator location = lower_bound(spaceRelations.begin(), spaceRelations.end(), sr, comparesr),sl=location;
-		for (; location!=spaceRelations.end() && location->where==where; location++)
+		cSyntacticRelationGroup sr(where,_o,whereControllingEntity,whereSubject,whereVerb,wherePrep,whereObject,wherePrepObject,whereMovingRelativeTo,relationType,false,false,-1,-1,physicalRelation);
+		vector <cSyntacticRelationGroup>::iterator location = lower_bound(syntacticRelationGroups.begin(), syntacticRelationGroups.end(), sr, comparesr),sl=location;
+		for (; location!=syntacticRelationGroups.end() && location->where==where; location++)
 		{
 			if (location->relationType!=relationType && 
 					location->relationType!=stPREPTIME && location->relationType!=stPREPDATE && location->relationType!=stSUBJDAYOFMONTHTIME &&
@@ -668,11 +670,11 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 					lplog(LOG_RESOLUTION,L"%06d:relationType changed from %s to %s",where,getRelStr(location->relationType),getRelStr(relationType));
 				location->relationType=relationType;
 			}
-			srSetTimeFlowTense((int) (location-spaceRelations.begin()));
+			srSetTimeFlowTense((int) (location-syntacticRelationGroups.begin()));
 		}
-		if (sl!=spaceRelations.end() && physicalRelation && !sl->physicalRelation)
+		if (sl!=syntacticRelationGroups.end() && physicalRelation && !sl->physicalRelation)
 			sl->physicalRelation=true;
-		if (sl!=spaceRelations.end() && sl->where==where && !sl->tft.futureHappening && !sl->tft.pastHappening)
+		if (sl!=syntacticRelationGroups.end() && sl->where==where && !sl->tft.futureHappening && !sl->tft.pastHappening)
 		{
 			vector <cLocalFocus>::iterator lsi;
 			if (relationType==stENTER && !(m[whereVerb].objectRole&IN_PRIMARY_QUOTE_ROLE) && whereSubject>=0)
@@ -691,7 +693,7 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 			return;
 		}
 	}
-	bool shouldLogSpaceRelation=false,genderedEntityMove=false,convertToMove=false;
+	bool shouldLogSyntacticRelationGroup=false,genderedEntityMove=false,convertToMove=false;
 	wstring tmpstr,tmpstr2,tmpstr3,tmpstr4,tmpstr5,tmpstr6;
 	// came to a halt
 	if (convertToStay) relationType=stSTAY;
@@ -832,7 +834,7 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 //	vector <cLocalFocus>::iterator lsi;
 	bool not=whereVerb>=0 && (m[whereVerb].verbSense&VT_NEGATION)!=0;
 	not|=whereVerb>=0 && m[whereVerb].previousCompoundPartObject>=0 && (m[m[whereVerb].previousCompoundPartObject].verbSense&VT_NEGATION)!=0; // trace back to main verb
-	//bool alreadyTaken=whereVerb>=0 && m[whereVerb].spaceRelation;
+	//bool alreadyTaken=whereVerb>=0 && m[whereVerb].hasSyntacticRelationGroup;
 	bool there=(whereSubject>=0 && m[whereSubject].word->first==L"there" && (m[whereSubject].objectRole&IN_PRIMARY_QUOTE_ROLE));
 	there|=(whereControllingEntity>=0 && m[whereControllingEntity].word->first==L"there" && (m[whereControllingEntity].objectRole&IN_PRIMARY_QUOTE_ROLE));
 	// where his[tommy] CONTACTcolleague[tuppence] would meet him[tommy] at ten o'clock . 
@@ -898,13 +900,13 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 		//((relationType!=stENTER && relationType!=stCONTACT) || (lsi=in(m[whereSubject].getObject()))==localObjects.end() || lsi->previousWhere<0 || lsi->previousWhere>=where || prepObjectSubType>=0);
 	if (speakerGroupsEstablished)
 	{
-		cSpaceRelation sr(where,_o,whereControllingEntity,whereSubject,whereVerb,wherePrep,whereObject,wherePrepObject,whereMovingRelativeTo,relationType,genderedEntityMove,genderedLocationRelation,objectSubType,prepObjectSubType,physicalRelation);
+		cSyntacticRelationGroup sr(where,_o,whereControllingEntity,whereSubject,whereVerb,wherePrep,whereObject,wherePrepObject,whereMovingRelativeTo,relationType,genderedEntityMove,genderedLocationRelation,objectSubType,prepObjectSubType,physicalRelation);
 		if (debugTrace.traceRelations)
-			logSpaceRelation(sr, L"BEFORE CORRECTION");
+			logSyntacticRelationGroup(sr, L"BEFORE CORRECTION");
 		correctSRIEntry(sr);
-		vector <cSpaceRelation>::iterator location = lower_bound(spaceRelations.begin(), spaceRelations.end(), sr, comparesr),forward=location,firstLocation=location;
+		vector <cSyntacticRelationGroup>::iterator location = lower_bound(syntacticRelationGroups.begin(), syntacticRelationGroups.end(), sr, comparesr),forward=location,firstLocation=location;
 		// there can be multiple space relations in one position - one for each object
-		while (forward!=spaceRelations.end() && forward->where==where)
+		while (forward!=syntacticRelationGroups.end() && forward->where==where)
 		{
 			if (sr==*forward)
 			{
@@ -913,11 +915,11 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 			}
 			forward++;
 		}
-		if (spaceRelations.empty() || location==spaceRelations.end() || (shouldLogSpaceRelation=sr!=*location))
+		if (syntacticRelationGroups.empty() || location==syntacticRelationGroups.end() || (shouldLogSyntacticRelationGroup=sr!=*location))
 		{
-			if (spaceRelations.empty())
-				location=spaceRelations.insert(spaceRelations.begin(),sr);
-			else if (location!=spaceRelations.end() && sr.canUpdate(*location))
+			if (syntacticRelationGroups.empty())
+				location=syntacticRelationGroups.insert(syntacticRelationGroups.begin(),sr);
+			else if (location!=syntacticRelationGroups.end() && sr.canUpdate(*location))
 			{
 				location->o=sr.o;
 				location->wherePrep=sr.wherePrep;
@@ -929,14 +931,14 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 				}
 			}
 			else
-				location=spaceRelations.insert(location,sr);
-			srSetTimeFlowTense((int) (location-spaceRelations.begin()));
+				location=syntacticRelationGroups.insert(location,sr);
+			srSetTimeFlowTense((int) (location-syntacticRelationGroups.begin()));
 			if (location->timeInfo.empty())
 			{
 				forward=location;
-				while (forward!=spaceRelations.begin() && forward->where==where) forward--;
+				while (forward!=syntacticRelationGroups.begin() && forward->where==where) forward--;
 				forward++;
-				while (forward!=spaceRelations.end() && forward->where==where)
+				while (forward!=syntacticRelationGroups.end() && forward->where==where)
 				{
 					if (forward->timeInfo.size())
 					{
@@ -955,40 +957,40 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 			if (whereSubject>=0)
 			{
 				for (int si=0; si<(signed)m[whereSubject].objectMatches.size(); si++)
-					objects[m[whereSubject].objectMatches[si].object].spaceRelations.push_back((int) (location-spaceRelations.begin()));
+					objects[m[whereSubject].objectMatches[si].object].syntacticRelationGroups.push_back((int) (location-syntacticRelationGroups.begin()));
 				if (m[whereSubject].getObject()>=0 && m[whereSubject].objectMatches.empty())
-					objects[m[whereSubject].getObject()].spaceRelations.push_back((int) (location-spaceRelations.begin()));
+					objects[m[whereSubject].getObject()].syntacticRelationGroups.push_back((int) (location-syntacticRelationGroups.begin()));
 			}
 		}
 		if (debugTrace.traceRelations)
-			logSpaceRelation(sr, whereType);
+			logSyntacticRelationGroup(sr, whereType);
 	}
 	else
 	{
-		if (spaceRelations.empty() || spaceRelations[spaceRelations.size()-1].where!=where)
+		if (syntacticRelationGroups.empty() || syntacticRelationGroups[syntacticRelationGroups.size()-1].where!=where)
 		{
-			int insertionPoint=spaceRelations.size();
-			while (insertionPoint>0 && spaceRelations[insertionPoint-1].where>where) insertionPoint--;
-			cSpaceRelation sr(where,_o,whereControllingEntity,whereSubject,whereVerb,wherePrep,whereObject,wherePrepObject,whereMovingRelativeTo,relationType,genderedEntityMove,genderedLocationRelation,objectSubType,prepObjectSubType,physicalRelation);
+			int insertionPoint=syntacticRelationGroups.size();
+			while (insertionPoint>0 && syntacticRelationGroups[insertionPoint-1].where>where) insertionPoint--;
+			cSyntacticRelationGroup sr(where,_o,whereControllingEntity,whereSubject,whereVerb,wherePrep,whereObject,wherePrepObject,whereMovingRelativeTo,relationType,genderedEntityMove,genderedLocationRelation,objectSubType,prepObjectSubType,physicalRelation);
 			correctSRIEntry(sr);
-			spaceRelations.insert(spaceRelations.begin()+insertionPoint,sr);
+			syntacticRelationGroups.insert(syntacticRelationGroups.begin()+insertionPoint,sr);
 			srSetTimeFlowTense(insertionPoint);
-			if (convertToMove && (spaceRelations[insertionPoint].tft.futureHappening || spaceRelations[insertionPoint].tft.pastHappening))
+			if (convertToMove && (syntacticRelationGroups[insertionPoint].tft.futureHappening || syntacticRelationGroups[insertionPoint].tft.pastHappening))
 			{
-				spaceRelations[insertionPoint].relationType=stENTER;
+				syntacticRelationGroups[insertionPoint].relationType=stENTER;
 				convertToMove=false;
 			}
-			shouldLogSpaceRelation=true;
+			shouldLogSyntacticRelationGroup=true;
 			if (debugTrace.traceRelations)
-				logSpaceRelation(sr,whereType);
+				logSyntacticRelationGroup(sr,whereType);
 		}
 	}
-	if (whereVerb>=0) m[whereVerb].spaceRelation=true;
-	if (wherePrepObject>=0) m[wherePrepObject].spaceRelation=true;
-	m[where].spaceRelation=true;
+	if (whereVerb>=0) m[whereVerb].hasSyntacticRelationGroup=true;
+	if (wherePrepObject>=0) m[wherePrepObject].hasSyntacticRelationGroup=true;
+	m[where].hasSyntacticRelationGroup=true;
 }
 
-void cSource::logSpaceRelation(cSpaceRelation &sr,const wchar_t *whereType)
+void cSource::logSyntacticRelationGroup(cSyntacticRelationGroup &sr,const wchar_t *whereType)
 {
 	set <int> relPreps;
 	getAllPreps(&sr, relPreps, sr.whereObject);
@@ -1018,7 +1020,7 @@ void cSource::logSpaceRelation(cSpaceRelation &sr,const wchar_t *whereType)
 
 // subject is moving to a destination
 // will change source.m (invalidate all iterators through the use of newSR)
-bool cSource::moveIdentifiedSubject(int where,bool inPrimaryQuote,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int at,int whereMovingRelativeTo,int spaceRelation,const wchar_t *whereType,bool physicalRelation)
+bool cSource::moveIdentifiedSubject(int where,bool inPrimaryQuote,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int at,int whereMovingRelativeTo,int hasSyntacticRelationGroup,const wchar_t *whereType,bool physicalRelation)
 { LFS
 	wstring tmpstr;
 	set <int> speakers,povSpeakers;
@@ -1069,28 +1071,28 @@ bool cSource::moveIdentifiedSubject(int where,bool inPrimaryQuote,int whereContr
 	if (povOneIn)
 	{
 		for (set<int>::iterator pvi=povSpeakers.begin(),pviEnd=povSpeakers.end(); pvi!=pviEnd; pvi++)
-			newSR(where,*pvi,whereControllingEntity,whereSubject,whereVerb,wherePrep,whereObject,at,whereMovingRelativeTo,spaceRelation,whereType,physicalRelation);
+			newSR(where,*pvi,whereControllingEntity,whereSubject,whereVerb,wherePrep,whereObject,at,whereMovingRelativeTo,hasSyntacticRelationGroup,whereType,physicalRelation);
 	}
 	else
 	{
 		// If non-pov speaker, age that subject.
 		for (int I=0; I<(signed)m[whereSubject].objectMatches.size(); I++)
-			newSR(where,m[whereSubject].objectMatches[I].object,whereControllingEntity,whereSubject,whereVerb,wherePrep,whereObject,at,whereMovingRelativeTo,spaceRelation,whereType,physicalRelation);
+			newSR(where,m[whereSubject].objectMatches[I].object,whereControllingEntity,whereSubject,whereVerb,wherePrep,whereObject,at,whereMovingRelativeTo,hasSyntacticRelationGroup,whereType,physicalRelation);
 		if (m[whereSubject].objectMatches.empty())
-			newSR(where,m[whereSubject].getObject(),whereControllingEntity,whereSubject,whereVerb,wherePrep,whereObject,at,whereMovingRelativeTo,spaceRelation,whereType,physicalRelation);
+			newSR(where,m[whereSubject].getObject(),whereControllingEntity,whereSubject,whereVerb,wherePrep,whereObject,at,whereMovingRelativeTo,hasSyntacticRelationGroup,whereType,physicalRelation);
 	}
 	return true;
 }
 
 // subject will move the object at whereObject to a destination
 // will change source.m (invalidate all iterators through the use of newSR)
-bool cSource::srMoveObject(int where,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int wherePrepObject,int whereMovingRelativeTo,int spaceRelation,wchar_t *whereType,bool physicalRelation)
+bool cSource::srMoveObject(int where,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int wherePrepObject,int whereMovingRelativeTo,int hasSyntacticRelationGroup,wchar_t *whereType,bool physicalRelation)
 { LFS
 	wstring tmpstr;
 	for (int I=0; I<(signed)m[whereObject].objectMatches.size(); I++)
-		newSR(where,m[whereObject].objectMatches[I].object,whereControllingEntity,whereSubject,whereVerb,wherePrep,whereObject,wherePrepObject,whereMovingRelativeTo,spaceRelation,whereType,physicalRelation);
+		newSR(where,m[whereObject].objectMatches[I].object,whereControllingEntity,whereSubject,whereVerb,wherePrep,whereObject,wherePrepObject,whereMovingRelativeTo,hasSyntacticRelationGroup,whereType,physicalRelation);
 	if (m[whereObject].objectMatches.empty())
-		newSR(where,m[whereObject].getObject(),whereControllingEntity,whereSubject,whereVerb,wherePrep,whereObject,wherePrepObject,whereMovingRelativeTo,spaceRelation,whereType,physicalRelation);
+		newSR(where,m[whereObject].getObject(),whereControllingEntity,whereSubject,whereVerb,wherePrep,whereObject,wherePrepObject,whereMovingRelativeTo,hasSyntacticRelationGroup,whereType,physicalRelation);
 	return true;
 }
 
@@ -1353,10 +1355,10 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 			  m[afterVerb].word->first!=L"out" && (whereSubject<0 || !(m[whereSubject].objectRole&PRIMARY_SPEAKER_ROLE) || isSpecialVerb(whereVerb,false)))
 		{
 			// scan for a previous LOCATION associated with this subject
-			vector <cSpaceRelation>::iterator location = findSpaceRelation(where);
-			if (location==spaceRelations.end() && spaceRelations.size()>0 && spaceRelations[spaceRelations.size()-1].where<where)
-				location=spaceRelations.begin()+spaceRelations.size()-1;
-			if (location!=spaceRelations.end())
+			vector <cSyntacticRelationGroup>::iterator location = findSyntacticRelationGroup(where);
+			if (location==syntacticRelationGroups.end() && syntacticRelationGroups.size()>0 && syntacticRelationGroups[syntacticRelationGroups.size()-1].where<where)
+				location=syntacticRelationGroups.begin()+syntacticRelationGroups.size()-1;
+			if (location!=syntacticRelationGroups.end())
 			{
 				int backwardSearchLimit=0;
 				if (whereSubject>=0)
@@ -1373,9 +1375,9 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 					backwardSearchLimit=speakerGroups[speakerGroups.size()-1].sgBegin;
 				int associatedLocation=-1;
 				bool pe,pp=whereSubject>=0 && physicallyPresentPosition(whereSubject,pe) && pe;
-				for (vector <cSpaceRelation>::iterator li=location; li>spaceRelations.begin() && li->where>=backwardSearchLimit && associatedLocation==-1; li--)
+				for (vector <cSyntacticRelationGroup>::iterator li=location; li>syntacticRelationGroups.begin() && li->where>=backwardSearchLimit && associatedLocation==-1; li--)
 				{
-					// does the spaceRelation have a subType>=0 associated with it?
+					// does the hasSyntacticRelationGroup have a subType>=0 associated with it?
 					if (li->whereSubject>=0 && li->tft.presentHappening && (intersect(li->whereSubject,whereSubject) || 
 						  (physicallyPresentPosition(li->whereSubject,pe) && pp && !(m[li->whereSubject].objectRole&IN_EMBEDDED_STORY_OBJECT_ROLE))))
 					{
@@ -1771,7 +1773,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 				moveIdentifiedSubject(where,inPrimaryQuote,whereControllingEntity,whereSubject,whereVerb,wherePrep,-1,wherePrepObject,-1,stType,otTypeStr.c_str(),pr);
 			else 
 				newSR(where,(whereSubject>0) ? m[whereSubject].getObject() : -1,whereControllingEntity,whereSubject,whereVerb,wherePrep,-1,wherePrepObject,-1,stType,otTypeStr.c_str(),pr);
-			m[wherePrep].spaceRelation=true; // so that the prepositions bound to an object won't pick this one up.
+			m[wherePrep].hasSyntacticRelationGroup=true; // so that the prepositions bound to an object won't pick this one up.
 			return true;
 		}
 		if (whereObject==wherePrepObject) whereObject=-1;
@@ -1953,8 +1955,8 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 	//		if (((m[wherePrep].word->second.flags&cSourceWordInfo::prepMoveType) || m[wherePrep].word->first==L"for") && !rejectPrepPhrase(wherePrep))
 	//			lplog(LOG_WHERE,L"%06d:activity noun PLACE:verb %s %s object %s",where,m[whereVerb].word->first.c_str(),m[wherePrep].word->first.c_str(),whereString(m[wherePrep].relObject,tmpstr,false).c_str());
 	//}
-	vector <cSpaceRelation>::iterator sri=findSpaceRelation(where);
-	if (sri!=spaceRelations.end() && sri->where==where) 
+	vector <cSyntacticRelationGroup>::iterator sri=findSyntacticRelationGroup(where);
+	if (sri!=syntacticRelationGroups.end() && sri->where==where) 
 		return false;
 	
 	pr=contact;
@@ -2106,9 +2108,9 @@ void cSource::processEndOfSentence(int where,int &lastBeginS1, int &lastRelative
 		for (int J = uqPreviousToLastSentenceEnd; J < uqLastSentenceEnd; J++)
 		{
 			if (!(m[J].objectRole&(IN_PRIMARY_QUOTE_ROLE | IN_SECONDARY_QUOTE_ROLE)) || narrativeIsQuoted)
-				detectSpaceRelation(J, where, lastSubjects);
-			vector<cSpaceRelation>::iterator sr;
-			if (m[J].spaceRelation && (sr = findSpaceRelation(J)) != spaceRelations.end() && sr->where == J && sr->tft.timeTransition)
+				detectSyntacticRelationGroup(J, where, lastSubjects);
+			vector<cSyntacticRelationGroup>::iterator sr;
+			if (m[J].hasSyntacticRelationGroup && (sr = findSyntacticRelationGroup(J)) != syntacticRelationGroups.end() && sr->where == J && sr->tft.timeTransition)
 			{
 				int tmpKeepPPSpeakerWhere = getSpeakersToKeep(sr);
 				if (tmpKeepPPSpeakerWhere >= 0 && keepPPSpeakerWhere < 0)
@@ -2122,9 +2124,9 @@ void cSource::processEndOfSentence(int where,int &lastBeginS1, int &lastRelative
 				lplog(LOG_RESOLUTION, L"%06d:transition is vague - %d.", lastTransitionSR, keepPPSpeakerWhere);
 			else
 			{
-				vector<cSpaceRelation>::iterator sr = findSpaceRelation(lastTransitionSR);
+				vector<cSyntacticRelationGroup>::iterator sr = findSyntacticRelationGroup(lastTransitionSR);
 				//keepPPSpeakerWhere=getSpeakersToKeep(sr);
-				if (sr != spaceRelations.end())
+				if (sr != syntacticRelationGroups.end())
 					ageTransition(sr->where, true, transitionSinceEOS, sr->tft.duplicateTimeTransitionFromWhere, keepPPSpeakerWhere, lastSubjects, L"TSR 1");
 			}
 		}
@@ -2318,14 +2320,14 @@ void cSource::evaluateMetaWhereQuery(int where, bool inPrimaryQuote, int &curren
 	LFS
 	vector <cWordMatch>::iterator im=m.begin()+where;
 	// Tuppence expressed a preference for the latter[go down to the restaurant]
-	if (m[where].spaceRelation && !inPrimaryQuote && m[where].getRelVerb()>=0 && lastOpeningPrimaryQuote>=0 &&
+	if (m[where].hasSyntacticRelationGroup && !inPrimaryQuote && m[where].getRelVerb()>=0 && lastOpeningPrimaryQuote>=0 &&
 		  isVerbClass(m[where].getRelVerb(),L"reflexive_appearance") && isNounClass(where,L"liking"))
 	{
-		cSpaceRelation sr(where,-1,-1,currentMetaWhereQuery,m[lastOpeningPrimaryQuote].previousQuote,-1,-1,-1,-1,stMETAWQ,false,false,-1,-1,true);
-		vector <cSpaceRelation>::iterator location = lower_bound(spaceRelations.begin(), spaceRelations.end(), sr, comparesr);
+		cSyntacticRelationGroup sr(where,-1,-1,currentMetaWhereQuery,m[lastOpeningPrimaryQuote].previousQuote,-1,-1,-1,-1,stMETAWQ,false,false,-1,-1,true);
+		vector <cSyntacticRelationGroup>::iterator location = lower_bound(syntacticRelationGroups.begin(), syntacticRelationGroups.end(), sr, comparesr);
 		if (location->where==where && location->relationType!=stMETAWQ)
 		{
-			spaceRelations.insert(location,sr);
+			syntacticRelationGroups.insert(location,sr);
 			wstring sRole;
 			if (debugTrace.traceSpeakerResolution)
 				lplog(LOG_RESOLUTION,L"%06d:PLACE meta query found at %06d (%s)",where,currentMetaWhereQuery,m[where].roleString(sRole).c_str());
@@ -2346,24 +2348,24 @@ void cSource::evaluateMetaWhereQuery(int where, bool inPrimaryQuote, int &curren
 				bool rtSet=false;
 				cTimeInfo timeInfo,rt;
 				int maxLen=-1;
-				vector <cSpaceRelation>::iterator location = findSpaceRelation(where);
-				if (location!=spaceRelations.end() && location!=spaceRelations.begin() && location->where>where)
+				vector <cSyntacticRelationGroup>::iterator location = findSyntacticRelationGroup(where);
+				if (location!=syntacticRelationGroups.end() && location!=syntacticRelationGroups.begin() && location->where>where)
 					location--;
 				if (!(m[where].flags&cWordMatch::flagAlreadyTimeAnalyzed) && evaluateTimePattern(where,maxLen,timeInfo,rt,rtSet))
 				{
-					cSpaceRelation sr(where,-1,-1,-1,-1,-1,-1,-1,-1,stABSTIME,false,false,-1,-1,true);
+					cSyntacticRelationGroup sr(where,-1,-1,-1,-1,-1,-1,-1,-1,stABSTIME,false,false,-1,-1,true);
 					rt.tWhere=timeInfo.tWhere=timeInfo.timeRTAnchor=rt.timeRTAnchor=where;
 					sr.timeInfo.push_back(timeInfo);
 					if (rtSet)
 						sr.timeInfo.push_back(rt);
 					markTime(where,where,maxLen);
-					location = lower_bound(spaceRelations.begin(), spaceRelations.end(), sr, comparesr);
-					spaceRelations.insert(location,sr);
+					location = lower_bound(syntacticRelationGroups.begin(), syntacticRelationGroups.end(), sr, comparesr);
+					syntacticRelationGroups.insert(location,sr);
 					if (debugTrace.traceSpeakerResolution)
 					lplog(LOG_RESOLUTION,L"%06d:TIME meta query answer found [direct time expression]@%d.",where,currentMetaWhereQuery);
 				}
 				//  2. sr with associated time expression
-				else if (location!=spaceRelations.end() && location->timeInfo.size()>0 && 
+				else if (location!=syntacticRelationGroups.end() && location->timeInfo.size()>0 && 
 					 ((location->where==where || (location->whereSubject>=0 && m[location->whereSubject].beginObjectPosition==where)) ||
 					  location->timeInfo[0].tWhere==where))
 				{
@@ -2388,14 +2390,14 @@ void cSource::evaluateMetaWhereQuery(int where, bool inPrimaryQuote, int &curren
 			__int64 or=m[where].objectRole;
 			if (((o>=0 && objects[o].isPossibleSubType(false) && !(or&(OBJECT_ROLE|SUBJECT_ROLE))) &&
 					 (!(or&PREP_OBJECT_ROLE) || (or&MOVEMENT_PREP_OBJECT_ROLE))) ||
-					(spaceRelations.size() && spaceRelations[spaceRelations.size()-1].where==where) ||
-					(spaceRelations.size() && spaceRelations[spaceRelations.size()-1].whereSubject==where))
+					(syntacticRelationGroups.size() && syntacticRelationGroups[syntacticRelationGroups.size()-1].where==where) ||
+					(syntacticRelationGroups.size() && syntacticRelationGroups[syntacticRelationGroups.size()-1].whereSubject==where))
 			{
-				cSpaceRelation sr(where,-1,-1,currentMetaWhereQuery,m[lastOpeningPrimaryQuote].previousQuote,-1,-1,-1,-1,stMETAWQ,false,false,-1,-1,true);
-				vector <cSpaceRelation>::iterator location = lower_bound(spaceRelations.begin(), spaceRelations.end(), sr, comparesr);
+				cSyntacticRelationGroup sr(where,-1,-1,currentMetaWhereQuery,m[lastOpeningPrimaryQuote].previousQuote,-1,-1,-1,-1,stMETAWQ,false,false,-1,-1,true);
+				vector <cSyntacticRelationGroup>::iterator location = lower_bound(syntacticRelationGroups.begin(), syntacticRelationGroups.end(), sr, comparesr);
 				if (location->where!=where || location->relationType!=stMETAWQ)
 				{
-					spaceRelations.insert(location,sr);
+					syntacticRelationGroups.insert(location,sr);
 					wstring sRole;
 					if (debugTrace.traceSpeakerResolution)
 						lplog(LOG_RESOLUTION,L"%06d:PLACE meta query found at %06d (%s)",where,currentMetaWhereQuery,m[where].roleString(sRole).c_str());
@@ -2475,17 +2477,17 @@ void cSource::srd(int where,wstring spd,wstring &description)
 
 wstring cSource::wsrToText(int where,wstring &description)
 { LFS
-	cSpaceRelation sr(where,-1,-1,-1,-1,-1,-1,-1,-1,stEXIT,false,false,-1,-1,false);
-	vector <cSpaceRelation>::iterator location = lower_bound(spaceRelations.begin(), spaceRelations.end(), sr, comparesr);
-	if (location==spaceRelations.end()) return L"";
-	int spr=(int) (location-spaceRelations.begin());
+	cSyntacticRelationGroup sr(where,-1,-1,-1,-1,-1,-1,-1,-1,stEXIT,false,false,-1,-1,false);
+	vector <cSyntacticRelationGroup>::iterator location = lower_bound(syntacticRelationGroups.begin(), syntacticRelationGroups.end(), sr, comparesr);
+	if (location==syntacticRelationGroups.end()) return L"";
+	int spr=(int) (location-syntacticRelationGroups.begin());
 	return srToText(spr,description);
 }
 
 wstring cSource::srToText(int &spr,wstring &description)
 { LFS
 	wstring names,tmpstr;
-	vector <cSpaceRelation>::iterator spri=spaceRelations.begin()+spr,keep=spri;
+	vector <cSyntacticRelationGroup>::iterator spri=syntacticRelationGroups.begin()+spr,keep=spri;
 	description=relationString(spri->relationType)+L":";
 	if (!spri->physicalRelation)
 		description+=L"npr:";
@@ -2545,11 +2547,11 @@ wstring cSource::srToText(int &spr,wstring &description)
 	srd(spri->whereMovingRelativeTo,L"M[",description);
 	for (int ti=0; ti<(signed)spri->timeInfo.size(); ti++)
 		description+=L" "+spri->timeInfo[ti].toString(m,tmpstr);
-	for (; spr<(signed)spaceRelations.size() && spri->where==keep->where; spr++,spri++);
+	for (; spr<(signed)syntacticRelationGroups.size() && spri->where==keep->where; spr++,spri++);
 	/*
 	wstring tmpstr2;
 	bool allShare
-	for (; spr<spaceRelations.size() && spri->where==keep->where; spr++,spri++)
+	for (; spr<syntacticRelationGroups.size() && spri->where==keep->where; spr++,spri++)
 		names+=whereString(objects[spri->o].originalLocation,tmpstr,true)+L" ";
 	if (names.length()) names.erase(names.begin()+names.length()-1);
 	whereString(spri->whereSubject,tmpstr,true);
@@ -2756,7 +2758,7 @@ bool cSource::locationMatched(int where)
 	return false;
 }
 
-// corral prepositional references to objects that wouldn't already be picked up by detectSpaceRelation (which keys off of verbs)
+// corral prepositional references to objects that wouldn't already be picked up by detectSyntacticRelationGroup (which keys off of verbs)
 // will change source.m (invalidate all iterators through the use of newSR)
 void cSource::detectSpaceLocation(int where,int lastBeginS1)
 { LFS
@@ -2764,7 +2766,7 @@ void cSource::detectSpaceLocation(int where,int lastBeginS1)
 	if (m[where].getObject()>=0 && m[wp=m[where].endObjectPosition].queryWinnerForm(prepositionForm)>=0 && (wpo=m[wp].getRelObject())>=0 &&
 		 ((m[where].word->second.flags&cSourceWordInfo::physicalObjectByWN) || objects[m[where].getObject()].getSubType()>=0 || objects[m[where].getObject()].isAgent(false)))
 	{
-		//bool setPhysicalRelation=((whereVerb>=0 && m[whereVerb].spaceRelation) || m[wp].spaceRelation);
+		//bool setPhysicalRelation=((whereVerb>=0 && m[whereVerb].hasSyntacticRelationGroup) || m[wp].hasSyntacticRelationGroup);
 		// moment is also a 'force', which is considered a physical object.  But overrule it by including the T_UNIT restriction.
 		if ((m[wp].word->second.flags&cSourceWordInfo::prepMoveType) && (prepType=prepTypesMap[m[wp].word->first])!= tprTO && prepType!=tprFROM && !(m[wpo].word->second.timeFlags&T_UNIT))
 		{
@@ -2784,7 +2786,7 @@ void cSource::detectSpaceLocation(int where,int lastBeginS1)
 		  !(m[where].flags&cWordMatch::flagAdjectivalObject) && m[m[where].beginObjectPosition].pma.queryPattern(L"__INTRO_S1")==-1 &&
 			// if in prepositional phrase, must be a preposition of movement
 			(!(m[where].objectRole&PREP_OBJECT_ROLE) || (m[where].objectRole&MOVEMENT_PREP_OBJECT_ROLE) || objects[m[where].getObject()].getSubType()!=UNKNOWN_PLACE_SUBTYPE) &&
-			!m[where].spaceRelation)
+			!m[where].hasSyntacticRelationGroup)
 	{
 		// if in lastBeginS1 or lastQ2 then cancel too
 		if (lastBeginS1<0 || lastBeginS1+m[lastBeginS1].maxMatch<where)
@@ -2840,12 +2842,12 @@ bool cSource::isSpatialSeparation(int whereVerb)
 }
 
 // will change source.m (invalidate all iterators through the use of newSR)
-void cSource::detectSpaceRelation(int where,int backInitialPosition,vector <int> &lastSubjects)
+void cSource::detectSyntacticRelationGroup(int where,int backInitialPosition,vector <int> &lastSubjects)
 { LFS
 	wstring tmpstr,tmpstr2,tmpstr3,tmpstr4;
-	bool spaceRelationDetected=false;
+	bool syntacticRelationGroupDetected=false;
 	bool inPrimaryQuote=(m[where].objectRole&IN_PRIMARY_QUOTE_ROLE)!=0;
-	int whereSubject=-1,whereVerb=-1,spaceRelationsOriginalSize=spaceRelations.size();
+	int whereSubject=-1,whereVerb=-1,syntacticRelationGroupsOriginalSize=syntacticRelationGroups.size();
 	if (m[where].objectRole&SUBJECT_ROLE)
 	{
 		whereSubject=where;
@@ -2950,7 +2952,7 @@ void cSource::detectSpaceRelation(int where,int backInitialPosition,vector <int>
 		// right now limit it to only things that move
 		bool continuesMoving=(primaryLocationLastMovingPosition>=0 && m[primaryLocationLastMovingPosition].word==m[where].word),cancel=false;
 		bool lastWherePP=false,sgOccurredAfter=false,audienceOccurredAfter=false,speakerOccurredAfter=false,noMove=false,speakerContinuation=false;
-		spaceRelationDetected=!continuesMoving && st==MOVING;
+		syntacticRelationGroupDetected=!continuesMoving && st==MOVING;
 		// the hostel was put in Bagravia - allow passives
 		noMove=st!=MOVING && whereVerb>=0 && isSpecialVerb(whereVerb,true) && !(m[whereVerb].verbSense&VT_PASSIVE);
 		cancel=noMove;
@@ -2982,15 +2984,15 @@ void cSource::detectSpaceRelation(int where,int backInitialPosition,vector <int>
 			if (!location || timeUnit)
 				wherePrepObject=-1;
 		}
-		int originalSize=spaceRelations.size();
+		int originalSize=syntacticRelationGroups.size();
 		for (set<int>::iterator pvi=speakers.begin(),pviEnd=speakers.end(); pvi!=pviEnd; pvi++)
 			newSR(where,*pvi,-1,whereSubject,whereVerb,wherePrep,m[where].getRelObject(),wherePrepObject,-1,stLOCATION,L"location move",true);
 		if (speakers.empty())
 			newSR(where, cObject::eOBJECTS::OBJECT_UNKNOWN_ALL,-1,whereSubject,whereVerb,wherePrep,m[where].getRelObject(),wherePrepObject,-1,stLOCATION,L"location move",true);
-		for (; originalSize<(signed)spaceRelations.size(); originalSize++)
+		for (; originalSize<(signed)syntacticRelationGroups.size(); originalSize++)
 		{
-			spaceRelations[originalSize].establishingLocation=!cancel;
-			spaceRelations[originalSize].speakerContinuation=speakerContinuation;
+			syntacticRelationGroups[originalSize].establishingLocation=!cancel;
+			syntacticRelationGroups[originalSize].speakerContinuation=speakerContinuation;
 		}
 	}
 	bool acceptableSubject=whereSubject>=0 && (m[whereSubject].objectRole&SUBJECT_ROLE) && ((m[whereSubject].getObject())>=0 || m[whereSubject].word->first==L"who");
@@ -3130,16 +3132,16 @@ void cSource::detectSpaceRelation(int where,int backInitialPosition,vector <int>
 		}
 	}
 	bool transitionSinceEOS=false;
-	if (spaceRelationDetected && ageTransition(whereSubject,false,transitionSinceEOS,-1,-1,lastSubjects,L"DSR"))
+	if (syntacticRelationGroupDetected && ageTransition(whereSubject,false,transitionSinceEOS,-1,-1,lastSubjects,L"DSR"))
 		primaryLocationLastMovingPosition=where;
-	else if (spaceRelationsOriginalSize!=spaceRelations.size() || (speakerGroupsEstablished && m[where].spaceRelation))
+	else if (syntacticRelationGroupsOriginalSize !=syntacticRelationGroups.size() || (speakerGroupsEstablished && m[where].hasSyntacticRelationGroup))
 	{
-		vector <cSpaceRelation>::iterator sri=spaceRelations.end();
-		if (spaceRelationsOriginalSize==spaceRelations.size() || (sri=spaceRelations.begin()+(spaceRelations.size()-1))->where!=where)
-			sri=findSpaceRelation(where);
-		if (sri==spaceRelations.end() || sri->where!=where) return;
+		vector <cSyntacticRelationGroup>::iterator sri=syntacticRelationGroups.end();
+		if (syntacticRelationGroupsOriginalSize==syntacticRelationGroups.size() || (sri=syntacticRelationGroups.begin()+(syntacticRelationGroups.size()-1))->where!=where)
+			sri=findSyntacticRelationGroup(where);
+		if (sri==syntacticRelationGroups.end() || sri->where!=where) return;
 		if (!sri->agentLocationRelationSet && speakerGroupsEstablished)
-			srSetTimeFlowTense((int) (sri-spaceRelations.begin()));
+			srSetTimeFlowTense((int) (sri-syntacticRelationGroups.begin()));
 		processExit(where,sri,backInitialPosition,lastSubjects);
 	}
 }
@@ -3343,7 +3345,7 @@ void cSource::printVerbFrequency()
 	}
 }
 
-void cSource::processExit(int where,vector <cSpaceRelation>::iterator sri,int backInitialPosition,vector <int> &lastSubjects)
+void cSource::processExit(int where,vector <cSyntacticRelationGroup>::iterator sri,int backInitialPosition,vector <int> &lastSubjects)
 { LFS
 	bool inPrimaryQuote=(m[where].objectRole&IN_PRIMARY_QUOTE_ROLE)!=0;
 	bool inSecondaryQuote=(m[where].objectRole&IN_SECONDARY_QUOTE_ROLE)!=0;
@@ -3573,7 +3575,7 @@ void cSource::processExit(int where,vector <cSpaceRelation>::iterator sri,int ba
 					// does the subject exit and then come back, or continue the action?
 					// There EXITthey[whittington,boris,chance] went up to the first floor , and CONTACTsat at a small LOCATIONtable in the window .
 					// The EXITbutler[butler] retired , ENTERreturning a moment or two later. 
-					if (sri+1<spaceRelations.end() && (sri+1)->whereSubject==sri->whereSubject && (sri+1)->relationType!=stEXIT)
+					if (sri+1<syntacticRelationGroups.end() && (sri+1)->whereSubject==sri->whereSubject && (sri+1)->relationType!=stEXIT)
 					{
 						lplog(LOG_RESOLUTION,L"%06d:EXIT cancelled (nonPOV comes back)!",sri->where);
 						return;
@@ -3666,20 +3668,20 @@ void cSource::logSpaceCheck(void)
 { LFS
 	wstring tmpstr,tmpstr2;
 	int lastSPTAnchor=-1;
-	for (int I=0; I<(signed)spaceRelations.size(); I++)
+	for (int I=0; I<(signed)syntacticRelationGroups.size(); I++)
 	{
 		if (debugTrace.traceWhere)
-		lplog(LOG_WCHECK,L"%06d:%s",spaceRelations[I].where,spaceRelations[I].description.c_str());
-		for (int J=0; J<(signed)spaceRelations[I].timeInfo.size(); J++)
+		lplog(LOG_WCHECK,L"%06d:%s",syntacticRelationGroups[I].where,syntacticRelationGroups[I].description.c_str());
+		for (int J=0; J<(signed)syntacticRelationGroups[I].timeInfo.size(); J++)
 		{
-			//if (spaceRelations[I].tft.presentHappening)
-			spaceRelations[I].timeInfo[J].timeSPTAnchor=lastSPTAnchor;
-			//if (!spaceRelations[I].tft.presentHappening && spaceRelations[I].timeInfo[J].timeRTAnchor<0)
-			//	spaceRelations[I].timeInfo[J].timeRTAnchor=lastSPTAnchor;
+			//if (syntacticRelationGroups[I].tft.presentHappening)
+			syntacticRelationGroups[I].timeInfo[J].timeSPTAnchor=lastSPTAnchor;
+			//if (!syntacticRelationGroups[I].tft.presentHappening && syntacticRelationGroups[I].timeInfo[J].timeRTAnchor<0)
+			//	syntacticRelationGroups[I].timeInfo[J].timeRTAnchor=lastSPTAnchor;
 			if (debugTrace.traceTime)
-			lplog(LOG_TIME,L"%06d:%s %s",spaceRelations[I].where,(lastSPTAnchor>=0) ? itos(lastSPTAnchor,tmpstr2).c_str():L"",spaceRelations[I].timeInfo[J].toString(m,tmpstr).c_str());
+			lplog(LOG_TIME,L"%06d:%s %s",syntacticRelationGroups[I].where,(lastSPTAnchor>=0) ? itos(lastSPTAnchor,tmpstr2).c_str():L"",syntacticRelationGroups[I].timeInfo[J].toString(m,tmpstr).c_str());
 		}
-		if (spaceRelations[I].timeProgression>0 || spaceRelations[I].relationType==stABSTIME)
-			lastSPTAnchor=spaceRelations[I].where;
+		if (syntacticRelationGroups[I].timeProgression>0 || syntacticRelationGroups[I].relationType==stABSTIME)
+			lastSPTAnchor=syntacticRelationGroups[I].where;
 	}
 }

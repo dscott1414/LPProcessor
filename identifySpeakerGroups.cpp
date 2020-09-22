@@ -885,14 +885,14 @@ bool cSource::createSpeakerGroup(int begin,int end,bool endOfSection,int &lastSp
 				for (vector <cObject::cLocation>::iterator loc=objects[object].locations.begin(),locEnd=objects[object].locations.end(); loc!=locEnd; loc++)
 					if (loc->at>=begin && loc->at<end && m[loc->at].getRelVerb()>=0 && isSelfMoveVerb(m[loc->at].getRelVerb(),exitOnly) && m[loc->at].getObject()>=0 && objects[m[loc->at].getObject()].objectClass!=BODY_OBJECT_CLASS) 
 					{
-						vector <cSpaceRelation>::iterator sr=findSpaceRelation(loc->at);
+						vector <cSyntacticRelationGroup>::iterator sr=findSyntacticRelationGroup(loc->at);
 						vector <int> lastSubjects;
-						if (sr==spaceRelations.end())
+						if (sr==syntacticRelationGroups.end())
 						{
-							detectSpaceRelation(loc->at,-1,lastSubjects);
-							sr=findSpaceRelation(loc->at);
+							detectSyntacticRelationGroup(loc->at,-1,lastSubjects);
+							sr=findSyntacticRelationGroup(loc->at);
 						}
-						if (sr!=spaceRelations.end() && (sr->relationType==stMOVE || sr->relationType==stEXIT || sr->relationType==stENTER))
+						if (sr!=syntacticRelationGroups.end() && (sr->relationType==stMOVE || sr->relationType==stEXIT || sr->relationType==stENTER))
 						{
 							whereSubjectMove=loc->at;
 							if (debugTrace.traceSpeakerResolution)
@@ -1304,10 +1304,10 @@ bool cSource::isFocus(int where,bool inPrimaryQuote,bool inSecondaryQuote,int o,
 	int beginObjectPosition=(o==m[where].getObject() && objects[o].begin>=m[where].beginObjectPosition) ? m[where].beginObjectPosition : objects[o].begin;
 	vector <cLocalFocus>::iterator lsi;
 	bool isExit=false;
-	if (m[where].spaceRelation) 
+	if (m[where].hasSyntacticRelationGroup) 
 	{
-		vector <cSpaceRelation>::iterator location = findSpaceRelation(where);
-		if (location!=spaceRelations.end() && location->where==where && (isExit=location->relationType==stEXIT) && location->genderedLocationRelation && (location+1)->whereSubject==location->whereSubject)
+		vector <cSyntacticRelationGroup>::iterator location = findSyntacticRelationGroup(where);
+		if (location!=syntacticRelationGroups.end() && location->where==where && (isExit=location->relationType==stEXIT) && location->genderedLocationRelation && (location+1)->whereSubject==location->whereSubject)
 			isExit=false;
 	}
 	if (((inPrimaryQuote && (objectRole&IN_EMBEDDED_STORY_OBJECT_ROLE)) || (!inPrimaryQuote && !inSecondaryQuote)) && 
@@ -2124,7 +2124,7 @@ void cSource::distributePOV(void)
 		// speakerGroup and the previous speakerGroup had conversational quotes, then this is not an observer
 		bool conversationRestricted=(speakerGroups[sgi].speakers.size()==2 && speakerGroups[sgi].conversationalQuotes),isAnyNonObserverSpeakerNew=false,isAnyObserverSpeakerNew=false;
 		int nonObserver=-1;
-		vector <cSpaceRelation>::iterator location = findSpaceRelation((sgi>0) ? speakerGroups[sgi-1].sgBegin : speakerGroups[sgi].sgBegin);
+		vector <cSyntacticRelationGroup>::iterator location = findSyntacticRelationGroup((sgi>0) ? speakerGroups[sgi-1].sgBegin : speakerGroups[sgi].sgBegin);
 		for (set <int>::iterator mo=speakerGroups[sgi].speakers.begin(),moEnd=speakerGroups[sgi].speakers.end(); mo!=moEnd; mo++)
 		{
 			bool isPOV=speakerGroups[sgi].povSpeakers.find(*mo)!=speakerGroups[sgi].povSpeakers.end();
@@ -2133,9 +2133,9 @@ void cSource::distributePOV(void)
 			// speaker part of previous speakerGroup and conversationalQuotes
 			bool isPreviousSpeaker=sgi && speakerGroups[sgi-1].speakers.find(*mo)!=speakerGroups[sgi-1].speakers.end() && speakerGroups[sgi-1].conversationalQuotes && !isPreviousObserver;
 			bool allIn,oneIn,currentSpeakerGroupSuperGroupToPrevious=sgi && intersect(speakerGroups[sgi-1].speakers,speakerGroups[sgi].speakers,allIn,oneIn) && allIn;
-			// follower? - search for spaceRelation 'follow'
+			// follower? - search for hasSyntacticRelationGroup 'follow'
 			bool follower=false;
-			for (vector <cSpaceRelation>::iterator li=location; li!=spaceRelations.end() && li->where<speakerGroups[sgi].sgEnd && !follower; li++)
+			for (vector <cSyntacticRelationGroup>::iterator li=location; li!=syntacticRelationGroups.end() && li->where<speakerGroups[sgi].sgEnd && !follower; li++)
 			  follower=(in(*mo,li->whereSubject) && li->whereVerb>=0 && isVerbClass(li->whereVerb,L"chase"));
 			// if there is more than one conversational quote, and there is only one definitively named speaker, and there are more than two speakers, and
 			//   the speaker was not an observer in a pervious group, then speaker is not an observer (because we don't know whether the other speaker is actually an observer)
@@ -2702,7 +2702,7 @@ bool cSource::blockSpeakerGroupCreation(int endSection,bool quotesSeenSinceLastS
 	return block|(endSection && m[endSection-1].word->first==L":");
 }
 
-int cSource::getSpeakersToKeep(vector<cSpaceRelation>::iterator sr)
+int cSource::getSpeakersToKeep(vector<cSyntacticRelationGroup>::iterator sr)
 { LFS
 	vector <cLocalFocus>::iterator llsi;
 	int numPPSpeakers=0,keepPPSpeakerWhere=sr->whereSubject; // lastPPSpeaker=-1,
@@ -2711,7 +2711,7 @@ int cSource::getSpeakersToKeep(vector<cSpaceRelation>::iterator sr)
 		keepPPSpeakerWhere=-1;
 	if (keepPPSpeakerWhere<0)
 	{
-		// if there is only one PP speaker, and whereSubject is not a speaker, and spaceRelation is not a TIME type, then set where to the PP speaker.
+		// if there is only one PP speaker, and whereSubject is not a speaker, and hasSyntacticRelationGroup is not a TIME type, then set where to the PP speaker.
 		for (vector <cLocalFocus>::iterator lsi=localObjects.begin(),lsiEnd=localObjects.end(); lsi!=lsiEnd; lsi++)
 			if (lsi->physicallyPresent && lsi->numIdentifiedAsSpeaker>0)
 			{

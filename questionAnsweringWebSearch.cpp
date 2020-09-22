@@ -194,7 +194,7 @@ int getGoogleSearchJSON(int where,wstring object,wstring &buffer,wstring &filePa
 
 bool cSource::inObject(int where,int whereQuestionType)
 { LFS
-	if (where==whereQuestionType)
+	if (whereQuestionType>=0 && where==whereQuestionType)
 		return true;
 	return (where>=0 && whereQuestionType>=0 && m[where].beginObjectPosition>=0 && m[where].endObjectPosition>=0 && 
 		  whereQuestionType>=m[where].beginObjectPosition-1 && whereQuestionType<m[where].endObjectPosition);
@@ -926,17 +926,17 @@ void cQuestionAnswering::enhanceWebSearchQueries(vector <wstring> &webSearchQuer
 	}
 }
 
-void cQuestionAnswering::getWebSearchQueries(cSource *questionSource,cSpaceRelation* parentSRI,vector <wstring> &webSearchQueryStrings)
+void cQuestionAnswering::getWebSearchQueries(cSource *questionSource,cSyntacticRelationGroup* parentSRG,vector <wstring> &webSearchQueryStrings)
 { LFS
 	webSearchQueryStrings.push_back(L"");
-	questionSource->appendObject(parentSRI->questionType,parentSRI->whereQuestionType, webSearchQueryStrings, parentSRI->whereSubject);
-	if (parentSRI->whereVerb>=0)
-		questionSource->appendVerb(webSearchQueryStrings,parentSRI->whereVerb);
-	bool noQuotes = (questionSource->appendObject(parentSRI->questionType, parentSRI->whereQuestionType, webSearchQueryStrings, parentSRI->whereObject)<0);
-	if (parentSRI->wherePrep>=0 && !parentSRI->prepositionUncertain && (parentSRI->whereObject<0 || questionSource->m[parentSRI->whereObject].relPrep<0 || questionSource->m[questionSource->m[parentSRI->whereObject].relPrep].nextQuote!=parentSRI->whereObject))
+	questionSource->appendObject(parentSRG->questionType,parentSRG->whereQuestionType, webSearchQueryStrings, parentSRG->whereSubject);
+	if (parentSRG->whereVerb>=0)
+		questionSource->appendVerb(webSearchQueryStrings,parentSRG->whereVerb);
+	bool noQuotes = (questionSource->appendObject(parentSRG->questionType, parentSRG->whereQuestionType, webSearchQueryStrings, parentSRG->whereObject)<0);
+	if (parentSRG->wherePrep>=0 && !parentSRG->prepositionUncertain && (parentSRG->whereObject<0 || questionSource->m[parentSRG->whereObject].relPrep<0 || questionSource->m[questionSource->m[parentSRG->whereObject].relPrep].nextQuote!=parentSRG->whereObject))
 	{
-		questionSource->appendWord(webSearchQueryStrings,parentSRI->wherePrep);
-		questionSource->appendObject(parentSRI->questionType, parentSRI->whereQuestionType, webSearchQueryStrings, parentSRI->wherePrepObject);
+		questionSource->appendWord(webSearchQueryStrings,parentSRG->wherePrep);
+		questionSource->appendObject(parentSRG->questionType, parentSRG->whereQuestionType, webSearchQueryStrings, parentSRG->wherePrepObject);
 	}
 	else
 		noQuotes=false;
@@ -1010,7 +1010,7 @@ int cQuestionAnswering::spinParses(MYSQL &mysql,vector <cSearchSource> &accumula
 }
 
 extern int limitProcessingForProfiling;
-int cQuestionAnswering::accumulateParseRequests(cSpaceRelation* parentSRI, int webSitesAskedFor, int index, bool googleSearch, vector <wstring> &webSearchQueryStrings, int &webSearchQueryStringOffset, vector <cSearchSource> &accumulatedParseRequests)
+int cQuestionAnswering::accumulateParseRequests(cSyntacticRelationGroup* parentSRG, int webSitesAskedFor, int index, bool googleSearch, vector <wstring> &webSearchQueryStrings, int &webSearchQueryStringOffset, vector <cSearchSource> &accumulatedParseRequests)
 {
 	LFS
 	int maxWebSitesFound = -1;
@@ -1021,12 +1021,12 @@ int cQuestionAnswering::accumulateParseRequests(cSpaceRelation* parentSRI, int w
 		vector <wstring> webSites, snippets;
 		if (googleSearch)
 		{
-			getGoogleSearchJSON(parentSRI->where, object, jsonBuffer, filePathOut, webSitesAskedFor, index);
+			getGoogleSearchJSON(parentSRG->where, object, jsonBuffer, filePathOut, webSitesAskedFor, index);
 			extractGoogleWebSites(jsonBuffer, webSites, snippets);
 		}
 		else
 		{
-			if (!getBINGSearchJSON(parentSRI->where, object, jsonBuffer, filePathOut, webSitesAskedFor, index))
+			if (!getBINGSearchJSON(parentSRG->where, object, jsonBuffer, filePathOut, webSitesAskedFor, index))
 				extractBINGWebSites(jsonBuffer, webSites, snippets);
 		}
 		maxWebSitesFound = max(maxWebSitesFound, (signed)webSites.size());
@@ -1064,7 +1064,7 @@ int cQuestionAnswering::accumulateParseRequests(cSpaceRelation* parentSRI, int w
 					pathsAccumulated.insert(path);
 				}
 			}
-			if (cInternet::getWebPath(parentSRI->where, *wsi, webSiteBuffer, epath, L"webSearchCache", filePathOut, headers, index, true, false) == 0 && pathsAccumulated.find(filePathOut) == pathsAccumulated.end())
+			if (cInternet::getWebPath(parentSRG->where, *wsi, webSiteBuffer, epath, L"webSearchCache", filePathOut, headers, index, true, false) == 0 && pathsAccumulated.find(filePathOut) == pathsAccumulated.end())
 			{
 				pr.isSnippet = false;
 				pr.pathInCache = filePathOut;
@@ -1087,8 +1087,7 @@ int cQuestionAnswering::accumulateParseRequests(cSpaceRelation* parentSRI, int w
 	return maxWebSitesFound;
 }
 
-int cQuestionAnswering::analyzeAccumulatedRequests(cSource *questionSource,wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, vector <cSearchSource> &accumulatedParseRequests,
- cPattern *&mapPatternAnswer,	cPattern *&mapPatternQuestion)
+int cQuestionAnswering::analyzeAccumulatedRequests(cSource *questionSource,wchar_t *derivation, cSyntacticRelationGroup* parentSRG, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, vector <cSearchSource> &accumulatedParseRequests)
 {
 	LFS
 	int check = answerSRIs.size();
@@ -1101,7 +1100,7 @@ int cQuestionAnswering::analyzeAccumulatedRequests(cSource *questionSource,wchar
 		if (oi->isSnippet || !oi->hasCorrespondingSnippet)
 			check = answerSRIs.size();
 		if (processPath(questionSource,oi->pathInCache.c_str(), source, cSource::WEB_SEARCH_SOURCE_TYPE, (oi->isSnippet) ? 50 : 100, parseOnly) >= 0)
-			analyzeQuestionFromSource(questionSource,derivation, oi->fullWebPath, source, parentSRI, answerSRIs, sMaxAnswer, true, mapPatternAnswer, mapPatternQuestion);
+			analyzeQuestionFromSource(questionSource,derivation, oi->fullWebPath, source, parentSRG, answerSRIs, sMaxAnswer, true);
 		maxAnswer = max(maxAnswer, sMaxAnswer);
 		if (sMaxAnswer >= 24 && oi->isSnippet && oi->fullPathIndex >= 0)
 			accumulatedParseRequests[oi->fullPathIndex].skipFullPath = true;
@@ -1109,19 +1108,18 @@ int cQuestionAnswering::analyzeAccumulatedRequests(cSource *questionSource,wchar
 	return 0;
 }
 
-int cQuestionAnswering::webSearchForQueryParallel(cSource *questionSource,wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
- vector <wstring> &webSearchQueryStrings,int &webSearchQueryStringOffset, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion)
+int cQuestionAnswering::webSearchForQueryParallel(cSource *questionSource,wchar_t *derivation, cSyntacticRelationGroup* parentSRG, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
+ vector <wstring> &webSearchQueryStrings,int &webSearchQueryStringOffset)
 {
 	vector <cSearchSource> accumulatedParseRequests;
-	int maxWebSitesFound = accumulateParseRequests(parentSRI, webSitesAskedFor, index, googleSearch, webSearchQueryStrings, webSearchQueryStringOffset, accumulatedParseRequests);
+	int maxWebSitesFound = accumulateParseRequests(parentSRG, webSitesAskedFor, index, googleSearch, webSearchQueryStrings, webSearchQueryStringOffset, accumulatedParseRequests);
 	spinParses(questionSource->mysql,accumulatedParseRequests);
-	analyzeAccumulatedRequests(questionSource,derivation, parentSRI, parseOnly, answerSRIs, maxAnswer, accumulatedParseRequests, mapPatternAnswer, mapPatternQuestion);
+	analyzeAccumulatedRequests(questionSource,derivation, parentSRG, parseOnly, answerSRIs, maxAnswer, accumulatedParseRequests);
 	return maxWebSitesFound;
 }
 
-int cQuestionAnswering::webSearchForQuerySerial(cSource *questionSource, wchar_t *derivation, cSpaceRelation* parentSRI, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
- vector <wstring> &webSearchQueryStrings,
-	int &webSearchQueryStringOffset, cPattern *&mapPatternAnswer, cPattern *&mapPatternQuestion)
+int cQuestionAnswering::webSearchForQuerySerial(cSource *questionSource, wchar_t *derivation, cSyntacticRelationGroup* parentSRG, bool parseOnly, vector < cAS > &answerSRIs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
+ vector <wstring> &webSearchQueryStrings,int &webSearchQueryStringOffset)
 {
 	LFS
 	int maxWebSitesFound = -1;
@@ -1131,12 +1129,12 @@ int cQuestionAnswering::webSearchForQuerySerial(cSource *questionSource, wchar_t
 		vector <wstring> webSites, snippets;
 		if (googleSearch)
 		{
-			getGoogleSearchJSON(parentSRI->where, object, jsonBuffer, filePathOut, webSitesAskedFor, index);
+			getGoogleSearchJSON(parentSRG->where, object, jsonBuffer, filePathOut, webSitesAskedFor, index);
 			extractGoogleWebSites(jsonBuffer, webSites, snippets);
 		}
 		else
 		{
-			getBINGSearchJSON(parentSRI->where, object, jsonBuffer, filePathOut, webSitesAskedFor, index);
+			getBINGSearchJSON(parentSRG->where, object, jsonBuffer, filePathOut, webSitesAskedFor, index);
 			extractBINGWebSites(jsonBuffer, webSites, snippets);
 		}
 		maxWebSitesFound = max(maxWebSitesFound, (signed)webSites.size());
@@ -1152,16 +1150,16 @@ int cQuestionAnswering::webSearchForQuerySerial(cSource *questionSource, wchar_t
 				cSource *source = NULL;
 				if (processSnippet(questionSource,*ssi, epath, source, parseOnly) >= 0)
 				{
-					analyzeQuestionFromSource(questionSource,derivation, *wsi + L" abstract", source, parentSRI, answerSRIs, sMaxAnswer, true, mapPatternAnswer, mapPatternQuestion);
+					analyzeQuestionFromSource(questionSource,derivation, *wsi + L" abstract", source, parentSRG, answerSRIs, sMaxAnswer, true);
 				}
 			}
 			maxAnswer = max(maxAnswer, sMaxAnswer);
-			if (sMaxAnswer<24 && cInternet::getWebPath(parentSRI->where, *wsi, webSiteBuffer, epath, L"webSearchCache", filePathOut, headers, index, true, false) == 0)
+			if (sMaxAnswer<24 && cInternet::getWebPath(parentSRG->where, *wsi, webSiteBuffer, epath, L"webSearchCache", filePathOut, headers, index, true, false) == 0)
 			{
 				cSource *source = NULL;
 				if (processPath(questionSource,(wchar_t *)filePathOut.c_str(), source, cSource::WEB_SEARCH_SOURCE_TYPE, 100, parseOnly) >= 0)
 				{
-					analyzeQuestionFromSource(questionSource,derivation, *wsi, source, parentSRI, answerSRIs, maxAnswer, true, mapPatternAnswer, mapPatternQuestion);
+					analyzeQuestionFromSource(questionSource,derivation, *wsi, source, parentSRG, answerSRIs, maxAnswer, true);
 					if (limitProcessingForProfiling)
 						return maxWebSitesFound;
 				}

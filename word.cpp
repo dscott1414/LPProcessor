@@ -2153,6 +2153,14 @@ bool cWord::parseMetaCommands(int where,wchar_t *buffer, int &endSymbol, wstring
     t.traceMapQuestion= setValue;
 		t.traceQuestionPatternMap=false;
 		t.traceLinkQuestion = false;
+		wchar_t* endline = wcschr(buffer + wcslen(L"traceMapQuestion"), '\r');
+		if (endline)
+		{
+			*endline = 0;
+			comment = buffer + wcslen(L"traceMapQuestion") + 1;
+			*endline = '\r';
+		}
+
 	}
 	else if (!wcsnicmp(buffer, L"traceQuestionPatternMap", wcslen(L"traceQuestionPatternMap")))
 	{
@@ -2259,6 +2267,10 @@ bool cWord::isDoubleQuote(wchar_t ch)
 	return false;
 }
 
+
+// nounOwner=0 - no ownership (Danny)
+// nounOwner=1 - plural ownership (patients')
+// nounOwner=2 - singular ownership (Danny's)
 int cWord::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocation,
                         wstring &sWord,wstring &comment,int &nounOwner,bool scanForSection,bool webScrapeParse,sTrace &t, MYSQL *mysql,int sourceId)
 { LFS
@@ -2359,10 +2371,10 @@ int cWord::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocatio
     if (cp<bufferLen) cp++;
     if (buffer[cp]==10) cp++;
     bufferScanLocation=cp;
-		if (endSymbol) 
+		if (endSymbol)
 			return endSymbol;
 		else
-			return readWord(buffer,bufferLen,bufferScanLocation,sWord,comment,nounOwner,scanForSection,webScrapeParse,t,mysql,sourceId);
+			return PARSE_TRACE;
   }
   if (cp>=bufferLen)
     return PARSE_EOF;

@@ -141,6 +141,11 @@ wstring cSource::objectString(vector <cObject>::iterator object,wstring &logres,
 			{
 				if (m[ow].objectMatches.size())
 					objectString(m[ow].objectMatches, tmpstr, true, true);
+				else if (m[ow].getObject() == -1)
+				{
+					itos(ow, tmpstr);
+					tmpstr = L"NO OWNER OBJECT @" + tmpstr;
+				}
 				else
 					objectString(m[ow].getObject(), tmpstr, true, true);
 			}
@@ -2589,10 +2594,10 @@ void cSource::testLocalFocus(int where,vector <cLocalFocus>::iterator lsi)
 { LFS
 	if (!objects[lsi->om.object].neuter || lsi->numIdentifiedAsSpeaker>0 || objects[lsi->om.object].isLocationObject) return;
 	wstring tmpstr;
-	vector <cSpaceRelation>::iterator csr=findSpaceRelation(where);
-	if (csr!=spaceRelations.end() && csr!=spaceRelations.begin() && csr->where>where)
+	vector <cSyntacticRelationGroup>::iterator csr=findSyntacticRelationGroup(where);
+	if (csr!=syntacticRelationGroups.end() && csr!=syntacticRelationGroups.begin() && csr->where>where)
 		csr--;
-	if (csr!=spaceRelations.end() && where==csr->where && (csr->relationType==stLOCATION))
+	if (csr!=syntacticRelationGroups.end() && where==csr->where && (csr->relationType==stLOCATION))
 	{
 		if (debugTrace.traceSpeakerResolution)
 			lplog(LOG_RESOLUTION,L"%06d:made location object %s PP and NS.",where,objectString(lsi->om,tmpstr,false).c_str());
@@ -2732,13 +2737,13 @@ bool cSource::pushObjectIntoLocalFocus(int where, int matchingObject, bool ident
 							  m[m[m[m[lsi->lastExit].getRelVerb()].relPrep].getRelObject()].getObject()>=0 && 
 								objects[m[m[m[m[lsi->lastExit].getRelVerb()].relPrep].getRelObject()].getObject()].getSubType()<0 && !(m[m[m[m[lsi->lastExit].getRelVerb()].relPrep].getRelObject()].word->second.timeFlags&T_UNIT))))
 					{
-						cSpaceRelation sr(lsi->lastExit,-1,-1,-1,-1,-1,-1,-1,-1,stEXIT,false,false,-1,-1,true);
-						bool comparesr( const cSpaceRelation &s1, const cSpaceRelation &s2 );
-						vector <cSpaceRelation>::iterator location = lower_bound(spaceRelations.begin(), spaceRelations.end(), sr, comparesr);
-						if (location!=spaceRelations.end() && location->relationType==stEXIT)
+						cSyntacticRelationGroup sr(lsi->lastExit,-1,-1,-1,-1,-1,-1,-1,-1,stEXIT,false,false,-1,-1,true);
+						bool comparesr( const cSyntacticRelationGroup &s1, const cSyntacticRelationGroup &s2 );
+						vector <cSyntacticRelationGroup>::iterator location = lower_bound(syntacticRelationGroups.begin(), syntacticRelationGroups.end(), sr, comparesr);
+						if (location!=syntacticRelationGroups.end() && location->relationType==stEXIT)
 						{
 							// or turn the exit off
-							m[lsi->lastExit].spaceRelation=false;
+							m[lsi->lastExit].hasSyntacticRelationGroup=false;
 							deleted=L"[DELETED]";
 						}
 					}
@@ -8897,7 +8902,7 @@ void cSource::processEndOfSentenceRS(int where,
 	transitionSinceEOS = false;
 	int whereLastObject = -1;
 	// Process unquoted previous and last sentence ends to scan for space relations and meta where query patterns
-	bool anySpaceRelation = false;
+	bool anySyntacticRelationGroup = false;
 	if (isEOS(uqPreviousToLastSentenceEnd)) uqPreviousToLastSentenceEnd++; // skip the last sentence's EOS.
 	if (m[uqPreviousToLastSentenceEnd].queryForm(quoteForm) >= 0)
 		uqPreviousToLastSentenceEnd++; // skip the quote at the end of last sentence.
@@ -8907,25 +8912,25 @@ void cSource::processEndOfSentenceRS(int where,
 		uqPreviousToLastSentenceEnd++; // skip the quote at the start of this sentence.
 	for (int J = uqPreviousToLastSentenceEnd; J < uqLastSentenceEnd; J++)
 	{
-		detectSpaceRelation(J, where, lastSubjects); // so that space relations use disambiguated objects
+		detectSyntacticRelationGroup(J, where, lastSubjects); // so that space relations use disambiguated objects
 		detectSpaceLocation(J, lastBeginS1);
 		evaluateMetaWhereQuery(J, false, currentMetaWhereQuery); // how to use currentIsQuestion when this is set below?
 		if (m[J].getObject() >= 0) whereLastObject = J;
-		anySpaceRelation |= (m[J].spaceRelation);
+		anySyntacticRelationGroup |= (m[J].hasSyntacticRelationGroup);
 	}
 	// the inQuestion flag is only set as the first word of the question or any object
 	// if the sentence is one word or one object, make space relation one word.
-	if (!anySpaceRelation && uqLastSentenceEnd - uqPreviousToLastSentenceEnd > 0 && (uqLastSentenceEnd - uqPreviousToLastSentenceEnd <= 2 || whereLastObject >= 0))
+	if (!anySyntacticRelationGroup && uqLastSentenceEnd - uqPreviousToLastSentenceEnd > 0 && (uqLastSentenceEnd - uqPreviousToLastSentenceEnd <= 2 || whereLastObject >= 0))
 	{
 		if (whereLastObject < 0) whereLastObject = uqPreviousToLastSentenceEnd;
-		cSpaceRelation lastSR(whereLastObject, -1, -1, -1, -1, -1, -1, -1, -1, stNORELATION, false, false, -1, -1, true);
+		cSyntacticRelationGroup lastSR(whereLastObject, -1, -1, -1, -1, -1, -1, -1, -1, stNORELATION, false, false, -1, -1, true);
 		if (lastOpeningPrimaryQuote > uqLastSentenceEnd)
 			lastSR.tft.lastOpeningPrimaryQuote = m[lastOpeningPrimaryQuote].previousQuote;
 		else
 			lastSR.tft.lastOpeningPrimaryQuote = lastOpeningPrimaryQuote;
-		bool comparesr(const cSpaceRelation &s1, const cSpaceRelation &s2);
-		vector <cSpaceRelation>::iterator location = lower_bound(spaceRelations.begin(), spaceRelations.end(), lastSR, comparesr);
-		spaceRelations.insert(location, lastSR);
+		bool comparesr(const cSyntacticRelationGroup &s1, const cSyntacticRelationGroup &s2);
+		vector <cSyntacticRelationGroup>::iterator location = lower_bound(syntacticRelationGroups.begin(), syntacticRelationGroups.end(), lastSR, comparesr);
+		syntacticRelationGroups.insert(location, lastSR);
 	}
 	uqPreviousToLastSentenceEnd = uqLastSentenceEnd;
 	uqLastSentenceEnd = where+1;
@@ -9076,7 +9081,7 @@ void cSource::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 	speakerGroupsEstablished=true;
 	subjectsInPreviousUnquotedSectionUsableForImmediateResolution=false;
 	int endMetaResponse=-1;
-	spaceRelationsIdEnd=spaceRelations.size();
+	syntacticRelationGroupsIdEnd=syntacticRelationGroups.size();
 	if (!speakerGroups.size())
 	{
 		cSpeakerGroup entireSpeakerGroup;
@@ -9145,14 +9150,14 @@ void cSource::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 		letterDetectionBegin(I, whereLetterTo, lastLetterBegin);
 		if (letterDetectionEnd(I, whereLetterTo, lastLetterBegin))
 			continue;
-		vector<cSpaceRelation>::iterator sr;
-		if (m[I].spaceRelation && (m[I].objectRole&(IN_SECONDARY_QUOTE_ROLE | IN_PRIMARY_QUOTE_ROLE)) == 0 && (sr = findSpaceRelation(I))!=spaceRelations.end() && (sr = findSpaceRelation(I))->where == I &&
+		vector<cSyntacticRelationGroup>::iterator sr;
+		if (m[I].hasSyntacticRelationGroup && (m[I].objectRole&(IN_SECONDARY_QUOTE_ROLE | IN_PRIMARY_QUOTE_ROLE)) == 0 && (sr = findSyntacticRelationGroup(I))!=syntacticRelationGroups.end() && (sr = findSyntacticRelationGroup(I))->where == I &&
 			sr->tft.timeTransition)
 		{
 			vector <cLocalFocus>::iterator lsi, llsi;
 			int numPPSpeakers = 0, keepPPSpeakerWhere = sr->whereSubject;
 			bool allIn, oneIn;
-			// if there is only one PP speaker, and whereSubject is not a speaker, and spaceRelation is not a TIME type, then set where to the PP speaker.
+			// if there is only one PP speaker, and whereSubject is not a speaker, and hasSyntacticRelationGroup is not a TIME type, then set where to the PP speaker.
 			for (set<int>::iterator i = speakerGroups[currentSpeakerGroup].speakers.begin(), iEnd = speakerGroups[currentSpeakerGroup].speakers.end(); i != iEnd; i++)
 				if ((lsi = in(*i)) != localObjects.end() && lsi->physicallyPresent)
 				{
@@ -9410,29 +9415,29 @@ void cSource::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 	}
 	// (CMREADME44)
 	int whereLastObject=-1;
-	bool anySpaceRelation=false;
+	bool anySyntacticRelationGroup=false;
 	debugTrace = m[uqPreviousToLastSentenceEnd].t;
 	for (int J=uqPreviousToLastSentenceEnd; J<uqLastSentenceEnd; J++)
 	{
-		detectSpaceRelation(J,m.size(),lastSubjects); // so that space relations use disambiguated objects
+		detectSyntacticRelationGroup(J,m.size(),lastSubjects); // so that space relations use disambiguated objects
 		detectSpaceLocation(J,lastBeginS1);
 		evaluateMetaWhereQuery(J,false,currentMetaWhereQuery); // how to use currentIsQuestion when this is set below?
 		if (m[J].getObject()>=0) whereLastObject=J;
-		anySpaceRelation|=(m[J].spaceRelation) ;
+		anySyntacticRelationGroup|=(m[J].hasSyntacticRelationGroup) ;
 	} 
 	// the inQuestion flag is only set as the first word of the question or any object
 	// if the sentence is one word or one object, make space relation one word.
-	if (!anySpaceRelation && uqLastSentenceEnd-uqPreviousToLastSentenceEnd>0 && (uqLastSentenceEnd-uqPreviousToLastSentenceEnd<=2 || whereLastObject>=0))
+	if (!anySyntacticRelationGroup && uqLastSentenceEnd-uqPreviousToLastSentenceEnd>0 && (uqLastSentenceEnd-uqPreviousToLastSentenceEnd<=2 || whereLastObject>=0))
 	{
 		if (whereLastObject<0) whereLastObject=uqPreviousToLastSentenceEnd;
-		cSpaceRelation sr(whereLastObject,-1,-1,-1,-1,-1,-1,-1,-1,stNORELATION,false,false,-1,-1,true);
+		cSyntacticRelationGroup sr(whereLastObject,-1,-1,-1,-1,-1,-1,-1,-1,stNORELATION,false,false,-1,-1,true);
 		if (lastOpeningPrimaryQuote>uqLastSentenceEnd)
 			sr.tft.lastOpeningPrimaryQuote=m[lastOpeningPrimaryQuote].previousQuote;
 		else
 			sr.tft.lastOpeningPrimaryQuote=lastOpeningPrimaryQuote;
-		bool comparesr( const cSpaceRelation &s1, const cSpaceRelation &s2 );
-		vector <cSpaceRelation>::iterator location = lower_bound(spaceRelations.begin(), spaceRelations.end(), sr, comparesr);
-		spaceRelations.insert(location,sr);
+		bool comparesr( const cSyntacticRelationGroup &s1, const cSyntacticRelationGroup &s2 );
+		vector <cSyntacticRelationGroup>::iterator location = lower_bound(syntacticRelationGroups.begin(), syntacticRelationGroups.end(), sr, comparesr);
+		syntacticRelationGroups.insert(location,sr);
 	}
   if (section<sections.size())
     processNextSection(m.size(),section);

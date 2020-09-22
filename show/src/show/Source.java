@@ -200,6 +200,12 @@ public class Source {
 				if (objects[I].masterSpeakerIndex >= 0)
 					masterSpeakerList.put(objects[I].masterSpeakerIndex, I);
 			}
+			if (rs.EndOfBufferReached())
+			{
+				relations = new Relation[0];
+				timelineSegments = new TimelineSegment[0];
+				return;
+			}
 			count = rs.readInteger();
 			relations = new Relation[count];
 			for (int I = 0; I < count; I++)

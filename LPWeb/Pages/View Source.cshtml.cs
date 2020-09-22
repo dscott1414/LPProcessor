@@ -1,10 +1,8 @@
+using Microsoft.AspNetCore.Mvc.RazorPages;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.RazorPages;
 using System.IO;
+using System.Linq;
 
 namespace LPWeb.Pages
 {
@@ -22,12 +20,16 @@ namespace LPWeb.Pages
         //    Products = await db.Products.ToListAsync();
         //    FeaturedProduct = Products.ElementAt(new Random().Next(Products.Count));
         //}
+        public List<String> SourceDirectories { get; set; } = new List<String>();
     }
     public class SourceMenuData
     {
-        var dirs = from dir in
+        public void createMenu()
+        {
+            var dirs = from dir in
              Directory.EnumerateDirectories(@"M:\caches\texts")
-                   select dir;
+                       select dir;
+        }
 
     }
 }

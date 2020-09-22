@@ -6,7 +6,7 @@
 #include "tableColumn.h"
 #include "getMusicBrainz.h"
 
-class cSpaceRelation;
+class cSyntacticRelationGroup;
 #define MAX_LEN 2048
 
 typedef struct {
@@ -174,7 +174,7 @@ public:
 		PEMACount=0;
 		timeColor=0;
 		tmpWinnerForms=0;
-		spaceRelation=false;
+		hasSyntacticRelationGroup=false;
 		andChainType=false;
 		notFreePrep=false;
 		hasVerbRelations=false;
@@ -393,7 +393,7 @@ public:
 	int embeddedStorySpeakerPosition; // tracks who is speaking when they are relating an event that happened in the past
 	int audiencePosition,speakerPosition;
 	sTrace t;
-	bool spaceRelation,hasVerbRelations,andChainType,notFreePrep;
+	bool hasSyntacticRelationGroup,hasVerbRelations,andChainType,notFreePrep;
 	short logCache;
 	wstring baseVerb;
 	wstring questionTransformationSuggestedPattern;
@@ -595,7 +595,7 @@ public:
 			relSubject=0;
 			relVerb=0;
 			skipResponse=0;
-			spaceRelation=0;
+			hasSyntacticRelationGroup=0;
 			speakerPosition=0;
 			timeColor=0;
 			tmpWinnerForms=0;
@@ -776,7 +776,7 @@ enum OCSubType {
 	WORLD_CITY_TOWN_VILLAGE,
 	GEOGRAPHICAL_NATURAL_FEATURE, // lake mountain stream river pool air sea land space water
 	GEOGRAPHICAL_URBAN_FEATURE, // city, town, suburbs, park, dam, buildings - definitely a different location
-	GEOGRAPHICAL_URBAN_SUBFEATURE, // rooms within buildings - perhaps a different location (see spaceRelations)
+	GEOGRAPHICAL_URBAN_SUBFEATURE, // rooms within buildings - perhaps a different location (see syntacticRelationGroups)
 	GEOGRAPHICAL_URBAN_SUBSUBFEATURE, // commonly interacted things within rooms - door, table, chair, desk - not a different location
 	TRAVEL, // trip, journey, road, street, trail
 	MOVING, // train, plane, automobile
@@ -844,7 +844,7 @@ public:
 	int whereRelSubjectClause;
 	int usedAsLocation,lastWhereLocation;
 	vector <cLocalFocus>::iterator lsiOffset;
-	vector <int> spaceRelations;
+	vector <int> syntacticRelationGroups;
 	set <int> duplicates; // objects that this object replaced
 	vector <int> aliases; // objects that this object is the same as (but the information cannot be merged, as in duplicates)
 	vector <tIWMM> associatedNouns; // man
@@ -1090,7 +1090,7 @@ public:
 		if (error=!copy(whereRelSubjectClause,buffer,where,total)) return; 
 		if (error=!copy(usedAsLocation,buffer,where,total)) return; 
 		if (error=!copy(lastWhereLocation,buffer,where,total)) return; 
-		if (error=!copy(spaceRelations,buffer,where,total)) return;
+		if (error=!copy(syntacticRelationGroups,buffer,where,total)) return;
 		if (error=!copy(duplicates,buffer,where,total)) return;
 		if (error=!copy(aliases,buffer,where,total)) return;
 		int num;
@@ -1191,7 +1191,7 @@ public:
 		if (!copy(buffer,whereRelSubjectClause,where,limit)) return false; 
 		if (!copy(buffer,usedAsLocation,where,limit)) return false; 
 		if (!copy(buffer,lastWhereLocation,where,limit)) return false; 
-		if (!copy(buffer,spaceRelations,where,limit)) return false;
+		if (!copy(buffer,syntacticRelationGroups,where,limit)) return false;
 		if (!copy(buffer,duplicates,where,limit)) return false;
 		if (!copy(buffer,aliases,where,limit)) return false;
 		if (!copy(buffer,(int)associatedNouns.size(),where,limit)) return false; 
@@ -1594,7 +1594,7 @@ public:
 	cSource(wchar_t *databaseServer,int _sourceType,bool generateFormStatistics,bool skipWordInitialization,bool printProgress);
 	int beginClock;
 	int pass;
-	bool RDFFileCaching;
+	bool RDFFileCaching; // sets whether rdfTypes are read from disk.  They may still be cached in memory! (cOntology::cacheRdfTypes determines that).  This is different than cQuestionAnswering::fileCaching.
 	enum sourceTypeEnum {
 		NO_SOURCE_TYPE, TEST_SOURCE_TYPE, GUTENBERG_SOURCE_TYPE, NEWS_BANK_SOURCE_TYPE, BNC_SOURCE_TYPE, SCRIPT_SOURCE_TYPE,
 		WEB_SEARCH_SOURCE_TYPE, WIKIPEDIA_SOURCE_TYPE, INTERACTIVE_SOURCE_TYPE, PATTERN_TRANSFORM_TYPE, REQUEST_TYPE
@@ -1965,7 +1965,6 @@ public:
 	void printSectionStatistics(void);
 	void printResolutionCheck(vector <int> &badSpeakers);
 	bool isSpeaker(int where,int esg,int tempCSG);
-	void evaluateSpaceRelation(int where,int endSpeakerGroup,int &spri);
 	bool appendPrepositionalPhrase(int where, vector <wstring> &prepPhraseStrings, int relPrep, bool nonMixed, bool lowerCase, wchar_t *separator, int atNumPP);
 	int appendPrepositionalPhrases(int where, wstring &wsoStr, vector <wstring> &prepPhraseStrings, int &numWords, bool nonMixed, wchar_t *separator, int atNumPP);
 	int getObjectStrings(int where, int object, vector <wstring> &wsoStrs, bool &alreadyDidPlainCopy);
@@ -2048,16 +2047,16 @@ int &numFirstInQuote,
 	void eraseAliasesAndReplacementsInSpeakerGroups(void);
 	bool blockSpeakerGroupCreation(int endSection,bool quotesSeenSinceLastSentence,int nsAfter);
 	bool rejectTimeWord(int where,int begin);
-	bool resolveTimeRange(int where,int pmaOffset,vector <cSpaceRelation>::iterator csr);
+	bool resolveTimeRange(int where,int pmaOffset,vector <cSyntacticRelationGroup>::iterator csr);
 	bool stopSearch(int I);
-	void distributeTimeRelations(vector <cSpaceRelation>::iterator csr,vector <cSpaceRelation>::iterator previousRelation,int conjunctionPassed);
-	void appendTime(vector <cSpaceRelation>::iterator csr);
+	void distributeTimeRelations(vector <cSyntacticRelationGroup>::iterator csr,vector <cSyntacticRelationGroup>::iterator previousRelation,int conjunctionPassed);
+	void appendTime(vector <cSyntacticRelationGroup>::iterator csr);
 	void detectTimeTransition(int where,vector <int> &lastSubjects);
 	void copyTimeInfoNum(vector <cTimeInfo>::iterator previousTime,cTimeInfo &t,int num);
 	void markTime(int where,int begin,int len);
 	bool evaluateTimePattern(int beginObjectPosition,int &maxLen,cTimeInfo &t,cTimeInfo &rt,bool &rtSet);
-	bool identifyDateTime(int where,vector <cSpaceRelation>::iterator csr,int &maxLen,int inMultiObject);
-	bool detectTimeTransition(int where,vector <cSpaceRelation>::iterator csr,cTimeInfo &t);
+	bool identifyDateTime(int where,vector <cSyntacticRelationGroup>::iterator csr,int &maxLen,int inMultiObject);
+	bool detectTimeTransition(int where,vector <cSyntacticRelationGroup>::iterator csr,cTimeInfo &t);
 	bool evaluateHOUR(int where,cTimeInfo &t);
 	bool evaluateDateTime(vector <cTagLocation> &tagSet,cTimeInfo &t,cTimeInfo &rt,bool &rtSet);
 	bool ageTransition(int where,bool timeTransition,bool &transitionSinceEOS,int duplicateFromWhere,int exceptWhere,vector <int> &lastSubjects,wchar_t *fromWhere);
@@ -2065,18 +2064,18 @@ int &numFirstInQuote,
 	bool like(wstring str1,wstring str2);
 
 	// where
-	void getMaxWhereSR(vector <cSpaceRelation>::iterator csr,int &begin,int &end);
-	vector <cSpaceRelation>::iterator findSpaceRelation(int where);
+	void getMaxWhereSR(vector <cSyntacticRelationGroup>::iterator csr,int &begin,int &end);
+	vector <cSyntacticRelationGroup>::iterator findSyntacticRelationGroup(int where);
 	const wchar_t *src(int where,wstring description,wstring &tmpstr);
-	bool followerPOVToObserverConversion(vector <cSpaceRelation>::iterator sr,int sg);
+	bool followerPOVToObserverConversion(vector <cSyntacticRelationGroup>::iterator sr,int sg);
 	bool setTimeFlowTense(int where,int whereControllingEntity,int whereSubject,int whereVerb,int whereObject,
 int wherePrepObject,
 		int prepObjectSubType,int objectSubType,bool establishingLocation,bool futureLocation,bool genderedLocationRelation,cTimeFlowTense &tft);
 	void srSetTimeFlowTense(int spri);
 	bool isRelativeLocation(wstring word);
 	void newSR(int where,int o,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int at,int whereMovingRelativeTo,int relationType,const wchar_t *whereType,bool physicalRelation);
-	void logSpaceRelation(cSpaceRelation &sr, const wchar_t *whereType);
-	bool moveIdentifiedSubject(int where,bool inPrimaryQuote,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int at,int whereMovingRelativeTo,int spaceRelation,const wchar_t *whereType,bool physicalRelation);
+	void logSyntacticRelationGroup(cSyntacticRelationGroup &sr, const wchar_t *whereType);
+	bool moveIdentifiedSubject(int where,bool inPrimaryQuote,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int at,int whereMovingRelativeTo,int hasSyntacticRelationGroup,const wchar_t *whereType,bool physicalRelation);
 	int findAnyLocationPrepObject(int whereVerb,int &wherePrep,bool &location,bool &timeUnit);
 	bool rejectPrepPhrase(int wherePrep);
 	bool adverbialPlace(int where);
@@ -2084,7 +2083,7 @@ int wherePrepObject,
 	bool whereSubType(int where);
 	bool exitConversion(int whereObject,int whereSubject,int wherePrepObject);
 	bool placeIdentification(int where,bool inPrimaryQuote,int whereControllingEntity,int whereSubject,int whereVerb,int vnClass);
-	bool srMoveObject(int where,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int at,int whereMovingRelativeTo,int spaceRelation,wchar_t *whereType,bool physicalRelation);
+	bool srMoveObject(int where,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int at,int whereMovingRelativeTo,int hasSyntacticRelationGroup,wchar_t *whereType,bool physicalRelation);
 	void defineObjectAsSpatial(int where);
 	void detectTenseAndFirstPersonUsage(int where, int lastBeginS1, int lastRelativePhrase, int &numPastSinceLastQuote, int &numNonPastSinceLastQuote, int &numFirstInQuote, int &numSecondInQuote, bool inPrimaryQuote);
 	void evaluateMetaWhereQuery(int where,bool inPrimaryQuote,int &currentMetaWhereQuery);
@@ -2130,11 +2129,11 @@ int wherePrepObject,
 	void detectSpaceLocation(int where,int lastBeginS1);
 	bool isSpeakerContinued(int where,int o,int lastWherePP,bool &sgOccurredAfter,bool &audienceOccurredAfter,bool &speakerOccurredAfter);
 	bool isSpatialSeparation(int whereVerb);
-	void processExit(int where,vector <cSpaceRelation>::iterator sri,int backInitialPosition,vector <int> &lastSubjects);
-	void detectSpaceRelation(int where,int backInitialPosition,vector <int> &lastSubjects);
+	void processExit(int where,vector <cSyntacticRelationGroup>::iterator sri,int backInitialPosition,vector <int> &lastSubjects);
+	void detectSyntacticRelationGroup(int where,int backInitialPosition,vector <int> &lastSubjects);
 	void logSpaceCheck(void);
 
-	int getSpeakersToKeep(vector<cSpaceRelation>::iterator sr);
+	int getSpeakersToKeep(vector<cSyntacticRelationGroup>::iterator sr);
 	void beginSection(int &lastSpeakerGroupPositionConsidered, int &lastSpeakerGroupOfPreviousSection, int I, vector <int> &previousLastSubjects, vector <int> &lastSubjects);
 	void endSection(int &questionSpeakerLastParagraph, int &questionSpeakerLastSentence, int &whereFirstSubjectInParagraph, int &lastSpeakerGroupPositionConsidered, int &lastSpeakerGroupOfPreviousSection, int I,
 		bool &endOfSentence, bool &immediatelyAfterEndOfParagraph, bool &quotesSeenSinceLastSentence, bool inSecondaryQuote, bool inPrimaryQuote, bool &quotesSeen, bool &firstQuotedSentenceOfSpeakerGroupNotSeen,
@@ -2182,8 +2181,8 @@ int wherePrepObject,
 	int determineKindBitField(cSource *source, int where, int &wikiBitField);
 	int determineKindBitFieldFromObject(cSource *source, int object, int &wikiBitField);
 	bool testQuestionType(int where,int &whereQuestionType,int &whereQuestionTypeFlags,int setType,set <int> &whereQuestionInformationSourceObjects);
-	void processQuestion(int whereVerb,int whereReferencingObject,__int64 &questionType,int &whereQuestionType,set <int> &whereQuestionInformationSourceObjects);
-	void transformQuestionRelation(cSpaceRelation& sri);
+	void getQuestionTypeAndQuestionInformationSourceObjects(int whereVerb,int whereReferencingObject,__int64 &questionType,int &whereQuestionType,set <int> &whereQuestionInformationSourceObjects);
+	void transformQuestionRelation(cSyntacticRelationGroup& sri);
 
 	void resolveQuotedPOVObjects(int lastOpeningPrimaryQuote,int lastClosingPrimaryQuote);
 	void setEmbeddedStorySpeaker(int where,int &lastDefiniteSpeaker);
@@ -2196,7 +2195,6 @@ int wherePrepObject,
 	bool letterDetectionEnd(int where,int whereLetterTo,int lastLetterBegin);
 
 	void resolveMetaReference(int speakerPosition,int quotePosition,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb);
-	void insertSpaceRelations();
 	void resolveSpeakers(vector <int> &secondaryQuotesResolutions);
 	void resolveFirstSecondPersonPronouns(vector <int> &secondaryQuotesResolutions);
 	void printTenseStatistic(cTenseStat &tenseStatistics,int sense,int numTotal);
@@ -2296,11 +2294,12 @@ int wherePrepObject,
 	bool isObjectCapitalized(int where);
 	bool ppExtensionAvailable(int where,int &numPPAvailable,bool nonMixed);
 	void copySource(cSource* childSource, int begin, int end, unordered_map <int, int>& sourceIndexMap);
-	vector <cSpaceRelation>::iterator copySRI(cSource *childSource,vector <cSpaceRelation>::iterator sri);
+	vector <cSyntacticRelationGroup>::iterator copySRI(cSource *childSource,vector <cSyntacticRelationGroup>::iterator sri);
+	int numWordsOfDirectlyAttachedPrepositionalPhrases(int whereChild);
 	int copyDirectlyAttachedPrepositionalPhrase(cSource *childSource,int relPrep, unordered_map <int, int>& sourceIndexMap,bool clear);
 	int copyDirectlyAttachedPrepositionalPhrases(int whereParentObject,cSource *childSource,int whereChild, unordered_map <int, int>& sourceIndexMap,bool clear);
-	vector <int> copyChildrenIntoParent(cSource *childSource,int whereChild, unordered_map <int, int>& sourceIndexMap, bool clear);
-	int detectAttachedPhrase(vector <cSpaceRelation>::iterator sri,int &relVerb);
+	vector <int> copyChildrenIntoParent(cSource *childSource,int whereChild, unordered_map <int, int>& sourceIndexMap, bool enclosingLoop);
+	int detectAttachedPhrase(cSyntacticRelationGroup *sri,int &relVerb);
 	bool hasProperty(int where,int whereQuestionTypeObject, unordered_map <int,vector < vector <int> > > &wikiTableMap,vector <wstring> &propertyValues);
 	bool compareObjectString(int whereObject1,int whereObject2);
 	bool objectContainedIn(int whereObject,set <int> whereObjects);
@@ -2442,10 +2441,10 @@ int wherePrepObject,
 	void updateSourceStatistics2(int sizeInBytes, int numWordRelations);
 	void updateSourceStatistics3(int numMultiWordRelations);
 	void logPatternChain(int sourcePosition,int insertionPoint,enum cPatternElementMatchArray::chainType patternChainType);
-	void printSRI(wstring logPrefix,cSpaceRelation* sri,int s,int ws,int wo,int ps,bool overWrote,int matchSum,wstring matchInfo,int logDestination=LOG_WHERE);
-	void printSRI(wstring logPrefix,cSpaceRelation* sri,int s,int ws,int wo,wstring ps,bool overWrote,int matchSum,wstring matchInfo,int logDestination=LOG_WHERE);
+	void printSRG(wstring logPrefix,cSyntacticRelationGroup* sri,int s,int ws,int wo,int ps,bool overWrote,int matchSum,wstring matchInfo,int logDestination=LOG_WHERE);
+	void printSRG(wstring logPrefix,cSyntacticRelationGroup* sri,int s,int ws,int wo,wstring ps,bool overWrote,int matchSum,wstring matchInfo,int logDestination=LOG_WHERE);
 	int checkInsertPrep(set <int> &relPreps,int wp,int wo);
-	void getAllPreps(cSpaceRelation* sri,set <int> &relPreps,int wo=-1);
+	void getAllPreps(cSyntacticRelationGroup* sri,set <int> &relPreps,int wo=-1);
 	int flushMultiWordRelations(set <int> &objects);
 	int initializeNounVerbMapping(void);
 	void getSynonyms(wstring word, set <wstring> &synonyms, int synonymType);
@@ -2462,7 +2461,7 @@ int wherePrepObject,
 	int numTotalSpeakerFullVerbTenses,numTotalSpeakerVerbTenses;
 	cLastVerbTenses lastVerbTenses[VERB_HISTORY];
 	void reduceParents(int position,vector <unsigned int> &insertionPoints,vector <int> &reducedCosts);
-	vector <cSpaceRelation> spaceRelations;
+	vector <cSyntacticRelationGroup> syntacticRelationGroups;
 	wstring phraseString(int where,int end,wstring &logres,bool shortFormat,wchar_t *separator=L" ");
 	wstring whereString(int where,wstring &logres,bool shortFormat,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases,wchar_t *separator,int &numWords);
 	wstring whereString(int where,wstring &logres,bool shortFormat);
@@ -2546,7 +2545,7 @@ private:
 	int lastQuote; // last conversational quote - updated during identifySpeakerGroups
 	int lastOpeningPrimaryQuote,lastOpeningSecondaryQuote; // updated during both identifySpeakerGroups and resolveSpeakers
 	int previousPrimaryQuote; // updated during both identifySpeakerGroups and resolveSpeakers.  Valid only in-between quotes.
-	int spaceRelationsIdEnd; // marks the split between the space relations discovered by identifySpeakers and relations discovered by resolveSpeakers
+	int syntacticRelationGroupsIdEnd; // marks the split between the space relations discovered by identifySpeakers and relations discovered by resolveSpeakers
 	void adjustSaliencesBySubjectRole(int where,int lastBeginS1);
 	void scanForLocation(bool check,bool &relAsObject,int &whereRelClause,int &pmWhere,int checkEnd);
 	bool assignRelativeClause(int where);
@@ -2910,10 +2909,10 @@ bool inSectionHeader,
 	int maxBackwards(int where);
 	int getMinPosition(int where);
 	int gmo(int wo);
-	void getSRIMinMax(cSpaceRelation *sri);
+	void getSRIMinMax(cSyntacticRelationGroup *sri);
 	void prepPhraseToString(int wherePrep,wstring &ps);
 	void insertCompoundObjects(int wo,set <int> &relPreps, unordered_map <int,int> &principalObjectEndPoints);
-	void correctSRIEntry(cSpaceRelation &sri);
+	void correctSRIEntry(cSyntacticRelationGroup &sri);
 };
 
 extern vector <cSource::cSpeakerGroup>::iterator sgNULL;

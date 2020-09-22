@@ -58,7 +58,7 @@ __int64 cProfile::lastNetworkTimePrinted;
 __int64 cProfile::accumulateNetworkTimeCount;
 int cProfile::lastNetClock;
 int cInternet::internetWebSearchRetryAttempts=1;
-bool cQuestionAnswering::fileCaching=true;
+bool cQuestionAnswering::fileCaching=false;  // fileCaching determines whether they are cached on disk.  cOntology::cacheRdfTypes determines whether rdfTypes are cached in memory.  
 unordered_map < wstring, __int64 > cProfile::netAndSleepTimes,cProfile::onlyNetTimes,cProfile::numTimesPerURL;
 
 
@@ -1451,7 +1451,7 @@ int wmain(int argc,wchar_t *argv[])
 			if (source.sourceInPast = source.sourceType == cSource::INTERACTIVE_SOURCE_TYPE)
 			{
 				cQuestionAnswering qa;
-				qa.processQuestionSource(&source,parseOnly, true);
+				qa.answerAllQuestionsInSource(&source,parseOnly, true);
 			}
 
 			if (!exitNow) source.signalFinishedProcessingSource(sourceId);
