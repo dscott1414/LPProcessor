@@ -674,7 +674,7 @@ public:
   static tIWMM query(wstring sWord);
   tIWMM gquery(wstring sWord);
   bool parseMetaCommands(int where,wchar_t *buffer,int &endSymbol, wstring &comment, sTrace &t);
-  int readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocation,wstring &sWord, wstring &comment, int &nounOwner,bool scanForSection,bool webScrapeParse,sTrace &t,MYSQL *mysql,int sourceId);
+  int readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocation,wstring &sWord, wstring &comment, int &nounOwner,bool scanForSection,bool webScrapeParse,sTrace &t,MYSQL *mysql,int sourceId, int sourceType);
   int processFootnote(wchar_t *buffer,__int64 bufferLen,__int64 &cp);
 	int parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool log);
 	static int attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId,bool log);

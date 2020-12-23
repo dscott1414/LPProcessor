@@ -172,10 +172,10 @@ bool cSource::searchExactMatch(cObject &object, int position)
 	return false;
 }
 
-void cSource::accumulateAdjective(const wstring &fromWord, set <wstring> &words, vector <tIWMM> &validList, bool isAdjective, wstring &aa, bool &containsMale, bool &containsFemale)
+void cSource::accumulateAdjective(const wstring &fromWord, unordered_set <wstring> &words, vector <tIWMM> &validList, bool isAdjective, wstring &aa, bool &containsMale, bool &containsFemale)
 {
 	LFS
-		for (set <wstring>::iterator wi = words.begin(), wiEnd = words.end(); wi != wiEnd; wi++)
+		for (auto wi = words.begin(), wiEnd = words.end(); wi != wiEnd; wi++)
 		{
 			wstring tmp = *wi;
 			bool properNounDetected = false;
@@ -289,7 +289,7 @@ void cSource::addDefaultGenderedAssociatedNouns(int o)
 void cSource::fillWNMaps(int where, tIWMM word, bool isAdjective)
 {
 	LFS
-		set <wstring> synonyms, antonyms;
+		unordered_set <wstring> synonyms, antonyms;
 	vector <tIWMM> wnSynonyms, wnAntonyms;
 	int gender = 0;
 	wstring aa;
@@ -313,7 +313,7 @@ void cSource::fillWNMaps(int where, tIWMM word, bool isAdjective)
 		// if no antonyms, get antonyms of more common synonyms
 		// but these synonyms may be multiple words which won't be found again in WordNet
 		int familiarity = getFamiliarity(word->first, isAdjective);
-		for (set <wstring>::iterator si = synonyms.begin(), siEnd = synonyms.end(); si != siEnd; si++)
+		for (auto si = synonyms.begin(), siEnd = synonyms.end(); si != siEnd; si++)
 			if (getFamiliarity(*si, isAdjective) >= familiarity)
 			{
 				antonyms.clear();

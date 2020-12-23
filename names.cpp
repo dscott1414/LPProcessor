@@ -328,7 +328,7 @@ unordered_map<wstring,int>::iterator iNickname;
   return true;
 }
 
-void cName::hn(wchar_t *namePartName,tIWMM namePart,wstring &accumulate,bool printShort)
+void cName::hn(wchar_t *namePartName,tIWMM namePart,wstring &accumulate,bool printShort, wchar_t * separator = L" ")
 { LFS
   if (namePart==wNULL) return;
   if (!printShort)
@@ -337,11 +337,11 @@ void cName::hn(wchar_t *namePartName,tIWMM namePart,wstring &accumulate,bool pri
     accumulate+=L":";
   }
 	int len=accumulate.length();
-  accumulate+=namePart->first+L" ";
+  accumulate+=namePart->first+ separator;
 	accumulate[len]=towupper(accumulate[len]);
 }
 
-void cName::hn(wchar_t *namePartName,tIWMM namePart,wchar_t *accumulate,bool printShort)
+void cName::hn(wchar_t *namePartName,tIWMM namePart,wchar_t *accumulate,bool printShort, wchar_t * separator = L" ")
 { LFS
   if (namePart==wNULL) return;
   if (!printShort)
@@ -351,21 +351,21 @@ void cName::hn(wchar_t *namePartName,tIWMM namePart,wchar_t *accumulate,bool pri
   }
 	wchar_t *ch=accumulate+wcslen(accumulate);
   wcscat(accumulate,namePart->first.c_str());
-	wcscat(accumulate,L" ");
+	wcscat(accumulate, separator);
 	*ch=towupper(*ch);
 }
 
-wstring cName::print(wstring &message,bool printShort)
+wstring cName::print(wstring &message,bool printShort, wchar_t * separator = L" ")
 { LFS
-  hn(L"H1",hon,message,printShort);
-  hn(L"H2",hon2,message,printShort);
-  hn(L"H3",hon3,message,printShort);
-  hn(L"F",first,message,printShort);
-  hn(L"M1",middle,message,printShort);
-  hn(L"M2",middle2,message,printShort);
-  hn(L"L",last,message,printShort);
-  hn(L"A",any,message,printShort);
-	hn(L"S", suffix, message, printShort);
+  hn(L"H1",hon,message,printShort,separator);
+  hn(L"H2",hon2,message,printShort, separator);
+  hn(L"H3",hon3,message,printShort, separator);
+  hn(L"F",first,message,printShort, separator);
+  hn(L"M1",middle,message,printShort, separator);
+  hn(L"M2",middle2,message,printShort, separator);
+  hn(L"L",last,message,printShort, separator);
+  hn(L"A",any,message,printShort, separator);
+	hn(L"S", suffix, message, printShort, separator);
 	if (nickName>=0 && !printShort)
   {
     wchar_t temp[10];
@@ -378,18 +378,18 @@ wstring cName::print(wstring &message,bool printShort)
 }
 
 // optimized
-wstring cName::print(wchar_t *message,bool printShort)
+wstring cName::print(wchar_t *message,bool printShort, wchar_t * separator = L" ")
 { LFS
 	message[0]=0;
-  hn(L"H1",hon,message,printShort);
-  hn(L"H2",hon2,message,printShort);
-  hn(L"H3",hon3,message,printShort);
-  hn(L"F",first,message,printShort);
-  hn(L"M1",middle,message,printShort);
-  hn(L"M2",middle2,message,printShort);
-  hn(L"L",last,message,printShort);
-  hn(L"S",suffix,message,printShort);
-  hn(L"A",any,message,printShort);
+  hn(L"H1",hon,message,printShort, separator);
+  hn(L"H2",hon2,message,printShort, separator);
+  hn(L"H3",hon3,message,printShort, separator);
+  hn(L"F",first,message,printShort, separator);
+  hn(L"M1",middle,message,printShort, separator);
+  hn(L"M2",middle2,message,printShort, separator);
+  hn(L"L",last,message,printShort, separator);
+  hn(L"S",suffix,message,printShort, separator);
+  hn(L"A",any,message,printShort, separator);
   if (nickName>=0 && !printShort)
     wsprintf(message+wcslen(message),L"[%d]",nickName);
   return message;

@@ -88,7 +88,7 @@ void cSource::printLocalFocusedObjects(int where,int forObjectClass)
 
 // integrate the LL procedures into the resolveObject
 // finish the RAP description
-wstring cSource::objectString(int object,wstring &logres,bool shortNameFormat,bool objectOwnerRecursionFlag)
+wstring cSource::objectString(int object,wstring &logres,bool shortNameFormat,bool objectOwnerRecursionFlag, wchar_t * separator)
 { LFS
   if (object>=(int)objects.size() || object<0)
     return logres=L"ILLEGAL!";
@@ -104,7 +104,7 @@ wstring cSource::objectString(int object,wstring &logres,bool shortNameFormat,bo
   case cObject::eOBJECTS::OBJECT_UNKNOWN_PLURAL: return logres=L"UNK_P";
   case cObject::eOBJECTS::OBJECT_UNKNOWN_ALL: return logres=L"ALL";
   default:
-    return objectString(objects.begin()+object,logres,shortNameFormat,objectOwnerRecursionFlag);
+    return objectString(objects.begin()+object,logres,shortNameFormat,objectOwnerRecursionFlag,separator);
   }
 }
 
@@ -118,12 +118,12 @@ wstring cSource::objectString(cOM om,wstring &logres,bool shortNameFormat,bool o
   return logres;
 }
 
-wstring cSource::objectString(vector <cObject>::iterator object,wstring &logres,bool shortFormat,bool objectOwnerRecursionFlag)
+wstring cSource::objectString(vector <cObject>::iterator object,wstring &logres,bool shortFormat,bool objectOwnerRecursionFlag, wchar_t * separator)
 { LFS
   if (object->objectClass==NAME_OBJECT_CLASS && !object->name.notNull() && (object->end-object->begin)>1) // (added object length consideration because otherwise this will print US as Us - correct printing of acronyms that are names)
-    object->name.print(logres,true);
+    object->name.print(logres,true, separator);
   else
-    phraseString(object->begin,object->end,logres,shortFormat);
+    phraseString(object->begin,object->end,logres,shortFormat, separator);
 	if (!shortFormat)
 	{
 		int ow = object->getOwnerWhere();
@@ -168,7 +168,7 @@ wstring cSource::objectString(vector <cObject>::iterator object,wstring &logres,
 		if (object->objectClass == NAME_OBJECT_CLASS)
 		{
 			wstring tmpstr;
-			logres += L"[" + object->name.print(tmpstr, false) + L"]";
+			logres += L"[" + object->name.print(tmpstr, false, separator) + L"]";
 		}
 		if (object->suspect) logres += L"[suspect]";
 		if (object->verySuspect) logres += L"[verySuspect]";
@@ -4028,7 +4028,7 @@ bool cSource::physicallyPresentPosition(int where,int beginObjectPosition,bool &
 		if (wo>=0 && m[wo].getObject()>=0 && (lsi=in(m[wo].getObject()))!=localObjects.end() && !lsi->physicallyPresent &&
 			  (m[wo].word->second.flags&cSourceWordInfo::notPhysicalObjectByWN))
 		{
-			set <wstring> synonyms;
+			unordered_set <wstring> synonyms;
   		getSynonyms(L"conversation",synonyms,ADJ);
 			if (m[wo].word->first!=L"conversation" && synonyms.find(m[wo].word->first)==synonyms.end())
 				return false;

@@ -33,7 +33,7 @@ unordered_map<wstring, int > orderedHyperNymsNumMap; // protected with orderedHy
 unordered_map <wstring,set < wstring > > nounVerbMap; // initialized
 void printEntry(sDefinition d);
 
-int extractWordsFromSynset(char *word,SynsetPtr synset_ptr,int recur,vector <set <wstring> > &words,bool ignoreTopLevel,sTrace &t)
+int extractWordsFromSynset(char *word,SynsetPtr synset_ptr,int recur,vector <unordered_set <wstring> > &words,bool ignoreTopLevel,sTrace &t)
 { LFS
 	if (!synset_ptr) return 0;
 	/*
@@ -49,7 +49,7 @@ int extractWordsFromSynset(char *word,SynsetPtr synset_ptr,int recur,vector <set
 	int numWords=0;
 	if (recur || !ignoreTopLevel)
 	{
-		set <wstring> sense;
+		unordered_set <wstring> sense;
 		//if (recur && synset_ptr -> wcount && t.traceSpeakerResolution) lplogNR(LOG_WORDNET,L"  =>");
 		for (int I = 0; I < synset_ptr -> wcount; I++)
 		{
@@ -74,9 +74,9 @@ int extractWordsFromSynset(char *word,SynsetPtr synset_ptr,int recur,vector <set
 	return numWords;
 }
 
-int extractWordsFromSynset(char *word, SynsetPtr synset_ptr, int recur, set <wstring> &words, bool ignoreTopLevel, sTrace &t)
+int extractWordsFromSynset(char *word, SynsetPtr synset_ptr, int recur, unordered_set <wstring> &words, bool ignoreTopLevel, sTrace &t)
 {
-	vector <set <wstring> > wordsBySense;
+	vector <unordered_set <wstring> > wordsBySense;
 	extractWordsFromSynset(word, synset_ptr, recur, wordsBySense, ignoreTopLevel, t);
 	for (int I = 0; I < wordsBySense.size(); I++)
 		words.insert(wordsBySense[I].begin(), wordsBySense[I].end());
@@ -183,7 +183,7 @@ int setWordNetCategoryBits(void)
 // http://thesaurus.com/t2opt/out?desturl=browse/columnist&posFilter=noun
 // also better than www.synonyms.net: http://www.synonyms.net/synonym/columnist or 
 // Big Huge Thesaurus: key 78c2b0a82a3c06236622bb4f8158ead9 (http://words.bighugelabs.com/api/2/78c2b0a82a3c06236622bb4f8158ead9/'word'/json)
-void scrapeOldThesaurus(wstring word,set <wstring> &synonyms, int synonymType,bool forceWebReread)
+void scrapeOldThesaurus(wstring word,unordered_set <wstring> &synonyms, int synonymType,bool forceWebReread)
 { LFS
 	wstring webAddress=L"http://thesaurus.com/t2opt/out?desturl=browse/"+word+L"&posFilter=",epath=word+L".thesaurus.txt",filePathOut,buffer,cSynonymType,match,headers;
 	switch (synonymType)
@@ -417,7 +417,7 @@ void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition> &vd)
 
 void split(string str, vector <string> &words, char *splitch);
 
-bool getSynonymsFromDB(MYSQL mysql,wstring word, vector < set <wstring> > &synonyms, int synonymType)
+bool getSynonymsFromDB(MYSQL mysql,wstring word, vector < unordered_set <wstring> > &synonyms, int synonymType)
 {
 	bool entriesAdded = false;
 	wstring query = L"select primarySynonyms, accumulatedSynonyms from thesaurus where mainEntry = '";
@@ -442,7 +442,7 @@ bool getSynonymsFromDB(MYSQL mysql,wstring word, vector < set <wstring> > &synon
 			string primarySynonyms = (sqlrow[0] == NULL) ? "" : sqlrow[0];
 			string properties = (sqlrow[1] == NULL) ? "" : sqlrow[1];
 			int lastBegin = 0;
-			set <wstring> sense;
+			unordered_set <wstring> sense;
 			for (int s = 0; s < properties.size(); s++)
 				if (properties[s] == ';')
 				{
@@ -485,16 +485,16 @@ bool getSynonymsFromDB(MYSQL mysql,wstring word, vector < set <wstring> > &synon
 	return entriesAdded;
 }
 
-unordered_map <wstring,vector < set <wstring> > > internalSynonymMap[4];
-void cSource::getSynonyms(wstring word, set <wstring> &synonyms, int synonymType)
+unordered_map <wstring,vector < unordered_set <wstring> > > internalSynonymMap[4];
+void cSource::getSynonyms(wstring word, unordered_set <wstring> &synonyms, int synonymType)
 {
-	vector <set <wstring> > synonymsSenses;
+	vector <unordered_set <wstring> > synonymsSenses;
 	getSynonyms(word, synonymsSenses, synonymType);
 	for (int s = 0; s < synonymsSenses.size(); s++)
 		synonyms.insert(synonymsSenses[s].begin(), synonymsSenses[s].end());
 }
 
-void cSource::getSynonyms(wstring word, vector <set <wstring> > &synonyms, int synonymType)
+void cSource::getSynonyms(wstring word, vector <unordered_set <wstring> > &synonyms, int synonymType)
 {
 	LFS
 		// check if word is legal
@@ -503,7 +503,7 @@ void cSource::getSynonyms(wstring word, vector <set <wstring> > &synonyms, int s
 				return;
 	if (word.find(L"http")!=wstring::npos)
 		return;
-	unordered_map <wstring, vector < set <wstring> > >::iterator smi = internalSynonymMap[synonymType].find(word);
+	auto smi = internalSynonymMap[synonymType].find(word);
 	if (smi != internalSynonymMap[synonymType].end())
 	{
 		synonyms = smi->second;
@@ -528,7 +528,7 @@ void cSource::getSynonyms(wstring word, vector <set <wstring> > &synonyms, int s
 			scrapeNewThesaurus(word, synonymType, d);
 			for (int n = 0; n < d.size(); n++)
 			{
-				set <wstring> sense;
+				unordered_set <wstring> sense;
 				for (int I = 0; I < d[n].accumulatedSynonyms.size(); I++)
 				{
 					wstring tmp;
@@ -550,7 +550,7 @@ void cSource::getSynonyms(wstring word, vector <set <wstring> > &synonyms, int s
 	internalSynonymMap[synonymType][word] = synonyms;
 }
 
-void cSource::getWordNetSynonymsOnly(wstring word, vector <set <wstring> > &synonyms, int synonymType)
+void cSource::getWordNetSynonymsOnly(wstring word, vector <unordered_set <wstring> > &synonyms, int synonymType)
 {
 	LFS
 	initWordNet();
@@ -560,7 +560,7 @@ void cSource::getWordNetSynonymsOnly(wstring word, vector <set <wstring> > &syno
 }
 
 
-void getAntonyms(wstring word,set <wstring> &antonyms,sTrace &t)
+void getAntonyms(wstring word,unordered_set <wstring> &antonyms,sTrace &t)
 { LFS
 	initWordNet();
 	string sWord;
@@ -1062,7 +1062,7 @@ bool addHyponyms(wchar_t *word,set <wstring> &objects,bool print)
 }
 
 wstring getMostCommonSynonym(wstring in,wstring &out,bool isNoun,bool isVerb,bool isAdjective,bool isAdverb,
-														 SynsetPtr &sp,IndexPtr &index,set <wstring> &synonyms,int &initialFamiliarity,int &highestFamiliarity,sTrace &t)
+														 SynsetPtr &sp,IndexPtr &index,unordered_set <wstring> &synonyms,int &initialFamiliarity,int &highestFamiliarity,sTrace &t)
 { LFS
 unordered_map <wstring,wstring>::iterator smi;
 	if ((smi=mostCommonSynonymMap.find(in))==mostCommonSynonymMap.end())
@@ -1086,7 +1086,7 @@ unordered_map <wstring,wstring>::iterator smi;
 				if (index) 
 				{
 					initialFamiliarity=highestFamiliarity=index->sense_cnt;
-					for (set <wstring>::iterator si=synonyms.begin(),siEnd=synonyms.end(); si!=siEnd; si++)
+					for (auto si=synonyms.begin(),siEnd=synonyms.end(); si!=siEnd; si++)
 					{
 						IndexPtr synonymIndex=index_lookup(wTM(*si,inStr), wnClass);
 						if (synonymIndex && synonymIndex->sense_cnt>highestFamiliarity)
@@ -1109,7 +1109,7 @@ wstring getMostCommonSynonym(wstring in,wstring &out,bool isNoun,bool isVerb,boo
 { LFS
   SynsetPtr sp;
 	IndexPtr index;
-	set <wstring> synonyms;
+	unordered_set <wstring> synonyms;
 	int initialFamiliarity;
 	int highestFamiliarity;
   return getMostCommonSynonym(in,out,isNoun,isVerb,isAdjective,isAdverb,sp,index,synonyms,initialFamiliarity,highestFamiliarity,t);
@@ -1487,7 +1487,8 @@ void analyzeVerbNetClass(int where,wstring in,wstring &proposedSubstitute,int &n
 	initWordNet();
 	deriveMainEntry(where,37,in,inflectionFlags,true,false,lastNounNotFound,lastVerbNotFound);
   SynsetPtr sp=NULL;
-	set <wstring> synonyms,objects;
+	unordered_set <wstring> synonyms;
+	set <wstring> objects;
 	int initialFamiliarity=-1,highestFamiliarity=-1,numSense=0,wnClass=VERB;
   wstring synonym,cdstr,coordFamiliarity,tmp;
 	string inStr;
@@ -1519,7 +1520,7 @@ void analyzeVerbNetClass(int where,wstring in,wstring &proposedSubstitute,int &n
 				}
 			}
 			if (!oneSenseVbNetClassFound)
-				for (set <wstring>::iterator si=synonyms.begin(),siEnd=synonyms.end(); si!=siEnd; si++)
+				for (auto si=synonyms.begin(),siEnd=synonyms.end(); si!=siEnd; si++)
 					if ((inlvtoCi=vbNetVerbToClassMap.find(*si))!=vbNetVerbToClassMap.end())
 					{
 						oneSenseVbNetClassFound=true;
@@ -1553,7 +1554,7 @@ void analyzeVerbNetClass(int where,wstring in,wstring &proposedSubstitute,int &n
 					scanCoordObjects(in,cdstr,objects,wnClass,highestCoordFamiliarity,coordFamiliarity,proposedSubstitution,multiSenseVbNetClassFound);
 				}
 				else
-					for (set <wstring>::iterator si=synonyms.begin(),siEnd=synonyms.end(); si!=siEnd; si++)
+					for (auto si=synonyms.begin(),siEnd=synonyms.end(); si!=siEnd; si++)
 						if ((inlvtoCi=vbNetVerbToClassMap.find(*si))!=vbNetVerbToClassMap.end())
 						{
 							multiSenseMatchingSynonyms.push_back(*si);
@@ -1575,7 +1576,7 @@ void analyzeVerbNetClass(int where,wstring in,wstring &proposedSubstitute,int &n
 		{
 			wstring sFlags,multiSenseSynonym;
 			inflectionFlagsToStr(inflectionFlags&VERB_INFLECTIONS_MASK,sFlags);
-			for (set <wstring>::iterator si=synonyms.begin(),siEnd=synonyms.end(); si!=siEnd; si++)
+			for (auto si=synonyms.begin(),siEnd=synonyms.end(); si!=siEnd; si++)
 				multiSenseSynonym+=L" "+*si;
 			if (t.traceSpeakerResolution)
 			{

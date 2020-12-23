@@ -31,7 +31,7 @@ bool cQuestionAnswering::matchOwnershipDbQuery(cSource *questionSource,wchar_t *
 	return matchOwnershipDbMusicBrainz(questionSource,derivation,parentSRG);
 }
 
-bool cQuestionAnswering::dbSearchForQuery(cSource *questionSource, wchar_t *derivation,cSyntacticRelationGroup* parentSRG,vector < cAS > &answerSRIs)
+bool cQuestionAnswering::dbSearchForQuery(cSource *questionSource, wchar_t *derivation,cSyntacticRelationGroup* parentSRG,vector < cAS > &answerSRGs)
 { LFS
-	return dbSearchMusicBrainz(questionSource, derivation, parentSRG, answerSRIs);
+	return dbSearchMusicBrainz(questionSource, derivation, parentSRG, answerSRGs);
 }

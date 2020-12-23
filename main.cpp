@@ -58,7 +58,7 @@ __int64 cProfile::lastNetworkTimePrinted;
 __int64 cProfile::accumulateNetworkTimeCount;
 int cProfile::lastNetClock;
 int cInternet::internetWebSearchRetryAttempts=1;
-bool cQuestionAnswering::fileCaching=false;  // fileCaching determines whether they are cached on disk.  cOntology::cacheRdfTypes determines whether rdfTypes are cached in memory.  
+bool cQuestionAnswering::fileCaching=true;  // fileCaching determines whether they are cached on disk.  cOntology::cacheRdfTypes determines whether rdfTypes are cached in memory.  
 unordered_map < wstring, __int64 > cProfile::netAndSleepTimes,cProfile::onlyNetTimes,cProfile::numTimesPerURL;
 
 

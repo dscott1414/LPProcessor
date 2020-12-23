@@ -4,6 +4,7 @@
 #include "io.h"
 #include "winhttp.h"
 #include "word.h"
+#include "ontology.h"
 #include "source.h"
 #include "time.h"
 #include <fcntl.h>
@@ -11,7 +12,6 @@
 #include "mysql.h"
 #include <direct.h>
 #include <sys/stat.h>
-#include "ontology.h"
 #include <crtdbg.h>
 	extern "C" {
 #include <yajl_tree.h>
@@ -28,6 +28,7 @@
 #include "mutex"
 #include "stacktrace.h"
 #include <algorithm>
+
 
 void getSentenceWithTags(cSource &source, int patternBegin, int patternEnd, int sentenceBegin, int sentenceEnd, int PEMAPosition, wstring &sentence);
 bool unlockTables(MYSQL &mysql);

@@ -486,7 +486,7 @@ bool cWordMatch::isModifierType(void)
 					word->second.getUsageCost(form)<3 && (flags&flagNounOwner));
 }
 
-bool cWordMatch::read(char *buffer,int &where,int limit)
+bool cWordMatch::read(char *buffer,int &where,int limit,int sourceType)
 { DLFS
 	wstring temp;
 	if (!copy(temp,buffer,where,limit)) return false;
@@ -496,7 +496,7 @@ bool cWordMatch::read(char *buffer,int &where,int limit)
 		int sourceId=-1,nounOwner=0;
 		__int64 bufferLength=temp.length(),bufferScanLocation=0;
 		bool added=false;
-		int result=Words.readWord((wchar_t *)temp.c_str(),bufferLength,bufferScanLocation,sWord,comment,nounOwner,false,false,t,NULL,-1);
+		int result=Words.readWord((wchar_t *)temp.c_str(),bufferLength,bufferScanLocation,sWord,comment,nounOwner,false,false,t,NULL,-1, sourceType);
 		word=Words.end();
 		if (result==PARSE_NUM)
 			word=Words.addNewOrModify(NULL, sWord,0,NUMBER_FORM_NUM,0,0,L"",sourceId,added);
@@ -1929,11 +1929,11 @@ bool cSource::write(wstring path,bool S2, bool makeCopyBeforeSourceWrite, wstrin
 	if (S2)
 	{
 		copy(buffer,(int)syntacticRelationGroups.size(),where,MAX_BUF);
-		for (vector <cSyntacticRelationGroup>::iterator sri=syntacticRelationGroups.begin(), sriEnd=syntacticRelationGroups.end(); sri!=sriEnd; sri++)
+		for (vector <cSyntacticRelationGroup>::iterator srg=syntacticRelationGroups.begin(), sriEnd=syntacticRelationGroups.end(); srg!=sriEnd; srg++)
 		{
-			sri->nextSPR=(int) (sri-syntacticRelationGroups.begin());
-			srToText(sri->nextSPR,sri->description);
-			if (!sri->write(buffer,where,MAX_BUF)) break;
+			srg->nextSPR=(int) (srg-syntacticRelationGroups.begin());
+			srToText(srg->nextSPR,srg->description);
+			if (!srg->write(buffer,where,MAX_BUF)) break;
 			if (!FlushFile(fd,buffer,where)) return false;
 		}
 		count=timelineSegments.size();
@@ -2095,9 +2095,9 @@ int cSource::sanityCheck(int &generalizedIndex)
 		generalizedIndex++;
 	}
 	generalizedIndex = 0;
-	for (auto sri : syntacticRelationGroups)
+	for (auto srg : syntacticRelationGroups)
 	{
-		if (returnSanity = sri.sanityCheck(m.size(), objects.size())) return returnSanity;
+		if (returnSanity = srg.sanityCheck(m.size(), objects.size())) return returnSanity;
 		generalizedIndex++;
 	}
 	return 0;
@@ -2123,7 +2123,7 @@ bool cSource::read(char *buffer,int &where,unsigned int total, bool &parsedOnly,
 	{ LFSL
 		if ((where*100/total)>lastProgressPercent && printProgress)
 			wprintf(L"PROGRESS: %03d%% source read with %d seconds elapsed \r",lastProgressPercent=where*100/total,clocksec());
-		m.emplace_back(buffer,where,total,error);
+		m.emplace_back(buffer,where,total,sourceType,error);
 	}
 	if (error || where >= (signed)total)
 	{
@@ -3095,7 +3095,7 @@ bool cSource::matchChildSourcePositionSynonym(tIWMM parentWord, cSource *childSo
 			lplog(LOG_ERROR, L"parent word is not in dictionary!");
 			return false;
 		}
-	set <wstring> childSynonyms, parentSynonyms;
+	unordered_set <wstring> childSynonyms, parentSynonyms;
 	getSynonyms(parentWord->first, parentSynonyms, NOUN);
 	tIWMM parentME = parentWord->second.mainEntry;
 	if (parentME == wNULL)
@@ -3339,7 +3339,7 @@ int cSource::determineKindBitField(cSource *source, int where, int &wikiBitField
 	return 0;
 }
 
-void cSource::checkParticularPartSemanticMatchWord(int logType, int parentWhere, bool &synonym, set <wstring> &parentSynonyms, wstring pw, wstring pwme, int &lowestConfidence, unordered_map <wstring, int >::iterator ami)
+void cSource::checkParticularPartSemanticMatchWord(int logType, int parentWhere, bool &synonym, unordered_set <wstring> &parentSynonyms, wstring pw, wstring pwme, int &lowestConfidence, unordered_map <wstring, int >::iterator ami)
 {
 	LFS // DLFS
  //if (logQuestionDetail)
@@ -3370,13 +3370,14 @@ int cSource::checkParticularPartSemanticMatch(int logType, int parentWhere, cSou
 		childObject = (childSource->m[childWhere].objectMatches.size() > 0) ? childSource->m[childWhere].objectMatches[0].object : childSource->m[childWhere].getObject();
 	if (childObject < 0)
 		return CONFIDENCE_NOMATCH;
-
+	if (childSource->objects[childObject].originalLocation < 0 || childSource->m[childSource->objects[childObject].originalLocation].beginObjectPosition < 0 || childSource->m[childSource->objects[childObject].originalLocation].endObjectPosition < 0)
+		lplog(LOG_FATAL_ERROR, L"Incorrect object information detected.");
 	unordered_map <wstring, int > associationMap;
 	childSource->getAssociationMapMaster(childSource->objects[childObject].originalLocation, -1, associationMap, TEXT(__FUNCTION__), fileCaching);
 	wstring tmpstr, tmpstr2, pw = m[parentWhere].word->first;
 	transform(pw.begin(), pw.end(), pw.begin(), (int(*)(int)) tolower);
 	wstring pwme = m[parentWhere].getMainEntry()->first;
-	set <wstring> parentSynonyms;
+	unordered_set <wstring> parentSynonyms;
 	getSynonyms(pw, parentSynonyms, NOUN);
 	getSynonyms(pwme, parentSynonyms, NOUN);
 	int lowestConfidence = CONFIDENCE_NOMATCH;
@@ -3754,10 +3755,10 @@ vector <int> cSource::copyChildrenIntoParent(cSource *childSource, int whereChil
 	return parentLocations;
 }
 
-int cSource::detectAttachedPhrase(cSyntacticRelationGroup *sri, int &relVerb)
+int cSource::detectAttachedPhrase(cSyntacticRelationGroup *srg, int &relVerb)
 {
 	LFS
-		int collectionWhere = sri->whereQuestionTypeObject;
+		int collectionWhere = srg->whereQuestionTypeObject;
 	if (m[collectionWhere].beginObjectPosition >= 0 && m[m[collectionWhere].beginObjectPosition].pma.queryPatternDiff(L"__NOUN", L"F") != -1 && (relVerb = m[collectionWhere].getRelVerb()) >= 0 && m[relVerb].relSubject == collectionWhere)
 		return 0;
 	return -1;

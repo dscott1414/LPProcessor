@@ -38,7 +38,7 @@ void cColumn::removeDomainFromAccumulatedRDFTypesMap(wchar_t * domainAssociation
 }
 
 // accumulate all rdf types of all entries of all rows in a column.
-void cColumn::accumulateColumnRDFTypes(cSource *wikipediaSource, wstring tableName, set <wstring> &titleSynonyms, bool keepMusicDomain, bool keepFilmDomain, bool onlyPreferred, bool fileCaching)
+void cColumn::accumulateColumnRDFTypes(cSource *wikipediaSource, wstring tableName, unordered_set <wstring> &titleSynonyms, bool keepMusicDomain, bool keepFilmDomain, bool onlyPreferred, bool fileCaching)
 {
 	for (int row = 0; row < rows.size(); row++)
 	{
@@ -58,7 +58,7 @@ void cColumn::accumulateColumnRDFTypes(cSource *wikipediaSource, wstring tableNa
 // the RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap map takes all the RDF types associated with a given sequence of words (adaptiveWhere to adaptiveWhere+numWords) and 
 //   returns a list of words with confidences estimating how much the RDF type the word is simplified from is associated with the sequence of words.
 // take the list of words simplified from RDF types which are associated with the entry, and accumulate the ones with highest confidence into the accumulatedRDFTypesMap for the column.
-void cColumn::cEntry::accumulateEntryRDFTypes(cSource *wikipediaSource, wstring tableName, int row,int entry,set <wstring> &titleSynonyms, unordered_map < wstring, cAssociationType > &accumulatedRDFTypesMap, bool fileCaching)
+void cColumn::cEntry::accumulateEntryRDFTypes(cSource *wikipediaSource, wstring tableName, int row,int entry,unordered_set <wstring> &titleSynonyms, unordered_map < wstring, cAssociationType > &accumulatedRDFTypesMap, bool fileCaching)
 {
 	queryAssociationsMatched = 0;
 	titleAssociationsMatched = 0;
@@ -74,7 +74,7 @@ void cColumn::cEntry::accumulateEntryRDFTypes(cSource *wikipediaSource, wstring 
 			if (cmi == accumulatedRDFTypesMap.end())
 			{
 				accumulatedRDFTypesMap[ri->first].frequency = 1;
-				set <wstring >::iterator wami;
+				unordered_set <wstring >::iterator wami;
 				if (accumulatedRDFTypesMap[ri->first].titleObjectMatch = (wami = titleSynonyms.find(ri->first)) != titleSynonyms.end())
 					titleAssociationsMatched++;
 			}
@@ -189,7 +189,7 @@ int cColumn::calculateColumnRDFTypeCoherence(cSource *wikipediaSource, cColumn::
 	return coherencyPercentage;
 }
 
-bool cColumn::testTitlePreference(cSource *wikipediaSource, wstring tableName, set <wstring> &titleSynonyms, bool fileCaching)
+bool cColumn::testTitlePreference(cSource *wikipediaSource, wstring tableName, unordered_set <wstring> &titleSynonyms, bool fileCaching)
 {
 	if (titleSynonyms.empty())
 		return false;
@@ -289,7 +289,7 @@ void cColumn::setRowPreference(cSource *wikipediaSource, wstring tableName, bool
 	}
 }
 
-bool cColumn::determineColumnRDFTypeCoherency(cSource *wikipediaSource, cColumn::cEntry titleEntry, set <wstring> &titleSynonyms, wstring tableName, bool keepMusicDomain, bool keepFilmDomain, bool fileCaching)
+bool cColumn::determineColumnRDFTypeCoherency(cSource *wikipediaSource, cColumn::cEntry titleEntry, unordered_set <wstring> &titleSynonyms, wstring tableName, bool keepMusicDomain, bool keepFilmDomain, bool fileCaching)
 {
 	int sumMaxEntries = 0;
 	for (int row = 0; row < rows.size(); row++)
@@ -655,7 +655,7 @@ bool cSourceTable::isEntryInvalid(int beginEntry, vector <int> &wikiColumns,cSou
 		tableTitleEntry.coherentTable = coherentTitle(tableTitleEntry.begin, tableTitleEntry.begin + tableTitleEntry.numWords, wikipediaSource) && !tableTitleEntry.tableOfContentsFlag;
 		if (tableTitleEntry.coherentTable)
 		{
-			set <wstring> titleSynonyms;
+			unordered_set <wstring> titleSynonyms;
 			for (int ti = tableTitleEntry.begin; ti < tableTitleEntry.begin + tableTitleEntry.numWords; ti++)
 			{
 				wikipediaSource->getSynonyms(wikipediaSource->m[ti].getMainEntry()->first, titleSynonyms, NOUN);
@@ -728,7 +728,7 @@ bool cSourceTable::isEntryInvalid(int beginEntry, vector <int> &wikiColumns,cSou
 						lplog(LOG_WHERE, L"Processing table %s: %d:%s matches %d:%s.", tableName.c_str(), where, wikipediaSource->m[where].getMainEntry()->first.c_str(), whereQuestionTypeObject, questionSource->m[whereQuestionTypeObject].getMainEntry()->first.c_str());
 					columnEntry.matchedQuestionObject.push_back(where);
 				}
-				set <wstring> childSynonyms;
+				unordered_set <wstring> childSynonyms;
 				wikipediaSource->getSynonyms(wikipediaSource->m[where].getMainEntry()->first, childSynonyms, NOUN);
 				if (matchFound = childSynonyms.find(questionSource->m[whereQuestionTypeObject].getMainEntry()->first) != childSynonyms.end() ||
 					hasHyperNym(wikipediaSource->m[where].getMainEntry()->first, questionSource->m[whereQuestionTypeObject].getMainEntry()->first, matchFound, false)) 

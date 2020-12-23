@@ -34,7 +34,7 @@ using namespace std;
 bool myquery(MYSQL *mysql, wchar_t *q, MYSQL_RES * &result, bool allowFailure = false);
 void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition> &d);
 
-void getSynonymsFromDB(MYSQL mysql, wstring word, vector <set <wstring> > &synonyms, vector <wstring > &alternatives, int synonymType)
+void getSynonymsFromDB(MYSQL mysql, wstring word, vector <unordered_set <wstring> > &synonyms, vector <wstring > &alternatives, int synonymType)
 {
 	wstring query = L"select primarySynonyms, accumulatedSynonyms from thesaurus where mainEntry = '";
 	query += word + L"'";
@@ -54,7 +54,7 @@ void getSynonymsFromDB(MYSQL mysql, wstring word, vector <set <wstring> > &synon
 	{
 		while ((sqlrow = mysql_fetch_row(result)) != NULL)
 		{
-			set <wstring> ss;
+			unordered_set <wstring> ss;
 			string primarySynonyms = (sqlrow[0] == NULL) ? "" : sqlrow[0];
 			string properties = (sqlrow[1] == NULL) ? "" : sqlrow[1];
 			wstring firstWordSynonym;
@@ -159,7 +159,7 @@ void splitPrimarySynonyms(MYSQL mysql)
 	exit(0);
 }
 
-void scrapeOldThesaurus(wstring word, wstring buffer, set <wstring> &synonyms)
+void scrapeOldThesaurus(wstring word, wstring buffer, unordered_set <wstring> &synonyms)
 {
 	wstring match;
 	int lastNewLine = 1000;
@@ -267,20 +267,20 @@ wstring reduce(wstring me1)
 	return me1;
 }
 
-bool compareWordSets(set <wstring> &s1, set <string> &s2)
+bool compareWordSets(unordered_set <wstring> &s1, unordered_set <string> &s2)
 {
 	set <wstring> s11, s21;
-	for (set <wstring>::iterator ss = s1.begin(), ssEnd = s1.end(); ss != ssEnd; ss++)
+	for (auto ss = s1.begin(), ssEnd = s1.end(); ss != ssEnd; ss++)
 	{
 		s11.insert(reduce(*ss));
 	}
-	for (set <string>::iterator ss = s2.begin(), ssEnd = s2.end(); ss != ssEnd; ss++)
+	for (auto ss = s2.begin(), ssEnd = s2.end(); ss != ssEnd; ss++)
 	{
 		wstring t;
 		mTW(*ss, t);
 		s21.insert(reduce(t));
 	}
-	for (set <wstring>::iterator ss = s11.begin(), ssEnd = s11.end(); ss != ssEnd; ss++)
+	for (auto ss = s11.begin(), ssEnd = s11.end(); ss != ssEnd; ss++)
 	{
 		if (s21.find(*ss) == s21.end())
 			return false;
@@ -291,7 +291,7 @@ bool compareWordSets(set <wstring> &s1, set <string> &s2)
 // lastWordPrimaryFromDB == "fatigue"
 // firstWordSynonymFromDB == "catch flies"
 // alternative == fatiguecatch flies
-bool compareWordSets(vector <string> &s1, set <wstring> &synonymsFromDB, wstring alternative)
+bool compareWordSets(vector <string> &s1, unordered_set <wstring> &synonymsFromDB, wstring alternative)
 {
 	set <wstring> s11, synonymsFromDBR;
 	for (vector <string>::iterator ss = s1.begin(), ssEnd = s1.end(); ss != ssEnd; ss++)
@@ -299,12 +299,12 @@ bool compareWordSets(vector <string> &s1, set <wstring> &synonymsFromDB, wstring
 		wstring t;
 		s11.insert(reduce(mTW(*ss,t)));
 	}
-	for (set <wstring>::iterator ss = synonymsFromDB.begin(), ssEnd = synonymsFromDB.end(); ss != ssEnd; ss++)
+	for (auto ss = synonymsFromDB.begin(), ssEnd = synonymsFromDB.end(); ss != ssEnd; ss++)
 	{
 		synonymsFromDBR.insert(reduce(*ss));
 	}
 	wstring alternativeR = reduce(alternative);
-	for (set <wstring>::iterator ss = s11.begin(), ssEnd = s11.end(); ss != ssEnd; ss++)
+	for (auto ss = s11.begin(), ssEnd = s11.end(); ss != ssEnd; ss++)
 	{
 		if (synonymsFromDBR.find(*ss) == synonymsFromDBR.end() && *ss != alternativeR)
 			return false;
@@ -363,7 +363,7 @@ void testThesaurus()
 					_read(fd, buffer, (unsigned int)fl);
 					_close(fd);
 				}
-				set <wstring> scrapedSynonyms;
+				unordered_set <wstring> scrapedSynonyms;
 				wstring word = ffd.cFileName;
 				int where = word.find('.');
 				word.erase(where);
@@ -373,7 +373,7 @@ void testThesaurus()
 					word[space] = ' ';
 				scrapeOldThesaurus(word, buffer, scrapedSynonyms);
 				vector < wstring > dbAlternatives;
-				vector < set <wstring> > dbSynonyms;
+				vector < unordered_set <wstring> > dbSynonyms;
 				if (synonymType >= 0)
 				{
 					getSynonymsFromDB(mysql, word, dbSynonyms, dbAlternatives, synonymType);
@@ -393,13 +393,13 @@ void testThesaurus()
 							nonMatched++;
 							printf("\nWORD [%d:%d]%S[%d]:\n", nonMatched, total, word.c_str(), synonymType);
 							printf("scrapedSynonyms:");
-							for (set <wstring>::iterator ss = scrapedSynonyms.begin(), ssEnd = scrapedSynonyms.end(); ss != ssEnd; ss++)
+							for (auto ss = scrapedSynonyms.begin(), ssEnd = scrapedSynonyms.end(); ss != ssEnd; ss++)
 								if (dbSynonyms[I].find(*ss)==dbSynonyms[I].end())
 									printf("%S;", ss->c_str());
 							printf("\ndbSynonyms:");
 							if (dbSynonyms.size()>1)
 								printf("\n[%d]:", I);
-							for (set <wstring>::iterator ss = dbSynonyms[I].begin(), ssEnd = dbSynonyms[I].end(); ss != ssEnd; ss++)
+							for (auto ss = dbSynonyms[I].begin(), ssEnd = dbSynonyms[I].end(); ss != ssEnd; ss++)
 								printf("%S;", ss->c_str());
 							printf("\nnewScrapedSynonyms:");
 							for (int J = 0; J < d.size(); J++)

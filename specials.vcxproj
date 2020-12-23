@@ -446,8 +446,8 @@
     <ClCompile Include="resolveSpeakers.cpp" />
     <ClCompile Include="semanticRelations.cpp" />
     <ClCompile Include="source.cpp" />
-    <ClCompile Include="spaceRelations.cpp" />
     <ClCompile Include="specials_main.cpp" />
+    <ClCompile Include="syntacticRelationGroups.cpp" />
     <ClCompile Include="syntacticRelations.cpp" />
     <ClCompile Include="tableColumn.cpp" />
     <ClCompile Include="tagOperations.cpp" />

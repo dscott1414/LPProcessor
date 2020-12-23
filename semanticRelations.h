@@ -282,7 +282,7 @@ public:
 	void convertToFlags(__int64 flags);
 	__int64 convertFlags(bool isQuestion, bool inPrimaryQuote, bool inSecondaryQuote, __int64 questionFlags);
 	bool write(void *buffer, int &w, int limit);
-	cSyntacticRelationGroup(cSyntacticRelationGroup *sri, unordered_map <int, int> &sourceMap);
+	cSyntacticRelationGroup(cSyntacticRelationGroup *srg, unordered_map <int, int> &sourceMap);
 	bool adjustValue(int& val, int originalVal, wstring valString, unordered_map <int, int>& sourceIndexMap);
 };
 

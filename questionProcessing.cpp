@@ -892,46 +892,46 @@ void cSource::getQuestionTypeAndQuestionInformationSourceObjects(int whereVerb,i
 }
 
 // this is called by correctSRIEntry
-void cSource::transformQuestionRelation(cSyntacticRelationGroup& sri)
+void cSource::transformQuestionRelation(cSyntacticRelationGroup& srg)
 {
-	bool inQuestion=(sri.whereSubject>=0 && (m[sri.whereSubject].flags&cWordMatch::flagInQuestion));
-	inQuestion|=(sri.whereObject>=0 && (m[sri.whereObject].flags&cWordMatch::flagInQuestion));
-	if (inQuestion && sri.whereVerb>=0) 
+	bool inQuestion=(srg.whereSubject>=0 && (m[srg.whereSubject].flags&cWordMatch::flagInQuestion));
+	inQuestion|=(srg.whereObject>=0 && (m[srg.whereObject].flags&cWordMatch::flagInQuestion));
+	if (inQuestion && srg.whereVerb>=0) 
 	{
 		// what is his academic specialty? CASE 9
-		if (m[sri.whereVerb].queryWinnerForm(isForm)>=0 && sri.whereObject>=0 && sri.whereSubject>=0 && (m[sri.whereSubject].queryForm(relativizerForm)>=0 || m[sri.whereSubject].queryForm(interrogativeDeterminerForm)>=0))
+		if (m[srg.whereVerb].queryWinnerForm(isForm)>=0 && srg.whereObject>=0 && srg.whereSubject>=0 && (m[srg.whereSubject].queryForm(relativizerForm)>=0 || m[srg.whereSubject].queryForm(interrogativeDeterminerForm)>=0))
 		{
 			lplog(LOG_WHERE | LOG_INFO, L"Question answering: Transforming space relation of 'is' question by reversing the subject and object");
-			int wo=sri.whereObject;
-			sri.whereObject=sri.whereSubject;
-			sri.whereSubject=wo;
+			int wo=srg.whereObject;
+			srg.whereObject=srg.whereSubject;
+			srg.whereSubject=wo;
 		}
-		getQuestionTypeAndQuestionInformationSourceObjects(sri.whereVerb,sri.whereControllingEntity,sri.questionType,sri.whereQuestionType,sri.whereQuestionInformationSourceObjects);
+		getQuestionTypeAndQuestionInformationSourceObjects(srg.whereVerb,srg.whereControllingEntity,srg.questionType,srg.whereQuestionType,srg.whereQuestionInformationSourceObjects);
 		// if a where clause, put where in a prepositional clause / did Jay-Z grow up? CASE 10
 		// if a when clause, also put where in a prepositional clause / when was Darrell Hammond born? CASE 11
-		if (((sri.questionType&cQuestionAnswering::typeQTMask)== cQuestionAnswering::whereQTFlag || (sri.questionType&cQuestionAnswering::typeQTMask)== cQuestionAnswering::whenQTFlag) &&
-				inObject(sri.whereObject,sri.whereQuestionType) && sri.whereVerb>=0)
+		if (((srg.questionType&cQuestionAnswering::typeQTMask)== cQuestionAnswering::whereQTFlag || (srg.questionType&cQuestionAnswering::typeQTMask)== cQuestionAnswering::whenQTFlag) &&
+				inObject(srg.whereObject,srg.whereQuestionType) && srg.whereVerb>=0)
 		{
 			tIWMM inWord=Words.query(L"in");
 			if (inWord!=Words.end()) {
-				lplog(LOG_WHERE | LOG_INFO, L"transformQuestionRelation: Transforming space relation of where and when question, when what is being asked for requires a preposition 'in' (grew up in, born in).  Setting object of prep '%d:in' to: '%d:%s' and erasing whereObject.", m.size(), sri.whereObject, (sri.whereObject<0) ? L"Undefined":m[sri.whereObject].word->first.c_str());
+				lplog(LOG_WHERE | LOG_INFO, L"transformQuestionRelation: Transforming space relation of where and when question, when what is being asked for requires a preposition 'in' (grew up in, born in).  Setting object of prep '%d:in' to: '%d:%s' and erasing whereObject.", m.size(), srg.whereObject, (srg.whereObject<0) ? L"Undefined":m[srg.whereObject].word->first.c_str());
 				wstring ps;
-				prepPhraseToString(sri.wherePrep, ps);
-				printSRG(L"transformQuestionRelation - ORIGINAL", &sri, 0, sri.whereSubject, sri.whereObject, ps, false, -1, L"", LOG_INFO | LOG_WHERE);
+				prepPhraseToString(srg.wherePrep, ps);
+				printSRG(L"transformQuestionRelation - ORIGINAL", &srg, 0, srg.whereSubject, srg.whereObject, ps, false, -1, L"", LOG_INFO | LOG_WHERE);
 				// transforms 'did Jay-Z grow up?' to 'Jay-Z did grow up in X?'
 				// transforms 'when was Darrell Hammond born?' to 'Darrell Hammond was born in X?'
 				m.push_back(cWordMatch(inWord,0,debugTrace));
-				m[m.size()-1].relPrep=m[sri.whereVerb].relPrep;
-				m[m.size()-1].setRelObject(sri.whereObject);
-				m[sri.whereVerb].relPrep=m.size()-1;
-				sri.wherePrepObject=sri.whereObject;
-				sri.wherePrep=m.size()-1;
-				sri.prepositionUncertain=true;
-				sri.whereObject=-1;
-				sri.transformedPrep = m.size()-1;
+				m[m.size()-1].relPrep=m[srg.whereVerb].relPrep;
+				m[m.size()-1].setRelObject(srg.whereObject);
+				m[srg.whereVerb].relPrep=m.size()-1;
+				srg.wherePrepObject=srg.whereObject;
+				srg.wherePrep=m.size()-1;
+				srg.prepositionUncertain=true;
+				srg.whereObject=-1;
+				srg.transformedPrep = m.size()-1;
 				wstring pss;
-				prepPhraseToString(sri.wherePrep, pss);
-				printSRG(L"transformQuestionRelation - QUESTIONTRANSFORMED", &sri, 0, sri.whereSubject, sri.whereObject, pss, false, -1, L"", LOG_INFO | LOG_WHERE);
+				prepPhraseToString(srg.wherePrep, pss);
+				printSRG(L"transformQuestionRelation - QUESTIONTRANSFORMED", &srg, 0, srg.whereSubject, srg.whereObject, pss, false, -1, L"", LOG_INFO | LOG_WHERE);
 			}
 		}
 	}

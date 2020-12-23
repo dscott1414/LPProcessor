@@ -544,11 +544,11 @@ public:
 		return relObject=ro;
 	}
 	bool writeRef(void *buffer,int &where,int limit);
-	bool read(char *buffer,int &where,int limit);
+	bool read(char *buffer,int &where,int limit,int sourceType);
 	void accumulateStatistics(unordered_map<wstring, int> &defaultMap);
-	cWordMatch(char *buffer,int &where,int limit,bool &error)
+	cWordMatch(char *buffer,int &where,int limit,int sourceType,bool &error)
 	{
-		error=!read(buffer,where,limit);
+		error=!read(buffer,where,limit,sourceType);
 	}
 	cWordMatch(void)
 	{
@@ -2129,7 +2129,7 @@ int wherePrepObject,
 	void detectSpaceLocation(int where,int lastBeginS1);
 	bool isSpeakerContinued(int where,int o,int lastWherePP,bool &sgOccurredAfter,bool &audienceOccurredAfter,bool &speakerOccurredAfter);
 	bool isSpatialSeparation(int whereVerb);
-	void processExit(int where,vector <cSyntacticRelationGroup>::iterator sri,int backInitialPosition,vector <int> &lastSubjects);
+	void processExit(int where,vector <cSyntacticRelationGroup>::iterator srg,int backInitialPosition,vector <int> &lastSubjects);
 	void detectSyntacticRelationGroup(int where,int backInitialPosition,vector <int> &lastSubjects);
 	void logSpaceCheck(void);
 
@@ -2153,7 +2153,7 @@ int wherePrepObject,
 	void accumulateLocation(int where,vector <cTagLocation> &tagSet,int subjectObject,bool locationTense);
 	int determineSpeaker(int beginQuote,int endQuote,bool primary,bool noSpeakerAfterward,bool &definitelySpeaker,int &audienceObjectPosition);
 	int accumulateLocationLastLocation;
-	void accumulateAdjective(const wstring &fromWord,set <wstring> &words,vector <tIWMM> &validList,bool isAdjective,wstring &aa,bool &containsMale,bool &containsFemale);
+	void accumulateAdjective(const wstring &fromWord,unordered_set <wstring> &words,vector <tIWMM> &validList,bool isAdjective,wstring &aa,bool &containsMale,bool &containsFemale);
 	map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > wnSynonymsNounMap,wnSynonymsAdjectiveMap,wnAntonymsAdjectiveMap,wnAntonymsNounMap;
 	map <tIWMM,int,cSourceWordInfo::cRMap::wordMapCompare> wnGenderAdjectiveMap,wnGenderNounMap;
 	int readWNMap(map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &m,void *buffer,int &where,int bufferlen);
@@ -2182,7 +2182,7 @@ int wherePrepObject,
 	int determineKindBitFieldFromObject(cSource *source, int object, int &wikiBitField);
 	bool testQuestionType(int where,int &whereQuestionType,int &whereQuestionTypeFlags,int setType,set <int> &whereQuestionInformationSourceObjects);
 	void getQuestionTypeAndQuestionInformationSourceObjects(int whereVerb,int whereReferencingObject,__int64 &questionType,int &whereQuestionType,set <int> &whereQuestionInformationSourceObjects);
-	void transformQuestionRelation(cSyntacticRelationGroup& sri);
+	void transformQuestionRelation(cSyntacticRelationGroup& srg);
 
 	void resolveQuotedPOVObjects(int lastOpeningPrimaryQuote,int lastClosingPrimaryQuote);
 	void setEmbeddedStorySpeaker(int where,int &lastDefiniteSpeaker);
@@ -2290,16 +2290,16 @@ int wherePrepObject,
 	bool isDefiniteObject(int where, wchar_t *definiteObjectType, int &ownerWhere, bool recursed);
 	int identifyISARelationTextAnalysis(cQuestionAnswering &qa, int principalWhere,bool parseOnly);
 	int checkParticularPartSemanticMatch(int logType, int parentWhere, cSource *childSource, int childWhere, int childObject, bool &synonym, int &semanticMismatch, bool fileCaching);
-	void checkParticularPartSemanticMatchWord(int logType, int parentWhere, bool &synonym, set <wstring> &parentSynonyms, wstring pw, wstring pwme, int &lowestConfidence, unordered_map <wstring, int >::iterator ami);
+	void checkParticularPartSemanticMatchWord(int logType, int parentWhere, bool &synonym, unordered_set <wstring> &parentSynonyms, wstring pw, wstring pwme, int &lowestConfidence, unordered_map <wstring, int >::iterator ami);
 	bool isObjectCapitalized(int where);
 	bool ppExtensionAvailable(int where,int &numPPAvailable,bool nonMixed);
 	void copySource(cSource* childSource, int begin, int end, unordered_map <int, int>& sourceIndexMap);
-	vector <cSyntacticRelationGroup>::iterator copySRI(cSource *childSource,vector <cSyntacticRelationGroup>::iterator sri);
+	vector <cSyntacticRelationGroup>::iterator copySRI(cSource *childSource,vector <cSyntacticRelationGroup>::iterator srg);
 	int numWordsOfDirectlyAttachedPrepositionalPhrases(int whereChild);
 	int copyDirectlyAttachedPrepositionalPhrase(cSource *childSource,int relPrep, unordered_map <int, int>& sourceIndexMap,bool clear);
 	int copyDirectlyAttachedPrepositionalPhrases(int whereParentObject,cSource *childSource,int whereChild, unordered_map <int, int>& sourceIndexMap,bool clear);
 	vector <int> copyChildrenIntoParent(cSource *childSource,int whereChild, unordered_map <int, int>& sourceIndexMap, bool enclosingLoop);
-	int detectAttachedPhrase(cSyntacticRelationGroup *sri,int &relVerb);
+	int detectAttachedPhrase(cSyntacticRelationGroup *srg,int &relVerb);
 	bool hasProperty(int where,int whereQuestionTypeObject, unordered_map <int,vector < vector <int> > > &wikiTableMap,vector <wstring> &propertyValues);
 	bool compareObjectString(int whereObject1,int whereObject2);
 	bool objectContainedIn(int whereObject,set <int> whereObjects);
@@ -2391,7 +2391,7 @@ int wherePrepObject,
 			flags=_flags;
 		}
 	};
-	wstring objectString(int object,wstring &logres,bool shortNameFormat,bool objectOwnerRecursionFlag=false);
+	wstring objectString(int object,wstring &logres,bool shortNameFormat,bool objectOwnerRecursionFlag=false, wchar_t * separator=L" ");
 	vector <cRelationHistory> relationHistory;
 	class cMultiRelationHistory
 	{
@@ -2441,15 +2441,15 @@ int wherePrepObject,
 	void updateSourceStatistics2(int sizeInBytes, int numWordRelations);
 	void updateSourceStatistics3(int numMultiWordRelations);
 	void logPatternChain(int sourcePosition,int insertionPoint,enum cPatternElementMatchArray::chainType patternChainType);
-	void printSRG(wstring logPrefix,cSyntacticRelationGroup* sri,int s,int ws,int wo,int ps,bool overWrote,int matchSum,wstring matchInfo,int logDestination=LOG_WHERE);
-	void printSRG(wstring logPrefix,cSyntacticRelationGroup* sri,int s,int ws,int wo,wstring ps,bool overWrote,int matchSum,wstring matchInfo,int logDestination=LOG_WHERE);
+	void printSRG(wstring logPrefix,cSyntacticRelationGroup* srg,int s,int ws,int wo,int ps,bool overWrote,int matchSum,wstring matchInfo,int logDestination=LOG_WHERE);
+	void printSRG(wstring logPrefix,cSyntacticRelationGroup* srg,int s,int ws,int wo,wstring ps,bool overWrote,int matchSum,wstring matchInfo,int logDestination=LOG_WHERE);
 	int checkInsertPrep(set <int> &relPreps,int wp,int wo);
-	void getAllPreps(cSyntacticRelationGroup* sri,set <int> &relPreps,int wo=-1);
+	void getAllPreps(cSyntacticRelationGroup* srg,set <int> &relPreps,int wo=-1);
 	int flushMultiWordRelations(set <int> &objects);
 	int initializeNounVerbMapping(void);
-	void getSynonyms(wstring word, set <wstring> &synonyms, int synonymType);
-	void getSynonyms(wstring word, vector <set <wstring> > &synonyms, int synonymType);
-	void getWordNetSynonymsOnly(wstring word, vector <set <wstring> > &synonyms, int synonymType);
+	void getSynonyms(wstring word, unordered_set <wstring> &synonyms, int synonymType);
+	void getSynonyms(wstring word, vector <unordered_set <wstring> > &synonyms, int synonymType);
+	void getWordNetSynonymsOnly(wstring word, vector <unordered_set <wstring> > &synonyms, int synonymType);
 	
 	// tense statistics
 	cTenseStat narratorTenseStatistics[NUM_SIMPLE_TENSE];
@@ -2467,7 +2467,7 @@ int wherePrepObject,
 	wstring whereString(int where,wstring &logres,bool shortFormat);
 	wstring whereString(vector <int> &where,wstring &logres);
 	wstring whereString(set <int> &where,wstring &logres);
-	wstring objectString(vector <cObject>::iterator object,wstring &logres,bool shortNameFormat,bool objectOwnerRecursionFlag=false);
+	wstring objectString(vector <cObject>::iterator object,wstring &logres,bool shortNameFormat,bool objectOwnerRecursionFlag=false, wchar_t * separator=L" ");
 	wstring objectString(vector <cOM> &oms,wstring &logres,bool shortNameFormat,bool objectOwnerRecursionFlag=false);
 	wstring objectSortedString(vector <cOM> &objects,wstring &logres);
 	wstring objectString(set <int> &objects,wstring &logres,bool shortNameFormat=true);
@@ -2873,6 +2873,7 @@ bool inSectionHeader,
 	bool matchedList(set <wstring> &matchList, int where, int objectClass,wchar_t *fromWhere);
 	void createObject(cObject object);
 	cOM createObject(wstring derivation,wstring wordstr,OC objectClass);
+	int createObject(wstring derivation, wstring descriptor);
 
 	// MYSQL Database
 	int createLocationTables(void);
@@ -2909,10 +2910,10 @@ bool inSectionHeader,
 	int maxBackwards(int where);
 	int getMinPosition(int where);
 	int gmo(int wo);
-	void getSRIMinMax(cSyntacticRelationGroup *sri);
+	void getSRIMinMax(cSyntacticRelationGroup *srg);
 	void prepPhraseToString(int wherePrep,wstring &ps);
 	void insertCompoundObjects(int wo,set <int> &relPreps, unordered_map <int,int> &principalObjectEndPoints);
-	void correctSRIEntry(cSyntacticRelationGroup &sri);
+	void correctSRIEntry(cSyntacticRelationGroup &srg);
 };
 
 extern vector <cSource::cSpeakerGroup>::iterator sgNULL;

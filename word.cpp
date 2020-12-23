@@ -2271,8 +2271,9 @@ bool cWord::isDoubleQuote(wchar_t ch)
 // nounOwner=0 - no ownership (Danny)
 // nounOwner=1 - plural ownership (patients')
 // nounOwner=2 - singular ownership (Danny's)
-int cWord::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocation,
-                        wstring &sWord,wstring &comment,int &nounOwner,bool scanForSection,bool webScrapeParse,sTrace &t, MYSQL *mysql,int sourceId)
+int cWord::readWord(wchar_t *buffer,__int64 bufferLen,
+__int64 &bufferScanLocation,
+                        wstring &sWord,wstring &comment,int &nounOwner,bool scanForSection,bool webScrapeParse,sTrace &t, MYSQL *mysql,int sourceId, int sourceType)
 { LFS
   __int64 cp=bufferScanLocation;
   nounOwner=0;
@@ -2297,7 +2298,7 @@ int cWord::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocatio
     return PARSE_END_PARAGRAPH;
 	}
 	// Pattern building parse
-	if (buffer[cp]==L'{' && cp+3<bufferLen && ((iswupper(buffer[cp+1]) && iswalpha(buffer[cp+1])) || buffer[cp+1]==L'$') && (buffer[cp+2]==L'=' || buffer[cp+2]==L'}'))
+	if (sourceType== cSource::PATTERN_TRANSFORM_TYPE && buffer[cp]==L'{' && cp+3<bufferLen && ((iswupper(buffer[cp+1]) && iswalpha(buffer[cp+1])) || buffer[cp+1]==L'$') && (buffer[cp+2]==L'=' || buffer[cp+2]==L'}'))
 	{
 		for (cp+=1; cp<bufferLen && buffer[cp]!=L'}'; cp++)
 			sWord+=buffer[cp];
@@ -2326,12 +2327,12 @@ int cWord::readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocatio
 	if (!wcsncmp(buffer + cp, L"<i>", 3))
 	{
 		bufferScanLocation = cp + 3;
-		return readWord(buffer, bufferLen, bufferScanLocation, sWord, comment, nounOwner, scanForSection, webScrapeParse, t,mysql,sourceId);
+		return readWord(buffer, bufferLen, bufferScanLocation, sWord, comment, nounOwner, scanForSection, webScrapeParse, t,mysql,sourceId, sourceType);
 	}
 	if (!wcsncmp(buffer + cp, L"</i>", 4))
 	{
 		bufferScanLocation = cp + 4;
-		return readWord(buffer, bufferLen, bufferScanLocation, sWord, comment, nounOwner, scanForSection, webScrapeParse, t,mysql,sourceId);
+		return readWord(buffer, bufferLen, bufferScanLocation, sWord, comment, nounOwner, scanForSection, webScrapeParse, t,mysql,sourceId, sourceType);
 	}
 	// NewsBank XML parsing
   if (buffer[cp]=='&')

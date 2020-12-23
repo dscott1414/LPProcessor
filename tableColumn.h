@@ -79,7 +79,7 @@ public:
 		wstring simplifiedRDFTypes;
 		wstring sprint(cSource *source, wstring &buffer);
 		void logEntry(int logType, const wchar_t *tableName, int row, int entryIndex, cSource *source);
-		void accumulateEntryRDFTypes(cSource *wikipediaSource, wstring tableName, int row, int entry, set <wstring> &titleSynonyms, unordered_map < wstring, cAssociationType > &accumulatedRDFTypesMap, bool fileCaching);
+		void accumulateEntryRDFTypes(cSource *wikipediaSource, wstring tableName, int row, int entry, unordered_set <wstring> &titleSynonyms, unordered_map < wstring, cAssociationType > &accumulatedRDFTypesMap, bool fileCaching);
 	};
 	class cRow
 	{
@@ -119,12 +119,12 @@ public:
 	bool invalidColumn;
 	cColumn();
 	void removeDomainFromAccumulatedRDFTypesMap(wchar_t * domainAssociations[]);
-	bool determineColumnRDFTypeCoherency(cSource *wikipediaSource, cColumn::cEntry titleEntry, set <wstring> &titleSynonyms, wstring tableName,bool keepMusicDomain, bool keepFilmDomain, bool fileCaching);
+	bool determineColumnRDFTypeCoherency(cSource *wikipediaSource, cColumn::cEntry titleEntry, unordered_set <wstring> &titleSynonyms, wstring tableName,bool keepMusicDomain, bool keepFilmDomain, bool fileCaching);
 	void zeroColumnAccumulatedRDFTypes();
-	void accumulateColumnRDFTypes(cSource *wikipediaSource, wstring tableName, set <wstring> &titleSynonyms, bool keepMusicDomain, bool keepFilmDomain, bool onlyPreferred, bool fileCaching);
+	void accumulateColumnRDFTypes(cSource *wikipediaSource, wstring tableName, unordered_set <wstring> &titleSynonyms, bool keepMusicDomain, bool keepFilmDomain, bool onlyPreferred, bool fileCaching);
 	void getMostCommonRDFTypes(wchar_t *when, wstring tableName);
 	int getSumOfAllFullyConfidentRDFTypeFrequencies(cSource *wikipediaSource, int row, int entry, int &maxFrequency, wstring &maxAssociation, bool fileCaching);
-	bool testTitlePreference(cSource *wikipediaSource, wstring tableName, set <wstring> &titleSynonyms, bool fileCaching);
+	bool testTitlePreference(cSource *wikipediaSource, wstring tableName, unordered_set <wstring> &titleSynonyms, bool fileCaching);
 	void setRowPreference(cSource *wikipediaSource, wstring tableName, bool fileCaching);
 	// each lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms entry has two values:
 	//   the average of the associationValue

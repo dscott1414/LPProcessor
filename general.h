@@ -182,7 +182,7 @@ public:
 };
 
 //void getSynonyms(wstring word,set <wstring> &synonyms, int synonymType,sTrace &t);
-void getAntonyms(wstring word,set <wstring> &synonyms,sTrace &t);
+void getAntonyms(wstring word,unordered_set <wstring> &synonyms,sTrace &t);
 int getFamiliarity(wstring word,bool isAdjective);
 int getHighestFamiliarity(wstring word);
 bool hasHyperNym(wstring word,wstring hyperNym,bool &found,bool trace);
@@ -211,7 +211,8 @@ extern unordered_map <wstring,set < wstring > > nounVerbMap;
 wstring vectorString(vector <wstring> &vstr,wstring &tmpstr,wstring separator);
 wstring vectorString(vector < vector <wstring> > &vstr,wstring &tmpstr,wstring separator);
 wstring setString(set <wstring> &sstr,wstring &tmpstr,wchar_t *separator);
-wstring setString(unordered_set <wstring> &sstr, wstring &tmpstr, wchar_t *separator);
+wstring setString(unordered_set <wstring>& sstr, wstring& tmpstr, wchar_t* separator);
+wstring setString(set <wstring>& sstr, wstring& tmpstr, wchar_t* separator);
 string setString(set <string> &sstr,string &tmpstr,char *separator);
 const wchar_t *ontologyTypeString(int ontologyType,int resourceType, wstring &Btmpstr);
 #define SEPARATOR L"SEPARATOR|||"

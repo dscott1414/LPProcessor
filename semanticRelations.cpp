@@ -495,133 +495,133 @@ I want you to spread yourself this evening
 
 */
 // will change source.m (invalidate all iterators)
-void cSource::correctSRIEntry(cSyntacticRelationGroup &sri)
+void cSource::correctSRIEntry(cSyntacticRelationGroup &srg)
 { LFS
-	if (sri.relationType==stNORELATION)
+	if (srg.relationType==stNORELATION)
 	{
-		if (sri.whereSubject<0 && m[sri.where].relSubject<0)
-			sri.whereSubject=sri.where;
-		else if (sri.whereObject<0 && m[sri.where].getRelObject()<0)
-			sri.whereObject=sri.where;
-		if (sri.whereVerb<0 && m[sri.where].getRelVerb()>=0)
-			sri.whereVerb=m[sri.where].getRelVerb();
+		if (srg.whereSubject<0 && m[srg.where].relSubject<0)
+			srg.whereSubject=srg.where;
+		else if (srg.whereObject<0 && m[srg.where].getRelObject()<0)
+			srg.whereObject=srg.where;
+		if (srg.whereVerb<0 && m[srg.where].getRelVerb()>=0)
+			srg.whereVerb=m[srg.where].getRelVerb();
 	}
 	// CASE 1. he is going to make a mess of things.
-	if (sri.whereControllingEntity==sri.whereSubject && sri.whereSubject>=0) // CASE 1
+	if (srg.whereControllingEntity==srg.whereSubject && srg.whereSubject>=0) // CASE 1
 	{
-		sri.whereControllingEntity=-1;
-		sri.whereObject=m[sri.whereSubject].getRelObject();
+		srg.whereControllingEntity=-1;
+		srg.whereObject=m[srg.whereSubject].getRelObject();
 	}
 	// CASE 2. I felt I could not possibly remain at close quarters
 	// but not 'What is Danny's profession?'
-	if (sri.whereControllingEntity<0 && sri.whereSubject>=0 && m[sri.whereSubject].relInternalObject>=0 && m[sri.whereSubject].getRelVerb()>=0 // CASE 2
-		 && sri.whereSubject<sri.whereVerb) // not a question, where the subject and object are inverted - subject must come before verb.
+	if (srg.whereControllingEntity<0 && srg.whereSubject>=0 && m[srg.whereSubject].relInternalObject>=0 && m[srg.whereSubject].getRelVerb()>=0 // CASE 2
+		 && srg.whereSubject<srg.whereVerb) // not a question, where the subject and object are inverted - subject must come before verb.
 	{
-		sri.whereControllingEntity=sri.whereSubject;
-		sri.whereSubject=m[sri.whereSubject].relInternalObject;
-		sri.whereVerb=m[sri.whereSubject].getRelVerb();
-		if (sri.whereVerb<0)
-			sri.whereObject=-1;
+		srg.whereControllingEntity=srg.whereSubject;
+		srg.whereSubject=m[srg.whereSubject].relInternalObject;
+		srg.whereVerb=m[srg.whereSubject].getRelVerb();
+		if (srg.whereVerb<0)
+			srg.whereObject=-1;
 		else
-			sri.whereObject=m[sri.whereVerb].getRelObject();
+			srg.whereObject=m[srg.whereVerb].getRelObject();
 	}
-	if (sri.whereControllingEntity<0 && sri.whereObject>=0 && m[sri.whereObject].relInternalVerb>=0) // CASE 3
+	if (srg.whereControllingEntity<0 && srg.whereObject>=0 && m[srg.whereObject].relInternalVerb>=0) // CASE 3
 	{
-		sri.whereControllingEntity=sri.whereSubject;
-		sri.whereSubject=sri.whereObject;
-		int saveWhereObject=m[sri.whereSubject].getRelObject();
-		sri.whereVerb=m[sri.whereObject].relInternalVerb;
-		sri.whereObject=saveWhereObject;
+		srg.whereControllingEntity=srg.whereSubject;
+		srg.whereSubject=srg.whereObject;
+		int saveWhereObject=m[srg.whereSubject].getRelObject();
+		srg.whereVerb=m[srg.whereObject].relInternalVerb;
+		srg.whereObject=saveWhereObject;
 	}
 	// CASE 4. is he planning to marry?
-	if (sri.whereControllingEntity<0 && sri.whereSubject>=0 && sri.whereVerb>=0 && m[sri.whereVerb].previousCompoundPartObject>=0 && (m[sri.whereSubject].flags&cWordMatch::flagInQuestion)) // CASE 4
+	if (srg.whereControllingEntity<0 && srg.whereSubject>=0 && srg.whereVerb>=0 && m[srg.whereVerb].previousCompoundPartObject>=0 && (m[srg.whereSubject].flags&cWordMatch::flagInQuestion)) // CASE 4
 	{
-		sri.whereObject=m[sri.whereSubject].getRelObject();
-		sri.whereVerb=m[sri.whereSubject].getRelVerb();
+		srg.whereObject=m[srg.whereSubject].getRelObject();
+		srg.whereVerb=m[srg.whereSubject].getRelVerb();
 	}
-	if (sri.whereControllingEntity>=0 && m[sri.whereControllingEntity].getRelVerb()==sri.whereVerb && sri.whereSubject>=0) // CASE 5
+	if (srg.whereControllingEntity>=0 && m[srg.whereControllingEntity].getRelVerb()==srg.whereVerb && srg.whereSubject>=0) // CASE 5
 	{
-		sri.whereVerb=m[sri.whereSubject].getRelVerb();
-		if (m[sri.whereControllingEntity].getRelVerb()==sri.whereVerb)
+		srg.whereVerb=m[srg.whereSubject].getRelVerb();
+		if (m[srg.whereControllingEntity].getRelVerb()==srg.whereVerb)
 		{
-			sri.whereVerb=m[sri.whereSubject].relInternalVerb;
-			if (sri.whereVerb<0)
+			srg.whereVerb=m[srg.whereSubject].relInternalVerb;
+			if (srg.whereVerb<0)
 			{
-				sri.whereSubject=sri.whereControllingEntity;
-				sri.whereControllingEntity=-1;
-				sri.whereObject=m[sri.whereSubject].getRelObject();
-				sri.whereVerb=m[sri.whereSubject].getRelVerb();
+				srg.whereSubject=srg.whereControllingEntity;
+				srg.whereControllingEntity=-1;
+				srg.whereObject=m[srg.whereSubject].getRelObject();
+				srg.whereVerb=m[srg.whereSubject].getRelVerb();
 			}
 		}
 	}
-	if (sri.whereSubject>=0 && sri.whereVerb<0) 
+	if (srg.whereSubject>=0 && srg.whereVerb<0) 
 	{
-		sri.whereVerb=m[sri.whereSubject].getRelVerb();
+		srg.whereVerb=m[srg.whereSubject].getRelVerb();
 	}
-	if (sri.whereObject<0 && sri.whereVerb>=0) 
-		sri.whereObject=m[sri.whereVerb].getRelObject();
+	if (srg.whereObject<0 && srg.whereVerb>=0) 
+		srg.whereObject=m[srg.whereVerb].getRelObject();
 	// How many years transpired between world championships for the winning team ? CASE 6
-	if (sri.whereControllingEntity<0 && sri.whereSubject>=0 && m[sri.whereSubject].queryWinnerForm(relativizerForm)!=-1 && 
-			sri.whereVerb>=0 && m[sri.whereVerb].relSubject>=0 && m[sri.whereVerb].relSubject!=sri.whereSubject)
-			sri.whereSubject=m[sri.whereVerb].relSubject;
-	if (sri.wherePrep<0 && sri.whereVerb>=0) 
-		sri.wherePrep=m[sri.whereVerb].relPrep;
-	if (sri.wherePrep>=0 && sri.wherePrepObject<0)
-		sri.wherePrepObject=m[sri.wherePrep].getRelObject();
-	if (sri.whereObject==sri.whereSubject && sri.whereVerb>=0)
+	if (srg.whereControllingEntity<0 && srg.whereSubject>=0 && m[srg.whereSubject].queryWinnerForm(relativizerForm)!=-1 && 
+			srg.whereVerb>=0 && m[srg.whereVerb].relSubject>=0 && m[srg.whereVerb].relSubject!=srg.whereSubject)
+			srg.whereSubject=m[srg.whereVerb].relSubject;
+	if (srg.wherePrep<0 && srg.whereVerb>=0) 
+		srg.wherePrep=m[srg.whereVerb].relPrep;
+	if (srg.wherePrep>=0 && srg.wherePrepObject<0)
+		srg.wherePrepObject=m[srg.wherePrep].getRelObject();
+	if (srg.whereObject==srg.whereSubject && srg.whereVerb>=0)
 	{
-		sri.whereObject=m[sri.whereVerb].getRelObject();
-		sri.whereSubject=m[sri.whereVerb].relSubject;
+		srg.whereObject=m[srg.whereVerb].getRelObject();
+		srg.whereSubject=m[srg.whereVerb].relSubject;
 	}
 	// On what date did the court begin screening potential jurors? CASE 7
-	sri.changeStateAdverb=false;
-	if (sri.whereVerb>=0 && m[sri.whereVerb].getRelVerb()<0 && sri.whereVerb+1<(signed)m.size() && (m[sri.whereVerb+1].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE)!=0)
+	srg.changeStateAdverb=false;
+	if (srg.whereVerb>=0 && m[srg.whereVerb].getRelVerb()<0 && srg.whereVerb+1<(signed)m.size() && (m[srg.whereVerb+1].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE)!=0)
 	{
-		int timeFlag=(m[sri.whereVerb].word->second.timeFlags&31);
+		int timeFlag=(m[srg.whereVerb].word->second.timeFlags&31);
 		if (timeFlag==T_START || timeFlag==T_STOP || timeFlag==T_FINISH || timeFlag==T_RESUME)
 		{
-			sri.whereVerb++;
-			if (sri.whereObject>=0 && m[sri.whereObject].beginObjectPosition==sri.whereVerb)
+			srg.whereVerb++;
+			if (srg.whereObject>=0 && m[srg.whereObject].beginObjectPosition==srg.whereVerb)
 			{
-				m[sri.whereObject].beginObjectPosition++;
-				m[m[sri.whereObject].beginObjectPosition].principalWherePosition=m[m[sri.whereObject].beginObjectPosition-1].principalWherePosition;
-				m[m[sri.whereObject].beginObjectPosition-1].principalWherePosition=-1;
-				sri.changeStateAdverb=true;
+				m[srg.whereObject].beginObjectPosition++;
+				m[m[srg.whereObject].beginObjectPosition].principalWherePosition=m[m[srg.whereObject].beginObjectPosition-1].principalWherePosition;
+				m[m[srg.whereObject].beginObjectPosition-1].principalWherePosition=-1;
+				srg.changeStateAdverb=true;
 			}
 		}
 	}
-	if (sri.whereVerb>=0 && m[sri.whereVerb].getRelVerb()>=0 && m[m[sri.whereVerb].getRelVerb()].previousCompoundPartObject==sri.whereVerb) // CASE 8
+	if (srg.whereVerb>=0 && m[srg.whereVerb].getRelVerb()>=0 && m[m[srg.whereVerb].getRelVerb()].previousCompoundPartObject==srg.whereVerb) // CASE 8
 	{
-		sri.whereSecondaryVerb=m[sri.whereVerb].getRelVerb();
-		sri.whereSecondaryObject=m[m[sri.whereVerb].getRelVerb()].getRelObject();
-		if (sri.whereObject==sri.whereSecondaryObject)
-			sri.whereObject=-1;
-		if (sri.whereSecondaryObject>=0)
-			sri.whereNextSecondaryObject=m[sri.whereSecondaryObject].relNextObject;
+		srg.whereSecondaryVerb=m[srg.whereVerb].getRelVerb();
+		srg.whereSecondaryObject=m[m[srg.whereVerb].getRelVerb()].getRelObject();
+		if (srg.whereObject==srg.whereSecondaryObject)
+			srg.whereObject=-1;
+		if (srg.whereSecondaryObject>=0)
+			srg.whereNextSecondaryObject=m[srg.whereSecondaryObject].relNextObject;
 	}
-	sri.whereSecondaryPrep=(sri.wherePrep>=0) ? m[sri.wherePrep].relPrep : -1;
-	if (sri.whereSecondaryPrep<0 && sri.whereVerb>=0 && sri.wherePrep!=m[sri.whereVerb].relPrep)
+	srg.whereSecondaryPrep=(srg.wherePrep>=0) ? m[srg.wherePrep].relPrep : -1;
+	if (srg.whereSecondaryPrep<0 && srg.whereVerb>=0 && srg.wherePrep!=m[srg.whereVerb].relPrep)
 	{
-		sri.whereSecondaryPrep=sri.wherePrep;
-		sri.wherePrep=m[sri.whereVerb].relPrep;
-		if (sri.wherePrep>=0) sri.wherePrepObject=m[sri.wherePrep].getRelObject();
+		srg.whereSecondaryPrep=srg.wherePrep;
+		srg.wherePrep=m[srg.whereVerb].relPrep;
+		if (srg.wherePrep>=0) srg.wherePrepObject=m[srg.wherePrep].getRelObject();
 	}
-	if (sri.whereSecondaryPrep<0 && sri.whereSecondaryVerb>=0 && sri.wherePrep!=m[sri.whereSecondaryVerb].relPrep)
-		sri.whereSecondaryPrep=m[sri.whereSecondaryVerb].relPrep;
-	transformQuestionRelation(sri);
+	if (srg.whereSecondaryPrep<0 && srg.whereSecondaryVerb>=0 && srg.wherePrep!=m[srg.whereSecondaryVerb].relPrep)
+		srg.whereSecondaryPrep=m[srg.whereSecondaryVerb].relPrep;
+	transformQuestionRelation(srg);
 	// sets relNextObject of a prep to be the object immediately before the preposition
 	// sets principalWherePosition of a prep to be the object which is at the head of a chain of prepositions, which is itself not an object of a preposition
 	int ro;
 	set <int> relPreps;
 	unordered_map <int,int> principalObjectEndPoints;
-	getAllPreps(&sri,relPreps,-1);
-	insertCompoundObjects(sri.whereObject,relPreps,principalObjectEndPoints);
-	if (sri.whereObject>=0)
-		insertCompoundObjects(m[sri.whereObject].relNextObject,relPreps,principalObjectEndPoints);
-	insertCompoundObjects(sri.whereControllingEntity,relPreps,principalObjectEndPoints);
-	insertCompoundObjects(sri.whereSubject,relPreps,principalObjectEndPoints);
-	insertCompoundObjects(sri.whereSecondaryObject,relPreps,principalObjectEndPoints);
-	insertCompoundObjects(sri.whereNextSecondaryObject,relPreps,principalObjectEndPoints);
+	getAllPreps(&srg,relPreps,-1);
+	insertCompoundObjects(srg.whereObject,relPreps,principalObjectEndPoints);
+	if (srg.whereObject>=0)
+		insertCompoundObjects(m[srg.whereObject].relNextObject,relPreps,principalObjectEndPoints);
+	insertCompoundObjects(srg.whereControllingEntity,relPreps,principalObjectEndPoints);
+	insertCompoundObjects(srg.whereSubject,relPreps,principalObjectEndPoints);
+	insertCompoundObjects(srg.whereSecondaryObject,relPreps,principalObjectEndPoints);
+	insertCompoundObjects(srg.whereNextSecondaryObject,relPreps,principalObjectEndPoints);
 	int whereLastPrep=-1,whereLastPrincipalObject=-1;
 	for (set <int>::iterator rpi=relPreps.begin(),rpiEnd=relPreps.end(); rpi!=rpiEnd; rpi++)
 	{
@@ -638,9 +638,9 @@ void cSource::correctSRIEntry(cSyntacticRelationGroup &sri)
 		m[*rpi].nextQuote=whereLastPrincipalObject;
 		whereLastPrep=*rpi;
 	}
-	getSRIMinMax(&sri);
+	getSRIMinMax(&srg);
 	//wstring tmpstr;
-	//phraseString(sri.printMin,sri.printMax,tmpstr,true);
+	//phraseString(srg.printMin,srg.printMax,tmpstr,true);
 }
 
 // will change source.m (invalidate all iterators)
@@ -1955,8 +1955,8 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 	//		if (((m[wherePrep].word->second.flags&cSourceWordInfo::prepMoveType) || m[wherePrep].word->first==L"for") && !rejectPrepPhrase(wherePrep))
 	//			lplog(LOG_WHERE,L"%06d:activity noun PLACE:verb %s %s object %s",where,m[whereVerb].word->first.c_str(),m[wherePrep].word->first.c_str(),whereString(m[wherePrep].relObject,tmpstr,false).c_str());
 	//}
-	vector <cSyntacticRelationGroup>::iterator sri=findSyntacticRelationGroup(where);
-	if (sri!=syntacticRelationGroups.end() && sri->where==where) 
+	vector <cSyntacticRelationGroup>::iterator srg=findSyntacticRelationGroup(where);
+	if (srg!=syntacticRelationGroups.end() && srg->where==where) 
 		return false;
 	
 	pr=contact;
@@ -3136,13 +3136,13 @@ void cSource::detectSyntacticRelationGroup(int where,int backInitialPosition,vec
 		primaryLocationLastMovingPosition=where;
 	else if (syntacticRelationGroupsOriginalSize !=syntacticRelationGroups.size() || (speakerGroupsEstablished && m[where].hasSyntacticRelationGroup))
 	{
-		vector <cSyntacticRelationGroup>::iterator sri=syntacticRelationGroups.end();
-		if (syntacticRelationGroupsOriginalSize==syntacticRelationGroups.size() || (sri=syntacticRelationGroups.begin()+(syntacticRelationGroups.size()-1))->where!=where)
-			sri=findSyntacticRelationGroup(where);
-		if (sri==syntacticRelationGroups.end() || sri->where!=where) return;
-		if (!sri->agentLocationRelationSet && speakerGroupsEstablished)
-			srSetTimeFlowTense((int) (sri-syntacticRelationGroups.begin()));
-		processExit(where,sri,backInitialPosition,lastSubjects);
+		vector <cSyntacticRelationGroup>::iterator srg=syntacticRelationGroups.end();
+		if (syntacticRelationGroupsOriginalSize==syntacticRelationGroups.size() || (srg=syntacticRelationGroups.begin()+(syntacticRelationGroups.size()-1))->where!=where)
+			srg=findSyntacticRelationGroup(where);
+		if (srg==syntacticRelationGroups.end() || srg->where!=where) return;
+		if (!srg->agentLocationRelationSet && speakerGroupsEstablished)
+			srSetTimeFlowTense((int) (srg-syntacticRelationGroups.begin()));
+		processExit(where,srg,backInitialPosition,lastSubjects);
 	}
 }
 
@@ -3345,60 +3345,60 @@ void cSource::printVerbFrequency()
 	}
 }
 
-void cSource::processExit(int where,vector <cSyntacticRelationGroup>::iterator sri,int backInitialPosition,vector <int> &lastSubjects)
+void cSource::processExit(int where,vector <cSyntacticRelationGroup>::iterator srg,int backInitialPosition,vector <int> &lastSubjects)
 { LFS
 	bool inPrimaryQuote=(m[where].objectRole&IN_PRIMARY_QUOTE_ROLE)!=0;
 	bool inSecondaryQuote=(m[where].objectRole&IN_SECONDARY_QUOTE_ROLE)!=0;
 	bool physicallyEvaluated=false,allIn,oneIn;
 	wstring tmpstr;
 	int tense;
-	if ((sri->relationType==stEXIT || sri->relationType==stENTER) && !inPrimaryQuote && !inSecondaryQuote && 
-			sri->whereSubject>=0 && !(m[sri->whereSubject].objectRole&THINK_ENCLOSING_ROLE) && !(m[sri->whereSubject].flags&cWordMatch::flagInQuestion) &&
-		  sri->whereVerb>=0 && ((tense=m[sri->whereVerb].verbSense)&(VT_TENSE_MASK|VT_POSSIBLE|VT_NEGATION))==VT_PAST)
+	if ((srg->relationType==stEXIT || srg->relationType==stENTER) && !inPrimaryQuote && !inSecondaryQuote && 
+			srg->whereSubject>=0 && !(m[srg->whereSubject].objectRole&THINK_ENCLOSING_ROLE) && !(m[srg->whereSubject].flags&cWordMatch::flagInQuestion) &&
+		  srg->whereVerb>=0 && ((tense=m[srg->whereVerb].verbSense)&(VT_TENSE_MASK|VT_POSSIBLE|VT_NEGATION))==VT_PAST)
 	{
 		// For a minute Tuppence [thought] she was going to spring upon her - if EXIT is owned by a "think" verb, don't exit
-		int so=m[sri->whereSubject].getObject();
+		int so=m[srg->whereSubject].getObject();
 		bool acceptableSubject=so>=0 && (objects[so].male || objects[so].female || objects[so].getSubType()==MOVING);
-		for (vector <cOM>::iterator omi=m[sri->whereSubject].objectMatches.begin(),omiEnd=m[sri->whereSubject].objectMatches.end(); omi!=omiEnd && !acceptableSubject; omi++)
+		for (vector <cOM>::iterator omi=m[srg->whereSubject].objectMatches.begin(),omiEnd=m[srg->whereSubject].objectMatches.end(); omi!=omiEnd && !acceptableSubject; omi++)
 			acceptableSubject=(objects[omi->object].male || objects[omi->object].female || objects[omi->object].getSubType()==MOVING);
 		// The footsteps died away .
-		if (m[sri->whereSubject].word->first==L"all" || (so>=0 && objects[so].objectClass==BODY_OBJECT_CLASS && m[sri->whereSubject].word->first!=L"footsteps")) acceptableSubject=false;
+		if (m[srg->whereSubject].word->first==L"all" || (so>=0 && objects[so].objectClass==BODY_OBJECT_CLASS && m[srg->whereSubject].word->first!=L"footsteps")) acceptableSubject=false;
 		// 'Left to himself', Tommy would probably have sat down to think things out for a good half-hour before he decided on a plan of action.
-		if (m[sri->whereSubject].getRelVerb()>=0 && sri->whereVerb<sri->whereSubject && m[sri->whereSubject].getRelVerb()!=sri->whereVerb &&
-			  ((m[m[sri->whereSubject].getRelVerb()].verbSense)&(VT_TENSE_MASK|VT_POSSIBLE|VT_NEGATION))!=VT_PAST)
+		if (m[srg->whereSubject].getRelVerb()>=0 && srg->whereVerb<srg->whereSubject && m[srg->whereSubject].getRelVerb()!=srg->whereVerb &&
+			  ((m[m[srg->whereSubject].getRelVerb()].verbSense)&(VT_TENSE_MASK|VT_POSSIBLE|VT_NEGATION))!=VT_PAST)
 			acceptableSubject=false;
 		if (acceptableSubject)
 		{
 			vector <cLocalFocus>::iterator lsi;
-			if (sri->relationType==stENTER)
+			if (srg->relationType==stENTER)
 			{
-				for (int omi=0; omi<(signed)m[sri->whereSubject].objectMatches.size(); omi++)
-					if ((lsi=in(m[sri->whereSubject].objectMatches[omi].object))!=localObjects.end())
+				for (int omi=0; omi<(signed)m[srg->whereSubject].objectMatches.size(); omi++)
+					if ((lsi=in(m[srg->whereSubject].objectMatches[omi].object))!=localObjects.end())
 						lsi->lastEntrance=where;
 				return;
 			}
-			if (m[sri->whereSubject].objectMatches.size()>0)
-				so=m[sri->whereSubject].objectMatches[0].object;
+			if (m[srg->whereSubject].objectMatches.size()>0)
+				so=m[srg->whereSubject].objectMatches[0].object;
 			// is the object POV?
 			set <int> povSpeakers;
 			getPOVSpeakers(povSpeakers);
 			if (povSpeakers.empty() && !speakerGroupsEstablished) 
 			{
 				// if whereSubject is present between where and backInitialPosition, they are povSpeakers.
-				if (m[sri->whereSubject].objectMatches.empty() && (lsi=in(m[sri->whereSubject].getObject()))!=localObjects.end() && lsi->lastWhere>where && 
+				if (m[srg->whereSubject].objectMatches.empty() && (lsi=in(m[srg->whereSubject].getObject()))!=localObjects.end() && lsi->lastWhere>where && 
 					  physicallyPresentPosition(lsi->lastWhere,physicallyEvaluated) && physicallyEvaluated &&
 						// a page-boy went in search of him.
-						!(sri->relationType==stEXIT && objects[lsi->om.object].originalLocation==sri->whereSubject)) // if stEXIT, and whereSubject is the first mention of the subject, skip.
-					povSpeakers.insert(m[sri->whereSubject].getObject());
-				else if (m[sri->whereSubject].objectMatches.size())
+						!(srg->relationType==stEXIT && objects[lsi->om.object].originalLocation==srg->whereSubject)) // if stEXIT, and whereSubject is the first mention of the subject, skip.
+					povSpeakers.insert(m[srg->whereSubject].getObject());
+				else if (m[srg->whereSubject].objectMatches.size())
 				{
-					for (int omi=0; omi<(signed)m[sri->whereSubject].objectMatches.size(); omi++)
+					for (int omi=0; omi<(signed)m[srg->whereSubject].objectMatches.size(); omi++)
 					{
-						if ((lsi=in(m[sri->whereSubject].objectMatches[omi].object))!=localObjects.end() && lsi->lastWhere>where && 
+						if ((lsi=in(m[srg->whereSubject].objectMatches[omi].object))!=localObjects.end() && lsi->lastWhere>where && 
 						  physicallyPresentPosition(lsi->lastWhere,physicallyEvaluated) && physicallyEvaluated)
-							povSpeakers.insert(m[sri->whereSubject].objectMatches[omi].object);
+							povSpeakers.insert(m[srg->whereSubject].objectMatches[omi].object);
 					}
-					if (m[sri->whereSubject].objectMatches.size()!=povSpeakers.size())
+					if (m[srg->whereSubject].objectMatches.size()!=povSpeakers.size())
 						povSpeakers.clear();
 				}
 			}
@@ -3408,16 +3408,16 @@ void cSource::processExit(int where,vector <cSyntacticRelationGroup>::iterator s
 			if (csg>0 && ((unsigned)csg)<speakerGroups.size() && speakerGroups[csg].sgBegin>where) csg--;
 			// if no POV, and several PP speakers, and only one speaker exists in next speaker group, pick that one as a POV
 			if (povSpeakers.empty() && speakerGroupsEstablished && ((unsigned)csg+1)<speakerGroups.size() && 
-				  (m[sri->whereSubject].objectMatches.empty() || m[sri->whereSubject].objectMatches.size()==1)) // definite match 
+				  (m[srg->whereSubject].objectMatches.empty() || m[srg->whereSubject].objectMatches.size()==1)) // definite match 
 			{
 				if (intersect(speakerGroups[csg].speakers,speakerGroups[csg+1].speakers,allIn,oneIn) && !allIn) // at least one doesn't match
 				{
 					// if this speaker exists in the next speaker group, it must be the POV.
-					if (intersect(sri->whereSubject,speakerGroups[csg+1].speakers,allIn,oneIn) && allIn)
+					if (intersect(srg->whereSubject,speakerGroups[csg+1].speakers,allIn,oneIn) && allIn)
 					{
 						// make the POV the one that survives to the next speaker group (the one who exits and keeps the point-of-view
-						povSpeakers.insert((m[sri->whereSubject].objectMatches.empty()) ? m[sri->whereSubject].getObject() : m[sri->whereSubject].objectMatches[0].object);
-						lplog(LOG_RESOLUTION,L"%06d:Made lingering speaker %s POV.",where,whereString(sri->whereSubject,tmpstr,true).c_str());
+						povSpeakers.insert((m[srg->whereSubject].objectMatches.empty()) ? m[srg->whereSubject].getObject() : m[srg->whereSubject].objectMatches[0].object);
+						lplog(LOG_RESOLUTION,L"%06d:Made lingering speaker %s POV.",where,whereString(srg->whereSubject,tmpstr,true).c_str());
 					}
 					// this speaker doesn't exist in the next speaker group. if the other speaker does, then the other speaker must be the POV.
 					else 
@@ -3439,7 +3439,7 @@ void cSource::processExit(int where,vector <cSyntacticRelationGroup>::iterator s
 			if (povSpeakers.empty()) 
 				povStr=L"noPOV";
 			else
-				povStr=(intersect(sri->whereSubject,povSpeakers,allPOVSpeakersInSubject,oneIn)) ? L"notPOV":L"POV";
+				povStr=(intersect(srg->whereSubject,povSpeakers,allPOVSpeakersInSubject,oneIn)) ? L"notPOV":L"POV";
 			lsi=localObjects.end();
 			bool cancel=false,lastWherePP=false;
 			if (!allPOVSpeakersInSubject)
@@ -3454,49 +3454,49 @@ void cSource::processExit(int where,vector <cSyntacticRelationGroup>::iterator s
 				if (lsi!=localObjects.end() && lsi->lastWhere>where && lsi->lastWhere>m[where].getRelObject() && lastWherePP && lookFromAfar)
 					lplog(LOG_RESOLUTION,L"%06d:lookFromAfar means this character really has left (cancels the PP at %d).",where,lsi->lastWhere);
 				// speaking or being spoken to after exit
-				cancel|=(lastOpeningPrimaryQuote>where && m[lastOpeningPrimaryQuote].audiencePosition>=0 && intersect(sri->whereSubject,m[lastOpeningPrimaryQuote].audiencePosition));
-				cancel|=(lastOpeningPrimaryQuote>where && m[lastOpeningPrimaryQuote].speakerPosition>=0 && intersect(sri->whereSubject,m[lastOpeningPrimaryQuote].speakerPosition));
+				cancel|=(lastOpeningPrimaryQuote>where && m[lastOpeningPrimaryQuote].audiencePosition>=0 && intersect(srg->whereSubject,m[lastOpeningPrimaryQuote].audiencePosition));
+				cancel|=(lastOpeningPrimaryQuote>where && m[lastOpeningPrimaryQuote].speakerPosition>=0 && intersect(srg->whereSubject,m[lastOpeningPrimaryQuote].speakerPosition));
 				if (speakerGroupsEstablished && lastOpeningPrimaryQuote>where)
 				{
-					cancel|=intersect(sri->whereSubject,m[lastOpeningPrimaryQuote].audienceObjectMatches,allIn,oneIn);
-					cancel|=intersect(sri->whereSubject,m[lastOpeningPrimaryQuote].objectMatches,allIn,oneIn);
+					cancel|=intersect(srg->whereSubject,m[lastOpeningPrimaryQuote].audienceObjectMatches,allIn,oneIn);
+					cancel|=intersect(srg->whereSubject,m[lastOpeningPrimaryQuote].objectMatches,allIn,oneIn);
 				}
 			}
-			intersect(sri->whereSubject,povSpeakers,allPOVSpeakersInSubject,oneIn);
+			intersect(srg->whereSubject,povSpeakers,allPOVSpeakersInSubject,oneIn);
 			// only cancel if no povSpeakers or there are no povSpeakers in the subject.
-			cancel=cancel && (povSpeakers.empty() || !oneIn) && m[sri->whereSubject].objectMatches.size()<=2;
+			cancel=cancel && (povSpeakers.empty() || !oneIn) && m[srg->whereSubject].objectMatches.size()<=2;
 			// one of the subjects is in the pov, the other isn't, but both are mentioned as exiting.  So cancel.
 			// cancel|=oneIn && !allIn;
-			cancel|=(m[sri->whereSubject].objectRole&THINK_ENCLOSING_ROLE)!=0;
-			if (!(tense&VT_PASSIVE) && !(m[sri->whereSubject].objectRole&THINK_ENCLOSING_ROLE) && lsi!=localObjects.end() && debugTrace.traceWhere)
+			cancel|=(m[srg->whereSubject].objectRole&THINK_ENCLOSING_ROLE)!=0;
+			if (!(tense&VT_PASSIVE) && !(m[srg->whereSubject].objectRole&THINK_ENCLOSING_ROLE) && lsi!=localObjects.end() && debugTrace.traceWhere)
 				lplog(LOG_WHERE,L"%06d:SGPEXIT %s- %s (lastWhere=%d:previousWhere=%d:%s %s) tense %s subject role=%s.",
 							where,(cancel) ? L"CANCEL ":L"",povStr.c_str(),lsi->lastWhere,lsi->previousWhere,
 							(lastWherePP) ? L"PP":L"notPP",(physicallyEvaluated) ? L"eval":L"not eval",
-							senseString(ss,tense).c_str(),m[sri->whereSubject].roleString(sRole).c_str());
-			int subjectObject=m[sri->whereSubject].getObject();
+							senseString(ss,tense).c_str(),m[srg->whereSubject].roleString(sRole).c_str());
+			int subjectObject=m[srg->whereSubject].getObject();
 			if (subjectObject>=0) 
 			{
 				int wo=objects[subjectObject].getOwnerWhere();
 				/* the subject is an exact count of people and the number of people matched does not equal the count */
-				if (wo<0 && wo!=-1 && cObject::wordOrderWords[-2-wo]==L"two" && m[sri->whereSubject].objectMatches.size()!=2)
+				if (wo<0 && wo!=-1 && cObject::wordOrderWords[-2-wo]==L"two" && m[srg->whereSubject].objectMatches.size()!=2)
 					cancel=true;
-				if (wo<0 && wo!=-1 && cObject::wordOrderWords[-2-wo]==L"three" && m[sri->whereSubject].objectMatches.size()!=3)
+				if (wo<0 && wo!=-1 && cObject::wordOrderWords[-2-wo]==L"three" && m[srg->whereSubject].objectMatches.size()!=3)
 					cancel=true;
-				if (m[where].queryWinnerForm(numeralCardinalForm)>=0 && m[where].word->first==L"two" && m[sri->whereSubject].objectMatches.size()!=2)
+				if (m[where].queryWinnerForm(numeralCardinalForm)>=0 && m[where].word->first==L"two" && m[srg->whereSubject].objectMatches.size()!=2)
 					cancel=true;
-				if (m[where].queryWinnerForm(numeralCardinalForm)>=0 && m[where].word->first==L"three" && m[sri->whereSubject].objectMatches.size()!=3)
+				if (m[where].queryWinnerForm(numeralCardinalForm)>=0 && m[where].word->first==L"three" && m[srg->whereSubject].objectMatches.size()!=3)
 					cancel=true;
 			}
 			bool allSpeakers=false;
 			// is everyone dispersing? / The two young EXITpeople[tommy,tuppence] went off in opposite directions 
-			if (!cancel && !allPOVSpeakersInSubject && subjectObject>=0 && objects[subjectObject].plural && m[sri->whereSubject].objectMatches.size()>1)
+			if (!cancel && !allPOVSpeakersInSubject && subjectObject>=0 && objects[subjectObject].plural && m[srg->whereSubject].objectMatches.size()>1)
 			{
 				allSpeakers=true;
 				for (lsi=localObjects.begin(); lsi!=localObjects.end(); lsi++)
-					if (lsi->physicallyPresent && lsi->numIdentifiedAsSpeaker>0 && in(lsi->om.object,m[sri->whereSubject].objectMatches)==m[sri->whereSubject].objectMatches.end())
+					if (lsi->physicallyPresent && lsi->numIdentifiedAsSpeaker>0 && in(lsi->om.object,m[srg->whereSubject].objectMatches)==m[srg->whereSubject].objectMatches.end())
 					{
 						if (lsi->lastWhere>=0 && m[lsi->lastWhere].objectMatches.size()) continue;
-						if (lsi->lastWhere<0 || m[lsi->lastWhere].objectMatches.size()!=1 || in(m[lsi->lastWhere].objectMatches[0].object,m[sri->whereSubject].objectMatches)==m[sri->whereSubject].objectMatches.end())
+						if (lsi->lastWhere<0 || m[lsi->lastWhere].objectMatches.size()!=1 || in(m[lsi->lastWhere].objectMatches[0].object,m[srg->whereSubject].objectMatches)==m[srg->whereSubject].objectMatches.end())
 							allSpeakers=false;
 					}
 				if (allSpeakers && debugTrace.traceSpeakerResolution)
@@ -3505,17 +3505,17 @@ void cSource::processExit(int where,vector <cSyntacticRelationGroup>::iterator s
 			// attempt to disambiguate a subject which is exiting (21092 with verb 21103)
 			// if one is POV, and the other is not POV, then if notPOV is found after exit, then it must not be exiting.
 			// also don't erase if numbered metagroup (all three)
-			if (!cancel && m[sri->whereSubject].objectMatches.size()>1 && !allSpeakers && !allPOVSpeakersInSubject &&
-				  m[sri->whereSubject].getObject()>=0 && !objects[m[sri->whereSubject].getObject()].plural)
+			if (!cancel && m[srg->whereSubject].objectMatches.size()>1 && !allSpeakers && !allPOVSpeakersInSubject &&
+				  m[srg->whereSubject].getObject()>=0 && !objects[m[srg->whereSubject].getObject()].plural)
 			{
 				int eraseOtherEntry=-1,numFoundAfter=0,foundAfterEntry=-1;
-				for (int omi=0; omi<(signed)m[sri->whereSubject].objectMatches.size(); omi++)
+				for (int omi=0; omi<(signed)m[srg->whereSubject].objectMatches.size(); omi++)
 				{
-					if ((lsi=in(m[sri->whereSubject].objectMatches[omi].object))!=localObjects.end())
+					if ((lsi=in(m[srg->whereSubject].objectMatches[omi].object))!=localObjects.end())
 					{
 						if (debugTrace.traceSpeakerResolution)
 							lplog(LOG_RESOLUTION,L"%06d:exit disambiguation - %s:last exit in paragraph=%d POV=%s",
-								where,objectString(m[sri->whereSubject].objectMatches[omi].object,tmpstr,true).c_str(),lsi->lastWhere,(povSpeakers.find(lsi->om.object)!=povSpeakers.end()) ? L"true":L"false");
+								where,objectString(m[srg->whereSubject].objectMatches[omi].object,tmpstr,true).c_str(),lsi->lastWhere,(povSpeakers.find(lsi->om.object)!=povSpeakers.end()) ? L"true":L"false");
 						if (povSpeakers.find(lsi->om.object)==povSpeakers.end())
 						{
 							// notPOV is found after exit - erase entry
@@ -3530,7 +3530,7 @@ void cSource::processExit(int where,vector <cSyntacticRelationGroup>::iterator s
 								eraseOtherEntry=omi;
 								if (debugTrace.traceSpeakerResolution)
 									lplog(LOG_RESOLUTION,L"%06d:exit disambiguation - eraseOtherEntry preference set to %s",
-											where,objectString(m[sri->whereSubject].objectMatches[omi].object,tmpstr,true).c_str());
+											where,objectString(m[srg->whereSubject].objectMatches[omi].object,tmpstr,true).c_str());
 							}
 						}
 					}
@@ -3539,26 +3539,26 @@ void cSource::processExit(int where,vector <cSyntacticRelationGroup>::iterator s
 				{
 					if (debugTrace.traceSpeakerResolution)
 						lplog(LOG_RESOLUTION,L"%06d:exit disambiguation - erased nonPOV %s",
-							where,objectString(m[sri->whereSubject].objectMatches[foundAfterEntry].object,tmpstr,true).c_str());
-					m[sri->whereSubject].objectMatches.erase(m[sri->whereSubject].objectMatches.begin()+foundAfterEntry);
+							where,objectString(m[srg->whereSubject].objectMatches[foundAfterEntry].object,tmpstr,true).c_str());
+					m[srg->whereSubject].objectMatches.erase(m[srg->whereSubject].objectMatches.begin()+foundAfterEntry);
 				}
-				if (numFoundAfter==m[sri->whereSubject].objectMatches.size())
+				if (numFoundAfter==m[srg->whereSubject].objectMatches.size())
 				{
-					lplog(LOG_RESOLUTION,L"%06d:EXIT cancelled (nonPOV comes back) (numFoundAfter=%d)!",sri->where,numFoundAfter);
+					lplog(LOG_RESOLUTION,L"%06d:EXIT cancelled (nonPOV comes back) (numFoundAfter=%d)!",srg->where,numFoundAfter);
 					return;
 				}
-				if (eraseOtherEntry>=0 && m[sri->whereSubject].objectMatches.size()>1)
+				if (eraseOtherEntry>=0 && m[srg->whereSubject].objectMatches.size()>1)
 				{
-					for (int omi=0; omi<(signed)m[sri->whereSubject].objectMatches.size(); )
+					for (int omi=0; omi<(signed)m[srg->whereSubject].objectMatches.size(); )
 					{
-						if ((lsi=in(m[sri->whereSubject].objectMatches[omi].object))!=localObjects.end() && 
+						if ((lsi=in(m[srg->whereSubject].objectMatches[omi].object))!=localObjects.end() && 
 							  // POV cannot disappear - the only thing POV can do is make nonPOV exit
 							  (lsi->lastWhere>where || povSpeakers.find(lsi->om.object)!=povSpeakers.end()))
 						{
 							if (debugTrace.traceSpeakerResolution)
 								lplog(LOG_RESOLUTION,L"%06d:exit disambiguation - eraseOtherEntry preference erased %s",
-										where,objectString(m[sri->whereSubject].objectMatches[omi].object,tmpstr,true).c_str());
-							m[sri->whereSubject].objectMatches.erase(m[sri->whereSubject].objectMatches.begin()+omi);
+										where,objectString(m[srg->whereSubject].objectMatches[omi].object,tmpstr,true).c_str());
+							m[srg->whereSubject].objectMatches.erase(m[srg->whereSubject].objectMatches.begin()+omi);
 						}
 						else
 							omi++;												
@@ -3566,25 +3566,25 @@ void cSource::processExit(int where,vector <cSyntacticRelationGroup>::iterator s
 				}
 			}
 			if (!cancel && ((speakerGroupsEstablished  && (povSpeakers.size() || nonPOVSpeakerOverride)) || 
-				              (!speakerGroupsEstablished && (m[sri->whereSubject].objectMatches.size()<=1 || allSpeakers || allPOVSpeakersInSubject))))
+				              (!speakerGroupsEstablished && (m[srg->whereSubject].objectMatches.size()<=1 || allSpeakers || allPOVSpeakersInSubject))))
 			{
-				bool spatialSeparation=isSpatialSeparation(sri->whereVerb);
+				bool spatialSeparation=isSpatialSeparation(srg->whereVerb);
 				bool sgOccurredAfter=false,audienceOccurredAfter=false,speakerOccurredAfter=false;
-				if (!intersect(sri->whereSubject,povSpeakers,allIn,oneIn))
+				if (!intersect(srg->whereSubject,povSpeakers,allIn,oneIn))
 				{
 					// does the subject exit and then come back, or continue the action?
 					// There EXITthey[whittington,boris,chance] went up to the first floor , and CONTACTsat at a small LOCATIONtable in the window .
 					// The EXITbutler[butler] retired , ENTERreturning a moment or two later. 
-					if (sri+1<syntacticRelationGroups.end() && (sri+1)->whereSubject==sri->whereSubject && (sri+1)->relationType!=stEXIT)
+					if (srg+1<syntacticRelationGroups.end() && (srg+1)->whereSubject==srg->whereSubject && (srg+1)->relationType!=stEXIT)
 					{
-						lplog(LOG_RESOLUTION,L"%06d:EXIT cancelled (nonPOV comes back)!",sri->where);
+						lplog(LOG_RESOLUTION,L"%06d:EXIT cancelled (nonPOV comes back)!",srg->where);
 						return;
 					}
-					if (sri->speakerContinuation && isSpeakerContinued(where,so,lastWherePP,sgOccurredAfter,audienceOccurredAfter,speakerOccurredAfter))
-						lplog(LOG_RESOLUTION,L"%06d:reject [%s %s %s]?",sri->whereSubject,(sgOccurredAfter) ? L"sgOccurredAfter":L"",(audienceOccurredAfter) ? L"audienceOccurredAfter":L"",(speakerOccurredAfter) ? L"speakerOccurredAfter":L"");
+					if (srg->speakerContinuation && isSpeakerContinued(where,so,lastWherePP,sgOccurredAfter,audienceOccurredAfter,speakerOccurredAfter))
+						lplog(LOG_RESOLUTION,L"%06d:reject [%s %s %s]?",srg->whereSubject,(sgOccurredAfter) ? L"sgOccurredAfter":L"",(audienceOccurredAfter) ? L"audienceOccurredAfter":L"",(speakerOccurredAfter) ? L"speakerOccurredAfter":L"");
 					if (lsi==localObjects.end())
 					{
-						lplog(LOG_RESOLUTION,L"%06d:exit processing - illegal lsi found",sri->whereSubject);
+						lplog(LOG_RESOLUTION,L"%06d:exit processing - illegal lsi found",srg->whereSubject);
 						return;
 					}
 					if (lsi->physicallyPresent && lsi->whereBecamePhysicallyPresent>backInitialPosition) 
@@ -3619,37 +3619,37 @@ void cSource::processExit(int where,vector <cSyntacticRelationGroup>::iterator s
 				{
 					// Tuppence brought in the coffee and liqueurs and unwillingly EXITretired . As she[tuppence] did so , she[tuppence] heard Boris say
 					// cancel this EXIT regardless of whether if it is a POV
-					if (m[sri->whereSubject].flags&cWordMatch::flagInLingeringStatement)
+					if (m[srg->whereSubject].flags&cWordMatch::flagInLingeringStatement)
 					{
-						lplog(LOG_RESOLUTION,L"%06d:EXIT cancelled (lingering)!",sri->where);
+						lplog(LOG_RESOLUTION,L"%06d:EXIT cancelled (lingering)!",srg->where);
 						return;
 					}
-					for (int S1=sri->whereSubject; S1<(signed)m.size() && S1<sri->whereSubject+50; S1++)
+					for (int S1=srg->whereSubject; S1<(signed)m.size() && S1<srg->whereSubject+50; S1++)
 					{
 						if (m[S1].pma.queryPattern(L"__S1")!=-1 && (m[S1].flags&cWordMatch::flagInLingeringStatement))
-							for (int S2=S1; S2<(signed)m.size() && S2<sri->whereSubject+50; S2++)
+							for (int S2=S1; S2<(signed)m.size() && S2<srg->whereSubject+50; S2++)
 							{
 								if ((m[S2].objectRole&SUBJECT_ROLE) && m[S2].getObject()>=0)
 								{
-									if (intersect(sri->whereSubject,S2) && m[S2].getRelVerb()>=0 && m[S2].getRelObject()>=0 && m[m[S2].getRelVerb()].getMainEntry()->first==L"do" && m[m[S2].getRelObject()].word->first==L"so")
+									if (intersect(srg->whereSubject,S2) && m[S2].getRelVerb()>=0 && m[S2].getRelObject()>=0 && m[m[S2].getRelVerb()].getMainEntry()->first==L"do" && m[m[S2].getRelObject()].word->first==L"so")
 									{
-										lplog(LOG_RESOLUTION,L"%06d:EXIT cancelled (lingering 2)!",sri->where);
+										lplog(LOG_RESOLUTION,L"%06d:EXIT cancelled (lingering 2)!",srg->where);
 										return;
 									}
 									break;
 								}
 							}
 					}
-					int excludeWhere=sri->whereSubject;
+					int excludeWhere=srg->whereSubject;
 					// if all speakers exiting, preserve all the speakers in the next speaker group (if intersecting).
-					if (speakerGroupsEstablished  && allPOVSpeakersInSubject && currentSpeakerGroup+1<speakerGroups.size() && intersect(sri->whereSubject,speakerGroups[currentSpeakerGroup+1].speakers,allIn,oneIn))
+					if (speakerGroupsEstablished  && allPOVSpeakersInSubject && currentSpeakerGroup+1<speakerGroups.size() && intersect(srg->whereSubject,speakerGroups[currentSpeakerGroup+1].speakers,allIn,oneIn))
 					{
 						if (allIn) 
 							spatialSeparation=false;
 						else // this assumes a subject is no more than two people
 							for (set <int>::iterator s=speakerGroups[currentSpeakerGroup+1].speakers.begin(); s!=speakerGroups[currentSpeakerGroup+1].speakers.end(); s++)
 							{
-								if (in(*s,sri->whereSubject))
+								if (in(*s,srg->whereSubject))
 								{
 									spatialSeparation=false;
 									excludeWhere=objects[*s].originalLocation;
@@ -3657,7 +3657,7 @@ void cSource::processExit(int where,vector <cSyntacticRelationGroup>::iterator s
 							}
 					}
 					bool transitionSinceEOS=false;
-					ageTransition(sri->whereSubject,false,transitionSinceEOS,-1,(spatialSeparation) ? -1 : excludeWhere,lastSubjects,L"DSR 2");
+					ageTransition(srg->whereSubject,false,transitionSinceEOS,-1,(spatialSeparation) ? -1 : excludeWhere,lastSubjects,L"DSR 2");
 				}
 			}
 		}

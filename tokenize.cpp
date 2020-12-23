@@ -1013,7 +1013,7 @@ int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 		int nounOwner = 0;
 		bool flagAlphaBeforeHint = (bufferScanLocation && iswalpha(bookBuffer[bufferScanLocation - 1]));
 		bool flagNewLineBeforeHint = (bufferScanLocation && bookBuffer[bufferScanLocation - 1] == 13);
-		result = Words.readWord(bookBuffer, bufferLen, bufferScanLocation, sWord, comment, nounOwner, false, webScrapeParse, debugTrace, &mysql, sourceId);
+		result = Words.readWord(bookBuffer, bufferLen, bufferScanLocation, sWord, comment, nounOwner, false, webScrapeParse, debugTrace, &mysql, sourceId, sourceType);
 		if (comment.size() > 0)
 			lastMetaCommandEmbeddedInSource=metaCommandsEmbeddedInSource[m.size()] = comment;
 		if (result == PARSE_TRACE)

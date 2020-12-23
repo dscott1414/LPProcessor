@@ -61,17 +61,17 @@ const wchar_t *cSource::wrti(int where, wchar_t *id, wstring &tmpstr, bool short
 // Krugman earned his B.A. in economics from Yale University summa cum laude in 1974 and his PhD from the Massachusetts Institute of Technology (MIT) in 1977.
 // please also see http://aclweb.org/anthology-new/J/J06/J06-3002.pdf
 // 
-void cSource::getAllPreps(cSyntacticRelationGroup* sri, set <int> &relPreps, int wo)
+void cSource::getAllPreps(cSyntacticRelationGroup* srg, set <int> &relPreps, int wo)
 {
 	LFS
-		if (sri->whereVerb >= 0 && sri->wherePrep != m[sri->whereVerb].relPrep)
-			for (int wp = m[sri->whereVerb].relPrep; wp >= 0 && wp + 1 < (int)m.size(); wp = m[wp].relPrep)
+		if (srg->whereVerb >= 0 && srg->wherePrep != m[srg->whereVerb].relPrep)
+			for (int wp = m[srg->whereVerb].relPrep; wp >= 0 && wp + 1 < (int)m.size(); wp = m[wp].relPrep)
 				if (checkInsertPrep(relPreps, wp, wo) < 0)
 					break;
-	for (int wp = sri->wherePrep; wp >= 0 && wp + 1 < (int)m.size(); wp = m[wp].relPrep)
+	for (int wp = srg->wherePrep; wp >= 0 && wp + 1 < (int)m.size(); wp = m[wp].relPrep)
 		if (checkInsertPrep(relPreps, wp, wo) < 0)
 			break;
-	for (int wp = sri->whereSecondaryPrep; wp >= 0 && wp + 1 < (int)m.size(); wp = m[wp].relPrep)
+	for (int wp = srg->whereSecondaryPrep; wp >= 0 && wp + 1 < (int)m.size(); wp = m[wp].relPrep)
 		if (checkInsertPrep(relPreps, wp, wo) < 0)
 			break;
 	if (wo >= 0 && m[wo].relPrep >= 0)
@@ -119,41 +119,41 @@ int cSource::getProfession(int object)
 	return NULLWORD;
 }
 
-void cSource::getSRIMinMax(cSyntacticRelationGroup* sri)
+void cSource::getSRIMinMax(cSyntacticRelationGroup* srg)
 {
 	LFS
-		sri->printMin = 10000;
-	sri->printMax = -1;
-	if (sri->whereControllingEntity >= 0)
+		srg->printMin = 10000;
+	srg->printMax = -1;
+	if (srg->whereControllingEntity >= 0)
 	{
-		sri->printMin = min(sri->printMin, sri->whereControllingEntity);
-		if (m[sri->whereControllingEntity].getObject() >= 0)
-			sri->printMin = min(sri->printMin, m[sri->whereControllingEntity].beginObjectPosition);
+		srg->printMin = min(srg->printMin, srg->whereControllingEntity);
+		if (m[srg->whereControllingEntity].getObject() >= 0)
+			srg->printMin = min(srg->printMin, m[srg->whereControllingEntity].beginObjectPosition);
 	}
-	if (sri->whereSubject >= 0)
+	if (srg->whereSubject >= 0)
 	{
-		sri->printMin = min(sri->printMin, sri->whereSubject);
-		if (m[sri->whereSubject].getObject() >= 0)
-			sri->printMin = min(sri->printMin, m[sri->whereSubject].beginObjectPosition);
+		srg->printMin = min(srg->printMin, srg->whereSubject);
+		if (m[srg->whereSubject].getObject() >= 0)
+			srg->printMin = min(srg->printMin, m[srg->whereSubject].beginObjectPosition);
 	}
-	if (sri->whereVerb >= 0) sri->printMin = min(sri->printMin, sri->whereVerb);
-	if (sri->whereObject >= 0) sri->printMin = min(sri->printMin, sri->whereObject);
+	if (srg->whereVerb >= 0) srg->printMin = min(srg->printMin, srg->whereVerb);
+	if (srg->whereObject >= 0) srg->printMin = min(srg->printMin, srg->whereObject);
 
-	sri->printMax = max(sri->printMax, gmo(sri->whereControllingEntity));
-	sri->printMax = max(sri->printMax, gmo(sri->whereSubject));
-	sri->printMax = max(sri->printMax, sri->whereVerb);
-	sri->printMax = max(sri->printMax, gmo(sri->whereObject));
-	if (sri->whereObject >= 0) sri->printMax = max(sri->printMax, gmo(m[sri->whereObject].nextCompoundPartObject));
-	if (sri->whereVerb >= 0) sri->printMax = max(sri->printMax, m[sri->whereVerb].getRelVerb());
-	if (sri->whereVerb >= 0 && m[sri->whereVerb].getRelVerb() >= 0) sri->printMax = max(sri->printMax, gmo(m[m[sri->whereVerb].getRelVerb()].getRelObject()));
+	srg->printMax = max(srg->printMax, gmo(srg->whereControllingEntity));
+	srg->printMax = max(srg->printMax, gmo(srg->whereSubject));
+	srg->printMax = max(srg->printMax, srg->whereVerb);
+	srg->printMax = max(srg->printMax, gmo(srg->whereObject));
+	if (srg->whereObject >= 0) srg->printMax = max(srg->printMax, gmo(m[srg->whereObject].nextCompoundPartObject));
+	if (srg->whereVerb >= 0) srg->printMax = max(srg->printMax, m[srg->whereVerb].getRelVerb());
+	if (srg->whereVerb >= 0 && m[srg->whereVerb].getRelVerb() >= 0) srg->printMax = max(srg->printMax, gmo(m[m[srg->whereVerb].getRelVerb()].getRelObject()));
 	set <int> relPreps;
-	for (int wp = sri->wherePrep; wp >= 0 && wp < (int)m.size(); wp = m[wp].relPrep)
+	for (int wp = srg->wherePrep; wp >= 0 && wp < (int)m.size(); wp = m[wp].relPrep)
 	{
 		if (relPreps.find(wp) != relPreps.end())
 			break;
 		relPreps.insert(wp);
 	}
-	for (int wp = sri->whereSecondaryPrep; wp >= 0 && wp + 1 < (int)m.size(); wp = m[wp].relPrep)
+	for (int wp = srg->whereSecondaryPrep; wp >= 0 && wp + 1 < (int)m.size(); wp = m[wp].relPrep)
 	{
 		if (relPreps.find(wp) != relPreps.end())
 			break;
@@ -161,15 +161,15 @@ void cSource::getSRIMinMax(cSyntacticRelationGroup* sri)
 	}
 	for (set <int>::iterator rp = relPreps.begin(), rpEnd = relPreps.end(); rp != rpEnd; rp++)
 	{
-		if (*rp != sri->transformedPrep)
-			sri->printMin = min(sri->printMin, *rp);
-		if (m[*rp].getRelObject() >= 0) sri->printMin = min(sri->printMin, m[*rp].getRelObject());
-		if (*rp != sri->transformedPrep)
-			sri->printMax = max(sri->printMax, *rp);
-		sri->printMax = max(sri->printMax, gmo(m[*rp].getRelObject()));
-		if (m[*rp].getRelObject() >= 0) sri->printMax = max(sri->printMax, gmo(m[m[*rp].getRelObject()].nextCompoundPartObject));
+		if (*rp != srg->transformedPrep)
+			srg->printMin = min(srg->printMin, *rp);
+		if (m[*rp].getRelObject() >= 0) srg->printMin = min(srg->printMin, m[*rp].getRelObject());
+		if (*rp != srg->transformedPrep)
+			srg->printMax = max(srg->printMax, *rp);
+		srg->printMax = max(srg->printMax, gmo(m[*rp].getRelObject()));
+		if (m[*rp].getRelObject() >= 0) srg->printMax = max(srg->printMax, gmo(m[m[*rp].getRelObject()].nextCompoundPartObject));
 	}
-	if (sri->whereQuestionType >= 0) sri->printMin = min(sri->printMin, sri->whereQuestionType);
+	if (srg->whereQuestionType >= 0) srg->printMin = min(srg->printMin, srg->whereQuestionType);
 }
 
 wstring cSource::getWSAdjective(int where, int numOrder)
@@ -356,22 +356,22 @@ int cSource::getMSAdjective(int where, int numOrder)
 	return NULLWORD;
 }
 
-void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* sri, int s, int ws, int wo, int ps, bool overWrote, int matchSum, wstring matchInfo, int logDestination)
+void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* srg, int s, int ws, int wo, int ps, bool overWrote, int matchSum, wstring matchInfo, int logDestination)
 {
 	LFS
 		wstring tmpstr;
 	prepPhraseToString(ps, tmpstr);
-	printSRG(logPrefix, sri, s, ws, wo, tmpstr, overWrote, matchSum, matchInfo, logDestination);
+	printSRG(logPrefix, srg, s, ws, wo, tmpstr, overWrote, matchSum, matchInfo, logDestination);
 }
 
-void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* sri, int s, int ws, int wo, wstring ps, bool overWrote, int matchSum, wstring matchInfo, int logDestination)
+void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* srg, int s, int ws, int wo, wstring ps, bool overWrote, int matchSum, wstring matchInfo, int logDestination)
 {
 	LFS
-		if (sri == NULL)
+		if (srg == NULL)
 			return;
 	wstring tmpstr, tmpstr2, tmpstr3, tmpstr4, tmpstr5, tmpstr6, tmpstr7, tmpstr8, tmpstr9, tmpstr10, tmpstr11, tmpstr12, tmpstr14;
-	bool inQuestion = (sri->whereSubject >= 0 && (m[sri->whereSubject].flags&cWordMatch::flagInQuestion));
-	inQuestion |= (sri->whereObject >= 0 && (m[sri->whereObject].flags&cWordMatch::flagInQuestion));
+	bool inQuestion = (srg->whereSubject >= 0 && (m[srg->whereSubject].flags&cWordMatch::flagInQuestion));
+	inQuestion |= (srg->whereObject >= 0 && (m[srg->whereObject].flags&cWordMatch::flagInQuestion));
 	//if (SRIDebugCounter==464)
 	//{
 	//	extern int logQuestionProfileTime,logSynonymDetail,logTableDetail,equivalenceLogDetail,logDetail;
@@ -396,37 +396,37 @@ void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* sri, int s, i
 	wchar_t *f1 = L"%s:%06d:%s%s%s %s %s%s %s %s %s %s %d:%s%s [V %d:%s]%s%s%s %s %s %d:%s%s%s%s%s%s%s%s%s%s%s";
 	lplog(logDestination, f1, 
 		logPrefix.c_str(), // 1
-		sri->where, // 2
+		srg->where, // 2
 		tmpstr14.c_str(), // 3
-		(sri->whereQuestionType < 0 && sri->relationType != stLOCATION && sri->relationType != -stLOCATION && sri->relationType != stNORELATION && inQuestion) ? L"***" : L"", //4
+		(srg->whereQuestionType < 0 && srg->relationType != stLOCATION && srg->relationType != -stLOCATION && srg->relationType != stNORELATION && inQuestion) ? L"***" : L"", //4
 		(overWrote) ? L" OVERWRITE" : L"", // 5
-		relationString(sri->relationType).c_str(),  // 6
-		(sri->whereQuestionType >= 0) ? m[sri->whereQuestionType].word->first.c_str() : L"", // 7
-		wrti(sri->whereControllingEntity, L"controller", tmpstr, shortFormat),  // 8
-		(sri->whereControllingEntity < 0) ? L"" : wchr(m[sri->whereControllingEntity].getRelVerb()), // 9
+		relationString(srg->relationType).c_str(),  // 6
+		(srg->whereQuestionType >= 0) ? m[srg->whereQuestionType].word->first.c_str() : L"", // 7
+		wrti(srg->whereControllingEntity, L"controller", tmpstr, shortFormat),  // 8
+		(srg->whereControllingEntity < 0) ? L"" : wchr(m[srg->whereControllingEntity].getRelVerb()), // 9
 		getWOSAdjective(ws, tmpstr2).c_str(), // 10
 		getWSAdjective(ws, 0).c_str(), // 11
 		getWSAdjective(ws, 1).c_str(), // 12
 		ws, // 13
 		wrti(ws, L"S", tmpstr3, shortFormat), // 14
-		(sri->tft.negation) ? L"[NOT]" : L"", // 15
-		sri->whereVerb, // 16
-		wchr(sri->whereVerb), // 17
-		tmp1 = getWSAdverb(sri->whereVerb, sri->changeStateAdverb), // 18
-		tmp2 = getWOSAdjective(sri->whereVerb, wo, tmpstr4).c_str(), // 19
-		tmp3 = getWSAdjective(sri->whereVerb, wo, 0, tmpstr5).c_str(), // 20
-		tmp4 = getWSAdjective(sri->whereVerb, wo, 1, tmpstr6).c_str(), // 21
-		tmp5 = getWSAdjective(sri->whereVerb, wo, 2, tmpstr7).c_str(), // 22
+		(srg->tft.negation) ? L"[NOT]" : L"", // 15
+		srg->whereVerb, // 16
+		wchr(srg->whereVerb), // 17
+		tmp1 = getWSAdverb(srg->whereVerb, srg->changeStateAdverb), // 18
+		tmp2 = getWOSAdjective(srg->whereVerb, wo, tmpstr4).c_str(), // 19
+		tmp3 = getWSAdjective(srg->whereVerb, wo, 0, tmpstr5).c_str(), // 20
+		tmp4 = getWSAdjective(srg->whereVerb, wo, 1, tmpstr6).c_str(), // 21
+		tmp5 = getWSAdjective(srg->whereVerb, wo, 2, tmpstr7).c_str(), // 22
 		wo, // 23
 		tmp6 = wrti(wo, L"O", tmpstr8, shortFormat), // 24
-		wchr(sri->whereSecondaryVerb), // 25
-		getWOSAdjective(sri->whereSecondaryObject, tmpstr9).c_str(), // 26
-		getWSAdjective(sri->whereSecondaryObject, 0).c_str(), // 27
-		getWSAdjective(sri->whereSecondaryObject, 1).c_str(), // 28
-		wrti(sri->whereSecondaryObject, L"O2", tmpstr10, shortFormat), // 29
-		wrti(sri->whereNextSecondaryObject, L"nextObject2", tmpstr11, shortFormat), // 30
-		(sri->objectSubType >= 0) ? OCSubTypeStrings[sri->objectSubType] : L"", // 31
-		(sri->whereObject < 0) ? L"" : wrti(m[sri->whereObject].relNextObject, L"nextObject", tmpstr12, shortFormat), // 32
+		wchr(srg->whereSecondaryVerb), // 25
+		getWOSAdjective(srg->whereSecondaryObject, tmpstr9).c_str(), // 26
+		getWSAdjective(srg->whereSecondaryObject, 0).c_str(), // 27
+		getWSAdjective(srg->whereSecondaryObject, 1).c_str(), // 28
+		wrti(srg->whereSecondaryObject, L"O2", tmpstr10, shortFormat), // 29
+		wrti(srg->whereNextSecondaryObject, L"nextObject2", tmpstr11, shortFormat), // 30
+		(srg->objectSubType >= 0) ? OCSubTypeStrings[srg->objectSubType] : L"", // 31
+		(srg->whereObject < 0) ? L"" : wrti(m[srg->whereObject].relNextObject, L"nextObject", tmpstr12, shortFormat), // 32
 		ps.c_str(), //33
 		(inQuestion) ? L"?" : L"."); // 34
 }
@@ -739,66 +739,66 @@ bool cSyntacticRelationGroup::adjustValue(int& val, int originalVal, wstring val
 	return false;
 }
 
-cSyntacticRelationGroup::cSyntacticRelationGroup(cSyntacticRelationGroup *sri, unordered_map <int, int> &sourceIndexMap)
+cSyntacticRelationGroup::cSyntacticRelationGroup(cSyntacticRelationGroup *srg, unordered_map <int, int> &sourceIndexMap)
 {
 	o = -1;
-	adjustValue(where, sri->where, L"where", sourceIndexMap);
-	adjustValue(whereControllingEntity, sri->whereControllingEntity, L"whereControllingEntity", sourceIndexMap);
-	adjustValue(whereSubject, sri->whereSubject, L"whereSubject", sourceIndexMap);
-	adjustValue(whereVerb, sri->whereVerb, L"whereVerb", sourceIndexMap);
-	adjustValue(wherePrep, sri->wherePrep, L"wherePrep", sourceIndexMap);
-	adjustValue(whereObject, sri->whereObject, L"whereObject", sourceIndexMap);
-	adjustValue(wherePrepObject, sri->wherePrepObject, L"wherePrepObject", sourceIndexMap);
-	adjustValue(whereMovingRelativeTo, sri->whereMovingRelativeTo, L"whereMovingRelativeTo", sourceIndexMap);
-	adjustValue(whereSecondaryVerb, sri->whereSecondaryVerb, L"whereSecondaryVerb", sourceIndexMap);
-	adjustValue(whereSecondaryObject, sri->whereSecondaryObject, L"whereSecondaryObject", sourceIndexMap);
-	adjustValue(whereNextSecondaryObject, sri->whereNextSecondaryObject, L"whereNextSecondaryObject", sourceIndexMap);
-	adjustValue(whereSecondaryPrep, sri->whereSecondaryPrep, L"whereSecondaryPrep", sourceIndexMap);
-	adjustValue(whereQuestionType, sri->whereQuestionType, L"whereQuestionType", sourceIndexMap);
-	adjustValue(whereQuestionTypeObject, sri->whereQuestionTypeObject, L"whereQuestionTypeObject", sourceIndexMap);
-	for (int wo : sri->whereQuestionInformationSourceObjects)
+	adjustValue(where, srg->where, L"where", sourceIndexMap);
+	adjustValue(whereControllingEntity, srg->whereControllingEntity, L"whereControllingEntity", sourceIndexMap);
+	adjustValue(whereSubject, srg->whereSubject, L"whereSubject", sourceIndexMap);
+	adjustValue(whereVerb, srg->whereVerb, L"whereVerb", sourceIndexMap);
+	adjustValue(wherePrep, srg->wherePrep, L"wherePrep", sourceIndexMap);
+	adjustValue(whereObject, srg->whereObject, L"whereObject", sourceIndexMap);
+	adjustValue(wherePrepObject, srg->wherePrepObject, L"wherePrepObject", sourceIndexMap);
+	adjustValue(whereMovingRelativeTo, srg->whereMovingRelativeTo, L"whereMovingRelativeTo", sourceIndexMap);
+	adjustValue(whereSecondaryVerb, srg->whereSecondaryVerb, L"whereSecondaryVerb", sourceIndexMap);
+	adjustValue(whereSecondaryObject, srg->whereSecondaryObject, L"whereSecondaryObject", sourceIndexMap);
+	adjustValue(whereNextSecondaryObject, srg->whereNextSecondaryObject, L"whereNextSecondaryObject", sourceIndexMap);
+	adjustValue(whereSecondaryPrep, srg->whereSecondaryPrep, L"whereSecondaryPrep", sourceIndexMap);
+	adjustValue(whereQuestionType, srg->whereQuestionType, L"whereQuestionType", sourceIndexMap);
+	adjustValue(whereQuestionTypeObject, srg->whereQuestionTypeObject, L"whereQuestionTypeObject", sourceIndexMap);
+	for (int wo : srg->whereQuestionInformationSourceObjects)
 	{
 		int whereQuestionInformationSourceObject;
 		if (adjustValue(whereQuestionInformationSourceObject, wo, L"whereQuestionInformationSourceObject", sourceIndexMap))
 			whereQuestionInformationSourceObjects.insert(sourceIndexMap[wo]);
 	}
-	adjustValue(transformedPrep, sri->transformedPrep, L"transformedPrep", sourceIndexMap);
+	adjustValue(transformedPrep, srg->transformedPrep, L"transformedPrep", sourceIndexMap);
 
-	relationType = sri->relationType;
-	genderedEntityMove = sri->genderedEntityMove;
-	genderedLocationRelation = sri->genderedLocationRelation;
-	objectSubType = sri->objectSubType;
-	prepObjectSubType = sri->prepObjectSubType;
-	physicalRelation = sri->physicalRelation;
-	prepositionUncertain = sri->prepositionUncertain;
-	tft.speakerCommand = sri->tft.speakerCommand;
-	tft.speakerQuestionToAudience = sri->tft.speakerQuestionToAudience;
-	tft.significantRelation = sri->tft.significantRelation;
-	tft.beyondLocalSpace = sri->tft.beyondLocalSpace;
-	tft.story = sri->tft.story;
-	tft.timeTransition = sri->tft.timeTransition;
-	tft.nonPresentTimeTransition = sri->tft.nonPresentTimeTransition;
-	tft.duplicateTimeTransitionFromWhere = sri->tft.duplicateTimeTransitionFromWhere;
-	tft.beforePastHappening = sri->tft.beforePastHappening;
-	tft.pastHappening = sri->tft.pastHappening;
-	tft.presentHappening = sri->tft.presentHappening;
-	tft.futureHappening = sri->tft.futureHappening;
-	tft.futureInPastHappening = sri->tft.futureInPastHappening;
-	tft.negation = sri->tft.negation;
-	tft.lastOpeningPrimaryQuote = sri->tft.lastOpeningPrimaryQuote;
-	establishingLocation = sri->establishingLocation;
-	futureLocation = sri->futureLocation;
-	agentLocationRelationSet = sri->agentLocationRelationSet;
-	timeInfoSet = sri->timeInfoSet;
-	isConstructedRelative = sri->isConstructedRelative;
-	nextSPR = sri->nextSPR;
-	questionType = sri->questionType;
-	sentenceNum = sri->sentenceNum;
-	subQuery = sri->subQuery;
-	skip = sri->skip;
-	timeProgression = sri->timeProgression;
-	associatedPattern = sri->associatedPattern; // used only with question answering, particularly with verifying transformed questions
-	mapPatternAnswer = sri->mapPatternAnswer;
-	mapPatternQuestion = sri->mapPatternQuestion;
+	relationType = srg->relationType;
+	genderedEntityMove = srg->genderedEntityMove;
+	genderedLocationRelation = srg->genderedLocationRelation;
+	objectSubType = srg->objectSubType;
+	prepObjectSubType = srg->prepObjectSubType;
+	physicalRelation = srg->physicalRelation;
+	prepositionUncertain = srg->prepositionUncertain;
+	tft.speakerCommand = srg->tft.speakerCommand;
+	tft.speakerQuestionToAudience = srg->tft.speakerQuestionToAudience;
+	tft.significantRelation = srg->tft.significantRelation;
+	tft.beyondLocalSpace = srg->tft.beyondLocalSpace;
+	tft.story = srg->tft.story;
+	tft.timeTransition = srg->tft.timeTransition;
+	tft.nonPresentTimeTransition = srg->tft.nonPresentTimeTransition;
+	tft.duplicateTimeTransitionFromWhere = srg->tft.duplicateTimeTransitionFromWhere;
+	tft.beforePastHappening = srg->tft.beforePastHappening;
+	tft.pastHappening = srg->tft.pastHappening;
+	tft.presentHappening = srg->tft.presentHappening;
+	tft.futureHappening = srg->tft.futureHappening;
+	tft.futureInPastHappening = srg->tft.futureInPastHappening;
+	tft.negation = srg->tft.negation;
+	tft.lastOpeningPrimaryQuote = srg->tft.lastOpeningPrimaryQuote;
+	establishingLocation = srg->establishingLocation;
+	futureLocation = srg->futureLocation;
+	agentLocationRelationSet = srg->agentLocationRelationSet;
+	timeInfoSet = srg->timeInfoSet;
+	isConstructedRelative = srg->isConstructedRelative;
+	nextSPR = srg->nextSPR;
+	questionType = srg->questionType;
+	sentenceNum = srg->sentenceNum;
+	subQuery = srg->subQuery;
+	skip = srg->skip;
+	timeProgression = srg->timeProgression;
+	associatedPattern = srg->associatedPattern; // used only with question answering, particularly with verifying transformed questions
+	mapPatternAnswer = srg->mapPatternAnswer;
+	mapPatternQuestion = srg->mapPatternQuestion;
 
 }

@@ -30,7 +30,7 @@ wstring selectWhere=L"SELECT+%3Fv+%0D%0AWHERE+%7B%0D%0A";
 
 MYSQL cOntology::mysql;
 set<string> cOntology::rejectCategories= { "topic","track","document","edition","word","image","episode","title","subject","term","category","content","focus","type","base"};
-bool cOntology::cacheRdfTypes=false;
+bool cOntology::cacheRdfTypes=true;
 bool cOntology::alreadyConnected=false;
 bool cOntology::forceWebReread=false;
 extern int logOntologyDetail;

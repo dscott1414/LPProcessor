@@ -721,7 +721,7 @@ int bncc::processWord(cSource &source,int sourceId,wchar_t *buffer,int tag,int s
     anotherWord=false;
   if (!wcscmp(L"(s)",buffer+wcslen(buffer)-3)) // dilemma(s) member(s) finger(s) just delete the (s) for now
     buffer[wcslen(buffer)-3]=0;
-  int result=Words.readWord((wchar_t *)buffer,wcslen(buffer),bufferScanLocation,sWord,comment,nounOwner,false,false,source.debugTrace,&source.mysql,source.sourceId);
+  int result=Words.readWord((wchar_t *)buffer,wcslen(buffer),bufferScanLocation,sWord,comment,nounOwner,false,false,source.debugTrace,&source.mysql,source.sourceId, cSource::BNC_SOURCE_TYPE);
   if (buffer[bufferScanLocation]==L'.')
   {
     // only assigns the whole buffer if every entry is a single letter

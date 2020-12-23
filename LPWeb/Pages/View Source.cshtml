@@ -2,7 +2,7 @@
 @model LPWeb.Pages.View_SourceModel
 @{
     ViewData["Title"] = "View Source";
-    //SourceDirectories["Title"] = "View Source";
+    Model.SourceDirectories.AddRange(Model.createMenu());
     
 }
 <section id="main">
@@ -10,12 +10,10 @@
     <div class="dropdown" style="float:left;">
         <button class="dropbtn">Left</button>
         <div class="dropdown-content" style="left:0;">
-            @*@foreach (var sourceDirectory in SourceDirectories)
+            @foreach (var sourceDirectory in Model.SourceDirectories)
             {
                 <a href="#">@sourceDirectory</a>
-            }*@
-            <a href="#">Link 2</a>
-            <a href="#">Link 3</a>
+            }
         </div>
     </div>
 

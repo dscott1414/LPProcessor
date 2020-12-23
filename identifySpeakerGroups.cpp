@@ -1863,9 +1863,9 @@ void cSource::associateNyms(int where)
 		for (unsigned int aow=m[where].getRelVerb()+1;  aow+1<m.size() && (m[aow+1].objectRole&IS_ADJ_OBJECT_ROLE); aow++)
 		{
 			wstring word=m[aow].word->first+L"_"+m[aow+1].word->first;
-			set <wstring> synonyms;
+			unordered_set <wstring> synonyms;
   		getSynonyms(word,synonyms,ADJ);
-			for (set <wstring>::iterator s=synonyms.begin(),sEnd=synonyms.end(); s!=sEnd; s++)
+			for (auto s=synonyms.begin(),sEnd=synonyms.end(); s!=sEnd; s++)
 			{
 				tIWMM ws=Words.query(*s);
 				if (ws!=Words.end() && find(objects[o].associatedAdjectives.begin(),objects[o].associatedAdjectives.end(),ws)==objects[o].associatedAdjectives.end() &&
