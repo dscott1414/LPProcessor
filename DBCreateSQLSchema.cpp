@@ -54,7 +54,7 @@ vector <string> rest;
 int cSource::writeThesaurusEntry(sDefinition &d)
 {
 	wchar_t qt[4096];
-	char *wt[] = { "adj", "adv", "prep", "pron", "conj", "det", "interj", "n", "v", NULL };
+	const char *wt[] = { "adj", "adv", "prep", "pron", "conj", "det", "interj", "n", "v", NULL };
 	int w,wtTotal=0;
 	for (int I = 0; wt[I]; I++)
 		if ((w = d.wordType.find(wt[I])) != string::npos)
@@ -414,7 +414,7 @@ int generateTestSources(MYSQL &mysql)
   wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
   wcscpy(qt,L"INSERT INTO sources (sourceType, path, start, repeatStart) VALUES ");
   size_t len=wcslen(qt);
-  wchar_t *testSources[]={L"agreement",L"date-time-number",L"lappinl",L"modification",L"Nameres",L"pattern matching",L"resolution",L"time",L"timeExpressions",L"usage",
+  const wchar_t *testSources[]={L"agreement",L"date-time-number",L"lappinl",L"modification",L"Nameres",L"pattern matching",L"resolution",L"time",L"timeExpressions",L"usage",
                        L"verb object",NULL};     
   for (unsigned int I=0; testSources[I]; I++)
   {
@@ -452,14 +452,14 @@ int cSource::insertWordRelationTypes(void)
   size_t len=wcslen(qt);
   for (unsigned int I=firstRelationType; I<numRelationWOTypes; I++)
   {
-    len+=_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L"(%d, \"%s\"),",I,getRelStr(I));
+    len+=_snwprintf(qt+len,QUERY_BUFFER_LEN-len,L"(%u, \"%s\"),",I,getRelStr(I));
     if (!checkFull(&mysql,qt,len,false,NULL)) return -1;
   }
   if (!checkFull(&mysql,qt,len,true,NULL)) return -1;
   return 0;
 }
 
-int cSource::createDatabase(wchar_t *server)
+int cSource::createDatabase(const wchar_t * server)
 { LFS
   if (!initializeDatabaseHandle(mysql,server,alreadyConnected))
   {

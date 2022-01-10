@@ -14,7 +14,7 @@
 #include "profile.h"
 #include <sstream>
 
-void itos(wchar_t *before,int i,wstring &concat,wchar_t *after)
+void itos(const wchar_t *before,int i,wstring &concat,wchar_t *after)
 { LFS
 	wchar_t temp[1024];
 	wcscpy(temp,before);
@@ -23,7 +23,7 @@ void itos(wchar_t *before,int i,wstring &concat,wchar_t *after)
 	concat+=temp;
 }
 
-void itos(wchar_t *before,int i,wstring &concat,wstring after)
+void itos(const wchar_t *before,int i,wstring &concat,wstring after)
 { LFS
 	wchar_t temp[1024];
 	wcscpy(temp,before);
@@ -39,7 +39,7 @@ wstring itos(int i, wstring &tmp)
 	return tmp = temp;
 }
 
-wstring itos(int i, wchar_t *format, wstring &tmp)
+wstring itos(int i, const wchar_t *format, wstring &tmp)
 {
 	LFS
 	wchar_t temp[1024];
@@ -78,7 +78,8 @@ char *wTM(wstring inString,string &outString,int codePage)
 		if (!WideCharToMultiByte( codePage, 0, inString.c_str(), -1, (LPSTR)wTMbuffer, wTMbufSize, NULL, NULL ))
 			lplog(LOG_FATAL_ERROR,L"Error in translating sql request: %s",inString.c_str());
 	}
-	outString=(char *)wTMbuffer;
+	if (wTMbuffer)
+		outString=(char *)wTMbuffer;
 	return (char *)outString.c_str();
 }
 
@@ -675,7 +676,7 @@ bool copy(cName &a,void *buf,int &where,int limit)
 }
 
 // Function to lookup an error message from an error code.
-char * LastErrorStr(void)
+const char * LastErrorStr(void)
 { LFS
 	char *      szReturn = NULL;
 	int hr=GetLastError();

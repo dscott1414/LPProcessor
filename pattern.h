@@ -234,21 +234,21 @@ public:
     unsigned int NAME_TAG;
     int required;
     vector <unsigned int> tags;
-    cTagSet(unsigned int &tagSetNum,wchar_t *tag,int,...);
+    cTagSet(unsigned int &tagSetNum,const wchar_t *tag,int,...);
     void addTagSet(int tagSet);
 };
 
 extern vector < cTagSet > desiredTagSets;
 
-int findTag(vector <cTagLocation> &tagSet,wchar_t *tagName,int &nextTag);
-int findTag(wchar_t *tagName);
-int findOneTag(vector <cTagLocation> &tagSet,wchar_t *tagName,int start=-1);
-int findTagConstrained(vector <cTagLocation> &tagSet,wchar_t *tagName,int &nextTag,cTagLocation &parentTag);
-int findTagConstrained(vector <cTagLocation> &tagSet,wchar_t *tagName,int &nextTag,unsigned int searchBegin,unsigned int searchEnd);
+int findTag(vector <cTagLocation> &tagSet,const wchar_t *tagName,int &nextTag);
+int findTag(const wchar_t *tagName);
+int findOneTag(vector <cTagLocation> &tagSet, const wchar_t *tagName,int start=-1);
+int findTagConstrained(vector <cTagLocation> &tagSet, const wchar_t *tagName,int &nextTag,cTagLocation &parentTag);
+int findTagConstrained(vector <cTagLocation> &tagSet, const wchar_t *tagName,int &nextTag,unsigned int searchBegin,unsigned int searchEnd);
 void findTagSetConstrained(vector <cTagLocation> &tagSet,unsigned int desiredTagSetNum,char *tagFilledArray,cTagLocation &parentTag);
 void findTagSet(vector <cTagLocation> &tagSet,unsigned int desiredTagSetNum,char *tagFilledArray);
 void printTagSet(int logType,wchar_t *tagSetType,int ts,vector <cTagLocation> &tagSet,vector <wstring> &words);
-void printTagSet(int logType,wchar_t *tagSetType,int ts,vector <cTagLocation> &tagSet);
+void printTagSet(int logType, const wchar_t * descriptor,int ts,vector <cTagLocation> &tagSet);
 bool tagSetSame(vector <cTagLocation> &tagSet,vector <cTagLocation> &tagSetNew);
 void minimizeTagSet(vector  <cTagLocation> &tagSet);
 

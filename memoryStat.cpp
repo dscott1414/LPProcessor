@@ -59,7 +59,7 @@ int initializeCounter(void)
   return hr;
 }
 
-int getCounter(wchar_t *counter,DWORD &dwValue)
+int getCounter(const wchar_t * counter,DWORD &dwValue)
 { LFS
   HRESULT hr = S_OK;
   DWORD dwNumObjects = 0,dwNumReturned = 0,dwIDProcess = 0;

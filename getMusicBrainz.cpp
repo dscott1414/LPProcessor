@@ -17,7 +17,7 @@
 #include <sys/stat.h>
 #include "tinyxml2.h"
 #include <typeinfo>
-extern wchar_t *cacheDir; // initialized and then not changed
+extern const wchar_t *cacheDir; // initialized and then not changed
 #define MAX_BUF 1024*1024
 #define MB_BASE L"http://www.musicbrainz.org/ws/2/%s/?query=%s:%s"
 #include <algorithm>
@@ -540,7 +540,7 @@ bool cQuestionAnswering::dbSearchMusicBrainzSearchType(cSource *questionSource, 
 //    release: object verbs: owns/distributes/produces
 // no ownership of compactLabel known within this KB
 
-bool cSource::matchedList(set <wstring> &matchList,int where,int objectClass, wchar_t *fromWhere)
+bool cSource::matchedList(set <wstring> &matchList,int where,int objectClass, const wchar_t * fromWhere)
 { LFS
 	if (where<0 || where>=m.size())
 		return false;

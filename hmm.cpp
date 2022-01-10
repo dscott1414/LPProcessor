@@ -436,7 +436,7 @@ vector <wstring> readModelFile(wstring modelPath)
 	FILE *model_fp = _wfopen(modelPath.c_str(), L"r, ccs=UNICODE");
 	// Start state
 	wchar_t line[100 + 1];
-	while (fgetws(line, sizeof(line), model_fp) != NULL)
+	while (fgetws(line, 100, model_fp) != NULL)
 	{
 		line[wcslen(line) - 1] = 0;
 		model.push_back(line);
@@ -694,7 +694,10 @@ void forwardFromSource(cSource &source,vector<vector<double>> &tagTransitionProb
 		if (maximumProbabilityPerWordIndex != (double)-std::numeric_limits<double>::infinity())
 			probMult = ((double)numWordsInSource* numWordsInSource) / maximumProbabilityPerWordIndex; // CHANGE from log add to multiplication
 		if (probMult == nan(NULL))
+		{
 			lplog(LOG_FATAL_ERROR, L"Viterbi: forward probability multiplier is not a number: %f", maximumProbabilityPerWordIndex);
+			return;
+		}
 		if (probMult < 0.000000001)
 			lplog(LOG_ERROR, L"Low probMult probability detected:%d:%.14f %.14f/%.14f", wordSourceIndex, probMult, ((double)numWordsInSource* numWordsInSource),maximumProbabilityPerWordIndex);
 		source.m[wordSourceIndex].preferredViterbiMaximumProbability = maximumProbabilityPerWordIndex;

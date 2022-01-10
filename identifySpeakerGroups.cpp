@@ -1166,7 +1166,7 @@ bool cSource::createSpeakerGroup(int begin,int end,bool endOfSection,int &lastSp
   return false;
 }
 
-wchar_t *metaResponse[]={ L"reply",L"response", L"answer", NULL }; // initialized
+const wchar_t *metaResponse[]={ L"reply",L"response", L"answer", NULL }; // initialized
 
 bool cSource::setPOVStatus(int where,bool inPrimaryQuote,bool inSecondaryQuote)
 { LFS
@@ -1734,8 +1734,8 @@ void cSource::associatePossessions(int where)
 { LFS
 	if (m[where].objectMatches.size()>1 || (m[where].flags&cWordMatch::flagInPStatement)) return;
   int o=m[where].getObject(),ro=m[where].getRelObject(),wv=m[where].getRelVerb(); // rs=m[where].relSubject,
-	__int64 or=m[where].objectRole;
-	if (o>=0 && (or&SUBJECT_ROLE) && wv>=0 && ro>=0 && m[ro].getObject()>=0)
+	__int64 objectRole=m[where].objectRole;
+	if (o>=0 && (objectRole &SUBJECT_ROLE) && wv>=0 && ro>=0 && m[ro].getObject()>=0)
 	{
 		wstring verb;
 		bool has=false;
@@ -1760,7 +1760,7 @@ void cSource::associateNyms(int where)
   //int o=(m[where].objectMatches.size()==1) ? m[where].objectMatches[0].object : m[where].getObject(); this routine should be used BEFORE object is resolved
 	// at speakerResolution, because this is used before resolveObject the object matched is the old object from the last phase, so it is invalid.
   int o=m[where].getObject(),wv=m[where].getRelVerb(),tsSense=(wv>=0) ? m[wv].verbSense : 0; // rs=m[where].relSubject,ro=m[where].getRelObject(),
-	__int64 or=m[where].objectRole,ror=-1;
+	__int64 objectRole=m[where].objectRole,ror=-1;
 	// vS                               simple examine                     VT_PRESENT                                          R=E=S
 	// vS+past                          examined                           VT_PAST                                             R=E<S
 	// vB                               has examined                       VT_PRESENT_PERFECT                                  E<S=R
@@ -1775,13 +1775,13 @@ void cSource::associateNyms(int where)
 	// vBCD                             has been being examined            VT_PASSIVE+ VT_PRESENT_PERFECT+VT_EXTENDED
 	// neither talking about the past (he had been) nor about the future (he will be)
 	bool nymIsUseful=!(tsSense&(VT_POSSIBLE|VT_NEGATION)) && 
-		   ((or&IN_PRIMARY_QUOTE_ROLE) ? ((tsSense&VT_TENSE_MASK)==VT_PRESENT || (tsSense&VT_TENSE_MASK)==VT_PRESENT_PERFECT) : ((tsSense&VT_TENSE_MASK)==VT_PAST)); 
+		   ((objectRole &IN_PRIMARY_QUOTE_ROLE) ? ((tsSense&VT_TENSE_MASK)==VT_PRESENT || (tsSense&VT_TENSE_MASK)==VT_PRESENT_PERFECT) : ((tsSense&VT_TENSE_MASK)==VT_PAST));
 	// collect adjectives using is-a relation
 	// Whittington was a big man
 	// subject can also be object of containing sentence, so we must make sure that the subject of the contained sentence is not an IS object of the containing sentence.
-	if (o>=0 && (or&(SUBJECT_ROLE|IS_OBJECT_ROLE|SUBJECT_PLEONASTIC_ROLE))==(SUBJECT_ROLE|IS_OBJECT_ROLE) && m[where].getRelObject()>=0 &&
+	if (o>=0 && (objectRole &(SUBJECT_ROLE|IS_OBJECT_ROLE|SUBJECT_PLEONASTIC_ROLE))==(SUBJECT_ROLE|IS_OBJECT_ROLE) && m[where].getRelObject()>=0 &&
 		  ((ror=m[m[where].getRelObject()].objectRole)&(OBJECT_ROLE|IS_OBJECT_ROLE|NOT_OBJECT_ROLE))==(OBJECT_ROLE|IS_OBJECT_ROLE) &&
-			(!(or&OBJECT_ROLE) || m[where].relSubject<0 || !(m[m[where].relSubject].objectRole&IS_OBJECT_ROLE)))
+			(!(objectRole &OBJECT_ROLE) || m[where].relSubject<0 || !(m[m[where].relSubject].objectRole&IS_OBJECT_ROLE)))
 	{
 		if (m[m[where].getRelObject()].getObject()>=0)
 		{
@@ -1848,7 +1848,7 @@ void cSource::associateNyms(int where)
 	}
 	// Whittington was big.
 	// He is very well off.
-	if (o>=0 && (or&(SUBJECT_ROLE|IS_OBJECT_ROLE|SUBJECT_PLEONASTIC_ROLE))==(SUBJECT_ROLE|IS_OBJECT_ROLE) && m[where].getRelObject()<0 && nymIsUseful)
+	if (o>=0 && (objectRole&(SUBJECT_ROLE|IS_OBJECT_ROLE|SUBJECT_PLEONASTIC_ROLE))==(SUBJECT_ROLE|IS_OBJECT_ROLE) && m[where].getRelObject()<0 && nymIsUseful)
 	{
 		m[where].flags|=cWordMatch::flagUsedBeRelation;
 		for (unsigned int aow=m[where].getRelVerb()+1; (m[aow].objectRole&IS_ADJ_OBJECT_ROLE) && aow<m.size(); aow++)
@@ -1892,7 +1892,7 @@ bool cSource::implicitObject(int where)
 	if (where>=0 && m[where].getObject()>=0 && ((m[where].objectRole&SUBJECT_ROLE) || (m[where].objectRole&(IS_OBJECT_ROLE|SUBJECT_PLEONASTIC_ROLE))==(IS_OBJECT_ROLE|SUBJECT_PLEONASTIC_ROLE)) && 
 		  unResolvablePosition(m[where].beginObjectPosition))
 	{
-		wchar_t *implicitObjects[]={ L"knock",NULL };
+		const wchar_t *implicitObjects[]={ L"knock",NULL };
 		for (unsigned int J=0; implicitObjects[J]; J++) 
 			if (m[where].word->second.mainEntry!=wNULL && m[where].word->second.mainEntry->first==implicitObjects[J])
 				return true;
@@ -2579,7 +2579,7 @@ void cSource::embeddedStory(int where,int &numPastSinceLastQuote,int &numNonPast
 void cSource::adjustHailRoleDuringScan(int where)
 { LFS
 	vector <cWordMatch>::iterator im=m.begin()+where;
-	unsigned __int64 or=im->objectRole&(HAIL_ROLE|MPLURAL_ROLE|RE_OBJECT_ROLE);
+	unsigned __int64 objectRole=im->objectRole&(HAIL_ROLE|MPLURAL_ROLE|RE_OBJECT_ROLE);
 	int oc=(im->getObject()>=0) ? objects[im->getObject()].objectClass:-1;
 	// Here[here] we[tommy,julius] are . Ebury , Yorks .
 	// Come at once , Moat House , Ebury , Yorkshire , great developments -- Tommy
@@ -2595,9 +2595,9 @@ void cSource::adjustHailRoleDuringScan(int where)
 			objects[so].objectClass==NAME_OBJECT_CLASS && 
 			m[m[im->endObjectPosition+1].endObjectPosition].word->second.isSeparator())
 	{
-		if (or&HAIL_ROLE)
+		if (objectRole &HAIL_ROLE)
 		{
-			or&=~HAIL_ROLE;
+			objectRole &=~HAIL_ROLE;
 			im->objectRole&=~HAIL_ROLE;
 			if (debugTrace.traceRole)
 				lplog(LOG_ROLE,L"%06d:Removed HAIL role (PLACE).",where);
@@ -2626,10 +2626,10 @@ void cSource::adjustHailRoleDuringScan(int where)
 		}
 	}
 	// if the last quote has the speaker talking to himself/herself, remove hail
-	if ((or&HAIL_ROLE) && (im->objectRole&IN_PRIMARY_QUOTE_ROLE) && lastOpeningPrimaryQuote>=0 && 
+	if ((objectRole&HAIL_ROLE) && (im->objectRole&IN_PRIMARY_QUOTE_ROLE) && lastOpeningPrimaryQuote>=0 && 
 		  m[lastOpeningPrimaryQuote].audiencePosition>=0 && m[m[lastOpeningPrimaryQuote].audiencePosition].queryWinnerForm(reflexivePronounForm)>=0)
 	{
-			or&=~HAIL_ROLE;
+			objectRole&=~HAIL_ROLE;
 			im->objectRole&=~HAIL_ROLE;
 			if (debugTrace.traceRole)
 				lplog(LOG_ROLE,L"%06d:Removed HAIL role (REFLEXIVE).",where);

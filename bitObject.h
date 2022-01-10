@@ -11,7 +11,7 @@ public:
 	{
 		memset(bits, 0, sizeof(bits));
 	}
-	bool check(wchar_t *type, int limit)
+	bool check(const wchar_t *type, int limit)
 	{
 		if (limit >= (sizeof(bits) << 3))
 			lplog(LOG_FATAL_ERROR, L"FATAL ERROR: bit storage for %s exceeded - size %d cannot fit into bit storage for %d.", type, limit, (sizeof(bits) << 3) - 1);

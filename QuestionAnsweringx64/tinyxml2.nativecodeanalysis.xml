@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DEFECTS>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\tinyxml2-master\</FILEPATH>
+      <FILENAME>tinyxml2.h</FILENAME>
+      <LINE>1155</LINE>
+      <COLUMN>15</COLUMN>
+    </SFA>
+    <DEFECTCODE>26812</DEFECTCODE>
+    <DESCRIPTION>The enum type 'tinyxml2::XMLError' is unscoped. Prefer 'enum class' over 'enum' (Enum.3).</DESCRIPTION>
+    <FUNCTION>tinyxml2::XMLAttribute::IntValue</FUNCTION>
+    <DECORATED>?IntValue@XMLAttribute@tinyxml2@@QEBAHXZ</DECORATED>
+    <FUNCLINE>1153</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\tinyxml2-master\</FILEPATH>
+      <FILENAME>tinyxml2.h</FILENAME>
+      <LINE>1612</LINE>
+      <COLUMN>8</COLUMN>
+    </SFA>
+    <DEFECTCODE>26812</DEFECTCODE>
+    <DESCRIPTION>The enum type 'tinyxml2::XMLElement::ElementClosingType' is unscoped. Prefer 'enum class' over 'enum' (Enum.3).</DESCRIPTION>
+    <FUNCTION>tinyxml2::XMLElement::ClosingType</FUNCTION>
+    <DECORATED>?ClosingType@XMLElement@tinyxml2@@QEBA?AW4ElementClosingType@12@XZ</DECORATED>
+    <FUNCLINE>1611</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\tinyxml2-master\</FILEPATH>
+      <FILENAME>tinyxml2.h</FILENAME>
+      <LINE>1727</LINE>
+      <COLUMN>8</COLUMN>
+    </SFA>
+    <DEFECTCODE>26812</DEFECTCODE>
+    <DESCRIPTION>The enum type 'tinyxml2::Whitespace' is unscoped. Prefer 'enum class' over 'enum' (Enum.3).</DESCRIPTION>
+    <FUNCTION>tinyxml2::XMLDocument::WhitespaceMode</FUNCTION>
+    <DECORATED>?WhitespaceMode@XMLDocument@tinyxml2@@QEBA?AW4Whitespace@2@XZ</DECORATED>
+    <FUNCLINE>1726</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\tinyxml2-master\</FILEPATH>
+      <FILENAME>tinyxml2.cpp</FILENAME>
+      <LINE>436</LINE>
+      <COLUMN>13</COLUMN>
+    </SFA>
+    <DEFECTCODE>26819</DEFECTCODE>
+    <DESCRIPTION>Unannotated fallthrough between switch labels (es.78).</DESCRIPTION>
+    <FUNCTION>tinyxml2::XMLUtil::ConvertUTF32ToUTF8</FUNCTION>
+    <DECORATED>?ConvertUTF32ToUTF8@XMLUtil@tinyxml2@@SAXKPEADPEAH@Z</DECORATED>
+    <FUNCLINE>403</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\tinyxml2-master\</FILEPATH>
+      <FILENAME>tinyxml2.cpp</FILENAME>
+      <LINE>441</LINE>
+      <COLUMN>13</COLUMN>
+    </SFA>
+    <DEFECTCODE>26819</DEFECTCODE>
+    <DESCRIPTION>Unannotated fallthrough between switch labels (es.78).</DESCRIPTION>
+    <FUNCTION>tinyxml2::XMLUtil::ConvertUTF32ToUTF8</FUNCTION>
+    <DECORATED>?ConvertUTF32ToUTF8@XMLUtil@tinyxml2@@SAXKPEADPEAH@Z</DECORATED>
+    <FUNCLINE>403</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\tinyxml2-master\</FILEPATH>
+      <FILENAME>tinyxml2.cpp</FILENAME>
+      <LINE>446</LINE>
+      <COLUMN>13</COLUMN>
+    </SFA>
+    <DEFECTCODE>26819</DEFECTCODE>
+    <DESCRIPTION>Unannotated fallthrough between switch labels (es.78).</DESCRIPTION>
+    <FUNCTION>tinyxml2::XMLUtil::ConvertUTF32ToUTF8</FUNCTION>
+    <DECORATED>?ConvertUTF32ToUTF8@XMLUtil@tinyxml2@@SAXKPEADPEAH@Z</DECORATED>
+    <FUNCLINE>403</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\tinyxml2-master\</FILEPATH>
+      <FILENAME>tinyxml2.cpp</FILENAME>
+      <LINE>449</LINE>
+      <COLUMN>12</COLUMN>
+    </SFA>
+    <DEFECTCODE>26819</DEFECTCODE>
+    <DESCRIPTION>Unannotated fallthrough between switch labels (es.78).</DESCRIPTION>
+    <FUNCTION>tinyxml2::XMLUtil::ConvertUTF32ToUTF8</FUNCTION>
+    <DECORATED>?ConvertUTF32ToUTF8@XMLUtil@tinyxml2@@SAXKPEADPEAH@Z</DECORATED>
+    <FUNCLINE>403</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\tinyxml2-master\</FILEPATH>
+      <FILENAME>tinyxml2.cpp</FILENAME>
+      <LINE>1157</LINE>
+      <COLUMN>46</COLUMN>
+    </SFA>
+    <DEFECTCODE>26812</DEFECTCODE>
+    <DESCRIPTION>The enum type 'tinyxml2::StrPair::&lt;unnamed-enum-NEEDS_ENTITY_PROCESSING&gt;' is unscoped. Prefer 'enum class' over 'enum' (Enum.3).</DESCRIPTION>
+    <FUNCTION>tinyxml2::XMLText::ParseDeep</FUNCTION>
+    <DECORATED>?ParseDeep@XMLText@tinyxml2@@MEAAPEADPEADPEAVStrPair@2@PEAH@Z</DECORATED>
+    <FUNCLINE>1147</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\tinyxml2-master\</FILEPATH>
+      <FILENAME>tinyxml2.h</FILENAME>
+      <LINE>206</LINE>
+      <COLUMN>4</COLUMN>
+    </SFA>
+    <DEFECTCODE>26495</DEFECTCODE>
+    <DESCRIPTION>Variable 'tinyxml2::DynArray&lt;char,20&gt;::_pool' is uninitialized. Always initialize a member variable (type.6).</DESCRIPTION>
+    <FUNCTION>tinyxml2::DynArray&lt;char,20&gt;::{ctor}</FUNCTION>
+    <DECORATED>??0?$DynArray@D$0BE@@tinyxml2@@QEAA@XZ</DECORATED>
+    <FUNCLINE>206</FUNCLINE>
+    <ADDITIONALINFO>
+      <targetSymbol>tinyxml2::DynArray&lt;char,20&gt;::_pool</targetSymbol>
+    </ADDITIONALINFO>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\tinyxml2-master\</FILEPATH>
+      <FILENAME>tinyxml2.h</FILENAME>
+      <LINE>206</LINE>
+      <COLUMN>4</COLUMN>
+    </SFA>
+    <DEFECTCODE>26495</DEFECTCODE>
+    <DESCRIPTION>Variable 'tinyxml2::DynArray&lt;char const *,10&gt;::_pool' is uninitialized. Always initialize a member variable (type.6).</DESCRIPTION>
+    <FUNCTION>tinyxml2::DynArray&lt;char const *,10&gt;::{ctor}</FUNCTION>
+    <DECORATED>??0?$DynArray@PEBD$09@tinyxml2@@QEAA@XZ</DECORATED>
+    <FUNCLINE>206</FUNCLINE>
+    <ADDITIONALINFO>
+      <targetSymbol>tinyxml2::DynArray&lt;char const *,10&gt;::_pool</targetSymbol>
+    </ADDITIONALINFO>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\tinyxml2-master\</FILEPATH>
+      <FILENAME>tinyxml2.h</FILENAME>
+      <LINE>206</LINE>
+      <COLUMN>4</COLUMN>
+    </SFA>
+    <DEFECTCODE>26495</DEFECTCODE>
+    <DESCRIPTION>Variable 'tinyxml2::DynArray&lt;tinyxml2::XMLNode *,10&gt;::_pool' is uninitialized. Always initialize a member variable (type.6).</DESCRIPTION>
+    <FUNCTION>tinyxml2::DynArray&lt;tinyxml2::XMLNode *,10&gt;::{ctor}</FUNCTION>
+    <DECORATED>??0?$DynArray@PEAVXMLNode@tinyxml2@@$09@tinyxml2@@QEAA@XZ</DECORATED>
+    <FUNCLINE>206</FUNCLINE>
+    <ADDITIONALINFO>
+      <targetSymbol>tinyxml2::DynArray&lt;tinyxml2::XMLNode *,10&gt;::_pool</targetSymbol>
+    </ADDITIONALINFO>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\tinyxml2-master\</FILEPATH>
+      <FILENAME>tinyxml2.h</FILENAME>
+      <LINE>206</LINE>
+      <COLUMN>4</COLUMN>
+    </SFA>
+    <DEFECTCODE>26495</DEFECTCODE>
+    <DESCRIPTION>Variable 'tinyxml2::DynArray&lt;tinyxml2::MemPoolT&lt;104&gt;::Block *,10&gt;::_pool' is uninitialized. Always initialize a member variable (type.6).</DESCRIPTION>
+    <FUNCTION>tinyxml2::DynArray&lt;tinyxml2::MemPoolT&lt;104&gt;::Block *,10&gt;::{ctor}</FUNCTION>
+    <DECORATED>??0?$DynArray@PEAUBlock@?$MemPoolT@$0GI@@tinyxml2@@$09@tinyxml2@@QEAA@XZ</DECORATED>
+    <FUNCLINE>206</FUNCLINE>
+    <ADDITIONALINFO>
+      <targetSymbol>tinyxml2::DynArray&lt;tinyxml2::MemPoolT&lt;104&gt;::Block *,10&gt;::_pool</targetSymbol>
+    </ADDITIONALINFO>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\tinyxml2-master\</FILEPATH>
+      <FILENAME>tinyxml2.h</FILENAME>
+      <LINE>206</LINE>
+      <COLUMN>4</COLUMN>
+    </SFA>
+    <DEFECTCODE>26495</DEFECTCODE>
+    <DESCRIPTION>Variable 'tinyxml2::DynArray&lt;tinyxml2::MemPoolT&lt;112&gt;::Block *,10&gt;::_pool' is uninitialized. Always initialize a member variable (type.6).</DESCRIPTION>
+    <FUNCTION>tinyxml2::DynArray&lt;tinyxml2::MemPoolT&lt;112&gt;::Block *,10&gt;::{ctor}</FUNCTION>
+    <DECORATED>??0?$DynArray@PEAUBlock@?$MemPoolT@$0HA@@tinyxml2@@$09@tinyxml2@@QEAA@XZ</DECORATED>
+    <FUNCLINE>206</FUNCLINE>
+    <ADDITIONALINFO>
+      <targetSymbol>tinyxml2::DynArray&lt;tinyxml2::MemPoolT&lt;112&gt;::Block *,10&gt;::_pool</targetSymbol>
+    </ADDITIONALINFO>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\tinyxml2-master\</FILEPATH>
+      <FILENAME>tinyxml2.h</FILENAME>
+      <LINE>206</LINE>
+      <COLUMN>4</COLUMN>
+    </SFA>
+    <DEFECTCODE>26495</DEFECTCODE>
+    <DESCRIPTION>Variable 'tinyxml2::DynArray&lt;tinyxml2::MemPoolT&lt;80&gt;::Block *,10&gt;::_pool' is uninitialized. Always initialize a member variable (type.6).</DESCRIPTION>
+    <FUNCTION>tinyxml2::DynArray&lt;tinyxml2::MemPoolT&lt;80&gt;::Block *,10&gt;::{ctor}</FUNCTION>
+    <DECORATED>??0?$DynArray@PEAUBlock@?$MemPoolT@$0FA@@tinyxml2@@$09@tinyxml2@@QEAA@XZ</DECORATED>
+    <FUNCLINE>206</FUNCLINE>
+    <ADDITIONALINFO>
+      <targetSymbol>tinyxml2::DynArray&lt;tinyxml2::MemPoolT&lt;80&gt;::Block *,10&gt;::_pool</targetSymbol>
+    </ADDITIONALINFO>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\tinyxml2-master\</FILEPATH>
+      <FILENAME>tinyxml2.h</FILENAME>
+      <LINE>206</LINE>
+      <COLUMN>4</COLUMN>
+    </SFA>
+    <DEFECTCODE>26495</DEFECTCODE>
+    <DESCRIPTION>Variable 'tinyxml2::DynArray&lt;tinyxml2::MemPoolT&lt;120&gt;::Block *,10&gt;::_pool' is uninitialized. Always initialize a member variable (type.6).</DESCRIPTION>
+    <FUNCTION>tinyxml2::DynArray&lt;tinyxml2::MemPoolT&lt;120&gt;::Block *,10&gt;::{ctor}</FUNCTION>
+    <DECORATED>??0?$DynArray@PEAUBlock@?$MemPoolT@$0HI@@tinyxml2@@$09@tinyxml2@@QEAA@XZ</DECORATED>
+    <FUNCLINE>206</FUNCLINE>
+    <ADDITIONALINFO>
+      <targetSymbol>tinyxml2::DynArray&lt;tinyxml2::MemPoolT&lt;120&gt;::Block *,10&gt;::_pool</targetSymbol>
+    </ADDITIONALINFO>
+    <PATH></PATH>
+  </DEFECT>
+</DEFECTS>

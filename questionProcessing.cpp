@@ -657,7 +657,7 @@ void cSource::setSecondaryQuestion(vector <cWordMatch>::iterator im)
 }
 
 // returns true if the question speaker is different than the subject of the next paragraph.
-bool cSource::questionAgreement(int where,int whereFirstSubjectInParagraph,int questionSpeakerLastParagraph,vector <cOM> &objectMatches,bool &subjectDefinitelyResolved,bool audience,wchar_t *fromWhere)
+bool cSource::questionAgreement(int where,int whereFirstSubjectInParagraph,int questionSpeakerLastParagraph,vector <cOM> &objectMatches,bool &subjectDefinitelyResolved,bool audience, const wchar_t * fromWhere)
 { LFS
 	if (whereFirstSubjectInParagraph>=0 && 
 		  m[whereFirstSubjectInParagraph].getObject()>=0 && !objects[m[whereFirstSubjectInParagraph].getObject()].plural)

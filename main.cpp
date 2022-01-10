@@ -752,7 +752,7 @@ void setConsoleWindowSize(int width,int height)
 			(int)GetLastError(), LastErrorStr());
 }
 
-int createLPProcess(int numProcess, HANDLE &processHandle, DWORD &processId, wchar_t *commandPath, wchar_t *processParameters)
+int createLPProcess(int numProcess, HANDLE &processHandle, HANDLE &threadHandle, DWORD &processId, const wchar_t * commandPath, wchar_t * processParameters)
 {
 	STARTUPINFO si;
 	ZeroMemory(&si, sizeof(si));
@@ -786,6 +786,7 @@ int createLPProcess(int numProcess, HANDLE &processHandle, DWORD &processId, wch
 	}
 	processHandle = pi.hProcess;
 	processId = pi.dwProcessId;
+	threadHandle = pi.hThread;
 	return 0;
 }
 
@@ -853,7 +854,8 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite,bool makeCopyBeforeSourceWrite,bool parseOnly, wstring specialExtension)
 {
 	LFS
-	chdir("source");
+	if (chdir("source") < 0)
+		return -1;
 	bool sentBreakSignals = false;
 	int startTime = clock();
 	HANDLE *handles = (HANDLE *)calloc(maxProcesses, sizeof(HANDLE));
@@ -896,12 +898,12 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 			{
 				nextProcessIndex -= WAIT_OBJECT_0;
 				CloseHandle(handles[nextProcessIndex]);
-				printf("\nClosing process %d", nextProcessIndex);
+				printf("\nClosing process %u", nextProcessIndex);
 			}
 			if (nextProcessIndex >= WAIT_ABANDONED_0 && nextProcessIndex < WAIT_ABANDONED_0 + numProcesses)
 			{
 				nextProcessIndex -= WAIT_ABANDONED_0;
-				printf("\nClosing process %d [abandoned]", nextProcessIndex);
+				printf("\nClosing process %u [abandoned]", nextProcessIndex);
 				CloseHandle(handles[nextProcessIndex]);
 			}
 		}
@@ -953,12 +955,12 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 					{
 						nextProcessIndex -= WAIT_OBJECT_0;
 						CloseHandle(handles[nextProcessIndex]);
-						printf("\nClosing process %d", nextProcessIndex);
+						printf("\nClosing process %u", nextProcessIndex);
 					}
 					if (nextProcessIndex >= WAIT_ABANDONED_0 && nextProcessIndex < WAIT_ABANDONED_0 + numProcesses)
 					{
 						nextProcessIndex -= WAIT_ABANDONED_0;
-						printf("\nClosing process %d [abandoned]", nextProcessIndex);
+						printf("\nClosing process %u [abandoned]", nextProcessIndex);
 						CloseHandle(handles[nextProcessIndex]);
 					}
 					memmove(handles + nextProcessIndex, handles + nextProcessIndex + 1, (maxProcesses - nextProcessIndex - 1) * sizeof(handles[0]));
@@ -982,13 +984,13 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 		}
 		else
 		{
-			HANDLE processHandle = 0;
+			HANDLE processHandle = 0, threadHandle = 0;
 			DWORD processId = 0;
 			wchar_t processParameters[1024];
 			switch (processKind)
 			{
 			case 0:
-				wsprintf(processParameters, L"QuestionAnsweringx64\\lp.exe -ParseRequest 0 + -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %s.%d", CACHEDIR,
+				wsprintf(processParameters, L"QuestionAnsweringx64\\lp.exe -ParseRequest 0 + -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %s.%u", CACHEDIR,
 					(forceSourceReread) ? L"-forceSourceReread " : L"",
 					(sourceWrite) ? L"-SW " : L"",
 					(sourceWordNetRead) ? L"-SWNR " : L"",
@@ -1000,11 +1002,11 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 					numSourcesPerProcess,
 					specialExtension.c_str(),
 					nextProcessIndex);
-				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"QuestionAnsweringx64\\lp.exe", processParameters) < 0)
+				if (errorCode = createLPProcess(nextProcessIndex, processHandle, threadHandle, processId, L"QuestionAnsweringx64\\lp.exe", processParameters) < 0)
 					break;
 				break;
 			case 1:
-				wsprintf(processParameters, L"ParseAllSourcesx64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %s.%d", CACHEDIR,
+				wsprintf(processParameters, L"ParseAllSourcesx64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %s.%u", CACHEDIR,
 					(forceSourceReread) ? L"-forceSourceReread " : L"",
 					(sourceWrite) ? L"-SW " : L"",
 					(sourceWordNetRead) ? L"-SWNR " : L"",
@@ -1021,12 +1023,12 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 					wcscat(processParameters, L" -specialExtension ");
 					wcscat(processParameters, specialExtension.c_str());
 				}
-				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"ParseAllSourcesx64\\lp.exe", processParameters) < 0)
+				if (errorCode = createLPProcess(nextProcessIndex, processHandle, threadHandle, processId, L"ParseAllSourcesx64\\lp.exe", processParameters) < 0)
 					break;
 				break;
 			case 2:
-				wsprintf(processParameters, L"x64\\StanfordAllSources\\CorpusAnalysis.exe -step %d -numSourceLimit %d -log %s.%d", CACHEDIR, step, numSourcesPerProcess, specialExtension.c_str(),nextProcessIndex);
-				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"x64\\StanfordAllSources\\CorpusAnalysis.exe", processParameters) < 0)
+				wsprintf(processParameters, L"x64\\StanfordAllSources\\CorpusAnalysis.exe -step %d -numSourceLimit %d -log %s.%u", step, numSourcesPerProcess, specialExtension.c_str(),nextProcessIndex);
+				if (errorCode = createLPProcess(nextProcessIndex, processHandle, threadHandle, processId, L"x64\\StanfordAllSources\\CorpusAnalysis.exe", processParameters) < 0)
 					break;
 				break;
 			default: break;
@@ -1034,7 +1036,7 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 			handles[nextProcessIndex] = processHandle;
 			if (numProcesses < maxProcesses)
 				numProcesses++;
-			printf("\nCreated process %d:%d", nextProcessIndex, (int)processId);
+			printf("\nCreated process %u:%d", nextProcessIndex, (int)processId);
 		}
 	}
 	if (processSourceType != cSource::REQUEST_TYPE)
@@ -1043,8 +1045,7 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 		_exit(0); // fast exit
 	}
 	free(handles);
-	chdir("..");
-	return 0;
+	return chdir("..");
 }
 
 SRWLOCK rdfTypeMapSRWLock,mySQLTotalTimeSRWLock,totalInternetTimeWaitBandwidthControlSRWLock,mySQLQueryBufferSRWLock,orderedHyperNymsMapSRWLock;
@@ -1124,7 +1125,8 @@ int wmain(int argc,wchar_t *argv[])
 	wchar_t dir[1024];
 	GetCurrentDirectoryW(1024,dir);
 	set_new_handler(no_memory);
-	chdir("..");
+	if (chdir(".."))
+		return -1;
 	overallTime=clock();
 	// test gutenberg by generating usage statistics
 	//if (argc>1 && !wcscmp(argv[1],L"-tg"))
@@ -1148,7 +1150,7 @@ int wmain(int argc,wchar_t *argv[])
 		return getTwitterEntries(argv[1]);
 		*/
 	int numCommandLineParameters=argc;
-	wchar_t *sourceHost=L"localhost";
+	const wchar_t *sourceHost=L"localhost";
 	cacheDir=CACHEDIR;
 	bool resetAllSource=false,resetProcessingFlags=false,generateFormStatistics=false,retry=false;
 	bool forceSourceReread=false,sourceWrite=false,sourceWordNetRead=false,sourceWordNetWrite=false,parseOnly=false, makeCopyBeforeSourceWrite=false;
@@ -1274,11 +1276,11 @@ int wmain(int argc,wchar_t *argv[])
 	{
 		wchar_t consoleTitle[1500];
 #ifdef _DEBUG
-		wchar_t dflag = L'D';
+		wchar_t displayDebugFlag = L'D';
 #else
-		wchar_t dflag = L'R';
+		wchar_t displayDebugFlag = L'R';
 #endif
-			wsprintf(consoleTitle, L"[%c] %s...", dflag,argv[sourceArgs+1]);
+			wsprintf(consoleTitle, L"[%c] %s...", displayDebugFlag,argv[sourceArgs+1]);
 		_putws(consoleTitle);
 		lplog(LOG_INFO | LOG_ERROR, L"%s\n", consoleTitle);
 		SetConsoleTitle(consoleTitle);
@@ -1428,6 +1430,10 @@ int wmain(int argc,wchar_t *argv[])
 				source.resolveSpeakers(secondaryQuotesResolutions);
 				source.resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
 			}
+			vector <cSyntacticRelationGroup>::iterator srg = source.syntacticRelationGroups.begin();
+			for (; srg != source.syntacticRelationGroups.end(); srg++)
+				source.logSyntacticRelationGroup(*srg, L"ZZZTEST ");
+
 			//source.printObjects(); // only necessary if printing objects
 			//source.resolveWordRelations(); // this resolves word relations to add to words - these will be erased unless future plans to update word relations dynamically.
 			if (sourceWrite && !source.write(path,true, false,specialExtension))

@@ -7,7 +7,7 @@
 #include "source.h"
 #include "profile.h"
 
-void cSource::pushSpeaker(int where,int s, int sf,wchar_t *fromWhere)
+void cSource::pushSpeaker(int where,int s, int sf, const wchar_t * fromWhere)
 { LFS
   wstring tmpstr;
   m[where].objectMatches.push_back(cOM(s,sf));

@@ -92,7 +92,7 @@ int cStemmer::getInflectionNum(wchar_t const *inflection)
   for (int map=0; map<4; map++)
     for (int I=0; inflectionMaps[map][I].num>=0; I++)
     {
-      wchar_t *name=inflectionMaps[map][I].name;
+      const wchar_t *name=inflectionMaps[map][I].name;
       if ((ch=wcsstr(inflection,name)) && (*(ch+wcslen(name))==L' ' || !*(ch+wcslen(name))))
         temp|=inflectionMaps[map][I].num;
     }

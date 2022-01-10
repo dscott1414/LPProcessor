@@ -35,7 +35,7 @@ int cSource::gmo(int wo)
 	return (m[wo].endObjectPosition > wo) ? m[wo].endObjectPosition : wo;
 }
 
-const wchar_t *cSource::wrti(int where, wchar_t *id, wstring &tmpstr, bool shortFormat)
+const wchar_t *cSource::wrti(int where, const wchar_t * id, wstring &tmpstr, bool shortFormat)
 {
 	LFS
 	if (where < 0) return L"";
@@ -393,7 +393,7 @@ void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* srg, int s, i
 	}
 	const wchar_t *tmp1 = 0, *tmp2 = 0, *tmp3 = 0, *tmp4 = 0, *tmp5 = 0, *tmp6 = 0;
 	bool shortFormat = (logDestination&LOG_QCHECK) != 0;
-	wchar_t *f1 = L"%s:%06d:%s%s%s %s %s%s %s %s %s %s %d:%s%s [V %d:%s]%s%s%s %s %s %d:%s%s%s%s%s%s%s%s%s%s%s";
+	const wchar_t *f1 = L"%s:%06d:%s%s%s %s %s%s %s %s %s %s %d:%s%s [V %d:%s]%s%s%s %s %s %d:%s%s%s%s%s%s%s%s%s%s%s";
 	lplog(logDestination, f1, 
 		logPrefix.c_str(), // 1
 		srg->where, // 2
@@ -600,7 +600,7 @@ int cSyntacticRelationGroup::sanityCheck(int maxSourcePosition, int maxObjectInd
 	if (whereControllingEntity < -1 || whereControllingEntity >= maxSourcePosition) return 402;
 	if (whereSubject < -1 || whereSubject >= maxSourcePosition) return 403;
 	if (whereVerb < -1 || whereVerb >= maxSourcePosition) return 404;
-	if (wherePrep < -1 || wherePrep >= maxSourcePosition) return 405;
+	if (wherePrep < -2 || wherePrep >= maxSourcePosition) return 405;
 	if (whereObject < -1 || whereObject >= maxSourcePosition) return 406;
 	if (wherePrepObject < -1 || wherePrepObject >= maxSourcePosition) return 407;
 	if (whereSecondaryVerb < -1 || whereSecondaryVerb >= maxSourcePosition) return 408;

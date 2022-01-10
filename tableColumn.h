@@ -118,11 +118,11 @@ public:
 	int coherencyPercentage;
 	bool invalidColumn;
 	cColumn();
-	void removeDomainFromAccumulatedRDFTypesMap(wchar_t * domainAssociations[]);
+	void removeDomainFromAccumulatedRDFTypesMap(const wchar_t *domainAssociations[]);
 	bool determineColumnRDFTypeCoherency(cSource *wikipediaSource, cColumn::cEntry titleEntry, unordered_set <wstring> &titleSynonyms, wstring tableName,bool keepMusicDomain, bool keepFilmDomain, bool fileCaching);
 	void zeroColumnAccumulatedRDFTypes();
 	void accumulateColumnRDFTypes(cSource *wikipediaSource, wstring tableName, unordered_set <wstring> &titleSynonyms, bool keepMusicDomain, bool keepFilmDomain, bool onlyPreferred, bool fileCaching);
-	void getMostCommonRDFTypes(wchar_t *when, wstring tableName);
+	void getMostCommonRDFTypes(const wchar_t * when, wstring tableName);
 	int getSumOfAllFullyConfidentRDFTypeFrequencies(cSource *wikipediaSource, int row, int entry, int &maxFrequency, wstring &maxAssociation, bool fileCaching);
 	bool testTitlePreference(cSource *wikipediaSource, wstring tableName, unordered_set <wstring> &titleSynonyms, bool fileCaching);
 	void setRowPreference(cSource *wikipediaSource, wstring tableName, bool fileCaching);
@@ -130,7 +130,7 @@ public:
 	//   the average of the associationValue
 	//   the number of values/the size of the 
 	int calculateColumnRDFTypeCoherence(cSource *wikipediaSource, cColumn::cEntry titleEntry, wstring tableName, bool fileCaching);
-	void logColumn(int logType, wchar_t *when, wstring tableName);
+	void logColumn(int logType, const wchar_t * when, wstring tableName);
 	static cColumn::cEntry scanColumnEntry(int whereQuestionType, cSource *wikipediaSource, cSource *questionSource, int &I, bool &matchFound, wstring tableName);
 };
 

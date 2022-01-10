@@ -48,7 +48,8 @@ void distributeToSubDirectories(wchar_t *fullPath,int pathlen,bool createDirs)
 		if (createDirs)
 		{
 			path[2]=0;
-			_wmkdir(fullPath);
+			if (_wmkdir(fullPath)<0 && errno != EEXIST)
+				return;
 		}
 		path[2]=path[6];
 		if (path[2] == L'.')
@@ -58,7 +59,8 @@ void distributeToSubDirectories(wchar_t *fullPath,int pathlen,bool createDirs)
 		{
 			wchar_t savech=path[4];
 			path[4]=0;
-			_wmkdir(fullPath);
+			if (_wmkdir(fullPath) < 0 && errno != EEXIST)
+				return;
 			path[4]=savech;
 		}
 	}
@@ -93,7 +95,7 @@ int takeLastMatch(wstring &buffer,wstring beginString,wstring endString,wstring 
 	return beginPos;
 }
 
-int firstMatch(wstring &buffer, wstring beginString, wstring endString, size_t &beginPos, wstring &match, bool include_begin_and_end)
+size_t firstMatch(wstring &buffer, wstring beginString, wstring endString, size_t &beginPos, wstring &match, bool include_begin_and_end)
 {
 	LFS
 		beginPos = buffer.find(beginString, (beginPos == wstring::npos) ? 0 : beginPos);
@@ -109,7 +111,7 @@ int firstMatch(wstring &buffer, wstring beginString, wstring endString, size_t &
 	return beginPos = wstring::npos;
 }
 
-int firstMatch(string &buffer, string beginString, string endString, size_t &beginPos, string &match, bool include_begin_and_end)
+size_t firstMatch(string &buffer, string beginString, string endString, size_t &beginPos, string &match, bool include_begin_and_end)
 {
 	LFS
 	beginPos = buffer.find(beginString, (beginPos == string::npos) ? 0 : beginPos);
@@ -125,10 +127,11 @@ int firstMatch(string &buffer, string beginString, string endString, size_t &beg
 	return beginPos = string::npos;
 }
 
-wchar_t *firstMatch(wchar_t *buffer, wchar_t *beginString, wchar_t *endString)
+wchar_t *firstMatch(wchar_t *buffer, const wchar_t *beginString, const wchar_t *endString)
 {
 	LFS
-		wchar_t *beginPos = wcsstr(buffer, beginString), *endPos;
+	wchar_t* beginPos = wcsstr(buffer, beginString);
+	wchar_t *endPos;
 	if (beginPos != NULL)
 	{
 		beginPos += wcslen(beginString);
@@ -141,10 +144,11 @@ wchar_t *firstMatch(wchar_t *buffer, wchar_t *beginString, wchar_t *endString)
 	return NULL;
 }
 
-char *firstMatch(char *buffer, char *beginString, char *endString)
+char *firstMatch(char *buffer, const char *beginString, const char *endString)
 {
 	LFS
-	char *beginPos = strstr(buffer, beginString), *endPos;
+	char* beginPos = strstr(buffer, beginString);
+	char *endPos;
 	if (beginPos != NULL)
 	{
 		beginPos += strlen(beginString);
@@ -308,7 +312,7 @@ SYMBOLS
 void eliminateHTMLCharacterEntities(wstring &buffer)
 { LFS
 	// all begin with & and end with ;
-	wchar_t *ce[]={
+	const wchar_t *ce[]={
 		L"Aacute",L"Agrave",L"Acirc",L"Atilde",L"Aring",L"Auml",L"AElig",L"Ccedil",L"Eacute",L"Egrave",L"Ecirc",L"Euml",L"Iacute",L"Igrave",L"Icirc",L"Iuml",L"ETH",L"Ntilde",
 		L"Oacute",L"Ograve",L"Ocirc",L"Otilde",L"Ouml",L"Oslash",L"Uacute",L"Ugrave",L"Ucirc",L"Uuml",L"Yacute",L"THORN",L"szlig",L"aacute",L"agrave",L"acirc",L"atilde",
 		L"atilde",L"auml",L"aelig",L"ccedil",L"eacute",L"egrave",L"ecirc",L"euml",L"iacute",L"igrave",L"icirc",L"iuml",L"eth",L"ntilde",L"oacute",L"ograve",L"ocirc",
@@ -316,7 +320,7 @@ void eliminateHTMLCharacterEntities(wstring &buffer)
 		NULL
 	};
 
-	wchar_t *sym[]={
+	const wchar_t *sym[]={
 		L"nbsp",L"iexcl",L"curren",L"cent",L"pound",L"yen",L"brvbar",L"sect",L"uml",L"copy",L"ordf",L"laquo",L"not",L"shy",L"reg",L"trade",L"macr",L"deg",L"plusmn",L"sup2",L"sup3",
 		L"acute",L"micro",L"para",L"middot",L"cedil",L"sup1",L"ordm",L"raquo",L"frac14",L"frac12",L"frac34",L"iquest",L"times",L"divide",
 		NULL
@@ -636,7 +640,7 @@ Inflected Form(s): redder; reddest
 */
 // "<i>also dialect</i>","<i>also chiefly","<i>also dialect",
 // "<i>or nonstandard</i>","<i>or dialect","<i>or archaic</i>","<i>or chiefly"
-wchar_t *alternates[]={
+const wchar_t *alternates[]={
 	L"<i>also",L"<i>or",L"<i>chiefly in",
 };
 
@@ -661,7 +665,7 @@ bool equivalentIfIgnoreDashSpaceCase(wstring sWord,wstring sWord2)
 	return false;
 }
 
-int cWord::checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,wstring sForm,int inflection,int derivationRules,wstring definitionEntry,int sourceId,bool log)
+int cWord::checkAdd(const wchar_t * fromWhere,tIWMM &iWord,wstring sWord,int flags,wstring sForm,int inflection,int derivationRules,wstring definitionEntry,int sourceId,bool log)
 { LFS
 	int iForm;
 	vector <cForm *>::iterator ifc,ifcend=Forms.end();
@@ -1063,7 +1067,7 @@ bool existsInDictionaryDotCom(MYSQL *mysql,wstring word, bool &networkAccessed)
 	path[0] = '_';
 	wcscpy(path+1, word.c_str());
 	convertIllegalChars(path + 1);
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"select 1 from notwords where word = '%s'", path);
+	_snwprintf(qt, 1024, L"select 1 from notwords where word = '%s'", path);
 	if (!myquery(mysql, L"LOCK TABLES notwords READ"))
 		return false;
 	if (myquery(mysql, qt, result))

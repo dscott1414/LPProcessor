@@ -1174,7 +1174,7 @@ int cSource::parseBuffer(wstring &path, unsigned int &unknownCount)
 		bool endSentence = result == PARSE_END_SENTENCE;
 		if (endSentence && m.size() && sWord == L".")
 		{
-			wchar_t *abbreviationForms[] = { L"letter",L"abbreviation",L"measurement_abbreviation",L"street_address_abbreviation",L"business_abbreviation",
+			const wchar_t *abbreviationForms[] = { L"letter",L"abbreviation",L"measurement_abbreviation",L"street_address_abbreviation",L"business_abbreviation",
 				L"time_abbreviation",L"date_abbreviation",L"honorific_abbreviation",L"trademark",L"pagenum",NULL };
 			for (unsigned int af = 0; abbreviationForms[af] && endSentence; af++)
 				if (m[m.size() - 1].queryForm(abbreviationForms[af]) >= 0)

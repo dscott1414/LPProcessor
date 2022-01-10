@@ -349,11 +349,11 @@ int readN3FileIntoTripletMap(wchar_t *path, unordered_map < wstring, unordered_m
 	return 0;
 }
 
-void cOntology::importUMBELN3Files(wchar_t *basepath, wchar_t *extension, unordered_map < wstring, unordered_map <wstring, set< wstring > > > &triplets)
+void cOntology::importUMBELN3Files(const wchar_t * basepath, const wchar_t * extension, unordered_map < wstring, unordered_map <wstring, set< wstring > > > &triplets)
 {
 	WIN32_FIND_DATA FindFileData;
 	wchar_t path[1024];
-	wsprintf(path, L"%s\\*.*", basepath, extension);
+	wsprintf(path, L"%s\\*.*", basepath);
 	HANDLE hFind = FindFirstFile(path, &FindFileData);
 	if (hFind == INVALID_HANDLE_VALUE)
 	{
@@ -616,31 +616,31 @@ int cOntology::getDescription(wstring label, wstring objectName, wstring &abstra
 		{
 			size_t pos = 0, pos2 = 0;
 			wstring tmpstr;
-			if (firstMatch(buffer, L"<binding name=\"v1\">", L"</binding>", pos, tmpstr, false) >= 0)
+			if (firstMatch(buffer, L"<binding name=\"v1\">", L"</binding>", pos, tmpstr, false) != wstring::npos)
 				firstMatch(tmpstr, L"<literal xml:lang=\"en\">", L"</literal>", pos2, abstract, false);
-			if (firstMatch(buffer, L"<binding name=\"v2\">", L"</binding>", pos, tmpstr, false) >= 0)
+			if (firstMatch(buffer, L"<binding name=\"v2\">", L"</binding>", pos, tmpstr, false) != wstring::npos)
 			{
 				pos2 = 0;
 				firstMatch(tmpstr, L"<literal xml:lang=\"en\">", L"</literal>", pos2, comment, false);
 			}
-			if (firstMatch(buffer, L"<binding name=\"v3\">", L"</binding>", pos, tmpstr, false) >= 0)
+			if (firstMatch(buffer, L"<binding name=\"v3\">", L"</binding>", pos, tmpstr, false) != wstring::npos)
 			{
 				pos2 = 0;
 				firstMatch(tmpstr, L"<uri>", L"</uri>", pos2, infoPage, false);
 			}
-			if (firstMatch(buffer, L"<binding name=\"bd\">", L"</binding>", pos, tmpstr, false) >= 0)
+			if (firstMatch(buffer, L"<binding name=\"bd\">", L"</binding>", pos, tmpstr, false) != wstring::npos)
 			{
 				pos2 = 0;
 				firstMatch(tmpstr, L">", L"</literal>", pos2, birthDate, false);
 			}
-			if (firstMatch(buffer, L"<binding name=\"bp\">", L"</binding>", pos, tmpstr, false) >= 0)
+			if (firstMatch(buffer, L"<binding name=\"bp\">", L"</binding>", pos, tmpstr, false) != wstring::npos)
 			{
 				pos2 = 0;
 				wstring birthPlaceLink;
 				firstMatch(tmpstr, L"<uri>", L"</uri>", pos2, birthPlaceLink, false);
 				followDbpediaLink(birthPlaceLink,L"<span property=\"rdfs:label\" xmlns:rdfs=\"http://www.w3.org/2000/01/rdf-schema#\" xml:lang=\"en\">",birthPlace); // if birthPlace is a reference - http://dbpedia.org/resource/Albany,_New_York
 			}
-			if (firstMatch(buffer, L"<binding name=\"occ\">", L"</binding>", pos, tmpstr, false) >= 0)
+			if (firstMatch(buffer, L"<binding name=\"occ\">", L"</binding>", pos, tmpstr, false) != wstring::npos)
 			{
 				pos2 = 0;
 				wstring occupationLink;
@@ -787,7 +787,7 @@ compactLabel			skos:compactLabel "weather attributes weather topic"@en .
 
 wstring cOntology::stripUmbel(wstring umbelClass,wstring &compactLabel,wstring &labelWithSpace,int &UMBELType)
 {
-	wchar_t *prefixes[] = { L"<http://umbel.org/umbel/rc/", L"<http://umbel.org/umbel#", L"<http://schema.org/", L"<http://www.geonames.org/ontology#", L"<http://dbpedia.org/ontology/",
+	const wchar_t *prefixes[] = { L"<http://umbel.org/umbel/rc/", L"<http://umbel.org/umbel#", L"<http://schema.org/", L"<http://www.geonames.org/ontology#", L"<http://dbpedia.org/ontology/",
 		L"<http://purl.org/dc/dcmitype/",		L"<http://purl.org/dc/terms/",		L"<http://purl.org/goodrelations/v1#",		L"<http://purl.org/openorg/",
 		L"<http://usefulinc.com/ns/doap#",		L"<http://vocab.org/transit/terms/",		L"<http://www.w3.org/2003/01/geo/wgs84_pos#",		L"<http://www.w3.org/2004/02/skos/core#",
 		L"<http://www.w3.org/2006/time#",		L"<http://www.w3.org/2006/timezone#",		L"<http://www.w3.org/ns/org#",		L"<http://xmlns.com/foaf/0.1/", 
@@ -891,7 +891,7 @@ void transform(char *ic, string &nameIC)
 	char *original = ic;
 	for (; *ic; ic++)
 	{
-		if (ic != original && (iswupper(*ic) && !iswupper(ic[-1])) || (iswdigit(*ic) && !iswdigit(ic[-1])))
+		if (ic != original && (isupper(*ic) && !isupper(ic[-1])) || (isdigit(*ic) && !isdigit(ic[-1])))
 			nameIC += " ";
 		*ic = tolower(*ic);
 		if (isdigit(*ic))
@@ -923,7 +923,7 @@ int cOntology::readYAGOOntology()
 }
 
 #define MAXYAGOBUF 5000000 // in char
-int cOntology::readYAGOOntology(wchar_t *filepath, int &numYAGOEntries, int &numSuperClasses)
+int cOntology::readYAGOOntology(const wchar_t * filepath, int &numYAGOEntries, int &numSuperClasses)
 {
 	LFS
 	HANDLE fd = CreateFile(filepath, GENERIC_READ, FILE_SHARE_READ| FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
@@ -1061,8 +1061,8 @@ int cOntology::readDbPediaOntology()
 	dbp.numLine = 0;
 	wstring currentEntry;
 	// these super classes have been inexplicably dropped from the dbpedia ontology file
-	wchar_t *droppedSuperClassesEntry[] = { L"Thing",L"Festival",L"MusicGroup",L"SocialPerson",L"Organization",L"Product",0 };
-	wchar_t *droppedSuperClasses[] = { L"thing",L"festival",L"music group",L"social person",L"organization",L"product",0 };
+	const wchar_t *droppedSuperClassesEntry[] = { L"Thing",L"Festival",L"MusicGroup",L"SocialPerson",L"Organization",L"Product",0 };
+	const wchar_t *droppedSuperClasses[] = { L"thing",L"festival",L"music group",L"social person",L"organization",L"product",0 };
 	for (int I = 0; droppedSuperClasses[I]; I++)
 	{
 		dbp.compactLabel = droppedSuperClasses[I];
@@ -1243,7 +1243,7 @@ bool rdfCompare(const unordered_map <wstring, cOntologyEntry>::iterator &lhs,con
 	return (lhs)->second.ontologyHierarchicalRank < (rhs)->second.ontologyHierarchicalRank;
 }
 
-wchar_t *lpOntologySuperClasses[]={L"provincesandterritoriesofcanada",L"country",L"island",L"mountain",L"geoclasspark",L"river",L"stream",L"city",L"statesoftheunitedstates",NULL};
+const wchar_t *lpOntologySuperClasses[]={L"provincesandterritoriesofcanada",L"country",L"island",L"mountain",L"geoclasspark",L"river",L"stream",L"city",L"statesoftheunitedstates",NULL};
 
 int clocksec()
 {
@@ -1292,7 +1292,11 @@ int cOntology::fillOntologyList(bool reInitialize)
 				}
 				if (where>MAX_BUF-40960)
 				{
-					::write(fd,buffer,where);
+					if (::write(fd,buffer,where)<0) 
+					{
+						lplog(LOG_FATAL_ERROR, L"Cannot write rdfTypes dbPediaCache - %S.", _sys_errlist[errno]);
+						return -1;
+					}
 					where=0;
 				}
 			}
@@ -1439,8 +1443,8 @@ int cOntology::findCategoryRank(wstring &qtype,wstring &parentObject,wstring &ob
 	{
 		if (ret = getDBPediaPath(-1, uri, buffer, object + L"_cR" + qtype + cat + L".html")) return -1;
 		// <a class="uri" rel="rdfs:subClassOf" xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#" href="http://dbpedia.org/class/yago/Alumnus109786338">
-		if (firstMatch(buffer, L"<a class=\"uri\" rel=\"rdfs:subClassOf\"", L">", pos, temp, false) >= 0 &&
-			firstMatch(temp, L"href=\"http://dbpedia.org/class/yago/", L"\"", pos2, superClass, false) >= 0)
+		if (firstMatch(buffer, L"<a class=\"uri\" rel=\"rdfs:subClassOf\"", L">", pos, temp, false) != wstring::npos &&
+			firstMatch(temp, L"href=\"http://dbpedia.org/class/yago/", L"\"", pos2, superClass, false)!= wstring::npos)
 		{
 			if (find(dbPediaOntologyCategoryList[cat].superClasses.begin(), dbPediaOntologyCategoryList[cat].superClasses.end(),superClass)== dbPediaOntologyCategoryList[cat].superClasses.end())
 				dbPediaOntologyCategoryList[cat].superClasses.insert(superClass);
@@ -1454,7 +1458,7 @@ int cOntology::findCategoryRank(wstring &qtype,wstring &parentObject,wstring &ob
 	if ((cli == dbPediaOntologyCategoryList.end() || cli->second.ontologyHierarchicalRank == 100) && foundUMBELCategory)
 	{
 		if (ret = getDBPediaPath(-1, uri, buffer, object + L"_cR" + qtype + cat + L".html")) return -1;
-		if (firstMatch(buffer, L"<rdfs:subClassOf rdf:resource=\"http://umbel.org/umbel/rc/", L"\"", pos, superClass, false) >= 0)
+		if (firstMatch(buffer, L"<rdfs:subClassOf rdf:resource=\"http://umbel.org/umbel/rc/", L"\"", pos, superClass, false) != wstring::npos)
 		{
 			if (find(dbPediaOntologyCategoryList[cat].superClasses.begin(), dbPediaOntologyCategoryList[cat].superClasses.end(), superClass) == dbPediaOntologyCategoryList[cat].superClasses.end())
 				dbPediaOntologyCategoryList[cat].superClasses.insert(superClass);
@@ -1609,7 +1613,7 @@ int cOntology::getAcronyms(wstring &object,vector <wstring> &acronyms)
 	// reduce acronym page
 	size_t beginPos=wstring::npos;
 	wstring acronymsBuffer,individualAcronymBuffer;
-	int firstMatch(wstring &buffer,wstring beginString,wstring endString,size_t &beginPos,wstring &match,bool include_begin_and_end);
+	size_t firstMatch(wstring &buffer,wstring beginString,wstring endString,size_t &beginPos,wstring &match,bool include_begin_and_end);
 	firstMatch(buffer,L"<table id=AcrFinder class=AcrFinder",L"</table>",beginPos,acronymsBuffer,false);
 	beginPos=wstring::npos;
 	/*
@@ -1893,7 +1897,7 @@ int cOntology::lookupInFreebaseQuery(wstring &object,string &slobject,wstring &q
 			transform (name.begin (), name.end (), name.begin (), (int(*)(int)) tolower);
 		}
 		vector <wstring> wikipediaLinks;
-		for (int whereWikipediaLink=properties.find("{W}"); whereWikipediaLink!=string::npos; whereWikipediaLink=whereNextWikipediaLink)
+		for (size_t whereWikipediaLink=properties.find("{W}"); whereWikipediaLink!=string::npos; whereWikipediaLink=whereNextWikipediaLink)
 		{
 			string wikipediaLink;
 			wstring wWikipediaLink;
@@ -1907,7 +1911,7 @@ int cOntology::lookupInFreebaseQuery(wstring &object,string &slobject,wstring &q
 			wikipediaLinks.push_back(mTW(wikipediaLink,wWikipediaLink));
 		}
 		vector <wstring> professionLinks;
-		for (int whereProfessionLink=properties.find("{P}"); whereProfessionLink!=string::npos; whereProfessionLink=whereNextProfessionLink)
+		for (size_t whereProfessionLink=properties.find("{P}"); whereProfessionLink!=string::npos; whereProfessionLink=whereNextProfessionLink)
 		{
 			string professionLink;
 			wstring wProfessionLink;
@@ -2174,7 +2178,7 @@ bool cOntology::insertNoERDFTypesDBTable(wstring newObjectName)
 	return success;
 }
 
-int cOntology::printRDFTypes(wchar_t *kind, vector <cTreeCat *> &rdfTypes)
+int cOntology::printRDFTypes(const wchar_t * kind, vector <cTreeCat *> &rdfTypes)
 {
 	lplog(LOG_WIKIPEDIA, L"BEGIN %s:%d", kind, rdfTypes.size());
 	for (int I = 0; I < rdfTypes.size(); I++)
@@ -2282,7 +2286,7 @@ int cOntology::getRDFTypesMaster(wstring object, vector <cTreeCat *> &rdfTypes, 
 
 // insert the rdfType (cli->first) into topHierarchyClassIndexes, if it matches a known top class.
 //   if the top class is already there, make sure the topHierarchyClassIndexes are pointing to the rdfType with the lowest confidence (the MOST confident entry)
-bool checkInsert(wchar_t *fromCategory,wchar_t *finalCategory,unordered_map <wstring ,int > &topHierarchyClassIndexes,vector <cTreeCat *> &rdfTypes,unsigned int &I)
+bool checkInsert(const wchar_t *fromCategory,const wchar_t *finalCategory,unordered_map <wstring ,int > &topHierarchyClassIndexes,vector <cTreeCat *> &rdfTypes,unsigned int &I)
 { LFS
 	//rdfTypes[I]->lplog(LOG_WHERE);
 	if (rdfTypes[I]->cli->first!=fromCategory)
@@ -2306,9 +2310,9 @@ bool checkInsert(wchar_t *fromCategory,wchar_t *finalCategory,unordered_map <wst
 	return true;
 }
 
-wchar_t *knownClasses[]={ L"person", L"place", L"gml/_feature", L"location",L"business",L"organisation",L"work",L"plant",L"animal",
+const wchar_t *knownClasses[]={ L"person", L"place", L"gml/_feature", L"location",L"business",L"organisation",L"work",L"plant",L"animal",
 	L"disease",L"provincesandterritoriesofcanada",L"country",L"island",L"mountain",L"geoclasspark",L"river",L"stream",L"city",L"statesoftheunitedstates",NULL };
-wchar_t *knownMapToClasses[]={ L"person", L"place", L"place", L"place",L"business",L"business",L"creativeWork",L"plant",L"animal",
+const wchar_t *knownMapToClasses[]={ L"person", L"place", L"place", L"place",L"business",L"business",L"creativeWork",L"plant",L"animal",
 	L"disease",L"provincesandterritoriesofcanada",L"country",L"island",L"mountain",L"geoclasspark",L"river",L"river",L"city",L"statesoftheunitedstates",NULL };
 bool knownClass(wstring c)
 { LFS
@@ -2585,7 +2589,7 @@ void cOntology::readOpenLibraryInternetArchiveWorksDump()
 		{
 			convertCodePoints(buffer);
 			wstring buf = buffer;
-			wchar_t *searchTitle = L"\"title\": \"";
+			const wchar_t *searchTitle = L"\"title\": \"";
 			int whereTitle=buf.find(searchTitle);
 			if (whereTitle!=wstring::npos)
 			{
@@ -2616,7 +2620,7 @@ void cOntology::readOpenLibraryInternetArchiveWorksDump()
 					}
 				}
 			}
-			int numUnicodeCharsRead = buf.length();
+			__int64 numUnicodeCharsRead = buf.length();
 			numBytesRead += numUnicodeCharsRead << 1;
 			if ((printCounter & 127) == 0)
 			{

@@ -163,7 +163,7 @@ bool aVNNP(wchar_t *buf,__int64 &offset,vector <cXMLClass> &vxc)
 	return endX(buf,offset,tmp)==L"NP";
 }
 
-bool aVNLEAF(wchar_t *buf,__int64 &offset,wchar_t *str)
+bool aVNLEAF(wchar_t *buf,__int64 &offset,const wchar_t *str)
 { LFS
 	vector <cXMLClass> tempxc;
 	__int64 advOffset=offset;

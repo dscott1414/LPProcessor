@@ -108,14 +108,14 @@ void *tmalloc(size_t num);
 void *tcalloc(size_t num,size_t SizeOfElements);
 void *trealloc(int from,void *original,unsigned int oldbytes,unsigned int newbytes);
 void tfree(size_t oldbytes,void *original);
-int getCounter(wchar_t *counter,unsigned long &dwValue);
+int getCounter(const wchar_t *counter,unsigned long &dwValue);
 
 #define IOHANDLE int
 
-void itos(wchar_t *before,int i,wstring &concat,wchar_t *after);
-void itos(wchar_t *before,int i,wstring &concat,wstring after);
+void itos(const wchar_t *before,int i,wstring &concat,wchar_t *after);
+void itos(const wchar_t *before,int i,wstring &concat,wstring after);
 wstring itos(int i, wstring &tmp);
-wstring itos(int i, wchar_t *format, wstring &tmp);
+wstring itos(int i, const wchar_t *format, wstring &tmp);
 wstring dtos(double fl,wstring &tmp);
 char *wTM(wstring inString,string &outString,int codePage=CP_UTF8);
 const wchar_t *mTW(string inString, wstring &outString);
@@ -202,7 +202,7 @@ const wchar_t *inflectionFlagsToStr(int inflectionFlags, wstring &sFlags);
 const wchar_t *allWordFlags(int inflectionFlags, wstring &sFlags);
 void readVBNet(void);
 wstring relationString(int r);
-void *WideCharToMultiByte(wchar_t *q,int &queryLength,void *&buffer,unsigned int &bufSize);
+void *WideCharToMultiByte(const wchar_t * q,int &queryLength,void *&buffer,unsigned int &bufSize);
 void distributeToSubDirectories(wchar_t *path,int pathlen,bool createDirs);
 void convertIllegalChars(wchar_t *path); // from getWikipedia
 void deleteIllegalChars(char *path); // from getWikipedia
@@ -210,18 +210,18 @@ extern __int64 memoryAllocated;
 extern unordered_map <wstring,set < wstring > > nounVerbMap;
 wstring vectorString(vector <wstring> &vstr,wstring &tmpstr,wstring separator);
 wstring vectorString(vector < vector <wstring> > &vstr,wstring &tmpstr,wstring separator);
-wstring setString(set <wstring> &sstr,wstring &tmpstr,wchar_t *separator);
-wstring setString(unordered_set <wstring>& sstr, wstring& tmpstr, wchar_t* separator);
-wstring setString(set <wstring>& sstr, wstring& tmpstr, wchar_t* separator);
-string setString(set <string> &sstr,string &tmpstr,char *separator);
+wstring setString(set <wstring> &sstr,wstring &tmpstr,const wchar_t *separator);
+wstring setString(unordered_set <wstring>& sstr, wstring& tmpstr, const wchar_t* separator);
+wstring setString(set <wstring>& sstr, wstring& tmpstr, const wchar_t* separator);
+string setString(set <string> &sstr,string &tmpstr,const char *separator);
 const wchar_t *ontologyTypeString(int ontologyType,int resourceType, wstring &Btmpstr);
 #define SEPARATOR L"SEPARATOR|||"
-int initializeDatabaseHandle(MYSQL &mysql,wchar_t *where,bool &alreadyConnected);
+int initializeDatabaseHandle(MYSQL &mysql,const wchar_t *where,bool &alreadyConnected);
 wstring lastErrorMsg();
 
 // google API used for custom search and freebase
 extern wstring webSearchKey;
-char * LastErrorStr(void);
+const char * LastErrorStr(void);
 extern SRWLOCK rdfTypeMapSRWLock,mySQLTotalTimeSRWLock,mySQLQueryBufferSRWLock,orderedHyperNymsMapSRWLock;
 void positionConsole(bool controller);
 

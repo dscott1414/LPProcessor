@@ -64,7 +64,8 @@ void convertIllegalChars(wchar_t *path)
 	int len = wcslen(path);
 	wchar_t *pch = wcstok (path,WCHAR_ILLEGAL_PATH_CHARS);
 	if (!pch ||  len>= MAX_PATH_LEN) return;
-	wchar_t newPath[MAX_PATH_LEN];
+	wchar_t newPath[MAX_PATH_LEN+4];
+	newPath[0] = 0;
 	len=0;
   while (pch != NULL && len<MAX_PATH_LEN)
   {
@@ -90,6 +91,7 @@ void deleteIllegalChars(char *path)
 	char *pch = strtok(path, ILLEGAL_PATH_CHARS);
 	if (!pch || len >= MAX_PATH_LEN) return;
 	char newPath[MAX_PATH_LEN];
+	newPath[0] = 0;
 	len=0;
   while (pch != NULL && len<MAX_PATH_LEN)
   {
@@ -187,8 +189,8 @@ void interpretHTMLTable(wstring &buffer,size_t &whereHeadingEnd,wstring &match,v
 	table.push_back(tableHeader);
 	wstring columnHeaders,columnHeader;
 	size_t rowPosition=0,beginColumnHeader=0;
-	if (firstMatch(match,L"<tr ",L"</tr>",rowPosition,columnHeaders,false)<0) return;
-	while (firstMatch(columnHeaders,L"<th>",L"</th>",beginColumnHeader,columnHeader,false)>=0)
+	if (firstMatch(match,L"<tr ",L"</tr>",rowPosition,columnHeaders,false) == wstring::npos) return;
+	while (firstMatch(columnHeaders,L"<th>",L"</th>",beginColumnHeader,columnHeader,false) != wstring::npos)
 	{
 		scanForTables(columnHeader,tables,true);
 		scanForTables(columnHeader,tables,false);
@@ -201,10 +203,10 @@ void interpretHTMLTable(wstring &buffer,size_t &whereHeadingEnd,wstring &match,v
 		return;
 	table.push_back(Words.END_COLUMN_HEADERS->first);
 	wstring columns,columnIndex;
-	while (firstMatch(match,L"<tr ",L"</tr>",rowPosition,columns,false)>=0) 
+	while (firstMatch(match,L"<tr ",L"</tr>",rowPosition,columns,false) != wstring::npos)
 	{
 		int numColumn;
-		for (numColumn=0,beginColumn=0; numColumn<numColumns && firstMatch(columns,L"<td",L"</td>",beginColumn,columnIndex,false)>=0; numColumn++)
+		for (numColumn=0,beginColumn=0; numColumn<numColumns && firstMatch(columns,L"<td",L"</td>",beginColumn,columnIndex,false) != wstring::npos; numColumn++)
 		{
 			// eliminate until the '>'
 			size_t gt=columnIndex.find(L'>');
@@ -313,7 +315,7 @@ void scanForTables(wstring &buffer, vector < vector <wstring> > &tables, bool un
 	LFS
 	size_t tablePosition=0;
 	wstring tableHtml;
-	wchar_t *beginTable,*endTable;
+	const wchar_t *beginTable,*endTable;
 	if (unordered)
 	{
 		beginTable=L"<ul>";
@@ -388,10 +390,10 @@ int reduceWikipediaPage(wstring &buffer)
 	takeLastMatch(buffer, L"<span class=\"toctogglespan\">", L"</span>", match, false);
 	//takeLastMatch(buffer,L"<ol ",L"</ol>",match,false);
 	size_t pos=wstring::npos;
-	while (firstMatch(buffer,L"<!--",L"-->",pos,match,false)>=0);
-	while (firstMatch(buffer,L"<table",L"</table>",pos,match,false)>=0)
+	while (firstMatch(buffer,L"<!--",L"-->",pos,match,false) != wstring::npos);
+	while (firstMatch(buffer,L"<table",L"</table>",pos,match,false) != wstring::npos)
 		interpretHTMLTable(buffer,pos,match,tables);
-	while (firstMatch(buffer,L"<sup",L"</sup>",pos,match,false)>=0);
+	while (firstMatch(buffer,L"<sup",L"</sup>",pos,match,false) != wstring::npos);
 	if (buffer.find(L"Results 1-",0)==wstring::npos)
 	{
 		// keep apostrophes
@@ -434,7 +436,7 @@ int reduceWikipediaPage(wstring &buffer)
 			takeLastMatch(match,L"Relevance: ",L"%",sRelevance,false);
 			if (sRelevance.length() && _wtoi(sRelevance.c_str())<70)
 				break;
-			wchar_t path[1024];
+			wchar_t path[MAX_LEN];
 			int pathlen=_snwprintf(path,MAX_LEN,L"%s\\wikipediaCache",CACHEDIR)+1;
 			if (_wmkdir(path) < 0 && errno == ENOENT)
 				lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
@@ -443,7 +445,7 @@ int reduceWikipediaPage(wstring &buffer)
 			distributeToSubDirectories(path,pathlen,true);
 			if (_waccess(path,0)<0)
 			{
-				wchar_t webAddress[1024];
+				wchar_t webAddress[MAX_LEN];
 				// http://en.wikipedia.org/w/index.php?title=Localized_versions_of_the_Monopoly_game&printable=yes
 				// http://en.wikipedia.org/w/index.php?title=List_of_French_phrases_used_by_English_speakers&printable=yes
 				_snwprintf(webAddress,MAX_LEN,L"http://en.wikipedia.org/w/index.php?title=%s&printable=yes",nextWikiAddress.c_str()); 
@@ -511,7 +513,7 @@ wstring vectorString(vector < vector <wstring> > &vstr, wstring &tmpstr, wstring
 	return tmpstr;
 }
 
-wstring setString(set <wstring> &sstr, wstring &tmpstr, wchar_t *separator)
+wstring setString(set <wstring> &sstr, wstring &tmpstr, const wchar_t *separator)
 {
 	LFS
 		tmpstr.clear();
@@ -522,7 +524,7 @@ wstring setString(set <wstring> &sstr, wstring &tmpstr, wchar_t *separator)
 	return tmpstr;
 }
 
-wstring setString(unordered_set <wstring> &sstr, wstring &tmpstr, wchar_t *separator)
+wstring setString(unordered_set <wstring> &sstr, wstring &tmpstr, const wchar_t *separator)
 {
 	LFS
 		tmpstr.clear();
@@ -533,7 +535,7 @@ wstring setString(unordered_set <wstring> &sstr, wstring &tmpstr, wchar_t *separ
 	return tmpstr;
 }
 
-string setString(set <string> &sstr, string &tmpstr, char *separator)
+string setString(set <string> &sstr, string &tmpstr, const char *separator)
 { LFS
 	tmpstr.clear();
 	for (set <string>::iterator sci=sstr.begin(),sciEnd=sstr.end(); sci!=sciEnd; sci++)
@@ -1151,7 +1153,7 @@ int cSource::getWikipediaPath(int principalWhere,vector <wstring> &wikipediaLink
 		lplog(LOG_WHERE, L"TRACEOPEN %s %s", path, __FUNCTIONW__);
 	if (_waccess(path, 0)<0)
 	{
-		wchar_t webAddress[1024];
+		wchar_t webAddress[MAX_LEN];
 		_snwprintf(webAddress,MAX_LEN,L"http://en.wikipedia.org/wiki/Special:Search?search=%s&printable=yes&redirect=no",object.c_str()); 
 		lplog(LOG_WIKIPEDIA,L"PRIMARY:  %s",webAddress);
 		int ret; 
@@ -1421,7 +1423,7 @@ int cQuestionAnswering::processPath(cSource *parentSource,const wchar_t *path, c
 		source->numSearchedInMemory++;
 		if (ch)
 		{
-			wsprintf(ch + 3, L"[%d%%] %d sources processed:%s[%d]", questionProgress, sourcesMap.size(), path, source->numSearchedInMemory);
+			wsprintf(ch + 3, L"[%d%%] %I64u sources processed:%s[%d]", questionProgress, sourcesMap.size(), path, source->numSearchedInMemory);
 			SetConsoleTitle(sourcesParsedTitle);
 		}
 		return 0;
@@ -1430,7 +1432,7 @@ int cQuestionAnswering::processPath(cSource *parentSource,const wchar_t *path, c
 		return -1;
 	if (ch)
 	{
-		wsprintf(ch + 3, L"[%d%%]  %d sources processed:%s", questionProgress, sourcesMap.size(), path);
+		wsprintf(ch + 3, L"[%d%%]  %I64u sources processed:%s", questionProgress, sourcesMap.size(), path);
 		SetConsoleTitle(sourcesParsedTitle);
 	}
 	source = new cSource(&parentSource->mysql, st, pathSourceConfidence);
@@ -1574,7 +1576,7 @@ int cSource::identifyISARelationTextAnalysis(cQuestionAnswering &qa,int principa
 	return 0;
 }
 
-int cSource::getRDFWhereString(int where, wstring &oStr, wchar_t *separator, int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool ignoreMatches)
+int cSource::getRDFWhereString(int where, wstring &oStr, const wchar_t *separator, int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool ignoreMatches)
 { LFS
 	int o,begin,len;
 	if (m[where].objectMatches.size()>0 && !ignoreMatches)

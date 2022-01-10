@@ -435,7 +435,7 @@ bool cSource::isRelativeLocation(wstring word)
 { LFS
 		bool location=false;
 		// in front of the hotel / at the end of the street / at the angle of the corner / at the bend of the staircase    
-		wchar_t *locations[]={L"front",L"middle",L"side",L"back",L"end",L"corner",L"angle",L"bend",L"curve",L"top",NULL};
+		const wchar_t *locations[]={L"front",L"middle",L"side",L"back",L"end",L"corner",L"angle",L"bend",L"curve",L"top",NULL};
 		for (int p=0; locations[p] && !(location=(word==locations[p])); p++);
 		return location;
 }
@@ -832,8 +832,8 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 		objectIsAcceptable=true;
 	bool ofNegation=(prepTypeCancelled && !prepObjectIsAcceptable && !objectIsAcceptable);
 //	vector <cLocalFocus>::iterator lsi;
-	bool not=whereVerb>=0 && (m[whereVerb].verbSense&VT_NEGATION)!=0;
-	not|=whereVerb>=0 && m[whereVerb].previousCompoundPartObject>=0 && (m[m[whereVerb].previousCompoundPartObject].verbSense&VT_NEGATION)!=0; // trace back to main verb
+	bool negation=whereVerb>=0 && (m[whereVerb].verbSense&VT_NEGATION)!=0;
+	negation|=whereVerb>=0 && m[whereVerb].previousCompoundPartObject>=0 && (m[m[whereVerb].previousCompoundPartObject].verbSense&VT_NEGATION)!=0; // trace back to main verb
 	//bool alreadyTaken=whereVerb>=0 && m[whereVerb].hasSyntacticRelationGroup;
 	bool there=(whereSubject>=0 && m[whereSubject].word->first==L"there" && (m[whereSubject].objectRole&IN_PRIMARY_QUOTE_ROLE));
 	there|=(whereControllingEntity>=0 && m[whereControllingEntity].word->first==L"there" && (m[whereControllingEntity].objectRole&IN_PRIMARY_QUOTE_ROLE));
@@ -877,7 +877,7 @@ void cSource::newSR(int where,int _o,int whereControllingEntity,int whereSubject
 		!ofNegation &&
 		// "there are seven of us at home"
 		!there &&
-		!not && 
+		!negation && 
 		relationType!=stTRANSFER && 
 		// moving an object is OK if the object being moved is a place (She took her place in the boat) or the subject (He moved himself over the water)
 		// or SECOND or FIRST person He moved you; They sent me
@@ -1086,7 +1086,7 @@ bool cSource::moveIdentifiedSubject(int where,bool inPrimaryQuote,int whereContr
 
 // subject will move the object at whereObject to a destination
 // will change source.m (invalidate all iterators through the use of newSR)
-bool cSource::srMoveObject(int where,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int wherePrepObject,int whereMovingRelativeTo,int hasSyntacticRelationGroup,wchar_t *whereType,bool physicalRelation)
+bool cSource::srMoveObject(int where,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int wherePrepObject,int whereMovingRelativeTo,int hasSyntacticRelationGroup, const wchar_t * whereType,bool physicalRelation)
 { LFS
 	wstring tmpstr;
 	for (int I=0; I<(signed)m[whereObject].objectMatches.size(); I++)
@@ -1190,7 +1190,7 @@ bool cSource::rejectPrepPhrase(int wherePrep)
 bool cSource::adverbialPlace(int where)
 { LFS
 	if (where<0) return false;
-	wchar_t *locations[]={L"there",L"where",L"here",L"ashore",L"alight",L"aboard",L"abroad",L"back",L"away",NULL}; // ,L"out" may have negative conseuqnces
+	const wchar_t *locations[]={L"there",L"where",L"here",L"ashore",L"alight",L"aboard",L"abroad",L"back",L"away",NULL}; // ,L"out" may have negative conseuqnces
 	wstring word=m[where].word->first;
 	for (int p=0; locations[p]; p++) if (locations[p]==word) return true;
 	return (word==L"down" || word==L"up") && where+1<(signed)m.size() && (m[where+1].word->first==L"there" || m[where+1].word->first==L"here");
@@ -1199,7 +1199,7 @@ bool cSource::adverbialPlace(int where)
 bool cSource::adjectivalExit(int where)
 { LFS
 	if (m[where].word->first==L"off" && m[where-1].word->first==L"well") return false;
-	wchar_t *gone[]={L"gone",L"kaput",L"absent",L"deceased",L"departed",L"dead",L"lost",L"off",NULL};
+	const wchar_t *gone[]={L"gone",L"kaput",L"absent",L"deceased",L"departed",L"dead",L"lost",L"off",NULL};
 	wstring word=m[where].word->first;
 	for (int p=0; gone[p]; p++) if (gone[p]==word) return true;
 	return false;
@@ -1575,11 +1575,12 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 		}
 		else if (debugTrace.traceSpeakerResolution)
 			lplog(LOG_RESOLUTION,L"%06d:PLACE transition rejected:SUBJ[%s] V[%s] O[%s %d:%s] PO[%s%s %d:%s]",where,
-					whereString(whereSubject,tmpstr,true).c_str(),m[whereVerb].word->first.c_str(),
-					(whereObject>=0) ? ((!woPhysicalObject) ? L"P":L"NP") : L"",
-					whereObject,whereString(whereObject,tmpstr2,true).c_str(),
-					(wherePrepObject>=0) ? ((!wpoPhysicalObject) ? L"P":L"NP") : L"",
-					(wpoTimeUnit) ? "T":"",
+					whereString(whereSubject,tmpstr,true).c_str(), // SUBJ[%s]
+				  m[whereVerb].word->first.c_str(), // V[%s]
+					(whereObject>=0) ? ((!woPhysicalObject) ? L"P":L"NP") : L"", // O[%s %d:%s]
+					whereObject,whereString(whereObject,tmpstr2,true).c_str(), // O[%s %d:%s]
+					(wherePrepObject>=0) ? ((!wpoPhysicalObject) ? L"P":L"NP") : L"", // PO[%s%s %d:%s]
+					(wpoTimeUnit) ? L"T":L"", // PO[%s%s %d:%s]
 					wherePrepObject,whereString(wherePrepObject,tmpstr3,true).c_str());
 	}
 	// check if object is neuter and not a place.
@@ -1595,7 +1596,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 			((st>=0 && st!=UNKNOWN_PLACE_SUBTYPE) || ((move || moveObject || moveInPlace || transfer || contact || _near || contiguous || stay) && !(m[whereObject].word->second.flags&cSourceWordInfo::notPhysicalObjectByWN)) || 
 			 (o>=0 && (objects[o].objectClass==PRONOUN_OBJECT_CLASS || objects[o].objectClass==GENDERED_GENERAL_OBJECT_CLASS) && (objects[o].male || objects[o].female))))
 	{
-		wchar_t *whereType;
+		const wchar_t *whereType;
 		// North of the Andes.  The Tube exit.  
 		if (st==RELATIVE_DIRECTION || st==ABSOLUTE_DIRECTION)
 		{
@@ -1869,7 +1870,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 			stType=vbNetClasses[vnClass].getRelationType();
 		if (id==L"escape-51.1-5" && !adverbialPlace(whereObject))
 			stType=stMOVE_OBJECT;
-		newSR(where,(whereSubject>0) ? m[whereSubject].getObject() : -1,whereControllingEntity,whereSubject,whereVerb,-4,whereObject,m[whereObject].endObjectPosition,-1,stType,(m[whereObject].endObjectPosition>=0) ? m[m[whereObject].endObjectPosition].word->first.c_str():L"",pr);
+		newSR(where,(whereSubject>0) ? m[whereSubject].getObject() : -1,whereControllingEntity,whereSubject,whereVerb,-1,whereObject,m[whereObject].endObjectPosition,-1,stType,(m[whereObject].endObjectPosition>=0) ? m[m[whereObject].endObjectPosition].word->first.c_str():L"",pr);
 		return true;
 	}
 	// she was gone.  she was dead.
@@ -1916,7 +1917,7 @@ bool cSource::placeIdentification(int where,bool inPrimaryQuote,int whereControl
 		if (debugTrace.traceSpeakerResolution)
 			lplog(LOG_RESOLUTION,L"%06d:PLACE transfer: subject %s verb %s object %d:%s %d:%s",where,
 				whereString(whereSubject,tmpstr,true).c_str(),m[whereVerb].word->first.c_str(),whereObject,whereString(whereObject,tmpstr2,true).c_str(),nwo,whereString(nwo,tmpstr3,true).c_str());
-		newSR(where,(whereSubject>0) ? m[whereSubject].getObject() : -1,whereControllingEntity,whereSubject,whereVerb,-2,whereObject,nwo,-1,stTRANSFER,L"indirect object",pr);
+		newSR(where,(whereSubject>0) ? m[whereSubject].getObject() : -1,whereControllingEntity,whereSubject,whereVerb,-1,whereObject,nwo,-1,stTRANSFER,L"indirect object",pr);
 		return true;
 	}
 	// commands
@@ -2387,9 +2388,9 @@ void cSource::evaluateMetaWhereQuery(int where, bool inPrimaryQuote, int &curren
 			// is this a position?
 			// is this a statement of position?
 			int o=m[where].getObject();
-			__int64 or=m[where].objectRole;
-			if (((o>=0 && objects[o].isPossibleSubType(false) && !(or&(OBJECT_ROLE|SUBJECT_ROLE))) &&
-					 (!(or&PREP_OBJECT_ROLE) || (or&MOVEMENT_PREP_OBJECT_ROLE))) ||
+			__int64 objectRole=m[where].objectRole;
+			if (((o>=0 && objects[o].isPossibleSubType(false) && !(objectRole&(OBJECT_ROLE|SUBJECT_ROLE))) &&
+					 (!(objectRole&PREP_OBJECT_ROLE) || (objectRole&MOVEMENT_PREP_OBJECT_ROLE))) ||
 					(syntacticRelationGroups.size() && syntacticRelationGroups[syntacticRelationGroups.size()-1].where==where) ||
 					(syntacticRelationGroups.size() && syntacticRelationGroups[syntacticRelationGroups.size()-1].whereSubject==where))
 			{
@@ -2892,6 +2893,7 @@ void cSource::detectSyntacticRelationGroup(int where,int backInitialPosition,vec
 		if (m[where].getRelObject()<0 && where+2<(signed)m.size() && m[where].pma.queryPattern(L"_VERBREL1")!=-1 && m[where+1].pma.queryPatternDiff(L"_PP",L"3")!=-1)
 			whereVerb=where;
 	}
+	lplog(LOG_INFO, L"ZZZTEST %d:%d:%d", __LINE__, whereSubject, whereVerb);
 	if (whereVerb>=0 && !m[whereVerb].hasWinnerVerbForm()) // includes verbverbForm
 		return;
 	if (whereSubject>=0 && m[whereSubject].principalWherePosition>whereSubject) 
@@ -2920,6 +2922,8 @@ void cSource::detectSyntacticRelationGroup(int where,int backInitialPosition,vec
 		o=m[whereSubject].objectMatches[0].object;
 		ws=objects[o].originalLocation;
 	}
+	lplog(LOG_INFO, L"ZZZTEST %d:%d:%d", __LINE__, whereSubject,whereVerb);
+
 	int st=(o>=0) ? objects[o].getSubType() : -1,tmp1=-1,tmp2=-1,tmp3=-1,tmp4=-1;
 	if (o>=0 && (tmp1=whereVerb<0 || primaryLocationLastPosition<0 || (tmp4=m[whereVerb].verbSense&VT_TENSE_MASK)==VT_PAST) &&
 			 !(m[ws].flags&cWordMatch::flagAdjectivalObject) && 
@@ -3042,6 +3046,7 @@ void cSource::detectSyntacticRelationGroup(int where,int backInitialPosition,vec
 				whereVerb=m[whereVerb].getRelVerb();
 			}
 		}
+		lplog(LOG_INFO, L"ZZZTEST %d:%d:%d", __LINE__, whereSubject, whereVerb);
 		// She[girl] had noticed the speaker more than once amongst the first - class passengers .
 		// NOT inQuote: CONTACTyou[sir] could call and LOCATIONsee me[carter] at the above LOCATIONaddress . whereControllingEntity=unknown. subject=sir
 		// ALSO NOT I[whittington] happened to overhear part of your[tuppence] conversation with the young LOCATIONgentleman[glance] in Lyons's
@@ -3085,6 +3090,8 @@ void cSource::detectSyntacticRelationGroup(int where,int backInitialPosition,vec
 			}		
 		}
 	}
+	lplog(LOG_INFO, L"ZZZTEST %d:%d:%d", __LINE__, whereSubject, whereVerb);
+
 	// this makes sure 'get' or 'got' is not misinterpreted as an stMOVE
 	// these papers have got to be saved
 	if (whereVerb>=0 && (m[whereVerb].word->first==L"get" || m[whereVerb].word->first==L"got") &&
@@ -3131,6 +3138,7 @@ void cSource::detectSyntacticRelationGroup(int where,int backInitialPosition,vec
 			newSR(where,-1,whereControllingEntity,whereSubject,whereVerb,m[whereVerb].relPrep,m[whereVerb].getRelObject(),-1,-1,stOTHER,L"",false);
 		}
 	}
+	lplog(LOG_INFO, L"ZZZTEST %d:%d:%d", __LINE__, whereSubject, whereVerb);
 	bool transitionSinceEOS=false;
 	if (syntacticRelationGroupDetected && ageTransition(whereSubject,false,transitionSinceEOS,-1,-1,lastSubjects,L"DSR"))
 		primaryLocationLastMovingPosition=where;

@@ -22,7 +22,7 @@ vector <wstring> patternTagStrings; // initialized
 
 struct {
   int flag;
-  wchar_t *sFlag;
+  const wchar_t *sFlag;
 } inflectionFlagList[]=
 { 
   {SINGULAR,L"SINGULAR"},
@@ -99,13 +99,13 @@ wstring matchesToString(vector <cMatchElement> &whatMatched,int elementMatched,w
     {
       if (whatMatched[elementMatched].getChildPattern()>=patterns.size())
         lplog(LOG_FATAL_ERROR,L"Illegal pattern #%d at elementMatched %d!",whatMatched[elementMatched].getChildPattern(),elementMatched);
-      wsprintf(temp,L"(%d %s[%s] (childRelEnd=%d, cost=%d)) ",whatMatched[elementMatched].endPosition,
+      wsprintf(temp,L"(%u %s[%s] (childRelEnd=%u, cost=%d)) ",whatMatched[elementMatched].endPosition,
         patterns[whatMatched[elementMatched].getChildPattern()]->name.c_str(),
         patterns[whatMatched[elementMatched].getChildPattern()]->differentiator.c_str(),
         whatMatched[elementMatched].getChildLen(),whatMatched[elementMatched].cost);
     }
     else
-      wsprintf(temp,L"(%d %d) ",whatMatched[elementMatched].endPosition,whatMatched[elementMatched].elementMatchedIndex);
+      wsprintf(temp,L"(%u %u) ",whatMatched[elementMatched].endPosition,whatMatched[elementMatched].elementMatchedIndex);
     elementMatched=whatMatched[elementMatched].previousMatch;
     s=temp+s;
   }
@@ -579,7 +579,7 @@ bool cPattern::fillPattern(cSource &source, int sourcePosition, vector <cMatchEl
 			bool endSentence = true;
 			// also if next is a period, but before that is an honorific
 			// As though that first scrutiny had been satisfactory , Mrs . Vandemeyer motioned to a chair . (CLOSING_S1 will match Mrs)
-			wchar_t *abbreviationForms[] = { L"letter",L"abbreviation",L"measurement_abbreviation",L"street_address_abbreviation",L"business_abbreviation",
+			const wchar_t *abbreviationForms[] = { L"letter",L"abbreviation",L"measurement_abbreviation",L"street_address_abbreviation",L"business_abbreviation",
 				L"time_abbreviation",L"date_abbreviation",L"honorific_abbreviation",L"trademark",L"pagenum",NULL };
 			for (unsigned int af = 0; abbreviationForms[af] && endSentence; af++)
 				if (source.m[endPosition - 1].queryForm(abbreviationForms[af]) >= 0)
@@ -608,7 +608,8 @@ bool cPattern::fillPattern(cSource &source, int sourcePosition, vector <cMatchEl
 			if (t.tracePatternMatching)
 				::lplog(L"%d:pattern %s[%s](%d,%d) NOT NEW MATCH", sourcePosition, name.c_str(), differentiator.c_str(), sourcePosition, endPosition);
 #endif
-			return pushed = false;
+      pushed = false;
+			return false;
 		}
 	}
 	else
@@ -1372,7 +1373,7 @@ const wchar_t *inflectionFlagsToStr(int inflectionFlags,wstring &sFlags)
 
 struct {
 	int flag;
-	wchar_t *sFlag;
+	const wchar_t *sFlag;
 } wordFlagList[] =
 {
 	{cSourceWordInfo::topLevelSeparator,L"topLevelSeparator"},
@@ -1413,7 +1414,7 @@ void cPattern::lplog(int logTypes)
 {
   LFS
     wchar_t temp[1024];
-  wsprintf(temp, L"%d:%s[%s] root=%d", num, name.c_str(), differentiator.c_str(), rootPattern);
+  wsprintf(temp, L"%u:%s[%s] root=%u", num, name.c_str(), differentiator.c_str(), rootPattern);
   if (isFutureReference) wcscat(temp, L" FUTURE_REFERENCE");
   if (containsFutureReference) wcscat(temp, L" CONTAINS_FUTURE_REFERENCE");
   if (indirectFutureReference) wcscat(temp, L" INDIRECT_FUTURE_REFERENCE");
@@ -1482,7 +1483,7 @@ void cPattern::lplogShort(wstring patternType,int logTypes)
   LFS
   wchar_t temp[1024],logstr[1024];
   int len = 0;
-  len+=wsprintf(logstr, L"%d:%s[%s] ", num, name.c_str(), differentiator.c_str());
+  len+=wsprintf(logstr, L"%u:%s[%s] ", num, name.c_str(), differentiator.c_str());
   for (unordered_map < wstring, int >::iterator vlpi = variableToLocationMap.begin(), vlpiEnd = variableToLocationMap.end(); vlpi != vlpiEnd; vlpi++)
     len += wsprintf(logstr +len, L"%s->%d ", vlpi->first.c_str(), vlpi->second);
   for (unordered_map < wstring, int >::iterator vlpi = variableToLengthMap.begin(), vlpiEnd = variableToLengthMap.end(); vlpi != vlpiEnd; vlpi++)
@@ -1845,15 +1846,19 @@ int cPattern::hasTagInSet(int desiredTagSetNum,unsigned int &tag)
 
 wchar_t *cPatternElement::toText(wchar_t *temp, int J, bool isPattern, int maxBuf)
 {
-	LFS
+  LFS
+    temp[0] = 0;
 		if (isPattern)
 		{
 			wsprintf(temp, L"%s[%s]*%d%s", patterns[patternIndexes[J]]->name.c_str(), patterns[patternIndexes[J]]->differentiator.c_str(), patternCosts[J], (patternStopDescendingSearch[J]) ? L"{_BLOCK}" : L"");
 			if (patternTags[J].size())
 			{
 				wcscat(temp, L"{");
-				for (set <unsigned int>::iterator t = patternTags[J].begin(), tEnd = patternTags[J].end(); t != tEnd; t++)
-					_snwprintf(temp + wcslen(temp), maxBuf - wcslen(temp), L"%s:", patternTagStrings[*t].c_str());
+        for (set <unsigned int>::iterator t = patternTags[J].begin(), tEnd = patternTags[J].end(); t != tEnd; t++)
+        {
+          _snwprintf(temp + wcslen(temp), maxBuf - wcslen(temp) - 1, L"%s:", patternTagStrings[*t].c_str());
+          temp[maxBuf - 1] = 0;
+        }
 				temp[wcslen(temp) - 1] = L'}';
 			}
 		}
@@ -1866,8 +1871,11 @@ wchar_t *cPatternElement::toText(wchar_t *temp, int J, bool isPattern, int maxBu
 			if (formTags[J].size())
 			{
 				wcscat(temp, L"{");
-				for (set <unsigned int>::iterator t = formTags[J].begin(), tEnd = formTags[J].end(); t != tEnd; t++)
-					_snwprintf(temp + wcslen(temp), maxBuf - wcslen(temp), L"%s:", patternTagStrings[*t].c_str());
+        for (set <unsigned int>::iterator t = formTags[J].begin(), tEnd = formTags[J].end(); t != tEnd; t++)
+        {
+          _snwprintf(temp + wcslen(temp), maxBuf - wcslen(temp) - 1, L"%s:", patternTagStrings[*t].c_str());
+          temp[maxBuf - 1] = 0;
+        }
 				temp[wcslen(temp) - 1] = L'}';
 			}
 		}
@@ -2123,7 +2131,7 @@ void initializePatterns(void)
 #endif
 }
 
-cTagSet::cTagSet(unsigned int &tagSetNum,wchar_t *tag,int requiredNumOfTags,...)
+cTagSet::cTagSet(unsigned int &tagSetNum,const wchar_t *tag,int requiredNumOfTags,...)
 { LFS
   va_list tagMarker;
   va_start( tagMarker,requiredNumOfTags );     /* Initialize variable arguments. */
@@ -2141,7 +2149,7 @@ cTagSet::cTagSet(unsigned int &tagSetNum,wchar_t *tag,int requiredNumOfTags,...)
   va_end( tagMarker );              /* Reset variable arguments.      */
 }
 
-int findTag(wchar_t *tagName)
+int findTag(const wchar_t *tagName)
 { LFS
   for (unsigned int tag=0; tag<patternTagStrings.size(); tag++)
     if (patternTagStrings[tag]==tagName)
@@ -2150,7 +2158,7 @@ int findTag(wchar_t *tagName)
   return -1;
 }
 
-int findTag(vector <cTagLocation> &tagSet, wchar_t *tagName, int &nextTag)
+int findTag(vector <cTagLocation> &tagSet, const wchar_t *tagName, int &nextTag)
 {
 	LFS
 		for (unsigned int I = nextTag + 1; I < tagSet.size(); I++)
@@ -2168,14 +2176,14 @@ int findTag(vector <cTagLocation> &tagSet, wchar_t *tagName, int &nextTag)
 	return -1;
 }
 
-int findOneTag(vector <cTagLocation> &tagSet,wchar_t *tagName,int start)
+int findOneTag(vector <cTagLocation> &tagSet,const wchar_t *tagName,int start)
 { LFS
   for (unsigned int I=start+1; I<tagSet.size(); I++)
     if (patternTagStrings[tagSet[I].tag]==tagName) return I;
   return -1;
 }
 
-int findTagConstrained(vector <cTagLocation> &tagSet,wchar_t *tagName,int &nextTag,unsigned int parentBegin,unsigned int parentEnd)
+int findTagConstrained(vector <cTagLocation> &tagSet,const wchar_t *tagName,int &nextTag,unsigned int parentBegin,unsigned int parentEnd)
 { LFS
   vector <cTagLocation>::iterator tsi=tagSet.begin()+nextTag+1,tsiEnd=tagSet.end();
   for (unsigned int I=nextTag+1; tsi!=tsiEnd; I++,tsi++)
@@ -2194,7 +2202,7 @@ int findTagConstrained(vector <cTagLocation> &tagSet,wchar_t *tagName,int &nextT
     return -1;
 }
 
-int findTagConstrained(vector <cTagLocation> &tagSet,wchar_t *tagName,int &nextTag,cTagLocation &parentTag)
+int findTagConstrained(vector <cTagLocation> &tagSet,const wchar_t *tagName,int &nextTag,cTagLocation &parentTag)
 { LFS
   unsigned int parentBegin=parentTag.sourcePosition,parentEnd=parentBegin+parentTag.len;
 	return findTagConstrained(tagSet,tagName,nextTag,parentBegin,parentEnd);
@@ -2236,7 +2244,7 @@ bool cPattern::equivalentTagSet(vector <cTagLocation> &tagSet,vector <cTagLocati
   return true;
 }
 
-void printTagSet(int logType,wchar_t *descriptor,int ts,vector <cTagLocation> &tagSet)
+void printTagSet(int logType, const wchar_t * descriptor,int ts,vector <cTagLocation> &tagSet)
 { LFS
   vector <cTagLocation>::iterator its=tagSet.begin();
   vector <cTagLocation>::iterator itsEnd=tagSet.end();
@@ -2299,7 +2307,7 @@ int cSource::queryPattern(int position, wstring pattern)
 	return -1;
 }
 
-void cSource::printTagSet(int logType,wchar_t *descriptor,int ts,vector <cTagLocation> &tagSet,int position,int PEMAPosition)
+void cSource::printTagSet(int logType, const wchar_t * descriptor,int ts,vector <cTagLocation> &tagSet,int position,int PEMAPosition)
 { LFS
   wchar_t temp[1024];
   if (descriptor) wcscpy(temp,descriptor);
@@ -2309,7 +2317,7 @@ void cSource::printTagSet(int logType,wchar_t *descriptor,int ts,vector <cTagLoc
   ::printTagSet(logType,temp,ts,tagSet);
 }
 
-void printTagSet(int logType,wchar_t *descriptor,int ts,vector <cTagLocation> &tagSet,vector <wstring> &words)
+void printTagSet(int logType,const wchar_t *descriptor,int ts,vector <cTagLocation> &tagSet,vector <wstring> &words)
 { LFS
   wstring clause;
   for (unsigned I=0; I<words.size(); I++)
@@ -2318,7 +2326,7 @@ void printTagSet(int logType,wchar_t *descriptor,int ts,vector <cTagLocation> &t
   printTagSet(logType,NULL,ts,tagSet);
 }
 
-void cSource::printTagSet(int logType,wchar_t *descriptor,int ts,vector <cTagLocation> &tagSet,int position,int PEMAPosition,vector <wstring> &words)
+void cSource::printTagSet(int logType, const wchar_t * descriptor,int ts,vector <cTagLocation> &tagSet,int position,int PEMAPosition,vector <wstring> &words)
 { LFS
   wstring clause;
   for (unsigned I=0; I<words.size(); I++)

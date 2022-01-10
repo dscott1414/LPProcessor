@@ -328,7 +328,7 @@ unordered_map<wstring,int>::iterator iNickname;
   return true;
 }
 
-void cName::hn(wchar_t *namePartName,tIWMM namePart,wstring &accumulate,bool printShort, wchar_t * separator = L" ")
+void cName::hn(const wchar_t * namePartName,tIWMM namePart,wstring &accumulate,bool printShort, const wchar_t * separator = L" ")
 { LFS
   if (namePart==wNULL) return;
   if (!printShort)
@@ -341,7 +341,7 @@ void cName::hn(wchar_t *namePartName,tIWMM namePart,wstring &accumulate,bool pri
 	accumulate[len]=towupper(accumulate[len]);
 }
 
-void cName::hn(wchar_t *namePartName,tIWMM namePart,wchar_t *accumulate,bool printShort, wchar_t * separator = L" ")
+void cName::hn(const wchar_t * namePartName,tIWMM namePart, wchar_t * accumulate,bool printShort, const wchar_t * separator = L" ")
 { LFS
   if (namePart==wNULL) return;
   if (!printShort)
@@ -355,7 +355,7 @@ void cName::hn(wchar_t *namePartName,tIWMM namePart,wchar_t *accumulate,bool pri
 	*ch=towupper(*ch);
 }
 
-wstring cName::print(wstring &message,bool printShort, wchar_t * separator = L" ")
+wstring cName::print(wstring &message,bool printShort, const wchar_t * separator = L" ")
 { LFS
   hn(L"H1",hon,message,printShort,separator);
   hn(L"H2",hon2,message,printShort, separator);
@@ -378,7 +378,7 @@ wstring cName::print(wstring &message,bool printShort, wchar_t * separator = L" 
 }
 
 // optimized
-wstring cName::print(wchar_t *message,bool printShort, wchar_t * separator = L" ")
+wstring cName::print(wchar_t *message,bool printShort, const wchar_t * separator = L" ")
 { LFS
 	message[0]=0;
   hn(L"H1",hon,message,printShort, separator);
@@ -1616,7 +1616,7 @@ void cSource::equivocateObjects(int where,int eTo,int eFrom)
 }
 
 struct {
-	wchar_t *nc;
+	const wchar_t *nc;
 	int num;
 } numeralCardinalMap[] = {
 	{ L"zero", 0 },
@@ -1635,7 +1635,7 @@ int mapNumeralCardinal(const wstring &word)
 }
 
 struct {
-	wchar_t *nc;
+	const wchar_t *nc;
 	int num;
 } numeralOrdinalMap[] = {
 	{ L"zeroth", 0 },
@@ -2338,8 +2338,8 @@ bool cSource::identifyMetaGroup(int where,bool inPrimaryQuote,bool inSecondaryQu
 // If doc is introduced first (or doctor, or reverend) and then Reverend Holland is introduced, they should be related
 // also Hasbro Co. should match Hasbro Company
 struct {
-	wchar_t *abbreviation;
-	wchar_t *full;
+	const wchar_t *abbreviation;
+	const wchar_t *full;
 } abbreviationWordMapList[] = 
 // honorifics
 {
@@ -2779,7 +2779,7 @@ bool cSource::resolveNameObject(int where,vector <cObject>::iterator &object,vec
 			// prefer unowned objects
 			// 'Porsche' should be matched with 'her Porsche' - but not replaced.
 			// if not in local and number of parts don't match 
-			wchar_t *reason=NULL;
+			const wchar_t *reason=NULL;
 			if ((objects[*mo].getOwnerWhere() !=-1 && object->getOwnerWhere()==-1)) reason=L"preferUnOwnedObjects";
 			if (object->name.justHonorific()) reason=L"justHonorific";
 			if (!object->matchGenderIncludingNeuter(objects[*mo],unambiguousGenderFound)) reason=L"genderConflict";

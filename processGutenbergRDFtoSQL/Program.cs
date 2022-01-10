@@ -10,20 +10,20 @@ using System.IO;
 
 namespace processGutenbergRDFtoSQL
 {
-    public static class processGutenbergRDFtoSQL
+    public static class ProcessGutenbergRDFtoSQL
     {
-        static bool test = false;
-        static XNamespace nsGutenbergTerms = "http://www.gutenberg.org/rdfterms/";
-        static XNamespace nsRdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
-        static XNamespace rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
-        static XNamespace rdfs = "http://www.w3.org/2000/01/rdf-schema#";
-        static XNamespace dc = "http://purl.org/dc/elements/1.1/";
-        static XNamespace dcterms = "http://purl.org/dc/terms/";
-        static XNamespace dcmitype = "http://purl.org/dc/dcmitype/";
-        static XNamespace cc = "http://web.resource.org/cc/";
-        static XNamespace pgterms = "http://www.gutenberg.org/2009/pgterms/";
-        static XNamespace dcam = "http://purl.org/dc/dcam/";
-        static XNamespace marcrel = "http://id.loc.gov/vocabulary/relators/";
+        static readonly bool test = false;
+        //static readonly XNamespace nsGutenbergTerms = "http://www.gutenberg.org/rdfterms/";
+        //static readonly XNamespace nsRdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+        static readonly XNamespace rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+        //static readonly XNamespace rdfs = "http://www.w3.org/2000/01/rdf-schema#";
+        //static readonly XNamespace dc = "http://purl.org/dc/elements/1.1/";
+        static readonly XNamespace dcterms = "http://purl.org/dc/terms/";
+        //static readonly XNamespace dcmitype = "http://purl.org/dc/dcmitype/";
+        //static readonly XNamespace cc = "http://web.resource.org/cc/";
+        static readonly XNamespace pgterms = "http://www.gutenberg.org/2009/pgterms/";
+        static readonly XNamespace dcam = "http://purl.org/dc/dcam/";
+        static readonly XNamespace marcrel = "http://id.loc.gov/vocabulary/relators/";
         /// <summary>
         /// Returns a sequence of <see cref="XElement">XElements</see> corresponding to the currently
         /// positioned element and all following sibling elements which match the specified name.
@@ -41,7 +41,7 @@ namespace processGutenbergRDFtoSQL
                 yield return (XElement)XElement.ReadFrom(reader);
         }
 
-        public static HashSet<string> getExistingSources()
+        public static HashSet<string> GetExistingSources()
         {
             MySqlConnection queryConnection = new MySqlConnection(string.Format("Server=localhost; database={0}; UID={1}; password={2}", "lp", "root", "byron0"));
             queryConnection.Open();
@@ -58,7 +58,7 @@ namespace processGutenbergRDFtoSQL
         }
 
         // not needed anymore, kept in case we need to do something like this again
-        public static void checkExistingSources()
+        public static void CheckExistingSources()
         {
             int incorrectPaths = 0,correctPaths=0,correctedPaths=0;
             List<string> etexts=new List<string>(), authors= new List<string>(), titles= new List<string>(), paths= new List<string>();
@@ -92,33 +92,32 @@ namespace processGutenbergRDFtoSQL
                 string etext = etexts[I];
                 string author = authors[I];
                 string title = titles[I];
-                string path = paths[I];
                 title = title.Replace("\\'", "'").Replace("<", "").Replace(">", "").Replace(":", " ").Replace("\"", "").Replace("/", "").Replace("\\", "").Replace("|", "").Replace("?", "").Replace("*", "");
                 if (author.Length+title.Length > 226)
                     title = title.Remove(226-author.Length);
                 author = author.Replace(":", " "); // : is illegal in Windows directory name
-                path = "texts\\\\" + author + "\\\\" + title + ".txt";
-                if (File.Exists("J:\\caches\\" + path))
+                string path = "texts\\\\" + author + "\\\\" + title + ".txt";
+                if (File.Exists("M:\\caches\\" + path))
                 {
                     var updatecmd = new MySqlCommand("update sources set path=\"" + path + "\" where etext=\"" + etext + "\"", updateConnection);
-                    var numRows = updatecmd.ExecuteNonQuery();
+                    updatecmd.ExecuteNonQuery();
                 }
             }
             updateConnection.Close();
             Console.WriteLine("Incorrect paths={0} corrected paths={1} out of {2}", incorrectPaths,correctedPaths,incorrectPaths+correctPaths+correctedPaths);
         }
 
-        // move F:\lp\gutenbergMirror\1155-0.txt to
+        // move F:\lp\gutenberg\gutenbergMirror\1155-0.txt to
         // J:\caches\texts\Christie Agatha\Secret Adversary.txt
-        static int moveAndRename(string etextNum, string path, string title, string creator)
+        static int MoveAndRename(string etextNum, string path, string title, string creator)
         {
-            string oldPath = "F:\\lp\\gutenbergMirror\\" + path;
+            string oldPath = "F:\\lp\\gutenberg\\gutenbergMirror\\" + path;
             title = title.Replace("\\'", "'");
-            string newPath = "J:\\caches\\texts\\" + creator + "\\" + title + ".txt";
+            string newPath = "M:\\caches\\texts\\" + creator + "\\" + title + ".txt";
             try
             {
-                if (!Directory.Exists("J:\\caches\\texts\\" + creator))
-                    Directory.CreateDirectory("J:\\caches\\texts\\" + creator);
+                if (!Directory.Exists("M:\\caches\\texts\\" + creator))
+                    Directory.CreateDirectory("M:\\caches\\texts\\" + creator);
                 if (File.Exists(oldPath) && !File.Exists(newPath))
                 {
                     if (!test)
@@ -179,7 +178,7 @@ namespace processGutenbergRDFtoSQL
         // <dcterms:issued rdf:datatype="http://www.w3.org/2001/XMLSchema#date">1998-01-01</dcterms:issued>
         static void Main(string[] args)
         {
-            checkExistingSources();
+            CheckExistingSources();
             MySqlConnection insertConnection = new MySqlConnection(string.Format("Server=localhost; database={0}; UID={1}; password={2}", "lp", "root", "byron0"));
             insertConnection.Open();
             var bookTypes =new SortedDictionary<string, int>();
@@ -187,8 +186,8 @@ namespace processGutenbergRDFtoSQL
             int numAcceptableBookTypes = 0, numReadmeBooks=0;
             string[] acceptableBookTypes = new string[] { "PC", "PE", "PN", "PR", "PS", "PZ", "PQ", "PT","PG","PH","PK","D","DG","DT","DA","DQ","DU","SK","QL" };
             HashSet<string> unknownMarcrelRelators = new HashSet<string>();
-            HashSet<string> etexts = getExistingSources();
-            foreach (string filepath in System.IO.Directory.GetFiles("F:\\lp\\gutenbergMirrorRDFs", "*.rdf"))
+            HashSet<string> etexts = GetExistingSources();
+            foreach (string filepath in System.IO.Directory.GetFiles("F:\\lp\\gutenberg\\gutenbergMirrorRDFs", "*.rdf"))
             {
                 rdfFilesProcessed++;
                 Console.Title = rdfFilesProcessed + " RDFs processed.";
@@ -222,7 +221,7 @@ namespace processGutenbergRDFtoSQL
                                     break;
                                 }
                             }
-                            if (dataType.Contains("text/plain") && File.Exists("F:\\lp\\gutenbergMirror\\" + path) && !path.Contains("readme.")) 
+                            if (dataType.Contains("text/plain") && File.Exists("F:\\lp\\gutenberg\\gutenbergMirror\\" + path) && !path.Contains("readme.")) 
                                 break;
                         }
                         string title = "";
@@ -348,13 +347,13 @@ namespace processGutenbergRDFtoSQL
                                 }
                                 numInsertableBooks++;
                                 //Console.WriteLine("Title {0} by {1} in path {2} written to database ({3}) [{4}].", title, creator, path, numRows, filepath);
-                                if (moveAndRename(etextNum, path, title, creator) < 0)
+                                if (MoveAndRename(etextNum, path, title, creator) < 0)
                                     filesNotFound++;
                             }
                             else
                             {
                                 //Console.WriteLine("Title {0} by {1} in path {2} already exists in database.", title, creator, path);
-                                moveAndRename(etextNum, path, title, creator);
+                                MoveAndRename(etextNum, path, title, creator);
                                 numBooksAlreadyExist++;
                             }
                         }

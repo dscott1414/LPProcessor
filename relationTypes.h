@@ -1,5 +1,5 @@
 #define VERB_HISTORY 4 // number of verbs back to analyze for relations
-wchar_t *getRelStr(int relationType);
+const wchar_t *getRelStr(int relationType);
 enum relationWOTypes { firstRelationType=0,
 	SubjectWordWithVerb=firstRelationType,VerbWithSubjectWord,
 	SubjectWordWithNotVerb,NotVerbWithSubjectWord,
@@ -24,7 +24,7 @@ enum relationWOTypes { firstRelationType=0,
 	//ClauseWithVerb,VerbWithClause, // when general clause is attached to a thinksay verb clause index is a 
 	numRelationWOTypes };
 
-extern wchar_t *relationWOTypeStrings[];
+extern const wchar_t *relationWOTypeStrings[];
 
 enum relationComboTypes { SVOO, // SubjectWordWithVerb, DirectWordWithIndirectWord
                           SVO,  // SubjectWordWithVerb, VerbWithDirectWord

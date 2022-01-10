@@ -43,7 +43,10 @@ cPatternElementMatchArray::cPatternElementMatchArray(const cPatternElementMatchA
     {
         content = (tPatternElementMatch *)tmalloc(allocated*sizeof(*content));
         if (!content)
-      lplog(LOG_FATAL_ERROR,L"OUT OF MEMORY (5)");
+        {
+          lplog(LOG_FATAL_ERROR, L"OUT OF MEMORY (5)");
+          return;
+        }
         memcpy(content,rhs.content,count*sizeof(*content));
     }
 }
@@ -74,8 +77,12 @@ bool cPatternElementMatchArray::WriteFile(HANDLE file)
 
 bool cPatternElementMatchArray::read(IOHANDLE file)
 { LFS
-    _read(file,&count,sizeof(count));
-    allocated=count;
+    if (_read(file, &count, sizeof(count)) < 0)
+    {
+      lplog(LOG_ERROR, L"read error!");
+      return false;
+    }
+    allocated = count;
     if (count>1000000)
     {
         lplog(LOG_ERROR,L"Illegal count of %d (>1000000) encountered!");
@@ -87,7 +94,11 @@ bool cPatternElementMatchArray::read(IOHANDLE file)
         lplog();
         return false;
     }
-    _read(file,content,count*sizeof(*content));
+    if (_read(file,content,count*sizeof(*content))<0)
+    {
+      lplog(LOG_ERROR, L"read error!");
+      return false;
+    }
     return true;
 }
 
@@ -138,7 +149,10 @@ cPatternElementMatchArray& cPatternElementMatchArray::operator=(const cPatternEl
     {
         content = (tPatternElementMatch *)tmalloc(allocated*sizeof(*content));
         if (!content)
-      lplog(LOG_FATAL_ERROR,L"OUT OF MEMORY (7)");
+        {
+          lplog(LOG_FATAL_ERROR, L"OUT OF MEMORY (7)");
+          return *this;
+        }
         memcpy(content,rhs.content,count*sizeof(*content));
     }
     return *this;
@@ -150,7 +164,7 @@ bool cPatternElementMatchArray::operator!=(const cPatternElementMatchArray other
   return memcmp(content, other.content,count*sizeof(*content))!=0;
 }
 
-cPatternElementMatchArray::reference cPatternElementMatchArray::operator[](unsigned int _P0)
+cPatternElementMatchArray::tPatternElementMatch &cPatternElementMatchArray::operator[](unsigned int _P0)
 { LFS
     #ifdef INDEX_CHECK
         static int catchError=0;
@@ -161,7 +175,7 @@ cPatternElementMatchArray::reference cPatternElementMatchArray::operator[](unsig
     return (content[_P0]);
 }
 
-cPatternElementMatchArray::const_reference cPatternElementMatchArray::operator[](unsigned int _P0) const
+const cPatternElementMatchArray::tPatternElementMatch & cPatternElementMatchArray::operator[](unsigned int _P0) const
 { LFS
     #ifdef INDEX_CHECK
         if (_P0>=count || _P0<0)
@@ -532,10 +546,10 @@ __int64 cPatternElementMatchArray::tPatternElementMatch::getRole(__int64 &tagRol
 
 wchar_t *cPatternElementMatchArray::tPatternElementMatch::toText(unsigned int position,wchar_t *temp,vector <cWordMatch> &m)
 { LFS
-	int len=wsprintf(temp,L"%s[%s](%d,%d) child",
+	int len=wsprintf(temp,L"%s[%s](%u,%u) child",
 		patterns[getParentPattern()]->name.c_str(),patterns[getParentPattern()]->differentiator.c_str(),position+begin,position+end);
 	if (isChildPattern())
-		len+=wsprintf(temp+len,L" %s[*](%d,%d)",patterns[getChildPattern()]->name.c_str(),position,position+getChildLen());
+		len+=wsprintf(temp+len,L" %s[*](%u,%u)",patterns[getChildPattern()]->name.c_str(),position,position+getChildLen());
 	else
 		len+=wsprintf(temp+len,L" form %s",Forms[m[position].getFormNum(getChildForm())]->shortName.c_str());
 	return temp;

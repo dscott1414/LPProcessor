@@ -13,8 +13,8 @@ int clocksec();
 
 struct
 {
-  wchar_t *SGML;
-  wchar_t *substitute;
+  const wchar_t *SGML;
+  const wchar_t *substitute;
 } bncChars[]=
 {
 { L"&Aacute;",L"A"},
@@ -296,8 +296,8 @@ void translateBuffer(wchar_t *buffer,wstring location)
 #define TAG_NOT_SET -1
 struct
 {
-  wchar_t *tag;
-  wchar_t *sForm;
+  const wchar_t *tag;
+  const wchar_t *sForm;
   int form;
   int inflection;
 } tagList[]=
@@ -375,8 +375,8 @@ select w.word,f.name from wordforms wf,words w,forms f where wf.wordId=w.id and 
 */
 struct
 {
-  wchar_t *tag;
-  wchar_t *tag2;
+  const wchar_t *tag;
+  const wchar_t *tag2;
 } ambTagList[]=
 {
   {L"AJ0",L"NN1"},
@@ -453,7 +453,7 @@ bool bncc::findMultiplePreferredForm(vector <cWordMatch>::iterator im,int tag,co
   }
   else
   {
-    wchar_t *confusingWords[]={L"here",L"however",L"never",L"no",L"need",L"used",NULL};
+    const wchar_t *confusingWords[]={L"here",L"however",L"never",L"no",L"need",L"used",NULL};
     for (unsigned int I=0; confusingWords[I]; I++)
       if (im->word->first==confusingWords[I]) return false;
     // a time like 5pm is legal
@@ -709,7 +709,7 @@ void cWordMatch::setForm(void)
 }
 
 
-int bncc::processWord(cSource &source,int sourceId,wchar_t *buffer,int tag,int secondTag,int &lastSentenceEnd,int &printLocation,int sentence)
+int bncc::processWord(cSource &source,int sourceId, wchar_t * buffer,int tag,int secondTag,int &lastSentenceEnd,int &printLocation,int sentence)
 {
   bool anotherWord=false;
   wstring sWord,comment;
@@ -1104,7 +1104,7 @@ int bncc::processSentence(cSource &source,int sourceId,wchar_t *s,int &lastSente
       if (returnWord<0) return returnWord;
       endTag=slash;
       tag=secondTag=TAG_NOT_SET;
-      wchar_t *comma=L",";
+      wchar_t comma[2]=L",";
       returnWord=processWord(source,sourceId,comma,tag,secondTag,lastSentenceEnd,printLocation,sentence);
       if (returnWord<0) return returnWord;
     }
@@ -1178,7 +1178,7 @@ int bncc::process(cSource &source,int sourceId,wstring id)
     if ((int)(where*100/actualLen)>lastProgressPercent)
     {
       lastProgressPercent=(int)(where*100/actualLen);
-      wprintf(L"PROGRESS: %03d%% (%06zu words) %d out of %d bytes read with %d seconds elapsed (%I64d bytes) \r",lastProgressPercent,source.m.size(),where,actualLen,clocksec(),memoryAllocated);
+      wprintf(L"PROGRESS: %03d%% (%06zu words) %d out of %u bytes read with %d seconds elapsed (%I64d bytes) \r",lastProgressPercent,source.m.size(),where,actualLen,clocksec(),memoryAllocated);
     }
     wchar_t *sentenceStart=wcsstr(buffer+where,L"<s n=\"");
     if (!sentenceStart) break;
@@ -1211,7 +1211,7 @@ int bncc::process(cSource &source,int sourceId,wstring id)
     if (returnSentence<0) return returnSentence;
   }
   tfree(actualLen+1,buffer);
-  wprintf(L"PROGRESS: 100%% (%06zu words) %d out of %d bytes read with %d seconds elapsed (%I64d bytes) \n",source.m.size(),where,actualLen,clocksec(),memoryAllocated);
+  wprintf(L"PROGRESS: 100%% (%06zu words) %d out of %u bytes read with %d seconds elapsed (%I64d bytes) \n",source.m.size(),where,actualLen,clocksec(),memoryAllocated);
   return 0;//source.write(sourceId,path);
 }
 

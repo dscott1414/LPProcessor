@@ -740,7 +740,7 @@ bool cSource::resolveMetaGroupTwo(int where,bool inQuote,vector <cOM> &objectMat
 	wstring tmpstr;
 	if (debugTrace.traceSpeakerResolution && objectMatches.size())
 	{
-		wchar_t *fromWhere=L"?";
+		const wchar_t *fromWhere=L"?";
 		if (fromGroupedSpeakers) fromWhere=L"fromGroupedSpeakers";
 		else if (fromGroups) fromWhere=L"fromGroups";
 		else if (fromOnePluralObject) fromWhere=L"fromOnePluralObject";
@@ -1149,7 +1149,11 @@ bool cSource::isSubsetOfSpeakers(int where,int ownerWhere,set <int> &speakers,bo
 	bool allInSpeakerGroup=false,selfInSpeakerGroup=speakers.find(m[where].getObject())!=speakers.end();
 	unsigned int numOwnerSpeakers=max(1,m[ownerWhere].objectMatches.size());
 	intersect(ownerWhere,speakers,allInSpeakerGroup,atLeastOneInSpeakerGroup);
-	if (rejectSG(ownerWhere,speakers,inPrimaryQuote)) return atLeastOneInSpeakerGroup=false;
+	if (rejectSG(ownerWhere, speakers, inPrimaryQuote))
+	{
+		atLeastOneInSpeakerGroup = false;
+		return false;
+	}
 	// during the second scan (after speakerGroups have been defined), where is resolved to possibly the correct value.
 	// if intersect with where is used, the (possibly correct) matched values will rule out the correct answer on the second scan.
 	return (allInSpeakerGroup && !selfInSpeakerGroup && speakers.size()>numOwnerSpeakers);

@@ -15,7 +15,7 @@ class DIYDiskArray
 {
 	vector<vector <T>> matrix;
 	vector<vector <T>> checkMatrix;
-	wchar_t *path;
+	const wchar_t *path;
 	int matrixfp;
 	errno_t error;
 	bool anyErrorFatal;
@@ -134,7 +134,7 @@ public:
 		}
 	}
 
-	DIYDiskArray(wchar_t *tpath)
+	DIYDiskArray(const wchar_t *tpath)
 	{
 		path = tpath;
 		anyErrorFatal = true;

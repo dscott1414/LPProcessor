@@ -43,12 +43,12 @@ public:
 	bool operator == (const cName& n);
 	bool justHonorific(void);
 	bool getNickName(tIWMM firstName);
-	void hn(wchar_t *namePartName,tIWMM namePart,wstring &accumulate,bool printShort, wchar_t * separator);
-	void hn(wchar_t *namePartName,tIWMM namePart,wchar_t *accumulate,bool printShort, wchar_t * separator);
+	void hn(const wchar_t * namePartName,tIWMM namePart,wstring &accumulate,bool printShort, const wchar_t * separator);
+	void hn(const wchar_t * namePartName,tIWMM namePart, wchar_t * accumulate,bool printShort, const wchar_t * separator);
 	bool hn(tIWMM namePart,wchar_t separationCharacter,wstring &accumulate);
-	wstring print(wstring &message,bool printShort, wchar_t * separator);
+	wstring print(wstring &message,bool printShort, const wchar_t * separator);
 	bool notNull();
-	wstring print(wchar_t *message,bool printShort, wchar_t * separator);
+	wstring print(wchar_t *message,bool printShort, const wchar_t * separator);
 	wstring original(wstring &message,wchar_t separationCharacter,bool justFirstAndLast);
 	bool match(tIWMM sub1,tIWMM sub2,bool returnTrueOnNull=true);
 	void merge(tIWMM &w1,tIWMM w2);

@@ -201,7 +201,7 @@ bool cSource::inObject(int where,int whereQuestionType)
 }
 
 // this is deliberately noncombinatorial - each prepositional phrase only has one predecessor
-bool cSource::appendPrepositionalPhrase(int where,vector <wstring> &prepPhraseStrings,int relPrep,bool nonMixedCase,bool lowerCase,wchar_t *separator,int atNumPP)
+bool cSource::appendPrepositionalPhrase(int where,vector <wstring> &prepPhraseStrings,int relPrep,bool nonMixedCase,bool lowerCase,const wchar_t *separator,int atNumPP)
 { LFS
 	int relObject=m[relPrep].getRelObject();
 	if (relObject>=relPrep && m[relObject].endObjectPosition>=0 && (m[relPrep].nextQuote==where || m[relPrep].relNextObject==where))
@@ -231,7 +231,7 @@ bool cSource::appendPrepositionalPhrase(int where,vector <wstring> &prepPhraseSt
 	return false;
 }
 
-int cSource::appendPrepositionalPhrases(int where,wstring &wsoStr,vector <wstring> &prepPhraseStrings,int &numWords,bool noMixedCase,wchar_t *separator,int atNumPP)
+int cSource::appendPrepositionalPhrases(int where,wstring &wsoStr,vector <wstring> &prepPhraseStrings,int &numWords,bool noMixedCase,const wchar_t *separator,int atNumPP)
 { LFS
 	int relPrep;
 	numWords=0;
@@ -536,7 +536,7 @@ void hashWebSiteURL(wstring webSiteURL,wstring &epath)
 { LFS
 	wchar_t tmp[8];
 	wstring::iterator wsi=webSiteURL.begin();
-	wchar_t *ba = L"http://";
+	const wchar_t *ba = L"http://";
 	if (!wcsncmp(ba, &(*wsi), wcslen(ba)))
 		wsi += wcslen(ba);
 	ba = L"https://";
@@ -559,16 +559,16 @@ void hashWebSiteURL(wstring webSiteURL,wstring &epath)
 	}
 }
 
-wchar_t *StructureOfHtmlDocument[] = { L"html",L"head",L"body",L"div",L"span",NULL };
-wchar_t *CreatingMetaTags[] = { L"DOCTYPE",L"title",L"link",L"meta",L"style",NULL };
-wchar_t *TextLinkInHtml[] = { L"p",L"h1-h6",L"strong",L"em",L"abbr",L"acronym",L"address",L"bdo",L"blockquote",L"cite",L"q",L"code",L"ins",L"del",L"dfn",L"kbd",L"pre",L"samp",L"var",L"br",NULL };
-wchar_t *ImagesAndObjects[] = { L"img",L"area",L"map",L"object",L"param",NULL };
-wchar_t *CreatingWebForms[] = { L"form",L"input",L"textarea",L"select",L"option",L"optgroup",L"button",L"label",L"fieldset",L"legend",NULL };
-wchar_t *TablesTagInHtml[] = { L"table",L"tr",L"td",L"th",L"tbody",L"thead",L"tfoot",L"col",L"colgroup",L"caption",NULL };
-wchar_t *OrderedUnorderedLists[] = { L"ul",L"ol",L"li",L"dl",L"dt",L"dd",NULL };
-wchar_t *Scripting[] = { L"script",L"noscript",NULL };
+const wchar_t *StructureOfHtmlDocument[] = { L"html",L"head",L"body",L"div",L"span",NULL };
+const wchar_t *CreatingMetaTags[] = { L"DOCTYPE",L"title",L"link",L"meta",L"style",NULL };
+const wchar_t *TextLinkInHtml[] = { L"p",L"h1-h6",L"strong",L"em",L"abbr",L"acronym",L"address",L"bdo",L"blockquote",L"cite",L"q",L"code",L"ins",L"del",L"dfn",L"kbd",L"pre",L"samp",L"var",L"br",NULL };
+const wchar_t *ImagesAndObjects[] = { L"img",L"area",L"map",L"object",L"param",NULL };
+const wchar_t *CreatingWebForms[] = { L"form",L"input",L"textarea",L"select",L"option",L"optgroup",L"button",L"label",L"fieldset",L"legend",NULL };
+const wchar_t *TablesTagInHtml[] = { L"table",L"tr",L"td",L"th",L"tbody",L"thead",L"tfoot",L"col",L"colgroup",L"caption",NULL };
+const wchar_t *OrderedUnorderedLists[] = { L"ul",L"ol",L"li",L"dl",L"dt",L"dd",NULL };
+const wchar_t *Scripting[] = { L"script",L"noscript",NULL };
 
-bool inCategory(wchar_t *tagList[],wstring tag)
+bool inCategory(const wchar_t *tagList[],wstring tag)
 { LFS
 	for (int tli=0; tagList[tli]; tli++)
 		if (tag==tagList[tli])
@@ -792,12 +792,12 @@ int extractGoogleWebSites(wstring jsonBuffer,vector <wstring> &webSites,vector <
 				const char * idpath[] = { "snippet", (const char *) 0 };
 				yajl_val vid = yajl_tree_get(v5, idpath, yajl_t_string);
 				wstring snippet;
-				if (vid!=NULL && YAJL_IS_STRING(vid))
+				if (YAJL_IS_STRING(vid))
 					mTW(YAJL_GET_STRING(vid),snippet);
 				wstring link;
 				const char * lpath[] = { "link", (const char *) 0 };
 				vid = yajl_tree_get(v5, lpath, yajl_t_string);
-				if (vid!=NULL && YAJL_IS_STRING(vid))
+				if (YAJL_IS_STRING(vid))
 				{
 					mTW(YAJL_GET_STRING(vid),link);
 					if (link.length()>0)
@@ -871,12 +871,12 @@ int extractBINGWebSites(wstring jsonBuffer,vector <wstring> &webSites,vector <ws
 				const char * idpath[] = { "snippet", (const char *) 0 };
 				yajl_val vid = yajl_tree_get(v5, idpath, yajl_t_string);
 				wstring snippet;
-				if (vid!=NULL && YAJL_IS_STRING(vid))
+				if (YAJL_IS_STRING(vid))
 					mTW(YAJL_GET_STRING(vid),snippet);
 				wstring link;
 				const char * upath[] = { "url", (const char *) 0 };
 				vid = yajl_tree_get(v5, upath, yajl_t_string);
-				if (vid!=NULL && YAJL_IS_STRING(vid))
+				if (YAJL_IS_STRING(vid))
 				{
 					mTW(YAJL_GET_STRING(vid),link);
 					if (link.length()>0)

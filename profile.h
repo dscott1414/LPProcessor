@@ -51,7 +51,7 @@ public:
 	static __int64 mySQLTotalTime; // protect by mySQLTotalTimeSRWLock
 	string saveFunctionPath;
 	__int64 startTime,startPrivateBytes;
-	cProfile(char *function,int num=0)
+	cProfile(const char * function,int num=0)
 	{
 		startPrivateBytes = 0;
 		startTime = 0;
@@ -74,7 +74,7 @@ public:
 		}
 		else
 		{
-			char *wc=strchr(function,L':');
+			const char *wc=strchr(function,L':');
 			if (wc)
 				functionPath+=wc+2;
 			else
@@ -119,7 +119,7 @@ public:
 		QueryPerformanceCounter((LARGE_INTEGER *)&cb);
 	}
 
-	static void counterEnd(char *countType)
+	static void counterEnd(const char *countType)
 	{
 		__int64 endcb;
 		QueryPerformanceCounter((LARGE_INTEGER *)&endcb);

@@ -32,7 +32,8 @@ bool cSource::writeWNMap(map <tIWMM, vector <tIWMM>, cSourceWordInfo::cRMap::wor
 			if (!copy(buffer, (*wi)->first, where, limit)) return false;
 			if (where > limit - 4096)
 			{
-				::write(fd, buffer, where);
+				if (::write(fd, buffer, where) < 0)
+					return false;
 				where = 0;
 			}
 		}
@@ -130,7 +131,8 @@ bool cSource::writeWNMaps(wstring path)
 	wstring empty;
 	if (!copy(buffer, empty, where, MAX_BUF))
 		return false;
-	::write(fd, buffer, where);
+	if (::write(fd, buffer, where) < 0)
+		return false;
 	close(fd);
 	return true;
 }

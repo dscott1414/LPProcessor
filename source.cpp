@@ -77,7 +77,7 @@ tInflectionMap shortBracketInflectionMap[]=
 	{ -1,NULL}
 };
 
-wchar_t *OCSubTypeStrings[]={
+const wchar_t *OCSubTypeStrings[]={
 	L"canadian province city",
 	L"country",
 	L"island",
@@ -120,7 +120,7 @@ __int64 roles[]={ SUBOBJECT_ROLE,SUBJECT_ROLE,OBJECT_ROLE,META_NAME_EQUIVALENCE,
 						PASSIVE_SUBJECT_ROLE, POV_OBJECT_ROLE, MNOUN_ROLE, PRIMARY_SPEAKER_ROLE,SECONDARY_SPEAKER_ROLE,FOCUS_EVALUATED,
 						ID_SENTENCE_TYPE,DELAYED_RECEIVER_ROLE,IN_PRIMARY_QUOTE_ROLE,IN_SECONDARY_QUOTE_ROLE,IN_EMBEDDED_STORY_OBJECT_ROLE,EXTENDED_OBJECT_ROLE,
 						NOT_ENCLOSING_ROLE,EXTENDED_ENCLOSING_ROLE,NONPAST_ENCLOSING_ROLE,NONPRESENT_ENCLOSING_ROLE,POSSIBLE_ENCLOSING_ROLE,THINK_ENCLOSING_ROLE};
-wchar_t *r_c[]={ L"SUBOBJ",L"SUBJ",L"OBJ",L"META_EQUIV",L"MP",L"H",
+const wchar_t *r_c[]={ L"SUBOBJ",L"SUBJ",L"OBJ",L"META_EQUIV",L"MP",L"H",
 						L"IOBJECT",L"PREP",L"RE",L"IS",L"NOT",L"NONPAST",L"ID",L"NO_ALT_RES_SPEAKER",
 						L"IS_ADJ",L"NONPRESENT",L"PL",L"MOVE",L"NON_MOVE",
 						L"PLEO",L"INQ_SELF_REF_SPEAKER",L"UNRES_FROM_IMPLICIT",L"S_IN_REL",
@@ -778,7 +778,7 @@ void cSource::setRelPrep(int where,int relPrep,int fromWhere,int setType,int whe
 	int original=m[where].relPrep;
 	m[where].relPrep = relPrep;
 	m[where].setRelVerb(whereVerb);
-	wchar_t *setTypeStr;
+	const wchar_t *setTypeStr;
 	wstring tmpstr;
 	switch (setType)
 	{
@@ -1135,7 +1135,7 @@ int cSource::scanUntil(const wchar_t *start,int repeat,bool printError)
 	return -1;
 }
 
-bool checkIsolated(wchar_t *word,vector <cWordMatch> &m,int I)
+bool checkIsolated(const wchar_t *word,vector <cWordMatch> &m,int I)
 {
 	return m[I].word == Words.sectionWord && m[I + 1].word->first == word && (m[I + 1].flags&cWordMatch::flagAllCaps) && 
 		(m[I + 2].word == Words.sectionWord || (m[I + 2].word->first == L":" && m[I + 3].word == Words.sectionWord) || (m[I + 2].word->first == L"." && m[I + 3].word == Words.sectionWord));
@@ -1958,7 +1958,7 @@ bool cSource::write(wstring path,bool S2, bool makeCopyBeforeSourceWrite, wstrin
 int cSource::sanityCheck(int &generalizedIndex)
 {
 	generalizedIndex = 0;
-	for (auto mi : m)
+	for (auto &mi : m)
 	{
 		if (mi.beginPEMAPosition<-1 || mi.beginPEMAPosition>=(signed)pema.count) return 1;
 		if (mi.endPEMAPosition<-1 || mi.endPEMAPosition>= (signed)pema.count) return 2;
@@ -1978,11 +1978,11 @@ int cSource::sanityCheck(int &generalizedIndex)
 		if (mi.principalWherePosition < -1 || mi.principalWherePosition >= (int)m.size()) return 8;
 		if (mi.principalWhereAdjectivalPosition < -1 || (int)mi.principalWhereAdjectivalPosition >= (int)m.size()) return 9;
 		if (mi.originalObject < cObject::eOBJECTS::OBJECT_UNKNOWN_ALL || mi.originalObject >= (int)objects.size()) return 10;
-		for (auto om : mi.objectMatches)
+		for (auto &om : mi.objectMatches)
 			if (om.object < cObject::eOBJECTS::OBJECT_UNKNOWN_ALL || om.object >= (int)objects.size()) return 11;
-		for (auto om : mi.audienceObjectMatches)
+		for (auto &om : mi.audienceObjectMatches)
 			if (om.object < cObject::eOBJECTS::OBJECT_UNKNOWN_ALL || om.object >=(int) objects.size()) return 12;
-		if (mi.getQuoteForwardLink() < -1 || mi.getQuoteForwardLink() >= (int)m.size()) 
+		if (mi.isQuote() && (mi.getQuoteForwardLink() < -1 || mi.getQuoteForwardLink() >= (int)m.size()))
 			return 13;
 		if (mi.endQuote < -1 || mi.endQuote >= (int)m.size()) return 14;
 		if (mi.nextQuote < -1 || mi.nextQuote >= (int)m.size()) return 15;
@@ -2083,19 +2083,19 @@ int cSource::sanityCheck(int &generalizedIndex)
 	}
 	generalizedIndex = 0;
 	int returnSanity=0;
-	for (auto sgi : speakerGroups)
+	for (auto &sgi : speakerGroups)
 	{
 		if (returnSanity = sgi.sanityCheck(m.size(), sections.size(), objects.size(), (int)speakerGroups.size())) return returnSanity;
 		generalizedIndex++;
 	}
 	generalizedIndex = 0;
-	for (auto o : objects)
+	for (auto &o : objects)
 	{
 		if (returnSanity = o.sanityCheck(m.size(), objects.size(), speakerGroups.size(), m)) return returnSanity;
 		generalizedIndex++;
 	}
 	generalizedIndex = 0;
-	for (auto srg : syntacticRelationGroups)
+	for (auto &srg : syntacticRelationGroups)
 	{
 		if (returnSanity = srg.sanityCheck(m.size(), objects.size())) return returnSanity;
 		generalizedIndex++;
@@ -2178,7 +2178,7 @@ bool cSource::read(char *buffer,int &where,unsigned int total, bool &parsedOnly,
 
 // find the first title that is followed by two consecutive sentences in a paragraph.
 // *** END OF THE PROJECT 
-wchar_t *ignoreWords[]={L"GUTENBERG",L"COPYRIGHT",L"THIS HEADER SHOULD BE THE FIRST THING",L"THE WORLD OF FREE PLAIN VANILLA ELECTRONIC TEXTS",L"EBOOKS ",L"ETEXT",
+const wchar_t *ignoreWords[]={L"GUTENBERG",L"COPYRIGHT",L"THIS HEADER SHOULD BE THE FIRST THING",L"THE WORLD OF FREE PLAIN VANILLA ELECTRONIC TEXTS",L"EBOOKS ",L"ETEXT",
 L"PLEASE TAKE A LOOK AT THE IMPORTANT INFORMATION IN THIS HEADER",
 L"WE ARE NOW TRYING TO RELEASE ALL OUR BOOKS",
 L"FOR THESE AND OTHER MATTERS, PLEASE MAIL TO",
@@ -2215,7 +2215,7 @@ bool containsSectionHeader(wstring &line,int firstNonBlank)
 		{
 			wstring upline=line;
 			wcsupr((wchar_t *)upline.c_str());
-			wchar_t *sectionheader[] = {L"BOOK",L"CHAPTER",L"PART",L"PROLOGUE",L"EPILOGUE",L"VOLUME",L"STAVE",L"I.",NULL};
+			const wchar_t *sectionheader[] = {L"BOOK",L"CHAPTER",L"PART",L"PROLOGUE",L"EPILOGUE",L"VOLUME",L"STAVE",L"I.",NULL};
 			for (int I=0; sectionheader[I]; I++)
 			{
 				if (csh=(!wcsncmp(upline.c_str()+firstNonBlank,sectionheader[I],wcslen(sectionheader[I]))))
@@ -2240,7 +2240,7 @@ bool containsAttribution(wstring &line,int firstNonBlank)
 		{
 			wstring upline=line;
 			wcsupr((wchar_t *)upline.c_str());
-			wchar_t *attribution[] = {L"SCANNED BY",L"PRODUCED BY",L"WRITTEN BY",L"TRANSCRIBED BY",L"PRODUCED BY",L"PREFACE BY",
+			const wchar_t *attribution[] = {L"SCANNED BY",L"PRODUCED BY",L"WRITTEN BY",L"TRANSCRIBED BY",L"PRODUCED BY",L"PREFACE BY",
 				L"TRANSCRIBER'S NOTE",L"AUTHOR'S NOTE",L"WITH ILLUSTRATIONS BY",L"DEDICATION",L"AUTHOR'S INTRODUCTION",L"PREFATORY NOTE",L"TO MY READERS",
 				L"ADDRESSED TO THE READER",NULL};
 			for (int I=0; attribution[I]; I++)
@@ -2255,7 +2255,7 @@ bool containsAttribution(wstring &line,int firstNonBlank)
 bool isRomanNumeral(wstring line,int where)
 { LFS
 	bool matches=false;
-	extern wchar_t *roman_numeral[];
+	extern const wchar_t *roman_numeral[];
 	wstring rn;
 	while (where<(signed)line.length() && line[where]!=L'.' && !iswspace(line[where]))
 		rn+=towlower(line[where++]);
@@ -2454,7 +2454,7 @@ bool findNextParagraph(int &where,wstring &buffer,wstring &lastLine,int &whereLa
 }
 
 // You can use the predicate version of std::search
-bool testStart(wstring &buffer,wchar_t *str,int &where,bool checkAlone=true)
+bool testStart(wstring &buffer, const wchar_t * str,int &where,bool checkAlone=true)
 { LFS
 	int wt;
 	wchar_t *startScanningPosition;
@@ -2816,7 +2816,7 @@ void cSource::reduceParents(int position,vector <unsigned int> &insertionPoints,
 
 void cSource::logPatternChain(int sourcePosition,int insertionPoint,enum cPatternElementMatchArray::chainType patternChainType)
 { LFS
-	wchar_t *chPT=L"";
+	const wchar_t *chPT=L"";
 	int chain=-1,originPattern=0,originEnd=0;
 	switch (patternChainType)
 	{
@@ -2878,7 +2878,7 @@ void cSource::logPatternChain(int sourcePosition,int insertionPoint,enum cPatter
 	}
 }
 
-cSource::cSource(wchar_t *databaseServer,int _sourceType,bool generateFormStatistics,bool skipWordInitialization,bool printProgress)
+cSource::cSource(const wchar_t * databaseServer,int _sourceType,bool generateFormStatistics,bool skipWordInitialization,bool printProgress)
 { LFS
 	sourceType=_sourceType;
 	primaryQuoteType=L"\"";
@@ -3151,7 +3151,7 @@ bool cSource::matchChildSourcePositionSynonym(tIWMM parentWord, cSource *childSo
 // does this represent a definite noun, like Sting or MIT?  If so, disallow synonyms (or perhaps use another kind of synonym which is not yet supported)
 // also people are not allowed
 // also include subjects which follow immediately after relativizers which have resolved to an object.
-bool cSource::isDefiniteObject(int where, wchar_t *definiteObjectType, int &ownerWhere, bool recursed)
+bool cSource::isDefiniteObject(int where, const wchar_t * definiteObjectType, int &ownerWhere, bool recursed)
 {
 	LFS
 		int object = m[where].getObject();
@@ -3440,7 +3440,7 @@ int cSource::checkParticularPartSemanticMatch(int logType, int parentWhere, cSou
 				lplog(logType, L"object parent [%s]:(primary match:%s[%s]) child [%s] BitField mismatch", whereString(parentWhere, tmpstr, false).c_str(), pw.c_str(), pwme.c_str(), childSource->objectString(childObject, tmpstr2, false).c_str(), parentWikiBitField, childWikiBitField);
 		}
 		// profession
-		wchar_t *professionLimitedSynonyms[] = { L"avocation", L"calling", L"career", L"employment", L"occupation", L"vocation", L"job", L"livelihood", L"profession", L"work", NULL };
+		const wchar_t *professionLimitedSynonyms[] = { L"avocation", L"calling", L"career", L"employment", L"occupation", L"vocation", L"job", L"livelihood", L"profession", L"work", NULL };
 		bool parentIsProfession = false;
 		for (int I = 0; professionLimitedSynonyms[I] && !parentIsProfession; I++)
 			parentIsProfession |= m[parentWhere].word->first == professionLimitedSynonyms[I];

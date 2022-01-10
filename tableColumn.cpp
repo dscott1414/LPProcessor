@@ -27,7 +27,7 @@ cColumn::cColumn()
 /* RDF type column analysis section*/
 
 // remove a domain like film from the accumulated common association map.  This is because Wikipedia is really good at accumulating types of this sort, which biases trying to find a common association.
-void cColumn::removeDomainFromAccumulatedRDFTypesMap(wchar_t * domainAssociations[])
+void cColumn::removeDomainFromAccumulatedRDFTypesMap(const wchar_t * domainAssociations[])
 {
 	for (int ma = 0; domainAssociations[ma][0]; ma++)
 	{
@@ -46,10 +46,10 @@ void cColumn::accumulateColumnRDFTypes(cSource *wikipediaSource, wstring tableNa
 			if (!onlyPreferred || rows[row].entries[entry].lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms)
 				rows[row].entries[entry].accumulateEntryRDFTypes(wikipediaSource, tableName, row, entry, titleSynonyms, accumulatedRDFTypesMap, fileCaching);
 	}
-	wchar_t *musicAssociations[] = { L"single", L"recording", L"music", L"release", L"album", L"" };
+	const wchar_t *musicAssociations[] = { L"single", L"recording", L"music", L"release", L"album", L"" };
 	if (!keepMusicDomain)
 		removeDomainFromAccumulatedRDFTypesMap(musicAssociations);
-	wchar_t *filmAssociations[] = { L"film", L"" };
+	const wchar_t *filmAssociations[] = { L"film", L"" };
 	if (!keepFilmDomain)
 		removeDomainFromAccumulatedRDFTypesMap(filmAssociations);
 }
@@ -86,7 +86,7 @@ void cColumn::cEntry::accumulateEntryRDFTypes(cSource *wikipediaSource, wstring 
 
 // after accumulating RDF types from every entry from every row in the column, further accumulate them into a set, which is sorted by frequency, then alphabetically by word 
 // output in mostCommonAssociationTypeSet, which is the set of all the simplified RDF types, their frequency in the column, whether the RDF type matched something in the query, and whether the RDF type matched something in the title of the column.
-void cColumn::getMostCommonRDFTypes(wchar_t *when, wstring tableName)
+void cColumn::getMostCommonRDFTypes(const wchar_t * when, wstring tableName)
 {
 	mostCommonAssociationTypeSet.clear();
 	numCommonObjectAssociations = 0;
@@ -317,7 +317,7 @@ bool cColumn::determineColumnRDFTypeCoherency(cSource *wikipediaSource, cColumn:
 }
 
 	
-void cColumn::logColumn(int logType, wchar_t *when,wstring tableName)
+void cColumn::logColumn(int logType, const wchar_t * when,wstring tableName)
 {
 	if (!logTableCoherenceDetail)
 		return;
@@ -368,7 +368,7 @@ wstring cColumn::cEntry::sprint(cSource *source,wstring &buffer)
 	return buffer= whereStr +L":"+phrase+L" [# matched question object=" + matchedQuestionObjectStr + L" # synonym matched question object="+ matchedQuestionObjectStr+L"]";
 }
 
-wchar_t *wikiInvalidTableEntries[] = {
+const wchar_t *wikiInvalidTableEntries[] = {
 	L"All articles with dead external links", L"All articles with unsourced statements", L"All articles with specifically marked weasel - worded phrases",
 	L"All articles to be expanded",	L"Wikipedia articles with VIAF identifiers",	L"Wikipedia articles with LCCN identifiers",	L"Wikipedia articles with ISNI identifiers",
 	L"Wikipedia articles with GND identifiers",	L"Wikipedia articles with BNF identifiers",	L"Wikipedia articles with Musicbrainz identifiers",

@@ -147,10 +147,8 @@ public:
   bool operator==(const cPatternElementMatchArray other) const;
   cPatternElementMatchArray& operator=(const cPatternElementMatchArray &rhs);
   bool operator!=(const cPatternElementMatchArray other) const;
-  typedef allocator<tPatternElementMatch>::reference reference;
-  typedef allocator<tPatternElementMatch>::const_reference const_reference;
-  reference operator[](unsigned int _P0);
-  const_reference operator[](unsigned int _P0) const;
+  tPatternElementMatch& operator[](unsigned int _P0);
+  const tPatternElementMatch& operator[](unsigned int _P0) const;
   int push_back_unique(int *firstPosition,unsigned int position,int oCost,int iCost,unsigned int p,int begin,int end,int elementMatchedSubIndex,
     unsigned int cPatternElement,unsigned int patternElementIndex,int allocationHint,bool &newElement,bool POFlag);
   void getNextValidPosition(int lastPEMAConsolidationIndex,int *wa,int *nextPosition,enum chainType cType);

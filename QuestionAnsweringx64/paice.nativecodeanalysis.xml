@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DEFECTS>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILENAME>word.h</FILENAME>
+      <LINE>575</LINE>
+      <COLUMN>17</COLUMN>
+    </SFA>
+    <DEFECTCODE>26812</DEFECTCODE>
+    <DESCRIPTION>The enum type 'cSourceWordInfo::eUsagePatterns' is unscoped. Prefer 'enum class' over 'enum' (Enum.3).</DESCRIPTION>
+    <FUNCTION>cSourceWordInfo::updateNounDeterminerUsageCost</FUNCTION>
+    <DECORATED>?updateNounDeterminerUsageCost@cSourceWordInfo@@QEAAX_N@Z</DECORATED>
+    <FUNCLINE>571</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILENAME>paice.cpp</FILENAME>
+      <LINE>83</LINE>
+      <COLUMN>14</COLUMN>
+    </SFA>
+    <DEFECTCODE>26812</DEFECTCODE>
+    <DESCRIPTION>The enum type 'states' is unscoped. Prefer 'enum class' over 'enum' (Enum.3).</DESCRIPTION>
+    <FUNCTION>cStemmer::applyStemRule</FUNCTION>
+    <DECORATED>?applyStemRule@cStemmer@@CAHV?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@VcSuffixRule@1@AEAV?$vector@VcSuffixRule@cStemmer@@V?$allocator@VcSuffixRule@cStemmer@@@std@@@3@VcIntArray@@@Z</DECORATED>
+    <FUNCLINE>38</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILENAME>paice.h</FILENAME>
+      <LINE>64</LINE>
+      <COLUMN>1</COLUMN>
+    </SFA>
+    <DEFECTCODE>26495</DEFECTCODE>
+    <DESCRIPTION>Variable 'cStemmer::tPrefixRule::rulenum' is uninitialized. Always initialize a member variable (type.6).</DESCRIPTION>
+    <FUNCTION>cStemmer::tPrefixRule::{ctor}</FUNCTION>
+    <DECORATED>??0tPrefixRule@cStemmer@@QEAA@XZ</DECORATED>
+    <FUNCLINE>64</FUNCLINE>
+    <ADDITIONALINFO>
+      <targetSymbol>cStemmer::tPrefixRule::rulenum</targetSymbol>
+    </ADDITIONALINFO>
+    <PATH></PATH>
+  </DEFECT>
+</DEFECTS>

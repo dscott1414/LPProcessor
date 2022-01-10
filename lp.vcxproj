@@ -61,71 +61,71 @@
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>Unicode</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>Unicode</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='test|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>Unicode</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='QuestionAnswering|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>Unicode</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ParseTest(Optimized)|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>Unicode</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ParseAllSources|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>Unicode</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>Unicode</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='test|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>Unicode</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='QuestionAnswering|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>Unicode</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ParseTest(Optimized)|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>Unicode</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -221,50 +221,63 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ParseAllSources|x64'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);F:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-66cb08c\src\api;F:\lp\source\tinyxml2-master;C:\Program Files\Java\jdk1.8.0_181\include\win32;C:\Program Files\Java\jdk1.8.0_181\include</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\\yajl\ParseAllSources;F:\lp\tempMySQL;F:\lp\source\ParseAllSourcesx64;C:\Program Files\Java\jdk1.8.0_181\lib</LibraryPath>
+    <EnableMicrosoftCodeAnalysis>false</EnableMicrosoftCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|x64'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);F:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-66cb08c\src\api;F:\lp\source\tinyxml2-master;C:\Program Files\Java\jdk1.8.0_181\include\win32;C:\Program Files\Java\jdk1.8.0_181\include</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\\yajl\Release;F:\lp\tempMySQL;F:\lp\source\Releasex64;C:\Program Files\Java\jdk1.8.0_181\lib;F:\lp\source\RerunSingleSourcex64;F:\lp\source\yajl\RerunSingleSource</LibraryPath>
+    <EnableMicrosoftCodeAnalysis>false</EnableMicrosoftCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='test|x64'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);F:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-66cb08c\src\api;F:\lp\source\tinyxml2-master;C:\Program Files\Java\jdk1.8.0_181\include\win32;C:\Program Files\Java\jdk1.8.0_181\include</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\\yajl\Release;F:\lp\tempMySQL;F:\lp\source\Releasex64;C:\Program Files\Java\jdk1.8.0_181\lib;F:\lp\source\RerunSingleSourcex64;F:\lp\source\yajl\RerunSingleSource</LibraryPath>
+    <EnableMicrosoftCodeAnalysis>false</EnableMicrosoftCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='QuestionAnswering|x64'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);F:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-66cb08c\src\api;F:\lp\source\tinyxml2-master;C:\Program Files\Java\jdk1.8.0_181\include\win32;C:\Program Files\Java\jdk1.8.0_181\include</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\yajl\RerunSingleSource;F:\lp\tempMySQL;F:\lp\source\RerunSingleSourcex64;F:\lp\source\QuestionAnsweringx64;C:\Program Files\Java\jdk1.8.0_181\lib</LibraryPath>
+    <EnableMicrosoftCodeAnalysis>true</EnableMicrosoftCodeAnalysis>
+    <EnableClangTidyCodeAnalysis>true</EnableClangTidyCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ParseTest(Optimized)|x64'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);F:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-66cb08c\src\api;F:\lp\source\tinyxml2-master;C:\Program Files\Java\jdk1.8.0_181\include\win32;C:\Program Files\Java\jdk1.8.0_181\include</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\yajl\ParseTest%28Optimized%29;F:\lp\tempMySQL;F:\lp\source\ParseTest%28Optimized%29x64;C:\Program Files\Java\jdk1.8.0_181\lib</LibraryPath>
+    <EnableMicrosoftCodeAnalysis>false</EnableMicrosoftCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);J:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-66cb08c\src\api;F:\lp\source\tinyxml2-master</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\lloyd-yajl-f4b2b1a\yajl\Release;F:\Program Files\MySQL\MySQL Server 8.0\lib;F:\lp\source\Releasex64</LibraryPath>
+    <EnableMicrosoftCodeAnalysis>false</EnableMicrosoftCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);F:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-f4b2b1a\src\yajl-2.0.1\include;F:\lp\source\tinyxml2-master</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\lloyd-yajl-f4b2b1a\yajl\Release;F:\Program Files\MySQL\MySQL Server 8.0\lib;F:\lp\source\Releasex64</LibraryPath>
+    <EnableMicrosoftCodeAnalysis>false</EnableMicrosoftCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ParseAllSources|Win32'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);F:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-f4b2b1a\src\yajl-2.0.1\include;F:\lp\source\tinyxml2-master</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\lloyd-yajl-f4b2b1a\yajl\Release;F:\Program Files\MySQL\MySQL Server 8.0\lib;F:\lp\source\Releasex64</LibraryPath>
+    <EnableMicrosoftCodeAnalysis>false</EnableMicrosoftCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|Win32'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);F:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-f4b2b1a\src\yajl-2.0.1\include;F:\lp\source\tinyxml2-master</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\lloyd-yajl-f4b2b1a\yajl\Release;F:\Program Files\MySQL\MySQL Server 8.0\lib;F:\lp\source\Releasex64</LibraryPath>
+    <EnableMicrosoftCodeAnalysis>false</EnableMicrosoftCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='test|Win32'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);F:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-f4b2b1a\src\yajl-2.0.1\include;F:\lp\source\tinyxml2-master</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\lloyd-yajl-f4b2b1a\yajl\Release;F:\Program Files\MySQL\MySQL Server 8.0\lib;F:\lp\source\Releasex64</LibraryPath>
+    <EnableMicrosoftCodeAnalysis>false</EnableMicrosoftCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='QuestionAnswering|Win32'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);F:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-f4b2b1a\src\yajl-2.0.1\include;F:\lp\source\tinyxml2-master</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\lloyd-yajl-f4b2b1a\yajl\Release;F:\Program Files\MySQL\MySQL Server 8.0\lib;F:\lp\source\Releasex64</LibraryPath>
+    <EnableMicrosoftCodeAnalysis>false</EnableMicrosoftCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ParseTest(Optimized)|Win32'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);F:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-f4b2b1a\src\yajl-2.0.1\include;F:\lp\source\tinyxml2-master</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\lloyd-yajl-f4b2b1a\yajl\Release;F:\Program Files\MySQL\MySQL Server 8.0\lib;F:\lp\source\Releasex64</LibraryPath>
+    <EnableMicrosoftCodeAnalysis>false</EnableMicrosoftCodeAnalysis>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -281,6 +294,8 @@
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <AdditionalDependencies>winInet.lib;Ws2_32.lib;libmysql.lib;ole32.lib;oleaut32.lib;..\source\debug\wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;..\source\debug\yajl.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -316,6 +331,8 @@
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <DisableSpecificWarnings>4389;4242;4388;4820;4365;4710;4668;4626;4625;4571;4245;4244;5039;5027;5026;4514;4774;4623;4706;4711;5045;4834;4574;5219;26451;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <AdditionalDependencies>winInet.lib;Ws2_32.lib;ole32.lib;oleaut32.lib;wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;yajl.lib;libmysql.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -357,6 +374,8 @@
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <AdditionalDependencies>winInet.lib;Ws2_32.lib;libmysql.lib;ole32.lib;oleaut32.lib;..\source\release\wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;..\source\release\yajl.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -395,6 +414,8 @@
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <AdditionalDependencies>winInet.lib;Ws2_32.lib;libmysql.lib;ole32.lib;oleaut32.lib;..\source\release\wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;..\source\release\yajl.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -433,6 +454,8 @@
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <AdditionalDependencies>winInet.lib;Ws2_32.lib;libmysql.lib;ole32.lib;oleaut32.lib;..\source\release\wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;..\source\release\yajl.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -471,6 +494,8 @@
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <AdditionalDependencies>winInet.lib;Ws2_32.lib;libmysql.lib;ole32.lib;oleaut32.lib;..\source\release\wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;..\source\release\yajl.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -509,6 +534,8 @@
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <AdditionalDependencies>winInet.lib;Ws2_32.lib;libmysql.lib;ole32.lib;oleaut32.lib;..\source\release\wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;..\source\release\yajl.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -552,6 +579,7 @@
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <WholeProgramOptimization>true</WholeProgramOptimization>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <AdditionalDependencies>winInet.lib;Ws2_32.lib;ole32.lib;oleaut32.lib;wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;yajl.lib;libmysql.lib;jvm.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -575,7 +603,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|x64'">
     <ClCompile>
-      <Optimization>MaxSpeed</Optimization>
+      <Optimization>Disabled</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <OmitFramePointers>true</OmitFramePointers>
@@ -597,6 +625,7 @@
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <AdditionalDependencies>winInet.lib;Ws2_32.lib;ole32.lib;oleaut32.lib;wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;yajl.lib;libmysql.lib;jvm.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -642,6 +671,7 @@
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <AdditionalDependencies>winInet.lib;Ws2_32.lib;ole32.lib;oleaut32.lib;wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;yajl.lib;libmysql.lib;jvm.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -683,10 +713,13 @@
       <WarningLevel>EnableAllWarnings</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <TreatWarningAsError>true</TreatWarningAsError>
-      <DisableSpecificWarnings>4389;4242;4388;4820;4365;4710;4668;4626;4625;4571;4245;4244;5039;5027;5026;4514;4774;4623;4706;4711;5045;4834;4574;5219;26451;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4389;4242;4388;4820;4365;4710;4668;4626;4625;4571;4245;4244;5039;5027;5026;4514;4774;4623;4706;4711;5045;4834;4574;5219;26451;6011;6262;6053;6385;28199;28182;28241;28285;6387;6001;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalOptions>%(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
+      <EnableModules>true</EnableModules>
     </ClCompile>
     <Link>
       <AdditionalDependencies>winInet.lib;Ws2_32.lib;ole32.lib;oleaut32.lib;wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;yajl.lib;libmysql.lib;jvm.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -703,6 +736,7 @@
       <StackReserveSize>21097152</StackReserveSize>
       <StackCommitSize>21097152</StackCommitSize>
       <HeapReserveSize>21097152</HeapReserveSize>
+      <HeapCommitSize>21097152</HeapCommitSize>
     </Link>
     <Manifest>
       <AdditionalManifestFiles>longpaths.manifest %(AdditionalManifestFiles)</AdditionalManifestFiles>
@@ -733,6 +767,7 @@
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <AdditionalDependencies>winInet.lib;Ws2_32.lib;ole32.lib;oleaut32.lib;wn.lib;Advapi32.lib;user32.lib;Winhttp.lib;yajl.lib;libmysql.lib;jvm.lib;%(AdditionalDependencies)</AdditionalDependencies>

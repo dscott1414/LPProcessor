@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DEFECTS>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILENAME>word.h</FILENAME>
+      <LINE>575</LINE>
+      <COLUMN>17</COLUMN>
+    </SFA>
+    <DEFECTCODE>26812</DEFECTCODE>
+    <DESCRIPTION>The enum type 'cSourceWordInfo::eUsagePatterns' is unscoped. Prefer 'enum class' over 'enum' (Enum.3).</DESCRIPTION>
+    <FUNCTION>cSourceWordInfo::updateNounDeterminerUsageCost</FUNCTION>
+    <DECORATED>?updateNounDeterminerUsageCost@cSourceWordInfo@@QEAAX_N@Z</DECORATED>
+    <FUNCLINE>571</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILENAME>getDictionary.cpp</FILENAME>
+      <LINE>846</LINE>
+      <COLUMN>41</COLUMN>
+    </SFA>
+    <DEFECTCODE>26812</DEFECTCODE>
+    <DESCRIPTION>The enum type 'yajl_type' is unscoped. Prefer 'enum class' over 'enum' (Enum.3).</DESCRIPTION>
+    <FUNCTION>lookForPOS</FUNCTION>
+    <DECORATED>?lookForPOS@@YA?AV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@V12@PEAUyajl_val_s@@_NAEAHAEAV12@@Z</DECORATED>
+    <FUNCLINE>840</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+</DEFECTS>

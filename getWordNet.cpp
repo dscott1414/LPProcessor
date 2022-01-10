@@ -13,8 +13,8 @@
 #include "wininet.h"
 #include "internet.h"
 
-bool myquery(MYSQL *mysql, wchar_t *q, MYSQL_RES * &result, bool allowFailure = false);
-bool myquery(MYSQL *mysql, wchar_t *q, bool allowFailure = false);
+bool myquery(MYSQL *mysql, const wchar_t *q, MYSQL_RES * &result, bool allowFailure = false);
+bool myquery(MYSQL *mysql, const wchar_t *q, bool allowFailure = false);
 bool wordNetInitialized = false; // initialized
 unordered_map <wstring,wstring> mostCommonSynonymMap; // initialized
 unordered_map <wstring,wstring> synonymMap; // synonyms that are left out of WordNet // initialized
@@ -192,7 +192,7 @@ void scrapeOldThesaurus(wstring word,unordered_set <wstring> &synonyms, int syno
 		case ADJ: webAddress+=L"adjective";  break; // may not work! 
 		case VERB: webAddress+=L"verb"; break;
 		case ADV: webAddress+=L"adverb"; break; // may not work!
-		default:;
+		default: break;
 	}
 	int space,lastNewLine=1000;
 	while ((space=webAddress.find(' '))!=wstring::npos) 
@@ -205,7 +205,7 @@ void scrapeOldThesaurus(wstring word,unordered_set <wstring> &synonyms, int syno
 		return;
 	beginPos+=wcslen(L"Main Entry:");
 	size_t endPos=1000000,tmpPos;
-	wchar_t *endStr[]={L"Main Entry:",L"Roget's 21st Century Thesaurus",L"Adjective Finder",L"Synonym Collection",L"Search another word",L"Antonyms:", L"* = informal/non-formal usage",NULL };
+	const wchar_t *endStr[]={L"Main Entry:",L"Roget's 21st Century Thesaurus",L"Adjective Finder",L"Synonym Collection",L"Search another word",L"Antonyms:", L"* = informal/non-formal usage",NULL };
 	for (int I=0; endStr[I]!=NULL; I++)
 		if ((tmpPos=buffer.find(endStr[I],beginPos))!=wstring::npos && tmpPos<endPos)
 			endPos=tmpPos;
@@ -275,7 +275,7 @@ void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition> &vd)
 	case ADJ: webAddress += L"adjective";  break; // may not work! 
 	case VERB: webAddress += L"verb"; break;
 	case ADV: webAddress += L"adverb"; break; // may not work!
-	default:;
+	default: break;
 	}
 	//int lastNewLine = 1000;
 	while ((space = webAddress.find(' ')) != wstring::npos)
@@ -415,7 +415,7 @@ void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition> &vd)
 	}
 }
 
-void split(string str, vector <string> &words, char *splitch);
+void split(string str, vector <string> &words, const char *splitch);
 
 bool getSynonymsFromDB(MYSQL mysql,wstring word, vector < unordered_set <wstring> > &synonyms, int synonymType)
 {
@@ -841,7 +841,7 @@ bool addCoords(wchar_t *word,vector <tmWS > &objects,int wnClass,wchar_t *prefer
 			if((synptr->ptrtyp[i] == HYPERPTR || synptr->ptrtyp[i] == INSTANCE) &&
 				((synptr->pfrm[i] == 0) || (synptr->pfrm[i] == synptr->whichword))) 
 			{
-				SynsetPtr cursyn = read_synset(wnClass, synptr->ptroff[i], "");
+				SynsetPtr cursyn = read_synset(wnClass, synptr->ptroff[i], " ");
 				for (int w=0; w<cursyn->wcount; w++) 
 				{
 					if (preferredSense && !strcmp(MBCSPreferredSense.c_str(),cursyn->words[w]))
@@ -1156,7 +1156,7 @@ wstring getIsKindOf(wstring in,int &highestFamiliarity)
 	return out;
 }
 
-bool stripEndingIfFound(wstring &in,wchar_t *ending,wchar_t *replace,int &inflectionFlags)
+bool stripEndingIfFound(wstring &in,const wchar_t *ending,const wchar_t *replace,int &inflectionFlags)
 { LFS
 	if (in.length()>wcslen(ending) && !wcscmp(in.c_str()+in.length()-wcslen(ending),ending))
 	{
@@ -1336,7 +1336,11 @@ bool writeHyperNymCache(wstring &in,vector < set <string> > &objects)
   if (!copy(buffer,(int)objects.size(),where,MAX_BUF)) return false;
 	for (unsigned int I=0; I<objects.size(); I++)
 		if (!copy(buffer,objects[I],where,MAX_BUF)) return false;
-  write(fd,buffer,where);
+	if (write(fd, buffer, where) < 0)
+	{
+		lplog(LOG_FATAL_ERROR, L"Cannot write rdfTypes dbPediaCache - %S.", _sys_errlist[errno]);
+		return false;
+	}
   close(fd);
 	return true;
 }
@@ -1351,8 +1355,12 @@ bool writeHyperNymCache(wstring &in,vector < vector <string> > &objects)
   if (!copy(buffer,(int)objects.size(),where,MAX_BUF)) return false;
 	for (unsigned int I=0; I<objects.size(); I++)
 		if (!copy(buffer,objects[I],where,MAX_BUF)) return false;
-  write(fd,buffer,where);
-  close(fd);
+	if (write(fd, buffer, where) < 0)
+	{
+		lplog(LOG_FATAL_ERROR, L"Cannot write rdfTypes dbPediaCache - %S.", _sys_errlist[errno]);
+		return false;
+	}
+	close(fd);
 	return true;
 }
 
@@ -1597,7 +1605,7 @@ void analyzeVerbNetClass(int where,wstring in,wstring &proposedSubstitute,int &n
 
 int cSource::initializeNounVerbMapping(void)
 { LFS
-	wchar_t *path=L"source\\lists\\nounVerbMapping";
+	const wchar_t *path=L"source\\lists\\nounVerbMapping";
 	initWordNet();
 	int nvfd=_wopen(path,O_RDWR|O_BINARY);
 	if (nvfd>=0)
@@ -1696,8 +1704,11 @@ int cSource::initializeNounVerbMapping(void)
 			where=0;
 		}
 	}
-	if (where)
-		::write(nvfd,buffer,where);
+	if (where &&::write(nvfd, buffer, where) < 0)
+	{
+		lplog(LOG_FATAL_ERROR, L"Cannot write rdfTypes dbPediaCache - %S.", _sys_errlist[errno]);
+		return -1;
+	}
 	close(nvfd);
 	return 0;
 }

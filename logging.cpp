@@ -44,11 +44,12 @@ int logstring(int logLevel,const wchar_t *s)
 	{
 		int *lastClock = &lastInfoClock;
 #ifdef LOG_BUFFER
-		FILE **logFile=NULL;
+		FILE **logFile= &logInfoFile; // give it a default so compiler doesn't complain
 #else
 		int *logFile= &logInfoFile;
 #endif
 		char logFilename[1024];
+		sprintf(logFilename, "main%S.lplog", logFileExtension.c_str()); // give it a default so compiler doesn't complain
 		if ((logLevel&LOG_INFO) || (logLevel&LOG_FATAL_ERROR))
 		{
 			lastClock=&lastInfoClock; logFile=&logInfoFile;
@@ -193,7 +194,9 @@ int logstring(int logLevel,const wchar_t *s)
 			if (*logFile != NULL)
 				fclose(*logFile);
 			*logFile = NULL;
-			getchar(); // wait so we can see the error
+			// wait so we can see the error
+			if (getchar() == EOF)
+				printf("ERROR");
 			char buf[11];
 			fgets(buf, 10, stdin); // make sure we wait so we can see the error
 
@@ -296,7 +299,9 @@ int lplogNR(int logLevel,const wchar_t *format,...)
 	{
 		logstring(LOG_MASK,NULL);
 		wprintf(buf);
-		getchar(); // wait so we can see the error
+		// wait so we can see the error
+		if (getchar() == EOF)
+			printf("ERROR");
 		char cbuf[11];
 		fgets(cbuf,10,stdin); // make sure we wait so we can see the error
 		exit(0);

@@ -945,7 +945,7 @@ bool cSource::identifyDateTime(int where,vector <cSyntacticRelationGroup>::itera
 	return true;
 }
 
-wchar_t *twsCapacity[]={ L"millenium",L"century",L"decade",L"year",L"semester",L"season",L"quarter",L"month",L"week",L"day",
+const wchar_t *twsCapacity[]={ L"millenium",L"century",L"decade",L"year",L"semester",L"season",L"quarter",L"month",L"week",L"day",
 	 L"hour",L"minute",L"second",L"moment",
 	 L"morning",L"noon",L"afternoon",L"evening",L"dusk",L"night",L"midnight",L"dawn",
 	 L"tonight",L"today",L"tomorrow",L"morrow",L"yesterday",
@@ -1083,13 +1083,13 @@ a) wish I wish I had studied more. I am wishing I had studied more.
  
 */
 
-wchar_t *stateVerbs[] = 
+const wchar_t *stateVerbs[] = 
 { L"accept",L"agree",L"believe",L"belong",L"consist",L"contain",L"deserve",L"disagree",L"dislike",L"doubt",L"fancy",L"hate",
   L"imagine",L"impress",L"include",L"involve",L"know",L"like",L"loathe",L"love",L"matter",L"mean",L"measure",L"mind",L"need",L"notice",
 	L"owe",L"own",L"possess",L"prefer",L"refuse",L"sound",L"suppose",L"suspect",L"weigh",NULL
 };
 
-wchar_t *possibleStateVerbs[] = 
+const wchar_t *possibleStateVerbs[] = 
 { L"am", L"feel", L"fit", L"forget", L"have", L"judge",L"keep",L"lie",L"last",L"promise",L"realize",L"recognize",L"remember",L"see",L"seem",
 	L"sense",L"smell",L"taste",L"think",L"trust",L"understand",L"want",L"wish",NULL
 };
@@ -1172,7 +1172,7 @@ void cWord::addTimeFlag(int flag,Inflections words[])
 	}
 }
 
-void cWord::usageCostToNoun(Inflections words[], wchar_t *nounSubclass)
+void cWord::usageCostToNoun(Inflections words[], const wchar_t * nounSubclass)
 {
 	LFS
 		int nounSubclassForm = cForms::gFindForm(nounSubclass);
@@ -1185,7 +1185,7 @@ void cWord::usageCostToNoun(Inflections words[], wchar_t *nounSubclass)
 	}
 }
 
-void cWord::toLowestUsageCost(Inflections words[], wchar_t *formClass)
+void cWord::toLowestUsageCost(Inflections words[], const wchar_t * formClass)
 {
 	LFS
 	int form = cForms::gFindForm(formClass);
@@ -1208,7 +1208,7 @@ bool cSourceWordInfo::costEquivalentSubClass(int subclassForm,int parentForm)
 	return true;
 }
 
-void cWord::addTimeFlag(int flag,wchar_t *words[])
+void cWord::addTimeFlag(int flag, const wchar_t *words[])
 { LFS
 	for (int I=0; words[I]!=NULL; I++)
 	{
@@ -1223,7 +1223,7 @@ void cWord::addTimeFlag(int flag,wchar_t *words[])
 	}
 }
 
-void cWord::usageCostToNoun(wchar_t *words[],wchar_t *nounSubclass)
+void cWord::usageCostToNoun(const wchar_t *words[], const wchar_t * nounSubclass)
 { LFS
 	int nounSubclassForm=cForms::gFindForm(nounSubclass);
 	for (int I=0; words[I]; I++)
@@ -1253,7 +1253,7 @@ wstring senseString(wstring &s,int verbSense)
 	return s;
 };
 
-bool cSource::ageTransition(int where,bool timeTransition,bool &transitionSinceEOS,int duplicateFromWhere,int exceptWhere,vector <int> &lastSubjects,wchar_t *fromWhere)
+bool cSource::ageTransition(int where,bool timeTransition,bool &transitionSinceEOS,int duplicateFromWhere,int exceptWhere,vector <int> &lastSubjects, const wchar_t * fromWhere)
 { LFS
 	if (duplicateFromWhere>=0 && transitionSinceEOS)
 		return false;
@@ -1335,7 +1335,7 @@ bool cSource::rejectTimeWord(int where,int begin)
 { LFS
 		wstring moment=m[where].getMainEntry()->first;
 		// second or minute doesn't work because the assumption of everyone being somewhere else is not necessarily true
-		wchar_t *momentUnits[] = {L"second",L"minute",L"moment",L"flash",NULL}; // see simultaneous units
+		const wchar_t *momentUnits[] = {L"second",L"minute",L"moment",L"flash",NULL}; // see simultaneous units
 		for (int I=0; momentUnits[I]; I++) 
 			if (moment==momentUnits[I])
 				return true;
@@ -1344,7 +1344,7 @@ bool cSource::rejectTimeWord(int where,int begin)
 		// each day saw them set out...
 		// any time he chose
 		wstring detTime=m[begin].word->first;
-		wchar_t *anyTime[] = {L"this",L"all",L"each",L"any",NULL}; 
+		const wchar_t *anyTime[] = {L"this",L"all",L"each",L"any",NULL}; 
 		for (int I=0; anyTime[I]; I++) 
 			if (detTime==anyTime[I])
 				return true;
@@ -1517,10 +1517,13 @@ void cSource::appendTime(vector <cSyntacticRelationGroup>::iterator csr)
 			if (identifyDateTime(csr->whereObject,csr,maxLen,0) && csr->relationType==stBE && m[csr->where].word->first==L"it")
 			{
 				int whereTime=m[csr->whereObject].beginObjectPosition;
-				if (m[whereTime].pma.queryPattern(L"_DATE")!=-1)
-					csr->relationType=stABSDATE;
-				else if (m[whereTime].pma.queryPattern(L"_TIME")!=-1)
-					csr->relationType=stABSTIME;
+				if (whereTime >= 0)
+				{
+					if (m[whereTime].pma.queryPattern(L"_DATE") != -1)
+						csr->relationType = stABSDATE;
+					else if (m[whereTime].pma.queryPattern(L"_TIME") != -1)
+						csr->relationType = stABSTIME;
+				}
 			}
 		}
 	}
@@ -1960,7 +1963,7 @@ any plural time category is also considered T_RECURRING
 	Inflections months[] = {{L"january",SINGULAR},{L"february",SINGULAR},{L"march",SINGULAR},{L"april",SINGULAR},{L"may",SINGULAR},
 	{L"june",SINGULAR},{L"july",SINGULAR},{L"august",SINGULAR},{L"september",SINGULAR},{L"october",SINGULAR},
 	{L"november",SINGULAR},{L"december",SINGULAR},{NULL,0}};
-	wchar_t *months_abb[] = {L"jan",L"feb",L"mar",L"apr",L"aug",L"sept",L"oct",L"nov",L"dec",NULL};
+	const wchar_t *months_abb[] = {L"jan",L"feb",L"mar",L"apr",L"aug",L"sept",L"oct",L"nov",L"dec",NULL};
 int whichMonth(wstring w)
 { LFS
 	for (int I=0; months[I].inflection; I++)
@@ -1972,7 +1975,7 @@ int whichMonth(wstring w)
 	return -1;
 }
 
-	wchar_t *daysOfWeek_abb[] = {L"sun",L"mon",L"tues",L"wed",L"thurs",L"fri",L"sat",NULL};
+	const wchar_t *daysOfWeek_abb[] = {L"sun",L"mon",L"tues",L"wed",L"thurs",L"fri",L"sat",NULL};
 	Inflections daysOfWeek[] = {{L"sunday",SINGULAR},{L"monday",SINGULAR},{L"tuesday",SINGULAR},{L"wednesday",SINGULAR},
 			{L"thursday",SINGULAR},{L"friday",SINGULAR},{L"saturday",SINGULAR},{L"weekend",SINGULAR},
 	{L"sundays",PLURAL},{L"mondays",PLURAL},{L"tuesdays",PLURAL},{L"wednesdays",PLURAL},
@@ -1988,7 +1991,7 @@ int whichDayOfWeek(wstring w)
 	return -1;
 }
 
-wchar_t *twr_ara[]={L"hourly",L"daily",L"weekly",L"monthly",L"quarterly",L"seasonally",L"yearly",L"annual",L"twice",L"thrice",L"once",L"times",L"every",L"each",L"",NULL};
+const wchar_t *twr_ara[]={L"hourly",L"daily",L"weekly",L"monthly",L"quarterly",L"seasonally",L"yearly",L"annual",L"twice",L"thrice",L"once",L"times",L"every",L"each",L"",NULL};
 int recurrence_flags[]={cHour, cDay, cWeek, cMonth, cQuarter, cSeason, cYear, cYear, -2, -3, -4, -5, -6, -7, cUnspecified,0 };
 int whichRecurrence(wstring w)
 { LFS
@@ -2107,9 +2110,9 @@ void cWord::createTimeCategories(bool normalize)
 	addTimeFlag(T_UNIT, dayUnits);
 	predefineWords(uncertainDurationUnits, L"uncertainDurationUnit", L"uncertainDurationUnit", L"noun", cSourceWordInfo::queryOnAnyAppearance, true);
 	addTimeFlag(T_UNIT, uncertainDurationUnits);
-	wchar_t *times[]={L"3:45",NULL};
+	const wchar_t *times[]={L"3:45",NULL};
 	predefineWords(times,L"time",L"time",0,false);
-	wchar_t *dates[]={L"3/4/90",NULL};
+	const wchar_t *dates[]={L"3/4/90",NULL};
 	predefineWords(dates,L"date",L"date",0,false);
 	addTimeFlags();
 }
@@ -2125,27 +2128,27 @@ void cWord::addTimeFlags()
 	// Long ago the dinosaurs ruled the earth.
 	// I couldn't see yet the wisdom of his words.
 	//************ adverbs
-	wchar_t *twr_ap[]={L"recently", L"previously", L"already",L"ago",L"then",NULL};
+	const wchar_t *twr_ap[]={L"recently", L"previously", L"already",L"ago",L"then",NULL};
 	addTimeFlag(T_BEFORE,twr_ap);
-	wchar_t *twr_ac[]={L"currently",L"still",L"now",L"immediately",NULL};
+	const wchar_t *twr_ac[]={L"currently",L"still",L"now",L"immediately",NULL};
 	addTimeFlag(T_PRESENT,twr_ac);
-	wchar_t *twr_af[]={L"yet",L"soon",L"straightaway",L"directly",L"shortly",NULL};
+	const wchar_t *twr_af[]={L"yet",L"soon",L"straightaway",L"directly",L"shortly",NULL};
 	addTimeFlag(T_AFTER,twr_af);
 	//************* nouns
-	wchar_t *twr_u[]={L"date", L"then", L"anytime",L"late",L"veronal",L"o'clock",NULL};
+	const wchar_t *twr_u[]={L"date", L"then", L"anytime",L"late",L"veronal",L"o'clock",NULL};
 	addTimeFlag(T_UNIT,twr_u);
-	wchar_t *twr_l[]={L"period", L"term", L"age", L"moment", L"time", L"era", L"weekend",L"for ever",NULL};
+	const wchar_t *twr_l[]={L"period", L"term", L"age", L"moment", L"time", L"era", L"weekend",L"for ever",NULL};
 	addTimeFlag(T_LENGTH|T_UNIT,twr_l);
 	// Past her mother's death she couldn't decide.
-	wchar_t *twr_uap[]={L"past",L"yesterday",NULL};
+	const wchar_t *twr_uap[]={L"past",L"yesterday",NULL};
 	addTimeFlag(T_BEFORE|T_UNIT,twr_uap);
-	wchar_t *twr_uac[]={L"present",L"today",L"to-day",NULL};
+	const wchar_t *twr_uac[]={L"present",L"today",L"to-day",NULL};
 	addTimeFlag(T_PRESENT|T_UNIT,twr_uac);
-	wchar_t *twr_uaf[]={L"future",L"tomorrow",L"tonight",L"to-morrow",L"morrow",L"to-night",NULL};
+	const wchar_t *twr_uaf[]={L"future",L"tomorrow",L"tonight",L"to-morrow",L"morrow",L"to-night",NULL};
 	addTimeFlag(T_AFTER|T_UNIT,twr_uaf);
 	// recurring adverbs having an independent absolute recurring interval
 	addTimeFlag(T_RECURRING,twr_ara);
-	wchar_t *twr_c[]={L"currently",L"existing",NULL};
+	const wchar_t *twr_c[]={L"currently",L"existing",NULL};
 	addTimeFlag(T_PRESENT,twr_c);
 	/******************************************************************************************/
 
@@ -2154,13 +2157,13 @@ void cWord::addTimeFlags()
 	// words lending a direction or modification of another time word
 	//************ adjectives
 	// must modify time expression
-	wchar_t *twr_r[]={L"every",L"several",L"each",NULL};
+	const wchar_t *twr_r[]={L"every",L"several",L"each",NULL};
 	addTimeFlag(T_RECURRING,twr_r);
-	wchar_t *twr_v[]={L"around",L"about",NULL};
+	const wchar_t *twr_v[]={L"around",L"about",NULL};
 	addTimeFlag(T_VAGUE,twr_v);
-	wchar_t *twr_p[]={L"prior",L"previous",L"preceding",L"former",L"earlier",L"already",L"recent",L"earliest",L"early",L"medieval",NULL};
+	const wchar_t *twr_p[]={L"prior",L"previous",L"preceding",L"former",L"earlier",L"already",L"recent",L"earliest",L"early",L"medieval",NULL};
 	addTimeFlag(T_BEFORE,twr_p);
-	wchar_t *twr_artc[]={L"current",NULL};
+	const wchar_t *twr_artc[]={L"current",NULL};
 	addTimeFlag(T_PRESENT,twr_artc);
 	//************ conjunctions
 	// The next week he was filled with surprises.
@@ -2168,23 +2171,23 @@ void cWord::addTimeFlags()
 	// I will do this magic trick next.
 	// Don't be in the library past 2 o'clock!
 	// Beyond July he was entirely booked.
-	wchar_t *twr_f[]={L"after",L"afterwards",L"next",L"following",L"latter",L"later",L"coming",L"latest",L"late",L"soon",L"beyond",NULL};
+	const wchar_t *twr_f[]={L"after",L"afterwards",L"next",L"following",L"latter",L"later",L"coming",L"latest",L"late",L"soon",L"beyond",NULL};
 	addTimeFlag(T_AFTER,twr_f);
 	// adverbs
 	// then, just
-	wchar_t *twr_ar[]={L"again",L"often",L"frequently", L"oft", L"oftentimes", L"ofttimes", L"always", L"ever", L"never", // removed L"much" - if you knew how much I loved you
+	const wchar_t *twr_ar[]={L"again",L"often",L"frequently", L"oft", L"oftentimes", L"ofttimes", L"always", L"ever", L"never", // removed L"much" - if you knew how much I loved you
 		L"repeatedly", L"infrequently", L"rarely", L"occasionally", L"seldom",L"usually",L"sometimes",NULL};
 	addTimeFlag(T_RECURRING,twr_ar);
 	// prepositions
 	// must have time expression as object or modifying it
-	wchar_t *twr_vp[]={L"around",L"about",L"near",L"along",L"amid",L"than",NULL}; // more than / less than
+	const wchar_t *twr_vp[]={L"around",L"about",L"near",L"along",L"amid",L"than",NULL}; // more than / less than
 	addTimeFlag(T_VAGUE,twr_vp);
 	// You will be here by noon.
 	// The store is closed till August each year.
 	// The store is closed from July to August.
-	wchar_t *twr_b[]={L"by",L"till",L"until",L"to",L"before",L"ere",NULL};
+	const wchar_t *twr_b[]={L"by",L"till",L"until",L"to",L"before",L"ere",NULL};
 	addTimeFlag(T_BEFORE,twr_b);
-	wchar_t *twr_a[]={L"since",L"from",NULL}; // also "after" under conjunctions
+	const wchar_t *twr_a[]={L"since",L"from",NULL}; // also "after" under conjunctions
 	addTimeFlag(T_AFTER,twr_a);
 
 	// introductory time expressions
@@ -2196,36 +2199,36 @@ void cWord::addTimeFlags()
 	// During August she ate almost nothing.
 	// Meanwhile, she fretted.
 	// While she played tennis, he golfed.
-	wchar_t *tw_in[]={L"inside",L"in",L"within",L"throughout",L"through",L"during",L"meanwhile",L"while",L"for",NULL};
+	const wchar_t *tw_in[]={L"inside",L"in",L"within",L"throughout",L"through",L"during",L"meanwhile",L"while",L"for",NULL};
 	addTimeFlag(T_THROUGHOUT,tw_in);
 	// At the end of July, he was running three miles daily.
 	// He decided on December the eighth.
 	// Upon discovering the murderer, he set out once again.
-	wchar_t *tw_at[]={L"at",L"upon",L"on",L"of",NULL};
+	const wchar_t *tw_at[]={L"at",L"upon",L"on",L"of",NULL};
 	addTimeFlag(T_AT,tw_at);
 	// Three time meanings for 'over'
 	// He was seen in the vicinity over two weeks ago. (1)
 	// Over the two weeks he was supposedly working for FEMA, he actually played pool. (2)
 	// He completed the test in over two hours. (3)
 	// He completed the race in under 2 minutes.
-	wchar_t *tw_on[]={L"over",L"under",NULL};
+	const wchar_t *tw_on[]={L"over",L"under",NULL};
 	addTimeFlag(T_ON,tw_on);
 	// Midway through August he quit.
-	wchar_t *tw_mid[]={L"midway",NULL};
+	const wchar_t *tw_mid[]={L"midway",NULL};
 	addTimeFlag(T_MIDWAY,tw_mid);
 	// Between the 2nd and 3rd week in July he played tennis frequently.
-	wchar_t *tw_int[]={L"between",NULL};
+	const wchar_t *tw_int[]={L"between",NULL};
 	addTimeFlag(T_INTERVAL,tw_int);
 
-	wchar_t *tw_start[]={L"start",L"begin",L"commence",L"embark",L"initiate",L"open",L"originate",NULL};
+	const wchar_t *tw_start[]={L"start",L"begin",L"commence",L"embark",L"initiate",L"open",L"originate",NULL};
 	addTimeFlag(T_START,tw_start);
-	wchar_t *tw_stop[]={L"stop",L"halt",L"conclude",L"discontinue",L"close",L"cease",L"quit",L"interrupt",L"suspend",L"pause",NULL};
+	const wchar_t *tw_stop[]={L"stop",L"halt",L"conclude",L"discontinue",L"close",L"cease",L"quit",L"interrupt",L"suspend",L"pause",NULL};
 	addTimeFlag(T_STOP,tw_stop);
-	wchar_t *tw_finish[]={L"finish",L"end",L"terminate",L"complete",L"conclude",NULL};
+	const wchar_t *tw_finish[]={L"finish",L"end",L"terminate",L"complete",L"conclude",NULL};
 	addTimeFlag(T_FINISH,tw_finish);
-	wchar_t *tw_resume[]={L"resume",L"continue",L"recommence",L"renew",L"reopen",L"restart",NULL};
+	const wchar_t *tw_resume[]={L"resume",L"continue",L"recommence",L"renew",L"reopen",L"restart",NULL};
 	addTimeFlag(T_RESUME,tw_resume);
-	wchar_t *tw_card[]={L"around",L"about",L"by",L"till",L"until",L"to",L"before",L"since",L"from",L"before",L"after",L"at",NULL};
+	const wchar_t *tw_card[]={L"around",L"about",L"by",L"till",L"until",L"to",L"before",L"since",L"from",L"before",L"after",L"at",NULL};
 	addTimeFlag(T_CARDTIME,tw_card);
 
 
@@ -2246,9 +2249,9 @@ the value of December is assigned to Christmas, but given only “Christmas left m
 	// Months:
 	struct
 	{
-		wchar_t *name;
-		wchar_t *beginDate;
-		wchar_t *endDate;
+		const wchar_t *name;
+		const wchar_t *beginDate;
+		const wchar_t *endDate;
 	} holidayMonths[] = {
 	{L"black history month",L"2/1",L"2/30"},
 	{L"cinco de mayo",L"5/1",L"5/30"},
@@ -2274,8 +2277,8 @@ the value of December is assigned to Christmas, but given only “Christmas left m
 	// Single Days:
 	struct
 	{
-		wchar_t *name;
-		wchar_t *dayDate;
+		const wchar_t *name;
+		const wchar_t *dayDate;
 	} holidayDays[] = {
 	{L"new year's day",L"1/1"},
 	{L"new years day",L"1/1"},
@@ -2351,10 +2354,10 @@ int whichHoliday(wstring w)
 
 wstring holidayString(int holiday)
 { LFS
-  if (holiday<sizeof(holidayDays)/sizeof(holidayDays[0]))
+  if (holiday<_countof(holidayDays))
 		return holidayDays[holiday].name;
-	holiday-=sizeof(holidayDays);
-  if (holiday<sizeof(holidayMonths)/sizeof(holidayMonths[0]))
+	holiday-=_countof(holidayDays);
+  if (holiday<_countof(holidayMonths))
 		return holidayMonths[holiday].name;
 	return L"illegal";
 }
@@ -2445,7 +2448,7 @@ void cSource::printTenseStatistic(cTenseStat &tenseStatistics,int sense,int numT
 					tenseStatistics.occurrence,tenseStatistics.occurrence*100/numTotal,tenseStatistics.passiveOccurrence,followedByStr.c_str(),infinitiveStr.c_str());
 }
 
-void cSource::printTenseStatistics(wchar_t *fromWhere,cTenseStat tenseStatistics[],int numTotal)
+void cSource::printTenseStatistics(const wchar_t * fromWhere,cTenseStat tenseStatistics[],int numTotal)
 { LFS
 	int numPrintTotal=0;
 	for (unsigned int I=0; I<NUM_SIMPLE_TENSE; I++)
@@ -2456,7 +2459,7 @@ void cSource::printTenseStatistics(wchar_t *fromWhere,cTenseStat tenseStatistics
 		printTenseStatistic(tenseStatistics[I],sts[I],numTotal);
 }
 
-void cSource::printTenseStatistics(wchar_t *fromWhere, unordered_map <int,cTenseStat> &tenseStatistics,int numTotal)
+void cSource::printTenseStatistics(const wchar_t * fromWhere, unordered_map <int,cTenseStat> &tenseStatistics,int numTotal)
 { LFS
 	if (!tenseStatistics.size()) return;
 	lplog(L"%s: %d Total",fromWhere,numTotal);
@@ -2466,10 +2469,10 @@ void cSource::printTenseStatistics(wchar_t *fromWhere, unordered_map <int,cTense
 
 wstring timeString(int timeWordFlags,wstring &s)
 { LFS
-	wchar_t *tws[]={ L"SEQ",L"before",L"after",L"present",
+	const wchar_t *tws[]={ L"SEQ",L"before",L"after",L"present",
 		L"throughout",L"recurring",L"at",L"midway",
 		L"in",L"on",L"interval",L"start",L"stop",L"resume",L"finish",L"range"};
-	wchar_t *tws2[]={	L" unit",L" time",L" date",L" vague",L" length",L" cardtime" };
+	const wchar_t *tws2[]={	L" unit",L" time",L" date",L" vague",L" length",L" cardtime" };
 	s=tws[timeWordFlags&15];
 	for (int I=4; I<10; I++)
 		if (timeWordFlags&(1<<I))

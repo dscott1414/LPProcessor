@@ -68,10 +68,8 @@ public:
 	bool operator==(const cPatternMatchArray other) const;
 	cPatternMatchArray& operator=(const cPatternMatchArray &rhs);
 	bool operator!=(const cPatternMatchArray other) const;
-	typedef allocator<tPatternMatch>::reference reference;
-	typedef allocator<tPatternMatch>::const_reference const_reference;
-	reference operator[](unsigned int _P0);
-	const_reference operator[](unsigned int _P0) const;
+	tPatternMatch &operator[](unsigned int _P0);
+	const tPatternMatch &operator[](unsigned int _P0) const;
 	//bool push_back(tPatternMatch &pm);
 	int push_back_unique(int pass,short cost,unsigned short p,short end,bool &reduced,bool &pushed);
 	int getNextPosition(int w);

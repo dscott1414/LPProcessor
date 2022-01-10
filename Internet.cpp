@@ -46,7 +46,7 @@ int cInternet::readPage(const wchar_t *str, wstring &buffer)
 	return readPage(str, buffer, headers);
 }
 
-bool cInternet::InetOption(bool global, int option, wchar_t *description, unsigned long value)
+bool cInternet::InetOption(bool global, int option, const wchar_t * description, unsigned long value)
 {
 	LFS
 		HINTERNET hI = (global) ? 0 : hINet;
@@ -295,7 +295,11 @@ int cInternet::readBinaryPage(wchar_t *str, int destfile, int &total)
 				if (dwRead == 0)
 					break;
 				total += dwRead;
-				::write(destfile, cBuffer, dwRead);
+				if (::write(destfile, cBuffer, dwRead) < 0)
+				{
+					lplog(LOG_FATAL_ERROR, L"Cannot write rdfTypes dbPediaCache - %S.", _sys_errlist[errno]);
+					return -1;
+				}
 			}
 			InternetCloseHandle(hFile);
 			return 0;
@@ -314,6 +318,7 @@ bool cInternet::closeConnection(void)
 {
 	LFS
 		if (hINet) InternetCloseHandle(hINet);
+	hINet = 0;
 	return true;
 }
 
@@ -325,7 +330,7 @@ int cInternet::cacheWebPath(wstring webAddress, wstring &buffer, wstring epath, 
 	if (_wmkdir(path) < 0 && errno == ENOENT)
 		lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
 	_snwprintf(path + pathlen, MAX_LEN - pathlen, L"\\_%s", epath.c_str());
-	path[MAX_PATH - 20] = 0; // make space for subdirectories and for file extensions
+	path[MAX_LEN - 20] = 0; // make space for subdirectories and for file extensions
 	convertIllegalChars(path + pathlen + 1);
 	distributeToSubDirectories(path, pathlen + 1, true);
 	int ret, fd;
@@ -350,7 +355,8 @@ int cInternet::cacheWebPath(wstring webAddress, wstring &buffer, wstring epath, 
 		{
 			int bufferlen = filelength(fd);
 			void *tbuffer = (void *)tcalloc(bufferlen + 10, 1);
-			_read(fd, tbuffer, bufferlen);
+			if (_read(fd, tbuffer, bufferlen) < 0)
+				lplog(LOG_FATAL_ERROR, L"Error reading web path file.");
 			_close(fd);
 			buffer = (wchar_t *)tbuffer;
 			tfree(bufferlen + 10, tbuffer);
@@ -391,7 +397,8 @@ bool cInternet::InternetReadFile_Wait(HINTERNET RequestHandle, char *buffer, int
 		0,               // Creation flags
 		&dwThreadID      // Pointer to returned thread identifier
 	);
-
+	if (hThread == NULL)
+		return false;
 	// Wait for the call to InternetConnect in worker function to complete
 	DWORD dwTimeout = 5 * 60 * 1000; // in milliseconds
 	if (WaitForSingleObject(hThread, dwTimeout) == WAIT_TIMEOUT)
@@ -534,7 +541,8 @@ int cInternet::getWebPath(int where, wstring webAddress, wstring &buffer, wstrin
 		}
 		int bufferlen = filelength(fd);
 		void *tbuffer = (void *)tcalloc(bufferlen + 10, 1);
-		_read(fd, tbuffer, bufferlen);
+		if (_read(fd, tbuffer, bufferlen)<0)
+			lplog(LOG_FATAL_ERROR, L"Error reading webPath file.");
 		_close(fd);
 		buffer = (wchar_t *)tbuffer;
 		tfree(bufferlen + 10, tbuffer);
@@ -591,7 +599,8 @@ int cInternet::runJavaJerichoHTML(wstring webAddress, wstring outputPath, string
 	LFS
 		TCHAR NPath[MAX_PATH];
 	GetCurrentDirectory(MAX_PATH, NPath);
-	_wchdir(LMAINDIR);
+	if (_wchdir(LMAINDIR) < 0)
+		lplog(LOG_FATAL_ERROR, L"Cannot find main directory.");
 	wstring baseCommandLine = L"java -classpath jericho-html-3.4\\classes;jericho-html-3.4\\dist\\jericho-html-3.4.jar;TextRenderer\\bin RenderToText ";
 	wstring commandLine = baseCommandLine + webAddress + L" " + outputPath;
 
@@ -654,6 +663,7 @@ int cInternet::runJavaJerichoHTML(wstring webAddress, wstring outputPath, string
 		wchar_t currentDirectory[4096];
 		GetCurrentDirectory(4096, currentDirectory);
 		lplog(LOG_FATAL_ERROR, L"Error launching %s in %s", commandLine.c_str(), currentDirectory);
+		return -1;
 	}
 	// Close pipe handles (do not continue to modify the parent).
 	// You need to make sure that no handles to the write end of the
@@ -680,7 +690,8 @@ int cInternet::runJavaJerichoHTML(wstring webAddress, wstring outputPath, string
 		lplog(LOG_FATAL_ERROR, L"CloseHandle %d line %d", GetLastError(), __LINE__);
 	if (!CloseHandle(hInputWrite))
 		lplog(LOG_FATAL_ERROR, L"CloseHandle %d line %d", GetLastError(), __LINE__);
-	_wchdir(NPath);
+	if (_wchdir(NPath) < 0)
+		return -1;
 	return 0;
 }
 

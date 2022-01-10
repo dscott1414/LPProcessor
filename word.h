@@ -15,7 +15,7 @@ using namespace std;
 #include "relationTypes.h"
 #include <stdio.h>
 
-extern wchar_t *cacheDir;
+extern const wchar_t *cacheDir;
 #define DBNAME "lp"
 #define LDBNAME L"lp"
 #define MAX_WORD_LENGTH 32
@@ -106,11 +106,11 @@ extern bool exitNow;
 #define ADVERB_INFLECTIONS_MASK (ADVERB_NORMATIVE|ADVERB_COMPARATIVE|ADVERB_SUPERLATIVE)
 #define INFLECTIONS_MASK (OPEN_INFLECTION|CLOSE_INFLECTION)
 
-unsigned int findTagSet(wchar_t *tagSet);
+unsigned int findTagSet(const wchar_t *tagSet);
 
 typedef struct {
   int num;
-  wchar_t *name;
+  const wchar_t *name;
 } tInflectionMap;
 
 tInflectionMap nounInflectionMap[],verbInflectionMap[],adjectiveInflectionMap[],adverbInflectionMap[];
@@ -243,8 +243,8 @@ extern tInflectionMap shortAdverbInflectionMap[];
 class cSourceWordInfo;
 typedef unordered_map <wstring,cSourceWordInfo>::iterator tIWMM;
 extern tIWMM wNULL;
-wchar_t *firstMatch(wchar_t *buffer, wchar_t *beginString, wchar_t *endString);
-char *firstMatch(char *buffer, char *beginString, char *endString);
+wchar_t *firstMatch(wchar_t *buffer, const wchar_t *beginString, const wchar_t *endString);
+char *firstMatch(char *buffer, const char *beginString, const char *endString);
 
 class cSourceWordInfo
 {
@@ -635,7 +635,7 @@ bool loosesort( const wchar_t *s1, const wchar_t *s2 );
 bool equivalentIfIgnoreDashSpaceCase(wstring sWord,wstring word2);
 void removeDots(wstring &str);
 int takeLastMatch(wstring &buffer,wstring begin_string,wstring end_string,wstring &match,bool include_begin_and_end);
-int firstMatch(wstring &buffer,wstring begin_string,wstring end_string,size_t &beginPos,wstring &match,bool include_begin_and_end);
+size_t firstMatch(wstring &buffer,wstring begin_string,wstring end_string,size_t &beginPos,wstring &match,bool include_begin_and_end);
 int firstMatchNonEmbedded(wstring &buffer,wstring beginString,wstring endString,size_t &beginPos,wstring &match,bool include_begin_and_end);
 int getInflection(wstring sWord,wstring form,wstring mainEntry,wstring iform,vector <wstring> &allInflections);
 int nextMatch(wstring &buffer,wstring begin_string,wstring end_string,size_t &begin_pos,wstring &match,bool include_begin_and_end);
@@ -710,14 +710,14 @@ public:
   int createWordCategories();
 
   void addTimeFlag(int flag,Inflections words[]);
-  void addTimeFlag(int flag,wchar_t *words[]);
-  void usageCostToNoun(Inflections words[], wchar_t *subnounClass);
-	void toLowestUsageCost(Inflections words[], wchar_t *subnounClass);
-  void usageCostToNoun(wchar_t *words[], wchar_t *subnounClass);
+  void addTimeFlag(int flag, const wchar_t *words[]);
+  void usageCostToNoun(Inflections words[], const wchar_t * nounSubclass);
+	void toLowestUsageCost(Inflections words[], const wchar_t * formClass);
+  void usageCostToNoun(const wchar_t * words[], const wchar_t * nounSubclass);
   // the following are only used temporarily in BNCC and should be moved back to private usage
-  int predefineVerbsFromFile(wstring form,wstring shortForm,wchar_t *path,int flags);
+  int predefineVerbsFromFile(wstring form,wstring shortForm, const wchar_t * path,int flags);
   int predefineWords(Inflections words[],wstring form,wstring shortForm,wstring inflectionsClass=L"",int flags=0,bool properNounSubClass=false);
-  int predefineWords(wchar_t *words[],wstring form,wstring shortForm,int flags=0,bool properNounSubClass=false);
+  int predefineWords(const wchar_t *words[],wstring form,wstring shortForm,int flags=0,bool properNounSubClass=false);
   static tIWMM predefineWord(const wchar_t *word,int flags=0);
 	void extendedParseHolidays();
 	int predefineHolidays();
@@ -765,8 +765,8 @@ private:
 	static int disinclinationRecursionCount;
 
   bool evaluateIncludedSingleQuote(wchar_t *buffer,__int64 cp,__int64 begincp);
-  int addGenderedNouns(wchar_t *genPath,int inflectionFlags,int wordForm);
-	int addDemonyms(wchar_t *demPath);
+  int addGenderedNouns(const wchar_t *genPath,int inflectionFlags,int wordForm);
+	int addDemonyms(const wchar_t * demPath);
 	bool readVerbClasses(void);
 	bool readVerbClassNames(void);
   bool addPlaces(wstring pPath,vector <tmWS > &objects);
@@ -777,12 +777,12 @@ private:
   static tIWMM query(wstring sWord,int form,int inflection,int &offset);
   bool addInflectionFlag(wstring sWord,int flag);
   static tIWMM hasFormInflection(tIWMM iWord,wstring sForm,int inflection);
-  static bool handleExtendedParseWords(wchar_t *word);
+  static bool handleExtendedParseWords(const wchar_t * word);
   int continueParse(wchar_t *buffer,__int64 begincp,__int64 bufferLen,vector<wchar_t *> &multiWords);
   static int addWordToForm(wstring sWord,tIWMM &iWord,int flags,wstring sForm,wstring shortForm,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool &added,bool markUndefined=false);
   int predefineWords(InflectionsRoot words[],wstring form,wstring shortForm,wstring inflectionsClass=L"",int flags=0,bool properNounSubClass=false);
   bool closeConnection(void);
-  static int checkAdd(wchar_t *fromWhere,tIWMM &iWord,wstring sWord,int flags,wstring sForm,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool log);
+  static int checkAdd(const wchar_t * fromWhere,tIWMM &iWord,wstring sWord,int flags,wstring sForm,int inflection,int derivationRules,wstring mainEntry,int sourceId,bool log);
 
   #ifdef CHECK_WORD_CACHE
     // test routines
@@ -790,7 +790,7 @@ private:
   #endif
 
   int addProperNamesFile(wstring path);
-  void addNickNames(wchar_t *filePath);
+  void addNickNames(const wchar_t * filePath);
 	static int markWordUndefined(tIWMM &iWord,wstring sWord,int flags,bool firstWordCapitalized,int nounOwner,int sourceId);
   void generateFormStatistics(void);
   int processDate(wstring &sWord, wchar_t *buffer,__int64 &cp,__int64 &bufferScanLocation);
@@ -806,4 +806,4 @@ class cWordMatch;
 #include "patternElementMatchArray.h"
 #include "patternMatchArray.h"
 
-extern wchar_t *OCSubTypeStrings[];
+extern const wchar_t *OCSubTypeStrings[];

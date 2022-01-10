@@ -23,7 +23,7 @@ static void *sqlQueryBuffer=NULL; // protect by mySQLQueryBufferSRWLock
 static unsigned int sqlQueryBufSize=0; // protect by mySQLQueryBufferSRWLock
 
 
-bool myquery(MYSQL *mysql,wchar_t *q,bool allowFailure)
+bool myquery(MYSQL *mysql,const wchar_t *q,bool allowFailure)
 { LFS
 	int seconds=clock(),queryLength;
 	AcquireSRWLockExclusive(&mySQLQueryBufferSRWLock);
@@ -57,7 +57,7 @@ bool myquery(MYSQL *mysql,wchar_t *q,bool allowFailure)
   return true;
 }
 
-bool myquery(MYSQL *mysql,wchar_t *q,MYSQL_RES * &result,bool allowFailure)
+bool myquery(MYSQL *mysql,const wchar_t *q,MYSQL_RES * &result,bool allowFailure)
 { LFS
   if (!myquery(mysql,q,allowFailure))
     return false;
@@ -66,7 +66,7 @@ bool myquery(MYSQL *mysql,wchar_t *q,MYSQL_RES * &result,bool allowFailure)
   return result!=NULL;
 }
 
-void *WideCharToMultiByte(wchar_t *q,int &queryLength,void *&buffer,unsigned int &bufSize)
+void *WideCharToMultiByte(const wchar_t * q,int &queryLength,void *&buffer,unsigned int &bufSize)
 { LFS
 	queryLength=WideCharToMultiByte( CP_UTF8, 0, q, -1, (LPSTR)buffer, bufSize, NULL, NULL );
 	if (bufSize==0)
@@ -110,9 +110,16 @@ wchar_t *getTimeStamp(void)
    time_t aclock;
    time( &aclock );   // Get time in seconds
    newtime = localtime( &aclock );   // Convert time to struct tm form
-   /* Print local time as a wstring */
-   wcscpy(ts,_wasctime( newtime ));
-   ts[wcslen(ts)-1]=0;
+   if (newtime)
+   {
+     wchar_t* lt = _wasctime(newtime);
+     if (lt)
+     {
+       /* Print local time as a wstring */
+       wcscpy(ts, lt);
+       ts[wcslen(ts) - 1] = 0;
+     }
+   }
    return ts;
 }
 

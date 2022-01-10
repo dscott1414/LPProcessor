@@ -12,7 +12,7 @@ class cInternet
 
 public:
 	static int readPage(const wchar_t *str, wstring &buffer);
-	static bool InetOption(bool global, int option, wchar_t *description, unsigned long value);
+	static bool InetOption(bool global, int option, const wchar_t * description, unsigned long value);
 	static void InternetStatusCallback(HINTERNET hInternet,DWORD_PTR dwContext,DWORD dwInternetStatus,LPVOID lpvStatusInformation,DWORD dwStatusInformationLength);
 	static bool LPInternetOpen(int timer);
 	static int readPage(const wchar_t *str, wstring &buffer, wstring &headers);

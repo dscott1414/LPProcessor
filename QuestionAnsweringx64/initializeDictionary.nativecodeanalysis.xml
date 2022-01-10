@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DEFECTS>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILENAME>word.h</FILENAME>
+      <LINE>575</LINE>
+      <COLUMN>17</COLUMN>
+    </SFA>
+    <DEFECTCODE>26812</DEFECTCODE>
+    <DESCRIPTION>The enum type 'cSourceWordInfo::eUsagePatterns' is unscoped. Prefer 'enum class' over 'enum' (Enum.3).</DESCRIPTION>
+    <FUNCTION>cSourceWordInfo::updateNounDeterminerUsageCost</FUNCTION>
+    <DECORATED>?updateNounDeterminerUsageCost@cSourceWordInfo@@QEAAX_N@Z</DECORATED>
+    <FUNCLINE>571</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILENAME>initializeDictionary.cpp</FILENAME>
+      <LINE>389</LINE>
+      <COLUMN>18</COLUMN>
+    </SFA>
+    <DEFECTCODE>26444</DEFECTCODE>
+    <DESCRIPTION>Don't try to declare a local variable with no name (es.84).</DESCRIPTION>
+    <FUNCTION>cWord::readWords</FUNCTION>
+    <DECORATED>?readWords@cWord@@QEAAHV?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@H_N0@Z</DECORATED>
+    <FUNCLINE>350</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILENAME>initializeDictionary.cpp</FILENAME>
+      <LINE>570</LINE>
+      <COLUMN>20</COLUMN>
+    </SFA>
+    <DEFECTCODE>26812</DEFECTCODE>
+    <DESCRIPTION>The enum type 'InflectionTypes' is unscoped. Prefer 'enum class' over 'enum' (Enum.3).</DESCRIPTION>
+    <FUNCTION>cWord::addDemonyms</FUNCTION>
+    <DECORATED>?addDemonyms@cWord@@AEAAHPEB_W@Z</DECORATED>
+    <FUNCLINE>529</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILENAME>initializeDictionary.cpp</FILENAME>
+      <LINE>1501</LINE>
+      <COLUMN>7</COLUMN>
+    </SFA>
+    <DEFECTCODE>26495</DEFECTCODE>
+    <DESCRIPTION>Variable 'cWord::lastModifiedTime' is uninitialized. Always initialize a member variable (type.6).</DESCRIPTION>
+    <FUNCTION>cWord::{ctor}</FUNCTION>
+    <DECORATED>??0cWord@@QEAA@XZ</DECORATED>
+    <FUNCLINE>1501</FUNCLINE>
+    <ADDITIONALINFO>
+      <targetSymbol>cWord::lastModifiedTime</targetSymbol>
+    </ADDITIONALINFO>
+    <PATH></PATH>
+  </DEFECT>
+</DEFECTS>

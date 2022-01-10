@@ -379,7 +379,10 @@ public:
 	vector <cOM> objectMatches;
 	vector <cOM> audienceObjectMatches;
 	int getQuoteForwardLink() { return quoteForwardLink; }
-	void setQuoteForwardLink(int qfl) { quoteForwardLink = qfl; }
+	void setQuoteForwardLink(int qfl) 
+	{ 
+		quoteForwardLink = qfl; 
+	}
 	int quoteBackLink; // previous quote in same paragraph 
 	int nextQuote; // set at the beginning of the quote to the beginning of the next quote in a separate paragraph
 	                    // if the word is a preposition, this points to the head of the preposition phrase
@@ -542,6 +545,10 @@ public:
 	int setRelObject(int ro)
 	{
 		return relObject=ro;
+	}
+	bool isQuote()
+	{
+		return cWord::isSingleQuote(word->first[0]) || cWord::isDoubleQuote(word->first[0]);
 	}
 	bool writeRef(void *buffer,int &where,int limit);
 	bool read(char *buffer,int &where,int limit,int sourceType);
@@ -788,7 +795,7 @@ enum OCSubType {
 	NUM_SUBTYPES,
 	NOT_A_PLACE=-2
 };
-extern wchar_t *OCSubTypeStrings[];
+extern const wchar_t *OCSubTypeStrings[];
 
 class cLastVerbTenses
 {
@@ -1057,6 +1064,7 @@ public:
 	};
 	cObject(char *buffer,int &where,unsigned int total,bool &error)
 	{
+		clear(true);
 		if (error=!copy(dbIndex,buffer,where,total)) return; 
 		int tmp;
 		if (error=!copy(tmp,buffer,where,total)) return; 
@@ -1369,9 +1377,9 @@ public:
 		return true;
 	}
 	bool hasAttribute(int where,vector <cWordMatch> &m);
-	bool hasAgeModifier(vector <cWordMatch> &m,wchar_t *modifiers[]);
+	bool hasAgeModifier(vector <cWordMatch> &m, const wchar_t *modifiers[]);
 	int setGenericAge(vector <cWordMatch> &m);
-	bool updateGenericGender(int where,tIWMM w,int fromAge,wchar_t *fromWhere,sTrace &t);
+	bool updateGenericGender(int where,tIWMM w,int fromAge, const wchar_t * fromWhere,sTrace &t);
 	void updateGenericGenders(map <tIWMM,int,cSourceWordInfo::cRMap::wordMapCompare> &genericNounMap,int *replacedGenericAge);
 
 	static int whichOrderWord(tIWMM word)
@@ -1549,14 +1557,18 @@ public:
 		sr=_sr;
 		subTimelines=_subTimelines;
 	}
+	void clear()
+	{
+		parentTimeline = -1;
+		begin = -1;
+		end = -1;
+		speakerGroup = -1;
+		location = -1;
+		linkage = -1;
+	}
 	cTimelineSegment()
 	{
-		parentTimeline=-1;
-		begin=-1;
-		end=-1;
-		speakerGroup=-1;
-		location=-1;
-		linkage=-1;
+		clear();
 	}
 	bool copy(void *buffer,int &w,int limit) // write
 	{
@@ -1574,6 +1586,7 @@ public:
 	}
 	cTimelineSegment(char *buffer,int &w,unsigned int limit,bool &error)
 	{
+		clear();
 		if (error=!::copy(parentTimeline,buffer,w,limit)) return;
 		if (error=!::copy(begin,buffer,w,limit)) return;
 		if (error=!::copy(end,buffer,w,limit)) return;
@@ -1591,7 +1604,7 @@ public:
 class cSource
 {
 public:
-	cSource(wchar_t *databaseServer,int _sourceType,bool generateFormStatistics,bool skipWordInitialization,bool printProgress);
+	cSource(const wchar_t * databaseServer,int _sourceType,bool generateFormStatistics,bool skipWordInitialization,bool printProgress);
 	int beginClock;
 	int pass;
 	bool RDFFileCaching; // sets whether rdfTypes are read from disk.  They may still be cached in memory! (cOntology::cacheRdfTypes determines that).  This is different than cQuestionAnswering::fileCaching.
@@ -1654,7 +1667,7 @@ public:
 	void clearSource(void);
 
 	int evaluateBNCPreferenceForPosition(int position,int patternPreference,int flag,bool remove);
-	int evaluateBNCPreference(vector <cTagLocation> &tagSet,wchar_t *tag,int patternPreference,bool remove);
+	int evaluateBNCPreference(vector <cTagLocation> &tagSet, const wchar_t * tag,int patternPreference,bool remove);
 	int evaluateBNCPreferences(int position,int PEMAPosition,vector <cTagLocation> &tagSet);
 	int BNCPatternViolation(int position,int PEMAPosition,vector < vector <cTagLocation> > &tagSets);
 
@@ -1752,7 +1765,7 @@ public:
 					return 105;
 			for (int si : fromNextSpeakerGroup)
 				if (si < 0 || si >= maxObjectIndex) return 106;
-			for (int si = 0; si < replacedSpeakers.size(); si++)
+			for (unsigned int si = 0; si < replacedSpeakers.size(); si++)
 				if (replacedSpeakers[si].object < 0 || replacedSpeakers[si].object >= maxObjectIndex) return 107;
 			for (int si : singularSpeakers)
 				if (si < 0 || si >= maxObjectIndex) return 108;
@@ -1766,13 +1779,13 @@ public:
 				if (si < 0 || si >= maxObjectIndex) return 112;
 			for (int si : observers)
 				if (si < 0 || si >= maxObjectIndex) return 113;
-			for (auto esg : embeddedSpeakerGroups)
+			for (auto &esg : embeddedSpeakerGroups)
 			{
 				int sanityCheckReturnCode = 0;
 				if (sanityCheckReturnCode=esg.sanityCheck(maxSourcePosition, maxSection, maxObjectIndex, maxSpeakerGroupsIndex))
 					return sanityCheckReturnCode+20;
 			}
-			for (auto g : groups)
+			for (auto &g : groups)
 			{
 				if (g.where < 0 || g.where >= maxSourcePosition) return 115;
 				for (int oi : g.objects)
@@ -1937,12 +1950,12 @@ public:
 	void setChain2(vector <cPatternElementMatchArray::tPatternElementMatch *> &chainPEMAPositions,vector <cPatternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int deltaCost);
 	void findAllChains2(int PEMAPosition,int position,vector <cPatternElementMatchArray::tPatternElementMatch *> &chain,vector <cPatternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int changedPosition,int rootPattern,int len,bool includesPatternMatch,int deltaCost);
 	bool notFirstNounInMultiNounConstruction(int parentPosition,int parentPEMAOffset, int childPosition,int childEnd);
-	int cascadeUpToAllParents(bool recalculatePMCost,int basePosition,cPatternMatchArray::tPatternMatch *childPM,int traceSource,vector <cPatternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet, bool stopCascadeWhenNDAlreadySet, wchar_t *fromWhere);
+	int cascadeUpToAllParents(bool recalculatePMCost,int basePosition,cPatternMatchArray::tPatternMatch *childPM,int traceSource,vector <cPatternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet, bool stopCascadeWhenNDAlreadySet, const wchar_t * fromWhere);
 	void recalculateOCosts(bool &recalculatePMCost,vector<cPatternElementMatchArray::tPatternElementMatch *> &PEMAPositionsSet,int start,int traceSource);
-	int setSecondaryCosts(vector <cCostPatternElementByTagSet> &secondaryPEMAPositions,cPatternMatchArray::tPatternMatch *pm,int basePosition, bool stopCascadeWhenNDAlreadySet, wchar_t *fromWhere);
+	int setSecondaryCosts(vector <cCostPatternElementByTagSet> &secondaryPEMAPositions,cPatternMatchArray::tPatternMatch *pm,int basePosition, bool stopCascadeWhenNDAlreadySet, const wchar_t * fromWhere);
 	int getEndRelativeSourcePosition(int PEMAPosition);
 	void setPreviousElementsCostsAtIndex(vector <cCostPatternElementByTagSet> &PEMAPositions, int pp, int cost, int traceSource, int patternElementEndPosition, int pattern, int cPatternElement);
-	void lowerPreviousElementCosts(vector <cCostPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, wchar_t *fromWhere);
+	void lowerPreviousElementCosts(vector <cCostPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, const wchar_t * fromWhere);
 	void lowerPreviousElementCostsLowerRegardlessOfPosition(vector <cCostPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, wchar_t *fromWhere);
 	void lowerPreviousElementCostsOld(vector <cCostPatternElementByTagSet> &PEMAPositions, vector <int> &costs, vector <int> &traceSources, wchar_t *fromWhere);
 	bool assessEVALCost(cTagLocation &tl,int pattern,cPatternMatchArray::tPatternMatch *pm,int position, unordered_map <int, cCostPatternElementByTagSet> &tertiaryPEMAPositions,wstring purpose);
@@ -1965,8 +1978,8 @@ public:
 	void printSectionStatistics(void);
 	void printResolutionCheck(vector <int> &badSpeakers);
 	bool isSpeaker(int where,int esg,int tempCSG);
-	bool appendPrepositionalPhrase(int where, vector <wstring> &prepPhraseStrings, int relPrep, bool nonMixed, bool lowerCase, wchar_t *separator, int atNumPP);
-	int appendPrepositionalPhrases(int where, wstring &wsoStr, vector <wstring> &prepPhraseStrings, int &numWords, bool nonMixed, wchar_t *separator, int atNumPP);
+	bool appendPrepositionalPhrase(int where, vector <wstring> &prepPhraseStrings, int relPrep, bool nonMixed, bool lowerCase, const wchar_t *separator, int atNumPP);
+	int appendPrepositionalPhrases(int where, wstring &wsoStr, vector <wstring> &prepPhraseStrings, int &numWords, bool nonMixed, const wchar_t *separator, int atNumPP);
 	int getObjectStrings(int where, int object, vector <wstring> &wsoStrs, bool &alreadyDidPlainCopy);
 	int appendVerb(vector <wstring> &objects, int where);
 	int appendWord(vector <wstring> &objects, int where);
@@ -2026,7 +2039,7 @@ public:
 	bool skipMetaResponse(int &I);
 	void associateNyms(int where);
 	void associatePossessions(int where);
-	void moveNyms(int where,int toObject,int fromObject,wchar_t *fromWhere);
+	void moveNyms(int where,int toObject,int fromObject, const wchar_t * fromWhere);
 	bool implicitObject(int where);
 	void distributePOV(void);
 	bool invalidGroupObjectClass(int oc);
@@ -2059,7 +2072,7 @@ int &numFirstInQuote,
 	bool detectTimeTransition(int where,vector <cSyntacticRelationGroup>::iterator csr,cTimeInfo &t);
 	bool evaluateHOUR(int where,cTimeInfo &t);
 	bool evaluateDateTime(vector <cTagLocation> &tagSet,cTimeInfo &t,cTimeInfo &rt,bool &rtSet);
-	bool ageTransition(int where,bool timeTransition,bool &transitionSinceEOS,int duplicateFromWhere,int exceptWhere,vector <int> &lastSubjects,wchar_t *fromWhere);
+	bool ageTransition(int where,bool timeTransition,bool &transitionSinceEOS,int duplicateFromWhere,int exceptWhere,vector <int> &lastSubjects, const wchar_t * fromWhere);
 	int primaryLocationLastMovingPosition,primaryLocationLastPosition;
 	bool like(wstring str1,wstring str2);
 
@@ -2083,7 +2096,7 @@ int wherePrepObject,
 	bool whereSubType(int where);
 	bool exitConversion(int whereObject,int whereSubject,int wherePrepObject);
 	bool placeIdentification(int where,bool inPrimaryQuote,int whereControllingEntity,int whereSubject,int whereVerb,int vnClass);
-	bool srMoveObject(int where,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int at,int whereMovingRelativeTo,int hasSyntacticRelationGroup,wchar_t *whereType,bool physicalRelation);
+	bool srMoveObject(int where,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int at,int whereMovingRelativeTo,int hasSyntacticRelationGroup, const wchar_t * whereType,bool physicalRelation);
 	void defineObjectAsSpatial(int where);
 	void detectTenseAndFirstPersonUsage(int where, int lastBeginS1, int lastRelativePhrase, int &numPastSinceLastQuote, int &numNonPastSinceLastQuote, int &numFirstInQuote, int &numSecondInQuote, bool inPrimaryQuote);
 	void evaluateMetaWhereQuery(int where,bool inPrimaryQuote,int &currentMetaWhereQuery);
@@ -2173,7 +2186,7 @@ int wherePrepObject,
 
 	// question processing
 	unordered_map <int,int> questionSubjectAgreementMap;  // maps the first subject occurring in the next nonquotedParagraph to the question before it
-	bool questionAgreement(int where,int whereFirstSubjectInParagraph,int questionSpeakerLastParagraph,vector <cOM> &objectMatches,bool &subjectDefinitelyResolved,bool audience,wchar_t *fromWhere);
+	bool questionAgreement(int where,int whereFirstSubjectInParagraph,int questionSpeakerLastParagraph,vector <cOM> &objectMatches,bool &subjectDefinitelyResolved,bool audience, const wchar_t * fromWhere);
 	void setSecondaryQuestion(vector <cWordMatch>::iterator im);
 	void setQuestion(vector <cWordMatch>::iterator im,bool inQuote,int &questionSpeakerLastSentence,int &questionSpeaker,bool &currentIsQuestion);
 	void correctBySpeakerInversionIfQuestion(int where,int whereFirstSubjectInParagraph);
@@ -2198,8 +2211,8 @@ int wherePrepObject,
 	void resolveSpeakers(vector <int> &secondaryQuotesResolutions);
 	void resolveFirstSecondPersonPronouns(vector <int> &secondaryQuotesResolutions);
 	void printTenseStatistic(cTenseStat &tenseStatistics,int sense,int numTotal);
-	void printTenseStatistics(wchar_t *fromWhere,cTenseStat tenseStatistics[],int numTotal);
-	void printTenseStatistics(wchar_t *fromWhere, unordered_map <int,cTenseStat> &tenseStatistics,int numTotal);
+	void printTenseStatistics(const wchar_t * fromWhere,cTenseStat tenseStatistics[],int numTotal);
+	void printTenseStatistics(const wchar_t * fromWhere, unordered_map <int,cTenseStat> &tenseStatistics,int numTotal);
 	bool determineTimelineSegmentLink();
 	bool speakerGroupTransition(int where,int newSG,bool forward);
 	void initializeTimelineSegments(void);
@@ -2249,8 +2262,8 @@ int wherePrepObject,
 
 	int printSentences(bool updateStatistics,unsigned int unknownCount,unsigned int quotationExceptions,unsigned int totalQuotations,int &globalOverMatchedPositionsTotal);
 	int printSentencesCheck(bool skipCheck);
-	void printTagSet(int logType,wchar_t *descriptor,int ts,vector <cTagLocation> &tagSet,int position,int PEMAPosition);
-	void printTagSet(int logType,wchar_t *descriptor,int ts,vector <cTagLocation> &tagSet,int position,int PEMAPosition,vector <wstring> &words);
+	void printTagSet(int logType, const wchar_t * descriptor,int ts,vector <cTagLocation> &tagSet,int position,int PEMAPosition);
+	void printTagSet(int logType, const wchar_t * descriptor,int ts,vector <cTagLocation> &tagSet,int position,int PEMAPosition,vector <wstring> &words);
 
 	// wikipedia
 	cSource(MYSQL *parentMysql,int _sourceType,int _sourceConfidence);
@@ -2278,7 +2291,7 @@ int wherePrepObject,
 	bool noRDFTypes();
 	int getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat *> &rdfTypes, unordered_map <wstring, int > &topHierarchyClassIndexes, wstring fromWhere, int extendNumPP = -1, bool fileCaching = true, bool ignoreMatches=false);
 	void testWikipedia();
-	int getRDFWhereString(int where, wstring &oStr, wchar_t *separator, int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool ignoreMatches=false);
+	int getRDFWhereString(int where, wstring &oStr, const wchar_t *separator, int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool ignoreMatches=false);
 	bool analyzeRDFTitle(unsigned int where, int &numWords, int &numPrepositions, wstring tableName);
 	int getRDFTypes(int where, vector <cTreeCat *> &rdfTypes, wstring fromWhere, int extendNumPP = -1, bool ignoreMatches=false, bool fileCaching=true);
 	int identifyISARelation(int principalWhere,bool initialTenseOnly, bool fileCaching);
@@ -2287,7 +2300,7 @@ int wherePrepObject,
 	bool mixedCaseObject(int begin,int len);
 	bool capitalizationCheck(int begin, int len);
 	bool rejectISARelation(int principalWhere);
-	bool isDefiniteObject(int where, wchar_t *definiteObjectType, int &ownerWhere, bool recursed);
+	bool isDefiniteObject(int where, const wchar_t * definiteObjectType, int &ownerWhere, bool recursed);
 	int identifyISARelationTextAnalysis(cQuestionAnswering &qa, int principalWhere,bool parseOnly);
 	int checkParticularPartSemanticMatch(int logType, int parentWhere, cSource *childSource, int childWhere, int childObject, bool &synonym, int &semanticMismatch, bool fileCaching);
 	void checkParticularPartSemanticMatchWord(int logType, int parentWhere, bool &synonym, unordered_set <wstring> &parentSynonyms, wstring pw, wstring pwme, int &lowestConfidence, unordered_map <wstring, int >::iterator ami);
@@ -2391,7 +2404,7 @@ int wherePrepObject,
 			flags=_flags;
 		}
 	};
-	wstring objectString(int object,wstring &logres,bool shortNameFormat,bool objectOwnerRecursionFlag=false, wchar_t * separator=L" ");
+	wstring objectString(int object,wstring &logres,bool shortNameFormat,bool objectOwnerRecursionFlag=false, const wchar_t * separator=L" ");
 	vector <cRelationHistory> relationHistory;
 	class cMultiRelationHistory
 	{
@@ -2423,7 +2436,7 @@ int wherePrepObject,
 	MYSQL mysql;
 	bool alreadyConnected;
 	int sourceId;
-	int createDatabase(wchar_t *server);
+	int createDatabase(const wchar_t * server);
 	int insertWordRelationTypes(void);
 	bool signalBeginProcessingSource(int sourceId);
 	bool signalFinishedProcessingSource(int sourceId);
@@ -2462,12 +2475,12 @@ int wherePrepObject,
 	cLastVerbTenses lastVerbTenses[VERB_HISTORY];
 	void reduceParents(int position,vector <unsigned int> &insertionPoints,vector <int> &reducedCosts);
 	vector <cSyntacticRelationGroup> syntacticRelationGroups;
-	wstring phraseString(int where,int end,wstring &logres,bool shortFormat,wchar_t *separator=L" ");
-	wstring whereString(int where,wstring &logres,bool shortFormat,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases,wchar_t *separator,int &numWords);
+	wstring phraseString(int where,int end,wstring &logres,bool shortFormat,const wchar_t *separator=L" ");
+	wstring whereString(int where,wstring &logres,bool shortFormat,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, const wchar_t * separator,int &numWords);
 	wstring whereString(int where,wstring &logres,bool shortFormat);
 	wstring whereString(vector <int> &where,wstring &logres);
 	wstring whereString(set <int> &where,wstring &logres);
-	wstring objectString(vector <cObject>::iterator object,wstring &logres,bool shortNameFormat,bool objectOwnerRecursionFlag=false, wchar_t * separator=L" ");
+	wstring objectString(vector <cObject>::iterator object,wstring &logres,bool shortNameFormat,bool objectOwnerRecursionFlag=false, const wchar_t * separator=L" ");
 	wstring objectString(vector <cOM> &oms,wstring &logres,bool shortNameFormat,bool objectOwnerRecursionFlag=false);
 	wstring objectSortedString(vector <cOM> &objects,wstring &logres);
 	wstring objectString(set <int> &objects,wstring &logres,bool shortNameFormat=true);
@@ -2575,7 +2588,7 @@ private:
 	bool intersect(set <int> &speakers,vector <cOM> &matches,bool &allIn,bool &oneIn);
 	bool intersect(vector <int> &speakers,vector <cOM> &matches,bool &allIn,bool &oneIn);
 	bool intersect(vector <int> &o1,vector <int> &o2,bool &allIn,bool &oneIn);
-	bool intersect(vector <tIWMM> &m1,wchar_t **a,bool &allIn,bool &oneIn);
+	bool intersect(vector <tIWMM> &m1, const wchar_t ** a,bool &allIn,bool &oneIn);
 	bool intersect(int where1,int where2);
 	bool isSubsetOfSpeakers(int where,int ownerWhere,set <int> &speakers,bool inPrimaryQuote,bool &atLeastOneInSpeakerGroup);
 	bool rejectSG(int ownerWhere,set <int> &speakers,bool inPrimaryQuote);
@@ -2623,7 +2636,7 @@ int wordOrderSensitiveModifier,
 	void excludeSpeakers(int where,bool inPrimaryQuote,bool inSecondaryQuote);
 	void discouragePOV(int where,bool inQuote,bool definitelySpeaker);
 	void excludeObservers(int where,bool inQuote,bool definitelySpeaker);
-	void excludePOVSpeakers(int where,wchar_t *fromWhere);
+	void excludePOVSpeakers(int where, const wchar_t * fromWhere);
 	bool resolveWordOrderOfObject(int where,int wo,int ofObjectWhere,vector <cOM> &objectMatches);
 	void setQuoteContainsSpeaker(int where,bool inPrimaryQuote);
 	void setResolved(int where,vector <cLocalFocus>::iterator lsi,bool isPhysicallyPresent);
@@ -2635,7 +2648,7 @@ int wordOrderSensitiveModifier,
 	int scanForSpeaker(int position,bool &definitelySpeaker,bool &crossedSectionBoundary,int &audienceObjectPosition);
 	int repeatReplaceObjectInSectionPosition;
 	wstring repeatReplaceObjectInSectionFromWhere;
-	bool replaceObjectInSection(int where,int replacementObject,int objectToBeReplaced,wchar_t *fromWhere);
+	bool replaceObjectInSection(int where,int replacementObject,int objectToBeReplaced, const wchar_t * fromWhere);
 	void associateNyms(int where,int replacementObject,int objectToBeReplaced,wchar_t *fromWhere);
 	int getBodyObject(int o);
 	unsigned int numMatchingGenderInSpeakerGroup(int o);
@@ -2675,7 +2688,7 @@ int wordOrderSensitiveModifier,
 	// agreement
 	unsigned int getAllLocations(unsigned int position,int parentPattern,int rootp,int childLen,int parentLen,vector <unsigned int> &allLocations, int recursionLevel,unordered_map <int, cCostPatternElementByTagSet> &tertiaryPEMAPositions,bool &reassessParentCosts);
 	int markChildren(cPatternElementMatchArray::tPatternElementMatch *pem,int position,int recursionLevel,int allRootsLowestCost, unordered_map <int, cCostPatternElementByTagSet> &tertiaryPEMAPositions,bool &reassessParentCosts);
-	bool findLowCostTag(vector<cTagLocation> &tagSet,int &cost,wchar_t *tagName,cTagLocation &lowestCostTag,int parentCost,int &nextTag);
+	bool findLowCostTag(vector<cTagLocation> &tagSet,int &cost, const wchar_t * tagName,cTagLocation &lowestCostTag,int parentCost,int &nextTag);
 	int evaluateSubjectVerbAgreement(cPatternMatchArray::tPatternMatch *parentpm,cPatternMatchArray::tPatternMatch *pm,unsigned int parentPosition,unsigned int position,vector<cTagLocation> tagSet,int &traceSource);
 	// agreement section end
 
@@ -2729,7 +2742,7 @@ bool &comparableName,
 	void localRoleBoost(vector <cLocalFocus>::iterator lsi,int I,unsigned __int64 objectRole,int age);
 	void adjustSaliencesByParallelRoleAndPlurality(int where,bool inQuote,bool forSpeakerIdentification,int lastGenderedAge);
 
-	void pushSpeaker(int where,int s, int sf,wchar_t *fromWhere);
+	void pushSpeaker(int where,int s, int sf, const wchar_t * fromWhere);
 	bool matchObjectToSpeakers(int I,vector <cOM> &currentSpeaker,vector <cOM> &previousSpeaker,int inflectionFlags,unsigned __int64 quoteFlags,int lastEmbeddedStoryBegin);
 	void removeSpeakers(int I,vector <cOM> &speakers);
 	void removeSpeakers(int I,set <int> &speakers);
@@ -2738,23 +2751,27 @@ bool &comparableName,
 	void testIfDeleteSingularObjects(vector <cOM> currentMaleObjects,vector <cOM> currentFemaleObjects,vector <cOM> currentGenderUnknownObjects);
 	bool getHighestEncounters(int &highestDefinitelyIdentifiedEncounters,int &highestIdentifiedEncounters,int &highestEncounters);
 	void getOwnerSex(int ownerObject,bool &matchMale,bool &matchFemale,bool &matchNeuter, bool &matchPlural);
-	void printNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap1,
-								 vector <tIWMM> &nyms2, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap2,wchar_t *type,wchar_t *subtype,
+	void printNyms(vector <tIWMM> &nyms1,
+ map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap1,
+								 vector <tIWMM> &nyms2, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap2, const wchar_t * type, const wchar_t * subtype,
 								 int sharedMembers,wstring &logMatch);
-	void printNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap,wchar_t *type,wchar_t *subtype,wchar_t *subsubtype);
+	void printNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap, const wchar_t * type, const wchar_t * subtype, const wchar_t * subsubtype);
 	bool setNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap);
 	void clearNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap);
 	bool objectClassComparable(vector <cObject>::iterator o,vector <cObject>::iterator lso);
 	bool hasDemonyms(vector <cObject>::iterator o);
 	bool sharedDemonyms(int where,bool traceNymMatch,vector <cObject>::iterator o,vector <cObject>::iterator lso,tIWMM &fromMatch,tIWMM &toMatch,tIWMM &toMapMatch);
 	bool nymNoMatch(vector <cObject>::iterator o,tIWMM adj);
-	bool nymNoMatch(int where,vector <cObject>::iterator o,vector <cObject>::iterator lso,bool getFromMatch,bool traceThisMatch,wstring &logMatch,tIWMM &fromMatch,tIWMM &toMatch,tIWMM &toMapMatch,wchar_t *type);
+	bool nymNoMatch(int where,vector <cObject>::iterator o,vector <cObject>::iterator lso,bool getFromMatch,bool traceThisMatch,wstring &logMatch,tIWMM &fromMatch,tIWMM &toMatch,tIWMM &toMapMatch, const wchar_t * type);
 	int limitedNymMatch(vector <cObject>::iterator o,vector <cObject>::iterator lso,bool traceNymMatch);
-	int nymMatch(vector <cObject>::iterator o,vector <cObject>::iterator lso,bool getFromMatch,bool traceNymMatch,bool &explicitOccupationMatch,wstring &logMatch,tIWMM &fromMatch,tIWMM &toMatch,tIWMM &toMapMatch,wchar_t *type);
-	int nymMapMatch(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap1,
-							 vector <tIWMM> &nyms2, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap2,
-							 bool mapOnly,bool getFromMatch,bool traceNymMatch,wstring &logMatch,
-							 tIWMM &fromMatch,tIWMM &toMatch,tIWMM &toMapMatch,wchar_t *type,wchar_t *subtype);
+	int nymMatch(vector <cObject>::iterator o,vector <cObject>::iterator lso,bool getFromMatch,bool traceNymMatch,bool &explicitOccupationMatch,wstring &logMatch,tIWMM &fromMatch,tIWMM &toMatch,tIWMM &toMapMatch, const wchar_t * type);
+	int nymMapMatch(vector <tIWMM> &nyms1,
+ map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap1,
+							 vector <tIWMM> &nyms2,
+ map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap2,
+							 bool mapOnly,bool getFromMatch,bool traceNymMatch,
+wstring &logMatch,
+							 tIWMM &fromMatch,tIWMM &toMatch,tIWMM &toMapMatch, const wchar_t * type, const wchar_t * subtype);
 	void adjustForPhysicalPresence();
 	void adjustSaliencesByGenderNumberAndOccurrenceAgeAdjust(int where,int object,bool inPrimaryQuote,bool inSecondaryQuote,bool forSpeakerIdentification,int &lastGenderedAge,vector <int> &disallowedReferences,bool disallowOnlyNeuterMatches,bool isPhysicallyPresent,bool physicallyEvaluated);
 	void adjustSaliencesByGenderNumberAndOccurrence(int where,int object,bool inPrimaryQuote,bool inSecondaryQuote,bool identifiedAsSpeaker,int &lastGenderedAge,bool isPhysicallyPresent);
@@ -2767,14 +2784,14 @@ bool &comparableName,
 	vector <cLocalFocus>::iterator in(int o);
 	bool in(int o,int where);
 	vector <cOM>::iterator in(int o,vector <cOM> &objects);
-	bool replaceObject(int replacementObject,int objectToBeReplaced,vector <cOM> &objectList,wchar_t *fromWhat);
+	bool replaceObject(int replacementObject,int objectToBeReplaced,vector <cOM> &objectList, const wchar_t * fromWhat);
 	bool replaceObject(int replacementObject,int objectToBeReplaced,vector <cOM> &objectList,vector <cObject::cLocation>::iterator ol);
 	bool replaceObject(int replacementObject,int objectToBeReplaced,vector <cOM> &objectList,int ol);
-	void replaceObject(int replacementObject,int objectToBeReplaced,wchar_t * fromWhat);
-	bool replaceObject(int where,int replacementObject, int objectToBeReplaced,vector <int> &objects, wchar_t *description,int begin,int end,wchar_t *fromWhat);
-	bool replaceObject(int where,int replacementObject, int objectToBeReplaced,set <int> &objects, wchar_t *description,int begin,int end,wchar_t *fromWhat);
-	bool replaceObjectInSpeakerGroup(int where,int replacementObject,int objectToBeReplaced,int sg,wchar_t *fromWhat);
-	void replaceObjectWithObject(int where,vector <cObject>::iterator &object,int objectConfidentMatch,wchar_t *fromWhat);
+	void replaceObject(int replacementObject,int objectToBeReplaced, const wchar_t * fromWhat);
+	bool replaceObject(int where,int replacementObject, int objectToBeReplaced,vector <int> &objects, const wchar_t * description,int begin,int end, const wchar_t * fromWhat);
+	bool replaceObject(int where,int replacementObject, int objectToBeReplaced,set <int> &objects, const wchar_t * description,int begin,int end, const wchar_t * fromWhat);
+	bool replaceObjectInSpeakerGroup(int where,int replacementObject,int objectToBeReplaced,int sg, const wchar_t * fromWhat);
+	void replaceObjectWithObject(int where,vector <cObject>::iterator &object,int objectConfidentMatch, const wchar_t * fromWhat);
 	void resolveNameGender(int where,bool male,bool female);
 	int getRoleSalience(unsigned __int64 role);
 	tIWMM setSex(vector <cTagLocation> &tagSet,int where,bool &isMale,bool &isFemale,bool isPlural);
@@ -2782,9 +2799,9 @@ bool &comparableName,
 	bool identifyNameAdjective(int where,cName &name,bool &isMale,bool &isFemale);
 	bool recentExit(vector <cLocalFocus>::iterator lsi);
 	void testLocalFocus(int where,vector <cLocalFocus>::iterator lsi);
-	bool pushObjectIntoLocalFocus(int where,int matchingObject,bool identifiedAsSpeaker,bool notSpeaker,bool inPrimaryQuote,bool inSecondaryQuote,wchar_t *fromWhere, vector <cLocalFocus>::iterator &lsi);
+	bool pushObjectIntoLocalFocus(int where,int matchingObject,bool identifiedAsSpeaker,bool notSpeaker,bool inPrimaryQuote,bool inSecondaryQuote, const wchar_t * fromWhere, vector <cLocalFocus>::iterator &lsi);
 	vector <cLocalFocus>::iterator substituteAlias(int where,vector <cLocalFocus>::iterator lsi);
-	void pushLocalObjectOntoMatches(int where,vector <cLocalFocus>::iterator lsi,wchar_t *reason);
+	void pushLocalObjectOntoMatches(int where,vector <cLocalFocus>::iterator lsi, const wchar_t * reason);
 	void narrowGender(int where,int toObject);
 	void eliminateBodyObjectRedundancy(int where,vector <cOM> &objectMatches);
 	bool mixedPluralityInSameSentence(int where);
@@ -2799,7 +2816,7 @@ bool &comparableName,
 	bool chooseBest(int where,bool definitelySpeaker,bool inPrimaryQuote,bool inSecondaryQuote,bool resolveForSpeaker,bool mixedPlurality);
 	void removeObjectsFromNotMatched(int where,int matchWhere);
 	void removeObjectsFromMatched(int where,int matchWhere,vector <cLocalFocus> &ls);
-	void setSpeakerMatchesFromPosition(int where,vector <cOM> &objectsToSet,int fromPosition,wchar_t *fromWhere,unsigned __int64 flag);
+	void setSpeakerMatchesFromPosition(int where,vector <cOM> &objectsToSet,int fromPosition, const wchar_t * fromWhere,unsigned __int64 flag);
 	void setObjectsFromMatchedAtPosition(int where,vector <cOM> &objectsSet,int matchWhere,bool identifiedAsSpeaker,unsigned __int64 flag);
 	bool removeMatchedFromObjects(int where,vector <cOM> &removeFrom,int matchWhere,bool identifiedAsSpeaker);
 
@@ -2826,10 +2843,8 @@ bool &comparableName,
 	tIWMM fullyResolveToClass(int position);
 	bool forcePrepObject(vector <cTagLocation> &tagSet,int tag,int &object,int &whereObject,tIWMM &word);
 	bool resolveTag(vector <cTagLocation> &tagSet,int tag,int &object,int &whereObject,tIWMM &word);
-	void trackVerbTenses(int where,
-vector <cTagLocation> &tagSet,
-		bool inQuote,bool inQuotedString,
-bool inSectionHeader,
+	void trackVerbTenses(int where,vector <cTagLocation> &tagSet,
+		bool inQuote,bool inQuotedString,bool inSectionHeader,
 		bool ambiguousSense,int sense,bool &tenseError);
 	void recordVerbTenseRelations(int where,int sense,int subjectObject,int whereVerb);
 	void evaluateSubjectRoleTag(int where,int which,vector <int> whereSubjects,int whereObject,int whereHObject,int whereVerb,int whereHVerb,vector <int> subjectObjects,int tsSense,
@@ -2838,12 +2853,30 @@ bool inSectionHeader,
 	void scanForSubjectsBackwardsInSentence(int where,int whereVerb,bool isId,bool &objectAsSubject,bool &subjectIsPleonastic,vector <tIWMM> &subjectWords,vector <int> &subjectObjects,vector <int> &whereSubjects,int tsSense,bool &multiSubject,bool preferInfinitive);
 	void discoverSubjects(int where,vector <cTagLocation> &tagSet,int subjectTag,bool isId,bool &objectAsSubject,bool &subjectIsPleonastic,vector <tIWMM> &subjectWords,vector <int> &subjectObjects,vector <int> &whereSubjects);
 	void markPrepositionalObjects(int where,int whereVerb,bool flagInInfinitivePhrase,bool subjectIsPleonastic,bool objectAsSubject,bool isId,bool inPrimaryQuote,bool inSecondaryQuote,bool isNot,bool isNonPast,bool isNonPresent,bool noObjects,bool delayedReceiver,int tsSense,vector <cTagLocation> &tagSet);
-	void addRoleTagsAt(int where,int I,bool inRelativeClause,bool withinInfinitivePhrase,bool subjectIsPleonastic,bool isNot,bool objectNot,int tsSense,bool isNonPast,bool isNonPresent,bool objectAsSubject,bool isId,bool inPrimaryQuote,bool inSecondaryQuote,wchar_t *fromWhere);
+	void addRoleTagsAt(int where, int I, bool inRelativeClause, bool withinInfinitivePhrase, bool subjectIsPleonastic, bool isNot, bool objectNot, int tsSense, bool isNonPast, bool isNonPresent, bool objectAsSubject, bool isId, bool inPrimaryQuote, bool inSecondaryQuote, const wchar_t* fromWhere);
+	void extendRolesThroughExtendedIdentitySentence(int where, int len, bool withinInfinitivePhrase, bool subjectIsPleonastic, bool isNot, int tsSense, bool isNonPast, bool isNonPresent, bool objectAsSubject, bool isId, bool inPrimaryQuote, bool inSecondaryQuote);
 	int findPrepRole(int whereLastPrep,int role,int rejectRole);
 	int processInternalInfinitivePhrase(int where,int whereVerb,int whereParentObject,int iverbTag,int firstFreePrep,vector <int> &futureBoundPrepositions,bool inPrimaryQuote,bool inSecondaryQuote,
 		bool &nextVerbInSeries,int &sense,
 		int &whereLastVerb,bool &ambiguousSense,bool inQuotedString,bool inSectionHeader,int begin,int end,int infpElement,vector <cTagLocation> &tagSet);
-	bool evaluateAdditionalRoleTags(int where,vector <cTagLocation> &tagSet,int len,int firstFreePrep,vector <int> &futureBoundPrepositions,bool inPrimaryQuote,bool inSecondaryQuote,bool &outsideQuoteTruth,bool &inQuoteTruth,bool withinInfinitivePhrase,bool internalInfinitivePhrase,
+	void evaluateMultipleVerbs(vector <cTagLocation>& tagSet, int& whereLastVerb, int whereVerb,bool &isNot);
+	void evaluateSubjects(int where, vector <cTagLocation>& tagSet,bool inPrimaryQuote, bool inSecondaryQuote, bool withinInfinitivePhrase,
+		bool internalInfinitivePhrase, int whereVerb, vector <int>& whereSubjects,int tsSense,bool isId, bool &isNonPast, bool& objectAsSubject, bool &subjectIsPleonastic, bool& noObjects, vector <tIWMM>& subjectWords, vector <int>& subjectObjects,bool &backwardsSubjects);
+	void bindFreePrepositions(int where,int firstFreePrep, int whereVerb, int whereHVerb);
+	void processMultipleObjects(vector <cTagLocation>& tagSet, int& whereObject, const int tsSense, const int mnounTag, const int objectTag, vector <int>& whereMObjects);
+	void processObjects(int where, vector <cTagLocation>& tagSet, int firstFreePrep, vector <int>& futureBoundPrepositions,
+		bool inPrimaryQuote, bool inSecondaryQuote, bool withinInfinitivePhrase, bool& nextVerbInSeries, int& sense, int& whereLastVerb,
+		bool& ambiguousSense, bool inQuotedString, bool inSectionHeader, int begin, int end,
+		int& numObjects, const int whereHObject, int& whereObject, const int whereVerb, int& infpElement, const int tsSense,
+		vector <int>& whereSubjects, vector <int>& subjectObjects, vector <tIWMM>& subjectWords,
+		const bool isId, const bool isNonPast, const bool isNonPresent, const bool isNot, const bool subjectIsPleonastic, const bool objectAsSubject);
+	void adjustAttachmentOfPrecedingRelativizer(int whereSubject);
+	bool evaluateVerbRoleTags(int where,int& hverbTagIndex, int& verbTagIndex, int& whereHVerb, int& whereVerb, int& notTag, int& len, bool& nextVerbInSeries, int& sense, int& tsSense, int& whereLastVerb, int& begin, int& end,
+		bool& isId, bool& isNot, bool& withinInfinitivePhrase, bool& isNonPast, bool& isNonPresent, bool& ambiguousSense, bool& inPrimaryQuote, bool& inQuotedString, bool& inSectionHeader, vector <cTagLocation>& tagSet);
+	void overrideRelativeObject(int where,vector <cTagLocation>& tagSet, int whereVerb, int whereObject, const vector <int> whereSubjects,bool noObjects);
+	void handleLeadingPreposition(int where, bool objectAsSubject, vector <int>& whereSubjects, int whereVerb, int whereObject);
+	void setInfinitiveRelations(int whereVerb, int whereIVerb, const vector <int> whereSubjects);
+	bool evaluateAdditionalRoleTags(int where, vector <cTagLocation>& tagSet, int len, int firstFreePrep, vector <int>& futureBoundPrepositions, bool inPrimaryQuote, bool inSecondaryQuote, bool& outsideQuoteTruth, bool& inQuoteTruth, bool withinInfinitivePhrase, bool internalInfinitivePhrase,
 																	bool &nextVerbInSeries,int &sense,int &whereLastVerb,bool &ambiguousSense,bool inQuotedString,bool inSectionHeader,int begin,int end);
 	int findObject(cTagLocation &tag,int &position);
 	public: size_t startCollectTagsFromTag(bool inTrace,int tagSet,cTagLocation &tl,vector < vector <cTagLocation> > &tagSets,int rejectTag,bool obeyBlock, bool collectParentTags, wstring purpose);
@@ -2870,7 +2903,7 @@ bool inSectionHeader,
 
 	bool pushWhereEntities(wchar_t *derivation,int where,wstring matchEntityType,wstring byWhatType,int whatWhere,bool filterNameDuplicates, vector <mbInfoReleaseType> mbs);
 	bool pushEntities(wchar_t *derivation,int where,wstring matchEntityType, vector <mbInfoReleaseType> &mbs);
-	bool matchedList(set <wstring> &matchList, int where, int objectClass,wchar_t *fromWhere);
+	bool matchedList(set <wstring> &matchList, int where, int objectClass, const wchar_t * fromWhere);
 	void createObject(cObject object);
 	cOM createObject(wstring derivation,wstring wordstr,OC objectClass);
 	int createObject(wstring derivation, wstring descriptor);
@@ -2893,7 +2926,7 @@ bool inSectionHeader,
 	void buildMap(void);
 	int rti(int where);
 	const wchar_t *wchr(int where);
-	const wchar_t *wrti(int where,wchar_t *id,wstring &tmpstr,bool shortFormat=false);
+	const wchar_t *wrti(int where, const wchar_t * id,wstring &tmpstr,bool shortFormat=false);
 	bool acceptableAdjective(int where);
 	bool acceptableObjectPosition(int where);
 	int getMSAdverb(int whereVerb,bool changeStateAdverb);

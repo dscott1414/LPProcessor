@@ -13,6 +13,25 @@
 #include "bitObject.h"
 #define MAX_BUF 10240000
 
+// eliminate patterns based on a little semantic help
+// this was created to help speaker resolution
+// this is very helpful when a word is both a verb and an adjective, so that the pattern is very ambiguous
+bool cSource::preferS1(int position, unsigned int J)
+{
+	LFS
+		vector <cWordMatch>::iterator im = m.begin() + position;
+	cPattern* p = patterns[im->pma[J].getPattern()];
+	// also reject if an _S1 occupies the same elements and is the same or less in cost.
+	if (patterns[im->pma[J].getPattern()]->name != L"__NOUN" && patterns[im->pma[J].getPattern()]->name != L"__MNOUN") return false;
+	int nounAvgCost = im->pma[J].getAverageCost(), element;
+	if ((element = im->pma.queryPatternWithLen(L"__S1", im->pma[J].len)) == -1 ||
+		nounAvgCost < im->pma[element & ~cMatchElement::patternFlag].getAverageCost()) return false;
+	if (debugTrace.tracePatternElimination)
+		lplog(L"position %d:pma %d:pattern %s[%s](%d,%d) is not a winner (S1 preference) nounAvgCost=%d >= S1Cost %d.", position, J,
+			p->name.c_str(), p->differentiator.c_str(), position, im->pma[J].len + position, nounAvgCost, im->pma[element & ~cMatchElement::patternFlag].getAverageCost());
+	return true;
+}
+
 bool cSource::findSpecificAnaphor(wstring tagName, int where, int element, int &specificWhere, bool &pluralNounOverride, bool &embeddedName)
 {
 	LFS
@@ -107,7 +126,7 @@ bool cSource::isPleonastic(unsigned int where)
 {
 	LFS
 		if (m[where].word->first != L"it" || where + 4 > m.size()) return false;
-	wchar_t *MA[] = { L"necessary",L"possible",L"certain",L"likely",L"important",L"good",L"useful",L"advisable",L"convenient",
+	const wchar_t *MA[] = { L"necessary",L"possible",L"certain",L"likely",L"important",L"good",L"useful",L"advisable",L"convenient",
 	  L"sufficient",L"economical",L"easy",L"desirable",L"difficult",L"legal",L"surprising",NULL };
 	if (m[where + 1].word->first == L"is")
 	{
@@ -125,7 +144,7 @@ bool cSource::isPleonastic(unsigned int where)
 			}
 			return false;
 		}
-		wchar_t *COG[] = { L"recommended",L"thought",L"believed",L"known",L"anticipated",L"assumed",L"expected",NULL };
+		const wchar_t *COG[] = { L"recommended",L"thought",L"believed",L"known",L"anticipated",L"assumed",L"expected",NULL };
 		for (I = 0; COG[I] && m[where + 2].word->first != COG[I]; I++);
 		if (COG[I] && m[where + 3].pma.queryPattern(L"_REL1") != -1) return true;
 		if (m[where + 2].word->first == L"time") return true;
@@ -138,7 +157,7 @@ bool cSource::isPleonastic(unsigned int where)
 		return false;
 	}
 	// It MEANS (that) S [ It MEANS S1 or REL1]
-	wchar_t *MEANS[] = { L"seems",L"appears",L"means",L"follows",NULL };
+	const wchar_t *MEANS[] = { L"seems",L"appears",L"means",L"follows",NULL };
 	int I;
 	for (I = 0; MEANS[I] && m[where + 2].word->first != MEANS[I]; I++);
 	if (MEANS[I] && (m[where + 3].pma.queryPattern(L"__S1") != -1 || m[where + 3].pma.queryPattern(L"_REL1") != -1)) return true;
@@ -619,7 +638,7 @@ bool cSource::nymNoMatch(vector <cObject>::iterator o, tIWMM adj)
 	wstring logMatch;
 	tIWMM fromMatch, toMatch, toMapMatch;
 	associatedAdjectives.push_back(adj);
-	wchar_t *type = L"single";
+	const wchar_t *type = L"single";
 	return  (nymMapMatch(o->associatedAdjectives, wnSynonymsAdjectiveMap, associatedAdjectives, wnAntonymsAdjectiveMap, true, getFromMatch, traceThisMatch, logMatch, fromMatch, toMatch, toMapMatch, type, L"o adj syn <-> lso adj ant") ||
 		nymMapMatch(o->associatedNouns, wnSynonymsNounMap, associatedAdjectives, wnAntonymsAdjectiveMap, true, getFromMatch, traceThisMatch, logMatch, fromMatch, toMatch, toMapMatch, type, L"o noun syn <-> lso adj ant")) &&
 
@@ -632,7 +651,7 @@ bool cSource::nymNoMatch(vector <cObject>::iterator o, tIWMM adj)
 // C. one other object is 'big' having synonyms 'astronomic' 'big' and antonyms 'little'
 // so A&B are truly opposites: A's synonyms and B's antonyms AND A's antonyms and B's synonyms have common members
 //    A&C should be ignored: A's synonyms and B's antonyms are common but NOT A's antonyms and B's synonyms
-bool cSource::nymNoMatch(int where, vector <cObject>::iterator o, vector <cObject>::iterator lso, bool getFromMatch, bool traceThisMatch, wstring &logMatch, tIWMM &fromMatch, tIWMM &toMatch, tIWMM &toMapMatch, wchar_t *type)
+bool cSource::nymNoMatch(int where, vector <cObject>::iterator o, vector <cObject>::iterator lso, bool getFromMatch, bool traceThisMatch, wstring &logMatch, tIWMM &fromMatch, tIWMM &toMatch, tIWMM &toMapMatch, const wchar_t * type)
 {
 	LFS
 		//if (!objectClassComparable(o,lso)) return false;
@@ -680,7 +699,7 @@ int cSource::limitedNymMatch(vector <cObject>::iterator o, vector <cObject>::ite
 	return total;
 }
 
-int cSource::nymMatch(vector <cObject>::iterator o, vector <cObject>::iterator lso, bool getFromMatch, bool traceNymMatch, bool &explicitOccupationMatch, wstring &logMatch, tIWMM &fromMatch, tIWMM &toMatch, tIWMM &toMapMatch, wchar_t *type)
+int cSource::nymMatch(vector <cObject>::iterator o, vector <cObject>::iterator lso, bool getFromMatch, bool traceNymMatch, bool &explicitOccupationMatch, wstring &logMatch, tIWMM &fromMatch, tIWMM &toMatch, tIWMM &toMapMatch, const wchar_t * type)
 {
 	LFS
 		// limit flow of adjectives and nouns from body objects

@@ -290,7 +290,7 @@ public:
 	static void compareRDFTypes();
 	static bool inNoERDFTypesDBTable(wstring newPath);
 	static bool insertNoERDFTypesDBTable(wstring newPath);
-	static int printRDFTypes(wchar_t *kind, vector <cTreeCat *> &rdfTypes);
+	static int printRDFTypes(const wchar_t * kind, vector <cTreeCat *> &rdfTypes);
 	static int printExtendedRDFTypes(wchar_t *kind, vector <cTreeCat *> &rdfTypes, unordered_map <wstring, int > &topHierarchyClassIndexes);
 	static void readOpenLibraryInternetArchiveWorksDump();
 	static int fillOntologyList(bool reInitialize);
@@ -327,9 +327,9 @@ private:
 	static int lookupInFreebaseQuery(wstring &object,string &slobject,wstring &q,vector <cTreeCat *> &rdfTypes,bool accumulateAliases);
 	static int lookupLinks(vector <wstring> &links);
 	static wstring stripUmbel(wstring umbelClass, wstring &compactLabel, wstring &labelWithSpace, int &UMBELType);
-	static void importUMBELN3Files(wchar_t *basepath, wchar_t *extension, unordered_map < wstring, unordered_map <wstring, set< wstring > > > &triplets);
+	static void importUMBELN3Files(const wchar_t * basepath, const wchar_t * extension, unordered_map < wstring, unordered_map <wstring, set< wstring > > > &triplets);
 	static bool readUMBELSuperClasses();
-	static int readYAGOOntology(wchar_t *filepath, int &numYAGOEntries, int &numSuperClasses);
+	static int readYAGOOntology(const wchar_t * filepath, int &numYAGOEntries, int &numSuperClasses);
 	static int readYAGOOntology();
 	static int readRDFTypes(wchar_t path[4096],vector <cTreeCat *> &rdfTypes);
 	static wstring extractLinkedFreebaseDescription(string &properties,wstring &description);

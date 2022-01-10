@@ -81,7 +81,7 @@ int cWord::lastWordWrittenClock; /// not used
 unordered_map <wstring,int> nicknameEquivalenceMap; // initialized 
 bool cForms::changedForms; // change possible but shut off
 unordered_map <wstring,int> cForms::formMap; // change possible but shut off
-wchar_t *cacheDir; // initialize
+const wchar_t *cacheDir; // initialize
 vector <wchar_t *> cWord::multiElementWords;
 vector <wchar_t *> cWord::quotedWords;
 vector <wchar_t *> cWord::periodWords;
@@ -1326,10 +1326,10 @@ int cWord::addWordToForm(wstring sWord,tIWMM &iWord,int flag,wstring sForm,wstri
   return iForm;
 }
 
-bool cWord::handleExtendedParseWords(wchar_t *word)
+bool cWord::handleExtendedParseWords(const wchar_t * word)
 { LFS
   if (!word[1]) return false;
-  wchar_t *ch;
+  const wchar_t *ch;
 	vector <wchar_t *>::iterator index;
 	if (wcschr(word,L' ') || wcschr(word, L'-') || wcschr(word, L'—'))
 	{
@@ -1943,7 +1943,7 @@ int cWord::processWebAddress(wstring &sWord,wchar_t *buffer, __int64 &cp, __int6
 			tempcp += 3;
 		if (tempcp <= cp + 1 || buffer[tempcp] != L':' || buffer[tempcp + 1] != '/')
 			return -1;
-		wchar_t *allowedCharacters = L"-._~%!$&'()*+,;=:/?";
+		const wchar_t *allowedCharacters = L"-._~%!$&'()*+,;=:/?";
 		while (buffer[tempcp] && (iswalnum(buffer[tempcp]) || wcschr(allowedCharacters, buffer[tempcp])))
 			tempcp++;
 		if (angleBracket && buffer[tempcp] == L'>')
@@ -2551,7 +2551,7 @@ __int64 &bufferScanLocation,
         bufferScanLocation=cp;
         return PARSE_PLURAL_NUM;
       }
-      wchar_t *numEnd[]={L"0th",L"1st",L"2nd",L"3rd",L"3d",L"4th",L"5th",L"6th",L"7th",L"8th",L"9th",
+      const wchar_t *numEnd[]={L"0th",L"1st",L"2nd",L"3rd",L"3d",L"4th",L"5th",L"6th",L"7th",L"8th",L"9th",
         L"1stly",L"2ndly",L"3rdly",L"4thly",L"5thly",L"6thly",L"7thly",L"8thly",L"9thly",NULL};
       int num;
       for (num=0; numEnd[num] && wcsicmp(sWord.c_str()+I-1,numEnd[num]); num++);

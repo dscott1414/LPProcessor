@@ -1,0 +1,860 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0-rtm.5.json",
+  "runs": [
+    {
+      "results": [
+        {
+          "ruleId": "C26812",
+          "message": {
+            "text": "The enum type 'tinyxml2::XMLError' is unscoped. Prefer 'enum class' over 'enum' (Enum.3)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///F:/lp/source.C++20/tinyxml2-master/tinyxml2.h"
+                },
+                "region": {
+                  "startLine": 1155,
+                  "startColumn": 3,
+                  "endLine": 1155,
+                  "endColumn": 18
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "tinyxml2::XMLAttribute::IntValue",
+                  "decoratedName": "?IntValue@XMLAttribute@tinyxml2@@QEBAHXZ",
+                  "kind": "function"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ruleId": "C26812",
+          "message": {
+            "text": "The enum type 'tinyxml2::XMLElement::ElementClosingType' is unscoped. Prefer 'enum class' over 'enum' (Enum.3)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///F:/lp/source.C++20/tinyxml2-master/tinyxml2.h"
+                },
+                "region": {
+                  "startLine": 1612,
+                  "startColumn": 9,
+                  "endLine": 1612,
+                  "endColumn": 16
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "tinyxml2::XMLElement::ClosingType",
+                  "decoratedName": "?ClosingType@XMLElement@tinyxml2@@QEBA?AW4ElementClosingType@12@XZ",
+                  "kind": "function"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ruleId": "C26812",
+          "message": {
+            "text": "The enum type 'tinyxml2::Whitespace' is unscoped. Prefer 'enum class' over 'enum' (Enum.3)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///F:/lp/source.C++20/tinyxml2-master/tinyxml2.h"
+                },
+                "region": {
+                  "startLine": 1727,
+                  "startColumn": 9,
+                  "endLine": 1727,
+                  "endColumn": 16
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "tinyxml2::XMLDocument::WhitespaceMode",
+                  "decoratedName": "?WhitespaceMode@XMLDocument@tinyxml2@@QEBA?AW4Whitespace@2@XZ",
+                  "kind": "function"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ruleId": "C26819",
+          "message": {
+            "text": "Unannotated fallthrough between switch labels (es.78)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///F:/lp/source.C++20/tinyxml2-master/tinyxml2.cpp"
+                },
+                "region": {
+                  "startLine": 436,
+                  "startColumn": 14
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "tinyxml2::XMLUtil::ConvertUTF32ToUTF8",
+                  "decoratedName": "?ConvertUTF32ToUTF8@XMLUtil@tinyxml2@@SAXKPEADPEAH@Z",
+                  "kind": "function"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ruleId": "C26819",
+          "message": {
+            "text": "Unannotated fallthrough between switch labels (es.78)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///F:/lp/source.C++20/tinyxml2-master/tinyxml2.cpp"
+                },
+                "region": {
+                  "startLine": 441,
+                  "startColumn": 14
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "tinyxml2::XMLUtil::ConvertUTF32ToUTF8",
+                  "decoratedName": "?ConvertUTF32ToUTF8@XMLUtil@tinyxml2@@SAXKPEADPEAH@Z",
+                  "kind": "function"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ruleId": "C26819",
+          "message": {
+            "text": "Unannotated fallthrough between switch labels (es.78)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///F:/lp/source.C++20/tinyxml2-master/tinyxml2.cpp"
+                },
+                "region": {
+                  "startLine": 446,
+                  "startColumn": 14
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "tinyxml2::XMLUtil::ConvertUTF32ToUTF8",
+                  "decoratedName": "?ConvertUTF32ToUTF8@XMLUtil@tinyxml2@@SAXKPEADPEAH@Z",
+                  "kind": "function"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ruleId": "C26819",
+          "message": {
+            "text": "Unannotated fallthrough between switch labels (es.78)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///F:/lp/source.C++20/tinyxml2-master/tinyxml2.cpp"
+                },
+                "region": {
+                  "startLine": 449,
+                  "startColumn": 13,
+                  "endLine": 449,
+                  "endColumn": 13
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "tinyxml2::XMLUtil::ConvertUTF32ToUTF8",
+                  "decoratedName": "?ConvertUTF32ToUTF8@XMLUtil@tinyxml2@@SAXKPEADPEAH@Z",
+                  "kind": "function"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ruleId": "C26812",
+          "message": {
+            "text": "The enum type 'tinyxml2::StrPair::<unnamed-enum-NEEDS_ENTITY_PROCESSING>' is unscoped. Prefer 'enum class' over 'enum' (Enum.3)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///F:/lp/source.C++20/tinyxml2-master/tinyxml2.cpp"
+                },
+                "region": {
+                  "startLine": 1157,
+                  "startColumn": 21,
+                  "endLine": 1157,
+                  "endColumn": 85
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "tinyxml2::XMLText::ParseDeep",
+                  "decoratedName": "?ParseDeep@XMLText@tinyxml2@@MEAAPEADPEADPEAVStrPair@2@PEAH@Z",
+                  "kind": "function"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ruleId": "C26495",
+          "message": {
+            "text": "Variable 'tinyxml2::DynArray<char,20>::_pool' is uninitialized. Always initialize a member variable (type.6)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///F:/lp/source.C++20/tinyxml2-master/tinyxml2.h"
+                },
+                "region": {
+                  "startLine": 206,
+                  "startColumn": 5,
+                  "endLine": 206,
+                  "endColumn": 5
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "tinyxml2::DynArray<char,20>::{ctor}",
+                  "decoratedName": "??0?$DynArray@D$0BE@@tinyxml2@@QEAA@XZ",
+                  "kind": "function"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "targetSymbol": "tinyxml2::DynArray<char,20>::_pool"
+          }
+        },
+        {
+          "ruleId": "C26495",
+          "message": {
+            "text": "Variable 'tinyxml2::DynArray<char const *,10>::_pool' is uninitialized. Always initialize a member variable (type.6)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///F:/lp/source.C++20/tinyxml2-master/tinyxml2.h"
+                },
+                "region": {
+                  "startLine": 206,
+                  "startColumn": 5,
+                  "endLine": 206,
+                  "endColumn": 5
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "tinyxml2::DynArray<char const *,10>::{ctor}",
+                  "decoratedName": "??0?$DynArray@PEBD$09@tinyxml2@@QEAA@XZ",
+                  "kind": "function"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "targetSymbol": "tinyxml2::DynArray<char const *,10>::_pool"
+          }
+        },
+        {
+          "ruleId": "C26495",
+          "message": {
+            "text": "Variable 'tinyxml2::DynArray<tinyxml2::XMLNode *,10>::_pool' is uninitialized. Always initialize a member variable (type.6)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///F:/lp/source.C++20/tinyxml2-master/tinyxml2.h"
+                },
+                "region": {
+                  "startLine": 206,
+                  "startColumn": 5,
+                  "endLine": 206,
+                  "endColumn": 5
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "tinyxml2::DynArray<tinyxml2::XMLNode *,10>::{ctor}",
+                  "decoratedName": "??0?$DynArray@PEAVXMLNode@tinyxml2@@$09@tinyxml2@@QEAA@XZ",
+                  "kind": "function"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "targetSymbol": "tinyxml2::DynArray<tinyxml2::XMLNode *,10>::_pool"
+          }
+        },
+        {
+          "ruleId": "C26495",
+          "message": {
+            "text": "Variable 'tinyxml2::DynArray<tinyxml2::MemPoolT<104>::Block *,10>::_pool' is uninitialized. Always initialize a member variable (type.6)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///F:/lp/source.C++20/tinyxml2-master/tinyxml2.h"
+                },
+                "region": {
+                  "startLine": 206,
+                  "startColumn": 5,
+                  "endLine": 206,
+                  "endColumn": 5
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "tinyxml2::DynArray<tinyxml2::MemPoolT<104>::Block *,10>::{ctor}",
+                  "decoratedName": "??0?$DynArray@PEAUBlock@?$MemPoolT@$0GI@@tinyxml2@@$09@tinyxml2@@QEAA@XZ",
+                  "kind": "function"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "targetSymbol": "tinyxml2::DynArray<tinyxml2::MemPoolT<104>::Block *,10>::_pool"
+          }
+        },
+        {
+          "ruleId": "C26495",
+          "message": {
+            "text": "Variable 'tinyxml2::DynArray<tinyxml2::MemPoolT<112>::Block *,10>::_pool' is uninitialized. Always initialize a member variable (type.6)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///F:/lp/source.C++20/tinyxml2-master/tinyxml2.h"
+                },
+                "region": {
+                  "startLine": 206,
+                  "startColumn": 5,
+                  "endLine": 206,
+                  "endColumn": 5
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "tinyxml2::DynArray<tinyxml2::MemPoolT<112>::Block *,10>::{ctor}",
+                  "decoratedName": "??0?$DynArray@PEAUBlock@?$MemPoolT@$0HA@@tinyxml2@@$09@tinyxml2@@QEAA@XZ",
+                  "kind": "function"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "targetSymbol": "tinyxml2::DynArray<tinyxml2::MemPoolT<112>::Block *,10>::_pool"
+          }
+        },
+        {
+          "ruleId": "C26495",
+          "message": {
+            "text": "Variable 'tinyxml2::DynArray<tinyxml2::MemPoolT<80>::Block *,10>::_pool' is uninitialized. Always initialize a member variable (type.6)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///F:/lp/source.C++20/tinyxml2-master/tinyxml2.h"
+                },
+                "region": {
+                  "startLine": 206,
+                  "startColumn": 5,
+                  "endLine": 206,
+                  "endColumn": 5
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "tinyxml2::DynArray<tinyxml2::MemPoolT<80>::Block *,10>::{ctor}",
+                  "decoratedName": "??0?$DynArray@PEAUBlock@?$MemPoolT@$0FA@@tinyxml2@@$09@tinyxml2@@QEAA@XZ",
+                  "kind": "function"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "targetSymbol": "tinyxml2::DynArray<tinyxml2::MemPoolT<80>::Block *,10>::_pool"
+          }
+        },
+        {
+          "ruleId": "C26495",
+          "message": {
+            "text": "Variable 'tinyxml2::DynArray<tinyxml2::MemPoolT<120>::Block *,10>::_pool' is uninitialized. Always initialize a member variable (type.6)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///F:/lp/source.C++20/tinyxml2-master/tinyxml2.h"
+                },
+                "region": {
+                  "startLine": 206,
+                  "startColumn": 5,
+                  "endLine": 206,
+                  "endColumn": 5
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "tinyxml2::DynArray<tinyxml2::MemPoolT<120>::Block *,10>::{ctor}",
+                  "decoratedName": "??0?$DynArray@PEAUBlock@?$MemPoolT@$0HI@@tinyxml2@@$09@tinyxml2@@QEAA@XZ",
+                  "kind": "function"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "targetSymbol": "tinyxml2::DynArray<tinyxml2::MemPoolT<120>::Block *,10>::_pool"
+          }
+        }
+      ],
+      "tool": {
+        "driver": {
+          "name": "PREfast",
+          "fullName": "PREfast Code Analysis",
+          "version": "14.30.30706.0",
+          "informationUri": "https://aka.ms/cpp/ca"
+        }
+      },
+      "invocations": [
+        {
+          "commandLine": "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\bin\\HostX64\\x64\\c1xx.dll\" -ACf{1F7B090C-16DB-4822-966A-A93D26ED4681} -ACpmspft140.dll -Alint -D_PREFAST_ -D_AST_FE_ -Analyze -zm0x00007FF668C20C80 -il C:\\Users\\dscot_000\\AppData\\Local\\Temp\\_CL_0ce4d412ast -typedil -f tinyxml2-master\\tinyxml2.cpp -W 1 -Ze -D_MSC_EXTENSIONS -Zp16 -pc \\:/ -D_MSC_VER=1930 -D_MSC_FULL_VER=193030706 -D_MSC_BUILD=0 -D_M_AMD64=100 -ZILP448 -D_M_X64=100 -D_WIN64 -D_WIN32 -nologo -Wall -W4 -WX -diagnostics:column -Oi -Ot -Oy -ltcg -DCODE_ANALYSIS -DWIN32 -DNDEBUG -D_CONSOLE -D_STLP_NO_IOSTREAMS -D_STLP_NO_EXCEPTIONS -D_CRT_SECURE_NO_WARNINGS -D_UNICODE -DUNICODE -DANDROID_NDK -EHs -D_CPPUNWIND -EHc -MD -D_MT -D_DLL -D__AVX__ -D__AVX2__ -D_NO_PREFETCHW -fpfast -fpcontract -D_M_FP_FAST -D_M_FP_CONTRACT -Zc:wchar_t -Zc:forScope -GR -D_CPPRTTI -std:c++latest -experimental:module -stdIfcDir C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\ifc\\x64 -FoQuestionAnsweringx64\\tinyxml2.obj -FdF:\\lp\\source.C++20\\QuestionAnsweringx64\\lp.pdb -external:W 4 -Gd -wd 4389 -wd 4242 -wd 4388 -wd 4820 -wd 4365 -wd 4710 -wd 4668 -wd 4626 -wd 4625 -wd 4571 -wd 4245 -wd 4244 -wd 5039 -wd 5027 -wd 5026 -wd 4514 -wd 4774 -wd 4623 -wd 4706 -wd 4711 -wd 5045 -wd 4834 -wd 4574 -wd 5219 -wd 26451 -wd 6011 -wd 6262 -wd 6053 -wd 6385 -wd 28199 -wd 28182 -wd 28241 -wd 28285 -wd 6387 -wd 6001 -analyze:projectdirectory F:\\lp\\source.C++20 -analyze:rulesetdirectory ;C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Team Tools\\Static Analysis Tools\\\\Rule Sets; -analyze:ruleset C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Team Tools\\Static Analysis Tools\\Rule Sets\\NativeRecommendedRules.ruleset -analyze:quiet -analyze:plugin C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\bin\\HostX64\\x64\\EspXEngine.dll -FC -errorreport:prompt -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\include -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\atlmfc\\include -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\VS\\include -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\ucrt -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\VS\\UnitTest\\include -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\um -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\shared -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\winrt -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\cppwinrt -I C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.8\\Include\\um -I F:\\Program Files\\MySQL\\MySQL Server 8.0\\include -I F:\\Program Files (x86)\\WordNet\\2.1\\src\\include -I F:\\lp\\source\\lloyd-yajl-66cb08c\\src\\api -I F:\\lp\\source\\tinyxml2-master -I C:\\Program Files\\Java\\jdk1.8.0_181\\include\\win32 -I C:\\Program Files\\Java\\jdk1.8.0_181\\include -external:I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\include -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\include -external:I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\atlmfc\\include -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\atlmfc\\include -external:I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\VS\\include -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\VS\\include -external:I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\ucrt -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\ucrt -external:I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\VS\\UnitTest\\include -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\VS\\UnitTest\\include -external:I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\um -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\um -external:I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\shared -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\shared -external:I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\winrt -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\winrt -external:I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\cppwinrt -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\cppwinrt -external:I C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.8\\Include\\um -I C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.8\\Include\\um -MPdiagMutex 0000000000000170",
+          "executionSuccessful": true
+        }
+      ],
+      "artifacts": [
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/adversary bugs.cpp"
+          },
+          "roles": [
+            "analysisTarget"
+          ],
+          "hashes": {
+            "sha-256": "9d8375f6b5e8c7d6b6b00d376583408a48cec800708640c1e4b9d8b6c80ebd4e"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///F:/lp/source.C++20/word.h"
+          },
+          "roles": [
+            "resultFile"
+          ],
+          "hashes": {
+            "sha-256": "f724c1753c881f2183c882abe90cd197d0f79f0ba13a161d326aa096e822a3aa"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///F:/lp/source.C++20/syntacticRelations.h"
+          },
+          "roles": [
+            "resultFile"
+          ],
+          "hashes": {
+            "sha-256": "a251428ab93c7c2ceb5af7c102fff80a71e8c46d2cd09c3f8fd412ea67bc7c0e"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///F:/lp/source.C++20/tableColumn.h"
+          },
+          "roles": [
+            "resultFile"
+          ],
+          "hashes": {
+            "sha-256": "7c698b49d30efe3f75329f94948783b0556be9707443ecda13cc515de78b57ac"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///F:/lp/source.C++20/timeRelations.h"
+          },
+          "roles": [
+            "resultFile"
+          ],
+          "hashes": {
+            "sha-256": "e893b27ce67f36941a02e8f2165f34195f8652bef7f91006b1ccdf42fd883065"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///F:/lp/source.C++20/source.h"
+          },
+          "roles": [
+            "resultFile"
+          ],
+          "hashes": {
+            "sha-256": "e3d2ea04118ef90fc9d61ae41cb6fbb20a0fb5df7d95c2e28ed988d3c626c843"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///F:/lp/source.C++20/DBWordRelations.cpp"
+          },
+          "roles": [
+            "analysisTarget",
+            "resultFile"
+          ],
+          "hashes": {
+            "sha-256": "778aa453f25ee3fbd70bcbb92305e995079209e1e7378e2bd101203acce7b22d"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/logging.h"
+          },
+          "hashes": {
+            "sha-256": "479e83983bc3716633f90fae184a4d4d6a04669a3c91313f8f6112aa350932cd"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/program files/mysql/mysql server 8.0/include/mysql.h"
+          },
+          "hashes": {
+            "sha-256": "596f7d8537ebaff27cdddabad1990ce4e3f1a06ef3b222ea0cb2f59b77d1da4e"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/program files/mysql/mysql server 8.0/include/field_types.h"
+          },
+          "hashes": {
+            "sha-256": "c9a0e033989bb8d513cc17e514bc24306c493d79dbf7e39d7659436ff34767e0"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/program files/mysql/mysql server 8.0/include/my_list.h"
+          },
+          "hashes": {
+            "sha-256": "2bb8e00efa0fec3362b978c30f71253595e7386d90ce6b074bfa5fb42853657c"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/program files/mysql/mysql server 8.0/include/mysql_com.h"
+          },
+          "hashes": {
+            "sha-256": "812681ea6ef2081f167bf0d1474bb92c9175cb2df547cf3216826077dfdeb195"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/program files/mysql/mysql server 8.0/include/my_command.h"
+          },
+          "hashes": {
+            "sha-256": "efaf2960a68a33028258a92ab9a16a6f25964216342674d9613ec4267a21ac5f"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/program files/mysql/mysql server 8.0/include/mysql/udf_registration_types.h"
+          },
+          "hashes": {
+            "sha-256": "d939a9067007c8aca6362231ea64ef757c891af560be2064ba2e0e6bab5846f3"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/program files/mysql/mysql server 8.0/include/mysql/client_plugin.h"
+          },
+          "hashes": {
+            "sha-256": "5409646f96a44e113ccae1658413719020e42f62ddb504dbca2f9be93a481280"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/program files/mysql/mysql server 8.0/include/mysql/plugin_auth_common.h"
+          },
+          "hashes": {
+            "sha-256": "ff21f0acd2ac6ffc63d243fd71440598f139d924438658ab137b91c0344322cd"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/program files/mysql/mysql server 8.0/include/mysql_version.h"
+          },
+          "hashes": {
+            "sha-256": "b3e24cd8e041c8a91f55dea1aded53c050504ddc5b449a9d87914e19cb7419b2"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/program files/mysql/mysql server 8.0/include/mysql_time.h"
+          },
+          "hashes": {
+            "sha-256": "05bcb6d7f5561f5fce146dc4965c3dbdd33d6562135530a41c8b1a4c14f6f6d5"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/program files/mysql/mysql server 8.0/include/errmsg.h"
+          },
+          "hashes": {
+            "sha-256": "a693314f2c1bb66e12468bb17a34d3f65e05d7b46c197f029bb59f9aac988266"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/general.h"
+          },
+          "hashes": {
+            "sha-256": "07f7dde63839beb7c03963fd0100ac736212629f9f551be2bcc106ed0d03de4c"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/relationtypes.h"
+          },
+          "hashes": {
+            "sha-256": "3f8d26d3c2aedaee57b4a4d891971f8745706a8f26228ac2eaaeecc802365861"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/intarray.h"
+          },
+          "hashes": {
+            "sha-256": "6f420f5c901e4cffd079f0697ee9d9c0210da0a19fc320aa53a8485f20b667c0"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/pattern.h"
+          },
+          "hashes": {
+            "sha-256": "aba016599b46143d77cd4ad136046e6edc7f4c969e8ec4be3f4b9a8ac5d33e83"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/bitobject.h"
+          },
+          "hashes": {
+            "sha-256": "7b26737a50f40ce2467b9a0078ee5b92904da74aac1e1590baeedeed70559232"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/patternelementmatcharray.h"
+          },
+          "hashes": {
+            "sha-256": "81c4cbe76b6370e009e9c7579a783b8bac218d9f33c3faa2fd4ef853ee2a1136"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/patternmatcharray.h"
+          },
+          "hashes": {
+            "sha-256": "ed37896c4f6d23dbc1e4dc7043b73747a18bc05ca09ac8e0b861f1ac9e260e91"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/program files/mysql/mysql server 8.0/include/mysqld_error.h"
+          },
+          "hashes": {
+            "sha-256": "1cffc6df6540dd9e227a3261b33991f4fa4c7f93b23ca4ac394e5c6735a82c25"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/ontology.h"
+          },
+          "hashes": {
+            "sha-256": "756ca902980acf872e800d1847382c7139e69ea2c3e5797695adc334219d7457"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/names.h"
+          },
+          "hashes": {
+            "sha-256": "f4b6f3b5596e9e70440df3b456d093d8f7a017563fc2df3fe0f7640cb36870de"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/getmusicbrainz.h"
+          },
+          "hashes": {
+            "sha-256": "e1ba7fe3c2382fbeb1187469850b176240cfd587c95fa91c3fc8c0ac53a6268d"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/semanticrelations.h"
+          },
+          "hashes": {
+            "sha-256": "dcc9042e917b449c89557b33105c8fcafa6f3a4645e98017cc4e63eaadcbc905"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/vcxml.h"
+          },
+          "hashes": {
+            "sha-256": "e318b11298643ba7178557aa394bd8ff2a67d7470a159053314e7c19e9c60c58"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/profile.h"
+          },
+          "hashes": {
+            "sha-256": "b83b6d924516ad8c135ec835581d801a4987da5172df5c96fe6e0a4cfdb1f026"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/mysqldb.h"
+          },
+          "hashes": {
+            "sha-256": "e808f248783026234c6191c91a342fbed3e30924c431a25d3733252a93386e52"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/internet.h"
+          },
+          "hashes": {
+            "sha-256": "b9f84e1acf3564b7f36d85b1ca6dfaf87e4ae9defb42727183fb264a24f56ac1"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/questionanswering.h"
+          },
+          "hashes": {
+            "sha-256": "25730c02e4f2d8e38be97a8a1641b00bfa11e1eb7c2da7a417a0735252d18c01"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/getthesaurus.cpp"
+          },
+          "roles": [
+            "analysisTarget"
+          ],
+          "hashes": {
+            "sha-256": "92cf300da6042c236fc01f5dd2583b078586f8936225023dc68f3d1d991680d5"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/program files (x86)/wordnet/2.1/src/include/wn.h"
+          },
+          "hashes": {
+            "sha-256": "dfd8499a0e5b36785923767163c8455ec64099e6628115679c5feb9c276a3e68"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///F:/lp/source.C++20/initializeDictionary.cpp"
+          },
+          "roles": [
+            "analysisTarget",
+            "resultFile"
+          ],
+          "hashes": {
+            "sha-256": "a7a868c24ab4fcd1aa7f9241ca0a0bcc40133f82cd0fe69a3102d46ac7658aa0"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///f:/lp/source.c++20/pattern.cpp"
+          },
+          "roles": [
+            "analysisTarget"
+          ],
+          "hashes": {
+            "sha-256": "e8a162545aad46a4de988ff17e4068af79d3129e90ebf5ae5480197544405530"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///F:/lp/source.C++20/syntacticRelationGroups.cpp"
+          },
+          "roles": [
+            "analysisTarget",
+            "resultFile"
+          ],
+          "hashes": {
+            "sha-256": "0ddcbe6d593ce1c10dfb610d88d610eab0b83220c43e63178f58fbe47241bdbd"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///F:/lp/source.C++20/tableColumn.cpp"
+          },
+          "roles": [
+            "analysisTarget",
+            "resultFile"
+          ],
+          "hashes": {
+            "sha-256": "34bffad1605322b763bfe1237d19844a5c8dc304bb2870c5a70dbf965fde792a"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///F:/lp/source.C++20/tinyxml2-master/tinyxml2.h"
+          },
+          "roles": [
+            "resultFile"
+          ],
+          "hashes": {
+            "sha-256": "d884b226a3336d3c3c8e3a598bd09747ed688ad8d3ffee994252f8c378d2f830"
+          }
+        },
+        {
+          "location": {
+            "uri": "file:///F:/lp/source.C++20/tinyxml2-master/tinyxml2.cpp"
+          },
+          "roles": [
+            "analysisTarget",
+            "resultFile"
+          ],
+          "hashes": {
+            "sha-256": "39c0a8f92a5c3a3aa7d1b172b38833b18c259a7a707fe8713e28dfd18aa052f3"
+          }
+        }
+      ]
+    }
+  ]
+}

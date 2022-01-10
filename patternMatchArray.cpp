@@ -40,7 +40,10 @@ cPatternMatchArray::cPatternMatchArray(const cPatternMatchArray &rhs)
   {
     content = (tPatternMatch *)tmalloc(allocated*sizeof(*content));
     if (!content)
-      lplog(LOG_FATAL_ERROR,L"OUT OF MEMORY (1)");
+    {
+      lplog(LOG_FATAL_ERROR, L"OUT OF MEMORY (1)");
+      return;
+    }
     memcpy(content,rhs.content,count*sizeof(*content));
   }
 }
@@ -103,7 +106,10 @@ cPatternMatchArray& cPatternMatchArray::operator=(const cPatternMatchArray &rhs)
   {
     content = (tPatternMatch *)tmalloc(allocated*sizeof(*content));
     if (!content)
-      lplog(LOG_FATAL_ERROR,L"OUT OF MEMORY (3)");
+    {
+      lplog(LOG_FATAL_ERROR, L"OUT OF MEMORY (3)");
+      return *this;
+    }
     memcpy(content,rhs.content,count*sizeof(*content));
   }
   return *this;
@@ -115,7 +121,7 @@ bool cPatternMatchArray::operator!=(const cPatternMatchArray other) const
   return memcmp(content, other.content,count*sizeof(*content))!=0;
 }
 
-cPatternMatchArray::reference cPatternMatchArray::operator[](unsigned int _P0)
+cPatternMatchArray::tPatternMatch &cPatternMatchArray::operator[](unsigned int _P0)
 { LFS
   #ifdef INDEX_CHECK
     if (_P0>=count || _P0<0)
@@ -129,7 +135,7 @@ cPatternMatchArray::reference cPatternMatchArray::operator[](unsigned int _P0)
   return (content[_P0]);
 }
 
-cPatternMatchArray::const_reference cPatternMatchArray::operator[](unsigned int _P0) const
+const cPatternMatchArray::tPatternMatch &cPatternMatchArray::operator[](unsigned int _P0) const
 { LFS
   #ifdef INDEX_CHECK
     if (_P0>=count || _P0<0)

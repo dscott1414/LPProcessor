@@ -31,7 +31,7 @@
 using namespace std;
 #include "mysql.h"
 #include "wn.h"
-bool myquery(MYSQL *mysql, wchar_t *q, MYSQL_RES * &result, bool allowFailure = false);
+bool myquery(MYSQL *mysql, const wchar_t *q, MYSQL_RES * &result, bool allowFailure = false);
 void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition> &d);
 
 void getSynonymsFromDB(MYSQL mysql, wstring word, vector <unordered_set <wstring> > &synonyms, vector <wstring > &alternatives, int synonymType)
@@ -91,7 +91,7 @@ void getSynonymsFromDB(MYSQL mysql, wstring word, vector <unordered_set <wstring
 	}
 }
 
-void split(string str, vector <string> &words, char *splitch)
+void split(string str, vector <string> &words, const char *splitch)
 {
 	int ch = -1;
 	vector <string> syns;
@@ -168,7 +168,7 @@ void scrapeOldThesaurus(wstring word, wstring buffer, unordered_set <wstring> &s
 		return;
 	beginPos += wcslen(L"Main Entry:");
 	size_t endPos = 1000000, tmpPos;
-	wchar_t *endStr[] = { L"Main Entry:", L"Roget's 21st Century Thesaurus", L"Adjective Finder", L"Synonym Collection", L"Search another word", L"Antonyms:", L"* = informal/non-formal usage", NULL };
+	const wchar_t *endStr[] = { L"Main Entry:", L"Roget's 21st Century Thesaurus", L"Adjective Finder", L"Synonym Collection", L"Search another word", L"Antonyms:", L"* = informal/non-formal usage", NULL };
 	for (int I = 0; endStr[I] != NULL; I++)
 		if ((tmpPos = buffer.find(endStr[I], beginPos)) != wstring::npos && tmpPos<endPos)
 			endPos = tmpPos;
@@ -242,7 +242,7 @@ void convert(wchar_t &c)
 		if (unknowns.find(c) == unknowns.end())
 		{
 			unknowns.insert(c);
-			printf("Unknown character - %d %C\n", c, c);
+			printf("Unknown character - %d %C\n", (int)c, c);
 		}
 	}
 }
@@ -330,7 +330,11 @@ void testThesaurus()
 	}
 	mysql_options(&mysql, MYSQL_OPT_RECONNECT, &keep_connect);
 	wstring thesaurusDir = wstring(LMAINDIR) + L"\\old thesaurus entries";
-	_wchdir(thesaurusDir.c_str());
+	if (_wchdir(thesaurusDir.c_str()) < 0)
+	{
+		printf("Error changing directory.");
+		return;
+	}
 	hFind = FindFirstFile(L"*.thesaurus.txt.*", &ffd);
 	if (hFind == INVALID_HANDLE_VALUE)
 	{
@@ -360,7 +364,8 @@ void testThesaurus()
 				wchar_t *buffer = (wchar_t *)malloc(fl + 2);
 				if (fd >= 0)
 				{
-					_read(fd, buffer, (unsigned int)fl);
+					if (_read(fd, buffer, (unsigned int)fl) < 0)
+						lplog(LOG_FATAL_ERROR, L"Error reading thesaurus file.");
 					_close(fd);
 				}
 				unordered_set <wstring> scrapedSynonyms;
@@ -434,7 +439,7 @@ void testThesaurus()
 
 #define MAX_COLUMNS 4
 vector <string> tokens;
-bool isBeginToken(int I, char *token)
+bool isBeginToken(int I, const char *token)
 {
 	return !strncmp(tokens[I].c_str() + 1, token, strlen(token)) &&
 		tokens[I][0] == '<' && 
@@ -447,7 +452,7 @@ bool isWord(int I)
 	return tokens[I].find("<") == string::npos;
 }
 
-bool isEndToken(int I, char *token)
+bool isEndToken(int I,const char *token)
 {
 	return !strncmp(tokens[I].c_str() + 2, token, strlen(token)) &&
 		tokens[I][0] == '<' && 
@@ -456,7 +461,7 @@ bool isEndToken(int I, char *token)
 		tokens[I][tokens[I].length() - 1] == '>';
 }
 
-bool isWord(int I, char *word)
+bool isWord(int I, const char *word)
 {
 	return tokens[I] == word;
 }
@@ -500,7 +505,8 @@ bool isToken(int I)
 void error(int I)
 {
 	printf("STOP %d\n", I);
-	getchar();
+	if (getchar() == EOF)
+		printf("ERROR");
 }
 
 string trim(string &s, string &tmp)
@@ -606,12 +612,13 @@ void processIntoTokens()
 	string tablesPath = string(MAINDIR) + "\\Linguistics information\\thesaurus\\Koptimized_tags_noTables.html";
 	_sopen_s(&fd, tablesPath.c_str(), _O_RDWR | _O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE);
 	int fl = _filelength(fd);
-	char *buffer = (char *)malloc(fl + 2);
+	char *buffer = (char *)malloc(fl + 4);
 	string buf;
 	//int numTable = 0;
 	if (fd >= 0)
 	{
-		_read(fd, buffer, fl);
+		if (_read(fd, buffer, fl)<0)
+			lplog(LOG_FATAL_ERROR, L"Error reading thesaurus HTML file.");
 		_close(fd);
 	}
 	string tag, beginTag, endTag, words;
@@ -774,7 +781,7 @@ void printEntry(sDefinition d)
 	printf("\n");
 }
 
-void error(vector <sDefinition>::iterator e1,char *where,string whichEntry)
+void error(vector <sDefinition>::iterator e1,const char *where,string whichEntry)
 {
 	static int errors = 0;
 	printf("\n%d:%s %s                     \n", errors++, where, whichEntry.c_str());
@@ -953,7 +960,7 @@ int getThesaurus(MYSQL mysql)
 	string tmp2,tmp3;
 	for (unsigned int I = 0; I < tokens.size(); )
 	{
-		printf("phase two %zu%% %d out of %zu\r", I * 100 / tokens.size(), I, tokens.size());
+		printf("phase two %zu%% %u out of %zu\r", I * 100 / tokens.size(), I, tokens.size());
 		sDefinition d;
 		//printf("\n\n%d:%s\n", I,tokens[I].c_str());
 		//for (unsigned int J = I+1; J < tokens.size() && !(isBeginToken(J, "span class=\"s19") || isBeginToken(J, "span class=\"s24")); J++)
@@ -1130,12 +1137,13 @@ int stripTags()
 	string tablesPath = string(MAINDIR) + "\\Linguistics information\\thesaurus\\Koptimized.html";
 	int fd, error = _sopen_s(&fd, tablesPath.c_str(), _O_RDWR, _SH_DENYNO, _S_IREAD | _S_IWRITE);
 	size_t fl = _filelength(fd);
-	char *buffer = (char *)malloc(fl + 2);
+	char *buffer = (char *)malloc(fl + 100);
 	string buf;
 	//int numTable = 0;
 	if (fd >= 0)
 	{
-		_read(fd, buffer, (unsigned int)fl);
+		if (_read(fd, buffer, (unsigned int)fl)<0)
+			lplog(LOG_FATAL_ERROR, L"Error reading thesaurus HTML file.");
 		_close(fd);
 	}
 	bool saveNextSpan = false;
@@ -1368,7 +1376,8 @@ int resolveTables()
 	//int numTable = 0;
 	if (fd >= 0)
 	{
-		_read(fd, buffer, (unsigned int)fl);
+		if (_read(fd, buffer, (unsigned int)fl) < 0)
+			lplog(LOG_FATAL_ERROR, L"Error reading thesaurus file.");
 		_close(fd);
 	}
 	//bool saveNextSpan = false;
