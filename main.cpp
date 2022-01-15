@@ -12,9 +12,9 @@
 #include <direct.h>
 #include <sys/stat.h>
 #include <crtdbg.h>
-	extern "C" {
+extern "C" {
 #include <yajl_tree.h>
-	}
+}
 #include "getMusicBrainz.h"
 #include "profile.h"
 #include <Dbghelp.h>
@@ -24,32 +24,32 @@
 #include "QuestionAnswering.h"
 
 // needed for _STLP_DEBUG - these must be set to a legal, unreachable yet never changing value
-unordered_map <wstring,cSourceWordInfo> static_wordMap;
-tIWMM wNULL=static_wordMap.begin();
+unordered_map <wstring, cSourceWordInfo> static_wordMap;
+tIWMM wNULL = static_wordMap.begin();
 unordered_map<wstring, cSourceWordInfo::cRMap::cRelation> static_tIcMap;
-cSourceWordInfo::cRMap::tIcRMap tNULL=(cSourceWordInfo::cRMap::tIcRMap)static_tIcMap.begin();
+cSourceWordInfo::cRMap::tIcRMap tNULL = (cSourceWordInfo::cRMap::tIcRMap)static_tIcMap.begin();
 vector <cLocalFocus> static_cLocalFocus;
-vector <cLocalFocus>::iterator cNULL=static_cLocalFocus.begin();
+vector <cLocalFocus>::iterator cNULL = static_cLocalFocus.begin();
 vector <cSource::cSpeakerGroup> static_cSpeakerGroup;
 vector <cSource::cSpeakerGroup>::iterator sgNULL = (vector <cSource::cSpeakerGroup>::iterator)static_cSpeakerGroup.begin();
 vector <cWordMatch> static_wm;
-vector <cWordMatch>::iterator wmNULL=static_wm.begin();
+vector <cWordMatch>::iterator wmNULL = static_wm.begin();
 set<int> static_setInt;
-set<int>::iterator sNULL= static_setInt.begin();
+set<int>::iterator sNULL = static_setInt.begin();
 
 // profiling
 __int64 cProfile::cb;
-__int64 cProfile::accumulatedOverheadTime=0;
-unordered_map <string ,__int64 > cProfile::counterMap;
-unordered_map <string ,int > cProfile::counterNumMap;
-unordered_map <string,cProfile::CP> cProfile::timeMapTotal;
-__int64 cProfile::totalCount=0;
-bool cProfile::lockInitialized=false;
+__int64 cProfile::accumulatedOverheadTime = 0;
+unordered_map <string, __int64 > cProfile::counterMap;
+unordered_map <string, int > cProfile::counterNumMap;
+unordered_map <string, cProfile::CP> cProfile::timeMapTotal;
+__int64 cProfile::totalCount = 0;
+bool cProfile::lockInitialized = false;
 string cProfile::functionPath;
-set <unordered_map <string,cProfile::CP>::iterator ,cProfile::timeSetCompare> cProfile::timeSort; // sort map by time taken by function
-set <unordered_map <string,cProfile::CP>::iterator ,cProfile::memorySetCompare> cProfile::memorySort; // sort map by memory allocated by function
-set <unordered_map <string,cProfile::CP>::iterator ,cProfile::countSetCompare> cProfile::countSort; // sort map by number of times function is called
-__int64 cProfile::mySQLTotalTime=0;
+set <unordered_map <string, cProfile::CP>::iterator, cProfile::timeSetCompare> cProfile::timeSort; // sort map by time taken by function
+set <unordered_map <string, cProfile::CP>::iterator, cProfile::memorySetCompare> cProfile::memorySort; // sort map by memory allocated by function
+set <unordered_map <string, cProfile::CP>::iterator, cProfile::countSetCompare> cProfile::countSort; // sort map by number of times function is called
+__int64 cProfile::mySQLTotalTime = 0;
 struct _RTL_SRWLOCK cProfile::networkTimeSRWLock;
 int cProfile::totalInternetTimeWaitBandwidthControl;
 __int64 cProfile::accumulationNetworkProfileTimer;
@@ -57,21 +57,21 @@ __int64 cProfile::accumulateOnlyNetTimer;
 __int64 cProfile::lastNetworkTimePrinted;
 __int64 cProfile::accumulateNetworkTimeCount;
 int cProfile::lastNetClock;
-int cInternet::internetWebSearchRetryAttempts=1;
-bool cQuestionAnswering::fileCaching=true;  // fileCaching determines whether they are cached on disk.  cOntology::cacheRdfTypes determines whether rdfTypes are cached in memory.  
-unordered_map < wstring, __int64 > cProfile::netAndSleepTimes,cProfile::onlyNetTimes,cProfile::numTimesPerURL;
+int cInternet::internetWebSearchRetryAttempts = 1;
+bool cQuestionAnswering::fileCaching = true;  // fileCaching determines whether they are cached on disk.  cOntology::cacheRdfTypes determines whether rdfTypes are cached in memory.  
+unordered_map < wstring, __int64 > cProfile::netAndSleepTimes, cProfile::onlyNetTimes, cProfile::numTimesPerURL;
 
 
-typedef long long (FAR WINAPI *MINIDUMPWRITEDUMP)(HANDLE hProcess, DWORD dwPid, HANDLE hFile, MINIDUMP_TYPE DumpType, CONST PMINIDUMP_EXCEPTION_INFORMATION ExceptionParam, CONST PMINIDUMP_USER_STREAM_INFORMATION UserStreamParam, CONST PMINIDUMP_CALLBACK_INFORMATION CallbackParam);
-bool unlockTables(MYSQL &mysql);
+typedef long long (FAR WINAPI* MINIDUMPWRITEDUMP)(HANDLE hProcess, DWORD dwPid, HANDLE hFile, MINIDUMP_TYPE DumpType, CONST PMINIDUMP_EXCEPTION_INFORMATION ExceptionParam, CONST PMINIDUMP_USER_STREAM_INFORMATION UserStreamParam, CONST PMINIDUMP_CALLBACK_INFORMATION CallbackParam);
+bool unlockTables(MYSQL& mysql);
 
 void createMinidump(struct _EXCEPTION_POINTERS* apExceptionInfo)
 {
 	HMODULE mhLib = ::LoadLibrary(L"dbghelp.dll");
 	MINIDUMPWRITEDUMP pDump = (MINIDUMPWRITEDUMP)::GetProcAddress(mhLib, "MiniDumpWriteDump");
 	wchar_t corePath[1024];
-	wsprintf(corePath, L"%s\\core.dmp",LMAINDIR);
-	HANDLE  hFile = ::CreateFile(corePath, GENERIC_WRITE, FILE_SHARE_WRITE, NULL, CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL, NULL);
+	wsprintf(corePath, L"%s\\core.dmp", LMAINDIR);
+	HANDLE  hFile = ::CreateFile(corePath, GENERIC_WRITE, FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
 	_MINIDUMP_EXCEPTION_INFORMATION ExInfo;
 	ExInfo.ThreadId = ::GetCurrentThreadId();
@@ -104,36 +104,36 @@ LONG WINAPI unhandled_handler(struct _EXCEPTION_POINTERS* apExceptionInfo)
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
-int acquireList(wchar_t *filename)
-{ 
+int acquireList(wchar_t* filename)
+{
 	LFS
-	FILE *listfile=_wfopen(filename,L"rb"); // binary mode reads unicode
+		FILE* listfile = _wfopen(filename, L"rb"); // binary mode reads unicode
 	if (listfile)
 	{
-		wchar_t url[2048],*path;
-		int total=0;
-		while (fgetws(url,2047,listfile))
+		wchar_t url[2048], * path;
+		int total = 0;
+		while (fgetws(url, 2047, listfile))
 		{
-			if (url[0]==0xFEFF) // detect BOM
-				memcpy(url,url+1,wcslen(url+1));
-			if (url[wcslen(url)-1]==L'\n') url[wcslen(url)-1]=0;
-			if (url[wcslen(url)-1]==L'\r') url[wcslen(url)-1]=0;
-			wchar_t *ch=wcschr(url,L'|');
-			*ch=0;
-			path=ch+1;
-			wchar_t *period=wcsrchr(url,L'.');
-			if (period) wcscat(path,period);
+			if (url[0] == 0xFEFF) // detect BOM
+				memcpy(url, url + 1, wcslen(url + 1));
+			if (url[wcslen(url) - 1] == L'\n') url[wcslen(url) - 1] = 0;
+			if (url[wcslen(url) - 1] == L'\r') url[wcslen(url) - 1] = 0;
+			wchar_t* ch = wcschr(url, L'|');
+			*ch = 0;
+			path = ch + 1;
+			wchar_t* period = wcsrchr(url, L'.');
+			if (period) wcscat(path, period);
 			wstring buffer;
-			int destfile=_wopen(path,O_RDWR|O_BINARY|O_CREAT);
+			int destfile = _wopen(path, O_RDWR | O_BINARY | O_CREAT);
 			if (destfile)
 			{
-				if (cInternet::readBinaryPage(url,destfile,total))
-					lplog(LOG_ERROR,L"error retrieving %s.",url);
+				if (cInternet::readBinaryPage(url, destfile, total))
+					lplog(LOG_ERROR, L"error retrieving %s.", url);
 				close(destfile);
 			}
 			else
-				lplog(LOG_ERROR,L"error opening %s.",path);
-			wprintf(L"%s - total bytes = %dMB.\n",path,total/1024/1024);
+				lplog(LOG_ERROR, L"error opening %s.", path);
+			wprintf(L"%s - total bytes = %dMB.\n", path, total / 1024 / 1024);
 			Sleep(5000);
 		}
 		fclose(listfile);
@@ -165,35 +165,36 @@ return 0;
 }
 */
 
-bool exitNow=false,exitEventually=false;
+bool exitNow = false, exitEventually = false;
 
 BOOL WINAPI ConsoleHandler(DWORD CEvent)
-{ LFS
-	if (exitEventually) exitNow=true;
-	exitEventually=true;
-	switch(CEvent)
+{
+	LFS
+		if (exitEventually) exitNow = true;
+	exitEventually = true;
+	switch (CEvent)
 	{
 	case CTRL_C_EVENT:
-		wprintf(L"\nCTRL+C received! Interrupting %s...\n",(exitNow) ? L"immediately" : L"at end of this source");
+		wprintf(L"\nCTRL+C received! Interrupting %s...\n", (exitNow) ? L"immediately" : L"at end of this source");
 		break;
 	case CTRL_BREAK_EVENT:
-		wprintf(L"\nCTRL+Break received! Interrupting %s...\n",(exitNow) ? L"immediately" : L"at end of this source");
+		wprintf(L"\nCTRL+Break received! Interrupting %s...\n", (exitNow) ? L"immediately" : L"at end of this source");
 		break;
 	case CTRL_CLOSE_EVENT:
-		wprintf(L"\nClose received! Interrupting %s...\n",(exitNow) ? L"immediately" : L"at end of this source");
+		wprintf(L"\nClose received! Interrupting %s...\n", (exitNow) ? L"immediately" : L"at end of this source");
 		break;
 	case CTRL_LOGOFF_EVENT:
-		wprintf(L"\nUser is logging off! Interrupting %s...\n",(exitNow) ? L"immediately" : L"at end of this source");
+		wprintf(L"\nUser is logging off! Interrupting %s...\n", (exitNow) ? L"immediately" : L"at end of this source");
 		break;
 	case CTRL_SHUTDOWN_EVENT:
-		exitNow=true;
-		wprintf(L"\nSystem is shutting down! Interrupting %s...\n",(exitNow) ? L"immediately" : L"at end of this source");
+		exitNow = true;
+		wprintf(L"\nSystem is shutting down! Interrupting %s...\n", (exitNow) ? L"immediately" : L"at end of this source");
 		break;
 	}
 	return TRUE;
 }
 
-/*	
+/*
 
 Amazon customer reviews:
 http://www.amazon.com/gp/community-content-search/results?ie=UTF8&flatten=1&query=10%20amp&search-alias=community-reviews
@@ -251,21 +252,21 @@ d. What
 e. Why
 f. How
 
-Also, go by Google News. Get all articles about a person. 
-Analyze all articles to confirm they are about the same person. 
+Also, go by Google News. Get all articles about a person.
+Analyze all articles to confirm they are about the same person.
 Analyze whether the article is positive or negative about the person
 Where they are
 When they are
 What are they doing
 
-TODO: 
+TODO:
 multiple processes:
 central decision
 hunger
 curiousity
 secondary relations correlator (thinking about what was just said)
 alternate goals resolution mechanism
-current central conversation theme 
+current central conversation theme
 alternate conversation themes
 
 the use of language is driven by results!
@@ -279,7 +280,7 @@ relations
 where and when
 locate the audience in context of the stories
 
-drivers of conversation - 
+drivers of conversation -
 inform - non-opinion - driven by 'theme' or common topic or summary (money/Mother)
 goal -driven conversation - how do we get this accomplished?
 biographies/biographies show how one person lived. This will help give a person-context/image of the other.
@@ -293,7 +294,7 @@ will also have to drive question/answer adjacency pairs
 find happiness? http://kidshealth.org/kid/feeling/index.html
 inform with opinion - (editorials?)
 first we must establish opinions to defend or persuade with
-we must measure how much the other person agrees/disagrees with our opinion and 
+we must measure how much the other person agrees/disagrees with our opinion and
 then based on which part of the opinion
 counter it
 feeling based conversation
@@ -320,8 +321,8 @@ Soliciting comments
 Putting out a wanted ad
 Calling for action - Rallying support - Recruiting people - Giving a shout-out
 
-inform - 
-about 'dry' issue like economics (teach) or 
+inform -
+about 'dry' issue like economics (teach) or
 how to build a train
 Answering a question
 Making an observation
@@ -338,7 +339,7 @@ Making a joke
 
 
 refresh relations in DB
-analyze conversation and flow using 
+analyze conversation and flow using
 current/historical internal/external environment for each person and narrator
 1. INFORMATION - what information does each person know?
 2. What new information can be provided and still maintain coherency?
@@ -350,7 +351,7 @@ motivations money/power/etc
 
 
 1. check before/after etc being used as conjunctions rather than prepositions
-2. treat better: during (for time expressions that are META, whose prep objects don't involve 
+2. treat better: during (for time expressions that are META, whose prep objects don't involve
 time, or involving time conjunctions like when and after.
 3. cut down the WordCache for wikipedia entries
 4. single quote
@@ -386,16 +387,16 @@ in quote time expressions, either command
 31019: And to - day is Friday!
 31919: - hadn't been here since Wednesday
 32031: I[julius] haven't had one darned word from him[tommy] since we[julius,tuppence] parted at the depot on Wednesday .
-35596: I[julius] shall be round in the car in half an hour . 
+35596: I[julius] shall be round in the car in half an hour .
 38750: I[james] will call upon her[marguerite] about ten o'clock
 39169: I[tuppence] shall meet you[julius] at the Ritz at seven .
-47883: She[marguerite] took an overdose of chloral last night 
+47883: She[marguerite] took an overdose of chloral last night
 47916: she[marguerite] was found dead this morning .
 49831: To - day is Monday
 27652 - morning post
 Commands
 involving an activity location:
-07841:Let us go to Lunch. 
+07841:Let us go to Lunch.
 09415:Let us do dinner and a show
 10525: you[tommy,tuppence] could call and see me[carter] at the above address[carshalton] at eleven o'clock to - morrow morning
 involving a future intention:
@@ -463,7 +464,7 @@ http://www.idiomsite.com/
 http://www.idioms-today.com/
 extend thinksay and internal verbs through verbNet - mark counts of how many in each class
 implement Paice & Husk for pleonastic it
-so anaphora - 
+so anaphora -
 (1) “And with complete premeditation [they] resolved that His
 Imperial Majesty Haile Selassie should be strangled because he was
 head of the feudal system.” He was so strangled on Aug. 26, 1975,
@@ -475,13 +476,13 @@ occasions. (Groliers Encyclopedia)
 zero anaphora - find the red blocks and stack up three
 He found three blocks and she did also.
 REMEMBER COPULAR VERBS 5.5 p.435 "to be" verbs
-copular relations - 
+copular relations -
 He is the driver.
 He was voted the driver.
 He became the driver.
 He was appointed the president.
 He was named the doctor.
-Indefinite anaphora - 
+Indefinite anaphora -
 George bought some chocolates
 A few are left.
 attributes
@@ -585,15 +586,15 @@ touching transpassing unwanting wanting
 barring excepting bating excepting
 
 parse this sentence:
-In the neighbourhood are: Alatri is divide into the following rioni (quarters): Chiappitto, Pacciano, Porpuro, Valle Santa Maria, Carvarola, 
-Capranica, Fontana Vecchia, Maddalena, Piedimonte, Madonna delle Grazie, Melegranate, Montecapraro, Vignola, Valle Carchera, Montesantangelo, Montelarena, 
-Pezza, Allegra, Basciano, Pignano, Castello, Collefreddo, Madonna del Pianto, Montelungo, Montereo, Monte San Marino, Pezzelle, Preturo, Sant'Antimo, 
-San Valentino, Vallecupa, Vallefredda, Valle Pantano, Vallesacco, Valle S.Matteo, Villa Magna, Cassiano, Castagneto, Fraschette, Seritico, Santa Caterina, 
-Vicero, Aiello, Canarolo, Collelavena, Costa San Vincenzo, Maranillo, Cavariccio, Colletraiano, Imbratto, Piano, S. Colomba, Scopigliette, Cucuruzzavolo, 
-le Grotte, Magione, Mole Santa Maria, San Pancrazio, Vallemiccina, Sant'Emidio, Canale, Prati Giuliani, Quarticciolo, Quarti di Tecchiena, Tecchiena, 
-Campello, Mole Bisleti, Cuione, Fontana Santo Stefano, Fontana Sistiliana, Frittola, S. Manno, Arillette, Collecuttrino, Colle del Papa, Laguccio, 
-Montelena, Quercia d'Orlando, San Mattia, Carano, Fontana Scurano, Magliano, Cellerano, Fiume, Fiura, Fontana Santa, Riano, Abbadia, Case Paolone, 
-Fontana Sambuco, Gaudo, Intignano, Colleprata. 
+In the neighbourhood are: Alatri is divide into the following rioni (quarters): Chiappitto, Pacciano, Porpuro, Valle Santa Maria, Carvarola,
+Capranica, Fontana Vecchia, Maddalena, Piedimonte, Madonna delle Grazie, Melegranate, Montecapraro, Vignola, Valle Carchera, Montesantangelo, Montelarena,
+Pezza, Allegra, Basciano, Pignano, Castello, Collefreddo, Madonna del Pianto, Montelungo, Montereo, Monte San Marino, Pezzelle, Preturo, Sant'Antimo,
+San Valentino, Vallecupa, Vallefredda, Valle Pantano, Vallesacco, Valle S.Matteo, Villa Magna, Cassiano, Castagneto, Fraschette, Seritico, Santa Caterina,
+Vicero, Aiello, Canarolo, Collelavena, Costa San Vincenzo, Maranillo, Cavariccio, Colletraiano, Imbratto, Piano, S. Colomba, Scopigliette, Cucuruzzavolo,
+le Grotte, Magione, Mole Santa Maria, San Pancrazio, Vallemiccina, Sant'Emidio, Canale, Prati Giuliani, Quarticciolo, Quarti di Tecchiena, Tecchiena,
+Campello, Mole Bisleti, Cuione, Fontana Santo Stefano, Fontana Sistiliana, Frittola, S. Manno, Arillette, Collecuttrino, Colle del Papa, Laguccio,
+Montelena, Quercia d'Orlando, San Mattia, Carano, Fontana Scurano, Magliano, Cellerano, Fiume, Fiura, Fontana Santa, Riano, Abbadia, Case Paolone,
+Fontana Sambuco, Gaudo, Intignano, Colleprata.
 
 enhance agreement with the examples in comment before evaluateSubjectVerbAgreement.
 when she thought of him, she yelled "How!". (speaker related speech not in a conversation)
@@ -641,7 +642,7 @@ create occupational subclass: political - democratic, republican, independent...
 appearance (already taken care of by associatedAdjectives): shorty, dwarf
 create occupational subclass: class/caste - peasant, bourgousie
 racial/regional (but not country): aborigine, indian, african, asian, european - add to demonyms
-by hobby/activity other than occupation: bicyclist, runner, 
+by hobby/activity other than occupation: bicyclist, runner,
 attempt to combine pronoun definite selections with definite Proper_Noun's of the same gender and number.
 attribute three-quarters, three-fifths to number
 correct can't, don't etc contractions
@@ -705,15 +706,15 @@ int initializeCounter(void);
 void freeCounter(void);
 void reportMemoryUsage(void);
 int getInterviewTranscript();
-int getTwitterEntries(wchar_t *filter);
-bool TSROverride=false,flipTOROverride=false,flipTNROverride=false,logMatchedSentences=false,logUnmatchedSentences=false;
+int getTwitterEntries(wchar_t* filter);
+bool TSROverride = false, flipTOROverride = false, flipTNROverride = false, logMatchedSentences = false, logUnmatchedSentences = false;
 
-void no_memory () {
-	lplog(LOG_FATAL_ERROR,L"Out of memory (new/STL allocation).");
-	exit (1);
+void no_memory() {
+	lplog(LOG_FATAL_ERROR, L"Out of memory (new/STL allocation).");
+	exit(1);
 }
 
-void setConsoleWindowSize(int width,int height)
+void setConsoleWindowSize(int width, int height)
 {
 	HANDLE Handle = GetStdHandle(STD_OUTPUT_HANDLE);      // Get Handle 
 	_COORD coord;
@@ -747,12 +748,12 @@ void setConsoleWindowSize(int width,int height)
 	Rect.Right = width - 1;
 
 	if (!SetConsoleWindowInfo(Handle, TRUE, &Rect))            // Set Window Size 	SMALL_RECT srctWindow;
-		printf("Cannot set console window info to (top=%d,left=%d,bottom=%d,right=%d) (%d) %s\n", 
+		printf("Cannot set console window info to (top=%d,left=%d,bottom=%d,right=%d) (%d) %s\n",
 			Rect.Top, Rect.Left, Rect.Bottom, Rect.Right,
 			(int)GetLastError(), LastErrorStr());
 }
 
-int createLPProcess(int numProcess, HANDLE &processHandle, HANDLE &threadHandle, DWORD &processId, const wchar_t * commandPath, wchar_t * processParameters)
+int createLPProcess(int numProcess, HANDLE& processHandle, HANDLE& threadHandle, DWORD& processId, const wchar_t* commandPath, wchar_t* processParameters)
 {
 	STARTUPINFO si;
 	ZeroMemory(&si, sizeof(si));
@@ -791,9 +792,9 @@ int createLPProcess(int numProcess, HANDLE &processHandle, HANDLE &threadHandle,
 }
 
 
-int getNumSourcesProcessed(MYSQL &mysql, int sourceType, int &numSourcesProcessed, __int64 &wordsProcessed, __int64 &sentencesProcessed)
+int getNumSourcesProcessed(MYSQL& mysql, int sourceType, int& numSourcesProcessed, __int64& wordsProcessed, __int64& sentencesProcessed)
 {
-	MYSQL_RES * result;
+	MYSQL_RES* result;
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	if (!myquery(&mysql, L"LOCK TABLES sources WRITE")) return -1;
 	wsprintf(qt, L"select COUNT(id), SUM(numWords), SUM(numSentences) from sources where sourceType = %d and processed IS not NULL and processing IS NULL and start != '**SKIP**' and start != '**START NOT FOUND**'", sourceType);
@@ -847,24 +848,24 @@ bool signalCtrl(DWORD dwProcessId, DWORD dwCtrlEvent)
 	return success;
 }
 
-bool getNextUnprocessedSource(MYSQL &mysql,int begin, int end, int sourceType, bool setUsed, int &id, wstring &path, wstring &encoding, wstring &start, int &repeatStart, wstring &etext, wstring &author, wstring &title);
-int getNumSources(MYSQL &mysql, int sourceType, bool left);
-bool anymoreUnprocessedForUnknown(MYSQL &mysql, int sourceType, int step);
-int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int beginSource, int endSource, cSource::sourceTypeEnum processSourceType, int maxProcesses, int numSourcesPerProcess,
-	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite,bool makeCopyBeforeSourceWrite,bool parseOnly, wstring specialExtension)
+bool getNextUnprocessedSource(MYSQL& mysql, int begin, int end, int sourceType, bool setUsed, int& id, wstring& path, wstring& encoding, wstring& start, int& repeatStart, wstring& etext, wstring& author, wstring& title);
+int getNumSources(MYSQL& mysql, int sourceType, bool left);
+bool anymoreUnprocessedForUnknown(MYSQL& mysql, int sourceType, int step);
+int startProcesses(MYSQL& mysql, int sourceType, int processKind, int step, int beginSource, int endSource, cSource::sourceTypeEnum processSourceType, int maxProcesses, int numSourcesPerProcess,
+	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool makeCopyBeforeSourceWrite, bool parseOnly, wstring specialExtension)
 {
 	LFS
-	if (chdir("source") < 0)
-		return -1;
+		if (chdir("source") < 0)
+			return -1;
 	bool sentBreakSignals = false;
 	int startTime = clock();
-	HANDLE *handles = (HANDLE *)calloc(maxProcesses, sizeof(HANDLE));
-	int numProcesses = 0, errorCode = 0,numSourcesProcessedOriginally =0,numSourcesLeft;
+	HANDLE* handles = (HANDLE*)calloc(maxProcesses, sizeof(HANDLE));
+	int numProcesses = 0, errorCode = 0, numSourcesProcessedOriginally = 0, numSourcesLeft;
 	__int64 wordsProcessedOriginally = 0, sentencesProcessedOriginally = 0;
-	if (processKind==0)
+	if (processKind == 0)
 		sourceType = cSource::REQUEST_TYPE;
 	getNumSourcesProcessed(mysql, sourceType, numSourcesProcessedOriginally, wordsProcessedOriginally, sentencesProcessedOriginally);
-	numSourcesLeft = getNumSources(mysql,sourceType,true);
+	numSourcesLeft = getNumSources(mysql, sourceType, true);
 	maxProcesses = min(maxProcesses, numSourcesLeft);
 	wstring tmpstr;
 	while (!errorCode)
@@ -883,13 +884,13 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 			int numSourcesProcessedNow = 0;
 			__int64 wordsProcessedNow = 0, sentencesProcessedNow = 0;
 			getNumSourcesProcessed(mysql, sourceType, numSourcesProcessedNow, wordsProcessedNow, sentencesProcessedNow);
-			int processingSeconds=(clock() - startTime) / CLOCKS_PER_SEC;
+			int processingSeconds = (clock() - startTime) / CLOCKS_PER_SEC;
 			wchar_t consoleTitle[1500];
 			numSourcesProcessedNow -= numSourcesProcessedOriginally;
 			wordsProcessedNow -= wordsProcessedOriginally;
 			sentencesProcessedNow -= sentencesProcessedOriginally;
-			wsprintf(consoleTitle, L"sources=%06d:sentences=%06I64d:words=%08I64d in %02d:%02d:%02d [%d sources/hour] [%I64d words/hour].", 
-				numSourcesProcessedNow, sentencesProcessedNow, wordsProcessedNow, processingSeconds/3600, (processingSeconds % 3600)/60, processingSeconds % 60, numSourcesProcessedNow*3600/processingSeconds, wordsProcessedNow *3600/processingSeconds);
+			wsprintf(consoleTitle, L"sources=%06d:sentences=%06I64d:words=%08I64d in %02d:%02d:%02d [%d sources/hour] [%I64d words/hour].",
+				numSourcesProcessedNow, sentencesProcessedNow, wordsProcessedNow, processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, numSourcesProcessedNow * 3600 / processingSeconds, wordsProcessedNow * 3600 / processingSeconds);
 			SetConsoleTitle(consoleTitle);
 
 			if (nextProcessIndex == WAIT_IO_COMPLETION || nextProcessIndex == WAIT_TIMEOUT)
@@ -909,7 +910,7 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 		}
 		int id, repeatStart;
 		wstring start, path, encoding, etext, author, title, pathInCache;
-		bool result=true;
+		bool result = true;
 		if (processKind == 1 && numSourcesLeft > 0)
 			numSourcesLeft--;
 		else
@@ -917,8 +918,8 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 			switch (processKind)
 			{
 			case 0:
-			case 1:result = getNextUnprocessedSource(mysql,beginSource, endSource, sourceType,false, id, path, encoding, start, repeatStart, etext, author, title); break;
-			case 2:result = anymoreUnprocessedForUnknown(mysql,sourceType,step); break;
+			case 1:result = getNextUnprocessedSource(mysql, beginSource, endSource, sourceType, false, id, path, encoding, start, repeatStart, etext, author, title); break;
+			case 2:result = anymoreUnprocessedForUnknown(mysql, sourceType, step); break;
 			default:result = false; break;
 			}
 		}
@@ -1027,7 +1028,7 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 					break;
 				break;
 			case 2:
-				wsprintf(processParameters, L"x64\\StanfordAllSources\\CorpusAnalysis.exe -step %d -numSourceLimit %d -log %s.%u", step, numSourcesPerProcess, specialExtension.c_str(),nextProcessIndex);
+				wsprintf(processParameters, L"x64\\StanfordAllSources\\CorpusAnalysis.exe -step %d -numSourceLimit %d -log %s.%u", step, numSourcesPerProcess, specialExtension.c_str(), nextProcessIndex);
 				if (errorCode = createLPProcess(nextProcessIndex, processHandle, threadHandle, processId, L"x64\\StanfordAllSources\\CorpusAnalysis.exe", processParameters) < 0)
 					break;
 				break;
@@ -1048,10 +1049,11 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 	return chdir("..");
 }
 
-SRWLOCK rdfTypeMapSRWLock,mySQLTotalTimeSRWLock,totalInternetTimeWaitBandwidthControlSRWLock,mySQLQueryBufferSRWLock,orderedHyperNymsMapSRWLock;
+SRWLOCK rdfTypeMapSRWLock, mySQLTotalTimeSRWLock, totalInternetTimeWaitBandwidthControlSRWLock, mySQLQueryBufferSRWLock, orderedHyperNymsMapSRWLock;
 void createLocks(void)
-{ LFS
-	InitializeSRWLock(&rdfTypeMapSRWLock);
+{
+	LFS
+		InitializeSRWLock(&rdfTypeMapSRWLock);
 	InitializeSRWLock(&mySQLTotalTimeSRWLock);
 	InitializeSRWLock(&totalInternetTimeWaitBandwidthControlSRWLock);
 	InitializeSRWLock(&mySQLQueryBufferSRWLock);
@@ -1061,7 +1063,7 @@ int WRMemoryCheck(MYSQL mysql)
 {
 	int numRowsOnDisk = 0, numRowsInMemory = 0;
 	MYSQL_ROW sqlrow;
-	MYSQL_RES *result = NULL;
+	MYSQL_RES* result = NULL;
 	if (!myquery(&mysql, L"LOCK TABLES wordRelationsMemory WRITE,wordRelations READ"))
 		return -1;
 	if (!myquery(&mysql, L"SELECT COUNT(sourceId) from wordRelationsMemory", result))
@@ -1107,9 +1109,9 @@ int WRMemoryCheck(MYSQL mysql)
 // -book 0 + -BC 0 -cacheDir M:\caches -SWNR -SWNW -SW -MCSW -logMatchedSentences -logUnmatchedSentences -numSourcesPerProcess 15 -forceSourceReread -parseOnly -retry -mp 8
 // do TREC:
 // -Interactive 0 + -BC 0 -cacheDir J:\caches -SR -SW -SWNR -SWNW -TNMS
-void redistributeFilesAlphabetically(wchar_t *dir);
+void redistributeFilesAlphabetically(wchar_t* dir);
 int numSourceLimit = 0;
-int wmain(int argc,wchar_t *argv[])
+int wmain(int argc, wchar_t* argv[])
 {
 	// Create a dump file whenever this program crashes (only on windows)
 	SetUnhandledExceptionFilter(unhandled_handler);
@@ -1123,11 +1125,11 @@ int wmain(int argc,wchar_t *argv[])
 	cProfile profile("");
 	createLocks();
 	wchar_t dir[1024];
-	GetCurrentDirectoryW(1024,dir);
+	GetCurrentDirectoryW(1024, dir);
 	set_new_handler(no_memory);
 	if (chdir(".."))
 		return -1;
-	overallTime=clock();
+	overallTime = clock();
 	// test gutenberg by generating usage statistics
 	//if (argc>1 && !wcscmp(argv[1],L"-tg"))
 	//{
@@ -1136,7 +1138,7 @@ int wmain(int argc,wchar_t *argv[])
 	//	return 0;
 	//}
 	SetConsoleCtrlHandler(ConsoleHandler, true);
-	if (remove("wcheck.lplog")==ERROR_SHARING_VIOLATION) return -1;
+	if (remove("wcheck.lplog") == ERROR_SHARING_VIOLATION) return -1;
 	initializeCounter();
 	//void extractFromWiktionary(wchar_t *f);
 	//extractFromWiktionary(LMAINDIR+L"\\Linguistics information\\TEMP-E20120211.tsv");
@@ -1149,66 +1151,66 @@ int wmain(int argc,wchar_t *argv[])
 	if (argc==2 && wcsstr(argv[1],L"-acquireTwitter"))
 		return getTwitterEntries(argv[1]);
 		*/
-	int numCommandLineParameters=argc;
-	const wchar_t *sourceHost=L"localhost";
-	cacheDir=CACHEDIR;
-	bool resetAllSource=false,resetProcessingFlags=false,generateFormStatistics=false,retry=false;
-	bool forceSourceReread=false,sourceWrite=false,sourceWordNetRead=false,sourceWordNetWrite=false,parseOnly=false, makeCopyBeforeSourceWrite=false;
-	int numSourcesPerProcess = 5; 
+	int numCommandLineParameters = argc;
+	const wchar_t* sourceHost = L"localhost";
+	cacheDir = CACHEDIR;
+	bool resetAllSource = false, resetProcessingFlags = false, generateFormStatistics = false, retry = false;
+	bool forceSourceReread = false, sourceWrite = false, sourceWordNetRead = false, sourceWordNetWrite = false, parseOnly = false, makeCopyBeforeSourceWrite = false;
+	int numSourcesPerProcess = 5;
 	wstring specialExtension;
-	for (int I=0; I<argc; I++)
+	for (int I = 0; I < argc; I++)
 	{
-		if (!_wcsicmp(argv[I],L"-server") && I<argc-1)
-			sourceHost=argv[++I];
-		else if (!_wcsicmp(argv[I],L"-log") && I<argc-1)
-			logFileExtension=argv[++I];
+		if (!_wcsicmp(argv[I], L"-server") && I < argc - 1)
+			sourceHost = argv[++I];
+		else if (!_wcsicmp(argv[I], L"-log") && I < argc - 1)
+			logFileExtension = argv[++I];
 		else if (!_wcsicmp(argv[I], L"-mp") && I < argc - 1)
 			multiProcess = _wtoi(argv[++I]);
 		else if (!_wcsicmp(argv[I], L"-numSourcesPerProcess") && I < argc - 1)
 			numSourcesPerProcess = _wtoi(argv[++I]);
-		else if (!_wcsicmp(argv[I],L"-numSourceLimit") && I<argc-1)
-			numSourceLimit=_wtoi(argv[++I]);
-		else if (!_wcsicmp(argv[I],L"-cacheDir") && I<argc-1)
-			cacheDir=argv[++I];
-		else if (!_wcsicmp(argv[I],L"-resetAllSource"))
-			resetAllSource=true;
-		else if (!_wcsicmp(argv[I],L"-resetProcessingFlags"))
-			resetProcessingFlags=true;
-		else if (!_wcsicmp(argv[I],L"-generateFormStatistics"))
-			generateFormStatistics=true;
-		else if (!_wcsicmp(argv[I],L"-retry"))
-			retry=true;
-		else if (!_wcsicmp(argv[I],L"-parseOnly"))
-			parseOnly=true;
-		else if ((!_wcsicmp(argv[I],L"-LC") || !_wcsicmp(argv[I],L"-logCache")) && I<argc-1)
-			logCache=_wtoi(argv[I+1]);
-		else if ((!_wcsicmp(argv[I],L"-BC")) && I<argc-1) // bandwidth control
-			cInternet::bandwidthControl=_wtoi(argv[I+1]);
-		else if (!_wcsicmp(argv[I],L"-logMatchedSentences"))
-			logMatchedSentences=true;
-		else if (!_wcsicmp(argv[I],L"-logUnmatchedSentences"))
-			logUnmatchedSentences=true;
-		else if (!_wcsicmp(argv[I],L"-TSRO"))
-			TSROverride=true;
-		else if (!_wcsicmp(argv[I],L"-fTOR"))
-			flipTOROverride=true;
-		else if (!_wcsicmp(argv[I],L"-fTNR"))
-			flipTNROverride=true;
+		else if (!_wcsicmp(argv[I], L"-numSourceLimit") && I < argc - 1)
+			numSourceLimit = _wtoi(argv[++I]);
+		else if (!_wcsicmp(argv[I], L"-cacheDir") && I < argc - 1)
+			cacheDir = argv[++I];
+		else if (!_wcsicmp(argv[I], L"-resetAllSource"))
+			resetAllSource = true;
+		else if (!_wcsicmp(argv[I], L"-resetProcessingFlags"))
+			resetProcessingFlags = true;
+		else if (!_wcsicmp(argv[I], L"-generateFormStatistics"))
+			generateFormStatistics = true;
+		else if (!_wcsicmp(argv[I], L"-retry"))
+			retry = true;
+		else if (!_wcsicmp(argv[I], L"-parseOnly"))
+			parseOnly = true;
+		else if ((!_wcsicmp(argv[I], L"-LC") || !_wcsicmp(argv[I], L"-logCache")) && I < argc - 1)
+			logCache = _wtoi(argv[I + 1]);
+		else if ((!_wcsicmp(argv[I], L"-BC")) && I < argc - 1) // bandwidth control
+			cInternet::bandwidthControl = _wtoi(argv[I + 1]);
+		else if (!_wcsicmp(argv[I], L"-logMatchedSentences"))
+			logMatchedSentences = true;
+		else if (!_wcsicmp(argv[I], L"-logUnmatchedSentences"))
+			logUnmatchedSentences = true;
+		else if (!_wcsicmp(argv[I], L"-TSRO"))
+			TSROverride = true;
+		else if (!_wcsicmp(argv[I], L"-fTOR"))
+			flipTOROverride = true;
+		else if (!_wcsicmp(argv[I], L"-fTNR"))
+			flipTNROverride = true;
 		else if (!_wcsicmp(argv[I], L"-forceSourceReread"))
 			forceSourceReread = true;
 		else if (!_wcsicmp(argv[I], L"-SW"))
 			sourceWrite = true;
 		else if (!_wcsicmp(argv[I], L"-MCSW"))
 			makeCopyBeforeSourceWrite = true;
-		else if (!_wcsicmp(argv[I],L"-SWNR"))
-			sourceWordNetRead=true;
+		else if (!_wcsicmp(argv[I], L"-SWNR"))
+			sourceWordNetRead = true;
 		else if (!_wcsicmp(argv[I], L"-SWNW"))
 			sourceWordNetWrite = true;
 		else if (!_wcsicmp(argv[I], L"-specialExtension"))
 			specialExtension = argv[++I];
 		else
 			continue;
-		numCommandLineParameters=min(numCommandLineParameters,I);
+		numCommandLineParameters = min(numCommandLineParameters, I);
 	}
 	//cOntology::fillOntologyList(true);
 	//cOntology::maxFieldLengths();
@@ -1226,8 +1228,8 @@ int wmain(int argc,wchar_t *argv[])
 	*/
 	vector <int> badSpeakers;
 	int sourceArgs = -1;
-	enum cSource::sourceTypeEnum sourceType= cSource::NO_SOURCE_TYPE;
-	const wchar_t *where;
+	enum cSource::sourceTypeEnum sourceType = cSource::NO_SOURCE_TYPE;
+	const wchar_t* where;
 	for (int I = 1; I < numCommandLineParameters - 1; I++)
 	{
 		wstring arg = argv[I];
@@ -1239,18 +1241,18 @@ int wmain(int argc,wchar_t *argv[])
 			break;
 		}
 	}
-	if (sourceArgs==-1)
-		lplog(LOG_FATAL_ERROR,L"Source type not found.");
-	if (_waccess(cacheDir,0)<0)
-		lplog(LOG_FATAL_ERROR,L"Cache directory %s does not exist!",cacheDir);
-	cSource source(sourceHost,sourceType,generateFormStatistics,multiProcess>0,true);
+	if (sourceArgs == -1)
+		lplog(LOG_FATAL_ERROR, L"Source type not found.");
+	if (_waccess(cacheDir, 0) < 0)
+		lplog(LOG_FATAL_ERROR, L"Cache directory %s does not exist!", cacheDir);
+	cSource source(sourceHost, sourceType, generateFormStatistics, multiProcess > 0, true);
 	if (multiProcess > 0 || numSourceLimit == 0) // controller or a single process not under control
 		WRMemoryCheck(source.mysql);
 
 	if (resetAllSource) source.resetAllSource();
 	if (resetProcessingFlags) source.resetProcessingFlags();
 	source.initializeNounVerbMapping();
-	unsigned int totalQuotations=0,quotationExceptions=0,unknownCount=0;
+	unsigned int totalQuotations = 0, quotationExceptions = 0, unknownCount = 0;
 	// build thesaurus 
 	//int getThesaurus();
 	//getThesaurus();
@@ -1266,11 +1268,11 @@ int wmain(int argc,wchar_t *argv[])
 	//for (int I = 0; I < synonyms.size(); I++)
 		//for (set<wstring>::iterator ss = synonyms[I].begin(), ssEnd = synonyms[I].end(); ss != ssEnd; ss++)
 			//printf("%d:%S\n", I, ss->c_str());
-	if (multiProcess==0)
+	if (multiProcess == 0)
 		initializePatterns();
 	unordered_map <int, vector < vector <cTagLocation> > > emptyMap;
 	source.pemaMapToTagSetsByPemaByTagSet.reserve(desiredTagSets.size());
-	for (unsigned int ts=0; ts<desiredTagSets.size(); ts++)
+	for (unsigned int ts = 0; ts < desiredTagSets.size(); ts++)
 		source.pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
 	if (sourceType == cSource::sourceTypeEnum::PATTERN_TRANSFORM_TYPE)
 	{
@@ -1280,61 +1282,61 @@ int wmain(int argc,wchar_t *argv[])
 #else
 		wchar_t displayDebugFlag = L'R';
 #endif
-			wsprintf(consoleTitle, L"[%c] %s...", displayDebugFlag,argv[sourceArgs+1]);
+		wsprintf(consoleTitle, L"[%c] %s...", displayDebugFlag, argv[sourceArgs + 1]);
 		_putws(consoleTitle);
 		lplog(LOG_INFO | LOG_ERROR, L"%s\n", consoleTitle);
 		SetConsoleTitle(consoleTitle);
 		unlockTables(source.mysql);
 		Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
-		cSource *requestedSource;
+		cSource* requestedSource;
 		cQuestionAnswering qa;
-		return qa.processPath(&source,argv[sourceArgs+1], requestedSource, cSource::WEB_SEARCH_SOURCE_TYPE, 1, false);
+		return qa.processPath(&source, argv[sourceArgs + 1], requestedSource, cSource::WEB_SEARCH_SOURCE_TYPE, 1, false);
 	}
-	int globalTotalUnmatched=0,globalOverMatchedPositionsTotal=0,numWords=0;
-	if (iswdigit(argv[sourceArgs+1][0]))
+	int globalTotalUnmatched = 0, globalOverMatchedPositionsTotal = 0, numWords = 0;
+	if (iswdigit(argv[sourceArgs + 1][0]))
 	{
-		int beginSource=_wtoi(argv[sourceArgs + 1]),endSource;
+		int beginSource = _wtoi(argv[sourceArgs + 1]), endSource;
 		endSource = (argv[sourceArgs + 2][0] == '+') ? -1 : ((iswdigit(argv[sourceArgs + 2][0])) ? _wtoi(argv[sourceArgs + 2]) : beginSource + 1);
 		if (retry)
 		{
 			wprintf(L"Resetting sources...               \r");
 			source.resetSource(beginSource, endSource);
 		}
-		if (multiProcess>0)
+		if (multiProcess > 0)
 		{
 			HWND consoleWindowHandle = GetConsoleWindow();
 			SetWindowPos(consoleWindowHandle, HWND_NOTOPMOST, 900, 0, 700, 180, SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-			startProcesses(source.mysql, source.sourceType, 1,0,beginSource, endSource, sourceType, multiProcess, numSourcesPerProcess, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite,makeCopyBeforeSourceWrite,parseOnly,specialExtension);
+			startProcesses(source.mysql, source.sourceType, 1, 0, beginSource, endSource, sourceType, multiProcess, numSourcesPerProcess, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite, makeCopyBeforeSourceWrite, parseOnly, specialExtension);
 			return 0;
 		}
 		wprintf(L"Getting number of sources to process...               \r");
-		int numSources = getNumSources(source.mysql,source.sourceType,false);
-		int numSourcesProcessed=0,pid= GetCurrentProcessId();
-		while (!exitNow && !exitEventually && (numSourceLimit==0 || numSourcesProcessed++<numSourceLimit))
+		int numSources = getNumSources(source.mysql, source.sourceType, false);
+		int numSourcesProcessed = 0, pid = GetCurrentProcessId();
+		while (!exitNow && !exitEventually && (numSourceLimit == 0 || numSourcesProcessed++ < numSourceLimit))
 		{
 			int sourceId, repeatStart;
 			wstring path, encoding, etext, author, title, start;
 			wprintf(L"Getting number of sources left...               \r");
-			int numSourcesLeft = getNumSources(source.mysql,source.sourceType,true);
-			if (!getNextUnprocessedSource(source.mysql,beginSource, endSource, source.sourceType, true, sourceId, path, encoding, start, repeatStart, etext, author, title))
+			int numSourcesLeft = getNumSources(source.mysql, source.sourceType, true);
+			if (!getNextUnprocessedSource(source.mysql, beginSource, endSource, source.sourceType, true, sourceId, path, encoding, start, repeatStart, etext, author, title))
 				break;
 			path.insert(0, L"\\");
-			path=path.insert(0,TEXTDIR);
+			path = path.insert(0, TEXTDIR);
 			wchar_t consoleTitle[1500];
-			wsprintf(consoleTitle,L"[%03d:%03d-%03d:%03d%%]PID%05d %s '%s'...",sourceId,beginSource,numSources, (numSources-numSourcesLeft)*100/numSources,pid, (start == L"**SKIP**" || start == L"**START NOT FOUND**") ? L"Skipping":L"",title.c_str());
+			wsprintf(consoleTitle, L"[%03d:%03d-%03d:%03d%%]PID%05d %s '%s'...", sourceId, beginSource, numSources, (numSources - numSourcesLeft) * 100 / numSources, pid, (start == L"**SKIP**" || start == L"**START NOT FOUND**") ? L"Skipping" : L"", title.c_str());
 			_putws(consoleTitle);
-			lplog(LOG_INFO|LOG_ERROR,L"%s\n", consoleTitle);
+			lplog(LOG_INFO | LOG_ERROR, L"%s\n", consoleTitle);
 			SetConsoleTitle(consoleTitle);
 			unlockTables(source.mysql);
 			if (start == L"**SKIP**")
 				continue;
-			Words.addMultiWordObjects(source.multiWordStrings,source.multiWordObjects);
-			wstring rt1,rt2;
-			int ret=0;
+			Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
+			wstring rt1, rt2;
+			int ret = 0;
 			bool parsedOnly = false;
-			if (forceSourceReread || !source.readSource(path,false, parsedOnly, true,specialExtension))
+			if (forceSourceReread || !source.readSource(path, false, parsedOnly, true, specialExtension))
 			{
-				unknownCount=0;
+				unknownCount = 0;
 				switch (sourceType)
 				{
 				case cSource::TEST_SOURCE_TYPE:
@@ -1344,12 +1346,12 @@ int wmain(int argc,wchar_t *argv[])
 				case cSource::WEB_SEARCH_SOURCE_TYPE:
 				case cSource::NEWS_BANK_SOURCE_TYPE:
 				case cSource::REQUEST_TYPE:
-					if ((ret=source.tokenize(title,etext,path,encoding,start,repeatStart,unknownCount))<0)
+					if ((ret = source.tokenize(title, etext, path, encoding, start, repeatStart, unknownCount)) < 0)
 					{
-						lplog(LOG_ERROR,L"ERROR:Unable to parse %s - %d (start=%s, repeatStart=%d).",path.c_str(),ret,start.c_str(),repeatStart);
+						lplog(LOG_ERROR, L"ERROR:Unable to parse %s - %d (start=%s, repeatStart=%d).", path.c_str(), ret, start.c_str(), repeatStart);
 						continue;
 					}
-					quotationExceptions=source.doQuotesOwnershipAndContractions(totalQuotations);
+					quotationExceptions = source.doQuotesOwnershipAndContractions(totalQuotations);
 					break;
 				case cSource::BNC_SOURCE_TYPE:
 				{
@@ -1372,18 +1374,18 @@ int wmain(int argc,wchar_t *argv[])
 				int totalUnmatched = source.printSentences(true, unknownCount, quotationExceptions, totalQuotations, globalOverMatchedPositionsTotal);
 				if (totalUnmatched < 0)
 					lplog(LOG_FATAL_ERROR, L"Cannot print sentences.");
-				globalTotalUnmatched+=totalUnmatched;
+				globalTotalUnmatched += totalUnmatched;
 			}
 			else
 			{
-				lplog(LOG_INFO,L"%s already parsed.",path.c_str());
+				lplog(LOG_INFO, L"%s already parsed.", path.c_str());
 				source.m.shrink_to_fit(); // C++ 11 only
 				source.printSentencesCheck(false);
 			}
-			numWords+=source.m.size();
+			numWords += source.m.size();
 			//source.accumulateNewPatterns();
 			//source.printAccumulatedPatterns();
-			sourceWordNetWrite=(!sourceWordNetRead || !source.readWNMaps(path)) && sourceWordNetWrite;
+			sourceWordNetWrite = (!sourceWordNetRead || !source.readWNMaps(path)) && sourceWordNetWrite;
 			source.addWNExtensions();
 			// noun/verb class analysis (debugging)
 			//bool measurableObject,notMeasurableObject,grouping;
@@ -1411,7 +1413,7 @@ int wmain(int argc,wchar_t *argv[])
 			{
 				if (viterbiTest)
 				{
-					void testViterbiFromSource(cSource &source);
+					void testViterbiFromSource(cSource & source);
 					testViterbiFromSource(source);
 				}
 				source.clearSource();
@@ -1431,13 +1433,10 @@ int wmain(int argc,wchar_t *argv[])
 				source.resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
 			}
 			vector <cSyntacticRelationGroup>::iterator srg = source.syntacticRelationGroups.begin();
-			for (; srg != source.syntacticRelationGroups.end(); srg++)
-				source.logSyntacticRelationGroup(*srg, L"ZZZTEST ");
-
 			//source.printObjects(); // only necessary if printing objects
 			//source.resolveWordRelations(); // this resolves word relations to add to words - these will be erased unless future plans to update word relations dynamically.
-			if (sourceWrite && !source.write(path,true, false,specialExtension))
-				lplog(LOG_FATAL_ERROR,L"buffer overrun");
+			if (sourceWrite && !source.write(path, true, false, specialExtension))
+				lplog(LOG_FATAL_ERROR, L"buffer overrun");
 			source.printResolutionCheck(badSpeakers);
 			source.logSpaceCheck();
 			source.identifyConversations();
@@ -1446,10 +1445,10 @@ int wmain(int argc,wchar_t *argv[])
 				source.writeWNMaps(path);
 			if (source.debugTrace.traceSpeakerResolution)
 			{
-				source.printTenseStatistics(L"Narrator",source.narratorTenseStatistics,source.numTotalNarratorVerbTenses);
-				source.printTenseStatistics(L"Speaker",source.speakerTenseStatistics,source.numTotalSpeakerVerbTenses);
-				source.printTenseStatistics(L"Narrator All Tenses",source.narratorFullTenseStatistics,source.numTotalNarratorFullVerbTenses);
-				source.printTenseStatistics(L"Speaker All Tenses",source.speakerFullTenseStatistics,source.numTotalSpeakerFullVerbTenses);
+				source.printTenseStatistics(L"Narrator", source.narratorTenseStatistics, source.numTotalNarratorVerbTenses);
+				source.printTenseStatistics(L"Speaker", source.speakerTenseStatistics, source.numTotalSpeakerVerbTenses);
+				source.printTenseStatistics(L"Narrator All Tenses", source.narratorFullTenseStatistics, source.numTotalNarratorFullVerbTenses);
+				source.printTenseStatistics(L"Speaker All Tenses", source.speakerFullTenseStatistics, source.numTotalSpeakerFullVerbTenses);
 				if (source.debugTrace.traceSpeakerResolution)
 					source.printSectionStatistics();
 			}
@@ -1457,7 +1456,7 @@ int wmain(int argc,wchar_t *argv[])
 			if (source.sourceInPast = source.sourceType == cSource::INTERACTIVE_SOURCE_TYPE)
 			{
 				cQuestionAnswering qa;
-				qa.answerAllQuestionsInSource(&source,parseOnly, true);
+				qa.answerAllQuestionsInSource(&source, parseOnly, true);
 			}
 
 			if (!exitNow) source.signalFinishedProcessingSource(sourceId);
@@ -1473,33 +1472,33 @@ int wmain(int argc,wchar_t *argv[])
 		if (numWords)
 		{
 			wprintf(L"\n%d milliseconds elapsed (%d words, %d unmatched (%5.2f%%) %d overmatched (%5.2f%%)",
-				(int)((clock()-overallTime)/(CLOCKS_PER_SEC/1000)),numWords,
-				globalTotalUnmatched,(float)globalTotalUnmatched*100/numWords,globalOverMatchedPositionsTotal,(float)globalOverMatchedPositionsTotal*100/numWords);
+				(int)((clock() - overallTime) / (CLOCKS_PER_SEC / 1000)), numWords,
+				globalTotalUnmatched, (float)globalTotalUnmatched * 100 / numWords, globalOverMatchedPositionsTotal, (float)globalOverMatchedPositionsTotal * 100 / numWords);
 			lplog(L"%d milliseconds elapsed (%d words, %d unmatched (%5.2f%%) %d overmatched (%5.2f%%)",
-				(int)((clock()-overallTime)/(CLOCKS_PER_SEC/1000)),numWords,
-				globalTotalUnmatched,(float)globalTotalUnmatched*100/numWords,globalOverMatchedPositionsTotal,(float)globalOverMatchedPositionsTotal*100/numWords);
+				(int)((clock() - overallTime) / (CLOCKS_PER_SEC / 1000)), numWords,
+				globalTotalUnmatched, (float)globalTotalUnmatched * 100 / numWords, globalOverMatchedPositionsTotal, (float)globalOverMatchedPositionsTotal * 100 / numWords);
 			lplog();
 		}
 		else
-			lplog(L"%d milliseconds elapsed. No words processed.",(clock()-overallTime)/(CLOCKS_PER_SEC/1000));
+			lplog(L"%d milliseconds elapsed. No words processed.", (clock() - overallTime) / (CLOCKS_PER_SEC / 1000));
 	}
 	else
 	{
-		wstring path=L"tests\\"+ std::wstring(argv[sourceArgs + 1]) +L".txt";
-		wstring start=L"~~BEGIN",title,etext,encoding=L"NOT FOUND";
+		wstring path = L"tests\\" + std::wstring(argv[sourceArgs + 1]) + L".txt";
+		wstring start = L"~~BEGIN", title, etext, encoding = L"NOT FOUND";
 		if (argv[sourceArgs + 2][0] == L'~')
 			start = argv[sourceArgs + 2];
-		int repeatStart=1;
+		int repeatStart = 1;
 		bool parsedOnly;
 		if (forceSourceReread || !source.readSource(path, false, parsedOnly, true, specialExtension))
 		{
-			if (source.tokenize(title,etext,path,encoding, start,repeatStart,unknownCount)<0)
+			if (source.tokenize(title, etext, path, encoding, start, repeatStart, unknownCount) < 0)
 				exit(0);
 			lplog();
-			source.write(path,false, false,specialExtension);
+			source.write(path, false, false, specialExtension);
 		}
-		quotationExceptions=source.doQuotesOwnershipAndContractions(totalQuotations);
-		globalTotalUnmatched+=source.printSentences(false,unknownCount,quotationExceptions,totalQuotations,globalOverMatchedPositionsTotal);
+		quotationExceptions = source.doQuotesOwnershipAndContractions(totalQuotations);
+		globalTotalUnmatched += source.printSentences(false, unknownCount, quotationExceptions, totalQuotations, globalOverMatchedPositionsTotal);
 		puts("");
 		source.identifyObjects();
 		vector <int> secondaryQuotesResolutions;
@@ -1510,10 +1509,10 @@ int wmain(int argc,wchar_t *argv[])
 		{
 			if (viterbiTest)
 			{
-				void testViterbiFromSource(cSource &source);
+				void testViterbiFromSource(cSource & source);
 				testViterbiFromSource(source);
 			}
-			source.write(path, true, false,specialExtension);
+			source.write(path, true, false, specialExtension);
 			source.writeWords(path, specialExtension);
 		}
 		else
@@ -1522,7 +1521,7 @@ int wmain(int argc,wchar_t *argv[])
 			source.resolveSpeakers(secondaryQuotesResolutions);
 			source.resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
 			source.printObjects();
-			source.write(path, true, false,specialExtension);
+			source.write(path, true, false, specialExtension);
 			source.printResolutionCheck(badSpeakers);
 			source.logSpaceCheck();
 			source.testSyntacticRelations();

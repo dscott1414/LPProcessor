@@ -24,78 +24,81 @@ extern "C" {
 #define MAX_LEN 2048
 #include "internet.h"
 
-int bandwidthControl=1; // minimum seconds between requests   // initialized before threads
+int bandwidthControl = 1; // minimum seconds between requests   // initialized before threads
 
-void removeRedundantSpace(wstring &buffer)
-{ LFS
-	wstring tmpstr;
-	for (unsigned int I=0; I<buffer.size(); I++)
-		if (!iswspace(buffer[I]) || I==0 || !iswspace(buffer[I-1]))
-			tmpstr+=buffer[I];
-	buffer=tmpstr;
+void removeRedundantSpace(wstring& buffer)
+{
+	LFS
+		wstring tmpstr;
+	for (unsigned int I = 0; I < buffer.size(); I++)
+		if (!iswspace(buffer[I]) || I == 0 || !iswspace(buffer[I - 1]))
+			tmpstr += buffer[I];
+	buffer = tmpstr;
 }
 
-void distributeToSubDirectories(wchar_t *fullPath,int pathlen,bool createDirs)
-{ LFS
-	wchar_t *path=fullPath+pathlen;
-	if (path[1] && path[2] && path[1]!=' ' && path[2]!=' ')
+void distributeToSubDirectories(wchar_t* fullPath, int pathlen, bool createDirs)
+{
+	LFS
+		wchar_t* path = fullPath + pathlen;
+	if (path[1] && path[2] && path[1] != ' ' && path[2] != ' ')
 	{
-		memmove(path+4,path,(wcslen(path)+1)*sizeof(path[0]));
-		path[0]=path[5];
+		memmove(path + 4, path, (wcslen(path) + 1) * sizeof(path[0]));
+		path[0] = path[5];
 		if (path[0] == L'.')
 			path[0] = L'!';
-		path[1]='\\';
+		path[1] = '\\';
 		if (createDirs)
 		{
-			path[2]=0;
-			if (_wmkdir(fullPath)<0 && errno != EEXIST)
-				return;
-		}
-		path[2]=path[6];
-		if (path[2] == L'.')
-			path[2] = L'!';
-		path[3]='\\';
-		if (createDirs)
-		{
-			wchar_t savech=path[4];
-			path[4]=0;
+			path[2] = 0;
 			if (_wmkdir(fullPath) < 0 && errno != EEXIST)
 				return;
-			path[4]=savech;
+		}
+		path[2] = path[6];
+		if (path[2] == L'.')
+			path[2] = L'!';
+		path[3] = '\\';
+		if (createDirs)
+		{
+			wchar_t savech = path[4];
+			path[4] = 0;
+			if (_wmkdir(fullPath) < 0 && errno != EEXIST)
+				return;
+			path[4] = savech;
 		}
 	}
 }
 
-int takeLastMatch(wstring &buffer,wstring beginString,wstring endString,wstring &match,bool include_begin_and_end)
-{ LFS
-	size_t beginPos=wstring::npos,pos=0,endPos;
-	while (pos!=wstring::npos)
+int takeLastMatch(wstring& buffer, wstring beginString, wstring endString, wstring& match, bool include_begin_and_end)
+{
+	LFS
+		size_t beginPos = wstring::npos, pos = 0, endPos;
+	while (pos != wstring::npos)
 	{
-		pos=buffer.find(beginString,(beginPos==wstring::npos) ? 0 : beginPos+beginString.length());
-		if (pos!=wstring::npos && (endPos=buffer.find(endString,pos+beginString.length()))==wstring::npos) break;
-		if (pos!=wstring::npos) beginPos=pos;
+		pos = buffer.find(beginString, (beginPos == wstring::npos) ? 0 : beginPos + beginString.length());
+		if (pos != wstring::npos && (endPos = buffer.find(endString, pos + beginString.length())) == wstring::npos) break;
+		if (pos != wstring::npos) beginPos = pos;
 	}
-	if (beginPos==wstring::npos)
+	if (beginPos == wstring::npos)
 	{
 		//  wprintf(L"begin expression %s not found.",beginString.c_str());
 		return TAKE_LAST_MATCH_BEGIN_NOT_FOUND;
 	}
-	endPos=buffer.find(endString,beginPos+beginString.length());
-	if (endPos==wstring::npos)
+	endPos = buffer.find(endString, beginPos + beginString.length());
+	if (endPos == wstring::npos)
 	{
 		// wprintf(L"end expression %s not found.",beginString.c_str());
 		return TAKE_LAST_MATCH_END_NOT_FOUND;
 	}
-	int len=endPos-beginPos+endString.length();
-	match=buffer.substr(beginPos+((include_begin_and_end) ? 0 : beginString.length()),len-((include_begin_and_end) ? 0 : (endString.length()+beginString.length())));
-	if (len>=1)
-		buffer.erase(beginPos,len);
-	while (buffer.length() && buffer[buffer.length()-1]==' ')
-		buffer.erase(buffer.length()-1);
+	int len = endPos - beginPos + endString.length();
+	match = buffer.substr(beginPos + ((include_begin_and_end) ? 0 : beginString.length()), len - ((include_begin_and_end) ? 0 : (endString.length() + beginString.length())));
+	if (len >= 1)
+		buffer.erase(beginPos, len);
+	while (buffer.length() && buffer[buffer.length() - 1] == ' ')
+		buffer.erase(buffer.length() - 1);
 	return beginPos;
 }
 
-size_t firstMatch(wstring &buffer, wstring beginString, wstring endString, size_t &beginPos, wstring &match, bool include_begin_and_end)
+size_t firstMatch(wstring& buffer, wstring beginString, wstring endString, size_t& beginPos, wstring& match, bool include_begin_and_end)
 {
 	LFS
 		beginPos = buffer.find(beginString, (beginPos == wstring::npos) ? 0 : beginPos);
@@ -111,10 +114,10 @@ size_t firstMatch(wstring &buffer, wstring beginString, wstring endString, size_
 	return beginPos = wstring::npos;
 }
 
-size_t firstMatch(string &buffer, string beginString, string endString, size_t &beginPos, string &match, bool include_begin_and_end)
+size_t firstMatch(string& buffer, string beginString, string endString, size_t& beginPos, string& match, bool include_begin_and_end)
 {
 	LFS
-	beginPos = buffer.find(beginString, (beginPos == string::npos) ? 0 : beginPos);
+		beginPos = buffer.find(beginString, (beginPos == string::npos) ? 0 : beginPos);
 	int endPos;
 	if (beginPos != string::npos && (endPos = buffer.find(endString, beginPos + beginString.length())) != string::npos)
 	{
@@ -127,11 +130,11 @@ size_t firstMatch(string &buffer, string beginString, string endString, size_t &
 	return beginPos = string::npos;
 }
 
-wchar_t *firstMatch(wchar_t *buffer, const wchar_t *beginString, const wchar_t *endString)
+wchar_t* firstMatch(wchar_t* buffer, const wchar_t* beginString, const wchar_t* endString)
 {
 	LFS
-	wchar_t* beginPos = wcsstr(buffer, beginString);
-	wchar_t *endPos;
+		wchar_t* beginPos = wcsstr(buffer, beginString);
+	wchar_t* endPos;
 	if (beginPos != NULL)
 	{
 		beginPos += wcslen(beginString);
@@ -144,11 +147,11 @@ wchar_t *firstMatch(wchar_t *buffer, const wchar_t *beginString, const wchar_t *
 	return NULL;
 }
 
-char *firstMatch(char *buffer, const char *beginString, const char *endString)
+char* firstMatch(char* buffer, const char* beginString, const char* endString)
 {
 	LFS
-	char* beginPos = strstr(buffer, beginString);
-	char *endPos;
+		char* beginPos = strstr(buffer, beginString);
+	char* endPos;
 	if (beginPos != NULL)
 	{
 		beginPos += strlen(beginString);
@@ -162,45 +165,47 @@ char *firstMatch(char *buffer, const char *beginString, const char *endString)
 }
 
 // if there is an embedded beginString/endString within the beginString/endString, only take the larger one.
-int firstMatchNonEmbedded(wstring &buffer,wstring beginString,wstring endString,size_t &beginPos,wstring &match,bool include_begin_and_end)
-{ LFS
-	beginPos=buffer.find(beginString,(beginPos==wstring::npos) ? 0 : beginPos);
-	int endPos,lastEmbeddedEnd=beginPos+beginString.length();
-	while (beginPos!=wstring::npos && (endPos=buffer.find(endString,lastEmbeddedEnd))!=wstring::npos)
+int firstMatchNonEmbedded(wstring& buffer, wstring beginString, wstring endString, size_t& beginPos, wstring& match, bool include_begin_and_end)
+{
+	LFS
+		beginPos = buffer.find(beginString, (beginPos == wstring::npos) ? 0 : beginPos);
+	int endPos, lastEmbeddedEnd = beginPos + beginString.length();
+	while (beginPos != wstring::npos && (endPos = buffer.find(endString, lastEmbeddedEnd)) != wstring::npos)
 	{
-		size_t embeddedPos=buffer.find(beginString,lastEmbeddedEnd);
-		if (embeddedPos!=wstring::npos && embeddedPos<endPos)
+		size_t embeddedPos = buffer.find(beginString, lastEmbeddedEnd);
+		if (embeddedPos != wstring::npos && embeddedPos < endPos)
 		{
-			lastEmbeddedEnd=endPos+endString.length();
+			lastEmbeddedEnd = endPos + endString.length();
 			continue;
 		}
-		int len=endPos-beginPos+endString.length();
-		match=buffer.substr(beginPos+((include_begin_and_end) ? 0 : beginString.length()),len-((include_begin_and_end) ? 0 : (endString.length()+beginString.length())));
-		if (len>=1)
-			buffer.erase(beginPos,len);
+		int len = endPos - beginPos + endString.length();
+		match = buffer.substr(beginPos + ((include_begin_and_end) ? 0 : beginString.length()), len - ((include_begin_and_end) ? 0 : (endString.length() + beginString.length())));
+		if (len >= 1)
+			buffer.erase(beginPos, len);
 		return beginPos;
 	}
-	return beginPos=-1;
+	return beginPos = -1;
 }
 
-int nextMatch(wstring &buffer,wstring beginString,wstring endString,size_t &beginPos,wstring &match,bool include_begin_and_end)
-{ LFS
-	size_t pos=0;
-	pos=buffer.find(beginString,(beginPos==wstring::npos) ? 0 : beginPos);
-	if (pos==wstring::npos)
+int nextMatch(wstring& buffer, wstring beginString, wstring endString, size_t& beginPos, wstring& match, bool include_begin_and_end)
+{
+	LFS
+		size_t pos = 0;
+	pos = buffer.find(beginString, (beginPos == wstring::npos) ? 0 : beginPos);
+	if (pos == wstring::npos)
 	{
 		//  wprintf(L"begin expression %s not found.",beginString.c_str());
 		return NEXT_MATCH_BEGIN_NOT_FOUND;
 	}
-	size_t endPos=buffer.find(endString,pos+beginString.length());
-	if (endPos==wstring::npos)
+	size_t endPos = buffer.find(endString, pos + beginString.length());
+	if (endPos == wstring::npos)
 	{
 		// wprintf(L"end expression %s not found.",beginString.c_str());
 		return NEXT_MATCH_END_NOT_FOUND;
 	}
-	int len=endPos-pos+endString.length();
-	match=buffer.substr(pos+((include_begin_and_end) ? 0 : beginString.length()),len-((include_begin_and_end) ? 0 : (endString.length()+beginString.length())));
-	beginPos=endPos+endString.length();
+	int len = endPos - pos + endString.length();
+	match = buffer.substr(pos + ((include_begin_and_end) ? 0 : beginString.length()), len - ((include_begin_and_end) ? 0 : (endString.length() + beginString.length())));
+	beginPos = endPos + endString.length();
 	return 0;
 }
 
@@ -309,129 +314,132 @@ SYMBOLS
 ÷               &divide;    division
 
 */
-void eliminateHTMLCharacterEntities(wstring &buffer)
-{ LFS
-	// all begin with & and end with ;
-	const wchar_t *ce[]={
-		L"Aacute",L"Agrave",L"Acirc",L"Atilde",L"Aring",L"Auml",L"AElig",L"Ccedil",L"Eacute",L"Egrave",L"Ecirc",L"Euml",L"Iacute",L"Igrave",L"Icirc",L"Iuml",L"ETH",L"Ntilde",
-		L"Oacute",L"Ograve",L"Ocirc",L"Otilde",L"Ouml",L"Oslash",L"Uacute",L"Ugrave",L"Ucirc",L"Uuml",L"Yacute",L"THORN",L"szlig",L"aacute",L"agrave",L"acirc",L"atilde",
-		L"atilde",L"auml",L"aelig",L"ccedil",L"eacute",L"egrave",L"ecirc",L"euml",L"iacute",L"igrave",L"icirc",L"iuml",L"eth",L"ntilde",L"oacute",L"ograve",L"ocirc",
-		L"otilde",L"ouml",L"oslash",L"uacute",L"ugrave",L"ucirc",L"uuml",L"yacute",L"thorn",L"yuml", // &amp; and other XML special characters are taken care of while parsing
-		NULL
+void eliminateHTMLCharacterEntities(wstring& buffer)
+{
+	LFS
+		// all begin with & and end with ;
+		const wchar_t* ce[] = {
+			L"Aacute",L"Agrave",L"Acirc",L"Atilde",L"Aring",L"Auml",L"AElig",L"Ccedil",L"Eacute",L"Egrave",L"Ecirc",L"Euml",L"Iacute",L"Igrave",L"Icirc",L"Iuml",L"ETH",L"Ntilde",
+			L"Oacute",L"Ograve",L"Ocirc",L"Otilde",L"Ouml",L"Oslash",L"Uacute",L"Ugrave",L"Ucirc",L"Uuml",L"Yacute",L"THORN",L"szlig",L"aacute",L"agrave",L"acirc",L"atilde",
+			L"atilde",L"auml",L"aelig",L"ccedil",L"eacute",L"egrave",L"ecirc",L"euml",L"iacute",L"igrave",L"icirc",L"iuml",L"eth",L"ntilde",L"oacute",L"ograve",L"ocirc",
+			L"otilde",L"ouml",L"oslash",L"uacute",L"ugrave",L"ucirc",L"uuml",L"yacute",L"thorn",L"yuml", // &amp; and other XML special characters are taken care of while parsing
+			NULL
 	};
 
-	const wchar_t *sym[]={
+	const wchar_t* sym[] = {
 		L"nbsp",L"iexcl",L"curren",L"cent",L"pound",L"yen",L"brvbar",L"sect",L"uml",L"copy",L"ordf",L"laquo",L"not",L"shy",L"reg",L"trade",L"macr",L"deg",L"plusmn",L"sup2",L"sup3",
 		L"acute",L"micro",L"para",L"middot",L"cedil",L"sup1",L"ordm",L"raquo",L"frac14",L"frac12",L"frac34",L"iquest",L"times",L"divide",
 		NULL
 	};
 	int pos;
-	if ((pos=buffer.find('&'))==wstring::npos || (!iswalpha(buffer[pos+1]) && buffer[pos+1]!=L'#')) return;
+	if ((pos = buffer.find('&')) == wstring::npos || (!iswalpha(buffer[pos + 1]) && buffer[pos + 1] != L'#')) return;
 	while (true)
 	{
-		if (buffer[pos+1]==L'#')
+		if (buffer[pos + 1] == L'#')
 		{
-			int end=pos+2;
+			int end = pos + 2;
 			while (iswdigit(buffer[end]))
 				end++;
-			buffer.erase(pos,end-pos+1);
-			pos=-1;
+			buffer.erase(pos, end - pos + 1);
+			pos = -1;
 		}
-		if (pos!=-1)
-			for (unsigned int I=0; ce[I]; I++)
-				if (!wcsncmp(buffer.c_str()+pos+1,ce[I],wcslen(ce[I])) && buffer[pos+1+wcslen(ce[I])]==';')
+		if (pos != -1)
+			for (unsigned int I = 0; ce[I]; I++)
+				if (!wcsncmp(buffer.c_str() + pos + 1, ce[I], wcslen(ce[I])) && buffer[pos + 1 + wcslen(ce[I])] == ';')
 				{
-					buffer.erase(pos,wcslen(ce[I])+1);
-					buffer[pos]=ce[I][0];
-					pos=-1;
+					buffer.erase(pos, wcslen(ce[I]) + 1);
+					buffer[pos] = ce[I][0];
+					pos = -1;
 					break;
 				}
-		if (pos!=-1)
-			for (unsigned int I=0; sym[I]; I++)
-				if (!wcsncmp(buffer.c_str()+pos+1,sym[I],wcslen(sym[I])) && buffer[pos+1+wcslen(sym[I])]==';')
+		if (pos != -1)
+			for (unsigned int I = 0; sym[I]; I++)
+				if (!wcsncmp(buffer.c_str() + pos + 1, sym[I], wcslen(sym[I])) && buffer[pos + 1 + wcslen(sym[I])] == ';')
 				{
-					buffer.erase(pos,wcslen(sym[I])+2);
-					pos=-1;
+					buffer.erase(pos, wcslen(sym[I]) + 2);
+					pos = -1;
 					break;
 				}
-		if ((pos=buffer.find('&',pos+1))==wstring::npos || (!iswalpha(buffer[pos+1]) && buffer[pos+1]!=L'#')) return;
+		if ((pos = buffer.find('&', pos + 1)) == wstring::npos || (!iswalpha(buffer[pos + 1]) && buffer[pos + 1] != L'#')) return;
 	}
 }
 
-void removeDots(wstring &str)
-{ LFS
-	int dot;
-	while ((dot=str.find('·'))>=0)
-		str.erase(dot,1);
+void removeDots(wstring& str)
+{
+	LFS
+		int dot;
+	while ((dot = str.find('·')) >= 0)
+		str.erase(dot, 1);
 	eliminateHTMLCharacterEntities(str);
 }
 
 /* examples
 -ed/-ing/-s
 */
-int getInflection(wstring sWord,wstring form,wstring mainEntry,wstring iform,vector <wstring> &allInflections)
-{ LFS
-	wchar_t *ch=(wchar_t *)iform.c_str();
-	int inflection=1,chosenInflection=0;
+int getInflection(wstring sWord, wstring form, wstring mainEntry, wstring iform, vector <wstring>& allInflections)
+{
+	LFS
+		wchar_t* ch = (wchar_t*)iform.c_str();
+	int inflection = 1, chosenInflection = 0;
 	while (true)
 	{
-		wchar_t *next=wcschr(ch+1,'/'),extension[100];
-		if (next) *next=0;
-		wcscpy(extension,ch+((*ch=='-') ? 1 : 0));
-		if (!wcscmp(extension,sWord.c_str()+sWord.length()-wcslen(extension))) chosenInflection=inflection;
+		wchar_t* next = wcschr(ch + 1, '/'), extension[100];
+		if (next) *next = 0;
+		wcscpy(extension, ch + ((*ch == '-') ? 1 : 0));
+		if (!wcscmp(extension, sWord.c_str() + sWord.length() - wcslen(extension))) chosenInflection = inflection;
 		inflection++;
-		wstring Inflection=mainEntry;
+		wstring Inflection = mainEntry;
 		if (chosenInflection)
 		{
-			if ((Inflection+extension)!=sWord)
+			if ((Inflection + extension) != sWord)
 			{
-				Inflection=Inflection+Inflection[Inflection.length()-1];
-				if ((Inflection+extension)!=sWord) Inflection=mainEntry;
+				Inflection = Inflection + Inflection[Inflection.length() - 1];
+				if ((Inflection + extension) != sWord) Inflection = mainEntry;
 				else
-					lplog(LOG_DICTIONARY,L"Doubled letter in use of matching extension to word=%s MainEntry %s extension %s.",
-					sWord.c_str(),mainEntry.c_str(),extension);
+					lplog(LOG_DICTIONARY, L"Doubled letter in use of matching extension to word=%s MainEntry %s extension %s.",
+						sWord.c_str(), mainEntry.c_str(), extension);
 			}
 		}
-		if (extension[0]=='e' && mainEntry[mainEntry.length()-1]=='e')
-			Inflection+=extension+1;
+		if (extension[0] == 'e' && mainEntry[mainEntry.length() - 1] == 'e')
+			Inflection += extension + 1;
 		// this doesn't always work (example: enjoy, enjoyed) - but sometimes does (bloomy,bloomier)
-		else if (extension[0]=='e' && mainEntry[mainEntry.length()-1]=='y')
+		else if (extension[0] == 'e' && mainEntry[mainEntry.length() - 1] == 'y')
 		{
-			Inflection[Inflection.length()-1]='i';
-			Inflection+=extension;
-			if (sWord!=Inflection)
-				Inflection=mainEntry+extension;
+			Inflection[Inflection.length() - 1] = 'i';
+			Inflection += extension;
+			if (sWord != Inflection)
+				Inflection = mainEntry + extension;
 		}
 		// also Lady -> Ladies
-		else if (!wcscmp(extension,L"s") && mainEntry[mainEntry.length()-1]==L'y')
+		else if (!wcscmp(extension, L"s") && mainEntry[mainEntry.length() - 1] == L'y')
 		{
-			Inflection[Inflection.length()-1]=L'i';
-			Inflection+=L"es";
-			if (sWord!=Inflection)
-				Inflection=mainEntry+extension;
+			Inflection[Inflection.length() - 1] = L'i';
+			Inflection += L"es";
+			if (sWord != Inflection)
+				Inflection = mainEntry + extension;
 		}
-		else if (extension[0]==L'i' && mainEntry[mainEntry.length()-1]==L'e')
+		else if (extension[0] == L'i' && mainEntry[mainEntry.length() - 1] == L'e')
 		{
-			if (sWord!=Inflection+extension)
-				Inflection.erase(Inflection.length()-1,Inflection.length());
-			Inflection=Inflection+extension;
+			if (sWord != Inflection + extension)
+				Inflection.erase(Inflection.length() - 1, Inflection.length());
+			Inflection = Inflection + extension;
 		}
-		else if (!wcscmp(extension,L"s") && mainEntry[mainEntry.length()-1]==L's')
+		else if (!wcscmp(extension, L"s") && mainEntry[mainEntry.length() - 1] == L's')
 		{
-			Inflection=Inflection+L"es";
+			Inflection = Inflection + L"es";
 		}
-		else if (!wcscmp(extension,L"s") && (mainEntry[mainEntry.length()-1]==L'o' || mainEntry[mainEntry.length()-1]==L'h'))
+		else if (!wcscmp(extension, L"s") && (mainEntry[mainEntry.length() - 1] == L'o' || mainEntry[mainEntry.length() - 1] == L'h'))
 		{
-			Inflection+=L"es";
-			if (sWord!=Inflection)
-				Inflection=mainEntry+extension;
+			Inflection += L"es";
+			if (sWord != Inflection)
+				Inflection = mainEntry + extension;
 		}
 		else
-			Inflection+=extension;
+			Inflection += extension;
 		allInflections.push_back(Inflection);
-		if (form==L"verb" && allInflections.size()==1) allInflections.push_back(Inflection); // past==past_participle
+		if (form == L"verb" && allInflections.size() == 1) allInflections.push_back(Inflection); // past==past_participle
 		if (!next) return chosenInflection;  // normal form?
-		ch=next+1;
+		ch = next + 1;
 	}
 	return chosenInflection;
 }
@@ -640,155 +648,159 @@ Inflected Form(s): redder; reddest
 */
 // "<i>also dialect</i>","<i>also chiefly","<i>also dialect",
 // "<i>or nonstandard</i>","<i>or dialect","<i>or archaic</i>","<i>or chiefly"
-const wchar_t *alternates[]={
+const wchar_t* alternates[] = {
 	L"<i>also",L"<i>or",L"<i>chiefly in",
 };
 
-bool equivalentIfIgnoreDashSpaceCase(wstring sWord,wstring sWord2)
-{ LFS
-	// convert acute
-	int pos;
-	if ((pos=sWord.find(L"&eacute;"))!=wstring::npos)
-		sWord.replace(pos,8,L"e");
-	int iW=0,iW2=0;
+bool equivalentIfIgnoreDashSpaceCase(wstring sWord, wstring sWord2)
+{
+	LFS
+		// convert acute
+		int pos;
+	if ((pos = sWord.find(L"&eacute;")) != wstring::npos)
+		sWord.replace(pos, 8, L"e");
+	int iW = 0, iW2 = 0;
 	while (true)
 	{
-		if (iW>0)
+		if (iW > 0)
 		{
-			while (sWord[iW]==L'-' || sWord[iW]==L' ') iW++;
-			while (sWord2[iW2]==L'-' || sWord2[iW2]==L' ') iW2++;
+			while (sWord[iW] == L'-' || sWord[iW] == L' ') iW++;
+			while (sWord2[iW2] == L'-' || sWord2[iW2] == L' ') iW2++;
 		}
-		if (towlower(sWord[iW])!=towlower(sWord2[iW2])) return false;
+		if (towlower(sWord[iW]) != towlower(sWord2[iW2])) return false;
 		if (!sWord[iW]) return true;
 		iW++; iW2++;
 	}
 	return false;
 }
 
-int cWord::checkAdd(const wchar_t * fromWhere,tIWMM &iWord,wstring sWord,int flags,wstring sForm,int inflection,int derivationRules,wstring definitionEntry,int sourceId,bool log)
-{ LFS
-	int iForm;
-	vector <cForm *>::iterator ifc,ifcend=Forms.end();
-	for (iForm=0,ifc=Forms.begin(); ifc!=ifcend && (*ifc)->name!=sForm; ifc++,iForm++);
-	if (ifc==ifcend)
+int cWord::checkAdd(const wchar_t* fromWhere, tIWMM& iWord, wstring sWord, int flags, wstring sForm, int inflection, int derivationRules, wstring definitionEntry, int sourceId, bool log)
+{
+	LFS
+		int iForm;
+	vector <cForm*>::iterator ifc, ifcend = Forms.end();
+	for (iForm = 0, ifc = Forms.begin(); ifc != ifcend && (*ifc)->name != sForm; ifc++, iForm++);
+	if (ifc == ifcend)
 	{
 		unsigned int chi;
-		if (sForm.find(L"adjective")!=wstring::npos)
-			sForm=L"adjective";
-		else if (sForm.find(L"adverb")!=wstring::npos)
-			sForm=L"adverb";
-		else if ((chi=sForm.find(L"verb"))!=wstring::npos && (!sForm[chi+4] || iswspace(sForm[chi+4])))
-			sForm=L"verb";
-		else if (sForm.find(L"past part")!=wstring::npos)
-			sForm=L"verb";
-		else if (sForm.find(L"plural in construction")!=wstring::npos)
-			sForm=L"noun";
-		else if (sForm.find(L"exclamation")!=wstring::npos)  // from Cambridge
-			sForm=L"interjection";
-		else if (sForm.find(L"definite article")!=wstring::npos)
-			sForm=L"determiner";
-		else if (sForm.find(L"indefinite article")!=wstring::npos)
-			sForm=L"quantifier";
-		else if (sForm.find(L"verbal auxiliary")!=wstring::npos)
+		if (sForm.find(L"adjective") != wstring::npos)
+			sForm = L"adjective";
+		else if (sForm.find(L"adverb") != wstring::npos)
+			sForm = L"adverb";
+		else if ((chi = sForm.find(L"verb")) != wstring::npos && (!sForm[chi + 4] || iswspace(sForm[chi + 4])))
+			sForm = L"verb";
+		else if (sForm.find(L"past part") != wstring::npos)
+			sForm = L"verb";
+		else if (sForm.find(L"plural in construction") != wstring::npos)
+			sForm = L"noun";
+		else if (sForm.find(L"exclamation") != wstring::npos)  // from Cambridge
+			sForm = L"interjection";
+		else if (sForm.find(L"definite article") != wstring::npos)
+			sForm = L"determiner";
+		else if (sForm.find(L"indefinite article") != wstring::npos)
+			sForm = L"quantifier";
+		else if (sForm.find(L"verbal auxiliary") != wstring::npos)
 		{
 			if (log)
-			lplog(LOG_DICTIONARY,L"Form %s rejected!",sForm.c_str());
+				lplog(LOG_DICTIONARY, L"Form %s rejected!", sForm.c_str());
 			return 0;
 		}
 	}
-	while (sWord[sWord.length()-1]==' ') // strangely, all multi-word words in MW seem to have a space at the end
-		sWord.erase(sWord.length()-1);
-	while (definitionEntry[definitionEntry.length()-1]==' ') // crow
-		definitionEntry.erase(definitionEntry.length()-1);
+	while (sWord[sWord.length() - 1] == ' ') // strangely, all multi-word words in MW seem to have a space at the end
+		sWord.erase(sWord.length() - 1);
+	while (definitionEntry[definitionEntry.length() - 1] == ' ') // crow
+		definitionEntry.erase(definitionEntry.length() - 1);
 	wstring inflectionName;
-	if (hasFormInflection(iWord,sForm,inflection)==WMM.end())
+	if (hasFormInflection(iWord, sForm, inflection) == WMM.end())
 	{
 		bool added;
-		tIWMM saveIWord=iWord;
-		iForm=addWordToForm(sWord,iWord,flags,sForm,sForm,inflection,derivationRules,definitionEntry,sourceId,added);
-		if (saveIWord!=WMM.end()) iWord=saveIWord;
+		tIWMM saveIWord = iWord;
+		iForm = addWordToForm(sWord, iWord, flags, sForm, sForm, inflection, derivationRules, definitionEntry, sourceId, added);
+		if (saveIWord != WMM.end()) iWord = saveIWord;
 		if (added)
 		{
 			if (log)
-			lplog(LOG_DICTIONARY,L"(%s) word %s: Added Inflection%s (Form %s, definitionEntry %s)",fromWhere,sWord.c_str(),getInflectionName(inflection,iForm,inflectionName),sForm.c_str(),definitionEntry.c_str());
+				lplog(LOG_DICTIONARY, L"(%s) word %s: Added Inflection%s (Form %s, definitionEntry %s)", fromWhere, sWord.c_str(), getInflectionName(inflection, iForm, inflectionName), sForm.c_str(), definitionEntry.c_str());
 			return 0;
 		}
 	}
-	iForm=cForms::findForm(sForm);
-	if (iForm<0)
+	iForm = cForms::findForm(sForm);
+	if (iForm < 0)
 	{
 		if (log)
-		lplog(LOG_DICTIONARY,L"form %s is not found!",sForm.c_str());
+			lplog(LOG_DICTIONARY, L"form %s is not found!", sForm.c_str());
 		return -1;
 	}
 	if (log)
-	lplog(LOG_DICTIONARY,L"(%s) word %s: (Already) Added Inflection%s (Form %s, definitionEntry %s)",fromWhere,sWord.c_str(),getInflectionName(inflection,iForm,inflectionName),sForm.c_str(),definitionEntry.c_str());
+		lplog(LOG_DICTIONARY, L"(%s) word %s: (Already) Added Inflection%s (Form %s, definitionEntry %s)", fromWhere, sWord.c_str(), getInflectionName(inflection, iForm, inflectionName), sForm.c_str(), definitionEntry.c_str());
 	return 0;
 }
 
 // this was changed from standard read
 // because Microsoft version of _read had a bug in it
-int getPath(const wchar_t *pathname,void *buffer,int maxlen,int &actualLen)
-{ LFS
-	HANDLE hFile = CreateFile(pathname,    // file to open
-		GENERIC_READ,          // open for reading
-		FILE_SHARE_READ,       // share for reading
-		NULL,                  // default security
-		OPEN_EXISTING,         // existing file only
-		FILE_ATTRIBUTE_NORMAL, // normal file
-		NULL);                 // no attr. template
+int getPath(const wchar_t* pathname, void* buffer, int maxlen, int& actualLen)
+{
+	LFS
+		HANDLE hFile = CreateFile(pathname,    // file to open
+			GENERIC_READ,          // open for reading
+			FILE_SHARE_READ,       // share for reading
+			NULL,                  // default security
+			OPEN_EXISTING,         // existing file only
+			FILE_ATTRIBUTE_NORMAL, // normal file
+			NULL);                 // no attr. template
 
 	if (hFile == INVALID_HANDLE_VALUE)
 	{
 		wstring bcct;
-		if (GetLastError()!=ERROR_PATH_NOT_FOUND && GetLastError()!=ERROR_FILE_NOT_FOUND)
-			lplog(LOG_ERROR,L"GetPath cannot open path %s - %s",pathname,getLastErrorMessage(bcct));
+		if (GetLastError() != ERROR_PATH_NOT_FOUND && GetLastError() != ERROR_FILE_NOT_FOUND)
+			lplog(LOG_ERROR, L"GetPath cannot open path %s - %s", pathname, getLastErrorMessage(bcct));
 		return GETPATH_CANNOT_OPEN_PATH;
 	}
-	actualLen=GetFileSize(hFile,NULL);
-	if (actualLen<0)
+	actualLen = GetFileSize(hFile, NULL);
+	if (actualLen < 0)
 	{
-		lplog(LOG_ERROR,L"ERROR:filelength of file %s yields an invalid filelength (%d).",pathname,actualLen);
+		lplog(LOG_ERROR, L"ERROR:filelength of file %s yields an invalid filelength (%d).", pathname, actualLen);
 		CloseHandle(hFile);
 		return GETPATH_INVALID_FILELENGTH1;
 	}
-	if (actualLen==0)
+	if (actualLen == 0)
 	{
 		CloseHandle(hFile);
 		return 0;
 	}
-	if (actualLen+1>=maxlen)
+	if (actualLen + 1 >= maxlen)
 	{
-		lplog(LOG_ERROR,L"ERROR:filelength of file %s (%d) is greater than the maximum allowed (%d).",pathname,actualLen+1,maxlen);
+		lplog(LOG_ERROR, L"ERROR:filelength of file %s (%d) is greater than the maximum allowed (%d).", pathname, actualLen + 1, maxlen);
 		CloseHandle(hFile);
 		return GETPATH_INVALID_FILELENGTH2;
 	}
-	DWORD lenRead=0;
-	if (!ReadFile(hFile,buffer,actualLen,&lenRead,NULL) || actualLen!=lenRead)
+	DWORD lenRead = 0;
+	if (!ReadFile(hFile, buffer, actualLen, &lenRead, NULL) || actualLen != lenRead)
 	{
-		lplog(LOG_ERROR,L"ERROR:read error of file %s.",pathname);
+		lplog(LOG_ERROR, L"ERROR:read error of file %s.", pathname);
 		CloseHandle(hFile);
 		return GETPATH_INVALID_FILELENGTH2;
 	}
-	((char *)buffer)[lenRead]=0;
-	((char *)buffer)[lenRead+1]=0;
+	((char*)buffer)[lenRead] = 0;
+	((char*)buffer)[lenRead + 1] = 0;
 	CloseHandle(hFile);
 	return 0;
 }
 
-int cWord::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId,bool log)
-{ LFS
-	if (sWord.length()<5) 
-		return -1;
+int cWord::splitWord(MYSQL* mysql, tIWMM& iWord, wstring sWord, int sourceId, bool log)
+{
+	LFS
+		if (sWord.length() < 5)
+			return -1;
 	static unordered_set <wstring> rejectSplitEndings = { L"o",L"ing",L"ton",L"rin",L"tin",L"pin",L"ism",L"ons",L"aire",L"ana",L"la",L"ard",L"ell",L"sey",L"ness",L"la",L"ies",
 	L"ley",L"ers",L"ish",L"ner",L"ington",L"leys",L"que",L"tes",L"ion",L"in",L"els",L"era",L"ists",L"sie",L"and",L"ingly",L"ium",L"ics",L"ilate",L"issima",L"ells" };
 	vector <wstring> components = splitString(sWord, '-');
-	tIWMM iWordComponent=WMM.end();
+	tIWMM iWordComponent = WMM.end();
 	for (wstring w : components)
 		if ((iWordComponent = fullQuery(mysql, w, sourceId)) == WMM.end())
 			break;
 	// don't split a word with a dash in it
-	if (components.size()==1 && (iWordComponent == WMM.end() || !cStemmer::wordIsNotUnknownAndOpen(iWordComponent,log) || rejectSplitEndings.find(components[components.size() - 1]) != rejectSplitEndings.end())) // not found or unknown
+	if (components.size() == 1 && (iWordComponent == WMM.end() || !cStemmer::wordIsNotUnknownAndOpen(iWordComponent, log) || rejectSplitEndings.find(components[components.size() - 1]) != rejectSplitEndings.end())) // not found or unknown
 	{
 		for (unsigned int I = 2; I < sWord.length() - 2; I++)
 		{
@@ -797,31 +809,31 @@ int cWord::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId,bool l
 			components.push_back(sWord.substr(I, sWord.length() - I));
 			tIWMM firstQIWord;
 			// with splitting word this way, the previous word must also be known and of an open word type. 
-			if (((firstQIWord = fullQuery(mysql, firstWord, sourceId)) != WMM.end() && cStemmer::wordIsNotUnknownAndOpen(firstQIWord,log)) &&
-				((iWordComponent = fullQuery(mysql, components[components.size() - 1], sourceId)) != WMM.end() && cStemmer::wordIsNotUnknownAndOpen(iWordComponent,log)) &&
+			if (((firstQIWord = fullQuery(mysql, firstWord, sourceId)) != WMM.end() && cStemmer::wordIsNotUnknownAndOpen(firstQIWord, log)) &&
+				((iWordComponent = fullQuery(mysql, components[components.size() - 1], sourceId)) != WMM.end() && cStemmer::wordIsNotUnknownAndOpen(iWordComponent, log)) &&
 				(rejectSplitEndings.find(components[components.size() - 1]) == rejectSplitEndings.end()))
-					break;
+				break;
 			iWordComponent = WMM.end();
 		}
 	}
-	if (iWordComponent != WMM.end() && cStemmer::wordIsNotUnknownAndOpen(iWordComponent,log) && rejectSplitEndings.find(components[components.size() - 1]) == rejectSplitEndings.end())
+	if (iWordComponent != WMM.end() && cStemmer::wordIsNotUnknownAndOpen(iWordComponent, log) && rejectSplitEndings.find(components[components.size() - 1]) == rejectSplitEndings.end())
 	{
 		// (SW) word bone-cracking( main: verb present part)
 		// (SW) word white-maned(main: verb past)
 		// (SW) word micro-electric( main: adjective)
 		// (SW) word half-wittingly(main: adverb)
 		// (SW) word arms-sales(main: noun)
-		iWord=end();
+		iWord = end();
 		if (iWordComponent->second.query(verbForm) >= 0)
-			checkAdd(L"SW", iWord, sWord, 0, L"verb", iWordComponent->second.inflectionFlags, 0, components[components.size()-1], sourceId,log);
-		if (iWordComponent->second.query(nounForm)>=0)
-			checkAdd(L"SW",iWord,sWord,0,L"noun", iWordComponent->second.inflectionFlags,0, components[components.size() - 1],sourceId, log);
-		if (iWordComponent->second.query(adjectiveForm)>=0)
-			checkAdd(L"SW",iWord,sWord,0,L"adjective", iWordComponent->second.inflectionFlags,0, components[components.size() - 1],sourceId, log);
-		if (iWordComponent->second.query(adverbForm)>=0)
-			checkAdd(L"SW",iWord,sWord,0,L"adverb", iWordComponent->second.inflectionFlags,0, components[components.size() - 1],sourceId, log);
-		if (iWord==end()) return -1;
-		checkAdd(L"SW",iWord,sWord,0,COMBINATION_FORM,0,0, components[components.size() - 1],sourceId, log);
+			checkAdd(L"SW", iWord, sWord, 0, L"verb", iWordComponent->second.inflectionFlags, 0, components[components.size() - 1], sourceId, log);
+		if (iWordComponent->second.query(nounForm) >= 0)
+			checkAdd(L"SW", iWord, sWord, 0, L"noun", iWordComponent->second.inflectionFlags, 0, components[components.size() - 1], sourceId, log);
+		if (iWordComponent->second.query(adjectiveForm) >= 0)
+			checkAdd(L"SW", iWord, sWord, 0, L"adjective", iWordComponent->second.inflectionFlags, 0, components[components.size() - 1], sourceId, log);
+		if (iWordComponent->second.query(adverbForm) >= 0)
+			checkAdd(L"SW", iWord, sWord, 0, L"adverb", iWordComponent->second.inflectionFlags, 0, components[components.size() - 1], sourceId, log);
+		if (iWord == end()) return -1;
+		checkAdd(L"SW", iWord, sWord, 0, COMBINATION_FORM, 0, 0, components[components.size() - 1], sourceId, log);
 		lplog(LOG_DICTIONARY, L"WordPosMAP splitWord %s-->%s", sWord.c_str(), components[components.size() - 1].c_str());
 		lplog(LOG_DICTIONARY, L"%s TEMPWordPosMAP", components[components.size() - 1].c_str());
 		return 0;
@@ -829,19 +841,20 @@ int cWord::splitWord(MYSQL *mysql,tIWMM &iWord,wstring sWord,int sourceId,bool l
 	return -1;
 }
 
-bool loosesort( const wchar_t *s1, const wchar_t *s2 )
-{ LFS
-	if (*s1 && *s2) return wcscmp(s1,s2)<0;
-	if (*s1) 
-		return wcsncmp(s1,s2+1,wcslen(s1))<0;
-	return wcsncmp(s1+1,s2,wcslen(s2))<0;
+bool loosesort(const wchar_t* s1, const wchar_t* s2)
+{
+	LFS
+		if (*s1 && *s2) return wcscmp(s1, s2) < 0;
+	if (*s1)
+		return wcsncmp(s1, s2 + 1, wcslen(s1)) < 0;
+	return wcsncmp(s1 + 1, s2, wcslen(s2)) < 0;
 }
 
-string lookForPOS(string originalWord,yajl_val node,bool logEverything,int &inflection,string &referWord)
+string lookForPOS(string originalWord, yajl_val node, bool logEverything, int& inflection, string& referWord)
 {
 	inflection = 0;
 	// check identity to make sure word matches
-	const char * metaPath[] = { "meta", "id", (const char *)0 };
+	const char* metaPath[] = { "meta", "id", (const char*)0 };
 	yajl_val metaIdDocs = yajl_tree_get(node, metaPath, yajl_t_any);
 	string id = (metaIdDocs == NULL) ? "" : YAJL_GET_STRING(metaIdDocs);
 	if (metaIdDocs == NULL && logEverything)
@@ -852,12 +865,12 @@ string lookForPOS(string originalWord,yajl_val node,bool logEverything,int &infl
 		id = id.substr(0, whereColon);
 	if (metaIdDocs == NULL || originalWord == id)
 	{
-		const char * flPathMain[] = { "fl", (const char *)0 };
+		const char* flPathMain[] = { "fl", (const char*)0 };
 		yajl_val flDocs = yajl_tree_get(node, flPathMain, yajl_t_any);
 		if (logEverything)
-			lplog(LOG_INFO, L"WAPI %S:fl %S", originalWord.c_str(),(flDocs == NULL) ? "not found": YAJL_GET_STRING(flDocs));
+			lplog(LOG_INFO, L"WAPI %S:fl %S", originalWord.c_str(), (flDocs == NULL) ? "not found" : YAJL_GET_STRING(flDocs));
 		if (flDocs != NULL) return YAJL_GET_STRING(flDocs);
-		const char * cxsPath[] = { "cxs", "cxtis","cxt", (const char *)0 };
+		const char* cxsPath[] = { "cxs", "cxtis","cxt", (const char*)0 };
 		yajl_val cxsIdDocs = yajl_tree_get(node, cxsPath, yajl_t_any);
 		string cxs = (cxsIdDocs == NULL) ? "" : YAJL_GET_STRING(cxsIdDocs);
 		if (cxsIdDocs != NULL && logEverything)
@@ -867,27 +880,27 @@ string lookForPOS(string originalWord,yajl_val node,bool logEverything,int &infl
 	}
 	// main meta entry does not match the originalWord.
 	// try ins (inflections)
-	const char * inflectionsPath[] = { "ins", (const char *)0 };
+	const char* inflectionsPath[] = { "ins", (const char*)0 };
 	yajl_val insDocs = yajl_tree_get(node, inflectionsPath, yajl_t_array);
 	if (insDocs)
 	{
 		for (unsigned int docNum = 0; docNum < insDocs->u.array.len; docNum++)
 		{
 			yajl_val doc = insDocs->u.array.values[docNum];
-			const char * ifPath[] = { "if", (const char *)0 };
+			const char* ifPath[] = { "if", (const char*)0 };
 			yajl_val ifDocs = yajl_tree_get(doc, ifPath, yajl_t_any);
 			if (ifDocs == NULL)
 				continue;
-			string ifElement =  YAJL_GET_STRING(ifDocs);
+			string ifElement = YAJL_GET_STRING(ifDocs);
 			ifElement.erase(std::remove(ifElement.begin(), ifElement.end(), L'*'), ifElement.end());
 			transform(ifElement.begin(), ifElement.end(), ifElement.begin(), ::tolower);
 			if (ifElement == originalWord)
 			{
-				const char * ilPath[] = { "il", (const char *)0 };
+				const char* ilPath[] = { "il", (const char*)0 };
 				yajl_val ilDocs = yajl_tree_get(doc, ilPath, yajl_t_any);
 				if (ilDocs == NULL)
 					continue;
-				const char * flPathMain[] = { "fl", (const char *)0 };
+				const char* flPathMain[] = { "fl", (const char*)0 };
 				yajl_val flinsDocs = yajl_tree_get(node, flPathMain, yajl_t_any);
 				string flinsForm = (flinsDocs == NULL) ? "" : YAJL_GET_STRING(flinsDocs);
 				string ilElement = YAJL_GET_STRING(ilDocs);
@@ -896,26 +909,26 @@ string lookForPOS(string originalWord,yajl_val node,bool logEverything,int &infl
 				else if (logEverything)
 					lplog(LOG_INFO, L"WAPI %S:Unknown inflection type %S", originalWord.c_str(), ilElement.c_str());
 				if (logEverything)
-					lplog(LOG_INFO, L"WAPI %S:INS fl %S%s", originalWord.c_str(), flinsForm.c_str(),(inflection==1) ? L" plural":L"");
+					lplog(LOG_INFO, L"WAPI %S:INS fl %S%s", originalWord.c_str(), flinsForm.c_str(), (inflection == 1) ? L" plural" : L"");
 				return flinsForm;
 			}
 		}
 	}
 	// now try run-ons
-	const char * runonPath[] = { "uros", (const char *)0 };
+	const char* runonPath[] = { "uros", (const char*)0 };
 	yajl_val urosDocs = yajl_tree_get(node, runonPath, yajl_t_array);
 	if (urosDocs)
 		for (unsigned int docNum = 0; docNum < urosDocs->u.array.len; docNum++)
 		{
 			yajl_val doc = urosDocs->u.array.values[docNum];
-			const char * urePath[] = { "ure", (const char *)0 };
+			const char* urePath[] = { "ure", (const char*)0 };
 			yajl_val ureDocs = yajl_tree_get(doc, urePath, yajl_t_any);
 			string ure = (ureDocs == NULL) ? "" : YAJL_GET_STRING(ureDocs);
 			ure.erase(std::remove(ure.begin(), ure.end(), L'*'), ure.end());
 			transform(ure.begin(), ure.end(), ure.begin(), ::tolower);
 			if (ure == originalWord)
 			{
-				const char * flPathUre[] = { "fl", (const char *)0 };
+				const char* flPathUre[] = { "fl", (const char*)0 };
 				yajl_val flDocs = yajl_tree_get(doc, flPathUre, yajl_t_any);
 				if (logEverything)
 					lplog(LOG_INFO, L"WAPI %S:UROS fl %S", originalWord.c_str(), (flDocs == NULL) ? "not found" : YAJL_GET_STRING(flDocs));
@@ -1012,9 +1025,9 @@ vector<wstring> ignoreBefore = { L"pronunciation spelling" };
 vector<wstring> classes = { L"adjective",L"adverb",L"verb",L"noun",L"interjection",L"abbreviation",L"symbol",L"preposition",L"conjunction",L"trademark",L"pronoun",L"honorific" };
 vector<wstring> ignoreAfter = { L"prefix",L"suffix",L"phrase",L"saying",L"quotation",L"pronunciation spelling",L"script annotation",L"combining form",L"contraction",L"indefinite article",L"definite article" }; // must be processed after classes
 
-void identifyFormClass(set<int> &posSet, wstring pos, bool &plural)
+void identifyFormClass(set<int>& posSet, wstring pos, bool& plural)
 {
-		//investigate sidgwick should never have reached splitWord!
+	//investigate sidgwick should never have reached splitWord!
 
 	plural = pos.find(L"noun") != wstring::npos && pos.find(L"plural") != wstring::npos;
 	if (pos == L"idiom")
@@ -1055,17 +1068,17 @@ void identifyFormClass(set<int> &posSet, wstring pos, bool &plural)
 }
 
 // returns false if not found by the site (or error)
-bool existsInDictionaryDotCom(MYSQL *mysql,wstring word, bool &networkAccessed)
+bool existsInDictionaryDotCom(MYSQL* mysql, wstring word, bool& networkAccessed)
 {
-	if (word.length() <= 2 || word.length()>31)
+	if (word.length() <= 2 || word.length() > 31)
 		return false;
 	//initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
-	MYSQL_RES * result;
+	MYSQL_RES* result;
 	_int64 numResults = 0;
 	wchar_t qt[1024];
 	wchar_t path[1024];
 	path[0] = '_';
-	wcscpy(path+1, word.c_str());
+	wcscpy(path + 1, word.c_str());
 	convertIllegalChars(path + 1);
 	_snwprintf(qt, 1024, L"select 1 from notwords where word = '%s'", path);
 	if (!myquery(mysql, L"LOCK TABLES notwords READ"))
@@ -1081,13 +1094,13 @@ bool existsInDictionaryDotCom(MYSQL *mysql,wstring word, bool &networkAccessed)
 	if (numResults > 0)
 		return false;
 
-	wstring buffer,diskPath;
-	if (cInternet::cacheWebPath(L"https://www.dictionary.com/browse/" + word, buffer, word, L"DictionaryDotCom", false, networkAccessed,diskPath))
+	wstring buffer, diskPath;
+	if (cInternet::cacheWebPath(L"https://www.dictionary.com/browse/" + word, buffer, word, L"DictionaryDotCom", false, networkAccessed, diskPath))
 		return false;
-	if ((networkAccessed && cInternet::redirectUrl.find(L"noresults")!=wstring::npos) || 
-		  buffer.find(L"No results found") != wstring::npos || 
-		  buffer.find(L"dcom-no-result") != wstring::npos ||
-			buffer.find(L"dcom-misspell") != wstring::npos)
+	if ((networkAccessed && cInternet::redirectUrl.find(L"noresults") != wstring::npos) ||
+		buffer.find(L"No results found") != wstring::npos ||
+		buffer.find(L"dcom-no-result") != wstring::npos ||
+		buffer.find(L"dcom-misspell") != wstring::npos)
 	{
 		if (!myquery(mysql, L"LOCK TABLES notwords WRITE"))
 			return false;
@@ -1125,12 +1138,12 @@ bool detectNonEuropeanWord(wstring word)
 	//return true;
 }
 
-bool getMerriamWebsterDictionaryAPIForms(wstring sWord, set <int> &posSet, bool &plural, bool &networkAccessed,bool logEverything)
+bool getMerriamWebsterDictionaryAPIForms(wstring sWord, set <int>& posSet, bool& plural, bool& networkAccessed, bool logEverything)
 {
 	wstring pageURL = L"https://www.dictionaryapi.com/api/v3/references/collegiate/json/";
 	pageURL += sWord + L"?key=ba4ac476-dac1-4b38-ad6b-fe36e8416e07";
 	wstring jsonWideBuffer, diskPath;
-	if (!cInternet::cacheWebPath(pageURL, jsonWideBuffer, sWord, L"Webster", false, networkAccessed,diskPath))
+	if (!cInternet::cacheWebPath(pageURL, jsonWideBuffer, sWord, L"Webster", false, networkAccessed, diskPath))
 	{
 		if (jsonWideBuffer.find(L'{') == wstring::npos)
 		{
@@ -1144,7 +1157,7 @@ bool getMerriamWebsterDictionaryAPIForms(wstring sWord, set <int> &posSet, bool 
 		wTM(jsonWideBuffer, jsonBuffer);
 		string originalWord;
 		wTM(sWord, originalWord);
-		yajl_val node = yajl_tree_parse((const char *)jsonBuffer.c_str(), errbuf, sizeof(errbuf));
+		yajl_val node = yajl_tree_parse((const char*)jsonBuffer.c_str(), errbuf, sizeof(errbuf));
 		/* parse error handling */
 		if (node == NULL) {
 			lplog(LOG_ERROR, L"Parse error:%s\n %S", jsonBuffer.c_str(), errbuf);
@@ -1157,7 +1170,7 @@ bool getMerriamWebsterDictionaryAPIForms(wstring sWord, set <int> &posSet, bool 
 				yajl_val doc = node->u.array.values[docNum];
 				int inflection;
 				string referWord;
-				mTW(lookForPOS(originalWord, doc,logEverything,inflection,referWord), pos);
+				mTW(lookForPOS(originalWord, doc, logEverything, inflection, referWord), pos);
 				if (pos.length() > 0)
 				{
 					identifyFormClass(posSet, pos, plural);
@@ -1166,7 +1179,7 @@ bool getMerriamWebsterDictionaryAPIForms(wstring sWord, set <int> &posSet, bool 
 				else if (referWord.length() > 0)
 				{
 					wstring wReferWord;
-					getMerriamWebsterDictionaryAPIForms(mTW(referWord,wReferWord), posSet, plural, networkAccessed, logEverything);
+					getMerriamWebsterDictionaryAPIForms(mTW(referWord, wReferWord), posSet, plural, networkAccessed, logEverything);
 				}
 			}
 	}
@@ -1176,7 +1189,7 @@ bool getMerriamWebsterDictionaryAPIForms(wstring sWord, set <int> &posSet, bool 
 // pass back these inflections:
 int discoverInflections(set <int> posSet, bool plural, wstring word)
 {
-	int inflections=0;
+	int inflections = 0;
 	for (auto c : posSet)
 	{
 		if (c == nounForm)
@@ -1234,7 +1247,7 @@ int discoverInflections(set <int> posSet, bool plural, wstring word)
 	return 0;
 }
 
-bool cWord::illegalWord(MYSQL *mysql, wstring sWord)
+bool cWord::illegalWord(MYSQL* mysql, wstring sWord)
 {
 	// non English word?
 	if (detectNonEuropeanWord(sWord) || sWord.find_first_of(L"ãâäáàæçêéèêëîíïñôóòöõôûüùú") != wstring::npos)
@@ -1252,16 +1265,16 @@ bool cWord::illegalWord(MYSQL *mysql, wstring sWord)
 
 // this routine should look up words from wiktionary or some other dictionary
 // this returns >0 if word is found or WORD_NOT_FOUND if word lookup fails.
-int cWord::getForms(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId,bool logEverything)
+int cWord::getForms(MYSQL* mysql, tIWMM& iWord, wstring sWord, int sourceId, bool logEverything)
 {
 	LFS
-	if (illegalWord(mysql, sWord))
-		return WORD_NOT_FOUND;
-	changedWords=true;
+		if (illegalWord(mysql, sWord))
+			return WORD_NOT_FOUND;
+	changedWords = true;
 	bool plural, networkAccessed;
 	// check webster for a list of the forms (because of their API)
 	set <int> posSet;
-	if (!getMerriamWebsterDictionaryAPIForms(sWord, posSet, plural, networkAccessed,logEverything))
+	if (!getMerriamWebsterDictionaryAPIForms(sWord, posSet, plural, networkAccessed, logEverything))
 		return WORD_NOT_FOUND;
 	// discover common inflections for each open word class
 	int inflections = discoverInflections(posSet, plural, sWord);
@@ -1273,25 +1286,26 @@ int cWord::getForms(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId,bool
 	return (iWord == Words.end()) ? WORD_NOT_FOUND : posSet.size();
 }
 
-const wchar_t *getLastErrorMessage(wstring &out)
-{ LFS
-	wchar_t msg[10000]; 
+const wchar_t* getLastErrorMessage(wstring& out)
+{
+	LFS
+		wchar_t msg[10000];
 	DWORD dw = GetLastError();
-	FormatMessage( 
-		FORMAT_MESSAGE_FROM_SYSTEM 
+	FormatMessage(
+		FORMAT_MESSAGE_FROM_SYSTEM
 		| FORMAT_MESSAGE_IGNORE_INSERTS // don't process inserts
-    | FORMAT_MESSAGE_FROM_HMODULE,  // retrieve message from specified DLL
-		GetModuleHandle(L"wininet.dll"),dw,MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),(LPTSTR) &msg,10000, NULL );
+		| FORMAT_MESSAGE_FROM_HMODULE,  // retrieve message from specified DLL
+		GetModuleHandle(L"wininet.dll"), dw, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&msg, 10000, NULL);
 	int len;
-	if (msg[len=wcslen(msg)-1]=='\n') msg[len]=0;
-	if (msg[len=wcslen(msg)-1]=='\r') msg[len]=0;
-	if (dw==ERROR_INTERNET_EXTENDED_ERROR)
+	if (msg[len = wcslen(msg) - 1] == '\n') msg[len] = 0;
+	if (msg[len = wcslen(msg) - 1] == '\r') msg[len] = 0;
+	if (dw == ERROR_INTERNET_EXTENDED_ERROR)
 	{
-		len=wcslen(msg);
-		DWORD remainingBufferLen=10000-len;
-		InternetGetLastResponseInfo(&dw,msg+len,&remainingBufferLen);
+		len = wcslen(msg);
+		DWORD remainingBufferLen = 10000 - len;
+		InternetGetLastResponseInfo(&dw, msg + len, &remainingBufferLen);
 	}
-	out=msg;
+	out = msg;
 	return out.c_str();
 }
 
@@ -1299,45 +1313,48 @@ const wchar_t *getLastErrorMessage(wstring &out)
 
 #ifdef CHECK_WORD_CACHE
 
-int cWord::checkWord(cWord &Words2,tIWMM originalIWord,tIWMM newWord,int ret)
-{ LFS
-	int wait=0;
-	if (ret==WORD_NOT_FOUND || newWord==WMM.end()) return WORD_NOT_FOUND;
+int cWord::checkWord(cWord& Words2, tIWMM originalIWord, tIWMM newWord, int ret)
+{
+	LFS
+		int wait = 0;
+	if (ret == WORD_NOT_FOUND || newWord == WMM.end()) return WORD_NOT_FOUND;
 	if (ret)
 		while (wait) Sleep(1000);
 	// check for mainEntry
-	if (originalIWord->first==newWord->first && originalIWord->second==newWord->second)
+	if (originalIWord->first == newWord->first && originalIWord->second == newWord->second)
 	{
-		unsigned int *forms=newWord->second.forms();
-		int count=newWord->second.formsSize(),I=0;
-		for (; I<count && !Forms[forms[I]]->inflectionsClass.length(); I++);
-		if (I==count || (I<count && newWord->second.mainEntry!=(tIWMM) NULL)) return 0;
-		lplog(L"Word %s has a NULL main entry.",newWord->first.c_str());
+		unsigned int* forms = newWord->second.forms();
+		int count = newWord->second.formsSize(), I = 0;
+		for (; I < count && !Forms[forms[I]]->inflectionsClass.length(); I++);
+		if (I == count || (I < count && newWord->second.mainEntry != (tIWMM)NULL)) return 0;
+		lplog(L"Word %s has a NULL main entry.", newWord->first.c_str());
 	}
-	lplog(L"name %s differs.",originalIWord->first.c_str());
+	lplog(L"name %s differs.", originalIWord->first.c_str());
 	while (wait) Sleep(1000);
 	return 0;
 }
 
 //#define TEST_SPECIFIC
-wchar_t *unknowns[]={L"countermarches",NULL,
- "ageist", 
+wchar_t* unknowns[] = { L"countermarches",NULL,
+ "ageist",
 NULL };
 
-bool endStringMatch(const wchar_t *str,wchar_t *endMatch)
-{ LFS
-	return !wcscmp(str+wcslen(str)-wcslen(endMatch),endMatch);
+bool endStringMatch(const wchar_t* str, wchar_t* endMatch)
+{
+	LFS
+		return !wcscmp(str + wcslen(str) - wcslen(endMatch), endMatch);
 }
 
 #include "wn.h"
 
-bool getWNForms(wstring w,vector <int> &WNForms)
-{ LFS
-		if (checkexist((wchar_t *)w.c_str(),NOUN)) WNForms.push_back(nounForm);
-		if (checkexist((wchar_t *)w.c_str(),VERB))  WNForms.push_back(verbForm);
-		if (checkexist((wchar_t *)w.c_str(),ADJ))  WNForms.push_back(adjectiveForm);
-		if (checkexist((wchar_t *)w.c_str(),ADV)) WNForms.push_back(adverbForm);
-		return WNForms.size()>0;
+bool getWNForms(wstring w, vector <int>& WNForms)
+{
+	LFS
+		if (checkexist((wchar_t*)w.c_str(), NOUN)) WNForms.push_back(nounForm);
+	if (checkexist((wchar_t*)w.c_str(), VERB))  WNForms.push_back(verbForm);
+	if (checkexist((wchar_t*)w.c_str(), ADJ))  WNForms.push_back(adjectiveForm);
+	if (checkexist((wchar_t*)w.c_str(), ADV)) WNForms.push_back(adverbForm);
+	return WNForms.size() > 0;
 }
 
 #endif
@@ -1349,48 +1366,49 @@ bool getWNForms(wstring w,vector <int> &WNForms)
 // English	zymosterol	Noun	# {{biochemistry}} A [[cholesterol]] [[intermediate]].
 // create table wiktionaryNouns  ( noun char(56) COLLATE utf8mb4_bin NOT NULL,definition TEXT(1024) COLLATE utf8mb4_bin NOT NULL ) ENGINE=MyISAM AUTO_INCREMENT=798922 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
 // LOAD DATA INFILE MAINDIR+'\\Linguistics information\\TEMP-E20120211.nounsOnly.tsv' INTO TABLE wiktionaryNouns FIELDS TERMINATED BY ',' ENCLOSED BY '"' LINES TERMINATED BY '\n';
-void extractFromWiktionary(wchar_t *filename)
-{ LFS
-	FILE *listfile=_wfopen(filename,L"rb"); // binary mode reads unicode
+void extractFromWiktionary(wchar_t* filename)
+{
+	LFS
+		FILE* listfile = _wfopen(filename, L"rb"); // binary mode reads unicode
 	wchar_t outputName[2048];
-	wcscpy(outputName,filename);
-	wcscat(outputName,L".tsv");
-	unsigned int maxNoun=0,maxDefinition=0;
-	FILE *outputFile=_wfopen(outputName,L"wb"); // binary mode reads unicode
+	wcscpy(outputName, filename);
+	wcscat(outputName, L".tsv");
+	unsigned int maxNoun = 0, maxDefinition = 0;
+	FILE* outputFile = _wfopen(outputName, L"wb"); // binary mode reads unicode
 	if (listfile)
 	{
 		char url[2048];
-		while (fgets(url,2047,listfile))
+		while (fgets(url, 2047, listfile))
 		{
-			if (url[strlen(url)-1]==L'\n') url[strlen(url)-1]=0;
-			if (url[strlen(url)-1]==L'\r') url[strlen(url)-1]=0;
-			char *ch=strchr(url,'#'),*e=strstr(url,"English"),*n=strstr(url,"Noun");
-			if (!ch || !e || !n || e>n || n>ch || e>ch) continue;
-			for (e+=strlen("English"); isspace((unsigned char)*e); e++);
-			for (n--; n>e && isspace((unsigned char)*n); n--);
-			n[1]=0;
-			if (strlen(e)<2) continue;
-			string word=e;
-			int I=0,J=(int)(ch+1-url);
+			if (url[strlen(url) - 1] == L'\n') url[strlen(url) - 1] = 0;
+			if (url[strlen(url) - 1] == L'\r') url[strlen(url) - 1] = 0;
+			char* ch = strchr(url, '#'), * e = strstr(url, "English"), * n = strstr(url, "Noun");
+			if (!ch || !e || !n || e > n || n > ch || e > ch) continue;
+			for (e += strlen("English"); isspace((unsigned char)*e); e++);
+			for (n--; n > e && isspace((unsigned char)*n); n--);
+			n[1] = 0;
+			if (strlen(e) < 2) continue;
+			string word = e;
+			int I = 0, J = (int)(ch + 1 - url);
 			while (isspace((unsigned char)url[J])) J++;
 			for (; url[J]; J++)
 			{
-				if (url[J]=='{')
+				if (url[J] == '{')
 				{
-					while (url[J]!='}' && url[J])
+					while (url[J] != '}' && url[J])
 						J++;
-					if (url[J]=='}') J++;
-					if (url[J]=='}') J++;
+					if (url[J] == '}') J++;
+					if (url[J] == '}') J++;
 				}
-				if (url[J]=='[' || url[J]==']' || (isspace((unsigned char)url[J]) && isspace((unsigned char)url[J+1]))) continue;
-				if (url[J]=='"') url[J]='\'';
-				if (J>I) url[I++]=url[J];
+				if (url[J] == '[' || url[J] == ']' || (isspace((unsigned char)url[J]) && isspace((unsigned char)url[J + 1]))) continue;
+				if (url[J] == '"') url[J] = '\'';
+				if (J > I) url[I++] = url[J];
 			}
-			url[I]=0;
+			url[I] = 0;
 			if (!url[0] || (isspace((unsigned char)url[0]) && !url[1])) continue;
-			fprintf(outputFile,"\"%s\",\"%s\"\n",word.c_str(),isspace((unsigned char)url[0]) ? url+1:url);
-			maxNoun=max(maxNoun,word.length()+2);
-			maxDefinition=max(maxDefinition,strlen(url+2));
+			fprintf(outputFile, "\"%s\",\"%s\"\n", word.c_str(), isspace((unsigned char)url[0]) ? url + 1 : url);
+			maxNoun = max(maxNoun, word.length() + 2);
+			maxDefinition = max(maxDefinition, strlen(url + 2));
 		}
 		fclose(listfile);
 		fclose(outputFile);

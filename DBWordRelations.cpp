@@ -23,49 +23,50 @@
 #include "questionAnswering.h"
 
 #define NULLWORD 187
-bool checkFull(MYSQL *mysql,wchar_t *qt,size_t &len,bool flush,wchar_t *qualifier);
+bool checkFull(MYSQL* mysql, wchar_t* qt, size_t& len, bool flush, wchar_t* qualifier);
 
 void cSourceWordInfo::allocateMap(int relationType)
-{ LFS
-  if (relationMaps[relationType]==NULL)
-    relationMaps[relationType]=new cRMap;
+{
+	LFS
+		if (relationMaps[relationType] == NULL)
+			relationMaps[relationType] = new cRMap;
 }
 
 // main entries from all words in source must already exist in memory (Words array)
 // return a set of wordIds for all words including the mainEntries, except for special words that do not already have wordRelations
-int cSource::readWordIdsNeedingWordRelations(set <int> &wordIdsAndMainEntryIdsInSourceNeedingWordRelations)
-	{
+int cSource::readWordIdsNeedingWordRelations(set <int>& wordIdsAndMainEntryIdsInSourceNeedingWordRelations)
+{
 	LFS
-	tIWMM specials[] = { Words.PPN,Words.TELENUM,Words.NUM,Words.DATE,Words.TIME,Words.LOCATION,Words.sectionWord };
-	for (unsigned int I=0; I<sizeof(specials)/sizeof(tIWMM); I++)
+		tIWMM specials[] = { Words.PPN,Words.TELENUM,Words.NUM,Words.DATE,Words.TIME,Words.LOCATION,Words.sectionWord };
+	for (unsigned int I = 0; I < sizeof(specials) / sizeof(tIWMM); I++)
 	{
 		wordIdsAndMainEntryIdsInSourceNeedingWordRelations.insert(specials[I]->second.index);
 		specials[I]->second.clearRelationMaps();
 	}
-  tIWMM tWord;
-  vector <cWordMatch>::iterator im=m.begin(),imEnd=m.end();
-  for (int I=0; im!=imEnd; im++,I++)
-  {
+	tIWMM tWord;
+	vector <cWordMatch>::iterator im = m.begin(), imEnd = m.end();
+	for (int I = 0; im != imEnd; im++, I++)
+	{
 		if (wordIdsAndMainEntryIdsInSourceNeedingWordRelations.insert(im->word->second.index).second)
 			im->word->second.clearRelationMaps();
-    tIWMM ME=resolveToClass(I);
+		tIWMM ME = resolveToClass(I);
 		if (ME->first.length() != 1)
 		{
 			if (wordIdsAndMainEntryIdsInSourceNeedingWordRelations.insert(ME->second.index).second)
 				ME->second.clearRelationMaps();
 		}
-  }
-  return 0;
+	}
+	return 0;
 }
 
-int cWord::initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, bool inSourceFlagSet,bool log)
+int cWord::initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, bool inSourceFlagSet, bool log)
 {
 	int startTime = clock();
-	size_t wrRead = 0, wrAdded = 0, totalWRIDs = wordIds.size(),numWordsProcessed=0;
+	size_t wrRead = 0, wrAdded = 0, totalWRIDs = wordIds.size(), numWordsProcessed = 0;
 	__int64 lastProgressPercent = -1, where;
 	if (totalWRIDs > 10)
 		wprintf(L"Waiting for lock on word relations for %zu words...                       \r", totalWRIDs);
-	if (!myquery(&mysql, L"LOCK TABLES wordRelationsMemory READ")) return -1; 
+	if (!myquery(&mysql, L"LOCK TABLES wordRelationsMemory READ")) return -1;
 	if (totalWRIDs > 10)
 		wprintf(L"Acquired read lock.  Refreshing word relations for %zu words...                       \r", totalWRIDs);
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
@@ -95,8 +96,8 @@ int cWord::initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, bool in
 		//if (I==totalWRIDs) // actually makes query take 50% longer
 		//  sqt+=" AND toWordId in (" + wstring(qt) + ")";
 		//int tempSQLTime = clock(); performance testing
-		MYSQL_RES *result = NULL;
-		if (!myquery(&mysql, (wchar_t *)sqt.c_str(), result))
+		MYSQL_RES* result = NULL;
+		if (!myquery(&mysql, (wchar_t*)sqt.c_str(), result))
 		{
 			myquery(&mysql, L"UNLOCK TABLES");
 			return -1;
@@ -113,7 +114,7 @@ int cWord::initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, bool in
 			// testWordRelations.push_back(cTestWordRelation(atoi(sqlrow[0]), atoi(sqlrow[1]), atoi(sqlrow[2]), atoi(sqlrow[3]), atoi(sqlrow[4]), atoi(sqlrow[5]), atoi(sqlrow[6]))); performance testing
 			bool isNew;
 			int fromId = atoi(sqlrow[3]), toId = atoi(sqlrow[4]);
-			tIWMM iFromWord= wordStructureGivenWordIdExists(fromId), iToWord= wordStructureGivenWordIdExists(toId);
+			tIWMM iFromWord = wordStructureGivenWordIdExists(fromId), iToWord = wordStructureGivenWordIdExists(toId);
 			if (iFromWord != wNULL && iToWord != wNULL)
 			{
 				// CHECK
@@ -130,7 +131,7 @@ int cWord::initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, bool in
 				iToWord->second.relationMaps[wordRelation]->addRelation(relationSourceId, lastWhere, iFromWord, isNew, totalCount, true);
 				wrAdded += 2;
 			}
-			if ((where = wrSubRead++ * 100 * numWordsProcessed / (numRows*totalWRIDs)) > lastProgressPercent)
+			if ((where = wrSubRead++ * 100 * numWordsProcessed / (numRows * totalWRIDs)) > lastProgressPercent)
 			{
 				if (totalWRIDs > 10)
 					wprintf(L"PROGRESS: %03I64d%% word relations read with %04d seconds elapsed                    \r", where, clocksec());
@@ -145,7 +146,7 @@ int cWord::initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, bool in
 		lplog(L"Reading %d (%d added) word relations took %d seconds.", wrRead, wrAdded, (int)((clock() - startTime) / CLOCKS_PER_SEC));
 	if (totalWRIDs > 10)
 		wprintf(L"PROGRESS: 100%% word relations read with %04d seconds elapsed                    \n", clocksec());
-	myquery(&mysql, L"UNLOCK TABLES");  
+	myquery(&mysql, L"UNLOCK TABLES");
 	return 0;
 }
 

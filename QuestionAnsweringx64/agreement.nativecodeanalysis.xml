@@ -2,7 +2,7 @@
 <DEFECTS>
   <DEFECT>
     <SFA>
-      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILEPATH>F:\lp\source\</FILEPATH>
       <FILENAME>word.h</FILENAME>
       <LINE>575</LINE>
       <COLUMN>17</COLUMN>
@@ -16,7 +16,7 @@
   </DEFECT>
   <DEFECT>
     <SFA>
-      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILEPATH>F:\lp\source\</FILEPATH>
       <FILENAME>syntacticRelations.h</FILENAME>
       <LINE>29</LINE>
       <COLUMN>1</COLUMN>
@@ -30,7 +30,7 @@
   </DEFECT>
   <DEFECT>
     <SFA>
-      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILEPATH>F:\lp\source\</FILEPATH>
       <FILENAME>tableColumn.h</FILENAME>
       <LINE>147</LINE>
       <COLUMN>1</COLUMN>
@@ -47,7 +47,7 @@
   </DEFECT>
   <DEFECT>
     <SFA>
-      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILEPATH>F:\lp\source\</FILEPATH>
       <FILENAME>timeRelations.h</FILENAME>
       <LINE>205</LINE>
       <COLUMN>19</COLUMN>
@@ -61,7 +61,7 @@
   </DEFECT>
   <DEFECT>
     <SFA>
-      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILEPATH>F:\lp\source\</FILEPATH>
       <FILENAME>timeRelations.h</FILENAME>
       <LINE>210</LINE>
       <COLUMN>15</COLUMN>
@@ -75,7 +75,7 @@
   </DEFECT>
   <DEFECT>
     <SFA>
-      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILEPATH>F:\lp\source\</FILEPATH>
       <FILENAME>source.h</FILENAME>
       <LINE>40</LINE>
       <COLUMN>1</COLUMN>
@@ -92,7 +92,7 @@
   </DEFECT>
   <DEFECT>
     <SFA>
-      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILEPATH>F:\lp\source\</FILEPATH>
       <FILENAME>source.h</FILENAME>
       <LINE>918</LINE>
       <COLUMN>17</COLUMN>
@@ -106,7 +106,7 @@
   </DEFECT>
   <DEFECT>
     <SFA>
-      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILEPATH>F:\lp\source\</FILEPATH>
       <FILENAME>source.h</FILENAME>
       <LINE>2334</LINE>
       <COLUMN>2</COLUMN>
@@ -123,7 +123,7 @@
   </DEFECT>
   <DEFECT>
     <SFA>
-      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILEPATH>F:\lp\source\</FILEPATH>
       <FILENAME>source.h</FILENAME>
       <LINE>2334</LINE>
       <COLUMN>2</COLUMN>
@@ -140,7 +140,7 @@
   </DEFECT>
   <DEFECT>
     <SFA>
-      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILEPATH>F:\lp\source\</FILEPATH>
       <FILENAME>source.h</FILENAME>
       <LINE>2334</LINE>
       <COLUMN>2</COLUMN>
@@ -157,7 +157,7 @@
   </DEFECT>
   <DEFECT>
     <SFA>
-      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILEPATH>F:\lp\source\</FILEPATH>
       <FILENAME>source.h</FILENAME>
       <LINE>2334</LINE>
       <COLUMN>2</COLUMN>
@@ -174,7 +174,7 @@
   </DEFECT>
   <DEFECT>
     <SFA>
-      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
+      <FILEPATH>F:\lp\source\</FILEPATH>
       <FILENAME>source.h</FILENAME>
       <LINE>2334</LINE>
       <COLUMN>2</COLUMN>
@@ -187,62 +187,6 @@
     <ADDITIONALINFO>
       <targetSymbol>cSource::cSection::counterSpeakersNotMatched</targetSymbol>
     </ADDITIONALINFO>
-    <PATH></PATH>
-  </DEFECT>
-  <DEFECT>
-    <SFA>
-      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
-      <FILENAME>agreement.cpp</FILENAME>
-      <LINE>115</LINE>
-      <COLUMN>24</COLUMN>
-    </SFA>
-    <DEFECTCODE>26817</DEFECTCODE>
-    <DESCRIPTION>Potentially expensive copy of variable 'its' in range-for loop. Consider making it a const reference (es.71).</DESCRIPTION>
-    <FUNCTION>cSource::assessCost</FUNCTION>
-    <DECORATED>?assessCost@cSource@@QEAAHPEAU_tPatternMatch@cPatternMatchArray@@0HHAEAV?$vector@V?$vector@VcTagLocation@@V?$allocator@VcTagLocation@@@std@@@std@@V?$allocator@V?$vector@VcTagLocation@@V?$allocator@VcTagLocation@@@std@@@std@@@2@@std@@AEAV?$unordered_map@HVcCostPatternElementByTagSet@cSource@@U?$hash@H@std@@U?$equal_to@H@4@V?$allocator@U?$pair@$$CBHVcCostPatternElementByTagSet@cSource@@@std@@@4@@5@_NV?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@5@@Z</DECORATED>
-    <FUNCLINE>11</FUNCLINE>
-    <PATH></PATH>
-  </DEFECT>
-  <DEFECT>
-    <SFA>
-      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
-      <FILENAME>agreement.cpp</FILENAME>
-      <LINE>1649</LINE>
-      <COLUMN>13</COLUMN>
-    </SFA>
-    <DEFECTCODE>26817</DEFECTCODE>
-    <DESCRIPTION>Potentially expensive copy of variable 'tl' in range-for loop. Consider making it a const reference (es.71).</DESCRIPTION>
-    <FUNCTION>cSource::evaluateNounDeterminers</FUNCTION>
-    <DECORATED>?evaluateNounDeterminers@cSource@@QEAAXHHAEAV?$vector@V?$vector@VcTagLocation@@V?$allocator@VcTagLocation@@@std@@@std@@V?$allocator@V?$vector@VcTagLocation@@V?$allocator@VcTagLocation@@@std@@@std@@@2@@std@@_NV?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@3@@Z</DECORATED>
-    <FUNCLINE>1604</FUNCLINE>
-    <PATH></PATH>
-  </DEFECT>
-  <DEFECT>
-    <SFA>
-      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
-      <FILENAME>agreement.cpp</FILENAME>
-      <LINE>2893</LINE>
-      <COLUMN>12</COLUMN>
-    </SFA>
-    <DEFECTCODE>26817</DEFECTCODE>
-    <DESCRIPTION>Potentially expensive copy of variable 'tl' in range-for loop. Consider making it a const reference (es.71).</DESCRIPTION>
-    <FUNCTION>cSource::sortTagLocations</FUNCTION>
-    <DECORATED>?sortTagLocations@cSource@@QEAAXAEAV?$vector@V?$vector@VcTagLocation@@V?$allocator@VcTagLocation@@@std@@@std@@V?$allocator@V?$vector@VcTagLocation@@V?$allocator@VcTagLocation@@@std@@@std@@@2@@std@@AEAV?$vector@VcTagLocation@@V?$allocator@VcTagLocation@@@std@@@3@@Z</DECORATED>
-    <FUNCLINE>2890</FUNCLINE>
-    <PATH></PATH>
-  </DEFECT>
-  <DEFECT>
-    <SFA>
-      <FILEPATH>F:\lp\source.C++20\</FILEPATH>
-      <FILENAME>agreement.cpp</FILENAME>
-      <LINE>3268</LINE>
-      <COLUMN>13</COLUMN>
-    </SFA>
-    <DEFECTCODE>26817</DEFECTCODE>
-    <DESCRIPTION>Potentially expensive copy of variable 'tag' in range-for loop. Consider making it a const reference (es.71).</DESCRIPTION>
-    <FUNCTION>cSource::notFirstNounInMultiNounConstruction</FUNCTION>
-    <DECORATED>?notFirstNounInMultiNounConstruction@cSource@@QEAA_NHHHH@Z</DECORATED>
-    <FUNCLINE>3250</FUNCLINE>
     <PATH></PATH>
   </DEFECT>
 </DEFECTS>

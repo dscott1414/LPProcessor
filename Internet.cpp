@@ -32,21 +32,21 @@ using namespace std;
 #include "mysqldb.h"
 #include "general.h"
 
-const wchar_t *getLastErrorMessage(wstring &out);
-void * cInternet::hINet;
+const wchar_t* getLastErrorMessage(wstring& out);
+void* cInternet::hINet;
 int cInternet::bandwidthControl;
 bool cInternet::readTimeoutError;
 struct _RTL_SRWLOCK cInternet::totalInternetTimeWaitBandwidthControlSRWLock;
 wstring cInternet::redirectUrl;
 
-int cInternet::readPage(const wchar_t *str, wstring &buffer)
+int cInternet::readPage(const wchar_t* str, wstring& buffer)
 {
 	LFS
 		wstring headers;
 	return readPage(str, buffer, headers);
 }
 
-bool cInternet::InetOption(bool global, int option, const wchar_t * description, unsigned long value)
+bool cInternet::InetOption(bool global, int option, const wchar_t* description, unsigned long value)
 {
 	LFS
 		HINTERNET hI = (global) ? 0 : hINet;
@@ -66,8 +66,8 @@ bool cInternet::InetOption(bool global, int option, const wchar_t * description,
 }
 
 void cInternet::InternetStatusCallback(
-	HINTERNET , // hInternet
-	DWORD_PTR , // dwContext
+	HINTERNET, // hInternet
+	DWORD_PTR, // dwContext
 	DWORD dwInternetStatus,
 	LPVOID lpvStatusInformation,
 	DWORD // dwStatusInformationLength
@@ -75,60 +75,60 @@ void cInternet::InternetStatusCallback(
 {
 	switch (dwInternetStatus)
 	{
-	//case INTERNET_STATUS_CLOSING_CONNECTION:
-	//	lplog(LOG_INFO, L"status:%s", L"Closing the connection to the server."); break;
-	//case INTERNET_STATUS_CONNECTED_TO_SERVER:
-	//	lplog(LOG_INFO, L"Successfully connected to the socket address(SOCKADDR) pointed to by lpvStatusInformation."); break;
-	//case INTERNET_STATUS_CONNECTING_TO_SERVER:
-	//	lplog(LOG_INFO, L"Connecting to the socket address(SOCKADDR) pointed to by lpvStatusInformation."); break;
-	//case INTERNET_STATUS_CONNECTION_CLOSED:
-	//	lplog(LOG_INFO, L"Successfully closed the connection to the server."); break;
-	//case INTERNET_STATUS_COOKIE_HISTORY:
-	//	lplog(LOG_INFO, L"Retrieving content from the cache.Contains data about past cookie events for the URL such as if cookies were accepted, rejected, downgraded, or leashed."); break;
-	//case INTERNET_STATUS_COOKIE_RECEIVED:
-	//	lplog(LOG_INFO, L"Indicates the number of cookies that were accepted, rejected, downgraded(changed from persistent to session cookies), or leashed(will be sent out only in 1st party context).The lpvStatusInformation parameter is a DWORD with the number of cookies received."); break;
-	//case INTERNET_STATUS_COOKIE_SENT:
-	//	lplog(LOG_INFO, L"Indicates the number of cookies that were either sent or suppressed, when a request is sent.The lpvStatusInformation parameter is a DWORD with the number of cookies sent or suppressed."); break;
-	//case INTERNET_STATUS_CTL_RESPONSE_RECEIVED:
-	//	lplog(LOG_INFO, L"Not implemented."); break;
-	//case INTERNET_STATUS_DETECTING_PROXY:
-	//	lplog(LOG_INFO, L"Notifies the client application that a proxy has been detected."); break;
-	//case INTERNET_STATUS_HANDLE_CLOSING:
-	//	lplog(LOG_INFO, L"This handle value has been terminated.pvStatusInformation contains the address of the handle being closed.The lpvStatusInformation parameter contains the address of the handle being closed."); break;
-	//case INTERNET_STATUS_HANDLE_CREATED:
-	//	lplog(LOG_INFO, L"Used by InternetConnect to indicate it has created the new handle.This lets the application call InternetCloseHandle from another thread, if the connect is taking too long.The lpvStatusInformation parameter contains the address of an HINTERNET handle."); break;
-	//case INTERNET_STATUS_INTERMEDIATE_RESPONSE:
-	//	lplog(LOG_INFO, L"Received an intermediate(100 level) status code message from the server."); break;
-	//case INTERNET_STATUS_NAME_RESOLVED:
-	//	lplog(LOG_INFO, L"Successfully found the IP address of the name contained in lpvStatusInformation.The lpvStatusInformation parameter points to a PCTSTR containing the host name."); break;
-	//case INTERNET_STATUS_P3P_HEADER:
-	//	lplog(LOG_INFO, L"The response has a P3P header in it."); break;
-	//case INTERNET_STATUS_P3P_POLICYREF:
-	//	lplog(LOG_INFO, L"Not implemented."); break;
-	//case INTERNET_STATUS_PREFETCH:
-	//	lplog(LOG_INFO, L"Not implemented."); break;
-	//case INTERNET_STATUS_PRIVACY_IMPACTED:
-	//	lplog(LOG_INFO, L"Not implemented."); break;
-	//case INTERNET_STATUS_RECEIVING_RESPONSE:
-	//	lplog(LOG_INFO, L"Waiting for the server to respond to a request.The lpvStatusInformation parameter is NULL."); break;
+		//case INTERNET_STATUS_CLOSING_CONNECTION:
+		//	lplog(LOG_INFO, L"status:%s", L"Closing the connection to the server."); break;
+		//case INTERNET_STATUS_CONNECTED_TO_SERVER:
+		//	lplog(LOG_INFO, L"Successfully connected to the socket address(SOCKADDR) pointed to by lpvStatusInformation."); break;
+		//case INTERNET_STATUS_CONNECTING_TO_SERVER:
+		//	lplog(LOG_INFO, L"Connecting to the socket address(SOCKADDR) pointed to by lpvStatusInformation."); break;
+		//case INTERNET_STATUS_CONNECTION_CLOSED:
+		//	lplog(LOG_INFO, L"Successfully closed the connection to the server."); break;
+		//case INTERNET_STATUS_COOKIE_HISTORY:
+		//	lplog(LOG_INFO, L"Retrieving content from the cache.Contains data about past cookie events for the URL such as if cookies were accepted, rejected, downgraded, or leashed."); break;
+		//case INTERNET_STATUS_COOKIE_RECEIVED:
+		//	lplog(LOG_INFO, L"Indicates the number of cookies that were accepted, rejected, downgraded(changed from persistent to session cookies), or leashed(will be sent out only in 1st party context).The lpvStatusInformation parameter is a DWORD with the number of cookies received."); break;
+		//case INTERNET_STATUS_COOKIE_SENT:
+		//	lplog(LOG_INFO, L"Indicates the number of cookies that were either sent or suppressed, when a request is sent.The lpvStatusInformation parameter is a DWORD with the number of cookies sent or suppressed."); break;
+		//case INTERNET_STATUS_CTL_RESPONSE_RECEIVED:
+		//	lplog(LOG_INFO, L"Not implemented."); break;
+		//case INTERNET_STATUS_DETECTING_PROXY:
+		//	lplog(LOG_INFO, L"Notifies the client application that a proxy has been detected."); break;
+		//case INTERNET_STATUS_HANDLE_CLOSING:
+		//	lplog(LOG_INFO, L"This handle value has been terminated.pvStatusInformation contains the address of the handle being closed.The lpvStatusInformation parameter contains the address of the handle being closed."); break;
+		//case INTERNET_STATUS_HANDLE_CREATED:
+		//	lplog(LOG_INFO, L"Used by InternetConnect to indicate it has created the new handle.This lets the application call InternetCloseHandle from another thread, if the connect is taking too long.The lpvStatusInformation parameter contains the address of an HINTERNET handle."); break;
+		//case INTERNET_STATUS_INTERMEDIATE_RESPONSE:
+		//	lplog(LOG_INFO, L"Received an intermediate(100 level) status code message from the server."); break;
+		//case INTERNET_STATUS_NAME_RESOLVED:
+		//	lplog(LOG_INFO, L"Successfully found the IP address of the name contained in lpvStatusInformation.The lpvStatusInformation parameter points to a PCTSTR containing the host name."); break;
+		//case INTERNET_STATUS_P3P_HEADER:
+		//	lplog(LOG_INFO, L"The response has a P3P header in it."); break;
+		//case INTERNET_STATUS_P3P_POLICYREF:
+		//	lplog(LOG_INFO, L"Not implemented."); break;
+		//case INTERNET_STATUS_PREFETCH:
+		//	lplog(LOG_INFO, L"Not implemented."); break;
+		//case INTERNET_STATUS_PRIVACY_IMPACTED:
+		//	lplog(LOG_INFO, L"Not implemented."); break;
+		//case INTERNET_STATUS_RECEIVING_RESPONSE:
+		//	lplog(LOG_INFO, L"Waiting for the server to respond to a request.The lpvStatusInformation parameter is NULL."); break;
 	case INTERNET_STATUS_REDIRECT:
 		if (logDetail)
-			lplog(LOG_INFO, L"Request redirected to %s.", (wchar_t *)lpvStatusInformation);
-		redirectUrl = (wchar_t *)lpvStatusInformation;
+			lplog(LOG_INFO, L"Request redirected to %s.", (wchar_t*)lpvStatusInformation);
+		redirectUrl = (wchar_t*)lpvStatusInformation;
 		break;
-	//case INTERNET_STATUS_REQUEST_COMPLETE:
-	//	lplog(LOG_INFO, L"An asynchronous operation has been completed.The lpvStatusInformation parameter contains the address of an INTERNET_ASYNC_RESULT structure."); break;
-	//case INTERNET_STATUS_REQUEST_SENT:
-	//	lplog(LOG_INFO, L"Successfully sent the information request to the server.The lpvStatusInformation parameter points to a DWORD value that contains the number of bytes sent."); break;
-	//case INTERNET_STATUS_RESOLVING_NAME:
-	//	lplog(LOG_INFO, L"Looking up the IP address of the name contained in lpvStatusInformation.The lpvStatusInformation parameter points to a PCTSTR containing the host name."); break;
-	//case INTERNET_STATUS_RESPONSE_RECEIVED:
-	//	lplog(LOG_INFO, L"Successfully received a response from the server."); break;
-	//case INTERNET_STATUS_SENDING_REQUEST:
-	//	lplog(LOG_INFO, L"Sending the information request to the server.The lpvStatusInformation parameter is NULL."); break;
-	//case INTERNET_STATUS_STATE_CHANGE:
-	//	lplog(LOG_INFO, L"Moved between a secure(HTTPS) and a nonsecure(HTTP) site.The user must be informed of this change; otherwise, the user is at risk of disclosing sensitive information involuntarily.When this flag is set, the lpvStatusInformation parameter points to a status DWORD that contains additional flags."); break;
-	//default:;
+		//case INTERNET_STATUS_REQUEST_COMPLETE:
+		//	lplog(LOG_INFO, L"An asynchronous operation has been completed.The lpvStatusInformation parameter contains the address of an INTERNET_ASYNC_RESULT structure."); break;
+		//case INTERNET_STATUS_REQUEST_SENT:
+		//	lplog(LOG_INFO, L"Successfully sent the information request to the server.The lpvStatusInformation parameter points to a DWORD value that contains the number of bytes sent."); break;
+		//case INTERNET_STATUS_RESOLVING_NAME:
+		//	lplog(LOG_INFO, L"Looking up the IP address of the name contained in lpvStatusInformation.The lpvStatusInformation parameter points to a PCTSTR containing the host name."); break;
+		//case INTERNET_STATUS_RESPONSE_RECEIVED:
+		//	lplog(LOG_INFO, L"Successfully received a response from the server."); break;
+		//case INTERNET_STATUS_SENDING_REQUEST:
+		//	lplog(LOG_INFO, L"Sending the information request to the server.The lpvStatusInformation parameter is NULL."); break;
+		//case INTERNET_STATUS_STATE_CHANGE:
+		//	lplog(LOG_INFO, L"Moved between a secure(HTTPS) and a nonsecure(HTTP) site.The user must be informed of this change; otherwise, the user is at risk of disclosing sensitive information involuntarily.When this flag is set, the lpvStatusInformation parameter points to a status DWORD that contains additional flags."); break;
+		//default:;
 	}
 }
 
@@ -139,19 +139,19 @@ bool cInternet::LPInternetOpen(int timer)
 		hINet = InternetOpen(L"InetURL/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
 		DWORD dwFlags;
 		InternetGetConnectedState(&dwFlags, 0); // BOOL connState=
-		if (dwFlags&INTERNET_CONNECTION_CONFIGURED)
+		if (dwFlags & INTERNET_CONNECTION_CONFIGURED)
 			lplog(LOG_INFO, L"Local system has a valid connection to the Internet, but it might or might not be currently connected.");
-		if (dwFlags&INTERNET_CONNECTION_LAN)
+		if (dwFlags & INTERNET_CONNECTION_LAN)
 			lplog(LOG_INFO, L"Local system uses a local area network to connect to the Internet.");
-		if (dwFlags&INTERNET_CONNECTION_MODEM)
+		if (dwFlags & INTERNET_CONNECTION_MODEM)
 			lplog(LOG_INFO, L"Local system uses a modem to connect to the Internet.");
-		if (dwFlags&INTERNET_CONNECTION_MODEM_BUSY)
+		if (dwFlags & INTERNET_CONNECTION_MODEM_BUSY)
 			lplog(LOG_INFO, L"No longer used.");
-		if (dwFlags&INTERNET_CONNECTION_OFFLINE)
+		if (dwFlags & INTERNET_CONNECTION_OFFLINE)
 			lplog(LOG_INFO, L"Local system is in offline mode.");
-		if (dwFlags&INTERNET_CONNECTION_PROXY)
+		if (dwFlags & INTERNET_CONNECTION_PROXY)
 			lplog(LOG_INFO, L"Local system uses a proxy server to connect to the Internet.");
-		if (dwFlags&INTERNET_RAS_INSTALLED)
+		if (dwFlags & INTERNET_RAS_INSTALLED)
 			lplog(LOG_INFO, L"Local system has RAS installed.");
 		InetOption(true, INTERNET_OPTION_MAX_CONNS_PER_1_0_SERVER, L"Maximum connections per 1.0 server", 100);
 		InetOption(true, INTERNET_OPTION_MAX_CONNS_PER_PROXY, L"Maximum connections per proxy", 100);
@@ -172,7 +172,7 @@ bool cInternet::LPInternetOpen(int timer)
 }
 
 #define MAX_BUF 200000
-int cInternet::readPage(const wchar_t *str, wstring &buffer, wstring &headers)
+int cInternet::readPage(const wchar_t* str, wstring& buffer, wstring& headers)
 {
 	LFS
 		int timer = clock();
@@ -243,7 +243,7 @@ int cInternet::readPage(const wchar_t *str, wstring &buffer, wstring &headers)
 			if (!InternetCheckConnection(str, FLAG_ICC_FORCE_CONNECTION, 0))
 				lplog(LOG_ERROR, L"ERROR:Cannot force URL %s - %s.\r", str, getLastErrorMessage(ioe));
 			InternetCloseHandle(hINet);
-			wprintf(L"\nrestarting internet connection for URL %s...\n",str);
+			wprintf(L"\nrestarting internet connection for URL %s...\n", str);
 			hINet = 0;
 			LPInternetOpen(timer);
 			lplog(LOG_ERROR, NULL);
@@ -253,12 +253,12 @@ int cInternet::readPage(const wchar_t *str, wstring &buffer, wstring &headers)
 		}
 	}
 	if (errors == internetWebSearchRetryAttempts)
-		lplog(LOG_ERROR, L"ERROR:%d:Terminating because we cannot read URL %s - %s.", errors, str, getLastErrorMessage(ioe)); 
+		lplog(LOG_ERROR, L"ERROR:%d:Terminating because we cannot read URL %s - %s.", errors, str, getLastErrorMessage(ioe));
 	cProfile::accumulateNetworkTime(str, timer, cProfile::lastNetClock);
 	return (errors) ? INTERNET_OPEN_URL_FAILED : 0;
 }
 
-int cInternet::readBinaryPage(wchar_t *str, int destfile, int &total)
+int cInternet::readBinaryPage(wchar_t* str, int destfile, int& total)
 {
 	LFS
 		AcquireSRWLockShared(&cProfile::networkTimeSRWLock);
@@ -322,7 +322,7 @@ bool cInternet::closeConnection(void)
 	return true;
 }
 
-int cInternet::cacheWebPath(wstring webAddress, wstring &buffer, wstring epath, wstring cacheTypePath, bool forceWebReread, bool &networkAccessed,wstring &diskPath)
+int cInternet::cacheWebPath(wstring webAddress, wstring& buffer, wstring epath, wstring cacheTypePath, bool forceWebReread, bool& networkAccessed, wstring& diskPath)
 {
 	LFS
 		wchar_t path[MAX_LEN];
@@ -354,11 +354,11 @@ int cInternet::cacheWebPath(wstring webAddress, wstring &buffer, wstring epath, 
 		else
 		{
 			int bufferlen = filelength(fd);
-			void *tbuffer = (void *)tcalloc(bufferlen + 10, 1);
+			void* tbuffer = (void*)tcalloc(bufferlen + 10, 1);
 			if (_read(fd, tbuffer, bufferlen) < 0)
 				lplog(LOG_FATAL_ERROR, L"Error reading web path file.");
 			_close(fd);
-			buffer = (wchar_t *)tbuffer;
+			buffer = (wchar_t*)tbuffer;
 			tfree(bufferlen + 10, tbuffer);
 		}
 	}
@@ -366,9 +366,9 @@ int cInternet::cacheWebPath(wstring webAddress, wstring &buffer, wstring epath, 
 }
 
 
-DWORD WINAPI cInternet::InternetReadFile_Child(void *vThreadParm)
+DWORD WINAPI cInternet::InternetReadFile_Child(void* vThreadParm)
 {
-	tIRFW *p = (tIRFW *)vThreadParm;
+	tIRFW* p = (tIRFW*)vThreadParm;
 	if (!InternetReadFile(p->RequestHandle, p->buffer, p->bufsize, p->dwRead))
 	{
 		wstring lem;
@@ -378,7 +378,7 @@ DWORD WINAPI cInternet::InternetReadFile_Child(void *vThreadParm)
 	return 0;
 }
 
-bool cInternet::InternetReadFile_Wait(HINTERNET RequestHandle, char *buffer, int bufsize, DWORD *dwRead)
+bool cInternet::InternetReadFile_Wait(HINTERNET RequestHandle, char* buffer, int bufsize, DWORD* dwRead)
 {
 	tIRFW p;
 	readTimeoutError = false;
@@ -422,7 +422,7 @@ bool cInternet::InternetReadFile_Wait(HINTERNET RequestHandle, char *buffer, int
 	return dwExitCode == 0;
 }
 
-int cInternet::getWebPath(int where, wstring webAddress, wstring &buffer, wstring epath, wstring cacheTypePath, wstring &filePathOut, wstring &headers, int index, bool clean, bool readInfoBuffer, bool forceWebReread)
+int cInternet::getWebPath(int where, wstring webAddress, wstring& buffer, wstring epath, wstring cacheTypePath, wstring& filePathOut, wstring& headers, int index, bool clean, bool readInfoBuffer, bool forceWebReread)
 {
 	LFS
 		if (webAddress.find(L".pdf") != wstring::npos || webAddress.find(L".php") != wstring::npos) // Nobel Prize abstract is 2 bytes / also don't bother with pdf or php files for now
@@ -432,7 +432,7 @@ int cInternet::getWebPath(int where, wstring webAddress, wstring &buffer, wstrin
 	if (logQuestionDetail)
 		lplog(LOG_WIKIPEDIA, L"accessing page: %s", epath.c_str());
 	wchar_t path[MAX_LEN];
-	int pathlen = _snwprintf(path, MAX_LEN, L"%s\\%s", (cacheTypePath==L"webSearchCache") ? WEBSEARCH_CACHEDIR:CACHEDIR, cacheTypePath.c_str());
+	int pathlen = _snwprintf(path, MAX_LEN, L"%s\\%s", (cacheTypePath == L"webSearchCache") ? WEBSEARCH_CACHEDIR : CACHEDIR, cacheTypePath.c_str());
 	if (_wmkdir(path) < 0 && errno == ENOENT)
 		lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
 	if (index > 1)
@@ -446,7 +446,7 @@ int cInternet::getWebPath(int where, wstring webAddress, wstring &buffer, wstrin
 	int exitCode = 0;
 	string spath;
 	wTM(path, spath, CP_ACP);
-	deleteIllegalChars((char *)spath.c_str() + pathlen + 5);
+	deleteIllegalChars((char*)spath.c_str() + pathlen + 5);
 	spath[pathlen + 1] = spath[pathlen + 6];
 	spath[pathlen + 3] = spath[pathlen + 7];
 	spath[pathlen + 2] = 0;
@@ -458,8 +458,8 @@ int cInternet::getWebPath(int where, wstring webAddress, wstring &buffer, wstrin
 		lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
 	spath[pathlen + 4] = '\\';
 	wchar_t* wp = wcsstr(path, L"http");
-	if (wp && (wp-path)<5)
-		lplog(LOG_FATAL_ERROR, L"Please remove http addresses from web path to avoid overuse of the h/t directory %s!",path);
+	if (wp && (wp - path) < 5)
+		lplog(LOG_FATAL_ERROR, L"Please remove http addresses from web path to avoid overuse of the h/t directory %s!", path);
 	if (forceWebReread || (_waccess(path, 0) < 0 && _access(spath.c_str(), 0) < 0))
 	{
 		if (!forceWebReread)
@@ -540,11 +540,11 @@ int cInternet::getWebPath(int where, wstring webAddress, wstring &buffer, wstrin
 				mTW(spath, filePathOut);
 		}
 		int bufferlen = filelength(fd);
-		void *tbuffer = (void *)tcalloc(bufferlen + 10, 1);
-		if (_read(fd, tbuffer, bufferlen)<0)
+		void* tbuffer = (void*)tcalloc(bufferlen + 10, 1);
+		if (_read(fd, tbuffer, bufferlen) < 0)
 			lplog(LOG_FATAL_ERROR, L"Error reading webPath file.");
 		_close(fd);
-		buffer = (wchar_t *)tbuffer;
+		buffer = (wchar_t*)tbuffer;
 		tfree(bufferlen + 10, tbuffer);
 	}
 	return 0;
@@ -552,7 +552,7 @@ int cInternet::getWebPath(int where, wstring webAddress, wstring &buffer, wstrin
 
 // ReadAndHandleOutput
 // Monitors handle for input. Exits when child exits or pipe breaks.
-void cInternet::ReadAndHandleOutput(HANDLE hPipeRead, string &outbuf)
+void cInternet::ReadAndHandleOutput(HANDLE hPipeRead, string& outbuf)
 {
 	LFS
 		CHAR lpBuffer[257];
@@ -594,7 +594,7 @@ HANDLE cInternet::PrepAndLaunchRedirectedChild(wstring commandLine,
 	return pi.hProcess;
 }
 
-int cInternet::runJavaJerichoHTML(wstring webAddress, wstring outputPath, string &outbuf)
+int cInternet::runJavaJerichoHTML(wstring webAddress, wstring outputPath, string& outbuf)
 {
 	LFS
 		TCHAR NPath[MAX_PATH];
@@ -696,7 +696,7 @@ int cInternet::runJavaJerichoHTML(wstring webAddress, wstring outputPath, string
 }
 
 #ifdef TEST_CODE
-int testWebPath(int where, wstring webAddress, wstring epath, wstring cacheTypePath, wstring &filePathOut, wstring &headers)
+int testWebPath(int where, wstring webAddress, wstring epath, wstring cacheTypePath, wstring& filePathOut, wstring& headers)
 {
 	LFS
 		wchar_t path[MAX_LEN];
@@ -711,7 +711,7 @@ int testWebPath(int where, wstring webAddress, wstring epath, wstring cacheTypeP
 	//int exitCode=0;
 	string spath;
 	wTM(path, spath, CP_ACP);
-	deleteIllegalChars((char *)spath.c_str() + pathlen + 5);
+	deleteIllegalChars((char*)spath.c_str() + pathlen + 5);
 	spath[pathlen + 1] = spath[pathlen + 6];
 	spath[pathlen + 3] = spath[pathlen + 7];
 	spath[pathlen + 2] = 0;
@@ -736,10 +736,10 @@ int testWebPath(int where, wstring webAddress, wstring epath, wstring cacheTypeP
 			mTW(spath, filePathOut);
 	}
 	int bufferlen = filelength(fd);
-	void *tbuffer = (void *)tcalloc(bufferlen + 10, 1);
+	void* tbuffer = (void*)tcalloc(bufferlen + 10, 1);
 	_read(fd, tbuffer, bufferlen);
 	_close(fd);
-	wstring writeBufferToDisk = (wchar_t *)tbuffer;
+	wstring writeBufferToDisk = (wchar_t*)tbuffer;
 	tfree(bufferlen + 10, tbuffer);
 	if (readBufferFromDisk != writeBufferToDisk)
 		lplog(L"MISMATCH!");

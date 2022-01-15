@@ -19,7 +19,7 @@
 //   common number of 2, which will give it an advantage over any other object merely matching to 'man'.
 //   If the primary nouns and adjectives are kept track of, then any match associated with them can be counted
 //   accurately.
-bool cSource::writeWNMap(map <tIWMM, vector <tIWMM>, cSourceWordInfo::cRMap::wordMapCompare > &sourceWordMap, void *buffer, int &where, int fd, int limit)
+bool cSource::writeWNMap(map <tIWMM, vector <tIWMM>, cSourceWordInfo::cRMap::wordMapCompare >& sourceWordMap, void* buffer, int& where, int fd, int limit)
 {
 	LFS
 		if (!copy(buffer, (int)sourceWordMap.size(), where, limit)) return false;
@@ -41,7 +41,7 @@ bool cSource::writeWNMap(map <tIWMM, vector <tIWMM>, cSourceWordInfo::cRMap::wor
 	return true;
 }
 
-int cSource::readWNMap(map <tIWMM, vector <tIWMM>, cSourceWordInfo::cRMap::wordMapCompare > &sourceWordMap, void *buffer, int &where, int bufferlen)
+int cSource::readWNMap(map <tIWMM, vector <tIWMM>, cSourceWordInfo::cRMap::wordMapCompare >& sourceWordMap, void* buffer, int& where, int bufferlen)
 {
 	LFS
 		unsigned int count;
@@ -73,7 +73,7 @@ int cSource::readWNMap(map <tIWMM, vector <tIWMM>, cSourceWordInfo::cRMap::wordM
 	return (where > bufferlen) ? -1 : 0;
 }
 
-bool cSource::writeGWNMap(map <tIWMM, int, cSourceWordInfo::cRMap::wordMapCompare > &wnMap, void *buffer, int &where, int fd, int limit)
+bool cSource::writeGWNMap(map <tIWMM, int, cSourceWordInfo::cRMap::wordMapCompare >& wnMap, void* buffer, int& where, int fd, int limit)
 {
 	LFS
 		if (!copy(buffer, (int)wnMap.size(), where, limit)) return false;
@@ -86,7 +86,7 @@ bool cSource::writeGWNMap(map <tIWMM, int, cSourceWordInfo::cRMap::wordMapCompar
 	return true;
 }
 
-int cSource::readGWNMap(map <tIWMM, int, cSourceWordInfo::cRMap::wordMapCompare > &wnMap, void *buffer, int &where, int bufferlen)
+int cSource::readGWNMap(map <tIWMM, int, cSourceWordInfo::cRMap::wordMapCompare >& wnMap, void* buffer, int& where, int bufferlen)
 {
 	LFS
 		unsigned int count;
@@ -121,7 +121,7 @@ bool cSource::writeWNMaps(wstring path)
 	writeGWNMap(wnGenderNounMap, buffer, where, fd, MAX_BUF);
 	for (tIWMM w = Words.begin(), wEnd = Words.end(); w != wEnd; w++)
 	{
-		if (w->second.flags&(cSourceWordInfo::physicalObjectByWN | cSourceWordInfo::notPhysicalObjectByWN))
+		if (w->second.flags & (cSourceWordInfo::physicalObjectByWN | cSourceWordInfo::notPhysicalObjectByWN))
 		{
 			if (!copy(buffer, w->first, where, MAX_BUF)) return false;
 			if (!copy(buffer, w->second.flags, where, MAX_BUF)) return false;
@@ -153,9 +153,9 @@ bool cSource::readWNMaps(wstring path)
 		path += L".WNCache";
 	IOHANDLE fd = _wopen(path.c_str(), O_RDWR | O_BINARY);
 	if (fd < 0) return false;
-	void *buffer;
+	void* buffer;
 	int bufferlen = filelength(fd);
-	buffer = (void *)tmalloc(bufferlen + 10);
+	buffer = (void*)tmalloc(bufferlen + 10);
 	::read(fd, buffer, bufferlen);
 	close(fd);
 	int where = 0;
@@ -174,7 +174,7 @@ bool cSource::readWNMaps(wstring path)
 		if (!copy(flags, buffer, where, bufferlen)) return false;
 		tIWMM w = Words.query(word);
 		if (w != Words.end())
-			w->second.flags |= (flags&(cSourceWordInfo::physicalObjectByWN | cSourceWordInfo::notPhysicalObjectByWN));
+			w->second.flags |= (flags & (cSourceWordInfo::physicalObjectByWN | cSourceWordInfo::notPhysicalObjectByWN));
 	}
 	tfree(bufferlen, buffer);
 	return where <= bufferlen;

@@ -32,16 +32,16 @@ bool cSource::preferS1(int position, unsigned int J)
 	return true;
 }
 
-bool cSource::findSpecificAnaphor(wstring tagName, int where, int element, int &specificWhere, bool &pluralNounOverride, bool &embeddedName)
+bool cSource::findSpecificAnaphor(wstring tagName, int where, int element, int& specificWhere, bool& pluralNounOverride, bool& embeddedName)
 {
 	LFS
 		specificWhere = where;
-	if (!(element&cMatchElement::patternFlag)) return true;
+	if (!(element & cMatchElement::patternFlag)) return true;
 	if (tagName == L"NOUN" || tagName == L"VNOUN" || tagName == L"ADJOBJECT")
 	{
 		vector < vector <cTagLocation> > tagSets;
-		cPatternMatchArray::tPatternMatch *pm = m[where].pma.content + (element&~cMatchElement::patternFlag);
-		if (!startCollectTags(debugTrace.traceAnaphors, specificAnaphorTagSet, where, pm->pemaByPatternEnd, tagSets, true, false,L"find specific anaphor")) return false;
+		cPatternMatchArray::tPatternMatch* pm = m[where].pma.content + (element & ~cMatchElement::patternFlag);
+		if (!startCollectTags(debugTrace.traceAnaphors, specificAnaphorTagSet, where, pm->pemaByPatternEnd, tagSets, true, false, L"find specific anaphor")) return false;
 		for (unsigned int J = 0; J < tagSets.size(); J++)
 		{
 			if (debugTrace.traceAnaphors)
@@ -64,7 +64,7 @@ bool cSource::findSpecificAnaphor(wstring tagName, int where, int element, int &
 						specificWhere = tagSets[J][whereVerb].sourcePosition;
 						if (debugTrace.traceAnaphors)
 							lplog(LOG_RESOLUTION, L"%06d:Search for specific anaphor returned V_AGREE=(%d,%d) specificWhere=%d plural=%s.",
-						where, whereVerb, nextVerb, specificWhere, (pluralNounOverride) ? L"TRUE" : L"FALSE");
+								where, whereVerb, nextVerb, specificWhere, (pluralNounOverride) ? L"TRUE" : L"FALSE");
 						return true;
 					}
 					else
@@ -90,7 +90,7 @@ bool cSource::findSpecificAnaphor(wstring tagName, int where, int element, int &
 				specificWhere--;
 			// a huge bus bearing down on us
 			if (specificWhere - where > 2 && m[specificWhere].queryWinnerForm(verbForm) >= 0 && m[specificWhere - 1].queryWinnerForm(nounForm) >= 0 &&
-				!(m[specificWhere - 1].word->second.inflectionFlags&(PLURAL_OWNER | SINGULAR_OWNER)) && !(m[specificWhere - 1].flags&cWordMatch::flagNounOwner))
+				!(m[specificWhere - 1].word->second.inflectionFlags & (PLURAL_OWNER | SINGULAR_OWNER)) && !(m[specificWhere - 1].flags & cWordMatch::flagNounOwner))
 				specificWhere--;
 			// the doctor most [of all] / least [of all]
 			if (specificWhere - where >= 2 && m[specificWhere - 1].queryWinnerForm(nounForm) >= 0 &&
@@ -99,7 +99,7 @@ bool cSource::findSpecificAnaphor(wstring tagName, int where, int element, int &
 			pluralNounOverride = findTag(tagSets[J], L"PLURAL", nextPlural) >= 0;
 			if (debugTrace.traceAnaphors)
 				lplog(LOG_RESOLUTION, L"%06d:Search for specific anaphor returned N_AGREE=(%d,%d) GNOUN=(%d,%d) specificWhere=%d plural=%s embedded=%s.",
-			where, whereNoun, nextNoun, whereGNoun, nextGNoun, specificWhere, (pluralNounOverride) ? L"TRUE" : L"FALSE", (embeddedName) ? L"TRUE" : L"FALSE");
+					where, whereNoun, nextNoun, whereGNoun, nextGNoun, specificWhere, (pluralNounOverride) ? L"TRUE" : L"FALSE", (embeddedName) ? L"TRUE" : L"FALSE");
 			return true;
 		}
 	}
@@ -126,8 +126,8 @@ bool cSource::isPleonastic(unsigned int where)
 {
 	LFS
 		if (m[where].word->first != L"it" || where + 4 > m.size()) return false;
-	const wchar_t *MA[] = { L"necessary",L"possible",L"certain",L"likely",L"important",L"good",L"useful",L"advisable",L"convenient",
-	  L"sufficient",L"economical",L"easy",L"desirable",L"difficult",L"legal",L"surprising",NULL };
+	const wchar_t* MA[] = { L"necessary",L"possible",L"certain",L"likely",L"important",L"good",L"useful",L"advisable",L"convenient",
+		L"sufficient",L"economical",L"easy",L"desirable",L"difficult",L"legal",L"surprising",NULL };
 	if (m[where + 1].word->first == L"is")
 	{
 		int I;
@@ -140,11 +140,11 @@ bool cSource::isPleonastic(unsigned int where)
 				if (m[where + 4].pma.queryPattern(L"_INFP") != -1) return true;
 				int tmpPP;
 				if ((tmpPP = m[where + 4].pma.queryPattern(L"_PP")) == -1) return false;
-				return m[where + 4 + m[where + 4].pma[tmpPP&~cMatchElement::patternFlag].len].pma.queryPattern(L"_INFP") != -1;
+				return m[where + 4 + m[where + 4].pma[tmpPP & ~cMatchElement::patternFlag].len].pma.queryPattern(L"_INFP") != -1;
 			}
 			return false;
 		}
-		const wchar_t *COG[] = { L"recommended",L"thought",L"believed",L"known",L"anticipated",L"assumed",L"expected",NULL };
+		const wchar_t* COG[] = { L"recommended",L"thought",L"believed",L"known",L"anticipated",L"assumed",L"expected",NULL };
 		for (I = 0; COG[I] && m[where + 2].word->first != COG[I]; I++);
 		if (COG[I] && m[where + 3].pma.queryPattern(L"_REL1") != -1) return true;
 		if (m[where + 2].word->first == L"time") return true;
@@ -152,12 +152,12 @@ bool cSource::isPleonastic(unsigned int where)
 		{
 			int tmpPP;
 			if ((tmpPP = m[where + 3].pma.queryPattern(L"_PP")) == -1) return false;
-			return m[where + 3 + m[where + 3].pma[tmpPP&~cMatchElement::patternFlag].len].pma.queryPattern(L"_REL1") != -1;
+			return m[where + 3 + m[where + 3].pma[tmpPP & ~cMatchElement::patternFlag].len].pma.queryPattern(L"_REL1") != -1;
 		}
 		return false;
 	}
 	// It MEANS (that) S [ It MEANS S1 or REL1]
-	const wchar_t *MEANS[] = { L"seems",L"appears",L"means",L"follows",NULL };
+	const wchar_t* MEANS[] = { L"seems",L"appears",L"means",L"follows",NULL };
 	int I;
 	for (I = 0; MEANS[I] && m[where + 2].word->first != MEANS[I]; I++);
 	if (MEANS[I] && (m[where + 3].pma.queryPattern(L"__S1") != -1 || m[where + 3].pma.queryPattern(L"_REL1") != -1)) return true;
@@ -167,7 +167,7 @@ bool cSource::isPleonastic(unsigned int where)
 	return true;
 }
 
-bool cSource::searchExactMatch(cObject &object, int position)
+bool cSource::searchExactMatch(cObject& object, int position)
 {
 	LFS
 		if (object.objectClass != NAME_OBJECT_CLASS &&
@@ -191,7 +191,7 @@ bool cSource::searchExactMatch(cObject &object, int position)
 	return false;
 }
 
-void cSource::accumulateAdjective(const wstring &fromWord, unordered_set <wstring> &words, vector <tIWMM> &validList, bool isAdjective, wstring &aa, bool &containsMale, bool &containsFemale)
+void cSource::accumulateAdjective(const wstring& fromWord, unordered_set <wstring>& words, vector <tIWMM>& validList, bool isAdjective, wstring& aa, bool& containsMale, bool& containsFemale)
 {
 	LFS
 		for (auto wi = words.begin(), wiEnd = words.end(); wi != wiEnd; wi++)
@@ -253,11 +253,11 @@ void cSource::addWNExtensions(void)
 	if (w_tall != Words.end() && w_small != Words.end())
 	{
 		if ((mainEntry = w_tall->second.mainEntry) == wNULL) mainEntry = w_tall;
-		if (!(mainEntry->second.flags&cSourceWordInfo::genericGenderIgnoreMatch) && wnAntonymsAdjectiveMap.find(mainEntry) == wnAntonymsAdjectiveMap.end())
+		if (!(mainEntry->second.flags & cSourceWordInfo::genericGenderIgnoreMatch) && wnAntonymsAdjectiveMap.find(mainEntry) == wnAntonymsAdjectiveMap.end())
 			fillWNMaps(-1, mainEntry, true);
 		wnAntonymsAdjectiveMap[w_tall].push_back(w_small);
 		if ((mainEntry = w_small->second.mainEntry) == wNULL) mainEntry = w_small;
-		if (!(mainEntry->second.flags&cSourceWordInfo::genericGenderIgnoreMatch) && wnAntonymsAdjectiveMap.find(mainEntry) == wnAntonymsAdjectiveMap.end())
+		if (!(mainEntry->second.flags & cSourceWordInfo::genericGenderIgnoreMatch) && wnAntonymsAdjectiveMap.find(mainEntry) == wnAntonymsAdjectiveMap.end())
 			fillWNMaps(-1, mainEntry, true);
 		wnAntonymsAdjectiveMap[w_small].push_back(w_tall);
 	}
@@ -280,7 +280,7 @@ void cSource::addDefaultGenderedAssociatedNouns(int o)
 			objects[o].objectClass == GENDERED_RELATIVE_OBJECT_CLASS) &&
 			(objects[o].male ^ objects[o].female))
 		{
-			vector <tIWMM> *an = &objects[o].associatedNouns;
+			vector <tIWMM>* an = &objects[o].associatedNouns;
 			if (objects[o].male)
 			{
 				if (find(an->begin(), an->end(), Words.gquery(L"man")) == an->end())
@@ -391,7 +391,7 @@ void cSource::accumulateAdjectives(int where)
 			// that Russian chap Kramenin
 			for (int I = m[where].beginObjectPosition; I < m[where].endObjectPosition; I++)
 			{
-				if (m[I].word->second.flags&cSourceWordInfo::genericGenderIgnoreMatch)
+				if (m[I].word->second.flags & cSourceWordInfo::genericGenderIgnoreMatch)
 				{
 					endNameAdjectives = I;
 					break;
@@ -431,8 +431,8 @@ void cSource::accumulateAdjectives(int where)
 				m[I].word->first == L"dear") // my dear sir / Dear Tommy
 				continue;
 			//lplog(LOG_RESOLUTION,L"%06d:%s  PERSX    SYN %s",where,objectString(adjectiveObject,tmpstr,true).c_str(),m[I].word->first.c_str());
-			map <tIWMM, vector <tIWMM>, cSourceWordInfo::cRMap::wordMapCompare > *wnsMap;
-			map <tIWMM, int, cSourceWordInfo::cRMap::wordMapCompare> *wnsGenderMap;
+			map <tIWMM, vector <tIWMM>, cSourceWordInfo::cRMap::wordMapCompare >* wnsMap;
+			map <tIWMM, int, cSourceWordInfo::cRMap::wordMapCompare>* wnsGenderMap;
 			if (isAdjective &= (I != where))
 			{
 				wnsMap = &wnSynonymsAdjectiveMap;
@@ -445,7 +445,7 @@ void cSource::accumulateAdjectives(int where)
 			}
 			tIWMM mainEntry = m[I].word->second.mainEntry;
 			if (mainEntry == wNULL) mainEntry = m[I].word;
-			if (!(mainEntry->second.flags&cSourceWordInfo::genericGenderIgnoreMatch) && wnsMap->find(mainEntry) == wnsMap->end())
+			if (!(mainEntry->second.flags & cSourceWordInfo::genericGenderIgnoreMatch) && wnsMap->find(mainEntry) == wnsMap->end())
 				fillWNMaps(I, mainEntry, isAdjective);
 			if (isAdjective)
 			{
@@ -461,9 +461,9 @@ void cSource::accumulateAdjectives(int where)
 			int gender = (*wnsGenderMap)[mainEntry];
 			if (gender && objects[adjectiveObject].objectClass != NON_GENDERED_NAME_OBJECT_CLASS)
 			{
-				genderSet = (gender&(MALE_GENDER | FEMALE_GENDER)) != 0;
-				objects[adjectiveObject].male = (gender&MALE_GENDER) != 0;
-				objects[adjectiveObject].female = (gender&FEMALE_GENDER) != 0;
+				genderSet = (gender & (MALE_GENDER | FEMALE_GENDER)) != 0;
+				objects[adjectiveObject].male = (gender & MALE_GENDER) != 0;
+				objects[adjectiveObject].female = (gender & FEMALE_GENDER) != 0;
 			}
 		}
 		if (objects[adjectiveObject].objectClass == NAME_OBJECT_CLASS && debugTrace.traceSpeakerResolution)
@@ -569,7 +569,7 @@ bool cSource::hasDemonyms(vector <cObject>::iterator o)
 	return false;
 }
 
-bool cSource::sharedDemonyms(int where, bool traceNymMatch, vector <cObject>::iterator o, vector <cObject>::iterator lso, tIWMM &fromMatch, tIWMM &toMatch, tIWMM &toMapMatch)
+bool cSource::sharedDemonyms(int where, bool traceNymMatch, vector <cObject>::iterator o, vector <cObject>::iterator lso, tIWMM& fromMatch, tIWMM& toMatch, tIWMM& toMapMatch)
 {
 	LFS
 		wstring tmpstr, tmpstr2;
@@ -610,7 +610,7 @@ bool cSource::sharedDemonyms(int where, bool traceNymMatch, vector <cObject>::it
 			fromMatch = toMatch = toMapMatch = *ani;
 			if (traceNymMatch)
 				lplog(LOG_RESOLUTION, L"%06d:SD 4) o=%s lso=%s MATCH %s", where, objectString(o, tmpstr, true).c_str(), objectString(lso, tmpstr2, true).c_str(),
-				(*ani)->first.c_str());
+					(*ani)->first.c_str());
 			return true;
 		}
 	for (vector <tIWMM>::iterator ani = o->associatedNouns.begin(), aniEnd = o->associatedNouns.end(); ani != aniEnd; ani++)
@@ -621,7 +621,7 @@ bool cSource::sharedDemonyms(int where, bool traceNymMatch, vector <cObject>::it
 			toMatch = toMapMatch = *ani;
 	if (traceNymMatch)
 		lplog(LOG_RESOLUTION, L"%06d:SD 4) o=%s lso=%s NO MATCH %s!=%s", where, objectString(o, tmpstr, true).c_str(), objectString(lso, tmpstr2, true).c_str(),
-		(fromMatch != wNULL) ? fromMatch->first.c_str() : L"(None)", (toMatch != wNULL) ? toMatch->first.c_str() : L"(None)");
+			(fromMatch != wNULL) ? fromMatch->first.c_str() : L"(None)", (toMatch != wNULL) ? toMatch->first.c_str() : L"(None)");
 	return false;
 }
 
@@ -638,7 +638,7 @@ bool cSource::nymNoMatch(vector <cObject>::iterator o, tIWMM adj)
 	wstring logMatch;
 	tIWMM fromMatch, toMatch, toMapMatch;
 	associatedAdjectives.push_back(adj);
-	const wchar_t *type = L"single";
+	const wchar_t* type = L"single";
 	return  (nymMapMatch(o->associatedAdjectives, wnSynonymsAdjectiveMap, associatedAdjectives, wnAntonymsAdjectiveMap, true, getFromMatch, traceThisMatch, logMatch, fromMatch, toMatch, toMapMatch, type, L"o adj syn <-> lso adj ant") ||
 		nymMapMatch(o->associatedNouns, wnSynonymsNounMap, associatedAdjectives, wnAntonymsAdjectiveMap, true, getFromMatch, traceThisMatch, logMatch, fromMatch, toMatch, toMapMatch, type, L"o noun syn <-> lso adj ant")) &&
 
@@ -651,7 +651,7 @@ bool cSource::nymNoMatch(vector <cObject>::iterator o, tIWMM adj)
 // C. one other object is 'big' having synonyms 'astronomic' 'big' and antonyms 'little'
 // so A&B are truly opposites: A's synonyms and B's antonyms AND A's antonyms and B's synonyms have common members
 //    A&C should be ignored: A's synonyms and B's antonyms are common but NOT A's antonyms and B's synonyms
-bool cSource::nymNoMatch(int where, vector <cObject>::iterator o, vector <cObject>::iterator lso, bool getFromMatch, bool traceThisMatch, wstring &logMatch, tIWMM &fromMatch, tIWMM &toMatch, tIWMM &toMapMatch, const wchar_t * type)
+bool cSource::nymNoMatch(int where, vector <cObject>::iterator o, vector <cObject>::iterator lso, bool getFromMatch, bool traceThisMatch, wstring& logMatch, tIWMM& fromMatch, tIWMM& toMatch, tIWMM& toMapMatch, const wchar_t* type)
 {
 	LFS
 		//if (!objectClassComparable(o,lso)) return false;
@@ -686,7 +686,7 @@ int cSource::limitedNymMatch(vector <cObject>::iterator o, vector <cObject>::ite
 		int nounsMatched = 0, adjectivesMatched = 0;
 	for (unsigned int I = 0; I < o->associatedNouns.size(); I++)
 		if ((o->associatedNouns[I]->second.query(demonymForm) >= 0 || o->associatedNouns[I]->second.query(PROPER_NOUN_FORM_NUM) >= 0) &&
-			!(o->associatedNouns[I]->second.flags&cSourceWordInfo::genericGenderIgnoreMatch) &&
+			!(o->associatedNouns[I]->second.flags & cSourceWordInfo::genericGenderIgnoreMatch) &&
 			find(lso->associatedNouns.begin(), lso->associatedNouns.end(), o->associatedNouns[I]) != lso->associatedNouns.end())
 			nounsMatched++;
 	for (unsigned int I = 0; I < o->associatedAdjectives.size(); I++)
@@ -699,7 +699,7 @@ int cSource::limitedNymMatch(vector <cObject>::iterator o, vector <cObject>::ite
 	return total;
 }
 
-int cSource::nymMatch(vector <cObject>::iterator o, vector <cObject>::iterator lso, bool getFromMatch, bool traceNymMatch, bool &explicitOccupationMatch, wstring &logMatch, tIWMM &fromMatch, tIWMM &toMatch, tIWMM &toMapMatch, const wchar_t * type)
+int cSource::nymMatch(vector <cObject>::iterator o, vector <cObject>::iterator lso, bool getFromMatch, bool traceNymMatch, bool& explicitOccupationMatch, wstring& logMatch, tIWMM& fromMatch, tIWMM& toMatch, tIWMM& toMapMatch, const wchar_t* type)
 {
 	LFS
 		// limit flow of adjectives and nouns from body objects
@@ -715,7 +715,7 @@ int cSource::nymMatch(vector <cObject>::iterator o, vector <cObject>::iterator l
 	vector <tIWMM> marked;
 	for (unsigned int I = 0; I < o->associatedNouns.size(); I++)
 	{
-		if (o->associatedNouns[I]->second.flags&cSourceWordInfo::genericGenderIgnoreMatch) continue;
+		if (o->associatedNouns[I]->second.flags & cSourceWordInfo::genericGenderIgnoreMatch) continue;
 		if (find(lso->associatedNouns.begin(), lso->associatedNouns.end(), o->associatedNouns[I]) != lso->associatedNouns.end())
 		{
 			marked.push_back(o->associatedNouns[I]);
@@ -742,7 +742,7 @@ int cSource::nymMatch(vector <cObject>::iterator o, vector <cObject>::iterator l
 		// this should not check for genericGenderIgnoreMatch because we still want 'man' to match a 'man' more than someone named 'Tommy'
 		// don't allow 'the voice' to force match (because of matching heads) to 'his voice' 
 		((headsMatch && ((o->objectClass != BODY_OBJECT_CLASS || o->getOwnerWhere() < 0))) ? 2 : 0); // && !(m[o->originalLocation].word->second.flags&cSourceWordInfo::genericGenderIgnoreMatch)) ? 1 : 0);
-   // matching against original locations will work if they are the same class.  But if they are different classes
+	 // matching against original locations will work if they are the same class.  But if they are different classes
 	if (traceNymMatch)
 		lplog(LOG_RESOLUTION, L"nounsMatched[*3]=%d adjectivesMatched[*3]=%d originals match (%d,%d) %s=%s yields a total [%d] - explicitOccupationMatch=%s", nounsMatched, adjectivesMatched,
 			o->originalLocation, lso->originalLocation, m[o->originalLocation].word->first.c_str(), (headsMatch) ? L"true" : L"false", total, (explicitOccupationMatch) ? L"true" : L"false");
@@ -751,7 +751,7 @@ int cSource::nymMatch(vector <cObject>::iterator o, vector <cObject>::iterator l
 	return total;
 }
 
-int cSource::identifySubType(int principalWhere, bool &partialMatch)
+int cSource::identifySubType(int principalWhere, bool& partialMatch)
 {
 	LFS
 		unsigned int oc = objects[m[principalWhere].getObject()].objectClass, maxObjectsPerType = 0;
@@ -775,7 +775,7 @@ int cSource::identifySubType(int principalWhere, bool &partialMatch)
 	unordered_map <int, int> objectMappings;
 	int maxSubType = -1;
 	unsigned int maxObjectMatchValue = 0, op = m[principalWhere].beginObjectPosition;
-	vector < tIWMM > *maxMWO=0;
+	vector < tIWMM >* maxMWO = 0;
 	vector <cWordMatch>::iterator lastPosition = (oc == NAME_OBJECT_CLASS || oc == NON_GENDERED_NAME_OBJECT_CLASS) ? m.begin() + m[principalWhere].endObjectPosition - 1 : m.begin() + principalWhere;
 	for (vector <cWordMatch>::iterator im = m.begin() + op, imEnd = m.begin() + m[principalWhere].endObjectPosition; im != imEnd; im++, op++)
 	{
@@ -783,7 +783,7 @@ int cSource::identifySubType(int principalWhere, bool &partialMatch)
 		{
 			bool isProperNoun = im->forms.isSet(PROPER_NOUN_FORM_NUM);
 			vector <int>::iterator subType = im->word->second.relatedSubTypes.begin();
-			vector < tIWMM > *mwo;
+			vector < tIWMM >* mwo;
 			unordered_map <int, int>::iterator omi;
 			for (vector <int>::iterator pii = im->word->second.relatedSubTypeObjects.begin(), piiEnd = im->word->second.relatedSubTypeObjects.end(); pii != piiEnd; pii++, subType++)
 			{
@@ -798,7 +798,7 @@ int cSource::identifySubType(int principalWhere, bool &partialMatch)
 						break;
 					mwoPWPosition = *imwo;
 				}
-				int uniqueObjectIndex = (*subType)*maxObjectsPerType + *pii, positionValue = (im == lastPosition && im->word == mwoPWPosition) ? 10 : 1;
+				int uniqueObjectIndex = (*subType) * maxObjectsPerType + *pii, positionValue = (im == lastPosition && im->word == mwoPWPosition) ? 10 : 1;
 				unsigned int objectValue = ((omi = objectMappings.find(uniqueObjectIndex)) == objectMappings.end()) ? (objectMappings[uniqueObjectIndex] = positionValue) : omi->second += positionValue;
 				if (objectValue > maxObjectMatchValue ||
 					((*subType == GEOGRAPHICAL_URBAN_SUBFEATURE || *subType == BY_ACTIVITY || *subType == GEOGRAPHICAL_URBAN_SUBSUBFEATURE) && maxSubType == GEOGRAPHICAL_URBAN_FEATURE && objectValue == maxObjectMatchValue))
@@ -829,7 +829,7 @@ int cSource::identifySubType(int principalWhere, bool &partialMatch)
 					if (*subType <= WORLD_CITY_TOWN_VILLAGE && !isProperNoun)
 						continue;
 					mwo = &multiWordObjects[*subType][*pii];
-					int uniqueObjectIndex = (*subType)*maxObjectsPerType + *pii, positionValue = (im == lastPosition && w == (*mwo)[mwo->size() - 1]) ? 10 : 1;
+					int uniqueObjectIndex = (*subType) * maxObjectsPerType + *pii, positionValue = (im == lastPosition && w == (*mwo)[mwo->size() - 1]) ? 10 : 1;
 					unsigned int objectValue = ((omi = objectMappings.find(uniqueObjectIndex)) == objectMappings.end()) ? (objectMappings[uniqueObjectIndex] = positionValue) : omi->second += positionValue;
 					if (objectValue > maxObjectMatchValue || ((*subType == GEOGRAPHICAL_URBAN_SUBFEATURE || *subType == BY_ACTIVITY || *subType == GEOGRAPHICAL_URBAN_SUBSUBFEATURE) && maxSubType == GEOGRAPHICAL_URBAN_FEATURE))
 					{
@@ -896,7 +896,7 @@ bool cSource::assignRelativeClause(int where)
 		scanForLocation(pmWhere < 0 && m[checkEnd].pma.queryPattern(L"__C1_IP", C1Len) != -1, relAsObject, whereRelClause, pmWhere, checkEnd + C1Len);
 		// scan past trailing prepositional phrases
 		// a tall man with close-cropped hair and a short, pointed, naval-looking beard, who sat where the head of the table with papers in front of him.
-		for (cPatternMatchArray::tPatternMatch *pm = m[checkEnd].pma.content, *pmend = pm + m[checkEnd].pma.count; pm != pmend && pmWhere < 0; pm++)
+		for (cPatternMatchArray::tPatternMatch* pm = m[checkEnd].pma.content, *pmend = pm + m[checkEnd].pma.count; pm != pmend && pmWhere < 0; pm++)
 			if (patterns[pm->getPattern()]->name == L"_PP" && checkEnd + pm->len < (int)m.size())
 			{
 				scanForLocation(true, relAsObject, whereRelClause, pmWhere, checkEnd + pm->len);
@@ -905,10 +905,10 @@ bool cSource::assignRelativeClause(int where)
 		// skip relative phrases which have embedded sentences (because they do not necessarily bind to the previous object)
 		//   // she went to London, where she entered a children's hospital.
 		// there is a certain man[brown] , a man whose real name is unknown to us[tuppence,tommy] , who is working in the dark for his[brown] own ends
-		for (cPatternMatchArray::tPatternMatch *pm = m[checkEnd].pma.content, *pmend = pm + m[checkEnd].pma.count; pm != pmend && pmWhere < 0; pm++)
+		for (cPatternMatchArray::tPatternMatch* pm = m[checkEnd].pma.content, *pmend = pm + m[checkEnd].pma.count; pm != pmend && pmWhere < 0; pm++)
 			if (patterns[pm->getPattern()]->name == L"_REL1")
 			{
-				if ((m[checkEnd + 1].objectRole&SUBJECT_ROLE) && (m[checkEnd].word->first == L"who" || m[checkEnd].word->first == L"whom") &&
+				if ((m[checkEnd + 1].objectRole & SUBJECT_ROLE) && (m[checkEnd].word->first == L"who" || m[checkEnd].word->first == L"whom") &&
 					(objects[o].male || objects[o].female) && !objects[o].neuter)
 					objects[o].whereRelSubjectClause = checkEnd + 1; // this points to an object that is not yet identified
 				scanForLocation(true, relAsObject, whereRelClause, pmWhere, checkEnd + pm->len);
@@ -921,10 +921,10 @@ bool cSource::assignRelativeClause(int where)
 			// pause at end of relative clause or when OBJECT is hit.
 			bool isSingular = false, isPlural = false;
 			int relEnd = whereRelClause + m[whereRelClause].pma[pmWhere].len;
-			for (int I = whereRelClause + 1; I < relEnd && !(m[I].objectRole&OBJECT_ROLE) && (!isSingular && !isPlural); I++)
+			for (int I = whereRelClause + 1; I < relEnd && !(m[I].objectRole & OBJECT_ROLE) && (!isSingular && !isPlural); I++)
 			{
-				isSingular = (m[I].word->second.inflectionFlags&(VERB_PRESENT_THIRD_SINGULAR | VERB_PRESENT_FIRST_SINGULAR | VERB_PAST_THIRD_SINGULAR | VERB_PRESENT_SECOND_SINGULAR)) != 0;
-				isPlural = (m[I].word->second.inflectionFlags&(VERB_PAST_PLURAL | VERB_PRESENT_PLURAL)) != 0;
+				isSingular = (m[I].word->second.inflectionFlags & (VERB_PRESENT_THIRD_SINGULAR | VERB_PRESENT_FIRST_SINGULAR | VERB_PAST_THIRD_SINGULAR | VERB_PRESENT_SECOND_SINGULAR)) != 0;
+				isPlural = (m[I].word->second.inflectionFlags & (VERB_PAST_PLURAL | VERB_PRESENT_PLURAL)) != 0;
 			}
 			if ((isSingular && objects[o].plural) || (isPlural && !objects[o].plural))
 			{
@@ -940,7 +940,7 @@ bool cSource::assignRelativeClause(int where)
 		bool isNeuter = objects[o].neuter || objects[o].objectClass == BODY_OBJECT_CLASS;
 		if (pmWhere >= 0 && whereRelClause >= 0 &&
 			((isNeuter && m[whereRelClause].word->first != L"which" && m[whereRelClause].word->first != L"that") ||
-			(!isNeuter && (m[whereRelClause].word->first == L"which" || m[whereRelClause].word->first == L"that"))))
+				(!isNeuter && (m[whereRelClause].word->first == L"which" || m[whereRelClause].word->first == L"that"))))
 		{
 			pmWhere = -1;
 			if (debugTrace.traceSpeakerResolution)
@@ -962,13 +962,13 @@ bool cSource::assignRelativeClause(int where)
 			if (oBefore >= 0)
 			{
 				wstring tmpstr;
-				if (!(m[oBefore].objectRole&RE_OBJECT_ROLE) && (m[where].objectRole&RE_OBJECT_ROLE))
+				if (!(m[oBefore].objectRole & RE_OBJECT_ROLE) && (m[where].objectRole & RE_OBJECT_ROLE))
 				{
 					pmWhere = -1;
 					if (debugTrace.traceSpeakerResolution)
 						lplog(LOG_RESOLUTION, L"%06d:%s rejected a relative clause at %d (RE_OBJECT).", where, objectString(o, tmpstr, true).c_str(), whereRelClause);
 				}
-				else if ((m[oBefore].objectRole&RE_OBJECT_ROLE) && !(m[where].objectRole&RE_OBJECT_ROLE))
+				else if ((m[oBefore].objectRole & RE_OBJECT_ROLE) && !(m[where].objectRole & RE_OBJECT_ROLE))
 				{
 					objects[oo].relativeClausePM = objects[oo].whereRelativeClause = -1;
 					if (oo >= 0 && debugTrace.traceSpeakerResolution)
@@ -1048,7 +1048,7 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 		// this is to correct parsing errors that inadvertently classify the noun as modifying the ordinal
 		if (where < principalWhere && m[principalWhere].queryWinnerForm(numeralOrdinalForm) >= 0 && m[principalWhere - 1].queryWinnerForm(nounForm) >= 0)
 			principalWhere--;
-		end = (element == -1) ? where + 1 : (element&cMatchElement::patternFlag) ? m[where].pma[element&~cMatchElement::patternFlag].len + where : where + 1;
+		end = (element == -1) ? where + 1 : (element & cMatchElement::patternFlag) ? m[where].pma[element & ~cMatchElement::patternFlag].len + where : where + 1;
 		if ((signed)end > where + 1 && m[end - 1].word->first == L"--")
 		{
 			end--; // subtract -- from the end of a noun (see NOUN[E])
@@ -1072,7 +1072,7 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 				int tmp2=(pnwf>=0) ? m[I].word->second.usageCosts[pnwf] : -1;
 				int tmp3=(nwf>=0) ? m[I].word->second.usageCosts[nwf] : -1;
 				*/
-				if (!(m[I].flags&cWordMatch::flagAllCaps) ||
+				if (!(m[I].flags & cWordMatch::flagAllCaps) ||
 					(pnwf = m[I].queryWinnerForm(PROPER_NOUN_FORM_NUM)) >= 0 &&
 					(((nwf = m[I].queryWinnerForm(nounForm)) < 0) || m[I].word->second.getUsageCost(pnwf) <= m[I].word->second.getUsageCost(nwf)))
 					break;
@@ -1088,19 +1088,19 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 			}
 		}
 		// you are English, aren't you?
-		if (m[begin].queryForm(demonymForm) >= 0 && end - begin == 1 && (m[begin].word->second.inflectionFlags&PLURAL) == PLURAL &&
-			(m[begin].objectRole&(SUBJECT_ROLE | OBJECT_ROLE)) == OBJECT_ROLE)
+		if (m[begin].queryForm(demonymForm) >= 0 && end - begin == 1 && (m[begin].word->second.inflectionFlags & PLURAL) == PLURAL &&
+			(m[begin].objectRole & (SUBJECT_ROLE | OBJECT_ROLE)) == OBJECT_ROLE)
 			return -1;
 		if (!identifyName(begin, principalWhere, end, nameElement, name, isMale, isFemale, isNeuter, plural, isBusiness, comparableName, comparableNameAdjective, requestWikiAgreement, objectClass) &&
 			m[principalWhere].isGendered())
 		{
 			int inflectionFlags = m[principalWhere].word->second.inflectionFlags;
 			if (!isBusiness && (m[principalWhere].queryWinnerForm(PROPER_NOUN_FORM_NUM) >= 0 ||
-				(m[principalWhere].flags&cWordMatch::flagFirstLetterCapitalized) != 0 ||
-				(inflectionFlags&(MALE_GENDER_ONLY_CAPITALIZED | FEMALE_GENDER_ONLY_CAPITALIZED)) == 0))
+				(m[principalWhere].flags & cWordMatch::flagFirstLetterCapitalized) != 0 ||
+				(inflectionFlags & (MALE_GENDER_ONLY_CAPITALIZED | FEMALE_GENDER_ONLY_CAPITALIZED)) == 0))
 			{
-				isMale = (inflectionFlags&(MALE_GENDER | MALE_GENDER_ONLY_CAPITALIZED)) != 0;
-				isFemale = (inflectionFlags&(FEMALE_GENDER | FEMALE_GENDER_ONLY_CAPITALIZED)) != 0;
+				isMale = (inflectionFlags & (MALE_GENDER | MALE_GENDER_ONLY_CAPITALIZED)) != 0;
+				isFemale = (inflectionFlags & (FEMALE_GENDER | FEMALE_GENDER_ONLY_CAPITALIZED)) != 0;
 			}
 			else
 				isMale = isFemale = false;
@@ -1109,11 +1109,11 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 		{
 			// an Irish Sinn feiner (a name, so principalWhere is set to Irish, but it should be set to Sinn feiner, because Irish is a plural noun)
 			if (objectClass == GENDERED_DEMONYM_OBJECT_CLASS && (m[principalWhere].queryForm(demonymForm) < 0 || m[end - 1].queryForm(demonymForm) >= 0)) principalWhere = end - 1;
-			plural = (m[principalWhere].word->second.inflectionFlags&PLURAL) == PLURAL;
-			bool singular = (m[principalWhere].word->second.inflectionFlags&SINGULAR) == SINGULAR;
-			isNeuter = (m[principalWhere].word->second.inflectionFlags&NEUTER_GENDER) == NEUTER_GENDER;
+			plural = (m[principalWhere].word->second.inflectionFlags & PLURAL) == PLURAL;
+			bool singular = (m[principalWhere].word->second.inflectionFlags & SINGULAR) == SINGULAR;
+			isNeuter = (m[principalWhere].word->second.inflectionFlags & NEUTER_GENDER) == NEUTER_GENDER;
 			// prevent 'that' and 'this' from relative phrases from concatenating onto the beginning of objects
-			if ((plural ^ singular) && (principalWhere - where < 2 || !(m[where + 1].flags&cWordMatch::flagNounOwner)))
+			if ((plural ^ singular) && (principalWhere - where < 2 || !(m[where + 1].flags & cWordMatch::flagNounOwner)))
 			{
 				if ((plural && (m[where].word->first == L"that" || m[where].word->first == L"this")) ||
 					(!plural && (m[where].word->first == L"these" || m[where].word->first == L"those")))
@@ -1134,14 +1134,14 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 	else
 	{
 		isNeuter = true;
-		principalWhere = m[where].pma[element&~cMatchElement::patternFlag].len + where - 1;
+		principalWhere = m[where].pma[element & ~cMatchElement::patternFlag].len + where - 1;
 		end = principalWhere + 1;
 		if (m[principalWhere].queryForm(quoteForm) >= 0) principalWhere--;
 		// the(95557) much- heralded “Labour Day,”
 		if (m[principalWhere].word->first == L"." || m[principalWhere].word->first == L",") principalWhere--;
 	}
 	int ownerWhere = previousOwnerWhere;
-	bool singularBodyPart=false;
+	bool singularBodyPart = false;
 	if (adjectival)
 	{
 		bool possessivePronoun = false;
@@ -1157,13 +1157,13 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 			}
 			int element2 = m[principalWhere].pma.queryPattern(L"__NAMEOWNER");
 			if (element2 != -1) element2 &= ~cMatchElement::patternFlag;
-			plural = plural || (m[principalWhere].word->second.inflectionFlags&PLURAL_OWNER) == PLURAL_OWNER ||
+			plural = plural || (m[principalWhere].word->second.inflectionFlags & PLURAL_OWNER) == PLURAL_OWNER ||
 				(element2 >= 0 && patterns[m[principalWhere].pma[element2].getPattern()]->tags.find(PLURAL_TAG) != patterns[m[principalWhere].pma[element2].getPattern()]->tags.end());
 		}
 		//  The efficient German's voice but NOT 'The efficient German master' - The efficient German in the second example is not necessarily an independent entity
 		if (principalWhere && m[principalWhere].queryForm(demonymForm) >= 0 && m[ownerBegin].queryForm(determinerForm) >= 0)
 		{
-			if ((m[where].word->second.inflectionFlags&(PLURAL_OWNER | SINGULAR_OWNER)) || (m[where].flags&cWordMatch::flagNounOwner))
+			if ((m[where].word->second.inflectionFlags & (PLURAL_OWNER | SINGULAR_OWNER)) || (m[where].flags & cWordMatch::flagNounOwner))
 			{
 				begin = ownerBegin;
 				objectClass = GENDERED_DEMONYM_OBJECT_CLASS;
@@ -1172,7 +1172,7 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 			else
 				return -1;
 		}
-		if (principalWhere && m[principalWhere].queryForm(relativeForm) >= 0 && !(m[principalWhere].flags&cWordMatch::flagFirstLetterCapitalized))
+		if (principalWhere && m[principalWhere].queryForm(relativeForm) >= 0 && !(m[principalWhere].flags & cWordMatch::flagFirstLetterCapitalized))
 			objectClass = GENDERED_RELATIVE_OBJECT_CLASS;
 	}
 	else
@@ -1181,7 +1181,7 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 		for (unsigned int I = where; I < (unsigned)principalWhere; I++)
 		{
 			hasDeterminer |= (m[I].queryWinnerForm(determinerForm) >= 0);
-			cPatternMatchArray::tPatternMatch *pma = m[I].pma.content;
+			cPatternMatchArray::tPatternMatch* pma = m[I].pma.content;
 			int gElement = -1, maxLen = -1;
 			for (unsigned int PMAElement = 0; PMAElement < m[I].pma.count; PMAElement++, pma++)
 				if (patterns[pma->getPattern()]->hasTag(GNOUN_TAG) && pma->len > maxLen)
@@ -1191,7 +1191,7 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 					break;
 				}
 			if (I == where && where + maxLen == end) break; // don't analyze part of name
-	  // if _NAME (skip rest of _NAME)
+		// if _NAME (skip rest of _NAME)
 			int nameLen, nelement, ow = cObject::whichOrderWord(m[I].word);
 			if ((nelement = m[I].pma.queryPattern(L"_NAME", nameLen)) != -1 && nameLen >= maxLen)
 			{
@@ -1215,7 +1215,7 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 					// to 'his' which is not correct.  It is not 'his' check, it is 'his' banker's check.
 					// so this has to be either a pronoun to own or it has an OWNER flag on it.
 					if (identifyObject(nounTag, I, nelement, true, ownerWhere, where) >= 0 && m[I].getObject() >= 0 &&
-						(m[I].word->second.inflectionFlags&(PLURAL_OWNER | SINGULAR_OWNER)) || (m[I].flags&cWordMatch::flagNounOwner))
+						(m[I].word->second.inflectionFlags & (PLURAL_OWNER | SINGULAR_OWNER)) || (m[I].flags & cWordMatch::flagNounOwner))
 						ownerWhere = I;
 				}
 				else if (debugTrace.traceSpeakerResolution)
@@ -1226,33 +1226,33 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 			{
 				hasDeterminer = true;
 				int inflectionFlags = m[I].word->second.inflectionFlags;
-				if ((inflectionFlags&(MALE_GENDER | FEMALE_GENDER)) == MALE_GENDER)
+				if ((inflectionFlags & (MALE_GENDER | FEMALE_GENDER)) == MALE_GENDER)
 					m[I].setObject(cObject::eOBJECTS::OBJECT_UNKNOWN_MALE);
-				else if ((inflectionFlags&(MALE_GENDER | FEMALE_GENDER)) == FEMALE_GENDER)
+				else if ((inflectionFlags & (MALE_GENDER | FEMALE_GENDER)) == FEMALE_GENDER)
 					m[I].setObject(cObject::eOBJECTS::OBJECT_UNKNOWN_FEMALE);
-				else if ((inflectionFlags&(MALE_GENDER | FEMALE_GENDER)) == (MALE_GENDER | FEMALE_GENDER))
+				else if ((inflectionFlags & (MALE_GENDER | FEMALE_GENDER)) == (MALE_GENDER | FEMALE_GENDER))
 					m[I].setObject(cObject::eOBJECTS::OBJECT_UNKNOWN_MALE_OR_FEMALE);
-				else if ((inflectionFlags&NEUTER_GENDER) == NEUTER_GENDER)
+				else if ((inflectionFlags & NEUTER_GENDER) == NEUTER_GENDER)
 					m[I].setObject(cObject::eOBJECTS::OBJECT_UNKNOWN_NEUTER);
-				else if ((inflectionFlags&(PLURAL | PLURAL_OWNER)) != 0)
+				else if ((inflectionFlags & (PLURAL | PLURAL_OWNER)) != 0)
 					m[I].setObject(cObject::eOBJECTS::OBJECT_UNKNOWN_PLURAL);
 				else
 					m[I].setObject(cObject::eOBJECTS::OBJECT_UNKNOWN_MALE_OR_FEMALE);
-				if ((inflectionFlags&(MALE_GENDER | FEMALE_GENDER)) != 0 || (inflectionFlags&(FIRST_PERSON | SECOND_PERSON)) != 0)
+				if ((inflectionFlags & (MALE_GENDER | FEMALE_GENDER)) != 0 || (inflectionFlags & (FIRST_PERSON | SECOND_PERSON)) != 0)
 					ownerWhere = I;
 				m[I].beginObjectPosition = I;
 				m[I].endObjectPosition = I + 1;
 				m[I].flags |= cWordMatch::flagAdjectivalObject;
 				m[I].principalWhereAdjectivalPosition = principalWhere;
 			}
-			else if (ow >= 0 && ((m[I].word->second.inflectionFlags&(PLURAL_OWNER | SINGULAR_OWNER)) || (m[I].flags&cWordMatch::flagNounOwner)))
+			else if (ow >= 0 && ((m[I].word->second.inflectionFlags & (PLURAL_OWNER | SINGULAR_OWNER)) || (m[I].flags & cWordMatch::flagNounOwner)))
 			{
 				hasDeterminer = true;
 				if (identifyObject(nounTag, I, nelement, true, ownerWhere, where) >= 0 && m[I].getObject() >= 0)
 					ownerWhere = I;
 			}
 			isOwnerGendered = ownerWhere != -1;
-			if (ownerWhere >= 0 && tagName != L"VNOUN" && tagName != L"GNOUN" && isOwnerGendered && isExternalBodyPart(principalWhere, singularBodyPart, (m[ownerWhere].word->second.inflectionFlags&(PLURAL_OWNER | PLURAL)) != 0))
+			if (ownerWhere >= 0 && tagName != L"VNOUN" && tagName != L"GNOUN" && isOwnerGendered && isExternalBodyPart(principalWhere, singularBodyPart, (m[ownerWhere].word->second.inflectionFlags & (PLURAL_OWNER | PLURAL)) != 0))
 			{
 				if (m[ownerWhere].getObject() <= cObject::eOBJECTS::UNKNOWN_OBJECT)
 				{
@@ -1266,7 +1266,7 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 					isOwnerMale = objects[m[ownerWhere].getObject()].male;
 					isOwnerFemale = objects[m[ownerWhere].getObject()].female;
 				}
-				isOwnerPlural = (m[ownerWhere].word->second.inflectionFlags&PLURAL) == PLURAL;
+				isOwnerPlural = (m[ownerWhere].word->second.inflectionFlags & PLURAL) == PLURAL;
 			}
 			// her former manner - the owner should be 'her' not 'former', since 'her' allows more information for resolution
 			if (ow >= 0 && ownerWhere < 0) ownerWhere = -2 - ow;
@@ -1287,16 +1287,16 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 				m[principalWhere].queryWinnerForm(indefinitePronounForm) >= 0 || m[principalWhere].queryWinnerForm(pronounForm) >= 0 ||
 				m[principalWhere].queryWinnerForm(demonstrativeDeterminerForm) >= 0) &&
 			// "another"
-				(cObject::whichOrderWord(m[principalWhere].word) == -1))
+			(cObject::whichOrderWord(m[principalWhere].word) == -1))
 			objectClass = (isPleonastic(principalWhere)) ? PLEONASTIC_OBJECT_CLASS : PRONOUN_OBJECT_CLASS;
 		if (end - begin == 2 && m[begin].word->first == L"some" && m[begin + 1].word->first == L"one")
 			objectClass = PRONOUN_OBJECT_CLASS;
 		// don't recognize 'that' in: He had never recognized that he was a good baseball player.
 		if (objectClass != NAME_OBJECT_CLASS && scanForPatternTag(where, SENTENCE_IN_REL_TAG) != -1 && end - where == 1)
 			return -1;
-		if (objectClass == NAME_OBJECT_CLASS && !(m[principalWhere].flags&cWordMatch::flagFirstLetterCapitalized) &&
+		if (objectClass == NAME_OBJECT_CLASS && !(m[principalWhere].flags & cWordMatch::flagFirstLetterCapitalized) &&
 			(m[principalWhere].queryForm(relativeForm) >= 0 ||
-			(m[principalWhere].word->second.mainEntry != wNULL && m[principalWhere].word->second.mainEntry->second.query(relativeForm) >= 0)))
+				(m[principalWhere].word->second.mainEntry != wNULL && m[principalWhere].word->second.mainEntry->second.query(relativeForm) >= 0)))
 		{
 			objectClass = GENDERED_RELATIVE_OBJECT_CLASS;
 			if (!isMale && !isFemale) isMale = isFemale = true;
@@ -1343,7 +1343,7 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 				objectClass = GENDERED_DEMONYM_OBJECT_CLASS;
 				if (!isMale && !isFemale) isMale = isFemale = true;
 			}
-			if (!(m[principalWhere].flags&cWordMatch::flagFirstLetterCapitalized) && (m[principalWhere].queryForm(relativeForm) >= 0 ||
+			if (!(m[principalWhere].flags & cWordMatch::flagFirstLetterCapitalized) && (m[principalWhere].queryForm(relativeForm) >= 0 ||
 				(m[principalWhere].word->second.mainEntry != wNULL && m[principalWhere].word->second.mainEntry->second.query(relativeForm) >= 0)))
 			{
 				objectClass = GENDERED_RELATIVE_OBJECT_CLASS;
@@ -1352,10 +1352,10 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 			// the accents of Number One / but not 'at hand' or 'on hand' 
 			if ((end - begin) == 1 && m[where].word->first == L"hand")
 				return -1;
-			if ((isOwnerGendered || (m[principalWhere].objectRole&(SUBJECT_ROLE | OBJECT_ROLE)) ||
-				((end - begin) > 1 && (m[principalWhere].objectRole&PREP_OBJECT_ROLE) && begin && m[begin].word->first != L"the" && m[begin - 1].word->first == L"with") ||
+			if ((isOwnerGendered || (m[principalWhere].objectRole & (SUBJECT_ROLE | OBJECT_ROLE)) ||
+				((end - begin) > 1 && (m[principalWhere].objectRole & PREP_OBJECT_ROLE) && begin && m[begin].word->first != L"the" && m[begin - 1].word->first == L"with") ||
 				(principalWhere + 1 < (signed)m.size() && m[principalWhere + 1].word->first == L"of")) &&
-				isExternalBodyPart(principalWhere, singularBodyPart, ownerWhere < 0 || (m[ownerWhere].word->second.inflectionFlags&(PLURAL_OWNER | PLURAL)) != 0))
+				isExternalBodyPart(principalWhere, singularBodyPart, ownerWhere < 0 || (m[ownerWhere].word->second.inflectionFlags & (PLURAL_OWNER | PLURAL)) != 0))
 			{
 				objectClass = BODY_OBJECT_CLASS;
 				if (isOwnerMale || isOwnerFemale)
@@ -1377,11 +1377,11 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 			// first-comer, last-comer, new-comer
 			if ((isWordOrder = cObject::whichOrderWord(m[principalWhere].word) != -1) ||
 				// my fellow, but not "the fellow" (fellow is also a generic gender word)
-				(isMetaGroupWord(principalWhere) && (!(m[principalWhere].word->second.flags&cSourceWordInfo::genericGenderIgnoreMatch) || ownerWhere != -1)) ||
+				(isMetaGroupWord(principalWhere) && (!(m[principalWhere].word->second.flags & cSourceWordInfo::genericGenderIgnoreMatch) || ownerWhere != -1)) ||
 				isGroupJoiner(m[principalWhere].word))
 			{
 				// if the object is only numbers, and more than one word, skip this.
-				bool allNumber=false;
+				bool allNumber = false;
 				for (int I = where; I < (signed)end && (allNumber = m[I].queryWinnerForm(numeralCardinalForm) >= 0 || m[I].queryWinnerForm(dashForm) >= 0); I++);
 				// either not entirely a number, or only of length one, and not primarily a number, or not an object of a preposition
 				if ((!allNumber || end - where == 1) && (m[where].queryWinnerForm(numeralCardinalForm) < 0 || !where ||
@@ -1391,9 +1391,9 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 					if (!isMale && !isFemale) isMale = isFemale = true;
 					if (isWordOrder && where == principalWhere)
 					{
-						isMale = (m[principalWhere].word->second.inflectionFlags&MALE_GENDER) == MALE_GENDER;
-						isFemale = (m[principalWhere].word->second.inflectionFlags&FEMALE_GENDER) == FEMALE_GENDER;
-						isNeuter = (m[principalWhere].word->second.inflectionFlags&NEUTER_GENDER) == NEUTER_GENDER;
+						isMale = (m[principalWhere].word->second.inflectionFlags & MALE_GENDER) == MALE_GENDER;
+						isFemale = (m[principalWhere].word->second.inflectionFlags & FEMALE_GENDER) == FEMALE_GENDER;
+						isNeuter = (m[principalWhere].word->second.inflectionFlags & NEUTER_GENDER) == NEUTER_GENDER;
 						isNeuter |= (!isMale && !isFemale);
 					}
 				}
@@ -1405,7 +1405,7 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 			if (objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS)
 			{
 				// SNL / IBM
-				if (m[where].word->first.length() > 1 && (end - begin) == 1 && (m[where].flags&cWordMatch::flagAllCaps))
+				if (m[where].word->first.length() > 1 && (end - begin) == 1 && (m[where].flags & cWordMatch::flagAllCaps))
 				{
 					objectClass = NON_GENDERED_NAME_OBJECT_CLASS;
 					name.any = m[where].word;
@@ -1421,7 +1421,7 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 		objectClass = META_GROUP_OBJECT_CLASS;
 	if (isBusiness || (objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS && m[principalWhere].queryWinnerForm(businessForm) >= 0))
 		objectClass = NON_GENDERED_BUSINESS_OBJECT_CLASS;
-	int PMAElement = ((element&cMatchElement::patternFlag) && element != -1) ? element & ~cMatchElement::patternFlag : -1;
+	int PMAElement = ((element & cMatchElement::patternFlag) && element != -1) ? element & ~cMatchElement::patternFlag : -1;
 	cObject thisObject(objectClass, name, where, end, principalWhere, PMAElement, ownerWhere, isMale, isFemale, isNeuter, plural, false);
 	if (ownerWhere >= 0)
 	{
@@ -1437,7 +1437,7 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 			thisObject.ownerMale = objects[m[ownerWhere].getObject()].male;
 			thisObject.ownerFemale = objects[m[ownerWhere].getObject()].female;
 		}
-		thisObject.ownerPlural = (m[ownerWhere].word->second.inflectionFlags&PLURAL) == PLURAL;
+		thisObject.ownerPlural = (m[ownerWhere].word->second.inflectionFlags & PLURAL) == PLURAL;
 	}
 	if (!searchExactMatch(thisObject, principalWhere))
 	{
@@ -1448,7 +1448,7 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 		*/
 		for (int I = thisObject.begin; I < thisObject.end; I++)
 		{
-			cBitObject<> *forms = &m[I].forms;
+			cBitObject<>* forms = &m[I].forms;
 			if ((forms->isSet(nounForm) || forms->isSet(adjectiveForm) || forms->isSet(adverbForm) ||
 				forms->isSet(verbForm) || forms->isSet(PROPER_NOUN_FORM_NUM) || forms->isSet(NUMBER_FORM_NUM) || forms->isSet(numeralOrdinalForm) ||
 				(forms->isSet(honorificForm) && m[I].queryForm(L"pinr") < 0)) &&
@@ -1474,10 +1474,10 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 	}
 	m[principalWhere].beginObjectPosition = where;
 	m[principalWhere].endObjectPosition = end;
-	if (!cWord::illegalWord(&mysql,m[principalWhere].word->first))
+	if (!cWord::illegalWord(&mysql, m[principalWhere].word->first))
 		accumulateAdjectives(principalWhere);
 	objects[m[principalWhere].getObject()].setSubType(identifySubType(principalWhere, objects[m[principalWhere].getObject()].partialMatch));
-	if (objects[m[principalWhere].getObject()].getSubType() < 0 && (end - where) == 1 && (m[where].word->second.timeFlags&T_UNIT))
+	if (objects[m[principalWhere].getObject()].getSubType() < 0 && (end - where) == 1 && (m[where].word->second.timeFlags & T_UNIT))
 		objects[m[principalWhere].getObject()].isNotAPlace = true; // this is a time, not a place
 	assignRelativeClause(principalWhere);
 	addAssociatedNounsFromTitle(m[principalWhere].getObject());
@@ -1582,17 +1582,17 @@ void cSource::printObjects(void)
 
 // determine whether a pattern that is not owned by any other pattern and has finalIfAlone set
 // still has isSeparator on both sides.  If not, flag to eliminate.
-bool cSource::eraseWinnerFromRecalculatingAloneness(int where, cPatternMatchArray::tPatternMatch *pma)
+bool cSource::eraseWinnerFromRecalculatingAloneness(int where, cPatternMatchArray::tPatternMatch* pma)
 {
 	LFS
-	cPattern *p = patterns[pma->getPattern()];
+		cPattern* p = patterns[pma->getPattern()];
 	if ((p->fillIfAloneFlag || p->onlyAloneExceptInSubPatternsFlag) &&
-		!pema.ownedByOtherWinningPattern(-1,m[where].beginPEMAPosition, pma->getPattern(), pma->len) &&
+		!pema.ownedByOtherWinningPattern(-1, m[where].beginPEMAPosition, pma->getPattern(), pma->len) &&
 		((where && !m[where - 1].isWinnerSeparator()) ||
-		(where + pma->len < (int)m.size() && !m[where + pma->len].isWinnerSeparator())))
+			(where + pma->len < (int)m.size() && !m[where + pma->len].isWinnerSeparator())))
 	{
 		int nPEMAPosition = pma->pemaByPatternEnd, np;
-		cPatternElementMatchArray::tPatternElementMatch *pem = pema.begin() + nPEMAPosition;
+		cPatternElementMatchArray::tPatternElementMatch* pem = pema.begin() + nPEMAPosition;
 		// check all children of this pattern
 		for (; nPEMAPosition >= 0 && pem->getParentPattern() == pma->getPattern() && (pem->end - pem->begin) == pma->len; nPEMAPosition = pem->nextPatternElement, pem = pema.begin() + nPEMAPosition)
 		{
@@ -1606,7 +1606,7 @@ bool cSource::eraseWinnerFromRecalculatingAloneness(int where, cPatternMatchArra
 				return false;
 			}
 		}
-		vector <cPatternMatchArray::tPatternMatch *> PMAToRemoveWinner;
+		vector <cPatternMatchArray::tPatternMatch*> PMAToRemoveWinner;
 		vector <int> parentPEMAToRemoveWinner;
 		if (removeWinnerFlag(where, pma, 2, PMAToRemoveWinner, parentPEMAToRemoveWinner))
 		{
@@ -1630,7 +1630,7 @@ bool cSource::eraseWinnerFromRecalculatingAloneness(int where, cPatternMatchArra
 		if (!(p->fillIfAloneFlag || p->onlyAloneExceptInSubPatternsFlag))
 			lplog(L"position %d:pma %d:%s[%s](%d,%d)*%d not eliminated because it does not have alone flags.",
 				where, pma - m[where].pma.content, p->name.c_str(), p->differentiator.c_str(), where, where + pma->len, pma->cost);
-		else if (pema.ownedByOtherWinningPattern(-1,m[where].beginPEMAPosition, pma->getPattern(), pma->len))
+		else if (pema.ownedByOtherWinningPattern(-1, m[where].beginPEMAPosition, pma->getPattern(), pma->len))
 			lplog(L"position %d:pma %d:%s[%s](%d,%d)*%d not eliminated because it is owned by another winner pattern.",
 				where, pma - m[where].pma.content, p->name.c_str(), p->differentiator.c_str(), where, where + pma->len, pma->cost);
 		else if (!(where && !m[where - 1].isWinnerSeparator()) && !(where + pma->len < (int)m.size() && !m[where + pma->len].isWinnerSeparator()))
@@ -1640,11 +1640,11 @@ bool cSource::eraseWinnerFromRecalculatingAloneness(int where, cPatternMatchArra
 	return false;
 }
 
-bool cSource::removeWinnerFlag(int where, cPatternMatchArray::tPatternMatch *pma,int recursionSpaces,vector <cPatternMatchArray::tPatternMatch *> &PMAToRemoveWinner, vector <int> &parentPEMAToRemoveWinner)
+bool cSource::removeWinnerFlag(int where, cPatternMatchArray::tPatternMatch* pma, int recursionSpaces, vector <cPatternMatchArray::tPatternMatch*>& PMAToRemoveWinner, vector <int>& parentPEMAToRemoveWinner)
 {
 	if (find(PMAToRemoveWinner.begin(), PMAToRemoveWinner.end(), pma) != PMAToRemoveWinner.end())
 		return true;
-	cPattern *p = patterns[pma->getPattern()];
+	cPattern* p = patterns[pma->getPattern()];
 	if (!pma->isWinner()) /* OPTION */
 	{
 		if (debugTrace.tracePatternElimination)
@@ -1661,14 +1661,14 @@ bool cSource::removeWinnerFlag(int where, cPatternMatchArray::tPatternMatch *pma
 	for (int nPEMAPositionByPatternEnd = pma->pemaByPatternEnd; nPEMAPositionByPatternEnd >= 0; nPEMAPositionByPatternEnd = pema[nPEMAPositionByPatternEnd].nextByPatternEnd)
 	{
 		int nPEMAPositionByPatternElement = nPEMAPositionByPatternEnd;
-		cPatternElementMatchArray::tPatternElementMatch *pem = pema.begin() + nPEMAPositionByPatternElement;
+		cPatternElementMatchArray::tPatternElementMatch* pem = pema.begin() + nPEMAPositionByPatternElement;
 		if (!pem->isWinner()) /* OPTION */
 		{
 			if (debugTrace.tracePatternElimination)
 			{
-				cPattern *pemp = patterns[pem->getParentPattern()];
+				cPattern* pemp = patterns[pem->getParentPattern()];
 				lplog(L"%*sposition %d:pema %d:%s[%s](%d,%d)*%d not a winner!", recursionSpaces - 2, L" ",
-					where, pem - pema.begin(), pemp->name.c_str(), pemp->differentiator.c_str(), where+pem->begin, where + pem->end, pem->getOCost());
+					where, pem - pema.begin(), pemp->name.c_str(), pemp->differentiator.c_str(), where + pem->begin, where + pem->end, pem->getOCost());
 			}
 			//continue;
 		}
@@ -1696,7 +1696,7 @@ bool cSource::removeWinnerFlag(int where, cPatternMatchArray::tPatternMatch *pma
 			{
 				if (debugTrace.tracePatternElimination)
 				{
-					cPattern *pemp = patterns[pem->getParentPattern()];
+					cPattern* pemp = patterns[pem->getParentPattern()];
 					lplog(L"%*sposition %d:pema %d:%s[%s](%d,%d)*%d not a winner!", recursionSpaces - 2, L" ",
 						where, pem - pema.begin(), pemp->name.c_str(), pemp->differentiator.c_str(), where + pem->begin, where + pem->end, pem->getOCost());
 				}
@@ -1712,7 +1712,7 @@ bool cSource::removeWinnerFlag(int where, cPatternMatchArray::tPatternMatch *pma
 						pem->getChildLen() + where - pem->begin,
 						(pem->flagSet(cPatternElementMatchArray::ELIMINATED)) ? 'E' : ' ');
 				// is this the only winner parent of this child? 
-				if (!pema.ownedByOtherWinningPattern(nPEMAPositionByPatternElement,m[where - pem->begin].beginPEMAPosition, pem->getChildPattern(), pem->getChildLen()))
+				if (!pema.ownedByOtherWinningPattern(nPEMAPositionByPatternElement, m[where - pem->begin].beginPEMAPosition, pem->getChildPattern(), pem->getChildLen()))
 				{
 					int pmaOffset = m[where - pem->begin].pma.queryPatternWithLen(pem->getChildPattern(), pem->getChildLen());
 					if (pmaOffset == -1)
@@ -1721,7 +1721,7 @@ bool cSource::removeWinnerFlag(int where, cPatternMatchArray::tPatternMatch *pma
 							lplog(L"%d:Could not find pattern %s[*][%d].", where - pem->begin, patterns[pem->getChildPattern()]->name.c_str(), pem->getChildLen() + where - pem->begin);
 					}
 					else
-						childrenRemovalComplete=removeWinnerFlag(where - pem->begin, m[where - pem->begin].pma.content + (pmaOffset&~cMatchElement::patternFlag), recursionSpaces + 2, PMAToRemoveWinner, parentPEMAToRemoveWinner);
+						childrenRemovalComplete = removeWinnerFlag(where - pem->begin, m[where - pem->begin].pma.content + (pmaOffset & ~cMatchElement::patternFlag), recursionSpaces + 2, PMAToRemoveWinner, parentPEMAToRemoveWinner);
 				}
 				if (childrenRemovalComplete)
 					temporaryPEMAToRemove.push_back(nPEMAPositionByPatternElement);
@@ -1764,16 +1764,16 @@ bool cSource::isAnySeparator(int where)
 		for (int np = m[where].beginPEMAPosition; np >= 0; np = pema[np].nextByPosition)
 			if (!pema[np].isChildPattern() && m[where].word->second.Form(pema[np].getChildForm())->isTopLevel)
 				return true;
-	return (m[where].word->second.flags&cSourceWordInfo::topLevelSeparator) != 0 && m[where].beginPEMAPosition < 0;
+	return (m[where].word->second.flags & cSourceWordInfo::topLevelSeparator) != 0 && m[where].beginPEMAPosition < 0;
 }
 
 // determine whether a pattern that is not owned by any other pattern and has finalIfAlone set
 // still has isSeparator on both sides.  separator is determined by all patterns matching.  If there are no patterns matching, then if lowest cost.
 // if not, add high cost.
-bool cSource::addCostFromRecalculatingAloneness(int where, cPatternMatchArray::tPatternMatch *pma)
+bool cSource::addCostFromRecalculatingAloneness(int where, cPatternMatchArray::tPatternMatch* pma)
 {
 	LFS // DLFS
-		cPattern *p = patterns[pma->getPattern()];
+		cPattern* p = patterns[pma->getPattern()];
 	//lplog(L"%d:%s[%s]*%d(%d,%d) not alone? fill=%s not owned=%s sep begin=%s sep end=%s.",
 	//			where,p->name.c_str(),p->differentiator.c_str(),pma->cost,where,where+pma->len,
 	//				(p->fillIfAloneFlag || p->onlyAloneExceptInSubPatternsFlag) ? L"true":L"false",
@@ -1783,7 +1783,7 @@ bool cSource::addCostFromRecalculatingAloneness(int where, cPatternMatchArray::t
 	if ((p->fillIfAloneFlag || p->onlyAloneExceptInSubPatternsFlag) &&
 		!pema.ownedByOtherPattern(m[where].beginPEMAPosition, pma->getPattern(), pma->len) &&
 		((where && !isAnySeparator(where - 1)) ||
-		(where + pma->len < (int)m.size() && !isAnySeparator(where + pma->len))))
+			(where + pma->len < (int)m.size() && !isAnySeparator(where + pma->len))))
 	{
 		int cost = 0;
 		if (where && !isAnySeparator(where - 1)) cost += m[where - 1].word->second.lowestSeparatorCost() / 1000;
@@ -1791,10 +1791,10 @@ bool cSource::addCostFromRecalculatingAloneness(int where, cPatternMatchArray::t
 		if (cost)
 		{
 			int nPEMAPosition = pma->pemaByPatternEnd;
-			cPatternElementMatchArray::tPatternElementMatch *pem = pema.begin() + nPEMAPosition;
+			cPatternElementMatchArray::tPatternElementMatch* pem = pema.begin() + nPEMAPosition;
 			if (debugTrace.traceParseInfo)
 				lplog(L"%d:%s[%s]*%d(%d,%d) added cost %d because it is a FINAL_IF_ALONE and it is not alone.",
-			where, p->name.c_str(), p->differentiator.c_str(), pma->cost, where, where + pma->len, cost);
+					where, p->name.c_str(), p->differentiator.c_str(), pma->cost, where, where + pma->len, cost);
 			for (; nPEMAPosition >= 0 && pem->getParentPattern() == pma->getPattern() && (pem->end - pem->begin) == pma->len; nPEMAPosition = pem->nextPatternElement, pem = pema.begin() + nPEMAPosition)
 				pem->addOCostTillMax(cost);
 			pma->addCostTillMax(cost);
@@ -1842,7 +1842,7 @@ void cSource::identifyObjects(void)
 	// pre-process patterns
 	for (unsigned int I = 0; I < patterns.size(); I++)
 	{
-		cPattern *p = patterns[I];
+		cPattern* p = patterns[I];
 		tagInSet = 0;
 		p->objectContainer = (p->allElementTags.isSet(PREP_TAG) || p->allElementTags.isSet(SUBOBJECT_TAG) ||
 			p->allElementTags.isSet(PREP_OBJECT_TAG) || p->allElementTags.isSet(VERB_TAG) ||
@@ -1874,7 +1874,7 @@ void cSource::identifyObjects(void)
 				// is *that* Ella? is *that* ours?  'that Ella' is ambiguous.  The identify object routine takes the longest object length, which excludes 'that' from being an object
 				// so reinclude it here.
 				int pmaOffset;
-				if (imtmp->getObject() == -1 && (pmaOffset = imtmp->pma.queryPatternWithLen(L"__NOUN",1)) != -1)
+				if (imtmp->getObject() == -1 && (pmaOffset = imtmp->pma.queryPatternWithLen(L"__NOUN", 1)) != -1)
 				{
 					identifyObject(-1, J, pmaOffset, false, -1, -1);
 					imtmp->flags |= cWordMatch::flagInQuestion;
@@ -1909,10 +1909,10 @@ void cSource::identifyObjects(void)
 		bool nameFound = false;
 		// find a pattern that is a noun, vnoun, pnoun, gnoun, name, without containing a prepositional phrase or subobject
 		// give preference to names and the greatest length
-		cPatternMatchArray::tPatternMatch *pma = im->pma.content, *saveOverride = NULL;
+		cPatternMatchArray::tPatternMatch* pma = im->pma.content, * saveOverride = NULL;
 		for (unsigned int PMAElement = 0; PMAElement < im->pma.count; PMAElement++, pma++)
 		{
-			cPattern *p = patterns[pma->getPattern()];
+			cPattern* p = patterns[pma->getPattern()];
 			if (p->name == L"_VERBREL1") saveOverride = pma;
 			if (p->objectTag >= 0 && !p->objectContainer && pma->len >= maxLen && !(pma->len == maxLen && nameFound))
 			{
@@ -1926,7 +1926,7 @@ void cSource::identifyObjects(void)
 				// this eliminates NOUNs that have been matched incorrectly such as NOUNs that have been
 				//  matched as part of another NOUN[B] which matches quotes that are not part of quoted strings
 				// but rather primary quotes which should not have been matched (but are because quoted strings are not analyzed until later)
-				cPatternMatchArray::tPatternMatch *pm2 = im->pma.content;
+				cPatternMatchArray::tPatternMatch* pm2 = im->pma.content;
 				for (unsigned int PE2 = 0; PE2 < im->pma.count; PE2++, pm2++)
 					if (pm2->len == pma->len &&
 						(pm2->cost < pma->cost || (pm2->cost == pma->cost && patterns[pm2->getPattern()]->name == L"__S1")) &&
@@ -1960,8 +1960,8 @@ void cSource::identifyObjects(void)
 		// which can mess up speaker resolution 29414:"thought Tuppence to herself"
 		if (saveOverride && lastTag >= 0 && maxLen > 1 && saveOverride->len >= maxLen && saveOverride->cost < lowestCost && m[I].queryWinnerForm(verbForm) >= 0)
 		{
-			cPattern *p = patterns[im->pma[element&~cMatchElement::patternFlag].getPattern()];
-			cPattern *vp = patterns[saveOverride->getPattern()];
+			cPattern* p = patterns[im->pma[element & ~cMatchElement::patternFlag].getPattern()];
+			cPattern* vp = patterns[saveOverride->getPattern()];
 			if (debugTrace.traceSpeakerResolution)
 				lplog(LOG_RESOLUTION, L"%06d:%s[%s]*%d(%d,%d) eliminated because of lower cost VERBREL %s[%s]*%d(%d,%d).",
 					I, p->name.c_str(), p->differentiator.c_str(), lowestCost, I, I + maxLen,

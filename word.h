@@ -113,7 +113,7 @@ typedef struct {
   const wchar_t *name;
 } tInflectionMap;
 
-tInflectionMap nounInflectionMap[],verbInflectionMap[],adjectiveInflectionMap[],adverbInflectionMap[];
+extern tInflectionMap nounInflectionMap[],verbInflectionMap[],adjectiveInflectionMap[],adverbInflectionMap[];
 const wchar_t *getInflectionName(int inflection,int form,wstring &temp);
 const wchar_t *getInflectionName(int inflection,tInflectionMap *map,wstring &temp);
 

@@ -89,7 +89,7 @@ from (select count(subjectLocal) totalSubjectCount,subjectLocal from multiWordRe
 where subjectCounts.totalSubjectCount>2 and subjectVerbCount.subjectVerbCount>2 and words.id=subjectCounts.subjectLocal and subjectCounts.subjectLocal=subjectVerbCount.subjectLocal order by subjectVerbCount.subjectVerbCount/subjectCounts.totalSubjectCount desc;
 
 // features:
-  avoids words that have low counts (<=2) and words that only exist as proper nouns by seeing whether lowerCaseCount is null or lowerCaseCount/upperCaseCount<10
+	avoids words that have low counts (<=2) and words that only exist as proper nouns by seeing whether lowerCaseCount is null or lowerCaseCount/upperCaseCount<10
 select subjectVerbCount.subjectVerbCount/subjectCounts.totalSubjectCount,words.word,subjectVerbCount.subjectVerbCount, subjectCounts.totalSubjectCount, lowercase.count lowerCaseCount, uppercase.count upperCaseCount
 from (select COUNT(words.mainEntryWordId) totalSubjectCount,words.mainEntryWordId subjectLocal from multiWordRelations,words where words.id=multiWordRelations.subjectLocal group by words.mainEntryWordId) subjectCounts,
 	 (select COUNT(words.mainEntryWordId) subjectVerbCount,words.mainEntryWordId subjectLocal from multiWordRelations,words where words.id=multiWordRelations.subjectLocal and verb=169 group by words.mainEntryWordId) subjectVerbCount,

@@ -1,5 +1,6 @@
 #pragma once
 #include "timeRelations.h"
+class cSyntacticRelationGroup;
 // accumulateProximityMaps
 // accumulateProximityEntry
 // semanticCheck

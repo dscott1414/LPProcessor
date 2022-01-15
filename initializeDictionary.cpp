@@ -9,47 +9,51 @@
 #include "time.h" // clock
 #include "wn.h"
 #include "profile.h"
-unordered_map <int,wstring> levinClassSectionToVerbMap; // initialized
-unordered_map <wstring,int> levinVerbToClassSectionMap; // dictionary initialized 
-unordered_map <int,wstring> levinClassSectionNames; // dictionary initialized 
+unordered_map <int, wstring> levinClassSectionToVerbMap; // initialized
+unordered_map <wstring, int> levinVerbToClassSectionMap; // dictionary initialized 
+unordered_map <int, wstring> levinClassSectionNames; // dictionary initialized 
 
 tIWMM cWord::gquery(wstring sWord)
-{ LFS
-	tIWMM iWord=WMM.find(sWord);
-	if (iWord==end())
-		lplog(LOG_FATAL_ERROR,L"FATAL ERROR: word %s not found.",sWord.c_str());
+{
+	LFS
+		tIWMM iWord = WMM.find(sWord);
+	if (iWord == end())
+		lplog(LOG_FATAL_ERROR, L"FATAL ERROR: word %s not found.", sWord.c_str());
 	return iWord;
 }
 
-tIWMM cWord::predefineWord(const wchar_t *word,int flags)
-{ LFS
-  unsigned int iForm=cForms::addNewForm(word,word,false);
-	handleExtendedParseWords((wchar_t *)word);
+tIWMM cWord::predefineWord(const wchar_t* word, int flags)
+{
+	LFS
+		unsigned int iForm = cForms::addNewForm(word, word, false);
+	handleExtendedParseWords((wchar_t*)word);
 	bool added;
-	return addNewOrModify(NULL,word,flags,iForm,0,0,L"",-1,added);
+	return addNewOrModify(NULL, word, flags, iForm, 0, 0, L"", -1, added);
 }
 
-int cWord::predefineWords(const wchar_t *words[],wstring sForm,wstring shortForm,int flags,bool properNounSubClass)
-{ LFS
-  unsigned int iForm=cForms::addNewForm(sForm,shortForm,false,properNounSubClass);
-	for (int I=0; words[I]; I++)
+int cWord::predefineWords(const wchar_t* words[], wstring sForm, wstring shortForm, int flags, bool properNounSubClass)
+{
+	LFS
+		unsigned int iForm = cForms::addNewForm(sForm, shortForm, false, properNounSubClass);
+	for (int I = 0; words[I]; I++)
 	{
 		handleExtendedParseWords(words[I]);
 		bool added;
-		addNewOrModify(NULL,words[I],flags,iForm,0,0,L"",-1,added);
+		addNewOrModify(NULL, words[I], flags, iForm, 0, 0, L"", -1, added);
 	}
 	return iForm;
 }
 
-int cWord::predefineWords(Inflections words[],wstring sForm,wstring shortName,wstring inflectionsClass,int flags,bool properNounSubClass)
-{ LFS
-	size_t aForm=cForms::createForm(sForm,shortName,true,inflectionsClass,properNounSubClass);
-	for (int I=0; words[I].word[0]; I++)
+int cWord::predefineWords(Inflections words[], wstring sForm, wstring shortName, wstring inflectionsClass, int flags, bool properNounSubClass)
+{
+	LFS
+		size_t aForm = cForms::createForm(sForm, shortName, true, inflectionsClass, properNounSubClass);
+	for (int I = 0; words[I].word[0]; I++)
 	{
 		handleExtendedParseWords(words[I].word);
 		bool added;
-		addNewOrModify(NULL, words[I].word,flags,aForm,words[I].inflection,0,L"",-1,added);
-		wchar_t *quote;
+		addNewOrModify(NULL, words[I].word, flags, aForm, words[I].inflection, 0, L"", -1, added);
+		wchar_t* quote;
 		if (quote = wcschr(words[I].word, L'\''))
 		{
 			*quote = L'ʼ';
@@ -61,67 +65,70 @@ int cWord::predefineWords(Inflections words[],wstring sForm,wstring shortName,ws
 	return 0;
 }
 
-int cWord::predefineWords(InflectionsRoot words[],wstring sForm,wstring shortName,wstring inflectionsClass,int flags,bool properNounSubClass)
-{ LFS
-	unsigned int aForm=cForms::createForm(sForm,shortName,true,inflectionsClass,properNounSubClass);
-	for (int I=0; words[I].word[0]; I++)
+int cWord::predefineWords(InflectionsRoot words[], wstring sForm, wstring shortName, wstring inflectionsClass, int flags, bool properNounSubClass)
+{
+	LFS
+		unsigned int aForm = cForms::createForm(sForm, shortName, true, inflectionsClass, properNounSubClass);
+	for (int I = 0; words[I].word[0]; I++)
 	{
 		handleExtendedParseWords(words[I].word);
 		bool added;
-		addNewOrModify(NULL, words[I].word,flags,aForm,words[I].inflection,0,words[I].mainEntry,-1,added);
+		addNewOrModify(NULL, words[I].word, flags, aForm, words[I].inflection, 0, words[I].mainEntry, -1, added);
 		// check for possible spaces and add dashes if only one space
-		bool containsSpaces=false;
-		for (unsigned int J=0; words[I].word[J]; J++)
-			if (words[I].word[J]==' ')
+		bool containsSpaces = false;
+		for (unsigned int J = 0; words[I].word[J]; J++)
+			if (words[I].word[J] == ' ')
 			{
-				containsSpaces=true;
-				words[I].word[J]='-';
+				containsSpaces = true;
+				words[I].word[J] = '-';
 			}
 		if (containsSpaces)
 		{
 			handleExtendedParseWords(words[I].word);
-			addNewOrModify(NULL, words[I].word,flags,aForm,words[I].inflection,0,words[I].mainEntry,-1,added);
+			addNewOrModify(NULL, words[I].word, flags, aForm, words[I].inflection, 0, words[I].mainEntry, -1, added);
 		}
 	}
 	return 0;
 }
 
-int cWord::predefineVerbsFromFile(wstring sForm,wstring shortName, const wchar_t * path,int flags)
-{ LFS
-	const wchar_t *inflectionsClass=L"verb";
-	bool properNounSubClass=false;
-	FILE *tf=_wfopen(path,L"rb");
+int cWord::predefineVerbsFromFile(wstring sForm, wstring shortName, const wchar_t* path, int flags)
+{
+	LFS
+		const wchar_t* inflectionsClass = L"verb";
+	bool properNounSubClass = false;
+	FILE* tf = _wfopen(path, L"rb");
 	if (!tf)
 	{
 		lplog(LOG_FATAL_ERROR, L"verb list %s is missing.", path);
 		return -1;
 	}
-	unsigned int aForm=cForms::createForm(sForm,shortName,true,inflectionsClass,properNounSubClass);
+	unsigned int aForm = cForms::createForm(sForm, shortName, true, inflectionsClass, properNounSubClass);
 	while (true)
 	{
-		wchar_t firstSingular[1024],past[1024],presentParticiple[1024],thirdSingular[1024];
-		if (fwscanf(tf,L"%s %s %s %s",firstSingular,past,presentParticiple,thirdSingular)!=4)
+		wchar_t firstSingular[1024], past[1024], presentParticiple[1024], thirdSingular[1024];
+		if (fwscanf(tf, L"%s %s %s %s", firstSingular, past, presentParticiple, thirdSingular) != 4)
 			break;
-		if (firstSingular[0]==65279) // BOM
-			wcscpy(firstSingular,firstSingular+1);
+		if (firstSingular[0] == 65279) // BOM
+			wcscpy(firstSingular, firstSingular + 1);
 		handleExtendedParseWords(firstSingular);
 		handleExtendedParseWords(past);
 		handleExtendedParseWords(presentParticiple);
 		handleExtendedParseWords(thirdSingular);
 		bool added;
-		addNewOrModify(NULL, firstSingular,flags,aForm,VERB_PRESENT_FIRST_SINGULAR,0,firstSingular,-1,added);
-		addNewOrModify(NULL, past,flags,aForm,VERB_PAST,0,firstSingular,-1,added);
-		addNewOrModify(NULL, presentParticiple,flags,aForm,VERB_PRESENT_PARTICIPLE,0,firstSingular,-1,added);
-		addNewOrModify(NULL, thirdSingular,flags,aForm,VERB_PRESENT_THIRD_SINGULAR,0,firstSingular,-1,added);
+		addNewOrModify(NULL, firstSingular, flags, aForm, VERB_PRESENT_FIRST_SINGULAR, 0, firstSingular, -1, added);
+		addNewOrModify(NULL, past, flags, aForm, VERB_PAST, 0, firstSingular, -1, added);
+		addNewOrModify(NULL, presentParticiple, flags, aForm, VERB_PRESENT_PARTICIPLE, 0, firstSingular, -1, added);
+		addNewOrModify(NULL, thirdSingular, flags, aForm, VERB_PRESENT_THIRD_SINGULAR, 0, firstSingular, -1, added);
 	}
 	fclose(tf);
 	return 0;
 }
 
 bool cWord::readVerbClasses(void)
-{ LFS
-	const wchar_t *path;
-	FILE *tf=_wfopen(path=L"source\\lists\\levinVerbClasses.txt",L"rb");
+{
+	LFS
+		const wchar_t* path;
+	FILE* tf = _wfopen(path = L"source\\lists\\levinVerbClasses.txt", L"rb");
 	if (!tf)
 	{
 		lplog(LOG_FATAL_ERROR, L"verb class list %s is missing.", path);
@@ -129,41 +136,41 @@ bool cWord::readVerbClasses(void)
 	}
 	wchar_t line[1024];
 	// acclaim : 2.10, 2.13.1, 2.13.2, 2.13.3, 33 
-	while (fgetws(line,1023,tf))
+	while (fgetws(line, 1023, tf))
 	{
-		if (wcschr(line,'/')) continue;
-		wchar_t *ch=wcschr(line,L':'),*ch2,*period;
-		if (!ch) 
+		if (wcschr(line, '/')) continue;
+		wchar_t* ch = wcschr(line, L':'), * ch2, * period;
+		if (!ch)
 		{
 			fclose(tf);
 			return false;
 		}
-		ch[-1]=0;
-		wstring verb=line;
-		ch+=2;
+		ch[-1] = 0;
+		wstring verb = line;
+		ch += 2;
 		while (true)
 		{
-			if (ch2=wcschr(ch,L',')) *ch2=0;
-			int classSection=0;
+			if (ch2 = wcschr(ch, L',')) *ch2 = 0;
+			int classSection = 0;
 			while (true)
 			{
-				if (period=wcschr(ch,L'.')) *period=0;
-				classSection+=_wtoi(ch)<<24;
+				if (period = wcschr(ch, L'.')) *period = 0;
+				classSection += _wtoi(ch) << 24;
 				if (!period) break;
-				if (period=wcschr(ch=period+1,L'.')) *period=0;
-				classSection+=_wtoi(ch)<<16;
+				if (period = wcschr(ch = period + 1, L'.')) *period = 0;
+				classSection += _wtoi(ch) << 16;
 				if (!period) break;
-				if (period=wcschr(ch=period+1,L'.')) *period=0;
-				classSection+=_wtoi(ch)<<8;
+				if (period = wcschr(ch = period + 1, L'.')) *period = 0;
+				classSection += _wtoi(ch) << 8;
 				if (!period) break;
-				if (period=wcschr(ch=period+1,L'.')) *period=0;
-				classSection+=_wtoi(ch);
+				if (period = wcschr(ch = period + 1, L'.')) *period = 0;
+				classSection += _wtoi(ch);
 				if (!period) break;
 			}
-			levinClassSectionToVerbMap[classSection]=verb;
-			levinVerbToClassSectionMap[verb]=classSection;
+			levinClassSectionToVerbMap[classSection] = verb;
+			levinVerbToClassSectionMap[verb] = classSection;
 			if (!ch2) break;
-			ch=ch2+2;
+			ch = ch2 + 2;
 		}
 	}
 	fclose(tf);
@@ -171,83 +178,85 @@ bool cWord::readVerbClasses(void)
 }
 
 bool cWord::readVerbClassNames(void)
-{ LFS
-	const wchar_t *path;
-	FILE *tf=_wfopen(path=L"source\\lists\\levinVerbCategories.txt",L"rb");
+{
+	LFS
+		const wchar_t* path;
+	FILE* tf = _wfopen(path = L"source\\lists\\levinVerbCategories.txt", L"rb");
 	if (!tf)
-		lplog(LOG_FATAL_ERROR,L"verb class category list %s is missing.",path);
+		lplog(LOG_FATAL_ERROR, L"verb class category list %s is missing.", path);
 	wchar_t line[1024];
 	//  01234567890
 	//   01.1.2.1  Causative/Inchoative Alternation
-	while (fgetws(line,1023,tf))
+	while (fgetws(line, 1023, tf))
 	{
-		if (wcsstr(line,L"//")) continue;
-		wchar_t *ch,*period,*cutoff;
-		if (ch=wcschr(line,13)) *ch=0;
-		if (cutoff=wcschr(line+11,L'\"')) *cutoff=0;
-		if (cutoff=wcsstr(line+11,L" verbs")) *cutoff=0;
-		wstring verbClassName=line+11;
-		line[10]=0;
-		ch=line+1;
-		int classSection=0;
+		if (wcsstr(line, L"//")) continue;
+		wchar_t* ch, * period, * cutoff;
+		if (ch = wcschr(line, 13)) *ch = 0;
+		if (cutoff = wcschr(line + 11, L'\"')) *cutoff = 0;
+		if (cutoff = wcsstr(line + 11, L" verbs")) *cutoff = 0;
+		wstring verbClassName = line + 11;
+		line[10] = 0;
+		ch = line + 1;
+		int classSection = 0;
 		while (true)
 		{
-			if (period=wcschr(ch,L'.')) *period=0;
-			classSection+=_wtoi(ch)<<24;
+			if (period = wcschr(ch, L'.')) *period = 0;
+			classSection += _wtoi(ch) << 24;
 			if (!period) break;
-			if (period=wcschr(ch=period+1,L'.')) *period=0;
-			classSection+=_wtoi(ch)<<16;
+			if (period = wcschr(ch = period + 1, L'.')) *period = 0;
+			classSection += _wtoi(ch) << 16;
 			if (!period) break;
-			if (period=wcschr(ch=period+1,L'.')) *period=0;
-			classSection+=_wtoi(ch)<<8;
+			if (period = wcschr(ch = period + 1, L'.')) *period = 0;
+			classSection += _wtoi(ch) << 8;
 			if (!period) break;
-			if (period=wcschr(ch=period+1,L'.')) *period=0;
-			classSection+=_wtoi(ch);
+			if (period = wcschr(ch = period + 1, L'.')) *period = 0;
+			classSection += _wtoi(ch);
 			if (!period) break;
 		}
-		levinClassSectionNames[classSection]=verbClassName;
+		levinClassSectionNames[classSection] = verbClassName;
 	}
 	fclose(tf);
 	return true;
 }
 
 int cWord::addProperNamesFile(wstring path)
-{ LFS
-	FILE *fp=_wfopen(path.c_str(),L"rb");
+{
+	LFS
+		FILE* fp = _wfopen(path.c_str(), L"rb");
 	if (!fp) return -1;
 	wchar_t line[1024];
-	fgetws(line,1024,fp);
-	fgetws(line,1024,fp);
-	fgetws(line,1024,fp);
+	fgetws(line, 1024, fp);
+	fgetws(line, 1024, fp);
+	fgetws(line, 1024, fp);
 	//Rank,Male,Number,Female,Number
 	// 9,Edward,7428,Mildred,5800
-	while (fgetws(line,1024,fp))
+	while (fgetws(line, 1024, fp))
 	{
 		int rank;
-		wchar_t *ch=line;
-		while (*ch!=',' && *ch) ch++;
+		wchar_t* ch = line;
+		while (*ch != ',' && *ch) ch++;
 		if (!*ch) continue;
-		*ch=0;
-		rank=_wtoi(line);
-		wchar_t *savech=++ch;
-		while (*ch!=',' && *ch) ch++;
+		*ch = 0;
+		rank = _wtoi(line);
+		wchar_t* savech = ++ch;
+		while (*ch != ',' && *ch) ch++;
 		if (!*ch) continue;
-		*ch=0;
+		*ch = 0;
 		//wstring maleName=savech;
 		bool added;
-		int flags=(query(savech)==end()) ? cSourceWordInfo::queryOnLowerCase : 0;
-		addNewOrModify(NULL, savech,flags,PROPER_NOUN_FORM_NUM/*MALE_GENDER+(rank<<8)+year*/,MALE_GENDER|MALE_GENDER_ONLY_CAPITALIZED,0,savech,-1,added);
-		savech=++ch;
-		while (*ch!=',' && *ch) ch++;
+		int flags = (query(savech) == end()) ? cSourceWordInfo::queryOnLowerCase : 0;
+		addNewOrModify(NULL, savech, flags, PROPER_NOUN_FORM_NUM/*MALE_GENDER+(rank<<8)+year*/, MALE_GENDER | MALE_GENDER_ONLY_CAPITALIZED, 0, savech, -1, added);
+		savech = ++ch;
+		while (*ch != ',' && *ch) ch++;
 		if (!*ch) continue;
-		*ch=0;
-		savech=++ch;
-		while (*ch!=',' && *ch) ch++;
+		*ch = 0;
+		savech = ++ch;
+		while (*ch != ',' && *ch) ch++;
 		if (!*ch) continue;
-		*ch=0;
+		*ch = 0;
 		//wstring femaleName=savech;
-		flags=(query(savech)==end()) ? cSourceWordInfo::queryOnLowerCase : 0;
-		addNewOrModify(NULL, savech,flags,PROPER_NOUN_FORM_NUM/*FEMALE_GENDER+(rank<<8)+year*/,FEMALE_GENDER|FEMALE_GENDER_ONLY_CAPITALIZED,0,savech,-1,added);
+		flags = (query(savech) == end()) ? cSourceWordInfo::queryOnLowerCase : 0;
+		addNewOrModify(NULL, savech, flags, PROPER_NOUN_FORM_NUM/*FEMALE_GENDER+(rank<<8)+year*/, FEMALE_GENDER | FEMALE_GENDER_ONLY_CAPITALIZED, 0, savech, -1, added);
 	}
 	fclose(fp);
 	return 0;
@@ -255,93 +264,96 @@ int cWord::addProperNamesFile(wstring path)
 
 #define MAX_BUF 32000
 
-int cWord::writeWord(tIWMM iWord, void *buffer, int &where, int limit)
+int cWord::writeWord(tIWMM iWord, void* buffer, int& where, int limit)
 {
 	LFS
 		if (iWord->second.mainEntry == wNULL)
 			lplog(LOG_ERROR, L"mainentry is NULL for word %s!", iWord->first.c_str());
 	if (!copy(buffer, iWord->first, where, limit))
 		return -1;
-	iWord->second.write(buffer,where,limit);
+	iWord->second.write(buffer, where, limit);
 	return 0;
 }
 
-int cWord::readFormsCache(char *buffer,int bufferlen,int &numReadForms)
-{ LFS
-	int where=0;
+int cWord::readFormsCache(char* buffer, int bufferlen, int& numReadForms)
+{
+	LFS
+		int where = 0;
 	unsigned int numForms;
-	if (!copy(numForms,buffer,where,bufferlen)) return -1;
-	numReadForms=numForms;
-	for (unsigned int iForm=0; iForm<numForms; iForm++)
+	if (!copy(numForms, buffer, where, bufferlen)) return -1;
+	numReadForms = numForms;
+	for (unsigned int iForm = 0; iForm < numForms; iForm++)
 	{
-		wstring name,shortName,inflectionsClass;
-		if (!copy(name,buffer,where,bufferlen)) return -1;
-		if (!copy(shortName,buffer,where,bufferlen)) return -1;
-		if (!copy(inflectionsClass,buffer,where,bufferlen)) return -1;
-		short hasInflections,properNounSubClass,isTopLevel,isIgnore,isVerbForm,blockProperNounRecognition,formCheck;
-		if (!copy(hasInflections,buffer,where,bufferlen)) return -1;
-		if (!copy(properNounSubClass,buffer,where,bufferlen)) return -1;
-		if (!copy(isTopLevel,buffer,where,bufferlen)) return -1;
-		if (!copy(isIgnore,buffer,where,bufferlen)) return -1;
-		if (!copy(isVerbForm,buffer,where,bufferlen)) return -1;
-		if (!copy(blockProperNounRecognition,buffer,where,bufferlen)) return -1;
-		if (!copy(formCheck,buffer,where,bufferlen)) return -1;
+		wstring name, shortName, inflectionsClass;
+		if (!copy(name, buffer, where, bufferlen)) return -1;
+		if (!copy(shortName, buffer, where, bufferlen)) return -1;
+		if (!copy(inflectionsClass, buffer, where, bufferlen)) return -1;
+		short hasInflections, properNounSubClass, isTopLevel, isIgnore, isVerbForm, blockProperNounRecognition, formCheck;
+		if (!copy(hasInflections, buffer, where, bufferlen)) return -1;
+		if (!copy(properNounSubClass, buffer, where, bufferlen)) return -1;
+		if (!copy(isTopLevel, buffer, where, bufferlen)) return -1;
+		if (!copy(isIgnore, buffer, where, bufferlen)) return -1;
+		if (!copy(isVerbForm, buffer, where, bufferlen)) return -1;
+		if (!copy(blockProperNounRecognition, buffer, where, bufferlen)) return -1;
+		if (!copy(formCheck, buffer, where, bufferlen)) return -1;
 		//lplog(L"%d:hasInflections=%d form=%s shortForm=%s inflectionsClass=%s",where,(int)hasInflections,name.c_str(),shortName.c_str(),inflectionsClass.c_str());
 		//int f=cForms::createForm(name,shortName,hasInflections!=0,inflectionsClass,properNounSubClass!=0);
-		if (cForms::findForm(name)<0)
+		if (cForms::findForm(name) < 0)
 		{
-			Forms.push_back(new cForm(-1,name,shortName,inflectionsClass,hasInflections!=0,properNounSubClass!=0,isTopLevel!=0,isIgnore!=0,isVerbForm!=0,blockProperNounRecognition!=0,formCheck!=0));
-			cForms::formMap[name]=Forms.size()-1;
+			Forms.push_back(new cForm(-1, name, shortName, inflectionsClass, hasInflections != 0, properNounSubClass != 0, isTopLevel != 0, isIgnore != 0, isVerbForm != 0, blockProperNounRecognition != 0, formCheck != 0));
+			cForms::formMap[name] = Forms.size() - 1;
 		}
 	}
 	return where;
 }
 
 int cWord::writeFormsCache(int fd)
-{ LFS
-	int where,numForms=(int)Forms.size(),len=(int)sizeof(numForms);
+{
+	LFS
+		int where, numForms = (int)Forms.size(), len = (int)sizeof(numForms);
 	if (::write(fd, &numForms, sizeof(numForms)) < 0)
-		lplog(LOG_FATAL_ERROR,L"Out of space writing forms cache.");
+		lplog(LOG_FATAL_ERROR, L"Out of space writing forms cache.");
 	if (logDatabaseDetails)
-		lplog(L"%d:writing %d forms.",len,numForms);
-	int I=0;
-	for (vector <cForm *>::iterator fc=Forms.begin(),fcend=Forms.end(); fc!=fcend; fc++,I++)
+		lplog(L"%d:writing %d forms.", len, numForms);
+	int I = 0;
+	for (vector <cForm*>::iterator fc = Forms.begin(), fcend = Forms.end(); fc != fcend; fc++, I++)
 	{
 		char buffer[MAX_BUF];
-		where=0;
+		where = 0;
 		//lplog(L"%d:%d:wrote form %s.",len,I,(*fc)->name.c_str());
-		(*fc)->write(buffer,where,MAX_BUF);
-		if (::write(fd,buffer,where)<0)
+		(*fc)->write(buffer, where, MAX_BUF);
+		if (::write(fd, buffer, where) < 0)
 			lplog(LOG_FATAL_ERROR, L"Out of space writing forms cache.");
-		len+=where;
+		len += where;
 	}
 	return len;
 }
 
 bool disqualify(wstring sWord)
-{ LFS
-	if (sWord.length()>MAX_WORD_LENGTH)
-		return true;
-	if (sWord[sWord.length()-1]==' ')
+{
+	LFS
+		if (sWord.length() > MAX_WORD_LENGTH)
+			return true;
+	if (sWord[sWord.length() - 1] == ' ')
 	{
-		lplog(LOG_ERROR,L"Word '%s' has a space at the end... Rejected (4).",sWord.c_str());
+		lplog(LOG_ERROR, L"Word '%s' has a space at the end... Rejected (4).", sWord.c_str());
 		return true;
 	}
-	if (sWord==L"--" || sWord==L"." || sWord==L"...")
+	if (sWord == L"--" || sWord == L"." || sWord == L"...")
 		return false;
-	int dashes=0;
-	for (unsigned I=0; I<sWord.length(); I++)
+	int dashes = 0;
+	for (unsigned I = 0; I < sWord.length(); I++)
 		if (cWord::isDash(sWord[I])) dashes++;
-	if (dashes>2) return true;
-	if (sWord.find('.')==wstring::npos)
+	if (dashes > 2) return true;
+	if (sWord.find('.') == wstring::npos)
 		return false;
 	// word may only have periods if it is a real abbreviation X.X.X.X. ...
 	// all other abbreviations must have already been introduced through initializeDictionary
-	for (const wchar_t *w=sWord.c_str(); *w; w+=2)
+	for (const wchar_t* w = sWord.c_str(); *w; w += 2)
 	{
-		if (*w<0 || !iswalpha(*w))
+		if (*w < 0 || !iswalpha(*w))
 			return true;
-		if (!w[1] || w[1]!='.')
+		if (!w[1] || w[1] != '.')
 			return true;
 	}
 	return false;
@@ -350,33 +362,33 @@ bool disqualify(wstring sWord)
 int cWord::readWords(wstring oPath, int sourceId, bool disqualifyWords, wstring specialExtension)
 {
 	LFS
-	oPath += L".wordCacheFile";
-	int fd=_wopen(oPath.c_str(),O_RDONLY|O_BINARY);
-	if (fd<0) return -1;
-	char *buffer;
-	int bufferlen=filelength(fd);
-	buffer=(char *)tmalloc(bufferlen+10);
-	::read(fd,buffer,bufferlen);
+		oPath += L".wordCacheFile";
+	int fd = _wopen(oPath.c_str(), O_RDONLY | O_BINARY);
+	if (fd < 0) return -1;
+	char* buffer;
+	int bufferlen = filelength(fd);
+	buffer = (char*)tmalloc(bufferlen + 10);
+	::read(fd, buffer, bufferlen);
 	close(fd);
-	int where=0,numReadForms;
-	where=readFormsCache(buffer,bufferlen,numReadForms);
-	if (where<0) return -1;
+	int where = 0, numReadForms;
+	where = readFormsCache(buffer, bufferlen, numReadForms);
+	if (where < 0) return -1;
 	// for preferVerbPresentParticiple contained in the cSourceWordInfo constructor
-	if (nounForm==-1) nounForm=cForms::gFindForm(L"noun");
-	if (adjectiveForm<0) adjectiveForm=cForms::gFindForm(L"adjective");
-	if (adverbForm<0) adverbForm=cForms::gFindForm(L"adverb");
-	if (prepositionForm<0) prepositionForm=cForms::gFindForm(L"preposition");
-	cForms::changedForms=false;
+	if (nounForm == -1) nounForm = cForms::gFindForm(L"noun");
+	if (adjectiveForm < 0) adjectiveForm = cForms::gFindForm(L"adjective");
+	if (adverbForm < 0) adverbForm = cForms::gFindForm(L"adverb");
+	if (prepositionForm < 0) prepositionForm = cForms::gFindForm(L"preposition");
+	cForms::changedForms = false;
 	wstring sWord;
-	tIWMM iWord=wNULL;
+	tIWMM iWord = wNULL;
 	vector <wstring> mainEntries;
 	vector <tIWMM> entries;
 	bool rejectionTitleIsPrinted = false;
 	//int numPreps=0;
-	while (where<bufferlen)
+	while (where < bufferlen)
 	{
 		//int saveWhere=where;
-		if (!copy(sWord,buffer,where,bufferlen)) return -1;
+		if (!copy(sWord, buffer, where, bufferlen)) return -1;
 		wstring sME;
 		if (disqualifyWords && disqualify(sWord))
 		{
@@ -386,135 +398,136 @@ int cWord::readWords(wstring oPath, int sourceId, bool disqualifyWords, wstring 
 				rejectionTitleIsPrinted = true;
 			}
 			lplog(LOG_ERROR, L"    %s", sWord.c_str());
-			cSourceWordInfo(buffer,where,bufferlen,sME,sourceId); // advance 'where' in buffer
+			cSourceWordInfo(buffer, where, bufferlen, sME, sourceId); // advance 'where' in buffer
 			continue;
 		}
-		if ((iWord=WMM.find(sWord))!=WMM.end())
+		if ((iWord = WMM.find(sWord)) != WMM.end())
 		{
-			if (iWord->second.updateFromDisk(buffer,where,bufferlen,sME))
+			if (iWord->second.updateFromDisk(buffer, where, bufferlen, sME))
 			{
 				entries.push_back(iWord);
 				mainEntries.push_back(sME);
-				#ifdef LOG_WORD_FLOW
-					lplog(L"Updated word %s.",sWord.c_str());
-				#endif
-        for (unsigned int K=0; K<iWord->second.formsSize(); K++)
-        {
-          if (iWord->second.forms()[K]>=(unsigned)numReadForms)
-            lplog(LOG_FATAL_ERROR,L"Word %s has illegal form #%d (out of max %d)!",sWord.c_str(),iWord->second.forms()[K],numReadForms);
-          
-        }
+#ifdef LOG_WORD_FLOW
+				lplog(L"Updated word %s.", sWord.c_str());
+#endif
+				for (unsigned int K = 0; K < iWord->second.formsSize(); K++)
+				{
+					if (iWord->second.forms()[K] >= (unsigned)numReadForms)
+						lplog(LOG_FATAL_ERROR, L"Word %s has illegal form #%d (out of max %d)!", sWord.c_str(), iWord->second.forms()[K], numReadForms);
+
+				}
 			}
-			#ifdef LOG_WORD_FLOW
-				else
-					lplog(L"Rejected word %s.",sWord.c_str());
-			#endif
+#ifdef LOG_WORD_FLOW
+			else
+				lplog(L"Rejected word %s.", sWord.c_str());
+#endif
 		}
 		else
 		{
-			iWord=WMM.insert(tWFIMap(sWord,cSourceWordInfo(buffer,where,bufferlen,sME,sourceId))).first;
+			iWord = WMM.insert(tWFIMap(sWord, cSourceWordInfo(buffer, where, bufferlen, sME, sourceId))).first;
 			entries.push_back(iWord);
 			mainEntries.push_back(sME);
-			handleExtendedParseWords((wchar_t *)sWord.c_str());
-      for (unsigned int K=0; K<iWord->second.formsSize(); K++)
-      {
-        if (iWord->second.forms()[K]>=(unsigned)numReadForms)
-          lplog(LOG_FATAL_ERROR,L"Word %s has illegal form #%d (out of max %d)!",sWord.c_str(),iWord->second.forms()[K],numReadForms);
-        
-      }
+			handleExtendedParseWords((wchar_t*)sWord.c_str());
+			for (unsigned int K = 0; K < iWord->second.formsSize(); K++)
+			{
+				if (iWord->second.forms()[K] >= (unsigned)numReadForms)
+					lplog(LOG_FATAL_ERROR, L"Word %s has illegal form #%d (out of max %d)!", sWord.c_str(), iWord->second.forms()[K], numReadForms);
+
+			}
 		}
 	}
-	for (unsigned int I=0; I<mainEntries.size(); I++)
+	for (unsigned int I = 0; I < mainEntries.size(); I++)
 		if (mainEntries[I].length())
 		{
-			iWord=WMM.find(mainEntries[I]);
-			if (iWord==end())
+			iWord = WMM.find(mainEntries[I]);
+			if (iWord == end())
 			{
-				entries[I]->second.flags|=cSourceWordInfo::queryOnAnyAppearance;
-				lplog(LOG_FATAL_ERROR,L"MainEntry %s not found in memory for word %s!",mainEntries[I].c_str(),entries[I]->first.c_str());
+				entries[I]->second.flags |= cSourceWordInfo::queryOnAnyAppearance;
+				lplog(LOG_FATAL_ERROR, L"MainEntry %s not found in memory for word %s!", mainEntries[I].c_str(), entries[I]->first.c_str());
 			}
 			else
 			{
-				entries[I]->second.mainEntry=iWord;
-				if (iWord!=wNULL)
+				entries[I]->second.mainEntry = iWord;
+				if (iWord != wNULL)
 					mainEntryMap[iWord->first].push_back(entries[I]);
 			}
 		}
-	tfree(bufferlen+10,buffer);
-	tIWMM w=begin(),wEnd=end();
-	for (w=begin(); w!=wEnd; w++)
-		if (w->second.mainEntry==wNULL && iswalpha(w->first[0]) && 
-				(w->second.query(nounForm)>=0 ||
-				 w->second.query(verbForm)>=0 ||
-				 w->second.query(adjectiveForm)>=0 ||
-				 w->second.query(adverbForm)>=0))
+	tfree(bufferlen + 10, buffer);
+	tIWMM w = begin(), wEnd = end();
+	for (w = begin(); w != wEnd; w++)
+		if (w->second.mainEntry == wNULL && iswalpha(w->first[0]) &&
+			(w->second.query(nounForm) >= 0 ||
+				w->second.query(verbForm) >= 0 ||
+				w->second.query(adjectiveForm) >= 0 ||
+				w->second.query(adverbForm) >= 0))
 		{
 			if (logDetail)
-				lplog(LOG_ERROR,L"Word %s has no mainEntry after reading wordcache!",w->first.c_str());
-			w->second.flags|=cSourceWordInfo::queryOnAnyAppearance;
-			w->second.mainEntry=w;
+				lplog(LOG_ERROR, L"Word %s has no mainEntry after reading wordcache!", w->first.c_str());
+			w->second.flags |= cSourceWordInfo::queryOnAnyAppearance;
+			w->second.mainEntry = w;
 		}
 	return 0;
 }
 
-int cWord::addGenderedNouns(const wchar_t *genPath,int defaultInflectionFlags,int wordForm)
-{ LFS
-	FILE *fgen=_wfopen(genPath,L"rb"); // binary mode reads unicode
+int cWord::addGenderedNouns(const wchar_t* genPath, int defaultInflectionFlags, int wordForm)
+{
+	LFS
+		FILE* fgen = _wfopen(genPath, L"rb"); // binary mode reads unicode
 	if (!fgen) return -1;
 	wchar_t noun[101];
-	while (fgetws(noun,100,fgen))
+	while (fgetws(noun, 100, fgen))
 	{
-		if (noun[0]==0xFEFF) // detect BOM
-			memcpy(noun,noun+1,(wcslen(noun+1)+1)*sizeof(noun[0]));
-		if (noun[wcslen(noun)-1]=='\n') noun[wcslen(noun)-1]=0;
-		if (noun[wcslen(noun)-1]=='\r') noun[wcslen(noun)-1]=0; // in binary mode, cr/lf is not translated
-		bool addWordNetSearch=false,hypo=false;
-		wchar_t *preferredSense=NULL,*ch;
-		if ((hypo=(ch=wcsstr(noun,L" +HYPO"))!=NULL) || (ch=wcsstr(noun,L" +COORDS")))
+		if (noun[0] == 0xFEFF) // detect BOM
+			memcpy(noun, noun + 1, (wcslen(noun + 1) + 1) * sizeof(noun[0]));
+		if (noun[wcslen(noun) - 1] == '\n') noun[wcslen(noun) - 1] = 0;
+		if (noun[wcslen(noun) - 1] == '\r') noun[wcslen(noun) - 1] = 0; // in binary mode, cr/lf is not translated
+		bool addWordNetSearch = false, hypo = false;
+		wchar_t* preferredSense = NULL, * ch;
+		if ((hypo = (ch = wcsstr(noun, L" +HYPO")) != NULL) || (ch = wcsstr(noun, L" +COORDS")))
 		{
-			addWordNetSearch=true;
-			*ch=0;
-			wchar_t *chsense=wcschr(ch+1,'('),*chsense2=wcschr(ch+1,')');
+			addWordNetSearch = true;
+			*ch = 0;
+			wchar_t* chsense = wcschr(ch + 1, '('), * chsense2 = wcschr(ch + 1, ')');
 			if (chsense && chsense2)
 			{
-				*chsense2=0;
-				preferredSense=chsense+1;
+				*chsense2 = 0;
+				preferredSense = chsense + 1;
 			}
 		}
-		while (noun[0] && isspace(noun[wcslen(noun)-1]))
-			noun[wcslen(noun)-1]=0;
+		while (noun[0] && isspace(noun[wcslen(noun) - 1]))
+			noun[wcslen(noun) - 1] = 0;
 		handleExtendedParseWords(noun);
 		bool added;
-		tIWMM word=query(noun);
-		if (word==end())
-			addNewOrModify(NULL, noun,cSourceWordInfo::queryOnAnyAppearance,wordForm,defaultInflectionFlags,0,noun,-1,added);
+		tIWMM word = query(noun);
+		if (word == end())
+			addNewOrModify(NULL, noun, cSourceWordInfo::queryOnAnyAppearance, wordForm, defaultInflectionFlags, 0, noun, -1, added);
 		else
 		{
-			int inflectionFlags=word->second.inflectionFlags;
-			if (!(inflectionFlags&(MALE_GENDER|FEMALE_GENDER))) inflectionFlags|=defaultInflectionFlags;
-			addNewOrModify(NULL, noun,0,wordForm,inflectionFlags,0,noun,-1,added);
+			int inflectionFlags = word->second.inflectionFlags;
+			if (!(inflectionFlags & (MALE_GENDER | FEMALE_GENDER))) inflectionFlags |= defaultInflectionFlags;
+			addNewOrModify(NULL, noun, 0, wordForm, inflectionFlags, 0, noun, -1, added);
 		}
 		if (addWordNetSearch)
 		{
 			vector <tmWS > objects;
 			set <string> ignoreCategories;
 			int numFirstSense;
-			if (hypo)	addHyponyms(noun,objects,preferredSense,ignoreCategories,false);
-			else addCoords(noun,objects,NOUN,preferredSense,numFirstSense,ignoreCategories,false);
-			for (unsigned int I=0; I<objects.size(); I++)
+			if (hypo)	addHyponyms(noun, objects, preferredSense, ignoreCategories, false);
+			else addCoords(noun, objects, NOUN, preferredSense, numFirstSense, ignoreCategories, false);
+			for (unsigned int I = 0; I < objects.size(); I++)
 			{
 				// toss multiword professions for now
-				if (objects[I].ws.size()==1)
+				if (objects[I].ws.size() == 1)
 				{
-					handleExtendedParseWords((wchar_t *)objects[I].ws[0].c_str());
-					word=query(objects[I].ws[0].c_str());
-					if (word==end())
-						addNewOrModify(NULL, objects[I].ws[0].c_str(),cSourceWordInfo::queryOnAnyAppearance,wordForm,defaultInflectionFlags,0,objects[I].ws[0].c_str(),-1,added);
+					handleExtendedParseWords((wchar_t*)objects[I].ws[0].c_str());
+					word = query(objects[I].ws[0].c_str());
+					if (word == end())
+						addNewOrModify(NULL, objects[I].ws[0].c_str(), cSourceWordInfo::queryOnAnyAppearance, wordForm, defaultInflectionFlags, 0, objects[I].ws[0].c_str(), -1, added);
 					else
 					{
-						int inflectionFlags=word->second.inflectionFlags;
-						if (!(inflectionFlags&(MALE_GENDER|FEMALE_GENDER))) inflectionFlags|=defaultInflectionFlags;
-						addNewOrModify(NULL, objects[I].ws[0].c_str(),cSourceWordInfo::queryOnAnyAppearance,wordForm,inflectionFlags,0,objects[I].ws[0].c_str(),-1,added);
+						int inflectionFlags = word->second.inflectionFlags;
+						if (!(inflectionFlags & (MALE_GENDER | FEMALE_GENDER))) inflectionFlags |= defaultInflectionFlags;
+						addNewOrModify(NULL, objects[I].ws[0].c_str(), cSourceWordInfo::queryOnAnyAppearance, wordForm, inflectionFlags, 0, objects[I].ws[0].c_str(), -1, added);
 					}
 				}
 			}
@@ -526,68 +539,69 @@ int cWord::addGenderedNouns(const wchar_t *genPath,int defaultInflectionFlags,in
 
 // every line is a nation followed by a person associated with that nation (noun,adjective)separated by a comma
 // ; He is from Afghanistan.  He is an Afghan.  He is Afghani.
-int cWord::addDemonyms(const wchar_t * demPath)
-{ LFS
-	demonymForm=cForms::createForm(L"demonym",L"de",true,L"noun",true);
-	FILE *fdem=_wfopen(demPath,L"rb"); // binary mode reads unicode
-	if (!fdem) 
+int cWord::addDemonyms(const wchar_t* demPath)
+{
+	LFS
+		demonymForm = cForms::createForm(L"demonym", L"de", true, L"noun", true);
+	FILE* fdem = _wfopen(demPath, L"rb"); // binary mode reads unicode
+	if (!fdem)
 	{
-		lplog(LOG_FATAL_ERROR,L"demonym list file %s not found.",demPath);
+		lplog(LOG_FATAL_ERROR, L"demonym list file %s not found.", demPath);
 		return -1;
 	}
 	wchar_t demonym[101];
-	while (fgetws(demonym,100,fdem))
+	while (fgetws(demonym, 100, fdem))
 	{
-		if (demonym[0]==0xFEFF) // detect BOM
-			memcpy(demonym,demonym+1,(wcslen(demonym+1)+1)*sizeof(demonym[0]));
-		if (demonym[wcslen(demonym)-1]=='\n') demonym[wcslen(demonym)-1]=0;
-		if (demonym[wcslen(demonym)-1]=='\r') demonym[wcslen(demonym)-1]=0; // in binary mode, cr/lf is not translated
+		if (demonym[0] == 0xFEFF) // detect BOM
+			memcpy(demonym, demonym + 1, (wcslen(demonym + 1) + 1) * sizeof(demonym[0]));
+		if (demonym[wcslen(demonym) - 1] == '\n') demonym[wcslen(demonym) - 1] = 0;
+		if (demonym[wcslen(demonym) - 1] == '\r') demonym[wcslen(demonym) - 1] = 0; // in binary mode, cr/lf is not translated
 		wcslwr(demonym);
-		if (demonym[0]==L';') continue;
-		wchar_t *nounDemonym=wcschr(demonym,L',');
+		if (demonym[0] == L';') continue;
+		wchar_t* nounDemonym = wcschr(demonym, L',');
 		if (!nounDemonym) continue;
-		int inflectionFlags=0;
-		wchar_t *adjectiveDemonym=wcschr(++nounDemonym,L',');
+		int inflectionFlags = 0;
+		wchar_t* adjectiveDemonym = wcschr(++nounDemonym, L',');
 		if (!adjectiveDemonym) continue;
-		*adjectiveDemonym=0;
-		wchar_t *kind=wcschr(++adjectiveDemonym,L',');
-		bool male=false,female=false,plural=false;
-		while (kind) 
+		*adjectiveDemonym = 0;
+		wchar_t* kind = wcschr(++adjectiveDemonym, L',');
+		bool male = false, female = false, plural = false;
+		while (kind)
 		{
-			*kind=0;
+			*kind = 0;
 			kind++;
 			switch (*kind)
 			{
-			case L'm':male=true; break; 
-			case L'f':female=true; break; 
-			case L'p':plural=true; break; 
+			case L'm':male = true; break;
+			case L'f':female = true; break;
+			case L'p':plural = true; break;
 			}
-			kind=wcschr(kind+1,L',');
+			kind = wcschr(kind + 1, L',');
 		}
-		if (male) inflectionFlags=MALE_GENDER; 
-		if (female) inflectionFlags=FEMALE_GENDER; 
-		if (!female && !male) inflectionFlags|=MALE_GENDER|FEMALE_GENDER;
-		inflectionFlags|=(plural) ? PLURAL : SINGULAR;
-		int len=wcslen(nounDemonym)-1;
-		while (len>1 && nounDemonym[len]==' ') len--;
-		if (nounDemonym[len+1]==' ') 
-			nounDemonym[len+1]=0;
-		len=wcslen(adjectiveDemonym)-1;
-		while (len>1 && adjectiveDemonym[len]==' ') len--;
-		if (adjectiveDemonym[len+1]==' ') 
-			adjectiveDemonym[len+1]=0;
+		if (male) inflectionFlags = MALE_GENDER;
+		if (female) inflectionFlags = FEMALE_GENDER;
+		if (!female && !male) inflectionFlags |= MALE_GENDER | FEMALE_GENDER;
+		inflectionFlags |= (plural) ? PLURAL : SINGULAR;
+		int len = wcslen(nounDemonym) - 1;
+		while (len > 1 && nounDemonym[len] == ' ') len--;
+		if (nounDemonym[len + 1] == ' ')
+			nounDemonym[len + 1] = 0;
+		len = wcslen(adjectiveDemonym) - 1;
+		while (len > 1 && adjectiveDemonym[len] == ' ') len--;
+		if (adjectiveDemonym[len + 1] == ' ')
+			adjectiveDemonym[len + 1] = 0;
 		handleExtendedParseWords(nounDemonym);
 		bool added;
-		addNewOrModify(NULL, nounDemonym,cSourceWordInfo::queryOnAnyAppearance,demonymForm,inflectionFlags,0,nounDemonym,-1,added);
-		addNewOrModify(NULL, nounDemonym,cSourceWordInfo::queryOnAnyAppearance,nounForm,inflectionFlags,0,nounDemonym,-1,added);
-		if (wcscmp(nounDemonym,adjectiveDemonym))
+		addNewOrModify(NULL, nounDemonym, cSourceWordInfo::queryOnAnyAppearance, demonymForm, inflectionFlags, 0, nounDemonym, -1, added);
+		addNewOrModify(NULL, nounDemonym, cSourceWordInfo::queryOnAnyAppearance, nounForm, inflectionFlags, 0, nounDemonym, -1, added);
+		if (wcscmp(nounDemonym, adjectiveDemonym))
 		{
-			addNewOrModify(NULL, adjectiveDemonym,cSourceWordInfo::queryOnAnyAppearance,demonymForm,MALE_GENDER|FEMALE_GENDER,0,adjectiveDemonym,-1,added);
-			addNewOrModify(NULL, adjectiveDemonym,cSourceWordInfo::queryOnAnyAppearance,adjectiveForm,MALE_GENDER|FEMALE_GENDER,0,adjectiveDemonym,-1,added);
-			addNewOrModify(NULL, adjectiveDemonym,cSourceWordInfo::queryOnAnyAppearance,nounForm,inflectionFlags|PLURAL&~SINGULAR,0,adjectiveDemonym,-1,added);
+			addNewOrModify(NULL, adjectiveDemonym, cSourceWordInfo::queryOnAnyAppearance, demonymForm, MALE_GENDER | FEMALE_GENDER, 0, adjectiveDemonym, -1, added);
+			addNewOrModify(NULL, adjectiveDemonym, cSourceWordInfo::queryOnAnyAppearance, adjectiveForm, MALE_GENDER | FEMALE_GENDER, 0, adjectiveDemonym, -1, added);
+			addNewOrModify(NULL, adjectiveDemonym, cSourceWordInfo::queryOnAnyAppearance, nounForm, inflectionFlags | PLURAL & ~SINGULAR, 0, adjectiveDemonym, -1, added);
 		}
 		else
-			addNewOrModify(NULL, adjectiveDemonym,cSourceWordInfo::queryOnAnyAppearance,adjectiveForm,0,0,adjectiveDemonym,-1,added);
+			addNewOrModify(NULL, adjectiveDemonym, cSourceWordInfo::queryOnAnyAppearance, adjectiveForm, 0, 0, adjectiveDemonym, -1, added);
 	}
 	fclose(fdem);
 	return 0;
@@ -595,69 +609,70 @@ int cWord::addDemonyms(const wchar_t * demPath)
 
 //     bool added;
 //    words.push_back(addNewOrModify(mwords[I],cSourceWordInfo::queryOnAnyAppearance,PROPER_NOUN_FORM_NUM,0,0,mwords[I],-1,added));
-bool cWord::addPlaces(wstring pPath,vector <tmWS > &objects)
-{ LFS
-	FILE *fp=_wfopen(pPath.c_str(),L"rb"); // binary mode reads unicode
+bool cWord::addPlaces(wstring pPath, vector <tmWS >& objects)
+{
+	LFS
+		FILE* fp = _wfopen(pPath.c_str(), L"rb"); // binary mode reads unicode
 	if (!fp) return false;
 	int numFirstSense;
 	wchar_t place[1024];
-	while (fgetws(place,1020,fp))
+	while (fgetws(place, 1020, fp))
 	{
-		if (place[0]==0xFEFF) // detect BOM
-			memcpy(place,place+1,(wcslen(place+1)+1)*sizeof(place[0]));
-		int len=wcslen(place);
-		if (len>=1 && place[0]==L';') continue;
-		if (place[len-1]=='\n') place[--len]=0;
-		if (place[len-1]=='\r') place[--len]=0; // in binary mode, cr/lf is not translated
-		while (place[len-1]==' ') place[--len]=0;
+		if (place[0] == 0xFEFF) // detect BOM
+			memcpy(place, place + 1, (wcslen(place + 1) + 1) * sizeof(place[0]));
+		int len = wcslen(place);
+		if (len >= 1 && place[0] == L';') continue;
+		if (place[len - 1] == '\n') place[--len] = 0;
+		if (place[len - 1] == '\r') place[--len] = 0; // in binary mode, cr/lf is not translated
+		while (place[len - 1] == ' ') place[--len] = 0;
 		set <string> ignoreCategories;
-		bool addWordNetSearch=false;
-		wchar_t *preferredSense=NULL,*ch,*ch2;
-		bool hypo=false,print=false;
-		if (print=(ch=wcsstr(place,L" +print"))!=NULL)
-			*ch=0;
-		while (((ch=wcsrchr(place,L'-'))!=NULL || (ch = wcsrchr(place, L'—')) != NULL) && ch!=place)
+		bool addWordNetSearch = false;
+		wchar_t* preferredSense = NULL, * ch, * ch2;
+		bool hypo = false, print = false;
+		if (print = (ch = wcsstr(place, L" +print")) != NULL)
+			*ch = 0;
+		while (((ch = wcsrchr(place, L'-')) != NULL || (ch = wcsrchr(place, L'—')) != NULL) && ch != place)
 		{
 			string ic;
-			ignoreCategories.insert(wTM(ch+1,ic));
+			ignoreCategories.insert(wTM(ch + 1, ic));
 			if (print)
-				printf("IGNORING: [%lS]\n",ch+1);
-			while (ch!=place && *(ch-1)==' ') ch--;
-			*ch=0;
+				printf("IGNORING: [%lS]\n", ch + 1);
+			while (ch != place && *(ch - 1) == ' ') ch--;
+			*ch = 0;
 		}
-		if ((hypo=(ch=wcsstr(place,L" +HYPO"))!=NULL) || (ch=wcsstr(place,L" +COORDS")))
+		if ((hypo = (ch = wcsstr(place, L" +HYPO")) != NULL) || (ch = wcsstr(place, L" +COORDS")))
 		{
-			addWordNetSearch=true;
-			*ch=0;
-			wchar_t *chsense=wcschr(ch+1,'('),*chsense2=wcschr(ch+1,')');
+			addWordNetSearch = true;
+			*ch = 0;
+			wchar_t* chsense = wcschr(ch + 1, '('), * chsense2 = wcschr(ch + 1, ')');
 			if (chsense && chsense2)
 			{
-				*chsense2=0;
-				preferredSense=chsense+1;
+				*chsense2 = 0;
+				preferredSense = chsense + 1;
 			}
 		}
 		wcslwr(place);
 		// if has () other than for WORDNET sense, remove
-		ch=wcschr(place,'(');
-		ch2=wcschr(place,')');
+		ch = wcschr(place, '(');
+		ch2 = wcschr(place, ')');
 		if (ch && ch2)
 		{
-			while (ch>place && ch[-1]>=0 && iswspace(ch[-1])) ch--;
-			*ch=0;
+			while (ch > place && ch[-1] >= 0 && iswspace(ch[-1])) ch--;
+			*ch = 0;
 		}
 		// if has one comma, register name before comma, and content after comma appended
-		ch=wcsrchr(place,',');
+		ch = wcsrchr(place, ',');
 		if (ch)
-			*ch=0;
+			*ch = 0;
 		vector <wstring> words;
-		if (wcschr(place,' ')!=NULL)
+		if (wcschr(place, ' ') != NULL)
 		{
 			if (addWordNetSearch)
 			{
-				if (hypo)	addHyponyms(place,objects,preferredSense,ignoreCategories,print);
-				else addCoords(place,objects,NOUN,preferredSense,numFirstSense,ignoreCategories,print);
+				if (hypo)	addHyponyms(place, objects, preferredSense, ignoreCategories, print);
+				else addCoords(place, objects, NOUN, preferredSense, numFirstSense, ignoreCategories, print);
 			}
-			splitMultiWord(place,words);
+			splitMultiWord(place, words);
 			objects.push_back(tmWS(words));
 			continue;
 		}
@@ -665,32 +680,32 @@ bool cWord::addPlaces(wstring pPath,vector <tmWS > &objects)
 		if (ch)
 		{
 			ch++;
-			while (*ch==' ') ch++;
+			while (*ch == ' ') ch++;
 			if (*ch)
 			{
 				if (addWordNetSearch)
 				{
-					if (hypo)	addHyponyms(place,objects,preferredSense,ignoreCategories,print);
-					else addCoords(place,objects,NOUN,preferredSense,numFirstSense,ignoreCategories,print);
+					if (hypo)	addHyponyms(place, objects, preferredSense, ignoreCategories, print);
+					else addCoords(place, objects, NOUN, preferredSense, numFirstSense, ignoreCategories, print);
 				}
-				splitMultiWord(ch,words);
+				splitMultiWord(ch, words);
 				words.push_back(place);
 				objects.push_back(words);
 			}
 		}
 		if (isDash(place[0]))
 		{
-			for (unsigned int I=0; I<objects.size(); I++)
-				if (objects[I].ws[objects[I].ws.size()-1]==place+1)
-					objects.erase(objects.begin()+I);
+			for (unsigned int I = 0; I < objects.size(); I++)
+				if (objects[I].ws[objects[I].ws.size() - 1] == place + 1)
+					objects.erase(objects.begin() + I);
 			continue;
 		}
 		words.clear();
 		words.push_back(place);
 		if (addWordNetSearch)
 		{
-			if (hypo)	addHyponyms(place,objects,preferredSense,ignoreCategories,print);
-			else addCoords(place,objects,NOUN,preferredSense,numFirstSense,ignoreCategories,print);
+			if (hypo)	addHyponyms(place, objects, preferredSense, ignoreCategories, print);
+			else addCoords(place, objects, NOUN, preferredSense, numFirstSense, ignoreCategories, print);
 		}
 		objects.push_back(words);
 	}
@@ -698,47 +713,49 @@ bool cWord::addPlaces(wstring pPath,vector <tmWS > &objects)
 	return true;
 }
 
-void cWord::addNickNames(const wchar_t * filePath)
-{ LFS
-	FILE *nf=_wfopen(filePath,L"rb"); // binary mode reads unicode
-if (!nf)
+void cWord::addNickNames(const wchar_t* filePath)
 {
-	lplog(LOG_FATAL_ERROR, L"ERROR:Unable to open %s.  (2)", filePath);
-	return;
-}
-	wchar_t names[1024];
-	int equivalenceClass=0;
-	while (fgetws(names,1024,nf))
+	LFS
+		FILE* nf = _wfopen(filePath, L"rb"); // binary mode reads unicode
+	if (!nf)
 	{
-		if (names[0]==0xFEFF) // detect BOM
-			memcpy(names,names+1,(wcslen(names+1)+1)*sizeof(names[0]));
+		lplog(LOG_FATAL_ERROR, L"ERROR:Unable to open %s.  (2)", filePath);
+		return;
+	}
+	wchar_t names[1024];
+	int equivalenceClass = 0;
+	while (fgetws(names, 1024, nf))
+	{
+		if (names[0] == 0xFEFF) // detect BOM
+			memcpy(names, names + 1, (wcslen(names + 1) + 1) * sizeof(names[0]));
 		typedef pair <wstring, int> tNickPair;
-		wchar_t seps[] = L" ,", *token;
-		for (token = wcstok( names, seps ); token != NULL; token = wcstok( NULL, seps ))
+		wchar_t seps[] = L" ,", * token;
+		for (token = wcstok(names, seps); token != NULL; token = wcstok(NULL, seps))
 		{
-			if (token[wcslen(token)-1]=='\n') token[wcslen(token)-1]=0;
-			if (token[wcslen(token)-1]=='\r') token[wcslen(token)-1]=0; // in binary mode, cr/lf is not translated
+			if (token[wcslen(token) - 1] == '\n') token[wcslen(token) - 1] = 0;
+			if (token[wcslen(token) - 1] == '\r') token[wcslen(token) - 1] = 0; // in binary mode, cr/lf is not translated
 			if (!token[0]) continue;
 			wcslwr(token);
 			//lplog(L"Inserted %s with class %d.",token,equivalenceClass);
-			nicknameEquivalenceMap.insert(tNickPair(token,equivalenceClass));
+			nicknameEquivalenceMap.insert(tNickPair(token, equivalenceClass));
 		}
 		equivalenceClass++;
 	}
 	fclose(nf);
 }
 
-bool cWord::readWordsOfMultiWordObjects(vector < vector < tmWS > > &multiWordStrings,vector < vector < vector <tIWMM> > > &multiWordObjects)
-{ LFS
-	for (int pp=0; OCSubTypeStrings[pp]; pp++)
-	{
-		vector < tmWS > placeWords;
-		if (!addPlaces(wstring(L"source\\lists\\places\\")+OCSubTypeStrings[pp]+L".txt",placeWords)) 
-			return false;
-		multiWordStrings.push_back(placeWords);
-		vector < vector <tIWMM> > multiWordObjectsCategory;
-		multiWordObjects.push_back(multiWordObjectsCategory);
-	}
+bool cWord::readWordsOfMultiWordObjects(vector < vector < tmWS > >& multiWordStrings, vector < vector < vector <tIWMM> > >& multiWordObjects)
+{
+	LFS
+		for (int pp = 0; OCSubTypeStrings[pp]; pp++)
+		{
+			vector < tmWS > placeWords;
+			if (!addPlaces(wstring(L"source\\lists\\places\\") + OCSubTypeStrings[pp] + L".txt", placeWords))
+				return false;
+			multiWordStrings.push_back(placeWords);
+			vector < vector <tIWMM> > multiWordObjectsCategory;
+			multiWordObjects.push_back(multiWordObjectsCategory);
+		}
 	return true;
 }
 
@@ -747,74 +764,76 @@ bool cWord::readWordsOfMultiWordObjects(vector < vector < tmWS > > &multiWordStr
 // after each readWithLock (after each book adds more words)
 // the multiWordStrings vector is scanned and any more objects which have all the words defined are moved to the multiWordObjects array,
 //   and the entry is removed from the multiWordStrings array
-void cWord::addMultiWordObjects(vector < vector < tmWS > > &multiWordStrings,vector < vector < vector <tIWMM> > > &multiWordObjects)
-{ LFS 
-	int multiWordObjectType=0,numStringsScanned=0,numStringsEntered=0;
-	for (vector < vector < tmWS > >::iterator mwsi=multiWordStrings.begin(),mwsiEnd=multiWordStrings.end(); mwsi!=mwsiEnd; mwsi++,multiWordObjectType++)
-		for (vector < tmWS >::iterator mwsii=mwsi->begin(); mwsii!=mwsi->end(); numStringsScanned++,mwsii++)
+void cWord::addMultiWordObjects(vector < vector < tmWS > >& multiWordStrings, vector < vector < vector <tIWMM> > >& multiWordObjects)
+{
+	LFS
+		int multiWordObjectType = 0, numStringsScanned = 0, numStringsEntered = 0;
+	for (vector < vector < tmWS > >::iterator mwsi = multiWordStrings.begin(), mwsiEnd = multiWordStrings.end(); mwsi != mwsiEnd; mwsi++, multiWordObjectType++)
+		for (vector < tmWS >::iterator mwsii = mwsi->begin(); mwsii != mwsi->end(); numStringsScanned++, mwsii++)
 			if (!mwsii->taken)
 			{
 				vector <tIWMM> multiWordObject;
-				tIWMM w=WMM.end();
-				for (vector <wstring>::iterator mwsiii=mwsii->ws.begin(),mwsiiiEnd=mwsii->ws.end(); mwsiii!=mwsiiiEnd; mwsiii++)
-					if ((w=query(*mwsiii))!=WMM.end())
+				tIWMM w = WMM.end();
+				for (vector <wstring>::iterator mwsiii = mwsii->ws.begin(), mwsiiiEnd = mwsii->ws.end(); mwsiii != mwsiiiEnd; mwsiii++)
+					if ((w = query(*mwsiii)) != WMM.end())
 						multiWordObject.push_back(w);
 					else
 						break;
-				if (w!=WMM.end())
+				if (w != WMM.end())
 				{
 					multiWordObjects[multiWordObjectType].push_back(multiWordObject);
-					for (vector <tIWMM>::iterator wi=multiWordObject.begin(),wiEnd=multiWordObject.end(); wi!=wiEnd; wi++)
+					for (vector <tIWMM>::iterator wi = multiWordObject.begin(), wiEnd = multiWordObject.end(); wi != wiEnd; wi++)
 					{
-						cSourceWordInfo *twi=&(*wi)->second;
-						if (twi->query(adjectiveForm)>=0 || twi->query(nounForm)>=0 || twi->query(PROPER_NOUN_FORM_NUM)>=0)
+						cSourceWordInfo* twi = &(*wi)->second;
+						if (twi->query(adjectiveForm) >= 0 || twi->query(nounForm) >= 0 || twi->query(PROPER_NOUN_FORM_NUM) >= 0)
 						{
 							twi->relatedSubTypes.push_back(multiWordObjectType);
-							twi->relatedSubTypeObjects.push_back(multiWordObjects[multiWordObjectType].size()-1);
-							if (twi->mainEntry!=wNULL && twi->mainEntry!=Words.end() && twi->mainEntry!=(*wi))
+							twi->relatedSubTypeObjects.push_back(multiWordObjects[multiWordObjectType].size() - 1);
+							if (twi->mainEntry != wNULL && twi->mainEntry != Words.end() && twi->mainEntry != (*wi))
 							{
 								twi->mainEntry->second.relatedSubTypes.push_back(multiWordObjectType);
-								twi->mainEntry->second.relatedSubTypeObjects.push_back(multiWordObjects[multiWordObjectType].size()-1);
+								twi->mainEntry->second.relatedSubTypeObjects.push_back(multiWordObjects[multiWordObjectType].size() - 1);
 							}
 						}
 					}
 					//mwsii=mwsi->erase(mwsii);
-					mwsii->taken=true;
+					mwsii->taken = true;
 					numStringsEntered++;
 				}
 			}
-		//lplog(LOG_RESOLUTION,L"(%d/%d) multiWordObjects entered.",numStringsEntered,numStringsScanned);
+	//lplog(LOG_RESOLUTION,L"(%d/%d) multiWordObjects entered.",numStringsEntered,numStringsScanned);
 }
 
-	const wchar_t *roman_numeral[] = {
-		L"i",L"ii",L"iii",L"iv",L"v",L"vi",L"vii",L"viii",L"ix",
-		L"x",L"xi",L"xii",L"xiii",L"xiv",L"xv",L"xvi",L"xvii",L"xviii",L"xix",
-		L"xx",L"xxi",L"xxii",L"xxiii",L"xxiv",L"xxv",L"xxvi",L"xxvii",L"xxviii",L"xxix",
-		L"xxx",L"xxxi",L"xxxii",L"xxxiii",L"xxxiv",L"xxxv",L"xxxvi",L"xxxvii",L"xxxviii",L"xxxix",
-		L"xl",L"xli",L"xlii",L"xliii",L"xliv",L"xlv",L"xlvi",L"xlvii",L"xlviii",L"xlix",
-		L"l",L"li",L"lii",L"liii",L"liv",L"lv",L"lvi",L"lvii",L"lviii",L"lix",
-		L"lx",L"lxi",L"lxii",L"lxiii",L"lxiv",L"lxv",L"lxvi",L"lxvii",L"lxviii",L"lxix",
-		L"lxx",L"lxxi",L"lxxii",L"lxxiii",L"lxxiv",L"lxxv",L"lxxvi",L"lxxvii",L"lxxviii",L"lxxix",
-		NULL};
+const wchar_t* roman_numeral[] = {
+	L"i",L"ii",L"iii",L"iv",L"v",L"vi",L"vii",L"viii",L"ix",
+	L"x",L"xi",L"xii",L"xiii",L"xiv",L"xv",L"xvi",L"xvii",L"xviii",L"xix",
+	L"xx",L"xxi",L"xxii",L"xxiii",L"xxiv",L"xxv",L"xxvi",L"xxvii",L"xxviii",L"xxix",
+	L"xxx",L"xxxi",L"xxxii",L"xxxiii",L"xxxiv",L"xxxv",L"xxxvi",L"xxxvii",L"xxxviii",L"xxxix",
+	L"xl",L"xli",L"xlii",L"xliii",L"xliv",L"xlv",L"xlvi",L"xlvii",L"xlviii",L"xlix",
+	L"l",L"li",L"lii",L"liii",L"liv",L"lv",L"lvi",L"lvii",L"lviii",L"lix",
+	L"lx",L"lxi",L"lxii",L"lxiii",L"lxiv",L"lxv",L"lxvi",L"lxvii",L"lxviii",L"lxix",
+	L"lxx",L"lxxi",L"lxxii",L"lxxiii",L"lxxiv",L"lxxv",L"lxxvi",L"lxxvii",L"lxxviii",L"lxxix",
+	NULL };
 
 int cWord::createWordCategories()
-{ LFS
-	changedWords=true;
-	inCreateDictionaryPhase=true;
-	cForms::createForm(UNDEFINED_FORM,UNDEFINED_SHORT_FORM,false,L"",false);
-	cForms::createForm(SECTION_FORM,SECTION_SHORT_FORM,true,L"",false);
-	cForms::createForm(COMBINATION_FORM,COMBINATION_SHORT_FORM,true,L"",false);
-	cForms::createForm(PROPER_NOUN_FORM,PROPER_NOUN_SHORT_FORM,false,L"noun",false);
-	cForms::createForm(NUMBER_FORM,NUMBER_SHORT_FORM,false,L"",false);
+{
+	LFS
+		changedWords = true;
+	inCreateDictionaryPhase = true;
+	cForms::createForm(UNDEFINED_FORM, UNDEFINED_SHORT_FORM, false, L"", false);
+	cForms::createForm(SECTION_FORM, SECTION_SHORT_FORM, true, L"", false);
+	cForms::createForm(COMBINATION_FORM, COMBINATION_SHORT_FORM, true, L"", false);
+	cForms::createForm(PROPER_NOUN_FORM, PROPER_NOUN_SHORT_FORM, false, L"noun", false);
+	cForms::createForm(NUMBER_FORM, NUMBER_SHORT_FORM, false, L"", false);
 	// add special section word
 	bool added;
-	addNewOrModify(NULL,wstring(L"|||"),cSourceWordInfo::topLevelSeparator,SECTION_FORM_NUM,0,0,L"",-1,added);
-	sectionWord=WMM.begin();
-	Inflections honorific[] = {{L"mister",MALE_GENDER},{L"missus",FEMALE_GENDER},{L"miss",FEMALE_GENDER},
+	addNewOrModify(NULL, wstring(L"|||"), cSourceWordInfo::topLevelSeparator, SECTION_FORM_NUM, 0, 0, L"", -1, added);
+	sectionWord = WMM.begin();
+	Inflections honorific[] = { {L"mister",MALE_GENDER},{L"missus",FEMALE_GENDER},{L"miss",FEMALE_GENDER},
 		{L"monsieur",MALE_GENDER},{L"madame",FEMALE_GENDER},{L"mademoiselle",FEMALE_GENDER},{L"sir",MALE_GENDER},{L"ma'am",FEMALE_GENDER},{L"lord",MALE_GENDER},
-		{L"lady",FEMALE_GENDER},{L"m'm",FEMALE_GENDER},{NULL,0}};
-	predefineWords(honorific,L"honorific",L"hon",L"noun",cSourceWordInfo::queryOnAnyAppearance,false);
-	Forms[Forms.size()-1]->blockProperNounRecognition=true; // any words having this form will never be considered as proper nouns
+		{L"lady",FEMALE_GENDER},{L"m'm",FEMALE_GENDER},{NULL,0} };
+	predefineWords(honorific, L"honorific", L"hon", L"noun", cSourceWordInfo::queryOnAnyAppearance, false);
+	Forms[Forms.size() - 1]->blockProperNounRecognition = true; // any words having this form will never be considered as proper nouns
 	// honorifics that can resolve like gendered nouns without a previous introduction of a character
 	//   that has this as part of his/her name.  This is an honorific that is not a title or occupation (like deacon)
 	//   these honorifics can still be used similarly to occupations ('what does the little lady like today?')
@@ -822,52 +841,52 @@ int cWord::createWordCategories()
 	//   they do not require an 'introduction' of a character with this honorific in their name (unlike
 	//   the honorific 'archdeacon' as in 'the archdeacon' or 'Archdeacon Cowley'.
 	//   Previous Introduction Not Required
-	Inflections pinr[] = {{L"mister",MALE_GENDER},{L"mr",MALE_GENDER},{L"missus",FEMALE_GENDER},{L"miss",FEMALE_GENDER},
+	Inflections pinr[] = { {L"mister",MALE_GENDER},{L"mr",MALE_GENDER},{L"missus",FEMALE_GENDER},{L"miss",FEMALE_GENDER},
 		{L"monsieur",MALE_GENDER},{L"madame",FEMALE_GENDER},{L"mademoiselle",FEMALE_GENDER},{L"sir",MALE_GENDER},{L"ma'am",FEMALE_GENDER},//{L"lord",MALE_GENDER},
-		{L"lady",FEMALE_GENDER},{L"m'm",FEMALE_GENDER},{NULL,0}};
-	predefineWords(pinr,L"pinr",L"pinr",L"noun",false,false);
-	Inflections honorific_abbreviation[] = {{L"mr",MALE_GENDER},{L"mrs",FEMALE_GENDER},{L"dr",MALE_GENDER|FEMALE_GENDER},
-		{L"rev",MALE_GENDER|FEMALE_GENDER},{L"sen",MALE_GENDER|FEMALE_GENDER},{L"ms",FEMALE_GENDER},{L"st",MALE_GENDER|FEMALE_GENDER},{L"m",MALE_GENDER},{NULL,0}};
-	predefineWords(honorific_abbreviation,L"honorific_abbreviation",L"hon_abb",L"noun",0,false);
-	Forms[Forms.size()-1]->blockProperNounRecognition=true; // any words having this form will never be considered as proper nouns
-	Inflections honorificFull[] = {{L"mother",FEMALE_GENDER},{L"lady",FEMALE_GENDER},{L"aunt",FEMALE_GENDER},{L"sister",FEMALE_GENDER},
+		{L"lady",FEMALE_GENDER},{L"m'm",FEMALE_GENDER},{NULL,0} };
+	predefineWords(pinr, L"pinr", L"pinr", L"noun", false, false);
+	Inflections honorific_abbreviation[] = { {L"mr",MALE_GENDER},{L"mrs",FEMALE_GENDER},{L"dr",MALE_GENDER | FEMALE_GENDER},
+		{L"rev",MALE_GENDER | FEMALE_GENDER},{L"sen",MALE_GENDER | FEMALE_GENDER},{L"ms",FEMALE_GENDER},{L"st",MALE_GENDER | FEMALE_GENDER},{L"m",MALE_GENDER},{NULL,0} };
+	predefineWords(honorific_abbreviation, L"honorific_abbreviation", L"hon_abb", L"noun", 0, false);
+	Forms[Forms.size() - 1]->blockProperNounRecognition = true; // any words having this form will never be considered as proper nouns
+	Inflections honorificFull[] = { {L"mother",FEMALE_GENDER},{L"lady",FEMALE_GENDER},{L"aunt",FEMALE_GENDER},{L"sister",FEMALE_GENDER},
 		{L"grandmother",FEMALE_GENDER},{L"duchess",FEMALE_GENDER},{L"queen",FEMALE_GENDER},{L"princess",FEMALE_GENDER},{L"baroness",FEMALE_GENDER},
 		{L"mistress",FEMALE_GENDER},{L"marchioness",FEMALE_GENDER},{L"countess",FEMALE_GENDER},{L"viscountess",FEMALE_GENDER},
 		{L"father",MALE_GENDER},{L"uncle",MALE_GENDER},{L"grandfather",MALE_GENDER},
 		{L"king",MALE_GENDER},{L"duke",MALE_GENDER},{L"prince",MALE_GENDER},{L"baron",MALE_GENDER},{L"marquis",MALE_GENDER},
-		{L"earl",MALE_GENDER},{L"viscount",MALE_GENDER},{L"count",MALE_GENDER},{L"cousin",MALE_GENDER|FEMALE_GENDER},
-		{L"inspector",MALE_GENDER|FEMALE_GENDER},{NULL,0}};
-	predefineWords(honorificFull,L"honorific",L"hon",L"noun",cSourceWordInfo::queryOnAnyAppearance,false);
+		{L"earl",MALE_GENDER},{L"viscount",MALE_GENDER},{L"count",MALE_GENDER},{L"cousin",MALE_GENDER | FEMALE_GENDER},
+		{L"inspector",MALE_GENDER | FEMALE_GENDER},{NULL,0} };
+	predefineWords(honorificFull, L"honorific", L"hon", L"noun", cSourceWordInfo::queryOnAnyAppearance, false);
 	Inflections militaryTitle[] = {
-				// army/marines/air force officers
-				{L"general",MALE_GENDER},{L"lieutenant general",MALE_GENDER},{L"major general",MALE_GENDER},{L"brigadier general",MALE_GENDER},
-				{L"colonal",MALE_GENDER},{L"lieutenant colonal",MALE_GENDER},{L"major",MALE_GENDER},{L"captain",MALE_GENDER},
-				{L"lieutenant",MALE_GENDER},
+		// army/marines/air force officers
+		{L"general",MALE_GENDER},{L"lieutenant general",MALE_GENDER},{L"major general",MALE_GENDER},{L"brigadier general",MALE_GENDER},
+		{L"colonal",MALE_GENDER},{L"lieutenant colonal",MALE_GENDER},{L"major",MALE_GENDER},{L"captain",MALE_GENDER},
+		{L"lieutenant",MALE_GENDER},
 
-				// navy/coast guard officers
-				{L"admiral",MALE_GENDER},{L"vice admiral",MALE_GENDER},{L"rear admiral",MALE_GENDER},
-				{L"captain",MALE_GENDER},{L"commander",MALE_GENDER},{L"lieutenant commander",MALE_GENDER},{L"ensign",MALE_GENDER},
+		// navy/coast guard officers
+		{L"admiral",MALE_GENDER},{L"vice admiral",MALE_GENDER},{L"rear admiral",MALE_GENDER},
+		{L"captain",MALE_GENDER},{L"commander",MALE_GENDER},{L"lieutenant commander",MALE_GENDER},{L"ensign",MALE_GENDER},
 
-				// army/marines/navy/coast guard warrant officers
-				{L"chief warrant officer",MALE_GENDER},{L"warrant officer",MALE_GENDER},
+		// army/marines/navy/coast guard warrant officers
+		{L"chief warrant officer",MALE_GENDER},{L"warrant officer",MALE_GENDER},
 
-				// enlisted army
-				{L"sargeant major",MALE_GENDER},{L"master sargeant",MALE_GENDER},{L"sargeant",MALE_GENDER},
-				{L"staff sargeant",MALE_GENDER},{L"corporal",MALE_GENDER},{L"private",MALE_GENDER},
+		// enlisted army
+		{L"sargeant major",MALE_GENDER},{L"master sargeant",MALE_GENDER},{L"sargeant",MALE_GENDER},
+		{L"staff sargeant",MALE_GENDER},{L"corporal",MALE_GENDER},{L"private",MALE_GENDER},
 
-				// enlisted marines
-				{L"gunnery sargeant",MALE_GENDER},{L"lance corporal",MALE_GENDER},
+		// enlisted marines
+		{L"gunnery sargeant",MALE_GENDER},{L"lance corporal",MALE_GENDER},
 
-				// enlisted air force
-				{L"chief master sargeant",MALE_GENDER},{L"senior master sargeant",MALE_GENDER},{L"master sargeant",MALE_GENDER},{L"technical sargeant",MALE_GENDER},
-				{L"senior airman",MALE_GENDER},{L"airman",MALE_GENDER},
+		// enlisted air force
+		{L"chief master sargeant",MALE_GENDER},{L"senior master sargeant",MALE_GENDER},{L"master sargeant",MALE_GENDER},{L"technical sargeant",MALE_GENDER},
+		{L"senior airman",MALE_GENDER},{L"airman",MALE_GENDER},
 
-				// enlisted navy/coast guard
-				{L"master chief petty officer",MALE_GENDER},{L"senior chief petty officer",MALE_GENDER},{L"chief petty officer",MALE_GENDER},
-				{L"petty officer",MALE_GENDER},{L"seaman",MALE_GENDER},
+		// enlisted navy/coast guard
+		{L"master chief petty officer",MALE_GENDER},{L"senior chief petty officer",MALE_GENDER},{L"chief petty officer",MALE_GENDER},
+		{L"petty officer",MALE_GENDER},{L"seaman",MALE_GENDER},
 
-				{NULL,0}};
-	predefineWords(militaryTitle,L"honorific",L"hon",L"noun",cSourceWordInfo::queryOnAnyAppearance,false);
+		{NULL,0} };
+	predefineWords(militaryTitle, L"honorific", L"hon", L"noun", cSourceWordInfo::queryOnAnyAppearance, false);
 	Inflections religiousTitle[] = {
 				{L"deacon",MALE_GENDER},{L"archdeacon",MALE_GENDER},{L"elder",MALE_GENDER},
 				{L"priest",MALE_GENDER},{L"priestess",FEMALE_GENDER},{L"bishop",MALE_GENDER},{L"archbishop",MALE_GENDER},
@@ -876,82 +895,82 @@ int cWord::createWordCategories()
 				{L"father",MALE_GENDER},{L"monsignor",MALE_GENDER},{L"monseigneur",MALE_GENDER},
 		{L"cardinal",MALE_GENDER},{L"pastor",MALE_GENDER},{L"rector",MALE_GENDER},
 				{L"eminence",MALE_GENDER},{L"excellence",MALE_GENDER},{L"pope",MALE_GENDER},{L"emperor",MALE_GENDER},
-				{NULL,0}};
-	predefineWords(religiousTitle,L"honorific",L"hon",L"noun",cSourceWordInfo::queryOnAnyAppearance,false);
+				{NULL,0} };
+	predefineWords(religiousTitle, L"honorific", L"hon", L"noun", cSourceWordInfo::queryOnAnyAppearance, false);
 	Inflections governmentTitle[] = {
 				{L"president",MALE_GENDER},{L"prime minister",MALE_GENDER},{L"vice president",MALE_GENDER},
 				{L"speaker of the house",MALE_GENDER},{L"senator",MALE_GENDER},{L"governor",MALE_GENDER},{L"mayor",MALE_GENDER},
 				{L"attorney general",MALE_GENDER},{L"chief of staff",MALE_GENDER},{L"national security advisor",MALE_GENDER},
-				{L"chief",MALE_GENDER},{L"chieftess",FEMALE_GENDER},{L"ambassador",MALE_GENDER|FEMALE_GENDER},
-				{NULL,0}};
-	predefineWords(governmentTitle,L"honorific",L"hon",L"noun",cSourceWordInfo::queryOnAnyAppearance,false);
-	Inflections brackets[] = {{L"{",OPEN_INFLECTION},{L"}",CLOSE_INFLECTION},
+				{L"chief",MALE_GENDER},{L"chieftess",FEMALE_GENDER},{L"ambassador",MALE_GENDER | FEMALE_GENDER},
+				{NULL,0} };
+	predefineWords(governmentTitle, L"honorific", L"hon", L"noun", cSourceWordInfo::queryOnAnyAppearance, false);
+	Inflections brackets[] = { {L"{",OPEN_INFLECTION},{L"}",CLOSE_INFLECTION},
 														{L"(",OPEN_INFLECTION},{L")",CLOSE_INFLECTION},
 														{L"<",OPEN_INFLECTION},{L">",CLOSE_INFLECTION},
-														{L"[",OPEN_INFLECTION},{L"]",CLOSE_INFLECTION},{NULL,0}};
-	predefineWords(brackets,L"brackets",L"brackets",L"brackets");
+														{L"[",OPEN_INFLECTION},{L"]",CLOSE_INFLECTION},{NULL,0} };
+	predefineWords(brackets, L"brackets", L"brackets", L"brackets");
 	// "\"" is mapped to {L"“",OPEN_INFLECTION},{L"”",CLOSE_INFLECTION}
 	// "'" is mapped to {L"‘",OPEN_INFLECTION},{L"’",CLOSE_INFLECTION}
-	Inflections quotes[] = {{L"\"",0},{L"'",0},{L"`",OPEN_INFLECTION},
-													{L"‘",OPEN_INFLECTION},{L"’",CLOSE_INFLECTION},{L"“",OPEN_INFLECTION},{L"”",CLOSE_INFLECTION},{NULL,0}};
-	predefineWords(quotes,L"quotes",L"quotes",L"quotes");
-	const wchar_t *dash[] = {L"-",L"—",L"–",L"--",NULL};                          predefineWords(dash,L"dash",L"dash");
-	const wchar_t *punctuation[]={L".",L"·",L"...",L";",L":",L"@",L"#",L"$",L"%",L"^",L"&",L"*",L"--",L"+",L"=",L"_",L"|",L"‚",L",",L"/",L"~",L"…",L"│",NULL};
-	for (const wchar_t **p=punctuation; *p; p++) predefineWord(*p);
-	const wchar_t *letter[] = {L"a",L"b",L"c",L"d",L"e",L"f",L"g",L"h",L"i",L"j",L"k",L"l",L"m",L"n",L"o",L"p",L"q",L"r",L"s",L"t",
-		L"u",L"v",L"w",L"x",L"y",L"z",NULL};
-	predefineWords(letter,L"letter",L"let");
-	if (letterForm<0) letterForm=cForms::gFindForm(L"letter");
-	Forms[letterForm]->inflectionsClass=L"noun";
+	Inflections quotes[] = { {L"\"",0},{L"'",0},{L"`",OPEN_INFLECTION},
+													{L"‘",OPEN_INFLECTION},{L"’",CLOSE_INFLECTION},{L"“",OPEN_INFLECTION},{L"”",CLOSE_INFLECTION},{NULL,0} };
+	predefineWords(quotes, L"quotes", L"quotes", L"quotes");
+	const wchar_t* dash[] = { L"-",L"—",L"–",L"--",NULL };                          predefineWords(dash, L"dash", L"dash");
+	const wchar_t* punctuation[] = { L".",L"·",L"...",L";",L":",L"@",L"#",L"$",L"%",L"^",L"&",L"*",L"--",L"+",L"=",L"_",L"|",L"‚",L",",L"/",L"~",L"…",L"│",NULL };
+	for (const wchar_t** p = punctuation; *p; p++) predefineWord(*p);
+	const wchar_t* letter[] = { L"a",L"b",L"c",L"d",L"e",L"f",L"g",L"h",L"i",L"j",L"k",L"l",L"m",L"n",L"o",L"p",L"q",L"r",L"s",L"t",
+		L"u",L"v",L"w",L"x",L"y",L"z",NULL };
+	predefineWords(letter, L"letter", L"let");
+	if (letterForm < 0) letterForm = cForms::gFindForm(L"letter");
+	Forms[letterForm]->inflectionsClass = L"noun";
 	// abbreviations - see abbreviations note below
 	Inflections measurement_abbreviation[] = {
 		{L"lbs",PLURAL},{L"mo",SINGULAR},{L"mos",PLURAL},  {L"cm",SINGULAR},{L"bt",SINGULAR},{L"cc",SINGULAR},
 		{L"kg",SINGULAR},{L"km",SINGULAR},{L"kw",SINGULAR},
-		{L"lb",SINGULAR},{L"ft",SINGULAR|PLURAL},{L"oz",SINGULAR|PLURAL},{L"in",SINGULAR|PLURAL},
+		{L"lb",SINGULAR},{L"ft",SINGULAR | PLURAL},{L"oz",SINGULAR | PLURAL},{L"in",SINGULAR | PLURAL},
 		{L"mg",SINGULAR},{L"ml",SINGULAR},{L"mm",SINGULAR},{L"mpg",SINGULAR},{L"mph",SINGULAR},
 		{L"oz",SINGULAR},{L"ppm",SINGULAR},{L"rpm",SINGULAR},{L"tbsp",SINGULAR},{L"tsp",SINGULAR},
-		{NULL,0}};
-	predefineWords(measurement_abbreviation,L"measurement_abbreviation",L"meas_abb",L"noun");
+		{NULL,0} };
+	predefineWords(measurement_abbreviation, L"measurement_abbreviation", L"meas_abb", L"noun");
 	// abbreviations - see abbreviations note below
 	Inflections street_address_abbreviation[] = {
 		{L"st",SINGULAR},{L"av",SINGULAR},{L"ave",SINGULAR},{L"dr",SINGULAR},{L"rd",SINGULAR},{L"pk",SINGULAR}, // streets (NewsBank)
-		{NULL,0}};
-	predefineWords(street_address_abbreviation,L"street_address_abbreviation",L"sa_abb",L"noun",0,true);
+		{NULL,0} };
+	predefineWords(street_address_abbreviation, L"street_address_abbreviation", L"sa_abb", L"noun", 0, true);
 	Inflections street_address[] = {
 		{L"street",SINGULAR},{L"avenue",SINGULAR},{L"drive",SINGULAR},{L"road",SINGULAR},{L"pike",SINGULAR}, // streets (NewsBank)
-		{NULL,0}};
-	predefineWords(street_address,L"street_address",L"sa",L"noun",cSourceWordInfo::queryOnAnyAppearance,true);
-	Inflections business[] = {{L"incorporated",SINGULAR},{L"limited",SINGULAR},{L"corporation",SINGULAR},{L"company",SINGULAR},{NULL,0}};
-	predefineWords(business,L"business",L"b",L"noun",0,true);
+		{NULL,0} };
+	predefineWords(street_address, L"street_address", L"sa", L"noun", cSourceWordInfo::queryOnAnyAppearance, true);
+	Inflections business[] = { {L"incorporated",SINGULAR},{L"limited",SINGULAR},{L"corporation",SINGULAR},{L"company",SINGULAR},{NULL,0} };
+	predefineWords(business, L"business", L"b", L"noun", 0, true);
 	// abbreviations - see abbreviations note below
-	Inflections business_abbreviation[] = {{L"inc",SINGULAR},{L"ltd",SINGULAR},{L"corp",SINGULAR},{L"co",SINGULAR},{NULL,0}};
-	predefineWords(business_abbreviation,L"business_abbreviation",L"b_abb",L"noun",0,true);
+	Inflections business_abbreviation[] = { {L"inc",SINGULAR},{L"ltd",SINGULAR},{L"corp",SINGULAR},{L"co",SINGULAR},{NULL,0} };
+	predefineWords(business_abbreviation, L"business_abbreviation", L"b_abb", L"noun", 0, true);
 	// abbreviations - see abbreviations note below
 	Inflections abbreviation[] = {
 		{L"appt",SINGULAR},{L"art",SINGULAR},{L"isbn",SINGULAR},{L"ibid",SINGULAR},{L"ln",SINGULAR},
 		{L"i.e",SINGULAR},{L"ie",SINGULAR},{L"etc",SINGULAR},{L"e.g",SINGULAR},{L"eg",SINGULAR},{L"circa",SINGULAR},{L"c",SINGULAR},
 		{L"pc",SINGULAR},{L"dna",SINGULAR},{L"rna",SINGULAR},{L"pcb",SINGULAR},{L"pc",SINGULAR},{L"ph",SINGULAR},{L"pcb",SINGULAR},
 		{L"no",SINGULAR},{L"ok",SINGULAR},{L"o.k",SINGULAR},{L"etc",SINGULAR},{L"p",SINGULAR},{L"a.b.c",SINGULAR},{L"v.a.d",SINGULAR}, // a.b.c. from Secret Adversary
-		{NULL,0}};
-	predefineWords(abbreviation,L"abbreviation",L"abb",L"noun",0,true);
+		{NULL,0} };
+	predefineWords(abbreviation, L"abbreviation", L"abb", L"noun", 0, true);
 	// abbreviations - see abbreviations note below
 	Inflections pagenumber[] = {
 		{L"pp",SINGULAR},{L"p",SINGULAR},{L"fig",SINGULAR},
-		{NULL,0}};
-	predefineWords(pagenumber,L"pnum",L"pnum");
+		{NULL,0} };
+	predefineWords(pagenumber, L"pnum", L"pnum");
 	// abbreviations - see abbreviations note below
-	Inflections time_abbreviation[] = {{L"p.m",SINGULAR},{L"a.m",SINGULAR},{L"pm",SINGULAR},{L"am",SINGULAR},{NULL,0}};
-	predefineWords(time_abbreviation,L"time_abbreviation",L"tabb",L"noun");
+	Inflections time_abbreviation[] = { {L"p.m",SINGULAR},{L"a.m",SINGULAR},{L"pm",SINGULAR},{L"am",SINGULAR},{NULL,0} };
+	predefineWords(time_abbreviation, L"time_abbreviation", L"tabb", L"noun");
 	// abbreviations - see abbreviations note below
-	Inflections date_abbreviation[] = {{L"a.d",SINGULAR},{L"b.c",SINGULAR},{L"ad",SINGULAR},{L"bc",SINGULAR},{NULL,0}};
-	predefineWords(date_abbreviation,L"date_abbreviation",L"dabb",L"noun");
+	Inflections date_abbreviation[] = { {L"a.d",SINGULAR},{L"b.c",SINGULAR},{L"ad",SINGULAR},{L"bc",SINGULAR},{NULL,0} };
+	predefineWords(date_abbreviation, L"date_abbreviation", L"dabb", L"noun");
 	// abbreviations - no abbreviation can end with a period because
 	//   then the period would be hidden from the parser.  Because no period would be seen as a distinct
 	//   word by the parser, and if the period would also stand for the end of the sentence, as well as the
 	//   end of the abbreviation, no abbreviations can end with a period, but instead
 	//   almost all abbreviations have their own _PATTERNS which add an optional period at the end.
 
-	const wchar_t *interjection[] = {L"aha",L"my",L"um",L"er",L"ah",L"eh",L"gosh",L"ouch",L"huh",L"aah",L"phoo",L"gee",L"heh",L"eek",L"ahem",L"whoa",L"lordy",L"begad",L"hmm",L"ssh",L"avast",
+	const wchar_t* interjection[] = { L"aha",L"my",L"um",L"er",L"ah",L"eh",L"gosh",L"ouch",L"huh",L"aah",L"phoo",L"gee",L"heh",L"eek",L"ahem",L"whoa",L"lordy",L"begad",L"hmm",L"ssh",L"avast",
 													L"mm",L"mmm",L"hm",L"good-bye",L"h'm",L"o",L"no",L"yes",L"hush",L"aye",L"bravo",L"nay",L"ach",L"yea",L"yeah",
 							L"abudah",L"ahh",L"amen",L"ar",L"aw",L"burmah",L"cor",L"daaah",L"damn",L"doggone",L"ee",L"euch",L"farewell",L"femgliah",L"gah",
 							L"gees",L"glug",L"goddammit",L"goddamn",L"golly",L"hah",L"hallelujah",L"hey",L"hic",L"hooray",L"howdy",L"hoy",L"hum",L"hurrah",
@@ -960,100 +979,100 @@ int cWord::createWordCategories()
 							L"allo",L"ay",L"bah",L"ciao",L"cripes",L"eureka",L"forsooth",L"goodbye",L"hello",L"hiya",L"hullo",L"hurray",L"oh",
 							L"olah",L"ooh",L"oooh",L"pah",L"presto",L"shh",L"shucks",L"umm",L"ya",L"yuck",L"zounds",L"alas",L"ha",L"hurrah",L"hurray",
 							L"hoo",L"sorry",L"lord", // L"how" - removed because / Empire State of Mind: How Jay-Z Went from Street Corner to Corner Office 'How' matches __INTRO_N and prevents _RELQ
-							NULL};
-	predefineWords(interjection,L"interjection",L"inter",cSourceWordInfo::queryOnAnyAppearance,false);
-	const wchar_t *trademark[] = {L"benzadrine",NULL};
-	predefineWords(trademark,L"trademark",L"tm");
-	const wchar_t *symbol[] = {L"he",NULL};
-	predefineWords(symbol,L"symbol",L"sym");
-	Inflections pronoun[] = {{L"yonder",SINGULAR|PLURAL|NEUTER_GENDER},{L"there",SINGULAR|PLURAL|NEUTER_GENDER},
-		 {L"both",PLURAL|MALE_GENDER|FEMALE_GENDER|NEUTER_GENDER},
-		 {L"either",SINGULAR|MALE_GENDER|FEMALE_GENDER|NEUTER_GENDER},
-		 {L"neither",SINGULAR|MALE_GENDER|FEMALE_GENDER|NEUTER_GENDER},{L"any",SINGULAR|PLURAL|MALE_GENDER|FEMALE_GENDER|NEUTER_GENDER},
-		 {L"all",SINGULAR|PLURAL|MALE_GENDER|FEMALE_GENDER|NEUTER_GENDER},{L"another",SINGULAR|MALE_GENDER|FEMALE_GENDER|NEUTER_GENDER},
-		 {L"other",SINGULAR|MALE_GENDER|FEMALE_GENDER|NEUTER_GENDER},{L"each",SINGULAR|MALE_GENDER|FEMALE_GENDER|NEUTER_GENDER},
-		 {L"less",SINGULAR},{L"more",SINGULAR|PLURAL},
-		 {L"least",SINGULAR|PLURAL},{L"most",SINGULAR|PLURAL},
-		 {L"such",SINGULAR|PLURAL},{NULL,0}};
-	predefineWords(pronoun,L"pronoun",L"pn",L"noun",cSourceWordInfo::queryOnAnyAppearance,false);
-	const wchar_t *determiner[] = {L"the",L"a",L"an",L"th'",L"another",NULL};
-	predefineWords(determiner,L"determiner",L"det");
-	Forms[Forms.size()-1]->blockProperNounRecognition=true; // any words having this form will never be considered as proper nouns
+							NULL };
+	predefineWords(interjection, L"interjection", L"inter", cSourceWordInfo::queryOnAnyAppearance, false);
+	const wchar_t* trademark[] = { L"benzadrine",NULL };
+	predefineWords(trademark, L"trademark", L"tm");
+	const wchar_t* symbol[] = { L"he",NULL };
+	predefineWords(symbol, L"symbol", L"sym");
+	Inflections pronoun[] = { {L"yonder",SINGULAR | PLURAL | NEUTER_GENDER},{L"there",SINGULAR | PLURAL | NEUTER_GENDER},
+		 {L"both",PLURAL | MALE_GENDER | FEMALE_GENDER | NEUTER_GENDER},
+		 {L"either",SINGULAR | MALE_GENDER | FEMALE_GENDER | NEUTER_GENDER},
+		 {L"neither",SINGULAR | MALE_GENDER | FEMALE_GENDER | NEUTER_GENDER},{L"any",SINGULAR | PLURAL | MALE_GENDER | FEMALE_GENDER | NEUTER_GENDER},
+		 {L"all",SINGULAR | PLURAL | MALE_GENDER | FEMALE_GENDER | NEUTER_GENDER},{L"another",SINGULAR | MALE_GENDER | FEMALE_GENDER | NEUTER_GENDER},
+		 {L"other",SINGULAR | MALE_GENDER | FEMALE_GENDER | NEUTER_GENDER},{L"each",SINGULAR | MALE_GENDER | FEMALE_GENDER | NEUTER_GENDER},
+		 {L"less",SINGULAR},{L"more",SINGULAR | PLURAL},
+		 {L"least",SINGULAR | PLURAL},{L"most",SINGULAR | PLURAL},
+		 {L"such",SINGULAR | PLURAL},{NULL,0} };
+	predefineWords(pronoun, L"pronoun", L"pn", L"noun", cSourceWordInfo::queryOnAnyAppearance, false);
+	const wchar_t* determiner[] = { L"the",L"a",L"an",L"th'",L"another",NULL };
+	predefineWords(determiner, L"determiner", L"det");
+	Forms[Forms.size() - 1]->blockProperNounRecognition = true; // any words having this form will never be considered as proper nouns
 	Inflections demonstrative_determiner[] = {
-				{L"this",SINGULAR|NEUTER_GENDER},{L"that",SINGULAR|NEUTER_GENDER},{L"these",PLURAL|NEUTER_GENDER},{L"those",PLURAL|NEUTER_GENDER},{NULL,0}};
-	predefineWords(demonstrative_determiner,L"demonstrative_determiner",L"dem_det",L"noun");
+				{L"this",SINGULAR | NEUTER_GENDER},{L"that",SINGULAR | NEUTER_GENDER},{L"these",PLURAL | NEUTER_GENDER},{L"those",PLURAL | NEUTER_GENDER},{NULL,0} };
+	predefineWords(demonstrative_determiner, L"demonstrative_determiner", L"dem_det", L"noun");
 	Inflections possessive_determiner[] = {
-		{L"my",SINGULAR_OWNER|FEMALE_GENDER|MALE_GENDER|FIRST_PERSON},{L"our",PLURAL_OWNER|FEMALE_GENDER|MALE_GENDER|FIRST_PERSON|SECOND_PERSON},
-		{L"your",SINGULAR_OWNER|PLURAL_OWNER|FEMALE_GENDER|MALE_GENDER|SECOND_PERSON},
-		{L"her",SINGULAR_OWNER|FEMALE_GENDER|THIRD_PERSON},{L"his",SINGULAR_OWNER|MALE_GENDER|THIRD_PERSON},
-		{L"its",SINGULAR_OWNER|NEUTER_GENDER|THIRD_PERSON},{L"their",PLURAL_OWNER|FEMALE_GENDER|MALE_GENDER|NEUTER_GENDER|THIRD_PERSON},
+		{L"my",SINGULAR_OWNER | FEMALE_GENDER | MALE_GENDER | FIRST_PERSON},{L"our",PLURAL_OWNER | FEMALE_GENDER | MALE_GENDER | FIRST_PERSON | SECOND_PERSON},
+		{L"your",SINGULAR_OWNER | PLURAL_OWNER | FEMALE_GENDER | MALE_GENDER | SECOND_PERSON},
+		{L"her",SINGULAR_OWNER | FEMALE_GENDER | THIRD_PERSON},{L"his",SINGULAR_OWNER | MALE_GENDER | THIRD_PERSON},
+		{L"its",SINGULAR_OWNER | NEUTER_GENDER | THIRD_PERSON},{L"their",PLURAL_OWNER | FEMALE_GENDER | MALE_GENDER | NEUTER_GENDER | THIRD_PERSON},
 		//{L"that's",SINGULAR_OWNER|NEUTER_GENDER}, // interferes with that's processing
-		{L"thy",SINGULAR|PLURAL|FEMALE_GENDER|MALE_GENDER|SECOND_PERSON},{NULL,0}};
-	predefineWords(possessive_determiner,L"possessive_determiner",L"pos_det",L"noun");
-	const wchar_t *interrogative_determiner[] = {L"what",L"which",L"whose",L"whatever",L"whichever",L"whosoever",L"whoever",L"whomever",L"whereever",L"whenever",NULL};
-	predefineWords(interrogative_determiner,L"interrogative_determiner",L"int_det");
+		{L"thy",SINGULAR | PLURAL | FEMALE_GENDER | MALE_GENDER | SECOND_PERSON},{NULL,0} };
+	predefineWords(possessive_determiner, L"possessive_determiner", L"pos_det", L"noun");
+	const wchar_t* interrogative_determiner[] = { L"what",L"which",L"whose",L"whatever",L"whichever",L"whosoever",L"whoever",L"whomever",L"whereever",L"whenever",NULL };
+	predefineWords(interrogative_determiner, L"interrogative_determiner", L"int_det");
 	// http://www.wwnorton.com/write/waor.htm
 	// Some of the oil has been cleaned up.
 	// Some of the problems have been solved.
-	Inflections quantifier[] = {{L"all",SINGULAR|PLURAL},{L"some",SINGULAR|PLURAL},{L"much",SINGULAR|PLURAL},{L"many",PLURAL},{L"few",PLURAL},{L"each",SINGULAR},{L"every",PLURAL},{L"several",PLURAL},{L"plenty",PLURAL},{NULL,0}};
-	predefineWords(quantifier,L"quantifier",L"quant",L"noun",cSourceWordInfo::queryOnAnyAppearance,false);
+	Inflections quantifier[] = { {L"all",SINGULAR | PLURAL},{L"some",SINGULAR | PLURAL},{L"much",SINGULAR | PLURAL},{L"many",PLURAL},{L"few",PLURAL},{L"each",SINGULAR},{L"every",PLURAL},{L"several",PLURAL},{L"plenty",PLURAL},{NULL,0} };
+	predefineWords(quantifier, L"quantifier", L"quant", L"noun", cSourceWordInfo::queryOnAnyAppearance, false);
 
 	Inflections personal_pronoun_nominative[] = {
-		{L"one",SINGULAR|MALE_GENDER|FEMALE_GENDER|THIRD_PERSON},
-		{L"i",SINGULAR|FIRST_PERSON|MALE_GENDER_ONLY_CAPITALIZED|FEMALE_GENDER_ONLY_CAPITALIZED},{L"we",PLURAL|FIRST_PERSON|SECOND_PERSON|MALE_GENDER|FEMALE_GENDER},
-		{NULL,0}};
-	predefineWords(personal_pronoun_nominative,L"personal_pronoun_nominative",L"pers_pron_nom",L"noun");
+		{L"one",SINGULAR | MALE_GENDER | FEMALE_GENDER | THIRD_PERSON},
+		{L"i",SINGULAR | FIRST_PERSON | MALE_GENDER_ONLY_CAPITALIZED | FEMALE_GENDER_ONLY_CAPITALIZED},{L"we",PLURAL | FIRST_PERSON | SECOND_PERSON | MALE_GENDER | FEMALE_GENDER},
+		{NULL,0} };
+	predefineWords(personal_pronoun_nominative, L"personal_pronoun_nominative", L"pers_pron_nom", L"noun");
 	Inflections personal_pronoun_accusative[] = {
-		{L"me",SINGULAR|FIRST_PERSON|MALE_GENDER|FEMALE_GENDER},{L"us",PLURAL|FIRST_PERSON|SECOND_PERSON|MALE_GENDER|FEMALE_GENDER},
-		{L"him",SINGULAR|MALE_GENDER|THIRD_PERSON},{L"her",SINGULAR|FEMALE_GENDER|THIRD_PERSON},
-		{L"them",PLURAL|THIRD_PERSON|MALE_GENDER|FEMALE_GENDER|NEUTER_GENDER},
-		{L"em",PLURAL|THIRD_PERSON|MALE_GENDER|FEMALE_GENDER|NEUTER_GENDER},
-		{L"'em",PLURAL|THIRD_PERSON|MALE_GENDER|FEMALE_GENDER|NEUTER_GENDER},{NULL,0}};
-	predefineWords(personal_pronoun_accusative,L"personal_pronoun_accusative",L"pers_pron_acc",L"noun");
+		{L"me",SINGULAR | FIRST_PERSON | MALE_GENDER | FEMALE_GENDER},{L"us",PLURAL | FIRST_PERSON | SECOND_PERSON | MALE_GENDER | FEMALE_GENDER},
+		{L"him",SINGULAR | MALE_GENDER | THIRD_PERSON},{L"her",SINGULAR | FEMALE_GENDER | THIRD_PERSON},
+		{L"them",PLURAL | THIRD_PERSON | MALE_GENDER | FEMALE_GENDER | NEUTER_GENDER},
+		{L"em",PLURAL | THIRD_PERSON | MALE_GENDER | FEMALE_GENDER | NEUTER_GENDER},
+		{L"'em",PLURAL | THIRD_PERSON | MALE_GENDER | FEMALE_GENDER | NEUTER_GENDER},{NULL,0} };
+	predefineWords(personal_pronoun_accusative, L"personal_pronoun_accusative", L"pers_pron_acc", L"noun");
 	Inflections personal_pronoun[] = {
-		{L"you",SINGULAR|PLURAL|SECOND_PERSON|MALE_GENDER|FEMALE_GENDER},{L"ye",SINGULAR|PLURAL|SECOND_PERSON|MALE_GENDER|FEMALE_GENDER},
-		{L"ya",SINGULAR|PLURAL|SECOND_PERSON|MALE_GENDER|FEMALE_GENDER},
-		{L"yer",SINGULAR|PLURAL|SECOND_PERSON|MALE_GENDER|FEMALE_GENDER},{L"youse",SINGULAR|PLURAL|SECOND_PERSON|MALE_GENDER|FEMALE_GENDER},
-		{L"he",SINGULAR|MALE_GENDER|THIRD_PERSON},{L"she",SINGULAR|FEMALE_GENDER|THIRD_PERSON},
-		{L"it",SINGULAR|NEUTER_GENDER|THIRD_PERSON},
-		{L"they",PLURAL|THIRD_PERSON|MALE_GENDER|FEMALE_GENDER|NEUTER_GENDER},
-		{L"thee",SINGULAR|PLURAL|SECOND_PERSON|MALE_GENDER|FEMALE_GENDER},{L"thees",PLURAL|SECOND_PERSON|MALE_GENDER|FEMALE_GENDER},
-		{L"thou",SINGULAR|SECOND_PERSON|MALE_GENDER|FEMALE_GENDER},{NULL,0}};
-	predefineWords(personal_pronoun,L"personal_pronoun",L"pers_pron",L"noun");
-	Inflections reflexive_pronoun[]={
-		{L"myself",SINGULAR|FIRST_PERSON},{L"ourselves",PLURAL|FIRST_PERSON|SECOND_PERSON|MALE_GENDER|FEMALE_GENDER},
-		{L"yourself",SINGULAR|SECOND_PERSON|MALE_GENDER|FEMALE_GENDER},{L"yourselves",PLURAL|SECOND_PERSON|MALE_GENDER|FEMALE_GENDER},{L"himself",SINGULAR|MALE_GENDER|THIRD_PERSON},
-		{L"herself",SINGULAR|FEMALE_GENDER|THIRD_PERSON},{L"itself",SINGULAR|NEUTER_GENDER|THIRD_PERSON},
-		{L"themselves",PLURAL|THIRD_PERSON|MALE_GENDER|FEMALE_GENDER|NEUTER_GENDER},{NULL,0}};
-	predefineWords(reflexive_pronoun,L"reflexive_pronoun",L"refl_pron",L"noun");
+		{L"you",SINGULAR | PLURAL | SECOND_PERSON | MALE_GENDER | FEMALE_GENDER},{L"ye",SINGULAR | PLURAL | SECOND_PERSON | MALE_GENDER | FEMALE_GENDER},
+		{L"ya",SINGULAR | PLURAL | SECOND_PERSON | MALE_GENDER | FEMALE_GENDER},
+		{L"yer",SINGULAR | PLURAL | SECOND_PERSON | MALE_GENDER | FEMALE_GENDER},{L"youse",SINGULAR | PLURAL | SECOND_PERSON | MALE_GENDER | FEMALE_GENDER},
+		{L"he",SINGULAR | MALE_GENDER | THIRD_PERSON},{L"she",SINGULAR | FEMALE_GENDER | THIRD_PERSON},
+		{L"it",SINGULAR | NEUTER_GENDER | THIRD_PERSON},
+		{L"they",PLURAL | THIRD_PERSON | MALE_GENDER | FEMALE_GENDER | NEUTER_GENDER},
+		{L"thee",SINGULAR | PLURAL | SECOND_PERSON | MALE_GENDER | FEMALE_GENDER},{L"thees",PLURAL | SECOND_PERSON | MALE_GENDER | FEMALE_GENDER},
+		{L"thou",SINGULAR | SECOND_PERSON | MALE_GENDER | FEMALE_GENDER},{NULL,0} };
+	predefineWords(personal_pronoun, L"personal_pronoun", L"pers_pron", L"noun");
+	Inflections reflexive_pronoun[] = {
+		{L"myself",SINGULAR | FIRST_PERSON},{L"ourselves",PLURAL | FIRST_PERSON | SECOND_PERSON | MALE_GENDER | FEMALE_GENDER},
+		{L"yourself",SINGULAR | SECOND_PERSON | MALE_GENDER | FEMALE_GENDER},{L"yourselves",PLURAL | SECOND_PERSON | MALE_GENDER | FEMALE_GENDER},{L"himself",SINGULAR | MALE_GENDER | THIRD_PERSON},
+		{L"herself",SINGULAR | FEMALE_GENDER | THIRD_PERSON},{L"itself",SINGULAR | NEUTER_GENDER | THIRD_PERSON},
+		{L"themselves",PLURAL | THIRD_PERSON | MALE_GENDER | FEMALE_GENDER | NEUTER_GENDER},{NULL,0} };
+	predefineWords(reflexive_pronoun, L"reflexive_pronoun", L"refl_pron", L"noun");
 	Inflections possessive_pronoun[] = {
-		{L"mine",SINGULAR|FIRST_PERSON},{L"ours",PLURAL|FIRST_PERSON|SECOND_PERSON|MALE_GENDER|FEMALE_GENDER},
-		{L"yours",SINGULAR|PLURAL|SECOND_PERSON},{L"thine",SINGULAR|PLURAL|SECOND_PERSON},
-		{L"his",SINGULAR|MALE_GENDER|THIRD_PERSON},{L"hers",SINGULAR|FEMALE_GENDER|THIRD_PERSON}, // {L"it's",SINGULAR|NEUTER_GENDER},
-		{L"theirs",PLURAL|THIRD_PERSON|MALE_GENDER|FEMALE_GENDER},{L"everybodies",PLURAL|MALE_GENDER|FEMALE_GENDER},
-		{L"somebodies",SINGULAR|MALE_GENDER|FEMALE_GENDER},{L"nobodies",SINGULAR|MALE_GENDER|FEMALE_GENDER},{NULL,0}};
-		// removed - interfering with contraction processing no one's could be 'no one is'
-		//{L"everyone's",PLURAL},{L"someone's",SINGULAR},{L"no one's",SINGULAR},
-	predefineWords(possessive_pronoun,L"possessive_pronoun",L"pos_pron",L"noun",cSourceWordInfo::queryOnAnyAppearance);
-	const wchar_t *reciprocal_pronoun[]={L"each other",L"one another",NULL};
-	predefineWords(reciprocal_pronoun,L"reciprocal_pronoun",L"recip_pron");
-	Inflections indefinite_pronoun[]={ // agreement is singular ownership is fuzzy
-			{L"everybody",SINGULAR|MALE_GENDER|FEMALE_GENDER},{L"everyone",SINGULAR|MALE_GENDER|FEMALE_GENDER},{L"every one",SINGULAR|MALE_GENDER|FEMALE_GENDER},
-			{L"people",PLURAL|MALE_GENDER|FEMALE_GENDER},{L"person",SINGULAR|MALE_GENDER|FEMALE_GENDER},
-			{L"others",PLURAL|MALE_GENDER|FEMALE_GENDER},{L"other",SINGULAR|MALE_GENDER|FEMALE_GENDER},
-			{L"everything",SINGULAR|NEUTER_GENDER},{L"somebody",SINGULAR|MALE_GENDER|FEMALE_GENDER},
-			{L"someone",SINGULAR|MALE_GENDER|FEMALE_GENDER},{L"something",SINGULAR|NEUTER_GENDER},
-			{L"anybody",SINGULAR|MALE_GENDER|FEMALE_GENDER},{L"anyone",SINGULAR|MALE_GENDER|FEMALE_GENDER},
-			{L"anything",SINGULAR|NEUTER_GENDER},{L"nobody",SINGULAR|MALE_GENDER|FEMALE_GENDER},
-			{L"no one",SINGULAR|MALE_GENDER|FEMALE_GENDER},{L"nothing",SINGULAR|NEUTER_GENDER},
-			{L"crowd",PLURAL|MALE_GENDER|FEMALE_GENDER},
-			{NULL,0}};
-	predefineWords(indefinite_pronoun,L"indefinite_pronoun",L"indef_pron",L"noun",0);
+		{L"mine",SINGULAR | FIRST_PERSON},{L"ours",PLURAL | FIRST_PERSON | SECOND_PERSON | MALE_GENDER | FEMALE_GENDER},
+		{L"yours",SINGULAR | PLURAL | SECOND_PERSON},{L"thine",SINGULAR | PLURAL | SECOND_PERSON},
+		{L"his",SINGULAR | MALE_GENDER | THIRD_PERSON},{L"hers",SINGULAR | FEMALE_GENDER | THIRD_PERSON}, // {L"it's",SINGULAR|NEUTER_GENDER},
+		{L"theirs",PLURAL | THIRD_PERSON | MALE_GENDER | FEMALE_GENDER},{L"everybodies",PLURAL | MALE_GENDER | FEMALE_GENDER},
+		{L"somebodies",SINGULAR | MALE_GENDER | FEMALE_GENDER},{L"nobodies",SINGULAR | MALE_GENDER | FEMALE_GENDER},{NULL,0} };
+	// removed - interfering with contraction processing no one's could be 'no one is'
+	//{L"everyone's",PLURAL},{L"someone's",SINGULAR},{L"no one's",SINGULAR},
+	predefineWords(possessive_pronoun, L"possessive_pronoun", L"pos_pron", L"noun", cSourceWordInfo::queryOnAnyAppearance);
+	const wchar_t* reciprocal_pronoun[] = { L"each other",L"one another",NULL };
+	predefineWords(reciprocal_pronoun, L"reciprocal_pronoun", L"recip_pron");
+	Inflections indefinite_pronoun[] = { // agreement is singular ownership is fuzzy
+			{L"everybody",SINGULAR | MALE_GENDER | FEMALE_GENDER},{L"everyone",SINGULAR | MALE_GENDER | FEMALE_GENDER},{L"every one",SINGULAR | MALE_GENDER | FEMALE_GENDER},
+			{L"people",PLURAL | MALE_GENDER | FEMALE_GENDER},{L"person",SINGULAR | MALE_GENDER | FEMALE_GENDER},
+			{L"others",PLURAL | MALE_GENDER | FEMALE_GENDER},{L"other",SINGULAR | MALE_GENDER | FEMALE_GENDER},
+			{L"everything",SINGULAR | NEUTER_GENDER},{L"somebody",SINGULAR | MALE_GENDER | FEMALE_GENDER},
+			{L"someone",SINGULAR | MALE_GENDER | FEMALE_GENDER},{L"something",SINGULAR | NEUTER_GENDER},
+			{L"anybody",SINGULAR | MALE_GENDER | FEMALE_GENDER},{L"anyone",SINGULAR | MALE_GENDER | FEMALE_GENDER},
+			{L"anything",SINGULAR | NEUTER_GENDER},{L"nobody",SINGULAR | MALE_GENDER | FEMALE_GENDER},
+			{L"no one",SINGULAR | MALE_GENDER | FEMALE_GENDER},{L"nothing",SINGULAR | NEUTER_GENDER},
+			{L"crowd",PLURAL | MALE_GENDER | FEMALE_GENDER},
+			{NULL,0} };
+	predefineWords(indefinite_pronoun, L"indefinite_pronoun", L"indef_pron", L"noun", 0);
 	// 	who, whom, whose, which, that, what, whoever, whomever, whichever, whatever - ,L"wherever",L"whenever"
-	const wchar_t *interrogative_pronoun[]={L"who",L"whom",L"what",L"which",L"whoever",L"whomever",L"whatever",L"whichever",NULL};
-	predefineWords(interrogative_pronoun,L"interrogative_pronoun",L"inter_pron");
+	const wchar_t* interrogative_pronoun[] = { L"who",L"whom",L"what",L"which",L"whoever",L"whomever",L"whatever",L"whichever",NULL };
+	predefineWords(interrogative_pronoun, L"interrogative_pronoun", L"inter_pron");
 
-	const wchar_t *preposition[] = {L"as",L"into",L"against",L"along",L"anigh",L"at",L"atop",L"between",L"betwixt",L"bout",
+	const wchar_t* preposition[] = { L"as",L"into",L"against",L"along",L"anigh",L"at",L"atop",L"between",L"betwixt",L"bout",
 		L"by",L"circa",L"concerning",L"considering",L"contra",L"cum",L"during",L"enduring",L"fae",L"for",L"forby",
 		L"fro",L"in",L"in-between",L"maugre",L"minus",L"next to",L"notwithstanding",L"of",L"de",L"on",L"outen",L"per",L"plus",L"qua",
 		L"sans",L"thorough",L"through",L"till",L"times",L"to",L"touching",L"underneath",L"unlike",L"until",L"upon",
@@ -1064,45 +1083,45 @@ int cWord::createWordCategories()
 		L"under",L"upward",L"within",
 		// these words must be specified as the dictionary lookup gets too many forms (>8)
 		L"ere",
-		NULL};
-	predefineWords(preposition,L"preposition",L"prep",cSourceWordInfo::queryOnAnyAppearance,false);
-	const wchar_t *verbalPreposition[] = {L"including",NULL};
-	predefineWords(verbalPreposition,L"verbalPreposition",L"vprep",cSourceWordInfo::queryOnAnyAppearance,false);
-	const wchar_t *preposition2[] = {L"with",NULL}; // this is also defined as an adverb and as a noun which are very rare usages
-	predefineWords(preposition2,L"preposition",L"prep",0,false);
-	Inflections negation_verb_contraction[] = {{L"daresn't",VERB_PRESENT_FIRST_SINGULAR},{L"dasn't",VERB_PRESENT_FIRST_SINGULAR},
-			{L"dunno",VERB_PRESENT_FIRST_SINGULAR},{NULL,0}};//{L"oughtn't",VERB_PRESENT_THIRD_SINGULAR},
+		NULL };
+	predefineWords(preposition, L"preposition", L"prep", cSourceWordInfo::queryOnAnyAppearance, false);
+	const wchar_t* verbalPreposition[] = { L"including",NULL };
+	predefineWords(verbalPreposition, L"verbalPreposition", L"vprep", cSourceWordInfo::queryOnAnyAppearance, false);
+	const wchar_t* preposition2[] = { L"with",NULL }; // this is also defined as an adverb and as a noun which are very rare usages
+	predefineWords(preposition2, L"preposition", L"prep", 0, false);
+	Inflections negation_verb_contraction[] = { {L"daresn't",VERB_PRESENT_FIRST_SINGULAR},{L"dasn't",VERB_PRESENT_FIRST_SINGULAR},
+			{L"dunno",VERB_PRESENT_FIRST_SINGULAR},{NULL,0} };//{L"oughtn't",VERB_PRESENT_THIRD_SINGULAR},
 	//{L"didn't",VERB_PAST},{L"doesn't",VERB_PAST_THIRD_SINGULAR},{L"don't",VERB_PRESENT_FIRST_SINGULAR},{L"don't",VERB_PRESENT_PLURAL},NULL};
-	predefineWords(negation_verb_contraction,L"negation_verb_contraction",L"neg_vb_cont",L"verb");
+	predefineWords(negation_verb_contraction, L"negation_verb_contraction", L"neg_vb_cont", L"verb");
 
-	const wchar_t *conjunction[] = {L"and",L"as if",L"but",L"however",L"if",L"lest",L"nor",L"or",L"than",L"unless",L"as",L"before",L"after",
+	const wchar_t* conjunction[] = { L"and",L"as if",L"but",L"however",L"if",L"lest",L"nor",L"or",L"than",L"unless",L"as",L"before",L"after",
 		L"cos",L"even",L"given",L"immediately",L"insofar",L"whereupon", // BNCC
 		L"an'", // short for 'and'
 		L"o'", // short for 'of'
 		L"whencesoever",L"whenever",L"whensoever",L"whereas",L"wheresoever",L"whiles",L"whilst",L"&",L"wherever", // "--" removed There may be a risk--if I've been followed.
 		// these words must be specified as the dictionary lookup gets too many forms (>8)
 		L"how",L"ere",
-		NULL};
-	predefineWords(conjunction,L"conjunction",L"conj",cSourceWordInfo::queryOnAnyAppearance,false);
-	const wchar_t *modal_auxiliary[]={L"can",L"canst",L"could",L"couldst",L"may",L"mayst",L"might",L"must",L"should",L"shouldst",L"would",L"wouldst",L"wouldhad",L"ought",L"aught",NULL};
-	predefineWords(modal_auxiliary,L"modal_auxiliary",L"mod_aux",cSourceWordInfo::queryOnAnyAppearance,false);
-	const wchar_t *future_modal_auxiliary[]={L"shall",L"will",L"wilt",L"shalt",NULL};
-	predefineWords(future_modal_auxiliary,L"future_modal_auxiliary",L"fut_mod_aux",cSourceWordInfo::queryOnAnyAppearance,false);
-	const wchar_t *negation_modal_auxiliary[]={L"can't",L"mayn't",L"mustn't",L"shouldn't",L"couldn't",L"wouldn't",L"cannot",L"mightn't",L"oughtn't",NULL};
-		//"can not",L"may not",L"must not",L"should not",L"could not",L"would not",L"might not",NULL};
-	predefineWords(negation_modal_auxiliary,L"negation_modal_auxiliary",L"neg_mod_aux");
-	const wchar_t *negation_future_modal_auxiliary[]={L"won't",L"shan't",NULL}; // "will not",L"shall not",
-	predefineWords(negation_future_modal_auxiliary,L"negation_future_modal_auxiliary",L"neg_fut_mod_aux");
+		NULL };
+	predefineWords(conjunction, L"conjunction", L"conj", cSourceWordInfo::queryOnAnyAppearance, false);
+	const wchar_t* modal_auxiliary[] = { L"can",L"canst",L"could",L"couldst",L"may",L"mayst",L"might",L"must",L"should",L"shouldst",L"would",L"wouldst",L"wouldhad",L"ought",L"aught",NULL };
+	predefineWords(modal_auxiliary, L"modal_auxiliary", L"mod_aux", cSourceWordInfo::queryOnAnyAppearance, false);
+	const wchar_t* future_modal_auxiliary[] = { L"shall",L"will",L"wilt",L"shalt",NULL };
+	predefineWords(future_modal_auxiliary, L"future_modal_auxiliary", L"fut_mod_aux", cSourceWordInfo::queryOnAnyAppearance, false);
+	const wchar_t* negation_modal_auxiliary[] = { L"can't",L"mayn't",L"mustn't",L"shouldn't",L"couldn't",L"wouldn't",L"cannot",L"mightn't",L"oughtn't",NULL };
+	//"can not",L"may not",L"must not",L"should not",L"could not",L"would not",L"might not",NULL};
+	predefineWords(negation_modal_auxiliary, L"negation_modal_auxiliary", L"neg_mod_aux");
+	const wchar_t* negation_future_modal_auxiliary[] = { L"won't",L"shan't",NULL }; // "will not",L"shall not",
+	predefineWords(negation_future_modal_auxiliary, L"negation_future_modal_auxiliary", L"neg_fut_mod_aux");
 
-	const wchar_t *numeral_cardinal[] = {
+	const wchar_t* numeral_cardinal[] = {
 		L"zero",L"naught",L"one",L"two",L"three",L"four",L"five",L"six",L"seven",L"eight",L"nine",L"ten",L"eleven",
 		L"ones",L"twos",L"threes",L"fours",L"fives",L"sixes",L"sevens",L"eights",L"nines",L"tens",L"elevens",
 		L"twelve",L"dozen",L"dozens",L"thirteen",L"fourteen",L"fifteen",L"sixteen",L"seventeen",L"eighteen",L"nineteen",L"umpteen",L"gross",
 		L"twenty",L"twenties",L"thirty",L"thirties",L"forty",L"forties",L"fifty",L"fifties",L"sixty",L"sixties",L"seventy",L"seventies",L"eighty",L"eighties",L"ninety",L"nineties",
-		L"hundred",L"hundreds",L"thousand",L"thousands",L"million",L"millions",L"billion",L"billions",L"trillion",L"trillions",NULL};
-	predefineWords(numeral_cardinal,L"numeral_cardinal",L"card");
-	predefineWords(roman_numeral,L"roman_numeral",L"roman");
-	const wchar_t *numeral_ordinal[] = {L"first",L"second",L"seconds",L"third",L"thirds",L"fourth",L"fourths",L"fifth",L"fifths",
+		L"hundred",L"hundreds",L"thousand",L"thousands",L"million",L"millions",L"billion",L"billions",L"trillion",L"trillions",NULL };
+	predefineWords(numeral_cardinal, L"numeral_cardinal", L"card");
+	predefineWords(roman_numeral, L"roman_numeral", L"roman");
+	const wchar_t* numeral_ordinal[] = { L"first",L"second",L"seconds",L"third",L"thirds",L"fourth",L"fourths",L"fifth",L"fifths",
 		L"sixth",L"sixths",L"seventh",L"sevenths",L"eighth",L"eighths",L"ninth",L"ninths",L"tenth",L"tenths",
 		L"eleventh",L"elevenths",L"twelfth",L"twelveths",L"twelves",L"thirteenth",L"thirteenths",L"fourteenth",L"fourteenths",L"fifteenth",L"fifteenths",
 		L"sixteenth",L"sixteenths",L"seventeenth",L"seventeenths",L"eighteenth",L"eighteenths",L"nineteenth",L"nineteenths",
@@ -1112,26 +1131,26 @@ int cWord::createWordCategories()
 		L"11th",L"12th",L"13th",L"14th",L"15th",L"16th",L"17th",L"18th",L"19th",L"20th",
 		L"21st",L"22nd",L"23rd",L"24th",L"25th",L"26th",L"27th",L"28th",L"29th",L"30th",
 		L"31st",L"32nd",L"33rd",L"34th",L"35th",L"36th",L"37th",L"38th",L"39th",L"40th",
-		L"first",L"last",L"next",L"umpteenth",L"nth",NULL}; // BNC
-	predefineWords(numeral_ordinal,L"numeral_ordinal",L"ord");
-	const wchar_t *inserts[] = {L"ouch",L"right-o",L"good-bye",NULL}; // chapter 14 LGSWE
-	predefineWords(inserts,L"inserts",L"ins");
-	const wchar_t *politeness_discourse_marker[] = {L"please",L"pray",NULL}; // chapter 14 LGSWE // "thank you" removed (decreased matches)
-	predefineWords(politeness_discourse_marker,L"politeness_discourse_marker",L"pi",cSourceWordInfo::queryOnAnyAppearance,false);
-	const wchar_t *predeterminer[] = {L"all",L"half",L"double",L"both",L"once",L"twice",L"thrice",L"such",NULL};
-	predefineWords(predeterminer,L"predeterminer",L"predeterminer",cSourceWordInfo::queryOnAnyAppearance,false);
-	const wchar_t *sNoQuery[] = {L"and",L"you",L"p.o.",L"!",L"?",NULL};
-	for (const wchar_t **s=sNoQuery; *s; s++) predefineWord(*s);
-	const wchar_t *specials[] = {L"ex",L"there",L"to",L"only",L"but",L"also",L"thank",L"box",L"which",L"what",L"whose",L"how",L"both",L"van",L"von",NULL};
-	for (const wchar_t **s=specials; *s; s++) predefineWord(*s,cSourceWordInfo::queryOnAnyAppearance);
+		L"first",L"last",L"next",L"umpteenth",L"nth",NULL }; // BNC
+	predefineWords(numeral_ordinal, L"numeral_ordinal", L"ord");
+	const wchar_t* inserts[] = { L"ouch",L"right-o",L"good-bye",NULL }; // chapter 14 LGSWE
+	predefineWords(inserts, L"inserts", L"ins");
+	const wchar_t* politeness_discourse_marker[] = { L"please",L"pray",NULL }; // chapter 14 LGSWE // "thank you" removed (decreased matches)
+	predefineWords(politeness_discourse_marker, L"politeness_discourse_marker", L"pi", cSourceWordInfo::queryOnAnyAppearance, false);
+	const wchar_t* predeterminer[] = { L"all",L"half",L"double",L"both",L"once",L"twice",L"thrice",L"such",NULL };
+	predefineWords(predeterminer, L"predeterminer", L"predeterminer", cSourceWordInfo::queryOnAnyAppearance, false);
+	const wchar_t* sNoQuery[] = { L"and",L"you",L"p.o.",L"!",L"?",NULL };
+	for (const wchar_t** s = sNoQuery; *s; s++) predefineWord(*s);
+	const wchar_t* specials[] = { L"ex",L"there",L"to",L"only",L"but",L"also",L"thank",L"box",L"which",L"what",L"whose",L"how",L"both",L"van",L"von",NULL };
+	for (const wchar_t** s = specials; *s; s++) predefineWord(*s, cSourceWordInfo::queryOnAnyAppearance);
 	// not is registered as a (noun, adjective, adverb and preposition, but it is very rarely anything but an adverb)
 	// never is an adverb
 	// no is an adverb, adjective or noun (very rare)
-	const wchar_t *specials3[] = {L"not",L"no",L"never",L"p",L"m",L"le",L"de",L"f",L"c",L"k",L"o",NULL};  //p is the British abbreviation for pence
-	for (const wchar_t **s=specials3; *s; s++) predefineWord(*s,0);
+	const wchar_t* specials3[] = { L"not",L"no",L"never",L"p",L"m",L"le",L"de",L"f",L"c",L"k",L"o",NULL };  //p is the British abbreviation for pence
+	for (const wchar_t** s = specials3; *s; s++) predefineWord(*s, 0);
 
 	// of late, he is not there. // _PP only takes nouns as objects.
-	InflectionsRoot noun[] = {{L"desk",SINGULAR,L"desk"},{L"desks",PLURAL,L"desk"},{L"eardrop",SINGULAR,L"eardrop"},{L"eardrops",PLURAL,L"eardrop"},
+	InflectionsRoot noun[] = { {L"desk",SINGULAR,L"desk"},{L"desks",PLURAL,L"desk"},{L"eardrop",SINGULAR,L"eardrop"},{L"eardrops",PLURAL,L"eardrop"},
 											{L"as",SINGULAR,L"as"},{L"art",SINGULAR,L"art"},{L"arts",PLURAL,L"art"},
 											{L"to-day",SINGULAR,L"to-day"},{L"to-morrow",SINGULAR,L"to-morrow"},{L"to-night",SINGULAR,L"to-night"},
 											{L"hanger-on",SINGULAR,L"hanger-on"},{L"hangers-on",PLURAL,L"hanger-on"},{L"man-of-war",SINGULAR,L"man-of-war"},
@@ -1139,18 +1158,18 @@ int cWord::createWordCategories()
 											{L"jack-of-all-trades",SINGULAR,L"jack-of-all-trades"},
 											{L"late",SINGULAR,L"late"},{L"time",SINGULAR,L"time"},{L"times",PLURAL,L"time"},{L"for ever",SINGULAR,L"for ever"},
 											{L"veronal",SINGULAR,L"veronal"},{L"lookout",SINGULAR,L"lookout"},{L"o'clock",SINGULAR,L"o'clock"},
-											// these words must be specified as the dictionary lookup gets too many forms (>8)
-											{L"air",SINGULAR,L"air"},{L"airs",PLURAL,L"air"},
-											{L"bit",SINGULAR,L"bit"},{L"bits",PLURAL,L"bit"},
-											{L"ear",SINGULAR,L"ear"},{L"ears",PLURAL,L"ear"},
-											{L"fat",SINGULAR,L"fat"},{L"fats",PLURAL,L"fat"},
-											{L"but",SINGULAR,L"but"},{L"buts",PLURAL,L"but"},
-											{L"how",SINGULAR,L"how"},{L"hows",PLURAL,L"how"},
-											{L"what",SINGULAR,L"what"},{L"whats",PLURAL,L"what"},
-																						{L"whereabouts",SINGULAR,L"whereabouts"},
-											{NULL,0}};
-	predefineWords(noun,L"noun",L"n",L"noun",cSourceWordInfo::queryOnAnyAppearance);
-	InflectionsRoot adjective[] = {{L"little",ADJECTIVE_NORMATIVE,L"little"},{L"littler",ADJECTIVE_COMPARATIVE,L"little"},
+		// these words must be specified as the dictionary lookup gets too many forms (>8)
+		{L"air",SINGULAR,L"air"},{L"airs",PLURAL,L"air"},
+		{L"bit",SINGULAR,L"bit"},{L"bits",PLURAL,L"bit"},
+		{L"ear",SINGULAR,L"ear"},{L"ears",PLURAL,L"ear"},
+		{L"fat",SINGULAR,L"fat"},{L"fats",PLURAL,L"fat"},
+		{L"but",SINGULAR,L"but"},{L"buts",PLURAL,L"but"},
+		{L"how",SINGULAR,L"how"},{L"hows",PLURAL,L"how"},
+		{L"what",SINGULAR,L"what"},{L"whats",PLURAL,L"what"},
+													{L"whereabouts",SINGULAR,L"whereabouts"},
+		{NULL,0} };
+	predefineWords(noun, L"noun", L"n", L"noun", cSourceWordInfo::queryOnAnyAppearance);
+	InflectionsRoot adjective[] = { {L"little",ADJECTIVE_NORMATIVE,L"little"},{L"littler",ADJECTIVE_COMPARATIVE,L"little"},
 											{L"littlest",ADJECTIVE_SUPERLATIVE,L"little"},{L"just",ADJECTIVE_NORMATIVE,L"just"},
 											{L"yonder",ADJECTIVE_NORMATIVE,L"yonder"},{L"thorough",ADJECTIVE_NORMATIVE,L"thorough"},
 											{L"would-be",ADJECTIVE_NORMATIVE,L"would-be"},{L"towards",ADJECTIVE_NORMATIVE,L"towards"},
@@ -1159,13 +1178,13 @@ int cWord::createWordCategories()
 											{L"good",ADJECTIVE_NORMATIVE,L"good"},{L"better",ADJECTIVE_COMPARATIVE,L"good"},{L"best",ADJECTIVE_SUPERLATIVE,L"good"},
 											{L"state-of-the-art",ADJECTIVE_NORMATIVE,L"state-of-the-art"},
 											{L"op-ed",ADJECTIVE_NORMATIVE,L"op-ed"},
-											// these words must be specified as the dictionary lookup gets too many forms (>8)
-											{L"fat",ADJECTIVE_NORMATIVE,L"fat"},
-											{L"what",ADJECTIVE_NORMATIVE,L"what"},
-											{L"but",ADJECTIVE_NORMATIVE,L"but"},
-											{L"next",ADJECTIVE_NORMATIVE,L"next"},
-											{NULL,0}};
-	predefineWords(adjective,L"adjective",L"adj",L"adjective",cSourceWordInfo::queryOnAnyAppearance);
+		// these words must be specified as the dictionary lookup gets too many forms (>8)
+		{L"fat",ADJECTIVE_NORMATIVE,L"fat"},
+		{L"what",ADJECTIVE_NORMATIVE,L"what"},
+		{L"but",ADJECTIVE_NORMATIVE,L"but"},
+		{L"next",ADJECTIVE_NORMATIVE,L"next"},
+		{NULL,0} };
+	predefineWords(adjective, L"adjective", L"adj", L"adjective", cSourceWordInfo::queryOnAnyAppearance);
 	InflectionsRoot verb[] = {
 							{L"showed",VERB_PAST,L"show"},{L"shown",VERB_PAST_PARTICIPLE,L"show"},{L"showing",VERB_PRESENT_PARTICIPLE,L"show"},
 							{L"shows",VERB_PRESENT_THIRD_SINGULAR,L"show"},{L"show",VERB_PRESENT_FIRST_SINGULAR,L"show"},
@@ -1173,8 +1192,8 @@ int cWord::createWordCategories()
 							{L"cuts out",VERB_PRESENT_THIRD_SINGULAR,L"cut out"},{L"cut out",VERB_PRESENT_FIRST_SINGULAR,L"cut out"},
 							{L"withdrew",VERB_PAST,L"withdraw"},{L"foresaw",VERB_PAST,L"foresee"},
 							{L"withdrawn",VERB_PAST_PARTICIPLE,L"withdraw"},{L"foresaw",VERB_PAST_PARTICIPLE,L"foreseen"},
-							{L"misunderstood",VERB_PAST|VERB_PAST_PARTICIPLE,L"misunderstand"},
-							{L"dunno",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR,L"dunno"},
+							{L"misunderstood",VERB_PAST | VERB_PAST_PARTICIPLE,L"misunderstand"},
+							{L"dunno",VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_THIRD_SINGULAR,L"dunno"},
 							{L"done",VERB_PAST_PARTICIPLE,L"do"},
 							{L"lasted",VERB_PAST,L"last"},{L"lasted",VERB_PAST_PARTICIPLE,L"last"},{L"lasting",VERB_PRESENT_PARTICIPLE,L"last"}, // last is also a number - which is marked as nonquery
 							{L"lasts",VERB_PRESENT_THIRD_SINGULAR,L"last"},{L"last",VERB_PRESENT_FIRST_SINGULAR,L"last"},
@@ -1186,16 +1205,16 @@ int cWord::createWordCategories()
 							{L"airbrushes",VERB_PRESENT_THIRD_SINGULAR,L"airbrush"},{L"bringeth",VERB_PRESENT_THIRD_SINGULAR,L"bring"},{L"catalyses",VERB_PRESENT_THIRD_SINGULAR,L"catalyse"},{L"changeth",VERB_PRESENT_THIRD_SINGULAR,L"change"},{L"goeth",VERB_PRESENT_THIRD_SINGULAR,L"go"},
 							{L"interwoven",VERB_PAST_PARTICIPLE,L"interweave"},{L"overseen",VERB_PAST_PARTICIPLE,L"oversee"},{L"overgrown",VERB_PAST_PARTICIPLE,L"overgrow"},{L"outdone",VERB_PAST_PARTICIPLE,L"outdo"},
 							{L"hypothesising",VERB_PRESENT_PARTICIPLE,L"hypothesise"},{L"labouring",VERB_PRESENT_PARTICIPLE,L"labour"},{L"outsourcing",VERB_PRESENT_PARTICIPLE,L"outsource"},{L"scrutinising",VERB_PRESENT_PARTICIPLE,L"scrutinise"},{L"sleepwalking",VERB_PRESENT_PARTICIPLE,L"sleepwalk"},{L"snorkelling",VERB_PRESENT_PARTICIPLE,L"snorkel"},{L"underlying",VERB_PRESENT_PARTICIPLE,L"underlie"},
-							{L"slew",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR,L"slue"},{L"slewing",VERB_PRESENT_PARTICIPLE,L"slue"},{L"slewed",VERB_PAST,L"slue"},
-							{L"slough",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_THIRD_SINGULAR,L"slue"},{L"sloughing",VERB_PRESENT_PARTICIPLE,L"slue"},{L"sloughed",VERB_PAST,L"slue"},
+							{L"slew",VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_THIRD_SINGULAR,L"slue"},{L"slewing",VERB_PRESENT_PARTICIPLE,L"slue"},{L"slewed",VERB_PAST,L"slue"},
+							{L"slough",VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_THIRD_SINGULAR,L"slue"},{L"sloughing",VERB_PRESENT_PARTICIPLE,L"slue"},{L"sloughed",VERB_PAST,L"slue"},
 							// these words must be specified as the dictionary lookup gets too many forms (>8)
 							{L"air",VERB_PRESENT_FIRST_SINGULAR,L"air"},
 							{L"bite",VERB_PRESENT_FIRST_SINGULAR,L"bite"},{L"bit",VERB_PAST,L"bite"},
 							{L"ear",VERB_PRESENT_FIRST_SINGULAR,L"ear"},
 							{L"fat",VERB_PRESENT_FIRST_SINGULAR,L"fat"},
 							{L"wot",VERB_PRESENT_FIRST_SINGULAR,L"wot"},
-							{NULL,0}};
-	predefineWords(verb,L"verb",L"v",L"verb",cSourceWordInfo::queryOnAnyAppearance);
+							{NULL,0} };
+	predefineWords(verb, L"verb", L"v", L"verb", cSourceWordInfo::queryOnAnyAppearance);
 	InflectionsRoot adverb[] = {
 				{L"as",ADVERB_NORMATIVE,L"as"},{L"there",ADVERB_NORMATIVE,L"there"},{L"little",ADVERB_NORMATIVE,L"little"},
 				{L"just",ADVERB_NORMATIVE,L"just"},{L"rather",ADVERB_NORMATIVE,L"rather"},{L"ruther",ADVERB_NORMATIVE,L"ruther"},
@@ -1211,10 +1230,10 @@ int cWord::createWordCategories()
 				{L"how",ADVERB_NORMATIVE,L"how"},
 				{L"ere",ADVERB_NORMATIVE,L"ere"},
 				{L"worldwide",ADVERB_NORMATIVE,L"worldwide"},
-				{NULL,0}};
-	predefineWords(adverb,L"adverb",L"adv",L"adverb",cSourceWordInfo::queryOnAnyAppearance);
-	InflectionsRoot adverb2[] = {{L"this",ADVERB_NORMATIVE,L"this"},{L"that",ADVERB_NORMATIVE,L"that"},{L"next",ADVERB_NORMATIVE,L"next"},{L"first",ADVERB_NORMATIVE,L"first"},{NULL,0}};
-	predefineWords(adverb2,L"adverb",L"adv",L"adverb");  // do not allow discovery of this or that because they are also m-w pronouns and adjectives, which are
+				{NULL,0} };
+	predefineWords(adverb, L"adverb", L"adv", L"adverb", cSourceWordInfo::queryOnAnyAppearance);
+	InflectionsRoot adverb2[] = { {L"this",ADVERB_NORMATIVE,L"this"},{L"that",ADVERB_NORMATIVE,L"that"},{L"next",ADVERB_NORMATIVE,L"next"},{L"first",ADVERB_NORMATIVE,L"first"},{NULL,0} };
+	predefineWords(adverb2, L"adverb", L"adv", L"adverb");  // do not allow discovery of this or that because they are also m-w pronouns and adjectives, which are
 																										// already included in the patterns as determiners
 	InflectionsRoot is[] = {
 							{L"am",VERB_PRESENT_FIRST_SINGULAR,L"am"}, // this must be first (mainEntry without queryOnAppearance)
@@ -1225,53 +1244,53 @@ int cWord::createWordCategories()
 							{L"was",VERB_PAST,L"am"},{L"been",VERB_PAST_PARTICIPLE,L"am"},
 							{L"were",VERB_PAST_PLURAL,L"am"},
 							{L"wert",VERB_PAST_PLURAL,L"am"},
-							{NULL,0}};
-	predefineWords(is,L"is",L"is",L"verb");
-							//{L"is not",VERB_PRESENT_THIRD_SINGULAR},{L"am not",VERB_PRESENT_FIRST_SINGULAR},{L"are not",VERB_PRESENT_PLURAL},
-							//{L"was not",VERB_PAST_PARTICIPLE},{L"was not",VERB_PAST},{L"were not",VERB_PAST_PLURAL},
+							{NULL,0} };
+	predefineWords(is, L"is", L"is", L"verb");
+	//{L"is not",VERB_PRESENT_THIRD_SINGULAR},{L"am not",VERB_PRESENT_FIRST_SINGULAR},{L"are not",VERB_PRESENT_PLURAL},
+	//{L"was not",VERB_PAST_PARTICIPLE},{L"was not",VERB_PAST},{L"were not",VERB_PAST_PLURAL},
 	InflectionsRoot is_negation[] = {
 							{L"isn't",VERB_PRESENT_THIRD_SINGULAR,L"am"},{L"ain't",VERB_PRESENT_FIRST_SINGULAR,L"am"},
 							{L"amn't",VERB_PRESENT_FIRST_SINGULAR,L"am"},{L"an't",VERB_PRESENT_FIRST_SINGULAR,L"am"},
 							{L"is't",VERB_PRESENT_THIRD_SINGULAR,L"am"},
 							{L"aren't",VERB_PRESENT_PLURAL,L"am"},{L"wasn't",VERB_PAST,L"am"},{L"wasn't",VERB_PAST_PARTICIPLE,L"am"},
-							{L"weren't",VERB_PAST_PLURAL,L"am"},{NULL,0}};
-	predefineWords(is_negation,L"is_negation",L"is_neg",L"verb");
+							{L"weren't",VERB_PAST_PLURAL,L"am"},{NULL,0} };
+	predefineWords(is_negation, L"is_negation", L"is_neg", L"verb");
 	predefineWord(L"be");
-	predefineWord(L"being",cSourceWordInfo::queryOnAnyAppearance);
+	predefineWord(L"being", cSourceWordInfo::queryOnAnyAppearance);
 	predefineWord(L"been");
 	InflectionsRoot have[] = {
-							{L"have",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_PLURAL,L"have"}, // this must be first (mainEntry without queryOnAppearance)
+							{L"have",VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_PLURAL,L"have"}, // this must be first (mainEntry without queryOnAppearance)
 							{L"had",VERB_PAST,L"have"},{L"wouldhad",VERB_PAST,L"wouldhad"},{L"had",VERB_PAST_PARTICIPLE,L"have"},{L"wouldhad",VERB_PAST_PARTICIPLE,L"wouldhad"},
 							{L"having",VERB_PRESENT_PARTICIPLE,L"have"},
 							{L"has",VERB_PRESENT_THIRD_SINGULAR,L"have"},{L"hast",VERB_PRESENT_SECOND_SINGULAR,L"have"},
 							{L"hath",VERB_PRESENT_THIRD_SINGULAR,L"have"},
-							{L"ishas",VERB_PRESENT_THIRD_SINGULAR,L"have"},{L"ishasdoes",VERB_PRESENT_THIRD_SINGULAR,L"have"},{NULL,0}};
-	predefineWords(have,L"have",L"have",L"verb");
+							{L"ishas",VERB_PRESENT_THIRD_SINGULAR,L"have"},{L"ishasdoes",VERB_PRESENT_THIRD_SINGULAR,L"have"},{NULL,0} };
+	predefineWords(have, L"have", L"have", L"verb");
 	InflectionsRoot have_negation[] = {
-							{L"haven't",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_PLURAL,L"have"},// this must be first (mainEntry without queryOnAppearance)
-							{L"havent",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_PLURAL,L"have"},// this must be first (mainEntry without queryOnAppearance)
+							{L"haven't",VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_PLURAL,L"have"},// this must be first (mainEntry without queryOnAppearance)
+							{L"havent",VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_PLURAL,L"have"},// this must be first (mainEntry without queryOnAppearance)
 							{L"hadn't",VERB_PAST,L"haven't"},{L"hain't",VERB_PRESENT_FIRST_SINGULAR,L"have"},
 							{L"hain't",VERB_PRESENT_THIRD_SINGULAR,L"have"},
 							{L"han't",VERB_PRESENT_FIRST_SINGULAR,L"have"},{L"han't",VERB_PRESENT_THIRD_SINGULAR,L"have"},
 							{L"hasn't",VERB_PRESENT_THIRD_SINGULAR,L"have"},
 							{L"haven't",VERB_PRESENT_THIRD_SINGULAR,L"have"},
 							//{L"have not",VERB_PRESENT_FIRST_SINGULAR},{L"had not",VERB_PRESENT_FIRST_SINGULAR},
-							{NULL,0}};
-	predefineWords(have_negation,L"have_negation",L"have_neg",L"verb");
+							{NULL,0} };
+	predefineWords(have_negation, L"have_negation", L"have_neg", L"verb");
 	InflectionsRoot does[] = {
-							{L"do",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_PLURAL,L"do"},// this must be first (mainEntry without queryOnAppearance)
+							{L"do",VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_PLURAL,L"do"},// this must be first (mainEntry without queryOnAppearance)
 							{L"did",VERB_PAST,L"do"},{L"done",VERB_PAST_PARTICIPLE,L"do"},{L"doing",VERB_PRESENT_PARTICIPLE,L"do"},
 							{L"does",VERB_PRESENT_THIRD_SINGULAR,L"do"},{L"dost",VERB_PRESENT_SECOND_SINGULAR,L"do"},
 							{L"doth",VERB_PRESENT_THIRD_SINGULAR,L"do"},
-							{L"ishasdoes",VERB_PRESENT_THIRD_SINGULAR,L"ishasdoes"},{NULL,0}};
-	predefineWords(does,L"does",L"does",L"verb");
+							{L"ishasdoes",VERB_PRESENT_THIRD_SINGULAR,L"ishasdoes"},{NULL,0} };
+	predefineWords(does, L"does", L"does", L"verb");
 	InflectionsRoot does_negation[] = {
-							{L"don't",VERB_PRESENT_FIRST_SINGULAR|VERB_PRESENT_PLURAL,L"do"},// this must be first (mainEntry without queryOnAppearance)
+							{L"don't",VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_PLURAL,L"do"},// this must be first (mainEntry without queryOnAppearance)
 							{L"didn't",VERB_PAST,L"do"},{L"doesn't",VERB_PRESENT_THIRD_SINGULAR,L"do"},
 							{L"doesn't",VERB_PRESENT_THIRD_SINGULAR,L"do"},
 							//,{L"did not",VERB_PAST},{L"does not",VERB_PRESENT_THIRD_SINGULAR},{L"do not",VERB_PRESENT_FIRST_SINGULAR},
-							{NULL,0}};
-	predefineWords(does_negation,L"does_negation",L"does_neg",L"verb");
+							{NULL,0} };
+	predefineWords(does_negation, L"does_negation", L"does_neg", L"verb");
 	// introduces relative clauses
 		// relative pronouns - who, which, whose, whom
 		// relative adverbs - when, where, why
@@ -1283,12 +1302,12 @@ int cWord::createWordCategories()
 		//   If the relative pronoun is not followed by a verb (but by a noun or pronoun), the relative pronoun is an object pronoun. Object pronouns can be dropped in defining relative clauses, which are then called Contact Clauses.
 		//     the apple (which) George lay on the table
 	// who, whom, whose, which, that, what, whoever, whoever, whomever, whichever, whatever
-	const wchar_t *relativizer[] = {L"who",L"which",L"whom",L"whose", // "that" removed - doesn't necessarily fit with all the other relativizers - doesn't necessarily start a question
+	const wchar_t* relativizer[] = { L"who",L"which",L"whom",L"whose", // "that" removed - doesn't necessarily fit with all the other relativizers - doesn't necessarily start a question
 																															// whose shoes? which shoes? NOT 'that shoe'
 														L"where",L"when",L"why",L"whence",L"whereabouts",L"whereby",L"whereat",L"whensoever",L"wherefore",L"whereon",L"whereto",L"wherewith",
 														L"what",L"how",L"ow",L"whither",
-												 NULL}; // BNCC
-	predefineWords(relativizer,L"relativizer",L"rel");
+												 NULL }; // BNCC
+	predefineWords(relativizer, L"relativizer", L"rel");
 	// eliminated complementizer 12/14/2006 - what has too many forms and complementizer and startquestion are somewhat redundant
 	// replaced complementizer with interrogative_determiner
 	//wchar_t *complementizer[] = {L"whoever",L"whichever",L"whomever",L"whereever",L"whenever",L"what",NULL};
@@ -1302,20 +1321,20 @@ int cWord::createWordCategories()
 	// rather run two miles.
 	// go steal it, if you want.
 	// come show me the house.
-	const wchar_t *verbal_auxiliary[] = {L"rather",L"ruther",L"dare",L"dares",L"help",L"helps",L"go",L"come",L"need",L"needs",NULL};
-	predefineWords(verbal_auxiliary,L"verbal_auxiliary",L"vb_aux",cSourceWordInfo::queryOnAnyAppearance,false);
-	const wchar_t *past_verbal_auxiliary[] = {L"dared",L"helped",L"needed",NULL};
-	predefineWords(past_verbal_auxiliary,L"past_verbal_auxiliary",L"past_vb_aux",cSourceWordInfo::queryOnAnyAppearance,false);
-	const wchar_t *sectionheader[] = {L"book",L"chapter",L"part",L"prologue",L"epilogue",L"volume",NULL};
-	predefineWords(sectionheader,L"sectionheader",L"sh",cSourceWordInfo::queryOnAnyAppearance,false);
+	const wchar_t* verbal_auxiliary[] = { L"rather",L"ruther",L"dare",L"dares",L"help",L"helps",L"go",L"come",L"need",L"needs",NULL };
+	predefineWords(verbal_auxiliary, L"verbal_auxiliary", L"vb_aux", cSourceWordInfo::queryOnAnyAppearance, false);
+	const wchar_t* past_verbal_auxiliary[] = { L"dared",L"helped",L"needed",NULL };
+	predefineWords(past_verbal_auxiliary, L"past_verbal_auxiliary", L"past_vb_aux", cSourceWordInfo::queryOnAnyAppearance, false);
+	const wchar_t* sectionheader[] = { L"book",L"chapter",L"part",L"prologue",L"epilogue",L"volume",NULL };
+	predefineWords(sectionheader, L"sectionheader", L"sh", cSourceWordInfo::queryOnAnyAppearance, false);
 	// defined by Daniel Webster
-	const wchar_t *servicemark[] = {L"automat",L"bake-off",L"college board",L"laundromat",L"planned parenthood",L"soap box derby",L"comsat",L"grammy",L"rolfing",L"super bowl",NULL};
-	predefineWords(servicemark,L"service mark",L"sm");
-	predefineVerbsFromFile(L"SYNTAX:Accepts S as Object",L"SYN:S as O",L"source\\lists\\thinksayVerbs.txt",0);
-	predefineVerbsFromFile(L"istate",L"istate",L"source\\lists\\internalStateVerbs.txt",0);
-	const wchar_t *coordinator[] = {L"and",L"or",L"nor",L"an'",L"plus",NULL};  // He and I / David and Jane, etc. ('but' removed) 2/2/2007
-	predefineWords(coordinator,L"coordinator",L"coord");
-		// you need not define the parameters for me. 2/5/2007
+	const wchar_t* servicemark[] = { L"automat",L"bake-off",L"college board",L"laundromat",L"planned parenthood",L"soap box derby",L"comsat",L"grammy",L"rolfing",L"super bowl",NULL };
+	predefineWords(servicemark, L"service mark", L"sm");
+	predefineVerbsFromFile(L"SYNTAX:Accepts S as Object", L"SYN:S as O", L"source\\lists\\thinksayVerbs.txt", 0);
+	predefineVerbsFromFile(L"istate", L"istate", L"source\\lists\\internalStateVerbs.txt", 0);
+	const wchar_t* coordinator[] = { L"and",L"or",L"nor",L"an'",L"plus",NULL };  // He and I / David and Jane, etc. ('but' removed) 2/2/2007
+	predefineWords(coordinator, L"coordinator", L"coord");
+	// you need not define the parameters for me. 2/5/2007
 	InflectionsRoot verbverb[] = {
 		{L"dare",VERB_PRESENT_FIRST_SINGULAR,L"dare"},{L"dared",VERB_PAST,L"dare"},{L"daring",VERB_PRESENT_PARTICIPLE,L"dare"},{L"dares",VERB_PRESENT_THIRD_SINGULAR,L"dare"},
 		{L"rather",VERB_PRESENT_FIRST_SINGULAR,L"rather"},{L"rathered",VERB_PAST,L"rather"},{L"ruther",VERB_PAST,L"rather"},{L"rathering",VERB_PRESENT_PARTICIPLE,L"rather"},{L"rathers",VERB_PRESENT_THIRD_SINGULAR,L"rather"},
@@ -1329,67 +1348,67 @@ int cWord::createWordCategories()
 		{L"see",VERB_PRESENT_FIRST_SINGULAR,L"see"},{L"saw",VERB_PAST,L"see"},          {L"seeing",VERB_PRESENT_PARTICIPLE,L"see"},    {L"sees",VERB_PRESENT_THIRD_SINGULAR,L"see"},
 		{L"watch",VERB_PRESENT_FIRST_SINGULAR,L"watch"},{L"watched",VERB_PAST,L"watch"},{L"watching",VERB_PRESENT_PARTICIPLE,L"watch"},{L"watches",VERB_PRESENT_THIRD_SINGULAR,L"watch"},
 		{L"tell",VERB_PRESENT_FIRST_SINGULAR,L"tell"},{L"told",VERB_PAST,L"tell"},      {L"telling",VERB_PRESENT_PARTICIPLE,L"tell"},  {L"tells",VERB_PRESENT_THIRD_SINGULAR,L"tell"},
-		{NULL,0}};
-	predefineWords(verbverb,L"verbverb",L"verbverb",L"verb",cSourceWordInfo::queryOnAnyAppearance);
+		{NULL,0} };
+	predefineWords(verbverb, L"verbverb", L"verbverb", L"verb", cSourceWordInfo::queryOnAnyAppearance);
 	//InflectionsRoot verbverb2[] = {
 	 // {L"have",VERB_PRESENT_FIRST_SINGULAR,L"have"},{L"had",VERB_PAST,L"have"},{L"having",VERB_PRESENT_PARTICIPLE,L"have"},{L"has",VERB_PRESENT_THIRD_SINGULAR,L"have"},
 	 // {NULL,0}};
 	//predefineWords(verbverb2,L"verbverb",L"verbverb",L"verb");
-	const wchar_t *specials2[] = {L"if",L"then",L"more",L"than",L"so",L"number",L"of",L"as",L"like",NULL};
-	for (const wchar_t **s=specials2; *s; s++) predefineWord(*s,cSourceWordInfo::queryOnAnyAppearance);
+	const wchar_t* specials2[] = { L"if",L"then",L"more",L"than",L"so",L"number",L"of",L"as",L"like",NULL };
+	for (const wchar_t** s = specials2; *s; s++) predefineWord(*s, cSourceWordInfo::queryOnAnyAppearance);
 
-	commonProfessionForm=cForms::createForm(L"commonProfession",L"cp",true,L"noun",false);
+	commonProfessionForm = cForms::createForm(L"commonProfession", L"cp", true, L"noun", false);
 	moneyForm = cForms::createForm(L"money", L"m", true, L"noun", false);
 	webAddressForm = cForms::createForm(L"webAddress", L"wa", true, L"noun", false);
 	addGenderedNouns(L"source\\lists\\commonProfessions.txt", SINGULAR | MALE_GENDER | FEMALE_GENDER, commonProfessionForm);
-	addGenderedNouns(L"source\\lists\\commonProfessionsPlural.txt",PLURAL|MALE_GENDER|FEMALE_GENDER,commonProfessionForm); // only exist in plural form [staff]
-	addGenderedNouns(L"source\\lists\\commonProfessionsFemale.txt",SINGULAR|FEMALE_GENDER,commonProfessionForm);
+	addGenderedNouns(L"source\\lists\\commonProfessionsPlural.txt", PLURAL | MALE_GENDER | FEMALE_GENDER, commonProfessionForm); // only exist in plural form [staff]
+	addGenderedNouns(L"source\\lists\\commonProfessionsFemale.txt", SINGULAR | FEMALE_GENDER, commonProfessionForm);
 	gquery(L"woman")->second.remove(commonProfessionForm);
 	gquery(L"hand")->second.remove(commonProfessionForm);
-	friendForm=cForms::createForm(L"friend",L"fr",true,L"noun",false);
-	addGenderedNouns(L"source\\lists\\friends.txt",SINGULAR|MALE_GENDER|FEMALE_GENDER,friendForm);
+	friendForm = cForms::createForm(L"friend", L"fr", true, L"noun", false);
+	addGenderedNouns(L"source\\lists\\friends.txt", SINGULAR | MALE_GENDER | FEMALE_GENDER, friendForm);
 
 	// source: http://geography.about.com/library/weekly/aa030900a.htm
 	addDemonyms(L"source\\lists\\demonyms.txt");
- 
+
 	/* add Proper Noun categories */
 	createTimeCategories(false);
-	const wchar_t *telephoneNumbers[]={L"388-1976",NULL};
-	predefineWords(telephoneNumbers,L"telephone_number",L"telenum",0,false);
+	const wchar_t* telephoneNumbers[] = { L"388-1976",NULL };
+	predefineWords(telephoneNumbers, L"telephone_number", L"telenum", 0, false);
 
 	// this is placed here to avoid renumbering forms
-	inCreateDictionaryPhase=false;
-	if (nounForm==-1) nounForm=cForms::gFindForm(L"noun");
-	addGenderedNouns(L"source\\lists\\singularFemaleGender.txt",SINGULAR|FEMALE_GENDER,nounForm);
-	addGenderedNouns(L"source\\lists\\pluralFemaleGender.txt",PLURAL|FEMALE_GENDER,nounForm);
-	addGenderedNouns(L"source\\lists\\singularMaleGender.txt",SINGULAR|MALE_GENDER,nounForm);
-	addGenderedNouns(L"source\\lists\\pluralMaleGender.txt",PLURAL|MALE_GENDER,nounForm);
-	extern const wchar_t *stateVerbs[];
-	for (unsigned int I=0; stateVerbs[I]; I++)
-		gquery(stateVerbs[I])->second.flags|=cSourceWordInfo::stateVerb;
-	extern const wchar_t *possibleStateVerbs[];
-	for (unsigned int I=0; possibleStateVerbs[I]; I++)
-		gquery(possibleStateVerbs[I])->second.flags|=cSourceWordInfo::possibleStateVerb;
-	const wchar_t *nameListPaths[]={
+	inCreateDictionaryPhase = false;
+	if (nounForm == -1) nounForm = cForms::gFindForm(L"noun");
+	addGenderedNouns(L"source\\lists\\singularFemaleGender.txt", SINGULAR | FEMALE_GENDER, nounForm);
+	addGenderedNouns(L"source\\lists\\pluralFemaleGender.txt", PLURAL | FEMALE_GENDER, nounForm);
+	addGenderedNouns(L"source\\lists\\singularMaleGender.txt", SINGULAR | MALE_GENDER, nounForm);
+	addGenderedNouns(L"source\\lists\\pluralMaleGender.txt", PLURAL | MALE_GENDER, nounForm);
+	extern const wchar_t* stateVerbs[];
+	for (unsigned int I = 0; stateVerbs[I]; I++)
+		gquery(stateVerbs[I])->second.flags |= cSourceWordInfo::stateVerb;
+	extern const wchar_t* possibleStateVerbs[];
+	for (unsigned int I = 0; possibleStateVerbs[I]; I++)
+		gquery(possibleStateVerbs[I])->second.flags |= cSourceWordInfo::possibleStateVerb;
+	const wchar_t* nameListPaths[] = {
 		L"source\\lists\\Names\\Names1990.csv",L"source\\lists\\Names\\Names1980.csv",L"source\\lists\\Names\\Names1970.csv",L"source\\lists\\Names\\Names1960.csv",L"source\\lists\\Names\\Names1950.csv",
 		L"source\\lists\\Names\\Names1940.csv",L"source\\lists\\Names\\Names1930.csv",L"source\\lists\\Names\\Names1920.csv",L"source\\lists\\Names\\Names1910.csv",L"source\\lists\\Names\\Names1900.csv",NULL
 	};
-	for (int nlp=0; nameListPaths[nlp]; nlp++)
+	for (int nlp = 0; nameListPaths[nlp]; nlp++)
 		addProperNamesFile(nameListPaths[nlp]);
 	{
 		// The letters also should not be included as names (proper nouns)
 		wchar_t anyLetter[3];
-		for (wchar_t l='a'; l<='z'; l++)
+		for (wchar_t l = 'a'; l <= 'z'; l++)
 		{
-			anyLetter[0]=l;
-			anyLetter[1]=0;
-			tIWMM q=Words.gquery(anyLetter);
-			if (q->second.query(PROPER_NOUN_FORM_NUM)>=0)
+			anyLetter[0] = l;
+			anyLetter[1] = 0;
+			tIWMM q = Words.gquery(anyLetter);
+			if (q->second.query(PROPER_NOUN_FORM_NUM) >= 0)
 				q->second.remove(PROPER_NOUN_FORM_NUM);
-			anyLetter[1]='.';
-			anyLetter[2]=0;
+			anyLetter[1] = '.';
+			anyLetter[2] = 0;
 			remove(anyLetter);
-					//lplog(L"removed Prop Noun from %c.",letter[0]);
+			//lplog(L"removed Prop Noun from %c.",letter[0]);
 		}
 	}
 	// a list of words that tend to be prefixes used with dashes.  Dashes are separated out into separate words, so we want these words to stand alone.
@@ -1402,71 +1421,73 @@ int cWord::createWordCategories()
 		{L"ever",ADVERB_NORMATIVE,L"ever"},{L"de",ADVERB_NORMATIVE,L"de"},{L"hand",ADVERB_NORMATIVE,L"hand"},{L"single",ADVERB_NORMATIVE,L"single"},{L"co",ADVERB_NORMATIVE,L"co"},
 		{L"mini",ADVERB_NORMATIVE,L"mini"},{L"pro",ADVERB_NORMATIVE,L"pro"},{L"in",ADVERB_NORMATIVE,L"in"},{L"multi",ADVERB_NORMATIVE,L"multi"},{L"semi",ADVERB_NORMATIVE,L"semi"},
 		{L"sub",ADVERB_NORMATIVE,L"sub"},{L"mid",ADVERB_NORMATIVE,L"mid"},{L"post",ADVERB_NORMATIVE,L"post"},{L"pre",ADVERB_NORMATIVE,L"pre"},{L"ex",ADVERB_NORMATIVE,L"ex"},
-		{L"re",ADVERB_NORMATIVE,L"re"},{L"anti",ADVERB_NORMATIVE,L"anti"},{L"non",ADVERB_NORMATIVE,L"non"},{NULL,0}};
-	predefineWords(dashed_prefixes,L"adverb",L"adv",L"adverb",cSourceWordInfo::queryOnAnyAppearance);
-	predefineWords(dashed_prefixes,L"adjective",L"adj",L"adjective",cSourceWordInfo::queryOnAnyAppearance);
+		{L"re",ADVERB_NORMATIVE,L"re"},{L"anti",ADVERB_NORMATIVE,L"anti"},{L"non",ADVERB_NORMATIVE,L"non"},{NULL,0} };
+	predefineWords(dashed_prefixes, L"adverb", L"adv", L"adverb", cSourceWordInfo::queryOnAnyAppearance);
+	predefineWords(dashed_prefixes, L"adjective", L"adj", L"adjective", cSourceWordInfo::queryOnAnyAppearance);
 	predefineHolidays();
 
-	const wchar_t *particles[]={ L"apart", L"about", L"across", L"along", L"around", L"aside", L"away", L"back", L"by", L"down",
+	const wchar_t* particles[] = { L"apart", L"about", L"across", L"along", L"around", L"aside", L"away", L"back", L"by", L"down",
 												 L"forth", L"forward", L"home", L"in", L"off", L"on", L"out", L"over", L"past", L"round", L"through", L"under", L"up",NULL };
-	predefineWords(particles,L"particle",L"pa");
-	PPN=predefineWord(L"__ppn__"); // personal proper noun used for relations with pronouns or gendered proper nouns.
-	TELENUM=predefineWord(L"__telenum__"); // personal proper noun used for relations with pronouns or gendered proper nouns.
-	NUM=predefineWord(L"__num__"); // number used for relations
-	DATE=predefineWord(L"__date__"); // date used for relations.
-	TIME=predefineWord(L"__time__"); // time used for relations.
-	LOCATION=predefineWord(L"__location__"); // location used for relations.
-	const wchar_t *specials4[] = {L"b",L"his",L"her",L"or",L"eg",L"e.g.",L"the",L"less",L"once",L"twice",NULL};  //b is billion
-	for (const wchar_t **s=specials4; *s; s++) predefineWord(*s,0);
+	predefineWords(particles, L"particle", L"pa");
+	PPN = predefineWord(L"__ppn__"); // personal proper noun used for relations with pronouns or gendered proper nouns.
+	TELENUM = predefineWord(L"__telenum__"); // personal proper noun used for relations with pronouns or gendered proper nouns.
+	NUM = predefineWord(L"__num__"); // number used for relations
+	DATE = predefineWord(L"__date__"); // date used for relations.
+	TIME = predefineWord(L"__time__"); // time used for relations.
+	LOCATION = predefineWord(L"__location__"); // location used for relations.
+	const wchar_t* specials4[] = { L"b",L"his",L"her",L"or",L"eg",L"e.g.",L"the",L"less",L"once",L"twice",NULL };  //b is billion
+	for (const wchar_t** s = specials4; *s; s++) predefineWord(*s, 0);
 	// these are words which result in too many forms (>8), have been defined fully and should not be overwritten by caches.
-	const wchar_t *seal[]={L"air",L"bit",L"but",L"how",L"what",NULL};
-	for (unsigned int I=0; seal[I]; I++)
-		gquery(seal[I])->second.flags&=~cSourceWordInfo::queryOnAnyAppearance;
+	const wchar_t* seal[] = { L"air",L"bit",L"but",L"how",L"what",NULL };
+	for (unsigned int I = 0; seal[I]; I++)
+		gquery(seal[I])->second.flags &= ~cSourceWordInfo::queryOnAnyAppearance;
 	return 0;
 }
 
 bool string_compare(const wstring& s1, const wstring& s2)
-{ LFS
+{
+	LFS
 		return s1 < s2 ? 1 : 0;
 }
 
-void cWord::readUnknownWords(wchar_t *fileName,vector <wstring> &unknownWords)
-{ LFS
-	int fd=_wopen(fileName,O_RDWR);
-	if (fd<0)
-		lplog(LOG_FATAL_ERROR,L"FATAL:%s unknown word list does not exist.",fileName);
-	unsigned int len=filelength(fd);
-	wchar_t *buffer=(wchar_t *)tmalloc(len);
-	::read(fd,buffer,len);
+void cWord::readUnknownWords(wchar_t* fileName, vector <wstring>& unknownWords)
+{
+	LFS
+		int fd = _wopen(fileName, O_RDWR);
+	if (fd < 0)
+		lplog(LOG_FATAL_ERROR, L"FATAL:%s unknown word list does not exist.", fileName);
+	unsigned int len = filelength(fd);
+	wchar_t* buffer = (wchar_t*)tmalloc(len);
+	::read(fd, buffer, len);
 	close(fd);
-	len/=sizeof(buffer[0]);
+	len /= sizeof(buffer[0]);
 	unknownWords.reserve(500000);
 	//bool sorted=true,duplicates=false;
-	unsigned int lastWord=0;
+	unsigned int lastWord = 0;
 	while (iswspace(buffer[lastWord])) lastWord++;
 	//int wordBeforeThat=-1;
-	for (unsigned int I=lastWord; I<len; I++)
-		if (buffer[I]==10 || buffer[I]==13)
-	{
-			buffer[I]=0;
-			while (buffer[I+1]>=0 && iswspace(buffer[I+1])) I++;
+	for (unsigned int I = lastWord; I < len; I++)
+		if (buffer[I] == 10 || buffer[I] == 13)
+		{
+			buffer[I] = 0;
+			while (buffer[I + 1] >= 0 && iswspace(buffer[I + 1])) I++;
 			//strlwr(buffer+lastWord);
-			if (wcslen(buffer+lastWord)<2)
+			if (wcslen(buffer + lastWord) < 2)
 			{
 				//wordBeforeThat=lastWord;
-				lastWord=I+1;
+				lastWord = I + 1;
 				continue;
 			}
 			//if (unknownWords[unknownWords.size()-1]!=buffer+lastWord)
-			unknownWords.push_back(buffer+lastWord);
+			unknownWords.push_back(buffer + lastWord);
 			//else
 			//  duplicates=true;
 			//if (sorted && unknownWords.size()>1)
 			//  sorted=unknownWords[unknownWords.size()-2]<=unknownWords[unknownWords.size()-1];
 			//wordBeforeThat=lastWord;
-			lastWord=I+1;
-	}
-	tfree(len,buffer);
+			lastWord = I + 1;
+		}
+	tfree(len, buffer);
 	//if (!sorted)
 	//  sort(unknownWords.begin(),unknownWords.end(),string_compare);
 	//if (!sorted || duplicates)
@@ -1485,32 +1506,33 @@ void cWord::writeUnknownWords(wchar_t* fileName, vector <wstring>& unknownWords)
 		lplog(LOG_FATAL_ERROR, L"FATAL:%s Cannot open unknown word list.", tmp);
 		return;
 	}
-	for (unsigned int I=0; I<unknownWords.size(); I++)
+	for (unsigned int I = 0; I < unknownWords.size(); I++)
 	{
-		if (unknownWords[I][0]>='0' && unknownWords[I][0]<='9') // time, date or number not considered unknown.
+		if (unknownWords[I][0] >= '0' && unknownWords[I][0] <= '9') // time, date or number not considered unknown.
 			continue;
 		// if next word matches except for subtraction of last letter, remove word.
-		if (unknownWords[I]==unknownWords[I+1].substr(0,unknownWords[I].length()))
+		if (unknownWords[I] == unknownWords[I + 1].substr(0, unknownWords[I].length()))
 			continue;
-		fwprintf(words,L"%s\n",unknownWords[I].c_str());
+		fwprintf(words, L"%s\n", unknownWords[I].c_str());
 	}
 	fclose(words);
 	if (appendToUnknownWordsMode) unknownWords.clear();
 }
 
 cWord::cWord(void)
-{ LFS
-	appendToUnknownWordsMode=false;
-	cSourceWordInfo::allocated=20000;
-	cSourceWordInfo::formsArray=(unsigned int *)tmalloc(cSourceWordInfo::allocated*(sizeof(*cSourceWordInfo::formsArray)));
-	cSourceWordInfo::fACount=0;
-		cSourceWordInfo::uniqueNewIndex=1; // use to insure every word has a unique index, even though it hasn't been
-	minimumLastWordWrittenClockDiff=240;
-	changedWords=inCreateDictionaryPhase=false;
-	lastReadfromDBTime=-1;
-	idToMap=NULL;
-	idsAllocated=0;
-	disinclinationRecursionCount=0;
+{
+	LFS
+		appendToUnknownWordsMode = false;
+	cSourceWordInfo::allocated = 20000;
+	cSourceWordInfo::formsArray = (unsigned int*)tmalloc(cSourceWordInfo::allocated * (sizeof(*cSourceWordInfo::formsArray)));
+	cSourceWordInfo::fACount = 0;
+	cSourceWordInfo::uniqueNewIndex = 1; // use to insure every word has a unique index, even though it hasn't been
+	minimumLastWordWrittenClockDiff = 240;
+	changedWords = inCreateDictionaryPhase = false;
+	lastReadfromDBTime = -1;
+	idToMap = NULL;
+	idsAllocated = 0;
+	disinclinationRecursionCount = 0;
 }
 
 bool cSourceWordInfo::toLowestCost(int form)
@@ -1527,10 +1549,10 @@ bool cSourceWordInfo::toLowestCost(int form)
 	return false;
 }
 
-bool cSourceWordInfo::toLowestCostPreferForm(int form,int preferForm)
+bool cSourceWordInfo::toLowestCostPreferForm(int form, int preferForm)
 {
 	LFS
-	int hf,pf;
+		int hf, pf;
 	if ((hf = query(form)) >= 0 && (pf = query(preferForm)) >= 0)
 	{
 		usagePatterns[hf] = usagePatterns[pf];
@@ -1540,47 +1562,49 @@ bool cSourceWordInfo::toLowestCostPreferForm(int form,int preferForm)
 	return toLowestCost(form);
 }
 
-bool cSourceWordInfo::setCost(int form,int cost)
-{ LFS
-	int hf;
-	if ((hf=query(form))>=0)
+bool cSourceWordInfo::setCost(int form, int cost)
+{
+	LFS
+		int hf;
+	if ((hf = query(form)) >= 0)
 	{
-		usagePatterns[hf]=255*cost/4;
-		usageCosts[hf]=cost;
+		usagePatterns[hf] = 255 * cost / 4;
+		usageCosts[hf] = cost;
 		return true;
 	}
 	return false;
 }
 
 void cWord::initializeChangeStateVerbs()
-{ LFS
-	InflectionsRoot changeState[] = {
-		{L"start",VERB_PRESENT_FIRST_SINGULAR,L"start"},			    {L"started",VERB_PAST,L"start"},					{L"starting",VERB_PRESENT_PARTICIPLE,L"start"},					{L"starts",VERB_PRESENT_THIRD_SINGULAR,L"start"},
-		{L"begin",VERB_PRESENT_FIRST_SINGULAR,L"begin"},			    {L"began",VERB_PAST,L"begin"},						{L"beginning",VERB_PRESENT_PARTICIPLE,L"begin"},				{L"begins",VERB_PRESENT_THIRD_SINGULAR,L"begin"},
-		{L"commence",VERB_PRESENT_FIRST_SINGULAR,L"commence"},		{L"commenced",VERB_PAST,L"commence"},			{L"commencing",VERB_PRESENT_PARTICIPLE,L"commence"},		{L"commences",VERB_PRESENT_THIRD_SINGULAR,L"commence"},
-		{L"initiate",VERB_PRESENT_FIRST_SINGULAR,L"initiate"},		{L"initiated",VERB_PAST,L"initiate"},			{L"initiating",VERB_PRESENT_PARTICIPLE,L"initiate"},		{L"initiates",VERB_PRESENT_THIRD_SINGULAR,L"initiate"},
-		{L"stop",VERB_PRESENT_FIRST_SINGULAR,L"stop"},						{L"stopped",VERB_PAST,L"stop"},						{L"stopping",VERB_PRESENT_PARTICIPLE,L"stop"},					{L"stops",VERB_PRESENT_THIRD_SINGULAR,L"stop"},
-		{L"halt",VERB_PRESENT_FIRST_SINGULAR,L"halt"},						{L"halted",VERB_PAST,L"halt"},						{L"halting",VERB_PRESENT_PARTICIPLE,L"halt"},						{L"halts",VERB_PRESENT_THIRD_SINGULAR,L"halt"},
-		{L"conclude",VERB_PRESENT_FIRST_SINGULAR,L"conclude"},		{L"concluded",VERB_PAST,L"conclude"},			{L"concluding",VERB_PRESENT_PARTICIPLE,L"conclude"},		{L"concludes",VERB_PRESENT_THIRD_SINGULAR,L"conclude"},
-		{L"discontinue",VERB_PRESENT_FIRST_SINGULAR,L"discontinue"},{L"discontinued",VERB_PAST,L"discontinue"},{L"discontinuing",VERB_PRESENT_PARTICIPLE,L"discontinue"},  {L"discontinues",VERB_PRESENT_THIRD_SINGULAR,L"discontinue"},
-		{L"close",VERB_PRESENT_FIRST_SINGULAR,L"close"},					{L"closed",VERB_PAST,L"close"},						{L"closing",VERB_PRESENT_PARTICIPLE,L"close"},					{L"closes",VERB_PRESENT_THIRD_SINGULAR,L"close"},
-		{L"cease",VERB_PRESENT_FIRST_SINGULAR,L"cease"},					{L"ceased",VERB_PAST,L"cease"},						{L"ceasing",VERB_PRESENT_PARTICIPLE,L"cease"},					{L"ceases",VERB_PRESENT_THIRD_SINGULAR,L"cease"},
-		{L"quit",VERB_PRESENT_FIRST_SINGULAR,L"quit"},						{L"quit",VERB_PAST,L"quit"},							{L"quitting",VERB_PRESENT_PARTICIPLE,L"quit"},					{L"quits",VERB_PRESENT_THIRD_SINGULAR,L"quit"},
-		{L"interrupt",VERB_PRESENT_FIRST_SINGULAR,L"interrupt"},	{L"interrupted",VERB_PAST,L"interrupt"},	{L"interrupting",VERB_PRESENT_PARTICIPLE,L"interrupt"},	{L"interrupts",VERB_PRESENT_THIRD_SINGULAR,L"interrupt"},
-		{L"suspend",VERB_PRESENT_FIRST_SINGULAR,L"suspend"},			{L"suspended",VERB_PAST,L"suspend"},			{L"suspending",VERB_PRESENT_PARTICIPLE,L"suspend"},			{L"suspends",VERB_PRESENT_THIRD_SINGULAR,L"suspend"},
-		{L"pause",VERB_PRESENT_FIRST_SINGULAR,L"pause"},					{L"paused",VERB_PAST,L"pause"},						{L"pausing",VERB_PRESENT_PARTICIPLE,L"pause"},					{L"pauses",VERB_PRESENT_THIRD_SINGULAR,L"pause"},
-		{L"finish",VERB_PRESENT_FIRST_SINGULAR,L"finish"},				{L"finished",VERB_PAST,L"finish"},				{L"finishing",VERB_PRESENT_PARTICIPLE,L"finish"},				{L"finishes",VERB_PRESENT_THIRD_SINGULAR,L"finish"},
-		{L"end",VERB_PRESENT_FIRST_SINGULAR,L"end"},							{L"ended",VERB_PAST,L"end"},							{L"ending",VERB_PRESENT_PARTICIPLE,L"end"},							{L"ends",VERB_PRESENT_THIRD_SINGULAR,L"end"},
-		{L"terminate",VERB_PRESENT_FIRST_SINGULAR,L"terminate"},	{L"terminated",VERB_PAST,L"terminate"},		{L"terminating",VERB_PRESENT_PARTICIPLE,L"terminate"},	{L"terminates",VERB_PRESENT_THIRD_SINGULAR,L"terminate"},
-		{L"complete",VERB_PRESENT_FIRST_SINGULAR,L"complete"},		{L"completed",VERB_PAST,L"complete"},			{L"completing",VERB_PRESENT_PARTICIPLE,L"complete"},		{L"completes",VERB_PRESENT_THIRD_SINGULAR,L"complete"},
-		{L"conclude",VERB_PRESENT_FIRST_SINGULAR,L"conclude"},		{L"concluded",VERB_PAST,L"conclude"},			{L"concluding",VERB_PRESENT_PARTICIPLE,L"conclude"},		{L"concludes",VERB_PRESENT_THIRD_SINGULAR,L"conclude"},
-		{L"resume",VERB_PRESENT_FIRST_SINGULAR,L"resume"},				{L"resumed",VERB_PAST,L"resume"},					{L"resuming",VERB_PRESENT_PARTICIPLE,L"resume"},				{L"resumes",VERB_PRESENT_THIRD_SINGULAR,L"resume"},
-		{L"continue",VERB_PRESENT_FIRST_SINGULAR,L"continue"},		{L"continued",VERB_PAST,L"continue"},			{L"continuing",VERB_PRESENT_PARTICIPLE,L"continue"},		{L"continues",VERB_PRESENT_THIRD_SINGULAR,L"continue"},
-		{L"recommence",VERB_PRESENT_FIRST_SINGULAR,L"recommence"},{L"recommenced",VERB_PAST,L"recommence"},	{L"recommencing",VERB_PRESENT_PARTICIPLE,L"recommence"},{L"recommences",VERB_PRESENT_THIRD_SINGULAR,L"recommence"},
-		{L"renew",VERB_PRESENT_FIRST_SINGULAR,L"renew"},					{L"renewed",VERB_PAST,L"renew"},					{L"renewing",VERB_PRESENT_PARTICIPLE,L"renew"},					{L"renews",VERB_PRESENT_THIRD_SINGULAR,L"renew"},
-		{L"restart",VERB_PRESENT_FIRST_SINGULAR,L"restart"},			{L"restarted",VERB_PAST,L"restart"},			{L"restarting",VERB_PRESENT_PARTICIPLE,L"restart"},			{L"restarts",VERB_PRESENT_THIRD_SINGULAR,L"restart"},
-		{NULL,0}};
-	predefineWords(changeState,L"changeState",L"changeState",L"verb",0);
+{
+	LFS
+		InflectionsRoot changeState[] = {
+			{L"start",VERB_PRESENT_FIRST_SINGULAR,L"start"},			    {L"started",VERB_PAST,L"start"},					{L"starting",VERB_PRESENT_PARTICIPLE,L"start"},					{L"starts",VERB_PRESENT_THIRD_SINGULAR,L"start"},
+			{L"begin",VERB_PRESENT_FIRST_SINGULAR,L"begin"},			    {L"began",VERB_PAST,L"begin"},						{L"beginning",VERB_PRESENT_PARTICIPLE,L"begin"},				{L"begins",VERB_PRESENT_THIRD_SINGULAR,L"begin"},
+			{L"commence",VERB_PRESENT_FIRST_SINGULAR,L"commence"},		{L"commenced",VERB_PAST,L"commence"},			{L"commencing",VERB_PRESENT_PARTICIPLE,L"commence"},		{L"commences",VERB_PRESENT_THIRD_SINGULAR,L"commence"},
+			{L"initiate",VERB_PRESENT_FIRST_SINGULAR,L"initiate"},		{L"initiated",VERB_PAST,L"initiate"},			{L"initiating",VERB_PRESENT_PARTICIPLE,L"initiate"},		{L"initiates",VERB_PRESENT_THIRD_SINGULAR,L"initiate"},
+			{L"stop",VERB_PRESENT_FIRST_SINGULAR,L"stop"},						{L"stopped",VERB_PAST,L"stop"},						{L"stopping",VERB_PRESENT_PARTICIPLE,L"stop"},					{L"stops",VERB_PRESENT_THIRD_SINGULAR,L"stop"},
+			{L"halt",VERB_PRESENT_FIRST_SINGULAR,L"halt"},						{L"halted",VERB_PAST,L"halt"},						{L"halting",VERB_PRESENT_PARTICIPLE,L"halt"},						{L"halts",VERB_PRESENT_THIRD_SINGULAR,L"halt"},
+			{L"conclude",VERB_PRESENT_FIRST_SINGULAR,L"conclude"},		{L"concluded",VERB_PAST,L"conclude"},			{L"concluding",VERB_PRESENT_PARTICIPLE,L"conclude"},		{L"concludes",VERB_PRESENT_THIRD_SINGULAR,L"conclude"},
+			{L"discontinue",VERB_PRESENT_FIRST_SINGULAR,L"discontinue"},{L"discontinued",VERB_PAST,L"discontinue"},{L"discontinuing",VERB_PRESENT_PARTICIPLE,L"discontinue"},  {L"discontinues",VERB_PRESENT_THIRD_SINGULAR,L"discontinue"},
+			{L"close",VERB_PRESENT_FIRST_SINGULAR,L"close"},					{L"closed",VERB_PAST,L"close"},						{L"closing",VERB_PRESENT_PARTICIPLE,L"close"},					{L"closes",VERB_PRESENT_THIRD_SINGULAR,L"close"},
+			{L"cease",VERB_PRESENT_FIRST_SINGULAR,L"cease"},					{L"ceased",VERB_PAST,L"cease"},						{L"ceasing",VERB_PRESENT_PARTICIPLE,L"cease"},					{L"ceases",VERB_PRESENT_THIRD_SINGULAR,L"cease"},
+			{L"quit",VERB_PRESENT_FIRST_SINGULAR,L"quit"},						{L"quit",VERB_PAST,L"quit"},							{L"quitting",VERB_PRESENT_PARTICIPLE,L"quit"},					{L"quits",VERB_PRESENT_THIRD_SINGULAR,L"quit"},
+			{L"interrupt",VERB_PRESENT_FIRST_SINGULAR,L"interrupt"},	{L"interrupted",VERB_PAST,L"interrupt"},	{L"interrupting",VERB_PRESENT_PARTICIPLE,L"interrupt"},	{L"interrupts",VERB_PRESENT_THIRD_SINGULAR,L"interrupt"},
+			{L"suspend",VERB_PRESENT_FIRST_SINGULAR,L"suspend"},			{L"suspended",VERB_PAST,L"suspend"},			{L"suspending",VERB_PRESENT_PARTICIPLE,L"suspend"},			{L"suspends",VERB_PRESENT_THIRD_SINGULAR,L"suspend"},
+			{L"pause",VERB_PRESENT_FIRST_SINGULAR,L"pause"},					{L"paused",VERB_PAST,L"pause"},						{L"pausing",VERB_PRESENT_PARTICIPLE,L"pause"},					{L"pauses",VERB_PRESENT_THIRD_SINGULAR,L"pause"},
+			{L"finish",VERB_PRESENT_FIRST_SINGULAR,L"finish"},				{L"finished",VERB_PAST,L"finish"},				{L"finishing",VERB_PRESENT_PARTICIPLE,L"finish"},				{L"finishes",VERB_PRESENT_THIRD_SINGULAR,L"finish"},
+			{L"end",VERB_PRESENT_FIRST_SINGULAR,L"end"},							{L"ended",VERB_PAST,L"end"},							{L"ending",VERB_PRESENT_PARTICIPLE,L"end"},							{L"ends",VERB_PRESENT_THIRD_SINGULAR,L"end"},
+			{L"terminate",VERB_PRESENT_FIRST_SINGULAR,L"terminate"},	{L"terminated",VERB_PAST,L"terminate"},		{L"terminating",VERB_PRESENT_PARTICIPLE,L"terminate"},	{L"terminates",VERB_PRESENT_THIRD_SINGULAR,L"terminate"},
+			{L"complete",VERB_PRESENT_FIRST_SINGULAR,L"complete"},		{L"completed",VERB_PAST,L"complete"},			{L"completing",VERB_PRESENT_PARTICIPLE,L"complete"},		{L"completes",VERB_PRESENT_THIRD_SINGULAR,L"complete"},
+			{L"conclude",VERB_PRESENT_FIRST_SINGULAR,L"conclude"},		{L"concluded",VERB_PAST,L"conclude"},			{L"concluding",VERB_PRESENT_PARTICIPLE,L"conclude"},		{L"concludes",VERB_PRESENT_THIRD_SINGULAR,L"conclude"},
+			{L"resume",VERB_PRESENT_FIRST_SINGULAR,L"resume"},				{L"resumed",VERB_PAST,L"resume"},					{L"resuming",VERB_PRESENT_PARTICIPLE,L"resume"},				{L"resumes",VERB_PRESENT_THIRD_SINGULAR,L"resume"},
+			{L"continue",VERB_PRESENT_FIRST_SINGULAR,L"continue"},		{L"continued",VERB_PAST,L"continue"},			{L"continuing",VERB_PRESENT_PARTICIPLE,L"continue"},		{L"continues",VERB_PRESENT_THIRD_SINGULAR,L"continue"},
+			{L"recommence",VERB_PRESENT_FIRST_SINGULAR,L"recommence"},{L"recommenced",VERB_PAST,L"recommence"},	{L"recommencing",VERB_PRESENT_PARTICIPLE,L"recommence"},{L"recommences",VERB_PRESENT_THIRD_SINGULAR,L"recommence"},
+			{L"renew",VERB_PRESENT_FIRST_SINGULAR,L"renew"},					{L"renewed",VERB_PAST,L"renew"},					{L"renewing",VERB_PRESENT_PARTICIPLE,L"renew"},					{L"renews",VERB_PRESENT_THIRD_SINGULAR,L"renew"},
+			{L"restart",VERB_PRESENT_FIRST_SINGULAR,L"restart"},			{L"restarted",VERB_PAST,L"restart"},			{L"restarting",VERB_PRESENT_PARTICIPLE,L"restart"},			{L"restarts",VERB_PRESENT_THIRD_SINGULAR,L"restart"},
+			{NULL,0} };
+	predefineWords(changeState, L"changeState", L"changeState", L"verb", 0);
 }
 
 void cWord::initialize()
@@ -1690,7 +1714,7 @@ void cWord::initialize()
 
 	// numeralCardinalForm, numeralOrdinalForm, romanNumeralForm, quantifierform, dateForm,timeForm, telephoneNumberForm, moneyForm, and webAddressForm
 	// are not closed, but they can be positively identified so they do not have to be written in the cache file
-	vector<int> nonCachedForms = { 
+	vector<int> nonCachedForms = {
 				beForm,bracketForm,commaForm,conjunctionForm,coordinatorForm,dashForm,dateForm,demonstrativeDeterminerForm,determinerForm,
 				doForm,doNegationForm,doesForm,doesNegationForm,futureModalAuxiliaryForm,haveForm,haveNegationForm,honorificAbbreviationForm,
 				honorificForm,indefinitePronounForm,interrogativeDeterminerForm,isForm,isNegationForm,letterForm,modalAuxiliaryForm,
@@ -1741,9 +1765,9 @@ void cWord::initialize()
 		// reset these counts, which are more relevant on a per-source basis
 		iWord->second.usagePatterns[cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN] = iWord->second.usagePatterns[cSourceWordInfo::LOWER_CASE_USAGE_PATTERN] = 0;
 		// make honorifics not costly (honorifics are not reflected out of BNC properly so they are underweighted)
-		iWord->second.toLowestCostPreferForm(honorificForm,nounForm);
-		if (!iWord->second.toLowestCost(demonstrativeDeterminerForm) && iWord->second.query(relativizerForm) < 0 && 
-			  iWord->first != L"there" && iWord->first != L"another" && iWord->first != L"so" && iWord->first != L"each" && iWord->first != L"every" && iWord->first != L"either" && iWord->first != L"neither" && iWord->first != L"other")
+		iWord->second.toLowestCostPreferForm(honorificForm, nounForm);
+		if (!iWord->second.toLowestCost(demonstrativeDeterminerForm) && iWord->second.query(relativizerForm) < 0 &&
+			iWord->first != L"there" && iWord->first != L"another" && iWord->first != L"so" && iWord->first != L"each" && iWord->first != L"every" && iWord->first != L"either" && iWord->first != L"neither" && iWord->first != L"other")
 			iWord->second.toLowestCost(pronounForm);
 	}
 	// gquery(L"--")->second.flags &= ~cSourceWordInfo::ignoreFlag; // ignore all dashes EXCEPT the double dash!  Stanford check 33023/5697357 0.580% BEFORE.  

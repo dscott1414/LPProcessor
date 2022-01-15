@@ -31,10 +31,10 @@
 using namespace std;
 #include "mysql.h"
 #include "wn.h"
-bool myquery(MYSQL *mysql, const wchar_t *q, MYSQL_RES * &result, bool allowFailure = false);
-void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition> &d);
+bool myquery(MYSQL* mysql, const wchar_t* q, MYSQL_RES*& result, bool allowFailure = false);
+void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition>& d);
 
-void getSynonymsFromDB(MYSQL mysql, wstring word, vector <unordered_set <wstring> > &synonyms, vector <wstring > &alternatives, int synonymType)
+void getSynonymsFromDB(MYSQL mysql, wstring word, vector <unordered_set <wstring> >& synonyms, vector <wstring >& alternatives, int synonymType)
 {
 	wstring query = L"select primarySynonyms, accumulatedSynonyms from thesaurus where mainEntry = '";
 	query += word + L"'";
@@ -48,9 +48,9 @@ void getSynonymsFromDB(MYSQL mysql, wstring word, vector <unordered_set <wstring
 		query += L" and (wordType&1)=1";
 	else if (synonymType == 4) // ADV
 		query += L" and (wordType&2)=2";
-	MYSQL_RES *result = NULL;
+	MYSQL_RES* result = NULL;
 	MYSQL_ROW sqlrow;
-	if (myquery(&mysql, (wchar_t *)query.c_str(), result))
+	if (myquery(&mysql, (wchar_t*)query.c_str(), result))
 	{
 		while ((sqlrow = mysql_fetch_row(result)) != NULL)
 		{
@@ -62,18 +62,18 @@ void getSynonymsFromDB(MYSQL mysql, wstring word, vector <unordered_set <wstring
 			for (unsigned int s = 0; s < properties.size(); s++)
 				if (properties[s] == ';')
 				{
-				wstring wtmp;
-				mTW(properties.substr(lastBegin, s - lastBegin), wtmp);
-				if (wtmp.length()>0 && wtmp[wtmp.length() - 1] == '*')
-					wtmp.erase(wtmp.length() - 1);
-				ss.insert(wtmp);
-				if (lastBegin == 0)
-					firstWordSynonym = wtmp;
-				lastBegin = s + 1;
+					wstring wtmp;
+					mTW(properties.substr(lastBegin, s - lastBegin), wtmp);
+					if (wtmp.length() > 0 && wtmp[wtmp.length() - 1] == '*')
+						wtmp.erase(wtmp.length() - 1);
+					ss.insert(wtmp);
+					if (lastBegin == 0)
+						firstWordSynonym = wtmp;
+					lastBegin = s + 1;
 				}
 			synonyms.push_back(ss);
 			lastBegin = 0;
-//			-- if primarySynonyms contain 'or' as in 'prize or reward;' then split in multiple parts base on 'or' and record both parts
+			//			-- if primarySynonyms contain 'or' as in 'prize or reward;' then split in multiple parts base on 'or' and record both parts
 			int whereLastSpace = primarySynonyms.find_last_of(' ');
 			if (whereLastSpace != string::npos)
 			{
@@ -91,27 +91,26 @@ void getSynonymsFromDB(MYSQL mysql, wstring word, vector <unordered_set <wstring
 	}
 }
 
-void split(string str, vector <string> &words, const char *splitch)
+void split(string str, vector <string>& words, const char* splitch)
 {
 	int ch = -1;
 	vector <string> syns;
 	do
 	{
 		int nextch = str.find(splitch, ch + 1);
-		words.push_back(str.substr(ch+1, nextch - ch - 1));
+		words.push_back(str.substr(ch + 1, nextch - ch - 1));
 		ch = nextch;
-	}
-	while (ch != string::npos);
+	} while (ch != string::npos);
 }
 
-string vectorString(vector <string> &vstr, string &tmpstr, string separator);
+string vectorString(vector <string>& vstr, string& tmpstr, string separator);
 
 void splitPrimarySynonyms(MYSQL mysql)
 {
 	wstring query = L"select primarySynonyms from thesaurus where primarySynonyms like '% or %'";
-	MYSQL_RES *result = NULL;
+	MYSQL_RES* result = NULL;
 	MYSQL_ROW sqlrow;
-	if (myquery(&mysql, (wchar_t *)query.c_str(), result))
+	if (myquery(&mysql, (wchar_t*)query.c_str(), result))
 	{
 		int totalRows = 0;
 		int rowsNotProcessed = 0;
@@ -121,7 +120,7 @@ void splitPrimarySynonyms(MYSQL mysql)
 			string primarySynonyms = (sqlrow[0] == NULL) ? "" : sqlrow[0];
 			// split by semicolons
 			bool caseMet = false;
-			vector <string> syns,syns2;
+			vector <string> syns, syns2;
 			split(primarySynonyms, syns2, ";");
 			for (int s = 0; s < syns2.size(); s++)
 			{
@@ -152,14 +151,14 @@ void splitPrimarySynonyms(MYSQL mysql)
 			else
 				rowsNotProcessed++;
 		}
-		lplog(LOG_WHERE, L"%d out of %d processed (%d%%).", totalRows - rowsNotProcessed, totalRows, (totalRows - rowsNotProcessed)*100/totalRows);
+		lplog(LOG_WHERE, L"%d out of %d processed (%d%%).", totalRows - rowsNotProcessed, totalRows, (totalRows - rowsNotProcessed) * 100 / totalRows);
 	}
 	logCache = 0;
 	lplog(LOG_WHERE, L"STOP");
 	exit(0);
 }
 
-void scrapeOldThesaurus(wstring word, wstring buffer, unordered_set <wstring> &synonyms)
+void scrapeOldThesaurus(wstring word, wstring buffer, unordered_set <wstring>& synonyms)
 {
 	wstring match;
 	int lastNewLine = 1000;
@@ -168,9 +167,9 @@ void scrapeOldThesaurus(wstring word, wstring buffer, unordered_set <wstring> &s
 		return;
 	beginPos += wcslen(L"Main Entry:");
 	size_t endPos = 1000000, tmpPos;
-	const wchar_t *endStr[] = { L"Main Entry:", L"Roget's 21st Century Thesaurus", L"Adjective Finder", L"Synonym Collection", L"Search another word", L"Antonyms:", L"* = informal/non-formal usage", NULL };
+	const wchar_t* endStr[] = { L"Main Entry:", L"Roget's 21st Century Thesaurus", L"Adjective Finder", L"Synonym Collection", L"Search another word", L"Antonyms:", L"* = informal/non-formal usage", NULL };
 	for (int I = 0; endStr[I] != NULL; I++)
-		if ((tmpPos = buffer.find(endStr[I], beginPos)) != wstring::npos && tmpPos<endPos)
+		if ((tmpPos = buffer.find(endStr[I], beginPos)) != wstring::npos && tmpPos < endPos)
 			endPos = tmpPos;
 	if (endPos == wstring::npos)
 		return;
@@ -180,7 +179,7 @@ void scrapeOldThesaurus(wstring word, wstring buffer, unordered_set <wstring> &s
 	if (pos != wstring::npos)
 	{
 		wstring s;
-		for (pos += wcslen(L"Synonyms:"); pos<(signed)match.length(); pos++)
+		for (pos += wcslen(L"Synonyms:"); pos < (signed)match.length(); pos++)
 			if (iswalpha(match[pos]) || match[pos] == L'\'')
 				s += match[pos];
 			else if (match[pos] == L' ')
@@ -189,10 +188,10 @@ void scrapeOldThesaurus(wstring word, wstring buffer, unordered_set <wstring> &s
 			}
 			else if (match[pos] == L',')
 			{
-				while (s.length()>0 && iswspace(s[s.length() - 1]))
+				while (s.length() > 0 && iswspace(s[s.length() - 1]))
 					s.erase(s.length() - 1);
 				transform(s.begin(), s.end(), s.begin(), (int(*)(int)) tolower);
-				if (s.length()>0)
+				if (s.length() > 0)
 				{
 					synonyms.insert(s);
 				}
@@ -205,25 +204,25 @@ void scrapeOldThesaurus(wstring word, wstring buffer, unordered_set <wstring> &s
 			}
 			else if (match[pos] == 13 && match[pos + 1] == 10)
 				lastNewLine = s.length();
-			else if (addressEncountered = match[pos] == L'.' && pos>3 && match[pos - 1] == L'w' && match[pos - 2] == L'w' && match[pos - 3] == L'w')
+			else if (addressEncountered = match[pos] == L'.' && pos > 3 && match[pos - 1] == L'w' && match[pos - 2] == L'w' && match[pos - 3] == L'w')
 				break;
-			transform(s.begin(), s.end(), s.begin(), (int(*)(int)) tolower);
-			if (s.length()>0)
-			{
-				if ((s.length() >= 64 || addressEncountered) && lastNewLine<(signed)s.length())
-					s = s.substr(0, lastNewLine);
-				if (s.length() >= 64)
-					wprintf(L"\nSynonym of %s (%s) is too long.\n", word.c_str(), s.c_str());
-				else
-					synonyms.insert(s);
-			}
+		transform(s.begin(), s.end(), s.begin(), (int(*)(int)) tolower);
+		if (s.length() > 0)
+		{
+			if ((s.length() >= 64 || addressEncountered) && lastNewLine < (signed)s.length())
+				s = s.substr(0, lastNewLine);
+			if (s.length() >= 64)
+				wprintf(L"\nSynonym of %s (%s) is too long.\n", word.c_str(), s.c_str());
+			else
+				synonyms.insert(s);
+		}
 	}
 	extern int logSynonymDetail;
 	//if (noMainEntryMatch && synonyms.find(word) == synonyms.end())
 	//	wprintf(L"%s itself not found in synonyms.\n", word.c_str());
 }
 
-void convert(wchar_t &c)
+void convert(wchar_t& c)
 {
 	if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))
 		return;
@@ -261,13 +260,13 @@ wstring reduce(wstring me1)
 		me1.erase(me1.begin() + ws, me1.end());
 	while ((ws = me1.find_first_of(L"&.\r\n \'-)(")) != wstring::npos)
 		me1.erase(me1.begin() + ws);
-	_wcslwr((wchar_t *)me1.c_str());
+	_wcslwr((wchar_t*)me1.c_str());
 	for (int r = 0; r < me1.size(); r++)
 		convert(me1[r]);
 	return me1;
 }
 
-bool compareWordSets(unordered_set <wstring> &s1, unordered_set <string> &s2)
+bool compareWordSets(unordered_set <wstring>& s1, unordered_set <string>& s2)
 {
 	set <wstring> s11, s21;
 	for (auto ss = s1.begin(), ssEnd = s1.end(); ss != ssEnd; ss++)
@@ -291,13 +290,13 @@ bool compareWordSets(unordered_set <wstring> &s1, unordered_set <string> &s2)
 // lastWordPrimaryFromDB == "fatigue"
 // firstWordSynonymFromDB == "catch flies"
 // alternative == fatiguecatch flies
-bool compareWordSets(vector <string> &s1, unordered_set <wstring> &synonymsFromDB, wstring alternative)
+bool compareWordSets(vector <string>& s1, unordered_set <wstring>& synonymsFromDB, wstring alternative)
 {
 	set <wstring> s11, synonymsFromDBR;
 	for (vector <string>::iterator ss = s1.begin(), ssEnd = s1.end(); ss != ssEnd; ss++)
 	{
 		wstring t;
-		s11.insert(reduce(mTW(*ss,t)));
+		s11.insert(reduce(mTW(*ss, t)));
 	}
 	for (auto ss = synonymsFromDB.begin(), ssEnd = synonymsFromDB.end(); ss != ssEnd; ss++)
 	{
@@ -361,7 +360,7 @@ void testThesaurus()
 				_wsopen_s(&fd, ffd.cFileName, _O_RDWR | _O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE); // error = 
 				total++;
 				size_t fl = _filelength(fd);
-				wchar_t *buffer = (wchar_t *)malloc(fl + 2);
+				wchar_t* buffer = (wchar_t*)malloc(fl + 2);
 				if (fd >= 0)
 				{
 					if (_read(fd, buffer, (unsigned int)fl) < 0)
@@ -390,7 +389,7 @@ void testThesaurus()
 						bool atLeastOneNewScrapedIdenticalWithDB = false;
 						for (int J = 0; J < d.size(); J++)
 						{
-							atLeastOneScrapedIdenticalWithNewScraped |= compareWordSets(d[J].accumulatedSynonyms, scrapedSynonyms,L"");
+							atLeastOneScrapedIdenticalWithNewScraped |= compareWordSets(d[J].accumulatedSynonyms, scrapedSynonyms, L"");
 							atLeastOneNewScrapedIdenticalWithDB |= compareWordSets(d[J].accumulatedSynonyms, dbSynonyms[I], dbAlternatives[I]);
 						}
 						if (!atLeastOneNewScrapedIdenticalWithDB && !atLeastOneScrapedIdenticalWithNewScraped)
@@ -399,17 +398,17 @@ void testThesaurus()
 							printf("\nWORD [%d:%d]%S[%d]:\n", nonMatched, total, word.c_str(), synonymType);
 							printf("scrapedSynonyms:");
 							for (auto ss = scrapedSynonyms.begin(), ssEnd = scrapedSynonyms.end(); ss != ssEnd; ss++)
-								if (dbSynonyms[I].find(*ss)==dbSynonyms[I].end())
+								if (dbSynonyms[I].find(*ss) == dbSynonyms[I].end())
 									printf("%S;", ss->c_str());
 							printf("\ndbSynonyms:");
-							if (dbSynonyms.size()>1)
+							if (dbSynonyms.size() > 1)
 								printf("\n[%d]:", I);
 							for (auto ss = dbSynonyms[I].begin(), ssEnd = dbSynonyms[I].end(); ss != ssEnd; ss++)
 								printf("%S;", ss->c_str());
 							printf("\nnewScrapedSynonyms:");
 							for (int J = 0; J < d.size(); J++)
 							{
-								if (d.size()>1)
+								if (d.size() > 1)
 									printf("\n[%d]:", J);
 								for (vector <string>::iterator ss = d[J].accumulatedSynonyms.begin(), ssEnd = d[J].accumulatedSynonyms.end(); ss != ssEnd; ss++)
 								{
@@ -431,7 +430,7 @@ void testThesaurus()
 				free(buffer);
 			}
 		} while (FindNextFile(hFind, &ffd) != 0);
-		printf("dbempty=%d nonMatched=%d total=%d (%d%%)\n", dbEmpty, nonMatched, total,100*nonMatched/(total-dbEmpty));
+		printf("dbempty=%d nonMatched=%d total=%d (%d%%)\n", dbEmpty, nonMatched, total, 100 * nonMatched / (total - dbEmpty));
 		FindClose(hFind);
 	}
 }
@@ -439,12 +438,12 @@ void testThesaurus()
 
 #define MAX_COLUMNS 4
 vector <string> tokens;
-bool isBeginToken(int I, const char *token)
+bool isBeginToken(int I, const char* token)
 {
 	return !strncmp(tokens[I].c_str() + 1, token, strlen(token)) &&
-		tokens[I][0] == '<' && 
+		tokens[I][0] == '<' &&
 		tokens[I].length() > 1 &&
-		tokens[I][tokens[I].length()-1] == '>';
+		tokens[I][tokens[I].length() - 1] == '>';
 }
 
 bool isWord(int I)
@@ -452,21 +451,21 @@ bool isWord(int I)
 	return tokens[I].find("<") == string::npos;
 }
 
-bool isEndToken(int I,const char *token)
+bool isEndToken(int I, const char* token)
 {
 	return !strncmp(tokens[I].c_str() + 2, token, strlen(token)) &&
-		tokens[I][0] == '<' && 
+		tokens[I][0] == '<' &&
 		tokens[I][1] == '/' &&
 		tokens[I].length() > 1 &&
 		tokens[I][tokens[I].length() - 1] == '>';
 }
 
-bool isWord(int I, const char *word)
+bool isWord(int I, const char* word)
 {
 	return tokens[I] == word;
 }
 
-bool isCapitalWord(string &s)
+bool isCapitalWord(string& s)
 {
 	if (s.empty())
 		return false;
@@ -481,17 +480,17 @@ bool isCapitalWord(int I)
 	return isCapitalWord(tokens[I]);
 }
 
-bool isToken(string &s)
+bool isToken(string& s)
 {
 	return s[0] == '<' &&
 		s.length() > 1 &&
 		s[s.length() - 1] == '>';
 }
 
-bool isNumber(string &s,int &n)
+bool isNumber(string& s, int& n)
 {
 	for (int I = 0; s[I]; I++)
-		if (!isdigit(s[I]) && !isspace(s[I]) && (s[I] != '-' || I==0))
+		if (!isdigit(s[I]) && !isspace(s[I]) && (s[I] != '-' || I == 0))
 			return false;
 	n = atoi(s.c_str());
 	return true;
@@ -509,7 +508,7 @@ void error(int I)
 		printf("ERROR");
 }
 
-string trim(string &s, string &tmp)
+string trim(string& s, string& tmp)
 {
 	tmp = s;
 	size_t J;
@@ -526,7 +525,7 @@ string trim(string &s, string &tmp)
 	return tmp;
 }
 
-wstring trim(wstring &s, wstring &tmp)
+wstring trim(wstring& s, wstring& tmp)
 {
 	tmp = s;
 	size_t J;
@@ -543,10 +542,10 @@ wstring trim(wstring &s, wstring &tmp)
 	return tmp;
 }
 
-__int64 breakByCommaSemiColon(vector <string> &words, int t, bool primarySemiColon)
+__int64 breakByCommaSemiColon(vector <string>& words, int t, bool primarySemiColon)
 {
 	string tmp;
-	string token = trim(tokens[t],tmp);
+	string token = trim(tokens[t], tmp);
 	string word;
 	__int64 semicolonIndex = -1;
 	bool 	printWordsTemp = false;
@@ -561,12 +560,12 @@ __int64 breakByCommaSemiColon(vector <string> &words, int t, bool primarySemiCol
 			else
 			{
 				int whereSemiColon = token.find(';', w);
-				__int64 whereOr = token.find("or",w);
-				if (whereOr>0 && (isalpha(token[whereOr - 1]) || isalpha(token[whereOr + 2])))
+				__int64 whereOr = token.find("or", w);
+				if (whereOr > 0 && (isalpha(token[whereOr - 1]) || isalpha(token[whereOr + 2])))
 				{
 					whereOr = string::npos;
 				}
-				if (whereOr!=string::npos && (whereSemiColon==string::npos || whereOr<whereSemiColon))
+				if (whereOr != string::npos && (whereSemiColon == string::npos || whereOr < whereSemiColon))
 					printWordsTemp = true;
 				else
 				{
@@ -589,9 +588,9 @@ __int64 breakByCommaSemiColon(vector <string> &words, int t, bool primarySemiCol
 				error(t);
 			semicolonIndex = words.size() - 1;
 		}
-		else if (token[w] != ' ' || word.size()>0)
+		else if (token[w] != ' ' || word.size() > 0)
 			word += token[w];
-	if (word.length()>0)
+	if (word.length() > 0)
 		words.push_back(word);
 	if (semicolonIndex >= 0 && semicolonIndex + 1 < (signed)words.size() && words[semicolonIndex + 1] != "concept" && words[semicolonIndex + 1] != "concepts")
 	{
@@ -601,7 +600,7 @@ __int64 breakByCommaSemiColon(vector <string> &words, int t, bool primarySemiCol
 	return semicolonIndex;
 }
 
-string trim(int I, string &tmp)
+string trim(int I, string& tmp)
 {
 	return trim(tokens[I], tmp);
 }
@@ -612,12 +611,12 @@ void processIntoTokens()
 	string tablesPath = string(MAINDIR) + "\\Linguistics information\\thesaurus\\Koptimized_tags_noTables.html";
 	_sopen_s(&fd, tablesPath.c_str(), _O_RDWR | _O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE);
 	int fl = _filelength(fd);
-	char *buffer = (char *)malloc(fl + 4);
+	char* buffer = (char*)malloc(fl + 4);
 	string buf;
 	//int numTable = 0;
 	if (fd >= 0)
 	{
-		if (_read(fd, buffer, fl)<0)
+		if (_read(fd, buffer, fl) < 0)
 			lplog(LOG_FATAL_ERROR, L"Error reading thesaurus HTML file.");
 		_close(fd);
 	}
@@ -644,7 +643,7 @@ void processIntoTokens()
 		}
 		tag += buffer[I++];
 		tags.insert(tag);
-		while (I<fl && (buffer[I] == '\n' || buffer[I] == '\r'))
+		while (I < fl && (buffer[I] == '\n' || buffer[I] == '\r'))
 			I++;
 		if (!hasSlash || lastTagWasBeginTag)
 			tokens.push_back(tag);
@@ -665,9 +664,9 @@ void processIntoTokens()
 		printf("%d:%s\n", t++, ti->c_str());
 }
 
-void distributeRest(sDefinition &d)
+void distributeRest(sDefinition& d)
 {
-	bool firstSynonymWordHit = d.accumulatedSynonyms.size()>0;
+	bool firstSynonymWordHit = d.accumulatedSynonyms.size() > 0;
 	bool conceptsHit = false;
 	bool lookingForAnt = false;
 	bool foundAnt = false;
@@ -700,7 +699,7 @@ void distributeRest(sDefinition &d)
 				{
 					conceptsHit = true;
 					int cn;
-					if (d.rest[I + 2] != "<i>" && d.rest[I + 2] != "</span>" && !isNumber(d.rest[I+2], cn))
+					if (d.rest[I + 2] != "<i>" && d.rest[I + 2] != "</span>" && !isNumber(d.rest[I + 2], cn))
 						error(I);
 					else
 					{
@@ -712,7 +711,7 @@ void distributeRest(sDefinition &d)
 								d.concepts.push_back(cn);
 							else if (d.rest[I] == "</i>")
 							{
-								while (I+1<d.rest.size() && isNumber(d.rest[I + 1], cn))
+								while (I + 1 < d.rest.size() && isNumber(d.rest[I + 1], cn))
 								{
 									d.concepts.push_back(cn);
 									I++;
@@ -750,10 +749,10 @@ void distributeRest(sDefinition &d)
 		}
 		else if (lookingForAnt == true && foundAnt == true)
 		{
-				if (isCapitalWord(d.rest[I]))
-					error(I);
-				else
-					d.accumulatedAntonyms.push_back(d.rest[I]);
+			if (isCapitalWord(d.rest[I]))
+				error(I);
+			else
+				d.accumulatedAntonyms.push_back(d.rest[I]);
 		}
 	}
 }
@@ -781,7 +780,7 @@ void printEntry(sDefinition d)
 	printf("\n");
 }
 
-void error(vector <sDefinition>::iterator e1,const char *where,string whichEntry)
+void error(vector <sDefinition>::iterator e1, const char* where, string whichEntry)
 {
 	static int errors = 0;
 	printf("\n%d:%s %s                     \n", errors++, where, whichEntry.c_str());
@@ -802,14 +801,14 @@ bool compareOK(string me1, string me2)
 		me1.erase(me1.begin() + ws);
 	while ((ws = me2.find_first_of("&.\r\n \'-)(")) != string::npos)
 		me2.erase(me2.begin() + ws);
-	_strlwr((char *)me1.c_str());
-	_strlwr((char *)me2.c_str());
+	_strlwr((char*)me1.c_str());
+	_strlwr((char*)me2.c_str());
 	size_t len = min(me1.length(), me2.length());
-	return strncmp(me2.c_str(),me1.c_str(),len)<=0;
+	return strncmp(me2.c_str(), me1.c_str(), len) <= 0;
 }
 
 set <string> wordTypeMap;
-void checkLastEntry(vector <sDefinition> & thesaurus)
+void checkLastEntry(vector <sDefinition>& thesaurus)
 {
 	vector <sDefinition>::iterator e1 = thesaurus.begin() + thesaurus.size() - 1;
 	if (thesaurus.size() >= 2)
@@ -822,10 +821,10 @@ void checkLastEntry(vector <sDefinition> & thesaurus)
 	//	if (e1->primarySynonyms[I] > e1->primarySynonyms[I + 1])
 	//		error(e1, "primarySynonyms", e1->primarySynonyms[I]);
 	for (int I = 0; I < (signed)e1->accumulatedAntonyms.size() - 1; I++)
-		if (!compareOK(e1->accumulatedAntonyms[I+1],e1->accumulatedAntonyms[I]))
+		if (!compareOK(e1->accumulatedAntonyms[I + 1], e1->accumulatedAntonyms[I]))
 			error(e1, "accumulatedAntonyms", e1->accumulatedAntonyms[I]);
 	for (int I = 0; I < (signed)e1->accumulatedSynonyms.size() - 1; I++)
-		if (!compareOK(e1->accumulatedSynonyms[I+1],e1->accumulatedSynonyms[I ]))
+		if (!compareOK(e1->accumulatedSynonyms[I + 1], e1->accumulatedSynonyms[I]))
 			error(e1, "accumulatedSynonyms", e1->accumulatedSynonyms[I]);
 	for (int I = 0; I < (signed)e1->concepts.size() - 1; I++)
 		if (e1->concepts[I] > e1->concepts[I + 1])
@@ -833,7 +832,7 @@ void checkLastEntry(vector <sDefinition> & thesaurus)
 	wordTypeMap.insert(e1->wordType);
 }
 
-void breakBySpace(string inputWord,vector <string> &words)
+void breakBySpace(string inputWord, vector <string>& words)
 {
 	string tmp;
 	string token = trim(inputWord, tmp);
@@ -845,14 +844,14 @@ void breakBySpace(string inputWord,vector <string> &words)
 			words.push_back(word);
 			word.clear();
 		}
-		else if (token[w] != ' ' || word.size()>0)
+		else if (token[w] != ' ' || word.size() > 0)
 			word += token[w];
-	if (word.length()>0)
+	if (word.length() > 0)
 		words.push_back(word);
 }
 
 int numDashedWords = 0, numconvertedWords = 0;
-void removeDash(MYSQL mysql, string &possibleDashedWord)
+void removeDash(MYSQL mysql, string& possibleDashedWord)
 {
 	__int64 whereDash = possibleDashedWord.find('-');
 	if (whereDash == string::npos)
@@ -868,7 +867,7 @@ void removeDash(MYSQL mysql, string &possibleDashedWord)
 	{
 		if (whereSpace > 0 && !(rd[whereSpace - 1] == '-' || rd[whereSpace + 1] == '-'))
 		{
-			whereSpace = rd.find(' ', whereSpace+1);
+			whereSpace = rd.find(' ', whereSpace + 1);
 			continue;
 		}
 		rd.erase(rd.begin() + whereSpace);
@@ -893,7 +892,7 @@ void removeDash(MYSQL mysql, string &possibleDashedWord)
 		mTW(tmp, wtmp);
 		if (wtmp != rd)
 		{
-			rd=wtmp;
+			rd = wtmp;
 			numconvertedWords++;
 			printf("%d:%d:%s -> %S                                            \n", numDashedWords, numconvertedWords, possibleDashedWord.c_str(), rd.c_str());
 			if (extraStar)
@@ -911,7 +910,7 @@ void removeDash(MYSQL mysql, string &possibleDashedWord)
 	}
 	tIWMM iWord = Words.end();
 	int result = 0;
-	if ((result = Words.parseWord(&mysql, rd, iWord,false))>=0)
+	if ((result = Words.parseWord(&mysql, rd, iWord, false)) >= 0)
 	{
 		numconvertedWords++;
 		printf("%d:%d:%s -> %S                                            \n", numDashedWords, numconvertedWords, possibleDashedWord.c_str(), rd.c_str());
@@ -923,7 +922,7 @@ void removeDash(MYSQL mysql, string &possibleDashedWord)
 		printf("%d:%S (from %s) not found.                                  \n", numDashedWords, rd.c_str(), possibleDashedWord.c_str());
 }
 
-void removeDashes(MYSQL mysql, sDefinition &d)
+void removeDashes(MYSQL mysql, sDefinition& d)
 {
 	removeDash(mysql, d.mainEntry);
 	for (int I = 0; I < (signed)d.accumulatedAntonyms.size(); I++)
@@ -932,10 +931,10 @@ void removeDashes(MYSQL mysql, sDefinition &d)
 		removeDash(mysql, d.accumulatedSynonyms[I]);
 }
 
-void combineDashes(vector <string> &a)
+void combineDashes(vector <string>& a)
 {
 	for (unsigned int I = 0; I < a.size(); I++)
-		if (a[I][a[I].size() - 1] == '-' && I<a.size()-1)
+		if (a[I][a[I].size() - 1] == '-' && I < a.size() - 1)
 		{
 			a[I].erase(a[I].size() - 1);
 			a[I] += a[I + 1];
@@ -957,7 +956,7 @@ int getThesaurus(MYSQL mysql)
 {
 	processIntoTokens();
 	printf("\n");
-	string tmp2,tmp3;
+	string tmp2, tmp3;
 	for (unsigned int I = 0; I < tokens.size(); )
 	{
 		printf("phase two %zu%% %u out of %zu\r", I * 100 / tokens.size(), I, tokens.size());
@@ -970,13 +969,13 @@ int getThesaurus(MYSQL mysql)
 			isWord(I + 3, "[") && isBeginToken(I + 4, "i") && isWord(I + 5) && isEndToken(I + 6, "i") &&
 			trim(I + 7, tmp3) == "]")
 		{
-			d.mainEntry = trim(tokens[I + 1],tmp2);
+			d.mainEntry = trim(tokens[I + 1], tmp2);
 			d.wordType = tokens[I + 5];
 			int currentLocation = I + 8;
 			bool allowEndScan = false;
 			if (isBeginToken(I + 8, "i") && isWord(I + 9) && isEndToken(I + 10, "i"))
 			{
-				__int64 whereSemiColon = breakByCommaSemiColon(d.primarySynonyms, I + 9,true);
+				__int64 whereSemiColon = breakByCommaSemiColon(d.primarySynonyms, I + 9, true);
 				currentLocation = I + 11;
 				if (whereSemiColon > 0)
 				{
@@ -984,9 +983,9 @@ int getThesaurus(MYSQL mysql)
 					d.rest.erase(d.rest.begin(), d.rest.begin() + whereSemiColon);
 					d.primarySynonyms.erase(d.primarySynonyms.begin() + whereSemiColon, d.primarySynonyms.end());
 				}
-				if (whereSemiColon<0 && isWord(I + 11)) 
+				if (whereSemiColon < 0 && isWord(I + 11))
 				{
-					whereSemiColon = breakByCommaSemiColon(d.accumulatedSynonyms, I + 11,false);
+					whereSemiColon = breakByCommaSemiColon(d.accumulatedSynonyms, I + 11, false);
 					currentLocation = I + 12;
 					if (whereSemiColon > 0)
 					{
@@ -997,7 +996,7 @@ int getThesaurus(MYSQL mysql)
 					if (isBeginToken(I + 12, "span class=\"p\"") || isBeginToken(I + 12, "span class=\"s25\""))
 					{
 						//bool concatOR = false;
-						if (d.primarySynonyms.size() > 0 && d.accumulatedSynonyms.size()>0)
+						if (d.primarySynonyms.size() > 0 && d.accumulatedSynonyms.size() > 0)
 						{
 							string lPS = d.primarySynonyms[d.primarySynonyms.size() - 1];
 							if (lPS.size() > 3 && lPS[lPS.size() - 3] == ' ' && lPS[lPS.size() - 2] == 'o' && lPS[lPS.size() - 1] == 'r')
@@ -1016,46 +1015,46 @@ int getThesaurus(MYSQL mysql)
 					}
 				}
 			}
-			for (I = currentLocation; I<tokens.size() && !(isBeginToken(I, "span class=\"s19") || isBeginToken(I, "span class=\"s24")); I++)
+			for (I = currentLocation; I < tokens.size() && !(isBeginToken(I, "span class=\"s19") || isBeginToken(I, "span class=\"s24")); I++)
 			{
 				//printf("phase two %d%% %d out of %d\r", I * 100 / tokens.size(), I, tokens.size());
-				if (isBeginToken(I, "i") || isEndToken(I, "i") || (allowEndScan && isEndToken(I,"span")))
+				if (isBeginToken(I, "i") || isEndToken(I, "i") || (allowEndScan && isEndToken(I, "span")))
 					d.rest.push_back(tokens[I]);
 				else if (isToken(I))
 					continue;
-				else 
+				else
 				{
 					if (isCapitalWord(I))
 					{
-						if (trim(tokens[I],tmp2).size() == 1)
+						if (trim(tokens[I], tmp2).size() == 1)
 							printf("*%s*", tokens[I].c_str());
 						else
 							error(I);
 					}
 					else
-						breakByCommaSemiColon(d.rest, I,false);
+						breakByCommaSemiColon(d.rest, I, false);
 				}
 			}
-			if (I + 6<tokens.size() && isEndToken(I + 1, "span") &&
+			if (I + 6 < tokens.size() && isEndToken(I + 1, "span") &&
 				isBeginToken(I + 2, "i") && trim(tokens[I + 3], tmp2) == "Ant." && isEndToken(I + 4, "i") &&
 				isWord(I + 5))
 			{
 				//for (unsigned int J = I; J < I + 7; J++)
 				//	printf("%d:%s\n", J, tokens[J].c_str());
-				breakByCommaSemiColon(d.accumulatedAntonyms, I + 5,false); // __int64 whereSemiColon = 
+				breakByCommaSemiColon(d.accumulatedAntonyms, I + 5, false); // __int64 whereSemiColon = 
 				I += 6;
 			}
-			else if (I + 6<tokens.size() && isEndToken(I + 1, "span") &&
+			else if (I + 6 < tokens.size() && isEndToken(I + 1, "span") &&
 				trim(tokens[I + 2], tmp2) == "Ant." && isBeginToken(I + 3, "span") &&
 				isWord(I + 4) && isEndToken(I + 5, "span"))
 			{
 				//for (unsigned int J = I; J < I + 7; J++)
 				//	printf("%d:%s\n", J, tokens[J].c_str());
-				__int64 whereSemiColon = breakByCommaSemiColon(d.accumulatedAntonyms, I + 4,false);
+				__int64 whereSemiColon = breakByCommaSemiColon(d.accumulatedAntonyms, I + 4, false);
 				I += 6;
 				if (whereSemiColon < 0 && isWord(I) && (isBeginToken(I + 1, "span class=\"s19") || isBeginToken(I + 1, "span class=\"s24")))
 				{
-					whereSemiColon = breakByCommaSemiColon(d.accumulatedAntonyms, I,false );
+					whereSemiColon = breakByCommaSemiColon(d.accumulatedAntonyms, I, false);
 					I++;
 				}
 			}
@@ -1064,13 +1063,13 @@ int getThesaurus(MYSQL mysql)
 			for (unsigned int s = 0; s < d.accumulatedSynonyms.size(); s++)
 			{
 				string synonymConcept = d.accumulatedSynonyms[s];
-				if (isdigit(synonymConcept[synonymConcept.size() - 1]) &&	!strncmp((char *)(synonymConcept.c_str()), "concept", 7))
+				if (isdigit(synonymConcept[synonymConcept.size() - 1]) && !strncmp((char*)(synonymConcept.c_str()), "concept", 7))
 				{
 					unsigned int J = 0;
 					while (J < synonymConcept.size() && !isdigit(synonymConcept[J]))
 						J++;
 					synonymConcept.erase(synonymConcept.begin(), synonymConcept.begin() + J);
-					if (d.concepts.size()>0)
+					if (d.concepts.size() > 0)
 						error(I);
 					if (!isNumber(synonymConcept, cn))
 						error(I);
@@ -1086,20 +1085,20 @@ int getThesaurus(MYSQL mysql)
 			}
 			combineDashes(d.accumulatedSynonyms);
 			combineDashes(d.accumulatedAntonyms);
-			removeDashes(mysql,d);
+			removeDashes(mysql, d);
 			thesaurus.push_back(d);
 			checkLastEntry(thesaurus);
-				//printEntry(d);
+			//printEntry(d);
 		}
 		else
 			error(I);
 	}
-	int maxSynonymAccumulatedSize = 0, maxAntonymAccumulatedSize = 0, maxConceptSize = 0,maxPrimarySynonymAccumulatedSize=0;
+	int maxSynonymAccumulatedSize = 0, maxAntonymAccumulatedSize = 0, maxConceptSize = 0, maxPrimarySynonymAccumulatedSize = 0;
 	for (int I = 0; I < thesaurus.size(); I++)
 	{
 		int accumulatedSize = 0;
 		for (int J = 0; J < thesaurus[I].accumulatedAntonyms.size(); J++)
-			accumulatedSize += thesaurus[I].accumulatedAntonyms[J].length()+1;
+			accumulatedSize += thesaurus[I].accumulatedAntonyms[J].length() + 1;
 		maxAntonymAccumulatedSize = max(maxAntonymAccumulatedSize, accumulatedSize);
 		accumulatedSize = 0;
 		for (int J = 0; J < thesaurus[I].accumulatedSynonyms.size(); J++)
@@ -1119,7 +1118,7 @@ int getThesaurus(MYSQL mysql)
 	for (set <string>::iterator wti = wordTypeMap.begin(), wtiEnd = wordTypeMap.end(); wti != wtiEnd; wti++)
 		printf("%s\n", wti->c_str());
 	//	writeThesaurusEntry(thesaurus[I]);
-	
+
 	//fd = open(MAINDIR+"\\Linguistics information\\k3_no_tables2.html", _O_RDWR | _O_CREAT, _S_IREAD | _S_IWRITE);
 	//fl = buf.length();
 	//int error=_write(fd, buf.c_str(), buf.length());
@@ -1137,19 +1136,19 @@ int stripTags()
 	string tablesPath = string(MAINDIR) + "\\Linguistics information\\thesaurus\\Koptimized.html";
 	int fd, error = _sopen_s(&fd, tablesPath.c_str(), _O_RDWR, _SH_DENYNO, _S_IREAD | _S_IWRITE);
 	size_t fl = _filelength(fd);
-	char *buffer = (char *)malloc(fl + 100);
+	char* buffer = (char*)malloc(fl + 100);
 	string buf;
 	//int numTable = 0;
 	if (fd >= 0)
 	{
-		if (_read(fd, buffer, (unsigned int)fl)<0)
+		if (_read(fd, buffer, (unsigned int)fl) < 0)
 			lplog(LOG_FATAL_ERROR, L"Error reading thesaurus HTML file.");
 		_close(fd);
 	}
 	bool saveNextSpan = false;
 	for (int I = 0; I < fl; I++)
 	{
-		if (I%4096==4095)
+		if (I % 4096 == 4095)
 			printf("phase two %zu%% %d out of %zu\r", I * 100 / fl, I, fl);
 		if (buffer[I] == '<')
 		{
@@ -1158,7 +1157,7 @@ int stripTags()
 			{
 				if (buffer[I] == '\n')
 					buffer[I] = ' ';
-				if (buffer[I]!=' ' || buffer[I-1]!=' ')
+				if (buffer[I] != ' ' || buffer[I - 1] != ' ')
 					token += buffer[I];
 			}
 			token += buffer[I];
@@ -1171,7 +1170,7 @@ int stripTags()
 				save = true;
 				saveNextSpan = false;
 			}
-			if (!strncmp(token.c_str()+1, "span", strlen("span")))
+			if (!strncmp(token.c_str() + 1, "span", strlen("span")))
 			{
 				save = true;
 				saveNextSpan = true;
@@ -1227,7 +1226,7 @@ int stripTags()
 		}
 		else
 		{
-			if (buffer[I]>0)
+			if (buffer[I] > 0)
 				buf += buffer[I];
 			else
 			{
@@ -1236,10 +1235,10 @@ int stripTags()
 					buf += "-";
 					I += 2;
 				}
-				else if (buffer[I] == -30 && buffer[I + 1] == -128 && (buffer[I + 2]<0 && buffer[I + 3] >= 0 && !isalpha(buffer[I + 3])))
-						I += 2;
-					else
-					{
+				else if (buffer[I] == -30 && buffer[I + 1] == -128 && (buffer[I + 2] < 0 && buffer[I + 3] >= 0 && !isalpha(buffer[I + 3])))
+					I += 2;
+				else
+				{
 					if (buffer[I] == -30 && buffer[I + 1] == -128 && buffer[I + 2] == -103)
 					{
 						buf += '\'';
@@ -1299,7 +1298,7 @@ int stripTags()
 	}
 	error = _sopen_s(&fd, tablesPath.c_str(), _O_RDWR | _O_CREAT, _SH_DENYNO, _S_IREAD | _S_IWRITE);
 	fl = buf.length();
-	error=_write(fd, buf.c_str(), (unsigned int)buf.length());
+	error = _write(fd, buf.c_str(), (unsigned int)buf.length());
 	printf("%d\n", errno);
 	_close(fd);
 	return 0;
@@ -1307,12 +1306,12 @@ int stripTags()
 
 /* there are no th tags
 <tr ????>
-  <td ????>Jill</td>
-  <td ???/>
-  <td>50</td>
+	<td ????>Jill</td>
+	<td ???/>
+	<td>50</td>
 </tr>
 */
-void processTable(string &tableToken)
+void processTable(string& tableToken)
 {
 	string columns[3];
 	for (unsigned int I = 0; I < tableToken.size(); I++)
@@ -1330,7 +1329,7 @@ void processTable(string &tableToken)
 				for (I++; I < tableToken.size() && isspace(tableToken[I]); I++);
 				if (!strncmp(tableToken.c_str() + I, "<td", strlen("<td")))
 				{
-					if (columnIndex>2)
+					if (columnIndex > 2)
 						error(I);
 					for (; I < tableToken.size() && tableToken[I] != '>'; I++);
 					if (tableToken[I - 1] != '/')
@@ -1369,9 +1368,9 @@ void processTable(string &tableToken)
 int resolveTables()
 {
 	string tablesPath = string(MAINDIR) + "\\Linguistics information\\thesaurus\\Koptimized_tags.html";
-	int fd, error = _sopen_s(&fd, tablesPath.c_str(), _O_RDWR|_O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE);
+	int fd, error = _sopen_s(&fd, tablesPath.c_str(), _O_RDWR | _O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE);
 	size_t fl = _filelength(fd);
-	char *buffer = (char *)malloc(fl + 2);
+	char* buffer = (char*)malloc(fl + 2);
 	string buf;
 	//int numTable = 0;
 	if (fd >= 0)
@@ -1386,7 +1385,7 @@ int resolveTables()
 	{
 		if (I % 4096 == 4095)
 			printf("phase two %zu%% %d out of %zu\r", I * 100 / fl, I, fl);
-		if (!strncmp(buffer+I, "<table", strlen("<table")))
+		if (!strncmp(buffer + I, "<table", strlen("<table")))
 		{
 			string token;
 			int begin = I;

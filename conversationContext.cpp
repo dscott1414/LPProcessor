@@ -21,31 +21,31 @@ class cCohereInfo
 void cSource::identifyConversations()
 {
 	LFS
-	int numQuotes=0,numQuotesInConversations=0,numConversations=0;
-	currentSpeakerGroup=0;
-	bool allIn,oneIn;
-	for (int I=firstQuote; I>=0; I=m[I].nextQuote,numQuotes++)
+		int numQuotes = 0, numQuotesInConversations = 0, numConversations = 0;
+	currentSpeakerGroup = 0;
+	bool allIn, oneIn;
+	for (int I = firstQuote; I >= 0; I = m[I].nextQuote, numQuotes++)
 	{
 		// is this an extended embedded story?  if so, skip.
-		if ((m[I].flags&cWordMatch::flagEmbeddedStoryResolveSpeakers) && !(m[I].flags&cWordMatch::flagEmbeddedStoryBeginResolveSpeakers))
+		if ((m[I].flags & cWordMatch::flagEmbeddedStoryResolveSpeakers) && !(m[I].flags & cWordMatch::flagEmbeddedStoryBeginResolveSpeakers))
 			continue;
 		// does this quote refer to more than one person (speaker and audience)?  if not, skip, this is not a conversation between two or more people.
-		if (m[I].audienceObjectMatches.empty() || m[I].objectMatches.empty() || (intersect(m[I].audienceObjectMatches,m[I].objectMatches,allIn,oneIn) && allIn))
+		if (m[I].audienceObjectMatches.empty() || m[I].objectMatches.empty() || (intersect(m[I].audienceObjectMatches, m[I].objectMatches, allIn, oneIn) && allIn))
 			continue;
 		numQuotesInConversations++;
 		// did the last quote and current quote belong to a different speaker group?  if so, this is a different conversation.
-		if (currentSpeakerGroup+1<speakerGroups.size() && speakerGroups[currentSpeakerGroup+1].sgBegin<I)
+		if (currentSpeakerGroup + 1 < speakerGroups.size() && speakerGroups[currentSpeakerGroup + 1].sgBegin < I)
 		{
-			while (currentSpeakerGroup+1<speakerGroups.size() && speakerGroups[currentSpeakerGroup+1].sgBegin<I)
+			while (currentSpeakerGroup + 1 < speakerGroups.size() && speakerGroups[currentSpeakerGroup + 1].sgBegin < I)
 				currentSpeakerGroup++;
 			numConversations++;
 			continue;
 		}
 		// did the last quote and current quote share at least two people? if not, this is a different conversation.
-		int previousQuote=m[I].previousQuote;
-		if (previousQuote>=0 &&
-			  (!(intersect(m[I].objectMatches,m[previousQuote].objectMatches,allIn,oneIn) || intersect(m[I].audienceObjectMatches,m[previousQuote].objectMatches,allIn,oneIn)) ||
-			   !(intersect(m[I].objectMatches,m[previousQuote].objectMatches,allIn,oneIn) || intersect(m[I].audienceObjectMatches,m[previousQuote].objectMatches,allIn,oneIn))))
+		int previousQuote = m[I].previousQuote;
+		if (previousQuote >= 0 &&
+			(!(intersect(m[I].objectMatches, m[previousQuote].objectMatches, allIn, oneIn) || intersect(m[I].audienceObjectMatches, m[previousQuote].objectMatches, allIn, oneIn)) ||
+				!(intersect(m[I].objectMatches, m[previousQuote].objectMatches, allIn, oneIn) || intersect(m[I].audienceObjectMatches, m[previousQuote].objectMatches, allIn, oneIn))))
 		{
 			numConversations++;
 			continue;
@@ -65,9 +65,9 @@ void cSource::identifyConversations()
 		// c. relations
 
 		// first level map word 
-		map<tIWMM,cCohereInfo> coherenceWords;
+		map<tIWMM, cCohereInfo> coherenceWords;
 		// second level map noun/adjective/adverb synonyms and verb verbNet classes
-		map<tIWMM,cCohereInfo> coherenceSecondary;
+		map<tIWMM, cCohereInfo> coherenceSecondary;
 		// third level map 
 		// this maps verb/noun/adj/adv relations
 		// rich - millionaire/ rich - money

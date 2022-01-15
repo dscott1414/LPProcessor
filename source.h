@@ -5,6 +5,7 @@
 #include "bitObject.h"
 #include "tableColumn.h"
 #include "getMusicBrainz.h"
+#include "vcXML.h"
 
 class cSyntacticRelationGroup;
 #define MAX_LEN 2048
@@ -2082,7 +2083,7 @@ int &numFirstInQuote,
 	const wchar_t *src(int where,wstring description,wstring &tmpstr);
 	bool followerPOVToObserverConversion(vector <cSyntacticRelationGroup>::iterator sr,int sg);
 	bool setTimeFlowTense(int where,int whereControllingEntity,int whereSubject,int whereVerb,int whereObject,
-int wherePrepObject,
+		int wherePrepObject,
 		int prepObjectSubType,int objectSubType,bool establishingLocation,bool futureLocation,bool genderedLocationRelation,cTimeFlowTense &tft);
 	void srSetTimeFlowTense(int spri);
 	bool isRelativeLocation(wstring word);
@@ -2095,7 +2096,21 @@ int wherePrepObject,
 	bool adjectivalExit(int where);
 	bool whereSubType(int where);
 	bool exitConversion(int whereObject,int whereSubject,int wherePrepObject);
-	bool placeIdentification(int where,bool inPrimaryQuote,int whereControllingEntity,int whereSubject,int whereVerb,int vnClass);
+	int getAfterVerb(const int where, const int whereVerb, const int whereSubject);
+	int getSubType(int whereVerb, int& whereObject);
+	void adjustForStart(bool start, int &whereObject, int &whereVerb, int& wpd);
+	bool determineIfPhysicalSubject(int where, int whereSubject);
+	bool detectPlaceTransition(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet &verbClass, wstring id, bool pr, bool inPrimaryQuote, int st, bool proLocation);
+	bool identifyObjectAsPlace(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet& verbClass, wstring id, bool pr, bool inPrimaryQuote, int st, int wpd, bool acceptableVerbForm, bool prepLocation, bool prepMustBeLocation);
+	int detectPlacePreposition(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet& verbClass, wstring id, bool pr, bool inPrimaryQuote, int wherePrep, int whereLastPrepObject, bool acceptableVerbForm, bool prepMustBeLocation, bool objectMustBeLocation);
+	int detectPlaceTransitionForPrep(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet& verbClass, wstring id, bool pr, int wherePrep, bool proLocation, bool physicalObject, bool prepMustBeLocation, bool objectMustBeLocation, bool acceptableVerbForm);
+	bool detectAdverbialWhere(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet& verbClass, wstring id, bool pr, bool physicalObject, bool acceptableVerbForm);
+	bool detectExit(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, int afterVerb, wstring id, bool pr, bool inPrimaryQuote);
+	int detectObjectTransfer(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet& verbClass, wstring id, bool pr);
+	bool detectMoveCommand(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet& verbClass, wstring id, bool pr);
+	bool detectWhere(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, wstring id, bool pr);
+	bool detectPhysicalObject(int whereObject);
+	bool placeIdentification(int where, bool inPrimaryQuote, int whereControllingEntity, int whereSubject, int whereVerb, int vnClass);
 	bool srMoveObject(int where,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int at,int whereMovingRelativeTo,int hasSyntacticRelationGroup, const wchar_t * whereType,bool physicalRelation);
 	void defineObjectAsSpatial(int where);
 	void detectTenseAndFirstPersonUsage(int where, int lastBeginS1, int lastRelativePhrase, int &numPastSinceLastQuote, int &numNonPastSinceLastQuote, int &numFirstInQuote, int &numSecondInQuote, bool inPrimaryQuote);

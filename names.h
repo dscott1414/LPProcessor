@@ -38,7 +38,7 @@ public:
 	tIWMM last;
 	tIWMM suffix;
 	tIWMM any;
-	cName(void) { hon=hon2=hon3=first=middle=middle2=last=suffix=any=wNULL; nickName=-1; };
+	cName(void) { hon=hon2=hon3=first=middle=middle2=last=suffix=any=wNULL; nickName=-1; }
 	void operator = (const cName& n);
 	bool operator == (const cName& n);
 	bool justHonorific(void);

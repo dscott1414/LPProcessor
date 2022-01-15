@@ -1,4 +1,4 @@
-																																																									 #include <errno.h>
+#include <errno.h>
 #include <windows.h>
 #include "WinInet.h"
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
@@ -54,11 +54,11 @@ using namespace std;
 	</entry>
 	*/
 
-wstring I64ToS(__int64 i,wstring &tmp)
+wstring I64ToS(__int64 i, wstring& tmp)
 {
 	wchar_t temp[1024];
-	_i64tow(i,temp,10);
-	return tmp=temp;
+	_i64tow(i, temp, 10);
+	return tmp = temp;
 }
 
 // “:D”     :-) :) :o) :] :3 :c) :> =] 8) =) :} :^)
@@ -76,65 +76,65 @@ wstring I64ToS(__int64 i,wstring &tmp)
 
 void logCurrentTime(void)
 {
-	time_t seconds = time (NULL);
-	struct tm *day=gmtime(&seconds);
-	lplog(L"%d-%d-%d",day->tm_mon,day->tm_mday,1900+day->tm_year);
+	time_t seconds = time(NULL);
+	struct tm* day = gmtime(&seconds);
+	lplog(L"%d-%d-%d", day->tm_mon, day->tm_mday, 1900 + day->tm_year);
 }
 
-extern wstring logFileExtension; 
-int getTwitterEntries(wchar_t *filter)
+extern wstring logFileExtension;
+int getTwitterEntries(wchar_t* filter)
 {
 	// happy
-	wstring baseURL=L"http://search.twitter.com/search.atom?lang=en&rpp=100&q="; // ORq=%3A-)ORq=%3D) - removed - actually decreases results!
-	
+	wstring baseURL = L"http://search.twitter.com/search.atom?lang=en&rpp=100&q="; // ORq=%3A-)ORq=%3D) - removed - actually decreases results!
+
 	// %3A) happy
 	// %3A( sad
-	baseURL+=filter;
-	cInternet::bandwidthControl=0;
-	__int64 lastId=-1;
-	int numTotalPerQueryCollected=0;
+	baseURL += filter;
+	cInternet::bandwidthControl = 0;
+	__int64 lastId = -1;
+	int numTotalPerQueryCollected = 0;
 	set <__int64> tweets;
-	logCache=0;
+	logCache = 0;
 	wchar_t logbuf[1024];
-	_swprintf(logbuf,L".Twitter.%s",filter);
-	logFileExtension=logbuf;
+	_swprintf(logbuf, L".Twitter.%s", filter);
+	logFileExtension = logbuf;
 	while (true)
 	{
 		logCurrentTime();
-		wstring buffer,URL=baseURL,tmp;
-		if (lastId>=0)
-			URL+=L"&since_id="+I64ToS(lastId,buffer);
-		wstring consoleTitle=L"# tweets total="+itos(tweets.size(),buffer)+L" perQuery="+itos(numTotalPerQueryCollected,tmp)+wstring(L" filter=")+filter;
+		wstring buffer, URL = baseURL, tmp;
+		if (lastId >= 0)
+			URL += L"&since_id=" + I64ToS(lastId, buffer);
+		wstring consoleTitle = L"# tweets total=" + itos(tweets.size(), buffer) + L" perQuery=" + itos(numTotalPerQueryCollected, tmp) + wstring(L" filter=") + filter;
 		SetConsoleTitle(consoleTitle.c_str());
-		numTotalPerQueryCollected=0;
-		for (int page=1; page<15; page++)
+		numTotalPerQueryCollected = 0;
+		for (int page = 1; page < 15; page++)
 		{
-			wstring pagedURL=URL+L"&page="+itos(page,buffer);
-			int pos=-1,ret,numCollected=tweets.size();
-			if (ret= cInternet::readPage(pagedURL.c_str(),buffer)) return ret;
+			wstring pagedURL = URL + L"&page=" + itos(page, buffer);
+			int pos = -1, ret, numCollected = tweets.size();
+			if (ret = cInternet::readPage(pagedURL.c_str(), buffer)) return ret;
 			wstring entry;
-			int numEntriesPerPage=0;
-			for (; (pos=takeLastMatch(buffer,L"<entry>",L"</entry>",entry,false))>=0; numEntriesPerPage++)
+			int numEntriesPerPage = 0;
+			for (; (pos = takeLastMatch(buffer, L"<entry>", L"</entry>", entry, false)) >= 0; numEntriesPerPage++)
 			{
-				wstring sid,title;
-				const wchar_t *wch;
-				pos=takeLastMatch(entry,L"<id>",L"</id>",sid,false);
-				if ((wch=wcschr(sid.c_str(),L':'))!=NULL && (wch=wcschr(wch+1,L':'))!=NULL)
+				wstring sid, title;
+				const wchar_t* wch;
+				pos = takeLastMatch(entry, L"<id>", L"</id>", sid, false);
+				if ((wch = wcschr(sid.c_str(), L':')) != NULL && (wch = wcschr(wch + 1, L':')) != NULL)
 				{
-					lastId=_wtoi64(wch+1);
-					pos=takeLastMatch(entry,L"<title>",L"</title>",title,false);
-					if (tweets.find(lastId)==tweets.end())
+					lastId = _wtoi64(wch + 1);
+					pos = takeLastMatch(entry, L"<title>", L"</title>", title, false);
+					if (tweets.find(lastId) == tweets.end())
 					{
-						printf("%010I64d:%lS\n",lastId,title.c_str());
-						lplog(L"%010I64d:%s",lastId,title.c_str());
+						printf("%010I64d:%lS\n", lastId, title.c_str());
+						lplog(L"%010I64d:%s", lastId, title.c_str());
 						tweets.insert(lastId);
 						numTotalPerQueryCollected++;
 					}
 				}
 			}
-			if (numEntriesPerPage==0 || (tweets.size()-numCollected)==0) break;
+			if (numEntriesPerPage == 0 || (tweets.size() - numCollected) == 0) break;
 		}
-		Sleep(1000*60*10);
+		Sleep(1000 * 60 * 10);
 	}
 	return 0;
 }

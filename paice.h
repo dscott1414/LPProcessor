@@ -1,6 +1,6 @@
-#pragma warning (disable: 4503)
-#pragma warning (disable: 4996)
-#undef _STLP_USE_EXCEPTIONS // STLPORT 4.6.1
+//#pragma warning (disable: 4503)
+//#pragma warning (disable: 4996)
+//#undef _STLP_USE_EXCEPTIONS // STLPORT 4.6.1
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -64,7 +64,7 @@ public:
 	} tPrefixRule;
 
 	static int findLastFormInflection(vector <cSuffixRule> rulesUsed, vector <cSuffixRule>::iterator &r, wstring &form, int &inflection);
-	static int stem(MYSQL mysql, wstring s, vector <cSuffixRule> &rulesUsed, cIntArray &trail, int addRule);
+	static size_t stem(MYSQL mysql, wstring s, vector<cSuffixRule>& rulesUsed, cIntArray& trail, int addRule);
 	~cStemmer();
 	static bool isWordDBUnknown(MYSQL mysql, wstring word);
 	static bool wordIsNotUnknownAndOpen(tIWMM iWord, bool log);

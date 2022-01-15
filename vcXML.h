@@ -1,3 +1,6 @@
+#pragma once
+#include "semanticRelations.h"
+
 class cXMLAttribute 
 {
 public:

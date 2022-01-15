@@ -13,7 +13,7 @@
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///F:/lp/source.C++20/word.h"
+                  "uri": "file:///F:/lp/source/word.h"
                 },
                 "region": {
                   "startLine": 575,
@@ -41,7 +41,7 @@
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///F:/lp/source.C++20/syntacticRelations.h"
+                  "uri": "file:///F:/lp/source/syntacticRelations.h"
                 },
                 "region": {
                   "startLine": 29,
@@ -69,7 +69,7 @@
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///F:/lp/source.C++20/tableColumn.h"
+                  "uri": "file:///F:/lp/source/tableColumn.h"
                 },
                 "region": {
                   "startLine": 147,
@@ -100,7 +100,7 @@
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///F:/lp/source.C++20/timeRelations.h"
+                  "uri": "file:///F:/lp/source/timeRelations.h"
                 },
                 "region": {
                   "startLine": 205,
@@ -128,7 +128,7 @@
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///F:/lp/source.C++20/timeRelations.h"
+                  "uri": "file:///F:/lp/source/timeRelations.h"
                 },
                 "region": {
                   "startLine": 210,
@@ -156,7 +156,7 @@
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///F:/lp/source.C++20/source.h"
+                  "uri": "file:///F:/lp/source/source.h"
                 },
                 "region": {
                   "startLine": 40,
@@ -187,7 +187,7 @@
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///F:/lp/source.C++20/source.h"
+                  "uri": "file:///F:/lp/source/source.h"
                 },
                 "region": {
                   "startLine": 918,
@@ -215,7 +215,7 @@
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///F:/lp/source.C++20/source.h"
+                  "uri": "file:///F:/lp/source/source.h"
                 },
                 "region": {
                   "startLine": 2334,
@@ -246,7 +246,7 @@
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///F:/lp/source.C++20/source.h"
+                  "uri": "file:///F:/lp/source/source.h"
                 },
                 "region": {
                   "startLine": 2334,
@@ -277,7 +277,7 @@
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///F:/lp/source.C++20/source.h"
+                  "uri": "file:///F:/lp/source/source.h"
                 },
                 "region": {
                   "startLine": 2334,
@@ -308,7 +308,7 @@
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///F:/lp/source.C++20/source.h"
+                  "uri": "file:///F:/lp/source/source.h"
                 },
                 "region": {
                   "startLine": 2334,
@@ -339,7 +339,7 @@
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///F:/lp/source.C++20/source.h"
+                  "uri": "file:///F:/lp/source/source.h"
                 },
                 "region": {
                   "startLine": 2334,
@@ -360,118 +360,6 @@
           "properties": {
             "targetSymbol": "cSource::cSection::counterSpeakersNotMatched"
           }
-        },
-        {
-          "ruleId": "C26817",
-          "message": {
-            "text": "Potentially expensive copy of variable 'its' in range-for loop. Consider making it a const reference (es.71)."
-          },
-          "locations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "file:///F:/lp/source.C++20/agreement.cpp"
-                },
-                "region": {
-                  "startLine": 115,
-                  "startColumn": 25,
-                  "endLine": 115,
-                  "endColumn": 25
-                }
-              },
-              "logicalLocations": [
-                {
-                  "fullyQualifiedName": "cSource::assessCost",
-                  "decoratedName": "?assessCost@cSource@@QEAAHPEAU_tPatternMatch@cPatternMatchArray@@0HHAEAV?$vector@V?$vector@VcTagLocation@@V?$allocator@VcTagLocation@@@std@@@std@@V?$allocator@V?$vector@VcTagLocation@@V?$allocator@VcTagLocation@@@std@@@std@@@2@@std@@AEAV?$unordered_map@HVcCostPatternElementByTagSet@cSource@@U?$hash@H@std@@U?$equal_to@H@4@V?$allocator@U?$pair@$$CBHVcCostPatternElementByTagSet@cSource@@@std@@@4@@5@_NV?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@5@@Z",
-                  "kind": "function"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "ruleId": "C26817",
-          "message": {
-            "text": "Potentially expensive copy of variable 'tl' in range-for loop. Consider making it a const reference (es.71)."
-          },
-          "locations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "file:///F:/lp/source.C++20/agreement.cpp"
-                },
-                "region": {
-                  "startLine": 1649,
-                  "startColumn": 14,
-                  "endLine": 1649,
-                  "endColumn": 14
-                }
-              },
-              "logicalLocations": [
-                {
-                  "fullyQualifiedName": "cSource::evaluateNounDeterminers",
-                  "decoratedName": "?evaluateNounDeterminers@cSource@@QEAAXHHAEAV?$vector@V?$vector@VcTagLocation@@V?$allocator@VcTagLocation@@@std@@@std@@V?$allocator@V?$vector@VcTagLocation@@V?$allocator@VcTagLocation@@@std@@@std@@@2@@std@@_NV?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@3@@Z",
-                  "kind": "function"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "ruleId": "C26817",
-          "message": {
-            "text": "Potentially expensive copy of variable 'tl' in range-for loop. Consider making it a const reference (es.71)."
-          },
-          "locations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "file:///F:/lp/source.C++20/agreement.cpp"
-                },
-                "region": {
-                  "startLine": 2893,
-                  "startColumn": 13,
-                  "endLine": 2893,
-                  "endColumn": 13
-                }
-              },
-              "logicalLocations": [
-                {
-                  "fullyQualifiedName": "cSource::sortTagLocations",
-                  "decoratedName": "?sortTagLocations@cSource@@QEAAXAEAV?$vector@V?$vector@VcTagLocation@@V?$allocator@VcTagLocation@@@std@@@std@@V?$allocator@V?$vector@VcTagLocation@@V?$allocator@VcTagLocation@@@std@@@std@@@2@@std@@AEAV?$vector@VcTagLocation@@V?$allocator@VcTagLocation@@@std@@@3@@Z",
-                  "kind": "function"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "ruleId": "C26817",
-          "message": {
-            "text": "Potentially expensive copy of variable 'tag' in range-for loop. Consider making it a const reference (es.71)."
-          },
-          "locations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "file:///F:/lp/source.C++20/agreement.cpp"
-                },
-                "region": {
-                  "startLine": 3268,
-                  "startColumn": 14,
-                  "endLine": 3268,
-                  "endColumn": 14
-                }
-              },
-              "logicalLocations": [
-                {
-                  "fullyQualifiedName": "cSource::notFirstNounInMultiNounConstruction",
-                  "decoratedName": "?notFirstNounInMultiNounConstruction@cSource@@QEAA_NHHHH@Z",
-                  "kind": "function"
-                }
-              ]
-            }
-          ]
         }
       ],
       "tool": {
@@ -484,14 +372,14 @@
       },
       "invocations": [
         {
-          "commandLine": "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\bin\\HostX64\\x64\\c1xx.dll\" -ACf{1F7B090C-16DB-4822-966A-A93D26ED4681} -ACpmspft140.dll -Alint -D_PREFAST_ -D_AST_FE_ -Analyze -zm0x00007FF668C20C80 -il C:\\Users\\dscot_000\\AppData\\Local\\Temp\\_CL_3761239bast -typedil -f agreement.cpp -W 1 -Ze -D_MSC_EXTENSIONS -Zp16 -pc \\:/ -D_MSC_VER=1930 -D_MSC_FULL_VER=193030706 -D_MSC_BUILD=0 -D_M_AMD64=100 -ZILP448 -D_M_X64=100 -D_WIN64 -D_WIN32 -nologo -Wall -W4 -WX -diagnostics:column -Oi -Ot -Oy -ltcg -DCODE_ANALYSIS -DWIN32 -DNDEBUG -D_CONSOLE -D_STLP_NO_IOSTREAMS -D_STLP_NO_EXCEPTIONS -D_CRT_SECURE_NO_WARNINGS -D_UNICODE -DUNICODE -DANDROID_NDK -EHs -D_CPPUNWIND -EHc -MD -D_MT -D_DLL -D__AVX__ -D__AVX2__ -D_NO_PREFETCHW -fpfast -fpcontract -D_M_FP_FAST -D_M_FP_CONTRACT -Zc:wchar_t -Zc:forScope -GR -D_CPPRTTI -std:c++latest -experimental:module -stdIfcDir C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\ifc\\x64 -FoQuestionAnsweringx64\\agreement.obj -FdF:\\lp\\source.C++20\\QuestionAnsweringx64\\lp.pdb -external:W 4 -Gd -wd 4389 -wd 4242 -wd 4388 -wd 4820 -wd 4365 -wd 4710 -wd 4668 -wd 4626 -wd 4625 -wd 4571 -wd 4245 -wd 4244 -wd 5039 -wd 5027 -wd 5026 -wd 4514 -wd 4774 -wd 4623 -wd 4706 -wd 4711 -wd 5045 -wd 4834 -wd 4574 -wd 5219 -wd 26451 -wd 6011 -wd 6262 -wd 6053 -wd 6385 -wd 28199 -wd 28182 -wd 28241 -wd 28285 -wd 6387 -wd 6001 -analyze:projectdirectory F:\\lp\\source.C++20 -analyze:rulesetdirectory ;C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Team Tools\\Static Analysis Tools\\\\Rule Sets; -analyze:ruleset C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Team Tools\\Static Analysis Tools\\Rule Sets\\NativeRecommendedRules.ruleset -analyze:quiet -analyze:plugin C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\bin\\HostX64\\x64\\EspXEngine.dll -FC -errorreport:prompt -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\include -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\atlmfc\\include -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\VS\\include -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\ucrt -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\VS\\UnitTest\\include -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\um -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\shared -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\winrt -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\cppwinrt -I C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.8\\Include\\um -I F:\\Program Files\\MySQL\\MySQL Server 8.0\\include -I F:\\Program Files (x86)\\WordNet\\2.1\\src\\include -I F:\\lp\\source\\lloyd-yajl-66cb08c\\src\\api -I F:\\lp\\source\\tinyxml2-master -I C:\\Program Files\\Java\\jdk1.8.0_181\\include\\win32 -I C:\\Program Files\\Java\\jdk1.8.0_181\\include -external:I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\include -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\include -external:I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\atlmfc\\include -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\atlmfc\\include -external:I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\VS\\include -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\VS\\include -external:I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\ucrt -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\ucrt -external:I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\VS\\UnitTest\\include -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\VS\\UnitTest\\include -external:I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\um -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\um -external:I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\shared -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\shared -external:I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\winrt -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\winrt -external:I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\cppwinrt -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\cppwinrt -external:I C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.8\\Include\\um -I C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.8\\Include\\um",
+          "commandLine": "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\bin\\HostX64\\x64\\c1xx.dll\" -ACf{1F7B090C-16DB-4822-966A-A93D26ED4681} -ACpmspft140.dll -Alint -D_PREFAST_ -D_AST_FE_ -Analyze -zm0x00007FF650FB0C80 -il C:\\Users\\dscot_000\\AppData\\Local\\Temp\\_CL_35cd8428ast -typedil -f agreement.cpp -W 1 -Ze -D_MSC_EXTENSIONS -Zp16 -pc \\:/ -D_MSC_VER=1930 -D_MSC_FULL_VER=193030706 -D_MSC_BUILD=0 -D_M_AMD64=100 -ZILP448 -D_M_X64=100 -D_WIN64 -D_WIN32 -nologo -Wall -W4 -WX -diagnostics:column -Oi -Ot -Oy -ltcg -DCODE_ANALYSIS -DWIN32 -DNDEBUG -D_CONSOLE -D_STLP_NO_IOSTREAMS -D_STLP_NO_EXCEPTIONS -D_CRT_SECURE_NO_WARNINGS -D_UNICODE -DUNICODE -DANDROID_NDK -EHs -D_CPPUNWIND -EHc -MD -D_MT -D_DLL -D__AVX__ -D__AVX2__ -D_NO_PREFETCHW -fpfast -fpcontract -D_M_FP_FAST -D_M_FP_CONTRACT -Zc:wchar_t -Zc:forScope -GR -D_CPPRTTI -std:c++latest -experimental:module -stdIfcDir C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\ifc\\x64 -FoQuestionAnsweringx64\\agreement.obj -FdF:\\lp\\source\\QuestionAnsweringx64\\lp.pdb -external:W 4 -Gd -wd 4389 -wd 4242 -wd 4388 -wd 4820 -wd 4365 -wd 4710 -wd 4668 -wd 4626 -wd 4625 -wd 4571 -wd 4245 -wd 4244 -wd 5039 -wd 5027 -wd 5026 -wd 4514 -wd 4774 -wd 4623 -wd 4706 -wd 4711 -wd 5045 -wd 4834 -wd 4574 -wd 5219 -wd 26451 -wd 6011 -wd 6262 -wd 6053 -wd 6385 -wd 28199 -wd 28182 -wd 28241 -wd 28285 -wd 6387 -wd 6001 -analyze:projectdirectory F:\\lp\\source -analyze:rulesetdirectory ;C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Team Tools\\Static Analysis Tools\\\\Rule Sets; -analyze:ruleset C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Team Tools\\Static Analysis Tools\\Rule Sets\\NativeRecommendedRules.ruleset -analyze:quiet -analyze:plugin C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\bin\\HostX64\\x64\\EspXEngine.dll -FC -errorreport:prompt -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\include -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\atlmfc\\include -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\VS\\include -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\ucrt -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\VS\\UnitTest\\include -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\um -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\shared -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\winrt -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\cppwinrt -I C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.8\\Include\\um -I F:\\Program Files\\MySQL\\MySQL Server 8.0\\include -I F:\\Program Files (x86)\\WordNet\\2.1\\src\\include -I F:\\lp\\source\\lloyd-yajl-66cb08c\\src\\api -I F:\\lp\\source\\tinyxml2-master -I C:\\Program Files\\Java\\jdk1.8.0_181\\include\\win32 -I C:\\Program Files\\Java\\jdk1.8.0_181\\include -external:I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\include -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\include -external:I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\atlmfc\\include -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.30.30705\\atlmfc\\include -external:I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\VS\\include -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\VS\\include -external:I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\ucrt -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\ucrt -external:I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\VS\\UnitTest\\include -I C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\VS\\UnitTest\\include -external:I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\um -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\um -external:I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\shared -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\shared -external:I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\winrt -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\winrt -external:I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\cppwinrt -I C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\cppwinrt -external:I C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.8\\Include\\um -I C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.8\\Include\\um",
           "executionSuccessful": true
         }
       ],
       "artifacts": [
         {
           "location": {
-            "uri": "file:///F:/lp/source.C++20/word.h"
+            "uri": "file:///F:/lp/source/word.h"
           },
           "roles": [
             "resultFile"
@@ -502,7 +390,7 @@
         },
         {
           "location": {
-            "uri": "file:///F:/lp/source.C++20/syntacticRelations.h"
+            "uri": "file:///F:/lp/source/syntacticRelations.h"
           },
           "roles": [
             "resultFile"
@@ -513,7 +401,7 @@
         },
         {
           "location": {
-            "uri": "file:///F:/lp/source.C++20/tableColumn.h"
+            "uri": "file:///F:/lp/source/tableColumn.h"
           },
           "roles": [
             "resultFile"
@@ -524,7 +412,7 @@
         },
         {
           "location": {
-            "uri": "file:///F:/lp/source.C++20/timeRelations.h"
+            "uri": "file:///F:/lp/source/timeRelations.h"
           },
           "roles": [
             "resultFile"
@@ -535,30 +423,29 @@
         },
         {
           "location": {
-            "uri": "file:///F:/lp/source.C++20/source.h"
+            "uri": "file:///F:/lp/source/source.h"
           },
           "roles": [
             "resultFile"
           ],
           "hashes": {
-            "sha-256": "e78f1d844ffc6e607fd56ef29aa3fe7a38754b5d9d8ff2f803bd8b89ebc549e9"
+            "sha-256": "fd89a4fd0eb254ee46acc4451a9915e0ae6e2b1a0fed29729004cd69f7b64dc8"
           }
         },
         {
           "location": {
-            "uri": "file:///F:/lp/source.C++20/agreement.cpp"
+            "uri": "file:///f:/lp/source/agreement.cpp"
           },
           "roles": [
-            "analysisTarget",
-            "resultFile"
+            "analysisTarget"
           ],
           "hashes": {
-            "sha-256": "88fae73cc4436e4ddab3e9335d5dce62d5fe2e966169bf2f20e22dbdc4529a2d"
+            "sha-256": "1cd164f9956cecdafc1791c55090e52297e56df7b0baf345340de35cb9a5a36f"
           }
         },
         {
           "location": {
-            "uri": "file:///f:/lp/source.c++20/logging.h"
+            "uri": "file:///f:/lp/source/logging.h"
           },
           "hashes": {
             "sha-256": "479e83983bc3716633f90fae184a4d4d6a04669a3c91313f8f6112aa350932cd"
@@ -654,7 +541,7 @@
         },
         {
           "location": {
-            "uri": "file:///f:/lp/source.c++20/general.h"
+            "uri": "file:///f:/lp/source/general.h"
           },
           "hashes": {
             "sha-256": "07f7dde63839beb7c03963fd0100ac736212629f9f551be2bcc106ed0d03de4c"
@@ -662,7 +549,7 @@
         },
         {
           "location": {
-            "uri": "file:///f:/lp/source.c++20/relationtypes.h"
+            "uri": "file:///f:/lp/source/relationtypes.h"
           },
           "hashes": {
             "sha-256": "3f8d26d3c2aedaee57b4a4d891971f8745706a8f26228ac2eaaeecc802365861"
@@ -670,7 +557,7 @@
         },
         {
           "location": {
-            "uri": "file:///f:/lp/source.c++20/intarray.h"
+            "uri": "file:///f:/lp/source/intarray.h"
           },
           "hashes": {
             "sha-256": "6f420f5c901e4cffd079f0697ee9d9c0210da0a19fc320aa53a8485f20b667c0"
@@ -678,7 +565,7 @@
         },
         {
           "location": {
-            "uri": "file:///f:/lp/source.c++20/pattern.h"
+            "uri": "file:///f:/lp/source/pattern.h"
           },
           "hashes": {
             "sha-256": "aba016599b46143d77cd4ad136046e6edc7f4c969e8ec4be3f4b9a8ac5d33e83"
@@ -686,7 +573,7 @@
         },
         {
           "location": {
-            "uri": "file:///f:/lp/source.c++20/bitobject.h"
+            "uri": "file:///f:/lp/source/bitobject.h"
           },
           "hashes": {
             "sha-256": "7b26737a50f40ce2467b9a0078ee5b92904da74aac1e1590baeedeed70559232"
@@ -694,7 +581,7 @@
         },
         {
           "location": {
-            "uri": "file:///f:/lp/source.c++20/patternelementmatcharray.h"
+            "uri": "file:///f:/lp/source/patternelementmatcharray.h"
           },
           "hashes": {
             "sha-256": "81c4cbe76b6370e009e9c7579a783b8bac218d9f33c3faa2fd4ef853ee2a1136"
@@ -702,7 +589,7 @@
         },
         {
           "location": {
-            "uri": "file:///f:/lp/source.c++20/patternmatcharray.h"
+            "uri": "file:///f:/lp/source/patternmatcharray.h"
           },
           "hashes": {
             "sha-256": "ed37896c4f6d23dbc1e4dc7043b73747a18bc05ca09ac8e0b861f1ac9e260e91"
@@ -710,7 +597,7 @@
         },
         {
           "location": {
-            "uri": "file:///f:/lp/source.c++20/ontology.h"
+            "uri": "file:///f:/lp/source/ontology.h"
           },
           "hashes": {
             "sha-256": "756ca902980acf872e800d1847382c7139e69ea2c3e5797695adc334219d7457"
@@ -718,7 +605,7 @@
         },
         {
           "location": {
-            "uri": "file:///f:/lp/source.c++20/names.h"
+            "uri": "file:///f:/lp/source/names.h"
           },
           "hashes": {
             "sha-256": "f4b6f3b5596e9e70440df3b456d093d8f7a017563fc2df3fe0f7640cb36870de"
@@ -726,7 +613,7 @@
         },
         {
           "location": {
-            "uri": "file:///f:/lp/source.c++20/getmusicbrainz.h"
+            "uri": "file:///f:/lp/source/getmusicbrainz.h"
           },
           "hashes": {
             "sha-256": "e1ba7fe3c2382fbeb1187469850b176240cfd587c95fa91c3fc8c0ac53a6268d"
@@ -734,7 +621,7 @@
         },
         {
           "location": {
-            "uri": "file:///f:/lp/source.c++20/semanticrelations.h"
+            "uri": "file:///f:/lp/source/semanticrelations.h"
           },
           "hashes": {
             "sha-256": "dcc9042e917b449c89557b33105c8fcafa6f3a4645e98017cc4e63eaadcbc905"
@@ -742,7 +629,7 @@
         },
         {
           "location": {
-            "uri": "file:///f:/lp/source.c++20/profile.h"
+            "uri": "file:///f:/lp/source/profile.h"
           },
           "hashes": {
             "sha-256": "b83b6d924516ad8c135ec835581d801a4987da5172df5c96fe6e0a4cfdb1f026"
