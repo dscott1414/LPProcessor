@@ -1373,7 +1373,7 @@ int cSource::getSubType(int whereVerb,int &whereObject)
 	return st;
 }
 
-void cSource::adjustForStart(bool start,int &whereObject, int &whereVerb, int &wpd)
+void cSource::adjustForStart(bool start,int &whereObject, int &whereVerb, int &wpd,int &st)
 {
 	int pmaOffset,pd;
 	// they[tuppence,tommy] started walking down Dover Street towards Piccadilly
@@ -1390,6 +1390,7 @@ void cSource::adjustForStart(bool start,int &whereObject, int &whereVerb, int &w
 			if (!resolveTag(tagSets[J], vTag, vObject, whereVObject, vWord) || !resolveTag(tagSets[J], oTag, oObject, whereOObject, oWord) || oObject < 0) continue;
 			whereObject = tagSets[J][oTag].sourcePosition;
 			whereVerb = tagSets[J][vTag].sourcePosition;
+			st = objects[oObject].getSubType();
 			if (whereObject >= 0 && m[whereObject].endObjectPosition < (signed)m.size() && m[whereObject].endObjectPosition >= 0 &&
 				m[m[whereObject].endObjectPosition].queryWinnerForm(prepositionForm) >= 0 &&
 				((m[m[whereObject].endObjectPosition].word->second.flags & cSourceWordInfo::prepMoveType) || (m[m[whereObject].endObjectPosition].word->first == L"for")) &&
@@ -1405,7 +1406,7 @@ void cSource::adjustForStart(bool start,int &whereObject, int &whereVerb, int &w
 	}
 }
 
-bool cSource::determineIfPhysicalSubject(int where,int whereSubject)
+bool cSource::determineIfPhysicalSubject(int where,int &whereSubject)
 {
 	bool physicalSubject = true;
 	if (whereSubject >= 0 && m[whereSubject].getObject() >= 0 && objects[m[whereSubject].getObject()].neuter && !objects[m[whereSubject].getObject()].female && !objects[m[whereSubject].getObject()].male)
@@ -1458,6 +1459,13 @@ bool cSource::detectPlaceTransition(int where, int whereControllingEntity, int w
 	bool enter = verbClass.enter;
 	bool contiguous = verbClass.contiguous;
 	bool stay = verbClass.stay;
+	if (whereSubject >= 0 && (m[whereSubject].objectRole & PRIMARY_SPEAKER_ROLE) && whereObject < 0)
+		move = moveObject = moveInPlace = exit = stay = enter = contiguous = false;
+	else if (move && moveObject)
+	{
+		move = (whereObject < 0);
+		moveObject = (whereObject >= 0);
+	}
 	if ((!(m[where].objectRole & PRIMARY_SPEAKER_ROLE) || whereObject >= 0) &&
 		(whereSubject >= 0 || ((m[where].flags & cWordMatch::flagInQuestion) != 0 && inPrimaryQuote)) && (exit || enter || stay || move || moveObject || moveInPlace || contiguous))
 	{
@@ -1558,7 +1566,7 @@ bool cSource::detectPlaceTransition(int where, int whereControllingEntity, int w
 
 bool cSource::identifyObjectAsPlace(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet& verbClass, wstring id, bool pr, bool inPrimaryQuote, int st, int wpd, bool acceptableVerbForm, bool prepLocation, bool prepMustBeLocation)
 {
-	int o;
+	int o = -1;
 	bool isMatchedLocation = true;
 	bool transfer = verbClass.transfer;
 	bool contact = verbClass.contact;
@@ -1570,6 +1578,13 @@ bool cSource::identifyObjectAsPlace(int where, int whereControllingEntity, int w
 	bool enter = verbClass.enter;
 	bool contiguous = verbClass.contiguous;
 	bool stay = verbClass.stay;
+	if (whereSubject >= 0 && (m[whereSubject].objectRole & PRIMARY_SPEAKER_ROLE) && whereObject < 0)
+		move = moveObject = moveInPlace = exit = stay = enter = contiguous = false;
+	else if (move && moveObject)
+	{
+		move = (whereObject < 0);
+		moveObject = (whereObject >= 0);
+	}
 	wstring tmpstr, tmpstr2;
 	if (whereObject >= 0 && (o = m[whereObject].getObject()) >= 0 && objects[o].male && objects[o].female && objects[o].neuter && m[whereObject].objectMatches.size())
 	{
@@ -1641,13 +1656,15 @@ bool cSource::identifyObjectAsPlace(int where, int whereControllingEntity, int w
 			(prepLocation) ? L"true" : L"false", (prepMustBeLocation) ? L"true" : L"false", st,
 			(m[whereObject].getObject() >= 0) ? getClass(objects[m[whereObject].getObject()].objectClass).c_str() : L"",
 			(isMatchedLocation) ? L"true" : L"false");
+	return false;
 }
 
 // return values
 // if -1, return true in containing function.
 // if 0, continue in loop in containing function
 // if 1, do not return true, nor call continue in containing function.
-int cSource::detectPlacePreposition(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet& verbClass, wstring id, bool pr, bool inPrimaryQuote, int wherePrep, int whereLastPrepObject, bool acceptableVerbForm, bool prepMustBeLocation,bool objectMustBeLocation)
+int cSource::detectPlacePreposition(int where, const int whereControllingEntity, const int whereSubject, int &whereObject, const int whereVerb, cVerbNet& verbClass, wstring id, const bool pr, const bool inPrimaryQuote, const int wherePrep, int &whereLastPrepObject, 
+	const bool acceptableVerbForm, const bool prepMustBeLocation, const bool objectMustBeLocation)
 {
 	bool transfer = verbClass.transfer;
 	bool contact = verbClass.contact;
@@ -1661,6 +1678,13 @@ int cSource::detectPlacePreposition(int where, int whereControllingEntity, int w
 	bool start = verbClass.start;
 	bool noPrepTo = verbClass.noPrepTo;
 	bool noPrepFrom = verbClass.noPrepFrom;
+	if (whereSubject >= 0 && (m[whereSubject].objectRole & PRIMARY_SPEAKER_ROLE) && whereObject < 0)
+		move = moveObject = moveInPlace = exit = start = enter = contiguous = false;
+	else if (move && moveObject)
+	{
+		move = (whereObject < 0);
+		moveObject = (whereObject >= 0);
+	}
 	wstring tmpstr, tmpstr2;
 	// in the presence of XX
 	bool multiWordMovement = m[wherePrep].word->first == L"of" && wherePrep > 4 &&
@@ -1751,7 +1775,8 @@ int cSource::detectPlacePreposition(int where, int whereControllingEntity, int w
 		m[wherePrep].hasSyntacticRelationGroup = true; // so that the prepositions bound to an object won't pick this one up.
 		return -1;
 	}
-	if (whereObject == wherePrepObject) whereObject = -1;
+	if (whereObject == wherePrepObject) 
+		whereObject = -1;
 	if (!acceptvAM || (objectMustBeLocation && whereObject < 0)) 
 		return 0;
 	return 1;
@@ -1771,6 +1796,13 @@ int cSource::detectPlaceTransitionForPrep(int where, int whereControllingEntity,
 	bool exit = verbClass.exit;
 	bool enter = verbClass.enter;
 	bool contiguous = verbClass.contiguous;
+	if (whereSubject >= 0 && (m[whereSubject].objectRole & PRIMARY_SPEAKER_ROLE) && whereObject < 0)
+		move = moveObject = moveInPlace = exit = enter = contiguous = false;
+	else if (move && moveObject)
+	{
+		move = (whereObject < 0);
+		moveObject = (whereObject >= 0);
+	}
 	wstring tmpstr,tmpstr2,tmpstr3;
 	int wherePrepObject = m[wherePrep].getRelObject(), pd, wpd;
 	// if qualifying preposition after object, then this pertains only to the object
@@ -1800,6 +1832,8 @@ int cSource::detectPlaceTransitionForPrep(int where, int whereControllingEntity,
 			if (!prepMustBeLocation) 
 				return 0;
 		}
+		tmpstr.clear();
+		tmpstr2.clear();
 		if (prepMustBeLocation && (rejectPrep = (!(m[wpd].word->second.flags & cSourceWordInfo::physicalObjectByWN) && !objects[pd].isPossibleSubType(false))))
 		{
 			if (debugTrace.traceSpeakerResolution)
@@ -1859,6 +1893,13 @@ bool cSource::detectAdverbialWhere(int where, int whereControllingEntity, int wh
 	bool exit = verbClass.exit;
 	bool enter = verbClass.enter;
 	bool contiguous = verbClass.contiguous;
+	if (whereSubject >= 0 && (m[whereSubject].objectRole & PRIMARY_SPEAKER_ROLE) && whereObject < 0)
+		move = moveObject = moveInPlace = exit = enter = contiguous = false;
+	else if (move && moveObject)
+	{
+		move = (whereObject < 0);
+		moveObject = (whereObject >= 0);
+	}
 	if (whereObject >= 0 && acceptableVerbForm && physicalObject && (adverbialPlace(m[whereObject].endObjectPosition) || adverbialPlace(whereObject)))
 	{
 		int stType = stESTABLISH;
@@ -1951,6 +1992,7 @@ bool cSource::detectWhere(int where, int whereControllingEntity, int whereSubjec
 		newSR(where, m[whereSubject].getObject(), whereControllingEntity, whereSubject, whereVerb, -3, whereObject, m[whereSubject].beginObjectPosition - 1, -1, stLOCATIONRP, L"location relative phrase", pr);
 		return true;
 	}
+	return false;
 }
 
 // commands
@@ -1968,6 +2010,13 @@ bool cSource::detectMoveCommand(int where, int whereControllingEntity, int where
 	bool stay = verbClass.stay;
 	bool tmp1 = false, tmp2 = false, tmp3 = false, tmp4 = false, tmp5 = false; // debugging flags
 	int flags;
+	if (whereSubject >= 0 && (m[whereSubject].objectRole & PRIMARY_SPEAKER_ROLE) && whereObject < 0)
+		move = moveObject = moveInPlace = exit = stay = enter = contiguous = false;
+	else if (move && moveObject)
+	{
+		move = (whereObject < 0);
+		moveObject = (whereObject >= 0);
+	}
 	if ((tmp1 = (m[where].objectRole & IN_PRIMARY_QUOTE_ROLE) != 0) &&
 		//(whereObject<0 || (whereObject>=0 && m[whereObject].relNextObject<0 && (m[whereObject].word->second.timeFlags&T_UNIT))) && // command - come to-morrow
 		(tmp2 = whereSubject < 0 && !(m[whereVerb].flags & cWordMatch::flagInInfinitivePhrase)) &&
@@ -2036,6 +2085,7 @@ bool cSource::placeIdentification(int where, bool inPrimaryQuote, int whereContr
 	bool stay = vbNetClasses[vnClass].stay;
 	bool proLocation = false;
 	int whereObject = -1, wpd = -1;
+	int st = getSubType(whereVerb, whereObject);
 	if (move && moveObject)
 	{
 		move = (whereObject < 0);
@@ -2061,6 +2111,7 @@ bool cSource::placeIdentification(int where, bool inPrimaryQuote, int whereContr
 	int afterVerb=getAfterVerb(  where,   whereVerb,  whereSubject);
 	if (whereObject < 0 && adverbialPlace(afterVerb))
 	{
+		st = 0;
 		whereObject = afterVerb;
 		prepMustBeLocation = false;
 		proLocation = true;
@@ -2077,14 +2128,13 @@ bool cSource::placeIdentification(int where, bool inPrimaryQuote, int whereContr
 			(whereSubject < 0) ? L"(None)" : objectString(m[whereSubject].getObject(), tmpstr, false).c_str(), m[whereVerb].word->first.c_str(),
 			(whereObject < 0) ? L"(None)" : objectString(m[whereObject].getObject(), tmpstr2, false).c_str());
 	// they[tuppence,tommy] started walking down Dover Street towards Piccadilly
-	adjustForStart(start, whereObject, whereVerb, wpd);
+	adjustForStart(start, whereObject, whereVerb, wpd, st);
 	if (start && m[whereVerb].getMainEntry()->first == L"start" &&
 		whereSubject >= 0 && whereObject < 0 && whereVerb + 1 < (signed)m.size() && (m[whereVerb + 1].word->second.flags & cSourceWordInfo::prepMoveType) && m[whereVerb + 1].word->first != L"to")
 	{
 		newSR(where, -1, whereControllingEntity, whereSubject, whereVerb, whereVerb + 1, whereObject, -1, -1, stMOVE, L"start", true);
 		return true;
 	}
-	int st = getSubType(whereVerb, whereObject);
 	bool physicalSubject = determineIfPhysicalSubject(where,whereSubject);
 	bool pr = physicalSubject;
 	// verbs of self movement with direct objects 51.1
@@ -2155,6 +2205,7 @@ bool cSource::placeIdentification(int where, bool inPrimaryQuote, int whereContr
 	//		if (((m[wherePrep].word->second.flags&cSourceWordInfo::prepMoveType) || m[wherePrep].word->first==L"for") && !rejectPrepPhrase(wherePrep))
 	//			lplog(LOG_WHERE,L"%06d:activity noun PLACE:verb %s %s object %s",where,m[whereVerb].word->first.c_str(),m[wherePrep].word->first.c_str(),whereString(m[wherePrep].relObject,tmpstr,false).c_str());
 	//}
+	tmpstr.clear();
 	vector <cSyntacticRelationGroup>::iterator srg = findSyntacticRelationGroup(where);
 	if (srg == syntacticRelationGroups.end() || srg->where != where)
 		newSR(where, -1, whereControllingEntity, whereSubject, whereVerb, wherePrep, whereObject, -1, -1, vbNetClasses[vnClass].getRelationType(), vbNetClasses[vnClass].incorporatedVerbClassString(tmpstr).c_str(), contact);

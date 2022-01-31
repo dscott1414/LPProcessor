@@ -604,7 +604,7 @@ tIWMM cSource::resolveObjectToClass(int where, int o)
 		int objectClass = objects[o].objectClass;
 	if (objects[o].isLocationObject)
 		return Words.LOCATION;
-	if (objects[o].isTimeObject)
+	if (objects[o].getIsTimeObject())
 		return Words.TIME;
 	if (objects[o].numDefinitelyIdentifiedAsSpeaker > 0 || objects[o].numIdentifiedAsSpeaker > 0)
 		return Words.PPN;

@@ -174,7 +174,7 @@ wstring cSource::objectString(vector <cObject>::iterator object,wstring &logres,
 		if (object->verySuspect) logres += L"[verySuspect]";
 		if (object->ambiguous) logres += L"[ambiguous]";
 		if (object->eliminated) logres += L"[ELIMINATED]";
-		if (object->isTimeObject) logres += L"[TimeObject]";
+		if (object->getIsTimeObject()) logres += L"[TimeObject]";
 		if (object->isLocationObject) logres += L"[LocationObject]";
 		if (object->isWikiBusiness) logres += L"[WikiBusiness]";
 		if (object->isWikiPerson) logres += L"[WikiPerson]";
@@ -2651,7 +2651,7 @@ bool cSource::pushObjectIntoLocalFocus(int where, int matchingObject, bool ident
   {
     localObjects.push_back(cLocalFocus(matchingObject,inPrimaryQuote,inSecondaryQuote,
 			                     notSpeaker && !objects[matchingObject].numIdentifiedAsSpeaker && !objects[matchingObject].numDefinitelyIdentifiedAsSpeaker,
-													 physicallyPresentPosition(where,beginEntirePosition,physicallyEvaluated,false) && physicallyEvaluated && !objects[matchingObject].isTimeObject));
+													 physicallyPresentPosition(where,beginEntirePosition,physicallyEvaluated,false) && physicallyEvaluated && !objects[matchingObject].getIsTimeObject()));
     lsi=localObjects.begin()+localObjects.size()-1;
 		if (lsi->physicallyPresent && notSpeaker && (m[where].endObjectPosition-m[where].beginObjectPosition)==1 &&
 			(m[where].word->second.timeFlags&T_UNIT) && (m[where].flags&cWordMatch::flagFirstLetterCapitalized))
@@ -3926,10 +3926,10 @@ bool cSource::physicallyPresentPosition(int where,int beginObjectPosition,bool &
 	if (beginObjectPosition<0) return false;
   vector <cWordMatch>::iterator im=m.begin()+beginObjectPosition;
 	int at=im->principalWherePosition;
-	if (at>=0 && m[at].getObject()>=0 && objects[m[at].getObject()].isTimeObject) 
+	if (at>=0 && m[at].getObject()>=0 && objects[m[at].getObject()].getIsTimeObject())
 	{
-		//wstring tmpstr;
-		//lplog(LOG_RESOLUTION,L"%06d:time object %s not present.",where,objectString(m[at].getObject(),tmpstr,true).c_str());
+		wstring tmpstr;
+		lplog(LOG_RESOLUTION,L"%06d:CheckTest time object %s not present.",where,objectString(m[at].getObject(),tmpstr,true).c_str());
 		return false;
 	}
 	//if (m[at].getObject()>=0 && objects[m[at].getObject()].isLocationObject) return true;

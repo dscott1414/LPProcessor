@@ -881,7 +881,16 @@ public:
 	bool wikipediaAccessed;
 	bool dbPediaAccessed;
 	bool container; // object or subject of verb that in turn contains other objects
-	bool isTimeObject;
+	bool ito;
+	bool getIsTimeObject() {
+		return ito;
+	}
+	bool setIsTimeObject(bool setITO)
+	{
+		lplog(LOG_RESOLUTION, L"set object at where = %d to %s", begin, (setITO) ? L"true" : L"false");
+		ito = setITO;
+		return ito;
+	}
 	bool isLocationObject;
 	bool isWikiPlace;
 	bool isWikiPerson;
@@ -1003,7 +1012,7 @@ public:
 		genderNarrowed=false;
 		isKindOf=false;
 		wikipediaAccessed=false;
-		isTimeObject=false;
+		setIsTimeObject(false);
 		isLocationObject=false;
 		isWikiPlace=false;
 		isWikiPerson=false;
@@ -1045,7 +1054,7 @@ public:
 		partialMatch=false;
 		isKindOf=false;
 		wikipediaAccessed=false;
-		isTimeObject=false;
+		setIsTimeObject(false);
 		isLocationObject=false;
 		isWikiPlace=false;
 		isWikiPerson=false;
@@ -1141,7 +1150,7 @@ public:
 		isWikiPerson=flags&1; flags>>=1;
 		isWikiPlace=flags&1; flags>>=1;
 		isLocationObject=flags&1; flags>>=1;
-		isTimeObject=flags&1; flags>>=1;
+		setIsTimeObject(flags & 1); flags >>= 1;
 		dbPediaAccessed=flags&1; flags>>=1;
 		container=flags&1; flags>>=1;
 		wikipediaAccessed=flags&1; flags>>=1;
@@ -1245,7 +1254,7 @@ public:
 		flags|=(wikipediaAccessed) ? 1:0; flags<<=1;
 		flags|=(container) ? 1:0; flags<<=1;
 		flags|=(dbPediaAccessed) ? 1:0; flags<<=1;
-		flags|=(isTimeObject) ? 1:0; flags<<=1;
+		flags|=(getIsTimeObject()) ? 1:0; flags<<=1;
 		flags|=(isLocationObject) ? 1:0; flags<<=1;
 		flags|=(isWikiPlace) ? 1:0; flags<<=1;
 		flags|=(isWikiPerson) ? 1:0; flags<<=1;
@@ -2098,12 +2107,13 @@ int &numFirstInQuote,
 	bool exitConversion(int whereObject,int whereSubject,int wherePrepObject);
 	int getAfterVerb(const int where, const int whereVerb, const int whereSubject);
 	int getSubType(int whereVerb, int& whereObject);
-	void adjustForStart(bool start, int &whereObject, int &whereVerb, int& wpd);
-	bool determineIfPhysicalSubject(int where, int whereSubject);
+	void adjustForStart(bool start, int &whereObject, int &whereVerb, int& wpd, int &st);
+	bool determineIfPhysicalSubject(int where, int &whereSubject);
 	bool detectPlaceTransition(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet &verbClass, wstring id, bool pr, bool inPrimaryQuote, int st, bool proLocation);
 	bool identifyObjectAsPlace(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet& verbClass, wstring id, bool pr, bool inPrimaryQuote, int st, int wpd, bool acceptableVerbForm, bool prepLocation, bool prepMustBeLocation);
-	int detectPlacePreposition(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet& verbClass, wstring id, bool pr, bool inPrimaryQuote, int wherePrep, int whereLastPrepObject, bool acceptableVerbForm, bool prepMustBeLocation, bool objectMustBeLocation);
-	int detectPlaceTransitionForPrep(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet& verbClass, wstring id, bool pr, int wherePrep, bool proLocation, bool physicalObject, bool prepMustBeLocation, bool objectMustBeLocation, bool acceptableVerbForm);
+	int detectPlacePreposition(int where, const int whereControllingEntity, const int whereSubject, int& whereObject, const int whereVerb, cVerbNet& verbClass, wstring id, const bool pr, const bool inPrimaryQuote, const int wherePrep, 
+		int &whereLastPrepObject, const bool acceptableVerbForm, const bool prepMustBeLocation, const bool objectMustBeLocation);
+		int detectPlaceTransitionForPrep(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet& verbClass, wstring id, bool pr, int wherePrep, bool proLocation, bool physicalObject, bool prepMustBeLocation, bool objectMustBeLocation, bool acceptableVerbForm);
 	bool detectAdverbialWhere(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet& verbClass, wstring id, bool pr, bool physicalObject, bool acceptableVerbForm);
 	bool detectExit(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, int afterVerb, wstring id, bool pr, bool inPrimaryQuote);
 	int detectObjectTransfer(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet& verbClass, wstring id, bool pr);
@@ -2886,10 +2896,11 @@ wstring &logMatch,
 		vector <int>& whereSubjects, vector <int>& subjectObjects, vector <tIWMM>& subjectWords,
 		const bool isId, const bool isNonPast, const bool isNonPresent, const bool isNot, const bool subjectIsPleonastic, const bool objectAsSubject);
 	void adjustAttachmentOfPrecedingRelativizer(int whereSubject);
-	bool evaluateVerbRoleTags(int where,int& hverbTagIndex, int& verbTagIndex, int& whereHVerb, int& whereVerb, int& notTag, int& len, bool& nextVerbInSeries, int& sense, int& tsSense, int& whereLastVerb, int& begin, int& end,
-		bool& isId, bool& isNot, bool& withinInfinitivePhrase, bool& isNonPast, bool& isNonPresent, bool& ambiguousSense, bool& inPrimaryQuote, bool& inQuotedString, bool& inSectionHeader, vector <cTagLocation>& tagSet);
+	bool evaluateVerbRoleTags(int where, int& hverbTagIndex, int& verbTagIndex, int& whereHVerb, int& whereVerb, int& notTag, int& len, bool& nextVerbInSeries, int& sense, int& tsSense,
+		int& whereLastVerb, int& begin, int& end, bool& isId, bool& isNot, bool& withinInfinitivePhrase, bool& isNonPast, bool& isNonPresent, bool& ambiguousSense, bool& inPrimaryQuote, bool& inQuotedString,
+		bool& inSectionHeader, vector <cTagLocation>& tagSet, int& infpElement, int firstFreePrep, vector <int>& futureBoundPrepositions, bool inSecondaryQuote, int &whereIVerb);
 	void overrideRelativeObject(int where,vector <cTagLocation>& tagSet, int whereVerb, int whereObject, const vector <int> whereSubjects,bool noObjects);
-	void handleLeadingPreposition(int where, bool objectAsSubject, vector <int>& whereSubjects, int whereVerb, int whereObject);
+	void handleLeadingPreposition(const int where, const bool objectAsSubject, vector <int>& whereSubjects, const int whereVerb, int &whereObject);
 	void setInfinitiveRelations(int whereVerb, int whereIVerb, const vector <int> whereSubjects);
 	bool evaluateAdditionalRoleTags(int where, vector <cTagLocation>& tagSet, int len, int firstFreePrep, vector <int>& futureBoundPrepositions, bool inPrimaryQuote, bool inSecondaryQuote, bool& outsideQuoteTruth, bool& inQuoteTruth, bool withinInfinitivePhrase, bool internalInfinitivePhrase,
 																	bool &nextVerbInSeries,int &sense,int &whereLastVerb,bool &ambiguousSense,bool inQuotedString,bool inSectionHeader,int begin,int end);

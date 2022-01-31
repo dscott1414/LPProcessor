@@ -512,8 +512,8 @@ bool cQuestionAnswering::matchSourcePositions(cSource* parentSource, int parentW
 				return synonym = true;
 		}
 		// time objects?
-		if (parentSource->m[parentWhere].getObject() >= 0 && parentSource->objects[parentSource->m[parentWhere].getObject()].isTimeObject &&
-			childSource->m[childWhere].getObject() >= 0 && childSource->objects[childSource->m[childWhere].getObject()].isTimeObject &&
+		if (parentSource->m[parentWhere].getObject() >= 0 && parentSource->objects[parentSource->m[parentWhere].getObject()].getIsTimeObject() &&
+			childSource->m[childWhere].getObject() >= 0 && childSource->objects[childSource->m[childWhere].getObject()].getIsTimeObject() &&
 			matchTimeObjects(parentSource, parentWhere, childSource, childWhere))
 			return true;
 		if (parentSource->m[parentWhere].objectMatches.empty() && parentSource->matchChildSourcePositionSynonym(parentSource->m[parentWhere].word, childSource, childWhere))
@@ -2171,7 +2171,7 @@ bool cQuestionAnswering::analyzeRDFTypeBirthDate(cSource* questionSource, cSynta
 		questionSource->prepPhraseToString(ssri->wherePrep, ps);
 		questionSource->printSRG(L":analyzeRDFTypeBirthDate ", ssri, -1, ssri->whereSubject, ssri->whereObject, ps, false, -1, L"analyzeRDFTypeBirthDate", (ssri->questionType) ? LOG_WHERE | LOG_QCHECK : LOG_WHERE);
 		cOM object = questionSource->createObject(derivation, birthDate, NON_GENDERED_GENERAL_OBJECT_CLASS);
-		questionSource->objects[object.object].isTimeObject = true;
+		questionSource->objects[object.object].setIsTimeObject(true);
 		// cAS(wstring _sourceType, cSource *_source, int _confidence, int _matchSum, wstring _matchInfo, cSyntacticRelationGroup* _sri, int _equivalenceClass, int _ws, int _wo, int _wp, bool _fromTable, wstring _tableNum, wstring _tableName, int _columnIndex, int _rowIndex, int _entryIndex, cColumn::cEntry *_entry)
 		if (ssri->wherePrepObject >= 0)
 			questionSource->m[ssri->wherePrepObject].objectMatches.push_back(object);
@@ -2495,7 +2495,7 @@ int cQuestionAnswering::checkParticularPartQuestionTypeCheck(cSource* questionSo
 				childObject->isWikiPlace)
 				return 1;
 			if (childObject->getSubType() == NOT_A_PLACE ||
-				childObject->isTimeObject ||
+				childObject->getIsTimeObject() ||
 				childObject->isWikiPerson ||
 				childObject->isWikiWork ||
 				childObject->isWikiBusiness)
@@ -2537,7 +2537,7 @@ int cQuestionAnswering::checkParticularPartQuestionTypeCheck(cSource* questionSo
 				semanticMismatch = 7;
 				return CONFIDENCE_NOMATCH;
 			}
-			if (wikiDetermined && !childObject->isWikiPerson && (childObject->isTimeObject || childObject->isLocationObject || childObject->isWikiPlace || childObject->isWikiBusiness))
+			if (wikiDetermined && !childObject->isWikiPerson && (childObject->getIsTimeObject() || childObject->isLocationObject || childObject->isWikiPlace || childObject->isWikiBusiness))
 			{
 				semanticMismatch = 8;
 				return CONFIDENCE_NOMATCH;
@@ -2549,7 +2549,7 @@ int cQuestionAnswering::checkParticularPartQuestionTypeCheck(cSource* questionSo
 		}
 		return CONFIDENCE_NOMATCH;
 	case cQuestionAnswering::whenQTFlag:
-		if (!childObject->isTimeObject)
+		if (!childObject->getIsTimeObject())
 		{
 			semanticMismatch = 9;
 			return CONFIDENCE_NOMATCH;

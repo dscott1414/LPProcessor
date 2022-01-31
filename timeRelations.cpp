@@ -502,7 +502,7 @@ bool cSource::detectTimeTransition(int where, vector <cSyntacticRelationGroup>::
 				oc != NON_GENDERED_NAME_OBJECT_CLASS &&
 				oc != META_GROUP_OBJECT_CLASS)
 				return false;
-			objects[m[where].getObject()].isTimeObject = true;
+			objects[m[where].getObject()].setIsTimeObject(true);
 			wstring tmpstr;
 			if (debugTrace.traceSpeakerResolution)
 				lplog(LOG_RESOLUTION, L"%06d:made time object [DTT] %s", where, objectString(m[where].getObject(), tmpstr, false).c_str());
@@ -1466,7 +1466,7 @@ void cSource::appendTime(vector <cSyntacticRelationGroup>::iterator csr)
 	int maxLen = -1;
 	if (csr->whereSubject >= 0 && m[csr->whereSubject].getObject() >= 0)
 	{
-		if (csr->relationType != stABSTIME && m[csr->whereSubject].relPrep < 0 && objects[m[csr->whereSubject].getObject()].isTimeObject)
+		if (csr->relationType != stABSTIME && m[csr->whereSubject].relPrep < 0 && objects[m[csr->whereSubject].getObject()].getIsTimeObject())
 		{
 			wstring tmpstr;
 			if (debugTrace.traceTime)
@@ -1475,7 +1475,7 @@ void cSource::appendTime(vector <cSyntacticRelationGroup>::iterator csr)
 			csr->tft.timeTransition = true;
 		}
 		if (objects[m[csr->whereSubject].getObject()].objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS ||
-			objects[m[csr->whereSubject].getObject()].isTimeObject)
+			objects[m[csr->whereSubject].getObject()].getIsTimeObject())
 			identifyDateTime(csr->whereSubject, csr, maxLen, 0);
 	}
 	if (csr->relationType == stADVERBTIME)
@@ -1642,12 +1642,12 @@ void cSource::detectTimeTransition(int where, vector <int>& lastSubjects)
 			if (m[wt].getRelObject() >= 0 && m[m[wt].getRelObject()].queryWinnerForm(numeralOrdinalForm) >= 0)
 			{
 				timeType = stSUBJDAYOFMONTHTIME;
-				objects[m[m[wt].getRelObject()].getObject()].isTimeObject = true;
+				objects[m[m[wt].getRelObject()].getObject()].setIsTimeObject(true);
 			}
 			else
 			{
 				if (m[wt].getObject() >= 0)
-					objects[m[wt].getObject()].isTimeObject = true;
+					objects[m[wt].getObject()].setIsTimeObject(true);
 				m[wt].timeColor = T_UNIT;
 				return;
 			}
@@ -1685,7 +1685,7 @@ void cSource::detectTimeTransition(int where, vector <int>& lastSubjects)
 		where = wt;
 		if (m[where].getObject() >= 0)
 		{
-			objects[m[where].getObject()].isTimeObject = true;
+			objects[m[where].getObject()].setIsTimeObject(true);
 			wstring tmpstr;
 			if (debugTrace.traceTime)
 				lplog(LOG_RESOLUTION, L"%06d:Marking %s as timeObject", where, objectString(m[where].getObject(), tmpstr, false).c_str());
@@ -1705,7 +1705,7 @@ void cSource::detectTimeTransition(int where, vector <int>& lastSubjects)
 		if (timeType >= 0)
 		{
 			where = whereTime = saveWhere;
-			objects[m[where].getObject()].isTimeObject = true;
+			objects[m[where].getObject()].setIsTimeObject(true);
 		}
 	}
 	else if (m[where].pma.queryPattern(L"_TIME") != -1 && (m[where].objectRole & SUBJECT_PLEONASTIC_ROLE))
@@ -1713,7 +1713,7 @@ void cSource::detectTimeTransition(int where, vector <int>& lastSubjects)
 		whereTime = where;
 		timeType = stABSTIME;
 		if (m[where].getObject() >= 0)
-			objects[m[where].getObject()].isTimeObject = true;
+			objects[m[where].getObject()].setIsTimeObject(true);
 	}
 	// IT was May 7 , 1915
 	else if (m[where].pma.queryPattern(L"_DATE") != -1 && (m[where].objectRole & SUBJECT_PLEONASTIC_ROLE))
@@ -1721,7 +1721,7 @@ void cSource::detectTimeTransition(int where, vector <int>& lastSubjects)
 		whereTime = where;
 		timeType = stABSDATE;
 		if (m[where].getObject() >= 0)
-			objects[m[where].getObject()].isTimeObject = true;
+			objects[m[where].getObject()].setIsTimeObject(true);
 	}
 	if (timeType >= 0)
 	{

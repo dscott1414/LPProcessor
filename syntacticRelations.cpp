@@ -1895,7 +1895,7 @@ void cSource::overrideRelativeObject(int where, vector <cTagLocation>& tagSet, i
 	}
 }
 
-void cSource::handleLeadingPreposition(int where, bool objectAsSubject, vector <int>& whereSubjects, int whereVerb, int whereObject)
+void cSource::handleLeadingPreposition(const int where, const bool objectAsSubject, vector <int>& whereSubjects, const int whereVerb, int &whereObject)
 {
 	if (objectAsSubject && whereSubjects.size() > 0 && whereSubjects[0] > 0 && m[whereSubjects[0] - 1].queryWinnerForm(prepositionForm) >= 0 && m[whereVerb].getRelObject() >= 0 && whereSubjects[0] > 0 &&
 		(m[whereSubjects[0] - 1].pma.queryPatternDiff(L"__C1__S1", L"2") != -1))
@@ -1971,8 +1971,9 @@ void cSource::extendRolesThroughExtendedIdentitySentence(int where, int len, boo
 	}
 }
 
-bool cSource::evaluateVerbRoleTags(int where, int& hverbTagIndex, int& verbTagIndex, int& whereHVerb, int& whereVerb, int& notTag, int& len, bool& nextVerbInSeries, int& sense, int& tsSense, int& whereLastVerb, int& begin, int& end,
-	bool& isId, bool& isNot, bool& withinInfinitivePhrase, bool& isNonPast, bool& isNonPresent, bool& ambiguousSense, bool& inPrimaryQuote, bool& inQuotedString, bool& inSectionHeader, vector <cTagLocation>& tagSet)
+bool cSource::evaluateVerbRoleTags(int where, int& hverbTagIndex, int& verbTagIndex, int& whereHVerb, int& whereVerb, int& notTag, int& len, bool& nextVerbInSeries, int& sense, int& tsSense, 
+	int& whereLastVerb, int& begin, int& end,	bool& isId, bool& isNot, bool& withinInfinitivePhrase, bool& isNonPast, bool& isNonPresent, bool& ambiguousSense, bool& inPrimaryQuote, bool& inQuotedString, 
+	bool& inSectionHeader, vector <cTagLocation>& tagSet, int &infpElement,	int firstFreePrep, vector <int> &futureBoundPrepositions, bool inSecondaryQuote, int &whereIVerb)
 {
 	wstring tmpstr;
 	int nextTag = -1;
@@ -2048,6 +2049,10 @@ bool cSource::evaluateVerbRoleTags(int where, int& hverbTagIndex, int& verbTagIn
 		}
 	}
 	else return false;
+	infpElement = (where + len < (signed)m.size()) ? m[where + len].pma.queryPattern(L"__INFP") : -1;
+	int iverbTag = findOneTag(tagSet, L"IVERB", -1);
+	if (iverbTag >= 0 || infpElement != -1)
+		whereIVerb = processInternalInfinitivePhrase(where + len, whereVerb, -1, iverbTag, firstFreePrep, futureBoundPrepositions, inPrimaryQuote, inSecondaryQuote, nextVerbInSeries, sense, whereLastVerb, ambiguousSense, inQuotedString, inSectionHeader, begin, end, infpElement, tagSet);
 	if (isPossible(whereVerb)) tsSense |= VT_POSSIBLE;
 	// the purpose was not to direct but to succeed.
 	// "not" can also come right after the verb which unfortunately is captured by the object after the verb and not the verb itself because adverbs so often come
@@ -2143,11 +2148,13 @@ bool cSource::evaluateAdditionalRoleTags(int where, vector <cTagLocation>& tagSe
 			(inQuoteTruth) ? L"true" : L"false",
 			(inPrimaryQuote) ? L"true" : L"false",
 			(inSecondaryQuote) ? L"true" : L"false");
-	int nextTag = -1, verbTagIndex, tsSense, whereVerb = -1, notTag, whereHVerb = -1, hverbTagIndex;
-	int numObjects = 0;
+	int nextTag = -1, verbTagIndex, tsSense, whereVerb = -1, notTag, whereHVerb = -1, whereIVerb = -1, hverbTagIndex;
+	int numObjects = 0, infpElement;
 	bool isId = false, isNot = false, isNonPast = false, isNonPresent = false;
 	wstring tmpstr, tmpstr2;
-	if (!evaluateVerbRoleTags(where, hverbTagIndex, verbTagIndex, whereHVerb, whereVerb, notTag, len, nextVerbInSeries, sense, tsSense, whereLastVerb, begin, end, isId, isNot, withinInfinitivePhrase, isNonPast, isNonPresent, ambiguousSense, inPrimaryQuote, inQuotedString, inSectionHeader, tagSet))
+	if (!evaluateVerbRoleTags(where, hverbTagIndex, verbTagIndex, whereHVerb, whereVerb, notTag, len, nextVerbInSeries, sense, tsSense, 
+		whereLastVerb,begin, end, isId, isNot, withinInfinitivePhrase, isNonPast, isNonPresent, ambiguousSense, inPrimaryQuote, inQuotedString, 
+		inSectionHeader, tagSet, infpElement, firstFreePrep, futureBoundPrepositions, inSecondaryQuote, whereIVerb	))
 		return false;
 	nextTag = -1;
 	vector <int> whereSubjects;
@@ -2157,7 +2164,8 @@ bool cSource::evaluateAdditionalRoleTags(int where, vector <cTagLocation>& tagSe
 	evaluateSubjects(where, tagSet, inPrimaryQuote, inSecondaryQuote, withinInfinitivePhrase, internalInfinitivePhrase, whereVerb, whereSubjects, tsSense, isId, isNonPast, objectAsSubject, subjectIsPleonastic, noObjects, subjectWords, subjectObjects, backwardsSubjects);
 	bool delayedReceiver = whereVerb >= 0 &&
 		isDelayedReceiver((m[whereVerb].word->second.mainEntry == wNULL) ? m[whereVerb].word : m[whereVerb].word->second.mainEntry);
-	markPrepositionalObjects(where, whereVerb, withinInfinitivePhrase, subjectIsPleonastic, objectAsSubject, isId, inPrimaryQuote, inSecondaryQuote, isNot, isNonPast, isNonPresent, noObjects, delayedReceiver, tsSense, tagSet);
+	markPrepositionalObjects(where, whereVerb, withinInfinitivePhrase, subjectIsPleonastic, objectAsSubject, isId, inPrimaryQuote, inSecondaryQuote, 
+		isNot, isNonPast, isNonPresent, noObjects, delayedReceiver, tsSense, tagSet);
 	// Occasionally PREP may not be visible from the S1 structure
 	// He[man] indicated the place he[man] had been occupying at the head of the table[table] .
 	if (m[whereVerb].relPrep < 0 && whereVerb + 2 < (signed)m.size() && m[whereVerb + 1].pma.queryPattern(L"_PP") != -1 && m[whereVerb + 1].isOnlyWinner(prepositionForm) &&
@@ -2178,7 +2186,6 @@ bool cSource::evaluateAdditionalRoleTags(int where, vector <cTagLocation>& tagSe
 	int whereObject = -1;
 	int hObjectTag = findOneTag(tagSet, L"HOBJECT", -1);
 	int whereHObject = (hObjectTag >= 0) ? m[tagSet[hObjectTag].sourcePosition].principalWherePosition : -1;
-	int infpElement = (where + len < (signed)m.size()) ? m[where + len].pma.queryPattern(L"__INFP") : -1;
 	processObjects(where, tagSet, firstFreePrep, futureBoundPrepositions, inPrimaryQuote,
 		inSecondaryQuote, withinInfinitivePhrase, nextVerbInSeries, sense, whereLastVerb, ambiguousSense,
 		inQuotedString, inSectionHeader, begin, end,
@@ -2198,13 +2205,8 @@ bool cSource::evaluateAdditionalRoleTags(int where, vector <cTagLocation>& tagSe
 		m[whereVerb].relSubject = whereHObject;
 		m[whereVerb].hasVerbRelations = true;
 	}
-	int iverbTag = findOneTag(tagSet, L"IVERB", -1), whereIVerb = -1;
-	if (iverbTag >= 0 || infpElement != -1)
-	{
-		whereIVerb = processInternalInfinitivePhrase(where + len, whereVerb, -1, iverbTag, firstFreePrep, futureBoundPrepositions, inPrimaryQuote, inSecondaryQuote, nextVerbInSeries, sense, whereLastVerb, ambiguousSense, inQuotedString, inSectionHeader, begin, end, infpElement, tagSet);
-		if (whereIVerb >= 0 && m[whereIVerb].relSubject < 0)
-			setInfinitiveRelations(whereVerb, whereIVerb, whereSubjects);
-	}
+	if (whereIVerb >= 0 && m[whereIVerb].relSubject < 0)
+		setInfinitiveRelations(whereVerb, whereIVerb, whereSubjects);
 	// take care of double negatives.  He was not unknown to the watcher.
 	int adjObjectTag = (numObjects == 0) ? findOneTag(tagSet, L"ADJOBJECT", -1) : -1;
 	if (adjObjectTag >= 0 && isNot && isId)
