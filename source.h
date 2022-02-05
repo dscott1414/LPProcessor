@@ -2648,10 +2648,8 @@ private:
 	bool scanFutureGenderedMatchingObjects(int where,bool inQuote,vector <cObject>::iterator object,vector <cOM> &objectMatches);
 	void includeWordOrderPreferences(int where,int wordOrderSensitiveModifier);
 	bool resolveGenderedObject(int where,bool definitelyResolveSpeaker,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,
-vector <cOM> &objectMatches,
-														 vector <cObject>::iterator object,
-int wordOrderSensitiveModifier,
-														 int &subjectCataRestriction,bool &mixedPlurality,bool limitTwo,bool isPhysicallyPresent,bool physicallyEvaluated);
+					vector <cOM> &objectMatches,vector <cObject>::iterator object,int wordOrderSensitiveModifier,
+					int &subjectCataRestriction,bool &mixedPlurality,bool limitTwo,bool isPhysicallyPresent,bool physicallyEvaluated);
 	void mixedPluralityUsageSubGroupEnhancement(int where);
 	void processSubjectCataRestriction(int where,int subjectCataRestriction);
 	void addPreviousDemonyms(int where);
@@ -2665,7 +2663,27 @@ int wordOrderSensitiveModifier,
 	bool resolveWordOrderOfObject(int where,int wo,int ofObjectWhere,vector <cOM> &objectMatches);
 	void setQuoteContainsSpeaker(int where,bool inPrimaryQuote);
 	void setResolved(int where,vector <cLocalFocus>::iterator lsi,bool isPhysicallyPresent);
-	void resolveObject(int where,bool definitelySpeaker,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,bool resolveForSpeaker,bool avoidCurrentSpeaker,bool limitTwo);
+	void setMatchesAndLocalResolved(int where, bool resolveForSpeaker, bool isPhysicallyPresent);
+	void pushSpeakerGroupResolvedObjectToLocalFocus(int where, bool inPrimaryQuote, bool inSecondaryQuote);
+	bool resolveSpecialPronounObjects(int where, bool inPrimaryQuote, bool inSecondaryQuote);
+	bool getPresentAssertion(int where, bool inPrimaryQuote);
+	bool unresolvableObject(int where, int beginEntirePosition, bool inPrimaryQuote, bool inSecondaryQuote, bool resolveForSpeaker, bool isPhysicallyPresent);
+	void reclassifyGenderedOccupationalRoleActivityToNameObject(int where, int beginEntirePosition, bool inPrimaryQuote, bool inSecondaryQuote);
+	bool resolveFirstPersonSecondPersonPronoun(int where, int person, bool inPrimaryQuote, bool inSecondaryQuote);
+	void resolveGenderedOccupationalRoleActivityClass(int where, vector <cObject>::iterator object, vector <cOM>& objectMatches, const int wordOrderSensitiveModifier,
+		bool& chooseFromLocalFocus, const bool isPhysicallyPresent, const bool physicallyEvaluated);
+	bool resolveIsKindOf(int where, bool definitelySpeaker, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb,
+		bool resolveForSpeaker, bool avoidCurrentSpeaker, bool limitTwo, vector <cOM>& objectMatches);
+	void deleteCurrentSpeaker(int where);
+	void avoidFollowingRelativeClauseSubject(int where, vector <cObject>::iterator object, bool chooseFromLocalFocus, vector <cOM>& objectMatches);
+	bool definitelyNotSpeaker(int where, vector <cObject>::iterator object, bool definitelySpeaker);
+	void reclassifyWikiPersonSubject(int where, vector <cObject>::iterator object);
+	bool isNotLocallyMatched(int where, vector <cObject>::iterator object, int beginEntirePosition, int lastBeginS1, bool& notSpeaker);
+	void pushObjectMatchesToLocalFocus(int where, vector <cObject>::iterator object, bool inPrimaryQuote, bool inSecondaryQuote, bool definitelySpeaker, bool notSpeaker, vector <cOM>& objectMatches);
+	bool pleonasticIt(int where);
+	void pushObjectMatchesIntoLocalFocusAndLocation(int where, vector <cObject>::iterator object, bool inPrimaryQuote, bool inSecondaryQuote, bool definitelySpeaker, bool notSpeaker, bool inSpeakerGroup, vector <cOM>& objectMatches);
+	void cataphoricallyMatch(int where, int lastBeginS1, vector <cObject>::iterator object);
+	void resolveObject(int where, bool definitelySpeaker, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool resolveForSpeaker, bool avoidCurrentSpeaker, bool limitTwo);
 	bool quotedString(unsigned int beginQuote,unsigned int endQuote,bool &noTextBeforeOrAfter,bool &noSpeakerAfterward);
 	int speakerBefore(int beginQuote,bool &previousParagraph);
 	void addCataSpeaker(int position,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,bool definitelySpeaker);

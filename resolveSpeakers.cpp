@@ -2240,7 +2240,7 @@ void cSource::replaceObject(int replacementObject, int objectToBeReplaced, const
 				if (debugTrace.traceSpeakerResolution)
 				{
 					wstring tmpstr;
-					lplog(LOG_RESOLUTION,L"%06d:Removed %s from localObjects",objects[objectToBeReplaced].originalLocation,objectString(lsi->om.object,tmpstr,true).c_str());
+					lplog(LOG_RESOLUTION,L"%06d:Removed %s from localObjects (1)",objects[objectToBeReplaced].originalLocation,objectString(lsi->om.object,tmpstr,true).c_str());
 				}
         localObjects.erase(lsi);
 			}
@@ -2576,7 +2576,7 @@ void cSource::replaceObjectWithObject(int where,vector <cObject>::iterator &obje
 	{
 		if (debugTrace.traceSpeakerResolution)
 		{
-			lplog(LOG_RESOLUTION,L"%06d:Removed %s from localObjects",where,objectString(lsi->om.object,tmpstr,true).c_str());
+			lplog(LOG_RESOLUTION,L"%06d:Removed %s from localObjects (2)",where,objectString(lsi->om.object,tmpstr,true).c_str());
 		}
 		localObjects.erase(lsi);
 	}
@@ -4122,7 +4122,7 @@ bool cSource::eliminateExactMatchingLocalObject(int where)
 				if (debugTrace.traceSpeakerResolution)
 				{
 					wstring tmpstr;
-					lplog(LOG_RESOLUTION,L"%06d:Removed %s from localObjects",where,objectString(lsi->om.object,tmpstr,true).c_str());
+					lplog(LOG_RESOLUTION,L"%06d:Removed %s from localObjects (3)",where,objectString(lsi->om.object,tmpstr,true).c_str());
 				}
 				localObjects.erase(lsi);
 				return true;
@@ -6776,7 +6776,7 @@ void cSource::ageSpeaker(int where,bool inPrimaryQuote,bool inSecondaryQuote,vec
     if (debugTrace.traceSpeakerResolution)
     {
       wstring tmpstr;
-      lplog(LOG_RESOLUTION,L"%06d:Removed %s from localObjects",where,objectString(lfi->om.object,tmpstr,true).c_str());
+      lplog(LOG_RESOLUTION,L"%06d:Removed %s from localObjects (4)",where,objectString(lfi->om.object,tmpstr,true).c_str());
     }
     lfi=localObjects.erase(lfi);
   }
@@ -6796,7 +6796,7 @@ void cSource::ageSpeaker(int where,vector <cLocalFocus>::iterator &lfi,int amoun
     if (debugTrace.traceSpeakerResolution)
     {
       wstring tmpstr;
-      lplog(LOG_RESOLUTION,L"%06d:Removed %s from localObjects",where,objectString(lfi->om.object,tmpstr,true).c_str());
+      lplog(LOG_RESOLUTION,L"%06d:Removed %s from localObjects (5)",where,objectString(lfi->om.object,tmpstr,true).c_str());
     }
     lfi=localObjects.erase(lfi);
   }
@@ -7947,7 +7947,7 @@ void cSource::ageIntoNewSpeakerGroup(int where)
 			if (debugTrace.traceSpeakerResolution)
 			{
 				wstring tmpstr;
-				lplog(LOG_RESOLUTION,L"%06d:Removed %s from localObjects",where,objectString(lfi->om.object,tmpstr,true).c_str());
+				lplog(LOG_RESOLUTION,L"%06d:Removed %s from localObjects (6)",where,objectString(lfi->om.object,tmpstr,true).c_str());
 			}
       lfi=localObjects.erase(lfi); // if NAME, ageSpeaker will never delete this, so if not in speakerGroup, then remove
 		}
