@@ -3,7 +3,6 @@ C:\lp\processGutenbergRDFtoSQL\bin\x64\Debug\processGutenbergRDFtoSQL.pdb
 C:\lp\processGutenbergRDFtoSQL\obj\x64\Debug\processGutenbergRDFtoSQL.exe
 C:\lp\processGutenbergRDFtoSQL\obj\x64\Debug\processGutenbergRDFtoSQL.pdb
 C:\lp\processGutenbergRDFtoSQL\obj\x64\Debug\processGutenbergRDFtoSQL.csprojResolveAssemblyReference.cache
-F:\lp\source\processGutenbergRDFtoSQL\obj\x64\Debug\processGutenbergRDFtoSQL.csprojAssemblyReference.cache
 F:\lp\source\processGutenbergRDFtoSQL\obj\x64\Debug\processGutenbergRDFtoSQL.csproj.CoreCompileInputs.cache
 F:\lp\source\processGutenbergRDFtoSQL\obj\x64\Debug\processGutenbergRDFtoSQL.exe
 F:\lp\source\processGutenbergRDFtoSQL\obj\x64\Debug\processGutenbergRDFtoSQL.pdb
@@ -14,3 +13,5 @@ F:\lp\source\processGutenbergRDFtoSQL\bin\x64\Debug\BouncyCastle.Crypto.dll
 F:\lp\source\processGutenbergRDFtoSQL\bin\x64\Debug\MySql.Data.dll
 F:\lp\source\processGutenbergRDFtoSQL\bin\x64\Debug\MySql.Data.xml
 F:\lp\source\processGutenbergRDFtoSQL\obj\x64\Debug\processGutenbergRDFtoSQL.csproj.CopyComplete
+F:\lp\source\processGutenbergRDFtoSQL\obj\x64\Debug\processGutenbergRDFtoSQL.csproj.AssemblyReference.cache
+F:\lp\source\processGutenbergRDFtoSQL\obj\x64\Debug\processGutenbergRDFtoSQL.csproj.SuggestedBindingRedirects.cache

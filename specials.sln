@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.28307.438
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.32112.339
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "CorpusAnalysis", "specials.vcxproj", "{082462F8-F409-4DE1-854A-1F654B517E71}"
 EndProject
@@ -13,14 +13,22 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "checkTypes", "checkTypes\ch
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "convertPDFTextToDatabase", "convertPDFTextToDatabase\convertPDFTextToDatabase\convertPDFTextToDatabase.vcxproj", "{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "compareLargeFiles", "..\compareLargeFiles\compareLargeFiles.vcxproj", "{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
 		GetWordFormsFromDictionary|Any CPU = GetWordFormsFromDictionary|Any CPU
 		GetWordFormsFromDictionary|x64 = GetWordFormsFromDictionary|x64
 		GetWordFormsFromDictionary|x86 = GetWordFormsFromDictionary|x86
 		patternAnalysis|Any CPU = patternAnalysis|Any CPU
 		patternAnalysis|x64 = patternAnalysis|x64
 		patternAnalysis|x86 = patternAnalysis|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
 		StanfordAllSources|Any CPU = StanfordAllSources|Any CPU
 		StanfordAllSources|x64 = StanfordAllSources|x64
 		StanfordAllSources|x86 = StanfordAllSources|x86
@@ -32,6 +40,12 @@ Global
 		StanfordParseTest|x86 = StanfordParseTest|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{082462F8-F409-4DE1-854A-1F654B517E71}.Debug|Any CPU.ActiveCfg = ReleaseParseTest|x64
+		{082462F8-F409-4DE1-854A-1F654B517E71}.Debug|Any CPU.Build.0 = ReleaseParseTest|x64
+		{082462F8-F409-4DE1-854A-1F654B517E71}.Debug|x64.ActiveCfg = ReleaseParseTest|x64
+		{082462F8-F409-4DE1-854A-1F654B517E71}.Debug|x64.Build.0 = ReleaseParseTest|x64
+		{082462F8-F409-4DE1-854A-1F654B517E71}.Debug|x86.ActiveCfg = ReleaseParseTest|Win32
+		{082462F8-F409-4DE1-854A-1F654B517E71}.Debug|x86.Build.0 = ReleaseParseTest|Win32
 		{082462F8-F409-4DE1-854A-1F654B517E71}.GetWordFormsFromDictionary|Any CPU.ActiveCfg = ReleaseGetWordFormsFromDictionary|Win32
 		{082462F8-F409-4DE1-854A-1F654B517E71}.GetWordFormsFromDictionary|x64.ActiveCfg = ReleaseGetWordFormsFromDictionary|x64
 		{082462F8-F409-4DE1-854A-1F654B517E71}.GetWordFormsFromDictionary|x64.Build.0 = ReleaseGetWordFormsFromDictionary|x64
@@ -42,6 +56,12 @@ Global
 		{082462F8-F409-4DE1-854A-1F654B517E71}.patternAnalysis|x64.Build.0 = patternAnalysis|x64
 		{082462F8-F409-4DE1-854A-1F654B517E71}.patternAnalysis|x86.ActiveCfg = patternAnalysis|Win32
 		{082462F8-F409-4DE1-854A-1F654B517E71}.patternAnalysis|x86.Build.0 = patternAnalysis|Win32
+		{082462F8-F409-4DE1-854A-1F654B517E71}.Release|Any CPU.ActiveCfg = ReleaseParseTest|x64
+		{082462F8-F409-4DE1-854A-1F654B517E71}.Release|Any CPU.Build.0 = ReleaseParseTest|x64
+		{082462F8-F409-4DE1-854A-1F654B517E71}.Release|x64.ActiveCfg = ReleaseParseTest|x64
+		{082462F8-F409-4DE1-854A-1F654B517E71}.Release|x64.Build.0 = ReleaseParseTest|x64
+		{082462F8-F409-4DE1-854A-1F654B517E71}.Release|x86.ActiveCfg = ReleaseParseTest|Win32
+		{082462F8-F409-4DE1-854A-1F654B517E71}.Release|x86.Build.0 = ReleaseParseTest|Win32
 		{082462F8-F409-4DE1-854A-1F654B517E71}.StanfordAllSources|Any CPU.ActiveCfg = StanfordAllSources|Win32
 		{082462F8-F409-4DE1-854A-1F654B517E71}.StanfordAllSources|x64.ActiveCfg = StanfordAllSources|x64
 		{082462F8-F409-4DE1-854A-1F654B517E71}.StanfordAllSources|x64.Build.0 = StanfordAllSources|x64
@@ -57,6 +77,12 @@ Global
 		{082462F8-F409-4DE1-854A-1F654B517E71}.StanfordParseTest|x64.Build.0 = ReleaseParseTest|x64
 		{082462F8-F409-4DE1-854A-1F654B517E71}.StanfordParseTest|x86.ActiveCfg = ReleaseParseTest|Win32
 		{082462F8-F409-4DE1-854A-1F654B517E71}.StanfordParseTest|x86.Build.0 = ReleaseParseTest|Win32
+		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.Debug|x64.Build.0 = Debug|Any CPU
+		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.Debug|x86.Build.0 = Debug|Any CPU
 		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.GetWordFormsFromDictionary|Any CPU.ActiveCfg = ReleaseGetWordFormsFromDictionary|Any CPU
 		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.GetWordFormsFromDictionary|Any CPU.Build.0 = ReleaseGetWordFormsFromDictionary|Any CPU
 		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.GetWordFormsFromDictionary|x64.ActiveCfg = ReleaseGetWordFormsFromDictionary|Any CPU
@@ -69,6 +95,12 @@ Global
 		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.patternAnalysis|x64.Build.0 = patternAnalysis|Any CPU
 		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.patternAnalysis|x86.ActiveCfg = patternAnalysis|Any CPU
 		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.patternAnalysis|x86.Build.0 = patternAnalysis|Any CPU
+		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.Release|Any CPU.Build.0 = Release|Any CPU
+		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.Release|x64.ActiveCfg = Release|Any CPU
+		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.Release|x64.Build.0 = Release|Any CPU
+		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.Release|x86.ActiveCfg = Release|Any CPU
+		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.Release|x86.Build.0 = Release|Any CPU
 		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.StanfordAllSources|Any CPU.ActiveCfg = Release|Any CPU
 		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.StanfordAllSources|Any CPU.Build.0 = Release|Any CPU
 		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.StanfordAllSources|x64.ActiveCfg = Release|Any CPU
@@ -87,6 +119,12 @@ Global
 		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.StanfordParseTest|x64.Build.0 = ReleaseForDebugging|Any CPU
 		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.StanfordParseTest|x86.ActiveCfg = ReleaseForDebugging|Any CPU
 		{76070E07-52D3-4F4D-97F6-F8D572E31E05}.StanfordParseTest|x86.Build.0 = ReleaseForDebugging|Any CPU
+		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.Debug|Any CPU.Build.0 = Debug|x64
+		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.Debug|x64.ActiveCfg = Debug|x64
+		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.Debug|x64.Build.0 = Debug|x64
+		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.Debug|x86.ActiveCfg = Debug|x86
+		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.Debug|x86.Build.0 = Debug|x86
 		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.GetWordFormsFromDictionary|Any CPU.ActiveCfg = ReleaseGetWordFormsFromDictionary|x86
 		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.GetWordFormsFromDictionary|x64.ActiveCfg = ReleaseGetWordFormsFromDictionary|x64
 		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.GetWordFormsFromDictionary|x64.Build.0 = ReleaseGetWordFormsFromDictionary|x64
@@ -97,6 +135,12 @@ Global
 		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.patternAnalysis|x64.Build.0 = patternAnalysis|x64
 		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.patternAnalysis|x86.ActiveCfg = patternAnalysis|x86
 		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.patternAnalysis|x86.Build.0 = patternAnalysis|x86
+		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.Release|Any CPU.ActiveCfg = Release|x64
+		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.Release|Any CPU.Build.0 = Release|x64
+		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.Release|x64.ActiveCfg = Release|x64
+		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.Release|x64.Build.0 = Release|x64
+		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.Release|x86.ActiveCfg = Release|x86
+		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.Release|x86.Build.0 = Release|x86
 		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.StanfordAllSources|Any CPU.ActiveCfg = Release|x86
 		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.StanfordAllSources|x64.ActiveCfg = Release|x64
 		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.StanfordAllSources|x64.Build.0 = Release|x64
@@ -113,6 +157,12 @@ Global
 		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.StanfordParseTest|x64.Build.0 = ReleaseForDebugging|x64
 		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.StanfordParseTest|x86.ActiveCfg = ReleaseForDebugging|x86
 		{3114AED5-FCF2-44A2-B304-A5A02601D9B8}.StanfordParseTest|x86.Build.0 = ReleaseForDebugging|x86
+		{0976018C-FB91-4437-B862-B230C0DF4874}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{0976018C-FB91-4437-B862-B230C0DF4874}.Debug|Any CPU.Build.0 = Debug|x64
+		{0976018C-FB91-4437-B862-B230C0DF4874}.Debug|x64.ActiveCfg = Debug|x64
+		{0976018C-FB91-4437-B862-B230C0DF4874}.Debug|x64.Build.0 = Debug|x64
+		{0976018C-FB91-4437-B862-B230C0DF4874}.Debug|x86.ActiveCfg = Debug|Win32
+		{0976018C-FB91-4437-B862-B230C0DF4874}.Debug|x86.Build.0 = Debug|Win32
 		{0976018C-FB91-4437-B862-B230C0DF4874}.GetWordFormsFromDictionary|Any CPU.ActiveCfg = ReleaseGetWordFormsFromDictionary|Win32
 		{0976018C-FB91-4437-B862-B230C0DF4874}.GetWordFormsFromDictionary|x64.ActiveCfg = ReleaseGetWordFormsFromDictionary|x64
 		{0976018C-FB91-4437-B862-B230C0DF4874}.GetWordFormsFromDictionary|x64.Build.0 = ReleaseGetWordFormsFromDictionary|x64
@@ -123,6 +173,12 @@ Global
 		{0976018C-FB91-4437-B862-B230C0DF4874}.patternAnalysis|x64.Build.0 = patternAnalysis|x64
 		{0976018C-FB91-4437-B862-B230C0DF4874}.patternAnalysis|x86.ActiveCfg = patternAnalysis|Win32
 		{0976018C-FB91-4437-B862-B230C0DF4874}.patternAnalysis|x86.Build.0 = patternAnalysis|Win32
+		{0976018C-FB91-4437-B862-B230C0DF4874}.Release|Any CPU.ActiveCfg = Release|x64
+		{0976018C-FB91-4437-B862-B230C0DF4874}.Release|Any CPU.Build.0 = Release|x64
+		{0976018C-FB91-4437-B862-B230C0DF4874}.Release|x64.ActiveCfg = Release|x64
+		{0976018C-FB91-4437-B862-B230C0DF4874}.Release|x64.Build.0 = Release|x64
+		{0976018C-FB91-4437-B862-B230C0DF4874}.Release|x86.ActiveCfg = Release|Win32
+		{0976018C-FB91-4437-B862-B230C0DF4874}.Release|x86.Build.0 = Release|Win32
 		{0976018C-FB91-4437-B862-B230C0DF4874}.StanfordAllSources|Any CPU.ActiveCfg = Release|Win32
 		{0976018C-FB91-4437-B862-B230C0DF4874}.StanfordAllSources|x64.ActiveCfg = Release|x64
 		{0976018C-FB91-4437-B862-B230C0DF4874}.StanfordAllSources|x64.Build.0 = Release|x64
@@ -139,6 +195,12 @@ Global
 		{0976018C-FB91-4437-B862-B230C0DF4874}.StanfordParseTest|x64.Build.0 = ReleaseForDebugging|x64
 		{0976018C-FB91-4437-B862-B230C0DF4874}.StanfordParseTest|x86.ActiveCfg = ReleaseForDebugging|Win32
 		{0976018C-FB91-4437-B862-B230C0DF4874}.StanfordParseTest|x86.Build.0 = ReleaseForDebugging|Win32
+		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.Debug|Any CPU.Build.0 = Debug|x64
+		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.Debug|x64.ActiveCfg = Debug|x64
+		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.Debug|x64.Build.0 = Debug|x64
+		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.Debug|x86.ActiveCfg = Debug|Win32
+		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.Debug|x86.Build.0 = Debug|Win32
 		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.GetWordFormsFromDictionary|Any CPU.ActiveCfg = ReleaseGetWordFormsFromDictionary|Win32
 		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.GetWordFormsFromDictionary|x64.ActiveCfg = ReleaseGetWordFormsFromDictionary|x64
 		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.GetWordFormsFromDictionary|x64.Build.0 = ReleaseGetWordFormsFromDictionary|x64
@@ -149,6 +211,12 @@ Global
 		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.patternAnalysis|x64.Build.0 = patternAnalysis|x64
 		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.patternAnalysis|x86.ActiveCfg = patternAnalysis|Win32
 		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.patternAnalysis|x86.Build.0 = patternAnalysis|Win32
+		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.Release|Any CPU.ActiveCfg = Release|x64
+		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.Release|Any CPU.Build.0 = Release|x64
+		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.Release|x64.ActiveCfg = Release|x64
+		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.Release|x64.Build.0 = Release|x64
+		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.Release|x86.ActiveCfg = Release|Win32
+		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.Release|x86.Build.0 = Release|Win32
 		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.StanfordAllSources|Any CPU.ActiveCfg = Release|Win32
 		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.StanfordAllSources|x64.ActiveCfg = Release|x64
 		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.StanfordAllSources|x64.Build.0 = Release|x64
@@ -165,6 +233,48 @@ Global
 		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.StanfordParseTest|x64.Build.0 = ReleaseForDebugging|x64
 		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.StanfordParseTest|x86.ActiveCfg = ReleaseForDebugging|Win32
 		{7CE71645-B149-4CA7-8ABE-36C2B576CF6A}.StanfordParseTest|x86.Build.0 = ReleaseForDebugging|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.Debug|Any CPU.Build.0 = Debug|x64
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.Debug|x64.ActiveCfg = Debug|x64
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.Debug|x64.Build.0 = Debug|x64
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.Debug|x86.ActiveCfg = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.Debug|x86.Build.0 = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.GetWordFormsFromDictionary|Any CPU.ActiveCfg = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.GetWordFormsFromDictionary|Any CPU.Build.0 = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.GetWordFormsFromDictionary|x64.ActiveCfg = Debug|x64
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.GetWordFormsFromDictionary|x64.Build.0 = Debug|x64
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.GetWordFormsFromDictionary|x86.ActiveCfg = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.GetWordFormsFromDictionary|x86.Build.0 = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.patternAnalysis|Any CPU.ActiveCfg = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.patternAnalysis|Any CPU.Build.0 = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.patternAnalysis|x64.ActiveCfg = Debug|x64
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.patternAnalysis|x64.Build.0 = Debug|x64
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.patternAnalysis|x86.ActiveCfg = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.patternAnalysis|x86.Build.0 = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.Release|Any CPU.ActiveCfg = Release|x64
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.Release|Any CPU.Build.0 = Release|x64
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.Release|x64.ActiveCfg = Release|x64
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.Release|x64.Build.0 = Release|x64
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.Release|x86.ActiveCfg = Release|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.Release|x86.Build.0 = Release|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.StanfordAllSources|Any CPU.ActiveCfg = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.StanfordAllSources|Any CPU.Build.0 = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.StanfordAllSources|x64.ActiveCfg = Debug|x64
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.StanfordAllSources|x64.Build.0 = Debug|x64
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.StanfordAllSources|x86.ActiveCfg = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.StanfordAllSources|x86.Build.0 = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.StanfordParseMT|Any CPU.ActiveCfg = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.StanfordParseMT|Any CPU.Build.0 = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.StanfordParseMT|x64.ActiveCfg = Debug|x64
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.StanfordParseMT|x64.Build.0 = Debug|x64
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.StanfordParseMT|x86.ActiveCfg = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.StanfordParseMT|x86.Build.0 = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.StanfordParseTest|Any CPU.ActiveCfg = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.StanfordParseTest|Any CPU.Build.0 = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.StanfordParseTest|x64.ActiveCfg = Debug|x64
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.StanfordParseTest|x64.Build.0 = Debug|x64
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.StanfordParseTest|x86.ActiveCfg = Debug|Win32
+		{A5BBB4FF-0E78-4AAB-B5DF-936B6518F024}.StanfordParseTest|x86.Build.0 = Debug|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

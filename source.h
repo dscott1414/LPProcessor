@@ -2683,6 +2683,8 @@ private:
 	bool pleonasticIt(int where);
 	void pushObjectMatchesIntoLocalFocusAndLocation(int where, vector <cObject>::iterator object, bool inPrimaryQuote, bool inSecondaryQuote, bool definitelySpeaker, bool notSpeaker, bool inSpeakerGroup, vector <cOM>& objectMatches);
 	void cataphoricallyMatch(int where, int lastBeginS1, vector <cObject>::iterator object);
+	bool resolveSpecificClassObject(const int where, const bool definitelySpeaker, const bool inPrimaryQuote, const bool inSecondaryQuote, const int lastBeginS1, const int lastRelativePhrase, const int lastQ2, const int lastVerb, const int beginEntirePosition, int& subjectCataRestriction,
+		const bool resolveForSpeaker, const bool avoidCurrentSpeaker, const bool limitTwo, bool& chooseFromLocalFocus, const bool isPhysicallyPresent, const bool physicallyEvaluated, bool& mixedPlurality, vector <cOM>& objectMatches, vector <cObject>::iterator &object);
 	void resolveObject(int where, bool definitelySpeaker, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool resolveForSpeaker, bool avoidCurrentSpeaker, bool limitTwo);
 	bool quotedString(unsigned int beginQuote,unsigned int endQuote,bool &noTextBeforeOrAfter,bool &noSpeakerAfterward);
 	int speakerBefore(int beginQuote,bool &previousParagraph);
