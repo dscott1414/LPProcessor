@@ -2006,7 +2006,7 @@ public:
 	bool addCostFromRecalculatingAloneness(int where,cPatternMatchArray::tPatternMatch *pma);
 	void identifyObjects(void);
 	int scanForSpeakers(int begin,int end,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,unsigned __int64 roleFlag);
-	bool genderedBodyPartSubstitution(int where,int &speakerObject);
+	bool substituteGenderedBodyObject(int where,int &speakerObject);
 	void clearNextSection(int I,int section);
 	void processNextSection(int I,int section);
 	bool quoteIndependentAge,objectToBeMatchedInQuote;
@@ -2786,7 +2786,6 @@ bool &comparableName,
 	int getLocationBefore(vector <cObject>::iterator object,int where);
 	void localRoleBoost(vector <cLocalFocus>::iterator lsi,int I,unsigned __int64 objectRole,int age);
 	void adjustSaliencesByParallelRoleAndPlurality(int where,bool inQuote,bool forSpeakerIdentification,int lastGenderedAge);
-
 	void pushSpeaker(int where,int s, int sf, const wchar_t * fromWhere);
 	bool matchObjectToSpeakers(int I,vector <cOM> &currentSpeaker,vector <cOM> &previousSpeaker,int inflectionFlags,unsigned __int64 quoteFlags,int lastEmbeddedStoryBegin);
 	void removeSpeakers(int I,vector <cOM> &speakers);
@@ -2796,8 +2795,7 @@ bool &comparableName,
 	void testIfDeleteSingularObjects(vector <cOM> currentMaleObjects,vector <cOM> currentFemaleObjects,vector <cOM> currentGenderUnknownObjects);
 	bool getHighestEncounters(int &highestDefinitelyIdentifiedEncounters,int &highestIdentifiedEncounters,int &highestEncounters);
 	void getOwnerSex(int ownerObject,bool &matchMale,bool &matchFemale,bool &matchNeuter, bool &matchPlural);
-	void printNyms(vector <tIWMM> &nyms1,
- map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap1,
+	void printNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap1,
 								 vector <tIWMM> &nyms2, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap2, const wchar_t * type, const wchar_t * subtype,
 								 int sharedMembers,wstring &logMatch);
 	void printNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap, const wchar_t * type, const wchar_t * subtype, const wchar_t * subsubtype);
@@ -2810,16 +2808,34 @@ bool &comparableName,
 	bool nymNoMatch(int where,vector <cObject>::iterator o,vector <cObject>::iterator lso,bool getFromMatch,bool traceThisMatch,wstring &logMatch,tIWMM &fromMatch,tIWMM &toMatch,tIWMM &toMapMatch, const wchar_t * type);
 	int limitedNymMatch(vector <cObject>::iterator o,vector <cObject>::iterator lso,bool traceNymMatch);
 	int nymMatch(vector <cObject>::iterator o,vector <cObject>::iterator lso,bool getFromMatch,bool traceNymMatch,bool &explicitOccupationMatch,wstring &logMatch,tIWMM &fromMatch,tIWMM &toMatch,tIWMM &toMapMatch, const wchar_t * type);
-	int nymMapMatch(vector <tIWMM> &nyms1,
- map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap1,
-							 vector <tIWMM> &nyms2,
- map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap2,
-							 bool mapOnly,bool getFromMatch,bool traceNymMatch,
-wstring &logMatch,
+	int nymMapMatch(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap1,
+							 vector <tIWMM> &nyms2, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap2,
+							 bool mapOnly,bool getFromMatch,bool traceNymMatch,wstring &logMatch,
 							 tIWMM &fromMatch,tIWMM &toMatch,tIWMM &toMapMatch, const wchar_t * type, const wchar_t * subtype);
 	void adjustForPhysicalPresence();
 	void adjustSaliencesByGenderNumberAndOccurrenceAgeAdjust(int where,int object,bool inPrimaryQuote,bool inSecondaryQuote,bool forSpeakerIdentification,int &lastGenderedAge,vector <int> &disallowedReferences,bool disallowOnlyNeuterMatches,bool isPhysicallyPresent,bool physicallyEvaluated);
-	void adjustSaliencesByGenderNumberAndOccurrence(int where,int object,bool inPrimaryQuote,bool inSecondaryQuote,bool identifiedAsSpeaker,int &lastGenderedAge,bool isPhysicallyPresent);
+	void setGender(int where, vector <cObject>::iterator o, bool& male, bool& matchMale, bool& female, bool& matchFemale, bool& neuter, bool& matchNeuter, bool& plural, bool& matchPlural);
+	void setColocation(int where, vector <cObject>::iterator& oColocate, bool traceThisNym);
+	int determineGenderAgreement(int& numUnambiguousSexMatch, vector <cLocalFocus>::iterator& unambiguousSexMatch, bool forSpeakerIdentification, vector <cLocalFocus>::iterator lsi,
+		bool localMale, bool localFemale, bool localNeuter, bool matchMale, bool matchFemale, bool male, bool female, bool neuter);
+	void fillTracingInfo(vector <cLocalFocus>::iterator lsi, int where, int object, bool inPrimaryQuote, bool inSecondaryQuote, bool forSpeakerIdentification, bool isPhysicallyPresent,
+		vector <cObject>::iterator o, bool& male, bool& matchMale, bool& female, bool& matchFemale, bool& neuter, int highestDefinitelyIdentifiedEncounters, int highestIdentifiedEncounters, int highestEncounters,
+		bool localNeuter, bool localMale, bool localFemale, bool ignorePlural, bool ignoreMPlural, bool allowedPlural,
+		vector <cSpeakerGroup>::iterator sg, vector <cSpeakerGroup>::iterator esg);
+	void adjustColocatedBodyObject(vector <cLocalFocus>::iterator lsi, int where, vector <cObject>::iterator oColocate, vector <cObject>::iterator lso, bool traceThisNym);
+	void boostUnresolvableCloseGenderedObject(vector <cLocalFocus>::iterator lsi, int where, vector < vector <cLocalFocus>::iterator >& urps, bool forSpeakerIdentification, bool isPhysicallyPresent);
+	void disallowSpeakerMatchToThirdPersonInPrimaryQuotes(vector <cLocalFocus>::iterator lsi, int where, int object, vector <cObject>::iterator o, bool inPrimaryQuote, vector <cSpeakerGroup>::iterator sg);
+	void disallowSpeakerMatchToThirdPersonInSecondaryQuotes(vector <cLocalFocus>::iterator lsi, int where, int object, vector <cObject>::iterator o, bool inSecondaryQuote, vector <cSpeakerGroup>::iterator esg);
+	void computePluralAgreement(vector <cLocalFocus>::iterator lsi, bool ignorePlural, bool ignoreMPlural, bool allowedPlural);
+	void computeSalienceByAge(vector <cLocalFocus>::iterator lsi, bool male, bool female, bool neuter);
+	void computerSalienceByNumEncounter(vector <cLocalFocus>::iterator lsi, int highestEncounters, int highestIdentifiedEncounters, int highestDefinitelyIdentifiedEncounters, bool forSpeakerIdentification);
+	bool unknownBodyObject(vector <cObject>::iterator lso, bool neuter);
+	void adjustLocalObjectSalienceByGenderNumberAndOccurrence(vector <cLocalFocus>::iterator lsi, int where, int object, bool inPrimaryQuote, bool inSecondaryQuote, bool forSpeakerIdentification, int& lastGenderedAge, bool isPhysicallyPresent,
+		vector <cObject>::iterator o, bool& male, bool& matchMale, bool& female, bool& matchFemale, bool& neuter, bool& plural, bool traceThisNym, int& numUnambiguousSexMatch, 
+		vector < vector <cLocalFocus>::iterator > &urps, int highestDefinitelyIdentifiedEncounters, int highestIdentifiedEncounters, int highestEncounters, vector <cLocalFocus>::iterator& unambiguousSexMatch, vector <cObject>::iterator oColocate);
+	void reduceSalienceIfSpeakerIdentificationAndNotSpeaker(int where);
+	void setUnresolvableObjectPreference(int where, vector < vector <cLocalFocus>::iterator >& urps);
+	void adjustSaliencesByGenderNumberAndOccurrence(int where, int object, bool inPrimaryQuote, bool inSecondaryQuote, bool identifiedAsSpeaker, int& lastGenderedAge, bool isPhysicallyPresent);
 	bool resolveNonGenderedGeneralObjectAgainstOneObject(int where,vector <cObject>::iterator object,vector <cOM> &objectMatches,int o,int sf,int lastWhere,int &mostRecentMatch);
 	void resolveNonGenderedGeneralObject(int where,vector <cObject>::iterator &object,vector <cOM> &objectMatches,int wordOrderSensitiveModifier);
 	bool potentiallyMergable(int where,vector <cObject>::iterator o1,vector <cObject>::iterator o2,bool allowBothToBeSpeakers,bool checkUnmergableSpeaker);
@@ -2858,7 +2874,27 @@ wstring &logMatch,
 		vector <cLocalFocus>::iterator *highest,int numNeuterObjects,int numGenderedObjects,
 		vector <int> &lsOffsets);
 	void preferRelatedObjects(int where);
-	bool chooseBest(int where,bool definitelySpeaker,bool inPrimaryQuote,bool inSecondaryQuote,bool resolveForSpeaker,bool mixedPlurality);
+	void evaluateEachLocalObject(vector <cLocalFocus>::iterator lsi, int where, bool inPrimaryQuote, bool resolveForSpeaker, bool physicallyPresent, bool neuter,
+		int object, bool& genericGender, bool& genericGenderOverride, vector <cLocalFocus>::iterator* highest);
+	bool preferNonAudience(int where, vector <cLocalFocus>::iterator* highest, bool resolveForSpeaker);
+	bool preferLastSubject(int where, vector <cLocalFocus>::iterator* highest, bool resolveForSpeaker);
+	bool preferMatchingSubject(int where, vector <cLocalFocus>::iterator* highest);
+	void resolveHailUsingSpeakers(int where, vector <cLocalFocus>::iterator* highest);
+	void bodyObjectInheritsPreviousCompoundBodyMatch(int where, int object, vector <cLocalFocus>::iterator* highest);
+	void resolveSpeakerSameGenderByAudienceOrLastSubject(int where, vector <cLocalFocus>::iterator* highest, bool resolveForSpeaker);
+	void chooseBetweenMatches(int where, vector <cLocalFocus>::iterator* highest, bool resolveForSpeaker);
+	void ifGroupJoinerPickMostRecentlyPhysicallyManifestedObject(int where, vector <cLocalFocus>::iterator* highest);
+	void preferPhysicalPresentIfPhysicallyPresentPosition(int where, vector <cLocalFocus>::iterator* highest, bool physicallyEvaluated, bool physicallyPresent);
+	void nullifyGenericGenderOverrideIfPhysicallyPresentAndSalientAlternateFound(int where, vector <cLocalFocus>::iterator* highest, bool genericGenderOverride);
+	void preferMatchedAdjectives(int where, vector <cLocalFocus>::iterator* highest);
+	void preferRecentPOVIfPronounAndSpeakersDefined(int where, vector <cLocalFocus>::iterator* highest);
+	bool preferImplicitObjectMatchIfSingleAndUnowned(int where, vector <cLocalFocus>::iterator* highest, int I, int object, bool inPrimaryQuote, bool inSecondaryQuote, bool physicallyPresent);
+	void substituteOwnerOfBodyObject(int where, int highestActualsf, bool isPlural);
+	void adjustStatisticsForMatchedObjects(int where, vector <cOM>& objectMatches, bool definitelySpeaker);
+	void insertPOVSpeaker(int where);
+	void checkIfReplacedSpeaker(int where);
+	void narrowToNeuterIfPlace(int where, vector <cLocalFocus>::iterator lsi, bool neuter);
+	bool chooseBest(int where, bool definitelySpeaker, bool inPrimaryQuote, bool inSecondaryQuote, bool resolveForSpeaker, bool mixedPlurality);
 	void removeObjectsFromNotMatched(int where,int matchWhere);
 	void removeObjectsFromMatched(int where,int matchWhere,vector <cLocalFocus> &ls);
 	void setSpeakerMatchesFromPosition(int where,vector <cOM> &objectsToSet,int fromPosition, const wchar_t * fromWhere,unsigned __int64 flag);
