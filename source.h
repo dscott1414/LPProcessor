@@ -2522,7 +2522,7 @@ int &numFirstInQuote,
 	int printSentence(unsigned int rowsize, unsigned int begin, unsigned int end, bool containsNotMatched);
 	int getSubjectInfo(cTagLocation subjectTagset, int whereSubject, int &nounPosition, int &nameLastPosition, bool &restateSet, bool &singularSet, bool &pluralSet, bool &adjectivalSet, bool &embeddedS1);
 	bool longSubjectBindingMismatch(int wordIndex, int principalWherePosition, int primaryPMAOffset, int whereVerb);
-	bool evaluateSubjectVerbAgreement(int verbPosition, int whereSubject, bool &agreementTestable);
+	bool evaluateSubjectVerbAgreement(int verbPosition, int whereSubject, bool& agreementTestable);
 	int queryPatternDiff(int position, wstring pattern, wstring differentiator);
 	int queryPattern(int position, wstring pattern, int &maxEnd);
 	int queryPattern(int position, wstring pattern);
@@ -2734,7 +2734,23 @@ private:
 	unsigned int getAllLocations(unsigned int position,int parentPattern,int rootp,int childLen,int parentLen,vector <unsigned int> &allLocations, int recursionLevel,unordered_map <int, cCostPatternElementByTagSet> &tertiaryPEMAPositions,bool &reassessParentCosts);
 	int markChildren(cPatternElementMatchArray::tPatternElementMatch *pem,int position,int recursionLevel,int allRootsLowestCost, unordered_map <int, cCostPatternElementByTagSet> &tertiaryPEMAPositions,bool &reassessParentCosts);
 	bool findLowCostTag(vector<cTagLocation> &tagSet,int &cost, const wchar_t * tagName,cTagLocation &lowestCostTag,int parentCost,int &nextTag);
-	int evaluateSubjectVerbAgreement(cPatternMatchArray::tPatternMatch *parentpm,cPatternMatchArray::tPatternMatch *pm,unsigned int parentPosition,unsigned int position,vector<cTagLocation> tagSet,int &traceSource);
+	void switchSpecialSubjectWithObject(unsigned int position, cPatternMatchArray::tPatternMatch* pm, vector<cTagLocation>& tagSet, int subjectTag, int mainVerbTag);
+	bool capitalizedVerbWithPeriod(int subjectTag, int verbAgreeTag, int position, vector<cTagLocation>& tagSet, int& traceSource);
+	bool logLongSubject(int subjectTag, int verbAgreeTag, int position, int nounPosition, vector<cTagLocation>& tagSet, int& traceSource);
+	bool adjectiveSubjectNotWithBeVerb(int subjectTag, int verbAgreeTag, int position, vector<cTagLocation>& tagSet, int& traceSource);
+	bool possessiveDeterminerSubject(int subjectTag, int nextSubjectTag, int mainVerbTag, int nextVerbAgreeTag, int position, vector<cTagLocation>& tagSet, int& traceSource);
+	bool theMostSubjectWithPastVerb(int subjectTag, int position, vector<cTagLocation>& tagSet, int& traceSource);
+	bool agreeVerbNotFoundOrQuestion(int& conditionalTag, int& nextConditionalTag, int futureTag, int subjectTag, int nextSubjectTag, int mainVerbTag, int nextMainVerbTag,
+		int& verbAgreeTag, int& nextVerbAgreeTag, int position, int nounPosition, vector<cTagLocation>& tagSet, int& traceSource);
+	void decreaseSubjectVerbCostIfRelated(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, unsigned parentPosition, unsigned int position,
+		vector<cTagLocation>& tagSet, int nounPosition, int verbPosition, int subjectTag, int mainVerbTag, int verbAgreeTag, int nextVerbAgreeTag, int& relationCost);
+	void substitutePrepObjectSomeOf(int& nounPosition, bool& singularSet, bool& pluralSet);
+	void determineSingularOrPlural(int nounPosition, int person, int position, int nameLastPosition, int inflectionFlags, bool& singularSet, bool& pluralSet);
+	bool isSubjunctiveMood(int subjectTag, int position, int verbPosition, int person, vector<cTagLocation>& tagSet);
+	bool agreeInPersonPluralityAndTense(int inflectionFlags, int verbPosition, int person, bool singularSet, bool pluralSet);
+	void disagreementWithAmbiguousTense(bool agree, bool ambiguousTense, int verbAgreeTag, int conditionalTag, int mainVerbTag, int verbPosition, int position, vector<cTagLocation>& tagSet);
+	void reduceCostIfRestate(bool restateSet, int relationCost, int subjectTag, vector<cTagLocation>& tagSet);
+	int evaluateSubjectVerbAgreement(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, unsigned int parentPosition, unsigned int position, vector<cTagLocation> tagSet, int& traceSource);
 	// agreement section end
 
 	void printSpeakerQueue(int where);

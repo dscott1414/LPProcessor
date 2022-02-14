@@ -697,41 +697,8 @@ int cSource::getMinCost(cPatternElementMatchArray::tPatternElementMatch* pem, in
 	return minCost;
 }
 
-/*
-1. Compound subjects made with 'and' are plural when they are used before
-the verb and refer to more than one thing:
-The lion and the tiger belong to the cat family.
-Bach and Beethoven are among the greatest composers of all time.
-2. When a compound subject made with 'and' follows the verb, and the
-first item in the compound is singular, the verb may agree with that:
-There was a desk and three chairs in the room.
-Strictly speaking, the verb should agree with both items: There were a desk
-and three chairs in the room. But since There were a desk sounds odd, no
-matter what follows desk, the verb may agree with desk alone—the first
-item. If the first item is plural, the verb always agrees with it:
-At the entrance stand two marble pillars and a statue of Napoleon.
-3. A compound subject that is made with and and refers to only one
-thing is always singular:
-The founder and first president of the college was Eleazor Wheelock.
-COLLECTIVE NOUNS ( a flock of geese) AND NOUNS OF MEASUREMENT (3/4 of a cup)
-Collective nouns and nouns of measurement are singular when they refer
-to a unit, and plural when they refer to the individuals or elements of
-a unit:
-Half of the cake was eaten.
-Half of the jewels were stolen.
-THE WORD NUMBER AS SUBJECT
-The word number is singular when it follows the, plural when it follows a:
-The number of applications was huge.
-A number of teenagers now hold full-time jobs.
-*/
-// tagSet is modified during this procedure!  Do not pass by address!
-int cSource::evaluateSubjectVerbAgreement(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, unsigned parentPosition, unsigned int position, vector<cTagLocation> tagSet, int& traceSource)
+void cSource::switchSpecialSubjectWithObject(unsigned int position, cPatternMatchArray::tPatternMatch* pm, vector<cTagLocation> &tagSet, int subjectTag,int mainVerbTag)
 {
-	LFS
-		int nextSubjectTag = -1, subjectTag = findTag(tagSet, L"SUBJECT", nextSubjectTag);
-	if (subjectTag < 0) return 0;
-	int nextMainVerbTag = -1;
-	int mainVerbTag = findTag(tagSet, L"VERB", nextMainVerbTag);
 	//wstring debugSwitchBack;
 	// for the subject reversal, constrain matches to the relativizer itself because otherwise there are 300,000 unique matches in 106 sources and all studied make no sense to reverse.  (see switchcheck debug statement below)
 		// if child is a REL, rather than S1, then the pattern is 'A man who fights other soldiers...', and who should not be replaced with soldiers, but rather with 'a man'!  This alternate check is not performed.
@@ -780,81 +747,42 @@ int cSource::evaluateSubjectVerbAgreement(cPatternMatchArray::tPatternMatch* par
 			}
 		}
 	}
-	bool restateSet, singularSet, pluralSet, adjectivalSet, embeddedS1ImproperEnding = false;
-	int nounPosition, nameLastPosition;
-	if (getSubjectInfo(tagSet[subjectTag], subjectTag, nounPosition, nameLastPosition, restateSet, singularSet, pluralSet, adjectivalSet, embeddedS1ImproperEnding) < 0)
-		return 0;
-	if (embeddedS1ImproperEnding)
-	{
-		if (debugTrace.traceSubjectVerbAgreement)
-			lplog(L"%d: subject has embedded S1 improper ending [SOURCE=%06d] cost=%d", position, traceSource = gTraceSource++, 20);
-		return 20;
-	}
-	// to block unwanted C1_S1 -> reflexive_pronoun
-	//if (tagSet[subjectTag].len == 1)
-	//{
-		// remove form
-	if (m[tagSet[subjectTag].sourcePosition].queryForm(reflexivePronounForm) >= 0)
-		return 20;
-	// remove pattern
-	//	int pattern = tagSet[subjectTag].pattern, subjectPosition = tagSet[subjectTag].sourcePosition, end = tagSet[subjectTag].len, PEMAOffset = tagSet[subjectTag].PEMAOffset;
-	//	if (PEMAOffset < 0)
-	//	{
-	//		for (int p = patterns[pattern]->rootPattern; p >= 0; p = patterns[p]->nextRoot)
-	//		{
-	//			if (!m[subjectPosition].patterns.isSet(p)) continue;
-	//			cPatternMatchArray::tPatternMatch *pma = m[subjectPosition].pma.find(p, end);
-	//			if (pma == NULL) continue;
-	//			PEMAOffset = pma->pemaByPatternEnd;
-	//			cPatternElementMatchArray::tPatternElementMatch *pem = pema.begin() + PEMAOffset;
-	//			for (; PEMAOffset >= 0 && pem->getParentPattern() == p && pem->end == end; PEMAOffset = pem->nextByPatternEnd, pem = pema.begin() + PEMAOffset)
-	//				if (!pem->begin) break;
-	//			if (PEMAOffset < 0 || pem->getParentPattern() != p || pem->end != end || pem->begin) continue;
-	//			if (patterns[pema[PEMAOffset].getParentPattern()]->name == L"_ADJECTIVE")
-	//				return 20; // adjective is allowed as a C1_S1, but lets see whether it is really needed!
-	//		}
-	//	}
-//}
-// evaluate if SUBJECT is an _ADJECTIVE and ALSO a _NAME.  This is not allowed as a subject
-// A _NAME is allowed as an adjective (Dover Street Pub), and an _ADJECTIVE is allowed as a subject (The poor)
-// but a _NAME as a subject should be an OBJECT, not classified as an ADJECTIVE.
-// This allows _ADJECTIVE to be general, and still disallows _S1[4] from using a _NAME as subject.
-// Many[annie] ishas the time Annie ishas said to me[albert] :
-//wchar_t temp2[1024];
-//if (tagSet[subjectTag].PEMAOffset>=0 && pema[tagSet[subjectTag].PEMAOffset].getParentPattern()>=0)
-//	lplog(L"%d:SUBJECT %s",tagSet[subjectTag].sourcePosition,pema[tagSet[subjectTag].PEMAOffset].toText(tagSet[subjectTag].sourcePosition,temp2,m));
-	int nextConditionalTag = -1, nextFutureTag = -1;
-	int nextVerbAgreeTag = -1, verbAgreeTag = (mainVerbTag >= 0) ? findTagConstrained(tagSet, L"V_AGREE", nextVerbAgreeTag, tagSet[mainVerbTag]) : -1;
-	int conditionalTag = (mainVerbTag >= 0) ? findTagConstrained(tagSet, L"conditional", nextConditionalTag, tagSet[mainVerbTag]) : -1;
-	int pastTag = (mainVerbTag >= 0) ? findTagConstrained(tagSet, L"past", nextConditionalTag, tagSet[mainVerbTag]) : -1;
-	int futureTag = (mainVerbTag >= 0) ? findTagConstrained(tagSet, L"future", nextFutureTag, tagSet[mainVerbTag]) : -1;
-	// St. Pancras? - Pancras is an unknown, so verb is allowed.  Yet Pancras is after a ., so capitalization is allowed.
-	// disallow this case.
+}
+
+bool cSource::capitalizedVerbWithPeriod(int subjectTag,int verbAgreeTag,int position,vector<cTagLocation> &tagSet, int &traceSource)
+{
 	if (subjectTag >= 0 && verbAgreeTag >= 0 && tagSet[verbAgreeTag].sourcePosition > tagSet[subjectTag].sourcePosition &&
 		(m[tagSet[verbAgreeTag].sourcePosition].flags & cWordMatch::flagFirstLetterCapitalized) &&
 		m[tagSet[subjectTag].sourcePosition + tagSet[subjectTag].len - 1].word->first == L".")
 	{
 		if (debugTrace.traceSubjectVerbAgreement)
 			lplog(L"%d: verb capitalized [SOURCE=%06d] cost=%d", position, traceSource = gTraceSource++, 20);
-		return 20;
+		return true;
 	}
+	return false;
+}
+
+bool cSource::logLongSubject(int subjectTag, int verbAgreeTag, int position, int nounPosition,vector<cTagLocation>& tagSet, int &traceSource)
+{
 	if (verbAgreeTag >= 0 && longSubjectBindingMismatch(tagSet[subjectTag].sourcePosition, nounPosition, tagSet[subjectTag].sourcePosition + tagSet[subjectTag].len, tagSet[verbAgreeTag].sourcePosition))
 	{
-		wstring C1__S1;
-		phraseString(tagSet[subjectTag].sourcePosition, tagSet[subjectTag].sourcePosition + tagSet[subjectTag].len, C1__S1, true);
 		if (debugTrace.traceSubjectVerbAgreement)
+		{
+			wstring C1__S1;
+			phraseString(tagSet[subjectTag].sourcePosition, tagSet[subjectTag].sourcePosition + tagSet[subjectTag].len, C1__S1, true);
 			lplog(L"%d: long subject %d-%d:'%s' binding error: bound '%s' to verb '%s' but binding '%s' to verb '%s' is more likely. [SOURCE=%06d] cost=%d",
 				position, tagSet[subjectTag].sourcePosition, tagSet[subjectTag].sourcePosition + tagSet[subjectTag].len, C1__S1.c_str(),
 				m[nounPosition].word->first.c_str(), m[tagSet[verbAgreeTag].sourcePosition].word->first.c_str(), m[tagSet[subjectTag].sourcePosition + tagSet[subjectTag].len - 1].word->first.c_str(), m[tagSet[verbAgreeTag].sourcePosition].word->first.c_str(),
 				traceSource = gTraceSource++, 20);
-		return 20;
+		}
+		return true;
 	}
 	else if (verbAgreeTag >= 0 && tagSet[subjectTag].len >= 15)
 	{
-		wstring C1__S1;
-		phraseString(tagSet[subjectTag].sourcePosition, tagSet[subjectTag].sourcePosition + tagSet[subjectTag].len, C1__S1, true);
 		if (debugTrace.traceSubjectVerbAgreement)
 		{
+			wstring C1__S1;
+			phraseString(tagSet[subjectTag].sourcePosition, tagSet[subjectTag].sourcePosition + tagSet[subjectTag].len, C1__S1, true);
 			if (nounPosition < 0)
 				lplog(L"%d: long subject %d-%d:'%s' binding uncertain: unknown bound to verb '%s' ; binding '%s' to verb '%s' is also possible",
 					position, tagSet[subjectTag].sourcePosition, tagSet[subjectTag].sourcePosition + tagSet[subjectTag].len, C1__S1.c_str(),
@@ -865,7 +793,45 @@ int cSource::evaluateSubjectVerbAgreement(cPatternMatchArray::tPatternMatch* par
 					m[nounPosition].word->first.c_str(), m[tagSet[verbAgreeTag].sourcePosition].word->first.c_str(), m[tagSet[subjectTag].sourcePosition + tagSet[subjectTag].len - 1].word->first.c_str(), m[tagSet[verbAgreeTag].sourcePosition].word->first.c_str());
 		}
 	}
+	return false;
+}
 
+// disallow adjective as subject
+// bool subjectIsAdjective()
+// {
+//	 int pattern = tagSet[subjectTag].pattern, subjectPosition = tagSet[subjectTag].sourcePosition, end = tagSet[subjectTag].len, PEMAOffset = tagSet[subjectTag].PEMAOffset;
+//	 if (PEMAOffset < 0)
+//	 {
+//		 for (int p = patterns[pattern]->rootPattern; p >= 0; p = patterns[p]->nextRoot)
+//		 {
+//			 if (!m[subjectPosition].patterns.isSet(p)) continue;
+//			 cPatternMatchArray::tPatternMatch *pma = m[subjectPosition].pma.find(p, end);
+//			 if (pma == NULL) continue;
+//			 PEMAOffset = pma->pemaByPatternEnd;
+//			 cPatternElementMatchArray::tPatternElementMatch *pem = pema.begin() + PEMAOffset;
+//			 for (; PEMAOffset >= 0 && pem->getParentPattern() == p && pem->end == end; PEMAOffset = pem->nextByPatternEnd, pem = pema.begin() + PEMAOffset)
+//			 	if (!pem->begin) break;
+//			 if (PEMAOffset < 0 || pem->getParentPattern() != p || pem->end != end || pem->begin) continue;
+//			 if (patterns[pema[PEMAOffset].getParentPattern()]->name == L"_ADJECTIVE")
+//			 	return 20; // adjective is allowed as a C1_S1, but lets see whether it is really needed!
+//		 }
+//	 }
+// }
+
+// evaluate if SUBJECT is an _ADJECTIVE and ALSO a _NAME.  This is not allowed as a subject
+// A _NAME is allowed as an adjective (Dover Street Pub), and an _ADJECTIVE is allowed as a subject (The poor)
+// but a _NAME as a subject should be an OBJECT, not classified as an ADJECTIVE.
+// This allows _ADJECTIVE to be general, and still disallows _S1[4] from using a _NAME as subject.
+// Many[annie] ishas the time Annie ishas said to me[albert] :
+// bool evaluateAmbiguousSubject()
+// {
+//    wchar_t temp2[1024];
+//    if (tagSet[subjectTag].PEMAOffset>=0 && pema[tagSet[subjectTag].PEMAOffset].getParentPattern()>=0)
+//    	lplog(L"%d:SUBJECT %s",tagSet[subjectTag].sourcePosition,pema[tagSet[subjectTag].PEMAOffset].toText(tagSet[subjectTag].sourcePosition,temp2,m));
+// }
+
+bool cSource::adjectiveSubjectNotWithBeVerb(int subjectTag, int mainVerbTag, int position, vector<cTagLocation>& tagSet, int& traceSource)
+{
 	if (tagSet[subjectTag].len == 1 && m[tagSet[subjectTag].sourcePosition].word->first != L"such" &&
 		((!tagSet[subjectTag].isPattern && Forms[tagSet[subjectTag].pattern]->name == L"adjective") || (tagSet[subjectTag].isPattern && patterns[tagSet[subjectTag].pattern]->name == L"_ADJECTIVE")) &&
 		mainVerbTag >= 0 &&
@@ -876,38 +842,45 @@ int cSource::evaluateSubjectVerbAgreement(cPatternMatchArray::tPatternMatch* par
 	{
 		if (debugTrace.traceSubjectVerbAgreement)
 			lplog(L"%d: adjective subject not used with BE verb [SOURCE=%06d] cost=%d", position, traceSource = gTraceSource++, 4);
-		return 4;
+		return true;
 	}
-	// his sacrificed ambition / his is modifying a past verb which serves as an adjective
-	if (mainVerbTag >= 0 && subjectTag >= 0 && nextSubjectTag < 0 && tagSet[subjectTag].len == 1 && m[tagSet[subjectTag].sourcePosition].queryForm(possessiveDeterminerForm) != -1 &&
-		nextVerbAgreeTag < 0 && tagSet[mainVerbTag].len == 1 && // &&
+	return false;
+}
+
+// his sacrificed ambition / his is modifying a past verb which serves as an adjective
+bool cSource::possessiveDeterminerSubject(int subjectTag, int nextSubjectTag, int mainVerbTag, int nextVerbAgreeTag, int position, vector<cTagLocation>& tagSet, int& traceSource)
+{
+	if (mainVerbTag >= 0 && subjectTag >= 0 && nextSubjectTag < 0 &&
+		tagSet[subjectTag].len == 1 &&
+		m[tagSet[subjectTag].sourcePosition].queryForm(possessiveDeterminerForm) != -1 &&
+		nextVerbAgreeTag < 0 && tagSet[mainVerbTag].len == 1 &&
 		tagSet[subjectTag].sourcePosition == tagSet[mainVerbTag].sourcePosition - 1 &&
 		(m[tagSet[mainVerbTag].sourcePosition].queryForm(nounForm) != -1 ||
 			((m[tagSet[mainVerbTag].sourcePosition].word->second.inflectionFlags & VERB_PAST) == VERB_PAST && m[tagSet[mainVerbTag].sourcePosition + 1].queryForm(nounForm) != -1)))
-		//if (nextSubjectTag < 0 && tagSet[subjectTag].len == 1 && m[tagSet[subjectTag].sourcePosition].queryForm(possessiveDeterminerForm) != -1 &&
-		//	nextVerbAgreeTag < 0 && tagSet[mainVerbTag].len == 1 && (m[tagSet[mainVerbTag].sourcePosition].word->second.inflectionFlags&VERB_PAST) != -1 &&
-		//	tagSet[subjectTag].sourcePosition == tagSet[mainVerbTag].sourcePosition - 1 && m[tagSet[mainVerbTag].sourcePosition + 1].queryForm(nounForm) != -1)
 	{
 		if (debugTrace.traceSubjectVerbAgreement)
 			lplog(L"%d: use of possessive determiner as subject [SOURCE=%06d] cost=%d", position, traceSource = gTraceSource++, 6);
-		//int patternEnd = position + pm->len;
-		//wstring sentence;
-		//int ss = sentenceStarts.binary_search_lower_bound(position);
-		//getSentenceWithTags(*this, position, patternEnd, sentenceStarts[ss], sentenceStarts[ss+1], pm->pemaByPatternEnd, sentence);
-		//lplog(L"ZZCHECK %d:%s",position,sentence.c_str());
-		return 6;
+		return true;
 	}
+	return false;
+}
+
+bool cSource::theMostSubjectWithPastVerb(int subjectTag, int position, vector<cTagLocation>& tagSet, int& traceSource)
+{
 	// checking for 'the most' followed by a past verb
 	if (tagSet[subjectTag].len == 2 && (m[tagSet[subjectTag].sourcePosition].word->first == L"the" && m[tagSet[subjectTag].sourcePosition + 1].word->first == L"most" &&
 		m[tagSet[subjectTag].sourcePosition + 1].getRelVerb() >= 0 && m[m[tagSet[subjectTag].sourcePosition + 1].getRelVerb()].word->second.inflectionFlags & (VERB_PRESENT_PARTICIPLE | VERB_PAST)) != 0)
 	{
 		if (debugTrace.traceSubjectVerbAgreement)
 			lplog(L"%d: 'the most' as subject with a directly following PAST verb [SOURCE=%06d] cost=%d", position, traceSource = gTraceSource++, 10);
-		return 10;
+		return true;
 	}
-	//if (mainVerbTag >= 0 && subjectTag >= 0)
-	//	lplog(L"ZZCHECK %d:%d<0 %d==1 %d!=-1 %d<0 %d==1 %d==%d-1 %d!=-1", position, nextSubjectTag, tagSet[subjectTag].len, m[tagSet[subjectTag].sourcePosition].queryForm(possessiveDeterminerForm),
-	//		nextVerbAgreeTag, tagSet[mainVerbTag].len, tagSet[subjectTag].sourcePosition, tagSet[mainVerbTag].sourcePosition, m[tagSet[mainVerbTag].sourcePosition].queryForm(nounForm));
+	return false;
+}
+
+bool cSource::agreeVerbNotFoundOrQuestion(int &conditionalTag, int & nextConditionalTag, int futureTag, int subjectTag, int nextSubjectTag, int mainVerbTag, int nextMainVerbTag, 
+	int &verbAgreeTag, int &nextVerbAgreeTag, int position, int nounPosition, vector<cTagLocation>& tagSet, int& traceSource)
+{
 	if ((conditionalTag < 0 && futureTag < 0 && verbAgreeTag < 0) || subjectTag < 0 || mainVerbTag < 0 || nextSubjectTag >= 0)
 	{
 		// check for question
@@ -924,22 +897,15 @@ int cSource::evaluateSubjectVerbAgreement(cPatternMatchArray::tPatternMatch* par
 			if (debugTrace.traceSubjectVerbAgreement)
 				lplog(L"%d:Search for noun and verb tag returned V_AGREE tag=(%d,%d) SUBJECT tag=(%d,%d) VERB tag=(%d,%d) [SOURCE=%06d] cost=%d",
 					position, verbAgreeTag, nextVerbAgreeTag, subjectTag, nextSubjectTag, mainVerbTag, nextMainVerbTag, traceSource = gTraceSource++, 0);
-			return 0;
+			return true;
 		}
 	}
-	int relationCost = 0;
-	cSourceWordInfo::cRMap* rm;
-	int verbPosition = (verbAgreeTag >= 0) ? tagSet[verbAgreeTag].sourcePosition : -1;
-	// prevent _INTRO_S1 that matches a _PP like 'from her' and a subject like 'face' when it should be 'from her face' - This particular intro_S1 should not be allowed 
-	// But this , she knew , was not so , for her face was perfectly unharmed ; 
-	// position must = nounPosition because nounPosition = the main noun, which may have a determiner which is perfectly normal (and in this case position!=nounPosition)
-	if (nounPosition >= 1 && position == nounPosition && m[nounPosition].queryForm(nounForm) != -1 && m[nounPosition - 1].queryForm(possessiveDeterminerForm) != -1)
-	{
-		if (debugTrace.traceSubjectVerbAgreement)
-			lplog(L"%d:Noun subject %d:%s is preceeded by a possessive determiner %d:%s",
-				position, nounPosition, m[nounPosition].word->first.c_str(), nounPosition - 1, m[nounPosition - 1].word->first.c_str());
-		relationCost += 10;
-	}
+	return false;
+}
+
+void cSource::decreaseSubjectVerbCostIfRelated(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, unsigned parentPosition, unsigned int position, 
+	vector<cTagLocation> &tagSet, int nounPosition,int verbPosition, int subjectTag, int mainVerbTag, int verbAgreeTag, int nextVerbAgreeTag,int &relationCost)
+{
 	if ((nounPosition >= 0 || nounPosition == -2) && verbPosition >= 0)
 	{
 		tIWMM nounWord, verbWord;
@@ -963,6 +929,7 @@ int cSource::evaluateSubjectVerbAgreement(cPatternMatchArray::tPatternMatch* par
 		if (verbWord->second.mainEntry != wNULL)
 			verbWord = verbWord->second.mainEntry;
 		cSourceWordInfo::cRMap::tIcRMap tr = tNULL;
+		cSourceWordInfo::cRMap* rm;
 		if ((rm = nounWord->second.relationMaps[SubjectWordWithVerb]) && ((tr = rm->r.find(verbWord->first)) != rm->r.end()))
 			relationCost -= COST_PER_RELATION;
 		else // Whom did Obama defeat for the Senate seat? - Obama is a single word, so it never gets a name (nounPosition=-2) designation, and so never tries __ppn__->verb relation
@@ -982,92 +949,66 @@ int cSource::evaluateSubjectVerbAgreement(cPatternMatchArray::tPatternMatch* par
 					temp, nounPosition, nounWord->first.c_str(), tr->second.frequency, verbWord->first.c_str());
 		}
 	}
-	if (nounPosition >= 0 && m[nounPosition].queryForm(personalPronounAccusativeForm) >= 0)
+}
+
+void cSource::substitutePrepObjectSomeOf(int &nounPosition, bool &singularSet,bool &pluralSet)
+{
+	// SANAM
+	// substitute the object of the preposition
+	set <wstring> SANAM = { L"some", L"any", L"none", L"all", L"most" };
+	if (SANAM.find(m[nounPosition].word->first) != SANAM.end() && nounPosition + 1 < (signed)m.size() && m[nounPosition + 1].word->first == L"of")
 	{
+		singularSet = pluralSet = false;
 		if (debugTrace.traceSubjectVerbAgreement)
-			lplog(L"%d:Noun phrase at %d is accusative pronoun [additional cost of 4]!", position, nounPosition);
-		//relationCost += 4; must be carefully tested
-	}
-	if (restateSet && relationCost)
-	{
-		if (debugTrace.traceSubjectVerbAgreement)
-			lplog(L"Subject restated.  cost %d = %d/subject length=%d.", relationCost / tagSet[subjectTag].len, relationCost, tagSet[subjectTag].len);
-		relationCost /= tagSet[subjectTag].len;
-	}
-	if (conditionalTag >= 0 || futureTag >= 0) // he will have, they will have etc.
-	{
-		if (debugTrace.traceSubjectVerbAgreement)
-			lplog(L"%d: conditional agree [SOURCE=%06d] cost=%d", position, traceSource = gTraceSource++, relationCost);
-		return relationCost;
-	}
-	//int nextPersonTag=-1;
-	//  bool thirdPersonSet=(subjectTag>=0) ? findTagConstrained(tagSet,"THIRD_PERSON",nextPersonTag,tagSet[subjectTag])>=0 : false;
-	int person = THIRD_PERSON;
-	// if third_person not already set,
-	if (nounPosition >= 0)
-	{
-		// SANAM
-		// substitute the object of the preposition
-		set <wstring> SANAM = { L"some", L"any", L"none", L"all", L"most" };
-		if (SANAM.find(m[nounPosition].word->first) != SANAM.end() && nounPosition + 1 < (signed)m.size() && m[nounPosition + 1].word->first == L"of")
-		{
-			singularSet = pluralSet = false;
-			if (debugTrace.traceSubjectVerbAgreement)
-				lplog(L"%d:SANAM detected: tracing immediately proceeding prepositional phrase.", nounPosition);
-			// substitute the object of the preposition.  We cannot use the relPrep or other syntactic relations fields because they are not set yet at this stage.
-			// Some of the debt is paid off.
-			// Some of the debts are being paid off.
-			for (unsigned int pmOffset = 0; pmOffset < m[nounPosition + 1].pma.count; pmOffset++)
-				if (patterns[m[nounPosition + 1].pma.content[pmOffset].getPattern()]->name == L"_PP")
+			lplog(L"%d:SANAM detected: tracing immediately proceeding prepositional phrase.", nounPosition);
+		// substitute the object of the preposition.  We cannot use the relPrep or other syntactic relations fields because they are not set yet at this stage.
+		// Some of the debt is paid off.
+		// Some of the debts are being paid off.
+		for (unsigned int pmOffset = 0; pmOffset < m[nounPosition + 1].pma.count; pmOffset++)
+			if (patterns[m[nounPosition + 1].pma.content[pmOffset].getPattern()]->name == L"_PP")
+			{
+				vector < vector <cTagLocation> > prepTagSets;
+				if (startCollectTags(debugTrace.traceSubjectVerbAgreement, prepTagSet, nounPosition + 1, m[nounPosition + 1].pma.content[pmOffset].pemaByPatternEnd, prepTagSets, true, false, L"evaluateSubjectVerbAgreement SANAM") > 0)
 				{
-					vector < vector <cTagLocation> > prepTagSets;
-					if (startCollectTags(debugTrace.traceSubjectVerbAgreement, prepTagSet, nounPosition + 1, m[nounPosition + 1].pma.content[pmOffset].pemaByPatternEnd, prepTagSets, true, false, L"evaluateSubjectVerbAgreement SANAM") > 0)
+					for (unsigned int J = 0; J < prepTagSets.size(); J++)
 					{
-						for (unsigned int J = 0; J < prepTagSets.size(); J++)
+						int nextTag = -1, tag = findTag(prepTagSets[J], L"PREPOBJECT", nextTag);
+						vector < vector <cTagLocation> > ndTagSets;
+						if (tag >= 0 && startCollectTagsFromTag(debugTrace.traceSubjectVerbAgreement, nounDeterminerTagSet, prepTagSets[J][tag], ndTagSets, -1, true, true, L"subject verb agreement - SANAM") > 0)
 						{
-							int nextTag = -1, tag = findTag(prepTagSets[J], L"PREPOBJECT", nextTag);
-							vector < vector <cTagLocation> > ndTagSets;
-							if (tag >= 0 && startCollectTagsFromTag(debugTrace.traceSubjectVerbAgreement, nounDeterminerTagSet, prepTagSets[J][tag], ndTagSets, -1, true, true, L"subject verb agreement - SANAM") > 0)
+							if (debugTrace.traceSubjectVerbAgreement)
+								lplog(L"%d:SANAM detection: prepobject at %d-%d.", nounPosition, prepTagSets[J][tag].sourcePosition, prepTagSets[J][tag].sourcePosition + prepTagSets[J][tag].len);
+							for (unsigned int K = 0; K < ndTagSets.size(); K++)
 							{
-								if (debugTrace.traceSubjectVerbAgreement)
-									lplog(L"%d:SANAM detection: prepobject at %d-%d.", nounPosition, prepTagSets[J][tag].sourcePosition, prepTagSets[J][tag].sourcePosition + prepTagSets[J][tag].len);
-								for (unsigned int K = 0; K < ndTagSets.size(); K++)
+								int nounTag = -1, nextNounTag = -1, nAgreeTag = -1, nextNAgreeTag = -1;
+								if ((nounTag = findTag(ndTagSets[K], L"NOUN", nextNounTag)) >= 0 && (nAgreeTag = findTagConstrained(ndTagSets[K], L"N_AGREE", nextNAgreeTag, ndTagSets[K][nounTag])) > 0)
 								{
-									int nounTag = -1, nextNounTag = -1, nAgreeTag = -1, nextNAgreeTag = -1;
-									if ((nounTag = findTag(ndTagSets[K], L"NOUN", nextNounTag)) >= 0 && (nAgreeTag = findTagConstrained(ndTagSets[K], L"N_AGREE", nextNAgreeTag, ndTagSets[K][nounTag])) > 0)
+									if (debugTrace.traceSubjectVerbAgreement)
+										lplog(L"%d:SANAM detection: N_AGREE within prepobject %d-%d located at %d.", nounPosition, prepTagSets[J][tag].sourcePosition, prepTagSets[J][tag].sourcePosition + prepTagSets[J][tag].len, ndTagSets[K][nAgreeTag].sourcePosition);
+									tIWMM nounWord = m[nounPosition = ndTagSets[K][nAgreeTag].sourcePosition].word;
+									if (nounWord->second.inflectionFlags & SINGULAR)
 									{
 										if (debugTrace.traceSubjectVerbAgreement)
-											lplog(L"%d:SANAM detection: N_AGREE within prepobject %d-%d located at %d.", nounPosition, prepTagSets[J][tag].sourcePosition, prepTagSets[J][tag].sourcePosition + prepTagSets[J][tag].len, ndTagSets[K][nAgreeTag].sourcePosition);
-										tIWMM nounWord = m[nounPosition = ndTagSets[K][nAgreeTag].sourcePosition].word;
-										if (nounWord->second.inflectionFlags & SINGULAR)
-										{
-											if (debugTrace.traceSubjectVerbAgreement)
-												lplog(L"%d:noun %s is singular.", nounPosition, nounWord->first.c_str());
-											singularSet = true;
-										}
-										if (nounWord->second.inflectionFlags & PLURAL)
-										{
-											if (debugTrace.traceSubjectVerbAgreement)
-												lplog(L"%d:noun %s is plural.", nounPosition, nounWord->first.c_str());
-											pluralSet = true;
-										}
+											lplog(L"%d:noun %s is singular.", nounPosition, nounWord->first.c_str());
+										singularSet = true;
+									}
+									if (nounWord->second.inflectionFlags & PLURAL)
+									{
+										if (debugTrace.traceSubjectVerbAgreement)
+											lplog(L"%d:noun %s is plural.", nounPosition, nounWord->first.c_str());
+										pluralSet = true;
 									}
 								}
 							}
 						}
 					}
 				}
-
-		}
-		person = m[nounPosition].word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON | THIRD_PERSON);
+			}
 	}
-	if (!person)
-		person = THIRD_PERSON;
-	// if singular | plural not already set
-	// words like "there" may be plural or singular depending on usage
-	int inflectionFlags = m[verbPosition].word->second.inflectionFlags & VERB_INFLECTIONS_MASK;
-	//wstring verbInflections;
-	//lplog(L"%d:%s %s", verbPosition, m[verbPosition].word->first.c_str(), getInflectionName(inflectionFlags, verbInflectionMap, verbInflections));
+}
+
+void cSource::determineSingularOrPlural(int nounPosition, int person, int position, int nameLastPosition, int inflectionFlags, bool& singularSet, bool& pluralSet)
+{
 	if (!singularSet && !pluralSet && nounPosition >= 0)
 	{
 		pluralSet = (m[nounPosition].word->second.inflectionFlags & PLURAL) == PLURAL;
@@ -1122,56 +1063,45 @@ int cSource::evaluateSubjectVerbAgreement(cPatternMatchArray::tPatternMatch* par
 		wstring temp;
 		lplog(L"%d:Noun phrase at %d was %s [plural=%s singular=%s]", position, nounPosition, getInflectionName(person, nounInflectionMap, temp), (pluralSet) ? L"true" : L"false", (singularSet) ? L"true" : L"false");
 	}
-	bool ambiguousTense;
-	// the verb 'beat' is both past and present tense
-	if (ambiguousTense = ((inflectionFlags & (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) == (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)))
-	{
-		if (pastTag >= 0) inflectionFlags &= VERB_PAST_PARTICIPLE | VERB_PAST | VERB_PAST_PLURAL;
-		else inflectionFlags &= VERB_PRESENT_PARTICIPLE | VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_THIRD_SINGULAR | VERB_PRESENT_PLURAL;
-	}
-	if (debugTrace.traceSubjectVerbAgreement)
-	{
-		wstring temp;
-		lplog(L"%d:Verb phrase at (%d:%d-%d) had mask of %s.", position, verbPosition,
-			tagSet[mainVerbTag].sourcePosition, tagSet[mainVerbTag].len + tagSet[mainVerbTag].sourcePosition,
-			getInflectionName(inflectionFlags, verbInflectionMap, temp));
-	}
-	//	The present subjunctive is identical to the bare infinitive(and imperative) of the verb in all forms.
-	// This means that, for almost all verbs, the present subjunctive differs from the present indicative only in the 
-	// third person singular form, which lacks the ending - s in the subjunctive.
+}
 
-	//Present indicative
-	//	I own, you own, he owns, we own, they own
-	//Present subjunctive
-	//	(that) I own, (that)you own, (that)he own, (that)we own, (that)they own
+//	The present subjunctive is identical to the bare infinitive(and imperative) of the verb in all forms.
+// This means that, for almost all verbs, the present subjunctive differs from the present indicative only in the 
+// third person singular form, which lacks the ending - s in the subjunctive.
 
-	//	With the verb be, however, the two moods are fully distinguished :
-	//Present indicative
-	//	I am, you are, he is, we are, they are
-	//Present subjunctive
-	//	(that) I be, (that)you be, (that)he be, (that)we be, (that)they be
-	//	Note also the defective verb beware, which lacks indicative forms, but has a present subjunctive : (that)she beware…
+//Present indicative
+//	I own, you own, he owns, we own, they own
+//Present subjunctive
+//	(that) I own, (that)you own, (that)he own, (that)we own, (that)they own
 
-	//The two moods are also fully distinguished when negated.
-	//Present subjunctive forms are negated by placing the word not before them.
+//	With the verb be, however, the two moods are fully distinguished :
+//Present indicative
+//	I am, you are, he is, we are, they are
+//Present subjunctive
+//	(that) I be, (that)you be, (that)he be, (that)we be, (that)they be
+//	Note also the defective verb beware, which lacks indicative forms, but has a present subjunctive : (that)she beware…
 
-	//Present indicative
-	//	I do not own, you do not own, he does not own…; I am not…
-	//Present subjunctive
-	//	(that) I not own, (that)you not own, (that)he not own…; (that)I not be…
+//The two moods are also fully distinguished when negated.
+//Present subjunctive forms are negated by placing the word not before them.
 
-	//	The past subjunctive exists as a distinct form only for the verb be, which has the form were throughout :
-	//Past indicative
-	//	I was, you were, he was, we were, they were
-	//Past subjunctive
-	//	(that) I were, (that)you were, (that)he were, (that)we were, (that)they were
+//Present indicative
+//	I do not own, you do not own, he does not own…; I am not…
+//Present subjunctive
+//	(that) I not own, (that)you not own, (that)he not own…; (that)I not be…
 
-	//In the past tense, there is no difference between the two moods as regards manner of negation : I was not; (that)I were not.  
-	//Verbs other than be are described as lacking a past subjunctive, 
-	//or possibly as having a past subjunctive identical in form to the past indicative : (that)I owned; (that)I did not own.
+//	The past subjunctive exists as a distinct form only for the verb be, which has the form were throughout :
+//Past indicative
+//	I was, you were, he was, we were, they were
+//Past subjunctive
+//	(that) I were, (that)you were, (that)he were, (that)we were, (that)they were
 
-	//Certain subjunctives(particularly were) can also be distinguished from indicatives by the possibility of inversion with the subject.
+//In the past tense, there is no difference between the two moods as regards manner of negation : I was not; (that)I were not.  
+//Verbs other than be are described as lacking a past subjunctive, 
+//or possibly as having a past subjunctive identical in form to the past indicative : (that)I owned; (that)I did not own.
 
+//Certain subjunctives(particularly were) can also be distinguished from indicatives by the possibility of inversion with the subject.
+bool cSource::isSubjunctiveMood(int subjectTag,int position,int verbPosition,int person, vector<cTagLocation> &tagSet)
+{
 	bool subjunctiveMood = findOneTag(tagSet, L"SUBJUNCTIVE") >= 0;
 	// if/lest exception
 	// If I were a rich man, I would make more charitable donations.
@@ -1197,84 +1127,93 @@ int cSource::evaluateSubjectVerbAgreement(cPatternMatchArray::tPatternMatch* par
 		{
 			if (debugTrace.traceSubjectVerbAgreement)
 				lplog(L"%d: subjunctive tag agreement 1) verb is 'were' or 'be'.", position);
-			return relationCost;
+			return true;
 		}
 		// ambiguous for third person - subjunctive mood disagrees with non subjunctive 
 		if (person & THIRD_PERSON)
 		{
 			if (debugTrace.traceSubjectVerbAgreement)
 				lplog(L"%d: subjunctive tag agreement 2) subject is third person.", position);
-			return relationCost;
+			return true;
 		}
 		if (findOneTag(tagSet, L"not") >= 0)
 		{
 			if (debugTrace.traceSubjectVerbAgreement)
 				lplog(L"%d: subjunctive tag agreement 3) verb negated.", position);
-			return relationCost;
+			return true;
 		}
 		if (debugTrace.traceSubjectVerbAgreement)
 			lplog(L"%d: subjunctive mood failed to find a case where it would make a difference in agreement.", position);
 	}
+	return false;
+}
+
+bool cSource::agreeInPersonPluralityAndTense(int inflectionFlags, int verbPosition, int person, bool singularSet, bool pluralSet)
+{
 	bool agree = true;
 	switch (inflectionFlags)
 	{
-	case VERB_PRESENT_PARTICIPLE:
-	case VERB_PAST_PARTICIPLE:
-	case VERB_PAST:break;
-	case VERB_PRESENT_FIRST_SINGULAR: // only FIRST_SINGULAR !
-		// you want, I want, they want, we want NOT he want!
-		if ((person & THIRD_PERSON) == THIRD_PERSON && (singularSet && !pluralSet)) agree = false;
-		if (((person & SECOND_PERSON) || (person & THIRD_PERSON)) && m[verbPosition].word->first == L"am")
-			agree = false;
-		break;
-	case VERB_PRESENT_THIRD_SINGULAR:
-		// he wants ONLY
-		if ((person & THIRD_PERSON) != THIRD_PERSON || (!singularSet && pluralSet)) agree = false;
-		break;
-	case VERB_PRESENT_PLURAL:
-	case VERB_PAST_PLURAL:
-		if (((person & THIRD_PERSON) != THIRD_PERSON || (singularSet && !pluralSet)) &&
-			(person & SECOND_PERSON) != SECOND_PERSON && (person != (FIRST_PERSON | SECOND_PERSON))) agree = false;
-		break;
-	case VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_PLURAL:
-		if (((person & THIRD_PERSON) != THIRD_PERSON || (singularSet && !pluralSet)) && (person & FIRST_PERSON) != FIRST_PERSON &&
-			(person & SECOND_PERSON) != SECOND_PERSON && (person != (FIRST_PERSON | SECOND_PERSON))) agree = false;
-		break;
-	case VERB_PAST | VERB_PAST_PARTICIPLE:
-		break;
-	case VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_THIRD_SINGULAR:
-		break;
-	case VERB_PAST_PARTICIPLE | VERB_PRESENT_FIRST_SINGULAR:
-		break;
-	case VERB_PRESENT_PARTICIPLE | VERB_PRESENT_FIRST_SINGULAR:
-		break;
-	case VERB_PAST | VERB_PRESENT_THIRD_SINGULAR:
-		break;
-	case VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_THIRD_SINGULAR | VERB_PAST_PLURAL:
-		break;
-	case VERB_PAST | VERB_PRESENT_PARTICIPLE | VERB_PRESENT_THIRD_SINGULAR:
-		break;
-	case VERB_PRESENT_PARTICIPLE | VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_THIRD_SINGULAR:
-		break;
-	case VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_THIRD_SINGULAR | VERB_PRESENT_PLURAL:
-		break;
-	case VERB_PAST | VERB_PAST_PARTICIPLE | VERB_PRESENT_PARTICIPLE:
-	case VERB_PAST | VERB_PRESENT_PARTICIPLE:
-	case VERB_PAST_PARTICIPLE | VERB_PRESENT_PARTICIPLE:
-	case VERB_PAST_THIRD_SINGULAR:
-	case VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_SECOND_SINGULAR:
-	case VERB_PRESENT_PARTICIPLE | VERB_PRESENT_THIRD_SINGULAR:
-	case VERB_PRESENT_SECOND_SINGULAR:
-	case VERB_PRESENT_SECOND_SINGULAR | VERB_PRESENT_PLURAL:
-	case 0:
-		break;
-	default:
-	{
-		wstring temp;
-		lplog(LOG_ERROR, L"inflectionFlags of %s (%d) on %s not supported!", getInflectionName(inflectionFlags, verbForm, temp), inflectionFlags, m[verbPosition].word->first.c_str());
+		case VERB_PRESENT_PARTICIPLE:
+		case VERB_PAST_PARTICIPLE:
+		case VERB_PAST:break;
+		case VERB_PRESENT_FIRST_SINGULAR: // only FIRST_SINGULAR !
+			// you want, I want, they want, we want NOT he want!
+			if ((person & THIRD_PERSON) == THIRD_PERSON && (singularSet && !pluralSet)) agree = false;
+			if (((person & SECOND_PERSON) || (person & THIRD_PERSON)) && m[verbPosition].word->first == L"am")
+				agree = false;
+			break;
+		case VERB_PRESENT_THIRD_SINGULAR:
+			// he wants ONLY
+			if ((person & THIRD_PERSON) != THIRD_PERSON || (!singularSet && pluralSet)) agree = false;
+			break;
+		case VERB_PRESENT_PLURAL:
+		case VERB_PAST_PLURAL:
+			if (((person & THIRD_PERSON) != THIRD_PERSON || (singularSet && !pluralSet)) &&
+				(person & SECOND_PERSON) != SECOND_PERSON && (person != (FIRST_PERSON | SECOND_PERSON))) agree = false;
+			break;
+		case VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_PLURAL:
+			if (((person & THIRD_PERSON) != THIRD_PERSON || (singularSet && !pluralSet)) && (person & FIRST_PERSON) != FIRST_PERSON &&
+				(person & SECOND_PERSON) != SECOND_PERSON && (person != (FIRST_PERSON | SECOND_PERSON))) agree = false;
+			break;
+		case VERB_PAST | VERB_PAST_PARTICIPLE:
+			break;
+		case VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_THIRD_SINGULAR:
+			break;
+		case VERB_PAST_PARTICIPLE | VERB_PRESENT_FIRST_SINGULAR:
+			break;
+		case VERB_PRESENT_PARTICIPLE | VERB_PRESENT_FIRST_SINGULAR:
+			break;
+		case VERB_PAST | VERB_PRESENT_THIRD_SINGULAR:
+			break;
+		case VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_THIRD_SINGULAR | VERB_PAST_PLURAL:
+			break;
+		case VERB_PAST | VERB_PRESENT_PARTICIPLE | VERB_PRESENT_THIRD_SINGULAR:
+			break;
+		case VERB_PRESENT_PARTICIPLE | VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_THIRD_SINGULAR:
+			break;
+		case VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_THIRD_SINGULAR | VERB_PRESENT_PLURAL:
+			break;
+		case VERB_PAST | VERB_PAST_PARTICIPLE | VERB_PRESENT_PARTICIPLE:
+		case VERB_PAST | VERB_PRESENT_PARTICIPLE:
+		case VERB_PAST_PARTICIPLE | VERB_PRESENT_PARTICIPLE:
+		case VERB_PAST_THIRD_SINGULAR:
+		case VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_SECOND_SINGULAR:
+		case VERB_PRESENT_PARTICIPLE | VERB_PRESENT_THIRD_SINGULAR:
+		case VERB_PRESENT_SECOND_SINGULAR:
+		case VERB_PRESENT_SECOND_SINGULAR | VERB_PRESENT_PLURAL:
+		case 0:
+			break;
+		default:
+		{
+			wstring temp;
+			lplog(LOG_ERROR, L"inflectionFlags of %s (%d) on %s not supported!", getInflectionName(inflectionFlags, verbForm, temp), inflectionFlags, m[verbPosition].word->first.c_str());
+		}
 	}
-	}
-	int cost = ((agree) ? 0 : NON_AGREEMENT_COST) + relationCost;
+	return agree;
+}
+
+void cSource::disagreementWithAmbiguousTense(bool agree,bool ambiguousTense, int verbAgreeTag, int conditionalTag, int mainVerbTag, int verbPosition, int position, vector<cTagLocation>& tagSet)
+{
 	if (!agree && ambiguousTense && verbAgreeTag >= 0 && conditionalTag < 0 &&
 		// avoid stomping on part of another pattern 'my millionaire would probably run for his life!'
 		(m[verbPosition].word->second.query(modalAuxiliaryForm) < 0 && m[verbPosition].word->second.query(futureModalAuxiliaryForm) < 0 &&
@@ -1285,10 +1224,147 @@ int cSource::evaluateSubjectVerbAgreement(cPatternMatchArray::tPatternMatch* par
 		if (debugTrace.traceSubjectVerbAgreement)
 			lplog(L"%d: Disagreement at ambiguous tense PEMA %d[%d] [SOURCE=%06d] increased cost=1", position, abs(tagSet[verbAgreeTag].PEMAOffset), abs(tagSet[mainVerbTag].PEMAOffset), gTraceSource);
 	}
+}
+
+void cSource::reduceCostIfRestate(bool restateSet, int relationCost, int subjectTag, vector<cTagLocation>& tagSet)
+{
+	if (restateSet && relationCost)
+	{
+		if (debugTrace.traceSubjectVerbAgreement)
+			lplog(L"Subject restated.  cost %d = %d/subject length=%d.", relationCost / tagSet[subjectTag].len, relationCost, tagSet[subjectTag].len);
+		relationCost /= tagSet[subjectTag].len;
+	}
+}
+
+/*
+1. Compound subjects made with 'and' are plural when they are used before
+the verb and refer to more than one thing:
+The lion and the tiger belong to the cat family.
+Bach and Beethoven are among the greatest composers of all time.
+2. When a compound subject made with 'and' follows the verb, and the
+first item in the compound is singular, the verb may agree with that:
+There was a desk and three chairs in the room.
+Strictly speaking, the verb should agree with both items: There were a desk
+and three chairs in the room. But since There were a desk sounds odd, no
+matter what follows desk, the verb may agree with desk alone—the first
+item. If the first item is plural, the verb always agrees with it:
+At the entrance stand two marble pillars and a statue of Napoleon.
+3. A compound subject that is made with and and refers to only one
+thing is always singular:
+The founder and first president of the college was Eleazor Wheelock.
+COLLECTIVE NOUNS ( a flock of geese) AND NOUNS OF MEASUREMENT (3/4 of a cup)
+Collective nouns and nouns of measurement are singular when they refer
+to a unit, and plural when they refer to the individuals or elements of
+a unit:
+Half of the cake was eaten.
+Half of the jewels were stolen.
+THE WORD NUMBER AS SUBJECT
+The word number is singular when it follows the, plural when it follows a:
+The number of applications was huge.
+A number of teenagers now hold full-time jobs.
+*/
+// tagSet is modified during this procedure!  Do not pass by address!
+int cSource::evaluateSubjectVerbAgreement(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, unsigned parentPosition, unsigned int position, vector<cTagLocation> tagSet, int& traceSource)
+{
+	LFS
+	int nextSubjectTag = -1, subjectTag = findTag(tagSet, L"SUBJECT", nextSubjectTag);
+	if (subjectTag < 0) return 0;
+	int nextMainVerbTag = -1;
+	int mainVerbTag = findTag(tagSet, L"VERB", nextMainVerbTag);
+	switchSpecialSubjectWithObject(position, pm,tagSet, subjectTag, mainVerbTag);
+	int nextVerbAgreeTag = -1, verbAgreeTag = (mainVerbTag >= 0) ? findTagConstrained(tagSet, L"V_AGREE", nextVerbAgreeTag, tagSet[mainVerbTag]) : -1;
+	bool restateSet, singularSet, pluralSet, adjectivalSet, embeddedS1ImproperEnding = false;
+	int nounPosition, nameLastPosition;
+	if (getSubjectInfo(tagSet[subjectTag], subjectTag, nounPosition, nameLastPosition, restateSet, singularSet, pluralSet, adjectivalSet, embeddedS1ImproperEnding) < 0)
+		return 0;
+	if (embeddedS1ImproperEnding)
+	{
+		if (debugTrace.traceSubjectVerbAgreement)
+			lplog(L"%d: subject has embedded S1 improper ending [SOURCE=%06d] cost=%d", position, traceSource = gTraceSource++, 20);
+		return 20;
+	}
+	if (m[tagSet[subjectTag].sourcePosition].queryForm(reflexivePronounForm) >= 0)
+		return 20;
+	// St. Pancras? - Pancras is an unknown, so verb is allowed.  Yet Pancras is after a ., so capitalization is allowed.
+	// disallow this case.
+	if (capitalizedVerbWithPeriod(subjectTag, verbAgreeTag, position, tagSet, traceSource))
+		return 20;
+	if (logLongSubject(subjectTag, verbAgreeTag, position, nounPosition, tagSet, traceSource))
+		return 20;
+	if (adjectiveSubjectNotWithBeVerb(subjectTag, mainVerbTag, position, tagSet, traceSource))
+		return 4;
+	if (possessiveDeterminerSubject(subjectTag, nextSubjectTag, mainVerbTag, nextVerbAgreeTag, position, tagSet, traceSource))
+		return 6;
+	if (theMostSubjectWithPastVerb(subjectTag, position, tagSet, traceSource))
+		return 10;
+	int nextConditionalTag = -1, nextFutureTag = -1;
+	int conditionalTag = (mainVerbTag >= 0) ? findTagConstrained(tagSet, L"conditional", nextConditionalTag, tagSet[mainVerbTag]) : -1;
+	int pastTag = (mainVerbTag >= 0) ? findTagConstrained(tagSet, L"past", nextConditionalTag, tagSet[mainVerbTag]) : -1;
+	int futureTag = (mainVerbTag >= 0) ? findTagConstrained(tagSet, L"future", nextFutureTag, tagSet[mainVerbTag]) : -1;
+	// if question set verbAgreeTag and conditionalTag, otherwise if no verbAgreeTag then return with cost=0
+	if (agreeVerbNotFoundOrQuestion(conditionalTag, nextConditionalTag, futureTag, subjectTag, nextSubjectTag, mainVerbTag, nextMainVerbTag, verbAgreeTag, nextVerbAgreeTag, position, nounPosition, tagSet, traceSource))
+		return 0;
+	int relationCost = 0;
+	int verbPosition = (verbAgreeTag >= 0) ? tagSet[verbAgreeTag].sourcePosition : -1;
+	// prevent _INTRO_S1 that matches a _PP like 'from her' and a subject like 'face' when it should be 'from her face' - This particular intro_S1 should not be allowed 
+	// But this , she knew , was not so , for her face was perfectly unharmed ; 
+	// position must = nounPosition because nounPosition = the main noun, which may have a determiner which is perfectly normal (and in this case position!=nounPosition)
+	if (nounPosition >= 1 && position == nounPosition && m[nounPosition].queryForm(nounForm) != -1 && m[nounPosition - 1].queryForm(possessiveDeterminerForm) != -1)
+	{
+		if (debugTrace.traceSubjectVerbAgreement)
+			lplog(L"%d:Noun subject %d:%s is preceeded by a possessive determiner %d:%s",
+				position, nounPosition, m[nounPosition].word->first.c_str(), nounPosition - 1, m[nounPosition - 1].word->first.c_str());
+		relationCost += 10;
+	}
+	decreaseSubjectVerbCostIfRelated(parentpm, pm, parentPosition, position, tagSet, nounPosition, verbPosition, subjectTag, mainVerbTag, verbAgreeTag, nextVerbAgreeTag, relationCost);
+	if (nounPosition >= 0 && m[nounPosition].queryForm(personalPronounAccusativeForm) >= 0)
+	{
+		if (debugTrace.traceSubjectVerbAgreement)
+			lplog(L"%d:Noun phrase at %d is accusative pronoun [additional cost of 4?]", position, nounPosition);
+		//relationCost += 4; must be carefully tested
+	}
+	reduceCostIfRestate(restateSet, relationCost, subjectTag, tagSet);
+	if (conditionalTag >= 0 || futureTag >= 0) // he will have, they will have etc.
+	{
+		if (debugTrace.traceSubjectVerbAgreement)
+			lplog(L"%d: conditional agree [SOURCE=%06d] cost=%d", position, traceSource = gTraceSource++, relationCost);
+		return relationCost;
+	}
+	int person = THIRD_PERSON;
+	if (nounPosition >= 0)
+	{
+		substitutePrepObjectSomeOf(nounPosition, singularSet, pluralSet);
+		person = m[nounPosition].word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON | THIRD_PERSON);
+	}
+	if (!person)
+		person = THIRD_PERSON;
+	// if singular | plural not already set
+	// words like "there" may be plural or singular depending on usage
+	int inflectionFlags = m[verbPosition].word->second.inflectionFlags & VERB_INFLECTIONS_MASK;
+	//wstring verbInflections;
+	//lplog(L"%d:%s %s", verbPosition, m[verbPosition].word->first.c_str(), getInflectionName(inflectionFlags, verbInflectionMap, verbInflections));
+	determineSingularOrPlural(nounPosition, person, position, nameLastPosition, inflectionFlags, singularSet, pluralSet);
+	bool ambiguousTense;
+	// the verb 'beat' is both past and present tense
+	if (ambiguousTense = ((inflectionFlags & (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) == (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)))
+	{
+		if (pastTag >= 0) inflectionFlags &= VERB_PAST_PARTICIPLE | VERB_PAST | VERB_PAST_PLURAL;
+		else inflectionFlags &= VERB_PRESENT_PARTICIPLE | VERB_PRESENT_FIRST_SINGULAR | VERB_PRESENT_THIRD_SINGULAR | VERB_PRESENT_PLURAL;
+	}
+	if (debugTrace.traceSubjectVerbAgreement && mainVerbTag>=0)
+	{
+		wstring temp;
+		lplog(L"%d:Verb phrase at (%d:%d-%d) had mask of %s.", position, verbPosition,
+			tagSet[mainVerbTag].sourcePosition, tagSet[mainVerbTag].len + tagSet[mainVerbTag].sourcePosition,
+			getInflectionName(inflectionFlags, verbInflectionMap, temp));
+	}
+	if (isSubjunctiveMood(subjectTag, position, verbPosition, person, tagSet))
+		return relationCost;
+	bool agree = agreeInPersonPluralityAndTense(inflectionFlags, verbPosition, person, singularSet, pluralSet);
+	int cost = ((agree) ? 0 : NON_AGREEMENT_COST) + relationCost;
+	disagreementWithAmbiguousTense(agree, ambiguousTense, verbAgreeTag, conditionalTag, mainVerbTag, verbPosition, position, tagSet);
 	if (debugTrace.traceSubjectVerbAgreement)
 		lplog(L"%d: %s [SOURCE=%06d] cost=%d", position, (agree) ? L"agree" : L"DISAGREE", traceSource = gTraceSource++, cost);
-	//if (!agree && debugSwitchBack.length()>0)
-	//	lplog(LOG_INFO, debugSwitchBack.c_str());
 	return cost;
 }
 
