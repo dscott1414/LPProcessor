@@ -1726,6 +1726,7 @@ bool cSource::ageDetection(int where, int primary, int secondary)
 		objects[primary].associatedAdjectives.push_back(Words.gquery(L"old"));
 	return true;
 }
+
 // in secondary quotes, inPrimaryQuote=false
 bool cSource::evaluateMetaNameEquivalence(int where, vector <cTagLocation>& tagSet, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb)
 {

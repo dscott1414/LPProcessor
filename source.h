@@ -2140,16 +2140,15 @@ int &numFirstInQuote,
 		int &paragraphsSinceLastSubjectWasSet, int wherePreviousLastSubjects,
 		bool &inPrimaryQuote, bool &immediatelyAfterEndOfParagraph, bool &quotesSeenSinceLastSentence, bool &previousSpeakersUncertain,
 		vector <int> &previousLastSubjects);
+	void scanSentenceForSyntacticAndSpaceRelationsAndMetaQueries(int where, int lastBeginS1, int& currentMetaWhereQuery, int& uqPreviousToLastSentenceEnd, int& uqLastSentenceEnd, vector <int>& lastSubjects);
+	void processUnquotedEnds(int where, int& currentMetaWhereQuery, int& uqPreviousToLastSentenceEnd, int& uqLastSentenceEnd, vector <int>& lastSubjects);
+	void ageEmbeddedSpeakerGroups(int where, bool inPrimaryQuote);
 	void processEndOfSentenceRS(int where,
-		int &questionSpeakerLastSentence, int &questionSpeaker, bool &currentIsQuestion,
-		int &lastBeginS1, int &lastRelativePhrase, int &lastQ2, int &lastClosingPrimaryQuote,
-		int &paragraphsSinceLastSubjectWasSet, int &wherePreviousLastSubjects,
-		bool &inPrimaryQuote, bool &inSecondaryQuote, bool &quotesSeenSinceLastSentence,
-		int whereSubject, vector <int> &lastSubjects, vector <int> &previousLastSubjects,
-		int &lastSentenceMetaSpeakerQuery, int &currentMetaSpeakerQuery, int &currentMetaWhereQuery,
-		bool &endOfSentence, bool &transitionSinceEOS, bool &accumulateMultipleSubjects,
-		int &uqPreviousToLastSentenceEnd, int &uqLastSentenceEnd, int &lastSentenceEnd,
-		int lastSectionWord, unsigned int &agingStructuresSeen);
+		int& questionSpeakerLastSentence, int& questionSpeaker, bool& currentIsQuestion,
+		int& lastClosingPrimaryQuote, int& paragraphsSinceLastSubjectWasSet, int& wherePreviousLastSubjects,		
+		bool& inPrimaryQuote, bool& inSecondaryQuote,
+		bool& quotesSeenSinceLastSentence, int whereSubject, vector <int>& lastSubjects,
+		vector <int>& previousLastSubjects, int lastSectionWord, unsigned int& agingStructuresSeen);
 	void srd(int where,wstring spd,wstring &description);
 	wstring wsrToText(int where,wstring &description);
 	wstring srToText(int &spr,wstring &description);
@@ -2233,7 +2232,23 @@ int &numFirstInQuote,
 	bool letterDetectionEnd(int where,int whereLetterTo,int lastLetterBegin);
 
 	void resolveMetaReference(int speakerPosition,int quotePosition,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb);
-	void resolveSpeakers(vector <int> &secondaryQuotesResolutions);
+	void atTimeTransitionKeepOnlyPhysicallyPresentSpeaker(int I, bool &transitionSinceEOS, vector <int>& lastSubjects);
+	void markLoneNameSpeaker(int I);
+	void accumulateSubjects(int I, bool inPrimaryQuote, bool inSecondaryQuote, int& whereSubject, bool accumulateMultipleSubjects, bool currentIsQuestion, vector <int>& lastSubjects);
+	bool setOpeningDoubleQuote(int I, bool& inPrimaryQuote, bool& quotesSeen, bool& quotesSeenSinceLastSentence, int& lastQuotedString, int& lastSentenceEndBeforeAndNotIncludingCurrentQuote, int lastSentenceEnd, int& lastSentenceMetaSpeakerQuery);
+	void processEndOfSection(int I, bool& endOfSentence, bool& immediatelyAfterEndOfParagraph, bool& accumulateMultipleSubjects, bool inPrimaryQuote, bool& quotesSeen,
+		int& lastSectionWord, bool & quotesSeenSinceLastSentence, int& lastLetterBegin, int& whereLetterTo, int& lastDefiniteSpeaker,
+		int& questionSpeakerLastParagraph, int& questionSpeakerLastSentence, int& whereFirstSubjectInParagraph, int wherePreviousLastSubjects,
+		vector <int>& previousLastSubjects);
+	void processBeginSection(int I, int& beginSection, int& lastDefiniteSpeaker, int& whereSubject, int& wherePreviousLastSubjects,
+		vector <int>& lastSubjects, vector <int>& previousLastSubjects, bool quotesSeenSinceLastSentence);
+	void processMetaResponse(int I, int& endMetaResponse);
+	void processBeginningOfSentence(int I, unsigned int& agingStructuresSeen, int& lastBeginS1, int endMetaResponse, bool inPrimaryQuote, bool inSecondaryQuote, bool& accumulateMultipleSubjects);
+	void processOneWordSentence(int uqLastSentenceEnd, int uqPreviousToLastSentenceEnd, int whereLastObject, bool anySyntacticRelationGroup);
+	void logSpeakerGroups();
+	void followObjectReplacements();
+	void assureAtLeastOneSpeakerGroup();
+	void resolveSpeakers(vector <int>& secondaryQuotesResolutions);
 	void resolveFirstSecondPersonPronouns(vector <int> &secondaryQuotesResolutions);
 	void printTenseStatistic(cTenseStat &tenseStatistics,int sense,int numTotal);
 	void printTenseStatistics(const wchar_t * fromWhere,cTenseStat tenseStatistics[],int numTotal);
