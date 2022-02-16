@@ -3010,10 +3010,20 @@ bool &comparableName,
 	bool identifyMetaGroup(int where,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb);
 	bool identifyMetaNameEquivalence(int where,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb);
 	bool ageDetection(int where,int primary,int secondary);
+	bool primaryIsMNoun(int where, int wherePrimary, cTagLocation& tag);
+	void findLast(int where, int wherePrimary, int& tmpLastRelativePhrase, int& tmpLastBeginS1, int& tmpLastQ2, int& tmpLastVerb);
+	void resolvePrimaryMetaNameObject(int where, int wherePrimary, int whereSecondary, int& tmpLastRelativePhrase, int lastRelativePhrase, int& tmpLastBeginS1, int lastBeginS1, int& tmpLastQ2, int lastQ2, int& tmpLastVerb, 
+		bool inPrimaryQuote, bool inSecondaryQuote);
+	bool findAndResolveSecondaryObjects(int& tmpLastRelativePhrase, int& tmpLastBeginS1, int& tmpLastQ2, int& tmpLastVerb, bool inPrimaryQuote, bool inSecondaryQuote, int secondaryTag, vector <cTagLocation>& tagSet, vector <int>& objectsResolved,
+		vector <int>& secondaryNameObjects, vector <int>& eraseREObjects);
+	void resolveSecondaryMetaNameObject(int whereSecondary,int primaryNameObject, int& tmpLastRelativePhrase, int& tmpLastBeginS1, int& tmpLastQ2, int& tmpLastVerb, bool inPrimaryQuote, bool inSecondaryQuote, vector <int>& objectsResolved,
+		vector <int>& secondaryNameObjects, vector <int>& eraseREObjects);
+	void insertSecondaryNameObjectInQuoteIntoSpeakers(int where, int wherePrimary, int whereSecondary, vector <int>& secondaryNameObjects, bool inPrimaryQuote);
+	bool evaluateSecondaryMetaNameEquivalence(int where, vector <cTagLocation>& tagSet, bool inPrimaryQuote, bool inSecondaryQuote, int sno, int wherePrimary, int whereSecondary, int primaryNameObject, int secondaryTag, vector <int>& objectsResolved,
+		vector <int>& secondaryNameObjects, vector <int>& eraseREObjects);
 	bool evaluateMetaNameEquivalence(int where,vector <cTagLocation> &tagSet,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb);
 
 	bool inObject(int where, int whereQuestionType);
-
 	bool pushWhereEntities(wchar_t *derivation,int where,wstring matchEntityType,wstring byWhatType,int whatWhere,bool filterNameDuplicates, vector <mbInfoReleaseType> mbs);
 	bool pushEntities(wchar_t *derivation,int where,wstring matchEntityType, vector <mbInfoReleaseType> &mbs);
 	bool matchedList(set <wstring> &matchList, int where, int objectClass, const wchar_t * fromWhere);

@@ -27,9 +27,9 @@ using namespace std;
 #include "mysql.h"
 #include "wn.h"
 #include "..\..\word.h"
+#include "..\..\ontology.h"
 #include "..\..\source.h"
 void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition> &d);
-
 
 __declspec(thread) static void *mTWbuffer = NULL;
 __declspec(thread) static unsigned int mTWbufSize = 0;
@@ -169,7 +169,7 @@ void scrapeThesaurus(wstring word, wstring buffer, set <wstring> &synonyms)
 		return;
 	beginPos += wcslen(L"Main Entry:");
 	size_t endPos = 1000000, tmpPos;
-	wchar_t *endStr[] = { L"Main Entry:", L"Roget's 21st Century Thesaurus", L"Adjective Finder", L"Synonym Collection", L"Search another word", L"Antonyms:", L"* = informal/non-formal usage", NULL };
+	const wchar_t *endStr[] = { L"Main Entry:", L"Roget's 21st Century Thesaurus", L"Adjective Finder", L"Synonym Collection", L"Search another word", L"Antonyms:", L"* = informal/non-formal usage", NULL };
 	for (int I = 0; endStr[I] != NULL; I++)
 		if ((tmpPos = buffer.find(endStr[I], beginPos)) != wstring::npos && tmpPos<endPos)
 			endPos = tmpPos;
@@ -255,7 +255,7 @@ bool compareWordSets(set <wstring> &s1, set <wstring> &s2)
 	return true;
 }
 
-void _tmain(int argc, TCHAR *argv[])
+int _tmain(int argc, TCHAR *argv[])
 {
 	WIN32_FIND_DATA ffd;
 	HANDLE hFind;
@@ -277,7 +277,7 @@ void _tmain(int argc, TCHAR *argv[])
 	if (hFind == INVALID_HANDLE_VALUE)
 	{
 		printf("FindFirstFile failed (%d)\n", GetLastError());
-		return;
+		return -1;
 	}
 	else
 	{

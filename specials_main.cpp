@@ -1,5 +1,4 @@
 ﻿#include <windows.h>
-#include <windows.h>
 #define _WINSOCKAPI_ /* Prevent inclusion of winsock.h in windows.h */
 #include "io.h"
 #include "winhttp.h"
@@ -97,7 +96,7 @@ void no_memory () {
 	exit (1);
 }
 
-int createLPProcess(int numProcess, HANDLE &processHandle, DWORD &processId, wchar_t *commandPath, wchar_t *processParameters)
+int createLPProcess(int numProcess, HANDLE &processHandle, DWORD &processId, const wchar_t *commandPath, const wchar_t *processParameters)
 {
 	STARTUPINFO si;
 	ZeroMemory(&si, sizeof(si));
@@ -114,7 +113,7 @@ int createLPProcess(int numProcess, HANDLE &processHandle, DWORD &processId, wch
 	PROCESS_INFORMATION pi;
 	ZeroMemory(&pi, sizeof(pi));
 	if (!CreateProcess(commandPath,
-		processParameters, // Command line
+		(LPWSTR) processParameters, // Command line
 		NULL, // Process handle not inheritable
 		NULL, // Thread handle not inheritable
 		FALSE, // Set handle inheritance to FALSE
@@ -793,7 +792,7 @@ void scanAllWebsterEntries(wchar_t *basepath, unordered_set<wstring> &pos, int &
 						wstring temppos;
 						int inflection;
 						string referWord;
-						mTW(lookForPOS(NULL, doc, true,inflection, referWord), temppos);
+						mTW(lookForPOS("", doc, true,inflection, referWord), temppos);
 						if (temppos.length() > 0)
 						{
 							pos.insert(temppos);
@@ -811,7 +810,8 @@ void eraseOldRDFTypeFiles(wstring completePath, int &removeErrors)
 {
 }
 
-void scanAllRDFTypes(MYSQL mysql, wchar_t *startPath, bool &startHit, wchar_t *basepath, int &numFilesProcessed, int &numNotOpenable, int &numNewestVersion, int &numOldVersion, int &removeErrors, int &populatedRDFs,int &numERDFRemoved,
+void scanAllRDFTypes(MYSQL mysql, wchar_t *startPath, bool &startHit, const wchar_t *basepath, int &numFilesProcessed, int &numNotOpenable, int &numNewestVersion, 
+	int &numOldVersion, int &removeErrors, int &populatedRDFs,int &numERDFRemoved,
 	unordered_map<wstring,int> &extensions, unordered_map<wstring, __int64> &extensionSpace)
 {
 	WIN32_FIND_DATA FindFileData;
@@ -939,7 +939,7 @@ void scanAllRDFTypes(MYSQL mysql, wchar_t *startPath, bool &startHit, wchar_t *b
 	return;
 }
 
-void removeIllegalNames(wchar_t *basepath)
+void removeIllegalNames(const wchar_t *basepath)
 {
 	WIN32_FIND_DATA FindFileData;
 	wchar_t path[1024];
@@ -1033,7 +1033,7 @@ void scanAllERDFTypes(MYSQL mysql, wchar_t *basepath, int &numFilesProcessed, in
 	return;
 }
 */
-void scanAllDictionaryDotCom(MYSQL mysql, wchar_t *basepath, int &numFilesProcessed, int &numNotOpenable, int &filesRemoved,int &removeErrors)
+void scanAllDictionaryDotCom(MYSQL mysql, const wchar_t *basepath, int &numFilesProcessed, int &numNotOpenable, int &filesRemoved,int &removeErrors)
 {
 	WIN32_FIND_DATA FindFileData;
 	wchar_t path[1024];
@@ -2043,8 +2043,8 @@ void testRDFType(cSource &source, wstring specialExtension)
 }
 
 struct {
-	wchar_t *commonWord;
-	wchar_t *replace;
+	const wchar_t *commonWord;
+	const wchar_t *replace;
 } doubleReplace[] = {
 	{ L"d'ye", L"do you" },
 	{ L"more'n", L"more than" },
@@ -2054,8 +2054,8 @@ struct {
 };
 
 struct {
-	wchar_t *commonWord;
-	wchar_t *replace;
+	const wchar_t *commonWord;
+	const wchar_t *replace;
 } singleReplace[] = {
 { L"thar", L"there" },
 { L"sez", L"says" },
@@ -3610,7 +3610,7 @@ int attributeErrors(wstring primarySTLPMatch, cSource &source, int wordSourceInd
 		for (wstring dt : determinerTypes)
 			if (wordAfterIsDeterminer = source.m[wordSourceIndex + 1].queryWinnerForm(dt) >= 0)
 				break;
-	wchar_t *unmodifiableForms[] = { L"relativizer",L"preposition",L"coordinator",L"conjunction",L"quantifier", L"adverb",L"adjective",L"personal_pronoun_accusative",L"personal_pronoun_nominative",L"personal_pronoun",L"reflexive_pronoun" };
+	const wchar_t *unmodifiableForms[] = { L"relativizer",L"preposition",L"coordinator",L"conjunction",L"quantifier", L"adverb",L"adjective",L"personal_pronoun_accusative",L"personal_pronoun_nominative",L"personal_pronoun",L"reflexive_pronoun" };
 	bool wordAfterIsUnmodifiable = false;
 	if (wordSourceIndex+1 < source.m.size())
 		for (wstring unForm : unmodifiableForms)
@@ -6063,7 +6063,7 @@ int stanfordCheckTest(cSource source, wstring path, int sourceId, bool pcfg,wstr
 }
 
 // this would be easier if you had all the sources in memory at once!
-int testViterbiHMMMultiSource(cSource &source,wchar_t *databaseHost,int step, wstring specialExtension)
+int testViterbiHMMMultiSource(cSource &source,const wchar_t *databaseHost,int step, wstring specialExtension)
 {
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
@@ -6095,7 +6095,8 @@ int testViterbiHMMMultiSource(cSource &source,wchar_t *databaseHost,int step, ws
 		if (childSource.readSource(path, false, parsedOnly, false, specialExtension))
 		{
 			lplog(LOG_ERROR,L"Beginning child source %d:%s at offset %d.", sourceId,path.c_str(), source.m.size());
-			source.copySource(&childSource, 0, childSource.m.size());
+			unordered_map <int, int> sourceIndexMap;
+			source.copySource(&childSource, 0, childSource.m.size(), sourceIndexMap);
 		}
 		else
 		{
@@ -6145,13 +6146,13 @@ int numSourceLimit = 0;
 // to begin proc2 field in all sources must be set to 1
 // step = 1 - accumulate word frequency statistics - will set to 2 when finished.
 // step = 2 - evaluate statistics and create database statements to decrease the number of unknown words
-void wmain(int argc,wchar_t *argv[])
+int wmain(int argc,wchar_t *argv[])
 {
 	setConsoleWindowSize(85, 5);
 	chdir("..");
 	initializeCounter();
 	cacheDir = CACHEDIR;
-	wchar_t *databaseHost = L"localhost";
+	const wchar_t *databaseHost = L"localhost";
 	enum cSource::sourceTypeEnum st = cSource::GUTENBERG_SOURCE_TYPE;
 	cSource source(databaseHost, st, false, false, true);
 	source.initializeNounVerbMapping();
@@ -6161,7 +6162,7 @@ void wmain(int argc,wchar_t *argv[])
 	for (unsigned int ts = 0; ts < desiredTagSets.size(); ts++)
 		source.pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
 	if (!myquery(&source.mysql, L"LOCK TABLES sources READ"))
-		return;
+		return -1;
 	wstring specialExtension = L"";
 	//testDisinclination();
 	//writeFrequenciesToDB(source);
@@ -6180,7 +6181,7 @@ void wmain(int argc,wchar_t *argv[])
 		else if (!_wcsicmp(argv[I], L"-stanfordCheck") && I < argc - 1)
 		{
 			stanfordCheck(source, step, true, specialExtension,true);
-			return;
+			return 0;
 		}
 		else if (!_wcsicmp(argv[I], L"-specialExtension"))
 			specialExtension = argv[++I];
@@ -6195,7 +6196,7 @@ void wmain(int argc,wchar_t *argv[])
 	if (step > 100)
 	{
 		stanfordCheck(source, step, true, specialExtension,false);
-		return;
+		return 0;
 	}
 	switch (step)
 	{
@@ -6219,7 +6220,7 @@ void wmain(int argc,wchar_t *argv[])
 			unlockTables(source.mysql);;
 			int numFilesProcessed = 0, numNotOpenable = 0, numNewestVersion = 0, numOldVersion = 0, removeErrors = 0, populatedRDFs = 0, numERDFRemoved = 0;
 			if (!myquery(&source.mysql, L"LOCK TABLES noRDFTypes WRITE, noERDFTypes WRITE"))
-				return;
+				return -1;
 			FILE *progressFile = _wfopen(L"RDFTypesScanProgress.txt", L"r");
 			wchar_t startPath[2048];
 			bool startHit = false;
@@ -6240,7 +6241,7 @@ void wmain(int argc,wchar_t *argv[])
 		{
 			int numFilesProcessed = 0, numNotOpenable = 0, filesRemoved = 0, removeErrors = 0;
 			if (!myquery(&source.mysql, L"LOCK TABLES notwords WRITE"))
-				return;
+				return -1;
 			scanAllDictionaryDotCom(source.mysql, L"J:\\caches\\DictionaryDotCom", numFilesProcessed, numNotOpenable, filesRemoved, removeErrors);
 		}
 		break;
@@ -6294,7 +6295,7 @@ void wmain(int argc,wchar_t *argv[])
 	{
 		vector <wstring> words = { L"advertising",L"wishing",L"writing",L"yachting",L"yellowing" };
 		if (!myquery(&source.mysql, L"LOCK TABLES words WRITE"))
-			return;
+			return -1;
 		for (wstring sWord : words)
 		{
 			set <int> posSet;

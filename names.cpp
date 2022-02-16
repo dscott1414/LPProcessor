@@ -1727,18 +1727,28 @@ bool cSource::ageDetection(int where, int primary, int secondary)
 	return true;
 }
 
-// in secondary quotes, inPrimaryQuote=false
-bool cSource::evaluateMetaNameEquivalence(int where, vector <cTagLocation>& tagSet, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb)
+bool cSource::primaryIsMNoun(int where, int wherePrimary, cTagLocation &tag)
 {
-	LFS
-		int primaryTag = findOneTag(tagSet, L"NAME_PRIMARY", -1), secondaryTag = findOneTag(tagSet, L"NAME_SECONDARY", -1);
-	if (primaryTag < 0 || secondaryTag < 0) return false;
-	int wherePrimary = tagSet[primaryTag].sourcePosition, whereSecondary = tagSet[secondaryTag].sourcePosition;
-	if (tagSet[primaryTag].len > 1 && m[wherePrimary].principalWherePosition >= 0) // could be an adjective
-		wherePrimary = m[wherePrimary].principalWherePosition;
-	wstring tmpstr;
-	int primaryNameObject = m[wherePrimary].getObject();
-	int tmpLastRelativePhrase = lastRelativePhrase, tmpLastBeginS1 = lastBeginS1, tmpLastQ2 = lastQ2, tmpLastVerb = lastVerb;
+	if (tag.len > 1)
+	{
+		cPatternMatchArray::tPatternMatch* pma = m[wherePrimary].pma.content;
+		for (unsigned int PMAElement = 0; PMAElement < m[wherePrimary].pma.count; PMAElement++, pma++)
+			if (pma->len == tag.len && patterns[pma->getPattern()]->hasTag(MNOUN_TAG))
+			{
+				if (debugTrace.traceNameResolution || debugTrace.traceObjectResolution)
+				{
+					wstring tmpstr;
+					int primaryNameObject = m[wherePrimary].getObject();
+					lplog(LOG_RESOLUTION, L"%06d:Metaname equivalence rejected (primary is multiple) for primary %d:[%s]", where, wherePrimary, objectString(primaryNameObject, tmpstr, false).c_str());
+				}
+				return true;
+			}
+	}
+	return false;
+}
+
+void cSource::findLast(int where, int wherePrimary, int &tmpLastRelativePhrase, int &tmpLastBeginS1, int &tmpLastQ2, int &tmpLastVerb)
+{
 	for (int J = where + 1; J < wherePrimary; J++)
 	{
 		if (m[J].pma.queryPattern(L"_REL1") != -1)
@@ -1750,6 +1760,421 @@ bool cSource::evaluateMetaNameEquivalence(int where, vector <cTagLocation>& tagS
 		if (m[J].hasVerbRelations)
 			tmpLastVerb = J;
 	}
+}
+
+void cSource::resolvePrimaryMetaNameObject(int where, int wherePrimary, int whereSecondary, int& tmpLastRelativePhrase, int lastRelativePhrase, int& tmpLastBeginS1, int lastBeginS1, int& tmpLastQ2, int lastQ2, int& tmpLastVerb,
+	bool inPrimaryQuote, bool inSecondaryQuote)
+{
+	findLast(where, wherePrimary, tmpLastRelativePhrase, tmpLastBeginS1, tmpLastQ2, tmpLastVerb);
+	resolveObject(wherePrimary, false, inPrimaryQuote, inSecondaryQuote, tmpLastBeginS1, tmpLastRelativePhrase, tmpLastQ2, tmpLastVerb, false, false, false);
+	tmpLastRelativePhrase = lastRelativePhrase;
+	tmpLastBeginS1 = lastBeginS1;
+	tmpLastQ2 = lastQ2;
+	int tmpLastVerb2;
+	findLast(where, whereSecondary, tmpLastRelativePhrase, tmpLastBeginS1, tmpLastQ2, tmpLastVerb2);
+}
+
+bool cSource::findAndResolveSecondaryObjects(int& tmpLastRelativePhrase, int& tmpLastBeginS1, int& tmpLastQ2, int& tmpLastVerb, bool inPrimaryQuote, bool inSecondaryQuote, int secondaryTag, vector <cTagLocation>& tagSet, vector <int> &objectsResolved,
+ vector <int> &secondaryNameObjects, vector <int> &eraseREObjects)
+{
+	bool acceptPrepObjects = true;
+	bool stopOnPreposition = (m[tagSet[secondaryTag].sourcePosition].objectRole & MPLURAL_ROLE) == 0;
+	for (unsigned int I = tagSet[secondaryTag].sourcePosition; I < tagSet[secondaryTag].sourcePosition + tagSet[secondaryTag].len; I++)
+		if (m[I].queryWinnerForm(prepositionForm) >= 0)
+		{
+			acceptPrepObjects = false;
+			if (stopOnPreposition) break;
+		}
+		else if (m[I].getObject() >= 0 && (acceptPrepObjects || !(m[I].objectRole & PREP_OBJECT_ROLE)))
+		{
+			// whether to put him[man] down as an actor or a lawyer 
+			eraseREObjects.push_back((!(m[I].objectRole & RE_OBJECT_ROLE)) ? I : -1);
+			m[I].objectRole |= RE_OBJECT_ROLE; // prevent secondary objects from becoming 'live'
+			resolveObject(I, false, inPrimaryQuote, inSecondaryQuote, tmpLastBeginS1, tmpLastRelativePhrase, tmpLastQ2, tmpLastVerb, false, false, false);
+			objectsResolved.push_back(I);
+			if (m[I].objectMatches.size() == 1)
+				secondaryNameObjects.push_back(m[I].objectMatches[0].object);
+			else
+				secondaryNameObjects.push_back(m[I].getObject());
+		}
+	return secondaryNameObjects.size() > 0;
+}
+
+void cSource::resolveSecondaryMetaNameObject(int whereSecondary,int primaryNameObject,int& tmpLastRelativePhrase, int& tmpLastBeginS1, int& tmpLastQ2, int& tmpLastVerb, bool inPrimaryQuote, bool inSecondaryQuote, vector <int>& objectsResolved,
+	vector <int>& secondaryNameObjects, vector <int>& eraseREObjects)
+{
+	eraseREObjects.push_back((!(m[whereSecondary].objectRole & RE_OBJECT_ROLE)) ? whereSecondary : -1);
+	objectsResolved.push_back(whereSecondary);
+	m[whereSecondary].objectRole |= RE_OBJECT_ROLE; // prevent secondary objects from becoming 'live'
+	resolveObject(whereSecondary, false, inPrimaryQuote, inSecondaryQuote, tmpLastBeginS1, tmpLastRelativePhrase, tmpLastQ2, tmpLastVerb, false, false, false);
+	if (m[whereSecondary].objectMatches.size() == 1 || (m[whereSecondary].objectMatches.size() == 2 && m[whereSecondary].objectMatches[1].object == primaryNameObject))
+		secondaryNameObjects.push_back(m[whereSecondary].objectMatches[0].object);
+	else if (m[whereSecondary].objectMatches.size() == 2 && m[whereSecondary].objectMatches[0].object == primaryNameObject)
+		secondaryNameObjects.push_back(m[whereSecondary].objectMatches[1].object);
+	else if (m[whereSecondary].getObject() >= 0)
+		secondaryNameObjects.push_back(m[whereSecondary].getObject());
+}
+
+void cSource::insertSecondaryNameObjectInQuoteIntoSpeakers(int where, int wherePrimary, int whereSecondary, vector <int> &secondaryNameObjects, bool inPrimaryQuote)
+{
+	if (inPrimaryQuote && (m[wherePrimary].word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON)) != 0 && secondaryNameObjects.size() == 1 &&
+		objects[secondaryNameObjects[0]].objectClass == NAME_OBJECT_CLASS && tempSpeakerGroup.speakers.find(secondaryNameObjects[0]) == tempSpeakerGroup.speakers.end())
+	{
+		wstring tmpstr;
+		m[whereSecondary].objectRole |= ((m[wherePrimary].word->second.inflectionFlags & FIRST_PERSON) ? IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE : IN_QUOTE_REFERRING_AUDIENCE_ROLE);
+		if (!speakerGroupsEstablished)
+		{
+			if (debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%06d:Insert into speaker group (%d,%d) from metaname equivalence:%s", where, wherePrimary, whereSecondary, objectString(secondaryNameObjects[0], tmpstr, true).c_str());
+			tempSpeakerGroup.speakers.insert(secondaryNameObjects[0]);
+		}
+		else if (debugTrace.traceSpeakerResolution)
+			lplog(LOG_RESOLUTION, L"%06d:Established %d:%s as %s from metaname equivalence", where, whereSecondary, objectString(secondaryNameObjects[0], tmpstr, true).c_str(),
+				((m[wherePrimary].word->second.inflectionFlags & FIRST_PERSON) ? L"speaker" : L"audience"));
+	}
+}
+
+bool cSource::evaluateSecondaryMetaNameEquivalence(int where, vector <cTagLocation>& tagSet, bool inPrimaryQuote, bool inSecondaryQuote, int sno, int wherePrimary, int whereSecondary, int primaryNameObject, int secondaryTag,  vector <int>& objectsResolved,
+	vector <int>& secondaryNameObjects, vector <int>& eraseREObjects)
+{
+	wstring tmpstr;
+	bool atLeastOneSecondarySucceeded = false;
+	int secondaryNameObject = secondaryNameObjects[sno];
+	if (primaryNameObject == secondaryNameObject || primaryNameObject < 0 || secondaryNameObject < 0 ||
+		find(objects[primaryNameObject].aliases.begin(), objects[primaryNameObject].aliases.end(), secondaryNameObject) != objects[primaryNameObject].aliases.end())
+		return atLeastOneSecondarySucceeded;
+	int primaryClass = objects[primaryNameObject].objectClass, secondaryClass = objects[secondaryNameObject].objectClass;
+	bool primaryAcceptable = primaryClass == NAME_OBJECT_CLASS || primaryClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS || primaryClass == GENDERED_DEMONYM_OBJECT_CLASS || primaryClass == GENDERED_RELATIVE_OBJECT_CLASS || primaryClass == BODY_OBJECT_CLASS;
+	bool secondaryAcceptable = secondaryClass == NAME_OBJECT_CLASS || secondaryClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS || secondaryClass == GENDERED_DEMONYM_OBJECT_CLASS || secondaryClass == GENDERED_RELATIVE_OBJECT_CLASS || secondaryClass == BODY_OBJECT_CLASS || secondaryClass == GENDERED_GENERAL_OBJECT_CLASS;
+	if ((!primaryAcceptable && !secondaryAcceptable) ||
+		(primaryClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS && secondaryClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS) ||
+		(primaryClass == GENDERED_DEMONYM_OBJECT_CLASS && secondaryClass == GENDERED_DEMONYM_OBJECT_CLASS) ||
+		(primaryClass == GENDERED_RELATIVE_OBJECT_CLASS && secondaryClass == GENDERED_RELATIVE_OBJECT_CLASS) ||
+		(primaryClass == BODY_OBJECT_CLASS && secondaryClass == BODY_OBJECT_CLASS) ||
+		primaryClass == PRONOUN_OBJECT_CLASS || primaryClass == NON_GENDERED_GENERAL_OBJECT_CLASS || primaryClass == NON_GENDERED_BUSINESS_OBJECT_CLASS ||
+		secondaryClass == PRONOUN_OBJECT_CLASS || secondaryClass == NON_GENDERED_GENERAL_OBJECT_CLASS || secondaryClass == NON_GENDERED_BUSINESS_OBJECT_CLASS ||
+		(objects[secondaryNameObject].plural != objects[secondaryNameObject].plural))
+	{
+		if (secondaryClass == NON_GENDERED_GENERAL_OBJECT_CLASS && ageDetection(where, primaryNameObject, secondaryNameObject))
+			return atLeastOneSecondarySucceeded;
+		int inflectionFlags = m[wherePrimary].word->second.inflectionFlags;
+		if ((((inflectionFlags & MALE_GENDER) == MALE_GENDER) ^ ((inflectionFlags & FEMALE_GENDER) == FEMALE_GENDER)) && m[wherePrimary].objectMatches.size() > 1)
+		{
+			wstring tmpstr2;
+			lplog(LOG_RESOLUTION, L"%06d:Metaname equivalence rejected (uncertain) for secondary %d:[%s] to primary %d:[%s]", where, whereSecondary, objectString(secondaryNameObject, tmpstr, false).c_str(), wherePrimary, objectString(primaryNameObject, tmpstr2, false).c_str());
+			return atLeastOneSecondarySucceeded;
+		}
+		else
+		{
+			// the Defense Intelligence Agency cryptonym "Curveball"
+			// the overall object is nongen, but the specific referring object is a name
+			int maxLen = 1, element = -1;
+			if ((objects[secondaryNameObject].begin != whereSecondary && secondaryClass == NON_GENDERED_GENERAL_OBJECT_CLASS &&
+				((element = m[whereSecondary].pma.queryPattern(L"_NAME", maxLen)) != -1)) || (tagSet[secondaryTag].len == 1 && (m[whereSecondary].flags & cWordMatch::flagFirstLetterCapitalized)))
+			{
+				if (m[wherePrimary].objectMatches.empty() || objects[m[wherePrimary].objectMatches[0].object].begin != whereSecondary)
+				{
+					if (identifyObject(-1, whereSecondary, element, false, -1, -1) >= 0)
+					{
+						secondaryNameObject = objects.size() - 1;
+						if (debugTrace.traceNameResolution || debugTrace.traceObjectResolution)
+						{
+							wstring tmpstr2;
+							lplog(LOG_RESOLUTION, L"%06d:Metaname equivalence accepted (class change) for secondary %d:[%s] to primary %d:[%s]", where, whereSecondary, objectString(secondaryNameObject, tmpstr, false).c_str(), wherePrimary, objectString(primaryNameObject, tmpstr2, false).c_str());
+						}
+					}
+				}
+			}
+			else
+			{
+				if (debugTrace.traceNameResolution || debugTrace.traceObjectResolution)
+				{
+					wstring tmpstr2;
+					lplog(LOG_RESOLUTION, L"%06d:Metaname equivalence rejected (wrong class) for secondary %d:[%s] to primary %d:[%s]", where, whereSecondary, objectString(secondaryNameObject, tmpstr, false).c_str(), wherePrimary, objectString(primaryNameObject, tmpstr2, false).c_str());
+				}
+				if (eraseREObjects[sno] != -1)
+					m[eraseREObjects[sno]].objectRole &= ~RE_OBJECT_ROLE;
+				for (unsigned int J = 0; J < objectsResolved.size(); J++)
+					m[objectsResolved[J]].flags &= ~cWordMatch::flagObjectResolved;
+				return atLeastOneSecondarySucceeded;
+			}
+		}
+	}
+	if (objects[primaryNameObject].plural != objects[secondaryNameObject].plural)
+	{
+		if (debugTrace.traceNameResolution || debugTrace.traceObjectResolution)
+		{
+			wstring tmpstr2;
+			lplog(LOG_RESOLUTION, L"%06d:Metaname equivalence rejected (different plurality) for secondary %d:[%s] to primary %d:[%s]", where, whereSecondary, objectString(secondaryNameObject, tmpstr, false).c_str(), wherePrimary, objectString(primaryNameObject, tmpstr2, false).c_str());
+		}
+		return atLeastOneSecondarySucceeded;
+	}
+	// somebody named Jane Finn should be equivocated to Jane Finn
+	//if (overlaps(objects.begin()+primaryNameObject,objects.begin()+secondaryNameObject))
+	//{
+	//	if (t.traceNameResolution || t.traceObjectResolution)
+	//	{
+	//		wstring tmpstr,tmpstr2;
+	//		lplog(LOG_RESOLUTION,L"%06d:Metaname equivalence rejected (overlaps) for secondary %d:[%s] to primary %d:[%s]",where,whereSecondary,objectString(secondaryNameObject,tmpstr,false).c_str(),wherePrimary,objectString(primaryNameObject,tmpstr2,false).c_str());
+	//	}
+	//	continue;
+	//}
+	bool switched;
+	// prefer to match to a name or a metagroup
+	if (switched =
+		((secondaryClass == GENDERED_GENERAL_OBJECT_CLASS ||
+			secondaryClass == BODY_OBJECT_CLASS ||
+			secondaryClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS ||
+			secondaryClass == GENDERED_DEMONYM_OBJECT_CLASS ||
+			secondaryClass == GENDERED_RELATIVE_OBJECT_CLASS) &&
+			(primaryClass == NAME_OBJECT_CLASS || primaryClass == META_GROUP_OBJECT_CLASS)) ||
+		(secondaryClass == BODY_OBJECT_CLASS &&
+			(primaryClass == GENDERED_GENERAL_OBJECT_CLASS ||
+				primaryClass == BODY_OBJECT_CLASS ||
+				primaryClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS ||
+				primaryClass == GENDERED_DEMONYM_OBJECT_CLASS ||
+				primaryClass == GENDERED_RELATIVE_OBJECT_CLASS)))
+	{
+		int tmp = secondaryNameObject, tmp2 = secondaryClass, tmp3 = whereSecondary;
+		secondaryNameObject = primaryNameObject;
+		secondaryClass = primaryClass;
+		whereSecondary = wherePrimary;
+		primaryNameObject = tmp;
+		primaryClass = tmp2;
+		wherePrimary = tmp3;
+	}
+	atLeastOneSecondarySucceeded = true;
+	for (vector <cWordMatch>::iterator im = m.begin() + m[wherePrimary].beginObjectPosition, imEnd = m.begin() + m[wherePrimary].endObjectPosition; im != imEnd; im++)
+	{
+		im->objectRole |= META_NAME_EQUIVALENCE;
+		if (debugTrace.traceRole)
+			lplog(LOG_ROLE, L"%06d:Removed HAIL role (evaluateMetaNameEquivalence).", where);
+		// prevents HAIL re-evaluation on mistaken HAIL 
+		im->objectRole &= ~HAIL_ROLE; // [tommy:tuppence] Are you[tuppence] proposing a third advertisement : Wanted , female crook[tuppence] , answering to the name[name] of Rita ? ”
+	}
+	//  he[man] nevertheless conveyed the impression of a big man
+	if (primaryClass == GENDERED_GENERAL_OBJECT_CLASS && secondaryClass == GENDERED_GENERAL_OBJECT_CLASS)
+	{
+		if ((objects[secondaryNameObject].associatedNouns.size() || objects[secondaryNameObject].associatedAdjectives.size()) && debugTrace.traceSpeakerResolution)
+		{
+			wstring nouns, adjectives;
+			if (debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%06d:Object %s original associated nouns (%s) and adjectives (%s) taking from %d:%s (4)",
+					where, objectString(primaryNameObject, tmpstr, false).c_str(), wordString(objects[primaryNameObject].associatedNouns, nouns).c_str(), wordString(objects[primaryNameObject].associatedAdjectives, adjectives).c_str(),
+					whereSecondary, objectString(secondaryNameObject, tmpstr, false).c_str());
+		}
+		narrowGender(whereSecondary, primaryNameObject);
+		for (vector <tIWMM>::iterator ai = objects[secondaryNameObject].associatedAdjectives.begin(), aiEnd = objects[secondaryNameObject].associatedAdjectives.end(); ai != aiEnd; ai++)
+			if (find(objects[primaryNameObject].associatedAdjectives.begin(), objects[primaryNameObject].associatedAdjectives.end(), *ai) == objects[primaryNameObject].associatedAdjectives.end())
+				objects[primaryNameObject].associatedAdjectives.push_back(*ai);
+		for (vector <tIWMM>::iterator ai = objects[secondaryNameObject].associatedNouns.begin(), aiEnd = objects[secondaryNameObject].associatedNouns.end(); ai != aiEnd; ai++)
+			if (find(objects[primaryNameObject].associatedNouns.begin(), objects[primaryNameObject].associatedNouns.end(), *ai) == objects[primaryNameObject].associatedNouns.end())
+				objects[primaryNameObject].associatedNouns.push_back(*ai);
+		if (!(m[wherePrimary].word->second.flags & cSourceWordInfo::genericGenderIgnoreMatch))
+			objects[primaryNameObject].updateGenericGender(where, m[whereSecondary].word, objects[secondaryNameObject].objectGenericAge, L"metaNameEquivalence", debugTrace);
+		if ((objects[secondaryNameObject].associatedNouns.size() || objects[secondaryNameObject].associatedAdjectives.size()) && debugTrace.traceSpeakerResolution)
+		{
+			wstring nouns, adjectives;
+			if (debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%06d:Object %s associated nouns (%s) and adjectives (%s) (3)",
+					where, objectString(primaryNameObject, tmpstr, false).c_str(), wordString(objects[secondaryNameObject].associatedNouns, nouns).c_str(), wordString(objects[secondaryNameObject].associatedAdjectives, adjectives).c_str());
+		}
+		if (objects[primaryNameObject].relativeClausePM < 0 && objects[secondaryNameObject].relativeClausePM >= 0)
+		{
+			objects[primaryNameObject].relativeClausePM = objects[secondaryNameObject].relativeClausePM;
+			objects[primaryNameObject].whereRelativeClause = objects[secondaryNameObject].whereRelativeClause;
+			objects[secondaryNameObject].relativeClausePM = objects[secondaryNameObject].whereRelativeClause = -1; // to prevent this object from becoming more visible to focus
+		}
+		return atLeastOneSecondarySucceeded;
+	}
+	// do not arbitrarily assign a name to another if they are not positively absolutely identified and both previously existed
+	// The man known as Number One
+	if (currentSpeakerGroup >= 2)
+	{
+		int lastSpeakerGroupEnd = (speakerGroupsEstablished) ? speakerGroups[currentSpeakerGroup - 1].sgEnd : speakerGroups[currentSpeakerGroup - 2].sgEnd;
+		if ((primaryClass == NAME_OBJECT_CLASS || primaryClass == GENDERED_GENERAL_OBJECT_CLASS) && secondaryClass == NAME_OBJECT_CLASS &&
+			(m[wherePrimary].objectMatches.size() || m[whereSecondary].objectMatches.size()) && currentSpeakerGroup &&
+			objects[primaryNameObject].firstLocation < lastSpeakerGroupEnd &&
+			objects[secondaryNameObject].firstLocation < lastSpeakerGroupEnd)
+		{
+			wstring tmpstr2;
+			if (debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%06d:meta resolution refused between %d:%s and %d:%s (%d)!", where,
+					objects[primaryNameObject].originalLocation, objectString(objects.begin() + primaryNameObject, tmpstr, false).c_str(),
+					objects[secondaryNameObject].originalLocation, objectString(objects.begin() + secondaryNameObject, tmpstr2, false).c_str(),
+					speakerGroups[currentSpeakerGroup - 1].sgEnd);
+			if (m[wherePrimary].getObject() != primaryNameObject && m[whereSecondary].getObject() == secondaryNameObject)
+			{
+				m[wherePrimary].objectMatches.clear();
+				m[wherePrimary].objectMatches.push_back(cOM(secondaryNameObject, SALIENCE_THRESHOLD));
+				objects[secondaryNameObject].locations.push_back(wherePrimary);
+				objects[secondaryNameObject].updateFirstLocation(wherePrimary);
+			}
+			return atLeastOneSecondarySucceeded;
+		}
+	}
+	if (sourceType == cSource::INTERACTIVE_SOURCE_TYPE)
+	{
+		// check if already there
+		if (in(secondaryNameObject, m[wherePrimary].objectMatches) == m[wherePrimary].objectMatches.end())
+		{
+			objects.push_back(objects[secondaryNameObject]);
+			secondaryNameObject = objects.size() - 1;
+			m[wherePrimary].objectMatches.push_back(cOM(secondaryNameObject, SALIENCE_THRESHOLD));
+			objects[secondaryNameObject].begin = m[whereSecondary].beginObjectPosition = whereSecondary;
+			objects[secondaryNameObject].end = m[whereSecondary].endObjectPosition = whereSecondary + tagSet[secondaryTag].len;
+			objects[secondaryNameObject].objectClass = objects[primaryNameObject].objectClass;
+			objects[secondaryNameObject].locations.push_back(wherePrimary);
+			objects[secondaryNameObject].aliases.push_back(primaryNameObject);
+			objects[secondaryNameObject].updateFirstLocation(wherePrimary);
+			wstring tmpstr2;
+			if (debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%06d:%s gains match of %s.", wherePrimary,
+					objectString(objects.begin() + primaryNameObject, tmpstr, false).c_str(),
+					objectString(objects.begin() + secondaryNameObject, tmpstr2, false).c_str());
+		}
+	}
+	if (((primaryClass == GENDERED_GENERAL_OBJECT_CLASS ||
+		primaryClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS ||
+		primaryClass == GENDERED_DEMONYM_OBJECT_CLASS ||
+		primaryClass == GENDERED_RELATIVE_OBJECT_CLASS ||
+		primaryClass == META_GROUP_OBJECT_CLASS ||
+		primaryClass == BODY_OBJECT_CLASS) &&
+		secondaryClass == NAME_OBJECT_CLASS) ||
+		(primaryClass == BODY_OBJECT_CLASS &&
+			(secondaryClass == GENDERED_GENERAL_OBJECT_CLASS ||
+				secondaryClass == BODY_OBJECT_CLASS ||
+				secondaryClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS ||
+				secondaryClass == GENDERED_DEMONYM_OBJECT_CLASS ||
+				secondaryClass == GENDERED_RELATIVE_OBJECT_CLASS)))
+	{
+		if (debugTrace.traceNameResolution || debugTrace.traceObjectResolution)
+		{
+			wstring tmpstr2;
+			lplog(LOG_RESOLUTION, L"%06d:Metaname replacement detected for secondary %d:[%s] to primary %d:[%s]", where, whereSecondary, objectString(secondaryNameObject, tmpstr, false).c_str(), wherePrimary, objectString(primaryNameObject, tmpstr2, false).c_str());
+		}
+		objects[secondaryNameObject].isNotAPlace = objects[primaryNameObject].isNotAPlace = true;
+		if (objects[secondaryNameObject].getSubType() >= 0)
+		{
+			objects[secondaryNameObject].resetSubType();
+			objects[secondaryNameObject].isNotAPlace = true;
+			if (debugTrace.traceSpeakerResolution || debugTrace.traceObjectResolution)
+				lplog(LOG_RESOLUTION, L"%06d:Removing place designation (2) from object %s.", where, objectString(secondaryNameObject, tmpstr, false).c_str());
+		}
+		if (objects[primaryNameObject].getSubType() >= 0)
+		{
+			if ((debugTrace.traceSpeakerResolution || debugTrace.traceObjectResolution) && objects[secondaryNameObject].getSubType() >= 0)
+				lplog(LOG_RESOLUTION, L"%06d:Removing place designation (3) from object %s.", where, objectString(primaryNameObject, tmpstr, false).c_str());
+			objects[primaryNameObject].resetSubType();
+			objects[primaryNameObject].isNotAPlace = true;
+		}
+		if (objects[primaryNameObject].male ^ objects[primaryNameObject].female)
+		{
+			bool ambiguousGender = objects[secondaryNameObject].male && objects[secondaryNameObject].female;
+			objects[secondaryNameObject].male = objects[primaryNameObject].male;
+			objects[secondaryNameObject].female = objects[primaryNameObject].female;
+			if (debugTrace.traceSpeakerResolution || debugTrace.traceObjectResolution)
+			{
+				wstring tmpstr2;
+				lplog(LOG_RESOLUTION, L"%06d:Match %s becomes %s from object %s (1).", where,
+					objectString(objects.begin() + secondaryNameObject, tmpstr, false).c_str(), (objects[secondaryNameObject].male) ? L"male" : L"female",
+					objectString(objects.begin() + primaryNameObject, tmpstr2, false).c_str());
+			}
+			if (ambiguousGender)
+				addDefaultGenderedAssociatedNouns(secondaryNameObject);
+			if ((debugTrace.traceSpeakerResolution || debugTrace.traceObjectResolution) && objects[secondaryNameObject].getSubType() >= 0)
+			{
+				lplog(LOG_RESOLUTION, L"%06d:Removing place designation (4) from object %s.", where, objectString(secondaryNameObject, tmpstr, false).c_str());
+			}
+			objects[secondaryNameObject].resetSubType(); // not a place
+			objects[secondaryNameObject].isNotAPlace = true;
+		}
+		if (primaryClass != BODY_OBJECT_CLASS)
+			replaceObjectInSection(where, secondaryNameObject, primaryNameObject, L"metaname");
+		else
+		{
+			vector <cLocalFocus>::iterator lsi;
+			if (pushObjectIntoLocalFocus(whereSecondary, secondaryNameObject, false, false, inPrimaryQuote, inSecondaryQuote, L"metaname", lsi))
+				pushLocalObjectOntoMatches(wherePrimary, lsi, L"metaname");
+		}
+		if (switched)
+		{
+			int tmp = secondaryNameObject, tmp2 = secondaryClass, tmp3 = whereSecondary;
+			secondaryNameObject = primaryNameObject;
+			secondaryClass = primaryClass;
+			whereSecondary = wherePrimary;
+			primaryNameObject = tmp;
+			primaryClass = tmp2;
+			wherePrimary = tmp3;
+		}
+		return atLeastOneSecondarySucceeded;
+	}
+	for (vector <cWordMatch>::iterator im = m.begin() + m[wherePrimary].beginObjectPosition, imEnd = m.begin() + m[wherePrimary].endObjectPosition; im != imEnd; im++)
+	{
+		im->objectRole |= META_NAME_EQUIVALENCE;
+		if (debugTrace.traceRole)
+			lplog(LOG_ROLE, L"%06d:Removed HAIL role (evaluateMetaNameEquivalence).", where);
+		// prevents HAIL re-evaluation on mistaken HAIL 
+		im->objectRole &= ~HAIL_ROLE; // [tommy:tuppence] Are you[tuppence] proposing a third advertisement : Wanted , female crook[tuppence] , answering to the name[name] of Rita ? ”
+	}
+	//if (primaryNameObject>=0 && primaryClass==NAME_OBJECT_CLASS && 
+	//		(secondaryNameObject<0 || secondaryClass!=BODY_OBJECT_CLASS))
+	// scan all future speakerGroups and see whether they have both the 'from' and the 'to'
+	for (unsigned int sg = currentSpeakerGroup; sg < speakerGroups.size(); sg++)
+		if (speakerGroups[sg].speakers.find(primaryNameObject) != speakerGroups[sg].speakers.end() && speakerGroups[sg].speakers.find(secondaryNameObject) != speakerGroups[sg].speakers.end())
+		{
+			speakerGroups[sg].speakers.erase(secondaryNameObject);
+			if (debugTrace.traceSpeakerResolution)
+			{
+				wstring tmpstr2;
+				lplog(LOG_RESOLUTION, L"%06d:Alias %s erased from %s.", where, objectString(secondaryNameObject, tmpstr, true).c_str(), toText(speakerGroups[sg], tmpstr2));
+			}
+		}
+	equivocateObjects(where, primaryNameObject, secondaryNameObject);
+	//if (secondaryNameObject>=0 && secondaryClass==NAME_OBJECT_CLASS && 
+	//		(primaryNameObject<0 || primaryClass!=BODY_OBJECT_CLASS))
+	equivocateObjects(where, secondaryNameObject, primaryNameObject);
+	// don't move adjectives to a gendered object with only two words - 'a woman'
+	// otherwise 'a woman' gets to be a more significant object than the other one, which would be more descriptive 'the nurse'
+	// 22284:Metaname equivalence detected for 
+	//   secondary 22290:[an Irish Sinn feiner[22288-22291][22290][gendem][M][OBJECT][RE][NONPRESENT][FOCUS_EVALUATED]] to 
+	//   primary 22287:[The man[21946-21948][21947][gender][M][SUBJECT][IS][NONPRESENT][FOCUS_EVALUATED][who came up the staircase with a furtive , soft - footed tread[21948-21961]]]
+	if (objects[primaryNameObject].objectClass != GENDERED_GENERAL_OBJECT_CLASS || objects[primaryNameObject].end - objects[primaryNameObject].begin > 2 ||
+		objects[primaryNameObject].relativeClausePM >= 0)
+		moveNyms(where, primaryNameObject, secondaryNameObject, L"evaluateMetaNameEquivalence primary->secondary");
+	if (objects[secondaryNameObject].objectClass != GENDERED_GENERAL_OBJECT_CLASS || objects[secondaryNameObject].end - objects[secondaryNameObject].begin > 2 ||
+		objects[secondaryNameObject].relativeClausePM >= 0)
+		moveNyms(where, secondaryNameObject, primaryNameObject, L"evaluateMetaNameEquivalence secondary->primary");
+	if (objects[primaryNameObject].relativeClausePM < 0 && objects[secondaryNameObject].relativeClausePM >= 0)
+	{
+		objects[primaryNameObject].relativeClausePM = objects[secondaryNameObject].relativeClausePM;
+		objects[primaryNameObject].whereRelativeClause = objects[secondaryNameObject].whereRelativeClause;
+		objects[secondaryNameObject].relativeClausePM = objects[secondaryNameObject].whereRelativeClause = -1; // to prevent this object from becoming more visible to focus
+	}
+	if (debugTrace.traceNameResolution || debugTrace.traceObjectResolution)
+	{
+		wstring tmpstr2;
+		lplog(LOG_RESOLUTION, L"%06d:Metaname equivalence detected for secondary %d:[%s] to primary %d:[%s]", where, whereSecondary, objectString(secondaryNameObject, tmpstr, false).c_str(), wherePrimary, objectString(primaryNameObject, tmpstr2, false).c_str());
+	}
+	if (switched)
+	{
+		int tmp = secondaryNameObject;
+		secondaryNameObject = primaryNameObject;
+		primaryNameObject = tmp;
+	}
+	return atLeastOneSecondarySucceeded;
+}
+
+// in secondary quotes, inPrimaryQuote=false
+bool cSource::evaluateMetaNameEquivalence(int where, vector <cTagLocation>& tagSet, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb)
+{
+	LFS
+	int primaryTag = findOneTag(tagSet, L"NAME_PRIMARY", -1), secondaryTag = findOneTag(tagSet, L"NAME_SECONDARY", -1);
+	if (primaryTag < 0 || secondaryTag < 0) return false;
+	int wherePrimary = tagSet[primaryTag].sourcePosition, whereSecondary = tagSet[secondaryTag].sourcePosition;
+	if (tagSet[primaryTag].len > 1 && m[wherePrimary].principalWherePosition >= 0) // could be an adjective
+		wherePrimary = m[wherePrimary].principalWherePosition;
+	wstring tmpstr;
 	// MNOUN?
 	bool scanForMultiple = false;
 	if (tagSet[secondaryTag].len > 1) // could be an adjective
@@ -1763,22 +2188,11 @@ bool cSource::evaluateMetaNameEquivalence(int where, vector <cTagLocation>& tagS
 			whereSecondary = m[whereSecondary].principalWherePosition;
 	}
 	// primary could also be a MNOUN
-	if (tagSet[primaryTag].len > 1)
-	{
-		cPatternMatchArray::tPatternMatch* pma = m[wherePrimary].pma.content;
-		for (unsigned int PMAElement = 0; PMAElement < m[wherePrimary].pma.count; PMAElement++, pma++)
-			if (pma->len == tagSet[primaryTag].len && patterns[pma->getPattern()]->hasTag(MNOUN_TAG))
-			{
-				if (debugTrace.traceNameResolution || debugTrace.traceObjectResolution)
-				{
-					lplog(LOG_RESOLUTION, L"%06d:Metaname equivalence rejected (primary is multiple) for primary %d:[%s]", where, wherePrimary, objectString(primaryNameObject, tmpstr, false).c_str());
-				}
-				return false;
-			}
-	}
-	vector <int> objectsResolved;
-	resolveObject(wherePrimary, false, inPrimaryQuote, inSecondaryQuote, tmpLastBeginS1, tmpLastRelativePhrase, tmpLastQ2, tmpLastVerb, false, false, false);
-	objectsResolved.push_back(wherePrimary);
+	if (primaryIsMNoun(where,wherePrimary,tagSet[primaryTag]))
+		return false;
+	int tmpLastRelativePhrase = lastRelativePhrase, tmpLastBeginS1 = lastBeginS1, tmpLastQ2 = lastQ2, tmpLastVerb = lastVerb;
+	resolvePrimaryMetaNameObject(where, wherePrimary, whereSecondary, tmpLastRelativePhrase, lastRelativePhrase, tmpLastBeginS1, lastBeginS1, tmpLastQ2, lastQ2, tmpLastVerb, inPrimaryQuote, inSecondaryQuote);
+	int primaryNameObject = m[wherePrimary].getObject();
 	if (m[wherePrimary].objectMatches.size() == 1)
 		primaryNameObject = m[wherePrimary].objectMatches[0].object;
 	if (primaryNameObject == cObject::eOBJECTS::UNKNOWN_OBJECT)
@@ -1786,73 +2200,26 @@ bool cSource::evaluateMetaNameEquivalence(int where, vector <cTagLocation>& tagS
 		m[wherePrimary].flags &= ~cWordMatch::flagObjectResolved;
 		return false;
 	}
+	vector <int> objectsResolved;
+	objectsResolved.push_back(wherePrimary);
 	vector <int> secondaryNameObjects, eraseREObjects;
-	tmpLastRelativePhrase = lastRelativePhrase;
-	tmpLastBeginS1 = lastBeginS1;
-	tmpLastQ2 = lastQ2;
-	for (int J = where + 1; J < whereSecondary; J++)
-	{
-		if (m[J].pma.queryPattern(L"_REL1") != -1)
-			tmpLastRelativePhrase = J;
-		if (m[J].pma.queryPattern(L"__S1") != -1)
-			tmpLastBeginS1 = J;
-		if (m[J].pma.queryPattern(L"_Q2") != -1)
-			tmpLastQ2 = J;
-	}
 	if (whereSecondary < 0 || scanForMultiple)
 	{
-		bool acceptPrepObjects = true;
-		bool stopOnPreposition = (m[tagSet[secondaryTag].sourcePosition].objectRole & MPLURAL_ROLE) == 0;
-		for (unsigned int I = tagSet[secondaryTag].sourcePosition; I < tagSet[secondaryTag].sourcePosition + tagSet[secondaryTag].len; I++)
-			if (m[I].queryWinnerForm(prepositionForm) >= 0)
-			{
-				acceptPrepObjects = false;
-				if (stopOnPreposition) break;
-			}
-			else if (m[I].getObject() >= 0 && (acceptPrepObjects || !(m[I].objectRole & PREP_OBJECT_ROLE)))
-			{
-				// whether to put him[man] down as an actor or a lawyer 
-				eraseREObjects.push_back((!(m[I].objectRole & RE_OBJECT_ROLE)) ? I : -1);
-				m[I].objectRole |= RE_OBJECT_ROLE; // prevent secondary objects from becoming 'live'
-				resolveObject(I, false, inPrimaryQuote, inSecondaryQuote, tmpLastBeginS1, tmpLastRelativePhrase, tmpLastQ2, tmpLastVerb, false, false, false);
-				objectsResolved.push_back(I);
-				if (m[I].objectMatches.size() == 1)
-					secondaryNameObjects.push_back(m[I].objectMatches[0].object);
-				else
-					secondaryNameObjects.push_back(m[I].getObject());
-			}
-		if (secondaryNameObjects.empty()) return false;
+		// whether to put him[man] down as an actor or a lawyer 
+		if (!findAndResolveSecondaryObjects(tmpLastRelativePhrase, tmpLastBeginS1, tmpLastQ2, tmpLastVerb, inPrimaryQuote, inSecondaryQuote, secondaryTag, tagSet, objectsResolved,
+				secondaryNameObjects, eraseREObjects))
+			return false;
 	}
 	else
 	{
-		eraseREObjects.push_back((!(m[whereSecondary].objectRole & RE_OBJECT_ROLE)) ? whereSecondary : -1);
-		objectsResolved.push_back(whereSecondary);
-		m[whereSecondary].objectRole |= RE_OBJECT_ROLE; // prevent secondary objects from becoming 'live'
-		resolveObject(whereSecondary, false, inPrimaryQuote, inSecondaryQuote, tmpLastBeginS1, tmpLastRelativePhrase, tmpLastQ2, tmpLastVerb, false, false, false);
-		if (m[whereSecondary].objectMatches.size() == 1 || (m[whereSecondary].objectMatches.size() == 2 && m[whereSecondary].objectMatches[1].object == primaryNameObject))
-			secondaryNameObjects.push_back(m[whereSecondary].objectMatches[0].object);
-		else if (m[whereSecondary].objectMatches.size() == 2 && m[whereSecondary].objectMatches[0].object == primaryNameObject)
-			secondaryNameObjects.push_back(m[whereSecondary].objectMatches[1].object);
-		else if (m[whereSecondary].getObject() >= 0)
-			secondaryNameObjects.push_back(m[whereSecondary].getObject());
+		resolveSecondaryMetaNameObject(whereSecondary, primaryNameObject, tmpLastRelativePhrase, tmpLastBeginS1, tmpLastQ2, tmpLastVerb, inPrimaryQuote, inSecondaryQuote, objectsResolved,
+			secondaryNameObjects, eraseREObjects);
 	}
 	// He[boris] gave his[boris] name as Count Stepanov . 
+	// if there are two primary matches, and one secondary match, and the secondary match matches one of the primary matches, switch the primaryNameObeject to the other match.
 	if (m[wherePrimary].objectMatches.size() == 2 && secondaryNameObjects.size() == 1 && in(secondaryNameObjects[0], m[wherePrimary].objectMatches) != m[wherePrimary].objectMatches.end())
 		primaryNameObject = (m[wherePrimary].objectMatches[0].object == secondaryNameObjects[0]) ? m[wherePrimary].objectMatches[1].object : m[wherePrimary].objectMatches[0].object;
-	if (inPrimaryQuote && (m[wherePrimary].word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON)) != 0 && secondaryNameObjects.size() == 1 &&
-		objects[secondaryNameObjects[0]].objectClass == NAME_OBJECT_CLASS && tempSpeakerGroup.speakers.find(secondaryNameObjects[0]) == tempSpeakerGroup.speakers.end())
-	{
-		m[whereSecondary].objectRole |= ((m[wherePrimary].word->second.inflectionFlags & FIRST_PERSON) ? IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE : IN_QUOTE_REFERRING_AUDIENCE_ROLE);
-		if (!speakerGroupsEstablished)
-		{
-			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:Insert into speaker group (%d,%d) from metaname equivalence:%s", where, wherePrimary, whereSecondary, objectString(secondaryNameObjects[0], tmpstr, true).c_str());
-			tempSpeakerGroup.speakers.insert(secondaryNameObjects[0]);
-		}
-		else if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:Established %d:%s as %s from metaname equivalence", where, whereSecondary, objectString(secondaryNameObjects[0], tmpstr, true).c_str(),
-				((m[wherePrimary].word->second.inflectionFlags & FIRST_PERSON) ? L"speaker" : L"audience"));
-	}
+	insertSecondaryNameObjectInQuoteIntoSpeakers(where, wherePrimary, whereSecondary, secondaryNameObjects, inPrimaryQuote);
 	if (inPrimaryQuote && (m[wherePrimary].word->second.inflectionFlags & THIRD_PERSON) && secondaryNameObjects.size() == 1 &&
 		objects[secondaryNameObjects[0]].objectClass == NAME_OBJECT_CLASS && tempSpeakerGroup.speakers.find(secondaryNameObjects[0]) == tempSpeakerGroup.speakers.end() && !speakerGroupsEstablished)
 	{
@@ -1860,341 +2227,11 @@ bool cSource::evaluateMetaNameEquivalence(int where, vector <cTagLocation>& tagS
 			lplog(LOG_RESOLUTION, L"%06d:Reject from speaker group (%d,%d) from third-person metaname equivalence:%s", where, wherePrimary, whereSecondary, objectString(secondaryNameObjects[0], tmpstr, true).c_str());
 		metaNameOthersInSpeakerGroups.push_back(whereSecondary);
 	}
-	/*
-	bool oneIn,allIn;
-	if (intersect(wherePrimary,secondaryNameObjects,oneIn,allIn))
-	{
-		if (t.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION,L"%06d:primary and secondary are equal",where);
-		return true;
-	}
-	*/
 	bool atLeastOneSecondarySucceeded = false;
 	for (unsigned int sno = 0; sno < secondaryNameObjects.size(); sno++)
 	{
-		int secondaryNameObject = secondaryNameObjects[sno];
-		if (primaryNameObject == secondaryNameObject || primaryNameObject < 0 || secondaryNameObject < 0 ||
-			find(objects[primaryNameObject].aliases.begin(), objects[primaryNameObject].aliases.end(), secondaryNameObject) != objects[primaryNameObject].aliases.end())
-			continue;
-		int primaryClass = objects[primaryNameObject].objectClass, secondaryClass = objects[secondaryNameObject].objectClass;
-		bool primaryAcceptable = primaryClass == NAME_OBJECT_CLASS || primaryClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS || primaryClass == GENDERED_DEMONYM_OBJECT_CLASS || primaryClass == GENDERED_RELATIVE_OBJECT_CLASS || primaryClass == BODY_OBJECT_CLASS;
-		bool secondaryAcceptable = secondaryClass == NAME_OBJECT_CLASS || secondaryClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS || secondaryClass == GENDERED_DEMONYM_OBJECT_CLASS || secondaryClass == GENDERED_RELATIVE_OBJECT_CLASS || secondaryClass == BODY_OBJECT_CLASS || secondaryClass == GENDERED_GENERAL_OBJECT_CLASS;
-		if ((!primaryAcceptable && !secondaryAcceptable) ||
-			(primaryClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS && secondaryClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS) ||
-			(primaryClass == GENDERED_DEMONYM_OBJECT_CLASS && secondaryClass == GENDERED_DEMONYM_OBJECT_CLASS) ||
-			(primaryClass == GENDERED_RELATIVE_OBJECT_CLASS && secondaryClass == GENDERED_RELATIVE_OBJECT_CLASS) ||
-			(primaryClass == BODY_OBJECT_CLASS && secondaryClass == BODY_OBJECT_CLASS) ||
-			primaryClass == PRONOUN_OBJECT_CLASS || primaryClass == NON_GENDERED_GENERAL_OBJECT_CLASS || primaryClass == NON_GENDERED_BUSINESS_OBJECT_CLASS ||
-			secondaryClass == PRONOUN_OBJECT_CLASS || secondaryClass == NON_GENDERED_GENERAL_OBJECT_CLASS || secondaryClass == NON_GENDERED_BUSINESS_OBJECT_CLASS ||
-			(objects[secondaryNameObject].plural != objects[secondaryNameObject].plural))
-		{
-			if (secondaryClass == NON_GENDERED_GENERAL_OBJECT_CLASS && ageDetection(where, primaryNameObject, secondaryNameObject))
-				continue;
-			int inflectionFlags = m[wherePrimary].word->second.inflectionFlags;
-			if ((((inflectionFlags & MALE_GENDER) == MALE_GENDER) ^ ((inflectionFlags & FEMALE_GENDER) == FEMALE_GENDER)) && m[wherePrimary].objectMatches.size() > 1)
-			{
-				wstring tmpstr2;
-				lplog(LOG_RESOLUTION, L"%06d:Metaname equivalence rejected (uncertain) for secondary %d:[%s] to primary %d:[%s]", where, whereSecondary, objectString(secondaryNameObject, tmpstr, false).c_str(), wherePrimary, objectString(primaryNameObject, tmpstr2, false).c_str());
-				continue;
-			}
-			else
-			{
-				// the Defense Intelligence Agency cryptonym "Curveball"
-				// the overall object is nongen, but the specific referring object is a name
-				int maxLen = 1, element = -1;
-				if ((objects[secondaryNameObject].begin != whereSecondary && secondaryClass == NON_GENDERED_GENERAL_OBJECT_CLASS &&
-					((element = m[whereSecondary].pma.queryPattern(L"_NAME", maxLen)) != -1)) || (tagSet[secondaryTag].len == 1 && (m[whereSecondary].flags & cWordMatch::flagFirstLetterCapitalized)))
-				{
-					if (m[wherePrimary].objectMatches.empty() || objects[m[wherePrimary].objectMatches[0].object].begin != whereSecondary)
-					{
-						if (identifyObject(-1, whereSecondary, element, false, -1, -1) >= 0)
-						{
-							secondaryNameObject = objects.size() - 1;
-							if (debugTrace.traceNameResolution || debugTrace.traceObjectResolution)
-							{
-								wstring tmpstr2;
-								lplog(LOG_RESOLUTION, L"%06d:Metaname equivalence accepted (class change) for secondary %d:[%s] to primary %d:[%s]", where, whereSecondary, objectString(secondaryNameObject, tmpstr, false).c_str(), wherePrimary, objectString(primaryNameObject, tmpstr2, false).c_str());
-							}
-						}
-					}
-				}
-				else
-				{
-					if (debugTrace.traceNameResolution || debugTrace.traceObjectResolution)
-					{
-						wstring tmpstr2;
-						lplog(LOG_RESOLUTION, L"%06d:Metaname equivalence rejected (wrong class) for secondary %d:[%s] to primary %d:[%s]", where, whereSecondary, objectString(secondaryNameObject, tmpstr, false).c_str(), wherePrimary, objectString(primaryNameObject, tmpstr2, false).c_str());
-					}
-					if (eraseREObjects[sno] != -1)
-						m[eraseREObjects[sno]].objectRole &= ~RE_OBJECT_ROLE;
-					for (unsigned int J = 0; J < objectsResolved.size(); J++)
-						m[objectsResolved[J]].flags &= ~cWordMatch::flagObjectResolved;
-					continue;
-				}
-			}
-		}
-		if (objects[primaryNameObject].plural != objects[secondaryNameObject].plural)
-		{
-			if (debugTrace.traceNameResolution || debugTrace.traceObjectResolution)
-			{
-				wstring tmpstr2;
-				lplog(LOG_RESOLUTION, L"%06d:Metaname equivalence rejected (different plurality) for secondary %d:[%s] to primary %d:[%s]", where, whereSecondary, objectString(secondaryNameObject, tmpstr, false).c_str(), wherePrimary, objectString(primaryNameObject, tmpstr2, false).c_str());
-			}
-			continue;
-		}
-		// somebody named Jane Finn should be equivocated to Jane Finn
-		//if (overlaps(objects.begin()+primaryNameObject,objects.begin()+secondaryNameObject))
-		//{
-		//	if (t.traceNameResolution || t.traceObjectResolution)
-		//	{
-		//		wstring tmpstr,tmpstr2;
-		//		lplog(LOG_RESOLUTION,L"%06d:Metaname equivalence rejected (overlaps) for secondary %d:[%s] to primary %d:[%s]",where,whereSecondary,objectString(secondaryNameObject,tmpstr,false).c_str(),wherePrimary,objectString(primaryNameObject,tmpstr2,false).c_str());
-		//	}
-		//	continue;
-		//}
-		bool switched;
-		// prefer to match to a name or a metagroup
-		if (switched =
-			((secondaryClass == GENDERED_GENERAL_OBJECT_CLASS ||
-				secondaryClass == BODY_OBJECT_CLASS ||
-				secondaryClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS ||
-				secondaryClass == GENDERED_DEMONYM_OBJECT_CLASS ||
-				secondaryClass == GENDERED_RELATIVE_OBJECT_CLASS) &&
-				(primaryClass == NAME_OBJECT_CLASS || primaryClass == META_GROUP_OBJECT_CLASS)) ||
-			(secondaryClass == BODY_OBJECT_CLASS &&
-				(primaryClass == GENDERED_GENERAL_OBJECT_CLASS ||
-					primaryClass == BODY_OBJECT_CLASS ||
-					primaryClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS ||
-					primaryClass == GENDERED_DEMONYM_OBJECT_CLASS ||
-					primaryClass == GENDERED_RELATIVE_OBJECT_CLASS)))
-		{
-			int tmp = secondaryNameObject, tmp2 = secondaryClass, tmp3 = whereSecondary;
-			secondaryNameObject = primaryNameObject;
-			secondaryClass = primaryClass;
-			whereSecondary = wherePrimary;
-			primaryNameObject = tmp;
-			primaryClass = tmp2;
-			wherePrimary = tmp3;
-		}
-		atLeastOneSecondarySucceeded = true;
-		for (vector <cWordMatch>::iterator im = m.begin() + m[wherePrimary].beginObjectPosition, imEnd = m.begin() + m[wherePrimary].endObjectPosition; im != imEnd; im++)
-		{
-			im->objectRole |= META_NAME_EQUIVALENCE;
-			if (debugTrace.traceRole)
-				lplog(LOG_ROLE, L"%06d:Removed HAIL role (evaluateMetaNameEquivalence).", where);
-			// prevents HAIL re-evaluation on mistaken HAIL 
-			im->objectRole &= ~HAIL_ROLE; // [tommy:tuppence] Are you[tuppence] proposing a third advertisement : Wanted , female crook[tuppence] , answering to the name[name] of Rita ? ”
-		}
-		//  he[man] nevertheless conveyed the impression of a big man
-		if (primaryClass == GENDERED_GENERAL_OBJECT_CLASS && secondaryClass == GENDERED_GENERAL_OBJECT_CLASS)
-		{
-			if ((objects[secondaryNameObject].associatedNouns.size() || objects[secondaryNameObject].associatedAdjectives.size()) && debugTrace.traceSpeakerResolution)
-			{
-				wstring nouns, adjectives;
-				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:Object %s original associated nouns (%s) and adjectives (%s) taking from %d:%s (4)",
-						where, objectString(primaryNameObject, tmpstr, false).c_str(), wordString(objects[primaryNameObject].associatedNouns, nouns).c_str(), wordString(objects[primaryNameObject].associatedAdjectives, adjectives).c_str(),
-						whereSecondary, objectString(secondaryNameObject, tmpstr, false).c_str());
-			}
-			narrowGender(whereSecondary, primaryNameObject);
-			for (vector <tIWMM>::iterator ai = objects[secondaryNameObject].associatedAdjectives.begin(), aiEnd = objects[secondaryNameObject].associatedAdjectives.end(); ai != aiEnd; ai++)
-				if (find(objects[primaryNameObject].associatedAdjectives.begin(), objects[primaryNameObject].associatedAdjectives.end(), *ai) == objects[primaryNameObject].associatedAdjectives.end())
-					objects[primaryNameObject].associatedAdjectives.push_back(*ai);
-			for (vector <tIWMM>::iterator ai = objects[secondaryNameObject].associatedNouns.begin(), aiEnd = objects[secondaryNameObject].associatedNouns.end(); ai != aiEnd; ai++)
-				if (find(objects[primaryNameObject].associatedNouns.begin(), objects[primaryNameObject].associatedNouns.end(), *ai) == objects[primaryNameObject].associatedNouns.end())
-					objects[primaryNameObject].associatedNouns.push_back(*ai);
-			if (!(m[wherePrimary].word->second.flags & cSourceWordInfo::genericGenderIgnoreMatch))
-				objects[primaryNameObject].updateGenericGender(where, m[whereSecondary].word, objects[secondaryNameObject].objectGenericAge, L"metaNameEquivalence", debugTrace);
-			if ((objects[secondaryNameObject].associatedNouns.size() || objects[secondaryNameObject].associatedAdjectives.size()) && debugTrace.traceSpeakerResolution)
-			{
-				wstring nouns, adjectives;
-				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:Object %s associated nouns (%s) and adjectives (%s) (3)",
-						where, objectString(primaryNameObject, tmpstr, false).c_str(), wordString(objects[secondaryNameObject].associatedNouns, nouns).c_str(), wordString(objects[secondaryNameObject].associatedAdjectives, adjectives).c_str());
-			}
-			if (objects[primaryNameObject].relativeClausePM < 0 && objects[secondaryNameObject].relativeClausePM >= 0)
-			{
-				objects[primaryNameObject].relativeClausePM = objects[secondaryNameObject].relativeClausePM;
-				objects[primaryNameObject].whereRelativeClause = objects[secondaryNameObject].whereRelativeClause;
-				objects[secondaryNameObject].relativeClausePM = objects[secondaryNameObject].whereRelativeClause = -1; // to prevent this object from becoming more visible to focus
-			}
-			continue;
-		}
-		// do not arbitrarily assign a name to another if they are not positively absolutely identified and both previously existed
-		// The man known as Number One
-		if (currentSpeakerGroup >= 2)
-		{
-			int lastSpeakerGroupEnd = (speakerGroupsEstablished) ? speakerGroups[currentSpeakerGroup - 1].sgEnd : speakerGroups[currentSpeakerGroup - 2].sgEnd;
-			if ((primaryClass == NAME_OBJECT_CLASS || primaryClass == GENDERED_GENERAL_OBJECT_CLASS) && secondaryClass == NAME_OBJECT_CLASS &&
-				(m[wherePrimary].objectMatches.size() || m[whereSecondary].objectMatches.size()) && currentSpeakerGroup &&
-				objects[primaryNameObject].firstLocation < lastSpeakerGroupEnd &&
-				objects[secondaryNameObject].firstLocation < lastSpeakerGroupEnd)
-			{
-				wstring tmpstr2;
-				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:meta resolution refused between %d:%s and %d:%s (%d)!", where,
-						objects[primaryNameObject].originalLocation, objectString(objects.begin() + primaryNameObject, tmpstr, false).c_str(),
-						objects[secondaryNameObject].originalLocation, objectString(objects.begin() + secondaryNameObject, tmpstr2, false).c_str(),
-						speakerGroups[currentSpeakerGroup - 1].sgEnd);
-				if (m[wherePrimary].getObject() != primaryNameObject && m[whereSecondary].getObject() == secondaryNameObject)
-				{
-					m[wherePrimary].objectMatches.clear();
-					m[wherePrimary].objectMatches.push_back(cOM(secondaryNameObject, SALIENCE_THRESHOLD));
-					objects[secondaryNameObject].locations.push_back(wherePrimary);
-					objects[secondaryNameObject].updateFirstLocation(wherePrimary);
-				}
-				continue;
-			}
-		}
-		if (sourceType == cSource::INTERACTIVE_SOURCE_TYPE)
-		{
-			// check if already there
-			if (in(secondaryNameObject, m[wherePrimary].objectMatches) == m[wherePrimary].objectMatches.end())
-			{
-				objects.push_back(objects[secondaryNameObject]);
-				secondaryNameObject = objects.size() - 1;
-				m[wherePrimary].objectMatches.push_back(cOM(secondaryNameObject, SALIENCE_THRESHOLD));
-				objects[secondaryNameObject].begin = m[whereSecondary].beginObjectPosition = whereSecondary;
-				objects[secondaryNameObject].end = m[whereSecondary].endObjectPosition = whereSecondary + tagSet[secondaryTag].len;
-				objects[secondaryNameObject].objectClass = objects[primaryNameObject].objectClass;
-				objects[secondaryNameObject].locations.push_back(wherePrimary);
-				objects[secondaryNameObject].aliases.push_back(primaryNameObject);
-				objects[secondaryNameObject].updateFirstLocation(wherePrimary);
-				wstring tmpstr2;
-				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:%s gains match of %s.", wherePrimary,
-						objectString(objects.begin() + primaryNameObject, tmpstr, false).c_str(),
-						objectString(objects.begin() + secondaryNameObject, tmpstr2, false).c_str());
-			}
-		}
-		if (((primaryClass == GENDERED_GENERAL_OBJECT_CLASS ||
-			primaryClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS ||
-			primaryClass == GENDERED_DEMONYM_OBJECT_CLASS ||
-			primaryClass == GENDERED_RELATIVE_OBJECT_CLASS ||
-			primaryClass == META_GROUP_OBJECT_CLASS ||
-			primaryClass == BODY_OBJECT_CLASS) &&
-			secondaryClass == NAME_OBJECT_CLASS) ||
-			(primaryClass == BODY_OBJECT_CLASS &&
-				(secondaryClass == GENDERED_GENERAL_OBJECT_CLASS ||
-					secondaryClass == BODY_OBJECT_CLASS ||
-					secondaryClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS ||
-					secondaryClass == GENDERED_DEMONYM_OBJECT_CLASS ||
-					secondaryClass == GENDERED_RELATIVE_OBJECT_CLASS)))
-		{
-			if (debugTrace.traceNameResolution || debugTrace.traceObjectResolution)
-			{
-				wstring tmpstr2;
-				lplog(LOG_RESOLUTION, L"%06d:Metaname replacement detected for secondary %d:[%s] to primary %d:[%s]", where, whereSecondary, objectString(secondaryNameObject, tmpstr, false).c_str(), wherePrimary, objectString(primaryNameObject, tmpstr2, false).c_str());
-			}
-			objects[secondaryNameObject].isNotAPlace = objects[primaryNameObject].isNotAPlace = true;
-			if (objects[secondaryNameObject].getSubType() >= 0)
-			{
-				objects[secondaryNameObject].resetSubType();
-				objects[secondaryNameObject].isNotAPlace = true;
-				if (debugTrace.traceSpeakerResolution || debugTrace.traceObjectResolution)
-					lplog(LOG_RESOLUTION, L"%06d:Removing place designation (2) from object %s.", where, objectString(secondaryNameObject, tmpstr, false).c_str());
-			}
-			if (objects[primaryNameObject].getSubType() >= 0)
-			{
-				if ((debugTrace.traceSpeakerResolution || debugTrace.traceObjectResolution) && objects[secondaryNameObject].getSubType() >= 0)
-					lplog(LOG_RESOLUTION, L"%06d:Removing place designation (3) from object %s.", where, objectString(primaryNameObject, tmpstr, false).c_str());
-				objects[primaryNameObject].resetSubType();
-				objects[primaryNameObject].isNotAPlace = true;
-			}
-			if (objects[primaryNameObject].male ^ objects[primaryNameObject].female)
-			{
-				bool ambiguousGender = objects[secondaryNameObject].male && objects[secondaryNameObject].female;
-				objects[secondaryNameObject].male = objects[primaryNameObject].male;
-				objects[secondaryNameObject].female = objects[primaryNameObject].female;
-				if (debugTrace.traceSpeakerResolution || debugTrace.traceObjectResolution)
-				{
-					wstring tmpstr2;
-					lplog(LOG_RESOLUTION, L"%06d:Match %s becomes %s from object %s (1).", where,
-						objectString(objects.begin() + secondaryNameObject, tmpstr, false).c_str(), (objects[secondaryNameObject].male) ? L"male" : L"female",
-						objectString(objects.begin() + primaryNameObject, tmpstr2, false).c_str());
-				}
-				if (ambiguousGender)
-					addDefaultGenderedAssociatedNouns(secondaryNameObject);
-				if ((debugTrace.traceSpeakerResolution || debugTrace.traceObjectResolution) && objects[secondaryNameObject].getSubType() >= 0)
-				{
-					lplog(LOG_RESOLUTION, L"%06d:Removing place designation (4) from object %s.", where, objectString(secondaryNameObject, tmpstr, false).c_str());
-				}
-				objects[secondaryNameObject].resetSubType(); // not a place
-				objects[secondaryNameObject].isNotAPlace = true;
-			}
-			if (primaryClass != BODY_OBJECT_CLASS)
-				replaceObjectInSection(where, secondaryNameObject, primaryNameObject, L"metaname");
-			else
-			{
-				vector <cLocalFocus>::iterator lsi;
-				if (pushObjectIntoLocalFocus(whereSecondary, secondaryNameObject, false, false, inPrimaryQuote, inSecondaryQuote, L"metaname", lsi))
-					pushLocalObjectOntoMatches(wherePrimary, lsi, L"metaname");
-			}
-			if (switched)
-			{
-				int tmp = secondaryNameObject, tmp2 = secondaryClass, tmp3 = whereSecondary;
-				secondaryNameObject = primaryNameObject;
-				secondaryClass = primaryClass;
-				whereSecondary = wherePrimary;
-				primaryNameObject = tmp;
-				primaryClass = tmp2;
-				wherePrimary = tmp3;
-			}
-			continue;
-		}
-		for (vector <cWordMatch>::iterator im = m.begin() + m[wherePrimary].beginObjectPosition, imEnd = m.begin() + m[wherePrimary].endObjectPosition; im != imEnd; im++)
-		{
-			im->objectRole |= META_NAME_EQUIVALENCE;
-			if (debugTrace.traceRole)
-				lplog(LOG_ROLE, L"%06d:Removed HAIL role (evaluateMetaNameEquivalence).", where);
-			// prevents HAIL re-evaluation on mistaken HAIL 
-			im->objectRole &= ~HAIL_ROLE; // [tommy:tuppence] Are you[tuppence] proposing a third advertisement : Wanted , female crook[tuppence] , answering to the name[name] of Rita ? ”
-		}
-		//if (primaryNameObject>=0 && primaryClass==NAME_OBJECT_CLASS && 
-		//		(secondaryNameObject<0 || secondaryClass!=BODY_OBJECT_CLASS))
-		// scan all future speakerGroups and see whether they have both the 'from' and the 'to'
-		for (unsigned int sg = currentSpeakerGroup; sg < speakerGroups.size(); sg++)
-			if (speakerGroups[sg].speakers.find(primaryNameObject) != speakerGroups[sg].speakers.end() && speakerGroups[sg].speakers.find(secondaryNameObject) != speakerGroups[sg].speakers.end())
-			{
-				speakerGroups[sg].speakers.erase(secondaryNameObject);
-				if (debugTrace.traceSpeakerResolution)
-				{
-					wstring tmpstr2;
-					lplog(LOG_RESOLUTION, L"%06d:Alias %s erased from %s.", where, objectString(secondaryNameObject, tmpstr, true).c_str(), toText(speakerGroups[sg], tmpstr2));
-				}
-			}
-		equivocateObjects(where, primaryNameObject, secondaryNameObject);
-		//if (secondaryNameObject>=0 && secondaryClass==NAME_OBJECT_CLASS && 
-		//		(primaryNameObject<0 || primaryClass!=BODY_OBJECT_CLASS))
-		equivocateObjects(where, secondaryNameObject, primaryNameObject);
-		// don't move adjectives to a gendered object with only two words - 'a woman'
-		// otherwise 'a woman' gets to be a more significant object than the other one, which would be more descriptive 'the nurse'
-		// 22284:Metaname equivalence detected for 
-		//   secondary 22290:[an Irish Sinn feiner[22288-22291][22290][gendem][M][OBJECT][RE][NONPRESENT][FOCUS_EVALUATED]] to 
-		//   primary 22287:[The man[21946-21948][21947][gender][M][SUBJECT][IS][NONPRESENT][FOCUS_EVALUATED][who came up the staircase with a furtive , soft - footed tread[21948-21961]]]
-		if (objects[primaryNameObject].objectClass != GENDERED_GENERAL_OBJECT_CLASS || objects[primaryNameObject].end - objects[primaryNameObject].begin > 2 ||
-			objects[primaryNameObject].relativeClausePM >= 0)
-			moveNyms(where, primaryNameObject, secondaryNameObject, L"evaluateMetaNameEquivalence primary->secondary");
-		if (objects[secondaryNameObject].objectClass != GENDERED_GENERAL_OBJECT_CLASS || objects[secondaryNameObject].end - objects[secondaryNameObject].begin > 2 ||
-			objects[secondaryNameObject].relativeClausePM >= 0)
-			moveNyms(where, secondaryNameObject, primaryNameObject, L"evaluateMetaNameEquivalence secondary->primary");
-		if (objects[primaryNameObject].relativeClausePM < 0 && objects[secondaryNameObject].relativeClausePM >= 0)
-		{
-			objects[primaryNameObject].relativeClausePM = objects[secondaryNameObject].relativeClausePM;
-			objects[primaryNameObject].whereRelativeClause = objects[secondaryNameObject].whereRelativeClause;
-			objects[secondaryNameObject].relativeClausePM = objects[secondaryNameObject].whereRelativeClause = -1; // to prevent this object from becoming more visible to focus
-		}
-		if (debugTrace.traceNameResolution || debugTrace.traceObjectResolution)
-		{
-			wstring tmpstr2;
-			lplog(LOG_RESOLUTION, L"%06d:Metaname equivalence detected for secondary %d:[%s] to primary %d:[%s]", where, whereSecondary, objectString(secondaryNameObject, tmpstr, false).c_str(), wherePrimary, objectString(primaryNameObject, tmpstr2, false).c_str());
-		}
-		if (switched)
-		{
-			int tmp = secondaryNameObject;
-			secondaryNameObject = primaryNameObject;
-			primaryNameObject = tmp;
-		}
+		atLeastOneSecondarySucceeded|=evaluateSecondaryMetaNameEquivalence(where, tagSet, inPrimaryQuote, inSecondaryQuote, sno, wherePrimary, whereSecondary, primaryNameObject, secondaryTag, objectsResolved,
+			secondaryNameObjects, eraseREObjects);
 	}
 	return atLeastOneSecondarySucceeded;
 }
