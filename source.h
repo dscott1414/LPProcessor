@@ -1739,6 +1739,7 @@ public:
 		{
 			sgBegin=sgEnd=section=previousSubsetSpeakerGroup=saveNonNameObject=conversationalQuotes=-1;
 			speakersAreNeverGroupedTogether=false; 
+			tlTransition = false;
 			speakers.clear(); 
 			fromNextSpeakerGroup.clear(); // objects resolved by speakers from the next speaker group
 			replacedSpeakers.clear(); // speakers replaced by other speakers (in speakergroup only, so replacedBy is still -1)
@@ -2262,6 +2263,13 @@ int &numFirstInQuote,
 	void eraseLastQuote(int &lastQuote,tIWMM quoteCloseWord,unsigned int &q);
 	bool testConversionToDoubleQuotes();
 	bool getFormFlags(int where, bool &maybeVerb, bool &maybeNoun, bool &maybeAdjective, bool &preferNoun);
+	bool isFirstWordInSentence(unsigned int q, unsigned int begin);
+	void checkProperNoun(unsigned int q, unsigned int begin, unsigned int end, bool firstWordInSentence);
+	void adjustQuotationsIfOpen(unsigned int q, unsigned int& end, unsigned int& quotationExceptions, int lastPrimaryQuote, int lastSecondaryQuote,
+		tIWMM primaryQuoteOpenWord, tIWMM primaryQuoteCloseWord,
+		tIWMM secondaryQuoteOpenWord, tIWMM secondaryQuoteCloseWord,
+		unsigned int& primaryQuotations, unsigned int& secondaryQuotations);
+	void alterNounOwner(int q);
 	unsigned int doQuotesOwnershipAndContractions(unsigned int &quotations);
 	int reportUnmatchedElements(int begin,int end,bool logElements);
 	void clearTagSetMaps(void);
@@ -3019,6 +3027,13 @@ bool &comparableName,
 	void resolveSecondaryMetaNameObject(int whereSecondary,int primaryNameObject, int& tmpLastRelativePhrase, int& tmpLastBeginS1, int& tmpLastQ2, int& tmpLastVerb, bool inPrimaryQuote, bool inSecondaryQuote, vector <int>& objectsResolved,
 		vector <int>& secondaryNameObjects, vector <int>& eraseREObjects);
 	void insertSecondaryNameObjectInQuoteIntoSpeakers(int where, int wherePrimary, int whereSecondary, vector <int>& secondaryNameObjects, bool inPrimaryQuote);
+	bool rejectSecondaryMetaNameEquivalence(int where, int sno, int wherePrimary, int whereSecondary, int primaryNameObject, vector <int>& objectsResolved, vector <int>& secondaryNameObjects, vector <int>& eraseREObjects);
+	void switchToPreferPrimaryNameOrMetaGroup(int& wherePrimary, int& primaryNameObject, int& whereSecondary, int& secondaryNameObject);
+	void removeHail(int where, int wherePrimary);
+	void associateSecondaryAdjectivesAndGenderToPrimary(int where, int wherePrimary, int primaryNameObject, int whereSecondary, int secondaryNameObject);
+	bool refuseIdentificationIfNotIdentifiedOrNotKnown(int where, int wherePrimary, int primaryNameObject, int whereSecondary, int secondaryNameObject);
+	void removePlaceSetGenderAndReplacePrimaryWithSecondary(int where, bool inPrimaryQuote, bool inSecondaryQuote, int wherePrimary, int primaryNameObject, int whereSecondary, int secondaryNameObject);
+	void equalizeGenderAdjectivesAndRelativeClauses(int where, int primaryNameObject, int secondaryNameObject);
 	bool evaluateSecondaryMetaNameEquivalence(int where, vector <cTagLocation>& tagSet, bool inPrimaryQuote, bool inSecondaryQuote, int sno, int wherePrimary, int whereSecondary, int primaryNameObject, int secondaryTag, vector <int>& objectsResolved,
 		vector <int>& secondaryNameObjects, vector <int>& eraseREObjects);
 	bool evaluateMetaNameEquivalence(int where,vector <cTagLocation> &tagSet,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb);

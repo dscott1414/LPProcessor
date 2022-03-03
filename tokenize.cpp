@@ -294,6 +294,329 @@ bool cSource::getFormFlags(int where, bool& maybeVerb, bool& maybeNoun, bool& ma
 	return false;
 }
 
+bool cSource::isFirstWordInSentence(unsigned int q, unsigned int begin)
+{
+	tIWMM w = (q) ? m[q - 1].word : wNULL;
+	return q == begin || w->first == L"." || // include "." because the last word may be a contraction
+		w == Words.sectionWord || w->first == L"--" /* Ulysses */ || w->first == L"?" || w->first == L"!" ||
+		w->first == L":" /* Secret Adversary - Second month:  Promoted to drying aforesaid plates.*/ ||
+		w->first == L";" /* I am a Soldier A jolly British Soldier ; You can see that I am a Soldier by my feet . . . */ ||
+		w->second.query(quoteForm) >= 0 || w->second.query(dashForm) >= 0 || w->second.query(bracketForm) >= 0 ||
+		(q - 3 == begin && m[q - 2].word->second.query(quoteForm) >= 0 && w->first == L"(") || // Pay must be good.' (We might as well make that clear from the start.)
+		(q - 2 == begin && w->first == L"(");   // The bag dropped.  (If you didn't know).
+}
+
+void cSource::checkProperNoun(unsigned int q, unsigned int begin, unsigned int end, bool firstWordInSentence)
+{
+	bool afterPossibleAbbreviation = (q > 1 && m[q - 1].word->first == L"." && (m[q - 2].queryForm(abbreviationForm) >= 0 || m[q - 2].queryForm(honorificAbbreviationForm) >= 0 || m[q - 2].queryForm(letterForm) >= 0));
+	wstring originalWord;
+	// if the first word, and there are no other usages of it not being the first word but capitalized,
+		// and there are usages of it not being capitalized, or it is NOT (unknown or a proper noun)
+		// OR
+		// if first word, and all other usages of the word are that it is accompanied by another following word if it is capitalized (numProperNounUsageAsAdjective),
+		// and it is not accompanied by another following capitalized word, and it is not (unknown or a proper noun). ('New' York)
+		// ADDITIONALLY, 
+		// [mightBeName] if (the previous word is a .) AND (the word before that is an honorific and capitalized) St. Pancras
+	bool mightBeName = q > 2 && m[q - 1].word->first == L"." &&
+		(m[q - 2].word->second.query(honorificForm) >= 0 || m[q - 2].word->second.query(honorificAbbreviationForm) >= 0 || m[q - 2].word->second.query(letterForm) >= 0) &&
+		(m[q - 2].flags & (cWordMatch::flagFirstLetterCapitalized));
+	// added q>0 because in abstracts, most of the other criteria is invalid (see Curveball - Rafid Ahmed Alwan al-Janabi, known by the Central Intelligence Agency cryptonym "Curveball")
+	if (((firstWordInSentence && q > 0) || m[q].flags & cWordMatch::flagAllCaps) && !mightBeName &&
+		(m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN) == 0 ||
+			(m[q].word->second.numProperNounUsageAsAdjective == m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN) &&
+				(q + 1 >= m.size() || (m[q + 1].flags & (cWordMatch::flagFirstLetterCapitalized | cWordMatch::flagAllCaps)) == 0))) &&
+		//m[q].word->second.relatedSubTypeObjects.size()==0 && // not a known common place 
+		(q < 1 || (m[q - 1].word->first != L"the" && !(m[q - 1].flags & cWordMatch::flagAllCaps))) &&
+		!((m[q].flags & cWordMatch::flagAllCaps) && m[q].word->second.formsSize() == 0) && // The US / that IRS tax form
+		// must NOT be queryForm because of test
+		(m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN) > 0 || m[q].word->second.query(PROPER_NOUN_FORM_NUM) < 0))
+	{
+		// if flagAddProperNoun and first word, check if usage pattern is 0.  If it is, unflag word.
+		if (m[q].flags & cWordMatch::flagAddProperNoun)
+		{
+			m[q].flags &= ~cWordMatch::flagAddProperNoun;
+			if (debugTrace.traceParseInfo)
+				lplog(LOG_INFO, L"%d:%s:removed flagAddProperNoun asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
+					q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
+					m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
+					m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
+		}
+		// refuse to make it proper noun, even if it is listed as one.  see cWordMatch::queryForm(int form)
+		else
+			if ((m[q].flags & cWordMatch::flagFirstLetterCapitalized) && !afterPossibleAbbreviation && !(m[q].flags & cWordMatch::flagAllCaps) && m[q].word->second.localWordIsLowercase > 0)
+			{
+				m[q].flags |= cWordMatch::flagRefuseProperNoun;
+				if (debugTrace.traceParseInfo)
+					lplog(LOG_INFO, L"%d:%s:added flagRefuseProperNoun asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
+						q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
+						m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
+						m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
+			}
+	}
+	if (firstWordInSentence && (m[q].flags & cWordMatch::flagFirstLetterCapitalized) && !(m[q].flags & cWordMatch::flagAddProperNoun) && !(m[q].flags & cWordMatch::flagRefuseProperNoun) &&
+		m[q].word->second.query(PROPER_NOUN_FORM_NUM) < 0 &&
+		((m[q].word->second.localWordIsLowercase == 0 && m[q].word->second.localWordIsCapitalized > 2) || m[q].word->second.localWordIsCapitalized > 20))
+	{
+		m[q].flags |= cWordMatch::flagAddProperNoun;
+		if (debugTrace.traceParseInfo)
+			lplog(LOG_INFO, L"%d:%s:added flagAddProperNoun (from local) asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
+				q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
+				m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
+				m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
+
+	}
+	if (m[q].word->first == L"lord" && (m[q].flags & cWordMatch::flagFirstLetterCapitalized) && !(m[q].flags & cWordMatch::flagAddProperNoun) && q + 1 < m.size() && !(m[q + 1].flags & cWordMatch::flagFirstLetterCapitalized))
+	{
+		m[q].flags |= cWordMatch::flagAddProperNoun;
+		if (debugTrace.traceParseInfo)
+			lplog(LOG_INFO, L"%d:%s:added flagAddProperNoun (SPECIAL CASE lord) asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
+				q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
+				m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
+				m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
+	}
+	// if capitalized, not all caps, at least 2 letters long, not a cardinal or ordinal number
+	// does not already have flagRefuseProperNoun or flagAddProperNoun or flagOnlyConsiderProperNounForms or flagOnlyConsiderOtherNounForms set
+	// is never used in the lower case, and has been used as a proper noun unambiguously
+	if ((m[q].flags & cWordMatch::flagFirstLetterCapitalized) && !(m[q].flags & cWordMatch::flagAllCaps) && m[q].word->first[1] &&
+		m[q].word->second.query(numeralOrdinalForm) == -1 && m[q].word->second.query(numeralCardinalForm) == -1 &&
+		!(m[q].flags & (cWordMatch::flagRefuseProperNoun | cWordMatch::flagOnlyConsiderProperNounForms | cWordMatch::flagOnlyConsiderOtherNounForms)) &&
+		(m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN) > 0 || m[q].word->second.localWordIsCapitalized > 0) &&  // PROPER_NOUN_USAGE_PATTERN is only updated if proper noun form is added 
+		m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN) == 0 &&
+		// word was found capitalized alone (the number of times being a capitalized adjective is < the number of times being capitalized)
+		(m[q].word->second.numProperNounUsageAsAdjective < m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN) ||
+			// OR this particular position is followed by a capitalized word (Peel Edgerton) - peel is also a verb!
+			(q + 1 < m.size() && (m[q + 1].flags & (cWordMatch::flagFirstLetterCapitalized | cWordMatch::flagAllCaps)) != 0)))
+	{
+		// if word serves only as an adjective in a proper noun ('New' York), don't mark as only proper noun
+		//lplog(L"%d:DEBUG PNU %d %d",q,m[q].word->second.numProperNounUsageAsAdjective,(int)m[q].word->second.usagePatterns[cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN]);
+		bool atLeastOneProperNounForm = (m[q].flags & cWordMatch::flagAddProperNoun) != 0;
+		for (unsigned int I = 0; I < m[q].word->second.formsSize() && !atLeastOneProperNounForm; I++)
+			if (m[q].word->second.Form(I)->properNounSubClass || m[q].word->second.forms()[I] == PROPER_NOUN_FORM_NUM)
+				atLeastOneProperNounForm = true;
+		if (atLeastOneProperNounForm)
+		{
+			m[q].flags |= cWordMatch::flagOnlyConsiderProperNounForms;
+			if (debugTrace.traceParseInfo)
+				lplog(LOG_INFO, L"%d:%s:added flagOnlyConsiderProperNounForms (2).", q, getOriginalWord(q, originalWord, false));
+		}
+	}
+	if ((m[q].flags & cWordMatch::flagOnlyConsiderProperNounForms) && end - begin > 4 && !m[q].word->second.isUnknown())
+	{
+		// check if from begin to end there is only capitalized words except for determiners or prepositions
+		// What Do We Need to Know About the International Monetary System? (Paul Krugman)
+		bool allCapitalized = true;
+		int longestContinuousTerm = 0, termLength = 0, numCommonClassCapitalizedWords = 0, numCapitalized = 0;
+		for (unsigned int si = begin; si < end; si++)
+		{
+			if (!iswalpha(m[si].word->first[0]))
+			{
+				termLength = 0;
+				numCapitalized++;
+				continue;
+			}
+			termLength++;
+			longestContinuousTerm = max(longestContinuousTerm, termLength);
+			bool isCapitalized = (m[si].queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (m[si].flags & cWordMatch::flagFirstLetterCapitalized) || (m[si].flags & cWordMatch::flagAllCaps));
+			if (m[si].word->second.isCommonWord() && isCapitalized)
+				numCommonClassCapitalizedWords++;
+			if (!isCapitalized && m[si].queryForm(determinerForm) < 0 && m[si].queryForm(prepositionForm) < 0)
+				allCapitalized = false;
+			else
+				numCapitalized++;
+		}
+		if ((allCapitalized && longestContinuousTerm > 4 && numCommonClassCapitalizedWords > 0) ||
+			((end - begin) > (unsigned)numCapitalized && longestContinuousTerm > 4 && (unsigned)numCommonClassCapitalizedWords >= ((end - begin) - numCapitalized))) // take care of small errors / How Jay-Z Went from Street Corner to Corner Office by Zack O'Malley Greenburg (2011: Portfolio (Penguin), 240 pages) ISBN 978-1-59184-381-8
+		{
+			m[q].flags &= ~cWordMatch::flagOnlyConsiderProperNounForms;
+			if (debugTrace.traceParseInfo)
+				lplog(LOG_INFO, L"%d:%s:removed flagOnlyConsiderProperNounForms [allCapitalized longestContinuousTerm=%d numCommonClassCapitalizedWords=%d numCapitalized=%d totalLength=%d].",
+					q, getOriginalWord(q, originalWord, false), longestContinuousTerm, numCommonClassCapitalizedWords, numCapitalized, end - begin);
+		}
+		else if (debugTrace.traceParseInfo)
+			lplog(LOG_INFO, L"%d:%s:did not remove flagOnlyConsiderProperNounForms [allCapitalized=%s longestContinuousTerm=%d numCommonClassCapitalizedWords=%d numCapitalized=%d totalLength=%d].",
+				q, getOriginalWord(q, originalWord, false), (allCapitalized) ? L"true" : L"false", longestContinuousTerm, numCommonClassCapitalizedWords, numCapitalized, end - begin);
+	}
+}
+
+void cSource::adjustQuotationsIfOpen(unsigned int q, unsigned int &end, unsigned int &quotationExceptions, int lastPrimaryQuote, int lastSecondaryQuote, 
+																			tIWMM primaryQuoteOpenWord, tIWMM primaryQuoteCloseWord,
+																			tIWMM secondaryQuoteOpenWord, tIWMM secondaryQuoteCloseWord,
+	                                    unsigned int & primaryQuotations, unsigned int & secondaryQuotations)
+{
+	if (q && m[q - 1].word == primaryQuoteOpenWord && (primaryQuotations & 1))  // section found with an open quotation
+	{
+		primaryQuotations--;
+#ifdef LOG_QUOTATIONS
+		lplog(L"%d-%d:Primary quotations odd at end-of-section at %d (1).  Removing quote at %d.  Total primaryQuotations decreased to %d.",
+			begin, end, q, lastPrimaryQuote, primaryQuotations);
+		displayQuoteContext(begin - 5, end + 5);
+#endif
+		eraseLastQuote(lastPrimaryQuote, primaryQuoteCloseWord, q);
+		end--;
+		quotationExceptions++;
+	}
+	else if (q && m[q - 1].word == secondaryQuoteOpenWord && (secondaryQuotations & 1))
+	{
+		secondaryQuotations--;
+#ifdef LOG_QUOTATIONS
+		lplog(L"%d-%d:Secondary quotations odd at end-of-section at %d (3).  Removing quote at %d.  Total secondaryQuotations decreased to %d.",
+			begin, end, q, lastSecondaryQuote, secondaryQuotations);
+		displayQuoteContext(begin - 5, end + 5);
+#endif
+		eraseLastQuote(lastSecondaryQuote, secondaryQuoteCloseWord, q);
+		end--;
+		quotationExceptions++;
+	}
+}
+
+void cSource::alterNounOwner(int q)
+{
+	// do plural ownership
+	if (m[q].flags & cWordMatch::flagPossiblePluralNounOwner)
+	{
+		m[q].flags &= ~cWordMatch::flagPossiblePluralNounOwner;
+		// only if the word is a plural noun type and their is no unresolved single quote
+		if (((m[q].word->second.inflectionFlags & PLURAL) || m[q].word->first[m[q].word->first.length() - 1] == L's') && !(secondaryQuotations & 1))
+		{
+			m[q].flags |= cWordMatch::flagNounOwner;
+			if (m[q + 1].word->first == L"\'")
+			{
+#ifdef LOG_QUOTATIONS
+				lplog(L"%d-%d:flagPossiblePluralNounOwner deletes single quote at %d.", begin, end, q + 1);
+				displayQuoteContext(begin - 5, end + 5);
+#endif
+				m.erase(m.begin() + q + 1);
+				for (unsigned int s2 = s + 1; s2 < sentenceStarts.size(); s2++)
+					sentenceStarts[s2]--;
+				unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
+				for (auto const& [where, comment] : metaCommandsEmbeddedInSource)
+					newMetaCommandsEmbeddedInSource[(where < q + 1) ? where : where - 1] = comment;
+				metaCommandsEmbeddedInSource = newMetaCommandsEmbeddedInSource;
+				end--;
+			}
+		}
+	}
+	// do is/has
+	// the other's more expensive.
+	// current word ends in 's, is a noun type or that or one and the next word is not a noun type and is not punctuation and has another form besides a verb.
+	// Dave's sure been right. Dave's now about 80?
+	// Dave's beans are great.
+	// a barn of Dave's.
+	// no one's been there.
+			 // must be owner (have 's after it) 
+	// Jay-Z's planning to marry Beyonce?
+	else if ((m[q].flags & cWordMatch::flagNounOwner) &&
+		// must be single or have a determiner AFTER the word
+		(!(m[q].word->second.inflectionFlags & PLURAL) || (q + 1 < lastWord && m[q + 1].queryWinnerForm(determinerForm) >= 0)) &&
+		// must be a nounType, that, a pronoun (nominal (one, I, we) acc (him, them...), indefinite or quantifier 
+		(m[q].isNounType() || m[q].word->first == L"that" || m[q].queryForm(nomForm) >= 0 || m[q].queryForm(personalPronounAccusativeForm) >= 0 || m[q].queryForm(indefinitePronounForm) >= 0 || m[q].queryForm(quantifierForm) >= 0) &&
+		// and NOT "let" (because of "let's")
+		m[q].word->first != L"let" &&
+		(q + 1 < lastWord && m[q + 1].word != Words.sectionWord &&
+			// the next word must be "been" or (NOT is and NOT punctuation and NOT 'will').
+			(m[q + 1].word->first == L"been" || (m[q + 1].queryForm(L"is") < 0 && m[q + 1].queryForm(L"is_negation") < 0 && iswalpha(m[q + 1].word->first[0]) && m[q + 1].word->first != L"will" && m[q + 1].word->first != L"can"))) &&
+		// the previous word must not be "not" / (not Whittington's one) and not "is"
+		(!q || (m[q - 1].word->first != L"not" && m[q - 1].queryForm(isForm) < 0)))
+	{
+		// scan for immediately preceding preposition
+		// from q to begin, scan for any word that preposition is the lowest cost.
+		// if word is not determiner or Proper Noun or preposition break.
+		int I = q - 1;
+		for (; I >= (int)begin && m[I].queryForm(PROPER_NOUN_FORM_NUM) >= 0; I--);
+		for (; I >= (int)begin && m[I].queryForm(determinerForm) >= 0; I--);
+		if (I >= 0)
+		{
+			int numForm = m[I].queryForm(prepositionForm);
+			if (numForm < 0 || m[I].word->second.getUsageCost(numForm)>1)
+			{
+				// is the next word a noun?  If there is no noun, 's cannot be ownership.
+				// if it IS a noun, it might mean ownership, or maybe not (further work?)
+				I = q + 1;
+				for (; I < (int)lastWord && m[I].isModifierType() && !m[I].isNounType(); I++);
+				// other's a cadillac
+				// other's reform.
+				if ((I < (int)lastWord && !m[I].isNounType()) || ((numForm = m[q].queryForm(relativizerForm)) >= 0 && m[q].word->second.getUsageCost(numForm) < 3))
+				{
+					m[q].flags &= ~cWordMatch::flagNounOwner;
+					m.insert(m.begin() + q + 1, cWordMatch(Words.gquery(L"ishas"), 0, debugTrace));
+					for (unsigned int s2 = s + 1; s2 < sentenceStarts.size(); s2++)
+						sentenceStarts[s2]++;
+					end++;
+				}
+			}
+		}
+	}
+	// The captain's right.
+	// if there is no verb before the owning noun, and no verb after the owned word, and the word is more likely an adjective, then convert.
+	// Also a title (which will be in all caps) is more likely to be a noun phrase, so don't expand an ownership.  Also 'worth' is a strange adjective, which tends to be owned (a thousand pound's worth)
+	if (m[q].word->first != L"let" && (q + 1 >= m.size() || m[q + 1].word->first != L"worth") && (m[q].flags & cWordMatch::flagNounOwner) && !(m[q].flags & cWordMatch::flagAllCaps))
+	{
+		int capitalizedWords = 0;
+		for (unsigned int I = begin; I < end; I++)
+			if (m[I].flags & cWordMatch::flagFirstLetterCapitalized)
+				capitalizedWords++;
+		// detect titles - titles tend to be noun phrases
+		// David Lloyd's Last Will . 
+		if (capitalizedWords * 100 / (end - begin) < 75)
+		{
+			if (debugTrace.traceParseInfo)
+				lplog(LOG_INFO, L"NOUNOWNER %s test", m[q].word->first.c_str());
+			bool maybeVerb = false, maybeNoun, maybeAdjective, preferNoun, detectNoun = true;
+			// go backwards skip past any adjectives, nouns or determiners.  Stop at verb, or at non-noun/adjective or beginning of sentence (begin).
+			// go forwards skip past adjectives or nouns. Stop at verb or at non-noun/adjective or at end of sentence (end)
+			for (unsigned int I = begin; I < q && !maybeVerb; I++)
+				getFormFlags(I, maybeVerb, maybeNoun, maybeAdjective, preferNoun);
+			maybeNoun = preferNoun = false;
+			int whereLastNoun = -1, whereLastAdjective = -1;
+			// don't go beyond the double quote, as it will probably have a verb after it (said) which should not be counted in this analysis.
+			// sentenceStarts may not include an end of sentence!
+			for (unsigned int I = q + 1; I < end && !isEOS(I) && !maybeVerb && !cWord::isDoubleQuote(m[I].word->first[0]); I++)
+			{
+				getFormFlags(I, maybeVerb, maybeNoun, maybeAdjective, preferNoun);
+				if (!maybeNoun && !maybeAdjective && !cWord::isDash(m[I].word->first[0]))
+					detectNoun = false;
+				if (detectNoun)
+				{
+					if (maybeNoun && preferNoun)
+						whereLastNoun = I;
+					if (maybeAdjective && (!maybeNoun || !preferNoun))
+						whereLastAdjective = I;
+				}
+			}
+			// if there is no verb anywhere in the sentence (must be very conservative at this stage of tokenization)
+			// and if there is no probable noun after the ownership, and there is at least one adjective, then convert.
+			if (!maybeVerb && whereLastNoun < 0 && whereLastAdjective >= 0)
+			{
+				m[q].flags &= ~cWordMatch::flagNounOwner;
+				m.insert(m.begin() + q + 1, cWordMatch(Words.gquery(L"ishas"), 0, debugTrace));
+				for (unsigned int s2 = s + 1; s2 < sentenceStarts.size(); s2++)
+					sentenceStarts[s2]++;
+				unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
+				for (auto const& [where, comment] : metaCommandsEmbeddedInSource)
+					newMetaCommandsEmbeddedInSource[(where > q) ? where + 1 : where] = comment;
+				metaCommandsEmbeddedInSource = newMetaCommandsEmbeddedInSource;
+				end++;
+				if (debugTrace.traceParseInfo)
+				{
+					wstring sentence;
+					for (unsigned int swhere = begin; swhere < end; swhere++)
+					{
+						wstring originalIWord;
+						getOriginalWord(swhere, originalIWord, false, false);
+						if (swhere == q)
+							originalIWord = L"*" + originalIWord + L"*";
+						sentence += originalIWord + L" ";
+					}
+					lplog(LOG_INFO, L"OWNERCONVERSION [%d]:%s", whereLastAdjective, sentence.c_str());
+				}
+			}
+		}
+		else
+			if (debugTrace.traceParseInfo)
+				lplog(LOG_INFO, L"NOUNOWNER %s capitalized words test %d*100/%d<75", m[q].word->first.c_str(), capitalizedWords, end - begin);
+	}
+}
+
 // executed after tokenization but before pattern matching.
 // also handle Let's = Let us and What's he want = What does he want?
 // also handle 'Tis as in 'Tis the time for all good men... (It is)
@@ -332,168 +655,15 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int& primaryQuot
 			if (end != sectionEnd) sentenceStarts.insert(s + 1, sectionEnd);
 		for (unsigned int q = begin; q < end; q++)
 		{
-			bool afterPossibleAbbreviation = (q > 1 && m[q - 1].word->first == L"." && (m[q - 2].queryForm(abbreviationForm) >= 0 || m[q - 2].queryForm(honorificAbbreviationForm) >= 0 || m[q - 2].queryForm(letterForm) >= 0));
 			// logic copied from cSource::parse
-			tIWMM w = (q) ? m[q - 1].word : wNULL;
-			bool firstWordInSentence = q == begin || w->first == L"." || // include "." because the last word may be a contraction
-				w == Words.sectionWord || w->first == L"--" /* Ulysses */ || w->first == L"?" || w->first == L"!" ||
-				w->first == L":" /* Secret Adversary - Second month:  Promoted to drying aforesaid plates.*/ ||
-				w->first == L";" /* I am a Soldier A jolly British Soldier ; You can see that I am a Soldier by my feet . . . */ ||
-				w->second.query(quoteForm) >= 0 || w->second.query(dashForm) >= 0 || w->second.query(bracketForm) >= 0 ||
-				(q - 3 == begin && m[q - 2].word->second.query(quoteForm) >= 0 && w->first == L"(") || // Pay must be good.' (We might as well make that clear from the start.)
-				(q - 2 == begin && w->first == L"(");   // The bag dropped.  (If you didn't know).
-			// if the first word, and there are no other usages of it not being the first word but capitalized,
-			// and there are usages of it not being capitalized, or it is NOT (unknown or a proper noun)
-			// OR
-			// if first word, and all other usages of the word are that it is accompanied by another following word if it is capitalized (numProperNounUsageAsAdjective),
-			// and it is not accompanied by another following capitalized word, and it is not (unknown or a proper noun). ('New' York)
-			// ADDITIONALLY, 
-			// [mightBeName] if (the previous word is a .) AND (the word before that is an honorific and capitalized) St. Pancras
-			bool mightBeName = q > 2 && m[q - 1].word->first == L"." &&
-				(m[q - 2].word->second.query(honorificForm) >= 0 || m[q - 2].word->second.query(honorificAbbreviationForm) >= 0 || m[q - 2].word->second.query(letterForm) >= 0) &&
-				(m[q - 2].flags & (cWordMatch::flagFirstLetterCapitalized));
-			// added q>0 because in abstracts, most of the other criteria is invalid (see Curveball - Rafid Ahmed Alwan al-Janabi, known by the Central Intelligence Agency cryptonym "Curveball")
-			if (((firstWordInSentence && q > 0) || m[q].flags & cWordMatch::flagAllCaps) && !mightBeName &&
-				(m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN) == 0 ||
-					(m[q].word->second.numProperNounUsageAsAdjective == m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN) &&
-						(q + 1 >= m.size() || (m[q + 1].flags & (cWordMatch::flagFirstLetterCapitalized | cWordMatch::flagAllCaps)) == 0))) &&
-				//m[q].word->second.relatedSubTypeObjects.size()==0 && // not a known common place 
-				(q < 1 || (m[q - 1].word->first != L"the" && !(m[q - 1].flags & cWordMatch::flagAllCaps))) &&
-				!((m[q].flags & cWordMatch::flagAllCaps) && m[q].word->second.formsSize() == 0) && // The US / that IRS tax form
-				// must NOT be queryForm because of test
-				(m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN) > 0 || m[q].word->second.query(PROPER_NOUN_FORM_NUM) < 0))
-			{
-				// if flagAddProperNoun and first word, check if usage pattern is 0.  If it is, unflag word.
-				if (m[q].flags & cWordMatch::flagAddProperNoun)
-				{
-					m[q].flags &= ~cWordMatch::flagAddProperNoun;
-					if (debugTrace.traceParseInfo)
-						lplog(LOG_INFO, L"%d:%s:removed flagAddProperNoun asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
-							q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
-							m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
-							m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
-				}
-				// refuse to make it proper noun, even if it is listed as one.  see cWordMatch::queryForm(int form)
-				else
-					if ((m[q].flags & cWordMatch::flagFirstLetterCapitalized) && !afterPossibleAbbreviation && !(m[q].flags & cWordMatch::flagAllCaps) && m[q].word->second.localWordIsLowercase > 0)
-					{
-						m[q].flags |= cWordMatch::flagRefuseProperNoun;
-						if (debugTrace.traceParseInfo)
-							lplog(LOG_INFO, L"%d:%s:added flagRefuseProperNoun asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
-								q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
-								m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
-								m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
-					}
-			}
-			if (firstWordInSentence && (m[q].flags & cWordMatch::flagFirstLetterCapitalized) && !(m[q].flags & cWordMatch::flagAddProperNoun) && !(m[q].flags & cWordMatch::flagRefuseProperNoun) &&
-				m[q].word->second.query(PROPER_NOUN_FORM_NUM) < 0 &&
-				((m[q].word->second.localWordIsLowercase == 0 && m[q].word->second.localWordIsCapitalized > 2) || m[q].word->second.localWordIsCapitalized > 20))
-			{
-				m[q].flags |= cWordMatch::flagAddProperNoun;
-				if (debugTrace.traceParseInfo)
-					lplog(LOG_INFO, L"%d:%s:added flagAddProperNoun (from local) asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
-						q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
-						m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
-						m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
-
-			}
-			if (m[q].word->first == L"lord" && (m[q].flags & cWordMatch::flagFirstLetterCapitalized) && !(m[q].flags & cWordMatch::flagAddProperNoun) && q + 1 < m.size() && !(m[q + 1].flags & cWordMatch::flagFirstLetterCapitalized))
-			{
-				m[q].flags |= cWordMatch::flagAddProperNoun;
-				if (debugTrace.traceParseInfo)
-					lplog(LOG_INFO, L"%d:%s:added flagAddProperNoun (SPECIAL CASE lord) asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
-						q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
-						m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
-						m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
-			}
-			// if capitalized, not all caps, at least 2 letters long, not a cardinal or ordinal number
-			// does not already have flagRefuseProperNoun or flagAddProperNoun or flagOnlyConsiderProperNounForms or flagOnlyConsiderOtherNounForms set
-			// is never used in the lower case, and has been used as a proper noun unambiguously
-			if ((m[q].flags & cWordMatch::flagFirstLetterCapitalized) && !(m[q].flags & cWordMatch::flagAllCaps) && m[q].word->first[1] &&
-				m[q].word->second.query(numeralOrdinalForm) == -1 && m[q].word->second.query(numeralCardinalForm) == -1 &&
-				!(m[q].flags & (cWordMatch::flagRefuseProperNoun | cWordMatch::flagOnlyConsiderProperNounForms | cWordMatch::flagOnlyConsiderOtherNounForms)) &&
-				(m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN) > 0 || m[q].word->second.localWordIsCapitalized > 0) &&  // PROPER_NOUN_USAGE_PATTERN is only updated if proper noun form is added 
-				m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN) == 0 &&
-				// word was found capitalized alone (the number of times being a capitalized adjective is < the number of times being capitalized)
-				(m[q].word->second.numProperNounUsageAsAdjective < m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN) ||
-					// OR this particular position is followed by a capitalized word (Peel Edgerton) - peel is also a verb!
-					(q + 1 < m.size() && (m[q + 1].flags & (cWordMatch::flagFirstLetterCapitalized | cWordMatch::flagAllCaps)) != 0)))
-			{
-				// if word serves only as an adjective in a proper noun ('New' York), don't mark as only proper noun
-				//lplog(L"%d:DEBUG PNU %d %d",q,m[q].word->second.numProperNounUsageAsAdjective,(int)m[q].word->second.usagePatterns[cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN]);
-				bool atLeastOneProperNounForm = (m[q].flags & cWordMatch::flagAddProperNoun) != 0;
-				for (unsigned int I = 0; I < m[q].word->second.formsSize() && !atLeastOneProperNounForm; I++)
-					if (m[q].word->second.Form(I)->properNounSubClass || m[q].word->second.forms()[I] == PROPER_NOUN_FORM_NUM)
-						atLeastOneProperNounForm = true;
-				if (atLeastOneProperNounForm)
-				{
-					m[q].flags |= cWordMatch::flagOnlyConsiderProperNounForms;
-					if (debugTrace.traceParseInfo)
-						lplog(LOG_INFO, L"%d:%s:added flagOnlyConsiderProperNounForms (2).", q, getOriginalWord(q, originalWord, false));
-				}
-			}
-			if ((m[q].flags & cWordMatch::flagOnlyConsiderProperNounForms) && end - begin > 4 && !m[q].word->second.isUnknown())
-			{
-				// check if from begin to end there is only capitalized words except for determiners or prepositions
-				// What Do We Need to Know About the International Monetary System? (Paul Krugman)
-				bool allCapitalized = true;
-				int longestContinuousTerm = 0, termLength = 0, numCommonClassCapitalizedWords = 0, numCapitalized = 0;
-				for (unsigned int si = begin; si < end; si++)
-				{
-					if (!iswalpha(m[si].word->first[0]))
-					{
-						termLength = 0;
-						numCapitalized++;
-						continue;
-					}
-					termLength++;
-					longestContinuousTerm = max(longestContinuousTerm, termLength);
-					bool isCapitalized = (m[si].queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (m[si].flags & cWordMatch::flagFirstLetterCapitalized) || (m[si].flags & cWordMatch::flagAllCaps));
-					if (m[si].word->second.isCommonWord() && isCapitalized)
-						numCommonClassCapitalizedWords++;
-					if (!isCapitalized && m[si].queryForm(determinerForm) < 0 && m[si].queryForm(prepositionForm) < 0)
-						allCapitalized = false;
-					else
-						numCapitalized++;
-				}
-				if ((allCapitalized && longestContinuousTerm > 4 && numCommonClassCapitalizedWords > 0) ||
-					((end - begin) > (unsigned)numCapitalized && longestContinuousTerm > 4 && (unsigned)numCommonClassCapitalizedWords >= ((end - begin) - numCapitalized))) // take care of small errors / How Jay-Z Went from Street Corner to Corner Office by Zack O'Malley Greenburg (2011: Portfolio (Penguin), 240 pages) ISBN 978-1-59184-381-8
-				{
-					m[q].flags &= ~cWordMatch::flagOnlyConsiderProperNounForms;
-					if (debugTrace.traceParseInfo)
-						lplog(LOG_INFO, L"%d:%s:removed flagOnlyConsiderProperNounForms [allCapitalized longestContinuousTerm=%d numCommonClassCapitalizedWords=%d numCapitalized=%d totalLength=%d].",
-							q, getOriginalWord(q, originalWord, false), longestContinuousTerm, numCommonClassCapitalizedWords, numCapitalized, end - begin);
-				}
-				else if (debugTrace.traceParseInfo)
-					lplog(LOG_INFO, L"%d:%s:did not remove flagOnlyConsiderProperNounForms [allCapitalized=%s longestContinuousTerm=%d numCommonClassCapitalizedWords=%d numCapitalized=%d totalLength=%d].",
-						q, getOriginalWord(q, originalWord, false), (allCapitalized) ? L"true" : L"false", longestContinuousTerm, numCommonClassCapitalizedWords, numCapitalized, end - begin);
-			}
+			bool firstWordInSentence = isFirstWordInSentence(q, begin);
+			checkProperNoun(q, begin, end, firstWordInSentence);
 			if (m[q].word == Words.sectionWord)
 			{
-				if (q && m[q - 1].word == primaryQuoteOpenWord && (primaryQuotations & 1))  // section found with an open quotation
-				{
-					primaryQuotations--;
-#ifdef LOG_QUOTATIONS
-					lplog(L"%d-%d:Primary quotations odd at end-of-section at %d (1).  Removing quote at %d.  Total primaryQuotations decreased to %d.",
-						begin, end, q, lastPrimaryQuote, primaryQuotations);
-					displayQuoteContext(begin - 5, end + 5);
-#endif
-					eraseLastQuote(lastPrimaryQuote, primaryQuoteCloseWord, q);
-					end--;
-					quotationExceptions++;
-				}
-				else if (q && m[q - 1].word == secondaryQuoteOpenWord && (secondaryQuotations & 1))
-				{
-					secondaryQuotations--;
-#ifdef LOG_QUOTATIONS
-					lplog(L"%d-%d:Secondary quotations odd at end-of-section at %d (3).  Removing quote at %d.  Total secondaryQuotations decreased to %d.",
-						begin, end, q, lastSecondaryQuote, secondaryQuotations);
-					displayQuoteContext(begin - 5, end + 5);
-#endif
-					eraseLastQuote(lastSecondaryQuote, secondaryQuoteCloseWord, q);
-					end--;
-					quotationExceptions++;
-				}
+				adjustQuotationsIfOpen(q, end, quotationExceptions, lastPrimaryQuote, lastSecondaryQuote,
+					primaryQuoteOpenWord, primaryQuoteCloseWord,
+					secondaryQuoteOpenWord, secondaryQuoteCloseWord,
+					primaryQuotations, secondaryQuotations);
 				continue;
 			}
 			if (!quoteTest(q, primaryQuotations, lastPrimaryQuote, primaryQuoteWord, primaryQuoteOpenWord, primaryQuoteCloseWord))
@@ -501,150 +671,7 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int& primaryQuot
 				if (m[q].word == secondaryQuoteWord)
 					secondaryQuoteTest(q, secondaryQuotations, lastSecondaryQuote, secondaryQuoteWord, secondaryQuoteOpenWord, secondaryQuoteCloseWord);
 			}
-			// do plural ownership
-			if (m[q].flags & cWordMatch::flagPossiblePluralNounOwner)
-			{
-				m[q].flags &= ~cWordMatch::flagPossiblePluralNounOwner;
-				// only if the word is a plural noun type and their is no unresolved single quote
-				if (((m[q].word->second.inflectionFlags & PLURAL) || m[q].word->first[m[q].word->first.length() - 1] == L's') && !(secondaryQuotations & 1))
-				{
-					m[q].flags |= cWordMatch::flagNounOwner;
-					if (m[q + 1].word->first == L"\'")
-					{
-#ifdef LOG_QUOTATIONS
-						lplog(L"%d-%d:flagPossiblePluralNounOwner deletes single quote at %d.", begin, end, q + 1);
-						displayQuoteContext(begin - 5, end + 5);
-#endif
-						m.erase(m.begin() + q + 1);
-						for (unsigned int s2 = s + 1; s2 < sentenceStarts.size(); s2++)
-							sentenceStarts[s2]--;
-						unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
-						for (auto const& [where, comment] : metaCommandsEmbeddedInSource)
-							newMetaCommandsEmbeddedInSource[(where < q + 1) ? where : where - 1] = comment;
-						metaCommandsEmbeddedInSource = newMetaCommandsEmbeddedInSource;
-						end--;
-					}
-				}
-			}
-			// do is/has
-			// the other's more expensive.
-			// current word ends in 's, is a noun type or that or one and the next word is not a noun type and is not punctuation and has another form besides a verb.
-			// Dave's sure been right. Dave's now about 80?
-			// Dave's beans are great.
-			// a barn of Dave's.
-			// no one's been there.
-					 // must be owner (have 's after it) 
-			// Jay-Z's planning to marry Beyonce?
-			else if ((m[q].flags & cWordMatch::flagNounOwner) &&
-				// must be single or have a determiner AFTER the word
-				(!(m[q].word->second.inflectionFlags & PLURAL) || (q + 1 < lastWord && m[q + 1].queryWinnerForm(determinerForm) >= 0)) &&
-				// must be a nounType, that, a pronoun (nominal (one, I, we) acc (him, them...), indefinite or quantifier 
-				(m[q].isNounType() || m[q].word->first == L"that" || m[q].queryForm(nomForm) >= 0 || m[q].queryForm(personalPronounAccusativeForm) >= 0 || m[q].queryForm(indefinitePronounForm) >= 0 || m[q].queryForm(quantifierForm) >= 0) &&
-				// and NOT "let" (because of "let's")
-				m[q].word->first != L"let" &&
-				(q + 1 < lastWord && m[q + 1].word != Words.sectionWord &&
-					// the next word must be "been" or (NOT is and NOT punctuation and NOT 'will').
-					(m[q + 1].word->first == L"been" || (m[q + 1].queryForm(L"is") < 0 && m[q + 1].queryForm(L"is_negation") < 0 && iswalpha(m[q + 1].word->first[0]) && m[q + 1].word->first != L"will" && m[q + 1].word->first != L"can"))) &&
-				// the previous word must not be "not" / (not Whittington's one) and not "is"
-				(!q || (m[q - 1].word->first != L"not" && m[q - 1].queryForm(isForm) < 0)))
-			{
-				// scan for immediately preceding preposition
-				// from q to begin, scan for any word that preposition is the lowest cost.
-				// if word is not determiner or Proper Noun or preposition break.
-				int I = q - 1;
-				for (; I >= (int)begin && m[I].queryForm(PROPER_NOUN_FORM_NUM) >= 0; I--);
-				for (; I >= (int)begin && m[I].queryForm(determinerForm) >= 0; I--);
-				if (I >= 0)
-				{
-					int numForm = m[I].queryForm(prepositionForm);
-					if (numForm < 0 || m[I].word->second.getUsageCost(numForm)>1)
-					{
-						// is the next word a noun?  If there is no noun, 's cannot be ownership.
-						// if it IS a noun, it might mean ownership, or maybe not (further work?)
-						I = q + 1;
-						for (; I < (int)lastWord && m[I].isModifierType() && !m[I].isNounType(); I++);
-						// other's a cadillac
-						// other's reform.
-						if ((I < (int)lastWord && !m[I].isNounType()) || ((numForm = m[q].queryForm(relativizerForm)) >= 0 && m[q].word->second.getUsageCost(numForm) < 3))
-						{
-							m[q].flags &= ~cWordMatch::flagNounOwner;
-							m.insert(m.begin() + q + 1, cWordMatch(Words.gquery(L"ishas"), 0, debugTrace));
-							for (unsigned int s2 = s + 1; s2 < sentenceStarts.size(); s2++)
-								sentenceStarts[s2]++;
-							end++;
-						}
-					}
-				}
-			}
-			// The captain's right.
-			// if there is no verb before the owning noun, and no verb after the owned word, and the word is more likely an adjective, then convert.
-			// Also a title (which will be in all caps) is more likely to be a noun phrase, so don't expand an ownership.  Also 'worth' is a strange adjective, which tends to be owned (a thousand pound's worth)
-			if (m[q].word->first != L"let" && (q + 1 >= m.size() || m[q + 1].word->first != L"worth") && (m[q].flags & cWordMatch::flagNounOwner) && !(m[q].flags & cWordMatch::flagAllCaps))
-			{
-				int capitalizedWords = 0;
-				for (unsigned int I = begin; I < end; I++)
-					if (m[I].flags & cWordMatch::flagFirstLetterCapitalized)
-						capitalizedWords++;
-				// detect titles - titles tend to be noun phrases
-				// David Lloyd's Last Will . 
-				if (capitalizedWords * 100 / (end - begin) < 75)
-				{
-					if (debugTrace.traceParseInfo)
-						lplog(LOG_INFO, L"NOUNOWNER %s test", m[q].word->first.c_str());
-					bool maybeVerb = false, maybeNoun, maybeAdjective, preferNoun, detectNoun = true;
-					// go backwards skip past any adjectives, nouns or determiners.  Stop at verb, or at non-noun/adjective or beginning of sentence (begin).
-					// go forwards skip past adjectives or nouns. Stop at verb or at non-noun/adjective or at end of sentence (end)
-					for (unsigned int I = begin; I < q && !maybeVerb; I++)
-						getFormFlags(I, maybeVerb, maybeNoun, maybeAdjective, preferNoun);
-					maybeNoun = preferNoun = false;
-					int whereLastNoun = -1, whereLastAdjective = -1;
-					// don't go beyond the double quote, as it will probably have a verb after it (said) which should not be counted in this analysis.
-					// sentenceStarts may not include an end of sentence!
-					for (unsigned int I = q + 1; I < end && !isEOS(I) && !maybeVerb && !cWord::isDoubleQuote(m[I].word->first[0]); I++)
-					{
-						getFormFlags(I, maybeVerb, maybeNoun, maybeAdjective, preferNoun);
-						if (!maybeNoun && !maybeAdjective && !cWord::isDash(m[I].word->first[0]))
-							detectNoun = false;
-						if (detectNoun)
-						{
-							if (maybeNoun && preferNoun)
-								whereLastNoun = I;
-							if (maybeAdjective && (!maybeNoun || !preferNoun))
-								whereLastAdjective = I;
-						}
-					}
-					// if there is no verb anywhere in the sentence (must be very conservative at this stage of tokenization)
-					// and if there is no probable noun after the ownership, and there is at least one adjective, then convert.
-					if (!maybeVerb && whereLastNoun < 0 && whereLastAdjective >= 0)
-					{
-						m[q].flags &= ~cWordMatch::flagNounOwner;
-						m.insert(m.begin() + q + 1, cWordMatch(Words.gquery(L"ishas"), 0, debugTrace));
-						for (unsigned int s2 = s + 1; s2 < sentenceStarts.size(); s2++)
-							sentenceStarts[s2]++;
-						unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
-						for (auto const& [where, comment] : metaCommandsEmbeddedInSource)
-							newMetaCommandsEmbeddedInSource[(where > q) ? where + 1 : where] = comment;
-						metaCommandsEmbeddedInSource = newMetaCommandsEmbeddedInSource;
-						end++;
-						if (debugTrace.traceParseInfo)
-						{
-							wstring sentence;
-							for (unsigned int swhere = begin; swhere < end; swhere++)
-							{
-								wstring originalIWord;
-								getOriginalWord(swhere, originalIWord, false, false);
-								if (swhere == q)
-									originalIWord = L"*" + originalIWord + L"*";
-								sentence += originalIWord + L" ";
-							}
-							lplog(LOG_INFO, L"OWNERCONVERSION [%d]:%s", whereLastAdjective, sentence.c_str());
-						}
-					}
-				}
-				else
-					if (debugTrace.traceParseInfo)
-						lplog(LOG_INFO, L"NOUNOWNER %s capitalized words test %d*100/%d<75", m[q].word->first.c_str(), capitalizedWords, end - begin);
-			}
+			alterNounOwner(q);
 			if (adjustWord(q))
 			{
 				for (unsigned int s2 = s + 1; s2 < sentenceStarts.size(); s2++)

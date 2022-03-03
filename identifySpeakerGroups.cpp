@@ -60,6 +60,7 @@ cSource::cSpeakerGroup::cSpeakerGroup(void)
 	saveNonNameObject=-1;
 	conversationalQuotes=0;
 	speakersAreNeverGroupedTogether=true;
+	tlTransition = false;
 }
 
 cSource::cSpeakerGroup::cSpeakerGroup(char *buffer,int &where,unsigned int limit,bool &error)
