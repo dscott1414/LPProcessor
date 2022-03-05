@@ -2269,8 +2269,12 @@ int &numFirstInQuote,
 		tIWMM primaryQuoteOpenWord, tIWMM primaryQuoteCloseWord,
 		tIWMM secondaryQuoteOpenWord, tIWMM secondaryQuoteCloseWord,
 		unsigned int& primaryQuotations, unsigned int& secondaryQuotations);
-	void alterNounOwner(int q);
-	unsigned int doQuotesOwnershipAndContractions(unsigned int &quotations);
+	void alterNounOwner(unsigned int q, unsigned int& begin, unsigned int& end, unsigned int s, unsigned int secondaryQuotations);
+	bool convertNoOne(unsigned int q);
+	void manageMissingQuotes(unsigned int& end, unsigned int& primaryQuotations, unsigned int& secondaryQuotations, unsigned int& quotationExceptions, unsigned int s, int lastSecondaryQuote,
+		tIWMM primaryQuoteWord, tIWMM secondaryQuoteWord, tIWMM primaryQuoteCloseWord, tIWMM secondaryQuoteCloseWord, bool& endOfParagraph);
+	void rationalizePrimarySecondaryQuotes();
+	unsigned int doQuotesOwnershipAndContractions(unsigned int& quotations);
 	int reportUnmatchedElements(int begin,int end,bool logElements);
 	void clearTagSetMaps(void);
 	int WRMemoryCheck();

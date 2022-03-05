@@ -469,8 +469,9 @@ void cSource::adjustQuotationsIfOpen(unsigned int q, unsigned int &end, unsigned
 	}
 }
 
-void cSource::alterNounOwner(int q)
+void cSource::alterNounOwner(unsigned int q, unsigned int &begin,unsigned int &end, unsigned int s, unsigned int secondaryQuotations)
 {
+	unsigned int lastWord = m.size();
 	// do plural ownership
 	if (m[q].flags & cWordMatch::flagPossiblePluralNounOwner)
 	{
@@ -617,160 +618,97 @@ void cSource::alterNounOwner(int q)
 	}
 }
 
-// executed after tokenization but before pattern matching.
-// also handle Let's = Let us and What's he want = What does he want?
-// also handle 'Tis as in 'Tis the time for all good men... (It is)
-unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int& primaryQuotations)
+// if the word 'no one' is immediately before a non capitalized word which is almost certainly a noun, or cannot be a verb, convert it to 'no' 'one'
+bool cSource::convertNoOne(unsigned int q)
 {
-	LFS
-		unsigned int quotationExceptions = 0;
-	unsigned int secondaryQuotations = 0;
-	int lastPrimaryQuote = -1, lastSecondaryQuote = -1;
+	// Of course , no one man would attempt such a thing.
+	int nounFormOffset, verbFormOffset;
+	if (q < m.size() - 1 && m[q].word->first == L"no one" &&
+		(nounFormOffset = m[q + 1].queryForm(L"noun")) >= 0 && // next word could be a noun
+		(!m[q + 1].word->second.hasVerbForm() || ((verbFormOffset = m[q + 1].queryForm(L"verb")) >= 0 && m[q + 1].word->second.getUsageCost(verbFormOffset) > m[q + 1].word->second.getUsageCost(nounFormOffset)))) // next word is not a verb, or the cost of the verb is > cost of noun
+	{
+		m[q].word = Words.gquery(L"no");
+		m.insert(m.begin() + q + 1, cWordMatch(Words.gquery(L"one"), 0, debugTrace));
+		return true;
+	}
+	return false;
+}
+
+void cSource::manageMissingQuotes(unsigned int &end, unsigned int& primaryQuotations, unsigned int &secondaryQuotations, unsigned int &quotationExceptions, unsigned int s, int lastSecondaryQuote,
+	tIWMM primaryQuoteWord, tIWMM secondaryQuoteWord, tIWMM primaryQuoteCloseWord, tIWMM secondaryQuoteCloseWord, bool & endOfParagraph)
+{
+	// if a ' is right after the end of a sentence, and there was a preceding ', extend the end of the sentence.
+	// secondaryQuotations should be BEFORE the check for primary (") quotations because single quotations (') should always
+	// be inside the primary quotations (") when closing the quote.
+	if (end < m.size() && (m[end].word == secondaryQuoteWord && (secondaryQuotations & 1) == 1))
+	{
+		secondaryQuotations++;
+		unsigned int toEnd = end;
+		if (m[end + 1].word == Words.sectionWord) endOfParagraph = true;
+		while (toEnd + 1 < m.size() && m[toEnd + 1].word == Words.sectionWord) toEnd++;
+		sentenceStarts[s + 1] = toEnd + 1;
+		m[end].word = secondaryQuoteCloseWord;
+		end++;
+#ifdef LOG_QUOTATIONS
+		lplog(L"Detected secondaryQuotations at %d increased to %d. (E)", end, secondaryQuotations);
+		displayQuoteContext(end - 3, end + 3);
+#endif
+	}
+	if (end < m.size() && (m[end].word == primaryQuoteWord && (primaryQuotations & 1) == 1))
+	{
+		primaryQuotations++;
+		unsigned int toEnd = end;
+		if (m[end + 1].word == Words.sectionWord) endOfParagraph = true;
+		while (toEnd + 1 < m.size() && m[toEnd + 1].word == Words.sectionWord) toEnd++;
+		sentenceStarts[s + 1] = toEnd + 1;
+		m[end].word = primaryQuoteCloseWord;
+		end++;
+#ifdef LOG_QUOTATIONS
+		lplog(L"Detected primaryQuotations at %d increased to %d. (E)", end, primaryQuotations);
+		displayQuoteContext(end - 3, end + 3);
+#endif
+	}
+	// end of sentence and end of paragraph and still no quote!
+	if (((primaryQuotations & 1) == 1 || (secondaryQuotations & 1) == 1) && endOfParagraph)
+	{
+		if (primaryQuotations & 1)
+		{
+			primaryQuotations++;
+#ifdef LOG_QUOTATIONS
+			lplog(L"%d-%d:Quotations odd upon reaching end-of-section (2).  Inserted quotation at %d. Increasing total primaryQuotations to %d.", begin, end, end, primaryQuotations);
+#endif
+			m.insert(m.begin() + end, cWordMatch(primaryQuoteCloseWord, 0, debugTrace));
+			m[end].flags |= cWordMatch::flagInsertedQuote;
+			for (unsigned int s2 = s + 1; s2 < sentenceStarts.size(); s2++)
+				sentenceStarts[s2]++;
+			unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
+			for (auto const& [where, comment] : metaCommandsEmbeddedInSource)
+				newMetaCommandsEmbeddedInSource[(where > end) ? where + 1 : where] = comment;
+			metaCommandsEmbeddedInSource = newMetaCommandsEmbeddedInSource;
+		}
+		if (secondaryQuotations & 1)
+		{
+			secondaryQuotations--;
+			m[lastSecondaryQuote].word = secondaryQuoteWord;
+#ifdef LOG_QUOTATIONS
+			lplog(L"%d-%d:Secondary quotations odd upon reaching end-of-section (4).  Reverted quotation at %d. Decreasing total secondaryQuotations to %d.", begin, end, lastSecondaryQuote, secondaryQuotations);
+#endif
+			lastSecondaryQuote = -1;
+		}
+#ifdef LOG_QUOTATIONS
+		displayQuoteContext(begin - 5, end + 5);
+#endif
+		quotationExceptions++;
+	}
+}
+
+// make sure primary quotes are on the outside and secondary quotes are on the inside of primary quotes.
+void cSource::rationalizePrimarySecondaryQuotes()
+{
 	tIWMM primaryQuoteWord = Words.gquery(primaryQuoteType);
 	tIWMM secondaryQuoteWord = Words.gquery(secondaryQuoteType);
 	tIWMM primaryQuoteOpenWord = Words.gquery(L"“"), primaryQuoteCloseWord = Words.gquery(L"”");
 	tIWMM secondaryQuoteOpenWord = Words.gquery(L"‘"), secondaryQuoteCloseWord = Words.gquery(L"’");
-	unsigned int lastWord = m.size();
-	primaryQuotations = 0;
-	wstring originalWord;
-	// scan for only single quotations - convert if necessary
-	// rearrange quotes, also figure out plural ownership and more on would/had is/has
-	for (unsigned int s = 0; s + 1 < sentenceStarts.size(); s++)
-	{
-		unsigned int begin = sentenceStarts[s];
-		unsigned int end = sentenceStarts[s + 1];
-		bool endOfParagraph = false;
-		while (end && m[end - 1].word == Words.sectionWord)
-		{
-			end--; // cut off end of paragraphs
-			endOfParagraph = true;
-		}
-		if (begin >= end)
-		{
-			sentenceStarts.erase(s--);
-			continue;
-		}
-		unsigned int sectionEnd;
-		if (sourceType != NEWS_BANK_SOURCE_TYPE && isSectionHeader(begin, end, sectionEnd))
-			if (end != sectionEnd) sentenceStarts.insert(s + 1, sectionEnd);
-		for (unsigned int q = begin; q < end; q++)
-		{
-			// logic copied from cSource::parse
-			bool firstWordInSentence = isFirstWordInSentence(q, begin);
-			checkProperNoun(q, begin, end, firstWordInSentence);
-			if (m[q].word == Words.sectionWord)
-			{
-				adjustQuotationsIfOpen(q, end, quotationExceptions, lastPrimaryQuote, lastSecondaryQuote,
-					primaryQuoteOpenWord, primaryQuoteCloseWord,
-					secondaryQuoteOpenWord, secondaryQuoteCloseWord,
-					primaryQuotations, secondaryQuotations);
-				continue;
-			}
-			if (!quoteTest(q, primaryQuotations, lastPrimaryQuote, primaryQuoteWord, primaryQuoteOpenWord, primaryQuoteCloseWord))
-			{
-				if (m[q].word == secondaryQuoteWord)
-					secondaryQuoteTest(q, secondaryQuotations, lastSecondaryQuote, secondaryQuoteWord, secondaryQuoteOpenWord, secondaryQuoteCloseWord);
-			}
-			alterNounOwner(q);
-			if (adjustWord(q))
-			{
-				for (unsigned int s2 = s + 1; s2 < sentenceStarts.size(); s2++)
-					sentenceStarts[s2]++;
-				unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
-				for (auto const& [where, comment] : metaCommandsEmbeddedInSource)
-					newMetaCommandsEmbeddedInSource[(where > q) ? where + 1 : where] = comment;
-				metaCommandsEmbeddedInSource = newMetaCommandsEmbeddedInSource;
-				end++;
-			}
-			// if the word 'no one' is immediately before a non capitalized word which is almost certainly a noun, or cannot be a verb, convert it to 'no' 'one'
-			// Of course , no one man would attempt such a thing.
-			int nounFormOffset, verbFormOffset;
-			if (q < m.size() - 1 && m[q].word->first == L"no one" &&
-				(nounFormOffset = m[q + 1].queryForm(L"noun")) >= 0 && // next word could be a noun
-				(!m[q + 1].word->second.hasVerbForm() || ((verbFormOffset = m[q + 1].queryForm(L"verb")) >= 0 && m[q + 1].word->second.getUsageCost(verbFormOffset) > m[q + 1].word->second.getUsageCost(nounFormOffset)))) // next word is not a verb, or the cost of the verb is > cost of noun
-			{
-				m[q].word = Words.gquery(L"no");
-				m.insert(m.begin() + q + 1, cWordMatch(Words.gquery(L"one"), 0, debugTrace));
-				for (unsigned int s2 = s + 1; s2 < sentenceStarts.size(); s2++)
-					sentenceStarts[s2]++;
-				unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
-				for (auto const& [where, comment] : metaCommandsEmbeddedInSource)
-					newMetaCommandsEmbeddedInSource[(where > q) ? where + 1 : where] = comment;
-				metaCommandsEmbeddedInSource = newMetaCommandsEmbeddedInSource;
-				end++;
-			}
-		}
-		// if a ' is right after the end of a sentence, and there was a preceding ', extend the end of the sentence.
-		// secondaryQuotations should be BEFORE the check for primary (") quotations because single quotations (') should always
-		// be inside the primary quotations (") when closing the quote.
-		if (end < m.size() && (m[end].word == secondaryQuoteWord && (secondaryQuotations & 1) == 1))
-		{
-			secondaryQuotations++;
-			unsigned int toEnd = end;
-			if (m[end + 1].word == Words.sectionWord) endOfParagraph = true;
-			while (toEnd + 1 < m.size() && m[toEnd + 1].word == Words.sectionWord) toEnd++;
-			sentenceStarts[s + 1] = toEnd + 1;
-			m[end].word = secondaryQuoteCloseWord;
-			end++;
-#ifdef LOG_QUOTATIONS
-			lplog(L"Detected secondaryQuotations at %d increased to %d. (E)", end, secondaryQuotations);
-			displayQuoteContext(end - 3, end + 3);
-#endif
-		}
-		if (end < m.size() && (m[end].word == primaryQuoteWord && (primaryQuotations & 1) == 1))
-		{
-			primaryQuotations++;
-			unsigned int toEnd = end;
-			if (m[end + 1].word == Words.sectionWord) endOfParagraph = true;
-			while (toEnd + 1 < m.size() && m[toEnd + 1].word == Words.sectionWord) toEnd++;
-			sentenceStarts[s + 1] = toEnd + 1;
-			m[end].word = primaryQuoteCloseWord;
-			end++;
-#ifdef LOG_QUOTATIONS
-			lplog(L"Detected primaryQuotations at %d increased to %d. (E)", end, primaryQuotations);
-			displayQuoteContext(end - 3, end + 3);
-#endif
-		}
-		// end of sentence and end of paragraph and still no quote!
-		if (((primaryQuotations & 1) == 1 || (secondaryQuotations & 1) == 1) && endOfParagraph)
-		{
-			if (primaryQuotations & 1)
-			{
-				primaryQuotations++;
-#ifdef LOG_QUOTATIONS
-				lplog(L"%d-%d:Quotations odd upon reaching end-of-section (2).  Inserted quotation at %d. Increasing total primaryQuotations to %d.", begin, end, end, primaryQuotations);
-#endif
-				m.insert(m.begin() + end, cWordMatch(primaryQuoteCloseWord, 0, debugTrace));
-				m[end].flags |= cWordMatch::flagInsertedQuote;
-				for (unsigned int s2 = s + 1; s2 < sentenceStarts.size(); s2++)
-					sentenceStarts[s2]++;
-				unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
-				for (auto const& [where, comment] : metaCommandsEmbeddedInSource)
-					newMetaCommandsEmbeddedInSource[(where > end) ? where + 1 : where] = comment;
-				metaCommandsEmbeddedInSource = newMetaCommandsEmbeddedInSource;
-			}
-			if (secondaryQuotations & 1)
-			{
-				//if (wcsstr(L"aeiou",m[lastSecondaryQuote+1].word->first[0])!=NULL ||
-				secondaryQuotations--;
-				m[lastSecondaryQuote].word = secondaryQuoteWord;
-				//if (m[end-1].word==primaryQuoteCloseWord) end--; // insert secondary quotes inside of primary quotes
-#ifdef LOG_QUOTATIONS
-				lplog(L"%d-%d:Secondary quotations odd upon reaching end-of-section (4).  Reverted quotation at %d. Decreasing total secondaryQuotations to %d.", begin, end, lastSecondaryQuote, secondaryQuotations);
-#endif
-				lastSecondaryQuote = -1;
-				//m.insert(m.begin()+end,cWordMatch(secondaryQuoteCloseWord,0));
-				//m[end].flags|=cWordMatch::flagInsertedQuote;
-				//for (unsigned int s2=s+1; s2<sentenceStarts.size(); s2++)
-				//	sentenceStarts[s2]++;
-			}
-#ifdef LOG_QUOTATIONS
-			displayQuoteContext(begin - 5, end + 5);
-#endif
-			quotationExceptions++;
-		}
-	}
-	puts("");
 	vector <cWordMatch>::iterator im = m.begin(), imEnd = m.end();
 	int outerPrimaryQuotes = 0, outerSecondaryQuotes = 0;
 	int innerPrimaryQuotes = 0, innerSecondaryQuotes = 0;
@@ -813,6 +751,78 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int& primaryQuot
 				im->word = primaryQuoteCloseWord;
 		}
 	}
+}
+
+// executed after tokenization but before pattern matching.
+// also handle Let's = Let us and What's he want = What does he want?
+// also handle 'Tis as in 'Tis the time for all good men... (It is)
+unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int& primaryQuotations)
+{
+	LFS
+	unsigned int quotationExceptions = 0;
+	unsigned int secondaryQuotations = 0;
+	int lastPrimaryQuote = -1, lastSecondaryQuote = -1;
+	tIWMM primaryQuoteWord = Words.gquery(primaryQuoteType);
+	tIWMM secondaryQuoteWord = Words.gquery(secondaryQuoteType);
+	tIWMM primaryQuoteOpenWord = Words.gquery(L"“"), primaryQuoteCloseWord = Words.gquery(L"”");
+	tIWMM secondaryQuoteOpenWord = Words.gquery(L"‘"), secondaryQuoteCloseWord = Words.gquery(L"’");
+	primaryQuotations = 0;
+	wstring originalWord;
+	// scan for only single quotations - convert if necessary
+	// rearrange quotes, also figure out plural ownership and more on would/had is/has
+	for (unsigned int s = 0; s + 1 < sentenceStarts.size(); s++)
+	{
+		unsigned int begin = sentenceStarts[s];
+		unsigned int end = sentenceStarts[s + 1];
+		bool endOfParagraph = false;
+		while (end && m[end - 1].word == Words.sectionWord)
+		{
+			end--; // cut off end of paragraphs
+			endOfParagraph = true;
+		}
+		if (begin >= end)
+		{
+			sentenceStarts.erase(s--);
+			continue;
+		}
+		unsigned int sectionEnd;
+		if (sourceType != NEWS_BANK_SOURCE_TYPE && isSectionHeader(begin, end, sectionEnd))
+			if (end != sectionEnd) sentenceStarts.insert(s + 1, sectionEnd);
+		for (unsigned int q = begin; q < end; q++)
+		{
+			// logic copied from cSource::parse
+			bool firstWordInSentence = isFirstWordInSentence(q, begin);
+			checkProperNoun(q, begin, end, firstWordInSentence);
+			if (m[q].word == Words.sectionWord)
+			{
+				adjustQuotationsIfOpen(q, end, quotationExceptions, lastPrimaryQuote, lastSecondaryQuote,
+					primaryQuoteOpenWord, primaryQuoteCloseWord,
+					secondaryQuoteOpenWord, secondaryQuoteCloseWord,
+					primaryQuotations, secondaryQuotations);
+				continue;
+			}
+			if (!quoteTest(q, primaryQuotations, lastPrimaryQuote, primaryQuoteWord, primaryQuoteOpenWord, primaryQuoteCloseWord))
+			{
+				if (m[q].word == secondaryQuoteWord)
+					secondaryQuoteTest(q, secondaryQuotations, lastSecondaryQuote, secondaryQuoteWord, secondaryQuoteOpenWord, secondaryQuoteCloseWord);
+			}
+			alterNounOwner(q, begin, end, s, secondaryQuotations);
+			if (adjustWord(q) || convertNoOne(q))
+			{
+				for (unsigned int s2 = s + 1; s2 < sentenceStarts.size(); s2++)
+					sentenceStarts[s2]++;
+				unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
+				for (auto const& [where, comment] : metaCommandsEmbeddedInSource)
+					newMetaCommandsEmbeddedInSource[(where > q) ? where + 1 : where] = comment;
+				metaCommandsEmbeddedInSource = newMetaCommandsEmbeddedInSource;
+				end++;
+			}
+		}
+		manageMissingQuotes(end, primaryQuotations, secondaryQuotations, quotationExceptions, s, lastSecondaryQuote,
+			primaryQuoteWord, secondaryQuoteWord, primaryQuoteCloseWord, secondaryQuoteCloseWord, endOfParagraph);
+	}
+	puts("");
+	rationalizePrimarySecondaryQuotes();
 	setForms();
 	return quotationExceptions;
 }
