@@ -2822,7 +2822,15 @@ bool &comparableName,
 	int pronounCoreferenceFilterLL6(int P, int lastBeginS1,vector <int> &disallowedReferences);
 	int reflexivePronounCoreference(int P, int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,bool inPrimaryQuote,bool inSecondaryQuote);
 	int identifySubType(int principalWhere,bool &partialMatch);
-	int identifyObject(int tag,int where,int element,bool adjectival,int previousOwnerWhere,int ownerBegin);
+	void getPrincipalWhereAndEndAndNameInfo(wstring tagName, int where, int element, int& specificWhere, bool& pluralNounOverride, bool& embeddedName, unsigned int& end, int& nameElement);
+	bool identifyAdjectivalObjects(const int where, wstring tagName, const int principalWhere, const int end, int &ownerWhere, bool &isOwnerGendered, bool &isOwnerFemale, bool &isOwnerMale, bool &isOwnerPlural, bool& hasDeterminer, unsigned int &I);
+	bool refineObjectClassAndGender(const int where, const int ownerWhere, const int principalWhere, const int begin, const int end,
+		const bool isOwnerMale, const bool isOwnerFemale, const bool adjectival, const bool isOwnerGendered,
+		enum OC& objectClass, bool& isFemale, bool& isMale, bool& isNeuter, bool& plural, cName& name);
+	void setOwnerGender(cObject& thisObject);
+	void setRelatedObjects(cObject& thisObject);
+	bool identifyAdjectiveObjectClassAndGender(const int where, const int ownerBegin, int& begin, int principalWhere, int& ownerWhere, enum OC& objectClass, bool& isMale, bool& isFemale, bool& plural);
+	int identifyObject(int tag, int where, int element, bool adjectival, int previousOwnerWhere, int ownerBegin);
 	void setRole(int position,cPatternElementMatchArray::tPatternElementMatch *pem);
 	int getObjectEnd(vector <cObject>::iterator object);
 	bool overlaps(vector <cObject>::iterator object,vector <cObject>::iterator matchingObject);
