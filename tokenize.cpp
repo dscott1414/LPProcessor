@@ -1254,7 +1254,7 @@ int cSource::parseBuffer(wstring& path, unsigned int& unknownCount)
 			unknownCount++;
 		}
 		unsigned __int64 flags;
-		iWord->second.adjustFormsInflections(sWord, flags, firstWordInSentence, nounOwner, allCaps, firstLetterCapitalized, false);
+		iWord->second.adjustFormsInflections(sWord, flags, firstWordInSentence, nounOwner, allCaps, firstLetterCapitalized, debugTrace.traceParseInfo);
 		if (allCaps && m.size() && ((m[m.size() - 1].word->first == L"the" && !(m[m.size() - 1].flags & cWordMatch::flagAllCaps)) || iWord->second.formsSize() == 0))
 		{
 			flags |= cWordMatch::flagAddProperNoun;

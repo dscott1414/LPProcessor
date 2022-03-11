@@ -2782,9 +2782,8 @@ private:
 
 	void printSpeakerQueue(int where);
 	bool evaluateName(vector <cTagLocation> &tagSet,cName &name,bool &isMale,bool &isFemale,bool &isPlural,bool &isBusiness);
-	bool identifyName(int begin,int principalWhere,int end,int &nameElement,cName &name,bool &isMale,bool &isFemale,bool &isNeuter,bool &isPlural,bool &isBusiness,
-bool &comparableName,
-														bool &comparableNameAdjective,bool &requestWikiAgreement,OC &objectClass);
+	bool identifyName(int begin, int principalWhere, int end, int& nameElement, cName& name, bool& isMale, bool& isFemale, bool& isNeuter, bool& isPlural, bool& isBusiness,
+		bool& comparableName, bool& comparableNameAdjective, bool& requestWikiAgreement, OC& objectClass);
 	bool identifyName(int where,int &element,cName &name,bool &isMale,bool &isFemale,bool &isPlural,bool &isBusiness);
 	void foldNames(int where,cObject s,int speakerSet);
 	bool findSpecificAnaphor(wstring tagName,int where,int element,int &specificWhere,bool &pluralNounOverride,bool &embeddedName);
@@ -2830,6 +2829,11 @@ bool &comparableName,
 	void setOwnerGender(cObject& thisObject);
 	void setRelatedObjects(cObject& thisObject);
 	bool identifyAdjectiveObjectClassAndGender(const int where, const int ownerBegin, int& begin, int principalWhere, int& ownerWhere, enum OC& objectClass, bool& isMale, bool& isFemale, bool& plural);
+	int determineNonOwnershipObjectInfo(int& where, int& element, const int begin, int& principalWhere, const int ownerWhere, unsigned int& end,
+		cName& name, bool& isMale, bool& isFemale, bool& isNeuter, bool& plural, bool& isBusiness, const bool adjectival,
+		OC& objectClass, const wstring tagName);
+	bool determineIfBodyObject(const bool isOwnerGendered, const bool isOwnerMale, const bool isOwnerFemale, bool& isMale, bool& isFemale, bool& isNeuter, bool& singularBodyPart,
+		const int principalWhere, const unsigned int begin, const unsigned int end, const int ownerWhere, enum OC& objectClass);
 	int identifyObject(int tag, int where, int element, bool adjectival, int previousOwnerWhere, int ownerBegin);
 	void setRole(int position,cPatternElementMatchArray::tPatternElementMatch *pem);
 	int getObjectEnd(vector <cObject>::iterator object);

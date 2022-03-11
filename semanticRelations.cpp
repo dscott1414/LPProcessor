@@ -1838,7 +1838,7 @@ int cSource::detectPlaceTransitionForPrep(int where, int whereControllingEntity,
 		{
 			if (debugTrace.traceSpeakerResolution)
 				lplog(LOG_RESOLUTION, L"%06d:PLACE direct object and prep: rejected (prep object not location) subject %s verb %s prep object %d:%s", where,
-					whereString(whereSubject, tmpstr, true).c_str(), m[whereVerb].word->first.c_str(), wpd, whereString(pd, tmpstr2, true).c_str());
+					whereString(whereSubject, tmpstr, true).c_str(), m[whereVerb].word->first.c_str(), wpd, whereString(wpd, tmpstr2, true).c_str());
 			if (!objectMustBeLocation || rejectObject) 
 				return 0;
 		}

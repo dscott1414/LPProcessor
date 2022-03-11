@@ -1357,24 +1357,12 @@ bool cSource::identifyAdjectiveObjectClassAndGender(const int where, const int o
 	return true;
 }
 
-// if adjectival is false, where and element point to the full multi-word object
-// if adjectival is true, previousOwnerWhere points to the ownerWhere of the previous adjective (if any)
-int cSource::identifyObject(int tag, int where, int element, bool adjectival, int previousOwnerWhere, int ownerBegin)
+int cSource::determineNonOwnershipObjectInfo(int &where, int &element, const int begin, int &principalWhere, const int ownerWhere, unsigned int &end,
+	cName& name, bool& isMale, bool& isFemale, bool& isNeuter, bool& plural, bool& isBusiness, const bool adjectival,
+	OC& objectClass, const wstring tagName)
 {
-	LFS
-		wstring tagName = (tag < 0) ? L"NAME" : patternTagStrings[tag];
-	if (m[where].queryForm(L"--") >= 0) // m[where].queryForm(indefinitePronounForm)>=0 ||
-	{
-		lplog(LOG_RESOLUTION, L"%06d:word %s is an indefinite pronoun and so not eligible for tracking.", where, m[where].word->first.c_str());
-		return -1;
-	}
-	int principalWhere = where, begin = where;
-	unsigned int end;
-	enum OC objectClass = NON_GENDERED_GENERAL_OBJECT_CLASS;
-	bool comparableName = false, comparableNameAdjective = false, plural = false, embeddedName = false, requestWikiAgreement = false;
-	bool isMale = false, isFemale = false, isNeuter = false, isOwnerGendered = false, isOwnerMale = false, isOwnerFemale = false, isOwnerPlural = false, isBusiness = false, hasDeterminer = false;
-	cName name;
-	int ownerWhere = previousOwnerWhere;
+	bool comparableName = false, comparableNameAdjective = false;
+	bool embeddedName = false, requestWikiAgreement = false;
 	if (tagName != L"VNOUN" && tagName != L"GNOUN")
 	{
 		int nameElement = -1;
@@ -1438,7 +1426,60 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 		if (m[principalWhere].queryForm(quoteForm) >= 0) principalWhere--;
 		// the(95557) much- heralded “Labour Day,”
 		if (m[principalWhere].word->first == L"." || m[principalWhere].word->first == L",") principalWhere--;
+		if (tagName == L"VNOUN")
+		{
+			objectClass = VERB_OBJECT_CLASS;
+			// but not tagName=="GNOUN" "the other" should be set to "other" not "the"!
+			principalWhere = where;
+		}
 	}
+	return 0;
+}
+
+bool cSource::determineIfBodyObject(const bool isOwnerGendered, const bool isOwnerMale, const bool isOwnerFemale, bool &isMale, bool &isFemale, bool &isNeuter, bool &singularBodyPart,
+	   const int principalWhere, const unsigned int begin, const unsigned int end, const int ownerWhere, enum OC &objectClass)
+{
+	if ((isOwnerGendered || (m[principalWhere].objectRole & (SUBJECT_ROLE | OBJECT_ROLE)) ||
+		((end - begin) > 1 && (m[principalWhere].objectRole & PREP_OBJECT_ROLE) && begin && m[begin].word->first != L"the" && m[begin - 1].word->first == L"with") ||
+		(principalWhere + 1 < (signed)m.size() && m[principalWhere + 1].word->first == L"of")) &&
+		isExternalBodyPart(principalWhere, singularBodyPart, ownerWhere < 0 || (m[ownerWhere].word->second.inflectionFlags & (PLURAL_OWNER | PLURAL)) != 0))
+	{
+		objectClass = BODY_OBJECT_CLASS;
+		if (isOwnerMale || isOwnerFemale)
+		{
+			isMale = isOwnerMale;
+			isFemale = isOwnerFemale;
+		}
+		// that glance
+		if (!isNeuter && !isMale && !isFemale)
+			isNeuter = isMale = isFemale = true;
+		return true;
+	}
+	return false;
+}
+
+// if adjectival is false, where and element point to the full multi-word object
+// if adjectival is true, previousOwnerWhere points to the ownerWhere of the previous adjective (if any)
+int cSource::identifyObject(int tag, int where, int element, bool adjectival, int previousOwnerWhere, int ownerBegin)
+{
+	LFS
+	if (m[where].queryForm(L"--") >= 0) 
+	{
+		lplog(LOG_RESOLUTION, L"%06d:word %s is a dash and so not eligible for tracking.", where, m[where].word->first.c_str());
+		return -1;
+	}
+	wstring tagName = (tag < 0) ? L"NAME" : patternTagStrings[tag];
+	int principalWhere = where, begin = where, ownerWhere = previousOwnerWhere;
+	unsigned int end;
+	enum OC objectClass = NON_GENDERED_GENERAL_OBJECT_CLASS;
+	bool plural = false, isBusiness = false, hasDeterminer = false;
+	bool isMale = false, isFemale = false, isNeuter = false;
+	bool isOwnerGendered = false, isOwnerMale = false, isOwnerFemale = false, isOwnerPlural = false;
+	cName name;
+	// before determining ownership information, figure out some class, gender, end, etc
+	if (determineNonOwnershipObjectInfo(where, element, begin, principalWhere, ownerWhere, end,
+		name, isMale, isFemale, isNeuter, plural, isBusiness, adjectival, objectClass, tagName) < 0)
+		return -1;
 	if (adjectival)
 	{
 		if (!identifyAdjectiveObjectClassAndGender(where, ownerBegin, begin, principalWhere, ownerWhere, objectClass, isMale, isFemale, plural))
@@ -1446,34 +1487,18 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 	}
 	else
 	{
+		// determining ownership information when identifying any adjectives as objects
 		for (unsigned int I = where; I < (unsigned)principalWhere; I++)
 			if (!identifyAdjectivalObjects(where, tagName, principalWhere, end, ownerWhere, isOwnerGendered, isOwnerFemale, isOwnerMale, isOwnerPlural, hasDeterminer, I))
 				break;
 	}
+	// use ownership information when identifying body object
 	bool singularBodyPart = false;
-	if (tagName == L"VNOUN")
+	if (tagName != L"VNOUN" && tagName != L"GNOUN")
 	{
-		objectClass = VERB_OBJECT_CLASS;
-		// but not tagName=="GNOUN" "the other" should be set to "other" not "the"!
-		principalWhere = where;
-	}
-	else if (tagName != L"GNOUN")
-	{
-		if ((isOwnerGendered || (m[principalWhere].objectRole & (SUBJECT_ROLE | OBJECT_ROLE)) ||
-			((end - begin) > 1 && (m[principalWhere].objectRole & PREP_OBJECT_ROLE) && begin && m[begin].word->first != L"the" && m[begin - 1].word->first == L"with") ||
-			(principalWhere + 1 < (signed)m.size() && m[principalWhere + 1].word->first == L"of")) &&
-			isExternalBodyPart(principalWhere, singularBodyPart, ownerWhere < 0 || (m[ownerWhere].word->second.inflectionFlags & (PLURAL_OWNER | PLURAL)) != 0))
-		{
-			objectClass = BODY_OBJECT_CLASS;
-			if (isOwnerMale || isOwnerFemale)
-			{
-				isMale = isOwnerMale;
-				isFemale = isOwnerFemale;
-			}
-			// that glance
-			if (!isNeuter && !isMale && !isFemale)
-				isNeuter = isMale = isFemale = true;
-		}
+		determineIfBodyObject(isOwnerGendered, isOwnerMale, isOwnerFemale, isMale, isFemale, isNeuter, singularBodyPart,
+			principalWhere, begin, end, ownerWhere, objectClass);
+			// must go last - this is if we cannot figure out any other class for this object, it is still the NON_GENDERED_GENERAL_OBJECT_CLASS.
 		if (objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS)
 		{
 			// SNL / IBM
@@ -1485,6 +1510,7 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 			isNeuter = true;
 		}
 	}
+	// adjust the object classes
 	// the other man   -2 
 	// gendered word at principalWhere, wordOrder owner as modifier (another man)
 	// must be after setting singularBodyPart in previous section!
