@@ -1334,6 +1334,7 @@ int wmain(int argc, wchar_t* argv[])
 			wstring rt1, rt2;
 			int ret = 0;
 			bool parsedOnly = false;
+			Words.readWords(path, sourceId, false, specialExtension);
 			if (forceSourceReread || !source.readSource(path, false, parsedOnly, true, specialExtension))
 			{
 				unknownCount = 0;

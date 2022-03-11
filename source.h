@@ -2825,8 +2825,8 @@ bool &comparableName,
 	void getPrincipalWhereAndEndAndNameInfo(wstring tagName, int where, int element, int& specificWhere, bool& pluralNounOverride, bool& embeddedName, unsigned int& end, int& nameElement);
 	bool identifyAdjectivalObjects(const int where, wstring tagName, const int principalWhere, const int end, int &ownerWhere, bool &isOwnerGendered, bool &isOwnerFemale, bool &isOwnerMale, bool &isOwnerPlural, bool& hasDeterminer, unsigned int &I);
 	bool refineObjectClassAndGender(const int where, const int ownerWhere, const int principalWhere, const int begin, const int end,
-		const bool isOwnerMale, const bool isOwnerFemale, const bool adjectival, const bool isOwnerGendered,
-		enum OC& objectClass, bool& isFemale, bool& isMale, bool& isNeuter, bool& plural, cName& name);
+		//const bool isOwnerMale, const bool isOwnerFemale, const bool isOwnerGendered, cName& name,
+		enum OC& objectClass, bool& isFemale, bool& isMale, bool& isNeuter, bool& plural, const bool adjectival);
 	void setOwnerGender(cObject& thisObject);
 	void setRelatedObjects(cObject& thisObject);
 	bool identifyAdjectiveObjectClassAndGender(const int where, const int ownerBegin, int& begin, int principalWhere, int& ownerWhere, enum OC& objectClass, bool& isMale, bool& isFemale, bool& plural);

@@ -1174,8 +1174,8 @@ bool cSource::identifyAdjectivalObjects(const int where, wstring tagName, const 
 }
 
 bool cSource::refineObjectClassAndGender(const int where, const int ownerWhere, const int principalWhere, const int begin, const int end, 
-	const bool isOwnerMale, const bool isOwnerFemale,	const bool adjectival, const bool isOwnerGendered,
-	enum OC &objectClass, bool &isFemale,bool &isMale, bool &isNeuter, bool &plural, cName &name)
+	//const bool isOwnerMale, const bool isOwnerFemale,	const bool isOwnerGendered, cName& name,
+	enum OC &objectClass, bool &isFemale,bool &isMale, bool &isNeuter, bool &plural, const bool adjectival)
 {
 	if ((objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS || objectClass == NAME_OBJECT_CLASS) &&
 		(m[principalWhere].queryWinnerForm(nomForm) >= 0 || m[principalWhere].queryWinnerForm(personalPronounAccusativeForm) >= 0 ||
@@ -1249,22 +1249,6 @@ bool cSource::refineObjectClassAndGender(const int where, const int ownerWhere, 
 		// the accents of Number One / but not 'at hand' or 'on hand' 
 		if ((end - begin) == 1 && m[where].word->first == L"hand")
 			return false;
-		bool singularBodyPart = false;
-		if ((isOwnerGendered || (m[principalWhere].objectRole & (SUBJECT_ROLE | OBJECT_ROLE)) ||
-			((end - begin) > 1 && (m[principalWhere].objectRole & PREP_OBJECT_ROLE) && begin && m[begin].word->first != L"the" && m[begin - 1].word->first == L"with") ||
-			(principalWhere + 1 < (signed)m.size() && m[principalWhere + 1].word->first == L"of")) &&
-			isExternalBodyPart(principalWhere, singularBodyPart, ownerWhere < 0 || (m[ownerWhere].word->second.inflectionFlags & (PLURAL_OWNER | PLURAL)) != 0))
-		{
-			objectClass = BODY_OBJECT_CLASS;
-			if (isOwnerMale || isOwnerFemale)
-			{
-				isMale = isOwnerMale;
-				isFemale = isOwnerFemale;
-			}
-			// that glance
-			if (!isNeuter && !isMale && !isFemale)
-				isNeuter = isMale = isFemale = true;
-		}
 		// first           -1                 wordOrder word at prinpalWhere, no determiner - neuter
 		// the other       -1                 wordOrder word is in the principalWhere position, no resolvable owner
 		// his last        positive           wordOrder word at principalWhere, resolvable owner
@@ -1295,20 +1279,6 @@ bool cSource::refineObjectClassAndGender(const int where, const int ownerWhere, 
 					isNeuter |= (!isMale && !isFemale);
 				}
 			}
-		}
-		// the other man   -2                 gendered word at principalWhere, wordOrder owner as modifier (another man)
-		if ((objectClass == GENDERED_GENERAL_OBJECT_CLASS || (objectClass == BODY_OBJECT_CLASS && singularBodyPart) ||
-			objectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS || objectClass == GENDERED_DEMONYM_OBJECT_CLASS) && ownerWhere < -1)
-			objectClass = META_GROUP_OBJECT_CLASS;
-		if (objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS)
-		{
-			// SNL / IBM
-			if (m[where].word->first.length() > 1 && (end - begin) == 1 && (m[where].flags & cWordMatch::flagAllCaps))
-			{
-				objectClass = NON_GENDERED_NAME_OBJECT_CLASS;
-				name.any = m[where].word;
-			}
-			isNeuter = true;
 		}
 	}
 	return true;
@@ -1404,6 +1374,7 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 	bool comparableName = false, comparableNameAdjective = false, plural = false, embeddedName = false, requestWikiAgreement = false;
 	bool isMale = false, isFemale = false, isNeuter = false, isOwnerGendered = false, isOwnerMale = false, isOwnerFemale = false, isOwnerPlural = false, isBusiness = false, hasDeterminer = false;
 	cName name;
+	int ownerWhere = previousOwnerWhere;
 	if (tagName != L"VNOUN" && tagName != L"GNOUN")
 	{
 		int nameElement = -1;
@@ -1426,11 +1397,14 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 			else
 				isMale = isFemale = false;
 		}
+		// must be after identifyName because it sets objectClass to GENDERED_DEMONYM_OBJECT_CLASS
+		// an Irish Sinn feiner (a name, so principalWhere is set to Irish, but it should be set to Sinn feiner, because Irish is a plural noun)
+		if (objectClass == GENDERED_DEMONYM_OBJECT_CLASS && (m[principalWhere].queryForm(demonymForm) < 0 || m[end - 1].queryForm(demonymForm) >= 0))
+			principalWhere = end - 1;
+		// set plural, neuter, principalWhere if it is not a name 
+		// must be GENDERED_DEMONYM_OBJECT_CLASS test because this uses principalWhere
 		if (objectClass != NAME_OBJECT_CLASS && objectClass != NON_GENDERED_NAME_OBJECT_CLASS)
 		{
-			// an Irish Sinn feiner (a name, so principalWhere is set to Irish, but it should be set to Sinn feiner, because Irish is a plural noun)
-			if (objectClass == GENDERED_DEMONYM_OBJECT_CLASS && (m[principalWhere].queryForm(demonymForm) < 0 || m[end - 1].queryForm(demonymForm) >= 0)) 
-				principalWhere = end - 1;
 			plural = (m[principalWhere].word->second.inflectionFlags & PLURAL) == PLURAL;
 			bool singular = (m[principalWhere].word->second.inflectionFlags & SINGULAR) == SINGULAR;
 			isNeuter = (m[principalWhere].word->second.inflectionFlags & NEUTER_GENDER) == NEUTER_GENDER;
@@ -1452,6 +1426,9 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 			else if (m[principalWhere].queryWinnerForm(reciprocalPronounForm) >= 0)
 				objectClass = RECIPROCAL_PRONOUN_OBJECT_CLASS;
 		}
+		if (!refineObjectClassAndGender(where, ownerWhere, principalWhere, begin, end,
+			objectClass, isFemale, isMale, isNeuter, plural, adjectival))
+			return -1;
 	}
 	else
 	{
@@ -1462,7 +1439,6 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 		// the(95557) much- heralded “Labour Day,”
 		if (m[principalWhere].word->first == L"." || m[principalWhere].word->first == L",") principalWhere--;
 	}
-	int ownerWhere = previousOwnerWhere;
 	if (adjectival)
 	{
 		if (!identifyAdjectiveObjectClassAndGender(where, ownerBegin, begin, principalWhere, ownerWhere, objectClass, isMale, isFemale, plural))
@@ -1474,6 +1450,7 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 			if (!identifyAdjectivalObjects(where, tagName, principalWhere, end, ownerWhere, isOwnerGendered, isOwnerFemale, isOwnerMale, isOwnerPlural, hasDeterminer, I))
 				break;
 	}
+	bool singularBodyPart = false;
 	if (tagName == L"VNOUN")
 	{
 		objectClass = VERB_OBJECT_CLASS;
@@ -1482,11 +1459,38 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 	}
 	else if (tagName != L"GNOUN")
 	{
-		if (!refineObjectClassAndGender(where, ownerWhere, principalWhere, begin, end,
-			isOwnerMale, isOwnerFemale, adjectival, isOwnerGendered,
-			objectClass, isFemale, isMale, isNeuter, plural, name))
-			return -1;
+		if ((isOwnerGendered || (m[principalWhere].objectRole & (SUBJECT_ROLE | OBJECT_ROLE)) ||
+			((end - begin) > 1 && (m[principalWhere].objectRole & PREP_OBJECT_ROLE) && begin && m[begin].word->first != L"the" && m[begin - 1].word->first == L"with") ||
+			(principalWhere + 1 < (signed)m.size() && m[principalWhere + 1].word->first == L"of")) &&
+			isExternalBodyPart(principalWhere, singularBodyPart, ownerWhere < 0 || (m[ownerWhere].word->second.inflectionFlags & (PLURAL_OWNER | PLURAL)) != 0))
+		{
+			objectClass = BODY_OBJECT_CLASS;
+			if (isOwnerMale || isOwnerFemale)
+			{
+				isMale = isOwnerMale;
+				isFemale = isOwnerFemale;
+			}
+			// that glance
+			if (!isNeuter && !isMale && !isFemale)
+				isNeuter = isMale = isFemale = true;
+		}
+		if (objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS)
+		{
+			// SNL / IBM
+			if (m[where].word->first.length() > 1 && (end - begin) == 1 && (m[where].flags & cWordMatch::flagAllCaps))
+			{
+				objectClass = NON_GENDERED_NAME_OBJECT_CLASS;
+				name.any = m[where].word;
+			}
+			isNeuter = true;
+		}
 	}
+	// the other man   -2 
+	// gendered word at principalWhere, wordOrder owner as modifier (another man)
+	// must be after setting singularBodyPart in previous section!
+	if ((objectClass == GENDERED_GENERAL_OBJECT_CLASS || (objectClass == BODY_OBJECT_CLASS && singularBodyPart) ||
+		objectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS || objectClass == GENDERED_DEMONYM_OBJECT_CLASS) && ownerWhere < -1)
+		objectClass = META_GROUP_OBJECT_CLASS;
 	// the last
 	if (objectClass == PRONOUN_OBJECT_CLASS && !isOwnerGendered &&
 		m[where].queryWinnerForm(determinerForm) >= 0 &&

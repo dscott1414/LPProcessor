@@ -336,9 +336,9 @@ void cSource::checkProperNoun(unsigned int q, unsigned int begin, unsigned int e
 		{
 			m[q].flags &= ~cWordMatch::flagAddProperNoun;
 			if (debugTrace.traceParseInfo)
-				lplog(LOG_INFO, L"%d:%s:removed flagAddProperNoun asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
+				lplog(LOG_INFO, L"%d:%s:removed flagAddProperNoun asAdjective=%d global lower case=%u global upper case=%u local lower case=%d local upper case=%d.",
 					q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
-					m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
+					(unsigned int)m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (unsigned int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
 					m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
 		}
 		// refuse to make it proper noun, even if it is listed as one.  see cWordMatch::queryForm(int form)
@@ -347,9 +347,9 @@ void cSource::checkProperNoun(unsigned int q, unsigned int begin, unsigned int e
 			{
 				m[q].flags |= cWordMatch::flagRefuseProperNoun;
 				if (debugTrace.traceParseInfo)
-					lplog(LOG_INFO, L"%d:%s:added flagRefuseProperNoun asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
+					lplog(LOG_INFO, L"%d:%s:added flagRefuseProperNoun asAdjective=%d global lower case=%u global upper case=%u local lower case=%d local upper case=%d.",
 						q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
-						m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
+						(unsigned int)m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (unsigned int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
 						m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
 			}
 	}
@@ -359,9 +359,9 @@ void cSource::checkProperNoun(unsigned int q, unsigned int begin, unsigned int e
 	{
 		m[q].flags |= cWordMatch::flagAddProperNoun;
 		if (debugTrace.traceParseInfo)
-			lplog(LOG_INFO, L"%d:%s:added flagAddProperNoun (from local) asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
+			lplog(LOG_INFO, L"%d:%s:added flagAddProperNoun (from local) asAdjective=%d global lower case=%u global upper case=%u local lower case=%d local upper case=%d.",
 				q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
-				m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
+				(unsigned int)m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (unsigned int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
 				m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
 
 	}
@@ -369,9 +369,9 @@ void cSource::checkProperNoun(unsigned int q, unsigned int begin, unsigned int e
 	{
 		m[q].flags |= cWordMatch::flagAddProperNoun;
 		if (debugTrace.traceParseInfo)
-			lplog(LOG_INFO, L"%d:%s:added flagAddProperNoun (SPECIAL CASE lord) asAdjective=%d global lower case=%d global upper case=%d local lower case=%d local upper case=%d.",
+			lplog(LOG_INFO, L"%d:%s:added flagAddProperNoun (SPECIAL CASE lord) asAdjective=%d global lower case=%u global upper case=%u local lower case=%d local upper case=%d.",
 				q, getOriginalWord(q, originalWord, false), m[q].word->second.numProperNounUsageAsAdjective,
-				m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
+				(unsigned int)m[q].word->second.getUsagePattern(cSourceWordInfo::LOWER_CASE_USAGE_PATTERN), (unsigned int)m[q].word->second.getUsagePattern(cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN),
 				m[q].word->second.localWordIsLowercase, m[q].word->second.localWordIsCapitalized);
 	}
 	// if capitalized, not all caps, at least 2 letters long, not a cardinal or ordinal number
