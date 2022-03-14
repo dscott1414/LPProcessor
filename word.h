@@ -674,8 +674,19 @@ public:
   static tIWMM query(wstring sWord);
   tIWMM gquery(wstring sWord);
   bool parseMetaCommands(int where,wchar_t *buffer,int &endSymbol, wstring &comment, sTrace &t);
+  int ignoreSpecialContext(wchar_t* buffer, __int64 bufferLen, __int64& bufferScanLocation,
+    wstring& sWord, wstring& comment, int& nounOwner, bool scanForSection, bool webScrapeParse, sTrace& t, MYSQL* mysql, int sourceId, int sourceType, __int64& cp);
+  int readContraction(wchar_t* buffer, __int64 bufferLen, __int64& bufferScanLocation, wstring& sWord, __int64& cp);
+  int readSpecialWords(wchar_t* buffer, __int64 bufferLen, __int64& bufferScanLocation, wstring& sWord, int nounOwner, __int64& cp);
+  int readCharacters(wchar_t* buffer, __int64 bufferLen, wstring& sWord, __int64& cp);
+  int readDanglingDash(wchar_t* buffer, __int64 bufferLen, wstring& sWord, MYSQL* mysql, int sourceId, __int64& cp);
+  void readOwnership(wchar_t* buffer, __int64 bufferLen, wstring& sWord, int& nounOwner, __int64& cp);
+  void readNTContraction(wchar_t* buffer, __int64 bufferLen, wstring& sWord, int numChars, __int64& cp);
+  void readDigits(wstring& sWord, MYSQL* mysql, int sourceId, __int64& cp);
   int readWord(wchar_t *buffer,__int64 bufferLen,__int64 &bufferScanLocation,wstring &sWord, wstring &comment, int &nounOwner,bool scanForSection,bool webScrapeParse,sTrace &t,MYSQL *mysql,int sourceId, int sourceType);
   int processFootnote(wchar_t *buffer,__int64 bufferLen,__int64 &cp);
+  void readContraction(wchar_t* buffer, __int64 bufferLen, wstring& sWord, int numChars, __int64& cp);
+  int readSpecialWords(wchar_t* buffer, __int64 bufferLen, __int64& bufferScanLocation, wstring& sWord, __int64& cp);
 	int parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool log);
 	static int attemptDisInclination(MYSQL *mysql, tIWMM &iWord, wstring sWord, int sourceId,bool log);
 	static int parseWord(MYSQL *mysql, wstring sWord, tIWMM &iWord, bool firstLetterCapitalized, int nounOwner, int sourceId, bool log);
@@ -707,6 +718,20 @@ public:
 	bool readWordsOfMultiWordObjects(vector < vector < tmWS > > &multiWordStrings,vector < vector < vector <tIWMM> > > &multiWordObjects);
 	void addMultiWordObjects(vector < vector < tmWS > > &multiWordStrings,vector < vector < vector <tIWMM> > > &multiWordObjects);
   int wordCheck(void);
+  void createHonorificWordCategories();
+  void createAbbreviationWordCategories();
+  void createPronounCategories();
+  void createVerbAssociatedCategories();
+  void createAdverbCategories();
+  void createNounCategories();
+  void createNumberCategories();
+  void createLetterCategory();
+  void createNonLetterWordCategories();
+  void createAdjectiveCategories();
+  void createPrepositionCategories();
+  void createInterjectionCategory();
+  void createRelativizerCategory();
+  void defineDashedPrefixes();
   int createWordCategories();
 
   void addTimeFlag(int flag,Inflections words[]);

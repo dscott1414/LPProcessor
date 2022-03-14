@@ -701,7 +701,6 @@ use application verifier
 use this sympath:
 .sympath c:\windows\system32;SRV*c:\localsymbols*http://msdl.microsoft.com/download/symbols;SRV*C:\WebSymb*http://msdl.microsoft.com/download/symbols
 */
-int overallTime;
 int initializeCounter(void);
 void freeCounter(void);
 void reportMemoryUsage(void);
@@ -1095,73 +1094,19 @@ int WRMemoryCheck(MYSQL mysql)
 	return (numRowsInMemory == numRowsOnDisk) ? 0 : -1;
 }
 
-//SleepConditionVariableSRW	Sleeps on the specified condition variable and releases the specified lock as an atomic operation.
-//TryAcquireSRWLockExclusive	Attempts to acquire a slim reader/writer (SRW) lock in exclusive mode. If the call is successful, the calling thread takes ownership of the lock.
-//TryAcquireSRWLockShared	Attempts to acquire a slim reader/writer (SRW) lock in shared mode. If the call is successful, the calling thread takes ownership of the lock.
-
-// -test timeExpressions -retry -BC 0 -cacheDir M:\caches -forceSourceReread -parseOnly -SW -SWNR -SWNW 
-// -test tokenization -BC 0 -cacheDir M:\caches -SW -SWNR -SWNW -forceSourceReread -retry
-// -test thatParsing -BC 0 -cacheDir M:\caches -SW -SWNR -SWNW -forceSourceReread -retry
-// parse one gutenberg book repeatedly:
-// -book 3537 3538 -BC 0 -cacheDir M:\caches -SW -SWNR -SWNW -forceSourceReread -numSourcesPerProcess 15 -retry -parseOnly
-// -book 0 -BC 0 -retry -cacheDir M:\caches -SR -SW -SWNR -SWNW -TNMS
-// parse gutenberg books all at once parcelled out (parseOnly):
-// -book 0 + -BC 0 -cacheDir M:\caches -SWNR -SWNW -SW -MCSW -logMatchedSentences -logUnmatchedSentences -numSourcesPerProcess 15 -forceSourceReread -parseOnly -retry -mp 8
-// do TREC:
-// -Interactive 0 + -BC 0 -cacheDir J:\caches -SR -SW -SWNR -SWNW -TNMS
-void redistributeFilesAlphabetically(wchar_t* dir);
 int numSourceLimit = 0;
-int wmain(int argc, wchar_t* argv[])
+void processCommandArguments(int argc, wchar_t* argv[],
+	bool &forceSourceReread, bool& sourceWrite, bool& sourceWordNetRead, bool& sourceWordNetWrite, 
+	bool &resetAllSource, bool &resetProcessingFlags, bool &generateFormStatistics, bool &retry,
+	bool &parseOnly, bool &makeCopyBeforeSourceWrite,
+	int &sourceArgs, int &numSourcesPerProcess, enum cSource::sourceTypeEnum &sourceType,
+	wstring &specialExtension, wchar_t sourceHost[])
 {
-	// Create a dump file whenever this program crashes (only on windows)
-	SetUnhandledExceptionFilter(unhandled_handler);
-	wstring testbuffer;
-	//int readPageFromSolr(const wchar_t *queryParams, wstring &buffer);
-	//readPageFromSolr(L"{ params: { q: \"*:*\",rows:1 } }", testbuffer);
-	//if (!testbuffer.empty())
-	//	return 0;
-	bool viterbiTest = false;
-	setConsoleWindowSize(100, 8);
-	cProfile profile("");
-	createLocks();
-	wchar_t dir[1024];
-	GetCurrentDirectoryW(1024, dir);
-	set_new_handler(no_memory);
-	if (chdir(".."))
-		return -1;
-	overallTime = clock();
-	// test gutenberg by generating usage statistics
-	//if (argc>1 && !wcscmp(argv[1],L"-tg"))
-	//{
-	//	cSource source2(L"localhost",0,false,true,true);
-	//	source2.testStartCode();
-	//	return 0;
-	//}
-	SetConsoleCtrlHandler(ConsoleHandler, true);
-	if (remove("wcheck.lplog") == ERROR_SHARING_VIOLATION) return -1;
-	initializeCounter();
-	//void extractFromWiktionary(wchar_t *f);
-	//extractFromWiktionary(LMAINDIR+L"\\Linguistics information\\TEMP-E20120211.tsv");
-	/* test over */
-	/*
-	if (argc>2 && !_wcsicmp(argv[1],L"-acquireMovieList"))
-		return acquireList(argv[2]);
-	if (argc>2 && !_wcsicmp(argv[1],L"-acquireInterviewTranscript"))
-		return getInterviewTranscript();
-	if (argc==2 && wcsstr(argv[1],L"-acquireTwitter"))
-		return getTwitterEntries(argv[1]);
-		*/
 	int numCommandLineParameters = argc;
-	const wchar_t* sourceHost = L"localhost";
-	cacheDir = CACHEDIR;
-	bool resetAllSource = false, resetProcessingFlags = false, generateFormStatistics = false, retry = false;
-	bool forceSourceReread = false, sourceWrite = false, sourceWordNetRead = false, sourceWordNetWrite = false, parseOnly = false, makeCopyBeforeSourceWrite = false;
-	int numSourcesPerProcess = 5;
-	wstring specialExtension;
 	for (int I = 0; I < argc; I++)
 	{
 		if (!_wcsicmp(argv[I], L"-server") && I < argc - 1)
-			sourceHost = argv[++I];
+			wcscpy(sourceHost, argv[++I]);
 		else if (!_wcsicmp(argv[I], L"-log") && I < argc - 1)
 			logFileExtension = argv[++I];
 		else if (!_wcsicmp(argv[I], L"-mp") && I < argc - 1)
@@ -1212,23 +1157,8 @@ int wmain(int argc, wchar_t* argv[])
 			continue;
 		numCommandLineParameters = min(numCommandLineParameters, I);
 	}
-	//cOntology::fillOntologyList(true);
-	//cOntology::maxFieldLengths();
-	//cOntology::writeOntologyList();
-	//cOntology ontology;
-	//ontology.readOpenLibraryInternetArchiveWorksDump();
-	/*
-	vector <mbInfoRecordingType> mbRecordingsTypes;
-	vector <mbInfoReleaseType> mbReleasesTypes;
-	vector <mbInfoArtistType> mbArtistsTypes;
-	getArtists(L"artist",L"Jay-Z",mbArtistsTypes);
-	getArtists(L"compactLabel",L"Roc-A-Fella Records",mbArtistsTypes);
-	getReleases(L"compactLabel",L"Roc-A-Fella Records",mbReleasesTypes);
-	getRecordings(L"artist",L"Jay-Z",mbRecordingsTypes);
-	*/
-	vector <int> badSpeakers;
-	int sourceArgs = -1;
-	enum cSource::sourceTypeEnum sourceType = cSource::NO_SOURCE_TYPE;
+	sourceArgs = -1;
+	sourceType = cSource::NO_SOURCE_TYPE;
 	const wchar_t* where;
 	for (int I = 1; I < numCommandLineParameters - 1; I++)
 	{
@@ -1243,8 +1173,273 @@ int wmain(int argc, wchar_t* argv[])
 	}
 	if (sourceArgs == -1)
 		lplog(LOG_FATAL_ERROR, L"Source type not found.");
+}
+
+int processPatternTransformTypeSource(cSource &source, wchar_t *path)
+{
+	wchar_t consoleTitle[1500];
+#ifdef _DEBUG
+	wchar_t displayDebugFlag = L'D';
+#else
+	wchar_t displayDebugFlag = L'R';
+#endif
+	wsprintf(consoleTitle, L"[%c] %s...", displayDebugFlag, path);
+	_putws(consoleTitle);
+	lplog(LOG_INFO | LOG_ERROR, L"%s\n", consoleTitle);
+	SetConsoleTitle(consoleTitle);
+	unlockTables(source.mysql);
+	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
+	cSource* requestedSource;
+	cQuestionAnswering qa;
+	return qa.processPath(&source, path, requestedSource, cSource::WEB_SEARCH_SOURCE_TYPE, 1, false);
+}
+
+void processSource(cSource &source, bool forceSourceReread, bool sourceWordNetRead, bool sourceWordNetWrite, bool sourceWrite, bool viterbiTest, bool parseOnly, bool makeCopyBeforeSourceWrite,
+	const wstring specialExtension, wstring title, wstring& encoding, wstring& start, int& repeatStart, wstring& etext,
+	int &numWordsOverAllSource, int &globalTotalUnmatched, int &globalOverMatchedPositionsTotal)
+{
+	int ret = 0;
+	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
+	unsigned int totalQuotations = 0, quotationExceptions = 0, unknownCount = 0;
+	bool parsedOnly = false;
+	Words.readWords(source.sourcePath, source.sourceId, false, specialExtension);
+	if (forceSourceReread || !source.readSource(source.sourcePath, false, parsedOnly, true, specialExtension))
+	{
+		unknownCount = 0;
+		switch (source.sourceType)
+		{
+			case cSource::TEST_SOURCE_TYPE:
+			case cSource::GUTENBERG_SOURCE_TYPE:
+			case cSource::WIKIPEDIA_SOURCE_TYPE:
+			case cSource::INTERACTIVE_SOURCE_TYPE:
+			case cSource::WEB_SEARCH_SOURCE_TYPE:
+			case cSource::NEWS_BANK_SOURCE_TYPE:
+			case cSource::REQUEST_TYPE:
+				if ((ret = source.tokenize(title, etext, source.sourcePath, encoding, start, repeatStart, unknownCount)) < 0)
+				{
+					lplog(LOG_ERROR, L"ERROR:Unable to parse %s - %d (start=%s, repeatStart=%d).", source.sourcePath.c_str(), ret, start.c_str(), repeatStart);
+					return;
+				}
+				quotationExceptions = source.doQuotesOwnershipAndContractions(totalQuotations);
+				break;
+			case cSource::BNC_SOURCE_TYPE:
+			{
+				source.beginClock = clock();
+				bncc bnc;
+				bnc.process(source, source.sourceId, source.sourcePath);
+				source.adjustWords();
+				unknownCount = bnc.unknownCount;
+				break;
+			}
+			case cSource::NO_SOURCE_TYPE:
+			case cSource::SCRIPT_SOURCE_TYPE:
+			case cSource::PATTERN_TRANSFORM_TYPE:
+			default: break;
+		}
+		//int cap=source.m.capacity();
+		source.m.shrink_to_fit(); // C++ 11 only
+		//int cap2=source.m.capacity();
+		int totalUnmatched = source.printSentences(true, unknownCount, quotationExceptions, totalQuotations, globalOverMatchedPositionsTotal);
+		if (totalUnmatched < 0)
+			lplog(LOG_FATAL_ERROR, L"Cannot print sentences.");
+		globalTotalUnmatched += totalUnmatched;
+	}
+	else
+	{
+		lplog(LOG_INFO, L"%s already parsed.", source.sourcePath.c_str());
+		source.m.shrink_to_fit(); // C++ 11 only
+		source.printSentencesCheck(false);
+	}
+	numWordsOverAllSource += source.m.size();
+	sourceWordNetWrite = (!sourceWordNetRead || !source.readWNMaps(source.sourcePath)) && sourceWordNetWrite;
+	source.addWNExtensions();
+	puts("");
+	if (source.m.size())
+	{
+		source.identifyObjects();
+		source.analyzeWordSenses();
+		source.narrativeIsQuoted = source.sourceType != cSource::GUTENBERG_SOURCE_TYPE;
+		source.syntacticRelations();
+	}
+	lplog();
+	if (sourceWrite)
+	{
+		source.write(source.sourcePath, false, makeCopyBeforeSourceWrite, specialExtension);
+		source.writeWords(source.sourcePath, specialExtension);
+		source.writePatternUsage(source.sourcePath, true);
+	}
+	if (parseOnly || viterbiTest)
+	{
+		if (viterbiTest)
+		{
+			void testViterbiFromSource(cSource & source);
+			testViterbiFromSource(source);
+		}
+		if (!exitNow) source.signalFinishedProcessingSource(source.sourceId);
+		if (source.updateWordUsageCostsDynamically)
+			cWord::resetUsagePatternsAndCosts(source.debugTrace);
+		else
+			cWord::resetCapitalizationAndProperNounUsageStatistics(source.debugTrace);
+		source.clearSource();
+		return;
+	}
+	if (source.m.size())
+	{
+		//source.printVerbFrequency();
+		source.identifySpeakerGroups();
+		vector <int> secondaryQuotesResolutions;
+		source.resolveSpeakers(secondaryQuotesResolutions);
+		source.resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
+	}
+	vector <cSyntacticRelationGroup>::iterator srg = source.syntacticRelationGroups.begin();
+	//source.printObjects(); // only necessary if printing objects
+	//source.resolveWordRelations(); // this resolves word relations to add to words - these will be erased unless future plans to update word relations dynamically.
+	if (sourceWrite && !source.write(source.sourcePath, true, false, specialExtension))
+		lplog(LOG_FATAL_ERROR, L"buffer overrun");
+	vector <int> badSpeakers;
+	source.printResolutionCheck(badSpeakers);
+	source.logSpaceCheck();
+	source.identifyConversations();
+	//source.printResolutions(badSpeakers,false);
+	if (sourceWordNetWrite)
+		source.writeWNMaps(source.sourcePath);
+	if (source.debugTrace.traceSpeakerResolution)
+	{
+		source.printTenseStatistics(L"Narrator", source.narratorTenseStatistics, source.numTotalNarratorVerbTenses);
+		source.printTenseStatistics(L"Speaker", source.speakerTenseStatistics, source.numTotalSpeakerVerbTenses);
+		source.printTenseStatistics(L"Narrator All Tenses", source.narratorFullTenseStatistics, source.numTotalNarratorFullVerbTenses);
+		source.printTenseStatistics(L"Speaker All Tenses", source.speakerFullTenseStatistics, source.numTotalSpeakerFullVerbTenses);
+		if (source.debugTrace.traceSpeakerResolution)
+			source.printSectionStatistics();
+	}
+	lplog();
+	if (source.sourceInPast = source.sourceType == cSource::INTERACTIVE_SOURCE_TYPE)
+	{
+		cQuestionAnswering qa;
+		qa.answerAllQuestionsInSource(&source, parseOnly, true);
+	}
+
+	if (!exitNow) source.signalFinishedProcessingSource(source.sourceId);
+	source.clearSource();
+	if (source.updateWordUsageCostsDynamically)
+		cWord::resetUsagePatternsAndCosts(source.debugTrace);
+	else
+		cWord::resetCapitalizationAndProperNounUsageStatistics(source.debugTrace);
+}
+
+void initialize()
+{
+	// Create a dump file whenever this program crashes (only on windows)
+	SetUnhandledExceptionFilter(unhandled_handler);
+	setConsoleWindowSize(100, 8);
+	createLocks();
+	set_new_handler(no_memory);
+	SetConsoleCtrlHandler(ConsoleHandler, true);
+	initializeCounter();
+	wchar_t dir[1024];
+	GetCurrentDirectoryW(1024, dir);
+	if (chdir(".."))
+		exit(-1);
+	cacheDir = CACHEDIR;
 	if (_waccess(cacheDir, 0) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cache directory %s does not exist!", cacheDir);
+}
+
+void printWordMatchingStatistics(int numWordsOverAllSource, int globalTotalUnmatched, int globalOverMatchedPositionsTotal, int overallTime)
+{
+	if (numWordsOverAllSource)
+	{
+		wprintf(L"\n%d milliseconds elapsed (%d words, %d unmatched (%5.2f%%) %d overmatched (%5.2f%%)",
+			(int)((clock() - overallTime) / (CLOCKS_PER_SEC / 1000)), numWordsOverAllSource,
+			globalTotalUnmatched, (float)globalTotalUnmatched * 100 / numWordsOverAllSource, globalOverMatchedPositionsTotal, (float)globalOverMatchedPositionsTotal * 100 / numWordsOverAllSource);
+		lplog(L"%d milliseconds elapsed (%d words, %d unmatched (%5.2f%%) %d overmatched (%5.2f%%)",
+			(int)((clock() - overallTime) / (CLOCKS_PER_SEC / 1000)), numWordsOverAllSource,
+			globalTotalUnmatched, (float)globalTotalUnmatched * 100 / numWordsOverAllSource, globalOverMatchedPositionsTotal, (float)globalOverMatchedPositionsTotal * 100 / numWordsOverAllSource);
+		lplog();
+	}
+	else
+		lplog(L"%d milliseconds elapsed. No words processed.", (clock() - overallTime) / (CLOCKS_PER_SEC / 1000));
+}
+
+/*
+  SleepConditionVariableSRW	Sleeps on the specified condition variable and releases the specified lock as an atomic operation.
+  TryAcquireSRWLockExclusive	Attempts to acquire a slim reader/writer (SRW) lock in exclusive mode. If the call is successful, the calling thread takes ownership of the lock.
+  TryAcquireSRWLockShared	Attempts to acquire a slim reader/writer (SRW) lock in shared mode. If the call is successful, the calling thread takes ownership of the lock.
+
+// -test timeExpressions -retry -BC 0 -cacheDir M:\caches -forceSourceReread -parseOnly -SW -SWNR -SWNW 
+// -test tokenization -BC 0 -cacheDir M:\caches -SW -SWNR -SWNW -forceSourceReread -retry
+// -test thatParsing -BC 0 -cacheDir M:\caches -SW -SWNR -SWNW -forceSourceReread -retry
+// parse one gutenberg book repeatedly:
+// -book 3537 3538 -BC 0 -cacheDir M:\caches -SW -SWNR -SWNW -forceSourceReread -numSourcesPerProcess 15 -retry -parseOnly
+// -book 0 -BC 0 -retry -cacheDir M:\caches -SR -SW -SWNR -SWNW -TNMS
+// parse gutenberg books all at once parcelled out (parseOnly):
+// -book 0 + -BC 0 -cacheDir M:\caches -SWNR -SWNW -SW -MCSW -logMatchedSentences -logUnmatchedSentences -numSourcesPerProcess 15 -forceSourceReread -parseOnly -retry -mp 8
+// do TREC:
+// -Interactive 0 + -BC 0 -cacheDir J:\caches -SR -SW -SWNR -SWNW -TNMS
+
+// test gutenberg by generating usage statistics
+  if (argc>1 && !wcscmp(argv[1],L"-tg"))
+  {
+  	cSource source2(L"localhost",0,false,true,true);
+  	source2.testStartCode();
+  	return 0;
+//}
+// TEST Ontology:
+	//cOntology::fillOntologyList(true);
+	//cOntology::maxFieldLengths();
+	//cOntology::writeOntologyList();
+	//cOntology ontology;
+	//ontology.readOpenLibraryInternetArchiveWorksDump();
+// Test MusicBrainz
+	vector <mbInfoRecordingType> mbRecordingsTypes;
+	vector <mbInfoReleaseType> mbReleasesTypes;
+	vector <mbInfoArtistType> mbArtistsTypes;
+	getArtists(L"artist",L"Jay-Z",mbArtistsTypes);
+	getArtists(L"compactLabel",L"Roc-A-Fella Records",mbArtistsTypes);
+	getReleases(L"compactLabel",L"Roc-A-Fella Records",mbReleasesTypes);
+	getRecordings(L"artist",L"Jay-Z",mbRecordingsTypes);
+// TEST thesaurus
+	// build thesaurus
+	//source.createThesaurusTables();
+	//extern vector <sDefinition> thesaurus;
+	//for (int I = 0; I < thesaurus.size(); I++)
+	//	source.writeThesaurusEntry(thesaurus[I]);
+	// synonym testing
+	//vector <set <wstring> > synonyms;
+	//source.getWordNetSynonymsOnly(L"car", synonyms, 1);
+	//for (int I = 0; I < synonyms.size(); I++)
+		//for (set<wstring>::iterator ss = synonyms[I].begin(), ssEnd = synonyms[I].end(); ss != ssEnd; ss++)
+			//printf("%d:%S\n", I, ss->c_str());
+
+// TEST PATTERNS
+	//source.accumulateNewPatterns();
+	//source.printAccumulatedPatterns();
+
+// NOUN/VERB class analysis (debugging)
+	//bool measurableObject,notMeasurableObject,grouping;
+	//analyzeNounClass(0,L"fish",0,measurableObject,notMeasurableObject,grouping,t);
+	//wstring proposedSubstitute;
+	//int inflectionFlags=0;
+	//bool isNoun=false,isVerb=true,isAdjective=false,isAdverb=false;
+	//analyzeSense(false,L"draft",proposedSubstitute,numIrregular,inflectionFlags,isNoun,isVerb,isAdjective,isAdverb);
+*/
+int wmain(int argc, wchar_t* argv[])
+{
+	initialize();
+	bool viterbiTest = false;
+	cProfile profile("");
+	int overallTime = clock();
+	wchar_t sourceHost[1024];
+	wcscpy(sourceHost, L"localhost");
+	bool forceSourceReread = false, sourceWrite = false, sourceWordNetRead = false, sourceWordNetWrite = false;
+	bool resetAllSource = false, resetProcessingFlags = false, generateFormStatistics = false, retry = false;
+	bool parseOnly = false, makeCopyBeforeSourceWrite = false;
+	int sourceArgs = -1, numSourcesPerProcess = 5;
+	enum cSource::sourceTypeEnum sourceType;
+	wstring specialExtension;
+	processCommandArguments(argc, argv, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite, 
+		resetAllSource, resetProcessingFlags, generateFormStatistics, retry,
+		parseOnly, makeCopyBeforeSourceWrite,	sourceArgs, numSourcesPerProcess, sourceType, specialExtension,	sourceHost);
 	cSource source(sourceHost, sourceType, generateFormStatistics, multiProcess > 0, true);
 	if (multiProcess > 0 || numSourceLimit == 0) // controller or a single process not under control
 		WRMemoryCheck(source.mysql);
@@ -1252,47 +1447,12 @@ int wmain(int argc, wchar_t* argv[])
 	if (resetAllSource) source.resetAllSource();
 	if (resetProcessingFlags) source.resetProcessingFlags();
 	source.initializeNounVerbMapping();
-	unsigned int totalQuotations = 0, quotationExceptions = 0, unknownCount = 0;
-	// build thesaurus 
-	//int getThesaurus();
-	//getThesaurus();
-	//source.createThesaurusTables();
-	//extern vector <sDefinition> thesaurus;
-	//for (int I = 0; I < thesaurus.size(); I++)
-	//	source.writeThesaurusEntry(thesaurus[I]);
-	// synonym testing
-	//void testThesaurus();
-	//testThesaurus();
-	//vector <set <wstring> > synonyms;
-	//source.getWordNetSynonymsOnly(L"car", synonyms, 1);
-	//for (int I = 0; I < synonyms.size(); I++)
-		//for (set<wstring>::iterator ss = synonyms[I].begin(), ssEnd = synonyms[I].end(); ss != ssEnd; ss++)
-			//printf("%d:%S\n", I, ss->c_str());
 	if (multiProcess == 0)
 		initializePatterns();
-	unordered_map <int, vector < vector <cTagLocation> > > emptyMap;
-	source.pemaMapToTagSetsByPemaByTagSet.reserve(desiredTagSets.size());
-	for (unsigned int ts = 0; ts < desiredTagSets.size(); ts++)
-		source.pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
-	if (sourceType == cSource::sourceTypeEnum::PATTERN_TRANSFORM_TYPE)
-	{
-		wchar_t consoleTitle[1500];
-#ifdef _DEBUG
-		wchar_t displayDebugFlag = L'D';
-#else
-		wchar_t displayDebugFlag = L'R';
-#endif
-		wsprintf(consoleTitle, L"[%c] %s...", displayDebugFlag, argv[sourceArgs + 1]);
-		_putws(consoleTitle);
-		lplog(LOG_INFO | LOG_ERROR, L"%s\n", consoleTitle);
-		SetConsoleTitle(consoleTitle);
-		unlockTables(source.mysql);
-		Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
-		cSource* requestedSource;
-		cQuestionAnswering qa;
-		return qa.processPath(&source, argv[sourceArgs + 1], requestedSource, cSource::WEB_SEARCH_SOURCE_TYPE, 1, false);
-	}
-	int globalTotalUnmatched = 0, globalOverMatchedPositionsTotal = 0, numWords = 0;
+	source.initializePemaMap(desiredTagSets.size());
+	if (source.sourceType == cSource::sourceTypeEnum::PATTERN_TRANSFORM_TYPE)
+		return processPatternTransformTypeSource(source, argv[sourceArgs + 1]);
+	int globalTotalUnmatched = 0, globalOverMatchedPositionsTotal = 0, numWordsOverAllSource = 0;
 	if (iswdigit(argv[sourceArgs + 1][0]))
 	{
 		int beginSource = _wtoi(argv[sourceArgs + 1]), endSource;
@@ -1314,220 +1474,42 @@ int wmain(int argc, wchar_t* argv[])
 		int numSourcesProcessed = 0, pid = GetCurrentProcessId();
 		while (!exitNow && !exitEventually && (numSourceLimit == 0 || numSourcesProcessed++ < numSourceLimit))
 		{
-			int sourceId, repeatStart;
+			int repeatStart;
 			wstring path, encoding, etext, author, title, start;
 			wprintf(L"Getting number of sources left...               \r");
 			int numSourcesLeft = getNumSources(source.mysql, source.sourceType, true);
-			if (!getNextUnprocessedSource(source.mysql, beginSource, endSource, source.sourceType, true, sourceId, path, encoding, start, repeatStart, etext, author, title))
+			if (!getNextUnprocessedSource(source.mysql, beginSource, endSource, source.sourceType, true, source.sourceId, path, encoding, start, repeatStart, etext, author, title))
 				break;
 			path.insert(0, L"\\");
 			path = path.insert(0, TEXTDIR);
 			wchar_t consoleTitle[1500];
-			wsprintf(consoleTitle, L"[%03d:%03d-%03d:%03d%%]PID%05d %s '%s'...", sourceId, beginSource, numSources, (numSources - numSourcesLeft) * 100 / numSources, pid, (start == L"**SKIP**" || start == L"**START NOT FOUND**") ? L"Skipping" : L"", title.c_str());
+			wsprintf(consoleTitle, L"[%03d:%03d-%03d:%03d%%]PID%05d %s '%s'...", source.sourceId, beginSource, numSources, (numSources - numSourcesLeft) * 100 / numSources, pid, (start == L"**SKIP**" || start == L"**START NOT FOUND**") ? L"Skipping" : L"", title.c_str());
 			_putws(consoleTitle);
 			lplog(LOG_INFO | LOG_ERROR, L"%s\n", consoleTitle);
 			SetConsoleTitle(consoleTitle);
 			unlockTables(source.mysql);
 			if (start == L"**SKIP**")
 				continue;
-			Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
-			wstring rt1, rt2;
-			int ret = 0;
-			bool parsedOnly = false;
-			Words.readWords(path, sourceId, false, specialExtension);
-			if (forceSourceReread || !source.readSource(path, false, parsedOnly, true, specialExtension))
-			{
-				unknownCount = 0;
-				switch (sourceType)
-				{
-				case cSource::TEST_SOURCE_TYPE:
-				case cSource::GUTENBERG_SOURCE_TYPE:
-				case cSource::WIKIPEDIA_SOURCE_TYPE:
-				case cSource::INTERACTIVE_SOURCE_TYPE:
-				case cSource::WEB_SEARCH_SOURCE_TYPE:
-				case cSource::NEWS_BANK_SOURCE_TYPE:
-				case cSource::REQUEST_TYPE:
-					if ((ret = source.tokenize(title, etext, path, encoding, start, repeatStart, unknownCount)) < 0)
-					{
-						lplog(LOG_ERROR, L"ERROR:Unable to parse %s - %d (start=%s, repeatStart=%d).", path.c_str(), ret, start.c_str(), repeatStart);
-						continue;
-					}
-					quotationExceptions = source.doQuotesOwnershipAndContractions(totalQuotations);
-					break;
-				case cSource::BNC_SOURCE_TYPE:
-				{
-					source.beginClock = clock();
-					bncc bnc;
-					bnc.process(source, sourceId, path);
-					source.adjustWords();
-					unknownCount = bnc.unknownCount;
-					break;
-				}
-				case cSource::NO_SOURCE_TYPE:
-				case cSource::SCRIPT_SOURCE_TYPE:
-				case cSource::PATTERN_TRANSFORM_TYPE:
-				default: break;
-				}
-				//int cap=source.m.capacity();
-				source.m.shrink_to_fit(); // C++ 11 only
-				//int cap2=source.m.capacity();
-				source.sourceId = sourceId;
-				int totalUnmatched = source.printSentences(true, unknownCount, quotationExceptions, totalQuotations, globalOverMatchedPositionsTotal);
-				if (totalUnmatched < 0)
-					lplog(LOG_FATAL_ERROR, L"Cannot print sentences.");
-				globalTotalUnmatched += totalUnmatched;
-			}
-			else
-			{
-				lplog(LOG_INFO, L"%s already parsed.", path.c_str());
-				source.m.shrink_to_fit(); // C++ 11 only
-				source.printSentencesCheck(false);
-			}
-			numWords += source.m.size();
-			//source.accumulateNewPatterns();
-			//source.printAccumulatedPatterns();
-			sourceWordNetWrite = (!sourceWordNetRead || !source.readWNMaps(path)) && sourceWordNetWrite;
-			source.addWNExtensions();
-			// noun/verb class analysis (debugging)
-			//bool measurableObject,notMeasurableObject,grouping;
-			//analyzeNounClass(0,L"fish",0,measurableObject,notMeasurableObject,grouping,t);
-			//wstring proposedSubstitute;
-			//int inflectionFlags=0;
-			//bool isNoun=false,isVerb=true,isAdjective=false,isAdverb=false;
-			//analyzeSense(false,L"draft",proposedSubstitute,numIrregular,inflectionFlags,isNoun,isVerb,isAdjective,isAdverb);
-			puts("");
-			if (source.m.size())
-			{
-				source.identifyObjects();
-				source.analyzeWordSenses();
-				source.narrativeIsQuoted = sourceType != cSource::GUTENBERG_SOURCE_TYPE;
-				source.syntacticRelations();
-			}
-			lplog();
-			if (sourceWrite)
-			{
-				source.write(path, false, makeCopyBeforeSourceWrite, specialExtension);
-				source.writeWords(path, specialExtension);
-				source.writePatternUsage(path, true);
-			}
-			if (parseOnly || viterbiTest)
-			{
-				if (viterbiTest)
-				{
-					void testViterbiFromSource(cSource & source);
-					testViterbiFromSource(source);
-				}
-				source.clearSource();
-				if (source.updateWordUsageCostsDynamically)
-					cWord::resetUsagePatternsAndCosts(source.debugTrace);
-				else
-					cWord::resetCapitalizationAndProperNounUsageStatistics(source.debugTrace);
-				if (!exitNow) source.signalFinishedProcessingSource(sourceId);
-				continue;
-			}
-			if (source.m.size())
-			{
-				//source.printVerbFrequency();
-				source.identifySpeakerGroups();
-				vector <int> secondaryQuotesResolutions;
-				source.resolveSpeakers(secondaryQuotesResolutions);
-				source.resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
-			}
-			vector <cSyntacticRelationGroup>::iterator srg = source.syntacticRelationGroups.begin();
-			//source.printObjects(); // only necessary if printing objects
-			//source.resolveWordRelations(); // this resolves word relations to add to words - these will be erased unless future plans to update word relations dynamically.
-			if (sourceWrite && !source.write(path, true, false, specialExtension))
-				lplog(LOG_FATAL_ERROR, L"buffer overrun");
-			source.printResolutionCheck(badSpeakers);
-			source.logSpaceCheck();
-			source.identifyConversations();
-			//source.printResolutions(badSpeakers,false);
-			if (sourceWordNetWrite)
-				source.writeWNMaps(path);
-			if (source.debugTrace.traceSpeakerResolution)
-			{
-				source.printTenseStatistics(L"Narrator", source.narratorTenseStatistics, source.numTotalNarratorVerbTenses);
-				source.printTenseStatistics(L"Speaker", source.speakerTenseStatistics, source.numTotalSpeakerVerbTenses);
-				source.printTenseStatistics(L"Narrator All Tenses", source.narratorFullTenseStatistics, source.numTotalNarratorFullVerbTenses);
-				source.printTenseStatistics(L"Speaker All Tenses", source.speakerFullTenseStatistics, source.numTotalSpeakerFullVerbTenses);
-				if (source.debugTrace.traceSpeakerResolution)
-					source.printSectionStatistics();
-			}
-			lplog();
-			if (source.sourceInPast = source.sourceType == cSource::INTERACTIVE_SOURCE_TYPE)
-			{
-				cQuestionAnswering qa;
-				qa.answerAllQuestionsInSource(&source, parseOnly, true);
-			}
-
-			if (!exitNow) source.signalFinishedProcessingSource(sourceId);
-			source.clearSource();
-			if (source.updateWordUsageCostsDynamically)
-				cWord::resetUsagePatternsAndCosts(source.debugTrace);
-			else
-				cWord::resetCapitalizationAndProperNounUsageStatistics(source.debugTrace);
+			source.sourcePath = path;
+			processSource(source, forceSourceReread, sourceWordNetRead, sourceWordNetWrite, sourceWrite, viterbiTest, parseOnly, makeCopyBeforeSourceWrite, 
+				specialExtension, title, encoding, start, repeatStart, etext, numWordsOverAllSource, globalTotalUnmatched, globalOverMatchedPositionsTotal);
 		}
 #ifdef LOG_PATTERNS
 		cPattern::printPatternStatistics();
 #endif
-		if (numWords)
-		{
-			wprintf(L"\n%d milliseconds elapsed (%d words, %d unmatched (%5.2f%%) %d overmatched (%5.2f%%)",
-				(int)((clock() - overallTime) / (CLOCKS_PER_SEC / 1000)), numWords,
-				globalTotalUnmatched, (float)globalTotalUnmatched * 100 / numWords, globalOverMatchedPositionsTotal, (float)globalOverMatchedPositionsTotal * 100 / numWords);
-			lplog(L"%d milliseconds elapsed (%d words, %d unmatched (%5.2f%%) %d overmatched (%5.2f%%)",
-				(int)((clock() - overallTime) / (CLOCKS_PER_SEC / 1000)), numWords,
-				globalTotalUnmatched, (float)globalTotalUnmatched * 100 / numWords, globalOverMatchedPositionsTotal, (float)globalOverMatchedPositionsTotal * 100 / numWords);
-			lplog();
-		}
-		else
-			lplog(L"%d milliseconds elapsed. No words processed.", (clock() - overallTime) / (CLOCKS_PER_SEC / 1000));
+		printWordMatchingStatistics(numWordsOverAllSource, globalTotalUnmatched, globalOverMatchedPositionsTotal,overallTime);
 	}
 	else
 	{
-		wstring path = L"tests\\" + std::wstring(argv[sourceArgs + 1]) + L".txt";
 		wstring start = L"~~BEGIN", title, etext, encoding = L"NOT FOUND";
 		if (argv[sourceArgs + 2][0] == L'~')
 			start = argv[sourceArgs + 2];
 		int repeatStart = 1;
-		bool parsedOnly;
-		if (forceSourceReread || !source.readSource(path, false, parsedOnly, true, specialExtension))
-		{
-			if (source.tokenize(title, etext, path, encoding, start, repeatStart, unknownCount) < 0)
-				exit(0);
-			lplog();
-			source.write(path, false, false, specialExtension);
-		}
-		quotationExceptions = source.doQuotesOwnershipAndContractions(totalQuotations);
-		globalTotalUnmatched += source.printSentences(false, unknownCount, quotationExceptions, totalQuotations, globalOverMatchedPositionsTotal);
-		puts("");
-		source.identifyObjects();
-		vector <int> secondaryQuotesResolutions;
-		source.analyzeWordSenses();
-		source.narrativeIsQuoted = true;
-		source.syntacticRelations();
-		if (parseOnly || viterbiTest)
-		{
-			if (viterbiTest)
-			{
-				void testViterbiFromSource(cSource & source);
-				testViterbiFromSource(source);
-			}
-			source.write(path, true, false, specialExtension);
-			source.writeWords(path, specialExtension);
-		}
-		else
-		{
-			source.identifySpeakerGroups();
-			source.resolveSpeakers(secondaryQuotesResolutions);
-			source.resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
-			source.printObjects();
-			source.write(path, true, false, specialExtension);
-			source.printResolutionCheck(badSpeakers);
-			source.logSpaceCheck();
-			source.testSyntacticRelations();
-			lplog();
-		}
+		source.sourcePath = L"tests\\" + std::wstring(argv[sourceArgs + 1]) + L".txt";
+		source.sourceType = cSource::GUTENBERG_SOURCE_TYPE;
+		processSource(source, forceSourceReread, sourceWordNetRead, sourceWordNetWrite, sourceWrite, viterbiTest, parseOnly, makeCopyBeforeSourceWrite,
+			specialExtension, title, encoding, start, repeatStart, etext,
+			numWordsOverAllSource, globalTotalUnmatched, globalOverMatchedPositionsTotal);
 	}
 	freeCounter();
 	cProfile::lfprint(profile);

@@ -207,6 +207,7 @@ public:
 		t.traceParseInfo = trace.traceParseInfo;
 		t.tracePreposition = trace.tracePreposition;
 		t.tracePatternMatching = trace.tracePatternMatching;
+		t.traceTime = trace.traceTime;
 		logCache=::logCache;
 		originalPreferredViterbiForm = 0;
 		preferredViterbiCurrentTagOfHighestProbability = 0;
@@ -1734,6 +1735,8 @@ public:
 		vector < cGroup > groups; // subgroups of speakers grouped syntactically
 		cSpeakerGroup(void);
 		cSpeakerGroup(char *buffer,int &where,unsigned int limit,bool &error);
+		cSpeakerGroup(const cSpeakerGroup& obj);
+
 		bool copy(void *buffer,int &where,int limit);
 		void clear(void)
 		{
@@ -2369,6 +2372,7 @@ int &numFirstInQuote,
 	bool compareObjectString(int whereObject1,int whereObject2);
 	bool objectContainedIn(int whereObject,set <int> whereObjects);
 	int ruleCorrectLPClass(int wordSourceIndex, int startOfSentence);
+	void initializePemaMap(size_t numTagSets);
 
 	void setForms(void);
 	cIntArray sentenceStarts;

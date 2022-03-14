@@ -614,6 +614,7 @@ bool cWordMatch::read(char* buffer, int& where, int limit, int sourceType)
 	t.printBeforeElimination = tflags & 1; tflags >>= 1;
 	t.traceTestSubjectVerbAgreement = tflags & 1; tflags >>= 1;
 	t.traceTestSyntacticRelations = tflags & 1; tflags >>= 1;
+	t.traceTime = tflags & 1; tflags >>= 1;
 	if (!copy(logCache, buffer, where, limit)) return false;
 	skipResponse = -1;
 	if (!copy(relNextObject, buffer, where, limit)) return false;
@@ -683,6 +684,7 @@ bool cWordMatch::writeRef(void* buffer, int& where, int limit)
 	// flags
 	// 110000000000
 	__int64 tflags = 0;
+	tflags |= (t.traceTime) ? 1 : 0; tflags <<= 1;
 	tflags |= (t.traceTestSyntacticRelations) ? 1 : 0; tflags <<= 1;
 	tflags |= (t.traceTestSubjectVerbAgreement) ? 1 : 0; tflags <<= 1;
 	tflags |= (t.printBeforeElimination) ? 1 : 0; tflags <<= 1;
@@ -3850,6 +3852,14 @@ bool cSource::objectContainedIn(int whereObject, set <int> whereObjects)
 					return true;
 		}
 	return false;
+}
+
+void cSource::initializePemaMap(size_t numTagSets)
+{
+	unordered_map <int, vector < vector <cTagLocation> > > emptyMap;
+	pemaMapToTagSetsByPemaByTagSet.reserve(numTagSets);
+	for (unsigned int ts = 0; ts < numTagSets; ts++)
+		pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
 }
 
 // correct from Stanford analysis - see specials_main::ruleCorrectLPClass

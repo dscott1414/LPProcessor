@@ -2189,6 +2189,8 @@ bool cWord::parseMetaCommands(int where, wchar_t* buffer, int& endSymbol, wstrin
 		t.tracePreposition = setValue;
 	else if (!wcsnicmp(buffer + offset, L"tracePatternMatching", wcslen(L"tracePatternMatching")))
 		t.tracePatternMatching = setValue;
+	else if (!wcsnicmp(buffer + offset, L"traceTime", wcslen(L"traceTime")))
+		t.traceTime = setValue;
 	else if (!wcsnicmp(buffer, L"traceTransformDestinationQuestion", wcslen(L"traceTransformDestinationQuestion")))
 	{
 		t.traceTransformDestinationQuestion = setValue;
@@ -2323,18 +2325,9 @@ bool cWord::isDoubleQuote(wchar_t ch)
 	return false;
 }
 
-
-// nounOwner=0 - no ownership (Danny)
-// nounOwner=1 - plural ownership (patients')
-// nounOwner=2 - singular ownership (Danny's)
-int cWord::readWord(wchar_t* buffer, __int64 bufferLen,
-	__int64& bufferScanLocation,
-	wstring& sWord, wstring& comment, int& nounOwner, bool scanForSection, bool webScrapeParse, sTrace& t, MYSQL* mysql, int sourceId, int sourceType)
+int cWord::ignoreSpecialContext(wchar_t* buffer, __int64 bufferLen, __int64& bufferScanLocation,
+	wstring& sWord, wstring& comment, int& nounOwner, bool scanForSection, bool webScrapeParse, sTrace& t, MYSQL* mysql, int sourceId, int sourceType, __int64&cp)
 {
-	LFS
-		__int64 cp = bufferScanLocation;
-	nounOwner = 0;
-	sWord.clear();
 	int numlines = 0;
 	// ignore _ and *
 	while (cp < bufferLen && (iswspace(buffer[cp]) || buffer[cp] == '_' || (buffer[cp] == '*' && !webScrapeParse)) && numlines <= 1)
@@ -2362,18 +2355,6 @@ int cWord::readWord(wchar_t* buffer, __int64 bufferLen,
 		bufferScanLocation = cp + 1;
 		return PARSE_PATTERN;
 	}
-	// NewsBank
-	if (!wcsncmp(buffer + cp, L"<br>", 4))
-	{
-		bufferScanLocation = cp + 4;
-		return PARSE_END_SECTION;
-	}
-	// NewsBank
-	if (!wcsncmp(buffer + cp, L"~|~", 3))
-	{
-		bufferScanLocation = cp + 3;
-		return PARSE_END_BOOK;
-	}
 	// web address processing
 	if (processWebAddress(sWord, buffer, cp, bufferLen) == 0)
 	{
@@ -2390,28 +2371,6 @@ int cWord::readWord(wchar_t* buffer, __int64 bufferLen,
 	{
 		bufferScanLocation = cp + 4;
 		return readWord(buffer, bufferLen, bufferScanLocation, sWord, comment, nounOwner, scanForSection, webScrapeParse, t, mysql, sourceId, sourceType);
-	}
-	// NewsBank XML parsing
-	if (buffer[cp] == '&')
-	{
-		if (!wcsncmp(buffer + cp, L"&lt;", 4))
-		{
-			bufferScanLocation = cp += 4;
-			sWord = '<';
-			return 0;
-		}
-		if (!wcsncmp(buffer + cp, L"&gt;", 4))
-		{
-			bufferScanLocation = cp += 4;
-			sWord = '>';
-			return 0;
-		}
-		if (!wcsncmp(buffer + cp, L"&amp;", 5))
-		{
-			bufferScanLocation = cp += 5;
-			sWord = '&';
-			return 0;
-		}
 	}
 	if (numlines > 1)
 	{
@@ -2436,9 +2395,15 @@ int cWord::readWord(wchar_t* buffer, __int64 bufferLen,
 	}
 	if (cp >= bufferLen)
 		return PARSE_EOF;
-	if (processFootnote(buffer, bufferLen, cp) < 0) return PARSE_EOF;
+	if (processFootnote(buffer, bufferLen, cp) < 0) 
+		return PARSE_EOF;
 	if (readDate(buffer, bufferLen, bufferScanLocation, cp, sWord))
 		return PARSE_DATE;
+	return 0;
+}
+
+int cWord::readContraction(wchar_t* buffer, __int64 bufferLen, __int64& bufferScanLocation, wstring& sWord, __int64& cp)
+{
 	// any character that should be its own word
 	if (iswpunct(buffer[cp]) || (!iswprint(buffer[cp]) && iswspace(buffer[cp + 1])) ||
 		isSingleQuote(buffer[cp]) || // slightly different quotes
@@ -2451,19 +2416,19 @@ int cWord::readWord(wchar_t* buffer, __int64 bufferLen,
 		{
 			switch (towlower(buffer[cp + 1]))
 			{
-			case 'd':if (!iswalpha(buffer[cp + 2])) { sWord = L"wouldhad"; cp += 2; } break; // 'd would contraction
-			case 'l':if (!iswalpha(buffer[cp + 3]) && towlower(buffer[cp + 2]) == 'l') { sWord = L"shall"; cp += 3; } break; // 'll[1,verb] shall contraction
-			case 'm':if (!iswalpha(buffer[cp + 2])) { sWord = L"am"; cp += 2; } break; // 'm am contraction
-			case 'r':
-				if (iswalpha(buffer[cp + 3])) break;
-				if (towlower(buffer[cp + 2]) == 'e') { sWord = L"are"; cp += 3; } // 're are contraction
-				else if (towlower(buffer[cp + 2]) == 't') { sWord = L"art"; cp += 3; } // 'rt art contraction
-				break;
-			case 's':
-				if (!iswalpha(buffer[cp + 3]) && towlower(buffer[cp + 2]) == 't') { sWord = L"hast"; cp += 3; } // 'st hast contraction
-				else if (!iswalpha(buffer[cp + 2])) { sWord = L"ishas"; cp += 2; } // he she it there here see **hsit below
-				break;
-			case 'v':if (!iswalpha(buffer[cp + 3]) && towlower(buffer[cp + 2]) == 'e') { sWord = L"have"; cp += 3; } break; // 've have contraction
+				case 'd':if (!iswalpha(buffer[cp + 2])) { sWord = L"wouldhad"; cp += 2; } break; // 'd would contraction
+				case 'l':if (!iswalpha(buffer[cp + 3]) && towlower(buffer[cp + 2]) == 'l') { sWord = L"shall"; cp += 3; } break; // 'll[1,verb] shall contraction
+				case 'm':if (!iswalpha(buffer[cp + 2])) { sWord = L"am"; cp += 2; } break; // 'm am contraction
+				case 'r':
+					if (iswalpha(buffer[cp + 3])) break;
+					if (towlower(buffer[cp + 2]) == 'e') { sWord = L"are"; cp += 3; } // 're are contraction
+					else if (towlower(buffer[cp + 2]) == 't') { sWord = L"art"; cp += 3; } // 'rt art contraction
+					break;
+				case 's':
+					if (!iswalpha(buffer[cp + 3]) && towlower(buffer[cp + 2]) == 't') { sWord = L"hast"; cp += 3; } // 'st hast contraction
+					else if (!iswalpha(buffer[cp + 2])) { sWord = L"ishas"; cp += 2; } // he she it there here see **hsit below
+					break;
+				case 'v':if (!iswalpha(buffer[cp + 3]) && towlower(buffer[cp + 2]) == 'e') { sWord = L"have"; cp += 3; } break; // 've have contraction
 			}
 		}
 		if (sWord.length())
@@ -2488,156 +2453,210 @@ int cWord::readWord(wchar_t* buffer, __int64 bufferLen,
 		}
 		return 0;
 	}
-	else
+	return 1;
+}
+
+int cWord::readSpecialWords(wchar_t* buffer, __int64 bufferLen, __int64& bufferScanLocation, wstring& sWord, int nounOwner, __int64& cp)
+{
+	// dates, times, phone numbers (U.S. short form), money, 0th 1st 2nd 3rd 4th 5th 6th 7th 8th 9th processing
+	// 2"	char *
+	bool isAsciiMoney = false, isUnicodeMoney = false;
+	if ((sWord[0] > 0 && iswdigit(sWord[0])) ||
+		((isAsciiMoney = (sWord[0] == L'$')) || (isUnicodeMoney = ((sWord[0]) == L'Â' && (sWord[1]) == L'£'))))
 	{
-		__int64 begincp = cp;
-		int numChars = 0, extend = continueParse(buffer, begincp, bufferLen, multiElementWords);
-		bool wasSpace = false, isSpace = false;
-		while (cp < bufferLen)
+		int I = 0;
+		if (isAsciiMoney) I++;
+		if (isUnicodeMoney) I += 2;
+		while (iswdigit(sWord[I])) I++;
+		if (!sWord[I] && I == 3 && isDash(buffer[cp]) && iswdigit(buffer[cp + 1]))
 		{
-			numChars = extend;
-			for (wchar_t* b = buffer + cp; cp < bufferLen; cp++, b++)
-				if ((!iswspace(*b) && !iswpunct(*b) && (iswprint(*b) || !iswspace(b[1])) &&
-					!(isSingleQuote(*b) || isDoubleQuote(*b) || *b == L'…' || *b == L'_' || *b == L'*')
-					) || (isDash(*b) && iswalpha(b[1])) || // accept al-Jazeera as one word, but not a double dash or anything else
-					cp - begincp < numChars)
-				{
-					if ((isSpace = (iswspace(*b) != 0)) && wasSpace) continue;
-					if (wasSpace = isSpace)
-						sWord += L' ';
-					else
-						sWord += *b;
-				}
-				else
-					break;
-			if (numChars >= 0 && cp - begincp == numChars) break;
-			if (isSingleQuote(buffer[cp]) && cp + 2 < bufferLen && evaluateIncludedSingleQuote(buffer, cp, begincp))
+			int J = 0;
+			while (iswdigit(buffer[J + cp + 1]) && J + cp + 1 < bufferLen) J++;
+			if (J == 4)
 			{
-				extend = (int)(cp - begincp + 1);
-				continue;
+				for (J = 0; J < 5; J++) sWord += buffer[cp++];
+				bufferScanLocation = cp;
+				return PARSE_TELEPHONE_NUMBER;
 			}
-			if (isSingleQuote(buffer[cp]) && cp + 2 < bufferLen && (extend = continueParse(buffer, begincp, bufferLen, quotedWords)) > numChars)
-				continue;
-			else if (buffer[cp] == '.' && (extend = continueParse(buffer, begincp, bufferLen, periodWords)) > numChars) continue;
-			//else if (buffer[cp]=='-' && (extend=continueParse(buffer,begincp,dashWords))>numChars) continue;
-			break;
 		}
-		// dangling - at the end of a line
-		if (isDash(buffer[cp]) && buffer[cp + 1] == 13 && buffer[cp + 2] == 10 && fullQuery(mysql, sWord, sourceId) == end())
+		// date processing
+		if (!sWord[I] && (buffer[cp] == L'/' || isDash(buffer[cp])) && processDate(sWord, buffer, cp, bufferScanLocation) == 0)
+			return PARSE_DATE;
+		// time processing
+		if (!sWord[I] && (buffer[cp] == L':' || buffer[cp] == L'.') && processTime(sWord, buffer, cp, bufferScanLocation) == 0)
+			return PARSE_TIME;
+		if (buffer[cp] == L'.' && iswdigit(buffer[cp + 1]))
 		{
-			cp += 3;
-			while (cp < bufferLen && iswspace(buffer[cp])) cp++;
-			if (cp == bufferLen)
-				return PARSE_EOF;
-			for (; cp < bufferLen; cp++)
-				if (!iswspace(buffer[cp]) && !iswpunct(buffer[cp]))
-					sWord += buffer[cp];
-				else
-					break;
-		}
-		// ownership (plural) too ambiguous on this level to figure out whether it is ownership or the end of a single quoted string
-		if (isSingleQuote(buffer[cp]) && !iswalpha(buffer[cp + 1]) && towlower(buffer[cp - 1]) == 's')
-		{
-			nounOwner = 1;
-			//  cp++;
-		}
-		// ownership (single)
-		if (isSingleQuote(buffer[cp]) && bufferLen > cp + 1 && towlower(buffer[cp + 1]) == L's' && (bufferLen <= cp + 2 || !iswalpha(buffer[cp + 2])) &&
-			wcsicmp(sWord.c_str(), L"he") && wcsicmp(sWord.c_str(), L"she") && wcsicmp(sWord.c_str(), L"it") &&
-			wcsicmp(sWord.c_str(), L"there") && wcsicmp(sWord.c_str(), L"here")) // **hsit
-		{
-			nounOwner = 2;
-			cp += 2;
-		}
-		// -n't not contraction - after processing done by next section
-		if (isSingleQuote(buffer[cp]) && bufferLen > cp + 1 && towlower(buffer[cp + 1]) == L't' && !wcsicmp(sWord.c_str(), L"n"))
-		{
-			sWord = L"not";
-			cp += 2;
-		}
-		// -n't not contraction - cut off n, prepare for processing by previous section
-		else if (sWord.length() > 1 && numChars == -1 && isSingleQuote(buffer[cp]) && bufferLen > cp + 1 && cp > 0 && towlower(buffer[cp + 1]) == L't' && towlower(buffer[cp - 1]) == L'n')
-		{
-			sWord.erase(sWord.length() - 1, 1); // cut off n
-			//sWord[sWord.length()-1]=0;
-			cp--;
-		}
-		// dates, times, phone numbers (U.S. short form), money, 0th 1st 2nd 3rd 4th 5th 6th 7th 8th 9th processing
-		// 2"	char *
-		bool isAsciiMoney = false, isUnicodeMoney = false;
-		if ((sWord[0] > 0 && iswdigit(sWord[0])) ||
-			((isAsciiMoney = (sWord[0] == L'$')) || (isUnicodeMoney = ((sWord[0]) == L'Â' && (sWord[1]) == L'£'))))
-		{
-			int I = 0;
-			if (isAsciiMoney) I++;
-			if (isUnicodeMoney) I += 2;
-			while (iswdigit(sWord[I])) I++;
-			if (!sWord[I] && I == 3 && isDash(buffer[cp]) && iswdigit(buffer[cp + 1]))
-			{
-				int J = 0;
-				while (iswdigit(buffer[J + cp + 1]) && J + cp + 1 < bufferLen) J++;
-				if (J == 4)
-				{
-					for (J = 0; J < 5; J++) sWord += buffer[cp++];
-					bufferScanLocation = cp;
-					return PARSE_TELEPHONE_NUMBER;
-				}
-			}
-			// date processing
-			if (!sWord[I] && (buffer[cp] == L'/' || isDash(buffer[cp])) && processDate(sWord, buffer, cp, bufferScanLocation) == 0)
-				return PARSE_DATE;
-			// time processing
-			if (!sWord[I] && (buffer[cp] == L':' || buffer[cp] == L'.') && processTime(sWord, buffer, cp, bufferScanLocation) == 0)
-				return PARSE_TIME;
-			if (buffer[cp] == L'.' && iswdigit(buffer[cp + 1]))
-			{
+			sWord += buffer[cp++];
+			while (cp < bufferLen && iswdigit((wchar_t)buffer[cp]))
 				sWord += buffer[cp++];
-				while (cp < bufferLen && iswdigit((wchar_t)buffer[cp]))
-					sWord += buffer[cp++];
-				bufferScanLocation = cp;
-				return (isAsciiMoney || isUnicodeMoney) ? PARSE_MONEY_NUM : PARSE_NUM;
-			}
-			if (!sWord[I] && !nounOwner) // not 70's
-			{
-				bufferScanLocation = cp;
-				return (isAsciiMoney || isUnicodeMoney) ? PARSE_MONEY_NUM : PARSE_NUM;
-			}
-			// include 1950s or it was in the low 50s today. The 70's
-			if (nounOwner || (sWord[I] == L's' && !sWord[I + 1]))
-			{
-				bufferScanLocation = cp;
-				return PARSE_PLURAL_NUM;
-			}
-			const wchar_t* numEnd[] = { L"0th",L"1st",L"2nd",L"3rd",L"3d",L"4th",L"5th",L"6th",L"7th",L"8th",L"9th",
-				L"1stly",L"2ndly",L"3rdly",L"4thly",L"5thly",L"6thly",L"7thly",L"8thly",L"9thly",NULL };
-			int num;
-			for (num = 0; numEnd[num] && wcsicmp(sWord.c_str() + I - 1, numEnd[num]); num++);
-			if (!numEnd[num])
-			{
-				cp -= sWord.length() - I;
-				sWord.erase(I, sWord.length() - I);
-				bufferScanLocation = cp;
-				return (isAsciiMoney || isUnicodeMoney) ? PARSE_MONEY_NUM : PARSE_NUM;
-			}
 			bufferScanLocation = cp;
-			return (sWord[sWord.length() - 1] == 'y') ? PARSE_ADVERB_NUM : PARSE_ORD_NUM;
+			return (isAsciiMoney || isUnicodeMoney) ? PARSE_MONEY_NUM : PARSE_NUM;
 		}
-		// handle numbers incorrectly appended to words 'He was in the category 18to25'
-		else if (iswdigit(sWord[sWord.length() - 1]))
+		if (!sWord[I] && !nounOwner) // not 70's
 		{
-			int I = sWord.length() - 1;
-			while (iswdigit(sWord[I])) I--;
-			I++;
-			wstring tmp = sWord.substr(0, I);
-			// if it is a word we recognize, uncouple the word from the number.
-			if (fullQuery(mysql, tmp, sourceId) != WMM.end())
-			{
-				cp -= sWord.length() - I;
-				sWord = tmp;
-			}
+			bufferScanLocation = cp;
+			return (isAsciiMoney || isUnicodeMoney) ? PARSE_MONEY_NUM : PARSE_NUM;
+		}
+		// include 1950s or it was in the low 50s today. The 70's
+		if (nounOwner || (sWord[I] == L's' && !sWord[I + 1]))
+		{
+			bufferScanLocation = cp;
+			return PARSE_PLURAL_NUM;
+		}
+		const wchar_t* numEnd[] = { L"0th",L"1st",L"2nd",L"3rd",L"3d",L"4th",L"5th",L"6th",L"7th",L"8th",L"9th",
+			L"1stly",L"2ndly",L"3rdly",L"4thly",L"5thly",L"6thly",L"7thly",L"8thly",L"9thly",NULL };
+		int num;
+		for (num = 0; numEnd[num] && wcsicmp(sWord.c_str() + I - 1, numEnd[num]); num++);
+		if (!numEnd[num])
+		{
+			cp -= sWord.length() - I;
+			sWord.erase(I, sWord.length() - I);
+			bufferScanLocation = cp;
+			return (isAsciiMoney || isUnicodeMoney) ? PARSE_MONEY_NUM : PARSE_NUM;
 		}
 		bufferScanLocation = cp;
+		return (sWord[sWord.length() - 1] == 'y') ? PARSE_ADVERB_NUM : PARSE_ORD_NUM;
 	}
+	return 0;
+}
+
+int cWord::readCharacters(wchar_t* buffer, __int64 bufferLen, wstring& sWord, __int64& cp)
+{
+	__int64 begincp = cp;
+	int numChars = 0, extend = continueParse(buffer, begincp, bufferLen, multiElementWords);
+	bool wasSpace = false, isSpace = false;
+	while (cp < bufferLen)
+	{
+		numChars = extend;
+		for (wchar_t* b = buffer + cp; cp < bufferLen; cp++, b++)
+			if ((!iswspace(*b) && !iswpunct(*b) && (iswprint(*b) || !iswspace(b[1])) &&
+				!(isSingleQuote(*b) || isDoubleQuote(*b) || *b == L'…' || *b == L'_' || *b == L'*')
+				) || (isDash(*b) && iswalpha(b[1])) || // accept al-Jazeera as one word, but not a double dash or anything else
+				cp - begincp < numChars)
+			{
+				if ((isSpace = (iswspace(*b) != 0)) && wasSpace) continue;
+				if (wasSpace = isSpace)
+					sWord += L' ';
+				else
+					sWord += *b;
+			}
+			else
+				break;
+		if (numChars >= 0 && cp - begincp == numChars) break;
+		if (isSingleQuote(buffer[cp]) && cp + 2 < bufferLen && evaluateIncludedSingleQuote(buffer, cp, begincp))
+		{
+			extend = (int)(cp - begincp + 1);
+			continue;
+		}
+		if (isSingleQuote(buffer[cp]) && cp + 2 < bufferLen && (extend = continueParse(buffer, begincp, bufferLen, quotedWords)) > numChars)
+			continue;
+		else if (buffer[cp] == '.' && (extend = continueParse(buffer, begincp, bufferLen, periodWords)) > numChars) continue;
+		//else if (buffer[cp]=='-' && (extend=continueParse(buffer,begincp,dashWords))>numChars) continue;
+		break;
+	}
+	return numChars;
+}
+
+int cWord::readDanglingDash(wchar_t* buffer, __int64 bufferLen, wstring& sWord, MYSQL* mysql, int sourceId, __int64& cp)
+{
+	// dangling - at the end of a line
+	if (isDash(buffer[cp]) && buffer[cp + 1] == 13 && buffer[cp + 2] == 10 && fullQuery(mysql, sWord, sourceId) == end())
+	{
+		cp += 3;
+		while (cp < bufferLen && iswspace(buffer[cp])) cp++;
+		if (cp == bufferLen)
+			return PARSE_EOF;
+		for (; cp < bufferLen; cp++)
+			if (!iswspace(buffer[cp]) && !iswpunct(buffer[cp]))
+				sWord += buffer[cp];
+			else
+				break;
+	}
+	return 0;
+}
+
+// nounOwner=0 - no ownership (Danny)
+// nounOwner=1 - plural ownership (patients')
+// nounOwner=2 - singular ownership (Danny's)
+void cWord::readOwnership(wchar_t* buffer, __int64 bufferLen, wstring& sWord, int &nounOwner, __int64& cp)
+{
+	// ownership (plural) too ambiguous on this level to figure out whether it is ownership or the end of a single quoted string
+	if (isSingleQuote(buffer[cp]) && !iswalpha(buffer[cp + 1]) && towlower(buffer[cp - 1]) == 's')
+	{
+		nounOwner = 1;
+	}
+	// ownership (single)
+	if (isSingleQuote(buffer[cp]) && bufferLen > cp + 1 && towlower(buffer[cp + 1]) == L's' && (bufferLen <= cp + 2 || !iswalpha(buffer[cp + 2])) &&
+		wcsicmp(sWord.c_str(), L"he") && wcsicmp(sWord.c_str(), L"she") && wcsicmp(sWord.c_str(), L"it") &&
+		wcsicmp(sWord.c_str(), L"there") && wcsicmp(sWord.c_str(), L"here")) // **hsit
+	{
+		nounOwner = 2;
+		cp += 2;
+	}
+}
+
+void cWord::readNTContraction(wchar_t* buffer, __int64 bufferLen, wstring& sWord, int numChars, __int64& cp)
+{
+	// -n't not contraction - after processing done by next section
+	if (isSingleQuote(buffer[cp]) && bufferLen > cp + 1 && towlower(buffer[cp + 1]) == L't' && !wcsicmp(sWord.c_str(), L"n"))
+	{
+		sWord = L"not";
+		cp += 2;
+	}
+	// -n't not contraction - cut off n, prepare for processing by previous section
+	else if (sWord.length() > 1 && numChars == -1 && isSingleQuote(buffer[cp]) && bufferLen > cp + 1 && cp > 0 && towlower(buffer[cp + 1]) == L't' && towlower(buffer[cp - 1]) == L'n')
+	{
+		sWord.erase(sWord.length() - 1, 1); // cut off n
+		//sWord[sWord.length()-1]=0;
+		cp--;
+	}
+}
+
+void cWord::readDigits(wstring& sWord, MYSQL* mysql, int sourceId, __int64& cp)
+{
+	// handle numbers incorrectly appended to words 'He was in the category 18to25'
+	if (iswdigit(sWord[sWord.length() - 1]))
+	{
+		int I = sWord.length() - 1;
+		while (iswdigit(sWord[I])) I--;
+		I++;
+		wstring tmp = sWord.substr(0, I);
+		// if it is a word we recognize, uncouple the word from the number.
+		if (fullQuery(mysql, tmp, sourceId) != WMM.end())
+		{
+			cp -= sWord.length() - I;
+			sWord = tmp;
+		}
+	}
+}
+
+int cWord::readWord(wchar_t* buffer, __int64 bufferLen, __int64& bufferScanLocation,
+	wstring& sWord, wstring& comment, int& nounOwner, bool scanForSection, bool webScrapeParse, sTrace& t, MYSQL* mysql, int sourceId, int sourceType)
+{
+	LFS
+		__int64 cp = bufferScanLocation;
+	nounOwner = 0;
+	sWord.clear();
+	int scCode=ignoreSpecialContext(buffer, bufferLen, bufferScanLocation,
+		sWord, comment, nounOwner, scanForSection, webScrapeParse, t, mysql, sourceId, sourceType, cp);
+	if (scCode != 0)
+		return scCode;
+	int rcCode = readContraction(buffer, bufferLen, bufferScanLocation, sWord, cp);
+	if (rcCode <= 0)
+		return rcCode;
+	int numChars = readCharacters(buffer, bufferLen, sWord, cp);
+	int ddCode = readDanglingDash(buffer, bufferLen, sWord, mysql, sourceId, cp);
+	if (ddCode != 0)
+		return ddCode;
+	readOwnership(buffer, bufferLen, sWord, nounOwner, cp);
+	readNTContraction(buffer, bufferLen, sWord, numChars, cp);
+	// dates, times, phone numbers (U.S. short form), money, 0th 1st 2nd 3rd 4th 5th 6th 7th 8th 9th processing
+	int rswCode = readSpecialWords(buffer, bufferLen, bufferScanLocation, sWord, nounOwner, cp);
+	if (rswCode != 0)
+		return rswCode;
+	readDigits(sWord, mysql, sourceId, cp);
+	bufferScanLocation = cp;
 	if (sWord[0] == L'\'' || sWord[0] == L'’' || sWord[0] == L'‘')
 		lplog(LOG_FATAL_ERROR, L"Illegal character");
 	return 0;

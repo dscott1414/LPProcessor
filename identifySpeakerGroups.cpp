@@ -96,6 +96,28 @@ cSource::cSpeakerGroup::cSpeakerGroup(char *buffer,int &where,unsigned int limit
   error=where>(signed)limit;
 }
 
+cSource::cSpeakerGroup::cSpeakerGroup(const cSpeakerGroup& obj) {
+	sgBegin = obj.sgBegin;
+	sgEnd = obj.sgEnd;
+	section = obj.section;
+	previousSubsetSpeakerGroup = obj.previousSubsetSpeakerGroup;
+	saveNonNameObject = obj.saveNonNameObject;
+	conversationalQuotes = obj.conversationalQuotes;
+	speakers = obj.speakers;
+	fromNextSpeakerGroup = obj.fromNextSpeakerGroup;
+	replacedSpeakers = obj.replacedSpeakers;
+	singularSpeakers = obj.singularSpeakers;
+	groupedSpeakers = obj.groupedSpeakers;
+	povSpeakers = obj.povSpeakers;
+	dnSpeakers = obj.dnSpeakers;
+	metaNameOthers = obj.metaNameOthers;
+	observers = obj.observers;
+	embeddedSpeakerGroups = obj.embeddedSpeakerGroups;
+	groups = obj.groups;
+	speakersAreNeverGroupedTogether = obj.speakersAreNeverGroupedTogether;
+	tlTransition = obj.tlTransition;
+}
+
 bool cSource::cSpeakerGroup::copy(void *buffer,int &where,int limit)
 { LFS
 	if (!::copy(buffer,sgBegin,where,limit)) return false;
@@ -846,12 +868,14 @@ bool cSource::createSpeakerGroup(int begin,int end,bool endOfSection,int &lastSp
   //int sectionBegin=(sections.size()) ? sections[section].begin:0;
   vector <cSpeakerGroup>::iterator lastSG=(speakerGroups.size()) ? speakerGroups.begin()+speakerGroups.size()-1 : speakerGroups.end();
 	bool conversationOccurred=tempSpeakerGroup.speakers.size()!=0;
+	// nextNarrationSubjects - narration subjects inbetween begin and end
   for (vector <int>::iterator s=nextNarrationSubjects.begin(),sEnd=nextNarrationSubjects.end(); s!=sEnd; s++)
   {
 		inserted=(unMergable(-1,*s,tempSpeakerGroup.speakers,uniquelyMergable,true,false,false,false,stsi));
 		if (debugTrace.traceSpeakerResolution)
 			lplog(LOG_SG,L"%06d-%06d:%02d   spNextNarrationSubject %s %s into %s",begin,end,section,objectString(*s,tmpstr,true).c_str(),(inserted) ? L"inserted" : L"merged",objectString(tempSpeakerGroup.speakers,tmpstr2).c_str());
   }
+	// nextNarrationSubjects - narration subjects inbetween begin and end AND only subjects which are also IS_OBJECT
 	if (tempSpeakerGroup.speakers.size()<2 && conversationOccurred)
 	{
 		int offset=0;
@@ -865,14 +889,17 @@ bool cSource::createSpeakerGroup(int begin,int end,bool endOfSection,int &lastSp
 		whereNextISNarrationSubjects.clear();
 	}
 	// this does not actually include another more thorough way - is the speaker specified after the quote?
+	// if there are less than 2 speakers, there were subjects in the previous unquoted section and the section ended with an open double quote
   if (tempSpeakerGroup.speakers.size()<2 && subjectsInPreviousUnquotedSection.size()>=1 && end+1<(signed)m.size() && m[end+1].word->first==L"“")
   {
 		// bool BF=(tempSpeakerGroup.begin+1<m.size() && m[tempSpeakerGroup.begin+1].forms.isSet(quoteForm)); all speaker groups at this point start with an unquoted paragraph
 		int whereSubjectMove=-1;
 		bool allIn=false,oneIn=false;
+		// is one or all of subjectsInPreviousUnquotedSection in the speakers of tempSpeakerGroup?
 	  intersect(subjectsInPreviousUnquotedSection,tempSpeakerGroup.speakers,allIn,oneIn);
-		// if this speaker group starts with an unquoted paragraph, and the speakerGroup only consists of a single speaker, and that speaker exits or moves during that unquoted paragraph,
-		//  then don't import previous speakers into this speaker group.
+		// if this speaker group starts with an unquoted paragraph, and the speakerGroup only consists of a single speaker, 
+		//  determine if that speaker exits or moves during that unquoted paragraph in the next lines
+		//  and if so don't import previous speakers into this speaker group.
 		if (tempSpeakerGroup.speakers.size()==1 && !allIn)
 		{
 			int object=*tempSpeakerGroup.speakers.begin(),wherePOV=-1;
@@ -880,19 +907,27 @@ bool cSource::createSpeakerGroup(int begin,int end,bool endOfSection,int &lastSp
 			for (int I=povInSpeakerGroups.size()-1; I>=0 && section<sections.size() && povInSpeakerGroups[I]>=(signed)sections[section].begin && wherePOV<0; I--)
 				if (in(object,povInSpeakerGroups[I]))
 					wherePOV=povInSpeakerGroups[I];
+			// if the speaker IS POV
 			if (wherePOV>=0)
 			{
 				bool exitOnly=false;
+				// while in this section, does this POV object MOVE itself (self move verb) and is not a body object?
 				for (vector <cObject::cLocation>::iterator loc=objects[object].locations.begin(),locEnd=objects[object].locations.end(); loc!=locEnd; loc++)
 					if (loc->at>=begin && loc->at<end && m[loc->at].getRelVerb()>=0 && isSelfMoveVerb(m[loc->at].getRelVerb(),exitOnly) && m[loc->at].getObject()>=0 && objects[m[loc->at].getObject()].objectClass!=BODY_OBJECT_CLASS) 
 					{
+						// find associated syntactic relationship.
 						vector <cSyntacticRelationGroup>::iterator sr=findSyntacticRelationGroup(loc->at);
-						vector <int> lastSubjects;
 						if (sr==syntacticRelationGroups.end())
 						{
+							// perhaps the location has not been made into a syntactic relationship yet?  
+							// try to create one
+							vector <int> lastSubjects;
 							detectSyntacticRelationGroup(loc->at,-1,lastSubjects);
+							// find it.
 							sr=findSyntacticRelationGroup(loc->at);
 						}
+						// if a POV and definitely a MOVE, EXIT or ENTER, then this object which was in the previous unquoted section to this speaker group
+						// has moved out and should not be considered a current speaker.
 						if (sr!=syntacticRelationGroups.end() && (sr->relationType==stMOVE || sr->relationType==stEXIT || sr->relationType==stENTER))
 						{
 							whereSubjectMove=loc->at;

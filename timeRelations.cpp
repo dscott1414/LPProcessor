@@ -2559,7 +2559,7 @@ bool cSource::speakerGroupTransition(int where, int sg, bool forwardTransition)
 	if (!forwardTransition)
 		speakerGroups[sg].tlTransition = (allNew || allNotPhysicallyPresent) && section < sections.size() && sections[section].endHeader == where;
 	if (debugTrace.traceTime)
-		lplog(LOG_RESOLUTION | LOG_SG, L"%06d:SGT for %s - transition=%s (section begin=%d)", where, toText(speakerGroups[sg], tmpstr), (allNew || allNotPhysicallyPresent) ? L"true" : L"false", (section < sections.size()) ? sections[section].begin : -1);
+		lplog(LOG_RESOLUTION | LOG_SG, L"%06d:SGT for %s - transition=%s (section begin=%d) tlTransition=%s", where, toText(speakerGroups[sg], tmpstr), (allNew || allNotPhysicallyPresent) ? L"true" : L"false", (section < sections.size()) ? sections[section].begin : -1, (speakerGroups[sg].tlTransition) ? L"true" : L"false");
 	return (allNew || allNotPhysicallyPresent);
 }
 

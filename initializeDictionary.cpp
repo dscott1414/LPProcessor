@@ -815,20 +815,8 @@ const wchar_t* roman_numeral[] = {
 	L"lxx",L"lxxi",L"lxxii",L"lxxiii",L"lxxiv",L"lxxv",L"lxxvi",L"lxxvii",L"lxxviii",L"lxxix",
 	NULL };
 
-int cWord::createWordCategories()
+void cWord::createHonorificWordCategories()
 {
-	LFS
-		changedWords = true;
-	inCreateDictionaryPhase = true;
-	cForms::createForm(UNDEFINED_FORM, UNDEFINED_SHORT_FORM, false, L"", false);
-	cForms::createForm(SECTION_FORM, SECTION_SHORT_FORM, true, L"", false);
-	cForms::createForm(COMBINATION_FORM, COMBINATION_SHORT_FORM, true, L"", false);
-	cForms::createForm(PROPER_NOUN_FORM, PROPER_NOUN_SHORT_FORM, false, L"noun", false);
-	cForms::createForm(NUMBER_FORM, NUMBER_SHORT_FORM, false, L"", false);
-	// add special section word
-	bool added;
-	addNewOrModify(NULL, wstring(L"|||"), cSourceWordInfo::topLevelSeparator, SECTION_FORM_NUM, 0, 0, L"", -1, added);
-	sectionWord = WMM.begin();
 	Inflections honorific[] = { {L"mister",MALE_GENDER},{L"missus",FEMALE_GENDER},{L"miss",FEMALE_GENDER},
 		{L"monsieur",MALE_GENDER},{L"madame",FEMALE_GENDER},{L"mademoiselle",FEMALE_GENDER},{L"sir",MALE_GENDER},{L"ma'am",FEMALE_GENDER},{L"lord",MALE_GENDER},
 		{L"lady",FEMALE_GENDER},{L"m'm",FEMALE_GENDER},{NULL,0} };
@@ -904,25 +892,15 @@ int cWord::createWordCategories()
 				{L"chief",MALE_GENDER},{L"chieftess",FEMALE_GENDER},{L"ambassador",MALE_GENDER | FEMALE_GENDER},
 				{NULL,0} };
 	predefineWords(governmentTitle, L"honorific", L"hon", L"noun", cSourceWordInfo::queryOnAnyAppearance, false);
-	Inflections brackets[] = { {L"{",OPEN_INFLECTION},{L"}",CLOSE_INFLECTION},
-														{L"(",OPEN_INFLECTION},{L")",CLOSE_INFLECTION},
-														{L"<",OPEN_INFLECTION},{L">",CLOSE_INFLECTION},
-														{L"[",OPEN_INFLECTION},{L"]",CLOSE_INFLECTION},{NULL,0} };
-	predefineWords(brackets, L"brackets", L"brackets", L"brackets");
-	// "\"" is mapped to {L"“",OPEN_INFLECTION},{L"”",CLOSE_INFLECTION}
-	// "'" is mapped to {L"‘",OPEN_INFLECTION},{L"’",CLOSE_INFLECTION}
-	Inflections quotes[] = { {L"\"",0},{L"'",0},{L"`",OPEN_INFLECTION},
-													{L"‘",OPEN_INFLECTION},{L"’",CLOSE_INFLECTION},{L"“",OPEN_INFLECTION},{L"”",CLOSE_INFLECTION},{NULL,0} };
-	predefineWords(quotes, L"quotes", L"quotes", L"quotes");
-	const wchar_t* dash[] = { L"-",L"—",L"–",L"--",NULL };                          predefineWords(dash, L"dash", L"dash");
-	const wchar_t* punctuation[] = { L".",L"·",L"...",L";",L":",L"@",L"#",L"$",L"%",L"^",L"&",L"*",L"--",L"+",L"=",L"_",L"|",L"‚",L",",L"/",L"~",L"…",L"│",NULL };
-	for (const wchar_t** p = punctuation; *p; p++) predefineWord(*p);
-	const wchar_t* letter[] = { L"a",L"b",L"c",L"d",L"e",L"f",L"g",L"h",L"i",L"j",L"k",L"l",L"m",L"n",L"o",L"p",L"q",L"r",L"s",L"t",
-		L"u",L"v",L"w",L"x",L"y",L"z",NULL };
-	predefineWords(letter, L"letter", L"let");
-	if (letterForm < 0) letterForm = cForms::gFindForm(L"letter");
-	Forms[letterForm]->inflectionsClass = L"noun";
-	// abbreviations - see abbreviations note below
+}
+
+// abbreviations - no abbreviation can end with a period because
+//   then the period would be hidden from the parser.  Because no period would be seen as a distinct
+//   word by the parser, and if the period would also stand for the end of the sentence, as well as the
+//   end of the abbreviation, no abbreviations can end with a period, but instead
+//   almost all abbreviations have their own _PATTERNS which add an optional period at the end.
+void cWord::createAbbreviationWordCategories()
+{
 	Inflections measurement_abbreviation[] = {
 		{L"lbs",PLURAL},{L"mo",SINGULAR},{L"mos",PLURAL},  {L"cm",SINGULAR},{L"bt",SINGULAR},{L"cc",SINGULAR},
 		{L"kg",SINGULAR},{L"km",SINGULAR},{L"kw",SINGULAR},
@@ -964,27 +942,10 @@ int cWord::createWordCategories()
 	// abbreviations - see abbreviations note below
 	Inflections date_abbreviation[] = { {L"a.d",SINGULAR},{L"b.c",SINGULAR},{L"ad",SINGULAR},{L"bc",SINGULAR},{NULL,0} };
 	predefineWords(date_abbreviation, L"date_abbreviation", L"dabb", L"noun");
-	// abbreviations - no abbreviation can end with a period because
-	//   then the period would be hidden from the parser.  Because no period would be seen as a distinct
-	//   word by the parser, and if the period would also stand for the end of the sentence, as well as the
-	//   end of the abbreviation, no abbreviations can end with a period, but instead
-	//   almost all abbreviations have their own _PATTERNS which add an optional period at the end.
+}
 
-	const wchar_t* interjection[] = { L"aha",L"my",L"um",L"er",L"ah",L"eh",L"gosh",L"ouch",L"huh",L"aah",L"phoo",L"gee",L"heh",L"eek",L"ahem",L"whoa",L"lordy",L"begad",L"hmm",L"ssh",L"avast",
-													L"mm",L"mmm",L"hm",L"good-bye",L"h'm",L"o",L"no",L"yes",L"hush",L"aye",L"bravo",L"nay",L"ach",L"yea",L"yeah",
-							L"abudah",L"ahh",L"amen",L"ar",L"aw",L"burmah",L"cor",L"daaah",L"damn",L"doggone",L"ee",L"euch",L"farewell",L"femgliah",L"gah",
-							L"gees",L"glug",L"goddammit",L"goddamn",L"golly",L"hah",L"hallelujah",L"hey",L"hic",L"hooray",L"howdy",L"hoy",L"hum",L"hurrah",
-							L"jeez",L"mmmm",L"na",L"nah",L"nope",L"och",L"oi",L"oo",L"phew",L"pop",L"pow",L"siah",L"slam",L"ta",L"tara",L"uh",L"waaaaah",
-							L"wham",L"whee",L"whoop",L"whoosh",L"yep",L"yo",L"yuk",L"yup",L"shush",L"daah",L"dah",L"naaah",L"naw",L"nope",L"oy",
-							L"allo",L"ay",L"bah",L"ciao",L"cripes",L"eureka",L"forsooth",L"goodbye",L"hello",L"hiya",L"hullo",L"hurray",L"oh",
-							L"olah",L"ooh",L"oooh",L"pah",L"presto",L"shh",L"shucks",L"umm",L"ya",L"yuck",L"zounds",L"alas",L"ha",L"hurrah",L"hurray",
-							L"hoo",L"sorry",L"lord", // L"how" - removed because / Empire State of Mind: How Jay-Z Went from Street Corner to Corner Office 'How' matches __INTRO_N and prevents _RELQ
-							NULL };
-	predefineWords(interjection, L"interjection", L"inter", cSourceWordInfo::queryOnAnyAppearance, false);
-	const wchar_t* trademark[] = { L"benzadrine",NULL };
-	predefineWords(trademark, L"trademark", L"tm");
-	const wchar_t* symbol[] = { L"he",NULL };
-	predefineWords(symbol, L"symbol", L"sym");
+void cWord::createPronounCategories()
+{
 	Inflections pronoun[] = { {L"yonder",SINGULAR | PLURAL | NEUTER_GENDER},{L"there",SINGULAR | PLURAL | NEUTER_GENDER},
 		 {L"both",PLURAL | MALE_GENDER | FEMALE_GENDER | NEUTER_GENDER},
 		 {L"either",SINGULAR | MALE_GENDER | FEMALE_GENDER | NEUTER_GENDER},
@@ -1071,38 +1032,14 @@ int cWord::createWordCategories()
 	// 	who, whom, whose, which, that, what, whoever, whomever, whichever, whatever - ,L"wherever",L"whenever"
 	const wchar_t* interrogative_pronoun[] = { L"who",L"whom",L"what",L"which",L"whoever",L"whomever",L"whatever",L"whichever",NULL };
 	predefineWords(interrogative_pronoun, L"interrogative_pronoun", L"inter_pron");
+}
 
-	const wchar_t* preposition[] = { L"as",L"into",L"against",L"along",L"anigh",L"at",L"atop",L"between",L"betwixt",L"bout",
-		L"by",L"circa",L"concerning",L"considering",L"contra",L"cum",L"during",L"enduring",L"fae",L"for",L"forby",
-		L"fro",L"in",L"in-between",L"maugre",L"minus",L"next to",L"notwithstanding",L"of",L"de",L"on",L"outen",L"per",L"plus",L"qua",
-		L"sans",L"thorough",L"through",L"till",L"times",L"to",L"touching",L"underneath",L"unlike",L"until",L"upon",
-		L"via",L"without",
-		L"about",L"above",L"across",L"after",L"again",L"alongside",L"around",L"aside",L"aslant",L"astraddle",L"astride",
-		L"athwart",L"before",L"behind",L"below",L"beneath",L"beside",L"beyond",L"but",L"ere",L"except",L"fromward",
-		L"in between",L"nearby",L"o'er",L"or",L"since",L"than",L"throughout",L"toward",L"towards",
-		L"under",L"upward",L"within",
-		// these words must be specified as the dictionary lookup gets too many forms (>8)
-		L"ere",
-		NULL };
-	predefineWords(preposition, L"preposition", L"prep", cSourceWordInfo::queryOnAnyAppearance, false);
-	const wchar_t* verbalPreposition[] = { L"including",NULL };
-	predefineWords(verbalPreposition, L"verbalPreposition", L"vprep", cSourceWordInfo::queryOnAnyAppearance, false);
-	const wchar_t* preposition2[] = { L"with",NULL }; // this is also defined as an adverb and as a noun which are very rare usages
-	predefineWords(preposition2, L"preposition", L"prep", 0, false);
+void cWord::createVerbAssociatedCategories()
+{
 	Inflections negation_verb_contraction[] = { {L"daresn't",VERB_PRESENT_FIRST_SINGULAR},{L"dasn't",VERB_PRESENT_FIRST_SINGULAR},
 			{L"dunno",VERB_PRESENT_FIRST_SINGULAR},{NULL,0} };//{L"oughtn't",VERB_PRESENT_THIRD_SINGULAR},
 	//{L"didn't",VERB_PAST},{L"doesn't",VERB_PAST_THIRD_SINGULAR},{L"don't",VERB_PRESENT_FIRST_SINGULAR},{L"don't",VERB_PRESENT_PLURAL},NULL};
 	predefineWords(negation_verb_contraction, L"negation_verb_contraction", L"neg_vb_cont", L"verb");
-
-	const wchar_t* conjunction[] = { L"and",L"as if",L"but",L"however",L"if",L"lest",L"nor",L"or",L"than",L"unless",L"as",L"before",L"after",
-		L"cos",L"even",L"given",L"immediately",L"insofar",L"whereupon", // BNCC
-		L"an'", // short for 'and'
-		L"o'", // short for 'of'
-		L"whencesoever",L"whenever",L"whensoever",L"whereas",L"wheresoever",L"whiles",L"whilst",L"&",L"wherever", // "--" removed There may be a risk--if I've been followed.
-		// these words must be specified as the dictionary lookup gets too many forms (>8)
-		L"how",L"ere",
-		NULL };
-	predefineWords(conjunction, L"conjunction", L"conj", cSourceWordInfo::queryOnAnyAppearance, false);
 	const wchar_t* modal_auxiliary[] = { L"can",L"canst",L"could",L"couldst",L"may",L"mayst",L"might",L"must",L"should",L"shouldst",L"would",L"wouldst",L"wouldhad",L"ought",L"aught",NULL };
 	predefineWords(modal_auxiliary, L"modal_auxiliary", L"mod_aux", cSourceWordInfo::queryOnAnyAppearance, false);
 	const wchar_t* future_modal_auxiliary[] = { L"shall",L"will",L"wilt",L"shalt",NULL };
@@ -1112,79 +1049,6 @@ int cWord::createWordCategories()
 	predefineWords(negation_modal_auxiliary, L"negation_modal_auxiliary", L"neg_mod_aux");
 	const wchar_t* negation_future_modal_auxiliary[] = { L"won't",L"shan't",NULL }; // "will not",L"shall not",
 	predefineWords(negation_future_modal_auxiliary, L"negation_future_modal_auxiliary", L"neg_fut_mod_aux");
-
-	const wchar_t* numeral_cardinal[] = {
-		L"zero",L"naught",L"one",L"two",L"three",L"four",L"five",L"six",L"seven",L"eight",L"nine",L"ten",L"eleven",
-		L"ones",L"twos",L"threes",L"fours",L"fives",L"sixes",L"sevens",L"eights",L"nines",L"tens",L"elevens",
-		L"twelve",L"dozen",L"dozens",L"thirteen",L"fourteen",L"fifteen",L"sixteen",L"seventeen",L"eighteen",L"nineteen",L"umpteen",L"gross",
-		L"twenty",L"twenties",L"thirty",L"thirties",L"forty",L"forties",L"fifty",L"fifties",L"sixty",L"sixties",L"seventy",L"seventies",L"eighty",L"eighties",L"ninety",L"nineties",
-		L"hundred",L"hundreds",L"thousand",L"thousands",L"million",L"millions",L"billion",L"billions",L"trillion",L"trillions",NULL };
-	predefineWords(numeral_cardinal, L"numeral_cardinal", L"card");
-	predefineWords(roman_numeral, L"roman_numeral", L"roman");
-	const wchar_t* numeral_ordinal[] = { L"first",L"second",L"seconds",L"third",L"thirds",L"fourth",L"fourths",L"fifth",L"fifths",
-		L"sixth",L"sixths",L"seventh",L"sevenths",L"eighth",L"eighths",L"ninth",L"ninths",L"tenth",L"tenths",
-		L"eleventh",L"elevenths",L"twelfth",L"twelveths",L"twelves",L"thirteenth",L"thirteenths",L"fourteenth",L"fourteenths",L"fifteenth",L"fifteenths",
-		L"sixteenth",L"sixteenths",L"seventeenth",L"seventeenths",L"eighteenth",L"eighteenths",L"nineteenth",L"nineteenths",
-		L"twentieth",L"twentieths",L"thirtieth",L"thirtieths",L"fortieth",L"fortieths",L"fiftieth",L"fiftieths",L"sixtieth",L"sixtieths",L"seventieth",L"seventieths",L"eightieth",L"eightieths",
-		L"ninetieth",L"nintieths",L"hundredth",L"hundredths",L"thousandth",L"thousandths",L"millionth",L"millionths",L"billionth",L"billionths",L"trillionth",L"trillionths",
-		L"1st",L"2nd",L"3rd",L"4th",L"5th",L"6th",L"7th",L"8th",L"9th",L"10th",
-		L"11th",L"12th",L"13th",L"14th",L"15th",L"16th",L"17th",L"18th",L"19th",L"20th",
-		L"21st",L"22nd",L"23rd",L"24th",L"25th",L"26th",L"27th",L"28th",L"29th",L"30th",
-		L"31st",L"32nd",L"33rd",L"34th",L"35th",L"36th",L"37th",L"38th",L"39th",L"40th",
-		L"first",L"last",L"next",L"umpteenth",L"nth",NULL }; // BNC
-	predefineWords(numeral_ordinal, L"numeral_ordinal", L"ord");
-	const wchar_t* inserts[] = { L"ouch",L"right-o",L"good-bye",NULL }; // chapter 14 LGSWE
-	predefineWords(inserts, L"inserts", L"ins");
-	const wchar_t* politeness_discourse_marker[] = { L"please",L"pray",NULL }; // chapter 14 LGSWE // "thank you" removed (decreased matches)
-	predefineWords(politeness_discourse_marker, L"politeness_discourse_marker", L"pi", cSourceWordInfo::queryOnAnyAppearance, false);
-	const wchar_t* predeterminer[] = { L"all",L"half",L"double",L"both",L"once",L"twice",L"thrice",L"such",NULL };
-	predefineWords(predeterminer, L"predeterminer", L"predeterminer", cSourceWordInfo::queryOnAnyAppearance, false);
-	const wchar_t* sNoQuery[] = { L"and",L"you",L"p.o.",L"!",L"?",NULL };
-	for (const wchar_t** s = sNoQuery; *s; s++) predefineWord(*s);
-	const wchar_t* specials[] = { L"ex",L"there",L"to",L"only",L"but",L"also",L"thank",L"box",L"which",L"what",L"whose",L"how",L"both",L"van",L"von",NULL };
-	for (const wchar_t** s = specials; *s; s++) predefineWord(*s, cSourceWordInfo::queryOnAnyAppearance);
-	// not is registered as a (noun, adjective, adverb and preposition, but it is very rarely anything but an adverb)
-	// never is an adverb
-	// no is an adverb, adjective or noun (very rare)
-	const wchar_t* specials3[] = { L"not",L"no",L"never",L"p",L"m",L"le",L"de",L"f",L"c",L"k",L"o",NULL };  //p is the British abbreviation for pence
-	for (const wchar_t** s = specials3; *s; s++) predefineWord(*s, 0);
-
-	// of late, he is not there. // _PP only takes nouns as objects.
-	InflectionsRoot noun[] = { {L"desk",SINGULAR,L"desk"},{L"desks",PLURAL,L"desk"},{L"eardrop",SINGULAR,L"eardrop"},{L"eardrops",PLURAL,L"eardrop"},
-											{L"as",SINGULAR,L"as"},{L"art",SINGULAR,L"art"},{L"arts",PLURAL,L"art"},
-											{L"to-day",SINGULAR,L"to-day"},{L"to-morrow",SINGULAR,L"to-morrow"},{L"to-night",SINGULAR,L"to-night"},
-											{L"hanger-on",SINGULAR,L"hanger-on"},{L"hangers-on",PLURAL,L"hanger-on"},{L"man-of-war",SINGULAR,L"man-of-war"},
-											{L"in-law",SINGULAR,L"in-law"},{L"in-laws",PLURAL,L"in-law"},
-											{L"jack-of-all-trades",SINGULAR,L"jack-of-all-trades"},
-											{L"late",SINGULAR,L"late"},{L"time",SINGULAR,L"time"},{L"times",PLURAL,L"time"},{L"for ever",SINGULAR,L"for ever"},
-											{L"veronal",SINGULAR,L"veronal"},{L"lookout",SINGULAR,L"lookout"},{L"o'clock",SINGULAR,L"o'clock"},
-		// these words must be specified as the dictionary lookup gets too many forms (>8)
-		{L"air",SINGULAR,L"air"},{L"airs",PLURAL,L"air"},
-		{L"bit",SINGULAR,L"bit"},{L"bits",PLURAL,L"bit"},
-		{L"ear",SINGULAR,L"ear"},{L"ears",PLURAL,L"ear"},
-		{L"fat",SINGULAR,L"fat"},{L"fats",PLURAL,L"fat"},
-		{L"but",SINGULAR,L"but"},{L"buts",PLURAL,L"but"},
-		{L"how",SINGULAR,L"how"},{L"hows",PLURAL,L"how"},
-		{L"what",SINGULAR,L"what"},{L"whats",PLURAL,L"what"},
-													{L"whereabouts",SINGULAR,L"whereabouts"},
-		{NULL,0} };
-	predefineWords(noun, L"noun", L"n", L"noun", cSourceWordInfo::queryOnAnyAppearance);
-	InflectionsRoot adjective[] = { {L"little",ADJECTIVE_NORMATIVE,L"little"},{L"littler",ADJECTIVE_COMPARATIVE,L"little"},
-											{L"littlest",ADJECTIVE_SUPERLATIVE,L"little"},{L"just",ADJECTIVE_NORMATIVE,L"just"},
-											{L"yonder",ADJECTIVE_NORMATIVE,L"yonder"},{L"thorough",ADJECTIVE_NORMATIVE,L"thorough"},
-											{L"would-be",ADJECTIVE_NORMATIVE,L"would-be"},{L"towards",ADJECTIVE_NORMATIVE,L"towards"},
-											{L"art",ADJECTIVE_NORMATIVE,L"art"},{L"slicked-back",ADJECTIVE_NORMATIVE,L"slicked-back"},
-											{L"bad",ADJECTIVE_NORMATIVE,L"bad"},{L"worse",ADJECTIVE_COMPARATIVE,L"bad"},{L"worst",ADJECTIVE_SUPERLATIVE,L"bad"},
-											{L"good",ADJECTIVE_NORMATIVE,L"good"},{L"better",ADJECTIVE_COMPARATIVE,L"good"},{L"best",ADJECTIVE_SUPERLATIVE,L"good"},
-											{L"state-of-the-art",ADJECTIVE_NORMATIVE,L"state-of-the-art"},
-											{L"op-ed",ADJECTIVE_NORMATIVE,L"op-ed"},
-		// these words must be specified as the dictionary lookup gets too many forms (>8)
-		{L"fat",ADJECTIVE_NORMATIVE,L"fat"},
-		{L"what",ADJECTIVE_NORMATIVE,L"what"},
-		{L"but",ADJECTIVE_NORMATIVE,L"but"},
-		{L"next",ADJECTIVE_NORMATIVE,L"next"},
-		{NULL,0} };
-	predefineWords(adjective, L"adjective", L"adj", L"adjective", cSourceWordInfo::queryOnAnyAppearance);
 	InflectionsRoot verb[] = {
 							{L"showed",VERB_PAST,L"show"},{L"shown",VERB_PAST_PARTICIPLE,L"show"},{L"showing",VERB_PRESENT_PARTICIPLE,L"show"},
 							{L"shows",VERB_PRESENT_THIRD_SINGULAR,L"show"},{L"show",VERB_PRESENT_FIRST_SINGULAR,L"show"},
@@ -1215,26 +1079,6 @@ int cWord::createWordCategories()
 							{L"wot",VERB_PRESENT_FIRST_SINGULAR,L"wot"},
 							{NULL,0} };
 	predefineWords(verb, L"verb", L"v", L"verb", cSourceWordInfo::queryOnAnyAppearance);
-	InflectionsRoot adverb[] = {
-				{L"as",ADVERB_NORMATIVE,L"as"},{L"there",ADVERB_NORMATIVE,L"there"},{L"little",ADVERB_NORMATIVE,L"little"},
-				{L"just",ADVERB_NORMATIVE,L"just"},{L"rather",ADVERB_NORMATIVE,L"rather"},{L"ruther",ADVERB_NORMATIVE,L"ruther"},
-				{L"yonder",ADVERB_NORMATIVE,L"yonder"},{L"for ever",ADVERB_NORMATIVE,L"for ever"},{L"however",ADVERB_NORMATIVE,L"however"},
-				{L"bad",ADVERB_NORMATIVE,L"bad"},{L"worse",ADVERB_COMPARATIVE,L"bad"},{L"worst",ADVERB_SUPERLATIVE,L"bad"},
-				{L"good",ADVERB_NORMATIVE,L"good"},{L"better",ADVERB_COMPARATIVE,L"good"},{L"best",ADVERB_SUPERLATIVE,L"good"},
-				{L"even",ADVERB_NORMATIVE,L"even"},{L"grimly",ADVERB_NORMATIVE,L"grim"}, // not in m-w!
-				{L"backwards",ADVERB_NORMATIVE,L"backward"}, // not in m-w!
-				{L"afterwards",ADVERB_NORMATIVE,L"afterward"}, // not in m-w!
-				// these words must be specified as the dictionary lookup gets too many forms (>8)
-				{L"what",ADVERB_NORMATIVE,L"what"},
-				{L"but",ADVERB_NORMATIVE,L"but"},
-				{L"how",ADVERB_NORMATIVE,L"how"},
-				{L"ere",ADVERB_NORMATIVE,L"ere"},
-				{L"worldwide",ADVERB_NORMATIVE,L"worldwide"},
-				{NULL,0} };
-	predefineWords(adverb, L"adverb", L"adv", L"adverb", cSourceWordInfo::queryOnAnyAppearance);
-	InflectionsRoot adverb2[] = { {L"this",ADVERB_NORMATIVE,L"this"},{L"that",ADVERB_NORMATIVE,L"that"},{L"next",ADVERB_NORMATIVE,L"next"},{L"first",ADVERB_NORMATIVE,L"first"},{NULL,0} };
-	predefineWords(adverb2, L"adverb", L"adv", L"adverb");  // do not allow discovery of this or that because they are also m-w pronouns and adjectives, which are
-																										// already included in the patterns as determiners
 	InflectionsRoot is[] = {
 							{L"am",VERB_PRESENT_FIRST_SINGULAR,L"am"}, // this must be first (mainEntry without queryOnAppearance)
 							{L"is",VERB_PRESENT_THIRD_SINGULAR,L"am"},{L"ishas",VERB_PRESENT_THIRD_SINGULAR,L"ishas"},
@@ -1291,50 +1135,6 @@ int cWord::createWordCategories()
 							//,{L"did not",VERB_PAST},{L"does not",VERB_PRESENT_THIRD_SINGULAR},{L"do not",VERB_PRESENT_FIRST_SINGULAR},
 							{NULL,0} };
 	predefineWords(does_negation, L"does_negation", L"does_neg", L"verb");
-	// introduces relative clauses
-		// relative pronouns - who, which, whose, whom
-		// relative adverbs - when, where, why
-
-		// Subject and object pronouns cannot be distinguished by their forms - who, which are used for subject and object pronouns.
-		//   You can, however, distinguish them as follows:
-		//   If the relative pronoun is followed by a verb, the relative pronoun is a subject pronoun. Subject pronouns must always be used.
-		//     the apple which is lying on the table
-		//   If the relative pronoun is not followed by a verb (but by a noun or pronoun), the relative pronoun is an object pronoun. Object pronouns can be dropped in defining relative clauses, which are then called Contact Clauses.
-		//     the apple (which) George lay on the table
-	// who, whom, whose, which, that, what, whoever, whoever, whomever, whichever, whatever
-	const wchar_t* relativizer[] = { L"who",L"which",L"whom",L"whose", // "that" removed - doesn't necessarily fit with all the other relativizers - doesn't necessarily start a question
-																															// whose shoes? which shoes? NOT 'that shoe'
-														L"where",L"when",L"why",L"whence",L"whereabouts",L"whereby",L"whereat",L"whensoever",L"wherefore",L"whereon",L"whereto",L"wherewith",
-														L"what",L"how",L"ow",L"whither",
-												 NULL }; // BNCC
-	predefineWords(relativizer, L"relativizer", L"rel");
-	// eliminated complementizer 12/14/2006 - what has too many forms and complementizer and startquestion are somewhat redundant
-	// replaced complementizer with interrogative_determiner
-	//wchar_t *complementizer[] = {L"whoever",L"whichever",L"whomever",L"whereever",L"whenever",L"what",NULL};
-	//predefineWords(complementizer,L"complementizer",L"comp");
-	// eliminated startquestion - replaced with relativizer 12/14/2006
-	//wchar_t *startquestion[] = {L"who",L"which",L"whom",L"whose",L"where",L"when",L"why",L"what",L"how",L"wherein",L"whereof",L"whither",L"whereabouts",NULL};
-	//predefineWords(startquestion,L"startquestion",L"sq");
-	// help run him out of town!
-	// help define the status.
-	// dare run three miles!
-	// rather run two miles.
-	// go steal it, if you want.
-	// come show me the house.
-	const wchar_t* verbal_auxiliary[] = { L"rather",L"ruther",L"dare",L"dares",L"help",L"helps",L"go",L"come",L"need",L"needs",NULL };
-	predefineWords(verbal_auxiliary, L"verbal_auxiliary", L"vb_aux", cSourceWordInfo::queryOnAnyAppearance, false);
-	const wchar_t* past_verbal_auxiliary[] = { L"dared",L"helped",L"needed",NULL };
-	predefineWords(past_verbal_auxiliary, L"past_verbal_auxiliary", L"past_vb_aux", cSourceWordInfo::queryOnAnyAppearance, false);
-	const wchar_t* sectionheader[] = { L"book",L"chapter",L"part",L"prologue",L"epilogue",L"volume",NULL };
-	predefineWords(sectionheader, L"sectionheader", L"sh", cSourceWordInfo::queryOnAnyAppearance, false);
-	// defined by Daniel Webster
-	const wchar_t* servicemark[] = { L"automat",L"bake-off",L"college board",L"laundromat",L"planned parenthood",L"soap box derby",L"comsat",L"grammy",L"rolfing",L"super bowl",NULL };
-	predefineWords(servicemark, L"service mark", L"sm");
-	predefineVerbsFromFile(L"SYNTAX:Accepts S as Object", L"SYN:S as O", L"source\\lists\\thinksayVerbs.txt", 0);
-	predefineVerbsFromFile(L"istate", L"istate", L"source\\lists\\internalStateVerbs.txt", 0);
-	const wchar_t* coordinator[] = { L"and",L"or",L"nor",L"an'",L"plus",NULL };  // He and I / David and Jane, etc. ('but' removed) 2/2/2007
-	predefineWords(coordinator, L"coordinator", L"coord");
-	// you need not define the parameters for me. 2/5/2007
 	InflectionsRoot verbverb[] = {
 		{L"dare",VERB_PRESENT_FIRST_SINGULAR,L"dare"},{L"dared",VERB_PAST,L"dare"},{L"daring",VERB_PRESENT_PARTICIPLE,L"dare"},{L"dares",VERB_PRESENT_THIRD_SINGULAR,L"dare"},
 		{L"rather",VERB_PRESENT_FIRST_SINGULAR,L"rather"},{L"rathered",VERB_PAST,L"rather"},{L"ruther",VERB_PAST,L"rather"},{L"rathering",VERB_PRESENT_PARTICIPLE,L"rather"},{L"rathers",VERB_PRESENT_THIRD_SINGULAR,L"rather"},
@@ -1354,9 +1154,51 @@ int cWord::createWordCategories()
 	 // {L"have",VERB_PRESENT_FIRST_SINGULAR,L"have"},{L"had",VERB_PAST,L"have"},{L"having",VERB_PRESENT_PARTICIPLE,L"have"},{L"has",VERB_PRESENT_THIRD_SINGULAR,L"have"},
 	 // {NULL,0}};
 	//predefineWords(verbverb2,L"verbverb",L"verbverb",L"verb");
-	const wchar_t* specials2[] = { L"if",L"then",L"more",L"than",L"so",L"number",L"of",L"as",L"like",NULL };
-	for (const wchar_t** s = specials2; *s; s++) predefineWord(*s, cSourceWordInfo::queryOnAnyAppearance);
+	// help run him out of town!
+	// help define the status.
+	// dare run three miles!
+	// rather run two miles.
+	// go steal it, if you want.
+	// come show me the house.
+	const wchar_t* verbal_auxiliary[] = { L"rather",L"ruther",L"dare",L"dares",L"help",L"helps",L"go",L"come",L"need",L"needs",NULL };
+	predefineWords(verbal_auxiliary, L"verbal_auxiliary", L"vb_aux", cSourceWordInfo::queryOnAnyAppearance, false);
+	const wchar_t* past_verbal_auxiliary[] = { L"dared",L"helped",L"needed",NULL };
+	predefineWords(past_verbal_auxiliary, L"past_verbal_auxiliary", L"past_vb_aux", cSourceWordInfo::queryOnAnyAppearance, false);
+	extern const wchar_t* stateVerbs[];
+	for (unsigned int I = 0; stateVerbs[I]; I++)
+		gquery(stateVerbs[I])->second.flags |= cSourceWordInfo::stateVerb;
+	extern const wchar_t* possibleStateVerbs[];
+	for (unsigned int I = 0; possibleStateVerbs[I]; I++)
+		gquery(possibleStateVerbs[I])->second.flags |= cSourceWordInfo::possibleStateVerb;
+	predefineVerbsFromFile(L"SYNTAX:Accepts S as Object", L"SYN:S as O", L"source\\lists\\thinksayVerbs.txt", 0);
+	predefineVerbsFromFile(L"istate", L"istate", L"source\\lists\\internalStateVerbs.txt", 0);
+	const wchar_t* particles[] = { L"apart", L"about", L"across", L"along", L"around", L"aside", L"away", L"back", L"by", L"down",
+												 L"forth", L"forward", L"home", L"in", L"off", L"on", L"out", L"over", L"past", L"round", L"through", L"under", L"up",NULL };
+	predefineWords(particles, L"particle", L"pa");
+}
 
+void cWord::createNounCategories()
+{
+	// of late, he is not there. // _PP only takes nouns as objects.
+	InflectionsRoot noun[] = { {L"desk",SINGULAR,L"desk"},{L"desks",PLURAL,L"desk"},{L"eardrop",SINGULAR,L"eardrop"},{L"eardrops",PLURAL,L"eardrop"},
+											{L"as",SINGULAR,L"as"},{L"art",SINGULAR,L"art"},{L"arts",PLURAL,L"art"},
+											{L"to-day",SINGULAR,L"to-day"},{L"to-morrow",SINGULAR,L"to-morrow"},{L"to-night",SINGULAR,L"to-night"},
+											{L"hanger-on",SINGULAR,L"hanger-on"},{L"hangers-on",PLURAL,L"hanger-on"},{L"man-of-war",SINGULAR,L"man-of-war"},
+											{L"in-law",SINGULAR,L"in-law"},{L"in-laws",PLURAL,L"in-law"},
+											{L"jack-of-all-trades",SINGULAR,L"jack-of-all-trades"},
+											{L"late",SINGULAR,L"late"},{L"time",SINGULAR,L"time"},{L"times",PLURAL,L"time"},{L"for ever",SINGULAR,L"for ever"},
+											{L"veronal",SINGULAR,L"veronal"},{L"lookout",SINGULAR,L"lookout"},{L"o'clock",SINGULAR,L"o'clock"},
+		// these words must be specified as the dictionary lookup gets too many forms (>8)
+		{L"air",SINGULAR,L"air"},{L"airs",PLURAL,L"air"},
+		{L"bit",SINGULAR,L"bit"},{L"bits",PLURAL,L"bit"},
+		{L"ear",SINGULAR,L"ear"},{L"ears",PLURAL,L"ear"},
+		{L"fat",SINGULAR,L"fat"},{L"fats",PLURAL,L"fat"},
+		{L"but",SINGULAR,L"but"},{L"buts",PLURAL,L"but"},
+		{L"how",SINGULAR,L"how"},{L"hows",PLURAL,L"how"},
+		{L"what",SINGULAR,L"what"},{L"whats",PLURAL,L"what"},
+													{L"whereabouts",SINGULAR,L"whereabouts"},
+		{NULL,0} };
+	predefineWords(noun, L"noun", L"n", L"noun", cSourceWordInfo::queryOnAnyAppearance);
 	commonProfessionForm = cForms::createForm(L"commonProfession", L"cp", true, L"noun", false);
 	moneyForm = cForms::createForm(L"money", L"m", true, L"noun", false);
 	webAddressForm = cForms::createForm(L"webAddress", L"wa", true, L"noun", false);
@@ -1383,18 +1225,89 @@ int cWord::createWordCategories()
 	addGenderedNouns(L"source\\lists\\pluralFemaleGender.txt", PLURAL | FEMALE_GENDER, nounForm);
 	addGenderedNouns(L"source\\lists\\singularMaleGender.txt", SINGULAR | MALE_GENDER, nounForm);
 	addGenderedNouns(L"source\\lists\\pluralMaleGender.txt", PLURAL | MALE_GENDER, nounForm);
-	extern const wchar_t* stateVerbs[];
-	for (unsigned int I = 0; stateVerbs[I]; I++)
-		gquery(stateVerbs[I])->second.flags |= cSourceWordInfo::stateVerb;
-	extern const wchar_t* possibleStateVerbs[];
-	for (unsigned int I = 0; possibleStateVerbs[I]; I++)
-		gquery(possibleStateVerbs[I])->second.flags |= cSourceWordInfo::possibleStateVerb;
 	const wchar_t* nameListPaths[] = {
 		L"source\\lists\\Names\\Names1990.csv",L"source\\lists\\Names\\Names1980.csv",L"source\\lists\\Names\\Names1970.csv",L"source\\lists\\Names\\Names1960.csv",L"source\\lists\\Names\\Names1950.csv",
 		L"source\\lists\\Names\\Names1940.csv",L"source\\lists\\Names\\Names1930.csv",L"source\\lists\\Names\\Names1920.csv",L"source\\lists\\Names\\Names1910.csv",L"source\\lists\\Names\\Names1900.csv",NULL
 	};
 	for (int nlp = 0; nameListPaths[nlp]; nlp++)
 		addProperNamesFile(nameListPaths[nlp]);
+}
+
+void cWord::createAdverbCategories()
+{
+	InflectionsRoot adverb[] = {
+				{L"as",ADVERB_NORMATIVE,L"as"},{L"there",ADVERB_NORMATIVE,L"there"},{L"little",ADVERB_NORMATIVE,L"little"},
+				{L"just",ADVERB_NORMATIVE,L"just"},{L"rather",ADVERB_NORMATIVE,L"rather"},{L"ruther",ADVERB_NORMATIVE,L"ruther"},
+				{L"yonder",ADVERB_NORMATIVE,L"yonder"},{L"for ever",ADVERB_NORMATIVE,L"for ever"},{L"however",ADVERB_NORMATIVE,L"however"},
+				{L"bad",ADVERB_NORMATIVE,L"bad"},{L"worse",ADVERB_COMPARATIVE,L"bad"},{L"worst",ADVERB_SUPERLATIVE,L"bad"},
+				{L"good",ADVERB_NORMATIVE,L"good"},{L"better",ADVERB_COMPARATIVE,L"good"},{L"best",ADVERB_SUPERLATIVE,L"good"},
+				{L"even",ADVERB_NORMATIVE,L"even"},{L"grimly",ADVERB_NORMATIVE,L"grim"}, // not in m-w!
+				{L"backwards",ADVERB_NORMATIVE,L"backward"}, // not in m-w!
+				{L"afterwards",ADVERB_NORMATIVE,L"afterward"}, // not in m-w!
+				// these words must be specified as the dictionary lookup gets too many forms (>8)
+				{L"what",ADVERB_NORMATIVE,L"what"},
+				{L"but",ADVERB_NORMATIVE,L"but"},
+				{L"how",ADVERB_NORMATIVE,L"how"},
+				{L"ere",ADVERB_NORMATIVE,L"ere"},
+				{L"worldwide",ADVERB_NORMATIVE,L"worldwide"},
+				{NULL,0} };
+	predefineWords(adverb, L"adverb", L"adv", L"adverb", cSourceWordInfo::queryOnAnyAppearance);
+	InflectionsRoot adverb2[] = { {L"this",ADVERB_NORMATIVE,L"this"},{L"that",ADVERB_NORMATIVE,L"that"},{L"next",ADVERB_NORMATIVE,L"next"},{L"first",ADVERB_NORMATIVE,L"first"},{NULL,0} };
+	predefineWords(adverb2, L"adverb", L"adv", L"adverb");  // do not allow discovery of this or that because they are also m-w pronouns and adjectives, which are
+																													// already included in the patterns as determiners
+}
+
+void cWord::createAdjectiveCategories()
+{
+	InflectionsRoot adjective[] = { {L"little",ADJECTIVE_NORMATIVE,L"little"},{L"littler",ADJECTIVE_COMPARATIVE,L"little"},
+											{L"littlest",ADJECTIVE_SUPERLATIVE,L"little"},{L"just",ADJECTIVE_NORMATIVE,L"just"},
+											{L"yonder",ADJECTIVE_NORMATIVE,L"yonder"},{L"thorough",ADJECTIVE_NORMATIVE,L"thorough"},
+											{L"would-be",ADJECTIVE_NORMATIVE,L"would-be"},{L"towards",ADJECTIVE_NORMATIVE,L"towards"},
+											{L"art",ADJECTIVE_NORMATIVE,L"art"},{L"slicked-back",ADJECTIVE_NORMATIVE,L"slicked-back"},
+											{L"bad",ADJECTIVE_NORMATIVE,L"bad"},{L"worse",ADJECTIVE_COMPARATIVE,L"bad"},{L"worst",ADJECTIVE_SUPERLATIVE,L"bad"},
+											{L"good",ADJECTIVE_NORMATIVE,L"good"},{L"better",ADJECTIVE_COMPARATIVE,L"good"},{L"best",ADJECTIVE_SUPERLATIVE,L"good"},
+											{L"state-of-the-art",ADJECTIVE_NORMATIVE,L"state-of-the-art"},
+											{L"op-ed",ADJECTIVE_NORMATIVE,L"op-ed"},
+		// these words must be specified as the dictionary lookup gets too many forms (>8)
+		{L"fat",ADJECTIVE_NORMATIVE,L"fat"},
+		{L"what",ADJECTIVE_NORMATIVE,L"what"},
+		{L"but",ADJECTIVE_NORMATIVE,L"but"},
+		{L"next",ADJECTIVE_NORMATIVE,L"next"},
+		{NULL,0} };
+	predefineWords(adjective, L"adjective", L"adj", L"adjective", cSourceWordInfo::queryOnAnyAppearance);
+}
+
+void cWord::createNumberCategories()
+{
+	const wchar_t* numeral_cardinal[] = {
+		L"zero",L"naught",L"one",L"two",L"three",L"four",L"five",L"six",L"seven",L"eight",L"nine",L"ten",L"eleven",
+		L"ones",L"twos",L"threes",L"fours",L"fives",L"sixes",L"sevens",L"eights",L"nines",L"tens",L"elevens",
+		L"twelve",L"dozen",L"dozens",L"thirteen",L"fourteen",L"fifteen",L"sixteen",L"seventeen",L"eighteen",L"nineteen",L"umpteen",L"gross",
+		L"twenty",L"twenties",L"thirty",L"thirties",L"forty",L"forties",L"fifty",L"fifties",L"sixty",L"sixties",L"seventy",L"seventies",L"eighty",L"eighties",L"ninety",L"nineties",
+		L"hundred",L"hundreds",L"thousand",L"thousands",L"million",L"millions",L"billion",L"billions",L"trillion",L"trillions",NULL };
+	predefineWords(numeral_cardinal, L"numeral_cardinal", L"card");
+	predefineWords(roman_numeral, L"roman_numeral", L"roman");
+	const wchar_t* numeral_ordinal[] = { L"first",L"second",L"seconds",L"third",L"thirds",L"fourth",L"fourths",L"fifth",L"fifths",
+		L"sixth",L"sixths",L"seventh",L"sevenths",L"eighth",L"eighths",L"ninth",L"ninths",L"tenth",L"tenths",
+		L"eleventh",L"elevenths",L"twelfth",L"twelveths",L"twelves",L"thirteenth",L"thirteenths",L"fourteenth",L"fourteenths",L"fifteenth",L"fifteenths",
+		L"sixteenth",L"sixteenths",L"seventeenth",L"seventeenths",L"eighteenth",L"eighteenths",L"nineteenth",L"nineteenths",
+		L"twentieth",L"twentieths",L"thirtieth",L"thirtieths",L"fortieth",L"fortieths",L"fiftieth",L"fiftieths",L"sixtieth",L"sixtieths",L"seventieth",L"seventieths",L"eightieth",L"eightieths",
+		L"ninetieth",L"nintieths",L"hundredth",L"hundredths",L"thousandth",L"thousandths",L"millionth",L"millionths",L"billionth",L"billionths",L"trillionth",L"trillionths",
+		L"1st",L"2nd",L"3rd",L"4th",L"5th",L"6th",L"7th",L"8th",L"9th",L"10th",
+		L"11th",L"12th",L"13th",L"14th",L"15th",L"16th",L"17th",L"18th",L"19th",L"20th",
+		L"21st",L"22nd",L"23rd",L"24th",L"25th",L"26th",L"27th",L"28th",L"29th",L"30th",
+		L"31st",L"32nd",L"33rd",L"34th",L"35th",L"36th",L"37th",L"38th",L"39th",L"40th",
+		L"first",L"last",L"next",L"umpteenth",L"nth",NULL }; // BNC
+	predefineWords(numeral_ordinal, L"numeral_ordinal", L"ord");
+}
+
+void cWord::createLetterCategory()
+{
+	const wchar_t* letter[] = { L"a",L"b",L"c",L"d",L"e",L"f",L"g",L"h",L"i",L"j",L"k",L"l",L"m",L"n",L"o",L"p",L"q",L"r",L"s",L"t",
+	L"u",L"v",L"w",L"x",L"y",L"z",NULL };
+	predefineWords(letter, L"letter", L"let");
+	if (letterForm < 0) letterForm = cForms::gFindForm(L"letter");
+	Forms[letterForm]->inflectionsClass = L"noun";
 	{
 		// The letters also should not be included as names (proper nouns)
 		wchar_t anyLetter[3];
@@ -1411,8 +1324,91 @@ int cWord::createWordCategories()
 			//lplog(L"removed Prop Noun from %c.",letter[0]);
 		}
 	}
+}
+
+void cWord::createNonLetterWordCategories()
+{
+	// add special section word
+	bool added;
+	addNewOrModify(NULL, wstring(L"|||"), cSourceWordInfo::topLevelSeparator, SECTION_FORM_NUM, 0, 0, L"", -1, added);
+	sectionWord = WMM.begin();
+	createHonorificWordCategories();
+	Inflections brackets[] = { {L"{",OPEN_INFLECTION},{L"}",CLOSE_INFLECTION},
+														{L"(",OPEN_INFLECTION},{L")",CLOSE_INFLECTION},
+														{L"<",OPEN_INFLECTION},{L">",CLOSE_INFLECTION},
+														{L"[",OPEN_INFLECTION},{L"]",CLOSE_INFLECTION},{NULL,0} };
+	predefineWords(brackets, L"brackets", L"brackets", L"brackets");
+	// "\"" is mapped to {L"“",OPEN_INFLECTION},{L"”",CLOSE_INFLECTION}
+	// "'" is mapped to {L"‘",OPEN_INFLECTION},{L"’",CLOSE_INFLECTION}
+	Inflections quotes[] = { {L"\"",0},{L"'",0},{L"`",OPEN_INFLECTION},
+													{L"‘",OPEN_INFLECTION},{L"’",CLOSE_INFLECTION},{L"“",OPEN_INFLECTION},{L"”",CLOSE_INFLECTION},{NULL,0} };
+	predefineWords(quotes, L"quotes", L"quotes", L"quotes");
+	const wchar_t* dash[] = { L"-",L"—",L"–",L"--",NULL };                          predefineWords(dash, L"dash", L"dash");
+	const wchar_t* punctuation[] = { L".",L"·",L"...",L";",L":",L"@",L"#",L"$",L"%",L"^",L"&",L"*",L"--",L"+",L"=",L"_",L"|",L"‚",L",",L"/",L"~",L"…",L"│",NULL };
+	for (const wchar_t** p = punctuation; *p; p++) predefineWord(*p);
+}
+
+void cWord::createPrepositionCategories()
+{
+	const wchar_t* preposition[] = { L"as",L"into",L"against",L"along",L"anigh",L"at",L"atop",L"between",L"betwixt",L"bout",
+		L"by",L"circa",L"concerning",L"considering",L"contra",L"cum",L"during",L"enduring",L"fae",L"for",L"forby",
+		L"fro",L"in",L"in-between",L"maugre",L"minus",L"next to",L"notwithstanding",L"of",L"de",L"on",L"outen",L"per",L"plus",L"qua",
+		L"sans",L"thorough",L"through",L"till",L"times",L"to",L"touching",L"underneath",L"unlike",L"until",L"upon",
+		L"via",L"without",
+		L"about",L"above",L"across",L"after",L"again",L"alongside",L"around",L"aside",L"aslant",L"astraddle",L"astride",
+		L"athwart",L"before",L"behind",L"below",L"beneath",L"beside",L"beyond",L"but",L"ere",L"except",L"fromward",
+		L"in between",L"nearby",L"o'er",L"or",L"since",L"than",L"throughout",L"toward",L"towards",
+		L"under",L"upward",L"within",
+		// these words must be specified as the dictionary lookup gets too many forms (>8)
+		L"ere",
+		NULL };
+	predefineWords(preposition, L"preposition", L"prep", cSourceWordInfo::queryOnAnyAppearance, false);
+	const wchar_t* verbalPreposition[] = { L"including",NULL };
+	predefineWords(verbalPreposition, L"verbalPreposition", L"vprep", cSourceWordInfo::queryOnAnyAppearance, false);
+	const wchar_t* preposition2[] = { L"with",NULL }; // this is also defined as an adverb and as a noun which are very rare usages
+	predefineWords(preposition2, L"preposition", L"prep", 0, false);
+}
+
+void cWord::createInterjectionCategory()
+{
+	const wchar_t* interjection[] = { L"aha",L"my",L"um",L"er",L"ah",L"eh",L"gosh",L"ouch",L"huh",L"aah",L"phoo",L"gee",L"heh",L"eek",L"ahem",L"whoa",L"lordy",L"begad",L"hmm",L"ssh",L"avast",
+													L"mm",L"mmm",L"hm",L"good-bye",L"h'm",L"o",L"no",L"yes",L"hush",L"aye",L"bravo",L"nay",L"ach",L"yea",L"yeah",
+							L"abudah",L"ahh",L"amen",L"ar",L"aw",L"burmah",L"cor",L"daaah",L"damn",L"doggone",L"ee",L"euch",L"farewell",L"femgliah",L"gah",
+							L"gees",L"glug",L"goddammit",L"goddamn",L"golly",L"hah",L"hallelujah",L"hey",L"hic",L"hooray",L"howdy",L"hoy",L"hum",L"hurrah",
+							L"jeez",L"mmmm",L"na",L"nah",L"nope",L"och",L"oi",L"oo",L"phew",L"pop",L"pow",L"siah",L"slam",L"ta",L"tara",L"uh",L"waaaaah",
+							L"wham",L"whee",L"whoop",L"whoosh",L"yep",L"yo",L"yuk",L"yup",L"shush",L"daah",L"dah",L"naaah",L"naw",L"nope",L"oy",
+							L"allo",L"ay",L"bah",L"ciao",L"cripes",L"eureka",L"forsooth",L"goodbye",L"hello",L"hiya",L"hullo",L"hurray",L"oh",
+							L"olah",L"ooh",L"oooh",L"pah",L"presto",L"shh",L"shucks",L"umm",L"ya",L"yuck",L"zounds",L"alas",L"ha",L"hurrah",L"hurray",
+							L"hoo",L"sorry",L"lord", // L"how" - removed because / Empire State of Mind: How Jay-Z Went from Street Corner to Corner Office 'How' matches __INTRO_N and prevents _RELQ
+							NULL };
+	predefineWords(interjection, L"interjection", L"inter", cSourceWordInfo::queryOnAnyAppearance, false);
+}
+
+void cWord::createRelativizerCategory()
+{
+	// introduces relative clauses
+		// relative pronouns - who, which, whose, whom
+		// relative adverbs - when, where, why
+
+		// Subject and object pronouns cannot be distinguished by their forms - who, which are used for subject and object pronouns.
+		//   You can, however, distinguish them as follows:
+		//   If the relative pronoun is followed by a verb, the relative pronoun is a subject pronoun. Subject pronouns must always be used.
+		//     the apple which is lying on the table
+		//   If the relative pronoun is not followed by a verb (but by a noun or pronoun), the relative pronoun is an object pronoun. Object pronouns can be dropped in defining relative clauses, which are then called Contact Clauses.
+		//     the apple (which) George lay on the table
+	// who, whom, whose, which, that, what, whoever, whoever, whomever, whichever, whatever
+	const wchar_t* relativizer[] = { L"who",L"which",L"whom",L"whose", // "that" removed - doesn't necessarily fit with all the other relativizers - doesn't necessarily start a question
+																															// whose shoes? which shoes? NOT 'that shoe'
+														L"where",L"when",L"why",L"whence",L"whereabouts",L"whereby",L"whereat",L"whensoever",L"wherefore",L"whereon",L"whereto",L"wherewith",
+														L"what",L"how",L"ow",L"whither",
+												 NULL }; // BNCC
+	predefineWords(relativizer, L"relativizer", L"rel");
+}
+
+void cWord::defineDashedPrefixes()
+{
 	// a list of words that tend to be prefixes used with dashes.  Dashes are separated out into separate words, so we want these words to stand alone.
-	// these are statistically significant words judged from the BNC
+		// these are statistically significant words judged from the BNC
 	InflectionsRoot dashed_prefixes[] = {
 		{L"neo",ADVERB_NORMATIVE,L"neo"},{L"full",ADVERB_NORMATIVE,L"full"},{L"off",ADVERB_NORMATIVE,L"off"},{L"light",ADVERB_NORMATIVE,L"light"},{L"ultra",ADVERB_NORMATIVE,L"ultra"},
 		{L"micro",ADVERB_NORMATIVE,L"micro"},{L"sun",ADVERB_NORMATIVE,L"sun"},{L"pseudo",ADVERB_NORMATIVE,L"pseudo"},{L"white",ADVERB_NORMATIVE,L"white"},{L"hard",ADVERB_NORMATIVE,L"hard"},
@@ -1424,19 +1420,85 @@ int cWord::createWordCategories()
 		{L"re",ADVERB_NORMATIVE,L"re"},{L"anti",ADVERB_NORMATIVE,L"anti"},{L"non",ADVERB_NORMATIVE,L"non"},{NULL,0} };
 	predefineWords(dashed_prefixes, L"adverb", L"adv", L"adverb", cSourceWordInfo::queryOnAnyAppearance);
 	predefineWords(dashed_prefixes, L"adjective", L"adj", L"adjective", cSourceWordInfo::queryOnAnyAppearance);
-	predefineHolidays();
+}
 
-	const wchar_t* particles[] = { L"apart", L"about", L"across", L"along", L"around", L"aside", L"away", L"back", L"by", L"down",
-												 L"forth", L"forward", L"home", L"in", L"off", L"on", L"out", L"over", L"past", L"round", L"through", L"under", L"up",NULL };
-	predefineWords(particles, L"particle", L"pa");
+// eliminated complementizer 12/14/2006 - what has too many forms and complementizer and startquestion are somewhat redundant
+// replaced complementizer with interrogative_determiner
+//wchar_t *complementizer[] = {L"whoever",L"whichever",L"whomever",L"whereever",L"whenever",L"what",NULL};
+//predefineWords(complementizer,L"complementizer",L"comp");
+// eliminated startquestion - replaced with relativizer 12/14/2006
+//wchar_t *startquestion[] = {L"who",L"which",L"whom",L"whose",L"where",L"when",L"why",L"what",L"how",L"wherein",L"whereof",L"whither",L"whereabouts",NULL};
+//predefineWords(startquestion,L"startquestion",L"sq");
+int cWord::createWordCategories()
+{
+	LFS
+		changedWords = true;
+	inCreateDictionaryPhase = true;
+	cForms::createForm(UNDEFINED_FORM, UNDEFINED_SHORT_FORM, false, L"", false);
+	cForms::createForm(SECTION_FORM, SECTION_SHORT_FORM, true, L"", false);
+	cForms::createForm(COMBINATION_FORM, COMBINATION_SHORT_FORM, true, L"", false);
+	cForms::createForm(PROPER_NOUN_FORM, PROPER_NOUN_SHORT_FORM, false, L"noun", false);
+	cForms::createForm(NUMBER_FORM, NUMBER_SHORT_FORM, false, L"", false);
 	PPN = predefineWord(L"__ppn__"); // personal proper noun used for relations with pronouns or gendered proper nouns.
 	TELENUM = predefineWord(L"__telenum__"); // personal proper noun used for relations with pronouns or gendered proper nouns.
 	NUM = predefineWord(L"__num__"); // number used for relations
 	DATE = predefineWord(L"__date__"); // date used for relations.
 	TIME = predefineWord(L"__time__"); // time used for relations.
 	LOCATION = predefineWord(L"__location__"); // location used for relations.
-	const wchar_t* specials4[] = { L"b",L"his",L"her",L"or",L"eg",L"e.g.",L"the",L"less",L"once",L"twice",NULL };  //b is billion
-	for (const wchar_t** s = specials4; *s; s++) predefineWord(*s, 0);
+	createNonLetterWordCategories();
+	createLetterCategory();
+	createAbbreviationWordCategories();
+	createPronounCategories();
+	createPrepositionCategories();
+	createNumberCategories();
+	createNounCategories();
+	createAdjectiveCategories();
+	createVerbAssociatedCategories();
+	createAdverbCategories();
+	createInterjectionCategory();
+	createRelativizerCategory();
+	defineDashedPrefixes();
+	const wchar_t* trademark[] = { L"benzadrine",NULL };
+	predefineWords(trademark, L"trademark", L"tm");
+	const wchar_t* symbol[] = { L"he",NULL };
+	predefineWords(symbol, L"symbol", L"sym");
+	const wchar_t* conjunction[] = { L"and",L"as if",L"but",L"however",L"if",L"lest",L"nor",L"or",L"than",L"unless",L"as",L"before",L"after",
+		L"cos",L"even",L"given",L"immediately",L"insofar",L"whereupon", // BNCC
+		L"an'", // short for 'and'
+		L"o'", // short for 'of'
+		L"whencesoever",L"whenever",L"whensoever",L"whereas",L"wheresoever",L"whiles",L"whilst",L"&",L"wherever", // "--" removed There may be a risk--if I've been followed.
+		// these words must be specified as the dictionary lookup gets too many forms (>8)
+		L"how",L"ere",
+		NULL };
+	predefineWords(conjunction, L"conjunction", L"conj", cSourceWordInfo::queryOnAnyAppearance, false);
+	const wchar_t* inserts[] = { L"ouch",L"right-o",L"good-bye",NULL }; // chapter 14 LGSWE
+	predefineWords(inserts, L"inserts", L"ins");
+	const wchar_t* politeness_discourse_marker[] = { L"please",L"pray",NULL }; // chapter 14 LGSWE // "thank you" removed (decreased matches)
+	predefineWords(politeness_discourse_marker, L"politeness_discourse_marker", L"pi", cSourceWordInfo::queryOnAnyAppearance, false);
+	const wchar_t* predeterminer[] = { L"all",L"half",L"double",L"both",L"once",L"twice",L"thrice",L"such",NULL };
+	predefineWords(predeterminer, L"predeterminer", L"predeterminer", cSourceWordInfo::queryOnAnyAppearance, false);
+	const wchar_t* sNoQuery[] = { L"and",L"you",L"p.o.",L"!",L"?",NULL };
+	for (const wchar_t** s = sNoQuery; *s; s++) predefineWord(*s);
+	const wchar_t* sectionheader[] = { L"book",L"chapter",L"part",L"prologue",L"epilogue",L"volume",NULL };
+	predefineWords(sectionheader, L"sectionheader", L"sh", cSourceWordInfo::queryOnAnyAppearance, false);
+	// defined by Daniel Webster
+	const wchar_t* servicemark[] = { L"automat",L"bake-off",L"college board",L"laundromat",L"planned parenthood",L"soap box derby",L"comsat",L"grammy",L"rolfing",L"super bowl",NULL };
+	predefineWords(servicemark, L"service mark", L"sm");
+	const wchar_t* coordinator[] = { L"and",L"or",L"nor",L"an'",L"plus",NULL };  // He and I / David and Jane, etc. ('but' removed) 2/2/2007
+	predefineWords(coordinator, L"coordinator", L"coord");
+	predefineHolidays();
+	const wchar_t* specials[] = { L"ex",L"there",L"to",L"only",L"but",L"also",L"thank",L"box",L"which",L"what",L"whose",L"how",L"both",L"van",L"von",NULL };
+	for (const wchar_t** s = specials; *s; s++) predefineWord(*s, cSourceWordInfo::queryOnAnyAppearance);
+	const wchar_t* specials2[] = { L"if",L"then",L"more",L"than",L"so",L"number",L"of",L"as",L"like",NULL };
+	for (const wchar_t** s = specials2; *s; s++) predefineWord(*s, cSourceWordInfo::queryOnAnyAppearance);
+	// you need not define the parameters for me. 2/5/2007
+	// not is registered as a (noun, adjective, adverb and preposition, but it is very rarely anything but an adverb)
+	// never is an adverb
+	// no is an adverb, adjective or noun (very rare)
+	// p is the British abbreviation for pence
+	// b is billion
+	const wchar_t* specials3[] = { L"not",L"no",L"never",L"p",L"m",L"le",L"de",L"f",L"c",L"k",L"o",L"b",L"his",L"her",L"or",L"eg",L"e.g.",L"the",L"less",L"once",L"twice",NULL };  
+	for (const wchar_t** s = specials3; *s; s++) predefineWord(*s, 0);
 	// these are words which result in too many forms (>8), have been defined fully and should not be overwritten by caches.
 	const wchar_t* seal[] = { L"air",L"bit",L"but",L"how",L"what",NULL };
 	for (unsigned int I = 0; seal[I]; I++)
