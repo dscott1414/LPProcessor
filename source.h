@@ -1641,6 +1641,13 @@ public:
 	bool parseNecessary(wchar_t *path);
 	int readSourceBuffer(wstring title, wstring etext, wstring path, wstring encoding, wstring &start, int &repeatStart);
 	int parseBuffer(wstring &path,unsigned int &unknownCount);
+	void parsePattern(unordered_map <wstring, wstring> &parseVariables, const wstring lastMetaCommandEmbeddedInSource, wstring& sWord, int& nounOwner);
+	void processDash(wstring& sWord, bool& firstLetterCapitalized, const int result);
+	bool processEndSentence(const wstring path, bool endSentence, size_t& lastSentenceEnd, tIWMM iWord, const wstring sWord, int& lastProgressPercent, int& runOnSentences, bool& multipleEnds, bool & alreadyAtEnd);
+	void webScrapeFields(size_t& lastSentenceEnd);
+	void adjustFormsInflections(tIWMM iWord, wstring sWord, unsigned __int64& flags, int nounOwner, int lastSentenceEnd, bool allCaps,
+		bool firstLetterCapitalized, bool flagAlphaBeforeHint, bool flagAlphaAfterHint, bool flagNewLineBeforeHint, bool & previousIsProperNoun);
+	bool addSpecialWord(int result, const wstring sWord, tIWMM& iWord);
 	int tokenize(wstring title, wstring etext, wstring path, wstring encoding, wstring &start, int &repeatStart, unsigned int &unknownCount);
 	bool write(IOHANDLE file);
 	int sanityCheck(int &wordIndex);
@@ -1754,6 +1761,18 @@ public:
 			embeddedSpeakerGroups.clear();
 			observers.clear();
 			groups.clear(); // subgroups of speakers grouped syntactically
+		}
+		void clearTemp(int end)
+		{
+			speakers.clear();
+			groupedSpeakers.clear();
+			singularSpeakers.clear();
+			povSpeakers.clear();
+			metaNameOthers.clear();
+			sgBegin = end;
+			sgEnd = end;
+			groups.clear();
+			conversationalQuotes = 0;
 		}
 		void removeSpeaker(int s)
 		{
@@ -2034,6 +2053,12 @@ public:
 	void determineSpeakerRemoval(int where);
 	void eliminateSpuriousHailSpeakers(int begin,int end,cSpeakerGroup &sg,bool speakerGroupCrossesSectionBoundary);
 	int detectUnresolvableObjectsResolvableThroughSpeakerGroup(void);
+	int determineIfSpeakerMoved(int begin, int end, bool endOfSection);
+	void insertPreviousUnquotedSpeakers(int begin, int end);
+	void mergeTempSpeakerGroupWithLastSG(int begin, int end, int& speakersNotMergable, int& onlyHailSpeakers, vector <cSpeakerGroup>::iterator lastSG, int resolvableByFutureSpeaker, bool speakerGroupCrossesSectionBoundary);
+	bool mergeTempSpeakerGroupWithLastSG2(int begin, int end, vector <cSpeakerGroup>::iterator lastSG, int resolvableByFutureSpeaker, bool speakerGroupCrossesSectionBoundary);
+	void extendLastSGToEndOfSection(int begin, int end, vector <cSpeakerGroup>::iterator lastSG, int resolvableByFutureSpeaker, int& lastSpeakerGroupOfPreviousSection, bool speakerGroupCrossesSectionBoundary, bool endOfSection);
+	void pushTemporarySpeakerGroupAndErase(int begin, int end, bool endOfSection, int& lastSpeakerGroupOfPreviousSection);
 	bool createSpeakerGroup(int begin,int end,bool endOfSection,int &lastSpeakerGroup);
 	bool anyAcceptableLocations(int where,int object);
 	int atBefore(int object,int where);
@@ -2060,9 +2085,8 @@ public:
 	void accumulateGroups(int where,vector <int> &groupedObjects,int &lastWhereMPluralGroupedObject);
 	bool sameSpeaker(int sWhere1,int sWhere2);
 	vector <int> subNarratives;
-	void embeddedStory(int where,int &numPastSinceLastQuote,int &numNonPastSinceLastQuote,int &numSecondInQuote,
-int &numFirstInQuote,
-													 int &lastEmbeddedStory,int &lastEmbeddedImposedSpeakerPosition,int lastSpeakerPosition);
+	void embeddedStory(int where,int &numPastSinceLastQuote,int &numNonPastSinceLastQuote,int &numSecondInQuote,int &numFirstInQuote,
+										 int &lastEmbeddedStory,int &lastEmbeddedImposedSpeakerPosition,int lastSpeakerPosition);
 	void adjustHailRoleDuringScan(int where);
 	void adjustToHailRole(int where);
 	void syntacticRelations();
@@ -2100,6 +2124,20 @@ int &numFirstInQuote,
 		int prepObjectSubType,int objectSubType,bool establishingLocation,bool futureLocation,bool genderedLocationRelation,cTimeFlowTense &tft);
 	void srSetTimeFlowTense(int spri);
 	bool isRelativeLocation(wstring word);
+	void setRelationTypeAndTimeFlow(int where, int whereSubject, vector <cSyntacticRelationGroup>::iterator location, int relationType);
+	bool changeEnterToMoveIfPhysicallyPresent(int where, int relationType, int whereVerb, int whereSubject);
+	bool determineSubjectGendered(int whereSubject, int whereVerb);
+	bool determineControllerGendered(int whereControllingEntity);
+	bool determineObjectIsAcceptable(int whereObject, int relationType, int o, int objectSubType);
+	int setPrepSubType(const int po, const int wherePrepObject, int& relObject, int& relPrep, bool &prepTypeCancelled);
+	bool defineGenderedLocationRelation(const int o, const int po, const int whereControllingEntity, int &whereSubject, const int whereVerb, const int whereObject, const int relationType, const int objectSubType,
+		const bool prepObjectIsAcceptable, const bool objectIsAcceptable, const bool prepTypeCancelled, const bool convertToMove);
+	void lookForwardToUpdateTimeInfo(int where, vector <cSyntacticRelationGroup>::iterator location);
+	void insertOrUpdateNewSpeakerGroup(int where, int whereSubject, cSyntacticRelationGroup& sr, bool convertToMove, const wchar_t* whereType);
+	void determineAcceptabilityAndSubTypes(const int whereSubject, const int whereVerb, const int relationType,
+		int& o, int& objectSubType, const int whereObject, bool& objectIsAcceptable,
+		int& po, int& prepObjectSubType, int& wherePrepObject, bool& prepObjectIsAcceptable,
+		int& wherePrep);
 	void newSR(int where,int o,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int at,int whereMovingRelativeTo,int relationType,const wchar_t *whereType,bool physicalRelation);
 	void logSyntacticRelationGroup(cSyntacticRelationGroup &sr, const wchar_t *whereType);
 	bool moveIdentifiedSubject(int where,bool inPrimaryQuote,int whereControllingEntity,int whereSubject,int whereVerb,int wherePrep,int whereObject,int at,int whereMovingRelativeTo,int hasSyntacticRelationGroup,const wchar_t *whereType,bool physicalRelation);
@@ -2131,10 +2169,8 @@ int &numFirstInQuote,
 	void evaluateMetaWhereQuery(int where,bool inPrimaryQuote,int &currentMetaWhereQuery);
 	void identifyHailObjects(int where, int o, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool inPrimaryQuote, bool inSecondaryQuote);
 	void processEndOfSentence(int where, int &lastBeginS1, int &lastRelativePhrase, int &lastCommand, int &lastSentenceEnd, int &uqPreviousToLastSentenceEnd, int &uqLastSentenceEnd,
-		int &questionSpeakerLastSentence, int &questionSpeaker, bool &currentIsQuestion,
-		bool inPrimaryQuote, bool inSecondaryQuote, bool &endOfSentence, bool &transitionSinceEOS,
-		unsigned int &agingStructuresSeen, bool quotesSeenSinceLastSentence,
-		vector <int> &lastSubjects, vector <int> &previousLastSubjects);
+		int &questionSpeakerLastSentence, int &questionSpeaker, bool &currentIsQuestion, bool inPrimaryQuote, bool inSecondaryQuote, bool &endOfSentence, bool &transitionSinceEOS,
+		unsigned int &agingStructuresSeen, bool quotesSeenSinceLastSentence, vector <int> &lastSubjects, vector <int> &previousLastSubjects);
 	void processEndOfPrimaryQuote(int where, int lastSentenceEndBeforeAndNotIncludingCurrentQuote,
 		int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, int &lastSpeakerPosition, int &lastQuotedString, int &quotedObjectCounter,
 		bool &inPrimaryQuote, bool &immediatelyAfterEndOfParagraph, bool &firstQuotedSentenceOfSpeakerGroupNotSeen, bool &quotesSeenSinceLastSentence,
@@ -2546,7 +2582,7 @@ int &numFirstInQuote,
 	wstring objectString(cOM om,wstring &logres,bool shortNameFormat,bool objectOwnerRecursionFlag=false);
 	wstring wordString(vector <tIWMM> &words,wstring &logres);
 	const wchar_t *getOriginalWord(int I, wstring &out, bool concat, bool mostCommon = false);
-	bool analyzeEnd(wstring &path, int begin, int end, bool &multipleEnds);
+	bool analyzeEnd(const wstring path, int begin, int end, bool &multipleEnds);
 	void writeWords(wstring oPath, wstring specialExtension);
 	int scanForPatternTag(int where, int tag);
 	int scanForPatternElementTag(int where, int tag);

@@ -1179,7 +1179,7 @@ bool checkIsolated(const wchar_t* word, vector <cWordMatch>& m, int I)
 // or THE END all in caps, on one line, alone
 // or FOOTNOTES all in caps, on one line, alone
 // or INDEX all in caps, on one line, alone
-bool cSource::analyzeEnd(wstring& path, int begin, int end, bool& multipleEnds)
+bool cSource::analyzeEnd(const wstring path, int begin, int end, bool& multipleEnds)
 {
 	LFS
 		int w = 0;

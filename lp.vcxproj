@@ -226,7 +226,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|x64'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);F:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-66cb08c\src\api;F:\lp\source\tinyxml2-master;C:\Program Files\Java\jdk1.8.0_181\include\win32;C:\Program Files\Java\jdk1.8.0_181\include</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64;F:\lp\source\\yajl\Release;F:\lp\tempMySQL;F:\lp\source\Releasex64;C:\Program Files\Java\jdk1.8.0_181\lib;F:\lp\source\RerunSingleSourcex64;F:\lp\source\yajl\RerunSingleSource</LibraryPath>
-    <EnableMicrosoftCodeAnalysis>false</EnableMicrosoftCodeAnalysis>
+    <EnableMicrosoftCodeAnalysis>true</EnableMicrosoftCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='test|x64'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);F:\Program Files\MySQL\MySQL Server 8.0\include;F:\Program Files (x86)\WordNet\2.1\src\include;F:\lp\source\lloyd-yajl-66cb08c\src\api;F:\lp\source\tinyxml2-master;C:\Program Files\Java\jdk1.8.0_181\include\win32;C:\Program Files\Java\jdk1.8.0_181\include</IncludePath>
@@ -603,7 +603,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RerunSingleSource|x64'">
     <ClCompile>
-      <Optimization>MaxSpeed</Optimization>
+      <Optimization>Disabled</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <OmitFramePointers>true</OmitFramePointers>

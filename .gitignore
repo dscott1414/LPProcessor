@@ -44,3 +44,4 @@ processGutenbergRDFtoSQL/obj/x64/Release/processGutenbergRDFtoSQL.csproj.FileLis
 CodeGraphData
 *.recipe
 *.FileListAbsolute.txt
+*.sarif

@@ -656,89 +656,57 @@ void cSource::correctSRIEntry(cSyntacticRelationGroup& srg)
 	//phraseString(srg.printMin,srg.printMax,tmpstr,true);
 }
 
-// will change source.m (invalidate all iterators)
-void cSource::newSR(int where, int _o, int whereControllingEntity, int whereSubject, int whereVerb, int wherePrep, int whereObject, int wherePrepObject, int whereMovingRelativeTo, int relationType, const wchar_t* whereType, bool physicalRelation)
+void cSource::setRelationTypeAndTimeFlow(int where, int whereSubject, vector <cSyntacticRelationGroup>::iterator location, int relationType)
 {
-	LFS
-		if (whereSubject >= 0 && m[whereSubject].queryWinnerForm(prepositionForm) >= 0 && m[whereSubject].queryWinnerForm(nounForm) < 0)
-		{
-			lplog(LOG_ERROR, L"%d:subject@%d is preposition!", where, whereSubject);
-			return;
-		}
-	if (wherePrepObject >= 0 && wherePrep == -1)
-		lplog(LOG_ERROR, L"%d:subject@%d wherePrepObject=%d but no prep!", where, whereSubject, wherePrepObject);
-
-	bool found = false, convertToStay = (relationType == stENTER && wherePrep >= 0 && m[wherePrep].word->first == L"to" && wherePrepObject >= 0 && (hasHyperNym(m[wherePrepObject].word->first, L"inaction", found, false) || found));
-	if (speakerGroupsEstablished && m[where].hasSyntacticRelationGroup && !convertToStay)
+	for (; location != syntacticRelationGroups.end() && location->where == where; location++)
 	{
-		cSyntacticRelationGroup sr(where, _o, whereControllingEntity, whereSubject, whereVerb, wherePrep, whereObject, wherePrepObject, whereMovingRelativeTo, relationType, false, false, -1, -1, physicalRelation);
-		vector <cSyntacticRelationGroup>::iterator location = lower_bound(syntacticRelationGroups.begin(), syntacticRelationGroups.end(), sr, comparesr), sl = location;
-		for (; location != syntacticRelationGroups.end() && location->where == where; location++)
+		if (location->relationType != relationType &&
+			location->relationType != stPREPTIME && location->relationType != stPREPDATE && location->relationType != stSUBJDAYOFMONTHTIME &&
+			location->relationType != stABSTIME && location->relationType != stABSDATE && location->relationType != stADVERBTIME &&
+			!whereSubType(whereSubject))
 		{
-			if (location->relationType != relationType &&
-				location->relationType != stPREPTIME && location->relationType != stPREPDATE && location->relationType != stSUBJDAYOFMONTHTIME &&
-				location->relationType != stABSTIME && location->relationType != stABSDATE && location->relationType != stADVERBTIME &&
-				!whereSubType(whereSubject))
-			{
-				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:relationType changed from %s to %s", where, getRelStr(location->relationType), getRelStr(relationType));
-				location->relationType = relationType;
-			}
-			srSetTimeFlowTense((int)(location - syntacticRelationGroups.begin()));
-		}
-		if (sl != syntacticRelationGroups.end() && physicalRelation && !sl->physicalRelation)
-			sl->physicalRelation = true;
-		if (sl != syntacticRelationGroups.end() && sl->where == where && !sl->tft.futureHappening && !sl->tft.pastHappening)
-		{
-			vector <cLocalFocus>::iterator lsi;
-			if (relationType == stENTER && !(m[whereVerb].objectRole & IN_PRIMARY_QUOTE_ROLE) && whereSubject >= 0)
-			{
-				int so = m[whereSubject].getObject();
-				if (m[whereSubject].objectMatches.size() >= 1)
-					so = m[whereSubject].objectMatches[0].object;
-				if (so >= 0 && (lsi = in(so)) != localObjects.end() && lsi->physicallyPresent && lsi->whereBecamePhysicallyPresent < where)
-				{
-					sl->relationType = stMOVE;
-					wstring tmpstr;
-					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d:Already PP object %s entering - changed to move", where, whereString(whereSubject, tmpstr, false).c_str());
-				}
-			}
-			return;
-		}
-	}
-	bool shouldLogSyntacticRelationGroup = false, genderedEntityMove = false, convertToMove = false;
-	wstring tmpstr, tmpstr2, tmpstr3, tmpstr4, tmpstr5, tmpstr6;
-	// came to a halt
-	if (convertToStay) relationType = stSTAY;
-	// convert enter to move, if the subject is already physically present.
-	if (speakerGroupsEstablished && !convertToStay && relationType == stENTER && whereSubject >= 0)
-	{
-		if (convertToMove = (m[whereSubject].word->second.inflectionFlags & FIRST_PERSON) == FIRST_PERSON)
-		{
-			relationType = stMOVE;
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:Already PP object %s entering - changed to move (2)", where, whereString(whereSubject, tmpstr, false).c_str());
+				lplog(LOG_RESOLUTION, L"%06d:relationType changed from %s to %s", where, getRelStr(location->relationType), getRelStr(relationType));
+			location->relationType = relationType;
 		}
-		else if (!(m[whereVerb].objectRole & IN_PRIMARY_QUOTE_ROLE))
+		srSetTimeFlowTense((int)(location - syntacticRelationGroups.begin()));
+	}
+}
+
+bool cSource::changeEnterToMoveIfPhysicallyPresent(int where,int relationType, int whereVerb, int whereSubject)
+{
+	if (relationType == stENTER && whereSubject >= 0)
+	{
+		wstring tmpstr;
+		if (!(m[whereVerb].objectRole & IN_PRIMARY_QUOTE_ROLE))
 		{
-			vector <cLocalFocus>::iterator lsi;
 			int so = m[whereSubject].getObject();
 			if (m[whereSubject].objectMatches.size() >= 1)
 				so = m[whereSubject].objectMatches[0].object;
-			if (convertToMove = so >= 0 && (lsi = in(so)) != localObjects.end() && lsi->physicallyPresent)
+			vector <cLocalFocus>::iterator lsi;
+			if (so >= 0 && (lsi = in(so)) != localObjects.end() && lsi->physicallyPresent && lsi->whereBecamePhysicallyPresent < where)
 			{
-				relationType = stMOVE;
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:Already PP object %s entering - changed to move (3)", where, whereString(whereSubject, tmpstr, false).c_str());
+					lplog(LOG_RESOLUTION, L"%06d:Already PP object %s entering - changed to move", where, whereString(whereSubject, tmpstr, false).c_str());
+				return true;
 			}
 		}
+		if ((m[whereSubject].word->second.inflectionFlags & FIRST_PERSON) == FIRST_PERSON)
+		{
+			if (debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%06d:Already PP object %s entering - changed to move (2)", where, whereString(whereSubject, tmpstr, false).c_str());
+			return true;
+		}
 	}
-	int so = -1, po = -1, o = -1, ce = -1;
+	return false;
+}
+
+bool cSource::determineSubjectGendered(int whereSubject, int whereVerb)
+{
 	bool subjectGendered = false;
 	if (whereSubject >= 0)
 	{
-		so = (m[whereSubject].objectMatches.size() == 1) ? m[whereSubject].objectMatches[0].object : m[whereSubject].getObject();
+		int so = (m[whereSubject].objectMatches.size() == 1) ? m[whereSubject].objectMatches[0].object : m[whereSubject].getObject();
 		subjectGendered = m[whereSubject].objectMatches.empty() && so >= 0 && (objects[so].male || objects[so].female);
 		for (int si = 0; si < (signed)m[whereSubject].objectMatches.size(); si++)
 			subjectGendered |= (objects[m[whereSubject].objectMatches[si].object].male || objects[m[whereSubject].objectMatches[si].object].female);
@@ -748,36 +716,26 @@ void cSource::newSR(int where, int _o, int whereControllingEntity, int whereSubj
 			(whereSubject >= 2 && m[whereSubject - 2].word->first == L"two" && m[whereSubject].word->first == L"three"))
 			subjectGendered = false;
 	}
-	else subjectGendered = (whereVerb >= 0 && m[whereVerb].objectRole & IN_PRIMARY_QUOTE_ROLE) != 0 && (m[whereVerb].verbSense & VT_TENSE_MASK) == VT_PRESENT && !(m[whereVerb].flags & cWordMatch::flagInInfinitivePhrase);
+	else 
+		subjectGendered = (whereVerb >= 0 && m[whereVerb].objectRole & IN_PRIMARY_QUOTE_ROLE) != 0 && (m[whereVerb].verbSense & VT_TENSE_MASK) == VT_PRESENT && !(m[whereVerb].flags & cWordMatch::flagInInfinitivePhrase);
+	return subjectGendered;
+}
+
+bool cSource::determineControllerGendered(int whereControllingEntity)
+{
 	bool controllerGendered = false;
 	if (whereControllingEntity >= 0)
 	{
-		ce = (m[whereControllingEntity].objectMatches.size() == 1) ? m[whereControllingEntity].objectMatches[0].object : m[whereControllingEntity].getObject();
+		int ce = (m[whereControllingEntity].objectMatches.size() == 1) ? m[whereControllingEntity].objectMatches[0].object : m[whereControllingEntity].getObject();
 		controllerGendered = m[whereControllingEntity].objectMatches.empty() && ce >= 0 && (objects[ce].male || objects[ce].female);
 		for (int si = 0; si < (signed)m[whereControllingEntity].objectMatches.size(); si++)
 			controllerGendered |= (objects[m[whereControllingEntity].objectMatches[si].object].male || objects[m[whereControllingEntity].objectMatches[si].object].female);
 	}
-	if (wherePrepObject >= 0) po = (m[wherePrepObject].objectMatches.size() == 1) ? m[wherePrepObject].objectMatches[0].object : m[wherePrepObject].getObject();
-	int prepObjectSubType = (po >= 0) ? objects[po].getSubType() : -1;
-	if (prepObjectSubType < 0 && po >= 0 && objects[po].isPossibleSubType(false)) prepObjectSubType = UNKNOWN_PLACE_SUBTYPE;
-	bool prepTypeCancelled;
-	int relPrep = -1, relObject = -1;
-	// filter out 'state of confusion' but keep 
-	// 'she ran to the door of No. 20.'
-	if (prepTypeCancelled = prepObjectSubType >= 0 && (relPrep = m[wherePrepObject].endObjectPosition) < (signed)m.size() && relPrep >= 0 &&
-		m[relPrep].word->first == L"of" && (relObject = m[relPrep].getRelObject()) >= 0 &&
-		(m[relObject].getObject() < 0 || (objects[m[relObject].getObject()].getSubType() < 0 && m[relObject].queryForm(NUMBER_FORM_NUM) < 0 && !isAgentObject(m[relObject].getObject()))))
-		prepObjectSubType = -1;
-	if (whereMovingRelativeTo < 0 && relObject >= 0 && m[relObject].getObject() >= 0 && (objects[m[relObject].getObject()].getSubType() >= 0 || m[relObject].queryForm(NUMBER_FORM_NUM) >= 0))
-		whereMovingRelativeTo = relObject;
-	if (whereObject >= 0) o = (m[whereObject].objectMatches.size() == 1) ? m[whereObject].objectMatches[0].object : m[whereObject].getObject();
-	int objectSubType = (o >= 0) ? objects[o].getSubType() : -1;
-	relPrep = relObject = -1;
-	if (objectSubType >= 0 && (relPrep = m[whereObject].endObjectPosition) >= 0 && m[relPrep].word->first == L"of" && (relObject = m[relPrep].getRelObject()) >= 0 &&
-		(m[relObject].getObject() < 0 || (objects[m[relObject].getObject()].getSubType() < 0 && m[relObject].queryForm(NUMBER_FORM_NUM) < 0 && !isAgentObject(m[relObject].getObject()))))
-		objectSubType = -1;
-	if (whereMovingRelativeTo < 0 && relObject >= 0 && m[relObject].getObject() >= 0 && (objects[m[relObject].getObject()].getSubType() >= 0 || m[relObject].queryForm(NUMBER_FORM_NUM) >= 0))
-		whereMovingRelativeTo = relObject;
+	return controllerGendered;
+}
+
+bool cSource::determineObjectIsAcceptable(int whereObject, int relationType, int o, int objectSubType)
+{
 	bool objectIsAcceptable = o >= 0 && (((objects[o].male || objects[o].female) &&
 		(m[whereObject].getObject() < 0 || objects[m[whereObject].getObject()].objectClass != BODY_OBJECT_CLASS) &&
 		objects[o].objectClass != BODY_OBJECT_CLASS) || objectSubType != -1);
@@ -787,14 +745,178 @@ void cSource::newSR(int where, int _o, int whereControllingEntity, int whereSubj
 	// She set foot in England
 	if (relationType == stMOVE && whereObject >= 0 && (m[whereObject].word->first == L"foot" && m[whereObject - 1].queryWinnerForm(determinerForm) == -1))
 		objectIsAcceptable = true;
-	//  ESTABDanvers was seen speaking to a young American girl[jane]
-	if (!objectIsAcceptable && o >= 0 && ((m[whereObject].word->second.timeFlags & T_UNIT) || (m[whereObject].word->second.inflectionFlags & VERB_PRESENT_PARTICIPLE)))
-		o = -1;
 	if (!objectIsAcceptable && o < 0 && whereObject >= 0 && adverbialPlace(whereObject))
 		objectIsAcceptable = true;
-	// the corner of the street
-	if (wherePrep >= 0 && po < 0 && whereMovingRelativeTo >= 0) po = m[whereMovingRelativeTo].getObject();
-	bool prepObjectIsAcceptable = po >= 0 && (((objects[po].male || objects[po].female) && objects[po].objectClass != BODY_OBJECT_CLASS) || prepObjectSubType != -1);
+	return objectIsAcceptable;
+}
+
+int cSource::setPrepSubType(const int po, const int wherePrepObject, int &relObject, int &relPrep, bool &prepTypeCancelled)
+{
+	int prepObjectSubType = (po >= 0) ? objects[po].getSubType() : -1;
+	if (prepObjectSubType < 0 && po >= 0 && objects[po].isPossibleSubType(false)) prepObjectSubType = UNKNOWN_PLACE_SUBTYPE;
+	relPrep = relObject = -1;
+	// filter out 'state of confusion' but keep 
+	// 'she ran to the door of No. 20.'
+	if (prepTypeCancelled = prepObjectSubType >= 0 && (relPrep = m[wherePrepObject].endObjectPosition) < (signed)m.size() && relPrep >= 0 &&
+		m[relPrep].word->first == L"of" && (relObject = m[relPrep].getRelObject()) >= 0 &&
+		(m[relObject].getObject() < 0 || (objects[m[relObject].getObject()].getSubType() < 0 && m[relObject].queryForm(NUMBER_FORM_NUM) < 0 && !isAgentObject(m[relObject].getObject()))))
+		prepObjectSubType = -1;
+	return prepObjectSubType;
+}
+
+bool cSource::defineGenderedLocationRelation(const int o, const int po, const int whereControllingEntity, int &whereSubject, const int whereVerb, const int whereObject, const int relationType, const int objectSubType,
+	const bool prepObjectIsAcceptable, const bool objectIsAcceptable, const bool prepTypeCancelled, const bool convertToMove)
+{
+	bool subjectGendered = determineSubjectGendered(whereSubject, whereVerb);
+	bool controllerGendered = determineControllerGendered(whereControllingEntity);
+	int vt = (whereVerb >= 0) ? m[whereVerb].verbSense : 0;
+	if (vt == VT_PAST && whereSubject < 0 && whereControllingEntity < 0 && whereVerb>0 && isEOS(whereVerb - 1) &&
+		(m[whereVerb].objectRole & IN_PRIMARY_QUOTE_ROLE) != 0 && (whereObject < 0 || m[whereObject].word->first != L"me"))
+	{
+		// do a quick scan through local objects, and see whether any are in the current quote, with a verb that is also in the past.
+		for (int I = whereVerb - 2; I >= 0 && m[I].queryForm(quoteForm) == -1; I--)
+			if (m[I].getObject() >= 0 && in(m[I].getObject()) != localObjects.end() &&
+				(m[I].objectRole & SUBJECT_ROLE) != 0 && m[I].getRelVerb() >= 0)
+			{
+				whereSubject = m[whereVerb].relSubject = I;
+				if (isAgentObject(m[I].getObject()))
+					subjectGendered = true;
+				break;
+			}
+		if (whereSubject < 0)
+			subjectGendered = true;
+	}
+	///////////////////////////
+	// or moving, special case (taking a taxi, set foot in England)
+	bool movingSpecialCase = o >= 0 &&
+		((objectSubType == MOVING && whereVerb >= 0 && isVerbClass(whereVerb, L"bring-11.3")) ||
+			(m[whereObject].word->first == L"foot" && m[whereObject - 1].queryWinnerForm(determinerForm) == -1));
+	movingSpecialCase |= (objectSubType >= 0 && objectSubType < UNKNOWN_PLACE_SUBTYPE);
+	// moved down the stairs / down may be misparsed as a particle
+	if (relationType == stMOVE && !prepObjectIsAcceptable && objectIsAcceptable && whereVerb >= 0 &&
+		(m[whereVerb + 1].word->second.flags & cSourceWordInfo::prepMoveType) && m[whereVerb + 1].queryWinnerForm(adverbForm) != -1)
+		movingSpecialCase = true;
+	int so = (whereSubject >= 0) ? ((m[whereSubject].objectMatches.size() == 1) ? m[whereSubject].objectMatches[0].object : m[whereSubject].getObject()) : -1;
+	bool there = (whereSubject >= 0 && m[whereSubject].word->first == L"there" && (m[whereSubject].objectRole & IN_PRIMARY_QUOTE_ROLE));
+	there |= (whereControllingEntity >= 0 && m[whereControllingEntity].word->first == L"there" && (m[whereControllingEntity].objectRole & IN_PRIMARY_QUOTE_ROLE));
+	bool negation = whereVerb >= 0 && (m[whereVerb].verbSense & VT_NEGATION) != 0;
+	negation |= whereVerb >= 0 && m[whereVerb].previousCompoundPartObject >= 0 && (m[m[whereVerb].previousCompoundPartObject].verbSense & VT_NEGATION) != 0; // trace back to main verb
+	bool genderedLocationRelation = whereVerb >= 0 &&
+		// state of confusion - objects of a subType that are negated by being 'of' an object which indicates they are not
+		!(prepTypeCancelled && !prepObjectIsAcceptable && !objectIsAcceptable) && // NOT of prepositional negation
+		// "there are seven of us at home"
+		!there &&
+		!negation &&
+		relationType != stTRANSFER &&
+		// moving an object is OK if the object being moved is a place (She took her place in the boat) or the subject (He moved himself over the water)
+		// or SECOND or FIRST person He moved you; They sent me
+		(relationType != stMOVE_OBJECT || objectSubType >= 0 || o == so || (po == so && o < 0) || (whereObject >= 0 && (m[whereObject].word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON)) ||
+			(o >= 0 && (objects[o].numIdentifiedAsSpeaker > 0 || objects[o].PISHail > 0 || objects[o].PISDefinite > 0)))) &&
+		// object must be physical
+	 //((relationType!=stMOVE_OBJECT && relationType!=stMOVE) || whereObject<0 || objectSubType>=0 || !((tmp1=m[whereObject].word->second.getMainEntry(m[whereObject].word)->second.flags)&cSourceWordInfo::notPhysicalObjectByWN)) && 
+	 // but 'not' He thrust his hands in his pockets
+		(relationType != stMOVE_OBJECT || whereObject < 0 || m[whereObject].getObject() < 0 || objects[m[whereObject].getObject()].objectClass != BODY_OBJECT_CLASS) &&
+		// gendered subject, controller
+		(subjectGendered || controllerGendered || (objectIsAcceptable && so >= 0 && objects[so].getSubType() >= 0)) &&
+		// gendered object or place object
+		((relationType != stMOVE && relationType != stESTABLISH && relationType != stSTAY && relationType != stLOCATION && relationType != -stLOCATION) || o < 0 || objectIsAcceptable) &&
+		// if contact, must be contacting something.  If ESTAB, must be somewhere
+		((relationType != stCONTACT && relationType != stNEAR && relationType != stESTABLISH) || objectIsAcceptable || prepObjectIsAcceptable) &&
+		// if moving, must be moving somewhere?
+		(relationType != stMOVE || prepObjectIsAcceptable || movingSpecialCase || convertToMove || (po < 0 && o < 0 && !(m[whereVerb].flags & cWordMatch::flagInInfinitivePhrase)));
+	return genderedLocationRelation;
+}
+
+void cSource::lookForwardToUpdateTimeInfo(int where,vector <cSyntacticRelationGroup>::iterator location)
+{
+	if (location->timeInfo.empty())
+	{
+		vector <cSyntacticRelationGroup>::iterator forward = location;
+		while (forward != syntacticRelationGroups.begin() && forward->where == where) forward--;
+		forward++;
+		while (forward != syntacticRelationGroups.end() && forward->where == where)
+		{
+			if (forward->timeInfo.size())
+			{
+				location->timeInfo = forward->timeInfo;
+				location->tft.timeTransition |= forward->tft.timeTransition;
+				break;
+			}
+			forward++;
+		}
+	}
+}
+
+void cSource::insertOrUpdateNewSpeakerGroup(int where, int whereSubject, cSyntacticRelationGroup &sr, bool convertToMove, const wchar_t* whereType)
+{
+	if (speakerGroupsEstablished)
+	{
+		vector <cSyntacticRelationGroup>::iterator location = lower_bound(syntacticRelationGroups.begin(), syntacticRelationGroups.end(), sr, comparesr), forward = location, firstLocation = location;
+		// there can be multiple space relations in one position - one for each object
+		while (forward != syntacticRelationGroups.end() && forward->where == where)
+		{
+			if (sr == *forward)
+			{
+				location = forward;
+				break;
+			}
+			forward++;
+		}
+		if (syntacticRelationGroups.empty() || location == syntacticRelationGroups.end() || sr != *location)
+		{
+			if (syntacticRelationGroups.empty())
+				location = syntacticRelationGroups.insert(syntacticRelationGroups.begin(), sr);
+			else if (location != syntacticRelationGroups.end() && sr.canUpdate(*location))
+			{
+				location->o = sr.o;
+				location->wherePrep = sr.wherePrep;
+				location->wherePrepObject = sr.wherePrepObject;
+				if (location->timeInfo.empty() && sr.timeInfo.size() > 0)
+				{
+					location->timeInfo = sr.timeInfo;
+					location->timeInfoSet = sr.timeInfoSet;
+				}
+			}
+			else
+				location = syntacticRelationGroups.insert(location, sr);
+			srSetTimeFlowTense((int)(location - syntacticRelationGroups.begin()));
+			lookForwardToUpdateTimeInfo(where, location);
+			if (convertToMove && (location->tft.futureHappening || location->tft.pastHappening || !location->tft.presentHappening))
+				location->relationType = stENTER;
+			if (whereSubject >= 0)
+			{
+				for (int si = 0; si < (signed)m[whereSubject].objectMatches.size(); si++)
+					objects[m[whereSubject].objectMatches[si].object].syntacticRelationGroups.push_back((int)(location - syntacticRelationGroups.begin()));
+				if (m[whereSubject].getObject() >= 0 && m[whereSubject].objectMatches.empty())
+					objects[m[whereSubject].getObject()].syntacticRelationGroups.push_back((int)(location - syntacticRelationGroups.begin()));
+			}
+		}
+		if (debugTrace.traceRelations)
+			logSyntacticRelationGroup(sr, whereType);
+	}
+	else
+	{
+		if (syntacticRelationGroups.empty() || syntacticRelationGroups[syntacticRelationGroups.size() - 1].where != where)
+		{
+			int insertionPoint = syntacticRelationGroups.size();
+			while (insertionPoint > 0 && syntacticRelationGroups[insertionPoint - 1].where > where) insertionPoint--;
+			syntacticRelationGroups.insert(syntacticRelationGroups.begin() + insertionPoint, sr);
+			srSetTimeFlowTense(insertionPoint);
+			if (convertToMove && (syntacticRelationGroups[insertionPoint].tft.futureHappening || syntacticRelationGroups[insertionPoint].tft.pastHappening))
+				syntacticRelationGroups[insertionPoint].relationType = stENTER;
+			if (debugTrace.traceRelations)
+				logSyntacticRelationGroup(sr, whereType);
+		}
+	}
+}
+
+void cSource::determineAcceptabilityAndSubTypes(const int whereSubject, const int whereVerb, const int relationType, 
+	int &o, int &objectSubType, const int whereObject, bool & objectIsAcceptable,
+	int &po, int &prepObjectSubType, int &wherePrepObject, bool & prepObjectIsAcceptable,
+	int &wherePrep)
+{
+	objectIsAcceptable = determineObjectIsAcceptable(whereObject, relationType, o, objectSubType);
+	prepObjectIsAcceptable = po >= 0 && (((objects[po].male || objects[po].female) && objects[po].objectClass != BODY_OBJECT_CLASS) || prepObjectSubType != -1);
 	if (whereObject >= 0 && whereVerb >= 0 && whereObject + 1 == m[whereVerb].relPrep &&
 		m[m[whereVerb].relPrep].getRelObject() >= 0 && m[m[m[whereVerb].relPrep].getRelObject()].getObject() >= 0)
 	{
@@ -810,6 +932,7 @@ void cSource::newSR(int where, int _o, int whereControllingEntity, int whereSubj
 			}
 		}
 	}
+	wstring tmpstr, tmpstr2, tmpstr3, tmpstr4, tmpstr5, tmpstr6;
 	if (wherePrepObject >= 0 && !prepObjectIsAcceptable && whereVerb >= 0)
 	{
 		bool timeUnit;
@@ -832,6 +955,71 @@ void cSource::newSR(int where, int _o, int whereControllingEntity, int whereSubj
 				(subjectAgentGendered) ? L"gendered" : L"nongendered", relationString(relationType).c_str());
 
 	}
+	//  ESTAB Danvers was seen speaking to a young American girl[jane]
+	if (!objectIsAcceptable && o >= 0 && ((m[whereObject].word->second.timeFlags & T_UNIT) || (m[whereObject].word->second.inflectionFlags & VERB_PRESENT_PARTICIPLE)))
+		o = -1;
+	// half-way across the Park
+	if (o >= 0 && objectSubType < 0 && prepObjectIsAcceptable && m[whereObject].word->first == L"way")
+		objectIsAcceptable = true;
+}
+
+// will change source.m (invalidate all iterators)
+void cSource::newSR(int where, int _o, int whereControllingEntity, int whereSubject, int whereVerb, int wherePrep, int whereObject, int wherePrepObject, int whereMovingRelativeTo, int relationType, const wchar_t* whereType, bool physicalRelation)
+{
+	LFS
+	if (whereSubject >= 0 && m[whereSubject].queryWinnerForm(prepositionForm) >= 0 && m[whereSubject].queryWinnerForm(nounForm) < 0)
+	{
+		lplog(LOG_ERROR, L"%d:subject@%d is preposition!", where, whereSubject);
+		return;
+	}
+	if (wherePrepObject >= 0 && wherePrep == -1)
+		lplog(LOG_ERROR, L"%d:subject@%d wherePrepObject=%d but no prep!", where, whereSubject, wherePrepObject);
+
+	bool found = false, convertToStay = (relationType == stENTER && wherePrep >= 0 && m[wherePrep].word->first == L"to" && wherePrepObject >= 0 && (hasHyperNym(m[wherePrepObject].word->first, L"inaction", found, false) || found));
+	// came to a halt
+	if (convertToStay) relationType = stSTAY;
+	// this position already has a syntactic relation group!  return after setting relation type, flow, physical relation and possible enter->move
+	if (speakerGroupsEstablished && !convertToStay && m[where].hasSyntacticRelationGroup)
+	{
+		cSyntacticRelationGroup sr(where, _o, whereControllingEntity, whereSubject, whereVerb, wherePrep, whereObject, wherePrepObject, whereMovingRelativeTo, relationType, false, false, -1, -1, physicalRelation);
+		vector <cSyntacticRelationGroup>::iterator location = lower_bound(syntacticRelationGroups.begin(), syntacticRelationGroups.end(), sr, comparesr), sl = location;
+		setRelationTypeAndTimeFlow(where, whereSubject, location, relationType);
+		if (sl != syntacticRelationGroups.end() && physicalRelation && !sl->physicalRelation)
+			sl->physicalRelation = true;
+		if (sl != syntacticRelationGroups.end() && sl->where == where && !sl->tft.futureHappening && !sl->tft.pastHappening)
+		{
+			if (changeEnterToMoveIfPhysicallyPresent(where, relationType, whereVerb, whereSubject))
+				sl->relationType = stMOVE;
+			return;
+		}
+	}
+	// convert enter to move, if the subject is already physically present.
+	bool convertToMove = false;
+	if (speakerGroupsEstablished && !convertToStay && whereSubject >= 0 && 
+		(convertToMove = changeEnterToMoveIfPhysicallyPresent(where, relationType, whereVerb, whereSubject)))
+		relationType = stMOVE;
+	int po = -1;
+	if (wherePrepObject >= 0)
+		po = (m[wherePrepObject].objectMatches.size() == 1) ? m[wherePrepObject].objectMatches[0].object : m[wherePrepObject].getObject();
+	int relObject, relPrep;
+	bool prepTypeCancelled = false;
+	int prepObjectSubType = setPrepSubType(po, wherePrepObject, relObject, relPrep, prepTypeCancelled);
+	if (whereMovingRelativeTo < 0 && relObject >= 0 && m[relObject].getObject() >= 0 && (objects[m[relObject].getObject()].getSubType() >= 0 || m[relObject].queryForm(NUMBER_FORM_NUM) >= 0))
+		whereMovingRelativeTo = relObject;
+	int o = -1;
+	if (whereObject >= 0) o = (m[whereObject].objectMatches.size() == 1) ? m[whereObject].objectMatches[0].object : m[whereObject].getObject();
+	int objectSubType = (o >= 0) ? objects[o].getSubType() : -1;
+	relPrep = relObject = -1;
+	if (objectSubType >= 0 && (relPrep = m[whereObject].endObjectPosition) >= 0 && m[relPrep].word->first == L"of" && (relObject = m[relPrep].getRelObject()) >= 0 &&
+		(m[relObject].getObject() < 0 || (objects[m[relObject].getObject()].getSubType() < 0 && m[relObject].queryForm(NUMBER_FORM_NUM) < 0 && !isAgentObject(m[relObject].getObject()))))
+		objectSubType = -1;
+	if (whereMovingRelativeTo < 0 && relObject >= 0 && m[relObject].getObject() >= 0 && (objects[m[relObject].getObject()].getSubType() >= 0 || m[relObject].queryForm(NUMBER_FORM_NUM) >= 0))
+		whereMovingRelativeTo = relObject;
+	// the corner of the street
+	if (wherePrep >= 0 && po < 0 && whereMovingRelativeTo >= 0) 
+		po = m[whereMovingRelativeTo].getObject();
+	bool objectIsAcceptable, prepObjectIsAcceptable;
+	determineAcceptabilityAndSubTypes(whereSubject, whereVerb, relationType, o, objectSubType, whereObject, objectIsAcceptable, po, prepObjectSubType, wherePrepObject, prepObjectIsAcceptable, wherePrep);
 	// ESTABUshered into the presence of Mr . Carter , he[carter] and I[tommy] wish each other good morning as is customary
 	// post L&L resolution on multiple compound subjects
 	if (whereSubject > whereVerb && m[whereSubject].nextCompoundPartObject >= 0 && (whereObject >= 0 || wherePrepObject >= 0))
@@ -841,164 +1029,23 @@ void cSource::newSR(int where, int _o, int whereControllingEntity, int whereSubj
 		else if (wherePrepObject >= 0 && in(m[wherePrepObject].getObject(), whereSubject))
 			whereSubject = m[whereSubject].nextCompoundPartObject;
 	}
-	// half-way across the Park
-	if (o >= 0 && objectSubType < 0 && prepObjectIsAcceptable && m[whereObject].word->first == L"way")
-		objectIsAcceptable = true;
-	bool ofNegation = (prepTypeCancelled && !prepObjectIsAcceptable && !objectIsAcceptable);
-	//	vector <cLocalFocus>::iterator lsi;
-	bool negation = whereVerb >= 0 && (m[whereVerb].verbSense & VT_NEGATION) != 0;
-	negation |= whereVerb >= 0 && m[whereVerb].previousCompoundPartObject >= 0 && (m[m[whereVerb].previousCompoundPartObject].verbSense & VT_NEGATION) != 0; // trace back to main verb
-	//bool alreadyTaken=whereVerb>=0 && m[whereVerb].hasSyntacticRelationGroup;
-	bool there = (whereSubject >= 0 && m[whereSubject].word->first == L"there" && (m[whereSubject].objectRole & IN_PRIMARY_QUOTE_ROLE));
-	there |= (whereControllingEntity >= 0 && m[whereControllingEntity].word->first == L"there" && (m[whereControllingEntity].objectRole & IN_PRIMARY_QUOTE_ROLE));
 	// where his[tommy] CONTACTcolleague[tuppence] would meet him[tommy] at ten o'clock . 
 	if (whereVerb >= 0 && (m[whereVerb].verbSense & VT_POSSIBLE) && whereVerb > 0 && m[whereVerb - 1].word->first == L"would")
 	{
 		m[whereVerb].verbSense &= ~VT_POSSIBLE;
 		m[whereVerb].verbSense |= VT_FUTURE;
 	}
-	int vt = (whereVerb >= 0) ? m[whereVerb].verbSense : 0;
-	if (vt == VT_PAST && whereSubject < 0 && whereControllingEntity < 0 && whereVerb>0 && isEOS(whereVerb - 1) &&
-		(m[whereVerb].objectRole & IN_PRIMARY_QUOTE_ROLE) != 0 && (whereObject < 0 || m[whereObject].word->first != L"me"))
-	{
-		// do a quick scan through local objects, and see whether any are in the current quote, with a verb that is also in the past.
-		for (int I = whereVerb - 2; I >= 0 && m[I].queryForm(quoteForm) == -1; I--)
-			if (m[I].getObject() >= 0 && in(m[I].getObject()) != localObjects.end() &&
-				(m[I].objectRole & SUBJECT_ROLE) != 0 && m[I].getRelVerb() >= 0)
-			{
-				whereSubject = m[whereVerb].relSubject = I;
-				if (isAgentObject(m[I].getObject())) subjectGendered = true;
-				break;
-			}
-		if (whereSubject < 0)
-			subjectGendered = true;
-	}
-	// VT_POSSIBLE cancellation
-	// we wouldhad better take a taxi / but NOT I wouldhad rather take a taxi
-	if ((vt & VT_POSSIBLE) && whereVerb > 1 && m[whereVerb - 1].word->first == L"better" && m[whereVerb - 2].word->first == L"wouldhad")
-		vt &= ~VT_POSSIBLE;
-	// or moving, special case (taking a taxi, set foot in England)
-	bool movingSpecialCase = o >= 0 &&
-		((objectSubType == MOVING && whereVerb >= 0 && isVerbClass(whereVerb, L"bring-11.3")) ||
-			(m[whereObject].word->first == L"foot" && m[whereObject - 1].queryWinnerForm(determinerForm) == -1));
-	movingSpecialCase |= (objectSubType >= 0 && objectSubType < UNKNOWN_PLACE_SUBTYPE);
-	// moved down the stairs / down may be misparsed as a particle
-	if (relationType == stMOVE && !prepObjectIsAcceptable && objectIsAcceptable && whereVerb >= 0 &&
-		(m[whereVerb + 1].word->second.flags & cSourceWordInfo::prepMoveType) && m[whereVerb + 1].queryWinnerForm(adverbForm) != -1)
-		movingSpecialCase = true;
-	bool genderedLocationRelation = whereVerb >= 0 &&
-		// state of confusion - objects of a subType that are negated by being 'of' an object which indicates they are not
-		!ofNegation &&
-		// "there are seven of us at home"
-		!there &&
-		!negation &&
-		relationType != stTRANSFER &&
-		// moving an object is OK if the object being moved is a place (She took her place in the boat) or the subject (He moved himself over the water)
-		// or SECOND or FIRST person He moved you; They sent me
-		(relationType != stMOVE_OBJECT || objectSubType >= 0 || o == so || (po == so && o < 0) || (whereObject >= 0 && (m[whereObject].word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON)) ||
-			(o >= 0 && (objects[o].numIdentifiedAsSpeaker > 0 || objects[o].PISHail > 0 || objects[o].PISDefinite > 0)))) &&
-		// object must be physical
-	 //((relationType!=stMOVE_OBJECT && relationType!=stMOVE) || whereObject<0 || objectSubType>=0 || !((tmp1=m[whereObject].word->second.getMainEntry(m[whereObject].word)->second.flags)&cSourceWordInfo::notPhysicalObjectByWN)) && 
-	 // but 'not' He thrust his hands in his pockets
-		(relationType != stMOVE_OBJECT || whereObject < 0 || m[whereObject].getObject() < 0 || objects[m[whereObject].getObject()].objectClass != BODY_OBJECT_CLASS) &&
-		// gendered subject, controller
-		(subjectGendered || controllerGendered || (objectIsAcceptable && so >= 0 && objects[so].getSubType() >= 0)) &&
-		// gendered object or place object
-		((relationType != stMOVE && relationType != stESTABLISH && relationType != stSTAY && relationType != stLOCATION && relationType != -stLOCATION) || o < 0 || objectIsAcceptable) &&
-		// if contact, must be contacting something.  If ESTAB, must be somewhere
-		((relationType != stCONTACT && relationType != stNEAR && relationType != stESTABLISH) || objectIsAcceptable || prepObjectIsAcceptable) &&
-		// if moving, must be moving somewhere?
-		(relationType != stMOVE || prepObjectIsAcceptable || movingSpecialCase || convertToMove || (po < 0 && o < 0 && !(m[whereVerb].flags & cWordMatch::flagInInfinitivePhrase)));
+	bool genderedLocationRelation = defineGenderedLocationRelation(o, po, whereControllingEntity, whereSubject, whereVerb, whereObject, relationType, objectSubType,
+		prepObjectIsAcceptable, objectIsAcceptable, prepTypeCancelled,	convertToMove);
 	// if entering, must be the first time this is locally mentioned.
 	// if contact, if both object and subject are already mentioned, this is not a significant movement (it doesn't add any information), unless a location is specific
 	//((relationType!=stENTER && relationType!=stCONTACT) || (lsi=in(m[whereSubject].getObject()))==localObjects.end() || lsi->previousWhere<0 || lsi->previousWhere>=where || prepObjectSubType>=0);
-	if (speakerGroupsEstablished)
-	{
-		cSyntacticRelationGroup sr(where, _o, whereControllingEntity, whereSubject, whereVerb, wherePrep, whereObject, wherePrepObject, whereMovingRelativeTo, relationType, genderedEntityMove, genderedLocationRelation, objectSubType, prepObjectSubType, physicalRelation);
-		if (debugTrace.traceRelations)
-			logSyntacticRelationGroup(sr, L"BEFORE CORRECTION");
-		correctSRIEntry(sr);
-		vector <cSyntacticRelationGroup>::iterator location = lower_bound(syntacticRelationGroups.begin(), syntacticRelationGroups.end(), sr, comparesr), forward = location, firstLocation = location;
-		// there can be multiple space relations in one position - one for each object
-		while (forward != syntacticRelationGroups.end() && forward->where == where)
-		{
-			if (sr == *forward)
-			{
-				location = forward;
-				break;
-			}
-			forward++;
-		}
-		if (syntacticRelationGroups.empty() || location == syntacticRelationGroups.end() || (shouldLogSyntacticRelationGroup = sr != *location))
-		{
-			if (syntacticRelationGroups.empty())
-				location = syntacticRelationGroups.insert(syntacticRelationGroups.begin(), sr);
-			else if (location != syntacticRelationGroups.end() && sr.canUpdate(*location))
-			{
-				location->o = sr.o;
-				location->wherePrep = sr.wherePrep;
-				location->wherePrepObject = sr.wherePrepObject;
-				if (location->timeInfo.empty() && sr.timeInfo.size() > 0)
-				{
-					location->timeInfo = sr.timeInfo;
-					location->timeInfoSet = sr.timeInfoSet;
-				}
-			}
-			else
-				location = syntacticRelationGroups.insert(location, sr);
-			srSetTimeFlowTense((int)(location - syntacticRelationGroups.begin()));
-			if (location->timeInfo.empty())
-			{
-				forward = location;
-				while (forward != syntacticRelationGroups.begin() && forward->where == where) forward--;
-				forward++;
-				while (forward != syntacticRelationGroups.end() && forward->where == where)
-				{
-					if (forward->timeInfo.size())
-					{
-						location->timeInfo = forward->timeInfo;
-						location->tft.timeTransition |= forward->tft.timeTransition;
-						break;
-					}
-					forward++;
-				}
-			}
-			if (convertToMove && (location->tft.futureHappening || location->tft.pastHappening || !location->tft.presentHappening))
-			{
-				location->relationType = stENTER;
-				convertToMove = false;
-			}
-			if (whereSubject >= 0)
-			{
-				for (int si = 0; si < (signed)m[whereSubject].objectMatches.size(); si++)
-					objects[m[whereSubject].objectMatches[si].object].syntacticRelationGroups.push_back((int)(location - syntacticRelationGroups.begin()));
-				if (m[whereSubject].getObject() >= 0 && m[whereSubject].objectMatches.empty())
-					objects[m[whereSubject].getObject()].syntacticRelationGroups.push_back((int)(location - syntacticRelationGroups.begin()));
-			}
-		}
-		if (debugTrace.traceRelations)
-			logSyntacticRelationGroup(sr, whereType);
-	}
-	else
-	{
-		if (syntacticRelationGroups.empty() || syntacticRelationGroups[syntacticRelationGroups.size() - 1].where != where)
-		{
-			int insertionPoint = syntacticRelationGroups.size();
-			while (insertionPoint > 0 && syntacticRelationGroups[insertionPoint - 1].where > where) insertionPoint--;
-			cSyntacticRelationGroup sr(where, _o, whereControllingEntity, whereSubject, whereVerb, wherePrep, whereObject, wherePrepObject, whereMovingRelativeTo, relationType, genderedEntityMove, genderedLocationRelation, objectSubType, prepObjectSubType, physicalRelation);
-			correctSRIEntry(sr);
-			syntacticRelationGroups.insert(syntacticRelationGroups.begin() + insertionPoint, sr);
-			srSetTimeFlowTense(insertionPoint);
-			if (convertToMove && (syntacticRelationGroups[insertionPoint].tft.futureHappening || syntacticRelationGroups[insertionPoint].tft.pastHappening))
-			{
-				syntacticRelationGroups[insertionPoint].relationType = stENTER;
-				convertToMove = false;
-			}
-			shouldLogSyntacticRelationGroup = true;
-			if (debugTrace.traceRelations)
-				logSyntacticRelationGroup(sr, whereType);
-		}
-	}
+	bool genderedEntityMove = false;
+	cSyntacticRelationGroup sr(where, _o, whereControllingEntity, whereSubject, whereVerb, wherePrep, whereObject, wherePrepObject, whereMovingRelativeTo, relationType, genderedEntityMove, genderedLocationRelation, objectSubType, prepObjectSubType, physicalRelation);
+	if (debugTrace.traceRelations)
+		logSyntacticRelationGroup(sr, L"BEFORE CORRECTION");
+	correctSRIEntry(sr);
+	insertOrUpdateNewSpeakerGroup(where, whereSubject, sr, convertToMove, whereType);
 	if (whereVerb >= 0) m[whereVerb].hasSyntacticRelationGroup = true;
 	if (wherePrepObject >= 0) m[wherePrepObject].hasSyntacticRelationGroup = true;
 	m[where].hasSyntacticRelationGroup = true;

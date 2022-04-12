@@ -786,7 +786,7 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int& primaryQuot
 			continue;
 		}
 		unsigned int sectionEnd;
-		if (sourceType != NEWS_BANK_SOURCE_TYPE && isSectionHeader(begin, end, sectionEnd))
+		if (isSectionHeader(begin, end, sectionEnd))
 			if (end != sectionEnd) sentenceStarts.insert(s + 1, sectionEnd);
 		for (unsigned int q = begin; q < end; q++)
 		{
@@ -1038,13 +1038,279 @@ int cSource::readSourceBuffer(wstring title, wstring etext, wstring path, wstrin
 	return 0;
 }
 
+void cSource::parsePattern(unordered_map <wstring, wstring> &parseVariables,const wstring lastMetaCommandEmbeddedInSource, wstring &sWord, int &nounOwner)
+{
+	positionToTransformationPatternVariableMap[(int)m.size()] = sWord;
+	// [variable name]=[substitute word for parsing]:[pattern list]
+	size_t equalsPos = sWord.find(L'='), colonPos = sWord.find(L':');
+	if (equalsPos != wstring::npos && colonPos != wstring::npos)
+	{
+		wstring variable = sWord.substr(0, equalsPos);
+		parseVariables[variable] = sWord = sWord.substr(equalsPos + 1, colonPos - equalsPos - 1);
+		::lplog(LOG_WHERE, L"%d:%s - parse created mapped variable %s=(%s)", m.size(), lastMetaCommandEmbeddedInSource.c_str(), variable.c_str(), parseVariables[variable].c_str());
+	}
+	else
+	{
+		if (parseVariables.find(sWord) == parseVariables.end())
+			::lplog(LOG_FATAL_ERROR, L"%d:Parse variable %s not defined!", m.size(), sWord.c_str());
+		::lplog(LOG_WHERE, L"%d:%s - parse used mapped variable %s=(%s)", m.size(), lastMetaCommandEmbeddedInSource.c_str(), sWord.c_str(), parseVariables[sWord].c_str());
+		sWord = parseVariables[sWord];
+	}
+	// nounOwner=0 - no ownership (Danny)
+	// nounOwner=2 - singular ownership (Danny's)
+	nounOwner = 0;
+	if (sWord.size() > 2 && sWord[sWord.size() - 1] == 's' && cWord::isSingleQuote(sWord[sWord.size() - 2]))
+	{
+		nounOwner = 2;
+		sWord.erase(sWord.size() - 2);
+	}
+}
+
+void cSource::processDash(wstring &sWord, bool &firstLetterCapitalized, const int result)
+{
+	size_t dash = wstring::npos, firstDash = wstring::npos;
+	int numDash = 0, offset = 0;
+	for (wchar_t dq : sWord)
+	{
+		if (cWord::isDash(dq))
+		{
+			numDash++;
+			// if the word contains two dashes that follow right after each other or are of different types, split word immediately.
+			if (numDash > 1 && (offset == dash + 1 || dq != sWord[dash]))
+			{
+				if (dq != sWord[dash] && offset > dash + 1)
+				{
+					bufferScanLocation -= sWord.length() - offset;
+					sWord.erase(offset, sWord.length() - offset);
+					numDash = 1;
+					break;
+				}
+				else if (dash > 0)
+				{
+					bufferScanLocation -= sWord.length() - dash;
+					sWord.erase(dash, sWord.length() - dash);
+					dash = wstring::npos;
+					numDash = 0;
+					break;
+				}
+			}
+			dash = offset;
+			if (firstDash == wstring::npos)
+				firstDash = offset;
+		}
+		offset++;
+	}
+	// keep names like al-Jazeera or dashed words incorporating first words that are unknown like fierro-regni or Jay-Z
+	// preserve dashes by setting insertDashes to true.
+	// Handle cases like 10-15 or 10-60,000 which are returned as PARSE_NUM
+	if (dash != wstring::npos && result == 0 && // if (not date or number)
+		sWord[1] != 0 && // not a single dash
+		!cWord::isDash(sWord[dash + 1]) && // not '--'
+		!(sWord[0] == L'a' && cWord::isDash(sWord[1]) && numDash == 1) // a-working
+		 // state-of-the-art
+		)
+	{
+		wstring lowerWord = sWord;
+		transform(lowerWord.begin(), lowerWord.end(), lowerWord.begin(), (int(*)(int)) tolower);
+		unsigned int unknownWords = 0, capitalizedWords = 0, openWords = 0, letters = 0;
+		vector <wstring> dashedWords = splitString(sWord, sWord[dash]);
+		wstring removeDashesWord;
+		for (wstring subWord : dashedWords)
+		{
+			wstring lowerSubWord = subWord;
+			transform(lowerSubWord.begin(), lowerSubWord.end(), lowerSubWord.begin(), (int(*)(int)) tolower);
+			tIWMM iWord = cWord::fullQuery(&mysql, lowerSubWord, sourceId);
+			if (iWord == cWord::end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0)
+				unknownWords++;
+			if (iWord != cWord::end() && cStemmer::wordIsNotUnknownAndOpen(iWord, debugTrace.traceParseInfo))
+				openWords++;
+			if (subWord.length() > 1 && iswupper(subWord[0]) && !iswupper(subWord[1]))  // al-Jazeera, not BALL-PLAYING
+				capitalizedWords++;
+			if (subWord.length() == 1)  // F-R-E-E-D-O-M  
+				letters++;
+			removeDashesWord += lowerSubWord;
+		}
+		// if this does not qualify as a dashed word, back up to just AFTER the dash
+		tIWMM iWord = cWord::fullQuery(&mysql, lowerWord, sourceId);
+		tIWMM iWordNoDashes = cWord::fullQuery(&mysql, removeDashesWord, sourceId);
+		//bool notCapitalized = (capitalizedWords == 0 || (capitalizedWords == 1 && firstWordInSentence));
+		// break apart if it is not capitalized, there are no unknown words, and the dashed word is unknown.
+		// however, there may be cases like I-THE, which webster/dictionary.com incorrectly say are defined.
+		if ((unknownWords <= capitalizedWords || unknownWords <= dashedWords.size() / 2) &&
+			(iWord == Words.end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0) &&
+			(capitalizedWords != 1 || letters != 1 || dashedWords.size() != 2 || dashedWords[1].length() != 1) && // keep Jay-Z
+			(iWordNoDashes == Words.end() || iWordNoDashes->second.query(UNDEFINED_FORM_NUM) >= 0 || letters != dashedWords.size() || letters < 3))
+		{
+			bufferScanLocation -= sWord.length() - firstDash;
+			sWord.erase(firstDash, sWord.length() - firstDash);
+		}
+		else if (sWord != L"--" && debugTrace.traceParseInfo)
+			lplog(LOG_INFO, L"%s NOT split (#unknownWords=%d #capitalizedWords=%d #letters=%d %s).", sWord.c_str(), unknownWords, capitalizedWords, letters, ((iWord == Words.end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0)) ? L"UNKNOWN" : L"NOT unknown");
+		firstLetterCapitalized = (capitalizedWords > 0);
+	}
+}
+
+/*
+* return value:
+* if true, break out of processing text
+*/
+bool cSource::processEndSentence(const wstring path, bool endSentence, size_t & lastSentenceEnd, tIWMM iWord, const wstring sWord, int & lastProgressPercent, int &runOnSentences, bool &multipleEnds, bool & alreadyAtEnd)
+{
+	if (endSentence && m.size() && sWord == L".")
+	{
+		const wchar_t* abbreviationForms[] = { L"letter",L"abbreviation",L"measurement_abbreviation",L"street_address_abbreviation",L"business_abbreviation",
+			L"time_abbreviation",L"date_abbreviation",L"honorific_abbreviation",L"trademark",L"pagenum",NULL };
+		for (unsigned int af = 0; abbreviationForms[af] && endSentence; af++)
+			if (m[m.size() - 2].queryForm(abbreviationForms[af]) >= 0)
+				endSentence = false;
+	}
+	int numWords = m.size() - lastSentenceEnd;
+	if (numWords > 150 || (numWords > 100 && (iWord->second.query(conjunctionForm) >= 0 || iWord->first == L";")))
+	{
+		lplog(LOG_ERROR, L"ERROR:Terminating run-on sentence at word %d in source %s (word offset %d).", numWords, path.c_str(), m.size());
+		runOnSentences++;
+		endSentence = true;
+	}
+	if (endSentence)
+	{
+		if (analyzeEnd(path, lastSentenceEnd, m.size(), multipleEnds))
+		{
+			m.erase(m.begin() + lastSentenceEnd, m.end());
+			alreadyAtEnd = true;
+			return true;
+		}
+		if (sentenceStarts.size() && lastSentenceEnd == sentenceStarts[sentenceStarts.size() - 1] + 1)
+			sentenceStarts[sentenceStarts.size() - 1]++;
+		else
+			sentenceStarts.push_back(lastSentenceEnd);
+		lastSentenceEnd = m.size();
+		if ((int)(bufferScanLocation * 100 / bufferLen) > lastProgressPercent)
+		{
+			lastProgressPercent = (int)(bufferScanLocation * 100 / bufferLen);
+			wprintf(L"PROGRESS: %03d%% (%06zu words) %I64d out of %I64d bytes read with %d seconds elapsed (%I64d bytes) \r", lastProgressPercent, m.size(), bufferScanLocation, bufferLen, clocksec(), memoryAllocated);
+		}
+	}
+	return false;
+}
+
+void cSource::webScrapeFields(size_t &lastSentenceEnd)
+{
+	// check for By artist
+	if (m.size() > 2 && m[m.size() - 3].word->first == L"by" && (m[m.size() - 3].flags & cWordMatch::flagNewLineBeforeHint) &&
+		(m[m.size() - 1].flags & cWordMatch::flagFirstLetterCapitalized) && (m[m.size() - 2].flags & cWordMatch::flagFirstLetterCapitalized))
+	{
+		sentenceStarts.push_back(lastSentenceEnd);
+		lastSentenceEnd = m.size() + 1;
+		m.push_back(cWordMatch(Words.sectionWord, 0, debugTrace));
+	}
+	// Last modified: 2012-01-29T21:38:56Z
+	// Published: Saturday, Jan. 28, 2012 - 12:00 am | Page 11A
+	// Last Modified: Sunday, Jan. 29, 2012 - 1:38 pm
+	if (m.size() > 2 && (m[m.size() - 3].flags & cWordMatch::flagNewLineBeforeHint) &&
+		(m[m.size() - 1].flags & cWordMatch::flagFirstLetterCapitalized) && (m[m.size() - 2].flags & cWordMatch::flagFirstLetterCapitalized) && bookBuffer[bufferScanLocation] == L':')
+	{
+		sentenceStarts.push_back(lastSentenceEnd);
+		lastSentenceEnd = m.size() + 1;
+		m.push_back(cWordMatch(Words.sectionWord, 0, debugTrace));
+	}
+}
+
+void cSource::adjustFormsInflections(tIWMM iWord,wstring sWord, unsigned __int64& flags, int nounOwner, int lastSentenceEnd, bool allCaps,
+	bool firstLetterCapitalized, bool flagAlphaBeforeHint, bool flagAlphaAfterHint, bool flagNewLineBeforeHint, bool & previousIsProperNoun)
+{
+	tIWMM w = (m.size()) ? m[m.size() - 1].word : wNULL;
+	// this logic is copied in doQuotesOwnershipAndContractions
+	bool firstWordInSentence = m.size() == lastSentenceEnd || w->first == L"." || // include "." because the last word may be a contraction
+		w == Words.sectionWord || w->first == L"--" /* Ulysses */ || w->first == L"?" || w->first == L"!" ||
+		w->first == L":" /* Secret Adversary - Second month:  Promoted to drying aforesaid plates.*/ ||
+		w->first == L";" /* I am a Soldier A jolly British Soldier ; You can see that I am a Soldier by my feet . . . */ ||
+		w->second.query(quoteForm) >= 0 || w->second.query(dashForm) >= 0 || // BNC 4.00 PM - We
+		w->second.query(bracketForm) >= 0 || // BNC (c) Complete the ...
+		(m.size() - 3 == lastSentenceEnd && m[m.size() - 2].word->second.query(quoteForm) >= 0 && w->first == L"(") || // Pay must be good.' (We might as well make that clear from the start.)
+		(m.size() - 2 == lastSentenceEnd && w->first == L"(");   // The bag dropped.  (If you didn't know).
+	iWord->second.adjustFormsInflections(sWord, flags, firstWordInSentence, nounOwner, allCaps, firstLetterCapitalized, debugTrace.traceParseInfo);
+	if (allCaps && m.size() && ((m[m.size() - 1].word->first == L"the" && !(m[m.size() - 1].flags & cWordMatch::flagAllCaps)) || iWord->second.formsSize() == 0))
+	{
+		flags |= cWordMatch::flagAddProperNoun;
+		iWord->second.zeroNewProperNounCostIfUsedAllCaps();
+#ifdef LOG_PATTERN_COST_CHECK
+		::lplog(L"Added ProperNoun [from the] to word %s (form #%d) at cost %d.", originalWord.c_str(), formsSize(), usageCosts[formsSize()]);
+#endif
+	}
+	if ((flags & cWordMatch::flagAddProperNoun) && debugTrace.traceParseInfo)
+		lplog(LOG_INFO, L"%d:%s:added flagAddProperNoun.", m.size(), sWord.c_str());
+	if ((flags & cWordMatch::flagOnlyConsiderProperNounForms) && debugTrace.traceParseInfo)
+		lplog(LOG_INFO, L"%d:%s:added flagOnlyConsiderProperNounForms.", m.size(), sWord.c_str());
+	if ((flags & cWordMatch::flagOnlyConsiderOtherNounForms) && debugTrace.traceParseInfo)
+		lplog(LOG_INFO, L"%d:%s:added flagOnlyConsiderOtherNounForms.", m.size(), sWord.c_str());
+	// does not necessarily have to be a proper noun after a word with a . at the end (P.N.C.)
+	// The description of a green toque , a coat with a handkerchief in the pocket marked P.L.C. He looked an agonized question at Mr . Carter .
+	if ((flags & cWordMatch::flagOnlyConsiderProperNounForms) && m.size() && m[m.size() - 1].word->first.length() > 1 && m[m.size() - 1].word->first[m[m.size() - 1].word->first.length() - 1] == L'.')
+	{
+		flags &= ~cWordMatch::flagOnlyConsiderProperNounForms;
+		if (debugTrace.traceParseInfo)
+			lplog(LOG_INFO, L"%d:removed flagOnlyConsiderProperNounForms.", m.size());
+	}
+	// if a word is capitalized, but is always followed by another word that is also capitalized, then 
+	// don't treat it as an automatic proper noun ('New' York)
+	bool isProperNoun = (flags & cWordMatch::flagAddProperNoun) && !allCaps && !firstWordInSentence;
+	if (isProperNoun && previousIsProperNoun)
+	{
+		m[m.size() - 1].word->second.numProperNounUsageAsAdjective++;
+		if (debugTrace.traceParseInfo)
+			lplog(LOG_INFO, L"%d:%s:increased usage of proper noun as adjective to %d.", m.size() - 1, m[m.size() - 1].word->first.c_str(), m[m.size() - 1].word->second.numProperNounUsageAsAdjective);
+	}
+	previousIsProperNoun = isProperNoun;
+	// used in disambiguating abbreviated quotes from nested quotes
+	if (sWord == secondaryQuoteType)
+	{
+		if (flagAlphaBeforeHint) flags |= cWordMatch::flagAlphaBeforeHint;
+		if (flagAlphaAfterHint) flags |= cWordMatch::flagAlphaAfterHint;
+	}
+	// The description of a green toque , a coat with a handkerchief in the pocket marked P.L.C. He looked an agonized question at Mr . Carter .
+	if (firstLetterCapitalized && (sWord == L"he" || sWord == L"she" || sWord == L"it" || sWord == L"they" || sWord == L"we" || sWord == L"you") && m.size() &&
+		m[m.size() - 1].word->first.length() > 1 && m[m.size() - 1].word->first[m[m.size() - 1].word->first.length() - 1] == L'.')
+	{
+		m[m.size() - 1].word->second.flags |= cSourceWordInfo::topLevelSeparator;
+		sentenceStarts.push_back(lastSentenceEnd);
+		lastSentenceEnd = m.size();
+	}
+	if (flagNewLineBeforeHint) flags |= cWordMatch::flagNewLineBeforeHint;
+}
+
+bool cSource::addSpecialWord(int result, const wstring sWord, tIWMM &iWord)
+{
+	bool added;
+	if (result == PARSE_NUM)
+		iWord = Words.addNewOrModify(&mysql, sWord, 0, NUMBER_FORM_NUM, 0, 0, L"", sourceId, added);
+	else if (result == PARSE_PLURAL_NUM)
+		iWord = Words.addNewOrModify(&mysql, sWord, 0, NUMBER_FORM_NUM, PLURAL, 0, L"", sourceId, added);
+	else if (result == PARSE_ORD_NUM)
+		iWord = Words.addNewOrModify(&mysql, sWord, 0, numeralOrdinalForm, 0, 0, L"", sourceId, added);
+	else if (result == PARSE_ADVERB_NUM)
+		iWord = Words.addNewOrModify(&mysql, sWord, 0, adverbForm, 0, 0, sWord, sourceId, added);
+	else if (result == PARSE_DATE)
+		iWord = Words.addNewOrModify(&mysql, sWord, 0, dateForm, 0, 0, L"", sourceId, added);
+	else if (result == PARSE_TIME)
+		iWord = Words.addNewOrModify(&mysql, sWord, 0, timeForm, 0, 0, L"", sourceId, added);
+	else if (result == PARSE_TELEPHONE_NUMBER)
+		iWord = Words.addNewOrModify(&mysql, sWord, 0, telephoneNumberForm, 0, 0, L"", sourceId, added);
+	else if (result == PARSE_MONEY_NUM)
+		iWord = Words.addNewOrModify(&mysql, sWord, 0, moneyForm, 0, 0, L"", sourceId, added);
+	else if (result == PARSE_WEB_ADDRESS)
+		iWord = Words.addNewOrModify(&mysql, sWord, 0, webAddressForm, 0, 0, L"", sourceId, added);
+	else
+		return false;
+	return true;
+}
+
 int cSource::parseBuffer(wstring& path, unsigned int& unknownCount)
 {
 	LFS
-		int lastProgressPercent = 0, result = 0, runOnSentences = 0;
+	int lastProgressPercent = 0, result = 0, runOnSentences = 0;
 	bool alreadyAtEnd = false, previousIsProperNoun = false;
 	bool webScrapeParse = sourceType == WEB_SEARCH_SOURCE_TYPE || sourceType == REQUEST_TYPE, multipleEnds = false;
-	size_t lastSentenceEnd = m.size(), numParagraphsInSection = 0;
+	size_t lastSentenceEnd = m.size();
 	unordered_map <wstring, wstring> parseVariables;
 	parseVariables[L"$"] = L"answer";
 	if (bufferScanLocation == 0 && bookBuffer[0] == 65279)
@@ -1064,36 +1330,13 @@ int cSource::parseBuffer(wstring& path, unsigned int& unknownCount)
 			result = 0;
 			continue;
 		}
-		bool flagAlphaAfterHint = (bufferScanLocation < bufferLen&& iswalpha(bookBuffer[bufferScanLocation]));
+		bool flagAlphaAfterHint = (bufferScanLocation < bufferLen && iswalpha(bookBuffer[bufferScanLocation]));
 		if (result == PARSE_EOF)
 			break;
 		if (result == PARSE_PATTERN)
 		{
-			positionToTransformationPatternVariableMap[(int)m.size()] = sWord;
+			parsePattern(parseVariables, lastMetaCommandEmbeddedInSource, sWord, nounOwner);
 			result = 0;
-			// [variable name]=[substitute word for parsing]:[pattern list]
-			size_t equalsPos = sWord.find(L'='), colonPos = sWord.find(L':');
-			if (equalsPos != wstring::npos && colonPos != wstring::npos)
-			{
-				wstring variable = sWord.substr(0, equalsPos);
-				parseVariables[variable] = sWord = sWord.substr(equalsPos + 1, colonPos - equalsPos - 1);
-				::lplog(LOG_WHERE, L"%d:%s - parse created mapped variable %s=(%s)", m.size(), lastMetaCommandEmbeddedInSource.c_str(), variable.c_str(), parseVariables[variable].c_str());
-			}
-			else
-			{
-				if (parseVariables.find(sWord) == parseVariables.end())
-					::lplog(LOG_FATAL_ERROR, L"%d:Parse variable %s not defined!", m.size(), sWord.c_str());
-				::lplog(LOG_WHERE, L"%d:%s - parse used mapped variable %s=(%s)", m.size(), lastMetaCommandEmbeddedInSource.c_str(), sWord.c_str(), parseVariables[sWord].c_str());
-				sWord = parseVariables[sWord];
-			}
-			// nounOwner=0 - no ownership (Danny)
-			// nounOwner=2 - singular ownership (Danny's)
-			nounOwner = 0;
-			if (sWord.size() > 2 && sWord[sWord.size() - 1] == 's' && cWord::isSingleQuote(sWord[sWord.size() - 2]))
-			{
-				nounOwner = 2;
-				sWord.erase(sWord.size() - 2);
-			}
 		}
 		if (result == PARSE_END_SECTION || result == PARSE_END_PARAGRAPH || result == PARSE_END_BOOK || result == PARSE_DUMP_LOCAL_OBJECTS)
 		{
@@ -1108,145 +1351,30 @@ int cSource::parseBuffer(wstring& path, unsigned int& unknownCount)
 				alreadyAtEnd = true;
 				break;
 			}
-			if (result == PARSE_END_PARAGRAPH && (sourceType != NEWS_BANK_SOURCE_TYPE || numParagraphsInSection++ < 2))
+			if (result == PARSE_END_PARAGRAPH)
 			{
 				sentenceStarts.push_back(lastSentenceEnd);
 				lastSentenceEnd = m.size();
 			}
-			if (sourceType == NEWS_BANK_SOURCE_TYPE && result == PARSE_END_BOOK)
-				numParagraphsInSection = 0;
 			if (m.size() == lastSentenceEnd) lastSentenceEnd++;
 			m.push_back(cWordMatch(Words.sectionWord, (result == PARSE_DUMP_LOCAL_OBJECTS) ? 1 : 0, debugTrace));
 			result = 0;
 			continue;
 		}
-		size_t dash = wstring::npos, firstDash = wstring::npos;
-		int numDash = 0, offset = 0;
-		for (wchar_t dq : sWord)
-		{
-			if (cWord::isDash(dq))
-			{
-				numDash++;
-				// if the word contains two dashes that follow right after each other or are of different types, split word immediately.
-				if (numDash > 1 && (offset == dash + 1 || dq != sWord[dash]))
-				{
-					if (dq != sWord[dash] && offset > dash + 1)
-					{
-						bufferScanLocation -= sWord.length() - offset;
-						sWord.erase(offset, sWord.length() - offset);
-						numDash = 1;
-						break;
-					}
-					else if (dash > 0)
-					{
-						bufferScanLocation -= sWord.length() - dash;
-						sWord.erase(dash, sWord.length() - dash);
-						dash = wstring::npos;
-						numDash = 0;
-						break;
-					}
-				}
-				dash = offset;
-				if (firstDash == wstring::npos)
-					firstDash = offset;
-			}
-			offset++;
-		}
 		bool firstLetterCapitalized = iswupper(sWord[0]) != 0;
-		tIWMM w = (m.size()) ? m[m.size() - 1].word : wNULL;
-		// this logic is copied in doQuotesOwnershipAndContractions
-		bool firstWordInSentence = m.size() == lastSentenceEnd || w->first == L"." || // include "." because the last word may be a contraction
-			w == Words.sectionWord || w->first == L"--" /* Ulysses */ || w->first == L"?" || w->first == L"!" ||
-			w->first == L":" /* Secret Adversary - Second month:  Promoted to drying aforesaid plates.*/ ||
-			w->first == L";" /* I am a Soldier A jolly British Soldier ; You can see that I am a Soldier by my feet . . . */ ||
-			w->second.query(quoteForm) >= 0 || w->second.query(dashForm) >= 0 || // BNC 4.00 PM - We
-			w->second.query(bracketForm) >= 0 || // BNC (c) Complete the ...
-			(m.size() - 3 == lastSentenceEnd && m[m.size() - 2].word->second.query(quoteForm) >= 0 && w->first == L"(") || // Pay must be good.' (We might as well make that clear from the start.)
-			(m.size() - 2 == lastSentenceEnd && w->first == L"(");   // The bag dropped.  (If you didn't know).
-		// keep names like al-Jazeera or dashed words incorporating first words that are unknown like fierro-regni or Jay-Z
-		// preserve dashes by setting insertDashes to true.
-		// Handle cases like 10-15 or 10-60,000 which are returned as PARSE_NUM
-		if (dash != wstring::npos && result == 0 && // if (not date or number)
-			sWord[1] != 0 && // not a single dash
-			!cWord::isDash(sWord[dash + 1]) && // not '--'
-			!(sWord[0] == L'a' && cWord::isDash(sWord[1]) && numDash == 1) // a-working
-			 // state-of-the-art
-			)
-		{
-			wstring lowerWord = sWord;
-			transform(lowerWord.begin(), lowerWord.end(), lowerWord.begin(), (int(*)(int)) tolower);
-			unsigned int unknownWords = 0, capitalizedWords = 0, openWords = 0, letters = 0;
-			vector <wstring> dashedWords = splitString(sWord, sWord[dash]);
-			wstring removeDashesWord;
-			for (wstring subWord : dashedWords)
-			{
-				wstring lowerSubWord = subWord;
-				transform(lowerSubWord.begin(), lowerSubWord.end(), lowerSubWord.begin(), (int(*)(int)) tolower);
-				tIWMM iWord = cWord::fullQuery(&mysql, lowerSubWord, sourceId);
-				if (iWord == cWord::end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0)
-					unknownWords++;
-				if (iWord != cWord::end() && cStemmer::wordIsNotUnknownAndOpen(iWord, debugTrace.traceParseInfo))
-					openWords++;
-				if (subWord.length() > 1 && iswupper(subWord[0]) && !iswupper(subWord[1]))  // al-Jazeera, not BALL-PLAYING
-					capitalizedWords++;
-				if (subWord.length() == 1)  // F-R-E-E-D-O-M  
-					letters++;
-				removeDashesWord += lowerSubWord;
-			}
-			// if this does not qualify as a dashed word, back up to just AFTER the dash
-			tIWMM iWord = cWord::fullQuery(&mysql, lowerWord, sourceId);
-			tIWMM iWordNoDashes = cWord::fullQuery(&mysql, removeDashesWord, sourceId);
-			//bool notCapitalized = (capitalizedWords == 0 || (capitalizedWords == 1 && firstWordInSentence));
-			// break apart if it is not capitalized, there are no unknown words, and the dashed word is unknown.
-			// however, there may be cases like I-THE, which webster/dictionary.com incorrectly say are defined.
-			if ((unknownWords <= capitalizedWords || unknownWords <= dashedWords.size() / 2) &&
-				(iWord == Words.end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0) &&
-				(capitalizedWords != 1 || letters != 1 || dashedWords.size() != 2 || dashedWords[1].length() != 1) && // keep Jay-Z
-				(iWordNoDashes == Words.end() || iWordNoDashes->second.query(UNDEFINED_FORM_NUM) >= 0 || letters != dashedWords.size() || letters < 3))
-			{
-				bufferScanLocation -= sWord.length() - firstDash;
-				sWord.erase(firstDash, sWord.length() - firstDash);
-			}
-			else if (sWord != L"--" && debugTrace.traceParseInfo)
-				lplog(LOG_INFO, L"%s NOT split (#unknownWords=%d #capitalizedWords=%d #letters=%d %s).", sWord.c_str(), unknownWords, capitalizedWords, letters, ((iWord == Words.end() || iWord->second.query(UNDEFINED_FORM_NUM) >= 0)) ? L"UNKNOWN" : L"NOT unknown");
-			firstLetterCapitalized = (capitalizedWords > 0);
-		}
+		processDash(sWord, firstLetterCapitalized, result);
 		bool allCaps = Words.isAllUpper(sWord);
 		wcslwr((wchar_t*)sWord.c_str());
-		bool added;
 		bool endSentence = result == PARSE_END_SENTENCE;
-		if (endSentence && m.size() && sWord == L".")
-		{
-			const wchar_t* abbreviationForms[] = { L"letter",L"abbreviation",L"measurement_abbreviation",L"street_address_abbreviation",L"business_abbreviation",
-				L"time_abbreviation",L"date_abbreviation",L"honorific_abbreviation",L"trademark",L"pagenum",NULL };
-			for (unsigned int af = 0; abbreviationForms[af] && endSentence; af++)
-				if (m[m.size() - 1].queryForm(abbreviationForms[af]) >= 0)
-					endSentence = false;
-		}
 		tIWMM iWord = Words.end();
-		if (result == PARSE_NUM)
-			iWord = Words.addNewOrModify(&mysql, sWord, 0, NUMBER_FORM_NUM, 0, 0, L"", sourceId, added);
-		else if (result == PARSE_PLURAL_NUM)
-			iWord = Words.addNewOrModify(&mysql, sWord, 0, NUMBER_FORM_NUM, PLURAL, 0, L"", sourceId, added);
-		else if (result == PARSE_ORD_NUM)
-			iWord = Words.addNewOrModify(&mysql, sWord, 0, numeralOrdinalForm, 0, 0, L"", sourceId, added);
-		else if (result == PARSE_ADVERB_NUM)
-			iWord = Words.addNewOrModify(&mysql, sWord, 0, adverbForm, 0, 0, sWord, sourceId, added);
-		else if (result == PARSE_DATE)
-			iWord = Words.addNewOrModify(&mysql, sWord, 0, dateForm, 0, 0, L"", sourceId, added);
-		else if (result == PARSE_TIME)
-			iWord = Words.addNewOrModify(&mysql, sWord, 0, timeForm, 0, 0, L"", sourceId, added);
-		else if (result == PARSE_TELEPHONE_NUMBER)
-			iWord = Words.addNewOrModify(&mysql, sWord, 0, telephoneNumberForm, 0, 0, L"", sourceId, added);
-		else if (result == PARSE_MONEY_NUM)
-			iWord = Words.addNewOrModify(&mysql, sWord, 0, moneyForm, 0, 0, L"", sourceId, added);
-		else if (result == PARSE_WEB_ADDRESS)
-			iWord = Words.addNewOrModify(&mysql, sWord, 0, webAddressForm, 0, 0, L"", sourceId, added);
-		else if (result < 0 && result != PARSE_END_SENTENCE)
-			break;
-		else
-			if ((result = Words.parseWord(&mysql, sWord, iWord, firstLetterCapitalized, nounOwner, sourceId, debugTrace.traceParseInfo)) < 0)
+		if (!addSpecialWord(result, sWord, iWord))
+		{
+			if (result < 0 && result != PARSE_END_SENTENCE)
 				break;
+			else
+				if ((result = Words.parseWord(&mysql, sWord, iWord, firstLetterCapitalized, nounOwner, sourceId, debugTrace.traceParseInfo)) < 0)
+					break;
+		}
 		result = 0;
 		if (iWord->second.isUnknown())
 		{
@@ -1254,102 +1382,13 @@ int cSource::parseBuffer(wstring& path, unsigned int& unknownCount)
 			unknownCount++;
 		}
 		unsigned __int64 flags;
-		iWord->second.adjustFormsInflections(sWord, flags, firstWordInSentence, nounOwner, allCaps, firstLetterCapitalized, debugTrace.traceParseInfo);
-		if (allCaps && m.size() && ((m[m.size() - 1].word->first == L"the" && !(m[m.size() - 1].flags & cWordMatch::flagAllCaps)) || iWord->second.formsSize() == 0))
-		{
-			flags |= cWordMatch::flagAddProperNoun;
-			iWord->second.zeroNewProperNounCostIfUsedAllCaps();
-#ifdef LOG_PATTERN_COST_CHECK
-			::lplog(L"Added ProperNoun [from the] to word %s (form #%d) at cost %d.", originalWord.c_str(), formsSize(), usageCosts[formsSize()]);
-#endif
-		}
-		if ((flags & cWordMatch::flagAddProperNoun) && debugTrace.traceParseInfo)
-			lplog(LOG_INFO, L"%d:%s:added flagAddProperNoun.", m.size(), sWord.c_str());
-		if ((flags & cWordMatch::flagOnlyConsiderProperNounForms) && debugTrace.traceParseInfo)
-			lplog(LOG_INFO, L"%d:%s:added flagOnlyConsiderProperNounForms.", m.size(), sWord.c_str());
-		if ((flags & cWordMatch::flagOnlyConsiderOtherNounForms) && debugTrace.traceParseInfo)
-			lplog(LOG_INFO, L"%d:%s:added flagOnlyConsiderOtherNounForms.", m.size(), sWord.c_str());
-		// does not necessarily have to be a proper noun after a word with a . at the end (P.N.C.)
-		// The description of a green toque , a coat with a handkerchief in the pocket marked P.L.C. He looked an agonized question at Mr . Carter .
-		if ((flags & cWordMatch::flagOnlyConsiderProperNounForms) && m.size() && m[m.size() - 1].word->first.length() > 1 && m[m.size() - 1].word->first[m[m.size() - 1].word->first.length() - 1] == L'.')
-		{
-			flags &= ~cWordMatch::flagOnlyConsiderProperNounForms;
-			if (debugTrace.traceParseInfo)
-				lplog(LOG_INFO, L"%d:removed flagOnlyConsiderProperNounForms.", m.size());
-		}
-		// if a word is capitalized, but is always followed by another word that is also capitalized, then 
-		// don't treat it as an automatic proper noun ('New' York)
-		bool isProperNoun = (flags & cWordMatch::flagAddProperNoun) && !allCaps && !firstWordInSentence;
-		if (isProperNoun && previousIsProperNoun)
-		{
-			m[m.size() - 1].word->second.numProperNounUsageAsAdjective++;
-			if (debugTrace.traceParseInfo)
-				lplog(LOG_INFO, L"%d:%s:increased usage of proper noun as adjective to %d.", m.size() - 1, m[m.size() - 1].word->first.c_str(), m[m.size() - 1].word->second.numProperNounUsageAsAdjective);
-		}
-		previousIsProperNoun = isProperNoun;
-		// used in disambiguating abbreviated quotes from nested quotes
-		if (sWord == secondaryQuoteType)
-		{
-			if (flagAlphaBeforeHint) flags |= cWordMatch::flagAlphaBeforeHint;
-			if (flagAlphaAfterHint) flags |= cWordMatch::flagAlphaAfterHint;
-		}
-		if (sourceType == NEWS_BANK_SOURCE_TYPE && numParagraphsInSection < 3)
-			flags |= cWordMatch::flagMetaData;
-		// The description of a green toque , a coat with a handkerchief in the pocket marked P.L.C. He looked an agonized question at Mr . Carter .
-		if (firstLetterCapitalized && (sWord == L"he" || sWord == L"she" || sWord == L"it" || sWord == L"they" || sWord == L"we" || sWord == L"you") && m.size() &&
-			m[m.size() - 1].word->first.length() > 1 && m[m.size() - 1].word->first[m[m.size() - 1].word->first.length() - 1] == L'.')
-		{
-			m[m.size() - 1].word->second.flags |= cSourceWordInfo::topLevelSeparator;
-			sentenceStarts.push_back(lastSentenceEnd);
-			lastSentenceEnd = m.size();
-		}
-		if (flagNewLineBeforeHint) flags |= cWordMatch::flagNewLineBeforeHint;
+		adjustFormsInflections(iWord, sWord, flags, nounOwner, lastSentenceEnd, allCaps,
+			firstLetterCapitalized, flagAlphaBeforeHint, flagAlphaAfterHint, flagNewLineBeforeHint, previousIsProperNoun);
 		m.emplace_back(iWord, flags, debugTrace);
-		// check for By artist
-		if (webScrapeParse && m.size() > 2 && m[m.size() - 3].word->first == L"by" && (m[m.size() - 3].flags & cWordMatch::flagNewLineBeforeHint) &&
-			(m[m.size() - 1].flags & cWordMatch::flagFirstLetterCapitalized) && (m[m.size() - 2].flags & cWordMatch::flagFirstLetterCapitalized))
-		{
-			sentenceStarts.push_back(lastSentenceEnd);
-			lastSentenceEnd = m.size() + 1;
-			m.push_back(cWordMatch(Words.sectionWord, 0, debugTrace));
-		}
-		// Last modified: 2012-01-29T21:38:56Z
-		// Published: Saturday, Jan. 28, 2012 - 12:00 am | Page 11A
-		// Last Modified: Sunday, Jan. 29, 2012 - 1:38 pm
-		if (webScrapeParse && m.size() > 2 && (m[m.size() - 3].flags & cWordMatch::flagNewLineBeforeHint) &&
-			(m[m.size() - 1].flags & cWordMatch::flagFirstLetterCapitalized) && (m[m.size() - 2].flags & cWordMatch::flagFirstLetterCapitalized) && bookBuffer[bufferScanLocation] == L':')
-		{
-			sentenceStarts.push_back(lastSentenceEnd);
-			lastSentenceEnd = m.size() + 1;
-			m.push_back(cWordMatch(Words.sectionWord, 0, debugTrace));
-		}
-		int numWords = m.size() - lastSentenceEnd;
-		if (numWords > 150 || (numWords > 100 && (iWord->second.query(conjunctionForm) >= 0 || iWord->first == L";")))
-		{
-			lplog(LOG_ERROR, L"ERROR:Terminating run-on sentence at word %d in source %s (word offset %d).", numWords, path.c_str(), m.size());
-			runOnSentences++;
-			endSentence = true;
-		}
-		if (endSentence)
-		{
-			if (analyzeEnd(path, lastSentenceEnd, m.size(), multipleEnds))
-			{
-				m.erase(m.begin() + lastSentenceEnd, m.end());
-				alreadyAtEnd = true;
-				break;
-			}
-			if (sentenceStarts.size() && lastSentenceEnd == sentenceStarts[sentenceStarts.size() - 1] + 1)
-				sentenceStarts[sentenceStarts.size() - 1]++;
-			else
-				sentenceStarts.push_back(lastSentenceEnd);
-			lastSentenceEnd = m.size();
-			if ((int)(bufferScanLocation * 100 / bufferLen) > lastProgressPercent)
-			{
-				lastProgressPercent = (int)(bufferScanLocation * 100 / bufferLen);
-				wprintf(L"PROGRESS: %03d%% (%06zu words) %I64d out of %I64d bytes read with %d seconds elapsed (%I64d bytes) \r", lastProgressPercent, m.size(), bufferScanLocation, bufferLen, clocksec(), memoryAllocated);
-			}
-			continue;
-		}
+		if (webScrapeParse)
+			webScrapeFields(lastSentenceEnd);
+		if (processEndSentence(path, endSentence, lastSentenceEnd, iWord, sWord, lastProgressPercent, runOnSentences, multipleEnds, alreadyAtEnd))
+			break;
 	}
 	if (!alreadyAtEnd && analyzeEnd(path, lastSentenceEnd, m.size(), multipleEnds))
 	{
