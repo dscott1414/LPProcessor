@@ -1964,58 +1964,24 @@ bool cSource::assessEVALCost(cTagLocation& tl, int pattern, cPatternMatchArray::
 	return false;
 }
 
-//  desiredTagSets.push_back(cTagSet(VERB_OBJECTS_TAGSET,3,"VERB","V_OBJECT","OBJECT","V_AGREE","vD","vrD","IVERB",NULL));
-int cSource::evaluateVerbObjects(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, int parentPosition, int position,
-	vector <cTagLocation>& tagSet, bool infinitive, bool assessCost, int& voRelationsFound, int& traceSource, wstring purpose)
+void cSource::evaluateVerbObjectsInfo(cPatternMatchArray::tPatternMatch* pm, 
+	vector <cTagLocation>& tagSet, bool assessCost, wstring purpose, 
+	int &whereObjectTag, int &nextObjectTag, unsigned int &numObjects,
+	int &wo1, int& object1, tIWMM& object1Word, int& wo2, int& object2, tIWMM &object2Word,
+	int verbTagIndex, tIWMM verbWord)
 {
-	DLFS
-		voRelationsFound = 0;
-	// not sure whether 'to' is used as an infinitive or a preposition without pretagging
-	// so only assess verb/object cost of verb, refuse to accumulate statistics
-	if (!preTaggedSource && infinitive && !assessCost)
-	{
-		if (debugTrace.traceVerbObjects)
-			lplog(L"          %d:verb is infinitive and no assessment of cost - skipping.", position);
-		return 0;
-	}
-	int verbTagIndex, nextObjectTag = -1, nextPassiveTag = -1;
-	if ((infinitive) ? !getIVerb(tagSet, verbTagIndex) : !getVerb(tagSet, verbTagIndex))
-	{
-		// Why should she *despair* ? - despair IS a verb, but _MQ1[4](0,4) also has __ALLOBJECTS_1 with just _COND, because ALLVERB cannot be used because of the question structure 
-		if (infinitive || !patterns[pm->getPattern()]->questionFlag || (verbTagIndex = findOneTag(tagSet, L"V_AGREE")) < 0)
-		{
-			if (debugTrace.traceVerbObjects)
-				lplog(L"          %d:verb not found %s- skipping.", position, (infinitive) ? L"from infinitive " : L"");
-			return 0;
-		}
-	}
-	const wchar_t* passiveTags[] = { L"vD",L"vrD",L"vAD",L"vBD",L"vCD",L"vABD",L"vACD",L"vBCD",L"vABCD", nullptr };
-	bool passive = false;
-	for (int pt = 0; passiveTags[pt]; pt++)
-		passive |= findTag(tagSet, passiveTags[pt], nextPassiveTag) >= 0;
-	if (passive && !patterns[pm->getPattern()]->questionFlag)
-	{
-		if (debugTrace.traceVerbObjects)
-			lplog(L"          %d:verb is passive in pattern %s[%s] - skipping.", position, patterns[pm->getPattern()]->name.c_str(), patterns[pm->getPattern()]->differentiator.c_str());
-		return 0;
-	}
-	int whereObjectTag = findTag(tagSet, L"OBJECT", nextObjectTag);
-	// hObjects are for use with _VERB_BARE_INF - I make/made you approach him, where there is only a relationship between the subject (I) and (you)
-	//int wherehObjectTag=findOneTag(tagSet,L"HOBJECT",-1); this is incorrect - the main verb doesn't have the hobject as an object, leading to incorrect cost assessment.
-	//if (wherehObjectTag>=0)
-	//{
-	//	whereObjectTag=wherehObjectTag;
-	//	nextObjectTag=-1;
-	//}
-	if (!tagIsCertain(tagSet[verbTagIndex].sourcePosition)) return 0;
-	tIWMM verbWord = m[tagSet[verbTagIndex].sourcePosition].word;
-	if (verbWord->second.mainEntry != wNULL)
-		verbWord = verbWord->second.mainEntry;
-	unsigned int numObjects = 0;
-	int object1 = -1, object2 = -1, wo1 = -1, wo2 = -1;
-	tIWMM object1Word = wNULL, object2Word = wNULL;
-	//cSourceWordInfo::cRMap *rm=(cSourceWordInfo::cRMap *)NULL;
+	/////////////////////////////////////////////////////////////////
+
+//cSourceWordInfo::cRMap *rm=(cSourceWordInfo::cRMap *)NULL;
+// hObjects are for use with _VERB_BARE_INF - I make/made you approach him, where there is only a relationship between the subject (I) and (you)
+//int wherehObjectTag=findOneTag(tagSet,L"HOBJECT",-1); this is incorrect - the main verb doesn't have the hobject as an object, leading to incorrect cost assessment.
+//if (wherehObjectTag>=0)
+//{
+//	whereObjectTag=wherehObjectTag;
+//	nextObjectTag=-1;
+//}
 	bool success;
+	whereObjectTag = findTag(tagSet, L"OBJECT", nextObjectTag);
 	if (whereObjectTag >= 0 && patterns[pm->getPattern()]->questionFlag && (m[tagSet[whereObjectTag].sourcePosition].word->first == L"how" || m[tagSet[whereObjectTag].sourcePosition].word->first == L"when" || m[tagSet[whereObjectTag].sourcePosition].word->first == L"why"))
 	{
 		if (nextObjectTag >= 0)
@@ -2065,6 +2031,363 @@ int cSource::evaluateVerbObjects(cPatternMatchArray::tPatternMatch* parentpm, cP
 		if (debugTrace.traceVerbObjects)
 			lplog(L"          %d:verb %s is in a question, has two objects (%d,%d) and the second object is a time - numObjects is decremented.", tagSet[verbTagIndex].sourcePosition, verbWord->first.c_str(), tagSet[whereObjectTag].sourcePosition, tagSet[nextObjectTag].sourcePosition);
 	}
+
+}
+
+int cSource::getAfterQuoteAttributionBenefit(cPatternMatchArray::tPatternMatch* pm, int whereVerb, int numObjects, int verbAfterVerbCost, int &verbObjectCost)
+{
+	// determine whether this is a special "after quotes" case preferVerbRel
+	int afterQuoteAttributionBenefit = 0;
+	if (whereVerb && m[whereVerb - 1].forms.isSet(quoteForm) && (m[whereVerb - 1].word->second.inflectionFlags & CLOSE_INFLECTION) == CLOSE_INFLECTION &&
+		m[whereVerb].forms.isSet(thinkForm) && numObjects == 1 && verbAfterVerbCost == 0 && patterns[pm->getPattern()]->name == L"_VERBREL1")
+	{
+		verbObjectCost = 0;
+		afterQuoteAttributionBenefit = 2; // not so much that it causes VERBREL1 to absorb elements that are high cost
+	}
+	return afterQuoteAttributionBenefit;
+}
+
+int cSource::getVerbObjectCost(cPatternMatchArray::tPatternMatch* pm, vector <cTagLocation>& tagSet, int &voRelationsFound, 
+	const unsigned int whereVerb, const int verbTagIndex, const tIWMM verbWord, const int numObjects, int &objectDistanceCost,
+	const int nextObjectTag, const tIWMM object1Word, const int object2, const int whereObjectTag)
+{
+	int vsp = tagSet[verbTagIndex].sourcePosition;
+	int nextAdjObjectTag = -1, adjObjectTag = findTag(tagSet, L"ADJOBJECT", nextAdjObjectTag);
+	// increase parent pattern cost at verb
+	int verbObjectCost = verbWord->second.getUsageCost(cSourceWordInfo::VERB_HAS_0_OBJECTS + numObjects);
+	if (numObjects == 0 && verbWord->second.query(isForm) >= 0 && adjObjectTag >= 0)
+	{
+		if (debugTrace.traceVerbObjects)
+			lplog(L"          %d:decreased objectCost to 0 because of adjectiveObject and isForm.", tagSet[verbTagIndex].sourcePosition);
+		verbObjectCost = 0;
+	}
+	if (numObjects > 0)
+	{
+		//if (numObjects == 1 && whereObjectTag >= 0 && patterns[tagSet[whereObjectTag].parentPattern]->name == L"__ALLOBJECTS_1" && patterns[tagSet[whereObjectTag].parentPattern]->differentiator == L"3" &&
+		//	m[tagSet[whereObjectTag].sourcePosition - 1].word->first == L"her" && (m[tagSet[whereObjectTag].sourcePosition].queryForm(adjectiveForm) != -1 || m[tagSet[whereObjectTag].sourcePosition].queryForm(nounForm) != -1))
+		//{
+		//	verbObjectCost += 6;
+		//	if (debugTrace.traceVerbObjects)
+		//		lplog(L"          %d:objectWord %s is preceded by a short prepositional phrase ending in 'her'.",
+		//			tagSet[whereObjectTag].sourcePosition, (object1Word != wNULL) ? object1Word->first.c_str() : L"");
+		//}
+		wstring w = m[tagSet[whereObjectTag].sourcePosition].word->first;
+		if (tagSet[whereObjectTag].len == 1 && (w == L"i" || w == L"he" || w == L"she" || w == L"we" || w == L"they") && !patterns[pm->getPattern()]->questionFlag &&
+			(w != L"i" || (verbWord->first != L"is" && verbWord->first != L"do"))) // It is I!  So do I!
+		{
+			verbObjectCost += 6;
+			if (debugTrace.traceVerbObjects)
+				lplog(L"          %d:objectWord %s is a nominative pronoun used as an accusative.",
+					tagSet[whereObjectTag].sourcePosition, (object1Word != wNULL) ? object1Word->first.c_str() : L"");
+		}
+		int distance = tagSet[whereObjectTag].sourcePosition - (tagSet[verbTagIndex].sourcePosition + tagSet[verbTagIndex].len);
+		if (distance > 2) objectDistanceCost = distance - 2;
+		if (debugTrace.traceVerbObjects && objectDistanceCost)
+			lplog(L"          %d:verb %s has 1st object start at %d - verb end at %d - 2 = %d objectDistanceCost.",
+				tagSet[verbTagIndex].sourcePosition, verbWord->first.c_str(), tagSet[whereObjectTag].sourcePosition, tagSet[verbTagIndex].sourcePosition + tagSet[verbTagIndex].len, objectDistanceCost);
+		if (objectDistanceCost > 4)
+		{
+			if (debugTrace.traceVerbObjects)
+				lplog(L"          %d:verb %s has objectDistanceCost=%d > 4. voRelationsFound cancelled.",
+					tagSet[verbTagIndex].sourcePosition, verbWord->first.c_str(), objectDistanceCost);
+			voRelationsFound = 0;
+		}
+	}
+	int particleTagIndex = -1;
+	if ((verbWord->second.query(isForm) != -1 || verbWord->second.query(isNegationForm) != -1 || verbWord->first == L"being" || verbWord->first == L"be" || verbWord->first == L"been") &&
+		(particleTagIndex = findOneTag(tagSet, L"PT")) >= 0)
+	{
+		if (debugTrace.traceVerbObjects)
+			lplog(L"          %d:be verb %s should not have a particle %s.", tagSet[verbTagIndex].sourcePosition, verbWord->first.c_str(), m[tagSet[particleTagIndex].sourcePosition].word->first.c_str());
+		verbObjectCost += 6;
+	}
+	// they were all alike
+	// if there is one object, and the object is 'all' and there is a match for __S1[7] (but this is not __S1[7]), and the word after the object could be an adjective, then increase cost greatly.
+	// this encourages 'all' to be an adverb and the next word to be an adjective.
+	if (numObjects == 1 && object1Word != wNULL && object1Word->first == L"all" && m.size() > tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len &&
+		m[tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len].word->second.query(L"adjective") >= 0)
+	{
+		verbObjectCost += 6;
+		if (debugTrace.traceVerbObjects)
+			lplog(L"          %d:verb %s is followed by all with an added adverb, which is unlikely (added cost 6).", vsp, verbWord->first.c_str());
+	}
+	// if one object, and object follows directly after verb, and object consists of adverb, adverb, acc, then add cost.
+	if (numObjects == 1 && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len < whereVerb + 5)
+	{
+		bool isAdverb = m[whereVerb + 1].forms.isSet(adverbForm) && m[whereVerb + 1].word->second.getUsageCost(m[whereVerb + 1].queryForm(adverbForm)) < 4; // is it possibly an adverb?
+		if (isAdverb && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len == whereVerb + 3)
+		{
+			bool isPreposition = m[whereVerb + 1].forms.isSet(prepositionForm);
+			bool objectDoesntTakeAdjectives = (m[whereVerb + 2].queryForm(personalPronounAccusativeForm) != -1 || m[whereVerb + 2].queryForm(personalPronounForm) != -1) &&
+				m[whereVerb + 2].word->first != L"he" && m[whereVerb + 2].word->first != L"she";
+			if (isPreposition && objectDoesntTakeAdjectives)
+			{
+				verbObjectCost += 6;
+				if (debugTrace.traceVerbObjects)
+					lplog(L"          %d:verb %s is followed by an object %s with one previous adverb and the object doesn't take an adjective - more likely a prep phrase.", vsp, verbWord->first.c_str(), object1Word->first.c_str());
+			}
+		}
+		else if (isAdverb && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len == whereVerb + 4)
+		{
+			isAdverb = m[whereVerb + 2].forms.isSet(adverbForm) && m[whereVerb + 2].word->second.getUsageCost(m[whereVerb + 2].queryForm(adverbForm)) < 4; // is it possibly an adverb?
+			bool isPreposition = m[whereVerb + 2].forms.isSet(prepositionForm);
+			bool objectDoesntTakeAdjectives = (m[whereVerb + 3].queryForm(personalPronounAccusativeForm) != -1 || m[whereVerb + 3].queryForm(personalPronounForm) != -1) &&
+				m[whereVerb + 3].word->first != L"he" && m[whereVerb + 3].word->first != L"she";
+			if (isAdverb && isPreposition && objectDoesntTakeAdjectives)
+			{
+				verbObjectCost += 6;
+				if (debugTrace.traceVerbObjects)
+					lplog(L"          %d:verb %s is followed by an object %s with two previous adverbs and the object doesn't take an adjective - more likely a prep phrase.", vsp, verbWord->first.c_str(), (object1Word != wNULL) ? object1Word->first.c_str() : L"");
+			}
+		}
+	}
+	if (numObjects == 1 && verbObjectCost && whereVerb + 1 < m.size() && m[whereVerb + 1].queryWinnerForm(adverbForm) >= 0 && m[whereVerb + 1].queryForm(particleForm) >= 0 &&
+		// if the particle is followed by a preposition, then don't decrease the cost of having an object because then that encourages the preposition to become an adverb.
+		// also include a case where 'to' is not a preposition because of to-day and to-morrow
+		(whereVerb + 3 >= m.size() || m[whereVerb + 2].queryForm(prepositionForm) < 0 || m[whereVerb + 3].word->first == L"-") &&
+		verbObjectCost < 6)
+	{
+		if (debugTrace.traceVerbObjects)
+			lplog(L"          %d:decreased verbObjectCost=%d to %d for verb %s because of possible particle usage (%s)",
+				tagSet[verbTagIndex].sourcePosition, verbObjectCost, 0, verbWord->first.c_str(), m[whereVerb + 1].word->first.c_str());
+		verbObjectCost = 0;
+	}
+	// here or there may be considered a prepositional phrase
+	// I am swimming here. (I am swimming in the pool) / I am going there now. (I am going to the store now)
+	if (numObjects == 1 && verbObjectCost > verbWord->second.getUsageCost(cSourceWordInfo::VERB_HAS_0_OBJECTS) && tagSet[whereObjectTag].len == 1 &&
+		(m[tagSet[whereObjectTag].sourcePosition].word->first == L"there" || m[tagSet[whereObjectTag].sourcePosition].word->first == L"here" || m[tagSet[whereObjectTag].sourcePosition].word->first == L"home"))
+	{
+		if (debugTrace.traceVerbObjects)
+			lplog(L"          %d:decreased verbObjectCost=%d to %d for verb %s because object is 'here' or 'there' or 'home' (standing in for a PP which may not be considered an object)",
+				tagSet[verbTagIndex].sourcePosition, verbObjectCost, verbWord->second.getUsageCost(cSourceWordInfo::VERB_HAS_0_OBJECTS), verbWord->first.c_str(), m[whereVerb + 1].word->first.c_str());
+		verbObjectCost = verbWord->second.getUsageCost(cSourceWordInfo::VERB_HAS_0_OBJECTS);
+	}
+	// modal auxiliaries really should not have objects!
+	if (numObjects > 0 && object1Word != wNULL && object1Word->second.query(verbForm) >= 0 &&
+		(m[whereVerb].word->second.query(modalAuxiliaryForm) >= 0 || m[whereVerb].word->second.query(negationModalAuxiliaryForm) >= 0 || m[whereVerb].word->second.query(futureModalAuxiliaryForm) >= 0 || m[whereVerb].word->second.query(negationFutureModalAuxiliaryForm) >= 0 ||
+			m[whereVerb].word->second.query(doesForm) >= 0 || m[whereVerb].word->second.query(doesNegationForm) >= 0))
+	{
+		if (debugTrace.traceVerbObjects)
+			lplog(L"          %d:increased verbObjectCost=%d to %d for verb %s because verb is modal auxiliary or does",
+				tagSet[verbTagIndex].sourcePosition, verbObjectCost, verbObjectCost + verbWord->second.getUsageCost(cSourceWordInfo::VERB_HAS_1_OBJECTS), verbWord->first.c_str());
+		verbObjectCost += verbWord->second.getUsageCost(cSourceWordInfo::VERB_HAS_1_OBJECTS);
+	}
+	if (numObjects == 2)
+	{
+		int wo = tagSet[whereObjectTag].sourcePosition;
+		wstring w = m[wo].word->first;
+		wstring w2 = m[tagSet[nextObjectTag].sourcePosition].word->first;
+		if (wo + 1 == tagSet[nextObjectTag].sourcePosition && m[wo].queryForm(determinerForm) >= 0 && m[tagSet[nextObjectTag].sourcePosition].queryForm(nounForm) >= 0)
+		{
+			verbObjectCost += 6;
+			wstring tmpstr;
+			if (debugTrace.traceVerbObjects && object2 >= 0)
+				lplog(L"          %d:objectWord %s, immediately before %s, is a determiner (verbObjectCost=%d).",
+					wo, w.c_str(), w2.c_str(), verbObjectCost);
+		}
+		bool prepOrSubjectDetected = false;
+		if (tagSet[whereObjectTag].isPattern && tagSet[whereObjectTag].len > 1)
+		{
+			if (debugTrace.traceVerbObjects)
+				lplog(L"%d:VOC__Prep first object test from %s[%s](%d,%d) %s[%s](%d,%d) BEGIN", tagSet[verbTagIndex].sourcePosition,
+					patterns[tagSet[whereObjectTag].parentPattern]->name.c_str(), patterns[tagSet[whereObjectTag].parentPattern]->differentiator.c_str(),
+					pema[abs(tagSet[whereObjectTag].PEMAOffset)].begin + tagSet[whereObjectTag].sourcePosition, pema[abs(tagSet[whereObjectTag].PEMAOffset)].end + tagSet[whereObjectTag].sourcePosition,
+					patterns[tagSet[whereObjectTag].pattern]->name.c_str(), patterns[tagSet[whereObjectTag].pattern]->differentiator.c_str(),
+					tagSet[whereObjectTag].sourcePosition, tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len);
+			vector < vector <cTagLocation> > twoObjectTestTagSets;
+			if (prepOrSubjectDetected = (startCollectTagsFromTag(debugTrace.traceSubjectVerbAgreement, twoObjectTestTagSet, tagSet[whereObjectTag], twoObjectTestTagSets, -1, false, true, L"verb objects 2 - prep phrase") > 0))
+			{
+				objectDistanceCost += 6;
+				if (debugTrace.traceVerbObjects)
+				{
+					lplog(L"          %d:increased objectDistanceCost to %d because first object has an embedded preposition/relative/infinitive clause [tagsets follow]", wo, objectDistanceCost);
+					for (auto& totTagSet : twoObjectTestTagSets)
+						printTagSet(LOG_INFO, L"PrepInFirstObject", -1, totTagSet, tagSet[whereObjectTag].sourcePosition, tagSet[whereObjectTag].PEMAOffset);
+				}
+			}
+			//for (auto ppTagSet : ndPrepTagSets)
+			//{
+			//	int nextPrepPhraseTag=-1,prepPhraseTag=findTag(ppTagSet, L"PREP", nextPrepPhraseTag);
+
+			//}
+
+			if (debugTrace.traceVerbObjects)
+				lplog(L"%d:VOC__Prep first object test from %s[%s](%d,%d) END", tagSet[verbTagIndex].sourcePosition, patterns[tagSet[whereObjectTag].parentPattern]->name.c_str(), patterns[tagSet[whereObjectTag].parentPattern]->differentiator.c_str(),
+					pema[abs(tagSet[whereObjectTag].PEMAOffset)].begin + tagSet[whereObjectTag].sourcePosition, pema[abs(tagSet[whereObjectTag].PEMAOffset)].end + tagSet[whereObjectTag].sourcePosition);
+			//wstring object1Temp, object2Temp;
+			//lplog(L"PREPTEST {%s} {%s} {%s} %s", m[whereVerb].word->first.c_str(), phraseString(tagSet[whereObjectTag].sourcePosition, tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len, object1Temp, true).c_str(),
+			//	phraseString(tagSet[nextObjectTag].sourcePosition, tagSet[nextObjectTag].sourcePosition + tagSet[nextObjectTag].len, object2Temp, true).c_str(), (prepOrSubjectDetected) ? L"prepDetected" : L"NOPrepDetected");
+		}
+		if (tagSet[nextObjectTag].len == 1 && (w2 == L"i" || w2 == L"he" || w2 == L"she" || w2 == L"we" || w2 == L"they") && !patterns[pm->getPattern()]->questionFlag)
+		{
+			verbObjectCost += 6;
+			wstring tmpstr;
+			if (debugTrace.traceVerbObjects && object2 >= 0)
+				lplog(L"          %d:objectWord %s is a nominative pronoun used as an accusative (verbObjectCost=%d).",
+					tagSet[nextObjectTag].sourcePosition, objectString(object2, tmpstr, true).c_str(), verbObjectCost);
+		}
+		if (debugTrace.traceVerbObjects)
+			lplog(L"          %d:increased objectDistanceCost=%d to %d (object1@%d-%d, object2@%d-%d)",
+				tagSet[verbTagIndex].sourcePosition, objectDistanceCost, objectDistanceCost + (tagSet[nextObjectTag].sourcePosition - (wo + tagSet[whereObjectTag].len)),
+				wo, wo + tagSet[whereObjectTag].len,
+				tagSet[nextObjectTag].sourcePosition, tagSet[nextObjectTag].sourcePosition + tagSet[nextObjectTag].len);
+		objectDistanceCost += (tagSet[nextObjectTag].sourcePosition - (wo + tagSet[whereObjectTag].len));
+		if (voRelationsFound < 2 || objectDistanceCost>0)
+			verbObjectCost <<= 1;
+	}
+	return verbObjectCost;
+}
+
+int cSource::getVerbAfterVerbCost(cPatternMatchArray::tPatternMatch* pm, vector <cTagLocation>& tagSet, wstring purpose,
+	const unsigned int numObjects, const int verbTagIndex, tIWMM verbWord, const unsigned int whereVerb, const unsigned int nextWord,
+	int advObjectTag)
+{
+	int verbAfterVerbCost = 0;
+	// if the word after this verb is compatible (it should be included as part of the verb), yet is not included, 
+	// then punch up the cost.
+	if ((verbAfterVerbCost = calculateVerbAfterVerbUsage(whereVerb, nextWord, numObjects == 0 && advObjectTag >= 0)) && patterns[pm->getPattern()]->name == L"__S1" && patterns[pm->getPattern()]->differentiator == L"7")
+		verbAfterVerbCost++;  // takes care of ADJECTIVE being lowered in cost in __S1[7]!
+	int vsp = tagSet[verbTagIndex].sourcePosition, pp = tagSet[verbTagIndex].parentPattern;
+	// make the following pattern costly:
+	// we have come across his tracks. / where 'have' is verbverb and 'come' is a present tense (_VERB_BARE_INF)
+	if (vsp > 0 && m[vsp - 1].word->first == L"have" && patterns[pp]->name == L"_VERB_BARE_INF" &&
+		(verbWord->second.inflectionFlags & (VERB_PAST_PARTICIPLE | VERB_PRESENT_FIRST_SINGULAR)) == (VERB_PAST_PARTICIPLE | VERB_PRESENT_FIRST_SINGULAR))
+	{
+		verbAfterVerbCost += 4;
+		if (debugTrace.traceVerbObjects)
+			lplog(L"          %d:verb %s is both a first-singular and past participle, and is preceded by 'have' - don't match _VERB_BARE_INF.", vsp, verbWord->first.c_str());
+	}
+	return verbAfterVerbCost;
+}
+
+int cSource::evaluateVerbObjectsCost(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, const int parentPosition, const int position,
+	vector <cTagLocation>& tagSet, int& voRelationsFound, int &traceSource, wstring purpose,
+	const int whereObjectTag, const int nextObjectTag, unsigned int &numObjects,
+	tIWMM object1Word, const int object2, tIWMM object2Word, const int verbTagIndex, tIWMM verbWord)
+{
+	// These if statements must not be combined with previous if statements!
+	if (numObjects >= 1 && object1Word != wNULL && checkRelation(parentpm, pm, parentPosition, position, verbWord, object1Word, VerbWithDirectWord))
+		voRelationsFound++;
+	if (numObjects == 2 && object2Word != wNULL && checkRelation(parentpm, pm, parentPosition, position, verbWord, object2Word, VerbWithIndirectWord))
+		voRelationsFound++;
+	int prepForm = -1;
+	unsigned int whereVerb = tagSet[verbTagIndex].sourcePosition + tagSet[verbTagIndex].len - 1, nextWord = whereVerb + 1;
+	if (nextWord + 1 < m.size() &&
+		m[nextWord].word->first != L"no" && // There was no thought to which rocket to launch. / thought is a past verb, and no is an adverb of cost < 4.  But still should not be considered a verbafterverb.
+		m[nextWord].word->first != L"any" && // See __NOUN[ANY] - 'all' dropped because of a probabilistic analysis
+		m[nextWord].word->first != L"either" &&
+		(m[nextWord].word->first == L"not" || m[nextWord].word->first == L"never" || // is it a not or never?
+			(m[nextWord].forms.isSet(adverbForm) && m[nextWord].word->second.getUsageCost(m[nextWord].queryForm(adverbForm)) < 4 &&  // is it possibly an adverb?
+				(!m[nextWord].forms.isSet(verbForm) ||                                 // and definitely not a verb (don't skip it unnecessarily)
+					(m[nextWord + 1].forms.isSet(verbForm) && m[nextWord + 1].word->second.inflectionFlags & VERB_PRESENT_PARTICIPLE))))) // OR is the next word after a verb participle?
+	{
+		if (debugTrace.traceVerbObjects)
+			lplog(L"          %d:bumped nextWord from %d:%s to %d:%s. (case 1 - adverb)", position, nextWord, m[nextWord].word->first.c_str(), nextWord + 1, m[nextWord + 1].word->first.c_str());
+		nextWord++; // could possibly be an adverb in between
+	}
+	// they were at once taken up to his suite. - be conservative by only including the most likely (lowest cost) path
+	// Don't include 'that' as an adverb! / Another voice which Tommy rather thought was that[voice] of Boris replied :
+	if (nextWord < m.size() && m[whereVerb].forms.isSet(isForm) && m[nextWord].forms.isSet(prepositionForm) &&
+		((prepForm = m[nextWord].queryForm(prepositionForm)) >= 0 && m[nextWord].word->second.getUsageCost(prepForm) == 0))
+	{
+		int maxLen = -1, element;
+		if ((element = m[nextWord].pma.queryMaximumLowestCostPattern(L"_PP", maxLen)) != -1 && m[nextWord + maxLen].forms.isSet(verbForm))
+		{
+			if (debugTrace.traceVerbObjects)
+				lplog(L"          %d:bumped nextWord from %d:%s to %d:%s. (case 2 - _PP)", position, nextWord, m[nextWord].word->first.c_str(), nextWord + maxLen, m[nextWord + maxLen].word->first.c_str());
+			nextWord += maxLen;
+		}
+	}
+	int nextAdvObjectTag = -1, advObjectTag = findTag(tagSet, L"ADVOBJECT", nextAdvObjectTag);
+	int verbAfterVerbCost = getVerbAfterVerbCost(pm, tagSet, purpose,	numObjects,	verbTagIndex, verbWord,	whereVerb, nextWord, advObjectTag);
+	// if the object is a present participle, this is not an object, but rather an adverb:
+	// Soon after Henrietta Hen shrieked for the rooster he came **hurrying around a corner of the barn** .   // how he came - adverb
+	// at the same time, sometimes it really is an object:
+	// Arthur Scott Bailey\The Tale of Freddie Firefly[4325-4330]:
+	// When he saw his brothers and cousins go dancing off in **the dark he couldn't help** wanting to dance too . // what he couldn't help - object
+	if (verbWord->first != L"am" && numObjects > 0 && (m[tagSet[whereObjectTag].sourcePosition].word->second.inflectionFlags & VERB_PRESENT_PARTICIPLE) != 0 && verbWord->second.getUsageCost(cSourceWordInfo::VERB_HAS_0_OBJECTS + numObjects) > verbWord->second.getUsageCost(cSourceWordInfo::VERB_HAS_0_OBJECTS + numObjects - 1))
+	{
+		if (debugTrace.traceVerbObjects)
+			lplog(L"          %d:decreased numObjects=%d to %d for verb %s because the object %s is a present participle (may be adverbial usage)",
+				tagSet[verbTagIndex].sourcePosition, numObjects, numObjects - 1, verbWord->first.c_str(), m[tagSet[whereObjectTag].sourcePosition].word->first.c_str());
+		numObjects--;
+	}
+	int objectDistanceCost = 0, verbObjectCost = getVerbObjectCost(pm, tagSet, voRelationsFound,
+		whereVerb, verbTagIndex, verbWord, numObjects, objectDistanceCost, 
+		nextObjectTag, object1Word, object2, whereObjectTag);
+	//if (verbObjectCost==0)
+	//  objectDistanceCost>>=1;
+	// voRelationsFound=voRelationsFound*(4-verbObjectCost); GRADUATED RELATIONS
+	if (verbObjectCost >= 4) // top cost
+	{
+		if (debugTrace.traceVerbObjects)
+			lplog(L"          %d:verb %s has verbObjectCost=%d. objectDistanceCost increased from %d to %d. voRelationsFound cancelled.",
+				tagSet[verbTagIndex].sourcePosition, verbWord->first.c_str(), verbObjectCost, objectDistanceCost, objectDistanceCost << 1);
+		objectDistanceCost <<= 1;
+		voRelationsFound = 0; // GRADUATED RELATIONS
+	}
+	if (verbAfterVerbCost) // top cost
+	{
+		if (debugTrace.traceVerbObjects)
+			lplog(L"          %d:verb %s has %s=%d (nextWord=%d:%s). voRelationsFound cancelled.",
+				tagSet[verbTagIndex].sourcePosition, verbWord->first.c_str(), (numObjects == 0 && advObjectTag >= 0) ? L"adverbAfterIsVerbCost" : L"verbAfterVerbCost", verbAfterVerbCost, nextWord, m[nextWord].word->first.c_str());
+		voRelationsFound = 0; // GRADUATED RELATIONS
+	}
+	// determine whether this is a special "after quotes" case preferVerbRel
+	int afterQuoteAttributionBenefit = getAfterQuoteAttributionBenefit(pm, whereVerb, numObjects, verbAfterVerbCost, verbObjectCost);
+	int deltaCost = verbObjectCost + verbAfterVerbCost + objectDistanceCost - afterQuoteAttributionBenefit;
+	if (debugTrace.traceVerbObjects)
+		lplog(L"          %d:verb %s has %d objects (verbObjectCost=%d, verbAfterVerbCost=%d, objectDistanceCost=%d voRelationsFound=%d afterQuoteAttributionBenefit=%d totalCost=%d) [SOURCE=%06d].",
+			tagSet[verbTagIndex].sourcePosition, verbWord->first.c_str(), numObjects, verbObjectCost, verbAfterVerbCost, objectDistanceCost, voRelationsFound, afterQuoteAttributionBenefit, deltaCost - COST_PER_RELATION * voRelationsFound, traceSource = gTraceSource++);
+	return deltaCost;
+}
+
+//  desiredTagSets.push_back(cTagSet(VERB_OBJECTS_TAGSET,3,"VERB","V_OBJECT","OBJECT","V_AGREE","vD","vrD","IVERB",NULL));
+int cSource::evaluateVerbObjects(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, int parentPosition, int position,
+	vector <cTagLocation>& tagSet, bool infinitive, bool assessCost, int& voRelationsFound, int& traceSource, wstring purpose)
+{
+	DLFS
+		voRelationsFound = 0;
+	// not sure whether 'to' is used as an infinitive or a preposition without pretagging
+	// so only assess verb/object cost of verb, refuse to accumulate statistics
+	if (!preTaggedSource && infinitive && !assessCost)
+	{
+		if (debugTrace.traceVerbObjects)
+			lplog(L"          %d:verb is infinitive and no assessment of cost - skipping.", position);
+		return 0;
+	}
+	int verbTagIndex, nextObjectTag = -1, nextPassiveTag = -1;
+	if ((infinitive) ? !getIVerb(tagSet, verbTagIndex) : !getVerb(tagSet, verbTagIndex))
+	{
+		// Why should she *despair* ? - despair IS a verb, but _MQ1[4](0,4) also has __ALLOBJECTS_1 with just _COND, because ALLVERB cannot be used because of the question structure 
+		if (infinitive || !patterns[pm->getPattern()]->questionFlag || (verbTagIndex = findOneTag(tagSet, L"V_AGREE")) < 0)
+		{
+			if (debugTrace.traceVerbObjects)
+				lplog(L"          %d:verb not found %s- skipping.", position, (infinitive) ? L"from infinitive " : L"");
+			return 0;
+		}
+	}
+	const wchar_t* passiveTags[] = { L"vD",L"vrD",L"vAD",L"vBD",L"vCD",L"vABD",L"vACD",L"vBCD",L"vABCD", nullptr };
+	bool passive = false;
+	for (int pt = 0; passiveTags[pt]; pt++)
+		passive |= findTag(tagSet, passiveTags[pt], nextPassiveTag) >= 0;
+	if (passive && !patterns[pm->getPattern()]->questionFlag)
+	{
+		if (debugTrace.traceVerbObjects)
+			lplog(L"          %d:verb is passive in pattern %s[%s] - skipping.", position, patterns[pm->getPattern()]->name.c_str(), patterns[pm->getPattern()]->differentiator.c_str());
+		return 0;
+	}
+	if (!tagIsCertain(tagSet[verbTagIndex].sourcePosition)) return 0;
+	tIWMM verbWord = m[tagSet[verbTagIndex].sourcePosition].word;
+	if (verbWord->second.mainEntry != wNULL)
+		verbWord = verbWord->second.mainEntry;
+	unsigned int numObjects = 0;
+	int object1 = -1, object2 = -1, wo1 = -1, wo2 = -1, whereObjectTag;
+	tIWMM object1Word = wNULL, object2Word = wNULL;
+	evaluateVerbObjectsInfo(pm, tagSet, assessCost, purpose,
+													whereObjectTag, nextObjectTag, numObjects,
+													wo1, object1, object1Word, wo2, object2, object2Word,
+													verbTagIndex, verbWord);
 	// How many American Girl dolls have been sold?
 	if (passive && numObjects == 0)
 	{
@@ -2076,280 +2399,10 @@ int cSource::evaluateVerbObjects(cPatternMatchArray::tPatternMatch* parentpm, cP
 	// report cost
 	if (assessCost)
 	{
-		// These if statements must not be combined with previous if statements!
-		if (numObjects >= 1 && object1Word != wNULL && checkRelation(parentpm, pm, parentPosition, position, verbWord, object1Word, VerbWithDirectWord))
-			voRelationsFound++;
-		if (numObjects == 2 && object2Word != wNULL && checkRelation(parentpm, pm, parentPosition, position, verbWord, object2Word, VerbWithIndirectWord))
-			voRelationsFound++;
-		int verbAfterVerbCost = 0, objectDistanceCost = 0, prepForm = -1;
-		unsigned int whereVerb = tagSet[verbTagIndex].sourcePosition + tagSet[verbTagIndex].len - 1, nextWord = whereVerb + 1;
-		if (nextWord + 1 < m.size() &&
-			m[nextWord].word->first != L"no" && // There was no thought to which rocket to launch. / thought is a past verb, and no is an adverb of cost < 4.  But still should not be considered a verbafterverb.
-			m[nextWord].word->first != L"any" && // See __NOUN[ANY] - 'all' dropped because of a probabilistic analysis
-			m[nextWord].word->first != L"either" &&
-			(m[nextWord].word->first == L"not" || m[nextWord].word->first == L"never" || // is it a not or never?
-				(m[nextWord].forms.isSet(adverbForm) && m[nextWord].word->second.getUsageCost(m[nextWord].queryForm(adverbForm)) < 4 &&  // is it possibly an adverb?
-					(!m[nextWord].forms.isSet(verbForm) ||                                 // and definitely not a verb (don't skip it unnecessarily)
-						(m[nextWord + 1].forms.isSet(verbForm) && m[nextWord + 1].word->second.inflectionFlags & VERB_PRESENT_PARTICIPLE))))) // OR is the next word after a verb participle?
-		{
-			if (debugTrace.traceVerbObjects)
-				lplog(L"          %d:bumped nextWord from %d:%s to %d:%s. (case 1 - adverb)", position, nextWord, m[nextWord].word->first.c_str(), nextWord + 1, m[nextWord + 1].word->first.c_str());
-			nextWord++; // could possibly be an adverb in between
-		}
-		// they were at once taken up to his suite. - be conservative by only including the most likely (lowest cost) path
-		// Don't include 'that' as an adverb! / Another voice which Tommy rather thought was that[voice] of Boris replied :
-		if (nextWord < m.size() && m[whereVerb].forms.isSet(isForm) && m[nextWord].forms.isSet(prepositionForm) &&
-			((prepForm = m[nextWord].queryForm(prepositionForm)) >= 0 && m[nextWord].word->second.getUsageCost(prepForm) == 0))
-		{
-			int maxLen = -1, element;
-			if ((element = m[nextWord].pma.queryMaximumLowestCostPattern(L"_PP", maxLen)) != -1 && m[nextWord + maxLen].forms.isSet(verbForm))
-			{
-				if (debugTrace.traceVerbObjects)
-					lplog(L"          %d:bumped nextWord from %d:%s to %d:%s. (case 2 - _PP)", position, nextWord, m[nextWord].word->first.c_str(), nextWord + maxLen, m[nextWord + maxLen].word->first.c_str());
-				nextWord += maxLen;
-			}
-		}
-		int nextAdvObjectTag = -1, advObjectTag = findTag(tagSet, L"ADVOBJECT", nextAdvObjectTag);
-		int nextAdjObjectTag = -1, adjObjectTag = findTag(tagSet, L"ADJOBJECT", nextAdjObjectTag);
-		// if the word after this verb is compatible (it should be included as part of the verb), yet is not included, 
-		// then punch up the cost.
-		if ((verbAfterVerbCost = calculateVerbAfterVerbUsage(whereVerb, nextWord, numObjects == 0 && advObjectTag >= 0)) && patterns[pm->getPattern()]->name == L"__S1" && patterns[pm->getPattern()]->differentiator == L"7")
-			verbAfterVerbCost++;  // takes care of ADJECTIVE being lowered in cost in __S1[7]!
-		int vsp = tagSet[verbTagIndex].sourcePosition, pp = tagSet[verbTagIndex].parentPattern;
-		// make the following pattern costly:
-		// we have come across his tracks. / where 'have' is verbverb and 'come' is a present tense (_VERB_BARE_INF)
-		if (vsp > 0 && m[vsp - 1].word->first == L"have" && patterns[pp]->name == L"_VERB_BARE_INF" &&
-			(verbWord->second.inflectionFlags & (VERB_PAST_PARTICIPLE | VERB_PRESENT_FIRST_SINGULAR)) == (VERB_PAST_PARTICIPLE | VERB_PRESENT_FIRST_SINGULAR))
-		{
-			verbAfterVerbCost += 4;
-			if (debugTrace.traceVerbObjects)
-				lplog(L"          %d:verb %s is both a first-singular and past participle, and is preceded by 'have' - don't match _VERB_BARE_INF.", vsp, verbWord->first.c_str());
-		}
-		// if the object is a present participle, this is not an object, but rather an adverb:
-		// Soon after Henrietta Hen shrieked for the rooster he came **hurrying around a corner of the barn** .   // how he came - adverb
-		// at the same time, sometimes it really is an object:
-		// Arthur Scott Bailey\The Tale of Freddie Firefly[4325-4330]:
-		// When he saw his brothers and cousins go dancing off in **the dark he couldn't help** wanting to dance too . // what he couldn't help - object
-		if (verbWord->first != L"am" && numObjects > 0 && (m[tagSet[whereObjectTag].sourcePosition].word->second.inflectionFlags & VERB_PRESENT_PARTICIPLE) != 0 && verbWord->second.getUsageCost(cSourceWordInfo::VERB_HAS_0_OBJECTS + numObjects) > verbWord->second.getUsageCost(cSourceWordInfo::VERB_HAS_0_OBJECTS + numObjects - 1))
-		{
-			if (debugTrace.traceVerbObjects)
-				lplog(L"          %d:decreased numObjects=%d to %d for verb %s because the object %s is a present participle (may be adverbial usage)",
-					tagSet[verbTagIndex].sourcePosition, numObjects, numObjects - 1, verbWord->first.c_str(), m[tagSet[whereObjectTag].sourcePosition].word->first.c_str());
-			numObjects--;
-		}
-		// increase parent pattern cost at verb
-		int verbObjectCost = verbWord->second.getUsageCost(cSourceWordInfo::VERB_HAS_0_OBJECTS + numObjects);
-		if (numObjects == 0 && verbWord->second.query(isForm) >= 0 && adjObjectTag >= 0)
-		{
-			if (debugTrace.traceVerbObjects)
-				lplog(L"          %d:decreased objectCost to 0 because of adjectiveObject and isForm.", tagSet[verbTagIndex].sourcePosition);
-			verbObjectCost = 0;
-		}
-		if (numObjects > 0)
-		{
-			//if (numObjects == 1 && whereObjectTag >= 0 && patterns[tagSet[whereObjectTag].parentPattern]->name == L"__ALLOBJECTS_1" && patterns[tagSet[whereObjectTag].parentPattern]->differentiator == L"3" &&
-			//	m[tagSet[whereObjectTag].sourcePosition - 1].word->first == L"her" && (m[tagSet[whereObjectTag].sourcePosition].queryForm(adjectiveForm) != -1 || m[tagSet[whereObjectTag].sourcePosition].queryForm(nounForm) != -1))
-			//{
-			//	verbObjectCost += 6;
-			//	if (debugTrace.traceVerbObjects)
-			//		lplog(L"          %d:objectWord %s is preceded by a short prepositional phrase ending in 'her'.",
-			//			tagSet[whereObjectTag].sourcePosition, (object1Word != wNULL) ? object1Word->first.c_str() : L"");
-			//}
-			wstring w = m[tagSet[whereObjectTag].sourcePosition].word->first;
-			if (tagSet[whereObjectTag].len == 1 && (w == L"i" || w == L"he" || w == L"she" || w == L"we" || w == L"they") && !patterns[pm->getPattern()]->questionFlag &&
-				(w != L"i" || (verbWord->first != L"is" && verbWord->first != L"do"))) // It is I!  So do I!
-			{
-				verbObjectCost += 6;
-				if (debugTrace.traceVerbObjects)
-					lplog(L"          %d:objectWord %s is a nominative pronoun used as an accusative.",
-						tagSet[whereObjectTag].sourcePosition, (object1Word != wNULL) ? object1Word->first.c_str() : L"");
-			}
-			int distance = tagSet[whereObjectTag].sourcePosition - (tagSet[verbTagIndex].sourcePosition + tagSet[verbTagIndex].len);
-			if (distance > 2) objectDistanceCost = distance - 2;
-			if (debugTrace.traceVerbObjects && objectDistanceCost)
-				lplog(L"          %d:verb %s has 1st object start at %d - verb end at %d - 2 = %d objectDistanceCost.",
-					tagSet[verbTagIndex].sourcePosition, verbWord->first.c_str(), tagSet[whereObjectTag].sourcePosition, tagSet[verbTagIndex].sourcePosition + tagSet[verbTagIndex].len, objectDistanceCost);
-			if (objectDistanceCost > 4)
-			{
-				if (debugTrace.traceVerbObjects)
-					lplog(L"          %d:verb %s has objectDistanceCost=%d > 4. voRelationsFound cancelled.",
-						tagSet[verbTagIndex].sourcePosition, verbWord->first.c_str(), objectDistanceCost);
-				voRelationsFound = 0;
-			}
-		}
-		int particleTagIndex = -1;
-		if ((verbWord->second.query(isForm) != -1 || verbWord->second.query(isNegationForm) != -1 || verbWord->first == L"being" || verbWord->first == L"be" || verbWord->first == L"been") &&
-			(particleTagIndex = findOneTag(tagSet, L"PT")) >= 0)
-		{
-			if (debugTrace.traceVerbObjects)
-				lplog(L"          %d:be verb %s should not have a particle %s.", tagSet[verbTagIndex].sourcePosition, verbWord->first.c_str(), m[tagSet[particleTagIndex].sourcePosition].word->first.c_str());
-			verbObjectCost += 6;
-		}
-		// they were all alike
-		// if there is one object, and the object is 'all' and there is a match for __S1[7] (but this is not __S1[7]), and the word after the object could be an adjective, then increase cost greatly.
-		// this encourages 'all' to be an adverb and the next word to be an adjective.
-		if (numObjects == 1 && object1Word != wNULL && object1Word->first == L"all" && m.size() > tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len &&
-			m[tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len].word->second.query(L"adjective") >= 0)
-		{
-			verbObjectCost += 6;
-			if (debugTrace.traceVerbObjects)
-				lplog(L"          %d:verb %s is followed by all with an added adverb, which is unlikely (added cost 6).", vsp, verbWord->first.c_str());
-		}
-		// if one object, and object follows directly after verb, and object consists of adverb, adverb, acc, then add cost.
-		if (numObjects == 1 && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len < whereVerb + 5)
-		{
-			bool isAdverb = m[whereVerb + 1].forms.isSet(adverbForm) && m[whereVerb + 1].word->second.getUsageCost(m[whereVerb + 1].queryForm(adverbForm)) < 4; // is it possibly an adverb?
-			if (isAdverb && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len == whereVerb + 3)
-			{
-				bool isPreposition = m[whereVerb + 1].forms.isSet(prepositionForm);
-				bool objectDoesntTakeAdjectives = (m[whereVerb + 2].queryForm(personalPronounAccusativeForm) != -1 || m[whereVerb + 2].queryForm(personalPronounForm) != -1) &&
-					m[whereVerb + 2].word->first != L"he" && m[whereVerb + 2].word->first != L"she";
-				if (isPreposition && objectDoesntTakeAdjectives)
-				{
-					verbObjectCost += 6;
-					if (debugTrace.traceVerbObjects)
-						lplog(L"          %d:verb %s is followed by an object %s with one previous adverb and the object doesn't take an adjective - more likely a prep phrase.", vsp, verbWord->first.c_str(), object1Word->first.c_str());
-				}
-			}
-			else if (isAdverb && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len == whereVerb + 4)
-			{
-				isAdverb = m[whereVerb + 2].forms.isSet(adverbForm) && m[whereVerb + 2].word->second.getUsageCost(m[whereVerb + 2].queryForm(adverbForm)) < 4; // is it possibly an adverb?
-				bool isPreposition = m[whereVerb + 2].forms.isSet(prepositionForm);
-				bool objectDoesntTakeAdjectives = (m[whereVerb + 3].queryForm(personalPronounAccusativeForm) != -1 || m[whereVerb + 3].queryForm(personalPronounForm) != -1) &&
-					m[whereVerb + 3].word->first != L"he" && m[whereVerb + 3].word->first != L"she";
-				if (isAdverb && isPreposition && objectDoesntTakeAdjectives)
-				{
-					verbObjectCost += 6;
-					if (debugTrace.traceVerbObjects)
-						lplog(L"          %d:verb %s is followed by an object %s with two previous adverbs and the object doesn't take an adjective - more likely a prep phrase.", vsp, verbWord->first.c_str(), (object1Word != wNULL) ? object1Word->first.c_str() : L"");
-				}
-			}
-		}
-		if (numObjects == 1 && verbObjectCost && whereVerb + 1 < m.size() && m[whereVerb + 1].queryWinnerForm(adverbForm) >= 0 && m[whereVerb + 1].queryForm(particleForm) >= 0 &&
-			// if the particle is followed by a preposition, then don't decrease the cost of having an object because then that encourages the preposition to become an adverb.
-			// also include a case where 'to' is not a preposition because of to-day and to-morrow
-			(whereVerb + 3 >= m.size() || m[whereVerb + 2].queryForm(prepositionForm) < 0 || m[whereVerb + 3].word->first == L"-") &&
-			verbObjectCost < 6)
-		{
-			if (debugTrace.traceVerbObjects)
-				lplog(L"          %d:decreased verbObjectCost=%d to %d for verb %s because of possible particle usage (%s)",
-					tagSet[verbTagIndex].sourcePosition, verbObjectCost, 0, verbWord->first.c_str(), m[whereVerb + 1].word->first.c_str());
-			verbObjectCost = 0;
-		}
-		// here or there may be considered a prepositional phrase
-		// I am swimming here. (I am swimming in the pool) / I am going there now. (I am going to the store now)
-		if (numObjects == 1 && verbObjectCost > verbWord->second.getUsageCost(cSourceWordInfo::VERB_HAS_0_OBJECTS) && tagSet[whereObjectTag].len == 1 &&
-			(m[tagSet[whereObjectTag].sourcePosition].word->first == L"there" || m[tagSet[whereObjectTag].sourcePosition].word->first == L"here" || m[tagSet[whereObjectTag].sourcePosition].word->first == L"home"))
-		{
-			if (debugTrace.traceVerbObjects)
-				lplog(L"          %d:decreased verbObjectCost=%d to %d for verb %s because object is 'here' or 'there' or 'home' (standing in for a PP which may not be considered an object)",
-					tagSet[verbTagIndex].sourcePosition, verbObjectCost, verbWord->second.getUsageCost(cSourceWordInfo::VERB_HAS_0_OBJECTS), verbWord->first.c_str(), m[whereVerb + 1].word->first.c_str());
-			verbObjectCost = verbWord->second.getUsageCost(cSourceWordInfo::VERB_HAS_0_OBJECTS);
-		}
-		// modal auxiliaries really should not have objects!
-		if (numObjects > 0 && object1Word != wNULL && object1Word->second.query(verbForm) >= 0 &&
-			(m[whereVerb].word->second.query(modalAuxiliaryForm) >= 0 || m[whereVerb].word->second.query(negationModalAuxiliaryForm) >= 0 || m[whereVerb].word->second.query(futureModalAuxiliaryForm) >= 0 || m[whereVerb].word->second.query(negationFutureModalAuxiliaryForm) >= 0 ||
-				m[whereVerb].word->second.query(doesForm) >= 0 || m[whereVerb].word->second.query(doesNegationForm) >= 0))
-		{
-			if (debugTrace.traceVerbObjects)
-				lplog(L"          %d:increased verbObjectCost=%d to %d for verb %s because verb is modal auxiliary or does",
-					tagSet[verbTagIndex].sourcePosition, verbObjectCost, verbObjectCost + verbWord->second.getUsageCost(cSourceWordInfo::VERB_HAS_1_OBJECTS), verbWord->first.c_str());
-			verbObjectCost += verbWord->second.getUsageCost(cSourceWordInfo::VERB_HAS_1_OBJECTS);
-		}
-		if (numObjects == 2)
-		{
-			int wo = tagSet[whereObjectTag].sourcePosition;
-			wstring w = m[wo].word->first;
-			wstring w2 = m[tagSet[nextObjectTag].sourcePosition].word->first;
-			if (wo + 1 == tagSet[nextObjectTag].sourcePosition && m[wo].queryForm(determinerForm) >= 0 && m[tagSet[nextObjectTag].sourcePosition].queryForm(nounForm) >= 0)
-			{
-				verbObjectCost += 6;
-				wstring tmpstr;
-				if (debugTrace.traceVerbObjects && object2 >= 0)
-					lplog(L"          %d:objectWord %s, immediately before %s, is a determiner (verbObjectCost=%d).",
-						wo, w.c_str(), w2.c_str(), verbObjectCost);
-			}
-			bool prepOrSubjectDetected = false;
-			if (tagSet[whereObjectTag].isPattern && tagSet[whereObjectTag].len > 1)
-			{
-				if (debugTrace.traceVerbObjects)
-					lplog(L"%d:VOC__Prep first object test from %s[%s](%d,%d) %s[%s](%d,%d) BEGIN", tagSet[verbTagIndex].sourcePosition,
-						patterns[tagSet[whereObjectTag].parentPattern]->name.c_str(), patterns[tagSet[whereObjectTag].parentPattern]->differentiator.c_str(),
-						pema[abs(tagSet[whereObjectTag].PEMAOffset)].begin + tagSet[whereObjectTag].sourcePosition, pema[abs(tagSet[whereObjectTag].PEMAOffset)].end + tagSet[whereObjectTag].sourcePosition,
-						patterns[tagSet[whereObjectTag].pattern]->name.c_str(), patterns[tagSet[whereObjectTag].pattern]->differentiator.c_str(),
-						tagSet[whereObjectTag].sourcePosition, tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len);
-				vector < vector <cTagLocation> > twoObjectTestTagSets;
-				if (prepOrSubjectDetected = (startCollectTagsFromTag(debugTrace.traceSubjectVerbAgreement, twoObjectTestTagSet, tagSet[whereObjectTag], twoObjectTestTagSets, -1, false, true, L"verb objects 2 - prep phrase") > 0))
-				{
-					objectDistanceCost += 6;
-					if (debugTrace.traceVerbObjects)
-					{
-						lplog(L"          %d:increased objectDistanceCost to %d because first object has an embedded preposition/relative/infinitive clause [tagsets follow]", wo, objectDistanceCost);
-						for (auto& totTagSet : twoObjectTestTagSets)
-							printTagSet(LOG_INFO, L"PrepInFirstObject", -1, totTagSet, tagSet[whereObjectTag].sourcePosition, tagSet[whereObjectTag].PEMAOffset);
-					}
-				}
-				//for (auto ppTagSet : ndPrepTagSets)
-				//{
-				//	int nextPrepPhraseTag=-1,prepPhraseTag=findTag(ppTagSet, L"PREP", nextPrepPhraseTag);
+		return evaluateVerbObjectsCost(parentpm, pm, parentPosition, position,
+			tagSet, voRelationsFound, traceSource, purpose, whereObjectTag, nextObjectTag, numObjects,
+			object1Word, object2, object2Word, verbTagIndex, verbWord);
 
-				//}
-
-				if (debugTrace.traceVerbObjects)
-					lplog(L"%d:VOC__Prep first object test from %s[%s](%d,%d) END", tagSet[verbTagIndex].sourcePosition, patterns[tagSet[whereObjectTag].parentPattern]->name.c_str(), patterns[tagSet[whereObjectTag].parentPattern]->differentiator.c_str(),
-						pema[abs(tagSet[whereObjectTag].PEMAOffset)].begin + tagSet[whereObjectTag].sourcePosition, pema[abs(tagSet[whereObjectTag].PEMAOffset)].end + tagSet[whereObjectTag].sourcePosition);
-				//wstring object1Temp, object2Temp;
-				//lplog(L"PREPTEST {%s} {%s} {%s} %s", m[whereVerb].word->first.c_str(), phraseString(tagSet[whereObjectTag].sourcePosition, tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len, object1Temp, true).c_str(),
-				//	phraseString(tagSet[nextObjectTag].sourcePosition, tagSet[nextObjectTag].sourcePosition + tagSet[nextObjectTag].len, object2Temp, true).c_str(), (prepOrSubjectDetected) ? L"prepDetected" : L"NOPrepDetected");
-			}
-			if (tagSet[nextObjectTag].len == 1 && (w2 == L"i" || w2 == L"he" || w2 == L"she" || w2 == L"we" || w2 == L"they") && !patterns[pm->getPattern()]->questionFlag)
-			{
-				verbObjectCost += 6;
-				wstring tmpstr;
-				if (debugTrace.traceVerbObjects && object2 >= 0)
-					lplog(L"          %d:objectWord %s is a nominative pronoun used as an accusative (verbObjectCost=%d).",
-						tagSet[nextObjectTag].sourcePosition, objectString(object2, tmpstr, true).c_str(), verbObjectCost);
-			}
-			if (debugTrace.traceVerbObjects)
-				lplog(L"          %d:increased objectDistanceCost=%d to %d (object1@%d-%d, object2@%d-%d)",
-					tagSet[verbTagIndex].sourcePosition, objectDistanceCost, objectDistanceCost + (tagSet[nextObjectTag].sourcePosition - (wo + tagSet[whereObjectTag].len)),
-					wo, wo + tagSet[whereObjectTag].len,
-					tagSet[nextObjectTag].sourcePosition, tagSet[nextObjectTag].sourcePosition + tagSet[nextObjectTag].len);
-			objectDistanceCost += (tagSet[nextObjectTag].sourcePosition - (wo + tagSet[whereObjectTag].len));
-			if (voRelationsFound < 2 || objectDistanceCost>0)
-				verbObjectCost <<= 1;
-		}
-		//if (verbObjectCost==0)
-		//  objectDistanceCost>>=1;
-		// voRelationsFound=voRelationsFound*(4-verbObjectCost); GRADUATED RELATIONS
-		if (verbObjectCost >= 4) // top cost
-		{
-			if (debugTrace.traceVerbObjects)
-				lplog(L"          %d:verb %s has verbObjectCost=%d. objectDistanceCost increased from %d to %d. voRelationsFound cancelled.",
-					tagSet[verbTagIndex].sourcePosition, verbWord->first.c_str(), verbObjectCost, objectDistanceCost, objectDistanceCost << 1);
-			objectDistanceCost <<= 1;
-			voRelationsFound = 0; // GRADUATED RELATIONS
-		}
-		if (verbAfterVerbCost) // top cost
-		{
-			if (debugTrace.traceVerbObjects)
-				lplog(L"          %d:verb %s has %s=%d (nextWord=%d:%s). voRelationsFound cancelled.",
-					tagSet[verbTagIndex].sourcePosition, verbWord->first.c_str(), (numObjects == 0 && advObjectTag >= 0) ? L"adverbAfterIsVerbCost" : L"verbAfterVerbCost", verbAfterVerbCost, nextWord, m[nextWord].word->first.c_str());
-			voRelationsFound = 0; // GRADUATED RELATIONS
-		}
-		// determine whether this is a special "after quotes" case preferVerbRel
-		int afterQuoteAttributionBenefit = 0;
-		if (whereVerb && m[whereVerb - 1].forms.isSet(quoteForm) && (m[whereVerb - 1].word->second.inflectionFlags & CLOSE_INFLECTION) == CLOSE_INFLECTION &&
-			m[whereVerb].forms.isSet(thinkForm) && numObjects == 1 && verbAfterVerbCost == 0 && patterns[pm->getPattern()]->name == L"_VERBREL1")
-		{
-			verbObjectCost = 0;
-			afterQuoteAttributionBenefit = 2; // not so much that it causes VERBREL1 to absorb elements that are high cost
-		}
-		int deltaCost = verbObjectCost + verbAfterVerbCost + objectDistanceCost - afterQuoteAttributionBenefit;
-		if (debugTrace.traceVerbObjects)
-			lplog(L"          %d:verb %s has %d objects (verbObjectCost=%d, verbAfterVerbCost=%d, objectDistanceCost=%d voRelationsFound=%d afterQuoteAttributionBenefit=%d totalCost=%d) [SOURCE=%06d].",
-				tagSet[verbTagIndex].sourcePosition, verbWord->first.c_str(), numObjects, verbObjectCost, verbAfterVerbCost, objectDistanceCost, voRelationsFound, afterQuoteAttributionBenefit, deltaCost - COST_PER_RELATION * voRelationsFound, traceSource = gTraceSource++);
-		return deltaCost;
 	}
 	// usage patterns being accumulated, cost is not assessed
 	if (numObjects == 2)

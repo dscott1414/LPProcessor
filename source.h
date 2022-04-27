@@ -3007,6 +3007,19 @@ private:
 	bool getIVerb(vector <cTagLocation> &tagSet,int &tag);
 	bool checkRelation(cPatternMatchArray::tPatternMatch *parentpm,cPatternMatchArray::tPatternMatch *pm,int parentPosition,int position,tIWMM verbWord,tIWMM objectWord,int relationType);
 	int calculateVerbAfterVerbUsage(int whereVerb,unsigned int nextWord, bool adverbialObject);
+	void evaluateVerbObjectsInfo(cPatternMatchArray::tPatternMatch* pm, 
+		vector <cTagLocation>& tagSet, bool assessCost, wstring purpose, int &whereObjectTag, int &nextObjectTag, unsigned int &numObjects,
+		int& wo1, int& object1, tIWMM& object1Word, int& wo2, int& object2, tIWMM& object2Word, int verbTagIndex, tIWMM verbWord);
+	int getAfterQuoteAttributionBenefit(cPatternMatchArray::tPatternMatch* pm, int whereVerb, int numObjects, int verbAfterVerbCost, int &verbObjectCost);
+	int getVerbObjectCost(cPatternMatchArray::tPatternMatch* pm, vector <cTagLocation>& tagSet, int& voRelationsFound,
+		const unsigned int whereVerb, const int verbTagIndex, const tIWMM verbWord, const int numObjects, int &objectDistanceCost,
+		const int nextObjectTag, const tIWMM object1Word, const int object2, const int whereObjectTag);
+	int getVerbAfterVerbCost(cPatternMatchArray::tPatternMatch* pm, vector <cTagLocation>& tagSet, wstring purpose,
+		const unsigned int numObjects, const int verbTagIndex, tIWMM verbWord, const unsigned int whereVerb, const unsigned int nextWord, int advObjectTag);
+	int evaluateVerbObjectsCost(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, const int parentPosition, const int position,
+		vector <cTagLocation>& tagSet, int& voRelationsFound, int &traceSource, wstring purpose,
+		const int whereObjectTag, const int nextObjectTag, unsigned int &numObjects,
+		tIWMM object1Word, const int object2, tIWMM object2Word, const int verbTagIndex, tIWMM verbWord);
 	int evaluateVerbObjects(cPatternMatchArray::tPatternMatch *parentpm,cPatternMatchArray::tPatternMatch *pm,int parentPosition,int position,vector <cTagLocation> &tagSet,bool infinitive,bool assessCost,int &voRelationsFound,int &traceSource,wstring purpose);
 	int properNounCheck(int &traceSource,int begin,int end,int whereDet);
 	int evaluateNounDeterminer(vector <cTagLocation> &tagSet,bool assessCost,int &traceSource,int begin,int end, int fromPEMAPosition);

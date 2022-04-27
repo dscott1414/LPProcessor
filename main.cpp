@@ -64,6 +64,7 @@ unordered_map < wstring, __int64 > cProfile::netAndSleepTimes, cProfile::onlyNet
 
 typedef long long (FAR WINAPI* MINIDUMPWRITEDUMP)(HANDLE hProcess, DWORD dwPid, HANDLE hFile, MINIDUMP_TYPE DumpType, CONST PMINIDUMP_EXCEPTION_INFORMATION ExceptionParam, CONST PMINIDUMP_USER_STREAM_INFORMATION UserStreamParam, CONST PMINIDUMP_CALLBACK_INFORMATION CallbackParam);
 bool unlockTables(MYSQL& mysql);
+bool preTaggedSource = false; // BNC
 
 void createMinidump(struct _EXCEPTION_POINTERS* apExceptionInfo)
 {
@@ -1224,11 +1225,12 @@ void processSource(cSource &source, bool forceSourceReread, bool sourceWordNetRe
 				break;
 			case cSource::BNC_SOURCE_TYPE:
 			{
-				source.beginClock = clock();
-				bncc bnc;
-				bnc.process(source, source.sourceId, source.sourcePath);
-				source.adjustWords();
-				unknownCount = bnc.unknownCount;
+				// BNC processing has been removed for now - it is in getBNC.cpp
+				// source.beginClock = clock();
+				// bncc bnc;
+				// bnc.process(source, source.sourceId, source.sourcePath);
+				// source.adjustWords();
+				// unknownCount = bnc.unknownCount;
 				break;
 			}
 			case cSource::NO_SOURCE_TYPE:

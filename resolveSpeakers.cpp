@@ -488,9 +488,10 @@ void cSource::printSpeakerQueue(int where)
 //   paragraph, ignore.
 // if !immediatelyAfterEndOfParagraph (if in a paragraph after the first speaker quote in the paragraph)
 // and textBefore OR textAfter, quotedString is true.
-bool cSource::quotedString(unsigned int beginQuote,unsigned int endQuote,bool &noTextBeforeOrAfter,bool &noSpeakerAfterward)
-{ LFS
-  if (noSpeakerAfterward=((m[endQuote].flags&cWordMatch::flagInsertedQuote)!=0)) return false;
+bool cSource::quotedString(unsigned int beginQuote, unsigned int endQuote, bool& noTextBeforeOrAfter, bool& noSpeakerAfterward)
+{
+	LFS
+	noSpeakerAfterward = ((m[endQuote].flags & cWordMatch::flagInsertedQuote) != 0);
   bool EOSEmbeddedInside=m[endQuote-1].word->first==L"." || m[endQuote-1].word->first==L"?" || m[endQuote-1].word->first==L"!";
 	if (endQuote-beginQuote>5 && !EOSEmbeddedInside)
 	{
@@ -501,6 +502,8 @@ bool cSource::quotedString(unsigned int beginQuote,unsigned int endQuote,bool &n
 	bool textBeforeQuote=beginQuote>0 && m[beginQuote-1].word->first!=L"." && m[beginQuote-1].word->first!=L"?" && m[beginQuote-1].word->first!=L"!" && m[beginQuote-1].word!=Words.sectionWord;
 	bool textAfterQuote=!EOSEmbeddedInside && endQuote+1<m.size() && m[endQuote+1].word->first!=L"." && m[endQuote+1].word->first!=L"?" && m[endQuote+1].word->first!=L"!" && m[endQuote+1].word!=Words.sectionWord;
   noTextBeforeOrAfter=(!textBeforeQuote && !textAfterQuote);
+	if (noSpeakerAfterward)
+		return false;
   noSpeakerAfterward=textBeforeQuote && EOSEmbeddedInside;
   //for (unsigned int I=beginQuote; I<endQuote-2; I++)
   //  if (m[I].word->first==L"." || m[I].word->second.query(EOSForm)>=0)

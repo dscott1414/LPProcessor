@@ -8,7 +8,7 @@
 #include "bncc.h"
 #include "time.h"
 
-bool preTaggedSource = false;
+extern bool preTaggedSource;
 int clocksec();
 
 struct
@@ -623,89 +623,6 @@ void printWord(tIWMM iWord, int flags, int& printLocation, bool firstWordInSente
 	}
 	wprintf(L"%s ", temp);
 	printLocation += wcslen(temp) + 1;
-}
-
-void cWordMatch::setPreferredForm(void)
-{
-	if (flags & cWordMatch::flagOnlyConsiderProperNounForms)
-	{
-		forms.set(PROPER_NOUN_FORM_NUM);
-		for (unsigned int I = 0; I < word->second.formsSize(); I++)
-			if (word->second.Form(I)->properNounSubClass)
-				forms.set(word->second.forms()[I]);
-		return;
-	}
-	if (flags & cWordMatch::flagAddProperNoun)
-		forms.set(PROPER_NOUN_FORM_NUM);
-	// determine highest use pattern count
-	/* removed - not reliable
-	int up=-1,whichForm=-1;
-	if (word->second.isUnknown())
-		for (unsigned int I=0; I<word->second.formsSize(); I++)
-		{
-			if (up<word->second.usagePatterns[I])
-			{
-				up=word->second.usagePatterns[I];
-				whichForm=I;
-			}
-		}
-	if (whichForm>=0)
-		forms.set(word->second.forms()[whichForm]);
-	else
-	*/
-	for (unsigned int f = 0, *fp = word->second.forms(), *fpEnd = word->second.forms() + word->second.formsSize(); fp != fpEnd; fp++, f++)
-		forms.set(*fp);
-	if (!(flags & cWordMatch::flagFirstLetterCapitalized) || (flags & cWordMatch::flagRefuseProperNoun))
-		forms.reset(PROPER_NOUN_FORM_NUM);
-}
-
-void cWordMatch::setForm(void)
-{
-	// adjust words that are honorifics that are capitalized so that they are only recognized as honorifics
-	if (flags & cWordMatch::flagOnlyConsiderOtherNounForms)
-	{
-		// since it is a determiner, and also capitalized, the flagOnlyConsiderOtherNounForms was set, since we do not usually want a determiner to be considered a proper noun.
-		// HOWEVER, the word no is both a determiner, which has block proper noun on it, and an abbreviation, which is a proper noun subclass.  In this case, recognize it as an abbreviation.
-		if (word->first == L"no")
-		{
-			forms.set(abbreviationForm);
-		}
-		else
-			for (unsigned int I = 0; I < word->second.formsSize(); I++)
-				if (word->second.Form(I)->blockProperNounRecognition)
-					forms.set(word->second.forms()[I]);
-		return;
-	}
-	if (flags & cWordMatch::flagOnlyConsiderProperNounForms)
-	{
-		forms.set(PROPER_NOUN_FORM_NUM);
-		for (unsigned int I = 0; I < word->second.formsSize(); I++)
-			if (word->second.Form(I)->properNounSubClass)
-				forms.set(word->second.forms()[I]);
-		return;
-	}
-	if (flags & cWordMatch::flagAddProperNoun)
-		forms.set(PROPER_NOUN_FORM_NUM);
-	// if something has a 's after it, it can only be a noun
-	if (queryForm(nounForm) >= 0 && (flags & cWordMatch::flagNounOwner) != 0)
-	{
-		for (unsigned int f = 0, *fp = word->second.forms(), *fpEnd = word->second.forms() + word->second.formsSize(); fp != fpEnd; fp++, f++)
-			if (Forms[*fp]->properNounSubClass || *fp == nounForm || *fp == PROPER_NOUN_FORM_NUM)
-				forms.set(*fp);
-		return;
-	}
-	for (unsigned int f = 0, *fp = word->second.forms(), *fpEnd = word->second.forms() + word->second.formsSize(); fp != fpEnd; fp++, f++)
-	{
-		if (*fp >= Forms.size())
-		{
-			lplog(LOG_ERROR, L"Illegal form #%d found in word %s.", *fp, word->first.c_str());
-			*fp = 0;
-		}
-		else
-			forms.set(*fp);
-	}
-	if (!(flags & cWordMatch::flagFirstLetterCapitalized) || (flags & cWordMatch::flagRefuseProperNoun))
-		forms.reset(PROPER_NOUN_FORM_NUM);
 }
 
 

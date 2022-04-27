@@ -647,6 +647,9 @@ class cWord
 
 public:
   cWord(void);
+  void findPredefinedForms();
+  void adjustUsages();
+  void initializeCosts();
   void initialize();
 	void initializeChangeStateVerbs();
   ~cWord();

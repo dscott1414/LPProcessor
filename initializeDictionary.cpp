@@ -1669,16 +1669,8 @@ void cWord::initializeChangeStateVerbs()
 	predefineWords(changeState, L"changeState", L"changeState", L"verb", 0);
 }
 
-void cWord::initialize()
+void cWord::findPredefinedForms()
 {
-	LFS
-		wprintf(L"Initializing dictionary...                  \r");
-	// read into nicknameEquivalenceMap
-	addNickNames(L"source\\lists\\maleNicknames.txt");
-	addNickNames(L"source\\lists\\femaleNicknames.txt");
-
-	// SET internal form variables
-	// avoid looking these common forms up...
 	if (personalPronounAccusativeForm < 0) personalPronounAccusativeForm = cForms::gFindForm(L"personal_pronoun_accusative");
 	if (adverbForm < 0) adverbForm = cForms::gFindForm(L"adverb");
 	if (adjectiveForm < 0) adjectiveForm = cForms::gFindForm(L"adjective");
@@ -1748,6 +1740,82 @@ void cWord::initialize()
 	if (relativeForm < 0) relativeForm = cForms::gFindForm(L"relative");
 	if (monthForm < 0) monthForm = cForms::gFindForm(L"month");
 	if (predeterminerForm < 0) predeterminerForm = cForms::gFindForm(L"predeterminer");
+}
+
+void cWord::adjustUsages()
+{
+	// gquery(L"--")->second.flags &= ~cSourceWordInfo::ignoreFlag; // ignore all dashes EXCEPT the double dash!  Stanford check 33023/5697357 0.580% BEFORE.  
+	gquery(L"tell")->second.usagePatterns[cSourceWordInfo::VERB_HAS_2_OBJECTS] = 255;
+	gquery(L"tell")->second.usageCosts[cSourceWordInfo::VERB_HAS_2_OBJECTS] = 0;
+	gquery(L"descend")->second.usagePatterns[cSourceWordInfo::VERB_HAS_1_OBJECTS] = 255;
+	gquery(L"descend")->second.usageCosts[cSourceWordInfo::VERB_HAS_1_OBJECTS] = 0;
+	gquery(L"wish")->second.usagePatterns[cSourceWordInfo::VERB_HAS_2_OBJECTS] = 255; // I wish you some figgy pudding
+	gquery(L"wish")->second.usageCosts[cSourceWordInfo::VERB_HAS_2_OBJECTS] = 0;
+	//gquery(L"get")->second.usagePatterns[cSourceWordInfo::VERB_HAS_2_OBJECTS] = 127; // to get her a taxi - already set in DB
+	//gquery(L"get")->second.usageCosts[cSourceWordInfo::VERB_HAS_2_OBJECTS] = 2;
+	gquery(L"speed")->second.usagePatterns[cSourceWordInfo::VERB_HAS_1_OBJECTS] = 0;
+	gquery(L"speed")->second.usageCosts[cSourceWordInfo::VERB_HAS_1_OBJECTS] = 4;
+	gquery(L"other")->second.toLowestCost(indefinitePronounForm);
+	gquery(L"last")->second.toLowestCost(adjectiveForm);
+	gquery(L"last")->second.toLowestCost(adverbForm);
+	gquery(L"few")->second.toLowestCost(quantifierForm);
+	gquery(L"spring")->second.toLowestCost(verbForm);
+	gquery(L"whenever")->second.toLowestCost(relativizerForm);
+	gquery(L"such")->second.toLowestCost(cForms::gFindForm(L"predeterminer"));
+	gquery(L"dove")->second.setCost(verbForm, 3);
+	gquery(L"nurse")->second.usagePatterns[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
+	gquery(L"nurse")->second.usageCosts[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
+	gquery(L"turn")->second.usagePatterns[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
+	gquery(L"turn")->second.usageCosts[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
+	gquery(L"rap")->second.usagePatterns[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
+	gquery(L"rap")->second.usageCosts[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
+	gquery(L"mind")->second.usagePatterns[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
+	gquery(L"mind")->second.usageCosts[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
+	gquery(L"walk")->second.usagePatterns[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
+	gquery(L"walk")->second.usageCosts[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
+	gquery(L"repair")->second.usagePatterns[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0; // He wanted to repair to the Gallery.
+	gquery(L"repair")->second.usageCosts[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
+	gquery(L"step")->second.usagePatterns[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
+	gquery(L"step")->second.usageCosts[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
+	gquery(L"side")->second.usagePatterns[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
+	gquery(L"side")->second.usageCosts[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
+}
+
+void cWord::initializeCosts()
+{
+	// set usageCosts for 'think' verbs to be equal to the cost of verb usage.
+// see similar routine for regularizing usage cost of nouns - usageCostToNoun
+// **changes 
+// flags, inflectionFlags, usagePatterns, usageCosts, numProperNounUsageAsAdjective
+	for (tIWMM iWord = Words.WMM.begin(), iWordEnd = Words.WMM.end(); iWord != iWordEnd; iWord++)
+	{
+		iWord->second.setIgnore();
+		iWord->second.setTopLevel();
+		iWord->second.flags &= ~(cSourceWordInfo::physicalObjectByWN | cSourceWordInfo::notPhysicalObjectByWN | cSourceWordInfo::uncertainPhysicalObjectByWN);
+		iWord->second.costEquivalentSubClass(commonProfessionForm, nounForm);
+		iWord->second.costEquivalentSubClass(thinkForm, verbForm);
+		iWord->second.costEquivalentSubClass(verbverbForm, verbForm);
+		// reset these counts, which are more relevant on a per-source basis
+		iWord->second.usagePatterns[cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN] = iWord->second.usagePatterns[cSourceWordInfo::LOWER_CASE_USAGE_PATTERN] = 0;
+		// make honorifics not costly (honorifics are not reflected out of BNC properly so they are underweighted)
+		iWord->second.toLowestCostPreferForm(honorificForm, nounForm);
+		if (!iWord->second.toLowestCost(demonstrativeDeterminerForm) && iWord->second.query(relativizerForm) < 0 &&
+			iWord->first != L"there" && iWord->first != L"another" && iWord->first != L"so" && iWord->first != L"each" && iWord->first != L"every" && iWord->first != L"either" && iWord->first != L"neither" && iWord->first != L"other")
+			iWord->second.toLowestCost(pronounForm);
+	}
+}
+
+void cWord::initialize()
+{
+	LFS
+	wprintf(L"Initializing dictionary...                  \r");
+	// read into nicknameEquivalenceMap
+	addNickNames(L"source\\lists\\maleNicknames.txt");
+	addNickNames(L"source\\lists\\femaleNicknames.txt");
+
+	// SET internal form variables
+	// avoid looking these common forms up...
+	findPredefinedForms();
 
 	// set internal word variables
 	PPN = gquery(L"__ppn__"); // personal proper noun used for relations with pronouns or gendered proper nouns.
@@ -1812,64 +1880,12 @@ void cWord::initialize()
 	// initialize vbNet arrays
 	readVBNet();
 
-	// set usageCosts for 'think' verbs to be equal to the cost of verb usage.
-	// see similar routine for regularizing usage cost of nouns - usageCostToNoun
-	// **changes 
-	// flags, inflectionFlags, usagePatterns, usageCosts, numProperNounUsageAsAdjective
-	for (tIWMM iWord = Words.WMM.begin(), iWordEnd = Words.WMM.end(); iWord != iWordEnd; iWord++)
-	{
-		iWord->second.setIgnore();
-		iWord->second.setTopLevel();
-		iWord->second.flags &= ~(cSourceWordInfo::physicalObjectByWN | cSourceWordInfo::notPhysicalObjectByWN | cSourceWordInfo::uncertainPhysicalObjectByWN);
-		iWord->second.costEquivalentSubClass(commonProfessionForm, nounForm);
-		iWord->second.costEquivalentSubClass(thinkForm, verbForm);
-		iWord->second.costEquivalentSubClass(verbverbForm, verbForm);
-		// reset these counts, which are more relevant on a per-source basis
-		iWord->second.usagePatterns[cSourceWordInfo::PROPER_NOUN_USAGE_PATTERN] = iWord->second.usagePatterns[cSourceWordInfo::LOWER_CASE_USAGE_PATTERN] = 0;
-		// make honorifics not costly (honorifics are not reflected out of BNC properly so they are underweighted)
-		iWord->second.toLowestCostPreferForm(honorificForm, nounForm);
-		if (!iWord->second.toLowestCost(demonstrativeDeterminerForm) && iWord->second.query(relativizerForm) < 0 &&
-			iWord->first != L"there" && iWord->first != L"another" && iWord->first != L"so" && iWord->first != L"each" && iWord->first != L"every" && iWord->first != L"either" && iWord->first != L"neither" && iWord->first != L"other")
-			iWord->second.toLowestCost(pronounForm);
-	}
-	// gquery(L"--")->second.flags &= ~cSourceWordInfo::ignoreFlag; // ignore all dashes EXCEPT the double dash!  Stanford check 33023/5697357 0.580% BEFORE.  
-	gquery(L"tell")->second.usagePatterns[cSourceWordInfo::VERB_HAS_2_OBJECTS] = 255;
-	gquery(L"tell")->second.usageCosts[cSourceWordInfo::VERB_HAS_2_OBJECTS] = 0;
-	gquery(L"descend")->second.usagePatterns[cSourceWordInfo::VERB_HAS_1_OBJECTS] = 255;
-	gquery(L"descend")->second.usageCosts[cSourceWordInfo::VERB_HAS_1_OBJECTS] = 0;
-	gquery(L"wish")->second.usagePatterns[cSourceWordInfo::VERB_HAS_2_OBJECTS] = 255; // I wish you some figgy pudding
-	gquery(L"wish")->second.usageCosts[cSourceWordInfo::VERB_HAS_2_OBJECTS] = 0;
-	//gquery(L"get")->second.usagePatterns[cSourceWordInfo::VERB_HAS_2_OBJECTS] = 127; // to get her a taxi - already set in DB
-	//gquery(L"get")->second.usageCosts[cSourceWordInfo::VERB_HAS_2_OBJECTS] = 2;
-	gquery(L"speed")->second.usagePatterns[cSourceWordInfo::VERB_HAS_1_OBJECTS] = 0;
-	gquery(L"speed")->second.usageCosts[cSourceWordInfo::VERB_HAS_1_OBJECTS] = 4;
-	gquery(L"other")->second.toLowestCost(indefinitePronounForm);
-	gquery(L"last")->second.toLowestCost(adjectiveForm);
-	gquery(L"last")->second.toLowestCost(adverbForm);
-	gquery(L"few")->second.toLowestCost(quantifierForm);
-	gquery(L"spring")->second.toLowestCost(verbForm);
-	gquery(L"whenever")->second.toLowestCost(relativizerForm);
-	gquery(L"such")->second.toLowestCost(cForms::gFindForm(L"predeterminer"));
-	gquery(L"dove")->second.setCost(verbForm, 3);
-	gquery(L"nurse")->second.usagePatterns[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
-	gquery(L"nurse")->second.usageCosts[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
-	gquery(L"turn")->second.usagePatterns[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
-	gquery(L"turn")->second.usageCosts[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
-	gquery(L"rap")->second.usagePatterns[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
-	gquery(L"rap")->second.usageCosts[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
-	gquery(L"mind")->second.usagePatterns[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
-	gquery(L"mind")->second.usageCosts[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
-	gquery(L"walk")->second.usagePatterns[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
-	gquery(L"walk")->second.usageCosts[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
-	gquery(L"repair")->second.usagePatterns[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0; // He wanted to repair to the Gallery.
-	gquery(L"repair")->second.usageCosts[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
-	gquery(L"step")->second.usagePatterns[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
-	gquery(L"step")->second.usageCosts[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
-	gquery(L"side")->second.usagePatterns[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 0;
-	gquery(L"side")->second.usageCosts[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
+	initializeCosts();
+
+	adjustUsages();
+
 	// initialize time flags
 	createTimeCategories(true);  // normalize cost only
 	extendedParseHolidays();
 	printf("Finished initializing dictionary...\r");
 }
-
