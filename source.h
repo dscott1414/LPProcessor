@@ -2080,6 +2080,15 @@ public:
 	void associatePossessions(int where);
 	void moveNyms(int where,int toObject,int fromObject, const wchar_t * fromWhere);
 	bool implicitObject(int where);
+	void dropPOVIntoSpeakerGroup(const int sgi, int &povi, const int maleSpeakers, const int femaleSpeakers);
+	void dropDefinitelyIdentifiedSpeakersIntoSpeakerGroup(const int sgi, int &dni, const int maleSpeakers, const int femaleSpeakers);
+	void determineObserverStatus(const int sgi, int& nonObserver, const bool conversationRestricted, bool &isAnyNonObserverSpeakerNew, bool &isAnyObserverSpeakerNew);
+	bool determineObserverContinuing(const int sgi, const int nonObserver, const bool conversationRestricted);
+	void addPreviousObserver(const int sgi, const bool previousSpeakerGroupInSameSection);
+	void addPreviousPOV(const int sgi, const bool previousSpeakerGroupInSameSection);
+	void removeObserverAssociatedWithSpeakingGroup(const int sgi);
+	void setConversationalQuotes(const int sgi, int &currentQuote);
+	void distributeMetaNameOthers();
 	void distributePOV(void);
 	bool invalidGroupObjectClass(int oc);
 	void accumulateGroups(int where,vector <int> &groupedObjects,int &lastWhereMPluralGroupedObject);

@@ -2034,14 +2034,350 @@ const wchar_t* intString(int startPOVI, int povi, vector <int>& povInSpeakerGrou
 	return tmpstr.c_str();
 }
 
-// distribute povInSpeakerGroups and definitelyIdentifiedAsSpeakerInSpeakerGroups
-// to povSpeakers and dnSpeakers in speakerGroups.
-void cSource::distributePOV(void)
+void cSource::dropPOVIntoSpeakerGroup(const int sgi, int &povi, const int maleSpeakers, const int femaleSpeakers)
 {
-	LFS
-		// distribute people named as others in conversations (to lessen the risk of named supposedly hailed objects actually being talked about, rather than physically there)
-		int povi = 0, dni = 0, sgi = 0, mi, currentQuote = firstQuote;
 	wstring tmpstr, tmpstr2, tmpstr3;
+	int mi;
+	int startPOVI = povi;
+	set <int> povAmbiguousSpeakers;
+	while (povi < (signed)povInSpeakerGroups.size() && (mi = povInSpeakerGroups[povi]) < speakerGroups[sgi].sgEnd)
+	{
+		int o = m[mi].getObject();
+		bool found = speakerGroups[sgi].speakers.find(o) != speakerGroups[sgi].speakers.end();
+		int povAS = -1;
+		for (unsigned int I = 0; !found && I < m[mi].objectMatches.size(); I++)
+			if (speakerGroups[sgi].speakers.find(o = m[mi].objectMatches[I].object) != speakerGroups[sgi].speakers.end() &&
+				!objects[o].plural && (objects[o].male ^ objects[o].female) &&
+				!(found = (objects[o].male && maleSpeakers == 1) || (objects[o].female && femaleSpeakers == 1)))
+			{
+				int oldPOV = -1;
+				if (povAS >= 0 && (!sgi || speakerGroups[sgi - 1].povSpeakers.size() != 1 ||
+					((oldPOV = *speakerGroups[sgi - 1].povSpeakers.begin()) != o && oldPOV != povAS)))
+				{
+					povAS = -1;
+					break;
+				}
+				if (povAS < 0 || oldPOV < 0 || oldPOV != povAS)
+					povAS = o;
+			}
+		// if povSpeaker is not certain (it is matched to the object, rather than being the object)
+		// check if the object being matched is singular gendered, and if there are no other objects of that
+		// gender in the speakerGroup.  If so, it is not ambiguous.
+		if (!found && povAS >= 0)
+		{
+			if (sgi && speakerGroups[sgi - 1].povSpeakers.find(povAS) == speakerGroups[sgi - 1].povSpeakers.end() && speakerGroups[sgi - 1].povSpeakers.size())
+			{
+				if (debugTrace.traceSpeakerResolution)
+					lplog(LOG_RESOLUTION, L"%06d:ambiguous pov speaker %s in speakerGroup %s rejected (change in pov).", mi, objectString(povAS, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+			}
+			else
+				povAmbiguousSpeakers.insert(povAS);
+		}
+		if (found)
+		{
+			speakerGroups[sgi].povSpeakers.insert(o);
+			if (debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%06d:POVI speaker %s (1) inserted into speakerGroup %s.", mi, objectString(o, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+		}
+		povi++;
+	}
+	// if there were ambiguous speakers and no nonambiguous ones
+	if (povAmbiguousSpeakers.size() && speakerGroups[sgi].povSpeakers.empty())
+	{
+		bool allIn, oneIn;
+		if (povAmbiguousSpeakers.size() == 1)
+		{
+			// if there is only one ambiguous speaker (s1), get the gender, and go back to the last povSpeaker with the same gender, in the same section.
+			// if that povSpeaker is in the current speaker group, make it the povSpeaker instead.
+			for (int I = sgi - 1; I >= 0; I--)
+				if (speakerGroups[I].povSpeakers.size())
+				{
+					if (speakerGroups[I].povSpeakers.size() == 1 && objects[*speakerGroups[I].povSpeakers.begin()].matchGender(objects[*povAmbiguousSpeakers.begin()]) &&
+						speakerGroups[sgi].speakers.find(*speakerGroups[I].povSpeakers.begin()) != speakerGroups[sgi].speakers.end())
+					{
+						if (debugTrace.traceSpeakerResolution)
+							lplog(LOG_RESOLUTION, L"%s:POVI speaker %s remembered and inserted into speakerGroup %s.", intString(startPOVI, povi, povInSpeakerGroups, tmpstr3), objectString(speakerGroups[I].povSpeakers, tmpstr).c_str(), toText(speakerGroups[sgi], tmpstr2));
+						speakerGroups[sgi].povSpeakers = speakerGroups[I].povSpeakers;
+						break;
+					}
+				}
+			if (speakerGroups[sgi].povSpeakers.empty())
+			{
+				if (debugTrace.traceSpeakerResolution)
+					lplog(LOG_RESOLUTION, L"%s:POVI speaker %s (2) inserted into speakerGroup %s.", intString(startPOVI, povi, povInSpeakerGroups, tmpstr3), objectString(povAmbiguousSpeakers, tmpstr).c_str(), toText(speakerGroups[sgi], tmpstr2));
+				speakerGroups[sgi].povSpeakers = povAmbiguousSpeakers;
+			}
+		}
+		// at least one but not all ambiguous speakers were found in the previous speaker group
+		else if (sgi && intersect(speakerGroups[sgi - 1].speakers, povAmbiguousSpeakers, allIn, oneIn) && !allIn && oneIn)
+		{
+			for (set <int>::iterator si = speakerGroups[sgi - 1].speakers.begin(), siEnd = speakerGroups[sgi - 1].speakers.end(); si != siEnd; si++)
+				if (povAmbiguousSpeakers.find(*si) != povAmbiguousSpeakers.end())
+				{
+					if (debugTrace.traceSpeakerResolution)
+						lplog(LOG_RESOLUTION, L"%s:POVI speaker %s (3) inserted into speakerGroup %s.", intString(startPOVI, povi, povInSpeakerGroups, tmpstr3), objectString(*si, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+					speakerGroups[sgi].povSpeakers.insert(*si);
+				}
+		}
+	}
+	/* this leads to Boris having POVI incorrectly @22965
+	if (speakerGroups[sgi].povSpeakers.empty() && speakerGroups[sgi].speakers.size()==1 && conversationalQuotes==0 &&
+			(!sgi || speakerGroups[sgi-1].povSpeakers.empty() || speakerGroups[sgi-1].povSpeakers==speakerGroups[sgi].speakers) &&
+			(!sgi || speakerGroups[sgi-1].observers.empty() || find(speakerGroups[sgi-1].observers.begin(),speakerGroups[sgi-1].observers.end(),*speakerGroups[sgi].speakers.begin())!=speakerGroups[sgi-1].observers.end()))
+	{
+		speakerGroups[sgi].povSpeakers.insert(speakerGroups[sgi].speakers.begin(),speakerGroups[sgi].speakers.end());
+		lplog(LOG_RESOLUTION,L"%s:POVI speakers (4) previous speakerGroup %s.",intString(startPOVI,povi,povInSpeakerGroups,tmpstr3),toText(speakerGroups[sgi-1],tmpstr2));
+		lplog(LOG_RESOLUTION,L"%s:POVI speakers (4) inserted into speakerGroup %s.",intString(startPOVI,povi,povInSpeakerGroups,tmpstr3),toText(speakerGroups[sgi],tmpstr2));
+	}
+	*/
+}
+
+void cSource::dropDefinitelyIdentifiedSpeakersIntoSpeakerGroup(const int sgi, int &dni, const int maleSpeakers, const int femaleSpeakers)
+{
+	int mi;
+	while (dni < (signed)definitelyIdentifiedAsSpeakerInSpeakerGroups.size() && (mi = definitelyIdentifiedAsSpeakerInSpeakerGroups[dni]) < speakerGroups[sgi].sgEnd)
+	{
+		wstring tmpstr, tmpstr2, tmpstr3;
+		int o = m[mi].getObject();
+		bool found = speakerGroups[sgi].speakers.find(o) != speakerGroups[sgi].speakers.end(), ambiguous = false;
+		if (!found && m[mi].objectMatches.size() == 1 &&
+			(speakerGroups[sgi].speakers.find(o = m[mi].objectMatches[0].object) != speakerGroups[sgi].speakers.end()) &&
+			!objects[o].plural && (objects[o].male ^ objects[o].female) &&
+			!(found = (objects[o].male && maleSpeakers == 1) || (objects[o].female && femaleSpeakers == 1)) && debugTrace.traceSpeakerResolution)
+		{
+			if (objects[m[mi].getObject()].objectClass != GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS) // must set 'found' - something that matches occupation is much less likely to be ambiguous
+			{
+				lplog(LOG_RESOLUTION, L"%06d:ambiguous dn speaker %s rejected from speakerGroup %s.", mi, objectString(o, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+				ambiguous = true;
+			}
+			else
+				found = true;
+		}
+		if (!found && o >= 0 && objects[o].objectClass == BODY_OBJECT_CLASS && objects[o].getOwnerWhere() >= 0)
+		{
+			int oo = m[objects[o].getOwnerWhere()].getObject(), oow;
+			found = speakerGroups[sgi].speakers.find(oo) != speakerGroups[sgi].speakers.end();
+			if (!found && oo >= 0 && (oow = objects[oo].getOwnerWhere()) >= 0 && m[oow].objectMatches.size() == 1 &&
+				(found = speakerGroups[sgi].speakers.find(m[oow].objectMatches[0].object) != speakerGroups[sgi].speakers.end()))
+				o = m[oow].objectMatches[0].object;
+		}
+		// Ivan - a new name only mentioned in quotes.  Also not mergable to any previous name
+		if (!found && o >= 0 && !ambiguous && objects[o].objectClass == NAME_OBJECT_CLASS && !objects[o].plural && (objects[o].male ^ objects[o].female) && objects[o].getSubType() == -1 &&
+			objects[o].originalLocation > speakerGroups[sgi].sgBegin)
+		{
+			int nonNameObjectFound = -1, numFound = 0;
+			// search for a non-name object this name object could be
+			for (set <int>::iterator si = speakerGroups[sgi].speakers.begin(), siEnd = speakerGroups[sgi].speakers.end(); si != siEnd; si++)
+				if (objects[*si].objectClass != NAME_OBJECT_CLASS)
+				{
+					nonNameObjectFound = *si;
+					numFound++;
+				}
+			if (numFound == 1 && speakerGroups[sgi].metaNameOthers.find(o) == speakerGroups[sgi].metaNameOthers.end() && sections.size())
+			{
+				if (debugTrace.traceSpeakerResolution)
+					lplog(LOG_RESOLUTION, L"%06d:new dn speaker %s - replacing %s in speakerGroup %s", mi, objectString(o, tmpstr, false).c_str(), objectString(nonNameObjectFound, tmpstr2, false).c_str(), toText(speakerGroups[sgi], tmpstr3));
+				for (section = 0; section + 1 < sections.size() && (signed)sections[section + 1].begin < mi; section++);
+				currentSpeakerGroup = sgi;
+				replaceObjectInSection(mi, o, nonNameObjectFound, L"new name mentioned only in quotes");
+				int beginLimit = sections[section].begin, untilLimit = sections[section + 1].begin;
+				for (vector <cObject::cLocation>::iterator li = objects[nonNameObjectFound].locations.begin(), liEnd = objects[nonNameObjectFound].locations.end(); li != liEnd; li++)
+					if (li->at >= beginLimit && li->at <= untilLimit && m[li->at].getObject() == nonNameObjectFound && !(m[li->at].flags & cWordMatch::flagUnresolvableObjectResolvedThroughSpeakerGroup))
+					{
+						m[li->at].flags |= cWordMatch::flagUnresolvableObjectResolvedThroughSpeakerGroup;
+						if (debugTrace.traceSpeakerResolution)
+							lplog(LOG_SG, L"%06d:flagUnresolvableObjectResolvedThroughSpeakerGroup:%s", li->at, objectString(o, tmpstr2, true).c_str());
+						if (m[li->at].objectMatches.empty())
+						{
+							m[li->at].objectMatches.push_back(cOM(o, SALIENCE_THRESHOLD));
+							objects[o].locations.push_back(li->at);
+						}
+					}
+			}
+			dni++;
+			continue;
+		}
+		if (found)
+		{
+			speakerGroups[sgi].dnSpeakers.insert(o);
+			if (debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%06d:dn speaker %s found in speakerGroup %s.", mi, objectString(o, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+		}
+		else if (!ambiguous && debugTrace.traceSpeakerResolution)
+			lplog(LOG_RESOLUTION, L"%06d:dn speaker %s rejected from speakerGroup %s.", mi, objectString(o, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+		dni++;
+	}
+}
+
+void cSource::determineObserverStatus(const int sgi, int &nonObserver, const bool conversationRestricted, bool &isAnyNonObserverSpeakerNew, bool &isAnyObserverSpeakerNew)
+{
+	wstring tmpstr, tmpstr2;
+	vector <cSyntacticRelationGroup>::iterator location = findSyntacticRelationGroup((sgi > 0) ? speakerGroups[sgi - 1].sgBegin : speakerGroups[sgi].sgBegin);
+	for (set <int>::iterator mo = speakerGroups[sgi].speakers.begin(), moEnd = speakerGroups[sgi].speakers.end(); mo != moEnd; mo++)
+	{
+		bool isPOV = speakerGroups[sgi].povSpeakers.find(*mo) != speakerGroups[sgi].povSpeakers.end();
+		bool isDN = speakerGroups[sgi].dnSpeakers.find(*mo) != speakerGroups[sgi].dnSpeakers.end();
+		bool isPreviousObserver = sgi && find(speakerGroups[sgi - 1].observers.begin(), speakerGroups[sgi - 1].observers.end(), *mo) != speakerGroups[sgi - 1].observers.end();
+		// speaker part of previous speakerGroup and conversationalQuotes
+		bool isPreviousSpeaker = sgi && speakerGroups[sgi - 1].speakers.find(*mo) != speakerGroups[sgi - 1].speakers.end() && speakerGroups[sgi - 1].conversationalQuotes && !isPreviousObserver;
+		bool allIn, oneIn, currentSpeakerGroupSuperGroupToPrevious = sgi && intersect(speakerGroups[sgi - 1].speakers, speakerGroups[sgi].speakers, allIn, oneIn) && allIn;
+		// follower? - search for hasSyntacticRelationGroup 'follow'
+		bool follower = false;
+		for (vector <cSyntacticRelationGroup>::iterator li = location; li != syntacticRelationGroups.end() && li->where < speakerGroups[sgi].sgEnd && !follower; li++)
+			follower = (in(*mo, li->whereSubject) && li->whereVerb >= 0 && isVerbClass(li->whereVerb, L"chase"));
+		// if there is more than one conversational quote, and there is only one definitively named speaker, and there are more than two speakers, and
+		//   the speaker was not an observer in a pervious group, then speaker is not an observer (because we don't know whether the other speaker is actually an observer)
+		bool uncertainObserver = speakerGroups[sgi].conversationalQuotes && speakerGroups[sgi].dnSpeakers.size() <= 1 && speakerGroups[sgi].speakers.size() > 2 && !isPreviousObserver;
+		// if the speaker was not an observer in previous group and dnSpeakers is empty, then speaker is not an observer
+		if (isPOV && !isDN && (!speakerGroups[sgi].dnSpeakers.empty() || isPreviousObserver) && !(isPreviousSpeaker && currentSpeakerGroupSuperGroupToPrevious) && (!uncertainObserver || follower))
+		{
+			if (debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"OBS observer %s found in speakerGroup %s.", objectString(*mo, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+			speakerGroups[sgi].observers.insert(*mo);
+			if (sgi)
+				isAnyObserverSpeakerNew |= speakerGroups[sgi - 1].speakers.find(*mo) == speakerGroups[sgi - 1].speakers.end();
+		}
+		// is this non-observer speaker new?
+		else if (sgi && conversationRestricted)
+		{
+			isAnyNonObserverSpeakerNew |= speakerGroups[sgi - 1].speakers.find(*mo) == speakerGroups[sgi - 1].speakers.end();
+			nonObserver = *mo;
+		}
+	}
+}
+
+bool cSource::determineObserverContinuing(const int sgi, const int nonObserver, const bool conversationRestricted)
+{
+	bool observerContinuing = sgi && speakerGroups[sgi].observers == speakerGroups[sgi - 1].observers;
+	if (conversationRestricted && speakerGroups[sgi].observers.size() == 1 && observerContinuing && nonObserver >= 0)
+	{
+		// get last speakerGroup of non-observer that contains observer
+		observerContinuing = false;
+		for (int sgi2 = sgi - 1; sgi2 >= 0; sgi2--)
+			if (speakerGroups[sgi2].speakers.find(nonObserver) != speakerGroups[sgi2].speakers.end())
+			{
+				if (observerContinuing = speakerGroups[sgi].observers == speakerGroups[sgi2].observers)
+					break;
+				if (speakerGroups[sgi2].speakers.find(*speakerGroups[sgi].observers.begin()) != speakerGroups[sgi2].speakers.end())
+					break;
+			}
+	}
+	return observerContinuing;
+}
+
+// also an observer could be the observer of the previous group, who also doesn't speak in the current group, and there are no other povSpeakers of the current group.
+// also a section cannot be crossed with this assumption.
+void cSource::addPreviousObserver(const int sgi, const bool previousSpeakerGroupInSameSection)
+{
+	if (speakerGroups[sgi].povSpeakers.empty() && sgi && speakerGroups[sgi - 1].observers.size())
+	{
+		// both speakergroups must belong to the same section
+		if (previousSpeakerGroupInSameSection)
+		{
+			for (set <int>::iterator mo = speakerGroups[sgi - 1].observers.begin(), moEnd = speakerGroups[sgi - 1].observers.end(); mo != moEnd; mo++)
+			{
+				// if not a definite speaker, but is a speaker, and is not already an observer
+				if (speakerGroups[sgi].dnSpeakers.find(*mo) == speakerGroups[sgi].dnSpeakers.end() &&
+					speakerGroups[sgi].speakers.find(*mo) != speakerGroups[sgi].speakers.end() &&
+					find(speakerGroups[sgi].observers.begin(), speakerGroups[sgi].observers.end(), *mo) == speakerGroups[sgi].observers.end())
+				{
+					wstring tmpstr, tmpstr2;
+					if (debugTrace.traceSpeakerResolution)
+						lplog(LOG_RESOLUTION, L"POVI OBS observer %s found in speakerGroup %s (2).", objectString(*mo, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+					speakerGroups[sgi].observers.insert(*mo);
+					speakerGroups[sgi].povSpeakers.insert(*mo);
+				}
+			}
+		}
+	}
+}
+
+void cSource::addPreviousPOV(const int sgi, const bool previousSpeakerGroupInSameSection)
+{
+	// also a pov could be the pov of the previous group, who also doesn't speak in the current group, and there are no other povSpeakers of the current group.
+// also all the povSpeakers must be also of the current group.
+	if (speakerGroups[sgi].povSpeakers.empty() && sgi && speakerGroups[sgi - 1].povSpeakers.size() && previousSpeakerGroupInSameSection)
+	{
+		wstring tmpstr, tmpstr2;
+		// all the previous povSpeakers also have to be in the current group
+		bool oneIn, allIn;
+		intersect(speakerGroups[sgi - 1].povSpeakers, speakerGroups[sgi].speakers, allIn, oneIn);
+		if (allIn)
+		{
+			speakerGroups[sgi].povSpeakers = speakerGroups[sgi - 1].povSpeakers;
+			if (debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"pov speakers from %s moved forward into speakerGroup %s.", toText(speakerGroups[sgi - 1], tmpstr), toText(speakerGroups[sgi], tmpstr2));
+			// if there are no definite speakers in speakerGroup, then the povSpeaker would probably NOT be the one not speaking, so skip this observer test
+			if (speakerGroups[sgi].dnSpeakers.size() || !speakerGroups[sgi].conversationalQuotes)
+			{
+				for (set <int>::iterator mo = speakerGroups[sgi].povSpeakers.begin(), moEnd = speakerGroups[sgi].povSpeakers.end(); mo != moEnd; mo++)
+				{
+					// if not a definite speaker, but is a speaker, and is not already an observer
+					if (speakerGroups[sgi].dnSpeakers.find(*mo) == speakerGroups[sgi].dnSpeakers.end())
+					{
+						if (debugTrace.traceSpeakerResolution)
+							lplog(LOG_RESOLUTION, L"OBS observer %s derived from pov in previous speakerGroup in speakerGroup %s (3).", objectString(*mo, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+						speakerGroups[sgi].observers.insert(*mo);
+					}
+				}
+				if (speakerGroups[sgi].observers.size() == 1 && speakerGroups[sgi].groupedSpeakers.find(*speakerGroups[sgi].observers.begin()) != speakerGroups[sgi].groupedSpeakers.end())
+				{
+					if (debugTrace.traceSpeakerResolution)
+						lplog(LOG_RESOLUTION, L"OBS observer %s derived from pov in previous speakerGroup in speakerGroup %s CANCELLED (in group).", objectString(speakerGroups[sgi].observers, tmpstr).c_str(), toText(speakerGroups[sgi], tmpstr2));
+					speakerGroups[sgi].observers.clear();
+				}
+			}
+		}
+	}
+}
+
+void cSource::removeObserverAssociatedWithSpeakingGroup(const int sgi)
+{
+	// if an observer belongs to a group and that any of the group definitely speaks, then remove the observer. (error check)
+	bool allObserversInGroup = true, oneObserverInGroup;
+	// are observers grouped?
+	intersect(speakerGroups[sgi].groupedSpeakers, speakerGroups[sgi].observers, allObserversInGroup, oneObserverInGroup);
+	// if at least one observer is in a group, but not all the observers are in the group
+	if (oneObserverInGroup && !allObserversInGroup)
+	{
+		bool allGroupedAreDefiniteSpeakers, oneGroupedIsDefiniteSpeaker;
+		// if any of the groupedSpeakers is a definite speaker, then erase all observers that are in the group.
+		intersect(speakerGroups[sgi].groupedSpeakers, speakerGroups[sgi].dnSpeakers, allGroupedAreDefiniteSpeakers, oneGroupedIsDefiniteSpeaker);
+		if (oneGroupedIsDefiniteSpeaker)
+			for (set <int>::iterator mo = speakerGroups[sgi].observers.begin(); mo != speakerGroups[sgi].observers.end(); )
+			{
+				if (speakerGroups[sgi].groupedSpeakers.find(*mo) == speakerGroups[sgi].groupedSpeakers.end())
+					mo++;
+				else
+				{
+					wstring tmpstr, tmpstr2;
+					if (debugTrace.traceSpeakerResolution)
+						lplog(LOG_RESOLUTION, L"observer %s erased from speakerGroup %s [observer is in speaking group].", objectString(*mo, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+					speakerGroups[sgi].observers.erase(mo++);
+				}
+			}
+	}
+}
+
+void cSource::setConversationalQuotes(const int sgi, int &currentQuote)
+{
+	int conversationalQuotes = 0;
+	while (currentQuote >= 0 && currentQuote < speakerGroups[sgi].sgEnd)
+	{
+		// determine whether the speaker was just talking to him/herself
+		if (m[currentQuote].objectMatches.size() != 1 || m[currentQuote].audienceObjectMatches.size() != 1 ||
+			m[currentQuote].objectMatches[0].object != m[currentQuote].audienceObjectMatches[0].object)
+			conversationalQuotes++;
+		currentQuote = m[currentQuote].nextQuote;
+	}
+	speakerGroups[sgi].conversationalQuotes = conversationalQuotes;
+}
+
+// distribute people named as others in conversations (to lessen the risk of named supposedly hailed objects actually being talked about, rather than physically there)
+void cSource::distributeMetaNameOthers()
+{
+	int sgi = 0, mi;
+	wstring tmpstr, tmpstr2;
 	for (unsigned int I = 0; I < metaNameOthersInSpeakerGroups.size() && sgi < (int)speakerGroups.size(); sgi++)
 		for (; I < (signed)metaNameOthersInSpeakerGroups.size() && (mi = metaNameOthersInSpeakerGroups[I]) < speakerGroups[sgi].sgEnd; I++)
 		{
@@ -2049,7 +2385,16 @@ void cSource::distributePOV(void)
 			if (debugTrace.traceSpeakerResolution)
 				lplog(LOG_RESOLUTION, L"%06d:MNO speaker %s inserted into speakerGroup %s.", mi, objectString(m[mi].getObject(), tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
 		}
-	sgi = 0;
+}
+
+// distribute povInSpeakerGroups and definitelyIdentifiedAsSpeakerInSpeakerGroups
+// to povSpeakers and dnSpeakers in speakerGroups.
+void cSource::distributePOV()
+{
+	LFS
+	int povi = 0, dni = 0, sgi = 0, currentQuote = firstQuote;
+	distributeMetaNameOthers();
+	wstring tmpstr, tmpstr2, tmpstr3;
 	while (sgi < (signed)speakerGroups.size())
 	{
 		int maleSpeakers = 0, femaleSpeakers = 0;
@@ -2058,179 +2403,9 @@ void cSource::distributePOV(void)
 				maleSpeakers++;
 			else if (objects[*si].female)
 				femaleSpeakers++;
-		int conversationalQuotes = 0;
-		while (currentQuote >= 0 && currentQuote < speakerGroups[sgi].sgEnd)
-		{
-			// determine whether the speaker was just talking to him/herself
-			if (m[currentQuote].objectMatches.size() != 1 || m[currentQuote].audienceObjectMatches.size() != 1 ||
-				m[currentQuote].objectMatches[0].object != m[currentQuote].audienceObjectMatches[0].object)
-				conversationalQuotes++;
-			currentQuote = m[currentQuote].nextQuote;
-		}
-		speakerGroups[sgi].conversationalQuotes = conversationalQuotes;
-		set <int> povAmbiguousSpeakers;
-		int startPOVI = povi;
-		while (povi < (signed)povInSpeakerGroups.size() && (mi = povInSpeakerGroups[povi]) < speakerGroups[sgi].sgEnd)
-		{
-			int o = m[mi].getObject();
-			bool found = speakerGroups[sgi].speakers.find(o) != speakerGroups[sgi].speakers.end();
-			int povAS = -1;
-			for (unsigned int I = 0; !found && I < m[mi].objectMatches.size(); I++)
-				if (speakerGroups[sgi].speakers.find(o = m[mi].objectMatches[I].object) != speakerGroups[sgi].speakers.end() &&
-					!objects[o].plural && (objects[o].male ^ objects[o].female) &&
-					!(found = (objects[o].male && maleSpeakers == 1) || (objects[o].female && femaleSpeakers == 1)))
-				{
-					int oldPOV = -1;
-					if (povAS >= 0 && (!sgi || speakerGroups[sgi - 1].povSpeakers.size() != 1 ||
-						((oldPOV = *speakerGroups[sgi - 1].povSpeakers.begin()) != o && oldPOV != povAS)))
-					{
-						povAS = -1;
-						break;
-					}
-					if (povAS < 0 || oldPOV < 0 || oldPOV != povAS)
-						povAS = o;
-				}
-			// if povSpeaker is not certain (it is matched to the object, rather than being the object)
-			// check if the object being matched is singular gendered, and if there are no other objects of that
-			// gender in the speakerGroup.  If so, it is not ambiguous.
-			if (!found && povAS >= 0)
-			{
-				if (sgi && speakerGroups[sgi - 1].povSpeakers.find(povAS) == speakerGroups[sgi - 1].povSpeakers.end() && speakerGroups[sgi - 1].povSpeakers.size())
-				{
-					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d:ambiguous pov speaker %s in speakerGroup %s rejected (change in pov).", mi, objectString(povAS, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
-				}
-				else
-					povAmbiguousSpeakers.insert(povAS);
-			}
-			if (found)
-			{
-				speakerGroups[sgi].povSpeakers.insert(o);
-				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:POVI speaker %s (1) inserted into speakerGroup %s.", mi, objectString(o, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
-			}
-			povi++;
-		}
-		// if there were ambiguous speakers and no nonambiguous ones
-		if (povAmbiguousSpeakers.size() && speakerGroups[sgi].povSpeakers.empty())
-		{
-			bool allIn, oneIn;
-			if (povAmbiguousSpeakers.size() == 1)
-			{
-				// if there is only one ambiguous speaker (s1), get the gender, and go back to the last povSpeaker with the same gender, in the same section.
-				// if that povSpeaker is in the current speaker group, make it the povSpeaker instead.
-				for (int I = sgi - 1; I >= 0; I--)
-					if (speakerGroups[I].povSpeakers.size())
-					{
-						if (speakerGroups[I].povSpeakers.size() == 1 && objects[*speakerGroups[I].povSpeakers.begin()].matchGender(objects[*povAmbiguousSpeakers.begin()]) &&
-							speakerGroups[sgi].speakers.find(*speakerGroups[I].povSpeakers.begin()) != speakerGroups[sgi].speakers.end())
-						{
-							if (debugTrace.traceSpeakerResolution)
-								lplog(LOG_RESOLUTION, L"%s:POVI speaker %s remembered and inserted into speakerGroup %s.", intString(startPOVI, povi, povInSpeakerGroups, tmpstr3), objectString(speakerGroups[I].povSpeakers, tmpstr).c_str(), toText(speakerGroups[sgi], tmpstr2));
-							speakerGroups[sgi].povSpeakers = speakerGroups[I].povSpeakers;
-							break;
-						}
-					}
-				if (speakerGroups[sgi].povSpeakers.empty())
-				{
-					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%s:POVI speaker %s (2) inserted into speakerGroup %s.", intString(startPOVI, povi, povInSpeakerGroups, tmpstr3), objectString(povAmbiguousSpeakers, tmpstr).c_str(), toText(speakerGroups[sgi], tmpstr2));
-					speakerGroups[sgi].povSpeakers = povAmbiguousSpeakers;
-				}
-			}
-			// at least one but not all ambiguous speakers were found in the previous speaker group
-			else if (sgi && intersect(speakerGroups[sgi - 1].speakers, povAmbiguousSpeakers, allIn, oneIn) && !allIn && oneIn)
-			{
-				for (set <int>::iterator si = speakerGroups[sgi - 1].speakers.begin(), siEnd = speakerGroups[sgi - 1].speakers.end(); si != siEnd; si++)
-					if (povAmbiguousSpeakers.find(*si) != povAmbiguousSpeakers.end())
-					{
-						if (debugTrace.traceSpeakerResolution)
-							lplog(LOG_RESOLUTION, L"%s:POVI speaker %s (3) inserted into speakerGroup %s.", intString(startPOVI, povi, povInSpeakerGroups, tmpstr3), objectString(*si, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
-						speakerGroups[sgi].povSpeakers.insert(*si);
-					}
-			}
-		}
-		/* this leads to Boris having POVI incorrectly @22965
-		if (speakerGroups[sgi].povSpeakers.empty() && speakerGroups[sgi].speakers.size()==1 && conversationalQuotes==0 &&
-				(!sgi || speakerGroups[sgi-1].povSpeakers.empty() || speakerGroups[sgi-1].povSpeakers==speakerGroups[sgi].speakers) &&
-				(!sgi || speakerGroups[sgi-1].observers.empty() || find(speakerGroups[sgi-1].observers.begin(),speakerGroups[sgi-1].observers.end(),*speakerGroups[sgi].speakers.begin())!=speakerGroups[sgi-1].observers.end()))
-		{
-			speakerGroups[sgi].povSpeakers.insert(speakerGroups[sgi].speakers.begin(),speakerGroups[sgi].speakers.end());
-			lplog(LOG_RESOLUTION,L"%s:POVI speakers (4) previous speakerGroup %s.",intString(startPOVI,povi,povInSpeakerGroups,tmpstr3),toText(speakerGroups[sgi-1],tmpstr2));
-			lplog(LOG_RESOLUTION,L"%s:POVI speakers (4) inserted into speakerGroup %s.",intString(startPOVI,povi,povInSpeakerGroups,tmpstr3),toText(speakerGroups[sgi],tmpstr2));
-		}
-		*/
-		while (dni < (signed)definitelyIdentifiedAsSpeakerInSpeakerGroups.size() && (mi = definitelyIdentifiedAsSpeakerInSpeakerGroups[dni]) < speakerGroups[sgi].sgEnd)
-		{
-			int o = m[mi].getObject();
-			bool found = speakerGroups[sgi].speakers.find(o) != speakerGroups[sgi].speakers.end(), ambiguous = false;
-			if (!found && m[mi].objectMatches.size() == 1 &&
-				(speakerGroups[sgi].speakers.find(o = m[mi].objectMatches[0].object) != speakerGroups[sgi].speakers.end()) &&
-				!objects[o].plural && (objects[o].male ^ objects[o].female) &&
-				!(found = (objects[o].male && maleSpeakers == 1) || (objects[o].female && femaleSpeakers == 1)) && debugTrace.traceSpeakerResolution)
-			{
-				if (objects[m[mi].getObject()].objectClass != GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS) // must set 'found' - something that matches occupation is much less likely to be ambiguous
-				{
-					lplog(LOG_RESOLUTION, L"%06d:ambiguous dn speaker %s rejected from speakerGroup %s.", mi, objectString(o, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
-					ambiguous = true;
-				}
-				else
-					found = true;
-			}
-			if (!found && o >= 0 && objects[o].objectClass == BODY_OBJECT_CLASS && objects[o].getOwnerWhere() >= 0)
-			{
-				int oo = m[objects[o].getOwnerWhere()].getObject(), oow;
-				found = speakerGroups[sgi].speakers.find(oo) != speakerGroups[sgi].speakers.end();
-				if (!found && oo >= 0 && (oow = objects[oo].getOwnerWhere()) >= 0 && m[oow].objectMatches.size() == 1 &&
-					(found = speakerGroups[sgi].speakers.find(m[oow].objectMatches[0].object) != speakerGroups[sgi].speakers.end()))
-					o = m[oow].objectMatches[0].object;
-			}
-			// Ivan - a new name only mentioned in quotes.  Also not mergable to any previous name
-			if (!found && o >= 0 && !ambiguous && objects[o].objectClass == NAME_OBJECT_CLASS && !objects[o].plural && (objects[o].male ^ objects[o].female) && objects[o].getSubType() == -1 &&
-				objects[o].originalLocation > speakerGroups[sgi].sgBegin)
-			{
-				int nonNameObjectFound = -1, numFound = 0;
-				// search for a non-name object this name object could be
-				for (set <int>::iterator si = speakerGroups[sgi].speakers.begin(), siEnd = speakerGroups[sgi].speakers.end(); si != siEnd; si++)
-					if (objects[*si].objectClass != NAME_OBJECT_CLASS)
-					{
-						nonNameObjectFound = *si;
-						numFound++;
-					}
-				if (numFound == 1 && speakerGroups[sgi].metaNameOthers.find(o) == speakerGroups[sgi].metaNameOthers.end() && sections.size())
-				{
-					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d:new dn speaker %s - replacing %s in speakerGroup %s", mi, objectString(o, tmpstr, false).c_str(), objectString(nonNameObjectFound, tmpstr2, false).c_str(), toText(speakerGroups[sgi], tmpstr3));
-					for (section = 0; section + 1 < sections.size() && (signed)sections[section + 1].begin < mi; section++);
-					currentSpeakerGroup = sgi;
-					replaceObjectInSection(mi, o, nonNameObjectFound, L"new name mentioned only in quotes");
-					int beginLimit = sections[section].begin, untilLimit = sections[section + 1].begin;
-					for (vector <cObject::cLocation>::iterator li = objects[nonNameObjectFound].locations.begin(), liEnd = objects[nonNameObjectFound].locations.end(); li != liEnd; li++)
-						if (li->at >= beginLimit && li->at <= untilLimit && m[li->at].getObject() == nonNameObjectFound && !(m[li->at].flags & cWordMatch::flagUnresolvableObjectResolvedThroughSpeakerGroup))
-						{
-							m[li->at].flags |= cWordMatch::flagUnresolvableObjectResolvedThroughSpeakerGroup;
-							if (debugTrace.traceSpeakerResolution)
-								lplog(LOG_SG, L"%06d:flagUnresolvableObjectResolvedThroughSpeakerGroup:%s", li->at, objectString(o, tmpstr2, true).c_str());
-							if (m[li->at].objectMatches.empty())
-							{
-								m[li->at].objectMatches.push_back(cOM(o, SALIENCE_THRESHOLD));
-								objects[o].locations.push_back(li->at);
-							}
-						}
-				}
-				dni++;
-				continue;
-			}
-			if (found)
-			{
-				speakerGroups[sgi].dnSpeakers.insert(o);
-				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:dn speaker %s found in speakerGroup %s.", mi, objectString(o, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
-			}
-			else if (!ambiguous && debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:dn speaker %s rejected from speakerGroup %s.", mi, objectString(o, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
-			dni++;
-		}
+		setConversationalQuotes(sgi, currentQuote);
+		dropPOVIntoSpeakerGroup(sgi, povi, maleSpeakers, femaleSpeakers);
+		dropDefinitelyIdentifiedSpeakersIntoSpeakerGroup(sgi, dni, maleSpeakers, femaleSpeakers);
 		// an observer is one that is mentioned as having an internal state, but doesn't speak.
 
 		// if the speakerGroup has only two speakers, there is a conversation, and the observer is the only new speaker,
@@ -2240,59 +2415,15 @@ void cSource::distributePOV(void)
 		// speakerGroup and the previous speakerGroup had conversational quotes, then this is not an observer
 		bool conversationRestricted = (speakerGroups[sgi].speakers.size() == 2 && speakerGroups[sgi].conversationalQuotes), isAnyNonObserverSpeakerNew = false, isAnyObserverSpeakerNew = false;
 		int nonObserver = -1;
-		vector <cSyntacticRelationGroup>::iterator location = findSyntacticRelationGroup((sgi > 0) ? speakerGroups[sgi - 1].sgBegin : speakerGroups[sgi].sgBegin);
-		for (set <int>::iterator mo = speakerGroups[sgi].speakers.begin(), moEnd = speakerGroups[sgi].speakers.end(); mo != moEnd; mo++)
-		{
-			bool isPOV = speakerGroups[sgi].povSpeakers.find(*mo) != speakerGroups[sgi].povSpeakers.end();
-			bool isDN = speakerGroups[sgi].dnSpeakers.find(*mo) != speakerGroups[sgi].dnSpeakers.end();
-			bool isPreviousObserver = sgi && find(speakerGroups[sgi - 1].observers.begin(), speakerGroups[sgi - 1].observers.end(), *mo) != speakerGroups[sgi - 1].observers.end();
-			// speaker part of previous speakerGroup and conversationalQuotes
-			bool isPreviousSpeaker = sgi && speakerGroups[sgi - 1].speakers.find(*mo) != speakerGroups[sgi - 1].speakers.end() && speakerGroups[sgi - 1].conversationalQuotes && !isPreviousObserver;
-			bool allIn, oneIn, currentSpeakerGroupSuperGroupToPrevious = sgi && intersect(speakerGroups[sgi - 1].speakers, speakerGroups[sgi].speakers, allIn, oneIn) && allIn;
-			// follower? - search for hasSyntacticRelationGroup 'follow'
-			bool follower = false;
-			for (vector <cSyntacticRelationGroup>::iterator li = location; li != syntacticRelationGroups.end() && li->where < speakerGroups[sgi].sgEnd && !follower; li++)
-				follower = (in(*mo, li->whereSubject) && li->whereVerb >= 0 && isVerbClass(li->whereVerb, L"chase"));
-			// if there is more than one conversational quote, and there is only one definitively named speaker, and there are more than two speakers, and
-			//   the speaker was not an observer in a pervious group, then speaker is not an observer (because we don't know whether the other speaker is actually an observer)
-			bool uncertainObserver = speakerGroups[sgi].conversationalQuotes && speakerGroups[sgi].dnSpeakers.size() <= 1 && speakerGroups[sgi].speakers.size() > 2 && !isPreviousObserver;
-			// if the speaker was not an observer in previous group and dnSpeakers is empty, then speaker is not an observer
-			if (isPOV && !isDN && (!speakerGroups[sgi].dnSpeakers.empty() || isPreviousObserver) && !(isPreviousSpeaker && currentSpeakerGroupSuperGroupToPrevious) && (!uncertainObserver || follower))
-			{
-				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"OBS observer %s found in speakerGroup %s.", objectString(*mo, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
-				speakerGroups[sgi].observers.insert(*mo);
-				if (sgi)
-					isAnyObserverSpeakerNew |= speakerGroups[sgi - 1].speakers.find(*mo) == speakerGroups[sgi - 1].speakers.end();
-			}
-			// is this non-observer speaker new?
-			else if (sgi && conversationRestricted)
-			{
-				isAnyNonObserverSpeakerNew |= speakerGroups[sgi - 1].speakers.find(*mo) == speakerGroups[sgi - 1].speakers.end();
-				nonObserver = *mo;
-			}
-		}
+		determineObserverStatus(sgi, nonObserver, conversationRestricted, isAnyNonObserverSpeakerNew, isAnyObserverSpeakerNew);
 		// if all observers are old and all non observers are new and there is only one non-observer (!isAnyObserverSpeakerNew && isAnyNonObserverSpeakerNew && observerContinuing)
 		// and the present observer was also the last observer AND in the last speakergroup which had the non-observer, that observer was also the present observer
-		bool observerContinuing = sgi && speakerGroups[sgi].observers == speakerGroups[sgi - 1].observers;
-		if (conversationRestricted && speakerGroups[sgi].observers.size() == 1 && observerContinuing && nonObserver >= 0)
-		{
-			// get last speakerGroup of non-observer that contains observer
-			observerContinuing = false;
-			for (int sgi2 = sgi - 1; sgi2 >= 0; sgi2--)
-				if (speakerGroups[sgi2].speakers.find(nonObserver) != speakerGroups[sgi2].speakers.end())
-				{
-					if (observerContinuing = speakerGroups[sgi].observers == speakerGroups[sgi2].observers)
-						break;
-					if (speakerGroups[sgi2].speakers.find(*speakerGroups[sgi].observers.begin()) != speakerGroups[sgi2].speakers.end())
-						break;
-				}
-		}
+		bool observerContinuing = determineObserverContinuing(sgi, nonObserver, conversationRestricted);
 		// if only one quote is recorded, and the only definitive speaker is the observer, then conversationalQuotes should be 0 (no conversation took place?)
-		if (conversationalQuotes == 1 && speakerGroups[sgi].observers.size() == 1 && speakerGroups[sgi].dnSpeakers.size() == 1 &&
+		if (speakerGroups[sgi].conversationalQuotes == 1 && speakerGroups[sgi].observers.size() == 1 && speakerGroups[sgi].dnSpeakers.size() == 1 &&
 			speakerGroups[sgi].dnSpeakers == speakerGroups[sgi].observers)
 		{
-			conversationalQuotes = 0;
+			speakerGroups[sgi].conversationalQuotes = 0;
 			conversationRestricted = false;
 		}
 		// The German and Thomas - When the German is re-introduced, The German creates a new speakerGroup, which is not then merged with the next one either
@@ -2301,7 +2432,6 @@ void cSource::distributePOV(void)
 		// OR (deleted) or all observers were in the last speaker group as observers
 		if (conversationRestricted && speakerGroups[sgi].observers.size() && sgi &&
 			((isAnyObserverSpeakerNew && !isAnyNonObserverSpeakerNew) || (!isAnyObserverSpeakerNew && isAnyNonObserverSpeakerNew && observerContinuing)))
-			//speakerGroups[sgi].observers==speakerGroups[sgi-1].observers))
 		{
 			conversationRestricted = false;
 			// add previous speakerGroup
@@ -2310,9 +2440,6 @@ void cSource::distributePOV(void)
 				lplog(LOG_RESOLUTION | LOG_SG, L"speakers added to observer-created speakerGroup %s (conversation restriction isAnyObserverSpeakerNew=%s isAnyNonObserverSpeakerNew=%s observerContinuing=%s).",
 					toText(speakerGroups[sgi], tmpstr2), (isAnyObserverSpeakerNew) ? L"true" : L"false", (isAnyNonObserverSpeakerNew) ? L"true" : L"false", (observerContinuing) ? L"true" : L"false");
 		}
-		// both speakergroups must belong to the same section
-		for (section = 0; section + 1 < sections.size() && (signed)sections[section + 1].begin < speakerGroups[sgi].sgBegin; section++);
-		bool previousSpeakerGroupInSameSection = section < sections.size() && sgi>0 && ((signed)sections[section].begin < speakerGroups[sgi - 1].sgBegin);
 		if (conversationRestricted)
 		{
 			if (speakerGroups[sgi].observers.size())
@@ -2324,85 +2451,12 @@ void cSource::distributePOV(void)
 		}
 		else
 		{
-			// also an observer could be the observer of the previous group, who also doesn't speak in the current group, and there are no other povSpeakers of the current group.
-			// also a section cannot be crossed with this assumption.
-			if (speakerGroups[sgi].povSpeakers.empty() && sgi && speakerGroups[sgi - 1].observers.size())
-			{
-				// both speakergroups must belong to the same section
-				if (previousSpeakerGroupInSameSection)
-				{
-					for (set <int>::iterator mo = speakerGroups[sgi - 1].observers.begin(), moEnd = speakerGroups[sgi - 1].observers.end(); mo != moEnd; mo++)
-					{
-						// if not a definite speaker, but is a speaker, and is not already an observer
-						if (speakerGroups[sgi].dnSpeakers.find(*mo) == speakerGroups[sgi].dnSpeakers.end() &&
-							speakerGroups[sgi].speakers.find(*mo) != speakerGroups[sgi].speakers.end() &&
-							find(speakerGroups[sgi].observers.begin(), speakerGroups[sgi].observers.end(), *mo) == speakerGroups[sgi].observers.end())
-						{
-							if (debugTrace.traceSpeakerResolution)
-								lplog(LOG_RESOLUTION, L"POVI OBS observer %s found in speakerGroup %s (2).", objectString(*mo, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
-							speakerGroups[sgi].observers.insert(*mo);
-							speakerGroups[sgi].povSpeakers.insert(*mo);
-						}
-					}
-				}
-			}
-			// also an pov could be the pov of the previous group, who also doesn't speak in the current group, and there are no other povSpeakers of the current group.
-			// also all the povSpeakers must be also of the current group.
-			if (speakerGroups[sgi].povSpeakers.empty() && sgi && speakerGroups[sgi - 1].povSpeakers.size() && previousSpeakerGroupInSameSection)
-			{
-				// all the previous povSpeakers also have to be in the current group
-				bool oneIn, allIn;
-				intersect(speakerGroups[sgi - 1].povSpeakers, speakerGroups[sgi].speakers, allIn, oneIn);
-				if (allIn)
-				{
-					speakerGroups[sgi].povSpeakers = speakerGroups[sgi - 1].povSpeakers;
-					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"pov speakers from %s moved forward into speakerGroup %s.", toText(speakerGroups[sgi - 1], tmpstr), toText(speakerGroups[sgi], tmpstr2));
-					// if there are no definite speakers in speakerGroup, then the povSpeaker would probably NOT be the one not speaking, so skip this observer test
-					if (speakerGroups[sgi].dnSpeakers.size() || !speakerGroups[sgi].conversationalQuotes)
-					{
-						for (set <int>::iterator mo = speakerGroups[sgi].povSpeakers.begin(), moEnd = speakerGroups[sgi].povSpeakers.end(); mo != moEnd; mo++)
-						{
-							// if not a definite speaker, but is a speaker, and is not already an observer
-							if (speakerGroups[sgi].dnSpeakers.find(*mo) == speakerGroups[sgi].dnSpeakers.end())
-							{
-								if (debugTrace.traceSpeakerResolution)
-									lplog(LOG_RESOLUTION, L"OBS observer %s derived from pov in previous speakerGroup in speakerGroup %s (3).", objectString(*mo, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
-								speakerGroups[sgi].observers.insert(*mo);
-							}
-						}
-						if (speakerGroups[sgi].observers.size() == 1 && speakerGroups[sgi].groupedSpeakers.find(*speakerGroups[sgi].observers.begin()) != speakerGroups[sgi].groupedSpeakers.end())
-						{
-							if (debugTrace.traceSpeakerResolution)
-								lplog(LOG_RESOLUTION, L"OBS observer %s derived from pov in previous speakerGroup in speakerGroup %s CANCELLED (in group).", objectString(speakerGroups[sgi].observers, tmpstr).c_str(), toText(speakerGroups[sgi], tmpstr2));
-							speakerGroups[sgi].observers.clear();
-						}
-					}
-				}
-			}
-			// if an observer belongs to a group and that any of the group definitely speaks, then remove the observer. (error check)
-			bool allObserversInGroup = true, oneObserverInGroup;
-			// are observers grouped?
-			intersect(speakerGroups[sgi].groupedSpeakers, speakerGroups[sgi].observers, allObserversInGroup, oneObserverInGroup);
-			// if at least one observer is in a group, but not all the observers are in the group
-			if (oneObserverInGroup && !allObserversInGroup)
-			{
-				bool allGroupedAreDefiniteSpeakers, oneGroupedIsDefiniteSpeaker;
-				// if any of the groupedSpeakers is a definite speaker, then erase all observers that are in the group.
-				intersect(speakerGroups[sgi].groupedSpeakers, speakerGroups[sgi].dnSpeakers, allGroupedAreDefiniteSpeakers, oneGroupedIsDefiniteSpeaker);
-				if (oneGroupedIsDefiniteSpeaker)
-					for (set <int>::iterator mo = speakerGroups[sgi].observers.begin(); mo != speakerGroups[sgi].observers.end(); )
-					{
-						if (speakerGroups[sgi].groupedSpeakers.find(*mo) == speakerGroups[sgi].groupedSpeakers.end())
-							mo++;
-						else
-						{
-							if (debugTrace.traceSpeakerResolution)
-								lplog(LOG_RESOLUTION, L"observer %s erased from speakerGroup %s [observer is in speaking group].", objectString(*mo, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
-							speakerGroups[sgi].observers.erase(mo++);
-						}
-					}
-			}
+			// both speakergroups must belong to the same section
+			for (section = 0; section + 1 < sections.size() && (signed)sections[section + 1].begin < speakerGroups[sgi].sgBegin; section++);
+			bool previousSpeakerGroupInSameSection = section < sections.size() && sgi>0 && ((signed)sections[section].begin < speakerGroups[sgi - 1].sgBegin);
+			addPreviousObserver(sgi, previousSpeakerGroupInSameSection);
+			addPreviousPOV(sgi, previousSpeakerGroupInSameSection);
+			removeObserverAssociatedWithSpeakingGroup(sgi);
 		}
 		if (speakerGroups[sgi].povSpeakers.empty())
 		{
