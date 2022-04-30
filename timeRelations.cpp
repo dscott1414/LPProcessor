@@ -628,20 +628,12 @@ bool cSource::evaluateTimePattern(int beginObjectPosition, int& maxLen, cTimeInf
 	return false;
 }
 
-bool cSource::identifyDateTime(int where, vector <cSyntacticRelationGroup>::iterator csr, int& maxLen, int inMultiObject)
+bool cSource::identifyTimePattern(const int where, vector <cSyntacticRelationGroup>::iterator csr, const int beginObjectPosition, int& maxLen)
 {
-	LFS
-		if (where < 0 || (m[where].flags & cWordMatch::flagAlreadyTimeAnalyzed)) return false;
-	bool rtSet = false;
 	cTimeInfo t, rt;
 	rt.tWhere = t.tWhere = where;
 	t.timeRTAnchor = rt.timeRTAnchor = where;
-	int beginObjectPosition, element;
-	beginObjectPosition = m[where].beginObjectPosition;
-	if (beginObjectPosition < 0) beginObjectPosition = where;
-	if (inMultiObject == 0 && (element = m[beginObjectPosition].pma.queryTag(MNOUN_TAG)) >= 0 && resolveTimeRange(beginObjectPosition, element, csr))
-		return true;
-	maxLen = -1;
+	bool rtSet = false;
 	if (evaluateTimePattern(beginObjectPosition, maxLen, t, rt, rtSet) && m[beginObjectPosition].timeColor == 0 && beginObjectPosition + maxLen > where)
 	{
 		rt.tWhere = t.tWhere = where;
@@ -669,9 +661,18 @@ bool cSource::identifyDateTime(int where, vector <cSyntacticRelationGroup>::iter
 		markTime(where, beginObjectPosition, maxLen);
 		return true;
 	}
+	return false;
+}
+
+bool cSource::identifyYear(const int where, vector <cSyntacticRelationGroup>::iterator csr, const int beginObjectPosition)
+{
+	int element, maxLen;
 	if ((element = m[beginObjectPosition].pma.queryPattern(L"_NUMBER", maxLen)) != -1 && maxLen == 1 && beginObjectPosition > 2 &&
 		m[beginObjectPosition - 1].word->first == L",")
 	{
+		cTimeInfo t;
+		t.tWhere = where;
+		t.timeRTAnchor = where;
 		int year = _wtoi(m[beginObjectPosition].word->first.c_str());
 		if (year > 1000 && year < 2500)
 		{
@@ -684,20 +685,11 @@ bool cSource::identifyDateTime(int where, vector <cSyntacticRelationGroup>::iter
 			return true;
 		}
 	}
-	t.clear();
-	rt.clear();
-	rt.tWhere = t.tWhere = where;
-	t.timeRTAnchor = rt.timeRTAnchor = where;
-	if (m[where].relPrep >= 0)
-	{
-		if (m[m[where].relPrep].getRelObject() == where)
-		{
-			t.timeRelationType = (eTimeWordFlags)m[m[where].relPrep].word->second.timeFlags;
-			t.metaDescriptive = (m[m[where].relPrep].word->first == L"of");
-		}
-		else if (m[m[where].relPrep].word->first == L"of" && (m[where].word->first == L"second" || m[where].getMainEntry()->first == L"shake"))
-			return false;
-	}
+	return false;
+}
+
+bool cSource::identifyTimeType(const int where, cTimeInfo &t)
+{
 	wstring word = m[where].deriveMainEntry(where, 34, false, true, lastNounNotFound, lastVerbNotFound)->first;
 	if (m[where].queryForm(L"timeUnit") >= 0 || m[where].queryForm(L"dayUnit") >= 0)
 		t.timeCapacity = (eCapacity)whichCapacity(word);
@@ -732,166 +724,152 @@ bool cSource::identifyDateTime(int where, vector <cSyntacticRelationGroup>::iter
 		cWord::processDate(m[where].word->first, t.absYear, t.absMonth, t.absDayOfMonth);
 	}
 	else
-	{ // the 1994 crisis
-		t.timeCapacity = cUnspecified;
-		for (int I = m[where].beginObjectPosition; I >= 0 && I < where; I++)
-			if ((m[I].forms.isSet(NUMBER_FORM_NUM) ||
-				m[I].word->second.query(L"month") >= 0 || m[I].word->second.query(L"daysOfWeek") >= 0 || m[I].word->second.query(L"season") >= 0 ||
-				m[I].getMainEntry()->second.query(L"timeUnit") >= 0 || m[I].getMainEntry()->second.query(L"dayUnit") >= 0) &&
-				!m[I].forms.isSet(numeralOrdinalForm) && // not 'second'
-				(m[I].pma.queryPatternWithLen(L"__ADJECTIVE", 1) != -1 || m[I].pma.queryPatternWithLen(L"__NADJECTIVE", 1) != -1))
-			{
-				if (m[I].word->second.query(L"month") >= 0)
-				{
-					t.timeCapacity = cNamedMonth;
-					t.absMonth = whichMonth(m[I].word->first);
-					t.timeRelationType = T_MODIFIER;
-					break;
-				}
-				else if (m[I].word->second.query(L"daysOfWeek") >= 0)
-				{
-					t.timeCapacity = cNamedDay;
-					t.absDayOfWeek = whichDayOfWeek(m[I].word->first);
-					t.timeRelationType = T_MODIFIER;
-					break;
-				}
-				else if (m[I].word->second.query(L"season") >= 0 && (m[I].flags & cWordMatch::flagFirstLetterCapitalized))
-				{
-					t.timeCapacity = cNamedSeason;
-					t.absSeason = whichSeason(m[I].word->first);
-					t.timeRelationType = T_MODIFIER;
-					break;
-				}
-				else if (m[I].word->second.query(L"holiday") >= 0)
-				{
-					t.timeCapacity = cNamedHoliday;
-					t.absHoliday = whichHoliday(m[I].word->first);
-					t.timeRelationType = T_MODIFIER;
-					break;
-				}
-				else if (m[I].getMainEntry()->second.query(L"timeUnit") >= 0 || m[I].getMainEntry()->second.query(L"dayUnit") >= 0)
-				{
-					if (I > 0 && (m[I - 1].forms.isSet(numeralCardinalForm) || m[I - 1].forms.isSet(numeralOrdinalForm)) && t.timeModifier < 0)
-						t.timeModifier = I - 1;
-					t.timeCapacity = (eCapacity)whichCapacity(m[I].getMainEntry()->first);
-					t.timeRelationType = T_MODIFIER;
-					break;
-				}
-				else
-				{
-					int year = _wtoi(m[I].word->first.c_str());
-					if (year > 1200 && year < 2100)
-					{
-						t.timeCapacity = cYear;
-						t.absYear = year;
-						t.timeRelationType = T_MODIFIER;
-						break;
-					}
-				}
-			}
-			else if (m[I].word->second.timeFlags & T_RECURRING) // daily
-				t.timeCapacity = (eCapacity)(t.timeFrequency = whichRecurrence(m[I].word->first));
+		return false;
+	return true;
+}
 
-		// must not be used as an adjective, and must be an object of a preposition
-		if ((m[where].forms.isSet(numeralCardinalForm) || m[where].forms.isSet(numeralOrdinalForm) || m[where].forms.isSet(NUMBER_FORM_NUM)) &&
-			m[beginObjectPosition].pma.queryPatternWithLen(L"__NOUN", where - beginObjectPosition + 1) != -1 &&
-			m[beginObjectPosition].pma.queryPatternDiff(L"__NOUN", L"Q") == -1)
+bool cSource:: processModifierTime(const int where, cTimeInfo& t)
+{
+	if ((m[where].forms.isSet(NUMBER_FORM_NUM) ||
+		m[where].word->second.query(L"month") >= 0 || m[where].word->second.query(L"daysOfWeek") >= 0 || m[where].word->second.query(L"season") >= 0 ||
+		m[where].getMainEntry()->second.query(L"timeUnit") >= 0 || m[where].getMainEntry()->second.query(L"dayUnit") >= 0) &&
+		!m[where].forms.isSet(numeralOrdinalForm) && // not 'second'
+		(m[where].pma.queryPatternWithLen(L"__ADJECTIVE", 1) != -1 || m[where].pma.queryPatternWithLen(L"__NADJECTIVE", 1) != -1))
+	{
+		if (m[where].word->second.query(L"month") >= 0)
 		{
-			vector <cTimeInfo>::iterator ti;
-			if (inMultiObject == 2)
-				ti = csr->timeInfo.begin() + csr->timeInfo.size() - 1;
-			if (m[where].forms.isSet(NUMBER_FORM_NUM))
-			{
-				int num = _wtoi(m[where].word->first.c_str());
-				if (inMultiObject == 2)
-					copyTimeInfoNum(ti, t, num); // only copy previous time
-				else if (num > 1200 && num < 2100)
-				{
-					t.timeCapacity = cYear;
-					t.absYear = num;
-				}
-				else if (num >= 1 && num <= 12)
-				{
-					t.timeCapacity = cHour;
-					t.absHour = num;
-				}
-			}
-			if (m[where].forms.isSet(numeralOrdinalForm))
-			{
-				int num = mapNumeralOrdinal(m[where].word->first.c_str());
-				if (inMultiObject == 2)
-					copyTimeInfoNum(ti, t, num); // only copy previous time
-				// don't make 'the first' be a time if it is not an object of a preposition
-				else if (num >= 1 && num <= 31 && m[where].relPrep >= 0 && m[where].endObjectPosition - m[where].beginObjectPosition > 1)
-				{
-					t.timeCapacity = cDay;
-					t.absDayOfMonth = num;
-				}
-				else if (inMultiObject == 1)
-				{
-					t.timeCapacity = cUnspecified;
-					t.timeModifier = where;
-				}
-			}
-			if (m[where].forms.isSet(numeralCardinalForm) &&
-				// events held one up.
-				m[where].relPrep >= 0 &&
-				m[where + 1].word->first != L"of" &&
-				// we got to one that seemed...
-				m[where + 1].word->first != L"that" &&
-				// a hiding place for one
-				(m[where].relPrep < 0 || (m[m[where].relPrep].word->second.timeFlags != T_THROUGHOUT)) &&
-				// one who he could trust
-				(m[where].getObject() < 0 || (objects[m[where].getObject()].whereRelativeClause < 0 &&
-					// he wanted a new one
-					(m[where].endObjectPosition - m[where].beginObjectPosition) == 1)) &&
-				// from one to the other
-				(m[where].relPrep < 0 || m[m[where].relPrep].relPrep < 0 ||
-					m[m[where].relPrep].word->first != L"from" || !(m[m[m[where].relPrep].relPrep].word->second.timeFlags & T_BEFORE) ||
-					m[m[m[where].relPrep].relPrep].getRelObject() < 0 ||
-					m[m[m[m[where].relPrep].relPrep].getRelObject()].forms.isSet(numeralCardinalForm)))
-			{
-				int num = mapNumeralCardinal(m[where].word->first.c_str());
-				if (inMultiObject == 2)
-					copyTimeInfoNum(ti, t, num); // only copy previous time
-				else if (num >= 1 && num <= 12)
-				{
-					t.timeCapacity = cHour;
-					t.absHour = num;
-					if (where + 2 < (int)m.size() && m[where + 1].queryWinnerForm(dashForm) != -1 && m[where + 2].forms.isSet(numeralCardinalForm))
-					{
-						num = mapNumeralCardinal(m[where + 2].word->first.c_str());
-						if (num >= 1 && num < 60)
-							t.absMinute = num;
-					}
-				}
-			}
+			t.timeCapacity = cNamedMonth;
+			t.absMonth = whichMonth(m[where].word->first);
+			t.timeRelationType = T_MODIFIER;
+			return true;
 		}
-		if ((m[where].relPrep < 0 || t.timeRelationType == T_UNSPECIFIED || !t.timeRelationType) && t.timeRelationType != T_MODIFIER &&
-			//coming of the light / following of the Druids
-			(m[where].queryWinnerForm(verbForm) == -1 || m[where + 1].word->first != L"of"))
-			t.timeRelationType = (eTimeWordFlags)(m[where].word->second.timeFlags);
-		auto tt = t.timeRelationType;
-		// cancel if this word is supposed to be a preposition (its timeFlag only applies to the preposition form)
-		if ((tt == T_THROUGHOUT || tt == T_AT || tt == T_ON || tt == T_MIDWAY || tt == T_INTERVAL ||
-			tt == (T_BEFORE | T_CARDTIME) || tt == (T_AT | T_CARDTIME) || tt == (T_AFTER | T_CARDTIME)) &&
-			(m[where].queryWinnerForm(prepositionForm) == -1 || t.empty()))
-			tt = t.timeRelationType = T_UNSPECIFIED;
-		if (!tt && (t.timeCapacity == cUnspecified || t.empty()) && inMultiObject != 1)
+		else if (m[where].word->second.query(L"daysOfWeek") >= 0)
 		{
-			return false;
+			t.timeCapacity = cNamedDay;
+			t.absDayOfWeek = whichDayOfWeek(m[where].word->first);
+			t.timeRelationType = T_MODIFIER;
+			return true;
 		}
-		if (t.timeRelationType == T_RECURRING || word == L"time")
+		else if (m[where].word->second.query(L"season") >= 0 && (m[where].flags & cWordMatch::flagFirstLetterCapitalized))
 		{
-			t.timeFrequency = whichRecurrence(m[where].word->first);
-			if (m[where].word->first == L"times" && (m[where].flags & cWordMatch::flagFirstLetterCapitalized))
-				return false; // the Times (of London)
-			// five times better!
-			if (where + 1 < (int)m.size() && m[where].word->first == L"times" && m[where - 1].queryWinnerForm(numeralCardinalForm) >= 0 &&
-				m[where + 1].queryWinnerForm(adjectiveForm) >= 0 && (m[where + 1].word->second.inflectionFlags & ADJECTIVE_COMPARATIVE) != 0)
-				return false;
+			t.timeCapacity = cNamedSeason;
+			t.absSeason = whichSeason(m[where].word->first);
+			t.timeRelationType = T_MODIFIER;
+			return true;
+		}
+		else if (m[where].word->second.query(L"holiday") >= 0)
+		{
+			t.timeCapacity = cNamedHoliday;
+			t.absHoliday = whichHoliday(m[where].word->first);
+			t.timeRelationType = T_MODIFIER;
+			return true;
+		}
+		else if (m[where].getMainEntry()->second.query(L"timeUnit") >= 0 || m[where].getMainEntry()->second.query(L"dayUnit") >= 0)
+		{
+			if (where > 0 && (m[where - 1].forms.isSet(numeralCardinalForm) || m[where - 1].forms.isSet(numeralOrdinalForm)) && t.timeModifier < 0)
+				t.timeModifier = where - 1;
+			t.timeCapacity = (eCapacity)whichCapacity(m[where].getMainEntry()->first);
+			t.timeRelationType = T_MODIFIER;
+			return true;
+		}
+		else
+		{
+			int year = _wtoi(m[where].word->first.c_str());
+			if (year > 1200 && year < 2100)
+			{
+				t.timeCapacity = cYear;
+				t.absYear = year;
+				t.timeRelationType = T_MODIFIER;
+				return true;
+			}
 		}
 	}
+	else if (m[where].word->second.timeFlags & T_RECURRING) // daily
+		t.timeCapacity = (eCapacity)(t.timeFrequency = whichRecurrence(m[where].word->first));
+	return false;
+}
+
+void cSource::interpretNumberAsDateTime(const int where, vector <cSyntacticRelationGroup>::iterator csr, cTimeInfo& t, const int beginObjectPosition, const int inMultiObject)
+{
+	// must not be used as an adjective, and must be an object of a preposition
+	if ((m[where].forms.isSet(numeralCardinalForm) || m[where].forms.isSet(numeralOrdinalForm) || m[where].forms.isSet(NUMBER_FORM_NUM)) &&
+		m[beginObjectPosition].pma.queryPatternWithLen(L"__NOUN", where - beginObjectPosition + 1) != -1 &&
+		m[beginObjectPosition].pma.queryPatternDiff(L"__NOUN", L"Q") == -1)
+	{
+		vector <cTimeInfo>::iterator ti;
+		if (inMultiObject == 2)
+			ti = csr->timeInfo.begin() + csr->timeInfo.size() - 1;
+		if (m[where].forms.isSet(NUMBER_FORM_NUM))
+		{
+			int num = _wtoi(m[where].word->first.c_str());
+			if (inMultiObject == 2)
+				copyTimeInfoNum(ti, t, num); // only copy previous time
+			else if (num > 1200 && num < 2100)
+			{
+				t.timeCapacity = cYear;
+				t.absYear = num;
+			}
+			else if (num >= 1 && num <= 12)
+			{
+				t.timeCapacity = cHour;
+				t.absHour = num;
+			}
+		}
+		if (m[where].forms.isSet(numeralOrdinalForm))
+		{
+			int num = mapNumeralOrdinal(m[where].word->first.c_str());
+			if (inMultiObject == 2)
+				copyTimeInfoNum(ti, t, num); // only copy previous time
+			// don't make 'the first' be a time if it is not an object of a preposition
+			else if (num >= 1 && num <= 31 && m[where].relPrep >= 0 && m[where].endObjectPosition - m[where].beginObjectPosition > 1)
+			{
+				t.timeCapacity = cDay;
+				t.absDayOfMonth = num;
+			}
+			else if (inMultiObject == 1)
+			{
+				t.timeCapacity = cUnspecified;
+				t.timeModifier = where;
+			}
+		}
+		if (m[where].forms.isSet(numeralCardinalForm) &&
+			// events held one up.
+			m[where].relPrep >= 0 &&
+			m[where + 1].word->first != L"of" &&
+			// we got to one that seemed...
+			m[where + 1].word->first != L"that" &&
+			// a hiding place for one
+			(m[where].relPrep < 0 || (m[m[where].relPrep].word->second.timeFlags != T_THROUGHOUT)) &&
+			// one who he could trust
+			(m[where].getObject() < 0 || (objects[m[where].getObject()].whereRelativeClause < 0 &&
+				// he wanted a new one
+				(m[where].endObjectPosition - m[where].beginObjectPosition) == 1)) &&
+			// from one to the other
+			(m[where].relPrep < 0 || m[m[where].relPrep].relPrep < 0 ||
+				m[m[where].relPrep].word->first != L"from" || !(m[m[m[where].relPrep].relPrep].word->second.timeFlags & T_BEFORE) ||
+				m[m[m[where].relPrep].relPrep].getRelObject() < 0 ||
+				m[m[m[m[where].relPrep].relPrep].getRelObject()].forms.isSet(numeralCardinalForm)))
+		{
+			int num = mapNumeralCardinal(m[where].word->first.c_str());
+			if (inMultiObject == 2)
+				copyTimeInfoNum(ti, t, num); // only copy previous time
+			else if (num >= 1 && num <= 12)
+			{
+				t.timeCapacity = cHour;
+				t.absHour = num;
+				if (where + 2 < (int)m.size() && m[where + 1].queryWinnerForm(dashForm) != -1 && m[where + 2].forms.isSet(numeralCardinalForm))
+				{
+					num = mapNumeralCardinal(m[where + 2].word->first.c_str());
+					if (num >= 1 && num < 60)
+						t.absMinute = num;
+				}
+			}
+		}
+	}
+}
+
+void cSource::setTimeModifier(const int where, cTimeInfo& t, const int beginObjectPosition)
+{
 	int len;
 	// fall semester / this weekend (encoded as_ADVERB[T]) / 4th quarter / it was only yesterday morning (yesterday is incorrectly flagged as adverb)
 	if (where > 0 && t.timeRelationType != T_MODIFIER &&
@@ -916,6 +894,77 @@ bool cSource::identifyDateTime(int where, vector <cSyntacticRelationGroup>::iter
 		t.timeModifier = where;
 		t.timeRelationType = T_MODIFIER;
 	}
+}
+
+bool cSource::cancelTimeDateIdentification(const int where, cTimeInfo& t, const int inMultiObject)
+{
+	auto tt = t.timeRelationType;
+	if (!tt && (t.timeCapacity == cUnspecified || t.empty()) && inMultiObject != 1)
+	{
+		return true;
+	}
+	wstring word = m[where].deriveMainEntry(where, 34, false, true, lastNounNotFound, lastVerbNotFound)->first;
+	if (t.timeRelationType == T_RECURRING || word == L"time")
+	{
+		t.timeFrequency = whichRecurrence(m[where].word->first);
+		if (m[where].word->first == L"times" && (m[where].flags & cWordMatch::flagFirstLetterCapitalized))
+			return true; // the Times (of London)
+		// five times better!
+		if (where + 1 < (int)m.size() && m[where].word->first == L"times" && m[where - 1].queryWinnerForm(numeralCardinalForm) >= 0 &&
+			m[where + 1].queryWinnerForm(adjectiveForm) >= 0 && (m[where + 1].word->second.inflectionFlags & ADJECTIVE_COMPARATIVE) != 0)
+			return true;
+	}
+	return false;
+}
+
+bool cSource::identifyDateTime(int where, vector <cSyntacticRelationGroup>::iterator csr, int& maxLen, int inMultiObject)
+{
+	LFS
+		if (where < 0 || (m[where].flags & cWordMatch::flagAlreadyTimeAnalyzed)) return false;
+	int beginObjectPosition = m[where].beginObjectPosition, element;
+	if (beginObjectPosition < 0) beginObjectPosition = where;
+	if (inMultiObject == 0 && (element = m[beginObjectPosition].pma.queryTag(MNOUN_TAG)) >= 0 && resolveTimeRange(beginObjectPosition, element, csr))
+		return true;
+	maxLen = -1;
+	if (identifyTimePattern(where, csr, beginObjectPosition, maxLen))
+		return true;
+	if (identifyYear(where, csr, beginObjectPosition))
+		return true;
+	bool rtSet = false;
+	cTimeInfo t, rt;
+	rt.tWhere = t.tWhere = where;
+	t.timeRTAnchor = rt.timeRTAnchor = where;
+	if (m[where].relPrep >= 0)
+	{
+		if (m[m[where].relPrep].getRelObject() == where)
+		{
+			t.timeRelationType = (eTimeWordFlags)m[m[where].relPrep].word->second.timeFlags;
+			t.metaDescriptive = (m[m[where].relPrep].word->first == L"of");
+		}
+		else if (m[m[where].relPrep].word->first == L"of" && (m[where].word->first == L"second" || m[where].getMainEntry()->first == L"shake"))
+			return false;
+	}
+	if (!identifyTimeType(where,t))
+	{ // the 1994 crisis
+		t.timeCapacity = cUnspecified;
+		for (int I = m[where].beginObjectPosition; I >= 0 && I < where; I++)
+			if (processModifierTime(I, t))
+				break;
+		interpretNumberAsDateTime(where, csr, t, beginObjectPosition, inMultiObject);
+		if ((m[where].relPrep < 0 || t.timeRelationType == T_UNSPECIFIED || !t.timeRelationType) && t.timeRelationType != T_MODIFIER &&
+			//coming of the light / following of the Druids
+			(m[where].queryWinnerForm(verbForm) == -1 || m[where + 1].word->first != L"of"))
+			t.timeRelationType = (eTimeWordFlags)(m[where].word->second.timeFlags);
+		auto tt = t.timeRelationType;
+		// cancel if this word is supposed to be a preposition (its timeFlag only applies to the preposition form)
+		if ((tt == T_THROUGHOUT || tt == T_AT || tt == T_ON || tt == T_MIDWAY || tt == T_INTERVAL ||
+			tt == (T_BEFORE | T_CARDTIME) || tt == (T_AT | T_CARDTIME) || tt == (T_AFTER | T_CARDTIME)) &&
+			(m[where].queryWinnerForm(prepositionForm) == -1 || t.empty()))
+			tt = t.timeRelationType = T_UNSPECIFIED;
+		if (cancelTimeDateIdentification(where, t, inMultiObject))
+			return false;
+	}
+	setTimeModifier(where, t, beginObjectPosition);
 	maxLen = 1;
 	if (m[where].endObjectPosition >= 0) maxLen = m[where].endObjectPosition - beginObjectPosition;
 	if (maxLen == 1 && m[where].queryWinnerForm(conjunctionForm) != -1 && m[where].word->second.timeFlags && m[where + 1].pma.queryPattern(L"__S1") != -1)

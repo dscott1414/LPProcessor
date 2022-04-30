@@ -2115,6 +2115,13 @@ public:
 	void copyTimeInfoNum(vector <cTimeInfo>::iterator previousTime,cTimeInfo &t,int num);
 	void markTime(int where,int begin,int len);
 	bool evaluateTimePattern(int beginObjectPosition,int &maxLen,cTimeInfo &t,cTimeInfo &rt,bool &rtSet);
+	bool identifyTimePattern(const int where, vector <cSyntacticRelationGroup>::iterator csr, const int beginObjectPosition, int& maxLen);
+	bool identifyYear(const int where, vector <cSyntacticRelationGroup>::iterator csr, const int beginObjectPosition);
+	bool identifyTimeType(const int where, cTimeInfo& t);
+	bool processModifierTime(const int where, cTimeInfo& t);
+	void interpretNumberAsDateTime(const int where, vector <cSyntacticRelationGroup>::iterator csr, cTimeInfo& t, const int beginObjectPosition, const int inMultiObject);
+	void setTimeModifier(const int where, cTimeInfo& t, const int beginObjectPosition);
+	bool cancelTimeDateIdentification(const int where, cTimeInfo& t, const int inMultiObject);
 	bool identifyDateTime(int where,vector <cSyntacticRelationGroup>::iterator csr,int &maxLen,int inMultiObject);
 	bool detectTimeTransition(int where,vector <cSyntacticRelationGroup>::iterator csr,cTimeInfo &t);
 	bool evaluateHOUR(int where,cTimeInfo &t);
@@ -2298,6 +2305,15 @@ public:
 	void followObjectReplacements();
 	void assureAtLeastOneSpeakerGroup();
 	void resolveSpeakers(vector <int>& secondaryQuotesResolutions);
+	void matchSelfReferences(vector <int>& secondaryQuotesResolutions, const int where, const int sqr, vector <cWordMatch>::iterator lastOpeningSecondaryQuoteIM, bool& audienceFilled);
+	void assignAudienceBasedOnHailOrLastAudienceOrEmbeddedSpeakers(vector <int>& secondaryQuotesResolutions, const int where, const int sqr, vector <cWordMatch>::iterator lastOpeningPrimaryQuoteIM, vector <cWordMatch>::iterator lastOpeningSecondaryQuoteIM);
+	void handleQuotes(vector <cWordMatch>::iterator im, const int where, bool& inPrimaryQuote, bool& inSecondaryQuote, vector <cWordMatch>::iterator& lastOpeningPrimaryQuoteIM, vector <cWordMatch>::iterator& lastOpeningSecondaryQuoteIM, int &lastEmbeddedStoryBegin);
+	void setMasterSpeakerList();
+	void resolveFirstSecondMetaGroupObject(vector <cWordMatch>::iterator im, const int where, const bool inPrimaryQuote, const bool inSecondaryQuote, vector <cWordMatch>::iterator lastOpeningPrimaryQuoteIM, vector <cWordMatch>::iterator lastOpeningSecondaryQuoteIM,
+		const int lastEmbeddedStoryBegin);
+	void resolveUnquotedFirstSecondPronoun(vector <cWordMatch>::iterator im, const bool inPrimaryQuote, const bool inSecondaryQuote);
+	void processSecondaryQuotes(const int where, int &sqr, vector <int>& secondaryQuotesResolutions, vector <cWordMatch>::iterator lastOpeningPrimaryQuoteIM, vector <cWordMatch>::iterator lastOpeningSecondaryQuoteIM,
+		const int lastEmbeddedStoryBegin);
 	void resolveFirstSecondPersonPronouns(vector <int> &secondaryQuotesResolutions);
 	void printTenseStatistic(cTenseStat &tenseStatistics,int sense,int numTotal);
 	void printTenseStatistics(const wchar_t * fromWhere,cTenseStat tenseStatistics[],int numTotal);

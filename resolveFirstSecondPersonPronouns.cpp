@@ -229,6 +229,299 @@ bool masterCompare(const vector<cObject>::iterator& lhs, const vector<cObject>::
 		return lhs->numIdentifiedAsSpeaker + lhs->numDefinitelyIdentifiedAsSpeaker > rhs->numIdentifiedAsSpeaker + rhs->numDefinitelyIdentifiedAsSpeaker;
 }
 
+void cSource::matchSelfReferences(vector <int>& secondaryQuotesResolutions, const int where, const int sqr, vector <cWordMatch>::iterator lastOpeningSecondaryQuoteIM, bool & audienceFilled)
+{
+	int selfReferringSpeakerFound = -1, referringAudienceFound = -1;
+	for (int J = secondaryQuotesResolutions[sqr + 0]; J < secondaryQuotesResolutions[sqr + 1] && selfReferringSpeakerFound < 0; J++)
+		if ((m[J].objectRole & IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE) && (m[J].getObject() >= 0 || m[J].objectMatches.size()))
+			selfReferringSpeakerFound = J;
+		else if ((m[J].objectRole & IN_QUOTE_REFERRING_AUDIENCE_ROLE) && (m[J].getObject() >= 0 || m[J].objectMatches.size()))
+			referringAudienceFound = J;
+	// hail cannot match speaker / He[mr] then says : ‘[mr:mr] Please take a seat , Mr[mr] . -- er ? ’ 
+	if (selfReferringSpeakerFound >= 0 && (m[selfReferringSpeakerFound].objectMatches.empty() || m[where].objectMatches.empty() ||
+		m[selfReferringSpeakerFound].objectMatches[0].object != m[where].objectMatches[0].object))
+	{
+		if (m[selfReferringSpeakerFound].objectMatches.size())
+			m[where].objectMatches = m[selfReferringSpeakerFound].objectMatches;
+		else
+			m[where].objectMatches.push_back(cOM(m[selfReferringSpeakerFound].getObject(), SALIENCE_THRESHOLD));
+	}
+	// if the beginning of this quote is immediately after the last one, then assume that the other secondary speaker is talking
+	else if (audienceFilled = sqr >= 4 && secondaryQuotesResolutions[sqr - 4 + 1] == where - 1)
+	{
+		m[where].objectMatches = m[secondaryQuotesResolutions[sqr - 4]].audienceObjectMatches;
+		m[where].audienceObjectMatches = m[secondaryQuotesResolutions[sqr - 4]].objectMatches;
+	}
+	// if the beginning of this quote is immediately after the speaker of the last secondary quote +EOS, then copy the last one.
+	// 33920-33935 NQS ’ explained the doctor . ‘ nothing serious . you shall be about again in a couple of days . ’
+	else if (audienceFilled = sqr >= 4 && lastOpeningSecondaryQuoteIM != wmNULL) // && secondaryQuotesResolutions[sqr-4+2]+1==where-1)
+	{
+		m[where].objectMatches = m[secondaryQuotesResolutions[sqr - 4]].objectMatches;
+		m[where].audienceObjectMatches = m[secondaryQuotesResolutions[sqr - 4]].audienceObjectMatches;
+	}
+	if (referringAudienceFound >= 0 && (m[referringAudienceFound].objectMatches.empty() || m[where].objectMatches.empty() ||
+		m[referringAudienceFound].objectMatches[0].object != m[where].objectMatches[0].object))
+	{
+		if (m[referringAudienceFound].objectMatches.size())
+			m[where].objectMatches = m[referringAudienceFound].objectMatches;
+		else
+			m[where].objectMatches.push_back(cOM(m[referringAudienceFound].getObject(), SALIENCE_THRESHOLD));
+	}
+}
+
+void cSource::assignAudienceBasedOnHailOrLastAudienceOrEmbeddedSpeakers(vector <int>& secondaryQuotesResolutions, const int where, const int sqr, vector <cWordMatch>::iterator lastOpeningPrimaryQuoteIM, vector <cWordMatch>::iterator lastOpeningSecondaryQuoteIM)
+{
+	int hailFound = -1;
+	for (int J = secondaryQuotesResolutions[sqr + 0]; J < secondaryQuotesResolutions[sqr + 1] && hailFound < 0; J++)
+		if ((m[J].objectRole & HAIL_ROLE) && (m[J].getObject() >= 0 || m[J].objectMatches.size()))
+			hailFound = J;
+	// hail cannot match speaker / He[mr] then says : ‘[mr:mr] Please take a seat , Mr[mr] . -- er ? ’ 
+	if (hailFound >= 0 && (m[hailFound].objectMatches.empty() || m[where].objectMatches.empty() ||
+		m[hailFound].objectMatches[0].object != m[where].objectMatches[0].object))
+	{
+		if (m[hailFound].objectMatches.size())
+			m[where].audienceObjectMatches = m[hailFound].objectMatches;
+		else
+			m[where].audienceObjectMatches.push_back(cOM(m[hailFound].getObject(), SALIENCE_THRESHOLD));
+	}
+	else if (lastOpeningPrimaryQuoteIM != wmNULL && lastOpeningPrimaryQuoteIM->objectMatches.size() == 1 &&
+		in(lastOpeningPrimaryQuoteIM->objectMatches[0].object, m[where].objectMatches) == m[where].objectMatches.end())
+		m[where].audienceObjectMatches = lastOpeningPrimaryQuoteIM->objectMatches;
+	// if still not specified, and present speaker is the same as last, then assume the audience is also the same as last
+	if (m[where].audienceObjectMatches.empty() && m[where].objectMatches.size() == 1 && lastOpeningSecondaryQuoteIM != wmNULL && lastOpeningSecondaryQuoteIM->objectMatches.size() == 1 &&
+		m[where].objectMatches[0].object == lastOpeningSecondaryQuoteIM->objectMatches[0].object)
+		m[where].audienceObjectMatches = lastOpeningSecondaryQuoteIM->audienceObjectMatches;
+	// if STILL not specified, and speaker known, subtract speaker from embeddedSpeakerGroup and assign to audience
+	if (m[where].audienceObjectMatches.empty() && m[where].objectMatches.size()) //  && currentSpeakerGroup>=0
+	{
+		if (currentEmbeddedSpeakerGroup >= 0 && ((unsigned)currentEmbeddedSpeakerGroup) < speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups.size() &&
+			where >= speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].sgBegin &&
+			where < speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].sgEnd)
+		{
+			for (set <int>::iterator s = speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].speakers.begin(),
+				sEnd = speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].speakers.end(); s != sEnd; s++)
+				if (in(*s, m[where].objectMatches) == m[where].objectMatches.end())
+					m[where].audienceObjectMatches.push_back(cOM(*s, SALIENCE_THRESHOLD));
+		}
+		// if STILL not specified, and speaker known, subtract speaker from speakerGroup and assign to audience
+		else if (where >= speakerGroups[currentSpeakerGroup].sgBegin && where < speakerGroups[currentSpeakerGroup].sgEnd)
+		{
+			for (set <int>::iterator s = speakerGroups[currentSpeakerGroup].speakers.begin(), sEnd = speakerGroups[currentSpeakerGroup].speakers.end(); s != sEnd; s++)
+				if (in(*s, m[where].objectMatches) == m[where].objectMatches.end())
+					m[where].audienceObjectMatches.push_back(cOM(*s, SALIENCE_THRESHOLD));
+		}
+	}
+}
+
+void cSource::handleQuotes(vector <cWordMatch>::iterator im, const int where, bool &inPrimaryQuote, bool &inSecondaryQuote, 
+	vector <cWordMatch>::iterator &lastOpeningPrimaryQuoteIM, vector <cWordMatch>::iterator &lastOpeningSecondaryQuoteIM,
+	int & lastEmbeddedStoryBegin)
+{
+	if (im->word->first == L"“" && !(im->flags & cWordMatch::flagQuotedString))
+	{
+		if (im->flags & cWordMatch::flagEmbeddedStoryBeginResolveSpeakers)
+			lastEmbeddedStoryBegin = where;
+		inPrimaryQuote = true;
+		lastOpeningPrimaryQuoteIM = im;
+		lastOpeningPrimaryQuote = where;
+		if (section < sections.size())
+		{
+			if (im->objectMatches.size() == 1)
+			{
+				speakersMatched++;
+				sections[section].speakersMatched++;
+			}
+			else
+			{
+				speakersNotMatched++;
+				sections[section].speakersNotMatched++;
+			}
+			if (im->audienceObjectMatches.size() != 0 && im->audienceObjectMatches.size() < speakerGroups[currentSpeakerGroup].speakers.size())
+			{
+				counterSpeakersMatched++;
+				sections[section].counterSpeakersMatched++;
+			}
+			else
+			{
+				counterSpeakersNotMatched++;
+				sections[section].counterSpeakersNotMatched++;
+			}
+		}
+	}
+	else if (im->word->first == L"”" && !(im->flags & cWordMatch::flagQuotedString))
+	{
+		lastOpeningSecondaryQuoteIM = lastOpeningPrimaryQuoteIM = wmNULL;
+		lastOpeningPrimaryQuote = -1;
+		lastQuote = -1;
+		inSecondaryQuote = inPrimaryQuote = false;
+	}
+	else if (im->word->first == L"‘" && !(im->flags & cWordMatch::flagQuotedString))
+	{
+		lastOpeningSecondaryQuoteIM = im;
+		lastOpeningSecondaryQuote = where;
+		inSecondaryQuote = true;
+		inPrimaryQuote = false;
+	}
+	else if (im->word->first == L"’" && !(im->flags & cWordMatch::flagQuotedString))
+	{
+		inSecondaryQuote = false;
+		inPrimaryQuote = (lastOpeningPrimaryQuote >= 0);
+	}
+}
+
+void cSource::setMasterSpeakerList()
+{
+	for (vector <cSpeakerGroup>::iterator sgi = speakerGroups.begin(), sgiEnd = speakerGroups.end(); sgi != sgiEnd; sgi++)
+		for (set <int>::iterator si = sgi->speakers.begin(); si != sgi->speakers.end(); si++)
+			if (objects[*si].masterSpeakerIndex < 0)
+			{
+				vector < vector<cObject>::iterator >::iterator msi;
+				bool aliasAlreadyInList = false;
+				for (unsigned int a = 0; a < objects[*si].aliases.size() && !aliasAlreadyInList; a++)
+					if ((msi = find(masterSpeakerList.begin(), masterSpeakerList.end(), objects.begin() + objects[*si].aliases[a])) != masterSpeakerList.end())
+					{
+						if (!(aliasAlreadyInList = (*msi)->numDefinitelyIdentifiedAsSpeaker >= objects[objects[*si].aliases[a]].numDefinitelyIdentifiedAsSpeaker))
+							masterSpeakerList.erase(msi);
+					}
+				if (!aliasAlreadyInList)
+				{
+					masterSpeakerList.push_back(objects.begin() + *si);
+					objects[*si].masterSpeakerIndex = 0;
+				}
+			}
+	sort(masterSpeakerList.begin(), masterSpeakerList.end(), masterCompare);
+	for (unsigned int ms = 0; ms < masterSpeakerList.size(); ms++)
+		masterSpeakerList[ms]->masterSpeakerIndex = ms;
+}
+
+void cSource::resolveFirstSecondMetaGroupObject(vector <cWordMatch>::iterator im, const int where, const bool inPrimaryQuote, const bool inSecondaryQuote, vector <cWordMatch>::iterator lastOpeningPrimaryQuoteIM, vector <cWordMatch>::iterator lastOpeningSecondaryQuoteIM,
+	const int lastEmbeddedStoryBegin)
+{
+	if (im->getObject() >= 0 && objects[im->getObject()].objectClass == META_GROUP_OBJECT_CLASS && inPrimaryQuote)
+	{
+		// my friend / your friend / friend of mine
+		if (objects[im->getObject()].getOwnerWhere() >= 0 && (m[objects[im->getObject()].getOwnerWhere()].word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON)) != 0 &&
+			// if identity relationship created a match, don't rematch
+			(m[where].objectMatches.empty() ||
+				(!(m[where].objectRole & RE_OBJECT_ROLE) && (m[where].objectRole & (SUBJECT_ROLE | IS_OBJECT_ROLE | SUBJECT_PLEONASTIC_ROLE)) != (SUBJECT_ROLE | IS_OBJECT_ROLE)))) // Copular
+		{
+			if (objects[im->getObject()].getOwnerWhere() > where)
+				resolveFirstSecondPersonPronoun(objects[im->getObject()].getOwnerWhere(),
+					(inSecondaryQuote) ? lastOpeningSecondaryQuoteIM->flags : lastOpeningPrimaryQuoteIM->flags, lastEmbeddedStoryBegin,
+					(inSecondaryQuote) ? lastOpeningSecondaryQuoteIM->objectMatches : lastOpeningPrimaryQuoteIM->objectMatches,
+					(inSecondaryQuote) ? lastOpeningSecondaryQuoteIM->audienceObjectMatches : lastOpeningPrimaryQuoteIM->audienceObjectMatches);
+			if (!(m[where].flags & cWordMatch::flagResolveMetaGroupByGender))
+				m[where].objectMatches.clear(); // also set in speakerResolution
+			vector <cOM> objectMatches;
+			wstring tmpstr, tmpstr2;
+			if (debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%06d:RESOLVING metagroup %s%s", where, objectString(im->getObject(), tmpstr, false).c_str(), m[where].roleString(tmpstr2).c_str());
+			resolveMetaGroupByAssociation(where, (im->objectRole & IN_PRIMARY_QUOTE_ROLE) != 0, objectMatches, objects[im->getObject()].getOwnerWhere());
+			if (objectMatches.size()) im->objectMatches = objectMatches;
+		}
+		else if (im->objectMatches.empty() && objects[im->getObject()].wordOrderSensitive(where, m) != 0)
+		{
+			m[where].flags &= ~cWordMatch::flagObjectResolved;
+			resolveObject(where, true, inPrimaryQuote, inSecondaryQuote, -1, -1, -1, -1, true, true, false);
+		}
+	}
+}
+
+void cSource::resolveUnquotedFirstSecondPronoun(vector <cWordMatch>::iterator im, const bool inPrimaryQuote, const bool inSecondaryQuote)
+{
+	// narrative you and I are resolved earlier.  But may not include both speakers.
+	if ((im->word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON)) == (FIRST_PERSON | SECOND_PERSON) &&
+		(im->queryWinnerForm(PROPER_NOUN_FORM_NUM) < 0 && im->queryWinnerForm(nounForm) < 0) && // US can be a proper noun, mine can be a noun
+		(im->getObject() >= 0 || im->getObject() < cObject::eOBJECTS::UNKNOWN_OBJECT) && !inPrimaryQuote && !inSecondaryQuote && im->objectMatches.size() <= 1)
+	{
+		// are any speakers grouped with the Narrator?  If so, include only this.
+		if (speakerGroups[currentSpeakerGroup].groupedSpeakers.find(0) != speakerGroups[currentSpeakerGroup].groupedSpeakers.end())
+		{
+			for (set <int>::iterator si = speakerGroups[currentSpeakerGroup].groupedSpeakers.begin(), siEnd = speakerGroups[currentSpeakerGroup].groupedSpeakers.end(); si != siEnd; si++)
+				if (*si)
+					im->objectMatches.push_back(cOM(*si, 0));
+		}
+		else
+		{
+			// if still only 1 match, match with other speaker.
+			for (set <int>::iterator si = speakerGroups[currentSpeakerGroup].speakers.begin(), siEnd = speakerGroups[currentSpeakerGroup].speakers.end(); si != siEnd; si++)
+				if (*si)
+					im->objectMatches.push_back(cOM(*si, 0));
+		}
+	}
+}
+
+// secondaryQuotes are quotes that are embedded in other quotes
+void cSource::processSecondaryQuotes(const int where, int &sqr, vector <int>& secondaryQuotesResolutions, vector <cWordMatch>::iterator lastOpeningPrimaryQuoteIM, vector <cWordMatch>::iterator lastOpeningSecondaryQuoteIM,
+	const int lastEmbeddedStoryBegin)
+{
+	if (sqr < (signed)secondaryQuotesResolutions.size() && secondaryQuotesResolutions[sqr] == where)
+	{
+		//  0:(openingSecondaryQuote);
+		//  1:(closingSecondaryQuote);
+		//  2:(secondarySpeaker);
+		//  3:(audienceObjectPosition); 
+		int secondarySpeaker = secondaryQuotesResolutions[sqr + 2];
+		int audienceObjectPosition = secondaryQuotesResolutions[sqr + 3];
+		bool audienceFilled = false;
+		if (secondarySpeaker >= 0)
+		{
+			if ((m[secondarySpeaker].getObject() >= 0 || m[secondarySpeaker].getObject() < cObject::eOBJECTS::UNKNOWN_OBJECT) && lastOpeningPrimaryQuoteIM != wmNULL)
+				resolveFirstSecondPersonPronoun(secondarySpeaker,
+					lastOpeningPrimaryQuoteIM->flags, lastEmbeddedStoryBegin,
+					lastOpeningPrimaryQuoteIM->objectMatches,
+					lastOpeningPrimaryQuoteIM->audienceObjectMatches);
+			secondarySpeaker = m[secondarySpeaker].principalWherePosition;
+			if (secondarySpeaker >= 0)
+			{
+				if (m[secondarySpeaker].objectMatches.size())
+					m[where].objectMatches = m[secondarySpeaker].objectMatches;
+				else if (m[secondarySpeaker].getObject() >= 0)
+					m[where].objectMatches.push_back(cOM(m[secondarySpeaker].getObject(), SALIENCE_THRESHOLD));
+			}
+		}
+		else
+		{
+			matchSelfReferences(secondaryQuotesResolutions, where, sqr, lastOpeningSecondaryQuoteIM, audienceFilled);
+		}
+		for (unsigned int J = 0; J < m[where].objectMatches.size(); J++)
+		{
+			objects[m[where].objectMatches[J].object].locations.push_back(where);
+			objects[m[where].objectMatches[J].object].updateFirstLocation(where);
+		}
+		if (audienceObjectPosition >= 0)
+		{
+			if ((m[audienceObjectPosition].getObject() >= 0 || m[audienceObjectPosition].getObject() < cObject::eOBJECTS::UNKNOWN_OBJECT) && lastOpeningPrimaryQuoteIM != wmNULL)
+				resolveFirstSecondPersonPronoun(audienceObjectPosition,
+					lastOpeningPrimaryQuoteIM->flags, lastEmbeddedStoryBegin,
+					lastOpeningPrimaryQuoteIM->objectMatches,
+					lastOpeningPrimaryQuoteIM->audienceObjectMatches);
+			if (m[audienceObjectPosition].principalWherePosition >= 0)
+				audienceObjectPosition = m[audienceObjectPosition].principalWherePosition;
+			if (m[audienceObjectPosition].objectMatches.size())
+				m[where].audienceObjectMatches = m[audienceObjectPosition].objectMatches;
+			else if (m[audienceObjectPosition].getObject() >= 0)
+				m[where].audienceObjectMatches.push_back(cOM(m[audienceObjectPosition].getObject(), SALIENCE_THRESHOLD));
+		}
+		// if speakerObject doesn't match lastOpeningPrimaryQuoteIM objectMatches, and there is no resolved hail object, assume person is talking to speaker 
+		else if (!audienceFilled && m[where].objectMatches.size())
+		{
+			assignAudienceBasedOnHailOrLastAudienceOrEmbeddedSpeakers(secondaryQuotesResolutions, where, sqr, lastOpeningPrimaryQuoteIM, lastOpeningSecondaryQuoteIM);
+		}
+		for (unsigned int J = 0; J < m[where].audienceObjectMatches.size(); J++)
+		{
+			objects[m[where].audienceObjectMatches[J].object].locations.push_back(where);
+			objects[m[where].audienceObjectMatches[J].object].updateFirstLocation(where);
+		}
+		wstring tmpstr, tmpstr2;
+		if (debugTrace.traceSpeakerResolution)
+			lplog(LOG_RESOLUTION, L"%d-%d:Secondary speaker resolution %d:%s audience %d:%s.",
+				secondaryQuotesResolutions[sqr], secondaryQuotesResolutions[sqr + 1], secondaryQuotesResolutions[sqr + 2],
+				objectString(m[where].objectMatches, tmpstr, true).c_str(), secondaryQuotesResolutions[sqr + 3], objectString(m[where].audienceObjectMatches, tmpstr2, true).c_str());
+		sqr += 4;
+	}
+}
+
 void cSource::resolveFirstSecondPersonPronouns(vector <int>& secondaryQuotesResolutions)
 {
 	LFS
@@ -266,34 +559,8 @@ void cSource::resolveFirstSecondPersonPronouns(vector <int>& secondaryQuotesReso
 			currentEmbeddedTimelineSegment = -1;
 		}
 		createTimelineSegment(I);
-		if (im->getObject() >= 0 && objects[im->getObject()].objectClass == META_GROUP_OBJECT_CLASS && inPrimaryQuote)
-		{
-			// my friend / your friend / friend of mine
-			if (objects[im->getObject()].getOwnerWhere() >= 0 && (m[objects[im->getObject()].getOwnerWhere()].word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON)) != 0 &&
-				// if identity relationship created a match, don't rematch
-				(m[I].objectMatches.empty() ||
-					(!(m[I].objectRole & RE_OBJECT_ROLE) && (m[I].objectRole & (SUBJECT_ROLE | IS_OBJECT_ROLE | SUBJECT_PLEONASTIC_ROLE)) != (SUBJECT_ROLE | IS_OBJECT_ROLE)))) // Copular
-			{
-				if (objects[im->getObject()].getOwnerWhere() > I)
-					resolveFirstSecondPersonPronoun(objects[im->getObject()].getOwnerWhere(),
-						(inSecondaryQuote) ? lastOpeningSecondaryQuoteIM->flags : lastOpeningPrimaryQuoteIM->flags, lastEmbeddedStoryBegin,
-						(inSecondaryQuote) ? lastOpeningSecondaryQuoteIM->objectMatches : lastOpeningPrimaryQuoteIM->objectMatches,
-						(inSecondaryQuote) ? lastOpeningSecondaryQuoteIM->audienceObjectMatches : lastOpeningPrimaryQuoteIM->audienceObjectMatches);
-				if (!(m[I].flags & cWordMatch::flagResolveMetaGroupByGender))
-					m[I].objectMatches.clear(); // also set in speakerResolution
-				vector <cOM> objectMatches;
-				wstring tmpstr, tmpstr2;
-				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:RESOLVING metagroup %s%s", I, objectString(im->getObject(), tmpstr, false).c_str(), m[I].roleString(tmpstr2).c_str());
-				resolveMetaGroupByAssociation(I, (im->objectRole & IN_PRIMARY_QUOTE_ROLE) != 0, objectMatches, objects[im->getObject()].getOwnerWhere());
-				if (objectMatches.size()) im->objectMatches = objectMatches;
-			}
-			else if (im->objectMatches.empty() && objects[im->getObject()].wordOrderSensitive(I, m) != 0)
-			{
-				m[I].flags &= ~cWordMatch::flagObjectResolved;
-				resolveObject(I, true, inPrimaryQuote, inSecondaryQuote, -1, -1, -1, -1, true, true, false);
-			}
-		}
+		resolveFirstSecondMetaGroupObject(im, I, inPrimaryQuote, inSecondaryQuote, lastOpeningPrimaryQuoteIM, lastOpeningSecondaryQuoteIM,
+			lastEmbeddedStoryBegin);
 		bool allIn, oneIn;
 		if ((im->objectRole & HAIL_ROLE) && im->objectMatches.size() > 1 && inPrimaryQuote && lastOpeningPrimaryQuoteIM->audienceObjectMatches.size() &&
 			intersect(lastOpeningPrimaryQuoteIM->audienceObjectMatches, im->objectMatches, allIn, oneIn))
@@ -306,220 +573,15 @@ void cSource::resolveFirstSecondPersonPronouns(vector <int>& secondaryQuotesReso
 				(m[I].objectMatches.empty() || lastOpeningSecondaryQuoteIM->audienceObjectMatches[0].object != m[I].objectMatches[0].object))
 				pushSpeaker(I, lastOpeningSecondaryQuoteIM->audienceObjectMatches[0].object, lastOpeningSecondaryQuoteIM->audienceObjectMatches[0].salienceFactor, L"(5)");
 		}
-		// narrative you and I are resolved earlier.  But may not include both speakers.
-		if ((im->word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON)) == (FIRST_PERSON | SECOND_PERSON) &&
-			(im->queryWinnerForm(PROPER_NOUN_FORM_NUM) < 0 && im->queryWinnerForm(nounForm) < 0) && // US can be a proper noun, mine can be a noun
-			(im->getObject() >= 0 || im->getObject() < cObject::eOBJECTS::UNKNOWN_OBJECT) && !inPrimaryQuote && !inSecondaryQuote && im->objectMatches.size() <= 1)
-		{
-			// are any speakers grouped with the Narrator?  If so, include only this.
-			if (speakerGroups[currentSpeakerGroup].groupedSpeakers.find(0) != speakerGroups[currentSpeakerGroup].groupedSpeakers.end())
-			{
-				for (set <int>::iterator si = speakerGroups[currentSpeakerGroup].groupedSpeakers.begin(), siEnd = speakerGroups[currentSpeakerGroup].groupedSpeakers.end(); si != siEnd; si++)
-					if (*si)
-						im->objectMatches.push_back(cOM(*si, 0));
-			}
-			else
-			{
-				// if still only 1 match, match with other speaker.
-				for (set <int>::iterator si = speakerGroups[currentSpeakerGroup].speakers.begin(), siEnd = speakerGroups[currentSpeakerGroup].speakers.end(); si != siEnd; si++)
-					if (*si)
-						im->objectMatches.push_back(cOM(*si, 0));
-			}
-		}
+		resolveUnquotedFirstSecondPronoun(im, inPrimaryQuote, inSecondaryQuote);
 		if ((im->getObject() >= 0 || im->getObject() < cObject::eOBJECTS::UNKNOWN_OBJECT) && (inPrimaryQuote || inSecondaryQuote))
 			resolveFirstSecondPersonPronoun(I,
 				(inSecondaryQuote) ? lastOpeningSecondaryQuoteIM->flags : lastOpeningPrimaryQuoteIM->flags, lastEmbeddedStoryBegin,
 				(inSecondaryQuote) ? lastOpeningSecondaryQuoteIM->objectMatches : lastOpeningPrimaryQuoteIM->objectMatches,
 				(inSecondaryQuote) ? lastOpeningSecondaryQuoteIM->audienceObjectMatches : lastOpeningPrimaryQuoteIM->audienceObjectMatches);
-		if (sqr < (signed)secondaryQuotesResolutions.size() && secondaryQuotesResolutions[sqr] == I)
-		{
-			//  0:(openingSecondaryQuote);
-			//  1:(closingSecondaryQuote);
-			//  2:(secondarySpeaker);
-			//  3:(audienceObjectPosition); 
-			int secondarySpeaker = secondaryQuotesResolutions[sqr + 2];
-			int audienceObjectPosition = secondaryQuotesResolutions[sqr + 3];
-			bool audienceFilled = false;
-			if (secondarySpeaker >= 0)
-			{
-				if ((m[secondarySpeaker].getObject() >= 0 || m[secondarySpeaker].getObject() < cObject::eOBJECTS::UNKNOWN_OBJECT) && lastOpeningPrimaryQuoteIM != wmNULL)
-					resolveFirstSecondPersonPronoun(secondarySpeaker,
-						lastOpeningPrimaryQuoteIM->flags, lastEmbeddedStoryBegin,
-						lastOpeningPrimaryQuoteIM->objectMatches,
-						lastOpeningPrimaryQuoteIM->audienceObjectMatches);
-				secondarySpeaker = m[secondarySpeaker].principalWherePosition;
-				if (secondarySpeaker >= 0)
-				{
-					if (m[secondarySpeaker].objectMatches.size())
-						m[I].objectMatches = m[secondarySpeaker].objectMatches;
-					else if (m[secondarySpeaker].getObject() >= 0)
-						m[I].objectMatches.push_back(cOM(m[secondarySpeaker].getObject(), SALIENCE_THRESHOLD));
-				}
-			}
-			else
-			{
-				int selfReferringSpeakerFound = -1, referringAudienceFound = -1;
-				for (int J = secondaryQuotesResolutions[sqr + 0]; J < secondaryQuotesResolutions[sqr + 1] && selfReferringSpeakerFound < 0; J++)
-					if ((m[J].objectRole & IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE) && (m[J].getObject() >= 0 || m[J].objectMatches.size()))
-						selfReferringSpeakerFound = J;
-					else if ((m[J].objectRole & IN_QUOTE_REFERRING_AUDIENCE_ROLE) && (m[J].getObject() >= 0 || m[J].objectMatches.size()))
-						referringAudienceFound = J;
-				// hail cannot match speaker / He[mr] then says : ‘[mr:mr] Please take a seat , Mr[mr] . -- er ? ’ 
-				if (selfReferringSpeakerFound >= 0 && (m[selfReferringSpeakerFound].objectMatches.empty() || m[I].objectMatches.empty() ||
-					m[selfReferringSpeakerFound].objectMatches[0].object != m[I].objectMatches[0].object))
-				{
-					if (m[selfReferringSpeakerFound].objectMatches.size())
-						m[I].objectMatches = m[selfReferringSpeakerFound].objectMatches;
-					else
-						m[I].objectMatches.push_back(cOM(m[selfReferringSpeakerFound].getObject(), SALIENCE_THRESHOLD));
-				}
-				// if the beginning of this quote is immediately after the last one, then assume that the other secondary speaker is talking
-				else if (audienceFilled = sqr >= 4 && secondaryQuotesResolutions[sqr - 4 + 1] == I - 1)
-				{
-					m[I].objectMatches = m[secondaryQuotesResolutions[sqr - 4]].audienceObjectMatches;
-					m[I].audienceObjectMatches = m[secondaryQuotesResolutions[sqr - 4]].objectMatches;
-				}
-				// if the beginning of this quote is immediately after the speaker of the last secondary quote +EOS, then copy the last one.
-				// 33920-33935 NQS ’ explained the doctor . ‘ nothing serious . you shall be about again in a couple of days . ’
-				else if (audienceFilled = sqr >= 4 && lastOpeningSecondaryQuoteIM != wmNULL) // && secondaryQuotesResolutions[sqr-4+2]+1==I-1)
-				{
-					m[I].objectMatches = m[secondaryQuotesResolutions[sqr - 4]].objectMatches;
-					m[I].audienceObjectMatches = m[secondaryQuotesResolutions[sqr - 4]].audienceObjectMatches;
-				}
-				if (referringAudienceFound >= 0 && (m[referringAudienceFound].objectMatches.empty() || m[I].objectMatches.empty() ||
-					m[referringAudienceFound].objectMatches[0].object != m[I].objectMatches[0].object))
-				{
-					if (m[referringAudienceFound].objectMatches.size())
-						m[I].objectMatches = m[referringAudienceFound].objectMatches;
-					else
-						m[I].objectMatches.push_back(cOM(m[referringAudienceFound].getObject(), SALIENCE_THRESHOLD));
-				}
-			}
-			for (unsigned int J = 0; J < m[I].objectMatches.size(); J++)
-			{
-				objects[m[I].objectMatches[J].object].locations.push_back(I);
-				objects[m[I].objectMatches[J].object].updateFirstLocation(I);
-			}
-			if (audienceObjectPosition >= 0)
-			{
-				if ((m[audienceObjectPosition].getObject() >= 0 || m[audienceObjectPosition].getObject() < cObject::eOBJECTS::UNKNOWN_OBJECT) && lastOpeningPrimaryQuoteIM != wmNULL)
-					resolveFirstSecondPersonPronoun(audienceObjectPosition,
-						lastOpeningPrimaryQuoteIM->flags, lastEmbeddedStoryBegin,
-						lastOpeningPrimaryQuoteIM->objectMatches,
-						lastOpeningPrimaryQuoteIM->audienceObjectMatches);
-				if (m[audienceObjectPosition].principalWherePosition >= 0)
-					audienceObjectPosition = m[audienceObjectPosition].principalWherePosition;
-				if (m[audienceObjectPosition].objectMatches.size())
-					m[I].audienceObjectMatches = m[audienceObjectPosition].objectMatches;
-				else if (m[audienceObjectPosition].getObject() >= 0)
-					m[I].audienceObjectMatches.push_back(cOM(m[audienceObjectPosition].getObject(), SALIENCE_THRESHOLD));
-			}
-			// if speakerObject doesn't match lastOpeningPrimaryQuoteIM objectMatches, and there is no resolved hail object, assume person is talking to speaker 
-			else if (!audienceFilled && m[I].objectMatches.size())
-			{
-				int hailFound = -1;
-				for (int J = secondaryQuotesResolutions[sqr + 0]; J < secondaryQuotesResolutions[sqr + 1] && hailFound < 0; J++)
-					if ((m[J].objectRole & HAIL_ROLE) && (m[J].getObject() >= 0 || m[J].objectMatches.size()))
-						hailFound = J;
-				// hail cannot match speaker / He[mr] then says : ‘[mr:mr] Please take a seat , Mr[mr] . -- er ? ’ 
-				if (hailFound >= 0 && (m[hailFound].objectMatches.empty() || m[I].objectMatches.empty() ||
-					m[hailFound].objectMatches[0].object != m[I].objectMatches[0].object))
-				{
-					if (m[hailFound].objectMatches.size())
-						m[I].audienceObjectMatches = m[hailFound].objectMatches;
-					else
-						m[I].audienceObjectMatches.push_back(cOM(m[hailFound].getObject(), SALIENCE_THRESHOLD));
-				}
-				else if (lastOpeningPrimaryQuoteIM != wmNULL && lastOpeningPrimaryQuoteIM->objectMatches.size() == 1 &&
-					in(lastOpeningPrimaryQuoteIM->objectMatches[0].object, m[I].objectMatches) == m[I].objectMatches.end())
-					m[I].audienceObjectMatches = lastOpeningPrimaryQuoteIM->objectMatches;
-				// if still not specified, and present speaker is the same as last, then assume the audience is also the same as last
-				if (m[I].audienceObjectMatches.empty() && m[I].objectMatches.size() == 1 && lastOpeningSecondaryQuoteIM != wmNULL && lastOpeningSecondaryQuoteIM->objectMatches.size() == 1 &&
-					m[I].objectMatches[0].object == lastOpeningSecondaryQuoteIM->objectMatches[0].object)
-					m[I].audienceObjectMatches = lastOpeningSecondaryQuoteIM->audienceObjectMatches;
-				// if STILL not specified, and speaker known, subtract speaker from embeddedSpeakerGroup and assign to audience
-				if (m[I].audienceObjectMatches.empty() && m[I].objectMatches.size()) //  && currentSpeakerGroup>=0
-				{
-					if (currentEmbeddedSpeakerGroup >= 0 && ((unsigned)currentEmbeddedSpeakerGroup) < speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups.size() &&
-						I >= speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].sgBegin &&
-						I < speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].sgEnd)
-					{
-						for (set <int>::iterator s = speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].speakers.begin(),
-							sEnd = speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].speakers.end(); s != sEnd; s++)
-							if (in(*s, m[I].objectMatches) == m[I].objectMatches.end())
-								m[I].audienceObjectMatches.push_back(cOM(*s, SALIENCE_THRESHOLD));
-					}
-					// if STILL not specified, and speaker known, subtract speaker from speakerGroup and assign to audience
-					else if (I >= speakerGroups[currentSpeakerGroup].sgBegin && I < speakerGroups[currentSpeakerGroup].sgEnd)
-					{
-						for (set <int>::iterator s = speakerGroups[currentSpeakerGroup].speakers.begin(), sEnd = speakerGroups[currentSpeakerGroup].speakers.end(); s != sEnd; s++)
-							if (in(*s, m[I].objectMatches) == m[I].objectMatches.end())
-								m[I].audienceObjectMatches.push_back(cOM(*s, SALIENCE_THRESHOLD));
-					}
-				}
-			}
-			for (unsigned int J = 0; J < m[I].audienceObjectMatches.size(); J++)
-			{
-				objects[m[I].audienceObjectMatches[J].object].locations.push_back(I);
-				objects[m[I].audienceObjectMatches[J].object].updateFirstLocation(I);
-			}
-			wstring tmpstr, tmpstr2;
-			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%d-%d:Secondary speaker resolution %d:%s audience %d:%s.",
-					secondaryQuotesResolutions[sqr], secondaryQuotesResolutions[sqr + 1], secondaryQuotesResolutions[sqr + 2],
-					objectString(m[I].objectMatches, tmpstr, true).c_str(), secondaryQuotesResolutions[sqr + 3], objectString(m[I].audienceObjectMatches, tmpstr2, true).c_str());
-			sqr += 4;
-		}
-		if (im->word->first == L"“" && !(im->flags & cWordMatch::flagQuotedString))
-		{
-			if (im->flags & cWordMatch::flagEmbeddedStoryBeginResolveSpeakers)
-				lastEmbeddedStoryBegin = I;
-			inPrimaryQuote = true;
-			lastOpeningPrimaryQuoteIM = im;
-			lastOpeningPrimaryQuote = I;
-			if (section < sections.size())
-			{
-				if (im->objectMatches.size() == 1)
-				{
-					speakersMatched++;
-					sections[section].speakersMatched++;
-				}
-				else
-				{
-					speakersNotMatched++;
-					sections[section].speakersNotMatched++;
-				}
-				if (im->audienceObjectMatches.size() != 0 && im->audienceObjectMatches.size() < speakerGroups[currentSpeakerGroup].speakers.size())
-				{
-					counterSpeakersMatched++;
-					sections[section].counterSpeakersMatched++;
-				}
-				else
-				{
-					counterSpeakersNotMatched++;
-					sections[section].counterSpeakersNotMatched++;
-				}
-			}
-		}
-		else if (im->word->first == L"”" && !(im->flags & cWordMatch::flagQuotedString))
-		{
-			lastOpeningSecondaryQuoteIM = lastOpeningPrimaryQuoteIM = wmNULL;
-			lastOpeningPrimaryQuote = -1;
-			lastQuote = -1;
-			inSecondaryQuote = inPrimaryQuote = false;
-		}
-		else if (im->word->first == L"‘" && !(im->flags & cWordMatch::flagQuotedString))
-		{
-			lastOpeningSecondaryQuoteIM = im;
-			lastOpeningSecondaryQuote = I;
-			inSecondaryQuote = true;
-			inPrimaryQuote = false;
-		}
-		else if (im->word->first == L"’" && !(im->flags & cWordMatch::flagQuotedString))
-		{
-			inSecondaryQuote = false;
-			inPrimaryQuote = (lastOpeningPrimaryQuote >= 0);
-		}
+		processSecondaryQuotes(I, sqr, secondaryQuotesResolutions, lastOpeningPrimaryQuoteIM, lastOpeningSecondaryQuoteIM,
+			lastEmbeddedStoryBegin);
+		handleQuotes(im, I, inPrimaryQuote, inSecondaryQuote, lastOpeningPrimaryQuoteIM, lastOpeningSecondaryQuoteIM, lastEmbeddedStoryBegin);
 		for (vector <cOM>::iterator oi = im->objectMatches.begin(), oiEnd = im->objectMatches.end(); oi != oiEnd; oi++)
 			followObjectChain(oi->object);
 		for (vector <cOM>::iterator oi = im->audienceObjectMatches.begin(), oiEnd = im->audienceObjectMatches.end(); oi != oiEnd; oi++)
@@ -535,26 +597,6 @@ void cSource::resolveFirstSecondPersonPronouns(vector <int>& secondaryQuotesReso
 		}
 	}
 	timelineSegments[currentTimelineSegment].end = m.size();
-	for (vector <cSpeakerGroup>::iterator sgi = speakerGroups.begin(), sgiEnd = speakerGroups.end(); sgi != sgiEnd; sgi++)
-		for (set <int>::iterator si = sgi->speakers.begin(); si != sgi->speakers.end(); si++)
-			if (objects[*si].masterSpeakerIndex < 0)
-			{
-				vector < vector<cObject>::iterator >::iterator msi;
-				bool aliasAlreadyInList = false;
-				for (unsigned int a = 0; a < objects[*si].aliases.size() && !aliasAlreadyInList; a++)
-					if ((msi = find(masterSpeakerList.begin(), masterSpeakerList.end(), objects.begin() + objects[*si].aliases[a])) != masterSpeakerList.end())
-					{
-						if (!(aliasAlreadyInList = (*msi)->numDefinitelyIdentifiedAsSpeaker >= objects[objects[*si].aliases[a]].numDefinitelyIdentifiedAsSpeaker))
-							masterSpeakerList.erase(msi);
-					}
-				if (!aliasAlreadyInList)
-				{
-					masterSpeakerList.push_back(objects.begin() + *si);
-					objects[*si].masterSpeakerIndex = 0;
-				}
-			}
-	sort(masterSpeakerList.begin(), masterSpeakerList.end(), masterCompare);
-	for (unsigned int ms = 0; ms < masterSpeakerList.size(); ms++)
-		masterSpeakerList[ms]->masterSpeakerIndex = ms;
+	setMasterSpeakerList();
 }
 
