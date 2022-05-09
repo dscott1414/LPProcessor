@@ -2226,6 +2226,9 @@ public:
 	bool cancelExitPOV(const int where, vector <cSyntacticRelationGroup>::iterator srg, bool &allPOVSpeakersInSubject, bool &subjectIsPhysicallyPresent, set <int> &povSpeakers);
 	void disambiguateExitingSubject(int where, vector <cSyntacticRelationGroup>::iterator srg, set <int>& povSpeakers);
 	void processExit(int where,vector <cSyntacticRelationGroup>::iterator srg,int backInitialPosition,vector <int> &lastSubjects);
+	bool detectSubjectVerbForSyntacticRelationGroup(const int where, const bool inPrimaryQuote, int& whereSubject, int& whereVerb);
+	void createLocationMoveSyntacticRelationGroup(const int where, const int whereSubject, const int whereVerb, bool &syntacticRelationGroupMovingDetected);
+	bool createLocationByPrepSyntacticRelationGroup(const int where, const bool inPrimaryQuote, int& whereControllingEntity, int& whereSubject, int& whereVerb);
 	void detectSyntacticRelationGroup(int where,int backInitialPosition,vector <int> &lastSubjects);
 	void logSpaceCheck(void);
 	int getSpeakersToKeep(vector<cSyntacticRelationGroup>::iterator sr);

@@ -2102,6 +2102,7 @@ bool cSource::detectPhysicalObject(int whereObject)
 	}
 	return physicalObject;
 }
+
 // The two young people[tommy,tuppence] greeted each other affectionately , and momentarily **blocked the Dover Street Tube exit
 // verbs of looking : (looked)
 //   He looked into the room
@@ -3152,26 +3153,20 @@ bool cSource::isSpatialSeparation(int whereVerb)
 	return false;
 }
 
-// will change source.m (invalidate all iterators through the use of newSR)
-void cSource::detectSyntacticRelationGroup(int where, int backInitialPosition, vector <int>& lastSubjects)
+bool cSource::detectSubjectVerbForSyntacticRelationGroup(const int where, const bool inPrimaryQuote, int &whereSubject, int &whereVerb)
 {
-	LFS
-		wstring tmpstr, tmpstr2, tmpstr3, tmpstr4;
-	bool syntacticRelationGroupDetected = false;
-	bool inPrimaryQuote = (m[where].objectRole & IN_PRIMARY_QUOTE_ROLE) != 0;
-	int whereSubject = -1, whereVerb = -1, syntacticRelationGroupsOriginalSize = syntacticRelationGroups.size();
 	if (m[where].objectRole & SUBJECT_ROLE)
 	{
 		whereSubject = where;
 		whereVerb = m[where].getRelVerb();
 		if (whereVerb >= 0 && (m[where].objectRole & OBJECT_ROLE) && m[whereVerb].relSubject != where)
-			return;
+			return false;
 		if (m[whereSubject].queryWinnerForm(prepositionForm) >= 0) // prevent prepositions within subject from being considered the subject itself
-			return;
+			return false;
 	}
 	else if ((m[where].objectRole & OBJECT_ROLE) && m[where].verbSense == 0) // getQuoteForwardLink() is tsSense for a verb
 	{
-		return; // should have already been taken care of with a subject or verb
+		return false; // should have already been taken care of with a subject or verb
 	}
 	else if (m[where].relSubject >= 0 && m[m[where].relSubject].getRelVerb() != where && m[where].verbSense >= 0)
 	{
@@ -3205,23 +3200,30 @@ void cSource::detectSyntacticRelationGroup(int where, int backInitialPosition, v
 			whereVerb = where;
 	}
 	if (whereVerb >= 0 && !m[whereVerb].hasWinnerVerbForm()) // includes verbverbForm
-		return;
+		return false;
 	if (whereSubject >= 0 && m[whereSubject].principalWherePosition > whereSubject)
-		return;
+		return false;
 	if (whereSubject < 0 && m[where].getRelVerb() >= 0 && m[m[where].getRelVerb()].relSubject >= 0)
 		whereSubject = m[m[where].getRelVerb()].relSubject;
 	int maxEnd = -1;
 	// evil-looking house
 	if (whereVerb >= 0 && (m[whereVerb].verbSense & VT_VERB_CLAUSE) && queryPattern(whereVerb, L"__ADJECTIVE", maxEnd) >= 0)
-		return;
+		return false;
+	wstring tmpstr;
 	if (whereSubject >= 0 && whereVerb >= 0 && m[whereVerb].getRelObject() >= 0 && m[whereSubject].word->first == L"where" &&
 		(m[whereVerb].word->first == L"is" || m[whereVerb].word->first == L"was" || m[whereVerb].word->first == L"be") &&
 		m[m[whereVerb].getRelObject()].getObject() >= 0 && objects[m[m[whereVerb].getRelObject()].getObject()].objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS &&
 		objects[m[m[whereVerb].getRelObject()].getObject()].getSubType() < 0)
 		lplog(LOG_RESOLUTION, L"%06d:location activity noun %s", where, whereString(m[whereVerb].getRelObject(), tmpstr, false).c_str());
-	bool physicallyEvaluated = false, allIn, oneIn;
 	if (whereSubject >= 0 && m[whereSubject].principalWherePosition >= 0)
 		whereSubject = m[whereSubject].principalWherePosition;
+	return true;
+}
+
+void cSource::createLocationMoveSyntacticRelationGroup(const int where, const int whereSubject, const int whereVerb, bool & syntacticRelationGroupMovingDetected)
+{
+	wstring tmpstr, tmpstr2, tmpstr3, tmpstr4;
+	bool physicallyEvaluated = false;
 	if (whereSubject >= 0 && m[whereSubject].beginObjectPosition >= 0)
 		physicallyPresentPosition(whereSubject, m[whereSubject].beginObjectPosition, physicallyEvaluated, true);
 	int o = (whereSubject >= 0) ? m[whereSubject].getObject() : -1, ws = whereSubject;
@@ -3232,7 +3234,7 @@ void cSource::detectSyntacticRelationGroup(int where, int backInitialPosition, v
 		o = m[whereSubject].objectMatches[0].object;
 		ws = objects[o].originalLocation;
 	}
-
+	bool allIn, oneIn;
 	int st = (o >= 0) ? objects[o].getSubType() : -1, tmp1 = -1, tmp2 = -1, tmp3 = -1, tmp4 = -1;
 	if (o >= 0 && (tmp1 = whereVerb < 0 || primaryLocationLastPosition < 0 || (tmp4 = m[whereVerb].verbSense & VT_TENSE_MASK) == VT_PAST) &&
 		!(m[ws].flags & cWordMatch::flagAdjectivalObject) &&
@@ -3265,7 +3267,7 @@ void cSource::detectSyntacticRelationGroup(int where, int backInitialPosition, v
 		// right now limit it to only things that move
 		bool continuesMoving = (primaryLocationLastMovingPosition >= 0 && m[primaryLocationLastMovingPosition].word == m[where].word), cancel = false;
 		bool lastWherePP = false, sgOccurredAfter = false, audienceOccurredAfter = false, speakerOccurredAfter = false, noMove = false, speakerContinuation = false;
-		syntacticRelationGroupDetected = !continuesMoving && st == MOVING;
+		syntacticRelationGroupMovingDetected = !continuesMoving && st == MOVING;
 		// the hostel was put in Bagravia - allow passives
 		noMove = st != MOVING && whereVerb >= 0 && isSpecialVerb(whereVerb, true) && !(m[whereVerb].verbSense & VT_PASSIVE);
 		cancel = noMove;
@@ -3308,6 +3310,10 @@ void cSource::detectSyntacticRelationGroup(int where, int backInitialPosition, v
 			syntacticRelationGroups[originalSize].speakerContinuation = speakerContinuation;
 		}
 	}
+}
+
+bool cSource::createLocationByPrepSyntacticRelationGroup(const int where, const bool inPrimaryQuote, int & whereControllingEntity, int &whereSubject, int &whereVerb)
+{
 	bool acceptableSubject = whereSubject >= 0 && (m[whereSubject].objectRole & SUBJECT_ROLE) && ((m[whereSubject].getObject()) >= 0 || m[whereSubject].word->first == L"who");
 	// command - don't make me do this!
 	if (inPrimaryQuote && whereSubject < 0 && whereVerb >= 0 && (m[whereVerb].verbSense & (VT_TENSE_MASK | VT_EXTENDED)) == VT_PRESENT &&
@@ -3317,7 +3323,6 @@ void cSource::detectSyntacticRelationGroup(int where, int backInitialPosition, v
 // ESTAB You[mr] want me[tuppence] to go to Madame[colombier] Colombier's
 // stMOVE Subject=You, me=object AT:Madame Columbier's
 // letters might be expected to arrive at Tommy's rooms
-	int whereControllingEntity = -1;
 	if (whereVerb >= 0 && acceptableSubject && (whereSubject < 0 || (m[whereSubject].getObject() >= 0 &&
 		((objects[m[whereSubject].getObject()].male || objects[m[whereSubject].getObject()].female) || (m[whereVerb].verbSense & VT_PASSIVE)))))
 	{
@@ -3378,7 +3383,7 @@ void cSource::detectSyntacticRelationGroup(int where, int backInitialPosition, v
 				whereControllingEntity = whereSubject;
 				whereSubject = relObject;
 				newSR(where, -1, whereControllingEntity, whereSubject, whereVerb, wherePrep, wherePrepObject, -1, -1, stLOCATION, L"by prep phrase", true);
-				return;
+				return true;
 			}
 			// I[whittington] happened to overhear part of your[tuppence] conversation with the young LOCATIONgentleman[glance] in Lyons's
 			// subject 'see, sight' object's conversation[hyperNym auditory communication] in Lyon's
@@ -3394,10 +3399,27 @@ void cSource::detectSyntacticRelationGroup(int where, int backInitialPosition, v
 				whereControllingEntity = whereSubject;
 				whereSubject = whereOwner;
 				newSR(where, -1, whereControllingEntity, whereSubject, whereVerb, wherePrep, wherePrepObject, -1, -1, stLOCATION, L"by prep phrase and owner", true);
-				return;
+				return true;
 			}
 		}
 	}
+	return false;
+}
+
+// will change source.m (invalidate all iterators through the use of newSR)
+void cSource::detectSyntacticRelationGroup(int where, int backInitialPosition, vector <int>& lastSubjects)
+{
+	LFS
+		wstring tmpstr, tmpstr2, tmpstr3, tmpstr4;
+	bool syntacticRelationGroupMovingDetected = false;
+	bool inPrimaryQuote = (m[where].objectRole & IN_PRIMARY_QUOTE_ROLE) != 0;
+	int whereSubject = -1, whereVerb = -1, syntacticRelationGroupsOriginalSize = syntacticRelationGroups.size();
+	if (!detectSubjectVerbForSyntacticRelationGroup(where, inPrimaryQuote, whereSubject, whereVerb))
+		return;
+	createLocationMoveSyntacticRelationGroup(where, whereSubject, whereVerb, syntacticRelationGroupMovingDetected);
+	int whereControllingEntity = -1;
+	if (createLocationByPrepSyntacticRelationGroup(where, inPrimaryQuote, whereControllingEntity, whereSubject, whereVerb))
+		return;
 
 	// this makes sure 'get' or 'got' is not misinterpreted as an stMOVE
 	// these papers have got to be saved
@@ -3446,7 +3468,7 @@ void cSource::detectSyntacticRelationGroup(int where, int backInitialPosition, v
 		}
 	}
 	bool transitionSinceEOS = false;
-	if (syntacticRelationGroupDetected && ageTransition(whereSubject, false, transitionSinceEOS, -1, -1, lastSubjects, L"DSR"))
+	if (syntacticRelationGroupMovingDetected && ageTransition(whereSubject, false, transitionSinceEOS, -1, -1, lastSubjects, L"DSR"))
 		primaryLocationLastMovingPosition = where;
 	else if (syntacticRelationGroupsOriginalSize != syntacticRelationGroups.size() || (speakerGroupsEstablished && m[where].hasSyntacticRelationGroup))
 	{
@@ -3842,7 +3864,6 @@ void cSource::processExit(int where, vector <cSyntacticRelationGroup>::iterator 
 	bool cancel= cancelExitPOV(where, srg, allPOVSpeakersInSubject, subjectIsPhysicallyPresent, povSpeakers);
 	bool allSpeakers = false;
 	int subjectObject = m[srg->whereSubject].getObject();
-	lplog(LOG_RESOLUTION,L"XXX %d %d %d %d %d", (int)cancel, (int)allPOVSpeakersInSubject, (int)subjectObject, (int)objects[subjectObject].plural, (int)m[srg->whereSubject].objectMatches.size());
 	// is everyone dispersing? / The two young EXITpeople[tommy,tuppence] went off in opposite directions 
 	if (!cancel && !allPOVSpeakersInSubject && subjectObject >= 0 && objects[subjectObject].plural && m[srg->whereSubject].objectMatches.size() > 1)
 	{
