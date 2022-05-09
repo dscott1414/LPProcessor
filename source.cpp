@@ -3114,12 +3114,13 @@ cSource::cSource(const wchar_t* databaseServer, int _sourceType, bool generateFo
 	primaryLocationLastPosition = -1;
 	updateWordUsageCostsDynamically = false;
 	RDFFileCaching = true;
+	sourceConfidence = 0;
 }
 
 cSource::cSource(MYSQL* parentMysql, int _sourceType, int _sourceConfidence)
 {
 	LFS
-		sourceType = _sourceType;
+	sourceType = _sourceType;
 	sourceConfidence = _sourceConfidence;
 	primaryQuoteType = L"\"";
 	secondaryQuoteType = L"\'";

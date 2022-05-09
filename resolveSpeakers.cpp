@@ -4137,8 +4137,10 @@ bool cSource::accompanyingRolePP(int where)
   return false;
 }
 
-bool cSource::physicallyPresentPosition(int where,int beginObjectPosition,bool &physicallyEvaluated,bool ignoreTense)
-{ LFS
+bool cSource::physicallyPresentPosition(int where, int beginObjectPosition, bool& physicallyEvaluated, bool ignoreTense)
+{
+	LFS
+	physicallyEvaluated = false;
 	if (beginObjectPosition<0) return false;
   vector <cWordMatch>::iterator im=m.begin()+beginObjectPosition;
 	int at=im->principalWherePosition;

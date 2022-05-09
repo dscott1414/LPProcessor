@@ -6,6 +6,7 @@
 #include "ontology.h"
 #include "source.h"
 #include "profile.h"
+#include <iterator>
 
 // meta group object types:
 // example:        latestOwnerWhere
@@ -883,6 +884,65 @@ void cSource::getPOVSpeakers(set <int> &povSpeakers)
 		}
 		if (povSpeakers.size()>1)
 			povSpeakers.clear();
+	}
+}
+
+void cSource::getPOVSpeakers2(const int where, vector <cSyntacticRelationGroup>::iterator srg, set <int>& povSpeakers, bool &nonPOVSpeakerOverride)
+{
+	vector <cLocalFocus>::iterator lsi;
+	bool allIn, oneIn, physicallyEvaluated;
+	if (povSpeakers.empty() && !speakerGroupsEstablished)
+	{
+		// if whereSubject is present between where and backInitialPosition, they are povSpeakers.
+		if (m[srg->whereSubject].objectMatches.empty() && (lsi = in(m[srg->whereSubject].getObject())) != localObjects.end() && lsi->lastWhere > where &&
+			physicallyPresentPosition(lsi->lastWhere, physicallyEvaluated) && physicallyEvaluated &&
+			// a page-boy went in search of him.
+			!(srg->relationType == stEXIT && objects[lsi->om.object].originalLocation == srg->whereSubject)) // if stEXIT, and whereSubject is the first mention of the subject, skip.
+			povSpeakers.insert(m[srg->whereSubject].getObject());
+		else if (m[srg->whereSubject].objectMatches.size())
+		{
+			for (int omi = 0; omi < (signed)m[srg->whereSubject].objectMatches.size(); omi++)
+			{
+				if ((lsi = in(m[srg->whereSubject].objectMatches[omi].object)) != localObjects.end() && lsi->lastWhere > where &&
+					physicallyPresentPosition(lsi->lastWhere, physicallyEvaluated) && physicallyEvaluated)
+					povSpeakers.insert(m[srg->whereSubject].objectMatches[omi].object);
+			}
+			if (m[srg->whereSubject].objectMatches.size() != povSpeakers.size())
+				povSpeakers.clear();
+		}
+	}
+	wstring tmpstr;
+	int csg = currentSpeakerGroup;
+	if (csg > 0 && ((unsigned)csg) < speakerGroups.size() && speakerGroups[csg].sgBegin > where) csg--;
+	// if no POV, and several PP speakers, and only one speaker exists in next speaker group, pick that one as a POV
+	if (povSpeakers.empty() && speakerGroupsEstablished && ((unsigned)csg + 1) < speakerGroups.size() &&
+		(m[srg->whereSubject].objectMatches.empty() || m[srg->whereSubject].objectMatches.size() == 1)) // definite match 
+	{
+		if (intersect(speakerGroups[csg].speakers, speakerGroups[csg + 1].speakers, allIn, oneIn) && !allIn) // at least one doesn't match
+		{
+			// if this speaker exists in the next speaker group, it must be the POV.
+			if (intersect(srg->whereSubject, speakerGroups[csg + 1].speakers, allIn, oneIn) && allIn)
+			{
+				// make the POV the one that survives to the next speaker group (the one who exits and keeps the point-of-view
+				povSpeakers.insert((m[srg->whereSubject].objectMatches.empty()) ? m[srg->whereSubject].getObject() : m[srg->whereSubject].objectMatches[0].object);
+				lplog(LOG_RESOLUTION, L"%06d:Made lingering speaker %s POV.", where, whereString(srg->whereSubject, tmpstr, true).c_str());
+			}
+			// this speaker doesn't exist in the next speaker group. if the other speaker does, then the other speaker must be the POV.
+			else
+			{
+				set <int> s;
+				set_intersection(speakerGroups[csg].speakers.begin(), speakerGroups[csg].speakers.end(),
+					speakerGroups[csg + 1].speakers.begin(), speakerGroups[csg + 1].speakers.end(),
+					std::inserter(s, s.begin()));
+				if (s.size() == 1)
+				{
+					povSpeakers.insert(*s.begin());
+					lplog(LOG_RESOLUTION, L"%06d:Made lingering speaker %s POV (2).", where, objectString(*s.begin(), tmpstr, true).c_str());
+				}
+			}
+		}
+		else // no speakers match.  set nonPOVSpeakerOverride.
+			nonPOVSpeakerOverride = true;
 	}
 }
 

@@ -2803,6 +2803,304 @@ wchar_t* cSource::loopString(int where, wstring& tmpstr)
 	}
 	return (wchar_t*)tmpstr.c_str();
 }
+
+int cSource::coreferenceFilterDetermineBeginAndEndS1(const int lastBeginS1, const int lastRelativePhrase, const int lastQ2, int &begin, int &endS1)
+{
+	int end, element;
+	if (lastRelativePhrase > lastBeginS1 && lastRelativePhrase >= lastQ2)
+	{
+		if ((element = m[lastRelativePhrase].pma.queryPattern(L"_REL1", end)) == -1)
+			return -1;
+		endS1 = lastRelativePhrase + m[lastRelativePhrase].pma[element & ~cMatchElement::patternFlag].len;
+		begin = lastRelativePhrase;
+	}
+	if (lastBeginS1 >= lastRelativePhrase && lastBeginS1 >= lastQ2)
+	{
+		if (lastBeginS1 < 0) return 0;
+		if ((element = m[lastBeginS1].pma.queryPattern(L"__S1", end)) == -1)
+			return -1;
+		endS1 = lastBeginS1 + m[lastBeginS1].pma[element & ~cMatchElement::patternFlag].len;
+		begin = lastBeginS1;
+	}
+	if (lastQ2 > lastRelativePhrase && lastQ2 > lastBeginS1)
+	{
+		if (lastQ2 < 0) return 0;
+		if ((element = m[lastQ2].pma.queryPattern(L"_Q2", end)) == -1)
+			return -1;
+		endS1 = lastQ2 + m[lastQ2].pma[element & ~cMatchElement::patternFlag].len;
+		begin = lastQ2;
+	}
+	return 0;
+}
+
+bool cSource::noCoreferenceFound(const int where, const int endS1)
+{
+	if (endS1 < where)
+	{
+		// where is past the end of the last S1, but not past an EOS (because lastBeginS1 is reset on EOS)
+		// if no conjunction after sentence end, return.
+		if (m[endS1].queryWinnerForm(conjunctionForm) < 0 && m[endS1].queryWinnerForm(coordinatorForm) < 0 && m[endS1].word->first != L"and") 
+			return true;
+		int searchPosition = endS1;
+		// get the pattern that covers the most of the rest of the sentence.
+		int element = m[searchPosition].pma.findMaxLen(); // at conjunction
+		int element2 = m[searchPosition + 1].pma.findMaxLen(); // one afterward
+		if (element2 >= 0 && (element < 0 || m[searchPosition].pma[element & ~cMatchElement::patternFlag].len < m[searchPosition + 1].pma[element2].len))
+		{
+			searchPosition++;
+			element = element2;
+		}
+		// if the where still has not been reached, return.
+		if (element < 0 || searchPosition + m[searchPosition].pma[element & ~cMatchElement::patternFlag].len < where) 
+			return true;
+	}
+	return false;
+}
+
+void cSource::disallowCompoundReferences(const int where, vector <int>& disallowedReferences)
+{
+	int compoundLoop = 0, wcpo;
+	wstring tmpstr;
+	for (int wcp = m[where].previousCompoundPartObject; wcp >= 0; wcp = m[wcp].previousCompoundPartObject, compoundLoop++)
+	{
+		if (compoundLoop > 10)
+			break;
+		if (disallowReference(wcpo = m[wcp].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
+			lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 5 ruled out %d:%s (1)", where, wcp, objectString(wcpo, tmpstr, false).c_str());
+		if (wcpo >= 0 && (m[wcp].objectMatches.size() == 1 || objects[wcpo].plural) && objects[wcpo].objectClass != BODY_OBJECT_CLASS)
+			for (unsigned int I = 0; I < m[wcp].objectMatches.size(); I++)
+				if (disallowReference(wcpo = m[wcp].objectMatches[I].object, disallowedReferences) && debugTrace.traceSpeakerResolution)
+					lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 5 ruled out %d:%s (1m)", where, wcp, objectString(wcpo, tmpstr, false).c_str());
+	}
+	for (int wcp = m[where].nextCompoundPartObject; wcp >= 0; wcp = m[wcp].nextCompoundPartObject, compoundLoop++)
+	{
+		if (compoundLoop > 10)
+			break;
+		if (disallowReference(wcpo = m[wcp].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
+			lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 5 ruled out %d:%s (2)", where, wcp, objectString(wcpo, tmpstr, false).c_str());
+	}
+}
+
+// where is subject
+// Rule 2: add object1 and object2 to disallowedReferences
+void cSource::rule2DisallowObjects(const int where, const int directObject, const int indirectObject, const int indirectObjectPosition, vector <int>& disallowedReferences)
+{
+	wstring tmpstr;
+	if (disallowReference(directObject, disallowedReferences) && debugTrace.traceSpeakerResolution)
+		lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 ruled out directObject %s",
+			where, objectString(directObject, tmpstr, false).c_str());
+	if (disallowReference(indirectObject, disallowedReferences) && debugTrace.traceSpeakerResolution)
+		lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 ruled out indirectObject %s at %d",
+			where, objectString(indirectObject, tmpstr, false).c_str(), indirectObjectPosition);
+}
+
+// Rule 3: if there is no directObject, and a PREP is in the sentence not in SUBJECT,
+//         then add the PREPOBJECT to disallowedReferences
+// She sat near her.  NOT She sat him near her.
+void cSource::rule3DisallowPrepObject(const int where, const int whereVerb, const int endS1, const int directObjectPosition, vector <int>& disallowedReferences)
+{
+	wstring tmpstr;
+	if (directObjectPosition < 0 && whereVerb >= 0 && m[whereVerb].relPrep >= 0)
+	{
+		// get the first prep immediately after the verb
+		int relPrep = m[whereVerb].relPrep, prepLoop = 0;
+		while (whereVerb >= relPrep && relPrep != -1)
+		{
+			relPrep = m[relPrep].relPrep;
+			if (prepLoop++ > 20)
+			{
+				lplog(LOG_ERROR, L"%06d:Prep loop occurred (8) %s.", relPrep, loopString(relPrep, tmpstr));
+				break;
+			}
+		}
+		while (whereVerb < relPrep && relPrep != -1)
+		{
+			int object, I = m[relPrep].getRelObject();
+			if (I >= 0 && (m[I].objectRole & PREP_OBJECT_ROLE) && disallowReference(object = m[I].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 3 ruled out prepObject %s at %d(%d)",
+					where, objectString(object, tmpstr, false).c_str(), I, endS1);
+			relPrep = m[relPrep].relPrep;
+			if (prepLoop++ > 20)
+			{
+				lplog(LOG_ERROR, L"%06d:Prep loop occurred (9) %s.", relPrep, loopString(relPrep, tmpstr));
+				break;
+			}
+		}
+	}
+}
+
+// rObject is object or a prep object with no intervening object
+// Rule 2: add subject to disallowedReferences
+// Rule 3: if there is no directObject, and a PREP is in the sentence not in SUBJECT,
+//         then add the PREPOBJECT to disallowedReferences
+// this has an exception: there must not be any more than one PREP after the verb, otherwise the prepositional phrase may
+//   modify the object of the previous prepositional phrase and so this should NOT be excluded:
+//   he had not yet acquired the habit of going about with any considerable sum of money on him. (Agatha Christie)  
+void cSource::rule23ObjectDisallowSubjectOrPrepObject(const int where, const int whereVerb, const int whereSubject, const int rObject, const int subjectObject, const int directObject, const int directObjectPosition, vector <int>& disallowedReferences, int& subjectCataRestriction)
+{
+	wstring tmpstr;
+	int numPrepositionalEmbeddings = 0;
+	if (m[where].objectRole & PREP_OBJECT_ROLE)
+	{
+		// count how many embeddings there are potentially between verb and object.  If there is more than one preposition, return.
+		int relPrep = m[whereVerb].relPrep, prepLoop = 0;
+		while (whereVerb >= relPrep && relPrep != -1)
+		{
+			relPrep = m[relPrep].relPrep;
+			if (prepLoop++ > 20)
+			{
+				lplog(LOG_ERROR, L"%06d:Prep loop occurred (10) %s.", relPrep, loopString(relPrep, tmpstr));
+				break;
+			}
+		}
+		while (relPrep > whereVerb && relPrep < where)
+		{
+			numPrepositionalEmbeddings++;
+			relPrep = m[relPrep].relPrep;
+			if (prepLoop++ > 20)
+			{
+				lplog(LOG_ERROR, L"%06d:Prep loop occurred (11) %s.", relPrep, loopString(relPrep, tmpstr));
+				break;
+			}
+		}
+	}
+	// if rObject==directObject override check if object is subject, because we are certain that subject and object are linked.
+	// another knock sent him[knock] scuttling back to cover .  / him is both subject and object, yet 'another knock' should be eliminated
+	if (numPrepositionalEmbeddings <= 1 &&
+		(rObject == directObject || m[where].relSubject == whereSubject ||
+			(!(m[where].objectRole & SUBJECT_ROLE) && (directObject < 0 || !(m[directObjectPosition].objectRole & SUBJECT_ROLE)))))
+	{
+		if (disallowReference(subjectObject, disallowedReferences) && debugTrace.traceSpeakerResolution)
+			lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 or 3 ruled out subjectObject %s", where, objectString(subjectObject, tmpstr, false).c_str());
+		// handle compound subjects
+		int compoundLoop = 0;
+		for (int wcp = m[where].previousCompoundPartObject; wcp >= 0 && compoundLoop < 10; wcp = m[wcp].previousCompoundPartObject, compoundLoop++)
+			if (wcp != whereSubject &&
+				disallowReference(m[wcp].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 or 3 (compoundSubject) ruled out subjectObject %s", where, objectString(m[wcp].getObject(), tmpstr, false).c_str());
+		for (int wcp = m[where].nextCompoundPartObject; wcp >= 0 && compoundLoop < 10; wcp = m[wcp].nextCompoundPartObject, compoundLoop++)
+			if (wcp != whereSubject &&
+				disallowReference(m[wcp].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 or 3 (compoundSubject) ruled out subjectObject %s", where, objectString(m[wcp].getObject(), tmpstr, false).c_str());
+		// more multiple subjects - MNOUN
+		for (unsigned int I = whereSubject + 1; I < (signed)m.size() && (m[I].objectRole & MNOUN_ROLE) != 0; I++)
+			if (disallowReference(m[I].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 or 3 (multipleSubject MNOUN) ruled out subjectObject %s", where, objectString(m[I].getObject(), tmpstr, false).c_str());
+		// if personalPronoun, this must not be of form she..her or he..him, where subject has been matched with more than one object.
+		if ((m[whereSubject].queryForm(personalPronounForm) >= 0 && m[where].queryForm(personalPronounAccusativeForm) < 0) ||// must tightly constrict this, because it must not be an indefinite pronoun
+			(m[whereSubject].objectMatches.size() == 1 &&
+				(!objects[subjectObject].plural || objects[subjectObject].objectClass == BODY_OBJECT_CLASS)))
+			for (vector<cOM>::iterator mo = m[whereSubject].objectMatches.begin(), moEnd = m[whereSubject].objectMatches.end(); mo != moEnd; mo++)
+				if (disallowReference(mo->object, disallowedReferences) && debugTrace.traceSpeakerResolution)
+					lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 or 3 ruled out subjectObject matchingObject %s",
+						where, objectString(*mo, tmpstr, false).c_str());
+		// if subject is not definitely determined (more than one match)
+		// if subject is not plural
+		// if object is not itself a subject (usually a subclause or a question that has been multiple parses)
+		if (m[whereSubject].objectMatches.size() > 1 &&
+			(!objects[subjectObject].plural || objects[subjectObject].objectClass == BODY_OBJECT_CLASS))
+			subjectCataRestriction = whereSubject;
+	}
+}
+
+void cSource::rule4MetaNameEquivalenceSameNounPattern(const int where, const int rObject, const int lastBeginS1, int & idExemption, vector <int>& disallowedReferences)
+{
+	int maxEnd, nameEnd = -1, element;
+	idExemption = -1;
+	wstring tmpstr;
+	if ((element = queryPattern(where, L"_META_NAME_EQUIVALENCE", maxEnd)) != -1)
+	{
+		int whereMNE = where + pema[element].begin;
+		if ((element = m[whereMNE].pma.queryPattern(L"_META_NAME_EQUIVALENCE", nameEnd)) != -1)
+		{
+			vector < vector <cTagLocation> > tagSets;
+			if (startCollectTags(true, metaNameEquivalenceTagSet, whereMNE, m[whereMNE].pma[element & ~cMatchElement::patternFlag].pemaByPatternEnd, tagSets, true, true, L"name equivalence coref filter") > 0)
+				for (unsigned int J = 0; J < tagSets.size(); J++)
+				{
+					if (debugTrace.traceNameResolution)
+						printTagSet(LOG_RESOLUTION, L"MNE", J, tagSets[J], whereMNE, m[whereMNE].pma[element & ~cMatchElement::patternFlag].pemaByPatternEnd);
+					int primaryTag = findOneTag(tagSets[J], L"NAME_PRIMARY", -1), secondaryTag = findOneTag(tagSets[J], L"NAME_SECONDARY", -1);
+					if (primaryTag < 0 || secondaryTag < 0) 
+						continue;
+					int wherePrimary = tagSets[J][primaryTag].sourcePosition, whereSecondary = tagSets[J][secondaryTag].sourcePosition;
+					if (tagSets[J][primaryTag].len > 1 && m[wherePrimary].principalWherePosition >= 0) // could be an adjective
+						wherePrimary = m[wherePrimary].principalWherePosition;
+					if (tagSets[J][secondaryTag].len > 1 && m[whereSecondary].principalWherePosition >= 0)
+						whereSecondary = m[whereSecondary].principalWherePosition;
+					if (m[wherePrimary].getObject() < 0 || m[whereSecondary].getObject() < 0 || objects[m[wherePrimary].getObject()].plural == objects[m[whereSecondary].getObject()].plural)
+					{
+						if (wherePrimary == where) idExemption = whereSecondary;
+						if (whereSecondary == where) idExemption = wherePrimary;
+					}
+				}
+		}
+	}
+	int IP, NEnd = objects[rObject].end;
+	for (IP = objects[rObject].begin; IP < NEnd; IP++)
+		if (m[IP].getObject() != rObject && IP != idExemption && disallowReference(m[IP].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
+			lplog(LOG_RESOLUTION, L"%06d:Disallowed coreferences from begin S1 where %d Lappin and Leass 2.1.1 RULE 4: %s",
+				where, lastBeginS1, objectString(m[IP].getObject(), tmpstr, false).c_str());
+}
+
+bool cSource::getMixedPlurality(const int begin, const int endS1)
+{
+	bool singularPronounEncountered = false, pluralPronounEncountered = false;
+	int o;
+	// He looked at them.
+	// NOT: He looked for all that was good in the world.
+	for (int IP = begin; IP < endS1; IP++)
+		if ((o = m[IP].getObject()) >= 0 && objects[o].objectClass == PRONOUN_OBJECT_CLASS &&
+			(m[IP].queryForm(personalPronounForm) >= 0 || m[IP].queryForm(personalPronounAccusativeForm) >= 0))
+		{
+			singularPronounEncountered |= !objects[o].plural;
+			pluralPronounEncountered |= objects[o].plural;
+		}
+	return singularPronounEncountered && pluralPronounEncountered;
+}
+
+void cSource::scanEntireCompoundObject(const int where, const int rObject, const int idExemption, vector <int>& disallowedReferences)
+{
+	int wcpBegin, wcpEnd, maxEnd, compoundLoop = 0;
+	wstring tmpstr;
+	for (wcpBegin = where; m[wcpBegin].previousCompoundPartObject >= 0 && compoundLoop < 10; wcpBegin = m[wcpBegin].previousCompoundPartObject, compoundLoop++);
+	for (wcpEnd = where; m[wcpEnd].nextCompoundPartObject >= 0 && compoundLoop < 10; wcpEnd = m[wcpEnd].nextCompoundPartObject, compoundLoop++);
+	if ((m[wcpBegin].objectRole & PREP_OBJECT_ROLE) && m[wcpBegin].relPrep > 0 && ((m[m[wcpBegin].relPrep - 1].objectRole) & (OBJECT_ROLE | SUBJECT_ROLE)))
+	{
+		wcpBegin = m[wcpBegin].relPrep - 1;
+		while (wcpBegin > 0 && m[wcpBegin].objectRole & (OBJECT_ROLE | SUBJECT_ROLE))
+		{
+			if (!(m[wcpBegin].objectRole & PREP_OBJECT_ROLE) && m[wcpBegin].getObject() >= 0)
+			{
+				wcpBegin = m[wcpBegin].beginObjectPosition - 1;
+				break;
+			}
+			if (m[wcpBegin].queryWinnerForm(verbForm) != -1)
+				break;
+			wcpBegin--;
+		}
+		wcpBegin++;
+	}
+	else
+		wcpBegin = m[wcpBegin].beginObjectPosition;
+	if (m[wcpEnd].beginObjectPosition >= 0 && queryPattern(m[wcpEnd].beginObjectPosition, L"__NOUN", maxEnd) != -1)
+		wcpEnd = m[wcpEnd].beginObjectPosition + maxEnd;
+	else
+		wcpEnd = m[wcpEnd].endObjectPosition;
+	int o;
+	for (int IP = where; IP >= wcpBegin; IP--)
+	{
+		if (m[IP].word->first == L",") break;
+		if ((o = m[IP].getObject()) != rObject && IP != idExemption && disallowReference(o, disallowedReferences) && debugTrace.traceSpeakerResolution)
+			lplog(LOG_RESOLUTION, L"%06d:%d:Disallowed coreference L&L 2.1.1 RULE 4: %s", where, IP, objectString(o, tmpstr, true).c_str());
+	}
+	for (int IP = where + 1; IP < wcpEnd; IP++)
+	{
+		if (m[IP].word->first == L",") break;
+		if ((o = m[IP].getObject()) != rObject && IP != idExemption && disallowReference(o, disallowedReferences) && debugTrace.traceSpeakerResolution)
+			lplog(LOG_RESOLUTION, L"%06d:%d:Disallowed coreference L&L 2.1.1 RULE 4: %s", where, IP, objectString(o, tmpstr, true).c_str());
+	}
+}
+
 // Lappin and Leass 2.1.1
 // Syntactic filter on Pronoun - NP coreference
 // P stands for a pronoun.  N stands for any Noun Phrase, including a pronoun
@@ -2841,70 +3139,16 @@ int cSource::coreferenceFilterLL2345(int where, int rObject, vector <int>& disal
 	int lastBeginS1, int lastRelativePhrase, int lastQ2, bool& mixedPlurality, int& subjectCataRestriction)
 {
 	LFS
-		if (lastRelativePhrase == -1 && lastBeginS1 == -1 && lastQ2 == -1) return 0;
-	int subjectObject = -1, indirectObject = -1, directObject = -1, element, begin = where, end = -1, endS1 = -1, wcpo, compoundLoop = 0;
-	wstring tmpstr;
-	for (int wcp = m[where].previousCompoundPartObject; wcp >= 0; wcp = m[wcp].previousCompoundPartObject, compoundLoop++)
-	{
-		if (compoundLoop > 10)
-			break;
-		if (disallowReference(wcpo = m[wcp].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 5 ruled out %d:%s (1)", where, wcp, objectString(wcpo, tmpstr, false).c_str());
-		if (wcpo >= 0 && (m[wcp].objectMatches.size() == 1 || objects[wcpo].plural) && objects[wcpo].objectClass != BODY_OBJECT_CLASS)
-			for (unsigned int I = 0; I < m[wcp].objectMatches.size(); I++)
-				if (disallowReference(wcpo = m[wcp].objectMatches[I].object, disallowedReferences) && debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 5 ruled out %d:%s (1m)", where, wcp, objectString(wcpo, tmpstr, false).c_str());
-	}
-	for (int wcp = m[where].nextCompoundPartObject; wcp >= 0; wcp = m[wcp].nextCompoundPartObject, compoundLoop++)
-	{
-		if (compoundLoop > 10)
-			break;
-		if (disallowReference(wcpo = m[wcp].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 5 ruled out %d:%s (2)", where, wcp, objectString(wcpo, tmpstr, false).c_str());
-	}
-	if (lastRelativePhrase > lastBeginS1 && lastRelativePhrase >= lastQ2)
-	{
-		if ((element = m[lastRelativePhrase].pma.queryPattern(L"_REL1", end)) == -1)
-			return -1;
-		endS1 = lastRelativePhrase + m[lastRelativePhrase].pma[element & ~cMatchElement::patternFlag].len;
-		begin = lastRelativePhrase;
-	}
-	if (lastBeginS1 >= lastRelativePhrase && lastBeginS1 >= lastQ2)
-	{
-		if (lastBeginS1 < 0) return 0;
-		if ((element = m[lastBeginS1].pma.queryPattern(L"__S1", end)) == -1)
-			return -1;
-		endS1 = lastBeginS1 + m[lastBeginS1].pma[element & ~cMatchElement::patternFlag].len;
-		begin = lastBeginS1;
-	}
-	if (lastQ2 > lastRelativePhrase && lastQ2 > lastBeginS1)
-	{
-		if (lastQ2 < 0) return 0;
-		if ((element = m[lastQ2].pma.queryPattern(L"_Q2", end)) == -1)
-			return -1;
-		endS1 = lastQ2 + m[lastQ2].pma[element & ~cMatchElement::patternFlag].len;
-		begin = lastQ2;
-	}
-	int whereSubject = -1, directObjectPosition = -1, indirectObjectPosition = -1;
-
 	mixedPlurality = false;
-	if (endS1 < where)
-	{
-		// where is past the end of the last S1, but not past an EOS (because lastBeginS1 is reset on EOS)
-		// if no conjunction after sentence end, return.
-		if (m[endS1].queryWinnerForm(conjunctionForm) < 0 && m[endS1].queryWinnerForm(coordinatorForm) < 0 && m[endS1].word->first != L"and") return 0;
-		int searchPosition = endS1;
-		// get the pattern that covers the most of the rest of the sentence.
-		element = m[searchPosition].pma.findMaxLen(); // at conjunction
-		int element2 = m[searchPosition + 1].pma.findMaxLen(); // one afterward
-		if (element2 >= 0 && (element < 0 || m[searchPosition].pma[element & ~cMatchElement::patternFlag].len < m[searchPosition + 1].pma[element2].len))
-		{
-			searchPosition++;
-			element = element2;
-		}
-		// if the where still has not been reached, return.
-		if (element < 0 || searchPosition + m[searchPosition].pma[element & ~cMatchElement::patternFlag].len < where) return 0;
-	}
+	if (lastRelativePhrase == -1 && lastBeginS1 == -1 && lastQ2 == -1) 
+		return 0;
+	int  begin = where, endS1 = -1;
+	disallowCompoundReferences(where, disallowedReferences);
+	if (coreferenceFilterDetermineBeginAndEndS1(lastBeginS1, lastRelativePhrase, lastQ2, begin, endS1) < 0)
+		return -1;
+	if (noCoreferenceFound(where, endS1))
+		return 0;
+	// get whereVerb
 	int whereVerb = m[where].getRelVerb();
 	if (whereVerb < 0)
 	{
@@ -2914,6 +3158,8 @@ int cSource::coreferenceFilterLL2345(int where, int rObject, vector <int>& disal
 	}
 	if (whereVerb >= 0 && m[whereVerb].relSubject < 0 && m[whereVerb + 1].hasVerbRelations && m[whereVerb + 1].relSubject >= 0)
 		whereVerb++;
+	// get subject and objects
+	int whereSubject = -1, directObjectPosition = -1, indirectObjectPosition = -1, subjectObject = -1, indirectObject = -1, directObject = -1;
 	if (whereVerb >= 0 && (whereSubject = m[whereVerb].relSubject) >= 0)
 		subjectObject = m[whereSubject].getObject();
 	else
@@ -2928,6 +3174,7 @@ int cSource::coreferenceFilterLL2345(int where, int rObject, vector <int>& disal
 	}
 	else
 		directObject = indirectObjectPosition = indirectObject = -1;
+	wstring tmpstr;
 	if (subjectObject >= 0)
 	{
 		bool isIdentityRelation = (m[whereSubject].objectRole & IS_OBJECT_ROLE) != 0;
@@ -2935,207 +3182,22 @@ int cSource::coreferenceFilterLL2345(int where, int rObject, vector <int>& disal
 		{
 			checkForPreviousPP(where, disallowedReferences);
 			if (!isIdentityRelation)
-			{
-				// where is subject
-				// Rule 2: add object1 and object2 to disallowedReferences
-				if (disallowReference(directObject, disallowedReferences) && debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 ruled out directObject %s",
-						where, objectString(directObject, tmpstr, false).c_str());
-				if (disallowReference(indirectObject, disallowedReferences) && debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 ruled out indirectObject %s at %d",
-						where, objectString(indirectObject, tmpstr, false).c_str(), indirectObjectPosition);
-			}
-			// Rule 3: if there is no directObject, and a PREP is in the sentence not in SUBJECT,
-			//         then add the PREPOBJECT to disallowedReferences
-			// She sat near her.  NOT She sat him near her.
-			if (directObjectPosition < 0 && whereVerb >= 0 && m[whereVerb].relPrep >= 0)
-			{
-				// get the first prep immediately after the verb
-				int relPrep = m[whereVerb].relPrep, prepLoop = 0;
-				while (whereVerb >= relPrep && relPrep != -1)
-				{
-					relPrep = m[relPrep].relPrep;
-					if (prepLoop++ > 20)
-					{
-						lplog(LOG_ERROR, L"%06d:Prep loop occurred (8) %s.", relPrep, loopString(relPrep, tmpstr));
-						break;
-					}
-				}
-				while (whereVerb < relPrep && relPrep != -1)
-				{
-					int object, I = m[relPrep].getRelObject();
-					if (I >= 0 && (m[I].objectRole & PREP_OBJECT_ROLE) && disallowReference(object = m[I].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 3 ruled out prepObject %s at %d(%d)",
-							where, objectString(object, tmpstr, false).c_str(), I, endS1);
-					relPrep = m[relPrep].relPrep;
-					if (prepLoop++ > 20)
-					{
-						lplog(LOG_ERROR, L"%06d:Prep loop occurred (9) %s.", relPrep, loopString(relPrep, tmpstr));
-						break;
-					}
-				}
-			}
+				rule2DisallowObjects(where, directObject, indirectObject, indirectObjectPosition, disallowedReferences);
+			rule3DisallowPrepObject(where, whereVerb, endS1, directObjectPosition, disallowedReferences);
 		}
 		// this is the direct object, or there is no direct object and this is an object of the first preposition.
 		else if ((!isIdentityRelation && whereVerb >= 0 && (rObject == directObject || (m[where].objectRole & (OBJECT_ROLE | PREP_OBJECT_ROLE)) == OBJECT_ROLE)) ||
 			((directObjectPosition < 0 || where < directObjectPosition) && ((m[where].objectRole & PREP_OBJECT_ROLE) && !(m[where].objectRole & SUBJECT_ROLE))))
-		{
-			// rObject is object or a prep object with no intervening object
-			// Rule 2: add subject to disallowedReferences
-			// Rule 3: if there is no directObject, and a PREP is in the sentence not in SUBJECT,
-			//         then add the PREPOBJECT to disallowedReferences
-			// this has an exception: there must not be any more than one PREP after the verb, otherwise the prepositional phrase may
-			//   modify the object of the previous prepositional phrase and so this should NOT be excluded:
-			//   he had not yet acquired the habit of going about with any considerable sum of money on him. (Agatha Christie)  
-			int numPrepositionalEmbeddings = 0;
-			if (m[where].objectRole & PREP_OBJECT_ROLE)
-			{
-				// count how many embeddings there are potentially between verb and object.  If there is more than one preposition, return.
-				int relPrep = m[whereVerb].relPrep, prepLoop = 0;
-				while (whereVerb >= relPrep && relPrep != -1)
-				{
-					relPrep = m[relPrep].relPrep;
-					if (prepLoop++ > 20)
-					{
-						lplog(LOG_ERROR, L"%06d:Prep loop occurred (10) %s.", relPrep, loopString(relPrep, tmpstr));
-						break;
-					}
-				}
-				while (relPrep > whereVerb && relPrep < where)
-				{
-					numPrepositionalEmbeddings++;
-					relPrep = m[relPrep].relPrep;
-					if (prepLoop++ > 20)
-					{
-						lplog(LOG_ERROR, L"%06d:Prep loop occurred (11) %s.", relPrep, loopString(relPrep, tmpstr));
-						break;
-					}
-				}
-			}
-			// if rObject==directObject override check if object is subject, because we are certain that subject and object are linked.
-			// another knock sent him[knock] scuttling back to cover .  / him is both subject and object, yet 'another knock' should be eliminated
-			if (numPrepositionalEmbeddings <= 1 &&
-				(rObject == directObject || m[where].relSubject == whereSubject ||
-					(!(m[where].objectRole & SUBJECT_ROLE) && (directObject < 0 || !(m[directObjectPosition].objectRole & SUBJECT_ROLE)))))
-			{
-				if (disallowReference(subjectObject, disallowedReferences) && debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 or 3 ruled out subjectObject %s", where, objectString(subjectObject, tmpstr, false).c_str());
-				// handle compound subjects
-				compoundLoop = 0;
-				for (int wcp = m[where].previousCompoundPartObject; wcp >= 0 && compoundLoop < 10; wcp = m[wcp].previousCompoundPartObject, compoundLoop++)
-					if (wcp != whereSubject &&
-						disallowReference(m[wcp].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 or 3 (compoundSubject) ruled out subjectObject %s", where, objectString(m[wcp].getObject(), tmpstr, false).c_str());
-				for (int wcp = m[where].nextCompoundPartObject; wcp >= 0 && compoundLoop < 10; wcp = m[wcp].nextCompoundPartObject, compoundLoop++)
-					if (wcp != whereSubject &&
-						disallowReference(m[wcp].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 or 3 (compoundSubject) ruled out subjectObject %s", where, objectString(m[wcp].getObject(), tmpstr, false).c_str());
-				// more multiple subjects - MNOUN
-				for (unsigned int I = whereSubject + 1; I < (signed)m.size() && (m[I].objectRole & MNOUN_ROLE) != 0; I++)
-					if (disallowReference(m[I].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 or 3 (multipleSubject MNOUN) ruled out subjectObject %s", where, objectString(m[I].getObject(), tmpstr, false).c_str());
-				// if personalPronoun, this must not be of form she..her or he..him, where subject has been matched with more than one object.
-				if ((m[whereSubject].queryForm(personalPronounForm) >= 0 && m[where].queryForm(personalPronounAccusativeForm) < 0) ||// must tightly constrict this, because it must not be an indefinite pronoun
-					(m[whereSubject].objectMatches.size() == 1 &&
-						(!objects[subjectObject].plural || objects[subjectObject].objectClass == BODY_OBJECT_CLASS)))
-					for (vector<cOM>::iterator mo = m[whereSubject].objectMatches.begin(), moEnd = m[whereSubject].objectMatches.end(); mo != moEnd; mo++)
-						if (disallowReference(mo->object, disallowedReferences) && debugTrace.traceSpeakerResolution)
-							lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 or 3 ruled out subjectObject matchingObject %s",
-								where, objectString(*mo, tmpstr, false).c_str());
-				// if subject is not definitely determined (more than one match)
-				// if subject is not plural
-				// if object is not itself a subject (usually a subclause or a question that has been multiple parses)
-				if (m[whereSubject].objectMatches.size() > 1 &&
-					(!objects[subjectObject].plural || objects[subjectObject].objectClass == BODY_OBJECT_CLASS))
-					subjectCataRestriction = whereSubject;
-			}
-		}
+			rule23ObjectDisallowSubjectOrPrepObject(where, whereVerb, whereSubject, rObject, subjectObject, directObject, directObjectPosition, disallowedReferences, subjectCataRestriction);
 	}
-	// rule 4 - collect all nouns that are under the same _NOUN pattern
 	// if BODY_OBJECT_CLASS, then ignore
 	if (objects[rObject].objectClass == BODY_OBJECT_CLASS)
 		return 0;
-	int maxEnd, nameEnd = -1, idExemption = -1;
-	if ((element = queryPattern(where, L"_META_NAME_EQUIVALENCE", maxEnd)) != -1)
-	{
-		int whereMNE = where + pema[element].begin;
-		if ((element = m[whereMNE].pma.queryPattern(L"_META_NAME_EQUIVALENCE", nameEnd)) != -1)
-		{
-			vector < vector <cTagLocation> > tagSets;
-			if (startCollectTags(true, metaNameEquivalenceTagSet, whereMNE, m[whereMNE].pma[element & ~cMatchElement::patternFlag].pemaByPatternEnd, tagSets, true, true, L"name equivalence coref filter") > 0)
-				for (unsigned int J = 0; J < tagSets.size(); J++)
-				{
-					if (debugTrace.traceNameResolution)
-						printTagSet(LOG_RESOLUTION, L"MNE", J, tagSets[J], whereMNE, m[whereMNE].pma[element & ~cMatchElement::patternFlag].pemaByPatternEnd);
-					int primaryTag = findOneTag(tagSets[J], L"NAME_PRIMARY", -1), secondaryTag = findOneTag(tagSets[J], L"NAME_SECONDARY", -1);
-					if (primaryTag < 0 || secondaryTag < 0) return false;
-					int wherePrimary = tagSets[J][primaryTag].sourcePosition, whereSecondary = tagSets[J][secondaryTag].sourcePosition;
-					if (tagSets[J][primaryTag].len > 1 && m[wherePrimary].principalWherePosition >= 0) // could be an adjective
-						wherePrimary = m[wherePrimary].principalWherePosition;
-					if (tagSets[J][secondaryTag].len > 1 && m[whereSecondary].principalWherePosition >= 0)
-						whereSecondary = m[whereSecondary].principalWherePosition;
-					if (m[wherePrimary].getObject() < 0 || m[whereSecondary].getObject() < 0 || objects[m[wherePrimary].getObject()].plural == objects[m[whereSecondary].getObject()].plural)
-					{
-						if (wherePrimary == where) idExemption = whereSecondary;
-						if (whereSecondary == where) idExemption = wherePrimary;
-					}
-				}
-		}
-	}
-	int IP, NEnd = objects[rObject].end, o;
-	for (IP = objects[rObject].begin; IP < NEnd; IP++)
-		if (m[IP].getObject() != rObject && IP != idExemption && disallowReference(m[IP].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:Disallowed coreferences from begin S1 where %d Lappin and Leass 2.1.1 RULE 4: %s",
-				where, lastBeginS1, objectString(m[IP].getObject(), tmpstr, false).c_str());
-	bool singularPronounEncountered = false, pluralPronounEncountered = false;
-	// He looked at them.
-	// NOT: He looked for all that was good in the world.
-	for (IP = begin; IP < endS1; IP++)
-		if ((o = m[IP].getObject()) >= 0 && objects[o].objectClass == PRONOUN_OBJECT_CLASS &&
-			(m[IP].queryForm(personalPronounForm) >= 0 || m[IP].queryForm(personalPronounAccusativeForm) >= 0))
-		{
-			singularPronounEncountered |= !objects[o].plural;
-			pluralPronounEncountered |= objects[o].plural;
-		}
-	mixedPlurality = singularPronounEncountered && pluralPronounEncountered;
-	int wcpBegin, wcpEnd;
-	compoundLoop = 0;
-	for (wcpBegin = where; m[wcpBegin].previousCompoundPartObject >= 0 && compoundLoop < 10; wcpBegin = m[wcpBegin].previousCompoundPartObject, compoundLoop++);
-	for (wcpEnd = where; m[wcpEnd].nextCompoundPartObject >= 0 && compoundLoop < 10; wcpEnd = m[wcpEnd].nextCompoundPartObject, compoundLoop++);
-	if ((m[wcpBegin].objectRole & PREP_OBJECT_ROLE) && m[wcpBegin].relPrep > 0 && ((m[m[wcpBegin].relPrep - 1].objectRole) & (OBJECT_ROLE | SUBJECT_ROLE)))
-	{
-		wcpBegin = m[wcpBegin].relPrep - 1;
-		while (wcpBegin > 0 && m[wcpBegin].objectRole & (OBJECT_ROLE | SUBJECT_ROLE))
-		{
-			if (!(m[wcpBegin].objectRole & PREP_OBJECT_ROLE) && m[wcpBegin].getObject() >= 0)
-			{
-				wcpBegin = m[wcpBegin].beginObjectPosition - 1;
-				break;
-			}
-			if (m[wcpBegin].queryWinnerForm(verbForm) != -1)
-				break;
-			wcpBegin--;
-		}
-		wcpBegin++;
-	}
-	else
-		wcpBegin = m[wcpBegin].beginObjectPosition;
-	if (m[wcpEnd].beginObjectPosition >= 0 && queryPattern(m[wcpEnd].beginObjectPosition, L"__NOUN", maxEnd) != -1)
-		wcpEnd = m[wcpEnd].beginObjectPosition + maxEnd;
-	else
-		wcpEnd = m[wcpEnd].endObjectPosition;
-	for (IP = where; IP >= wcpBegin; IP--)
-	{
-		if (m[IP].word->first == L",") break;
-		if ((o = m[IP].getObject()) != rObject && IP != idExemption && disallowReference(o, disallowedReferences) && debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:%d:Disallowed coreference L&L 2.1.1 RULE 4: %s", where, IP, objectString(o, tmpstr, true).c_str());
-	}
-	for (IP = where + 1; IP < wcpEnd; IP++)
-	{
-		if (m[IP].word->first == L",") break;
-		if ((o = m[IP].getObject()) != rObject && IP != idExemption && disallowReference(o, disallowedReferences) && debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:%d:Disallowed coreference L&L 2.1.1 RULE 4: %s", where, IP, objectString(o, tmpstr, true).c_str());
-	}
+	// rule 4 - collect all nouns that are under the same _NOUN pattern
+	int idExemption = -1;
+	rule4MetaNameEquivalenceSameNounPattern(where, rObject, lastBeginS1, idExemption, disallowedReferences);
+	mixedPlurality = getMixedPlurality(begin, endS1);
+	scanEntireCompoundObject(where, rObject, idExemption, disallowedReferences);
 	return 0;
 }
 

@@ -157,6 +157,27 @@ public:
 	unordered_map <wstring, cAnswerConfidence> childCandidateAnswerMap;
 	void copySource(cSource *toSource, cSyntacticRelationGroup *constantQuestionSRI, cPattern *originalQuestionPattern, cPattern *constantQuestionPattern, unordered_map <int, int> &sourceMap, unordered_map <wstring, wstring> &parseVariables);
 	int getWhereQuestionTypeObject(cSource *questionSource, cSyntacticRelationGroup* srg);
+	void analyzeQuestionFromSourceSyntacticRelationSubjectVerbObjectPrep(cSource* questionSource, const wstring childSourceType, cSource* childSource,
+		cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer,
+		vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const wstring matchInfoDetailSubject, const int matchSumSubject, const int wo, int &po,
+		const bool questionTypeSubject, const bool questionTypePrepObject,
+		const bool subjectMatch, const int verbMatch, const wstring matchInfoDetailVerb,
+		wstring &matchInfoDetail, const int objectMatch, const int relativizerAsPrepMatch, const int secondaryObjectMatch, const int secondaryVerbMatch, set<int>& whereAnswerMatchSubquery);
+	void analyzeQuestionFromSourceSyntacticRelationSubjectVerbObject(cSource* questionSource, const wstring childSourceType, cSource* childSource,
+		cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer,
+		vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const int vi, const wstring matchInfoDetailSubject, const int matchSumSubject, const int wo,
+		const bool questionTypeSubject, const bool questionTypeObject, const bool questionTypePrepObject,
+		const bool subjectMatch, int &verbMatch, const wstring matchInfoDetailVerb);
+	int analyzeQuestionFromSourceSyntacticRelationSubjectVerb(cSource* questionSource, const wstring childSourceType, cSource* childSource,
+		cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer,
+		vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const int vi, const wstring matchInfoDetailSubject, const int matchSumSubject,
+		const bool questionTypeSubject, const bool questionTypeObject, const bool questionTypePrepObject);
+	int analyzeQuestionFromSourceSyntacticRelationSubject(cSource* questionSource, const wstring childSourceType, cSource* childSource,
+		cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer,
+		vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const bool questionTypeSubject, const bool questionTypeObject, const bool questionTypePrepObject);
+	void analyzeQuestionFromSourceSyntacticRelation(cSource* questionSource, wstring childSourceType, cSource* childSource,
+		cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer, 
+		vector <cSyntacticRelationGroup>::iterator childSRG, bool questionTypeSubject, bool questionTypeObject, bool questionTypePrepObject);
 	int analyzeQuestionFromSource(cSource *questionSource, wchar_t *derivation, wstring childSourceType, cSource *childSource, cSyntacticRelationGroup * parentSRG, vector < cAS > &answerSRGs, int &maxAnswer, bool eraseIfNoAnswers);
 	int questionTypeCheck(cSource *questionSource, wstring derivation, cSyntacticRelationGroup* parentSRG, cAS &childCAS, int &semanticMismatch, bool &unableToDoquestionTypeCheck);
 	int verbTenseMatch(cSource *questionSource, cSyntacticRelationGroup* parentSRG, cAS &childCAS);

@@ -2222,10 +2222,12 @@ public:
 	void detectSpaceLocation(int where,int lastBeginS1);
 	bool isSpeakerContinued(int where,int o,int lastWherePP,bool &sgOccurredAfter,bool &audienceOccurredAfter,bool &speakerOccurredAfter);
 	bool isSpatialSeparation(int whereVerb);
+	bool initiallyQualifySyntacticRelationExit(const int where, vector <cSyntacticRelationGroup>::iterator srg);
+	bool cancelExitPOV(const int where, vector <cSyntacticRelationGroup>::iterator srg, bool &allPOVSpeakersInSubject, bool &subjectIsPhysicallyPresent, set <int> &povSpeakers);
+	void disambiguateExitingSubject(int where, vector <cSyntacticRelationGroup>::iterator srg, set <int>& povSpeakers);
 	void processExit(int where,vector <cSyntacticRelationGroup>::iterator srg,int backInitialPosition,vector <int> &lastSubjects);
 	void detectSyntacticRelationGroup(int where,int backInitialPosition,vector <int> &lastSubjects);
 	void logSpaceCheck(void);
-
 	int getSpeakersToKeep(vector<cSyntacticRelationGroup>::iterator sr);
 	void beginSection(int &lastSpeakerGroupPositionConsidered, int &lastSpeakerGroupOfPreviousSection, int I, vector <int> &previousLastSubjects, vector <int> &lastSubjects);
 	void endSection(int &questionSpeakerLastParagraph, int &questionSpeakerLastSentence, int &whereFirstSubjectInParagraph, int &lastSpeakerGroupPositionConsidered, int &lastSpeakerGroupOfPreviousSection, int I,
@@ -2712,6 +2714,7 @@ private:
 	void setMatched(int where,vector <int> &objects);
 
 	void getPOVSpeakers(set <int> &povSpeakers);
+	void getPOVSpeakers2(const int where, vector <cSyntacticRelationGroup>::iterator srg, set <int>& povSpeakers, bool& nonPOVSpeakerOverride);
 	void getCurrentSpeakers(set <int> &speakers,set <int> &povSpeakers);
 	int checkIfOne(int I,int latestObject,set <int> *speakers);
 	bool resolveMetaGroupWordOrderedFutureObject(int where,vector <cOM> &objectMatches);
@@ -2882,6 +2885,15 @@ private:
 	void checkForPreviousPP(int where,vector <int> &disallowedReferences);
 	void coreferenceFilterLL5(int where,vector <int> &disallowedReferences);
 	wchar_t *loopString(int where,wstring &tmpstr);
+	int coreferenceFilterDetermineBeginAndEndS1(const int lastBeginS1, const int lastRelativePhrase, const int lastQ2, int& begin, int& endS1);
+	bool noCoreferenceFound(const int where, const int endS1);
+	void disallowCompoundReferences(const int where, vector <int>& disallowedReferences);
+	void rule2DisallowObjects(const int where, const int directObject, const int indirectObject, const int indirectObjectPosition, vector <int>& disallowedReferences);
+	void rule3DisallowPrepObject(const int where, const int whereVerb, const int endS1, const int directObjectPosition, vector <int>& disallowedReferences);
+	void rule23ObjectDisallowSubjectOrPrepObject(const int where, const int whereVerb, const int whereSubject, const int rObject, const int subjectObject, const int directObject, const int directObjectPosition, vector <int>& disallowedReferences, int& subjectCataRestriction);
+	void rule4MetaNameEquivalenceSameNounPattern(const int where, const int rObject, const int lastBeginS1, int& idExemption, vector <int>& disallowedReferences);
+	bool getMixedPlurality(const int begin, const int endS1);
+	void scanEntireCompoundObject(const int where, const int rObject, const int idExemption, vector <int>& disallowedReferences);
 	int coreferenceFilterLL2345(int position,int rObject, vector <int> &disallowedReferences,int lastBeginS1,int lastRelativePhrase,int lastQ2,bool &mixedPlurality,int &subjectCataRestriction);
 	int pronounCoreferenceFilterLL6(int P, int lastBeginS1,vector <int> &disallowedReferences);
 	int reflexivePronounCoreference(int P, int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,bool inPrimaryQuote,bool inSecondaryQuote);

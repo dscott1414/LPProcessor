@@ -930,7 +930,6 @@ bool cSource::identifyDateTime(int where, vector <cSyntacticRelationGroup>::iter
 		return true;
 	if (identifyYear(where, csr, beginObjectPosition))
 		return true;
-	bool rtSet = false;
 	cTimeInfo t, rt;
 	rt.tWhere = t.tWhere = where;
 	t.timeRTAnchor = rt.timeRTAnchor = where;
@@ -990,11 +989,6 @@ bool cSource::identifyDateTime(int where, vector <cSyntacticRelationGroup>::iter
 		(t.timeRelationType != T_UNSPECIFIED && t.timeRelationType != T_MODIFIER &&
 			t.timeCapacity != cUnspecified && t.timeCapacity != cMoment && t.timeCapacity != cMinute && t.timeCapacity != cSecond))
 		detectTimeTransition(where, csr, t);
-	if (rtSet)
-	{
-		csr->timeInfo.push_back(rt);
-		detectTimeTransition(where, csr, rt);
-	}
 	if (t.timeRelationType == T_MODIFIER)
 		maxLen--;
 	if (!inMultiObject || inMultiObject == 2)

@@ -994,7 +994,7 @@ int cQuestionAnswering::spinParses(MYSQL& mysql, vector <cSearchSource>& accumul
 		if (!_waccess(path.c_str(), 0))
 		{
 			processOldFile = true;
-			int fd, errorCode = _wsopen_s(&fd, path.c_str(), O_RDWR | O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE);
+			int fd, errorCode = _wsopen_s(&fd, path.c_str(), O_RDONLY | O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE);
 			if (errorCode == 0)
 			{
 				int sourceVersion = 0, numBytes = -2;
