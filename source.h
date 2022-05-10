@@ -553,6 +553,8 @@ public:
 		return cWord::isSingleQuote(word->first[0]) || cWord::isDoubleQuote(word->first[0]);
 	}
 	bool writeRef(void *buffer,int &where,int limit);
+	bool readWord(const wstring temp, int sourceType);
+	bool readFlags(char* buffer, int& where, int limit);
 	bool read(char *buffer,int &where,int limit,int sourceType);
 	void accumulateStatistics(unordered_map<wstring, int> &defaultMap);
 	cWordMatch(char *buffer,int &where,int limit,int sourceType,bool &error)
@@ -1177,6 +1179,39 @@ public:
 			if (error=!copy(lastVerbTenses[I],buffer,where,total)) return;
 		if (error=!copy(name,buffer,where,total)) return;
 	}
+	bool writeFlags(void* buffer, int& where, unsigned int limit)
+	{
+		__int64 flags = 0;
+		flags |= (identified) ? 1 : 0; flags <<= 1;
+		flags |= (plural) ? 1 : 0; flags <<= 1;
+		flags |= (male) ? 1 : 0; flags <<= 1;
+		flags |= (female) ? 1 : 0; flags <<= 1;
+		flags |= (neuter) ? 1 : 0; flags <<= 1;
+		flags |= (ownerPlural) ? 1 : 0; flags <<= 1;
+		flags |= (ownerMale) ? 1 : 0; flags <<= 1;
+		flags |= (ownerFemale) ? 1 : 0; flags <<= 1;
+		flags |= (ownerNeuter) ? 1 : 0; flags <<= 1;
+		flags |= (eliminated) ? 1 : 0; flags <<= 1;
+		flags |= (multiSource) ? 1 : 0; flags <<= 1;
+		flags |= (suspect) ? 1 : 0; flags <<= 1;
+		flags |= (verySuspect) ? 1 : 0; flags <<= 1;
+		flags |= (ambiguous) ? 1 : 0; flags <<= 1;
+		flags |= (partialMatch) ? 1 : 0; flags <<= 1;
+		flags |= (isNotAPlace) ? 1 : 0; flags <<= 1;
+		flags |= (genderNarrowed) ? 1 : 0; flags <<= 1;
+		flags |= (isKindOf) ? 1 : 0; flags <<= 1;
+		flags |= (wikipediaAccessed) ? 1 : 0; flags <<= 1;
+		flags |= (container) ? 1 : 0; flags <<= 1;
+		flags |= (dbPediaAccessed) ? 1 : 0; flags <<= 1;
+		flags |= (getIsTimeObject()) ? 1 : 0; flags <<= 1;
+		flags |= (isLocationObject) ? 1 : 0; flags <<= 1;
+		flags |= (isWikiPlace) ? 1 : 0; flags <<= 1;
+		flags |= (isWikiPerson) ? 1 : 0; flags <<= 1;
+		flags |= (isWikiBusiness) ? 1 : 0; flags <<= 1;
+		flags |= (isWikiWork) ? 1 : 0;
+		if (!copy(buffer, flags, where, limit)) return false;
+		return true;
+	}
 	bool write(void *buffer,int &where,unsigned int limit)
 	{
 		if (!copy(buffer,dbIndex,where,limit)) return false; 
@@ -1233,35 +1268,7 @@ public:
 			if (!copy(buffer,genericAge[I],where,limit)) return false;
 		if (!copy(buffer,objectGenericAge,where,limit)) return false; 
 		if (!copy(buffer,mostMatchedAge,where,limit)) return false; 
-		__int64 flags=0;
-		flags|=(identified) ? 1:0; flags<<=1;
-		flags|=(plural) ? 1:0; flags<<=1;
-		flags|=(male) ? 1:0; flags<<=1;
-		flags|=(female) ? 1:0; flags<<=1;
-		flags|=(neuter) ? 1:0; flags<<=1;
-		flags|=(ownerPlural) ? 1:0; flags<<=1;
-		flags|=(ownerMale) ? 1:0; flags<<=1;
-		flags|=(ownerFemale) ? 1:0; flags<<=1;
-		flags|=(ownerNeuter) ? 1:0; flags<<=1;
-		flags|=(eliminated) ? 1:0; flags<<=1;
-		flags|=(multiSource) ? 1:0; flags<<=1;
-		flags|=(suspect) ? 1:0; flags<<=1;
-		flags|=(verySuspect) ? 1:0; flags<<=1;
-		flags|=(ambiguous) ? 1:0; flags<<=1;
-		flags|=(partialMatch) ? 1:0; flags<<=1;
-		flags|=(isNotAPlace) ? 1:0; flags<<=1;
-		flags|=(genderNarrowed) ? 1:0; flags<<=1;
-		flags|=(isKindOf) ? 1:0; flags<<=1;
-		flags|=(wikipediaAccessed) ? 1:0; flags<<=1;
-		flags|=(container) ? 1:0; flags<<=1;
-		flags|=(dbPediaAccessed) ? 1:0; flags<<=1;
-		flags|=(getIsTimeObject()) ? 1:0; flags<<=1;
-		flags|=(isLocationObject) ? 1:0; flags<<=1;
-		flags|=(isWikiPlace) ? 1:0; flags<<=1;
-		flags|=(isWikiPerson) ? 1:0; flags<<=1;
-		flags|=(isWikiBusiness) ? 1:0; flags<<=1;
-		flags|=(isWikiWork) ? 1:0; 
-		if (!copy(buffer,flags,where,limit)) return false;
+		if (!writeFlags(buffer, where, limit)) return false;
 		for (int I=0; I<VERB_HISTORY; I++)
 			if (!copy(buffer,lastVerbTenses[I],where,limit)) return false;
 		if (!copy(buffer,name,where,limit)) return false;

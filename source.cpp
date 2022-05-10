@@ -582,49 +582,85 @@ bool cWordMatch::isModifierType(void)
 		word->second.getUsageCost(form) < 3 && (flags & flagNounOwner));
 }
 
+bool cWordMatch::readWord(const wstring temp, int sourceType)
+{
+	wstring sWord, comment;
+	int sourceId = -1, nounOwner = 0;
+	__int64 bufferLength = temp.length(), bufferScanLocation = 0;
+	bool added = false;
+	int result = Words.readWord((wchar_t*)temp.c_str(), bufferLength, bufferScanLocation, sWord, comment, nounOwner, false, false, t, NULL, -1, sourceType);
+	word = Words.end();
+	if (result == PARSE_NUM)
+		word = Words.addNewOrModify(NULL, sWord, 0, NUMBER_FORM_NUM, 0, 0, L"", sourceId, added);
+	else if (result == PARSE_PLURAL_NUM)
+		word = Words.addNewOrModify(NULL, sWord, 0, NUMBER_FORM_NUM, PLURAL, 0, L"", sourceId, added);
+	else if (result == PARSE_ORD_NUM)
+		word = Words.addNewOrModify(NULL, sWord, 0, numeralOrdinalForm, 0, 0, L"", sourceId, added);
+	else if (result == PARSE_ADVERB_NUM)
+		word = Words.addNewOrModify(NULL, sWord, 0, adverbForm, 0, 0, sWord, sourceId, added);
+	else if (result == PARSE_DATE)
+		word = Words.addNewOrModify(NULL, sWord, 0, dateForm, 0, 0, L"", sourceId, added);
+	else if (result == PARSE_TIME)
+		word = Words.addNewOrModify(NULL, sWord, 0, timeForm, 0, 0, L"", sourceId, added);
+	else if (result == PARSE_TELEPHONE_NUMBER)
+		word = Words.addNewOrModify(NULL, sWord, 0, telephoneNumberForm, 0, 0, L"", sourceId, added);
+	else if (result == PARSE_MONEY_NUM)
+		word = Words.addNewOrModify(NULL, sWord, 0, moneyForm, 0, 0, L"", sourceId, added);
+	else if (result == PARSE_WEB_ADDRESS)
+		word = Words.addNewOrModify(NULL, sWord, 0, webAddressForm, 0, 0, L"", sourceId, added);
+	else if (result < 0 && result != PARSE_END_SENTENCE)
+	{
+		lplog(LOG_ERROR, L"Word %s cannot be added - error %d.", temp.c_str(), result);
+		return false;
+	}
+	else
+		if ((result = Words.parseWord(NULL, sWord, word, false, nounOwner, sourceId, false)) < 0)
+		{
+			string temp2;
+			lplog(LOG_ERROR, L"Word %S cannot be added at buffer location %d", wTM(temp, temp2, 65001), bufferScanLocation);
+			return false;
+		}
+	return true;
+}
+
+bool cWordMatch::readFlags(char* buffer, int& where, int limit)
+{
+	__int64 tflags;
+	if (!copy(tflags, buffer, where, limit)) return false;
+	t.collectPerSentenceStats = tflags & 1; tflags >>= 1;
+	t.traceTagSetCollection = tflags & 1; tflags >>= 1;
+	t.traceIncludesPEMAIndex = tflags & 1; tflags >>= 1;
+	t.traceUnmatchedSentences = tflags & 1; tflags >>= 1;
+	t.traceMatchedSentences = tflags & 1; tflags >>= 1;
+	t.traceSecondaryPEMACosting = tflags & 1; tflags >>= 1;
+	t.tracePatternElimination = tflags & 1; tflags >>= 1;
+	t.traceBNCPreferences = tflags & 1; tflags >>= 1;
+	t.traceDeterminer = tflags & 1; tflags >>= 1;
+	t.traceVerbObjects = tflags & 1; tflags >>= 1;
+	t.traceObjectResolution = tflags & 1; tflags >>= 1;
+	t.traceNameResolution = tflags & 1; tflags >>= 1;
+	t.traceSpeakerResolution = tflags & 1; tflags >>= 1;
+	t.traceRelations = tflags & 1; tflags >>= 1;
+	t.traceAnaphors = tflags & 1; tflags >>= 1;
+	t.traceEVALObjects = tflags & 1; tflags >>= 1;
+	t.traceSubjectVerbAgreement = tflags & 1; tflags >>= 1;
+	t.traceRole = tflags & 1; tflags >>= 1;
+	t.printBeforeElimination = tflags & 1; tflags >>= 1;
+	t.traceTestSubjectVerbAgreement = tflags & 1; tflags >>= 1;
+	t.traceTestSyntacticRelations = tflags & 1; tflags >>= 1;
+	t.traceTime = tflags & 1; tflags >>= 1;
+	return true;
+}
+
 bool cWordMatch::read(char* buffer, int& where, int limit, int sourceType)
 {
 	DLFS
-		wstring temp;
+	wstring temp;
 	if (!copy(temp, buffer, where, limit)) return false;
 	if ((word = Words.query(temp)) == Words.end())
 	{
-		wstring sWord, comment;
-		int sourceId = -1, nounOwner = 0;
-		__int64 bufferLength = temp.length(), bufferScanLocation = 0;
-		bool added = false;
-		int result = Words.readWord((wchar_t*)temp.c_str(), bufferLength, bufferScanLocation, sWord, comment, nounOwner, false, false, t, NULL, -1, sourceType);
-		word = Words.end();
-		if (result == PARSE_NUM)
-			word = Words.addNewOrModify(NULL, sWord, 0, NUMBER_FORM_NUM, 0, 0, L"", sourceId, added);
-		else if (result == PARSE_PLURAL_NUM)
-			word = Words.addNewOrModify(NULL, sWord, 0, NUMBER_FORM_NUM, PLURAL, 0, L"", sourceId, added);
-		else if (result == PARSE_ORD_NUM)
-			word = Words.addNewOrModify(NULL, sWord, 0, numeralOrdinalForm, 0, 0, L"", sourceId, added);
-		else if (result == PARSE_ADVERB_NUM)
-			word = Words.addNewOrModify(NULL, sWord, 0, adverbForm, 0, 0, sWord, sourceId, added);
-		else if (result == PARSE_DATE)
-			word = Words.addNewOrModify(NULL, sWord, 0, dateForm, 0, 0, L"", sourceId, added);
-		else if (result == PARSE_TIME)
-			word = Words.addNewOrModify(NULL, sWord, 0, timeForm, 0, 0, L"", sourceId, added);
-		else if (result == PARSE_TELEPHONE_NUMBER)
-			word = Words.addNewOrModify(NULL, sWord, 0, telephoneNumberForm, 0, 0, L"", sourceId, added);
-		else if (result == PARSE_MONEY_NUM)
-			word = Words.addNewOrModify(NULL, sWord, 0, moneyForm, 0, 0, L"", sourceId, added);
-		else if (result == PARSE_WEB_ADDRESS)
-			word = Words.addNewOrModify(NULL, sWord, 0, webAddressForm, 0, 0, L"", sourceId, added);
-		else if (result < 0 && result != PARSE_END_SENTENCE)
-		{
-			lplog(LOG_ERROR, L"Word %s cannot be added - error %d.", temp.c_str(), result);
+		if (!readWord(temp, sourceType))
 			return false;
-		}
-		else
-			if ((result = Words.parseWord(NULL, sWord, word, false, nounOwner, sourceId, false)) < 0)
-			{
-				string temp2;
-				lplog(LOG_ERROR, L"Word %S cannot be added at buffer location %d", wTM(temp, temp2, 65001), bufferScanLocation);
-				return false;
-			}
 	}
 	if (!copy(baseVerb, buffer, where, limit)) return false;
 	if (!copy(flags, buffer, where, limit)) return false;
@@ -675,30 +711,7 @@ bool cWordMatch::read(char* buffer, int& where, int limit, int sourceType)
 	if (!copy(embeddedStorySpeakerPosition, buffer, where, limit)) return false;
 
 	// flags
-	__int64 tflags;
-	if (!copy(tflags, buffer, where, limit)) return false;
-	t.collectPerSentenceStats = tflags & 1; tflags >>= 1;
-	t.traceTagSetCollection = tflags & 1; tflags >>= 1;
-	t.traceIncludesPEMAIndex = tflags & 1; tflags >>= 1;
-	t.traceUnmatchedSentences = tflags & 1; tflags >>= 1;
-	t.traceMatchedSentences = tflags & 1; tflags >>= 1;
-	t.traceSecondaryPEMACosting = tflags & 1; tflags >>= 1;
-	t.tracePatternElimination = tflags & 1; tflags >>= 1;
-	t.traceBNCPreferences = tflags & 1; tflags >>= 1;
-	t.traceDeterminer = tflags & 1; tflags >>= 1;
-	t.traceVerbObjects = tflags & 1; tflags >>= 1;
-	t.traceObjectResolution = tflags & 1; tflags >>= 1;
-	t.traceNameResolution = tflags & 1; tflags >>= 1;
-	t.traceSpeakerResolution = tflags & 1; tflags >>= 1;
-	t.traceRelations = tflags & 1; tflags >>= 1;
-	t.traceAnaphors = tflags & 1; tflags >>= 1;
-	t.traceEVALObjects = tflags & 1; tflags >>= 1;
-	t.traceSubjectVerbAgreement = tflags & 1; tflags >>= 1;
-	t.traceRole = tflags & 1; tflags >>= 1;
-	t.printBeforeElimination = tflags & 1; tflags >>= 1;
-	t.traceTestSubjectVerbAgreement = tflags & 1; tflags >>= 1;
-	t.traceTestSyntacticRelations = tflags & 1; tflags >>= 1;
-	t.traceTime = tflags & 1; tflags >>= 1;
+	if (!readFlags(buffer, where, limit)) return false;
 	if (!copy(logCache, buffer, where, limit)) return false;
 	skipResponse = -1;
 	if (!copy(relNextObject, buffer, where, limit)) return false;
