@@ -2096,113 +2096,124 @@ bool cSource::write(wstring path, bool S2, bool makeCopyBeforeSourceWrite, wstri
 	return true;
 }
 
+int cSource::checkPEMAPositions(cWordMatch& mi, int& generalizedIndex)
+{
+	for (int np = mi.beginPEMAPosition; np >= 0; np = pema[np].nextByPosition)
+		if (np < 0 || np >= (signed)pema.count) return 50;
+		else
+		{
+			if (pema[np].getParentPattern() >= patterns.size()) return 201;
+			if (pema[np].isChildPattern())
+			{
+				if (pema[np].getChildPattern() >= patterns.size()) return 202;
+				if (generalizedIndex + pema[np].getChildLen() > m.size()) return 203; // may = m.size()
+			}
+			else
+				if (pema[np].getChildForm() >= Forms.size())
+					return 204;
+		}
+	for (int np = mi.beginPEMAPosition; np >= 0; np = pema[np].nextByPatternEnd)
+		if (np < 0 || np >= (signed)pema.count) return 51;
+		else
+		{
+			if (pema[np].getParentPattern() >= patterns.size()) return 205;
+			if (pema[np].isChildPattern())
+			{
+				if (pema[np].getChildPattern() >= patterns.size()) return 206;
+				if (generalizedIndex + pema[np].getChildLen() > m.size()) return 207; // may = m.size()
+			}
+			else
+				if (pema[np].getChildForm() >= Forms.size())
+					return 208;
+		}
+	for (int np = mi.beginPEMAPosition; np >= 0; np = pema[np].nextByChildPatternEnd)
+		if (np < 0 || np >= (signed)pema.count) return 52;
+		else
+		{
+			if (pema[np].getParentPattern() >= patterns.size()) return 209;
+			if (pema[np].isChildPattern())
+			{
+				if (pema[np].getChildPattern() >= patterns.size()) return 210;
+				if (generalizedIndex + pema[np].getChildLen() > m.size()) return 211; // may = m.size()
+			}
+			else
+				if (pema[np].getChildForm() >= Forms.size())
+					return 212;
+		}
+	for (int np = mi.beginPEMAPosition; np >= 0; np = pema[np].nextPatternElement)
+		if (np < 0 || np >= (signed)pema.count) return 53;
+		else
+		{
+			if (pema[np].getParentPattern() >= patterns.size()) return 213;
+			if (pema[np].isChildPattern())
+			{
+				if (pema[np].getChildPattern() >= patterns.size()) return 214;
+				if (generalizedIndex + pema[np].getChildLen() > m.size()) return 215; // may = m.size()
+			}
+			else
+				if (pema[np].getChildForm() >= Forms.size())
+					return 216;
+		}
+	generalizedIndex++;
+	return 0;
+}
+
+int cSource::sanityCheckSourcePosition(cWordMatch &mi, int & generalizedIndex)
+{
+	if (mi.beginPEMAPosition < -1 || mi.beginPEMAPosition >= (signed)pema.count) return 1;
+	if (mi.endPEMAPosition < -1 || mi.endPEMAPosition >= (signed)pema.count) return 2;
+	for (unsigned int pmi = 0; pmi < mi.pma.count; pmi++)
+	{
+		if (generalizedIndex + mi.pma[pmi].len > m.size()) return 3; // the end of a pm may be = m.size()
+		if (mi.pma[pmi].pemaByPatternEnd < -1 || mi.pma[pmi].pemaByPatternEnd >= (signed)pema.count) return 4;
+		if (mi.pma[pmi].pemaByChildPatternEnd < -1 || mi.pma[pmi].pemaByChildPatternEnd >= (signed)pema.count) return 5;
+		if (mi.pma[pmi].getPattern() >= patterns.size()) return 6;
+	}
+	// enum eOBJECTS { UNKNOWN_OBJECT=-1,OBJECT_UNKNOWN_MALE=-2, OBJECT_UNKNOWN_FEMALE=-3, OBJECT_UNKNOWN_MALE_OR_FEMALE = -4, OBJECT_UNKNOWN_NEUTER = -5, OBJECT_UNKNOWN_PLURAL = -6, OBJECT_UNKNOWN_ALL = -7
+	if (mi.getObject() < cObject::eOBJECTS::OBJECT_UNKNOWN_ALL || mi.getObject() >= (int)objects.size())
+	{
+		lplog(LOG_ERROR, L"Sanity check failure for source position %d.  object=%d out of %d objects.", generalizedIndex, mi.getObject(), objects.size());
+		return 7;
+	}
+	if (mi.principalWherePosition < -1 || mi.principalWherePosition >= (int)m.size()) return 8;
+	if (mi.principalWhereAdjectivalPosition < -1 || (int)mi.principalWhereAdjectivalPosition >= (int)m.size()) return 9;
+	if (mi.originalObject < cObject::eOBJECTS::OBJECT_UNKNOWN_ALL || mi.originalObject >= (int)objects.size()) return 10;
+	for (auto& om : mi.objectMatches)
+		if (om.object < cObject::eOBJECTS::OBJECT_UNKNOWN_ALL || om.object >= (int)objects.size()) return 11;
+	for (auto& om : mi.audienceObjectMatches)
+		if (om.object < cObject::eOBJECTS::OBJECT_UNKNOWN_ALL || om.object >= (int)objects.size()) return 12;
+	if (mi.isQuote() && (mi.getQuoteForwardLink() < -1 || mi.getQuoteForwardLink() >= (int)m.size()))
+		return 13;
+	if (mi.endQuote < -1 || mi.endQuote >= (int)m.size()) return 14;
+	if (mi.nextQuote < -1 || mi.nextQuote >= (int)m.size()) return 15;
+	if (mi.previousQuote < -1 || mi.previousQuote >= (int)m.size()) return 16;
+	if (mi.getRelObject() < -1 || mi.getRelObject() >= (int)m.size()) return 17;
+	if (mi.relSubject < -1 || mi.relSubject >= (int)m.size()) return 18;
+	if (mi.getRelVerb() < -1 || mi.getRelVerb() >= (int)m.size()) return 19;
+	if (mi.relPrep < -1 || mi.relPrep >= (int)m.size()) return 20;
+	if (mi.beginObjectPosition < -1 || mi.beginObjectPosition >= (int)m.size()) return 21;
+	if (mi.endObjectPosition < -1 || mi.endObjectPosition >(int)m.size()) return 22; // end position can be = m.size()
+	if (mi.embeddedStorySpeakerPosition < -1 || mi.embeddedStorySpeakerPosition >= (int)m.size()) return 23;
+	if (mi.relNextObject < -1 || mi.relNextObject >= (int)m.size()) return 24;
+	if (mi.nextCompoundPartObject < -1 || mi.nextCompoundPartObject >= (int)m.size()) return 25;
+	if (mi.previousCompoundPartObject < -1 || mi.previousCompoundPartObject >= (int)m.size()) return 26;
+	if (mi.relInternalVerb < -1 || mi.relInternalVerb >= (int)m.size()) return 27;
+	if (mi.relInternalObject < -1 || mi.relInternalObject >= (int)m.size()) return 28;
+	if (mi.quoteBackLink < -1 || mi.quoteBackLink >= (int)m.size()) return 30;
+	if (mi.speakerPosition < -1 || mi.speakerPosition >= (int)m.size()) return 31;
+	if (mi.audiencePosition < -1 || mi.audiencePosition >= (int)m.size()) return 32;
+	if (mi.getObject() >= 0 && (mi.beginObjectPosition < 0 || mi.endObjectPosition < 0)) return 33;
+	return checkPEMAPositions(mi, generalizedIndex);
+}
+
 // concentrates on index underflow and overflow
 int cSource::sanityCheck(int& generalizedIndex)
 {
 	generalizedIndex = 0;
+	int returnSanity = 0;
 	for (auto& mi : m)
-	{
-		if (mi.beginPEMAPosition < -1 || mi.beginPEMAPosition >= (signed)pema.count) return 1;
-		if (mi.endPEMAPosition < -1 || mi.endPEMAPosition >= (signed)pema.count) return 2;
-		for (unsigned int pmi = 0; pmi < mi.pma.count; pmi++)
-		{
-			if (generalizedIndex + mi.pma[pmi].len > m.size()) return 3; // the end of a pm may be = m.size()
-			if (mi.pma[pmi].pemaByPatternEnd < -1 || mi.pma[pmi].pemaByPatternEnd >= (signed)pema.count) return 4;
-			if (mi.pma[pmi].pemaByChildPatternEnd < -1 || mi.pma[pmi].pemaByChildPatternEnd >= (signed)pema.count) return 5;
-			if (mi.pma[pmi].getPattern() >= patterns.size()) return 6;
-		}
-		// enum eOBJECTS { UNKNOWN_OBJECT=-1,OBJECT_UNKNOWN_MALE=-2, OBJECT_UNKNOWN_FEMALE=-3, OBJECT_UNKNOWN_MALE_OR_FEMALE = -4, OBJECT_UNKNOWN_NEUTER = -5, OBJECT_UNKNOWN_PLURAL = -6, OBJECT_UNKNOWN_ALL = -7
-		if (mi.getObject() < cObject::eOBJECTS::OBJECT_UNKNOWN_ALL || mi.getObject() >= (int)objects.size())
-		{
-			lplog(LOG_ERROR, L"Sanity check failure for source position %d.  object=%d out of %d objects.", generalizedIndex, mi.getObject(), objects.size());
-			return 7;
-		}
-		if (mi.principalWherePosition < -1 || mi.principalWherePosition >= (int)m.size()) return 8;
-		if (mi.principalWhereAdjectivalPosition < -1 || (int)mi.principalWhereAdjectivalPosition >= (int)m.size()) return 9;
-		if (mi.originalObject < cObject::eOBJECTS::OBJECT_UNKNOWN_ALL || mi.originalObject >= (int)objects.size()) return 10;
-		for (auto& om : mi.objectMatches)
-			if (om.object < cObject::eOBJECTS::OBJECT_UNKNOWN_ALL || om.object >= (int)objects.size()) return 11;
-		for (auto& om : mi.audienceObjectMatches)
-			if (om.object < cObject::eOBJECTS::OBJECT_UNKNOWN_ALL || om.object >= (int)objects.size()) return 12;
-		if (mi.isQuote() && (mi.getQuoteForwardLink() < -1 || mi.getQuoteForwardLink() >= (int)m.size()))
-			return 13;
-		if (mi.endQuote < -1 || mi.endQuote >= (int)m.size()) return 14;
-		if (mi.nextQuote < -1 || mi.nextQuote >= (int)m.size()) return 15;
-		if (mi.previousQuote < -1 || mi.previousQuote >= (int)m.size()) return 16;
-		if (mi.getRelObject() < -1 || mi.getRelObject() >= (int)m.size()) return 17;
-		if (mi.relSubject < -1 || mi.relSubject >= (int)m.size()) return 18;
-		if (mi.getRelVerb() < -1 || mi.getRelVerb() >= (int)m.size()) return 19;
-		if (mi.relPrep < -1 || mi.relPrep >= (int)m.size()) return 20;
-		if (mi.beginObjectPosition < -1 || mi.beginObjectPosition >= (int)m.size()) return 21;
-		if (mi.endObjectPosition < -1 || mi.endObjectPosition >(int)m.size()) return 22; // end position can be = m.size()
-		if (mi.embeddedStorySpeakerPosition < -1 || mi.embeddedStorySpeakerPosition >= (int)m.size()) return 23;
-		if (mi.relNextObject < -1 || mi.relNextObject >= (int)m.size()) return 24;
-		if (mi.nextCompoundPartObject < -1 || mi.nextCompoundPartObject >= (int)m.size()) return 25;
-		if (mi.previousCompoundPartObject < -1 || mi.previousCompoundPartObject >= (int)m.size()) return 26;
-		if (mi.relInternalVerb < -1 || mi.relInternalVerb >= (int)m.size()) return 27;
-		if (mi.relInternalObject < -1 || mi.relInternalObject >= (int)m.size()) return 28;
-		if (mi.quoteBackLink < -1 || mi.quoteBackLink >= (int)m.size()) return 30;
-		if (mi.speakerPosition < -1 || mi.speakerPosition >= (int)m.size()) return 31;
-		if (mi.audiencePosition < -1 || mi.audiencePosition >= (int)m.size()) return 32;
-		if (mi.getObject() >= 0 && (mi.beginObjectPosition < 0 || mi.endObjectPosition < 0)) return 33;
-		for (int np = mi.beginPEMAPosition; np >= 0; np = pema[np].nextByPosition)
-			if (np < 0 || np >= (signed)pema.count) return 50;
-			else
-			{
-				if (pema[np].getParentPattern() >= patterns.size()) return 201;
-				if (pema[np].isChildPattern())
-				{
-					if (pema[np].getChildPattern() >= patterns.size()) return 202;
-					if (generalizedIndex + pema[np].getChildLen() > m.size()) return 203; // may = m.size()
-				}
-				else
-					if (pema[np].getChildForm() >= Forms.size())
-						return 204;
-			}
-		for (int np = mi.beginPEMAPosition; np >= 0; np = pema[np].nextByPatternEnd)
-			if (np < 0 || np >= (signed)pema.count) return 51;
-			else
-			{
-				if (pema[np].getParentPattern() >= patterns.size()) return 205;
-				if (pema[np].isChildPattern())
-				{
-					if (pema[np].getChildPattern() >= patterns.size()) return 206;
-					if (generalizedIndex + pema[np].getChildLen() > m.size()) return 207; // may = m.size()
-				}
-				else
-					if (pema[np].getChildForm() >= Forms.size())
-						return 208;
-			}
-		for (int np = mi.beginPEMAPosition; np >= 0; np = pema[np].nextByChildPatternEnd)
-			if (np < 0 || np >= (signed)pema.count) return 52;
-			else
-			{
-				if (pema[np].getParentPattern() >= patterns.size()) return 209;
-				if (pema[np].isChildPattern())
-				{
-					if (pema[np].getChildPattern() >= patterns.size()) return 210;
-					if (generalizedIndex + pema[np].getChildLen() > m.size()) return 211; // may = m.size()
-				}
-				else
-					if (pema[np].getChildForm() >= Forms.size())
-						return 212;
-			}
-		for (int np = mi.beginPEMAPosition; np >= 0; np = pema[np].nextPatternElement)
-			if (np < 0 || np >= (signed)pema.count) return 53;
-			else
-			{
-				if (pema[np].getParentPattern() >= patterns.size()) return 213;
-				if (pema[np].isChildPattern())
-				{
-					if (pema[np].getChildPattern() >= patterns.size()) return 214;
-					if (generalizedIndex + pema[np].getChildLen() > m.size()) return 215; // may = m.size()
-				}
-				else
-					if (pema[np].getChildForm() >= Forms.size())
-						return 216;
-			}
-		generalizedIndex++;
-	}
+		if ((returnSanity = sanityCheckSourcePosition(mi, generalizedIndex)) > 0)
+			return returnSanity;
 	generalizedIndex = 0;
 	for (unsigned int si = 0; si < sentenceStarts.size(); si++, generalizedIndex++)
 		if (sentenceStarts[si] < 0 || sentenceStarts[si] > (int)m.size()) return 33; // a sentence start may be = m.size()
@@ -2224,7 +2235,6 @@ int cSource::sanityCheck(int& generalizedIndex)
 			if (sections[I].objectsInNarration[dfoi].object < cObject::eOBJECTS::OBJECT_UNKNOWN_ALL || sections[I].objectsInNarration[dfoi].object >= (int)objects.size()) return 40;
 	}
 	generalizedIndex = 0;
-	int returnSanity = 0;
 	for (auto& sgi : speakerGroups)
 	{
 		if (returnSanity = sgi.sanityCheck(m.size(), sections.size(), objects.size(), (int)speakerGroups.size())) return returnSanity;

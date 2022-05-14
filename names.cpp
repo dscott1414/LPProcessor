@@ -2615,6 +2615,226 @@ void cSource::accumulateNameLikeStats(vector <cObject>::iterator& object, int o,
 	}
 }
 
+void cSource::matchRelatedObjects(const int where, vector <cObject>::iterator &object, const int forwardCallingObject, const int objectToBeReplaced,
+	bool &firstNameAmbiguous, bool &lastNameAmbiguous, tIWMM &ambiguousFirst, tIWMM &ambiguousLast, int &ambiguousNickName,
+	set <int> &matchingObjects)
+{
+	wstring tmpstr, tmpstr2;
+	// do not allow resolution against objects that have not been encountered yet!
+	set <int> relatedObjects;
+	accumulateRelatedObjects(objectToBeReplaced, relatedObjects);
+	set<int>::iterator begin = relatedObjects.begin(), end = relatedObjects.end();
+	for (set<int>::iterator s = begin; s != end && !object->eliminated; s++)
+	{
+		int ro = *s;
+		if (ro <= 1) continue;
+		if (objects[ro].eliminated)
+			followObjectChain(ro);
+		accumulateNameLikeStats(object, *s, firstNameAmbiguous, lastNameAmbiguous, ambiguousFirst, ambiguousNickName, ambiguousLast);
+		vector <cObject>::iterator rObject = objects.begin() + ro;
+		if (ro != objectToBeReplaced && rObject->firstLocation < where && !rObject->eliminated &&
+			((((rObject->objectClass == NAME_OBJECT_CLASS || rObject->objectClass == NON_GENDERED_NAME_OBJECT_CLASS) && !rObject->name.justHonorific())) ||
+				(rObject->objectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS && in(ro) != localObjects.end())))
+		{
+			// the only way a previous position has not been resolved is if
+			// this is in the identifySpeakerGroups phase and the previous position
+			// is inQuotes.  We should be very cautious about replacing objects in the identifySpeakerGroups phase because it is not reversed.
+			if (rObject->objectClass == NAME_OBJECT_CLASS || rObject->objectClass == NON_GENDERED_NAME_OBJECT_CLASS)
+			{
+				if (!(m[rObject->originalLocation].flags & cWordMatch::flagObjectResolved) && forwardCallingObject < 0)
+				{
+					int lastSpeakerGroupEnd = (speakerGroups.size() > 0) ? speakerGroups[speakerGroups.size() - 1].sgEnd : 0;
+					bool moreQualified = rObject->name.first != wNULL && rObject->name.last != wNULL;
+					if (rObject->originalLocation >= lastSpeakerGroupEnd || moreQualified || !(firstNameAmbiguous || lastNameAmbiguous))
+					{
+						vector <cOM> relatedObjectMatches;
+						resolveNameObject(rObject->originalLocation, rObject, relatedObjectMatches, where);
+					}
+					else
+					{
+						if (debugTrace.traceSpeakerResolution)
+							lplog(LOG_RESOLUTION, L"%06d:Object %s (%d,%d) related to object %s?", where, objectString(rObject, tmpstr, false).c_str(), rObject->originalLocation, lastSpeakerGroupEnd, objectString(object, tmpstr2, false).c_str());
+						continue;
+					}
+					// resolveObject(object->originalLocation,false,true,-1,false,false,false); must not call resolveObject because it will bring this object into local focus
+				}
+				if (rObject->eliminated) continue;
+				// does 'War' match 'War Office'
+				bool match = false;
+				if (rObject->objectClass == NON_GENDERED_NAME_OBJECT_CLASS && object->objectClass == NON_GENDERED_NAME_OBJECT_CLASS)
+					match = false; // shouldn't get here
+				else if (rObject->objectClass == NAME_OBJECT_CLASS && object->objectClass == NON_GENDERED_NAME_OBJECT_CLASS)
+					match = rObject->nameNonGenderedMatch(m, *object);
+				else if (rObject->objectClass == NON_GENDERED_NAME_OBJECT_CLASS && object->objectClass == NAME_OBJECT_CLASS)
+					match = object->nameNonGenderedMatch(m, *rObject);
+				else if (rObject->objectClass == NAME_OBJECT_CLASS && object->objectClass == NAME_OBJECT_CLASS)
+					match = object->nameMatch(*rObject, debugTrace);
+				if (match)
+					matchingObjects.insert(ro);
+			}
+			else if (rObject->objectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS)
+			{
+				// any honorific of the name object must be related to the principal where position of rObject
+				// so rObject==doc or the doctor, so w=doc or w=doctor
+				tIWMM w = m[rObject->originalLocation].word;
+				map <tIWMM, vector<tIWMM>, cSource::wordMapCompare>::iterator ami = abbreviationMap.find(w);
+				// if Dr. Hall (hon=Dr.) matches doc
+				if (object->name.hon == w || object->name.hon2 == w || object->name.hon3 == w ||
+					(ami != abbreviationMap.end() &&
+						// OR if Dr. Hall (hon=Dr. [doc]) matches doc (TRUE)
+						(find(ami->second.begin(), ami->second.end(), object->name.hon) != ami->second.end() ||
+							find(ami->second.begin(), ami->second.end(), object->name.hon2) != ami->second.end() ||
+							find(ami->second.begin(), ami->second.end(), object->name.hon3) != ami->second.end())))
+					matchingObjects.insert(ro);
+			}
+		}
+	}
+}
+
+void cSource::pushIntoObjectMatchesOrReplace(const int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches, const set <int>::iterator mo,
+	const bool firstNameAmbiguous, const bool lastNameAmbiguous, const bool qualified, const bool globalSearch)
+{
+	bool unambiguousGenderFound;
+	wstring tmpstr, tmpstr2;
+	if (objects[*mo].eliminated) 
+		return;
+	// 'doc' matches 'Dr. Hall'
+	if (objects[*mo].objectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS)
+	{
+		vector <cObject>::iterator mObject = objects.begin() + *mo;
+		int o = (int)(object - objects.begin());
+		// remove object if object being replaced (*mo) is an unresolvable object coming after where.
+		if (unResolvablePosition(mObject->begin) && (mObject->originalLocation > object->originalLocation ||
+			(currentSpeakerGroup < speakerGroups.size() && (mObject->begin < speakerGroups[currentSpeakerGroup].sgBegin ||
+				(currentEmbeddedSpeakerGroup >= 0 && mObject->begin < speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].sgBegin)))))
+		{
+			if (debugTrace.traceNameResolution)
+				lplog(LOG_RESOLUTION, L"%06d:unresolvable occupation %s matches but original location occurs after %s (%d>%d) or before current speaker group",
+					where, objectString(*mo, tmpstr, true).c_str(), objectString(object, tmpstr2, true).c_str(),
+					mObject->originalLocation, object->originalLocation);
+			return;
+		}
+		if (object->objectClass == NAME_OBJECT_CLASS && !object->name.justHonorific())
+		{
+			vector <cLocalFocus>::iterator lsi;
+			if ((lsi = in(*mo)) == localObjects.end())
+			{
+				if (debugTrace.traceNameResolution)
+					lplog(LOG_RESOLUTION, L"%06d:matching object %s is not in local salience (resolveNameWithOccupationObject) - rejected.",
+						where, objectString(*mo, tmpstr, true).c_str());
+			}
+			else
+				replaceObjectWithObject(atBefore(*mo, where), mObject, o, L"resolveNameWithOccupationObject");
+		}
+		else
+		{
+			if (debugTrace.traceNameResolution)
+				lplog(LOG_RESOLUTION, L"%06d:owned occupation %s matches but does not replace occupation %s", where, objectString(*mo, tmpstr, true).c_str(), objectString(object, tmpstr2, true).c_str());
+			objectMatches.push_back(cOM(*mo, SALIENCE_THRESHOLD));
+		}
+		return;
+	}
+	// even though every object in matchingObjects must match the original object in name and sex and plurality
+	// why is matchSex called?
+	// after replacing one object with another the objects in matchingObjects are also matched with each other.
+	// in this case because sex may be matched although original object is MALE & FEMALE and the other is only MALE or only FEMALE
+	// if the second object replaces the first, the next object (if any) may no longer match because it may be the opposite sex to the second object
+	// and so it matched the original object because it was ambiguous but now because of replacement (and the original object
+	// now becomes the second object and thus only one sex) is no longer ambiguous.
+	// also if sister matches both sister greenbank and sister matilda.  Both shouldn't match to each other.
+	if (object->nameMatch(objects[*mo], debugTrace) &&
+		// don't replace 'sir' or 'mister' with anything throughout a section.
+		(!objects[*mo].name.justHonorific() || objects[*mo].name.hon->second.query(L"pinr") < 0))
+	{
+		bool matchingQualified = objects[*mo].name.first != wNULL && objects[*mo].name.last != wNULL;
+		bool globallyAmbiguous = false;
+		if (globalSearch && (firstNameAmbiguous || lastNameAmbiguous) && !(qualified && matchingQualified))
+		{
+			// now determine whether ambiguousness applies to this particular name
+			// if object is full, and *mo is firstName, and lastNameAmbiguous then ambiguous, etc
+			bool firstNameOnly = false, lastNameOnly = false;
+			firstNameOnly = (qualified && !matchingQualified) && objects[*mo].name.first != wNULL && lastNameAmbiguous;
+			firstNameOnly |= (!qualified && matchingQualified) && object->name.first != wNULL && lastNameAmbiguous;
+			lastNameOnly = (qualified && !matchingQualified) && objects[*mo].name.last != wNULL && firstNameAmbiguous;
+			lastNameOnly |= (!qualified && matchingQualified) && object->name.last != wNULL && firstNameAmbiguous;
+			if (globallyAmbiguous = firstNameOnly || lastNameOnly)
+				lplog(LOG_RESOLUTION, L"%06d:matching %s: globally ambiguous name %s [%s,%s]",
+					where, objectString(object, tmpstr, true).c_str(), objectString(*mo, tmpstr2, true).c_str(),
+					(firstNameOnly) ? L"firstNameOnly" : L"", (lastNameOnly) ? L"lastNameOnly" : L"");
+		}
+		// object or matching object is composed of only one component which is ambiguous
+		// prefer unowned objects
+		// 'Porsche' should be matched with 'her Porsche' - but not replaced.
+		// if not in local and number of parts don't match 
+		const wchar_t* reason = NULL;
+		if ((objects[*mo].getOwnerWhere() != -1 && object->getOwnerWhere() == -1)) reason = L"preferUnOwnedObjects";
+		if (object->name.justHonorific()) reason = L"justHonorific";
+		if (!object->matchGenderIncludingNeuter(objects[*mo], unambiguousGenderFound)) reason = L"genderConflict";
+		if (globallyAmbiguous) reason = L"globallyAmbiguous";
+		if (reason != NULL)
+		{
+			tmpstr.clear();
+			tmpstr2.clear();
+			if (debugTrace.traceNameResolution)
+				lplog(LOG_RESOLUTION, L"%06d:owned name %s matches but does not replace name %s [%s]", where, objectString(*mo, tmpstr, true).c_str(), objectString(object, tmpstr2, true).c_str(), reason);
+			objectMatches.push_back(cOM(*mo, SALIENCE_THRESHOLD));
+		}
+		else
+		{
+			replaceObjectWithObject(where, object, *mo, L"resolveNameObject");
+			object = objects.begin() + *mo;
+		}
+	}
+}
+
+void cSource::removeEliminatedObjects(set <int> &matchingObjects)
+{
+	// maxOccurrence = max(maxOccurrence, objects[*mo].numEncounters + objects[*mo].numIdentifiedAsSpeaker);
+	// minOccurrence = min(minOccurrence, objects[*mo].numEncounters + objects[*mo].numIdentifiedAsSpeaker);
+	for (set<int>::iterator mo = matchingObjects.begin(), moEnd = matchingObjects.end(); mo != moEnd; )
+	{
+		int ro = *mo;
+		if (objects[ro].eliminated)
+		{
+			followObjectChain(ro);
+			matchingObjects.erase(mo++);
+			if (!objects[ro].eliminated)
+			{
+				matchingObjects.insert(ro);
+				mo = matchingObjects.begin();
+			}
+		}
+		else
+			mo++;
+	}
+}
+
+void cSource::matchLocalObjectWithNameObject(vector <cLocalFocus>::iterator lsi, vector <cObject>::iterator& object, 
+	const int objectToBeReplaced, bool &unambiguousGenderFound,
+	bool &firstNameAmbiguous, bool &lastNameAmbiguous, tIWMM& ambiguousFirst, tIWMM& ambiguousLast, int& ambiguousNickName,
+	set <int> &matchingObjects)
+{
+	if (lsi->om.object <= 1) return;
+	lsi->res.clear();
+	lsi->numMatchedAdjectives = 0;
+	if (lsi->om.object != objectToBeReplaced)
+	{
+		accumulateNameLikeStats(object, lsi->om.object, firstNameAmbiguous, lastNameAmbiguous, ambiguousFirst, ambiguousNickName, ambiguousLast);
+		if (object->nameMatch(objects[lsi->om.object], debugTrace))
+			matchingObjects.insert(lsi->om.object);
+		else
+			if (objects[lsi->om.object].objectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS &&
+				abbreviationEquivalent(m[objects[lsi->om.object].originalLocation].word, object->name.hon) &&
+				objects[lsi->om.object].matchGender(*object, unambiguousGenderFound) &&
+				objects[lsi->om.object].name.like(object->name, debugTrace) && objects[lsi->om.object].plural == object->plural)
+				matchingObjects.insert(lsi->om.object);
+			else
+				lsi->om.salienceFactor = -1;
+	}
+	else
+		lsi->om.salienceFactor = -1;
+}
+
 // merge current object onto matched object.  change all references (m and ls)
 //                       of the current object to the new object.
 //    if a name is not mentioned definitively as a speaker, try to match it to a speaker.
@@ -2662,27 +2882,8 @@ bool cSource::resolveNameObject(int where, vector <cObject>::iterator& object, v
 	wstring tmpstr, tmpstr2;
 	bool unambiguousGenderFound;
 	for (; lsi != lsiEnd; lsi++)
-	{
-		if (lsi->om.object <= 1) continue;
-		lsi->res.clear();
-		lsi->numMatchedAdjectives = 0;
-		if (lsi->om.object != objectToBeReplaced)
-		{
-			accumulateNameLikeStats(object, lsi->om.object, firstNameAmbiguous, lastNameAmbiguous, ambiguousFirst, ambiguousNickName, ambiguousLast);
-			if (object->nameMatch(objects[lsi->om.object], debugTrace))
-				matchingObjects.insert(lsi->om.object);
-			else
-				if (objects[lsi->om.object].objectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS &&
-					abbreviationEquivalent(m[objects[lsi->om.object].originalLocation].word, object->name.hon) &&
-					objects[lsi->om.object].matchGender(*object, unambiguousGenderFound) &&
-					objects[lsi->om.object].name.like(object->name, debugTrace) && objects[lsi->om.object].plural == object->plural)
-					matchingObjects.insert(lsi->om.object);
-				else
-					lsi->om.salienceFactor = -1;
-		}
-		else
-			lsi->om.salienceFactor = -1;
-	}
+		matchLocalObjectWithNameObject(lsi, object, objectToBeReplaced, unambiguousGenderFound, firstNameAmbiguous, lastNameAmbiguous, ambiguousFirst, ambiguousLast, ambiguousNickName, matchingObjects);
+
 	if (matchingObjects.empty() && usePIS && (m[where].objectRole & HAIL_ROLE) && currentSpeakerGroup < speakerGroups.size())
 	{
 		set <int>::iterator pISO = speakerGroups[currentSpeakerGroup].speakers.begin(), pISOEnd = speakerGroups[currentSpeakerGroup].speakers.end();
@@ -2696,75 +2897,8 @@ bool cSource::resolveNameObject(int where, vector <cObject>::iterator& object, v
 	bool globalSearch;
 	if (globalSearch = matchingObjects.empty())
 	{
-		// do not allow resolution against objects that have not been encountered yet!
-		set <int> relatedObjects;
-		accumulateRelatedObjects(objectToBeReplaced, relatedObjects);
-		set<int>::iterator begin = relatedObjects.begin(), end = relatedObjects.end();
-		for (set<int>::iterator s = begin; s != end && !object->eliminated; s++)
-		{
-			int ro = *s;
-			if (ro <= 1) continue;
-			if (objects[ro].eliminated)
-				followObjectChain(ro);
-			accumulateNameLikeStats(object, *s, firstNameAmbiguous, lastNameAmbiguous, ambiguousFirst, ambiguousNickName, ambiguousLast);
-			vector <cObject>::iterator rObject = objects.begin() + ro;
-			if (ro != objectToBeReplaced && rObject->firstLocation < where && !rObject->eliminated &&
-				((((rObject->objectClass == NAME_OBJECT_CLASS || rObject->objectClass == NON_GENDERED_NAME_OBJECT_CLASS) && !rObject->name.justHonorific())) ||
-					(rObject->objectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS && in(ro) != localObjects.end())))
-			{
-				// the only way a previous position has not been resolved is if
-				// this is in the identifySpeakerGroups phase and the previous position
-				// is inQuotes.  We should be very cautious about replacing objects in the identifySpeakerGroups phase because it is not reversed.
-				if (rObject->objectClass == NAME_OBJECT_CLASS || rObject->objectClass == NON_GENDERED_NAME_OBJECT_CLASS)
-				{
-					if (!(m[rObject->originalLocation].flags & cWordMatch::flagObjectResolved) && forwardCallingObject < 0)
-					{
-						int lastSpeakerGroupEnd = (speakerGroups.size() > 0) ? speakerGroups[speakerGroups.size() - 1].sgEnd : 0;
-						bool moreQualified = rObject->name.first != wNULL && rObject->name.last != wNULL;
-						if (rObject->originalLocation >= lastSpeakerGroupEnd || moreQualified || !(firstNameAmbiguous || lastNameAmbiguous))
-						{
-							vector <cOM> relatedObjectMatches;
-							resolveNameObject(rObject->originalLocation, rObject, relatedObjectMatches, where);
-						}
-						else
-						{
-							if (debugTrace.traceSpeakerResolution)
-								lplog(LOG_RESOLUTION, L"%06d:Object %s (%d,%d) related to object %s?", where, objectString(rObject, tmpstr, false).c_str(), rObject->originalLocation, lastSpeakerGroupEnd, objectString(object, tmpstr2, false).c_str());
-							continue;
-						}
-						// resolveObject(object->originalLocation,false,true,-1,false,false,false); must not call resolveObject because it will bring this object into local focus
-					}
-					if (rObject->eliminated) continue;
-					// does 'War' match 'War Office'
-					bool match = false;
-					if (rObject->objectClass == NON_GENDERED_NAME_OBJECT_CLASS && object->objectClass == NON_GENDERED_NAME_OBJECT_CLASS)
-						match = false; // shouldn't get here
-					else if (rObject->objectClass == NAME_OBJECT_CLASS && object->objectClass == NON_GENDERED_NAME_OBJECT_CLASS)
-						match = rObject->nameNonGenderedMatch(m, *object);
-					else if (rObject->objectClass == NON_GENDERED_NAME_OBJECT_CLASS && object->objectClass == NAME_OBJECT_CLASS)
-						match = object->nameNonGenderedMatch(m, *rObject);
-					else if (rObject->objectClass == NAME_OBJECT_CLASS && object->objectClass == NAME_OBJECT_CLASS)
-						match = object->nameMatch(*rObject, debugTrace);
-					if (match)
-						matchingObjects.insert(ro);
-				}
-				else if (rObject->objectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS)
-				{
-					// any honorific of the name object must be related to the principal where position of rObject
-					// so rObject==doc or the doctor, so w=doc or w=doctor
-					tIWMM w = m[rObject->originalLocation].word;
-					map <tIWMM, vector<tIWMM>, cSource::wordMapCompare>::iterator ami = abbreviationMap.find(w);
-					// if Dr. Hall (hon=Dr.) matches doc
-					if (object->name.hon == w || object->name.hon2 == w || object->name.hon3 == w ||
-						(ami != abbreviationMap.end() &&
-							// OR if Dr. Hall (hon=Dr. [doc]) matches doc (TRUE)
-							(find(ami->second.begin(), ami->second.end(), object->name.hon) != ami->second.end() ||
-								find(ami->second.begin(), ami->second.end(), object->name.hon2) != ami->second.end() ||
-								find(ami->second.begin(), ami->second.end(), object->name.hon3) != ami->second.end())))
-						matchingObjects.insert(ro);
-				}
-			}
-		}
+		matchRelatedObjects(where, object, forwardCallingObject, objectToBeReplaced,
+			firstNameAmbiguous, lastNameAmbiguous, ambiguousFirst, ambiguousLast, ambiguousNickName, matchingObjects);
 		if (object->eliminated)
 		{
 			if (debugTrace.traceNameResolution || debugTrace.traceSpeakerResolution)
@@ -2779,137 +2913,11 @@ bool cSource::resolveNameObject(int where, vector <cObject>::iterator& object, v
 		}
 	}
 	// sort by nearness of last mention?
-	bool qualified = object->name.first != wNULL && object->name.last != wNULL;
-	bool allMatchesMatch = true;
-	int maxOccurrence = -1, minOccurrence = 10000000;
 	if (globalSearch)
-	{
-		for (set<int>::iterator mo = matchingObjects.begin(), moEnd = matchingObjects.end(); mo != moEnd && allMatchesMatch; )
-		{
-			maxOccurrence = max(maxOccurrence, objects[*mo].numEncounters + objects[*mo].numIdentifiedAsSpeaker);
-			minOccurrence = min(minOccurrence, objects[*mo].numEncounters + objects[*mo].numIdentifiedAsSpeaker);
-			int ro = *mo;
-			if (objects[ro].eliminated)
-			{
-				followObjectChain(ro);
-				matchingObjects.erase(mo++);
-				if (!objects[ro].eliminated)
-				{
-					matchingObjects.insert(ro);
-					mo = matchingObjects.begin();
-				}
-			}
-			else
-				mo++;
-		}
-		/*
-		if (minOccurrence==0) minOccurrence=1;
-		for (set<int>::iterator mo=matchingObjects.begin(),moEnd=matchingObjects.end(); mo!=moEnd && allMatchesMatch; mo++)
-			for (set<int>::iterator mo2=mo; mo2!=moEnd && allMatchesMatch; mo2++)
-				allMatchesMatch=(objects[*mo].nameMatch(objects[*mo2]));
-		// if not everything matches, get rid of names that are really quite rare, unless
-		if (!allMatchesMatch && matchingObjects.size()>1 && minOccurrence*5<maxOccurrence)
-		{
-			for (set<int>::iterator mo=matchingObjects.begin(),moEnd=matchingObjects.end(); mo!=moEnd; )
-			{
-				lplog(LOG_RESOLUTION,L"%06d:NGM matchingObject %s has occurrence %d",where,objectString(*mo,tmpstr,false).c_str(),
-						objects[*mo].numEncounters+objects[*mo].numIdentifiedAsSpeaker);
-				if (objects[*mo].numEncounters+objects[*mo].numIdentifiedAsSpeaker<=minOccurrence)
-					matchingObjects.erase(mo++);
-				else
-					mo++;
-			}
-		}
-		*/
-	}
+		removeEliminatedObjects(matchingObjects);
+	bool qualified = object->name.first != wNULL && object->name.last != wNULL;
 	for (set<int>::iterator mo = matchingObjects.begin(), moEnd = matchingObjects.end(); mo != moEnd; mo++)
-	{
-		if (objects[*mo].eliminated) continue;
-		// 'doc' matches 'Dr. Hall'
-		if (objects[*mo].objectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS)
-		{
-			vector <cObject>::iterator mObject = objects.begin() + *mo;
-			int o = (int)(object - objects.begin());
-			// remove object if object being replaced (*mo) is an unresolvable object coming after where.
-			if (unResolvablePosition(mObject->begin) && (mObject->originalLocation > object->originalLocation ||
-				(currentSpeakerGroup < speakerGroups.size() && (mObject->begin < speakerGroups[currentSpeakerGroup].sgBegin ||
-					(currentEmbeddedSpeakerGroup >= 0 && mObject->begin < speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].sgBegin)))))
-			{
-				if (debugTrace.traceNameResolution)
-					lplog(LOG_RESOLUTION, L"%06d:unresolvable occupation %s matches but original location occurs after %s (%d>%d) or before current speaker group",
-						where, objectString(*mo, tmpstr, true).c_str(), objectString(object, tmpstr2, true).c_str(),
-						mObject->originalLocation, object->originalLocation);
-				continue;
-			}
-			if (object->objectClass == NAME_OBJECT_CLASS && !object->name.justHonorific())
-			{
-				if ((lsi = in(*mo)) == localObjects.end())
-				{
-					if (debugTrace.traceNameResolution)
-						lplog(LOG_RESOLUTION, L"%06d:matching object %s is not in local salience (resolveNameWithOccupationObject) - rejected.",
-							where, objectString(*mo, tmpstr, true).c_str());
-				}
-				else
-					replaceObjectWithObject(atBefore(*mo, where), mObject, o, L"resolveNameWithOccupationObject");
-			}
-			else
-			{
-				if (debugTrace.traceNameResolution)
-					lplog(LOG_RESOLUTION, L"%06d:owned occupation %s matches but does not replace occupation %s", where, objectString(*mo, tmpstr, true).c_str(), objectString(object, tmpstr2, true).c_str());
-				objectMatches.push_back(cOM(*mo, SALIENCE_THRESHOLD));
-			}
-			continue;
-		}
-		// even though every object in matchingObjects must match the original object in name and sex and plurality
-		// why is matchSex called?
-		// after replacing one object with another the objects in matchingObjects are also matched with each other.
-		// in this case because sex may be matched although original object is MALE & FEMALE and the other is only MALE or only FEMALE
-		// if the second object replaces the first, the next object (if any) may no longer match because it may be the opposite sex to the second object
-		// and so it matched the original object because it was ambiguous but now because of replacement (and the original object
-		// now becomes the second object and thus only one sex) is no longer ambiguous.
-		// also if sister matches both sister greenbank and sister matilda.  Both shouldn't match to each other.
-		if (object->nameMatch(objects[*mo], debugTrace) &&
-			// don't replace 'sir' or 'mister' with anything throughout a section.
-			(!objects[*mo].name.justHonorific() || objects[*mo].name.hon->second.query(L"pinr") < 0))
-		{
-			bool matchingQualified = objects[*mo].name.first != wNULL && objects[*mo].name.last != wNULL;
-			bool globallyAmbiguous = false;
-			if (globalSearch && (firstNameAmbiguous || lastNameAmbiguous) && !(qualified && matchingQualified))
-			{
-				// now determine whether ambiguousness applies to this particular name
-				// if object is full, and *mo is firstName, and lastNameAmbiguous then ambiguous, etc
-				bool firstNameOnly = false, lastNameOnly = false;
-				firstNameOnly = (qualified && !matchingQualified) && objects[*mo].name.first != wNULL && lastNameAmbiguous;
-				firstNameOnly |= (!qualified && matchingQualified) && object->name.first != wNULL && lastNameAmbiguous;
-				lastNameOnly = (qualified && !matchingQualified) && objects[*mo].name.last != wNULL && firstNameAmbiguous;
-				lastNameOnly |= (!qualified && matchingQualified) && object->name.last != wNULL && firstNameAmbiguous;
-				if (globallyAmbiguous = firstNameOnly || lastNameOnly)
-					lplog(LOG_RESOLUTION, L"%06d:matching %s: globally ambiguous name %s [%s,%s]",
-						where, objectString(object, tmpstr, true).c_str(), objectString(*mo, tmpstr2, true).c_str(),
-						(firstNameOnly) ? L"firstNameOnly" : L"", (lastNameOnly) ? L"lastNameOnly" : L"");
-			}
-			// object or matching object is composed of only one component which is ambiguous
-			// prefer unowned objects
-			// 'Porsche' should be matched with 'her Porsche' - but not replaced.
-			// if not in local and number of parts don't match 
-			const wchar_t* reason = NULL;
-			if ((objects[*mo].getOwnerWhere() != -1 && object->getOwnerWhere() == -1)) reason = L"preferUnOwnedObjects";
-			if (object->name.justHonorific()) reason = L"justHonorific";
-			if (!object->matchGenderIncludingNeuter(objects[*mo], unambiguousGenderFound)) reason = L"genderConflict";
-			if (globallyAmbiguous) reason = L"globallyAmbiguous";
-			if (reason != NULL)
-			{
-				if (debugTrace.traceNameResolution)
-					lplog(LOG_RESOLUTION, L"%06d:owned name %s matches but does not replace name %s [%s]", where, objectString(*mo, tmpstr, true).c_str(), objectString(object, tmpstr2, true).c_str(), reason);
-				objectMatches.push_back(cOM(*mo, SALIENCE_THRESHOLD));
-			}
-			else
-			{
-				replaceObjectWithObject(where, object, *mo, L"resolveNameObject");
-				object = objects.begin() + *mo;
-			}
-		}
-	}
+		pushIntoObjectMatchesOrReplace(where, object, objectMatches, mo, firstNameAmbiguous, lastNameAmbiguous, qualified, globalSearch);
 	return true;
 }
 

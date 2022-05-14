@@ -1148,36 +1148,40 @@ public:
 		if (error=!copy(mostMatchedAge,buffer,where,total)) return; 
 		__int64 flags;
 		if (error=!copy(flags,buffer,where,total)) return;
-		isWikiWork=flags&1; flags>>=1;
-		isWikiBusiness=flags&1; flags>>=1;
-		isWikiPerson=flags&1; flags>>=1;
-		isWikiPlace=flags&1; flags>>=1;
-		isLocationObject=flags&1; flags>>=1;
-		setIsTimeObject(flags & 1); flags >>= 1;
-		dbPediaAccessed=flags&1; flags>>=1;
-		container=flags&1; flags>>=1;
-		wikipediaAccessed=flags&1; flags>>=1;
-		isKindOf=flags&1; flags>>=1;
-		genderNarrowed=flags&1; flags>>=1;
-		isNotAPlace=flags&1; flags>>=1;
-		partialMatch=flags&1; flags>>=1;
-		ambiguous=flags&1; flags>>=1;
-		verySuspect=flags&1; flags>>=1;
-		suspect=flags&1; flags>>=1;
-		multiSource=flags&1; flags>>=1;
-		eliminated=flags&1; flags>>=1;
-		ownerNeuter=flags&1; flags>>=1;
-		ownerFemale=flags&1; flags>>=1;
-		ownerMale=flags&1; flags>>=1;
-		ownerPlural=flags&1; flags>>=1;
-		neuter=flags&1; flags>>=1;
-		female=flags&1; flags>>=1;
-		male=flags&1; flags>>=1;
-		plural=flags&1; flags>>=1;
-		identified=flags&1; 
+		readFlags(flags);
 		for (int I=0; I<VERB_HISTORY; I++)
 			if (error=!copy(lastVerbTenses[I],buffer,where,total)) return;
 		if (error=!copy(name,buffer,where,total)) return;
+	}
+	void readFlags(__int64 flags)
+	{
+		isWikiWork = flags & 1; flags >>= 1;
+		isWikiBusiness = flags & 1; flags >>= 1;
+		isWikiPerson = flags & 1; flags >>= 1;
+		isWikiPlace = flags & 1; flags >>= 1;
+		isLocationObject = flags & 1; flags >>= 1;
+		setIsTimeObject(flags & 1); flags >>= 1;
+		dbPediaAccessed = flags & 1; flags >>= 1;
+		container = flags & 1; flags >>= 1;
+		wikipediaAccessed = flags & 1; flags >>= 1;
+		isKindOf = flags & 1; flags >>= 1;
+		genderNarrowed = flags & 1; flags >>= 1;
+		isNotAPlace = flags & 1; flags >>= 1;
+		partialMatch = flags & 1; flags >>= 1;
+		ambiguous = flags & 1; flags >>= 1;
+		verySuspect = flags & 1; flags >>= 1;
+		suspect = flags & 1; flags >>= 1;
+		multiSource = flags & 1; flags >>= 1;
+		eliminated = flags & 1; flags >>= 1;
+		ownerNeuter = flags & 1; flags >>= 1;
+		ownerFemale = flags & 1; flags >>= 1;
+		ownerMale = flags & 1; flags >>= 1;
+		ownerPlural = flags & 1; flags >>= 1;
+		neuter = flags & 1; flags >>= 1;
+		female = flags & 1; flags >>= 1;
+		male = flags & 1; flags >>= 1;
+		plural = flags & 1; flags >>= 1;
+		identified = flags & 1;
 	}
 	bool writeFlags(void* buffer, int& where, unsigned int limit)
 	{
@@ -1657,6 +1661,8 @@ public:
 	bool addSpecialWord(int result, const wstring sWord, tIWMM& iWord);
 	int tokenize(wstring title, wstring etext, wstring path, wstring encoding, wstring &start, int &repeatStart, unsigned int &unknownCount);
 	bool write(IOHANDLE file);
+	int checkPEMAPositions(cWordMatch& mi, int& generalizedIndex);
+	int sanityCheckSourcePosition(cWordMatch& mi, int & generalizedIndex);
 	int sanityCheck(int &wordIndex);
 	bool read(char *buffer,int &where,unsigned int total, bool &parsedOnly, bool printProgress, wstring specialExtension);
 	bool flush(int fd,void *buffer,int &where);
@@ -2802,6 +2808,10 @@ private:
 	void associateNyms(int where,int replacementObject,int objectToBeReplaced,wchar_t *fromWhere);
 	int getBodyObject(int o);
 	unsigned int numMatchingGenderInSpeakerGroup(int o);
+	void setSpeakerAndAudience(const int beginQuote, const int speakerObjectAt, const bool definitelySpeaker, const int audienceObjectPosition);
+	void setDefiniteSpeaker(const int speakerObjectAt, const int audienceObjectPosition, const int audienceObject, int &speakerObject);
+	void resolvePreviousSpeakerAudience(const int beginQuote, const int endQuote, int &lastDefiniteSpeaker, const int speakerObjectAt, const bool definitelySpeaker,
+		const int lastBeginS1, const int lastRelativePhrase, const int lastQ2, const int lastVerb, const bool previousSpeakersUncertain, const int audienceObjectPosition);
 	void imposeSpeaker(int beginQuote,int endQuote,int &lastDefiniteSpeaker,int speakerObjectAt,bool definitelySpeaker,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,bool previousSpeakersUncertain,int audienceObjectPosition,vector <int> &lastUnQuotedSubjects,int whereLastUnQuotedSubjects);
 	void imposeMostLikelySpeakers(unsigned int beginQuote,int &lastDefiniteSpeaker,int audienceObjectPosition);
 	wstring speakerResolutionFlagsString(__int64 flags,wstring &tmpstr);
@@ -2867,6 +2877,16 @@ private:
 	bool findSpecificAnaphor(wstring tagName,int where,int element,int &specificWhere,bool &pluralNounOverride,bool &embeddedName);
 	bool reEvaluateHailedObjects(int beginQuote,bool setMatched);
 	void boostRecentSpeakers(int where,int beginQuote,int speakersConsidered,int speakersMentionedInLastParagraph,bool getMostLikelyAudience);
+	void scoreLocalObject(const vector <cLocalFocus>::iterator lsi, const unsigned int beginQuote, const unsigned int endQuote,
+		const int rejectObjectPosition,	bool& atLeastOne, bool& objectsRejected, const bool getMostLikelyAudience,
+		int& saveBlockedObject, int& speakersConsidered, int& speakersMentionedInLastParagraph,
+		const tIWMM secondaryQuoteOpenWord, const tIWMM secondaryQuoteCloseWord);
+	void setPreviousSpeakers(const unsigned int beginQuote,
+		bool &previousSpeakersUncertain, const int wherePreviousLastSubjects, vector <int>& previousLastSubjects,
+		bool &atLeastOne, const bool objectsRejected);
+	void reresolveHailObjects(const unsigned int beginQuote, const unsigned int endQuote,
+		const int lastBeginS1, const int lastRelativePhrase, const int lastQ2, const int lastVerb, int &saveBlockedObject);
+	void putSpeakersInLocalSalience(const unsigned int beginQuote);
 	void getMostLikelySpeakers(unsigned int beginQuote,unsigned int endQuote,int lastDefiniteSpeaker,bool previousSpeakersUncertain,int wherePreviousLastSubjects,vector <int> &previousLastSubjects,int rejectObjectPosition,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb);
 	int compareSpeakerEntry(int index1,int index2,vector <cLocalFocus> &ls);
 	bool matchObjectByGenderAndNumber(int where,vector <cObject>::iterator object,vector <cOM> &objectMatches,vector <cLocalFocus> &ls,bool inQuote,bool failureRetry);
@@ -2982,6 +3002,16 @@ private:
 	void resolveNonGenderedGeneralObject(int where,vector <cObject>::iterator &object,vector <cOM> &objectMatches,int wordOrderSensitiveModifier);
 	bool potentiallyMergable(int where,vector <cObject>::iterator o1,vector <cObject>::iterator o2,bool allowBothToBeSpeakers,bool checkUnmergableSpeaker);
 	void accumulateNameLikeStats(vector <cObject>::iterator &object,int o,bool &firstNameAmbiguous,bool &lastNameAmbiguous,tIWMM &ambiguousFirst,int &ambiguousNickName,tIWMM &ambiguousLast);
+	void matchRelatedObjects(const int where, vector <cObject>::iterator &object, const int forwardCallingObject, const int objectToBeReplaced,
+		bool& firstNameAmbiguous, bool& lastNameAmbiguous, tIWMM& ambiguousFirst, tIWMM& ambiguousLast, int& ambiguousNickName,
+		set <int>& matchingObjects);
+	void pushIntoObjectMatchesOrReplace(const int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches, const set <int>::iterator mo,
+		const bool firstNameAmbiguous, const bool lastNameAmbiguous, const bool qualified, const bool globalSearch);
+	void removeEliminatedObjects(set <int>& matchingObjects);
+	void matchLocalObjectWithNameObject(vector <cLocalFocus>::iterator lsi, vector <cObject>::iterator& object,
+		const int objectToBeReplaced, bool &unambiguousGenderFound,
+		bool &firstNameAmbiguous, bool &lastNameAmbiguous, tIWMM& ambiguousFirst, tIWMM& ambiguousLast, int& ambiguousNickName,
+		set <int> &matchingObjects);
 	bool resolveNameObject(int where,vector <cObject>::iterator &object,vector <cOM> &objectMatches,int forwardCallingObject);
 	//vector <cLocalFocus>::iterator in(int o,bool inQuote,bool neuter);
 	vector <cLocalFocus>::iterator in(int o);
