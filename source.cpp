@@ -731,6 +731,36 @@ bool cWordMatch::read(char* buffer, int& where, int limit, int sourceType)
 	return true;
 }
 
+bool cWordMatch::writeFlags(void* buffer, int& where, int limit)
+{
+	// flags
+	// 110000000000
+	__int64 tflags = 0;
+	tflags |= (t.traceTime) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.traceTestSyntacticRelations) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.traceTestSubjectVerbAgreement) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.printBeforeElimination) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.traceRole) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.traceSubjectVerbAgreement) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.traceEVALObjects) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.traceAnaphors) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.traceRelations) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.traceSpeakerResolution) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.traceNameResolution) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.traceObjectResolution) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.traceVerbObjects) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.traceDeterminer) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.traceBNCPreferences) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.tracePatternElimination) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.traceSecondaryPEMACosting) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.traceMatchedSentences) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.traceUnmatchedSentences) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.traceIncludesPEMAIndex) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.traceTagSetCollection) ? 1 : 0; tflags <<= 1;
+	tflags |= (t.collectPerSentenceStats) ? 1 : 0;
+	return copy(buffer, tflags, where, limit);
+}
+
 bool cWordMatch::writeRef(void* buffer, int& where, int limit)
 {
 	LFS
@@ -778,32 +808,7 @@ bool cWordMatch::writeRef(void* buffer, int& where, int limit)
 	if (!copy(buffer, tmpWinnerForms, where, limit)) return false;
 	if (!copy(buffer, embeddedStorySpeakerPosition, where, limit)) return false;
 
-	// flags
-	// 110000000000
-	__int64 tflags = 0;
-	tflags |= (t.traceTime) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.traceTestSyntacticRelations) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.traceTestSubjectVerbAgreement) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.printBeforeElimination) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.traceRole) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.traceSubjectVerbAgreement) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.traceEVALObjects) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.traceAnaphors) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.traceRelations) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.traceSpeakerResolution) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.traceNameResolution) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.traceObjectResolution) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.traceVerbObjects) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.traceDeterminer) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.traceBNCPreferences) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.tracePatternElimination) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.traceSecondaryPEMACosting) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.traceMatchedSentences) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.traceUnmatchedSentences) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.traceIncludesPEMAIndex) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.traceTagSetCollection) ? 1 : 0; tflags <<= 1;
-	tflags |= (t.collectPerSentenceStats) ? 1 : 0;
-	if (!copy(buffer, tflags, where, limit)) return false;
+	if (!writeFlags(buffer, where, limit)) return false;
 	if (!copy(buffer, logCache, where, limit)) return false;
 	if (!copy(buffer, relNextObject, where, limit)) return false;
 	if (!copy(buffer, nextCompoundPartObject, where, limit)) return false;

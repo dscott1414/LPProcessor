@@ -2581,7 +2581,24 @@ bool cSource::setAdditionalRoleTags(int where, int& firstFreePrep, vector <int>&
 	bool& nextVerbInSeries, int& sense, int& whereLastVerb, bool& ambiguousSense, bool inQuotedString, bool inSectionHeader, int begin, int end, vector < vector <cTagLocation> >& tagSets)
 {
 	LFS
-		vector <cWordMatch>::iterator im = m.begin() + where;
+	vector <cWordMatch>::iterator im = m.begin() + where;
+	if (inPrimaryQuote)
+		im->objectRole |= IN_PRIMARY_QUOTE_ROLE;
+	if (inSecondaryQuote)
+		im->objectRole |= IN_SECONDARY_QUOTE_ROLE;
+	for (int nextPEMAPosition = im->beginPEMAPosition; nextPEMAPosition != -1; nextPEMAPosition = pema[nextPEMAPosition].nextByPosition)
+		setRole(where, pema.begin() + nextPEMAPosition); // (CMREADME018)
+	if (inPrimaryQuote || inSecondaryQuote)
+		adjustToHailRole(where);
+	// And Sir James?
+	if (im->objectRole & HAIL_ROLE)
+		im->objectRole |= FOCUS_EVALUATED;
+	if ((im->objectRole & HAIL_ROLE) && !inPrimaryQuote && !inSecondaryQuote)
+	{
+		if (debugTrace.traceRole)
+			lplog(LOG_ROLE, L"%06d:Removed HAIL role (outside quote).", where);
+		im->objectRole &= ~HAIL_ROLE;
+	}
 	cPatternMatchArray::tPatternMatch* pma = im->pma.content;
 	bool idType = false;
 	for (unsigned PMAElement = 0; PMAElement < im->pma.count; PMAElement++, pma++)
@@ -2795,6 +2812,157 @@ void cSource::setRole(int position, cPatternElementMatchArray::tPatternElementMa
 	}
 }
 
+void cSource::syntacticRelationsEOS(int I, int &lastBeginS1, int& lastRelativePhrase, int &lastQ2, int& lastVerb, int& firstFreePrep, int& whereLastVerb)
+{
+	if (isEOS(I) || m[I].word == Words.sectionWord)
+	{
+		if (lastVerb >= 0 && firstFreePrep >= 0 && !m[firstFreePrep].notFreePrep)
+		{
+			bool alreadyInLoop = false;
+			int lastInChain = lastVerb, prepLoop = 0;
+			while (m[lastInChain].relPrep >= 0)
+			{
+				alreadyInLoop |= (lastInChain == firstFreePrep);
+				lastInChain = m[lastInChain].relPrep;
+				if (prepLoop++ > 20)
+				{
+					wstring tmpstr;
+					lplog(LOG_ERROR, L"%06d:Prep loop occurred (3) %s.", lastInChain, loopString(lastInChain, tmpstr));
+					break;
+				}
+			}
+			alreadyInLoop |= (lastInChain == firstFreePrep);
+			// if a preposition directly follows another object of a prep, the object of the preposition points to the previous object by relNextObject.
+			// make sure this is not after a verb that was missed because it is compound or MTS
+			if (!alreadyInLoop && (!firstFreePrep || (m[firstFreePrep - 1].getObject() < 0 && m[firstFreePrep - 1].queryWinnerForm(verbForm) < 0 && m[firstFreePrep - 1].queryWinnerForm(thinkForm) < 0)))
+			{
+				setRelPrep(lastInChain, firstFreePrep, 13, PREP_PREP_SET, lastVerb);
+				if (debugTrace.traceRelations)
+					lplog(LOG_RESOLUTION, L"%06d:Prep@%d bound to %d verb=%d ZZZ.", I, firstFreePrep, lastInChain, lastVerb);
+			}
+		}
+		lastBeginS1 = lastRelativePhrase = lastQ2 = -1;
+		lastVerb = firstFreePrep = -1;
+		whereLastVerb = -1;
+	}
+}
+
+void cSource::syntacticRelationsQuotes(vector <cWordMatch>::iterator im, const int I, bool &inPrimaryQuote, bool &inSecondaryQuote, bool &inQuotedString,	int &lastVerb, int &firstFreePrep)
+{
+	if (im->word->first == L"“")
+	{
+		inPrimaryQuote = true;
+		lastVerb = firstFreePrep = -1;
+		if (im->flags & cWordMatch::flagQuotedString)
+			inQuotedString = true;
+		else
+		{
+			lastOpeningPrimaryQuote = I;
+			lastSense = -1;
+			if (debugTrace.traceRelations)
+				lplog(L"set lastSense to %d (BQ).", lastSense);
+		}
+	}
+	if (im->word->first == L"”")
+	{
+		inPrimaryQuote = false;
+		lastVerb = firstFreePrep = -1;
+		if (inQuotedString)
+			inQuotedString = false;
+		else
+		{
+			lastOpeningPrimaryQuote = -1;
+			lastSense = -1;
+			if (debugTrace.traceRelations)
+				lplog(L"set lastSense to %d (EQ).", lastSense);
+		}
+	}
+	if (im->word->first == L"‘")
+	{
+		if (im->flags & cWordMatch::flagQuotedString)
+			inQuotedString = true;
+		else
+		{
+			inSecondaryQuote = true;
+			inPrimaryQuote = narrativeIsQuoted;
+			lastVerb = firstFreePrep = -1;
+		}
+	}
+	else if (im->word->first == L"’")
+	{
+		if (inQuotedString)
+			inQuotedString = false;
+		else
+		{
+			inSecondaryQuote = false;
+			inPrimaryQuote = true;
+			lastVerb = firstFreePrep = -1;
+		}
+	}
+}
+
+void cSource::syntacticRelationsEvaluateRelations(vector <cWordMatch>::iterator im, const int I)
+{
+	vector < vector <cTagLocation> > tagSets;
+	cPatternMatchArray::tPatternMatch* pma = im->pma.content;
+	for (unsigned PMAElement = 0; PMAElement < im->pma.count; PMAElement++, pma++)
+	{
+		int voRelationsFound, traceSource;
+		if (preTaggedSource)
+		{
+			tagSets.clear();
+			if (startCollectTags(false, nounDeterminerTagSet, I, pma->pemaByPatternEnd, tagSets, true, true, L"syntactic relations - record noun determiner usage") > 0)
+				for (unsigned int J = 0; J < tagSets.size(); J++)
+				{
+					if (debugTrace.traceDeterminer)
+						printTagSet(LOG_INFO, L"ND3", J, tagSets[J], I, pma->pemaByPatternEnd);
+					evaluateNounDeterminer(tagSets[J], false, traceSource, I, I + pma->len, pma->pemaByPatternEnd);
+				}
+		}
+		tagSets.clear();
+		if (startCollectTags(debugTrace.traceVerbObjects, verbObjectsTagSet, I, pma->pemaByPatternEnd, tagSets, true, false, L"syntactic relations - record verb objects usage") > 0)
+		{
+			for (unsigned int J = 0; J < tagSets.size(); J++)
+			{
+				// if this is an objective relative clause, a relativeObject must be computed and taken into account.
+				// Otherwise, incorrect verb object statistics will be recorded.  IVOS
+				evaluateVerbObjects(NULL, pma, -1, I, tagSets[J], false, false, voRelationsFound, traceSource, L"syntactic relations - record verb objects usage");
+			}
+		}
+	}
+}
+
+void cSource::setPrepVerbRelations(vector <int> &futureBoundPrepositions)
+{
+	for (unsigned int p = 0; p < futureBoundPrepositions.size(); p++)
+	{
+		int v = futureBoundPrepositions[p];
+		if (m[v + 1].getRelObject() >= 0)
+		{
+			bool setAlready = false;
+			int prepLoop = 0;
+			int lastVerb = m[m[v + 1].getRelObject()].getRelVerb();
+			for (int w = m[v].relPrep; w >= 0 && !setAlready; w = m[w].relPrep)
+			{
+				if (prepLoop++ > 20)
+				{
+					wstring tmpstr;
+					lplog(LOG_ERROR, L"%06d:Prep loop occurred (6) %s.", w, loopString(w, tmpstr));
+					break;
+				}
+				setAlready = w == v + 1;
+			}
+			if (!setAlready)
+			{
+				setRelPrep(v + 1, m[v].relPrep, 14, PREP_PREP_SET, lastVerb);
+				setRelPrep(v, v + 1, 15, PREP_VERB_SET, lastVerb);
+				if (debugTrace.traceRelations)
+					lplog(LOG_RESOLUTION, L"%06d:PV verb@%d prep@%d near preposition bound.", v, v, v + 1);
+			}
+		}
+	}
+}
+
 /*
 	relations:
 	VerbWithMasterVerb: verb with hverb
@@ -2821,7 +2989,6 @@ void cSource::setRole(int position, cPatternElementMatchArray::tPatternElementMa
 void cSource::syntacticRelations()
 {
 	LFS
-		vector < vector <cTagLocation> > tagSets;
 	vector <cWordMatch>::iterator im = m.begin(), imend = m.end();
 	vector <int> futureBoundPrepositions;
 	bool inPrimaryQuote = narrativeIsQuoted, inSecondaryQuote = false;
@@ -2887,141 +3054,21 @@ void cSource::syntacticRelations()
 			lastVerb = -1;
 		if (m[I].hasVerbRelations) lastVerb = I;
 		// At the end of each sentence, link any free preposition clauses to other preposition clauses in the sentence / CMREADME015
-		if (isEOS(I) || im->word == Words.sectionWord)
-		{
-			if (lastVerb >= 0 && firstFreePrep >= 0 && !m[firstFreePrep].notFreePrep)
-			{
-				bool alreadyInLoop = false;
-				int lastInChain = lastVerb, prepLoop = 0;
-				while (m[lastInChain].relPrep >= 0)
-				{
-					alreadyInLoop |= (lastInChain == firstFreePrep);
-					lastInChain = m[lastInChain].relPrep;
-					if (prepLoop++ > 20)
-					{
-						wstring tmpstr;
-						lplog(LOG_ERROR, L"%06d:Prep loop occurred (3) %s.", lastInChain, loopString(lastInChain, tmpstr));
-						break;
-					}
-				}
-				alreadyInLoop |= (lastInChain == firstFreePrep);
-				// if a preposition directly follows another object of a prep, the object of the preposition points to the previous object by relNextObject.
-				// make sure this is not after a verb that was missed because it is compound or MTS
-				if (!alreadyInLoop && (!firstFreePrep || (m[firstFreePrep - 1].getObject() < 0 && m[firstFreePrep - 1].queryWinnerForm(verbForm) < 0 && m[firstFreePrep - 1].queryWinnerForm(thinkForm) < 0)))
-				{
-					setRelPrep(lastInChain, firstFreePrep, 13, PREP_PREP_SET, lastVerb);
-					if (debugTrace.traceRelations)
-						lplog(LOG_RESOLUTION, L"%06d:Prep@%d bound to %d verb=%d ZZZ.", I, firstFreePrep, lastInChain, lastVerb);
-				}
-			}
-			lastBeginS1 = lastRelativePhrase = lastQ2 = -1;
-			lastVerb = firstFreePrep = -1;
-			whereLastVerb = -1;
-		}
+		syntacticRelationsEOS(I, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, firstFreePrep, whereLastVerb);
 		// CMREADME016
-		if (im->word->first == L"“")
-		{
-			inPrimaryQuote = true;
-			lastVerb = firstFreePrep = -1;
-			if (im->flags & cWordMatch::flagQuotedString)
-				inQuotedString = true;
-			else
-			{
-				lastOpeningPrimaryQuote = I;
-				lastSense = -1;
-				if (debugTrace.traceRelations)
-					lplog(L"set lastSense to %d (BQ).", lastSense);
-			}
-		}
-		if (im->word->first == L"”")
-		{
-			inPrimaryQuote = false;
-			lastVerb = firstFreePrep = -1;
-			if (inQuotedString)
-				inQuotedString = false;
-			else
-			{
-				lastOpeningPrimaryQuote = -1;
-				lastSense = -1;
-				if (debugTrace.traceRelations)
-					lplog(L"set lastSense to %d (EQ).", lastSense);
-			}
-		}
-		if (im->word->first == L"‘")
-		{
-			if (im->flags & cWordMatch::flagQuotedString)
-				inQuotedString = true;
-			else
-			{
-				inSecondaryQuote = true;
-				inPrimaryQuote = narrativeIsQuoted;
-				lastVerb = firstFreePrep = -1;
-			}
-		}
-		else if (im->word->first == L"’")
-		{
-			if (inQuotedString)
-				inQuotedString = false;
-			else
-			{
-				inSecondaryQuote = false;
-				inPrimaryQuote = true;
-				lastVerb = firstFreePrep = -1;
-			}
-		}
+		syntacticRelationsQuotes(im, I, inPrimaryQuote, inSecondaryQuote, inQuotedString, lastVerb, firstFreePrep);
 		if (updateWordUsageCostsDynamically && im->updateFormUsagePatterns())
 		{
 #ifdef LOG_USAGE_PATTERNS
 			im->logFormUsageCosts();
 #endif
 		}
-		if (inPrimaryQuote)
-			im->objectRole |= IN_PRIMARY_QUOTE_ROLE;
-		if (inSecondaryQuote)
-			im->objectRole |= IN_SECONDARY_QUOTE_ROLE;
-		for (int nextPEMAPosition = im->beginPEMAPosition; nextPEMAPosition != -1; nextPEMAPosition = pema[nextPEMAPosition].nextByPosition)
-			setRole(I, pema.begin() + nextPEMAPosition); // (CMREADME018)
-		if (inPrimaryQuote || inSecondaryQuote)
-			adjustToHailRole(I);
-		// And Sir James?
-		if (im->objectRole & HAIL_ROLE)
-			im->objectRole |= FOCUS_EVALUATED;
-		if ((im->objectRole & HAIL_ROLE) && !inPrimaryQuote && !inSecondaryQuote)
-		{
-			if (debugTrace.traceRole)
-				lplog(LOG_ROLE, L"%06d:Removed HAIL role (outside quote).", I);
-			im->objectRole &= ~HAIL_ROLE;
-		}
 		bool ambiguousSense = false, nextVerbInSeries = false;
 		int sense = TENSE_NOT_SPECIFIED;
+		vector < vector <cTagLocation> > tagSets;
 		if (setAdditionalRoleTags(I, firstFreePrep, futureBoundPrepositions, inPrimaryQuote, inSecondaryQuote, nextVerbInSeries, sense, whereLastVerb, ambiguousSense, inQuotedString, inSectionHeader, begin, end, tagSets) && lastBeginS1 >= 0)
 			m[lastBeginS1].objectRole |= ID_SENTENCE_TYPE;
-		cPatternMatchArray::tPatternMatch* pma = im->pma.content;
-		for (unsigned PMAElement = 0; PMAElement < im->pma.count; PMAElement++, pma++)
-		{
-			int voRelationsFound, traceSource;
-			if (preTaggedSource)
-			{
-				tagSets.clear();
-				if (startCollectTags(false, nounDeterminerTagSet, I, pma->pemaByPatternEnd, tagSets, true, true, L"syntactic relations - record noun determiner usage") > 0)
-					for (unsigned int J = 0; J < tagSets.size(); J++)
-					{
-						if (debugTrace.traceDeterminer)
-							printTagSet(LOG_INFO, L"ND3", J, tagSets[J], I, pma->pemaByPatternEnd);
-						evaluateNounDeterminer(tagSets[J], false, traceSource, I, I + pma->len, pma->pemaByPatternEnd);
-					}
-			}
-			tagSets.clear();
-			if (startCollectTags(debugTrace.traceVerbObjects, verbObjectsTagSet, I, pma->pemaByPatternEnd, tagSets, true, false, L"syntactic relations - record verb objects usage") > 0)
-			{
-				for (unsigned int J = 0; J < tagSets.size(); J++)
-				{
-					// if this is an objective relative clause, a relativeObject must be computed and taken into account.
-					// Otherwise, incorrect verb object statistics will be recorded.  IVOS
-					evaluateVerbObjects(NULL, pma, -1, I, tagSets[J], false, false, voRelationsFound, traceSource, L"syntactic relations - record verb objects usage");
-				}
-			}
-		}
+		syntacticRelationsEvaluateRelations(im,I);
 		// bind even loose prepositions with no object to the main verb - helps in stanford analysis
 		if (whereLastVerb >= 0 && m[I].queryWinnerForm(prepositionForm) >= 0 && m[I].getRelVerb() == -1 && find(futureBoundPrepositions.begin(), futureBoundPrepositions.end(), I) == futureBoundPrepositions.end())
 		{
@@ -3030,33 +3077,7 @@ void cSource::syntacticRelations()
 				lplog(LOG_INFO, L"bound prep at %d to verb position %d.", I, whereLastVerb - 1);
 		}
 	}
-	for (unsigned int p = 0; p < futureBoundPrepositions.size(); p++)
-	{
-		int v = futureBoundPrepositions[p];
-		if (m[v + 1].getRelObject() >= 0)
-		{
-			bool setAlready = false;
-			int prepLoop = 0;
-			lastVerb = m[m[v + 1].getRelObject()].getRelVerb();
-			for (int w = m[v].relPrep; w >= 0 && !setAlready; w = m[w].relPrep)
-			{
-				if (prepLoop++ > 20)
-				{
-					wstring tmpstr;
-					lplog(LOG_ERROR, L"%06d:Prep loop occurred (6) %s.", w, loopString(w, tmpstr));
-					break;
-				}
-				setAlready = w == v + 1;
-			}
-			if (!setAlready)
-			{
-				setRelPrep(v + 1, m[v].relPrep, 14, PREP_PREP_SET, lastVerb);
-				setRelPrep(v, v + 1, 15, PREP_VERB_SET, lastVerb);
-				if (debugTrace.traceRelations)
-					lplog(LOG_RESOLUTION, L"%06d:PV verb@%d prep@%d near preposition bound.", v, v, v + 1);
-			}
-		}
-	}
+	setPrepVerbRelations(futureBoundPrepositions);
 }
 
 void cSource::testSyntacticRelations()

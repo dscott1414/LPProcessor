@@ -552,6 +552,7 @@ public:
 	{
 		return cWord::isSingleQuote(word->first[0]) || cWord::isDoubleQuote(word->first[0]);
 	}
+	bool writeFlags(void* buffer, int& where, int limit);
 	bool writeRef(void *buffer,int &where,int limit);
 	bool readWord(const wstring temp, int sourceType);
 	bool readFlags(char* buffer, int& where, int limit);
@@ -2111,6 +2112,10 @@ public:
 										 int &lastEmbeddedStory,int &lastEmbeddedImposedSpeakerPosition,int lastSpeakerPosition);
 	void adjustHailRoleDuringScan(int where);
 	void adjustToHailRole(int where);
+	void setPrepVerbRelations(vector <int> &futureBoundPrepositions);
+	void syntacticRelationsQuotes(vector <cWordMatch>::iterator im, const int I, bool& inPrimaryQuote, bool& inSecondaryQuote, bool& inQuotedString, int& lastVerb, int& firstFreePrep);
+	void syntacticRelationsEvaluateRelations(vector <cWordMatch>::iterator im, const int I);
+	void syntacticRelationsEOS(int I, int& lastBeginS1, int& lastRelativePhrase, int& lastQ2, int& lastVerb, int& firstFreePrep, int& whereLastVerb);
 	void syntacticRelations();
 	void testSyntacticRelations();
 	bool replaceSubsequentMatches(set <int> &so,int sgEnd);
@@ -2204,6 +2209,12 @@ public:
 		int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, int &lastSpeakerPosition, int &lastQuotedString, int &quotedObjectCounter,
 		bool &inPrimaryQuote, bool &immediatelyAfterEndOfParagraph, bool &firstQuotedSentenceOfSpeakerGroupNotSeen, bool &quotesSeenSinceLastSentence,
 		vector <int> &lastSubjects);
+	void scanQuoteForAudience(int where);
+	void markEndOfEmbeddedSpeakerGroup(int where);
+	void removeObjectsHavingPrimaryQuote(unsigned int& quotedObjectCounter);
+	void resolveAudience(int audienceObjectPosition, int speakerPosition, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool& audienceInSubQuote, bool& audienceFromSpeakerGroup);
+	bool getSpeakerAudiencePositions(int where, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool noSpeakerAfterward, int& audienceObjectPosition, int& speakerPosition);
+	void replaceSpeakerWithPreviousSpeaker(int where, int speakerPosition);
 	void processEndOfPrimaryQuoteRS(int where, int lastSentenceEndBeforeAndNotIncludingCurrentQuote,
 		int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, int &lastQuotedString,unsigned int &quotedObjectCounter, int &lastDefiniteSpeaker, int &lastClosingPrimaryQuote,
 		int &paragraphsSinceLastSubjectWasSet, int wherePreviousLastSubjects,
@@ -3099,6 +3110,16 @@ private:
 		tIWMM object1Word, const int object2, tIWMM object2Word, const int verbTagIndex, tIWMM verbWord);
 	int evaluateVerbObjects(cPatternMatchArray::tPatternMatch *parentpm,cPatternMatchArray::tPatternMatch *pm,int parentPosition,int position,vector <cTagLocation> &tagSet,bool infinitive,bool assessCost,int &voRelationsFound,int &traceSource,wstring purpose);
 	int properNounCheck(int &traceSource,int begin,int end,int whereDet);
+	void evaluateNounDeterminerAdjectiveVerbPresentParticiple(int begin, int end, int fromPEMAPosition, int& PNC);
+	void evaluateNounDeterminerFromToOrToSame(int begin, int end, int fromPEMAPosition, int& PNC);
+	void evaluateNounDeterminerPreferVerbAfterTo(int begin, int end, int fromPEMAPosition, int& PNC);
+	void evaluateNounDeterminerIncorrectVerbalNoun(int& traceSource, int begin, int end, int fromPEMAPosition, int nAgreeTag, int& PNC);
+	void evaluateNounDeterminerFromTo2OrPreferVerb(int begin, int end, int fromPEMAPosition, int& PNC);
+	void evaluateNounDeterminerDetectSeparateTime(int begin, int end, int& PNC);
+	void evaluateNounDeterminerDetectIncorrectOrderingDeterminersAfterHer(int begin, int end, int& PNC);
+	void evaluateNounDeterminerDisallowPronounPrecededByNoun(int& traceSource, int begin, int end, int& PNC);
+	void evaluateNounDeterminerDetectNounDeterminerMissedCost(vector <cTagLocation>& tagSet, int nounTag, int fromPEMAPosition);
+	bool evaluateNounDeterminerSetHasDeterminer(vector <cTagLocation>& tagSet, int& traceSource, int begin, int nounTag, int nAgreeTag, int whereNAgree, tIWMM nounWord, bool& hasDeterminer);
 	int evaluateNounDeterminer(vector <cTagLocation> &tagSet,bool assessCost,int &traceSource,int begin,int end, int fromPEMAPosition);
 	bool hasTimeObject(int where);
 	//int attachAdjectiveRelation(vector <cTagLocation> &tagSet,int whereObject);  see dynamicallyUpdateWordRelations.cpp

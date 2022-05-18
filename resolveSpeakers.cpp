@@ -6783,6 +6783,18 @@ void cSource::resolvePreviousSpeakerAudience(const int beginQuote, const int end
 
 // definitelySpeaker is from scanForSpeaker.  It is set to true unless the speaker was detected after the
 // quote in an _S1 pattern with a verb with a nonpast tense, or the verb had one or more objects.
+// a. definitelySpeaker is from scanForSpeaker.It is set to true unless the speaker was detected after the quote in an _S1 pattern with a verb with a nonpast tense, or the verb had one or more objects.
+// b.	if subjects in previous unquoted section usable for immediate resolution, and last unquoted subjects position existsand is not plural, set last subject preference = true for all local objects outside primary quotes which match the last subjects.last subject preference used in chooseBest
+// c. resolve object at speakerObjectAt
+// d.	if all beforePreviousSpeakers are in the speaker object, then delete all of the beforePreviousSpeakers from the speakerObject position.
+// e. also resolve the principal object the speakerObjectAt is related to, if it is a part of an object
+// f. remove observers
+// g. reset lastSubject preference
+// h. are any speakers in the speakerGroup using this as an alias ? If so, replace with actual speaker.
+// i. resolve audience
+// j. set speakerand audience.If the speaker is definitively specified, but the speaker object is a gendered pronoun, for which there is more than one matching gender, then flag as ambiguous.
+// k.	if speaker / audience is definite and not a pronoun, set the speakerand audience as definite in counters, definitive speaker groups, section speakers, local focus
+
 void cSource::imposeSpeaker(int beginQuote,int endQuote,int &lastDefiniteSpeaker,int speakerObjectAt,bool definitelySpeaker,
                            int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,bool previousSpeakersUncertain,int audienceObjectPosition,vector <int> &lastUnquotedSubjects, int whereLastUnquotedSubjects)
 { LFS
@@ -8914,6 +8926,172 @@ void cSource::printResolutionCheck(vector <int> &badSpeakers)
 	}
 }
 
+// scan quote for audience - if supposed audience is included in the quote, then reject
+void cSource::scanQuoteForAudience(int where)
+{
+	bool allIn, oneIn;
+	wstring tmpstr, tmpstr2;
+	for (int ai = lastOpeningPrimaryQuote; ai < m[lastOpeningPrimaryQuote].endQuote; ai++)
+		if (m[ai].getObject() >= 0 && !(m[ai].objectRole & (HAIL_ROLE | PP_OBJECT_ROLE | IN_QUOTE_REFERRING_AUDIENCE_ROLE)) && (m[ai].objectRole & FOCUS_EVALUATED) &&
+			intersect(ai, m[lastOpeningPrimaryQuote].audienceObjectMatches, allIn, oneIn) &&
+			(m[where].queryForm(pronounForm) >= 0 || m[where].queryForm(indefinitePronounForm) >= 0)) // invalidObject
+		{
+			vector <cOM> audienceObjectMatches = m[lastOpeningPrimaryQuote].audienceObjectMatches;
+			m[lastOpeningPrimaryQuote].audienceObjectMatches.clear();
+			vector <cLocalFocus>::iterator lsi;
+			for (set <int>::iterator si = speakerGroups[currentSpeakerGroup].speakers.begin(), siEnd = speakerGroups[currentSpeakerGroup].speakers.end(); si != siEnd; si++)
+				if (in(*si, m[lastOpeningPrimaryQuote].objectMatches) == m[lastOpeningPrimaryQuote].objectMatches.end() && *si != m[ai].getObject() &&
+					(lsi = in(*si)) != localObjects.end() && lsi->physicallyPresent && lsi->whereBecamePhysicallyPresent >= 0)
+					m[lastOpeningPrimaryQuote].audienceObjectMatches.push_back(cOM(*si, SALIENCE_THRESHOLD));
+			if (debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%06d:audience speaker of %s corrected to %s [audience appears in quote@%d].", lastOpeningPrimaryQuote, objectString(audienceObjectMatches, tmpstr, true).c_str(), objectString(m[lastOpeningPrimaryQuote].audienceObjectMatches, tmpstr2, true).c_str(), ai);
+			m[lastOpeningPrimaryQuote].flags |= cWordMatch::flagSpecifiedResolveAudience;
+			for (unsigned int J = 0; J < m[lastOpeningPrimaryQuote].audienceObjectMatches.size(); J++)
+				objects[m[lastOpeningPrimaryQuote].audienceObjectMatches[J].object].speakerLocations.insert(lastOpeningPrimaryQuote);
+			if (!(m[previousPrimaryQuote].flags & cWordMatch::flagSpecifiedResolveAudience) &&
+				!intersect(lastOpeningPrimaryQuote, m[previousPrimaryQuote].audienceObjectMatches, allIn, oneIn))
+			{
+				if (debugTrace.traceSpeakerResolution)
+					lplog(LOG_RESOLUTION, L"%06d:original audience %s corrected [audience appears in forwardLink quote].", previousPrimaryQuote, objectString(m[previousPrimaryQuote].audienceObjectMatches, tmpstr, true).c_str());
+				m[previousPrimaryQuote].audienceObjectMatches = m[lastOpeningPrimaryQuote].audienceObjectMatches;
+				m[previousPrimaryQuote].flags |= cWordMatch::flagSpecifiedResolveAudience;
+				for (vector <cOM>::iterator aomi = m[previousPrimaryQuote].audienceObjectMatches.begin(), aomiEnd = m[previousPrimaryQuote].audienceObjectMatches.end(); aomi != aomiEnd; aomi++)
+					objects[aomi->object].speakerLocations.insert(previousPrimaryQuote);
+			}
+			break;
+		}
+}
+
+void cSource::markEndOfEmbeddedSpeakerGroup(int where)
+{
+	int lastDefinedOpenEmbeddedSpeakerGroup = currentEmbeddedSpeakerGroup, ldsg = currentSpeakerGroup;
+	if (lastDefinedOpenEmbeddedSpeakerGroup < 0 && ldsg>0 && speakerGroups[ldsg - 1].embeddedSpeakerGroups.size() > 0)
+		lastDefinedOpenEmbeddedSpeakerGroup = speakerGroups[ldsg = ldsg - 1].embeddedSpeakerGroups.size() - 1;
+	if (lastDefinedOpenEmbeddedSpeakerGroup >= 0 && !(m[lastOpeningPrimaryQuote].flags & (cWordMatch::flagEmbeddedStoryResolveSpeakers | cWordMatch::flagEmbeddedStoryResolveSpeakersGap)) &&
+		speakerGroups[ldsg].embeddedSpeakerGroups[lastDefinedOpenEmbeddedSpeakerGroup].sgEnd <= 0 && previousPrimaryQuote >= 0)
+	{
+		int forwardLink = previousPrimaryQuote;
+		while (m[forwardLink].getQuoteForwardLink() > forwardLink) forwardLink = m[forwardLink].getQuoteForwardLink();
+		if (m[forwardLink].endQuote >= 0)
+		{
+			wstring tmpstr;
+			speakerGroups[ldsg].embeddedSpeakerGroups[lastDefinedOpenEmbeddedSpeakerGroup].sgEnd = m[forwardLink].endQuote;
+			if (debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%d-%d:[%d,%d]mark end of embedded speaker group:%s",
+					lastOpeningPrimaryQuote, where, ldsg, lastDefinedOpenEmbeddedSpeakerGroup,
+					toText(speakerGroups[ldsg].embeddedSpeakerGroups[lastDefinedOpenEmbeddedSpeakerGroup], tmpstr));
+			currentEmbeddedSpeakerGroup = -1;
+			currentEmbeddedTimelineSegment = -1;
+		}
+	}
+}
+
+void cSource::removeObjectsHavingPrimaryQuote(unsigned int& quotedObjectCounter)
+{
+	wstring tmpstr;
+	// remove any objects referring to a quote which is not a quoted string
+	for (; quotedObjectCounter < objects.size(); quotedObjectCounter++)
+		if (objects[quotedObjectCounter].begin == lastOpeningPrimaryQuote)
+		{
+			if (debugTrace.traceObjectResolution)
+			{
+				lplog(LOG_RESOLUTION, L"%06d:object %s eliminated because it includes a primary quote",
+					lastOpeningPrimaryQuote, objectString(quotedObjectCounter, tmpstr, false).c_str());
+			}
+			objects[quotedObjectCounter].eliminated = true;
+			for (vector <cSection>::iterator is = sections.begin(), isEnd = sections.end(); is != isEnd; is++)
+				is->preIdentifiedSpeakerObjects.erase(quotedObjectCounter);
+		}
+		else if (objects[quotedObjectCounter].begin > lastOpeningPrimaryQuote)
+			break;
+}
+
+void cSource::resolveAudience(int audienceObjectPosition, int speakerPosition, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool & audienceInSubQuote, bool & audienceFromSpeakerGroup)
+{
+	if (audienceObjectPosition >= 0 && m[audienceObjectPosition].getObject() >= 0)
+	{
+		bool allIn, oneIn;
+		audienceInSubQuote = true;
+		resolveObject(audienceObjectPosition, false, false, false, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, false, false, false);
+		setSpeakerMatchesFromPosition(lastOpeningPrimaryQuote, m[lastOpeningPrimaryQuote].audienceObjectMatches, audienceObjectPosition, L"audienceObjectPositionSubQuote(2)", cWordMatch::flagSpecifiedResolveAudience);
+		subtract(m[audienceObjectPosition].getObject(), m[lastOpeningPrimaryQuote].objectMatches);
+		if (intersect(m[lastOpeningPrimaryQuote].audienceObjectMatches, m[lastOpeningPrimaryQuote].objectMatches, allIn, oneIn) && !allIn)
+			subtract(m[lastOpeningPrimaryQuote].audienceObjectMatches, m[lastOpeningPrimaryQuote].objectMatches);
+	}
+	// if audience not found, and previous quote had an audienceobject where the subject was talking to himself,
+	// and speaker is found, then cancel the assumption that the speaker is talking to himself.
+	else if (speakerPosition >= 0 && m[previousPrimaryQuote].audienceObjectMatches.size() && m[previousPrimaryQuote].objectMatches.size() &&
+		m[previousPrimaryQuote].audienceObjectMatches[0].object == m[previousPrimaryQuote].objectMatches[0].object && currentSpeakerGroup < speakerGroups.size())
+	{
+		audienceFromSpeakerGroup = true;
+		m[lastOpeningPrimaryQuote].audienceObjectMatches.clear();
+		for (set <int>::iterator si = speakerGroups[currentSpeakerGroup].speakers.begin(), siEnd = speakerGroups[currentSpeakerGroup].speakers.end(); si != siEnd; si++)
+			if (in(*si, m[previousPrimaryQuote].objectMatches) == m[previousPrimaryQuote].objectMatches.end())
+				m[lastOpeningPrimaryQuote].audienceObjectMatches.push_back(cOM(*si, SALIENCE_THRESHOLD));
+		m[lastOpeningPrimaryQuote].flags |= cWordMatch::flagAudienceFromSpeakerGroupResolveAudience;
+	}
+	// resolve the primary link with help from the forwardLink audience
+	// if definite (audienceInSubQuote) and only one entity and previous is not one entity and not definitely resolved
+	if (audienceInSubQuote &&
+		m[lastOpeningPrimaryQuote].audienceObjectMatches.size() == 1 && m[previousPrimaryQuote].audienceObjectMatches.size() != 1 &&
+		!(m[previousPrimaryQuote].flags & cWordMatch::flagSpecifiedResolveAudience))
+	{
+		// if the objectMatches of the primaryLink includes the audience, delete the audience
+		subtract(m[lastOpeningPrimaryQuote].audienceObjectMatches[0].object, m[previousPrimaryQuote].objectMatches);
+		wstring tmpstr3;
+		bool allIn, oneIn;
+		setSpeakerMatchesFromPosition(previousPrimaryQuote, m[previousPrimaryQuote].audienceObjectMatches, audienceObjectPosition, L"audienceObjectPositionSubQuote", cWordMatch::flagSpecifiedResolveAudience);
+		if (intersect(m[previousPrimaryQuote].audienceObjectMatches, m[previousPrimaryQuote].objectMatches, allIn, oneIn) && !allIn)
+			subtract(m[previousPrimaryQuote].audienceObjectMatches, m[previousPrimaryQuote].objectMatches);
+		wstring tmpstr, tmpstr2;
+		if (debugTrace.traceSpeakerResolution)
+			lplog(LOG_RESOLUTION, L"%06d:Resolve by definite audience backtrack from forwardLink [%s] resolving %d:%s to %d:%s",
+				lastOpeningPrimaryQuote, speakerResolutionFlagsString(m[previousPrimaryQuote].flags, tmpstr).c_str(),
+				lastOpeningPrimaryQuote,
+				objectString(m[lastOpeningPrimaryQuote].audienceObjectMatches, tmpstr2, true).c_str(),
+				previousPrimaryQuote,
+				objectString(m[previousPrimaryQuote].audienceObjectMatches, tmpstr3, true).c_str());
+	}
+}
+
+bool cSource::getSpeakerAudiencePositions(int where, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool noSpeakerAfterward, int &audienceObjectPosition, int &speakerPosition)
+{
+	audienceObjectPosition = scanForSpeakers(lastOpeningPrimaryQuote, where, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, HAIL_ROLE | IN_QUOTE_REFERRING_AUDIENCE_ROLE);
+	bool definitelySpeaker = false;
+	int w, w2;
+	speakerPosition = determineSpeaker(lastOpeningPrimaryQuote, where, true, noSpeakerAfterward, definitelySpeaker, audienceObjectPosition);
+	// the boots of Albert
+	if (speakerPosition >= 0 && (w = m[speakerPosition].principalWherePosition) >= 0 &&
+		m[w].getObject() >= 0 && objects[m[w].getObject()].objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS &&
+		(w2 = objects[m[w].getObject()].getOwnerWhere()) >= 0 && m[w2].getObject() >= 0 &&
+		(objects[m[w2].getObject()].male || objects[m[w2].getObject()].female))
+		speakerPosition = w2;
+	if (speakerPosition < 0)
+		definitelySpeaker |= (speakerPosition = scanForSpeakers(lastOpeningPrimaryQuote, where, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE)) >= 0;
+	return definitelySpeaker;
+}
+
+void cSource::replaceSpeakerWithPreviousSpeaker(int where, int speakerPosition)
+{
+	int lateSpeaker = -1;
+	wstring tmpstr, tmpstr2;
+	if (speakerPosition >= 0 && previousSpeakers.size() > 1 &&
+		((m[speakerPosition].objectMatches.empty() && find(previousSpeakers.begin(), previousSpeakers.end(), lateSpeaker = m[speakerPosition].getObject()) != previousSpeakers.end()) ||
+			(m[speakerPosition].objectMatches.size() == 1 && find(previousSpeakers.begin(), previousSpeakers.end(), lateSpeaker = m[speakerPosition].objectMatches[0].object) != previousSpeakers.end())))
+	{
+		if (debugTrace.traceSpeakerResolution)
+			lplog(LOG_RESOLUTION, L"%06d:late speaker of %s clarifies original speaker(s) %s.", where, objectString(lateSpeaker, tmpstr, true).c_str(), objectString(m[lastOpeningPrimaryQuote].objectMatches, tmpstr2, true).c_str());
+		m[lastOpeningPrimaryQuote].objectMatches.clear();
+		m[lastOpeningPrimaryQuote].objectMatches.push_back(cOM(lateSpeaker, SALIENCE_THRESHOLD));
+		objects[lateSpeaker].speakerLocations.insert(lastOpeningPrimaryQuote);
+	}
+	else if (lateSpeaker >= 0)
+	{
+		if (debugTrace.traceSpeakerResolution)
+			lplog(LOG_RESOLUTION, L"%06d:late speaker of %s conflicts with original speaker(s) %s.", where, objectString(lateSpeaker, tmpstr, true).c_str(), objectString(m[lastOpeningPrimaryQuote].objectMatches, tmpstr2, true).c_str());
+	}
+}
+
 void cSource::processEndOfPrimaryQuoteRS(int where, int lastSentenceEndBeforeAndNotIncludingCurrentQuote,
 	int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, int &lastQuotedString, unsigned int &quotedObjectCounter,int &lastDefiniteSpeaker,int &lastClosingPrimaryQuote,
 	int &paragraphsSinceLastSubjectWasSet,int wherePreviousLastSubjects, 
@@ -8923,12 +9101,12 @@ void cSource::processEndOfPrimaryQuoteRS(int where, int lastSentenceEndBeforeAnd
 	inPrimaryQuote = false;
 	lastClosingPrimaryQuote = where;
 	wstring tmpstr,tmpstr2;
-	// if the previous end quote was inserted, and this end quote was also inserted, then this quote has the same speakers as the last
-	bool previousEndQuoteInserted = previousPrimaryQuote >= 0 && m[previousPrimaryQuote].endQuote >= 0 && (m[m[previousPrimaryQuote].endQuote].flags&cWordMatch::flagInsertedQuote) != 0 && (m[where].flags&cWordMatch::flagInsertedQuote) != 0;
 	// immediatelyAfterEndOfParagraph is set if there has been an end of paragraph seen since the last close quote.
 	bool noTextBeforeOrAfter, quotedStringSeen = false, multipleQuoteInSentence = (previousPrimaryQuote > lastSentenceEndBeforeAndNotIncludingCurrentQuote), noSpeakerAfterward = false, audienceInSubQuote = false, audienceFromSpeakerGroup = false;
 	if (!(quotedStringSeen = quotedString(lastOpeningPrimaryQuote, where, noTextBeforeOrAfter, noSpeakerAfterward)))
 	{
+		// if the previous end quote was inserted, and this end quote was also inserted, then this quote has the same speakers as the last
+		bool previousEndQuoteInserted = previousPrimaryQuote >= 0 && m[previousPrimaryQuote].endQuote >= 0 && (m[m[previousPrimaryQuote].endQuote].flags & cWordMatch::flagInsertedQuote) != 0 && (m[where].flags & cWordMatch::flagInsertedQuote) != 0;
 		if (!(m[lastOpeningPrimaryQuote].flags&cWordMatch::flagQuotedString) &&
 			(multipleQuoteInSentence || !immediatelyAfterEndOfParagraph || previousEndQuoteInserted))
 		{
@@ -8936,110 +9114,17 @@ void cSource::processEndOfPrimaryQuoteRS(int where, int lastSentenceEndBeforeAnd
 			if (previousPrimaryQuote >= 0)
 			{
 				m[lastOpeningPrimaryQuote].audienceObjectMatches = m[previousPrimaryQuote].audienceObjectMatches;
-				bool allIn, oneIn;
 				// (CMREADME34)
-				// scan quote for audience - if supposed audience is included in the quote, then reject
-				for (int ai = lastOpeningPrimaryQuote; ai < m[lastOpeningPrimaryQuote].endQuote; ai++)
-					if (m[ai].getObject() >= 0 && !(m[ai].objectRole&(HAIL_ROLE | PP_OBJECT_ROLE | IN_QUOTE_REFERRING_AUDIENCE_ROLE)) && (m[ai].objectRole&FOCUS_EVALUATED) &&
-						intersect(ai, m[lastOpeningPrimaryQuote].audienceObjectMatches, allIn, oneIn) &&
-						(m[where].queryForm(pronounForm) >= 0 || m[where].queryForm(indefinitePronounForm) >= 0)) // invalidObject
-					{
-						vector <cOM> audienceObjectMatches = m[lastOpeningPrimaryQuote].audienceObjectMatches;
-						m[lastOpeningPrimaryQuote].audienceObjectMatches.clear();
-						vector <cLocalFocus>::iterator lsi;
-						for (set <int>::iterator si = speakerGroups[currentSpeakerGroup].speakers.begin(), siEnd = speakerGroups[currentSpeakerGroup].speakers.end(); si != siEnd; si++)
-							if (in(*si, m[lastOpeningPrimaryQuote].objectMatches) == m[lastOpeningPrimaryQuote].objectMatches.end() && *si != m[ai].getObject() &&
-								(lsi = in(*si)) != localObjects.end() && lsi->physicallyPresent && lsi->whereBecamePhysicallyPresent >= 0)
-								m[lastOpeningPrimaryQuote].audienceObjectMatches.push_back(cOM(*si, SALIENCE_THRESHOLD));
-						if (debugTrace.traceSpeakerResolution)
-							lplog(LOG_RESOLUTION, L"%06d:audience speaker of %s corrected to %s [audience appears in quote@%d].", lastOpeningPrimaryQuote, objectString(audienceObjectMatches, tmpstr, true).c_str(), objectString(m[lastOpeningPrimaryQuote].audienceObjectMatches, tmpstr2, true).c_str(), ai);
-						m[lastOpeningPrimaryQuote].flags |= cWordMatch::flagSpecifiedResolveAudience;
-						for (unsigned int J = 0; J < m[lastOpeningPrimaryQuote].audienceObjectMatches.size(); J++)
-							objects[m[lastOpeningPrimaryQuote].audienceObjectMatches[J].object].speakerLocations.insert(lastOpeningPrimaryQuote);
-						if (!(m[previousPrimaryQuote].flags&cWordMatch::flagSpecifiedResolveAudience) &&
-							!intersect(lastOpeningPrimaryQuote, m[previousPrimaryQuote].audienceObjectMatches, allIn, oneIn))
-						{
-							if (debugTrace.traceSpeakerResolution)
-								lplog(LOG_RESOLUTION, L"%06d:original audience %s corrected [audience appears in forwardLink quote].", previousPrimaryQuote, objectString(m[previousPrimaryQuote].audienceObjectMatches, tmpstr, true).c_str());
-							m[previousPrimaryQuote].audienceObjectMatches = m[lastOpeningPrimaryQuote].audienceObjectMatches;
-							m[previousPrimaryQuote].flags |= cWordMatch::flagSpecifiedResolveAudience;
-							for (vector <cOM>::iterator aomi = m[previousPrimaryQuote].audienceObjectMatches.begin(), aomiEnd = m[previousPrimaryQuote].audienceObjectMatches.end(); aomi != aomiEnd; aomi++)
-								objects[aomi->object].speakerLocations.insert(previousPrimaryQuote);
-						}
-						break;
-					}
+				scanQuoteForAudience(where);
 				// (CMREADME35)
 				// possible different person talking to?
 				if (!immediatelyAfterEndOfParagraph)
 				{
-					int audienceObjectPosition = scanForSpeakers(lastOpeningPrimaryQuote, where, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, HAIL_ROLE | IN_QUOTE_REFERRING_AUDIENCE_ROLE);
-					bool definitelySpeaker;
-					int speakerPosition = determineSpeaker(lastOpeningPrimaryQuote, where, true, noSpeakerAfterward, definitelySpeaker, audienceObjectPosition), lateSpeaker = -1;
-					// the boots of Albert
-					if (speakerPosition >= 0 && m[speakerPosition].getObject() >= 0 && objects[m[speakerPosition].getObject()].objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS &&
-						objects[m[speakerPosition].getObject()].getOwnerWhere() >= 0 && m[objects[m[speakerPosition].getObject()].getOwnerWhere()].getObject() >= 0 &&
-						(objects[m[objects[m[speakerPosition].getObject()].getOwnerWhere()].getObject()].male || objects[m[objects[m[speakerPosition].getObject()].getOwnerWhere()].getObject()].female))
-						speakerPosition = objects[m[speakerPosition].getObject()].getOwnerWhere();
-					if (speakerPosition < 0)
-						speakerPosition = scanForSpeakers(lastOpeningPrimaryQuote, where, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE);
+					int audienceObjectPosition, speakerPosition;
+					getSpeakerAudiencePositions(where, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, noSpeakerAfterward, audienceObjectPosition, speakerPosition);
 					resolveMetaReference(speakerPosition, lastOpeningPrimaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb);
-					if (speakerPosition >= 0 && previousSpeakers.size() > 1 &&
-						((m[speakerPosition].objectMatches.empty() && find(previousSpeakers.begin(), previousSpeakers.end(), lateSpeaker = m[speakerPosition].getObject()) != previousSpeakers.end()) ||
-						(m[speakerPosition].objectMatches.size() == 1 && find(previousSpeakers.begin(), previousSpeakers.end(), lateSpeaker = m[speakerPosition].objectMatches[0].object) != previousSpeakers.end())))
-					{
-						if (debugTrace.traceSpeakerResolution)
-							lplog(LOG_RESOLUTION, L"%06d:late speaker of %s clarifies original speaker(s) %s.", where, objectString(lateSpeaker, tmpstr, true).c_str(), objectString(m[lastOpeningPrimaryQuote].objectMatches, tmpstr2, true).c_str());
-						m[lastOpeningPrimaryQuote].objectMatches.clear();
-						m[lastOpeningPrimaryQuote].objectMatches.push_back(cOM(lateSpeaker, SALIENCE_THRESHOLD));
-						for (unsigned int J = 0; J < m[lastOpeningPrimaryQuote].objectMatches.size(); J++)
-							objects[m[lastOpeningPrimaryQuote].objectMatches[J].object].speakerLocations.insert(lastOpeningPrimaryQuote);
-					}
-					else if (lateSpeaker >= 0)
-					{
-						if (debugTrace.traceSpeakerResolution)
-							lplog(LOG_RESOLUTION, L"%06d:late speaker of %s conflicts with original speaker(s) %s.", where, objectString(lateSpeaker, tmpstr, true).c_str(), objectString(m[lastOpeningPrimaryQuote].objectMatches, tmpstr2, true).c_str());
-					}
-					if (audienceObjectPosition >= 0 && m[audienceObjectPosition].getObject() >= 0)
-					{
-						audienceInSubQuote = true;
-						resolveObject(audienceObjectPosition, false, false, false, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, false, false, false);
-						setSpeakerMatchesFromPosition(lastOpeningPrimaryQuote, m[lastOpeningPrimaryQuote].audienceObjectMatches, audienceObjectPosition, L"audienceObjectPositionSubQuote(2)", cWordMatch::flagSpecifiedResolveAudience);
-						subtract(m[audienceObjectPosition].getObject(), m[lastOpeningPrimaryQuote].objectMatches);
-						if (intersect(m[lastOpeningPrimaryQuote].audienceObjectMatches, m[lastOpeningPrimaryQuote].objectMatches, allIn, oneIn) && !allIn)
-							subtract(m[lastOpeningPrimaryQuote].audienceObjectMatches, m[lastOpeningPrimaryQuote].objectMatches);
-					}
-					// if audience not found, and previous quote had an audienceobject where the subject was talking to himself,
-					// and speaker is found, then cancel the assumption that the speaker is talking to himself.
-					else if (speakerPosition >= 0 && m[previousPrimaryQuote].audienceObjectMatches.size() && m[previousPrimaryQuote].objectMatches.size() &&
-						m[previousPrimaryQuote].audienceObjectMatches[0].object == m[previousPrimaryQuote].objectMatches[0].object && currentSpeakerGroup < speakerGroups.size())
-					{
-						audienceFromSpeakerGroup = true;
-						m[lastOpeningPrimaryQuote].audienceObjectMatches.clear();
-						for (set <int>::iterator si = speakerGroups[currentSpeakerGroup].speakers.begin(), siEnd = speakerGroups[currentSpeakerGroup].speakers.end(); si != siEnd; si++)
-							if (in(*si, m[previousPrimaryQuote].objectMatches) == m[previousPrimaryQuote].objectMatches.end())
-								m[lastOpeningPrimaryQuote].audienceObjectMatches.push_back(cOM(*si, SALIENCE_THRESHOLD));
-						m[lastOpeningPrimaryQuote].flags |= cWordMatch::flagAudienceFromSpeakerGroupResolveAudience;
-					}
-					// resolve the primary link with help from the forwardLink audience
-					// if definite (audienceInSubQuote) and only one entity and previous is not one entity and not definitely resolved
-					if (audienceInSubQuote &&
-						m[lastOpeningPrimaryQuote].audienceObjectMatches.size() == 1 && m[previousPrimaryQuote].audienceObjectMatches.size() != 1 &&
-						!(m[previousPrimaryQuote].flags&cWordMatch::flagSpecifiedResolveAudience))
-					{
-						// if the objectMatches of the primaryLink includes the audience, delete the audience
-						subtract(m[lastOpeningPrimaryQuote].audienceObjectMatches[0].object, m[previousPrimaryQuote].objectMatches);
-						wstring tmpstr3;
-						setSpeakerMatchesFromPosition(previousPrimaryQuote, m[previousPrimaryQuote].audienceObjectMatches, audienceObjectPosition, L"audienceObjectPositionSubQuote", cWordMatch::flagSpecifiedResolveAudience);
-						if (intersect(m[previousPrimaryQuote].audienceObjectMatches, m[previousPrimaryQuote].objectMatches, allIn, oneIn) && !allIn)
-							subtract(m[previousPrimaryQuote].audienceObjectMatches, m[previousPrimaryQuote].objectMatches);
-						if (debugTrace.traceSpeakerResolution)
-							lplog(LOG_RESOLUTION, L"%06d:Resolve by definite audience backtrack from forwardLink [%s] resolving %d:%s to %d:%s",
-								lastOpeningPrimaryQuote, speakerResolutionFlagsString(m[previousPrimaryQuote].flags, tmpstr).c_str(),
-								lastOpeningPrimaryQuote,
-								objectString(m[lastOpeningPrimaryQuote].audienceObjectMatches, tmpstr2, true).c_str(),
-								previousPrimaryQuote,
-								objectString(m[previousPrimaryQuote].audienceObjectMatches, tmpstr3, true).c_str());
-					}
+					replaceSpeakerWithPreviousSpeaker(where, speakerPosition);
+					resolveAudience(audienceObjectPosition, speakerPosition, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, audienceInSubQuote, audienceFromSpeakerGroup);
 				}
 				// (CMREADME36)
 				for (unsigned int J = 0; J < m[lastOpeningPrimaryQuote].audienceObjectMatches.size(); J++)
@@ -9068,37 +9153,10 @@ void cSource::processEndOfPrimaryQuoteRS(int where, int lastSentenceEndBeforeAnd
 		else
 		{
 		  // (CMREADME37)
-			int lastDefinedOpenEmbeddedSpeakerGroup = currentEmbeddedSpeakerGroup, ldsg = currentSpeakerGroup;
-			if (lastDefinedOpenEmbeddedSpeakerGroup < 0 && ldsg>0 && speakerGroups[ldsg - 1].embeddedSpeakerGroups.size() > 0)
-				lastDefinedOpenEmbeddedSpeakerGroup = speakerGroups[ldsg = ldsg - 1].embeddedSpeakerGroups.size() - 1;
-			if (lastDefinedOpenEmbeddedSpeakerGroup >= 0 && !(m[lastOpeningPrimaryQuote].flags&(cWordMatch::flagEmbeddedStoryResolveSpeakers | cWordMatch::flagEmbeddedStoryResolveSpeakersGap)) &&
-				speakerGroups[ldsg].embeddedSpeakerGroups[lastDefinedOpenEmbeddedSpeakerGroup].sgEnd <= 0 && previousPrimaryQuote >= 0)
-			{
-				int forwardLink = previousPrimaryQuote;
-				while (m[forwardLink].getQuoteForwardLink() > forwardLink) forwardLink = m[forwardLink].getQuoteForwardLink();
-				if (m[forwardLink].endQuote >= 0)
-				{
-					speakerGroups[ldsg].embeddedSpeakerGroups[lastDefinedOpenEmbeddedSpeakerGroup].sgEnd = m[forwardLink].endQuote;
-					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%d-%d:[%d,%d]mark end of embedded speaker group:%s",
-							lastOpeningPrimaryQuote, where, ldsg, lastDefinedOpenEmbeddedSpeakerGroup,
-							toText(speakerGroups[ldsg].embeddedSpeakerGroups[lastDefinedOpenEmbeddedSpeakerGroup], tmpstr));
-					currentEmbeddedSpeakerGroup = -1;
-					currentEmbeddedTimelineSegment = -1;
-				}
-			}
+			markEndOfEmbeddedSpeakerGroup(where);
 			cLocalFocus::setSalienceAgeMethod(false, false, objectToBeMatchedInQuote, quoteIndependentAge);
-			int audienceObjectPosition = scanForSpeakers(lastOpeningPrimaryQuote, where, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, HAIL_ROLE | IN_QUOTE_REFERRING_AUDIENCE_ROLE);
-			bool definitelySpeaker = false;
-			int speakerPosition = determineSpeaker(lastOpeningPrimaryQuote, where, true, noSpeakerAfterward, definitelySpeaker, audienceObjectPosition), w, w2;
-			// the boots of Albert
-			if (speakerPosition >= 0 && (w = m[speakerPosition].principalWherePosition) >= 0 &&
-				m[w].getObject() >= 0 && objects[m[w].getObject()].objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS &&
-				(w2 = objects[m[w].getObject()].getOwnerWhere()) >= 0 && m[w2].getObject() >= 0 &&
-				(objects[m[w2].getObject()].male || objects[m[w2].getObject()].female))
-				speakerPosition = w2;
-			if (speakerPosition < 0)
-				definitelySpeaker |= (speakerPosition = scanForSpeakers(lastOpeningPrimaryQuote, where, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE)) >= 0;
+			int audienceObjectPosition, speakerPosition;
+			bool definitelySpeaker = getSpeakerAudiencePositions(where, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, noSpeakerAfterward, audienceObjectPosition, speakerPosition);
 			// If there is more than one speaker, and if the speaker position object is not found in the current speaker group, invalidate speaker position.
 			if (speakerPosition >= 0 && m[speakerPosition].principalWherePosition >= 0 && m[m[speakerPosition].principalWherePosition].getObject() >= 0 &&
 				speakerGroups[currentSpeakerGroup].speakers.size() > 1 &&
@@ -9142,21 +9200,7 @@ void cSource::processEndOfPrimaryQuoteRS(int where, int lastSentenceEndBeforeAnd
 	// (CMREADME40)
 	if (lastQuotedString > lastSentenceEndBeforeAndNotIncludingCurrentQuote)
 		quotedStringSeen = true;
-	// remove any objects referring to a quote which is not a quoted string
-	for (; quotedObjectCounter < objects.size(); quotedObjectCounter++)
-		if (objects[quotedObjectCounter].begin == lastOpeningPrimaryQuote)
-		{
-			if (debugTrace.traceObjectResolution)
-			{
-				lplog(LOG_RESOLUTION, L"%06d:object %s eliminated because it includes a primary quote",
-					lastOpeningPrimaryQuote, objectString(quotedObjectCounter, tmpstr, false).c_str());
-			}
-			objects[quotedObjectCounter].eliminated = true;
-			for (vector <cSection>::iterator is = sections.begin(), isEnd = sections.end(); is != isEnd; is++)
-				is->preIdentifiedSpeakerObjects.erase(quotedObjectCounter);
-		}
-		else if (objects[quotedObjectCounter].begin > lastOpeningPrimaryQuote)
-			break;
+	removeObjectsHavingPrimaryQuote(quotedObjectCounter);
 	quotesSeenSinceLastSentence = true;
 	if (debugTrace.traceSpeakerResolution)
 		lplog(LOG_RESOLUTION, L"%06d:(3) quotesSeenSinceLastSentence set to true", where);

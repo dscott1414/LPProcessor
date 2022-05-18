@@ -2626,7 +2626,7 @@ void createPrepositionalPhrases(void)
 
 }
 
-int createSecondaryPatterns2(void)
+int createSecondaryPatterns__C1_IP(void)
 {
 	LFS
 
@@ -2675,7 +2675,13 @@ int createSecondaryPatterns2(void)
 		1, L"_ADJECTIVE", 0, 1, 1,
 		1, L",", 0, 1, 1,
 		0);
-	// INFP should be rare// REL1 should be rare// VERBREL2 should be rare
+	return 0;
+}
+
+int createSecondaryPatterns__C1__S1(void)
+{
+	LFS
+		// INFP should be rare// REL1 should be rare// VERBREL2 should be rare
 	// _ADJECTIVE should also cover NAMEOWNER
 	// there added to prevent "but of Jane Finn there was no mention" - 'there' should be a SUBJECT
 	// overwhelmingly 'there' may be parsed as an adverb (which it is), but then not matched to C1__S1 and then
@@ -2716,6 +2722,11 @@ int createSecondaryPatterns2(void)
 		1, L"adjective", 0, 0, 1,
 		5, L"honorific{HON:HAIL}", L"noun{HAIL}", L"adjective|dear", L"noun|thing{HAIL}", L"adverb|too{HAIL}", MALE_GENDER | FEMALE_GENDER, 1, 1,
 		0);
+	return 0;
+}
+
+int createSecondaryPatterns__CLOSING__S1(void)
+{
 	cPattern::create(L"__CLOSING__S1{_ONLY_END_MATCH}", L"1",
 		1, L",", 0, 1, 1, // , ma'am // if this is made optional, _NOUN of C4 and _ALLOBJECT of C3 are identical
 		7, L"_NAME{HAIL}", L"honorific{HON:HAIL}", L"_HON_ABB{HON:HAIL}", L"_META_GROUP{HAIL}", L"noun{HAIL}", L"_HAIL_OBJECT{HAIL|OBJECT}", L"politeness_discourse_marker", MALE_GENDER | FEMALE_GENDER, 1, 1, // , sir / , freak! noun includes _NAME, L"honorific",
@@ -2789,7 +2800,13 @@ int createSecondaryPatterns2(void)
 		1, L"_ADJECTIVE", 0, 1, 1,
 		1, L"_PP*1", 0, 0, 1,
 		0);
-	// DECLARATIVES p.803 CGEL
+	return 0;
+}
+
+int createSecondaryPatterns__S1(void)
+{
+	LFS
+		// DECLARATIVES p.803 CGEL
 	// The simple sentence (p. 754)
 	// SVC, SVA, SV, SVO, SVOC, SVOA, SVOO
 	// SVC: Subject, Verb, subject Complement
@@ -2878,7 +2895,13 @@ int createSecondaryPatterns2(void)
 		1, L"modal_auxiliary{V_AGREE}", 0, 1, 1,
 		0);
 	// END OBJVERB patterns - reverse END
-	// *I* shall have to speak to *whoever is in charge * .
+	return 0;
+}
+
+int createSecondaryPatterns__NOUN(void)
+{
+	LFS
+		// *I* shall have to speak to *whoever is in charge * .
 	cPattern::create(L"__NOUN{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:_BLOCK:GNOUN:VNOUN:_EXPLICIT_SUBJECT_VERB_AGREEMENT:_CHECK_IGNORABLE_FORMS}", L"Z",
 		5, L"interrogative_determiner|whatever{SUBJECT}", L"interrogative_determiner|whichever{SUBJECT}", L"interrogative_determiner|whosoever{SUBJECT}", L"interrogative_determiner|whoever{SUBJECT}", L"interrogative_determiner|wherever{SUBJECT}", 0, 1, 1,
 		1, L"__ALLVERB*1", 0, 1, 1, // make this more expensive than a normal__S1
@@ -2952,6 +2975,12 @@ int createSecondaryPatterns2(void)
 		1, L"determiner|a{DET}", 0, 1, 1,
 		1, L"noun{N_AGREE}", 0, 1, 1,
 		0);
+	return 0;
+}
+
+int createSecondaryPatterns__VERB(void)
+{
+	LFS
 
 	// * When _ALLOBJECT was a single object:
 	//     adjective must not be in __ALLOBJECT because __ALLOBJECT is repeated.  When this happens the adjective belonging to
@@ -3092,7 +3121,13 @@ int createSecondaryPatterns2(void)
 		1, L"_COULDHAVEBEEN", 0, 1, 1,
 		1, L"verb|making", 0, 1, 1,
 		0);
-	// *I* shall make you sorry you ever came near my hickory tree
+	return 0;
+}
+
+int createSecondaryPatterns_MS1(void)
+{
+	LFS
+		// *I* shall make you sorry you ever came near my hickory tree
 	// A blend of R3 and 5
 	cPattern::create(L"__S1{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"M4",
 		1, L"__C1__S1", 0, 1, 1,
@@ -3187,7 +3222,13 @@ int createSecondaryPatterns2(void)
 		1, L"__NOUN", 0, 1, 1,
 		1, L"__CLOSING__S1", 0, 0, 3,
 		0);
-	// Later, in her room, she sat and read.
+	return 0;
+}
+
+int createSecondaryPatterns__INTRO_N(void)
+{
+	LFS
+		// Later, in her room, she sat and read.
 	// restrict this to things relating to "time"? (see [9])
 	// __INTRO_N was introduced to prevent meta patterns incorporating Q1 and VERBREL from 
 	// acquiring subjects (through __INTRO_N) and then eliminating _S1 by being lower in cost.  __INTRO_S1 should be used
@@ -3264,6 +3305,12 @@ int createSecondaryPatterns2(void)
 		1, L"adjective", 0, 0, 1, // solemn
 		2, L"noun|word", L"noun|oath", 0, 1, 1,
 		0);
+	return 0;
+}
+
+int createSecondaryPatterns__INTRO_S1(void)
+{
+	LFS
 
 	// Hullo, stranger
 	// Oh, well! / Oh, very well!
@@ -3411,7 +3458,13 @@ int createSecondaryPatterns2(void)
 		1, L"_ADJECTIVE", 0, 0, 1,
 		1, L"_PP", 0, 0, 1,
 		0);
-	// Please, Tommy?  Later, Tommy. Yes Mom. Sorry, Tuppence.
+	return 0;
+}
+
+int createSecondaryPatterns__S2(void)
+{
+	LFS
+		// Please, Tommy?  Later, Tommy. Yes Mom. Sorry, Tuppence.
 	cPattern::create(L"__S2{_FINAL:_ONLY_BEGIN_MATCH:_ONLY_END_MATCH}", L"5",
 		2, L"_ADVERB", L"interjection*-4", 0, 1, 1, // pray / please / Yes (ADVERB)
 		1, L",", 0, 0, 1,
@@ -3459,7 +3512,13 @@ int createSecondaryPatterns2(void)
 		2, L",", L".", 0, 0, 1,
 		1, L"quotes", CLOSE_INFLECTION, 1, 1,
 		0);
-	//cPattern::create(L"__S1{_FINAL}",L"7",
+	return 0;
+}
+
+int createSecondaryPatterns_COMMAND(void)
+{
+	LFS
+		//cPattern::create(L"__S1{_FINAL}",L"7",
 	//                 1,L"__C1__S1",0,1,1,
 	//                 1,L"_VERB_ID{id}",0,1,1,
 	//                 1,L"_ADJECTIVE",0,1,1,
@@ -3551,6 +3610,12 @@ int createSecondaryPatterns2(void)
 		3, L"_NOUN_OBJ", L"__NOUN[*]", L"__MNOUN[*]", 0, 0, 1, // Tell me you were with monsieur Poirot.
 		1, L"__S1[*]{_BLOCK:OBJECT:EVAL}", 0, 1, 1,
 		0);
+	return 0;
+}
+
+int createSecondaryPatterns_REL(void)
+{
+	LFS
 
 	//cPattern::create(L"__NOUN", L"H",
 	//	1, L"_ADVERB", 0, 0, 1, // much more / ever more
@@ -3635,6 +3700,12 @@ int createSecondaryPatterns2(void)
 		4, L"adverb|then", L"_ADVERB", L"conjunction|though*-3", L"quantifier|all*-2", 0, 0, 1, // though is not used as a conjunction often, but should be one in this position
 		1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
 		0);
+	return 0;
+}
+
+int createSecondaryPatterns_MS1_1(void)
+{
+	LFS
 
 	cPattern::create(L"__PP", L"A",
 		1, L"_ADVERB*1", 0, 0, 1, // discourage ADVERBS if they can be picked up from ALLOBJECTS instead and bound to the previous verb
@@ -3708,7 +3779,13 @@ int createSecondaryPatterns2(void)
 											 1,L"_MSTAIL",0,1,1,
 											 0);
 											 */
-	cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}", L"1",
+	return 0;
+}
+
+int createSecondaryPatterns__MSTAIL(void)
+{
+	LFS
+		cPattern::create(L"__MSTAIL{NO_MIDDLE_MATCH:_BLOCK:EVAL}", L"1",
 		1, L",", 0, 0, 1,
 		1, L"_ADVERB", 0, 0, 1,
 		4, L"adverb|then", L"adverb|so", L"conjunction", L"coordinator", 0, 1, 1,
@@ -3806,7 +3883,13 @@ int createSecondaryPatterns2(void)
 		0);
 	// prevents multiplicative nesting in _MS1
 	cPattern::create(L"_MSTAIL{_NO_REPEAT}", L"", 1, L"__MSTAIL[*]", 0, 1, 4, 0);
-	cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}", L"3",
+	return 0;
+}
+
+int createSecondaryPatterns_MS1_2(void)
+{
+	LFS
+		cPattern::create(L"_MS1{_FINAL_IF_ALONE:_ONLY_BEGIN_MATCH}", L"3",
 		1, L"_INTRO_S1", 0, 0, 1,
 		1, L"__S1{_BLOCK:EVAL}", 0, 1, 1,
 		1, L"adverb|more", 0, 1, 1,
@@ -3983,6 +4066,12 @@ int createSecondaryPatterns2(void)
 		1, L",", 0, 1, 1,
 		1, L"__NOUN[*]", 0, 1, 1,
 		0);
+		return 0;
+	}
+
+	int createSecondaryPatterns_OTHER_VERB(void)
+	{
+		LFS
 
 	//cPattern::create(L"_MS1{_FINAL:_ONLY_BEGIN_MATCH}",L"C",
 	//                 1,L"_ADJECTIVE",0,1,1, // afraid I don't.
@@ -4052,3 +4141,23 @@ int createSecondaryPatterns2(void)
 	return 0;
 }
 
+	int createSecondaryPatterns2(void)
+	{
+		createSecondaryPatterns__C1_IP();
+		createSecondaryPatterns__C1__S1();
+		createSecondaryPatterns__CLOSING__S1();
+		createSecondaryPatterns__S1();
+		createSecondaryPatterns__NOUN();
+		createSecondaryPatterns__VERB();
+		createSecondaryPatterns_MS1();
+		createSecondaryPatterns__INTRO_N();
+		createSecondaryPatterns__INTRO_S1();
+		createSecondaryPatterns__S2();
+		createSecondaryPatterns_COMMAND();
+		createSecondaryPatterns_REL();
+		createSecondaryPatterns_MS1_1();
+		createSecondaryPatterns__MSTAIL();
+		createSecondaryPatterns_MS1_2();
+		createSecondaryPatterns_OTHER_VERB();
+		return 0;
+	}

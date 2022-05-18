@@ -2440,6 +2440,7 @@ void cSource::distributePOV()
 				lplog(LOG_RESOLUTION | LOG_SG, L"speakers added to observer-created speakerGroup %s (conversation restriction isAnyObserverSpeakerNew=%s isAnyNonObserverSpeakerNew=%s observerContinuing=%s).",
 					toText(speakerGroups[sgi], tmpstr2), (isAnyObserverSpeakerNew) ? L"true" : L"false", (isAnyNonObserverSpeakerNew) ? L"true" : L"false", (observerContinuing) ? L"true" : L"false");
 		}
+		for (section = 0; section + 1 < sections.size() && (signed)sections[section + 1].begin < speakerGroups[sgi].sgBegin; section++);
 		if (conversationRestricted)
 		{
 			if (speakerGroups[sgi].observers.size())
@@ -2452,7 +2453,6 @@ void cSource::distributePOV()
 		else
 		{
 			// both speakergroups must belong to the same section
-			for (section = 0; section + 1 < sections.size() && (signed)sections[section + 1].begin < speakerGroups[sgi].sgBegin; section++);
 			bool previousSpeakerGroupInSameSection = section < sections.size() && sgi>0 && ((signed)sections[section].begin < speakerGroups[sgi - 1].sgBegin);
 			addPreviousObserver(sgi, previousSpeakerGroupInSameSection);
 			addPreviousPOV(sgi, previousSpeakerGroupInSameSection);

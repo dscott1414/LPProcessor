@@ -2713,40 +2713,10 @@ bool cSource::findLowCostTag(vector<cTagLocation>& tagSet, int& cost, const wcha
 	return false;
 }
 
-//  desiredTagSets.push_back(cTagSet(NOUN_DETERMINER_TAGSET,1,"N_AGREE",NULL));
-int cSource::evaluateNounDeterminer(vector <cTagLocation>& tagSet, bool assessCost, int& traceSource, int begin, int end, int fromPEMAPosition)
+void cSource::evaluateNounDeterminerAdjectiveVerbPresentParticiple(int begin, int end, int fromPEMAPosition, int &PNC)
 {
-	LFS
-		int nounTag = -1, nextNounTag = -1, nAgreeTag = -1, nextNAgreeTag = -1, nextDet = -1, PNC = 0;// , nextName = -1, subObjectTag = -1;
-	if ((nounTag = findTag(tagSet, L"NOUN", nextNounTag)) >= 0) // PNOUN not included because personal pronouns do not have determiners and the patterns cannot match for them, so this case will not occur.
-		nAgreeTag = findTagConstrained(tagSet, L"N_AGREE", nextNAgreeTag, tagSet[nounTag]);
-	else
-	{
-		if (debugTrace.traceDeterminer)
-			lplog(L"%d:Noun (%d,%d) has no noun tag (cost=%d) [SOURCE=%06d].", begin, begin, end, PNC, traceSource = gTraceSource++);
-		return PNC;
-	}
-	if (fromPEMAPosition != abs(tagSet[nounTag].PEMAOffset) && pema[abs(tagSet[nounTag].PEMAOffset)].flagSet(cPatternElementMatchArray::COST_ND))
-	{
-		if (debugTrace.traceDeterminer)
-		{
-			int pattern = pema[abs(tagSet[nounTag].PEMAOffset)].getParentPattern();
-			lplog(L"%d:======== EVALUATION %06d %s[%s](%d,%d) SKIPPED (ND already evaluated)", begin, fromPEMAPosition, patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), begin, end);
-		}
-		return 0;
-	}
-	if (nAgreeTag >= 0 && nAgreeTag < end - 1 && calculateVerbAfterVerbUsage(end - 1, end, false)) // if nAgreeTag<end-1, it is more likely a compound noun
-	{
-		if (debugTrace.traceDeterminer)
-		{
-			//printTagSet(LOG_INFO, L"_ND2", -1, tagSet, begin, fromPEMAPosition);
-			wstring phrase;
-			lplog(L"%d:%s[%s]:%s(%s):Noun (%d,%d) is compound, has a verb at end and a verb after the end (cost=%d). [SOURCE=%06d].", begin, (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->differentiator.c_str(), phraseString(begin, end, phrase, true).c_str(), m[end].word->first.c_str(), begin, end, cSourceWordInfo::COST_OF_INCORRECT_VERBAL_NOUN, traceSource = gTraceSource);
-		}
-		PNC += cSourceWordInfo::COST_OF_INCORRECT_VERBAL_NOUN;
-	}
 	// for nouns where the immediately preceding adjective in the noun is a verb, and that verb has a relation to the head noun.
-	// He had *one stinging cut*.  So - does the *cut* *sting*? - head noun is subject, adjective is verb
+// He had *one stinging cut*.  So - does the *cut* *sting*? - head noun is subject, adjective is verb
 	if (end - begin > 1 && end - begin < 4 && m[end - 2].queryForm(verbForm) >= 0 && (m[end - 2].word->second.inflectionFlags & VERB_PRESENT_PARTICIPLE) &&
 		m[end - 1].queryForm(nounForm) >= 0 && m[end - 1].word->first != L"that" && m[end - 1].queryForm(adverbForm) < 0)
 	{
@@ -2780,6 +2750,29 @@ int cSource::evaluateNounDeterminer(vector <cTagLocation>& tagSet, bool assessCo
 			}
 		}
 	}
+}
+
+void cSource::evaluateNounDeterminerFromToOrToSame(int begin, int end, int fromPEMAPosition, int& PNC)
+{
+	// when they got through he kept walking abreast , *elbow to elbow* almost .
+// this covers the first noun, the second test below covers the second noun
+	if (begin < m.size() - 2 && m[begin + 1].word->first == L"to" && m[begin].queryForm(verbForm) >= 0 &&
+		(m[begin].word->second.inflectionFlags & SINGULAR) &&
+		!(m[begin].word->second.inflectionFlags & (SINGULAR_OWNER | PLURAL_OWNER)) && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm)) < 5 &&
+		((begin >= 1 && m[begin - 1].word->first == L"from" && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm)) > 0) || m[begin + 2].word->first == m[begin].word->first))
+	{
+		// from face to face / rock to rock / stone to stone
+		if (debugTrace.traceDeterminer)
+		{
+			wstring phrase;
+			lplog(L"%d:%s[%s]:(%s)%s: Noun (%d,%d) has 'from' 'to' construction OR 'noun' to 'same noun' cost-=4", begin, (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->differentiator.c_str(), m[begin - 1].word->first.c_str(), phraseString(begin, end, phrase, true).c_str(), begin, end);
+		}
+		PNC -= 4;
+	}
+}
+
+void cSource::evaluateNounDeterminerPreferVerbAfterTo(int begin, int end, int fromPEMAPosition, int& PNC)
+{
 	// to interest Bob - interest would need a determiner, but not as an adjective, and after a 'to' is probably a verb
 	if (end - begin == 2 && m[begin].queryForm(nounForm) >= 0 && begin > 0 && m[begin - 1].word->first == L"to" && m[begin].word->second.getUsageCost(cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER) == 4)
 	{
@@ -2797,21 +2790,26 @@ int cSource::evaluateNounDeterminer(vector <cTagLocation>& tagSet, bool assessCo
 			}
 		}
 	}
-	// when they got through he kept walking abreast , *elbow to elbow* almost .
-	// this covers the first noun, the second test below covers the second noun
-	if (begin < m.size() - 2 && m[begin + 1].word->first == L"to" && m[begin].queryForm(verbForm) >= 0 &&
-		(m[begin].word->second.inflectionFlags & SINGULAR) &&
-		!(m[begin].word->second.inflectionFlags & (SINGULAR_OWNER | PLURAL_OWNER)) && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm)) < 5 &&
-		((begin >= 1 && m[begin - 1].word->first == L"from" && m[begin].word->second.getUsageCost(m[begin].queryForm(verbForm)) > 0) || m[begin + 2].word->first == m[begin].word->first))
+}
+
+void cSource::evaluateNounDeterminerIncorrectVerbalNoun(int& traceSource, int begin, int end, int fromPEMAPosition, int nAgreeTag, int& PNC)
+{
+	if (nAgreeTag >= 0 && nAgreeTag < end - 1 && calculateVerbAfterVerbUsage(end - 1, end, false)) // if nAgreeTag<end-1, it is more likely a compound noun
 	{
-		// from face to face / rock to rock / stone to stone
 		if (debugTrace.traceDeterminer)
 		{
+			//printTagSet(LOG_INFO, L"_ND2", -1, tagSet, begin, fromPEMAPosition);
 			wstring phrase;
-			lplog(L"%d:%s[%s]:(%s)%s: Noun (%d,%d) has 'from' 'to' construction OR 'noun' to 'same noun' cost-=4", begin, (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->differentiator.c_str(), m[begin - 1].word->first.c_str(), phraseString(begin, end, phrase, true).c_str(), begin, end);
+			lplog(L"%d:%s[%s]:%s(%s):Noun (%d,%d) is compound, has a verb at end and a verb after the end (cost=%d). [SOURCE=%06d].", 
+				begin, (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->differentiator.c_str(), phraseString(begin, end, phrase, true).c_str(), 
+				m[end].word->first.c_str(), begin, end, cSourceWordInfo::COST_OF_INCORRECT_VERBAL_NOUN, traceSource = gTraceSource);
 		}
-		PNC -= 4;
+		PNC += cSourceWordInfo::COST_OF_INCORRECT_VERBAL_NOUN;
 	}
+}
+
+void cSource::evaluateNounDeterminerFromTo2OrPreferVerb(int begin, int end, int fromPEMAPosition, int& PNC)
+{
 	// I went to jail with him.
 	if (begin > 0 && m[begin - 1].word->first == L"to" && m[begin].queryForm(verbForm) >= 0 &&
 		(m[begin].word->second.inflectionFlags & SINGULAR) &&
@@ -2844,8 +2842,12 @@ int cSource::evaluateNounDeterminer(vector <cTagLocation>& tagSet, bool assessCo
 			PNC += toFormVerbCost; // 10
 		}
 	}
+}
+
+// Quick as a flash Tommy / in a moment Edith
+void cSource::evaluateNounDeterminerDetectSeparateTime(int begin, int end, int& PNC)
+{
 	//__int64 or=m[begin].objectRole;
-	// Quick as a flash Tommy / in a moment Edith
 	if (end - begin == 3 &&
 		m[end - 1].forms.isSet(PROPER_NOUN_FORM_NUM) && (m[end - 2].word->second.timeFlags & T_UNIT) && (m[begin].word->first == L"a" || m[begin].word->first == L"the") &&
 		begin && m[begin - 1].queryForm(prepositionForm) >= 0)
@@ -2854,6 +2856,10 @@ int cSource::evaluateNounDeterminer(vector <cTagLocation>& tagSet, bool assessCo
 			lplog(L"%d:Noun (%d,%d) has a time value after a preposition", begin, begin, end);
 		PNC += 6;
 	}
+}
+
+void cSource::evaluateNounDeterminerDetectIncorrectOrderingDeterminersAfterHer(int begin, int end, int& PNC)
+{
 	// disallow incorrect ordering of determiners after 'her'
 	for (int h = begin; h < end; h++)
 		if (m[h].word->first == L"her" && h + 1 < end)
@@ -2866,10 +2872,12 @@ int cSource::evaluateNounDeterminer(vector <cTagLocation>& tagSet, bool assessCo
 				PNC += 6;
 			}
 		}
-	// disallow adjectives after nouns!
-	// her cold
+}
+
+void cSource::evaluateNounDeterminerDisallowPronounPrecededByNoun(int& traceSource, int begin, int end, int& PNC)
+{
 	// P.N.C. He
-	// it is time I strolled around to the Ritz
+// it is time I strolled around to the Ritz
 	if (end - begin > 1)
 	{
 		int wb = begin + 1;
@@ -2885,9 +2893,13 @@ int cSource::evaluateNounDeterminer(vector <cTagLocation>& tagSet, bool assessCo
 			}
 		}
 	}
+}
+
+void cSource::evaluateNounDeterminerDetectNounDeterminerMissedCost(vector <cTagLocation>& tagSet, int nounTag, int fromPEMAPosition)
+{
 	// set the actual noun pattern that is being used, so that if __NOUN[9] comes first, for example, that the NOUNs in NOUN[9] don't get counted twice (once here, and once on their own).
-	// problem - what if _NOUN[2] needs to be evaluated separately because _NOUN[9] is not under a certain PP.  Therefore, this flag cannot be set on this child (commented out below).
-	// This has been corrected another way - see stopCascadeWhenNDAlreadySet.  This will stop the cascade upwards of the child pattern if the parent has already been evaluated for noun determiner.
+// problem - what if _NOUN[2] needs to be evaluated separately because _NOUN[9] is not under a certain PP.  Therefore, this flag cannot be set on this child (commented out below).
+// This has been corrected another way - see stopCascadeWhenNDAlreadySet.  This will stop the cascade upwards of the child pattern if the parent has already been evaluated for noun determiner.
 	if (debugTrace.traceDeterminer && nounTag >= 0 && !pema[abs(tagSet[nounTag].PEMAOffset)].flagSet(cPatternElementMatchArray::COST_ND))
 	{
 		wstring from;
@@ -2903,66 +2915,21 @@ int cSource::evaluateNounDeterminer(vector <cTagLocation>& tagSet, bool assessCo
 				tagSet[nounTag].parentElement, from.c_str());
 	}
 	//pema[tagSet[nounTag].PEMAOffset].setFlag(cPatternElementMatchArray::COST_ND);
-	if (nAgreeTag < 0)
-	{
-		if (debugTrace.traceDeterminer)
-			lplog(L"%d:Noun (%d,%d) has no nAgree tag (cost=%d) [SOURCE=%06d].", begin, begin, end, PNC, traceSource = gTraceSource++);
-		return PNC;
-	}
+}
 
-	/*
-	if ((subObjectTag=findOneTag(tagSet,L"SUBOBJECT",-1))>=0)
-	{
-		vector < vector <cTagLocation> > subobjectTagSets;
-		if (startCollectTagsFromTag(false,nounDeterminerTagSet,tagSet[subObjectTag],subobjectTagSets,-1,false,L"noun determiner - SUBOBJECT")>=0)
-			for (unsigned int J=0; J<subobjectTagSets.size(); J++)
-			{
-				if (t.traceSpeakerResolution)
-					::printTagSet(LOG_RESOLUTION,L"SUBOBJECT",J,subobjectTagSets[J]);
-				if (subobjectTagSets[J].empty()) continue; // shouldn't happen - but does
-				PNC+=evaluateNounDeterminer(subobjectTagSets[J],true,traceSource,tagSet[subObjectTag].sourcePosition,tagSet[subObjectTag].sourcePosition+tagSet[subObjectTag].len,tagSet[subObjectTag].PEMAOffset);
-			}
-	}
-	*/
-	int whereNAgree = tagSet[nAgreeTag].sourcePosition;
-	tIWMM nounWord = m[whereNAgree].word;
-	if (!(nounWord->second.inflectionFlags & SINGULAR))
-	{
-		// disallow the adjective 'one' immediately before a noun that is plural
-		// if *any one wishes* to know.
-		if (begin < whereNAgree && m[whereNAgree - 1].word->first == L"one")
-		{
-			if (debugTrace.traceDeterminer)
-				lplog(L"%d:plural noun %s has an immediately preceding contradictory adjective 'one' [SOURCE=%06d].", whereNAgree, nounWord->first.c_str(), traceSource = gTraceSource++);
-			PNC += 10;
-		}
-		else if (debugTrace.traceDeterminer)
-			lplog(L"%d:noun %s is not singular [SOURCE=%06d].", whereNAgree, nounWord->first.c_str(), traceSource = gTraceSource++);
-		return PNC;
-	}
-	if (!tagIsCertain(whereNAgree))
-	{
-		if (debugTrace.traceDeterminer)
-			lplog(L"%d:tag for noun %s is not certain [SOURCE=%06d].", whereNAgree, nounWord->first.c_str(), traceSource = gTraceSource++);
-		return PNC;
-	}
-	// mine is both a possessive pronoun AND a noun in completely different word senses, so they have differing determiner usage.
-	if (m[whereNAgree].word->first == L"mine")
-	{
-		if (debugTrace.traceDeterminer)
-			lplog(L"%d:tag for noun/pronoun %s has potentially conflicting determiner usage (PEMA=%d). [SOURCE=%06d].", whereNAgree, nounWord->first.c_str(), tagSet[nAgreeTag].PEMAOffset, traceSource = gTraceSource++);
-		return PNC;
-	}
-	int whereDeterminerTag;
-	bool hasDeterminer = (whereDeterminerTag = findTagConstrained(tagSet, L"DET", nextDet, tagSet[nounTag])) >= 0;
+bool cSource::evaluateNounDeterminerSetHasDeterminer(vector <cTagLocation>& tagSet, int& traceSource, int begin, int nounTag, int nAgreeTag, int whereNAgree, tIWMM nounWord, bool &hasDeterminer)
+{
+	int whereDeterminerTag, nextDet = -1;
+	hasDeterminer = (whereDeterminerTag = findTagConstrained(tagSet, L"DET", nextDet, tagSet[nounTag])) >= 0;
 	if (whereDeterminerTag >= 0)
 	{
 		wstring det = m[tagSet[whereDeterminerTag].sourcePosition].word->first;
 		if (det == L"some" || det == L"much" || det == L"any") // special determiners that can combine with uncoutable nouns (Longman 4.4.4)
 		{
 			if (debugTrace.traceDeterminer)
-				lplog(L"%d:determiner %s for noun/pronoun %s is also for use in uncountable nouns and so is invalid for determiner checking (PEMA=%d). [SOURCE=%06d].", tagSet[whereDeterminerTag].sourcePosition, det.c_str(), nounWord->first.c_str(), tagSet[nAgreeTag].PEMAOffset, traceSource = gTraceSource++);
-			return PNC;
+				lplog(L"%d:determiner %s for noun/pronoun %s is also for use in uncountable nouns and so is invalid for determiner checking (PEMA=%d). [SOURCE=%06d].", 
+					tagSet[whereDeterminerTag].sourcePosition, det.c_str(), nounWord->first.c_str(), tagSet[nAgreeTag].PEMAOffset, traceSource = gTraceSource++);
+			return true;
 		}
 	}
 	int b = tagSet[nounTag].sourcePosition;
@@ -2999,6 +2966,78 @@ int cSource::evaluateNounDeterminer(vector <cTagLocation>& tagSet, bool assessCo
 		hasDeterminer=true;
 	}
 	*/
+	return false;
+}
+
+//  desiredTagSets.push_back(cTagSet(NOUN_DETERMINER_TAGSET,1,"N_AGREE",NULL));
+int cSource::evaluateNounDeterminer(vector <cTagLocation>& tagSet, bool assessCost, int& traceSource, int begin, int end, int fromPEMAPosition)
+{
+	LFS
+		int nounTag = -1, nextNounTag = -1, nAgreeTag = -1, nextNAgreeTag = -1, PNC = 0;// , nextName = -1, subObjectTag = -1;
+	if ((nounTag = findTag(tagSet, L"NOUN", nextNounTag)) >= 0) // PNOUN not included because personal pronouns do not have determiners and the patterns cannot match for them, so this case will not occur.
+		nAgreeTag = findTagConstrained(tagSet, L"N_AGREE", nextNAgreeTag, tagSet[nounTag]);
+	else
+	{
+		if (debugTrace.traceDeterminer)
+			lplog(L"%d:Noun (%d,%d) has no noun tag (cost=%d) [SOURCE=%06d].", begin, begin, end, PNC, traceSource = gTraceSource++);
+		return PNC;
+	}
+	if (fromPEMAPosition != abs(tagSet[nounTag].PEMAOffset) && pema[abs(tagSet[nounTag].PEMAOffset)].flagSet(cPatternElementMatchArray::COST_ND))
+	{
+		if (debugTrace.traceDeterminer)
+		{
+			int pattern = pema[abs(tagSet[nounTag].PEMAOffset)].getParentPattern();
+			lplog(L"%d:======== EVALUATION %06d %s[%s](%d,%d) SKIPPED (ND already evaluated)", begin, fromPEMAPosition, patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), begin, end);
+		}
+		return 0;
+	}
+	evaluateNounDeterminerIncorrectVerbalNoun(traceSource, begin, end, fromPEMAPosition, nAgreeTag, PNC);
+	evaluateNounDeterminerAdjectiveVerbPresentParticiple(begin,end, fromPEMAPosition, PNC);
+	evaluateNounDeterminerPreferVerbAfterTo(begin, end, fromPEMAPosition, PNC);
+	evaluateNounDeterminerFromToOrToSame(begin, end, fromPEMAPosition, PNC);
+	evaluateNounDeterminerFromTo2OrPreferVerb(begin, end, fromPEMAPosition, PNC);
+	evaluateNounDeterminerDetectSeparateTime(begin, end, PNC);
+	evaluateNounDeterminerDetectIncorrectOrderingDeterminersAfterHer(begin, end, PNC);
+	evaluateNounDeterminerDisallowPronounPrecededByNoun(traceSource, begin, end, PNC);
+	evaluateNounDeterminerDetectNounDeterminerMissedCost(tagSet, nounTag, fromPEMAPosition);
+	if (nAgreeTag < 0)
+	{
+		if (debugTrace.traceDeterminer)
+			lplog(L"%d:Noun (%d,%d) has no nAgree tag (cost=%d) [SOURCE=%06d].", begin, begin, end, PNC, traceSource = gTraceSource++);
+		return PNC;
+	}
+	int whereNAgree = tagSet[nAgreeTag].sourcePosition;
+	tIWMM nounWord = m[whereNAgree].word;
+	if (!(nounWord->second.inflectionFlags & SINGULAR))
+	{
+		// disallow the adjective 'one' immediately before a noun that is plural
+		// if *any one wishes* to know.
+		if (begin < whereNAgree && m[whereNAgree - 1].word->first == L"one")
+		{
+			if (debugTrace.traceDeterminer)
+				lplog(L"%d:plural noun %s has an immediately preceding contradictory adjective 'one' [SOURCE=%06d].", whereNAgree, nounWord->first.c_str(), traceSource = gTraceSource++);
+			PNC += 10;
+		}
+		else if (debugTrace.traceDeterminer)
+			lplog(L"%d:noun %s is not singular [SOURCE=%06d].", whereNAgree, nounWord->first.c_str(), traceSource = gTraceSource++);
+		return PNC;
+	}
+	if (!tagIsCertain(whereNAgree))
+	{
+		if (debugTrace.traceDeterminer)
+			lplog(L"%d:tag for noun %s is not certain [SOURCE=%06d].", whereNAgree, nounWord->first.c_str(), traceSource = gTraceSource++);
+		return PNC;
+	}
+	// mine is both a possessive pronoun AND a noun in completely different word senses, so they have differing determiner usage.
+	if (m[whereNAgree].word->first == L"mine")
+	{
+		if (debugTrace.traceDeterminer)
+			lplog(L"%d:tag for noun/pronoun %s has potentially conflicting determiner usage (PEMA=%d). [SOURCE=%06d].", whereNAgree, nounWord->first.c_str(), tagSet[nAgreeTag].PEMAOffset, traceSource = gTraceSource++);
+		return PNC;
+	}
+	bool hasDeterminer;
+	if (evaluateNounDeterminerSetHasDeterminer(tagSet, traceSource, begin, nounTag, nAgreeTag, whereNAgree, nounWord, hasDeterminer))
+		return PNC;
 	if (nounWord->second.query(nounForm) >= 0 && nounWord->second.query(possessivePronounForm) >= 0)
 		if (nounWord->second.mainEntry != wNULL)
 			nounWord = nounWord->second.mainEntry;
