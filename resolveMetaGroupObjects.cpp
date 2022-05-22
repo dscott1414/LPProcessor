@@ -243,109 +243,151 @@ int cSource::checkIfOne(int I, int latestObject, set <int>* speakers)
 	return -1;
 }
 
-bool cSource::resolveMetaGroupGenericOther(int where, int latestOwnerWhere, bool inQuote, vector <cOM>& objectMatches)
+void cSource::resolveMetaGroupMatchLatestSpeakerMatchingGender(const int where, const int o, int latestObjectWhere, vector <cSpeakerGroup>::iterator sg, const int latestObject, vector <cOM>& objectMatches)
 {
-	LFS
-		// the other hand, the other leg, etc should be matched to another body object only
-		bool singularBodyPart;
-	if (m[where].getObject() >= 0 && isExternalBodyPart(where, singularBodyPart, true))
-		return false;
-	// the other first means 'the other' first /  STAYWe[tuppence,tommy] shall keep it to the last and ENTERopen the other first . ” 
-	if (m[where].queryWinnerForm(numeralOrdinalForm) >= 0)
-		return false;
-	vector <cSpeakerGroup>::iterator csg = speakerGroups.begin() + currentSpeakerGroup;
-	bool physicallyEvaluated, physicallyPresent = physicallyPresentPosition(where, m[where].beginObjectPosition, physicallyEvaluated, false) && physicallyEvaluated;
+	if (!objectMatches.empty())
+		return;
 	wstring tmpstr, tmpstr2, tmpstr3;
-	int numEOS = 0, numSectionWord = 0;
-	if (lastOpeningPrimaryQuote >= 0 && m[lastOpeningPrimaryQuote].endQuote >= 0)
-		for (int I = m[lastOpeningPrimaryQuote].endQuote; I < where && numEOS < 2 && numSectionWord < 2; I++)
+	bool matchGender = (objects[o].male ^ objects[o].female);
+	// When referring to 'the other woman', it is probably not referring to another woman other than
+	// the POV, but rather choosing between two women other than the POV, unless there is only one other woman.
+	if (sg->povSpeakers.find(latestObject) != sg->povSpeakers.end() ||
+		(matchGender && !objects[o].matchGender(objects[latestObject]))) 
+		return;
+	if (debugTrace.traceSpeakerResolution)
+		lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther based on sg %s", where, toText(*sg, tmpstr3));
+	// The latest object agreeing with the gender of 'o' is at the current location (I) - latestObject
+	// Now look for the object occurring closest to and before latestObject in the speakerGroup agreeing with the gender of o.
+	int latestOtherObjectWhere = -1, latestOtherObject = -1;
+	vector <cLocalFocus>::iterator lsi;
+	for (set <int>::iterator si = sg->speakers.begin(), siEnd = sg->speakers.end(); si != siEnd; si++)
+		if ((!matchGender || objects[o].matchGender(objects[*si])) && *si != latestObject && *si != o &&
+			sg->povSpeakers.find(*si) == sg->povSpeakers.end() &&
+			(lsi = in(*si)) != localObjects.end() && (latestOtherObjectWhere == -1 || latestOtherObjectWhere < lsi->lastWhere))
 		{
-			if (isEOS(I)) numEOS++;
-			if (m[I].word == Words.sectionWord) numSectionWord++;
+			latestOtherObjectWhere = lsi->lastWhere;
+			latestOtherObject = *si;
 		}
-	// if physically present subject of first sentence after quote
-	if (!inQuote && physicallyPresent && (m[where].objectRole & SUBJECT_ROLE) && numEOS == 0 && numSectionWord == 1 && lastOpeningPrimaryQuote >= 0 &&
-		(m[lastOpeningPrimaryQuote].audienceObjectMatches.size() == 1 || in(*csg->povSpeakers.begin(), m[lastOpeningPrimaryQuote].audienceObjectMatches) != m[lastOpeningPrimaryQuote].audienceObjectMatches.end()))
+	if (latestOtherObjectWhere != -1)
 	{
-		objectMatches = m[lastOpeningPrimaryQuote].audienceObjectMatches;
-		if (objectMatches.size() > 1 && csg->povSpeakers.size())
-			subtract(objectMatches, csg->povSpeakers);
+		objectMatches.push_back(cOM(latestOtherObject, SALIENCE_THRESHOLD));
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther: audience immediately after speaker lastOpeningPrimaryQuote=%d:%s", where, lastOpeningPrimaryQuote, objectString(objectMatches, tmpstr3, true).c_str());
+			lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther (speakers - any '%s' than %d:%s) resolved to %d:%s",
+				where, objectString(o, tmpstr3, true).c_str(),
+				latestObjectWhere, objectString(latestObject, tmpstr, true).c_str(),
+				latestOtherObjectWhere, objectString(objectMatches, tmpstr2, true).c_str());
+	}
+}
+
+void cSource::resolveMetaGroupGenericOtherTwoSpeaker(const int where, vector <cSpeakerGroup>::iterator sg, vector <cOM>& objectMatches)
+{
+	// if she[cook] missed the other[tuppence] (29868:match even though POV)
+	if (objectMatches.empty() && sg->speakers.size() == 2 && m[where].relSubject >= 0 && m[m[where].relSubject].objectMatches.size() <= 1)
+	{
+		int whereSubject = m[where].relSubject, subject = (m[whereSubject].objectMatches.empty()) ? m[whereSubject].getObject() : m[whereSubject].objectMatches[0].object;
+		if (sg->speakers.find(subject) != sg->speakers.end())
+		{
+			wstring tmpstr3;
+			for (set <int>::iterator si = sg->speakers.begin(), siEnd = sg->speakers.end(); si != siEnd; si++)
+				if (*si != subject)
+					objectMatches.push_back(cOM(*si, SALIENCE_THRESHOLD));
+			if (debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther (2 speakers subject/object L&L) based on sg %s", where, toText(*sg, tmpstr3));
+		}
+	}
+}
+
+bool cSource::resolveMetaGroupGenericObserver(const int where, bool inQuote, int latestOwnerWhere, int latestObject, int o, int latestObjectWhere, vector <cSpeakerGroup>::iterator sg, vector <cOM>& objectMatches)
+{
+	// speaker group:
+	// A naturalized German[12858-12861][12860][gendem][M]
+	// boris ivanovitch [19627][name][M][OBJ][PREP_OBJ][MOVE_PREP][F:boris L:ivanovitch ]
+	// the other[23011-23013]{OWNER: WO -2 other}[23012][mg][M][OGEN][SUBJ][ambiguous]
+	// the German[german] seemed to pull himself[german] together . 
+	// he[german,boris] indicated the place he[german] had been occupying at the head[head] of the table[table] . 
+	// the Russian[boris] demurred , but the other insisted .
+	// if the speakerGroup contains 2 or 3 (and the 3rd one is the generic other)
+	if (!inQuote && latestOwnerWhere == -2 && m[where].word->first == L"other" && (sg->speakers.size() == 2 ||
+		(sg->speakers.size() == 3 && sg->speakers.find(o) != sg->speakers.end()) ||
+		(sg->speakers.size() - sg->observers.size() == 2)))
+	{
+		wstring tmpstr, tmpstr2, tmpstr3;
+		for (set <int>::iterator si = sg->speakers.begin(), siEnd = sg->speakers.end(); si != siEnd; si++)
+			if (*si != latestObject && *si != o && find(sg->observers.begin(), sg->observers.end(), *si) == sg->observers.end())
+			{
+				objectMatches.push_back(cOM(*si, SALIENCE_THRESHOLD));
+				if (debugTrace.traceSpeakerResolution)
+					lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther (groupedSpeakers - observer) with %d:%s - %s in %s", where, latestObjectWhere, objectString(latestObject, tmpstr, true).c_str(), objectString(*si, tmpstr2, true).c_str(), toText(*sg, tmpstr3));
+			}
 		return true;
 	}
-	if ((m[where].objectRole & PRIMARY_SPEAKER_ROLE) ||
-		(!(m[where].flags & cWordMatch::flagAdjectivalObject) && !inQuote && physicallyPresent && csg->povSpeakers.size() &&
-			(csg->speakers.size() == 2 || (csg->speakers.size() == 3 && csg->speakers.find(m[where].getObject()) != csg->speakers.end()))))
+	return false;
+}
+
+void cSource::resolveMetaGroupGenericLatestSubGroupedSpeaker(const int where, int latestObject, int o, int latestObjectWhere, vector <cSpeakerGroup>::iterator sg, vector <cOM>& objectMatches)
+{
+	if (objectMatches.empty() && !(m[where].objectRole & PRIMARY_SPEAKER_ROLE))
 	{
-		// go back to the preceding sentence.  If this sentence passes across a sectionWord, and the preceding sentence has beginning quote, with a definite speaker, this is the last speaker. 
-		// if immediately preceding last speaker was not povSpeaker, then skip this routine.
-		// “[edgerton:dr] That remains to be seen , ” said Sir James gravely .
-		// The other[dr] hesitated .
-		if (lastOpeningPrimaryQuote >= 0 && (m[lastOpeningPrimaryQuote].flags & cWordMatch::flagDefiniteResolveSpeakers) &&
-			m[lastOpeningPrimaryQuote].speakerPosition >= 0 && csg->povSpeakers.size() == 1)
-		{
-			if (numEOS == 1 && numSectionWord == 1 && !in(*csg->povSpeakers.begin(), m[lastOpeningPrimaryQuote].speakerPosition))
+		for (vector < cSpeakerGroup::cGroup >::iterator sgg = sg->groups.begin(), sggEnd = sg->groups.end(); sgg != sggEnd; sgg++)
+			if (find(sgg->objects.begin(), sgg->objects.end(), latestObject) != sgg->objects.end())
 			{
-				objectMatches.push_back(cOM(*csg->povSpeakers.begin(), SALIENCE_THRESHOLD));
+				bool allMatchGender = true;
+				if (objects[latestObject].male ^ objects[latestObject].female)
+					for (vector <int>::iterator sggi = sgg->objects.begin(), sggiEnd = sgg->objects.end(); sggi != sggiEnd && allMatchGender; sggi++)
+						allMatchGender = objects[latestObject].matchGender(objects[*sggi]);
+				if (allMatchGender)
+					for (vector <int>::iterator sggi = sgg->objects.begin(), sggiEnd = sgg->objects.end(); sggi != sggiEnd; sggi++)
+						if (*sggi != latestObject && *sggi != o)
+						{
+							wstring tmpstr, tmpstr2, tmpstr3;
+							objectMatches.push_back(cOM(*sggi, SALIENCE_THRESHOLD));
+							if (debugTrace.traceSpeakerResolution)
+								lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther (grouped) with %d:%s - %s in %s", where, latestObjectWhere, objectString(latestObject, tmpstr, true).c_str(), objectString(*sggi, tmpstr2, true).c_str(), toText(*sg, tmpstr3));
+						}
+				break;
+			}
+	}
+}
+
+void cSource::resolveMetaGroupGenericLatestGroupedSpeaker(const int where, int latestObject, int o, int latestObjectWhere, vector <cSpeakerGroup>::iterator sg, vector <cOM>& objectMatches)
+{
+	if (sg->groupedSpeakers.find(latestObject) != sg->groupedSpeakers.end())
+	{
+		for (set <int>::iterator sgi = sg->groupedSpeakers.begin(), sgiEnd = sg->groupedSpeakers.end(); sgi != sgiEnd; sgi++)
+			if (*sgi != latestObject && *sgi != o && objects[o].matchGender(objects[*sgi]))
+			{
+				wstring tmpstr, tmpstr2, tmpstr3;
+				objectMatches.push_back(cOM(*sgi, SALIENCE_THRESHOLD));
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther:pov override csg=%s lastOpeningPrimaryQuote=%d = %s", where, toText(*csg, tmpstr), lastOpeningPrimaryQuote, objectString(objectMatches, tmpstr3, true).c_str());
-				return true;
+					lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther (grouped) with %d:%s - %s in %s", where, latestObjectWhere, objectString(latestObject, tmpstr, true).c_str(), objectString(*sgi, tmpstr2, true).c_str(), toText(*sg, tmpstr3));
 			}
-		}
-		// can't look back to other sentences because we could skip back an odd # of sentences.  Much more reliable to match every speaker, then let other routines sort it out.
-		vector <cOM> omlo, omplo;
-		for (set <int>::iterator si = csg->speakers.begin(), siEnd = csg->speakers.end(); si != siEnd; si++)
+	}
+}
+
+
+bool cSource::resolveMetaGroupGenericOtherOne(const int where, int latestObject, int wordsTraversed, int latestObjectWhere, bool crossQuotes, set <int>* &speakers, vector <cOM>& objectMatches)
+{
+	// one or the other // one to the other / one side
+	if (latestObject >= 0 && ((wordsTraversed < 30 && !crossQuotes) || (wordsTraversed < 10)))
+	{
+		int co = checkIfOne(latestObjectWhere, latestObject, speakers);
+		if (co < 0 && (m[latestObjectWhere].objectRole & OBJECT_ROLE) && m[latestObjectWhere].relSubject >= 0 && m[m[latestObjectWhere].relSubject].getObject() >= 0)
+			co = checkIfOne(m[latestObjectWhere].relSubject, m[m[latestObjectWhere].relSubject].getObject(), speakers);
+		if (co >= 0)
 		{
-			vector <cLocalFocus>::iterator lsi;
-			if ((lsi = in(*si)) != localObjects.end())
-			{
-				omlo.push_back(cOM(*si, SALIENCE_THRESHOLD));
-				if (lsi->physicallyPresent)
-					omplo.push_back(cOM(*si, SALIENCE_THRESHOLD));
-			}
-		}
-		if (omplo.size() > 1)
-			objectMatches = omplo;
-		else if (omlo.size() > 1)
-			objectMatches = omlo;
-		else
-			for (set <int>::iterator si = csg->speakers.begin(), siEnd = csg->speakers.end(); si != siEnd; si++)
-				objectMatches.push_back(cOM(*si, SALIENCE_THRESHOLD));
-		if ((m[where].objectRole & PRIMARY_SPEAKER_ROLE) && previousPrimaryQuote >= 0 && m[previousPrimaryQuote].objectMatches.size() == 1)
-			subtract(m[previousPrimaryQuote].objectMatches[0].object, objectMatches);
-		subtract(m[where].getObject(), objectMatches);
-		if (objectMatches.size() > 1 && csg->povSpeakers.size())
-			subtract(objectMatches, csg->povSpeakers);
-		bool allIn, oneIn;
-		if (previousPrimaryQuote >= 0)
-		{
-			if (intersect(m[previousPrimaryQuote].audienceObjectMatches, objectMatches, allIn, oneIn) && allIn)
-				objectMatches = m[previousPrimaryQuote].audienceObjectMatches;
-			int pq = m[previousPrimaryQuote].previousQuote;
-			if (pq < 0 && m[previousPrimaryQuote].quoteBackLink >= 0)
-				pq = m[m[previousPrimaryQuote].quoteBackLink].previousQuote;
-			if (objectMatches.size() > 1 && pq >= 0 &&
-				intersect(m[pq].objectMatches, objectMatches, allIn, oneIn) && oneIn)
-			{
-				vector <cOM> om;
-				for (vector <cOM>::iterator omi = objectMatches.begin(), omiEnd = objectMatches.end(); omi != omiEnd; omi++)
-					if (in(omi->object, m[pq].objectMatches) != m[pq].objectMatches.end())
-						om.push_back(*omi);
-				lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther:SOH objectMatches=%s before previous=%s -> %s", where,
-					objectString(objectMatches, tmpstr, true).c_str(),
-					objectString(m[pq].objectMatches, tmpstr2, true).c_str(),
-					objectString(om, tmpstr, true).c_str());
-				objectMatches = om;
-			}
+			objectMatches.push_back(cOM(co, SALIENCE_THRESHOLD));
+			wstring tmpstr;
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther:csg=%s %s previousPrimaryQuote=%d:%s = %s", where,
-					toText(*csg, tmpstr), (m[where].objectRole & PRIMARY_SPEAKER_ROLE) ? L"PRIMARY" : L"NOT_PRIMARY", previousPrimaryQuote,
-					(previousPrimaryQuote >= 0) ? objectString(m[previousPrimaryQuote].objectMatches, tmpstr2, true).c_str() : L"",
-					objectString(objectMatches, tmpstr3, true).c_str());
-			return objectMatches.size() == 1;
+				lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther (one) %s", where, objectString(co, tmpstr, true).c_str());
+			return true;
 		}
 	}
+	return false;
+}
+
+bool cSource::resolveMetaGroupGenericBackwardsMatch(const int where, int latestOwnerWhere, bool inQuote, vector <cSpeakerGroup>::iterator csg, vector <cOM>& objectMatches)
+{
+	// go backwards from object and match
 	set <int>* speakers = (csg->groupedSpeakers.size()) ? &csg->groupedSpeakers : &csg->speakers;
 	int o = m[where].getObject();
 	bool inBQuote = inQuote, crossQuotes = false; // in backwards quote
@@ -369,122 +411,138 @@ bool cSource::resolveMetaGroupGenericOther(int where, int latestOwnerWhere, bool
 			latestObject = m[I].objectMatches[0].object;
 		if (m[I].objectMatches.size() > 1)
 			return false;
-		// one or the other // one to the other / one side
-		if (latestObject >= 0 && ((wordsTraversed < 30 && !crossQuotes) || (wordsTraversed < 10)))
-		{
-			int co = checkIfOne(I, latestObject, speakers);
-			if (co < 0 && (m[I].objectRole & OBJECT_ROLE) && m[I].relSubject >= 0 && m[m[I].relSubject].getObject() >= 0)
-				co = checkIfOne(m[I].relSubject, m[m[I].relSubject].getObject(), speakers);
-			if (co >= 0)
-			{
-				objectMatches.push_back(cOM(co, SALIENCE_THRESHOLD));
-				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther (one) %s", where, objectString(co, tmpstr, true).c_str());
-				return true;
-			}
-		}
+		if (resolveMetaGroupGenericOtherOne(where, latestObject, wordsTraversed, I, crossQuotes, speakers, objectMatches))
+			break;
 		if (latestObject < 0 || objects[latestObject].neuter || (!objects[latestObject].male && !objects[latestObject].female)) continue;
 		int lastSpeakerGroup = getLastSpeakerGroup(latestObject, currentSpeakerGroup + 1);
 		if (lastSpeakerGroup < 0) continue;
 		vector <cSpeakerGroup>::iterator sg = speakerGroups.begin() + lastSpeakerGroup;
-		vector <int> otherObjects;
-		if (sg->groupedSpeakers.find(latestObject) != sg->groupedSpeakers.end())
-		{
-			for (set <int>::iterator sgi = sg->groupedSpeakers.begin(), sgiEnd = sg->groupedSpeakers.end(); sgi != sgiEnd; sgi++)
-				if (*sgi != latestObject && *sgi != o && objects[o].matchGender(objects[*sgi]))
-				{
-					objectMatches.push_back(cOM(*sgi, SALIENCE_THRESHOLD));
-					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther (grouped) with %d:%s - %s in %s", where, I, objectString(latestObject, tmpstr, true).c_str(), objectString(*sgi, tmpstr2, true).c_str(), toText(*sg, tmpstr3));
-				}
-		}
-		if (objectMatches.empty() && !(m[where].objectRole & PRIMARY_SPEAKER_ROLE))
-		{
-			for (vector < cSpeakerGroup::cGroup >::iterator sgg = sg->groups.begin(), sggEnd = sg->groups.end(); sgg != sggEnd; sgg++)
-				if (find(sgg->objects.begin(), sgg->objects.end(), latestObject) != sgg->objects.end())
-				{
-					bool allMatchGender = true;
-					if (objects[latestObject].male ^ objects[latestObject].female)
-						for (vector <int>::iterator sggi = sgg->objects.begin(), sggiEnd = sgg->objects.end(); sggi != sggiEnd && allMatchGender; sggi++)
-							allMatchGender = objects[latestObject].matchGender(objects[*sggi]);
-					if (allMatchGender)
-						for (vector <int>::iterator sggi = sgg->objects.begin(), sggiEnd = sgg->objects.end(); sggi != sggiEnd; sggi++)
-							if (*sggi != latestObject && *sggi != o)
-							{
-								objectMatches.push_back(cOM(*sggi, SALIENCE_THRESHOLD));
-								if (debugTrace.traceSpeakerResolution)
-									lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther (grouped) with %d:%s - %s in %s", where, I, objectString(latestObject, tmpstr, true).c_str(), objectString(*sggi, tmpstr2, true).c_str(), toText(*sg, tmpstr3));
-							}
-					break;
-				}
-		}
-		// speaker group:
-		// A naturalized German[12858-12861][12860][gendem][M]
-		// boris ivanovitch [19627][name][M][OBJ][PREP_OBJ][MOVE_PREP][F:boris L:ivanovitch ]
-		// the other[23011-23013]{OWNER: WO -2 other}[23012][mg][M][OGEN][SUBJ][ambiguous]
-		// the German[german] seemed to pull himself[german] together . 
-		// he[german,boris] indicated the place he[german] had been occupying at the head[head] of the table[table] . 
-		// the Russian[boris] demurred , but the other insisted .
-		// if the speakerGroup contains 2 or 3 (and the 3rd one is the generic other)
-		if (!inQuote && latestOwnerWhere == -2 && m[where].word->first == L"other" && (sg->speakers.size() == 2 ||
-			(sg->speakers.size() == 3 && sg->speakers.find(o) != sg->speakers.end()) ||
-			(sg->speakers.size() - sg->observers.size() == 2)))
-		{
-			for (set <int>::iterator si = sg->speakers.begin(), siEnd = sg->speakers.end(); si != siEnd; si++)
-				if (*si != latestObject && *si != o && find(sg->observers.begin(), sg->observers.end(), *si) == sg->observers.end())
-				{
-					objectMatches.push_back(cOM(*si, SALIENCE_THRESHOLD));
-					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther (groupedSpeakers - observer) with %d:%s - %s in %s", where, I, objectString(latestObject, tmpstr, true).c_str(), objectString(*si, tmpstr2, true).c_str(), toText(*sg, tmpstr3));
-				}
-			return true;
-		}
-		// if she[cook] missed the other[tuppence] (29868:match even though POV)
-		if (objectMatches.empty() && sg->speakers.size() == 2 && m[where].relSubject >= 0 && m[m[where].relSubject].objectMatches.size() <= 1)
-		{
-			int whereSubject = m[where].relSubject, subject = (m[whereSubject].objectMatches.empty()) ? m[whereSubject].getObject() : m[whereSubject].objectMatches[0].object;
-			if (sg->speakers.find(subject) != sg->speakers.end())
-			{
-				for (set <int>::iterator si = sg->speakers.begin(), siEnd = sg->speakers.end(); si != siEnd; si++)
-					if (*si != subject)
-						objectMatches.push_back(cOM(*si, SALIENCE_THRESHOLD));
-				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther (2 speakers subject/object L&L) based on sg %s", where, toText(*sg, tmpstr3));
-			}
-		}
-		if (objectMatches.empty())
-		{
-			bool matchGender = (objects[o].male ^ objects[o].female);
-			// When referring to 'the other woman', it is probably not referring to another woman other than
-			// the POV, but rather choosing between two women other than the POV, unless there is only one other woman.
-			if (sg->povSpeakers.find(latestObject) != sg->povSpeakers.end() ||
-				(matchGender && !objects[o].matchGender(objects[latestObject]))) continue;
-			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther based on sg %s", where, toText(*sg, tmpstr3));
-			// The latest object agreeing with the gender of 'o' is at the current location (I) - latestObject
-			// Now look for the object occurring closest to and before latestObject in the speakerGroup agreeing with the gender of o.
-			int latestOtherObjectWhere = -1, latestOtherObject = -1;
-			vector <cLocalFocus>::iterator lsi;
-			for (set <int>::iterator si = sg->speakers.begin(), siEnd = sg->speakers.end(); si != siEnd; si++)
-				if ((!matchGender || objects[o].matchGender(objects[*si])) && *si != latestObject && *si != o &&
-					sg->povSpeakers.find(*si) == sg->povSpeakers.end() &&
-					(lsi = in(*si)) != localObjects.end() && (latestOtherObjectWhere == -1 || latestOtherObjectWhere < lsi->lastWhere))
-				{
-					latestOtherObjectWhere = lsi->lastWhere;
-					latestOtherObject = *si;
-				}
-			if (latestOtherObjectWhere != -1)
-			{
-				objectMatches.push_back(cOM(latestOtherObject, SALIENCE_THRESHOLD));
-				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther (speakers - any '%s' than %d:%s) resolved to %d:%s",
-						where, objectString(o, tmpstr3, true).c_str(),
-						I, objectString(latestObject, tmpstr, true).c_str(),
-						latestOtherObjectWhere, objectString(objectMatches, tmpstr2, true).c_str());
-			}
-		}
+		resolveMetaGroupGenericLatestGroupedSpeaker(where, latestObject, o, I, sg, objectMatches);
+		resolveMetaGroupGenericLatestSubGroupedSpeaker(where, latestObject, o, I, sg, objectMatches);
+		if (resolveMetaGroupGenericObserver(where, inQuote, latestOwnerWhere, latestObject, o, I, sg, objectMatches))
+			break;
+		resolveMetaGroupGenericOtherTwoSpeaker(where, sg, objectMatches);
+		resolveMetaGroupMatchLatestSpeakerMatchingGender(where, o, I, sg, latestObject, objectMatches);
 	}
 	return true;
+}
+
+void cSource::limitObjectMatchesToAudienceAndPreviousSpeakers(int where, vector <cSpeakerGroup>::iterator csg, vector <cOM>& objectMatches)
+{
+	bool allIn, oneIn;
+	wstring tmpstr, tmpstr2, tmpstr3;
+	if (intersect(m[previousPrimaryQuote].audienceObjectMatches, objectMatches, allIn, oneIn) && allIn)
+		objectMatches = m[previousPrimaryQuote].audienceObjectMatches;
+	int pq = m[previousPrimaryQuote].previousQuote;
+	if (pq < 0 && m[previousPrimaryQuote].quoteBackLink >= 0)
+		pq = m[m[previousPrimaryQuote].quoteBackLink].previousQuote;
+	if (objectMatches.size() > 1 && pq >= 0 &&
+		intersect(m[pq].objectMatches, objectMatches, allIn, oneIn) && oneIn)
+	{
+		vector <cOM> om;
+		for (vector <cOM>::iterator omi = objectMatches.begin(), omiEnd = objectMatches.end(); omi != omiEnd; omi++)
+			if (in(omi->object, m[pq].objectMatches) != m[pq].objectMatches.end())
+				om.push_back(*omi);
+		lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther:SOH objectMatches=%s before previous=%s -> %s", where,
+			objectString(objectMatches, tmpstr, true).c_str(),
+			objectString(m[pq].objectMatches, tmpstr2, true).c_str(),
+			objectString(om, tmpstr, true).c_str());
+		objectMatches = om;
+	}
+	if (debugTrace.traceSpeakerResolution)
+		lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther:csg=%s %s previousPrimaryQuote=%d:%s = %s", where,
+			toText(*csg, tmpstr), (m[where].objectRole & PRIMARY_SPEAKER_ROLE) ? L"PRIMARY" : L"NOT_PRIMARY", previousPrimaryQuote,
+			(previousPrimaryQuote >= 0) ? objectString(m[previousPrimaryQuote].objectMatches, tmpstr2, true).c_str() : L"",
+			objectString(objectMatches, tmpstr3, true).c_str());
+}
+
+void cSource::resolveMetaGroupGenericOtherGetObjectMatchesPreferLocalPhysicallyPresentSpeakers(int where, vector <cSpeakerGroup>::iterator csg, vector <cOM>& objectMatches)
+{
+	// can't look back to other sentences because we could skip back an odd # of sentences.  Much more reliable to match every speaker, then let other routines sort it out.
+	vector <cOM> omlo, omplo;
+	for (set <int>::iterator si = csg->speakers.begin(), siEnd = csg->speakers.end(); si != siEnd; si++)
+	{
+		vector <cLocalFocus>::iterator lsi;
+		if ((lsi = in(*si)) != localObjects.end())
+		{
+			omlo.push_back(cOM(*si, SALIENCE_THRESHOLD));
+			if (lsi->physicallyPresent)
+				omplo.push_back(cOM(*si, SALIENCE_THRESHOLD));
+		}
+	}
+	if (omplo.size() > 1)
+		objectMatches = omplo;
+	else if (omlo.size() > 1)
+		objectMatches = omlo;
+	else
+		for (set <int>::iterator si = csg->speakers.begin(), siEnd = csg->speakers.end(); si != siEnd; si++)
+			objectMatches.push_back(cOM(*si, SALIENCE_THRESHOLD));
+	if ((m[where].objectRole & PRIMARY_SPEAKER_ROLE) && previousPrimaryQuote >= 0 && m[previousPrimaryQuote].objectMatches.size() == 1)
+		subtract(m[previousPrimaryQuote].objectMatches[0].object, objectMatches);
+	subtract(m[where].getObject(), objectMatches);
+	if (objectMatches.size() > 1 && csg->povSpeakers.size())
+		subtract(objectMatches, csg->povSpeakers);
+}
+
+bool cSource::resolveMetaGroupGenericOther(int where, int latestOwnerWhere, bool inQuote, vector <cOM>& objectMatches)
+{
+	LFS
+	// the other hand, the other leg, etc should be matched to another body object only
+	bool singularBodyPart;
+	if (m[where].getObject() >= 0 && isExternalBodyPart(where, singularBodyPart, true))
+		return false;
+	// the other first means 'the other' first /  STAYWe[tuppence,tommy] shall keep it to the last and ENTERopen the other first . ” 
+	if (m[where].queryWinnerForm(numeralOrdinalForm) >= 0)
+		return false;
+	vector <cSpeakerGroup>::iterator csg = speakerGroups.begin() + currentSpeakerGroup;
+	bool physicallyEvaluated, physicallyPresent = physicallyPresentPosition(where, m[where].beginObjectPosition, physicallyEvaluated, false) && physicallyEvaluated;
+	wstring tmpstr, tmpstr3;
+	int numEOS = 0, numSectionWord = 0;
+	if (lastOpeningPrimaryQuote >= 0 && m[lastOpeningPrimaryQuote].endQuote >= 0)
+		for (int I = m[lastOpeningPrimaryQuote].endQuote; I < where && numEOS < 2 && numSectionWord < 2; I++)
+		{
+			if (isEOS(I)) numEOS++;
+			if (m[I].word == Words.sectionWord) numSectionWord++;
+		}
+	// if physically present subject of first sentence after quote
+	if (!inQuote && physicallyPresent && (m[where].objectRole & SUBJECT_ROLE) && numEOS == 0 && numSectionWord == 1 && lastOpeningPrimaryQuote >= 0 &&
+		(m[lastOpeningPrimaryQuote].audienceObjectMatches.size() == 1 || in(*csg->povSpeakers.begin(), m[lastOpeningPrimaryQuote].audienceObjectMatches) != m[lastOpeningPrimaryQuote].audienceObjectMatches.end()))
+	{
+		objectMatches = m[lastOpeningPrimaryQuote].audienceObjectMatches;
+		if (objectMatches.size() > 1 && csg->povSpeakers.size())
+			subtract(objectMatches, csg->povSpeakers);
+		if (debugTrace.traceSpeakerResolution)
+			lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther: audience immediately after speaker lastOpeningPrimaryQuote=%d:%s", where, lastOpeningPrimaryQuote, objectString(objectMatches, tmpstr3, true).c_str());
+		return true;
+	}
+	// if a speaker OR (not adjectival and not in quote and physially present and ( there are 2 current speakers OR three current speakers and current object is one of them
+	if ((m[where].objectRole & PRIMARY_SPEAKER_ROLE) ||
+		(!(m[where].flags & cWordMatch::flagAdjectivalObject) && !inQuote && physicallyPresent && csg->povSpeakers.size() &&
+			(csg->speakers.size() == 2 || (csg->speakers.size() == 3 && csg->speakers.find(m[where].getObject()) != csg->speakers.end()))))
+	{
+		// go back to the preceding sentence.  If this sentence passes across a sectionWord, and the preceding sentence has beginning quote, with a definite speaker, this is the last speaker. 
+		// if immediately preceding last speaker was not povSpeaker, then skip this routine.
+		// “[edgerton:dr] That remains to be seen , ” said Sir James gravely .
+		// The other[dr] hesitated .
+		if (lastOpeningPrimaryQuote >= 0 && (m[lastOpeningPrimaryQuote].flags & cWordMatch::flagDefiniteResolveSpeakers) &&
+			m[lastOpeningPrimaryQuote].speakerPosition >= 0 && csg->povSpeakers.size() == 1)
+		{
+			if (numEOS == 1 && numSectionWord == 1 && !in(*csg->povSpeakers.begin(), m[lastOpeningPrimaryQuote].speakerPosition))
+			{
+				objectMatches.push_back(cOM(*csg->povSpeakers.begin(), SALIENCE_THRESHOLD));
+				if (debugTrace.traceSpeakerResolution)
+					lplog(LOG_RESOLUTION, L"%06d:resolveMetaGroupGenericOther:pov override csg=%s lastOpeningPrimaryQuote=%d = %s", where, toText(*csg, tmpstr), lastOpeningPrimaryQuote, objectString(objectMatches, tmpstr3, true).c_str());
+				return true;
+			}
+		}
+		resolveMetaGroupGenericOtherGetObjectMatchesPreferLocalPhysicallyPresentSpeakers(where, csg, objectMatches);
+		if (previousPrimaryQuote >= 0)
+		{
+			limitObjectMatchesToAudienceAndPreviousSpeakers(where, csg, objectMatches);
+			return objectMatches.size() == 1;
+		}
+	}
+	return resolveMetaGroupGenericBackwardsMatch(where, latestOwnerWhere, inQuote, csg, objectMatches);
 }
 
 // if no grouped speakers, is there a meta

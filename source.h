@@ -2749,6 +2749,15 @@ private:
 	bool resolveMetaGroupFirstSecondThirdWordOrderedObject(int where,int lastBeginS1,vector <cOM> &objectMatches,int latestOwnerWhere);
 	bool resolveMetaGroupPlural(int latestOwnerWhere,bool inQuote,vector <cOM> &objectMatches);
 	bool resolveMetaGroupSpecifiedOther(int where,int latestOwnerWhere,bool inQuote,vector <cOM> &objectMatches);
+	void resolveMetaGroupGenericOtherTwoSpeaker(const int where, vector <cSpeakerGroup>::iterator sg, vector <cOM>& objectMatches);
+	bool resolveMetaGroupGenericObserver(const int where, bool inQuote, int latestOwnerWhere, int latestObject, int o, int latestObjectWhere, vector <cSpeakerGroup>::iterator sg, vector <cOM>& objectMatches);
+	void resolveMetaGroupGenericLatestSubGroupedSpeaker(const int where, int latestObject, int o, int latestObjectWhere, vector <cSpeakerGroup>::iterator sg, vector <cOM>& objectMatches);
+	void resolveMetaGroupGenericLatestGroupedSpeaker(const int where, int latestObject, int o, int latestObjectWhere, vector <cSpeakerGroup>::iterator sg, vector <cOM>& objectMatches);
+	void resolveMetaGroupMatchLatestSpeakerMatchingGender(const int where, const int o, int latestObjectWhere, vector <cSpeakerGroup>::iterator sg, const int latestObject, vector <cOM>& objectMatches);
+	bool resolveMetaGroupGenericOtherOne(const int where, int latestObject, int wordsTraversed, int latestObjectWhere, bool crossQuotes, set <int>*& speakers, vector <cOM>& objectMatches);
+	bool resolveMetaGroupGenericBackwardsMatch(const int where, int latestOwnerWhere, bool inQuote, vector <cSpeakerGroup>::iterator csg, vector <cOM>& objectMatches);
+	void limitObjectMatchesToAudienceAndPreviousSpeakers(int where, vector <cSpeakerGroup>::iterator csg, vector <cOM>& objectMatches);
+	void resolveMetaGroupGenericOtherGetObjectMatchesPreferLocalPhysicallyPresentSpeakers(int where, vector <cSpeakerGroup>::iterator csg, vector <cOM>& objectMatches);
 	bool resolveMetaGroupGenericOther(int where,int latestOwnerWhere,bool inQuote,vector <cOM> &objectMatches);
 	bool resolveMetaGroupNonNameObject(int where,bool inQuote,vector <cOM> &objectMatches,int &latestOwnerWhere);
 	bool resolveMetaGroupInLocalObjects(int where,int o,vector <cOM> &objectMatches,bool onlyFirst);
