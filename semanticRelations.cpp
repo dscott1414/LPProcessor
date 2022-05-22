@@ -2318,15 +2318,16 @@ void cSource::detectTenseAndFirstPersonUsage(int where, int lastBeginS1, int las
 	}
 }
 
-void cSource::identifyHailObjects(int where, int o, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool inPrimaryQuote, bool inSecondaryQuote)
+void cSource::identifyHailObjects(int where, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool inPrimaryQuote, bool inSecondaryQuote)
 {
 	LFS
 		bool uniquelyMergable;
 	wstring tmpstr, tmpstr2;
 	set <int>::iterator stsi;
-	if (inPrimaryQuote && o >= 0 && (m[where].objectRole & (HAIL_ROLE | IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE | IN_QUOTE_REFERRING_AUDIENCE_ROLE)) &&
+	int currentObject = (m[where].objectMatches.size() == 1) ? m[where].objectMatches[0].object : m[where].getObject();
+	if (inPrimaryQuote && currentObject >= 0 && (m[where].objectRole & (HAIL_ROLE | IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE | IN_QUOTE_REFERRING_AUDIENCE_ROLE)) &&
 		!(m[where].flags & cWordMatch::flagAdjectivalObject) &&
-		objects[o].objectClass == NAME_OBJECT_CLASS && !objects[o].plural)
+		objects[currentObject].objectClass == NAME_OBJECT_CLASS && !objects[currentObject].plural)
 	{
 		bool appMatch = false;
 		int appFirstObject = m[where].beginObjectPosition;
@@ -2335,48 +2336,48 @@ void cSource::identifyHailObjects(int where, int o, int lastBeginS1, int lastRel
 			appFirstObject -= 2;
 			while (appFirstObject && m[appFirstObject].getObject() == -1) appFirstObject--;
 			if (m[appFirstObject].endObjectPosition + 1 == where && (appMatch = matchByAppositivity(appFirstObject, where)) && debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"%06d:%02d     REJECTED hail %s-matched appositively to %d:%s", where, section, objectString(o, tmpstr, true).c_str(), appFirstObject, objectString(m[appFirstObject].getObject(), tmpstr2, true).c_str());
+				lplog(LOG_SG, L"%06d:%02d     REJECTED hail %s-matched appositively to %d:%s", where, section, objectString(currentObject, tmpstr, true).c_str(), appFirstObject, objectString(m[appFirstObject].getObject(), tmpstr2, true).c_str());
 		}
 		if (!appMatch)
 		{
 			resolveObject(where, true, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, true, false, false);
 			if (m[where].objectMatches.empty())
 			{
-				if (!objects[o].name.justHonorific() || m[where].queryForm(L"pinr") < 0)
+				if (!objects[currentObject].name.justHonorific() || m[where].queryForm(L"pinr") < 0)
 				{
-					o = m[where].getObject();
-					if (section < sections.size()) sections[section].preIdentifiedSpeakerObjects.insert(o);
-					bool inserted = (unMergable(where, o, tempSpeakerGroup.speakers, uniquelyMergable, true, false, false, false, stsi));
-					vector <cLocalFocus>::iterator lsi = in(o);
+					currentObject = m[where].getObject();
+					if (section < sections.size()) sections[section].preIdentifiedSpeakerObjects.insert(currentObject);
+					bool inserted = (unMergable(where, currentObject, tempSpeakerGroup.speakers, uniquelyMergable, true, false, false, false, stsi));
+					vector <cLocalFocus>::iterator lsi = in(currentObject);
 					if (debugTrace.traceSpeakerResolution && lsi != localObjects.end())
-						lplog(LOG_SG, L"%06d:%02d     hail %s %s [%d %d]", where, section, objectString(o, tmpstr, true).c_str(), (inserted) ? L"inserted" : L"merged", lsi->lastWhere, lsi->previousWhere);
-					objects[o].PISHail++;
+						lplog(LOG_SG, L"%06d:%02d     hail %s %s [%d %d]", where, section, objectString(currentObject, tmpstr, true).c_str(), (inserted) ? L"inserted" : L"merged", lsi->lastWhere, lsi->previousWhere);
+					objects[currentObject].PISHail++;
 					// make sure this hail is not deleted afterward because of lack of definite references
 					if (m[where].objectRole & (IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE | IN_QUOTE_REFERRING_AUDIENCE_ROLE))
-						objects[o].PISDefinite++;
+						objects[currentObject].PISDefinite++;
 				}
 				definitelyIdentifiedAsSpeakerInSpeakerGroups.push_back(where);
-				objects[o].numDefinitelyIdentifiedAsSpeaker++;
-				objects[o].numDefinitelyIdentifiedAsSpeakerInSection++;
-				if (objects[o].numDefinitelyIdentifiedAsSpeakerInSection + objects[o].numIdentifiedAsSpeakerInSection == 1 && section < sections.size())
-					sections[section].speakerObjects.push_back(cOM(o, SALIENCE_THRESHOLD));
+				objects[currentObject].numDefinitelyIdentifiedAsSpeaker++;
+				objects[currentObject].numDefinitelyIdentifiedAsSpeakerInSection++;
+				if (objects[currentObject].numDefinitelyIdentifiedAsSpeakerInSection + objects[currentObject].numIdentifiedAsSpeakerInSection == 1 && section < sections.size())
+					sections[section].speakerObjects.push_back(cOM(currentObject, SALIENCE_THRESHOLD));
 			}
 			else
 				for (vector <cOM>::iterator omi = m[where].objectMatches.begin(); omi != m[where].objectMatches.end(); omi++)
 				{
-					o = omi->object;
-					if (section < sections.size()) sections[section].preIdentifiedSpeakerObjects.insert(o);
-					bool inserted = (unMergable(-1, o, tempSpeakerGroup.speakers, uniquelyMergable, true, false, false, false, stsi));
+					currentObject = omi->object;
+					if (section < sections.size()) sections[section].preIdentifiedSpeakerObjects.insert(currentObject);
+					bool inserted = (unMergable(-1, currentObject, tempSpeakerGroup.speakers, uniquelyMergable, true, false, false, false, stsi));
 					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_SG, L"%06d:%02d     hail %s %s", where, section, objectString(o, tmpstr, true).c_str(), (inserted) ? L"inserted" : L"merged");
-					objects[o].PISHail++;
+						lplog(LOG_SG, L"%06d:%02d     hail %s %s", where, section, objectString(currentObject, tmpstr, true).c_str(), (inserted) ? L"inserted" : L"merged");
+					objects[currentObject].PISHail++;
 					if (m[where].objectMatches.size() == 1)
 					{
 						definitelyIdentifiedAsSpeakerInSpeakerGroups.push_back(where);
-						objects[o].numDefinitelyIdentifiedAsSpeaker++;
-						objects[o].numDefinitelyIdentifiedAsSpeakerInSection++;
-						if (objects[o].numDefinitelyIdentifiedAsSpeakerInSection + objects[o].numIdentifiedAsSpeakerInSection == 1 && section < sections.size())
-							sections[section].speakerObjects.push_back(cOM(o, SALIENCE_THRESHOLD));
+						objects[currentObject].numDefinitelyIdentifiedAsSpeaker++;
+						objects[currentObject].numDefinitelyIdentifiedAsSpeakerInSection++;
+						if (objects[currentObject].numDefinitelyIdentifiedAsSpeakerInSection + objects[currentObject].numIdentifiedAsSpeakerInSection == 1 && section < sections.size())
+							sections[section].speakerObjects.push_back(cOM(currentObject, SALIENCE_THRESHOLD));
 					}
 				}
 		}

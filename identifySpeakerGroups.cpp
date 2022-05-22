@@ -3034,6 +3034,67 @@ void cSource::endSection(int& questionSpeakerLastParagraph, int& questionSpeaker
 	}
 }
 
+void cSource::ageSpeakersPerSentence(int where, int & endMetaResponse, unsigned int & agingStructuresSeen, int & lastBeginS1, const bool inPrimaryQuote, const bool inSecondaryQuote)
+{
+	int element;
+	if ((element = m[where].pma.queryPattern(L"__S1")) != -1)
+	{
+		if (endMetaResponse < where && (endMetaResponse = detectMetaResponse(where, element & ~cMatchElement::patternFlag)) < 0)
+		{
+			lastBeginS1 = where;
+			if (debugTrace.traceSpeakerResolution)
+				lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d     aging speakers (%s) BeginS1", where, section, (inPrimaryQuote) ? L"inQuote" : L"outsideQuote");
+			m[where].flags |= cWordMatch::flagAge;
+			for (vector <cLocalFocus>::iterator lfi = localObjects.begin(); lfi != localObjects.end(); )
+				ageSpeaker(where, inPrimaryQuote, inSecondaryQuote, lfi, 1);
+			agingStructuresSeen++;
+		}
+	}
+}
+
+void cSource::getWhereFirstSubjectInParagraph(int where, const bool inPrimaryQuote, const bool inSecondaryQuote, const bool currentIsQuestion, vector <int> &lastSubjects, int & whereFirstSubjectInParagraph)
+{
+	if (!currentIsQuestion && !(m[where].flags & cWordMatch::flagAdjectivalObject) && !(m[where].flags & cWordMatch::flagRelativeHead) &&
+		// don't introduce gendered objects that have matched plural neuter objects (pictures)
+		(m[where].getObject() < 0 || !objects[m[where].getObject()].plural || objects[m[where].getObject()].male || 
+			objects[m[where].getObject()].female || !objects[m[where].getObject()].neuter || objects[m[where].getObject()].objectClass == BODY_OBJECT_CLASS))
+	{
+		bool clearBeforeSet = true, genderedSubjectOccurred = false;
+		int currentObject = (m[where].objectMatches.size() == 1) ? m[where].objectMatches[0].object : m[where].getObject();
+		if (currentObject >= 0 && m[where].objectMatches.empty())
+		{
+			genderedSubjectOccurred = mergeFocus(inPrimaryQuote, inSecondaryQuote, currentObject, where, lastSubjects, clearBeforeSet);
+			if (objects[currentObject].objectClass == NAME_OBJECT_CLASS) mergeName(where, currentObject, tempSpeakerGroup.speakers);
+		}
+		else
+			for (unsigned int s = 0; s < m[where].objectMatches.size(); s++)
+				genderedSubjectOccurred |= mergeFocus(inPrimaryQuote, inSecondaryQuote, m[where].objectMatches[s].object, where, lastSubjects, clearBeforeSet);
+		// gendered body objects can still match 'it', so genderedSubjectOccurred could still be set to true, but it should be false
+		if (currentObject >= 0 && objects[currentObject].neuter && !objects[currentObject].male && !objects[currentObject].female)
+			genderedSubjectOccurred = false;
+		if (whereFirstSubjectInParagraph == -1 && genderedSubjectOccurred)
+		{
+			whereFirstSubjectInParagraph = where;
+			if (debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%06d:QXQ whereFirstSubjectInParagraph set to %d.", where, whereFirstSubjectInParagraph);
+		}
+	}
+}
+
+void cSource::updateSpeakerObjects(cSpeakerGroup &sg)
+{
+	// Make sure tempSpeakerGroup has objects up-to-date
+	for (set <int>::iterator q = sg.speakers.begin(), qEnd = sg.speakers.end(); q != qEnd; )
+		if (objects[*q].eliminated)
+		{
+			int tmp = *q;
+			followObjectChain(tmp);
+			sg.speakers.erase(q++);
+			sg.speakers.insert(tmp);
+		}
+		else q++;
+}
+
 // identify definite speakers and subjects in narration.
 // speakers and subjects must be name objects only.
 // no objects are actually resolved.
@@ -3091,7 +3152,6 @@ void cSource::identifySpeakerGroups()
 			if (debugTrace.traceSpeakerResolution)
 				lplog(LOG_RESOLUTION, L"%06d:Removed pleonastic role", I);
 		}
-		int element;
 		if (m[I].pma.queryPattern(L"_REL1") != -1)
 		{
 			lastRelativePhrase = I;
@@ -3107,19 +3167,7 @@ void cSource::identifySpeakerGroups()
 			lastCommand = I;
 		if (m[I].hasVerbRelations)
 			lastVerb = I;
-		if ((element = m[I].pma.queryPattern(L"__S1")) != -1)
-		{
-			if (endMetaResponse < I && (endMetaResponse = detectMetaResponse(I, element & ~cMatchElement::patternFlag)) < 0)
-			{
-				lastBeginS1 = I;
-				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d     aging speakers (%s) BeginS1", I, section, (inPrimaryQuote) ? L"inQuote" : L"outsideQuote");
-				m[I].flags |= cWordMatch::flagAge;
-				for (vector <cLocalFocus>::iterator lfi = localObjects.begin(); lfi != localObjects.end(); )
-					ageSpeaker(I, inPrimaryQuote, inSecondaryQuote, lfi, 1);
-				agingStructuresSeen++;
-			}
-		}
+		ageSpeakersPerSentence(I, endMetaResponse, agingStructuresSeen, lastBeginS1, inPrimaryQuote, inSecondaryQuote);
 		// implicit objects - another knock
 		if (implicitObject(I))
 		{
@@ -3154,50 +3202,18 @@ void cSource::identifySpeakerGroups()
 		defineObjectAsSpatial(I);
 		detectTenseAndFirstPersonUsage(I, lastBeginS1, lastRelativePhrase, numPastSinceLastQuote, numNonPastSinceLastQuote, numFirstInQuote, numSecondInQuote, inPrimaryQuote);
 		// CMREADME20
-		int o = (m[I].objectMatches.size() == 1) ? m[I].objectMatches[0].object : m[I].getObject();
 		if (!currentIsQuestion && !(m[I].flags & cWordMatch::flagAdjectivalObject) && !(m[I].flags & cWordMatch::flagRelativeHead) &&
 			!(m[I].getObject() < 0 || !objects[m[I].getObject()].plural || objects[m[I].getObject()].male || objects[m[I].getObject()].female || !objects[m[I].getObject()].neuter || objects[m[I].getObject()].objectClass == BODY_OBJECT_CLASS) &&
 			debugTrace.traceSpeakerResolution)
 			lplog(LOG_RESOLUTION, L"%06d:rejected all objects matched to %s for speaker focus.", I, objectString(m[I].getObject(), tmpstr, false).c_str());
-		if (!currentIsQuestion && !(m[I].flags & cWordMatch::flagAdjectivalObject) && !(m[I].flags & cWordMatch::flagRelativeHead) &&
-			// don't introduce gendered objects that have matched plural neuter objects (pictures)
-			(m[I].getObject() < 0 || !objects[m[I].getObject()].plural || objects[m[I].getObject()].male || objects[m[I].getObject()].female || !objects[m[I].getObject()].neuter || objects[m[I].getObject()].objectClass == BODY_OBJECT_CLASS))
-		{
-			bool clearBeforeSet = true, genderedSubjectOccurred = false;
-			if (o >= 0 && m[I].objectMatches.empty())
-			{
-				genderedSubjectOccurred = mergeFocus(inPrimaryQuote, inSecondaryQuote, o, I, lastSubjects, clearBeforeSet);
-				if (objects[o].objectClass == NAME_OBJECT_CLASS) mergeName(I, o, tempSpeakerGroup.speakers);
-			}
-			else
-				for (unsigned int s = 0; s < m[I].objectMatches.size(); s++)
-					genderedSubjectOccurred |= mergeFocus(inPrimaryQuote, inSecondaryQuote, m[I].objectMatches[s].object, I, lastSubjects, clearBeforeSet);
-			// gendered body objects can still match 'it', so genderedSubjectOccurred could still be set to true, but it should be false
-			if (o >= 0 && objects[o].neuter && !objects[o].male && !objects[o].female)
-				genderedSubjectOccurred = false;
-			if (whereFirstSubjectInParagraph == -1 && genderedSubjectOccurred)
-			{
-				whereFirstSubjectInParagraph = I;
-				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:QXQ whereFirstSubjectInParagraph set to %d.", I, whereFirstSubjectInParagraph);
-			}
-		}
+		getWhereFirstSubjectInParagraph(I, inPrimaryQuote, inSecondaryQuote, currentIsQuestion, lastSubjects, whereFirstSubjectInParagraph);
 		// CMREADME21
 		if (!inPrimaryQuote && !inSecondaryQuote) // avoid accumulating groups of objects in quotes that have not been disambiguated or resolved yet (and might not match or be invalid)
 			accumulateGroups(I, groupedObjects, lastWhereMPluralGroupedObject);
 		// CMREADME22
-		// Make sure tempSpeakerGroup has objects up-to-date
-		for (set <int>::iterator q = tempSpeakerGroup.speakers.begin(), qEnd = tempSpeakerGroup.speakers.end(); q != qEnd; )
-			if (objects[*q].eliminated)
-			{
-				int tmp = *q;
-				followObjectChain(tmp);
-				tempSpeakerGroup.speakers.erase(q++);
-				tempSpeakerGroup.speakers.insert(tmp);
-			}
-			else q++;
+		updateSpeakerObjects(tempSpeakerGroup);
 		// CMREADME23
-		identifyHailObjects(I, o, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, inPrimaryQuote, inSecondaryQuote);
+		identifyHailObjects(I, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, inPrimaryQuote, inSecondaryQuote);
 		// CMREADME24
 		if (I < endMetaResponse) continue;
 		if (m[I].word->first == L"lptable" || m[I].word->first == L"lpendcolumn")

@@ -2201,7 +2201,7 @@ public:
 	void defineObjectAsSpatial(int where);
 	void detectTenseAndFirstPersonUsage(int where, int lastBeginS1, int lastRelativePhrase, int &numPastSinceLastQuote, int &numNonPastSinceLastQuote, int &numFirstInQuote, int &numSecondInQuote, bool inPrimaryQuote);
 	void evaluateMetaWhereQuery(int where,bool inPrimaryQuote,int &currentMetaWhereQuery);
-	void identifyHailObjects(int where, int o, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool inPrimaryQuote, bool inSecondaryQuote);
+	void identifyHailObjects(int where, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool inPrimaryQuote, bool inSecondaryQuote);
 	void processEndOfSentence(int where, int &lastBeginS1, int &lastRelativePhrase, int &lastCommand, int &lastSentenceEnd, int &uqPreviousToLastSentenceEnd, int &uqLastSentenceEnd,
 		int &questionSpeakerLastSentence, int &questionSpeaker, bool &currentIsQuestion, bool inPrimaryQuote, bool inSecondaryQuote, bool &endOfSentence, bool &transitionSinceEOS,
 		unsigned int &agingStructuresSeen, bool quotesSeenSinceLastSentence, vector <int> &lastSubjects, vector <int> &previousLastSubjects);
@@ -2260,6 +2260,9 @@ public:
 	void endSection(int &questionSpeakerLastParagraph, int &questionSpeakerLastSentence, int &whereFirstSubjectInParagraph, int &lastSpeakerGroupPositionConsidered, int &lastSpeakerGroupOfPreviousSection, int I,
 		bool &endOfSentence, bool &immediatelyAfterEndOfParagraph, bool &quotesSeenSinceLastSentence, bool inSecondaryQuote, bool inPrimaryQuote, bool &quotesSeen, bool &firstQuotedSentenceOfSpeakerGroupNotSeen,
 		vector <int> previousLastSubjects);
+	void ageSpeakersPerSentence(int where, int& endMetaResponse, unsigned int& agingStructuresSeen, int& lastBeginS1, const bool inPrimaryQuote, const bool inSecondaryQuote);
+	void getWhereFirstSubjectInParagraph(int where, const bool inPrimaryQuote, const bool inSecondaryQuote, const bool currentIsQuestion, vector <int>& lastSubjects, int& whereFirstSubjectInParagraph);
+	void updateSpeakerObjects(cSpeakerGroup& tempSpeakerGroup);
 	void identifySpeakerGroups();
 	void substituteGenderedObject(int where,int &object,set <int> &speakers);
 	void mergeFocusResolution(int o,int I,vector <int> &lastSubjects,bool &clearBeforeSet);

@@ -848,6 +848,165 @@ bool signalCtrl(DWORD dwProcessId, DWORD dwCtrlEvent)
 	return success;
 }
 
+void waitForSpawnedProcesses(MYSQL& mysql, const int sourceType, int &numProcesses, HANDLE* handles, unsigned int &nextProcessIndex, const int startTime,
+	const int numSourcesProcessedOriginally, const int wordsProcessedOriginally, const int sentencesProcessedOriginally, const int maxProcesses)
+{
+	if (numProcesses)
+	{
+		wstring tmpstr;
+		printf("\nNo more processes to be created. %d processes left to wait for.", numProcesses);
+		while (numProcesses)
+		{
+			nextProcessIndex = WaitForMultipleObjectsEx(numProcesses, handles, false, 1000 * 60 * 3, false);
+			if (nextProcessIndex == WAIT_FAILED)
+				lplog(LOG_FATAL_ERROR, L"\nWaitForMultipleObjectsEx failed with error %s", getLastErrorMessage(tmpstr));
+			int numSourcesProcessedNow = 0;
+			__int64 wordsProcessedNow = 0, sentencesProcessedNow = 0;
+			getNumSourcesProcessed(mysql, sourceType, numSourcesProcessedNow, wordsProcessedNow, sentencesProcessedNow);
+			int processingSeconds = (clock() - startTime) / CLOCKS_PER_SEC;
+			wchar_t consoleTitle[1500];
+			numSourcesProcessedNow -= numSourcesProcessedOriginally;
+			wordsProcessedNow -= wordsProcessedOriginally;
+			sentencesProcessedNow -= sentencesProcessedOriginally;
+			wsprintf(consoleTitle, L"sources=%06d:sentences=%06I64d:words=%08I64d in %02d:%02d:%02d [%d sources/hour] [%I64d words/hour].",
+				numSourcesProcessedNow, sentencesProcessedNow, wordsProcessedNow, processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, numSourcesProcessedNow * 3600 / processingSeconds, wordsProcessedNow * 3600 / processingSeconds);
+			lplog(LOG_INFO | LOG_ERROR, L"%s", consoleTitle);
+			SetConsoleTitle(consoleTitle);
+			if (nextProcessIndex == WAIT_IO_COMPLETION || nextProcessIndex == WAIT_TIMEOUT)
+				continue;
+			if (nextProcessIndex < WAIT_OBJECT_0 + numProcesses) // nextProcessIndex >= WAIT_OBJECT_0 && 
+			{
+				nextProcessIndex -= WAIT_OBJECT_0;
+				CloseHandle(handles[nextProcessIndex]);
+				printf("\nClosing process %u", nextProcessIndex);
+			}
+			if (nextProcessIndex >= WAIT_ABANDONED_0 && nextProcessIndex < WAIT_ABANDONED_0 + numProcesses)
+			{
+				nextProcessIndex -= WAIT_ABANDONED_0;
+				printf("\nClosing process %u [abandoned]", nextProcessIndex);
+				CloseHandle(handles[nextProcessIndex]);
+			}
+			memmove(handles + nextProcessIndex, handles + nextProcessIndex + 1, (maxProcesses - nextProcessIndex - 1) * sizeof(handles[0]));
+			numProcesses--;
+		}
+	}
+}
+
+HANDLE createLPProcess(const int processKind, const bool forceSourceReread, const bool sourceWrite, const bool sourceWordNetRead, const bool sourceWordNetWrite, const bool parseOnly, const bool makeCopyBeforeSourceWrite,
+	const int numSourcesPerProcess, wstring specialExtension, const int nextProcessIndex, const int step)
+{
+	HANDLE processHandle = 0, threadHandle = 0;
+	DWORD processId = 0;
+	wchar_t processParameters[1024];
+	int errorCode;
+	switch (processKind)
+	{
+		case 0:
+			wsprintf(processParameters, L"QuestionAnsweringx64\\lp.exe -ParseRequest 0 + -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %s.%u", CACHEDIR,
+				(forceSourceReread) ? L"-forceSourceReread " : L"",
+				(sourceWrite) ? L"-SW " : L"",
+				(sourceWordNetRead) ? L"-SWNR " : L"",
+				(sourceWordNetWrite) ? L"-SWNW " : L"",
+				(parseOnly) ? L"-parseOnly " : L"",
+				(makeCopyBeforeSourceWrite) ? L"-MCSW " : L"",
+				(logMatchedSentences) ? L"-logMatchedSentences " : L"",
+				(logUnmatchedSentences) ? L"-logUnmatchedSentences " : L"",
+				numSourcesPerProcess,
+				specialExtension.c_str(),
+				nextProcessIndex);
+			if (errorCode = createLPProcess(nextProcessIndex, processHandle, threadHandle, processId, L"QuestionAnsweringx64\\lp.exe", processParameters) < 0)
+				break;
+			break;
+		case 1:
+			wsprintf(processParameters, L"ParseAllSourcesx64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %s.%u", CACHEDIR,
+				(forceSourceReread) ? L"-forceSourceReread " : L"",
+				(sourceWrite) ? L"-SW " : L"",
+				(sourceWordNetRead) ? L"-SWNR " : L"",
+				(sourceWordNetWrite) ? L"-SWNW " : L"",
+				(parseOnly) ? L"-parseOnly " : L"",
+				(makeCopyBeforeSourceWrite) ? L"-MCSW " : L"",
+				(logMatchedSentences) ? L"-logMatchedSentences " : L"",
+				(logUnmatchedSentences) ? L"-logUnmatchedSentences " : L"",
+				numSourcesPerProcess,
+				specialExtension.c_str(),
+				nextProcessIndex);
+			if (specialExtension.length() > 0)
+			{
+				wcscat(processParameters, L" -specialExtension ");
+				wcscat(processParameters, specialExtension.c_str());
+			}
+			if (errorCode = createLPProcess(nextProcessIndex, processHandle, threadHandle, processId, L"ParseAllSourcesx64\\lp.exe", processParameters) < 0)
+				break;
+			break;
+		case 2:
+			wsprintf(processParameters, L"x64\\StanfordAllSources\\CorpusAnalysis.exe -step %d -numSourceLimit %d -log %s.%u", step, numSourcesPerProcess, specialExtension.c_str(), nextProcessIndex);
+			if (errorCode = createLPProcess(nextProcessIndex, processHandle, threadHandle, processId, L"x64\\StanfordAllSources\\CorpusAnalysis.exe", processParameters) < 0)
+				break;
+			break;
+		default: break;
+	}
+	printf("\nCreated process %u:%d", nextProcessIndex, (int)processId);
+	return processHandle;
+}
+
+int waitToSpawnMoreProcesses(MYSQL& mysql, const int sourceType, const int numProcesses, HANDLE* handles, unsigned int &nextProcessIndex, const int startTime,
+	const int numSourcesProcessedOriginally, const int wordsProcessedOriginally, const int sentencesProcessedOriginally, const int maxProcesses, int &numSourcesLeft)
+{
+	if (numProcesses == maxProcesses)
+	{
+		wstring tmpstr;
+		nextProcessIndex = WaitForMultipleObjectsEx(numProcesses, handles, false, 1000 * 60 * 5, false);
+		if (nextProcessIndex == WAIT_FAILED)
+		{
+			if (!numProcesses)
+				return -1;
+			lplog(LOG_FATAL_ERROR, L"WaitForMultipleObjectsEx failed with error %s", getLastErrorMessage(tmpstr));
+		}
+		numSourcesLeft = 0;
+		int numSourcesProcessedNow = 0;
+		__int64 wordsProcessedNow = 0, sentencesProcessedNow = 0;
+		getNumSourcesProcessed(mysql, sourceType, numSourcesProcessedNow, wordsProcessedNow, sentencesProcessedNow);
+		int processingSeconds = (clock() - startTime) / CLOCKS_PER_SEC;
+		wchar_t consoleTitle[1500];
+		numSourcesProcessedNow -= numSourcesProcessedOriginally;
+		wordsProcessedNow -= wordsProcessedOriginally;
+		sentencesProcessedNow -= sentencesProcessedOriginally;
+		wsprintf(consoleTitle, L"sources=%06d:sentences=%06I64d:words=%08I64d in %02d:%02d:%02d [%d sources/hour] [%I64d words/hour].",
+			numSourcesProcessedNow, sentencesProcessedNow, wordsProcessedNow, processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, numSourcesProcessedNow * 3600 / processingSeconds, wordsProcessedNow * 3600 / processingSeconds);
+		SetConsoleTitle(consoleTitle);
+
+		if (nextProcessIndex == WAIT_IO_COMPLETION || nextProcessIndex == WAIT_TIMEOUT)
+			return 1;
+		if (nextProcessIndex < WAIT_OBJECT_0 + numProcesses) // nextProcessIndex >= WAIT_OBJECT_0 && 
+		{
+			nextProcessIndex -= WAIT_OBJECT_0;
+			CloseHandle(handles[nextProcessIndex]);
+			printf("\nClosing process %u", nextProcessIndex);
+		}
+		if (nextProcessIndex >= WAIT_ABANDONED_0 && nextProcessIndex < WAIT_ABANDONED_0 + numProcesses)
+		{
+			nextProcessIndex -= WAIT_ABANDONED_0;
+			printf("\nClosing process %u [abandoned]", nextProcessIndex);
+			CloseHandle(handles[nextProcessIndex]);
+		}
+	}
+	return 0;
+}
+
+void sendBreakSignals(bool & sentBreakSignals, const int numProcesses, HANDLE* handles)
+{
+	printf("\nSending break signals to children...\n");
+	if (!sentBreakSignals)
+	{
+		for (int p = 0; p < numProcesses; p++)
+		{
+			int pid = GetProcessId(handles[p]);
+			signalCtrl(pid, CTRL_C_EVENT);
+		}
+		sentBreakSignals = true;
+	}
+}
+
 bool getNextUnprocessedSource(MYSQL& mysql, int begin, int end, int sourceType, bool setUsed, int& id, wstring& path, wstring& encoding, wstring& start, int& repeatStart, wstring& etext, wstring& author, wstring& title);
 int getNumSources(MYSQL& mysql, int sourceType, bool left);
 bool anymoreUnprocessedForUnknown(MYSQL& mysql, int sourceType, int step);
@@ -871,43 +1030,10 @@ int startProcesses(MYSQL& mysql, int sourceType, int processKind, int step, int 
 	while (!errorCode)
 	{
 		unsigned int nextProcessIndex = numProcesses;
-		if (numProcesses == maxProcesses)
-		{
-			nextProcessIndex = WaitForMultipleObjectsEx(numProcesses, handles, false, 1000 * 60 * 5, false);
-			if (nextProcessIndex == WAIT_FAILED)
-			{
-				if (!numProcesses)
-					break;
-				lplog(LOG_FATAL_ERROR, L"WaitForMultipleObjectsEx failed with error %s", getLastErrorMessage(tmpstr));
-			}
-			numSourcesLeft = 0;
-			int numSourcesProcessedNow = 0;
-			__int64 wordsProcessedNow = 0, sentencesProcessedNow = 0;
-			getNumSourcesProcessed(mysql, sourceType, numSourcesProcessedNow, wordsProcessedNow, sentencesProcessedNow);
-			int processingSeconds = (clock() - startTime) / CLOCKS_PER_SEC;
-			wchar_t consoleTitle[1500];
-			numSourcesProcessedNow -= numSourcesProcessedOriginally;
-			wordsProcessedNow -= wordsProcessedOriginally;
-			sentencesProcessedNow -= sentencesProcessedOriginally;
-			wsprintf(consoleTitle, L"sources=%06d:sentences=%06I64d:words=%08I64d in %02d:%02d:%02d [%d sources/hour] [%I64d words/hour].",
-				numSourcesProcessedNow, sentencesProcessedNow, wordsProcessedNow, processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, numSourcesProcessedNow * 3600 / processingSeconds, wordsProcessedNow * 3600 / processingSeconds);
-			SetConsoleTitle(consoleTitle);
-
-			if (nextProcessIndex == WAIT_IO_COMPLETION || nextProcessIndex == WAIT_TIMEOUT)
-				continue;
-			if (nextProcessIndex < WAIT_OBJECT_0 + numProcesses) // nextProcessIndex >= WAIT_OBJECT_0 && 
-			{
-				nextProcessIndex -= WAIT_OBJECT_0;
-				CloseHandle(handles[nextProcessIndex]);
-				printf("\nClosing process %u", nextProcessIndex);
-			}
-			if (nextProcessIndex >= WAIT_ABANDONED_0 && nextProcessIndex < WAIT_ABANDONED_0 + numProcesses)
-			{
-				nextProcessIndex -= WAIT_ABANDONED_0;
-				printf("\nClosing process %u [abandoned]", nextProcessIndex);
-				CloseHandle(handles[nextProcessIndex]);
-			}
-		}
+		int breakContinueResult = waitToSpawnMoreProcesses(mysql, sourceType, numProcesses, handles, nextProcessIndex, startTime,
+			numSourcesProcessedOriginally, wordsProcessedOriginally, sentencesProcessedOriginally, maxProcesses, numSourcesLeft);
+		if (breakContinueResult < 0) break;
+		if (breakContinueResult > 0)  continue;
 		int id, repeatStart;
 		wstring start, path, encoding, etext, author, title, pathInCache;
 		bool result = true;
@@ -930,114 +1056,19 @@ int startProcesses(MYSQL& mysql, int sourceType, int processKind, int step, int 
 				memmove(handles + nextProcessIndex, handles + nextProcessIndex + 1, (maxProcesses - nextProcessIndex - 1) * sizeof(handles[0]));
 				numProcesses--;
 			}
-			if (numProcesses)
-			{
-				printf("\nNo more processes to be created. %d processes left to wait for.", numProcesses);
-				while (numProcesses)
-				{
-					nextProcessIndex = WaitForMultipleObjectsEx(numProcesses, handles, false, 1000 * 60 * 3, false);
-					if (nextProcessIndex == WAIT_FAILED)
-						lplog(LOG_FATAL_ERROR, L"\nWaitForMultipleObjectsEx failed with error %s", getLastErrorMessage(tmpstr));
-					int numSourcesProcessedNow = 0;
-					__int64 wordsProcessedNow = 0, sentencesProcessedNow = 0;
-					getNumSourcesProcessed(mysql, sourceType, numSourcesProcessedNow, wordsProcessedNow, sentencesProcessedNow);
-					int processingSeconds = (clock() - startTime) / CLOCKS_PER_SEC;
-					wchar_t consoleTitle[1500];
-					numSourcesProcessedNow -= numSourcesProcessedOriginally;
-					wordsProcessedNow -= wordsProcessedOriginally;
-					sentencesProcessedNow -= sentencesProcessedOriginally;
-					wsprintf(consoleTitle, L"sources=%06d:sentences=%06I64d:words=%08I64d in %02d:%02d:%02d [%d sources/hour] [%I64d words/hour].",
-						numSourcesProcessedNow, sentencesProcessedNow, wordsProcessedNow, processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, numSourcesProcessedNow * 3600 / processingSeconds, wordsProcessedNow * 3600 / processingSeconds);
-					lplog(LOG_INFO | LOG_ERROR, L"%s", consoleTitle);
-					SetConsoleTitle(consoleTitle);
-					if (nextProcessIndex == WAIT_IO_COMPLETION || nextProcessIndex == WAIT_TIMEOUT)
-						continue;
-					if (nextProcessIndex < WAIT_OBJECT_0 + numProcesses) // nextProcessIndex >= WAIT_OBJECT_0 && 
-					{
-						nextProcessIndex -= WAIT_OBJECT_0;
-						CloseHandle(handles[nextProcessIndex]);
-						printf("\nClosing process %u", nextProcessIndex);
-					}
-					if (nextProcessIndex >= WAIT_ABANDONED_0 && nextProcessIndex < WAIT_ABANDONED_0 + numProcesses)
-					{
-						nextProcessIndex -= WAIT_ABANDONED_0;
-						printf("\nClosing process %u [abandoned]", nextProcessIndex);
-						CloseHandle(handles[nextProcessIndex]);
-					}
-					memmove(handles + nextProcessIndex, handles + nextProcessIndex + 1, (maxProcesses - nextProcessIndex - 1) * sizeof(handles[0]));
-					numProcesses--;
-				}
-			}
+			waitForSpawnedProcesses(mysql, sourceType, numProcesses, handles, nextProcessIndex, startTime,
+				numSourcesProcessedOriginally, wordsProcessedOriginally, sentencesProcessedOriginally, maxProcesses);
 			break;
 		}
 		if (exitNow || exitEventually)
-		{
-			printf("\nSending break signals to children...\n");
-			if (!sentBreakSignals)
-			{
-				for (int p = 0; p < numProcesses; p++)
-				{
-					int pid = GetProcessId(handles[p]);
-					signalCtrl(pid, CTRL_C_EVENT);
-				}
-				sentBreakSignals = true;
-			}
-		}
+			sendBreakSignals(sentBreakSignals, numProcesses, handles);
 		else
 		{
-			HANDLE processHandle = 0, threadHandle = 0;
-			DWORD processId = 0;
-			wchar_t processParameters[1024];
-			switch (processKind)
-			{
-			case 0:
-				wsprintf(processParameters, L"QuestionAnsweringx64\\lp.exe -ParseRequest 0 + -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %s.%u", CACHEDIR,
-					(forceSourceReread) ? L"-forceSourceReread " : L"",
-					(sourceWrite) ? L"-SW " : L"",
-					(sourceWordNetRead) ? L"-SWNR " : L"",
-					(sourceWordNetWrite) ? L"-SWNW " : L"",
-					(parseOnly) ? L"-parseOnly " : L"",
-					(makeCopyBeforeSourceWrite) ? L"-MCSW " : L"",
-					(logMatchedSentences) ? L"-logMatchedSentences " : L"",
-					(logUnmatchedSentences) ? L"-logUnmatchedSentences " : L"",
-					numSourcesPerProcess,
-					specialExtension.c_str(),
-					nextProcessIndex);
-				if (errorCode = createLPProcess(nextProcessIndex, processHandle, threadHandle, processId, L"QuestionAnsweringx64\\lp.exe", processParameters) < 0)
-					break;
-				break;
-			case 1:
-				wsprintf(processParameters, L"ParseAllSourcesx64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %s.%u", CACHEDIR,
-					(forceSourceReread) ? L"-forceSourceReread " : L"",
-					(sourceWrite) ? L"-SW " : L"",
-					(sourceWordNetRead) ? L"-SWNR " : L"",
-					(sourceWordNetWrite) ? L"-SWNW " : L"",
-					(parseOnly) ? L"-parseOnly " : L"",
-					(makeCopyBeforeSourceWrite) ? L"-MCSW " : L"",
-					(logMatchedSentences) ? L"-logMatchedSentences " : L"",
-					(logUnmatchedSentences) ? L"-logUnmatchedSentences " : L"",
-					numSourcesPerProcess,
-					specialExtension.c_str(),
-					nextProcessIndex);
-				if (specialExtension.length() > 0)
-				{
-					wcscat(processParameters, L" -specialExtension ");
-					wcscat(processParameters, specialExtension.c_str());
-				}
-				if (errorCode = createLPProcess(nextProcessIndex, processHandle, threadHandle, processId, L"ParseAllSourcesx64\\lp.exe", processParameters) < 0)
-					break;
-				break;
-			case 2:
-				wsprintf(processParameters, L"x64\\StanfordAllSources\\CorpusAnalysis.exe -step %d -numSourceLimit %d -log %s.%u", step, numSourcesPerProcess, specialExtension.c_str(), nextProcessIndex);
-				if (errorCode = createLPProcess(nextProcessIndex, processHandle, threadHandle, processId, L"x64\\StanfordAllSources\\CorpusAnalysis.exe", processParameters) < 0)
-					break;
-				break;
-			default: break;
-			}
+			HANDLE processHandle= createLPProcess(processKind, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite, parseOnly, makeCopyBeforeSourceWrite,
+				numSourcesPerProcess, specialExtension, nextProcessIndex, step);
 			handles[nextProcessIndex] = processHandle;
 			if (numProcesses < maxProcesses)
 				numProcesses++;
-			printf("\nCreated process %u:%d", nextProcessIndex, (int)processId);
 		}
 	}
 	if (processSourceType != cSource::REQUEST_TYPE)
@@ -1053,7 +1084,7 @@ SRWLOCK rdfTypeMapSRWLock, mySQLTotalTimeSRWLock, totalInternetTimeWaitBandwidth
 void createLocks(void)
 {
 	LFS
-		InitializeSRWLock(&rdfTypeMapSRWLock);
+	InitializeSRWLock(&rdfTypeMapSRWLock);
 	InitializeSRWLock(&mySQLTotalTimeSRWLock);
 	InitializeSRWLock(&totalInternetTimeWaitBandwidthControlSRWLock);
 	InitializeSRWLock(&mySQLQueryBufferSRWLock);
