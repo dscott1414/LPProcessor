@@ -3473,6 +3473,92 @@ bool cSource::resolvePronounIsPlace(const int where, vector <cOM>& objectMatches
 	return true;
 }
 
+bool cSource::resolveAdjectivalNonSubject(int where, int lastBeginS1, vector <cOM>& objectMatches)
+{
+	if ((m[where].flags & cWordMatch::flagAdjectivalObject) == 0 && lastBeginS1 >= 0 && !(m[where].objectRole & SUBJECT_ROLE))
+	{
+		int o = m[where].getObject(), s;
+		// search for last subject.  If found, and agent with gender agreement, match and exit.
+		for (int subjectWhere = where - 1; subjectWhere >= 0 && !isEOS(subjectWhere) && m[subjectWhere].word->second.query(quoteForm) < 0; subjectWhere--)
+			if ((m[subjectWhere].objectRole & SUBJECT_ROLE) && (s = m[subjectWhere].getObject()) >= 0 &&
+				!(m[subjectWhere].flags & cWordMatch::flagAdjectivalObject) && objects[s].objectClass != BODY_OBJECT_CLASS)
+			{
+				if (m[subjectWhere].objectMatches.size() <= 1 && (s = (m[subjectWhere].objectMatches.size() == 1) ? m[subjectWhere].objectMatches[0].object : m[subjectWhere].getObject()) >= 0 &&
+					objects[s].matchGender(objects[o]) && objects[s].plural == objects[o].plural)
+				{
+					wstring tmpstr,tmpstr2;
+					lplog(LOG_RESOLUTION, L"%06d:possessive subject=%d:%s match to %d:%s.",
+						where, subjectWhere, objectString(s, tmpstr, true).c_str(), where, objectString(o, tmpstr2, true).c_str());
+					objectMatches.push_back(cOM(s, SALIENCE_THRESHOLD));
+					return false;
+				}
+			}
+	}
+	return true;
+}
+
+void cSource::disallowSpeakerOfPreviousQuestion(int where)
+{
+	unordered_map <int, int>::iterator sqi;
+	vector <cObject>::iterator object = objects.begin() + m[where].getObject();
+	vector <cLocalFocus>::iterator lsi;
+	if ((m[where].objectRole & SUBJECT_ROLE) && !object->plural && (sqi = questionSubjectAgreementMap.find(where)) != questionSubjectAgreementMap.end() &&
+		(m[sqi->second].flags & cWordMatch::flagDefiniteResolveSpeakers) && (lsi = in(m[sqi->second].objectMatches[0].object)) != localObjects.end())
+	{
+		wstring tmpstr,tmpstr2,tmpstr3;
+		if (debugTrace.traceSpeakerResolution)
+			lplog(LOG_RESOLUTION, L"%06d:subject %s should not match question speaker %d:%s - %s", where, objectString(object, tmpstr, true).c_str(), sqi->second, objectString(lsi->om, tmpstr2, true).c_str(), speakerResolutionFlagsString(m[sqi->second].flags, tmpstr3).c_str());
+		lsi->om.salienceFactor -= DISALLOW_SALIENCE;
+		itos(L"-SPEAKER_OF_PREVIOUS_QUESTION[-", DISALLOW_SALIENCE, lsi->res, L"]");
+	}
+}
+
+void cSource::disallowPOV(int where, const bool inPrimaryQuote)
+{
+	wstring tmpstr, tmpstr2;
+	if ((m[where].beginObjectPosition < 0 || m[m[where].beginObjectPosition].word->first != L"the") &&
+		m[where].queryForm(indefinitePronounForm) >= 0 && currentSpeakerGroup < speakerGroups.size() && speakerGroups[currentSpeakerGroup].povSpeakers.size() && !inPrimaryQuote)
+	{
+		vector <cLocalFocus>::iterator lsi;
+		for (set <int>::iterator oi = speakerGroups[currentSpeakerGroup].povSpeakers.begin(), oiEnd = speakerGroups[currentSpeakerGroup].povSpeakers.end(); oi != oiEnd; oi++)
+			if ((lsi = in(*oi)) != localObjects.end())
+			{
+				wstring tmpstr3;
+				if (debugTrace.traceSpeakerResolution)
+					lplog(LOG_RESOLUTION, L"%06d:POV %s should not match", where, objectString(*oi, tmpstr, true).c_str());
+				lsi->om.salienceFactor -= DISALLOW_SALIENCE;
+				itos(L"-POVIND[-", DISALLOW_SALIENCE, lsi->res, L"]");
+			}
+	}
+}
+
+// He spoke to them
+// them does not include he... - but not included in the usual L&L restrictions
+// each preposition points to the next preposition by relPrep.
+// each prep points to its object by relObject.
+// each object points to its preposition by relPrep.
+// if a preposition directly follows another object, the object of the preposition points to the previous object by relNextObject.
+void cSource::excludeMixedPlurality(int where)
+{
+	int whereSubject = -1;
+	if ((m[where].objectRole & PREP_OBJECT_ROLE) && m[where].relPrep >= 0 && m[m[where].relPrep].getRelVerb() >= 0 && m[m[m[where].relPrep].getRelVerb()].relSubject >= 0 &&
+		m[whereSubject = m[m[m[where].relPrep].getRelVerb()].relSubject].getObject() >= 0 &&
+		objects[m[whereSubject].getObject()].objectClass == PRONOUN_OBJECT_CLASS &&
+		m[where].getObject() >= 0 &&
+		(objects[m[whereSubject].getObject()].plural ^ objects[m[where].getObject()].plural) &&
+		(objects[m[whereSubject].getObject()].plural || m[whereSubject].objectMatches.size() == 1) &&
+		m[whereSubject].queryWinnerForm(pronounForm) < 0) // all, etc are not descriptive enough - must be 'they' etc
+	{
+		vector <cLocalFocus>::iterator lsi;
+		for (int o = 0; o < (signed)m[whereSubject].objectMatches.size(); o++)
+			if ((lsi = in(m[whereSubject].objectMatches[o].object)) != localObjects.end())
+			{
+				lsi->om.salienceFactor -= 10000;
+				lsi->res += L"MIXED_PLURALITY[-10000]";
+			}
+	}
+}
+
 bool cSource::resolvePronoun(int where, bool definitelySpeaker, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, int beginEntirePosition,
 	bool resolveForSpeaker, bool avoidCurrentSpeaker, bool& mixedPlurality, bool limitTwo, bool isPhysicallyPresent, bool physicallyEvaluated,
 	int& subjectCataRestriction, vector <cOM>& objectMatches)
@@ -3488,44 +3574,25 @@ bool cSource::resolvePronoun(int where, bool definitelySpeaker, bool inPrimaryQu
 		return false;
 	if (!identifyPleonasticIt(where, objectMatches))
 		return false;
-
 	// get the nearest localObject that has a subType
 	// it was opposite the door
 	if (!resolvePronounIsPlace(where, objectMatches))
 		return false;
-	wstring tmpstr, tmpstr2;
-	vector <cObject>::iterator object = objects.begin() + m[where].getObject();
 	vector <int> disallowedReferences;
-	wstring word = (m[where].principalWherePosition >= 0) ? m[m[where].principalWherePosition].word->first : m[where].word->first;
 	//if (unResolvablePosition(m[where].beginObjectPosition)) return false;
 	// he put her hand in his. (not an adjectival object, yet not applicable to LL2345)
 	if ((m[where].flags & cWordMatch::flagAdjectivalObject) == 0 && m[where].queryWinnerForm(possessivePronounForm) < 0)
 		coreferenceFilterLL2345(where, m[where].getObject(), disallowedReferences, lastBeginS1, lastRelativePhrase, lastQ2, mixedPlurality, subjectCataRestriction);
 	else if (m[where].queryWinnerForm(possessivePronounForm) >= 0)
 	{
-		if ((m[where].flags & cWordMatch::flagAdjectivalObject) == 0 && lastBeginS1 >= 0 && !(m[where].objectRole & SUBJECT_ROLE))
-		{
-			int o = m[where].getObject(), s;
-			// search for last subject.  If found, and agent with gender agreement, match and exit.
-			for (int subjectWhere = where - 1; subjectWhere >= 0 && !isEOS(subjectWhere) && m[subjectWhere].word->second.query(quoteForm) < 0; subjectWhere--)
-				if ((m[subjectWhere].objectRole & SUBJECT_ROLE) && (s = m[subjectWhere].getObject()) >= 0 &&
-					!(m[subjectWhere].flags & cWordMatch::flagAdjectivalObject) && objects[s].objectClass != BODY_OBJECT_CLASS)
-				{
-					if (m[subjectWhere].objectMatches.size() <= 1 && (s = (m[subjectWhere].objectMatches.size() == 1) ? m[subjectWhere].objectMatches[0].object : m[subjectWhere].getObject()) >= 0 &&
-						objects[s].matchGender(objects[o]) && objects[s].plural == objects[o].plural)
-					{
-						lplog(LOG_RESOLUTION, L"%06d:possessive subject=%d:%s match to %d:%s.",
-							where, subjectWhere, objectString(s, tmpstr, true).c_str(), where, objectString(o, tmpstr2, true).c_str());
-						objectMatches.push_back(cOM(s, SALIENCE_THRESHOLD));
-						return false;
-					}
-				}
-		}
+		if (!resolveAdjectivalNonSubject(where, lastBeginS1, objectMatches))
+			return false;
 		coreferenceFilterLL5(where, disallowedReferences);
 	}
 	// if plural pronoun, in subject position, and speakerGroup has more than 1 person, and not OUTSIDE_QUOTE_NONPAST_OBJECT_ROLE
 	// this prevents people from being aged out and plural neuter objects taking their place
 	bool disallowOnlyNeuterMatches;
+	vector <cObject>::iterator object = objects.begin() + m[where].getObject();
 	disallowOnlyNeuterMatches = object->plural &&
 		(m[where].objectRole & SUBJECT_ROLE) && ((m[where].objectRole & IN_PRIMARY_QUOTE_ROLE) || !(m[where].objectRole & NONPAST_OBJECT_ROLE)) &&
 		(currentSpeakerGroup >= speakerGroups.size() || speakerGroups[currentSpeakerGroup].speakers.size() > 1);
@@ -3540,60 +3607,16 @@ bool cSource::resolvePronoun(int where, bool definitelySpeaker, bool inPrimaryQu
 		if (debugTrace.traceSpeakerResolution)
 			lplog(LOG_RESOLUTION, L"lastGenderedAge is de-aged by one (%d).", lastGenderedAge);
 	}
-	// He spoke to them
-	// them does not include he... - but not included in the usual L&L restrictions
-	// each preposition points to the next preposition by relPrep.
-	// each prep points to its object by relObject.
-	// each object points to its preposition by relPrep.
-	// if a preposition directly follows another object, the object of the preposition points to the previous object by relNextObject.
-	vector <cLocalFocus>::iterator lsi;
-	int whereSubject = -1;
-	if ((m[where].objectRole & PREP_OBJECT_ROLE) && m[where].relPrep >= 0 && m[m[where].relPrep].getRelVerb() >= 0 && m[m[m[where].relPrep].getRelVerb()].relSubject >= 0 &&
-		m[whereSubject = m[m[m[where].relPrep].getRelVerb()].relSubject].getObject() >= 0 &&
-		objects[m[whereSubject].getObject()].objectClass == PRONOUN_OBJECT_CLASS &&
-		m[where].getObject() >= 0 &&
-		(objects[m[whereSubject].getObject()].plural ^ objects[m[where].getObject()].plural) &&
-		(objects[m[whereSubject].getObject()].plural || m[whereSubject].objectMatches.size() == 1) &&
-		m[whereSubject].queryWinnerForm(pronounForm) < 0) // all, etc are not descriptive enough - must be 'they' etc
-	{
-		for (int o = 0; o < (signed)m[whereSubject].objectMatches.size(); o++)
-			if ((lsi = in(m[whereSubject].objectMatches[o].object)) != localObjects.end())
-			{
-				lsi->om.salienceFactor -= 10000;
-				lsi->res += L"MIXED_PLURALITY[-10000]";
-			}
-	}
+	excludeMixedPlurality(where);
 	adjustSaliencesByParallelRoleAndPlurality(where, inPrimaryQuote, resolveForSpeaker, lastGenderedAge);
-	{
-		unordered_map <int, int>::iterator sqi;
-		if ((m[where].objectRole & SUBJECT_ROLE) && !object->plural && (sqi = questionSubjectAgreementMap.find(where)) != questionSubjectAgreementMap.end() &&
-			(m[sqi->second].flags & cWordMatch::flagDefiniteResolveSpeakers) && (lsi = in(m[sqi->second].objectMatches[0].object)) != localObjects.end())
-		{
-			wstring tmpstr3;
-			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:subject %s should not match question speaker %d:%s - %s", where, objectString(object, tmpstr, true).c_str(), sqi->second, objectString(lsi->om, tmpstr2, true).c_str(), speakerResolutionFlagsString(m[sqi->second].flags, tmpstr3).c_str());
-			lsi->om.salienceFactor -= DISALLOW_SALIENCE;
-			itos(L"-SPEAKER_OF_PREVIOUS_QUESTION[-", DISALLOW_SALIENCE, lsi->res, L"]");
-		}
-	}
-	if ((m[where].beginObjectPosition < 0 || m[m[where].beginObjectPosition].word->first != L"the") &&
-		m[where].queryForm(indefinitePronounForm) >= 0 && currentSpeakerGroup < speakerGroups.size() && speakerGroups[currentSpeakerGroup].povSpeakers.size() && !inPrimaryQuote)
-	{
-		for (set <int>::iterator oi = speakerGroups[currentSpeakerGroup].povSpeakers.begin(), oiEnd = speakerGroups[currentSpeakerGroup].povSpeakers.end(); oi != oiEnd; oi++)
-			if ((lsi = in(*oi)) != localObjects.end())
-			{
-				wstring tmpstr3;
-				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:POV %s should not match", where, objectString(*oi, tmpstr, true).c_str());
-				lsi->om.salienceFactor -= DISALLOW_SALIENCE;
-				itos(L"-POVIND[-", DISALLOW_SALIENCE, lsi->res, L"]");
-			}
-	}
+	disallowSpeakerOfPreviousQuestion(where);
+	disallowPOV(where, inPrimaryQuote);
 	excludeObservers(where, inPrimaryQuote, definitelySpeaker);
 	resolveNameGender(where, object->male, object->female);
 	excludeSpeakers(where, inPrimaryQuote, inSecondaryQuote);
 	if (debugTrace.traceSpeakerResolution)
 	{
+		wstring tmpstr, tmpstr2;
 		lplog(LOG_RESOLUTION, L"%06d:RESOLVING pronoun %s%s [%s minAge %d]", where, objectString(object, tmpstr, false).c_str(), m[where].roleString(tmpstr2).c_str(), (resolveForSpeaker) ? L"speaker" : L"object", lastGenderedAge);
 		printLocalFocusedObjects(where, PRONOUN_OBJECT_CLASS);
 	}

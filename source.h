@@ -2864,6 +2864,10 @@ private:
 		const bool resolveForSpeaker, const bool avoidCurrentSpeaker, vector <cOM>& objectMatches);
 	bool identifyPleonasticIt(const int where, vector <cOM>& objectMatches);
 	bool resolvePronounIsPlace(const int where, vector <cOM>& objectMatches);
+	bool resolveAdjectivalNonSubject(int where, int lastBeginS1, vector <cOM>& objectMatches);
+	void disallowSpeakerOfPreviousQuestion(int where);
+	void disallowPOV(int where, const bool inPrimaryQuote);
+	void excludeMixedPlurality(int where);
 	bool resolvePronoun(int where,bool definitelySpeaker,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,int beginEntirePosition,
 															bool resolveForSpeaker,bool avoidCurrentSpeaker,bool &mixedPlurality,bool limitTwo,bool isPhysicallyPresent,bool physicallyEvaluated,int &subjectCataRestriction,vector <cOM> &objectMatches);
 	enum pronounResolutionSearchType { anyType,anyPersonType,anyMalePersonType,anyFemalePersonType,anyPluralPersonType };
