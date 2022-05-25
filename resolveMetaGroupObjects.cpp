@@ -1313,33 +1313,69 @@ bool cSource::rejectSG(int ownerWhere, set <int>& speakers, bool inPrimaryQuote)
 	return true;
 }
 
-bool cSource::resolveMetaGroupByAssociation(int where, bool inPrimaryQuote, vector <cOM>& objectMatches, int latestOwnerWhere)
+bool cSource::resolveMetaGroupByAssociationAddSpeakerIfLatestOwnerWhereNotObserverSameGender(const int where, const int sg, vector <cOM>& objectMatches, 
+	const int latestOwnerWhere, const bool restrictSGToGrouped, const bool friendOfObserver, set <int>*speakers,
+	int &numInSpeakers)
 {
-	LFS
-		int o = m[where].getObject(), saveCSG = -1;
-	bool eraseOwnerWhereMatches = false;
-	if (m[latestOwnerWhere].objectMatches.empty())
-	{
-		bool firstPerson = (m[latestOwnerWhere].word->second.inflectionFlags & FIRST_PERSON) != 0;
-		bool secondPerson = (m[latestOwnerWhere].word->second.inflectionFlags & SECOND_PERSON) != 0;
-		bool inSecondaryLink = previousPrimaryQuote >= 0 && m[previousPrimaryQuote].getQuoteForwardLink() != -1;
-		// my friend
-		if ((firstPerson && inSecondaryLink) || (secondPerson && !inSecondaryLink))
-			setMatched(latestOwnerWhere, previousSpeakers);
-		// your friend
-		if ((firstPerson && !inSecondaryLink) || (secondPerson && inSecondaryLink))
-			setMatched(latestOwnerWhere, beforePreviousSpeakers);
-		wstring tmpstr;
-		if ((eraseOwnerWhereMatches = m[latestOwnerWhere].objectMatches.size() != 0) && debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:matched %d temporarily to %s previousPrimaryQuote=%d[NL=%d FL=%d].",
-				where, latestOwnerWhere, objectString(m[latestOwnerWhere].objectMatches, tmpstr, true).c_str(),
-				previousPrimaryQuote, m[previousPrimaryQuote].nextQuote, m[previousPrimaryQuote].getQuoteForwardLink());
-	}
-	// find latest speakerGroup
+	wstring tmpstr, tmpstr2;
+	int currentObject = m[where].getObject();
+	// if a speaker is not in latestOwnerWhere, and not observer and not the object itself
+	// AND matching gender with the object itself AND not grouped previously to current speaker group
+	for (set<int>::iterator si = speakers->begin(), siEnd = speakers->end(); si != siEnd; si++)
+		if (in(*si, m[latestOwnerWhere].objectMatches) == m[latestOwnerWhere].objectMatches.end())
+		{
+			if (!restrictSGToGrouped && (friendOfObserver ^ (find(speakerGroups[sg].observers.begin(), speakerGroups[sg].observers.end(), *si) != speakerGroups[sg].observers.end())))
+			{
+				if (debugTrace.traceSpeakerResolution)
+					lplog(LOG_RESOLUTION, L"%06d:Rejected %s - must %sbe observer", where, objectString(*si, tmpstr2, true).c_str(), (friendOfObserver) ? L"" : L"NOT ");
+				continue;
+			}
+			if (*si == m[where].getObject())
+			{
+				if (debugTrace.traceSpeakerResolution)
+					lplog(LOG_RESOLUTION, L"%06d:Unable to resolve meta group object from speakers %s - found the meta group in speakers", where,
+						objectString(*speakers, tmpstr2).c_str());
+				return false; // meta group object is in the speaker group
+			}
+			else if (objects[currentObject].matchGender(objects[*si]))
+			{
+				// check if *si was in groupedSpeakers or groups in any speakerGroup after sg.
+				// if we are finding the meta-group companion of 'Whittington' and the only group found was 
+				// Whittington and Tuppence but a group after sg but before the current speaker group
+				// had Tuppence in it also, then (by definition) it does not have Whittington (because otherwise this
+				// group after sg would actually be sg) so reject this 'Tuppence'.
+				vector <cSpeakerGroup>::iterator sgi = speakerGroups.begin() + sg + 1, sgiEnd = speakerGroups.begin() + currentSpeakerGroup;
+				if (sg + 1 > (int)currentSpeakerGroup) sgi = sgiEnd;
+				for (; sgi != sgiEnd; sgi++)
+					if (sgi->groupedSpeakers.find(*si) != sgi->groupedSpeakers.end())
+						break;
+				if (sgi != sgiEnd)
+				{
+					if (debugTrace.traceSpeakerResolution)
+					{
+						lplog(LOG_RESOLUTION, L"%06d:Rejected object %s as meta group match because of speaker group conflict between:", where, objectString(*si, tmpstr, true).c_str());
+						lplog(LOG_RESOLUTION, L"%06d:speakerGroup %s", where, toText(speakerGroups[sg], tmpstr2));
+						lplog(LOG_RESOLUTION, L"%06d:speakerGroup %s", where, toText(*sgi, tmpstr2));
+					}
+				}
+				else
+					objectMatches.push_back(cOM(*si, SALIENCE_THRESHOLD));
+			}
+			else if (debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%06d:Rejected object %s as meta group match because of gender mismatch with %s.", where, objectString(*si, tmpstr, false).c_str(), objectString(currentObject, tmpstr2, false).c_str());
+		}
+		else
+			numInSpeakers++;
+	return true;
+}
+
+bool cSource::findMinimallyAssociatedSpeakerGroup(const int where, const int latestOwnerWhere, const bool inPrimaryQuote, bool & restrictSGToGrouped, int &sg)
+{
+	int saveCSG = -1;
 	// does the currentSpeakerGroup contain every one of the latestOwnerWhere?
-	bool atLeastOneInSpeakerGroup = false, restrictSGToGrouped = false, restrictCSGToGrouped = false, isSubset = false; // atLeastOneInPOVSpeakerGroup=false,
+	bool atLeastOneInSpeakerGroup = false, restrictCSGToGrouped = false, isSubset = false; // atLeastOneInPOVSpeakerGroup=false,
 	// is the owner in speakers, and not in povSpeakers?
-	int sg, csg = (isSubsetOfSpeakers(where, latestOwnerWhere, speakerGroups[currentSpeakerGroup].speakers, inPrimaryQuote, atLeastOneInSpeakerGroup)) ? currentSpeakerGroup : -1;
+	int csg = (isSubsetOfSpeakers(where, latestOwnerWhere, speakerGroups[currentSpeakerGroup].speakers, inPrimaryQuote, atLeastOneInSpeakerGroup)) ? currentSpeakerGroup : -1;
 	// do any of the previous speakerGroups contain every one of the latestOwnerWhere?
 	// prefer groupedSpeakers over just speakers
 	for (sg = currentSpeakerGroup - 1; sg >= 0; sg--)
@@ -1385,7 +1421,6 @@ bool cSource::resolveMetaGroupByAssociation(int where, bool inPrimaryQuote, vect
 	{
 		if (saveCSG < 0)
 		{
-			if (eraseOwnerWhereMatches) m[latestOwnerWhere].objectMatches.clear();
 			return false;
 		}
 		csg = saveCSG;
@@ -1416,11 +1451,48 @@ bool cSource::resolveMetaGroupByAssociation(int where, bool inPrimaryQuote, vect
 		sg = csg;
 		restrictSGToGrouped = restrictCSGToGrouped;
 	}
+	return true;
+}
+
+bool cSource::temporarilyFill12PersonLatestOwnerWhere(const int where, const int latestOwnerWhere)
+{
+	bool eraseOwnerWhereMatches = false;
+	if (m[latestOwnerWhere].objectMatches.empty())
+	{
+		bool firstPerson = (m[latestOwnerWhere].word->second.inflectionFlags & FIRST_PERSON) != 0;
+		bool secondPerson = (m[latestOwnerWhere].word->second.inflectionFlags & SECOND_PERSON) != 0;
+		bool inSecondaryLink = previousPrimaryQuote >= 0 && m[previousPrimaryQuote].getQuoteForwardLink() != -1;
+		// my friend
+		if ((firstPerson && inSecondaryLink) || (secondPerson && !inSecondaryLink))
+			setMatched(latestOwnerWhere, previousSpeakers);
+		// your friend
+		if ((firstPerson && !inSecondaryLink) || (secondPerson && inSecondaryLink))
+			setMatched(latestOwnerWhere, beforePreviousSpeakers);
+		wstring tmpstr;
+		if ((eraseOwnerWhereMatches = m[latestOwnerWhere].objectMatches.size() != 0) && debugTrace.traceSpeakerResolution)
+			lplog(LOG_RESOLUTION, L"%06d:matched %d temporarily to %s previousPrimaryQuote=%d[NL=%d FL=%d].",
+				where, latestOwnerWhere, objectString(m[latestOwnerWhere].objectMatches, tmpstr, true).c_str(),
+				previousPrimaryQuote, m[previousPrimaryQuote].nextQuote, m[previousPrimaryQuote].getQuoteForwardLink());
+	}
+	return eraseOwnerWhereMatches;
+}
+
+bool cSource::resolveMetaGroupByAssociation(int where, bool inPrimaryQuote, vector <cOM>& objectMatches, int latestOwnerWhere)
+{
+	LFS
+	bool eraseOwnerWhereMatches = temporarilyFill12PersonLatestOwnerWhere(where, latestOwnerWhere);
+	int sg = -1;
+	bool restrictSGToGrouped = false;
+	// find latest speakerGroup
+	if (!findMinimallyAssociatedSpeakerGroup(where, latestOwnerWhere, inPrimaryQuote, restrictSGToGrouped, sg))
+	{
+		if (eraseOwnerWhereMatches) m[latestOwnerWhere].objectMatches.clear();
+		return false;
+	}
 	// now sg is the minimum winner
 	bool oneIn = false, allIn = false; // metaGroupObjectInSpeakerGroup=false,
 	set <int>* speakers = (restrictSGToGrouped) ? &speakerGroups[sg].groupedSpeakers : &speakerGroups[sg].speakers;
 	wstring tmpstr, tmpstr2, tmpstr3;
-	int numInSpeakers = 0;
 	bool friendOfObserver = intersect(latestOwnerWhere, speakerGroups[sg].observers, allIn, oneIn);
 	if (allIn)
 	{
@@ -1429,55 +1501,17 @@ bool cSource::resolveMetaGroupByAssociation(int where, bool inPrimaryQuote, vect
 		if (eraseOwnerWhereMatches) m[latestOwnerWhere].objectMatches.clear();
 		return false;
 	}
+	int numInSpeakers = 0;
 	// put all speakers in sg that are NOT in latestOwnerWhere nor in objectMatches and ARE in the currentSpeakerGroup
 	if (m[latestOwnerWhere].objectMatches.size())
 	{
-		for (set<int>::iterator si = speakers->begin(), siEnd = speakers->end(); si != siEnd; si++)
-			if (in(*si, m[latestOwnerWhere].objectMatches) == m[latestOwnerWhere].objectMatches.end())
-			{
-				if (!restrictSGToGrouped && (friendOfObserver ^ (find(speakerGroups[sg].observers.begin(), speakerGroups[sg].observers.end(), *si) != speakerGroups[sg].observers.end())))
-				{
-					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d:Rejected %s - must %sbe observer", where, objectString(*si, tmpstr2, true).c_str(), (friendOfObserver) ? L"" : L"NOT ");
-					continue;
-				}
-				if (*si == m[where].getObject())
-				{
-					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d:Unable to resolve meta group object from speakers %s - found the meta group in speakers", where,
-							objectString(*speakers, tmpstr2).c_str());
-					if (eraseOwnerWhereMatches) m[latestOwnerWhere].objectMatches.clear();
-					return false; // meta group object is in the speaker group
-				}
-				else if (objects[o].matchGender(objects[*si]))
-				{
-					// check if *si was in groupedSpeakers or groups in any speakerGroup after sg.
-					// if we are finding the meta-group companion of 'Whittington' and the only group found was 
-					// Whittington and Tuppence but a group after sg but before the current speaker group
-					// had Tuppence in it also, then (by definition) it does not have Whittington (because otherwise this
-					// group after sg would actually be sg) so reject this 'Tuppence'.
-					vector <cSpeakerGroup>::iterator sgi = speakerGroups.begin() + sg + 1, sgiEnd = speakerGroups.begin() + currentSpeakerGroup;
-					if (sg + 1 > (int)currentSpeakerGroup) sgi = sgiEnd;
-					for (; sgi != sgiEnd; sgi++)
-						if (sgi->groupedSpeakers.find(*si) != sgi->groupedSpeakers.end())
-							break;
-					if (sgi != sgiEnd)
-					{
-						if (debugTrace.traceSpeakerResolution)
-						{
-							lplog(LOG_RESOLUTION, L"%06d:Rejected object %s as meta group match because of speaker group conflict between:", where, objectString(*si, tmpstr, true).c_str());
-							lplog(LOG_RESOLUTION, L"%06d:speakerGroup %s", where, toText(speakerGroups[sg], tmpstr2));
-							lplog(LOG_RESOLUTION, L"%06d:speakerGroup %s", where, toText(*sgi, tmpstr2));
-						}
-					}
-					else
-						objectMatches.push_back(cOM(*si, SALIENCE_THRESHOLD));
-				}
-				else if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:Rejected object %s as meta group match because of gender mismatch with %s.", where, objectString(*si, tmpstr, false).c_str(), objectString(o, tmpstr2, false).c_str());
-			}
-			else
-				numInSpeakers++;
+		if (!resolveMetaGroupByAssociationAddSpeakerIfLatestOwnerWhereNotObserverSameGender(where, sg, objectMatches, latestOwnerWhere, 
+			restrictSGToGrouped, friendOfObserver, speakers, numInSpeakers))
+		{
+			if (eraseOwnerWhereMatches)
+				m[latestOwnerWhere].objectMatches.clear();
+			return false;
+		}
 		if (numInSpeakers == 0)
 			objectMatches.clear();
 		if (debugTrace.traceSpeakerResolution)
@@ -1512,6 +1546,7 @@ bool cSource::resolveMetaGroupByAssociation(int where, bool inPrimaryQuote, vect
 				}
 				else if (speakerGroups[currentSpeakerGroup].speakers.size() < 3 || speakerGroups[currentSpeakerGroup].speakers.find(*si) != speakerGroups[currentSpeakerGroup].speakers.end())
 				{
+					int o = m[where].getObject();
 					if (objects[o].matchGender(objects[*si]))
 						objectMatches.push_back(cOM(*si, SALIENCE_THRESHOLD));
 					else
@@ -1526,8 +1561,10 @@ bool cSource::resolveMetaGroupByAssociation(int where, bool inPrimaryQuote, vect
 			lplog(LOG_RESOLUTION, L"%06d:Resolving meta group object (2) - %s's friends from speakerGroup %s are %s.", where,
 				objectString(m[latestOwnerWhere].getObject(), tmpstr, true).c_str(), toText(speakerGroups[sg], tmpstr2), objectString(objectMatches, tmpstr3, true).c_str());
 	}
-	if (eraseOwnerWhereMatches) m[latestOwnerWhere].objectMatches.clear();
-	if (objectMatches.size() && (m[where].flags & cWordMatch::flagResolveMetaGroupByGender)) m[where].objectMatches.clear();
+	if (eraseOwnerWhereMatches) 
+		m[latestOwnerWhere].objectMatches.clear();
+	if (objectMatches.size() && (m[where].flags & cWordMatch::flagResolveMetaGroupByGender)) 
+		m[where].objectMatches.clear();
 	if (objectMatches.size() == 1)
 		replaceObjectInSection(where, objectMatches[0].object, m[where].getObject(), L"resolveMetaGroupObject");
 	return true;

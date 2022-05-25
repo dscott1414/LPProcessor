@@ -3292,15 +3292,12 @@ int cSource::pronounCoreferenceFilterLL6(int P, int lastBeginS1, vector <int>& d
 	return 0;
 }
 
-bool cSource::resolvePronoun(int where, bool definitelySpeaker, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, int beginEntirePosition,
-	bool resolveForSpeaker, bool avoidCurrentSpeaker, bool& mixedPlurality, bool limitTwo, bool isPhysicallyPresent, bool physicallyEvaluated,
-	int& subjectCataRestriction, vector <cOM>& objectMatches)
+bool cSource::resolvePronounSpecialCases(const int where, const bool definitelySpeaker, const bool inPrimaryQuote, const bool inSecondaryQuote, 
+	const int lastBeginS1, const int lastRelativePhrase, const int lastQ2, const int lastVerb, 
+	const bool resolveForSpeaker, const bool avoidCurrentSpeaker, const bool limitTwo, vector <cOM>& objectMatches)
 {
-	LFS
-		wstring tmpstr, tmpstr2;
-	vector <cObject>::iterator object = objects.begin() + m[where].getObject();
-	vector <int> disallowedReferences;
 	wstring word = (m[where].principalWherePosition >= 0) ? m[m[where].principalWherePosition].word->first : m[where].word->first;
+	wstring tmpstr;
 	// you are a very important person
 	if (inPrimaryQuote && (m[where].objectRole & IS_OBJECT_ROLE) && m[where].relSubject >= 0 &&
 		(m[m[where].relSubject].word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON | THIRD_PERSON)) == SECOND_PERSON)
@@ -3353,8 +3350,17 @@ bool cSource::resolvePronoun(int where, bool definitelySpeaker, bool inPrimaryQu
 	// such a look of ...
 	if (word == L"such" && where + 1 < (signed)m.size() && (m[where + 1].word->first == L"a" || m[where + 1].word->first == L"an"))
 		return false;
+	vector <cObject>::iterator object = objects.begin() + m[where].getObject();
 	if (limitTwo && tryGenderedSubgroup(where, objectMatches, object, -1, limitTwo))
 		return false;
+	return true;
+}
+
+bool cSource::resolveGenderAndNumberMatchedIsRolePronoun(const int where, const bool definitelySpeaker, const bool inPrimaryQuote, const bool inSecondaryQuote,
+	const int lastBeginS1, const int lastRelativePhrase, const int lastQ2, const int lastVerb,
+	const bool resolveForSpeaker, const bool avoidCurrentSpeaker, vector <cOM>& objectMatches)
+{
+	vector <cObject>::iterator object = objects.begin() + m[where].getObject();
 	// many is the time
 	if (((!object->male && !object->female) || object->neuter) &&
 		(m[where].objectRole & IS_OBJECT_ROLE) && m[where].getRelObject() >= 0 && m[m[where].getRelObject()].getObject() >= 0 &&
@@ -3364,6 +3370,8 @@ bool cSource::resolvePronoun(int where, bool definitelySpeaker, bool inPrimaryQu
 		// They[words] were uttered by Boris and they[words] were : “QS Mr . Brown . ”
 		(!object->plural || objects[m[m[where].getRelObject()].getObject()].plural))
 	{
+		wstring word = (m[where].principalWherePosition >= 0) ? m[m[where].principalWherePosition].word->first : m[where].word->first;
+		wstring tmpstr, tmpstr2;
 		// it was opposite the door / He was near Bobby 
 		// no preposition, but incorrect parsing means prep was turned into an adverb (opposite, near means the object is NOT the subject)
 		if (m[where].getRelVerb() >= 0 && m[m[where].getRelVerb()].relPrep < 0 && (m[m[m[where].getRelObject()].beginObjectPosition - 1].word->second.flags & cSourceWordInfo::prepMoveType))
@@ -3391,9 +3399,33 @@ bool cSource::resolvePronoun(int where, bool definitelySpeaker, bool inPrimaryQu
 			return false;
 		}
 	}
+	if (((object->male || object->female) && !object->neuter) &&
+		(m[where].objectRole & (IS_OBJECT_ROLE | SUBJECT_ROLE)) == (IS_OBJECT_ROLE | SUBJECT_ROLE) &&
+		m[where].getRelObject() >= 0 && m[m[where].getRelObject()].getObject() >= 0 &&
+		// the object cannot be unresolvable - this will not be useful / they were an essentially modern looking couple
+		!unResolvablePosition(m[m[where].getRelObject()].beginObjectPosition) &&
+		object->matchGenderIncludingNeuter(objects[m[m[where].getRelObject()].getObject()]) &&
+		objects[m[m[where].getRelObject()].getObject()].objectClass == NAME_OBJECT_CLASS &&
+		objects[m[m[where].getRelObject()].getObject()].numEncounters > 1)
+	{
+		wstring tmpstr, tmpstr2;
+		if (m[m[where].getRelObject()].objectMatches.size())
+			objectMatches = m[m[where].getRelObject()].objectMatches;
+		else
+			objectMatches.push_back(cOM(m[m[where].getRelObject()].getObject(), SALIENCE_THRESHOLD));
+		if (debugTrace.traceSpeakerResolution)
+			lplog(LOG_RESOLUTION, L"%06d:match gendered (IS) %s to %s", where, objectString(object, tmpstr2, false).c_str(), whereString(m[where].getRelObject(), tmpstr, false).c_str());
+		return false;
+	}
+	return true;
+}
+
+bool cSource::identifyPleonasticIt(const int where, vector <cOM>& objectMatches)
+{
 	// pleonastic it
 	// It was at that moment that the full realization of his[man] folly began to STAYcome home
 	int maxEnd;
+	vector <cObject>::iterator object = objects.begin() + m[where].getObject();
 	if ((!(object->male || object->female) && object->neuter && !object->plural) &&
 		m[where].relPrep >= 0 && m[where].relPrep == m[where].getRelVerb() + 1 &&
 		m[m[where].relPrep].getRelObject() >= 0 && m[m[m[where].relPrep].getRelObject()].endObjectPosition >= 0 && queryPattern(m[m[m[where].relPrep].getRelObject()].endObjectPosition, L"_REL1", maxEnd) != -1 &&
@@ -3405,11 +3437,6 @@ bool cSource::resolvePronoun(int where, bool definitelySpeaker, bool inPrimaryQu
 		m[where].objectRole |= SUBJECT_PLEONASTIC_ROLE;
 		return false;
 	}
-	// it was a few minutes past 11.
-	int tf = 0, relObjectDEBUG = 0;
-	if (m[where].getRelObject() >= 0 && m[m[where].getRelObject()].beginObjectPosition >= 0)
-		tf = m[relObjectDEBUG = m[where].getRelObject()].word->second.timeFlags;
-
 	if ((!(object->male || object->female) && object->neuter && !object->plural) &&
 		(m[where].objectRole & (IS_OBJECT_ROLE | SUBJECT_ROLE)) == (IS_OBJECT_ROLE | SUBJECT_ROLE) &&
 		m[where].getRelObject() >= 0 && m[m[where].getRelObject()].beginObjectPosition >= 0 &&
@@ -3423,9 +3450,13 @@ bool cSource::resolvePronoun(int where, bool definitelySpeaker, bool inPrimaryQu
 		m[where].objectRole |= SUBJECT_PLEONASTIC_ROLE;
 		return false;
 	}
-	// get the nearest localObject that has a subType
-	// it was opposite the door
+	return true;
+}
+
+bool cSource::resolvePronounIsPlace(const int where, vector <cOM>& objectMatches)
+{
 	int wp = m[where].getRelObject();
+	vector <cObject>::iterator object = objects.begin() + m[where].getObject();
 	if ((m[where].objectRole & IS_OBJECT_ROLE) && object->neuter && !(object->male || object->female || object->plural) && m[where].getRelObject() < 0 && m[where].getRelVerb() >= 0 &&
 		(wp = m[m[where].getRelVerb()].relPrep) >= 0 && (m[wp].word->second.flags & cSourceWordInfo::prepMoveType) && m[wp].getRelObject() >= 0 &&
 		m[m[wp].getRelObject()].getObject() >= 0 && objects[m[m[wp].getRelObject()].getObject()].getSubType() >= 0)
@@ -3433,27 +3464,39 @@ bool cSource::resolvePronoun(int where, bool definitelySpeaker, bool inPrimaryQu
 		for (vector <cLocalFocus>::iterator lsi = localObjects.begin(); lsi != localObjects.end(); lsi++)
 			if (lsi->physicallyPresent && objects[lsi->om.object].getSubType() >= 0 && lsi->getTotalAge() < 4)
 				objectMatches.push_back(cOM(lsi->om.object, SALIENCE_THRESHOLD));
+		wstring tmpstr;
 		if (debugTrace.traceSpeakerResolution && objectMatches.size())
 			lplog(LOG_RESOLUTION, L"%06d:added place match (IS) %s.", where, objectString(objectMatches, tmpstr, false).c_str());
-		if (objectMatches.size()) return false;
+		if (objectMatches.size()) 
+			return false;
 	}
-	if (((object->male || object->female) && !object->neuter) &&
-		(m[where].objectRole & (IS_OBJECT_ROLE | SUBJECT_ROLE)) == (IS_OBJECT_ROLE | SUBJECT_ROLE) &&
-		m[where].getRelObject() >= 0 && m[m[where].getRelObject()].getObject() >= 0 &&
-		// the object cannot be unresolvable - this will not be useful / they were an essentially modern looking couple
-		!unResolvablePosition(m[m[where].getRelObject()].beginObjectPosition) &&
-		object->matchGenderIncludingNeuter(objects[m[m[where].getRelObject()].getObject()]) &&
-		objects[m[m[where].getRelObject()].getObject()].objectClass == NAME_OBJECT_CLASS &&
-		objects[m[m[where].getRelObject()].getObject()].numEncounters > 1)
-	{
-		if (m[m[where].getRelObject()].objectMatches.size())
-			objectMatches = m[m[where].getRelObject()].objectMatches;
-		else
-			objectMatches.push_back(cOM(m[m[where].getRelObject()].getObject(), SALIENCE_THRESHOLD));
-		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:match gendered (IS) %s to %s", where, objectString(object, tmpstr2, false).c_str(), whereString(m[where].getRelObject(), tmpstr, false).c_str());
+	return true;
+}
+
+bool cSource::resolvePronoun(int where, bool definitelySpeaker, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, int beginEntirePosition,
+	bool resolveForSpeaker, bool avoidCurrentSpeaker, bool& mixedPlurality, bool limitTwo, bool isPhysicallyPresent, bool physicallyEvaluated,
+	int& subjectCataRestriction, vector <cOM>& objectMatches)
+{
+	LFS
+	if (!resolvePronounSpecialCases(where, definitelySpeaker, inPrimaryQuote, inSecondaryQuote,
+		lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, 
+		resolveForSpeaker, avoidCurrentSpeaker, limitTwo, objectMatches))
 		return false;
-	}
+	if (!resolveGenderAndNumberMatchedIsRolePronoun(where, definitelySpeaker, inPrimaryQuote, inSecondaryQuote,
+		lastBeginS1, lastRelativePhrase, lastQ2, lastVerb,
+		resolveForSpeaker, avoidCurrentSpeaker, objectMatches))
+		return false;
+	if (!identifyPleonasticIt(where, objectMatches))
+		return false;
+
+	// get the nearest localObject that has a subType
+	// it was opposite the door
+	if (!resolvePronounIsPlace(where, objectMatches))
+		return false;
+	wstring tmpstr, tmpstr2;
+	vector <cObject>::iterator object = objects.begin() + m[where].getObject();
+	vector <int> disallowedReferences;
+	wstring word = (m[where].principalWherePosition >= 0) ? m[m[where].principalWherePosition].word->first : m[where].word->first;
 	//if (unResolvablePosition(m[where].beginObjectPosition)) return false;
 	// he put her hand in his. (not an adjectival object, yet not applicable to LL2345)
 	if ((m[where].flags & cWordMatch::flagAdjectivalObject) == 0 && m[where].queryWinnerForm(possessivePronounForm) < 0)

@@ -2768,6 +2768,10 @@ private:
 	bool resolveMetaGroupTwo(int where,bool inQuote,vector <cOM> &objectMatches);
 	bool resolveMetaGroupJoiner(int where,vector <cOM> &objectMatches);
 	bool resolveMetaGroupOther(int where,vector <cOM> &objectMatches);
+	bool resolveMetaGroupByAssociationAddSpeakerIfLatestOwnerWhereNotObserverSameGender(const int where, const int sg, vector <cOM>& objectMatches,
+		const int latestOwnerWhere, const bool restrictSGToGrouped, const bool friendOfObserver, set <int>* speakers, int& numInSpeakers);
+	bool temporarilyFill12PersonLatestOwnerWhere(const int where, const int latestOwnerWhere);
+	bool findMinimallyAssociatedSpeakerGroup(const int where, const int latestOwnerWhere, const bool inPrimaryQuote, bool &restrictSGToGrouped, int &sg);
 	bool resolveMetaGroupByAssociation(int where,bool inPrimaryQuote,vector <cOM> &objectMatches,int latest);
 	bool resolveMetaGroupSpecificObject(int where,bool inPrimaryQuote,bool inSecondaryQuote,bool definitelyResolveSpeaker,int lastBeginS1,int lastRelativePhrase,vector <cOM> &objectMatches,bool &chooseFromLocalFocus);
 	bool resolveMetaGroupObject(int where,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,
@@ -2852,6 +2856,14 @@ private:
 	void displayQuoteContext(unsigned int begin,unsigned int end);
 	bool quoteTest(int q,unsigned int &quoteCount,int &lastQuote,tIWMM quoteType,tIWMM quoteOpenType,tIWMM quoteCloseType);
 	void secondaryQuoteTest(int q,unsigned int &secondaryQuotations,int &lastSecondaryQuote,tIWMM secondaryQuoteWord,tIWMM secondaryQuoteOpenWord,tIWMM secondaryQuoteCloseWord);
+	bool resolvePronounSpecialCases(const int where, const bool definitelySpeaker, const bool inPrimaryQuote, const bool inSecondaryQuote,
+		const int lastBeginS1, const int lastRelativePhrase, const int lastQ2, const int lastVerb, 
+		const bool resolveForSpeaker, const bool avoidCurrentSpeaker, const bool limitTwo, vector <cOM>& objectMatches);
+	bool resolveGenderAndNumberMatchedIsRolePronoun(const int where, const bool definitelySpeaker, const bool inPrimaryQuote, const bool inSecondaryQuote,
+		const int lastBeginS1, const int lastRelativePhrase, const int lastQ2, const int lastVerb,
+		const bool resolveForSpeaker, const bool avoidCurrentSpeaker, vector <cOM>& objectMatches);
+	bool identifyPleonasticIt(const int where, vector <cOM>& objectMatches);
+	bool resolvePronounIsPlace(const int where, vector <cOM>& objectMatches);
 	bool resolvePronoun(int where,bool definitelySpeaker,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,int beginEntirePosition,
 															bool resolveForSpeaker,bool avoidCurrentSpeaker,bool &mixedPlurality,bool limitTwo,bool isPhysicallyPresent,bool physicallyEvaluated,int &subjectCataRestriction,vector <cOM> &objectMatches);
 	enum pronounResolutionSearchType { anyType,anyPersonType,anyMalePersonType,anyFemalePersonType,anyPluralPersonType };
