@@ -249,6 +249,61 @@ bool aVNSemantics(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
 	return true;
 }
 
+bool absorbCommonVerbNetClasses(cVerbNet &vn, vector <cXMLClass> &tempxc, wchar_t* buf, __int64& offset)
+{
+	if (!vn.establish && (vn.establish = lineX(buf, offset, tempxc, L"ESTABLISH/"))) return true;
+	if (!vn.noPhysicalAction && (vn.noPhysicalAction = lineX(buf, offset, tempxc, L"NO_PHYSICAL_ACTION/"))) return true;
+	if (!vn.control && (vn.control = lineX(buf, offset, tempxc, L"CONTROL/"))) return true;
+	if (!vn.contact && (vn.contact = lineX(buf, offset, tempxc, L"CONTACT/"))) return true;
+	if (!vn._near && (vn._near = lineX(buf, offset, tempxc, L"NEAR/"))) return true;
+	if (!vn.objectMustBeLocation && (vn.objectMustBeLocation = lineX(buf, offset, tempxc, L"LOCATIONOBJECT/"))) return true;
+	if (!vn.prepMustBeLocation && (vn.prepMustBeLocation = lineX(buf, offset, tempxc, L"LOCATIONPREPOBJECT/"))) return true;
+	if (!vn.transfer && (vn.transfer = lineX(buf, offset, tempxc, L"TRANSFER/"))) return true;
+	if (!vn.noPrepTo && (vn.noPrepTo = lineX(buf, offset, tempxc, L"NO_PREP_TO/"))) return true;
+	if (!vn.noPrepFrom && (vn.noPrepFrom = lineX(buf, offset, tempxc, L"NO_PREP_FROM/"))) return true;
+	if (!vn.move && (vn.move = lineX(buf, offset, tempxc, L"MOVE/"))) return true;
+	if (!vn.moveObject && (vn.moveObject = lineX(buf, offset, tempxc, L"MOVE_OBJECT/"))) return true;
+	if (!vn.moveInPlace && (vn.moveInPlace = lineX(buf, offset, tempxc, L"MOVE_IN_PLACE/"))) return true;
+	if (!vn.exit && (vn.exit = lineX(buf, offset, tempxc, L"EXIT/"))) return true;
+	if (!vn.enter && (vn.enter = lineX(buf, offset, tempxc, L"ENTER/"))) return true;
+	if (!vn.contiguous && (vn.contiguous = lineX(buf, offset, tempxc, L"CONTIGUOUS/"))) return true;
+	if (!vn.start && (vn.start = lineX(buf, offset, tempxc, L"START/"))) return true;
+	if (!vn.stay && (vn.stay = lineX(buf, offset, tempxc, L"STAY/"))) return true;
+	if (!vn.has && (vn.has = lineX(buf, offset, tempxc, L"HAS/"))) return true;
+	if (!vn.communicate && (vn.communicate = lineX(buf, offset, tempxc, L"COMMUNICATE/"))) return true;
+	if (!vn.think && (vn.think = lineX(buf, offset, tempxc, L"THINK/"))) return true;
+	if (!vn.thinkObject && (vn.thinkObject = lineX(buf, offset, tempxc, L"THINK_OBJECT/"))) return true;
+	if (!vn.sense && (vn.sense = lineX(buf, offset, tempxc, L"SENSE/"))) return true;
+	if (!vn.create && (vn.create = lineX(buf, offset, tempxc, L"CREATE/"))) return true;
+	if (!vn.consume && (vn.consume = lineX(buf, offset, tempxc, L"CONSUME/"))) return true; // to take in and change state 
+	// change of state is physical (it can be visibly seen)
+	if (!vn.changeState && (vn.changeState = lineX(buf, offset, tempxc, L"CHANGE_STATE/"))) return true;
+	// if no object, then the change of state is in the subject
+	if (!vn.agentChangeObjectInternalState && (vn.agentChangeObjectInternalState = lineX(buf, offset, tempxc, L"AGENT_CHANGE_OBJECT_INTERNAL_STATE/"))) return true;
+	if (!vn.metaProfession && (vn.metaProfession = lineX(buf, offset, tempxc, L"META_PROFESSION/"))) return true;
+	if (!vn.metaFutureHave && (vn.metaFutureHave = lineX(buf, offset, tempxc, L"META_FUTURE_HAVE/"))) return true;
+	if (!vn.metaFutureContact && (vn.metaFutureContact = lineX(buf, offset, tempxc, L"META_FUTURE_CONTACT/"))) return true;
+	if (!vn.metaInfo && (vn.metaInfo = lineX(buf, offset, tempxc, L"META_INFO/"))) return true;
+	if (!vn.metaIfThen && (vn.metaIfThen = lineX(buf, offset, tempxc, L"META_IF_THEN/"))) return true;
+	if (!vn.metaContains && (vn.metaContains = lineX(buf, offset, tempxc, L"META_CONTAINS/"))) return true;
+	if (!vn.metaDesire && (vn.metaDesire = lineX(buf, offset, tempxc, L"META_DESIRE/"))) return true;
+	if (!vn.metaRole && (vn.metaRole = lineX(buf, offset, tempxc, L"META_ROLE/"))) return true;
+	/*
+	transferring belief or reveal of internal belief or attempt to change another's belief
+	000016:acquiesce-95        subject aligns belief with another
+	000016:advise-37.9         subject tells something to someone
+	000018:appeal-31.4-3       subject suggests something to object
+	000025:confront-98         subject asserts something to someone
+	000028:cooperate-73-3      subject aligns belief with another
+	000034:deduce-97.2         subject knows something
+	000007:interrogate-37.1.3  subject desires to know something
+	*/
+	if (!vn.metaBelief && (vn.metaBelief = lineX(buf, offset, tempxc, L"META_BELIEF/"))) return true;
+	if (!vn.spatialOrientation && (vn.spatialOrientation = lineX(buf, offset, tempxc, L"SPATIAL_ORIENTATION/"))) return true;
+	if (!vn.ignore && (vn.ignore = lineX(buf, offset, tempxc, L"IGNORE/"))) return true;
+	return false;
+}
+
 bool aVNCLASS(wchar_t* buf, __int64& offset)
 {
 	LFS
@@ -274,60 +329,7 @@ bool aVNCLASS(wchar_t* buf, __int64& offset)
 		}
 		if (endX(buf, offset, tmp) != L"MEMBERS") return false;
 	}
-	while (true)
-	{
-		if (!vn.establish && (vn.establish = lineX(buf, offset, tempxc, L"ESTABLISH/"))) continue;
-		if (!vn.noPhysicalAction && (vn.noPhysicalAction = lineX(buf, offset, tempxc, L"NO_PHYSICAL_ACTION/"))) continue;
-		if (!vn.control && (vn.control = lineX(buf, offset, tempxc, L"CONTROL/"))) continue;
-		if (!vn.contact && (vn.contact = lineX(buf, offset, tempxc, L"CONTACT/"))) continue;
-		if (!vn._near && (vn._near = lineX(buf, offset, tempxc, L"NEAR/"))) continue;
-		if (!vn.objectMustBeLocation && (vn.objectMustBeLocation = lineX(buf, offset, tempxc, L"LOCATIONOBJECT/"))) continue;
-		if (!vn.prepMustBeLocation && (vn.prepMustBeLocation = lineX(buf, offset, tempxc, L"LOCATIONPREPOBJECT/"))) continue;
-		if (!vn.transfer && (vn.transfer = lineX(buf, offset, tempxc, L"TRANSFER/"))) continue;
-		if (!vn.noPrepTo && (vn.noPrepTo = lineX(buf, offset, tempxc, L"NO_PREP_TO/"))) continue;
-		if (!vn.noPrepFrom && (vn.noPrepFrom = lineX(buf, offset, tempxc, L"NO_PREP_FROM/"))) continue;
-		if (!vn.move && (vn.move = lineX(buf, offset, tempxc, L"MOVE/"))) continue;
-		if (!vn.moveObject && (vn.moveObject = lineX(buf, offset, tempxc, L"MOVE_OBJECT/"))) continue;
-		if (!vn.moveInPlace && (vn.moveInPlace = lineX(buf, offset, tempxc, L"MOVE_IN_PLACE/"))) continue;
-		if (!vn.exit && (vn.exit = lineX(buf, offset, tempxc, L"EXIT/"))) continue;
-		if (!vn.enter && (vn.enter = lineX(buf, offset, tempxc, L"ENTER/"))) continue;
-		if (!vn.contiguous && (vn.contiguous = lineX(buf, offset, tempxc, L"CONTIGUOUS/"))) continue;
-		if (!vn.start && (vn.start = lineX(buf, offset, tempxc, L"START/"))) continue;
-		if (!vn.stay && (vn.stay = lineX(buf, offset, tempxc, L"STAY/"))) continue;
-		if (!vn.has && (vn.has = lineX(buf, offset, tempxc, L"HAS/"))) continue;
-		if (!vn.communicate && (vn.communicate = lineX(buf, offset, tempxc, L"COMMUNICATE/"))) continue;
-		if (!vn.think && (vn.think = lineX(buf, offset, tempxc, L"THINK/"))) continue;
-		if (!vn.thinkObject && (vn.thinkObject = lineX(buf, offset, tempxc, L"THINK_OBJECT/"))) continue;
-		if (!vn.sense && (vn.sense = lineX(buf, offset, tempxc, L"SENSE/"))) continue;
-		if (!vn.create && (vn.create = lineX(buf, offset, tempxc, L"CREATE/"))) continue;
-		if (!vn.consume && (vn.consume = lineX(buf, offset, tempxc, L"CONSUME/"))) continue; // to take in and change state 
-		// change of state is physical (it can be visibly seen)
-		if (!vn.changeState && (vn.changeState = lineX(buf, offset, tempxc, L"CHANGE_STATE/"))) continue;
-		// if no object, then the change of state is in the subject
-		if (!vn.agentChangeObjectInternalState && (vn.agentChangeObjectInternalState = lineX(buf, offset, tempxc, L"AGENT_CHANGE_OBJECT_INTERNAL_STATE/"))) continue;
-		if (!vn.metaProfession && (vn.metaProfession = lineX(buf, offset, tempxc, L"META_PROFESSION/"))) continue;
-		if (!vn.metaFutureHave && (vn.metaFutureHave = lineX(buf, offset, tempxc, L"META_FUTURE_HAVE/"))) continue;
-		if (!vn.metaFutureContact && (vn.metaFutureContact = lineX(buf, offset, tempxc, L"META_FUTURE_CONTACT/"))) continue;
-		if (!vn.metaInfo && (vn.metaInfo = lineX(buf, offset, tempxc, L"META_INFO/"))) continue;
-		if (!vn.metaIfThen && (vn.metaIfThen = lineX(buf, offset, tempxc, L"META_IF_THEN/"))) continue;
-		if (!vn.metaContains && (vn.metaContains = lineX(buf, offset, tempxc, L"META_CONTAINS/"))) continue;
-		if (!vn.metaDesire && (vn.metaDesire = lineX(buf, offset, tempxc, L"META_DESIRE/"))) continue;
-		if (!vn.metaRole && (vn.metaRole = lineX(buf, offset, tempxc, L"META_ROLE/"))) continue;
-		/*
-		transferring belief or reveal of internal belief or attempt to change another's belief
-		000016:acquiesce-95        subject aligns belief with another
-		000016:advise-37.9         subject tells something to someone
-		000018:appeal-31.4-3       subject suggests something to object
-		000025:confront-98         subject asserts something to someone
-		000028:cooperate-73-3      subject aligns belief with another
-		000034:deduce-97.2         subject knows something
-		000007:interrogate-37.1.3  subject desires to know something
-		*/
-		if (!vn.metaBelief && (vn.metaBelief = lineX(buf, offset, tempxc, L"META_BELIEF/"))) continue;
-		if (!vn.spatialOrientation && (vn.spatialOrientation = lineX(buf, offset, tempxc, L"SPATIAL_ORIENTATION/"))) continue;
-		if (!vn.ignore && (vn.ignore = lineX(buf, offset, tempxc, L"IGNORE/"))) continue;
-		break;
-	}
+	while (absorbCommonVerbNetClasses(vn, tempxc, buf, offset));
 	vn.prepLocation = false;
 	// <THEMROLES>
 	//   <THEMROLE type="Agent">

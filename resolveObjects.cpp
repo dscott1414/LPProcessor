@@ -301,134 +301,99 @@ unsigned int cSource::getNumCompoundObjects(int where, int& combinantScore, wstr
 	return chainCount;
 }
 
-void cSource::resolveNonGenderedGeneralObject(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches, int wordOrderSensitiveModifier)
+bool cSource::resolveNonGenderedGeneralObjectPlural(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches)
 {
-	LFS
-		// mappings: OBJECT             acceptable ls mapping                               unacceptable
-		//           a doctor           NONE
-		//           doctors            doctors (matchExact)
-		//           the doctor         a doctor, an old doctor, the old doctor,doctor's     the nurse
-		//           the old doctor     a doctor, an old doctor, the doctor                  the new doctor, the nurse
-		//           the doctors        the old doctors                                      the nurses
-		//           the old doctors    the doctors                                          the new doctors
-		//           Love (uncountable) The love, A love etc  UNIMPLEMENTED
-		//           old papers         papers
-		//           the doctor         Dr. Watson
-		//           the nurse          Nurse Jane
-		// "the" may also be demonstrative_determiner, possessive_determiner, quantifier
-		// one noun phrase has adjectives and the other does not, otherwise reject.
-		// compare the principal - this assumes unknown speakers have determiners.
-		int ep = m[where].endObjectPosition, o;
-	if (object->getOwnerWhere() < 0 && ep + 1 < (signed)m.size() && m[ep].word->first == L"of" &&
-		m[ep + 1].principalWherePosition >= 0 && m[m[ep + 1].principalWherePosition].getObject() >= 0 &&
-		objects[o = m[m[ep + 1].principalWherePosition].getObject()].objectClass == NAME_OBJECT_CLASS &&
-		// The chair of Aunt Amy's / The State Park of New Jersey
-		((m[m[ep + 1].principalWherePosition].endObjectPosition >= 0 && (m[m[m[ep + 1].principalWherePosition].endObjectPosition - 1].flags & cWordMatch::flagNounOwner)) ||
-			objects[o].isLocationObject))
-		object->setOwnerWhere(m[ep + 1].principalWherePosition);
 	wstring tmpstr, tmpstr2;
-	if (object->plural)
+	for (unsigned int s = 0; s < localObjects.size(); s++)
 	{
-		for (unsigned int s = 0; s < localObjects.size(); s++)
+		if (localObjects[0].om.object <= 1) continue;
+		//if (localObjects[s].inQuote!=inQuote) continue; GO_NEUTRAL
+		vector <cObject>::iterator lso = objects.begin() + localObjects[s].om.object;
+		if (lso != object && (lso->originalLocation - lso->begin <= 1 || object->originalLocation - object->begin <= 1) && m[lso->originalLocation].word == m[object->originalLocation].word && lso->plural)
 		{
-			if (localObjects[0].om.object <= 1) continue;
-			//if (localObjects[s].inQuote!=inQuote) continue; GO_NEUTRAL
-			vector <cObject>::iterator lso = objects.begin() + localObjects[s].om.object;
-			if (lso != object && (lso->originalLocation - lso->begin <= 1 || object->originalLocation - object->begin <= 1) && m[lso->originalLocation].word == m[object->originalLocation].word && lso->plural)
-			{
-				if (localObjects[s].lastWhere >= 0 && m[localObjects[s].lastWhere].objectMatches.size() && m[localObjects[s].lastWhere].getObject() == localObjects[s].om.object)
-					objectMatches = m[localObjects[s].lastWhere].objectMatches;
-				else
-					objectMatches.push_back(localObjects[s].om);
-				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:Unknown resolution mapped %s to (unknown) %d:%s [plural mapping].", where,
-						objectString(object, tmpstr, true).c_str(), localObjects[s].lastWhere, objectString(objectMatches, tmpstr2, true).c_str());
-				return;
-			}
+			if (localObjects[s].lastWhere >= 0 && m[localObjects[s].lastWhere].objectMatches.size() && m[localObjects[s].lastWhere].getObject() == localObjects[s].om.object)
+				objectMatches = m[localObjects[s].lastWhere].objectMatches;
+			else
+				objectMatches.push_back(localObjects[s].om);
+			if (debugTrace.traceSpeakerResolution)
+				lplog(LOG_RESOLUTION, L"%06d:Unknown resolution mapped %s to (unknown) %d:%s [plural mapping].", where,
+					objectString(object, tmpstr, true).c_str(), localObjects[s].lastWhere, objectString(objectMatches, tmpstr2, true).c_str());
+			return true;
 		}
-		// four pictures
-		// search for all local objects in a group matching the # of objects in the owner.
-		// if not found, search in the current and next sentence for the same.
-		int groupSize = -1, latest = -1, begin, end, len, combinantScore;
-		const wchar_t* fromWhere = L"";
-		wstring cstr;
-		if (object->getOwnerWhere() < 0 && (groupSize = mapNumeralCardinal(m[m[where].beginObjectPosition].word->first)) >= 1)
-		{
-			vector <cLocalFocus>::iterator lsi = localObjects.begin(), lsiEnd = localObjects.end();
-			for (; lsi != lsiEnd; lsi++)
-				if (lsi->om.object > 1 && lsi->includeInSalience(objectToBeMatchedInQuote, quoteIndependentAge) && lsi->om.object != m[where].getObject() && lsi->lastWhere >= 0 && getNumCompoundObjects(lsi->lastWhere, combinantScore, cstr) == groupSize)
-					if (lsi->lastWhere > latest)
-						latest = lsi->lastWhere;
-			if (latest >= 0)
-			{
-				int compoundLoop = 0;
-				while (m[latest].previousCompoundPartObject >= 0)
-				{
-					if (compoundLoop++ > 10) break;
-					latest = m[latest].previousCompoundPartObject;
-				}
-			}
-			fromWhere = L"local";
-		}
-		if (latest < 0)
-		{
-			int numEOS = 0, I;
-			// if not found in local objects, then search in the current and next sentence
-			for (I = where; numEOS <= 1 && I < (signed)m.size() && (getNumCompoundObjects(I, combinantScore, cstr) != groupSize || m[I].getObject() < 0 || !objects[m[I].getObject()].matchGenderIncludingNeuter(*object)); I++)
-				if (isEOS(I)) numEOS++;
-			if (numEOS <= 1 && I < (signed)m.size()) latest = I;
-			fromWhere = L"cata";
-		}
+	}
+	// four pictures
+	// search for all local objects in a group matching the # of objects in the owner.
+	// if not found, search in the current and next sentence for the same.
+	int groupSize = -1, latest = -1, begin, end, len, combinantScore;
+	const wchar_t* fromWhere = L"";
+	wstring cstr;
+	if (object->getOwnerWhere() < 0 && (groupSize = mapNumeralCardinal(m[m[where].beginObjectPosition].word->first)) >= 1)
+	{
+		vector <cLocalFocus>::iterator lsi = localObjects.begin(), lsiEnd = localObjects.end();
+		for (; lsi != lsiEnd; lsi++)
+			if (lsi->om.object > 1 && lsi->includeInSalience(objectToBeMatchedInQuote, quoteIndependentAge) && lsi->om.object != m[where].getObject() && lsi->lastWhere >= 0 && getNumCompoundObjects(lsi->lastWhere, combinantScore, cstr) == groupSize)
+				if (lsi->lastWhere > latest)
+					latest = lsi->lastWhere;
 		if (latest >= 0)
 		{
-			for (end = latest; end >= 0; end = m[end].nextCompoundPartObject)
+			int compoundLoop = 0;
+			while (m[latest].previousCompoundPartObject >= 0)
 			{
-				if (m[end].objectMatches.size())
-				{
-					objectMatches.insert(objectMatches.end(), m[end].objectMatches.begin(), m[end].objectMatches.end());
-					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION | LOG_SG, L"%d:Nongendered group mapped %s to %d:%s [%s].", where,
-							objectString(object, tmpstr, true).c_str(), end, objectString(m[end].objectMatches, tmpstr2, true).c_str(), fromWhere);
-				}
-				else if (m[end].getObject() >= 0)
-				{
-					objectMatches.push_back(cOM(m[end].getObject(), SALIENCE_THRESHOLD));
-					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION | LOG_SG, L"%d:Nongendered group mapped %s to %d:%s [%s].", where,
-							objectString(object, tmpstr, true).c_str(), end, objectString(m[end].getObject(), tmpstr2, true).c_str(), fromWhere);
-				}
-			}
-			if (m[begin = latest].pma.queryPattern(L"__MNOUN", len) != -1)
-				end = begin + len;
-			for (int I = begin; I <= end; I++)
-			{
-				if (m[I].getObject() < 0) continue;
-				if (m[I].objectMatches.size())
-				{
-					for (unsigned int J = 0; J < m[I].objectMatches.size(); J++)
-						introducedByReference.push_back(m[I].objectMatches[J].object);
-				}
-				else if (m[I].getObject() >= 0)
-					introducedByReference.push_back(m[I].getObject());
-				I = m[I].endObjectPosition - 1;
+				if (compoundLoop++ > 10) break;
+				latest = m[latest].previousCompoundPartObject;
 			}
 		}
+		fromWhere = L"local";
 	}
-	// the pity on Mr. Carter's face
-	int ww;
-	if (isFacialExpression(where) &&
-		(m[where].objectRole & (SUBJECT_ROLE | PREP_OBJECT_ROLE)) == SUBJECT_ROLE &&
-		m[m[where].endObjectPosition].queryForm(prepositionForm) >= 0 &&
-		(ww = m[m[where].endObjectPosition + 1].principalWherePosition) >= 0 && m[ww].getObject() >= 0 &&
-		(m[ww].word->first == L"face" || (m[ww].word->second.mainEntry != wNULL && m[ww].word->second.mainEntry->first == L"eye")) &&
-		(ww = objects[m[ww].getObject()].getOwnerWhere()) >= 0 && m[ww].getObject() >= 0)
+	if (latest < 0)
 	{
-		objectMatches.push_back(cOM(m[ww].getObject(), SALIENCE_THRESHOLD));
-		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:Unknown resolution mapped %s to (unknown) %d:%s [expression].", where,
-				objectString(object, tmpstr, true).c_str(), ww, objectString(m[ww].getObject(), tmpstr2, true).c_str());
-		return;
+		int numEOS = 0, I;
+		// if not found in local objects, then search in the current and next sentence
+		for (I = where; numEOS <= 1 && I < (signed)m.size() && (getNumCompoundObjects(I, combinantScore, cstr) != groupSize || m[I].getObject() < 0 || !objects[m[I].getObject()].matchGenderIncludingNeuter(*object)); I++)
+			if (isEOS(I)) numEOS++;
+		if (numEOS <= 1 && I < (signed)m.size()) latest = I;
+		fromWhere = L"cata";
 	}
+	if (latest >= 0)
+	{
+		for (end = latest; end >= 0; end = m[end].nextCompoundPartObject)
+		{
+			if (m[end].objectMatches.size())
+			{
+				objectMatches.insert(objectMatches.end(), m[end].objectMatches.begin(), m[end].objectMatches.end());
+				if (debugTrace.traceSpeakerResolution)
+					lplog(LOG_RESOLUTION | LOG_SG, L"%d:Nongendered group mapped %s to %d:%s [%s].", where,
+						objectString(object, tmpstr, true).c_str(), end, objectString(m[end].objectMatches, tmpstr2, true).c_str(), fromWhere);
+			}
+			else if (m[end].getObject() >= 0)
+			{
+				objectMatches.push_back(cOM(m[end].getObject(), SALIENCE_THRESHOLD));
+				if (debugTrace.traceSpeakerResolution)
+					lplog(LOG_RESOLUTION | LOG_SG, L"%d:Nongendered group mapped %s to %d:%s [%s].", where,
+						objectString(object, tmpstr, true).c_str(), end, objectString(m[end].getObject(), tmpstr2, true).c_str(), fromWhere);
+			}
+		}
+		if (m[begin = latest].pma.queryPattern(L"__MNOUN", len) != -1)
+			end = begin + len;
+		for (int I = begin; I <= end; I++)
+		{
+			if (m[I].getObject() < 0) continue;
+			if (m[I].objectMatches.size())
+			{
+				for (unsigned int J = 0; J < m[I].objectMatches.size(); J++)
+					introducedByReference.push_back(m[I].objectMatches[J].object);
+			}
+			else if (m[I].getObject() >= 0)
+				introducedByReference.push_back(m[I].getObject());
+			I = m[I].endObjectPosition - 1;
+		}
+	}
+	return false;
+}
+
+bool cSource::resolveNonGenderedGeneralObjectNumAddress(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches)
+{
+	wstring tmpstr, tmpstr2;
 	// No. 27 - does it match an address?
 	if (m[m[where].beginObjectPosition].pma.queryPatternDiff(L"__NOUN", L"Q") != -1)
 	{
@@ -466,9 +431,123 @@ void cSource::resolveNonGenderedGeneralObject(int where, vector <cObject>::itera
 			if (debugTrace.traceSpeakerResolution && objectMatches.size())
 				lplog(LOG_RESOLUTION, L"%06d:Unknown resolution mapped %s to (unknown) %s [num/address mapping 2].", where,
 					objectString(object, tmpstr, true).c_str(), objectString(objectMatches, tmpstr2, true).c_str());
-			return;
+			return true;
 		}
 	}
+	return false;
+}
+
+bool cSource::resolveNonGenderedGeneralObjectExpression(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches)
+{
+	int ww;
+	if (isFacialExpression(where) &&
+		(m[where].objectRole & (SUBJECT_ROLE | PREP_OBJECT_ROLE)) == SUBJECT_ROLE &&
+		m[m[where].endObjectPosition].queryForm(prepositionForm) >= 0 &&
+		(ww = m[m[where].endObjectPosition + 1].principalWherePosition) >= 0 && m[ww].getObject() >= 0 &&
+		(m[ww].word->first == L"face" || (m[ww].word->second.mainEntry != wNULL && m[ww].word->second.mainEntry->first == L"eye")) &&
+		(ww = objects[m[ww].getObject()].getOwnerWhere()) >= 0 && m[ww].getObject() >= 0)
+	{
+		wstring tmpstr, tmpstr2;
+		objectMatches.push_back(cOM(m[ww].getObject(), SALIENCE_THRESHOLD));
+		if (debugTrace.traceSpeakerResolution)
+			lplog(LOG_RESOLUTION, L"%06d:Unknown resolution mapped %s to (unknown) %d:%s [expression].", where,
+				objectString(object, tmpstr, true).c_str(), ww, objectString(m[ww].getObject(), tmpstr2, true).c_str());
+		return true;
+	}
+	return false;
+}
+
+void cSource::narrowClassToGenderedIfIsProfession(int where)
+{
+	// Curveball is an Iraqi defector
+	if ((m[where].objectRole & (SUBJECT_ROLE | IS_OBJECT_ROLE)) == (SUBJECT_ROLE | IS_OBJECT_ROLE) &&
+		m[where].getRelObject() >= 0 && m[m[where].getRelObject()].getObject() >= 0 &&
+		objects[m[m[where].getRelObject()].getObject()].objectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS)
+	{
+		int o = m[where].getObject();
+		if (objects[o].objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS || objects[o].objectClass == NON_GENDERED_NAME_OBJECT_CLASS)
+		{
+			objects[o].objectClass = GENDERED_GENERAL_OBJECT_CLASS;
+			objects[o].male = objects[o].female = true;
+		}
+	}
+}
+
+void cSource::resolveNonGenderedGeneralObjectSingularToPlural(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches)
+{
+	if (m[object->begin].word->first == L"a" && (m[where].objectRole & IN_PRIMARY_QUOTE_ROLE) != 0 && (m[where].flags & cWordMatch::flagInQuestion))
+	{
+		tIWMM word = m[where].word;
+		// search in local objects for a plural of the word - covers cases that wouldn't be covered in normal match
+		vector <cLocalFocus>::iterator lsi = localObjects.begin(), lsiEnd = localObjects.end();
+		for (; lsi != lsiEnd; lsi++)
+			if (lsi->om.object > 1 && lsi->includeInSalience(objectToBeMatchedInQuote, quoteIndependentAge) && objects[lsi->om.object].plural && lsi->lastWhere >= 0 && m[lsi->lastWhere].word->second.mainEntry == word)
+			{
+				wstring tmpstr, tmpstr2;
+				objectMatches.push_back(cOM(lsi->om.object, SALIENCE_THRESHOLD));
+				if (debugTrace.traceSpeakerResolution)
+					lplog(LOG_RESOLUTION, L"%06d:Unknown unique singular mapped %s to (unknown plural) %d:%s.", where,
+						objectString(object, tmpstr, true).c_str(), lsi->lastWhere, whereString(lsi->lastWhere, tmpstr2, false).c_str());
+				break;
+			}
+	}
+}
+
+void cSource::adjustForWordOrderSensitiveModifier(int where, vector <cOM>& objectMatches, int wordOrderSensitiveModifier)
+{
+	if (wordOrderSensitiveModifier >= 0 && objectMatches.size() > 0)
+	{
+		if (cObject::wordOrderWords[wordOrderSensitiveModifier] == L"another")
+			objectMatches.clear();
+		else
+		{
+			vector <int> locations;
+			for (unsigned int I = 0; I < objectMatches.size(); I++)
+				locations.push_back(locationBefore(objectMatches[I].object, where));
+			int tmp = preferWordOrder(wordOrderSensitiveModifier, locations);
+			if (tmp == 0 && objectMatches.size() >= 2)
+				objectMatches.erase(objectMatches.begin() + 1);
+			else if (tmp == 1)
+				objectMatches.erase(objectMatches.begin());
+			else if (tmp == -2)
+				objectMatches.clear();
+		}
+	}
+}
+
+void cSource::resolveNonGenderedGeneralObject(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches, int wordOrderSensitiveModifier)
+{
+	LFS
+		// mappings: OBJECT             acceptable ls mapping                               unacceptable
+		//           a doctor           NONE
+		//           doctors            doctors (matchExact)
+		//           the doctor         a doctor, an old doctor, the old doctor,doctor's     the nurse
+		//           the old doctor     a doctor, an old doctor, the doctor                  the new doctor, the nurse
+		//           the doctors        the old doctors                                      the nurses
+		//           the old doctors    the doctors                                          the new doctors
+		//           Love (uncountable) The love, A love etc  UNIMPLEMENTED
+		//           old papers         papers
+		//           the doctor         Dr. Watson
+		//           the nurse          Nurse Jane
+		// "the" may also be demonstrative_determiner, possessive_determiner, quantifier
+		// one noun phrase has adjectives and the other does not, otherwise reject.
+		// compare the principal - this assumes unknown speakers have determiners.
+		int ep = m[where].endObjectPosition, o;
+	if (object->getOwnerWhere() < 0 && ep + 1 < (signed)m.size() && m[ep].word->first == L"of" &&
+		m[ep + 1].principalWherePosition >= 0 && m[m[ep + 1].principalWherePosition].getObject() >= 0 &&
+		objects[o = m[m[ep + 1].principalWherePosition].getObject()].objectClass == NAME_OBJECT_CLASS &&
+		// The chair of Aunt Amy's / The State Park of New Jersey
+		((m[m[ep + 1].principalWherePosition].endObjectPosition >= 0 && (m[m[m[ep + 1].principalWherePosition].endObjectPosition - 1].flags & cWordMatch::flagNounOwner)) ||
+			objects[o].isLocationObject))
+		object->setOwnerWhere(m[ep + 1].principalWherePosition);
+	wstring tmpstr, tmpstr2;
+	if (object->plural && resolveNonGenderedGeneralObjectPlural(where, object, objectMatches))
+		return;
+	// the pity on Mr. Carter's face
+	if (resolveNonGenderedGeneralObjectExpression(where, object, objectMatches))
+		return;
+	if (resolveNonGenderedGeneralObjectNumAddress(where, object, objectMatches))
+		return;
 	if (m[object->begin].word->first == L"the" || m[object->begin].queryForm(demonstrativeDeterminerForm) >= 0 ||
 		m[object->begin].queryForm(possessiveDeterminerForm) >= 0 || m[object->begin].queryForm(quantifierForm) >= 0 ||
 		object->begin == object->originalLocation)
@@ -488,51 +567,10 @@ void cSource::resolveNonGenderedGeneralObject(int where, vector <cObject>::itera
 		}
 	}
 	// a pensionnat? - refers to "pensionnats" in the last speaker's utterance
-	else if (m[object->begin].word->first == L"a" && (m[where].objectRole & IN_PRIMARY_QUOTE_ROLE) != 0 && (m[where].flags & cWordMatch::flagInQuestion))
-	{
-		tIWMM word = m[where].word;
-		// search in local objects for a plural of the word - covers cases that wouldn't be covered in normal match
-		vector <cLocalFocus>::iterator lsi = localObjects.begin(), lsiEnd = localObjects.end();
-		for (; lsi != lsiEnd; lsi++)
-			if (lsi->om.object > 1 && lsi->includeInSalience(objectToBeMatchedInQuote, quoteIndependentAge) && objects[lsi->om.object].plural && lsi->lastWhere >= 0 && m[lsi->lastWhere].word->second.mainEntry == word)
-			{
-				objectMatches.push_back(cOM(lsi->om.object, SALIENCE_THRESHOLD));
-				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:Unknown unique singular mapped %s to (unknown plural) %d:%s.", where,
-						objectString(object, tmpstr, true).c_str(), lsi->lastWhere, whereString(lsi->lastWhere, tmpstr2, false).c_str());
-				break;
-			}
-	}
-	if (wordOrderSensitiveModifier >= 0 && objectMatches.size() > 0)
-	{
-		if (cObject::wordOrderWords[wordOrderSensitiveModifier] == L"another")
-			objectMatches.clear();
-		else
-		{
-			vector <int> locations;
-			for (unsigned int I = 0; I < objectMatches.size(); I++)
-				locations.push_back(locationBefore(objectMatches[I].object, where));
-			int tmp = preferWordOrder(wordOrderSensitiveModifier, locations);
-			if (tmp == 0 && objectMatches.size() >= 2)
-				objectMatches.erase(objectMatches.begin() + 1);
-			else if (tmp == 1)
-				objectMatches.erase(objectMatches.begin());
-			else if (tmp == -2)
-				objectMatches.clear();
-		}
-	}
-	// Curveball is an Iraqi defector
-	if ((m[where].objectRole & (SUBJECT_ROLE | IS_OBJECT_ROLE)) == (SUBJECT_ROLE | IS_OBJECT_ROLE) &&
-		m[where].getRelObject() >= 0 && m[m[where].getRelObject()].getObject() >= 0 &&
-		objects[m[m[where].getRelObject()].getObject()].objectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS)
-	{
-		o = m[where].getObject();
-		if (objects[o].objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS || objects[o].objectClass == NON_GENDERED_NAME_OBJECT_CLASS)
-		{
-			objects[o].objectClass = GENDERED_GENERAL_OBJECT_CLASS;
-			objects[o].male = objects[o].female = true;
-		}
-	}
+	else 
+		resolveNonGenderedGeneralObjectSingularToPlural(where, object, objectMatches);
+	adjustForWordOrderSensitiveModifier(where, objectMatches, wordOrderSensitiveModifier);
+	narrowClassToGenderedIfIsProfession(where);
 }
 
 bool cName::matchHonorifics(wstring sHon)

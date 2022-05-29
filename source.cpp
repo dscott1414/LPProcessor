@@ -3975,23 +3975,11 @@ void cSource::initializePemaMap(size_t numTagSets)
 		pemaMapToTagSetsByPemaByTagSet.push_back(emptyMap);
 }
 
-// correct from Stanford analysis - see specials_main::ruleCorrectLPClass
-// see if LP class can be corrected.
-// return code:
-//   -1: LP class corrected.  ST prefers something other than correct class, so LP is correct
-//   -2: LP class corrected.  ST prefers correct class, so this entry should simply be removed from the output file.
-//   -3: test whether to change to correct class - set to disagree, and add an arbitrary string to partofspeech to search for whatever string added as a test.
-//    0: unable to determine whether class should be corrected, or the class has been corrected. Normal processing should continue.  
-int cSource::ruleCorrectLPClass(int wordSourceIndex, int startOfSentence)
+int cSource::ruleCorrectLPClassAdjectiveToAdverb(int wordSourceIndex)
 {
-	if (wordSourceIndex + 1 >= m.size())
-		return 0;
 	int adverbFormOffset = m[wordSourceIndex].word->second.query(adverbForm);
 	int adjectiveFormOffset = m[wordSourceIndex].word->second.query(adjectiveForm);
-	int particleFormOffset = m[wordSourceIndex].word->second.query(particleForm);
 	int nounPlusOneFormOffset = m[wordSourceIndex + 1].word->second.query(nounForm);
-	int conjunctionFormOffset = m[wordSourceIndex].word->second.query(conjunctionForm);
-	// RULE CHANGE - change an adjective to an adverb?
 	if (m[wordSourceIndex].word->first != L"that" && // 'that' is very ambiguous
 		m[wordSourceIndex].isOnlyWinner(adjectiveForm) &&
 		m[wordSourceIndex + 1].queryWinnerForm(L"noun") < 0 &&
@@ -4026,6 +4014,13 @@ int cSource::ruleCorrectLPClass(int wordSourceIndex, int startOfSentence)
 			return -1;
 		}
 	}
+	return 0;
+}
+
+int cSource::ruleCorrectLPClassAdverbToAdjective(int wordSourceIndex)
+{
+	int adverbFormOffset = m[wordSourceIndex].word->second.query(adverbForm);
+	int adjectiveFormOffset = m[wordSourceIndex].word->second.query(adjectiveForm);
 	// RULE CHANGE - change an adverb to an adjective?
 	if (m[wordSourceIndex].isOnlyWinner(adverbForm) && adjectiveFormOffset >= 0 && m[wordSourceIndex].word->second.getUsageCost(adverbFormOffset) - m[wordSourceIndex].word->second.getUsageCost(adjectiveFormOffset) >= 3 &&
 		m[wordSourceIndex + 1].queryWinnerForm(determinerForm) >= 0 && wordSourceIndex > 0 && m[wordSourceIndex - 1].queryWinnerForm(verbForm) < 0)
@@ -4054,70 +4049,76 @@ int cSource::ruleCorrectLPClass(int wordSourceIndex, int startOfSentence)
 		m[wordSourceIndex].unsetWinner(adverbFormOffset);
 		return -1;
 	}
-	if (wordSourceIndex < m.size() - 3 && m[wordSourceIndex].word->first == L"most" &&
-		(m[wordSourceIndex + 1].hasWinnerNounForm() ||
-			(m[wordSourceIndex + 1].word->first == L"of" &&
-				(m[wordSourceIndex + 2].word->first == L"the" || m[wordSourceIndex + 2].queryWinnerForm(demonstrativeDeterminerForm) != -1 || m[wordSourceIndex + 2].queryWinnerForm(possessiveDeterminerForm) != -1 || m[wordSourceIndex + 2].queryWinnerForm(interrogativeDeterminerForm) != -1))
-			))
+	return 0;
+}
+
+int cSource::ruleCorrectLPClassOnly(int wordSourceIndex, int startOfSentence)
+{
+	int adverbFormOffset = m[wordSourceIndex].word->second.query(adverbForm);
+	int adjectiveFormOffset = m[wordSourceIndex].word->second.query(adjectiveForm);
+	int conjunctionFormOffset = m[wordSourceIndex].word->second.query(conjunctionForm);
+	if (m[wordSourceIndex + 1].pma.queryPattern(L"__S1") != -1)
+	{
+		if (wordSourceIndex == startOfSentence || wordSourceIndex == startOfSentence + 1)
+		{
+			m[wordSourceIndex].setWinner(adverbFormOffset);
+			m[wordSourceIndex].unsetAllFormWinners();
+			return -1;
+		}
+		else
+		{
+			m[wordSourceIndex].setWinner(conjunctionFormOffset);
+			m[wordSourceIndex].unsetAllFormWinners();
+			return -1;
+
+		}
+	}
+	else if (m[wordSourceIndex + 1].pma.queryPattern(L"__INFP") != -1)
+	{
+		m[wordSourceIndex].setWinner(adverbFormOffset);
+		m[wordSourceIndex].unsetAllFormWinners();
+		return -1;
+	}
+	else if (m[wordSourceIndex + 1].queryWinnerForm(determinerForm) != -1)
 	{
 		m[wordSourceIndex].setWinner(adjectiveFormOffset);
 		m[wordSourceIndex].unsetAllFormWinners();
 		return -1;
 	}
-	if (m[wordSourceIndex].word->first == L"only")
-	{
-		if (m[wordSourceIndex + 1].pma.queryPattern(L"__S1") != -1)
-		{
-			if (wordSourceIndex == startOfSentence || wordSourceIndex == startOfSentence + 1)
-			{
-				m[wordSourceIndex].setWinner(adverbFormOffset);
-				m[wordSourceIndex].unsetAllFormWinners();
-				return -1;
-			}
-			else
-			{
-				m[wordSourceIndex].setWinner(conjunctionFormOffset);
-				m[wordSourceIndex].unsetAllFormWinners();
-				return -1;
+	return 0;
+}
 
-			}
-		}
-		else if (m[wordSourceIndex + 1].pma.queryPattern(L"__INFP") != -1)
-		{
-			m[wordSourceIndex].setWinner(adverbFormOffset);
-			m[wordSourceIndex].unsetAllFormWinners();
-			return -1;
-		}
-		else if (m[wordSourceIndex + 1].queryWinnerForm(determinerForm) != -1)
-		{
-			m[wordSourceIndex].setWinner(adjectiveFormOffset);
-			m[wordSourceIndex].unsetAllFormWinners();
-			return -1;
-		}
-		return 0;
-	}
-	if (m[wordSourceIndex].word->first == L"better" || m[wordSourceIndex].word->first == L"further")
+int cSource::ruleCorrectLPClassBetterFurther(int wordSourceIndex)
+{
+	int adverbFormOffset = m[wordSourceIndex].word->second.query(adverbForm);
+	int adjectiveFormOffset = m[wordSourceIndex].word->second.query(adjectiveForm);
+	bool sentenceOfBeing =				// 4 words or less before the word must be an 'is' verb
+		((wordSourceIndex <= 0 || (m[wordSourceIndex - 1].queryForm(L"is") >= 0 || m[wordSourceIndex - 1].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
+			(wordSourceIndex <= 1 || (m[wordSourceIndex - 2].queryForm(L"is") >= 0 || m[wordSourceIndex - 2].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
+			(wordSourceIndex <= 2 || (m[wordSourceIndex - 3].queryForm(L"is") >= 0 || m[wordSourceIndex - 3].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
+			(wordSourceIndex <= 3 || (m[wordSourceIndex - 4].queryForm(L"is") >= 0 || m[wordSourceIndex - 4].queryForm(L"be") >= 0))); // is/ishas before means it really is an adjective!
+	if (m[wordSourceIndex].word->first == L"better" && sentenceOfBeing && m[wordSourceIndex + 1].queryWinnerForm(verbForm) == -1)
 	{
-		bool sentenceOfBeing =				// 4 words or less before the word must be an 'is' verb
-			((wordSourceIndex <= 0 || (m[wordSourceIndex - 1].queryForm(L"is") >= 0 || m[wordSourceIndex - 1].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
-				(wordSourceIndex <= 1 || (m[wordSourceIndex - 2].queryForm(L"is") >= 0 || m[wordSourceIndex - 2].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
-				(wordSourceIndex <= 2 || (m[wordSourceIndex - 3].queryForm(L"is") >= 0 || m[wordSourceIndex - 3].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
-				(wordSourceIndex <= 3 || (m[wordSourceIndex - 4].queryForm(L"is") >= 0 || m[wordSourceIndex - 4].queryForm(L"be") >= 0))); // is/ishas before means it really is an adjective!
-		if (m[wordSourceIndex].word->first == L"better" && sentenceOfBeing && m[wordSourceIndex + 1].queryWinnerForm(verbForm) == -1)
-		{
-			m[wordSourceIndex].setWinner(adjectiveFormOffset);
-			m[wordSourceIndex].unsetAllFormWinners();
-			return -1;
-		}
-		else if (m[wordSourceIndex].word->first == L"better" && m[wordSourceIndex + 1].queryWinnerForm(nounForm) == -1 && m[wordSourceIndex + 1].queryWinnerForm(determinerForm) == -1)
-		{
-			m[wordSourceIndex].setWinner(adverbFormOffset);
-			m[wordSourceIndex].unsetAllFormWinners();
-			return -1;
-		}
+		m[wordSourceIndex].setWinner(adjectiveFormOffset);
+		m[wordSourceIndex].unsetAllFormWinners();
+		return -1;
 	}
+	else if (m[wordSourceIndex].word->first == L"better" && m[wordSourceIndex + 1].queryWinnerForm(nounForm) == -1 && m[wordSourceIndex + 1].queryWinnerForm(determinerForm) == -1)
+	{
+		m[wordSourceIndex].setWinner(adverbFormOffset);
+		m[wordSourceIndex].unsetAllFormWinners();
+		return -1;
+	}
+	return 0;
+}
+
+int cSource::ruleCorrectLPClassPrepositionAtEndOfSentence(int wordSourceIndex)
+{
 	if (m[wordSourceIndex].isOnlyWinner(prepositionForm) && m[wordSourceIndex].getRelObject() < 0 && !iswalpha(m[wordSourceIndex + 1].word->first[0]))
 	{
+		int adverbFormOffset = m[wordSourceIndex].word->second.query(adverbForm);
+		int adjectiveFormOffset = m[wordSourceIndex].word->second.query(adjectiveForm);
+		int particleFormOffset = m[wordSourceIndex].word->second.query(particleForm);
 		int relVerb = m[wordSourceIndex].getRelVerb();
 		bool sentenceOfBeing =				// 4 words or less before the word must be an 'is' verb
 			((wordSourceIndex <= 0 || (m[wordSourceIndex - 1].queryForm(L"is") >= 0 || m[wordSourceIndex - 1].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
@@ -4189,6 +4190,11 @@ int cSource::ruleCorrectLPClass(int wordSourceIndex, int startOfSentence)
 			}
 		}
 	}
+	return 1;
+}
+
+void cSource::ruleCorrectLPClassPreferPronounOverDemonstrativeDeterminer(int wordSourceIndex, int startOfSentence)
+{
 	if (m[wordSourceIndex].word->first == L"that" && (((m[wordSourceIndex].flags & cWordMatch::flagInQuestion) && wordSourceIndex > 0 &&
 		wordSourceIndex > 0 && (m[wordSourceIndex - 1].queryForm(L"is") >= 0 || m[wordSourceIndex - 1].queryForm(L"is_negation") >= 0) &&
 		m[wordSourceIndex].queryWinnerForm(demonstrativeDeterminerForm) >= 0 && m[wordSourceIndex + 1].queryWinnerForm(nounForm) < 0) ||
@@ -4199,13 +4205,26 @@ int cSource::ruleCorrectLPClass(int wordSourceIndex, int startOfSentence)
 		m[wordSourceIndex].setWinner(m[wordSourceIndex].queryForm(pronounForm));
 		m[wordSourceIndex].unsetWinner(m[wordSourceIndex].queryForm(demonstrativeDeterminerForm));
 	}
-	// a word which LP thinks is an adverb, which is before a determiner, which has a predeterminer form
-	if (m[wordSourceIndex].isOnlyWinner(adverbForm) && m[wordSourceIndex + 1].isOnlyWinner(determinerForm) && m[wordSourceIndex].queryForm(predeterminerForm) != -1)
+}
+
+int cSource::ruleCorrectLPClassMost(int wordSourceIndex)
+{
+	if (wordSourceIndex < m.size() - 3 && m[wordSourceIndex].word->first == L"most" &&
+		(m[wordSourceIndex + 1].hasWinnerNounForm() ||
+			(m[wordSourceIndex + 1].word->first == L"of" &&
+				(m[wordSourceIndex + 2].word->first == L"the" || m[wordSourceIndex + 2].queryWinnerForm(demonstrativeDeterminerForm) != -1 || m[wordSourceIndex + 2].queryWinnerForm(possessiveDeterminerForm) != -1 || m[wordSourceIndex + 2].queryWinnerForm(interrogativeDeterminerForm) != -1))
+			))
 	{
-		m[wordSourceIndex].setWinner(m[wordSourceIndex].queryForm(predeterminerForm));
-		m[wordSourceIndex].unsetWinner(adverbFormOffset);
-		return -2;
+		int adjectiveFormOffset = m[wordSourceIndex].word->second.query(adjectiveForm);
+		m[wordSourceIndex].setWinner(adjectiveFormOffset);
+		m[wordSourceIndex].unsetAllFormWinners();
+		return -1;
 	}
+	return 0;
+}
+
+int cSource::ruleCorrectLPClassPreferPrepositionOverAdverb(int wordSourceIndex)
+{
 	int primaryPMAOffset = m[wordSourceIndex].pma.queryPattern(L"__ALLOBJECTS_1");
 	int secondaryPMAOffset = m[wordSourceIndex].pma.queryPattern(L"_ADVERB");
 	if (primaryPMAOffset != -1 && secondaryPMAOffset != -1)
@@ -4215,11 +4234,55 @@ int cSource::ruleCorrectLPClass(int wordSourceIndex, int startOfSentence)
 		set <wstring> particles = { L"down",L"out",L"off",L"up" };
 		if (particles.find(m[wordSourceIndex].word->first) == particles.end() && m[wordSourceIndex].word->second.getUsageCost(m[wordSourceIndex].queryForm(prepositionForm)) < 4 && m[wordSourceIndex].pma[secondaryPMAOffset].len == 1 && queryPattern(wordSourceIndex + 1, L"__NOUN") != -1 && m[wordSourceIndex].queryForm(prepositionForm) != -1)
 		{
+			int adverbFormOffset = m[wordSourceIndex].word->second.query(adverbForm);
 			m[wordSourceIndex].setWinner(m[wordSourceIndex].queryForm(prepositionForm));
 			m[wordSourceIndex].unsetWinner(adverbFormOffset);
 			return 0;
 		}
 	}
+	return 1;
+}
+
+// correct from Stanford analysis - see specials_main::ruleCorrectLPClass
+// see if LP class can be corrected.
+// return code:
+//   -1: LP class corrected.  ST prefers something other than correct class, so LP is correct
+//   -2: LP class corrected.  ST prefers correct class, so this entry should simply be removed from the output file.
+//   -3: test whether to change to correct class - set to disagree, and add an arbitrary string to partofspeech to search for whatever string added as a test.
+//    0: unable to determine whether class should be corrected, or the class has been corrected. Normal processing should continue.  
+int cSource::ruleCorrectLPClass(int wordSourceIndex, int startOfSentence)
+{
+	if (wordSourceIndex + 1 >= m.size())
+		return 0;
+	int adverbFormOffset = m[wordSourceIndex].word->second.query(adverbForm);
+	int conjunctionFormOffset = m[wordSourceIndex].word->second.query(conjunctionForm);
+	// RULE CHANGE - change an adjective to an adverb?
+	if (ruleCorrectLPClassAdjectiveToAdverb(wordSourceIndex) < 0)
+		return -1;
+	if (ruleCorrectLPClassAdverbToAdjective(wordSourceIndex) < 0)
+		return -1;
+	if (ruleCorrectLPClassMost(wordSourceIndex) < 0)
+		return -1;
+	if (m[wordSourceIndex].word->first == L"only")
+		return ruleCorrectLPClassOnly(wordSourceIndex, startOfSentence);
+	if (m[wordSourceIndex].word->first == L"better" || m[wordSourceIndex].word->first == L"further")
+	{
+		if (ruleCorrectLPClassBetterFurther(wordSourceIndex) < 0)
+			return -1;
+	}
+	int result = ruleCorrectLPClassPrepositionAtEndOfSentence(wordSourceIndex);
+	if (result <= 0)
+		return result;
+	ruleCorrectLPClassPreferPronounOverDemonstrativeDeterminer(wordSourceIndex, startOfSentence);
+	// a word which LP thinks is an adverb, which is before a determiner, which has a predeterminer form
+	if (m[wordSourceIndex].isOnlyWinner(adverbForm) && m[wordSourceIndex + 1].isOnlyWinner(determinerForm) && m[wordSourceIndex].queryForm(predeterminerForm) != -1)
+	{
+		m[wordSourceIndex].setWinner(m[wordSourceIndex].queryForm(predeterminerForm));
+		m[wordSourceIndex].unsetWinner(adverbFormOffset);
+		return -2;
+	}
+	if (ruleCorrectLPClassPreferPrepositionOverAdverb(wordSourceIndex) == 0)
+		return 0;
 	set <wstring> notObjects = { L"we",L"i",L"he",L"they" };
 	if (wordSourceIndex < m.size() - 2 && m[wordSourceIndex + 1].hasWinnerNounForm() && m[wordSourceIndex].isOnlyWinner(adverbForm) &&
 		m[wordSourceIndex].queryForm(prepositionForm) != -1 && m[wordSourceIndex].word->first != L"as" && m[wordSourceIndex + 1].queryWinnerForm(PROPER_NOUN_FORM) == -1)

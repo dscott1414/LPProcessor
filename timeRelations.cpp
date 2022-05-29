@@ -236,15 +236,9 @@ bool cSource::evaluateHOUR(int where, cTimeInfo& t)
 	return true;
 }
 
-bool cSource::evaluateDateTime(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& rtSet)
+void cSource::evaluateDateTimeTimeSpec(vector <cTagLocation>& tagSet, cTimeInfo& t, bool& tSet)
 {
-	LFS
-		t.clear();
-	rt.clear();
-	rtSet = false;
-	bool tSet = false;
-	rt.timeRelationType = T_RANGE;
-	int ti = -1, s;
+	int ti;
 	if ((ti = findOneTag(tagSet, L"TIMESPEC", -1)) >= 0) // A.M. / P.M.
 	{
 		tSet = true;
@@ -253,6 +247,11 @@ bool cSource::evaluateDateTime(vector <cTagLocation>& tagSet, cTimeInfo& t, cTim
 		else
 			t.absTimeSpec = 1;
 	}
+}
+
+void cSource::evaluateDateTimeDateSpec(vector <cTagLocation>& tagSet, cTimeInfo& t, bool& tSet)
+{
+	int ti;
 	if ((ti = findOneTag(tagSet, L"DATESPEC", -1)) >= 0) // A.D. / B.C.
 	{
 		tSet = true;
@@ -261,7 +260,11 @@ bool cSource::evaluateDateTime(vector <cTagLocation>& tagSet, cTimeInfo& t, cTim
 		else
 			t.absDateSpec = 1;
 	}
-	int nextTag = -1;
+}
+
+void cSource::evaluateDateTimeModifier(vector <cTagLocation>& tagSet, cTimeInfo& t, bool& tSet)
+{
+	int nextTag = -1, ti;
 	if ((ti = findTag(tagSet, L"TIMEMODIFIER", nextTag)) >= 0)
 	{  // text offset
 		tSet = true;
@@ -289,7 +292,11 @@ bool cSource::evaluateDateTime(vector <cTagLocation>& tagSet, cTimeInfo& t, cTim
 				t.timeFrequency = -1;
 		}
 	}
-	nextTag = -1;
+}
+
+void cSource::evaluateDateTimeCapacity(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet)
+{
+	int nextTag = -1, ti;
 	if ((ti = findTag(tagSet, L"TIMECAPACITY", nextTag)) >= 0) // hour / minute/ second/ dayUnit
 	{
 		tSet = true;
@@ -300,6 +307,11 @@ bool cSource::evaluateDateTime(vector <cTagLocation>& tagSet, cTimeInfo& t, cTim
 			rt.timeCapacity = (eCapacity)whichCapacity(m[tagSet[nextTag].sourcePosition].deriveMainEntry(tagSet[nextTag].sourcePosition, 32, false, true, lastNounNotFound, lastVerbNotFound)->first);
 		}
 	}
+}
+
+void cSource::evaluateDateTimeType(vector <cTagLocation>& tagSet, cTimeInfo& t, bool& tSet)
+{
+	int ti = -1, s;
 	if ((ti = findOneTag(tagSet, L"TIMETYPE", -1)) >= 0) // adverb/to/past
 	{
 		tSet = true;
@@ -319,7 +331,11 @@ bool cSource::evaluateDateTime(vector <cTagLocation>& tagSet, cTimeInfo& t, cTim
 				t.timeModifier2 = s;
 		}
 	}
-	nextTag = -1;
+}
+
+bool cSource::evaluateDateTimeHour(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet)
+{
+	int nextTag = -1, ti;
 	if ((ti = findTag(tagSet, L"HOUR", nextTag)) >= 0)
 	{
 		// Number / numeral_cardinal / time
@@ -331,7 +347,12 @@ bool cSource::evaluateDateTime(vector <cTagLocation>& tagSet, cTimeInfo& t, cTim
 		if (nextTag >= 0) // Number / numeral_cardinal / time
 			rtSet = evaluateHOUR(tagSet[nextTag].sourcePosition, rt);
 	}
-	nextTag = -1;
+	return true;
+}
+
+void cSource::evaluateDateTimeDayMonth(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet)
+{
+	int nextTag = -1, ti, s;
 	if ((ti = findTag(tagSet, L"DAYMONTH", nextTag)) >= 0) // numeral_cardinal / Number
 	{
 		tSet = true;
@@ -348,11 +369,15 @@ bool cSource::evaluateDateTime(vector <cTagLocation>& tagSet, cTimeInfo& t, cTim
 				rt.absDayOfMonth = mapNumeralOrdinal(m[s].word->first);
 		}
 	}
-	nextTag = -1;
+}
+
+bool cSource::evaluateDateTimeDayMinute(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet)
+{
+	int nextTag = -1, ti, s;
 	// at five to 6 tomorrow.
-	// NOT from 5 to 6 tomorrow.
-	// NOT 12 o'clock _DATE
-	// not one of these days
+// NOT from 5 to 6 tomorrow.
+// NOT 12 o'clock _DATE
+// not one of these days
 	if ((ti = findTag(tagSet, L"MINUTE", nextTag)) >= 0) // numeral_cardinal / Number
 	{
 		tSet = true;
@@ -377,7 +402,12 @@ bool cSource::evaluateDateTime(vector <cTagLocation>& tagSet, cTimeInfo& t, cTim
 			t.absMinute = -1;
 		}
 	}
-	nextTag = -1;
+	return true;
+}
+
+void cSource::evaluateDateTimeMonth(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet)
+{
+	int nextTag = -1, ti;
 	if ((ti = findTag(tagSet, L"MONTH", nextTag)) >= 0) // month
 	{
 		tSet = true;
@@ -388,7 +418,11 @@ bool cSource::evaluateDateTime(vector <cTagLocation>& tagSet, cTimeInfo& t, cTim
 			rt.absMonth = whichMonth(m[tagSet[nextTag].sourcePosition].getMainEntry()->first);
 		}
 	}
-	nextTag = -1;
+}
+
+void cSource::evaluateDateTimeSeason(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet)
+{
+	int nextTag = -1, ti, s;
 	if ((ti = findTag(tagSet, L"SEASON", nextTag)) >= 0 && (m[tagSet[ti].sourcePosition].flags & cWordMatch::flagFirstLetterCapitalized)) // season
 	{
 		tSet = (t.absSeason = whichSeason(m[tagSet[ti].sourcePosition].getMainEntry()->first)) >= 0;
@@ -407,7 +441,11 @@ bool cSource::evaluateDateTime(vector <cTagLocation>& tagSet, cTimeInfo& t, cTim
 			rt.absYear = _wtoi(m[s].word->first.c_str());
 		}
 	}
-	nextTag = -1;
+}
+
+void cSource::evaluateDateTimeHoliday(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet)
+{
+	int nextTag = -1, ti;
 	if ((ti = findTag(tagSet, L"HOLIDAY", nextTag)) >= 0) // numeral_cardinal / Number
 	{
 		tSet = true;
@@ -418,7 +456,11 @@ bool cSource::evaluateDateTime(vector <cTagLocation>& tagSet, cTimeInfo& t, cTim
 			rt.absHoliday = whichHoliday(m[tagSet[nextTag].sourcePosition].getMainEntry()->first);
 		}
 	}
-	nextTag = -1;
+}
+
+void cSource::evaluateDateTimeDayWeek(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet)
+{
+	int nextTag = -1, ti;
 	if ((ti = findTag(tagSet, L"DAYWEEK", nextTag)) >= 0) // daysOfWeek
 	{
 		tSet = true;
@@ -429,6 +471,11 @@ bool cSource::evaluateDateTime(vector <cTagLocation>& tagSet, cTimeInfo& t, cTim
 		rtSet = true;
 		rt.absDayOfWeek = whichDayOfWeek(m[tagSet[nextTag].sourcePosition].getMainEntry()->first);
 	}
+}
+
+void cSource::evaluateDateTimeMinute(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& rtSet)
+{
+	int nextTag = -1, ti, s;
 	// from 5 to 6 tomorrow (see _TIME[4])
 	if ((ti = findTag(tagSet, L"MINUTE", nextTag)) >= 0 && m[s = tagSet[ti].sourcePosition - 1].word->first == L"from" && t.absMinute > 0 && !rtSet)
 	{
@@ -439,6 +486,31 @@ bool cSource::evaluateDateTime(vector <cTagLocation>& tagSet, cTimeInfo& t, cTim
 		rt.absMinute = -1;
 		rt.timeRelationType = T_RANGE;
 	}
+}
+
+bool cSource::evaluateDateTime(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& rtSet)
+{
+	LFS
+	t.clear();
+	rt.clear();
+	rtSet = false;
+	bool tSet = false;
+	rt.timeRelationType = T_RANGE;
+	evaluateDateTimeTimeSpec(tagSet, t, tSet);
+	evaluateDateTimeDateSpec(tagSet, t, tSet);
+	evaluateDateTimeModifier(tagSet, t, tSet);
+	evaluateDateTimeCapacity(tagSet, t, rt, tSet, rtSet);
+	evaluateDateTimeType(tagSet, t, tSet);
+	if (!evaluateDateTimeHour(tagSet, t, rt, tSet, rtSet))
+		return false;
+	evaluateDateTimeDayMonth(tagSet, t, rt, tSet, rtSet);
+	if (!evaluateDateTimeDayMinute(tagSet, t, rt, tSet, rtSet))
+		return false;
+	evaluateDateTimeMonth(tagSet, t, rt, tSet, rtSet);
+	evaluateDateTimeSeason(tagSet, t, rt, tSet, rtSet);
+	evaluateDateTimeHoliday(tagSet, t, rt, tSet, rtSet);
+	evaluateDateTimeDayWeek(tagSet, t, rt, tSet, rtSet);
+	evaluateDateTimeMinute(tagSet, t, rt, rtSet);
 	return tSet;
 }
 

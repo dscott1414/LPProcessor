@@ -4186,12 +4186,179 @@ int cQuestionAnswering::getProximateObjectsMatchingOwnedItemType(cSource* questi
 	return proximityOwnedObjects.size();
 }
 
-extern int limitProcessingForProfiling;
-int cQuestionAnswering::answerQuestionInSource(cSource* questionSource, bool parseOnly, bool useParallelQuery, cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& ssrg, vector < cTrackDescendantAnswers>& descendantAnswers, bool disableWebSearch)
+void cQuestionAnswering::answerQuestionInSourceWebWikiSearch(cSource* questionSource,
+	const bool parseOnly, const bool useParallelQuery, const bool answerPluralSpecification, bool &webSearchOrWikipediaTableSuccess, const bool disableWebSearch, bool& lastGoogleResultPage,
+	cSyntacticRelationGroup*& ssrg,	vector < cAS >& answerSRGs, wchar_t* sqderivation, vector <cSyntacticRelationGroup> &subQueries, unordered_map <int, cWikipediaTableCandidateAnswers* > &wikiTableMap,
+	int& numFinalAnswers, int& maxAnswer,	vector <wstring> &webSearchQueryStrings)
 {
-	if (!srg->questionType || srg->skip)
-		return -1;
-	wstring derivation;
+	getWebSearchQueries(questionSource, ssrg, webSearchQueryStrings);
+	bool lastBINGResultPage = disableWebSearch;
+	for (int trySearchIndex = 1; trySearchIndex <= 20; trySearchIndex += 10)
+	{
+		vector < cAS > webSearchAnswerSRIs;
+		// search google with webSearchQueryStrings, starting at trySearchIndex
+		if (!lastGoogleResultPage)
+		{
+			searchWebSearchQueries(questionSource, sqderivation, ssrg, subQueries, webSearchAnswerSRIs, webSearchQueryStrings,
+				parseOnly, numFinalAnswers, maxAnswer, useParallelQuery, trySearchIndex, true, lastGoogleResultPage);
+			if (webSearchOrWikipediaTableSuccess = numFinalAnswers > 0)
+				answerSRGs.insert(answerSRGs.end(), webSearchAnswerSRIs.begin(), webSearchAnswerSRIs.end());
+			else
+				printAnswers(ssrg, webSearchAnswerSRIs); // print all rejected answers
+			if (numFinalAnswers > 0 && (!answerPluralSpecification || numFinalAnswers >= 1))
+				break;
+			webSearchAnswerSRIs.clear();
+		}
+		// search BING with webSearchQueryStrings, starting at trySearchIndex
+		if (!lastBINGResultPage)
+		{
+			searchWebSearchQueries(questionSource, sqderivation, ssrg, subQueries, webSearchAnswerSRIs, webSearchQueryStrings,
+				parseOnly, numFinalAnswers, maxAnswer, useParallelQuery, trySearchIndex, false, lastBINGResultPage);
+			if (webSearchOrWikipediaTableSuccess = numFinalAnswers > 0)
+				answerSRGs.insert(answerSRGs.end(), webSearchAnswerSRIs.begin(), webSearchAnswerSRIs.end());
+			else
+				printAnswers(ssrg, webSearchAnswerSRIs); // print all rejected answers
+			if (numFinalAnswers > 0 && (!answerPluralSpecification || numFinalAnswers >= 1))
+				break;
+		}
+		// search wikipedia tables after the first page of Google and BING results if no answers (or insufficient number of answers) are found.
+		if (trySearchIndex == 1 && ssrg->whereQuestionInformationSourceObjects.size() > 0)
+		{
+			vector < cAS > wikipediaTableAnswerSRIs;
+			int lowestConfidence = 100000 - 1;
+			searchTableForAnswer(questionSource, sqderivation, ssrg, wikiTableMap, subQueries, wikipediaTableAnswerSRIs, lowestConfidence, useParallelQuery);
+			bool atLeastOneFinalAnswer = false;
+			for (unsigned int I = 0; I < wikipediaTableAnswerSRIs.size(); I++)
+				if (wikipediaTableAnswerSRIs[I].confidence == lowestConfidence)
+					atLeastOneFinalAnswer = wikipediaTableAnswerSRIs[I].finalAnswer = true;
+				else
+					wikipediaTableAnswerSRIs[I].rejectAnswer += L"[low confidence]";
+			if (webSearchOrWikipediaTableSuccess = atLeastOneFinalAnswer)
+			{
+				answerSRGs.insert(answerSRGs.end(), wikipediaTableAnswerSRIs.begin(), wikipediaTableAnswerSRIs.end());
+				break;
+			}
+			else
+				printAnswers(ssrg, wikipediaTableAnswerSRIs); // print all rejected answers
+		}
+	}
+}
+
+void cQuestionAnswering::answerQuestionInSourceOwnershipRetryQuery(cSource* questionSource,
+	const bool parseOnly, const bool useParallelQuery, bool& webSearchOrWikipediaTableSuccess, const bool disableWebSearch, 
+	cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& ssrg, vector < cTrackDescendantAnswers>& descendantAnswers, 
+	vector < cAS >& answerSRGs)
+{
+	// for each information object (ex. Darrell Hammond)
+	for (int si : ssrg->whereQuestionInformationSourceObjects)
+	{
+		set <wstring> proximityOwnedItems;
+		// When a question information source object owns another object, disambiguate this by seeing 
+		// what objects matching the same type that are also very close and common to the question information source object, 
+		// and return all these matching objects.
+		set <int> proximityOwnedObjects;
+		if (getProximateObjectsMatchingOwnedItemType(questionSource, si, ssrg, proximityOwnedObjects))
+		{
+			for (int proximityOwnedObject : proximityOwnedObjects)
+			{
+				//construct query from ssrg but substituting proximityOwnedItems for the owned object
+				cSyntacticRelationGroup psrg = *ssrg, * ppsrg = &psrg;
+				int replacementWhere = -1;
+				if (questionSource->inObject(ssrg->whereSubject, si))
+					replacementWhere = psrg.whereSubject;
+				else if (questionSource->inObject(srg->whereObject, si))
+					replacementWhere = psrg.whereObject;
+				else if (questionSource->inObject(srg->wherePrepObject, si))
+					replacementWhere = psrg.wherePrepObject;
+				else if (questionSource->inObject(srg->whereSecondaryObject, si))
+					replacementWhere = psrg.whereSecondaryObject;
+				else if (srg->whereSecondaryPrep >= 0 && questionSource->inObject(questionSource->m[srg->whereSecondaryPrep].getRelObject(), srg->whereQuestionType))
+				{
+					lplog(LOG_FATAL_ERROR, L"ProximityOwnershipQuery:Unable to replace this object to a secondary prep.");
+				}
+				else
+				{
+					lplog(LOG_WHERE | LOG_INFO, L"ProximityOwnershipQuery:Cannot find owned item type %d in these fields: S=%d, O=%d, PO=%d, SO=%d",
+						si, srg->whereSubject, srg->whereObject, srg->wherePrepObject, srg->whereSecondaryObject);
+					continue;
+				}
+				questionSource->m[replacementWhere].objectMatches.clear();
+				questionSource->m[replacementWhere].objectMatches.push_back(cOM(proximityOwnedObject, 1000));
+				psrg.whereQuestionInformationSourceObjects.erase(si);
+				psrg.whereQuestionInformationSourceObjects.insert(questionSource->objects[proximityOwnedObject].originalLocation);
+				wstring tmpstr;
+				lplog(LOG_WHERE | LOG_INFO, L"ProximityOwnershipQuery:Successfully replaced owned item type at %d with specific object %s: S=%d, O=%d, PO=%d, SO=%d, whereQuestionTypeObject=%d",
+					replacementWhere, questionSource->whereString(replacementWhere, tmpstr, true).c_str(), srg->whereSubject, srg->whereObject, srg->wherePrepObject, srg->whereSecondaryObject, srg->whereQuestionTypeObject);
+				questionSource->printSRG(L"ProximityOwnershipQuery", &psrg, 0, srg->whereSubject, srg->whereObject, psrg.wherePrep, false, -1, L"", LOG_WHERE);
+				if (answerQuestionInSource(questionSource, parseOnly, useParallelQuery, &psrg, ppsrg, descendantAnswers, disableWebSearch) >= 0)
+				{
+					for (auto& wpa : descendantAnswers)
+					{
+						wstring outputAnswer;
+						questionSource->objectString(wpa.inputAnswerObject, outputAnswer, true);
+						answerSRGs.push_back(cAS(L"ProximityOwnershipQuery", questionSource, 1, 1000, outputAnswer, ppsrg, 0, srg->whereSubject, srg->whereObject, srg->wherePrep, false, false, L"", L"", 0, 0, 0, NULL));
+						answerSRGs[answerSRGs.size() - 1].object = wpa.inputAnswerObject;
+						webSearchOrWikipediaTableSuccess = true;
+					}
+				}
+			}
+		}
+	}
+}
+
+void cQuestionAnswering::answerQuestionInSourceProximityMapWebSearch(cSource* questionSource,
+	const bool parseOnly, const bool useParallelQuery, const bool answerPluralSpecification, bool& webSearchOrWikipediaTableSuccess, bool& lastGoogleResultPage,
+	cSyntacticRelationGroup*& ssrg, vector < cAS >& answerSRGs, wchar_t* sqderivation, vector <cSyntacticRelationGroup>& subQueries, 
+	int& numFinalAnswers, int& maxAnswer, vector <wstring>& webSearchQueryStrings)
+{
+	lplog(LOG_WHERE | LOG_QCHECK, L"    ***** proximity map");
+	wstring tmpstr;
+	for (set <int>::iterator si = ssrg->whereQuestionInformationSourceObjects.begin(), siEnd = ssrg->whereQuestionInformationSourceObjects.end(); si != siEnd; si++)
+	{
+		unordered_map <int, cProximityMap*>::iterator msi = ssrg->proximityMaps.find(*si);
+		if (msi != ssrg->proximityMaps.end())
+		{
+			msi->second->sortByFrequencyAndProximity(*this, ssrg, questionSource);
+			msi->second->lplogFrequentOrProximateObjects(*this, LOG_WHERE, questionSource, false);
+			set < unordered_map <wstring, cProximityMap::cProximityEntry>::iterator, cProximityMap::semanticSetCompare > frequentOrProximateObjects = msi->second->frequentOrProximateObjects;
+			for (set < unordered_map <wstring, cProximityMap::cProximityEntry>::iterator, cProximityMap::semanticSetCompare >::iterator sai = frequentOrProximateObjects.begin(), saiEnd = frequentOrProximateObjects.end(); sai != saiEnd; sai++)
+			{
+				vector < cAS > enhancedWebSearchAnswerSRIs;
+				vector <wstring> enhancedWebSearchQueryStrings = webSearchQueryStrings;
+				enhanceWebSearchQueries(enhancedWebSearchQueryStrings, (*sai)->first);
+				int trySearchIndex = 1;
+				// google
+				searchWebSearchQueries(questionSource, sqderivation, ssrg, subQueries, enhancedWebSearchAnswerSRIs, enhancedWebSearchQueryStrings,
+					parseOnly, numFinalAnswers, maxAnswer, useParallelQuery, trySearchIndex, true, lastGoogleResultPage);
+				if (webSearchOrWikipediaTableSuccess = numFinalAnswers > 0)
+					answerSRGs.insert(answerSRGs.end(), enhancedWebSearchAnswerSRIs.begin(), enhancedWebSearchAnswerSRIs.end());
+				else
+					printAnswers(ssrg, enhancedWebSearchAnswerSRIs); // print all rejected answers
+				if (numFinalAnswers > 0 && (!answerPluralSpecification || numFinalAnswers >= 1))
+					break;
+				enhancedWebSearchAnswerSRIs.clear();
+				// BING
+				searchWebSearchQueries(questionSource, sqderivation, ssrg, subQueries, enhancedWebSearchAnswerSRIs, enhancedWebSearchQueryStrings,
+					parseOnly, numFinalAnswers, maxAnswer, useParallelQuery, trySearchIndex, true, lastGoogleResultPage);
+				if (webSearchOrWikipediaTableSuccess = numFinalAnswers > 0)
+					answerSRGs.insert(answerSRGs.end(), enhancedWebSearchAnswerSRIs.begin(), enhancedWebSearchAnswerSRIs.end());
+				else
+					printAnswers(ssrg, enhancedWebSearchAnswerSRIs); // print all rejected answers
+				if (numFinalAnswers > 0 && (!answerPluralSpecification || numFinalAnswers >= 1))
+					break;
+			}
+		}
+		else
+			lplog(LOG_WHERE | LOG_QCHECK, L"    No entries in proximity map for %s.", questionSource->whereString(*si, tmpstr, true).c_str());
+	}
+}
+
+int cQuestionAnswering::answerQuestionInSourceInitialize(cSource* questionSource, 
+	const bool parseOnly, const bool useParallelQuery, 
+	cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& ssrg, 
+	vector < cTrackDescendantAnswers>& descendantAnswers, const bool disableWebSearch, 
+	wstring& ps, wstring& parentNum)
+{
 	eraseSourcesMap();
 	childCandidateAnswerMap.clear();
 	// **************************************************************
@@ -4209,13 +4376,24 @@ int cQuestionAnswering::answerQuestionInSource(cSource* questionSource, bool par
 	// **************************************************************
 	// log question
 	// **************************************************************
-	wstring ps, parentNum, tmpstr, tmpstr2;
+	wstring tmpstr, tmpstr2;
 	itos(ssrg->where, parentNum);
 	//if (tsrg->where==69) 
 		//logDatabaseDetails = logQuestionProfileTime = logSynonymDetail = logTableDetail = equivalenceLogDetail = logQuestionDetail = logProximityMap = 1;
 	parentNum += L":Q ";
 	questionSource->prepPhraseToString(ssrg->wherePrep, ps);
 	questionSource->printSRG(parentNum, ssrg, -1, ssrg->whereSubject, ssrg->whereObject, ps, false, -1, L"QUESTION", (ssrg->questionType) ? LOG_WHERE | LOG_QCHECK : LOG_WHERE);
+	return 1;
+}
+
+extern int limitProcessingForProfiling;
+int cQuestionAnswering::answerQuestionInSource(cSource* questionSource, bool parseOnly, bool useParallelQuery, cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& ssrg, vector < cTrackDescendantAnswers>& descendantAnswers, bool disableWebSearch)
+{
+	if (!srg->questionType || srg->skip)
+		return -1;
+	wstring derivation, ps, parentNum;
+	if (!answerQuestionInSourceInitialize(questionSource, parseOnly, useParallelQuery, srg, ssrg, descendantAnswers, disableWebSearch, ps, parentNum))
+		return 0;
 	// **************************************************************
 	// check databases for answer.  
 	// **************************************************************
@@ -4259,58 +4437,12 @@ int cQuestionAnswering::answerQuestionInSource(cSource* questionSource, bool par
 		bool answerPluralSpecification = (questionSource->m[ssrg->whereQuestionTypeObject].word->second.inflectionFlags & PLURAL) == PLURAL;
 		if (numFinalAnswers <= 0 || (answerPluralSpecification && numFinalAnswers <= 1))
 		{
+			bool webSearchOrWikipediaTableSuccess = false, lastGoogleResultPage = disableWebSearch;
 			vector <wstring> webSearchQueryStrings;
-			getWebSearchQueries(questionSource, ssrg, webSearchQueryStrings);
-			bool lastGoogleResultPage = disableWebSearch, lastBINGResultPage = disableWebSearch, webSearchOrWikipediaTableSuccess = false;
-			for (int trySearchIndex = 1; trySearchIndex <= 20; trySearchIndex += 10)
-			{
-				vector < cAS > webSearchAnswerSRIs;
-				// search google with webSearchQueryStrings, starting at trySearchIndex
-				if (!lastGoogleResultPage)
-				{
-					searchWebSearchQueries(questionSource, sqderivation, ssrg, subQueries, webSearchAnswerSRIs, webSearchQueryStrings,
-						parseOnly, numFinalAnswers, maxAnswer, useParallelQuery, trySearchIndex, true, lastGoogleResultPage);
-					if (webSearchOrWikipediaTableSuccess = numFinalAnswers > 0)
-						answerSRGs.insert(answerSRGs.end(), webSearchAnswerSRIs.begin(), webSearchAnswerSRIs.end());
-					else
-						printAnswers(ssrg, webSearchAnswerSRIs); // print all rejected answers
-					if (numFinalAnswers > 0 && (!answerPluralSpecification || numFinalAnswers >= 1))
-						break;
-					webSearchAnswerSRIs.clear();
-				}
-				// search BING with webSearchQueryStrings, starting at trySearchIndex
-				if (!lastBINGResultPage)
-				{
-					searchWebSearchQueries(questionSource, sqderivation, ssrg, subQueries, webSearchAnswerSRIs, webSearchQueryStrings,
-						parseOnly, numFinalAnswers, maxAnswer, useParallelQuery, trySearchIndex, false, lastBINGResultPage);
-					if (webSearchOrWikipediaTableSuccess = numFinalAnswers > 0)
-						answerSRGs.insert(answerSRGs.end(), webSearchAnswerSRIs.begin(), webSearchAnswerSRIs.end());
-					else
-						printAnswers(ssrg, webSearchAnswerSRIs); // print all rejected answers
-					if (numFinalAnswers > 0 && (!answerPluralSpecification || numFinalAnswers >= 1))
-						break;
-				}
-				// search wikipedia tables after the first page of Google and BING results if no answers (or insufficient number of answers) are found.
-				if (trySearchIndex == 1 && ssrg->whereQuestionInformationSourceObjects.size() > 0)
-				{
-					vector < cAS > wikipediaTableAnswerSRIs;
-					int lowestConfidence = 100000 - 1;
-					searchTableForAnswer(questionSource, sqderivation, ssrg, wikiTableMap, subQueries, wikipediaTableAnswerSRIs, lowestConfidence, useParallelQuery);
-					bool atLeastOneFinalAnswer = false;
-					for (unsigned int I = 0; I < wikipediaTableAnswerSRIs.size(); I++)
-						if (wikipediaTableAnswerSRIs[I].confidence == lowestConfidence)
-							atLeastOneFinalAnswer = wikipediaTableAnswerSRIs[I].finalAnswer = true;
-						else
-							wikipediaTableAnswerSRIs[I].rejectAnswer += L"[low confidence]";
-					if (webSearchOrWikipediaTableSuccess = atLeastOneFinalAnswer)
-					{
-						answerSRGs.insert(answerSRGs.end(), wikipediaTableAnswerSRIs.begin(), wikipediaTableAnswerSRIs.end());
-						break;
-					}
-					else
-						printAnswers(ssrg, wikipediaTableAnswerSRIs); // print all rejected answers
-				}
-			}
+			answerQuestionInSourceWebWikiSearch(questionSource, 
+				parseOnly, useParallelQuery, answerPluralSpecification, webSearchOrWikipediaTableSuccess, disableWebSearch, lastGoogleResultPage,
+				ssrg, answerSRGs,	sqderivation, subQueries, wikiTableMap,
+				numFinalAnswers, maxAnswer,	webSearchQueryStrings);
 			// **************************************************************
 			// ownership query - replace the items owned by the information source with a specific item using rdfTypes.  Then retry query.
 			// This section is about impressionist Darrell Hammond.
@@ -4318,105 +4450,19 @@ int cQuestionAnswering::answerQuestionInSource(cSource* questionSource, bool par
 			// **************************************************************
 			if (!webSearchOrWikipediaTableSuccess && !disableWebSearch)
 			{
-				// for each information object (ex. Darrell Hammond)
-				for (int si : ssrg->whereQuestionInformationSourceObjects)
-				{
-					set <wstring> proximityOwnedItems;
-					// When a question information source object owns another object, disambiguate this by seeing 
-					// what objects matching the same type that are also very close and common to the question information source object, 
-					// and return all these matching objects.
-					set <int> proximityOwnedObjects;
-					if (getProximateObjectsMatchingOwnedItemType(questionSource, si, ssrg, proximityOwnedObjects))
-					{
-						for (int proximityOwnedObject : proximityOwnedObjects)
-						{
-							//construct query from ssrg but substituting proximityOwnedItems for the owned object
-							cSyntacticRelationGroup psrg = *ssrg, * ppsrg = &psrg;
-							int replacementWhere = -1;
-							if (questionSource->inObject(ssrg->whereSubject, si))
-								replacementWhere = psrg.whereSubject;
-							else if (questionSource->inObject(srg->whereObject, si))
-								replacementWhere = psrg.whereObject;
-							else if (questionSource->inObject(srg->wherePrepObject, si))
-								replacementWhere = psrg.wherePrepObject;
-							else if (questionSource->inObject(srg->whereSecondaryObject, si))
-								replacementWhere = psrg.whereSecondaryObject;
-							else if (srg->whereSecondaryPrep >= 0 && questionSource->inObject(questionSource->m[srg->whereSecondaryPrep].getRelObject(), srg->whereQuestionType))
-							{
-								lplog(LOG_FATAL_ERROR, L"ProximityOwnershipQuery:Unable to replace this object to a secondary prep.");
-							}
-							else
-							{
-								lplog(LOG_WHERE | LOG_INFO, L"ProximityOwnershipQuery:Cannot find owned item type %d in these fields: S=%d, O=%d, PO=%d, SO=%d",
-									si, srg->whereSubject, srg->whereObject, srg->wherePrepObject, srg->whereSecondaryObject);
-								continue;
-							}
-							questionSource->m[replacementWhere].objectMatches.clear();
-							questionSource->m[replacementWhere].objectMatches.push_back(cOM(proximityOwnedObject, 1000));
-							psrg.whereQuestionInformationSourceObjects.erase(si);
-							psrg.whereQuestionInformationSourceObjects.insert(questionSource->objects[proximityOwnedObject].originalLocation);
-							lplog(LOG_WHERE | LOG_INFO, L"ProximityOwnershipQuery:Successfully replaced owned item type at %d with specific object %s: S=%d, O=%d, PO=%d, SO=%d, whereQuestionTypeObject=%d",
-								replacementWhere, questionSource->whereString(replacementWhere, tmpstr, true).c_str(), srg->whereSubject, srg->whereObject, srg->wherePrepObject, srg->whereSecondaryObject, srg->whereQuestionTypeObject);
-							questionSource->printSRG(L"ProximityOwnershipQuery", &psrg, 0, srg->whereSubject, srg->whereObject, psrg.wherePrep, false, -1, L"", LOG_WHERE);
-							if (answerQuestionInSource(questionSource, parseOnly, useParallelQuery, &psrg, ppsrg, descendantAnswers, disableWebSearch) >= 0)
-							{
-								for (auto& wpa : descendantAnswers)
-								{
-									wstring outputAnswer;
-									questionSource->objectString(wpa.inputAnswerObject, outputAnswer, true);
-									answerSRGs.push_back(cAS(L"ProximityOwnershipQuery", questionSource, 1, 1000, outputAnswer, ppsrg, 0, srg->whereSubject, srg->whereObject, srg->wherePrep, false, false, L"", L"", 0, 0, 0, NULL));
-									answerSRGs[answerSRGs.size() - 1].object = wpa.inputAnswerObject;
-									webSearchOrWikipediaTableSuccess = true;
-								}
-							}
-						}
-					}
-				}
+				answerQuestionInSourceOwnershipRetryQuery(questionSource,
+					parseOnly, useParallelQuery, webSearchOrWikipediaTableSuccess, disableWebSearch, 
+					srg, ssrg, descendantAnswers, answerSRGs);
 			}
 			// **************************************************************
 			// if there are no answers or more than one answer is asked for and there is only one, search the first 10 results from Google and BING using more information sources from proximity mapping.
 			// **************************************************************
 			if (!webSearchOrWikipediaTableSuccess && !disableWebSearch)
 			{
-				lplog(LOG_WHERE | LOG_QCHECK, L"    ***** proximity map");
-				for (set <int>::iterator si = ssrg->whereQuestionInformationSourceObjects.begin(), siEnd = ssrg->whereQuestionInformationSourceObjects.end(); si != siEnd; si++)
-				{
-					unordered_map <int, cProximityMap*>::iterator msi = ssrg->proximityMaps.find(*si);
-					if (msi != ssrg->proximityMaps.end())
-					{
-						msi->second->sortByFrequencyAndProximity(*this, ssrg, questionSource);
-						msi->second->lplogFrequentOrProximateObjects(*this, LOG_WHERE, questionSource, false);
-						set < unordered_map <wstring, cProximityMap::cProximityEntry>::iterator, cProximityMap::semanticSetCompare > frequentOrProximateObjects = msi->second->frequentOrProximateObjects;
-						for (set < unordered_map <wstring, cProximityMap::cProximityEntry>::iterator, cProximityMap::semanticSetCompare >::iterator sai = frequentOrProximateObjects.begin(), saiEnd = frequentOrProximateObjects.end(); sai != saiEnd; sai++)
-						{
-							vector < cAS > enhancedWebSearchAnswerSRIs;
-							vector <wstring> enhancedWebSearchQueryStrings = webSearchQueryStrings;
-							enhanceWebSearchQueries(enhancedWebSearchQueryStrings, (*sai)->first);
-							int trySearchIndex = 1;
-							// google
-							searchWebSearchQueries(questionSource, sqderivation, ssrg, subQueries, enhancedWebSearchAnswerSRIs, enhancedWebSearchQueryStrings,
-								parseOnly, numFinalAnswers, maxAnswer, useParallelQuery, trySearchIndex, true, lastGoogleResultPage);
-							if (webSearchOrWikipediaTableSuccess = numFinalAnswers > 0)
-								answerSRGs.insert(answerSRGs.end(), enhancedWebSearchAnswerSRIs.begin(), enhancedWebSearchAnswerSRIs.end());
-							else
-								printAnswers(ssrg, enhancedWebSearchAnswerSRIs); // print all rejected answers
-							if (numFinalAnswers > 0 && (!answerPluralSpecification || numFinalAnswers >= 1))
-								break;
-							enhancedWebSearchAnswerSRIs.clear();
-							// BING
-							searchWebSearchQueries(questionSource, sqderivation, ssrg, subQueries, enhancedWebSearchAnswerSRIs, enhancedWebSearchQueryStrings,
-								parseOnly, numFinalAnswers, maxAnswer, useParallelQuery, trySearchIndex, true, lastGoogleResultPage);
-							if (webSearchOrWikipediaTableSuccess = numFinalAnswers > 0)
-								answerSRGs.insert(answerSRGs.end(), enhancedWebSearchAnswerSRIs.begin(), enhancedWebSearchAnswerSRIs.end());
-							else
-								printAnswers(ssrg, enhancedWebSearchAnswerSRIs); // print all rejected answers
-							if (numFinalAnswers > 0 && (!answerPluralSpecification || numFinalAnswers >= 1))
-								break;
-						}
-					}
-					else
-						lplog(LOG_WHERE | LOG_QCHECK, L"    No entries in proximity map for %s.", questionSource->whereString(*si, tmpstr, true).c_str());
-				}
+				answerQuestionInSourceProximityMapWebSearch(questionSource,
+					parseOnly, useParallelQuery, answerPluralSpecification, webSearchOrWikipediaTableSuccess, lastGoogleResultPage,
+					ssrg, answerSRGs, sqderivation, subQueries, 
+					numFinalAnswers, maxAnswer, webSearchQueryStrings);
 			}
 		}
 	}

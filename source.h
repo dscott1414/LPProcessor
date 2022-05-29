@@ -2008,6 +2008,8 @@ public:
 	bool assessEVALCost(cTagLocation &tl,int pattern,cPatternMatchArray::tPatternMatch *pm,int position, unordered_map <int, cCostPatternElementByTagSet> &tertiaryPEMAPositions,wstring purpose);
 	void accumulateTertiaryPEMAPositions(int tagSetOffset,int traceSource,vector <cTagLocation>  &tagSet, unordered_map <int, cCostPatternElementByTagSet> &tertiaryPEMAPositions, int tmpVOCost);
 	void applyTertiaryPEMAPositions(unordered_map <int, cCostPatternElementByTagSet> &tertiaryPEMAPositions);
+	void assessAgreementCost(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, const int parentPosition, const int position, vector < vector <cTagLocation> >& tagSets, wstring purpose);
+	void assessVerbObjectCost(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, const int parentPosition, const int position, vector < vector <cTagLocation> >& tagSets, wstring purpose);
 	int assessCost(cPatternMatchArray::tPatternMatch *parentpm, cPatternMatchArray::tPatternMatch *pm, int parentPosition, int position, vector < vector <cTagLocation> > &tagSets, unordered_map <int, cCostPatternElementByTagSet> &tertiaryPEMAPositions,bool alternateNounDeterminerShortTry,wstring purpose);
 	void evaluateExplicitNounDeterminerAgreement(int position, cPatternMatchArray::tPatternMatch *pm, vector < vector <cTagLocation> > &tagSets, unordered_map <int, cCostPatternElementByTagSet> &tertiaryPEMAPositions);
 	void evaluateExplicitSubjectVerbAgreement(int position, cPatternMatchArray::tPatternMatch *pm, vector < vector <cTagLocation> > &tagSets, unordered_map <int, cCostPatternElementByTagSet> &tertiaryPEMAPositions);
@@ -2143,6 +2145,19 @@ public:
 	bool identifyDateTime(int where,vector <cSyntacticRelationGroup>::iterator csr,int &maxLen,int inMultiObject);
 	bool detectTimeTransition(int where,vector <cSyntacticRelationGroup>::iterator csr,cTimeInfo &t);
 	bool evaluateHOUR(int where,cTimeInfo &t);
+	void evaluateDateTimeTimeSpec(vector <cTagLocation>& tagSet, cTimeInfo& t, bool& tSet);
+	void evaluateDateTimeDateSpec(vector <cTagLocation>& tagSet, cTimeInfo& t, bool& tSet);
+	void evaluateDateTimeModifier(vector <cTagLocation>& tagSet, cTimeInfo& t, bool& tSet);
+	void evaluateDateTimeCapacity(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet);
+	void evaluateDateTimeType(vector <cTagLocation>& tagSet, cTimeInfo& t, bool& tSet);
+	bool evaluateDateTimeHour(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool &rtSet);
+	void evaluateDateTimeDayMonth(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet);
+	bool evaluateDateTimeDayMinute(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet);
+	void evaluateDateTimeMonth(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet);
+	void evaluateDateTimeSeason(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet);
+	void evaluateDateTimeHoliday(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet);
+	void evaluateDateTimeDayWeek(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet);
+	void evaluateDateTimeMinute(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& rtSet);
 	bool evaluateDateTime(vector <cTagLocation> &tagSet,cTimeInfo &t,cTimeInfo &rt,bool &rtSet);
 	bool ageTransition(int where,bool timeTransition,bool &transitionSinceEOS,int duplicateFromWhere,int exceptWhere,vector <int> &lastSubjects, const wchar_t * fromWhere);
 	int primaryLocationLastMovingPosition,primaryLocationLastPosition;
@@ -2464,6 +2479,15 @@ public:
 	bool hasProperty(int where,int whereQuestionTypeObject, unordered_map <int,vector < vector <int> > > &wikiTableMap,vector <wstring> &propertyValues);
 	bool compareObjectString(int whereObject1,int whereObject2);
 	bool objectContainedIn(int whereObject,set <int> whereObjects);
+	int ruleCorrectLPClassAdjectiveToAdverb(int wordSourceIndex);
+	int ruleCorrectLPClassAdverbToAdjective(int wordSourceIndex);
+	int ruleCorrectLPClassOnly(int wordSourceIndex, int startOfSentence);
+	int ruleCorrectLPClassBetterFurther(int wordSourceIndex);
+	int ruleCorrectLPClassMost(int wordSourceIndex);
+	int ruleCorrectLPClassPrepositionAtEndOfSentence(int wordSourceIndex);
+	int ruleCorrectLPClassPreferPrepositionOverAdverb(int wordSourceIndex);
+	void ruleCorrectLPClassPreferPronounOverDemonstrativeDeterminer(int wordSourceIndex, int startOfSentence);
+
 	int ruleCorrectLPClass(int wordSourceIndex, int startOfSentence);
 	void initializePemaMap(size_t numTagSets);
 
@@ -3038,6 +3062,12 @@ private:
 	void setUnresolvableObjectPreference(int where, vector < vector <cLocalFocus>::iterator >& urps);
 	void adjustSaliencesByGenderNumberAndOccurrence(int where, int object, bool inPrimaryQuote, bool inSecondaryQuote, bool identifiedAsSpeaker, int& lastGenderedAge, bool isPhysicallyPresent);
 	bool resolveNonGenderedGeneralObjectAgainstOneObject(int where,vector <cObject>::iterator object,vector <cOM> &objectMatches,int o,int sf,int lastWhere,int &mostRecentMatch);
+	bool resolveNonGenderedGeneralObjectPlural(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches);
+	bool resolveNonGenderedGeneralObjectNumAddress(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches);
+	bool resolveNonGenderedGeneralObjectExpression(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches);
+	void narrowClassToGenderedIfIsProfession(int where);
+	void resolveNonGenderedGeneralObjectSingularToPlural(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches);
+	void adjustForWordOrderSensitiveModifier(int where, vector <cOM>& objectMatches, int wordOrderSensitiveModifier);
 	void resolveNonGenderedGeneralObject(int where,vector <cObject>::iterator &object,vector <cOM> &objectMatches,int wordOrderSensitiveModifier);
 	bool potentiallyMergable(int where,vector <cObject>::iterator o1,vector <cObject>::iterator o2,bool allowBothToBeSpeakers,bool checkUnmergableSpeaker);
 	void accumulateNameLikeStats(vector <cObject>::iterator &object,int o,bool &firstNameAmbiguous,bool &lastNameAmbiguous,tIWMM &ambiguousFirst,int &ambiguousNickName,tIWMM &ambiguousLast);
@@ -3198,6 +3228,10 @@ private:
 	public: size_t startCollectTagsFromTag(bool inTrace,int tagSet,cTagLocation &tl,vector < vector <cTagLocation> > &tagSets,int rejectTag,bool obeyBlock, bool collectParentTags, wstring purpose);
 	public: size_t startCollectTags(bool trace,int tagSet,int position,int PEMAPosition,vector < vector <cTagLocation> > &tagSets,bool obeyBlock,bool collectParentTags,wstring purpose);
 	void sortTagLocations(vector < vector <cTagLocation> > &tagSets, vector <cTagLocation> &tagSetLocations);
+	void evaluateNounDeterminersGNoun(const int nLen, int& nPEMAPosition, const int nPosition, const int p, int& traceSource, cPatternMatchArray::tPatternMatch* pma);
+	int collectAndProcessNounDeterminerTags(const int nLen, int& nPEMAPosition, const int nPosition, const int p, int& traceSource, cPatternMatchArray::tPatternMatch* pma, wstring purpose);
+	void collectAndProcessHerNonSeparableTags(const int nLen, int& nPEMAPosition, const int nPosition, const int p, int& traceSource, cPatternMatchArray::tPatternMatch* pma);
+	void collectAndProcessNounDeterminerPattern(const int nLen, int& nPEMAPosition, const int nPosition, cPatternMatchArray::tPatternMatch* pma, wstring purpose);
 	void evaluateNounDeterminers(int PEMAPosition,int position,vector < vector <cTagLocation> > &tagSets, bool alternateShortTry, wstring purpose);
 	void evaluatePrepObjects(int PEMAPosition, int position, vector < vector <cTagLocation> > &tagSets, wstring purpose);
 	int evaluatePrepObjectRelation(vector <cTagLocation> &tagSet,int &pIndex,tIWMM &prepWord,int &object,int &wherePrepObject,tIWMM &objectWord);

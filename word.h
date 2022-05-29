@@ -647,6 +647,9 @@ class cWord
 
 public:
   cWord(void);
+  void findPredefinedVerb();
+  void findPredefinedPronoun();
+  void findPredefinedDeterminer();
   void findPredefinedForms();
   void adjustUsages();
   void initializeCosts();

@@ -1669,68 +1669,82 @@ void cWord::initializeChangeStateVerbs()
 	predefineWords(changeState, L"changeState", L"changeState", L"verb", 0);
 }
 
-void cWord::findPredefinedForms()
+void cWord::findPredefinedVerb()
 {
-	if (personalPronounAccusativeForm < 0) personalPronounAccusativeForm = cForms::gFindForm(L"personal_pronoun_accusative");
-	if (adverbForm < 0) adverbForm = cForms::gFindForm(L"adverb");
-	if (adjectiveForm < 0) adjectiveForm = cForms::gFindForm(L"adjective");
-	if (commaForm < 0) commaForm = cForms::gFindForm(L",");
-	if (conjunctionForm < 0) conjunctionForm = cForms::gFindForm(L"conjunction");
-	if (demonstrativeDeterminerForm < 0) demonstrativeDeterminerForm = cForms::gFindForm(L"demonstrative_determiner");
-	if (determinerForm < 0) determinerForm = cForms::gFindForm(L"determiner");
 	if (doesForm < 0) doesForm = cForms::gFindForm(L"does");
 	if (doesNegationForm < 0) doesNegationForm = cForms::gFindForm(L"does_negation");
-	if (honorificForm < 0) honorificForm = cForms::gFindForm(L"honorific");
-	if (indefinitePronounForm < 0) indefinitePronounForm = cForms::gFindForm(L"indefinite_pronoun");
-	if (reciprocalPronounForm < 0) reciprocalPronounForm = cForms::gFindForm(L"reciprocal_pronoun");
-	if (pronounForm < 0) pronounForm = cForms::gFindForm(L"pronoun");
-	if (nomForm < 0) nomForm = cForms::gFindForm(L"personal_pronoun_nominative");
-	if (nounForm == -1) nounForm = cForms::gFindForm(L"noun");
-	if (numeralCardinalForm < 0) numeralCardinalForm = cForms::gFindForm(L"numeral_cardinal");
-	if (numeralOrdinalForm < 0) numeralOrdinalForm = cForms::gFindForm(L"numeral_ordinal");
-	if (romanNumeralForm < 0) romanNumeralForm = cForms::gFindForm(L"roman_numeral");
-	if (possessiveDeterminerForm < 0) possessiveDeterminerForm = cForms::gFindForm(L"possessive_determiner");
-	if (interrogativeDeterminerForm < 0) interrogativeDeterminerForm = cForms::gFindForm(L"interrogative_determiner");
-	if (possessivePronounForm < 0) possessivePronounForm = cForms::gFindForm(L"possessive_pronoun");  // mine, ours etc.
-	if (periodForm < 0) periodForm = cForms::gFindForm(L".");
-	if (quantifierForm < 0) quantifierForm = cForms::gFindForm(L"quantifier");
-	if (quoteForm < 0) quoteForm = cForms::gFindForm(L"quotes");
-	if (dashForm < 0) dashForm = cForms::gFindForm(L"dash");
-	if (reflexivePronounForm < 0) reflexivePronounForm = cForms::gFindForm(L"reflexive_pronoun"); // myself, himself
 	if (verbForm < 0) verbForm = cForms::gFindForm(L"verb");
 	if (thinkForm < 0) thinkForm = cForms::gFindForm(L"SYNTAX:Accepts S as Object");
-	//if (internalStateForm<0) internalStateForm=cForms::gFindForm(L"internalState");
-	if (dateForm < 0) dateForm = cForms::gFindForm(L"date");
-	if (timeForm < 0) timeForm = cForms::gFindForm(L"time");
-	if (telephoneNumberForm < 0) telephoneNumberForm = cForms::gFindForm(L"telephone_number");
-	if (coordinatorForm < 0) coordinatorForm = cForms::gFindForm(L"coordinator");
 	if (verbverbForm < 0) verbverbForm = cForms::gFindForm(L"verbverb");
-	if (abbreviationForm < 0) abbreviationForm = cForms::gFindForm(L"abbreviation");
-	if (sa_abbForm < 0) sa_abbForm = cForms::gFindForm(L"street_address_abbreviation");
-	numberForm = NUMBER_FORM_NUM;
 	if (beForm < 0) beForm = cForms::gFindForm(L"be");
 	if (haveForm < 0) haveForm = cForms::gFindForm(L"have");
 	if (haveNegationForm < 0) haveNegationForm = cForms::gFindForm(L"have_negation");
 	if (doForm < 0) doForm = cForms::gFindForm(L"does");
 	if (doNegationForm < 0) doNegationForm = cForms::gFindForm(L"does_negation");
-	if (interjectionForm < 0) interjectionForm = cForms::gFindForm(L"interjection");
-	if (personalPronounForm < 0) personalPronounForm = cForms::gFindForm(L"personal_pronoun");
-	if (letterForm < 0) letterForm = cForms::gFindForm(L"letter");
-	if (isForm < 0) isForm = cForms::gFindForm(L"is");
-	if (isNegationForm < 0) isNegationForm = cForms::gFindForm(L"is_negation");
-	if (prepositionForm < 0) prepositionForm = cForms::gFindForm(L"preposition");
-	if (telenumForm < 0) telenumForm = cForms::gFindForm(L"telephone_number");
-	if (bracketForm < 0) bracketForm = cForms::gFindForm(L"brackets");
-	if (toForm < 0) toForm = cForms::gFindForm(L"to");
 	if (futureModalAuxiliaryForm < 0) futureModalAuxiliaryForm = cForms::gFindForm(L"future_modal_auxiliary");
 	if (negationModalAuxiliaryForm < 0) negationModalAuxiliaryForm = cForms::gFindForm(L"negation_modal_auxiliary");
 	if (negationFutureModalAuxiliaryForm < 0) negationFutureModalAuxiliaryForm = cForms::gFindForm(L"negation_future_modal_auxiliary");
 	if (modalAuxiliaryForm < 0)  modalAuxiliaryForm = cForms::gFindForm(L"modal_auxiliary");
+	if (isForm < 0) isForm = cForms::gFindForm(L"is");
+	if (isNegationForm < 0) isNegationForm = cForms::gFindForm(L"is_negation");
+}
+
+void cWord::findPredefinedPronoun()
+{
+	if (personalPronounAccusativeForm < 0) personalPronounAccusativeForm = cForms::gFindForm(L"personal_pronoun_accusative");
+	if (indefinitePronounForm < 0) indefinitePronounForm = cForms::gFindForm(L"indefinite_pronoun");
+	if (reciprocalPronounForm < 0) reciprocalPronounForm = cForms::gFindForm(L"reciprocal_pronoun");
+	if (pronounForm < 0) pronounForm = cForms::gFindForm(L"pronoun");
+	if (nomForm < 0) nomForm = cForms::gFindForm(L"personal_pronoun_nominative");
+	if (possessivePronounForm < 0) possessivePronounForm = cForms::gFindForm(L"possessive_pronoun");  // mine, ours etc.
+	if (reflexivePronounForm < 0) reflexivePronounForm = cForms::gFindForm(L"reflexive_pronoun"); // myself, himself
+	if (personalPronounForm < 0) personalPronounForm = cForms::gFindForm(L"personal_pronoun");
+}
+
+void cWord::findPredefinedDeterminer()
+{
+	if (demonstrativeDeterminerForm < 0) demonstrativeDeterminerForm = cForms::gFindForm(L"demonstrative_determiner");
+	if (determinerForm < 0) determinerForm = cForms::gFindForm(L"determiner");
+	if (possessiveDeterminerForm < 0) possessiveDeterminerForm = cForms::gFindForm(L"possessive_determiner");
+	if (interrogativeDeterminerForm < 0) interrogativeDeterminerForm = cForms::gFindForm(L"interrogative_determiner");
+	if (predeterminerForm < 0) predeterminerForm = cForms::gFindForm(L"predeterminer");
+}
+
+void cWord::findPredefinedForms()
+{
+	findPredefinedVerb();
+	findPredefinedPronoun();
+	findPredefinedDeterminer();
+	if (adverbForm < 0) adverbForm = cForms::gFindForm(L"adverb");
+	if (adjectiveForm < 0) adjectiveForm = cForms::gFindForm(L"adjective");
+	if (commaForm < 0) commaForm = cForms::gFindForm(L",");
+	if (conjunctionForm < 0) conjunctionForm = cForms::gFindForm(L"conjunction");
+	if (honorificForm < 0) honorificForm = cForms::gFindForm(L"honorific");
+	if (nounForm == -1) nounForm = cForms::gFindForm(L"noun");
+	if (numeralCardinalForm < 0) numeralCardinalForm = cForms::gFindForm(L"numeral_cardinal");
+	if (numeralOrdinalForm < 0) numeralOrdinalForm = cForms::gFindForm(L"numeral_ordinal");
+	if (romanNumeralForm < 0) romanNumeralForm = cForms::gFindForm(L"roman_numeral");
+	if (periodForm < 0) periodForm = cForms::gFindForm(L".");
+	if (quantifierForm < 0) quantifierForm = cForms::gFindForm(L"quantifier");
+	if (quoteForm < 0) quoteForm = cForms::gFindForm(L"quotes");
+	if (dashForm < 0) dashForm = cForms::gFindForm(L"dash");
+	if (dateForm < 0) dateForm = cForms::gFindForm(L"date");
+	if (timeForm < 0) timeForm = cForms::gFindForm(L"time");
+	if (telephoneNumberForm < 0) telephoneNumberForm = cForms::gFindForm(L"telephone_number");
+	if (coordinatorForm < 0) coordinatorForm = cForms::gFindForm(L"coordinator");
+	if (abbreviationForm < 0) abbreviationForm = cForms::gFindForm(L"abbreviation");
+	if (sa_abbForm < 0) sa_abbForm = cForms::gFindForm(L"street_address_abbreviation");
+	numberForm = NUMBER_FORM_NUM;
+	if (interjectionForm < 0) interjectionForm = cForms::gFindForm(L"interjection");
+	if (letterForm < 0) letterForm = cForms::gFindForm(L"letter");
+	if (prepositionForm < 0) prepositionForm = cForms::gFindForm(L"preposition");
+	if (telenumForm < 0) telenumForm = cForms::gFindForm(L"telephone_number");
+	if (bracketForm < 0) bracketForm = cForms::gFindForm(L"brackets");
+	if (toForm < 0) toForm = cForms::gFindForm(L"to");
 	if (relativizerForm < 0)  relativizerForm = cForms::gFindForm(L"relativizer");
 	if (honorificAbbreviationForm < 0) honorificAbbreviationForm = cForms::gFindForm(L"honorific_abbreviation");
 	if (businessForm < 0)  businessForm = cForms::gFindForm(L"business");
 	if (demonymForm < 0)  demonymForm = cForms::gFindForm(L"demonym");
-	//if (relativeForm<0)  relativeForm=cForms::gFindForm(L"relative");
 	if (commonProfessionForm < 0) commonProfessionForm = cForms::gFindForm(L"commonProfession");
 	if (friendForm < 0) friendForm = cForms::gFindForm(L"friend");
 	if (moneyForm < 0) moneyForm = cForms::gFindForm(L"money");
@@ -1739,7 +1753,8 @@ void cWord::findPredefinedForms()
 	if (particleForm < 0) particleForm = cForms::gFindForm(L"particle");
 	if (relativeForm < 0) relativeForm = cForms::gFindForm(L"relative");
 	if (monthForm < 0) monthForm = cForms::gFindForm(L"month");
-	if (predeterminerForm < 0) predeterminerForm = cForms::gFindForm(L"predeterminer");
+	//if (internalStateForm<0) internalStateForm=cForms::gFindForm(L"internalState");
+	//if (relativeForm<0)  relativeForm=cForms::gFindForm(L"relative");
 }
 
 void cWord::adjustUsages()

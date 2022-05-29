@@ -26,6 +26,62 @@ public:
 		wstring pathInCache;
 	};
 
+	class cAS
+	{
+	public:
+		wstring sourceType;
+		wstring rejectAnswer;
+		int confidence;
+		int matchSum;
+		int matchSumWithConfidenceAndNumIdenticalAnswersScored;
+		wstring matchInfo;
+		cSource* source;
+		cSyntacticRelationGroup* srg;
+		int equivalenceClass;
+		int ws, wo, wp; // used to differentiate compound nouns
+		int whereChildCandidateAnswer;
+		bool finalAnswer;
+		bool subQueryMatch;
+		bool subQueryExisted;
+		int numIdenticalAnswers;
+		bool fromTable;
+		bool fromWikipediaInfoBox;
+		wstring tableNum;
+		wstring tableName;
+		int columnIndex;
+		int rowIndex;
+		int entryIndex;
+		int object; // used in cases where multiple objects resulted from the same query.  An answer must only be one answer, not multiple.  
+		cColumn::cEntry entry;
+		cAS(wstring _sourceType, cSource* _source, int _confidence, int _matchSum, wstring _matchInfo, cSyntacticRelationGroup* _sri, int _equivalenceClass, int _ws, int _wo, int _wp, bool _fromWikipediaInfoBox, bool _fromTable, wstring _tableNum, wstring _tableName, int _columnIndex, int _rowIndex, int _entryIndex, cColumn::cEntry* _entry)
+		{
+			sourceType = _sourceType;
+			source = _source;
+			confidence = _confidence;
+			matchSum = _matchSum;
+			matchInfo = _matchInfo;
+			srg = _sri;
+			equivalenceClass = _equivalenceClass;
+			ws = _ws;
+			wo = _wo;
+			wp = _wp;
+			fromWikipediaInfoBox = _fromWikipediaInfoBox;
+			fromTable = _fromTable;
+			tableNum = _tableNum;
+			tableName = _tableName;
+			columnIndex = _columnIndex;
+			rowIndex = _rowIndex;
+			entryIndex = _entryIndex;
+			if (_entry)
+				entry = *_entry;
+			finalAnswer = false;
+			subQueryMatch = false;
+			subQueryExisted = false;
+			numIdenticalAnswers = 0;
+			whereChildCandidateAnswer = 0;
+			object = -1;
+		}
+	};
 	enum qtf {
 		unknownQTFlag = 1, whichQTFlag = 2, whereQTFlag = 3, whatQTFlag = 4, whoseQTFlag = 5, howQTFlag = 6, whenQTFlag = 7, whomQTFlag = 8, whyQTFlag = 9, wikiBusinessQTFlag = 10, wikiWorkQTFlag = 11, typeQTMask = (1 << 4) - 1,
 		referencingObjectQTFlag = 1 << 4, subjectQTFlag = 2 << 4, objectQTFlag = 3 << 4, secondaryObjectQTFlag = 4 << 4, prepObjectQTFlag = 5 << 4,
@@ -33,6 +89,19 @@ public:
 		QTAFlag = 1 << 8
 	};
 	int getProximateObjectsMatchingOwnedItemType(cSource* questionSource, int si, cSyntacticRelationGroup*& ssrg, set <int>& proximityOwnedObjects);
+	void answerQuestionInSourceWebWikiSearch(cSource* questionSource, 
+		const bool parseOnly, const bool useParallelQuery, const bool answerPluralSpecification, bool &webSearchOrWikipediaTableSuccess, const bool disableWebSearch, bool& lastGoogleResultPage,
+		cSyntacticRelationGroup*& ssrg,	vector < cAS >& answerSRGs, wchar_t* sqderivation, vector <cSyntacticRelationGroup> &subQueries, unordered_map <int, cWikipediaTableCandidateAnswers* > &wikiTableMap,
+		int& numFinalAnswers, int& maxAnswer, vector <wstring> &webSearchQueryStrings);
+	void answerQuestionInSourceOwnershipRetryQuery(cSource* questionSource,
+		const bool parseOnly, const bool useParallelQuery, bool& webSearchOrWikipediaTableSuccess, const bool disableWebSearch,
+		cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& ssrg, vector < cTrackDescendantAnswers>& descendantAnswers,
+		vector < cAS >& answerSRGs);
+	void answerQuestionInSourceProximityMapWebSearch(cSource* questionSource,
+		const bool parseOnly, const bool useParallelQuery, const bool answerPluralSpecification, bool& webSearchOrWikipediaTableSuccess, bool& lastGoogleResultPage,
+		cSyntacticRelationGroup*& ssrg, vector < cAS >& answerSRGs, wchar_t* sqderivation, vector <cSyntacticRelationGroup>& subQueries, 
+		int& numFinalAnswers, int& maxAnswer, vector <wstring>& webSearchQueryStrings);
+	int answerQuestionInSourceInitialize(cSource* questionSource, const bool parseOnly, const bool useParallelQuery, cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& ssrg, vector < cTrackDescendantAnswers>& descendantAnswers, const bool disableWebSearch, wstring& ps, wstring& parentNum);
 	int answerQuestionInSource(cSource* questionSource, bool parseOnly, bool useParallelQuery, cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& ssri, vector < cTrackDescendantAnswers>& descendantAnswers, bool disableWebSearch);
 	int answerAllQuestionsInSource(cSource *questionSource, bool parseOnly, bool useParallelQuery);
 	int processPath(cSource *parentSource, const wchar_t *path, cSource *&source, cSource::sourceTypeEnum st, int sourceConfidence, bool parseOnly);
@@ -47,62 +116,6 @@ public:
 			int anySemanticMismatch;
 			bool subQueryNoMatch;
 			int confidence;
-		};
-		class cAS
-		{
-		public:
-			wstring sourceType;
-			wstring rejectAnswer;
-			int confidence;
-			int matchSum;
-			int matchSumWithConfidenceAndNumIdenticalAnswersScored;
-			wstring matchInfo;
-			cSource *source;
-			cSyntacticRelationGroup* srg;
-			int equivalenceClass;
-			int ws, wo, wp; // used to differentiate compound nouns
-			int whereChildCandidateAnswer;
-			bool finalAnswer;
-			bool subQueryMatch;
-			bool subQueryExisted;
-			int numIdenticalAnswers;
-			bool fromTable;
-			bool fromWikipediaInfoBox;
-			wstring tableNum;
-			wstring tableName;
-			int columnIndex;
-			int rowIndex;
-			int entryIndex;
-			int object; // used in cases where multiple objects resulted from the same query.  An answer must only be one answer, not multiple.  
-			cColumn::cEntry entry;
-			cAS(wstring _sourceType, cSource *_source, int _confidence, int _matchSum, wstring _matchInfo, cSyntacticRelationGroup* _sri, int _equivalenceClass, int _ws, int _wo, int _wp, bool _fromWikipediaInfoBox, bool _fromTable, wstring _tableNum, wstring _tableName, int _columnIndex, int _rowIndex, int _entryIndex, cColumn::cEntry *_entry)
-			{
-				sourceType = _sourceType;
-				source = _source;
-				confidence = _confidence;
-				matchSum = _matchSum;
-				matchInfo = _matchInfo;
-				srg = _sri;
-				equivalenceClass = _equivalenceClass;
-				ws = _ws;
-				wo = _wo;
-				wp = _wp;
-				fromWikipediaInfoBox = _fromWikipediaInfoBox;
-				fromTable = _fromTable;
-				tableNum = _tableNum;
-				tableName = _tableName;
-				columnIndex = _columnIndex;
-				rowIndex = _rowIndex;
-				entryIndex = _entryIndex;
-				if (_entry)
-					entry = *_entry;
-				finalAnswer = false;
-				subQueryMatch = false;
-				subQueryExisted = false;
-				numIdenticalAnswers = 0;
-				whereChildCandidateAnswer = 0;
-				object = -1;
-			}
 		};
 		class cSemanticMatchInfo
 		{
