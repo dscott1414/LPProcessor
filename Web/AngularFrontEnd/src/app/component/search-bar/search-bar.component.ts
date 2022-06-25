@@ -1,5 +1,5 @@
 import { Component, OnInit, ViewChild, ElementRef, EventEmitter, Output } from '@angular/core';
-import { FormControl } from '@angular/forms';
+import { UntypedFormControl } from '@angular/forms';
 import { Observable } from 'rxjs';
 import { DataService } from '../data.service';
 import { Source } from '../source';
@@ -11,8 +11,8 @@ import { Source } from '../source';
 })
 export class SearchBarComponent implements OnInit {
 
-  titleControl = new FormControl();
-  authorControl = new FormControl();
+  titleControl = new UntypedFormControl();
+  authorControl = new UntypedFormControl();
   autoCompleteListAuthors: any[] = [ "" ];
   autoCompleteListTitles: any[] = [ ""];
   authorSearchString: string = "";
