@@ -182,11 +182,7 @@ import java.util.Map;
 			count = rs.readInteger();
 			possessions = new int[count];
 			for (int I = 0; I < count; I++)
-			{
 				possessions[I] = rs.readInteger();
-		    //System.err.println(possessions[I]+" ");
-			}
-			// map <tIWMM,int,tFI::cRMap::wordMapCompare> genericNounMap; // keeps track of how many times an object specifically matches a generic noun (woman, man, lady, girl, boy, etc)
 			count = rs.readInteger();
 			if (count>0) genericNounMap=new HashMap <String, Integer>();  
 			for (int I=0; I<count; I++)
@@ -225,7 +221,6 @@ import java.util.Map;
 			male = (flags & 1) == 1; flags >>= 1;
 			plural = (flags & 1) == 1; flags >>= 1;
 			identified = (flags & 1) == 1; flags >>= 1;
-
 			lastVerbTenses=new cLastVerbTenses[VERB_HISTORY];
 			for (int I=0; I<VERB_HISTORY; I++)
 			{

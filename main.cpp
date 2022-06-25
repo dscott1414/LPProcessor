@@ -1333,6 +1333,14 @@ void processSource(cSource &source, bool forceSourceReread, bool sourceWordNetRe
 	source.printResolutionCheck(badSpeakers);
 	source.logSpaceCheck();
 	source.identifyConversations();
+	//source.writeMarkup();
+	// write or compare markup
+	// read markup program will be written, along with a way to change the markup, keeping the most corrected markup and the last automated markup.
+	// then the markup will be corrected, and the percentage correct noted.
+	// whatever changes/improvements made will be scored according to the markup percentage changed/correct from the last automated run.
+	// do 10 books.  create corrected markup against all of them and compute the automated score.
+	// try to accumulate statistics on the best way to correct the automated run.
+	// do 10 more.  and so on.  each time accumulating stats and correcting the automated run.
 	//source.printResolutions(badSpeakers,false);
 	if (sourceWordNetWrite)
 		source.writeWNMaps(source.sourcePath);

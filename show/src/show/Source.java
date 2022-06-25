@@ -761,7 +761,7 @@ public class Source {
 				if (isObserver)
 					StyleConstants.setBackground(keyWord, new Color(0, 0, 0));
 				else if (isPOV)
-					StyleConstants.setBackground(keyWord, new Color(212, 212, 212));
+					StyleConstants.setBackground(keyWord, new Color(140, 140, 140));
 				String oStr = "";
 				if (isObserver)
 					oStr += "[obs]";

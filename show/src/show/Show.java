@@ -765,6 +765,7 @@ public class Show implements ActionListener, ItemListener {
 				Words = new WordClass(new LittleEndianDataInputStream("F:\\lp\\wordFormCache"));
 				Words.readSpecificWordCache(new LittleEndianDataInputStream(sourcePath + ".wordCacheFile"));
 				source = new Source(Words, new LittleEndianDataInputStream(sourcePath + ".SourceCache"));
+				
 				mainPane.setStyledDocument(source.print(Words, pickChapter, ccb.states));
 				agentPane.setStyledDocument(source.fillAgents());
 				timelineFrame.setContentPane(timelinePane = new TimelineTreePanel(source));
