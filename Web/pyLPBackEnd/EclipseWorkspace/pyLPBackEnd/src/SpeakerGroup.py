@@ -15,9 +15,9 @@ class SpeakerGroup:
         self.speakers = rs.readIntArray()
         self.fromNextSpeakerGroup = rs.readIntArray()
         count = rs.readInteger()
-        self.replacedSpeakers = {}
+        self.replacedSpeakers = []
         for I in range(count):
-            self.replacedSpeakers[I] = COM(rs)
+            self.replacedSpeakers.append(COM(rs))
         self.singularSpeakers = rs.readIntArray()
         self.groupedSpeakers = rs.readIntArray()
         self.povSpeakers = rs.readIntArray()
@@ -25,9 +25,9 @@ class SpeakerGroup:
         self.metaNameOthers = rs.readIntArray()
         self.observers = rs.readIntArray()
         count = rs.readInteger()
-        self.embeddedSpeakerGroups = {}
+        self.embeddedSpeakerGroups = []
         for I in range(count):
-            self.embeddedSpeakerGroups[I] = SpeakerGroup(rs)
+            self.embeddedSpeakerGroups.append(SpeakerGroup(rs))
         count = rs.readInteger()
         self.groups = {}
         for I in range(count):

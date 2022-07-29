@@ -93,9 +93,9 @@ class CObject:
 		for I in range(count):
 			self.spaceRelations[I] = rs.readInteger()
 		count = rs.readInteger()
-		duplicates = {}
+		self.duplicates = {}
 		for I in range(count):
-			duplicates[I] = rs.readInteger()
+			self.duplicates[I] = rs.readInteger()
 		count = rs.readInteger()
 		self.aliases = {}
 		for I in range(count):

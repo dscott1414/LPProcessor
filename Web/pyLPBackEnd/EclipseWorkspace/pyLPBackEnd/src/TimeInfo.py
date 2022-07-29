@@ -1,43 +1,9 @@
 from WordClass import WordClass
 from TFI import TFI
+import json
+from json import JSONEncoder
 
 class TimeInfo:
-    tWhere = 0  
-    timePreviousLink = 0 # a link to the previous statement (by time) 
-    timeSPTAnchor = 0 # speech time
-    timeETAnchor = 0 # event time
-    timeRTAnchor = 0 # reference time
-    timeRelationType = 0 # T_BEFORE, T_AFTER
-    timeModifier = 0 # early in the evening/ a few hours after - this can be a chain (The store is closed from July to August.) ( 2 p.m. on the afternoon of May 7 , 1915)
-    timeModifier2 = 0 # secondary modifier
-    absMetaRelation = 0
-    timeCapacity = 0 # day/hour/evening etc
-    absYear = 0
-    absSeason = 0
-    absDateSpec = 0 # A.D. B.C.
-    absMonth = 0
-    absDayOfWeek = 0
-    absDayOfMonth = 0
-    timeOfDay = 0 # morning/evening/noon etc
-    absHour = 0
-    absMinute = 0
-    absSecond = 0
-    absTimeSpec = 0 # A.M. P.M.
-    timeFrequency = 0
-    metaDescriptive = False
-    absHoliday = 0
-    absMoment = 0
-    absNamedDay = 0
-    absNamedHoliday = 0
-    absNamedMonth = 0
-    absNamedSeason = 0
-    absToday = 0
-    absTomorrow = 0
-    absTonight = 0
-    absUnspecified = 0
-    absYesterday = 0
-    
-    
     cMillenium = 0
     cCentury = 1
     cDecade = 2
@@ -270,3 +236,8 @@ class TimeInfo:
         self.absTonight = rs.readByte();
         self.absUnspecified = rs.readByte();
         self.absYesterday = rs.readByte();
+        
+        
+class TimeInfoEncoder(JSONEncoder):
+        def default(self, o):
+            return o.__dict__

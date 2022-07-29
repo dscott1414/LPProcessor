@@ -841,19 +841,6 @@ public class Source {
 		}
 	}
 
-	void setParagraphSpacing(boolean none) {
-		// Start with the current input attributes for the JTextPane. This
-		// should ensure that we do not wipe out any existing attributes
-		// (such as alignment or other paragraph attributes) currently
-		// set on the text area.
-		SimpleAttributeSet attributes = new SimpleAttributeSet();
-		StyleConstants.ParagraphConstants.setSpaceBelow(attributes, (none) ? 0 : 5);
-		// Replace the style for the entire document. We exceed the length
-		// of the document by 1 so that text entered at the end of the
-		// document uses the attributes.
-		batchDoc.setParagraphAttributes(batchDoc.getLength(), batchDoc.getLength() + 1, attributes, false);
-	}
-
 	void setTimeColorAttributes(int timeColor, SimpleAttributeSet keyWord) {
 		if (timeColor > 0) {
 			StyleConstants.setBackground(keyWord, new Color(255, 255, 0));
@@ -935,25 +922,23 @@ public class Source {
 		}
 	}
 
-	Vector<VerbMember> getVerbClasses(int whereVerb) {
+	String getPhrasalVerb(int whereVerb) {
 		String baseVerb = m[whereVerb].baseVerb;
-		// map <wstring, set <int> >::iterator lvtoCi;
-		Vector<VerbMember> vms = Show.vn.vbNetVerbToClassMap.get(baseVerb);
 		// get_out is very different from get by itself
 		if (whereVerb + 1 < m.length && (m[whereVerb + 1].queryWinnerForm(Form.adverbForm) >= 0
 				|| m[whereVerb + 1].queryWinnerForm(Form.prepositionForm) >= 0
-				|| m[whereVerb + 1].queryWinnerForm(Form.nounForm) >= 0)) {
-			String verbParticiple = baseVerb + "_" + m[whereVerb + 1].word;
-			Vector<VerbMember> vmsParticiple = Show.vn.vbNetVerbToClassMap.get(verbParticiple);
-			if (vmsParticiple != null) {
-				if (m[whereVerb].relObject == whereVerb + 1)
-					m[whereVerb].relObject = -1;
-				vms = vmsParticiple;
-			}
-		}
-		return vms;
+				|| m[whereVerb + 1].queryWinnerForm(Form.nounForm) >= 0)) 
+			return baseVerb + "_" + m[whereVerb + 1].word;
+		return "";
 	}
-
+	
+	boolean isVerbClass(int where,String verbClass)
+	{
+		String baseVerb = m[where].baseVerb;
+		String phrasalVerb = getPhrasalVerb(where);
+		return Show.vn.isVerbClass(baseVerb, phrasalVerb, verbClass);
+	}
+	
 	BatchDocument print(WordClass Words, SteppedComboBox pickChapter, Boolean[] preferences) {
 		positionToSource = new TreeMap<Integer, WhereSource>();
 		sourceToPosition = new TreeMap<Integer, Integer>();

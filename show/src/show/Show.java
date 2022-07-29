@@ -864,6 +864,9 @@ public class Show implements ActionListener, ItemListener {
 							System.out.println("source not found for index " + index);
 							return;
 						}
+						System.out.println(ws.index);
+						System.out.println(ws.flags);
+						
 						switch (ws.flags) {
 						case wordType:
 							wordInfo.setText(
@@ -872,8 +875,7 @@ public class Show implements ActionListener, ItemListener {
 							roleInfo.setText(source.m[ws.index].roleString());
 							relationsInfo.setText(source.m[ws.index].relations());
 							if (source.m[ws.index].baseVerb.length() > 0) {
-								roleInfo.setText(
-										VerbMember.toString(vn.vbNetVerbToClassMap.get(source.m[ws.index].baseVerb)));
+								roleInfo.setText(vn.getClassNames2(source.m[ws.index].baseVerb));
 								String verbSenseStr = source.getVerbSenseString(source.m[ws.index].quoteForwardLink);
 								wordInfo.setText(ws.index + ": " + source.m[ws.index].word + "(" + verbSenseStr + ")");
 							}
@@ -993,17 +995,8 @@ public class Show implements ActionListener, ItemListener {
 									wordInfoSelectionTable.setValueAt(source.m[ws.index].printFlags(), tableRow, 5);
 									// System.out.println(ws.index + ": " + source.m[ws.index].word +
 									// ":"+source.m[ws.index].relations());
-									if (source.m[ws.index].baseVerb.length() > 0 && role.length() == 0) {
-										Vector<VerbMember> vms = (source.m[ws.index].baseVerb.length() > 0)
-												? vn.vbNetVerbToClassMap.get(source.m[ws.index].baseVerb)
-												: null;
-										if (vms != null) {
-											String names = "";
-											for (VerbMember vm : vms)
-												names += vm.name + " ";
-											wordInfoSelectionTable.setValueAt(names, tableRow, 1);
-										}
-									}
+									if (source.m[ws.index].baseVerb.length() > 0 && role.length() == 0) 
+										wordInfoSelectionTable.setValueAt(vn.getClassNames(source.m[ws.index].baseVerb), tableRow, 1);
 									tableRow++;
 									lastWS = ws;
 								}

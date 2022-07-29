@@ -1,5 +1,26 @@
-.mat-menu-panel {
-  background: purple !important;
+.mat-menu-content {
+  padding-top: 0px !important;
+  padding-bottom: 0px !important;
+  min-width: 700px !important;
+  max-height: 300px !important;
+  overflow: scroll !important;
+}
+
+.mat-menu-item{
+  line-height:25px;
+  height:25px;
+}
+
+amenu {
+  min-width: 700px !important;
+  max-height: 300px !important;
+  overflow: scroll !important;
+}
+
+.matAgentMenu {
+  min-width: 700px !important;
+  max-height: 300px !important;
+  overflow: scroll !important;
 }
 
 html, body {
@@ -8,16 +29,64 @@ html, body {
   overflow: hidden
 }
 
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
 .mat-checkbox {
   display: block !important;
 }
 
+/* main window contains:
+  select-search height 60
+  info-area height 40
+  meta-information height 100
+  source-element - grow
+  wordinfo-table - height 200
+ */
+.main-window {
+  max-width: 100%;
+  height: 100%;
+  margin: 0 0;
+  padding: 0 10px;
+  display: grid;
+  grid-template-areas:
+        "header"
+        "source-element"
+        "footer";
+  grid-gap: 10px;
+  grid-template-rows: 200px 1fr 400px;
+  background-color: #fff;
+}
+
+header{
+  grid-area: header;
+  height: 200px;
+  color: #9f9c9c;
+  text-transform: uppercase;
+  border-bottom: 2px solid #b0e0ea;
+  padding: 20px 0;
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+
+}
+
+footer {
+  grid-area: footer;
+  color: #fff;
+  text-align: left;
+  padding: 20px 0;
+  bottom: 0;
+  background-color: #9f9c9c;
+  height: 400px;
+  overflow: auto;
+}
+
 .select-search {
-  position: absolute;
   width: 100%;
   border: 2px solid #4CAF50;
-  left: 0;
-  top: 0;
   height: 60px;
   display: grid;
   gap: 5px 5px;
@@ -35,24 +104,23 @@ html, body {
 }
 
 .info-area {
-  position: absolute;
   width: 100%;
   border: 2px solid #4CAF50;
-  left: 0;
-  top: 60px;
   height: 40px;
   display: grid;
   gap: 5px 5px;
-  grid-template-columns: 1fr 1fr 1fr 1fr;
+  grid-template-columns: 0.2fr 1fr 1.5fr 1fr 0.2fr;
   grid-template-areas:
-    "attributes range chapters reload"
+    "preferences range agents chapters reload"
 }
 
-.attributes-menu {
-  grid-area: attributes;
+.preferences-menu {
+  grid-area: preferences;
 }
 
 .current-source-range {
+  padding: 10px 0;
+  text-align: center;
   grid-area: range;
 }
 
@@ -60,29 +128,92 @@ html, body {
   grid-area: chapters;
 }
 
+.agents-menu {
+  grid-area: agents;
+}
+
+.agentMenuItem {
+  max-width:700px !important;
+}
+
 .reload {
   grid-area: reload;
 }
 
 .meta-information {
-  position: absolute;
   width: 100%;
   border: 2px solid #4CAF50;
-  left: 0;
-  top: 100px;
   height: 100px;
 }
 
 .source-element {
-  position: absolute;
   border: 2px solid #4CAF50;
-  left: 0;
-  top: 200px;
+  width: 100%;
+  overflow: auto;
+}
+
+.wordinfo-table {
+  border: 2px solid #4CAF50;
   bottom: 0;
   width: 100%;
-  overflow-y: scroll
+  overflow: auto;
+}
+
+.timeline-tree {
+  border: 2px solid #4CAF50;
+  bottom: 0;
+  width: 100%;
+  overflow: auto;
 }
 
 .search-field {
   width: 100%;
+}
+
+table {
+  width: 100%;
+}
+
+tr.mat-row {
+  border: 1px solid #e7e7e7;
+  height: 20px !important;
+  min-height: 20px !important;
+}
+
+th.mat-header-cell, td.mat-cell {
+  text-align: left;
+  border-right: 1px solid black;
+  padding: 2px 2px 2px 2px;
+}
+
+.timeline-tree-invisible {
+  display: none;
+}
+
+.timeline-tree ul,
+.timeline-tree li {
+  margin-top: 0;
+  margin-bottom: 0;
+  list-style-type: none;
+}
+
+/*
+ * This padding sets alignment of the nested nodes.
+ */
+.timeline-tree .mat-nested-tree-node div[role=group] {
+  text-align: left;
+  align-items: flex-start;
+  padding-left: 20px;
+}
+
+/*
+ * Padding for leaf nodes.
+ * Leaf nodes need to have padding so as to align with other non-leaf nodes
+ * under the same parent.
+ */
+.timeline-tree div > .mat-tree-node {
+  text-align: left;
+  align-items: flex-start;
+  padding-left: 40px;
+  min-height: 15px;
 }

@@ -46,3 +46,4 @@ CodeGraphData
 *.FileListAbsolute.txt
 *.sarif
 RerunSingleSourcex64
+node_modules

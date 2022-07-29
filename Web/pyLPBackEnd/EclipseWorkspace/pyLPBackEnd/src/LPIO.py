@@ -33,9 +33,9 @@ class LPIO:
     
     def readIntArray(self):
         count = self.readInteger();
-        a = {}
+        a = []
         for I in range(count):
-            a[I] = self.readInteger();
+            a.append(self.readInteger())
         return a;
 
     def readByte(self):

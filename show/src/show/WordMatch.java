@@ -281,7 +281,6 @@ public class WordMatch {
 	}
 
 	public tFI getWordtFI() {
-		System.out.println(word);
 		tFI tfi=WordClass.Words.get(word);
 		//if (tfi==null)
 		//	System.out.println("Word "+word+" not found!");

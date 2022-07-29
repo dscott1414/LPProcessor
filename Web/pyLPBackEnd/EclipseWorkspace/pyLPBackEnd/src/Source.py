@@ -8,8 +8,10 @@ from PatternElementMatch import PatternElementMatch
 from Relation import Relation
 from TimelineSegment import TimelineSegment
 from SourceEnums import SourceEnums
+from TimeInfo import TimeInfo
 import copy
 import json
+from VerbNet import VerbNet
 
 try:
     profile  # throws an exception when profile isn't defined
@@ -18,8 +20,6 @@ except NameError:
 
 class Source:
 
-    batchDoc = []
-    
     wordOrderWords = [ "other", "another", "second", "first", "third", "former", "latter", "that", "this",
             "two", "three", "one", "four", "five", "six", "seven", "eight" ]
 
@@ -47,6 +47,7 @@ class Source:
         beType = 14
         possessionType = 15
         tableType = 16
+        agentType = 17
 
     class HTMLStyles(dict):
         UNDERLINE = 0
@@ -54,6 +55,8 @@ class Source:
         FOREGROUND = 2
         BACKGROUND = 3
         BOLD = 4
+        SPACEBEFORE = 5
+        SPACEAFTER = 6
         
         def __init__(self):
             pass
@@ -81,6 +84,14 @@ class Source:
     
         def setBold(self, att):
             self.__setitem__(self.BOLD, att)
+            return self
+            
+        def setSpaceBefore(self, att):
+            self.__setitem__(self.SPACEBEFORE, att)
+            return self
+            
+        def setSpaceAfter(self, att):
+            self.__setitem__(self.SPACEAFTER, att)
             return self
             
     location = ""
@@ -113,6 +124,7 @@ class Source:
 
     def __init__(self, words, rs):
         self.initializeClassStrings()
+        self.vn = VerbNet()
         self.masterSpeakerList = {}
         self.version = rs.readInteger() 
         self.location = rs.readString()
@@ -147,14 +159,17 @@ class Source:
         for I in range(count):
             self.relations[I] = Relation(rs);
         count = rs.readInteger();
-        self.timelineSegments = {}
+        self.timelineSegments = []
         for I in range(count):
-            self.timelineSegments[I] = TimelineSegment(rs)
+            self.timelineSegments.append(TimelineSegment(rs))
 
     @profile
     def addElement(self, s, attrs, where, index2, index3, sourceMapType):
+        if where not in self.sourceToHTMLElementPosition:
+            self.sourceToHTMLElementPosition[where] = []
+        self.sourceToHTMLElementPosition[where].append(len(self.batchDoc))
+        self.HTMLElementIdToSource[len(self.batchDoc)] = where
         self.batchDoc.append((s, copy.copy(attrs), where, index2, index3, sourceMapType))
-        # self.positionToSource[self.docPosition] = self.WhereSource(where, index2, index3, sourceMapType)
         #if sourceMapType == self.SourceMapType.headerType or sourceMapType == self.SourceMapType.wordType:
         #    self.sourceToPosition[where] = self.docPosition
         self.docPosition += len(s)
@@ -184,15 +199,13 @@ class Source:
         tmp = self.objectNumString(om.object, shortNameFormat, objectOwnerRecursionFlag)
         if (shortNameFormat):
             return tmp
-        return tmp + om.salienceFactor
+        return tmp + str(om.salienceFactor)
 
     @profile
     def objectsString(self, oms, shortNameFormat, objectOwnerRecursionFlag):
         tmp = "";
-        for s in range(len(oms)):
-            tmp += self.objectString(oms[s], shortNameFormat, objectOwnerRecursionFlag)
-            if (s != len(oms) - 1):
-                tmp += " "
+        for s in oms:
+            tmp += self.objectString(s, shortNameFormat, objectOwnerRecursionFlag)
         return tmp
 
     def getClass(self, objectClass):
@@ -210,8 +223,8 @@ class Source:
         ow = self.objects[obj].ownerWhere
         if (ow >= 0):
             selfOwn = obj == (self.m[ow].object)
-            for I in range(len(self.m[ow].objectMatches)):
-                if obj == (self.m[ow].objectMatches[I].object):
+            for om in self.m[ow].objectMatches:
+                if obj == om.object:
                     tmpstr = "Self-owning obj!";
                     selfOwn = True;
             if not selfOwn and not objectOwnerRecursionFlag:
@@ -277,27 +290,27 @@ class Source:
     def getVerbSenseString(self, verbSense):
         verbSenseStr = ""
         if verbSense != 0:
-            if ((verbSense & SourceEnums.VT_TENSE_MASK) == self.VT_PRESENT):
+            if ((verbSense & SourceEnums.VT_TENSE_MASK) == SourceEnums.VT_PRESENT):
                 verbSenseStr += "PRESENT "
-            elif ((verbSense & SourceEnums.VT_TENSE_MASK) == self.VT_PRESENT_PERFECT):
+            elif ((verbSense & SourceEnums.VT_TENSE_MASK) == SourceEnums.VT_PRESENT_PERFECT):
                 verbSenseStr += "PRESENT_PERFECT "
-            elif ((verbSense & SourceEnums.VT_TENSE_MASK) == self.VT_PAST):
+            elif ((verbSense & SourceEnums.VT_TENSE_MASK) == SourceEnums.VT_PAST):
                 verbSenseStr += "PAST "
-            elif ((verbSense & SourceEnums.VT_TENSE_MASK) == self.VT_PAST_PERFECT):
+            elif ((verbSense & SourceEnums.VT_TENSE_MASK) == SourceEnums.VT_PAST_PERFECT):
                 verbSenseStr += "PAST_PERFECT "
-            elif ((verbSense & SourceEnums.VT_TENSE_MASK) == self.VT_FUTURE):
+            elif ((verbSense & SourceEnums.VT_TENSE_MASK) == SourceEnums.VT_FUTURE):
                 verbSenseStr += "FUTURE "
-            elif ((verbSense & SourceEnums.VT_TENSE_MASK) == self.VT_FUTURE_PERFECT):
+            elif ((verbSense & SourceEnums.VT_TENSE_MASK) == SourceEnums.VT_FUTURE_PERFECT):
                 verbSenseStr += "FUTURE_PREFECT "
-            if ((verbSense & SourceEnums.VT_EXTENDED) == self.VT_EXTENDED):
+            if ((verbSense & SourceEnums.VT_EXTENDED) == SourceEnums.VT_EXTENDED):
                 verbSenseStr += "EXTENDED "
-            if ((verbSense & SourceEnums.VT_PASSIVE) == self.VT_PASSIVE):
+            if ((verbSense & SourceEnums.VT_PASSIVE) == SourceEnums.VT_PASSIVE):
                 verbSenseStr += "PASSIVE "
-            if ((verbSense & SourceEnums.VT_NEGATION) == self.VT_NEGATION):
+            if ((verbSense & SourceEnums.VT_NEGATION) == SourceEnums.VT_NEGATION):
                 verbSenseStr += "NEGATION "
-            if ((verbSense & SourceEnums.VT_IMPERATIVE) == self.VT_IMPERATIVE):
+            if ((verbSense & SourceEnums.VT_IMPERATIVE) == SourceEnums.VT_IMPERATIVE):
                 verbSenseStr += "POSSIBLE "
-            if ((verbSense & SourceEnums.VT_POSSIBLE) == self.VT_POSSIBLE):
+            if ((verbSense & SourceEnums.VT_POSSIBLE) == SourceEnums.VT_POSSIBLE):
                 verbSenseStr += "IMPERATIVE "
         return verbSenseStr;
 
@@ -452,34 +465,50 @@ class Source:
                 keyWord.setBackground((200, 200, 200))
         return keyWord;
 
-    def shouldPrintRelation(self, where, spr, preference):
+    def shouldPrintRelation(self, where, spr, preferences):
         printAll = True
-        for p in preference:
+        printNone = True
+        for p in preferences.values():
             if (not p):
                 printAll = False
+            if (p):
+                printNone = False
         if (printAll):
+            if where<20: print(str(where) + " 1: True")
             return True
-        timeRelation = len(self.relations[self.spr].timeInfo) > 0 or (self.relations[self.spr].relationType == self.stABSTIME
-                or self.relations[self.spr].relationType == self.stPREPTIME or self.relations[self.spr].relationType == self.stPREPDATE
-                or self.relations[self.spr].relationType == self.stSUBJDAYOFMONTHTIME or self.relations[self.spr].relationType == self.stABSTIME
-                or self.relations[self.spr].relationType == self.stABSDATE or self.relations[self.spr].relationType == self.stADVERBTIME)
-        if (not preference[self.INCLUDE_STORY] and self.relations[self.spr].story):
+        if (printNone):
+            if where<20: print(str(where) + " 2: False")
             return False
-        if (not preference[self.INCLUDE_QUOTES] and (self.m[self.relations[self.spr].where].objectRole & CObject.IN_PRIMARY_QUOTE_ROLE) != 0):  
-            return False
-        if (not preference[self.INCLUDE_TIME_TRANSITION] and not self.relations[self.spr].timeTransition):
-            return False
-        if (preference[self.INCLUDE_ABSTRACT] and not (self.relations[self.spr].physicalRelation or timeRelation)):
+        if (preferences[SourceEnums.INCLUDE_STORY] and self.relations[self.spr].story):
+            if where<20: print(str(where) + " 3: True")
             return True
-        if (preference[self.INCLUDE_TIME]):
-            return timeRelation
-        if (preference[self.INCLUDE_SPACE] and not self.relations[self.spr].physicalRelation):
-            return False
-        return True
+        if (preferences[SourceEnums.INCLUDE_QUOTES] and (self.m[self.relations[self.spr].where].objectRole & CObject.IN_PRIMARY_QUOTE_ROLE) != 0):  
+            if where<20: print(str(where) + " 4: True")
+            return True
+        if (preferences[SourceEnums.INCLUDE_TIME_TRANSITION] and self.relations[self.spr].timeTransition):
+            if where<20: print(str(where) + " 5: True")
+            return True
+        timeRelation = len(self.relations[self.spr].timeInfo) > 0 or (self.relations[self.spr].relationType == SourceEnums.stABSTIME
+                or self.relations[self.spr].relationType == SourceEnums.stPREPTIME or self.relations[self.spr].relationType == SourceEnums.stPREPDATE
+                or self.relations[self.spr].relationType == SourceEnums.stSUBJDAYOFMONTHTIME or self.relations[self.spr].relationType == SourceEnums.stABSTIME
+                or self.relations[self.spr].relationType == SourceEnums.stABSDATE or self.relations[self.spr].relationType == SourceEnums.stADVERBTIME)
+        if (preferences[SourceEnums.INCLUDE_ABSTRACT] and not (self.relations[self.spr].physicalRelation or timeRelation)):
+            if where<20: print(str(where) + " 6: True")
+            return True
+        if (preferences[SourceEnums.INCLUDE_TIME] and timeRelation):
+            if where<20: print(str(where) + " 7: True")
+            return True
+        if (preferences[SourceEnums.INCLUDE_SPACE] and self.relations[self.spr].physicalRelation):
+            if where<20: print(str(where) + " 8: True")
+            return True
+        if where<20: print(str(where) + " 9: False")
+        return False
 
     def printRelation(self, where, preferences):
         if (self.spr < len(self.relations) and self.relations[self.spr].where == where):
+            if where<20: print(str(where) + ": printRelation 2")
             if (self.shouldPrintRelation(where, self.spr, preferences)):
+                if where<20: print(str(where) + ": printRelation 3")
                 self.addElement(self.relationString(self.relations[self.spr].relationType), self.setAttributes(self.relations, self.spr), where, self.spr, -1,
                         self.SourceMapType.relType);
         while (self.spr < len(self.relations) and self.relations[self.spr].where < where):
@@ -489,7 +518,7 @@ class Source:
         presType = "";
         r = self.relations[originalSPRI];
         if (r.futureHappening and r.wherePrepObject >= 0 and self.m[r.wherePrepObject].object >= 0
-                and self.objects[self.m[r.wherePrepObject].object].subType == self.BY_ACTIVITY):
+                and self.objects[self.m[r.wherePrepObject].object].subType == SourceEnums.BY_ACTIVITY):
             li = originalSPRI + 1
             while (abs(self.relations[li].relationType) == self.stLOCATION and li < len(self.relations)
                     and self.relations[li].where < endSpeakerGroup):
@@ -501,37 +530,36 @@ class Source:
         return w
 
     def evaluateSpaceRelation(self, where, endSpeakerGroup, spr, preferences):
-        if (self.relations[self.spr].agentLocationRelationSet):
-            originalSPRI = self.spr;
-            self.spr = self.relations[self.spr].nextSPR;
+        if (self.relations[spr].agentLocationRelationSet):
+            originalSPRI = spr;
+            spr = self.relations[spr].nextSPR;
             if (self.shouldPrintRelation(where, originalSPRI, preferences)):
                 w = self.printFullRelationString(originalSPRI, endSpeakerGroup)
-                self.addElement(w, self.setAttributes(self.relations, originalSPRI), where, self.spr, -1, self.SourceMapType.relType2)
-                self.addElement("\n", self.setAttributes(self.relations, originalSPRI), where, self.spr, -1, self.SourceMapType.relType2)
-            if (self.relations[originalSPRI].whereControllingEntity != -1 and self.relations[self.spr].whereControllingEntity == -1
-                    and self.relations[originalSPRI].whereSubject == self.relations[self.spr].whereSubject
-                    and self.relations[originalSPRI].whereVerb == self.relations[self.spr].whereVerb):
-                self.spr += 1
+                self.addElement(w, self.setAttributes(self.relations, originalSPRI), where, spr, -1, self.SourceMapType.relType2)
+                self.addElement("\n", self.setAttributes(self.relations, originalSPRI), where, spr, -1, self.SourceMapType.relType2)
+            if (self.relations[originalSPRI].whereControllingEntity != -1 and self.relations[spr].whereControllingEntity == -1
+                    and self.relations[originalSPRI].whereSubject == self.relations[spr].whereSubject
+                    and self.relations[originalSPRI].whereVerb == self.relations[spr].whereVerb):
+                spr += 1
         else:
-            self.spr += 1
-        return self.spr
+            spr += 1
+        return spr
 
-    def fillAgents(self):
-        docPosition = 0;
-        for ms in range(0, self.masterSpeakerList.size()):
-            msindex = ms % 8 #len(self.masterSpeakerColors)
-            keyWord = self.HTMLStyles()
-            keyWord.setBold(True)
-            keyWord.setForeground(self.masterSpeakerColors[msindex])
-            s = self.objectNumString(self.masterSpeakerList.get(ms), False, False)
-            s += " ds[" + self.objects[self.masterSpeakerList.get(ms)].numDefinitelyIdentifiedAsSpeaker + "] s[" + \
-                    self.objects[self.masterSpeakerList.get(ms)].numIdentifiedAsSpeaker + "]"
-            self.batchDoc.append((s, keyWord))
-            self.batchDoc.append(("\n", keyWord))
-            self.positionToAgent[docPosition] = self.WhereSource(self.masterSpeakerList.get(ms), -1, -1, self.SourceMapType.matchingSpeakerType)
-            self.agentToPosition[self.masterSpeakerList.get(ms)] = docPosition
-            docPosition += len(s)
-        return self.batchDoc
+    def masterSpeakerHtml(self, ms):
+        html = {}
+        html['style'] = "font-weight: bold; "
+        msindex = ms % len(self.masterSpeakerColors)
+        html['style'] += "color: rgb(" + json.dumps(self.masterSpeakerColors[msindex])[1:-1] + "); "
+        # html['style'] = "display:block; "
+        # html['mouseover'] = str(line)
+        masterSpeakerObject = self.masterSpeakerList[ms]  
+        s = self.objectNumString(masterSpeakerObject, False, False)
+        s += " ds[" + str(self.objects[masterSpeakerObject].numDefinitelyIdentifiedAsSpeaker) + "] s[" \
+                + str(self.objects[masterSpeakerObject].numIdentifiedAsSpeaker) + "]";
+        html['text'] = s  
+        self.positionToAgent[ms] = masterSpeakerObject
+        self.agentToPosition[masterSpeakerObject] = ms
+        return html
 
     @profile
     def printSpeakerGroup(self, I, preferences):
@@ -540,14 +568,13 @@ class Source:
                 keyWord = self.HTMLStyles()
                 keyWord.setBold(True)
                 keyWord.setForeground((0xFF, 0x00, 0x00))
-                self.addElement("------------------TRANSITION------------------", keyWord, self.currentSpeakerGroup, I, -1,
+                self.addElement("------------------TRANSITION------------------", keyWord, I, self.currentSpeakerGroup, -1,
                         self.SourceMapType.transitionSpeakerGroupType)
-            self.addElement("\n", None, self.currentSpeakerGroup, -1, -1, self.SourceMapType.speakerGroupType)
-            self.paragraphSpacingOn.append(len(self.batchDoc))
-            for mo in self.speakerGroups[self.currentSpeakerGroup].speakers.values():
-                isPOV = mo in self.speakerGroups[self.currentSpeakerGroup].povSpeakers.values()
-                isObserver = mo in self.speakerGroups[self.currentSpeakerGroup].observers.values()
-                isGrouped = mo in self.speakerGroups[self.currentSpeakerGroup].groupedSpeakers.values()
+            self.addElement("\n", None, I, self.currentSpeakerGroup, -1, self.SourceMapType.speakerGroupType)
+            for mo in self.speakerGroups[self.currentSpeakerGroup].speakers:
+                isPOV = mo in self.speakerGroups[self.currentSpeakerGroup].povSpeakers
+                isObserver = mo in self.speakerGroups[self.currentSpeakerGroup].observers
+                isGrouped = mo in self.speakerGroups[self.currentSpeakerGroup].groupedSpeakers
                 msindex = self.objects[mo].masterSpeakerIndex % 8 #len(self.masterSpeakerColors)
                 keyWord = self.HTMLStyles()
                 keyWord.setBold(True)
@@ -559,15 +586,15 @@ class Source:
                     keyWord.setBackground((130, 130, 130))
                 oStr = ""
                 if (isObserver):
-                    oStr += "[obs]"
+                    oStr += "[obs]" 
                 elif (isPOV):
                     oStr += "[pov]"
                 if (isGrouped):
                     oStr += "[grouped]"
                 oStr += self.objectNumString(mo, False, False)
-                self.addElement(oStr, keyWord, self.currentSpeakerGroup, -1, mo, self.SourceMapType.speakerGroupType)
-                self.addElement("\n", keyWord, self.currentSpeakerGroup, -1, mo, self.SourceMapType.speakerGroupType)
-            self.addElement("\n", None, self.currentSpeakerGroup, -1, -1, self.SourceMapType.speakerGroupType)
+                self.addElement(oStr, keyWord, I, self.currentSpeakerGroup, mo, self.SourceMapType.speakerGroupType)
+                self.addElement("\nbr", None, I, -1, -1, self.SourceMapType.speakerGroupType)
+            self.addElement("\n", None, I, self.currentSpeakerGroup, -1, self.SourceMapType.speakerGroupType)
             self.currentSpeakerGroup += 1
             if (self.currentSpeakerGroup >= len(self.speakerGroups)):
                 break;
@@ -588,12 +615,12 @@ class Source:
                 and self.currentEmbeddedSpeakerGroup < len(self.speakerGroups[self.currentSpeakerGroup - 1].embeddedSpeakerGroups)
                 and I == self.speakerGroups[self.currentSpeakerGroup
                         -1].embeddedSpeakerGroups[self.currentEmbeddedSpeakerGroup].begin):
-            for mo in self.speakerGroups[self.currentSpeakerGroup - 1].embeddedSpeakerGroups[self.currentEmbeddedSpeakerGroup].speakers.values():
+            for mo in self.speakerGroups[self.currentSpeakerGroup - 1].embeddedSpeakerGroups[self.currentEmbeddedSpeakerGroup].speakers:
                 isPOV = mo in self.speakerGroups[self.currentSpeakerGroup
-                        -1].embeddedSpeakerGroups[self.currentEmbeddedSpeakerGroup].povSpeakers.values()
+                        -1].embeddedSpeakerGroups[self.currentEmbeddedSpeakerGroup].povSpeakers
                 isObserver = mo in self.speakerGroups[self.currentSpeakerGroup
-                        -1].embeddedSpeakerGroups[self.currentEmbeddedSpeakerGroup].observers.values()
-                isGrouped = mo in self.speakerGroups[self.currentSpeakerGroup - 1].embeddedSpeakerGroups[self.currentEmbeddedSpeakerGroup].groupedSpeakers.values()
+                        -1].embeddedSpeakerGroups[self.currentEmbeddedSpeakerGroup].observers
+                isGrouped = mo in self.speakerGroups[self.currentSpeakerGroup - 1].embeddedSpeakerGroups[self.currentEmbeddedSpeakerGroup].groupedSpeakers
                 msindex = self.objects[mo].masterSpeakerIndex % 8 # len(self.masterSpeakerColors)
                 if (msindex < 0):
                     msindex = 0
@@ -613,29 +640,19 @@ class Source:
                 if (isGrouped):
                     oStr += "[grouped]"
                 oStr += self.objectNumString(mo, False, False)
-                self.addElement(oStr, keyWord, self.currentSpeakerGroup - 1, self.currentEmbeddedSpeakerGroup, mo,
+                self.addElement(oStr, keyWord, I, self.currentSpeakerGroup - 1, self.currentEmbeddedSpeakerGroup,
                         self.SourceMapType.speakerGroupType)
-                self.addElement("\n", keyWord, self.currentSpeakerGroup - 1, self.currentEmbeddedSpeakerGroup, mo,
-                        self.SourceMapType.speakerGroupType)
+                self.addElement("\nbr", None, I, -1 , -1,
+                                self.SourceMapType.speakerGroupType)
+            self.addElement("\n", None, I, -1 , -1,
+                            self.SourceMapType.speakerGroupType)
             self.currentEmbeddedSpeakerGroup += 1
         if (self.currentEmbeddedSpeakerGroup >= 0 and self.currentSpeakerGroup > 0
                 and self.currentEmbeddedSpeakerGroup < len(self.speakerGroups[self.currentSpeakerGroup - 1].embeddedSpeakerGroups)
                 and I == self.speakerGroups[self.currentSpeakerGroup - 1].embeddedSpeakerGroups[self.currentEmbeddedSpeakerGroup].end):
-            self.addElement("END", None, self.currentSpeakerGroup, self.currentEmbeddedSpeakerGroup, -1,
+            self.addElement("END", None, I, self.currentSpeakerGroup, self.currentEmbeddedSpeakerGroup,
                     self.SourceMapType.speakerGroupType);
             self.currentEmbeddedSpeakerGroup = -1;
-
-    def setParagraphSpacing(self, none):
-        # Start with the current input attributes for the JTextPane. This
-        # should ensure that we do not wipe out any existing attributes
-        # (such as alignment or other paragraph attributes) currently
-        # set on the text area.
-        attributes = self.HTMLStyles()
-        attributes.setSpaceBelow(0 if (none) else 5)
-        # Replace the style for the entire document. We exceed the length
-        # of the document by 1 so that text entered at the end of the
-        # document uses the attributes.
-        self.batchDoc.append("\n", attributes)
 
     def setTimeColorAttributes(self, timeColor, keyWord):
         if (timeColor > 0):
@@ -727,30 +744,116 @@ class Source:
                 vms = vmsParticiple
         return vms
 
+    """
+    1. create state variables for each source position
+    2. if source position is the same as the previous source position, do not create that (possible improvement)
+    3. rerun generateSourceElements, and verify that batchDoc is identical
+    4. THEN only run generateSourceElements when generating HTML elements.
+    5. keep array by position. keep intervals.
+    6. when new interval comes, | new interval with already generated intervals
+    7. subtract the previous intervals.
+    8. generate only what is left.
+    9. save the sum as the new interval set.
+    """
+    
+
     @profile
-    def generateSourceElements(self, words, preferences):
-        self.positionToSource = {}
-        self.sourceToPosition = {}
-        self.positionToAgent = {}
-        self.agentToPosition = {}
-        self.paragraphSpacingOff = []
-        self.paragraphSpacingOn = []
+    def generatePerElementState(self, words, preferences):
+        self.chaptersCheck = []
         self.section = 0;
-        self.docPosition = 0;
         self.spr = 0;
-        total = len(self.m)
         I = -1
-        last = -1
-        inObject = -1
-        endObject = 0
-        principalWhere = -1
+        # state variables
+        inObject = -1 
+        endObject = 0 
+        principalWhere = -1 
         inObjectSubType = -1
         numCurrentColumn = 0
         numCurrentRow = 0
         numTotalColumns = 0
         self.currentSpeakerGroup = 0
         inSection = False
+        states = []
+        for wm in self.m.values():
+            I += 1
+            inSection = False;
+            if (self.section < len(self.sections) and I >= self.sections[self.section].begin and I <= self.sections[self.section].endHeader):
+                inSection = True;
+                if (I == self.sections[self.section].begin):
+                    sectionHeader = ""
+                    si = self.sections[self.section].begin
+                    if self.m[si].word == "chapter":
+                        si += 1
+                    while (si < self.sections[self.section].endHeader and len(sectionHeader) < 50):
+                        if not self.m[si].word == "|||":
+                            sectionHeader += self.m[si].word + " "
+                        si += 1
+                    self.chaptersCheck.append({ 'header': sectionHeader, 'where': I,  'whereEndHeader': si})
+            if (wm.object >= 0 and len(self.objects) > wm.object):
+                inObject = wm.object;
+                if (self.objects[inObject].masterSpeakerIndex < 0 and len(self.objects[inObject].aliases) > 0):
+                    for ai in self.objects[inObject].aliases.values():
+                        if (self.objects[ai].masterSpeakerIndex >= 0):
+                            inObject = ai
+                            break
+                inObjectSubType = self.objects[inObject].subType
+                nextEndObject = wm.endObjectPosition
+                if (endObject < nextEndObject):
+                    endObject = nextEndObject;
+                    principalWhere = I;
+            if (I >= endObject):
+                inObject = inObjectSubType = -1
+            self.printRelation(I, preferences);
+            if not wm.word == "|||":
+                if wm.word == "lpendcolumnheaders":
+                    numTotalColumns = numCurrentColumn;
+                    numCurrentColumn = 0;
+                    continue;
+                if (I > 3 and self.m[I - 2].word == "lptable") or wm.word == "lpendcolumn":
+                    if wm.word == "lpendcolumn" and (I + 2 < len(self.m) and not self.m[I + 2].word == "lpendcolumnheaders" and not self.m[I + 2].word == "lptable"):
+                        numCurrentColumn += 1
+                        if (numCurrentColumn > numTotalColumns and numTotalColumns > 0):
+                            numCurrentColumn = 0;
+                            numCurrentRow += 1
+                    continue;
+                if I > 1 and (self.m[I - 1].word == "lpendcolumn"
+                        or (I + 1 < len(self.m) and self.m[I + 1].word == "lpendcolumn")):
+                    continue;
+                if wm.word == "lptable":
+                    numCurrentColumn = 0
+                    continue
+            if wm.word == "|||":
+                continue
+            if (self.section < len(self.sections) - 1 and I >= self.sections[self.section].endHeader):
+                self.section += 1
+            states.append([self.spr, inSection, self.section, inObject, endObject, principalWhere, inObjectSubType, numCurrentColumn, numCurrentRow, numTotalColumns, self.currentSpeakerGroup])
+        return states
+
+    @profile
+    def generateSourceElements(self, words, preferences):
+        states = self.generatePerElementState(words, preferences)
+        self.sourceToHTMLElementPosition = {}
+        self.HTMLElementIdToSource = {}
+        self.positionToAgent = {}
+        self.agentToPosition = {}
+        self.batchDoc = []
         self.chapters = []
+        self.section = 0;
+        self.docPosition = 0;
+        self.spr = 0;
+        total = len(self.m)
+        I = -1
+        last = -1 # keep percentage
+        # state variables
+        inObject = -1 
+        endObject = 0 
+        principalWhere = -1 
+        inObjectSubType = -1
+        numCurrentColumn = 0
+        numCurrentRow = 0
+        numTotalColumns = 0
+        self.currentSpeakerGroup = 0
+        inSection = False
         for wm in self.m.values():
             current = round(100 * I / total);
             I += 1
@@ -772,7 +875,7 @@ class Source:
                         if not self.m[si].word == "|||":
                             sectionHeader += self.m[si].word + " "
                         si += 1
-                    self.chapters.append({ 'header': sectionHeader, 'where': si})
+                    self.chapters.append({ 'header': sectionHeader, 'where': I,  'whereEndHeader': si})
             if (wm.object >= 0 and len(self.objects) > wm.object):
                 inObject = wm.object;
                 if (self.objects[inObject].masterSpeakerIndex < 0 and len(self.objects[inObject].aliases) > 0):
@@ -801,7 +904,6 @@ class Source:
             if (wm.verbSense == 0 and inObject >= 0 and self.objects[inObject].masterSpeakerIndex >= 0):
                 msindex = self.objects[inObject].masterSpeakerIndex % 8 #len(self.masterSpeakerColors);
                 keyWord.setForeground(self.masterSpeakerColors[msindex]);
-            self.paragraphSpacingOff.append(len(self.batchDoc))
             if wm.word == "|||":
                 self.addElement("\n", None, I, -1, -1, self.SourceMapType.wordType);
             self.printRelation(I, preferences);
@@ -810,38 +912,32 @@ class Source:
                 smt = self.SourceMapType.wordType;
                 if (inSection):
                     smt = self.SourceMapType.headerType;
-                tablesmart = True;
-                if (tablesmart):
-                    if wm.word == "lpendcolumnheaders":
-                        numTotalColumns = numCurrentColumn;
-                        numCurrentColumn = 0;
-                        continue;
-                    if (I > 3 and self.m[I - 2].word == "lptable") or wm.word == "lpendcolumn":
-                        self.addElement("\n", None, I, self.section, -1, self.SourceMapType.headerType);
-                        if wm.word == "lpendcolumn" and (I + 2 < len(self.m) and not self.m[I + 2].word == "lpendcolumnheaders" and not self.m[I + 2].word == "lptable"):
-                            numCurrentColumn += 1
-                            if (numCurrentColumn > numTotalColumns and numTotalColumns > 0):
-                                numCurrentColumn = 0;
-                                numCurrentRow += 1
-                            keyWord.setForeground((255, 165, 0));  
-                            if (numCurrentRow == 0 and numTotalColumns == 0):
-                                self.addElement("Column Title." + str(numCurrentColumn) + ":", keyWord, I,
-                                        self.section, -1, self.SourceMapType.headerType);
-                            else:
-                                self.addElement(str(numCurrentRow) + "." + str(numCurrentColumn)
-                                        +":", keyWord, I, self.section, -1, self.SourceMapType.headerType);
-                        continue;
-                    if I > 1 and (self.m[I - 1].word == "lpendcolumn"
-                            or (I + 1 < len(self.m) and self.m[I + 1].word == "lpendcolumn")):
-                        continue;
+                if wm.word == "lpendcolumnheaders":
+                    numTotalColumns = numCurrentColumn;
+                    numCurrentColumn = 0;
+                elif (I > 3 and self.m[I - 2].word == "lptable") or wm.word == "lpendcolumn":
+                    self.addElement("\n", None, I, self.section, -1, self.SourceMapType.headerType);
+                    if wm.word == "lpendcolumn" and (I + 2 < len(self.m) and not self.m[I + 2].word == "lpendcolumnheaders" and not self.m[I + 2].word == "lptable"):
+                        numCurrentColumn += 1
+                        if (numCurrentColumn > numTotalColumns and numTotalColumns > 0):
+                            numCurrentColumn = 0;
+                            numCurrentRow += 1
+                        keyWord.setForeground((255, 165, 0));  
+                        if (numCurrentRow == 0 and numTotalColumns == 0):
+                            self.addElement("Column Title." + str(numCurrentColumn) + ":", keyWord, I,
+                                    self.section, -1, self.SourceMapType.headerType);
+                        else:
+                            self.addElement(str(numCurrentRow) + "." + str(numCurrentColumn)
+                                    +":", keyWord, I, self.section, -1, self.SourceMapType.headerType);
+                elif I <= 1 or (self.m[I - 1].word != "lpendcolumn"
+                        and (I + 1 >= len(self.m) or self.m[I + 1].word != "lpendcolumn")):
                     if I > 1 and self.m[I - 1].word == "lptable":
                         keyWord.setForeground((255, 0, 0))  
                         keyWord.setFontSize(25)
                         keyWord.setBold(True)
                         keyWord.setUnderline(True)
                         self.addElement(str(int(wm.word) + 1), keyWord, I, self.section, -1, smt)
-                        continue
-                    if wm.word == "lptable":
+                    elif wm.word == "lptable":
                         self.addElement("\n", None, I, self.section, -1, self.SourceMapType.headerType)
                         self.addElement("\n", None, I, self.section, -1, self.SourceMapType.headerType)
                         smt = self.SourceMapType.tableType
@@ -853,12 +949,11 @@ class Source:
                         keyWord = keyWordTable
                         numCurrentColumn = 0
                         self.addElement("TABLE ", keyWord, I, self.section, -1, smt)
-                        # numTable++
-                        continue
-                originalWord = self.getOriginalWord(wm)
-                if I+1<len(self.m) and self.m[I + 1] != '.' and self.m[I + 1] != "|||":
-                    originalWord += " "     
-                self.addElement(originalWord, keyWord, I, self.section, -1, smt)
+                    else:
+                        originalWord = self.getOriginalWord(wm)
+                        if I+1<len(self.m) and self.m[I + 1] != '.' and self.m[I + 1] != "|||":
+                            originalWord += " "     
+                        self.addElement(originalWord, keyWord, I, self.section, -1, smt)
             if wm.word == "“" or wm.word == "‘":
                 # if (wm.word.equals("“"))
                 # lastOpeningPrimaryQuote = I;
@@ -883,9 +978,10 @@ class Source:
                     ESL = "ES" + ('1' if (wm.flags & WordMatch.flagFirstEmbeddedStory) != 0 else ' ') + ('2' if (wm.flags & WordMatch.flagSecondEmbeddedStory) != 0 else ' ')  
                     self.addElement(ESL, keyWordRED, I, -1, -1, self.SourceMapType.ESType);
             if not inSection:
-                keyWord.removeBackground()  
-            for J in range(len(wm.objectMatches)):
-                mObject = wm.objectMatches[J].object;
+                keyWord.removeBackground()
+            J = 0  
+            for om in wm.objectMatches:
+                mObject = om.object;
                 objectWhere = self.objects[mObject].originalLocation;
                 # skip honorific
                 if ((self.m[objectWhere].queryWinnerForm(Form.honorificForm) >= 0  
@@ -910,15 +1006,17 @@ class Source:
                     if (J > 2):
                         self.addElement("...", None, I, mObject, J, self.SourceMapType.matchingObjectType)
                         break
+                J += 1
             if (len(wm.objectMatches) > 0 and len(wm.audienceObjectMatches) > 0):
                 self.addElement(":", None, I, -1, -1, self.SourceMapType.matchingType)
             if (len(wm.objectMatches) > 0 and len(wm.audienceObjectMatches) == 0):
                 self.addElement("]", None, I, -1, -1, self.SourceMapType.matchingType)
             if (len(wm.objectMatches) == 0 and len(wm.audienceObjectMatches) > 0):
                 self.addElement("[", None, I, -1, -1, self.SourceMapType.matchingType)
-            for J in range(len(wm.audienceObjectMatches)):
+            J = 0
+            for aom in wm.audienceObjectMatches:
                 keyWord.setForeground((102, 204, 255));
-                mObject = wm.audienceObjectMatches[J].object;
+                mObject = aom.object;
                 if (mObject == 0):
                     w = "Narrator";
                 elif (mObject == 1):
@@ -926,18 +1024,24 @@ class Source:
                 else:
                     w = self.m[self.objects[mObject].originalLocation].word;
                 self.addElement(w + ("," if (J < len(wm.audienceObjectMatches) - 1) else "]"), None, I,
-                        wm.audienceObjectMatches[J].object, J, self.SourceMapType.audienceMatchingType);
+                        aom.object, J, self.SourceMapType.audienceMatchingType);
                 if (J > 2):
-                    self.addElement("...]", None, I, wm.audienceObjectMatches[J].object, J,
+                    self.addElement("...]", None, I, aom.object, J,
                             self.SourceMapType.audienceMatchingType)
                     break
+                J += 1
             newHeader = self.section < len(self.sections) and I == self.sections[self.section].endHeader
             if (newHeader):
                 self.addElement("\n", None, I, self.section, -1, self.SourceMapType.headerType)
-            if wm.word == "|||":
-                continue
-            if (self.section < len(self.sections) - 1 and I >= self.sections[self.section].endHeader):
+            if wm.word != "|||" and (self.section < len(self.sections) - 1 and I >= self.sections[self.section].endHeader):
                 self.section += 1
+            if states[I] == [self.spr, inSection, self.section, inObject, endObject, principalWhere, inObjectSubType, numCurrentColumn, numCurrentRow, numTotalColumns, self.currentSpeakerGroup]:
+                print("GOOD:" + str(I))
+            else:
+                print("BAD:" + str(I))
+                print(states[I])
+                print([self.spr, inSection, self.section, inObject, endObject, principalWhere, inObjectSubType, numCurrentColumn, numCurrentRow, numTotalColumns, self.currentSpeakerGroup])
+                break
         return self.batchDoc
 
     def getStyle(self, attr):
@@ -954,14 +1058,20 @@ class Source:
             htmlStyle += "color: rgb(" + json.dumps(attr[self.HTMLStyles.FOREGROUND])[1:-1] + "); "
         if self.HTMLStyles.BACKGROUND in attr:
             htmlStyle += "background-color: rgb(" + json.dumps(attr[self.HTMLStyles.BACKGROUND])[1:-1] + "); "
+        if self.HTMLStyles.SPACEBEFORE in attr:
+            htmlStyle += "margin-top: " + str(attr[self.HTMLStyles.SPACEBEFORE]) + "px; "
+        if self.HTMLStyles.SPACEAFTER in attr:
+            htmlStyle += "margin-bottom: " + str(attr[self.HTMLStyles.SPACEAFTER]) + "px; "
         return htmlStyle
             
-    def printHTMLPerElement(self, e, where):
+    def printHTMLPerElement(self, e, htmlElementPosition):
         #e(s, attrs, where, index2, index3, sourceMapType)
         html = {}
-        html['mouseover'] = where
+        html['mouseover'] = str(htmlElementPosition)  
         if e[0] == "\n":
-            html['style'] = "display:block"
+            html['style'] = "display:block; margin-bottom: 10px; "
+        elif e[0] == "\nbr":
+            html['style'] = "display:block; "
         else:
             html['style'] = self.getStyle(e[1])
             html['text'] = e[0]
@@ -971,18 +1081,31 @@ class Source:
         where = fromWhere
         linePosition = 0
         height = 0
-        lineHeight = 12
+        lineHeight = 16
+        letterWidth = 7
         htmlElements = []
+        numPages = 2 # before they have to scroll!
+        maxHeight = maxHeight * numPages 
         while height < maxHeight and where < len(self.batchDoc):
             # print(height,maxHeight,where,len(self.batchDoc))
             htmlElement = self.printHTMLPerElement(self.batchDoc[where], where)
             htmlElements.append(htmlElement)
-            length = 0 if 'text' not in htmlElement else len(htmlElement['text'])
+            length = 0 if 'text' not in htmlElement else len(htmlElement['text'])*letterWidth
             if length + linePosition > width:
                 height += lineHeight
                 linePosition = length
+                # if 'text' in htmlElement:
+                #    print("\n" + htmlElement['text'], end='')
             else:
                 linePosition += length
+                # if 'text' in htmlElement:
+                #    print(htmlElement['text'], end='')
+            if "display:block" in htmlElement['style']:
+                #print("\n")
+                #if 'text' in htmlElement:
+                #    print(htmlElement['text'], end='')
+                linePosition=0
+                height += lineHeight + 10
             where += 1
         return htmlElements    
     
@@ -1004,5 +1127,182 @@ class Source:
                     css_output += "background-color: rgb(" + json.dumps(attrsList[attr][a])[1:-1] + ");\n"
                 if a == self.HTMLStyles.FONTSIZE:
                     css_output += "font-size: " + str(attrsList[attr][a]) + "px;\n"
+                if a == self.HTMLStyles.SPACEBEFORE:
+                    css_output += "margin-top: " + str(attrsList[attr][a]) + "px;\n"
+                if a == self.HTMLStyles.SPACEAFTER:
+                    css_output += "margin-bottom: " + str(attrsList[attr][a]) + "px;\n"
             css_output += "}\n"
         return css_output
+    
+    def getInfoPanel(self, htmlElementPosition):
+        where = self.HTMLElementIdToSource[htmlElementPosition]
+        where2 = self.batchDoc[htmlElementPosition][2]
+        where3 = self.batchDoc[htmlElementPosition][3]
+        where4 = self.batchDoc[htmlElementPosition][4]
+        sourceMapType = self.batchDoc[htmlElementPosition][5]
+        wordInfo = ""
+        toolTip = ""
+        roleInfo = ""
+        relationsInfo = ""
+        if sourceMapType == self.SourceMapType.wordType:
+            wordInfo = str(where) + ": " + self.m[where].getWinnerForms() + self.m[where].word
+            toolTip = self.m[where].word
+            roleInfo = self.m[where].roleString()
+            relationsInfo = self.m[where].relations()
+            if len(self.m[where].baseVerb) > 0:
+                roleInfo = self.vn.getClassNames2(self.m[where].baseVerb)
+                verbSenseStr = self.getVerbSenseString(self.m[where].quoteForwardLink);
+                wordInfo = str(where) + ": " + self.m[where].word + "(" + verbSenseStr + ")"
+        if sourceMapType == self.SourceMapType.relType:
+            r = Source.relations[where2];
+            if (r.beforePastHappening):
+                wordInfo.setText("beforePast");
+            if (r.futureHappening):
+                wordInfo.setText("future");
+            if (r.futureInPastHappening):
+                wordInfo.setText("futureInPast");
+            if (r.futureLocation):
+                wordInfo.setText("futureLocation");
+            if (r.pastHappening):
+                wordInfo.setText("past");
+            if (r.presentHappening):
+                wordInfo.setText("present");
+            firstMultiple = where2 - 1
+            while firstMultiple >= 0 and Source.relations[firstMultiple].where == r.where:
+                firstMultiple -= 1
+            firstMultiple += 1
+            lastMultiple = firstMultiple + 1
+            while lastMultiple < Source.relations.len() and Source.relations[lastMultiple].where == r.where:
+                lastMultiple += 1
+            lastMultiple -= 1
+            relationsInfo = ("M" if firstMultiple != lastMultiple else "") + ("TT" if r.timeTransition else "") + r.description
+            roleInfo = TimeInfo.toString(self, r)
+        if sourceMapType == self.SourceMapType.relType2:
+            # w, self.setAttributes(self.relations, originalSPRI), where, spr, -1, self.SourceMapType.relType2
+            wordInfo = str(where) + ": space relation #=" + str(where3) 
+        if sourceMapType == self.SourceMapType.transitionSpeakerGroupType or \
+            sourceMapType == self.SourceMapType.speakerGroupType:
+            wordInfo = str(where) + ": speakerGroup #=" + str(where2) 
+            if where3>=0:
+                wordInfo += " embedded speakerGroup #=" + str(where3)
+            if where4>=0:
+                wordInfo += " object=" + self.objectNumString(where4, False, False)
+        if sourceMapType == self.SourceMapType.QSWordType:
+            wordInfo = str(where) + ": QUOTED STRING"
+        if sourceMapType == self.SourceMapType.ESType:
+            wordInfo = str(where) + ": EMBEDDED STORY"
+        if sourceMapType == self.SourceMapType.URWordType:
+            wordInfo = str(where) + ": UNRESOLVED"
+        if sourceMapType == self.SourceMapType.headerType:
+            wordInfo = str(where) + ": section#=" + str(where3) + " " + str(sourceMapType).split('.')[1]
+        if  sourceMapType == self.SourceMapType.matchingSpeakerType or \
+            sourceMapType == self.SourceMapType.matchingType or \
+            sourceMapType == self.SourceMapType.audienceMatchingType or \
+            sourceMapType == self.SourceMapType.matchingObjectType:
+            if where3 == -1:
+                wordInfo = str(where) + ": " + str(sourceMapType).split('.')[1]
+            else:
+                wordInfo = str(where) + ": matching object #" + str(where4) + "=" + self.objectNumString(where3, False, False) + " " + str(sourceMapType).split('.')[1]
+
+        if sourceMapType == self.SourceMapType.beType:
+            beObject = self.m[where].object;
+            if self.m[where].objectMatches.len() == 1:
+                beObject = self.m[where].objectMatches[0].object;
+            wordInfo = where + ":" + self.objectString(beObject, False, False)
+            relationsInfo = "acquired through BE relation:"
+            if object >= 0:
+                for I in self.objects[object].associatedAdjectives:
+                    roleInfo += I;
+        if sourceMapType == self.SourceMapType.possessionType:
+            posObject = self.m[where].object;
+            if self.m[where].objectMatches.len() == 1:
+                posObject = self.m[where].objectMatches[0].object;
+            wordInfo = where + ":" + self.objectString(posObject, False, False)
+            relationsInfo = "HAS-A relation:"
+            if posObject >= 0:
+                for I in self.objects[posObject].possessions:
+                    roleInfo += I;
+        return wordInfo, roleInfo, relationsInfo, toolTip 
+
+    def getWordInfo(self,fromIndex, toIndex, pageNumber, pageSize):
+        fromIndex = self.HTMLElementIdToSource[int(fromIndex)]
+        toIndex = self.HTMLElementIdToSource[int(toIndex)]
+        wordInfo = []
+        for I in range(fromIndex,toIndex + 1):
+            word = str(I) + ":" + self.m[I].getWinnerForms() + self.m[I].word
+            roleVerbClass = self.m[I].roleString()
+            relations = self.m[I].relations()
+            objectInfo = self.objectNumString(self.m[I].object, False, False)
+            matchingObjects = self.objectsString(self.m[I].objectMatches, False, True)
+            # locations are accumulated from processing source - not read from file
+            # if self.m[I].object >= 0 and self.objects[self.m[I].object].locations != None:
+            #    locations = self.objects[self.m[I].object].locations
+            flags = self.m[I].printFlags()
+            if len(self.m[I].baseVerb) > 0 and len(roleVerbClass) == 0:
+                flags = self.vn.getClassNames(self.m[I].baseVerb)
+            wordInfo.append({ 'word': word, 'roleVerbClass':roleVerbClass, 'relations': relations, 'objectInfo':objectInfo, 'matchingObjects':matchingObjects, 'flags':flags})
+        return wordInfo
+
+    def getTimelineSegments(self, pageNumber, pageSize):
+        segments = []
+        lastParent = None
+        timelineIndex = 0
+        for tl in self.timelineSegments:
+            s = "[" + str(tl.begin) + "-" + str(tl.end) + "]";
+            speakers = set()
+            if tl.begin == self.speakerGroups[tl.speakerGroup].begin:
+                tsg = tl.speakerGroup
+                while tsg < len(self.speakerGroups) and self.speakerGroups[tsg].end < tl.end:
+                    for mo in self.speakerGroups[tsg].speakers: 
+                        if not mo in speakers:
+                            speakers.add(mo)
+                            s += self.objectNumString(mo, True, False).strip() + ","
+                    tsg += 1
+            else:
+                for esg in self.speakerGroups[tl.speakerGroup].embeddedSpeakerGroups:
+                    if tl.begin == esg.begin:
+                        for mo in esg.speakers:
+                            if not mo in speakers:
+                                speakers.add(mo);
+                                s += self.objectNumString(mo, True, False).strip() + ","
+                        wm = self.m[tl.begin]
+                        if (wm.flags & WordMatch.flagEmbeddedStoryResolveSpeakers) != 0:
+                            if (wm.flags & WordMatch.flagFirstEmbeddedStory) != 0:
+                                for mo in wm.objectMatches:
+                                    if not mo.object in speakers:
+                                        speakers.add(mo.object);
+                                        s += self.objectNumString(mo.object, True, False).strip() + ","
+                            if (wm.flags & WordMatch.flagSecondEmbeddedStory) != 0:
+                                for mo in wm.audienceObjectMatches:
+                                    if not mo.object in speakers:
+                                        speakers.add(mo.object);
+                                        s += self.objectNumString(mo.object, True, False).strip() + ","
+                        break
+            if s[-1] == ",":
+                s = s[:-1]
+            segment = {}
+            segment['speakers'] = s
+            segment['timeline'] = timelineIndex
+            segment['children'] = []
+            if tl.parentTimeline == -1 or lastParent == None:
+                lastParent = segment
+                segments.append(segment)
+            else:
+                lastParent['children'].append(segment);
+            timelineIndex += 1
+        return segments
+    
+    def getRelationsInTimeline(self, timelineIndex):
+        relations = []
+        for tl in self.timelineSegment[timelineIndex].timeTransitions:
+            if self.relations[tl].timeTransition:
+                color = (0x00, 0x00, 0xFF)
+            elif self.relations[tl].nonPresentTimeTransition:
+                color = (0x20, 0x20, 0xDF)
+            else:
+                color = (0x20, 0x20, 0x20)
+            s = self.printFullRelationString(tl, -1) \
+                    + TimeInfo.determineTimeProgression(self, self.relations[tl])
+            relations.append((s,color))
+        return relations
+

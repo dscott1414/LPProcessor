@@ -118,20 +118,6 @@ import java.util.Vector;
 		 return ws[capacityFlags];
 		}
 
-		static boolean like(String str1,String str2)
-		{
-			int min=Math.min(str1.length(),str2.length());
-			return str1.substring(0, min).equals(str2.substring(0,min));
-		}
-
-		static boolean isVerbClass(Source source,int where,String verbClass)
-		{
-			Vector <VerbMember> vms=source.getVerbClasses(where);
-			if (vms!=null)
-				for (VerbMember vm:vms)
-					if (like(vm.name,verbClass)) return true;
-			return false;
-		}
 		static String toString(Source source,Relation r)
 		{
 			String timeInfo="      [";
@@ -164,7 +150,7 @@ import java.util.Vector;
 			if (r.presentHappening && r.whereVerb>=0)
 			{
 				tp=((source.m[r.whereVerb].quoteForwardLink&Source.VT_EXTENDED)==Source.VT_EXTENDED) ? 4 : 0;
-				if (isVerbClass(source,r.whereVerb,"am"))
+				if (source.isVerbClass(r.whereVerb,"am"))
 				{
 					if (tp==4 && r.relationType==Source.stCONTACT)
 						tp=0;

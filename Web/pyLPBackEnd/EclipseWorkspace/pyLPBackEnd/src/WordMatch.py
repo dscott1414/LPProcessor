@@ -128,13 +128,13 @@ class WordMatch:
         self.principalWhereAdjectivalPosition = rs.readInteger()
         self.originalObject = rs.readInteger()
         count = rs.readInteger()
-        self.objectMatches = {}
+        self.objectMatches = []
         for I in range(count):
-            self.objectMatches[I] = COM(rs)
+            self.objectMatches.append(COM(rs))
         count = rs.readInteger()
-        self.audienceObjectMatches = {}
+        self.audienceObjectMatches = []
         for I in range(count):
-            self.audienceObjectMatches[I] = COM(rs)
+            self.audienceObjectMatches.append(COM(rs))
         self.quoteForwardLink = rs.readInteger()
         self.endQuote = rs.readInteger()
         self.nextQuote = rs.readInteger()
@@ -237,7 +237,7 @@ class WordMatch:
         if (self.getWordtFI()==None or self.getWordtFI().forms==None):
             return -1
         if ((self.flags & self.flagAddProperNoun) != 0 and form == SourceEnums.PROPER_NOUN_FORM_NUM):  
-            picked = self.getWordtFI().forms.length
+            picked = len(self.getWordtFI().forms)
         elif ((self.flags & self.flagOnlyConsiderProperNounForms) != 0):
             if (form != SourceEnums.PROPER_NOUN_FORM_NUM and not Form.forms[form].properNounSubClass):  
                 return -1
@@ -268,27 +268,27 @@ class WordMatch:
         I = 0
         for r in self.r_c:
             if ((self.objectRole & self.roles[I]) != 0):
-                role += r + ","
+                role += r + ", "
             I += 1
-        if (role.length()>0):
-            role=role[:-1]
+        if len(role) > 1:
+            role=role[:-2]
         return role
 
     def relations(self):
         retMessage = ""
-        if (self.relSubject!=-1): retMessage+="rSubj=" + self.relSubject
-        if (self.relVerb!=-1): retMessage+=" rVerb=" + self.relVerb
-        if (self.relObject!=-1): retMessage+=" rObj=" + self.relObject
-        if (self.relPrep!=-1): retMessage+=" rPrep=" + self.relPrep
-        if (self.relInternalVerb!=-1): retMessage+=" rInternalVerb=" + self.relInternalVerb
-        if (self.relNextObject!=-1): retMessage+=" rNextObject=" + self.relNextObject
-        if (self.nextCompoundPartObject!=-1): retMessage+=" nextCompoundPartObject=" + self.nextCompoundPartObject
-        if (self.previousCompoundPartObject!=-1): retMessage+=" previousCompoundPartObject=" + self.previousCompoundPartObject
-        if (self.relInternalObject!=-1): retMessage+=" rInternalObject=" + self.relInternalObject
-        if (self.nextQuote!=-1): retMessage+=" nextQuote=" + self.nextQuote
-        if (self.previousQuote!=-1): retMessage+=" previousQuote=" + self.previousQuote
-        if (retMessage.length()>0 and retMessage.charAt(0)==' '):
-            retMessage=retMessage[1:]
+        if (self.relSubject!=-1): retMessage+="rSubj=" + str(self.relSubject)
+        if (self.relVerb!=-1): retMessage+=" rVerb=" + str(self.relVerb)
+        if (self.relObject!=-1): retMessage+=" rObj=" + str(self.relObject)
+        if (self.relPrep!=-1): retMessage+=" rPrep=" + str(self.relPrep)
+        if (self.relInternalVerb!=-1): retMessage+=" rInternalVerb=" + str(self.relInternalVerb)
+        if (self.relNextObject!=-1): retMessage+=" rNextObject=" + str(self.relNextObject)
+        if (self.nextCompoundPartObject!=-1): retMessage+=" nextCompoundPartObject=" + str(self.nextCompoundPartObject)
+        if (self.previousCompoundPartObject!=-1): retMessage+=" previousCompoundPartObject=" + str(self.previousCompoundPartObject)
+        if (self.relInternalObject!=-1): retMessage+=" rInternalObject=" + str(self.relInternalObject)
+        if (self.nextQuote!=-1): retMessage+=" nextQuote=" + str(self.nextQuote)
+        if (self.previousQuote!=-1): retMessage+=" previousQuote=" + str(self.previousQuote)
+        if (len(retMessage) > 0 and retMessage[0] == ' '):
+            retMessage = retMessage[1:]
         return retMessage
 
     def getWinnerForms(self):
@@ -297,7 +297,7 @@ class WordMatch:
             if (self.forms.isSet(I)):
                 if (self.queryWinnerForm(I)>=0): sForms+="*"
                 sForms+=Form.forms[I].shortName+" "
-        return sForms.trim()+") "
+        return sForms.strip()+") "
     
     def printFlags(self):
         flagStr=""

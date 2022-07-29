@@ -19,6 +19,8 @@ export class SearchBarComponent implements OnInit {
   authorSelected: string = "";
   titleSearchString: string = "";
   titleSelected: string = "";
+  public timeoutAutoCompleteTitleId: any;
+  public timeoutAutoCompleteAuthorId: any;
 
   @ViewChild('autocompleteInputAuthor') autocompleteInputAuthor!: ElementRef;
   @ViewChild('autocompleteInputTitle') autocompleteInputTitle!: ElementRef;
@@ -39,32 +41,34 @@ export class SearchBarComponent implements OnInit {
 
   private autoCompleteTitle(input:string) {
     this.titleSearchString = input;
-    this.dataService.getFilteredSourcesList(this.authorSearchString,this.titleSearchString).subscribe(sources => {
-      console.log("autoCompleteListTitles=")
-      console.log(sources['response']);
-      this.autoCompleteListTitles = sources['response']
-    });
+    clearTimeout(this.timeoutAutoCompleteTitleId);
+    this.timeoutAutoCompleteTitleId = setTimeout(() => {
+      this.dataService.getFilteredSourcesList(this.authorSearchString,this.titleSearchString).subscribe(sources => {
+        console.log("autoCompleteListTitles")
+        this.autoCompleteListTitles = sources['response']
+      });
+    }, 300);
   }
 
   private autoCompleteAuthor(input:string) {
     this.authorSearchString = input;
-    this.dataService.getFilteredAuthorsList(this.authorSearchString,this.titleSearchString).subscribe(authors => {
-      console.log("autoCompleteListAuthors=")
-      console.log(authors['response']);
-      this.autoCompleteListAuthors = authors['response'];
-    });
+    clearTimeout(this.timeoutAutoCompleteAuthorId);
+    this.timeoutAutoCompleteAuthorId = setTimeout(() => {
+      this.dataService.getFilteredAuthorsList(this.authorSearchString, this.titleSearchString).subscribe(authors => {
+        console.log("autoCompleteListAuthors")
+        this.autoCompleteListAuthors = authors['response'];
+      });
+    }, 300);
   }
 
   // after you clicked an autosuggest option, this function will show the field you want to show in input
   selectValueTitle(selected: Source) {
-    console.log(selected);
     let k = selected ? selected.title : selected;
     this.titleSelected = k;
     return k;
   }
 
   selectValueAuthor(selected: any) {
-    console.log(selected);
     let k = selected ? selected.author : selected;
     this.authorSelected = k;
     return k;
