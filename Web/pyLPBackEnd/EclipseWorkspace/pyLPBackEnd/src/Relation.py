@@ -1,30 +1,15 @@
 from TimeInfo import TimeInfo
+import struct 
 
 class Relation:
 
     def __init__(self, rs):
-        self.where = rs.readInteger()
-        self.o = rs.readInteger()
-        self.whereControllingEntity = rs.readInteger()
-        self.whereSubject = rs.readInteger()
-        self.whereVerb = rs.readInteger()
-        self.wherePrep = rs.readInteger()
-        self.whereObject = rs.readInteger()
-        self.wherePrepObject = rs.readInteger()
-        self.whereSecondaryVerb = rs.readInteger()
-        self.whereSecondaryObject = rs.readInteger()
-        self.whereSecondaryPrep = rs.readInteger()
-        self.whereNextSecondaryObject = rs.readInteger()
-        self.movingRelativeTo = rs.readInteger()
-        self.relationType = rs.readInteger()
-        self.objectSubType = rs.readInteger()
-        self.prepSubType = rs.readInteger()
-        self.timeProgression = rs.readInteger()
-        self.questionType = rs.readLong()
-        self.whereQuestionType = rs.readInteger()
-        self.sentenceNum = rs.readInteger()
-        # flags
-        flags = rs.readLong()
+        self.where, self.o, self.whereControllingEntity, self.whereSubject, self.whereVerb, self.wherePrep, \
+        self.whereObject, self.wherePrepObject, self.whereSecondaryVerb, self.whereSecondaryObject, self.whereSecondaryPrep, \
+        self.whereNextSecondaryObject, self.movingRelativeTo, self.relationType, self.objectSubType, \
+        self.prepSubType, self.timeProgression, self.questionType, self.whereQuestionType, self.sentenceNum, flags, \
+        self.lastOpeningPrimaryQuote, self.duplicateTimeTransitionFromWhere = struct.unpack('<17iq2iqii', rs.f.read(100))
+
         self.changeStateAdverb=(flags & 1) == 1; flags>>=1;
         self.skip=(flags & 1) == 1; flags>>=1;
         self.physicalRelation=(flags & 1) == 1; flags>>=1;
@@ -50,12 +35,11 @@ class Relation:
         self.establishingLocation = (flags & 1) == 1;  flags >>= 1;
         self.genderedLocationRelation = (flags & 1) == 1;    flags >>= 1;
         self.genderedEntityMove = (flags & 1) == 1;    
-        self.lastOpeningPrimaryQuote = rs.readInteger();
-        self.duplicateTimeTransitionFromWhere = rs.readInteger();
-        self.presType=rs.readString();
-        self.description=rs.readString();
-        self.nextSPR=rs.readInteger();
-        count = rs.readInteger();
-        self.timeInfo = {}
-        for I in range(count):
-            self.timeInfo[I] = TimeInfo(rs);
+
+        self.presType = rs.read_string();
+        self.description = rs.read_string();
+        self.nextSPR = rs.read_integer();
+        count = rs.read_integer();
+        self.timeInfo = []
+        for _ in range(count):
+            self.timeInfo.append(TimeInfo(rs))

@@ -30,13 +30,13 @@ class CName:
         return message
 
     def __init__(self,rs):
-        self.nickName = rs.readInteger()
-        self.hon = rs.readString()
-        self.hon2 = rs.readString()
-        self.hon3 = rs.readString()
-        self.first = rs.readString()
-        self.middle = rs.readString()
-        self.middle2 = rs.readString()
-        self.last = rs.readString()
-        self.suffix = rs.readString()
-        self.any = rs.readString()
+        self.nickName = rs.read_integer()
+        self.hon = rs.read_string()
+        self.hon2 = rs.read_string()
+        self.hon3 = rs.read_string()
+        self.first = rs.read_string()
+        self.middle = rs.read_string()
+        self.middle2 = rs.read_string()
+        self.last = rs.read_string()
+        self.suffix = rs.read_string()
+        self.any = rs.read_string()

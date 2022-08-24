@@ -1,5 +1,5 @@
 export interface SourceElement {
-  mouseover: number,
+  mouseover: string,
   style: string,
   text: string
 }

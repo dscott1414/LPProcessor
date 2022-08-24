@@ -2,6 +2,7 @@ from WordClass import WordClass
 from TFI import TFI
 import json
 from json import JSONEncoder
+import struct
 
 class TimeInfo:
     cMillenium = 0
@@ -36,8 +37,8 @@ class TimeInfo:
     cNamedHoliday = 29
     cUnspecified = 30
 
-    def relativeTime(self):
-        if (self.absoluteTime()):
+    def relative_time(self):
+        if (self.absolute_time()):
             return False
         if (self.absSeason>=0 or self.absMonth>=0 or self.absDayOfWeek>=0 or
                 self.absDayOfMonth>=0 or    self.absHour>=0 or    self.absMinute>=0 or    self.absHoliday>=0):
@@ -46,12 +47,12 @@ class TimeInfo:
             return True
         return False
         
-    def absoluteTime(self):
+    def absolute_time(self):
         if self.absYear>=0:
             return True
         return False
         
-    def timeString(self,timeWordFlags):
+    def time_string(self,timeWordFlags):
         ws = { "SEQ","before","after","present","throughout","recurring","at","midway",
                 "in","on","interval","start","stop","resume","finish","range","meta","unit"}
         ws2 = {    " time"," date"," vague"," length"," cardtime" }
@@ -64,7 +65,7 @@ class TimeInfo:
                 s += ws2[I-5]
         return s
 
-    def capacityString(self,capacityFlags):
+    def capacity_string(self,capacityFlags):
         ws = { "Millenium","Century","Decade","Year","Semester","Season","Quarter","Month","Week","Day",
                 "Hour","Minute","Second","Moment",
                 "Morning","Noon","Afternoon","Evening","Dusk","Night","Midnight","Dawn",
@@ -79,30 +80,30 @@ class TimeInfo:
         minLength = min(len(str1),len(str2))
         return str1[:minLength] == str2[:minLength]
 
-    def isVerbClass(self, source, where, verbClass):
-        vms = source.getVerbClasses(where)
+    def is_verb_class(self, source, where, verbClass):
+        vms = source.get_verb_classes(where)
         if vms != None:
             for vm in vms:
                 if self.like(vm.name,verbClass):
                     return True
         return False
 
-    def toString(self,source,r):
+    def to_string(self,source,r):
         timeInfo="      [";
-        timeInfo += self.determineTimeProgression(source,r)+"] ";
+        timeInfo += self.determine_time_progression(source,r)+"] ";
         for I in range(r.timeInfo.length):
-            timeInfo += r.timeInfo[I].toString(source);
+            timeInfo += r.timeInfo[I].to_string(source);
         return timeInfo;
         
-    def timeProgressionString(self, tp):
+    def time_progression_string(self, tp):
         adv = [ "advances", "not advances - state", "new time", "new relative time", "extended - not advancing", "past", "future", "recurring"]
         return adv[tp]
         
-    def determineTimeProgression(self,source,r):
+    def determine_time_progression(self,source,r):
         tp=0;
         if (r.presentHappening and r.whereVerb>=0):
             tp=4 if ((source.m[r.whereVerb].quoteForwardLink&source.VT_EXTENDED)==source.VT_EXTENDED) else 0;
-            if (self.isVerbClass(source,r.whereVerb,"am")):
+            if (self.is_verb_class(source,r.whereVerb,"am")):
                 if (tp==4 and r.relationType==source.stCONTACT):
                     tp=0;
                 else:
@@ -113,9 +114,9 @@ class TimeInfo:
             if (r.establishingLocation):
                 tp=2;
             for I in range(r.timeInfo.length):
-                if (r.timeInfo[I].relativeTime() and tp!=2):
+                if (r.timeInfo[I].relative_time() and tp!=2):
                     tp=3;
-                elif (r.timeInfo[I].absoluteTime()):
+                elif (r.timeInfo[I].absolute_time()):
                     tp=2;
         if (r.beforePastHappening or r.pastHappening):
             tp=5;
@@ -132,9 +133,9 @@ class TimeInfo:
         # 5 - an action that describes something that happened or may have happened in the past ; not advancing time / He had wandered down that road many times
         # 6 - an action that describes something that may or will happen in the future ; not advancing time / She will pay for this! / I might run for office
         # 7 - an action that describes recurring action ; not advancing the current time flow / I always visit her / I drive the van every Monday / She plays soccer twice a week.
-        return self.timeProgressionString(tp)
+        return self.time_progression_string(tp)
 
-    def toString2(self,source):
+    def to_string_2(self,source):
             timeInfo="";
             timeInfo += self.tWhere+":";
             if (self.timeModifier>0):
@@ -150,8 +151,8 @@ class TimeInfo:
             if (self.timeSPTAnchor>0):
                 timeInfo += "SPT="+self.timeSPTAnchor+" ";
             if (self.timeRelationType>0):
-                timeInfo += "RelType="+self.timeString(self.timeRelationType)+" ";
-            tc=self.capacityString(self.timeCapacity);
+                timeInfo += "RelType="+self.time_string(self.timeRelationType)+" ";
+            tc=self.capacity_string(self.timeCapacity);
             if (tc.contains("Named") and self.timeRTAnchor>=0):
                 timeInfo += "Capacity="+tc.replace("Named", "")+"["+source.m[self.timeRTAnchor].word+"] ";
             elif (self.timeCapacity>0 and not tc.equals("Unspecified")):
@@ -202,41 +203,13 @@ class TimeInfo:
             return timeInfo;
 
     def __init__(self,rs):
-        self.tWhere = rs.readInteger();
-        self.timePreviousLink = rs.readInteger();
-        self.timeSPTAnchor = rs.readInteger();
-        self.timeETAnchor = rs.readInteger();
-        self.timeRTAnchor = rs.readInteger();
-        self.timeRelationType = rs.readInteger();
-        self.timeModifier = rs.readInteger();
-        self.timeModifier2 = rs.readInteger();
-        self.absMetaRelation = rs.readInteger();
-        self.timeCapacity = rs.readInteger();
-        self.absYear = rs.readShort();
-        self.absSeason = rs.readByte();
-        self.absDateSpec = rs.readByte(); # A.D. B.C.
-        self.absMonth = rs.readByte();
-        self.absDayOfWeek = rs.readByte();
-        self.absDayOfMonth = rs.readByte();
-        self.timeOfDay = rs.readByte(); # morning/evening/noon etc
-        self.absHour = rs.readByte();
-        self.absMinute = rs.readByte();
-        self.absSecond = rs.readByte();
-        self.absTimeSpec = rs.readByte(); # A.M. P.M.
-        self.timeFrequency = rs.readByte(); # daily
-        self.metaDescriptive = rs.readByte()!=0;
-        self.absHoliday= rs.readShort();
-        self.absMoment = rs.readByte();
-        self.absNamedDay = rs.readByte();
-        self.absNamedHoliday = rs.readByte();
-        self.absNamedMonth = rs.readByte();
-        self.absNamedSeason = rs.readByte();
-        self.absToday = rs.readByte();
-        self.absTomorrow = rs.readByte();
-        self.absTonight = rs.readByte();
-        self.absUnspecified = rs.readByte();
-        self.absYesterday = rs.readByte();
-        
+        self.tWhere, self.timePreviousLink, self.timeSPTAnchor, self.timeETAnchor, self.timeRTAnchor, \
+        self.timeRelationType, self.timeModifier, self.timeModifier2, self.absMetaRelation, self.timeCapacity, \
+        self.absYear, self.absSeason, self.absDateSpec, self.absMonth, self.absDayOfWeek, \
+        self.absDayOfMonth, self.timeOfDay, self.absHour, self.absMinute, self.absSecond, \
+        self.absTimeSpec, self.timeFrequency, self.metaDescriptive, self.absHoliday, self.absMoment, \
+        self.absNamedDay, self.absNamedHoliday, self.absNamedMonth, self.absNamedSeason, self.absToday, \
+        self.absTomorrow, self.absTonight, self.absUnspecified, self.absYesterday = struct.unpack('<10ih12bh10b', rs.f.read(66))        
         
 class TimeInfoEncoder(JSONEncoder):
         def default(self, o):

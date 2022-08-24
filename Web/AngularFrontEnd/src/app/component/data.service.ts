@@ -1,19 +1,20 @@
-import { Injectable } from '@angular/core';
-import { Source } from './source';
-import { Observable, throwError, map } from 'rxjs';
-import { catchError, retry, tap } from 'rxjs/operators';
-import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
-import { WordInfo } from './word-info';
+import {Injectable} from '@angular/core';
+import {Source} from './source';
+import {Observable, throwError, map} from 'rxjs';
+import {catchError, retry, tap} from 'rxjs/operators';
+import {HttpClient, HttpHeaders, HttpParams} from '@angular/common/http';
+import {WordInfo} from './word-info';
 
 @Injectable({
   providedIn: 'root'
 })
 export class DataService {
 
-  searchOption: Source = {sourceId: -1, title: "", author: ""};
+  public searchOption: Source = {sourceId: -1, title: "", author: ""};
   configUrl = 'assets/config.json';
   public postsData: Source[] = [];
   public loaded = false;
+
   constructor(
     private http: HttpClient
   ) {
@@ -46,7 +47,7 @@ export class DataService {
     return this.http.request<string[]>('GET', 'api/generateSourceElements', {responseType: 'json'});
   }
 
-  loadElements(width:number, height:number, fromWhere:number): Observable<any> {
+  loadElements(width: number, height: number, fromWhere: string): Observable<any> {
     const elementParams = new HttpParams()
       .set('width', width)
       .set('height', height)
@@ -54,7 +55,7 @@ export class DataService {
     return this.http.request<string[]>('GET', 'api/loadElements', {responseType: 'json', params: elementParams});
   }
 
-  loadInfoPanel(where:number): Observable<any> {
+  loadInfoPanel(where: number): Observable<any> {
     const elementParams = new HttpParams()
       .set('where', where);
     return this.http.request<string[]>('GET', 'api/loadInfoPanel', {responseType: 'json', params: elementParams});
@@ -72,41 +73,63 @@ export class DataService {
     return this.http.request('GET', 'api/login', {responseType: 'json'});
   }
 
-  setPreference(which: number, value:boolean): Observable<any> {
-    return this.http.post('api/setPreference', { "type": which, "value": value});
+  setPreference(which: number, value: boolean): Observable<any> {
+    return this.http.post('api/setPreference', {"type": which, "value": value});
   }
 
   findWordInfo(
-    beginId:number, endId:number, pageNumber = 0, pageSize = 3):  Observable<WordInfo[]> {
+    beginId: number, endId: number, pageNumber = 0, pageSize = 3): Observable<WordInfo[]> {
 
-    return this.http.get<any>('/api/wordInfo', { responseType: 'json',
+    return this.http.get<any>('/api/wordInfo', {
+      responseType: 'json',
       params: new HttpParams()
         .set('beginId', beginId.toString())
         .set('endId', endId.toString())
         .set('pageNumber', pageNumber.toString())
         .set('pageSize', pageSize.toString())
     }).pipe(
-      map(res =>  res["response"])
+      map(res => res["response"])
     );
   }
 
   loadTimelines(pageNumber: number, pageSize: number) {
-    return this.http.get<any>('/api/timelineSegments', { responseType: 'json',
+    return this.http.get<any>('/api/timelineSegments', {
+      responseType: 'json',
       params: new HttpParams()
         .set('pageNumber', pageNumber.toString())
         .set('pageSize', pageSize.toString())
     }).pipe(
-      map(res =>  res["response"])
+      map(res => res["response"])
     );
   }
 
-  HTMLElementIdToSource(elementId: number) {
-    return this.http.get<any>('/api/HTMLElementIdToSource', { responseType: 'json',
+  getSearchStringsList(sourceSearchString: string): Observable<Map<number, string>> {
+    return this.http.get<any>('/api/searchStringList', {
+      responseType: 'json',
       params: new HttpParams()
-        .set('elementId', elementId.toString())
+        .set('sourceSearchString', sourceSearchString)
     }).pipe(
-      map(res =>  res["response"])
+      map(res => res["response"])
     );
   }
 
+  findParagraphStart(somewhereInParagraph: string): Observable<string> {
+    return this.http.get<any>('/api/findParagraphStart', {
+      responseType: 'json',
+      params: new HttpParams()
+        .set('somewhereInParagraph', somewhereInParagraph)
+    }).pipe(
+      map(res => res["response"])
+    );
+  }
+
+  getElementType(elementId: string): Observable<number> {
+    return this.http.get<any>('/api/getElementType', {
+      responseType: 'json',
+      params: new HttpParams()
+        .set('elementId', elementId)
+    }).pipe(
+      map(res => res["response"])
+    );
+  }
 }

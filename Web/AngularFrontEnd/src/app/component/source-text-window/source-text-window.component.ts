@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnInit, HostListener, Renderer2 } from '@angular/core';
+import {Component, ElementRef, OnInit, HostListener, Renderer2, Output, EventEmitter} from '@angular/core';
 import { DataService } from '../data.service';
 import { QueryList, ViewChild, ViewChildren, ViewEncapsulation} from '@angular/core';
 import { MatButton } from '@angular/material/button';
@@ -10,13 +10,36 @@ import {NestedTreeControl} from '@angular/cdk/tree';
 import {TimelineNode} from '../timelineNode';
 import {TimelineDataSource} from "../timeline.datasource";
 import {SourceElement} from "../source-element"
+import {UntypedFormControl} from "@angular/forms";
+import { TemplateRef } from '@angular/core';
+import {MatDialog, MatDialogConfig, MatDialogRef, MAT_DIALOG_DATA} from '@angular/material/dialog';
+import { SourceElementDialogComponent } from '../source-element-dialog/source-element-dialog.component';
+
+enum sourceElementTypes {
+  relType = 1,
+  relType2 = 2,
+  speakerGroupType = 3,
+  transitionSpeakerGroupType = 4,
+  wordType = 5,
+  QSWordType = 6,
+  ESType = 7,
+  URWordType = 8,
+  matchingSpeakerType = 9,
+  matchingType = 10,
+  audienceMatchingType = 11,
+  matchingObjectType = 12,
+  headerType = 13,
+  beType = 14,
+  possessionType = 15,
+  tableType = 16,
+  agentType = 17
+}
 
 @Component({
   selector: 'app-source-text-window',
   templateUrl: './source-text-window.component.html',
   styleUrls: ['./source-text-window.component.css']
 })
-
 export class SourceTextWindowComponent implements OnInit {
   public displayedColumns: string[] = ['word', 'roleVerbClass', 'relations', 'objectInfo', 'matchingObjects', 'flags'];
   public dataSource: WordInfoDataSource;
@@ -36,18 +59,32 @@ export class SourceTextWindowComponent implements OnInit {
   public relationsInfo: string = "";
   public toolTip: string = "";
 
+  public searchControl = new UntypedFormControl();
+  public sourceSearchString: string = "";
+  public searchResults: Map<number, string> = new Map();
+  public searchSourceSelected: string = "";
+
   private timeOutLoadWordInfoId: any;
   private timeoutResizeObserverId: any;
   private timeoutSourceRangeId: any;
+  private timeoutInfo: any;
+  private timeoutScrollEventListener: any;
+  private timeoutSourceSearchStringId: any;
 
-  private loadingSource = true
-  private lastFromWhere: number = 0;
-  private lastToWhere: number = 0;
+  private loadingSource = true;
+  private loadingElements = false;
+  private lastFromWhere: string = "0.0";
+  private lastToWhere: string = "0.0";
+  private bottomReached: boolean =  false;
   private selectedPreferences: string[] = [];
 
   private lastSelectionStartId: number = 0;
   private lastSelectionEndId: number = 0;
+  private lastLoadedSource: any;
 
+  private tempPauseScroll: boolean = false;
+
+  public isHidden = false;
   public preferencesList = [
     {title: 'time', activated: false, value: 0},
     {title: 'space', activated: false, value: 1},
@@ -70,11 +107,18 @@ export class SourceTextWindowComponent implements OnInit {
   @ViewChildren('menuItems')
   private menuItemsRef!: QueryList<MatCheckbox>;
   @ViewChild('amenu', {static: true}) amenu!: MatMenu;
+  @ViewChild('sourceSearchStringInput') sourceSearchStringInput!: ElementRef;
+  @ViewChild('dialogRef')
+  dialogRef!: TemplateRef<any>;
+
+  @Output() onSelectedSearchString = new EventEmitter();
 
   constructor(
-    private dataService: DataService,
+    public dataService: DataService,
     private changeDetection: ChangeDetectorRef,
-    private _renderer2: Renderer2
+    private _renderer2: Renderer2,
+    public sourceElementDialog: MatDialog,
+    public dialog: MatDialog
   ) {
     this.dataService.login().subscribe(ch => {
       console.log("LOGGED IN!")
@@ -108,7 +152,6 @@ export class SourceTextWindowComponent implements OnInit {
       let startId = this.getElementId(range.startContainer);
       let endId = this.getElementId(range.endContainer);
       if (startId < endId && (this.lastSelectionStartId != startId || this.lastSelectionEndId != endId)) {
-        console.log('loadWordInfoTimeout started' + startId + '-' + endId);
         this.lastSelectionStartId = startId;
         this.lastSelectionEndId = endId;
         clearTimeout(this.timeOutLoadWordInfoId);
@@ -117,6 +160,61 @@ export class SourceTextWindowComponent implements OnInit {
           this.dataSource.loadWordInfo(startId, endId, 0, 10);
         }, 300);
       }
+    });
+    this.searchControl.valueChanges.subscribe(userInput => {
+      this.populateSearchStrings(userInput);
+    })
+  }
+
+  private populateSearchStrings(input:string) {
+    this.sourceSearchString = input;
+    clearTimeout(this.timeoutSourceSearchStringId);
+    this.timeoutSourceSearchStringId = setTimeout(() => {
+      this.dataService.getSearchStringsList(this.sourceSearchString).subscribe(strings => {
+        this.searchResults = strings
+      });
+    }, 100);
+  }
+
+  // after you clicked an option, this function will show the field you want to show in input
+  selectValueSearchSource(selected: any) {
+    return selected;
+  }
+
+  timedBlinker(elementId:string, interval: number, times: number)
+  {
+    if ((times&1) == 0)
+      times += 1
+    const el = document.getElementById(elementId);
+    if (el!=null)
+    {
+      let saveStyle = el.style;
+      this.timedBlinkerHelper(el, interval,times, saveStyle.backgroundColor, saveStyle.color, saveStyle.fontWeight,
+        'black', 'red', 'bold')
+    }
+  }
+
+  timedBlinkerHelper(el:Element, interval: number, times: number,
+               saveBackColor: string, saveColor: string, saveWeight: string,
+               backColor: string, color: string, weight: string)
+  {
+      this._renderer2.setStyle(el, 'background-color',backColor);
+      this._renderer2.setStyle(el, 'color', color);
+      this._renderer2.setStyle(el, 'font-weight', weight);
+      if (times == 0)
+        return;
+      this.timeoutResizeObserverId = setTimeout(() => {
+        this.timedBlinkerHelper(el, interval, times-1, backColor, color, weight, saveBackColor, saveColor, saveWeight);
+      }, interval);
+  }
+
+  searchSourceEvent(event:any, result:any)
+  {
+    this.dataService.findParagraphStart(result.key.toString() + ".0").subscribe(paragraphStartId => {
+      this.scrollToMyRef(paragraphStartId, result.key.toString() + ".0");
+      this.sourceSearchStringInput.nativeElement.focus();
+      this.sourceSearchStringInput.nativeElement.value = event.source.value;
+      this.onSelectedSearchString.emit(this.sourceSearchString)
     });
   }
 
@@ -131,7 +229,7 @@ export class SourceTextWindowComponent implements OnInit {
     return 0
   }
 
-  findLowestVisibleTextElement(): number {
+  findLowestVisibleTextElement(): string {
     let parentElementRect = this.sourceElementsRef.nativeElement.getBoundingClientRect();
     let sourceElementsBottom = parentElementRect.bottom;
     let sourceElementsTop = parentElementRect.top;
@@ -140,16 +238,15 @@ export class SourceTextWindowComponent implements OnInit {
       if (e != null) {
         if (this.isElementVisible(e, sourceElementsTop, sourceElementsBottom) != 0) {
           let position = e.getBoundingClientRect();
-          console.log("lowest element index visible: " + se.mouseover);
           return se.mouseover;
         }
       }
     }
     console.log("Unable to find lowest visible element!");
-    return -1;
+    return "0.0";
   }
 
-  findHighestVisibleTextElement(): number {
+  findHighestVisibleTextElement(): string {
     let parentElementRect = this.sourceElementsRef.nativeElement.getBoundingClientRect();
     let sourceElementsBottom = parentElementRect.bottom;
     let sourceElementsTop = parentElementRect.top;
@@ -158,22 +255,29 @@ export class SourceTextWindowComponent implements OnInit {
       let e = document.getElementById(se.mouseover.toString())
       if (e != null) {
         if (this.isElementVisible(e, sourceElementsTop, sourceElementsBottom) != 0) {
-          console.log("highest element index visible: " + se.mouseover);
-
           return se.mouseover;
         }
       }
     }
     console.log("Unable to find highest visible element!");
-    return -1;
+    return "0.0";
   }
 
-  triggerRetrieveMoreFromScroll(): boolean {
+  triggerExtendBottomScroll(): boolean {
     let parentElementRect = this.sourceElementsRef.nativeElement.getBoundingClientRect();
     let sourceElementsBottom = parentElementRect.bottom;
     let sourceElementsTop = parentElementRect.top;
     let I = this.sourceElements.length - 1;
     let se = this.sourceElements[I]
+    let e = document.getElementById(se.mouseover.toString())
+    return (e != null && this.isElementVisible(e, sourceElementsTop, sourceElementsBottom) != 0);
+  }
+
+  triggerExtendTopScroll(): boolean {
+    let parentElementRect = this.sourceElementsRef.nativeElement.getBoundingClientRect();
+    let sourceElementsBottom = parentElementRect.bottom;
+    let sourceElementsTop = parentElementRect.top;
+    let se = this.sourceElements[0]
     let e = document.getElementById(se.mouseover.toString())
     return (e != null && this.isElementVisible(e, sourceElementsTop, sourceElementsBottom) != 0);
   }
@@ -198,28 +302,37 @@ export class SourceTextWindowComponent implements OnInit {
     this.timeoutSourceRangeId = setTimeout(() => {
       let lowestElementId = this.findLowestVisibleTextElement();
       let highestElementId = this.findHighestVisibleTextElement();
-      this.dataService.HTMLElementIdToSource(lowestElementId).subscribe(lowestSourcePosition => {
-        this.dataService.HTMLElementIdToSource(highestElementId).subscribe(highestSourcePosition => {
-          this.currentSourceRange = lowestSourcePosition.toString() + " - " + highestSourcePosition.toString();
-        });
-      });
-    }, 300);
+      this.currentSourceRange = lowestElementId + " - " + highestElementId;
+    }, 200);
   }
 
   ngAfterViewInit() {
     let obs = new ResizeObserver(entries => {
       clearTimeout(this.timeoutResizeObserverId);
-      this.timeoutResizeObserverId = setTimeout(() => { this.loadElements(this.lastFromWhere); }, 300);
+      this.timeoutResizeObserverId = setTimeout(() => { this.loadElements(1, this.lastFromWhere, null, null); }, 300);
     });
     obs.observe(this.sourceElementsRef.nativeElement);
     let scroll = document.querySelector(".source-element");
     if (scroll!=null)
       scroll.addEventListener('scroll', (event) => {
-        this.updateSourceRange();
-        if (this.triggerRetrieveMoreFromScroll())
-        {
-
-        }
+        clearTimeout(this.timeoutScrollEventListener);
+        this.timeoutScrollEventListener = setTimeout(() => {
+          if (this.triggerExtendBottomScroll() && !this.bottomReached) {
+            console.log("Bottom Extend");
+            this.appendElements(500);
+          } else if (this.triggerExtendTopScroll()) {
+            let fromWhere = parseInt(this.lastFromWhere.split(".")[0]);
+            let newFromWhere = Math.max(fromWhere - 300, 0);
+            let scrollToWhere = parseInt(this.findHighestVisibleTextElement().split(".")[0]) - 100;
+            if (newFromWhere < fromWhere) {
+              console.log("Top extend to " + newFromWhere.toString() + " then bottom scroll to " + scrollToWhere.toString() );
+              this.loadElements(2, newFromWhere.toString() + ".0", scrollToWhere.toString() + ".0", null);
+            }
+          } else
+            this.updateSourceRange();
+        }, 500);
+      }, {
+        passive: true
       });
     else
       console.log('source-element not found - scroll monitoring not available!')
@@ -234,7 +347,7 @@ export class SourceTextWindowComponent implements OnInit {
     this.dataService.generateSourceElements().subscribe(ch => {
       console.log(ch['response']);
       console.log("loading elements");
-      this.loadElements(0);
+      this.loadElements(3, "0.0", null, null);
     });
 
   }
@@ -292,27 +405,36 @@ export class SourceTextWindowComponent implements OnInit {
     }
   }
 
-  scrollToMyRef = (id:number) => {
-    let ref = document.getElementById(id.toString());
-    if (ref == null)
-      this.loadElements(id);
+  scrollToMyRef = (id:string, strobe: string | null) => {
+    let ref = document.getElementById(id);
+    if (ref == null) {
+      console.log("Cannot find element id " + id)
+      this.loadElements(4, id, null, strobe);
+      this.isHidden = false;
+    }
     else {
-      setTimeout(function () {
+      setTimeout(() => {
+        console.log("scrolling to " + id.toString());
+        let ref = document.getElementById(id);
         if (ref != null) {
           ref.scrollIntoView({
-            behavior: "smooth",
+            behavior: "auto",
             block: "start",
           });
+          this.isHidden=false;
+          this.changeDetection.detectChanges();
+          if (strobe != null)
+            this.timedBlinker(strobe, 300, 10);
         } else {
           console.log("element id = " + id.toString() + " not found!");
-          console.log(id);
         }
-      }, 300);
+      }, 50);
     }
   };
 
-  public onChaptersSelect(item:any) {
-    this.scrollToMyRef(item['position']);
+  public onChaptersSelect(chapter:any) {
+    console.log(chapter);
+    this.scrollToMyRef(chapter['where'], null);
   }
 
   public onAgentsSelect(item:any) {
@@ -321,7 +443,36 @@ export class SourceTextWindowComponent implements OnInit {
 
 
   onSelectedOption(e:any) {
+    this.lastLoadedSource = e;
     this.loadSource(e);
+  }
+
+  reload()
+  {
+    this.loadSource(this.lastLoadedSource);
+  }
+
+  sourceElementClick(elementId: string)
+  {
+    this.openContentElement();
+    console.log(elementId);
+    this.dataService.getElementType(elementId).subscribe( elementType => {
+      let sourceElementDialogRef: any;
+      console.log("element id " + elementId + " has element type " + elementType.toString());
+      switch (elementType) {
+        case sourceElementTypes.matchingObjectType:
+          console.log("OPENING");
+          /*
+          sourceElementDialogRef = this.sourceElementDialog.open(SourceElementDialogComponent,
+            {
+              data: {
+                'dataService': this.dataService,
+                "elementId": elementId
+              }
+            }).afterClosed().subscribe();
+           */
+      }
+    });
   }
 
   loadSource(e:any)
@@ -329,40 +480,84 @@ export class SourceTextWindowComponent implements OnInit {
     console.log("loading source");
     this.loadingSource=true
     this.dataService.loadSource(e).subscribe(elements => {
-      //console.log(elements['response']);
-      this.sourceElements = elements['response']
-      this.dataService.generateSourceElements().subscribe(ch => {
         this.loadingSource=false
-        //console.log(ch['response']);
-        //console.log("loading elements");
-        this.loadElements(0);
+        this.loadElements(5, "0.0", null, null);
         this.dataService.loadChapters().subscribe(ch => {
-          //console.log(ch['response']);
           this.chapters = ch['response']
         });
         this.dataService.loadAgents().subscribe(ch => {
-          console.log('AGENTS');
-          console.log(ch['response']);
           this.agents = ch['response']
         });
         this.timelineDataSource.loadTimelines(0, 100);
-      });
     });
-
-
   }
 
-  loadElements(fromWhere: number)
+  loadElements(caller: number, fromWhere: string, optionScrollTo: string | null, strobe: string | null)
   {
     if (this.loadingSource)
       return;
+    if (this.loadingElements)
+      return;
     let width = this.sourceElementsRef.nativeElement.offsetWidth;
     let height = this.sourceElementsRef.nativeElement.offsetHeight;
+    // console.log("before", caller, width, height, this.sourceElements.length);
+    if (width == 0 || height == 0)
+      return;
+    this.loadingElements = true;
     this.dataService.loadElements(width, height, fromWhere).subscribe(elements => {
-      //console.log(elements);
-      this.sourceElements = elements['response'];
-      this.lastFromWhere = fromWhere;
-      this.lastToWhere = this.sourceElements[this.sourceElements.length-1]['mouseover'];
+      if (optionScrollTo != null)
+        this.isHidden = true;
+      if (elements['response'].length > 0)
+      {
+        this.sourceElements = elements['response'];
+        this.lastFromWhere = fromWhere;
+        // console.log("after", caller, width, height, elements['response'].length, this.sourceElements[0]['mouseover'], this.sourceElements[this.sourceElements.length - 1]['mouseover']);
+        this.lastToWhere = this.sourceElements[this.sourceElements.length - 1]['mouseover'];
+        this.loadingElements = false;
+        this.isHidden = false;
+        if (optionScrollTo != null)
+          this.timeoutInfo = setTimeout(() => {
+            console.log("scroll to " + optionScrollTo);
+            let ref = document.getElementById(optionScrollTo);
+            if (ref != null) {
+              ref.scrollIntoView({
+                behavior: "auto",
+                block: "end",
+              });
+              if (strobe!= null)
+                this.timedBlinker(strobe, 300, 10);
+            }
+            else {
+              console.log("element id = " + optionScrollTo + " not found!");
+            }
+            this.changeDetection.detectChanges();
+          }, 25);
+        else
+        {
+          this.changeDetection.detectChanges();
+          if (strobe!= null)
+            this.timedBlinker(strobe, 300, 10);
+        }
+
+      }
+      this.updateSourceRange();
+    });
+  }
+
+  appendElements(numElements:number)
+  {
+    if (this.loadingSource)
+      return;
+    if (this.loadingElements)
+      return;
+    this.loadingElements = true;
+    let width = this.sourceElementsRef.nativeElement.offsetWidth;
+    let height = this.sourceElementsRef.nativeElement.offsetHeight;
+    let lastToWhere = this.sourceElements[this.sourceElements.length-1]['mouseover'];
+    lastToWhere = (parseInt(lastToWhere.split(".")[0]) + 1).toString() + ".0";
+    this.dataService.loadElements(width, height, lastToWhere).subscribe(elements => {
+      this.sourceElements = this.sourceElements.concat(elements['response']);
+      this.loadingElements = false;
       this.changeDetection.detectChanges();
       this.updateSourceRange();
     });
@@ -370,14 +565,41 @@ export class SourceTextWindowComponent implements OnInit {
 
   displayElement(e: any)
   {
-    this.dataService.loadInfoPanel(e).subscribe(ch => {
-       this.wordInfo = ch['response']["wordInfo"];
-       this.roleInfo = ch['response']["roleInfo"];
-       this.relationsInfo = ch['response']["relationsInfo"];
-       this.toolTip = ch['response']["toolTip"];
-      this.changeDetection.detectChanges();
-    });
+    clearTimeout(this.timeoutInfo);
+    this.timeoutInfo = setTimeout(() => {
+      this.dataService.loadInfoPanel(e).subscribe(ch => {
+        this.wordInfo = ch['response']["wordInfo"];
+        this.roleInfo = ch['response']["roleInfo"];
+        this.relationsInfo = ch['response']["relationsInfo"];
+        this.toolTip = ch['response']["toolTip"];
+        this.changeDetection.detectChanges();
+      });
+    }, 200);
     return e;
+  }
+  openContentElement() {
+    this.dialog.open(ContentElementDialog);
   }
 
 }
+
+@Component({
+  selector: 'demo-content-element-dialog',
+  styles: [
+  ],
+  template: `
+    <mat-dialog-actions >
+      <button
+        mat-raised-button
+        color="primary"
+        mat-dialog-close>Close</button>
+
+    </mat-dialog-actions>
+  `
+})
+export class ContentElementDialog {
+  constructor(public dialog: MatDialog) { }
+
+}
+
+

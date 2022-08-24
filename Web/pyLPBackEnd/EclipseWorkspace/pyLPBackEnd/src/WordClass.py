@@ -1,33 +1,25 @@
 from Form import Form
 from TFI import TFI
-from LPIO import LPIO 
+import struct
 
 class WordClass:
-    maxWordId = 0
-    counts = {}
-    numWordForms = 0
-    wordForms = {}
     words = {}
-    wordIndexes = {}
 
     def __init__(self, rs):
-        self.maxWordId = rs.readInteger()
-        for I in range(self.maxWordId):
-            self.wordIndexes[I] = rs.readInteger()
-        for I in range(self.maxWordId):
-            self.counts[I] = rs.readInteger()
-        self.numWordForms = rs.readInteger()
-        for I in range(self.numWordForms << 1):
-            self.wordForms[I] = rs.readInteger()
+        self.maxWordId = rs.read_integer()
+        self.wordIndexes = struct.unpack('<' + str(self.maxWordId) + 'i', rs.f.read(self.maxWordId * 4))
+        self.counts = struct.unpack('<' + str(self.maxWordId) + 'i', rs.f.read(self.maxWordId * 4))
+        self.numWordForms = rs.read_integer()
+        self.wordForms = struct.unpack('<' + str(self.numWordForms << 1) + 'i', rs.f.read(self.numWordForms * 8))
 
-    def readSpecificWordCache(self, rs):
-        numForms = rs.readInteger()
+    def read_specific_word_cache(self, rs):
+        numForms = rs.read_integer()
         Form.forms = {}
         for I in range(numForms):
             Form.forms[I] = Form(rs)  
-        Form.initializeForms()
-        while not rs.atEof():
-            word = rs.readString()
+        Form.initialize_forms()
+        while not rs.at_eof():
+            word = rs.read_string()
             self.words[word] = TFI(rs)
 
     def query(self, temp):

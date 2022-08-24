@@ -19,20 +19,20 @@ class VerbMember:
                 if member not in vbNetVerbToClassMap:
                     vbNetVerbToClassMap[member] = []
                 vbNetVerbToClassMap[member].append(self)
-                #print("Added " + self.name + " to " + member);
+                # print("Added " + self.name + " to " + member);
         if childNodes != None:
             for cn in childNodes:
-                if cn.find('')==None:
-                #if not (childNodes.item(i) instanceof DeferredTextImpl) and !(childNodes.item(i) instanceof DeferredCommentImpl):
-                    member = cn.tag
-                    if member in self.vbClassTypes:
-                        #print("Added kind " + member + " to VerbMember " + self.name);
-                        self.kinds.append(member)
+                member = cn.tag
+                if member in self.vbClassTypes:
+                    # print("Added kind " + member + " to VerbMember " + self.name);
+                    self.kinds.append(member)
+                # else:
+                    # print("Did not add kind " + member + " to VerbMember " + self.name);
 
-    def getName(self): 
+    def get_name(self): 
         return self.name;
     
-    def getNameWithKinds(self):
+    def get_name_with_kinds(self):
         names = self.name + " "
         if len(self.kinds) > 0:
             names += "[";

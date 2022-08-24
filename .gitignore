@@ -47,3 +47,4 @@ CodeGraphData
 *.sarif
 RerunSingleSourcex64
 node_modules
+*.pyc

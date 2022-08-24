@@ -5,6 +5,7 @@ from BitObject import BitObject
 from PatternMatch import PatternMatch
 from COM import COM 
 from SourceEnums import SourceEnums
+import struct
 
 class WordMatch:
     flags = 0
@@ -101,53 +102,33 @@ class WordMatch:
     flagObjectPleonastic = (1 << 1)
     flagIgnoreAsSpeaker = (1 << 0)
 
-    def __init__(self, words, rs):
-        self.word = rs.readString()
-        self.baseVerb = rs.readString()
-        self.flags = rs.readLong()
-        self.maxMatch = rs.readShort()
-        self.minAvgCostAfterAssessCost = rs.readInteger()
-        self.lowestAverageCost = rs.readInteger()
-        self.maxLACMatch = rs.readShort()
-        self.maxLACAACMatch = rs.readShort()
-        self.objectRole = rs.readLong()
-        self.verbSense = rs.readInteger()
-        self.timeColor = rs.readByte()
-        self.beginPEMAPosition = rs.readInteger()
-        self.endPEMAPosition = rs.readInteger()
-        self.PEMACount = rs.readInteger()
-        count = rs.readInteger()
-        self.pma = {}
-        for I in range(count):
-            self.pma[I] = PatternMatch(rs)
+    def __init__(self, rs):
+        self.word = rs.read_string()
+        self.baseVerb = rs.read_string()
+        self.flags, self.maxMatch, self.minAvgCostAfterAssessCost, self.lowestAverageCost, self.maxLACMatch, \
+        self.maxLACAACMatch, self.objectRole, self.verbSense, self.timeColor, self.beginPEMAPosition, \
+        self.endPEMAPosition, self.PEMACount, count = struct.unpack('<qhiihhqibiiii', rs.f.read(51))
+        self.pma = []
+        for _ in range(count):
+            self.pma.append(PatternMatch(rs))
         self.forms = BitObject(rs,16)
         self.winnerForms = BitObject(rs,16)
         self.patterns = BitObject(rs,32)
-        self.object = rs.readInteger()
-        self.principalWherePosition = rs.readInteger()
-        self.principalWhereAdjectivalPosition = rs.readInteger()
-        self.originalObject = rs.readInteger()
-        count = rs.readInteger()
+        self.object = rs.read_integer()
+        self.principalWherePosition = rs.read_integer()
+        self.principalWhereAdjectivalPosition = rs.read_integer()
+        self.originalObject = rs.read_integer()
+        count = rs.read_integer()
         self.objectMatches = []
-        for I in range(count):
+        for _ in range(count):
             self.objectMatches.append(COM(rs))
-        count = rs.readInteger()
+        count = rs.read_integer()
         self.audienceObjectMatches = []
-        for I in range(count):
+        for _ in range(count):
             self.audienceObjectMatches.append(COM(rs))
-        self.quoteForwardLink = rs.readInteger()
-        self.endQuote = rs.readInteger()
-        self.nextQuote = rs.readInteger()
-        self.previousQuote = rs.readInteger()
-        self.relObject = rs.readInteger()
-        self.relSubject = rs.readInteger()
-        self.relVerb = rs.readInteger()
-        self.relPrep = rs.readInteger()
-        self.beginObjectPosition = rs.readInteger()
-        self.endObjectPosition = rs.readInteger()
-        self.tmpWinnerForms = rs.readInteger()
-        self.embeddedStorySpeakerPosition = rs.readInteger()
-        traceFlags = rs.readLong()
+        self.quoteForwardLink, self.endQuote, self.nextQuote, self.previousQuote, self.relObject, \
+        self.relSubject, self.relVerb, self.relPrep, self.beginObjectPosition, self.endObjectPosition, \
+        self.tmpWinnerForms, self.embeddedStorySpeakerPosition, traceFlags = struct.unpack('<12iq', rs.f.read(56))
         self.collectPerSentenceStats = (traceFlags & 1) == 1
         traceFlags >>= 1
         self.traceTagSetCollection = (traceFlags & 1) == 1
@@ -185,38 +166,31 @@ class WordMatch:
         self.traceRole = (traceFlags & 1) == 1
         traceFlags >>= 1
         self.printBeforeElimination = (traceFlags & 1) == 1
-        self.logCache = rs.readShort()
+        self.logCache, self.relNextObject, self.nextCompoundPartObject, self.previousCompoundPartObject, \
+        self.relInternalVerb, self.relInternalObject, self.quoteForwardLink, self.quoteBackLink, self.speakerPosition, \
+        self.audiencePosition = struct.unpack('<h9i', rs.f.read(38))
         self.skipResponse = -1
-        self.relNextObject = rs.readInteger()
-        self.nextCompoundPartObject = rs.readInteger()
-        self.previousCompoundPartObject = rs.readInteger()
-        self.relInternalVerb = rs.readInteger()
-        self.relInternalObject = rs.readInteger()
-        self.quoteForwardLink = rs.readInteger()
-        self.quoteBackLink = rs.readInteger()
-        self.speakerPosition = rs.readInteger()
-        self.audiencePosition = rs.readInteger()
         self.spaceRelation = False
         self.andChainType = False
         self.notFreePrep = False
         self.hasVerbRelations = False
 
-    def getWordtFI(self):
+    def get_word_tfi(self):
         return WordClass.words.get(self.word)  
 
-    def queryWordForm(self,form):
-        tfi=self.getWordtFI()
+    def query_word_form(self,form):
+        tfi=self.get_word_tfi()
         if (tfi==None): return -1
         for f in range(len(tfi.forms)):
             if (tfi.forms[f] == form):
                 return f
         return -1
     
-    def queryForm(self, form):
+    def query_form(self, form):
         if (Form.forms==None):  
             return -1
         if ((self.flags & self.flagAddProperNoun) != 0 and form == SourceEnums.PROPER_NOUN_FORM_NUM):  
-            tfi=self.getWordtFI()
+            tfi=self.get_word_tfi()
             if (tfi==None): return -1
             return len(tfi.forms)
         if ((self.flags & self.flagOnlyConsiderProperNounForms) != 0):
@@ -225,26 +199,26 @@ class WordMatch:
                     return -1
         elif (form == SourceEnums.PROPER_NOUN_FORM_NUM and ((self.flags & self.flagFirstLetterCapitalized) == 0 or (self.flags & self.flagRefuseProperNoun) != 0)):  
             return -1
-        return self.queryWordForm(form)
+        return self.query_word_form(form)
 
-    def isWinner(self, form):
+    def is_winner(self, form):
         return ((1 << form) & self.tmpWinnerForms) != 0 if (self.tmpWinnerForms > 0) else True
 
-    def hasWinnerVerbForm(self):
-        return self.getWordtFI().hasWinnerVerbForm(self.tmpWinnerForms)
+    def has_winner_verb_form(self):
+        return self.get_word_tfi().has_winner_verb_form(self.tmpWinnerForms)
 
-    def queryWinnerForm(self, form):
-        if (self.getWordtFI()==None or self.getWordtFI().forms==None):
+    def query_winner_form(self, form):
+        if (self.get_word_tfi()==None or self.get_word_tfi().forms==None):
             return -1
         if ((self.flags & self.flagAddProperNoun) != 0 and form == SourceEnums.PROPER_NOUN_FORM_NUM):  
-            picked = len(self.getWordtFI().forms)
+            picked = len(self.get_word_tfi().forms)
         elif ((self.flags & self.flagOnlyConsiderProperNounForms) != 0):
             if (form != SourceEnums.PROPER_NOUN_FORM_NUM and not Form.forms[form].properNounSubClass):  
                 return -1
-            picked = self.queryWordForm(form)
+            picked = self.query_word_form(form)
         else:
-            picked = self.queryWordForm(form)
-        if (picked >= 0 and self.isWinner(picked)):
+            picked = self.query_word_form(form)
+        if (picked >= 0 and self.is_winner(picked)):
             return picked
         return -1
 
@@ -263,7 +237,7 @@ class WordMatch:
             "S_IN_REL", "PASS_SUBJ", "POV", "MNOUN", "SP", "SECONDARY_SP", "EVAL", "ID", "DELAY", "PRIM", "SECOND", "EMBED", "EXT", "NOT_ENC",
             "EXT_ENC", "NPAST_ENC", "NPRES_ENC", "POSS_ENC", "THINK_ENC" ]
 
-    def roleString(self):
+    def role_string(self):
         role = ""
         I = 0
         for r in self.r_c:
@@ -291,15 +265,15 @@ class WordMatch:
             retMessage = retMessage[1:]
         return retMessage
 
-    def getWinnerForms(self):
+    def get_winner_forms(self):
         sForms="("
         for I in range(len(Form.forms)):  
-            if (self.forms.isSet(I)):
-                if (self.queryWinnerForm(I)>=0): sForms+="*"
+            if (self.forms.is_set(I)):
+                if (self.query_winner_form(I)>=0): sForms+="*"
                 sForms+=Form.forms[I].shortName+" "
         return sForms.strip()+") "
     
-    def printFlags(self):
+    def print_flags(self):
         flagStr=""
         if ((self.flags&self.flagInQuestion)!=0): flagStr+=" Q"
         if ((self.flags&self.flagFirstLetterCapitalized)!=0): flagStr+=" C"

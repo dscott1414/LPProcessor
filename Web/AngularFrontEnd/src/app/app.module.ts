@@ -1,3 +1,4 @@
+import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';
 import { NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { AppComponent } from './app.component';
@@ -57,6 +58,8 @@ import {MatTreeModule} from '@angular/material/tree';
 import {OverlayModule} from '@angular/cdk/overlay';
 import {CdkMenuModule} from '@angular/cdk/menu';
 import {DialogModule} from '@angular/cdk/dialog';
+import { SourceElementDialogComponent } from './component/source-element-dialog/source-element-dialog.component';
+import { ContentElementDialog} from './component/source-text-window/source-text-window.component';
 
 @NgModule({
   declarations: [
@@ -64,8 +67,16 @@ import {DialogModule} from '@angular/cdk/dialog';
     SourceTextWindowComponent,
     TextWindowDirective,
     SearchBarComponent,
+    SourceElementDialogComponent,
+    ContentElementDialog
   ],
   imports: [
+    BrowserModule,
+    BrowserAnimationsModule,
+    FormsModule,
+    HttpClientModule,
+    MatNativeDateModule,
+    ReactiveFormsModule,
     A11yModule,
     CdkAccordionModule,
     ClipboardModule,
@@ -140,6 +151,8 @@ import {DialogModule} from '@angular/cdk/dialog';
     MatSortModule,
   ],
   providers: [DataService ],
-  bootstrap: [AppComponent]
+  bootstrap: [AppComponent],
+  entryComponents: [SourceElementDialogComponent, ContentElementDialog],
+
 })
 export class AppModule { }

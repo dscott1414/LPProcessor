@@ -6,7 +6,7 @@ from json import JSONEncoder
 
 class VerbNet:
     
-    def parseXmlFile(self, pathName):
+    def parse_xml_file(self, pathName):
         # get the factory
         tree = ET.parse(pathName)
         # get the root element
@@ -26,9 +26,9 @@ class VerbNet:
         self.vms = []
         os.chdir("F:\\lp\\source\\lists\\VerbNet")
         for file in glob.glob("*.xml"):
-            self.parseXmlFile(file);
+            self.parse_xml_file(file);
             
-    def getVerbClasses(self, baseVerb, phrasalVerb):
+    def get_verb_classes(self, baseVerb, phrasalVerb):
         vms = self.vbNetVerbToClassMap.get(baseVerb)
         if phrasalVerb.length() > 0:
             vmsParticiple = self.vbNetVerbToClassMap.get(phrasalVerb)
@@ -40,28 +40,28 @@ class VerbNet:
         m = min(str1.len(),str2.len());
         return str1[0:m] == str2[0:min]
     
-    def getClassNames(self, baseVerb):
+    def get_class_names(self, baseVerb):
         names = ""
         if len(baseVerb) == 0:
             return names;
         vmsl = self.vbNetVerbToClassMap.get(baseVerb)
         if vmsl is not None:
             for vm in vmsl:
-                names += vm.getName() + " "
+                names += vm.get_name() + " "
         return names
     
-    def getClassNames2(self, baseVerb):
+    def get_class_names_2(self, baseVerb):
         names = "";
         vml = self.vbNetVerbToClassMap.get(baseVerb)
         if vml is not None:
             for vm in vml: 
-                names += vm.getNameWithKinds()
+                names += vm.get_name_with_kinds()
         return names
     
-    def isVerbClass(self, baseVerb, phrasalVerb, verbClass):
-        vms = self.getVerbClasses(baseVerb, phrasalVerb)
+    def is_verb_class(self, baseVerb, phrasalVerb, verbClass):
+        vms = self.get_verb_classes(baseVerb, phrasalVerb)
         if vms is not None:
             for vm in vms:
-                if self.like(vm.getName(),verbClass): 
+                if self.like(vm.get_name(),verbClass): 
                     return True
         return False

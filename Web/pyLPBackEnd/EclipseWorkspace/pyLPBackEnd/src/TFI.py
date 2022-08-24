@@ -1,12 +1,10 @@
 from Form import Form
+import struct
+
 class TFI:
     MAX_USAGE_PATTERNS=16
-    #deltaUsagePatterns = []
-    #relatedSubTypes = []
-    #relatedSubTypeObjects = []
-    #cRMap *relationMaps[numRelationWOTypes]
 
-    def hasWinnerVerbForm(self, winnerForms):
+    def has_winner_verb_form(self, winnerForms):
         for I in range(self.count):
             if (Form.forms[self.forms[I]].verbForm and (winnerForms==0 or ((1<<I)&winnerForms)!=0)):
                 return True
@@ -14,22 +12,15 @@ class TFI:
 
 
     def __init__(self,rs):
-        self.count=rs.readInteger()
-        self.forms={}
-        for I in range(self.count):
-            self.forms[I]=rs.readInteger()
-        self.inflectionFlags=rs.readInteger()
-        self.flags=rs.readInteger()
-        self.timeFlags=rs.readInteger()
-        self.derivationRules=rs.readInteger()
-        self.index=rs.readInteger()
-        self.mainEntry=rs.readString()
-        self.usagePatterns={}
-        for I in range(self.MAX_USAGE_PATTERNS):
-            self.usagePatterns[I]=rs.readByte()
-        self.usageCosts={}
-        for I in range(self.MAX_USAGE_PATTERNS):
-            self.usageCosts[I]=rs.readByte()
+        self.count = rs.read_integer()
+        self.forms = struct.unpack('<' + str(self.count) + 'i', rs.f.read(self.count * 4))
+        rs.offset += self.count * 4
+        self.inflectionFlags, self.flags, self.timeFlags, self.derivationRules, self.index = struct.unpack('<5i', rs.f.read(20))
+        rs.offset += 20
+        self.mainEntry = rs.read_string()
+        self.usagePatterns = struct.unpack('<' + str(self.MAX_USAGE_PATTERNS) + 'b', rs.f.read(self.MAX_USAGE_PATTERNS))
+        self.usageCosts = struct.unpack('<' + str(self.MAX_USAGE_PATTERNS) + 'b', rs.f.read(self.MAX_USAGE_PATTERNS))
+        rs.offset += 2*self.MAX_USAGE_PATTERNS
 
     topLevelSeparator=1 
     ignoreFlag=2

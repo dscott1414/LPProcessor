@@ -1,3 +1,4 @@
+import struct
 from CName import CName
 
 
@@ -57,74 +58,42 @@ class CObject:
 
 	# identifySpeakers
 	def __init__(self, rs):
-		self.index = rs.readInteger()
-		self.objectClass = rs.readInteger()
-		self.subType = rs.readInteger()
-		self.begin = rs.readInteger()
-		self.end = rs.readInteger()
-		self.originalLocation = rs.readInteger()
-		self.PMAElement = rs.readInteger()
-		self.numEncounters = rs.readInteger()
-		self.numIdentifiedAsSpeaker = rs.readInteger()
-		self.numDefinitelyIdentifiedAsSpeaker = rs.readInteger()
-		self.numEncountersInSection = rs.readInteger()
-		self.numSpokenAboutInSection = rs.readInteger()
-		self.numIdentifiedAsSpeakerInSection = rs.readInteger()
-		self.numDefinitelyIdentifiedAsSpeakerInSection = rs.readInteger()
-		self.PISSubject = rs.readInteger()
-		self.PISHail = rs.readInteger()
-		self.PISDefinite = rs.readInteger()
-		self.replacedBy = rs.readInteger()
-		self.ownerWhere = rs.readInteger()
-		self.firstLocation = rs.readInteger()
-		self.firstSpeakerGroup = rs.readInteger()
-		self.firstPhysicalManifestation = rs.readInteger()
-		self.lastSpeakerGroup = rs.readInteger()
-		self.ageSinceLastSpeakerGroup = rs.readInteger()
-		self.masterSpeakerIndex = rs.readInteger()
-		self.htmlLinkCount = rs.readInteger()
-		self.relativeClausePM = rs.readInteger()
-		self.whereRelativeClause = rs.readInteger()
-		self.whereRelSubjectClause = rs.readInteger()
-		self.usedAsLocation = rs.readInteger()
-		self.lastWhereLocation = rs.readInteger()
-		count = rs.readInteger()
-		self.spaceRelations = {}
+		self.index, self.objectClass, self.subType, self.begin, self.end, self.originalLocation, \
+		self.PMAElement, self.numEncounters, self.numIdentifiedAsSpeaker, self.numDefinitelyIdentifiedAsSpeaker, self.numEncountersInSection, \
+		self.numSpokenAboutInSection, self.numIdentifiedAsSpeakerInSection, self.numDefinitelyIdentifiedAsSpeakerInSection, self.PISSubject, \
+		self.PISHail, self.PISDefinite, self.replacedBy, self.ownerWhere, self.firstLocation, self.firstSpeakerGroup, self.firstPhysicalManifestation, \
+		self.lastSpeakerGroup, self.ageSinceLastSpeakerGroup, self.masterSpeakerIndex, self.htmlLinkCount, self.relativeClausePM, self.whereRelativeClause, \
+		self.whereRelSubjectClause, self.usedAsLocation, self.lastWhereLocation = struct.unpack('<31i', rs.f.read(124))
+
+		count = rs.read_integer()
+		self.spaceRelations = struct.unpack('<' + str(count) + 'i', rs.f.read(count * 4))
+		count = rs.read_integer()
+		self.duplicates = struct.unpack('<' + str(count) + 'i', rs.f.read(count * 4))
+		count = rs.read_integer()
+		self.aliases = struct.unpack('<' + str(count) + 'i', rs.f.read(count * 4))
+		count = rs.read_integer()
+		self.associatedNouns = []
 		for I in range(count):
-			self.spaceRelations[I] = rs.readInteger()
-		count = rs.readInteger()
-		self.duplicates = {}
+			self.associatedNouns.append(rs.read_string())
+		count = rs.read_integer()
+		self.associatedAdjectives = []
 		for I in range(count):
-			self.duplicates[I] = rs.readInteger()
-		count = rs.readInteger()
-		self.aliases = {}
-		for I in range(count):
-			self.aliases[I] = rs.readInteger()
-		count = rs.readInteger()
-		self.associatedNouns = {}
-		for I in range(count):
-			self.associatedNouns[I] = rs.readString() 
-		count = rs.readInteger()
-		self.associatedAdjectives = {}
-		for I in range(count):
-			self.associatedAdjectives[I] = rs.readString() 
-		count = rs.readInteger()
-		self.possessions = {}
-		for I in range(count):
-			self.possessions[I] = rs.readInteger()
-		count = rs.readInteger()
+			self.associatedAdjectives.append(rs.read_string())
+		count = rs.read_integer()
+		self.possessions = struct.unpack('<' + str(count) + 'i', rs.f.read(count * 4))
+		count = rs.read_integer()
 		if (count > 0):
 			self.genericNounMap = {} 
 		for I in range(count):
-			s = rs.readString()
-			self.genericNounMap[s] = rs.readInteger() 
-		self.mostMatchedGeneric = rs.readString() 
+			s = rs.read_string()
+			self.genericNounMap[s] = rs.read_integer() 
+		self.mostMatchedGeneric = rs.read_string() 
 		self.genericAge = {}
 		for I in range(4):
-			self.genericAge[I] = rs.readInteger()
-		self.age = rs.readInteger()
-		self.mostMatchedAge = rs.readInteger()
-		flags = rs.readLong() 
+			self.genericAge[I] = rs.read_integer()
+		self.age = rs.read_integer()
+		self.mostMatchedAge = rs.read_integer()
+		flags = rs.read_long() 
 		
 		self.isWikiBusiness = (flags & 1) == 1
 		flags >>= 1 
@@ -182,7 +151,7 @@ class CObject:
 		self.lastVerbTenses = {}
 		for I in range(self.VERB_HISTORY):
 			self.lastVerbTenses[I] = self.CLastVerbTenses() 
-			self.lastVerbTenses[I].lastTense = rs.readInteger()
-			self.lastVerbTenses[I].lastVerb = rs.readInteger()
+			self.lastVerbTenses[I].lastTense = rs.read_integer()
+			self.lastVerbTenses[I].lastVerb = rs.read_integer()
 		self.name = CName(rs) 
 	

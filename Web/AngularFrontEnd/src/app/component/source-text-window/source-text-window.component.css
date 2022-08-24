@@ -56,7 +56,7 @@ html, body {
         "header"
         "source-element"
         "footer";
-  grid-gap: 10px;
+  grid-gap: 5px;
   grid-template-rows: 200px 1fr 400px;
   background-color: #fff;
 }
@@ -67,7 +67,7 @@ header{
   color: #9f9c9c;
   text-transform: uppercase;
   border-bottom: 2px solid #b0e0ea;
-  padding: 20px 0;
+  padding: 0px 0;
   display: grid;
   grid-template-rows: 1fr 1fr;
 
@@ -77,11 +77,17 @@ footer {
   grid-area: footer;
   color: #fff;
   text-align: left;
-  padding: 20px 0;
+  padding: 0px 0;
   bottom: 0;
   background-color: #9f9c9c;
   height: 400px;
   overflow: auto;
+  display: grid;
+  grid-template-areas:
+        "wordinfo"
+        "timeline";
+  grid-gap: 5px;
+  grid-template-rows: 195px 195px;
 }
 
 .select-search {
@@ -90,7 +96,7 @@ footer {
   height: 60px;
   display: grid;
   gap: 5px 5px;
-  grid-template-columns: 2.5fr 1fr;
+  grid-template-columns: 2fr 2fr;
   grid-template-areas:
     "select search"
 }
@@ -152,10 +158,22 @@ footer {
   overflow: auto;
 }
 
+.wordinfo {
+  grid-area: wordinfo;
+  text-align: center;
+  overflow: auto;
+}
+
 .wordinfo-table {
   border: 2px solid #4CAF50;
   bottom: 0;
   width: 100%;
+  overflow: auto;
+}
+
+.timeline {
+  grid-area: timeline;
+  text-align: center;
   overflow: auto;
 }
 
@@ -164,10 +182,6 @@ footer {
   bottom: 0;
   width: 100%;
   overflow: auto;
-}
-
-.search-field {
-  width: 100%;
 }
 
 table {

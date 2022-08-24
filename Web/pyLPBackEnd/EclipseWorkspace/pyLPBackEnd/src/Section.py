@@ -3,28 +3,28 @@ from COM import COM
 class Section:
 
     def __init__(self, rs):
-        self.begin = rs.readInteger();
-        self.endHeader = rs.readInteger();
-        count = rs.readInteger();
-        self.subHeadings = {}
-        for I in range(count):
-            self.subHeadings[I] = rs.readInteger();
-        count = rs.readInteger();
-        self.definiteSpeakerObjects = {}
-        for I in range(count):
-            self.definiteSpeakerObjects[I] = COM(rs);
-        count = rs.readInteger();
-        self.speakerObjects = {}
-        for I in range(count):
-            self.speakerObjects[I] = COM(rs);
-        count = rs.readInteger();
-        self.objectsSpokenAbout = {}
-        for I in range(count):
-            self.objectsSpokenAbout[I] = COM(rs);
-        count = rs.readInteger();
-        self.objectsInNarration = {}
-        for I in range(count):
-            self.objectsInNarration[I] = COM(rs);
+        self.begin = rs.read_integer();
+        self.endHeader = rs.read_integer();
+        count = rs.read_integer();
+        self.subHeadings = []
+        for _ in range(count):
+            self.subHeadings.append(rs.read_integer())
+        count = rs.read_integer();
+        self.definiteSpeakerObjects = []
+        for _ in range(count):
+            self.definiteSpeakerObjects.append(COM(rs))
+        count = rs.read_integer();
+        self.speakerObjects = []
+        for _ in range(count):
+            self.speakerObjects.append(COM(rs))
+        count = rs.read_integer()
+        self.objectsSpokenAbout = []
+        for _ in range(count):
+            self.objectsSpokenAbout.append(COM(rs))
+        count = rs.read_integer()
+        self.objectsInNarration = []
+        for _ in range(count):
+            self.objectsInNarration.append(COM(rs))
         self.speakersMatched = 0
         self.speakersNotMatched = 0
         self.counterSpeakersMatched = 0

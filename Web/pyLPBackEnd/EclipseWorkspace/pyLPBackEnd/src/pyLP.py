@@ -20,15 +20,8 @@ app.secret_key = "kjhasd@#$#@"
 global sessions
 sessions = {}
 
-
 class LPSession:
     pass
-
-
-try:
-    profile  # throws an exception when profile isn't defined
-except NameError:
-    profile = lambda x: x  # if it's not defined simply ignore the decorator.
 
 
 @app.route('/')
@@ -54,7 +47,7 @@ def login():
 
     
 @app.route('/api/searchSource', methods=["GET"])
-def searchSource():
+def search_source():
     author = request.args.get('author')
     if author is not None and author == "":
         author = None;
@@ -87,7 +80,7 @@ def searchSource():
 
     
 @app.route('/api/searchAuthor', methods=["GET"])
-def searchAuthor():
+def search_author():
     author = request.args.get('author')
     if author is not None and author == "":
         author = None;
@@ -119,7 +112,7 @@ def searchAuthor():
         return { 'response': return_result }
 
     
-def getPath(author, title):
+def get_path(author, title):
     if author is not None and author == "":
         author = None;
     if title is not None and title == "":
@@ -149,7 +142,7 @@ def getPath(author, title):
 
 
 @app.route('/api/setPreference', methods=["POST"])
-def setPreference():
+def set_preference():
     global sessions
     # print(sessions[session['uid']].preferences)
     data = request.get_json()
@@ -158,57 +151,75 @@ def setPreference():
     return { 'response': sessions[session['uid']].preferences }
 
     
-@profile
 @app.route('/api/loadSource', methods=["GET"])
-def loadSource():
+def load_source():
     global sessions
+    t_gstart = perf_counter()
     author = request.args.get('author')
     title = request.args.get('title')
-    sourcePath = getPath(author, title)
+    sourcePath = get_path(author, title)
     if sourcePath == "":
         print("Author/title not found")
         return { 'response': [] }
+
     t_start = perf_counter()
     lpio = LPIO("F:\\lp\\wordFormCache")
     sessions[session['uid']].Words = WordClass(lpio);
     lpio.close()
+    t_elapsed = perf_counter() - t_start
+    print("loadSource WordClass Seconds = " + "{:.2f}".format(t_elapsed))
+
+    t_start = perf_counter()
     lpio = LPIO("M:\\caches\\" + sourcePath + ".wordCacheFile")
-    sessions[session['uid']].Words.readSpecificWordCache(lpio);
+    sessions[session['uid']].Words.read_specific_word_cache(lpio);
     lpio.close()
+    t_elapsed = perf_counter() - t_start
+    print("loadSource read_specific_word_cache Seconds = " + "{:.2f}".format(t_elapsed))
+
+    t_start = perf_counter()
     lpio = LPIO("M:\\caches\\" + sourcePath + ".SourceCache")
     print("Loading " + sourcePath)
     sessions[session['uid']].source = Source(sessions[session['uid']].Words, lpio);
     lpio.close()
     t_elapsed = perf_counter() - t_start
-    print("loadSource Seconds = " + "{:.2f}".format(t_elapsed))
-    return { 'response': [] }
+    print("loadSource SourceCache Seconds = " + "{:.2f}".format(t_elapsed))
 
-
-@profile
-@app.route('/api/generateSourceElements', methods=["GET"])
-def generateSourceElements():
-    global sessions
     t_start = perf_counter()
-    print("Generating HTML Elements with preferences:")
-    # print(sessions[session['uid']].preferences)
-    sessions[session['uid']].source.generateSourceElements(sessions[session['uid']].Words, sessions[session['uid']].preferences)
-    for c in sessions[session['uid']].source.chapters:
-        c['position'] = sessions[session['uid']].source.sourceToHTMLElementPosition[c['where']][0]
+    sessions[session['uid']].source.initialize_source_elements()
     t_elapsed = perf_counter() - t_start
-    print("generateSourceElements Seconds = " + "{:.2f}".format(t_elapsed))
+    print("loadSource initialize_source_elements Seconds = " + "{:.2f}".format(t_elapsed))
+
+    t_start = perf_counter()
+    sessions[session['uid']].source.states = sessions[session['uid']].source.generate_per_element_state()
+    t_elapsed = perf_counter() - t_start
+    print("loadSource generate_per_element_state Seconds = " + "{:.2f}".format(t_elapsed))
+    t_elapsed = perf_counter() - t_gstart
+    print("loadSource TOTAL Seconds = " + "{:.2f}".format(t_elapsed))
+    
     return { 'response': [] }
 
 
-@profile
 @app.route('/api/loadElements', methods=["GET"])
-def loadElements():
+def load_elements():
     global sessions
     width = request.args.get('width')
     height = request.args.get('height')
-    fromWhere = request.args.get('fromWhere')
+    fromWhere = request.args.get('fromWhere') # id is source index.element index (100.2)
+    fromWhereSplit = fromWhere.split('.')
+    sourceIndex = int(fromWhereSplit[0])
+    elementIndex = int(fromWhereSplit[1])
+    htmlElements = []
+    currentWidth = 0
+    currentHeight = 0
+    if elementIndex != 0:
+        for ei in range(elementIndex,len(sessions[session['uid']].source.batchDoc[sourceIndex])):
+            htmlElement = sessions[session['uid']].source.batchDoc[sourceIndex][ei]
+            htmlElements.append(htmlElement)
+            currentWidth, currentHeight = sessions[session['uid']].source.advance_screen_position(htmlElement, int(width), currentWidth, currentHeight)
+        sourceIndex += 1
     if sessions[session['uid']] is not None:
         t_start = perf_counter()
-        htmlElements = sessions[session['uid']].source.printHTML(int(fromWhere), int(width), int(height))
+        htmlElements = sessions[session['uid']].source.print_html(sessions[session['uid']].preferences, sourceIndex, currentWidth, currentHeight, int(width), int(height))
         t_elapsed = perf_counter() - t_start
         print("loadElements Seconds = " + "{:.2f}".format(t_elapsed))
     else:
@@ -218,7 +229,7 @@ def loadElements():
 
 
 @app.route('/api/loadChapters', methods=["GET"])
-def loadChapters():
+def load_chapters():
     global sessions
     if sessions[session['uid']] is not None:
         return { 'response': sessions[session['uid']].source.chapters }
@@ -228,12 +239,12 @@ def loadChapters():
 
 
 @app.route('/api/loadAgents', methods=["GET"])
-def loadAgents():
+def load_agents():
     global sessions
     if sessions[session['uid']] is not None:
         htmlElements = []
         for ms in range(len(sessions[session['uid']].source.masterSpeakerList)):
-            html = sessions[session['uid']].source.masterSpeakerHtml(ms)
+            html = sessions[session['uid']].source.master_speaker_html(ms)
             # print(ms,html)
             htmlElements.append(html)
         return { 'response': htmlElements }
@@ -243,10 +254,10 @@ def loadAgents():
 
 
 @app.route('/api/loadInfoPanel', methods=["GET"])
-def loadInfoPanel():
+def load_info_panel():
     global sessions
     where = request.args.get('where')
-    wordInfo, roleInfo, relationsInfo, toolTip = sessions[session['uid']].source.getInfoPanel(int(where))
+    wordInfo, roleInfo, relationsInfo, toolTip = sessions[session['uid']].source.get_info_panel(where)
     if sessions[session['uid']] is not None:
         return { 'response': { "wordInfo":wordInfo, "roleInfo":roleInfo, "relationsInfo": relationsInfo, "toolTip":toolTip } }
     else:
@@ -254,13 +265,13 @@ def loadInfoPanel():
     return { 'response': {} }
 
 @app.route('/api/wordInfo', methods=["GET"])
-def loadWordInfo():
+def load_word_info():
     global sessions
     beginId = request.args.get('beginId')
     endId = request.args.get('endId')
     pageNumber = request.args.get('pageNumber')
     pageSize = request.args.get('pageSize')
-    wordInfo = sessions[session['uid']].source.getWordInfo(beginId, endId, pageNumber, pageSize)
+    wordInfo = sessions[session['uid']].source.get_word_info(beginId, endId, pageNumber, pageSize)
     if sessions[session['uid']] is not None:
         return { 'response': wordInfo }
     else:
@@ -268,11 +279,11 @@ def loadWordInfo():
     return { 'response': {} }
 
 @app.route('/api/timelineSegments', methods=["GET"])
-def loadTimelineSegments():
+def load_timeline_segments():
     global sessions
     pageNumber = request.args.get('pageNumber')
     pageSize = request.args.get('pageSize')
-    segments = sessions[session['uid']].source.getTimelineSegments(pageNumber, pageSize)
+    segments = sessions[session['uid']].source.get_timeline_segments(pageNumber, pageSize)
     if sessions[session['uid']] is not None:
         return { 'response': segments }
     else:
@@ -280,7 +291,7 @@ def loadTimelineSegments():
     return { 'response': {} }
 
 @app.route('/api/HTMLElementIdToSource', methods=["GET"])
-def HTMLElementIdToSource():
+def html_element_id_to_source():
     global sessions
     elementId = request.args.get('elementId')
     if sessions[session['uid']] is not None:
@@ -290,27 +301,65 @@ def HTMLElementIdToSource():
         print("Source is not loaded!")
     return { 'response': -1 }
 
-# if __name__ == '__main__':  # Script executed directly?
-#    app.run()  # Launch built-in web server and run this Flask webapp
-
 def test():
-    sourcePath = getPath("", "adv")
+    sourcePath = get_path("", "adv")
     if sourcePath == "":
         print("Author/title not found")
         return { 'response': [] }
     lpio = LPIO("F:\\lp\\wordFormCache")
-    session['Words'] = WordClass(lpio)
+    Words = WordClass(lpio)
     lpio.close()
     lpio = LPIO("M:\\caches\\" + sourcePath + ".wordCacheFile")
-    session['Words'].readSpecificWordCache(lpio)
+    Words.read_specific_word_cache(lpio)
     lpio.close()
-    lpio = LPIO("M:\\caches\\" + sourcePath + ".SourceCache")
-    session['source'] = Source(session['Words'], lpio)
-    lpio.close()
-    session['preferences'] = { 0: False, 1: False, 2: False, 3: False, 4: False, 5: False }
-    session['source'].generateSourceElements(session['Words'], session['preferences'])
-    for c in session['source'].chapters:
-        c['position'] = session['source'].sourceToHTMLElementPosition[c['where']][0]
+    for _ in range(100):
+        lpio = LPIO("M:\\caches\\" + sourcePath + ".SourceCache")
+        source = Source(Words, lpio)
+        lpio.close()
+        preferences = { 0: False, 1: False, 2: False, 3: False, 4: False, 5: False }
+        source.initialize_source_elements()
+        source.states = source.generate_per_element_state(Words, preferences)
 
-session = {}
-test()
+@app.route('/api/searchStringList', methods=["GET"])
+def search_string_list():
+    global sessions
+    sourceSearchString = request.args.get('sourceSearchString')
+    if sessions[session['uid']] is not None:
+        searchResults = sessions[session['uid']].source.get_instances_of_word(sourceSearchString)
+        print(searchResults)
+        return { 'response': searchResults }
+    else:
+        print("Source is not loaded!")
+    return { 'response': [] }
+    
+@app.route('/api/findParagraphStart', methods=["GET"])
+def find_paragraph_start():
+    global sessions
+    somewhereInParagraph = request.args.get('somewhereInParagraph')
+    if sessions[session['uid']] is not None:
+        paragraphStartId = sessions[session['uid']].source.find_paragraph_start(somewhereInParagraph)
+        print(paragraphStartId)
+        return { 'response': paragraphStartId }
+    else:
+        print("Source is not loaded!")
+    return { 'response': "" }
+    
+@app.route('/api/getElementType', methods=["GET"])
+def get_element_type():
+    global sessions
+    elementId = request.args.get('elementId')
+    if sessions[session['uid']] is not None:
+        elementType = sessions[session['uid']].source.get_element_type(elementId)
+        print(elementType)
+        return { 'response': elementType }
+    else:
+        print("Source is not loaded!")
+    return { 'response': "" }
+    
+    
+if __name__ == '__main__':  # Script executed directly?
+    app.run()  # Launch built-in web server and run this Flask webapp
+
+# cProfile.run("test()", filename = "out.prof")
+# p = pstats.Stats("out.prof")
+# p.sort_stats(pstats.SortKey.TIME).print_stats(10);
