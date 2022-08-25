@@ -48,3 +48,5 @@ CodeGraphData
 RerunSingleSourcex64
 node_modules
 *.pyc
+*.pack
+*.pack.old
