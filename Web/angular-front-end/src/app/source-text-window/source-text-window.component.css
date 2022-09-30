@@ -29,6 +29,10 @@ html, body {
   overflow: hidden
 }
 
+body.waiting * {
+  cursor: progress !important;
+}
+
 * {
   margin: 0;
   padding: 0;

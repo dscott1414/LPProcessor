@@ -1,6 +1,5 @@
 import { Component, OnInit, ViewChild, ElementRef, EventEmitter, Output } from '@angular/core';
 import { UntypedFormControl } from '@angular/forms';
-import { Observable } from 'rxjs';
 import { DataService } from '../services/data.service';
 import { Source } from '../interfaces/source';
 

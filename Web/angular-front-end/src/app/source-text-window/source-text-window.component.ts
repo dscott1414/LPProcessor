@@ -1,41 +1,28 @@
-import {Component, ElementRef, OnInit, HostListener, Renderer2, Output, EventEmitter, NgZone} from '@angular/core';
-import { DataService } from '../services/data.service';
-import { QueryList, ViewChild, ViewChildren, ViewEncapsulation} from '@angular/core';
-import { MatButton } from '@angular/material/button';
-import { MatCheckbox } from '@angular/material/checkbox';
+import {Component, ElementRef, OnInit, Renderer2, Output, EventEmitter, NgZone, Inject} from '@angular/core';
+import {DataService} from '../services/data.service';
+import {QueryList, ViewChild, ViewChildren} from '@angular/core';
+import {MatButton} from '@angular/material/button';
+import {MatCheckbox} from '@angular/material/checkbox';
 import {MatMenu, MatMenuTrigger} from '@angular/material/menu';
-import { ChangeDetectorRef } from '@angular/core';
-import { WordInfoDataSource } from "../word-info.datasource";
+import {ChangeDetectorRef} from '@angular/core';
+import {WordInfoDataSource} from "../word-info.datasource";
 import {NestedTreeControl} from '@angular/cdk/tree';
 import {TimelineNode} from '../interfaces/timeline-node';
 import {TimelineDataSource} from "../timeline.datasource";
 import {SourceElement} from "../interfaces/source-element"
 import {UntypedFormControl} from "@angular/forms";
-import { TemplateRef } from '@angular/core';
-import {MatDialog, MatDialogConfig, MatDialogRef, MAT_DIALOG_DATA} from '@angular/material/dialog';
+import {TemplateRef} from '@angular/core';
+import {MatDialog, MatDialogRef, MAT_DIALOG_DATA} from '@angular/material/dialog';
 import {
-  ContentElementDialog,
   SourceElementDialogComponent
 } from '../source-element-dialog/source-element-dialog.component';
+import {SseService} from "../services/sse.service";
+import {Router} from "@angular/router";
+import { SourceElementTypes } from "../source-element-types"
 
-enum sourceElementTypes {
-  relType = 1,
-  relType2 = 2,
-  speakerGroupType = 3,
-  transitionSpeakerGroupType = 4,
-  wordType = 5,
-  QSWordType = 6,
-  ESType = 7,
-  URWordType = 8,
-  matchingSpeakerType = 9,
-  matchingType = 10,
-  audienceMatchingType = 11,
-  matchingObjectType = 12,
-  headerType = 13,
-  beType = 14,
-  possessionType = 15,
-  tableType = 16,
-  agentType = 17
+export interface DialogData {
+  animal: string;
+  name: string;
 }
 
 @Component({
@@ -46,8 +33,8 @@ enum sourceElementTypes {
 export class SourceTextWindowComponent implements OnInit {
   public displayedColumns: string[] = ['word', 'roleVerbClass', 'relations', 'objectInfo', 'matchingObjects', 'flags'];
   public dataSource: WordInfoDataSource;
-  public timelineDataSource : TimelineDataSource;
-  public searchValue: string = "";
+  public timelineDataSource: TimelineDataSource;
+  //public searchValue: string = "";
   public currentSourceRange: string = "";
   public sourceElements: SourceElement[] = [];
   private preferencesButtonText = 'Preferences';
@@ -78,14 +65,14 @@ export class SourceTextWindowComponent implements OnInit {
   private loadingElements = false;
   private lastFromWhere: string = "0.0";
   private lastToWhere: string = "0.0";
-  private bottomReached: boolean =  false;
+  private bottomReached: boolean = false;
   private selectedPreferences: string[] = [];
 
   private lastSelectionStartId: number = 0;
   private lastSelectionEndId: number = 0;
   private lastLoadedSource: any;
 
-  private tempPauseScroll: boolean = false;
+  //private tempPauseScroll: boolean = false;
 
   public isHidden = false;
   public preferencesList = [
@@ -113,6 +100,9 @@ export class SourceTextWindowComponent implements OnInit {
   @ViewChild('sourceSearchStringInput') sourceSearchStringInput!: ElementRef;
   @ViewChild('dialogRef')
   dialogRef!: TemplateRef<any>;
+  animal: string = "";
+  name: string = "";
+
 
   @Output() onSelectedSearchString = new EventEmitter();
 
@@ -121,11 +111,16 @@ export class SourceTextWindowComponent implements OnInit {
     private changeDetection: ChangeDetectorRef,
     private _renderer2: Renderer2,
     public sourceElementDialogComponent: MatDialog,
+    public dialog: MatDialog,
     private ngZone: NgZone,
-    public dialog: MatDialog
+    private sseService: SseService,
+    private router: Router
   ) {
     this.dataService.login().subscribe(ch => {
       console.log("LOGGED IN!")
+      this.sseService
+        .getServerSentEvent("http://localhost:5000/stream-get-mode-switch?suid=1&mode_info=1")
+        .subscribe(data => console.log("stream-get-mode-switch", data));
     });
     this.dataSource = new WordInfoDataSource(this.dataService);
     this.timelineDataSource = new TimelineDataSource(this.dataService);
@@ -150,7 +145,7 @@ export class SourceTextWindowComponent implements OnInit {
      */
     document.addEventListener('selectionchange', () => {
       let selection = document.getSelection();
-      if (selection == null)
+      if (selection == null || selection.rangeCount == 0)
         return;
       let range = selection.getRangeAt(0);
       let startId = this.getElementId(range.startContainer);
@@ -170,7 +165,7 @@ export class SourceTextWindowComponent implements OnInit {
     })
   }
 
-  private populateSearchStrings(input:string) {
+  private populateSearchStrings(input: string) {
     this.sourceSearchString = input;
     clearTimeout(this.timeoutSourceSearchStringId);
     this.timeoutSourceSearchStringId = setTimeout(() => {
@@ -185,35 +180,31 @@ export class SourceTextWindowComponent implements OnInit {
     return selected;
   }
 
-  timedBlinker(elementId:string, interval: number, times: number)
-  {
-    if ((times&1) == 0)
+  timedBlinker(elementId: string, interval: number, times: number) {
+    if ((times & 1) == 0)
       times += 1
     const el = document.getElementById(elementId);
-    if (el!=null)
-    {
+    if (el != null) {
       let saveStyle = el.style;
-      this.timedBlinkerHelper(el, interval,times, saveStyle.backgroundColor, saveStyle.color, saveStyle.fontWeight,
+      this.timedBlinkerHelper(el, interval, times, saveStyle.backgroundColor, saveStyle.color, saveStyle.fontWeight,
         'black', 'red', 'bold')
     }
   }
 
-  timedBlinkerHelper(el:Element, interval: number, times: number,
+  timedBlinkerHelper(el: Element, interval: number, times: number,
                      saveBackColor: string, saveColor: string, saveWeight: string,
-                     backColor: string, color: string, weight: string)
-  {
-    this._renderer2.setStyle(el, 'background-color',backColor);
+                     backColor: string, color: string, weight: string) {
+    this._renderer2.setStyle(el, 'background-color', backColor);
     this._renderer2.setStyle(el, 'color', color);
     this._renderer2.setStyle(el, 'font-weight', weight);
     if (times == 0)
       return;
     this.timeoutResizeObserverId = setTimeout(() => {
-      this.timedBlinkerHelper(el, interval, times-1, backColor, color, weight, saveBackColor, saveColor, saveWeight);
+      this.timedBlinkerHelper(el, interval, times - 1, backColor, color, weight, saveBackColor, saveColor, saveWeight);
     }, interval);
   }
 
-  searchSourceEvent(event:any, result:any)
-  {
+  searchSourceEvent(event: any, result: any) {
     this.dataService.findParagraphStart(result.key.toString() + ".0").subscribe(paragraphStartId => {
       this.scrollToMyRef(paragraphStartId, result.key.toString() + ".0");
       this.sourceSearchStringInput.nativeElement.focus();
@@ -241,7 +232,7 @@ export class SourceTextWindowComponent implements OnInit {
       let e = document.getElementById(se.mouseover.toString())
       if (e != null) {
         if (this.isElementVisible(e, sourceElementsTop, sourceElementsBottom) != 0) {
-          let position = e.getBoundingClientRect();
+          // let position = e.getBoundingClientRect();
           return se.mouseover;
         }
       }
@@ -286,13 +277,11 @@ export class SourceTextWindowComponent implements OnInit {
     return (e != null && this.isElementVisible(e, sourceElementsTop, sourceElementsBottom) != 0);
   }
 
-  onAgentMenuDisplay()
-  {
+  onAgentMenuDisplay() {
     const el = document.getElementById(this.amenu.panelId);
     console.log(this.amenu.panelId);
     console.log(el);
-    if (el!=null)
-    {
+    if (el != null) {
       this._renderer2.setStyle(el, 'min-width', '700px');
       this._renderer2.setStyle(el, 'max-height', '300px');
       this._renderer2.setStyle(el, 'overlay', 'auto');
@@ -300,8 +289,7 @@ export class SourceTextWindowComponent implements OnInit {
     }
   }
 
-  updateSourceRange()
-  {
+  updateSourceRange() {
     clearTimeout(this.timeoutSourceRangeId);
     this.timeoutSourceRangeId = setTimeout(() => {
       let lowestElementId = this.findLowestVisibleTextElement();
@@ -310,14 +298,25 @@ export class SourceTextWindowComponent implements OnInit {
     }, 200);
   }
 
+  changeCursorToWait() {
+    console.log("Added waiting to body");
+    document.body.classList.add('waiting');   // set cursor to hourglass
+  }
+
+  removeCursorWait() {
+    document.body.classList.remove('waiting');   // unset cursor hourglass
+  }
+
   ngAfterViewInit() {
     let obs = new ResizeObserver(entries => {
       clearTimeout(this.timeoutResizeObserverId);
-      this.timeoutResizeObserverId = setTimeout(() => { this.loadElements(1, this.lastFromWhere, null, null); }, 300);
+      this.timeoutResizeObserverId = setTimeout(() => {
+        this.loadElements(1, this.lastFromWhere, null, null);
+      }, 300);
     });
     obs.observe(this.sourceElementsRef.nativeElement);
     let scroll = document.querySelector(".source-element");
-    if (scroll!=null)
+    if (scroll != null)
       scroll.addEventListener('scroll', (event) => {
         clearTimeout(this.timeoutScrollEventListener);
         this.timeoutScrollEventListener = setTimeout(() => {
@@ -329,7 +328,7 @@ export class SourceTextWindowComponent implements OnInit {
             let newFromWhere = Math.max(fromWhere - 300, 0);
             let scrollToWhere = parseInt(this.findHighestVisibleTextElement().split(".")[0]) - 100;
             if (newFromWhere < fromWhere) {
-              console.log("Top extend to " + newFromWhere.toString() + " then bottom scroll to " + scrollToWhere.toString() );
+              console.log("Top extend to " + newFromWhere.toString() + " then bottom scroll to " + scrollToWhere.toString());
               this.loadElements(2, newFromWhere.toString() + ".0", scrollToWhere.toString() + ".0", null);
             }
           } else
@@ -389,7 +388,7 @@ export class SourceTextWindowComponent implements OnInit {
 
   public onPreferencesMenuClosed() {
     this.matButtonRef.focus();
-    if (this.selectedPreferences.length>0)
+    if (this.selectedPreferences.length > 0)
       this.preferencesButtonText = this.selectedPreferences.join(', ');
     else
       this.preferencesButtonText = 'Preferences';
@@ -409,14 +408,13 @@ export class SourceTextWindowComponent implements OnInit {
     }
   }
 
-  scrollToMyRef = (id:string, strobe: string | null) => {
+  scrollToMyRef = (id: string, strobe: string | null) => {
     let ref = document.getElementById(id);
     if (ref == null) {
       console.log("Cannot find element id " + id)
       this.loadElements(4, id, null, strobe);
       this.isHidden = false;
-    }
-    else {
+    } else {
       setTimeout(() => {
         console.log("scrolling to " + id.toString());
         let ref = document.getElementById(id);
@@ -425,7 +423,7 @@ export class SourceTextWindowComponent implements OnInit {
             behavior: "auto",
             block: "start",
           });
-          this.isHidden=false;
+          this.isHidden = false;
           this.changeDetection.detectChanges();
           if (strobe != null)
             this.timedBlinker(strobe, 300, 10);
@@ -436,55 +434,76 @@ export class SourceTextWindowComponent implements OnInit {
     }
   };
 
-  public onChaptersSelect(chapter:any) {
+  public onChaptersSelect(chapter: any) {
     console.log(chapter);
     this.scrollToMyRef(chapter['where'], null);
   }
 
-  public onAgentsSelect(item:any) {
+  public onAgentsSelect(item: any) {
     //this.scrollToMyRef(item['position']);
   }
 
 
-  onSelectedOption(e:any) {
+  onSelectedOption(e: any) {
     this.lastLoadedSource = e;
     this.loadSource(e);
   }
 
-  reload()
-  {
+  reload() {
     this.loadSource(this.lastLoadedSource);
   }
 
-  sourceElementClick(elementId: string)
-  {
-    console.log(elementId);
-    this.dataService.getElementType(elementId).subscribe( elementType => {
-      let sourceElementDialogComponentRef: any;
-      console.log("element id " + elementId + " has element type " + elementType.toString());
-      switch (elementType) {
-        case sourceElementTypes.matchingObjectType:
-          console.log("OPENING");
-          sourceElementDialogComponentRef = this.sourceElementDialogComponent.open(SourceElementDialogComponent,
-            {
-              data: {
-                'dataService': this.dataService,
-                "elementId": elementId
-              }
-            }).afterClosed().subscribe();
-          this.ngZone.run(() => {
-            sourceElementDialogComponentRef.close();
-          });
-      }
+  openDialog(): void {
+    const dialogRef = this.dialog.open(DialogOverviewExampleDialog, {
+      width: '250px',
+      data: {name: this.name, animal: this.animal},
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      console.log('The dialog was closed');
+      this.animal = result;
     });
   }
 
-  loadSource(e:any)
-  {
+
+  // this click is done in a non-angular element.  Therefore sourceElementClick is outside the
+  // Angular Zone and must be put back in, otherwise components will not display or initialize correctly.
+  sourceElementClick(elementId: string) {
+    this.ngZone.run(() => {
+      //console.log("sourceElementClick In Angular Zone?");
+      //console.log(NgZone.isInAngularZone());
+      //console.log(elementId);
+      this.dataService.getElementType(elementId).subscribe(elementType => {
+        let sourceElementDialogComponentRef: any;
+        console.log("element id " + elementId + " has element type " + elementType.toString());
+        switch (elementType) {
+          case SourceElementTypes.wordType:
+          case SourceElementTypes.matchingSpeakerType:
+          case SourceElementTypes.matchingType:
+          case SourceElementTypes.audienceMatchingType:
+          case SourceElementTypes.matchingObjectType:
+            sourceElementDialogComponentRef = this.sourceElementDialogComponent.open(SourceElementDialogComponent,
+              {
+                data: {
+                  'dataService': this.dataService,
+                  'matchingType': elementType,
+                  "elementId": elementId
+                }
+              });
+            break;
+          default:
+            console.log("elementType doesn't match.");
+        }
+      });
+    });
+  }
+
+  loadSource(e: any) {
     console.log("loading source");
-    this.loadingSource=true
+    this.loadingSource = true
+    this.changeCursorToWait();
     this.dataService.loadSource(e).subscribe(elements => {
-      this.loadingSource=false
+      this.loadingSource = false
       this.loadElements(5, "0.0", null, null);
       this.dataService.loadChapters().subscribe(ch => {
         this.chapters = ch['response']
@@ -496,8 +515,7 @@ export class SourceTextWindowComponent implements OnInit {
     });
   }
 
-  loadElements(caller: number, fromWhere: string, optionScrollTo: string | null, strobe: string | null)
-  {
+  loadElements(caller: number, fromWhere: string, optionScrollTo: string | null, strobe: string | null) {
     if (this.loadingSource)
       return;
     if (this.loadingElements)
@@ -511,14 +529,14 @@ export class SourceTextWindowComponent implements OnInit {
     this.dataService.loadElements(width, height, fromWhere).subscribe(elements => {
       if (optionScrollTo != null)
         this.isHidden = true;
-      if (elements['response'].length > 0)
-      {
+      if (elements['response'].length > 0) {
         this.sourceElements = elements['response'];
         this.lastFromWhere = fromWhere;
         // console.log("after", caller, width, height, elements['response'].length, this.sourceElements[0]['mouseover'], this.sourceElements[this.sourceElements.length - 1]['mouseover']);
         this.lastToWhere = this.sourceElements[this.sourceElements.length - 1]['mouseover'];
         this.loadingElements = false;
         this.isHidden = false;
+        this.removeCursorWait();
         if (optionScrollTo != null)
           this.timeoutInfo = setTimeout(() => {
             console.log("scroll to " + optionScrollTo);
@@ -528,18 +546,16 @@ export class SourceTextWindowComponent implements OnInit {
                 behavior: "auto",
                 block: "end",
               });
-              if (strobe!= null)
+              if (strobe != null)
                 this.timedBlinker(strobe, 300, 10);
-            }
-            else {
+            } else {
               console.log("element id = " + optionScrollTo + " not found!");
             }
             this.changeDetection.detectChanges();
           }, 25);
-        else
-        {
+        else {
           this.changeDetection.detectChanges();
-          if (strobe!= null)
+          if (strobe != null)
             this.timedBlinker(strobe, 300, 10);
         }
 
@@ -548,8 +564,7 @@ export class SourceTextWindowComponent implements OnInit {
     });
   }
 
-  appendElements(numElements:number)
-  {
+  appendElements(numElements: number) {
     if (this.loadingSource)
       return;
     if (this.loadingElements)
@@ -557,7 +572,7 @@ export class SourceTextWindowComponent implements OnInit {
     this.loadingElements = true;
     let width = this.sourceElementsRef.nativeElement.offsetWidth;
     let height = this.sourceElementsRef.nativeElement.offsetHeight;
-    let lastToWhere = this.sourceElements[this.sourceElements.length-1]['mouseover'];
+    let lastToWhere = this.sourceElements[this.sourceElements.length - 1]['mouseover'];
     lastToWhere = (parseInt(lastToWhere.split(".")[0]) + 1).toString() + ".0";
     this.dataService.loadElements(width, height, lastToWhere).subscribe(elements => {
       this.sourceElements = this.sourceElements.concat(elements['response']);
@@ -567,8 +582,7 @@ export class SourceTextWindowComponent implements OnInit {
     });
   }
 
-  displayElement(e: any)
-  {
+  displayElement(e: any) {
     clearTimeout(this.timeoutInfo);
     this.timeoutInfo = setTimeout(() => {
       this.dataService.loadInfoPanel(e).subscribe(ch => {
@@ -581,9 +595,26 @@ export class SourceTextWindowComponent implements OnInit {
     }, 200);
     return e;
   }
+
   /*
   openContentElement() {
     this.dialog.open(ContentElementDialog);
   }
 */
+}
+
+@Component({
+  selector: 'dialog-overview-example-dialog',
+  templateUrl: '../dialog-overview-example-dialog.html',
+})
+export class DialogOverviewExampleDialog {
+  constructor(
+    public dialogRef: MatDialogRef<DialogOverviewExampleDialog>,
+    @Inject(MAT_DIALOG_DATA) public data: DialogData,
+  ) {
+  }
+
+  onNoClick(): void {
+    this.dialogRef.close();
+  }
 }

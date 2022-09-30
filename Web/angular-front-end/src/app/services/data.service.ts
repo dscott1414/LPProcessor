@@ -4,6 +4,8 @@ import {Observable, throwError, map} from 'rxjs';
 import {catchError, retry, tap} from 'rxjs/operators';
 import {HttpClient, HttpHeaders, HttpParams} from '@angular/common/http';
 import {WordInfo} from '../interfaces/word-info';
+import { LpObject } from '../interfaces/lp-object';
+import { SimpleObject } from "../interfaces/simple-object"
 
 @Injectable({
   providedIn: 'root'
@@ -128,6 +130,37 @@ export class DataService {
       responseType: 'json',
       params: new HttpParams()
         .set('elementId', elementId)
+    }).pipe(
+      map(res => res["response"])
+    );
+  }
+
+  getMatchingObjects(elementId: string, matchingType: number): Observable<SimpleObject[]> {
+    return this.http.get<any>('/api/getMatchingObjects', {
+      responseType: 'json',
+      params: new HttpParams()
+        .set('elementId', elementId)
+        .set('matchingType', matchingType)
+    }).pipe(
+      map(res => res["response"])
+    );
+  }
+
+  getSurroundingObjects(elementId: string, matchingType: number): Observable<SimpleObject[]> {
+    return this.http.get<any>('/api/getSurroundingObjects', {
+      responseType: 'json',
+      params: new HttpParams()
+        .set('elementId', elementId)
+        .set('matchingType', matchingType)
+    }).pipe(
+      map(res => res["response"])
+    );
+  }
+
+  saveMatchingObjects(elementId: string, matchingType: number, matchingObjects: SimpleObject[]) {
+    return this.http.post<any>('/api/saveMatchingObjects', {
+      'elementId': elementId,
+      'matchingObjects': matchingObjects
     }).pipe(
       map(res => res["response"])
     );

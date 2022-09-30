@@ -4,7 +4,7 @@ import { BrowserModule } from '@angular/platform-browser';
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { SearchBarComponent } from './search-bar/search-bar.component';
-import { ContentElementDialog, SourceElementDialogComponent } from './source-element-dialog/source-element-dialog.component';
+import { SourceElementDialogComponent } from './source-element-dialog/source-element-dialog.component';
 import { SourceTextWindowComponent } from './source-text-window/source-text-window.component';
 import {MatDialogModule} from '@angular/material/dialog';
 import {MatButtonModule} from '@angular/material/button';
@@ -21,6 +21,9 @@ import {MatCheckboxModule} from '@angular/material/checkbox';
 import {MatTableModule} from '@angular/material/table';
 import {MatTreeModule} from '@angular/material/tree';
 import { HttpClientModule } from '@angular/common/http';
+import { DialogOverviewExampleDialog} from './source-text-window/source-text-window.component';
+import {MatNativeDateModule} from "@angular/material/core";
+import {MatSelectModule} from "@angular/material/select";
 
 @NgModule({
   declarations: [
@@ -28,8 +31,7 @@ import { HttpClientModule } from '@angular/common/http';
     SearchBarComponent,
     SourceElementDialogComponent,
     SourceTextWindowComponent,
-    ContentElementDialog
-
+    DialogOverviewExampleDialog
 ],
   imports: [
     BrowserModule,
@@ -49,7 +51,15 @@ import { HttpClientModule } from '@angular/common/http';
     HttpClientModule,
     MatFormFieldModule,
     MatInputModule,
-    BrowserAnimationsModule
+    BrowserAnimationsModule,
+    BrowserAnimationsModule,
+    BrowserModule,
+    FormsModule,
+    HttpClientModule,
+    MatNativeDateModule,
+    ReactiveFormsModule,
+    MatSelectModule,
+
   ],
   providers: [],
   bootstrap: [AppComponent]

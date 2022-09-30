@@ -11,6 +11,8 @@ from SourceEnums import SourceEnums
 from TimeInfo import TimeInfo
 import copy
 import json
+import jsonpickle
+from json import JSONEncoder
 from VerbNet import VerbNet
 from time import perf_counter
 import re
@@ -1361,4 +1363,77 @@ class Source:
         print(self.batchDoc[where][whichHtmlElement][5]);
         return self.batchDoc[where][whichHtmlElement][5]
                 
+    def get_object_name(self, mObject):
+        objectWhere = self.objects[mObject].originalLocation;
+        # skip honorific
+        if ((self.m[objectWhere].query_winner_form(Form.honorificForm) >= 0  
+                or self.m[objectWhere].query_winner_form(Form.honorificAbbreviationForm) >= 0)  
+                and objectWhere + 1 < self.m[objectWhere].endObjectPosition):
+            objectWhere += 1
+            if self.m[objectWhere].word == ".":
+                objectWhere += 1
+        if mObject == 0:
+            w = "Narrator"
+        elif mObject == 1:
+            w = "Audience"
+        else:
+            w = self.m[objectWhere].word;
+        return w
+
+
+    def get_matching_objects(self, elementId, matchingType):
+        print("getting matching objects element id:" + elementId + "matchingType = " + matchingType)
+        idSplit = elementId.split('.')
+        where = int(idSplit[0])
+        oms = []
+        ret_objects = []
+        oms = self.m[where].objectMatches
+        for om in oms:
+            ret_objects.append({ 'type': self.SourceMapType.matchingObjectType, 'id':om.object, 'name':self.get_object_name(om.object)})
+        oms = self.m[where].audienceObjectMatches
+        for om in oms:
+            ret_objects.append({ 'type': self.SourceMapType.audienceMatchingType, 'id':om.object, 'name':self.get_object_name(om.object)})
+        return ret_objects
+                
+    def save_matching_objects(self, elementId, objects):
+        idSplit = elementId.split('.')
+        where = int(idSplit[0])
+        objects = []
+        objectMatches = []
+        audientObjectMatches = []
+        for o in objects:
+            if o.type == self.SourceMapType.matchingObjectType:
+                objectMatches.add(o.id);
+            else:
+                audientObjectMatches.add(o.id);
+        print("setting matching objects element id:" + elementId, objects, objectMatches, audientObjectMatches)
+        self.m[where].objectMatches = objectMatches
+        self.m[where].audientObjectMatches = audientObjectMatches
+        return 0
+                
+    def get_surrounding_objects(self, elementId, matchingType):
+        idSplit = elementId.split('.')
+        where = int(idSplit[0])
+        ret_objects = []
+        o = self.m[where].object;
+        if o > 0:
+            print("getting surrounding objects element id:" + elementId + \
+                   " matchingType = " + matchingType + \
+                   " in range " + str(max(0,o - 10)) + " to " + str(o))
+            for index in range(max(0,o - 10), o):
+                ret_objects.append({ 'id':index, 'name':self.get_object_name(index) })
+            return ret_objects
+        else:
+            print("getting surrounding objects element id:" + elementId + \
+                   " matchingType = " + matchingType + \
+                   " in position range " + str(max(0,where - 500)) + " to " + str(where))
+            objects = set()
+            for index in range(max(0,where - 500), where):
+                if self.m[index].object > 0:
+                    objects.add(self.m[index].object)
+            for o in objects:
+                ret_objects.append({ 'id':o, 'name':self.get_object_name(o) })
+            return ret_objects
             
+                
+       

@@ -1,0 +1,49 @@
+.source-element-actions {
+  display: flex;
+  flex-direction: row;
+  row-gap: 100px;
+  justify-content: center;
+}
+
+.close-class {
+  width: 60px;
+  height: 35px;
+  margin-top: 10px;
+  flex-basis: 60px;
+}
+
+.save-class {
+  width: 60px;
+  height: 35px;
+  margin-top: 10px;
+  margin-left: 80px;
+  flex-basis: 60px;
+}
+
+.match {
+  background-color: lightgreen;
+}
+
+.audience-match {
+  background-color: lightblue;
+}
+
+.mat-column-name {
+  padding-left: 10px;
+  padding-right: 0px;
+  flex: 0 0 70%;
+}
+
+.mat-column-delete {
+  padding-left: 10px;
+  padding-right: 0px;
+  flex: 0 0 30%;
+}
+
+.match-button {
+  background-color: lightgreen;
+}
+
+.audience-match-button {
+  background-color: lightblue;
+}

@@ -4,14 +4,16 @@ Created on May 29, 2022
 @author: dscot_000
 '''
 from flask import Flask, request, session
-from flask_cors import CORS
+from flask import render_template, Response
+from flask_cors import CORS, cross_origin
+
 import pymysql
 from LPIO import LPIO
 from WordClass import WordClass
 from Source import Source
 from time import perf_counter
 import uuid
-import json
+import time
 
 app = Flask(__name__)
 CORS(app)
@@ -21,7 +23,8 @@ global sessions
 sessions = {}
 
 class LPSession:
-    pass
+    preferences = { 0: False, 1: False, 2: False, 3: False, 4: False, 5: False }
+    modes = {}
 
 
 @app.route('/')
@@ -42,7 +45,7 @@ def connect():
 def login():
     session['uid'] = 1  # change to uuid.uuid4() when multi user! 
     sessions[session['uid']] = LPSession()
-    sessions[session['uid']].preferences = { 0: False, 1: False, 2: False, 3: False, 4: False, 5: False }
+    print("login session established.", session)
     return { 'response': str(session['uid']) }
 
     
@@ -147,8 +150,11 @@ def set_preference():
     # print(sessions[session['uid']].preferences)
     data = request.get_json()
     # print(data)
-    sessions[session['uid']].preferences[data['type']] = data['value']
-    return { 'response': sessions[session['uid']].preferences }
+    if 'uid' in session and session['uid'] in sessions:
+        sessions[session['uid']].preferences[data['type']] = data['value']
+        return { 'response': sessions[session['uid']].preferences }
+    else:
+        return { 'response': {} }
 
     
 @app.route('/api/loadSource', methods=["GET"])
@@ -162,6 +168,10 @@ def load_source():
         print("Author/title not found")
         return { 'response': [] }
 
+    if 'uid' not in session or session['uid'] not in sessions:
+        print("Session not logged in")
+        return { 'response': [] }
+        
     t_start = perf_counter()
     lpio = LPIO("F:\\lp\\wordFormCache")
     sessions[session['uid']].Words = WordClass(lpio);
@@ -217,7 +227,7 @@ def load_elements():
             htmlElements.append(htmlElement)
             currentWidth, currentHeight = sessions[session['uid']].source.advance_screen_position(htmlElement, int(width), currentWidth, currentHeight)
         sourceIndex += 1
-    if sessions[session['uid']] is not None:
+    if 'uid' in session and session['uid'] in sessions:
         t_start = perf_counter()
         htmlElements = sessions[session['uid']].source.print_html(sessions[session['uid']].preferences, sourceIndex, currentWidth, currentHeight, int(width), int(height))
         t_elapsed = perf_counter() - t_start
@@ -231,7 +241,7 @@ def load_elements():
 @app.route('/api/loadChapters', methods=["GET"])
 def load_chapters():
     global sessions
-    if sessions[session['uid']] is not None:
+    if 'uid' in session and session['uid'] in sessions:
         return { 'response': sessions[session['uid']].source.chapters }
     else:
         print("Source is not loaded!")
@@ -241,7 +251,7 @@ def load_chapters():
 @app.route('/api/loadAgents', methods=["GET"])
 def load_agents():
     global sessions
-    if sessions[session['uid']] is not None:
+    if 'uid' in session and session['uid'] in sessions:
         htmlElements = []
         for ms in range(len(sessions[session['uid']].source.masterSpeakerList)):
             html = sessions[session['uid']].source.master_speaker_html(ms)
@@ -257,8 +267,8 @@ def load_agents():
 def load_info_panel():
     global sessions
     where = request.args.get('where')
-    wordInfo, roleInfo, relationsInfo, toolTip = sessions[session['uid']].source.get_info_panel(where)
-    if sessions[session['uid']] is not None:
+    if 'uid' in session and session['uid'] in sessions:
+        wordInfo, roleInfo, relationsInfo, toolTip = sessions[session['uid']].source.get_info_panel(where)
         return { 'response': { "wordInfo":wordInfo, "roleInfo":roleInfo, "relationsInfo": relationsInfo, "toolTip":toolTip } }
     else:
         print("Source is not loaded!")
@@ -271,8 +281,8 @@ def load_word_info():
     endId = request.args.get('endId')
     pageNumber = request.args.get('pageNumber')
     pageSize = request.args.get('pageSize')
-    wordInfo = sessions[session['uid']].source.get_word_info(beginId, endId, pageNumber, pageSize)
-    if sessions[session['uid']] is not None:
+    if 'uid' in session and session['uid'] in sessions:
+        wordInfo = sessions[session['uid']].source.get_word_info(beginId, endId, pageNumber, pageSize)
         return { 'response': wordInfo }
     else:
         print("Source is not loaded!")
@@ -283,8 +293,8 @@ def load_timeline_segments():
     global sessions
     pageNumber = request.args.get('pageNumber')
     pageSize = request.args.get('pageSize')
-    segments = sessions[session['uid']].source.get_timeline_segments(pageNumber, pageSize)
-    if sessions[session['uid']] is not None:
+    if 'uid' in session and session['uid'] in sessions:
+        segments = sessions[session['uid']].source.get_timeline_segments(pageNumber, pageSize)
         return { 'response': segments }
     else:
         print("Source is not loaded!")
@@ -294,7 +304,7 @@ def load_timeline_segments():
 def html_element_id_to_source():
     global sessions
     elementId = request.args.get('elementId')
-    if sessions[session['uid']] is not None:
+    if 'uid' in session and session['uid'] in sessions:
         elementId = sessions[session['uid']].source.HTMLElementIdToSource[int(elementId)]
         return { 'response': elementId }
     else:
@@ -324,7 +334,7 @@ def test():
 def search_string_list():
     global sessions
     sourceSearchString = request.args.get('sourceSearchString')
-    if sessions[session['uid']] is not None:
+    if 'uid' in session and session['uid'] in sessions:
         searchResults = sessions[session['uid']].source.get_instances_of_word(sourceSearchString)
         print(searchResults)
         return { 'response': searchResults }
@@ -336,7 +346,7 @@ def search_string_list():
 def find_paragraph_start():
     global sessions
     somewhereInParagraph = request.args.get('somewhereInParagraph')
-    if sessions[session['uid']] is not None:
+    if 'uid' in session and session['uid'] in sessions:
         paragraphStartId = sessions[session['uid']].source.find_paragraph_start(somewhereInParagraph)
         print(paragraphStartId)
         return { 'response': paragraphStartId }
@@ -348,7 +358,7 @@ def find_paragraph_start():
 def get_element_type():
     global sessions
     elementId = request.args.get('elementId')
-    if sessions[session['uid']] is not None:
+    if 'uid' in session and session['uid'] in sessions:
         elementType = sessions[session['uid']].source.get_element_type(elementId)
         print(elementType)
         return { 'response': elementType }
@@ -356,6 +366,61 @@ def get_element_type():
         print("Source is not loaded!")
     return { 'response': "" }
     
+@app.route('/stream-get-mode-switch', methods=["GET"])
+@cross_origin(origins=['http://127.0.0.1:4200'])
+def get_mode_switch():
+    global sessions
+    mode = request.args.get('mode')
+    suid = int(request.args.get('suid'))
+    def event_stream():
+        last_mode_info = None
+        while True:
+            time.sleep(1)
+            if suid in sessions and mode in sessions[suid].modes:
+                current_mode_info = sessions[suid].modes[mode]
+                if current_mode_info != last_mode_info:
+                    last_mode_info = current_mode_info
+                    yield f"data:{mode}\n\n"
+    return Response(event_stream(), mimetype='text/event-stream')
+    
+@app.route('/set-mode-switch', methods=["GET"])
+def set_mode_switch():
+    global sessions
+    mode = request.args.get('mode')
+    current_mode_info = request.args.get('mode_info')
+    suid = request.args.get('suid')
+    if suid in sessions:
+        sessions[suid].modes[mode] = current_mode_info
+        return { 'response': current_mode_info }
+    else:
+        print("Source is not loaded!")
+    return { 'response': "" }
+    
+@app.route('/api/getMatchingObjects', methods=["GET"])
+def get_matching_objects():
+    global sessions
+    elementId = request.args.get('elementId')
+    matchingType = request.args.get('matchingType')
+    if 'uid' in session and session['uid'] in sessions:
+        matchingObjects = sessions[session['uid']].source.get_matching_objects(elementId, matchingType)
+        print(matchingObjects)
+        return { 'response': matchingObjects }
+    else:
+        print("Source is not loaded!")
+    return { 'response': "" }
+    
+@app.route('/api/getSurroundingObjects', methods=["GET"])
+def get_surrounding_objects():
+    global sessions
+    elementId = request.args.get('elementId')
+    matchingType = request.args.get('matchingType')
+    if 'uid' in session and session['uid'] in sessions:
+        surroundingObjects = sessions[session['uid']].source.get_surrounding_objects(elementId, matchingType)
+        print(surroundingObjects)
+        return { 'response': surroundingObjects }
+    else:
+        print("Source is not loaded!")
+    return { 'response': "" }
     
 if __name__ == '__main__':  # Script executed directly?
     app.run()  # Launch built-in web server and run this Flask webapp

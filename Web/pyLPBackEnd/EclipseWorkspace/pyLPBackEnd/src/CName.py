@@ -40,3 +40,17 @@ class CName:
         self.last = rs.read_string()
         self.suffix = rs.read_string()
         self.any = rs.read_string()
+        
+    def toJSON(self):
+        ret = {}
+        ret['nickName'] = self.nickName
+        ret['hon'] = self.hon
+        ret['hon2'] = self.hon2
+        ret['hon3'] = self.hon3
+        ret['first'] = self.first
+        ret['middle'] = self.middle
+        ret['middle2'] = self.middle2
+        ret['last'] = self.last
+        ret['suffix'] = self.suffix
+        ret['any'] = self.any
+        return ret

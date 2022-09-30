@@ -1,23 +1,24 @@
 import struct
+import json
 from CName import CName
 
 
-class CObject:
+class CObject(dict):
 	VERB_HISTORY = 4 
 	NO_ROLE = 0 
 	SUBOBJECT_ROLE = 2 
 	SUBJECT_ROLE = 4 
 	OBJECT_ROLE = 8 
 	META_NAME_EQUIVALENCE = 16 
-	MPLURAL_ROLE = 32  # multiple subjects & objects
-	HAIL_ROLE = 64  # speakers referred to in a quote from someone else
+	MPLURAL_ROLE = 32 # multiple subjects & objects
+	HAIL_ROLE = 64 # speakers referred to in a quote from someone else
 	IOBJECT_ROLE = 128 
 	PREP_OBJECT_ROLE = 256 
 	RE_OBJECT_ROLE = 512 
-	IS_OBJECT_ROLE = 1024  # used to determine speaker status
-	NONPAST_OBJECT_ROLE = 2048  # used to determine speaker status
-	ID_SENTENCE_TYPE = 4096  # set at sentence beginning if containing an "IS" verb
-	NO_ALT_RES_SPEAKER_ROLE = 8192  # Jill asked. ", Tom said. " said Jill. Ignore these as subjects for alternate resolution
+	IS_OBJECT_ROLE = 1024 # used to determine speaker status
+	NONPAST_OBJECT_ROLE = 2048 # used to determine speaker status
+	ID_SENTENCE_TYPE = 4096 # set at sentence beginning if containing an "IS" verb
+	NO_ALT_RES_SPEAKER_ROLE = 8192 # Jill asked. ", Tom said. " said Jill. Ignore these as subjects for alternate resolution
 	IS_ADJ_OBJECT_ROLE = 16384 
 	NONPRESENT_OBJECT_ROLE = 32768 
 	PLACE_OBJECT_ROLE = 65536 
@@ -25,7 +26,7 @@ class CObject:
 	NON_MOVEMENT_PREP_OBJECT_ROLE = 262144 
 
 	SUBJECT_PLEONASTIC_ROLE = NON_MOVEMENT_PREP_OBJECT_ROLE << 1 
-	IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE = SUBJECT_PLEONASTIC_ROLE << 1  # mark speakers referring to themselves within quotes
+	IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE = SUBJECT_PLEONASTIC_ROLE << 1 # mark speakers referring to themselves within quotes
 	UNRESOLVABLE_FROM_IMPLICIT_OBJECT_ROLE = IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE << 1 
 	SENTENCE_IN_REL_ROLE = UNRESOLVABLE_FROM_IMPLICIT_OBJECT_ROLE << 1 
 	PASSIVE_SUBJECT_ROLE = SENTENCE_IN_REL_ROLE << 1 
@@ -53,8 +54,8 @@ class CObject:
 	SENTENCE_IN_ALT_REL_ROLE = IN_COMMAND_OBJECT_ROLE << 1 
 
 	class CLastVerbTenses:
-		lastVerb = 0  # book position of main verb
-		lastTense = 0  # tense of the entire verb
+		lastVerb = 0 # book position of main verb
+		lastTense = 0 # tense of the entire verb
 
 	# identifySpeakers
 	def __init__(self, rs):
@@ -97,55 +98,55 @@ class CObject:
 		
 		self.isWikiBusiness = (flags & 1) == 1
 		flags >>= 1 
-		self.isWikiPerson = (flags & 1) == 1  
+		self.isWikiPerson = (flags & 1) == 1 
 		flags >>= 1 
-		self.isWikiPlace = (flags & 1) == 1  
+		self.isWikiPlace = (flags & 1) == 1 
 		flags >>= 1 
-		self.isLocationObject = (flags & 1) == 1  
+		self.isLocationObject = (flags & 1) == 1 
 		flags >>= 1 
-		self.isTimeObject = (flags & 1) == 1  
+		self.isTimeObject = (flags & 1) == 1 
 		flags >>= 1 
-		self.dbPediaAccessed = (flags & 1) == 1  
+		self.dbPediaAccessed = (flags & 1) == 1 
 		flags >>= 1 
-		self.container = (flags & 1) == 1  
+		self.container = (flags & 1) == 1 
 		flags >>= 1 
-		self.wikipediaAccessed = (flags & 1) == 1  
+		self.wikipediaAccessed = (flags & 1) == 1 
 		flags >>= 1 
-		self.isKindOf = (flags & 1) == 1  
+		self.isKindOf = (flags & 1) == 1 
 		flags >>= 1 
-		self.genderNarrowed = (flags & 1) == 1  
+		self.genderNarrowed = (flags & 1) == 1 
 		flags >>= 1 
-		self.isNotAPlace = (flags & 1) == 1  
+		self.isNotAPlace = (flags & 1) == 1 
 		flags >>= 1 
-		self.partialMatch = (flags & 1) == 1  
+		self.partialMatch = (flags & 1) == 1 
 		flags >>= 1 
-		self.ambiguous = (flags & 1) == 1  
+		self.ambiguous = (flags & 1) == 1 
 		flags >>= 1 
-		self.verySuspect = (flags & 1) == 1  
+		self.verySuspect = (flags & 1) == 1 
 		flags >>= 1 
-		self.suspect = (flags & 1) == 1  
+		self.suspect = (flags & 1) == 1 
 		flags >>= 1 
-		self.multiSource = (flags & 1) == 1  
+		self.multiSource = (flags & 1) == 1 
 		flags >>= 1 
-		self.eliminated = (flags & 1) == 1  
+		self.eliminated = (flags & 1) == 1 
 		flags >>= 1 
-		self.ownerNeuter = (flags & 1) == 1  
+		self.ownerNeuter = (flags & 1) == 1 
 		flags >>= 1 
-		self.ownerFemale = (flags & 1) == 1  
+		self.ownerFemale = (flags & 1) == 1 
 		flags >>= 1 
-		self.ownerMale = (flags & 1) == 1  
+		self.ownerMale = (flags & 1) == 1 
 		flags >>= 1 
-		self.ownerPlural = (flags & 1) == 1  
+		self.ownerPlural = (flags & 1) == 1 
 		flags >>= 1 
-		self.neuter = (flags & 1) == 1  
+		self.neuter = (flags & 1) == 1 
 		flags >>= 1 
-		self.female = (flags & 1) == 1  
+		self.female = (flags & 1) == 1 
 		flags >>= 1 
-		self.male = (flags & 1) == 1  
+		self.male = (flags & 1) == 1 
 		flags >>= 1 
-		self.plural = (flags & 1) == 1  
+		self.plural = (flags & 1) == 1 
 		flags >>= 1 
-		self.identified = (flags & 1) == 1  
+		self.identified = (flags & 1) == 1 
 		flags >>= 1 
 		
 		self.lastVerbTenses = {}
@@ -155,3 +156,81 @@ class CObject:
 			self.lastVerbTenses[I].lastVerb = rs.read_integer()
 		self.name = CName(rs) 
 	
+	def toJSON(self):
+		ret = {}
+		ret['index'] = self.index
+		ret['objectClass'] = self.objectClass
+		ret['subType'] = self.subType
+		ret['begin'] = self.begin
+		ret['end'] = self.end
+		ret['originalLocation'] = self.originalLocation
+		ret['PMAElement'] = self.PMAElement
+		ret['numEncounters'] = self.numEncounters
+		ret['numIdentifiedAsSpeaker'] = self.numIdentifiedAsSpeaker
+		ret['numDefinitelyIdentifiedAsSpeaker'] = self.numDefinitelyIdentifiedAsSpeaker
+		ret['numEncountersInSection'] = self.numEncountersInSection
+		ret['numSpokenAboutInSection'] = self.numSpokenAboutInSection
+		ret['numIdentifiedAsSpeakerInSection'] = self.numIdentifiedAsSpeakerInSection
+		ret['numDefinitelyIdentifiedAsSpeakerInSection'] = self.numDefinitelyIdentifiedAsSpeakerInSection
+		ret['PISSubject'] = self.PISSubject
+		ret['PISHail'] = self.PISHail
+		ret['PISDefinite'] = self.PISDefinite
+		ret['replacedBy'] = self.replacedBy
+		ret['ownerWhere'] = self.ownerWhere
+		ret['firstLocation'] = self.firstLocation
+		ret['firstSpeakerGroup'] = self.firstSpeakerGroup
+		ret['firstPhysicalManifestation'] = self.firstPhysicalManifestation
+		ret['lastSpeakerGroup'] = self.lastSpeakerGroup
+		ret['ageSinceLastSpeakerGroup'] = self.ageSinceLastSpeakerGroup
+		ret['masterSpeakerIndex'] = self.masterSpeakerIndex
+		ret['htmlLinkCount'] = self.htmlLinkCount
+		ret['relativeClausePM'] = self.relativeClausePM
+		ret['whereRelativeClause'] = self.whereRelativeClause
+		ret['whereRelSubjectClause'] = self.whereRelSubjectClause
+		ret['usedAsLocation'] = self.usedAsLocation
+		ret['lastWhereLocation'] = self.lastWhereLocation
+		ret['spaceRelations'] = json.dumps(self.spaceRelations)
+		ret['duplicates'] = json.dumps(self.duplicates)
+		ret['aliases'] = json.dumps(self.aliases)
+		ret['associatedNouns'] = json.dumps(self.associatedNouns)
+		ret['associatedAdjectives'] = json.dumps(self.associatedAdjectives)
+		ret['possessions'] = json.dumps(self.possessions)
+		if hasattr(self,'genericNounMap'):
+			ret['genericNounMap'] = json.dumps(self.genericNounMap)
+		ret['mostMatchedGeneric'] = self.mostMatchedGeneric
+		ret['genericAge'] = json.dumps(self.genericAge)
+		ret['age'] = self.age
+		ret['mostMatchedAge'] = self.mostMatchedAge
+		ret['flags'] = ( 
+			self.isWikiBusiness, 
+			self.isWikiPerson, 
+			self.isWikiPlace, 
+			self.isLocationObject, 
+			self.isTimeObject, 
+			self.dbPediaAccessed, 
+			self.container, 
+			self.wikipediaAccessed, 
+			self.isKindOf, 
+			self.genderNarrowed, 
+			self.isNotAPlace, 
+			self.partialMatch, 
+			self.ambiguous, 
+			self.verySuspect, 
+			self.suspect, 
+			self.multiSource, 
+			self.eliminated, 
+			self.ownerNeuter, 
+			self.ownerFemale, 
+			self.ownerMale, 
+			self.ownerPlural, 
+			self.neuter, 
+			self.female, 
+			self.male, 
+			self.plural, 
+			self.identified 
+			)
+		ret['lastVerbTenses'] = []
+		for I in range(self.VERB_HISTORY):
+			ret['lastVerbTenses'].append( { 'lastTense' : self.lastVerbTenses[I].lastTense, 'lastVerb': self.lastVerbTenses[I].lastVerb } )
+		ret['name'] = self.name.toJSON()
+		return ret
