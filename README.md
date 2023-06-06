@@ -70,33 +70,6 @@ A Narrative Parser
 
 [References 42](#_Toc46105769)
 
-## Research Directions
-
-1. Compare parsing output both in breadth, in depth and in accuracy to the Stanford CoreNLP:
-
-[https://nlp.stanford.edu/projects/stat-parsing.shtml](https://nlp.stanford.edu/projects/stat-parsing.shtml)
-
-https://people.eecs.berkeley.edu/~klein/cs294-5/chen\_goodman.pdf
-
-[https://west.uni-koblenz.de/sites/default/files/BachelorArbeit\_MartinKoerner.pdf](https://west.uni-koblenz.de/sites/default/files/BachelorArbeit_MartinKoerner.pdf)
-
-[https://kheafield.com/code/kenlm/](https://kheafield.com/code/kenlm/)
-
-implementations:
-
-[https://github.com/smilli/kneser-ney](https://github.com/smilli/kneser-ney) (simple)
-
-[https://github.com/kpu/kenlm](https://github.com/kpu/kenlm) (complex but optimized)
-
-1. Go through TREC question answering
-
-TODO (long range):
-
-1. Incorporate automatic clustering (Spark) to replace static ontology
-2. Create a 3D environment to furnish physical world understanding
-
-Detailed timeline of development contained in Development Diary in OneDrive documents
-
 ## Overview
 
 **Project** : Computational Linguistics Language Processor
@@ -147,6 +120,33 @@ Bob and Bill went toward the train while I held the track lever.
 4. Based on many academic sources such as Paice/Husk Stemmer, Lappin and Leass, Martha Palmer, Christiane Fellbaum and team, IBM/Lancaster, Inderjeet Mani, Winograd, Longman Grammar, TimeML, Chomsky, and many others.
 5. Question Answering is based on TREC data and papers. Google and BING searches are used instead of the data from NIST. Question answers are based off of syntax but also include creation of a semantic web to infer relations that are not syntactically specified. This includes extraction of data in HTML tables and subquery analysis ("What prize which originated in Spain has Krugman won?")
 6. SQL (MySQL) backend, C/C++ middle layer, Java front end. Parallel processing is used for parsing and semantic analysis.
+
+## Research Directions
+
+1. Compare parsing output both in breadth, in depth and in accuracy to the Stanford CoreNLP:
+
+[https://nlp.stanford.edu/projects/stat-parsing.shtml](https://nlp.stanford.edu/projects/stat-parsing.shtml)
+
+https://people.eecs.berkeley.edu/~klein/cs294-5/chen\_goodman.pdf
+
+[https://west.uni-koblenz.de/sites/default/files/BachelorArbeit\_MartinKoerner.pdf](https://west.uni-koblenz.de/sites/default/files/BachelorArbeit_MartinKoerner.pdf)
+
+[https://kheafield.com/code/kenlm/](https://kheafield.com/code/kenlm/)
+
+implementations:
+
+[https://github.com/smilli/kneser-ney](https://github.com/smilli/kneser-ney) (simple)
+
+[https://github.com/kpu/kenlm](https://github.com/kpu/kenlm) (complex but optimized)
+
+1. Go through TREC question answering
+
+TODO (long range):
+
+1. Incorporate automatic clustering (Spark) to replace static ontology
+2. Create a 3D environment to furnish physical world understanding
+
+Detailed timeline of development contained in Development Diary in OneDrive documents
 
 ## Parsing Processing Stages
 
