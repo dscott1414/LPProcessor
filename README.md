@@ -101,9 +101,9 @@ Detailed timeline of development contained in Development Diary in OneDrive docu
 
 **Project** : Computational Linguistics Language Processor
 
-**Purpose** : Make computers friendlier to people by predicting how people react in everyday situations, by understanding the human experience of time, and how people talk and refer to each other. This information is collected by analyzing conversations, characters and expressions of time and space for over 5500 hand-picked novels of the Gutenberg online library. Question answering is being developed as an API to the information collected.
+**Purpose** : Derive training data for ChatGPT from over 5500 hand-picked novels of the Gutenberg online library by conversational analysis. 
 
-**Design Philosophy** : Maximize the analysis of text (as opposed to commercial and most research efforts which seek to minimize the analysis of text), which allows even large novels to be processed as a whole.
+**Design Philosophy** : Maximize the analysis of text which allows large novels to be processed as an integrated entity rather than a bunch of sentences.
 
 **Major Processing Features:**
 
