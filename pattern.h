@@ -1,3 +1,51 @@
+/*
+	pattern.h - pattern grammar objects, tag locations, and the public match/create API
+
+	Overview:
+		Declares the in-memory representation of one hand-written sentence pattern
+		(cPattern / cPatternElement), one step of a live match (cMatchElement), the
+		flat tag-hit record used by later stages (cTagLocation / cTagSet), and the
+		forward-reference bookkeeping (cPatternReference) that lets a pattern mention
+		another pattern that has not been created yet.  Patterns themselves are built
+		by definePatterns.cpp via cPattern::create(); this header is the type system
+		the match engine in pattern.cpp walks.
+
+	Pipeline position:
+		Stage 1 (initialization) calls initializePatterns() which constructs every
+		cPattern.  Stage 4 (parse) walks them with matchPatternPosition() /
+		fillPattern() and writes winners into each token's PMA and the document-wide
+		PEMA.  Stages 5+ only read tags / PMA / PEMA.
+
+	Key entry points:
+		- initializePatterns() - build all 500+ patterns, resolve forward refs, evaluate tag sets
+		- cPattern::create() - parse one pattern definition (va_list of form/pattern steps)
+		- cPattern::matchPatternPosition() / fillPattern() - try this pattern at one source position
+		- findPattern() / findTag() / findTagConstrained() - lookup helpers used everywhere downstream
+		- cPatternElement::matchOne/matchFirst/matchRange() - one-element matching
+
+	Key data structures / globals:
+		- patterns - vector <cPattern *>, append-only after initializePatterns(); index is the
+		  pattern number stored in PMA/PEMA (unsigned short, so the hard cap is 65535)
+		- patternReferences - pending "_FOO" element references resolved after all creates
+		- patternTagStrings - intern table for {TAG} names; an unsigned int tag is an index here
+		- desiredTagSets - named groups of tags (agreement, objects, roles, time, ...) used by
+		  costing and relation extraction
+		- patternsWithNoParents / patternsWithNoChildren - bitsets filled at init
+
+	Notes / gotchas:
+		- cMatchElement::elementMatchedIndex packs either a form offset or
+		  (pattern# << 15 | childLen) plus bit 31 = patternFlag.  PEMA uses the same
+		  layout (CHILDPATBITS=15).  Changing either constant without the other
+		  silently corrupts every match.
+		- nextRoot chains every cPattern that shares a name (all __NOUN variants);
+		  rootPattern is the first of that name.  findPattern(name) returns the first
+		  and the caller walks nextRoot or uses [*] at create time to bind all of them.
+		- ABNF read/write is #ifdef ABNF and does not compile against the current
+		  members (onlyAfterQuote vs afterQuote, wtoi, wchar fgets).  The live path
+		  is always the va_list create().
+		- SOURCE_VERSION must be bumped on any pattern or cache-format change; the
+		  parsed-source cache is keyed on it.
+*/
 #include "bitObject.h"
 extern vector <wstring> patternTagStrings;
 
@@ -38,6 +86,11 @@ public:
     int PMAIndex;
 
     unsigned int cPatternElement; // could be a short but int is better for alignment
+	// One step of a live match: [beginPosition,endPosition) in source.m, linked to the
+	// previous step via previousMatch (an index into whatMatched, or -1).  isPattern
+	// sets bit 31 of elementMatchedIndex; PMAIndex is the child's PMA slot when the
+	// child is itself a pattern.  patternElementIndex -2/-3 are the "optional skip"
+	// placeholders written when minimum==0.
     cMatchElement(int inPMAIndex,unsigned int inBeginPosition,unsigned int inEndPosition,unsigned int inElementMatchedIndex,short inCost,bool isPattern,
         int inPreviousMatch,unsigned int inPatternElement,unsigned int inPatternElementIndex,bool inNew)
     {
@@ -61,6 +114,8 @@ public:
     unsigned int getChildPattern(void);
     unsigned int getChildLen(void);
     #ifdef LOG_OLD_MATCH
+	// True if this child was created on a later pass than parentPattern (child pattern
+	// number > parent) or the NEW_FLAG was set at insertion.  Forms are never "new".
     bool isNew(unsigned int parentPattern)
     {
         if (!(elementMatchedIndex&patternFlag)) return false; // a form cannot be new, as defined as something created on the second or subsequent parsing pass
@@ -69,6 +124,7 @@ public:
         return (flags&NEW_FLAG)==NEW_FLAG; // any pattern that was matched on the second or subsequent pass and created a new PMA entry will have this set.
     }
     #else
+	// True when fillPattern set NEW_FLAG because this PMA entry was created on pass>=1.
     bool isNew(void)
     {
         return (flags&NEW_FLAG)==NEW_FLAG; // any pattern that was matched on the second or subsequent pass and created a new PMA entry will have this set.
@@ -106,6 +162,8 @@ public:
 		vector <int> usagePatternEverMatched;
 		set <int> endPositionsSet;
     bool consolidateEndPositions; // no longer used - was for "super" patterns where remembering precise ends was no longer necessary
+	// Zeroes scalars.  form/pattern vectors stay empty until cPattern::create() fills them;
+	// usage* vectors stay empty until initializeUsage() (called at the end of initializePatterns).
     cPatternElement(void)
     {
         inflectionFlags=0; // see enum InflectionTypes
@@ -116,6 +174,10 @@ public:
       consolidateEndPositions=false;
         endPosition = 0;
     };
+	// Reserve the four usage counters to match the form/pattern alternative counts.
+	// Does not size() them — copyUsage/incrementUse assume the vectors were later
+	// grown (zeroUsage / the first incrementUse path); call only after create() has
+	// finished resolving patternReferences so patternIndexes is final.
 		void initializeUsage()
 		{
 			usageFormFinalMatch.reserve(formIndexes.size());
@@ -129,6 +191,7 @@ public:
     bool matchFirst(cSource &source,int sourcePosition,vector <cMatchElement> &whatMatched, sTrace &t);
     bool inflectionMatch(int inflectionFlags,__int64 flags,wstring formStr, sTrace &t);
     wstring formsStr(void);
+	// True if this element's OR-list of child patterns includes pattern number pn.
     bool contains(int pn)
     {
       for (unsigned int e=0; e<patternIndexes.size(); e++)
@@ -163,6 +226,9 @@ public:
     unsigned short len;
     short isPattern;
     int PEMAOffset; // offset into pema.  if negative, indicates this tag is for any pattern matching the root of 'pattern'
+	// One tag hit collected from a match tree.  PEMAOffset < 0 means "any pattern
+	// matching the root of `pattern`", not a specific PEMA slot.  Equality is
+	// field-wise (used to unique/minimize tag sets).
     cTagLocation(unsigned short inTag,unsigned short inPattern,unsigned short inParentPattern,unsigned short inParentElement,
         unsigned long insourcePosition,unsigned short inLen,unsigned int inPEMAOffset,bool inIsPattern)
     {
@@ -175,6 +241,7 @@ public:
         PEMAOffset=inPEMAOffset;
         isPattern=inIsPattern;
     };
+	// Field-wise equality, including PEMAOffset and isPattern.
     bool operator == (const cTagLocation& o)
     {
         return tag==o.tag &&
@@ -186,6 +253,7 @@ public:
             PEMAOffset==o.PEMAOffset &&
             isPattern==o.isPattern;
     }
+	// Lexicographic order tag, pattern, parent, position, len, PEMAOffset, isPattern.
     bool operator < (const cTagLocation& o)
     {
         if (tag!=o.tag) return tag<o.tag;
@@ -221,6 +289,7 @@ public:
         isPattern=o.isPattern;
         return *this;
     }
+	// Sort key for std::sort: shorter spans first.  Pass-by-value (copies).
 		static bool compareTagLocation(cTagLocation tl1, cTagLocation tl2)
 		{
 			return tl1.len < tl2.len;
@@ -258,6 +327,9 @@ unsigned int findPattern(wstring name,wstring diff);
 
 class cPattern {
 public:
+	// Zeroes every flag and counter.  objectTag stays -1 (no OBJECT tag on this
+	// pattern itself).  tagSetMemberInclusion is 64 * uint64: more than 64 tag
+	// sets, or more than 64 tags in one set, silently wraps the bit index.
     cPattern(void)
     {
         emi=0;
@@ -303,6 +375,8 @@ public:
     bool eliminateTag(wstring tag);
     bool resolveDescendants(bool circular);
     cPattern(cPattern *p);
+	// Deletes owned cPatternElement pointers.  The global `patterns` vector holds
+	// the cPattern* themselves; printPatternStatistics() deletes those.
     ~cPattern(void)
     {
         for (unsigned int e=0; e<elements.size(); e++)
@@ -351,6 +425,9 @@ public:
     unsigned __int64 includesOnlyDescendantsAllOfTagSet;
     unsigned __int64 includesDescendantsAndSelfAllOfTagSet;
     unsigned int lastTagSetEvaluated;
+	// True if this alternative is marked {_BLOCK}: collectTags must not walk into
+	// the child's descendant tags.  Logs _WRONG and returns false if index is OOB
+	// (the size vectors were not kept in lockstep with form/patternIndexes).
     bool stopDescendingTagSearch(int element,int index,bool isPattern)
     { 					
 			if (isPattern)
@@ -399,6 +476,9 @@ public:
 		cBitObject<32, 5, unsigned int, 32> parentPatterns,mandatoryParentPatterns;
     bool ancestorsSet,mandatoryAncestorsSet;
     cBitObject<32, 5, unsigned int, 32> ancestorPatterns,mandatoryAncestorPatterns;
+	// Scan elements after *elementStart (pre-incremented) for a child patternNum.
+	// elementStart is in/out: on entry, the last element already considered (or -1);
+	// on success it is the matching element index so the caller can resume.
     bool contains(int patternNum,int &elementStart)
     {
         for (elementStart++; elementStart<(signed)elements.size(); elementStart++)
@@ -411,6 +491,9 @@ public:
     //{
     //    whatMatched.clear();
     //}
+	// Count a winning use of alternative indexNum of elementNum.  Called from
+	// PEMA::consolidateWinners.  Indexes the usage* vectors; those are only
+	// reserve()'d by initializeUsage(), not resize()'d.
     void incrementUse(unsigned int elementNum,unsigned int indexNum,bool isPattern)
     {
 			if (isPattern)
@@ -418,11 +501,17 @@ public:
 			else
 				elements[elementNum]->usageFormFinalMatch[indexNum]++;
 		}
+	// Per-alternative cost (*N in the create() string).  offset is the form or
+	// pattern index within that element's OR-list.
     int getCost(unsigned int elementNum,int offset,bool isPattern)
     {
         return (isPattern) ? elements[elementNum]->patternCosts[offset] : elements[elementNum]->formCosts[offset];
     }
     bool isTopLevelMatch(cSource &source,unsigned int beginPosition,unsigned int endPosition);
+	// True if at least one later element can still be matched after currentElement
+	// (used when deciding whether a partial match can continue).  Optional
+	// (minimum==0) elements after currentElement extend `high`; a max>1 current
+	// element may repeat so `low` stays at currentElement.
     bool nextPossibleElementRange(int currentElement)
     {
         unsigned int low,high;
@@ -452,6 +541,7 @@ public:
     void setMandatoryAncestorPatterns(int childPattern);
     bool similarSets(set <unsigned int> &tags,set <unsigned int> &tags2);
     bool equivalentTagSet(vector <cTagLocation> &tagSet,vector <cTagLocation> &tagSet2);
+	// Element I of this pattern.  No bounds check; I must be in [0, numElements()).
 		cPatternElement *getElement(int I)
 		{
 			return elements[I];
@@ -473,6 +563,9 @@ class cPatternReference
 {
 public:
     static int firstPatternReference,lastPatternReference;
+	// Record that patterns[inPatternNum].elements[inElementNum] refers to the
+	// still-unresolved pattern named inForm.  resolve() later calls add() for
+	// every already-created instance of that name.
     cPatternReference(wstring inForm,int inPatternNum,int inDiffNum,int inElementNum,int inCost,set <unsigned int> inTags, bool inBlockDescendants, bool inAllowRecursiveMatch, bool inLogFutureReferences)
     {
         form=inForm;
