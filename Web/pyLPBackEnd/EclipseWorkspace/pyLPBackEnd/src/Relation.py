@@ -1,8 +1,29 @@
+"""Relation.py - One cSpaceRelation deserialized from an LP binary dump.
+
+Overview:
+    Unpacks the 100-byte packed header (17 ints, a 64-bit flags word,
+    two more ints) then bit-walks `flags` into the same boolean fields
+    the C++ cSpaceRelation uses (skip, timeTransition, speakerCommand,
+    genderedEntityMove, …). Followed by presType/description strings,
+    nextSPR, and a count-prefixed TimeInfo list.
+
+Pipeline position:
+    Loaded as part of Source relations after objects/speakers.
+
+Key entry points:
+    - __init__(rs) - unpack one relation from LPIO `rs`
+
+Notes / gotchas:
+    struct format '<17iq2iqii' must stay in lockstep with the C++
+    write path; a field reorder there silently mis-parses every flag.
+"""
 from TimeInfo import TimeInfo
 import struct 
 
 class Relation:
 
+        # Read the packed relation header, decode 24 flag bits LSB-first,
+        # then presType, description, nextSPR, and TimeInfo[count].
     def __init__(self, rs):
         self.where, self.o, self.whereControllingEntity, self.whereSubject, self.whereVerb, self.wherePrep, \
         self.whereObject, self.wherePrepObject, self.whereSecondaryVerb, self.whereSecondaryObject, self.whereSecondaryPrep, \

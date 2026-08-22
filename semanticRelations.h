@@ -1,3 +1,35 @@
+/*
+	semanticRelations.h - st* relation enum, cTimeFlowTense, cSyntacticRelationGroup,
+		and the QA proximity map used to rank candidate answers
+
+	Overview:
+		Declares the space/motion/state relation types produced by
+		semanticRelations.cpp, the per-clause tense/flow flags, and the SRG
+		that binds where* source-position slots to one relationType. Also
+		declares cProximityMap, used later by question answering to score
+		objects that co-occur with a principal entity across child sources.
+
+	Pipeline position:
+		Included from source.h. Instantiated during stage 5; consumed by
+		speaker resolution (stage 7) and question answering (stage 8).
+
+	Key data structures / globals:
+		- enum st - ENTER/EXIT/MOVE/CONTACT/… plus TimeML-ish PREPTIME /
+		  ABSTIME / ADVERBTIME; stLAST is the count sentinel
+		- cTimeFlowTense - narration vs quote vs story, plus Reichenbach
+		  happening bits (beforePast / past / present / future / futureInPast)
+		- cSyntacticRelationGroup - one clause-level relation; where* index m,
+		  o indexes objects, timeInfo is filled by timeRelations.cpp
+		- cProximityMap - closestObjects keyed by printed object name; score
+		  is occurrence^2 / distance (see calculateScore)
+
+	Notes / gotchas:
+		- stBE has no explicit enumerator value; it continues from
+		  stCHANGE_STATE=22. Do not renumber without a cache bump.
+		- -1 is “unset” on every where* / o field.
+		- cProximityEntry::score is only written when a distance sum is
+		  non-zero; otherwise it is left at whatever the constructor stored.
+*/
 #pragma once
 #include "timeRelations.h"
 class cSyntacticRelationGroup;
@@ -36,6 +68,7 @@ public:
 		void printDirectRelations(cQuestionAnswering &qa, int logType, cSource *parentSource, wstring &path, int where);
 		cProximityEntry();
 		cProximityEntry(cQuestionAnswering &qa, cSource *childSource, unsigned int childSourceIndex, int childObject, cSyntacticRelationGroup* parentSRG);
+		// One-line LOG dump of this entry’s score / occurrence / mismatch flags.
 		void lplogFrequentOrProximateObjects(int logType, wstring objectStr)
 		{
 			wstring tmpstr;
@@ -43,6 +76,9 @@ public:
 				objectStr.c_str(), score, inSource, totalDistanceFromObject, directRelation, confidentInSource, confidentTotalDistanceFromObject, confidentDirectRelation, confidenceSE,
 				semanticMismatch, (subQueryNoMatch) ? L"true" : L"false", (tenseMismatch) ? L"true" : L"false", (confidenceCheck) ? L"true" : L"false", childSourcePaths.size());
 		}
+		// occurrence^2 / (totalDistance + confidentTotalDistance). Unchanged
+		// when both distances are 0 (score stays at its constructor value).
+		// A single child source halves occurrence.
 		void calculateScore()
 		{
 			int occurrence = (inSource + confidentInSource * 2 + directRelation * 2 + confidentDirectRelation * 4);
@@ -52,6 +88,7 @@ public:
 				score = (float)((occurrence*occurrence)*1.0 / (totalDistanceFromObject + confidentTotalDistanceFromObject));
 		}
 	};
+	// Frequency order: more (confidentInSource + inSource) first; name tie-break.
 	struct semanticSetCompare
 	{
 		bool operator()(unordered_map <wstring, cProximityEntry>::iterator lhs, unordered_map <wstring, cProximityEntry>::iterator rhs) const
@@ -61,6 +98,7 @@ public:
 			return lhs->second.confidentInSource + lhs->second.inSource > rhs->second.confidentInSource + rhs->second.inSource;
 		}
 	};
+	// Higher calculateScore() first. Equal scores compare as equivalent.
 	struct proximityScoreCompare
 	{
 		bool operator()(unordered_map <wstring, cProximityEntry>::iterator lhs, unordered_map <wstring, cProximityEntry>::iterator rhs) const
@@ -72,6 +110,8 @@ public:
 	set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare> objectsSortedByFrequency;
 	set < unordered_map <wstring, cProximityEntry>::iterator, proximityScoreCompare> objectsSortedByProximityScore;
 	set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare > frequentOrProximateObjects;
+	// Rank closestObjects, semanticCheck the top 20 by frequency and by
+	// score, and keep those with confidence < CONFIDENCE_NOMATCH.
 	void sortByFrequencyAndProximity(cQuestionAnswering &qa,cSyntacticRelationGroup* parentSRG, cSource *parentSource)
 	{
 		objectsSortedByFrequency.clear();
@@ -97,6 +137,7 @@ public:
 				frequentOrProximateObjects.insert((*sroi));
 		}
 	}
+	// Dump the map, the top-20 frequency/score lists, and suggested answers.
 	void lplogFrequentOrProximateObjects(cQuestionAnswering &qa, int logType, cSource *parentSource, bool enhanced)
 	{
 		::lplog(logType, L"SM%s SEMANTIC MAP %d objects %d sources principalObject %s ****************************************************************************",
@@ -173,6 +214,7 @@ public:
 	bool negation;
 	int lastOpeningPrimaryQuote;
   wstring presType;
+	// All bools false, lastOpeningPrimaryQuote = -1, duplicateTimeTransitionFromWhere = 0.
 	cTimeFlowTense()
 	{
 		speakerCommand=false;
@@ -251,6 +293,7 @@ public:
 	cSyntacticRelationGroup(int _where, int _o, int _whereControllingEntity, int _whereSubject, int _whereVerb, int _wherePrep, int _whereObject,
 		int _wherePrepObject, int _movingRelativeTo, int _relationType,
 		bool _genderedEntityMove, bool _genderedLocationRelation, int _objectSubType, int _prepObjectSubType, bool _physicalRelation);
+	// Inequality on the identity slots (where* + relationType), not tft/timeInfo.
 	bool operator != (const cSyntacticRelationGroup &z)
   {
     return where!=z.where || 
@@ -264,6 +307,7 @@ public:
 			whereMovingRelativeTo!=z.whereMovingRelativeTo || 
 			relationType!=z.relationType;
   }
+	// Equality on the identity slots (where* + relationType), not tft/timeInfo.
   bool operator == (const cSyntacticRelationGroup &z)
   {
     return where==z.where &&

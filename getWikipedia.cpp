@@ -1,4 +1,37 @@
-﻿#include <windows.h>
+﻿/*
+	getWikipedia.cpp - Wikipedia/HTML scrape, RDF-type cache, and ISA-relation lookup
+
+	Overview:
+		Two jobs in one TU: (1) download printable Wikipedia pages, strip chrome, and
+		flatten tables/lists into the token stream; (2) resolve source objects to
+		DBpedia/YAGO RDF types (disk + in-memory cache) and mine "X is a Y" sentences
+		from those pages to assign place subtypes. Also hosts shared string-join
+		helpers (vectorString/setString) used across QA.
+
+	Pipeline position:
+		On-demand during question answering and object typing (after objects exist).
+		Not part of novel-parse initialization. processPath can parse a cached page
+		as a child cSource.
+
+	Key entry points:
+		- reduceWikipediaPage / interpretHTMLTable / scanForTables - HTML reduction
+		- getWikipediaPath / getObjectString - cache path + search URL
+		- getExtendedRDFTypes / getExtendedRDFTypesMaster / getAssociationMapMaster
+		- evaluateISARelation / identifyISARelation / processPath
+		- lastErrorMsg / convertIllegalChars / eliminateHTML
+
+	Dependencies:
+		CACHEDIR\\wikipediaCache and dbPediaCache; cInternet::readPage; cOntology;
+		MySQL no-ERDF-types table; Words.TABLE / END_COLUMN sentinels.
+
+	Notes / gotchas:
+		Wikipedia URLs are plaintext HTTP and the search term is not URL-encoded.
+		writeExtendedRDFTypes allocates a 20MB stack buffer (EMAX_BUF). firstMatchTableDeleteNested
+		updates beginPos only on the <li value= fallback, so a successful <li> find is ignored.
+		convertFromWikilinkEscape / eliminateHTML read past end on short tails.
+		readPageWinHTTP is compiled only under TEST_CODE and leaks WinHTTP handles on error.
+*/
+#include <windows.h>
 #include <io.h>
 #include "word.h"
 #include "ontology.h"
@@ -46,6 +79,7 @@ extern wchar_t* lpOntologySuperClasses[]; // initialized
 bool copy(unordered_map <wstring, cOntologyEntry>::iterator& hint, void* buf, int& where, int limit, unordered_map <wstring, cOntologyEntry>& hm);
 
 
+// Formats GetLastError() via FormatMessage and returns the wide string (buffer is LocalFree'd).
 // lastErrorMsg
 wstring lastErrorMsg()
 {
@@ -60,6 +94,8 @@ wstring lastErrorMsg()
 	return error;
 }
 
+// In-place: replace WCHAR_ILLEGAL_PATH_CHARS runs with '!', then map any remaining
+// non [alnum . - emdash] to '_'. Fatal if the rebuilt path exceeds MAX_PATH_LEN.
 void convertIllegalChars(wchar_t* path)
 {
 	LFS
@@ -87,6 +123,7 @@ void convertIllegalChars(wchar_t* path)
 			path[I] = L'_';
 }
 
+// Narrow-char cousin of convertIllegalChars: strips ILLEGAL_PATH_CHARS then maps leftovers to '_'.
 void deleteIllegalChars(char* path)
 {
 	LFS
@@ -110,6 +147,7 @@ void deleteIllegalChars(char* path)
 			path[I] = '_';
 }
 
+// Replaces every '_' in buffer with a space (Wikipedia title → display phrase).
 void convertUnderlines(wstring& buffer)
 {
 	LFS
@@ -118,6 +156,9 @@ void convertUnderlines(wstring& buffer)
 }
 
 void eliminateHTML(wstring& buffer);
+// Walks backward from whereHeadingEnd over </div> and </hN>, extracts the heading into
+// header (preferring mw-headline text), sets tableOfContentsFlag if mw-toc-heading is
+// present, and erases the heading from buffer (whereHeadingEnd is left at its start).
 // process the immediately preceding header: <h2>Contents</h2>
 // also process this: <div id="toctitle"><h2>Contents</h2></div>
 void processHeader(wstring& buffer, size_t& whereHeadingEnd, wstring& header, bool& tableOfContentsFlag)
@@ -185,6 +226,9 @@ void processHeader(wstring& buffer, size_t& whereHeadingEnd, wstring& header, bo
 //<th>population</th>
 //</tr>
 void scanForTables(wstring& buffer, vector < vector <wstring> >& tables, bool unordered);
+// Parses one <table> already extracted into match: heading, <th> headers, then <td> cells
+// (padding MISSING_COLUMN). Nested tables/lists inside cells are scanned first. Pushes
+// the flat row onto tables if it has more than the heading.
 void interpretHTMLTable(wstring& buffer, size_t& whereHeadingEnd, wstring& match, vector < vector <wstring> >& tables)
 {
 	LFS
@@ -231,6 +275,9 @@ void interpretHTMLTable(wstring& buffer, size_t& whereHeadingEnd, wstring& match
 }
 
 void eliminateHTMLCharacterEntities(wstring& buffer);
+// Strips tags and [N] footnotes after expanding character entities. Inserts a space when
+// two tagged spans abut so "ISBN""123" does not glue. Footnote scan reads I+1..I+3 unsafely
+// at end-of-string.
 void eliminateHTML(wstring& buffer)
 {
 	LFS
@@ -262,6 +309,9 @@ void eliminateHTML(wstring& buffer)
 	buffer = noHTML;
 }
 
+// Extracts the next <li>…</li> (or <li value=) from buffer into match, deleting one level
+// of nested <li> from the parent. Returns the start index, or npos. beginPos is only
+// updated on the <li value= fallback — a successful <li> find leaves beginPos unchanged.
 // this is to skip nested tables, instead of turning nested tables into another entry in the parent table (what firstMatch would do)
 // this only works for one level of nesting!  The nested table can have any number of entries
 // beginString can be <li value= OR <li>
@@ -317,6 +367,8 @@ int firstMatchTableDeleteNested(wstring& buffer, size_t& beginPos, wstring& matc
 //<ul> OR <ol>
 //<li>1997: <a href="/wiki/Nestl%C3%A9_Smarties_Book_Prize" title="Nestlé Smarties Book Prize">Nestlé Smarties Book Prize</a>, Gold Award for <i>Harry Potter and the Philosopher's Stone</i></li>
 // <h3> is not consistent.  <li> must be consecutive.
+// Finds each <ul> or <ol> (unordered flag), attaches the preceding heading, and pushes
+// one single-column "table" of <li> rows (TOC headings get Words.TOC_HEADER prefixed).
 void scanForTables(wstring& buffer, vector < vector <wstring> >& tables, bool unordered)
 {
 	LFS
@@ -374,6 +426,10 @@ void scanForTables(wstring& buffer, vector < vector <wstring> >& tables, bool un
 // <p><b>Allies</b> spelled with a capital "A", usually denotes the countries who fought together against the <a href="/wiki/Central_Powers" title="Central Powers">Central Powers</a> in <a href="/wiki/World_War_I" title="World War I">World War I</a> (see <a href="/wiki/Triple_Entente" title="Triple Entente">Triple Entente</a> or <a href="/wiki/Allies_of_World_War_I" title="Allies of World War I">Allies of World War I</a>), or those who fought against the <a href="/wiki/Axis_powers_of_World_War_II" title="Axis powers of World War II">Axis Powers</a> in <a href="/wiki/World_War_II" title="World War II">World War II</a>.</p>
 //
 // 
+// Reduces a printable Wikipedia HTML page in place: keep body content, drop chrome,
+// extract tables/lists into Words.TABLE sentinels, or (search-results pages) follow up
+// to 10 hits with Relevance>=70 into wikipediaCache and concatenate their text.
+// Returns 0, or a cInternet::readPage error / GETPAGE_CANNOT_CREATE.
 int reduceWikipediaPage(wstring& buffer)
 {
 	LFS
@@ -494,6 +550,7 @@ int reduceWikipediaPage(wstring& buffer)
 	return 0;
 }
 
+// Joins vstr into tmpstr with a leading separator on every element (including the first).
 wstring vectorString(vector <wstring>& vstr, wstring& tmpstr, wstring separator)
 {
 	LFS
@@ -503,6 +560,7 @@ wstring vectorString(vector <wstring>& vstr, wstring& tmpstr, wstring separator)
 	return tmpstr;
 }
 
+// Narrow-string overload of vectorString (leading separator on every element).
 string vectorString(vector <string>& vstr, string& tmpstr, string separator)
 {
 	LFS
@@ -512,6 +570,7 @@ string vectorString(vector <string>& vstr, string& tmpstr, string separator)
 	return tmpstr;
 }
 
+// Joins a vector-of-vectors as " [a,b] [c,d]" using the wstring vectorString helper.
 wstring vectorString(vector < vector <wstring> >& vstr, wstring& tmpstr, wstring separator)
 {
 	LFS
@@ -522,6 +581,7 @@ wstring vectorString(vector < vector <wstring> >& vstr, wstring& tmpstr, wstring
 	return tmpstr;
 }
 
+// Joins a set into tmpstr with separator, then drops the leading separator if non-empty.
 wstring setString(set <wstring>& sstr, wstring& tmpstr, const wchar_t* separator)
 {
 	LFS
@@ -533,6 +593,7 @@ wstring setString(set <wstring>& sstr, wstring& tmpstr, const wchar_t* separator
 	return tmpstr;
 }
 
+// unordered_set overload of setString (order is hash order).
 wstring setString(unordered_set <wstring>& sstr, wstring& tmpstr, const wchar_t* separator)
 {
 	LFS
@@ -544,6 +605,7 @@ wstring setString(unordered_set <wstring>& sstr, wstring& tmpstr, const wchar_t*
 	return tmpstr;
 }
 
+// Narrow set join; unlike the wide overload, the leading separator is kept.
 string setString(set <string>& sstr, string& tmpstr, const char* separator)
 {
 	LFS
@@ -553,6 +615,7 @@ string setString(set <string>& sstr, string& tmpstr, const char* separator)
 	return tmpstr;
 }
 
+// Writes DBPEDIA / YAGO / UMBEL<resourceType> / Unknown into tmpstr and returns tmpstr.c_str().
 const wchar_t* ontologyTypeString(int ontologyType, int resourceType, wstring& tmpstr)
 {
 	LFS
@@ -566,6 +629,7 @@ const wchar_t* ontologyTypeString(int ontologyType, int resourceType, wstring& t
 	return tmpstr.c_str();
 }
 
+// Formats this RDF category (parent, type, preferred flags, supers, confidence) into tmpstr.
 wstring cTreeCat::toString(wstring& tmpstr)
 {
 	LFS
@@ -577,6 +641,7 @@ wstring cTreeCat::toString(wstring& tmpstr)
 		L"[SUPER " + setString(cli->second.superClasses, tmpstr, L" ") + L"]:confidence,ontologyHierarchicalRank " + itos(cli->second.ontologyHierarchicalRank, tmpstr3) + L"," + itos(confidence, tmpstr7) + L"(" + qtype + L")";
 }
 
+// Logs toString() at whichLog, optionally prefixed with ofWhichObject.
 void cTreeCat::lplogTC(int whichLog, wstring ofWhichObject)
 {
 	LFS
@@ -587,6 +652,8 @@ void cTreeCat::lplogTC(int whichLog, wstring ofWhichObject)
 		::lplog(whichLog, L"%s", toString(tmpstr).c_str());
 }
 
+// Tries getRDFTypes with decreasing PP extensions and keeps the lowest-confidence / preferred
+// set, then includeSuperClasses + setPreferred. Returns rdfTypes.size().
 int cSource::getExtendedRDFTypes(int where, vector <cTreeCat*>& rdfTypes, unordered_map <wstring, int >& topHierarchyClassIndexes, wstring fromWhere, bool ignoreMatches, bool fileCaching)
 {
 	LFS
@@ -647,6 +714,7 @@ int cSource::getExtendedRDFTypes(int where, vector <cTreeCat*>& rdfTypes, unorde
 	return rdfTypes.size();
 }
 
+// rdfIdentify on objectString(object) plus superclasses/preferred. No Wikipedia fetch.
 int cSource::getObjectRDFTypes(int object, vector <cTreeCat*>& rdfTypes, unordered_map <wstring, int >& topHierarchyClassIndexes, wstring fromWhere)
 {
 	LFS
@@ -662,6 +730,8 @@ int cSource::getObjectRDFTypes(int object, vector <cTreeCat*>& rdfTypes, unorder
 	return rdfTypes.size();
 }
 
+// Loads a binary .eRdfTypes cache. Returns -1 if missing, -2 if version mismatches (file
+// deleted), 0 on success. Allocates cTreeCat with new (caller / cache map owns them).
 int cSource::readExtendedRDFTypes(wchar_t path[4096], vector <cTreeCat*>& rdfTypes, unordered_map <wstring, int >& topHierarchyClassIndexes)
 {
 	LFS
@@ -710,6 +780,7 @@ int cSource::readExtendedRDFTypes(wchar_t path[4096], vector <cTreeCat*>& rdfTyp
 }
 
 #define EMAX_BUF MAX_BUF*10
+// Writes .eRdfTypes via a 20MB stack buffer, flushing every ~8KB. Returns -1 if create fails.
 int cSource::writeExtendedRDFTypes(wchar_t path[4096], vector <cTreeCat*>& rdfTypes, unordered_map <wstring, int >& topHierarchyClassIndexes)
 {
 	LFS
@@ -753,6 +824,7 @@ int cSource::writeExtendedRDFTypes(wchar_t path[4096], vector <cTreeCat*>& rdfTy
 	return 0;
 }
 
+// Lowercases RDFType, '_'→' ', and decodes $XXXX hex escapes in place. Returns RDFType.
 wstring transformRDFTypeName(wstring& RDFType)
 {
 	transform(RDFType.begin(), RDFType.end(), RDFType.begin(), (int(*)(int)) tolower);
@@ -773,6 +845,8 @@ wstring transformRDFTypeName(wstring& RDFType)
 	return RDFType;
 }
 
+// If childWord is a multi-word category whose last token is uncapitalized (and has no ) or $),
+// copies that last token into lastWord and returns true. Used to map "American novelist"→"novelist".
 bool cSource::categoryMultiWord(wstring& childWord, wstring& lastWord)
 {
 	int lastSpace = -1;
@@ -879,6 +953,8 @@ int cSource::getAssociationMapMaster(int where, int numWords, unordered_map <wst
 	return 0;
 }
 
+// Builds the legacy cache key: sourcePath+where+extendNumPP, then strips a dbPediaCache/
+// webSearchCache prefix and a leading "m.". Written into object.
 void getOldRDFName(wstring& sourcePath, int where, int extendNumPP, wstring& object)
 {
 	wstring tmp1, tmp2;
@@ -893,6 +969,8 @@ void getOldRDFName(wstring& sourcePath, int where, int extendNumPP, wstring& obj
 		object.erase(0, 2);
 }
 
+// Builds CACHEDIR\\dbPediaCache\\_<sanitized object>.eRdfTypes into path (4096 assumed).
+// Truncates at MAX_PATH-12 and at pathlen+246 to keep the filename legal.
 void makePath(wstring& object, wchar_t* path)
 {
 	int pathlen = _snwprintf(path, MAX_LEN, L"%s\\dbPediaCache", CACHEDIR);// , retCode = -1;
@@ -908,6 +986,7 @@ void makePath(wstring& object, wchar_t* path)
 	wcscat(path, L".eRdfTypes");
 }
 
+// Placeholder skip: always false. Intended to reject objects that should not be typed.
 // may reject 'his contributions' in the future
 bool cSource::noRDFTypes()
 {
@@ -1040,6 +1119,9 @@ int cSource::getExtendedRDFTypesMaster(int where, int numWords, vector <cTreeCat
 	return retCode;
 }
 
+// Builds an underscored Wikipedia search string for the object at 'where' (first/last name
+// if a 1-token named object). Optionally drops leading uncapitalized tokens and appends
+// attached PPs. Proper-noun tokens are also pushed onto lookForSubject for ISA matching.
 void cSource::getObjectString(int where, wstring& object, vector <wstring>& lookForSubject, int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool removePrecedingUncapitalizedWordsFromProperNouns)
 {
 	LFS
@@ -1114,6 +1196,8 @@ void cSource::getObjectString(int where, wstring& object, vector <wstring>& look
 	}
 }
 
+// Decodes $XXXX hex escapes in a DBpedia/Wikipedia link (e.g. $0028 → '('). Reads I+1..I+4
+// without a length check, so a trailing '$' can walk off the string.
 // Curveball_$0028informant$0029$002FArchive1 
 // Curveball_$0028informant$0029 
 void convertFromWikilinkEscape(wstring& wikilink)
@@ -1191,6 +1275,9 @@ int cSource::getWikipediaPath(int principalWhere, vector <wstring>& wikipediaLin
 	return 0;
 }
 
+// If tagSet is an identity IS/denote (not not/never) whose SUBJECT matches lookForSubject,
+// returns the OBJECT's place subtype, NUM_SUBTYPES if untyped, NOT_A_PLACE if gendered
+// non-place, or -1 if the relation does not qualify.
 // if subject object matches, and verb is IS, evaluate object for an OCType.
 int cSource::evaluateISARelation(int parentSourceWhere, int where, vector <cTagLocation>& tagSet, vector <wstring>& lookForSubject)
 {
@@ -1274,6 +1361,8 @@ int cSource::evaluateISARelation(int parentSourceWhere, int where, vector <cTagL
 	return (objects[objectObject].getSubType() < 0) ? NUM_SUBTYPES : objects[objectObject].getSubType();
 }
 
+// Collects subjectVerbRelationTagSet at 'where' and evaluateISARelation each combo into OCTypes.
+// Returns true if any OCType (including NOT_A_PLACE) was pushed.
 bool cSource::getISARelations(int parentSourceWhere, int where, vector < vector <cTagLocation> >& tagSets, vector <int>& OCTypes, vector <wstring>& lookForSubject)
 {
 	LFS
@@ -1301,6 +1390,7 @@ bool cSource::getISARelations(int parentSourceWhere, int where, vector < vector 
 	return OCTypes.size() > 0;
 }
 
+// Reads path+".attribs" (binary OCTypes vector) via getPath. Returns false if missing/corrupt.
 bool readAttribs(wstring path, vector <int>& OCTypes)
 {
 	LFS
@@ -1312,6 +1402,7 @@ bool readAttribs(wstring path, vector <int>& OCTypes)
 	return true;
 }
 
+// Writes OCTypes to path+".attribs". Returns false if copy or _wopen fails.
 bool writeAttribs(wstring path, vector <int>& OCTypes)
 {
 	LFS
@@ -1329,6 +1420,8 @@ bool writeAttribs(wstring path, vector <int>& OCTypes)
 	return true;
 }
 
+// True if the span has both a non-capitalized alpha token and an ALL-CAPS token that contains
+// a vowel (e.g. PLAYLISTBYAOL_On_Valentine's) — used to reject ISA lookup.
 bool cSource::mixedCaseObject(int begin, int len)
 {
 	LFS
@@ -1358,6 +1451,7 @@ bool cSource::mixedCaseObject(int begin, int len)
 	return lowerCaseFound && allUpperCaseWithVowelsFound;
 }
 
+// True if the span should skip web ISA: 1-word uncapitalized, DET+uncap, or < half capitalized.
 // return true if object SHOULD NOT be identified through extensive web methods
 bool cSource::capitalizationCheck(int begin, int len)
 {
@@ -1383,6 +1477,8 @@ bool cSource::capitalizationCheck(int begin, int len)
 	return false;
 }
 
+// True if the object at principalWhere should not be Wikipedia-typed (not a name, already
+// accessed, speaker, time unit, mixed case, possessive, trailing colon, or a letter).
 bool cSource::rejectISARelation(int principalWhere)
 {
 	LFS
@@ -1423,6 +1519,7 @@ bool cSource::rejectISARelation(int principalWhere)
 	*/
 }
 
+// True if path is <10 bytes or looks like .pdf/.php (skip as an ISA child source).
 bool cQuestionAnswering::rejectPath(const wchar_t* path)
 {
 	struct _stat64 buf;
@@ -1430,6 +1527,9 @@ bool cQuestionAnswering::rejectPath(const wchar_t* path)
 	return (buf.st_size < 10 || wcsstr(path, L".pdf") != NULL || wcsstr(path, L".php") != NULL); // Nobel Prize abstract is 2 bytes / also don't bother with pdf or php files for now
 }
 
+// Parses (or reuses from sourcesMap) the Wikipedia/web page at path as a child cSource.
+// Returns 0 if source is usable, -1 if rejectPath or tokenize produced an empty stream
+// (writes an empty .SourceCache marker). On tokenize-empty after new, leaks source.
 int limitProcessingForProfiling = 0;
 int cQuestionAnswering::processPath(cSource* parentSource, const wchar_t* path, cSource*& source, cSource::sourceTypeEnum st, int pathSourceConfidence, bool parseOnly)
 {
@@ -1541,6 +1641,9 @@ int cQuestionAnswering::processPath(cSource* parentSource, const wchar_t* path, 
 	return 0;
 }
 
+// Fetches/parses the Wikipedia page for principalWhere, mines ISA relations, and assigns
+// place subtype or isNotAPlace. Returns -1 if rejectISARelation, 0 after applying OCTypes.
+// Null-dereferences source if processPath fails (source stays NULL).
 int cSource::identifyISARelationTextAnalysis(cQuestionAnswering& qa, int principalWhere, bool parseOnly)
 {
 	LFS
@@ -1600,6 +1703,9 @@ int cSource::identifyISARelationTextAnalysis(cQuestionAnswering& qa, int princip
 	return 0;
 }
 
+// Builds the DBpedia lookup string for the object at 'where' (First_Last or original words
+// joined by separator). Optionally requires attached PPs (returns -1 if none). Strips a
+// trailing 's. Returns -1 if there is no object/span.
 int cSource::getRDFWhereString(int where, wstring& oStr, const wchar_t* separator, int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool ignoreMatches)
 {
 	LFS
@@ -1656,6 +1762,9 @@ int cSource::getRDFWhereString(int where, wstring& oStr, const wchar_t* separato
 	return 0;
 }
 
+// Measures a title-like capitalized span starting at where (stop at EOS / TABLE / bracket).
+// Writes numWords and numPrepositions; trims a trailing comma-clause. Returns false only if
+// the span collapsed to empty (numWords forced to 1).
 bool cSource::analyzeRDFTitle(unsigned int where, int& numWords, int& numPrepositions, wstring tableName)
 {
 	LFS
@@ -1708,6 +1817,9 @@ bool cSource::analyzeRDFTitle(unsigned int where, int& numWords, int& numPreposi
 	return true;
 }
 
+// rdfIdentify on several fallbacks of the object string at 'where' (title expansion, strip
+// a_/the_, profession+name, colon, "3 M", drop adjectival owner). Returns -1 on a missing
+// begin or a >512-char string; 0 otherwise (rdfTypes may still be empty).
 // rdfTypes calls rdfIdentify, which then caches the rdfTypes of each individual string into the dbpedia cache.
 int cSource::getRDFTypes(int where, vector <cTreeCat*>& rdfTypes, wstring fromWhere, int extendNumPP, bool ignoreMatches, bool fileCaching)
 {
@@ -1847,6 +1959,9 @@ int cSource::getRDFTypes(int where, vector <cTreeCat*>& rdfTypes, wstring fromWh
 	return 0;
 }
 
+// Types the named object at principalWhere from DBpedia RDF (getExtendedRDFTypesMaster).
+// Speakers/honorifics are immediately marked isWikiPerson / not-a-place. Returns -1 if
+// rejectISARelation; 0 after setting isWikiPerson/Place/Business/Work from preferred tops.
 int cSource::identifyISARelation(int principalWhere, bool initialTenseOnly, bool fileCaching)
 {
 	LFS
@@ -1997,6 +2112,8 @@ int cSource::identifyISARelation(int principalWhere, bool initialTenseOnly, bool
 	return 0;
 }
 
+// True if the question source object is a single ALL-CAPS token that also has a non-noun
+// form (e.g. US as acronym) — matching against mixed-case child sources is unreliable.
 // is questionInformationSourceObject entirely uppercase, single word and having another class other than noun? (US - as in the acronym for the United States)
 // is childSource primarily capitalized?  If so, throw out this source because matching is not reliable in this case.
 bool cSource::checkForUppercaseSources(int questionInformationSourceObject)
@@ -2011,6 +2128,8 @@ bool cSource::checkForUppercaseSources(int questionInformationSourceObject)
 	return otherThanNoun;
 }
 
+// If >90% of tokens from I+1 to EOS are ALL-CAPS, advances I to that EOS and returns true
+// (caller should skip the sentence as an unreliable child source).
 bool cSource::skipSentenceForUpperCase(unsigned int& I)
 {
 	// is childSource primarily capitalized around I?
@@ -2032,6 +2151,8 @@ bool cSource::skipSentenceForUpperCase(unsigned int& I)
 
 int runJavaJerichoHTML(wstring webAddress, wstring outputPath, string& outbuf);
 
+// TEST_CODE-only WinHTTP GET (hardcoded umbel.org). Overwrites str. Returns 0/-1.
+// Error paths leak any handles already opened (no CloseHandle before return).
 // a routine derived from readPage which uses Windows HTTP routines – not used
 int cWord::readPageWinHTTP(wchar_t* str, wstring& buffer)
 {

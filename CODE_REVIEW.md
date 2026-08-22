@@ -591,6 +591,271 @@ are out of scope.
 
 ---
 
+## Wave — semantic relations, time, names (`semanticRelations.cpp`/`semanticRelations.h`,
+`timeRelations.cpp`/`timeRelations.h`, `names.cpp`/`names.h`)
+
+- **[HIGH] timeRelations.cpp:2832 — `speakerGroupTransition` walks `I++` instead of `I--`** —
+  supposed to find a previous speaker group; `I++` immediately walks into the
+  current group, so `lastSG` becomes `sg` and `tlTransition` is wrong. Use
+  `I--`.
+
+- **[HIGH] timeRelations.cpp:2248 — `months_abb` skips May/June/July** —
+  `{ jan, feb, mar, apr, aug, sept, oct, nov, dec }`. `whichMonth("aug")`
+  returns May’s slot. Insert `may`/`jun`/`jul`.
+
+- **[HIGH] timeRelations.cpp:1181 — `twsCapacity` inserts “morrow”, breaking `eCapacity`** —
+  `whichCapacity("yesterday")` is not `cYesterday`. Drop `"morrow"` or add
+  a matching enumerator.
+
+- **[HIGH] timeRelations.h:324 — `cTimeInfo::clear()` leaves named-day / deictic fields uninitialized** —
+  `write()` then persists stack garbage into the source cache. Zero them
+  to `-1` in `clear()`.
+
+- **[HIGH] names.cpp:1786 — “twentieth” maps to 0** —
+  `numeralOrdinalMap` has `{ L"twentieth", 0 }`. Change the value to `20`.
+
+- **[HIGH] names.cpp:557 — `merge()` never replaces a single-letter name part** —
+  `first[1]` as “has a second character” is the opposite of the comment.
+  Compare lengths; do not index `[1]` on an empty string.
+
+- **[HIGH] names.cpp:471 — `cName::notNull()` is inverted** —
+  returns true when *every* part is `wNULL`. Flip or rename;
+  `isCompletelyNull()` in `resolveObjects.cpp` is the correct test.
+
+- **[HIGH] semanticRelations.cpp:1453 — `getAfterVerb` indexes `m[afterVerb]` before the size check** —
+  when `whereVerb` is the last token this is OOB. Test the bound first
+  (same at 1456).
+
+- **[HIGH] names.cpp:416 — unbounded `wcscat` in `cName::hn(wchar_t*)`** —
+  no `maxbuf`. Use the `wstring` overload or `_snwprintf`.
+
+- **[HIGH] timeRelations.cpp:1526 — `ageTransition` builds `objects.begin() + so` when `so` may be -1** —
+  Only form the iterator when `so >= 0`.
+
+- **[HIGH] semanticRelations.cpp:1672 — `detectPlaceTransition` `&&`/`||` precedence** —
+  a physical/time prep-object is enough even when the other conjuncts
+  fail. Parenthesize as `A && (B || C)` if both sides were required.
+
+- **[MEDIUM] names.cpp:2024 — plurality reject compares secondary to itself** —
+  always false. Compare primary vs secondary.
+
+- **[MEDIUM] semanticRelations.cpp:1359 — “by hook or by crook” is unbounded** —
+  Require `wherePrep + 4 < (int)m.size()`.
+
+- **[MEDIUM] names.cpp:925 — `evaluateName` peeks `sourcePosition+1` without a bound** —
+  Same at 1200. Check `sourcePosition + 1 < (int)m.size()`.
+
+- **[MEDIUM] timeRelations.cpp:969 — `ti` is only set when `inMultiObject==2`** —
+  an empty `timeInfo` makes `end()-1` invalid.
+
+- **[MEDIUM] semanticRelations.h:82 — `calculateScore` leaves `score` unset when both distances are 0** —
+  Set `score = 0` in the `else`.
+
+- **[MEDIUM] names.cpp:868 — `insertSubSQL` `maxbuf-buflen` can go negative** —
+  Clamp remaining to 0.
+
+- **[MEDIUM] semanticRelations.cpp:223 — `setTimeFlowTense` comment vs return** —
+  always returns `true`; negation is stored in `tft.negation`.
+
+- **[LOW] timeRelations.cpp:2771 — `determineTimelineSegmentLink` is a stub** —
+  always returns `false`.
+
+- **[LOW] names.h:14 — `cNickName::operator==` takes `wstring` by value** —
+  Take `const wstring&`.
+
+- **[NIT] names.cpp:406 — `wchar_t*` print is labelled “optimized”** —
+  it is the unsafe twin of the `wstring` overload.
+
+---
+
+## Wave — data acquisition (`getWikipedia.cpp`, `getWordNet.cpp`,
+`getThesaurus.cpp`, `getDictionary.cpp`, `initializeDictionary.cpp`,
+`getMusicBrainz.cpp`/`getMusicBrainz.h`, `getTwitter.cpp`,
+`getWordNetMaps.cpp`, `tagOperations.cpp`, `vcXML.cpp`/`vcXML.h`,
+`Adversary bugs.cpp`, `relationTypes.h`)
+
+- **[CRITICAL] getDictionary.cpp:1209 — Merriam-Webster API key hardcoded in the URL** —
+  `?key=ba4ac476-dac1-4b38-ad6b-fe36e8416e07`. Move to env/secrets and rotate.
+
+- **[CRITICAL] getThesaurus.cpp:368 — MySQL root password hardcoded** —
+  `mysql_real_connect(..., "root", "byron0", "lp", ...)` in `testThesaurus()`.
+
+- **[CRITICAL] getWikipedia.cpp:1661 — NULL dereference after failed `processPath`** —
+  `cSource* source = NULL` then `source->m.begin()`. Any failed Wikipedia
+  child parse crashes.
+
+- **[CRITICAL] vcXML.cpp:73 — NULL dereference in `aH` when `>` is missing** —
+  `ech < ch` is true when `ech` is NULL; `*ch = 0` writes through NULL.
+
+- **[HIGH] getTwitter.cpp:56 — account password committed in source** —
+  comments record `password: builder!12`. Rotate and delete from history.
+
+- **[HIGH] getWordNet.cpp:486 / getThesaurus.cpp:73 — SQL concatenated from the lookup word** —
+  `query += word + L"'"`. Escape or bind. Also `wtmp[wtmp.length()-1]` on
+  a possibly empty `wtmp`.
+
+- **[HIGH] getMusicBrainz.cpp:198 — unchecked `FindAttribute("id")->Value()`** —
+  a release/artist/label without `id` is a NULL deref (same at 205, 211,
+  221, 272, 336, 338, 386).
+
+- **[HIGH] getWordNetMaps.cpp:202 — `readWNMaps` leaks the file buffer on every failure** —
+  `return false` without `tfree`. `writeWNMaps` also leaks `fd`.
+
+- **[HIGH] getWikipedia.cpp:1260 — Wikipedia search URL is HTTP and unescaped** —
+  spaces/`&` in object names corrupt the query. Same class in
+  `getMusicBrainz.cpp:85` and `getTwitter.cpp:115`.
+
+- **[HIGH] getWikipedia.cpp:322 — `firstMatchTableDeleteNested` ignores a successful `<li>` find** —
+  `beginPos` is only updated in the `<li value=` fallback.
+
+- **[HIGH] getWikipedia.cpp:1593 — `processPath` leaks the new `cSource` on empty tokenize** —
+  `return -1` without `delete source`.
+
+- **[HIGH] initializeDictionary.cpp:433 — `readWords` leaks the cache buffer** —
+  `if (where < 0) return -1` skips `tfree`.
+
+- **[HIGH] vcXML.cpp:472 — `readVBNet` leaks the `FindFirstFile` handle** —
+  `if (fd < 0) return;` inside the loop never `FindClose`.
+
+- **[HIGH] getWordNetMaps.cpp:151 / getWikipedia.cpp:793 — huge stack allocations** —
+  10MB / 20MB stack buffers. Heap-allocate or stream.
+
+- **[MEDIUM] getWordNet.cpp:239 — third-party API key left in a comment** —
+  Big Huge Thesaurus key. Rotate if still live.
+
+- **[MEDIUM] getMusicBrainz.h:70 — header/definition arity mismatch** —
+  header has 3 args; `.cpp` has a 4th `filterNameDuplicates`.
+
+- **[MEDIUM] getMusicBrainz.cpp:340 — `getRecordings` reads the wrong release-list** —
+  walks metadata-level `release-list` instead of the current `<recording>`'s.
+
+- **[MEDIUM] getWikipedia.cpp:301 — footnote scan reads past end** —
+  `[` without `I+3 < length`. Same class in `convertFromWikilinkEscape`
+  and `eliminateHTMLCharacterEntities`.
+
+- **[MEDIUM] tagOperations.cpp:613 — `isPPN` uses logical `&&` on flags** —
+  `flags && queryWinnerForm(...)` is true for any non-zero flags word.
+
+- **[MEDIUM] tagOperations.cpp:192 — `found` is never set true** —
+  the erase-and-continue branch is dead.
+
+- **[MEDIUM] getThesaurus.cpp:674 — `_filelength(fd)` before `fd` is validated** —
+  Check `fd` first; `malloc(fl+4)` is never freed.
+
+- **[MEDIUM] getThesaurus.cpp:190 — `splitPrimarySynonyms` can divide by zero then `exit(0)`** —
+  Guard `totalRows` and return instead of exiting.
+
+- **[MEDIUM] getWordNet.cpp:1765 — `initializeNounVerbMapping` leaks on a corrupt cache** —
+  `tmalloc` then `return -1` without `tfree`.
+
+- **[LOW] getTwitter.cpp:129 — `lastId` is the last tweet seen, not the max** —
+  Track the maximum ID.
+
+- **[LOW] initializeDictionary.cpp:57 — `predefineWords` mutates caller storage** —
+  writes through `Inflections` / `InflectionsRoot` (often literals).
+
+- **[LOW] getMusicBrainz.cpp:438 — `pushWhereEntities` takes `mbs` by value** —
+  Pass `const vector&`.
+
+- **[NIT] vcXML.cpp:404 — error path names the wrong directory** —
+  `VBNet` vs `VerbNet`.
+
+- **[NIT] relationTypes.h:21 — `VerbWithNext1MainVerb` is computed from `VERB_HISTORY`** —
+  inserting an enum value silently shifts stored `typeId`s.
+
+- **[NIT] Adversary bugs.cpp — not compiled** —
+  a single block comment (Secret Adversary gold bugs).
+
+---
+
+## Wave — unused source, satellite tools, pyLPBackEnd
+
+- **[HIGH] processGutenbergRDFtoSQL/Program.cs:84 — hardcoded MySQL `root`/`byron0`** —
+  also lines 106, 129, 230. Move to config/env.
+
+- **[HIGH] processGutenbergRDFtoSQL/Program.cs:376 — SQL built by string concatenation** —
+  RDF `creator`/`title` interpolated into INSERT. Use `MySqlParameter`.
+  Same at line 143 for the path UPDATE.
+
+- **[HIGH] Web/pyLPBackEnd/.../pyLP.py:74 — hardcoded DB password and Flask secret** —
+  `password='byron0'` and `app.secret_key = "kjhasd@#$#@"`.
+
+- **[HIGH] Web/pyLPBackEnd/.../pyLP.py:107 — SQL injection via LIKE concatenation** —
+  `LOWER(author) like LOWER('%`+author+`%')` (also `search_author` /
+  `get_path`). Use parameterized queries.
+
+- **[HIGH] convertPDFTextToDatabase/.../Source.cpp:329 — hardcoded MySQL password** —
+  `root`/`byron0` again.
+
+- **[HIGH] unused source/getNewsbank.cpp:381 — library-card credential in source** —
+  `libcard=80035000052216`. Remove/rotate.
+
+- **[HIGH] unused source/relations.cpp:452 — `Source, ::` will not compile** —
+  stray comma after the class name on every method. Same in
+  `getFreebase.cpp:277`.
+
+- **[HIGH] unused source/newPatternDetection.cpp:95 — PEMA walk never advances `p`** —
+  increment expression is `pema[p].nextByPosition` (not assigned). Infinite
+  loop. Should be `p = pema[p].nextByPosition`. Also trees are cleared
+  before print (line 304).
+
+- **[HIGH] unused source/DBMultiWordRelations.cpp:346 — LOCK TABLES leak on early return** —
+  `checkFull` failure skips `UNLOCK TABLES`.
+
+- **[MEDIUM] pyLP.py:81 — login always uses `uid=1`** —
+  all browsers share one session. Use `uuid.uuid4()`.
+
+- **[MEDIUM] LPIO.py:48 — short read on UTF-16 string** —
+  `ch[0]` after a 0–1 byte EOF is `IndexError`.
+
+- **[MEDIUM] TFI.py:33 — `return False` inside the for-loop** —
+  `has_winner_verb_form` only inspects form 0.
+
+- **[MEDIUM] VerbNet.py:61 / TimeInfo.py:90 / BitObject.py:20 — Java leftovers** —
+  `.length()`, set-as-list indexing, mutating a tuple. These raise at
+  runtime if called.
+
+- **[MEDIUM] WordMatch.py:208 — `has_winner_verb_form` no null check** —
+  AttributeError when the word is missing from `WordClass.words`.
+
+- **[MEDIUM] convertPDFTextToDatabase/.../Source.cpp:91 — realloc result overwrites pointer** —
+  leak + NULL deref on failure. Same at the local `WideCharToMultiByte`.
+
+- **[MEDIUM] unused source/getInterviewTranscripts.cpp:164 — URL month is 0-based** —
+  `tm_mon` used as the calendar month. Use `tm_mon+1`. NPR crawler
+  (`while (true)`) also never exits.
+
+- **[MEDIUM] unused source/readGutenbergWebstersDictionary.cpp:10 — `getLine` reads `buffer[where]` before the bound check** —
+  Swap the tests. Also `dictionaryBuffer[bufferLen + 1] = 0` writes one
+  past the payload (line 195).
+
+- **[MEDIUM] unused source/getFreebase.cpp:508 — 200MB malloc unchecked** —
+  then `memstr` on NULL. `vb[bbi+1]` also unguarded (line 557).
+
+- **[MEDIUM] unused source/originalhmm.cpp:109 — `fopen` / newline assumptions** —
+  unchecked `FILE*`; `line[strlen(line)-1]=0` on an empty last line.
+  `--s--` may be missing from tags (line 405).
+
+- **[MEDIUM] checkTypes/checkTypes.cpp:120 — unbounded `strcat` on a 1024-byte path** —
+  recursive walk. Also `getPath` return ignored (line 97).
+
+- **[MEDIUM] DirectoryAnalysis/Program.cs:47 — file count is the parent's, not the child's** —
+  `GetFiles(path)` instead of `GetFiles(folder)`.
+
+- **[MEDIUM] correctRDF/correctRDF.cpp:28 — 16348-byte buffer (likely 16384 typo)** —
+  `pastFirstError` also drops every triple before the first overlong one.
+
+- **[LOW] convertPDFTextToDatabase/.../Source.cpp:125 — unescaped word in SQL** —
+  `mainEntry = '" + word + "'"`.
+
+- **[LOW] unused source/getBNC.cpp:289 — overlapping `wcscpy` of entity substitute** —
+  Use `wmemmove` or a second buffer.
+
+- **[NIT] LPWeb/Startup.cs:48 — `UseAuthorization` without authentication** —
+  a no-op until an auth scheme is registered.
+
+---
+
 ## Later waves
 
-*(to be appended as the remaining files are annotated)*
+*(agreement/syntax and speaker resolution still in progress)*

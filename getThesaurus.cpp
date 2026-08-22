@@ -1,3 +1,33 @@
+/*
+	getThesaurus.cpp - Batch scrape/parse of thesaurus.com into the MySQL thesaurus table
+
+	Overview:
+		Offline acquisition driver: walks cached HTML (or live pages), tokenizes the
+		old thesaurus.com markup, builds sDefinition rows (mainEntry, wordType,
+		primary/accumulated synonyms and antonyms), and INSERTs them. Also contains
+		helpers to compare a scrape against the DB (testThesaurus), split "X or Y"
+		primary synonyms, strip HTML tables, and normalize dashes.
+
+	Pipeline position:
+		One-time / batch lexicon build. Runtime synonym lookup lives in getWordNet.cpp
+		(getSynonymsFromDB / scrapeNewThesaurus). This file is the loader that fills
+		the table those lookups read.
+
+	Key entry points:
+		- getThesaurus - main ingest
+		- scrapeOldThesaurus / getSynonymsFromDB / splitPrimarySynonyms
+		- processIntoTokens / distributeRest / processTable / resolveTables
+		- testThesaurus - compare cache files to DB (exits the process)
+
+	Dependencies:
+		MySQL 'lp.thesaurus'; LMAINDIR\\old thesaurus entries; wn.h POS constants.
+
+	Notes / gotchas:
+		testThesaurus hardcodes mysql_real_connect(..., "root", "byron0", "lp", ...).
+		getSynonymsFromDB concatenates the word into SQL with no escaping.
+		splitPrimarySynonyms logs then exit(0). Many helpers assume a global token
+		buffer set by processIntoTokens.
+*/
 #include <stdio.h>
 #include <string.h>
 #include <mbstring.h>
@@ -34,6 +64,9 @@ using namespace std;
 bool myquery(MYSQL* mysql, const wchar_t* q, MYSQL_RES*& result, bool allowFailure = false);
 void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition>& d);
 
+// SELECT primary/accumulated synonyms for mainEntry=word (wordType bitmask). Concatenates
+// word into SQL unescaped. Also builds alternatives from the last token of primarySynonyms
+// plus the first accumulated synonym. Does not LOCK.
 void getSynonymsFromDB(MYSQL mysql, wstring word, vector <unordered_set <wstring> >& synonyms, vector <wstring >& alternatives, int synonymType)
 {
 	wstring query = L"select primarySynonyms, accumulatedSynonyms from thesaurus where mainEntry = '";
@@ -91,6 +124,7 @@ void getSynonymsFromDB(MYSQL mysql, wstring word, vector <unordered_set <wstring
 	}
 }
 
+// Splits str on each occurrence of splitch (including a trailing empty piece after the last).
 void split(string str, vector <string>& words, const char* splitch)
 {
 	int ch = -1;
@@ -105,6 +139,8 @@ void split(string str, vector <string>& words, const char* splitch)
 
 string vectorString(vector <string>& vstr, string& tmpstr, string separator);
 
+// One-shot: SELECT rows whose primarySynonyms contain " or ", log a split of "X or Y rest",
+// then exit(0). Does not UPDATE the table. Division-by-zero if the SELECT returns no rows.
 void splitPrimarySynonyms(MYSQL mysql)
 {
 	wstring query = L"select primarySynonyms from thesaurus where primarySynonyms like '% or %'";
@@ -158,6 +194,7 @@ void splitPrimarySynonyms(MYSQL mysql)
 	exit(0);
 }
 
+// Parses an already-fetched old-thesaurus HTML buffer for the Synonyms: comma list.
 void scrapeOldThesaurus(wstring word, wstring buffer, unordered_set <wstring>& synonyms)
 {
 	wstring match;
@@ -222,6 +259,7 @@ void scrapeOldThesaurus(wstring word, wstring buffer, unordered_set <wstring>& s
 	//	wprintf(L"%s itself not found in synonyms.\n", word.c_str());
 }
 
+// Maps a small set of Latin-1 accented letters onto ASCII; logs each unseen codepoint once.
 void convert(wchar_t& c)
 {
 	if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))
@@ -246,6 +284,7 @@ void convert(wchar_t& c)
 	}
 }
 
+// Strips / * | and punctuation from me1, lowercases, then convert() each remaining char.
 wstring reduce(wstring me1)
 {
 	size_t ws = 0;
@@ -266,6 +305,7 @@ wstring reduce(wstring me1)
 	return me1;
 }
 
+// True if every reduce()d member of s1 is in reduce()d s2 (s2 may be a superset).
 bool compareWordSets(unordered_set <wstring>& s1, unordered_set <string>& s2)
 {
 	set <wstring> s11, s21;
@@ -290,6 +330,7 @@ bool compareWordSets(unordered_set <wstring>& s1, unordered_set <string>& s2)
 // lastWordPrimaryFromDB == "fatigue"
 // firstWordSynonymFromDB == "catch flies"
 // alternative == fatiguecatch flies
+// True if every reduce()d member of s1 is in synonymsFromDB or equals reduce(alternative).
 bool compareWordSets(vector <string>& s1, unordered_set <wstring>& synonymsFromDB, wstring alternative)
 {
 	set <wstring> s11, synonymsFromDBR;
@@ -311,6 +352,9 @@ bool compareWordSets(vector <string>& s1, unordered_set <wstring>& synonymsFromD
 	return true;
 }
 
+// Walks LMAINDIR\\old thesaurus entries\\*.thesaurus.txt.*, scrapes each, and compares
+// against the DB. Hardcodes mysql root/byron0. Prints mismatch counts; does not return
+// a status (FindFirstFile handle is not closed on all paths).
 void testThesaurus()
 {
 	WIN32_FIND_DATA ffd;
@@ -438,6 +482,7 @@ void testThesaurus()
 
 #define MAX_COLUMNS 4
 vector <string> tokens;
+// True if tokens[I] is "<token...>" (compares from c_str()+1). No bounds check on I.
 bool isBeginToken(int I, const char* token)
 {
 	return !strncmp(tokens[I].c_str() + 1, token, strlen(token)) &&
@@ -446,11 +491,13 @@ bool isBeginToken(int I, const char* token)
 		tokens[I][tokens[I].length() - 1] == '>';
 }
 
+// True if tokens[I] contains no '<'.
 bool isWord(int I)
 {
 	return tokens[I].find("<") == string::npos;
 }
 
+// True if tokens[I] is "</token...>". No bounds check on I.
 bool isEndToken(int I, const char* token)
 {
 	return !strncmp(tokens[I].c_str() + 2, token, strlen(token)) &&
@@ -460,11 +507,13 @@ bool isEndToken(int I, const char* token)
 		tokens[I][tokens[I].length() - 1] == '>';
 }
 
+// True if tokens[I] equals word exactly.
 bool isWord(int I, const char* word)
 {
 	return tokens[I] == word;
 }
 
+// True if s is non-empty and starts with an uppercase letter.
 bool isCapitalWord(string& s)
 {
 	if (s.empty())
@@ -475,11 +524,13 @@ bool isCapitalWord(string& s)
 	return true;
 }
 
+// isCapitalWord(tokens[I]).
 bool isCapitalWord(int I)
 {
 	return isCapitalWord(tokens[I]);
 }
 
+// True if s looks like an HTML tag (starts with '<' and ends with '>').
 bool isToken(string& s)
 {
 	return s[0] == '<' &&
@@ -487,6 +538,7 @@ bool isToken(string& s)
 		s[s.length() - 1] == '>';
 }
 
+// True if s is all digits; writes atoi(s) into n.
 bool isNumber(string& s, int& n)
 {
 	for (int I = 0; s[I]; I++)
@@ -496,11 +548,13 @@ bool isNumber(string& s, int& n)
 	return true;
 }
 
+// isToken(tokens[I]).
 bool isToken(int I)
 {
 	return isToken(tokens[I]);
 }
 
+// Prints tokens around I and aborts the ingest (error() implementation).
 void error(int I)
 {
 	printf("STOP %d\n", I);
@@ -508,6 +562,7 @@ void error(int I)
 		printf("ERROR");
 }
 
+// Copies s into tmp with leading/trailing whitespace removed; returns tmp.
 string trim(string& s, string& tmp)
 {
 	tmp = s;
@@ -525,6 +580,7 @@ string trim(string& s, string& tmp)
 	return tmp;
 }
 
+// Wide-string trim into tmp; returns tmp.
 wstring trim(wstring& s, wstring& tmp)
 {
 	tmp = s;
@@ -542,6 +598,8 @@ wstring trim(wstring& s, wstring& tmp)
 	return tmp;
 }
 
+// Tokenizes tokens[t] on comma/semicolon/"or" into words. Returns the index of the last
+// ';' piece, or -1. primarySemiColon changes how a trailing semicolon is kept.
 __int64 breakByCommaSemiColon(vector <string>& words, int t, bool primarySemiColon)
 {
 	string tmp;
@@ -600,11 +658,14 @@ __int64 breakByCommaSemiColon(vector <string>& words, int t, bool primarySemiCol
 	return semicolonIndex;
 }
 
+// trim(tokens[I], tmp).
 string trim(int I, string& tmp)
 {
 	return trim(tokens[I], tmp);
 }
 
+// Reads MAINDIR\\...\\Koptimized_tags_noTables.html into global tokens (tags vs. text).
+// Calls _filelength(fd) before checking fd>=0 ? undefined if open fails. malloc is not freed.
 void processIntoTokens()
 {
 	int fd;
@@ -664,6 +725,8 @@ void processIntoTokens()
 		printf("%d:%s\n", t++, ti->c_str());
 }
 
+// Moves leftover "rest" tokens on d into accumulated synonyms / antonyms / concepts
+// depending on following markup (Ant., "also", numbered senses).
 void distributeRest(sDefinition& d)
 {
 	bool firstSynonymWordHit = d.accumulatedSynonyms.size() > 0;
@@ -757,6 +820,7 @@ void distributeRest(sDefinition& d)
 	}
 }
 
+// Debug-prints one sDefinition (mainEntry, wordType, synonym/antonym lists).
 void printEntry(sDefinition d)
 {
 	printf("mainEntry[%s] wordType[%s]:", d.mainEntry.c_str(), d.wordType.c_str());
@@ -780,6 +844,7 @@ void printEntry(sDefinition d)
 	printf("\n");
 }
 
+// Logs a parse disagreement at 'where' for whichEntry and continues (unlike error(int)).
 void error(vector <sDefinition>::iterator e1, const char* where, string whichEntry)
 {
 	static int errors = 0;
@@ -788,6 +853,7 @@ void error(vector <sDefinition>::iterator e1, const char* where, string whichEnt
 	//error(-1);
 }
 
+// True if reduce(me1)==reduce(me2) (used to detect duplicate/adjacent main entries).
 bool compareOK(string me1, string me2)
 {
 	size_t ws = 0;
@@ -808,6 +874,7 @@ bool compareOK(string me1, string me2)
 }
 
 set <string> wordTypeMap;
+// If the last two thesaurus rows share a reduced mainEntry, merge or flag via error().
 void checkLastEntry(vector <sDefinition>& thesaurus)
 {
 	vector <sDefinition>::iterator e1 = thesaurus.begin() + thesaurus.size() - 1;
@@ -832,6 +899,7 @@ void checkLastEntry(vector <sDefinition>& thesaurus)
 	wordTypeMap.insert(e1->wordType);
 }
 
+// Splits inputWord on spaces into words (no empty pieces).
 void breakBySpace(string inputWord, vector <string>& words)
 {
 	string tmp;
@@ -851,6 +919,7 @@ void breakBySpace(string inputWord, vector <string>& words)
 }
 
 int numDashedWords = 0, numconvertedWords = 0;
+// If possibleDashedWord contains '-', looks up the undashed form in Words/DB and rewrites it.
 void removeDash(MYSQL mysql, string& possibleDashedWord)
 {
 	__int64 whereDash = possibleDashedWord.find('-');
@@ -922,6 +991,7 @@ void removeDash(MYSQL mysql, string& possibleDashedWord)
 		printf("%d:%S (from %s) not found.                                  \n", numDashedWords, rd.c_str(), possibleDashedWord.c_str());
 }
 
+// removeDash on d.mainEntry and every accumulated synonym/antonym.
 void removeDashes(MYSQL mysql, sDefinition& d)
 {
 	removeDash(mysql, d.mainEntry);
@@ -931,6 +1001,7 @@ void removeDashes(MYSQL mysql, sDefinition& d)
 		removeDash(mysql, d.accumulatedSynonyms[I]);
 }
 
+// Joins a[I] ending in '-' with a[I+1] (e.g. "self-" + "conscious").
 void combineDashes(vector <string>& a)
 {
 	for (unsigned int I = 0; I < a.size(); I++)
@@ -951,6 +1022,9 @@ void combineDashes(vector <string>& a)
 "s25" - like "p"
 "s27" - like "21"
 */
+// Tokenizes the stripped Roget HTML and walks span.s19/s24 entries into the global
+// thesaurus vector (then removeDashes). Returns 0. Does not INSERT into MySQL despite
+// taking a mysql handle (write is commented out).
 vector <sDefinition> thesaurus;
 int getThesaurus(MYSQL mysql)
 {
@@ -1131,6 +1205,8 @@ int getThesaurus(MYSQL mysql)
 // Koptimized.pdf produced using Adobe Acrobat Pro
 // Koptimized.html produced from Koptimized.pdf using Adobe Acrobat Pro (save as other HTML Web Page)
 // remove tags except for <i> and <span class s5, tr,th,td and <table
+// Reads Koptimized.html and writes a copy keeping only <i>, selected <span class=s*>, and
+// table tags. _filelength(fd) runs before the fd>=0 check. Returns 0.
 int stripTags()
 {
 	string tablesPath = string(MAINDIR) + "\\Linguistics information\\thesaurus\\Koptimized.html";
@@ -1311,6 +1387,7 @@ int stripTags()
 	<td>50</td>
 </tr>
 */
+// Parses one <table>? HTML blob from the Roget PDF conversion into tokens/rows.
 void processTable(string& tableToken)
 {
 	string columns[3];
@@ -1365,6 +1442,7 @@ void processTable(string& tableToken)
 
 // remove top and bottom text not belonging to definitions from Koptimized_tags.html
 //resolve tables
+// Walks extracted tables and turns each cell into thesaurus tokens. Returns 0.
 int resolveTables()
 {
 	string tablesPath = string(MAINDIR) + "\\Linguistics information\\thesaurus\\Koptimized_tags.html";

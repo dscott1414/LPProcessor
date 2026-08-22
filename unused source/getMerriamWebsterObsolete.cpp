@@ -1,3 +1,30 @@
+/*
+	getMerriamWebsterObsolete.cpp - Scrape Merriam-Webster Unabridged HTML into the lexicon
+
+	Overview:
+		WordClass methods that fetch unabridged.merriam-webster.com
+		pages, strip chrome (reduceDanielWebsterPage), parse Main Entry /
+		inflection / options-list HTML, and checkAdd forms+inflections
+		into the in-memory word map. URL-encoded option lists
+		(build%5B1%2Cverb%5D%3D…) are decoded by parseOption.
+
+	Pipeline position:
+		Historical dictionary acquisition (live lexicon uses other
+		get* importers). Subscription page ("save log-in information")
+		is treated as fatal.
+
+	Key entry points:
+		- processInflections / parseOption / findMainEntry
+		- processInflectedFunction / processNamedForms / processEndForm
+		- reduceDanielWebsterPage / parseMerriamWebsterDictionaryPage
+		- processOptionsList / processMainEntryBlock / getWebsterDictionaryPage
+
+	Notes / gotchas:
+		wcsstr/begin walking mutates the underlying wstring via *end=0.
+		namedForms[7] is missing a closing </i>. processInflections
+		indexes sWord[ch] until a NUL that wstring does not guarantee
+		beyond size(). Subscription credentials are not in this file.
+*/
 bool spaceSame(wstring sWord,wstring option)
 {
 	if (sWord.find(L" ")==wstring::npos)
@@ -5,6 +32,9 @@ bool spaceSame(wstring sWord,wstring option)
 	return option.find(L"%2B")!=wstring::npos;
 }
 
+// Parse <b>…</b> inflection fragments (default -s / -er/-est / -ed/-ing/-s
+// when sInflections is empty). Pushes surface forms into allInflections.
+// Returns 0. Mutates sInflections via *end=0.
 int processInflections(wstring sWord,wstring mainEntry,wstring Form,wstring sInflections,vector<wstring> &allInflections)
 {
 	wchar_t *begin,*end;
@@ -89,6 +119,9 @@ int processInflections(wstring sWord,wstring mainEntry,wstring Form,wstring sInf
 
 // build%5B1%2Cverb%5D%3D459446%3B
 // build  [1  ,verb  ]  =459446  ;
+// Decode a URL-encoded option (word%5B1%2Cverb%5D%3D459446%3B) into
+// jump (up to %3D), newWord, and form (with %2B -> space).
+// Returns PARSE_OPTION_FAILED if %3D is missing, else 0.
 int parseOption(wstring option,wstring &newWord,wstring &form,wstring &jump)
 {
 	int pos2=option.find(L"%5B"),pos3=wstring::npos;
@@ -121,6 +154,8 @@ int parseOption(wstring option,wstring &newWord,wstring &form,wstring &jump)
 		return 0;
 }
 
+// Strip pop-win / bgcolor chrome from match, take Main Entry:<b>…</b>,
+// removeDots, decode &#N;, drop <sup>. Always returns 0.
 int findMainEntry(wstring &match,wstring &mainEntry)
 {
 	wstring temp,temp2;
@@ -143,6 +178,8 @@ int findMainEntry(wstring &match,wstring &mainEntry)
 	return 0;
 }
 
+// If sWord==mainEntry and Form/temp say comparative/superlative/past,
+// checkAdd that inflection and return true; else false.
 bool WordClass::processInflectedFunction(wstring sWord,wstring mainEntry,wstring temp,wstring Form,tIWMM &iWord,int sourceId)
 {
 	if (mainEntry!=sWord) return false;
@@ -176,6 +213,9 @@ wchar_t *namedForms[]={
 	L"<i>third singular</i>",L"<i>plural</i>",L"<i>past first & third singular<i>"
 };
 
+// For verbs, walk <b> inflections labelled past / past part / present
+// part / … and checkAdd when the surface equals sWord. Returns whether
+// any named form was seen. namedForms[7] is a malformed <i> tag.
 bool WordClass::processNamedForms(wstring sWord,wstring mainEntry,wstring Form,tIWMM &iWord,wstring sInflections,int sourceId)
 {
 	if (Form!=L"verb") return false;
@@ -225,6 +265,8 @@ bool WordClass::processNamedForms(wstring sWord,wstring mainEntry,wstring Form,t
 	return namedFormFound;
 }
 
+// Harvest trailing "<br>- <b>word</b> <i>form</i>" derivation lines and
+// inflectionMatch each adjective/adverb/noun/verb against sWord.
 void WordClass::processEndForm(tIWMM &iWord,wstring sWord,wstring match,wstring mainEntry,int sourceId)
 {
 	wstring lastDitch;
@@ -258,6 +300,9 @@ void WordClass::processEndForm(tIWMM &iWord,wstring sWord,wstring match,wstring 
 	}
 }
 
+// Strip MW chrome from buffer. If the page is "not in the dictionary",
+// insert sWord into unknownWDWords (lowercased) and return false.
+// Otherwise rewrite buffer in place and return true.
 bool WordClass::reduceDanielWebsterPage(wstring sWord,wstring &buffer)
 {
 	wchar_t *input=wcsdup(buffer.c_str());
@@ -318,6 +363,8 @@ bool WordClass::reduceDanielWebsterPage(wstring sWord,wstring &buffer)
 	return true;
 }
 
+// Same chrome strip as reduceDanielWebsterPage but for the options-list
+// page (no unknown-word handling).
 void WordClass::reduceDanielWebsterListwordPage(wstring &buffer)
 {
 	wchar_t *input=wcsdup(buffer.c_str());
@@ -365,6 +412,9 @@ void WordClass::reduceDanielWebsterListwordPage(wstring &buffer)
 }
 
 
+// Walk <table> blocks: Main Entry -> processMainEntryBlock (+ options
+// list if not recursive); "not in dictionary" -> WORD_NOT_FOUND;
+// "save log-in information" is LOG_FATAL_ERROR. Returns 0 / error code.
 int WordClass::parseMerriamWebsterDictionaryPage(wstring buffer,tIWMM &iWord,wstring sWord,wstring desiredForm,vector <wstring> &pastPages,bool recursive,int sourceId)
 {
 	wstring match,lastOptionsList,mainEntry,Form;
@@ -404,6 +454,9 @@ int WordClass::parseMerriamWebsterDictionaryPage(wstring buffer,tIWMM &iWord,wst
 	return UNPARSABLE_PAGE;
 }
 
+// Map a human form string ("plural noun", "verb past", "adjective &
+// adverb", …) to checkAdd calls. Returns the checkAdd result or -1
+// if unrecognized.
 int WordClass::processAlternateForms(wstring sWord,wstring mainEntry,wstring form,tIWMM &iWord,int sourceId)
 {
 	if (form.find(L"plural noun")!=wstring::npos || form.find(L"noun plural")!=wstring::npos)
@@ -462,6 +515,8 @@ int WordClass::processAlternateForms(wstring sWord,wstring mainEntry,wstring for
 	return -1;
 }
 
+// Re-encode an MW hidden-list value into %XX option tokens, optionally
+// filtering space/dash/medical entries. Writes newList.
 void transformList(bool mainEntryHasSpace,bool mainEntryHasDash,wstring oldList,wstring &newList,bool medical)
 {
 	wstring option;
@@ -502,6 +557,8 @@ void transformList(bool mainEntryHasSpace,bool mainEntryHasDash,wstring oldList,
 		newList.erase(newList.length()-3,3);
 }
 
+// Decode lastOptionsList into per-sense URLs, fetch each (skipping
+// pastPages), and parseMerriamWebsterDictionaryPage recursively.
 int WordClass::processOptionsList(tIWMM &iWord,wstring sWord,wstring match,wstring lastOptionsList,vector <wstring> &pastPages,int sourceId)
 {
 	if (log_net) lplog(L"******\n%s\n****",match.c_str());
@@ -651,6 +708,8 @@ int WordClass::processOptionsList(tIWMM &iWord,wstring sWord,wstring match,wstri
 	return 0;
 }
 
+// Infer Form (noun/verb/adj/…) from an inflection fragment. Returns a
+// status used by processMainEntryBlock.
 int findFunction(wstring sInflection,wstring &Form)
 {
 	wchar_t *lookFor[]={L"intransitive verb",L"transitive verb",L"noun",L"verb",L"adjective",L"adverb",NULL};
@@ -660,6 +719,9 @@ int findFunction(wstring sInflection,wstring &Form)
 	return -1;
 }
 
+// Parse one Main Entry table: findMainEntry, generateInflections /
+// processNamedForms / processInflectedFunction, optionally follow
+// related-word links. Writes mainEntry out. Returns 0 or an error code.
 int WordClass::processMainEntryBlock(tIWMM &iWord,wstring sWord,wstring match,wstring desiredForm,vector <wstring> &pastPages,wstring &mainEntry,int sourceId)
 {
 	bool medical=(match.find(L"<input type=hidden name=book value=Medical>")!=wstring::npos);
@@ -845,6 +907,8 @@ int WordClass::processMainEntryBlock(tIWMM &iWord,wstring sWord,wstring match,ws
 	return 0;
 }
 
+// Apply a cross-reference instruction (variant of / plural of / …) by
+// checkAdd of newWord under aForm. Returns whether it was recognized.
 bool WordClass::processInstruction(tIWMM &iWord,wstring sWord,wstring newWord,wstring aForm,wstring instruction,int sourceId)
 {
 	int inflection=0;
@@ -868,6 +932,8 @@ bool WordClass::processInstruction(tIWMM &iWord,wstring sWord,wstring newWord,ws
 	return true;
 }
 
+// processInflections then checkAdd each surface form. medical tweaks
+// hyphenation. Returns 0 or checkAdd status.
 int WordClass::generateInflections(wstring sWord,wstring mainEntry,wstring sForm,tIWMM &iWord,wstring sInflection,wstring temp,int sourceId,bool medical)
 {
 	if (processNamedForms(sWord,mainEntry,sForm,iWord,sInflection,sourceId)) return 0;
@@ -881,6 +947,9 @@ int WordClass::generateInflections(wstring sWord,wstring mainEntry,wstring sForm
 }
 
 #define MAX_LEN 2048
+// HTTP-fetch the MW unabridged page for sWord (or treat sWord as a
+// full URL if wordIsAddress). Writes HTML into buffer. Return is a
+// getWebPath-style status.
 int WordClass::getWebsterDictionaryPage(wstring sWord,wstring form,wstring &buffer,bool wordIsAddress)
 {
 	wchar_t webAddress[MAX_LEN];

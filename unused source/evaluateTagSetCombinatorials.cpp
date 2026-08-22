@@ -1,3 +1,32 @@
+/*
+	evaluateTagSetCombinatorials.cpp - Exhaustive SUBJECT/VERB tag-set enumerator
+
+	Overview:
+		Compile-only under LOG_AGREE_PATTERN_EVALUATION. Recursively
+		expands a cPattern's element tree into every combination of
+		descendant tag locations, then flags those that fail a hard
+		agreement skeleton (exactly one SUBJECT, one N_AGREE/GNOUN under
+		it, at least one VERB, V_AGREE unless conditional/future).
+
+	Pipeline position:
+		Offline pattern-authoring diagnostic; not linked unless the
+		LOG_AGREE_PATTERN_EVALUATION macro is defined.
+
+	Key entry points:
+		- similarSets() - tag-set equality (used to skip duplicate forms)
+		- agreeTagSetOK() - structural agreement predicate
+		- minimizeTagSet() - drop tags outside SUBJECT/VERB spans
+		- addGeneratedPatternsRecursively() / generateTags() - DFS expansion
+		- evaluateAllTagPatternsForAgreement() - entry: generate then print failures
+
+	Notes / gotchas:
+		Combinatorial explosion — generateTags aborts a branch once
+		tagSets.size()>1000 and the current set is OK. minimizeTagSet
+		leaves beginSubject/endSubject uninitialized if whereSubject<0
+		and then still uses them in the later loop when whereMainVerb>=0
+		(the whereSubject<0 short-circuit in the compound condition
+		saves that path). similarSets currently just `tags==tags2`.
+*/
 #ifdef LOG_AGREE_PATTERN_EVALUATION
 #include <stdio.h>
 #include <string.h>
@@ -11,6 +40,8 @@
 #include "source.h"
 #include "time.h"
 
+// True if the two tag id sets are identical. The size/find implementation
+// below is leftover (sets are not randomly accessible by index).
 bool cPattern::similarSets(set <unsigned int> &tags,set <unsigned int> &tags2)
 {
   return tags==tags2;
@@ -22,6 +53,9 @@ bool cPattern::similarSets(set <unsigned int> &tags,set <unsigned int> &tags2)
   */
 }
 
+// Structural filter: exactly one SUBJECT, exactly one N_AGREE or GNOUN
+// under it, at least one VERB, and (unless conditional/future) a V_AGREE
+// under each VERB. Extra conditionals fail. Returns false on violation.
 bool agreeTagSetOK(vector <tTagLocation> &tagSet)
 {
   // exactly one SUBJECT required.
@@ -54,6 +88,9 @@ bool agreeTagSetOK(vector <tTagLocation> &tagSet)
   while (true);
 }
 
+// In-place: drop GNOUN/N_AGREE/SINGULAR/PLURAL outside SUBJECT and
+// V_AGREE/conditional/future outside VERB; keep only the first V_AGREE.
+// No-op if more than one SUBJECT or VERB tag is present. Mutates tagSet.
 void minimizeTagSet(vector  <tTagLocation> &tagSet)
 {
   // eliminate all GNOUNs, and SINGULAR, PLURALs and N_AGREEs not in SUBJECT
@@ -108,6 +145,9 @@ void minimizeTagSet(vector  <tTagLocation> &tagSet)
     }
 }
 
+// For each precomputed descendant tag/word set of pattern p, append it to
+// the current tagSet (adjusting lens/positions), recurse via generateTags,
+// then roll back. loopCounter is a progress tick (printed every 256).
 void cPattern::addGeneratedPatternsRecursively(int p,int originalTagSetSize,bool  blocking,bool repeat,int desiredTagSetNum,vector <unsigned int> futureParentElements,
                            vector <tTagLocation> tagSet,vector <wstring> words,vector < vector <tTagLocation> > &tagSets,vector < vector <wstring> > &wordSets,int  position,int loopCounter)
 {
@@ -142,6 +182,11 @@ void cPattern::addGeneratedPatternsRecursively(int p,int originalTagSetSize,bool
   }
 }
 
+// DFS over futureParentElements (pairs of patternId, nextElement). When the
+// stack empties, minimize and uniquely append tagSet to tagSets (cap 1000
+// if agreeTagSetOK). Otherwise expand the current element's child patterns
+// and forms, honouring blocking / includesOneOfTagSet / optional min==0.
+// Returns tagSets.size() (or 1000 on the early-out).
 int cPattern::generateTags(bool blocking,bool repeat,int desiredTagSetNum,vector <unsigned int> futureParentElements,
                            vector <tTagLocation> tagSet,vector <wstring> words,vector < vector <tTagLocation> > &tagSets,vector < vector <wstring> > &wordSets,int  position,int loopCounter)
 {
@@ -333,6 +378,9 @@ int cPattern::generateTags(bool blocking,bool repeat,int desiredTagSetNum,vector
   return tagSets.size();
 }
 
+// Seed generateTags at this pattern, then print every resulting tagSet
+// that fails agreeTagSetOK (after a second minimize). desiredTagSetNum
+// selects which named tag-set mask to collect.
 void cPattern::evaluateAllTagPatternsForAgreement(unsigned int desiredTagSetNum)
 {
   vector <unsigned int> futureParentElements;
