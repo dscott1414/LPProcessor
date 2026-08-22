@@ -1,4 +1,51 @@
-﻿#include <windows.h>
+﻿/*
+	createOntology.cpp - blend YAGO / DBpedia / UMBEL / OpenGIS into one in-memory ontology
+	and resolve named objects to typed cTreeCat hits.
+
+	Overview:
+		fillOntologyList() reads yago_taxonomy.ttl, yago_type_links.ttl,
+		dbpedia_2016-10.nt and umbel downloads\*.n3 (or the binary
+		CACHEDIR\dbPediaCache\_rdfTypes cache) into
+		cOntology::dbPediaOntologyCategoryList.  rdfIdentify() then looks an
+		object up via local Virtuoso SPARQL (types, redirects, disambiguations),
+		Freebase (freebaseProperties), and thefreedictionary.com acronyms, caches
+		the hit list as .rdfTypes, and walks superclasses until a known top class
+		(person/place/...) can be preferred.
+
+	Pipeline position:
+		Initialization / object typing.  rdfIdentify() is the public entry
+		(identifyISARelation in source.cpp).  fillOntologyList(false) runs on
+		first use.  Not on the tokenize/parse path.
+
+	Key entry points:
+		- fillOntologyList() - build or load the blended category map
+		- rdfIdentify() - type one object into rdfTypes
+		- getRDFTypesMaster() / getRDFTypesFromDbPedia() - cache + SPARQL walk
+		- includeSuperClasses() / setPreferred() - hierarchy + preferred flags
+		- readYAGOOntology() / readDbPediaOntology() / readUMBELSuperClasses()
+
+	Key data structures / globals:
+		- dbPediaOntologyCategoryList - process-lifetime category map
+		- rdfTypeMap / rdfTypeNumMap - per-object hit cache (rdfTypeMapSRWLock)
+		- rejectCategories - Freebase types dropped as too generic
+		- basehttpquery - Virtuoso at localhost:8890 (dbpedia.org SPARQL commented out)
+		- cacheRdfTypes / forceWebReread / alreadyConnected / mysql
+
+	Dependencies:
+		Virtuoso SPARQL, MySQL (ontology, noRDFTypes, noERDFTypes,
+		freebaseProperties, openLibraryInternetArchiveBooksDump), files under
+		source\lists, dbpedia_downloads\2016-10, umbel downloads, CACHEDIR\dbPediaCache,
+		WinHTTP / cInternet, hardcoded M:\ol_dump_works_... for Open Library.
+
+	Notes / gotchas:
+		- Several parsers put 2–20 MB arrays on the stack (MAX_BUF, MAXYAGOBUF,
+		  writeRDFTypes' MAX_BUF*10).
+		- getRDFTypesMaster mutates rdfTypeNumMap under a shared SRWLOCK.
+		- SQL for noRDFTypes / Freebase concatenates the object/id unescaped.
+		- decodeURL reads I+1/I+2 after '%' with no length check.
+		- readOntologyList fetches only the first SQL row.
+*/
+#include <windows.h>
 #include <io.h>
 #include "word.h"
 #include "ontology.h"
@@ -42,6 +89,8 @@ bool cOntology::superClassesAllPopulated = false;
 /***
 	Read N3 files (begin) - used for reading UMBEL ontology
 ***/
+// Advance s (which points at the opening '"') past an N3 quoted string, skipping
+// '\"'.  Returns the space after the closing quote, or 0 if the quote never closes.
 wchar_t* readTillEndOfN3String(wchar_t* s)
 {
 	s = s + 1;
@@ -66,6 +115,8 @@ wchar_t* readTillEndOfN3String(wchar_t* s)
 	return s;
 }
 
+// Consume an N3 """...""" literal that may span lines.  mapTo is the inner text
+// (language tag after @ is stripped).  Returns the scan position after the closer.
 wchar_t* readTillEndOfTripleString(wchar_t* s1, FILE* fp, wchar_t* buffer, int& line, wstring& mapTo)
 {
 	wchar_t* s2 = wcsstr(s1 + 4, L"\"\"\"");
@@ -106,6 +157,8 @@ wchar_t* readTillEndOfTripleString(wchar_t* s1, FILE* fp, wchar_t* buffer, int& 
 	return buffer; // take care of incorrect warning
 }
 
+// Read continuation objects of one predicate (comma-separated values).
+// Returns true when the statement ends with '.' (finished the subject).
 bool readN3OnePropertyLine(wstring ontologyRelation, wstring mapFrom, unordered_map < wstring, unordered_map <wstring, set< wstring > > >& triplets, FILE* fp, wchar_t* buffer, int& line, int& nonConformingLines)
 {
 	for (line++; fgetws(buffer, MAX_BUF, fp); line++)
@@ -154,6 +207,7 @@ bool readN3OnePropertyLine(wstring ontologyRelation, wstring mapFrom, unordered_
 	return false;
 }
 
+// Read indented "predicate object ;/,/." lines after a subject.  Returns 0.
 int readN3TwoPropertyLine(wchar_t* path, wstring mapFrom, unordered_map < wstring, unordered_map <wstring, set< wstring > > >& triplets, FILE* fp, wchar_t* buffer, int& line, int& nonConformingLines)
 {
 	for (line++; fgetws(buffer, MAX_BUF, fp); line++)
@@ -261,6 +315,8 @@ int readN3TwoPropertyLine(wchar_t* path, wstring mapFrom, unordered_map < wstrin
 									 skos:definition "License-built version of the U.S. Bell 205 helicopter."@en ;
 									 rdfs:isDefinedBy : .
 */
+// Parse one UMBEL .n3 file into triplets[predicate][subject] = {objects}.
+// Uses a MAX_BUF (2e6 wchar_t) stack buffer.  LOG_FATAL if the file is missing.
 int readN3FileIntoTripletMap(wchar_t* path, unordered_map < wstring, unordered_map <wstring, set< wstring > > >& triplets)
 {
 	FILE* fp = _wfopen(path, L"r");
@@ -349,6 +405,8 @@ int readN3FileIntoTripletMap(wchar_t* path, unordered_map < wstring, unordered_m
 	return 0;
 }
 
+// Recursively import every file under basepath whose suffix equals extension.
+// wcsrchr can be NULL (no '.') and is then passed to wcscmp.
 void cOntology::importUMBELN3Files(const wchar_t* basepath, const wchar_t* extension, unordered_map < wstring, unordered_map <wstring, set< wstring > > >& triplets)
 {
 	WIN32_FIND_DATA FindFileData;
@@ -377,6 +435,9 @@ void cOntology::importUMBELN3Files(const wchar_t* basepath, const wchar_t* exten
 	FindClose(hFind);
 }
 
+// Import "umbel downloads" *.n3, invert umbel:superClassOf into rdfs:subClassOf,
+// and insert UMBEL entries into dbPediaOntologyCategoryList.  fillRanks is
+// invoked once per triplets[L""] entry.  Always returns 0 (false as bool).
 bool cOntology::readUMBELSuperClasses()
 {
 	unordered_map < wstring, unordered_map <wstring, set<wstring>> > triplets;
@@ -423,6 +484,7 @@ bool cOntology::readUMBELSuperClasses()
 ***/
 
 // cut off YAGO and UMBEL category numbers
+// Strip a trailing run of digits (YAGO WordNet-style ids: HealthProfessional110165109).
 void cOntology::cutFinalDigits(wstring& cat)
 {
 	LFS
@@ -439,6 +501,8 @@ void cOntology::cutFinalDigits(wstring& cat)
 DBPEDIA START
 */
 // decode dbpedia URL for calling HTTP API into virtuoso
+// Percent-decode into decodedURL (+ -> space).  After '%' reads I+1 and I+2
+// with no length check.  Hex letters are assumed uppercase ('A'-10).
 wstring cOntology::decodeURL(wstring input, wstring& decodedURL)
 {
 	LFS
@@ -460,6 +524,9 @@ wstring cOntology::decodeURL(wstring input, wstring& decodedURL)
 	return decodedURL;
 }
 
+// Fetch/cache a SPARQL/HTTP result under dbPediaCache.  Sanitizes epath.
+// Returns cInternet::getWebPath's code, or -1 if the body looks like a SPARQL error
+// (cached file is then deleted).  where is the caller source-index for logging.
 int cOntology::getDBPediaPath(int where, wstring webAddress, wstring& buffer, wstring epath)
 {
 	LFS
@@ -478,6 +545,7 @@ int cOntology::getDBPediaPath(int where, wstring webAddress, wstring& buffer, ws
 	return retValue;
 }
 
+// Lower-case icat, strip trailing digits, look up in dbPediaOntologyCategoryList.
 unordered_map <wstring, cOntologyEntry>::iterator cOntology::findCategory(wstring& icat)
 {
 	LFS
@@ -491,6 +559,8 @@ unordered_map <wstring, cOntologyEntry>::iterator cOntology::findCategory(wstrin
 }
 
 // escape quote in object
+// If object contains ' or %27, wrap the corresponding SPARQL token in quotes
+// so Virtuoso will accept it.  begin is the query prefix used to locate the token.
 void 	adjustQuote(wstring& begin, wstring& object, wstring& webAddress)
 {
 	LFS
@@ -524,6 +594,7 @@ void 	adjustQuote(wstring& begin, wstring& object, wstring& webAddress)
 127	Control Characters	 ' '	                                      Unsafe
 128-255	Non-ASCII Characters	 ' '	                                Unsafe
 */
+// Percent-encode every non-alnum byte of the UTF-8 conversion of winput.
 void encodeURL(wstring winput, wstring& wencodedURL)
 {
 	LFS
@@ -546,6 +617,7 @@ void encodeURL(wstring winput, wstring& wencodedURL)
 	mTW(encodedURL, wencodedURL);
 }
 
+// SPARQL for abstract/comment/homepage/birthDate/birthPlace/occupation of label.
 wstring getDescriptionString(wstring label)
 {
 	return basehttpquery + prefix_foaf + prefix_colon +
@@ -560,6 +632,8 @@ wstring getDescriptionString(wstring label)
 		L"OPTIONAL+%7B+" + label + L"+%3Chttp%3A%2F%2Fdbpedia.org%2Fontology%2Foccupation%3E+%3Focc+.+%7D%0D%0A%7D";
 }
 
+// If link is a dbpedia.org URI, fetch the page and scrape property's <span> text
+// into value.  Non-dbpedia links are copied through.  Returns 0 or -1.
 int cOntology::followDbpediaLink(wstring link, wstring property, wstring& value)
 {
 	if (wcsncmp(link.c_str(), L"http://dbpedia.org", wcslen(L"http://dbpedia.org")))
@@ -586,6 +660,9 @@ int cOntology::followDbpediaLink(wstring link, wstring property, wstring& value)
 
 // these queries are not combined to look up properties of more than one object because it would go over the time limit imposed by the VIRTUOSO server.
 // when running SPARQL queries in Virtuoso Conductor ISQL, you must prepend the query with SPARQL, so it must go before even the PREFIX (and not anywhere else)
+// SPARQL getDescriptionString(label) and scrape v1/v2/v3/bd/bp/occ bindings.
+// birthPlace/occupation URIs are followed via followDbpediaLink.  Returns the
+// number of <binding name="v1"> rows (0 if the HTTP fetch failed).
 int cOntology::getDescription(wstring label, wstring objectName, wstring& abstract, wstring& comment, wstring& infoPage, wstring& birthDate, wstring& birthPlace, wstring& occupation)
 {
 	LFS
@@ -666,6 +743,9 @@ int cOntology::getDescription(wstring label, wstring objectName, wstring& abstra
 //	return cli->second.descriptionFilled=numRows;
 //}
 
+// SPARQL rdfs:subClassOf for a YAGO class not in the in-memory map; insert it
+// (rank 100) and recurse for unknown supers.  Returns the new iterator, or end()
+// if the fetch fails.  URI prefix strip assumes the http://dbpedia.org/class/yago/ prefix.
 unordered_map <wstring, cOntologyEntry>::iterator cOntology::findAnyYAGOSuperClass(wstring cl)
 {
 	LFS
@@ -697,6 +777,8 @@ unordered_map <wstring, cOntologyEntry>::iterator cOntology::findAnyYAGOSuperCla
 }
 
 // c. derive a combined ranking of a hierarchy from dbPedia, UMBEL, YAGO, OpenGIS
+// Repeatedly assign ontologyHierarchicalRank = super.rank+1 (or 0 if no/unknown
+// super) for entries of ontologyType still at 100.  Loops until a pass fills none.
 int cOntology::fillRanks(int ontologyType)
 {
 	LFS
@@ -770,6 +852,7 @@ int cOntology::fillRanks(int ontologyType)
 //                                                             <http://umbel.org/umbel/rc/Artist> ,
 //                                                             <http://umbel.org/umbel/rc/Entertainer> ;
 
+// Trim trailing CR/LF/space; if the last char is . ; or , stash it in ch and drop it.
 void stripEndOfLine(wchar_t* s, wchar_t& ch)
 {
 	LFS
@@ -794,6 +877,8 @@ superClasses		 rdfs:subClassOf :TopicsCategories ,
 compactLabel			skos:compactLabel "weather attributes weather topic"@en .
 */
 
+// Peel a known URI prefix (UMBELType = prefix index+1), camelCase -> spaced
+// lower-case labelWithSpace.  compactLabel is the local name.  Returns labelWithSpace.
 wstring cOntology::stripUmbel(wstring umbelClass, wstring& compactLabel, wstring& labelWithSpace, int& UMBELType)
 {
 	const wchar_t* prefixes[] = { L"<http://umbel.org/umbel/rc/", L"<http://umbel.org/umbel#", L"<http://schema.org/", L"<http://www.geonames.org/ontology#", L"<http://dbpedia.org/ontology/",
@@ -842,6 +927,8 @@ wstring cOntology::stripUmbel(wstring umbelClass, wstring& compactLabel, wstring
 	return labelWithSpace;
 }
 
+// fgetws-alike over a pread buffer.  Treats fileBuffer as wchar_t but _read's
+// count is MAX_BUF bytes.  Unused by the current YAGO reader (which has its own loop).
 wchar_t* bufferedGetws(wchar_t* s, int maxLen, int fd, wchar_t* fileBuffer, __int64& bufferLength, __int64& bufferOffset, __int64& fileOffset, __int64 totalFileLength)
 {
 	LFS
@@ -873,6 +960,8 @@ wchar_t* bufferedGetws(wchar_t* s, int maxLen, int fd, wchar_t* fileBuffer, __in
 	return s;
 }
 
+// In-place lower-case ic, insert a space before a new capital/digit run, and
+// drop a trailing digit run.  Mutates the caller's buffer.
 void transform(wchar_t* ic, wstring& nameIC)
 {
 	int lastContinuousDigit = 0;
@@ -895,6 +984,7 @@ void transform(wchar_t* ic, wstring& nameIC)
 		nameIC.erase(lastContinuousDigit);
 }
 
+// Narrow-char twin of transform(wchar_t*).
 void transform(char* ic, string& nameIC)
 {
 	int lastContinuousDigit = 0;
@@ -917,6 +1007,8 @@ void transform(char* ic, string& nameIC)
 		nameIC.erase(lastContinuousDigit);
 }
 
+// Load yago_taxonomy.ttl then yago_type_links.ttl and fillRanks(YAGO).  Returns -1
+// if either file is missing (the per-file reader already LOG_FATALs).
 int cOntology::readYAGOOntology()
 {
 	LFS
@@ -933,6 +1025,9 @@ int cOntology::readYAGOOntology()
 }
 
 #define MAXYAGOBUF 5000000 // in char
+// Stream one YAGO TTL: equivalentClass lines set compactLabel; subClassOf lines
+// insert a super.  5MB char fileBuffer on the stack.  GetFileSizeEx failure
+// returns -1 without CloseHandle.
 int cOntology::readYAGOOntology(const wchar_t* filepath, int& numYAGOEntries, int& numSuperClasses)
 {
 	LFS
@@ -1053,6 +1148,9 @@ int cOntology::readYAGOOntology(const wchar_t* filepath, int& numYAGOEntries, in
 #define DBP_PREFIX2 L"<http://www.w3.org/2002/07/owl#"
 #define DBP_PREFIX3 L"<http://schema.org/"
 #define DBP_PREFIX4 L"<http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#"
+// Parse dbpedia_downloads\2016-10\dbpedia_2016-10.nt for label/comment/subClassOf,
+// keying the map by the English label (not the CamelCase local name) so
+// fillRanks and text lookup share a key.  Seeds a few dropped supers (Thing, ...).
 int cOntology::readDbPediaOntology()
 {
 	LFS
@@ -1199,6 +1297,7 @@ unordered_map <wstring, cOntologyEntry>::iterator copy(unordered_map <wstring, c
 }
 */
 
+// Serialize dbsn into buf (same field set as the cTreeCat::copy entry writer).
 bool cOntology::copy(void* buf, cOntologyEntry& dbsn, int& where, int limit)
 {
 	DLFS
@@ -1217,6 +1316,7 @@ bool cOntology::copy(void* buf, cOntologyEntry& dbsn, int& where, int limit)
 	return true;
 }
 
+// Deserialize one cOntologyEntry from the _rdfTypes binary cache.
 bool copy(cOntologyEntry& dbsn, void* buf, int& where, int limit)
 {
 	DLFS
@@ -1235,6 +1335,7 @@ bool copy(cOntologyEntry& dbsn, void* buf, int& where, int limit)
 	return true;
 }
 
+// Deserialize key+entry and insert into hm; hint becomes the inserted iterator.
 bool copy(unordered_map <wstring, cOntologyEntry>::iterator& hint, void* buf, int& where, int limit, unordered_map <wstring, cOntologyEntry>& hm)
 {
 	DLFS
@@ -1249,6 +1350,7 @@ bool copy(unordered_map <wstring, cOntologyEntry>::iterator& hint, void* buf, in
 	return false;
 }
 
+// Sort key: lower ontologyHierarchicalRank first.
 bool rdfCompare(const unordered_map <wstring, cOntologyEntry>::iterator& lhs, const unordered_map <wstring, cOntologyEntry>::iterator& rhs)
 {
 	LFS
@@ -1257,11 +1359,15 @@ bool rdfCompare(const unordered_map <wstring, cOntologyEntry>::iterator& lhs, co
 
 const wchar_t* lpOntologySuperClasses[] = { L"provincesandterritoriesofcanada",L"country",L"island",L"mountain",L"geoclasspark",L"river",L"stream",L"city",L"statesoftheunitedstates",NULL };
 
+// wall-clock seconds since process start (clock()/CLOCKS_PER_SEC).
 int clocksec()
 {
 	return clock() / CLOCKS_PER_SEC;
 }
 
+// Load dbPediaOntologyCategoryList from CACHEDIR\dbPediaCache\_rdfTypes, or
+// rebuild from YAGO+DBpedia+UMBEL if missing / reInitialize / version mismatch.
+// Then force lpOntologySuperClasses ranks to -1 (preferred geography tops).
 int cOntology::fillOntologyList(bool reInitialize)
 {
 	LFS
@@ -1384,6 +1490,7 @@ bool readDbOntologyEntry(MYSQL& mysql, wstring key, cOntologyEntry& oncologyEntr
 
 void maxFieldLengths(const wstring key, cOntologyEntry& dbPredicate, int& maxKey, int& maxCompactLabel, int& maxInfoPage, int& maxAbstractDescription, int& maxCommentDescription, int& maxSuperClasses, int& numGTA, int& numGTB, int& numGTC);
 
+// Scan the in-memory map and log max string lengths (schema-sizing helper).
 bool cOntology::maxFieldLengths()
 {
 	int maxKey = -1, maxCompactLabel = -1, maxInfoPage = -1, maxAbstractDescription = -1, maxCommentDescription = -1, maxSuperClasses = -1;
@@ -1395,6 +1502,8 @@ bool cOntology::maxFieldLengths()
 	return true;
 }
 
+// Dump every category into MySQL `ontology` (writeDbOntologyEntry is declared here,
+// defined elsewhere).  Takes a WRITE lock.
 bool cOntology::writeOntologyList()
 {
 	if (!myquery(&mysql, L"LOCK TABLES ontology WRITE"))
@@ -1406,6 +1515,8 @@ bool cOntology::writeOntologyList()
 	return true;
 }
 
+// Load `ontology` into the map.  Only mysql_fetch_row is called once — a single
+// row is imported.  Superclasses are '|' split.
 bool cOntology::readOntologyList()
 {
 	if (!myquery(&mysql, L"LOCK TABLES ontology READ"))
@@ -1439,6 +1550,9 @@ bool cOntology::readOntologyList()
 	return true;
 }
 
+// Classify uri by ontology prefix, look up / fetch a missing YAGO or UMBEL super,
+// push a cTreeCat, return the hierarchical rank or -1.  Confidence is qtype[0]-'0'
+// (qtype is like L"1 TYPES").  UMBEL HTTP path is noted as broken by redirects.
 int cOntology::findCategoryRank(wstring& qtype, wstring& parentObject, wstring& object, vector <cTreeCat*>& rdfTypes, wstring& uri)
 {
 	LFS
@@ -1497,6 +1611,10 @@ int cOntology::findCategoryRank(wstring& qtype, wstring& parentObject, wstring& 
 }
 
 // access dbPedia on the local virtuoso server.  Derive type, description and ontological position and rank
+// Run one Virtuoso SPARQL (begin+encoded object+end), collect resource URIs or
+// typed hits via findCategoryRank, attach getDescription() to new hits, and
+// append a SEPARATOR cTreeCat.  Rejects long / illegal-char objects and a
+// leading dash.  Returns true if at least one <uri> was seen.
 bool cOntology::extractResults(wstring begin, wstring uobject, wstring end, wstring qtype, vector <cTreeCat*>& rdfTypes, vector <wstring>& resources, wstring parentObject)
 {
 	LFS
@@ -1567,6 +1685,9 @@ bool cOntology::extractResults(wstring begin, wstring uobject, wstring end, wstr
 }
 
 inline int (isUnderline)(int c) { return c == L'_'; }
+// Map a Freebase type string onto dbPediaOntologyCategoryList (try '_', spaces,
+// then no-underline).  Confidence 1 if slobject matches name/k, else 6.
+// Returns 1 on insert, -2 unknown type, -3 rejectCategories hit.
 int cOntology::enterCategory(string& id, string& k, string& propertyValue, string& description, string& slobject, wstring& object, string& objectType, string& name, vector <wstring>& wikipediaLinks, vector <wstring>& professionLinks, vector <cTreeCat*>& rdfTypes)
 {
 	LFS
@@ -1614,6 +1735,8 @@ int cOntology::enterCategory(string& id, string& k, string& propertyValue, strin
 }
 
 // get acronym
+// Scrape acronyms.thefreedictionary.com for an all-caps single token.
+// Returns -1 if the object is not all-caps or the fetch fails.
 int cOntology::getAcronyms(wstring& object, vector <wstring>& acronyms)
 {
 	LFS
@@ -1687,6 +1810,7 @@ int cOntology::getAcronyms(wstring& object, vector <wstring>& acronyms)
 	return 0;
 }
 
+// Expand object via getAcronyms and rdfIdentify each expansion (fromWhere L"b").
 int cOntology::getAcronymRDFTypes(wstring& object, vector <cTreeCat*>& rdfTypes)
 {
 	LFS
@@ -1701,6 +1825,8 @@ int cOntology::getAcronymRDFTypes(wstring& object, vector <cTreeCat*>& rdfTypes)
 /*********************************************************
 freebase begin
 ***********************************************************/
+// Walk {L}id markers in a Freebase properties blob, SELECT that id, and return
+// the {D} description text.  The id is concatenated into SQL unescaped.
 wstring cOntology::extractLinkedFreebaseDescription(string& properties, wstring& wDescription)
 {
 	int linkDescription = -1;
@@ -1730,6 +1856,7 @@ wstring cOntology::extractLinkedFreebaseDescription(string& properties, wstring&
 	return L"";
 }
 
+// In-place replace-all (used to escape ' as \\' for Freebase SQL).
 void replaceAll(std::wstring& str, const std::wstring& from, const std::wstring& to) {
 	if (from.empty())
 		return;
@@ -1741,6 +1868,8 @@ void replaceAll(std::wstring& str, const std::wstring& from, const std::wstring&
 }
 
 // prefer an entry where key=id or labelWithSpace, if it exists
+// Look up freebaseProperties by id or name (name quotes escaped).  Falls back
+// through k= and id+k= queries.  Returns the {D} description or empty.
 wstring cOntology::getFBDescription(wstring id, wstring name)
 {
 	LFS
@@ -1822,6 +1951,8 @@ wstring cOntology::getFBDescription(wstring id, wstring name)
 }
 
 // properties labelWithSpace type
+// Normalize object (spaces, lower, escape ') and SELECT freebaseProperties
+// where name or k matches.  Delegates to lookupInFreebaseQuery(..., accumulateAliases).
 int cOntology::lookupInFreebase(wstring object, vector <cTreeCat*>& rdfTypes)
 {
 	LFS
@@ -1856,6 +1987,7 @@ int cOntology::lookupInFreebase(wstring object, vector <cTreeCat*>& rdfTypes)
 }
 
 // select * from freebaseProperties where id in ('m.012t_z','m.0fj9f','m.0hltv');
+// Replace Freebase mids in links with the corresponding name column.  Returns -1 on SQL fail.
 int cOntology::lookupLinks(vector <wstring>& links)
 {
 	LFS
@@ -1872,6 +2004,10 @@ int cOntology::lookupLinks(vector <wstring>& links)
 	return 0;
 }
 
+// Parse freebaseProperties rows: {T} types (simplified to song/band/musician),
+// {W}/{P} links, {D}/{N} text.  Empty-properties rows become alias ids that are
+// re-queried once.  `properties.find(whereName + 1, '{')` passes a size_t as the
+// needle (meant find('{', whereName+1)).
 int cOntology::lookupInFreebaseQuery(wstring& object, string& slobject, wstring& q, vector <cTreeCat*>& rdfTypes, bool accumulateAliases)
 {
 	LFS
@@ -1910,6 +2046,7 @@ int cOntology::lookupInFreebaseQuery(wstring& object, string& slobject, wstring&
 		}
 		if (whereName != string::npos)
 		{
+			// Intended find('{', whereName+1); this calls find(const char*, pos) with a size_t-as-pointer.
 			size_t nextBracket = properties.find(whereName + 1, '{');
 			if (nextBracket != string::npos)
 				name = properties.substr(whereName + 3, nextBracket);
@@ -2005,6 +2142,8 @@ freebase end
 //   d. its disambiguations derived from its base entry
 //   e. the resources derived from each of the disambiguations derived from its base entry
 //   f. look up in freebase
+// SPARQL walk: types, redirects (+ their types/disambiguations), then the
+// object's own disambiguations, then Freebase.  fromWhere is unused here.
 void cOntology::getRDFTypesFromDbPedia(wstring object, vector <cTreeCat*>& rdfTypes, wstring fromWhere)
 {
 	LFS
@@ -2048,6 +2187,8 @@ void cOntology::getRDFTypesFromDbPedia(wstring object, vector <cTreeCat*>& rdfTy
 		lplog(LOG_WIKIPEDIA | LOG_INFO, L"%s:%d rdf types in dbpedia", object.c_str(), rdfTypes.size());
 }
 
+// Load an .rdfTypes cache.  Returns 0, -1 on open fail, -2 on version mismatch
+// (file is then deleted).  New cTreeCat objects are appended to rdfTypes.
 int cOntology::readRDFTypes(wchar_t path[4096], vector <cTreeCat*>& rdfTypes)
 {
 	LFS
@@ -2081,6 +2222,7 @@ int cOntology::readRDFTypes(wchar_t path[4096], vector <cTreeCat*>& rdfTypes)
 	return 0;
 }
 
+// Write .rdfTypes.  `char buffer[MAX_BUF * 10]` is a ~20MB stack array.
 int cOntology::writeRDFTypes(wchar_t path[4096], vector <cTreeCat*>& rdfTypes)
 {
 	LFS
@@ -2113,6 +2255,7 @@ int cOntology::writeRDFTypes(wchar_t path[4096], vector <cTreeCat*>& rdfTypes)
 	return 0;
 }
 
+// Strip '_' from the last path component so a too-long cache filename fits MAX_PATH.
 void cOntology::compressPath(wchar_t* path)
 {
 	wchar_t* ch = wcsrchr(path, L'\\');
@@ -2129,6 +2272,7 @@ void cOntology::compressPath(wchar_t* path)
 	}
 }
 
+// True if `noRDFTypes` has this word.  object is interpolated into SQL unescaped.
 bool cOntology::inRDFTypeNotFoundTable(wchar_t* object)
 {
 	initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
@@ -2149,6 +2293,7 @@ bool cOntology::inRDFTypeNotFoundTable(wchar_t* object)
 	return numResults > 0;
 }
 
+// INSERT into noRDFTypes.  object is interpolated unescaped (wsprintf).
 bool cOntology::insertRDFTypeNotFoundTable(wchar_t* object)
 {
 	initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
@@ -2162,6 +2307,7 @@ bool cOntology::insertRDFTypeNotFoundTable(wchar_t* object)
 	return success;
 }
 
+// True if noERDFTypes has '_' + convertIllegalChars(name).  Same unescaped SQL.
 bool cOntology::inNoERDFTypesDBTable(wstring newObjectName)
 {
 	initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
@@ -2185,6 +2331,7 @@ bool cOntology::inNoERDFTypesDBTable(wstring newObjectName)
 	return numResults > 0;
 }
 
+// INSERT into noERDFTypes.  Same sanitizing/escaping caveats as the reader.
 bool cOntology::insertNoERDFTypesDBTable(wstring newObjectName)
 {
 	initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
@@ -2201,6 +2348,7 @@ bool cOntology::insertNoERDFTypesDBTable(wstring newObjectName)
 	return success;
 }
 
+// Dump rdfTypes to LOG_WIKIPEDIA.  The END format string has two %d but one argument.
 int cOntology::printRDFTypes(const wchar_t* kind, vector <cTreeCat*>& rdfTypes)
 {
 	lplog(LOG_WIKIPEDIA, L"BEGIN %s:%d", kind, rdfTypes.size());
@@ -2210,6 +2358,7 @@ int cOntology::printRDFTypes(const wchar_t* kind, vector <cTreeCat*>& rdfTypes)
 	return 0;
 }
 
+// Dump rdfTypes plus the topHierarchyClassIndexes map.
 int cOntology::printExtendedRDFTypes(wchar_t* kind, vector <cTreeCat*>& rdfTypes, unordered_map <wstring, int >& topHierarchyClassIndexes)
 {
 	lplog(LOG_WIKIPEDIA, L"BEGIN %s:%d %d", kind, rdfTypes.size(), topHierarchyClassIndexes.size());
@@ -2221,11 +2370,15 @@ int cOntology::printExtendedRDFTypes(wchar_t* kind, vector <cTreeCat*>& rdfTypes
 	return 0;
 }
 
+// Resolve object: in-memory rdfTypeMap, else .rdfTypes file, else SPARQL+acronyms.
+// Mutates rdfTypeNumMap under a *shared* SRWLOCK (data race).  Empty results go
+// into noRDFTypes.  Path offset path+pathlen+5 assumes a 4-char subdirectory.
 int cOntology::getRDFTypesMaster(wstring object, vector <cTreeCat*>& rdfTypes, wstring fromWhere, bool fileCaching)
 {
 	LFS
 		if (cacheRdfTypes)
 		{
+			// Shared lock, but the miss path writes rdfTypeNumMap (should be exclusive).
 			AcquireSRWLockShared(&rdfTypeMapSRWLock);
 			unordered_map<wstring, int >::iterator rdfni;
 			if ((rdfni = rdfTypeNumMap.find(object)) == rdfTypeNumMap.end())
@@ -2310,6 +2463,9 @@ int cOntology::getRDFTypesMaster(wstring object, vector <cTreeCat*>& rdfTypes, w
 
 // insert the rdfType (cli->first) into topHierarchyClassIndexes, if it matches a known top class.
 //   if the top class is already there, make sure the topHierarchyClassIndexes are pointing to the rdfType with the lowest confidence (the MOST confident entry)
+// If rdfTypes[I] is fromCategory, record it as finalCategory in the top-class map
+// (keep the lowest-confidence / most-confident hit).  On insert, I is advanced
+// to the next SEPARATOR so later types of the same resource are skipped.
 bool checkInsert(const wchar_t* fromCategory, const wchar_t* finalCategory, unordered_map <wstring, int >& topHierarchyClassIndexes, vector <cTreeCat*>& rdfTypes, unsigned int& I)
 {
 	LFS
@@ -2339,6 +2495,7 @@ const wchar_t* knownClasses[] = { L"person", L"place", L"gml/_feature", L"locati
 	L"disease",L"provincesandterritoriesofcanada",L"country",L"island",L"mountain",L"geoclasspark",L"river",L"stream",L"city",L"statesoftheunitedstates",NULL };
 const wchar_t* knownMapToClasses[] = { L"person", L"place", L"place", L"place",L"business",L"business",L"creativeWork",L"plant",L"animal",
 	L"disease",L"provincesandterritoriesofcanada",L"country",L"island",L"mountain",L"geoclasspark",L"river",L"river",L"city",L"statesoftheunitedstates",NULL };
+// True if c is one of the knownClasses[] top labels (person, place, ...).
 bool knownClass(wstring c)
 {
 	LFS
@@ -2350,6 +2507,10 @@ bool knownClass(wstring c)
 set <wstring> knownClassesSet;
 
 // only return true if all entries have either no super classes or are a known class (above)
+// Walk rdfTypes from rdfBaseTypeOffset: map known classes into
+// topHierarchyClassIndexes (via knownMapToClasses).  Returns true if some
+// unknown class still has a super that is in neither the map nor rdfTypes
+// (caller should keep climbing).
 bool cOntology::topClassesAvailableToBeAdded(unordered_map <wstring, int >& topHierarchyClassIndexes, vector <cTreeCat*>& rdfTypes, int rdfBaseTypeOffset)
 {
 	LFS
@@ -2390,6 +2551,8 @@ set<wstring>  doNotFollow = { L"artifact",L"computer",L"device" ,L"instrumentali
 L"artifact-generic",L"agent-non geographical",L"orphans",SEPARATOR,L"agent-generic",L"spatial thing-localized",L"organizations",L"organisation",L"organization",L"business",L"property",L"employer",L"creative work",L"individual",L"periodical",L"credential",
 L"food",L"concept",L"model",L"fashion model",L"pipeline",L"resource",L"architecture",L"influence",L"war",L"musician",L"SocialGroup107950920",L"field of study",L"constitution",L"short story",L"adaptation",L"human language",L"place",L"natural language",
 L"attribute values",L"settlement",L"publishing company" };
+// Append supers of rdfTypes[rdfBaseTypeOffset..) unless they are in doNotFollow.
+// Recurses while topClassesAvailableToBeAdded says a known top is still missing.
 void cOntology::includeAllSuperClasses(unordered_map <wstring, int >& topHierarchyClassIndexes, vector <cTreeCat*>& rdfTypes, int recursionLevel, int rdfBaseTypeOffset)
 {
 	LFS
@@ -2439,6 +2602,7 @@ void cOntology::includeAllSuperClasses(unordered_map <wstring, int >& topHierarc
 		includeAllSuperClasses(topHierarchyClassIndexes, rdfTypes, ++recursionLevel, rdfOriginalSize);
 }
 
+// Public wrapper: climb from offset 0 if a known top class is not yet present.
 void cOntology::includeSuperClasses(unordered_map <wstring, int >& topHierarchyClassIndexes, vector <cTreeCat*>& rdfTypes)
 {
 	int recursionLevel = 1, rdfBaseTypeOffset = 0;
@@ -2446,6 +2610,7 @@ void cOntology::includeSuperClasses(unordered_map <wstring, int >& topHierarchyC
 		includeAllSuperClasses(topHierarchyClassIndexes, rdfTypes, recursionLevel, rdfBaseTypeOffset);
 }
 
+// True if word cannot be represented in CP1252 without substitution (or conversion fails).
 bool detectNonEuropean(wstring word)
 {
 	char buffer[256];
@@ -2464,6 +2629,7 @@ bool detectNonEuropean(wstring word)
 }
 
 // -\'a-zãâäáàæçêéèêëîíïñôóòöõûüù
+// True if any character is not letter / ASCII '-' / em-dash / apostrophe.
 bool detectNonEnglish(wstring word)
 {
 	for (wchar_t c : word)
@@ -2472,6 +2638,9 @@ bool detectNonEnglish(wstring word)
 	return false;
 }
 
+// Public typer: fillOntologyList, then skip (only log) overly long/short or
+// non-European names when logOntologyDetail is set; otherwise getRDFTypesMaster.
+// Long objects are still looked up when logOntologyDetail is false.
 void cOntology::rdfIdentify(wstring object, vector <cTreeCat*>& rdfTypes, wstring fromWhere, bool fileCaching)
 {
 	LFS
@@ -2488,6 +2657,9 @@ void cOntology::rdfIdentify(wstring object, vector <cTreeCat*>& rdfTypes, wstrin
 	}
 }
 
+// Mark preferred on the top-class hits with best (lowest) confidence then lowest
+// rank; mark preferredUnknownClass the same way over all non-SEPARATOR hits.
+// Returns true if any flag was set.
 bool cOntology::setPreferred(unordered_map <wstring, int >& topHierarchyClassIndexes, vector <cTreeCat*>& rdfTypes)
 {
 	LFS
@@ -2517,6 +2689,8 @@ bool cOntology::setPreferred(unordered_map <wstring, int >& topHierarchyClassInd
 }
 
 
+// Debug: rdfIdentify + climb + setPreferred and log the resulting identity.
+// Deletes the cTreeCat list only when cacheRdfTypes is false.
 void cOntology::printIdentity(wstring object)
 {
 	LFS
@@ -2565,6 +2739,7 @@ void cOntology::printIdentity(wstring object)
 			delete rdfTypes[I]; // now caching them
 }
 
+// printIdentity each NULL-terminated objects[i].
 void cOntology::printIdentities(wchar_t* objects[])
 {
 	LFS
@@ -2572,6 +2747,7 @@ void cOntology::printIdentities(wchar_t* objects[])
 			printIdentity(objects[I]);
 }
 
+// Hex digit to 0..15, or -1.
 int hextonum(wchar_t h)
 {
 	if (iswdigit(h))
@@ -2583,6 +2759,8 @@ int hextonum(wchar_t h)
 	return -1;
 }
 
+// In-place \\uXXXX unescape.  Uses a 100000-wchar stack temp and wcscpy with
+// no dest-size check (buffer must be at least as large as the source).
 void convertCodePoints(wchar_t* buffer)
 {
 	if (!wcsstr(buffer, L"\\u"))
@@ -2604,6 +2782,9 @@ void convertCodePoints(wchar_t* buffer)
 }
 
 // this just reads the titles of books and feeds them into the books table.
+// Stream M:\\ol_dump_works_2020-06-30.txt and INSERT IGNORE titles into
+// openLibraryInternetArchiveBooksDump.  Titles are concatenated into SQL;
+// a failed batch `return` leaves the WRITE lock held.
 void cOntology::readOpenLibraryInternetArchiveWorksDump()
 {
 	initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
@@ -2668,6 +2849,8 @@ void cOntology::readOpenLibraryInternetArchiveWorksDump()
 }
 
 #ifdef TEST_CODE
+// TEST_CODE: load _rdfTypes and "_rdfTypes - original" and log per-type counts.
+// fd is not checked; first vBuffer is leaked; copyOLD is assumed to exist.
 void cOntology::compareRDFTypes()
 {
 	// read in new 
@@ -2755,6 +2938,7 @@ void cOntology::compareRDFTypes()
 	tfree(bufferlen + 10, vBuffer);
 }
 
+// TEST_CODE: printIdentities of hard-coded geo / person / org lists, then exit(0).
 void cOntology::testWikipedia()
 {
 	LFS
@@ -2854,6 +3038,8 @@ void cOntology::testWikipedia()
 }
 
 
+// TEST_CODE twin of getDBPediaPath using testWebPath.  Checks buffer for
+// "SPARQL compiler" even though testWebPath may not have filled buffer.
 int cOntology::testDBPediaPath(int where, wstring webAddress, wstring& buffer, wstring epath)
 {
 	LFS
