@@ -1,12 +1,54 @@
 # LPProcessor code review
 
-Findings collected while annotating the first-party sources. Line numbers refer
-to the files as they stand on this branch (after comment insertion). Severity
-is `CRITICAL` / `HIGH` / `MEDIUM` / `LOW` / `NIT`.
+Findings collected while adding file-header and per-procedure comments to the
+first-party sources. Line numbers refer to the files as they stand on this
+branch (after comment insertion). Severity is `CRITICAL` / `HIGH` / `MEDIUM` /
+`LOW` / `NIT`.
 
-This document is being filled as files are annotated. Vendored third-party
-trees (`lloyd-yajl-66cb08c/`, `tinyxml2-master/`, `HMM/KenLM/`, `packages/`)
-are out of scope.
+Vendored third-party trees (`lloyd-yajl-66cb08c/`, `tinyxml2-master/`,
+`HMM/KenLM/`, `packages/`) are out of scope. This is a comments-only change;
+no executable logic was intended to change.
+
+## Cross-cutting conclusions
+
+The parser is a single large Windows/MSVC/MySQL research codebase with a
+clear pipeline (init → read → tokenize → pattern match → agreement winnow →
+syntactic/semantic/time relations → objects → speakers → QA). The comments
+now document that pipeline at the top of each first-party file.
+
+The same defect classes recur across stages:
+
+1. **Secrets in source.** MySQL `root`/`byron0` is copied through `DB.cpp`,
+   `DBCreateSQLSchema.cpp`, `getThesaurus.cpp`, `processGutenbergRDFtoSQL`,
+   `pyLP.py`, and `convertPDFTextToDatabase`. Live Google CSE, Bing, and
+   Merriam-Webster keys sit in QA/acquisition TUs; a Twitter password and a
+   NewsBank library card are in comments. Rotate all of these and load them
+   from the environment.
+2. **Undefined-behavior on the hot path.** Usage vectors and
+   `minSeparatorCost` are `reserve`d then indexed (every successful parse
+   match / every winnow). Several 4–20MB stack buffers will overflow a 1MB
+   MSVC stack. Iterator erase-then-read, `wstring[0]` on empty, and
+   `m[end]` when `end == m.size()` appear in object/speaker/syntax code.
+3. **Logic inversions that silently drop linguistic coverage.**
+   `containingSpeakerGroup` compares spans to the loop index;
+   `speakerGroupTransition` increments instead of decrementing;
+   `months_abb` skips May–July; `cName::notNull()` is inverted;
+   `sameSpeaker` one-sided tests are inverted; several `&&`/`||` mixes
+   parse as `(A && B) || C`.
+4. **SQL and HTTP built by concatenation.** Titles, words, and RDF fields
+   are interpolated into `INSERT`/`LIKE`/`VALUES('%s')` without escaping.
+   Wikipedia/MusicBrainz/Twitter URLs are HTTP and unescaped.
+5. **Process-control footguns.** `lplog(LOG_FATAL_ERROR)` waits on
+   `getchar()` then `exit(0)` (unattended children hang, then look
+   successful). Many `LOCK TABLES` paths never `UNLOCK`. `_exit(0)` skips
+   log flush and MySQL close.
+
+Highest-value first fixes: remove secrets, `resize` the usage /
+`minSeparatorCost` vectors, parenthesize the query-buffer macros, make
+FATAL abort with a non-zero status and no stdin wait, and correct the
+inverted speaker/name/month predicates.
+
+---
 
 ---
 
@@ -951,6 +993,57 @@ are out of scope.
 
 ---
 
-## Later waves
+## Wave — speaker groups and speaker resolution (`identifySpeakerGroups.cpp`,
+`resolveSpeakers.cpp`)
 
-*(speaker resolution still in progress)*
+- **[HIGH] identifySpeakerGroups.cpp:69 — unbounded `copy(cOM&)` deserializer** —
+  no `limit` argument. A corrupted SourceCache count walks off the buffer.
+  Refuse the read when `where + sizeof(cOM) > limit`.
+
+- **[HIGH] identifySpeakerGroups.cpp:2934 — `sameSpeaker` inverted when only one side has `objectMatches`** —
+  `return in(...) == matches.end()` is true when the object is *not* in
+  the other side. Change `==` to `!=` on both one-sided tests.
+
+- **[HIGH] identifySpeakerGroups.cpp:1619 — `isFocus` indexes `m[I]` before the bounds test** —
+  Swap the conjuncts (`I < m.size() && ...`).
+
+- **[HIGH] identifySpeakerGroups.cpp:940 — hail-delete log dereferences `localObjects.end()`** —
+  Guard the log with `lsi != localObjects.end()`.
+
+- **[HIGH] identifySpeakerGroups.cpp:1291 — `pushTemporarySpeakerGroupAndErase` takes `&speakerGroups[-1]` when empty** —
+  Only take the address when `!speakerGroups.empty()`.
+
+- **[HIGH] resolveSpeakers.cpp:286 — `oStr[0]=0` on a default-empty `wstring`** —
+  `operator[]` on `size()==0` is UB. Delete the `oStr[0]=0` line.
+
+- **[HIGH] resolveSpeakers.cpp:5286 — `_VERBPAST` audience scan compares a source position to a pattern length** —
+  the loop `audienceObjectPosition < end` never iterates, so “said X to Y”
+  after a past-tense verb is not picked up. Convert `end` to an absolute
+  position as the `_VERBREL1` branch does.
+
+- **[MEDIUM] identifySpeakerGroups.cpp:962 — empty-group early-out returns `false` (object 0, Narrator)** —
+  an `int` function whose no-match sentinel is `-1`. Return `-1`.
+
+- **[MEDIUM] identifySpeakerGroups.cpp:3310 — `block && m[I].flags & 1` operator precedence** —
+  parsed as `(block && flags) & 1`. Write `block && (m[I].flags & 1)` if
+  bit 0 was intended.
+
+- **[MEDIUM] identifySpeakerGroups.cpp:2265 — `intString` OOB when the POV range is empty** —
+  Return `L""` when `startPOVI >= povi`.
+
+- **[MEDIUM] resolveSpeakers.cpp:3722 — `preferPreviousSpeaker` is a stub** —
+  always returns `false`. Restore the rule or delete the calls.
+
+- **[MEDIUM] resolveSpeakers.cpp:1059 — `increaseAge` ignores secondary-quote sentences** —
+  nested-quote sentences never age local focus. Confirm against the
+  quote-age design.
+
+- **[LOW] identifySpeakerGroups.cpp:513 — extra `lplog` argument** —
+  format has two conversions; the call also passes
+  `speakerSections.size()`.
+
+- **[LOW] resolveSpeakers.cpp:685 — `readStringVector` reads 99 wchar_ts into a 1024 buffer** —
+  Pass `sizeof(buf)/sizeof(*buf)`.
+
+- **[NIT] resolveSpeakers.cpp:3722 — dead helper left in the speaker-ranking chain** —
+  Remove or implement `preferPreviousSpeaker`.
