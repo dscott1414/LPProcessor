@@ -47,6 +47,7 @@ CodeGraphData
 *.sarif
 RerunSingleSourcex64
 node_modules
+.venv
 *.pyc
 *.pack
 *.pack.old
