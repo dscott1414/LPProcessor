@@ -197,6 +197,137 @@ are out of scope.
 
 ---
 
+## Wave — ontology, HMM, specials (`createOntology.cpp`, `ontology.h`,
+`hmm.cpp`, `hmm.h`, `specials_main.cpp`)
+
+- **[HIGH] createOntology.cpp:2235 — 20MB stack buffer in `writeRDFTypes`** —
+  `char buffer[MAX_BUF * 10]` (~20MB) on a default 1MB MSVC stack. Heap-allocate
+  or reuse the chunked write path.
+
+- **[HIGH] createOntology.cpp:1045 — 5MB stack buffer in `readYAGOOntology`** —
+  `char fileBuffer[MAXYAGOBUF + 1]`. Heap-allocate or memory-map the TTL file.
+
+- **[HIGH] createOntology.cpp:328 — 4MB stack buffer in `readN3FileIntoTripletMap`** —
+  `wchar_t buffer[MAX_BUF]` is 2e6 × 2 bytes on the stack.
+
+- **[HIGH] createOntology.cpp:2385 — `rdfTypeNumMap` mutated under a shared SRWLOCK** —
+  `AcquireSRWLockShared` then `rdfTypeNumMap[object] = 1`. Use an exclusive
+  lock for the insert.
+
+- **[HIGH] createOntology.cpp:2303 — unescaped SQL in noRDFTypes / noERDFTypes / Freebase** —
+  `wsprintf(..., L"INSERT INTO noRDFTypes VALUES ('%s')", object)` (and
+  matching SELECTs). Escape or parameterize.
+
+- **[HIGH] createOntology.cpp:2828 — WRITE lock leaked on Open Library insert failure** —
+  `return` after `LOCK TABLES ... WRITE` leaves the lock held. Unlock on
+  every path.
+
+- **[HIGH] createOntology.cpp:514 — `decodeURL` reads past the end of input** —
+  `'%'` then `input[I+1]` / `input[I+2]` with no length check. Guard
+  `I+2 < input.size()`.
+
+- **[HIGH] createOntology.cpp:2050 — `find()` argument order is inverted** —
+  `properties.find(whereName + 1, '{')` is `find(const char*, size_t)`.
+  Intended: `properties.find('{', whereName + 1)`.
+
+- **[HIGH] hmm.cpp:218 — Stanford parse cache INSERT is unescaped** —
+  `VALUES('%s','%s',%I64d)` interpolates `parse` and `sentence` after only
+  mapping some quote characters. Escape or bind parameters.
+
+- **[HIGH] hmm.cpp:179 — cached PCFG lookup is hash-only** —
+  `where sentencehash = %I64d` never compares the sentence text. Collisions
+  return the wrong parse. Add `AND sentence = ...` or a stronger digest.
+
+- **[HIGH] hmm.cpp:479 — `writeModelFile` / `readModelFile` do not check `_wfopen`** —
+  a missing path is a null-pointer dereference.
+
+- **[HIGH] hmm.cpp:516 — `readModelFile` writes before the line buffer on empty input** —
+  `line[wcslen(line) - 1] = 0` underflows on an empty `fgetws`. Only strip
+  if `wcslen(line) > 0`.
+
+- **[HIGH] hmm.cpp:463 — `trainModelFromSource` never frees the wordforms result** —
+  `MYSQL_RES*` is dropped; `wordsToAdd` is also interpolated unescaped.
+
+- **[HIGH] hmm.cpp:311 — `findLPPOSEquivalents` indexes `[length-2]` unguarded** —
+  `'s` stripping without `originalWord.length() >= 2`. Same pattern in
+  `specials_main.cpp` `stTokenizeWord`.
+
+- **[HIGH] hmm.cpp:785 — NaN test is never true** —
+  `if (probMult == nan(NULL))` is always false. Use `std::isnan(probMult)`.
+
+- **[HIGH] specials_main.cpp:399 — `startProcesses` case 2 format-string mismatch** —
+  `wsprintf(..., L"... -log %d", CACHEDIR, step, ...)` passes a `wchar_t*`
+  as the first `%d`. Use `%s` for `CACHEDIR`.
+
+- **[HIGH] specials_main.cpp:6458 — `wmain` case 71 falls through into case 100** —
+  the Webster plural-word probe has no `break` and then runs
+  `stanfordCheckMP`. Add `break;`.
+
+- **[HIGH] specials_main.cpp:1164 — Dictionary.com sweep inverts the miss test** —
+  `!wcsstr(A) || !wcsstr(B)` is true unless *both* miss-markers are present,
+  so almost every cache file is inserted into `notwords`. Intended:
+  `wcsstr(A) || wcsstr(B)`.
+
+- **[HIGH] specials_main.cpp:533 — hyphen-split branch is dead** —
+  `if ((ret = Words.splitWord(...)) && word...find(L'-')!=npos, false)` :
+  the comma operator makes the condition always `false`. Remove `, false`.
+
+- **[HIGH] specials_main.cpp:1378 — several helpers take `cSource` by value and never UNLOCK** —
+  `printUnknownsFromSource`, `patternOrWordAnalysisFromSource`,
+  `syntaxCheckFromSource`, `testRDFType` lock and return without
+  `UNLOCK TABLES`. Pass `cSource&` and unlock on every path.
+
+- **[HIGH] specials_main.cpp:478 — `MWRequestAllowed` writes through a possibly-null `FILE*`** —
+  `_wfopen(L"MWCheck", L"w")` is not checked before `fwprintf`/`fclose`.
+
+- **[MEDIUM] createOntology.cpp:1530 — `readOntologyList` imports only one row** —
+  `if ((sqlrow = mysql_fetch_row(result)))` is not a `while`.
+
+- **[MEDIUM] createOntology.cpp:1044 — `GetFileSizeEx` failure leaks the YAGO HANDLE** —
+  `return -1` without `CloseHandle(fd)`.
+
+- **[MEDIUM] createOntology.cpp:2357 — `printRDFTypes` format/argument mismatch** —
+  `L"END %s:%d %d"` is passed only two arguments.
+
+- **[MEDIUM] createOntology.cpp:431 — `wcscmp` on a possibly-null extension** —
+  `wcsrchr` then `wcscmp` without a null check.
+
+- **[MEDIUM] ontology.h:86 — `cOntologyEntry::operator==` skips `resourceType` /
+  `superClassResourceTypes`** — include both fields, or document that they
+  are intentionally non-identity.
+
+- **[MEDIUM] ontology.h:179 — default `cTreeCat` leaves `cli` uninitialized** —
+  initialize `cli` to a sentinel in every constructor.
+
+- **[MEDIUM] hmm.cpp:1209 — `tagFromSource` assumes a non-empty source** —
+  `source.m[0]` with no empty check; vocab `operator[]` also inserts 0 for OOV.
+
+- **[MEDIUM] hmm.h:21 — header signatures do not match `hmm.cpp`** —
+  several declared arities will not link to the definitions.
+
+- **[MEDIUM] specials_main.cpp:786 — inflection flags are added, not ORed** —
+  `inflectionFlags=inflectionFlags+%d` corrupts the bitfield. Use `|`.
+
+- **[MEDIUM] specials_main.cpp:203 — `getNumSourcesProcessed` dereferences `SUM()` NULL** —
+  empty corpus makes `sqlrow[1]`/`sqlrow[2]` NULL. Guard NULL.
+
+- **[MEDIUM] specials_main.cpp:376 — `createLPProcess` result assigned as a bool** —
+  `if (errorCode = createLPProcess(...) < 0)` stores 0/1 and leaks
+  `pi.hThread`. Parenthesize and close the thread handle.
+
+- **[LOW] specials_main.cpp:1 — stale fork of `main.cpp`** —
+  no `initialize()`, unchecked `chdir("source")`, duplicated lock/sentinel
+  definitions. Port the `main.cpp` helpers or stop compiling this copy.
+
+- **[LOW] hmm.cpp:82 — `createJavaVM` classpath and heap comments are stale** —
+  option string is `F:\\lp\\Stanford\\...`; comments say 1MB/1GB while flags
+  are `-Xms10m`/`-Xmx3g`.
+
+- **[NIT] createOntology.cpp:478 — `readUMBELSuperClasses` always returns 0** —
+  a `bool` that always returns false.
+
+---
+
 ## Later waves
 
 *(to be appended as the remaining files are annotated)*

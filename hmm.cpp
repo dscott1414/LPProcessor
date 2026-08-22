@@ -1,3 +1,46 @@
+/*
+	hmm.cpp - first-party HMM Viterbi POS tagger trained on LP winner forms, plus Stanford JNI compare.
+
+	Overview:
+		Builds tag-transition and word-tag count maps from a parsed cSource (or a
+		sidecar .model.txt), constructs add-1-smoothed probability matrices, then
+		runs a Viterbi forward/backward pass that writes preferredViterbiForms on
+		each cWordMatch.  When compare is true, mismatches are re-parsed with the
+		Stanford PCFG via JNI and mapped through pennMapToLP.
+
+	Pipeline position:
+		Optional after parse.  testViterbiFromSource() is the usual entry
+		(specials_main step 8).  Not invoked from main.cpp's processSource().
+
+	Key entry points:
+		- testViterbiFromSource() - train or load model, spin up JVM, tag + compare
+		- createModelFromSource() / trainModelFromSource() - count maps from winners
+		- tagFromSource() - matrices + Viterbi + optional Stanford compare
+		- parseSentence() / foundParsedSentence() / setParsedSentence() - Stanford
+		  PCFG cache in stanfordPCFGParsedSentences (hash of the sentence only)
+
+	Key data structures / globals:
+		- alpha - additive smoothing for transitions (and emissions if
+		  USE_ALPHA_FOR_WORDTAG is defined; it is not)
+		- pennMapToLP - Penn Bank tag -> LP form-name list
+		- startTag / viterbiAssociationMap - Viterbi start state and form expansion
+		- wordTagCountsMap / tagTransitionCountsMap / tagCountsMap - trained counts
+
+	Dependencies:
+		JNI + Stanford ParserDemo jar at F:\lp\Stanford\..., MySQL
+		stanfordPCFGParsedSentences / words / wordforms / forms, DIYDiskArray
+		spilling to M:\caches when the source is huge.
+
+	Notes / gotchas:
+		- hmm.h declarations for tagFromSource / initViterbiStartProbabilities /
+		  forwardFromSource / findLPPOSEquivalents do not match these definitions.
+		- Emission matrix stays 0 for unseen (tag,word) unless USE_ALPHA_FOR_WORDTAG.
+		- Forward uses product + a renormalizing probMult instead of log-sum; NaN
+		  is tested with `== nan(NULL)`, which is never true.
+		- Lookup of cached parses is by sentencehash only (collision risk).
+		- setParsedSentence interpolates parse/sentence into SQL with only
+		  quote-character rewriting, not escaping.
+*/
 #include <windows.h>
 #include "Winhttp.h"
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
@@ -31,6 +74,9 @@ double alpha = 0.001;
 //http://www.melanietosik.com/posts/Viterbi-POS-tagger
 bool unlockTables(MYSQL& mysql);
 
+// Create a JNI 1.8 VM with a hardcoded F:\lp Stanford ParserDemo classpath.
+// options[1]/[2] comments say 1MB/1GB but the strings are -Xms10m / -Xmx3g.
+// Returns JNI_CreateJavaVM's jint (0 = JNI_OK).
 int createJavaVM(JavaVM*& vm, JNIEnv*& env)
 {
 	JavaVMOption options[5];
@@ -98,6 +144,9 @@ unordered_map<wstring, vector<wstring>> pennMapToLP = {
 { L"$",{ }} //	not listed in standard PennBank tag list but emitted by Stanford
 };
 
+// Map every single- and double-quote character to ASCII '"' so the string can
+// sit inside a single-quoted SQL literal.  Does not escape remaining apostrophes
+// that cWord::isSingleQuote does not classify.
 wstring replaceQuotes(wstring ws)
 {
 	wstring replacement;
@@ -110,6 +159,10 @@ wstring replaceQuotes(wstring ws)
 	return replacement;
 }
 
+// Look up a Stanford PCFG parse by hash of the (truncated, quote-normalized) sentence.
+// Truncates to 2999 chars.  Lookup is hash-only: collisions return the wrong parse.
+// Out: parse, with " rewritten to ' and a trailing space.  Returns true if non-empty.
+// lockTable: take/release a READ lock around the select (callers may lock higher up).
 bool foundParsedSentence(cSource& source, wstring sentence, wstring& parse, bool lockTable)
 {
 	if (lockTable)
@@ -144,6 +197,9 @@ bool foundParsedSentence(cSource& source, wstring sentence, wstring& parse, bool
 	return parse.length() > 0;
 }
 
+// INSERT the PCFG parse.  Sentence/parse are quote-normalized then interpolated
+// into VALUES('%s') with no further escaping.  Returns 0, or -1 on lock/query fail.
+// On query fail the WRITE lock is released even if this call did not take it.
 int setParsedSentence(cSource& source, wstring sentence, wstring parse, bool lockTable)
 {
 	if (lockTable)
@@ -174,6 +230,10 @@ int setParsedSentence(cSource& source, wstring sentence, wstring parse, bool loc
 	return 0;
 }
 
+// Parse via Stanford ParserDemo.parseSentence (static).  If pcfg, try/write the
+// MySQL cache first.  Returns 0 or a negative JNI/cache code (-1..-7).
+// Static jclass/jmethodID are cached without NewGlobalRef (invalid after detach).
+// Local JNI refs are not deleted.  Logs "Did not find sentence!" on every cache miss.
 int parseSentence(cSource& source, JNIEnv* env, wstring sentence, wstring& parse, bool pcfg, bool lockTable)
 {
 	static jclass parserDemoClass;
@@ -236,6 +296,11 @@ int parseSentence(cSource& source, JNIEnv* env, wstring sentence, wstring& parse
 	return 0;
 }
 
+// Map the Stanford tag of originalWord onto LP form names via pennMapToLP.
+// pcfg: walk "(TAG word)" trees; else " word_TAG " tagger output.
+// duplicateSkip skips earlier occurrences of the same surface word in the sentence.
+// 's is stripped only in the pcfg branch.  originalWord[length-2] is unguarded
+// if the word is shorter than 2.  Header declares an extra JNIEnv* that is unused.
 int findLPPOSEquivalents(wstring sentence, wstring& parse, wstring originalWord, vector<wstring>& posList, int duplicateSkip, bool pcfg)
 {
 	parse = L" " + parse; // take care of the edge case where the match is at the beginning
@@ -305,11 +370,13 @@ int findLPPOSEquivalents(wstring sentence, wstring& parse, wstring originalWord,
 }
 
 // Shutdown the VM.
+// DestroyJavaVM.  Does not null the caller's pointer.
 void destroyJavaVM(JavaVM* vm)
 {
 	vm->DestroyJavaVM();
 }
 
+// Vocabulary = distinct source.m word strings that occur at least min_cnt times, sorted.
 vector <wstring> generateVocabFromSource(cSource& source, int min_cnt = 2)
 {
 	//Generate vocabulary
@@ -330,6 +397,10 @@ vector <wstring> generateVocabFromSource(cSource& source, int min_cnt = 2)
 }
 
 wstring startTag = L"--s--";
+// Count winner-form transitions and emissions.  Spaces in tag/word names become '*'.
+// Words that never had a winner form are back-filled from words/wordforms/forms
+// (one count each) so the emission matrix is not all zeros.  The SELECT result
+// is never mysql_free_result'd.  wordsToAdd is interpolated into IN(...) unescaped.
 void trainModelFromSource(cSource& source, unordered_map <wstring, int>& wordTagCountsMap, unordered_map <wstring, int>& tagTransitionCountsMap, unordered_map <wstring, int>& tagCountsMap)
 {
 	// Train part-of-speech (POS) tagger model
@@ -399,6 +470,8 @@ void trainModelFromSource(cSource& source, unordered_map <wstring, int>& wordTag
 	}
 }
 
+// Write T/E/C lines (transition / emission / tag-count) as UNICODE.  _wfopen result
+// is not checked.  Returns the same lines in a vector for in-memory load.
 vector <wstring> writeModelFile(wstring modelPath, unordered_map <wstring, int>& wordTagCountsMap, unordered_map <wstring, int>& tagTransitionCountsMap, unordered_map <wstring, int>& tagCountsMap)
 {
 	vector <wstring> model;
@@ -430,6 +503,8 @@ vector <wstring> writeModelFile(wstring modelPath, unordered_map <wstring, int>&
 	return model;
 }
 
+// Read the T/E/C model file.  _wfopen is unchecked; empty lines do
+// `line[wcslen(line)-1]=0` (writes before the buffer).  Lines are capped at 100 chars.
 vector <wstring> readModelFile(wstring modelPath)
 {
 	vector <wstring> model;
@@ -446,6 +521,7 @@ vector <wstring> readModelFile(wstring modelPath)
 }
 
 // Load model
+// Parse T/E/C lines back into the three count maps.  '*' in tags/words becomes space.
 void loadModel(vector <wstring>& model, unordered_map <wstring, int>& wordTagCountsMap, unordered_map <wstring, int>& tagTransitionCountsMap, unordered_map <wstring, int>& tagCountsMap)
 {
 	for (vector <wstring>::iterator mi = model.begin(), miEnd = model.end(); mi != miEnd; mi++)
@@ -479,6 +555,7 @@ void loadModel(vector <wstring>& model, unordered_map <wstring, int>& wordTagCou
 	}
 }
 
+// P(tag_j | tag_i) = (count(i->j) + alpha) / (count(i) + alpha * |tags|).
 vector<vector<double>> constructTagTransitionProbabilityMatrix(unordered_map <wstring, int>& tagTransitionCountsMap, unordered_map <wstring, int>& tagCountsMap, vector <wstring>& tags)
 {
 	int tagsSize = tags.size();
@@ -504,6 +581,8 @@ vector<vector<double>> constructTagTransitionProbabilityMatrix(unordered_map <ws
 
 // Generate emission matrix wordTagProbabilityMatrix of size numTags x vocabSize
 // [wordTagProbabilityMatrix[i][j] stores the probability of observing o_j from state s_i]
+// P(word_j | tag_i).  Default (USE_ALPHA_FOR_WORDTAG off): raw count/tagCount, and
+// unseen pairs stay 0.  With the define: same additive smoothing as transitions.
 vector<vector<double>> constructWordTagProbabilityMatrix(unordered_map <wstring, int>& wordTagCountsMap, unordered_map <wstring, int>& tagCountsMap, vector <wstring>& tags, vector<wstring>& vocab)
 {
 	int tagsSize = tags.size();
@@ -544,6 +623,9 @@ vector<vector<double>> constructWordTagProbabilityMatrix(unordered_map <wstring,
 // vector <vector<double>> probabilityMatrix
 // vector <vector<int>> pathMatrix
 // unordered_map <string, int> vocabLookupVector
+// Allocate probability/path matrices (disk-backed if the DIYDiskArray path is set)
+// and seed column 0 from startTag -> each tag * P(firstWord | tag).
+// vocabReverseLookup[firstWord] inserts 0 if firstWord is not in vocab.
 void initViterbiStartProbabilities(int numWords, wstring firstWord, vector<wstring>& vocab, vector <wstring>& tags,
 	vector<vector<double>>& tagTransitionProbabilityMatrix, vector<vector<double>>& wordTagProbabilityMatrix,
 	DIYDiskArray<double>& probabilityMatrix, DIYDiskArray<int>& pathMatrix,
@@ -578,6 +660,8 @@ void initViterbiStartProbabilities(int numWords, wstring firstWord, vector<wstri
 	}
 }
 
+// Sentence window around wordSourceIndex (EOS-bounded, else ±20).  If star, prefix
+// the target word with '*'.  duplicateSkip counts earlier same-surface tokens (in/out).
 wstring getContext(cSource& source, int wordSourceIndex, bool star, int& duplicateSkip)
 {
 	wstring context;
@@ -614,6 +698,10 @@ wstring getContext(cSource& source, int wordSourceIndex, bool star, int& duplica
 // numWordsInSource = number of words in text 
 // order numWordsInSource*numTags*numTags
 // --- output in probabilityMatrix and pathMatrix
+// Viterbi forward: for each word, only consider forms present on that token.
+// Uses product * probMult (not log-add).  OOV words index vocab via operator[]
+// (default 0 = first vocab word).  Low-prob + flagOnlyConsiderProperNounForms
+// clears the flag and retries the same index.  `probMult == nan(NULL)` is never true.
 void forwardFromSource(cSource& source, vector<vector<double>>& tagTransitionProbabilityMatrix, vector<vector<double>>& wordTagProbabilityMatrix, DIYDiskArray<double>& probabilityMatrix, DIYDiskArray<int>& pathMatrix,
 	vector <wstring>& tags, unordered_map <wstring, int>& wordSourceIndexLookup, unordered_map <wstring, int>& tagLookup)
 {
@@ -693,8 +781,9 @@ void forwardFromSource(cSource& source, vector<vector<double>>& tagTransitionPro
 		}
 		if (maximumProbabilityPerWordIndex != (double)-std::numeric_limits<double>::infinity())
 			probMult = ((double)numWordsInSource * numWordsInSource) / maximumProbabilityPerWordIndex; // CHANGE from log add to multiplication
-		if (probMult == nan(NULL))
-		{
+	// NaN != NaN, so this comparison never fires; isnan(probMult) was intended.
+	if (probMult == nan(NULL))
+	{
 			lplog(LOG_FATAL_ERROR, L"Viterbi: forward probability multiplier is not a number: %f", maximumProbabilityPerWordIndex);
 			return;
 		}
@@ -706,6 +795,9 @@ void forwardFromSource(cSource& source, vector<vector<double>>& tagTransitionPro
 	}
 }
 
+// Walk pathMatrix from the last word's best tag back to 0, calling
+// setPreferredViterbiForm.  tagLookup[name] inserts 0 if the form is unknown.
+// Returns the number of setPreferred / illegal-path failures.
 int backwardFromSource(cSource& source, vector <wstring>& tags, unordered_map <wstring, int>& tagLookup, DIYDiskArray<double>& probabilityMatrix, DIYDiskArray<int>& pathMatrix)
 {
 	int numWordsInSource = source.m.size(), criticalErrors = 0;
@@ -766,6 +858,9 @@ unordered_map<wstring, vector <wstring> > viterbiAssociationMap = {
 // include subclasses of forms with their parents.
 // include the word itself if viterbi doesn't include it.
 // if viterbi specifies the word as the form, specify every form (as in that case the viterbi pick is ambiguous)
+// Expand preferredViterbiForms: invert viterbiAssociationMap so subclasses map
+// back to parents, keep the word-as-form if present, and add verbForm for
+// gerunds tagged adjective/noun.  Stops at the first token with an empty list.
 void appendAssociatedFormsToViterbiTags(cSource& source)
 {
 	unordered_map<wstring, vector <wstring> > originalViterbiAssociationMap = viterbiAssociationMap;
@@ -840,6 +935,7 @@ void appendAssociatedFormsToViterbiTags(cSource& source)
 	}
 }
 
+// Fill prevTag/tag and the raw transition/emission counts for logging a mismatch.
 void getInternalViterbiInfo(cSource& source, int viterbiOriginalTagIndex, int wordSourceIndex, wstring& prevTag, wstring& tag, int& tagTransitionCount, int& wordTagCount,
 	vector <wstring>& tags, //vector <wstring> &vocab,
 	DIYDiskArray<int>& pathMatrix,
@@ -859,6 +955,10 @@ void getInternalViterbiInfo(cSource& source, int viterbiOriginalTagIndex, int wo
 		wordTagCount = ei->second;
 }
 
+// Walk source.m and log Viterbi vs LP-winner disagreements.  On mismatch, parse
+// the local sentence with Stanford (WRITE lock held for the whole scan) and
+// record whether Stanford agrees with LP or Viterbi.  Final % lines divide by
+// viterbiMismatchesNotWinner with no zero guard.
 void compareViterbiAgainstStructuredTagging(cSource& source,
 	vector<vector<double>>& tagTransitionProbabilityMatrix, vector<vector<double>>& wordTagProbabilityMatrix, DIYDiskArray<double>& probabilityMatrix, DIYDiskArray<int>& pathMatrix,
 	unordered_map <wstring, int>& wordSourceIndexLookup,
@@ -1085,6 +1185,9 @@ void compareViterbiAgainstStructuredTagging(cSource& source,
 
 // Decode sequences
 // wordCountLimit - use words that occur across the corpus no less than this number
+// Load model, build matrices, run Viterbi.  wordCountLimit is the vocab min count.
+// Huge sources spill probability/path matrices to M:\caches.  source.m[0] is
+// assumed non-empty.  Header omits wordCountLimit and env.
 void tagFromSource(cSource& source, vector <wstring>& model, int wordCountLimit, JNIEnv* env, bool compare)
 {
 	unordered_map <wstring, int> wordTagCountsMap, tagTransitionCountsMap, tagCountsMap;
@@ -1124,6 +1227,7 @@ void tagFromSource(cSource& source, vector <wstring>& model, int wordCountLimit,
 	}
 }
 
+// Load sourcePath+".model.txt" if present, else train and write it.
 void createModelFromSource(cSource& source, vector <wstring>& model)
 {
 	wstring modelPath = source.sourcePath + L".model.txt";
@@ -1141,6 +1245,7 @@ void createModelFromSource(cSource& source, vector <wstring>& model)
 	}
 }
 
+// End-to-end: create/load model, JNI VM, tagFromSource(..., compare=true), destroy VM.
 void testViterbiFromSource(cSource& source)
 {
 	vector <wstring> model;

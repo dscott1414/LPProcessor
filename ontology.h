@@ -1,3 +1,34 @@
+/*
+	ontology.h - YAGO / DBpedia / UMBEL / OpenGIS blended-ontology types used to type named objects.
+
+	Overview:
+		Declares the in-memory ontology node (cOntologyEntry), one candidate type for an
+		object (cTreeCat), and the static cOntology facade that fillOntologyList() /
+		rdfIdentify() implement in createOntology.cpp.  Categories from YAGO, DBpedia,
+		UMBEL and OpenGIS are blended into one map keyed by a lower-cased, space-separated
+		label so a surface name can be looked up regardless of which source supplied it.
+
+	Pipeline position:
+		Initialization (README "Ontology"): fillOntologyList() is called from rdfIdentify()
+		the first time an object is typed.  identifyISARelation() in source.cpp then
+		walks the resulting cTreeCat list.  Not part of tokenize/parse itself.
+
+	Key data structures / globals:
+		- cOntologyEntry - one class/category: compactLabel, superClasses, hierarchical
+		  rank (100 = unranked / ignore), ontologyType 1..4, optional DBpedia description
+		  fields.  Lives in cOntology::dbPediaOntologyCategoryList for the process lifetime.
+		- cTreeCat - one typed hit for an object: iterator into the category map plus
+		  confidence, preferred / exactMatch flags, and a private infoPage/comment copy.
+		  Heap-allocated; when cacheRdfTypes is true the pointers are shared in rdfTypeMap
+		  and must not be deleted.
+		- cOntology - all static; see createOntology.cpp for the maps and MySQL handle.
+
+	Notes / gotchas:
+		- operator== on cOntologyEntry skips resourceType and superClassResourceTypes.
+		- Default cTreeCat() leaves cli uninitialized; equals() / operator== dereference it.
+		- copy() serializers omit resourceType / superClassResourceTypes / key / derivation.
+		- Ontology type constants match README Structure members item 7.
+*/
 #define maxCategoryLength 1024
 #define dbPedia_Ontology_Type 1
 #define YAGO_Ontology_Type 2
@@ -21,12 +52,15 @@ public:
 	int descriptionFilled;
 	unordered_set <wstring> superClasses;
 	vector <int> superClassResourceTypes;
+	// Rank 100 means "not yet placed in the hierarchy" (fillRanks / findCategoryRank).
+	// descriptionFilled is the SPARQL row count from getDescription, or -1 if never fetched.
 	cOntologyEntry()
 	{
 		numLine = ontologyType = resourceType = -1;
 		ontologyHierarchicalRank = 100; // ignore
 		descriptionFilled = -1; // number of rows found in ontology
 	}
+	// Format this entry into tmpstr (reused scratch).  origin is the map key / caller label.
 	wstring toString(wstring& tmpstr, wstring origin)
 	{
 		wstring tmpstr2, tmpstr3, tmpstr4, tmpstr5;
@@ -50,6 +84,7 @@ public:
 			tmpstr += L":ontologyHierarchicalRank " + itos(ontologyHierarchicalRank, tmpstr3);
 		return tmpstr;
 	}
+	// Field-wise equality.  Does not compare resourceType or superClassResourceTypes.
 	bool operator == (const cOntologyEntry& o)
 	{
 		if (compactLabel != o.compactLabel) return false;
@@ -70,6 +105,7 @@ public:
 	{
 		return !(*this == o);
 	}
+	// Log toString(origin) to whichLog via the process-wide lplog.
 	void lplog(int whichLog, wstring origin)
 	{
 		wstring tmpstr;
@@ -77,6 +113,7 @@ public:
 	}
 };
 
+// Binary-cache insert: deserialize key+entry from buf into hm and set hint to the inserted iterator.
 bool copy(unordered_map <wstring, cOntologyEntry>::iterator& hint, void* buf, int& where, int limit, unordered_map <wstring, cOntologyEntry>& hm);
 
 class cTreeCat
@@ -100,6 +137,7 @@ public:
 	bool exactMatch;
 	bool preferredUnknownClass;
 
+	// Freebase hit: k/description are narrow strings converted with mTW.  preferred stays false.
 	cTreeCat(unordered_map <wstring, cOntologyEntry>::iterator cli, wstring typeObject, wstring& parentObject, wstring qtype, int confidence, string& k, string& description, vector <wstring>& wikipediaLinks, vector <wstring>& professionLinks, bool exactMatch)
 	{
 		this->cli = cli;
@@ -115,6 +153,7 @@ public:
 		this->exactMatch = exactMatch;
 		preferredUnknownClass = false;
 	}
+	// Hierarchy-walk hit (includeAllSuperClasses).  derivation records the path of class keys.
 	cTreeCat(unordered_map <wstring, cOntologyEntry>::iterator cli, wstring typeObject, wstring& parentObject, wstring qtype, int confidence, wstring derivation)
 	{
 		this->cli = cli;
@@ -127,6 +166,7 @@ public:
 		exactMatch = false;
 		preferredUnknownClass = false;
 	}
+	// Separator / placeholder: only cli is meaningful (often the SEPARATOR category).
 	cTreeCat(unordered_map <wstring, cOntologyEntry>::iterator cli)
 	{
 		this->cli = cli;
@@ -135,6 +175,7 @@ public:
 		preferredUnknownClass = false;
 		confidence = 0;
 	}
+	// Used by readRDFTypes before copy() fills fields.  cli is left uninitialized.
 	cTreeCat()
 	{
 		//this->cli=(unordered_map <wstring, cOntologyEntry>::iterator)((void *) 0);
@@ -143,12 +184,14 @@ public:
 		preferredUnknownClass = false;
 		confidence = 0;
 	}
+	// Identity by category key and compactLabel only.  Dereferences both cli iterators.
 	bool equals(const cTreeCat* o)
 	{
 		if (cli->first != o->cli->first) return false;
 		if (cli->second.compactLabel != o->cli->second.compactLabel) return false;
 		return true;
 	}
+	// Full field compare including the private infoPage/comment copies.  Dereferences cli.
 	bool operator == (const cTreeCat& o)
 	{
 		if (cli->first != o.cli->first) return false;
@@ -177,6 +220,7 @@ public:
 	}
 	wstring toString(wstring& tmpstr);
 	void lplogTC(int whichLog, wstring object);
+	// Copy DBpedia description fields from getDescription() onto this hit.
 	void assignDetails(wstring& a, wstring& c, wstring& ip, wstring& bd, wstring& bp, wstring& occ)
 	{
 		this->abstract = a;
@@ -187,6 +231,8 @@ public:
 		this->occupation = occ;
 	}
 
+	// Deserialize one cOntologyEntry from the binary cache buffer.  where advances.
+	// Omits resourceType / superClassResourceTypes (not in the on-disk format).
 	bool copy(void* buf, cOntologyEntry& dbsn, int& where, int limit)
 	{
 		if (!::copy(buf, dbsn.compactLabel, where, limit)) return false;
@@ -204,6 +250,7 @@ public:
 		return true;
 	}
 
+	// Serialize the category key plus the entry that dbsi points at.
 	bool copy(void* buf, unordered_map <wstring, cOntologyEntry>::iterator dbsi, int& where, int limit)
 	{
 		if (!::copy(buf, dbsi->first, where, limit)) return false;
@@ -211,6 +258,8 @@ public:
 		return true;
 	}
 
+	// Deserialize this cTreeCat from an .rdfTypes cache file, resolving cli against hm.
+	// Flags packed as bit0 preferred, bit1 exactMatch, bit2 preferredUnknownClass.
 	bool copy(unordered_map <wstring, cOntologyEntry>& hm, void* buf, int& where, int limit)
 	{
 		if (!::copy(cli, buf, where, limit, hm)) return false;
@@ -234,6 +283,7 @@ public:
 		return true;
 	}
 
+	// Serialize this cTreeCat (including cli key/entry) into an .rdfTypes cache buffer.
 	bool copy(void* buf, int& where, int limit)
 	{
 		if (!copy(buf, cli, where, limit)) return false;
@@ -254,6 +304,8 @@ public:
 		return true;
 	}
 
+	// Log one ISTYPE[LI] line.  If printOnlyPreferred, skip unless preferred or exactMatch.
+	// rdfInfoPrinted suppresses repeat abstract dumps for the same description text.
 	void logIdentity(int logType, wstring object, bool printOnlyPreferred, wstring& rdfInfoPrinted)
 	{
 		if (printOnlyPreferred && !preferred && !exactMatch) return;
@@ -275,6 +327,8 @@ private:
 	wstring comment;
 };
 
+// Static facade for the blended ontology.  All members are process-lifetime.
+// Implementation and the maps themselves live in createOntology.cpp.
 class cOntology
 {
 public:
