@@ -1,3 +1,34 @@
+/*
+	DIYDiskArray.h - 2-D array of T that lives either in RAM or as a seekable disk file
+
+	Overview:
+		Template used for matrices too large to keep in RAM (e.g. pairwise scores).
+		If constructed with a non-NULL path, initialize() creates/opens the file and
+		pre-fills it with 'value'; put/get lseek+read/write one T.  If path is NULL,
+		storage is vector<vector<T>>.  The unused 'check' flag mirrors every write
+		into checkMatrix and re-reads it.
+
+	Pipeline position:
+		Support; not on the main parse path.  Callers pass CACHEDIR-based paths.
+
+	Key entry points:
+		- initialize(first,second,value) - allocate (first+1)*(second+1) slots.
+		- put / get - store or load one cell; out-of-range is LOG_FATAL_ERROR.
+		- errstr() - _wcserror_s of the last errno into errbuffer.
+
+	Notes / gotchas:
+		- path is stored as a borrowed pointer; a temporary wstring.c_str() dangles.
+		- Destructor is empty: the fd is never closed (leak, and the file is not
+			flushed).
+		- initialize() writes sizeof(buf) even when fewer bytes remain, so the file
+			is longer than (first+1)*(second+1)*sizeof(T).
+		- Disk index is (first*saveSecond + second).  Dimensions are saveFirst+1 by
+			saveSecond+1, so the stride should be (saveSecond+1).  The last column of
+			each row aliases the first cell of the next row.
+		- checkMatrix is sized (first) x (second), one short of the inclusive max
+			index, so a put of (saveFirst, saveSecond) is OOB when check==true.
+		- get() on a failed fd returns -1, which is not a valid T for every T.
+*/
 #include <sstream>
 #include <iostream>
 #include <vector>
@@ -24,6 +55,10 @@ class DIYDiskArray
 	bool check=false;
 
 public:
+	// Allocate a (first+1) by (second+1) matrix filled with 'value'.  Disk mode
+	// creates/opens 'path' and writes the fill in 4096-T chunks (the last write
+	// is a full chunk even if fewer bytes remain).  RAM mode is vector(first) x
+	// vector(second) - one short of the inclusive max index.
 	errno_t initialize(__int64 first, __int64 second, T value)
 	{
 		saveFirst = first;
@@ -56,12 +91,17 @@ public:
 		return 0;
 	}
 
+	// Format this->error into errbuffer (1024 wchar_t).  Returned pointer is
+	// owned by *this and is overwritten by the next errstr() call.
 	wchar_t *errstr()
 	{
 		_wcserror_s(errbuffer, 1024, error);
 		return errbuffer;
 	}
 
+	// Store value at [first][second].  Out of range is FATAL.  Disk seek uses
+	// (first*saveSecond + second) - stride is saveSecond, not saveSecond+1.
+	// Returns 0, or -1 if the fd is already in error.
 	int put(__int64 first, __int64 second, T value)
 	{
 		if (check)
@@ -98,6 +138,8 @@ public:
 		return 0;
 	}
 
+	// Load [first][second].  Out of range is FATAL.  On a dead fd returns -1
+	// (not a valid T for every T); on seek/read failure returns 0.
 	T get(__int64 first, __int64 second)
 	{
 		if (check)
@@ -134,6 +176,8 @@ public:
 		}
 	}
 
+	// Borrow tpath (not copied - a temporary dangles).  NULL path = RAM mode.
+	// anyErrorFatal defaults true so I/O errors abort.
 	DIYDiskArray(const wchar_t *tpath)
 	{
 		path = tpath;
@@ -141,6 +185,7 @@ public:
 	}
 
 
+	// Intentionally empty: the disk fd is never closed or flushed.
 	~DIYDiskArray()
 	{
 	}

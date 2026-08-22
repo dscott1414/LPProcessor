@@ -1,3 +1,30 @@
+/*
+	stacktrace.h - vendored dbg:: stack-walk helpers (Sean Farrell, MIT) used by main.cpp's SEH filter
+
+	Overview:
+		A self-contained Win32 dbghelp wrapper.  stack_trace() captures the current
+		CONTEXT, walks the stack, and resolves each frame to module/name/file/line.
+		DBG_ASSERT / DBG_FAIL pop a MessageBox and abort(); main.cpp's
+		unhandled-exception path uses stack_trace() itself and then logs the frames
+		via lplog(LOG_FATAL_ERROR), which exits.
+
+	Pipeline position:
+		Crash-only.  Not on the parse path.
+
+	Key entry points:
+		- dbg::stack_trace() - walk and resolve; returns an empty vector if SymInitialize fails.
+		- dbg::handle_assert() / dbg::fail() - format + MessageBoxA + abort().
+		- dbg::trace() - OutputDebugStringA of a 1024-byte vsnprintf buffer.
+
+	Notes / gotchas:
+		- Third-party file; the MIT header below is the author's.  Do not "fix" it.
+		- SymInitialize(process, NULL, TRUE) loads symbols for every module on each
+			call and is never paired with a process-lifetime init; fine for a crash
+			path, expensive if ever called in a loop.
+		- The first StackWalk frame is discarded (the helper itself).
+		- handle_assert / fail block on a GUI MessageBox - fatal on a service/headless
+			worker.  main.cpp avoids these and goes through lplog instead.
+*/
 #pragma once
 //
 // Debug Helpers
@@ -52,6 +79,8 @@
 
 namespace dbg
 {
+	// vsnprintf into a 1024-byte stack buffer and OutputDebugStringA.  Truncates
+	// silently; not used on the parse path.
 	inline
 		void trace(const char* msg, ...)
 	{
@@ -66,6 +95,8 @@ namespace dbg
 		va_end(args);
 	}
 
+	// Last path component of 'file' (accepts \\ or /).  Returns file unchanged
+	// if it has no separator.
 	inline
 		std::string basename(const std::string& file)
 	{
@@ -89,6 +120,8 @@ namespace dbg
 		std::string file;
 	};
 
+	// Capture CONTEXT, StackWalk, resolve each frame.  Drops the first frame
+	// (this helper).  Empty vector if SymInitialize fails.  Calls SymCleanup.
 	inline
 		std::vector<StackFrame> stack_trace()
 	{
@@ -205,6 +238,7 @@ namespace dbg
 		return frames;
 	}
 
+	// Format cond + stack, MessageBoxA, abort().  Blocks on a GUI dialog.
 	inline
 		void handle_assert(const char* func, const char* cond)
 	{
@@ -223,6 +257,7 @@ namespace dbg
 		abort();
 	}
 
+	// Format msg + stack, MessageBoxA, abort().  Blocks on a GUI dialog.
 	inline
 		void fail(const char* func, const char* msg)
 	{

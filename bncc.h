@@ -1,3 +1,24 @@
+/*
+	bncc.h - British National Corpus preference-tag applicator (bncc)
+
+	Overview:
+		Declares the helper that walks a tokenized cSource and, for each BNC-tagged
+		word, calls findPreferredForm / findMultiplePreferredForm to deposit a usage
+		preference on the matching cWordMatch.  Implementation lives in a separate
+		BNC translation unit (not in this assignment).
+
+	Pipeline position:
+		Optional corpus-statistics pass used to seed form-usage costs (the BNC
+		preferences consulted later by eliminateLoserPatterns).
+
+	Key entry points:
+		- process() - drive one sourceId.
+		- processSentence() / processWord() - per-sentence / per-token.
+		- findPreferredForm() / findMultiplePreferredForm() - map a BNC tag onto a form.
+
+	Key data structures / globals:
+		- unknownCount - words whose BNC tag could not be matched to a form.
+*/
 class bncc
 {
 public:

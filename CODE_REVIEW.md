@@ -328,6 +328,131 @@ are out of scope.
 
 ---
 
+## Wave — DB layer and shared headers (`DB.cpp`, `DBCreateSQLSchema.cpp`,
+`DBWordRelations.cpp`, `tableColumn.cpp`/`tableColumn.h`, `dbQuerySearch.cpp`,
+`general.h`, `logging.cpp`/`logging.h`, `profile.h`, `stacktrace.h`,
+`intArray.h`, `DIYDiskArray.h`, `bitObject.h`, `memoryStat.cpp`, `word.h`,
+`paice.cpp`/`paice.h`, `conversationContext.cpp`, `Loebner.cpp`, `bncc.h`,
+`Internet.cpp`/`internet.h`)
+
+- **[CRITICAL] DB.cpp:366 — hardcoded MySQL root password** —
+  `mysql_real_connect(..., "root", "byron0", DBNAME, ...)`. Move credentials
+  to config/env and rotate `byron0`.
+
+- **[CRITICAL] DBCreateSQLSchema.cpp:561 — same hardcoded credentials on schema create** —
+  `mysql_real_connect(..., "root", "byron0", NULL, ...)` on the “database
+  missing” path.
+
+- **[CRITICAL] DBCreateSQLSchema.cpp:419 — `generateBNCSources` buffer overrun** —
+  `tmalloc(actualLen + 1)` allocates bytes, then `buffer[actualLen] = 0`
+  writes a `wchar_t` at byte offset `2*actualLen`. Allocate
+  `actualLen + sizeof(wchar_t)` and NUL-terminate at
+  `actualLen / sizeof(wchar_t)` if the file is UTF-16, or treat it as bytes.
+
+- **[HIGH] logging.cpp:247 — `lplog(LOG_FATAL_ERROR)` getchar-then-`exit(0)`** —
+  Confirms the Wave 1 finding. `source.h:83` is wrong (FATAL does abort);
+  `main.cpp` / `DBUtility.cpp` are right. Exit 1 without waiting on stdin
+  when not a TTY, and correct `source.h`.
+
+- **[HIGH] DB.cpp:384 — `updateSourceStatistics` never `UNLOCK TABLES`** —
+  same in `updateSourceStatistics2`/`3`. Every stats write leaves `sources`
+  write-locked on this connection.
+
+- **[HIGH] DB.cpp:326 — `getNumSources` lock leak on query failure** —
+  `LOCK TABLES sources READ` then `return -1` without UNLOCK.
+
+- **[HIGH] DB.cpp:1125 — `isBookTitle` interpolates title unescaped** —
+  `where title = \"%s\"`. Escape or parameterize.
+
+- **[HIGH] DB.cpp:429 — `readMultiSourceObjects` maps columns onto the wrong `cObject` fields** —
+  `firstSpeakerGroup` is treated as the male BIT; the actual `plural` BIT
+  is ignored. Pass `getFirstSpeakerGroup` separately and use
+  `sqlrow[5..8][0]==1` for the four BIT columns.
+
+- **[HIGH] DB.cpp:446 — `objectId` used as `objects[]` index** —
+  a non-dense or large `objectId` is an out-of-range write. Map
+  `dbIndex` → vector offset.
+
+- **[HIGH] DB.cpp:846 — `isWordFormCacheValid` leaks the first `MYSQL_RES`** —
+  the first `SELECT UNIX_TIMESTAMP` result is overwritten without
+  `mysql_free_result`.
+
+- **[HIGH] paice.cpp:176 — overlapping `memcpy` of the wrong size for UTF-16 BOM** —
+  copies bytes not `wchar_t`s, drops the NUL, and overlaps. Use
+  `memmove(s, s+1, (wcslen(s+1)+1)*sizeof(wchar_t))`. Same at line 245.
+
+- **[HIGH] paice.cpp:307 — `isWordDBUnknown` interpolates word unescaped** —
+  `word=\"%s\"`. Escape, or look up only in `Words`.
+
+- **[HIGH] DIYDiskArray.h:189 — destructor never closes the fd** —
+  `_wsopen_s` fds leak. Also `put`/`get` stride `saveSecond` while
+  `initialize` sizes `(saveFirst+1)*(saveSecond+1)`, so the last column
+  aliases the next row.
+
+- **[HIGH] Internet.cpp:473 — timeout closes the request handle under a live reader thread** —
+  `InternetCloseHandle` while `InternetReadFile_Child` may still be in
+  `InternetReadFile`. Wait for the thread after cancel.
+
+- **[HIGH] profile.h:346 — `accumulateNetworkTime` writes through a `const wchar_t*`** —
+  mutates the URL to isolate the host. Copy into a local `wstring` first.
+
+- **[HIGH] intArray.h:350 — `decode()` right-shifts by a negative count** —
+  last iteration is `val >> (0-10)`. Stop at `bitFieldCount >= BITS_PER_RULE`.
+
+- **[HIGH] bitObject.h:177 — `write()` memcpy before the limit check** —
+  a short cache buffer is already overrun when FATAL fires. Check
+  `where+sizeof(bits) > limit` first.
+
+- **[HIGH] conversationContext.cpp:85 — identical intersect tests (copy-paste)** —
+  both sides of the `||` compare against `m[previousQuote].objectMatches`
+  only. The second clause should test `audienceObjectMatches`.
+
+- **[MEDIUM] word.h:153 — `ADJECTIVE_INFLECTIONS_MASK` includes `ADVERB_SUPERLATIVE`** —
+  copy-paste; should be `ADJECTIVE_SUPERLATIVE`.
+
+- **[MEDIUM] logging.cpp:55 — log `FILE*` handles are process-wide while the filename is TLS** —
+  concurrent workers can `fclose` each other's stream. Make the `FILE*` TLS
+  or take a lock.
+
+- **[MEDIUM] memoryStat.cpp:97 — WMI enumerator is never added** —
+  `AddEnum` is commented out, so `getCounter` always fails.
+
+- **[MEDIUM] tableColumn.cpp:374 — `determineColumnRDFTypeCoherency` always returns true** —
+  the reject path is commented TEMP DEBUG, so incoherent Wikipedia columns
+  are kept as QA answers.
+
+- **[MEDIUM] tableColumn.cpp:434 — `sprint` prints the matched-object count twice** —
+  uses `matchedQuestionObjectStr` instead of
+  `synonymMatchedQuestionObjectStr`.
+
+- **[MEDIUM] Internet.cpp:291 — SPARQL failure recurses with no depth cap** —
+  retry in the existing `while (errors < internetWebSearchRetryAttempts)`
+  loop.
+
+- **[MEDIUM] Internet.cpp:514 — `getWebPath` truncates at `MAX_PATH-20` in a `MAX_LEN` buffer** —
+  distinct long URLs collide on the same cache file. Truncate at
+  `MAX_LEN-20`.
+
+- **[MEDIUM] DBCreateSQLSchema.cpp:221 — `createTimeRelationTables` SQL is invalid** —
+  `INDEX`/`FOREIGN KEY` on `relationId` but the column is `wordRelationId`;
+  trailing comma. Same class of problems in `createRelationTables`.
+
+- **[MEDIUM] paice.cpp:287 — assignment used as the `applyStemRule` condition** —
+  `if (state = applyStemRule(...) == s_continue)` stores 0/1 in `state`.
+  Write `if (applyStemRule(...) == s_continue)`.
+
+- **[LOW] DB.cpp:1139 — `readWikiNominalizations` never `mysql_free_result`** —
+  leaked on both success and failure-after-store paths.
+
+- **[LOW] Loebner.cpp:1 — translation unit is comments only** —
+  move the notes to a `.md` or implement the sketched model.
+
+- **[NIT] source.h:83 vs logging.cpp — document FATAL in one place** —
+  after fixing abort behaviour, delete the contradictory sentence in
+  `source.h`.
+
+---
+
 ## Later waves
 
 *(to be appended as the remaining files are annotated)*
