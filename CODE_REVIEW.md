@@ -98,6 +98,105 @@ are out of scope.
 
 ---
 
+## Wave — question answering (`questionAnswering.cpp`, `QuestionAnswering.h`,
+`questionProcessing.cpp`, `questionAnsweringWebSearch.cpp`)
+
+- **[CRITICAL] questionAnsweringWebSearch.cpp:173 — hardcoded Google Custom Search API key** —
+  `webSearchKey = L"AIzaSyDOCHy1bm-46kJkgV2hqPjFJ6Ce8FfR_AE"` is a live CSE key
+  (also pasted in the comment at the REST example). Load from an env var /
+  secret store and rotate the committed key.
+
+- **[CRITICAL] questionAnsweringWebSearch.cpp:174 — hardcoded Bing v7 subscription key** —
+  `BINGAccountKey = L"345820954c834fa08a227260862bbfe5"` is sent as
+  `Ocp-Apim-Subscription-Key` on every search. Externalize and rotate.
+
+- **[HIGH] questionAnswering.cpp:3028 — `cProximityEntry` uses `childObject` before assigning `co`** —
+  the 5-arg ctor inherits `childObject = 0` (narrator) from the default ctor,
+  then types/describes every proximity neighbour as object 0. Assign
+  `childObject = co` first.
+
+- **[HIGH] questionAnswering.cpp:2866 — remapped question type is always 15** —
+  `parentSRG->questionType = qt | typeQTMask` ORs the new type with
+  `typeQTMask=15`, so later type checks miss. Should be
+  `(questionType & ~typeQTMask) | qt`.
+
+- **[HIGH] questionAnswering.cpp:1158 — meta-pattern answers are never recorded** —
+  `processMetanameTagset` can return a valid `whereAnswer`, but
+  `metaPatternMatch` ignores it and always `return -1`. Return the first
+  positive `whereAnswer`.
+
+- **[HIGH] questionAnsweringWebSearch.cpp:891 — yajl tree leaked on every Google parse** —
+  `yajl_tree_parse` is never paired with `yajl_tree_free` (same bug at 973
+  for Bing). Free `node` before each return.
+
+- **[HIGH] questionAnsweringWebSearch.cpp:886 — `jsonBuffer[0]` read before empty check** —
+  empty cache / failed fetch is UB. Check `empty()` first. Same pattern at
+  968 (`extractBINGWebSites`).
+
+- **[HIGH] questionProcessing.cpp:808 — `speakerGroups[sgAt]` can be `end()`** —
+  the scan can leave `sgAt == speakerGroups.size()`. Guard before iterating
+  `speakerGroups[sgAt].speakers`.
+
+- **[HIGH] questionAnswering.cpp:4658 — proximity “BING” pass still searches Google** —
+  `searchWebSearchQueries(..., true, lastGoogleResultPage)` repeats Google.
+  Pass `false` and a Bing last-page flag.
+
+- **[HIGH] questionAnswering.cpp:1874 — `wikiTableMap` entries are never deleted** —
+  `new cWikipediaTableCandidateAnswers` is stored in a local map that goes
+  out of scope without deleting. Own the pointers or store by value.
+
+- **[HIGH] questionAnswering.cpp:115 — `stripWeb` on an empty URI is UB** —
+  `name[0]` / `name.back()` with no empty check. Return early if
+  `name.empty()`.
+
+- **[MEDIUM] questionAnswering.cpp:3193 — `whereChildCandidateAnswer` written from the question source** —
+  a question-source index is later used as `childCAS.source->m[...]`. Use
+  the child SRG’s secondary prep object instead.
+
+- **[MEDIUM] questionAnswering.cpp:4130 — table `columnIndex` is `iterator - columns.end()`** —
+  always ≤ 0. Should be `columnIterator - tableIterator->columns.begin()`.
+
+- **[MEDIUM] questionAnswering.cpp:3356 — transformed / rewritten SRGs are leaked** —
+  `processTransformQuestionPattern` / `isQuestionPassive` `new` SRGs into
+  `ssrg` / `lssri` with no owner.
+
+- **[MEDIUM] questionAnsweringWebSearch.cpp:646 — `hashWebSiteURL` dereferences `end()` on an empty URL** —
+  Check `empty()` before stripping `http://`.
+
+- **[MEDIUM] questionAnsweringWebSearch.cpp:591 — `appendVerb` reads `m[where+1]` with no bounds check** —
+  Require `where + 1 < (int)m.size()`.
+
+- **[MEDIUM] questionProcessing.cpp:675 — `(imEOS + 1)` when the terminator is the last token** —
+  can dereference `m.end()`. Same at 713. Test `imEOS + 1 != m.end()` first.
+
+- **[MEDIUM] questionAnswering.cpp:715 — book-title strip can index `bookTitle[-1]`** —
+  Check `!bookTitle.empty()` before trailing-quote / comma tests.
+
+- **[MEDIUM] questionAnswering.cpp:302 — `matchAllSourcePositions` never writes `synonym`** —
+  callers therefore never apply the synonym discount.
+
+- **[MEDIUM] questionAnswering.cpp:140 — cache roots are compile-time `M:\caches`** —
+  no runtime override in this TU; `questionTransforms.txt` is also a
+  Windows-only relative path.
+
+- **[MEDIUM] questionAnsweringWebSearch.cpp:693 — `scrapeWebSite` is unfinished and unused** —
+  category-3 tags are a stub; full pages are parsed as raw HTML.
+
+- **[LOW] questionAnswering.cpp:4346 — `matchAnswersOfPreviousQuestion` dereferences an empty set** —
+  `*wherePossibleAnswers.begin()` with no `empty()` check; also always
+  returns -1.
+
+- **[LOW] questionAnswering.cpp:1003 — `appendSum` writes through `c_str()`** —
+  `c_str()` is const; empty `str` is also UB.
+
+- **[LOW] questionAnsweringWebSearch.cpp:210 — Bing `numWebSitesAskedFor` is ignored** —
+  the parameter only gates a constant `&answerCount=10`.
+
+- **[NIT] questionAnsweringWebSearch.cpp:894 — Google parse errors are logged as FreeBase** —
+  copy-paste leftover from the old Freebase client.
+
+---
+
 ## Later waves
 
 *(to be appended as the remaining files are annotated)*

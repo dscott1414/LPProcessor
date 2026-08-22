@@ -1,10 +1,66 @@
+/*
+	QuestionAnswering.h - cQuestionAnswering: TREC-style answer extraction from a parsed question
+		plus Wikipedia / DBpedia / Bing / Google fallback.
+
+	Overview:
+		Declares the class that owns stage 8 of the pipeline (see README.md "Question
+		Answering"). A question is itself a cSource that has already been tokenized,
+		parsed and related. This class then (a) classifies the question (qtf flags),
+		(b) optionally rewrites it via patterns loaded from questionTransforms.txt,
+		(c) scores candidate answers by matching the question's syntactic-relation group
+		against every SRG in a "child" source (the novel, a Wikipedia page, a search
+		snippet, a table cell), (d) runs subqueries for relative-clause constraints
+		("prize which originated in Spain"), and (e) falls back to DBpedia abstracts,
+		Wikipedia tables, MusicBrainz and web search.
+
+	Pipeline position:
+		Called from main.cpp after speakers / conversations have been resolved, via
+		answerAllQuestionsInSource(). Child sources are parsed on demand through
+		processPath() (defined in getWikipedia.cpp).
+
+	Key entry points:
+		- answerAllQuestionsInSource() - walk every SRG in the question source
+		- answerQuestionInSource() - one-question driver (DB, RDF, web, tables)
+		- transformQuestion() - rewrite "how old is X" into "when was X born"
+		- analyzeQuestionFromSource() - score child-source SRGs against the question
+		- determineBestAnswers() / findConstrainedAnswers() - winnow and copy winners
+		- webSearchForQueryParallel/Serial() - Bing / Google fallback
+
+	Key data structures / globals:
+		- qtf - packed question-type flags: low 4 bits are which/where/what/...;
+		  next bits are the syntactic role being asked for (subject/object/prep);
+		  QTAFlag means the answer must be an adjective ("whose book?")
+		- cAS - one scored candidate answer (source, matchSum, table coords, ...)
+		- cTrackDescendantAnswers - answer chain for linked transform patterns
+		- cSearchSource - one web-search snippet or full-page path waiting to be parsed
+		- sourcesMap - cache of already-parsed child cSource* keyed by path
+		- transformationPatternMap - questionTransforms.txt SOURCE -> DESTINATION/LINK
+		- fileCaching - static; whether RDF / association lookups may hit disk
+
+	Dependencies:
+		cSource / cSyntacticRelationGroup / cPattern / cColumn (tables), MySQL,
+		CACHEDIR / WEBSEARCH_CACHEDIR (M:\caches), Bing and Google Custom Search.
+
+	Notes / gotchas:
+		- "where" integers are indexes into a cSource::m token array; object ints
+		  index cSource::objects. -1 is unset. Child sources keep their own arrays.
+		- clear() / eraseSourcesMap() delete every cached child source; they restart
+		  the unordered_map iterator after each erase rather than incrementing it.
+		- Several methods (processPath, addTables, dbSearch*) are defined in other
+		  TUs (getWikipedia.cpp, tableColumn.cpp, dbQuerySearch.cpp, getMusicBrainz.cpp).
+		- Web-search API keys live as globals in questionAnsweringWebSearch.cpp.
+*/
 #pragma once
 class cQuestionAnswering
 {
 public:
+	// One hop in a linked transform: the object that answered the previous
+	// link-question, the tracking string of answers so far, which link index
+	// produced it, and whether this hop is the DESTINATION pattern's answer.
 	class cTrackDescendantAnswers
 	{
 	public:
+		// ao indexes questionSource->objects. ln is the linkPatterns index (-1 if none).
 		cTrackDescendantAnswers(int ao,wstring aa,int ln,bool da):inputAnswerObject(ao), ancestorAnswersTrackingString(aa), link(ln), destinationAnswer(da)
 		{
 		}
@@ -15,6 +71,8 @@ public:
 		set <int> wherePossibleAnswers; // only filled if this made it to the destination pattern.  This is filled with source positions, relative to the questionSource
 	};
 
+	// One Google/Bing hit queued for parse: either a snippet file or the full page
+	// cached under webSearchCache. fullPathIndex links a snippet to its article.
 	class cSearchSource
 	{
 	public:
@@ -26,6 +84,11 @@ public:
 		wstring pathInCache;
 	};
 
+	// One scored candidate answer. matchSum is the SRG-alignment score (higher is
+	// better; determineBestAnswers treats <14 as too weak). confidence is a
+	// semantic / question-type check (CONFIDENCE_NOMATCH = reject). ws/wo/wp are
+	// child-source positions of the matched subject/object/prep. object is an
+	// index into source->objects when one SRG produced several entities.
 	class cAS
 	{
 	public:
@@ -53,6 +116,8 @@ public:
 		int entryIndex;
 		int object; // used in cases where multiple objects resulted from the same query.  An answer must only be one answer, not multiple.  
 		cColumn::cEntry entry;
+		// _sri may be NULL for table / info-box answers. _entry is copied if non-NULL.
+		// finalAnswer / numIdenticalAnswers / whereChildCandidateAnswer are filled later.
 		cAS(wstring _sourceType, cSource* _source, int _confidence, int _matchSum, wstring _matchInfo, cSyntacticRelationGroup* _sri, int _equivalenceClass, int _ws, int _wo, int _wp, bool _fromWikipediaInfoBox, bool _fromTable, wstring _tableNum, wstring _tableName, int _columnIndex, int _rowIndex, int _entryIndex, cColumn::cEntry* _entry)
 		{
 			sourceType = _sourceType;
@@ -82,6 +147,9 @@ public:
 			object = -1;
 		}
 	};
+	// Packed into cSyntacticRelationGroup::questionType. Low 4 bits (typeQTMask) are
+	// the WH-word. Bits 4+ encode the syntactic role being asked for. QTAFlag (bit 8)
+	// means the WH-word is adjectival ("which prize", "whose book").
 	enum qtf {
 		unknownQTFlag = 1, whichQTFlag = 2, whereQTFlag = 3, whatQTFlag = 4, whoseQTFlag = 5, howQTFlag = 6, whenQTFlag = 7, whomQTFlag = 8, whyQTFlag = 9, wikiBusinessQTFlag = 10, wikiWorkQTFlag = 11, typeQTMask = (1 << 4) - 1,
 		referencingObjectQTFlag = 1 << 4, subjectQTFlag = 2 << 4, objectQTFlag = 3 << 4, secondaryObjectQTFlag = 4 << 4, prepObjectQTFlag = 5 << 4,
@@ -110,6 +178,7 @@ public:
 	int checkParticularPartQuestionTypeCheck(cSource* questionSource, __int64 questionType, int childWhere, int childObject, int& semanticMismatch);
 
 	private:
+		// Cached subquery result for one child-candidate string (childCandidateAnswerMap).
 		class cAnswerConfidence
 		{
 		public:
@@ -117,6 +186,7 @@ public:
 			bool subQueryNoMatch;
 			int confidence;
 		};
+		// Cached checkParentGroup result keyed by the child object's where-string.
 		class cSemanticMatchInfo
 		{
 		public:
@@ -129,6 +199,7 @@ public:
 				this->semanticMismatch = semanticMismatch;
 				this->confidence = confidence;
 			};
+			// Default is "no match" so a cache miss can be stored as a rejection.
 			cSemanticMatchInfo()
 			{
 				this->synonym = false;
@@ -145,6 +216,9 @@ public:
 	int transformQuestion(cSource* questionSource, cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& ssri, vector < cTrackDescendantAnswers>& descendantAnswers, bool parseOnly, bool useParallelQuery, bool disableWebSearch);
 	void initializeTransformations(cSource *questionSource, unordered_map <wstring, wstring> &parseVariables);
 	bool processPathToPattern(cSource *questionSource, const wchar_t *path, cSource *&source);
+	// One questionTransforms.txt group: SOURCE patterns that match the user's
+	// question, an optional chain of LINK questions, and the DESTINATION SRG/pattern
+	// that is actually answered (e.g. "how old is X" -> "when was X born").
 	class cTransformPatterns
 	{
 	public:
@@ -159,6 +233,7 @@ public:
 			linkPatterns = lps;
 			linkSyntacticRelationGroups = lsr;
 		}
+		// destinationPattern NULL until a DESTINATION / questionPatternMap sentence is seen.
 		cTransformPatterns()
 		{
 			destinationPattern = NULL;
@@ -260,6 +335,9 @@ public:
 	void detectSubQueries(cSource *questionSource, cSyntacticRelationGroup *srg, vector <cSyntacticRelationGroup> &subQueries);
 	bool matchAnswerSourceMatch(cSource *questionSource,cSyntacticRelationGroup *ssri, int whereMatch, int wherePossibleAnswer, set <int> &addWhereQuestionInformationSourceObjects);
 	static bool fileCaching;
+	// Delete every cached child cSource. Restarts the iterator after each erase
+	// (unordered_map::erase invalidates only the erased iterator, but this also
+	// survives any rehash). Does not reset transformationPatternMap / transformSource.
 	void clear()
 	{
 		for (unordered_map <wstring, cSource *>::iterator smi = sourcesMap.begin(); smi != sourcesMap.end();)
