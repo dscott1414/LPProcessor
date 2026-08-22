@@ -1,3 +1,53 @@
+/*
+	syntacticRelationGroups.cpp - cSyntacticRelationGroup (one SVO / location /
+	                              question clause) plus SRG print/serialize helpers.
+
+	Overview:
+		A cSyntacticRelationGroup is the clause-level record built after
+		pattern matching: where the controller/subject/verb/object/preps sit
+		in m[], the semantic relationType, tense/flow flags (cTimeFlowTense),
+		and question-answering extras.  This TU owns the constructors, the
+		on-disk serialize/deserialize pair, source-index remapping used when
+		a child source is spliced into a question, and the debug printers
+		that dump an SRG as a labelled S/V/O string.  Adjective/adverb
+		extractors (getWSAdjective, getOSAdjective, getMSAdverb, ...) pull
+		modifiers off an object span or, when the object is missing, off the
+		words immediately after the verb (typical of "How old is X?").
+
+	Pipeline position:
+		Stage 5+ (relations / time / QA).  Groups themselves are created in
+		semanticRelations.cpp / timeRelations.cpp; this file is the type's
+		implementation and the print/prep helpers those stages call.
+
+	Key entry points:
+		- cSyntacticRelationGroup constructors - live, cache, and remapped
+		- write() / convertFlags() / convertToFlags() - binary cache
+		- printSRG() - LOG_WHERE / LOG_QCHECK dump of one group
+		- getAllPreps() / checkInsertPrep() - walk the relPrep chain
+		- getSRIMinMax() - print window around the group
+		- wrti() / wchr() / gmo() - word-string helpers for printers
+
+	Key data structures / globals:
+		- SRIDebugCounter - monotonically increasing id stamped into QCHECK
+		  logs (process-wide, not reset per source)
+		- NULLWORD (187) - sentinel lexicon index meaning "no adjective /
+		  adverb / profession"
+
+	Notes / gotchas:
+		- wrti() returns tmpstr.c_str(); the caller must keep tmpstr alive
+		  for the duration of the use (printSRG does this with a stack of
+		  named wstrings).
+		- The cache ctor calls convertToFlags then immediately overwrites
+		  skip and changeStateAdverb with false, so those bits never survive
+		  a round-trip.
+		- write() always persists convertFlags(false,false,false,0); quote /
+		  question bits are recovered from cWordMatch::flagInQuestion, not
+		  from the SRG flags.
+		- The remapping ctor sets o = -1 and does not copy timeInfo,
+		  description, changeStateAdverb, or the nonSemantic* match flags.
+		- getWSAdverb(changeStateAdverb=true) returns m[whereVerb-1] without
+		  the time-flag check that getMSAdverb applies on the same path.
+*/
 #include <stdio.h>
 #include <string.h>
 #include <mbstring.h>
@@ -22,12 +72,15 @@
 int SRIDebugCounter = 0;
 #define NULLWORD 187
 
+// Lexicon string at source position `where`, or L"" if where < 0.
 const wchar_t *cSource::wchr(int where)
 {
 	LFS
 		return (where < 0) ? L"" : m[where].word->first.c_str();
 }
 
+// End of the object spanning `wo`, or wo itself if there is no wider object.
+// Negative wo is returned unchanged (used as a printMax "missing" sentinel).
 int cSource::gmo(int wo)
 {
 	LFS
@@ -35,6 +88,9 @@ int cSource::gmo(int wo)
 	return (m[wo].endObjectPosition > wo) ? m[wo].endObjectPosition : wo;
 }
 
+// Format "[id whereString]" or "[id (whereString) class]" into tmpstr.
+// Returns tmpstr.c_str() — caller must keep tmpstr alive.  Out-of-range
+// where writes "Illegal!" into tmpstr.  where < 0 returns L"".
 const wchar_t *cSource::wrti(int where, const wchar_t * id, wstring &tmpstr, bool shortFormat)
 {
 	LFS
@@ -61,6 +117,10 @@ const wchar_t *cSource::wrti(int where, const wchar_t * id, wstring &tmpstr, boo
 // Krugman earned his B.A. in economics from Yale University summa cum laude in 1974 and his PhD from the Massachusetts Institute of Technology (MIT) in 1977.
 // please also see http://aclweb.org/anthology-new/J/J06/J06-3002.pdf
 // 
+// Collect the relPrep chains hanging off the verb, the group's wherePrep /
+// whereSecondaryPrep, and (if wo >= 0) the object itself.  Drops preps whose
+// attached object is not `wo` (see checkInsertPrep).  relPrep is a next-link;
+// a repeated wp aborts the walk.
 void cSource::getAllPreps(cSyntacticRelationGroup* srg, set <int> &relPreps, int wo)
 {
 	LFS
@@ -82,6 +142,8 @@ void cSource::getAllPreps(cSyntacticRelationGroup* srg, set <int> &relPreps, int
 	}
 }
 
+// Append "prep adj* wherePrepObject: [PO ...]" (and up to 10 compound
+// POC parts) onto ps.  No-op if wherePrep or its relObject is missing.
 void cSource::prepPhraseToString(int wherePrep, wstring &ps)
 {
 	LFS
@@ -96,6 +158,10 @@ void cSource::prepPhraseToString(int wherePrep, wstring &ps)
 		ps += wchr(wherePrep) + getWOSAdjective(wherePrepObject, tmpstr1) + L" " + getWSAdjective(wherePrepObject, 0) + L" " + getWSAdjective(wherePrepObject, 1) + L" " + itos(wherePrepObject, ws) + L":" + wrti(wherePrepObject, L"POC", tmpstr2);
 }
 
+// Insert wp into relPreps unless already present or wp is past m[].
+// When wo >= 0, also require nextQuote < 0 or nextQuote == wo so only
+// preps attached to that object are kept.  Returns -1 to stop the walk,
+// 0 to continue.
 int cSource::checkInsertPrep(set <int> &relPreps, int wp, int wo)
 {
 	if (wp >= m.size() || relPreps.find(wp) != relPreps.end())
@@ -105,6 +171,9 @@ int cSource::checkInsertPrep(set <int> &relPreps, int wp, int wo)
 	return 0;
 }
 
+// Lexicon index of a GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS at `object`,
+// or of its single objectMatch.  NULLWORD (187) if object < 0 or not an
+// occupation/role.
 int cSource::getProfession(int object)
 {
 	LFS
@@ -119,6 +188,9 @@ int cSource::getProfession(int object)
 	return NULLWORD;
 }
 
+// Fill srg->printMin / printMax with the source-position window covering
+// controller, subject, verb, object, secondary object and every prep in
+// the wherePrep / whereSecondaryPrep chains (skipping transformedPrep).
 void cSource::getSRIMinMax(cSyntacticRelationGroup* srg)
 {
 	LFS
@@ -172,6 +244,9 @@ void cSource::getSRIMinMax(cSyntacticRelationGroup* srg)
 	if (srg->whereQuestionType >= 0) srg->printMin = min(srg->printMin, srg->whereQuestionType);
 }
 
+// numOrder-th non-object adjective/noun/determiner inside the object span
+// at `where` (acceptableAdjective && !acceptableObjectPosition).  Empty
+// if where < 0 or the span is a single token.
 wstring cSource::getWSAdjective(int where, int numOrder)
 {
 	LFS
@@ -191,6 +266,9 @@ wstring cSource::getWSAdjective(int where, int numOrder)
 	return L"";
 }
 
+// Object-id of the first adjectival object inside `where`, or — if where < 0 —
+// of a post-verbal adjectival object (whereVerb+1, or +2 if +1 is an adverb).
+// Returns -1 if none.
 int cSource::getOSAdjective(int whereVerb, int where)
 {
 	LFS
@@ -204,6 +282,8 @@ int cSource::getOSAdjective(int whereVerb, int where)
 	return -1;
 }
 
+// whereString of the first adjectival object at `where`, else (if where < 0)
+// of the post-verbal adjectival object next to whereVerb.  Writes into tmpstr.
 wstring cSource::getWOSAdjective(int whereVerb, int where, wstring &tmpstr)
 {
 	LFS
@@ -218,6 +298,9 @@ wstring cSource::getWOSAdjective(int whereVerb, int where, wstring &tmpstr)
 	return tmpstr;
 }
 
+// Lexicon index of the numOrder-th non-object adjective at `where`, or —
+// if where < 0 and numOrder == 0 — of a post-verbal adjective / _Q2-I
+// "What is X short for?" complement.  NULLWORD if none.
 int cSource::getMSAdjective(int whereVerb, int where, int numOrder)
 {
 	LFS
@@ -241,6 +324,8 @@ int cSource::getMSAdjective(int whereVerb, int where, int numOrder)
 	return NULLWORD;
 }
 
+// Word string of the numOrder-th non-object adjective at `where`, falling
+// back to a post-verbal / _Q2-I adjective when where < 0 and numOrder == 0.
 wstring cSource::getWSAdjective(int whereVerb, int where, int numOrder, wstring &tmpstr)
 {
 	LFS
@@ -261,6 +346,9 @@ wstring cSource::getWSAdjective(int whereVerb, int where, int numOrder, wstring 
 	return tmpstr;
 }
 
+// Lexicon index of an adverb immediately after or before whereVerb.
+// If changeStateAdverb, also accepts a T_START/STOP/FINISH/RESUME time
+// word immediately before the verb.  NULLWORD / -1 if none.
 int cSource::getMSAdverb(int whereVerb, bool changeStateAdverb)
 {
 	LFS
@@ -278,6 +366,9 @@ int cSource::getMSAdverb(int whereVerb, bool changeStateAdverb)
 	return i;
 }
 
+// Word string of an adverb next to whereVerb (prefers before, then after).
+// changeStateAdverb=true returns m[whereVerb-1] with no time-flag check —
+// unlike getMSAdverb, which requires T_START/STOP/FINISH/RESUME.
 const wchar_t *cSource::getWSAdverb(int whereVerb, bool changeStateAdverb)
 {
 	LFS
@@ -285,11 +376,15 @@ const wchar_t *cSource::getWSAdverb(int whereVerb, bool changeStateAdverb)
 			return m[whereVerb - 1].word->first.c_str();
 	if (whereVerb >= 0 && whereVerb + 1 < (signed)m.size() && m[whereVerb + 1].queryWinnerForm(adverbForm) >= 0)
 		return m[whereVerb + 1].word->first.c_str();
+	// Unlike getMSAdverb, no T_START/STOP/FINISH/RESUME filter here.
 	if (whereVerb > 0 && changeStateAdverb)
 		return m[whereVerb - 1].word->first.c_str();
 	return L"";
 }
 
+// True if `where` has objectMatches, or a multi-token / non-general /
+// repeatedly-encountered object.  Used to tell "real" object adjectives
+// from ordinary modifiers.
 bool cSource::acceptableObjectPosition(int where)
 {
 	LFS
@@ -298,6 +393,8 @@ bool cSource::acceptableObjectPosition(int where)
 		(m[where].endObjectPosition - m[where].beginObjectPosition > 1 || objects[m[where].getObject()].objectClass != NON_GENDERED_GENERAL_OBJECT_CLASS || objects[m[where].getObject()].numEncounters > 1));
 }
 
+// True if `where` won as adjective, noun, __ADJECTIVE, demonstrative /
+// possessive determiner or quantifier — anything that can modify a noun.
 bool cSource::acceptableAdjective(int where)
 {
 	LFS
@@ -306,6 +403,8 @@ bool cSource::acceptableAdjective(int where)
 }
 
 // return the first adjective that is an object
+// Object-id of that first adjectival object inside the span at `where`,
+// or -1.  Prefers getObject() over objectMatches[0].
 int cSource::getOSAdjective(int where)
 {
 	LFS
@@ -320,6 +419,8 @@ int cSource::getOSAdjective(int where)
 	return -1;
 }
 
+// whereString of the first adjectival object inside the span at `where`.
+// Empty if where < 0 or none found.  Writes into tmpstr.
 wstring cSource::getWOSAdjective(int where, wstring &tmpstr)
 {
 	LFS
@@ -335,6 +436,8 @@ wstring cSource::getWOSAdjective(int where, wstring &tmpstr)
 }
 
 // return the first adjective that is not an object
+// Lexicon index of the numOrder-th such adjective inside the object span
+// at `where`.  NULLWORD if where < 0 or none remain.
 int cSource::getMSAdjective(int where, int numOrder)
 {
 	LFS
@@ -356,6 +459,8 @@ int cSource::getMSAdjective(int where, int numOrder)
 	return NULLWORD;
 }
 
+// Overload: render prep `ps` via prepPhraseToString then call the wstring
+// printSRG.  s/ws/wo are sentence / subject / object positions for the dump.
 void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* srg, int s, int ws, int wo, int ps, bool overWrote, int matchSum, wstring matchInfo, int logDestination)
 {
 	LFS
@@ -364,6 +469,10 @@ void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* srg, int s, i
 	printSRG(logPrefix, srg, s, ws, wo, tmpstr, overWrote, matchSum, matchInfo, logDestination);
 }
 
+// One-line LOG dump of an SRG: relationType, controller, S/V/O adjectives,
+// secondary object, next objects and the prep string.  matchSum >= 0 stamps
+// SRIDebugCounter into the line (QCHECK omits the counter).  Format string
+// has one more %s than arguments — the last specifier reads off the stack.
 void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* srg, int s, int ws, int wo, wstring ps, bool overWrote, int matchSum, wstring matchInfo, int logDestination)
 {
 	LFS
@@ -431,6 +540,8 @@ void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* srg, int s, i
 		(inQuestion) ? L"?" : L"."); // 34
 }
 
+// Live constructor: fill the SVO / location slots from the caller, zero the
+// tense-flow / QA / print fields.  tft.presType is left uninitialized.
 cSyntacticRelationGroup::cSyntacticRelationGroup(int _where, int _o, int _whereControllingEntity, int _whereSubject, int _whereVerb, int _wherePrep, int _whereObject,
 	int _wherePrepObject, int _movingRelativeTo, int _relationType,
 	bool _genderedEntityMove, bool _genderedLocationRelation, int _objectSubType, int _prepObjectSubType, bool _physicalRelation)
@@ -497,6 +608,8 @@ cSyntacticRelationGroup::cSyntacticRelationGroup(int _where, int _o, int _whereC
 	mapPatternQuestion = NULL;
 }
 
+// Identity on the ten "where / o / relationType" slots only — tense, QA
+// and secondary-verb fields are ignored.
 bool operator != (const cSyntacticRelationGroup &lhs, const cSyntacticRelationGroup &rhs)
 {
 	return lhs.where != rhs.where ||
@@ -511,6 +624,8 @@ bool operator != (const cSyntacticRelationGroup &lhs, const cSyntacticRelationGr
 		lhs.relationType != rhs.relationType;
 }
 
+// Same ten-slot identity as operator !=.  Dual definitions exist in
+// semanticRelations.h; keep them in lockstep.
 bool operator == (const cSyntacticRelationGroup &lhs, const cSyntacticRelationGroup &rhs)
 {
 	return lhs.where == rhs.where &&
@@ -525,6 +640,8 @@ bool operator == (const cSyntacticRelationGroup &lhs, const cSyntacticRelationGr
 		lhs.relationType == rhs.relationType;
 }
 
+// True if `this` is the same clause as z except that this may fill in an
+// o / wherePrep / wherePrepObject that z still has as "missing" (< 0).
 bool cSyntacticRelationGroup::canUpdate(cSyntacticRelationGroup &z)
 {
 	return where == z.where &&
@@ -539,6 +656,10 @@ bool cSyntacticRelationGroup::canUpdate(cSyntacticRelationGroup &z)
 		relationType == z.relationType;
 }
 
+// Deserialize from the source-cache buffer at offset w (advanced on
+// success).  error is set on a short read.  After convertToFlags, skip and
+// changeStateAdverb are forced false, so those bits never survive a
+// round-trip.  QA / print / nonSemantic* fields are reset, not read.
 cSyntacticRelationGroup::cSyntacticRelationGroup(char *buffer, int &w, unsigned int total, bool &error)
 {
 	if (error = !copy(where, buffer, w, total)) return;
@@ -576,6 +697,7 @@ cSyntacticRelationGroup::cSyntacticRelationGroup(char *buffer, int &w, unsigned 
 	timeInfo.reserve(count);
 	while (count-- && !error && w < (signed)total)
 		timeInfo.emplace_back(buffer, w, total, error);
+	// Wipes the skip / changeStateAdverb bits just unpacked by convertToFlags.
 	skip = false;
 	changeStateAdverb = false;
 	nonSemanticObjectTotalMatch = false;
@@ -593,6 +715,9 @@ cSyntacticRelationGroup::cSyntacticRelationGroup(char *buffer, int &w, unsigned 
 
 }
 
+// Range-check every source-position and o.  Returns 0 if OK, or 400+
+// identifying the first bad field.  wherePrep may be -2 (special "unset
+// prep" used by some location relations); other positions allow -1.
 int cSyntacticRelationGroup::sanityCheck(int maxSourcePosition, int maxObjectIndex)
 {
 	if (where < 0 || where >= maxSourcePosition) return 400;
@@ -615,6 +740,10 @@ int cSyntacticRelationGroup::sanityCheck(int maxSourcePosition, int maxObjectInd
 	return 0;
 }
 
+// Unpack the packed flag word written by convertFlags.  The first three
+// bits (inSecondaryQuote / inPrimaryQuote / isQuestion) are discarded —
+// write() always persists them as 0.  The top 6 questionFlags bits are
+// never unpacked.
 void cSyntacticRelationGroup::convertToFlags(__int64 flags)
 {
 	/*bool inSecondaryQuote=flags&1; */flags >>= 1;
@@ -646,6 +775,8 @@ void cSyntacticRelationGroup::convertToFlags(__int64 flags)
 	// 6 questionFlags bits (see convertFlags)
 }
 
+// Pack gendered/location/tense/skip/changeStateAdverb plus the three
+// quote/question bools and questionFlags<<6 into the on-disk flag word.
 __int64 cSyntacticRelationGroup::convertFlags(bool isQuestion, bool inPrimaryQuote, bool inSecondaryQuote, __int64 questionFlags)
 {
 	__int64 flags = (questionFlags << 6);
@@ -678,6 +809,10 @@ __int64 cSyntacticRelationGroup::convertFlags(bool isQuestion, bool inPrimaryQuo
 	return flags;
 }
 
+// Serialize in the same field order as the buffer ctor.  Always writes
+// convertFlags(false,false,false,0); questions are recovered from
+// cWordMatch::flagInQuestion, not from these bits.  Returns false if the
+// copy helper ran out of room.
 bool cSyntacticRelationGroup::write(void *buffer, int &w, int limit)
 {
 	if (!copy(buffer, where, w, limit)) return false;
@@ -715,6 +850,10 @@ bool cSyntacticRelationGroup::write(void *buffer, int &w, int limit)
 	return true;
 }
 
+// Remap a source position through sourceIndexMap (used when a child
+// source is copied into a question).  originalVal < 0 is copied as-is
+// (values < -1 are logged as illegal).  Unmapped positives are left
+// unchanged and logged.  Returns true only on a successful map hit.
 bool cSyntacticRelationGroup::adjustValue(int& val, int originalVal, wstring valString, unordered_map <int, int>& sourceIndexMap)
 {
 	if (originalVal < 0)
@@ -739,6 +878,9 @@ bool cSyntacticRelationGroup::adjustValue(int& val, int originalVal, wstring val
 	return false;
 }
 
+// Copy srg with every source position rewritten through sourceIndexMap.
+// o is forced to -1; timeInfo, description, tft.presType, changeStateAdverb,
+// speakerContinuation and the nonSemantic* flags are not copied.
 cSyntacticRelationGroup::cSyntacticRelationGroup(cSyntacticRelationGroup *srg, unordered_map <int, int> &sourceIndexMap)
 {
 	o = -1;

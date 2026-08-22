@@ -856,6 +856,101 @@ are out of scope.
 
 ---
 
+## Wave — agreement and syntactic relations (`agreement.cpp`,
+`syntacticRelations.cpp`, `syntacticRelationGroups.cpp`,
+`syntacticRelations.h`)
+
+- **[HIGH] agreement.cpp:4342 — `eliminateLoserPatterns` writes past `minSeparatorCost`** —
+  `reserve` then `[I]=` on a size-0 vector is UB every winnow. Use `resize`.
+
+- **[HIGH] agreement.cpp:1382 — `reduceCostIfRestate` discards its result** —
+  `relationCost` is passed by value, so restated subjects keep the full
+  relation cost. Take `int&`.
+
+- **[HIGH] agreement.cpp:1367 — `disagreementWithAmbiguousTense` indexes `tagSet[-1]`** —
+  `mainVerbTag` can be -1 on the question path. Guard with `mainVerbTag >= 0`.
+
+- **[HIGH] agreement.cpp:651 — `markChildren` skips `allLocations[0]` after reassess** —
+  `lc = 0` then the `for` increment does `lc++`. Set `lc = (unsigned)-1` or
+  use a while-loop.
+
+- **[HIGH] agreement.cpp:1618 / 3949 — BNC helpers bound-check PEMA, then index `m[]`** —
+  Compare against `m.size()`.
+
+- **[HIGH] agreement.cpp:2151 / 2354 / 2093 — unbound `m[where+1]` reads** —
+  sentence-final `his`/`her`, verb, or `her own/best` OOBs. Require
+  `+ 1 < m.size()`.
+
+- **[HIGH] agreement.cpp:1773 — `setSecondaryCosts` dereferences a possibly-null `pm`** —
+  `pma.find` can return nullptr. Skip the cascade when `pm == nullptr`.
+
+- **[HIGH] syntacticRelations.cpp:615 — `checkAmbiguousVerbTense` `&&`/`||` mix** —
+  `(A && B) || C` rewrites `sense` when `masterVerbWord` is NULL even if
+  the incoming sense is not PRESENT/PAST. Parenthesize as `A && (B || C)`.
+
+- **[HIGH] syntacticRelations.cpp:1607 — `evaluateSubjects` forward scan is not gated on empty** —
+  `empty && A || B` runs the “did he?” scan even when subjects already
+  exist, and `m[where+maxLen]` is unbound. Write `empty && (A || B)` and
+  bound `where + maxLen + 1`.
+
+- **[HIGH] syntacticRelations.cpp:3325 — `testSyntacticRelations` reads `m[end]` when `end==m.size()`** —
+  Test `end < m.size()` first.
+
+- **[HIGH] syntacticRelationGroups.cpp:701 — cache ctor wipes `skip` / `changeStateAdverb` after unpack** —
+  those bits never survive a source-cache round-trip. Drop the two
+  assignments, or persist the real flags (`write()` currently packs
+  `convertFlags(false,false,false,0)`).
+
+- **[MEDIUM] agreement.cpp:1114 — `substitutePrepObjectSomeOf` skips N_AGREE at index 0** —
+  `findTagConstrained(...) > 0` should be `>= 0`.
+
+- **[MEDIUM] agreement.cpp:465 — `compareCost` multiplies three ints** —
+  overflows for long spans. Prefer `int64_t`.
+
+- **[MEDIUM] agreement.cpp:735 — `getAllLocations` returns `minCost` as unsigned** —
+  a negative PMA cost wraps to a huge value. Return `int`.
+
+- **[MEDIUM] agreement.cpp:210 — `assessCost` `wsprintf` into 1024 wchars** —
+  unbounded pattern names can overflow. Use `_snwprintf`.
+
+- **[MEDIUM] agreement.cpp:2911 — `longSubjectBindingMismatch` else-if never fires** —
+  integer division makes the last-noun frequency bias dead.
+
+- **[MEDIUM] syntacticRelations.cpp:1476 — `findPrepRole` does not honor its -1 contract** —
+  body does `m[whereLastPrep].relPrep` immediately. Return -1 up front.
+
+- **[MEDIUM] syntacticRelations.cpp:2946 — `setRole` RE_OBJECT walk can scan the whole document** —
+  `|| !isEOS` keeps the loop alive. Cap at `position-10`.
+
+- **[MEDIUM] syntacticRelations.cpp:2499 — Watson special-case skips `getObject()>=0`** —
+  `getObject()==-1` indexes `objects[-1]`.
+
+- **[MEDIUM] syntacticRelations.cpp:1867 / 1173 — unbound `m[sourcePosition+1]` / `m[wp+1]`** —
+  Require a size check; `markPrepositionalObjects` also uses `wp+1` when
+  `pTag<0`.
+
+- **[MEDIUM] syntacticRelations.cpp:317 / .h:48 — `cWordGroup` header vs `.cpp` type mismatch** —
+  header has `vector<wstring>`; `#ifdef ACCUMULATE_GROUPS` body uses
+  `tIWMM`. Enabling the ifdef will not compile. Also non-default ctors
+  leave `index`/`otherFlag` uninitialized.
+
+- **[MEDIUM] syntacticRelationGroups.cpp:886 / 609 / 839 / 380 — SRG copy/cache/adverb state** —
+  remapping ctor drops tense/QA/adverb fields; live ctor leaves
+  `tft.presType` uninitialized; `getWSAdverb(true)` has no time-flag
+  filter.
+
+- **[LOW] agreement.cpp:3047 / 3090 — debug logs read `m[begin-1]` / `m[end]` unbound** —
+  Gate the logs.
+
+- **[LOW] syntacticRelations.cpp:152 — `getRelStr` maps overflow types to the wrong `*1*` label** —
+  Use `/ VERB_HISTORY` for the generation.
+
+- **[NIT] agreement.cpp:2398 — here/there/home log has an extra `%s` argument** —
+
+- **[NIT] syntacticRelationGroups.cpp:167 — `checkInsertPrep` compares signed `wp` to `m.size()`** —
+
+---
+
 ## Later waves
 
-*(agreement/syntax and speaker resolution still in progress)*
+*(speaker resolution still in progress)*
