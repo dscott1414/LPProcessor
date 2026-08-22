@@ -1,3 +1,58 @@
+/*
+	resolveMetaGroupObjects.cpp - coreference for META_GROUP_OBJECT_CLASS
+	mentions: "the other man", "the two", "the latter", "my friend", "another".
+
+	Overview:
+		A meta-group is an underspecified definite that points at a member
+		(or pair) of the current speaker group rather than introducing a new
+		entity. ownerWhere encodes how it was built: >=0 is a real possessor
+		("his companion"); -1 is a bare word-order/friend head; -2-N is
+		wordOrderWords[N] as modifier or head ("other"=-2, "another"=-3,
+		"second"=-4, "first"=-5, "former"=-7, "latter"=-8, "two"=-11).
+		resolveMetaGroupObject() is the dispatcher: copular identity, "the
+		second of the two men", then resolveMetaGroupSpecificObject() which
+		fans out to former/latter, numbered, specified-other, generic-other,
+		two-person, joiner, and association ("X's friend") helpers.
+
+	Pipeline position:
+		Called from resolveObject() (resolveObjects.cpp) when the object's
+		class is META_GROUP_OBJECT_CLASS, during both speaker-group
+		identification and later full resolution. Also from
+		resolveFirstSecondMetaGroupObject for quoted "my/your friend".
+
+	Key entry points:
+		- resolveMetaGroupObject() - class dispatcher
+		- resolveMetaGroupSpecificObject() - ownerWhere-based fan-out
+		- resolveMetaGroupByAssociation() - "X's friend" via speaker groups
+		- resolveMetaGroupGenericOther() - "the other" / "the other man"
+		- resolveMetaGroupTwo() / resolveMetaGroupOne() - "the two" / "the one"
+		- resolveMetaGroupFormerLatter() - former/latter against the previous S1
+		- resolveMetaGroupSpecifiedOther() - "the other crook" minus the last
+		  mention of the plural
+
+	Key data structures / globals:
+		- cObject::ownerWhere / wordOrderWords - encoding table (source.h)
+		- speakerGroups[].speakers / groupedSpeakers / groups / povSpeakers /
+		  observers - the candidate pools
+		- localObjects - salience window; includeInSalience gates quote vs
+		  narration
+		- previousSpeakers / beforePreviousSpeakers / previousPrimaryQuote
+
+	Dependencies:
+		Lappin & Leass filters and resolveObject() (may recurse for the
+		"of" complement). Modjeska other-anaphora notes are in the
+		resolveMetaGroupSpecificObject comment block.
+
+	Notes / gotchas:
+		- latestOwnerWhere is overloaded: a source position, or a negative
+		  word-order code. Tests like `latestOwnerWhere == -2` are codes,
+		  not "missing owner".
+		- resolveMetaGroupFormerLatter returns false when it *did* match
+		  (inverted vs the usual true-on-success convention).
+		- MAX_WORD_ORDER_SEARCH (200 tokens) caps backward scans.
+		- getPOVSpeakers / getCurrentSpeakers are also used by
+		  resolveMetaGroupTwo before speaker groups are finalized.
+*/
 #include <windows.h>
 #include "Winhttp.h"
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
@@ -11,6 +66,9 @@
 // meta group object types:
 // example:        latestOwnerWhere
 // another ally    -3                 metagroup word at principalWhere, with a wordOrder word (another) as modifier
+// "another ally": collect currentSpeakerGroup speakers whose first mention
+// in this group is after 'where'. Replaces the meta-group object if exactly
+// one match. Returns true if any candidate was pushed.
 bool cSource::resolveMetaGroupWordOrderedFutureObject(int where, vector <cOM>& objectMatches)
 {
 	LFS
@@ -26,6 +84,10 @@ bool cSource::resolveMetaGroupWordOrderedFutureObject(int where, vector <cOM>& o
 	return objectMatches.size() > 0;
 }
 
+// Bind "the former" (latestOwnerWhere==-7) or "the latter" (-8) to the
+// previous __S1's subject vs its object/prep-object, but only when both
+// sit in the current speaker group. Returns false when a match was written
+// (inverted: callers treat false as "done").
 bool cSource::resolveMetaGroupFormerLatter(int where, int previousS1, int latestOwnerWhere, vector <cOM>& objectMatches)
 {
 	LFS
@@ -88,6 +150,10 @@ bool cSource::resolveMetaGroupFormerLatter(int where, int previousS1, int latest
 // wchar_t *wordOrderWords[]={L"other",L"another",L"second",L"first",L"third",L"former",L"latter",L"that",L"this",L"two",L"three",NULL};
 //                            -2       -3         -4        -5       -6       -7        -8        -9      -10     -11    -12
 // the latter, the first
+// "the first/second/third/former/latter" against a plural or MPLURAL
+// mention in the previous two sentences. Temporarily stashes lsiOffset on
+// each local object (cleared before return). Always returns false; matches
+// are left in objectMatches for the caller to consume.
 bool cSource::resolveMetaGroupFirstSecondThirdWordOrderedObject(int where, int lastBeginS1, vector <cOM>& objectMatches, int latestOwnerWhere)
 {
 	LFS
@@ -149,6 +215,10 @@ bool cSource::resolveMetaGroupFirstSecondThirdWordOrderedObject(int where, int l
 	return false;
 }
 
+// Bare plural meta-group ("the two men" with latestOwnerWhere>=-1): dump
+// current groupedSpeakers (or speakers) into objectMatches. In quotes,
+// refuses if any of those speakers is already a previousSpeaker. Returns
+// false when latestOwnerWhere < -1 (word-order code, not a real owner).
 bool cSource::resolveMetaGroupPlural(int latestOwnerWhere, bool inQuote, vector <cOM>& objectMatches)
 {
 	LFS
@@ -174,6 +244,9 @@ bool cSource::resolveMetaGroupPlural(int latestOwnerWhere, bool inQuote, vector 
 // the other crook
 // not used for generic others, like 'the other man'
 // not used for ownership, like 'the other's face'
+// "the other crook" (not generic "the other man", not "the other's face"):
+// find a same-head plural in localObjects, then subtract the most recent
+// same-quote mention of any of its members. latestOwnerWhere must be -2.
 bool cSource::resolveMetaGroupSpecifiedOther(int where, int latestOwnerWhere, bool inQuote, vector <cOM>& objectMatches)
 {
 	LFS
@@ -225,6 +298,10 @@ bool cSource::resolveMetaGroupSpecifiedOther(int where, int latestOwnerWhere, bo
 	return false;
 }
 
+// Support for "one or the other": if position I is the word "one" whose
+// matches omit some speaker other than latestObject, return that omitted
+// speaker; or if a sibling token in the same object span is "one", return
+// m[I].getObject(). Else -1.
 int cSource::checkIfOne(int I, int latestObject, set <int>* speakers)
 {
 	LFS
@@ -243,6 +320,9 @@ int cSource::checkIfOne(int I, int latestObject, set <int>* speakers)
 	return -1;
 }
 
+// If objectMatches is still empty, pick the most recently focused speaker
+// in sg of the same gender as o, excluding latestObject, o itself, and POV.
+// No-op when latestObject is the POV or gender does not match latestObject.
 void cSource::resolveMetaGroupMatchLatestSpeakerMatchingGender(const int where, const int o, int latestObjectWhere, vector <cSpeakerGroup>::iterator sg, const int latestObject, vector <cOM>& objectMatches)
 {
 	if (!objectMatches.empty())
@@ -279,6 +359,8 @@ void cSource::resolveMetaGroupMatchLatestSpeakerMatchingGender(const int where, 
 	}
 }
 
+// "she missed the other" with exactly two speakers: if the subject is one
+// of them, the other speaker is the match (Lappin & Leass subject/object).
 void cSource::resolveMetaGroupGenericOtherTwoSpeaker(const int where, vector <cSpeakerGroup>::iterator sg, vector <cOM>& objectMatches)
 {
 	// if she[cook] missed the other[tuppence] (29868:match even though POV)
@@ -297,6 +379,9 @@ void cSource::resolveMetaGroupGenericOtherTwoSpeaker(const int where, vector <cS
 	}
 }
 
+// Narration "the other" with 2 (or 3 including o) speakers: push every
+// non-observer speaker except latestObject and o. Returns true if this
+// rule applied (caller then stops the backward scan).
 bool cSource::resolveMetaGroupGenericObserver(const int where, bool inQuote, int latestOwnerWhere, int latestObject, int o, int latestObjectWhere, vector <cSpeakerGroup>::iterator sg, vector <cOM>& objectMatches)
 {
 	// speaker group:
@@ -324,6 +409,8 @@ bool cSource::resolveMetaGroupGenericObserver(const int where, bool inQuote, int
 	return false;
 }
 
+// If latestObject sits in one of sg->groups, push the other same-gender
+// members of that subgroup (except o). Skips PRIMARY_SPEAKER_ROLE.
 void cSource::resolveMetaGroupGenericLatestSubGroupedSpeaker(const int where, int latestObject, int o, int latestObjectWhere, vector <cSpeakerGroup>::iterator sg, vector <cOM>& objectMatches)
 {
 	if (objectMatches.empty() && !(m[where].objectRole & PRIMARY_SPEAKER_ROLE))
@@ -349,6 +436,8 @@ void cSource::resolveMetaGroupGenericLatestSubGroupedSpeaker(const int where, in
 	}
 }
 
+// If latestObject is in sg->groupedSpeakers, push the other grouped
+// speakers that match o's gender.
 void cSource::resolveMetaGroupGenericLatestGroupedSpeaker(const int where, int latestObject, int o, int latestObjectWhere, vector <cSpeakerGroup>::iterator sg, vector <cOM>& objectMatches)
 {
 	if (sg->groupedSpeakers.find(latestObject) != sg->groupedSpeakers.end())
@@ -365,6 +454,9 @@ void cSource::resolveMetaGroupGenericLatestGroupedSpeaker(const int where, int l
 }
 
 
+// "one or the other" / "one to the other" within 30 tokens (10 if the
+// scan crossed a quote). Uses checkIfOne on latestObjectWhere and, failing
+// that, on its subject. Returns true when a match was pushed.
 bool cSource::resolveMetaGroupGenericOtherOne(const int where, int latestObject, int wordsTraversed, int latestObjectWhere, bool crossQuotes, set <int>* &speakers, vector <cOM>& objectMatches)
 {
 	// one or the other // one to the other / one side
@@ -385,6 +477,11 @@ bool cSource::resolveMetaGroupGenericOtherOne(const int where, int latestObject,
 	return false;
 }
 
+// Walk backward up to MAX_WORD_ORDER_SEARCH tokens (same quote state) and
+// try one / grouped / subgroup / observer / two-speaker / gender-of-latest
+// rules against each gendered mention. Stops at the first hit. Returns true
+// always (even if objectMatches stays empty) so the caller treats the scan
+// as having run.
 bool cSource::resolveMetaGroupGenericBackwardsMatch(const int where, int latestOwnerWhere, bool inQuote, vector <cSpeakerGroup>::iterator csg, vector <cOM>& objectMatches)
 {
 	// go backwards from object and match
@@ -427,6 +524,9 @@ bool cSource::resolveMetaGroupGenericBackwardsMatch(const int where, int latestO
 	return true;
 }
 
+// If every current match is in the previous primary quote's audience, keep
+// only that audience; if more than one remains, further restrict to the
+// speaker of the quote before that. previousPrimaryQuote must be >= 0.
 void cSource::limitObjectMatchesToAudienceAndPreviousSpeakers(int where, vector <cSpeakerGroup>::iterator csg, vector <cOM>& objectMatches)
 {
 	bool allIn, oneIn;
@@ -456,6 +556,10 @@ void cSource::limitObjectMatchesToAudienceAndPreviousSpeakers(int where, vector 
 			objectString(objectMatches, tmpstr3, true).c_str());
 }
 
+// Seed objectMatches with physically-present local speakers if there are
+// at least two, else all local speakers, else the whole speaker set. Then
+// drop the previous primary speaker (if this is PRIMARY_SPEAKER_ROLE),
+// drop o itself, and drop POV when more than one remains.
 void cSource::resolveMetaGroupGenericOtherGetObjectMatchesPreferLocalPhysicallyPresentSpeakers(int where, vector <cSpeakerGroup>::iterator csg, vector <cOM>& objectMatches)
 {
 	// can't look back to other sentences because we could skip back an odd # of sentences.  Much more reliable to match every speaker, then let other routines sort it out.
@@ -484,6 +588,10 @@ void cSource::resolveMetaGroupGenericOtherGetObjectMatchesPreferLocalPhysicallyP
 		subtract(objectMatches, csg->povSpeakers);
 }
 
+// Generic "the other" / "the other man" (not a body part, not an ordinal).
+// Prefers audience-immediately-after-quote, then POV override, then local
+// physically-present speakers, then the backward scan. Returns true when
+// objectMatches should be treated as final.
 bool cSource::resolveMetaGroupGenericOther(int where, int latestOwnerWhere, bool inQuote, vector <cOM>& objectMatches)
 {
 	LFS
@@ -545,6 +653,9 @@ bool cSource::resolveMetaGroupGenericOther(int where, int latestOwnerWhere, bool
 	return resolveMetaGroupGenericBackwardsMatch(where, latestOwnerWhere, inQuote, csg, objectMatches);
 }
 
+// Match this meta-group against earlier META_GROUP entries in localObjects
+// of the same gender/plurality. onlyFirst restricts to the "second"<-"first"
+// pairing (ownerWhere -4 vs -5). Returns true if objectMatches is non-empty.
 // if no grouped speakers, is there a meta
 // look for matching metagroup object in localObjects - does "his companion" match "the second man"?
 // if this is a "second" was there a "first"?
@@ -578,6 +689,10 @@ bool cSource::resolveMetaGroupInLocalObjects(int where, int o, vector <cOM>& obj
 	return objectMatches.size() > 0;
 }
 
+// Narration only: if the current speaker group has exactly one non-NAME
+// speaker, resolve the meta-group to that entity (or, if the non-name *is*
+// this object and there are two speakers, to the other one). Occupation +
+// friendForm is refused. May rewrite latestOwnerWhere.
 // a metagroup name may be matched by another metagroup name
 bool cSource::resolveMetaGroupNonNameObject(int where, bool inQuote, vector <cOM>& objectMatches, int& latestOwnerWhere)
 {
@@ -631,6 +746,10 @@ bool cSource::resolveMetaGroupNonNameObject(int where, bool inQuote, vector <cOM
 	return false;
 }
 
+// Resolve "the two" / "the two men" / "couple" (ownerWhere -11, or -2/-1
+// with head "two"/"couple"). Searches current then previous speaker groups
+// for a size-2 groupedSpeakers or cGroup of matching gender, excluding POV
+// on transitions. Always returns true; success is objectMatches.size()>0.
 // the two men OR the other two OR the two
 bool cSource::resolveMetaGroupTwo(int where, bool inQuote, vector <cOM>& objectMatches)
 {
@@ -824,6 +943,10 @@ bool cSource::resolveMetaGroupTwo(int where, bool inQuote, vector <cOM>& objectM
 	return true;
 }
 
+// "the one" / "the big one" (not "someone" / "twenty one"): boost recent
+// local objects of matching gender that are not the quote's speaker or
+// embedded-story audience, then set chooseBest so resolveObject will run
+// chooseBest() on local focus. Returns true (always, unless ruled out).
 // the one man OR the big one
 // NOT this one man
 // in secondary quotes, inPrimaryQuote=false
@@ -880,6 +1003,9 @@ bool cSource::resolveMetaGroupOne(int where, bool inPrimaryQuote, vector <cOM>& 
 	return true;
 }
 
+// "this" (ownerWhere -10) as a group-joiner: copy matches from an earlier
+// joiner meta-group in the same speaker group (local focus first, then a
+// backward scan). Replaces the object if exactly one match.
 bool cSource::resolveMetaGroupJoiner(int where, vector <cOM>& objectMatches)
 {
 	LFS
@@ -907,6 +1033,10 @@ bool cSource::resolveMetaGroupJoiner(int where, vector <cOM>& objectMatches)
 	return false;
 }
 
+// Fill povSpeakers: established groups copy sg.povSpeakers; otherwise take
+// the unique physically-present definite speaker, or the latest out-of-quote
+// povInSpeakerGroups hit in this section. Clears the set if more than one
+// candidate survives.
 void cSource::getPOVSpeakers(set <int>& povSpeakers)
 {
 	LFS
@@ -958,6 +1088,10 @@ void cSource::getPOVSpeakers(set <int>& povSpeakers)
 		}
 }
 
+// When speaker groups are not yet final, infer POV from srg->whereSubject
+// if that subject is physically present later than 'where'. If groups *are*
+// established, the speaker who survives into the next group becomes POV;
+// disjoint groups set nonPOVSpeakerOverride.
 void cSource::getPOVSpeakers2(const int where, vector <cSyntacticRelationGroup>::iterator srg, set <int>& povSpeakers, bool& nonPOVSpeakerOverride)
 {
 	vector <cLocalFocus>::iterator lsi;
@@ -1017,6 +1151,10 @@ void cSource::getPOVSpeakers2(const int where, vector <cSyntacticRelationGroup>:
 	}
 }
 
+// Approximate the live speaker set before speakerGroups are finalized:
+// current (or previous) sg.speakers plus tempSpeakerGroup and
+// nextNarrationSubjects. Also counts male/female for later gender filters
+// (continues below the first block).
 void cSource::getCurrentSpeakers(set <int>& speakers, set <int>& povSpeakers)
 {
 	LFS
@@ -1070,6 +1208,9 @@ void cSource::getCurrentSpeakers(set <int>& speakers, set <int>& povSpeakers)
 // he[german,boris] indicated the place he[german] had been occupying at the head[head] of the table[table] . 
 // the Russian[boris] demurred , but the other insisted .
 // if the speakerGroup contains 2 or 3 (and the 3rd one is the generic other)
+// Last-resort "the other": among current speakers excluding POV and o,
+// push the *second*-most-recent mention (not the latest). Always returns
+// false so the caller does not treat this as a final unique resolution.
 bool cSource::resolveMetaGroupOther(int where, vector <cOM>& objectMatches)
 {
 	LFS
@@ -1107,6 +1248,12 @@ bool cSource::resolveMetaGroupOther(int where, vector <cOM>& objectMatches)
 	return false;
 }
 
+// ownerWhere-based fan-out for a gendered meta-group. Recurses one speaker
+// group back if currentSpeakerGroup is past the end. Negative ownerWhere
+// codes dispatch to joiner / another / plural / first-second-third / two /
+// specified-other / generic-other; a real owner (>=0) goes to association.
+// Sets chooseFromLocalFocus for "the one". Returns true when objectMatches
+// should be treated as final.
 // get position of owner object before and nearest the principalWhere of the object.  If not found, return false.
 // find latest speakerGroup containing any of the speakers of latestOwnerWhere.
 // if that speakerGroup also contains the rest of the speakers of latestOwnerWhere,
@@ -1156,6 +1303,7 @@ bool cSource::resolveMetaGroupSpecificObject(int where, bool inPrimaryQuote, boo
 		if (latestOwnerWhere >= 0)
 		{
 			bool allIn = false, oneIn = false;
+			// min(1, size)+1 is 1 or 2, not "one more than the owner set".
 			unsigned int minimumSize = min(1, m[latestOwnerWhere].objectMatches.size()) + 1;  // group must have at least one more member than the owner
 			for (vector < cSpeakerGroup::cGroup >::iterator gi = tempSpeakerGroup.groups.begin(), giEnd = tempSpeakerGroup.groups.end(); gi != giEnd; gi++)
 				if (intersect(latestOwnerWhere, gi->objects, allIn, oneIn) && allIn && minimumSize <= gi->objects.size())
@@ -1263,6 +1411,8 @@ bool cSource::resolveMetaGroupSpecificObject(int where, bool inPrimaryQuote, boo
 	return false;
 }
 
+// Copy each objects-index in objs onto m[where].objectMatches at
+// SALIENCE_THRESHOLD. Used to temporarily fill 1st/2nd-person owners.
 void cSource::setMatched(int where, vector <int>& objs)
 {
 	LFS
@@ -1270,6 +1420,9 @@ void cSource::setMatched(int where, vector <int>& objs)
 			m[where].objectMatches.push_back(cOM(objs[I], SALIENCE_THRESHOLD));
 }
 
+// True if every owner-side entity is in 'speakers', the meta-group object
+// itself is not, and the group is larger than the owner set. rejectSG may
+// still force false (and clears atLeastOneInSpeakerGroup).
 // Is all of ownerWhere in the speakerGroup?
 // Also skip (return false) for any speakerGroups containing the original.
 //  example:
@@ -1295,6 +1448,8 @@ bool cSource::isSubsetOfSpeakers(int where, int ownerWhere, set <int>& speakers,
 	return (allInSpeakerGroup && !selfInSpeakerGroup && speakers.size() > numOwnerSpeakers);
 }
 
+// True if every speaker-not-in-owner is the current quote speaker (in quote)
+// or a POV speaker (in narration) ? i.e. the leftover set is uninformative.
 // A=group of other objects other than ownerWhere in the speakerGroup
 // if inPrimaryQuote, is the current speaker (from lastOpeningPrimaryQuote) the only object in A?  If so reject.
 // if !inPrimaryQuote, is the current povSpeaker group matching A?  If so, reject.
@@ -1313,6 +1468,10 @@ bool cSource::rejectSG(int ownerWhere, set <int>& speakers, bool inPrimaryQuote)
 	return true;
 }
 
+// For each speaker in sg not in the owner set: skip observers (unless
+// friendOfObserver), skip gender mismatches, skip anyone who later appears
+// in a conflicting groupedSpeakers set; otherwise push them. Increments
+// numInSpeakers for owner-side hits. Returns false to abort association.
 bool cSource::resolveMetaGroupByAssociationAddSpeakerIfLatestOwnerWhereNotObserverSameGender(const int where, const int sg, vector <cOM>& objectMatches, 
 	const int latestOwnerWhere, const bool restrictSGToGrouped, const bool friendOfObserver, set <int>*speakers,
 	int &numInSpeakers)
@@ -1369,6 +1528,9 @@ bool cSource::resolveMetaGroupByAssociationAddSpeakerIfLatestOwnerWhereNotObserv
 	return true;
 }
 
+// Find the nearest speaker group that contains the owner and at least one
+// extra member. Prefers groupedSpeakers over speakers, then a gender-flagged
+// earlier group. Writes sg and restrictSGToGrouped. Returns false if none.
 bool cSource::findMinimallyAssociatedSpeakerGroup(const int where, const int latestOwnerWhere, const bool inPrimaryQuote, bool & restrictSGToGrouped, int &sg)
 {
 	int saveCSG = -1;
@@ -1454,6 +1616,10 @@ bool cSource::findMinimallyAssociatedSpeakerGroup(const int where, const int lat
 	return true;
 }
 
+// If the owner is an unresolved I/you, temporarily copy previousSpeakers
+// or beforePreviousSpeakers onto m[latestOwnerWhere].objectMatches (which
+// link is flipped when previousPrimaryQuote has a forward quote-link).
+// Returns true if the caller must clear those matches afterwards.
 bool cSource::temporarilyFill12PersonLatestOwnerWhere(const int where, const int latestOwnerWhere)
 {
 	bool eraseOwnerWhereMatches = false;
@@ -1477,6 +1643,10 @@ bool cSource::temporarilyFill12PersonLatestOwnerWhere(const int where, const int
 	return eraseOwnerWhereMatches;
 }
 
+// "X's friend" / "friend of X": find the smallest speaker group containing
+// X, then take the other same-gender members as the friend. In-quote hails
+// further restrict to previousSpeakers. Replaces the meta-group if unique.
+// latestOwnerWhere is a source position (>=0), not a word-order code.
 bool cSource::resolveMetaGroupByAssociation(int where, bool inPrimaryQuote, vector <cOM>& objectMatches, int latestOwnerWhere)
 {
 	LFS
@@ -1570,6 +1740,12 @@ bool cSource::resolveMetaGroupByAssociation(int where, bool inPrimaryQuote, vect
 	return true;
 }
 
+// META_GROUP dispatcher from resolveObject(). Skips "this"/"that" and
+// "no ...". Handles copular identity, "the second of the two men", then
+// resolveMetaGroupSpecificObject; on failure may fall through to
+// resolveGenderedObject (flagResolveMetaGroupByGender). Unresolvable
+// introductions can addNewSpeaker / addNewNumberedSpeakers. Returns true
+// if objectMatches is non-empty.
 bool cSource::resolveMetaGroupObject(int where, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb,
 	bool definitelySpeaker, bool resolveForSpeaker, bool avoidCurrentSpeaker, bool& mixedPlurality, bool limitTwo, vector <cOM>& objectMatches, bool& chooseFromLocalFocus)
 {

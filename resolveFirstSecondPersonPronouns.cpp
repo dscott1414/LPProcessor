@@ -1,3 +1,56 @@
+/*
+	resolveFirstSecondPersonPronouns.cpp - bind I/you/we/us (and quoted
+	meta-group "my friend") to the current speaker and audience.
+
+	Overview:
+		Runs after speaker groups and quote speakers have been assigned.
+		resolveFirstSecondPersonPronouns() walks m once, maintaining
+		inPrimaryQuote / inSecondaryQuote from the “ ” ‘ ’ tokens, and for
+		each first/second-person pronoun (or hail, or "my/your friend"
+		meta-group) copies the opening-quote's objectMatches (speaker) or
+		audienceObjectMatches (addressee) onto the pronoun. Unquoted "we/us"
+		takes the current speaker group's groupedSpeakers (if the narrator
+		is in it) or all speakers. Secondary (embedded) quotes are resolved
+		from secondaryQuotesResolutions quadruples filled by resolveSpeakers.
+
+	Pipeline position:
+		Stage 6 (end) / stage 7 companion. Called from processSource() after
+		resolveSpeakers and before identifyConversations. Also from
+		questionAnswering and getWikipedia. resolveObject() may recurse back
+		into this file via resolveFirstSecondPersonPronoun for owners.
+
+	Key entry points:
+		- resolveFirstSecondPersonPronouns() - document walk
+		- resolveFirstSecondPersonPronoun() - one quoted I/you/we/he
+		- matchObjectToSpeakers() - FIRST/SECOND inflection -> speaker/audience
+		- resolveUnquotedFirstSecondPronoun() - narrative we/us
+		- resolveFirstSecondMetaGroupObject() - "my friend" / "your friend"
+		- processSecondaryQuotes() - embedded-quote speaker/audience
+		- handleQuotes() - update quote state and speaker-match counters
+
+	Key data structures / globals:
+		- m[].objectMatches / audienceObjectMatches - written here
+		- speakerGroups / currentSpeakerGroup / currentEmbeddedSpeakerGroup
+		- lastOpeningPrimaryQuoteIM / lastOpeningSecondaryQuoteIM - the
+		  opening-quote tokens whose matches are the current speaker/audience
+		- secondaryQuotesResolutions - flat [open, close, speaker, audience]*
+		- masterSpeakerList - ranked unique speakers, filled at the end
+
+	Dependencies:
+		Speaker groups and quote links from identifySpeakerGroups /
+		resolveSpeakers. Uses flagDefiniteResolveSpeakers and related
+		quote-only flag bits (low 32 of cWordMatch::flags).
+
+	Notes / gotchas:
+		- handleQuotes treats “/” as primary and ‘/’ as secondary; these are
+		  the tokenizer's quote characters, not ASCII " / '.
+		- resolveFirstSecondPersonPronoun erases an iterator then immediately
+		  reads oi->object (use-after-invalidation).
+		- flagObjectResolved is set at the start of matchObjectToSpeakers,
+		  so a later pass will skip the position even if no speaker matched.
+		- In-quote vs narration is mutually exclusive here: entering a
+		  secondary quote clears inPrimaryQuote.
+*/
 #include <windows.h>
 #include "Winhttp.h"
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
@@ -7,6 +60,8 @@
 #include "source.h"
 #include "profile.h"
 
+// Append speaker s (objects index) to m[where].objectMatches with salience sf,
+// set the one-token object span, and record a location on objects[s].
 void cSource::pushSpeaker(int where, int s, int sf, const wchar_t* fromWhere)
 {
 	LFS
@@ -20,6 +75,11 @@ void cSource::pushSpeaker(int where, int s, int sf, const wchar_t* fromWhere)
 		lplog(LOG_RESOLUTION, L"%06d:FPP %s of %s", where, fromWhere, objectString(s, tmpstr, true).c_str());
 }
 
+// Bind the pronoun at mI to currentSpeaker (I/me) and/or previousSpeaker
+// (you/your), respecting plurality. FIRST|SECOND ("we/us/our") takes both,
+// plus leftover embedded-story speakers when the quote is a shared-experience
+// flashback. Sets flagObjectResolved immediately (even if nothing is pushed).
+// Returns false if already resolved (secondary speaker); otherwise true.
 bool cSource::matchObjectToSpeakers(int mI, vector <cOM>& currentSpeaker, vector <cOM>& previousSpeaker, int inflectionFlags, unsigned __int64 quoteFlags, int lastEmbeddedStoryBegin)
 {
 	LFS
@@ -65,6 +125,9 @@ bool cSource::matchObjectToSpeakers(int mI, vector <cOM>& currentSpeaker, vector
 }
 
 // THIRD_PERSON cannot involve either speaker.
+// Drop any objectMatches at mI that are in 'speakers' or are a BODY_OBJECT
+// owned by one of them. Third-person "he/she/they" uses this to exclude the
+// current speaker/audience. No-op when there is only one match.
 void cSource::removeSpeakers(int mI, vector <cOM>& speakers)
 {
 	LFS
@@ -87,6 +150,8 @@ void cSource::removeSpeakers(int mI, vector <cOM>& speakers)
 	}
 }
 
+// Same as the vector overload, but the exclusion set is a speaker-group
+// set<int>. Unlike the vector version this does not bail out at size<=1.
 void cSource::removeSpeakers(int mI, set <int>& speakers)
 {
 	LFS
@@ -108,6 +173,12 @@ void cSource::removeSpeakers(int mI, set <int>& speakers)
 		}
 }
 
+// Resolve one quoted 1st/2nd/3rd-person pronoun (or hail) at 'where'.
+// flags are the opening-quote cWordMatch::flags (definite-speaker /
+// specified-audience bits). currentSpeaker / previousSpeaker are that
+// quote's objectMatches / audienceObjectMatches. For "you are a young
+// couple" copies the subject's speaker onto the IS_OBJECT. May call
+// preferSubgroupMatch when the speaker group can be split.
 void cSource::resolveFirstSecondPersonPronoun(int where, unsigned __int64 flags, int lastEmbeddedStoryBegin, vector <cOM>& currentSpeaker, vector <cOM>& previousSpeaker)
 {
 	LFS
@@ -121,6 +192,7 @@ void cSource::resolveFirstSecondPersonPronoun(int where, unsigned __int64 flags,
 			if (objects[oi->object].objectClass == PRONOUN_OBJECT_CLASS &&
 				(m[objects[oi->object].originalLocation].word->second.inflectionFlags & SECOND_PERSON) != 0)
 			{
+				// erase(oi) invalidates oi; the next two lines still read it.
 				m[where].objectMatches.erase(oi);
 				objectClass = PRONOUN_OBJECT_CLASS;
 				inflectionFlags = m[objects[oi->object].originalLocation].word->second.inflectionFlags;
@@ -223,12 +295,17 @@ void cSource::resolveFirstSecondPersonPronoun(int where, unsigned __int64 flags,
 		preferSubgroupMatch(where, objectClass, inflectionFlags, true, currentSpeaker[0].object, false);
 }
 
+// Sort key for masterSpeakerList: more speaker identifications first.
 bool masterCompare(const vector<cObject>::iterator& lhs, const vector<cObject>::iterator& rhs)
 {
 	LFS
 		return lhs->numIdentifiedAsSpeaker + lhs->numDefinitelyIdentifiedAsSpeaker > rhs->numIdentifiedAsSpeaker + rhs->numDefinitelyIdentifiedAsSpeaker;
 }
 
+// When a secondary quote has no explicit speaker tag, copy speaker/audience
+// from an IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE mention inside the quote, or
+// from the immediately previous secondary quote (adjacent or +EOS). Sets
+// audienceFilled when the previous-quote copy ran.
 void cSource::matchSelfReferences(vector <int>& secondaryQuotesResolutions, const int where, const int sqr, vector <cWordMatch>::iterator lastOpeningSecondaryQuoteIM, bool & audienceFilled)
 {
 	int selfReferringSpeakerFound = -1, referringAudienceFound = -1;
@@ -269,6 +346,10 @@ void cSource::matchSelfReferences(vector <int>& secondaryQuotesResolutions, cons
 	}
 }
 
+// Fill m[where].audienceObjectMatches for a secondary quote that has a
+// speaker but no tagged audience: hail inside the quote, else the primary
+// quote's speaker (if not already the secondary speaker), else the last
+// secondary audience, else speakerGroup minus the speaker.
 void cSource::assignAudienceBasedOnHailOrLastAudienceOrEmbeddedSpeakers(vector <int>& secondaryQuotesResolutions, const int where, const int sqr, vector <cWordMatch>::iterator lastOpeningPrimaryQuoteIM, vector <cWordMatch>::iterator lastOpeningSecondaryQuoteIM)
 {
 	int hailFound = -1;
@@ -313,6 +394,11 @@ void cSource::assignAudienceBasedOnHailOrLastAudienceOrEmbeddedSpeakers(vector <
 	}
 }
 
+// Update inPrimaryQuote / inSecondaryQuote and the last-opening iterators
+// from the token at 'where'. “ opens primary (and may set
+// lastEmbeddedStoryBegin); ” closes both; ‘ opens secondary and clears
+// primary; ’ closes secondary and restores primary if lastOpeningPrimaryQuote
+// is still set. Also increments speakersMatched / counterSpeakersMatched.
 void cSource::handleQuotes(vector <cWordMatch>::iterator im, const int where, bool &inPrimaryQuote, bool &inSecondaryQuote, 
 	vector <cWordMatch>::iterator &lastOpeningPrimaryQuoteIM, vector <cWordMatch>::iterator &lastOpeningSecondaryQuoteIM,
 	int & lastEmbeddedStoryBegin)
@@ -369,6 +455,9 @@ void cSource::handleQuotes(vector <cWordMatch>::iterator im, const int where, bo
 	}
 }
 
+// Build masterSpeakerList as the unique speakers across all speakerGroups
+// (preferring an alias already in the list if it has more definite
+// identifications), sort by masterCompare, and write masterSpeakerIndex.
 void cSource::setMasterSpeakerList()
 {
 	for (vector <cSpeakerGroup>::iterator sgi = speakerGroups.begin(), sgiEnd = speakerGroups.end(); sgi != sgiEnd; sgi++)
@@ -394,6 +483,10 @@ void cSource::setMasterSpeakerList()
 		masterSpeakerList[ms]->masterSpeakerIndex = ms;
 }
 
+// Quoted META_GROUP with a 1st/2nd-person owner ("my friend" / "your friend"
+// / "friend of mine"): resolve the owner pronoun, then
+// resolveMetaGroupByAssociation. Word-order meta-groups with no matches
+// fall through to resolveObject.
 void cSource::resolveFirstSecondMetaGroupObject(vector <cWordMatch>::iterator im, const int where, const bool inPrimaryQuote, const bool inSecondaryQuote, vector <cWordMatch>::iterator lastOpeningPrimaryQuoteIM, vector <cWordMatch>::iterator lastOpeningSecondaryQuoteIM,
 	const int lastEmbeddedStoryBegin)
 {
@@ -427,6 +520,9 @@ void cSource::resolveFirstSecondMetaGroupObject(vector <cWordMatch>::iterator im
 	}
 }
 
+// Narrative (unquoted) we/us/our: if the narrator (object 0) is in
+// groupedSpeakers, add the other grouped speakers; otherwise add every
+// current speaker except 0. Skips "US"/"mine" when they won as noun/PN.
 void cSource::resolveUnquotedFirstSecondPronoun(vector <cWordMatch>::iterator im, const bool inPrimaryQuote, const bool inSecondaryQuote)
 {
 	// narrative you and I are resolved earlier.  But may not include both speakers.
@@ -451,6 +547,9 @@ void cSource::resolveUnquotedFirstSecondPronoun(vector <cWordMatch>::iterator im
 	}
 }
 
+// If 'where' is the opening of secondaryQuotesResolutions[sqr], copy that
+// embedded quote's speaker (slot+2) and audience (slot+3) onto m[where],
+// resolving any 1st/2nd-person tags first. Advances sqr by 4.
 // secondaryQuotes are quotes that are embedded in other quotes
 void cSource::processSecondaryQuotes(const int where, int &sqr, vector <int>& secondaryQuotesResolutions, vector <cWordMatch>::iterator lastOpeningPrimaryQuoteIM, vector <cWordMatch>::iterator lastOpeningSecondaryQuoteIM,
 	const int lastEmbeddedStoryBegin)
@@ -522,6 +621,10 @@ void cSource::processSecondaryQuotes(const int where, int &sqr, vector <int>& se
 	}
 }
 
+// Document walk: keep speaker-group / section / timeline / quote state, then
+// at each position resolve meta-groups, hails, unquoted we/us, quoted
+// pronouns, and secondary-quote frames. Ends by closing the last timeline
+// segment and building masterSpeakerList. No-op if speakerGroups is empty.
 void cSource::resolveFirstSecondPersonPronouns(vector <int>& secondaryQuotesResolutions)
 {
 	LFS

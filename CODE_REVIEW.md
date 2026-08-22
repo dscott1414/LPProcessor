@@ -453,6 +453,144 @@ are out of scope.
 
 ---
 
+## Wave — object and pronoun resolution (`identifyObjects.cpp`,
+`resolveObjects.cpp`, `resolveMetaGroupObjects.cpp`,
+`resolveFirstSecondPersonPronouns.cpp`)
+
+- **[HIGH] identifyObjects.cpp:1536 — `getPrincipalWhereAndEndAndNameInfo` args swapped** —
+  the call passes `embeddedName, plural` against
+  `(..., bool& pluralNounOverride, bool& embeddedName, ...)`. Swap the two
+  arguments.
+
+- **[HIGH] identifyObjects.cpp:240 — `isPleonastic` MEANS branch is off-by-one** —
+  the loop tests `m[where + 2]` after the `it is ...` arm. The verb is at
+  `where + 1`.
+
+- **[HIGH] identifyObjects.cpp:1261 — missing parens around `|| flagNounOwner`** —
+  `flagNounOwner` alone sets `ownerWhere = I` even when `identifyObject`
+  failed. Parenthesize as the `ow >= 0` branch already does.
+
+- **[HIGH] resolveFirstSecondPersonPronouns.cpp:196 — use-after-erase of `objectMatches` iterator** —
+  `erase(oi)` then reads `oi->object`. Save `oi->object` before erase.
+
+- **[HIGH] resolveObjects.cpp:732 — `containingSpeakerGroup` compares span to the loop index** —
+  `sgBegin >= I && sgEnd < I` uses the group index, not a source position.
+  Always returns `end()`. Take a `where` and test
+  `sgBegin <= where && where < sgEnd`.
+
+- **[HIGH] resolveObjects.cpp:389 — plural non-gendered loop tests `localObjects[0]` not `[s]`** —
+  Use `localObjects[s].om.object <= 1`.
+
+- **[HIGH] resolveObjects.cpp:517 — Num/address matcher returns after the first local object** —
+  `return true` is inside the `for` body. Move it after the loop, or return
+  only when `objectMatches` is non-empty.
+
+- **[HIGH] resolveObjects.cpp:1600 — `speakerGroups[currentSpeakerGroup + 1]` unchecked** —
+  last-group mentions are an out-of-bounds read. Guard like `addNewSpeaker`.
+
+- **[HIGH] resolveObjects.cpp:844 — `preferWordOrder` erase has no size guard** —
+  `erase(begin() + 1)` on an empty or singleton list is UB. Same at
+  `resolveRelativeObject:1010`. Require `size() >= 2`.
+
+- **[HIGH] resolveMetaGroupObjects.cpp:1692 — `previousPrimaryQuote` used without `>= 0`** —
+  `m[previousPrimaryQuote].getQuoteForwardLink()` when the index is still
+  -1. Guard with `previousPrimaryQuote >= 0`.
+
+- **[HIGH] resolveMetaGroupObjects.cpp:617 — `*csg->povSpeakers.begin()` on a possibly empty set** —
+  Test `!csg->povSpeakers.empty()` first.
+
+- **[MEDIUM] identifyObjects.cpp:267 — `searchExactMatch` tests the new object’s `eliminated` flag** —
+  always true for the freshly built `object`. Test `!objects[*s].eliminated`.
+
+- **[MEDIUM] identifyObjects.cpp:204 — pleonastic-it requires five trailing tokens** —
+  `where + 4 > m.size()` rejects shorter valid patterns. Require only as
+  many tokens as the arm that fires.
+
+- **[MEDIUM] resolveObjects.cpp:1371 — class-penalty `&&` / `||` precedence** —
+  every business/verb object is penalized even when not in salience.
+  Parenthesize the three class tests.
+
+- **[MEDIUM] resolveMetaGroupObjects.cpp:1307 — `min(1, ownerMatches.size()) + 1` is not “one more than the owner”** —
+  the expression is always 1 or 2. Use `size() + 1`.
+
+- **[LOW] identifyObjects.cpp:1833 — `(%d%)` in `printObjects`** —
+  a lone `%` before `)`. Use `%%`.
+
+---
+
+## Wave — pattern engine (`definePatterns.cpp`, `pattern.cpp`, `pattern.h`,
+`patternMatchArray.cpp`/`patternMatchArray.h`,
+`patternElementMatchArray.cpp`/`patternElementMatchArray.h`)
+
+- **[HIGH] pattern.h:183 — `initializeUsage` only `reserve()`s usage counters** —
+  `size()` stays 0; `incrementUse` / `fillPattern` then index those vectors
+  on every match (UB). Use `resize(n, 0)`.
+
+- **[HIGH] pattern.cpp:945 — `processForm` writes through `form.c_str()`** —
+  mutates the `wstring` via the const pointer to split `|specificWord`.
+  Copy the suffix without touching `*ch`.
+
+- **[HIGH] pattern.cpp:1803 — `setMandatoryAncestorPatterns` updates the wrong bitset** —
+  ORs into `ancestorPatterns` instead of `mandatoryAncestorPatterns`.
+  Mandatory-ancestor queries then miss ancestors.
+
+- **[HIGH] patternElementMatchArray.cpp:145 — format string missing its argument** —
+  `L"Illegal count of %d ..."` has no `count`. Pass `count`.
+
+- **[MEDIUM] patternMatchArray.cpp:65 — `PMA::clear` leaves a dangling `content`** —
+  `tfree` then `allocated = 0` but `content` is not NULLed. Set
+  `content = NULL`.
+
+- **[MEDIUM] patternMatchArray.cpp:119 — `read()` bounds-check uses the stale `count`** —
+  the check runs before `copy(count, ...)`. Parse count into a local first.
+
+- **[MEDIUM] patternMatchArray.cpp:419 — `queryPattern(int, int& len)` does not initialize `len`** —
+  Set `len = -1` on entry.
+
+- **[MEDIUM] patternMatchArray.cpp:440 — `queryTagSet` can index `patternTagStrings[-1]`** —
+  Guard `tag >= 0` before the NAME-precedence test.
+
+- **[MEDIUM] patternMatchArray.cpp:599 — `1 << 31` is signed overflow** —
+  Use `INT_MIN` or `1u << 31`.
+
+- **[MEDIUM] patternMatchArray.h:152 — `queryTag` returns the first hit, not the longest** —
+  `break`s on the first `hasTag` match. Remove the `break`.
+
+- **[MEDIUM] patternMatchArray.cpp:158 — `operator=` is not self-assignment safe** —
+  Same in `cPatternElementMatchArray::operator=`. Guard
+  `if (this == &rhs)`.
+
+- **[MEDIUM] definePatterns.cpp:2824 — `{HAIL|OBJECT}` is one tag name, not two** —
+  interns unused tag `HAIL|OBJECT`. Change to `{HAIL:OBJECT}`.
+
+- **[MEDIUM] pattern.cpp:2689 — `printPatternStatistics` header format/arg mismatch** —
+  seven `%s` plus `%%` but nine string arguments. Align the format with
+  the data columns.
+
+- **[LOW] pattern.cpp:1162 — ABNF dump refers to `onlyAfterQuote`** —
+  the live flag is `afterQuote`. Enabling `ABNF` will not compile.
+
+- **[LOW] pattern.cpp:2700 — `printPatternStatistics` deletes the global pattern objects** —
+  leaves dangling pointers in `patterns` / `patternReferences`.
+
+- **[LOW] pattern.h / pattern.cpp — `findPattern` not-found conventions disagree** —
+  some overloads return `patterns.size()`, one returns `(unsigned)-1`.
+
+- **[LOW] patternMatchArray.cpp:147 / patternElementMatchArray.cpp:196 — `operator==` takes the other array by value** —
+  Take `const T&`.
+
+- **[LOW] patternElementMatchArray.cpp:600 — `generatePEMACount` bounds test is off by one** —
+  `nextPosition == count` is accepted then used as an index. Use `>=`.
+
+- **[NIT] patternMatchArray.h:96 / :110 — `querySingleNoun` and `findObjectElement` have no definition** —
+  Remove the declarations or implement them.
+
+- **[NIT] patternElementMatchArray.h:11 — `CHILDPATBITS` is both a shift and an eFlags enumerator** —
+  `flagsStr` does `flagSet(CHILDPATBITS)` which tests `flags & 15`. Split
+  the shift constant from the flag.
+
+---
+
 ## Later waves
 
 *(to be appended as the remaining files are annotated)*

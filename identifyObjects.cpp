@@ -1,3 +1,66 @@
+/*
+	identifyObjects.cpp - first-pass entity creation: walk the token array, pick a
+	winning noun/name/pronoun pattern at each position, and push a cObject.
+
+	Overview:
+		After pattern matching has winnowed winners, this unit materializes the
+		document's entity inventory. identifyObjects() scans m left-to-right,
+		chooses the longest lowest-cost object-tagged pattern (NOUN / VNOUN /
+		PNOUN / GNOUN / NAME / NAMEOWNER), then identifyObject() classifies it
+		(name, pronoun, body part, occupation, demonym, meta-group, business,
+		verb-noun, pleonastic-it), records ownership (including the negative
+		cObject::ownerWhere word-order encodings), accumulates WordNet
+		adjective/noun associations, assigns place subtypes, and attaches
+		relative clauses. Exact-string name/reflexive matches reuse an existing
+		cObject rather than creating a duplicate. objects[0] and objects[1] are
+		the reserved narrator and audience entities.
+
+	Pipeline position:
+		Stage 6 (start). Called from processSource() after print/match sentences
+		and addWNExtensions, before analyzeWordSenses / syntacticRelations /
+		identifySpeakerGroups. Also invoked from question-answering and Wikipedia
+		acquisition paths. Resolution (resolveObjects.cpp and the pronoun/meta
+		files) consumes the objects this unit creates.
+
+	Key entry points:
+		- identifyObjects() - document-wide scan; creates narrator/audience then
+		  one cObject per winning noun/name/pronoun span
+		- identifyObject() - classify one span, push (or exact-match) a cObject,
+		  set m[principalWhere].object and begin/endObjectPosition
+		- findSpecificAnaphor() - walk tagSets to the N_AGREE / GNOUN / V_AGREE
+		  head inside a nested pattern
+		- isPleonastic() - Lappin & Leass 2.1.2 dummy-it detector
+		- accumulateAdjectives() / nymMatch() / nymNoMatch() - WordNet synonym /
+		  antonym association and contradiction stripping ("old girl")
+		- identifySubType() - place/activity subtype from multiWordObjects
+		- assignRelativeClause() - bind a following _REL1 / who-clause to the
+		  object; sets flagRelativeHead on the relativizer
+		- preferS1() / eraseWinnerFromRecalculatingAloneness() /
+		  addCostFromRecalculatingAloneness() - parse-cost helpers used while
+		  choosing which pattern owns the object
+
+	Key data structures / globals:
+		- objects / relatedObjectsMap - mutated here; later stages only resolve
+		- wnSynonymsAdjectiveMap / wnAntonymsAdjectiveMap / wnGender*Map -
+		  filled lazily by fillWNMaps via WordNet
+		- multiWordObjects[] - place-name gazetteer used by identifySubType
+		- cObject::ownerWhere - >=0 is a source position; -1 none; -2-N encodes
+		  wordOrderWords[N] ("other"=-2, "another"=-3, ... see source.h)
+
+	Dependencies:
+		WordNet (wn.h) for synonym/antonym/familiarity lookups; Words lexicon;
+		patternTagStrings / objectTagSet; MySQL only via illegalWord().
+
+	Notes / gotchas:
+		- identifyObject() is also called recursively for adjectival owners
+		  (his, Bill's, _NAMEOWNER) inside a larger span.
+		- getPrincipalWhereAndEndAndNameInfo's 5th/6th parameters are
+		  (pluralNounOverride, embeddedName); the call site in
+		  determineNonOwnershipObjectInfo currently passes them swapped.
+		- objects[0]/[1] are narrator/audience; later loops skip object<=1.
+		- SearchExactMatch tests object.eliminated (the newly built object,
+		  always false) rather than objects[*s].eliminated.
+*/
 #include <windows.h>
 #include "Winhttp.h"
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
@@ -13,6 +76,9 @@
 #include "bitObject.h"
 #define MAX_BUF 10240000
 
+// Eliminate a __NOUN/__MNOUN winner when an equally long __S1 has equal-or-lower
+// average cost. Returns true if this PMA slot should lose (used as a semantic
+// tie-break when a word is both verb and adjective).
 // eliminate patterns based on a little semantic help
 // this was created to help speaker resolution
 // this is very helpful when a word is both a verb and an adjective, so that the pattern is very ambiguous
@@ -32,6 +98,12 @@ bool cSource::preferS1(int position, unsigned int J)
 	return true;
 }
 
+// Locate the head token of a nested NOUN/VNOUN/ADJOBJECT pattern.
+// On success writes specificWhere (source position of N_AGREE / GNOUN / MNOUN /
+// V_AGREE), pluralNounOverride (PLURAL tag present), and embeddedName (a NAME
+// tag sits on the head or the head itself is a name). Returns false if element
+// is not a pattern or no usable tagSet is found; specificWhere then stays at
+// 'where'.
 bool cSource::findSpecificAnaphor(wstring tagName, int where, int element, int& specificWhere, bool& pluralNounOverride, bool& embeddedName)
 {
 	LFS
@@ -106,6 +178,10 @@ bool cSource::findSpecificAnaphor(wstring tagName, int where, int element, int& 
 	return false;
 }
 
+// True if m[where] is dummy "it" (It is likely that S / It seems that S /
+// NP makes it MA to VP). Requires where+4 < m.size(), so short sentences
+// near EOS are never treated as pleonastic. The MEANS branch indexes
+// m[where+2] rather than the verb after "it" (where+1).
 // Lappin and Leass 2.1.2
 // A quick glance shows these clearly do not cover many cases of pleonastic it
 // MA ModalAdj:
@@ -159,6 +235,8 @@ bool cSource::isPleonastic(unsigned int where)
 	// It MEANS (that) S [ It MEANS S1 or REL1]
 	const wchar_t* MEANS[] = { L"seems",L"appears",L"means",L"follows",NULL };
 	int I;
+	// Off-by-one vs the comment "It MEANS (that) S": indexes where+2, so
+	// "it seems that S" never matches (would need where+1).
 	for (I = 0; MEANS[I] && m[where + 2].word->first != MEANS[I]; I++);
 	if (MEANS[I] && (m[where + 3].pma.queryPattern(L"__S1") != -1 || m[where + 3].pma.queryPattern(L"_REL1") != -1)) return true;
 	// NP makes/finds it MA (for NP) to VP
@@ -167,6 +245,11 @@ bool cSource::isPleonastic(unsigned int where)
 	return true;
 }
 
+// For NAME / NON_GENDERED_NAME / REFLEXIVE / RECIPROCAL classes, look up every
+// word of 'object' in relatedObjectsMap and reuse the first non-eliminated
+// equals() hit: setObject, push a location, updateFirstLocation. Returns true
+// if a prior object was reused (identifyObject then skips the push). The
+// eliminated test is on the newly built 'object' (always false), not objects[*s].
 bool cSource::searchExactMatch(cObject& object, int position)
 {
 	LFS
@@ -191,6 +274,12 @@ bool cSource::searchExactMatch(cObject& object, int position)
 	return false;
 }
 
+// Filter a WordNet synonym/antonym set into lexicon adjectives (skipping
+// proper-noun-looking strings and 'fromWord' itself). Space-separated multiword
+// items contribute every subword except the last unless isAdjective (the last
+// token of a noun phrase is treated as a noun, not an adjective). Sets
+// containsMale/containsFemale when a subword is literally "male"/"female";
+// appends accepted words to validList and to the log string aa.
 void cSource::accumulateAdjective(const wstring& fromWord, unordered_set <wstring>& words, vector <tIWMM>& validList, bool isAdjective, wstring& aa, bool& containsMale, bool& containsFemale)
 {
 	LFS
@@ -246,6 +335,9 @@ void cSource::accumulateAdjective(const wstring& fromWord, unordered_set <wstrin
 
 
 
+// Seed wnAntonymsAdjectiveMap with the tall<->small pair (WordNet does not
+// always treat them as antonyms). Calls fillWNMaps for each if not already
+// cached. Invoked from processSource() before identifyObjects().
 void cSource::addWNExtensions(void)
 {
 	LFS
@@ -271,6 +363,9 @@ void cSource::addWNExtensions(void)
 		// in a previous match.  Other gendered objects like "A young American" should not have "man" associated with them
 		// even though it acquires male characteristics because "Tommy" will match against "young" and "man" and 
 		// Julius against "man" and "American" and so both will be equal, even though "Julius" should be lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms.
+// If object o is a uniquely gendered NAME / OCC / DEMONYM / RELATIVE, push
+// generic head nouns (man/fellow/gentleman/chap or woman/lady/girl) so later
+// nymMatch can equate "Mr. Whittington" with "the man".
 void cSource::addDefaultGenderedAssociatedNouns(int o)
 {
 	LFS
@@ -305,6 +400,9 @@ void cSource::addDefaultGenderedAssociatedNouns(int o)
 		}
 }
 
+// Populate the WordNet synonym / antonym / gender caches for 'word'. If the
+// adjective has no antonyms, fall back to antonyms of equally-or-more-familiar
+// synonyms. Writes wnSynonyms*Map, wnAntonyms*Map, wnGender*Map.
 void cSource::fillWNMaps(int where, tIWMM word, bool isAdjective)
 {
 	LFS
@@ -364,6 +462,9 @@ void cSource::fillWNMaps(int where, tIWMM word, bool isAdjective)
 	}
 }
 
+// Attach WordNet synonyms of the span's adjectives/nouns to the object at
+// 'where', strip antonym contradictions (keeping the later word), and call
+// addDefaultGenderedAssociatedNouns. Skips pronouns, order-words, and "dear".
 // for each adjective leading up to principalWhere, look up
 //    synonyms, antonyms
 // for the principalWhere, for each sense, for each adjective associated with the sense, look up
@@ -534,6 +635,9 @@ void cSource::accumulateAdjectives(int where)
 		addDefaultGenderedAssociatedNouns(adjectiveObject);
 }
 
+// True if both objects have associated adjectives/nouns and are in the same
+// gendered-vs-neuter class family (so nym comparison is meaningful). Pronouns
+// and VERB_OBJECT_CLASS always return false.
 bool cSource::objectClassComparable(vector <cObject>::iterator o, vector <cObject>::iterator lso)
 {
 	LFS
@@ -559,6 +663,7 @@ bool cSource::objectClassComparable(vector <cObject>::iterator o, vector <cObjec
 	return !(isPrimaryGendered ^ isSecondaryGendered);
 }
 
+// True if o is GENDERED_DEMONYM_OBJECT_CLASS or any associatedNoun has demonymForm.
 bool cSource::hasDemonyms(vector <cObject>::iterator o)
 {
 	LFS
@@ -569,6 +674,9 @@ bool cSource::hasDemonyms(vector <cObject>::iterator o)
 	return false;
 }
 
+// True if o and lso share a demonym head or associatedNoun. On mismatch still
+// writes fromMatch/toMatch for the log. Used by nymNoMatch to reject
+// "the Irishman" vs "the Frenchman".
 bool cSource::sharedDemonyms(int where, bool traceNymMatch, vector <cObject>::iterator o, vector <cObject>::iterator lso, tIWMM& fromMatch, tIWMM& toMatch, tIWMM& toMapMatch)
 {
 	LFS
@@ -630,6 +738,9 @@ bool cSource::sharedDemonyms(int where, bool traceNymMatch, vector <cObject>::it
 // C. one other object is 'big' having synonyms 'astronomic' 'big' and antonyms 'little'
 // so A&B are truly opposites: A's synonyms and B's antonyms AND A's antonyms and B's synonyms have common members
 //    A&C should be ignored: A's synonyms and B's antonyms are common but NOT A's antonyms and B's synonyms
+// True iff 'adj' is a true antonym of o (A's synonyms intersect B's antonyms
+// AND A's antonyms intersect B's synonyms). One-sided overlap ("young" vs
+// "big") is ignored.
 bool cSource::nymNoMatch(vector <cObject>::iterator o, tIWMM adj)
 {
 	LFS
@@ -646,6 +757,9 @@ bool cSource::nymNoMatch(vector <cObject>::iterator o, tIWMM adj)
 			nymMapMatch(associatedAdjectives, wnSynonymsAdjectiveMap, o->associatedNouns, wnAntonymsNounMap, true, getFromMatch, traceThisMatch, logMatch, fromMatch, toMatch, toMapMatch, type, L"lso adj syn <-> o noun ant"));
 }
 
+// True if o and lso are true antonyms (both syn<->ant directions fire) or
+// have conflicting demonyms. Body-vs-person comparisons return false
+// (too many false "low"/"young" hits). Writes fromMatch/toMatch when asked.
 // A. one object is 'young' having synonyms 'little' 'young' and antonyms 'old'
 // B. one object is 'old' having synonyms 'aged' 'old' and antonyms 'young'
 // C. one other object is 'big' having synonyms 'astronomic' 'big' and antonyms 'little'
@@ -679,6 +793,9 @@ bool cSource::nymNoMatch(int where, vector <cObject>::iterator o, vector <cObjec
 }
 
 // heavily limit gendered body object comparisons
+// Restricted nym score used when comparing a BODY_OBJECT to a gendered person:
+// only demonym / proper-noun associated terms count, each *3. Avoids "low
+// voice" matching "young man".
 int cSource::limitedNymMatch(vector <cObject>::iterator o, vector <cObject>::iterator lso, bool traceNymMatch)
 {
 	LFS
@@ -699,6 +816,11 @@ int cSource::limitedNymMatch(vector <cObject>::iterator o, vector <cObject>::ite
 	return total;
 }
 
+// Positive similarity score between o and lso: 3 per shared noun/adjective,
+// +1 per synonym-map overlap, +2 if heads are abbreviationEquivalent (Dr/doctor).
+// Temporarily sets alreadyTaken on matched lexicon entries so nymMapMatch
+// does not double-count. Sets explicitOccupationMatch if a shared noun has
+// commonProfessionForm. Body-vs-person falls through to limitedNymMatch.
 int cSource::nymMatch(vector <cObject>::iterator o, vector <cObject>::iterator lso, bool getFromMatch, bool traceNymMatch, bool& explicitOccupationMatch, wstring& logMatch, tIWMM& fromMatch, tIWMM& toMatch, tIWMM& toMapMatch, const wchar_t* type)
 {
 	LFS
@@ -751,6 +873,11 @@ int cSource::nymMatch(vector <cObject>::iterator o, vector <cObject>::iterator l
 	return total;
 }
 
+// Best OCSubType for the object at principalWhere by scoring overlapping
+// multiWordObjects entries (10 for a principal-word hit, 1 for a modifier).
+// Returns -1 if the best score is < 10 (no principal hit) or the object is
+// already a speaker / has an honorific / is "of course" / determiner-less
+// "state". Sets partialMatch if some gazetteer tokens are missing from the span.
 int cSource::identifySubType(int principalWhere, bool& partialMatch)
 {
 	LFS
@@ -865,6 +992,11 @@ int cSource::identifySubType(int principalWhere, bool& partialMatch)
 	return maxSubType;
 }
 
+// Bind a following relative clause (who/which/that/_REL1, optionally after a
+// comma, aside, or PP) to the object at 'where'. Rejects number/gender
+// mismatch and RE_OBJECT competitors. On success sets relativeClausePM /
+// whereRelativeClause, flagRelativeHead (or flagRelativeObject if the clause
+// is itself an object), and points the relativizer's object at o.
 // this is to be used in relative phrases that ARE NOT relative clauses used as objects,
 // Subject and object pronouns cannot be distinguished by their forms - who, which, that are used for subject and object pronouns.
 // You can, however, distinguish them as follows:
@@ -1022,6 +1154,11 @@ bool cSource::assignRelativeClause(int where)
 	return false;
 }
 
+// Resolve the head position, exclusive end, plurality, and whether the span
+// embeds a _NAME. 'plural' is the findSpecificAnaphor pluralNounOverride out
+// param; 'embeddedName' is the other. Callers must pass them in that order
+// (determineNonOwnershipObjectInfo currently swaps them). Also walks ALL-CAPS
+// titles to decide whether a NOUN should be treated as a name.
 void cSource::getPrincipalWhereAndEndAndNameInfo(wstring tagName, int where, int element, int& principalWhere, bool& plural, bool& embeddedName, unsigned int &end, int &nameElement)
 {
 	// "NOUN","PNOUN","NAME","NAMEOWNER"
@@ -1071,6 +1208,13 @@ void cSource::getPrincipalWhereAndEndAndNameInfo(wstring tagName, int where, int
 	}
 }
 
+// Walk one token I inside [where, principalWhere) and, if it is a nested
+// name / proper noun / possessive / word-order owner, identify it as an
+// adjectival object and update ownerWhere / hasDeterminer / owner gender.
+// Returns false only to stop the caller loop (I is itself the full NAME span).
+// The PROPER_NOUN/noun branch's ownerWhere assignment is
+// (identify && getObject>=0 && inflectionOwner) || flagNounOwner ? a missing
+// set of parens around the last ||, so flagNounOwner alone sets ownerWhere.
 /*
 * identifies all objects that modify current main object
 * and gets ownership information (gender, plural and determiner)
@@ -1169,10 +1313,16 @@ bool cSource::identifyAdjectivalObjects(const int where, wstring tagName, const 
 		isOwnerPlural = (m[ownerWhere].word->second.inflectionFlags & PLURAL) == PLURAL;
 	}
 	// her former manner - the owner should be 'her' not 'former', since 'her' allows more information for resolution
+	// Encode a leftover word-order modifier as ownerWhere = -2 - index
+	// (other=-2, another=-3, ...). Resolution later decodes this.
 	if (ow >= 0 && ownerWhere < 0) ownerWhere = -2 - ow;
 	return true;
 }
 
+// Refine objectClass / gender / plurality after the name pass: promote
+// pronoun/pleonastic-it, relatives, "a lot", professions, demonyms, and
+// word-order / friend / joiner meta-groups. Returns false to drop the object
+// (SENTENCE_IN_REL "that", standalone "hand").
 bool cSource::refineObjectClassAndGender(const int where, const int ownerWhere, const int principalWhere, const int begin, const int end, 
 	//const bool isOwnerMale, const bool isOwnerFemale,	const bool isOwnerGendered, cName& name,
 	enum OC &objectClass, bool &isFemale,bool &isMale, bool &isNeuter, bool &plural, const bool adjectival)
@@ -1284,6 +1434,9 @@ bool cSource::refineObjectClassAndGender(const int where, const int ownerWhere, 
 	return true;
 }
 
+// Copy male/female/plural of thisObject's owner (m[ownerWhere]) onto
+// ownerMale/ownerFemale/ownerPlural. ownerWhere must be >= 0; eOBJECTS
+// sentinels are decoded as unknown-male / unknown-female / both.
 void cSource::setOwnerGender(cObject &thisObject)
 {
 	int ownerWhere = thisObject.getOwnerWhere();
@@ -1302,6 +1455,10 @@ void cSource::setOwnerGender(cObject &thisObject)
 	thisObject.ownerPlural = (m[ownerWhere].word->second.inflectionFlags & PLURAL) == PLURAL;
 }
 
+// Insert thisObject's index into relatedObjectsMap for every content word
+// in [begin,end) (noun/adj/adv/verb/PN/number/honorific, skipping bare
+// determiners and pronouns except at originalLocation). Used by
+// searchExactMatch and later num/address resolution.
 void cSource::setRelatedObjects(cObject& thisObject)
 {
 	/*
@@ -1322,6 +1479,10 @@ void cSource::setRelatedObjects(cObject& thisObject)
 	}
 }
 
+// Adjectival-object extras: possessive pronouns become PRONOUN or META_GROUP
+// (ownerWhere = -2-whichOrderWord); demonym+"'s" after a determiner becomes
+// GENDERED_DEMONYM and begin is pulled back to ownerBegin. Returns false to
+// reject a non-possessive demonym modifier ("The efficient German master").
 bool cSource::identifyAdjectiveObjectClassAndGender(const int where, const int ownerBegin, int &begin, int principalWhere, int &ownerWhere, enum OC &objectClass, bool &isMale, bool &isFemale, bool &plural)
 {
 	bool possessivePronoun = false;
@@ -1357,6 +1518,11 @@ bool cSource::identifyAdjectiveObjectClassAndGender(const int where, const int o
 	return true;
 }
 
+// Fill principalWhere, end, name, gender, plurality, objectClass for a
+// non-ownership pass. Calls getPrincipalWhereAndEndAndNameInfo then
+// identifyName / refineObjectClassAndGender. VNOUN/GNOUN skip the name path
+// and force neuter. Returns -1 to abort identifyObject (plural demonym
+// used as object; SENTENCE_IN_REL reject).
 int cSource::determineNonOwnershipObjectInfo(int &where, int &element, const int begin, int &principalWhere, const int ownerWhere, unsigned int &end,
 	cName& name, bool& isMale, bool& isFemale, bool& isNeuter, bool& plural, bool& isBusiness, const bool adjectival,
 	OC& objectClass, const wstring tagName)
@@ -1366,6 +1532,7 @@ int cSource::determineNonOwnershipObjectInfo(int &where, int &element, const int
 	if (tagName != L"VNOUN" && tagName != L"GNOUN")
 	{
 		int nameElement = -1;
+		// 5th/6th args are declared (plural, embeddedName) but passed swapped.
 		getPrincipalWhereAndEndAndNameInfo(tagName, where, element, principalWhere, embeddedName, plural, end, nameElement);
 		// you are English, aren't you?
 		if (m[begin].queryForm(demonymForm) >= 0 && end - begin == 1 && (m[begin].word->second.inflectionFlags & PLURAL) == PLURAL &&
@@ -1436,6 +1603,9 @@ int cSource::determineNonOwnershipObjectInfo(int &where, int &element, const int
 	return 0;
 }
 
+// If the head is an external body part (and has an owner, a SUBJ/OBJ role,
+// "with X", or a following "of"), set BODY_OBJECT_CLASS and inherit the
+// owner's gender. Returns true when the class was changed.
 bool cSource::determineIfBodyObject(const bool isOwnerGendered, const bool isOwnerMale, const bool isOwnerFemale, bool &isMale, bool &isFemale, bool &isNeuter, bool &singularBodyPart,
 	   const int principalWhere, const unsigned int begin, const unsigned int end, const int ownerWhere, enum OC &objectClass)
 {
@@ -1458,6 +1628,12 @@ bool cSource::determineIfBodyObject(const bool isOwnerGendered, const bool isOwn
 	return false;
 }
 
+// Create (or exact-match) the cObject for the span starting at 'where'.
+// tag < 0 means NAME; otherwise patternTagStrings[tag]. Returns 0 on success,
+// -1 if the span is a dash or determineNonOwnershipObjectInfo /
+// identifyAdjectiveObjectClassAndGender rejected it. Side effects: push
+// objects[], set m[principalWhere].object / begin/endObjectPosition,
+// accumulateAdjectives, identifySubType, assignRelativeClause.
 // if adjectival is false, where and element point to the full multi-word object
 // if adjectival is true, previousOwnerWhere points to the ownerWhere of the previous adjective (if any)
 int cSource::identifyObject(int tag, int where, int element, bool adjectival, int previousOwnerWhere, int ownerBegin)
@@ -1563,6 +1739,9 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 	return 0;
 }
 
+// Set o->suspect / verySuspect / ambiguous from winner-form usage costs and
+// the owning PMA slot's average cost. A high-cost object that preferS1()
+// would drop is logged but not unmarked.
 // suspect - for any of the Form elements at the bottom of what the Noun comes down to, if any Form is of cost 4.
 // very suspect - if all of the elements are of cost 4
 // ambiguous - if any of the elements have more than one form
@@ -1614,6 +1793,9 @@ void cSource::checkObject(vector <cObject>::iterator o)
 	o->suspect = highCost;
 }
 
+// Log ambiguous / NAME objects (skipping narrator/audience and pronouns) and
+// a suspect/verySuspect/ambiguous count. cancelSubType and checkObject run
+// per object; gated by traceObjectResolution ^ flipTOROverride.
 void cSource::printObjects(void)
 {
 	LFS
@@ -1654,6 +1836,9 @@ void cSource::printObjects(void)
 			numAmbiguousObjects, numAmbiguousObjects * 100 / objects.size(), objects.size());
 }
 
+// If pma is FINAL_IF_ALONE / onlyAlone and is no longer between separators,
+// collect removable winners via removeWinnerFlag and strip them. Returns
+// true if this pma was eliminated.
 // determine whether a pattern that is not owned by any other pattern and has finalIfAlone set
 // still has isSeparator on both sides.  If not, flag to eliminate.
 bool cSource::eraseWinnerFromRecalculatingAloneness(int where, cPatternMatchArray::tPatternMatch* pma)
@@ -1714,6 +1899,11 @@ bool cSource::eraseWinnerFromRecalculatingAloneness(int where, cPatternMatchArra
 	return false;
 }
 
+// Recursively collect PMA/PEMA winners that can be stripped because a
+// FINAL_IF_ALONE ancestor is no longer alone. Returns true if this pma and
+// all its children can be removed without orphaning a position (the actual
+// removeWinnerFlag() calls happen in the caller). RecursionSpaces is only
+// for indented trace logs (2 at the top).
 bool cSource::removeWinnerFlag(int where, cPatternMatchArray::tPatternMatch* pma, int recursionSpaces, vector <cPatternMatchArray::tPatternMatch*>& PMAToRemoveWinner, vector <int>& parentPEMAToRemoveWinner)
 {
 	if (find(PMAToRemoveWinner.begin(), PMAToRemoveWinner.end(), pma) != PMAToRemoveWinner.end())
@@ -1829,6 +2019,8 @@ bool cSource::removeWinnerFlag(int where, cPatternMatchArray::tPatternMatch* pma
 	return !atLeastOneSurvivor;
 }
 
+// True if any PEMA child at 'where' is a top-level form, or the word itself
+// is a topLevelSeparator with no PEMA. Used by addCostFromRecalculatingAloneness.
 // used before winners are determined.  
 // if there are any patterns matching a separator form, or 
 // if there are no patterns matching on position and the separator for has lowest cost
@@ -1841,6 +2033,8 @@ bool cSource::isAnySeparator(int where)
 	return (m[where].word->second.flags & cSourceWordInfo::topLevelSeparator) != 0 && m[where].beginPEMAPosition < 0;
 }
 
+// Same FINAL_IF_ALONE test as eraseWinner..., but instead of eliminating,
+// add lowestSeparatorCost/1000 to the PMA/PEMA. Returns true if cost was added.
 // determine whether a pattern that is not owned by any other pattern and has finalIfAlone set
 // still has isSeparator on both sides.  separator is determined by all patterns matching.  If there are no patterns matching, then if lowest cost.
 // if not, add high cost.
@@ -1878,6 +2072,11 @@ bool cSource::addCostFromRecalculatingAloneness(int where, cPatternMatchArray::t
 	return false;
 }
 
+// Document-wide object creation: stamp objectTag on patterns, push narrator
+// (objects[0]) and audience (objects[1]), then for each unmatched token pick
+// the longest lowest-cost object-tagged PMA (preferring NAME) and call
+// identifyObject. Question marks propagate flagInQuestion backward to EOS.
+// Container patterns (PP/subobject) become VERB_OBJECT_CLASS placeholders.
 // acumulate information about all objects and sort by index of m
 // TAGS: NOUN, VNOUN, PNOUN, NAME, NAMEOWNER, N_AGREE where N_AGREE is possessive_pronoun, pronoun, indefinite_pronoun, personal_pronoun_nominative, noun, country OR GNOUN==NAME
 // NOUN gives  XXX    __NOUN "2" (includes _NAME as GNOUN)    "The Pool"

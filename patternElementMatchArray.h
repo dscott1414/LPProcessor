@@ -1,3 +1,48 @@
+/*
+	patternElementMatchArray.h - document-wide array of one-element pattern hits (PEMA)
+
+	Overview:
+		Unlike PMA (one array per source position), there is a single PEMA on
+		cSource.  Each tPatternElementMatch is one element of one pattern match:
+		parent pattern, which element/alternative matched, the child form or child
+		pattern+len, the [begin,end) relative to the parent start, and several
+		intrusive linked-list indexes that let later stages walk "same position",
+		"same (pattern,end)", or "same child (pattern,end)" without scanning.
+
+	Pipeline position:
+		Stage 4.  Filled by cPattern::fillPattern() -> push_back_unique(); compacted
+		by consolidateWinners() after eliminateLoserPatterns.  Stages 5+ walk the
+		chains (nextByPosition / nextByPatternEnd / nextPatternElement) to collect
+		tags and build syntactic relations.
+
+	Key entry points:
+		- push_back_unique() - insert into the by-pattern-end chain (sorted by
+		  descending begin) or cheapen an existing equivalent element
+		- consolidateWinners() / generateWinnerConsolidationArray() - pack winners
+		  and rewrite every chain index through the wa[] map
+		- getRole() - map element tags onto the role bitfield used by relations
+		- ownedByOtherWinningPattern() - true if another winner already claims this
+		  (childPattern, childLen)
+
+	Key data structures / globals:
+		- content[0..count) - slot 0 is deliberately left unused (collectTags
+		  negates PEMA offsets, so 0 cannot be a valid index)
+		- PEMAElementMatchedSubIndex - same packing as cMatchElement:
+		  bit 31 = is-pattern; bits 15..30 = child pattern #; bits 0..14 = child len
+		- flags - WINNER plus the COST_* bits that record which costing passes have
+		  already charged this element (COST_EVAL / ND / AGREE / NVO / ROLE / PREP)
+
+	Notes / gotchas:
+		- CHILDPATBITS is 15 and is used as a shift, but it also sits in eFlags next
+		  to WINNER_FLAG=1, so flagsStr's `flagSet(CHILDPATBITS)` tests bits 0-3
+		  rather than "is a child pattern".
+		- nextByPatternEnd is negative when it points back to the start of a
+		  circular chain (-PEMAOffset).  translate() un-negates, remaps, re-negates.
+		- begin/end are shorts relative to the parent match start; they must fit in
+		  a signed short or push_back fatals.
+		- iCost (incremental) is only meaningful inside reduceParent; oCost is the
+		  full pattern cost copied onto every element of the match.
+*/
 #define IOHANDLE int
 int lplog(const wchar_t *format,...);
 extern short logCache;
@@ -17,6 +62,7 @@ public:
     unsigned char __patternElementIndex;
     unsigned char getElement(void) { return __patternElement; }
     unsigned char getElementIndex(void) { return __patternElementIndex; }
+	// Which step of the parent pattern, and which OR-alternative of that step, matched.
     void setElementAndIndex(unsigned char cPatternElement,unsigned char patternElementIndex)
     {
       __patternElement=cPatternElement;
@@ -43,6 +89,8 @@ public:
     void removeWinnerFlag(void) { flags&=~WINNER_FLAG; }
     void setFlag(int flag) { flags|=flag; }
     bool flagSet(int flag) { return (flags&flag)!=0; }
+	// Return true if flag was already set; otherwise set it and return false.
+	// Used as a one-shot latch (COST_DONE in processTempCost).
     bool testAndSet(int flag) 
     { 
       if (flags&flag) return true; 
@@ -54,13 +102,14 @@ public:
     unsigned int getParentPattern() { return pattern; }
     void setParentPattern(int p) { pattern=p; flags=0; }
     int getOCost() { return cost; }
-		// this incremental cost is only used in reduceParent!
+		// Lowest PMA-element cost seen for this parent; only consumed by reduceParent.
 		short getIncrementalCost() {
 			return iCost;
 		}
 		void setIncrementalCost(int ic) {
 			iCost=ic;
 		}
+	// Saturate c into signed-short cost (the full pattern cost copied onto this element).
 		void setOCost(int c)
     {
 			#ifdef LOG_PATTERN_COST_CHECK
@@ -81,6 +130,8 @@ public:
       else if (iCost+addedCost<MIN_SIGNED_SHORT) iCost=MIN_SIGNED_SHORT;
       else iCost+=addedCost;
     }
+	// Append the set COST_*/WINNER flag names onto temp (debug).  CHILDPATBITS is
+	// tested as flags&15, which is not "is a child pattern".
 		const wchar_t *flagsStr(wstring &temp)
 		{
 			temp.clear();
@@ -97,12 +148,16 @@ public:
 			return temp.c_str();
 		}
     __int64 getRole(__int64 &tagRole); 
+	// Child packing: bit31=pattern; bits15-30=child pattern #; bits0-14=child len.
+	// getChildForm() is the raw word when bit31 is clear (a form offset, not a pattern).
     bool isChildPattern(void) { return (PEMAElementMatchedSubIndex&cMatchElement::patternFlag)== cMatchElement::patternFlag; }
 		unsigned int getChildPattern(void) { return (PEMAElementMatchedSubIndex&~cMatchElement::patternFlag)>>CHILDPATBITS; }
     unsigned int getChildLen(void) { return PEMAElementMatchedSubIndex&((1<<CHILDPATBITS)-1); }
     unsigned int getChildForm(void) { return PEMAElementMatchedSubIndex; }
     void setSubIndex(unsigned int subIndexPattern,unsigned int endPosition) { PEMAElementMatchedSubIndex=(subIndexPattern <<CHILDPATBITS)+endPosition; }
     wchar_t *toText(unsigned int position,wchar_t *temp,vector <cWordMatch> &m); 
+	// Latch COST_DONE and keep tempCost = max(tempCost, maxOCost) once latched.
+	// Returns true the first time (caller should remember this position).
     bool processTempCost(int maxOCost)
     {
       bool savePosition;
@@ -123,6 +178,7 @@ public:
   ~cPatternElementMatchArray();
   cPatternElementMatchArray(const cPatternElementMatchArray &rhs);
 
+  // Unpack / pack the child-pattern half of elementMatchedSubIndex (see class notes).
   static unsigned int PATMASK(int elementMatchedSubIndex)
   {
     return (unsigned int)((elementMatchedSubIndex&~cMatchElement::patternFlag)>>CHILDPATBITS);
