@@ -1,3 +1,46 @@
+/*
+	DB.cpp - MySQL source-table I/O, lexicon hydrate, object flush, and ontology write
+
+	Overview:
+		The operational half of the DB layer (schema create is DBCreateSQLSchema.cpp;
+		statement execution is DBUtility.cpp).  This file: claims/releases rows in
+		`sources` so multiple LPProcessor processes can divide the Gutenberg corpus;
+		hydrates Words from `words`/`wordForms`/`forms` (with an optional
+		wordFormCache file); writes discovered objects back to `objects` /
+		`objectWordMap`; and has a few ontology/wiktionary helpers.
+
+	Pipeline position:
+		Stage 1 (initializeDatabaseHandle, readWordsFromDB) and the bookkeeping
+		around each source (getNextUnprocessedSource ... signalFinishedProcessingSource).
+		flushObjects runs after identifyObjects when WRITE_OBJECTS_TO_DB is on.
+
+	Key entry points:
+		- initializeDatabaseHandle() - mysql_real_connect to DBNAME as root.
+		- getNextUnprocessedSource() / resetSource* / signal*ProcessingSource.
+		- cWord::readWordsFromDB / readWordFormsFromDB / initializeWordsFromDB.
+		- cSource::flushObjects / readMultiSourceObjects / updateSource*.
+		- writeDbOntologyEntry / readWikiNominalizations / isBookTitle.
+
+	Dependencies:
+		MySQL schema `lp` (see DBCreateSQLSchema.cpp).  wordFormCache next to cwd
+		when USE_TEST_CACHE is on.  Hardcoded DSN user/password (root/byron0).
+
+	Notes / gotchas:
+		- initializeDatabaseHandle embeds "root"/"byron0".  Same credentials are
+			repeated in createDatabase().
+		- updateSourceStatistics / 2 / 3 LOCK TABLES sources WRITE and never
+			UNLOCK - every stats write leaves the table locked.
+		- getNumSources LOCKs then returns -1 on query failure without UNLOCK.
+		- isBookTitle interpolates proposedTitle in double quotes, unescaped.
+		- readWikiNominalizations never mysql_free_result.
+		- isWordFormCacheValid overwrites `result` with a second SELECT without
+			freeing the first MYSQL_RES.
+		- Form ids in the DB are 1-based; wordForms.formId-1 is the in-memory
+			offset.  patternFormNumOffset (32750) stores usage-pattern counts in
+			the same table.
+		- lplog(LOG_FATAL_ERROR) exits (see logging.cpp); comments in source.h
+			that claim otherwise are wrong.
+*/
 #include <stdio.h>
 #include <string.h>
 #include <mbstring.h>
@@ -100,12 +143,16 @@ where subjectCounts.totalSubjectCount>2 and subjectVerbCount.subjectVerbCount>2 
 HAVING lowerCaseCount IS NOT NULL and (upperCaseCount IS NULL OR upperCaseCount/lowerCaseCount<0.1)
 order by subjectVerbCount.subjectVerbCount/subjectCounts.totalSubjectCount desc;
 */
+// UNLOCK TABLES.  Returns myquery's result (false is FATAL unless the server
+// is already gone).
 bool unlockTables(MYSQL& mysql)
 {
 	LFS
 		return myquery(&mysql, L"UNLOCK TABLES");
 }
 
+// Clear processed/processing on every sources row so the corpus can be
+// re-run.  Returns false if the LOCK fails.
 bool cSource::resetAllSource()
 {
 	LFS
@@ -115,6 +162,7 @@ bool cSource::resetAllSource()
 	return true;
 }
 
+// Clear processed/processing for sources.id in [beginSource, endSource).
 bool cSource::resetSource(int beginSource, int endSource)
 {
 	LFS
@@ -126,6 +174,8 @@ bool cSource::resetSource(int beginSource, int endSource)
 	return true;
 }
 
+// Clear the processing bit on every source (leaves processed alone).  Used
+// after a crash so a half-done source can be claimed again.
 void cSource::resetProcessingFlags(void)
 {
 	LFS
@@ -134,6 +184,7 @@ void cSource::resetProcessingFlags(void)
 	unlockTables(mysql);
 }
 
+// Set processing=true on sources.id=thisSourceId.  Returns false if LOCK fails.
 bool cSource::signalBeginProcessingSource(int thisSourceId)
 {
 	LFS
@@ -145,6 +196,7 @@ bool cSource::signalBeginProcessingSource(int thisSourceId)
 	return true;
 }
 
+// Mark thisSourceId processed, clear processing, stamp lastProcessedTime=NOW().
 bool cSource::signalFinishedProcessingSource(int thisSourceId)
 {
 	LFS
@@ -157,6 +209,12 @@ bool cSource::signalFinishedProcessingSource(int thisSourceId)
 }
 
 
+// Claim the largest unprocessed source of sourceType with id in [begin, end)
+// (end<0 means no upper bound), skipping **SKIP** / **START NOT FOUND**.
+// setUsed==true writes processing=true under the same WRITE lock.
+// Out-params are filled only when a row is found.  Returns true if one was
+// claimed.  mysql_free_result is called even when the SELECT fails (result
+// may be NULL - mysql_free_result(NULL) is safe).
 bool getNextUnprocessedSource(MYSQL& mysql, int begin, int end, int sourceType, bool setUsed, int& id, wstring& path, wstring& encoding, wstring& start, int& repeatStart, wstring& etext, wstring& author, wstring& title)
 {
 	LFS
@@ -196,6 +254,8 @@ bool getNextUnprocessedSource(MYSQL& mysql, int begin, int end, int sourceType, 
 	return sqlrow != NULL;
 }
 
+// True if at least one processed, not-currently-processing source of
+// sourceType still has proc2==step (a later "unknown words" pass).
 bool anymoreUnprocessedForUnknown(MYSQL& mysql, int sourceType, int step)
 {
 	LFS
@@ -213,6 +273,9 @@ bool anymoreUnprocessedForUnknown(MYSQL& mysql, int sourceType, int step)
 	return numResults > 0;
 }
 
+// Write path/start/repeatStart/sizeInBytes for the sources row whose etext
+// matches.  path and start are escapeStr'd in place (mutated); etext is not
+// escaped (etext values are Gutenberg ids, but this is still a hole).
 bool cSource::updateSource(wstring& path, wstring& start, int repeatStart, wstring& etext, int actualLenInBytes)
 {
 	LFS
@@ -223,6 +286,8 @@ bool cSource::updateSource(wstring& path, wstring& start, int repeatStart, wstri
 	return myquery(&mysql, (wchar_t*)sqlStatement.c_str());
 }
 
+// Like updateSource but only start/repeatStart/sizeInBytes.  start is
+// truncated to the last 255 chars (the column is VARCHAR(256)).
 bool cSource::updateSourceStart(wstring& start, int repeatStart, wstring& etext, __int64 actualLenInBytes)
 {
 	LFS
@@ -234,6 +299,8 @@ bool cSource::updateSourceStart(wstring& start, int repeatStart, wstring& etext,
 	return myquery(&mysql, (wchar_t*)sqlStatement.c_str());
 }
 
+// Write encoding and readBufferFlags for etext.  sourceEncoding is truncated
+// to 54 chars but is not escaped (comment about "start column" is stale).
 bool cSource::updateSourceEncoding(int readBufferType, wstring sourceEncoding, wstring etext)
 {
 	LFS
@@ -245,6 +312,9 @@ bool cSource::updateSourceEncoding(int readBufferType, wstring sourceEncoding, w
 }
 
 
+// COUNT(*) of sources of sourceType, excluding SKIP / START NOT FOUND.
+// left==true: only still-unprocessed rows.  Returns -1 on LOCK/query failure;
+// the query-failure path does not UNLOCK.
 int getNumSources(MYSQL& mysql, int sourceType, bool left)
 {
 	LFS
@@ -280,6 +350,10 @@ int getNumSources(MYSQL& mysql, int sourceType, bool left)
 	return numSources;
 }
 
+// mysql_init + mysql_real_connect to host 'where', schema DBNAME, user
+// root / password byron0.  Sets utf8mb4 / utf8mb4_bin and MYSQL_OPT_RECONNECT.
+// alreadyConnected is in/out: true on entry skips the connect; set true on
+// success.  Returns 0 or -1.  Credentials are hardcoded.
 int initializeDatabaseHandle(MYSQL& mysql, const wchar_t* where, bool& alreadyConnected)
 {
 	LFS
@@ -300,6 +374,8 @@ int initializeDatabaseHandle(MYSQL& mysql, const wchar_t* where, bool& alreadyCo
 	return -1;
 }
 
+// Write parse-quality counters onto this source's row.  LOCKs sources WRITE
+// and never UNLOCKs - every call leaves the table locked for this connection.
 void cSource::updateSourceStatistics(int numSentences, int matchedSentences, int numWords, int numUnknown,
 	int numUnmatched, int numOvermatched, int numQuotations, int quotationExceptions, int numTicks, int numPatternMatches)
 {
@@ -313,6 +389,7 @@ void cSource::updateSourceStatistics(int numSentences, int matchedSentences, int
 	myquery(&mysql, qt);
 }
 
+// Write sizeInBytes / numWordRelations.  Same missing-UNLOCK as above.
 void cSource::updateSourceStatistics2(int sizeInBytes, int numWordRelations)
 {
 	LFS
@@ -322,6 +399,7 @@ void cSource::updateSourceStatistics2(int sizeInBytes, int numWordRelations)
 	myquery(&mysql, qt);
 }
 
+// Write numMultiWordRelations.  Same missing-UNLOCK as above.
 void cSource::updateSourceStatistics3(int numMultiWordRelations)
 {
 	LFS
@@ -331,6 +409,12 @@ void cSource::updateSourceStatistics3(int numMultiWordRelations)
 	myquery(&mysql, qt);
 }
 
+// Load objects.common=1 (multi-source / location-like) and their
+// objectWordMap rows, appending cObject / cWordMatch entries and filling
+// relatedObjectsMap.  wordMap[wordId] must be valid for every mapped word.
+// BIT columns are tested as sqlrow[n][0]==1 (the binary 1 MySQL returns for
+// BIT, not '1').  objects[currentId] treats the DB objectId as a vector
+// index - non-dense ids are out-of-range.  Returns 0 or -1.
 int cSource::readMultiSourceObjects(tIWMM* wordMap, int numWords)
 {
 	LFS
@@ -386,6 +470,10 @@ int cSource::readMultiSourceObjects(tIWMM* wordMap, int numWords)
 	return 0;
 }
 
+// REPLACE INTO objects and INSERT INTO objectWordMap for every index in
+// objectsToFlush.  Uses checkFull() to batch VALUES lists.  Returns 0, or
+// -1 if LOCK/checkFull fails (the checkFull-failure path does not UNLOCK).
+// objectLocations is not written (numObjectLocationsInserted stays 0).
 // right now it is assumed that all objects from books are kept separate,
 // so there is no check for merging information between info sources
 // but there is a 'common' list consisting of all multiple-word objects, usually locations.
@@ -452,6 +540,8 @@ int cSource::flushObjects(set <int>& objectsToFlush)
 	return 0;
 }
 
+// Empty word: no forms, index = -uniqueNewIndex++ (a unique negative id
+// until the DB assigns a real one), all usage/relation slots zeroed.
 cSourceWordInfo::cSourceWordInfo(void)
 {
 	LFS
@@ -474,6 +564,9 @@ cSourceWordInfo::cSourceWordInfo(void)
 	localWordIsLowercase = 0;
 }
 
+// Copy DBUsagePatterns[upStart, upStart+upLength) into usagePatterns,
+// scaling so the max value is at most highestPatternCount (128 or 64).
+// Does not itself write usageCosts.
 // called by transferFormsAndUsage (in this file)
 // this procedure does not make a high pattern count into a low cost.
 // it makes a high pattern count received from the DB into a count which will fit into the usagePatterns array (max 128)
@@ -492,6 +585,10 @@ void cSourceWordInfo::transferDBUsagePatternsToUsagePattern(int highestPatternCo
 			usagePatterns[up] = (highestPatternCount * ((unsigned int)DBUsagePatterns[up]) / highest);
 }
 
+// Hydrate from a DB wordForms slice (forms[i]=formId, forms[i+1]=count,
+// iCount pairs).  Appends the form ids onto the process-wide formsArray
+// (grows it via trealloc 17).  mainEntry is resolved later from
+// tmpMainEntryWordId.  formNum is the "word is its own form" id, or -1.
 // formNum is the form that is the word itself, if that form exists.
 // read the cSourceWordInfo from the DB.  So, don't mark this with insertNewForms flag
 cSourceWordInfo::cSourceWordInfo(unsigned int* forms, unsigned int iCount, int iInflectionFlags, int iFlags, int iTimeFlags, int mainEntryWordId, int iDerivationRules, int iSourceId, int formNum, wstring& word)
@@ -521,6 +618,10 @@ cSourceWordInfo::cSourceWordInfo(unsigned int* forms, unsigned int iCount, int i
 	localWordIsLowercase = 0;
 }
 
+// Split the (formId,count) pairs into real forms vs usage-pattern fake
+// form ids (>= patternFormNumOffset-1).  Dedupes forms, fills usagePatterns
+// / usageCosts, and sets wordFrequency from TRANSFER_COUNT.  iCount is
+// overwritten with the number of real forms kept.
 void cSourceWordInfo::transferFormsAndUsage(unsigned int* forms, unsigned int& iCount, int formNum, wstring& word)
 {
 	LFS
@@ -584,6 +685,11 @@ void cSourceWordInfo::transferFormsAndUsage(unsigned int* forms, unsigned int& i
 	wordFrequency = UPDB[TRANSFER_COUNT];
 }
 
+// Overlay this in-memory word with a DB row.  Rejects the update (returns
+// false, sets updateMainInfo) unless the in-memory word has
+// queryOnLowerCase/queryOnAnyAppearance AND the DB row does not - i.e. a
+// locally-forced re-query wins.  On accept, replaces forms/flags and
+// returns true.
 // update cSourceWordInfo from the DB.  So, don't mark this with insertNewForms flag
 bool cSourceWordInfo::updateFromDB(int wordId, unsigned int* forms, unsigned int iCount, int iInflectionFlags, int iFlags, int iTimeFlags, int iMainEntryWordId, int iDerivationRules, int iSourceId, int formNum, wstring& word)
 {
@@ -614,6 +720,8 @@ bool cSourceWordInfo::updateFromDB(int wordId, unsigned int* forms, unsigned int
 }
 
 #define NUM_WORD_ALLOCATION 102400
+// idToMap[wordId] = iWord and iWord->second.index = wordId.  Grows the
+// sparse array by NUM_WORD_ALLOCATION slots (filled with wNULL) as needed.
 void cWord::mapWordIdToWordStructure(int wordId, tIWMM iWord)
 {
 	LFS
@@ -635,6 +743,7 @@ void cWord::mapWordIdToWordStructure(int wordId, tIWMM iWord)
 	iWord->second.index = wordId;
 }
 
+// idToMap[wordId], or wNULL if wordId is out of range or never mapped.
 tIWMM cWord::wordStructureGivenWordIdExists(int wordId)
 {
 	if (wordId >= idsAllocated || wordId < 0)
@@ -642,6 +751,9 @@ tIWMM cWord::wordStructureGivenWordIdExists(int wordId)
 	return idToMap[wordId];
 }
 
+// If an open-class word has no mainEntry, LOG_INFO and set
+// queryOnAnyAppearance so the next DB refresh will try again.  'where' is
+// only for the log (a call-site cookie).
 void cSourceWordInfo::mainEntryCheck(const wstring first, int where)
 {
 	LFS
@@ -653,6 +765,9 @@ void cSourceWordInfo::mainEntryCheck(const wstring first, int where)
 		}
 }
 
+// SELECT forms (optionally only rows newer than lastReadfromDBTime) and
+// append any name not already in Forms.  FATAL if both sides grew since the
+// last refresh (incompatible form-id spaces).  qt is a scratch buffer.
 void cWord::readForms(MYSQL& mysql, wchar_t* qt)
 {
 	LFS
@@ -689,6 +804,9 @@ void cWord::readForms(MYSQL& mysql, wchar_t* qt)
 		lplog(LOG_FATAL_ERROR, L"New forms discovered in db AND new forms already in memory!  Exiting!");
 }
 
+// True if the cwd wordFormCache file is newer than MAX(ts) of words and
+// wordForms.  The first SELECT's MYSQL_RES is overwritten by the second
+// without a free (leak).  Returns false if the file is missing or older.
 bool cWord::isWordFormCacheValid(MYSQL& mysql)
 {
 	HANDLE hFile = CreateFile(L"wordFormCache", GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
@@ -739,6 +857,11 @@ bool cWord::isWordFormCacheValid(MYSQL& mysql)
 	return wordCacheValid;
 }
 
+// Fill words[wordId]=offset into wordForms, counts[wordId]=#forms, and
+// wordForms as a flat (formId-1, count) pairs array.  Tries wordFormCache
+// first when USE_TEST_CACHE and lastReadfromDBTime==-1.  Returns 0 if the
+// caller should stop (skipWordInitialization cache hit), 2 to continue, -1
+// on query failure.  specialExtension is unused.
 // called by readWordsFromDB (in this file)
 // Reads word ids into words with numWordForms filled with the number of wordforms, and 
 //   wordForms filled with the forms of the words, with counts the number of wordForms for each word.
@@ -821,6 +944,9 @@ int cWord::readWordFormsFromDB(MYSQL& mysql, int maxWordId, wchar_t* qt, int* wo
 	return 2;
 }
 
+// MAX(id)+1 from words (the allocation size for the words[]/counts[]
+// scratch arrays).  Returns -1 on query/empty failure; the empty-row path
+// does not mysql_free_result.
 int getMaxWordId(MYSQL& mysql)
 {
 	LFS
@@ -833,6 +959,10 @@ int getMaxWordId(MYSQL& mysql)
 	return maxWordId;
 }
 
+// SELECT words where sourceId IS NULL and insert/update WMM, resolving
+// mainEntry via tmpMainEntryWordId after the scan.  Ensures the ||| section
+// sentinel exists.  Sets lastReadfromDBTime to NOW()+1.  Returns 0 or -1
+// (the NOW() NULL-row path returns -1 without freeing result).
 int cWord::initializeWordsFromDB(MYSQL& mysql, int* words, int* counts, unsigned int*& wordForms, int& numWordsInserted, int& numWordsModified, bool printProgress)
 {
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
@@ -940,6 +1070,9 @@ int cWord::initializeWordsFromDB(MYSQL& mysql, int* words, int* counts, unsigned
 	return 0;
 }
 
+// Stage-1 lexicon load: readForms, getMaxWordId, readWordFormsFromDB,
+// initializeWordsFromDB, optional generateFormStatistics.  Returns 0, or
+// maxWordId if that helper failed (<=0).
 // update read: read NULL source since lastReadfromDBTime and update or insert the entries into memory (lastReadfromDBTime>0)
 int cWord::readWordsFromDB(MYSQL& mysql, bool generateFormStatisticsFlag, bool printProgress, bool skipWordInitialization)
 {
@@ -980,6 +1113,8 @@ int cWord::readWordsFromDB(MYSQL& mysql, bool generateFormStatisticsFlag, bool p
 	return 0;
 }
 
+// True if openlibraryinternetarchivebooksdump has a row whose title equals
+// proposedTitle.  Title is interpolated in double quotes with no escape.
 bool isBookTitle(MYSQL& mysql, wstring proposedTitle)
 {
 	if (!myquery(&mysql, L"LOCK TABLES openlibraryinternetarchivebooksdump READ"))
@@ -999,6 +1134,9 @@ bool isBookTitle(MYSQL& mysql, wstring proposedTitle)
 	return numResults > 0;
 }
 
+// Scan wiktionarynouns definitions containing "gent noun of" or "one who "
+// and fill agentiveNominalizations[noun] with the extracted verb.
+// Does not mysql_free_result (leak).  Returns 0 or -1.
 int readWikiNominalizations(MYSQL& mysql, unordered_map <wstring, set < wstring > >& agentiveNominalizations)
 {
 	LFS
@@ -1039,6 +1177,8 @@ int readWikiNominalizations(MYSQL& mysql, unordered_map <wstring, set < wstring 
 	return 0;
 }
 
+// Raise the running max-* lengths for one ontology entry and count
+// superClasses strings over 150/170/190 chars.  Used only to size the table.
 void maxFieldLengths(const wstring key, cOntologyEntry& dbPredicate, int& maxKey, int& maxCompactLabel, int& maxInfoPage, int& maxAbstractDescription, int& maxCommentDescription, int& maxSuperClasses, int& numGT150, int& numGT170, int& numGT190)
 {
 	wstring superClasses;
@@ -1058,6 +1198,8 @@ void maxFieldLengths(const wstring key, cOntologyEntry& dbPredicate, int& maxKey
 		numGT190++;
 }
 
+// In-place: prefix ' and " with \\, and double existing backslashes.  Used
+// by writeDbOntologyEntry; not the same as escapeStr() (single-quote only).
 void escapeAllQuote(wstring& str)
 {
 	LFS
@@ -1071,6 +1213,11 @@ void escapeAllQuote(wstring& str)
 	str = ess;
 }
 
+// INSERT one ontology row.  Mutates dbPredicate (clamps negative ranks) and
+// escapeAllQuote's onkey/compactLabel/abstractDescription in place; infoPage
+// and commentDescription / superClasses are NOT escaped.  allowFailure=true
+// so ER_DUP_ENTRY is treated as success.  Superclass strings >10000 are
+// logged and skipped.
 bool writeDbOntologyEntry(MYSQL& mysql, const wstring key, cOntologyEntry& dbPredicate)
 {
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];

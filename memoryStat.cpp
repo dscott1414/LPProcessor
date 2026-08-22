@@ -1,3 +1,38 @@
+/*
+	memoryStat.cpp - WMI PrivateBytes sampler, GlobalMemoryStatusEx dump, and the tmalloc family
+
+	Overview:
+		initializeCounter() sets up a Wbem refresher against root\\cimv2 (the
+		AddEnum of Win32_PerfRawData_PerfProc_Process is commented out, so
+		getCounter() currently always fails).  reportMemoryUsage() logs physical /
+		virtual / pagefile totals plus the process PrivateBytes.  tmalloc / tcalloc
+		/ trealloc / tfree wrap CRT allocators and keep the process-wide
+		memoryAllocated counter; OOM logs FATAL (which exits) and then exit(0).
+
+	Pipeline position:
+		tmalloc is the allocator used by the binary cache, wordForms buffers, and
+		DIYDiskArray.  reportMemoryUsage is called only from the OOM path.
+
+	Key entry points:
+		- initializeCounter() / getCounter() / freeCounter() - WMI (currently inert).
+		- reportMemoryUsage() - one-line memory dump to main.lplog.
+		- tmalloc / tcalloc / trealloc / tfree - tracked malloc.
+
+	Key data structures / globals:
+		- memoryAllocated - process-wide; comment says "protect with mutex" but
+			there is no lock.
+		- pRefresher / pEnum / pNameSpace - COM objects; pEnum is never assigned
+			because AddEnum is commented out.
+
+	Notes / gotchas:
+		- initializeCounter leaks the locator/BSTR on several early-return paths
+			and never adds the enumerator, so getCounter is a no-op.
+		- tcalloc's OOM message uses 'num' (element count), not num*SizeOfElements.
+		- trealloc bumps memoryAllocated before realloc; on failure the counter is
+			wrong and the original pointer is still valid (but FATAL exits anyway).
+		- In _DEBUG, trealloc memset's the new tail - the comment says this is to
+			keep checked iterators happy.
+*/
 // from MSDN
 #define _WIN32_DCOM
 
@@ -24,6 +59,10 @@ IWbemRefresher* pRefresher = NULL;
 IWbemHiPerfEnum* pEnum = NULL;
 IWbemServices* pNameSpace = NULL;
 
+// CoInitialize + connect to \\\\.\\root\\cimv2 and create a WbemRefresher.
+// Returns 0-ish HRESULT on success, -1 on any failure.  AddEnum is commented
+// out, so pEnum stays NULL and getCounter will always return -1.
+// Early-return paths leak pWbemLocator / bstrNameSpace / pNameSpace.
 int initializeCounter(void)
 {
 	LFS
@@ -60,6 +99,9 @@ int initializeCounter(void)
 	return hr;
 }
 
+// Read the named DWORD property of this process from the (never-added) WMI
+// enumerator.  Always returns -1 today because pEnum is NULL.  On a live
+// enumerator, early returns after new[] leak apEnumAccess.
 int getCounter(const wchar_t* counter, DWORD& dwValue)
 {
 	LFS
@@ -99,6 +141,8 @@ int getCounter(const wchar_t* counter, DWORD& dwValue)
 	return hr;
 }
 
+// Release the three WMI objects (NULL-safe) and CoUninitialize.  Safe to call
+// even if initializeCounter failed part-way (NULLs are skipped).
 void freeCounter(void)
 {
 	LFS
@@ -108,6 +152,8 @@ void freeCounter(void)
 	CoUninitialize();
 }
 
+// Log GlobalMemoryStatusEx totals (MB) and this process's PrivateBytes.
+// PrivateBytes is 0 when getCounter fails (the current case).
 void reportMemoryUsage(void)
 {
 	LFS
@@ -123,6 +169,8 @@ void reportMemoryUsage(void)
 }
 
 /* memtrack */
+// malloc(num) and add num to memoryAllocated.  On OOM: dump memory, FATAL
+// (exits), then a dead exit(0).  Does not check for wrap of memoryAllocated.
 void* tmalloc(size_t num)
 {
 	LFS
@@ -135,6 +183,8 @@ void* tmalloc(size_t num)
 	exit(0);
 }
 
+// calloc and add num*SizeOfElements to memoryAllocated.  The OOM message
+// prints 'num' (elements), not the byte count.
 void* tcalloc(size_t num, size_t SizeOfElements)
 {
 	LFS
@@ -147,6 +197,9 @@ void* tcalloc(size_t num, size_t SizeOfElements)
 	exit(0);
 }
 
+// realloc, charging (newbytes-oldbytes) first.  'from' is a caller cookie
+// printed on OOM to identify the site (see the integers in intArray.h / DB.cpp).
+// _DEBUG memset's the new tail.  On failure FATAL-exits; original stays valid.
 void* trealloc(int from, void* original, unsigned int oldbytes, unsigned int newbytes)
 {
 	LFS
@@ -164,6 +217,8 @@ void* trealloc(int from, void* original, unsigned int oldbytes, unsigned int new
 	exit(0);
 }
 
+// Subtract oldbytes from memoryAllocated and free.  Caller is trusted for
+// oldbytes; a mismatch silently drifts the counter.  free(NULL) is OK.
 void tfree(size_t oldbytes, void* original)
 {
 	LFS

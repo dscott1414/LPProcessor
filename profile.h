@@ -1,3 +1,42 @@
+/*
+	profile.h - RAII function profiler (cProfile) and the LFS/LFSL/DLFS instrumentation macros
+
+	Overview:
+		When PROFILE is defined, every `LFS` at the top of a function constructs a
+		cProfile on the stack whose destructor records elapsed QPC time, private-byte
+		delta, and call count into a process-wide map keyed by a colon-separated
+		function-path (caller:callee:...).  lfprint() dumps the tree sorted by time,
+		memory-without-children, and call count.  When PROFILE is off (the default),
+		LFS/LFSL/DLFS expand to nothing, which is why locals in this codebase appear
+		to hang off a bare `LFS` line.
+
+	Pipeline position:
+		Optional; used while timing question-answering.  accumulateNetworkTime() is
+		also called from Internet.cpp and from logstring() on FATAL so network wait
+		is attributed even when the profiler is off.
+
+	Key entry points:
+		- cProfile(function,num) / ~cProfile() - push/pop the function path and accumulate.
+		- lfprint() - dump TIME/MEMORY/COUNT totals to the log.
+		- accumulateNetworkTime() - add one HTTP wait to the per-host maps.
+		- counterBegin/counterEnd/printCounters - ad-hoc QPC buckets (not the path tree).
+
+	Key data structures / globals:
+		- timeMapTotal / timeSort / memorySort / countSort / functionPath - process-wide
+			and explicitly not thread-safe (author comments on each).
+		- mySQLTotalTime - summed in DBUtility.cpp under mySQLTotalTimeSRWLock.
+		- networkTimeSRWLock - guards the accumulateNetworkTime maps.
+		- logQuestionProfileTime - master enable; constructor returns immediately if 0.
+
+	Notes / gotchas:
+		- accumulateNetworkTime() takes const wchar_t* but writes a NUL over the second
+			'/' of the URL and restores it - that is UB on a string literal and will
+			fault if the page is in read-only memory.
+		- lfprint(char*,int) passes timeMapTotal[f] (a CP struct) to a %I64d format;
+			varargs + class type is undefined.  It happens to print CP::t on MSVC.
+		- Nested LFS in a recursive function (paice stem()) will grow functionPath
+			without bound for that thread.
+*/
 #include "time.h"
 #include "Psapi.h"
 extern int logQuestionProfileTime;
@@ -51,6 +90,9 @@ public:
 	static __int64 mySQLTotalTime; // protect by mySQLTotalTimeSRWLock
 	string saveFunctionPath;
 	__int64 startTime,startPrivateBytes;
+	// Push 'function' (or a decimal 'num') onto functionPath and snapshot QPC +
+	// PrivateUsage.  Empty function resets the network accumulators.  No-op when
+	// logQuestionProfileTime is 0.  Not re-entrant across threads (functionPath is static).
 	cProfile(const char * function,int num=0)
 	{
 		startPrivateBytes = 0;
@@ -85,6 +127,8 @@ public:
 		startPrivateBytes=(ret) ? memCounter.PrivateUsage : -1;
 		QueryPerformanceCounter((LARGE_INTEGER *)&startTime);
 	}
+	// Add elapsed QPC ticks and private-byte delta to timeMapTotal[functionPath],
+	// restore the caller's path, and charge the destructor itself to accumulatedOverheadTime.
 	~cProfile()
 	{
 		if (!logQuestionProfileTime) return;
@@ -114,11 +158,14 @@ public:
 	static __int64 cb;
 	static unordered_map <string ,__int64 > counterMap;
 	static unordered_map <string ,int > counterNumMap;
+	// Start (or restart) the ad-hoc QPC interval stored in cb.
 	static void counterBegin(void)
 	{
 		QueryPerformanceCounter((LARGE_INTEGER *)&cb);
 	}
 
+	// Add (now-cb) to counterMap[countType], bump counterNumMap, then restart cb
+	// so consecutive counterEnd calls measure a chain of intervals.
 	static void counterEnd(const char *countType)
 	{
 		__int64 endcb;
@@ -138,6 +185,8 @@ public:
 		counterBegin();
 	}
 
+	// printf each counterMap bucket as ticks and percent of the sum.  Divides by
+	// total without a zero check - do not call if no counterEnd has run.
 	static void printCounters()
 	{
 		__int64 total=0;
@@ -150,6 +199,9 @@ public:
 		}
 	}
 
+	// Log one timeMapTotal entry.  Empty 'function' also dumps SQL wait and
+	// flushes accumulateNetworkTime.  timeMapTotal[f] is a CP, not an __int64;
+	// the %I64d happens to print CP::t on MSVC.
 	static void lfprint(char *function,int num)
 	{
 		if (num>0)
@@ -168,6 +220,9 @@ public:
 		}
 	}
 
+	// Close out 'profile', then dump TIME / MEMORY / COUNT reports for every
+	// functionPath, with direct-child attribution (paths that add exactly one
+	// more ':' segment).  No-op when logQuestionProfileTime is 0.
 	static void lfprint(cProfile &profile)
 	{
 		if (!logQuestionProfileTime) return;
@@ -269,6 +324,10 @@ public:
 			lplog(LOG_INFO,L"      %30S",(*si)->first.c_str());
 		}
 	}
+	// Add one HTTP wait: (now-timer) to the sleep+net total and (now-lNC) to
+	// net-only, keyed by the host carved out of 'str' (scheme://host/...).
+	// timer==0 still takes the lock (used as a flush from FATAL and lfprint).
+	// Casts away const and writes a temporary NUL into str - UB on a literal.
 	static void accumulateNetworkTime(const wchar_t *str,int timer,int lNC)
 	{ 
 		if (!lockInitialized)

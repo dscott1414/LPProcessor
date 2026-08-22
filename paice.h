@@ -1,3 +1,37 @@
+/*
+	paice.h - Paice/Husk stemmer (cStemmer) used to recover a word's mainEntry and inflection
+
+	Overview:
+		A C++ port of the 1994 Paice/Husk suffix stemmer, later extended by Zamora
+		(MINSTEMSIZE, 2-digit state markers) and then by this project with prefix
+		stripping against the words table and a closed-class reject list
+		(wordIsNotUnknownAndOpen).  Rules are loaded once from
+		source\\lists\\suffixRules.txt and prefixRules.txt.
+
+	Pipeline position:
+		Called from cWord::attemptDisInclination / parseWord during lexicon lookup
+		(initialization and tokenize) when a surface form is not already in Words.
+
+	Key entry points:
+		- stem() - apply every suffix rule (recursively on 'continue'), then prefixes.
+		- findLastFormInflection() - walk a result's trail to recover form + inflection.
+		- isWordDBUnknown() - true if the candidate stem is UNDEFINED in memory or DB.
+		- wordIsNotUnknownAndOpen() - false if the word carries a closed-class form.
+
+	Key data structures / globals:
+		- cSuffixRule - one suffixRules.txt line: keystr/repstr/form/inflection/flags/trail.
+		- tPrefixRule - one prefixRules.txt line: keystr/repstr/rulenum.
+		- stemRules / prefixRules - loaded lazily on first stem() / stripPrefix().
+		- unacceptableCombinationForms - closed-class form ids filled on first use.
+
+	Notes / gotchas:
+		- trail is a cIntArray of rule line numbers (negative for prefixes) recording
+			which rules produced a given candidate; encode/decode on cIntArray packs
+			these into a 30-bit int elsewhere.
+		- stem() is recursive and each frame has an LFS, so PROFILE builds explode
+			functionPath on long suffix chains.
+		- findLastFormInflection takes rulesUsed by value (full copy).
+*/
 //#pragma warning (disable: 4503)
 //#pragma warning (disable: 4996)
 //#undef _STLP_USE_EXCEPTIONS // STLPORT 4.6.1
@@ -31,6 +65,7 @@ public:
 		bool cont; /* Boolean-continue with another rule? */
 		bool protect; /* Boolean-protect this ending? */
 		cIntArray trail;
+		// Zero inflection/flags; rulenum=-1 (not yet bound to a file line).
 		cSuffixRule()
 		{
 			inflection=0;
@@ -42,6 +77,7 @@ public:
 		~cSuffixRule()
 		{
 		}
+		// Deep copy, including the trail of rule line numbers that produced text.
 		cSuffixRule(const cSuffixRule &rhs)
 		{
 			text = rhs.text; /* To return stemmer output */
@@ -65,6 +101,8 @@ public:
 
 	static int findLastFormInflection(vector <cSuffixRule> rulesUsed, vector <cSuffixRule>::iterator &r, wstring &form, int &inflection);
 	static size_t stem(MYSQL mysql, wstring s, vector<cSuffixRule>& rulesUsed, cIntArray& trail, int addRule);
+	// Clears the process-wide stemRules/prefixRules vectors (not usually needed -
+	// they are static and live for the process).
 	~cStemmer();
 	static bool isWordDBUnknown(MYSQL mysql, wstring word);
 	static bool wordIsNotUnknownAndOpen(tIWMM iWord, bool log);
