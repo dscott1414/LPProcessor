@@ -1,4 +1,95 @@
 ﻿#include <windows.h>
+/*
+	source.cpp - the cSource document object: per-word match bookkeeping, pattern
+	             printing, Gutenberg boilerplate trimming and cache serialization.
+
+	(This header comment sits just below the first #include because the file starts
+	with a UTF-8 BOM that must remain the very first bytes of the file.)
+
+	Overview:
+		This translation unit holds two cooperating layers.  The first is cWordMatch,
+		the per-source-position record: which dictionary word sits at this position,
+		which forms/inflections are in play, which patterns matched here (pma/pema
+		indices), which object/speaker/relation positions this word points at, plus
+		the serializer for all of that.  The second is the parts of cSource that own
+		the whole document: matching the 500+ hand-written patterns against each
+		sentence, printing the aligned pattern-match tables that the trace logs are
+		made of, deciding where the real text of a Project Gutenberg file starts and
+		ends, a post-parse rule layer that overrides a few part-of-speech decisions,
+		and read/write of the .SourceCache binary cache.
+
+		Two conventions run through the whole file.  (1) "position" (also "where",
+		"sourcePosition") is an index into the m[] vector of cWordMatch - never a
+		character offset; character offsets into the raw wide-char book text are
+		bufferScanLocation / bufferLen and only the Gutenberg-trimming helpers use
+		them.  (2) -1 means "unset" for essentially every stored position, and most
+		query*() helpers return -1 for "not present", so callers must test < 0 rather
+		than treat the value as an index.
+
+	Pipeline position:
+		Stage 2 (read source) contributes findStart()/scanUntil()/analyzeEnd(), which
+		locate the first real paragraph and the trailing Gutenberg matter; the actual
+		buffer load and encoding detection live in tokenize.cpp, not here.  Stage 4
+		(parse) is driven from printSentences(), which per sentence runs
+		matchPatternsAgainstSentence -> eliminateLoserPatterns -> consolidateWinners
+		and optionally prints the match table.  Everything else is support used by
+		later stages (relations, objects, speakers, question answering) or by the
+		cache: readSource()/read() and write() are the persistence entry points, and
+		copyChildrenIntoParent()/copySource() are used by question answering to splice
+		an answer out of a child source into the question source.
+
+	Key entry points:
+		- cWordMatch::setForm() / setPreferredForm() - turn the word's dictionary forms
+		  plus the position's capitalization/owner flags into the candidate form set.
+		- cWordMatch::read() / writeRef() - binary (de)serialization of one position.
+		- cSource::printSentences() - the per-sentence parse + trace driver.
+		- cSource::printSentence() / getMaxDisplaySize() / logOptimizedString() - the
+		  column-aligned pattern trace printer.
+		- cSource::findStart() / scanUntil() / analyzeEnd() - Gutenberg boilerplate,
+		  preface and TOC skipping; where the narrative really begins/ends.
+		- cSource::write() / read() / readSource() - .SourceCache persistence.
+		- cSource::sanityCheck() - index-range audit run before every cache write.
+		- cSource::ruleCorrectLPClass() and its ruleCorrectLPClass*() helpers - the
+		  hand-written post-parse part-of-speech overrides.
+		- cSource::copyChildrenIntoParent() - splice a child source's object (and its
+		  attached prepositional phrases) into this source.
+
+	Key data structures / globals:
+		- m - vector <cWordMatch>, one entry per source position; the document.
+		- pema / m[].pma - pattern-element and pattern match arrays; entries are
+		  referenced by integer index, and those indices are invalidated by
+		  consolidateWinners(), which is why clearTagSetMaps() is called around it.
+		- sentenceStarts - sentence boundaries; a trailing entry equal to m.size() is
+		  appended by printSentences() so that [starts[s],starts[s+1]) is always valid.
+		- bookBuffer / bufferLen / bufferScanLocation - the raw wide-char book text and
+		  offsets into it, in wchar_t units, owned by the tokenizer.
+		- shortNounInflectionMap etc. - static tables mapping inflection bits to the
+		  short tags used in trace output; terminated by a { -1, NULL } sentinel.
+		- ignoreWords / OCSubTypeStrings - NULL-terminated string tables.
+		- printMaxSize - scratch column-width vector reused by printSentence().
+
+	Dependencies:
+		Windows API (CreateFileW / ReadFile / WriteFile, wsprintf), MySQL through
+		cSource's mysql handle, the global Words dictionary and Forms table, WordNet
+		(hasHyperNym / getSynonyms), the ontology / DBpedia lookups used by
+		isDefiniteObject(), and the on-disk caches <path>.SourceCache,
+		<path>.patternUsage, <path>.wordCacheFile and WordCacheFile.
+
+	Notes / gotchas:
+		- MSVC/Windows only: wsprintf, _wopen, __int64, wcsupr, HANDLE, and 10 MB
+		  stack buffers (MAX_BUF) in write()/writePatternUsage()/writeWords().
+		- write() deliberately leaves the file handle open when it returns false (see
+		  the comment on it); several other early returns leak the handle too.
+		- The Gutenberg helpers assume CRLF line endings (see the comment above
+		  getNextLine); aloneOnLine's backward scan behaves differently on LF-only
+		  text.
+		- The trace printers write into fixed 2048-wchar_t stack buffers with almost
+		  no bounds checking; printSentence keeps a manual canary (bufferZone) because
+		  of it.
+		- LFS / DLFS / LFSL at the top of most functions are profiling macros
+		  (profile.h) that expand to nothing unless profiling is compiled in; that is
+		  why the first statement of a function is often indented oddly.
+*/
 #include "Winhttp.h"
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
 #include <io.h>
@@ -105,6 +196,11 @@ const wchar_t* OCSubTypeStrings[] = {
 
 // get inflection for form - remember to prepend a space
 // if there is no inflection , return an empty string
+// Sums the printed width of every short inflection tag selected by the bitmask
+// 'inflection', using one of the shortXXXInflectionMap tables (terminated by num<0).
+// Each matching tag costs 1 (the separator that getInflectionName emits) + its name
+// length.  Returns 0 when no bit in 'inflection' is present in the map.
+// Used only to size the fixed-width columns of the pattern trace output.
 int cWordMatch::getInflectionLength(int inflection, tInflectionMap* map)
 {
 	LFS
@@ -115,6 +211,14 @@ int cWordMatch::getInflectionLength(int inflection, tInflectionMap* map)
 	return len;
 }
 
+// Builds this position's candidate form set (the 'forms' bitset) from the dictionary
+// entry, honouring the capitalization / proper-noun flags decided by the tokenizer:
+//   flagOnlyConsiderProperNounForms - keep only PROPER_NOUN plus proper-noun subclasses
+//   flagAddProperNoun              - PROPER_NOUN is an extra candidate form
+//   flagFirstLetterCapitalized / flagRefuseProperNoun - gate PROPER_NOUN back off
+// Mutates 'forms' only; the disabled block below is the author's abandoned attempt at
+// picking a single form by usage-pattern count.  Compare setForm(), which is the
+// variant used for normal (non-preferred) positions.
 void cWordMatch::setPreferredForm(void)
 {
 	if (flags & cWordMatch::flagOnlyConsiderProperNounForms)
@@ -149,6 +253,13 @@ void cWordMatch::setPreferredForm(void)
 		forms.reset(PROPER_NOUN_FORM_NUM);
 }
 
+// Same job as setPreferredForm() but with the two extra special cases that normal text
+// needs: flagOnlyConsiderOtherNounForms (a capitalized determiner - keep only the forms
+// that block proper-noun recognition, except "no", which stays an abbreviation), and
+// flagNounOwner (a following "'s" forces noun/proper-noun readings only).
+// Side effects: sets bits in 'forms'; also repairs the dictionary entry in place -
+// an out-of-range form number is logged and rewritten to 0, which mutates the shared
+// Words table, so this is not safe to run concurrently on one word.
 void cWordMatch::setForm(void)
 {
 	// adjust words that are honorifics that are capitalized so that they are only recognized as honorifics
@@ -212,6 +323,10 @@ const wchar_t* r_c[] = { L"SUBOBJ",L"SUBJ",L"OBJ",L"META_EQUIV",L"MP",L"H",
 						L"PASS_SUBJ",L"POV",L"MNOUN",L"SP",L"SECONDARY_SP",L"EVAL",
 						L"ID",L"DELAY",L"PRIM",L"SECOND",L"EMBED",L"EXT",
 						L"NOT_ENC",L"EXT_ENC",L"NPAST_ENC",L"NPRES_ENC",L"POSS_ENC",L"THINK_ENC" };
+// Renders the objectRole bitmask as "[SUBJ][OBJ]..." for trace logs, using the parallel
+// roles[] / r_c[] tables above.  sRole is cleared first and also returned.
+// Note the two tables must stay index-aligned; ID_SENTENCE_TYPE appears twice in
+// roles[] (offsets 12 and 29), so that bit prints as "[ID]" from whichever hits first.
 wstring cWordMatch::roleString(wstring& sRole)
 {
 	LFS
@@ -233,6 +348,10 @@ wstring cWordMatch::roleString(wstring& sRole)
 // if adjective inflection and not flagOnlyConsiderProperNounForms, get adjective inflection length and adjective length
 // if adverb inflection and not flagOnlyConsiderProperNounForms, get adverb inflection length and adverb length
 // for all other forms not "like" adverb, adjective, verb, noun: max(shortlen) of the form.
+// Returns the width of the widest single "form+inflection" cell this position can print,
+// i.e. the column width printSentence() must reserve for it.  Must stay in sync with
+// getShortFormInflectionEntry(), which does the actual formatting: the +2 is the
+// surrounding decoration and the extra ++ covers a two-digit usage cost ("*10").
 unsigned int cWordMatch::getShortAllFormAndInflectionLen(void)
 {
 	LFS
@@ -280,6 +399,15 @@ unsigned int cWordMatch::getShortAllFormAndInflectionLen(void)
 	return allLen;
 }
 
+// Formats one cell of the pattern trace table: the short name of form offset 'line'
+// plus its short inflection tags plus "*<usageCost>" when the position is costable().
+// 'line' is an offset into the word's form list; the one-past-the-end offset means the
+// synthetic PROPER_NOUN form added by flagAddProperNoun.
+// 'entry' is a caller-supplied buffer written with wcscpy/wcscat/wsprintf and NO bound
+// checking - the caller must have reserved getShortAllFormAndInflectionLen() wchar_t.
+// Returns 0 always; a 0 return with an untouched buffer also means "form filtered out"
+// (see the flagOnlyConsiderProperNounForms early returns), so the return value cannot
+// be used to distinguish the two cases.
 unsigned int cWordMatch::getShortFormInflectionEntry(int line, wchar_t* entry)
 {
 	LFS
@@ -334,6 +462,10 @@ unsigned int cWordMatch::getShortFormInflectionEntry(int line, wchar_t* entry)
 	return 0;
 }
 
+// Number of candidate forms at this position: the dictionary entry's form count, plus
+// one for the synthetic proper-noun form when flagAddProperNoun is set.  Every loop that
+// walks forms by offset uses this bound, with offset == word->second.formsSize()
+// meaning "the added proper noun".
 unsigned int cWordMatch::formsSize(void)
 {
 	LFS
@@ -341,6 +473,10 @@ unsigned int cWordMatch::formsSize(void)
 	return word->second.formsSize();
 }
 
+// Maps a form offset (0..formsSize()-1) to a global form number.  Any offset at or past
+// the dictionary's form count is reported as PROPER_NOUN_FORM_NUM - note this happens
+// whether or not flagAddProperNoun is actually set (see the author's own "later?" note),
+// so an out-of-range offset is silently answered instead of flagged.
 unsigned int cWordMatch::getFormNum(unsigned int formOffset)
 {
 	LFS
@@ -349,6 +485,8 @@ unsigned int cWordMatch::getFormNum(unsigned int formOffset)
 }
 
 // gets all forms, including proper noun if set and properly checked
+// Returns the global form numbers that survive queryForm() at this position (i.e. after
+// the proper-noun / capitalization filtering).  Returns by value - O(formsSize()).
 vector <int> cWordMatch::getForms()
 {
 	vector <int> checkedForms;
@@ -360,6 +498,12 @@ vector <int> cWordMatch::getForms()
 }
 
 // in the case of a proper noun, it increases the size of the form by 1
+// Is global form number 'form' a candidate at this position?  Returns the form's offset
+// within the word's form list, or -1 if the form is absent or filtered out:
+//   flagAddProperNoun + PROPER_NOUN  -> the synthetic one-past-the-end offset
+//   flagOnlyConsiderProperNounForms  -> everything but proper-noun subclasses is -1
+//   PROPER_NOUN without capitalization (or with flagRefuseProperNoun) -> -1
+// Callers must test < 0, not != 0, because offset 0 is a legitimate answer.
 int cWordMatch::queryForm(int form)
 {
 	LFS
@@ -374,6 +518,8 @@ int cWordMatch::queryForm(int form)
 	return word->second.query(form);
 }
 
+// Name-based overload of queryForm(): looks the form name up in the global Forms table
+// first.  Returns -1 both for "no such form name" and "form not present here".
 int cWordMatch::queryForm(wstring sForm)
 {
 	LFS
@@ -383,6 +529,12 @@ int cWordMatch::queryForm(wstring sForm)
 }
 
 // in the case of a proper noun, it increases the size of the form by 1
+// Like queryForm(), but additionally requires the form to have survived pattern
+// winnowing (isWinner).  Returns the form offset, or -1.
+// Beware: isWinner() answers true for every form while tmpWinnerForms is still 0 (no
+// winner has been recorded yet), so before consolidateWinners() this is equivalent to
+// queryForm().  Unlike queryForm() it does not apply the capitalization filter to a
+// bare PROPER_NOUN request.
 int cWordMatch::queryWinnerForm(int form)
 {
 	DLFS
@@ -399,6 +551,9 @@ int cWordMatch::queryWinnerForm(int form)
 	return -1;
 }
 
+// Human-readable list of the winning form names at this position, space separated and
+// optionally with "[usageCost]" after each.  formsString is cleared, filled and returned.
+// The trailing separator is trimmed with substr() only when something was appended.
 wstring cWordMatch::winnerFormString(wstring& formsString, bool withCost)
 {
 	LFS
@@ -427,6 +582,8 @@ wstring cWordMatch::winnerFormString(wstring& formsString, bool withCost)
 	return formsString;
 }
 
+// Appends (does not clear) the global form numbers of all winning forms at this position
+// to winnerForms, including PROPER_NOUN_FORM_NUM when the synthetic proper-noun offset won.
 void cWordMatch::getWinnerForms(vector <int>& winnerForms)
 {
 	LFS
@@ -437,6 +594,9 @@ void cWordMatch::getWinnerForms(vector <int>& winnerForms)
 		winnerForms.push_back(PROPER_NOUN_FORM_NUM);
 }
 
+// Counts winning forms at this position (the synthetic proper noun counts as one).
+// Returns formsSize() in effect while no winner has been set, since isWinner() is
+// permissive when tmpWinnerForms == 0.
 int cWordMatch::getNumWinners()
 {
 	LFS
@@ -449,6 +609,9 @@ int cWordMatch::getNumWinners()
 	return numWinners;
 }
 
+// Machine-readable form dump used by the tag-set / statistics output:
+// "form|word*cost,form|word*cost".  winnerForms is cleared, filled and returned.
+// Unlike winnerFormString() this never reports the synthetic proper-noun form.
 wstring cWordMatch::patternWinnerFormString(wstring& winnerForms)
 {
 	LFS
@@ -467,18 +630,25 @@ wstring cWordMatch::patternWinnerFormString(wstring& winnerForms)
 	return winnerForms;
 }
 
+// True if any winning form at this position is verb-like; delegates to the dictionary
+// entry, passing this position's winner bitmask.
 bool cWordMatch::hasWinnerVerbForm(void)
 {
 	LFS
 		return word->second.hasWinnerVerbForm(tmpWinnerForms);
 }
 
+// True if any winning form at this position is noun-like (see hasWinnerVerbForm).
 bool cWordMatch::hasWinnerNounForm(void)
 {
 	LFS
 		return word->second.hasWinnerNounForm(tmpWinnerForms);
 }
 
+// Name-based overload of queryWinnerForm().  Returns -1 if the name is unknown.
+// Note the guard is "<= 0" here but "< 0" in queryForm(wstring): form number 0 is
+// rejected by this overload, so the form at index 0 of the Forms table can never be
+// queried by name through the winner path.
 int cWordMatch::queryWinnerForm(wstring sForm)
 {
 	DLFS
@@ -487,6 +657,11 @@ int cWordMatch::queryWinnerForm(wstring sForm)
 	return queryWinnerForm(form);
 }
 
+// Can this position carry the gender of a possessor ("his", "Jane's")?
+// Out: possessivePronoun - set true when the position is a possessive determiner, in
+// which case the function returns true immediately.  Otherwise true only for a
+// noun/proper-noun that owns the following word (flagNounOwner).
+// Note the condition uses a deliberate assignment (=) inside the if, not a comparison.
 bool cWordMatch::isPossessivelyGendered(bool& possessivePronoun)
 {
 	LFS
@@ -494,6 +669,11 @@ bool cWordMatch::isPossessivelyGendered(bool& possessivePronoun)
 	return ((queryWinnerForm(nounForm) >= 0 || queryWinnerForm(PROPER_NOUN_FORM_NUM) >= 0) && (flags & flagNounOwner));
 }
 
+// Could this position denote a person/thing whose gender matters to speaker and pronoun
+// resolution?  True for winning nouns and honorifics outright; false if none of the
+// pronoun / honorific / nom / proper-noun readings won.  For a word that also has a
+// proper-noun reading the answer depends on capitalization, because an uncapitalized
+// token is not a name.
 bool cWordMatch::isGendered(void)
 {
 	LFS
@@ -517,6 +697,13 @@ bool cWordMatch::isGendered(void)
 char* wTM(wstring inString, string& outString);
 
 // when changing this definition, the WNcache must be deleted
+// Decides via WordNet hypernym chains whether this noun denotes a physical object.
+// Answers false immediately for anything with no noun reading.  The verdict is cached in
+// the dictionary entry's flags (physicalObjectByWN / notPhysicalObjectByWN /
+// uncertainPhysicalObjectByWN) of the word's main entry, so the first call for a lemma
+// pays the WordNet lookup and mutates shared global state; "uncertain" reads as false.
+// Note the psychological_feature test queries 'word' rather than the resolved main entry
+// 'w' that the other two tests use.
 bool cWordMatch::isPhysicalObject(void)
 {
 	LFS
@@ -538,6 +725,10 @@ bool cWordMatch::isPhysicalObject(void)
 
 // purposefully ignores whether the noun has a flagNounOwner because of its use.
 // also judges noun usage - if noun form is rarely used, it is ignored.
+// True if this position can head a noun phrase.  A present participle that is also a
+// verb-verb is excluded outright.  Otherwise: any proper-noun handling flag, a
+// capitalized word with a proper-noun reading, or a noun / indefinite-pronoun /
+// relativizer reading whose usage cost is < 3 (i.e. common enough to trust).
 bool cWordMatch::isNounType(void)
 {
 	LFS
@@ -553,6 +744,8 @@ bool cWordMatch::isNounType(void)
 		((form = word->second.query(relativizerForm)) >= 0 && word->second.getUsageCost(form) < 3);
 }
 
+// True if any of the word's dictionary forms is marked as a top-level form (one that may
+// start a sentence-level pattern).  Ignores winners and this position's flags entirely.
 bool cWordMatch::isTopLevel(void)
 {
 	LFS
@@ -566,6 +759,11 @@ bool cWordMatch::isTopLevel(void)
 
 // we avoid processing verb past because the noun owner type could be used as a subject:
 // Jane's corrupted love.  Could be either! [Jane has corrupted love] or [Jane's corrupted love]  Unsolved problem
+// True if this position can modify a following noun: a commonly used (usage cost < 3)
+// adverb / adjective / ordinal / number / coordinator reading, or a noun-owner
+// construction ("Jane's").  Present participles that are also verb-verbs are excluded.
+// The modifierForms[] table is NULL-terminated, which means form number 0 would also
+// terminate it - safe only because no modifier form is form 0.
 bool cWordMatch::isModifierType(void)
 {
 	LFS
@@ -582,6 +780,14 @@ bool cWordMatch::isModifierType(void)
 		word->second.getUsageCost(form) < 3 && (flags & flagNounOwner));
 }
 
+// Re-creates a dictionary entry for a word that was in the cache file but is no longer
+// in the Words table, by re-tokenizing the text 'temp' the way the tokenizer would have.
+// The special forms (number, plural number, ordinal, adverbial number, date, time,
+// telephone, money, web address) are added directly; anything else goes through
+// parseWord().  On success 'word' points at the (possibly newly added) entry.
+// Returns false and logs LOG_ERROR when the word cannot be created; note that 'word' is
+// left equal to Words.end() in that case, so callers must not dereference it.
+// Side effects: inserts into the global Words table.
 bool cWordMatch::readWord(const wstring temp, int sourceType)
 {
 	wstring sWord, comment;
@@ -623,6 +829,12 @@ bool cWordMatch::readWord(const wstring temp, int sourceType)
 	return true;
 }
 
+// Unpacks the per-position trace flags from one __int64 in the cache buffer into this
+// position's sTrace 't'.  'where' is advanced past the value; 'limit' is the buffer size.
+// The bit order here must be the exact reverse of writeFlags() - the writer shifts left
+// as it packs, this reader shifts right as it unpacks, so adding a flag to one without
+// the other silently misassigns every trace flag.
+// Returns false if the buffer is exhausted.
 bool cWordMatch::readFlags(char* buffer, int& where, int limit)
 {
 	__int64 tflags;
@@ -652,6 +864,15 @@ bool cWordMatch::readFlags(char* buffer, int& where, int limit)
 	return true;
 }
 
+// Deserializes one source position from the .SourceCache buffer, in exactly the order
+// writeRef() wrote it; 'where' is advanced, 'limit' is the total buffer size.
+// The leading field is the word text: if it is not in the dictionary any more it is
+// rebuilt with readWord().  Members that are not persisted (skipResponse,
+// hasSyntacticRelationGroup, andChainType, notFreePrep, hasVerbRelations,
+// sameSourceCopy) are reset to their defaults at the end.
+// Returns false on any truncation; the object is then partially filled.
+// Note 'forms' is read twice (matching the two writes in writeRef) - the second read
+// overwrites the first, which is how the retired winnerForms field is skipped.
 bool cWordMatch::read(char* buffer, int& where, int limit, int sourceType)
 {
 	DLFS
@@ -731,6 +952,10 @@ bool cWordMatch::read(char* buffer, int& where, int limit, int sourceType)
 	return true;
 }
 
+// Packs this position's trace flags into a single __int64 and appends it to the cache
+// buffer.  Must mirror readFlags() exactly (see the note there).
+// Careful: the last flag (collectPerSentenceStats) is OR-ed in without a following shift,
+// which is what makes the two routines line up; a new flag must be added at the top.
 bool cWordMatch::writeFlags(void* buffer, int& where, int limit)
 {
 	// flags
@@ -761,6 +986,13 @@ bool cWordMatch::writeFlags(void* buffer, int& where, int limit)
 	return copy(buffer, tflags, where, limit);
 }
 
+// Serializes one source position into the cache buffer at 'where' (advanced), refusing to
+// pass 'limit'.  Returns false on overflow - the caller (cSource::write) then abandons
+// the file.  The word itself is stored by text, not by dictionary index, so caches
+// survive dictionary renumbering.
+// The field order here is the contract with read(); note the deliberate duplicates:
+// 'forms' is written twice and getQuoteForwardLink() is written twice (once in the quote
+// block and once in the trailing block), matching two reads on the other side.
 bool cWordMatch::writeRef(void* buffer, int& where, int limit)
 {
 	LFS
@@ -822,6 +1054,11 @@ bool cWordMatch::writeRef(void* buffer, int& where, int limit)
 	return true;
 }
 
+// Records that a pattern of length 'len' matched at this position with average cost
+// 'avgCost'.  maxMatch keeps the longest match ever seen; maxLACMatch keeps the longest
+// match seen at the lowest average cost, and lowestAverageCost that cost.
+// Returns true when the (cost, length) pair became the new best - i.e. when this pattern
+// is currently winning here - which eliminateLoserPatterns() uses to prune.
 bool cWordMatch::updateMaxMatch(int len, int avgCost)
 {
 	LFS
@@ -843,6 +1080,10 @@ bool cWordMatch::updateMaxMatch(int len, int avgCost)
 // lowerAverageCost is the original averageCost before it was set higher by assessCost
 // if the lower (original) average cost is actually the lowest average cost set for the position,
 //   it must be set to the higher avgCost to avoid eliminating all patterns in eliminateLoserPatterns
+// Three-argument variant used after assessCost() has raised a pattern's cost: if the
+// best-so-far record here is still the pre-assessment cost for this same length, raise it
+// to the post-assessment cost so the record stays achievable.
+// Returns true if the record was patched, false if it referred to some other pattern.
 bool cWordMatch::updateMaxMatch(int len, int avgCost, int lowerAvgCost)
 {
 	LFS
@@ -854,12 +1095,25 @@ bool cWordMatch::updateMaxMatch(int len, int avgCost, int lowerAvgCost)
 	return false;
 }
 
+// Logs the dictionary usage costs of every form of this position's word (diagnostics only).
 void cWordMatch::logFormUsageCosts(void)
 {
 	LFS
 		word->second.logFormUsageCosts(word->first);
 }
 
+// Scores the sentence [begin,end) after pattern elimination and decides whether it is
+// worth printing.
+// In/out: matchedTripletSumTotal accumulates the sum of per-position maxMatch over the
+//   whole document; matchedSentences is incremented when this sentence counts as matched.
+// Out: containsUnmatchedElement - true if some position is neither covered by a top-level
+//   pattern nor metadata nor a separator; such positions also get flagNotMatched set here.
+// Side effects: mutates m[] (flagNotMatched, and setSeparatorWinner() on separators so
+// the BNC word-form counters still see a winner).
+// Returns false ("do not print") when the sentence is considered matched - either the
+// average match length per position reaches the sentence length, or nothing was
+// unmatched - and traceMatchedSentences is off; true otherwise.
+// Note the average uses integer division and 'len' can be 0, hence the len && guard.
 bool cSource::sumMaxLength(unsigned int begin, unsigned int end, unsigned int& matchedTripletSumTotal, int& matchedSentences, bool& containsUnmatchedElement)
 {
 	LFS
@@ -895,6 +1149,13 @@ bool cSource::sumMaxLength(unsigned int begin, unsigned int end, unsigned int& m
 	return true;
 }
 
+// Attaches the prepositional-phrase link m[where].relPrep = relPrep (and the owning verb
+// whereVerb), then walks the resulting relPrep chain to make sure the assignment did not
+// create a cycle.  'fromWhere' and 'setType' (PREP_PREP_SET / PREP_OBJECT_SET /
+// PREP_VERB_SET) are for the trace log only.
+// If the chain is longer than 20 hops it is treated as a loop: LOG_ERROR is written and
+// the original relPrep is restored.  The loop guard is a heuristic, not a real cycle
+// detector, so a legitimate chain of more than 20 prepositions would be rejected too.
 void cSource::setRelPrep(int where, int relPrep, int fromWhere, int setType, int whereVerb)
 {
 	LFS
@@ -927,6 +1188,14 @@ void cSource::setRelPrep(int where, int relPrep, int fromWhere, int setType, int
 
 // PROLOGUE(0)[1]
 // 000161 _VERBREL1[1](3,4)*0 __ALLVERB[*](4)
+// Computes the column width printSentence() needs for one source position: the widest of
+// the word itself, the widest form+inflection cell, and the widest PEMA line (pattern
+// name + differentiator + begin/end positions + cost, plus the child pattern or child
+// form).  'numPosition' is the absolute source position used for the printed numbers, so
+// the "> 9 / > 99 / ..." ladders are just decimal-digit counts of those numbers.
+// The 28 added for traceIncludesPEMAIndex is the width of the four %06d indices plus
+// spaces that printSentence prepends in that mode.
+// Returns a width in wchar_t (no terminator or trailing separator included).
 unsigned int cSource::getMaxDisplaySize(vector <cWordMatch>::iterator& im, int numPosition)
 {
 	LFS
@@ -975,6 +1244,16 @@ unsigned int cSource::getMaxDisplaySize(vector <cWordMatch>::iterator& im, int n
 	return size;
 }
 
+// Tries pattern p at every position of [begin,end-1) - the last position is skipped
+// because it is the sentence-ending punctuation.  'fill' is passed through to
+// matchPatternPosition() and decides whether matches are recorded in pma/pema or the call
+// is only a test.
+// The four guards before the attempt are pattern-level preconditions: onlyBeginMatch
+// (must follow a separator that is not a relativizer), strictNoMiddleMatch (must not
+// follow a word character), notAfterPronoun (must not follow a definite-subject pronoun)
+// and afterQuote (must follow a closing quote).
+// Side effects: accumulates p->evaluationTime; fills pma/pema when fill is true.
+// Returns true if the pattern matched at least one position.
 bool cSource::matchPattern(cPattern* p, int begin, int end, bool fill)
 {
 	LFS // DLFS
@@ -1006,6 +1285,9 @@ bool cSource::matchPattern(cPattern* p, int begin, int end, bool fill)
 	return matchFound;
 }
 
+// Convenience wrapper: run matchPattern() over sentence number 's'.
+// Precondition: sentenceStarts must have an entry s+1 (printSentences() guarantees this
+// by appending m.size() as the final boundary).
 bool cSource::matchPatternAgainstSentence(cPattern* p, int s, bool fill)
 {
 	LFS // DLFS
@@ -1013,6 +1295,15 @@ bool cSource::matchPatternAgainstSentence(cPattern* p, int s, bool fill)
 }
 
 
+// Flushes one row of the pattern trace table: trims trailing blanks, compresses runs of
+// spaces to tabs, appends a newline and writes it out, then blanks 'line' again and
+// resets 'linepos' to 0.
+// linepos == 0 on entry means "nothing accumulated": just emit an empty log line and
+// blank the buffer.  A row that is all blanks is dropped silently.
+// The run-compression reinterprets the wide buffer as int and compares against
+// 0x20202020, i.e. it assumes four 8-bit spaces per int - which does not hold for
+// wchar_t (see the bug report); 'alignedLen' is len rounded down to a multiple of 4.
+// 'dest' is a fixed 2048-wchar_t stack buffer with no bound check against lineBufferLen.
 void cSource::logOptimizedString(wchar_t* line, unsigned int lineBufferLen, unsigned int& linepos)
 {
 	LFS
@@ -1052,6 +1343,10 @@ void cSource::logOptimizedString(wchar_t* line, unsigned int lineBufferLen, unsi
 	wmemset(line, L' ', lineBufferLen);
 }
 
+// Walks the by-position PEMA chain of source position 'position' and returns the index of
+// the 'line'-th entry (0-based), i.e. the PEMA that belongs on that row of the trace table.
+// Returns -1 when the chain is shorter than requested (logged as "not reachable").
+// An index at or past pema.count is a corrupted chain and is reported as LOG_FATAL_ERROR.
 int cSource::getPEMAPosition(int position, int line)
 {
 	LFS
@@ -1067,6 +1362,18 @@ int cSource::getPEMAPosition(int position, int line)
 // print a sentence
 // end should normally be set to words.size();
 #define LINE_BUFFER_LEN 2048
+// Prints the column-aligned pattern-match table for the positions [begin,end).
+// 'rowsize' is the terminal width (SCREEN_WIDTH); positions are emitted left to right
+// until the accumulated column widths exceed it, then printing continues on a new block.
+// Row 0 holds the words themselves (with capitalization, owner "'s", proper-noun flag
+// tags, "(position)[lowestAverageCost]"); rows 1..formsSize hold form+inflection cells;
+// the rows after that hold one matched PEMA each.  'containsNotMatched' additionally
+// echoes the plain words to the LOG_NOTMATCHED stream.
+// Returns 0 always (the early "sqlrow too large" return also returns 0, so a caller
+// cannot tell that a position was too wide to print).
+// Layout state: printMaxSize[] caches the per-position column width; bufferZone is a
+// manual canary checked at the end because everything here writes into fixed 2048-wide
+// stack buffers without bounds checks.
 int cSource::printSentence(unsigned int rowsize, unsigned int begin, unsigned int end, bool containsNotMatched)
 {
 	LFS
@@ -1193,6 +1500,18 @@ int cSource::printSentence(unsigned int rowsize, unsigned int begin, unsigned in
 	return 0;
 }
 
+// Is the occurrence of 'pattern' at 'loc' the only thing on its line?  Used to tell a
+// real chapter/boilerplate heading from an incidental mention inside a paragraph.
+// buffer/bufferLen describe the whole wide-char text (bufferLen counts wchar_t, not bytes).
+// Out: startScanningPosition - the first non-blank character of the line, i.e. where the
+// caller should resume scanning.
+// checkOnlyBeginning == true skips the forward check, so only "nothing before it on the
+// line" is required.
+// Returns false when text precedes or follows the pattern on the same line.
+// Two subtleties: the backward walk dereferences *loc after decrementing, so it reads one
+// wchar_t before 'buffer' when the pattern starts at offset 0 or 1; and the newline flag
+// is tested at the decremented position, which means a bare LF immediately before the
+// pattern is never recognized (only CRLF is) - see the bug report.
 bool aloneOnLine(wchar_t* buffer, wchar_t* loc, const wchar_t* pattern, wchar_t*& startScanningPosition, __int64 bufferLen, bool checkOnlyBeginning = false)
 {
 	LFS
@@ -1229,6 +1548,14 @@ bool aloneOnLine(wchar_t* buffer, wchar_t* loc, const wchar_t* pattern, wchar_t*
 	return true;
 }
 
+// Positions bufferScanLocation at the 'repeat'-th line of bookBuffer that consists solely
+// of 'start' - this is how the tokenizer is told to skip everything before the real text.
+// 'repeat' counts only occurrences that pass aloneOnLine(), and is decremented in place.
+// If 'start' cannot be found, the search falls back to the "~~BEGIN" marker; if that is
+// missing too, -1 is returned (and the failure is logged/printed when printError).
+// Returns 0 on success (bufferScanLocation is then a wchar_t offset into bookBuffer, and
+// points at the first non-blank character of the matched line), -1 on failure.
+// A "~~BEGIN" search that finds nothing returns 0 without moving bufferScanLocation.
 int cSource::scanUntil(const wchar_t* start, int repeat, bool printError)
 {
 	LFS
@@ -1266,6 +1593,10 @@ int cSource::scanUntil(const wchar_t* start, int repeat, bool printError)
 	return -1;
 }
 
+// True if m[I..] is a paragraph break followed by 'word' in all caps alone on its line
+// (optionally followed by ':' or '.'), i.e. the shape of a trailing "INDEX" / "CONTENTS"
+// / "FOOTNOTES" heading.
+// Reads up to m[I+3] without checking m.size(), so the caller must keep I+3 in range.
 bool checkIsolated(const wchar_t* word, vector <cWordMatch>& m, int I)
 {
 	return m[I].word == Words.sectionWord && m[I + 1].word->first == word && (m[I + 1].flags & cWordMatch::flagAllCaps) &&

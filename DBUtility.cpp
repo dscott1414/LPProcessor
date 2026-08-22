@@ -1,3 +1,55 @@
+/*
+	DBUtility.cpp - the bottom of the MySQL access layer: statement execution, escaping and the accumulating-INSERT helper
+
+	Overview:
+		Everything in the program that talks to MySQL goes through myquery() here.
+		A statement is built as a wide string by the caller, translated to UTF-8 into
+		one shared scratch buffer (sqlQueryBuffer) and executed with
+		mysql_real_query().  The rest of the file is the support cast: the wide->UTF-8
+		converter that grows that buffer, checkFull() (which lets callers accumulate
+		thousands of rows into one giant INSERT ... VALUES (..),(..),.. and flush it
+		when the buffer is nearly full), the two SQL string escapers, the global
+		database advisory lock (MySQL GET_LOCK) used to serialise multiple
+		LPProcessor processes, and a form-usage statistics dump.
+
+	Pipeline position:
+		Stage 1 (initialization) and every later stage that reads or writes words,
+		word relations, objects or sources.  Called from DB.cpp, DBWordRelations.cpp,
+		DBCreateSQLSchema.cpp, source.cpp, get*.cpp and main.cpp.
+
+	Key entry points:
+		- myquery() x2 - execute a statement, optionally storing the result set.
+		- WideCharToMultiByte() (the 4-argument overload defined here, which shadows
+			the Win32 API name) - wide->UTF-8 into a caller-owned growable buffer.
+		- checkFull() - flush an accumulating INSERT/IN list when it nears full.
+		- escapeStr() / encodeEscape() - SQL literal escaping.
+		- cWord::acquireLock() / releaseLock() - cross-process advisory DB lock.
+		- getTimeStamp() - local time as a wide string (static buffer).
+		- cWord::generateFormStatistics() - log per-form word counts.
+
+	Key data structures / globals:
+		- sqlQueryBuffer / sqlQueryBufSize - one process-wide UTF-8 scratch buffer for
+			the statement currently being sent.  Grows on demand, never freed.
+			Documented as protected by mySQLQueryBufferSRWLock.
+		- cProfile::mySQLTotalTime - accumulated query time, guarded by
+			mySQLTotalTimeSRWLock.
+
+	Dependencies:
+		libmysql (mysql_real_query, mysql_store_result, mysql_real_escape_string),
+		Win32 WideCharToMultiByte, the tmalloc/trealloc tracked allocator, lplog.
+
+	Notes / gotchas:
+		- lplog(LOG_FATAL_ERROR,...) does not return: logstring() calls exit(0).  So a
+			failed statement with allowFailure==false terminates the process, and code
+			written after such a call is effectively unreachable.
+		- The SRWLOCK is released before mysql_real_query() runs, while the pointer
+			into the shared buffer is still in use - see the report; single-threaded
+			today, but the lock discipline is not actually complete.
+		- Escaping here is hand-rolled and single-quote oriented; callers that quote
+			values with double quotes are not covered by escapeStr().
+		- LFS is the profiling macro from profile.h and expands to nothing unless
+			PROFILE is defined, which is why declarations appear to hang off it.
+*/
 #include <stdio.h>
 #include <string.h>
 #include <mbstring.h>
@@ -23,11 +75,24 @@ static void* sqlQueryBuffer = NULL; // protect by mySQLQueryBufferSRWLock
 static unsigned int sqlQueryBufSize = 0; // protect by mySQLQueryBufferSRWLock
 
 
+// Execute one SQL statement that returns no result set.
+// q is the statement as a wide string; it is translated to UTF-8 into the shared
+// sqlQueryBuffer and sent with mysql_real_query().
+// allowFailure==false: a server-side error is logged at LOG_FATAL_ERROR, which exits
+// the process.  allowFailure==true: the error is logged and false is returned so the
+// caller can carry on (used for "CREATE TABLE which may already exist" and for
+// INSERTs that may hit a duplicate key).
+// Returns true if the server accepted the statement.
+// Side effects: mutates the shared query buffer; adds the elapsed time to
+// cProfile::mySQLTotalTime under mySQLTotalTimeSRWLock.
 bool myquery(MYSQL* mysql, const wchar_t* q, bool allowFailure)
 {
 	LFS
 		int seconds = clock(), queryLength;
 	AcquireSRWLockExclusive(&mySQLQueryBufferSRWLock);
+	// this is the 4-argument overload below, not the Win32 API of the same name; it may
+	// grow/replace sqlQueryBuffer, which is why the lock is held here.  Note that the
+	// returned pointer is still used (below) after the lock has been released.
 	void* buffer = WideCharToMultiByte(q, queryLength, sqlQueryBuffer, sqlQueryBufSize);
 	ReleaseSRWLockExclusive(&mySQLQueryBufferSRWLock);
 	if (mysql_real_query(mysql, (char*)buffer, queryLength) != 0)
@@ -58,6 +123,13 @@ bool myquery(MYSQL* mysql, const wchar_t* q, bool allowFailure)
 	return true;
 }
 
+// Execute one SQL statement and retrieve its whole result set into result
+// (mysql_store_result, so the rows are buffered client side).
+// result is an out parameter and is only meaningful when true is returned; ownership
+// passes to the caller, who must mysql_free_result() it on every exit path.
+// Returns false if the statement failed OR if it produced no result set at all
+// (which for a statement that should return rows means the query was not a SELECT,
+// or the server ran out of memory); an empty-but-valid result set still returns true.
 bool myquery(MYSQL* mysql, const wchar_t* q, MYSQL_RES*& result, bool allowFailure)
 {
 	LFS
@@ -68,10 +140,22 @@ bool myquery(MYSQL* mysql, const wchar_t* q, MYSQL_RES*& result, bool allowFailu
 	return result != NULL;
 }
 
+// Translate the wide string q to UTF-8 in a caller-owned buffer that is grown as
+// needed.  Deliberately overloads the Win32 name WideCharToMultiByte (4 arguments
+// instead of 8) and is also used by logging.cpp with thread-local buffers.
+// buffer/bufSize are in/out: buffer is allocated (tmalloc) when bufSize==0 and
+// reallocated (trealloc) when the existing buffer is too small; both are updated.
+// queryLength is out: the byte count returned by the Win32 conversion, which for a
+// -1 (NUL-terminated) source INCLUDES the terminating NUL byte.
+// Returns buffer, or NULL on a conversion/allocation failure - though the
+// LOG_FATAL_ERROR logging on those paths exits the process first.
 void* WideCharToMultiByte(const wchar_t* q, int& queryLength, void*& buffer, unsigned int& bufSize)
 {
 	LFS
 		queryLength = WideCharToMultiByte(CP_UTF8, 0, q, -1, (LPSTR)buffer, bufSize, NULL, NULL);
+	// first ever call: the probe above passed bufSize 0, so Win32 returned the required
+	// byte count without writing anything - allocate that (doubled, minimum 10000) and
+	// convert for real.
 	if (bufSize == 0)
 	{
 		bufSize = max(queryLength * 2, 10000);
