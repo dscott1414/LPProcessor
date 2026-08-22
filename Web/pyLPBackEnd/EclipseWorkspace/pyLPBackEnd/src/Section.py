@@ -1,7 +1,18 @@
+"""Section.py - One document section (chapter/part) from an LP dump.
+
+Overview:
+    begin / endHeader, subHeading offsets, and four COM lists:
+    definite speakers, speakers, objects spoken about, objects in
+    narration. Match counters are initialized to 0 (not in the dump).
+
+Pipeline position:
+    Loaded with Source; used to page the web view by chapter.
+"""
 from COM import COM
 
 class Section:
 
+    # Deserialize section span, subHeadings, and four COM lists.
     def __init__(self, rs):
         self.begin = rs.read_integer();
         self.endHeader = rs.read_integer();

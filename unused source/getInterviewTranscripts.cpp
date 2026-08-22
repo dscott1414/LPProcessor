@@ -1,3 +1,33 @@
+/*
+	getInterviewTranscripts.cpp - PBS Moyers / NPR ATC transcript scraper
+
+	Overview:
+		Historical acquisition helpers that crawl public PBS NewsHour /
+		Bill Moyers archive pages and NPR All Things Considered rundowns,
+		download HTML transcript fragments, and write them under
+		interviews\MOYERS_* or interviews\ATC_*. Originally also targeted
+		Susie Gharib interviews (commented out).
+
+	Pipeline position:
+		Offline corpus acquisition; not on the live parse path. Would feed
+		scraped files into readSourceBuffer like any other source.
+
+	Key entry points:
+		- checkLinkExists() - local-file skip if already downloaded
+		- getInterviewTranscriptGharibMoyers() - paginated Moyers crawl
+		- getInterviewTranscript() - day-by-day NPR ATC crawl (infinite loop)
+
+	Dependencies:
+		Internet::readPage / bandwidthControl; Win32 _wopen/_write; firstMatch /
+		takeLastMatch HTML helpers from the main tree.
+
+	Notes / gotchas:
+		PBS/NPR markup has almost certainly changed; scrapers are brittle.
+		getInterviewTranscript() loops forever (timer += 1 day, no end).
+		wsprintf URL uses tm_mon (0-11) so January is month 0.
+		_write writes wchar_t buffer with length in wchar_t units, not bytes.
+		Hardcoded host 64.15.203.18 in the ethereal comment is a packet-sniff hint.
+*/
 #include <errno.h>
 #include <windows.h>
 #include "WinInet.h"
@@ -26,6 +56,9 @@ using namespace std;
 
 #define MAX_BUF 120000 // try to read file in one gulp
 
+// Map a transcript URL to interviews\MOYERS_<leaf> by replacing the last two
+// path slashes, then return true if that file already exists (_waccess == 0).
+// Mutates `link` in place (slash -> underscore).
 bool checkLinkExists(wstring link)
 {
 	int fpos=link.find_last_of(L'/',link.length()-1);
@@ -37,6 +70,10 @@ bool checkLinkExists(wstring link)
 }
 
 #define MAX_DOC_NUM 100000
+// Page through pbs.org/moyers/journal/archives (intervalSize=20, up to
+// MAX_DOC_NUM). For each "Transcript" href not already on disk, fetch the
+// page, locate a watchtranscript div, and write it as interviews\MOYERS_*.
+// Returns Internet::readPage error, or 0 on completing the page loop.
 int getInterviewTranscriptGharibMoyers(	)
 {
 	// Susie Gharib interviews
@@ -148,6 +185,10 @@ int getInterviewTranscriptGharibMoyers(	)
 }
 
 
+// Walk NPR ATC rundowns one UTC day at a time starting ~1977 (timer formula
+// in the body), fetch each class="transcript" link, and write
+// interviews\ATC_<storyId>. Never exits the while(true) on success (returns
+// only if readPage fails). tm_mon is 0-based in the URL.
 int getInterviewTranscript(	)
 {
 	wstring baseURL=L"http://www.npr.org/templates/rundowns/rundown.php?prgId=2&prgDate="; //11-1-2005"

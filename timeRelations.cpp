@@ -1,3 +1,55 @@
+/*
+	timeRelations.cpp - TimeML-style date/time patterns, cTimeInfo fill, tense
+		decode, and speaker-group aging on time transitions
+
+	Overview:
+		Registers the _TIME / _DATE / _MLT hand patterns, maps matched tags
+		(HOUR, MONTH, DAYWEEK, TIMETYPE, ?) onto a cTimeInfo (capacity,
+		absolute fields, T_BEFORE/T_AFTER/T_RANGE, ?), and hangs that
+		cTimeInfo on the current cSyntacticRelationGroup. Also seeds the
+		lexicon with time-word flags (createTimeCategories / addTimeFlags),
+		decodes VerbNet-style vS/vB/vC tags into VT_* verbSense bits
+		(getVerbTense), and ages local-focus entities when a clause is a
+		time or space transition (ageTransition). Timeline segments are
+		opened at speaker-group boundaries.
+
+	Pipeline position:
+		Initialization: defineTimePatterns() with the other pattern
+		builders; createTimeCategories() from dictionary setup.
+		Stage 5: appendTime() is called from srSetTimeFlowTense() after an
+		SRG is inserted. detectTimeTransition() (the lastSubjects overload)
+		runs in the speaker-resolution walk. getVerbTense() is used when
+		verbSense is assigned during parse.
+
+	Key entry points:
+		- defineTimePatterns() - _TIME / _DATE pattern table
+		- identifyDateTime() / evaluateDateTime() - tag-set -> cTimeInfo
+		- appendTime() - attach timeInfo to one SRG and set timeProgression
+		- detectTimeTransition() - flip tft.timeTransition / age speakers
+		- getVerbTense() - pattern tags -> VT_* (Quirk / Reichenbach)
+		- createTimeCategories() / addTimeFlags() - lexicon time flags
+		- ageTransition() - drop physicallyPresent / salience on a jump
+
+	Key data structures / globals:
+		- twsCapacity / months / daysOfWeek / seasons / holidayDays -
+		  lookup tables for whichCapacity / whichMonth / ?
+		- tagSetTimeArray - scratch buffer for getVerbTense (tmalloc)
+		- timelineSegments - cSource member, seeded by
+		  initializeTimelineSegments()
+
+	Dependencies:
+		cPattern, Words lexicon, VerbNet vbNetClasses, MySQL only
+		indirectly (via cSource). Holiday names are compiled in.
+
+	Notes / gotchas:
+		- eCapacity and twsCapacity drift after ?tomorrow?: twsCapacity
+		  inserts ?morrow?, so whichCapacity("yesterday") is not
+		  cYesterday. See the review report.
+		- months_abb omits may/jun/jul, so whichMonth("aug") returns 4
+		  (May?s slot).
+		- cTimeInfo::clear() does not zero the absNamed* / absToday family.
+		- LFS at every function entry.
+*/
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
@@ -14,6 +66,8 @@
 #include "source.h"
 #include "profile.h"
 
+// Register _TIME / _DATE / _MLT / INTERVAL patterns (2:37 A.M., June 20th,
+// ?two weeks ago today?, ?between now and Monday?, ?). Called once at init.
 void defineTimePatterns()
 {
 	LFS
@@ -207,6 +261,9 @@ void defineTimePatterns()
 		2, L"noun|day{TIMECAPACITY}", L"noun|morrow{TIMECAPACITY}", 0, 1, 1, 0);
 }
 
+// Parse m[where] as an hour (1?12 cardinal/Number) or HH:MM via processTime.
+// A bare Number outside 1?12 is treated as a year instead. False if the
+// cardinal is out of range or looks like ?a hundred to one?.
 bool cSource::evaluateHOUR(int where, cTimeInfo& t)
 {
 	LFS
@@ -236,6 +293,7 @@ bool cSource::evaluateHOUR(int where, cTimeInfo& t)
 	return true;
 }
 
+// TIMESPEC tag: A.M. -> absTimeSpec 0, anything else (P.M.) -> 1. Sets tSet.
 void cSource::evaluateDateTimeTimeSpec(vector <cTagLocation>& tagSet, cTimeInfo& t, bool& tSet)
 {
 	int ti;
@@ -249,6 +307,7 @@ void cSource::evaluateDateTimeTimeSpec(vector <cTagLocation>& tagSet, cTimeInfo&
 	}
 }
 
+// DATESPEC tag: A.D. -> absDateSpec 0, otherwise B.C. -> 1. Sets tSet.
 void cSource::evaluateDateTimeDateSpec(vector <cTagLocation>& tagSet, cTimeInfo& t, bool& tSet)
 {
 	int ti;
@@ -262,6 +321,8 @@ void cSource::evaluateDateTimeDateSpec(vector <cTagLocation>& tagSet, cTimeInfo&
 	}
 }
 
+// TIMEMODIFIER tags -> timeModifier / timeModifier2. Recurrence words
+// (?daily?) clear the modifier and set T_RECURRING + timeFrequency.
 void cSource::evaluateDateTimeModifier(vector <cTagLocation>& tagSet, cTimeInfo& t, bool& tSet)
 {
 	int nextTag = -1, ti;
@@ -294,6 +355,7 @@ void cSource::evaluateDateTimeModifier(vector <cTagLocation>& tagSet, cTimeInfo&
 	}
 }
 
+// TIMECAPACITY tags -> t.timeCapacity / rt.timeCapacity via whichCapacity.
 void cSource::evaluateDateTimeCapacity(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet)
 {
 	int nextTag = -1, ti;
@@ -309,6 +371,8 @@ void cSource::evaluateDateTimeCapacity(vector <cTagLocation>& tagSet, cTimeInfo&
 	}
 }
 
+// TIMETYPE tag: ?to?/?past? or the word?s timeFlags become timeRelationType.
+// Flagless adverbs are stored as timeModifier instead.
 void cSource::evaluateDateTimeType(vector <cTagLocation>& tagSet, cTimeInfo& t, bool& tSet)
 {
 	int ti = -1, s;
@@ -333,6 +397,8 @@ void cSource::evaluateDateTimeType(vector <cTagLocation>& tagSet, cTimeInfo& t, 
 	}
 }
 
+// HOUR tags through evaluateHOUR. Default capacity is cHour. False if the
+// first hour token is rejected.
 bool cSource::evaluateDateTimeHour(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet)
 {
 	int nextTag = -1, ti;
@@ -350,6 +416,7 @@ bool cSource::evaluateDateTimeHour(vector <cTagLocation>& tagSet, cTimeInfo& t, 
 	return true;
 }
 
+// DAYMONTH tags -> absDayOfMonth (Number or numeral_ordinal).
 void cSource::evaluateDateTimeDayMonth(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet)
 {
 	int nextTag = -1, ti, s;
@@ -371,6 +438,8 @@ void cSource::evaluateDateTimeDayMonth(vector <cTagLocation>& tagSet, cTimeInfo&
 	}
 }
 
+// MINUTE tags -> absMinute. False if out of 1..59, or the token is
+// followed by ?o'clock? (then the minute is rewritten as an hour).
 bool cSource::evaluateDateTimeDayMinute(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet)
 {
 	int nextTag = -1, ti, s;
@@ -405,6 +474,7 @@ bool cSource::evaluateDateTimeDayMinute(vector <cTagLocation>& tagSet, cTimeInfo
 	return true;
 }
 
+// MONTH tags -> absMonth via whichMonth.
 void cSource::evaluateDateTimeMonth(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet)
 {
 	int nextTag = -1, ti;
@@ -420,6 +490,7 @@ void cSource::evaluateDateTimeMonth(vector <cTagLocation>& tagSet, cTimeInfo& t,
 	}
 }
 
+// Capitalized SEASON -> absSeason; YEAR Number -> absYear (both t and rt).
 void cSource::evaluateDateTimeSeason(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet)
 {
 	int nextTag = -1, ti, s;
@@ -443,6 +514,7 @@ void cSource::evaluateDateTimeSeason(vector <cTagLocation>& tagSet, cTimeInfo& t
 	}
 }
 
+// HOLIDAY tags -> absHoliday via whichHoliday.
 void cSource::evaluateDateTimeHoliday(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet)
 {
 	int nextTag = -1, ti;
@@ -458,6 +530,7 @@ void cSource::evaluateDateTimeHoliday(vector <cTagLocation>& tagSet, cTimeInfo& 
 	}
 }
 
+// DAYWEEK tags -> absDayOfWeek via whichDayOfWeek.
 void cSource::evaluateDateTimeDayWeek(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& tSet, bool& rtSet)
 {
 	int nextTag = -1, ti;
@@ -473,6 +546,8 @@ void cSource::evaluateDateTimeDayWeek(vector <cTagLocation>& tagSet, cTimeInfo& 
 	}
 }
 
+// ?from 5 to 6?: if a MINUTE is preceded by ?from?, treat t as the start
+// hour and rt as the range end (T_RANGE).
 void cSource::evaluateDateTimeMinute(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& rtSet)
 {
 	int nextTag = -1, ti, s;
@@ -488,6 +563,9 @@ void cSource::evaluateDateTimeMinute(vector <cTagLocation>& tagSet, cTimeInfo& t
 	}
 }
 
+// Fill t (and optionally rt, with rt.timeRelationType = T_RANGE) from a
+// collected _TIME/_DATE tag-set. False if no time tag fired or an hour/minute
+// parse rejected the match.
 bool cSource::evaluateDateTime(vector <cTagLocation>& tagSet, cTimeInfo& t, cTimeInfo& rt, bool& rtSet)
 {
 	LFS
@@ -514,6 +592,8 @@ bool cSource::evaluateDateTime(vector <cTagLocation>& tagSet, cTimeInfo& t, cTim
 	return tSet;
 }
 
+// Copy capacity from previousTime and write `num` into the same kind of
+// field (day/hour/year/?), used for ?the next year or two?.
 // only copy previous time
 // the next year or two.
 void cSource::copyTimeInfoNum(vector <cTimeInfo>::iterator previousTime, cTimeInfo& t, int num)
@@ -564,6 +644,10 @@ void cSource::copyTimeInfoNum(vector <cTimeInfo>::iterator previousTime, cTimeIn
 	}
 }
 
+// Mark the object at `where` as a time object, then set tft.timeTransition
+// (present happening + a concrete calendar/capacity) or
+// nonPresentTimeTransition. Returns tft.timeTransition. BE-clauses with
+// ?it was a beautiful day? are rejected.
 bool cSource::detectTimeTransition(int where, vector <cSyntacticRelationGroup>::iterator csr, cTimeInfo& timeInfo)
 {
 	LFS
@@ -656,6 +740,8 @@ bool cSource::detectTimeTransition(int where, vector <cSyntacticRelationGroup>::
 	return csr->tft.timeTransition;
 }
 
+// Paint timeColor (from timeFlags, else T_UNIT) and flagAlreadyTimeAnalyzed
+// on [begin, begin+len) and the relPrep, so identifyDateTime will skip them.
 void cSource::markTime(int where, int begin, int len)
 {
 	LFS
@@ -679,6 +765,8 @@ void cSource::markTime(int where, int begin, int len)
 	}
 }
 
+// If _TIME / _DATE / __INTRO_N / _ADVERB matches at beginObjectPosition,
+// collect timeTagSet and evaluateDateTime. True on the first successful set.
 bool cSource::evaluateTimePattern(int beginObjectPosition, int& maxLen, cTimeInfo& t, cTimeInfo& rt, bool& rtSet)
 {
 	LFS
@@ -700,6 +788,8 @@ bool cSource::evaluateTimePattern(int beginObjectPosition, int& maxLen, cTimeInf
 	return false;
 }
 
+// evaluateTimePattern + markTime; may rewrite a BE ?it was ?? SRG to
+// stABSTIME / stABSDATE. True if timeInfo was pushed.
 bool cSource::identifyTimePattern(const int where, vector <cSyntacticRelationGroup>::iterator csr, const int beginObjectPosition, int& maxLen)
 {
 	cTimeInfo t, rt;
@@ -736,6 +826,7 @@ bool cSource::identifyTimePattern(const int where, vector <cSyntacticRelationGro
 	return false;
 }
 
+// ?, 1915? after a comma: _NUMBER of length 1 in 1000..2499 becomes cYear.
 bool cSource::identifyYear(const int where, vector <cSyntacticRelationGroup>::iterator csr, const int beginObjectPosition)
 {
 	int element, maxLen;
@@ -760,6 +851,8 @@ bool cSource::identifyYear(const int where, vector <cSyntacticRelationGroup>::it
 	return false;
 }
 
+// Fill capacity / abs* from the word form at `where` (timeUnit, month,
+// daysOfWeek, season, holiday, time, date). False if none apply.
 bool cSource::identifyTimeType(const int where, cTimeInfo &t)
 {
 	wstring word = m[where].deriveMainEntry(where, 34, false, true, lastNounNotFound, lastVerbNotFound)->first;
@@ -800,6 +893,8 @@ bool cSource::identifyTimeType(const int where, cTimeInfo &t)
 	return true;
 }
 
+// Adjectival month/day/season/holiday/unit/year at `where` as a T_MODIFIER
+// (the 1994 crisis). Recurring adverbs only set timeFrequency.
 bool cSource:: processModifierTime(const int where, cTimeInfo& t)
 {
 	if ((m[where].forms.isSet(NUMBER_FORM_NUM) ||
@@ -861,6 +956,9 @@ bool cSource:: processModifierTime(const int where, cTimeInfo& t)
 	return false;
 }
 
+// Bare Number / cardinal / ordinal as year (1200?2100), hour (1?12), or
+// day-of-month (ordinal 1?31 as a prep object). inMultiObject==2 copies
+// the previous timeInfo via copyTimeInfoNum (ti is only initialized then).
 void cSource::interpretNumberAsDateTime(const int where, vector <cSyntacticRelationGroup>::iterator csr, cTimeInfo& t, const int beginObjectPosition, const int inMultiObject)
 {
 	// must not be used as an adjective, and must be an object of a preposition
@@ -940,6 +1038,8 @@ void cSource::interpretNumberAsDateTime(const int where, vector <cSyntacticRelat
 	}
 }
 
+// Adjective / ?half an hour? / ?ago? / leading _NAME become timeModifier
+// or override timeRelationType (T_BEFORE/T_AFTER/T_PRESENT).
 void cSource::setTimeModifier(const int where, cTimeInfo& t, const int beginObjectPosition)
 {
 	int len;
@@ -968,6 +1068,8 @@ void cSource::setTimeModifier(const int where, cTimeInfo& t, const int beginObje
 	}
 }
 
+// True if this hit should be discarded: empty + no relation (unless
+// inMultiObject==1), ?the Times?, or ?five times better?.
 bool cSource::cancelTimeDateIdentification(const int where, cTimeInfo& t, const int inMultiObject)
 {
 	auto tt = t.timeRelationType;
@@ -989,6 +1091,10 @@ bool cSource::cancelTimeDateIdentification(const int where, cTimeInfo& t, const 
 	return false;
 }
 
+// Main per-token time recognizer: skip already-analyzed tokens, try
+// resolveTimeRange / identifyTimePattern / identifyYear, else build a
+// cTimeInfo from identifyTimeType + modifiers + the word?s timeFlags.
+// inMultiObject 0=normal, 1=first of a range, 2=second of a range.
 bool cSource::identifyDateTime(int where, vector <cSyntacticRelationGroup>::iterator csr, int& maxLen, int inMultiObject)
 {
 	LFS
@@ -1071,10 +1177,13 @@ bool cSource::identifyDateTime(int where, vector <cSyntacticRelationGroup>::iter
 const wchar_t* twsCapacity[] = { L"millenium",L"century",L"decade",L"year",L"semester",L"season",L"quarter",L"month",L"week",L"day",
 	 L"hour",L"minute",L"second",L"moment",
 	 L"morning",L"noon",L"afternoon",L"evening",L"dusk",L"night",L"midnight",L"dawn",
+	 // ?morrow? is extra vs eCapacity, so yesterday+ are shifted.
 	 L"tonight",L"today",L"tomorrow",L"morrow",L"yesterday",
 	 L"NamedMonth",L"NamedDay",L"NamedSeason",
 	 L"unspecified",NULL };
 
+// Index of `w` in twsCapacity, or -1. That table inserts ?morrow? before
+// ?yesterday?, so it is not aligned with eCapacity after cTomorrow.
 int whichCapacity(wstring w)
 {
 	LFS
@@ -1086,6 +1195,7 @@ int whichCapacity(wstring w)
 
 
 
+// twsCapacity[capacityFlags], or L"illegal" if out of range / -1.
 wstring capacityString(int capacityFlags)
 {
 	LFS
@@ -1284,6 +1394,7 @@ tPrepRelation prepRelations[] =
 	{NULL,-1}
 };
 
+// OR `flag` into timeFlags for each Inflections entry (parseWord if missing).
 void cWord::addTimeFlag(int flag, Inflections words[])
 {
 	LFS
@@ -1298,6 +1409,8 @@ void cWord::addTimeFlag(int flag, Inflections words[])
 		}
 }
 
+// Copy the noun form?s usage cost onto nounSubclass for each word (so
+// ?january? as month costs the same as a plain noun).
 void cWord::usageCostToNoun(Inflections words[], const wchar_t* nounSubclass)
 {
 	LFS
@@ -1311,6 +1424,7 @@ void cWord::usageCostToNoun(Inflections words[], const wchar_t* nounSubclass)
 	}
 }
 
+// Force formClass to the word?s lowest usage cost (prefer that form).
 void cWord::toLowestUsageCost(Inflections words[], const wchar_t* formClass)
 {
 	LFS
@@ -1323,6 +1437,8 @@ void cWord::toLowestUsageCost(Inflections words[], const wchar_t* formClass)
 	}
 }
 
+// Copy usagePatterns / usageCosts from parentForm onto subclassForm.
+// False if either form is absent.
 bool cSourceWordInfo::costEquivalentSubClass(int subclassForm, int parentForm)
 {
 	LFS
@@ -1335,6 +1451,7 @@ bool cSourceWordInfo::costEquivalentSubClass(int subclassForm, int parentForm)
 	return true;
 }
 
+// addTimeFlag for a NULL-terminated const wchar_t* list.
 void cWord::addTimeFlag(int flag, const wchar_t* words[])
 {
 	LFS
@@ -1351,6 +1468,7 @@ void cWord::addTimeFlag(int flag, const wchar_t* words[])
 		}
 }
 
+// usageCostToNoun for a NULL-terminated const wchar_t* list.
 void cWord::usageCostToNoun(const wchar_t* words[], const wchar_t* nounSubclass)
 {
 	LFS
@@ -1363,6 +1481,7 @@ void cWord::usageCostToNoun(const wchar_t* words[], const wchar_t* nounSubclass)
 	}
 }
 
+// Print VT_* verbSense into s (?past EXT NEG?). verbSense == -1 -> L"-1".
 wstring senseString(wstring& s, int verbSense)
 {
 	LFS
@@ -1383,6 +1502,10 @@ wstring senseString(wstring& s, int verbSense)
 	return s;
 };
 
+// Age every local-focus entity (except exceptWhere) across a time or space
+// jump: clear physicallyPresent, drop from lastSubjects / nextNarrationSubjects,
+// ageSpeaker(EOS_AGE). Skips embedded-story quotes and a duplicate transition
+// in the same sentence. Sets transitionSinceEOS. fromWhere is a log tag.
 bool cSource::ageTransition(int where, bool timeTransition, bool& transitionSinceEOS, int duplicateFromWhere, int exceptWhere, vector <int>& lastSubjects, const wchar_t* fromWhere)
 {
 	LFS
@@ -1462,6 +1585,8 @@ bool cSource::ageTransition(int where, bool timeTransition, bool& transitionSinc
 	return true;
 }
 
+// True if this time NP should not age speakers: second/minute/moment,
+// ?this/all/each/any ??, ?the time?, ?five times better?, single ?day?.
 bool cSource::rejectTimeWord(int where, int begin)
 {
 	LFS
@@ -1493,6 +1618,8 @@ bool cSource::rejectTimeWord(int where, int begin)
 	return false;
 }
 
+// MNOUN of two time objects (?June and July?, ?from 5 to 6?): identifyDateTime
+// each side; mark T_RANGE on ?and?. True if both sides parsed.
 bool cSource::resolveTimeRange(int where, int pmaOffset, vector <cSyntacticRelationGroup>::iterator csr)
 {
 	LFS
@@ -1533,12 +1660,17 @@ bool cSource::resolveTimeRange(int where, int pmaOffset, vector <cSyntacticRelat
 	return false;
 }
 
+// True at EOS, a section word, or a real (non-string) curly quote ? the
+// backward scan for a previous SRG to steal timeInfo from must stop here.
 bool cSource::stopSearch(int I)
 {
 	LFS
 		return isEOS(I) || m[I].word == Words.sectionWord || ((m[I].word->first == L"“" || m[I].word->first == L"”") && !(m[I].flags & cWordMatch::flagQuotedString));
 }
 
+// Copy or split previousRelation.timeInfo onto csr. conjunctionPassed == -1
+// copies everything and records duplicateTimeTransitionFromWhere; otherwise
+// moves expressions after the conjunction / after csr->where.
 // the previous relation has already taken everything in the sentence.
 // if there is no conjunction between them, simply copy all time expressions.
 // if there is a conjunction between them, then move all time expressions after the current space relation
@@ -1574,6 +1706,9 @@ void cSource::distributeTimeRelations(vector <cSyntacticRelationGroup>::iterator
 		previousRelation->tft.timeTransition = false;
 }
 
+// Attach cTimeInfo to csr (subject / verb PPs / object / intro adverb /
+// previous SRG) and set timeProgression 0?2 from state-verb / tense.
+// No-op if timeInfoSet. Marks timeInfoSet at the end of the scan.
 void cSource::appendTime(vector <cSyntacticRelationGroup>::iterator csr)
 {
 	LFS
@@ -1716,6 +1851,8 @@ void cSource::appendTime(vector <cSyntacticRelationGroup>::iterator csr)
 	csr->timeInfoSet = true;
 }
 
+// Subject-side time NP (?That evening Tommy sat??): emit stADVERBTIME /
+// stPREPTIME / stSUBJDAYOFMONTHTIME and optionally ageTransition.
 // will change source.m (invalidate all iterators through the use of newSR)
 void cSource::detectTimeTransition(int where, vector <int>& lastSubjects)
 {
@@ -1858,6 +1995,9 @@ void cSource::detectTimeTransition(int where, vector <int>& lastSubjects)
 	}
 }
 
+// Map verbSenseTagSet tags (vS/vB/vC/vD/past/future/conditional/?) onto a
+// VT_* bitset (Quirk table in this header). Writes m[].verbSense over the
+// verb span. isId is the ?id? (be) tag. Grows tagSetTimeArray via tmalloc.
 int cSource::getVerbTense(vector <cTagLocation>& tagSet, int verbTagIndex, bool& isId)
 {
 	LFS
@@ -1950,6 +2090,8 @@ int cSource::getVerbTense(vector <cTagLocation>& tagSet, int verbTagIndex, bool&
 	return tense;
 }
 
+// Collapse VT_* to 0?7 (tense) + 8 if VT_EXTENDED. -1 stays -1. Unknown
+// combinations LOG_FATAL_ERROR.
 int cSource::getSimplifiedTense(int tense)
 {
 	LFS
@@ -2102,7 +2244,10 @@ any plural time category is also considered T_RECURRING
 Inflections months[] = { {L"january",SINGULAR},{L"february",SINGULAR},{L"march",SINGULAR},{L"april",SINGULAR},{L"may",SINGULAR},
 {L"june",SINGULAR},{L"july",SINGULAR},{L"august",SINGULAR},{L"september",SINGULAR},{L"october",SINGULAR},
 {L"november",SINGULAR},{L"december",SINGULAR},{NULL,0} };
+// may/jun/jul omitted, so aug..dec return 4..8 (May?September slots).
 const wchar_t* months_abb[] = { L"jan",L"feb",L"mar",L"apr",L"aug",L"sept",L"oct",L"nov",L"dec",NULL };
+// 0-based month index, or -1. months_abb skips may/jun/jul, so ?aug?
+// returns 4 (May?s slot) ? do not treat that index as eCapacity-aligned.
 int whichMonth(wstring w)
 {
 	LFS
@@ -2120,6 +2265,8 @@ Inflections daysOfWeek[] = { {L"sunday",SINGULAR},{L"monday",SINGULAR},{L"tuesda
 		{L"thursday",SINGULAR},{L"friday",SINGULAR},{L"saturday",SINGULAR},{L"weekend",SINGULAR},
 {L"sundays",PLURAL},{L"mondays",PLURAL},{L"tuesdays",PLURAL},{L"wednesdays",PLURAL},
 		{L"thursdays",PLURAL},{L"fridays",PLURAL},{L"saturdays",PLURAL},{L"weekends",PLURAL},{NULL,0} };
+// 0=Sunday ? 6=Saturday, then weekend / plurals. Abbreviations sun..sat
+// map to 0..6. -1 if unknown.
 int whichDayOfWeek(wstring w)
 {
 	LFS
@@ -2134,6 +2281,8 @@ int whichDayOfWeek(wstring w)
 
 const wchar_t* twr_ara[] = { L"hourly",L"daily",L"weekly",L"monthly",L"quarterly",L"seasonally",L"yearly",L"annual",L"twice",L"thrice",L"once",L"times",L"every",L"each",L"",NULL };
 int recurrence_flags[] = { cHour, cDay, cWeek, cMonth, cQuarter, cSeason, cYear, cYear, -2, -3, -4, -5, -6, -7, cUnspecified,0 };
+// Recurrence word -> eCapacity (hourly=cHour, ?) or a negative code
+// (-2 twice ? -7 each). Unknown -> cUnspecified.
 int whichRecurrence(wstring w)
 {
 	LFS
@@ -2143,6 +2292,8 @@ int whichRecurrence(wstring w)
 	return cUnspecified;
 }
 
+// Human-readable dump of this cTimeInfo into tmpstr (type, modifiers,
+// capacity, calendar fields, frequency).
 wstring cTimeInfo::toString(vector <cWordMatch>& m, wstring& tmpstr)
 {
 	LFS
@@ -2197,6 +2348,7 @@ wstring cTimeInfo::toString(vector <cWordMatch>& m, wstring& tmpstr)
 
 Inflections seasons[] = { {L"winter",SINGULAR},{L"wintertime",SINGULAR},{L"spring",SINGULAR},{L"springtime",SINGULAR},{L"summer",SINGULAR},{L"summertime",SINGULAR},{L"fall",SINGULAR},
 			{L"winters",PLURAL},{L"wintertimes",PLURAL},{L"springs",PLURAL},{L"springtimes",PLURAL},{L"summers",PLURAL},{L"summertimes",PLURAL},{L"falls",PLURAL},{NULL,0} };
+// Index into seasons[] (winter=0, wintertime=1, spring=2, ?), or -1.
 int whichSeason(wstring w)
 {
 	LFS
@@ -2206,6 +2358,8 @@ int whichSeason(wstring w)
 	return -1;
 }
 
+// If normalize, only copy noun usage costs onto month/day/unit forms.
+// Otherwise predefine those forms, OR T_UNIT[/T_LENGTH], then addTimeFlags().
 void cWord::createTimeCategories(bool normalize)
 {
 	LFS
@@ -2262,6 +2416,7 @@ void cWord::createTimeCategories(bool normalize)
 	addTimeFlags();
 }
 
+// Seed timeFlags on closed-class time words (ago/now/daily/before/since/?).
 void cWord::addTimeFlags()
 {
 	LFS
@@ -2485,6 +2640,7 @@ struct
 {NULL,NULL}
 };
 
+// Index into holidayDays, then holidayMonths (offset by days count), or -1.
 int whichHoliday(wstring w)
 {
 	LFS
@@ -2499,6 +2655,7 @@ int whichHoliday(wstring w)
 	return -1;
 }
 
+// Inverse of whichHoliday. Out of range -> L"illegal".
 wstring holidayString(int holiday)
 {
 	LFS
@@ -2510,6 +2667,7 @@ wstring holidayString(int holiday)
 	return L"illegal";
 }
 
+// handleExtendedParseWords for every compiled holiday name (multi-word).
 void cWord::extendedParseHolidays()
 {
 	LFS
@@ -2524,6 +2682,8 @@ void cWord::extendedParseHolidays()
 }
 
 
+// Add the ?holiday? form, insert every holiday name into Words with T_UNIT.
+// Returns the new form id.
 int cWord::predefineHolidays()
 {
 	LFS
@@ -2558,6 +2718,7 @@ VT_EXTENDED + VT_PRESENT_PERFECT,VT_PASSIVE + VT_PRESENT_PERFECT,VT_PASSIVE + VT
 VT_PASSIVE + VT_PRESENT_PERFECT + VT_EXTENDED,VT_PASSIVE + VT_PRESENT + VT_EXTENDED + VT_VERB_CLAUSE };
 
 
+// One tense-statistic line: occurrence, %, passives, followedBy / infinitive.
 void cSource::printTenseStatistic(cTenseStat& tenseStatistics, int sense, int numTotal)
 {
 	LFS
@@ -2598,6 +2759,7 @@ void cSource::printTenseStatistic(cTenseStat& tenseStatistics, int sense, int nu
 			tenseStatistics.occurrence, tenseStatistics.occurrence * 100 / numTotal, tenseStatistics.passiveOccurrence, followedByStr.c_str(), infinitiveStr.c_str());
 }
 
+// Print NUM_SIMPLE_TENSE slots of tenseStatistics[].
 void cSource::printTenseStatistics(const wchar_t* fromWhere, cTenseStat tenseStatistics[], int numTotal)
 {
 	LFS
@@ -2610,6 +2772,7 @@ void cSource::printTenseStatistics(const wchar_t* fromWhere, cTenseStat tenseSta
 		printTenseStatistic(tenseStatistics[I], sts[I], numTotal);
 }
 
+// Print a sparse tense-statistic map (key = raw verbSense).
 void cSource::printTenseStatistics(const wchar_t* fromWhere, unordered_map <int, cTenseStat>& tenseStatistics, int numTotal)
 {
 	LFS
@@ -2619,6 +2782,8 @@ void cSource::printTenseStatistics(const wchar_t* fromWhere, unordered_map <int,
 		printTenseStatistic(I->second, I->first, numTotal);
 }
 
+// Print T_* flags into s. Uses timeWordFlags & 15 as the exclusive type
+// (T_META_RELATION=16 and above wrap) plus bits 4?9 as unit/time/date/?.
 wstring timeString(int timeWordFlags, wstring& s)
 {
 	LFS
@@ -2633,6 +2798,8 @@ wstring timeString(int timeWordFlags, wstring& s)
 	return s;
 }
 
+// Stub: always false. Intended to link a new timeline segment to the last
+// segment that shared these speakers.
 // look up last timeline segment belonging to speakers
 bool cSource::determineTimelineSegmentLink()
 {
@@ -2640,6 +2807,10 @@ bool cSource::determineTimelineSegmentLink()
 		return false;
 }
 
+// Set speakerGroups[sg].tlTransition if the new group is a new cast and/or
+// none of them are still physicallyPresent. The scan for a prior group
+// increments I (I++) from sg-1, so it walks forward into the current group
+// and will mark lastSG = sg for any speaker not in sg-1.
 // determine whether this speaker group is really a change in perspective from one group of 
 // people to another separate group in another location/time.
 // executed before marking any speaker non-physical (as part of the transition aging to any new speaker group).
@@ -2657,6 +2828,7 @@ bool cSource::speakerGroupTransition(int where, int sg, bool forwardTransition)
 	{
 		// has this speaker been in any previous speaker group?
 		int lastSG = -1;
+		// I++ walks forward (into the current group), not back through prior SGs.
 		for (int I = sg - 1; I >= 0 && lastSG < 0; I++)
 			if (speakerGroups[I].speakers.find(*si) != speakerGroups[I].speakers.end())
 				lastSG = I;
@@ -2694,6 +2866,7 @@ bool cSource::speakerGroupTransition(int where, int sg, bool forwardTransition)
 				then continue existing SPT.  If no speaker entered, or if established place (must be near the beginning of the SG) is different than current
 				place, then set SPT to last SPT for any speaker.
 */
+// Seed timelineSegments with one segment covering the start of the source.
 void cSource::initializeTimelineSegments(void)
 {
 	LFS
@@ -2705,6 +2878,9 @@ void cSource::initializeTimelineSegments(void)
 	timelineSegments.push_back(ts);
 }
 
+// Record this SRG as a time/location transition on the current (or
+// embedded) timeline segment; open a new segment at an embedded-SG start
+// or a tlTransition speaker-group boundary.
 void cSource::createTimelineSegment(int where)
 {
 	LFS

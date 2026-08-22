@@ -1,3 +1,27 @@
+/*
+	getTwitter.cpp - One-shot Twitter Atom search scraper (legacy search.twitter.com)
+
+	Overview:
+		Polls the long-retired Twitter Atom search API for a query string, extracts
+		<entry> blocks, and logs unique tweet IDs + titles. Sleeps ten minutes between
+		query cycles. Never returns on the success path.
+
+	Pipeline position:
+		Standalone acquisition utility; not called from the novel-parse pipeline.
+
+	Key entry points:
+		- I64ToS() - formats an __int64 into tmp
+		- logCurrentTime() - logs UTC month-day-year
+		- getTwitterEntries() - infinite scrape loop for 'filter'
+
+	Dependencies:
+		cInternet::readPage, WinInet, Windows console title.
+
+	Notes / gotchas:
+		Hardcoded account/password appear in comments above. Uses plaintext HTTP.
+		'filter' is appended to the URL with no encoding. lastId is the last tweet
+		seen on the last page, not the max ID. while(true) only exits on HTTP error.
+*/
 #include <errno.h>
 #include <windows.h>
 #include "WinInet.h"
@@ -54,6 +78,7 @@ using namespace std;
 	</entry>
 	*/
 
+// Writes decimal i into tmp (via a 1024-wchar stack buffer) and returns tmp.
 wstring I64ToS(__int64 i, wstring& tmp)
 {
 	wchar_t temp[1024];
@@ -74,6 +99,7 @@ wstring I64ToS(__int64 i, wstring& tmp)
 // Question mark ("?") 3F
 // 'At' symbol ("@") 40
 
+// Logs the current UTC date as month-day-year (month is 0-based, same as tm_mon).
 void logCurrentTime(void)
 {
 	time_t seconds = time(NULL);
@@ -82,6 +108,7 @@ void logCurrentTime(void)
 }
 
 extern wstring logFileExtension;
+// Scrapes search.twitter.com Atom for 'filter' forever. Returns only on readPage error.
 int getTwitterEntries(wchar_t* filter)
 {
 	// happy

@@ -1,4 +1,21 @@
 /*
+	Adversary bugs.cpp - Manual gold-bug list for The Secret Adversary parse
+
+	Overview:
+		Not a translation unit of executable code. The entire file is one block
+		comment: line-numbered failure notes from running the pipeline on Agatha
+		Christie's The Secret Adversary (Tommy / Tuppence / Julius / Jane Finn).
+		Sections cover ESTAB/'where' location bugs, meta-group mismatches, misparses,
+		and speaker/audience errors. Used as a regression checklist, not compiled.
+
+	Pipeline position:
+		Developer notes only. Numbers are source-position indexes in that novel.
+
+	Notes / gotchas:
+		Several entries are duplicated across sections (same position, different
+		angle). Line numbers refer to the token stream, not this file.
+*/
+/*
 'where' - incorrectly flagged statements
 000215:ESTAB:S[mans]V[was]->AT[a state] PERTAINS TO:mans
 ESTABHe[man] was evidently in a state of overmastering fear

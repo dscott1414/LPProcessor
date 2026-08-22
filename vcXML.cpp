@@ -1,3 +1,34 @@
+/*
+	vcXML.cpp - Hand-rolled VerbNet XML loader into cVerbNet / vbNetClasses
+
+	Overview:
+		Walks VerbNet 3.x class XML with pointer/offset helpers (no XML library):
+		tX/aH/tA/lineX/endX parse tags and attributes; aVN* helpers consume
+		SELRESTRS, SYNRESTRS, NP, PREP, SYNTAX, SEMANTICS; aVNCLASS loads one
+		VNCLASS/VNSUBCLASS recursively (subclasses nest). Custom empty tags
+		(MOVE/, THINK/, META_BELIEF/, …) set the cVerbNet semantic flags.
+		readVBNet() glob-loads source\lists\VerbNet\*.xml and appends a synthetic
+		"am/become/be" class.
+
+	Pipeline position:
+		Initialization, before pattern construction. Later stages query
+		vbNetVerbToClassMap and vbNetClasses.
+
+	Key entry points:
+		- tX / aH / tA / lineX / endX - low-level tag/attribute readers
+		- absorbCommonVerbNetClasses - LP overlay flags
+		- aVNCLASS - one class + nested subclasses
+		- readVBNet - directory scan + synthetic BE class
+
+	Dependencies:
+		source\lists\VerbNet\*.xml; tmalloc; mTW (MBCS->wide); FindFirstFile.
+
+	Notes / gotchas:
+		Parser assumes well-formed VerbNet XML and mutates the wide buffer in place
+		(temporarily zeros delimiters). aH can dereference NULL when '>' is missing
+		but a space is found. readVBNet leaks the FindFirstFile handle if _wopen
+		fails. Error wprintf cites VBNet but the path is VerbNet.
+*/
 #pragma warning(disable : 4786 ) // disable warning C4786
 #include <windows.h>
 #include <io.h>
@@ -16,6 +47,7 @@
 int numMembers = 0;
 unordered_map <wstring, set <int> > vbNetVerbToClassMap;
 
+// Copies buf[offset..endChar) into s and advances offset past endChar. Returns false if endChar is absent.
 bool tX(wchar_t* buf, __int64& offset, wstring& s, wchar_t endChar)
 {
 	LFS
@@ -29,6 +61,8 @@ bool tX(wchar_t* buf, __int64& offset, wstring& s, wchar_t endChar)
 	return true;
 }
 
+// Reads a tag name from buf[offset] up to endChar or '>'. Advances offset to the delimiter
+// (and past it if it was endChar). Returns false only if both delimiters are missing.
 // <VNCLASS 
 bool aH(wchar_t* buf, __int64& offset, wstring& s, wchar_t endChar)
 {
@@ -47,6 +81,7 @@ bool aH(wchar_t* buf, __int64& offset, wstring& s, wchar_t endChar)
 	return true;
 }
 
+// Parses one name="value" attribute at offset into attr. Returns false at /> or > or on bad syntax.
 // ID="say-37.7"
 bool tA(wchar_t* buf, __int64& offset, vector <cXMLAttribute>& attr)
 {
@@ -64,6 +99,9 @@ bool tA(wchar_t* buf, __int64& offset, vector <cXMLAttribute>& attr)
 	return true;
 }
 
+// Parses one start tag. If the name equals expectedClass (or absorbNonExpectedClassAnyway),
+// pushes a cXMLClass onto vxc. Skips <!-- comments --> recursively. Returns false on mismatch
+// or malformed tag. expectedClass starting with '?' is treated as an <?xml ...?> PI.
 // <VNCLASS ID="say-37.7" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="vn_schema-3.xsd">
 bool lineX(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc, wstring expectedClass, bool absorbNonExpectedClassAnyway = false)
 {
@@ -108,6 +146,7 @@ bool lineX(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc, wstring expec
 	}
 }
 
+// Consumes a </TAG> (skipping a '!' comment first). Returns the tag name in tmp, or L"" if not an end tag.
 //  </MEMBERS>
 wstring endX(wchar_t* buf, __int64& offset, wstring& tmp)
 {
@@ -124,6 +163,8 @@ wstring endX(wchar_t* buf, __int64& offset, wstring& tmp)
 	return tmp;
 }
 
+// Consumes <SELRESTRS>…</SELRESTRS> (nested SELRESTR / SELRESTRS). Returns true if at least one
+// self-closing or closed block was absorbed.
 bool aVNSEL(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
 {
 	LFS
@@ -137,6 +178,7 @@ bool aVNSEL(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
 	return lineX(buf, offset, vxc, L"SELRESTRS/") || (atLeastOne && endX(buf, offset, tmp) == L"SELRESTRS");
 }
 
+// Consumes <SYNRESTRS> with nested <SYNRESTR/> children, or a self-closing SELRESTRS-style tag.
 // <SYNRESTRS>
 //   <SYNRESTR Value="+" type="quotation"/>
 // </SYNRESTRS>
@@ -149,6 +191,7 @@ bool aVNSYN(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
 	return lineX(buf, offset, vxc, L"SYNRESTRS/") || endX(buf, offset, tmp) == L"SYNRESTRS";
 }
 
+// Consumes <SUBCLASSES>…<SUBCLASS/>…</SUBCLASSES> (or the self-closing form).
 bool aSUBCLASS(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
 {
 	LFS
@@ -158,6 +201,7 @@ bool aSUBCLASS(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
 	return lineX(buf, offset, vxc, L"SUBCLASSES/") || endX(buf, offset, tmp) == L"SUBCLASSES";
 }
 
+// Consumes <NP> plus either SYNRESTRS or SELRESTRS, then </NP>. Returns false if either piece is missing.
 //      <NP value="Agent">
 //        <SYNRESTRS>
 //          <SYNRESTR Value="+" type="quotation"/>
@@ -172,6 +216,7 @@ bool aVNNP(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
 	return endX(buf, offset, tmp) == L"NP";
 }
 
+// Tries to consume a self-closing leaf named str (e.g. L"ADV/") without committing offset on failure.
 bool aVNLEAF(wchar_t* buf, __int64& offset, const wchar_t* str)
 {
 	LFS
@@ -185,6 +230,7 @@ bool aVNLEAF(wchar_t* buf, __int64& offset, const wchar_t* str)
 	return false;
 }
 
+// Consumes <PREP> plus SELRESTRS then </PREP>.
 // <PREP value="with">
 //   <SELRESTRS/>
 // </PREP>
@@ -197,6 +243,8 @@ bool aVNPREP(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
 	return endX(buf, offset, tmp) == L"PREP";
 }
 
+// Consumes <SYNTAX> NP/ADV/ADJ/PREP/LEX* <VERB/> NP/ADV/ADJ/PREP/LEX* </SYNTAX>.
+// Pre-verb tokens go into vxc; the SYNTAX wrapper itself is discarded into a temp.
 //  <SYNTAX>
 //      <NP value="Agent">
 //        <SYNRESTRS>
@@ -223,6 +271,7 @@ bool aVNSyntax(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
 	return endX(buf, offset, end) == L"SYNTAX";
 }
 
+// Consumes <SEMANTICS><PRED>…<ARGS><ARG/>…</ARGS></PRED>…</SEMANTICS>. PREDs land in vxc.
 //  <SEMANTICS>
 //      <PRED value="transfer_info">
 //          <ARGS>
@@ -249,6 +298,8 @@ bool aVNSemantics(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
 	return true;
 }
 
+// Tries each LP overlay empty-tag (ESTABLISH/, MOVE/, META_BELIEF/, …) once if that flag
+// is still false. Returns true if one tag was consumed so the caller can loop.
 bool absorbCommonVerbNetClasses(cVerbNet &vn, vector <cXMLClass> &tempxc, wchar_t* buf, __int64& offset)
 {
 	if (!vn.establish && (vn.establish = lineX(buf, offset, tempxc, L"ESTABLISH/"))) return true;
@@ -304,6 +355,10 @@ bool absorbCommonVerbNetClasses(cVerbNet &vn, vector <cXMLClass> &tempxc, wchar_
 	return false;
 }
 
+// Parses one VNCLASS or VNSUBCLASS from offset: optional xml/DOCTYPE, ID, MEMBERS
+// (each MEMBER lemma is mapped in vbNetVerbToClassMap to the upcoming vbNetClasses.size()),
+// overlay flags, THEMROLES, FRAMES, then nested SUBCLASSES via recursion. Pushes vn onto
+// vbNetClasses. Returns false if any required closer is missing.
 bool aVNCLASS(wchar_t* buf, __int64& offset)
 {
 	LFS
@@ -394,6 +449,9 @@ bool aVNCLASS(wchar_t* buf, __int64& offset)
 
 vector < cVerbNet > vbNetClasses;
 
+// Loads every *.xml under source\lists\VerbNet\ via aVNCLASS, then appends a synthetic
+// am/become/be class (prepMustBeLocation, noPrepTo). Returns immediately (leaking hFind)
+// if the first file cannot be opened.
 void readVBNet(void)
 {
 	LFS

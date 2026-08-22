@@ -1,3 +1,18 @@
+"""SourceEnums.py - Integer constants mirrored from C++ source.h / ontology.
+
+Overview:
+    Object-class ids (PRONOUN_OBJECT_CLASS …), form numbers, time-relation
+    flags (T_BEFORE … T_CARDTIME), unknown-object sentinels, place
+    subtypes, include-mask bits, space-relation types (stEXIT …), and
+    verb-tense bits (VT_PRESENT … VT_IMPERATIVE). No methods.
+
+Pipeline position:
+    Imported by Source / pyLP when interpreting deserialized flags.
+
+Notes / gotchas:
+    Must stay in lockstep with the C++ enums; a C++ insert silently
+    shifts every Python interpretation.
+"""
 class SourceEnums:
     PRONOUN_OBJECT_CLASS = 1
     REFLEXIVE_PRONOUN_OBJECT_CLASS = 2

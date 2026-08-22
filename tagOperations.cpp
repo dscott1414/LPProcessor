@@ -1,3 +1,38 @@
+/*
+	tagOperations.cpp - Collect, compare, and resolve pattern-match tag sets
+
+	Overview:
+		Walks the PEMA (pattern-element match array) tree for a desired tag set
+		(nAgree, prep, verb, …), collecting every combination of tagged child
+		patterns/forms into vector<vector<cTagLocation>>. Handles blocking
+		patterns, optional focus positions, a time/count cap (COLLECT_TAGS_TIME_LIMIT
+		/ MAX_TAGSETS), and a memo map keyed by child PEMA position. Also contains
+		helpers that pick VERB/V_OBJECT tags, resolve a tag to a word class (PPN,
+		NUM, DATE, …), and apply the proper-noun determiner cost.
+
+	Pipeline position:
+		After parse / pattern matching. Used by agreement, object identification,
+		speaker resolution, and BNC cost evaluation whenever a pattern's tagged
+		pieces must be enumerated.
+
+	Key entry points:
+		- collectTags / startCollectTags / startCollectTagsFromTag - the collector
+		- replicate - cartesian-product a child's tagSets onto the parent
+		- getVerb / getIVerb / resolveTag / resolveObjectTagBeforeObjectResolution
+		- resolveToClass / fullyResolveToClass - map a position to a class token
+		- properNounCheck - COST_OF_INCORRECT_PROPER_NOUN unless DET+…+PN
+
+	Key data structures / globals:
+		- desiredTagSetNum, blocking, focused, exitTags, beginTime, timerForExit -
+		  collector state on cSource (not thread-safe)
+		- secondaryPEMAPositions - PEMA indexes pushed at recursionLevel==0 so
+		  later cost code can attribute a tagSet to an element
+
+	Notes / gotchas:
+		bool found in the child-pattern loop is never set true, so that continue
+		path is dead. isPPN uses `flags && queryWinnerForm` (logical, not bitwise).
+		compareTagSets copies both vectors by value then sort()s them.
+*/
 #include <windows.h>
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
 #include "io.h"
@@ -9,6 +44,7 @@
 #include "malloc.h"
 #include "profile.h"
 
+// True if any collectTagsFocusPositions index lies in [begin, end).
 bool cSource::tagInFocus(int begin, int end)
 {
 	LFS
@@ -25,6 +61,8 @@ bool cSource::tagInFocus(int begin, int end)
 #endif
 
 
+// For each child tagSet, append it to tagSet, recurse collectTags, then erase the append.
+// If childTagSets is empty, still recurses once (parent-only continuation). Returns child count.
 int cSource::replicate(int recursionLevel, int PEMAPosition, int position, vector <cTagLocation>& tagSet, vector < vector <cTagLocation> >& childTagSets, vector < vector <cTagLocation> >& tagSets, unordered_map <int, vector < vector <cTagLocation> > >& TagSetMap)
 {
 	LFS
@@ -43,6 +81,7 @@ int cSource::replicate(int recursionLevel, int PEMAPosition, int position, vecto
 	return childTagSets.size();
 }
 
+// Element-wise equality of two tag location vectors (same size and each cTagLocation ==).
 bool tagSetSame(vector <cTagLocation>& tagSet, vector <cTagLocation>& tagSetNew)
 {
 	LFS
@@ -53,6 +92,11 @@ bool tagSetSame(vector <cTagLocation>& tagSet, vector <cTagLocation>& tagSetNew)
 	return true;
 }
 
+// Recursively collect tag combinations from PEMAPosition. PEMAPosition < 0 is the leaf:
+// push tagSet onto tagSets (unless a recent duplicate) and maybe record secondaryPEMAPositions.
+// Otherwise walk sibling PEMA rows for this pattern/end, emit tags, and either block,
+// skip unfocused children, or recurse into the child pattern (memoized in TagSetMap).
+// Returns tagSets.size(). Sets exitTags on timeout or MAX_TAGSETS.
 int cSource::collectTags(int recursionLevel, int PEMAPosition, int position, vector <cTagLocation>& tagSet, vector < vector <cTagLocation> >& tagSets, unordered_map <int, vector < vector <cTagLocation> > >& TagSetMap)
 {
 	LFS
@@ -228,6 +272,8 @@ int cSource::collectTags(int recursionLevel, int PEMAPosition, int position, vec
 	return tagSets.size();
 }
 
+// Picks the verb-side tag: last V_OBJECT constrained to VERB, else last V_AGREE. Writes its
+// index into tag. Returns false if there is no VERB or neither V_OBJECT nor V_AGREE.
 bool cSource::getVerb(vector <cTagLocation>& tagSet, int& tag)
 {
 	LFS
@@ -248,6 +294,7 @@ bool cSource::getVerb(vector <cTagLocation>& tagSet, int& tag)
 	return true;
 }
 
+// Like getVerb but only looks for V_OBJECT (infinitive / object-verb). Returns false if none.
 bool cSource::getIVerb(vector <cTagLocation>& tagSet, int& tag)
 {
 	LFS
@@ -260,12 +307,16 @@ bool cSource::getIVerb(vector <cTagLocation>& tagSet, int& tag)
 	return true;
 }
 
+// True unless this is a BNC-pre-tagged source and the form at position is flagged uncertain.
 bool cSource::tagIsCertain(int position)
 {
 	LFS
 		return !preTaggedSource || (m[position].flags & cWordMatch::flagBNCFormNotCertain) == 0;
 }
 
+// Resolves tag to a class word (PPN/NUM/…) before objects exist. Single-token tags use
+// resolveToClass; multi-token NOUN tags collect GNOUN/MNOUN and take the first singleton.
+// Returns false if tag < 0, the pattern is not a NOUN, or no class word is found.
 bool cSource::resolveObjectTagBeforeObjectResolution(vector <cTagLocation>& tagSet, int tag, tIWMM& word, wstring purpose)
 {
 	LFS
@@ -306,6 +357,9 @@ bool cSource::resolveObjectTagBeforeObjectResolution(vector <cTagLocation>& tagS
 // 65396:added Tommy[65396-65398][65397][name  ][MALE  ]**[A:tommy [193]]**[ambiguous]
 // ALSO:
 // 87682:Tommy boy[87682-87684][87683][gender][MALE  ][OGEN]
+// Cost for a mixed proper-noun span: 0 if all-PN, no-PN, or PN used as adjective (last token
+// not PN). Otherwise COST_OF_INCORRECT_PROPER_NOUN unless the span starts at whereDet
+// (determiner + optional words + trailing PN). Writes gTraceSource into traceSource when logging.
 int cSource::properNounCheck(int& traceSource, int begin, int end, int whereDet)
 {
 	LFS
@@ -353,6 +407,7 @@ int cSource::properNounCheck(int& traceSource, int begin, int end, int whereDet)
 	*/
 }
 
+// Strict weak order for sort(): shorter first, then first differing cTagLocation.
 bool tlcompare(const vector <cTagLocation>& lhs, const vector <cTagLocation>& rhs)
 {
 	LFS
@@ -366,6 +421,7 @@ bool tlcompare(const vector <cTagLocation>& lhs, const vector <cTagLocation>& rh
 	return false;
 }
 
+// Dumps unique consecutive ORIGINAL vs NEW tagSets then LOG_FATAL_ERROR. Debug-only helper.
 void showDiffTagSets(vector < vector <cTagLocation> >& tagSets, vector < vector <cTagLocation> >& tagSetsNew)
 {
 	LFS
@@ -378,6 +434,8 @@ void showDiffTagSets(vector < vector <cTagLocation> >& tagSets, vector < vector 
 	lplog(LOG_FATAL_ERROR, L"ERROR!");
 }
 
+// Sorts copies of both collections (by-value parameters) and fatal-errors if the unique
+// non-empty sequences differ. Used to verify a rewritten collector against the old one.
 void compareTagSets(vector < vector <cTagLocation> > tagSets, vector < vector <cTagLocation> > tagSetsNew)
 {
 	LFS
@@ -401,6 +459,10 @@ void compareTagSets(vector < vector <cTagLocation> > tagSets, vector < vector <c
 	}
 }
 
+// Collects tagSet starting from an existing cTagLocation (pattern/position/len/PEMAOffset).
+// If PEMAOffset < 0, searches root-pattern PMA rows of that span (skipping rejectTag).
+// Returns tagSets.size() if any non-empty set was produced, else 0 (also 0 if the pattern
+// bitmap says it cannot contain tagSet).
 size_t cSource::startCollectTagsFromTag(bool inTrace, int tagSet, cTagLocation& tl, vector < vector <cTagLocation> >& tagSets, int rejectTag, bool obeyBlock, bool collectSelfTags, wstring purpose)
 {
 	LFS
@@ -437,6 +499,10 @@ size_t cSource::startCollectTagsFromTag(bool inTrace, int tagSet, cTagLocation& 
 	return 0;
 }
 
+// Entry for collectTags: clears secondaryPEMAPositions, optionally seeds tTagSet with the
+// parent pattern's own tags, then collects. Drops empty tagSets and repairs secondary
+// indexes. Returns 0 if PEMAPosition < 0 or the includes* bitmap cannot contain tagSet;
+// otherwise tagSets.size() (even if exitTags tripped the time/count cap).
 size_t cSource::startCollectTags(bool inTrace, int tagSet, int position, int PEMAPosition, vector < vector <cTagLocation> >& tagSets, bool obeyBlock, bool collectSelfTags, wstring purpose)
 {
 	LFS
@@ -533,6 +599,8 @@ size_t cSource::startCollectTags(bool inTrace, int tagSet, int position, int PEM
 	return tagSets.size();
 }
 
+// True if this token is a gendered personal/indefinite/reciprocal pronoun or a
+// single-gender proper name (flagOnlyConsiderProperNounForms, or flags && winner PN).
 bool cWordMatch::isPPN(void)
 {
 	LFS
@@ -545,6 +613,7 @@ bool cWordMatch::isPPN(void)
 			((flags & flagOnlyConsiderProperNounForms) || (flags && queryWinnerForm(PROPER_NOUN_FORM_NUM) >= 0)));
 }
 
+// Maps this token to a class word: PPN, NUM, DATE, TIME, TELENUM, else mainEntry, else self.
 tIWMM cWordMatch::resolveToClass()
 {
 	LFS
@@ -564,6 +633,8 @@ tIWMM cWordMatch::resolveToClass()
 	return w;
 }
 
+// Like cWordMatch::resolveToClass but also honors an already-attached _DATE/_TIME/_TELENUM
+// object pattern at beginObjectPosition. Used before objects are fully resolved.
 // this is used before any objects are resolved, or marked for time or location
 tIWMM cSource::resolveToClass(int where)
 {
@@ -598,6 +669,8 @@ tIWMM cSource::resolveToClass(int where)
 	return m[where].resolveToClass();
 }
 
+// Maps a resolved object o at 'where' to LOCATION, TIME, PPN (speakers / gendered classes),
+// the surface word (body / non-gendered), or wNULL if the class is unrecognized.
 tIWMM cSource::resolveObjectToClass(int where, int o)
 {
 	LFS
@@ -623,6 +696,9 @@ tIWMM cSource::resolveObjectToClass(int where, int o)
 	return wNULL;
 }
 
+// resolveToClass plus object-class override. If the object is neuter-only PPN, falls back
+// to the surface word. If there is exactly one objectMatch, prefers that match's class
+// unless the original class was already a special (PPN/NUM/DATE/TIME/TELENUM/LOCATION).
 // this is used before any objects are resolved, or marked for time or location
 tIWMM cSource::fullyResolveToClass(int where)
 {
@@ -648,6 +724,8 @@ tIWMM cSource::fullyResolveToClass(int where)
 	return w;
 }
 
+// Tries identifyObject on a NOUN at the tag's sourcePosition, then resolveTag. Used when a
+// prepositional object must exist for a match. Returns true if both succeed.
 bool cSource::forcePrepObject(vector <cTagLocation>& tagSet, int tag, int& object, int& whereObject, tIWMM& word)
 {
 	LFS
@@ -662,6 +740,9 @@ bool cSource::forcePrepObject(vector <cTagLocation>& tagSet, int tag, int& objec
 	return false;
 }
 
+// Resolves tagSet[tag] to (object, whereObject, word). Gendered/pronoun/meta-group objects
+// become Words.PPN; other certain objects use resolveToClass. Single-token certain tags
+// override to the token's class. Returns false if tag < 0 or word stays wNULL.
 /*
 All 4-digit numbers replaced with 'date'.
 Gendered proper nouns or personal pronouns are replaced with PPN.

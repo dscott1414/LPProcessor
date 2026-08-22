@@ -1,9 +1,42 @@
+/*
+	readGutenbergWebstersDictionary.cpp - Gutenberg Webster Unabridged parser
+
+	Overview:
+		One-off reader for the Project Gutenberg "Webster, Noah / Unabridged
+		Dictionary.txt" cache file. Walks all-caps headwords, maps Webster
+		abbreviations (n., v. t., a., …) to LP form names, collects Defn:/
+		numbered sense paragraphs, and prints per-form counts. Does not
+		write the lexicon or MySQL.
+
+	Pipeline position:
+		Offline dictionary acquisition; live lexicon load is elsewhere
+		(word.cpp / get* dictionary importers).
+
+	Key entry points:
+		- WebstersEntry::* helpers - line/paragraph/class/sense extraction
+		- WebstersEntry() - parse one entry, advancing `where`
+		- readUnabridgedGutenbergWebstersDictionary() - open file, walk entries
+
+	Dependencies:
+		Hardcoded J:\caches\texts\Webster, Noah\Unabridged Dictionary.txt;
+		tmalloc, mTW, lplog, nounForm/verbForm/... globals.
+
+	Notes / gotchas:
+		getLine indexes buffer[where] before the where<bufferLen test
+		(operator && short-circuits left-to-right — actually it evaluates
+		buffer[where] != '\r' FIRST, so this is an out-of-range read when
+		where==bufferLen). dictionaryBuffer[bufferLen+1]=0 leaves
+		buffer[bufferLen] uninitialized. WebstersEntry is never persisted.
+*/
 class WebstersEntry
 {
 public:
 	wstring word, info;
 	vector<wstring> wordClasses;
 	vector <wstring> definitions;
+	// Copy characters from buffer[where] up to (not including) '\r', then
+	// skip the CR and an optional LF. Advances where. Does not bound-check
+	// the first buffer[where] against bufferLen (see file notes).
 	wstring getLine(wstring &buffer, int &where, int bufferLen)
 	{
 		wstring line;
@@ -15,6 +48,9 @@ public:
 		return line;
 	}
 
+	// Concatenate lines until a blank line. Sets firstLineEntirelyUpperCase
+	// from whether the first line has any lowercase letter. Inner `where`
+	// shadows the parameter and only walks `line`.
 	wstring getUntilBlankLine(wstring &buffer, int &where, int bufferLen, bool &firstLineEntirelyUpperCase)
 	{
 		wstring paragraph;
@@ -37,6 +73,7 @@ public:
 		}
 	}
 
+	// True iff no wchar in line is lowercase (empty line is all-upper).
 	bool isAllUpper(wstring line)
 	{
 		for (wchar_t ch : line)
@@ -45,6 +82,8 @@ public:
 		return true;
 	}
 
+	// Skip blank lines, then if the next line is all-caps treat it as the
+	// headword. Returns the new `where`, or -1 if no such line remains.
 	int getWebsterEntryWord(wstring &buffer, int &where, wstring &word, int bufferLen)
 	{
 		wstring line;
@@ -57,6 +96,10 @@ public:
 		return -1;
 	}
 
+	// Read the POS/etymology paragraph after the headword, strip "Etym:",
+	// and if a comma is present map the first matching Webster abbreviation
+	// after that comma into wordClasses. Returns wordClasses.size() (0 if
+	// none matched). Only the first mapping hit is kept.
 	int getWebsterEntryWordClass(wstring &buffer, int &where, vector<wstring> &wordClasses, int bufferLen)
 	{
 		bool firstLineEntirelyUpperCase;
@@ -98,11 +141,14 @@ public:
 		return wordClasses.size();
 	}
 
+	// True if buffer begins with searchStr (case-sensitive prefix).
 	bool getWebsterEntryStartsWith(wstring &buffer, wstring searchStr)
 	{
 		return buffer.substr(0, searchStr.length()) == searchStr;
 	}
 
+	// If buffer starts with digits then '.', write the integer to num and
+	// return true. Used to detect numbered sense paragraphs ("1. …").
 	bool getWebsterEntryStartsWithNum(wstring &buffer, int &num)
 	{
 		int I;
@@ -115,6 +161,10 @@ public:
 		return false;
 	}
 
+	// Consume one post-POS paragraph. Pushes Defn: and numbered senses
+	// into definitions; prints NOTE/SYN/ADD. Returns true if the paragraph
+	// belonged to this entry; false (and restores where) when the next
+	// all-caps headword starts.
 	bool getWebsterEntryWordInfo(wstring &buffer, int &where, vector <wstring> &definitions, int bufferLen)
 	{
 		int saveWhere = where;
@@ -158,6 +208,8 @@ public:
 		return false;
 	}
 
+	// Parse one dictionary entry starting at where. Sets reachedEnd if no
+	// further all-caps headword is found. Prints the headword + first class.
 	WebstersEntry(wstring &buffer, int &where, int bufferLen, bool &reachedEnd)
 	{
 		// search for a line with all caps
@@ -172,6 +224,10 @@ public:
 };
 
 #define WebsterStart L"Produced by Graham Lawrence"
+// Open the Gutenberg Webster cache, skip to WebsterStart, parse every
+// WebstersEntry, print form-count histogram. Sets nounForm..prepositionForm
+// globals as a side effect. Returns -1 on open/read/marker failure, 0 on
+// completing the walk (including a trailing failed-entry that sets reachedEnd).
 int readUnabridgedGutenbergWebstersDictionary()
 {
 	nounForm = 1;
