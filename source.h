@@ -1,3 +1,92 @@
+/*
+	source.h - declaration of cSource, the in-memory representation of one entire parsed document (novel)
+
+	Overview:
+		This header declares the central document object of LPProcessor and the small
+		value types that every pipeline stage reads and writes:
+			cWordMatch  - one token ("source position") of the document, with its form/pattern
+			              bitmaps, pattern-match arrays, syntactic-relation links, object
+			              assignment and speaker/audience resolution state.
+			cObject     - one entity (person, place, thing, meta-group) discovered in the text.
+			cLocalFocus - one entity's "salience" record while it is in local focus (the
+			              attention window used for pronoun/speaker resolution).
+			cOM         - an (object index, salience factor) pair; the unit of a match list.
+			cSource     - the document: the token array m, the object array objects, the
+			              speaker groups, sections, timelines, MySQL handle, plus the several
+			              hundred member functions implementing stages 2-8 of the pipeline.
+		Nearly all cross-references inside these structures are plain ints that index one of
+		three parallel arrays, and -1 is the universal "unset" sentinel (see "Index
+		conventions" below).
+
+	Pipeline position:
+		Everything after initialization operates on a cSource. tokenize.cpp fills m;
+		pattern.cpp / patternMatchArray.cpp / patternElementMatchArray.cpp fill m[].pma and
+		pema; syntacticRelations.cpp fills the rel* links; identifyObjects.cpp /
+		resolveObjects.cpp fill objects and m[].objectMatches; identifySpeakerGroups.cpp /
+		resolveSpeakers.cpp fill speakerGroups, m[].speakerPosition and m[].audiencePosition;
+		questionAnswering.cpp consumes the finished structure. source.cpp implements reading,
+		tokenizing, and the binary cache read()/write() of the whole object.
+
+	Key entry points (defined in source.cpp and the stage .cpp files):
+		- readSourceBuffer() / retrieveText() / findStart() - load a document and skip
+		  Project Gutenberg boilerplate.
+		- tokenize() / parseBuffer() - build m.
+		- eliminateLoserPatterns() - cost-based winnowing of competing pattern matches.
+		- syntacticRelations() / identifyObjects() / resolveObjects() - relations and entities.
+		- identifySpeakerGroups() / resolveSpeakers() - who speaks to whom.
+		- read() / write() - binary cache of a fully parsed source; sanityCheck() validates
+		  every index in a cache that was just read.
+
+	Key data structures / globals:
+		- m               - vector <cWordMatch>, the token array. A "source position",
+		                    "where", or "position" anywhere in this codebase is an index
+		                    into m unless stated otherwise.
+		- objects         - vector <cObject>, one entry per discovered entity; an "object"
+		                    int is an index into it.
+		- localObjects    - vector <cLocalFocus>, the current attention window; cObject
+		                    ::lsiOffset and the "lsi" iterators point into it.
+		- speakerGroups   - vector <cSpeakerGroup>, conversation participants over spans of m.
+		- sections        - vector <cSection>, chapter/section boundaries in m.
+		- pema            - cPatternElementMatchArray shared by all positions; m[].pma holds
+		                    per-position pattern matches.
+		- wmNULL, cNULL, sgNULL - "null iterator" sentinels for m, localObjects and
+		                    speakerGroups respectively (declared at the end of the
+		                    corresponding class).
+
+	Index conventions (the single most important thing to know here):
+		- int fields named where*, *Position, begin/end, lastWhere, at, ... index m.
+		- int fields named object, replacedBy, o, speakers members, ... index objects.
+		- *SpeakerGroup fields index speakerGroups; section indexes sections;
+		  PMAElement/PEMAPosition index m[x].pma and pema respectively.
+		- -1 means "not set"/"none" almost everywhere; a few fields overload additional
+		  negative values (cObject::eOBJECTS, CURRENT_SUBSET_SG, cSpeakerGroup::sgEnd -2/-3,
+		  cObject::ownerWhere negative word-order encodings). Those are called out at the
+		  field.
+		- end offsets are exclusive: an object or phrase covers [begin,end).
+
+	Dependencies:
+		syntacticRelations.h / semanticRelations.h / names.h / tableColumn.h / bitObject.h /
+		getMusicBrainz.h / vcXML.h, the global word lexicon Words (word.h) and the tIWMM
+		iterators into it, MySQL (member mysql), and the copy()/lplog() helpers from
+		general.h / logging.h.
+
+	Notes / gotchas:
+		- tIWMM values are unordered_map iterators into the global Words map; they are
+		  serialized as the word string, not as a pointer, and are re-queried on read (so a
+		  word missing from the lexicon deserializes to wNULL - callers must check).
+		- The binary cache format is defined implicitly by the matched pairs of write() and
+		  the (char *buffer,int &where,...) constructors in this file. Any field added to one
+		  side must be added to the other in the same order, or every previously written
+		  cache silently misparses.
+		- The (char*,int&,...) deserializing constructors use the "if (error=!copy(...))"
+		  assignment-in-condition idiom throughout; that is intentional, not a == typo.
+		- lplog(LOG_FATAL_ERROR,...) only logs - it does NOT abort (only lplogNR does).
+		  Every "FATAL ERROR" check in this file therefore continues into the operation it
+		  was guarding.
+		- Several classes have more than one constructor that initialize different subsets of
+		  members (cWordMatch and cObject in particular); see the comments there before
+		  relying on a default-constructed instance.
+*/
 #pragma warning (disable: 4503)
 #pragma once
 #include "syntacticRelations.h"
@@ -10,6 +99,15 @@
 class cSyntacticRelationGroup;
 #define MAX_LEN 2048
 
+// One thesaurus/dictionary entry as scraped by the get*.cpp acquisition code and written to
+// the MySQL thesaurus tables by cSource::writeThesaurusEntry.  Narrow (char) strings because
+// the scraped sources are ASCII/UTF-8 byte streams, unlike the wchar_t document text.
+//   mainEntry            - the headword being defined.
+//   wordType             - part of speech as given by the source ("noun", "verb", ...).
+//   primarySynonyms      - synonyms listed directly under the headword.
+//   accumulatedSynonyms/accumulatedAntonyms - synonyms/antonyms gathered transitively.
+//   concepts             - ontology/concept ids associated with the entry.
+//   rest                 - remaining unparsed lines of the entry, kept verbatim.
 typedef struct {
 	string mainEntry;
 	string wordType;
@@ -32,12 +130,29 @@ typedef struct {
 void escapeStr(wstring &str);
 unsigned long encodeEscape(MYSQL &mysql, wstring &to, wstring from);
 
+// "Object Match": an entity plus the confidence/preference score with which it was matched at
+// some source position.  This is the element type of every match list in the system
+// (cWordMatch::objectMatches, cSpeakerGroup::replacedSpeakers, cSection::speakerObjects, ...).
+//   object         - index into cSource::objects, or -1 for "none".  May also hold one of the
+//                    negative cObject::eOBJECTS pseudo-objects (OBJECT_UNKNOWN_MALE etc) in
+//                    the lists that allow unresolved placeholders.
+//   salienceFactor - accumulated salience/preference score computed during resolution; higher
+//                    is a better match.  DISALLOW_SALIENCE (200000) is used as a poison value
+//                    to keep a candidate out of the running, and MINIMUM_SALIENCE_WITH_MATCHED
+//                    _ADJECTIVES is the floor applied when adjectives matched.  cLocalFocus
+//                    ::clear() resets it to -1.
+// Note the asymmetry between the comparison operators: == compares both fields but != compares
+// only 'object', so !(a==b) is not equivalent to (a!=b) when only the salience differs.  Code
+// that wants set-membership semantics must use != (or in()), and code that wants exact identity
+// must use ==.
 class cOM
 {
 public:
 	int object;
 	int salienceFactor;
 	cOM(int o,int sf) { object=o; salienceFactor=sf; };
+	// Deserialize from the binary source cache.  'where' is advanced past the two ints; 'error'
+	// is set true on a truncated buffer (and the object is left partially filled).
 	cOM(char *buffer,int &where,int limit, bool &error)
 	{
 		error = true;
@@ -45,6 +160,8 @@ public:
 		if (!copy(salienceFactor,buffer,where,limit)) return;
 		error = false;
 	}
+	// Serialize to the binary source cache; must stay in the same field order as the
+	// deserializing constructor above.  Returns false if the copy helper reported failure.
 	bool write(void *buffer,int &where,int limit)
 	{
 		if (!copy(buffer,object,where,limit)) return false;
@@ -54,12 +171,40 @@ public:
 	cOM(void) { object=-1; salienceFactor=0; };
 	bool operator == (const cOM& om)
 	{  return object==om.object && salienceFactor==om.salienceFactor;  }
+	// Deliberately compares only the object index (salience is ignored), so this is "a
+	// different entity", not "a different value" - see the class comment.
 	bool operator != (const cOM& om)
 	{  return object!=om.object; }
 };
 
+// Coarse tense buckets used when a full tense index (NUM_SIMPLE_TENSE, see cTenseStat) is not
+// needed - e.g. cSource::getTense(...,tenseDesired).  Values start at 1 so that 0 can mean
+// "unspecified".
 enum RENUM { R_SimplePresent=1,R_SimplePast=2,R_SimpleFuture=3,R_PresentPerfect=4,R_PastPerfect=5,R_FuturePerfect=6 };
 
+// One token of the document: cSource::m[where] for a source position 'where'.  A cWordMatch is
+// created per word (and per punctuation mark, quote, and synthetic section marker) by
+// tokenize.cpp and then progressively annotated by every later stage, so most members below are
+// meaningless until the stage that owns them has run.
+//
+// Roughly, the members group into:
+//   - the lexicon link (word) and the form/inflection bitmaps (forms, flags, tmpWinnerForms);
+//   - the pattern-matching state (pma, patterns, maxMatch/maxLAC*/lowestAverageCost costs,
+//     beginPEMAPosition/endPEMAPosition/PEMACount, PMAWinners/PEMAWinners);
+//   - the syntactic-relation links (relSubject/relVerb/relObject/relPrep/relNextObject/
+//     relInternal*/*CompoundPartObject) - every one of these is a source position, i.e. an
+//     index into the same m array, or -1;
+//   - the entity assignment (object/originalObject/principalWhere*/begin-endObjectPosition/
+//     objectMatches/audienceObjectMatches) - 'object' indexes cSource::objects;
+//   - the quote and speaker state (endQuote/nextQuote/previousQuote/quoteForwardLink/
+//     quoteBackLink/speakerPosition/audiencePosition/embeddedStorySpeakerPosition).
+//
+// The 64-bit 'flags' field is shared by two disjoint flag vocabularies: bits >= 32 (the
+// static const flagXxx members) are global, while the low 32 bits are declared in the anonymous
+// enum below and are interpreted differently depending on whether the position is a quote
+// (speaker-resolution flags) or not (form/BNC/object flags).  Several enum values therefore
+// intentionally collide - e.g. flagFirstLetterCapitalized and flagFromPreviousHailResolveSpeakers
+// are both 1<<23.  Never test a quote-only flag on a non-quote position or vice versa.
 class cWordMatch
 {
 public:
@@ -145,6 +290,15 @@ public:
 	void setForm(void);
 	void setPreferredForm(void);
 	bool costable(void);
+	// Primary constructor, used by tokenize.cpp for every token it appends to cSource::m.
+	//   inWord         - lexicon entry for this token (never wNULL in normal use).
+	//   inAdjustedForms- initial value of 'flags' (the form/hint flags the tokenizer already
+	//                    knows: capitalization, all-caps, newline-before, inserted quote, ...).
+	//   trace          - the source-wide trace settings, copied field by field into t so that
+	//                    per-position tracing can be toggled later without touching the source.
+	// All index members are initialized to -1 ("unset") and the two cost accumulators to
+	// 1000000 ("no cost known yet, anything is cheaper").  Contrast with the default
+	// constructor at the bottom of this class, which zeroes them instead.
 	cWordMatch(tIWMM inWord,unsigned __int64 inAdjustedForms, sTrace &trace)
 	{
 		word=inWord;
@@ -217,10 +371,24 @@ public:
 		sameSourceCopy = -1;
 	};
 	tIWMM word;  // points to WMM array
+	// The lexicon entry this token should be counted under: the word's own main (dictionary)
+	// entry if it has one, otherwise the word itself.  Never returns wNULL for a valid word.
 	tIWMM getMainEntry(void)
 	{
 		return (word->second.mainEntry==wNULL) ? word : word->second.mainEntry;
 	}
+	// Return the lexicon entry for the uninflected form of this token, deriving it
+	// morphologically if the lexicon does not already record a suitable mainEntry.
+	//   isVerb/isNoun - which category to normalize to (first person singular present for a
+	//                   verb, singular for a noun).  If neither is set, falls back to
+	//                   getMainEntry().
+	//   where/fromWhere            - source position and caller id, for logging only.
+	//   lastNounNotFound/lastVerbNotFound - in/out cache of the last failed derivation, used by
+	//                   ::deriveMainEntry to avoid repeating dictionary/DB lookups.
+	// Single-character words, numerals, pronouns/determiners and non-nouns are returned
+	// unchanged (they have no useful main entry).  On the derivation path the result is
+	// Words.query(derived) which can be wNULL if the derived form is not in the lexicon, so
+	// callers must check.
 	tIWMM deriveMainEntry(int where,int fromWhere,bool isVerb,bool isNoun,wstring &lastNounNotFound,wstring &lastVerbNotFound)
 	{
 		if (!isVerb && !isNoun) return getMainEntry();
@@ -247,6 +415,10 @@ public:
 		else
 			return word;
 	}
+	// Noun-only specialization of deriveMainEntry: returns the singular lexicon entry for this
+	// token.  Returns the token itself when it is already singular, is one word long, is a
+	// numeral/pronoun/determiner, or has no noun form at all; otherwise returns
+	// Words.query(singularized form), which may be wNULL if that form is unknown.
 	tIWMM getNounME(int where,int fromWhere,wstring &lastNounNotFound,wstring &lastVerbNotFound)
 	{
 		if (!(word->second.inflectionFlags&SINGULAR))
@@ -270,6 +442,11 @@ public:
 		else
 			return word;
 	}
+	// Verb-only specialization of deriveMainEntry: returns the first-person-singular-present
+	// lexicon entry for this token, or the token itself if it is already in that form or is a
+	// single character.  May return wNULL when the derived form is not in the lexicon.
+	// Unlike getNounME this does not screen out pronouns/numerals, because it is only called
+	// from positions already known to carry a verb form.
 	tIWMM getVerbME(int where,int fromWhere,wstring &lastNounNotFound,wstring &lastVerbNotFound)
 	{
 		if (!(word->second.inflectionFlags&VERB_PRESENT_FIRST_SINGULAR))
@@ -289,33 +466,35 @@ public:
 		else
 			return word;
 	}
-	unsigned __int64 flags;
-	unsigned short maxMatch;
-	int minAvgCostAfterAssessCost;
-	int lowestAverageCost;
+	unsigned __int64 flags;                 // see the class comment: high bits global, low 32 bits context dependent
+	unsigned short maxMatch;                // length (in positions) of the longest pattern match starting here
+	int minAvgCostAfterAssessCost;          // lowest average cost seen after assessCost ran; 1000000 = none yet
+	int lowestAverageCost;                   // lowest average cost of any match starting here; 1000000 = none yet
 
 	// used in HMM Viterbi training and testing
 	int originalPreferredViterbiForm;
 	vector <int> preferredViterbiForms; // gives form # relative to Forms, not form offset relative to this word.
+	                                   // -2 is pushed for the sentence-boundary pseudo-tag "--s--".
 	double preferredViterbiProbability;
 	double preferredViterbiMaximumProbability;
 	int preferredViterbiPreviousTagOfHighestProbability;
 	int preferredViterbiCurrentTagOfHighestProbability;
 
-	unsigned short maxLACMatch;
-	unsigned short maxLACAACMatch;
+	unsigned short maxLACMatch;    // longest match among the lowest-average-cost matches
+	unsigned short maxLACAACMatch; // longest match among lowest-average-cost/lowest-added-average-cost matches
 	short lastWinnerLACAACMatchPMAOffset; // only used during tracing
 	int whereLastWinnerLACAACMatchPMAOffset; // only used during tracing
-	unsigned __int64 objectRole;
-	int verbSense;
-	unsigned char timeColor;
-	int beginPEMAPosition;
-	int endPEMAPosition;
-	unsigned int PEMACount;
-	cPatternMatchArray pma;
-	cBitObject<> forms;
+	unsigned __int64 objectRole;   // bitfield of syntactic/semantic roles assigned to this position (see relationTypes.h)
+	int verbSense;                 // verb sense id for verb positions; 0 = unset
+	unsigned char timeColor;       // time-segment shading used by timeRelations.cpp / logging
+	int beginPEMAPosition;         // first entry in cSource::pema belonging to this position, -1 = none
+	int endPEMAPosition;           // one past the last pema entry for this position, -1 = none
+	unsigned int PEMACount;        // number of pema entries for this position
+	cPatternMatchArray pma;        // competing pattern matches that start at this position
+	cBitObject<> forms;            // bitmap of the word forms (parts of speech) allowed here; default template
+	                               // parameters give 16 x 32 = 512 bits, indexed by form number
 	//bitObject winnerForms; // used for BNC to remember tagged form
-	cBitObject<32, 5, unsigned int, 32> patterns;
+	cBitObject<32, 5, unsigned int, 32> patterns; // bitmap of pattern ids matched at this position (32 x 32 = 1024 bits)
 
 	// the man's shoes
 	//  0   1     2
@@ -356,11 +535,15 @@ public:
 	int nextCompoundPartObject; // subject or object, links compound objects together
 	int previousCompoundPartObject; // subject or object, links compound objects together : also links an infinitive verb back to the mainVerb
 	int relSubject; // if this is an object, what subject does it relate to? (for pronoun disambiguation)
-	int sameSourceCopy;
+	int sameSourceCopy; // when a phrase is duplicated within this same source (question transformation /
+	                    // copySource), the position in m this position was copied from; -1 if not a copy
+	// Source position of the verb this subject/object belongs to, or -1.
 	int getRelVerb()
 	{
 		return relVerb;
 	}
+	// Set the verb link.  Only -1 (unset) or a real source position is legal; anything below -1
+	// is logged as a fatal error but, because lplog does not abort, is still stored.
 	void setRelVerb(int rv)
 	{
 		if (rv < -1)
@@ -369,6 +552,8 @@ public:
 	}
 	int relPrep; // subjects, objects and verbs should have this set to the prepositions of the prep phrases, 
 							 // and prep phrases themselves have them set to the next prep phrase in the sentence
+	// Set the preposition link and echo it back, so callers can write "x=setRelPrep(y)".
+	// The interesting logic lives in cSource::setRelPrep(where,...), which decides what to link.
 	int setRelPrep(int rp) { 
 		relPrep=rp; 
 		return rp;
@@ -378,8 +563,12 @@ public:
 	// relInternalObject is also used for another object of the same subject location but the object is of another verb.  This verb may be before the subject (_INTRO_S1)
 	int relInternalObject; // I guess you have no right to ... relInternalObject of I is 'you' - this is to prevent LL routines 
 	int beginObjectPosition,endObjectPosition; // where is the object defined on this position begin and end?
-	vector <cOM> objectMatches;
-	vector <cOM> audienceObjectMatches;
+	                                           // half-open range [begin,end) of positions in m; -1 = no object here
+	vector <cOM> objectMatches;         // entities this position resolves to (pronoun/name coreference result).
+	                                    // For a quote position these are the speakers of the quote.
+	vector <cOM> audienceObjectMatches; // for a quote position, the entities being addressed
+	// Next quote in the same paragraph, or -1.  For a verb position this same storage holds
+	// tsSense instead (see the private declaration), so only read it on quote positions.
 	int getQuoteForwardLink() { return quoteForwardLink; }
 	void setQuoteForwardLink(int qfl) 
 	{ 
@@ -393,34 +582,48 @@ public:
 	                    // the head of 'from' Institute, 'in' 1977 = his 'PhD'
 	int previousQuote; // set at the beginning of the quote to the beginning of the previous quote in a separate paragraph
 	int endQuote; // matching end quote
-	int tmpWinnerForms; 
+	int tmpWinnerForms; // bitmap (by form offset within this word, not global form number) of the forms
+	                    // that survived pattern winnowing.  0 means "no winnowing yet" and is treated
+	                    // by isWinner() as "every form is still a winner".  Only 31 usable bits.
 	int skipResponse; // not saved
 	int embeddedStorySpeakerPosition; // tracks who is speaking when they are relating an event that happened in the past
-	int audiencePosition,speakerPosition;
-	sTrace t;
+	int audiencePosition,speakerPosition; // positions in m of the audience/speaker resolved for this quote; -1 = unresolved
+	sTrace t;                             // per-position copy of the trace flags (see the constructor)
 	bool hasSyntacticRelationGroup,hasVerbRelations,andChainType,notFreePrep;
 	short logCache;
-	wstring baseVerb;
+	wstring baseVerb;                            // uninflected verb string cached by getBaseVerb
 	wstring questionTransformationSuggestedPattern;
-	vector <int> PEMAWinners;
-	vector <int> PMAWinners;
+	vector <int> PEMAWinners;  // pema offsets that won at this position
+	vector <int> PMAWinners;   // pma offsets that won at this position
 	
+	// Mark form offset 'form' (relative to this word's form list) as a surviving winner.
+	// Out-of-range form numbers are logged as fatal, but since lplog does not abort the shift
+	// still executes with an out-of-range shift count.
 	void setWinner(int form)
 	{
 		if (form >= sizeof(tmpWinnerForms) * 8)
 			lplog(LOG_FATAL_ERROR, L"overFlow on tmpWinnerForms (1)!");
 		tmpWinnerForms |= (1 << form);
 	}
+	// Clear the winner bit for form offset 'form'.  Same missing-abort caveat as setWinner.
 	void unsetWinner(int form)
 	{
 		if (form >= sizeof(tmpWinnerForms) * 8)
 			lplog(LOG_FATAL_ERROR, L"overFlow on tmpWinnerForms (1)!");
 		tmpWinnerForms &= ~(1 << form);
 	}
+	// Forget all winnowing decisions for this position.  Because 0 doubles as "not winnowed",
+	// this makes isWinner() answer true for every form again.
 	void unsetAllFormWinners()
 	{
 		tmpWinnerForms = 0;
 	}
+	// Record the HMM/Viterbi-preferred tag for this token.
+	//   form        - form name; the special value L"--s--" is the sentence-boundary tag and is
+	//                 stored as -2 in preferredViterbiForms.
+	//   probability - Viterbi probability of that tag, stored only on the success path.
+	// Returns false (and logs) if 'form' is not one of the forms this word can take; the
+	// preferred-form list is then left unchanged.
 	bool setPreferredViterbiForm(wstring form,double probability)
 	{
 		if (form == L"--s--")
@@ -444,6 +647,8 @@ public:
 			return true;
 		}
 	}
+	// Dry run of setPreferredViterbiForm: returns true if 'form' is the sentence-boundary tag or
+	// is a legal form for this word, false (with a log line) otherwise.  Stores nothing.
 	bool testPreferredViterbiForm(wstring form)
 	{
 		if (form != L"--s--" && queryForm(form) < 0)
@@ -456,6 +661,10 @@ public:
 	void setSeparatorWinner(void);
 	bool maxWinner(int len,int avgCost,int lowestSeparatorCost);
 	// if there is no winner, display every form
+	// True if form offset 'form' survived winnowing.  When tmpWinnerForms is 0 (nothing has been
+	// winnowed yet) every form is reported as a winner, which is what the printing code wants.
+	// Out-of-range offsets return false after logging (note the log line prints the 'forms'
+	// bitmap object rather than the offending 'form' value).
 	bool isWinner(int form)
 	{
 		if (form>=sizeof(tmpWinnerForms)*8)
@@ -465,6 +674,11 @@ public:
 		}
 		return (tmpWinnerForms) ? ((1<<form)&tmpWinnerForms)!=0 : true;
 	}
+	// True if 'form' (a global form number, unlike isWinner's offset) is the single surviving
+	// form at this position: either nothing was winnowed and the word has exactly one form, or
+	// the winner bitmap contains exactly that form's bit.  Note the query() result is not
+	// checked for -1 on the second path, so calling this with a form the word cannot take
+	// evaluates a negative shift.
 	bool isOnlyWinner(int form)
 	{
 		int formIndex = word->second.query(form);
@@ -472,6 +686,10 @@ public:
 		return (1<< formIndex)==tmpWinnerForms;
 	}
 	wstring roleString(wstring &sRole);
+	// Log this position's syntactic-relation links at LOG_RESOLUTION.  If no relation link is
+	// set, only the role bitfield is printed (and nothing at all if there is no role either);
+	// the detailed link dump is gated on t.traceSpeakerResolution.  'where' is this position,
+	// printed as the %06d line prefix.
 	void logRelations(int where)
 	{
 		wstring rs;
@@ -493,6 +711,12 @@ public:
 					where,roleString(rs2).c_str(),relSubject,relVerb,relObject,relNextObject,nextCompoundPartObject,previousCompoundPartObject,relPrep,relInternalVerb,relInternalObject);
 		}
 	}
+	// Reset the links that only make sense in the position's original context, after this
+	// cWordMatch has been copied into another source (copySource / question transformation).
+	// Everything that points at a position or object index is set back to -1 and the resolved
+	// object matches are dropped, so the copy can be re-resolved from scratch in its new
+	// document.  Note that audienceObjectMatches, quoteBackLink, principalWhere*Position and
+	// the PEMA/PMA bookkeeping are deliberately or accidentally left untouched here.
 	void clearAfterCopy()
 	{
 		originalObject = relNextObject = nextCompoundPartObject = previousCompoundPartObject = relSubject = sameSourceCopy = relPrep = relInternalVerb = relInternalObject = nextQuote = previousQuote = endQuote = embeddedStorySpeakerPosition = audiencePosition = speakerPosition = -1;
@@ -538,16 +762,23 @@ public:
 	bool isPossessivelyGendered(bool &possessivePronoun);
 	bool updateFormUsagePatterns(void);
 	void logFormUsageCosts(void);
+	// Index into cSource::objects of the entity that starts (has its principalWhere) at this
+	// position, or -1.  Accessors exist only so that the assignment can be traced/breakpointed.
 	int getObject() { return object; }
 	void setObject(int o)
 	{
 		object=o;
 	}
+	// Source position of the object related to this subject (or of the explicitly named other
+	// speaker, when flagQuoteContainsSpeaker is set); -1 if none.  Returns the value assigned.
 	int getRelObject() { return relObject; }
 	int setRelObject(int ro)
 	{
 		return relObject=ro;
 	}
+	// True if this token is an opening/closing single or double quotation mark.  Only the first
+	// character is examined, which is enough because the tokenizer emits quotes as single-
+	// character tokens.
 	bool isQuote()
 	{
 		return cWord::isSingleQuote(word->first[0]) || cWord::isDoubleQuote(word->first[0]);
@@ -558,10 +789,18 @@ public:
 	bool readFlags(char* buffer, int& where, int limit);
 	bool read(char *buffer,int &where,int limit,int sourceType);
 	void accumulateStatistics(unordered_map<wstring, int> &defaultMap);
+	// Deserialize one token from the binary source cache; 'error' is set true if read() failed
+	// (truncated buffer or a word that is no longer in the lexicon).  'sourceType' selects the
+	// cSource::sourceTypeEnum-specific parts of the format.
 	cWordMatch(char *buffer,int &where,int limit,int sourceType,bool &error)
 	{
 		error=!read(buffer,where,limit,sourceType);
 	}
+	// Default constructor, needed so cWordMatch can live in a vector.  Beware: unlike the
+	// tokenizer constructor above it zeroes every index and cost field instead of using -1 /
+	// 1000000, so a default-constructed entry claims to reference object 0 and position 0 and
+	// to have zero cost; 'word' is also left as a default-constructed (invalid) lexicon
+	// iterator rather than wNULL.  Only use it as a placeholder that is immediately overwritten.
 	cWordMatch(void)
 	{
 			PEMACount=0;
@@ -622,30 +861,44 @@ private:
 	// the next field is also used to store tsSense for verbs
 	int quoteForwardLink; // next quote in same paragraph (or tsSense)
 };
-extern vector <cWordMatch>::iterator wmNULL;
+extern vector <cWordMatch>::iterator wmNULL; // "null" token iterator; compare against it instead of using NULL
 
+// One entity currently in local focus, i.e. a candidate for the next pronoun/speaker
+// resolution.  cSource::localObjects is the focus window; entries are pushed as entities are
+// encountered, aged as sentences go by (increaseAge/decreaseAge/resetAge), and cleared at
+// section boundaries.  cObject::lsiOffset points back at this entry for the object.
+//
+// The three age counters exist because salience decays differently inside and outside quotes:
+// text inside quotes and text outside quotes are effectively two interleaved narratives, and a
+// mention in one should not fully refresh the other.  Which counter is consulted is decided by
+// setSalienceAgeMethod/salienceInQuote/salienceIndependent.
 class cLocalFocus
 {
 public:
 	cOM om; // index into objects also a salience factor
-	int numEncounters;
-	int numIdentifiedAsSpeaker;
-	int numDefinitelyIdentifiedAsSpeaker;
-	int lastRoleSalience;
-	int lastWhere;
-	int previousWhere;
-	int numMatchedAdjectives;
+	int numEncounters;                      // total mentions of this entity while in focus
+	int numIdentifiedAsSpeaker;             // mentions where it was taken to be the speaker
+	int numDefinitelyIdentifiedAsSpeaker;   // subset of the above that were unambiguous ("said Bill")
+	int lastRoleSalience;                   // salience contributed by the syntactic role of the last mention
+	int lastWhere;                          // position in m of the most recent mention, -1 = none yet
+	int previousWhere;                      // position of the mention before that, -1 = none
+	int numMatchedAdjectives;               // adjectives that matched between mention and entity (raises salience)
 	int newPPAge; // the age of a new physically present entity - used with introductions
 	int lastExit; // position in source of last exit of object - used in determining whether the exit was true
 	int lastEntrance; // position in source of last explicit entrance of object 
 	int whereBecamePhysicallyPresent; // position where the object last became physically present.
-	bool notSpeaker;
+	bool notSpeaker;                  // known not to be a speaker (e.g. mentioned as absent)
 	bool lastSubject; // // last subject preference used in chooseBest
-	bool occurredInPrimaryQuote;
-	bool occurredOutsidePrimaryQuote;
-	bool occurredInSecondaryQuote;
-	bool physicallyPresent;
-	wstring res;
+	bool occurredInPrimaryQuote;      // has been mentioned inside a primary (outermost) quote
+	bool occurredOutsidePrimaryQuote; // has been mentioned in narration
+	bool occurredInSecondaryQuote;    // has been mentioned inside a quote within a quote
+	bool physicallyPresent;           // believed to be present in the current scene
+	wstring res;                      // human-readable trace of how salience was accumulated (logging only)
+	// (Re)initialize every counter for a fresh appearance of this entity.
+	//   inPrimaryQuote/inSecondaryQuote - whether the mention that created this focus entry was
+	//   inside a quote.  The age counter for the *other* context is set to -1, meaning "never
+	//   seen there", so that the entity does not appear artificially recent in that context.
+	// Does not touch om, so the caller's object/salience survive a re-init.
 	void init(bool inPrimaryQuote,bool inSecondaryQuote)
 	{
 		unquotedAge=(inPrimaryQuote || inSecondaryQuote) ? -1:0;
@@ -667,10 +920,13 @@ public:
 		lastSubject=false;
 		physicallyPresent=false;
 	};
+	// Focus entry with no entity attached yet (om.object stays -1).
 	cLocalFocus(bool inPrimaryQuote,bool inSecondaryQuote)
 	{
 		init(inPrimaryQuote,inSecondaryQuote);
 	}
+	// Focus entry for an already-scored match.  ns = known not to be a speaker,
+	// pp = believed physically present.
 	cLocalFocus(cOM lom,bool inPrimaryQuote,bool inSecondaryQuote,bool ns,bool pp)
 	{
 		init(inPrimaryQuote,inSecondaryQuote);
@@ -678,6 +934,7 @@ public:
 		notSpeaker=ns;
 		physicallyPresent=pp;
 	};
+	// Focus entry for an object index, leaving om.salienceFactor at its default 0.
 	cLocalFocus(int object,bool inPrimaryQuote,bool inSecondaryQuote,bool ns,bool pp)
 	{
 		init(inPrimaryQuote,inSecondaryQuote);
@@ -685,6 +942,9 @@ public:
 		notSpeaker=ns;
 		physicallyPresent=pp;
 	};
+	// Trivial named readers for the two salience-mode flags that resolution passes around; they
+	// exist so the call sites document which mode they are testing (the flags used to be static
+	// members of this class - see the commented-out declaration below).
 	static bool salienceInQuote(bool objectToBeMatchedInQuote)
 	{
 		return objectToBeMatchedInQuote;
@@ -695,6 +955,13 @@ public:
 	}
 	// this factor is set once for each object that is resolved.
 	//static bool quoteIndependentAge,objectToBeMatchedInQuote;
+	// Decide, once per entity being resolved, which age counter drives salience.
+	//   inObjectToBeMatchedInQuote      - is the position being resolved inside a quote?
+	//   objectToBeMatchedIsOnlyNeuter   - neuter-only entities (things, not people) ignore the
+	//                                     quote/narration split entirely, because "it" refers
+	//                                     across that boundary freely.
+	// Both decisions are written to the out parameters (which the caller keeps for the whole
+	// resolution) and the quote-independent decision is also returned.
 	static bool setSalienceAgeMethod(bool inObjectToBeMatchedInQuote,bool objectToBeMatchedIsOnlyNeuter,bool &objectToBeMatchedInQuote,bool &quoteIndependentAge)
 	{
 		objectToBeMatchedInQuote=inObjectToBeMatchedInQuote;
