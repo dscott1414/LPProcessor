@@ -50,9 +50,27 @@ export class SourceElementDialogComponent implements OnInit
     this.selectedObject = event.value;
   }
 
-  deleteMatchingObject(element: any, event: any)
+  deleteMatchingObject(o: SimpleObject, event: any)
   {
-    console.log(element, event);
+    let found = false;
+    this.matchingObjects.forEach( (item, index) => {
+      if(item.id === o.id) {
+        this.matchingObjects.splice(index, 1);
+        let foundSurrounding = false;
+        this.surroundingObjects.forEach( (item, index) => {
+          if(item.id === o.id) {
+            foundSurrounding = true;
+          }
+        });
+        if (!foundSurrounding)
+          this.surroundingObjects.push(o);
+        console.log("matching objects:",this.matchingObjects);
+        console.log("surrounding objects:",this.surroundingObjects);
+        this.dataSource.setData(this.matchingObjects);
+        found = true;
+      }
+    });
+    return found;
   }
 
   objectAlreadyMatched(o: SimpleObject): boolean
@@ -78,24 +96,26 @@ export class SourceElementDialogComponent implements OnInit
     return found;
   }
 
-  addMatching()
+  addObject()
   {
-    this.selectedObject.type = SourceElementTypes.matchingType;
     if (!this.objectAlreadyMatched(this.selectedObject))
       this.matchingObjects.push(this.selectedObject);
     this.removeFromSurroundingObjects(this.selectedObject);
     console.log("matching objects:",this.matchingObjects);
     console.log("surrounding objects:",this.surroundingObjects);
+    this.dataSource.setData(this.matchingObjects);
+  }
+
+  addMatching()
+  {
+    this.selectedObject.type = SourceElementTypes.matchingType;
+    this.addObject();
   }
 
   addAudience()
   {
     this.selectedObject.type = SourceElementTypes.audienceMatchingType;
-    if (!this.objectAlreadyMatched(this.selectedObject))
-      this.matchingObjects.push(this.selectedObject);
-    this.removeFromSurroundingObjects(this.selectedObject);
-    console.log("matching objects:",this.matchingObjects);
-    console.log("surrounding objects:",this.surroundingObjects);
+    this.addObject();
   }
 
   close()
@@ -108,7 +128,7 @@ export class SourceElementDialogComponent implements OnInit
     console.log("saving matching objects:",this.matchingObjects);
     console.log("at:",this.elementId);
     this.dataService.saveMatchingObjects(this.elementId, this.matchingType, this.matchingObjects).subscribe();
-    this.dialogRef.close({event: 'save', data: this.returnData});
+    this.dialogRef.close({event: 'save', data: this.elementId});
   }
 
   ngOnInit(): void {

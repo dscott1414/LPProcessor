@@ -1756,7 +1756,7 @@ public:
 		vector < cGroup > groups; // subgroups of speakers grouped syntactically
 		cSpeakerGroup(void);
 		cSpeakerGroup(char *buffer,int &where,unsigned int limit,bool &error);
-		cSpeakerGroup(const cSpeakerGroup& obj);
+		//cSpeakerGroup(const cSpeakerGroup& obj);
 
 		bool copy(void *buffer,int &where,int limit);
 		void clear(void)

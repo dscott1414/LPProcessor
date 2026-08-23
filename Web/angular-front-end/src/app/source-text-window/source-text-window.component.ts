@@ -34,7 +34,6 @@ export class SourceTextWindowComponent implements OnInit {
   public displayedColumns: string[] = ['word', 'roleVerbClass', 'relations', 'objectInfo', 'matchingObjects', 'flags'];
   public dataSource: WordInfoDataSource;
   public timelineDataSource: TimelineDataSource;
-  //public searchValue: string = "";
   public currentSourceRange: string = "";
   public sourceElements: SourceElement[] = [];
   private preferencesButtonText = 'Preferences';
@@ -55,11 +54,15 @@ export class SourceTextWindowComponent implements OnInit {
   public searchSourceSelected: string = "";
 
   private timeOutLoadWordInfoId: any;
-  private timeoutResizeObserverId: any;
+  private timeoutSourceElementsResizeObserverId: any;
+  private timeoutWordInfoResizeObserverId: any;
+  private timeoutTimelineResizeObserverId: any;
   private timeoutSourceRangeId: any;
-  private timeoutInfo: any;
-  private timeoutScrollEventListener: any;
+  private timeoutInfoId: any;
+  private timeoutScrollEventListenerId: any;
   private timeoutSourceSearchStringId: any;
+  private timeoutBlinkerObserverId: any;
+  private intervalSaveCorrectedSourcePeriodicallyId: any;
 
   private loadingSource = true;
   private loadingElements = false;
@@ -72,6 +75,7 @@ export class SourceTextWindowComponent implements OnInit {
   private lastSelectionEndId: number = 0;
   private lastLoadedSource: any;
 
+  private changedElementsToFlush: string[] = [];
   //private tempPauseScroll: boolean = false;
 
   public isHidden = false;
@@ -88,6 +92,10 @@ export class SourceTextWindowComponent implements OnInit {
   hasChild = (_: number, node: TimelineNode) => !!node.children && node.children.length > 0;
 
   @ViewChild('sourceElementsId') sourceElementsRef!: ElementRef;
+  @ViewChild('wordInfoId') wordInfoRef!: ElementRef;
+  @ViewChild('timelineId') timelineRef!: ElementRef;
+  @ViewChild('footerId') footerRef!: ElementRef;
+  @ViewChild('sourcetextwindow') sourceTextWindowRef!: ElementRef;
   @ViewChild('matMenuPreferencesTrigger', {read: MatMenuTrigger})
   private matMenuPreferencesTriggerRef!: MatMenuTrigger;
   @ViewChild('matMenuChaptersTrigger', {read: MatMenuTrigger})
@@ -163,6 +171,17 @@ export class SourceTextWindowComponent implements OnInit {
     this.searchControl.valueChanges.subscribe(userInput => {
       this.populateSearchStrings(userInput);
     })
+    this.intervalSaveCorrectedSourcePeriodicallyId = setInterval(() => {
+      if (this.changedElementsToFlush.length>0) {
+        this.saveCorrectedSource(this.changedElementsToFlush);
+        this.changedElementsToFlush = []
+      }
+    }, 1000 * 60 * 5); // save every 5 minutes
+  }
+
+  private saveCorrectedSource(changedElementsToFlush: string[])
+  {
+    this.dataService.saveCorrectedSource(changedElementsToFlush).subscribe();
   }
 
   private populateSearchStrings(input: string) {
@@ -199,7 +218,7 @@ export class SourceTextWindowComponent implements OnInit {
     this._renderer2.setStyle(el, 'font-weight', weight);
     if (times == 0)
       return;
-    this.timeoutResizeObserverId = setTimeout(() => {
+    this.timeoutBlinkerObserverId = setTimeout(() => {
       this.timedBlinkerHelper(el, interval, times - 1, backColor, color, weight, saveBackColor, saveColor, saveWeight);
     }, interval);
   }
@@ -308,18 +327,56 @@ export class SourceTextWindowComponent implements OnInit {
   }
 
   ngAfterViewInit() {
-    let obs = new ResizeObserver(entries => {
-      clearTimeout(this.timeoutResizeObserverId);
-      this.timeoutResizeObserverId = setTimeout(() => {
+    let obsSourceElements = new ResizeObserver(entries => {
+      clearTimeout(this.timeoutSourceElementsResizeObserverId);
+      this.timeoutSourceElementsResizeObserverId = setTimeout(() => {
+        // console.log("SourceElements",entries[0].contentRect.width,entries[0].contentRect.height);
         this.loadElements(1, this.lastFromWhere, null, null);
+        let seRect = this.sourceElementsRef.nativeElement.getBoundingClientRect();
+        // console.log("source elements",seRect);
+        let fRect = this.footerRef.nativeElement.getBoundingClientRect();
+        // console.log("footer",fRect);
+        let increaseHeight = fRect.top - seRect.bottom - 5;
+        if (increaseHeight>0)
+        {
+          let height = fRect.bottom - fRect.top + increaseHeight;
+          this._renderer2.setStyle(this.sourceTextWindowRef.nativeElement, 'grid-template-rows', `200px 1fr ${height}px`);
+          // this._renderer2.setStyle(this.footerRef.nativeElement, 'height', `${height}px`);
+          // let top = fRect.top - increaseHeight;
+          // this._renderer2.setStyle(this.footerRef.nativeElement, 'top', `${top}px`);
+          // console.log("height top",height,top);
+        }
+        else
+        {
+          let mainWindowRect = this.sourceTextWindowRef.nativeElement.getBoundingClientRect();
+          // console.log("mainWindow bottom footer bottom", mainWindowRect.bottom, fRect.bottom);
+          let height = mainWindowRect.bottom - fRect.top;
+          this._renderer2.setStyle(this.sourceTextWindowRef.nativeElement, 'grid-template-rows', `200px 1fr ${height}px`);
+        }
       }, 300);
     });
-    obs.observe(this.sourceElementsRef.nativeElement);
+    obsSourceElements.observe(this.sourceElementsRef.nativeElement);
+    let obsWordInfo = new ResizeObserver(entries => {
+      clearTimeout(this.timeoutWordInfoResizeObserverId);
+      this.timeoutWordInfoResizeObserverId = setTimeout(() => {
+        console.log("WordInfo",entries[0].contentRect.width,entries[0].contentRect.height);
+        //this.loadElements(1, this.lastFromWhere, null, null);
+      }, 300);
+    });
+    obsWordInfo.observe(this.wordInfoRef.nativeElement);
+    let obsTimeline = new ResizeObserver(entries => {
+      clearTimeout(this.timeoutTimelineResizeObserverId);
+      this.timeoutTimelineResizeObserverId = setTimeout(() => {
+        console.log("Timeline",entries[0].contentRect.width,entries[0].contentRect.height);
+        // this.loadElements(1, this.lastFromWhere, null, null);
+      }, 300);
+    });
+    obsTimeline.observe(this.timelineRef.nativeElement);
     let scroll = document.querySelector(".source-element");
     if (scroll != null)
       scroll.addEventListener('scroll', (event) => {
-        clearTimeout(this.timeoutScrollEventListener);
-        this.timeoutScrollEventListener = setTimeout(() => {
+        clearTimeout(this.timeoutScrollEventListenerId);
+        this.timeoutScrollEventListenerId = setTimeout(() => {
           if (this.triggerExtendBottomScroll() && !this.bottomReached) {
             console.log("Bottom Extend");
             this.appendElements(500);
@@ -453,19 +510,6 @@ export class SourceTextWindowComponent implements OnInit {
     this.loadSource(this.lastLoadedSource);
   }
 
-  openDialog(): void {
-    const dialogRef = this.dialog.open(DialogOverviewExampleDialog, {
-      width: '250px',
-      data: {name: this.name, animal: this.animal},
-    });
-
-    dialogRef.afterClosed().subscribe(result => {
-      console.log('The dialog was closed');
-      this.animal = result;
-    });
-  }
-
-
   // this click is done in a non-angular element.  Therefore sourceElementClick is outside the
   // Angular Zone and must be put back in, otherwise components will not display or initialize correctly.
   sourceElementClick(elementId: string) {
@@ -490,6 +534,13 @@ export class SourceTextWindowComponent implements OnInit {
                   "elementId": elementId
                 }
               });
+            sourceElementDialogComponentRef.afterClosed().subscribe((result:any) => {
+              console.log(`sourceElementDialogComponentRef`);
+              console.log(result['data']);
+              this.changedElementsToFlush.push(result['data'])
+              this.loadElements(7, this.lastFromWhere, null, null);
+            });
+
             break;
           default:
             console.log("elementType doesn't match.");
@@ -538,7 +589,7 @@ export class SourceTextWindowComponent implements OnInit {
         this.isHidden = false;
         this.removeCursorWait();
         if (optionScrollTo != null)
-          this.timeoutInfo = setTimeout(() => {
+          this.timeoutInfoId = setTimeout(() => {
             console.log("scroll to " + optionScrollTo);
             let ref = document.getElementById(optionScrollTo);
             if (ref != null) {
@@ -583,8 +634,8 @@ export class SourceTextWindowComponent implements OnInit {
   }
 
   displayElement(e: any) {
-    clearTimeout(this.timeoutInfo);
-    this.timeoutInfo = setTimeout(() => {
+    clearTimeout(this.timeoutInfoId);
+    this.timeoutInfoId = setTimeout(() => {
       this.dataService.loadInfoPanel(e).subscribe(ch => {
         this.wordInfo = ch['response']["wordInfo"];
         this.roleInfo = ch['response']["roleInfo"];
@@ -596,25 +647,5 @@ export class SourceTextWindowComponent implements OnInit {
     return e;
   }
 
-  /*
-  openContentElement() {
-    this.dialog.open(ContentElementDialog);
-  }
-*/
 }
 
-@Component({
-  selector: 'dialog-overview-example-dialog',
-  templateUrl: '../dialog-overview-example-dialog.html',
-})
-export class DialogOverviewExampleDialog {
-  constructor(
-    public dialogRef: MatDialogRef<DialogOverviewExampleDialog>,
-    @Inject(MAT_DIALOG_DATA) public data: DialogData,
-  ) {
-  }
-
-  onNoClick(): void {
-    this.dialogRef.close();
-  }
-}

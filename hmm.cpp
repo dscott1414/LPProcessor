@@ -35,11 +35,11 @@ int createJavaVM(JavaVM*& vm, JNIEnv*& env)
 {
 	JavaVMOption options[5];
 	memset(&options, 0, sizeof(options));
-	options[0].optionString = "-Djava.class.path=.;F:\\lp\\Stanford\\workspace\\StanfordParser\\target\\StanfordParser-0.0.1-SNAPSHOT.jar";
-	options[1].optionString = "-Xms10m"; // 1MB
-	options[2].optionString = "-Xmx3g"; // 1GB
-	options[3].optionString = "-mx2400m"; // 2.4GB
-	options[4].optionString = "-server"; // Selects server application runtime optimizations. The directory server will take longer to start and “warm up” but will be more aggressively optimized to produce higher throughput.
+	options[0].optionString = (char *)"-Djava.class.path=.;F:\\lp\\Stanford\\workspace\\StanfordParser\\target\\StanfordParser-0.0.1-SNAPSHOT.jar";
+	options[1].optionString = (char*)"-Xms10m"; // 1MB
+	options[2].optionString = (char*)"-Xmx3g"; // 1GB
+	options[3].optionString = (char*)"-mx2400m"; // 2.4GB
+	options[4].optionString = (char*)"-server"; // Selects server application runtime optimizations. The directory server will take longer to start and “warm up” but will be more aggressively optimized to produce higher throughput.
 
 	JavaVMInitArgs vm_args;
 	vm_args.version = JNI_VERSION_1_8;

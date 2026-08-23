@@ -121,11 +121,11 @@ class WordMatch:
         count = rs.read_integer()
         self.objectMatches = []
         for _ in range(count):
-            self.objectMatches.append(COM(rs))
+            self.objectMatches.append(COM(rs=rs))
         count = rs.read_integer()
         self.audienceObjectMatches = []
         for _ in range(count):
-            self.audienceObjectMatches.append(COM(rs))
+            self.audienceObjectMatches.append(COM(rs=rs))
         self.quoteForwardLink, self.endQuote, self.nextQuote, self.previousQuote, self.relObject, \
         self.relSubject, self.relVerb, self.relPrep, self.beginObjectPosition, self.endObjectPosition, \
         self.tmpWinnerForms, self.embeddedStorySpeakerPosition, traceFlags = struct.unpack('<12iq', rs.f.read(56))

@@ -165,4 +165,12 @@ export class DataService {
       map(res => res["response"])
     );
   }
+
+  saveCorrectedSource(changedElementsToFlush: string[]): Observable<number> {
+      return this.http.post<any>('/api/saveCorrectedSource', {
+        'changedElementsToFlush': changedElementsToFlush
+      }).pipe(
+        map(res => res["response"])
+      );
+  }
 }

@@ -1,21 +1,99 @@
+/*  SPEAKER/ matching problems - most  important (speaker:10 points, matching: 1 point)
+*   all corrections with objectMatches have salienceFactors = -1
+* 
+* 733 : object and audience incorrect match
+* 
+4909: SPEAKER: Incorrect audience(should be Tommy) special 'wrote'
+12722 : SPEAKER : Should be Mr.Carter, not Tuppence.Tuppence nodded is not necessarily acceptable as a subject indicating the speaker of the next paragraph
+15913 : SPEAKER : Should be Julius, not Tommy speaking...
+15996 : SPEAKER : questionInversion conflict with SPEAKER : 36789
+23952 : audience should be to 'this visitor', and split between this visitorand Boris(2nd sentence)
+24005 : SPEAKER : a new voice should be assigned to Mr.Potter
+24176 : SPEAKER : sibilant tones should be associated with 'one'
+24561 : SPEAKER : 'Number 14' is introduced again by purely context within the quotes, and should be attributed as speaker.
+29668 : SPEAKER : Should be Vandermeyer(Tuppence should be observer)
+36705 : SPEAKER : consider allowing question / next subject in paragraph agreement to be processed even if
+the question is not the last in its quote.
+36789 : SPEAKER : questionInversion conflict with SPEAKER : 15996
+37587 : SPEAKER : audience should be Tuppence(same as forward link, but because of alternate backwards resolution blows through a para with one sentence, it isn't.
+	37980: SPEAKER: split hail
+	37992 : SPEAKER : because of split hail this is not being resolved to Julius
+	43467 : SPEAKER : Sir James to Tuppence, NOT Rita
+	46327 : SPEAKER : speaker guess is wrong
+	46420 : SPEAKER : Tuppence, not Marguerite
+	46429 : SPEAKER : Should be Tuppence talking to Rita, not Rita to Tuppence
+	47730 : SPEAKER : split audience
+	48375, 48418 : SPEAKER : Julius should be detected from an extension of lastSubject
+	The little man[dr] shifted his[dr] benevolent glance[dr] to the excited young American[julius] .
+	52273 : SPEAKER : a HAIL speaker that never speaks and is never referred to as doing anything PP - he is not actually a HAIL!
+	53063 : SPEAKER : Should be Tommy again, to himself
+	53955 : SPEAKER : kill him!is directed toward every one, not Tommy and so him refers to Tommy(split speaker)
+	54300 : SPEAKER : wrong - the man is 'a tall man', not Boris
+	55558 : SPEAKER : should be a tall man, not Tommy.This is because lastSubject is wrong.
+	55875, 55883, 55891 : SPEAKER : Incorrect because of incorrect usage of a speaker that has not spoken before resolving backwards
+	57431 : Tommy is talking to Conrad
+	58261 : 14 is talking to Conrad
+	59968 : Annette turns to Tommy.
+	60036 : Annette should be talking to Tommy.Tommy has the only subject in the paragraph before and after, so context ?
+	60106 : Annette is talking to other people besides Tommy, who she just left('where')
+	60186 : Annette is talking to 'The German'
+	60452 : Annette's voice is the last thing mentioned before the quote
+	60508 : Annette 'words'
+	61255 : Tommy is not talking to anyone
+	61462 : disallow LastSubject when subject is the wrong tense or in a relative phrase ? -when Tommy had finished
+	61507 : meta equivalence - You[mr] say you[mr] have recognized Number[number] 1 to be Kramenin ?
+	62148 : resolved incorrectly from last subject - Tommy is correct(context)
+	62446 : Annette, not Tuppence(context)
+	62873, 62888 : SPEAKER : Should be Tommy / Julius, not between the waiter and Tommy.
+	63192 : SPEAKER - why is the question - response item not used to prevent Tommy ?
+	63930 : secondary quote improperly turned into a quoted string
+	65018, 65073 : audience should be Henry, not Julius
+	65083 : SPEAKER : explicit split hail
+	65739 : SPEAKER : a porter, to whom Tommy addressed himself : (special pattern where the audience is 'a porter')
+	65848 : SPEAKER : Tommy talking to the porter - context
+	66384 : workman is speaking, but this is only context
+	69421 : audience should be Tommy
+	69884 : Should be Tommy talking to James : context
+	70417 : Should be Tommy talking to James - incorrect definite attribution caused by--
+	70583 : split hail - actually talking to everyone else (and mentioning everyone else)
+	70992: Jane is talking to Julius
+	71042 : Julius is replying to Jane
+	71165 : Jane is talking to Julius, not Tommy talking to girl
+	71201 : Julius is talking to Jane
+	72126 : James speaking, determined by a meta speaker pattern outside quotes.It was Sir James who spoke .
+	72314 : audience is James, not Julius
+	72548 : Julius is talking to James.Confusion caused by subject in previous paragraph.
+	74794 : Julius is speaking. 'Not so Julius' - not recognized as a subject.
+	78163 : incorrect hail, separated by--
+	78315 : audience should be James
+	81252 : name in speaker - should ignore if two speakersand second quote in same paragraphand the same speaker as first quote
+	83023 : speaker self - reference not detected : 'Even I -- Kramenin! -- ...'
+	83239 : speaker self - reference note detected : 'all[life,revolutionists,question,chance,...] will end happily for little Julius .'
+	84366 : Julius is talking to George, the chauffeur - The chauffeur is also the lastSubject
+	84616 : the other fool is Tuppence
+	85386 : Julius talking to Tuppence, not Julius talking to Annette
+	86243 : 'both of you' should refer to Jane & Tuppence
+	87217 : King's Cross is not a person a person's name is not owned by someone else
+	87345: Tuppence to Jane(Jane is still physically present)
+	87530 : Tuppence to Jane
+	87959 : James to Jane, not Jane to 'my child'
+	92049 : Why is the audience suddenly 'Jane' ?
+	92247 : Jane is not the speaker - James is the speaker - fooled by lastsubject.Could override by meta object 'speaker'
+	92420 : the girl is Jane, not Tuppence
+	93221 : Tommy is not there!
+	85180 : split hail
+	95792 : dead man should be James - context
+	95907 : that great man - James
+	96555 : girl's should be Jane
+	96623 : Julius told him / accused him - because this has an object it is not marked definite, but should be, and him should be marked as audience!
+	96943 : why is she 'mother' ?
+	97223 : he should be James
+	97250 : two should be Julius and James
+	97440, 97567 : James
+	99791 : why is Beresford not resolved ?
+	
 /*
 'where' - incorrectly flagged statements
-000215:ESTAB:S[mans]V[was]->AT[a state] PERTAINS TO:mans
-ESTABHe[man] was evidently in a state of overmastering fear
-000259:looking is not recorded as an object, yet is not an acceptable verb
-He[man] stood looking at her[girl] with a kind of desperate irresolution
-001377:ESTAB:S[His brown suit{OWNER:lieutenant mr thomas beresford }]V[near]->AT[the end] PERTAINS TO:His brown suit{OWNER:lieutenant mr thomas beresford }
-His[tommy] brown suit was well cut , but perilously ESTABnear the end of its[end] tether . 
-002459:ESTAB:V[go]->AT[home] PERTAINS TO:
-// go home is an infinitive phrase
-003432:ESTAB:S[credit entries a book - keeping That]V[fired]->AT[miss tuppence ] PERTAINS TO:
-ESTABthey[entries,a,keeping,that...] fired me[tuppence] out 
-003902:ESTAB:S[that]V[strike]->AT[lieutenant mr thomas beresford ] PERTAINS TO:
-How would ESTABthat strike you[tommy] if you[tommy] read it[pay,hire,that] ?
-003913:ESTAB:S[that pay hire]V[strike]->AT[lieutenant mr thomas beresford ] PERTAINS TO:
-ESTABIt[that,pay,hire] would strike me[tommy] as either being a hoax , or else written by a lunatic .
-004322:STAY:S[the words]V[remained] PERTAINS TO:
-the words hovering on the tip of her[tuppence] tongue[tuppence] STAYremained unspoken 
 005334:missed:
 then opened the ESTABdoor[door] and stood aside to let her[tuppence] pass in . 
 005909:missed:
@@ -200,94 +278,6 @@ Incorrect parsing leads to incorrect attribution of secondary quote which leads 
 75423: Tommy's mind is a new __C1__S1[2]
 75626- not parsed
 
-4909: SPEAKER: Incorrect audience (should be Tommy) special 'wrote'
-12722: SPEAKER: Should be Mr. Carter, not Tuppence. Tuppence nodded is not necessarily acceptable as a subject indicating the speaker of the next paragraph
-15913: SPEAKER: Should be Julius, not Tommy speaking...
-15996: SPEAKER: questionInversion conflict with SPEAKER: 36789
-23952: audience should be to 'this visitor', and split between this visitor and Boris (2nd sentence)
-24005: SPEAKER: a new voice should be assigned to Mr. Potter
-24176: SPEAKER: sibilant tones should be associated with 'one'
-24561: SPEAKER: 'Number 14' is introduced again by purely context within the quotes, and should be attributed as speaker.
-29668: SPEAKER: Should be Vandermeyer (Tuppence should be observer)
-36705: SPEAKER: consider allowing question/next subject in paragraph agreement to be processed even if
-the question is not the last in its quote.
-36789: SPEAKER: questionInversion conflict with SPEAKER: 15996
-37587: SPEAKER: audience should be Tuppence (same as forward link, but because of alternate backwards resolution blows through a para with one sentence, it isn't.
-37980: SPEAKER: split hail
-37992: SPEAKER: because of split hail this is not being resolved to Julius
-43467: SPEAKER: Sir James to Tuppence, NOT Rita
-46327: SPEAKER: speaker guess is wrong
-46420: SPEAKER: Tuppence, not Marguerite
-46429: SPEAKER: Should be Tuppence talking to Rita, not Rita to Tuppence
-47730: SPEAKER: split audience
-48375,48418: SPEAKER: Julius should be detected from an extension of lastSubject
-The little man[dr] shifted his[dr] benevolent glance[dr] to the excited young American[julius] .
-52273: SPEAKER: a HAIL speaker that never speaks and is never referred to as doing anything PP - he is not actually a HAIL!
-53063: SPEAKER: Should be Tommy again, to himself
-53955: SPEAKER: kill him! is directed toward every one, not Tommy and so him refers to Tommy (split speaker)
-54300: SPEAKER: wrong - the man is 'a tall man', not Boris
-55558: SPEAKER: should be a tall man, not Tommy. This is because lastSubject is wrong.
-55875, 55883, 55891: SPEAKER: Incorrect because of incorrect usage of a speaker that has not spoken before resolving backwards
-57431: Tommy is talking to Conrad
-58261: 14 is talking to Conrad
-59968: Annette turns to Tommy.
-60036: Annette should be talking to Tommy. Tommy has the only subject in the paragraph before and after, so context?
-60106: Annette is talking to other people besides Tommy, who she just left ('where')
-60186: Annette is talking to 'The German'
-60452: Annette's voice is the last thing mentioned before the quote
-60508: Annette 'words'
-61255: Tommy is not talking to anyone
-61462: disallow LastSubject when subject is the wrong tense or in a relative phrase? - when Tommy had finished 
-61507: meta equivalence - You[mr] say you[mr] have recognized Number[number] 1 to be Kramenin ?
-62148: resolved incorrectly from last subject - Tommy is correct (context)
-62446: Annette, not Tuppence (context)
-62873,62888: SPEAKER: Should be Tommy/Julius, not between the waiter and Tommy.
-63192: SPEAKER - why is the question-response item not used to prevent Tommy?
-63930: secondary quote improperly turned into a quoted string
-65018, 65073: audience should be Henry, not Julius
-65083: SPEAKER: explicit split hail
-65739: SPEAKER: a porter, to whom Tommy addressed himself: (special pattern where the audience is 'a porter')
-65848: SPEAKER: Tommy talking to the porter- context 
-66384: workman is speaking, but this is only context
-69421: audience should be Tommy
-69884: Should be Tommy talking to James: context
-70417: Should be Tommy talking to James - incorrect definite attribution caused by --
-70583: split hail - actually talking to everyone else (and mentioning everyone else)
-70992: Jane is talking to Julius
-71042: Julius is replying to Jane
-71165: Jane is talking to Julius, not Tommy talking to girl
-71201: Julius is talking to Jane
-72126: James speaking, determined by a meta speaker pattern outside quotes. It was Sir James who spoke .
-72314: audience is James , not Julius
-72548: Julius is talking to James. Confusion caused by subject in previous paragraph.
-74794: Julius is speaking. 'Not so Julius' - not recognized as a subject.
-78163: incorrect hail, separated by --
-78315: audience should be James
-81252: name in speaker - should ignore if two speakers and second quote in same paragraph and the same speaker as first quote
-83023: speaker self-reference not detected: 'Even I -- Kramenin! -- ...'
-83239: speaker self-reference note detected: 'all[life,revolutionists,question,chance,...] will end happily for little Julius .'
-84366: Julius is talking to George, the chauffeur - The chauffeur is also the lastSubject
-84616: the other fool is Tuppence
-85386: Julius talking to Tuppence, not Julius talking to Annette
-86243: 'both of you' should refer to Jane & Tuppence
-87217: King's Cross is not a person a person's name is not owned by someone else
-87345: Tuppence to Jane (Jane is still physically present)
-87530: Tuppence to Jane
-87959: James to Jane, not Jane to 'my child'
-92049: Why is the audience suddenly 'Jane'?
-92247: Jane is not the speaker - James is the speaker - fooled by lastsubject. Could override by meta object 'speaker'
-92420: the girl is Jane, not Tuppence
-93221: Tommy is not there!
-85180: split hail
-95792: dead man should be James - context
-95907: that great man - James
-96555: girl's should be Jane
-96623: Julius told him/accused him - because this has an object it is not marked definite, but should be, and him should be marked as audience!
-96943: why is she 'mother'?
-97223: he should be James
-97250: two should be Julius and James
-97440,97567: James
-99791: why is Beresford not resolved?
 
 Manual quote-quote: 9972(9957) [QUOTE-QUOTE], 13571(13566) [QUOTE-QUOTE], (18763)18757
 1568:fifth daughter of arch-deacon - recognized as an RE_OBJECT, but not being equivocated to "miss Prudence Cowley"

@@ -41,6 +41,18 @@ class CName:
         self.suffix = rs.read_string()
         self.any = rs.read_string()
         
+    def write(self,rs):
+        rs.write_integer(self.nickName)
+        rs.write_string(self.hon)
+        rs.write_string(self.hon2)
+        rs.write_string(self.hon3)
+        rs.write_string(self.first)
+        rs.write_string(self.middle)
+        rs.write_string(self.middle2)
+        rs.write_string(self.last)
+        rs.write_string(self.suffix)
+        rs.write_string(self.any)
+        
     def toJSON(self):
         ret = {}
         ret['nickName'] = self.nickName

@@ -40,10 +40,47 @@ class LPIO:
         self.offset += 1
         return struct.unpack('b', self.f.read(1))[0]
 
+    def write_integer(self, i):
+        self.f.write(i)
+    
+    def write_string(self):
+        str_in = bytearray(b'')
+        while True:
+            self.offset += 2
+            ch = self.f.read(2)
+            if ch[0]==0 and ch[1] == 0:
+                break
+            str_in.extend(ch)
+        return str_in.decode('utf-16')
+    
+    def write_short(self):
+        self.offset += 2
+        return struct.unpack('h', self.f.read(2))[0]
+    
+    def write_long(self):
+        self.offset += 8
+        return struct.unpack('q', self.f.read(8))[0]
+    
+    def write_int_array(self):
+        count = self.read_integer();
+        self.offset += count * 4 
+        return struct.unpack('<' + str(count) + 'i', self.f.read(count * 4))
+
+    def write_byte(self):
+        self.offset += 1
+        return struct.unpack('b', self.f.read(1))[0]
+
     def __init__(self, path):
-        self.f = BytesIO(open(path, "rb").read())
         self.offset = 0
+        self.f = BytesIO(open(path, "rb").read())
         self.maxOffset = Path(path).stat().st_size
+
+    def initialize_read(self, path):
+        self.f = BytesIO(open(path, "rb").read())
+        self.maxOffset = Path(path).stat().st_size
+        
+    def initialize_write(self):
+        self.f = BytesIO()
 
     def at_eof(self):
         return self.offset == self.maxOffset

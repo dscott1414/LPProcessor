@@ -156,6 +156,116 @@ class CObject(dict):
 			self.lastVerbTenses[I].lastVerb = rs.read_integer()
 		self.name = CName(rs) 
 	
+	def write(self, rs):
+		rs.write_integer(self.index)
+		rs.write_integer(self.objectClass)
+		rs.write_integer(self.subType) 
+		rs.write_integer(self.begin) 
+		rs.write_integer(self.end) 
+		rs.write_integer(self.originalLocation)
+		rs.write_integer(self.PMAElement) 
+		rs.write_integer(self.numEncounters) 
+		rs.write_integer(self.numIdentifiedAsSpeaker) 
+		rs.write_integer(self.numDefinitelyIdentifiedAsSpeaker) 
+		rs.write_integer(self.numEncountersInSection) 
+		rs.write_integer(self.numSpokenAboutInSection) 
+		rs.write_integer(self.numIdentifiedAsSpeakerInSection) 
+		rs.write_integer(self.numDefinitelyIdentifiedAsSpeakerInSection) 
+		rs.write_integer(self.PISSubject) 
+		rs.write_integer(self.PISHail)
+		rs.write_integer(self.PISDefinite) 
+		rs.write_integer(self.replacedBy) 
+		rs.write_integer(self.ownerWhere)
+		rs.write_integer(self.firstLocation) 
+		rs.write_integer(self.firstSpeakerGroup) 
+		rs.write_integer(self.firstPhysicalManifestation) 
+		rs.write_integer(self.lastSpeakerGroup) 
+		rs.write_integer(self.ageSinceLastSpeakerGroup) 
+		rs.write_integer(self.masterSpeakerIndex) 
+		rs.write_integer(self.htmlLinkCount) 
+		rs.write_integer(self.relativeClausePM) 
+		rs.write_integer(self.whereRelativeClause) 
+		rs.write_integer(self.whereRelSubjectClause) 
+		rs.write_integer(self.usedAsLocation)
+		rs.write_integer(self.lastWhereLocation)
+
+		rs.write_int_array(self.spaceRelations);
+		rs.write_int_array(self.duplicates);
+		rs.write_int_array(self.aliases);
+		rs.write_string_array(self.associatedNouns)
+		rs.write_string_array(self.associatedAdjectives)
+		rs.write_int_array(self.possessions);
+		rs.write_integer(len(self.genericNounMap))
+		for k,v in self.genericNounMap:
+			rs.write_string(k)
+			rs.write_integer(v)
+		rs.write_string(self.mostMatchedGeneric) 
+		for k,v in self.genericAge:
+			rs.write_string(k)
+			rs.write_integer(v)
+		rs.write_integer(self.age)
+		rs.write_integer(self.mostMatchedAge)
+		
+		flags = 0
+		flags |= 1 if self.isWikiBusiness else 0
+		flags <<= 1 
+		flags |= 1 if self.isWikiPerson else 0 
+		flags <<= 1 
+		flags |= 1 if self.isWikiPlace else 0 
+		flags <<= 1  
+		flags |= 1 if self.isLocationObject else 0 
+		flags <<= 1  
+		flags |= 1 if self.isTimeObject else 0 
+		flags <<= 1  
+		flags |= 1 if self.dbPediaAccessed else 0 
+		flags <<= 1  
+		flags |= 1 if self.container else 0 
+		flags <<= 1  
+		flags |= 1 if self.wikipediaAccessed else 0 
+		flags <<= 1  
+		flags |= 1 if self.isKindOf else 0 
+		flags <<= 1  
+		flags |= 1 if self.genderNarrowed else 0 
+		flags <<= 1  
+		flags |= 1 if self.isNotAPlace else 0 
+		flags <<= 1  
+		flags |= 1 if self.partialMatch else 0 
+		flags <<= 1  
+		flags |= 1 if self.ambiguous else 0 
+		flags <<= 1  
+		flags |= 1 if self.verySuspect else 0 
+		flags <<= 1  
+		flags |= 1 if self.suspect else 0 
+		flags <<= 1  
+		flags |= 1 if self.multiSource else 0 
+		flags <<= 1  
+		flags |= 1 if self.eliminated else 0 
+		flags <<= 1  
+		flags |= 1 if self.ownerNeuter else 0 
+		flags <<= 1  
+		flags |= 1 if self.ownerFemale else 0 
+		flags <<= 1  
+		flags |= 1 if self.ownerMale else 0 
+		flags <<= 1  
+		flags |= 1 if self.ownerPlural else 0 
+		flags <<= 1  
+		flags |= 1 if self.neuter else 0 
+		flags <<= 1  
+		flags |= 1 if self.female else 0 
+		flags <<= 1  
+		flags |= 1 if self.male else 0 
+		flags <<= 1  
+		flags |= 1 if self.plural else 0 
+		flags <<= 1  
+		flags |= 1 if self.identified else 0 
+		flags >>= 1 
+		rs.write_long(flags) 
+		
+		for I in range(self.VERB_HISTORY):
+			rs.write_integer(self.lastVerbTenses[I].lastTense)
+			rs.write_integer(self.lastVerbTenses[I].lastVerb)
+		self.name.write(rs) 
+	
 	def toJSON(self):
 		ret = {}
 		ret['index'] = self.index

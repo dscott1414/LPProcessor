@@ -209,6 +209,7 @@ public:
             PEMAOffset!=o.PEMAOffset ||
             isPattern!=o.isPattern;
     }
+    /*
     cTagLocation& operator=(const cTagLocation &o)
     {
         tag=o.tag;
@@ -221,6 +222,7 @@ public:
         isPattern=o.isPattern;
         return *this;
     }
+    */
 		static bool compareTagLocation(cTagLocation tl1, cTagLocation tl2)
 		{
 			return tl1.len < tl2.len;

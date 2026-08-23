@@ -17,7 +17,7 @@ class SpeakerGroup:
         count = rs.read_integer()
         self.replacedSpeakers = []
         for I in range(count):
-            self.replacedSpeakers.append(COM(rs))
+            self.replacedSpeakers.append(COM(rs=rs))
         self.singularSpeakers = rs.read_int_array()
         self.groupedSpeakers = rs.read_int_array()
         self.povSpeakers = rs.read_int_array()

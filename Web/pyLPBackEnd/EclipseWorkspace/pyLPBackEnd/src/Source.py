@@ -9,6 +9,7 @@ from Relation import Relation
 from TimelineSegment import TimelineSegment
 from SourceEnums import SourceEnums
 from TimeInfo import TimeInfo
+from COM import COM;
 import copy
 import json
 import jsonpickle
@@ -16,6 +17,8 @@ from json import JSONEncoder
 from VerbNet import VerbNet
 from time import perf_counter
 import re
+from _ast import Or
+from LPIO import LPIO
 
 class Source:
 
@@ -181,6 +184,55 @@ class Source:
         self.lineHeight = 16
         self.letterWidth = 7
         print("Source(9) Seconds = " + "{:.2f}".format(perf_counter() - t_start))
+
+    
+    def save_corrected_source(self, preferences, changedElementsToFlush):
+        t_start = perf_counter()
+        corrected_source_path = "M:\\caches\\" + self.sourcePath + ".corrected.SourceCache"
+        print(corrected_source_path) 
+        rs = LPIO(corrected_source_path)
+        rs.write_integer(self.version)
+        rs.write_string(self.location)
+        rs.write_integer(len(self.m))
+        for mo in self.m:
+            mo.write(rs)
+        print("Source(2) Seconds = " + "{:.2f}".format(perf_counter() - t_start))
+        t_start = perf_counter()
+        rs.write_integer(len(self.sentenceStarts))
+        for ss in self.sentenceStarts:
+            rs.write_integer(ss)
+        print("Source(3) Seconds = " + "{:.2f}".format(perf_counter() - t_start))
+        t_start = perf_counter()
+        rs.write_integer(len(self.sections))
+        for s in self.sections:
+            s.write(rs)
+        print("Source(4) Seconds = " + "{:.2f}".format(perf_counter() - t_start))
+        t_start = perf_counter()
+        rs.write_integer(len(self.speakerGroups))
+        for sg in self.speakerGroups:
+            sg.write(rs)
+        print("Source(5) Seconds = " + "{:.2f}".format(perf_counter() - t_start))
+        t_start = perf_counter()
+        rs.write_integer(len(self.pema))
+        for pem in self.pema:
+            pem.write(rs)
+        print("Source(6) Seconds = " + "{:.2f}".format(perf_counter() - t_start))
+        t_start = perf_counter()
+        rs.write_integer(len(self.objects))
+        for o in self.objects:
+            o.write(rs)
+        print("Source(7) Seconds = " + "{:.2f}".format(perf_counter() - t_start))
+        t_start = perf_counter()
+        rs.write_integer(len(self.relations))
+        for r in self.relations:
+            r.write(rs)
+        print("Source(8) Seconds = " + "{:.2f}".format(perf_counter() - t_start))
+        t_start = perf_counter()
+        rs.write_integer(len(self.timelineSegments))
+        for ts in self.timelineSegments:
+            ts.write(rs)
+        print("Source(9) Seconds = " + "{:.2f}".format(perf_counter() - t_start))
+        rs.close()
 
 
     def add_element(self, s, attrs, where, index2, index3, sourceMapType):
@@ -762,7 +814,8 @@ class Source:
     def get_verb_classes(self, whereVerb):
         baseVerb = self.m[whereVerb].baseVerb;
         # map <wstring, set <int> >::iterator lvtoCi;
-        vms = self.vbNetVerbToClassMap.get(baseVerb);
+        vms = self.vbNetVerbToClassMa
+        p.get(baseVerb);
         # get_out is very different from get by itself
         if (whereVerb + 1 < len(self.m) and (self.m[whereVerb + 1].query_winner_form(Form.adverbForm) >= 0  
                 or self.m[whereVerb + 1].query_winner_form(Form.prepositionForm) >= 0  
@@ -1395,21 +1448,32 @@ class Source:
             ret_objects.append({ 'type': self.SourceMapType.audienceMatchingType, 'id':om.object, 'name':self.get_object_name(om.object)})
         return ret_objects
                 
-    def save_matching_objects(self, elementId, objects):
+    def save_matching_objects(self, preferences, elementId, objects):
         idSplit = elementId.split('.')
         where = int(idSplit[0])
-        objects = []
         objectMatches = []
-        audientObjectMatches = []
+        audienceObjectMatches = []
         for o in objects:
-            if o.type == self.SourceMapType.matchingObjectType:
-                objectMatches.add(o.id);
+            om = COM(o=o['id'], s = 0)
+            if o['type'] == self.SourceMapType.audienceMatchingType:
+                audienceObjectMatches.append(om)
             else:
-                audientObjectMatches.add(o.id);
-        print("setting matching objects element id:" + elementId, objects, objectMatches, audientObjectMatches)
+                objectMatches.append(om)
+        print("setting matching objects element id:{} object={} objectMatches={} audienceObjectMatches={}".format(elementId, objects, objectMatches, audienceObjectMatches))
         self.m[where].objectMatches = objectMatches
-        self.m[where].audientObjectMatches = audientObjectMatches
+        self.m[where].audienceObjectMatches = audienceObjectMatches
+        save_elements = self.batchDoc.pop(where)
+        self.generate_source_element(preferences, where, self.states)
+        print("OLD")
+        print(save_elements)
+        print("NEW")
+        print(self.batchDoc[where])
         return 0
+
+    def object_for_potential_match(self, objectClass):
+        return objectClass != SourceEnums.PRONOUN_OBJECT_CLASS and \
+               objectClass != SourceEnums.REFLEXIVE_PRONOUN_OBJECT_CLASS and \
+               objectClass != SourceEnums.VERB_OBJECT_CLASS;
                 
     def get_surrounding_objects(self, elementId, matchingType):
         idSplit = elementId.split('.')
@@ -1426,10 +1490,10 @@ class Source:
         else:
             print("getting surrounding objects element id:" + elementId + \
                    " matchingType = " + matchingType + \
-                   " in position range " + str(max(0,where - 500)) + " to " + str(where))
+                   " in position range " + str(max(0,where - 500)) + " to " + str(where + 100))
             objects = set()
-            for index in range(max(0,where - 500), where):
-                if self.m[index].object > 0:
+            for index in range(max(0,where - 500), min(where + 100,len(self.m))):
+                if self.m[index].object > 0 and self.object_for_potential_match(self.objects[self.m[index].object].objectClass):
                     objects.add(self.m[index].object)
             for o in objects:
                 ret_objects.append({ 'id':o, 'name':self.get_object_name(o) })

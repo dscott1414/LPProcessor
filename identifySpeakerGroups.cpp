@@ -102,6 +102,8 @@ cSource::cSpeakerGroup::cSpeakerGroup(char* buffer, int& where, unsigned int lim
 	error = where > (signed)limit;
 }
 
+/*
+
 cSource::cSpeakerGroup::cSpeakerGroup(const cSpeakerGroup& obj) {
 	sgBegin = obj.sgBegin;
 	sgEnd = obj.sgEnd;
@@ -123,7 +125,7 @@ cSource::cSpeakerGroup::cSpeakerGroup(const cSpeakerGroup& obj) {
 	speakersAreNeverGroupedTogether = obj.speakersAreNeverGroupedTogether;
 	tlTransition = obj.tlTransition;
 }
-
+*/
 bool cSource::cSpeakerGroup::copy(void* buffer, int& where, int limit)
 {
 	LFS

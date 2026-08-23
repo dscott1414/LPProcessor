@@ -4395,6 +4395,7 @@ bool cSource::resolveSpecificClassObject(const int where, const bool definitelyS
 				resolveMetaGroupObject(where, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, definitelySpeaker, resolveForSpeaker, avoidCurrentSpeaker, mixedPlurality, limitTwo, objectMatches, chooseFromLocalFocus);
 			break;
 		case GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS:
+			//[[fallthrough]];
 		case GENDERED_RELATIVE_OBJECT_CLASS:
 			if (unResolvablePosition(beginEntirePosition))
 			{
@@ -4421,20 +4422,26 @@ bool cSource::resolveSpecificClassObject(const int where, const bool definitelyS
 			}
 			if (objectMatches.size())
 				break;
+			//[[fallthrough]];
 		case NON_GENDERED_GENERAL_OBJECT_CLASS:
 			if (resolveIsKindOf(where, definitelySpeaker, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, resolveForSpeaker, avoidCurrentSpeaker,
 				limitTwo, objectMatches))
 				return true;
 		case NON_GENDERED_NAME_OBJECT_CLASS:
+			//[[fallthrough]];
 		case NON_GENDERED_BUSINESS_OBJECT_CLASS:
 			// match 'the old doctor' to 'the doctor' but not to 'the new doctor'
 			// right now do not support merging of nouns used as adjectives?
 			resolveNonGenderedGeneralObject(where, object, objectMatches, wordOrderSensitiveModifier);
 			if (chooseFromLocalFocus && object->objectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS)
 				for (vector <cLocalFocus>::iterator lsi = localObjects.begin(), lsiEnd = localObjects.end(); lsi != lsiEnd && !(chooseFromLocalFocus = lsi->includeInSalience(objectToBeMatchedInQuote, quoteIndependentAge) && lsi->numMatchedAdjectives > 1); lsi++);
+			[[fallthrough]];
 		case PLEONASTIC_OBJECT_CLASS:
+			//[[fallthrough]];
 		case VERB_OBJECT_CLASS:
+			//[[fallthrough]];
 		case RECIPROCAL_PRONOUN_OBJECT_CLASS:
+			//[[fallthrough]];
 		default:
 			break;
 	}

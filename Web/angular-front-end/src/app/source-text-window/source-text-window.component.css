@@ -84,14 +84,14 @@ footer {
   padding: 0px 0;
   bottom: 0;
   background-color: #9f9c9c;
-  height: 400px;
+  /* height: 400px; */
   overflow: auto;
   display: grid;
   grid-template-areas:
         "wordinfo"
         "timeline";
   grid-gap: 5px;
-  grid-template-rows: 195px 195px;
+  grid-template-rows: 1fr 1fr;
 }
 
 .select-search {
@@ -160,12 +160,14 @@ footer {
   border: 2px solid #4CAF50;
   width: 100%;
   overflow: auto;
+  resize: vertical;
 }
 
 .wordinfo {
   grid-area: wordinfo;
   text-align: center;
   overflow: auto;
+  resize: vertical;
 }
 
 .wordinfo-table {
@@ -175,10 +177,17 @@ footer {
   overflow: auto;
 }
 
+mat-cell:first-child,
+mat-footer-cell:first-child,
+mat-header-cell:first-child {
+  padding-left: 0px !important;
+}
+
 .timeline {
   grid-area: timeline;
   text-align: center;
   overflow: auto;
+  resize: vertical;
 }
 
 .timeline-tree {
@@ -194,12 +203,20 @@ table {
 
 tr.mat-row {
   border: 1px solid #e7e7e7;
+  height: 30px !important;
+  min-height: 20px !important;
+}
+
+tr.mat-header-row {
+  border: 1px solid #e7e7e7;
   height: 20px !important;
   min-height: 20px !important;
 }
 
 th.mat-header-cell, td.mat-cell {
   text-align: left;
+  font-size: 14px;
+  height: 20px !important;
   border-right: 1px solid black;
   padding: 2px 2px 2px 2px;
 }
@@ -234,4 +251,20 @@ th.mat-header-cell, td.mat-cell {
   align-items: flex-start;
   padding-left: 40px;
   min-height: 15px;
+}
+
+::-webkit-resizer {
+   border: 1px solid yellow;
+  background: linear-gradient(135deg, #ffffff 0%, #3a47d5 100%);
+  /* box-shadow: 0 0 2px 5px red; */
+   outline: 1px dashed blue;
+
+  /*size does not work*/
+  display:block;
+  width: 100px !important;
+  height: 100px !important;
+}
+
+::-webkit-scrollbar {
+  width: 50px
 }

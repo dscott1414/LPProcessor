@@ -39,22 +39,24 @@ public:
 			cont=false; /* Boolean-continue with another rule? */
 			protect=false; /* Boolean-protect this ending? */
 		}
-		~cSuffixRule()
+		/*~cSuffixRule()
 		{
 		}
+		
 		cSuffixRule(const cSuffixRule &rhs)
 		{
-			text = rhs.text; /* To return stemmer output */
-			keystr = rhs.keystr; /* Key wstring,ie,suffix to remove */
-			repstr = rhs.repstr; /* wstring  to replace deleted letters */
+			text = rhs.text; // To return stemmer output 
+			keystr = rhs.keystr; // Key wstring,ie,suffix to remove 
+			repstr = rhs.repstr; // wstring  to replace deleted letters 
 			form = rhs.form;
 			inflection = rhs.inflection;
-			rulenum = rhs.rulenum; /* Line number of rule in rule list file */
-			intact = rhs.intact; /* Boolean-must word be intact? */
-			cont = rhs.cont; /* Boolean-continue with another rule? */
-			protect = rhs.protect;  /* Boolean-protect this ending? */
+			rulenum = rhs.rulenum; // Line number of rule in rule list file 
+			intact = rhs.intact; // Boolean-must word be intact? 
+			cont = rhs.cont; // Boolean-continue with another rule? 
+			protect = rhs.protect;  // Boolean-protect this ending? 
 			trail = rhs.trail;
 		}
+	*/
 	};
 
 	typedef struct {

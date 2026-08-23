@@ -299,6 +299,7 @@ void defineNames(void)
 
 }
 
+/*
 void cName::operator = (const cName& n)
 {
 	LFS
@@ -321,7 +322,7 @@ bool cName::operator == (const cName& n)
 		first == n.first && middle == n.middle && middle2 == n.middle2 && last == n.last && suffix == n.suffix &&
 		any == n.any;
 }
-
+*/
 bool cName::getNickName(tIWMM firstName)
 {
 	LFS

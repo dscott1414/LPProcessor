@@ -14,6 +14,7 @@ from Source import Source
 from time import perf_counter
 import uuid
 import time
+from os.path import exists
 
 app = Flask(__name__)
 CORS(app)
@@ -187,9 +188,13 @@ def load_source():
     print("loadSource read_specific_word_cache Seconds = " + "{:.2f}".format(t_elapsed))
 
     t_start = perf_counter()
-    lpio = LPIO("M:\\caches\\" + sourcePath + ".SourceCache")
+    source_path = "M:\\caches\\" + sourcePath + ".SourceCache"
+    if exists(source_path + ".corrected.SourceCache"):
+        source_path += ".corrected.SourceCache"
+    lpio = LPIO(source_path)
     print("Loading " + sourcePath)
-    sessions[session['uid']].source = Source(sessions[session['uid']].Words, lpio);
+    sessions[session['uid']].source = Source(sessions[session['uid']].Words, lpio)
+    sessions[session['uid']].source.sourcePath = sourcePath
     lpio.close()
     t_elapsed = perf_counter() - t_start
     print("loadSource SourceCache Seconds = " + "{:.2f}".format(t_elapsed))
@@ -322,13 +327,17 @@ def test():
     lpio = LPIO("M:\\caches\\" + sourcePath + ".wordCacheFile")
     Words.read_specific_word_cache(lpio)
     lpio.close()
-    for _ in range(100):
-        lpio = LPIO("M:\\caches\\" + sourcePath + ".SourceCache")
-        source = Source(Words, lpio)
-        lpio.close()
-        preferences = { 0: False, 1: False, 2: False, 3: False, 4: False, 5: False }
-        source.initialize_source_elements()
-        source.states = source.generate_per_element_state(Words, preferences)
+    # for _ in range(100):
+    lpio = LPIO("M:\\caches\\" + sourcePath + ".SourceCache")
+    source = Source(Words, lpio)
+    lpio.close()
+    print(len(source.m))
+    for wx in source.m:
+        print(wx.get_winner_forms() + wx.word)
+        # preferences = { 0: False, 1: False, 2: False, 3: False, 4: False, 5: False }
+        # source.initialize_source_elements()
+        # Words, preferences
+        # source.states = source.generate_per_element_state()
 
 @app.route('/api/searchStringList', methods=["GET"])
 def search_string_list():
@@ -409,6 +418,20 @@ def get_matching_objects():
         print("Source is not loaded!")
     return { 'response': "" }
     
+@app.route('/api/saveMatchingObjects', methods=["POST"])
+def save_matching_objects():
+    global sessions
+    data = request.get_json()
+    elementId = data['elementId']
+    matchingObjects = data['matchingObjects']
+    print(matchingObjects)
+    if 'uid' in session and session['uid'] in sessions:
+        response = sessions[session['uid']].source.save_matching_objects(sessions[session['uid']].preferences, elementId, matchingObjects)
+        return { 'response': response }
+    else:
+        print("Source is not loaded!")
+    return { 'response': "" }
+    
 @app.route('/api/getSurroundingObjects', methods=["GET"])
 def get_surrounding_objects():
     global sessions
@@ -418,6 +441,18 @@ def get_surrounding_objects():
         surroundingObjects = sessions[session['uid']].source.get_surrounding_objects(elementId, matchingType)
         print(surroundingObjects)
         return { 'response': surroundingObjects }
+    else:
+        print("Source is not loaded!")
+    return { 'response': "" }
+    
+@app.route('/api/saveCorrectedSource', methods=["POST"])
+def save_corrected_source():
+    global sessions
+    data = request.get_json()
+    changedElementsToFlush = data['changedElementsToFlush']
+    if 'uid' in session and session['uid'] in sessions:
+        response = sessions[session['uid']].source.save_corrected_source(sessions[session['uid']].preferences, changedElementsToFlush)
+        return { 'response': response }
     else:
         print("Source is not loaded!")
     return { 'response': "" }

@@ -21,7 +21,6 @@ import {MatCheckboxModule} from '@angular/material/checkbox';
 import {MatTableModule} from '@angular/material/table';
 import {MatTreeModule} from '@angular/material/tree';
 import { HttpClientModule } from '@angular/common/http';
-import { DialogOverviewExampleDialog} from './source-text-window/source-text-window.component';
 import {MatNativeDateModule} from "@angular/material/core";
 import {MatSelectModule} from "@angular/material/select";
 
@@ -30,8 +29,7 @@ import {MatSelectModule} from "@angular/material/select";
     AppComponent,
     SearchBarComponent,
     SourceElementDialogComponent,
-    SourceTextWindowComponent,
-    DialogOverviewExampleDialog
+    SourceTextWindowComponent
 ],
   imports: [
     BrowserModule,
