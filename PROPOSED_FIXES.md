@@ -1312,27 +1312,556 @@ is letter → word, drop the last `||`.
 
 ---
 
+## Syntactic and semantic relations
+
+### 52. `syntacticRelations.cpp:615` `checkAmbiguousVerbTense` `&&`/`||` mix
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
+
+```
+if ((sense == VT_PRESENT || sense == VT_PAST) &&
+    (masterVerbWord != wNULL && ambiguous(master)) ||
+    (masterVerbWord == wNULL && ambiguous(m[whereVerb])))
+```
+
+This is `(A && B) || C`. When `masterVerbWord` is NULL and the token is
+beat/put-ambiguous, the body runs even if `sense` is future or perfect, and
+can rewrite it from `lastSense`.
+
+```
+--- a/syntacticRelations.cpp
+-		if ((sense == VT_PRESENT || sense == VT_PAST) &&
+-			(masterVerbWord != wNULL && (masterVerbWord->second.inflectionFlags & (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) == (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) ||
+-			(masterVerbWord == wNULL && (m[whereVerb].word->second.inflectionFlags & (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) == (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)))
++		if ((sense == VT_PRESENT || sense == VT_PAST) &&
++			((masterVerbWord != wNULL && (masterVerbWord->second.inflectionFlags & (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) == (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) ||
++			 (masterVerbWord == wNULL && (m[whereVerb].word->second.inflectionFlags & (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) == (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST))))
+```
+
+Watch tense histograms / `lastSense` for beat/put with a NULL master verb.
+
+### 53. `syntacticRelations.cpp:1607` `evaluateSubjects` forward scan not gated on empty
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
+
+```
+if (whereSubjects.empty() &&
+    (queryPattern(_INTRO_S1) && ... m[where+maxLen] ...) ||
+    (inQuestion && queryPattern(__INTRO_S1) && m[where+maxLen].word==L"did" && m[where+maxLen+1].getObject()>=0))
+```
+
+`(empty && A) || B` — the “did he?” scan (`B`) runs even when a subject was
+already found. `m[where+maxLen]` / `+1` are also unbound.
+
+```
+--- a/syntacticRelations.cpp
+-		if (whereSubjects.empty() &&
+-			(m[where].pma.queryPattern(L"_INTRO_S1", maxLen) != -1 && pema.queryTag(m[where + maxLen].beginPEMAPosition, SUBJECT_TAG) != -1 && !(m[where].flags & cWordMatch::flagInQuestion)) ||
+-			((m[where].flags & cWordMatch::flagInQuestion) && m[where].pma.queryPattern(L"__INTRO_S1", maxLen) != -1 && m[where + maxLen].word->first == L"did" && m[where + maxLen + 1].getObject() >= 0))
++		if (whereSubjects.empty() &&
++			((m[where].pma.queryPattern(L"_INTRO_S1", maxLen) != -1 && where + maxLen < (int)m.size() && pema.queryTag(m[where + maxLen].beginPEMAPosition, SUBJECT_TAG) != -1 && !(m[where].flags & cWordMatch::flagInQuestion)) ||
++			 ((m[where].flags & cWordMatch::flagInQuestion) && m[where].pma.queryPattern(L"__INTRO_S1", maxLen) != -1 && where + maxLen + 1 < (int)m.size() && m[where + maxLen].word->first == L"did" && m[where + maxLen + 1].getObject() >= 0)))
+```
+
+Watch “Brought a telephone message … did he?” vs verbs that already have a
+backward subject.
+
+### 54. `syntacticRelations.cpp:3325` `testSyntacticRelations` reads `m[end]` when `end == m.size()`
+
+**Verdict:** CONFIRMED. **Risk:** Safe (debug helper; still UB). **Order:** NORMAL.
+
+```
+unsigned int end = (s + 1 == sentenceStarts.size()) ? m.size() : sentenceStarts[s + 1];
+...
+if (m[end].word == primaryQuoteCloseWord || m[end].word == secondaryQuoteCloseWord)
+    end++;
+```
+
+```
+--- a/syntacticRelations.cpp
+-		if (m[end].word == primaryQuoteCloseWord || m[end].word == secondaryQuoteCloseWord)
++		if (end < m.size() && (m[end].word == primaryQuoteCloseWord || m[end].word == secondaryQuoteCloseWord))
+```
+
+### 55. `syntacticRelationGroups.cpp:701` cache ctor wipes `skip` / `changeStateAdverb`
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (source-cache
+round-trip). **Cache format:** no change — `write()` already packs the bits
+via `convertFlags`; the reader unpacks them and then overwrites. **Order:** NORMAL.
+
+```
+--- a/syntacticRelationGroups.cpp   (cache ctor, after convertToFlags)
+-	skip = false;
+-	changeStateAdverb = false;
+```
+
+Leave the other resets (`nonSemantic*`, `transformedPrep`, …) — those are
+not persisted. After this, old caches start honoring skip / change-state
+adverb. Watch adverb attachment and skipped SRGs on a re-read source.
+
+### 56. `syntacticRelationGroups.cpp:380` `getWSAdverb` has no time-flag filter
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
+
+`getMSAdverb` (`:360-365`) accepts a pre-verbal time word only when it is
+`T_START` / `T_STOP` / `T_FINISH` / `T_RESUME`. `getWSAdverb`’s
+`changeStateAdverb` arm returns `m[whereVerb-1]` unconditionally (and only
+when that token is *not* already an adverb, so it is some other word).
+
+```
+--- a/syntacticRelationGroups.cpp
+ 	if (whereVerb > 0 && changeStateAdverb)
+-		return m[whereVerb - 1].word->first.c_str();
++	{
++		int timeFlag = (m[whereVerb - 1].word->second.timeFlags & 31);
++		if (timeFlag == T_START || timeFlag == T_STOP || timeFlag == T_FINISH || timeFlag == T_RESUME)
++			return m[whereVerb - 1].word->first.c_str();
++	}
+```
+
+### 57. `syntacticRelations.cpp:1476` `findPrepRole` does not honor its −1 contract
+
+**Verdict:** CONFIRMED-LATENT. **Risk:** Safe. **Order:** NORMAL.
+
+The comment says return −1 when `whereLastPrep == -1`. The body does
+`m[whereLastPrep].relPrep` first. Live callers pass `whereVerb` (always a
+valid index). Still add the guard so the contract is real.
+
+```
+--- a/syntacticRelations.cpp
+ int cSource::findPrepRole(int whereLastPrep, int role, int rejectRole)
+ {
+ 	LFS
++		if (whereLastPrep < 0) return -1;
+```
+
+### 58. `semanticRelations.cpp:1452` `getAfterVerb` indexes `m[afterVerb]` before the size check
+
+**Verdict:** CONFIRMED. **Risk:** Safe. **Order:** NORMAL.
+
+```
+while (m[afterVerb].queryWinnerForm(adverbForm) >= 0 && ... && afterVerb + 1 < (signed)m.size() && !adverbialPlace(afterVerb)) afterVerb++;
+```
+
+and `:1456` reads `m[whereVerb + 1]` before `whereVerb + 1 < m.size()`.
+
+```
+--- a/semanticRelations.cpp
+-	while (m[afterVerb].queryWinnerForm(adverbForm) >= 0 && m[afterVerb].queryWinnerForm(prepositionForm) < 0 && afterVerb + 1 < (signed)m.size() && !adverbialPlace(afterVerb)) afterVerb++;
++	while (afterVerb < (signed)m.size() && m[afterVerb].queryWinnerForm(adverbForm) >= 0 && m[afterVerb].queryWinnerForm(prepositionForm) < 0 && afterVerb + 1 < (signed)m.size() && !adverbialPlace(afterVerb)) afterVerb++;
+```
+
+Swap the conjuncts at `:1456` the same way (`size` check first).
+
+### 59. `semanticRelations.cpp:1672` `detectPlaceTransition` `&&`/`||` mix
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
+
+```
+if ((id != escape || ... object-ok ...) &&
+    ((wherePrepObject < 0 || whereObject >= 0) && woPhysicalObject) ||
+    (wherePrepObject >= 0 && (wpoPhysicalObject || (wpoTimeUnit && id != escape))))
+```
+
+`(A && B) || C` — a physical/time prep-object (`C`) accepts the transition
+even when the verb-id / object-side test (`A`) failed. The comment says
+“if it has a prepobject, that object must be physical or a time” *in
+addition to* the object-side constraint.
+
+```
+--- a/semanticRelations.cpp
+-		if ((id != L"escape-51.1-5" || whereObject < 0 || (m[whereObject].word->second.timeFlags & T_UNIT) != 0 || proLocation || m[whereObject].relNextObject >= 0) &&
+-			((wherePrepObject < 0 || whereObject >= 0) && woPhysicalObject) ||
+-			(wherePrepObject >= 0 && (wpoPhysicalObject || (wpoTimeUnit && id != L"escape-51.1-5"))))
++		if ((id != L"escape-51.1-5" || whereObject < 0 || (m[whereObject].word->second.timeFlags & T_UNIT) != 0 || proLocation || m[whereObject].relNextObject >= 0) &&
++			(((wherePrepObject < 0 || whereObject >= 0) && woPhysicalObject) ||
++			 (wherePrepObject >= 0 && (wpoPhysicalObject || (wpoTimeUnit && id != L"escape-51.1-5")))))
+```
+
+Watch PLACE / MOVE / EXIT traces.
+
+### 60. `conversationContext.cpp:85` identical `||` arms
+
+**Verdict:** CONFIRMED as copy-paste. **Risk:** Needs author decision.
+**Order:** DEFER.
+
+```
+if (previousQuote >= 0 &&
+    (!(intersect(curr.speakers, prev.speakers) || intersect(curr.audience, prev.speakers)) ||
+     !(intersect(curr.speakers, prev.speakers) || intersect(curr.audience, prev.speakers))))
+```
+
+The two inner expressions are the same, so this is just
+`!(speakers∩prev.speakers || audience∩prev.speakers)`. Previous-quote
+*audience* is never consulted. The comment says “share at least two people”.
+
+Likely intended second arm (symmetric in previous audience):
+
+```
+!(intersect(m[I].objectMatches, m[previousQuote].audienceObjectMatches, allIn, oneIn) ||
+  intersect(m[I].audienceObjectMatches, m[previousQuote].audienceObjectMatches, allIn, oneIn))
+```
+
+Do not apply until the author confirms the “two people” rule. Current
+behaviour: a conversation continues if the new quote shares a speaker with
+the previous *speakers* list, ignoring who was being addressed.
+
+### 61. `word.h:153` `ADJECTIVE_INFLECTIONS_MASK` contains `ADVERB_SUPERLATIVE`
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
+
+```
+#define ADJECTIVE_INFLECTIONS_MASK (ADJECTIVE_NORMATIVE|ADJECTIVE_COMPARATIVE|ADVERB_SUPERLATIVE)
+```
+
+`ADJECTIVE_SUPERLATIVE` is 32768; `ADVERB_SUPERLATIVE` is 262144
+(`general.h:67-68`). Superlative adjectives (“biggest”) are invisible to
+every `ADJECTIVE_INFLECTIONS_MASK` test; superlative adverbs spuriously
+match.
+
+```
+--- a/word.h
+-#define ADJECTIVE_INFLECTIONS_MASK (ADJECTIVE_NORMATIVE|ADJECTIVE_COMPARATIVE|ADVERB_SUPERLATIVE)
++#define ADJECTIVE_INFLECTIONS_MASK (ADJECTIVE_NORMATIVE|ADJECTIVE_COMPARATIVE|ADJECTIVE_SUPERLATIVE)
+```
+
+Watch adjective form costing / `getInflectionName` for “best” / “biggest”.
+`ADVERB_INFLECTIONS_MASK` is already correct.
+
+---
+
+## Time leftovers
+
+### 62. `timeRelations.h:324` `cTimeInfo::clear()` leaves deictic / named-day fields
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (cache and reuse).
+**Cache format:** `write()` already serializes `absNamed*` / `absToday` /
+`absTomorrow` / `absTonight` / `absUnspecified` / `absYesterday`. `clear()`
+then `write()` currently persists stale values. **Order:** NORMAL.
+
+```
+--- a/timeRelations.h   (inside clear(), with the other abs* = -1)
++		absMoment = -1;
++		absNamedHoliday = -1;
++		absNamedMonth = -1;
++		absNamedSeason = -1;
++		absToday = -1;
++		absTomorrow = -1;
++		absTonight = -1;
++		absUnspecified = -1;
++		absYesterday = -1;
+```
+
+Confirm the member names against the `write()` list at `:310-317`.
+
+### 63. `timeRelations.cpp:1526` `ageTransition` forms `objects.begin() + (-1)`
+
+**Verdict:** CONFIRMED. **Risk:** Safe (iterator formed, deref is gated).
+**Order:** NORMAL.
+
+```
+int so = (m[where].objectMatches.size() > 0) ? m[where].objectMatches[0].object : m[where].getObject();
+vector <cObject>::iterator object = objects.begin() + so;
+cLocalFocus::setSalienceAgeMethod(..., (so >= 0) ? (object->neuter && ...) : false, ...);
+```
+
+`getObject()` can be −1. Forming the iterator is already UB.
+
+```
+--- a/timeRelations.cpp
+-	vector <cObject>::iterator object = objects.begin() + so;
+-	cLocalFocus::setSalienceAgeMethod(..., (so >= 0) ? (object->neuter && !(object->male || object->female)) : false, ...);
++	bool neuterOnly = false;
++	if (so >= 0)
++	{
++		vector <cObject>::iterator object = objects.begin() + so;
++		neuterOnly = object->neuter && !(object->male || object->female);
++	}
++	cLocalFocus::setSalienceAgeMethod(..., neuterOnly, ...);
+```
+
+---
+
+## Infra
+
+### 64. `utilities.cpp` serialize `copy()` writes, then checks `limit`
+
+**Verdict:** CONFIRMED. **Risk:** Safe (corrupt/short cache). **Order:** NORMAL.
+
+Every scalar serialize overload (`int`/`short`/`__int64`/`char`/…) stores
+into `buf+where`, advances `where`, then FATALS if `where > limit`. A tight
+or corrupt `limit` is detected only after the overrun.
+
+```
+--- a/utilities.cpp   (each serialize overload)
+-	*((int*)(((char*)buf) + where)) = num;
+-	where += sizeof(num);
+-	if (where > limit)
+-		lplog(LOG_FATAL_ERROR, ...);
++	if (where + (int)sizeof(num) > limit)
++	{
++		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (7)", limit);
++		return false;
++	}
++	*((int*)(((char*)buf) + where)) = num;
++	where += sizeof(num);
+```
+
+Apply the same shape to `bitObject.h:177` (`memcpy` then check) and the
+`copy(cOM&)` serialize in `identifySpeakerGroups.cpp`.
+
+### 65. `createOntology.cpp:2050` `properties.find` argument order is inverted
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended) + UB
+(treats a `size_t` as a `const char*`). **Order:** DO-FIRST.
+
+```
+size_t nextBracket = properties.find(whereName + 1, '{');
+```
+
+`string::find(const char*, size_t)` wins: `whereName+1` is the needle
+pointer and `'{'` (123) is the start offset. It searches random memory
+starting at position 123.
+
+```
+--- a/createOntology.cpp
+-			size_t nextBracket = properties.find(whereName + 1, '{');
++			size_t nextBracket = properties.find('{', whereName + 1);
+```
+
+Watch Freebase/DBpedia name extraction.
+
+### 66. `createOntology.cpp:514` `decodeURL` reads past `%`
+
+**Verdict:** CONFIRMED. **Risk:** Safe (malformed URL). **Order:** NORMAL.
+
+After `'%'` the loop reads `input[I+1]` and `input[I+2]` with no length
+check. Hex letters are assumed uppercase.
+
+```
+--- a/createOntology.cpp
+-		if (input[I] == L'%')
++		if (input[I] == L'%' && input[I + 1] && input[I + 2])
+ 		{
+ 			int ch = 0;
+-			ch += input[I + 1] - ((iswalpha(input[I + 1])) ? 'A' - 10 : '0');
++			wchar_t h1 = towupper(input[I + 1]), h2 = towupper(input[I + 2]);
++			ch += h1 - ((iswalpha(h1)) ? L'A' - 10 : L'0');
+ 			ch <<= 4;
+-			ch += input[I + 2] - ((iswalpha(input[I + 2])) ? 'A' - 10 : '0');
++			ch += h2 - ((iswalpha(h2)) ? L'A' - 10 : L'0');
+```
+
+A trailing `%` should be copied through or skipped; do not read off the end.
+
+### 67. `paice.cpp:176` overlapping `memcpy` of the wrong size for a UTF-16 BOM
+
+**Verdict:** CONFIRMED. **Risk:** Safe (suffix-file load). **Order:** NORMAL.
+
+```
+if (s[0] == 0xFEFF)
+    memcpy(s, s + 1, wcslen(s + 1));
+```
+
+`memcpy` on overlap is UB, the count is in *bytes* not `wchar_t`s, and the
+NUL is not moved.
+
+```
+--- a/paice.cpp
+-			memcpy(s, s + 1, wcslen(s + 1));
++			wmemmove(s, s + 1, wcslen(s + 1) + 1);
+```
+
+### 68. `hmm.cpp:785` NaN test is never true
+
+**Verdict:** CONFIRMED. **Risk:** Safe (the FATAL never fires). **Order:** NORMAL.
+
+```
+if (probMult == nan(NULL))
+```
+
+NaN compare is never equal. Use `std::isnan(probMult)`.
+
+### 69. `hmm.cpp:311` `findLPPOSEquivalents` indexes `[length-2]` unguarded
+
+**Verdict:** CONFIRMED. **Risk:** Safe (short words). **Order:** NORMAL.
+
+```
+--- a/hmm.cpp
+-		if (originalWord[originalWord.length() - 2] == L'\'' && originalWord[originalWord.length() - 1] == L's')
++		if (originalWord.length() >= 2 && originalWord[originalWord.length() - 2] == L'\'' && originalWord[originalWord.length() - 1] == L's')
+```
+
+### 70. `hmm.cpp:479` / `:511` `_wfopen` unchecked; empty line writes before the buffer
+
+**Verdict:** CONFIRMED. **Risk:** Safe (missing model file / empty line).
+**Order:** NORMAL.
+
+`writeModelFile` / `readModelFile` dereference a possibly-NULL `FILE*`.
+`readModelFile` then does `line[wcslen(line)-1]=0` on an empty `fgetws`
+result (writes `line[-1]`).
+
+```
+--- a/hmm.cpp   (both functions)
++	if (!out_fp) return model;          // writeModelFile
++	if (!model_fp) return model;        // readModelFile
+
+--- a/hmm.cpp:516
+-		line[wcslen(line) - 1] = 0;
++		size_t n = wcslen(line);
++		if (n) line[n - 1] = 0;
+```
+
+### 71. `DIYDiskArray.h:189` destructor never closes the fd
+
+**Verdict:** CONFIRMED. **Risk:** Safe (fd leak per array). **Order:** NORMAL.
+
+`~DIYDiskArray()` is empty. Close (and flush) the disk fd if the object is
+in disk mode. Also: the ctor stores `path = tpath` by pointer, so a
+temporary `wstring::c_str()` dangles — copy the path into an owned
+`wstring` while touching this class.
+
+### 72. `profile.h:346` `accumulateNetworkTime` writes through `const wchar_t*`
+
+**Verdict:** CONFIRMED. **Risk:** Safe if callers pass a mutable buffer;
+UB if they pass a string literal / `c_str()`. **Order:** NORMAL.
+
+```
+wchar_t *pos=(wchar_t *)wcschr(str,L'/');
+...
+*pos=0;
+```
+
+Copy `str` into a local `wstring` and mutate that. Do not write through the
+caller pointer.
+
+### 73. `DBCreateSQLSchema.cpp:419` `generateBNCSources` allocates bytes, indexes `wchar_t`s
+
+**Verdict:** CONFIRMED. **Risk:** Safe to apply (the function currently
+overruns on every file). **Order:** DO-FIRST.
+
+```
+wchar_t* buffer = (wchar_t*)tmalloc(actualLen + 1);
+ReadFile(hFile, buffer, actualLen, ...);
+buffer[actualLen] = 0;
+```
+
+`actualLen` is the byte length. The NUL write is at `wchar_t` index
+`actualLen` (byte offset `2*actualLen`). `wcsstr` then treats the byte
+image as UTF-16.
+
+```
+--- a/DBCreateSQLSchema.cpp
++	if (actualLen < 0 || (actualLen % sizeof(wchar_t)) != 0) { CloseHandle(hFile); return -18; }
+-	wchar_t* buffer = (wchar_t*)tmalloc(actualLen + 1);
++	wchar_t* buffer = (wchar_t*)tmalloc(actualLen + sizeof(wchar_t));
+ 	...
+-	buffer[actualLen] = 0;
++	buffer[actualLen / sizeof(wchar_t)] = 0;
+```
+
+If the BNC index is actually a narrow-char file, the `wcsstr` walk is the
+wrong API and this function needs a `char*` rewrite — confirm against a
+known file before applying. The allocation/index mismatch is a defect
+either way.
+
+---
+
+## QA
+
+### 74. `questionAnswering.cpp:115` `stripWeb` on an empty URI is UB
+
+**Verdict:** CONFIRMED. **Risk:** Safe. **Order:** NORMAL.
+
+```
+--- a/questionAnswering.cpp
+ wstring stripWeb(wstring& name)
+ {
++	if (name.empty()) return name;
+ 	if (name[0] == '<')
+```
+
+### 75. `questionAnswering.cpp:2866` remapped question type is always 15
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
+
+`typeQTMask` is `(1<<4)-1` = 15 (`QuestionAnswering.h:154`). `qt` is a value
+in 1..11, so `qt | typeQTMask` is always 15. Every remapped what-is-X
+question is stored as type 15, which is not a member of the enum.
+Later tests of `questionType & typeQTMask` therefore miss
+`wikiBusinessQTFlag` / `whenQTFlag` / etc.
+
+```
+--- a/questionAnswering.cpp
+-		parentSRG->questionType = qt | typeQTMask;
++		parentSRG->questionType = (parentSRG->questionType & ~typeQTMask) | qt;
+```
+
+Watch wiki-business / wiki-work / when questions after a “what is X”
+remap.
+
+### 76. `questionAnswering.cpp:3028` `cProximityEntry` uses object 0 before assigning `co`
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
+
+The default ctor leaves `childObject = 0` (Narrator).
+`checkParticularPartQuestionTypeCheck` and `objectString` / `objects[]` run
+against that, then `childObject = co` at the end. `fullDescriptor` is
+afterwards overwritten with just the principal-where offset, so the
+form-string work is discarded — but the type-check used Narrator.
+
+```
+--- a/questionAnswering.cpp
+ cProximityMap::cProximityEntry::cProximityEntry(...) : cProximityEntry()
+ {
++	childObject = co;
+ 	int qt = parentSRG->questionType & cQuestionAnswering::typeQTMask;
+```
+
+Delete the trailing `childObject = co`.
+
+### 77. `questionAnswering.cpp:1158` `metaPatternMatch` discards `whereAnswer`
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
+
+`processMetanameTagset` already returns the answer position (or 0 on
+reject). `metaPatternMatch` ignores that and always `return -1`. The caller
+at `:1749` therefore never records a meta-pattern answer.
+
+Two linked fixes:
+
+1. In `metaPatternMatch`, keep the first non-negative return:
+
+```
+--- a/questionAnswering.cpp
+-				processMetanameTagset(...);
++				int whereAnswer = processMetanameTagset(...);
++				if (whereAnswer > 0) return whereAnswer;
+```
+
+2. In `processMetanameTagset`, the reject path `return 0` is a valid source
+   position (the first token / Narrator). Change that reject to `-1` so the
+   caller’s `>= 0` test is coherent. `diff[0]` on an empty differentiator is
+   also UB — require `!diff.empty()` before the `switch`.
+
+Watch `_META_NAME_EQUIVALENCE` answers (patterns 8/9/G and the unmarked
+ones). This path has never succeeded in-tree.
+
+---
+
 ## Still to append
 
-Verification is still outstanding for the remaining category-2/3 items in
-`CODE_REVIEW.md`:
+A smaller set of category-2/3 items from `CODE_REVIEW.md` is not yet written
+up here. Next batch, same format:
 
-- syntactic relations (`checkAmbiguousVerbTense`, `evaluateSubjects`,
-  `testSyntacticRelations` `m[end]`, `findPrepRole`, SRG cache ctor,
-  `getWSAdverb`, conversationContext identical `||` arms,
-  `ADJECTIVE_INFLECTIONS_MASK`)
-- time/names leftovers (`cTimeInfo::clear()`, `ageTransition`
-  `objects.begin()+(-1)`, `detectPlaceTransition` `&&`/`||`)
-- infra (`utilities.cpp copy()`, `bitObject.h`, `DIYDiskArray` dtor,
-  `profile.h` const write, `paice.cpp` overlapping `memcpy`, `decodeURL`,
-  hmm NaN / `[length-2]` / `_wfopen`, `generateBNCSources`,
-  `readMultiSourceObjects`, `properties.find` argument order,
-  `readOntologyList`)
-- QA / acquisition (`stripWeb`, `cProximityEntry`, `qt | typeQTMask`,
-  `metaPatternMatch`, yajl leak, `jsonBuffer[0]`, `speakerGroups[sgAt]`,
-  Wikipedia `source` NULL, `vcXML` `aH`, specials Dictionary.com)
-- unused `newPatternDetection.cpp` infinite PEMA loop (only if that TU is
-  in a build)
+- `DB.cpp` `readMultiSourceObjects` column map / `objectId` as index
+- `createOntology.cpp` `readOntologyList` (`if` not `while`)
+- hmm `trainModelFromSource` leak
+- QA yajl leak, `jsonBuffer[0]`, `speakerGroups[sgAt]`, Wikipedia `source`
+  NULL, `vcXML` `aH` NULL write, specials Dictionary.com `!A || !B`
+- unused `newPatternDetection.cpp` infinite PEMA loop (only if compiled)
+- `resolveMetaGroupObjects.cpp` `previousPrimaryQuote` / empty `povSpeakers`
+- remaining `m[where+1]` sites in syntacticRelations
+- `cWordGroup` uninit / header vs `.cpp` type mismatch
 
-Those will be appended here in the same format. Nothing above has been
-applied.
+Nothing in this document has been applied.
