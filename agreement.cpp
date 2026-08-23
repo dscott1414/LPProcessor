@@ -1,3 +1,57 @@
+/*
+	agreement.cpp - cost-based winnowing of competing pattern matches using
+	                subject/verb, noun/determiner and verb/object agreement.
+
+	Overview:
+		After the 500+ hand-written patterns have been matched against a sentence,
+		several parses usually cover the same span.  This translation unit scores
+		those matches so eliminateLoserPatterns can keep the cheapest covering.
+		Costs come from three linguistic tests plus BNC form-preference flags:
+		(1) subject/verb person-number-tense agreement (and a handful of
+		special-case penalties: inverted "there/what" subjects, accusative
+		pronouns as subjects, possessive-determiner-as-subject, etc.);
+		(2) noun/determiner usage (singular common nouns want a determiner;
+		"to X" and "from X to X" constructions get verb-vs-noun adjustments);
+		(3) verb/object cardinality against the verb's corpus usage (0/1/2
+		objects), plus verb-after-verb and object-distance penalties.
+		Secondary PEMA costing then pushes those deltas up the parent-pattern
+		chain so a disagreeing child can eliminate its enclosing S1.
+
+	Pipeline position:
+		Stage 4 (parse), after matchPatternsAgainstSentence.  Called from
+		printSentences() via eliminateLoserPatterns / assessCost.  Stage 5
+		(syntacticRelations) later reuses evaluateNounDeterminer and
+		evaluateVerbObjects with assessCost=false to accumulate usage stats.
+
+	Key entry points:
+		- eliminateLoserPatterns() - five-phase winnow over [begin,end)
+		- assessCost() - EVAL + S/V + V/O + N/D costing for one PMA match
+		- evaluateSubjectVerbAgreement() - S/V cost for one tagSet
+		- evaluateNounDeterminer() - N/D cost (or usage update) for one tagSet
+		- evaluateVerbObjects() - V/O cost (or usage update) for one tagSet
+		- markChildren() / cascadeUpToAllParents() - winner / cost percolation
+
+	Key data structures / globals:
+		- secondaryPEMAPositions - filled by startCollectTags; agreement costs
+		  are written onto these PEMA slots then cascaded to parents
+		- tertiaryPEMAPositions - optional under-pattern costing (EVAL path)
+		- COST_AGREE / COST_NVO / COST_ND / COST_EVAL PEMA flags - prevent
+		  re-costing the same match
+		- minSeparatorCost - per-position lowest "separator-only" cost, used
+		  so a pattern that only matches commas/quotes cannot win
+
+	Notes / gotchas:
+		- evaluateSubjectVerbAgreement takes tagSet by value; switchSpecial-
+		  SubjectWithObject mutates that copy only.
+		- reduceCostIfRestate takes relationCost by value, so the divide-by-
+		  length it performs never reaches the caller.
+		- eliminateLoserPatterns fills minSeparatorCost via reserve()+[]
+		  rather than resize(); that is out-of-range on a size-0 vector.
+		- Costs are "till max" (addOCostTillMax): they clamp rather than
+		  grow without bound.  Negative costs exist and are legal.
+		- preTaggedSource (BNC) skips live N/D and V/O costing and uses
+		  BNCPatternViolation instead.
+*/
 #include <windows.h>
 #include <io.h>
 #include "word.h"
@@ -8,6 +62,10 @@
 #include "profile.h"
 #include <algorithm>    // std::lower_bound, std::upper_bound, std::sort
 
+// Collect SUBJECT/VERB/V_AGREE tagSets for `pm` (once; COST_AGREE guards
+// re-entry).  Score each unique tagSet with evaluateSubjectVerbAgreement,
+// then push the cheapest cost onto the secondary PEMA chain.  startCollectTags
+// wipes secondaryPEMAPositions, so the pre-call copy is restored first.
 void cSource::assessAgreementCost(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, const int parentPosition, const int position, vector < vector <cTagLocation> >& tagSets, wstring purpose)
 {
 	if (!pema[pm->pemaByPatternEnd].flagSet(cPatternElementMatchArray::COST_AGREE) &&
@@ -88,6 +146,10 @@ void cSource::assessAgreementCost(cPatternMatchArray::tPatternMatch* parentpm, c
 	}
 }
 
+// Same shape as assessAgreementCost for verb/object cardinality.  Uses
+// iverbTagSet when the pattern itself is tagged IVERB, else verbObjectsTagSet.
+// COST_NVO prevents a second pass.  Each tagSet cost is reduced by
+// COST_PER_RELATION * relationsFound.
 void cSource::assessVerbObjectCost(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, const int parentPosition, const int position, vector < vector <cTagLocation> >& tagSets, wstring purpose)
 {
 	//bool infinitive = false;
@@ -133,6 +195,11 @@ void cSource::assessVerbObjectCost(cPatternMatchArray::tPatternMatch* parentpm, 
 	}
 }
 
+// Full costing for one PMA match: EVAL children, then S/V, then (unless
+// preTaggedSource) V/O + N/D + first-level PREP N/D.  BNC sources instead
+// add BNCPatternViolation.  Returns pm->getCost() after the adds.
+// originPurpose is a 1024-wchar wsprintf buffer ? long pattern names can
+// overflow it.
 int cSource::assessCost(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, int parentPosition, int position, vector < vector <cTagLocation> >& tagSets, unordered_map <int, cCostPatternElementByTagSet>& tertiaryPEMAPositions, bool alternateNounDeterminerShortTry, wstring purpose)
 {
 	LFS
@@ -231,11 +298,17 @@ int cSource::assessCost(cPatternMatchArray::tPatternMatch* parentpm, cPatternMat
 	return pm->getCost();
 }
 
+// Phase-1 hook for patterns with explicitNounDeterminerAgreement: run
+// assessCost even though the pattern is not a top-level winner yet.
 void cSource::evaluateExplicitNounDeterminerAgreement(int position, cPatternMatchArray::tPatternMatch* pm, vector < vector <cTagLocation> >& tagSets, unordered_map <int, cCostPatternElementByTagSet>& tertiaryPEMAPositions)
 {
 	assessCost(nullptr, pm, -1, position, tagSets, tertiaryPEMAPositions, false, L"eliminate loser patterns - explicit noun determiner agreement");
 }
 
+// Phase 2/4: if preferVerbRel keeps this PMA alive, compareCost it against
+// every token it covers.  A global win pushes PMAOffset onto
+// preliminaryWinners.  onlyAloneExceptInSubPatternsFlag patterns pay the
+// previous token's lowestSeparatorCost.
 void cSource::updateCost(unsigned int begin, unsigned int position, vector <int>& minSeparatorCost, int PMAOffset, vector <unsigned int>& preliminaryWinners, int phase)
 {
 	int maxLen = 0;
@@ -287,6 +360,9 @@ void cSource::updateCost(unsigned int begin, unsigned int position, vector <int>
 	}
 }
 
+// Phase-1 hook for explicitSubjectVerbAgreement (typically NOUN[R]): if
+// the last token of the noun looks like a verb and the next word is also
+// a verb, add COST_OF_INCORRECT_VERBAL_NOUN, then run assessCost.
 void cSource::evaluateExplicitSubjectVerbAgreement(int position, cPatternMatchArray::tPatternMatch* pm, vector < vector <cTagLocation> >& tagSets, unordered_map <int, cCostPatternElementByTagSet>& tertiaryPEMAPositions)
 {
 	// this is for NOUN[R]
@@ -350,6 +426,12 @@ void cSource::evaluateExplicitSubjectVerbAgreement(int position, cPatternMatchAr
 //     set AC2=AC1 and LEN2=LEN1, return true.
 //   else return false
 // this could be done in one line, but it could be more confusing.
+// Decide whether incoming (AC1, LEN1) beats this token's current
+// (minAvgCostAfterAssessCost, maxLACAACMatch).  Negative average costs
+// prefer the more-negative * LEN^2 product (overflows if |AC|*LEN^2 does
+// not fit in int).  lowestSeparatorCost >= 0 rejects a match whose AC is
+// no cheaper than a separator-only pattern.  reason is 1..5 for the log.
+// alsoSet=false is the phase-3/5 "would this win?" probe.
 bool cWordMatch::compareCost(int AC1, int LEN1, int lowestSeparatorCost, int pmaOffset, int fromWhere, int& reason, bool alsoSet)
 {
 	LFS
@@ -457,6 +539,11 @@ bool cWordMatch::compareCost(int AC1, int LEN1, int lowestSeparatorCost, int pma
 // __S1[1](71,76)*0 __ALLOBJECTS[*](76)   __S1[1](71,76)*0 __C2__S1[*](76)       CORRECT - agrees with S1 having a childEnd of 73
 // __S1[1](71,76)*0 __C2__S1[*](76)
 // mark a pattern with a begin and end, begin at source position position.
+// Recursively mark winner PEMA/PMA for every child of `pem` whose OCost
+// equals the min over same begin/end.  getAllLocations may re-assessCost
+// fillIfAlone children and set reassessParentCosts; the lc=0 restart then
+// loses the first location to the for-loop's lc++.  Returns the number of
+// children marked.
 int cSource::markChildren(cPatternElementMatchArray::tPatternElementMatch* pem, int position, int recursionLevel, int allRootsLowestCost, unordered_map <int, cCostPatternElementByTagSet>& tertiaryPEMAPositions, bool& reassessParentCosts)
 {
 	LFS
@@ -561,7 +648,7 @@ int cSource::markChildren(cPatternElementMatchArray::tPatternElementMatch* pem, 
 						for (unsigned int clc = 0; clc < allLocations.size(); clc++)
 							lowestCost = min(lowestCost, m[position].pma.content[allLocations[clc]].getCost());
 						// go back to beginning and see whether there are other patterns that could become winners.
-						lc = 0;
+						lc = 0; // for-loop then does lc++, so allLocations[0] is skipped
 						// the lowest cost could have changed, or the cost of the winners could have changed, so re-evaluate the winners already set
 						vector <int> keptWinners;
 						for (int alreadySet : setAsWinners)
@@ -641,6 +728,10 @@ int cSource::markChildren(cPatternElementMatchArray::tPatternElementMatch* pem, 
 // 1. Are the lowest cost patterns
 // 2. have the same rootPattern
 // 4. have the same end as childend
+// Collect PMA offsets at `position` whose pattern shares rootPattern and
+// whose length is childLen.  fillIfAlone non-top-level matches are
+// re-assessCost'd (sets reassessParentCosts).  Returns the min PMA cost
+// as unsigned ? a negative cost wraps to a huge value.
 unsigned int cSource::getAllLocations(unsigned int position, int parentPattern, int rootPattern, int childLen, int parentLen, vector <unsigned int>& allLocations, int recursionLevel, unordered_map <int, cCostPatternElementByTagSet>& tertiaryPEMAPositions, bool& reassessParentCosts)
 {
 	LFS
@@ -694,6 +785,9 @@ unsigned int cSource::getAllLocations(unsigned int position, int parentPattern, 
 //   agreement costs are only attributed to each individual disagreeing element within the pattern,
 //   not necessarily percolating up to the top pattern on each position (although it will always percolate up to the
 //     FIRST position of each pattern that only contains disagreeing positions)
+// Min OCost over PEMA slots that share pem's parentPattern / begin / end.
+// minPEMAOffset is the first slot that achieved that min.  Agreement
+// costs live on the disagreeing child, not necessarily on the S1 itself.
 int cSource::getMinCost(cPatternElementMatchArray::tPatternElementMatch* pem, int& minPEMAOffset)
 {
 	LFS
@@ -707,6 +801,10 @@ int cSource::getMinCost(cPatternElementMatchArray::tPatternElementMatch* pem, in
 	return minCost;
 }
 
+// There/here/who/what/... before the verb: replace the SUBJECT tag with
+// the OBJECT from a matching subjectVerbRelation tagSet so "There are
+// books" agrees with books, not there.  Constrained to __S1 and a
+// one-token subject to avoid ~300k bogus reversals.
 void cSource::switchSpecialSubjectWithObject(unsigned int position, cPatternMatchArray::tPatternMatch* pm, vector<cTagLocation> &tagSet, int subjectTag,int mainVerbTag)
 {
 	//wstring debugSwitchBack;
@@ -759,6 +857,8 @@ void cSource::switchSpecialSubjectWithObject(unsigned int position, cPatternMatc
 	}
 }
 
+// True (cost 20) if the verb is capitalized and the subject ends in "."
+// ? "St. Pancras? Pancras is..." treated as a new sentence, not S-V.
 bool cSource::capitalizedVerbWithPeriod(int subjectTag,int verbAgreeTag,int position,vector<cTagLocation> &tagSet, int &traceSource)
 {
 	if (subjectTag >= 0 && verbAgreeTag >= 0 && tagSet[verbAgreeTag].sourcePosition > tagSet[subjectTag].sourcePosition &&
@@ -772,6 +872,9 @@ bool cSource::capitalizedVerbWithPeriod(int subjectTag,int verbAgreeTag,int posi
 	return false;
 }
 
+// True (cost 20) if longSubjectBindingMismatch says the verb prefers the
+// noun at the end of a >=15-token subject over nounPosition.  Also logs
+// (no extra cost) other long subjects whose binding is merely uncertain.
 bool cSource::logLongSubject(int subjectTag, int verbAgreeTag, int position, int nounPosition,vector<cTagLocation>& tagSet, int &traceSource)
 {
 	if (verbAgreeTag >= 0 && longSubjectBindingMismatch(tagSet[subjectTag].sourcePosition, nounPosition, tagSet[subjectTag].sourcePosition + tagSet[subjectTag].len, tagSet[verbAgreeTag].sourcePosition))
@@ -840,6 +943,8 @@ bool cSource::logLongSubject(int subjectTag, int verbAgreeTag, int position, int
 //    	lplog(L"%d:SUBJECT %s",tagSet[subjectTag].sourcePosition,pema[tagSet[subjectTag].PEMAOffset].toText(tagSet[subjectTag].sourcePosition,temp2,m));
 // }
 
+// True (cost 4) if the one-token subject is an adjective (not "such") and
+// the verb is not a BE family (_IS / _WOULDBE / _HAVEBEEN / _COULDHAVEBEEN).
 bool cSource::adjectiveSubjectNotWithBeVerb(int subjectTag, int mainVerbTag, int position, vector<cTagLocation>& tagSet, int& traceSource)
 {
 	if (tagSet[subjectTag].len == 1 && m[tagSet[subjectTag].sourcePosition].word->first != L"such" &&
@@ -858,6 +963,8 @@ bool cSource::adjectiveSubjectNotWithBeVerb(int subjectTag, int mainVerbTag, int
 }
 
 // his sacrificed ambition / his is modifying a past verb which serves as an adjective
+// True (cost 6) for "his sacrificed ambition": possessive determiner
+// immediately before a one-token verb that is also a noun / past-as-adj.
 bool cSource::possessiveDeterminerSubject(int subjectTag, int nextSubjectTag, int mainVerbTag, int nextVerbAgreeTag, int position, vector<cTagLocation>& tagSet, int& traceSource)
 {
 	if (mainVerbTag >= 0 && subjectTag >= 0 && nextSubjectTag < 0 &&
@@ -875,6 +982,8 @@ bool cSource::possessiveDeterminerSubject(int subjectTag, int nextSubjectTag, in
 	return false;
 }
 
+// True (cost 10) for "the most" as a two-token subject whose second word
+// already has a relVerb that is present-participle or past.
 bool cSource::theMostSubjectWithPastVerb(int subjectTag, int position, vector<cTagLocation>& tagSet, int& traceSource)
 {
 	// checking for 'the most' followed by a past verb
@@ -888,6 +997,11 @@ bool cSource::theMostSubjectWithPastVerb(int subjectTag, int position, vector<cT
 	return false;
 }
 
+// If V_AGREE / SUBJECT / VERB is missing (or there is a second SUBJECT),
+// try the question layout V_AGREE ... SUBJECT ... V_AGREE and fill
+// verbAgreeTag / conditionalTag.  Returns true to abort S/V costing
+// (caller returns cost 0); false to continue.  Does not write verbPosition
+// ? the caller must re-read it from the (possibly updated) verbAgreeTag.
 bool cSource::agreeVerbNotFoundOrQuestion(int &conditionalTag, int & nextConditionalTag, int futureTag, int subjectTag, int nextSubjectTag, int mainVerbTag, int nextMainVerbTag, 
 	int &verbAgreeTag, int &nextVerbAgreeTag, int position, int nounPosition, vector<cTagLocation>& tagSet, int& traceSource)
 {
@@ -913,6 +1027,9 @@ bool cSource::agreeVerbNotFoundOrQuestion(int &conditionalTag, int & nextConditi
 	return false;
 }
 
+// If the subject (or Words.PPN for a capitalized one-word name) has a
+// SubjectWordWithVerb count with the verb's main entry, subtract
+// COST_PER_RELATION from relationCost.  nounPosition == -2 means "use PPN".
 void cSource::decreaseSubjectVerbCostIfRelated(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, unsigned parentPosition, unsigned int position, 
 	vector<cTagLocation> &tagSet, int nounPosition,int verbPosition, int subjectTag, int mainVerbTag, int verbAgreeTag, int nextVerbAgreeTag,int &relationCost)
 {
@@ -961,6 +1078,9 @@ void cSource::decreaseSubjectVerbCostIfRelated(cPatternMatchArray::tPatternMatch
 	}
 }
 
+// "some/any/none/all/most of NP": replace nounPosition with the N_AGREE
+// inside the following _PP and recompute singular/plural from that noun.
+// The N_AGREE find uses `> 0`, so a tag at index 0 is ignored.
 void cSource::substitutePrepObjectSomeOf(int &nounPosition, bool &singularSet,bool &pluralSet)
 {
 	// SANAM
@@ -1017,6 +1137,11 @@ void cSource::substitutePrepObjectSomeOf(int &nounPosition, bool &singularSet,bo
 	}
 }
 
+// Fill singularSet/pluralSet from the noun's inflection, with exceptions:
+// proper nouns drop a competing plural unless the verb is 3rd-plural;
+// who/that are both; "The Prince of Asturias Awards are" / "The Men of
+// Yore Briefcase is" flip number from a capitalized-of-capitalized PP.
+// If still unset, defaults to singular.
 void cSource::determineSingularOrPlural(int nounPosition, int person, int position, int nameLastPosition, int inflectionFlags, bool& singularSet, bool& pluralSet)
 {
 	if (!singularSet && !pluralSet && nounPosition >= 0)
@@ -1089,15 +1214,15 @@ void cSource::determineSingularOrPlural(int nounPosition, int person, int positi
 //	I am, you are, he is, we are, they are
 //Present subjunctive
 //	(that) I be, (that)you be, (that)he be, (that)we be, (that)they be
-//	Note also the defective verb beware, which lacks indicative forms, but has a present subjunctive : (that)she beware…
+//	Note also the defective verb beware, which lacks indicative forms, but has a present subjunctive : (that)she bewareï¿½
 
 //The two moods are also fully distinguished when negated.
 //Present subjunctive forms are negated by placing the word not before them.
 
 //Present indicative
-//	I do not own, you do not own, he does not own…; I am not…
+//	I do not own, you do not own, he does not ownï¿½; I am notï¿½
 //Present subjunctive
-//	(that) I not own, (that)you not own, (that)he not own…; (that)I not be…
+//	(that) I not own, (that)you not own, (that)he not ownï¿½; (that)I not beï¿½
 
 //	The past subjunctive exists as a distinct form only for the verb be, which has the form were throughout :
 //Past indicative
@@ -1110,17 +1235,20 @@ void cSource::determineSingularOrPlural(int nounPosition, int person, int positi
 //or possibly as having a past subjunctive identical in form to the past indicative : (that)I owned; (that)I did not own.
 
 //Certain subjunctives(particularly were) can also be distinguished from indicatives by the possibility of inversion with the subject.
+// True if a SUBJUNCTIVE tag (or if/lest/think-verb before the subject)
+// actually changes agreement: verb is were/be, or 3rd person, or negated.
+// A mere SUBJUNCTIVE tag is only "may be subjunctive".
 bool cSource::isSubjunctiveMood(int subjectTag,int position,int verbPosition,int person, vector<cTagLocation> &tagSet)
 {
 	bool subjunctiveMood = findOneTag(tagSet, L"SUBJUNCTIVE") >= 0;
 	// if/lest exception
 	// If I were a rich man, I would make more charitable donations.
 	// If he were here right now, he would help us.
-	// this exception applies only to unreal conditionals—that is, situations that do not reflect reality. (Hint: unreal conditionals often contain words like “would” or “ought to.”) 
-	// When talking about a possibility that did happen or might be true, “was” and “were” are used normally.
+	// this exception applies only to unreal conditionalsï¿½that is, situations that do not reflect reality. (Hint: unreal conditionals often contain words like ï¿½wouldï¿½ or ï¿½ought to.ï¿½) 
+	// When talking about a possibility that did happen or might be true, ï¿½wasï¿½ and ï¿½wereï¿½ are used normally.
 	// If I was rude to you, I apologize.
 	// wishing he were here right now
-	// ‘ I am exactly the same , ’ Catherine repeated , wishing her aunt were a little less sympathetic .
+	// ï¿½ I am exactly the same , ï¿½ Catherine repeated , wishing her aunt were a little less sympathetic .
 	if (tagSet[subjectTag].sourcePosition > 1 &&
 		(m[tagSet[subjectTag].sourcePosition - 1].word->first == L"if" || m[tagSet[subjectTag].sourcePosition - 1].word->first == L"lest" ||
 			m[tagSet[subjectTag].sourcePosition - 1].queryForm(thinkForm) != -1))
@@ -1158,6 +1286,9 @@ bool cSource::isSubjunctiveMood(int subjectTag,int position,int verbPosition,int
 	return false;
 }
 
+// Core S/V table: present-1st vs 3rd-sg vs plural, plus "am" not with
+// 2nd/3rd.  Participles and most mixed flag combinations are treated as
+// agreeing (no information).  Unknown flag combos log LOG_ERROR.
 bool cSource::agreeInPersonPluralityAndTense(int inflectionFlags, int verbPosition, int person, bool singularSet, bool pluralSet)
 {
 	bool agree = true;
@@ -1222,6 +1353,9 @@ bool cSource::agreeInPersonPluralityAndTense(int inflectionFlags, int verbPositi
 	return agree;
 }
 
+// On disagree + ambiguous tense (beat/put) with no conditional and no
+// modal, add 1 to the main-verb PEMA.  Uses tagSet[mainVerbTag] with no
+// mainVerbTag >= 0 check ? the question path can leave it -1.
 void cSource::disagreementWithAmbiguousTense(bool agree,bool ambiguousTense, int verbAgreeTag, int conditionalTag, int mainVerbTag, int verbPosition, int position, vector<cTagLocation>& tagSet)
 {
 	if (!agree && ambiguousTense && verbAgreeTag >= 0 && conditionalTag < 0 &&
@@ -1236,6 +1370,9 @@ void cSource::disagreementWithAmbiguousTense(bool agree,bool ambiguousTense, int
 	}
 }
 
+// Intended to divide relationCost by subject length when the subject is
+// a restated object (RE_OBJECT).  relationCost is passed by value, so the
+// divide never reaches evaluateSubjectVerbAgreement.
 void cSource::reduceCostIfRestate(bool restateSet, int relationCost, int subjectTag, vector<cTagLocation>& tagSet)
 {
 	if (restateSet && relationCost)
@@ -1256,7 +1393,7 @@ first item in the compound is singular, the verb may agree with that:
 There was a desk and three chairs in the room.
 Strictly speaking, the verb should agree with both items: There were a desk
 and three chairs in the room. But since There were a desk sounds odd, no
-matter what follows desk, the verb may agree with desk alone—the first
+matter what follows desk, the verb may agree with desk aloneï¿½the first
 item. If the first item is plural, the verb always agrees with it:
 At the entrance stand two marble pillars and a statue of Napoleon.
 3. A compound subject that is made with and and refers to only one
@@ -1274,6 +1411,11 @@ The number of applications was huge.
 A number of teenagers now hold full-time jobs.
 */
 // tagSet is modified during this procedure!  Do not pass by address!
+// S/V cost for one tagSet (by value ? switchSpecialSubjectWithObject
+// mutates only this copy).  Returns 0 if untestable, a special-case
+// penalty (4/6/10/20), relationCost alone for conditionals/subjunctive,
+// or NON_AGREEMENT_COST + relationCost on disagree.  Accusative-pronoun
+// subject add of +4 is commented out.
 int cSource::evaluateSubjectVerbAgreement(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, unsigned parentPosition, unsigned int position, vector<cTagLocation> tagSet, int& traceSource)
 {
 	LFS
@@ -1381,6 +1523,9 @@ int cSource::evaluateSubjectVerbAgreement(cPatternMatchArray::tPatternMatch* par
 // FIRST_PERSON - I / we
 // SECOND_PERSON - you
 // THIRD_PERSON - he/she/it/they
+// Lightweight S/V check used after roles exist (evaluateSubjects).
+// agreementTestable is false for participles/past.  Returns true if they
+// agree (or cannot be tested).  whereSubject < 0 is treated as agreeing.
 bool cSource::evaluateSubjectVerbAgreement(int verbPosition, int whereSubject, bool& agreementTestable)
 {
 	LFS
@@ -1431,6 +1576,9 @@ bool cSource::evaluateSubjectVerbAgreement(int verbPosition, int whereSubject, b
 // this was created to help speaker resolution, after a closed quote or a comma
 // this is very helpful when a word is both a verb and an adjective, so that the pattern is very ambiguous
 // see also: evaluateVerbObjects
+// After a comma or close-quote, reject a __NOUN/__MNOUN PMA at J when a
+// same-length _VERBREL1 + _VERBPAST is as cheap or cheaper ? attribution
+// "said X" vs a noun reading of the verb.  Returns false to drop the noun.
 bool cSource::preferVerbRel(int position, unsigned int J, cPattern* p)
 {
 	LFS
@@ -1454,6 +1602,15 @@ bool cSource::preferVerbRel(int position, unsigned int J, cPattern* p)
 	return true;
 }
 
+// Cost a PEMA span against BNC prefer-Adj/Noun/Verb/Adverb flags on the
+// tokens it covers.  Returns 0 if no flagged tokens, else the min
+// evaluateBNCPreferences over collected tagSets (capped at 30).
+// The bounds check compares begin+position against pema.count, not m.size().
+// Pre-tagged BNC path: collect ADV/ADJ/NOUN/VERB tags only at tokens
+// that already have a BNC prefer-* flag, then return the cheapest
+// evaluateBNCPreferences cost (or 0 if no flagged tokens).  The bounds
+// check uses pema.count for begin+position / end+position, then indexes
+// m[I] ? should be m.size().
 int cSource::BNCPatternViolation(int position, int PEMAPosition, vector < vector <cTagLocation> >& tagSets)
 {
 	LFS
@@ -1481,6 +1638,9 @@ int cSource::BNCPatternViolation(int position, int PEMAPosition, vector < vector
 }
 
 // include every member of PEMAPositions which has the same or lower element # and has a lower index than I
+// True if PEMAPositions[I] and every earlier slot of the same tagSet
+// (walking element # downward) already have IN_CHAIN set.  Used by
+// setChain to pick a fully-covered tagSet.
 bool cSource::tagSetAllIn(vector <cCostPatternElementByTagSet>& PEMAPositions, int I)
 {
 	LFS
@@ -1495,6 +1655,9 @@ bool cSource::tagSetAllIn(vector <cCostPatternElementByTagSet>& PEMAPositions, i
 	return true;
 }
 
+// Write costsPerTagSet[tagSet] onto each PEMAPositions slot, then copy a
+// cheaper cost backward onto same-PEMA and immediately-preceding elements
+// (setPreviousElementsCostsAtIndex).  fromWhere is a log label.
 void cSource::lowerPreviousElementCosts(vector <cCostPatternElementByTagSet>& PEMAPositions, vector <int>& costsPerTagSet, vector <int>& traceSources, const wchar_t* fromWhere)
 {
 	LFS
@@ -1583,6 +1746,10 @@ P:  TS#  E
 
 */
 // set the costs of the next to top tier of the pattern (secondary)
+// Walk each distinct PEMA origin, findAllChains + recalculateOCosts, then
+// cascadeUpToAllParents so the tagSet cost looks as if it had been paid
+// when the child was first matched.  Always returns 0.  pm == nullptr
+// (evaluatePrepObjects when pma.find fails) will dereference in the cascade.
 int cSource::setSecondaryCosts(vector <cCostPatternElementByTagSet>& PEMAPositions, cPatternMatchArray::tPatternMatch* pm, int basePosition, bool stopCascadeWhenNDAlreadySet, const wchar_t* fromWhere)
 {
 	LFS
@@ -1618,6 +1785,11 @@ int cSource::setSecondaryCosts(vector <cCostPatternElementByTagSet>& PEMAPositio
 	return 0;
 }
 
+// Non-zero (HIGHEST_COST_OF_INCORRECT_VERB_AFTER_VERB_USAGE, or a
+// does-form fraction of it) when nextWord is a verb compatible with
+// whereVerb as an auxiliary (modal+bare, be+pres-part, have/be+past-part,
+// do+bare).  adverbialObject treats a following ADVOBJECT as that verb.
+// 0 means "not a verb-after-verb" (no extra cost).
 int cSource::calculateVerbAfterVerbUsage(int whereVerb, unsigned int nextWord, bool adverbialObject)
 {
 	LFS
@@ -1680,6 +1852,9 @@ int cSource::calculateVerbAfterVerbUsage(int whereVerb, unsigned int nextWord, b
 	return 0;
 }
 
+// GNOUN extras: cost 10 if the span contains "--"; for __NOUN[F], add 1
+// per determiner/coordinator inside the SUBJECT (not the first token) so
+// long "and/the" subjects lose.
 void cSource::evaluateNounDeterminersGNoun(const int nLen, int &nPEMAPosition, const int nPosition, const int p, int &traceSource, cPatternMatchArray::tPatternMatch* pma)
 {
 	vector <int> nCosts, traceSources;
@@ -1741,6 +1916,9 @@ void cSource::evaluateNounDeterminersGNoun(const int nLen, int &nPEMAPosition, c
 	}
 }
 
+// GNOUN: evaluateNounDeterminersGNoun and return -1 (caller continues).
+// Else collect nounDeterminerTagSets, score each with evaluateNounDeterminer,
+// cascade via setSecondaryCosts.  Returns the number of tagSets (0 = none).
 int cSource::collectAndProcessNounDeterminerTags(const int nLen, int &nPEMAPosition, const int nPosition, const int p, int &traceSource, cPatternMatchArray::tPatternMatch* pma, wstring purpose)
 {
 	// We're getting a bit unpopular here--blocking the gangway as it were. / a bit is not a subject of 'blocking'
@@ -1773,6 +1951,9 @@ int cSource::collectAndProcessNounDeterminerTags(const int nLen, int &nPEMAPosit
 	return nTagSets.size();
 }
 
+// "her own" / "her best": no N/D tagSet was found, so fabricate
+// secondaryPEMAPositions for the whole noun and give them cost 10
+// (her + non-separable is a determiner+adj, not a pronoun+noun).
 void cSource::collectAndProcessHerNonSeparableTags(const int nLen, int& nPEMAPosition, const int nPosition, const int p, int& traceSource, cPatternMatchArray::tPatternMatch* pma)
 {
 	if (debugTrace.traceDeterminer)
@@ -1792,6 +1973,10 @@ void cSource::collectAndProcessHerNonSeparableTags(const int nLen, int& nPEMAPos
 	setSecondaryCosts(secondaryPEMAPositions, pma, nPosition, false, L"herProbabilisticNonseparable");
 }
 
+// Score every N/D tagSet collected from a specific (already COST_ND-
+// flagged) PEMA slot, then push the cheapest costs onto pma via
+// lowerPreviousElementCosts + setSecondaryCosts.  stopCascadeWhenNDAlreadySet
+// is true so a later child noun does not re-tax an already-costed MNOUN.
 void cSource::collectAndProcessNounDeterminerPattern(const int nLen, int& nPEMAPosition, const int nPosition, cPatternMatchArray::tPatternMatch* pma, wstring purpose)
 {
 	vector < vector <cTagLocation> > nTagSets;
@@ -1809,6 +1994,12 @@ void cSource::collectAndProcessNounDeterminerPattern(const int nLen, int& nPEMAP
 	setSecondaryCosts(secondaryPEMAPositions, pma, nPosition, true, L"nounDeterminer2");
 }
 
+// Walk ROLE tags (SUBJECT/OBJECT/PREPOBJECT, obeying BLOCK) and run N/D
+// costing on each unique noun.  COST_ROLE / COST_ND skip repeats.  An
+// empty tagSet gets a fake tag so a command-like __NOUN[9] still pays
+// determiner cost vs VERBREL1.  "her own"/"her best" falls back to
+// collectAndProcessHerNonSeparableTags.  alternateShortTry (short
+// sentences only) lets N/D run with no OBJECT/SUBJECT.
 // alternateShortTry is to allow a search for a noun determiner to occur even though there is no OBJECT, SUBJECT.  This should only be allowed on very short sentences.
 // if this is allowed on all sentences, significant differences with ST will result (most of them ST is correct)
 void cSource::evaluateNounDeterminers(int PEMAPosition, int position, vector < vector <cTagLocation> >& tagSets, bool alternateShortTry, wstring purpose)
@@ -1920,6 +2111,11 @@ void cSource::evaluateNounDeterminers(int PEMAPosition, int position, vector < v
 	}
 }
 
+// Cost PREPOBJECT tags once (COST_PREP).  Nominative "he/she/they" as a
+// one-token prep object costs 10; "his/her" followed by a zero-usage noun
+// costs 4 (noun left hanging).  The his/her path reads m[prepObjectPosition+1]
+// with no size check.  pma.find may return nullptr; setSecondaryCosts
+// then dereferences it.
 void cSource::evaluatePrepObjects(int PEMAPosition, int position, vector < vector <cTagLocation> >& tagSets, wstring purpose)
 {
 	LFS // DLFS
@@ -1952,7 +2148,7 @@ void cSource::evaluatePrepObjects(int PEMAPosition, int position, vector < vecto
 					cost = 10;
 				// leaving a noun hanging but including its possessive
 				else if ((word == L"his" || word == L"her") &&
-					(nfindex = m[prepObjectPosition + 1].word->second.query(nounForm)) >= 0 &&
+					(nfindex = m[prepObjectPosition + 1].word->second.query(nounForm)) >= 0 && // no +1 < m.size()
 					m[prepObjectPosition + 1].word->second.getUsageCost(nfindex) == 0)
 					cost = 4;
 				if (debugTrace.tracePreposition)
@@ -1974,6 +2170,9 @@ void cSource::evaluatePrepObjects(int PEMAPosition, int position, vector < vecto
 }
 
 
+// If the EVAL child at tl.sourcePosition has not been costed yet, run
+// assessCost on it (writes tertiaryPEMAPositions) and setEval().  Returns
+// true if costing ran; false if EVALpm is missing or already evaluated.
 bool cSource::assessEVALCost(cTagLocation& tl, int pattern, cPatternMatchArray::tPatternMatch* pm, int position, unordered_map <int, cCostPatternElementByTagSet>& tertiaryPEMAPositions, wstring purpose)
 {
 	LFS // DLFS
@@ -1989,6 +2188,11 @@ bool cSource::assessEVALCost(cTagLocation& tl, int pattern, cPatternMatchArray::
 	return false;
 }
 
+// Resolve OBJECT / next-OBJECT from tagSet into object1/object2 words
+// (and object ids when assessCost=false).  Questions drop how/when/why
+// and a T_UNIT first object from the count.  Two objects are swapped so
+// object1 is the last (direct) object.  Out-params start unset; numObjects
+// is incremented here, not zeroed.
 void cSource::evaluateVerbObjectsInfo(cPatternMatchArray::tPatternMatch* pm, 
 	vector <cTagLocation>& tagSet, bool assessCost, wstring purpose, 
 	int &whereObjectTag, int &nextObjectTag, unsigned int &numObjects,
@@ -2059,6 +2263,9 @@ void cSource::evaluateVerbObjectsInfo(cPatternMatchArray::tPatternMatch* pm,
 
 }
 
+// ? said X: if whereVerb sits after a CLOSE quote, is a think-form, has
+// one object, no verb-after-verb, and the pattern is _VERBREL1, zero
+// verbObjectCost and return 2 (preferVerbRel bonus).  Otherwise 0.
 int cSource::getAfterQuoteAttributionBenefit(cPatternMatchArray::tPatternMatch* pm, int whereVerb, int numObjects, int verbAfterVerbCost, int &verbObjectCost)
 {
 	// determine whether this is a special "after quotes" case preferVerbRel
@@ -2072,6 +2279,11 @@ int cSource::getAfterQuoteAttributionBenefit(cPatternMatchArray::tPatternMatch* 
 	return afterQuoteAttributionBenefit;
 }
 
+// Verb/object usage cost: VERB_HAS_0_OBJECTS+numObjects, plus nominative
+// pronouns as objects (+6), object distance, be+particle (+6), "all"+adj
+// (+6).  here/there/home treated as 0-object.  Two objects double the
+// cost if voRelationsFound < 2 or distance > 0.  The adverb-object probe
+// reads m[whereVerb+1] with no size check when the object ends < whereVerb+5.
 int cSource::getVerbObjectCost(cPatternMatchArray::tPatternMatch* pm, vector <cTagLocation>& tagSet, int &voRelationsFound, 
 	const unsigned int whereVerb, const int verbTagIndex, const tIWMM verbWord, const int numObjects, int &objectDistanceCost,
 	const int nextObjectTag, const tIWMM object1Word, const int object2, const int whereObjectTag)
@@ -2139,7 +2351,7 @@ int cSource::getVerbObjectCost(cPatternMatchArray::tPatternMatch* pm, vector <cT
 	// if one object, and object follows directly after verb, and object consists of adverb, adverb, acc, then add cost.
 	if (numObjects == 1 && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len < whereVerb + 5)
 	{
-		bool isAdverb = m[whereVerb + 1].forms.isSet(adverbForm) && m[whereVerb + 1].word->second.getUsageCost(m[whereVerb + 1].queryForm(adverbForm)) < 4; // is it possibly an adverb?
+		bool isAdverb = m[whereVerb + 1].forms.isSet(adverbForm) && m[whereVerb + 1].word->second.getUsageCost(m[whereVerb + 1].queryForm(adverbForm)) < 4; // is it possibly an adverb?  no +1 < m.size()
 		if (isAdverb && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len == whereVerb + 3)
 		{
 			bool isPreposition = m[whereVerb + 1].forms.isSet(prepositionForm);
@@ -2263,6 +2475,10 @@ int cSource::getVerbObjectCost(cPatternMatchArray::tPatternMatch* pm, vector <cT
 	return verbObjectCost;
 }
 
+// Extra cost when nextWord should have been part of this verb (modal+bare,
+// be+pres-part, ...).  __S1[7] pays +1 more so its cheap ADJECTIVE path
+// does not win.  "have" + _VERB_BARE_INF that is also a past participle
+// ("have come") adds 4.
 int cSource::getVerbAfterVerbCost(cPatternMatchArray::tPatternMatch* pm, vector <cTagLocation>& tagSet, wstring purpose,
 	const unsigned int numObjects, const int verbTagIndex, tIWMM verbWord, const unsigned int whereVerb, const unsigned int nextWord,
 	int advObjectTag)
@@ -2285,6 +2501,12 @@ int cSource::getVerbAfterVerbCost(cPatternMatchArray::tPatternMatch* pm, vector 
 	return verbAfterVerbCost;
 }
 
+// Full V/O delta: count VerbWithDirect/Indirect relations, skip
+// adverb/not/never/cheap-_PP after be when looking for the next verb,
+// optionally decrement numObjects for a present-participle object, then
+// sum getVerbObjectCost + getVerbAfterVerbCost + objectDistanceCost
+// minus after-quote benefit.  High V/O or verb-after-verb zeroes
+// voRelationsFound.  Returns the raw delta (caller subtracts relations).
 int cSource::evaluateVerbObjectsCost(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, const int parentPosition, const int position,
 	vector <cTagLocation>& tagSet, int& voRelationsFound, int &traceSource, wstring purpose,
 	const int whereObjectTag, const int nextObjectTag, unsigned int &numObjects,
@@ -2367,6 +2589,10 @@ int cSource::evaluateVerbObjectsCost(cPatternMatchArray::tPatternMatch* parentpm
 	return deltaCost;
 }
 
+// V/O entry: skip passive (except questions), infinitive+!assessCost on
+// untagged text, and uncertain verb tags.  assessCost=true returns the
+// cost delta; else updateVerbObjectsUsageCost (skipping two generic
+// objects).  Returns 0 when skipped or when accumulating usage.
 //  desiredTagSets.push_back(cTagSet(VERB_OBJECTS_TAGSET,3,"VERB","V_OBJECT","OBJECT","V_AGREE","vD","vrD","IVERB",NULL));
 int cSource::evaluateVerbObjects(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, int parentPosition, int position,
 	vector <cTagLocation>& tagSet, bool infinitive, bool assessCost, int& voRelationsFound, int& traceSource, wstring purpose)
@@ -2457,6 +2683,12 @@ int cSource::evaluateVerbObjects(cPatternMatchArray::tPatternMatch* parentpm, cP
 	return 0;
 }
 
+// For a multi-token SUBJECT, pick the cheapest N_AGREE / GNOUN / MNOUN /
+// NAME and fill singular/plural/restate/adjectival.  nounPosition == -2
+// means "use Words.PPN".  NOUN[9] + dash / he|she|they|who|i ending /
+// embedded S1 > 10 words sets embeddedS1 (caller costs 20).  One-token
+// subjects just set nounPosition.  Returns 0, or -1 if no consistent
+// tagSet (caller treats that as cost 0 / untestable).
 int cSource::getSubjectInfo(cTagLocation subjectTag, int subjectTagIndex, int& nounPosition, int& nameLastPosition, bool& restateSet, bool& singularSet, bool& pluralSet, bool& adjectivalSet, bool& embeddedS1)
 {
 	LFS
@@ -2639,6 +2871,12 @@ int cSource::getSubjectInfo(cTagLocation subjectTag, int subjectTagIndex, int& n
 	return 0;
 }
 
+// True (illegal-subject, cost 20) if a >=15-token subject ends in a noun
+// that the following past-participle verb prefers over the head noun
+// (relation-count vs wordFrequency).  The else-if
+// `numBeginFrequency / numLastFrequency < 1` never fires: integer
+// division is 0 only when numBeginFrequency < numLastFrequency, which
+// the first branch already covers.
 // for long subjects, check to see if the verb is preferentially bound to a word closer to the verb, thus making this an incorrect subject.
 bool cSource::longSubjectBindingMismatch(int wordIndex, int beginObjectPosition, int primaryPatternEnd, int whereVerb)
 {
@@ -2670,7 +2908,7 @@ bool cSource::longSubjectBindingMismatch(int wordIndex, int beginObjectPosition,
 	// bias using word frequency but only for ruling out 
 	if (numBeginRelations > 0 && numBeginFrequency > 0 && numLastFrequency / numBeginFrequency > 1)
 		numBeginRelations = (numBeginRelations * numLastFrequency) / numBeginFrequency;
-	else if (numLastRelations > 0 && numLastFrequency > 0 && numBeginFrequency / numLastFrequency < 1)
+	else if (numLastRelations > 0 && numLastFrequency > 0 && numBeginFrequency / numLastFrequency < 1) // int / never < 1 when both > 0 and first branch missed
 		numLastRelations = (numLastRelations * numBeginFrequency) / numLastFrequency;
 	if ((numBeginRelations > 0 && numLastRelations > 0) &&
 		((numBeginRelations > numLastRelations) || // BEGIN_IS_CORRECT
@@ -2679,6 +2917,7 @@ bool cSource::longSubjectBindingMismatch(int wordIndex, int beginObjectPosition,
 	return true;
 }
 
+// Debug name for a BNC prefer-* word flag, or nullptr if flag is unknown.
 const wchar_t* flagStr(int flag)
 {
 	LFS
@@ -2692,6 +2931,9 @@ const wchar_t* flagStr(int flag)
 	return nullptr;
 }
 
+// True if verbWord's relationMaps[relationType] already contains
+// objectWord (mainEntry).  Used to cheapen V/O cost by COST_PER_RELATION.
+// objectWord==wNULL is false.  parentpm/pm/position are log-only.
 bool cSource::checkRelation(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, int parentPosition, int position, tIWMM verbWord, tIWMM objectWord, int relationType)
 {
 	LFS
@@ -2714,6 +2956,11 @@ bool cSource::checkRelation(cPatternMatchArray::tPatternMatch* parentpm, cPatter
 	return (rm != (cSourceWordInfo::cRMap*)nullptr) && (tr != rm->r.end());
 }
 
+// If tagName occurs in tagSet and its OCost+parentCost is cheaper than
+// `cost`, copy that tag into lowestCostTag, update cost, return true.
+// nextTag is the following same-name tag (or -1).  False if missing or
+// not cheaper.  The miss-log uses lowestCostTag.sourcePosition even
+// when lowestCostTag was never written.
 bool cSource::findLowCostTag(vector<cTagLocation>& tagSet, int& cost, const wchar_t* tagName, cTagLocation& lowestCostTag, int parentCost, int& nextTag)
 {
 	LFS
@@ -2738,6 +2985,10 @@ bool cSource::findLowCostTag(vector<cTagLocation>& tagSet, int& cost, const wcha
 	return false;
 }
 
+// "one stinging cut": if the token before the head noun is a present
+// participle verb that already has a SubjectWordWithVerb relation to that
+// noun, subtract the noun's usage cost from PNC (the adjective is doing
+// verb work).  Skipped for __S1 / __INTRO_N.
 void cSource::evaluateNounDeterminerAdjectiveVerbPresentParticiple(int begin, int end, int fromPEMAPosition, int &PNC)
 {
 	// for nouns where the immediately preceding adjective in the noun is a verb, and that verb has a relation to the head noun.
@@ -2777,6 +3028,9 @@ void cSource::evaluateNounDeterminerAdjectiveVerbPresentParticiple(int begin, in
 	}
 }
 
+// First-noun half of "from X to X" / "elbow to elbow": subtract 4 from
+// PNC.  The debug log reads m[begin-1] even when begin==0 and only the
+// "noun to same noun" arm matched.
 void cSource::evaluateNounDeterminerFromToOrToSame(int begin, int end, int fromPEMAPosition, int& PNC)
 {
 	// when they got through he kept walking abreast , *elbow to elbow* almost .
@@ -2790,12 +3044,15 @@ void cSource::evaluateNounDeterminerFromToOrToSame(int begin, int end, int fromP
 		if (debugTrace.traceDeterminer)
 		{
 			wstring phrase;
-			lplog(L"%d:%s[%s]:(%s)%s: Noun (%d,%d) has 'from' 'to' construction OR 'noun' to 'same noun' cost-=4", begin, (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->differentiator.c_str(), m[begin - 1].word->first.c_str(), phraseString(begin, end, phrase, true).c_str(), begin, end);
+			lplog(L"%d:%s[%s]:(%s)%s: Noun (%d,%d) has 'from' 'to' construction OR 'noun' to 'same noun' cost-=4", begin, (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->differentiator.c_str(), m[begin - 1].word->first.c_str(), phraseString(begin, end, phrase, true).c_str(), begin, end); // m[begin-1] when begin==0
 		}
 		PNC -= 4;
 	}
 }
 
+// "to interest Bob": a two-token noun after "to" whose
+// SINGULAR_NOUN_HAS_NO_DETERMINER usage is 4 is more likely a verb;
+// add that verb's usage cost to PNC.
 void cSource::evaluateNounDeterminerPreferVerbAfterTo(int begin, int end, int fromPEMAPosition, int& PNC)
 {
 	// to interest Bob - interest would need a determiner, but not as an adjective, and after a 'to' is probably a verb
@@ -2817,6 +3074,9 @@ void cSource::evaluateNounDeterminerPreferVerbAfterTo(int begin, int end, int fr
 	}
 }
 
+// Compound noun whose last token is a verb and the next word is also a
+// verb: add COST_OF_INCORRECT_VERBAL_NOUN.  nAgreeTag < end-1 is the
+// "compound" hint.  The log reads m[end] with no size check.
 void cSource::evaluateNounDeterminerIncorrectVerbalNoun(int& traceSource, int begin, int end, int fromPEMAPosition, int nAgreeTag, int& PNC)
 {
 	if (nAgreeTag >= 0 && nAgreeTag < end - 1 && calculateVerbAfterVerbUsage(end - 1, end, false)) // if nAgreeTag<end-1, it is more likely a compound noun
@@ -2833,6 +3093,9 @@ void cSource::evaluateNounDeterminerIncorrectVerbalNoun(int& traceSource, int be
 	}
 }
 
+// Second-noun half of "from X to X" (PNC -= 4), else "to jail" after a
+// verb-capable singular: add a toCost[] lookup of the verb usage (plus
+// missing-determiner 4 when that usage is 4).
 void cSource::evaluateNounDeterminerFromTo2OrPreferVerb(int begin, int end, int fromPEMAPosition, int& PNC)
 {
 	// I went to jail with him.
@@ -2869,6 +3132,8 @@ void cSource::evaluateNounDeterminerFromTo2OrPreferVerb(int begin, int end, int 
 	}
 }
 
+// "in a moment Edith": 3-token noun = a/the + T_UNIT + proper noun after
+// a preposition.  The time phrase is not part of the name; PNC += 6.
 // Quick as a flash Tommy / in a moment Edith
 void cSource::evaluateNounDeterminerDetectSeparateTime(int begin, int end, int& PNC)
 {
@@ -2883,6 +3148,8 @@ void cSource::evaluateNounDeterminerDetectSeparateTime(int begin, int end, int& 
 	}
 }
 
+// "her so/any/a/all/..." or "her --": invalid determiner after her.
+// PNC += 6 per hit.
 void cSource::evaluateNounDeterminerDetectIncorrectOrderingDeterminersAfterHer(int begin, int end, int& PNC)
 {
 	// disallow incorrect ordering of determiners after 'her'
@@ -2899,6 +3166,9 @@ void cSource::evaluateNounDeterminerDetectIncorrectOrderingDeterminersAfterHer(i
 		}
 }
 
+// "P.N.C. He" / "time I": a personal/nominative pronoun inside the noun
+// preceded by a period-ending token or a T_UNIT that is not a preposition.
+// PNC += 10 per hit.
 void cSource::evaluateNounDeterminerDisallowPronounPrecededByNoun(int& traceSource, int begin, int end, int& PNC)
 {
 	// P.N.C. He
@@ -2920,6 +3190,9 @@ void cSource::evaluateNounDeterminerDisallowPronounPrecededByNoun(int& traceSour
 	}
 }
 
+// Debug-only: log if the NOUN child's PEMA lacks COST_ND (a child that
+// will be costed again).  Does not set the flag ? stopCascadeWhenNDAlreadySet
+// is the real fix.  No-op when nounTag < 0 or tracing is off.
 void cSource::evaluateNounDeterminerDetectNounDeterminerMissedCost(vector <cTagLocation>& tagSet, int nounTag, int fromPEMAPosition)
 {
 	// set the actual noun pattern that is being used, so that if __NOUN[9] comes first, for example, that the NOUNs in NOUN[9] don't get counted twice (once here, and once on their own).
@@ -2942,6 +3215,10 @@ void cSource::evaluateNounDeterminerDetectNounDeterminerMissedCost(vector <cTagL
 	//pema[tagSet[nounTag].PEMAOffset].setFlag(cPatternElementMatchArray::COST_ND);
 }
 
+// Fill hasDeterminer from a DET tag constrained to the noun, a preceding
+// possessive proper noun, or which/what/whose immediately before begin.
+// Returns true to abort N/D costing (some/much/any with uncountable nouns);
+// false to continue.  hasDeterminer is written in all continue paths.
 bool cSource::evaluateNounDeterminerSetHasDeterminer(vector <cTagLocation>& tagSet, int& traceSource, int begin, int nounTag, int nAgreeTag, int whereNAgree, tIWMM nounWord, bool &hasDeterminer)
 {
 	int whereDeterminerTag, nextDet = -1;
@@ -2994,6 +3271,10 @@ bool cSource::evaluateNounDeterminerSetHasDeterminer(vector <cTagLocation>& tagS
 	return false;
 }
 
+// N/D cost for one tagSet: requires NOUN + N_AGREE.  Only singular nouns
+// pay determiner usage.  Runs the from-to / verbal-noun / "her so" /
+// pronoun-after-period helpers first.  assessCost=false updates lexicon
+// usage instead and returns 0.  COST_ND on a different PEMA slot skips.
 //  desiredTagSets.push_back(cTagSet(NOUN_DETERMINER_TAGSET,1,"N_AGREE",NULL));
 int cSource::evaluateNounDeterminer(vector <cTagLocation>& tagSet, bool assessCost, int& traceSource, int begin, int end, int fromPEMAPosition)
 {
@@ -3075,6 +3356,8 @@ int cSource::evaluateNounDeterminer(vector <cTagLocation>& tagSet, bool assessCo
 	return 0;
 }
 
+// Flatten tagSets into tagSetLocations and sort by
+// cTagLocation::compareTagLocation (source position, then PEMA).
 void cSource::sortTagLocations(vector < vector <cTagLocation> >& tagSets, vector <cTagLocation>& tagSetLocations)
 {
 	for (auto& ts : tagSets)
@@ -3083,6 +3366,9 @@ void cSource::sortTagLocations(vector < vector <cTagLocation> >& tagSets, vector
 	sort(tagSetLocations.begin(), tagSetLocations.end(), cTagLocation::compareTagLocation);
 }
 
+// For PEMAPositionsSet[start..), if tempCost != OCost+cumulativeDeltaCost,
+// fold the delta into cumulativeDeltaCost.  Sets recalculatePMCost if any
+// begin==0 slot changed (the pattern's first element, so PMA cost moves).
 void cSource::recalculateOCosts(bool& recalculatePMCost, vector<cPatternElementMatchArray::tPatternElementMatch*>& PEMAPositionsSet, int start, int traceSource)
 {
 	LFS
@@ -3406,6 +3692,9 @@ void cSource::setChain2(vector <cPatternElementMatchArray::tPatternElementMatch*
 }
 
 
+// Recurse along nextPatternElement from PEMAPosition, marking IN_CHAIN,
+// and call setChain at each complete chain.  Used by setSecondaryCosts
+// to push a tagSet cost onto every PEMA slot of the parent pattern.
 void cSource::findAllChains(vector <cCostPatternElementByTagSet>& PEMAPositions, int PEMAPosition, vector <cPatternElementMatchArray::tPatternElementMatch*>& chain, vector <cPatternElementMatchArray::tPatternElementMatch*>& PEMAPositionsSet, int& traceSource, int& minOverallChainCost)
 {
 	LFS // DLFS
@@ -3658,7 +3947,7 @@ int cSource::evaluateBNCPreferences(int position, int PEMAPosition, vector <cTag
 	lplog(L"Erasing positions %d-%d to ignore.", pema[PEMAPosition].begin + position, pema[PEMAPosition].end + position);
 #endif
 	if (PEMAPosition < 0 || PEMAPosition >= (int)pema.count ||
-		pema[PEMAPosition].begin + position < 0 || pema[PEMAPosition].begin + position >= (int)pema.count ||
+		pema[PEMAPosition].begin + position < 0 || pema[PEMAPosition].begin + position >= (int)pema.count || // should be m.size(); then m[I]
 		pema[PEMAPosition].end + position < 0 || pema[PEMAPosition].end + position >= (int)pema.count)
 		lplog(LOG_FATAL_ERROR, L"evaluateBNCPreferences - bad data!");
 	for (int I = pema[PEMAPosition].begin + position; I < pema[PEMAPosition].end + position; I++)
@@ -3666,6 +3955,10 @@ int cSource::evaluateBNCPreferences(int position, int PEMAPosition, vector <cTag
 	return cost;
 }
 
+// Sum evaluateBNCPreferenceForPosition over every token covered by `tag`
+// in tagSet, for all four BNC prefer-* flags.  remove=true marks the
+// matching preference as ignore so a later ADV/ADJ pass does not double-
+// count the same token.
 int cSource::evaluateBNCPreference(vector <cTagLocation>& tagSet, const wchar_t* tag, int patternPreference, bool remove)
 {
 	LFS
@@ -3688,6 +3981,9 @@ int cSource::evaluateBNCPreference(vector <cTagLocation>& tagSet, const wchar_t*
 	return cost;
 }
 
+// +4 if m[position] prefers `flag` but the pattern preferred something
+// else (and the token is not already flagBNCPreferIgnore).  remove marks
+// the pattern's own preference as ignore.  position out of m[] is fatal.
 int cSource::evaluateBNCPreferenceForPosition(int position, int patternPreference, int flag, bool remove)
 {
 	LFS
@@ -3718,6 +4014,8 @@ int cSource::evaluateBNCPreferenceForPosition(int position, int patternPreferenc
 	return cost;
 }
 
+// After phase 1, add each tertiary PEMA's stored cost onto that slot
+// unless COST_EVAL or COST_NVO is already set (already paid).
 void cSource::applyTertiaryPEMAPositions(unordered_map <int, cCostPatternElementByTagSet>& tertiaryPEMAPositions)
 {
 	for (auto& its : tertiaryPEMAPositions)
@@ -3738,6 +4036,12 @@ void cSource::applyTertiaryPEMAPositions(unordered_map <int, cCostPatternElement
 	}
 }
 
+// Pre-filter: top-level matches whose (cost - PRE_ASSESS_COST_ALLOWANCE)
+// * 1000 / len still beats maxWinner at some covered token.  Those PMA
+// offsets are assessCost'd (fills tertiaryPEMAPositions) and pushed onto
+// winners[position-begin].  Non-top-level explicit S/V or N/D patterns
+// still run their evaluateExplicit* hooks.  PRE_ASSESS_COST_ALLOWANCE
+// (4) is the slack so an imperfect parse can still reach phase 2.
 #define PRE_ASSESS_COST_ALLOWANCE 4
 void cSource::eliminateLoserPatternsPhase1(unsigned int begin, unsigned int end, vector <int>& minSeparatorCost, vector < vector <unsigned int> >& winners, unordered_map <int, cCostPatternElementByTagSet>& tertiaryPEMAPositions)
 {
@@ -3824,6 +4128,9 @@ void cSource::eliminateLoserPatternsPhase1(unsigned int begin, unsigned int end,
 	}
 }
 
+// After assessCost, re-run compareCost (preferVerbRel) on each phase-1
+// winner and keep only those that still beat minSeparatorCost.  Replaces
+// winners[position-begin] with the surviving PMA offsets.
 void cSource::eliminateLoserPatternsPhase2(unsigned int begin, unsigned int end, vector <int>& minSeparatorCost, vector < vector <unsigned int> >& winners)
 {
 	for (unsigned int position = begin; position < end && !exitNow; position++)
@@ -3842,6 +4149,9 @@ void cSource::eliminateLoserPatternsPhase2(unsigned int begin, unsigned int end,
 			lplog(L"position %d: PHASE 2 cost=%d len=%d", bp, m[bp].minAvgCostAfterAssessCost, m[bp].maxLACAACMatch);
 }
 
+// Reassess pass: like phase 2 but over every top-level PMA (not just
+// phase-1 survivors), after winners were cleared because markChildren
+// changed a parent cost.  Appends a new winners row per position.
 void cSource::eliminateLoserPatternsPhase4(unsigned int begin, unsigned int end, vector <int>& minSeparatorCost, vector < vector <unsigned int> >& winners)
 {
 	for (unsigned int position = begin; position < end && !exitNow; position++)
@@ -3867,6 +4177,11 @@ void cSource::eliminateLoserPatternsPhase4(unsigned int begin, unsigned int end,
 			lplog(L"position %d: PHASE 4 cost=%d len=%d", bp, m[bp].minAvgCostAfterAssessCost, m[bp].maxLACAACMatch);
 }
 
+// Mark winner PEMA/PMA for each surviving top-level match (compareCost
+// probe, then markChildren).  If markChildren reassessed a fillIfAlone
+// child, re-compareCost that span.  Returns true if any child cost
+// changed (caller then resets winners and runs phase 4+5).  matchedPositions
+// accumulates winner lengths.
 bool cSource::eliminateLoserPatternsPhase3OR5(unsigned int begin, unsigned int end, vector <int>& minSeparatorCost, vector < vector <unsigned int> >& winners, int& matchedPositions, unordered_map <int, cCostPatternElementByTagSet>& tertiaryPEMAPositions, int phase)
 {
 	bool reassessParentCosts = false;
@@ -4024,7 +4339,7 @@ int cSource::eliminateLoserPatterns(unsigned int begin, unsigned int end)
 		unordered_map <int, cCostPatternElementByTagSet> tertiaryPEMAPositions;
 	vector <int> minSeparatorCost;
 	vector < vector <unsigned int> > winners; // each winner is a PMAOffset
-	minSeparatorCost.reserve(end - begin + 1);
+	minSeparatorCost.reserve(end - begin + 1); // reserve does not grow size; [I] is out-of-range
 	for (unsigned int I = 0; I < end - begin + 1 && I < m.size() - begin; I++)
 		minSeparatorCost[I] = m[begin + I].word->second.lowestSeparatorCost();
 	eliminateLoserPatternsPhase1(begin, end, minSeparatorCost, winners, tertiaryPEMAPositions);

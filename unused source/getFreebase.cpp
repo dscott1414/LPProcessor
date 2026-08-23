@@ -1,3 +1,29 @@
+/*
+	getFreebase.cpp - Freebase / DBpedia cache fetch, RDF reduce, description QA
+
+	Overview:
+		Historical ontology helpers: fetch Freebase Search JSON into
+		dbPediaCache, parse it with yajl, reduce a Freebase RDF dump to
+		name|key|id|properties rows and LOAD DATA into
+		freebaseProperties, plus a phrase-similarity compare of cached
+		web descriptions vs the DB.
+
+	Pipeline position:
+		Offline ontology acquisition (createOntology / get* family).
+		Freebase itself was shut down in 2016; this is archival.
+
+	Key entry points:
+		- getFreebasePath() - cached GET with bug/404/retry handling
+		- lookupInFreebaseSuggest() - search API -> lookupInFreebase
+		- reduceLocalFreebase() - RDF dump -> .out + MySQL LOAD DATA
+		- compareFreebaseWebToFreebaseDescriptionRDL() - cache vs DB QA
+
+	Notes / gotchas:
+		`void Source, ::reduceLocalFreebase` has a stray comma and will
+		not compile. Same `Source, ::` typo appears in relations.cpp.
+		SCAN_BUF_LEN is 200MB malloc unchecked. Hardcoded Google
+		Freebase v1 URLs are dead.
+*/
 #include <windows.h>
 #include <io.h>
 #include "word.h"
@@ -22,6 +48,9 @@ extern "C"
 #include "yajl_tree.h"
 }
 
+// Sanitize epath, getWebPath into dbPediaCache. Drop the cache file and
+// return -1 on Freebase "bug" / "could not be retrieved" pages; retry
+// once if the body looks like a service-unavailable page.
 int getFreebasePath(int where,wstring webAddress,wstring &buffer,wstring epath,bool forceWebReread)
 { LFS
 	//int timer=clock(); 	
@@ -65,6 +94,7 @@ int getFreebasePath(int where,wstring webAddress,wstring &buffer,wstring epath,b
             size_t len; /*< Number of elements. */
         } array;
 
+// Recursively printf a yajl tree (debug). Null node is not checked.
 void printJsonNode(int recursionLevel,yajl_val node)
 { LFS
 	switch (node->type)
@@ -102,6 +132,9 @@ void printJsonNode(int recursionLevel,yajl_val node)
 }
 
 // https://www.googleapis.com/freebase/v1/search?query=BND&spell=always&exact=false&prefixed=true
+// GET freebase/v1/search for freebaseObject; on the first result with a
+// name, free the tree and recurse into lookupInFreebase(name). Returns
+// -1 on fetch/parse failure, 0 if no result (isFound stays false).
 int Ontology::lookupInFreebaseSuggest(wstring freebaseObject,vector <cTreeCat *> &rdfTypes)
 { LFS
 	replace(freebaseObject.begin(),freebaseObject.end(),L'_',L' ');
@@ -222,6 +255,7 @@ ns:m.0hcr6  ns:type.object.type     ns:common.topic.
 
 // fields also appear to have duplicates with rdf:
 // ns:common.topic.article links description with main key
+// Lowercase, map _+ | to space, collapse runs of spaces. In-place.
 void regularize(string &lobject)
 { LFS
 	transform (lobject.begin(), lobject.end(), lobject.begin(), (int(*)(int)) tolower);
@@ -236,6 +270,10 @@ void regularize(string &lobject)
 }
 
 #define BUFFER_LEN 65536
+// Stream a Freebase RDF N-Triples file, keep type/name/description/key/
+// alias/wikipedia/profession triples, write name|key|id|props rows, then
+// DROP/CREATE freebaseProperties and LOAD DATA INFILE. The `Source, ::`
+// qualifier is a syntax error (stray comma).
 void Source, ::reduceLocalFreebase(wchar_t *path,wchar_t *filename)
 { LFS
 	char *fields[] = {
@@ -452,6 +490,7 @@ void Source, ::reduceLocalFreebase(wchar_t *path,wchar_t *filename)
 		return ;
 }
 
+// True if pattern occurs in buffer followed by space or '.'.
 bool wholeWord(char *buffer,char *pattern)
 { LFS
 	char *ch=strstr(buffer,pattern);
@@ -468,6 +507,7 @@ bool wholeWord(char *buffer,char *pattern)
  * The return value is a pointer to the beginning of the sub-string, or
  * NULL if the substring is not found.
  */
+// memmem: first occurrence of needle in haystack, or NULL. nlen==0 -> NULL.
 void *memstr(const char *haystack, size_t hlen, const char *needle, size_t nlen)
 { LFS
     int needle_first;
@@ -497,6 +537,9 @@ void *memstr(const char *haystack, size_t hlen, const char *needle, size_t nlen)
 // ns:common.document   ns:type.type.instance   ns:m.0hcrj.
 // ns:m.0hcrj  ns:common.document.text "Sgt. Pepper's Lonely Hearts Club Band (often shortened to Sgt. Pepper) is the eighth studio album by the English rock band The Beatles, released on 1"@en.
 #define SCAN_BUF_LEN 200000000
+// Scan filename in 200MB chunks for whole-word testItem; print matching
+// lines with a file offset. malloc(SCAN_BUF_LEN) is unchecked; a match
+// that spans a chunk boundary is missed.
 void scanStringInFile(wchar_t *filename,char *testItem)
 { LFS 
 	int fp=_wopen(filename,_O_RDONLY|O_BINARY,0);
@@ -538,10 +581,14 @@ void scanStringInFile(wchar_t *filename,char *testItem)
 	close(fp);
 }
 
+// Map isspace(c) to ' ', else c. Used as a transform predicate.
 int tospace(int c) {
   return (c>=0 && isspace(c)) ? ' ':c;
 }
 
+// From va[ai], find the best contiguous match in vb (+100/word, -50
+// skip). If the match covers >3 words, jump ai to the end; else add
+// half credit and ai++. vb[bbi+1] is read without a bounds check.
 void computePhraseSimilarity(vector <wstring> &va,vector <wstring> &vb,unsigned int &ai,unsigned int &similaritySum)
 { LFS
 	unsigned int maxSimilaritySum=0,maxAI=0;
@@ -585,6 +632,9 @@ void computePhraseSimilarity(vector <wstring> &va,vector <wstring> &vb,unsigned 
 //    is bw[3] or bw+1[2] or bw+2[1] the same (if so bw2)? search 20 words beyond (if so bw3)
 //    if not, is bw2[3] or bw2+1[2] or bw2+2[1] the same (if so bw2) search 20 words beyond (if so bw3)
 //    if (match for bw2 or bw3, 
+// Tokenize a and b via Words.readWord, then walk va with
+// computePhraseSimilarity. Returns similaritySum/min(|va|,|vb|)
+// (100 if a==b, 0 if either empty). Sets numWordsA/B.
 int computeSimilarity(string &a,int &numWordsA,string &b,int &numWordsB,sTrace &t)
 { LFS
 	// separate a and b into words and also regarding punctuation
@@ -626,6 +676,9 @@ int computeSimilarity(string &a,int &numWordsA,string &b,int &numWordsB,sTrace &
 	return similaritySum/min(va.size(),vb.size());
 }
 
+// Walk dbPediaCache\\a..z\\a..z\\*_FreeBaseTopic.json, extract
+// description, compare to Ontology::getFBDescription; print when
+// computeSimilarity < 20. getPath dest is wchar_t[65536] used as bytes.
 void Ontology::compareFreebaseWebToFreebaseDescriptionRDL()
 { LFS
 	WIN32_FIND_DATA FindFileData;

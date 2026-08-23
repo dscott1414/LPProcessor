@@ -1,3 +1,53 @@
+/*
+	questionProcessing.cpp - question parse patterns, in-narrative '?' detection, and
+		WH-type / information-source tagging on a finished syntactic-relation group.
+
+	Overview:
+		Two jobs live here. First, createQuestionPatterns() registers the _Q1 / _Q1PASSIVE
+		/ _Q2 / _MQ1 / __SQ family of cPattern entries that let the parser recognize
+		interrogatives (aux-fronting, WH-fronting, tag questions, displaced objects).
+		Those patterns are ordinary pattern-table entries; later stages treat a sentence
+		that matched _Q2 as a question via the _QUESTION flag. Second, cSource methods
+		walk a tokenized document looking for '?' so speaker resolution can invert
+		who-asks / who-answers, and then, once syntactic relations exist, locate the
+		WH-word and the named entities that should be looked up in DBpedia / Wikipedia
+		(the "question information source objects").
+
+	Pipeline position:
+		createQuestionPatterns() runs during stage 1 (initialize sentence patterns),
+		alongside definePatterns.cpp. setQuestion() / setSecondaryQuestion() run during
+		tokenization / quote analysis. getQuestionTypeAndQuestionInformationSourceObjects()
+		and transformQuestionRelation() run from syntacticRelations.cpp (correctSRIEntry)
+		after relations are assigned, before cQuestionAnswering consumes the SRG.
+
+	Key entry points:
+		- createQuestionPatterns() - register interrogative patterns (Quirk CGEL 3.54 / p.803)
+		- setQuestion() / setSecondaryQuestion() - mark '?' spans and capture the speaker
+		- questionAgreement() / correctBySpeakerInversionIfQuestion() - invert speaker
+		  hypotheses after a quoted question
+		- testQuestionType() / getQuestionTypeAndQuestionInformationSourceObjects() -
+		  fill srg.questionType, srg.whereQuestionType, srg.whereQuestionInformationSourceObjects
+		- transformQuestionRelation() - reverse 'is' subject/object; inject a synthetic 'in'
+		  for where/when questions so web queries become "X was born in"
+
+	Key data structures / globals:
+		- Pattern names _Q1 (aux-fronted VP), _Q1PASSIVE, _Q2 (full interrogative),
+		  _Q2PREP (pied-piped prep), _MQ1 (question plus hail / if-clause), __SQ (WH-subject)
+		- cQuestionAnswering::qtf flags written into srg.questionType
+
+	Dependencies:
+		cPattern::create (definePatterns.cpp), Words / form ids, speakerGroups and
+		unresolvedSpeakers from resolveSpeakers.cpp.
+
+	Notes / gotchas:
+		- Pattern costs (*N) and _BLOCK / _FINAL_IF_ALONE flags are load-bearing; loosening
+		  optional elements (especially __ALLOBJECTS_0) creates a second object on the verb
+		  and the match becomes too expensive to win.
+		- transformQuestionRelation() push_back()s a synthetic "in" onto questionSource->m,
+		  so it must not run while an iterator into m is live.
+		- setQuestion() / setSecondaryQuestion() dereference (imEOS+1) when the token is
+		  ':'; that is UB if the colon is the last token in m.
+*/
 #undef _STLP_USE_EXCEPTIONS // STLPORT 4.6.1
 #include <algorithm>
 #include <string>
@@ -33,6 +83,10 @@ void defineTimePatterns(void);
 void createMetaNameEquivalencePatterns(void);
 extern int logQuestionDetail;
 
+// Register the interrogative pattern table. Each cPattern::create call is one
+// numbered differentiator of _Q1 / _Q1PASSIVE / _Q2 / _MQ1 / __SQ / etc. The
+// comments on individual creates are the author's examples; do not treat a
+// missing comment as "this pattern is unused". Called once from initialization.
 void createQuestionPatterns(void)
 {
 	LFS
@@ -573,6 +627,11 @@ cPattern::create(L"_Q3{_FINAL_IF_ALONE}",L"1",
 		0);
 }
 
+// Scan forward from im (an EOS) for the real sentence terminator. If it is '?',
+// set currentIsQuestion and, when the sentence is inside primary quotes, record
+// the opening-quote position as questionSpeaker (the person who asked). '!' / '.'
+// / ':'+sectionWord clear questionSpeaker. Secondary-quote spans are skipped.
+// questionSpeakerLastSentence is the previous asker, used by speaker inversion.
 // after a question, a new paragraph, and a non-quote paragraph, 
 //   the next subject matching should be the opposite of the speaker of the question.
 //   AND the previous speaker of the question should be the opposite of the next subject.
@@ -587,10 +646,10 @@ void cSource::setQuestion(vector <cWordMatch>::iterator im, bool inQuote, int& q
 	for (imEOS = im, imEOS++; imEOS != m.end(); imEOS++)
 	{
 		// skip secondary quotes
-		if (imEOS->word->first == L"‘")
+		if (imEOS->word->first == L"ï¿½")
 		{
-			for (imEOS++; imEOS != m.end() && imEOS->word->first != L"’" && imEOS->word->first != L"”"; imEOS++);
-			if (imEOS == m.end() || imEOS->word->first == L"”")
+			for (imEOS++; imEOS != m.end() && imEOS->word->first != L"ï¿½" && imEOS->word->first != L"ï¿½"; imEOS++);
+			if (imEOS == m.end() || imEOS->word->first == L"ï¿½")
 			{
 				if (forwardInQuote)
 				{
@@ -604,7 +663,7 @@ void cSource::setQuestion(vector <cWordMatch>::iterator im, bool inQuote, int& q
 			imEOS++;
 		}
 		if (imEOS == m.end()) break;
-		if (imEOS->word->first == L"“" && !(imEOS->flags & cWordMatch::flagQuotedString))
+		if (imEOS->word->first == L"ï¿½" && !(imEOS->flags & cWordMatch::flagQuotedString))
 		{
 			openingQuote = (int)(imEOS - m.begin());
 			forwardInQuote = true;
@@ -612,6 +671,7 @@ void cSource::setQuestion(vector <cWordMatch>::iterator im, bool inQuote, int& q
 		// checking for the sectionWord makes it more likely ':' is not in the middle of a sentence.
 		// The purpose is to detect the end of a sentence, not an utterance, because this section only 
 		// starts on an EOS, which means if we stopped before the end of a sentence, we might miss a '?'.
+		// (imEOS+1) is UB if this token is the last in m.
 		if (imEOS->word->first == L"?" || (imEOS->word->first == L":" && (imEOS + 1)->word == Words.sectionWord) ||
 			imEOS->word->first == L"!" || (imEOS->word->first == L"." && !imEOS->PEMACount))
 		{
@@ -639,10 +699,13 @@ void cSource::setQuestion(vector <cWordMatch>::iterator im, bool inQuote, int& q
 	}
 }
 
+// Same scan as setQuestion but only inside a secondary-quote run (ends at ?).
+// On '?' every object-bearing token between im and the terminator is marked
+// flagInQuestion so later stages know the span is interrogative.
 void cSource::setSecondaryQuestion(vector <cWordMatch>::iterator im)
 {
 	LFS
-		for (vector <cWordMatch>::iterator imEOS = ++im; imEOS != m.end() && (imEOS->word->first != L"’"); imEOS++)
+		for (vector <cWordMatch>::iterator imEOS = ++im; imEOS != m.end() && (imEOS->word->first != L"ï¿½"); imEOS++)
 		{
 			// checking for the sectionWord makes it more likely ':' is not in the middle of a sentence.
 			// The purpose is to detect the end of a sentence, not an utterance, because this section only 
@@ -659,6 +722,12 @@ void cSource::setSecondaryQuestion(vector <cWordMatch>::iterator im)
 		}
 }
 
+// Returns true when the next-paragraph subject is compatible with objectMatches
+// as speaker (audience==false) or addressee (audience==true). agree ^ audience
+// flips the test so a matching subject is a conflict for the asker (the answerer
+// should speak next) and a non-matching subject is a conflict for the audience.
+// subjectDefinitelyResolved is set when that subject is a name, not a pronoun.
+// Returns false on conflict (caller then inverts speakers).
 // returns true if the question speaker is different than the subject of the next paragraph.
 bool cSource::questionAgreement(int where, int whereFirstSubjectInParagraph, int questionSpeakerLastParagraph, vector <cOM>& objectMatches, bool& subjectDefinitelyResolved, bool audience, const wchar_t* fromWhere)
 {
@@ -691,6 +760,14 @@ bool cSource::questionAgreement(int where, int whereFirstSubjectInParagraph, int
 	return true;
 }
 
+// After a quoted question, the next unquoted subject is usually the addressee
+// answering, not the asker. If no more-reliable speaker has been seen, compare
+// whereFirstSubjectInParagraph to subjectsInPreviousUnquotedSection and, when
+// (unresolvedSpeakers.size() is odd) XOR questionAgrees, replace that section's
+// subjects with the complement of the current speaker group. Plural leftovers
+// are treated as a possible rhetorical question and the inversion is cancelled.
+// speakerGroups[sgAt] is used without a bounds check if every group ends before
+// whereSubjectsInPreviousUnquotedSection.
 // if a question is rhetorical, this inversion should be cancelled (future - how to tell whether a question is rhetorical)
 void cSource::correctBySpeakerInversionIfQuestion(int where, int whereFirstSubjectInParagraph)
 {
@@ -759,6 +836,13 @@ void cSource::correctBySpeakerInversionIfQuestion(int where, int whereFirstSubje
 	}
 }
 
+// If position 'where' is a named / demonym / business entity, insert it into
+// whereQuestionInformationSourceObjects (the DBpedia/Wikipedia lookup keys).
+// Recurses into the adjective span of the object with QTAFlag set so "whose book"
+// records the adjective role. If whereQuestionType is still unset and this token
+// is a relativizer or interrogative determiner, records it as the WH-word and
+// ORs setType into whereQuestionTypeFlags. Returns true only when the WH-word
+// is claimed here.
 bool cSource::testQuestionType(int where, int& whereQuestionType, int& whereQuestionTypeFlags, int setType, set <int>& whereQuestionInformationSourceObjects)
 {
 	LFS
@@ -808,6 +892,8 @@ bool cSource::testQuestionType(int where, int& whereQuestionType, int& whereQues
 	return false;
 }
 
+// Walk the PEMA chain at token 'where' and return the smallest pema[].begin
+// (a signed offset relative to 'where'). 0 if the position has no PEMA.
 int cSource::getMinPosition(int where)
 {
 	LFS
@@ -823,6 +909,9 @@ int cSource::getMinPosition(int where)
 	return mp;
 }
 
+// Step backward from 'where' by repeatedly adding getMinPosition() until the
+// walk no longer moves, or until a _REL1 / _Q2 pattern is found (then skip an
+// optional __INTRO_S1). Used to find the WH-word that sits in front of the verb.
 int cSource::maxBackwards(int where)
 {
 	LFS
@@ -842,6 +931,12 @@ int cSource::maxBackwards(int where)
 	return w;
 }
 
+// Probe the verb's prep-object chain, object, secondary object, controlling
+// entity, subject, and the tokens immediately before the verb for a WH-word
+// (testQuestionType) and for named entities to look up. Then map the WH-word
+// string (which/where/what/...) onto cQuestionAnswering::qtf and add the role
+// flags. who is stored as whomQTFlag. questionType stays unknownQTFlag if no
+// WH-word was found. prepLoop > 30 is treated as a cyclic relPrep chain.
 // whereQuestionType flag 
 //   referencingObject, subject, object, secondary object, prep object, etc
 //   OR an adjective OF same
@@ -900,6 +995,13 @@ void cSource::getQuestionTypeAndQuestionInformationSourceObjects(int whereVerb, 
 	}
 }
 
+// Called from correctSRIEntry once the SRG is known to sit in a question.
+// (1) For "what is X" (verb is 'is' and the subject is the WH-word), swap
+// subject and object so the named entity becomes the subject. (2) Fill
+// questionType / whereQuestionType / information-source objects. (3) For where
+// or when questions whose WH-word is the object, append a synthetic "in" to m
+// and rewire relPrep so web queries become "X was born in" / "X grew up in".
+// The extra token invalidates any live iterator into m.
 // this is called by correctSRIEntry
 void cSource::transformQuestionRelation(cSyntacticRelationGroup& srg)
 {

@@ -1,3 +1,20 @@
+"""SpeakerGroup.py - One speaker-group span deserialized from an LP dump.
+
+Overview:
+    Mirrors C++ cSpeakerGroup: begin/end/section, speaker id arrays
+    (singular/grouped/pov/dn/observers), replacedSpeakers (COM pairs),
+    recursively nested embeddedSpeakerGroups, and per-position Group
+    object sets. Two flag bits: speakersAreNeverGroupedTogether,
+    tlTransition.
+
+Pipeline position:
+    Loaded with Source after resolveSpeakers. Used to colour quotes
+    and list who is present.
+
+Key entry points:
+    - Group - {where, objects[]} nested type
+    - __init__(rs) - recursive deserialize
+"""
 from COM import COM
 
 class SpeakerGroup:
@@ -5,6 +22,8 @@ class SpeakerGroup:
         where = 0
         objects = {}
 
+    # Read scalars, speaker arrays, replacedSpeakers, nested
+    # embeddedSpeakerGroups, groups[I], then two flag bits.
     def __init__(self, rs):
         self.begin = rs.read_integer()
         self.end = rs.read_integer()

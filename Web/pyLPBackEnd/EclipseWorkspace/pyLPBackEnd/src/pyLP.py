@@ -1,3 +1,32 @@
+"""pyLP.py - Flask API that serves deserialized LP parse caches to LPWeb.
+
+Overview:
+    Connects to MySQL lp.sources, loads wordFormCache + per-source
+    .wordCacheFile / .SourceCache via LPIO, and exposes search, load,
+    paging, info-panel, timeline, and matching-object endpoints. Session
+    state (preferences, Source, Words) lives in a process-global
+    `sessions` dict keyed by a hardcoded uid=1.
+
+Pipeline position:
+    Web backend after the C++ parser has written cache files. Not on
+    the parse path itself.
+
+Key entry points:
+    - connect / login / search_source / search_author / get_path
+    - load_source / load_elements / load_chapters / load_agents
+    - load_info_panel / load_word_info / load_timeline_segments
+    - get_matching_objects / get_surrounding_objects
+    - get_mode_switch / set_mode_switch (SSE)
+
+Dependencies:
+    MySQL localhost root/byron0; hardcoded F:\\lp\\wordFormCache and
+    M:\\caches\\<path>.{wordCacheFile,SourceCache}.
+
+Notes / gotchas:
+    Hardcoded DB password and flask secret_key. SQL is concatenated
+    LIKE '%'+user+'%' with no escaping. login always sets uid=1
+    (comment says change to uuid for multi-user). CORS is wide open.
+"""
 '''
 Created on May 29, 2022
 
@@ -23,16 +52,22 @@ app.secret_key = "kjhasd@#$#@"
 global sessions
 sessions = {}
 
+# Per-browser session: display preferences, mode SSE state, and (after
+# load_source) Words / source. Class-level defaults are shared until
+# an instance is created and mutated.
 class LPSession:
     preferences = { 0: False, 1: False, 2: False, 3: False, 4: False, 5: False }
     modes = {}
 
 
 @app.route('/')
+# GET / — liveness HTML. No session.
 def hello():
     return '<h1>Hello, World!</h1>'
 
 
+# Open a new pymysql connection to lp@localhost as root/byron0.
+# Caller must close. DictCursor so rows are dicts.
 def connect():
     return pymysql.connect(host='localhost',
                                  port=3306,
@@ -43,6 +78,8 @@ def connect():
 
 
 @app.route('/api/login', methods=["GET"])
+# GET /api/login — stamp flask session uid=1 and allocate an LPSession.
+# Not actually multi-user (uid is hardcoded).
 def login():
     session['uid'] = 1  # change to uuid.uuid4() when multi user! 
     sessions[session['uid']] = LPSession()
@@ -51,6 +88,8 @@ def login():
 
     
 @app.route('/api/searchSource', methods=["GET"])
+# GET /api/searchSource?author=&title= — LIKE-search sources, max 10.
+# Interpolates author/title into SQL unescaped.
 def search_source():
     author = request.args.get('author')
     if author is not None and author == "":
@@ -84,6 +123,7 @@ def search_source():
 
     
 @app.route('/api/searchAuthor', methods=["GET"])
+# GET /api/searchAuthor — DISTINCT author LIKE search, same injection risk.
 def search_author():
     author = request.args.get('author')
     if author is not None and author == "":
@@ -116,6 +156,7 @@ def search_author():
         return { 'response': return_result }
 
     
+# Resolve the first sources.path matching author/title LIKE, or "".
 def get_path(author, title):
     if author is not None and author == "":
         author = None;
@@ -146,6 +187,7 @@ def get_path(author, title):
 
 
 @app.route('/api/setPreference', methods=["POST"])
+# POST /api/setPreference — store preferences[type]=value on the session.
 def set_preference():
     global sessions
     # print(sessions[session['uid']].preferences)
@@ -159,6 +201,9 @@ def set_preference():
 
     
 @app.route('/api/loadSource', methods=["GET"])
+# GET /api/loadSource?author=&title= — load wordFormCache, the source's
+# wordCacheFile and SourceCache, then initialize_source_elements +
+# generate_per_element_state. Returns empty response; data is in session.
 def load_source():
     global sessions
     t_gstart = perf_counter()
@@ -215,6 +260,9 @@ def load_source():
 
 
 @app.route('/api/loadElements', methods=["GET"])
+# GET /api/loadElements?width=&height=&fromWhere=src.el — page of HTML
+# elements from print_html, optionally finishing the current source index
+# first. fromWhere is "sourceIndex.elementIndex".
 def load_elements():
     global sessions
     width = request.args.get('width')
@@ -244,6 +292,7 @@ def load_elements():
 
 
 @app.route('/api/loadChapters', methods=["GET"])
+# GET /api/loadChapters — source.chapters or {}.
 def load_chapters():
     global sessions
     if 'uid' in session and session['uid'] in sessions:
@@ -254,6 +303,7 @@ def load_chapters():
 
 
 @app.route('/api/loadAgents', methods=["GET"])
+# GET /api/loadAgents — master_speaker_html for each masterSpeakerList slot.
 def load_agents():
     global sessions
     if 'uid' in session and session['uid'] in sessions:
@@ -269,6 +319,7 @@ def load_agents():
 
 
 @app.route('/api/loadInfoPanel', methods=["GET"])
+# GET /api/loadInfoPanel?where= — word/role/relations/tooltip for a token.
 def load_info_panel():
     global sessions
     where = request.args.get('where')
@@ -280,6 +331,7 @@ def load_info_panel():
     return { 'response': {} }
 
 @app.route('/api/wordInfo', methods=["GET"])
+# GET /api/wordInfo — paged get_word_info(beginId, endId, page, size).
 def load_word_info():
     global sessions
     beginId = request.args.get('beginId')
@@ -294,6 +346,7 @@ def load_word_info():
     return { 'response': {} }
 
 @app.route('/api/timelineSegments', methods=["GET"])
+# GET /api/timelineSegments — paged timeline segments.
 def load_timeline_segments():
     global sessions
     pageNumber = request.args.get('pageNumber')
@@ -306,6 +359,7 @@ def load_timeline_segments():
     return { 'response': {} }
 
 @app.route('/api/HTMLElementIdToSource', methods=["GET"])
+# GET /api/HTMLElementIdToSource?elementId= — map HTML id to source index.
 def html_element_id_to_source():
     global sessions
     elementId = request.args.get('elementId')
@@ -316,6 +370,9 @@ def html_element_id_to_source():
         print("Source is not loaded!")
     return { 'response': -1 }
 
+# Offline load-loop for profiling: 100x Source("adv") + initialize.
+# generate_per_element_state is called with extra args the method
+# does not take (will TypeError if run).
 def test():
     sourcePath = get_path("", "adv")
     if sourcePath == "":
@@ -340,6 +397,7 @@ def test():
         # source.states = source.generate_per_element_state()
 
 @app.route('/api/searchStringList', methods=["GET"])
+# GET /api/searchStringList — get_instances_of_word(sourceSearchString).
 def search_string_list():
     global sessions
     sourceSearchString = request.args.get('sourceSearchString')
@@ -352,6 +410,7 @@ def search_string_list():
     return { 'response': [] }
     
 @app.route('/api/findParagraphStart', methods=["GET"])
+# GET /api/findParagraphStart — source index of the paragraph start.
 def find_paragraph_start():
     global sessions
     somewhereInParagraph = request.args.get('somewhereInParagraph')
@@ -364,6 +423,7 @@ def find_paragraph_start():
     return { 'response': "" }
     
 @app.route('/api/getElementType', methods=["GET"])
+# GET /api/getElementType — SourceMapType name for an HTML element id.
 def get_element_type():
     global sessions
     elementId = request.args.get('elementId')
@@ -377,10 +437,13 @@ def get_element_type():
     
 @app.route('/stream-get-mode-switch', methods=["GET"])
 @cross_origin(origins=['http://127.0.0.1:4200'])
+# SSE: poll sessions[suid].modes[mode] every second and yield when it
+# changes. CORS locked to http://127.0.0.1:4200.
 def get_mode_switch():
     global sessions
     mode = request.args.get('mode')
     suid = int(request.args.get('suid'))
+    # Infinite generator; sleeps 1s between polls.
     def event_stream():
         last_mode_info = None
         while True:
@@ -393,6 +456,7 @@ def get_mode_switch():
     return Response(event_stream(), mimetype='text/event-stream')
     
 @app.route('/set-mode-switch', methods=["GET"])
+# GET /set-mode-switch — write modes[mode]=mode_info for suid.
 def set_mode_switch():
     global sessions
     mode = request.args.get('mode')
@@ -406,6 +470,7 @@ def set_mode_switch():
     return { 'response': "" }
     
 @app.route('/api/getMatchingObjects', methods=["GET"])
+# GET /api/getMatchingObjects — objects matching an HTML element's type.
 def get_matching_objects():
     global sessions
     elementId = request.args.get('elementId')
@@ -433,6 +498,7 @@ def save_matching_objects():
     return { 'response': "" }
     
 @app.route('/api/getSurroundingObjects', methods=["GET"])
+# GET /api/getSurroundingObjects — nearby objects of matchingType.
 def get_surrounding_objects():
     global sessions
     elementId = request.args.get('elementId')

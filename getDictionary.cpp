@@ -1,3 +1,34 @@
+/*
+	getDictionary.cpp - HTML/JSON dictionary scrape, form discovery, and path/cache helpers
+
+	Overview:
+		Runtime lexicon fill-in: given an unknown word, look up POS/inflections via
+		Merriam-Webster Collegiate JSON (yajl), dictionary.com HTML, WordNet, and
+		Wiktionary extracts. Also owns the shared HTML-slice helpers (takeLastMatch,
+		firstMatch, nextMatch, eliminateHTMLCharacterEntities) used by Wikipedia and
+		thesaurus scrapers, plus distributeToSubDirectories / getPath for cache files.
+
+	Pipeline position:
+		Called from cWord::getForms when a token is not already in the word table
+		(initialization and during tokenize of new sources).
+
+	Key entry points:
+		- cWord::getForms / checkAdd / splitWord / illegalWord
+		- getMerriamWebsterDictionaryAPIForms / existsInDictionaryDotCom / getWNForms
+		- getInflection / discoverInflections / identifyFormClass
+		- takeLastMatch / firstMatch / nextMatch / firstMatchNonEmbedded
+		- distributeToSubDirectories / getPath / eliminateHTMLCharacterEntities
+
+	Dependencies:
+		dictionaryapi.com (hardcoded key); dictionary.com; WordNet; yajl; cache
+		dirs Webster / webSearchCache; MySQL for illegal-word checks.
+
+	Notes / gotchas:
+		Merriam-Webster API key is embedded in the URL. sWord is concatenated into
+		the URL with no encoding. firstMatch(wchar_t*/char*) NUL-terminates the
+		endString in the caller's buffer. getPath return polarity is inverted at
+		several call sites (0 = success).
+*/
 #include <errno.h>
 #include <windows.h>
 #include "WinInet.h"
@@ -26,6 +57,7 @@ extern "C" {
 
 int bandwidthControl = 1; // minimum seconds between requests   // initialized before threads
 
+// Collapses runs of whitespace in buffer to a single character (keeps the first of each run).
 void removeRedundantSpace(wstring& buffer)
 {
 	LFS
@@ -36,6 +68,8 @@ void removeRedundantSpace(wstring& buffer)
 	buffer = tmpstr;
 }
 
+// Inserts X\\Y\\ after pathlen using the first two filename chars ('.' ? '!'), optionally
+// mkdir. Returns early (path already rewritten) if a mkdir fails for a reason other than EEXIST.
 void distributeToSubDirectories(wchar_t* fullPath, int pathlen, bool createDirs)
 {
 	LFS
@@ -68,6 +102,8 @@ void distributeToSubDirectories(wchar_t* fullPath, int pathlen, bool createDirs)
 	}
 }
 
+// Finds the last beginString?endString pair, copies it into match, and erases it from buffer.
+// Returns the start index, or TAKE_LAST_MATCH_BEGIN/END_NOT_FOUND.
 int takeLastMatch(wstring& buffer, wstring beginString, wstring endString, wstring& match, bool include_begin_and_end)
 {
 	LFS
@@ -98,6 +134,8 @@ int takeLastMatch(wstring& buffer, wstring beginString, wstring endString, wstri
 	return beginPos;
 }
 
+// First beginString?endString at/after beginPos; copies into match and erases. Returns the
+// start, or npos (also written to beginPos).
 size_t firstMatch(wstring& buffer, wstring beginString, wstring endString, size_t& beginPos, wstring& match, bool include_begin_and_end)
 {
 	LFS
@@ -114,6 +152,7 @@ size_t firstMatch(wstring& buffer, wstring beginString, wstring endString, size_
 	return beginPos = wstring::npos;
 }
 
+// Narrow-string firstMatch.
 size_t firstMatch(string& buffer, string beginString, string endString, size_t& beginPos, string& match, bool include_begin_and_end)
 {
 	LFS
@@ -130,6 +169,7 @@ size_t firstMatch(string& buffer, string beginString, string endString, size_t& 
 	return beginPos = string::npos;
 }
 
+// In-place: NUL-terminates at endString and returns a pointer to the interior. Mutates buffer.
 wchar_t* firstMatch(wchar_t* buffer, const wchar_t* beginString, const wchar_t* endString)
 {
 	LFS
@@ -147,6 +187,7 @@ wchar_t* firstMatch(wchar_t* buffer, const wchar_t* beginString, const wchar_t* 
 	return NULL;
 }
 
+// Narrow in-place firstMatch (NUL-terminates the caller buffer at endString).
 char* firstMatch(char* buffer, const char* beginString, const char* endString)
 {
 	LFS
@@ -164,6 +205,8 @@ char* firstMatch(char* buffer, const char* beginString, const char* endString)
 	return NULL;
 }
 
+// Like firstMatch but skips an endString that has another beginString before it (one nest level).
+// Returns the start, or -1 (and beginPos = -1).
 // if there is an embedded beginString/endString within the beginString/endString, only take the larger one.
 int firstMatchNonEmbedded(wstring& buffer, wstring beginString, wstring endString, size_t& beginPos, wstring& match, bool include_begin_and_end)
 {
@@ -187,6 +230,8 @@ int firstMatchNonEmbedded(wstring& buffer, wstring beginString, wstring endStrin
 	return beginPos = -1;
 }
 
+// Non-destructive firstMatch: copies the span into match and advances beginPos past endString.
+// Returns 0, NEXT_MATCH_BEGIN_NOT_FOUND, or NEXT_MATCH_END_NOT_FOUND.
 int nextMatch(wstring& buffer, wstring beginString, wstring endString, size_t& beginPos, wstring& match, bool include_begin_and_end)
 {
 	LFS
@@ -278,42 +323,44 @@ yuml            &yuml;      Small y, dieresis or umlaut mark
 
 SYMBOLS
 &nbsp;      non-breaking space
-¡               &iexcl;     inverted exclamation mark
-¤               &curren;    currency
-¢               &cent;      cent
-£               &pound;     pound
-¥               &yen;       yen
-¦               &brvbar;    broken vertical bar
-§               &sect;      section
-¨               &uml;       spacing diaeresis
-©               &copy;      copyright
-ª               &ordf;      feminine ordinal indicator
-«               &laquo;     angle quotation mark (left)
-¬               &not;       negation
-­               &shy;       soft hyphen
-®               &reg;       registered trademark
-™               &trade;     trademark
-¯               &macr;      spacing macron
-°               &deg;       degree
-±               &plusmn;    plus-or-minus
-²               &sup2;      superscript 2
-³               &sup3;      superscript 3
-´               &acute;     spacing acute
-µ               &micro;     micro
-¶               &para;      paragraph
-·               &middot;    middle dot
-¸               &cedil;     spacing cedilla
-¹               &sup1;      superscript 1
-º               &ordm;      masculine ordinal indicator
-»               &raquo;     angle quotation mark (right)
-¼               &frac14;    fraction 1/4
-½               &frac12;    fraction 1/2
-¾               &frac34;    fraction 3/4
-¿               &iquest;    inverted question mark
-×               &times;     multiplication
-÷               &divide;    division
+ï¿½               &iexcl;     inverted exclamation mark
+ï¿½               &curren;    currency
+ï¿½               &cent;      cent
+ï¿½               &pound;     pound
+ï¿½               &yen;       yen
+ï¿½               &brvbar;    broken vertical bar
+ï¿½               &sect;      section
+ï¿½               &uml;       spacing diaeresis
+ï¿½               &copy;      copyright
+ï¿½               &ordf;      feminine ordinal indicator
+ï¿½               &laquo;     angle quotation mark (left)
+ï¿½               &not;       negation
+ï¿½               &shy;       soft hyphen
+ï¿½               &reg;       registered trademark
+ï¿½               &trade;     trademark
+ï¿½               &macr;      spacing macron
+ï¿½               &deg;       degree
+ï¿½               &plusmn;    plus-or-minus
+ï¿½               &sup2;      superscript 2
+ï¿½               &sup3;      superscript 3
+ï¿½               &acute;     spacing acute
+ï¿½               &micro;     micro
+ï¿½               &para;      paragraph
+ï¿½               &middot;    middle dot
+ï¿½               &cedil;     spacing cedilla
+ï¿½               &sup1;      superscript 1
+ï¿½               &ordm;      masculine ordinal indicator
+ï¿½               &raquo;     angle quotation mark (right)
+ï¿½               &frac14;    fraction 1/4
+ï¿½               &frac12;    fraction 1/2
+ï¿½               &frac34;    fraction 3/4
+ï¿½               &iquest;    inverted question mark
+ï¿½               &times;     multiplication
+ï¿½               &divide;    division
 
 */
+// Replaces &Name; with the first letter of Name, drops &#NNN; and &sym; entirely.
+// Reads buffer[pos+1] without a length check after find('&').
 void eliminateHTMLCharacterEntities(wstring& buffer)
 {
 	LFS
@@ -364,15 +411,18 @@ void eliminateHTMLCharacterEntities(wstring& buffer)
 	}
 }
 
+// Erases middots (ï¿½) then eliminateHTMLCharacterEntities.
 void removeDots(wstring& str)
 {
 	LFS
 		int dot;
-	while ((dot = str.find('·')) >= 0)
+	while ((dot = str.find('ï¿½')) >= 0)
 		str.erase(dot, 1);
 	eliminateHTMLCharacterEntities(str);
 }
 
+// Fills allInflections with MW-style inflection strings for sWord given form/mainEntry/iform
+// (handles -ed/-ing/-s and irregular tables). Returns the count generated.
 /* examples
 -ed/-ing/-s
 */
@@ -475,18 +525,18 @@ Inflected Form: plural courts-martial also court-martials . . .
 Nouns that are plural in form and that are regularly used in plural construction are labeled noun
 plural (without a comma):
 
-Main Entry: en·vi·rons
+Main Entry: enï¿½viï¿½rons
 Function: noun plural . . .
 
 If the plural form is not always construed as a plural, the compactLabel continues with an applicable qualification:
 
-Main Entry: ge·net·ics . . .
+Main Entry: geï¿½netï¿½ics . . .
 Function: noun plural but singular in construction . . .
 
-Main Entry: pol·i·tics . . .
+Main Entry: polï¿½iï¿½tics . . .
 Function: noun plural but singular or plural in construction
 
-Main Entry: math·e·mat·ics . . .
+Main Entry: mathï¿½eï¿½matï¿½ics . . .
 Function: noun plural but usually singular in construction
 
 The phrase singular in construction indicates that the entry word takes a singular verb.
@@ -508,7 +558,7 @@ to the singular form:
 Main Entry: mice . . .
 plural of MOUSE
 
-Main Entry: geni·i . . .
+Main Entry: geniï¿½i . . .
 plural of GENIUS
 
 Such an entry does not specify whether it is the only plural; it simply tells where to look for relevant
@@ -652,6 +702,7 @@ const wchar_t* alternates[] = {
 	L"<i>also",L"<i>or",L"<i>chiefly in",
 };
 
+// True if sWord and sWord2 match ignoring case, spaces, and dashes.
 bool equivalentIfIgnoreDashSpaceCase(wstring sWord, wstring sWord2)
 {
 	LFS
@@ -674,6 +725,8 @@ bool equivalentIfIgnoreDashSpaceCase(wstring sWord, wstring sWord2)
 	return false;
 }
 
+// Adds sWord as form/inflection if missing. Returns 0 if added or already present, -1 if
+// sForm is unknown. Trailing spaces on sWord/definitionEntry are stripped (MW artifact).
 int cWord::checkAdd(const wchar_t* fromWhere, tIWMM& iWord, wstring sWord, int flags, wstring sForm, int inflection, int derivationRules, wstring definitionEntry, int sourceId, bool log)
 {
 	LFS
@@ -736,6 +789,8 @@ int cWord::checkAdd(const wchar_t* fromWhere, tIWMM& iWord, wstring sWord, int f
 	return 0;
 }
 
+// Reads pathname via CreateFile/ReadFile into buffer (maxlen bytes). Returns 0 on success
+// (actualLen set), non-zero on open/read failure. Callers often treat 0 as "cache hit".
 // this was changed from standard read
 // because Microsoft version of _read had a bug in it
 int getPath(const wchar_t* pathname, void* buffer, int maxlen, int& actualLen)
@@ -787,6 +842,8 @@ int getPath(const wchar_t* pathname, void* buffer, int maxlen, int& actualLen)
 	return 0;
 }
 
+// If sWord is a dashed/spaced compound, tries to add each piece. Returns 0 if any piece
+// was added as a known form; non-zero otherwise.
 int cWord::splitWord(MYSQL* mysql, tIWMM& iWord, wstring sWord, int sourceId, bool log)
 {
 	LFS
@@ -841,6 +898,7 @@ int cWord::splitWord(MYSQL* mysql, tIWMM& iWord, wstring sWord, int sourceId, bo
 	return -1;
 }
 
+// Case-insensitive wcscmp wrapper used to sort MW POS strings.
 bool loosesort(const wchar_t* s1, const wchar_t* s2)
 {
 	LFS
@@ -850,6 +908,8 @@ bool loosesort(const wchar_t* s1, const wchar_t* s2)
 	return wcsncmp(s1 + 1, s2, wcslen(s2)) < 0;
 }
 
+// Walks one MW Collegiate JSON entry for fl/ins/cxs. Writes inflection (1=plural) and
+// referWord (cross-ref). Returns the fl POS string, or empty if this doc is not originalWord.
 string lookForPOS(string originalWord, yajl_val node, bool logEverything, int& inflection, string& referWord)
 {
 	inflection = 0;
@@ -1025,6 +1085,7 @@ vector<wstring> ignoreBefore = { L"pronunciation spelling" };
 vector<wstring> classes = { L"adjective",L"adverb",L"verb",L"noun",L"interjection",L"abbreviation",L"symbol",L"preposition",L"conjunction",L"trademark",L"pronoun",L"honorific" };
 vector<wstring> ignoreAfter = { L"prefix",L"suffix",L"phrase",L"saying",L"quotation",L"pronunciation spelling",L"script annotation",L"combining form",L"contraction",L"indefinite article",L"definite article" }; // must be processed after classes
 
+// Maps a MW fl string (noun/verb/adjective/?) onto form indexes in posSet; sets plural for nouns.
 void identifyFormClass(set<int>& posSet, wstring pos, bool& plural)
 {
 	//investigate sidgwick should never have reached splitWord!
@@ -1068,6 +1129,7 @@ void identifyFormClass(set<int>& posSet, wstring pos, bool& plural)
 }
 
 // returns false if not found by the site (or error)
+// True if dictionary.com has a definition page for word (cached). Sets networkAccessed if fetched.
 bool existsInDictionaryDotCom(MYSQL* mysql, wstring word, bool& networkAccessed)
 {
 	if (word.length() <= 2 || word.length() > 31)
@@ -1114,6 +1176,7 @@ bool existsInDictionaryDotCom(MYSQL* mysql, wstring word, bool& networkAccessed)
 	return true;
 }
 
+// True if word contains a codepoint outside the Latin/common punctuation range LP can inflect.
 bool detectNonEuropeanWord(wstring word)
 {
 	char temptransbuf[1024];
@@ -1138,6 +1201,8 @@ bool detectNonEuropeanWord(wstring word)
 	//return true;
 }
 
+// GET dictionaryapi.com Collegiate JSON for sWord (hardcoded key, no URL-encoding) and
+// fill posSet/plural. Follows referWord recursively. Returns posSet.size() > 0.
 bool getMerriamWebsterDictionaryAPIForms(wstring sWord, set <int>& posSet, bool& plural, bool& networkAccessed, bool logEverything)
 {
 	wstring pageURL = L"https://www.dictionaryapi.com/api/v3/references/collegiate/json/";
@@ -1187,6 +1252,7 @@ bool getMerriamWebsterDictionaryAPIForms(wstring sWord, set <int>& posSet, bool&
 }
 
 // pass back these inflections:
+// ORs SINGULAR/PLURAL/VERB_* bits from posSet and a crude -ing/-ed/-s suffix guess.
 int discoverInflections(set <int> posSet, bool plural, wstring word)
 {
 	int inflections = 0;
@@ -1247,10 +1313,11 @@ int discoverInflections(set <int> posSet, bool plural, wstring word)
 	return 0;
 }
 
+// True if sWord should not be added (too long, disqualified punctuation, or DB-blocked).
 bool cWord::illegalWord(MYSQL* mysql, wstring sWord)
 {
 	// non English word?
-	if (detectNonEuropeanWord(sWord) || sWord.find_first_of(L"ãâäáàæçêéèêëîíïñôóòöõôûüùú") != wstring::npos)
+	if (detectNonEuropeanWord(sWord) || sWord.find_first_of(L"ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½") != wstring::npos)
 		return true;
 	// embedded quote?
 	size_t whereQuote = sWord.find('\'');
@@ -1265,6 +1332,8 @@ bool cWord::illegalWord(MYSQL* mysql, wstring sWord)
 
 // this routine should look up words from wiktionary or some other dictionary
 // this returns >0 if word is found or WORD_NOT_FOUND if word lookup fails.
+// Discovers forms for an unknown sWord (MW API, dictionary.com, WordNet). Adds them via
+// checkAdd. Returns 0 if any form was added, negative if the word is illegal/empty.
 int cWord::getForms(MYSQL* mysql, tIWMM& iWord, wstring sWord, int sourceId, bool logEverything)
 {
 	LFS
@@ -1313,6 +1382,7 @@ const wchar_t* getLastErrorMessage(wstring& out)
 
 #ifdef CHECK_WORD_CACHE
 
+// Debug compare of a word after getForms (Words2 snapshot). Returns ret unchanged.
 int cWord::checkWord(cWord& Words2, tIWMM originalIWord, tIWMM newWord, int ret)
 {
 	LFS
@@ -1339,6 +1409,7 @@ wchar_t* unknowns[] = { L"countermarches",NULL,
  "ageist",
 NULL };
 
+// True if str ends with endMatch.
 bool endStringMatch(const wchar_t* str, wchar_t* endMatch)
 {
 	LFS
@@ -1347,6 +1418,7 @@ bool endStringMatch(const wchar_t* str, wchar_t* endMatch)
 
 #include "wn.h"
 
+// Appends WordNet POS form indexes present for w. Returns true if any were found.
 bool getWNForms(wstring w, vector <int>& WNForms)
 {
 	LFS
@@ -1366,6 +1438,7 @@ bool getWNForms(wstring w, vector <int>& WNForms)
 // English	zymosterol	Noun	# {{biochemistry}} A [[cholesterol]] [[intermediate]].
 // create table wiktionaryNouns  ( noun char(56) COLLATE utf8mb4_bin NOT NULL,definition TEXT(1024) COLLATE utf8mb4_bin NOT NULL ) ENGINE=MyISAM AUTO_INCREMENT=798922 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
 // LOAD DATA INFILE MAINDIR+'\\Linguistics information\\TEMP-E20120211.nounsOnly.tsv' INTO TABLE wiktionaryNouns FIELDS TERMINATED BY ',' ENCLOSED BY '"' LINES TERMINATED BY '\n';
+// Offline Wiktionary dump walk (filename) to harvest POS/inflections into Words.
 void extractFromWiktionary(wchar_t* filename)
 {
 	LFS

@@ -1,3 +1,31 @@
+/*
+	getWordNetMaps.cpp - Binary cache I/O for per-source WordNet synonym/antonym/gender maps
+
+	Overview:
+		Serializes and restores cSource's WordNet-derived maps (noun/adjective synonyms
+		and antonyms, gender flags, and physicalObjectByWN bits) to a sibling
+		"<path>.WNCache" file so later parses of the same source skip WordNet walks.
+
+	Pipeline position:
+		Called after WordNet maps have been built for a source, and again on reload
+		before objects/pronouns use those maps for matching.
+
+	Key entry points:
+		- writeWNMap / readWNMap - word -> vector<word> maps
+		- writeGWNMap / readGWNMap - word -> int flag maps
+		- writeWNMaps / readWNMaps - full cache file (four WN maps + two gender maps +
+		  physical-object flags, terminated by an empty word)
+		- clearWNMaps - empties the six in-memory maps
+
+	Dependencies:
+		Words lexicon (query by string); tmalloc/tfree; POSIX-style _wopen/write.
+
+	Notes / gotchas:
+		writeWNMaps allocates a 10MB stack buffer (MAX_BUF). Early false returns after
+		_wopen leak the fd. readWNMaps tmallocs the whole file then returns without
+		tfree on any read* failure. Words not already in the lexicon are dropped on
+		read, so the cache is only useful after the word table is loaded.
+*/
 #include <windows.h>
 #include "Winhttp.h"
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
@@ -19,6 +47,8 @@
 //   common number of 2, which will give it an advantage over any other object merely matching to 'man'.
 //   If the primary nouns and adjectives are kept track of, then any match associated with them can be counted
 //   accurately.
+// Appends sourceWordMap (count, then each key string + vector of related words) into buffer,
+// flushing to fd when within 4096 of limit. Returns false if copy/write fails.
 bool cSource::writeWNMap(map <tIWMM, vector <tIWMM>, cSourceWordInfo::cRMap::wordMapCompare >& sourceWordMap, void* buffer, int& where, int fd, int limit)
 {
 	LFS
@@ -41,6 +71,8 @@ bool cSource::writeWNMap(map <tIWMM, vector <tIWMM>, cSourceWordInfo::cRMap::wor
 	return true;
 }
 
+// Reads one word->vector<word> map from buffer at 'where'. Words missing from Words are
+// skipped. Returns -1 on copy failure or if where walked past bufferlen; 0 on success.
 int cSource::readWNMap(map <tIWMM, vector <tIWMM>, cSourceWordInfo::cRMap::wordMapCompare >& sourceWordMap, void* buffer, int& where, int bufferlen)
 {
 	LFS
@@ -73,6 +105,7 @@ int cSource::readWNMap(map <tIWMM, vector <tIWMM>, cSourceWordInfo::cRMap::wordM
 	return (where > bufferlen) ? -1 : 0;
 }
 
+// Appends a word->int map (count, then each key + flags) and flush()es after every entry.
 bool cSource::writeGWNMap(map <tIWMM, int, cSourceWordInfo::cRMap::wordMapCompare >& wnMap, void* buffer, int& where, int fd, int limit)
 {
 	LFS
@@ -86,6 +119,8 @@ bool cSource::writeGWNMap(map <tIWMM, int, cSourceWordInfo::cRMap::wordMapCompar
 	return true;
 }
 
+// Reads one word->int map. Unknown words are skipped; last write wins if a word repeats.
+// Returns -1 on copy failure or overrun; 0 on success.
 int cSource::readGWNMap(map <tIWMM, int, cSourceWordInfo::cRMap::wordMapCompare >& wnMap, void* buffer, int& where, int bufferlen)
 {
 	LFS
@@ -104,6 +139,8 @@ int cSource::readGWNMap(map <tIWMM, int, cSourceWordInfo::cRMap::wordMapCompare 
 	return (where > bufferlen) ? -1 : 0;
 }
 
+// Writes all six WN maps plus physicalObjectByWN flags to path+".WNCache".
+// Returns false if the file cannot be created or any write fails (fd is not closed then).
 bool cSource::writeWNMaps(wstring path)
 {
 	LFS
@@ -137,6 +174,7 @@ bool cSource::writeWNMaps(wstring path)
 	return true;
 }
 
+// Drops synonym/antonym/gender maps for this source (physical-object flags on Words stay).
 void cSource::clearWNMaps()
 {
 	wnSynonymsNounMap.clear();
@@ -147,6 +185,8 @@ void cSource::clearWNMaps()
 	wnGenderNounMap.clear();
 }
 
+// Loads path+".WNCache" into the six maps and ORs physical-object flags onto Words.
+// Returns false if the file is missing or any section is corrupt; leaks buffer on those paths.
 bool cSource::readWNMaps(wstring path)
 {
 	LFS

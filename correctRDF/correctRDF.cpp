@@ -1,3 +1,28 @@
+/*
+	correctRDF.cpp - One-off DBpedia N-Triples sanitizer
+
+	Overview:
+		Standalone console tool that scans a DBpedia infobox-property-definitions
+		.nt dump and writes a .clean sibling, dropping triples whose three RDF
+		fields are longer than 1800 chars. Used historically to make Virtuoso
+		imports survive malformed/overlong lines.
+
+	Pipeline position:
+		Offline data-prep utility; not part of the narrative-parser runtime.
+		Run once against a dump, then feed the .clean file to Virtuoso.
+
+	Key entry points:
+		- _tmain() - open dump, filter triples, write .clean
+
+	Dependencies:
+		Hardcoded path G:\virtuoso_server_dumpfolder\...; MSVC _tmain / __int64.
+
+	Notes / gotchas:
+		buf is 16348 (not 16384) — likely a typo. Lines after the first
+		overlong triple are written; earlier lines are silently dropped
+		(pastFirstError gate). fopen failures only perror; later code
+		guards on both FILE* being non-NULL.
+*/
 // correctRDF.cpp : Defines the entry point for the console application.
 //
 
@@ -10,6 +35,9 @@
 //infobox_properties_en.nt DONE
 //infobox_properties_unredirected_en.nt DONE
 #define rdlFile "G:\\virtuoso_server_dumpfolder\\trash_from_original\\infobox_property_definitions_en.nt"
+// Filter infobox_property_definitions_en.nt into <path>.clean, skipping
+// comment lines and triples whose any of the three RDF fields exceeds 1800 chars.
+// Returns 0 always; fopen failures are reported via perror then skipped.
 int _tmain(int argc, _TCHAR* argv[])
 {
 	FILE *fp=fopen(rdlFile,"r");
@@ -25,7 +53,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	{
 		int linesRead=0,linesSkipped=0;
 		bool pastFirstError=false;
-		char buf[16348];
+		char buf[16348]; // 16348 not 16384 — likely off-by-36 typo vs. a 16 KiB buffer
 		while (fgets(buf,16348,fp))
 		{
 			linesRead++;

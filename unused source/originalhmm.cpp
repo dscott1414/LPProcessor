@@ -1,3 +1,34 @@
+/*
+	originalhmm.cpp - C++ port of a WSJ HMM POS-tagger (hmm.py / settings.py)
+
+	Overview:
+		Train a first-order HMM on WSJ_02-21.pos (emission/transition/
+		context counts, additive smoothing alpha=0.001), then Viterbi-tag
+		WSJ_24 (dev) or WSJ_23 (test). Unknown tokens are binned by
+		digit/punct/case/suffix into --unk_*-- classes. Writes
+		hmm_model.txt / hmm_vocab.txt and tagged output.
+
+	Pipeline position:
+		Standalone POS experiment; not wired into the LP pattern parser.
+		The live codebase uses a different HMM (hmm.h / KenLM) if at all.
+
+	Key entry points:
+		- generate_vocab() / assign_unk() / train_model() / load_model()
+		- constructTagTransitionProbabilityMatrix() / constructWordTagProbabilityMatrix()
+		- preprocess() / initViterbi() / initViterbi2() / forward() / backward()
+		- decode() / tag() / decode_seq() / runTest()
+
+	Dependencies:
+		Relative paths ../HMM2CTest/WSJ/... and data/. fopen without
+		NULL checks. TAGS_WSJ[] is unused (tags come from context keys).
+
+	Notes / gotchas:
+		fopen results are never null-checked. line[strlen(line)-1]=0
+		assumes every fgets line has a newline (empty last line UB).
+		cout << s on every training token. Viterbi is O(T*K^2) over the
+		whole file as one sequence (newlines become --n-- / --s--).
+		boolean (not bool) in tag/decode_seq is an MSVC/Windows typedef.
+*/
 #include <windows.h>
 #include "Winhttp.h"
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
@@ -98,6 +129,9 @@ char *adv_suffix[] = { "ward", "wards", "wise",0 };
 double alpha = 0.001;
 
 // called by runTest
+// Count tokens in the tab-separated training file, keep those with
+// frequency >= min_cnt, append UNK_TOKS, sort, write VOCAB, return the
+// vector. fopen is unchecked. Drops the last char of every line as NL.
 vector <string> generate_vocab(int min_cnt = 2, char *training_filepath = TRAIN)
 {
 	//Generate vocabulary
@@ -152,6 +186,9 @@ vector <string> generate_vocab(int min_cnt = 2, char *training_filepath = TRAIN)
 	return vocabvector;
 }
 
+// Map an OOV token to --unk_digit-- / --unk_punct-- / --unk_upper-- /
+// --unk_{noun,verb,adj,adv}-- (suffix tables) / --unk--. First match wins.
+// Returns a pointer to a string literal.
 char *assign_unk(string tok)
 {
 	// Assign unknown word tokens
@@ -182,6 +219,9 @@ char *assign_unk(string tok)
 }
 
 //called by runTest
+// One pass over training_filepath: count transitions (prev tag -> tag),
+// emissions (tag -> word or unk class), and context (tag). Blank lines
+// are --n-- / --s--. Writes MODEL and returns the same lines as a vector.
 vector <string> train_model(vector<string> vocabvector, char *training_filepath)
 {
 	// Train part - of - speech(POS) tagger model
@@ -257,6 +297,9 @@ vector <string> train_model(vector<string> vocabvector, char *training_filepath)
 }
 
 // Load model - called in decode_seq
+// Parse model lines: "C tag count", "T tag next count", "E tag word count"
+// into the three maps. Malformed C lines are printed; T/E parse failures
+// are not checked.
 void load_model(vector <string> &model, map <string, int> &emiss, map <string, int> &trans, map <string, int> &context)
 {
 	for (vector <string>::iterator mi = model.begin(), miEnd = model.end(); mi != miEnd; mi++)
@@ -284,6 +327,8 @@ void load_model(vector <string> &model, map <string, int> &emiss, map <string, i
 //				Generate transition matrix tagTransitionProbabilityMatrix of size numTags x numTags
 //				[A_ij stores the probability of transiting from state s_i to state s_j]
 // called by decode_seq
+// KxK matrix A[i][j] = P(tags[j]|tags[i]) with add-alpha smoothing
+// (alpha / (context[prev] + alpha*K)). Missing transitions count as 0.
 vector<vector<double>> constructTagTransitionProbabilityMatrix(map <string, int> &trans, map <string, int> &context, vector <string> &tags)
 {
 	int K = tags.size();
@@ -310,6 +355,8 @@ vector<vector<double>> constructTagTransitionProbabilityMatrix(map <string, int>
 // Generate emission matrix wordTagProbabilityMatrix of size numTags x N
 // [B_ij stores the probability of observing o_j from state s_i]
 // called by decode_seq
+// KxN matrix B[i][j] = P(vocab[j]|tags[i]) with add-alpha smoothing
+// over the vocab size N.
 vector<vector<double>> constructWordTagProbabilityMatrix(map <string, int> &emiss, map <string, int> &context, vector <string> &tags, vector<string> &vocab)
 {
 	int K = tags.size();
@@ -335,6 +382,9 @@ vector<vector<double>> constructWordTagProbabilityMatrix(map <string, int> &emis
 }
 
 // called by tag
+// Read one-word-per-line data_filepath. Push the raw token to orig and
+// either the same token, --n-- (blank line), or assign_unk() to prep.
+// Vocab membership is a linear find (O(|V|) per token).
 void preprocess(vector<string> &vocab, char *data_filepath, vector<string> &orig, vector<string> &prep)
 {
 	// Read data
@@ -378,6 +428,8 @@ void preprocess(vector<string> &vocab, char *data_filepath, vector<string> &orig
 // vector <vector<double>> pathMatrix
 // map <string, int> vocabLookupVector
 // called by decode
+// Allocate KxT probability (0) and path (-1) matrices, empty X[T], and
+// a word->column lookup from vocab. T = prep.size().
 void initViterbi(vector<string> &vocab, vector <string> &tags, vector<string> &prep,
 	vector<string> &X, vector <vector<double>> &probabilityMatrix, vector <vector<int>> &pathMatrix, map <string, int> &lookup)
 {
@@ -398,6 +450,8 @@ void initViterbi(vector<string> &vocab, vector <string> &tags, vector<string> &p
 
 // S  State space - vector <string> &tags
 // called by decode
+// Column 0: log P(--s-- -> tag_i) + log P(prep[0]|tag_i). Zero A is -inf.
+// --s-- missing from tags makes s_idx==K and A[s_idx] out of range.
 void initViterbi2(vector <string> &tags, vector<string> &prep, vector<vector<double>> &A, vector<vector<double>> &B,
 	vector <vector<double>> &probabilityMatrix, vector <vector<int>> &pathMatrix, map <string, int> &lookup)
 {
@@ -421,6 +475,8 @@ void initViterbi2(vector <string> &tags, vector<string> &prep, vector<vector<dou
 
 // Forward step
 // called by decode
+// Viterbi forward: for each time i and state j, take max_k of
+// prob[k][i-1] + log A[k][j] + log B[j][prep[i]]. O(T*K^2).
 void forward(int K, vector<string> &prep, vector<vector<double>> &A, vector<vector<double>> &B, vector <vector<double>> &probabilityMatrix, vector <vector<int>> &pathMatrix, map <string, int> &lookup)
 {
 	int T = prep.size();
@@ -454,6 +510,9 @@ void forward(int K, vector<string> &prep, vector<vector<double>> &A, vector<vect
 // numWordsInSource = number of words in text 
 // order numWordsInSource+numTags
 // called by decode
+// Backpointer walk from the best state at T-1. If every last-column
+// probability is <= probabilityMatrix[0][T-1] and that cell is not the
+// max, z[T-1] stays -1 and tags[-1] is UB. Writes predicted tags into X.
 void backward(int T, vector <vector<double>> &probabilityMatrix, vector <vector<int>> &pathMatrix, vector <string> &tags, vector<string> &X)
 {
 	int K = tags.size();
@@ -476,6 +535,8 @@ void backward(int T, vector <vector<double>> &probabilityMatrix, vector <vector<
 	}
 }
 
+// Debug dump of tags, prep, A, B, probability/path matrices, lookup, X.
+// fopen unchecked. Shared column counter `c` wraps across sections.
 void dump(vector<string> &prep, vector<vector<double>> &A, vector<vector<double>> &B, vector <vector<double>> &probabilityMatrix, vector <vector<int>> &pathMatrix, map <string, int> &lookup, vector <string> &tags, vector<string> &X, char *filename)
 {
 	FILE *out = fopen(filename, "w");
@@ -546,6 +607,7 @@ void dump(vector<string> &prep, vector<vector<double>> &A, vector<vector<double>
 
 //	Run the algorithm
 // called by tag
+// Full Viterbi: init matrices, seed column 0, forward, backward into X.
 void decode(vector<string> &vocab, vector <string> &tags, vector<string> &prep, vector<vector<double>> &A, vector<vector<double>> &B,
 	vector<string> &X)
 {
@@ -565,6 +627,8 @@ void decode(vector<string> &vocab, vector <string> &tags, vector<string> &prep, 
 
 // Tag development / test data
 // called by decode_seq
+// Preprocess DEV_WORDS or TEST_WORDS, decode, write word\\ttag lines
+// (blank orig => blank line) to DEV_OUT / TEST_OUT.
 void tag(boolean isTest, vector <string> &tags, vector<string> &vocab, vector<vector<double>> &A, vector<vector<double>> &B)
 {
 	// Preprocess data
@@ -588,6 +652,7 @@ void tag(boolean isTest, vector <string> &tags, vector<string> &vocab, vector<ve
 	fclose(out_fp);
 }
 
+// load_model, collect tags from context keys, build A/B, tag(isTest).
 void decode_seq(boolean isTest, vector <string> &model, vector<string> &vocab)
 {
 	// Decode sequences
@@ -603,6 +668,8 @@ void decode_seq(boolean isTest, vector <string> &model, vector<string> &vocab)
 	tag(isTest, tags, vocab, A, B);
 }
 
+// Load or generate VOCAB and MODEL, then decode_seq on dev (isTest=false)
+// or test. access()==0 means the cache file exists.
 void runTest(bool isTest)
 {
 	vector <string> vocab;

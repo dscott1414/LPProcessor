@@ -1,3 +1,69 @@
+/*
+	syntacticRelations.cpp - assign relSubject/relVerb/relObject/relPrep and
+	                         objectRole bits after the winning patterns are known.
+
+	Overview:
+		Walks the document left-to-right.  For each source position, winner
+		patterns that contain a SUBJECT/VERB/OBJECT/PREP/IVERB tag set are
+		collected and then:
+		  - the finite (or infinitive) verb is located and its tense/aspect
+		    written to verbSense;
+		  - subjects are taken from the SUBJECT tag, or scanned backward
+		    (and sometimes forward) when the clause is subjectless;
+		  - objects, HOBJECTs (bare-infinitive causee) and coordinated
+		    MOBJECTs are linked to that verb;
+		  - PREP phrases are chained via relPrep onto the verb or the
+		    preceding prep, and each prep's relObject is its PREPOBJECT;
+		  - infinitive "to V" clauses are hung off the parent verb with
+		    previousCompoundPartObject / relInternalVerb;
+		  - objectRole bits (SUBJECT_ROLE, NONPAST_OBJECT_ROLE, HAIL_ROLE,
+		    IS_OBJECT_ROLE, ...) are set for later speaker/object resolution.
+		Word-relation maps (cRMap) count how often a pair of words occurred
+		in each relationWOType; those counts later cheapen agreeing parses.
+		cWordGroup clustering of those maps is compiled out
+		(#ifdef ACCUMULATE_GROUPS) and is not used in the default build.
+
+	Pipeline position:
+		Stage 5, after identifyObjects / analyzeWordSenses.  Called from
+		processSource() as syntacticRelations().  Later stages
+		(identifySpeakerGroups, resolveObjects, question answering) read
+		the rel* links and objectRole bits written here.
+
+	Key entry points:
+		- syntacticRelations() - per-document walk
+		- setAdditionalRoleTags() - per-position role + SVO linking
+		- evaluateAdditionalRoleTags() - one tagSet -> rel* assignments
+		- evaluateVerbRoleTags() / evaluateSubjects() / processObjects()
+		- markPrepositionalObjects() / bindFreePrepositions()
+		- markMultipleObjects() - coordinated-noun next/prevCompound links
+		- setRole() - pattern-tag objectRole bits (CMREADME018)
+		- cSourceWordInfo::addRelation() - increment a word-pair count
+
+	Key data structures / globals:
+		- m[i].relSubject / relVerb / relObject / relPrep / relNextObject /
+		  relInternalVerb / relInternalObject / nextCompoundPartObject
+		- m[i].objectRole, verbSense, hasVerbRelations
+		- lastSense - previous clause tense, used to disambiguate beat/put
+		- relationWOTypeStrings / relationExtWOTypeStrings - debug names
+		- groups[] / relationCombos - unused unless ACCUMULATE_GROUPS
+		- futureBoundPrepositions - verbs whose following _PP is attached
+		  only after the rest of the sentence has been walked
+
+	Notes / gotchas:
+		- whereLastVerb is stored as lastVerb+1 in several places; callers
+		  that bind a prep use whereLastVerb-1.
+		- relPrep is a singly-linked list; every walker has a prepLoop>20
+		  guard against cycles.
+		- Fancy quotes (ï¿½ ï¿½ ï¿½ ï¿½) are the quote tokens, not ASCII " '.
+		- checkAmbiguousVerbTense's && / || mix lets a NULL masterVerbWord
+		  with ambiguous inflection rewrite sense even when the incoming
+		  sense is not PRESENT/PAST.
+		- evaluateSubjects' forward-scan condition is (empty && A) || B
+		  because && binds tighter than ||; B can run when subjects exist.
+		- First pass of syntacticRelations() zeroes every objectRole after
+		  markMultipleObjects, so compound-noun links must be written to
+		  next/prevCompoundPartObject, not to objectRole.
+*/
 #include <windows.h>
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
 #include "io.h"
@@ -9,6 +75,8 @@
 #include "vcXML.h"
 #include "profile.h"
 
+// Default: not in the DB yet.  otherFlag is left uninitialized (callers
+// of intersect() must set it false themselves).
 cWordGroup::cWordGroup(void)
 {
 	LFS
@@ -16,6 +84,8 @@ cWordGroup::cWordGroup(void)
 	addedFromWords = addedToWords = addedSubGroups = false;
 }
 
+// Cluster fromWords -> toWords, then add `word` to toWords.  index /
+// otherFlag are not initialized.
 cWordGroup::cWordGroup(vector <wstring>& inFromWords, set <wstring>& inToWords, wstring word)
 {
 	LFS
@@ -27,6 +97,7 @@ cWordGroup::cWordGroup(vector <wstring>& inFromWords, set <wstring>& inToWords, 
 #endif
 }
 
+// Two-from / two-to cluster used by ACCUMULATE_GROUPS intersect().
 cWordGroup::cWordGroup(wstring fromWord1, wstring fromWord2, wstring toWord1, wstring toWord2)
 {
 	LFS
@@ -36,6 +107,7 @@ cWordGroup::cWordGroup(wstring fromWord1, wstring fromWord2, wstring toWord1, ws
 	toWords.insert(toWord2);
 }
 
+// Singleton fromWord `self` whose toWords are the keys of inToWords.
 cWordGroup::cWordGroup(wstring self, cSourceWordInfo::cRMap::tcRMap* inToWords)
 {
 	LFS
@@ -68,6 +140,9 @@ const wchar_t* relationExtWOTypeStrings[] = {
 	L"*1*VerbWithNextMainVerb",L"*1*NextMainVerbWithVerb"  // verbs are same tense and close to one another
 };
 
+// Debug name for a relationWOTypes value.  Values past the base table are
+// reduced modulo VERB_HISTORY (4) into relationExtWOTypeStrings ? so a
+// far-out type still prints, but as the wrong *1* label.
 const wchar_t* getRelStr(int relationType)
 {
 	LFS
@@ -83,6 +158,7 @@ const wchar_t* getRelStr(int relationType)
 	//return temp;
 }
 
+// Flip the even/odd pair: SubjectWordWithVerb <-> VerbWithSubjectWord, etc.
 relationWOTypes getComplementaryRelationship(int rType)
 {
 	LFS
@@ -231,6 +307,9 @@ for each object member in group having GROUP verb and secondary object
 COMP for each object member and deposit into extended group
 
 */
+// "from1 from2 -> to1 to2" debug line.  Iterates fromWords as tIWMM, but
+// the header declares vector<wstring> ? this body only compiles if
+// ACCUMULATE_GROUPS also changes the member types.
 wstring cWordGroup::summary(void)
 {
 	LFS
@@ -246,6 +325,9 @@ wstring cWordGroup::summary(void)
 // does any group containing fromWord 'stop' need to add 'banker' as a toWord?
 // which words in this group contain word as a toWord?
 // return: whether group now contains the relation
+// If every fromWord already maps to `word` under relationType, insert word
+// into toWords and return true.  Otherwise push the fromWords that do map
+// onto subGroup (so the caller can spawn a subgroup) and return false.
 bool cWordGroup::incorporateMapping(relationWOTypes relationType, tIWMM word, vector <tIWMM>& subGroup)
 {
 	LFS
@@ -289,6 +371,10 @@ bool cWordGroup::incorporateMapping(relationWOTypes relationType, tIWMM word, ve
 // for each word in setY (Y) except banker:
 //   if there is exactly one word in complementary relation of Y (X2) already set, successful group creation.
 //
+// Look for a unique X,Y such that self->Y, X->word and X->Y already exist
+// (the "stop/banker/cook/sit" clustering case).  On success fromWord=X,
+// toWord=Y and returns true.  Uses intersectionGroup flags on words and
+// otherFlag on groups; both must be cleared by the caller / this function.
 bool cSourceWordInfo::intersect(relationWOTypes relationType, tIWMM word, tIWMM self, tIWMM& fromWord, tIWMM& toWord)
 {
 	LFS
@@ -363,6 +449,9 @@ bool cSourceWordInfo::intersect(relationWOTypes relationType, tIWMM word, tIWMM 
 // this return value is pointer to iterator (and mri is static) because
 // tIcRMap refers to wordMapCompare, which refers to tIWMM, which refers to cSourceWordInfo, which has a map of cRMaps in it
 // which refer to tIcRMap, and then again.
+// Insert or increment the (this-word -> toWord) count.  isNew is set true
+// on first insert.  Returns an iterator into r.  The bySequence frequency
+// map is compiled out.
 cSourceWordInfo::cRMap::tIcRMap cSourceWordInfo::cRMap::addRelation(int sourceId, int fromWhere, tIWMM toWord, bool& isNew, int count, bool fromDB)
 {
 	LFS
@@ -412,6 +501,9 @@ if the entire group uses it, add chef to the group.
 
 treat individual words as groups.
 */
+// Allocate relationMaps[relationType] if needed, then increment the pair
+// (this, word) by 1 for the current source.  Under ACCUMULATE_GROUPS also
+// grows / splits cWordGroup clusters.  Returns the cRMap iterator.
 cSourceWordInfo::cRMap::tIcRMap cSourceWordInfo::addRelation(int where, int relationType, tIWMM word)
 {
 	LFS
@@ -457,6 +549,8 @@ cSourceWordInfo::cRMap::tIcRMap cSourceWordInfo::addRelation(int where, int rela
 	return p;
 }
 
+// Pack three small ints into one hash: num1 + (num2<<14) + (num3<<28).
+// num3 must fit in the top 4 bits of a 32-bit int.
 int cSource::makeRelationHash(int num1, int num2, int num3)
 {
 	LFS
@@ -472,6 +566,8 @@ int cSource::makeRelationHash(int num1, int num2, int num3)
 	int finalRelation (default value -1)
 
 */
+// Stub: intended to pre-score word-pair relations per sentence before
+// resolveRelations fills delayedWordRelations.  Body is comments only.
 void cSource::createProbableRelationsList()
 {
 	LFS
@@ -484,6 +580,8 @@ void cSource::createProbableRelationsList()
 }
 
 // 
+// Stub: intended to log hit/miss counts for the probable-relations list.
+// Body is comments only.
 void cSource::reportProbableRelationsAccuracy()
 {
 	LFS
@@ -494,6 +592,7 @@ void cSource::reportProbableRelationsAccuracy()
 		// log sum (1), sum (2), average (1), average (2), low (1), high (1), low (2), high (2)
 }
 
+// True if innerTag's [sourcePosition, sourcePosition+len) sits inside outerTag's span.
 bool cSource::inTag(cTagLocation& innerTag, cTagLocation& outerTag)
 {
 	LFS
@@ -501,12 +600,18 @@ bool cSource::inTag(cTagLocation& innerTag, cTagLocation& outerTag)
 }
 
 // is innerTag in outerTag?
+// If the verb form is both present-1st and past (beat/put), rewrite sense
+// from lastSense / narrator-is-usually-past.  Returns true if the tense
+// stayed ambiguous (caller should not commit lastSense).
+// The && / || mix is (A && B) || C, so a NULL masterVerbWord with
+// ambiguous inflection can fire even when sense is not PRESENT/PAST.
 bool cSource::checkAmbiguousVerbTense(int whereVerb, int& sense, bool inQuote, tIWMM masterVerbWord)
 {
 	LFS
 		// tense statistics
 		// if the tense is ambiguous between past and present (due to verb form being identical between present and past forms)
 		// make the tense = the last tense by past or present.
+		// Parsed as (A && B) || C ? C can fire when sense is neither PRESENT nor PAST.
 		if ((sense == VT_PRESENT || sense == VT_PAST) &&
 			(masterVerbWord != wNULL && (masterVerbWord->second.inflectionFlags & (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) == (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) ||
 			(masterVerbWord == wNULL && (m[whereVerb].word->second.inflectionFlags & (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) == (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)))
@@ -527,6 +632,10 @@ bool cSource::checkAmbiguousVerbTense(int whereVerb, int& sense, bool inQuote, t
 	return false;
 }
 
+// Update narrator/speaker tense histograms and lastSense.  Skips verb
+// clauses, "would/could", quoted strings, section headers and relative
+// clauses.  A present-tense narrator verb sets tenseError (novels are
+// expected to narrate in the past).
 void cSource::trackVerbTenses(int where, vector <cTagLocation>& tagSet, bool inQuote, bool inQuotedString, bool inSectionHeader,
 	bool ambiguousSense, int sense, bool& tenseError)
 {
@@ -602,6 +711,8 @@ void cSource::trackVerbTenses(int where, vector <cTagLocation>& tagSet, bool inQ
 	}
 }
 
+// Walk MOBJECT tags and push each resolved principalWherePosition, skipping
+// comma-preceded determiner-less spans (likely RE_OBJECT appositives).
 void cSource::getCompoundPositions(int where, vector <cTagLocation>& multipleObjectTagSet, vector < int >& objectPositions)
 {
 	LFS
@@ -640,6 +751,10 @@ void cSource::getCompoundPositions(int where, vector <cTagLocation>& multipleObj
 	}
 }
 
+// Write relSubject / relObject / relVerb / relNextObject and objectRole
+// bits (POV, NONPAST, IS_OBJECT, pleonastic, FOCUS_EVALUATED) for
+// whereSubjects[which].  Does not overwrite an already-linked infinitive
+// subject unless the new subject is a gendered agent and the old one is not.
 void cSource::evaluateSubjectRoleTag(int where, int which, vector <int> whereSubjects, int whereObject, int whereHObject, int whereVerb, int whereHVerb, vector <int> subjectObjects, int tsSense,
 	bool ignoreSpeaker, bool isNot, bool isNonPast, bool isNonPresent, bool isId, bool subjectIsPleonastic, bool inPrimaryQuote, bool inSecondaryQuote, bool backwardsSubjects)
 {
@@ -798,18 +913,26 @@ void cSource::evaluateSubjectRoleTag(int where, int which, vector <int> whereSub
 }
 
 // return true if we can continue with the scan backwards for subject.
+// If m[where] is a closing primary quote ï¿½ that closes a __NOUN-wrapped
+// ï¿½...ï¿½ span, rewind `where` past the quote and return true.  Returns
+// false to stop a backward subject scan; true to keep walking.
 bool cSource::skipQuote(int& where)
 {
 	LFS
-		if (m[where].word->first != L"”") return true;
+		if (m[where].word->first != L"ï¿½") return true;
 	int maxEnd, maxLen, quoteCheck = queryPattern(where, L"__NOUN", maxEnd);
-	if (quoteCheck == -1 || where < (maxLen = pema[quoteCheck].end - pema[quoteCheck].begin) || m[where - maxLen + 1].word->first != L"“") return false;
+	if (quoteCheck == -1 || where < (maxLen = pema[quoteCheck].end - pema[quoteCheck].begin) || m[where - maxLen + 1].word->first != L"ï¿½") return false;
 	if (debugTrace.traceSpeakerResolution)
 		lplog(LOG_RESOLUTION, L"%d:Skipping quoted string (%d-%d) when scanning for subjects backwards.", where, where - maxLen + 1, where);
 	where -= maxLen; // go past the quote
 	return true;
 }
 
+// Walk left from `where` to the previous SUBJECT_ROLE (skipping quotes /
+// EOS / ':' / '--').  Fills whereSubjects / subjectWords / subjectObjects.
+// objectAsSubject is set for time-unit subjects and prep+noun inversions
+// ("with him was X").  preferInfinitive prefers a possessive-determiner
+// right before a present-participle prep object.
 void cSource::scanForSubjectsBackwardsInSentence(int where, int whereVerb, bool isId, bool& objectAsSubject, bool& subjectIsPleonastic, vector <tIWMM>& subjectWords,
 	vector <int>& subjectObjects, vector <int>& whereSubjects, int tsSense, bool& multiSubject, bool preferInfinitive)
 {
@@ -822,7 +945,7 @@ void cSource::scanForSubjectsBackwardsInSentence(int where, int whereVerb, bool 
 	// designatedAsInternalSubject in the following example is 'him' for the search of the subject of the verb 'rap'
 	// From the shelter of the doorway ESTABhe[tommy] watched him[boris] EXITgo up the steps of a particularly evil - looking house and MOVErap sharply , with a peculiar rhythm , on the door
 	int whereDesignatedAsInternalSubject = -1;
-	while (I > 0 && skipQuote(I) && !isEOS(I) && m[I].word->first != L"’" && m[I].word != Words.sectionWord && m[I].word->first != L":" && m[I].word->first != L"--" &&
+	while (I > 0 && skipQuote(I) && !isEOS(I) && m[I].word->first != L"ï¿½" && m[I].word != Words.sectionWord && m[I].word->first != L":" && m[I].word->first != L"--" &&
 		(!(m[I].objectRole & SUBJECT_ROLE) || (m[I].objectRole & PASSIVE_SUBJECT_ROLE) || m[I].getObject() == cObject::eOBJECTS::UNKNOWN_OBJECT) && I != whereDesignatedAsInternalSubject)
 	{
 		if (m[I].verbSense >= 0 && m[I].relSubject >= 0 && !(m[m[I].relSubject].objectRole & SUBJECT_ROLE) && !(m[m[I].relSubject].objectRole & PASSIVE_SUBJECT_ROLE))
@@ -845,7 +968,7 @@ void cSource::scanForSubjectsBackwardsInSentence(int where, int whereVerb, bool 
 		{
 			// if there is another subject, that is not the same subject, return.
 			int J = I - 1, element;
-			while (J >= 0 && !isEOS(J) && m[J].word->first != L"”" && m[J].word->first != L"’" && m[J].word != Words.sectionWord && m[J].word->first != L":" && m[J].queryWinnerForm(coordinatorForm) < 0 &&
+			while (J >= 0 && !isEOS(J) && m[J].word->first != L"ï¿½" && m[J].word->first != L"ï¿½" && m[J].word != Words.sectionWord && m[J].word->first != L":" && m[J].queryWinnerForm(coordinatorForm) < 0 &&
 				(!(m[J].objectRole & SUBJECT_ROLE) || m[J].getObject() == cObject::eOBJECTS::UNKNOWN_OBJECT || (m[J].flags & cWordMatch::flagAdjectivalObject))) J--;
 			if (multiSubject = (J >= 0 && m[J].objectRole & SUBJECT_ROLE) && m[J].getObject() != cObject::eOBJECTS::UNKNOWN_OBJECT && m[J].getObject() != m[I].getObject() && m[J].word != m[I].word && m[J].pma.queryPatternDiff(L"__S1", L"5") == -1)
 			{
@@ -882,7 +1005,7 @@ void cSource::scanForSubjectsBackwardsInSentence(int where, int whereVerb, bool 
 							{
 								// try really really hard to find that infinitive subject
 								K = J - 1;
-								while (K >= 0 && !isEOS(J) && m[K].word->first != L"”" && m[K].word->first != L"’" && m[K].word != Words.sectionWord && m[K].word->first != L":" && m[K].queryWinnerForm(coordinatorForm) < 0 &&
+								while (K >= 0 && !isEOS(J) && m[K].word->first != L"ï¿½" && m[K].word->first != L"ï¿½" && m[K].word != Words.sectionWord && m[K].word->first != L":" && m[K].queryWinnerForm(coordinatorForm) < 0 &&
 									(!(m[K].objectRole & (SUBJECT_ROLE | PREP_OBJECT_ROLE)) || m[K].getObject() == cObject::eOBJECTS::UNKNOWN_OBJECT || (m[K].flags & cWordMatch::flagAdjectivalObject))) K--;
 								if (K >= 0 && m[K].getRelVerb() >= 0 && m[m[K].getRelVerb()].getRelVerb() >= 0) I = K;
 								else return;
@@ -932,12 +1055,16 @@ void cSource::scanForSubjectsBackwardsInSentence(int where, int whereVerb, bool 
 	if (whereSubjects.empty() && (m[whereVerb].objectRole&PREP_OBJECT_ROLE) && (m[whereVerb].word->second.inflectionFlags&VERB_PRESENT_PARTICIPLE))
 	{
 		//  whereSubjects.size() && objects[m[whereSubjects[0]].getObject()].isAgent(true))
-		while (I>=0 && !isEOS(I) && m[I].word->first!=L"”" && m[I].word->first!=L"’" && m[I].word!=Words.sectionWord && m[I].word->first!=L":" &&
+		while (I>=0 && !isEOS(I) && m[I].word->first!=L"ï¿½" && m[I].word->first!=L"ï¿½" && m[I].word!=Words.sectionWord && m[I].word->first!=L":" &&
 			(!(m[I].objectRole&SUBJECT_ROLE) || (m[I].objectRole&PASSIVE_SUBJECT_ROLE) || m[I].getObject()==UNKNOWN_OBJECT)) I--;
 	}
 	*/
 }
 
+// Resolve SUBJECT (or coordinated MNOUN/MOBJECT) tags into whereSubjects.
+// Marks flagObjectPleonastic on "it was..." identity subjects.  Skips an
+// introductory time expression when a real subject follows inside the same
+// __NOUN[5] span.
 void cSource::discoverSubjects(int where, vector <cTagLocation>& tagSet, int subjectTag, bool isId, bool& objectAsSubject, bool& subjectIsPleonastic, vector <tIWMM>& subjectWords, vector <int>& subjectObjects, vector <int>& whereSubjects)
 {
 	LFS
@@ -1023,6 +1150,10 @@ void cSource::discoverSubjects(int where, vector <cTagLocation>& tagSet, int sub
 // each object points to its preposition by relPrep.
 // if a preposition directly follows another object of a preposition, the object of the preposition points to the previous object by relNextObject.
 // an infinitive verb points to its owning verb with previousCompoundPartObject
+// For each PREP tag: link prep.relObject = PREPOBJECT, object.relPrep = prep,
+// prep.relVerb = whereVerb, and chain relPrep onto the verb's prep list.
+// "by" under a passive verb also gets SUBJECT_ROLE | PASSIVE_SUBJECT_ROLE.
+// Recurses into nested prep tagSets.  prepLoop>20 breaks a cycle.
 void cSource::markPrepositionalObjects(int where, int whereVerb, bool flagInInfinitivePhrase, bool subjectIsPleonastic, bool objectAsSubject, bool isId, bool inPrimaryQuote, bool inSecondaryQuote, bool isNot, bool isNonPast, bool isNonPresent, bool noObjects, bool delayedReceiver, int tsSense, vector <cTagLocation>& tagSet)
 {
 	LFS
@@ -1142,6 +1273,9 @@ void cSource::markPrepositionalObjects(int where, int whereVerb, bool flagInInfi
 	}
 }
 
+// OR tense / identity / pleonastic / subject role bits onto m[I].objectRole
+// (ENCLOSING variants when inRelativeClause).  fromWhere is a short log tag
+// (MPO / MO / ME) identifying the caller.
 void cSource::addRoleTagsAt(int where, int I, bool inRelativeClause, bool withinInfinitivePhrase, bool subjectIsPleonastic, bool isNot, bool objectNot, int tsSense, bool isNonPast, bool isNonPresent, bool objectAsSubject, bool isId, bool inPrimaryQuote, bool inSecondaryQuote, const wchar_t* fromWhere)
 {
 	LFS
@@ -1210,6 +1344,10 @@ void cSource::addRoleTagsAt(int where, int I, bool inRelativeClause, bool within
 //   I want Bill to remember to thank Mrs. Smith for taking us back today. (single object, multiple infinitive phrase and so on)
 // relation to noun: I use language to suit the occasion.
 // relation as subjectObject to main verb: An extra candle to give away is always a good idea.
+// Bind a "to V" / HOBJECT causee infinitive: parent.relVerb = iverb,
+// iverb.previousCompoundPartObject = parent, iverb.relSubject = causee
+// or parent object.  Then evaluateAdditionalRoleTags on the ITO span.
+// Returns the infinitive (or HOBJECT) verb position, or -1.
 int cSource::processInternalInfinitivePhrase(int where, int whereVerb, int whereParentObject, int iverbTag, int firstFreePrep, vector <int>& futureBoundPrepositions,
 	bool inPrimaryQuote, bool inSecondaryQuote, bool& nextVerbInSeries, int& sense,
 	int& whereLastVerb, bool& ambiguousSense, bool inQuotedString, bool inSectionHeader, int begin, int end, int infpElement, vector <cTagLocation>& tagSet)
@@ -1328,6 +1466,9 @@ int cSource::processInternalInfinitivePhrase(int where, int whereVerb, int where
 // if whereLastPrep==-1, return -1.
 //   the first prep that contains the role, return.
 //   if no prep that contains the role, return a prep that does not contain the rejectRole
+// Walk relPrep from whereLastPrep.  Return the first prep whose objectRole
+// has `role`, else the last prep that does not have rejectRole, else -1.
+// Does not guard whereLastPrep < 0 ? m[-1] if the caller passes -1.
 int cSource::findPrepRole(int whereLastPrep, int role, int rejectRole)
 {
 	LFS
@@ -1346,6 +1487,10 @@ int cSource::findPrepRole(int whereLastPrep, int role, int rejectRole)
 	return save;
 }
 
+// For each MVERB tag, find the coordinated verb's V_OBJECT/V_AGREE, copy
+// tense/negation onto it, and chain it onto whereVerb via
+// next/previousCompoundPartObject.  Updates whereLastVerb (stored as
+// verbPosition+1).
 void cSource::evaluateMultipleVerbs(vector <cTagLocation>& tagSet, int& whereLastVerb, int whereVerb, bool& isNot)
 {
 	//attachAdverbRelation(tagSet,verbTagIndex,m[whereVerb].getVerbME(where,10,lastNounNotFound,lastVerbNotFound)); see dynamicallyUpdateWordRelations.cpp
@@ -1405,6 +1550,11 @@ void cSource::evaluateMultipleVerbs(vector <cTagLocation>& tagSet, int& whereLas
 	}
 }
 
+// Fill whereSubjects from the SUBJECT tag, or scan backward/forward when
+// the clause is subjectless.  Drops coordinated time subjects ("and a few
+// moments later").  VerbNet "control" verbs steal the parent object as
+// infinitive subject.  The forward-scan test is (empty && A) || B because
+// && binds tighter than || ? B can run even when subjects already exist.
 void cSource::evaluateSubjects(int where, vector <cTagLocation>& tagSet,
 	bool inPrimaryQuote, bool inSecondaryQuote, bool withinInfinitivePhrase,
 	bool internalInfinitivePhrase, int whereVerb, vector <int>& whereSubjects, int tsSense,
@@ -1453,6 +1603,7 @@ void cSource::evaluateSubjects(int where, vector <cTagLocation>& tagSet,
 		// scan forwards
 		// don't scan forwards in questions [MOVE_OBJECTBrought a message from Mrs . Vandemeyer , I[master] suppose ? ]
 		// but accept forwards in these questions: Brought a telephone message to the man Whittington , did he[brown,whittington] ?
+		// (empty && A) || B ? B (the "did he?" scan) is not gated on empty.
 		if (whereSubjects.empty() &&
 			(m[where].pma.queryPattern(L"_INTRO_S1", maxLen) != -1 && pema.queryTag(m[where + maxLen].beginPEMAPosition, SUBJECT_TAG) != -1 && !(m[where].flags & cWordMatch::flagInQuestion)) ||
 			((m[where].flags & cWordMatch::flagInQuestion) && m[where].pma.queryPattern(L"__INTRO_S1", maxLen) != -1 && m[where + maxLen].word->first == L"did" && m[where + maxLen + 1].getObject() >= 0))
@@ -1555,11 +1706,14 @@ void cSource::evaluateSubjects(int where, vector <cTagLocation>& tagSet,
 	// also mark objects of prepositional phrases
 	// make sure that this is not a quoted subject followed by a 'reply' verb and an object: this is probably not a sentence
 	if (whereSubjects.size() == 1 && (tsSense & VT_PAST) == VT_PAST && inPrimaryQuote && !inSecondaryQuote && !noObjects && whereVerb >= 0 && subjectTag >= 0 &&
-		m[tagSet[subjectTag].sourcePosition].word->first == L"“" && m[tagSet[subjectTag].sourcePosition + tagSet[subjectTag].len - 1].word->first == L"”" &&
+		m[tagSet[subjectTag].sourcePosition].word->first == L"ï¿½" && m[tagSet[subjectTag].sourcePosition + tagSet[subjectTag].len - 1].word->first == L"ï¿½" &&
 		(m[whereVerb].queryForm(thinkForm) >= 0 || m[whereVerb].queryForm(internalStateForm) >= 0))
 		whereSubjects.clear();
 }
 
+// Append the firstFreePrep relPrep chain onto the verb (preferring
+// whereHVerb over whereVerb so a leading PP binds to "watched" not "go").
+// No-op if the chain already contains firstFreePrep.
 void cSource::bindFreePrepositions(int where, int firstFreePrep, int whereVerb, int whereHVerb)
 {
 	if (firstFreePrep >= 0)
@@ -1607,6 +1761,9 @@ void cSource::bindFreePrepositions(int where, int firstFreePrep, int whereVerb, 
 	}
 }
 
+// Coordinated OBJECT: mark "not/neither" conjuncts with NOT_OBJECT_ROLE,
+// keep a "but" survivor as whereObject, and collect MOBJECT positions
+// into whereMObjects.
 void cSource::processMultipleObjects(vector <cTagLocation>& tagSet, int& whereObject, const int tsSense, const int mnounTag, const int objectTag, vector <int>& whereMObjects)
 {
 	wstring tmpstr, tmpstr2;
@@ -1651,6 +1808,11 @@ void cSource::processMultipleObjects(vector <cTagLocation>& tagSet, int& whereOb
 		lplog(LOG_ROLE, L"%d:main object not found [EART MNOUN].", tagSet[objectTag].sourcePosition);
 }
 
+// For each OBJECT tag: skip __S1 complements of think-verbs (relInternalObject),
+// resolve coordinated MNOUN via processMultipleObjects, then write
+// relSubject / relVerb / relNextObject / relPrep and walk the span with
+// addRoleTagsAt.  A post-quote _VERBREL1 + agent object is re-read as the
+// speaker (whereSubjects <- that object).
 void cSource::processObjects(int where, vector <cTagLocation>& tagSet, int firstFreePrep, vector <int>& futureBoundPrepositions,
 	bool inPrimaryQuote, bool inSecondaryQuote, bool withinInfinitivePhrase, bool& nextVerbInSeries, int& sense, int& whereLastVerb,
 	bool& ambiguousSense, bool inQuotedString, bool inSectionHeader, int begin, int end,
@@ -1714,12 +1876,12 @@ void cSource::processObjects(int where, vector <cTagLocation>& tagSet, int first
 				}
 			}
 		}
-		// the {document} itself , ” [said] the *german* bluntly.
+		// the {document} itself , ï¿½ [said] the *german* bluntly.
 		m[whereObject].objectRole |= FOCUS_EVALUATED;
 		if (m[whereObject].flags & cWordMatch::flagInQuestion)
 			m[whereVerb].flags |= cWordMatch::flagInQuestion;
 		// attachAdjectiveRelation(tagSet,whereObject); see dynamicallyUpdateWordRelations.cpp
-		if (whereVerb > 0 && (!(m[whereObject].objectRole & (IN_PRIMARY_QUOTE_ROLE | IN_SECONDARY_QUOTE_ROLE)) && m[whereVerb - 1].word->first == L"”" &&
+		if (whereVerb > 0 && (!(m[whereObject].objectRole & (IN_PRIMARY_QUOTE_ROLE | IN_SECONDARY_QUOTE_ROLE)) && m[whereVerb - 1].word->first == L"ï¿½" &&
 			((tsSense & VT_TENSE_MASK) == VT_PAST) && m[whereVerb].pma.queryPattern(L"_VERBREL1") != -1 && m[whereObject].getObject() >= 0 && objects[m[whereObject].getObject()].isAgent(true)))
 		{
 			if (debugTrace.traceRole)
@@ -1814,6 +1976,10 @@ void cSource::processObjects(int where, vector <cTagLocation>& tagSet, int first
 // 	10:where : relObject = 'florida'
 // 	11:he : relVerb = 'graduated' relPrep = 'in'
 // 	12:graduated : relSubject = 'he' relVerb = 'graduated' relPrep = 'in'
+// If the word before the subject is a relativizer ("where") whose relObject
+// is a prep-object (Florida) and the noun before that prep (University)
+// has more verb-relations with the clause verb, retarget the relativizer
+// (and the verb's relObject) at the farther noun.
 void cSource::adjustAttachmentOfPrecedingRelativizer(int whereSubject)
 {
 
@@ -1856,6 +2022,9 @@ void cSource::adjustAttachmentOfPrecedingRelativizer(int whereSubject)
 	}
 }
 
+// Give a QTYPE relativizer (who/what/where) an object when the clause has
+// none: prefer a later present-participle prep-object, else the secondary
+// verb, else the main verb.  Also copies that object onto every subject.
 void cSource::overrideRelativeObject(int where, vector <cTagLocation>& tagSet, int whereVerb, int whereObject, const vector <int> whereSubjects, bool noObjects)
 {
 	int nextTag = -1, qTagIndex = findTag(tagSet, L"QTYPE", nextTag);
@@ -1895,6 +2064,8 @@ void cSource::overrideRelativeObject(int where, vector <cTagLocation>& tagSet, i
 	}
 }
 
+// "with him was X" inversion: swap so X becomes the subject and "him"
+// becomes the prep-object of "with", chained onto the verb via relPrep.
 void cSource::handleLeadingPreposition(const int where, const bool objectAsSubject, vector <int>& whereSubjects, const int whereVerb, int &whereObject)
 {
 	if (objectAsSubject && whereSubjects.size() > 0 && whereSubjects[0] > 0 && m[whereSubjects[0] - 1].queryWinnerForm(prepositionForm) >= 0 && m[whereVerb].getRelObject() >= 0 && whereSubjects[0] > 0 &&
@@ -1913,6 +2084,10 @@ void cSource::handleLeadingPreposition(const int where, const bool objectAsSubje
 	}
 }
 
+// Choose the infinitive's subject: gendered main DO (unless IS_OBJECT),
+// else a gendered prep-object two tokens before the iverb, else the main
+// subject.  Rejects a gendered-pronoun DO that matches the main subject
+// ("he wanted him to..." is not a control structure).
 void cSource::setInfinitiveRelations(int whereVerb, int whereIVerb, const vector <int> whereSubjects)
 {
 	int DO = (m[whereVerb].getRelObject() >= 0) ? m[m[whereVerb].getRelObject()].getObject() : -1;
@@ -1933,6 +2108,9 @@ void cSource::setInfinitiveRelations(int whereVerb, int whereIVerb, const vector
 		m[m[whereIVerb].getRelObject()].relSubject = m[whereIVerb].relSubject;
 }
 
+// After an identity copula, copy role bits onto a following comma +
+// __IMPLIEDIS / __NOUN / __MNOUN appositive that runs to EOS ("His face
+// was pleasantly ugly -- ... the face of a gentleman").
 void cSource::extendRolesThroughExtendedIdentitySentence(int where, int len, bool withinInfinitivePhrase, bool subjectIsPleonastic, bool isNot, int tsSense, bool isNonPast, bool isNonPresent, bool objectAsSubject, bool isId, bool inPrimaryQuote, bool inSecondaryQuote)
 {
 	// His[tommy] face[tommy] was pleasantly ugly -- nondescript , yet unmistakably the face[gentleman] of a gentleman and a sportsman .
@@ -1971,6 +2149,10 @@ void cSource::extendRolesThroughExtendedIdentitySentence(int where, int len, boo
 	}
 }
 
+// Locate VERB / V_OBJECT / V_HOBJECT (or the infinitive equivalents), write
+// verbSense / hasVerbRelations, chain a following __INFP, and update
+// lastSense via checkAmbiguousVerbTense + trackVerbTenses.  Returns false
+// if no verb could be found.  whereLastVerb is stored as verbPosition+1.
 bool cSource::evaluateVerbRoleTags(int where, int& hverbTagIndex, int& verbTagIndex, int& whereHVerb, int& whereVerb, int& notTag, int& len, bool& nextVerbInSeries, int& sense, int& tsSense, 
 	int& whereLastVerb, int& begin, int& end,	bool& isId, bool& isNot, bool& withinInfinitivePhrase, bool& isNonPast, bool& isNonPresent, bool& ambiguousSense, bool& inPrimaryQuote, bool& inQuotedString, 
 	bool& inSectionHeader, vector <cTagLocation>& tagSet, int &infpElement,	int firstFreePrep, vector <int> &futureBoundPrepositions, bool inSecondaryQuote, int &whereIVerb)
@@ -2135,6 +2317,11 @@ bool cSource::evaluateVerbRoleTags(int where, int& hverbTagIndex, int& verbTagIn
 //		go - relSubject [him] relVerb XX relObject [steps] relInternalVerb XX
 //		steps - relSubject XX relVerb [go] relPrep [house]
 //    house - relNextObject [steps]
+// One tagSet -> full SVO / prep / infinitive linking: verb, subjects,
+// preps, objects, leading-PP swap, HOBJECT causee, infinitive subject,
+// then evaluateSubjectRoleTag for each subject.  Returns false if no verb.
+// outsideQuoteTruth / inQuoteTruth are "this clause is a reliable location
+// assertion" flags for accumulateLocation.
 bool cSource::evaluateAdditionalRoleTags(int where, vector <cTagLocation>& tagSet, int len, int firstFreePrep, vector <int>& futureBoundPrepositions,
 	bool inPrimaryQuote, bool inSecondaryQuote, bool& outsideQuoteTruth, bool& inQuoteTruth, bool withinInfinitivePhrase, bool internalInfinitivePhrase,
 	bool& nextVerbInSeries, int& sense, int& whereLastVerb, bool& ambiguousSense, bool inQuotedString, bool inSectionHeader, int begin, int end)
@@ -2272,12 +2459,17 @@ bool cSource::evaluateAdditionalRoleTags(int where, vector <cTagLocation>& tagSe
 	return isId;
 }
 
+// Promote or strip HAIL_ROLE on the object at `where`: drop hails that are
+// adjectival / owned / determined / pronouns / places / _S1-over-_HAIL;
+// acquire hail for a gendered name between commas; treat "Name -- Name --
+// Name." as audience + hail.  Hard-codes the "Elementary, my dear Watson"
+// exception.
 void cSource::adjustToHailRole(int where)
 {
 	LFS
 		vector <cWordMatch>::iterator im = m.begin() + where;
 	// additional hail check if gendered object is in between two commas and is not in a larger pattern (lastBeginS1==-1)
-	// “[tuppence:tommy] yes , little lady[cousin,jane] , out with it[yarn] . ”  Secret Adversary
+	// ï¿½[tuppence:tommy] yes , little lady[cousin,jane] , out with it[yarn] . ï¿½  Secret Adversary
 	// cannot already be a hail, or part of a multiple noun construction, or an appositive
 	unsigned __int64 objectRole = im->objectRole & (HAIL_ROLE | MPLURAL_ROLE | RE_OBJECT_ROLE);
 	int oc = (im->getObject() >= 0) ? objects[im->getObject()].objectClass : -1;
@@ -2293,7 +2485,7 @@ void cSource::adjustToHailRole(int where)
 		if (debugTrace.traceRole)
 			lplog(LOG_ROLE, L"%06d:Removed HAIL role.", where);
 	}
-	// Boris , here , knows pretty ways of making people speak ! ”
+	// Boris , here , knows pretty ways of making people speak ! ï¿½
 	// _HAIL will match this, but _S1 should overrule
 	if ((objectRole & HAIL_ROLE) && im->pma.queryPattern(L"_HAIL") != -1 && im->pma.queryPattern(L"__S1") != -1)
 	{
@@ -2313,8 +2505,8 @@ void cSource::adjustToHailRole(int where)
 	}
 	if (!(objectRole & (HAIL_ROLE | MPLURAL_ROLE)) &&
 		im->beginObjectPosition > 1 && im->getObject() >= 0 &&
-		// Ever heard of the word ‘QS graft , ’ sir ?
-		(m[im->beginObjectPosition - 1].word->first == L"," || (m[im->beginObjectPosition - 1].word->first == L"’" && m[im->beginObjectPosition - 2].word->first == L",")) &&
+		// Ever heard of the word ï¿½QS graft , ï¿½ sir ?
+		(m[im->beginObjectPosition - 1].word->first == L"," || (m[im->beginObjectPosition - 1].word->first == L"ï¿½" && m[im->beginObjectPosition - 2].word->first == L",")) &&
 		// You are a clever woman, Rita;
 		im->endObjectPosition < (signed)m.size() && (m[im->endObjectPosition].word->first == L"," || m[im->endObjectPosition].word->first == L";" || m[im->endObjectPosition].word->first == L"." || m[im->endObjectPosition].word->first == L"?") &&
 		objects[im->getObject()].getSubType() < 0 &&
@@ -2369,7 +2561,7 @@ void cSource::adjustToHailRole(int where)
 				lplog(LOG_ROLE, L"%06d:Removed HAIL role (PLACE).", im->endObjectPosition + 1);
 		}
 	}
-	// “[st:tommy] Mr . Hersheimmer -- Mr . Beresford -- Dr . Roylance . How ishas the patient[patient] ? ”
+	// ï¿½[st:tommy] Mr . Hersheimmer -- Mr . Beresford -- Dr . Roylance . How ishas the patient[patient] ? ï¿½
 	// if at the beginning, and there is a --, then a name, and then another -- and a name, and then a EOS, make the last name HAIL.
 	int w;
 	if (!(objectRole & HAIL_ROLE) && m[where].beginObjectPosition > 0 && m[m[where].beginObjectPosition - 1].queryForm(quoteForm) >= 0 &&
@@ -2409,6 +2601,10 @@ void cSource::adjustToHailRole(int where)
 
 
 #define MAX_COMBINANT_SCORE 100000
+// For each winning MNOUN pattern at `where`, score competing MOBJECT lists
+// (count, gender-mix, spread, number/verb homogeneity) and write the
+// highest-scoring chain onto next/previousCompoundPartObject.  An inferior
+// existing chain is erased first.  andChainType follows MPLURAL_TAG.
 void cSource::markMultipleObjects(int where)
 {
 	LFS
@@ -2577,6 +2773,11 @@ void cSource::markMultipleObjects(int where)
 }
 
 
+// Per-position Stage-5 work: setRole on every PEMA, hail adjust, then for
+// each winner with a SUBJECT/VERB/IVERB tag set call
+// evaluateAdditionalRoleTags.  Also attaches a free _PP at `where` to the
+// previous verb and records firstFreePrep.  Returns true if any tagSet
+// was an identity copula (caller ORs ID_SENTENCE_TYPE onto lastBeginS1).
 bool cSource::setAdditionalRoleTags(int where, int& firstFreePrep, vector <int>& futureBoundPrepositions, bool inPrimaryQuote, bool inSecondaryQuote,
 	bool& nextVerbInSeries, int& sense, int& whereLastVerb, bool& ambiguousSense, bool inQuotedString, bool inSectionHeader, int begin, int end, vector < vector <cTagLocation> >& tagSets)
 {
@@ -2637,7 +2838,7 @@ bool cSource::setAdditionalRoleTags(int where, int& firstFreePrep, vector <int>&
 				// current position and whereLastVerb must belong to the same sentence
 				bool differenceSentence = false;
 				for (int s1 = whereLastVerb - 1; s1 < where && !differenceSentence; s1++)
-					differenceSentence = (isEOS(s1) || m[s1].word->first == L"”" || m[s1].word->first == L"’" || m[s1].word == Words.sectionWord);
+					differenceSentence = (isEOS(s1) || m[s1].word->first == L"ï¿½" || m[s1].word->first == L"ï¿½" || m[s1].word == Words.sectionWord);
 				if (!differenceSentence)
 					firstFreePrep = whereLastVerb - 1; // whereLastVerb is actually set to the last verb +1
 			}
@@ -2718,6 +2919,11 @@ bool cSource::setAdditionalRoleTags(int where, int& firstFreePrep, vector <int>&
 }
 
 // (CMREADME018)
+// OR pattern-tag roles (SENTENCE_IN_REL, MPLURAL, RE_OBJECT, SUBJECT,
+// PREP_OBJECT, ...) onto every token in pem's span.  Demotes a false
+// relative after a vision verb; drops RE_OBJECT on a gender mismatch;
+// skips _REL1/_PP inside an MPLURAL span; cancels PREP_OBJECT when the
+// same token is being marked SUBJECT (misparsed PP-with-S).
 void cSource::setRole(int position, cPatternElementMatchArray::tPatternElementMatch* pem)
 {
 	LFS
@@ -2736,6 +2942,7 @@ void cSource::setRole(int position, cPatternElementMatchArray::tPatternElementMa
 	// all re_objects come immediately after their primary object.
 	if ((childRole & RE_OBJECT_ROLE) && m[position].principalWherePosition >= 0 && m[m[position].principalWherePosition].getObject() >= 0)
 	{
+		// Walks the whole document left if no EOS is found: (I >= pos-10 || !isEOS).
 		for (int I = position - 1; (I >= position - 10 || !isEOS(I)) && I >= 0; I--)
 			if (m[I].getObject() >= 0 && !(m[I].flags & cWordMatch::flagAdjectivalObject))
 			{
@@ -2812,6 +3019,9 @@ void cSource::setRole(int position, cPatternElementMatchArray::tPatternElementMa
 	}
 }
 
+// At EOS / section: chain firstFreePrep onto lastVerb's relPrep list
+// unless that would cycle or the prep follows another object/verb.
+// Then clear lastBeginS1 / lastVerb / firstFreePrep / whereLastVerb.
 void cSource::syntacticRelationsEOS(int I, int &lastBeginS1, int& lastRelativePhrase, int &lastQ2, int& lastVerb, int& firstFreePrep, int& whereLastVerb)
 {
 	if (isEOS(I) || m[I].word == Words.sectionWord)
@@ -2847,9 +3057,13 @@ void cSource::syntacticRelationsEOS(int I, int &lastBeginS1, int& lastRelativePh
 	}
 }
 
+// Track ï¿½ ï¿½ ï¿½ ï¿½ (not ASCII quotes).  Opening/closing a real quote (not
+// flagQuotedString) clears lastVerb/firstFreePrep and lastSense.
+// Closing a secondary quote sets inPrimaryQuote = true (nested-quote
+// convention used by the rest of the pipeline).
 void cSource::syntacticRelationsQuotes(vector <cWordMatch>::iterator im, const int I, bool &inPrimaryQuote, bool &inSecondaryQuote, bool &inQuotedString,	int &lastVerb, int &firstFreePrep)
 {
-	if (im->word->first == L"“")
+	if (im->word->first == L"ï¿½")
 	{
 		inPrimaryQuote = true;
 		lastVerb = firstFreePrep = -1;
@@ -2863,7 +3077,7 @@ void cSource::syntacticRelationsQuotes(vector <cWordMatch>::iterator im, const i
 				lplog(L"set lastSense to %d (BQ).", lastSense);
 		}
 	}
-	if (im->word->first == L"”")
+	if (im->word->first == L"ï¿½")
 	{
 		inPrimaryQuote = false;
 		lastVerb = firstFreePrep = -1;
@@ -2877,7 +3091,7 @@ void cSource::syntacticRelationsQuotes(vector <cWordMatch>::iterator im, const i
 				lplog(L"set lastSense to %d (EQ).", lastSense);
 		}
 	}
-	if (im->word->first == L"‘")
+	if (im->word->first == L"ï¿½")
 	{
 		if (im->flags & cWordMatch::flagQuotedString)
 			inQuotedString = true;
@@ -2888,7 +3102,7 @@ void cSource::syntacticRelationsQuotes(vector <cWordMatch>::iterator im, const i
 			lastVerb = firstFreePrep = -1;
 		}
 	}
-	else if (im->word->first == L"’")
+	else if (im->word->first == L"ï¿½")
 	{
 		if (inQuotedString)
 			inQuotedString = false;
@@ -2901,6 +3115,9 @@ void cSource::syntacticRelationsQuotes(vector <cWordMatch>::iterator im, const i
 	}
 }
 
+// After roles are assigned: on preTaggedSource, accumulate noun/determiner
+// usage; always accumulate verb/object usage (assessCost=false so the
+// lexicon costs, not the PMA costs, are updated).
 void cSource::syntacticRelationsEvaluateRelations(vector <cWordMatch>::iterator im, const int I)
 {
 	vector < vector <cTagLocation> > tagSets;
@@ -2932,6 +3149,8 @@ void cSource::syntacticRelationsEvaluateRelations(vector <cWordMatch>::iterator 
 	}
 }
 
+// Finish futureBoundPrepositions: for each verb v whose next token is a
+// _PP, splice that prep into v's relPrep chain (PREP_PREP + PREP_VERB).
 void cSource::setPrepVerbRelations(vector <int> &futureBoundPrepositions)
 {
 	for (unsigned int p = 0; p < futureBoundPrepositions.size(); p++)
@@ -2986,6 +3205,11 @@ void cSource::setPrepVerbRelations(vector <int> &futureBoundPrepositions)
 		attachInfinitivePhrase
 		attachAdditionalPrepositionalPhrases
 		*/
+// Stage 5 entry: first pass writes coordinated-noun links then zeroes
+// every objectRole; second pass walks the document, tracking quotes /
+// section headers / if-and-as statements, and per token calls
+// setAdditionalRoleTags + syntacticRelationsEvaluateRelations.  Ends by
+// flushing futureBoundPrepositions.
 void cSource::syntacticRelations()
 {
 	LFS
@@ -3080,10 +3304,14 @@ void cSource::syntacticRelations()
 	setPrepVerbRelations(futureBoundPrepositions);
 }
 
+// Debug dump (traceTestSyntacticRelations): per sentence print each token's
+// relSubject/relVerb/relObject/relPrep/... and any SRG whose `where` falls
+// in the sentence.  m[end] is read when end == m.size() ? one past the
+// last token ? before the quote-close adjustment.
 void cSource::testSyntacticRelations()
 {
-	tIWMM primaryQuoteCloseWord = Words.gquery(L"”");
-	tIWMM secondaryQuoteCloseWord = Words.gquery(L"’");
+	tIWMM primaryQuoteCloseWord = Words.gquery(L"ï¿½");
+	tIWMM secondaryQuoteCloseWord = Words.gquery(L"ï¿½");
 	vector <cSyntacticRelationGroup>::iterator srg = syntacticRelationGroups.begin();
 	for (unsigned int s = 0; s < sentenceStarts.size(); s++)
 	{
@@ -3093,6 +3321,7 @@ void cSource::testSyntacticRelations()
 		unsigned int end = (s + 1 == sentenceStarts.size()) ? m.size() : sentenceStarts[s + 1];
 		while (end && m[end - 1].word == Words.sectionWord)
 			end--; // cut off end of paragraphs
+		// end may equal m.size() here ? one past the last token.
 		if (m[end].word == primaryQuoteCloseWord || m[end].word == secondaryQuoteCloseWord)
 			end++;
 		debugTrace = m[begin].t;

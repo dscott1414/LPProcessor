@@ -1,4 +1,40 @@
-﻿#include <windows.h>
+/*
+	tableColumn.cpp - Wikipedia-table walk and RDF-type coherence scoring for QA
+
+	Overview:
+		cSourceTable walks a Wikipedia cSource from a Words.TABLE sentinel,
+		building cColumn/cRow/cEntry from the synthetic END_COLUMN /
+		END_COLUMN_HEADERS tokens tokenize.cpp left in m[].  Each column is then
+		scored: accumulate every cell's simplified RDF types, prefer cells whose
+		type (or last word) hits the title's WordNet synonyms, re-accumulate,
+		and compute coherencyPercentage.  Wiki chrome (languages, "View history",
+		VIAF identifiers, ...) is rejected via wikiInvalidTableEntries.
+
+	Pipeline position:
+		Stage 8.  cQuestionAnswering::addTables() constructs one cSourceTable per
+		TABLE token; surviving tables become wikiQuestionTypeObjectAnswers.
+
+	Key entry points:
+		- cSourceTable::cSourceTable() - parse one table starting at I (advanced).
+		- getTableFromSource() - headers + cells.
+		- scanColumnEntry() - one header/title cell, matching the question type.
+		- determineColumnRDFTypeCoherency() - the two-pass RDF score.
+		- addTables() - driver.
+
+	Notes / gotchas:
+		- determineColumnRDFTypeCoherency returns true on both the <90% and
+			>=90% paths (the reject is commented TEMP DEBUG), so rows.clear() in
+			the constructor never fires for incoherence.
+		- cEntry::sprint formats synonymMatchedQuestionObject.size() with the
+			matchedQuestionObjectStr variable (copy-paste).
+		- testTitlePreference uses `=` in `if (x = (titleSynonyms.find(...)))`
+			intentionally (assignment-in-condition, same idiom as source.h).
+		- getTableFromSource always returns true; invalid tables are marked via
+			invalidColumn / empty entries, not the return code.
+		- wikiInvalidTableEntries is a NULL-separated list of chrome groups;
+			isEntryInvalid builds a map on first call.
+*/
+#include <windows.h>
 #include <io.h>
 #include "word.h"
 #include "ontology.h"
@@ -7,6 +43,9 @@
 #include "profile.h"
 #include "wn.h"
 
+// Zero the per-column counters.  gMaxFrequency starts at 1 so a later
+// ratio divide cannot /0 before any types are accumulated.  rows and the
+// RDF maps are left empty (their default ctors).
 cColumn::cColumn()
 {
 	numDefinite = 0;
@@ -26,6 +65,10 @@ cColumn::cColumn()
 
 /* RDF type column analysis section*/
 
+// Zero the frequency of every domainAssociations[] key in
+// accumulatedRDFTypesMap (the entries stay, but they drop out of
+// getMostCommonRDFTypes).  domainAssociations is a NULL-terminated list
+// whose last element is L"".
 // remove a domain like film from the accumulated common association map.  This is because Wikipedia is really good at accumulating types of this sort, which biases trying to find a common association.
 void cColumn::removeDomainFromAccumulatedRDFTypesMap(const wchar_t* domainAssociations[])
 {
@@ -117,11 +160,17 @@ void cColumn::getMostCommonRDFTypes(const wchar_t* when, wstring tableName)
 	logColumn(LOG_WHERE, when, tableName);
 }
 
+// Drop accumulatedRDFTypesMap so the second (preferred-cell-only) pass
+// starts clean.  mostCommonAssociationTypeSet is not cleared here.
 void cColumn::zeroColumnAccumulatedRDFTypes()
 {
 	accumulatedRDFTypesMap.clear();
 }
 
+// Sum accumulatedRDFTypesMap frequencies for this cell's confidence==1 RDF
+// types; also return the type with the highest frequency via the out-params.
+// FATAL if a confidence-1 type is missing from the column map (should have
+// been accumulated already).
 int cColumn::getSumOfAllFullyConfidentRDFTypeFrequencies(cSource* wikipediaSource, int row, int entry, int& maxOfAllFullyConfidentRDFTypeFrequencies, wstring& fullyConfidentSimplifiedRDFTypeWithMaximumFrequency, bool fileCaching)
 {
 	unordered_map <wstring, int > RDFTypeSimplificationToWordAssociationWithObject_toConfidenceMap;
@@ -189,6 +238,11 @@ int cColumn::calculateColumnRDFTypeCoherence(cSource* wikipediaSource, cColumn::
 	return coherencyPercentage;
 }
 
+// For every cell, count simplified RDF types that sit in titleSynonyms and
+// whether the cell's last word is itself a title synonym.  Mark
+// lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms on the winning cells of
+// each row.  Returns true if >= 75% of rows that have any RDF types also
+// have a title-synonym hit (the caller then skips setRowPreference).
 bool cColumn::testTitlePreference(cSource* wikipediaSource, wstring tableName, unordered_set <wstring>& titleSynonyms, bool fileCaching)
 {
 	if (titleSynonyms.empty())
@@ -256,6 +310,8 @@ bool cColumn::testTitlePreference(cSource* wikipediaSource, wstring tableName, u
 	return numRowsWhereLastWordOrSimplifiedRDFTypesFoundInTitleSynonyms > numRowsWhereSimplifiedRDFTypesFound * 3 / 4;
 }
 
+// Fallback when the title did not prefer cells: mark the one cell per row
+// whose confidence-1 RDF types have the highest column frequency.
 void cColumn::setRowPreference(cSource* wikipediaSource, wstring tableName, bool fileCaching)
 {
 	for (int row = 0; row < rows.size(); row++)
@@ -289,6 +345,10 @@ void cColumn::setRowPreference(cSource* wikipediaSource, wstring tableName, bool
 	}
 }
 
+// Two-pass coherence: accumulate all cells, prefer title-matching (or
+// frequency-matching) cells, re-accumulate only those, compute
+// coherencyPercentage.  Always returns true (the `< 90 return false` is
+// commented TEMP DEBUG), so the caller never drops a column for incoherence.
 bool cColumn::determineColumnRDFTypeCoherency(cSource* wikipediaSource, cColumn::cEntry titleEntry, unordered_set <wstring>& titleSynonyms, wstring tableName, bool keepMusicDomain, bool keepFilmDomain, bool fileCaching)
 {
 	int sumMaxEntries = 0;
@@ -317,6 +377,8 @@ bool cColumn::determineColumnRDFTypeCoherency(cSource* wikipediaSource, cColumn:
 }
 
 
+// Dump column-level coherence counters and mostCommonAssociationTypeSet
+// when logTableCoherenceDetail is on.  'when' is "BEFORE" / "AFTER".
 void cColumn::logColumn(int logType, const wchar_t* when, wstring tableName)
 {
 	if (!logTableCoherenceDetail)
@@ -347,6 +409,7 @@ void cColumn::logColumn(int logType, const wchar_t* when, wstring tableName)
 	vector <int> synonymMatchedQuestionObject;
 	wstring simplifiedRDFTypes;
 */
+// One-line dump of this cell.  row<0 means this is the table title.
 void cColumn::cEntry::logEntry(int logType, const wchar_t* tableName, int row, int entryIndex, cSource* source)
 {
 	wstring tmp;
@@ -358,6 +421,9 @@ void cColumn::cEntry::logEntry(int logType, const wchar_t* tableName, int row, i
 			(lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms) ? L" [lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms]" : L"", matchedQuestionObject.size(), synonymMatchedQuestionObject.size());
 }
 
+// Format "adaptiveWhere:phrase [# matched ... # synonym matched ...]" into
+// buffer.  The synonym count is accidentally printed with
+// matchedQuestionObjectStr (copy-paste of the matched-object size).
 wstring cColumn::cEntry::sprint(cSource* source, wstring& buffer)
 {
 	wstring phrase, whereStr, matchedQuestionObjectStr, synonymMatchedQuestionObjectStr;
@@ -385,6 +451,11 @@ const wchar_t* wikiInvalidTableEntries[] = {
 	L"Dansk", L"Deutsch", L"Español", L"Esperanto", L"Français", L"Italiano", L"Nederlands", L"Polski", L"Svenska", L"Íslenska", L"Scots", L"Română", L"Português", L"Edit links", NULL, NULL }; // languages
 unordered_map <wstring, int> wikiInvalidTableEntriesMap;
 vector <int> expectedNumEntries;
+// True if the text of the cell starting at beginEntry is Wikipedia chrome
+// (languages, "View history", VIAF, "Articles with dead external links",
+// ...).  On first call, builds wikiInvalidTableEntriesMap from the
+// NULL-separated wikiInvalidTableEntries groups.  wikiColumns[group] is
+// incremented so a later pass can see a consistent chrome category.
 bool cSourceTable::isEntryInvalid(int beginEntry, vector <int>& wikiColumns, cSource* wikipediaSource)
 {
 	if (wikiInvalidTableEntriesMap.empty())
@@ -434,6 +505,11 @@ bool cSourceTable::isEntryInvalid(int beginEntry, vector <int>& wikiColumns, cSo
 	return false;
 }
 
+// From source position I (just after the title), read column headers up to
+// END_COLUMN_HEADERS, then cells up to the next TABLE.  Only the column
+// whose header matched the question (or every column if there are no
+// headers) is materialized as objects/entries; others are skipped.
+// Always returns true; sets invalidColumn / emptyEntries on the columns.
 bool cSourceTable::getTableFromSource(int I, int whereQuestionTypeObject, cSource* wikipediaSource, cSource* questionSource)
 {
 	wstring tmpstr, tmpstr2;
@@ -610,6 +686,8 @@ bool cSourceTable::getTableFromSource(int I, int whereQuestionTypeObject, cSourc
 	return true;
 }
 
+// False if the title span contains "index", "contents", or TOC_HEADER
+// (a table-of-contents table is not a fact table).
 bool coherentTitle(int begin, int end, cSource* wikipediaSource)
 {
 	for (int I = begin; I < end; I++)
@@ -618,6 +696,9 @@ bool coherentTitle(int begin, int end, cSource* wikipediaSource)
 	return true;
 }
 
+// Parse the table whose TABLE token is at I (I is advanced past the table).
+// Fills columns / tableTitleEntry / num.  On a coherent title, runs
+// determineColumnRDFTypeCoherency per column (which currently never rejects).
 //   for each table with a table header, does the table header match the questionTypeObject or its synonyms?
 //     if not, and the table has column headers, does any column header match the questionTypeObject or its synonyms?
 //    if matched, feed the table or only the selected column into propertyValues.
@@ -689,6 +770,9 @@ cSourceTable::cSourceTable(int& I, int whereQuestionTypeObject, cSource* wikiped
 	}
 }
 
+// Walk wikipediaSource for Words.TABLE and append every table that has at
+// least one non-invalid column (single-column tables also need >1 row).
+// fileCaching is the QA member, not a parameter.
 void cQuestionAnswering::addTables(cSource* questionSource, int whereQuestionTypeObject, cSource* wikipediaSource, vector < cSourceTable >& wikiTables)
 {
 	LFS
@@ -702,6 +786,10 @@ void cQuestionAnswering::addTables(cSource* questionSource, int whereQuestionTyp
 }
 
 
+// Scan from 'where' to END_COLUMN, recording cells whose mainEntry equals
+// (or is a synonym/hypernym of) the question's type-object.  Advances where
+// past the trailing " . END_COLUMN . " (where += 2 after the loop).
+// matchFound is overwritten on every object (last one wins).
 cColumn::cEntry cColumn::scanColumnEntry(int whereQuestionTypeObject, cSource* wikipediaSource, cSource* questionSource, int& where, bool& matchFound, wstring tableName)
 {
 	LFS
@@ -755,6 +843,11 @@ cColumn::cEntry cColumn::scanColumnEntry(int whereQuestionTypeObject, cSource* w
 	return columnEntry;
 }
 
+// Measure a capitalized title-like run starting at 'where' (proper nouns,
+// determiners, prepositions, ordinals, commas).  Truncates at a comma that
+// is not followed by a conjunction.  Returns false only if the run is empty
+// (then numWords is forced to 1).  Used to decide whether to createObject
+// a NAME_OBJECT_CLASS for an unmatched capitalized cell.
 bool cSourceTable::analyzeTitle(unsigned int where, int& numWords, int& numPrepositions, wstring tableName, cSource* wikipediaSource)
 {
 	LFS

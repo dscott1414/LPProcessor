@@ -1,4 +1,87 @@
-﻿#include <windows.h>
+/*
+	word.cpp - the lexicon core: form table, per-word records (cSourceWordInfo), the global
+	           word map, and the low-level word/token reader used by the tokenizer.
+
+	Overview:
+		Three layers live in this translation unit.
+		(1) The form (part-of-speech class) table: cForm / cForms and the global Forms
+		    vector.  A "form" is a word class such as noun, verb, month, honorific,
+		    Proper_Noun; there are a few hundred of them and each word carries a small
+		    set of form numbers (indices into Forms).
+		(2) cSourceWordInfo - the per-word record stored as the value of the global word
+		    map.  It holds the word's form set, inflection flags (InflectionTypes in
+		    general.h), word flags (eWordFlags in word.h), time flags, corpus usage
+		    statistics/costs used by pattern winnowing, the mainEntry (lemma) handle and
+		    the word-relation maps.  Form sets are not stored per word: every word's forms
+		    live in one shared, append-only array (cSourceWordInfo::formsArray) and the
+		    word only keeps an offset plus a count.
+		(3) cWord - the owner of the global word map WMM (word text -> cSourceWordInfo)
+		    plus word lookup/creation (query / fullQuery / findWordInDB / addNewOrModify /
+		    markWordUndefined), the stemming fallback (attemptDisInclination), and the
+		    character-level word reader (readWord and its helpers) that the tokenizer
+		    drives over the source buffer.
+		A handful of cWordMatch cost helpers that depend on per-word usage costs are also
+		defined here rather than in source.cpp.
+
+	Pipeline position:
+		Stage 1 (initialization) creates the form table and fills WMM from MySQL/the word
+		cache - most of that code is in initializeDictionary.cpp and DB.cpp, but the
+		structures it fills are defined here.  Stage 2/3 (read source, tokenize) call
+		cWord::readWord for each token and cWord::parseWord / fullQuery to define words
+		that are not yet known, consulting online dictionaries, the stemmer and word
+		splitting.  Stage 4 (pattern matching / eliminateLoserPatterns) consumes the
+		usageCosts computed here.
+
+	Key entry points:
+		- cWord::readWord() - reads one token out of the source buffer, handling
+		  contractions, dashes, quotes, dates, times, phone numbers, money, ordinals,
+		  URLs, footnotes and ~~meta commands.  Returns 0 or a negative NET_ERR code.
+		- cWord::parseWord() - makes sure a word exists in WMM, using the DB, online
+		  dictionaries, stemming and word splitting; marks it undefined as a last resort.
+		- cWord::fullQuery() / cWord::query() - read-only lookup (fullQuery may hit the DB).
+		- cWord::addNewOrModify() / addWordToForm() / markWordUndefined() - word creation.
+		- cSourceWordInfo::adjustFormsInflections() - per-occurrence capitalization logic
+		  that produces the cWordMatch form flags for one word position.
+		- cSourceWordInfo::write() / updateFromDisk() - word cache serialization.
+
+	Key data structures / globals:
+		- Forms (vector <cForm *>) - the form table; owned here, deleted in ~cWord.
+		  cForms::formMap maps form name -> index into Forms.
+		- cWord::WMM (static unordered_map <wstring,cSourceWordInfo>) - THE word map.
+		  Every word handle in the parser is a tIWMM (an iterator into WMM), so words must
+		  outlive every structure holding a handle; only the delete-after-source path and
+		  cWord::remove erase entries.
+		- cSourceWordInfo::formsArray / allocated / fACount - append-only shared array of
+		  form numbers; a word owns [formsOffset,formsOffset+count).  Slots vacated by
+		  eraseForms/addForm relocation are never reclaimed.
+		- cWord::mainEntryMap - lemma text -> all words having that lemma.
+		- cWord::multiElementWords / quotedWords / periodWords - sorted (loosesort) lists of
+		  wcsdup'ed known words containing space/dash, single quote and embedded period,
+		  used by continueParse to let readWord absorb multi-token words.
+		- nicknameEquivalenceMap - name equivalence, filled by initializeDictionary.
+
+	Dependencies:
+		MySQL tables words / wordForms (via myquery in mysqldb.h), the word and forms cache
+		files, the Paice/Husk stemmer (paice.h), the online dictionary fetchers
+		(getDictionary.cpp: getForms, splitWord, checkAdd) and logging.h.
+
+	Notes / gotchas:
+		- Everything is wchar_t (UTF-16 on MSVC); source buffers are NUL terminated, and
+		  most of the readWord helpers freely look ahead (buffer[cp+3]) or behind
+		  (buffer[cp-1]) relying on that terminator - not on bufferLen.
+		- lplog(LOG_FATAL_ERROR,...) does not return: it waits for a keypress and exits.
+		  Many "validation" branches here are therefore aborts, not recoverable errors.
+		- usagePatterns / usageCosts / deltaUsagePatterns are 16 bytes each and are indexed
+		  both by form offset (0..MAX_FORM_USAGE_PATTERNS-1) and by eUsagePatterns slot
+		  (8..15).  count can legally exceed 8 (MAX_FORMS is 30 on the cache read path), so
+		  code that indexes these arrays by form offset must clamp.
+		- All of the globals here (WMM, Forms, formsArray, mainEntryMap) are mutated with no
+		  lock; the "protected by SRWLock" notes in word.h are aspirational.  Parallelism in
+		  this system is process-level (see multiProcess in logging.cpp).
+		- This file is UTF-8 with a BOM and contains literal dashes/quotes/mojibake test
+		  characters (isDash, isSingleQuote, isDoubleQuote, the "Â£" test); preserve them.
+*/
+#include <windows.h>
 #include "Winhttp.h"
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
 #include <io.h>
@@ -14,6 +97,11 @@
 #include "paice.h"
 #include "mysqldb.h"
 
+// Long-form names for the inflection bits of each inflection class, terminated by {-1,NULL}.
+// The terminator is why tInflectionMap::num is signed: getInflectionName stops at num<0.
+// Only bits belonging to the class are listed, so callers must mask first (see the
+// *_INFLECTIONS_MASK macros in word.h) or unrelated bits are silently ignored.
+// The short-form equivalents (shortNounInflectionMap etc.) live in source.cpp.
 tInflectionMap nounInflectionMap[] =
 {
 	{ SINGULAR,L"SINGULAR"},
@@ -59,6 +147,8 @@ tInflectionMap adverbInflectionMap[] =
 	{ -1,NULL}
 };
 
+// OPEN_INFLECTION/CLOSE_INFLECTION are reused for both quotes and brackets (they are the
+// same two bits); only the printed name differs, hence two tables over the same values.
 tInflectionMap quoteInflectionMap[] =
 {
 	{ OPEN_INFLECTION,L"OPEN_QUOTE"},
@@ -73,6 +163,8 @@ tInflectionMap bracketInflectionMap[] =
 	{ -1,NULL}
 };
 
+// Definitions of the lexicon globals.  Zero-initialized here; cWord::cWord
+// (initializeDictionary.cpp) allocates formsArray and sets allocated/fACount/uniqueNewIndex.
 unsigned int* cSourceWordInfo::formsArray; // change possible but shut off
 unsigned int cSourceWordInfo::allocated; // change possible but shut off
 unsigned int cSourceWordInfo::fACount; // change possible but shut off
@@ -95,6 +187,10 @@ int cWord::disinclinationRecursionCount;
 #define MAX_FORMS 30
 // get inflection for form - remember to prepend a space
 // if there is no inflection , return an empty string
+// Appends " NAME" for every bit of 'inflection' listed in 'map'.
+// temp is cleared first and owns the storage; the returned pointer is temp.c_str() and dies
+// with temp, so callers must keep temp alive as long as they use the result.
+// Bits not present in the map (e.g. bits of another inflection class) are dropped silently.
 const wchar_t* getInflectionName(int inflection, tInflectionMap* map, wstring& temp)
 {
 	LFS
@@ -106,6 +202,10 @@ const wchar_t* getInflectionName(int inflection, tInflectionMap* map, wstring& t
 }
 
 // only print the inflection appropriate for the form
+// Picks the map (and mask) matching the form's inflectionsClass, so a noun form never prints
+// verb inflection names even though the word may carry both sets of bits.
+// form is an index into Forms; returns L"ILLEGAL FORM" if out of range and L"" if the form's
+// class has no inflection names.  Returned pointer is only valid while temp lives.
 const wchar_t* getInflectionName(int inflection, int form, wstring& temp)
 {
 	LFS
@@ -122,6 +222,10 @@ const wchar_t* getInflectionName(int inflection, int form, wstring& temp)
 
 vector <cForm*> Forms;
 
+// Builds one form (word class) descriptor.  indexIn is the forms table id in the DB (-1 for a
+// form that has not been written to the DB yet - every caller in this file passes -1).
+// isCommonForm / isNonCachedForm / isNounForm are NOT parameters: they default to false here
+// and are set later by cWord::findPredefinedForms (initializeDictionary.cpp).
 cForm::cForm(int indexIn, wstring nameIn, wstring shortNameIn, wstring inflectionsClassIn, bool hasInflectionsIn,
 	bool properNounSubClassIn, bool isTopLevelIn, bool isIgnoreIn, bool verbFormIn, bool blockProperNounRecognitionIn, bool formCheckIn)
 {
@@ -142,6 +246,7 @@ cForm::cForm(int indexIn, wstring nameIn, wstring shortNameIn, wstring inflectio
 	isNounForm = false;
 }
 
+// Form name -> index into Forms, or -1 if unknown.  Never creates anything.
 int cForms::findForm(wstring sForm)
 {
 	LFS
@@ -149,6 +254,8 @@ int cForms::findForm(wstring sForm)
 	return (fmi == formMap.end()) ? -1 : fmi->second;
 }
 
+// "guaranteed" findForm: same as findForm but a miss is fatal (LOG_FATAL_ERROR exits), so the
+// return value is always a valid Forms index for callers that cannot cope with -1.
 int cForms::gFindForm(wstring sForm)
 {
 	LFS
@@ -158,12 +265,24 @@ int cForms::gFindForm(wstring sForm)
 	return f;
 }
 
+// Maps a form name coming from an external dictionary onto an existing form, creating a new
+// form only when allowed.  Dictionary part-of-speech strings are messy ("verb (transitive)",
+// "past part.", "exclamation"), so on a miss the name is normalized to one of the open
+// classes and looked up again.
+// message==true means "callers are only allowed to use forms that already exist": the attempt
+// is logged and 0 (the Undefined form) is returned instead of creating one.
+// Side effects: may push a new cForm onto Forms and set changedForms; may turn on
+// properNounSubClass of an existing form (which is why the properNounSubClass argument must
+// stay sticky - see the comment below about abbreviations).
+// Returns an index into Forms, or 0 when creation was refused.
 int cForms::addNewForm(wstring sForm, wstring shortForm, bool message, bool properNounSubClass)
 {
 	LFS
 		unordered_map <wstring, int>::iterator fmi = formMap.find(sForm);
 	if (fmi == formMap.end())
 	{
+		// chi is the offset of "verb" within sForm: "verb" only counts as the verb class when
+		// it is not part of a longer word ("verbal", "adverb"), hence the iswalpha check.
 		unsigned int chi;
 		bool searchAgain = true;
 		if (sForm.find(L"adjective") != wstring::npos)
@@ -207,6 +326,10 @@ int cForms::addNewForm(wstring sForm, wstring shortForm, bool message, bool prop
 	return iForm;
 }
 
+// Unconditionally defines a form: updates it in place if the name already exists, otherwise
+// appends a new cForm.  Used by the predefined-category builders in initializeDictionary.cpp,
+// where the caller is the authority on shortName/inflectionsClass/properNounSubClass.
+// Returns the index into Forms.  Note it does not set changedForms (unlike addNewForm).
 int cForms::createForm(wstring sForm, wstring shortName, bool inflectionsFlag, wstring inflectionsClass, bool properNounSubClass)
 {
 	LFS
@@ -232,6 +355,12 @@ int cForms::createForm(wstring sForm, wstring shortName, bool inflectionsFlag, w
 cWord Words;
 
 // this is coming from either cWord::addCopy OR addNewOrModify.  Therefore, insertNewForms flag must be added.
+// Creates an in-memory word with exactly one form, appending that form to the shared
+// formsArray (growing it geometrically when full - trealloc aborts on failure).
+// index is set to a negative unique value: negative means "not yet in the DB", and the
+// magnitude is only used to keep new words distinguishable until they are flushed.
+// preferVerbPresentParticiple() is called so that Webster-style parallel noun/adjective forms
+// of an -ing verb start out more expensive than the verb form.
 cSourceWordInfo::cSourceWordInfo(int iForm, int iInflectionFlags, int iFlags, int iTimeFlags, int iDerivationRules, tIWMM iMainEntry, int iSourceId)
 {
 	LFS
@@ -261,6 +390,14 @@ cSourceWordInfo::cSourceWordInfo(int iForm, int iInflectionFlags, int iFlags, in
 
 
 // this is from disk.  The source has already been flushed to the database.  Don't add insertNewForms flag.
+// Deserializes one word record written by cSourceWordInfo::write from the word cache.
+// Layout (see write): count, count*form numbers, inflectionFlags, timeFlags, flags,
+// derivationRules, index, mainEntry text, usagePatterns[16], usageCosts[16].
+// where is advanced past the record; limit is the size of buffer and an overrun is fatal.
+// The DB index read off disk is discarded (index is re-assigned a new negative value) and the
+// mainEntry text is returned in ME for the caller to resolve into an iterator afterwards -
+// the word it names may not exist yet.  deltaUsagePatterns starts at zero because deltas are
+// per-source, not persisted.
 cSourceWordInfo::cSourceWordInfo(char* buffer, int& where, int limit, wstring& ME, int iSourceId)
 {
 	LFS
@@ -299,6 +436,9 @@ cSourceWordInfo::cSourceWordInfo(char* buffer, int& where, int limit, wstring& M
 	//preferVerbPresentParticiple();
 }
 
+// "map To DB": converts an eUsagePatterns slot (TRANSFER_COUNT..LAST_USAGE_PATTERN) into the
+// pseudo form number used to store that statistic as a row in the wordForms table.
+// Real form numbers stay below patternFormNumOffset (32750), so the two share one column.
 int mTD(int p)
 {
 	return p + cSourceWordInfo::patternFormNumOffset - cSourceWordInfo::TRANSFER_COUNT;

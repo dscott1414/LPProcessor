@@ -1,3 +1,33 @@
+/*
+	checkTypes.cpp - Scan a BNC-World tree for word/tag co-occurrence
+
+	Overview:
+		Recursive directory walker over F:\lp\BNC-World\texts. Either
+		finds every BNC tag that co-occurs with a hardcoded word
+		(FIND_WORD ">sit") or, if swapped, every word under a tag
+		(FIND_TYPE). Prints counts plus the mapped LP form from tagList.
+
+	Pipeline position:
+		Offline BNC-tag / LP-form research utility; not on the parse path.
+
+	Key entry points:
+		- getLastErrorMessage() - FormatMessage of GetLastError
+		- getPath() - ReadFile a whole file into a caller buffer
+		- findAllTypesMatchingWord() - recurse; collect tags near pattern
+		- findAllWordsMatchingType() - recurse; collect words after pattern
+		- main() - walk BNC texts, print alltypes + lptypes histograms
+
+	Key data structures / globals:
+		- buffer[MAX_BUF_LEN] (10e6) - shared file contents
+		- alltypes / lptypes - tag->count and LP-form->count maps
+		- tagList[] - BNC CLAWS tags -> LP form names (or NULL)
+
+	Notes / gotchas:
+		path is strcat'd without a size; long trees overflow 1024.
+		getPath return is ignored — failed reads still scan leftover buffer.
+		strlwr(buffer) is not standard C; MSVC-only. gets_s at the end
+		is a "press enter" pause. Hardcoded F:\lp\BNC-World\texts.
+*/
 #pragma warning(disable : 4786 4503 4996) // disable warning C4786
 #define _CRT_SECURE_NO_WARNINGS
 #include <windows.h>
@@ -16,6 +46,8 @@
 #include <set>
 using namespace std;
 
+// Format GetLastError() into a static 10k wchar buffer (strip trailing NL).
+// Not thread-safe; pointer is valid until the next call.
 wchar_t *getLastErrorMessage() 
 { 
 	static wchar_t msg[10000];
@@ -26,6 +58,9 @@ wchar_t *getLastErrorMessage()
 	return msg;
 }
 
+// Read pathname into buffer (NUL-terminated). Sets actualLen to file size.
+// Returns 0 on success, -1 on open/size/overflow/short-read. Does not
+// distinguish empty files from errors (actualLen<=0).
 int getPath(const char *pathname,char *buffer,int maxlen,int &actualLen)
 {
 	HANDLE hFile = CreateFileA(pathname,    // file to open
@@ -74,6 +109,10 @@ typedef map <string,int>::iterator tIBNC;
 typedef pair <string, int> tWFIMap;
 map<string,int> alltypes,lptypes;
 
+// Recurse from `path` (mutated in place: appends \*. then each name).
+// For each file, lowercase the contents and for every occurrence of
+// `pattern` walk back to the previous '<' and insert the tag text
+// (buffer+tmp+3, i.e. skip "<w ") into alltypes. No return.
 void findAllTypesMatchingWord(char *path,char *pattern)
 {
   struct _finddata_t bnc_file;
@@ -117,6 +156,9 @@ void findAllTypesMatchingWord(char *path,char *pattern)
   }
 }
 
+// Recurse like findAllTypesMatchingWord, but collect the token after
+// `pattern` (up to space or '<') into alltypes. Used when FIND_TYPE is
+// enabled instead of FIND_WORD.
 void findAllWordsMatchingType(char *path,char *pattern)
 {
   struct _finddata_t bnc_file;
@@ -265,6 +307,8 @@ struct
 */
 #define FIND_TYPE "<w dt0>"
 #define FIND_WORD ">sit"
+// Walk F:\lp\BNC-World\texts for FIND_WORD (">sit"), print per-tag and
+// collapsed LP-form counts, then gets_s pause. argv unused.
 int main( int argc, char *argv[] )
 {
   char path[1024];

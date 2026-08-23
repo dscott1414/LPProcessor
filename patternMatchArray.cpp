@@ -1,3 +1,35 @@
+/*
+	patternMatchArray.cpp - storage, insert, query and winner-compaction for per-token PMA
+
+	Overview:
+		Implements cPatternMatchArray: a growable, (pattern#,len)-sorted array of
+		competing pattern matches that start at one source position.  Insertion is
+		push_back_unique (lower_bound + optional memmove insert).  After costing,
+		consolidateWinners copies winner slots down and remaps the two PEMA chain
+		heads each slot holds.
+
+	Pipeline position:
+		Stage 4.  Called from cPattern::fillPattern (writes) and from
+		eliminateLoserPatterns / relation and object queries (reads).
+
+	Key entry points:
+		- push_back_unique() / push_back() - insert or locate a (pattern,len)
+		- find() / lower_bound() - bsearch and hand-rolled lower_bound
+		- consolidateWinners() - keep only winners; translate PEMA indexes
+		- queryPattern* / queryPatternDiff* / queryTagSet / findAgent / getNextPosition
+
+	Key data structures / globals:
+		- content / count / allocated - the buffer; allocated doubles from 5
+		- compare() - qsort/bsearch comparator on (pattern, len)
+
+	Notes / gotchas:
+		- clear() tfree's content but leaves the dangling pointer (destructor and
+		  PEMA::clear null it).  The next push_back then trealloc's freed memory.
+		- read() bounds-checks with the *old* count before copy() overwrites it.
+		- queryPattern(int, int& len) uses the caller's len as the running max
+		  without initializing it; the other overloads start from -1.
+		- getNextPosition seeds minPatternMatch with `1<<31` (signed-shift UB).
+*/
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
@@ -9,6 +41,7 @@
 #include "word.h"
 #include "profile.h"
 
+// Empty PMA.  content is NULL until the first push_back.
 cPatternMatchArray::cPatternMatchArray()
 {
 	LFS
@@ -17,6 +50,7 @@ cPatternMatchArray::cPatternMatchArray()
 	content = NULL;
 };
 
+// Free the buffer (if any) and leave a NULL content so a stray use is a clean crash.
 cPatternMatchArray::~cPatternMatchArray()
 {
 	LFS
@@ -26,6 +60,8 @@ cPatternMatchArray::~cPatternMatchArray()
 	content = NULL;
 }
 
+// Drop every entry and free the buffer.  Unlike the destructor this does not
+// NULL content, so a subsequent push_back trealloc's a freed pointer.
 void cPatternMatchArray::clear(void)
 {
 	LFS
@@ -34,6 +70,8 @@ void cPatternMatchArray::clear(void)
 	allocated = 0;
 }
 
+// Deep copy.  On tmalloc failure logs FATAL and returns with content==NULL but
+// count/allocated still copied from rhs (any later [] is a null deref).
 cPatternMatchArray::cPatternMatchArray(const cPatternMatchArray& rhs)
 {
 	LFS
@@ -52,6 +90,8 @@ cPatternMatchArray::cPatternMatchArray(const cPatternMatchArray& rhs)
 	}
 }
 
+// Shrink allocated down to count.  trealloc result is assigned over content:
+// if it fails the original buffer is leaked and content becomes NULL.
 void cPatternMatchArray::minimize(void)
 {
 	LFS
@@ -60,6 +100,8 @@ void cPatternMatchArray::minimize(void)
 	content = (tPatternMatch*)trealloc(2, content, oldAllocated * sizeof(*content), allocated * sizeof(*content));
 }
 
+// Write count then the raw content bytes to a POSIX fd.  Return is always true;
+// _write errors are ignored.
 bool cPatternMatchArray::write(IOHANDLE file)
 {
 	LFS
@@ -68,6 +110,9 @@ bool cPatternMatchArray::write(IOHANDLE file)
 	return true;
 }
 
+// Deserialize from a memory image.  The first bounds check uses the *pre-read*
+// count (usually 0), so it does not actually protect the memcpy.  Returns false
+// on a short buffer or tmalloc failure; fatals if the memcpy would exceed limit.
 bool cPatternMatchArray::read(char* buffer, int& where, unsigned int limit)
 {
 	LFS
@@ -87,6 +132,8 @@ bool cPatternMatchArray::read(char* buffer, int& where, unsigned int limit)
 	return true;
 }
 
+// Serialize into a memory image via copy() + memcpy.  Fatals if the payload
+// would exceed limit after the count has already been written.
 bool cPatternMatchArray::write(void* buffer, int& where, unsigned int limit)
 {
 	LFS
@@ -98,6 +145,7 @@ bool cPatternMatchArray::write(void* buffer, int& where, unsigned int limit)
 	return true;
 }
 
+// Byte-compare content[0..count).  `other` is taken by value (full copy).
 bool cPatternMatchArray::operator==(const cPatternMatchArray other) const
 {
 	LFS
@@ -105,6 +153,8 @@ bool cPatternMatchArray::operator==(const cPatternMatchArray other) const
 	return memcmp(content, other.content, count * sizeof(*content)) == 0;
 }
 
+// Replace this buffer with a deep copy of rhs.  Self-assignment frees content
+// first and then copies from the freed rhs (this==rhs is unsafe).
 cPatternMatchArray& cPatternMatchArray::operator=(const cPatternMatchArray& rhs)
 {
 	LFS
@@ -125,6 +175,7 @@ cPatternMatchArray& cPatternMatchArray::operator=(const cPatternMatchArray& rhs)
 	return *this;
 }
 
+// Inverse of operator==.  Also takes `other` by value.
 bool cPatternMatchArray::operator!=(const cPatternMatchArray other) const
 {
 	LFS
@@ -132,6 +183,8 @@ bool cPatternMatchArray::operator!=(const cPatternMatchArray other) const
 	return memcmp(content, other.content, count * sizeof(*content)) != 0;
 }
 
+// Slot _P0.  INDEX_CHECK (off by default) logs and returns content[0] on OOB,
+// pushing a dummy entry if the array is empty.
 cPatternMatchArray::tPatternMatch& cPatternMatchArray::operator[](unsigned int _P0)
 {
 	LFS
@@ -147,6 +200,7 @@ cPatternMatchArray::tPatternMatch& cPatternMatchArray::operator[](unsigned int _
 	return (content[_P0]);
 }
 
+// Const [] — INDEX_CHECK throws if count==0 rather than inserting a dummy.
 const cPatternMatchArray::tPatternMatch& cPatternMatchArray::operator[](unsigned int _P0) const
 {
 	LFS
@@ -162,6 +216,9 @@ const cPatternMatchArray::tPatternMatch& cPatternMatchArray::operator[](unsigned
 	return (content[_P0]);
 }
 
+// Insert a new slot at insertionPoint, shifting the tail right.  Grows allocated
+// *2 from 5.  Initializes PEMA heads to -1 and descendantRelationships to -1.
+// Returns insertionPoint.  No uniqueness check — caller is push_back_unique.
 int cPatternMatchArray::push_back(unsigned int insertionPoint, int pass, short cost, unsigned short p, short end)
 {
 	LFS
@@ -197,6 +254,11 @@ int cPatternMatchArray::push_back(unsigned int insertionPoint, int pass, short c
 }
 
 // this sorts by ascending pattern # and by ascending end #
+// Locate (p,end) via lower_bound.  If present and this cost is cheaper, set
+// reduced (the slot's cost is NOT written here — fillPattern/reduceParents
+// does that).  If absent, insert; on pass>=1 force cost=MAX_SIGNED_SHORT and
+// reduced=true so reduceParents rewrites parents.  pushed is true iff a slot
+// was created.  Returns the slot index.
 int cPatternMatchArray::push_back_unique(int pass, short cost, unsigned short p, short end, bool& reduced, bool& pushed)
 {
 	LFS
@@ -236,6 +298,7 @@ int cPatternMatchArray::push_back_unique(int pass, short cost, unsigned short p,
 	return push_back((int)(c - content), pass, cost, p, end);
 }
 
+// Remove slot `at` by memmove.  INDEX_CHECK throws on empty / OOB.
 int cPatternMatchArray::erase(unsigned int at)
 {
 	LFS
@@ -253,6 +316,7 @@ int cPatternMatchArray::erase(unsigned int at)
 	return count;
 }
 
+// Drop every entry without freeing the buffer (count=0; allocated stays).
 int cPatternMatchArray::erase(void)
 {
 	LFS
@@ -260,6 +324,8 @@ int cPatternMatchArray::erase(void)
 	return 0;
 }
 
+// Longest match whose pattern *name* equals `pattern`.  On success element is
+// the PMA index and the return is true; otherwise element=-1 and false.
 bool cPatternMatchArray::findMaxLen(wstring pattern, int& element)
 {
 	LFS
@@ -274,6 +340,7 @@ bool cPatternMatchArray::findMaxLen(wstring pattern, int& element)
 	return element >= 0;
 }
 
+// PMA index of the longest match of any pattern, or -1 if the array is empty.
 int cPatternMatchArray::findMaxLen(void)
 {
 	LFS
@@ -287,6 +354,8 @@ int cPatternMatchArray::findMaxLen(void)
 	return element;
 }
 
+// PMA index (OR'd with patternFlag) of the longest match named `pattern`, or
+// the discarded maxLen overload's return (-1 if none).
 int cPatternMatchArray::queryPattern(wstring pattern)
 {
 	LFS
@@ -294,6 +363,8 @@ int cPatternMatchArray::queryPattern(wstring pattern)
 	return queryPattern(pattern, maxLen);
 }
 
+// Longest match named `pattern`.  Returns PMA index | patternFlag, or -1; len
+// is set to that match's length or -1 if none.
 int cPatternMatchArray::queryPattern(wstring pattern, int& len)
 {
 	LFS
@@ -308,6 +379,7 @@ int cPatternMatchArray::queryPattern(wstring pattern, int& len)
 	return element;
 }
 
+// First PMA index at or after startAt whose pattern name equals `pattern`, or -1.
 int cPatternMatchArray::queryAllPattern(wstring pattern, int startAt)
 {
 	LFS
@@ -317,6 +389,9 @@ int cPatternMatchArray::queryAllPattern(wstring pattern, int startAt)
 	return -1;
 }
 
+// Among matches named `pattern`, pick the cheapest, breaking ties by longest
+// len.  Returns PMA index | patternFlag (or -1).  minCost starts at 10000, so a
+// match costing more than that is ignored.
 int cPatternMatchArray::queryMaximumLowestCostPattern(wstring pattern, int& len)
 {
 	LFS
@@ -333,6 +408,9 @@ int cPatternMatchArray::queryMaximumLowestCostPattern(wstring pattern, int& len)
 	return element;
 }
 
+// Longest match of pattern *number* `pattern` whose len is already > `len`.
+// Unlike the wstring overload, `len` is not reset to -1 — the caller must
+// initialize it or the first comparison is against garbage.
 int cPatternMatchArray::queryPattern(int pattern, int& len)
 {
 	LFS
@@ -346,6 +424,10 @@ int cPatternMatchArray::queryPattern(int pattern, int& len)
 	return element;
 }
 
+// Longest match whose pattern belongs to desiredTagSetNum.  On a length tie,
+// a NAME tag already chosen wins over a later NOUN.  Returns the tag id (or
+// -1); element is the PMA index | patternFlag.  If hasTagInSet returns -1,
+// a later equal-length hit reads patternTagStrings[-1].
 int cPatternMatchArray::queryTagSet(unsigned int& element, int desiredTagSetNum, int& maxLen)
 {
 	LFS
@@ -365,6 +447,7 @@ int cPatternMatchArray::queryTagSet(unsigned int& element, int desiredTagSetNum,
 }
 
 
+// Exact (pattern#, len) via bsearch.  Returns PMA index | patternFlag, or -1.
 int cPatternMatchArray::queryPatternWithLen(int pattern, int len)
 {
 	LFS
@@ -373,6 +456,7 @@ int cPatternMatchArray::queryPatternWithLen(int pattern, int len)
 	return (int)(e - content) | cMatchElement::patternFlag;
 }
 
+// Last (not first) PMA index | patternFlag whose name and len both match, or -1.
 int cPatternMatchArray::queryPatternWithLen(wstring pattern, int len)
 {
 	LFS
@@ -383,6 +467,7 @@ int cPatternMatchArray::queryPatternWithLen(wstring pattern, int len)
 	return element;
 }
 
+// Longest match of pattern *number* `pattern`.  Returns PMA index | patternFlag, or -1.
 int cPatternMatchArray::queryPattern(int pattern)
 {
 	LFS
@@ -396,6 +481,9 @@ int cPatternMatchArray::queryPattern(int pattern)
 	return element;
 }
 
+// Longest __NOUN whose differentiator is '2' (common noun) or, if
+// includePronouns, 'C' (pronominal), and whose len <= maximumMaxLen.
+// Returns the PMA index | patternFlag (also written to element), or -1.
 int cPatternMatchArray::findAgent(int& element, int maximumMaxLen, bool includePronouns)
 {
 	LFS
@@ -416,6 +504,7 @@ int cPatternMatchArray::findAgent(int& element, int maximumMaxLen, bool includeP
 	return element;
 }
 
+// Longest match of (pattern, differentiator); discards the maxLen out-param.
 int cPatternMatchArray::queryPatternDiff(wstring pattern, wstring differentiator)
 {
 	LFS
@@ -423,6 +512,8 @@ int cPatternMatchArray::queryPatternDiff(wstring pattern, wstring differentiator
 	return queryPatternDiff(pattern, differentiator, maxLen);
 }
 
+// Longest match of (name, differentiator).  "*" means any differentiator;
+// "X*" means differentiator[0]=='X'.  Returns PMA index | patternFlag, or -1.
 int cPatternMatchArray::queryPatternDiff(wstring pattern, wstring differentiator, int& maxLen)
 {
 	LFS
@@ -453,6 +544,8 @@ int cPatternMatchArray::queryPatternDiff(wstring pattern, wstring differentiator
 	return element;
 }
 
+// Longest match of (name, differentiator) whose len is strictly < the inbound
+// maxLen.  Writes that length back to maxLen.  Same "*" / "X*" wildcards.
 int cPatternMatchArray::queryPatternDiffLessThenLength(wstring pattern, wstring differentiator, int& maxLen)
 {
 	LFS
@@ -482,6 +575,7 @@ int cPatternMatchArray::queryPatternDiffLessThenLength(wstring pattern, wstring 
 	return element;
 }
 
+// Longest match whose pattern has _QUESTION set.  Returns PMA index | patternFlag, or -1.
 int cPatternMatchArray::queryQuestionFlagPattern()
 {
 	LFS
@@ -496,6 +590,9 @@ int cPatternMatchArray::queryQuestionFlagPattern()
 	return element;
 }
 
+// Smallest match length in this PMA, if it is > w; otherwise w+1.  Used to
+// skip forward when no match covering more than `w` tokens starts here.
+// Seeds the scan with `1<<31` (signed left-shift into the sign bit).
 int cPatternMatchArray::getNextPosition(int w)
 {
 	LFS
@@ -508,6 +605,8 @@ int cPatternMatchArray::getNextPosition(int w)
 	return w + 1;
 }
 
+// bsearch comparator: ascending pattern #, then ascending len.  Not a member;
+// the commented trace used a `t` that is not in scope here.
 int compare(cPatternMatchArray::tPatternMatch* pm1, cPatternMatchArray::tPatternMatch* pm2)
 {
 	DLFS
@@ -520,6 +619,8 @@ int compare(cPatternMatchArray::tPatternMatch* pm1, cPatternMatchArray::tPattern
 	return 0;
 }
 
+// Binary search for exact (p, len).  Returns a pointer into content, or NULL.
+// Relies on the array staying sorted by push_back_unique.
 cPatternMatchArray::tPatternMatch* cPatternMatchArray::find(unsigned int p, short len)
 {
 	LFS
@@ -534,6 +635,8 @@ cPatternMatchArray::tPatternMatch* cPatternMatchArray::find(unsigned int p, shor
 	//return result;
 }
 
+// First slot not ordered before (p, end).  May point one-past-last (content+count)
+// when every existing slot is < (p,end) — push_back_unique treats that as "insert here".
 cPatternMatchArray::tPatternMatch* cPatternMatchArray::lower_bound(unsigned int p, short end)
 {
 	LFS
@@ -555,6 +658,10 @@ cPatternMatchArray::tPatternMatch* cPatternMatchArray::lower_bound(unsigned int 
 	return first;
 }
 
+// Compact this PMA to winner slots only (memcpy down), clear WINNER_FLAG, and
+// remap pemaByPatternEnd / pemaByChildPatternEnd through PEMA's wa[] map.
+// maxMatch is the longest surviving len.  Returns true if more than one winner
+// remains.  `position` is the source-m index, used only for the elimination log.
 bool cPatternMatchArray::consolidateWinners(int lastPEMAConsolidationIndex, cPatternElementMatchArray& pema, int* wa, int position, int& maxMatch, sTrace& t)
 {
 	LFS

@@ -1,3 +1,56 @@
+/*
+	pattern.cpp - pattern match engine, create/resolve, tag-set eval, tag lookup
+
+	Overview:
+		The runtime half of stage 4.  initializePatterns() (called once at
+		startup) runs every create* in definePatterns.cpp, resolves
+		cPatternReference forward refs, then walks the pattern graph to fill
+		ancestor bitsets and descendant tag sets.  Per sentence,
+		matchPatternPosition() tries one pattern at one source position:
+		matchFirst/matchRange/matchOne build a linked whatMatched chain, then
+		fillPattern copies a successful chain into that token's PMA and the
+		document PEMA.  A second pass re-matches only "new" children so
+		forward-referenced subpatterns can cheapen their parents
+		(reduceParents).  After all patterns have been tried,
+		eliminateLoserPatterns (in source.cpp) costs and winnows; this file
+		also owns the tag-set tables and the findTag* helpers later stages use
+		to read the surviving match tree.
+
+	Pipeline position:
+		Stage 1 init (initializePatterns) and stage 4 parse (match/fill).
+		cSource::matchPatternsAgainstSentence is the usual caller of
+		matchPatternPosition.  findTag / findTagConstrained / queryPattern
+		are used from relations, objects, speakers and QA.
+
+	Key entry points:
+		- initializePatterns() / initializeTagSets()
+		- cPattern::create() (va_list and the dynamic QA transform overload)
+		- cPattern::matchPatternPosition() / fillPattern()
+		- cPatternElement::matchOne / matchFirst / matchRange / inflectionMatch
+		- findPattern / findTag / findTagConstrained / findOneTag
+		- cPattern::isTopLevelMatch / evaluateTagSets / add / resolveDescendants
+
+	Key data structures / globals:
+		- patterns / patternReferences / patternTagStrings / desiredTagSets
+		- overMatchMemoryExceeded - latched when whatMatched exceeds
+		  MAX_PATTERN_NUM_MATCH (4000); matchOne then returns -2
+		- verbObjectsTagSet, subjectTagSet, roleTagSet, ... - indexes into
+		  desiredTagSets, filled by initializeTagSets
+		- PREP_TAG / OBJECT_TAG / ... - interned tag ids for hot paths
+
+	Notes / gotchas:
+		- processForm writes through form.c_str() to split off |word *cost {tags}.
+		  That mutates the wstring via a const wchar_t* (UB on modern C++).
+		- setMandatoryAncestorPatterns ORs into ancestorPatterns, not
+		  mandatoryAncestorPatterns (copy-paste from setAncestorPatterns).
+		- initializeUsage only reserve()s the usage counters; incrementUse
+		  indexes them as if they had been resize()'d.
+		- findPattern(name, starting) returns patterns.size() on miss, never
+		  -1; findPattern(name, diff) returns (unsigned)-1.  Callers mix the
+		  two conventions.
+		- The #ifdef ABNF read/write path does not compile against current
+		  members and is not on the live init path.
+*/
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
@@ -58,18 +111,23 @@ struct {
 {-1,NULL}
 };
 
+// Child pattern # packed in elementMatchedIndex (bits 15-30).  Only valid when
+// patternFlag (bit 31) is set.
 unsigned int cMatchElement::getChildPattern()
 {
 	LFS
 		return cPatternElementMatchArray::PATMASK(elementMatchedIndex);
 };
 
+// Child match length packed in elementMatchedIndex (bits 0-14).
 unsigned int cMatchElement::getChildLen()
 {
 	LFS
 		return cPatternElementMatchArray::ENDMASK(elementMatchedIndex);
 };
 
+// Space-separated names of this element's form and child-pattern alternatives.
+// An index < 0 (unresolved) is rendered as "***".
 wstring cPatternElement::formsStr(void)
 {
 	LFS
@@ -92,6 +150,8 @@ wstring cPatternElement::formsStr(void)
 	return allForms;
 }
 
+// Walk the previousMatch chain from elementMatched back to the start and
+// format each step into s (used only under LOG_PATTERN_MATCHING).
 wstring matchesToString(vector <cMatchElement>& whatMatched, int elementMatched, wstring& s)
 {
 	LFS
@@ -116,6 +176,11 @@ wstring matchesToString(vector <cMatchElement>& whatMatched, int elementMatched,
 	return s;
 }
 
+// Match this element against every already-successful prefix in
+// whatMatched[matchBegin, matchEnd).  If minimum==0, also push a zero-width
+// "skipped" placeholder for each prefix.  Then repeat up to `maximum` times,
+// each round matching from the previous round's new entries.  Returns true if
+// at least one new match was produced, or if the element is optional.
 bool cPatternElement::matchRange(cSource& source, int matchBegin, int matchEnd, vector <cMatchElement>& whatMatched, sTrace& t)
 {
 	LFS // DLFS
@@ -165,6 +230,10 @@ bool cPatternElement::matchRange(cSource& source, int matchBegin, int matchEnd, 
 	return matchBegin != matchEnd || rep > 1 || minimum == 0; // if no matches, only return success if the element is optional
 }
 
+// First-element variant of matchRange: seeds whatMatched from sourcePosition
+// rather than from prior prefixes.  Returns false only when the element is
+// mandatory and matchOne failed.  A sole optional-skip (size==1, minimum==0)
+// is success with endPosition=-1 so later elements start at the same token.
 bool cPatternElement::matchFirst(cSource& source, int sourcePosition, vector <cMatchElement>& whatMatched, sTrace& t)
 {
 	LFS
@@ -240,6 +309,11 @@ bool cPatternElement::matchFirst(cSource& source, int sourcePosition, vector <cM
 // inflectionFlagsFromWord are the inflections of the word in the source
 // flags are the flags to match in the patternElement.
 // sourceFormStr is the form of the word of the source
+// True if the word's inflection is compatible with this element's required
+// inflectionFlags for the given form class.  Nouns marked flagNounOwner are
+// rewritten to SINGULAR_OWNER/PLURAL_OWNER; NO_OWNER then rejects them.
+// ONLY_CAPITALIZED rejects a non-capitalized token.  If the element imposes
+// no flags for this class, the class is accepted unconditionally.
 bool cPatternElement::inflectionMatch(int inflectionFlagsFromWord, __int64 flags, wstring sourceFormStr, sTrace& t)
 {
 	LFS
@@ -287,6 +361,15 @@ bool cPatternElement::inflectionMatch(int inflectionFlagsFromWord, __int64 flags
 #define MAX_PATTERN_NUM_MATCH 4000 // Charles Dickens may require a lower limit.
 // because endPositionMatches is being pushed back into whatMatched, endPositionMatches must be a COPY
 // of the position of whatMatched it started out as.  Do not pass endPositionMatches as a reference.
+// Try every form alternative, then every child-pattern alternative, at
+// sourcePosition.  Each hit is pushed onto whatMatched linked via lastElement.
+// Return 1 if anything matched; 2 if optional (minimum==0) and the word is not
+// ignorable; -1 if past end of source; -2 if whatMatched exceeded
+// MAX_PATTERN_NUM_MATCH; -3 if mandatory and no form/pattern hit; -4 if the
+// only remaining move would ignore a word at the start of the match.  An
+// ignorable token (dash etc.) recurses at sourcePosition+1 unless
+// checkIgnorableForms is set.  A specific-word alternative with cost>0
+// suppresses further pattern alternatives (skipPatternMatchingBecauseSpecificWordMatched).
 int cPatternElement::matchOne(cSource& source, unsigned int sourcePosition, unsigned int lastElement, vector <cMatchElement>& whatMatched, sTrace& t)
 {
 	LFS
@@ -332,6 +415,8 @@ int cPatternElement::matchOne(cSource& source, unsigned int sourcePosition, unsi
 					cost += im->word->second.getUsageCost(ME);
 				//if (f==PROPER_NOUN_FORM_NUM && (im->flags&(cWordMatch::flagAllCaps|cWordMatch::flagAddProperNoun))==(cWordMatch::flagAllCaps|cWordMatch::flagAddProperNoun)) // make this proper noun a little expensive
 				//  cost++;
+				// Bare "Dr" / "Mr" without a following '.' or a capital is usually
+				// not an abbreviation; the +5/+10 push a cheaper non-abbrev form.
 				if (f == abbreviationForm && sourcePosition + 1 < source.m.size() && source.m[sourcePosition + 1].word->first[0] != L'.')
 					cost += 5;
 				if (f == abbreviationForm && !(im->flags & (cWordMatch::flagAllCaps | cWordMatch::flagFirstLetterCapitalized)))
@@ -489,6 +574,13 @@ int cPatternElement::matchOne(cSource& source, unsigned int sourcePosition, unsi
 }
 
 // this assumes that optional or multiple elements cannot have a next element that could match
+// Try this pattern at sourcePosition.  Clears source.whatMatched, matches the
+// first element, then matchRange for each subsequent element.  If fill is
+// false (transform/QA patterns), only records variable->location maps and
+// returns whether anything matched.  If fill is true, fillPattern is called
+// for every surviving full-pattern chain; reduced costs are batched into
+// source.reduceParents.  Returns true if at least one *new* PMA/PEMA entry
+// was written (additionalMatch).
 bool cPattern::matchPatternPosition(cSource& source, const unsigned int sourcePosition, bool fill, sTrace& t)
 {
 	LFS  // DLFS
@@ -571,6 +663,14 @@ bool cPattern::matchPatternPosition(cSource& source, const unsigned int sourcePo
 	return additionalMatch;
 }
 
+// Materialize one whatMatched chain (ending at elementMatched) into PMA/PEMA.
+// Applies _ONLY_END_MATCH / _STRICT_NO_MIDDLE_MATCH / _QUESTION / _ONLY_BEGIN_MATCH
+// cost adjustments, sums element costs, push_back_unique's the PMA slot, then
+// walks the chain backwards writing PEMA elements and linking
+// nextByPatternEnd / nextByPosition / nextByChildPatternEnd.  On pass>1 a
+// chain with no isNew() child is discarded.  Returns true if a new PEMA
+// element was created.  insertionPoint/reducedCost/pushed are PMA outcomes
+// for reduceParents.
 bool cPattern::fillPattern(cSource& source, int sourcePosition, vector <cMatchElement>& whatMatched, int elementMatched, unsigned int& insertionPoint, int& reducedCost, bool& pushed, sTrace& t)
 {
 	LFS // DLFS
@@ -633,6 +733,8 @@ bool cPattern::fillPattern(cSource& source, int sourcePosition, vector <cMatchEl
 		for (; ep < source.m.size() && !source.isEOS(ep); ep++);
 		// -2 is to compensate for verbs taking objects like: are you not?  
 		// 'are' should take an object, which would give a -1 cost to a _COMMAND.  So to conteract this, -2 is given here.
+		// Non-questions pay +2 so a _QUESTION pattern loses to a declarative
+		// when the sentence does not actually end in '?'.
 		if (ep < source.m.size())
 			elementCost += (source.m[ep].word->first == L"?") ? -2 : 2;
 	}
@@ -784,6 +886,8 @@ bool cPattern::fillPattern(cSource& source, int sourcePosition, vector <cMatchEl
 	return additionalMatch;
 }
 
+// First pattern whose name equals form, scanning from 0.  Returns
+// patterns.size() (not -1) if none.
 unsigned int findPattern(wstring form)
 {
 	LFS
@@ -791,6 +895,7 @@ unsigned int findPattern(wstring form)
 	return findPattern(form, startingPattern);
 }
 
+// Set every bit in patternsFound for a pattern named `form` (all differentiators).
 void findPatterns(wstring form, cBitObject<>& patternsFound)
 {
 	LFS
@@ -800,6 +905,8 @@ void findPatterns(wstring form, cBitObject<>& patternsFound)
 		patternsFound.set(p);
 }
 
+// First pattern named `form` at or after startingPattern.  Advances
+// startingPattern to the hit (or to patterns.size() on miss).  Never returns -1.
 unsigned int findPattern(wstring form, unsigned int& startingPattern)
 {
 	LFS
@@ -807,6 +914,8 @@ unsigned int findPattern(wstring form, unsigned int& startingPattern)
 	return startingPattern;
 }
 
+// Pattern whose name AND differentiator both match.  Returns (unsigned)-1 if none
+// (unlike the name-only overloads, which return patterns.size()).
 unsigned int findPattern(wstring name, wstring diff)
 {
 	LFS
@@ -816,6 +925,10 @@ unsigned int findPattern(wstring name, wstring diff)
 }
 
 // _VERB|wrapping[*]*2{VERB:pM:V_OBJECT} is a verb with future reference and a cost of 2.
+// Split a create() token into the bare form/pattern name plus optional
+// |specificWord, [R] future-ref / recursive-match, *cost, and {TAG:TAG}.
+// Mutates `form` in place (erases the suffix) AND writes through form.c_str()
+// to temporarily NUL-terminate the specific word — that is a const-cast store.
 void cPattern::processForm(wstring& form, wstring& specificWord, int& cost, set <unsigned int>& tags, bool& explicitFutureReference, bool& blockDescendants, bool& allowRecursiveMatch)
 {
 	LFS
@@ -883,6 +996,9 @@ void cPattern::processForm(wstring& form, wstring& specificWord, int& cost, set 
 	form.erase(eraseFromThisPoint, form.length());
 }
 
+// If `tag` is in this pattern's own tags set, erase it and return true.
+// Used at create() time to turn {_FINAL}, {_QUESTION}, ... into bool flags
+// so they do not also live as ordinary collectable tags.
 bool cPattern::eliminateTag(wstring tag)
 {
 	LFS
@@ -896,6 +1012,7 @@ bool cPattern::eliminateTag(wstring tag)
 }
 
 #ifdef ABNF
+// ABNF dump of one form/pattern alternative: name[#diff][$cost][TAG:TAG]/.
 int cPatternElement::writeABNFElementTag(wchar_t* buf, wstring sForm, int num, int cost, vector <unsigned int>& tags, int maxBuf, bool printNum)
 {
 	LFS
@@ -918,6 +1035,8 @@ int cPatternElement::writeABNFElementTag(wchar_t* buf, wstring sForm, int num, i
 // ABNF patterns include all pattern #s (NOUN#2, NOUN#3), whereas the hardcoded patterns include only the main form (NOUN)
 // This is because ABNF patterns include costing data for each NOUN# individually (original purpose)
 //
+// Parse one ABNF alternative out of buf (mutates buf with NULs).  Pattern
+// names are queued as cPatternReference; forms must already exist.
 void cPatternElement::readABNFElementTag(wstring patternName, wstring differentiator, int elementNum, set <unsigned int>& descendantTags, wchar_t* buf)
 {
 	LFS
@@ -962,6 +1081,7 @@ void cPatternElement::readABNFElementTag(wstring patternName, wstring differenti
 		descendantTags.insert(elementTags[I]);
 }
 
+// ABNF dump of this whole element: [min*max]{INFLECTIONS}(alt/alt/...).
 void cPatternElement::writeABNF(wchar_t* buf, int& len, int maxBuf)
 {
 	LFS
@@ -979,6 +1099,7 @@ void cPatternElement::writeABNF(wchar_t* buf, int& len, int maxBuf)
 }
 
 // readABNF
+// Construct one element by parsing an ABNF "(alt/alt)" clause out of buf.
 cPatternElement::cPatternElement(wstring patternName, wstring differentiator, int elementNum, set <unsigned int>& descendantTags, wchar_t*& buf)
 {
 	LFS
@@ -1019,6 +1140,8 @@ __NAME#3  = 0*1(honorific[SINGULAR]/__NAMEINTRO)
 letter{FIRST}
 *"."
 */
+// Write this pattern as one ABNF rule.  References onlyAfterQuote, which is
+// not a member (the live flag is afterQuote) — this path does not compile.
 void cPattern::writeABNF(FILE* fh, unsigned int lastTag)
 {
 	LFS
@@ -1064,6 +1187,7 @@ void cPattern::writeABNF(FILE* fh, unsigned int lastTag)
 	fwprintf(fh, L"\n");
 }
 
+// Dump every pattern to filePath.  fwopen / writeABNF; silent no-op if open fails.
 void writePatternsInABNF(wstring filePath, unsigned int lastTag)
 {
 	LFS
@@ -1075,6 +1199,7 @@ void writePatternsInABNF(wstring filePath, unsigned int lastTag)
 	fclose(fp);
 }
 
+// Read an ABNF file into `patterns`.  Not on the live initializePatterns path.
 void readPatternsInABNF(wstring filePath)
 {
 	LFS
@@ -1090,6 +1215,7 @@ void readPatternsInABNF(wstring filePath)
 	fclose(fp);
 }
 
+// Parse one ABNF rule from fh.  valid is set false on EOF / no '='.
 cPattern::cPattern(FILE* fh, bool& valid)
 {
 	LFS
@@ -1161,6 +1287,13 @@ cPattern::cPattern(FILE* fh, bool& valid)
 // no pattern may limit references to only some instances of patterns
 // that is, a pattern may not refer to a only _NOUN[1] and _NOUN[2], and not to _NOUN[3] which is after it.
 // patternName,each element:(numForms,(form,...),flags,minimum,maximum)  - until numForms=0
+// Build one pattern from the va_list DSL used by definePatterns.cpp.  Each
+// step is: numForms, numForms form-strings, inflectionFlags, min, max; a
+// following 0 ends the pattern.  Form names starting with '_' become
+// cPatternReference entries (resolved after all creates).  {_FINAL} etc. are
+// stripped into bool flags via eliminateTag.  Always returns true (`OK`);
+// fatal-logs on undefined forms (unless {_FREE_FORM}), >255 elements, or
+// >65535 patterns.  Chains nextRoot for later same-name variants.
 bool cPattern::create(wstring patternName, wstring differentiator, int numForms, ...)
 {
 	LFS
@@ -1289,6 +1422,11 @@ bool cPattern::create(wstring patternName, wstring differentiator, int numForms,
 	return OK;
 }
 
+// Build a one-off pattern from source.m[whereBegin, whereEnd) for QA
+// transform matching.  Positions listed in
+// positionToTransformationPatternVariableMap become named variables
+// (parseVariables in/out); other positions take the winner form string.
+// Not pushed onto the global `patterns` vector — the caller owns the pointer.
 cPattern* cPattern::create(cSource* source, wstring patternName, int num, int whereBegin, int whereEnd, unordered_map <wstring, wstring>& parseVariables)
 {
 	LFS
@@ -1375,6 +1513,7 @@ cPattern* cPattern::create(cSource* source, wstring patternName, int num, int wh
 	return p;
 }
 
+// Render this element's inflectionFlags into sFlags (space-separated names).
 const wchar_t* cPatternElement::inflectionFlagsToStr(wstring& sFlags)
 {
 	LFS
@@ -1385,6 +1524,7 @@ const wchar_t* cPatternElement::inflectionFlagsToStr(wstring& sFlags)
 	return sFlags.c_str();
 }
 
+// Render an inflection bitfield into sFlags.  Shared with word.cpp callers.
 const wchar_t* inflectionFlagsToStr(int inflectionFlags, wstring& sFlags)
 {
 	LFS
@@ -1424,6 +1564,7 @@ struct {
 	{-1,NULL}
 };
 
+// Render cSourceWordInfo flag bits into sFlags (debug / logging).
 const wchar_t* allWordFlags(int wordflags, wstring& sFlags)
 {
 	LFS
@@ -1434,6 +1575,9 @@ const wchar_t* allWordFlags(int wordflags, wstring& sFlags)
 	return sFlags.c_str();
 }
 
+// Dump this pattern's flags, ancestor names, descendant tags, tag-set
+// membership and every element's alternatives to the log.  Uses a 1024-wchar
+// stack buffer with wcscat (no remaining-space check on the flag suffixes).
 void cPattern::lplog(int logTypes)
 {
 	LFS
@@ -1502,6 +1646,7 @@ void cPattern::lplog(int logTypes)
 	}
 }
 
+// One-line dump: num:name[diff] variables and [inflection forms] per element.
 void cPattern::lplogShort(wstring patternType, int logTypes)
 {
 	LFS
@@ -1531,6 +1676,8 @@ void cPattern::lplogShort(wstring patternType, int logTypes)
 	::lplog(logTypes, L"%s:%s", patternType.c_str(), logstr);
 }
 
+// Log ever-matched / final-match counts for every form and child-pattern
+// alternative.  Indexes usage* vectors that initializeUsage only reserve()'d.
 void cPattern::reportUsage(void)
 {
 	LFS
@@ -1546,6 +1693,8 @@ void cPattern::reportUsage(void)
 	}
 }
 
+// Serialize pattern number, element count, and each element's four usage
+// vectors into buf.  Returns false if the image is full.
 bool cPattern::copyUsage(void* buf, int& where, int limit)
 {
 	DLFS
@@ -1557,12 +1706,19 @@ bool cPattern::copyUsage(void* buf, int& where, int limit)
 	return true;
 }
 
+// Zero every element's usage counters (std::fill; no-op if they were never sized).
 void cPattern::zeroUsage()
 {
 	for (unsigned int I = 0; I < elements.size(); I++)
 		elements[I]->zeroUsage();
 }
 
+// Bind every existing pattern named `patternName` as an alternative of
+// elementNum (the resolve() of a cPatternReference).  Skips a self-match
+// unless elementAllowRecursiveMatch.  A reference to a not-yet-created
+// (higher-numbered) pattern sets containsFutureReference and may log.
+// Returns true on resolve failure OR a logged future-ref error (the `|`
+// is bitwise).
 bool cPattern::add(int elementNum, wstring patternName, bool logFutureReferences, int elementCost, set <unsigned int> elementTags,
 	bool elementBlockDescendants, bool elementAllowRecursiveMatch)
 {
@@ -1620,6 +1776,9 @@ bool cPattern::add(int elementNum, wstring patternName, bool logFutureReferences
 	return (!found) | error;
 }
 
+// Recursively set ancestorPatterns to every parent of childPattern (and
+// their already-computed ancestors).  Called as setAncestorPatterns(p) with
+// p==this->num during initializePatterns.
 void cPattern::setAncestorPatterns(int childPattern)
 {
 	LFS
@@ -1634,6 +1793,9 @@ void cPattern::setAncestorPatterns(int childPattern)
 			}
 }
 
+// Same walk as setAncestorPatterns but for the mandatory-parent bitset.
+// The already-computed branch ORs into ancestorPatterns instead of
+// mandatoryAncestorPatterns (copy-paste).
 void cPattern::setMandatoryAncestorPatterns(int childPattern)
 {
 	LFS
@@ -1651,6 +1813,9 @@ void cPattern::setMandatoryAncestorPatterns(int childPattern)
 // if the pattern will be eliminated on these grounds DO NOT set maxMatch
 // otherwise, patterns not matching up to these # of elements will be eliminated even though they are
 //   the winners. - used in eliminateLoserPatterns
+// True if this match is allowed to update maxLACMatch: _FINAL, or
+// _FINAL_IF_ALONE / _FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN and the
+// span is bounded by separators (or the document edges).
 bool cPattern::isTopLevelMatch(cSource& source, unsigned int beginPosition, unsigned int endPosition)
 {
 	LFS
@@ -1679,18 +1844,22 @@ repeat
 continue matching patterns after LAST pattern
 */
 
+// Bind this forward ref into the global `patterns` table.  ORs any failure
+// into patternError (initializePatterns then exit(0)s).
 void cPatternReference::resolve(bool& patternError)
 {
 	LFS
 		patternError |= patterns[patternNum]->add(elementNum, form, logFutureReferences, cost, tags, blockDescendants, allowRecursiveMatch);
 }
 
+// Same as resolve() but against a caller-supplied pattern vector (QA transforms).
 void cPatternReference::resolve(vector <cPattern*>& transformPatterns, bool& patternError)
 {
 	LFS
 		patternError |= transformPatterns[patternNum]->add(elementNum, form, logFutureReferences, cost, tags, blockDescendants, allowRecursiveMatch);
 }
 
+// True if `tag` appears on any descendant (or was percolated into descendantTags).
 bool cPattern::hasDescendantTag(unsigned int tag)
 {
 	LFS
@@ -1703,6 +1872,7 @@ bool cPattern::hasDescendantTag(unsigned int tag)
 	*/
 }
 
+// True if this pattern itself is tagged `tag` (not merely a descendant).
 bool cPattern::hasTag(unsigned int tag)
 {
 	LFS
@@ -1710,6 +1880,8 @@ bool cPattern::hasTag(unsigned int tag)
 }
 
 // a pattern may only contain some elements.  Only if it has no elements of the tag set will it be marked false.
+// True if any of desiredTagSet.tags[0..limit) is on this pattern (includeSelf)
+// or its descendants.
 bool cPattern::containsOneOfTagSet(cTagSet& desiredTagSet, unsigned int limit, bool includeSelf)
 {
 	LFS
@@ -1725,6 +1897,9 @@ bool cPattern::containsOneOfTagSet(cTagSet& desiredTagSet, unsigned int limit, b
 	return false;
 }
 
+// If required<0: true when at least |required| of the first |required| tags
+// are present (containsOneOf).  If required>0: true only when ALL of the
+// first `required` tags are present (on descendants, and on self if includeSelf).
 bool cPattern::setCheckDescendantsForTagSet(cTagSet& desiredTagSet, bool includeSelf)
 {
 	LFS
@@ -1741,6 +1916,7 @@ bool cPattern::setCheckDescendantsForTagSet(cTagSet& desiredTagSet, bool include
 	return true;
 }
 
+// Index of desiredTagSets named tagSet.  Fatals if missing (the return -1 is dead).
 unsigned int findTagSet(wchar_t* tagSet)
 {
 	LFS
@@ -1780,6 +1956,8 @@ unsigned int twoObjectTestTagSet;
 
 unsigned int PREP_TAG, OBJECT_TAG, SUBOBJECT_TAG, REOBJECT_TAG, IOBJECT_TAG, SUBJECT_TAG, PREP_OBJECT_TAG, VERB_TAG, IVERB_TAG, PLURAL_TAG, MPLURAL_TAG, GNOUN_TAG, MNOUN_TAG, PNOUN_TAG, VNOUN_TAG, HAIL_TAG, NAME_TAG, REL_TAG, SENTENCE_IN_REL_TAG, FLOAT_TIME_TAG, NOUN_TAG;
 
+// Append every tag of desiredTagSets[tagSet] onto this set (used to fold
+// verbSense tags into the relation tag sets).
 void cTagSet::addTagSet(int tagSet)
 {
 	LFS
@@ -1789,6 +1967,9 @@ void cTagSet::addTagSet(int tagSet)
 
 // the first number argument is the number of arguments ALL must be in the pattern before the pattern field includesAllOfTagSet bit
 // for the tagset.  If the first number is negative it indicates the number of AT LEAST ONE of the arguments that must be in the pattern.
+// Build desiredTagSets and intern the hot tag ids (PREP_TAG, OBJECT_TAG, ...).
+// startSuperTagSets is set to the first "super" set (currently
+// _DESCENDANTS_HAVE_AGREEMENT) so evaluateTagSets can percolate those last.
 void initializeTagSets(int& startSuperTagSets)
 {
 	LFS
@@ -1871,6 +2052,9 @@ void initializeTagSets(int& startSuperTagSets)
 	FLOAT_TIME_TAG = findTag(L"FLOATTIME");
 }
 
+// Next tag of this pattern that is in desiredTagSets[desiredTagSetNum],
+// starting from `tag` (in/out, incremented past the hit).  Returns the tag
+// id, or -1 if the inclusion bitset is empty / exhausted.
 int cPattern::hasTagInSet(int desiredTagSetNum, unsigned int& tag)
 {
 	LFS
@@ -1882,6 +2066,8 @@ int cPattern::hasTagInSet(int desiredTagSetNum, unsigned int& tag)
 	return -1;
 }
 
+// Format alternative J into temp: "name[diff]*cost{_BLOCK}{TAG:TAG}" or
+// "form|word*cost...".  wcscat / _snwprintf with a maxBuf cap on the tags only.
 wchar_t* cPatternElement::toText(wchar_t* temp, int J, bool isPattern, int maxBuf)
 {
 	LFS
@@ -1920,6 +2106,7 @@ wchar_t* cPatternElement::toText(wchar_t* temp, int J, bool isPattern, int maxBu
 	return temp;
 }
 
+// Serialize the four usage vectors.  Returns false if the image is full.
 bool cPatternElement::copyUsage(void* buf, int& where, int limit)
 {
 	if (!::copy(buf, usageFormEverMatched, where, limit)) return false;
@@ -1929,6 +2116,7 @@ bool cPatternElement::copyUsage(void* buf, int& where, int limit)
 	return true;
 }
 
+// Zero the four usage vectors in place (size unchanged).
 void cPatternElement::zeroUsage()
 {
 	std::fill(usageFormEverMatched.begin(), usageFormEverMatched.end(), 0);
@@ -1937,6 +2125,8 @@ void cPatternElement::zeroUsage()
 	std::fill(usagePatternFinalMatch.begin(), usagePatternFinalMatch.end(), 0);
 }
 
+// Append one alternative's ever/final counts onto temp and log the line,
+// then restore temp to its incoming length so the caller can reuse the prefix.
 void cPatternElement::reportUsage(wchar_t* temp, int J, bool isPattern)
 {
 	LFS
@@ -1957,6 +2147,7 @@ void cPatternElement::reportUsage(wchar_t* temp, int J, bool isPattern)
 	temp[len] = 0;
 }
 
+// True if any form or child-pattern alternative of this element carries `tag`.
 bool cPatternElement::hasTag(unsigned int tag)
 {
 	LFS
@@ -1969,6 +2160,7 @@ bool cPatternElement::hasTag(unsigned int tag)
 	return false;
 }
 
+// True if alternative elementIndex (form or pattern) carries `tag`.
 bool cPatternElement::hasTag(unsigned int elementIndex, unsigned int tag, bool isPattern)
 {
 	LFS
@@ -1983,6 +2175,8 @@ bool cPatternElement::hasTag(unsigned int elementIndex, unsigned int tag, bool i
 	return false;
 }
 
+// Next tag of alternative elementIndex that is in desiredTagSetNum, starting
+// from tagNumBySet (in/out).  Returns the tag id or -1.
 int cPatternElement::hasTagInSet(unsigned int elementIndex, unsigned int desiredTagSetNum, unsigned int& tagNumBySet, bool isPattern)
 {
 	LFS
@@ -2001,6 +2195,8 @@ int cPatternElement::hasTagInSet(unsigned int elementIndex, unsigned int desired
 	return -1;
 }
 
+// Wrapper: -2 in the (signed) elementIndex means "optional skip placeholder"
+// and yields -1.  Otherwise forwards to the element's hasTagInSet.
 int cPattern::elementHasTagInSet(unsigned char cPatternElement, unsigned char elementIndex, unsigned int desiredTagSetNum, unsigned int& tagNumBySet, bool isPattern)
 {
 	DLFS
@@ -2008,6 +2204,8 @@ int cPattern::elementHasTagInSet(unsigned char cPatternElement, unsigned char el
 	return elements[cPatternElement]->hasTagInSet(elementIndex, desiredTagSetNum, tagNumBySet, isPattern);
 }
 
+// True if alternative elementIndex of element cPatternElement carries `tag`.
+// elementIndex==-2 (optional skip) is never a hit.
 bool cPattern::elementHasTag(unsigned char cPatternElement, unsigned char elementIndex, int tag, bool isPattern)
 {
 	LFS
@@ -2015,6 +2213,10 @@ bool cPattern::elementHasTag(unsigned char cPatternElement, unsigned char elemen
 }
 
 // the only descendant who is a leaf in the tree is the pattern itself.
+// Walk descendantPatterns (skipping those already in ancestors to cut cycles).
+// True if every descendant eventually bottoms out at `parent` or has no
+// further descendants — i.e. this pattern's descendant graph is a cycle
+// back to parent, so resolveDescendants can flatten it.
 bool cPattern::onlyDescendant(unsigned int parent, vector <unsigned int>& ancestors)
 {
 	LFS
@@ -2028,6 +2230,11 @@ bool cPattern::onlyDescendant(unsigned int parent, vector <unsigned int>& ancest
 	return descendantPatterns.size() > 0;
 }
 
+// Flatten descendantPatterns whose own descendant list is empty or is a
+// cycle back to this pattern: erase them and absorb their tags.  Returns
+// true when descendantPatterns is empty (fully resolved).  initializePatterns
+// loops this until every pattern returns true.  `circular` only enables a
+// log line per descendant.
 bool cPattern::resolveDescendants(bool circular)
 {
 	LFS
@@ -2049,6 +2256,11 @@ bool cPattern::resolveDescendants(bool circular)
 	return descendantPatterns.size() == 0;
 }
 
+// For desiredTagSets[start, end): set includesOneOf / includesAll-of bitsets
+// and tagSetMemberInclusion.  When start==0 and the pattern contains all
+// required descendant tags, also insert the tag-set's NAME_TAG into this
+// pattern's tags and every mandatory ancestor's descendantTags (so a blocked
+// _AGREEMENT still percolates as _DESCENDANTS_HAVE_AGREEMENT).
 void cPattern::evaluateTagSets(unsigned int start, unsigned int end)
 {
 	LFS
@@ -2080,12 +2292,17 @@ void cPattern::evaluateTagSets(unsigned int start, unsigned int end)
 		}
 }
 
+// Reserve (not resize) each element's usage counters now that patternIndexes
+// is final.  See cPatternElement::initializeUsage.
 void cPattern::initializeUsage()
 {
 	for (auto element : elements)
 		element->initializeUsage();
 }
 
+// A child is mandatory if the element has minimum>0, exactly one pattern
+// alternative, and no form alternatives.  Fills mandatoryChildPatterns and
+// the child's mandatoryParentPatterns.
 void cPattern::establishMandatoryChildPatterns(void)
 {
 	LFS
@@ -2098,6 +2315,12 @@ void cPattern::establishMandatoryChildPatterns(void)
 			}
 }
 
+// Stage-1 entry: run every create* (basic/verb/secondary/infinitive/prep/
+// question/letter-intro), resolve all cPatternReference entries (exit(0) on
+// any future-ref log), initializeTagSets, reject duplicate name+differentiator,
+// then compute ancestor bitsets, flatten descendant tags, evaluate tag sets
+// and reserve usage counters.  SOURCE_VERSION is not bumped here — the
+// caller must increment it when the resulting grammar changes.
 void initializePatterns(void)
 {
 	LFS
@@ -2179,6 +2402,10 @@ void initializePatterns(void)
 #endif
 }
 
+// Construct one named tag set from a NULL-terminated va_list of tag names.
+// tagSetNum is set to the new desiredTagSets index.  requiredNumOfTags is
+// the "all of first N" / "at least |N| of first |N|" count; extra tags after
+// that are still stored and used by containsOneOf / hasTagInSet.
 cTagSet::cTagSet(unsigned int& tagSetNum, const wchar_t* tag, int requiredNumOfTags, ...)
 {
 	LFS
@@ -2198,6 +2425,10 @@ cTagSet::cTagSet(unsigned int& tagSetNum, const wchar_t* tag, int requiredNumOfT
 	va_end(tagMarker);              /* Reset variable arguments.      */
 }
 
+// Intern-table lookup of tagName in patternTagStrings.  Fatals if missing
+// (the return -1 is dead).  Tags are interned as they are first seen in
+// create() / cTagSet(), so this is only safe after initializePatterns
+// (or after the tag has already been mentioned).
 int findTag(const wchar_t* tagName)
 {
 	LFS
@@ -2208,6 +2439,9 @@ int findTag(const wchar_t* tagName)
 	return -1;
 }
 
+// Next cTagLocation in tagSet named tagName, starting at nextTag+1.  On a
+// hit, nextTag is set to the following same-name slot or -1 if this was the
+// last.  Returns the hit index or -1.  Not span-constrained.
 int findTag(vector <cTagLocation>& tagSet, const wchar_t* tagName, int& nextTag)
 {
 	LFS
@@ -2226,6 +2460,7 @@ int findTag(vector <cTagLocation>& tagSet, const wchar_t* tagName, int& nextTag)
 	return -1;
 }
 
+// First cTagLocation in tagSet named tagName at or after start+1, or -1.
 int findOneTag(vector <cTagLocation>& tagSet, const wchar_t* tagName, int start)
 {
 	LFS
@@ -2234,6 +2469,8 @@ int findOneTag(vector <cTagLocation>& tagSet, const wchar_t* tagName, int start)
 	return -1;
 }
 
+// Like findTag, but the hit (and the "next" preview) must lie inside
+// [parentBegin, parentEnd).  Used to collect child tags of one parent span.
 int findTagConstrained(vector <cTagLocation>& tagSet, const wchar_t* tagName, int& nextTag, unsigned int parentBegin, unsigned int parentEnd)
 {
 	LFS
@@ -2254,6 +2491,7 @@ int findTagConstrained(vector <cTagLocation>& tagSet, const wchar_t* tagName, in
 	return -1;
 }
 
+// Overload: constrain to parentTag's [sourcePosition, sourcePosition+len).
 int findTagConstrained(vector <cTagLocation>& tagSet, const wchar_t* tagName, int& nextTag, cTagLocation& parentTag)
 {
 	LFS
@@ -2261,6 +2499,7 @@ int findTagConstrained(vector <cTagLocation>& tagSet, const wchar_t* tagName, in
 	return findTagConstrained(tagSet, tagName, nextTag, parentBegin, parentEnd);
 }
 
+// Offset of desiredTag inside desiredTagSets[desiredTagSetNum], or -1.
 int inSet(unsigned int desiredTagSetNum, int desiredTag)
 {
 	LFS
@@ -2269,6 +2508,8 @@ int inSet(unsigned int desiredTagSetNum, int desiredTag)
 	return (I < numTags) ? I : -1;
 }
 
+// For each tag of desiredTagSetNum that appears in tagSet inside parentTag's
+// span, set tagFilledArray[setOffset]=1.  Caller owns and zeroes the array.
 void findTagSetConstrained(vector <cTagLocation>& tagSet, unsigned int desiredTagSetNum, char* tagFilledArray, cTagLocation& parentTag)
 {
 	LFS
@@ -2281,6 +2522,7 @@ void findTagSetConstrained(vector <cTagLocation>& tagSet, unsigned int desiredTa
 			tagFilledArray[setOffset] = 1;
 }
 
+// Unconstrained findTagSetConstrained — any occurrence in tagSet counts.
 void findTagSet(vector <cTagLocation>& tagSet, unsigned int desiredTagSetNum, char* tagFilledArray)
 {
 	LFS
@@ -2290,6 +2532,8 @@ void findTagSet(vector <cTagLocation>& tagSet, unsigned int desiredTagSetNum, ch
 			tagFilledArray[setOffset] = 1;
 }
 
+// True if both vectors have the same length and the same tag ids in order
+// (other cTagLocation fields are ignored).
 bool cPattern::equivalentTagSet(vector <cTagLocation>& tagSet, vector <cTagLocation>& tagSet2)
 {
 	LFS
@@ -2301,6 +2545,9 @@ bool cPattern::equivalentTagSet(vector <cTagLocation>& tagSet, vector <cTagLocat
 	return true;
 }
 
+// Log every cTagLocation in tagSet.  ts>=0 prints a "TAGSET N:" header and
+// includes PEMAOffset; ts<0 is the compact form used when embedding in a
+// larger dump.
 void printTagSet(int logType, const wchar_t* descriptor, int ts, vector <cTagLocation>& tagSet)
 {
 	LFS
@@ -2334,6 +2581,9 @@ void printTagSet(int logType, const wchar_t* descriptor, int ts, vector <cTagLoc
 }
 
 // exactly like pema::queryPattern
+// Walk the nextByPosition chain at source position `position` and return the
+// PEMA index of the longest parent named `pattern` (or -1).  maxEnd is that
+// match's relative end.
 int cSource::queryPattern(int position, wstring pattern, int& maxEnd)
 {
 	LFS
@@ -2346,6 +2596,7 @@ int cSource::queryPattern(int position, wstring pattern, int& maxEnd)
 }
 
 // exactly like pema::queryPattern
+// First PEMA slot at `position` whose parent name and differentiator both match, or -1.
 int cSource::queryPatternDiff(int position, wstring pattern, wstring differentiator)
 {
 	LFS
@@ -2356,6 +2607,7 @@ int cSource::queryPatternDiff(int position, wstring pattern, wstring differentia
 }
 
 // exactly like pema::queryPattern
+// First PEMA slot at `position` whose parent is named `pattern`, or -1.
 int cSource::queryPattern(int position, wstring pattern)
 {
 	LFS
@@ -2365,6 +2617,8 @@ int cSource::queryPattern(int position, wstring pattern)
 	return -1;
 }
 
+// Prefix descriptor with PARENT[diff](absBegin,absEnd) from PEMAPosition, then
+// printTagSet.  temp is 1024 wchars with wcscpy/wsprintf and no bound check.
 void cSource::printTagSet(int logType, const wchar_t* descriptor, int ts, vector <cTagLocation>& tagSet, int position, int PEMAPosition)
 {
 	LFS
@@ -2376,6 +2630,7 @@ void cSource::printTagSet(int logType, const wchar_t* descriptor, int ts, vector
 	::printTagSet(logType, temp, ts, tagSet);
 }
 
+// Log the concatenated `words` as the TAGSET header, then the locations.
 void printTagSet(int logType, const wchar_t* descriptor, int ts, vector <cTagLocation>& tagSet, vector <wstring>& words)
 {
 	LFS
@@ -2386,6 +2641,7 @@ void printTagSet(int logType, const wchar_t* descriptor, int ts, vector <cTagLoc
 	printTagSet(logType, NULL, ts, tagSet);
 }
 
+// Log `words` as the header, then the PEMA-qualified printTagSet.
 void cSource::printTagSet(int logType, const wchar_t* descriptor, int ts, vector <cTagLocation>& tagSet, int position, int PEMAPosition, vector <wstring>& words)
 {
 	LFS
@@ -2396,26 +2652,33 @@ void cSource::printTagSet(int logType, const wchar_t* descriptor, int ts, vector
 	printTagSet(logType, NULL, ts, tagSet, position, PEMAPosition);
 }
 
+// Unfinished stubs — bodies are empty.  Declared private on cPattern.
 void cPattern::firstForm(void)
 {
 	LFS
 }
 
+// Unfinished stub (empty body).
 void cPattern::lastForm(void)
 {
 	LFS
 }
 
+// Unfinished stub (empty body).
 void cPattern::firstNonMandatoryForm(void)
 {
 	LFS
 }
 
+// Unfinished stub (empty body).
 void cPattern::lastNonMandatoryForm(void)
 {
 	LFS
 }
 
+// Log per-pattern match/push/compare/winner counters and every element's
+// usage line, then delete every cPatternReference and every cPattern.
+// After this the global `patterns` vector holds dangling pointers.
 void cPattern::printPatternStatistics(void)
 {
 	LFS

@@ -1,3 +1,42 @@
+/*
+	logging.cpp - lplog / logstring implementation: per-level UTF-8 log files and FATAL exit
+
+	Overview:
+		logstring() is the sink.  It peels bits off logLevel, opens (or reuses) a
+		FILE* named <level><logFileExtension>.lplog (under "multiprocessor logs\\"
+		when the extension is non-empty), and fputws the wide message as UTF-8.
+		FILE*s stay open for logCache seconds (or forever if logCache is large).
+		lplog() formats into a LOG_BUFFER_SIZE wchar_t stack buffer, appends a
+		newline, and calls logstring.  lplogNR skips the newline.
+
+	Pipeline position:
+		Used from the first initializeDatabaseHandle through QA.  Every other
+		translation unit calls into here.
+
+	Key entry points:
+		- logstring() - write / flush / FATAL-exit.
+		- lplog() x3 - format (or flush-all when format==NULL).
+		- lplogNR() - format without a trailing newline.
+
+	Key data structures / globals:
+		- last*Clock - TLS, last time that level's FILE* was opened.
+		- log*File - process-wide FILE* when LOG_BUFFER is defined (the default);
+			TLS int fds in the #else path.
+		- logFileExtension / multiProcess - TLS, set by child workers.
+		- logCache - seconds a FILE* is kept (40).
+
+	Notes / gotchas:
+		- LOG_FATAL_ERROR is routed first as LOG_INFO (main.lplog).  lplog() also
+			ORs LOG_ERROR, but logstring() sees FATAL after the info write and
+			exit(0)s, so error.lplog never gets the fatal line.
+		- The FATAL path prints the message, fclose, getchar(), fgets(), exit(0).
+			Unattended runs hang on stdin; the process then exits 0, not 1.
+		- source.h currently claims lplog(FATAL) does not abort.  That is wrong;
+			this file and main.cpp are the authority.
+		- With LOG_BUFFER, FILE*s are shared across threads that have different
+			logFileExtension values - a race, and one thread can fclose another's file.
+		- sprintf into logFilename[1024] is unbounded in logFileExtension length.
+*/
 #include <windows.h>
 #define _WINSOCKAPI_ /* Prevent inclusion of winsock.h in windows.h */
 #include "io.h"
@@ -38,6 +77,10 @@ bool logTraceOpen = false;
 bool log_net = false;
 
 
+// Write 's' to every log file whose bit is set in logLevel.  s==NULL closes
+// those files (used as a flush).  LOG_FATAL_ERROR writes main.lplog, then
+// blocks on getchar()/fgets() and exit(0) - this function does not return.
+// Returns 0, or -1 if fopen/fputws failed (FATAL still exits first).
 int logstring(int logLevel, const wchar_t* s)
 {
 	LFS
@@ -237,13 +280,16 @@ int logstring(int logLevel, const wchar_t* s)
 	return 0;
 }
 
-// flush all buffers
+// Close every non-FATAL log FILE* (flush).  Omits LOG_FATAL_ERROR so this
+// cannot accidentally abort.
 int lplog(void)
 {
 	LFS
 		return logstring(LOG_MASK & ~LOG_FATAL_ERROR, NULL);
 }
 
+// Format at LOG_INFO and append a newline.  format==NULL flushes ALL levels
+// including FATAL in the mask (but s==NULL so FATAL's exit path is not taken).
 int lplog(const wchar_t* format, ...)
 {
 	LFS
@@ -260,6 +306,9 @@ int lplog(const wchar_t* format, ...)
 	return 0;
 }
 
+// Format at logLevel, append a newline, OR LOG_ERROR in if FATAL is set, then
+// logstring.  Does not return when logLevel includes LOG_FATAL_ERROR.
+// format==NULL flushes every non-FATAL level.
 int lplog(int logLevel, const wchar_t* format, ...)
 {
 	LFS
@@ -287,6 +336,10 @@ int lplog(int logLevel, const wchar_t* format, ...)
 	return 0;
 }
 
+// Like lplog(logLevel,...) but does not append a newline ("NR" = no return-
+// character, not "no return").  The extra exit(0) after logstring is dead for
+// FATAL because logstring already exited; it is the only reason the name is
+// sometimes read as "no return".
 int lplogNR(int logLevel, const wchar_t* format, ...)
 {
 	LFS

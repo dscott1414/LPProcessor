@@ -1,3 +1,40 @@
+/*
+	getWordNet.cpp - WordNet + thesaurus synonym/hypernym/hyponym/VerbNet class helpers
+
+	Overview:
+		Wraps the Princeton WordNet C API (findtheinfo_ds, morphstr, index_lookup,
+		traceptrs_ds) to extract synonyms, antonyms, hypernyms, hyponyms, coordinate
+		terms, and familiarity counts. Falls back to a MySQL 'thesaurus' table and,
+		if that is empty, scrapes thesaurus.com. Also maps verbs onto Levin/VerbNet
+		classes and caches ordered hypernym chains.
+
+	Pipeline position:
+		Initialization (initWordNet, initializeNounVerbMapping) and later whenever
+		objects/speakers need synonym or "kind of" tests. scrape*Thesaurus are
+		batch/on-demand acquisition.
+
+	Key entry points:
+		- initWordNet / addToWordNet / checkexist / wordCheck
+		- getSynonyms / getWordNetSynonymsOnly / getAntonyms / getFamiliarity
+		- getHyperNyms / hasHyperNym / getAllOrderedHyperNyms
+		- analyzeNounClass / analyzeVerbNetClass / deriveMainEntry
+		- scrapeOldThesaurus / scrapeNewThesaurus / getSynonymsFromDB
+
+	Key data structures / globals:
+		- synonymMap / synonymDeletionMap / mostCommonSynonymMap - hand overrides
+		- orderedHyperNymsMap - cached hypernym chains (SRWLOCK documented, not taken here)
+		- nounVerbMap - agentive nominalization mapping
+		- internalSynonymMap[4] - per-POS memo of getSynonyms results
+
+	Dependencies:
+		WordNet dict files (wninit); MySQL thesaurus table; thesaurus.com HTTP;
+		source\\lists VerbNet already loaded for analyzeVerbNetClass.
+
+	Notes / gotchas:
+		getSynonymsFromDB concatenates 'word' into SQL with no escaping. scrapeNewThesaurus
+		uses plaintext HTTP. Big Huge Thesaurus API key is in a comment. wordCheck always
+		ends in LOG_FATAL_ERROR. WordNet SynsetPtrs from findtheinfo_ds are not freed.
+*/
 #pragma warning(disable : 4786 ) // disable warning C4786
 #include <windows.h>
 #include <io.h>
@@ -33,6 +70,9 @@ unordered_map<wstring, int > orderedHyperNymsNumMap; // protected with orderedHy
 unordered_map <wstring, set < wstring > > nounVerbMap; // initialized
 void printEntry(sDefinition d);
 
+// Walks synset_ptr (ptrlist then nextss), collecting lowercased space-normalized synonyms
+// per sense into words. Skips the query 'word' itself. ignoreTopLevel drops the first sense
+// at recur==0. Returns the number of synonyms inserted. Does not free synset_ptr.
 int extractWordsFromSynset(char* word, SynsetPtr synset_ptr, int recur, vector <unordered_set <wstring> >& words, bool ignoreTopLevel, sTrace& t)
 {
 	LFS
@@ -75,6 +115,7 @@ int extractWordsFromSynset(char* word, SynsetPtr synset_ptr, int recur, vector <
 	return numWords;
 }
 
+// Flat overload: unions every sense from the vector version into words. Returns words.size().
 int extractWordsFromSynset(char* word, SynsetPtr synset_ptr, int recur, unordered_set <wstring>& words, bool ignoreTopLevel, sTrace& t)
 {
 	vector <unordered_set <wstring> > wordsBySense;
@@ -84,6 +125,7 @@ int extractWordsFromSynset(char* word, SynsetPtr synset_ptr, int recur, unordere
 	return words.size();
 }
 
+// Seeds synonymMap / synonymDeletionMap with hand overrides (professor→teacher, drop book=album).
 void addToWordNet()
 {
 	LFS
@@ -93,6 +135,7 @@ void addToWordNet()
 	synonymDeletionMap[L"person"] = L"party"; // this is not correct - leads to 'full detail' = 'Krugman's specialty'
 }
 
+// One-shot wninit(); LOG_FATAL_ERROR if the WordNet dict files cannot be opened.
 void initWordNet()
 {
 	LFS
@@ -105,6 +148,7 @@ void initWordNet()
 		}
 }
 
+// True if WordNet has word (or any morphstr of it) in wordClass (NOUN/VERB/ADJ/ADV).
 bool checkexist(char* word, int wordClass)
 {
 	LFS
@@ -115,12 +159,14 @@ bool checkexist(char* word, int wordClass)
 	return false;
 }
 
+// True if checkexist succeeds for any of NOUN/VERB/ADJ/ADV.
 bool checkexist(char* word)
 {
 	LFS
 		return checkexist(word, NOUN) || checkexist(word, VERB) || checkexist(word, ADJ) || checkexist(word, ADV);
 }
 
+// Audit: counts Words entries missing from WordNet. Always ends in LOG_FATAL_ERROR with totals.
 // checks to see that all words in WordNet are defined in
 int cWord::wordCheck(void)
 {
@@ -175,6 +221,7 @@ int cWord::wordCheck(void)
 	return 0;
 }
 
+// Stub: inits WordNet and returns 0. Category-bit tagging was never filled in.
 // set categories of words based on WordNet to be used with time and place
 int setWordNetCategoryBits(void)
 {
@@ -190,6 +237,8 @@ int setWordNetCategoryBits(void)
 // http://thesaurus.com/t2opt/out?desturl=browse/columnist&posFilter=noun
 // also better than www.synonyms.net: http://www.synonyms.net/synonym/columnist or 
 // Big Huge Thesaurus: key 78c2b0a82a3c06236622bb4f8158ead9 (http://words.bighugelabs.com/api/2/78c2b0a82a3c06236622bb4f8158ead9/'word'/json)
+// Fetches the old thesaurus.com t2opt page for word/POS and scrapes the Synonyms: comma list
+// into synonyms. Spaces become '+'. Stops at ads / www. prefixes.
 void scrapeOldThesaurus(wstring word, unordered_set <wstring>& synonyms, int synonymType, bool forceWebReread)
 {
 	LFS
@@ -271,6 +320,9 @@ void scrapeOldThesaurus(wstring word, unordered_set <wstring>& synonyms, int syn
 		lplog(LOG_WHERE, L"%s itself not found in synonyms [%s].", word.c_str(), setString(synonyms, buffer, L"|").c_str());
 }
 
+// Scrapes the current thesaurus.com/browse page into sDefinition rows (wordType, primary
+// synonym, accumulated synonyms/antonyms with complexity|length). LOG_FATAL_ERROR if the
+// expected HTML markers are missing mid-parse.
 void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition>& vd)
 {
 	int space;
@@ -425,6 +477,8 @@ void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition>& vd)
 
 void split(string str, vector <string>& words, const char* splitch);
 
+// SELECT accumulated/primary synonyms for mainEntry=word and wordType bitmask. Concatenates
+// word into SQL unescaped. LOCKs thesaurus READ. Returns true if any sense was pushed.
 bool getSynonymsFromDB(MYSQL mysql, wstring word, vector < unordered_set <wstring> >& synonyms, int synonymType)
 {
 	bool entriesAdded = false;
@@ -494,6 +548,7 @@ bool getSynonymsFromDB(MYSQL mysql, wstring word, vector < unordered_set <wstrin
 }
 
 unordered_map <wstring, vector < unordered_set <wstring> > > internalSynonymMap[4];
+// Flattens the per-sense getSynonyms overload into one set.
 void cSource::getSynonyms(wstring word, unordered_set <wstring>& synonyms, int synonymType)
 {
 	vector <unordered_set <wstring> > synonymsSenses;
@@ -502,6 +557,8 @@ void cSource::getSynonyms(wstring word, unordered_set <wstring>& synonyms, int s
 		synonyms.insert(synonymsSenses[s].begin(), synonymsSenses[s].end());
 }
 
+// WordNet SIMPTR + synonymMap + DB/scrapeNewThesaurus, minus synonymDeletionMap. Memoized
+// in internalSynonymMap[synonymType]. Ignores non-alpha/_ words and anything containing "http".
 void cSource::getSynonyms(wstring word, vector <unordered_set <wstring> >& synonyms, int synonymType)
 {
 	LFS
@@ -558,6 +615,7 @@ void cSource::getSynonyms(wstring word, vector <unordered_set <wstring> >& synon
 	internalSynonymMap[synonymType][word] = synonyms;
 }
 
+// WordNet SIMPTR only (no thesaurus DB/scrape, no synonymMap). Fills synonyms per sense.
 void cSource::getWordNetSynonymsOnly(wstring word, vector <unordered_set <wstring> >& synonyms, int synonymType)
 {
 	LFS
@@ -568,6 +626,7 @@ void cSource::getWordNetSynonymsOnly(wstring word, vector <unordered_set <wstrin
 }
 
 
+// WordNet ANTPTR on ADJ for word; ignoreTopLevel so the queried adjective itself is omitted.
 void getAntonyms(wstring word, unordered_set <wstring>& antonyms, sTrace& t)
 {
 	LFS
@@ -577,6 +636,7 @@ void getAntonyms(wstring word, unordered_set <wstring>& antonyms, sTrace& t)
 	extractWordsFromSynset(wTM(word, sWord), sp, 0, antonyms, true, t);
 }
 
+// WordNet sense_cnt for word as ADJ or NOUN. Returns 0 if the index lookup misses.
 int getFamiliarity(wstring word, bool isAdjective)
 {
 	LFS
@@ -587,6 +647,7 @@ int getFamiliarity(wstring word, bool isAdjective)
 	return index->sense_cnt;
 }
 
+// Max sense_cnt across ADJ/NOUN/VERB/ADV. Returns -1 if word is empty or wTM produced "".
 int getHighestFamiliarity(wstring word)
 {
 	LFS
@@ -610,6 +671,8 @@ int getHighestFamiliarity(wstring word)
 	return maxFamiliarity;
 }
 
+// Walks each sense's HYPERPTR chain into a set of noun lemmas (skipping capitalized if
+// avoidCapitalizedNouns). Mutates o->ptrlist as it traces. Does not free read_synset results.
 void getHyperNyms(SynsetPtr sp, vector < set <string> >& objects, bool avoidCapitalizedNouns, bool print)
 {
 	LFS
@@ -637,6 +700,7 @@ void getHyperNyms(SynsetPtr sp, vector < set <string> >& objects, bool avoidCapi
 		}
 }
 
+// Like getHyperNyms but keeps chain order (a "" sentinel starts each hop) per sense.
 void getOrderedHyperNyms(SynsetPtr sp, vector < vector <string> >& objects, bool avoidCapitalizedNouns, bool print)
 {
 	LFS
@@ -667,6 +731,7 @@ void getOrderedHyperNyms(SynsetPtr sp, vector < vector <string> >& objects, bool
 		}
 }
 
+// findtheinfo_ds(word, NOUN, HYPERPTR), trying morphstr if needed. Writes sp; true if non-NULL.
 bool initHyperNym(wstring word, SynsetPtr& sp)
 {
 	LFS
@@ -682,6 +747,8 @@ bool initHyperNym(wstring word, SynsetPtr& sp)
 	return sp != NULL;
 }
 
+// Walks HYPERPTR chains of sp. Sets found if MBCSHyperNum occurs in any sense. Returns true
+// only if every sense contains that hypernym (numSenses == numHypernymFound).
 bool hasHyperNym(SynsetPtr sp, string MBCSHyperNum, bool& found, bool trace)
 {
 	LFS
@@ -710,6 +777,7 @@ bool hasHyperNym(SynsetPtr sp, string MBCSHyperNum, bool& found, bool trace)
 	return numSenses > 0 && numSenses == numHypernymFound;
 }
 
+// initHyperNym(word) then hasHyperNym(sp, hyperNym). found is not cleared first.
 bool hasHyperNym(wstring word, wstring hyperNym, bool& found, bool trace)
 {
 	LFS
@@ -722,6 +790,7 @@ bool hasHyperNym(wstring word, wstring hyperNym, bool& found, bool trace)
 	return hasHyperNym(sp, MBCSHyperNym, found, trace);
 }
 
+// MBCS→wide then splitMultiWord(wstring).
 void splitMultiWord(string MBCSMultiWord, vector <wstring>& words)
 {
 	LFS
@@ -729,6 +798,7 @@ void splitMultiWord(string MBCSMultiWord, vector <wstring>& words)
 	splitMultiWord(mTW(MBCSMultiWord, w), words);
 }
 
+// Splits multiWord on space or '_' into words (clears words first). Consecutive separators skipped.
 void splitMultiWord(wstring multiWord, vector <wstring>& words)
 {
 	LFS
@@ -818,6 +888,9 @@ static struct {
 		{ NULL, 0, 0, 0, NULL }
 };
 */
+// Appends WordNet coordinate (sister) terms of word in wnClass. preferredSense / ignoreSenses
+// filter which synsets are used. Writes the count after sense 0 into numFirstSense.
+// Returns true if idx was found (objects may be unchanged).
 bool addCoords(wchar_t* word, vector <tmWS >& objects, int wnClass, wchar_t* preferredSense, int& numFirstSense, set <string>& ignoreSenses, bool print)
 {
 	LFS
@@ -897,6 +970,7 @@ bool addCoords(wchar_t* word, vector <tmWS >& objects, int wnClass, wchar_t* pre
 	return objects.size() > 0;
 }
 
+// Like addCoords but only the first sense, into a set. Writes the sense count into numSense.
 bool addOneSenseCoords(wchar_t* word, set < wstring >& objects, int wnClass, int& numSense)
 {
 	LFS
@@ -937,6 +1011,8 @@ bool addOneSenseCoords(wchar_t* word, set < wstring >& objects, int wnClass, int
 	return objects.size() > 0;
 }
 
+// DFS from synset offset 'index', appending hyponym lemmas (depth-tagged) if the sense
+// matches preferredSense / is not in ignoreSenses. Sets foundSense when preferredSense hits.
 void recurseHyponym(int index, int depth, vector <tmWS >& objects, char* preferredSense, bool& foundSense, set <string>& ignoreSenses, bool print)
 {
 	LFS
@@ -966,6 +1042,8 @@ void recurseHyponym(int index, int depth, vector <tmWS >& objects, char* preferr
 			recurseHyponym(cursyn->ptroff[k], depth + 1, objects, preferredSense, foundSense, ignoreSenses, print);
 }
 
+// Collects hyponyms (and INSTANCES) of word as NOUN, optionally restricted to preferredSense.
+// Morphs if the surface form has no index. Returns true if any object was appended.
 bool addHyponyms(wchar_t* word, vector <tmWS >& objects, wchar_t* preferredSense, set <string>& ignoreSenses, bool print)
 {
 	LFS
@@ -1027,6 +1105,7 @@ bool addHyponyms(wchar_t* word, vector <tmWS >& objects, wchar_t* preferredSense
 	return objects.size() > 0;
 }
 
+// Unfiltered hyponym DFS: inserts every single-word hyponym lemma into objects.
 void recurseHyponym(int index, int depth, set <wstring>& objects, bool print)
 {
 	LFS
@@ -1043,6 +1122,7 @@ void recurseHyponym(int index, int depth, set <wstring>& objects, bool print)
 			recurseHyponym(cursyn->ptroff[k], depth + 1, objects, print);
 }
 
+// Unfiltered NOUN hyponym collection (morph fallback). Returns objects.size() > 0.
 bool addHyponyms(wchar_t* word, set <wstring>& objects, bool print)
 {
 	LFS
@@ -1085,6 +1165,8 @@ bool addHyponyms(wchar_t* word, set <wstring>& objects, bool print)
 	return objects.size() > 0;
 }
 
+// Picks the synonym of 'in' with the highest WordNet sense_cnt (memoized in mostCommonSynonymMap).
+// Fills out, synonyms, familiarity counts, and the live sp/index. Returns out.
 wstring getMostCommonSynonym(wstring in, wstring& out, bool isNoun, bool isVerb, bool isAdjective, bool isAdverb,
 	SynsetPtr& sp, IndexPtr& index, unordered_set <wstring>& synonyms, int& initialFamiliarity, int& highestFamiliarity, sTrace& t)
 {
@@ -1130,6 +1212,7 @@ wstring getMostCommonSynonym(wstring in, wstring& out, bool isNoun, bool isVerb,
 	return out;
 }
 
+// Convenience overload: stack temporaries for sp/index/synonyms/familiarity.
 wstring getMostCommonSynonym(wstring in, wstring& out, bool isNoun, bool isVerb, bool isAdjective, bool isAdverb, sTrace& t)
 {
 	LFS
@@ -1141,6 +1224,7 @@ wstring getMostCommonSynonym(wstring in, wstring& out, bool isNoun, bool isVerb,
 	return getMostCommonSynonym(in, out, isNoun, isVerb, isAdjective, isAdverb, sp, index, synonyms, initialFamiliarity, highestFamiliarity, t);
 }
 
+// Returns the most familiar hypernym of 'in' (a "kind of" label) and its sense_cnt.
 wstring getIsKindOf(wstring in, int& highestFamiliarity)
 {
 	LFS
@@ -1183,6 +1267,8 @@ wstring getIsKindOf(wstring in, int& highestFamiliarity)
 	return out;
 }
 
+// If 'in' ends with 'ending', replace that suffix with 'replace' and OR inflectionFlags
+// with the matching VERB_* bit. Returns true if a strip happened.
 bool stripEndingIfFound(wstring& in, const wchar_t* ending, const wchar_t* replace, int& inflectionFlags)
 {
 	LFS
@@ -1202,6 +1288,8 @@ bool stripEndingIfFound(wstring& in, const wchar_t* ending, const wchar_t* repla
 	return false;
 }
 
+// Morphs 'in' toward a WordNet lemma (strip -ing/-ed/-s etc.) and updates inflectionFlags.
+// lastNounNotFound / lastVerbNotFound suppress repeat logs for the same miss.
 void deriveMainEntry(int where, int fromWhere, wstring& in, int& inflectionFlags, bool isVerb, bool isNoun, wstring& lastNounNotFound, wstring& lastVerbNotFound)
 {
 	LFS
@@ -1263,6 +1351,8 @@ void deriveMainEntry(int where, int fromWhere, wstring& in, int& inflectionFlags
 	}
 }
 
+// Among coordinate terms in objects, finds the most familiar one that is in vbNetVerbToClassMap
+// and copies that class set onto original. Sets proposedSubstitution / oneSenseVbNetClassFound.
 void scanCoordObjects(wstring& original, wstring& cdstr, set <wstring>& objects, int wnClass, int& highestCoordFamiliarity, wstring& coordFamiliarity, bool& proposedSubstitution, bool& oneSenseVbNetClassFound)
 {
 	LFS
@@ -1298,6 +1388,7 @@ void scanCoordObjects(wstring& original, wstring& cdstr, set <wstring>& objects,
 		cdstr.erase(cdstr.length() - 1);
 }
 
+// True if 'word' occurs in every sense-set of objects (a hypernym shared by all senses).
 bool inEveryGroup(string word, vector < set <string> >& objects)
 {
 	LFS
@@ -1307,6 +1398,7 @@ bool inEveryGroup(string word, vector < set <string> >& objects)
 	return true;
 }
 
+// Loads CACHEDIR\\wordNetCache\\<in> (renames "con" → "_con_"). Returns false if missing.
 bool readHyperNymCache(wstring& in, vector < set <string> >& objects)
 {
 	LFS
@@ -1332,6 +1424,7 @@ bool readHyperNymCache(wstring& in, vector < set <string> >& objects)
 	return true;
 }
 
+// Loads CACHEDIR\\wordNetCache\\orderedHyperNyms_<in> into objects.
 bool readHyperNymCache(wstring& in, vector < vector <string> >& objects)
 {
 	LFS
@@ -1358,6 +1451,7 @@ bool readHyperNymCache(wstring& in, vector < vector <string> >& objects)
 	return true;
 }
 
+// Writes objects to wordNetCache\\<in>. Returns false if open/copy fails (fd leaked on copy fail).
 #define MAX_BUF 102400
 bool writeHyperNymCache(wstring& in, vector < set <string> >& objects)
 {
@@ -1379,6 +1473,7 @@ bool writeHyperNymCache(wstring& in, vector < set <string> >& objects)
 	return true;
 }
 
+// Writes ordered hypernyms to wordNetCache\\orderedHyperNyms_<in>. Same leak-on-copy-fail as the set version.
 bool writeHyperNymCache(wstring& in, vector < vector <string> >& objects)
 {
 	LFS
@@ -1405,6 +1500,8 @@ bool writeHyperNymCache(wstring& in, vector < vector <string> >& objects)
 // L"relation" includes all familial relations (husband)
 // L"group" includes all groups like bikers, rockers, skinheads
 // L"set" includes tormentor and radio
+// Walks hypernyms of 'in' to set measurableObject / notMeasurableObject / grouping
+// (physical object vs. abstraction vs. collection). Updates last*NotFound for log suppression.
 void analyzeNounClass(int where, int fromWhere, wstring in, int inflectionFlags, bool& measurableObject, bool& notMeasurableObject, bool& grouping, sTrace& t, wstring& lastNounNotFound, wstring& lastVerbNotFound)
 {
 	LFS
@@ -1469,6 +1566,7 @@ void analyzeNounClass(int where, int fromWhere, wstring in, int inflectionFlags,
 			in.c_str(), (measurableObject) ? L"true" : L"false", (notMeasurableObject) ? L"true" : L"false");
 }
 
+// Fills kindOfObjects from cache or initHyperNym+getHyperNyms (then writes the cache).
 void getAllHyperNyms(wstring in, vector < set <string> >& kindOfObjects)
 {
 	LFS
@@ -1482,6 +1580,7 @@ void getAllHyperNyms(wstring in, vector < set <string> >& kindOfObjects)
 	}
 }
 
+// Ordered-chain cousin of getAllHyperNyms (memory map + disk cache keyed orderedHyperNyms_*).
 void getAllOrderedHyperNyms(wstring in, vector < vector <string> >& kindOfObjects)
 {
 	LFS
@@ -1516,6 +1615,7 @@ void getAllOrderedHyperNyms(wstring in, vector < vector <string> >& kindOfObject
 	}
 }
 
+// True if any hypernym set of 'in' contains 'group' (after deriveMainEntry).
 bool inWordNetClass(int where, wstring in, int inflectionFlags, string group, wstring& lastNounNotFound, wstring& lastVerbNotFound)
 {
 	LFS
@@ -1529,6 +1629,9 @@ bool inWordNetClass(int where, wstring in, int inflectionFlags, string group, ws
 	return false;
 }
 
+// Maps verb 'in' onto vbNetVerbToClassMap via lemma / most-common synonym / coordinate
+// terms. Increments numIrregular when an inflected form cannot be classed. Writes a
+// proposedSubstitute if a more familiar synonym was used.
 void analyzeVerbNetClass(int where, wstring in, wstring& proposedSubstitute, int& numIrregular, int inflectionFlags, sTrace& t, wstring& lastNounNotFound, wstring& lastVerbNotFound)
 {
 	LFS
@@ -1643,6 +1746,9 @@ void analyzeVerbNetClass(int where, wstring in, wstring& proposedSubstitute, int
 		proposedSubstitute = coordFamiliarity;
 }
 
+// Loads source\\lists\\nounVerbMapping (binary cache of agentive nominalizations) into
+// nounVerbMap, or rebuilds it from WordNet DERIVATION links and writes the cache.
+// Returns -1 if the on-disk copy is corrupt (leaks the tmalloc buffer).
 int cSource::initializeNounVerbMapping(void)
 {
 	LFS

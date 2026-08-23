@@ -93,6 +93,23 @@ the question is not the last in its quote.
 	99791 : why is Beresford not resolved ?
 	
 /*
+	Adversary bugs.cpp - Manual gold-bug list for The Secret Adversary parse
+
+	Overview:
+		Not a translation unit of executable code. The entire file is one block
+		comment: line-numbered failure notes from running the pipeline on Agatha
+		Christie's The Secret Adversary (Tommy / Tuppence / Julius / Jane Finn).
+		Sections cover ESTAB/'where' location bugs, meta-group mismatches, misparses,
+		and speaker/audience errors. Used as a regression checklist, not compiled.
+
+	Pipeline position:
+		Developer notes only. Numbers are source-position indexes in that novel.
+
+	Notes / gotchas:
+		Several entries are duplicated across sections (same position, different
+		angle). Line numbers refer to the token stream, not this file.
+*/
+/*
 'where' - incorrectly flagged statements
 005334:missed:
 then opened the ESTABdoor[door] and stood aside to let her[tuppence] pass in . 
@@ -103,7 +120,7 @@ treatment of HOBJECT - picked up as subject, but doesn't have the correct role. 
 008285: missed:
 they sat in state surrounded by the many hors d'oeuvre of Tuppence's dreams.
 061321: Mr. Carter is physically present 
-ESTABhe[tommy] was in the presence of the man who did not here[here] go by the name[name] of “QS Mr . Carter . ” 
+ESTABhe[tommy] was in the presence of the man who did not here[here] go by the name[name] of ï¿½QS Mr . Carter . ï¿½ 
 081012: Albert is physically present ('that worthy' refers to Albert)
 that worthy made his appearance
 099863: The Young Adventurers (Tuppence and Tommy) are introduced returning in a taxi. (new location), thus Jane and Julius are no longer present.
@@ -340,7 +357,7 @@ The man Tommy followed (29221) - match
 36565: Should refer to James, not Julius.
 37042: here is not Tuppence
 37416: She is a bad lot - the change to stop getting adjectives from neutral objects to gendered objects broke this
-37457: “[tuppence:julius] I[tuppence] think perhaps I[tuppence] wouldhad better tell you[julius] the whole story , Sir James . I[tuppence] have a sort of feeling that[sort] you[julius] wouldhad know in a minute if I[tuppence] didn't tell the truth , and so you[julius] might as well know all[truth,minute,sort] about it[truth,minute,sort] from the beginning . What do you[julius] think , Julius ? ”
+37457: ï¿½[tuppence:julius] I[tuppence] think perhaps I[tuppence] wouldhad better tell you[julius] the whole story , Sir James . I[tuppence] have a sort of feeling that[sort] you[julius] wouldhad know in a minute if I[tuppence] didn't tell the truth , and so you[julius] might as well know all[truth,minute,sort] about it[truth,minute,sort] from the beginning . What do you[julius] think , Julius ? ï¿½
 two hails in the same sentence - split hail
 37650: him should be Mr. Carter (cata match)
 37587: The lastSubject from the skipResponse should not override the mostLikely NOT speaker set previously.
@@ -424,7 +441,7 @@ He[tommy] recognized it[voice] at once for that of the bearded and efficient Ger
 60863: pursuers should be a gendered role object
 60974: attach another kind of relative clause - his[tommy] two pursuers , of whom the German[man] was one 
 61265: that should be the portait of kremanin, who should be equivocated to 'Number 1'
-61336: a meta pattern announcing presence - he[tommy] was in the presence of the man who did not here[here] go by the name[name] of “QS Mr . Carter .
+61336: a meta pattern announcing presence - he[tommy] was in the presence of the man who did not here[here] go by the name[name] of ï¿½QS Mr . Carter .
 61451: Mr. Carter's face - context
 62074: Tommy's hair - context
 62106, 62124, 62132: not Annette, Tuppence - see salienceNPP

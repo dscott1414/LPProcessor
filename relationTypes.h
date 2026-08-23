@@ -1,4 +1,29 @@
+/*
+	relationTypes.h - Word-order syntactic relation type IDs used by the relation pipeline
+
+	Overview:
+		Declares the bidirectional word-order relation enum (SubjectWordWithVerb, VerbWithPrep,
+		etc.) plus a smaller combo enum (SVO, VPO, …) that names common pairs of those
+		relations. VERB_HISTORY spaces the "next N main verb" slots so nearby same-tense
+		verbs can be linked without colliding with later relation IDs.
+
+	Pipeline position:
+		Consumed after parse, when syntacticRelations / syntacticRelationGroups assign
+		roles. getRelStr() is implemented elsewhere and is used for logging/debug.
+
+	Key data structures / globals:
+		- relationWOTypes - one ID per directed word-to-word relation; NextRelation is the
+		  first unused ID after VERB_HISTORY-expanded verb-adjacency slots
+		- relationComboTypes - named pairs of WO types used when collapsing SVO/prep frames
+		- relationWOTypeStrings[] - parallel display names (defined in another TU)
+
+	Notes / gotchas:
+		Adding a new WO type in the middle of the enum shifts every later ID, including
+		the VerbWithNext1MainVerb family (computed as VerbWithNext1MainVerbSameSubject +
+		VERB_HISTORY*2). Do not reorder without migrating stored relation tables.
+*/
 #define VERB_HISTORY 4 // number of verbs back to analyze for relations
+// Maps a relationWOTypes value to its display string; unknown IDs are the caller's problem.
 const wchar_t *getRelStr(int relationType);
 enum relationWOTypes { firstRelationType=0,
 	SubjectWordWithVerb=firstRelationType,VerbWithSubjectWord,

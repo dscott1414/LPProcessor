@@ -1,3 +1,43 @@
+/*
+	paice.cpp - Paice/Husk suffix/prefix stemmer (cStemmer) implementation
+
+	Overview:
+		Loads suffixRules.txt / prefixRules.txt on first use, then stem() tries
+		every suffix rule against the surface form.  A 'continue' rule recurses
+		on the replacement.  After suffixes, stripPrefix() tries each prefix
+		against the original word and against every suffix-produced candidate,
+		keeping a prefix strip only when the remainder is not UNDEFINED in the
+		lexicon/DB.  Results are sorted (fewer trail steps, then longer text).
+
+	Pipeline position:
+		cWord::attemptDisInclination / parseWord, during lexicon lookup.
+
+	Key entry points:
+		- applyStemRule() - one rule vs one word; returns s_notapply/s_stop/s_continue.
+		- stem() - drive the search; returns rulesUsed.size() or a NET_ERR code.
+		- stripPrefix() / applyPrefixRule() - non-nestable prefix pass.
+		- readStemRules() / readPrefixRules() - parse the lists files.
+		- findLastFormInflection() - recover form/inflection from a result's trail.
+		- isWordDBUnknown() / wordIsNotUnknownAndOpen() - filters.
+
+	Dependencies:
+		source\\lists\\suffixRules.txt (key,rep,form,inflection,flags)
+		source\\lists\\prefixRules.txt (key,rep)
+		words / wordForms tables (isWordDBUnknown).
+
+	Notes / gotchas:
+		- `if (state = applyStemRule(...) == s_continue)` is `=` plus `==`
+			precedence: state becomes 0/1 (the comparison), not the enum.  The
+			`if` still does the right thing because it tests the comparison.
+		- BOM stripping uses memcpy(s, s+1, wcslen(s+1)) - overlapping, and the
+			count is bytes not wchar_t, so the remainder of a UTF-16 line is
+			corrupted.  Should be memmove of (wcslen+1)*sizeof(wchar_t).
+		- isWordDBUnknown interpolates `word` into a double-quoted SQL literal
+			with no escape (injection / truncation on quotes).
+		- LOG_DICTIONARY in applyStemRule calls trail.concatToString() with no
+			argument; that path does not compile if the #define is on.
+		- findLastFormInflection copies rulesUsed by value.
+*/
 /* Paice/Husk Stemmer Program 1994-5,by Andrew Stark   Started 12-9-94. */
 /* 7/30/2003 - Antonio Zamora:
  - allowed comment lines starting with semicolon in rules,
@@ -34,6 +74,12 @@ vector <cStemmer::cSuffixRule> cStemmer::stemRules;
 vector <cStemmer::tPrefixRule> cStemmer::prefixRules;
 unordered_set<int> cStemmer::unacceptableCombinationForms;
 
+// Try one suffix rule against 'word'.  Returns s_notapply if the suffix
+// does not match, the word is not intact when required, or the result would
+// be shorter than MINSTEMSIZE (3); s_stop if protect or the rule does not
+// continue; s_continue if the caller should recurse on rule.text.
+// On apply, pushes a copy of 'rule' (with text/trail filled) onto rulesUsed.
+// 'rule' and 'trail' are taken by value.
 /* * * APPLYRULE()  * * * * * * * */
 int cStemmer::applyStemRule(wstring word, cSuffixRule rule, vector <cSuffixRule>& rulesUsed, cIntArray trail)
 {
@@ -84,6 +130,9 @@ int cStemmer::applyStemRule(wstring word, cSuffixRule rule, vector <cSuffixRule>
 	return (rule.cont) ? s_continue : s_stop;/* If continue flag is set,return cont */
 }
 
+// OR together every InflectionTypes bit whose name occurs as a whole word
+// in 'inflection' (space- or NUL-terminated), searching the four
+// noun/verb/adjective/adverb maps.  Returns 0 if inflection is empty.
 int cStemmer::getInflectionNum(wchar_t const* inflection)
 {
 	LFS
@@ -101,6 +150,10 @@ int cStemmer::getInflectionNum(wchar_t const* inflection)
 	return temp;
 }
 
+// Parse source\\lists\\suffixRules.txt into stemRules.  Line format:
+// keystr,repstr,form,inflection,flags  with optional ;comment.  BOM (U+FEFF)
+// is stripped with an overlapping memcpy (see file header).  Returns 0, or
+// NO_SUFFIX_RULES_FILE / SUFFIX_RULES_PARSE_ERROR (both FATAL first).
 int cStemmer::readStemRules(void)
 {
 	LFS
@@ -173,6 +226,8 @@ int cStemmer::readStemRules(void)
 	return 0;
 }
 
+// Parse source\\lists\\prefixRules.txt (keystr,repstr) into prefixRules.
+// Missing file is a silent NO_PREFIX_RULES_FILE (not FATAL, unlike suffixes).
 int cStemmer::readPrefixRules(void)
 {
 	LFS
@@ -206,6 +261,8 @@ int cStemmer::readPrefixRules(void)
 	return 0;
 }
 
+// Sort key for stem() results: fewer trail steps first, then longer text.
+// Taken by value (two full cSuffixRule copies per comparison).
 bool sortRuleGreater(cStemmer::cSuffixRule a, cStemmer::cSuffixRule b)
 {
 	LFS
@@ -214,6 +271,11 @@ bool sortRuleGreater(cStemmer::cSuffixRule a, cStemmer::cSuffixRule b)
 	return a.trail.count < b.trail.count;
 }
 
+// Load suffix rules if needed, try every rule, recurse on s_continue.
+// addRule>=0: this is a recursive frame - push addRule onto trail and
+// return rulesUsed.size() without prefix-stripping or sorting.
+// addRule<0 (the public call): then stripPrefix, sort, return size.
+// Returns a negative NET_ERR if the rules file is missing/corrupt.
 size_t cStemmer::stem(MYSQL mysql, wstring word, vector<cSuffixRule>& rulesUsed, cIntArray& trail, int addRule)
 {
 	LFS
@@ -231,6 +293,10 @@ size_t cStemmer::stem(MYSQL mysql, wstring word, vector<cSuffixRule>& rulesUsed,
 	return rulesUsed.size();
 }
 
+// True if 'word' is already in Words with UNDEFINED_FORM, or if the DB has
+// a words/wordForms row for it with formId UNDEFINED_FORM_NUM+1 (DB is
+// 1-based).  Also returns true on LOCK/query failure (conservative: treat
+// as unknown so the prefix is rejected).  Interpolates word unescaped.
 bool cStemmer::isWordDBUnknown(MYSQL mysql, wstring word)
 {
 	tIWMM iWord = Words.query(word);
@@ -255,6 +321,10 @@ bool cStemmer::isWordDBUnknown(MYSQL mysql, wstring word)
 	return count > 0;
 }
 
+// If 'word' starts with r.keystr and the remainder is a known open-class
+// word, push a prefix-stripped cSuffixRule (rulenum = -r.rulenum, form
+// PREVIOUS) and also strip the same prefix from rulesUsed[0..originalSize).
+// Prefixes are not nested.  Always returns 0.
 int cStemmer::applyPrefixRule(MYSQL mysql, tPrefixRule r, vector <cSuffixRule>& rulesUsed, int originalSize, wstring word)
 {
 	LFS
@@ -285,6 +355,9 @@ int cStemmer::applyPrefixRule(MYSQL mysql, tPrefixRule r, vector <cSuffixRule>& 
 	return 0;
 }
 
+// Load prefix rules if needed, then applyPrefixRule for every prefix against
+// 'word' and the current rulesUsed snapshot.  Returns -1 if the prefix file
+// is missing; 0 otherwise.
 // prefixes are not nestable
 // apply all prefixes to all rulesUsed
 int cStemmer::stripPrefix(MYSQL mysql, wstring word, vector <cSuffixRule>& rulesUsed)
@@ -297,6 +370,10 @@ int cStemmer::stripPrefix(MYSQL mysql, wstring word, vector <cSuffixRule>& rules
 	return 0;
 }
 
+// Walk r->trail from the end, skipping negative (prefix) ids, and copy the
+// last non-PREVIOUS stemRules[].form/inflection into the out-params.  If r
+// itself is not PREVIOUS, start from r.  rulesUsed is unused (passed by
+// value).  Always returns 0.
 int cStemmer::findLastFormInflection(vector <cSuffixRule> rulesUsed, vector <cSuffixRule>::iterator& r, wstring& form, int& inflection)
 {
 	LFS
@@ -322,6 +399,8 @@ int cStemmer::findLastFormInflection(vector <cSuffixRule> rulesUsed, vector <cSu
 	return 0;
 }
 
+// Clear the process-wide rule vectors.  Instantiating a cStemmer just to
+// destroy it is the only way to unload the rules.
 cStemmer::~cStemmer()
 {
 	LFS
@@ -329,6 +408,9 @@ cStemmer::~cStemmer()
 	prefixRules.clear();
 }
 
+// False if iWord carries any closed-class form (pronoun, determiner, numeral,
+// modal, punctuation, ... - the set is filled once).  True only if it also
+// has verb, noun, adverb, or adjective.  log writes the rejecting form.
 bool cStemmer::wordIsNotUnknownAndOpen(tIWMM iWord, bool log)
 {
 	if (unacceptableCombinationForms.empty())

@@ -1,9 +1,31 @@
+"""TFI.py - Lexicon word record (C++ tFI) plus inflection/flag constants.
+
+Overview:
+    Deserializes one Words[] entry: form-id array, inflectionFlags,
+    flags, timeFlags, derivationRules, index, mainEntry string, and
+    16-byte usagePatterns / usageCosts. Class-level constants mirror
+    word.h flags (SINGULAR, VERB_PAST, gender bits, …).
+
+Pipeline position:
+    Loaded into the Python lexicon; WordMatch / Source consult forms
+    and inflectionFlags during display and filtering.
+
+Key entry points:
+    - has_winner_verb_form(winnerForms) - any verb form in the winner mask
+    - __init__(rs) - read one tFI
+
+Notes / gotchas:
+    has_winner_verb_form's `return False` is indented inside the for
+    loop, so only the first form is ever tested.
+"""
 from Form import Form
 import struct
 
 class TFI:
     MAX_USAGE_PATTERNS=16
 
+    # True if some form i is a verbForm and (winnerForms==0 or bit i is set).
+    # BUG: return False sits inside the loop — only form 0 is examined.
     def has_winner_verb_form(self, winnerForms):
         for I in range(self.count):
             if (Form.forms[self.forms[I]].verbForm and (winnerForms==0 or ((1<<I)&winnerForms)!=0)):
@@ -11,6 +33,8 @@ class TFI:
             return False
 
 
+    # Read count, forms[count], 5 ints, mainEntry, usagePatterns[16],
+    # usageCosts[16]. Manually advances rs.offset to match the reads.
     def __init__(self,rs):
         self.count = rs.read_integer()
         self.forms = struct.unpack('<' + str(self.count) + 'i', rs.f.read(self.count * 4))

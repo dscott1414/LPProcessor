@@ -1,3 +1,44 @@
+/*
+	DBCreateSQLSchema.cpp - CREATE TABLE / CREATE DATABASE and seed-source generators
+
+	Overview:
+		createDatabase() is the one-shot installer: connect (or create schema
+		`lp`), then CREATE the forms/sources/words/wordForms/wordFrequency/
+		noRDFTypes tables and the object/relation family.  The other functions
+		are CREATE TABLE helpers for thesaurus/groups/locations/time, plus
+		INSERT generators that seed `sources` from the BNC index, NewsBank day
+		numbers, the tests\\ directory, and QA parse-request paths.
+
+	Pipeline position:
+		Run once from main when the schema is missing.  generate*Sources is also
+		called from that path.  Thesaurus/group/location/time CREATEs are
+		orphaned (author notes they "do not exist within the database").
+
+	Key entry points:
+		- createDatabase() - full install.
+		- createObjectTables / createRelationTables / createTimeRelationTables.
+		- generateBNCSources / generateNewsBankSources / generateTestSources.
+		- generateParseRequestSources / deleteGeneratedParseRequests.
+		- writeThesaurusEntry / createThesaurusTables.
+		- insertWordRelationTypes.
+
+	Dependencies:
+		MySQL as root/byron0.  source\\lists\\bookSources.sql is slurped into
+		the sources table.  BNC index at LMAINDIR\\BNC-world\\doc\\Source\\bncIndex.xml.
+
+	Notes / gotchas:
+		- createDatabase repeats the hardcoded root/byron0 credentials.
+		- Several CREATE TABLE strings are syntactically invalid (trailing
+			commas; FK column names that do not match the column; duplicate
+			index names).  createTimeRelationTables and parts of
+			createRelationTables will fail if ever executed.
+		- generateBNCSources treats a byte-sized file as wchar_t* and writes
+			buffer[actualLen]=0, which is 2*actualLen bytes past the allocation.
+		- writeThesaurusEntry interpolates unescaped narrow strings with %S
+			into a 1024-wchar_t _snwprintf (the stack buffer is 4096).
+		- 2*QUERY_BUFFER_LEN_OVERFLOW is 2*QUERY_BUFFER_LEN+1024, not
+			2*(QUERY_BUFFER_LEN+1024), because the macro is unparenthesized.
+*/
 #include <stdio.h>
 #include <string.h>
 #include <mbstring.h>
@@ -27,6 +68,9 @@ bool checkFull(MYSQL* mysql, wchar_t* qt, size_t& len, bool flush, wchar_t* qual
 //maxPrimarySynonymAccumulatedSize = 86
 //maxConceptSize = 35
 
+// CREATE TABLE thesaurus (mainEntry, wordType bitmap, synonym/antonym/concept
+// blobs).  Returns -1 if the CREATE fails (table-already-exists is FATAL
+// unless the caller used allowFailure).
 int cSource::createThesaurusTables()
 {
 	if (!myquery(&mysql, L"CREATE TABLE thesaurus ("
@@ -51,6 +95,9 @@ vector <string> rest;
 } sDefinition;
 
 */
+// INSERT one thesaurus row.  wordType is packed as bits from the wt[]
+// tokens found in d.wordType (pron/conj/interj suppress n; adv suppresses v).
+// Values are interpolated with %S and no escape.  Returns myquery's result.
 int cSource::writeThesaurusEntry(sDefinition& d)
 {
 	wchar_t qt[4096];
@@ -80,6 +127,8 @@ int cSource::writeThesaurusEntry(sDefinition& d)
 	return myquery(&mysql, qt);
 }
 
+// CREATE groups / groupMapTo / subGroups.  Unused; subGroups FKs
+// groups(id) but groups has no id column (would fail if run).
 // thse are not used and do not exist within the database
 int cSource::createGroupTables(void)
 {
@@ -97,6 +146,7 @@ int cSource::createGroupTables(void)
 	return 0;
 }
 
+// CREATE locations / locationObjectAssociation.  Unused (author note).
 // thse are not used and do not exist within the database
 int cSource::createLocationTables(void)
 {
@@ -125,6 +175,9 @@ int cSource::createLocationTables(void)
 	return 0;
 }
 
+// CREATE objects / objectLocations / objectWordMap.  objects has no `id`
+// column, but objectLocations FKs objects(id) - that CREATE will fail.
+// objectWordMap.orderOrType is a name-part enum when objects.name is set.
 int cSource::createObjectTables(void)
 {
 	LFS
@@ -155,6 +208,9 @@ int cSource::createObjectTables(void)
 	return 0;
 }
 
+// CREATE timeGroupMembers / timeGroups / timeRelationTypes / timeGroupRelations.
+// timeGroupMembers indexes/FKs `relationId` but the column is wordRelationId;
+// timeGroupRelations has a trailing comma before `)`.  Both CREATEs fail.
 int cSource::createTimeRelationTables(void)
 {
 	LFS
@@ -167,8 +223,8 @@ int cSource::createTimeRelationTables(void)
 	if (!myquery(&mysql, L"CREATE TABLE timeGroups (id int(11) unsigned NOT NULL auto_increment unique, "
 		L"speakerId INT UNSIGNED NOT NULL, INDEX si_ind (speakerId), FOREIGN KEY (speakerId) REFERENCES objects(id), "
 		L"sourceId INT UNSIGNED NOT NULL, INDEX s_ind (sourceId), FOREIGN KEY (sourceId) REFERENCES sources(id))")) return -1;
-	// timeRelationTypes: ’BEFORE’|’AFTER’|’ON_OR_BEFORE’|’ON_OR_AFTER’|’LESS_THAN’|’MORE_THAN’|
-	//                    ’EQUAL_OR_LESS’|’EQUAL_OR_MORE’|’START’|’MID’|’END’|’APPROX’
+	// timeRelationTypes: ï¿½BEFOREï¿½|ï¿½AFTERï¿½|ï¿½ON_OR_BEFOREï¿½|ï¿½ON_OR_AFTERï¿½|ï¿½LESS_THANï¿½|ï¿½MORE_THANï¿½|
+	//                    ï¿½EQUAL_OR_LESSï¿½|ï¿½EQUAL_OR_MOREï¿½|ï¿½STARTï¿½|ï¿½MIDï¿½|ï¿½ENDï¿½|ï¿½APPROXï¿½
 	if (!myquery(&mysql, L"CREATE TABLE timeRelationTypes (id int(11) unsigned NOT NULL auto_increment unique, "
 		L"type VARCHAR(256) CHARACTER SET utf8mb4 NOT NULL)")) return -1;
 	// timeGroupRelations:
@@ -226,6 +282,10 @@ int cSource::createTimeRelationTables(void)
 //         index is objectId to Larry
 //         count++;
 
+// CREATE objectRelations, wordRelations, wordrelationsmemory (MEMORY),
+// multiWordRelations, prepPhraseMultiWordRelations, relationsFlow.
+// wordrelationsmemory and multiWordRelations have trailing-comma / duplicate
+// index-name SQL that will fail if executed on a strict server.
 int cSource::createRelationTables(void)
 {
 	LFS
@@ -329,6 +389,11 @@ int cSource::createRelationTables(void)
 	return 0;
 }
 
+// Parse a BNC-world bncIndex.xml-like file and INSERT one sources row per
+// <doc> whose <genre> starts with 'W'.  Reads the file as bytes into a
+// wchar_t* of actualLen+1 bytes, then writes buffer[actualLen]=0 (a wchar_t
+// at byte 2*actualLen - buffer overrun).  Returns 0 on success, negative
+// NET_ERR-like codes on I/O or parse failure.
 int generateBNCSources(MYSQL& mysql, wstring indexFile) // note this is slightly modified from the original
 {
 	LFS
@@ -395,6 +460,8 @@ int generateBNCSources(MYSQL& mysql, wstring indexFile) // note this is slightly
 	return returnCode;
 }
 
+// INSERT one NEWS_BANK_SOURCE_TYPE row per day from Unix day 2557..7056
+// (1977-01-01-ish through ~1989) with path newsbank\\<year>\\<daynum>.txt.
 int generateNewsBankSources(MYSQL& mysql)
 {
 	LFS
@@ -415,6 +482,8 @@ int generateNewsBankSources(MYSQL& mysql)
 	return 0;
 }
 
+// INSERT the canned tests\\<name>.txt sources (agreement, date-time-number,
+// Nameres, ...) as TEST_SOURCE_TYPE with start ~~BEGIN.
 int generateTestSources(MYSQL& mysql)
 {
 	LFS
@@ -435,6 +504,9 @@ int generateTestSources(MYSQL& mysql)
 	return 0;
 }
 
+// INSERT one REQUEST_TYPE source for a QA web-search hit.  pathInCache is
+// stripped of the TEXTDIR prefix and escapeStr'd; fullWebPath is used as
+// title and is NOT escaped (wsprintf into 16384 wchar_t).
 int generateParseRequestSources(MYSQL& mysql, vector <cQuestionAnswering::cSearchSource>::iterator pri)
 {
 	wchar_t qt[16384];
@@ -446,6 +518,7 @@ int generateParseRequestSources(MYSQL& mysql, vector <cQuestionAnswering::cSearc
 	return myquery(&mysql, qt);
 }
 
+// DELETE every REQUEST_TYPE row from sources (the ephemeral QA parses).
 int deleteGeneratedParseRequests(MYSQL& mysql)
 {
 	wchar_t qt[1024];
@@ -453,6 +526,9 @@ int deleteGeneratedParseRequests(MYSQL& mysql)
 	return myquery(&mysql, qt);
 }
 
+// INSERT (id, getRelStr(id)) for firstRelationType..numRelationWOTypes-1
+// into wordRelationType.  Called only when the CREATE of that table fails
+// (i.e. it already exists) - a surprising control flow.
 int cSource::insertWordRelationTypes(void)
 {
 	LFS
@@ -468,6 +544,11 @@ int cSource::insertWordRelationTypes(void)
 	return 0;
 }
 
+// If initializeDatabaseHandle succeeds the schema already exists: close and
+// return 0.  Otherwise, if the error was ER_BAD_DB_ERROR, reconnect without
+// a schema (root/byron0 again), CREATE DATABASE lp, then CREATE the core
+// tables and seed sources from bookSources.sql + BNC/NewsBank/tests.
+// Returns 0 or -1; most CREATE failures are FATAL first.
 int cSource::createDatabase(const wchar_t* server)
 {
 	LFS

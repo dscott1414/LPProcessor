@@ -1,3 +1,27 @@
+"""WordMatch.py - One token of Source.m[] deserialized from an LP dump.
+
+Overview:
+    Mirrors C++ cWordMatch / WordMatch: the word string, a 64-bit flags
+    word (quote/speaker/BNC/proper-noun bits), PMA list, form/winner/
+    pattern bitsets, object + objectMatches, quote/rel* links, and
+    per-token trace flags. Helpers query forms, winner forms, and
+    format role/relation/flag strings for the info panel.
+
+Pipeline position:
+    Core of the web source view; one instance per token after tokenize
+    + parse + resolve.
+
+Key entry points:
+    - __init__(rs) - unpack one token
+    - query_form / query_winner_form / is_winner / has_winner_verb_form
+    - role_string / relations / get_winner_forms / print_flags
+
+Notes / gotchas:
+    Many flag bits reuse the same shift (e.g. <<23 is both
+    flagFirstLetterCapitalized and flagFromPreviousHailResolveSpeakers)
+    — quote vs non-quote interpretation. has_winner_verb_form does not
+    null-check get_word_tfi().
+"""
 from WordClass import WordClass
 from Form import Form 
 from CObject import CObject
@@ -102,6 +126,9 @@ class WordMatch:
     flagObjectPleonastic = (1 << 1)
     flagIgnoreAsSpeaker = (1 << 0)
 
+    # Read word/baseVerb, packed stats, PMA[count], three BitObjects,
+    # object/matches, quote/rel links, trace-flag bits, then the trailing
+    # 38-byte link block. skipResponse and spaceRelation are runtime-only.
     def __init__(self, rs):
         self.word = rs.read_string()
         self.baseVerb = rs.read_string()
@@ -175,9 +202,11 @@ class WordMatch:
         self.notFreePrep = False
         self.hasVerbRelations = False
 
+    # Lexicon TFI for self.word, or None if missing from WordClass.words.
     def get_word_tfi(self):
         return WordClass.words.get(self.word)  
 
+    # Index of `form` in the word's TFI.forms, or -1.
     def query_word_form(self,form):
         tfi=self.get_word_tfi()
         if (tfi==None): return -1
@@ -186,6 +215,9 @@ class WordMatch:
                 return f
         return -1
     
+    # Like query_word_form but honours flagAddProperNoun /
+    # flagOnlyConsiderProperNounForms / flagRefuseProperNoun.
+    # Returns -1 if the form is disallowed.
     def query_form(self, form):
         if (Form.forms==None):  
             return -1
@@ -201,12 +233,16 @@ class WordMatch:
             return -1
         return self.query_word_form(form)
 
+    # True if tmpWinnerForms bit `form` is set, or if tmpWinnerForms==0
+    # (all forms treated as winners).
     def is_winner(self, form):
         return ((1 << form) & self.tmpWinnerForms) != 0 if (self.tmpWinnerForms > 0) else True
 
+    # Delegate to TFI.has_winner_verb_form. Crashes if get_word_tfi() is None.
     def has_winner_verb_form(self):
         return self.get_word_tfi().has_winner_verb_form(self.tmpWinnerForms)
 
+    # Index of `form` if it is a winner under the proper-noun flags, else -1.
     def query_winner_form(self, form):
         if (self.get_word_tfi()==None or self.get_word_tfi().forms==None):
             return -1
@@ -237,6 +273,7 @@ class WordMatch:
             "S_IN_REL", "PASS_SUBJ", "POV", "MNOUN", "SP", "SECONDARY_SP", "EVAL", "ID", "DELAY", "PRIM", "SECOND", "EMBED", "EXT", "NOT_ENC",
             "EXT_ENC", "NPAST_ENC", "NPRES_ENC", "POSS_ENC", "THINK_ENC" ]
 
+    # Comma-joined short names of objectRole bits that are set.
     def role_string(self):
         role = ""
         I = 0
@@ -248,6 +285,7 @@ class WordMatch:
             role=role[:-2]
         return role
 
+    # Space-joined "rSubj=N rVerb=N …" for the non--1 rel* / quote links.
     def relations(self):
         retMessage = ""
         if (self.relSubject!=-1): retMessage+="rSubj=" + str(self.relSubject)
@@ -265,6 +303,7 @@ class WordMatch:
             retMessage = retMessage[1:]
         return retMessage
 
+    # "( *shortName shortName )" with '*' on winners. Form.forms is a dict.
     def get_winner_forms(self):
         sForms="("
         for I in range(len(Form.forms)):  
@@ -273,6 +312,8 @@ class WordMatch:
                 sForms+=Form.forms[I].shortName+" "
         return sForms.strip()+") "
     
+    # Compact flag abbreviations (Q, C, UsedPossessionRelation, …) for the
+    # info panel. Continues below through the remaining flag bits.
     def print_flags(self):
         flagStr=""
         if ((self.flags&self.flagInQuestion)!=0): flagStr+=" Q"

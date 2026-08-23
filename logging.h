@@ -1,3 +1,42 @@
+/*
+	logging.h - process-wide log-level flags, lplog entry points, and the sTrace diagnostic-switch bag
+
+	Overview:
+		Every translation unit includes this (usually via word.h) for the lplog() family and
+		the LOG_* bit flags.  Feature #defines at the top of the file are compile-time
+		switches that change what the rest of the program writes to the database and to
+		disk caches; they are not log-routing flags.  The LogLevels enum IS the routing
+		mask: each bit selects a destination file (main.lplog, error.lplog, ...).
+
+	Pipeline position:
+		Used from initialization through QA.  lplog is the only sanctioned way to write a
+		diagnostic; LOG_FATAL_ERROR is the sanctioned way to abort.
+
+	Key entry points:
+		- lplog() / lplog(format,...) / lplog(logLevel,format,...) - format and write.
+		- lplogNR() - same as lplog(logLevel,...) but does not append a newline.
+		- logstring() - the sink: opens/buffers the per-level FILE*, writes, and on
+			LOG_FATAL_ERROR blocks on getchar() then exit(0).
+
+	Key data structures / globals:
+		- sTrace - per-document bag of bools that gate expensive resolution/pattern traces.
+		- logFileExtension / multiProcess - TLS; child processes set the extension so each
+			writes "main<N>.lplog" under "multiprocessor logs\\".
+		- logCache - seconds a FILE* is kept open (40 by default); 0 means close after every write.
+
+	Notes / gotchas:
+		- lplog(LOG_FATAL_ERROR,...) DOES abort: logstring() calls exit(0) after a getchar()
+			wait.  source.h currently claims it only logs; that is wrong.  main.cpp and
+			DBUtility.cpp document the real behaviour.  Unattended runs hang at the prompt
+			and then exit with status 0 (not 1).
+		- LOG_FATAL_ERROR is also treated as LOG_INFO for file routing (writes main.lplog)
+			and lplog() ORs in LOG_ERROR, but logstring() exits before the error-file pass.
+		- lplogNR is "no newline" (it skips the wcscat L"\\n"), not "no return" - both
+			lplog and lplogNR abort on FATAL via logstring().
+		- When LOG_BUFFER is defined (it is), the FILE* handles are process-wide, not TLS,
+			while logFileExtension is TLS - concurrent threads sharing a level race on the
+			same FILE*.
+*/
 //#define LOG_RELATIVE_LOCATION
 //#define LOG_OLD_MATCH
 #define LOG_BUFFER
@@ -54,6 +93,9 @@
 // like two VERBS or two SUBJECTS.
 //#define LOG_GENERATE_PATTERNS
 extern short logCache;
+// Bitmask destinations for lplog.  A call may OR several bits; logstring() peels
+// one bit per loop iteration and writes that level's file.  Values are not a
+// dense sequence (LOG_WHERE starts at 128) because older bits were retired.
 enum LogLevels { LOG_INFO=1, LOG_ERROR=2, LOG_RESOLUTION=4, LOG_NOTMATCHED=8, LOG_WHERE=128, LOG_RESCHECK=256, 
 								 LOG_SG=512, LOG_WORDNET=1024, LOG_WIKIPEDIA=2048, LOG_WEBSEARCH=4096,
 								 LOG_ROLE=8192, LOG_WCHECK=16384, LOG_TIME=32768, LOG_DICTIONARY=65536, LOG_FATAL_ERROR=131072, LOG_PROFILER=262144, 
@@ -67,6 +109,9 @@ int lplog(int logLevel,const wchar_t *format,...);
 int lplogNR(int logLevel,const wchar_t *format,...);
 int logstring(int logLevel,const wchar_t *s);
 #define SCREEN_WIDTH 280
+// Per-document (copied onto cSource::debugTrace) switches that gate the expensive
+// resolution / pattern / Wikipedia traces.  Default-constructed to all-false so a
+// production parse is quiet; main.cpp flips subsets from the command line.
 class sTrace 
 {
 public:
@@ -78,6 +123,7 @@ public:
 	bool traceSecondaryPEMACosting,traceMatchedSentences,traceUnmatchedSentences,traceIncludesPEMAIndex;
 	bool traceTransformDestinationQuestion,traceMapQuestion,traceQuestionPatternMap,traceLinkQuestion;
 	bool traceTagSetCollection,collectPerSentenceStats,traceParseInfo, tracePreposition, tracePatternMatching;
+	// Every flag starts false.  Add new bools here AND in this constructor.
 	sTrace()
 	{
 		traceTime = false;
@@ -130,5 +176,7 @@ extern int logRDFDetail;
 extern bool log_net;  
 extern bool logTraceOpen;
 
-extern __declspec(thread) wstring logFileExtension; // parallel processing will overload this variable 
+extern __declspec(thread) wstring logFileExtension; // parallel processing will overload this variable
+// 0 = single-process (write next to cwd).  Non-zero child workers also set
+// logFileExtension so logstring() prefixes "multiprocessor logs\\".
 extern __declspec(thread) int multiProcess; // initialized

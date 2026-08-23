@@ -1,3 +1,50 @@
+/*
+	questionAnsweringWebSearch.cpp - Bing / Google Custom Search fallback and the
+		query-string builder that turns a question SRG into search phrases.
+
+	Overview:
+		When the novel / DBpedia / Wikipedia pass finds no (or too few) answers,
+		cQuestionAnswering asks this TU to (1) assemble query strings from the
+		question's subject + verb + object + prep, (2) hit Google Custom Search or
+		Bing Web Search v7 (results cached under WEBSEARCH_CACHEDIR\webSearchCache),
+		(3) parse the JSON with yajl, (4) write snippets to disk and optionally
+		download the full page, then (5) parse those texts as WEB_SEARCH_SOURCE_TYPE
+		child sources and score them with analyzeQuestionFromSource(). Parallel mode
+		queues the paths as REQUEST_TYPE rows and spins child lp.exe processes via
+		startProcesses(); serial mode parses in-process.
+
+	Pipeline position:
+		Called from answerQuestionInSourceWebWikiSearch() /
+		answerQuestionInSourceProximityMapWebSearch() / matchSubQueries() after the
+		RDF / Wikipedia pass. Also hosts cSource helpers (appendObject / appendVerb /
+		inObject) used while building the query strings.
+
+	Key entry points:
+		- getWebSearchQueries() / enhanceWebSearchQueries() - build / extend queries
+		- getGoogleSearchJSON() / getBINGSearchJSON() - REST call + disk cache
+		- extractGoogleWebSites() / extractBINGWebSites() - yajl walk of items[]
+		- webSearchForQueryParallel() / webSearchForQuerySerial() - fetch, parse, score
+		- cSource::appendObject/appendVerb/appendWord() - combinatorial query builder
+
+	Key data structures / globals:
+		- webSearchKey / BINGAccountKey / cseContext - hardcoded API credentials
+		- googleBaseWebSearchAddress / BINGBaseWebSearchAddress - REST endpoints
+		- cQuestionAnswering::cSearchSource - one snippet or full-page parse request
+
+	Dependencies:
+		cInternet::getWebPath (internet.h), yajl_tree, MySQL (generateParseRequestSources
+		in another TU), WEBSEARCH_CACHEDIR (M:\caches), WinHTTP.
+
+	Notes / gotchas:
+		- API keys are committed in the clear (Google CSE + Bing subscription).
+		- extract*WebSites never call yajl_tree_free; every successful parse leaks.
+		- jsonBuffer[0] is read before the empty-string check.
+		- scrapeWebSite() is unfinished (category-3 tags do nothing; buffer is never
+		  written back) and has no callers.
+		- Parallel Bing pass in answerQuestionInSourceProximityMapWebSearch()
+		  currently passes useGoogleSearch=true (copy-paste).
+		- Snippet paths truncate at MAX_PATH-28 on a MAX_LEN (2048) buffer.
+*/
 #include <windows.h>
 #include <io.h>
 #include "word.h"
@@ -24,7 +71,7 @@ int deleteGeneratedParseRequests(MYSQL& mysql);
 /*
 	 base64.cpp
 
-	 Copyright (C) 2004-2008 René Nyffenegger
+	 Copyright (C) 2004-2008 Renï¿½ Nyffenegger
 
 	 This source code is provided 'as-is', without any express or implied
 	 warranty. In no event will the author be held liable for any damages
@@ -44,7 +91,7 @@ int deleteGeneratedParseRequests(MYSQL& mysql);
 
 	 3. This notice may not be removed or altered from any source distribution.
 
-	 René Nyffenegger rene.nyffenegger@adp-gmbh.ch
+	 Renï¿½ Nyffenegger rene.nyffenegger@adp-gmbh.ch
 
 
 */
@@ -61,6 +108,8 @@ static inline bool is_base64(unsigned char c) {
 	return (isalnum(c) || (c == '+') || (c == '/'));
 }
 
+// Standard base64 (Nyffenegger). Present for the old Azure DataMarket Bing
+// handshake; the v7 path below uses an Ocp-Apim-Subscription-Key header instead.
 std::string base64_encode(unsigned char const* bytes_to_encode, unsigned int in_len) {
 	std::string ret;
 	int i = 0;
@@ -117,6 +166,8 @@ std::string base64_encode(unsigned char const* bytes_to_encode, unsigned int in_
 // using the custom search engine (cx) name created which ignores all information coming from wikipedia (since we already have freebase and dbPedia to reference directly)
 // with the words WITH QUOTES "Paul Krugman writes for"
 // https://www.googleapis.com/customsearch/v1?key=AIzaSyDOCHy1bm-46kJkgV2hqPjFJ6Ce8FfR_AE&cx=006746333365901280215:2cxb1obqj6u&q=%22Paul+Krugman+writes+for%22
+// Live credentials, not placeholders ï¿½ Google CSE key + Bing v7 subscription
+// plus the cx of a CSE that excludes Wikipedia (already searched via DBpedia).
 wstring googleBaseWebSearchAddress = L"https://www.googleapis.com/customsearch/v1";
 wstring BINGBaseWebSearchAddress = L"https://api.cognitive.microsoft.com/bing/v7.0/search";
 wstring webSearchKey = L"AIzaSyDOCHy1bm-46kJkgV2hqPjFJ6Ce8FfR_AE";
@@ -133,6 +184,11 @@ $top	Specifies the number of results to return.	&count=	50
 $skip	Specifies the offset requested for the starting point of results returned.	&offset=	0	https://api.datamarket.azure.com/Bing/Search/Web?Query=%27Xbox%27&$top=10&$skip=20
 
 */
+// GET Bing Web Search v7 for 'object' (spaces encoded, %22 rewritten to %27 so
+// the query is wrapped in single quotes). index>1 becomes &offset=. Results are
+// cached by cInternet::getWebPath under webSearchCache. Returns getWebPath's
+// errCode, or -1 if Bing replies with the "Query is not of type String" body.
+// numWebSitesAskedFor is ignored except to append a constant &answerCount=10.
 int getBINGSearchJSON(int where, wstring object, wstring& buffer, wstring& filePathOut, int numWebSitesAskedFor, int index)
 {
 	LFS
@@ -171,6 +227,9 @@ int getBINGSearchJSON(int where, wstring object, wstring& buffer, wstring& fileP
 	return errCode;
 }
 
+// GET Google Custom Search for 'object' (spaces first turned into '+', then URL-
+// encoded). index>1 becomes &start=. The key and cx are the globals above.
+// Cached under webSearchCache. Returns getWebPath's errCode.
 // cache google searches since this is faster and we are paying for them
 // input object is not encoded, but should include quotes when needed.
 int getGoogleSearchJSON(int where, wstring object, wstring& buffer, wstring& filePathOut, int numWebSitesAskedFor, int index)
@@ -194,6 +253,9 @@ int getGoogleSearchJSON(int where, wstring object, wstring& buffer, wstring& fil
 	return errCode;
 }
 
+// True if whereQuestionType is the token 'where' itself or lies inside that
+// token's [beginObjectPosition, endObjectPosition) span (the -1 on begin lets
+// an adjectival WH-word sitting just before the object still count).
 bool cSource::inObject(int where, int whereQuestionType)
 {
 	LFS
@@ -203,6 +265,10 @@ bool cSource::inObject(int where, int whereQuestionType)
 		whereQuestionType >= m[where].beginObjectPosition - 1 && whereQuestionType < m[where].endObjectPosition);
 }
 
+// Append one prep+object span (from relPrep through the object's end) onto the
+// last (or atNumPP-th) string in prepPhraseStrings, if case matches. Returns
+// true when something was appended. atNumPP<0 copies the last string first so
+// the caller can keep a no-PP variant; that path assumes the vector is non-empty.
 // this is deliberately noncombinatorial - each prepositional phrase only has one predecessor
 bool cSource::appendPrepositionalPhrase(int where, vector <wstring>& prepPhraseStrings, int relPrep, bool nonMixedCase, bool lowerCase, const wchar_t* separator, int atNumPP)
 {
@@ -235,6 +301,10 @@ bool cSource::appendPrepositionalPhrase(int where, vector <wstring>& prepPhraseS
 	return false;
 }
 
+// If the token after the object at 'where' is a preposition that points back
+// here, walk the relPrep chain and accumulate matching-case PP strings starting
+// from wsoStr. Returns the size of prepPhraseStrings. numWords is the token
+// span of the longest PP that was kept.
 int cSource::appendPrepositionalPhrases(int where, wstring& wsoStr, vector <wstring>& prepPhraseStrings, int& numWords, bool noMixedCase, const wchar_t* separator, int atNumPP)
 {
 	LFS
@@ -258,6 +328,10 @@ int cSource::appendPrepositionalPhrases(int where, wstring& wsoStr, vector <wstr
 	return prepPhraseStrings.size();
 }
 
+// Push one or more surface forms of objects[object] at 'where' into wsoStrs.
+// Names use cName::original with '+' separators. Other classes copy the token
+// span unless alreadyDidPlainCopy is set (then non-name classes return -1 so
+// a later alias does not duplicate the plain copy). 0 on success.
 int cSource::getObjectStrings(int where, int object, vector <wstring>& wsoStrs, bool& alreadyDidPlainCopy)
 {
 	LFS
@@ -286,6 +360,11 @@ int cSource::getObjectStrings(int where, int object, vector <wstring>& wsoStrs, 
 	return 0;
 }
 
+// Combinatorial append of the object at 'where' onto every string in
+// objectStrings. Skips the WH-span itself (returns -1) unless QTAFlag is set,
+// in which case the WH-word is concatenated. Pronouns are dropped. Multi-word
+// names also generate a quoted variant; attached PPs generate still more copies.
+// Returns 0, or -1 when the position is the question object (noQuotes signal).
 int cSource::appendObject(__int64 questionType, int whereQuestionType, vector <wstring>& objectStrings, int where)
 {
 	LFS
@@ -394,6 +473,9 @@ int cSource::appendObject(__int64 questionType, int whereQuestionType, vector <w
 	return 0;
 }
 
+// Return an inflected form of 'verb' whose tense matches tenseDesired, preferring
+// a third-person form from Words.mainEntryMap. If verb is already past/present as
+// requested, it is returned unchanged. subject==wNULL is treated as singular.
 // PAST:VERB_PAST, VERB_PAST_PARTICIPLE,VERB_PAST_THIRD_SINGULAR,VERB_PAST_PLURAL
 // PRESENT:VERB_PRESENT_THIRD_SINGULAR=128,VERB_PRESENT_FIRST_SINGULAR=256, VERB_PRESENT_PLURAL=2048,VERB_PRESENT_SECOND_SINGULAR=4096,VERB_PRESENT_PARTICIPLE
 tIWMM cSource::getTense(tIWMM verb, tIWMM subject, int tenseDesired)
@@ -426,6 +508,9 @@ tIWMM cSource::getTense(tIWMM verb, tIWMM subject, int tenseDesired)
 	return verb;
 }
 
+// Same lookup as the tIWMM overload, but starting from m[where]'s main entry and
+// returning a search-query token. preferredVerb==VERB_PRESENT_FIRST_SINGULAR is
+// treated as future and prefixed with "will+". Falls back to 'candidate'.
 wstring cSource::getTense(int where, wstring candidate, int preferredVerb)
 {
 	LFS
@@ -451,6 +536,11 @@ wstring cSource::getTense(int where, wstring candidate, int preferredVerb)
 	}
 	return candidate;
 }
+// Append a tensed query form of m[where] to every string in objectStrings.
+// Passive (and not "by") becomes was/will+be/is+being + verb. Future becomes
+// will+bare. A following object-less prep/adverb is glued on. Infinitive
+// complements duplicate the current strings with a "to+V" / past-tense variant.
+// Reads m[where+1] with no bounds check. Always returns 0.
 // possibly adjust tense
 int cSource::appendVerb(vector <wstring>& objectStrings, int where)
 {
@@ -532,6 +622,7 @@ int cSource::appendVerb(vector <wstring>& objectStrings, int where)
 	return 0;
 }
 
+// Append m[where]'s surface form to every query string (used for the preposition).
 int cSource::appendWord(vector <wstring>& objectStrings, int where)
 {
 	LFS
@@ -543,6 +634,9 @@ int cSource::appendWord(vector <wstring>& objectStrings, int where)
 	return 0;
 }
 
+// Fold a URL into a cache-file stem: strip http(s):// and www., map '/' to '_',
+// and hex-escape any other non-alnum except '.'. Empty webSiteURL dereferences
+// begin()==end() (UB). Output is appended onto epath (caller must start empty).
 void hashWebSiteURL(wstring webSiteURL, wstring& epath)
 {
 	LFS
@@ -580,6 +674,7 @@ const wchar_t* TablesTagInHtml[] = { L"table",L"tr",L"td",L"th",L"tbody",L"thead
 const wchar_t* OrderedUnorderedLists[] = { L"ul",L"ol",L"li",L"dl",L"dt",L"dd",NULL };
 const wchar_t* Scripting[] = { L"script",L"noscript",NULL };
 
+// Linear scan of a NULL-terminated tag-name table. Used only by scrapeWebSite.
 bool inCategory(const wchar_t* tagList[], wstring tag)
 {
 	LFS
@@ -589,6 +684,9 @@ bool inCategory(const wchar_t* tagList[], wstring tag)
 	return false;
 }
 
+// Intended HTML-to-text reduction for downloaded pages (category 1 = break
+// blob, 2 = strip tag, 3 = drop element). Category 3 is an empty stub, the
+// accumulated textBlobs are never written back, and nothing calls this.
 void scrapeWebSite(wstring& webSiteBuffer)
 {
 	LFS
@@ -730,8 +828,8 @@ extern "C"
 	 "htmlTitle": "\u003cb\u003ePaul Krugman&#39;s\u003c/b\u003e Solar Eclipse - Robert Bryce - National Review Online",
 	 "link": "http://www.nationalreview.com/articles/282610/paul-krugman-s-solar-eclipse-robert-bryce",
 	 "displayLink": "www.nationalreview.com",
-	 "snippet": "Nov 9, 2011 ... Robert Bryce writes on NRO: Paul Krugman may be a Nobel Prize–winning   economist, but his most recent column in the New York Times, ...",
-	 "htmlSnippet": "Nov 9, 2011 \u003cb\u003e...\u003c/b\u003e Robert Bryce \u003cb\u003ewrites\u003c/b\u003e on NRO: \u003cb\u003ePaul Krugman\u003c/b\u003e may be a Nobel Prize–winning \u003cbr\u003e  economist, but his most recent column in the New York Times, \u003cb\u003e...\u003c/b\u003e",
+	 "snippet": "Nov 9, 2011 ... Robert Bryce writes on NRO: Paul Krugman may be a Nobel Prizeï¿½winning   economist, but his most recent column in the New York Times, ...",
+	 "htmlSnippet": "Nov 9, 2011 \u003cb\u003e...\u003c/b\u003e Robert Bryce \u003cb\u003ewrites\u003c/b\u003e on NRO: \u003cb\u003ePaul Krugman\u003c/b\u003e may be a Nobel Prizeï¿½winning \u003cbr\u003e  economist, but his most recent column in the New York Times, \u003cb\u003e...\u003c/b\u003e",
 	 "cacheId": "sEuKW9Pq1vMJ",
 	 "pagemap": {
 		"cse_image": [
@@ -749,25 +847,25 @@ extern "C"
 		"article": [
 		 {
 			"app_id": "129250807108374",
-			"title": "Paul Krugman’s Solar Eclipse",
+			"title": "Paul Krugmanï¿½s Solar Eclipse",
 			"url": "http://www.nationalreview.com/articles/282610/paul-krugman-s-solar-eclipse-robert-bryce",
 			"image": "http://global.nationalreview.com/images/logo_NRO_facebook_square_110.jpg",
 			"type": "article",
 			"site_name": "NRO",
-			"description": "Robert Bryce writes on NRO: Paul Krugman may be a Nobel Prize–winning economist, but his most recent column in the New York Times, which condemns hydraulic fracturing and praises solar energy,..."
+			"description": "Robert Bryce writes on NRO: Paul Krugman may be a Nobel Prizeï¿½winning economist, but his most recent column in the New York Times, which condemns hydraulic fracturing and praises solar energy,..."
 		 }
 		],
 		"metatags": [
 		 {
 			"fb:app_id": "129250807108374",
-			"og:title": "Paul Krugman’s Solar Eclipse",
+			"og:title": "Paul Krugmanï¿½s Solar Eclipse",
 			"og:url": "http://www.nationalreview.com/articles/282610/paul-krugman-s-solar-eclipse-robert-bryce",
 			"og:image": "http://global.nationalreview.com/images/logo_NRO_facebook_square_110.jpg",
 			"og:type": "article",
 			"og:site_name": "NRO",
-			"og:description": "Robert Bryce writes on NRO: Paul Krugman may be a Nobel Prize–winning economist, but his most recent column in the New York Times, which condemns hydraulic fracturing and praises solar energy, displays an astounding disinterest in numbers and woeful ignorance of the facts.Without providing any sources, Krugman writes, “We know that [fracturing] produces toxic (and . . .",
-			"title": "Paul Krugman’s Solar Eclipse - National Review Online",
-			"fb_title": "Paul Krugman’s Solar Eclipse",
+			"og:description": "Robert Bryce writes on NRO: Paul Krugman may be a Nobel Prizeï¿½winning economist, but his most recent column in the New York Times, which condemns hydraulic fracturing and praises solar energy, displays an astounding disinterest in numbers and woeful ignorance of the facts.Without providing any sources, Krugman writes, ï¿½We know that [fracturing] produces toxic (and . . .",
+			"title": "Paul Krugmanï¿½s Solar Eclipse - National Review Online",
+			"fb_title": "Paul Krugmanï¿½s Solar Eclipse",
 			"medium": "article"
 		 }
 		]
@@ -776,6 +874,9 @@ extern "C"
  ]
 }
 */
+// Walk a Google Custom Search JSON document (yajl) and push items[].link /
+// items[].snippet pairs. Returns -1 on empty / parse failure, 0 otherwise.
+// Reads jsonBuffer[0] before the empty check. The yajl tree is never freed.
 int extractGoogleWebSites(wstring jsonBuffer, vector <wstring>& webSites, vector <wstring>& snippets)
 {
 	LFS
@@ -856,6 +957,8 @@ int extractGoogleWebSites(wstring jsonBuffer, vector <wstring>& webSites, vector
 	if (argc >= 0)
 		return 0;
 */
+// Walk a Bing v7 JSON document and push webPages.value[].url / .snippet pairs.
+// Same empty-buffer and yajl_tree_free issues as extractGoogleWebSites.
 int extractBINGWebSites(wstring jsonBuffer, vector <wstring>& webSites, vector <wstring>& snippets)
 {
 	LFS
@@ -907,6 +1010,9 @@ int extractBINGWebSites(wstring jsonBuffer, vector <wstring>& webSites, vector <
 	return 0;
 }
 
+// Count space-separated tokens that sit inside double quotes in a query string
+// (quotes toggle; '+' inside quotes counts as a word break). Used as a tie-break
+// so more-specified (quoted) queries sort first.
 int numWordsInQuotes(wstring& str)
 {
 	LFS
@@ -934,6 +1040,8 @@ bool sortWebQueryStrings(wstring i, wstring j) {
 }
 
 
+// Suffix every query with "+<semanticSuggestion>" (a proximity-map neighbour
+// such as a show name) so the next Google/Bing pass is more specific.
 void cQuestionAnswering::enhanceWebSearchQueries(vector <wstring>& webSearchQueryStrings, wstring semanticSuggestion)
 {
 	LFS
@@ -944,6 +1052,10 @@ void cQuestionAnswering::enhanceWebSearchQueries(vector <wstring>& webSearchQuer
 	}
 }
 
+// Build the Google/Bing query list from the question SRG: start with "", then
+// append subject, tensed verb, object, and (if the prep is certain) prep+object.
+// Each appendObject call fans the vector out. Unquoted copies get a quoted
+// twin unless the object was the WH-span (noQuotes). Sorted longest-first.
 void cQuestionAnswering::getWebSearchQueries(cSource* questionSource, cSyntacticRelationGroup* parentSRG, vector <wstring>& webSearchQueryStrings)
 {
 	LFS
@@ -972,6 +1084,8 @@ void cQuestionAnswering::getWebSearchQueries(cSource* questionSource, cSyntactic
 
 }
 
+// Copy qo into qlo with every '"' removed. Used to collapse quoted/unquoted
+// twins of the same query so we do not issue both once enough hits exist.
 wstring quoteLess(wstring& qo, wstring& qlo)
 {
 	LFS
@@ -983,6 +1097,11 @@ wstring quoteLess(wstring& qo, wstring& qlo)
 int startProcesses(MYSQL& mysql, int sourceType, int processKind, int step, int beginSource, int endSource, cSource::sourceTypeEnum processSourceType, int maxProcesses, int numSourcesPerProcess,
 	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool makeCopyBeforeSourceWrite, bool parseOnly, wstring specialExtension);
 
+// For each queued path, skip it if a current-version SourceCache already exists;
+// otherwise INSERT a REQUEST_TYPE row (generateParseRequestSources). If more than
+// one request was generated, startProcesses() launches up to 6 child lp.exe
+// workers. Returns startProcesses' result, or -1 when there is nothing to spawn.
+// Stale caches with sourceVersion==0 still trigger a reparse.
 int cQuestionAnswering::spinParses(MYSQL& mysql, vector <cSearchSource>& accumulatedParseRequests)
 {
 	deleteGeneratedParseRequests(mysql);
@@ -1030,6 +1149,11 @@ int cQuestionAnswering::spinParses(MYSQL& mysql, vector <cSearchSource>& accumul
 }
 
 extern int limitProcessingForProfiling;
+// From webSearchQueryStringOffset onward, run Google or Bing, skip wikipedia.org
+// hits, write each snippet to webSearchCache\_<hash>.snippet.txt and download
+// the full page. Dedupes by path. After a query that returned >2 hits, skip
+// remaining twins that differ only by quotes. Advances the offset. Returns the
+// largest hit-list size seen (used as "last page?" when < 10).
 int cQuestionAnswering::accumulateParseRequests(cSyntacticRelationGroup* parentSRG, int webSitesAskedFor, int index, bool googleSearch, vector <wstring>& webSearchQueryStrings, int& webSearchQueryStringOffset, vector <cSearchSource>& accumulatedParseRequests)
 {
 	LFS
@@ -1107,6 +1231,9 @@ int cQuestionAnswering::accumulateParseRequests(cSyntacticRelationGroup* parentS
 	return maxWebSitesFound;
 }
 
+// processPath + analyzeQuestionFromSource each queued snippet/page. A snippet
+// whose best matchSum is >= 24 marks its corresponding full page skipFullPath
+// so we do not re-parse the article. Always returns 0.
 int cQuestionAnswering::analyzeAccumulatedRequests(cSource* questionSource, wchar_t* derivation, cSyntacticRelationGroup* parentSRG, bool parseOnly, vector < cAS >& answerSRGs, int& maxAnswer, vector <cSearchSource>& accumulatedParseRequests)
 {
 	LFS
@@ -1128,6 +1255,8 @@ int cQuestionAnswering::analyzeAccumulatedRequests(cSource* questionSource, wcha
 	return 0;
 }
 
+// Parallel web-search pass: accumulateParseRequests, spin child parsers, then
+// score the resulting caches. Returns the max hit-list size (see Serial).
 int cQuestionAnswering::webSearchForQueryParallel(cSource* questionSource, wchar_t* derivation, cSyntacticRelationGroup* parentSRG, bool parseOnly, vector < cAS >& answerSRGs, int& maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
 	vector <wstring>& webSearchQueryStrings, int& webSearchQueryStringOffset)
 {
@@ -1138,6 +1267,10 @@ int cQuestionAnswering::webSearchForQueryParallel(cSource* questionSource, wchar
 	return maxWebSitesFound;
 }
 
+// In-process web-search pass: for each remaining query, fetch hits, parse the
+// snippet immediately, and only download/parse the full page if the snippet
+// scored below 24. Same quote-twin skip as the parallel path. limitProcessingForProfiling
+// aborts after the first full page. Returns the max hit-list size.
 int cQuestionAnswering::webSearchForQuerySerial(cSource* questionSource, wchar_t* derivation, cSyntacticRelationGroup* parentSRG, bool parseOnly, vector < cAS >& answerSRGs, int& maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
 	vector <wstring>& webSearchQueryStrings, int& webSearchQueryStringOffset)
 {

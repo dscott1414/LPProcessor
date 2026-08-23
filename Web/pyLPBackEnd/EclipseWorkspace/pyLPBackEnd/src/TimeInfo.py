@@ -1,3 +1,28 @@
+"""TimeInfo.py - One temporal annotation (C++ cTimeInfo) plus formatters.
+
+Overview:
+    Capacity constants cMillenium..cUnspecified match the C++ time
+    categories. __init__ unpacks a 66-byte record. Helper methods
+    classify relative vs absolute time, format flag words, and
+    compute a 0–7 time-progression label for a Relation (advances /
+    state / new time / past / future / recurring).
+
+Pipeline position:
+    Embedded in Relation.timeInfo[]; used when the web backend
+    renders the timeline.
+
+Key entry points:
+    - relative_time / absolute_time
+    - time_string / capacity_string / time_progression_string
+    - determine_time_progression(source, r)
+    - to_string / to_string_2
+    - __init__(rs)
+
+Notes / gotchas:
+    Several helpers still use Java APIs (.length, .contains, .equals)
+    on Python sets/strs and will raise at runtime. ws/ws2/adv are
+    sets, so ws[index] is invalid — they should be lists.
+"""
 from WordClass import WordClass
 from TFI import TFI
 import json
@@ -37,6 +62,8 @@ class TimeInfo:
     cNamedHoliday = 29
     cUnspecified = 30
 
+    # True if not year-absolute but some abs* field or a specified capacity
+    # is set (season/month/dow/dom/hour/minute/holiday).
     def relative_time(self):
         if (self.absolute_time()):
             return False
@@ -47,11 +74,15 @@ class TimeInfo:
             return True
         return False
         
+    # True if absYear was filled (>=0).
     def absolute_time(self):
         if self.absYear>=0:
             return True
         return False
         
+    # Decode low 5 bits as a relation word (SEQ/before/…) plus bits 5–9
+    # as time/date/vague/length/cardtime. ws is a set, so ws[i] will
+    # raise TypeError if this is ever called.
     def time_string(self,timeWordFlags):
         ws = { "SEQ","before","after","present","throughout","recurring","at","midway",
                 "in","on","interval","start","stop","resume","finish","range","meta","unit"}
@@ -65,6 +96,7 @@ class TimeInfo:
                 s += ws2[I-5]
         return s
 
+    # Map a cMillenium..cUnspecified code to its name. Same set-index bug.
     def capacity_string(self,capacityFlags):
         ws = { "Millenium","Century","Decade","Year","Semester","Season","Quarter","Month","Week","Day",
                 "Hour","Minute","Second","Moment",
@@ -76,10 +108,13 @@ class TimeInfo:
             return ""+capacityFlags
         return ws[capacityFlags]
 
+    # Prefix-equal of the shorter string (Python-correct, unlike VerbNet.like).
     def like(self, str1,str2):
         minLength = min(len(str1),len(str2))
         return str1[:minLength] == str2[:minLength]
 
+    # True if any VerbNet class name of the verb at `where` is a prefix
+    # of verbClass (or vice versa).
     def is_verb_class(self, source, where, verbClass):
         vms = source.get_verb_classes(where)
         if vms != None:
@@ -88,6 +123,9 @@ class TimeInfo:
                     return True
         return False
 
+    # "[<progression>] " plus each r.timeInfo[I].to_string — but
+    # TimeInfo has to_string_2, not to_string, and r.timeInfo.length
+    # is a Java-ism (AttributeError).
     def to_string(self,source,r):
         timeInfo="      [";
         timeInfo += self.determine_time_progression(source,r)+"] ";
@@ -95,10 +133,13 @@ class TimeInfo:
             timeInfo += r.timeInfo[I].to_string(source);
         return timeInfo;
         
+    # Label for determine_time_progression codes 0–7. adv is a set.
     def time_progression_string(self, tp):
         adv = [ "advances", "not advances - state", "new time", "new relative time", "extended - not advancing", "past", "future", "recurring"]
         return adv[tp]
         
+    # Classify relation r's tense/verb-class/timeInfo into 0–7 (see
+    # comments in the body) and return the label string.
     def determine_time_progression(self,source,r):
         tp=0;
         if (r.presentHappening and r.whereVerb>=0):
@@ -135,6 +176,8 @@ class TimeInfo:
         # 7 - an action that describes recurring action ; not advancing the current time flow / I always visit her / I drive the van every Monday / She plays soccer twice a week.
         return self.time_progression_string(tp)
 
+    # Human-readable dump of this TimeInfo against source.m[]. Uses
+    # Java .contains/.equals/.length on strings and sets.
     def to_string_2(self,source):
             timeInfo="";
             timeInfo += self.tWhere+":";
@@ -202,6 +245,7 @@ class TimeInfo:
             timeInfo += "]";
             return timeInfo;
 
+    # Unpack 10 ints + 1 short + 12 bytes + 1 short + 10 bytes (66 bytes).
     def __init__(self,rs):
         self.tWhere, self.timePreviousLink, self.timeSPTAnchor, self.timeETAnchor, self.timeRTAnchor, \
         self.timeRelationType, self.timeModifier, self.timeModifier2, self.absMetaRelation, self.timeCapacity, \
@@ -212,5 +256,6 @@ class TimeInfo:
         self.absTomorrow, self.absTonight, self.absUnspecified, self.absYesterday = struct.unpack('<10ih12bh10b', rs.f.read(66))        
         
 class TimeInfoEncoder(JSONEncoder):
+        # json.dumps fallback: emit the instance __dict__.
         def default(self, o):
             return o.__dict__

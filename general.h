@@ -1,3 +1,43 @@
+/*
+	general.h - shared constants, inflection bit flags, tracked allocators, and the binary-cache copy() overloads
+
+	Overview:
+		This is the kitchen-sink header every first-party translation unit eventually
+		pulls in (via word.h).  It owns: parse-cost constants; the InflectionTypes bit
+		enum (noun/verb/adjective/adverb/gender/person); the tmalloc/tcalloc/trealloc/
+		tfree wrappers that keep memoryAllocated; the copy() serialize/deserialize
+		overloads used by the binary source cache; and a pile of WordNet/VerbNet helpers
+		declared here and defined in utilities.cpp / net.cpp.
+
+	Pipeline position:
+		Available from initialization onward.  InflectionTypes bits live on
+		cSourceWordInfo::inflectionFlags and are consulted during tokenize, pattern
+		costing, agreement, and stemming (paice.cpp).  copy() is the cache codec used
+		by source.cpp read()/write().
+
+	Key data structures / globals:
+		- MAINDIR / LMAINDIR / CACHEDIR / WEBSEARCH_CACHEDIR / TEXTDIR - hardcoded
+			absolute paths (F:\\lp and M:\\caches).  Every disk cache and the Jericho
+			launcher assume these exist.
+		- InflectionTypes - unsigned bit flags.  When this enum changes, net.cpp
+			inflection calculations must change in lockstep (author note on the enum).
+		- NO_OWNER and VERB_NO_PAST share the same bit (_MIL*64) by design.
+		- memoryAllocated - process-wide counter mutated by tmalloc/tfree; comment
+			in memoryStat.cpp says "protect with mutex" but there is no lock.
+		- webSearchKey - Google Custom Search API key, set from the command line.
+		- mySQLQueryBufferSRWLock / mySQLTotalTimeSRWLock / rdfTypeMapSRWLock /
+			orderedHyperNymsMapSRWLock - the four process-wide locks used by DB and RDF.
+
+	Notes / gotchas:
+		- _MIL is 1024*1024 without parens; only use it as a factor, not in a larger
+			unparenthesized expression.
+		- MAX_INT / MIN_INT are computed from ~unsigned(0); they assume 32-bit int.
+		- copy() 'where' is an in/out byte offset into buf; false means the buffer was
+			truncated (the cache is corrupt).  The "if (error=!copy(...))" idiom in
+			source.h is intentional assignment, not a == typo.
+		- WideCharToMultiByte() declared here is the 4-arg UTF-8 helper in
+			DBUtility.cpp, not the Win32 API.
+*/
 #pragma warning (disable: 4996)
 #pragma warning(disable: 4267)
 #define COST_PER_RELATION 1
@@ -169,6 +209,9 @@ extern bool TSROverride,flipTOROverride,flipTNROverride,logMatchedSentences,logU
 extern bool preTaggedSource;
 extern short logCache;
 
+// One multi-word string plus a "already consumed" flag.  Used by the WordNet
+// hyponym walk (addHyponyms / addCoords) to hand a preferred-sense phrase
+// around without copying it twice.
 class tmWS 
 {
 public:

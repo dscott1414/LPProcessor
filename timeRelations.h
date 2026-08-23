@@ -1,3 +1,40 @@
+/*
+	timeRelations.h - time-unit / TimeML flag enums, tense bits, cTimeInfo, and
+		prep-relation tables used by timeRelations.cpp
+
+	Overview:
+		Declares the calendrical capacity scale (millennium ? moment plus
+		named days/holidays), the mutually-exclusive T_BEFORE/T_AFTER/?
+		relation flags (with combinable T_TIME/T_DATE/T_VAGUE bits), the
+		Quirk/Reichenbach VT_* verb-tense mask, and cTimeInfo ? one
+		absolute or relative temporal expression attached to an SRG.
+		Also exports the prepEquivalents / prepRelations tables that
+		semanticRelations.cpp uses to classify spatial prepositions.
+
+	Pipeline position:
+		Included from semanticRelations.h and source.h. cTimeInfo values
+		are written by identifyDateTime() and serialized with the source
+		cache via the (char* buffer, ?) constructor / write().
+
+	Key data structures / globals:
+		- eCapacity - unit of a time expression; cUnspecified is the empty
+		  sentinel
+		- eTimeWordFlags - low values 0..T_MODIFIER are exclusive; T_TIME
+		  and above are bits. T_UNSPECIFIED = -1
+		- VT_* / VT_TENSE_MASK - verbSense layout; TENSE_NOT_SPECIFIED = -2
+		- cTimeInfo - Speech/Event/Reference anchors plus abs* calendar
+		  fields (-1 = unset). empty() is ?no calendar field set?
+		- prepEquivalents[] / prepRelations[] - defined in
+		  timeRelations.cpp
+
+	Notes / gotchas:
+		- clear() does not initialize absMoment / absNamed* / absToday /
+		  absTomorrow / absTonight / absUnspecified / absYesterday, but
+		  write() / the buffer ctor persist them. Default-constructed
+		  then written cTimeInfo emits uninitialized bytes.
+		- empty() likewise ignores those same fields.
+		- Assignment in `if (error = !copy(...))` is intentional.
+*/
 #pragma once
 enum eCapacity {
 	cMillenium, cCentury, cDecade, cYear, cSemester, cSeason, cQuarter, cMonth, cWeek, cDay,
@@ -182,16 +219,21 @@ public:
 	short absHoliday;
 	bool metaDescriptive;  // she described the events of last Tuesday.
 
+	// Default: clear(). Named-day / today / moment fields are not cleared.
 	cTimeInfo()
 	{
 		clear();
 	}
+	// True if the classic calendar fields are all -1. Does not look at
+	// absMoment / absNamed* / absToday / absTomorrow / absTonight / absYesterday.
 	bool empty()
 	{
 		return absYear == -1 && absSeason == -1 && absDateSpec == -1 && absMonth == -1 &&
 			absDayOfWeek == -1 && absDayOfMonth == -1 && timeOfDay == -1 && absHour == -1 &&
 			absMinute == -1 && absSecond == -1 && absTimeSpec == -1 && timeFrequency <= -1 && absHoliday == -1;
 	}
+	// Deserialize one cTimeInfo from buffer[where]. Sets error and returns
+	// early on a short read. `where` is advanced past the record.
 	cTimeInfo(char* buffer, int& where, unsigned int total, bool& error)
 	{
 		clear();
@@ -235,6 +277,7 @@ public:
 		if (error = !copy(absUnspecified, buffer, where, total)) return;
 		if (error = !copy(absYesterday, buffer, where, total)) return;
 	}
+	// Serialize into buffer[where], advancing where. False if limit is hit.
 	bool write(void* buffer, int& where, int limit)
 	{
 		if (!copy(buffer, tWhere, where, limit)) return false;
@@ -275,6 +318,9 @@ public:
 		return true;
 	}
 
+	// Reset anchors / relation / the classic abs* fields to -1. Does not
+	// touch absMoment, absNamed*, absToday, absTomorrow, absTonight,
+	// absUnspecified, or absYesterday.
 	void clear()
 	{
 		tWhere = -1;
@@ -291,7 +337,7 @@ public:
 				 timeRelationType=T_ASSUME_SEQUENTIAL modifier=-1 capacity=cUnspecified
 			 Will MOVE_OBJECTyou[girl] take them[papers,more,woman] ?
 				 timeRelationType=T_AFTER modifier=-1 capacity=cUnspecified
-			 ESTAB I[man] shall advertise in the personal column of the Times , beginning ‘QS Shipmate . ’
+			 ESTAB I[man] shall advertise in the personal column of the Times , beginning ï¿½QS Shipmate . ï¿½
 				 timeRelationType=T_AFTER modifier=-1 capacity=cUnspecified
 			 At the end of three days if there ishas nothing
 				 timeRelationType=T_AFTER modifier=3 capacity=cMultiDays
@@ -325,6 +371,7 @@ public:
 		metaDescriptive = false;
 		absHoliday = -1;
 	}
+	// Append "name<field> " when field != -1 (debug / toString helper).
 	// only if not -1
 	void af(const wchar_t* name, int field, wstring& appendStr)
 	{

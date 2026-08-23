@@ -1,3 +1,25 @@
+"""CObject.py - Resolved narrative entity (C++ cObject) plus role-bit constants.
+
+Overview:
+    Deserializes one objects[] row: span, speaker-count stats, space
+    relations, aliases, associated nouns/adjectives, generic-noun map,
+    age, a 64-bit flag word (wiki/gender/suspect/…), VERB_HISTORY tense
+    slots, and an embedded CName. Role constants (SUBJECT_ROLE,
+    IN_PRIMARY_QUOTE_ROLE, …) match source.h. toJSON() is the web shape.
+
+Pipeline position:
+    Loaded with Source after identifyObjects / resolveSpeakers. The
+    web backend renders entities and speaker stats from this.
+
+Key entry points:
+    - __init__(rs) - unpack 31 ints + variable arrays + flags + name
+    - toJSON() - dict; some arrays are json.dumps'd into strings
+
+Notes / gotchas:
+    genericNounMap is only created when count>0; toJSON guards with
+    hasattr. CLastVerbTenses uses class-level lastVerb/lastTense
+    (shared defaults) then overwrites per instance.
+"""
 import struct
 import json
 from CName import CName
@@ -57,7 +79,9 @@ class CObject(dict):
 		lastVerb = 0 # book position of main verb
 		lastTense = 0 # tense of the entire verb
 
-	# identifySpeakers
+	# Unpack the 124-byte header, then count-prefixed arrays, flag bits
+	# LSB-first, lastVerbTenses[4], and CName. identifySpeakers is the
+	# C++ producer of the speaker-count fields.
 	def __init__(self, rs):
 		self.index, self.objectClass, self.subType, self.begin, self.end, self.originalLocation, \
 		self.PMAElement, self.numEncounters, self.numIdentifiedAsSpeaker, self.numDefinitelyIdentifiedAsSpeaker, self.numEncountersInSection, \

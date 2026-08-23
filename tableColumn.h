@@ -1,3 +1,37 @@
+/*
+	tableColumn.h - Wikipedia-table model used by question answering to pick a coherent answer column
+
+	Overview:
+		A scraped Wikipedia <table> is tokenized into cSource with synthetic TABLE /
+		END_COLUMN / END_COLUMN_HEADERS words.  cSourceTable walks those tokens into
+		cColumn / cRow / cEntry, then scores each column's RDF-type coherence against
+		the table title and the question's type-object.  A "coherent" column is one
+		whose cells share a simplified RDF type (or a title synonym) at >= 90%.
+
+	Pipeline position:
+		Stage 8.  cQuestionAnswering::addTables() constructs one cSourceTable per
+		Words.TABLE in a Wikipedia source; the resulting wikiQuestionTypeObjectAnswers
+		feed property-value answers.
+
+	Key data structures / globals:
+		- cEntry - one cell (or title/header): [begin, begin+numWords) in the wiki
+			source, plus synonym/RDF match flags.
+		- cRow - the cells of one row plus per-row title-synonym counters.
+		- cColumn - all rows of one column, the accumulatedRDFTypesMap, and
+			coherencyPercentage.
+		- cSourceTable - columns + columnHeaders + tableTitleEntry for one table.
+		- cWikipediaTableCandidateAnswers - wikipediaSource plus the tables kept as
+			answers for one question-type object.
+
+	Notes / gotchas:
+		- adaptiveWhere is the "object declare" position when the cell is an object,
+			otherwise equal to begin.  RDF lookup uses adaptiveWhere+numWords.
+		- lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms is overloaded as the
+			"preferred cell in this row" flag even when the title did not match
+			(setRowPreference writes it).
+		- determineColumnRDFTypeCoherency currently returns true on both the
+			<90% and >=90% paths (the reject is commented as TEMP DEBUG).
+*/
 #pragma once
 class cSource;
 
@@ -19,6 +53,8 @@ public:
 			titleObjectMatch = tom;
 		}
 	};
+	// Sort by frequency descending, then word descending.  Used as the comparator
+	// of mostCommonAssociationTypeSet so begin() is the most frequent type.
 	struct associationTypeMapCompare
 	{
 		bool operator()(cWordFrequencyMatch lhs, cWordFrequencyMatch rhs) const
@@ -38,6 +74,8 @@ public:
 	class cEntry
 	{
 	public:
+		// Cell covering source positions [b, b+n) whose "object declare" position
+		// is o (o==b when the cell is not an object).
 		cEntry(int b, int o, int n)
 		{
 			begin = b;
@@ -51,6 +89,7 @@ public:
 			tableOfContentsFlag = false;
 			coherentTable = false;
 		};
+		// Empty cell: begin/adaptiveWhere/numWords = -1.
 		cEntry()
 		{
 			begin = -1;
@@ -89,6 +128,7 @@ public:
 		int maxTitleFound = 0;
 		int numLastWordsFoundInTitleSynonymsInRow = 0;
 		vector <cEntry> entries;
+		// One table row.  Copies e and zeroes the per-row synonym counters.
 		cRow(vector <cEntry> &e)
 		{
 			entries = e;
@@ -144,6 +184,7 @@ public:
 	cSource *source;
 	int columnHeaderMatchTitle;
 
+	// Empty table: no source, no columns, columnHeaderMatchTitle = -1 (none).
 	cSourceTable()
 	{
 		columnHeaderMatchTitle = -1;
@@ -159,6 +200,7 @@ class cWikipediaTableCandidateAnswers
 public:
 	vector < cSourceTable > wikiQuestionTypeObjectAnswers;
 	cSource *wikipediaSource;
+	// Shallow pointer to wikipediaSource (not owned) plus a copy of the tables.
 	cWikipediaTableCandidateAnswers(cSource *wikipediaSource, vector < cSourceTable > wikiQuestionTypeObjectAnswers)
 	{
 		this->wikipediaSource = wikipediaSource;

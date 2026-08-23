@@ -1,3 +1,37 @@
+/*
+	dynamicUpdateWordRelations.cpp - Historical in-parse word-relation updates
+
+	Overview:
+		Source methods that attach adjective/adverb/verb-tense word relations
+		and flush delayed (object-resolved) relations into the in-memory
+		relation maps. Originally these could also write weights back to
+		MySQL while a source was being parsed; that path is retired because
+		it biased weights toward the texts under test.
+
+	Pipeline position:
+		Would run after parse + object resolution (relations stage).
+		Callers: attach* from pattern/relation walkers; resolveWordRelations
+		after delayedWordRelations is filled; addRelations / addDelayedWordRelations
+		from those walkers. No longer on the live parse path.
+
+	Key entry points:
+		- attachAdjectiveRelation() - ADJ tags inside an object -> WordWithAdjective
+		- attachAdverbRelation() - ADV tags on a verb -> VerbWithAdverb
+		- resolveWordRelations() - drain delayedWordRelations after objects resolve
+		- recordVerbTenseRelations() - same-subject / next-main-verb tense pairs
+		- addRelations() - write one directed+complementary pair into word maps
+		- addDelayedWordRelations() - queue a 4-int tuple for later resolve
+
+	Key data structures / globals:
+		- delayedWordRelations - flat [where, from, to, type] quartets
+		- relationHistory - cRelationHistory rows for verb/object pairs
+		- objects[].lastVerbTenses / Source::lastVerbTenses - VERB_HISTORY ring
+
+	Notes / gotchas:
+		Author comment below is the design rationale: update corpus-wide, not
+		per-source. LFS is a profile/stack-trace macro. Switch in
+		resolveWordRelations has no default; unknown types fall through.
+*/
 #include <windows.h>
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
 #include "io.h"
@@ -16,6 +50,9 @@
 //  comparing against Stanford)
 //
 
+// Walk ADJ tags inside the object span at whereObject and, for certain
+// (non-PPN-ambiguous) adjectives, record WordWithAdjective from the resolved
+// noun class to the adjective. Returns 0 always. Not delayed: args are not objects.
 int Source::attachAdjectiveRelation(vector <tTagLocation> &tagSet, int whereObject)
 {
 	LFS
@@ -35,6 +72,9 @@ int Source::attachAdjectiveRelation(vector <tTagLocation> &tagSet, int whereObje
 	return 0;
 }
 
+// Attach VerbWithAdverb for the first (and optionally second) certain ADV
+// constrained to the verb tag at verbTagIndex. verbWord is the already-resolved
+// verb main-entry. Returns 0 always.
 int Source::attachAdverbRelation(vector <tTagLocation> &tagSet, int verbTagIndex, tIWMM verbWord)
 {
 	LFS
@@ -50,6 +90,11 @@ int Source::attachAdverbRelation(vector <tTagLocation> &tagSet, int verbTagIndex
 	return 0;
 }
 
+// Drain delayedWordRelations (groups of 4 ints). Dedup consecutive identical
+// tuples. For each, pick the right resolver (word vs fullyResolveToClass vs
+// getVerbME) by relationType, then addRelations. Verb/object types also push
+// relationHistory with narrativeNum (quote / embedded-story) and subject.
+// Clears delayedWordRelations. Side effect: mutates word relation maps.
 void Source::resolveWordRelations()
 {
 	LFS
@@ -113,6 +158,11 @@ void Source::resolveWordRelations()
 	delayedWordRelations.clear();
 }
 
+// If subjectObject is set and sense is not VT_POSSIBLE / VT_VERB_CLAUSE,
+// pair this verb with up to VERB_HISTORY prior verbs of the same simplified
+// tense (bits 0-2 of getSimplifiedTense / 2), skipping pairs closer than 200
+// tokens. Updates both the subject's lastVerbTenses ring and Source::lastVerbTenses.
+// where is the log/source index; whereVerb is the verb token.
 void Source::recordVerbTenseRelations(int where, int sense, int subjectObject, int whereVerb)
 {
 	LFS
@@ -160,6 +210,10 @@ void Source::recordVerbTenseRelations(int where, int sense, int subjectObject, i
 //   SubjectWordWithNotVerb,SubjectWordWithVerb: if prep is 'by' and verb sense is passive
 //	 PrepWithPWord: preposition with its object
 //	 AVerbWithPrep : VerbWithPrep: verb with its preposition
+// Mark from/to changedSinceLastWordRelationFlush, optionally log, then write
+// complementaryRelation(relationType) on `to` and relationType on `from`.
+// Returns the iterator into from's relation map. The hashed-dedup block above
+// is commented out, so duplicates are accumulated.
 tFI::cRMap::tIcRMap Source::addRelations(int where, tIWMM from, tIWMM to, int relationType)
 {
 	LFS
@@ -181,6 +235,9 @@ tFI::cRMap::tIcRMap Source::addRelations(int where, tIWMM from, tIWMM to, int re
 	return from->second.addRelation(where, relationType, to);
 }
 
+// Queue a relation whose endpoints may still be unresolved objects.
+// Four push_backs: where, fromWhere, toWhere, relationType.
+// resolveWordRelations() later resolves the endpoints.
 void Source::addDelayedWordRelations(int where, int fromWhere, int toWhere, int relationType)
 {
 	LFS
