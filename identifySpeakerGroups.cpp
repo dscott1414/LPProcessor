@@ -1,3 +1,51 @@
+/*
+	identifySpeakerGroups.cpp - first-pass conversation-cast: who is in the scene, grouped how.
+
+	Overview:
+		Walks the tokenized document once and partitions it into cSpeakerGroup spans
+		(continuous stretches of m[] that share a cast of speakers).  A temporary
+		group is accumulated across paragraphs; at each paragraph / chapter boundary
+		createSpeakerGroup() either extends the previous span or pushes a new one.
+		Along the way it records POV, observers, syntactic subgroups ("Bob and Bill"),
+		embedded stories (a character narrating other characters), and hail vocatives.
+		No quote is given a final speaker/audience pair here - that is resolveSpeakers.
+
+	Pipeline position:
+		Stage 7a, immediately after object/pronoun identification.  Called from
+		processSource() in main.cpp as identifySpeakerGroups() then resolveSpeakers().
+		Reads objects[], localObjects, syntacticRelationGroups; writes speakerGroups,
+		tempSpeakerGroup, povInSpeakerGroups, and various cObject speaker counters.
+
+	Key entry points:
+		- identifySpeakerGroups() - the single document scan
+		- createSpeakerGroup() - decide merge-vs-new at a paragraph / section boundary
+		- determinePreviousSubgroup() / determineSpeakerRemoval() - grouping and aging-out
+		- distributePOV() - post-pass that fills povSpeakers / observers / dnSpeakers
+		- embeddedStory() - mark quotes that are a character telling a story
+
+	Key data structures / globals:
+		- speakerGroups / tempSpeakerGroup - finished vs in-progress casts (cSource members)
+		- speakerAges / speakerSections - age of each speaker inside the current span
+		- povInSpeakerGroups / definitelyIdentifiedAsSpeakerInSpeakerGroups /
+		  metaNameOthersInSpeakerGroups - position lists later dropped into each group
+		- nextNarrationSubjects / nextISNarrationSubjects - unquoted subjects parked
+		  until the next group is closed, then used as audience candidates
+		- cOM copy() overloads - binary (de)serialization of object-match records
+		  used by cSpeakerGroup's cache I/O
+
+	Dependencies:
+		cSource members (m, objects, localObjects, sections, syntacticRelationGroups),
+		VerbNet (associatePossessions), WordNet synonyms (associateNyms), Words lexicon.
+		Windows-only (windows.h / Winhttp.h) via the rest of the build.
+
+	Notes / gotchas:
+		- Object 0 is Narrator, object 1 is Audience; o <= 1 is treated as unmergable.
+		- sgEnd of -2 / -3 is legal on embedded groups (CURRENT_SUBSET_SG / open span).
+		- unMergable() returns true when the candidate is NOT already in the set
+		  (and optionally inserts it).  The name is easy to read backwards.
+		- sameSpeaker() looks inverted when only one side has objectMatches - see report.
+		- copy(cOM&) has no buffer-limit argument; the vector reader trusts the count.
+*/
 #include <windows.h>
 #include "Winhttp.h"
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
@@ -12,6 +60,9 @@
 
 extern set<int>::iterator sNULL;
 
+// Deserialize one cOM (object index + salience) from buf at 'where' and advance
+// where by sizeof(cOM).  Unlike the other copy() overloads this has NO limit
+// argument - callers that have a remaining-buffer bound must check it themselves.
 bool copy(cOM& num, char* buf, int& where)
 {
 	DLFS
@@ -20,6 +71,9 @@ bool copy(cOM& num, char* buf, int& where)
 	return true;
 }
 
+// Deserialize a counted vector<cOM> from buf.  Returns false if the count itself
+// cannot be read inside 'limit'.  Each element is then read via the unbounded
+// copy(cOM&) above, so a corrupted count can walk past the buffer.
 bool copy(vector <cOM>& s, char* buf, int& where, int limit)
 {
 	DLFS
@@ -35,6 +89,9 @@ bool copy(vector <cOM>& s, char* buf, int& where, int limit)
 	return true;
 }
 
+// Serialize one cOM into buf at 'where'.  The overflow check (where > limit)
+// runs AFTER the write, so a tight buffer can already have been overrun when
+// LOG_FATAL_ERROR fires.  Returns true on success.
 bool copy(void* buf, cOM num, int& where, int limit)
 {
 	DLFS
@@ -45,6 +102,8 @@ bool copy(void* buf, cOM num, int& where, int limit)
 	return true;
 }
 
+// Serialize a vector<cOM> as count + packed elements.  Returns false if the
+// count write fails; element writes abort on their own limit check.
 bool copy(void* buf, vector <cOM>& s, int& where, int limit)
 {
 	DLFS
@@ -56,6 +115,9 @@ bool copy(void* buf, vector <cOM>& s, int& where, int limit)
 	return true;
 }
 
+// Default-construct an empty speaker group: zero span, section -1, no speakers,
+// speakersAreNeverGroupedTogether true (until determinePreviousSubgroup proves
+// otherwise), tlTransition false.
 cSource::cSpeakerGroup::cSpeakerGroup(void)
 {
 	LFS
@@ -68,6 +130,10 @@ cSource::cSpeakerGroup::cSpeakerGroup(void)
 	tlTransition = false;
 }
 
+// Deserialize a speaker group (and recursively its embeddedSpeakerGroups and
+// groups) from the SourceCache buffer.  Sets error and returns early on any
+// short read.  The two bools are packed in a flags qword (bit 0 = never-grouped,
+// bit 1 = tlTransition).  error is also set if where overshoots limit at the end.
 cSource::cSpeakerGroup::cSpeakerGroup(char* buffer, int& where, unsigned int limit, bool& error)
 {
 	LFS
@@ -156,6 +222,10 @@ bool cSource::cSpeakerGroup::copy(void* buffer, int& where, int limit)
 	return true;
 }
 
+// Age one local-focus entry and, if it is a nameless entity that has never been
+// identified as a speaker, has < 2 encounters and is older than MAX_AGE, erase
+// it from localObjects (lfi is then the next entry).  Otherwise advances lfi.
+// Used when we want recency decay without touching speaker-identification stats.
 void cSource::ageSpeakerWithoutSpeakerInfo(int where, bool inPrimaryQuote, bool inSecondaryQuote, vector <cLocalFocus>::iterator& lfi, int amount)
 {
 	LFS
@@ -175,6 +245,9 @@ void cSource::ageSpeakerWithoutSpeakerInfo(int where, bool inPrimaryQuote, bool 
 		lfi++;
 }
 
+// If object o confidently matches another speaker in 'speakers', replace o with
+// that speaker (replaceObjectWithObject) and rewrite o in-place.  Restarts the
+// scan after each merge so a chain of aliases collapses to one survivor.
 void cSource::mergeName(int where, int& o, set <int>& speakers)
 {
 	LFS
@@ -190,6 +263,11 @@ void cSource::mergeName(int where, int& o, set <int>& speakers)
 		}
 }
 
+// True if object o can merge with at least one speaker by gender (including
+// neuter).  A hit on an unresolvable, physically-present speaker is accepted
+// only if that speaker first appeared before o.  uniquelyMergable is set false
+// when more than one speaker matches; mergedObject is the last (or only) hit,
+// or sNULL if none.
 bool cSource::mergableBySex(int o, set <int>& speakers, bool& uniquelyMergable, set<int>::iterator& mergedObject)
 {
 	LFS
@@ -208,6 +286,14 @@ bool cSource::mergableBySex(int o, set <int>& speakers, bool& uniquelyMergable, 
 	return mergedObject != sNULL;
 }
 
+// set<> overload.  Returns true if o cannot be identified with any member of
+// 'speakers' (and, if insertObject, inserts o then still returns true with
+// save == end()).  Returns false when a merge candidate was found; save is
+// that iterator and uniquelyMergable says whether it was the only one.
+// o<=1 (Narrator/Audience) is always unmergable.  Unresolvable names that
+// failed implicit resolution are not merged with prior casts; body objects
+// may substitute for their owner.  crossedSection restricts merges to
+// speakers already seen in the new chapter.
 bool cSource::unMergable(int where, int o, set <int>& speakers, bool& uniquelyMergable, bool insertObject, bool crossedSection, bool allowBothToBeSpeakers, bool checkUnmergableSpeaker, set <int>::iterator& save)
 {
 	LFS
@@ -281,6 +367,10 @@ bool cSource::unMergable(int where, int o, set <int>& speakers, bool& uniquelyMe
 	return save == speakers.end();
 }
 
+// vector<int> overload of unMergable - same contract, used for narration-
+// subject lists (nextNarrationSubjects / nextISNarrationSubjects) which are
+// ordered rather than unique.  Body-object owner substitution appends o
+// instead of inserting into a set.
 bool cSource::unMergable(int where, int o, vector <int>& speakers, bool& uniquelyMergable, bool insertObject, bool crossedSection, bool allowBothToBeSpeakers, bool checkUnmergableSpeaker, vector <int>::iterator& save)
 {
 	LFS
@@ -332,6 +422,11 @@ bool cSource::unMergable(int where, int o, vector <int>& speakers, bool& uniquel
 	return save == speakers.end();
 }
 
+// Walk speaker groups whose sgBegin >= begin backwards from the last group
+// and, wherever fromObject is a speaker, swap it for toObject.  Also rewrites
+// m[].objectMatches / locations in [begin,end) so later resolveSpeakers will
+// not reject the replacement as an unknown.  replacedSpeakers records
+// (fromObject, toObject) as cOM(object, salienceFactor=toObject).
 void cSource::replaceSpeaker(int begin, int end, int fromObject, int toObject)
 {
 	LFS
@@ -393,6 +488,12 @@ void cSource::replaceSpeaker(int begin, int end, int fromObject, int toObject)
 //   newSG.begin=speakerSection.
 //   remove S from newSG.
 //   make lastSG point to newSG.
+// When the last speaker group has 3+ speakers and some of them have aged
+// out of tempSpeakerGroup (speakerAge > 2), split the last group at the
+// speakerSection after that speaker's last encounter, dropping the aged
+// speaker from the newer half.  Refuses the split if it would leave a
+// one-speaker group that still contains a quote.  See the block comment
+// immediately above the function for the step-by-step.
 void cSource::determineSpeakerRemoval(int where)
 {
 	LFS
@@ -500,6 +601,7 @@ void cSource::determineSpeakerRemoval(int where)
 	}
 }
 
+// resultSet = bigSet \ subtractSet.  Does not clear resultSet first.
 void cSource::subtract(set <int>& bigSet, set <int>& subtractSet, set <int>& resultSet)
 {
 	LFS
@@ -508,6 +610,7 @@ void cSource::subtract(set <int>& bigSet, set <int>& subtractSet, set <int>& res
 				resultSet.insert(*bi);
 }
 
+// In-place: drop every cOM in bigSet whose object also appears in subtractSet.
 void cSource::subtract(vector <cOM>& bigSet, vector <cOM>& subtractSet)
 {
 	LFS
@@ -518,6 +621,7 @@ void cSource::subtract(vector <cOM>& bigSet, vector <cOM>& subtractSet)
 	bigSet = resultSet;
 }
 
+// In-place: drop every cOM in bigSet whose object is in the int vector.
 void cSource::subtract(vector <cOM>& bigSet, vector <int>& subtractSet)
 {
 	LFS
@@ -528,6 +632,7 @@ void cSource::subtract(vector <cOM>& bigSet, vector <int>& subtractSet)
 	bigSet = resultSet;
 }
 
+// In-place: drop every cOM in bigSet whose object is in the int set.
 void cSource::subtract(vector <cOM>& bigSet, set <int>& subtractSet)
 {
 	LFS
@@ -538,6 +643,7 @@ void cSource::subtract(vector <cOM>& bigSet, set <int>& subtractSet)
 	bigSet = resultSet;
 }
 
+// Erase the first cOM whose object == o, if any.
 void cSource::subtract(int o, vector <cOM>& objectMatches)
 {
 	LFS
@@ -546,6 +652,8 @@ void cSource::subtract(int o, vector <cOM>& objectMatches)
 		objectMatches.erase(w);
 }
 
+// Walk speakerGroups backwards from lastSG-1 and return the first index that
+// still lists o as a speaker, or -1 if none.
 int cSource::getLastSpeakerGroup(int o, int lastSG)
 {
 	LFS
@@ -556,6 +664,9 @@ int cSource::getLastSpeakerGroup(int o, int lastSG)
 	return -1;
 }
 
+// If any syntactic cGroup is a proper subset of sg.speakers, promote those
+// members to groupedSpeakers and put the remainder in singularSpeakers.
+// First such group wins.
 void cSource::determineSubgroupFromGroups(cSpeakerGroup& sg)
 {
 	LFS
@@ -582,6 +693,13 @@ void cSource::determineSubgroupFromGroups(cSpeakerGroup& sg)
 	}
 }
 
+// Recover lastSG's "they" subgroup by looking backwards through earlier
+// speaker groups: a previous group's speakers (or groupedSpeakers) that are
+// entirely contained in lastSG become lastSG.groupedSpeakers, and
+// previousSubsetSpeakerGroup is set to that index (or CURRENT_SUBSET_SG = -2
+// when the leftover members of lastSG themselves form the subgroup).
+// Also sets speakersAreNeverGroupedTogether and may override groupedSpeakers
+// with a preferred MPLURAL_ROLE group.  whichSG is lastSG's index.
 void cSource::determinePreviousSubgroup(int where, int whichSG, cSpeakerGroup* lastSG)
 {
 	LFS
@@ -776,6 +894,10 @@ void cSource::determinePreviousSubgroup(int where, int whichSG, cSpeakerGroup* l
 }
 
 // remove hail objects that have not been detected any other way than through hail.
+// Drop speakers whose only evidence is a hail vocative (PISHail, no definite
+// / subject hits, low encounter counts).  Parsing errors produce a lot of
+// these.  Kept when the group just crossed a chapter boundary and deleting
+// them would leave no physically-present speakers at all.
 void cSource::eliminateSpuriousHailSpeakers(int begin, int end, cSpeakerGroup& sg, bool speakerGroupCrossesSectionBoundary)
 {
 	LFS
@@ -826,6 +948,12 @@ void cSource::eliminateSpuriousHailSpeakers(int begin, int end, cSpeakerGroup& s
 
 // take the intersection between the current and future speaker groups.  If the current has an unresolvable object,
 // and the next speakerGroup has an object not contained in the previous speakerGroup, allow the current to be merged into the future.
+// Compare the last finished group with tempSpeakerGroup.  If the last group
+// has exactly one still-unresolvable speaker and the next group introduces
+// exactly one new, gender-matching, non-body speaker, return that future
+// object index so mergeTempSpeakerGroupWithLastSG can treat it as the
+// resolution of "a voice" / "the man".  Returns -1 if no such pair.
+// (The empty-speakerGroups early-out returns false/0, i.e. Narrator - see report.)
 int cSource::detectUnresolvableObjectsResolvableThroughSpeakerGroup(void)
 {
 	LFS
@@ -870,6 +998,11 @@ int cSource::detectUnresolvableObjectsResolvableThroughSpeakerGroup(void)
 	return -1;
 }
 
+// If tempSpeakerGroup is a singleton POV speaker who is not among
+// subjectsInPreviousUnquotedSection, scan [begin,end) for a genuine MOVE /
+// EXIT / ENTER (not reflexive, not acting on a body part, not a figurative
+// prep).  Returns the location of that move, or -1 if the speaker stayed.
+// A move means the previous-paragraph subjects should NOT be imported.
 int cSource::determineIfSpeakerMoved(int begin, int end, bool endOfSection)
 {
 	bool allIn = false, oneIn = false;
@@ -934,6 +1067,9 @@ int cSource::determineIfSpeakerMoved(int begin, int end, bool endOfSection)
 	return -1;
 }
 
+// Merge or insert each subjectsInPreviousUnquotedSection member into
+// tempSpeakerGroup and bump their identified-as-speaker counters (and the
+// section's speakerObjects list on first identification).
 void cSource::insertPreviousUnquotedSpeakers(int begin, int end)
 {
 	for (int spusi = 0; spusi < (signed)subjectsInPreviousUnquotedSection.size(); spusi++)
@@ -960,6 +1096,10 @@ void cSource::insertPreviousUnquotedSpeakers(int begin, int end)
 	}
 }
 
+// Count how many tempSpeakerGroup speakers cannot merge into lastSG
+// (speakersNotMergable) vs. are hail-only and so should not force a new
+// group (onlyHailSpeakers).  Does not mutate lastSG; the actual merge is
+// mergeTempSpeakerGroupWithLastSG2.  Skips speakers already in replacedSpeakers.
 void cSource::mergeTempSpeakerGroupWithLastSG(int begin, int end, int& speakersNotMergable, int& onlyHailSpeakers, vector <cSpeakerGroup>::iterator lastSG, int resolvableByFutureSpeaker, bool speakerGroupCrossesSectionBoundary)
 {
 	for (set <int>::iterator s = tempSpeakerGroup.speakers.begin(), sEnd = tempSpeakerGroup.speakers.end(); s != sEnd; s++)
@@ -1007,6 +1147,12 @@ void cSource::mergeTempSpeakerGroupWithLastSG(int begin, int end, int& speakersN
 }
 
 
+// Apply the merge: uniquely-mergable NAME vs non-NAME pairs call
+// replaceSpeaker (and copy gender if the name is still M+F); unmatched
+// speakers are inserted into lastSG; already-known speakers reset
+// speakerAges to 0.  META_GROUP_OBJECT_CLASS hits also zero every other
+// meta-group's age so they are not aged out before later resolution.
+// Returns true if at least one replaceSpeaker occurred (caller loops).
 bool cSource::mergeTempSpeakerGroupWithLastSG2(int begin, int end, vector <cSpeakerGroup>::iterator lastSG, int resolvableByFutureSpeaker, bool speakerGroupCrossesSectionBoundary)
 {
 	bool atLeastOneMerged = false;
@@ -1064,6 +1210,10 @@ bool cSource::mergeTempSpeakerGroupWithLastSG2(int begin, int end, vector <cSpea
 	return atLeastOneMerged;
 }
 
+// Fold tempSpeakerGroup into lastSG (looping mergeTempSpeakerGroupWithLastSG2
+// until no more replacements), steal its groups / conversationalQuotes, set
+// lastSG.sgEnd = end, and clear temp.  If the extended group is a lone
+// speaker with quotes, also fold lastISNarrationSubjects in as audience.
 void cSource::extendLastSGToEndOfSection(int begin, int end, vector <cSpeakerGroup>::iterator lastSG, int resolvableByFutureSpeaker, int& lastSpeakerGroupOfPreviousSection, bool speakerGroupCrossesSectionBoundary, bool endOfSection)
 {
 	wstring tmpstr, tmpstr2;
@@ -1120,6 +1270,11 @@ void cSource::extendLastSGToEndOfSection(int begin, int end, vector <cSpeakerGro
 	}
 }
 
+// Close the last group (hail cleanup, speaker-removal split, subgrouping),
+// push tempSpeakerGroup onto speakerGroups, stamp each speaker's
+// first/lastSpeakerGroup, reset speakerAges / speakerSections, and start a
+// fresh temp at 'end'.  If speakerGroups is empty, determinePreviousSubgroup
+// is still called with &speakerGroups[-1] - see report.
 void cSource::pushTemporarySpeakerGroupAndErase(int begin, int end, bool endOfSection, int& lastSpeakerGroupOfPreviousSection)
 {
 	wstring tmpstr;
@@ -1178,6 +1333,13 @@ void cSource::pushTemporarySpeakerGroupAndErase(int begin, int end, bool endOfSe
 // if all of tempSpeakerGroup occurred in the last speaker group, merge all and extend last speaker group.
 // if all but one occurred in last speaker group and last speaker group only contained one speaker, add the one that did not occur to last speaker group and extend last speaker group
 // if more than one did not occur in last speaker group or last speaker group contained more than one speaker, create a new speaker group.
+// Decide, at a paragraph or chapter boundary [begin,end), whether to extend
+// the last speaker group or start a new one.  Imports nextNarrationSubjects
+// (and, if the cast is still < 2, nextISNarrationSubjects and the previous
+// unquoted subjects unless determineIfSpeakerMoved says they left).  Extends
+// lastSG when every (or all-but-one, if lastSG is a singleton) temp speaker
+// merges, or when lastSG is a single quoted paragraph that cannot close.
+// Returns true if a group was created or extended.  begin==end is a no-op.
 bool cSource::createSpeakerGroup(int begin, int end, bool endOfSection, int& lastSpeakerGroupOfPreviousSection)
 {
 	LFS
@@ -1213,7 +1375,7 @@ bool cSource::createSpeakerGroup(int begin, int end, bool endOfSection, int& las
 	}
 	// this does not actually include another more thorough way - is the speaker specified after the quote?
 	// if there are less than 2 speakers, there were subjects in the previous unquoted section and the section ended with an open double quote
-	if (tempSpeakerGroup.speakers.size() < 2 && subjectsInPreviousUnquotedSection.size() >= 1 && end + 1 < (signed)m.size() && m[end + 1].word->first == L"“")
+	if (tempSpeakerGroup.speakers.size() < 2 && subjectsInPreviousUnquotedSection.size() >= 1 && end + 1 < (signed)m.size() && m[end + 1].word->first == L"ï¿½")
 	{
 		// bool BF=(tempSpeakerGroup.begin+1<m.size() && m[tempSpeakerGroup.begin+1].forms.isSet(quoteForm)); all speaker groups at this point start with an unquoted paragraph
 		if (determineIfSpeakerMoved(begin, end, endOfSection) < 0)
@@ -1235,12 +1397,14 @@ bool cSource::createSpeakerGroup(int begin, int end, bool endOfSection, int& las
 		}
 		// if lastSG is not composed of a single quoted paragraph
 		bool lastSGNotClosable = false;
-		if (lastSG != speakerGroups.end() && m[lastSG->sgBegin + 1].word->first == L"“")
+		if (lastSG != speakerGroups.end() && m[lastSG->sgBegin + 1].word->first == L"ï¿½")
 		{
 			int q = lastSG->sgBegin + 1;
 			while (m[q].getQuoteForwardLink() >= 0) q = m[q].getQuoteForwardLink();
 			lastSGNotClosable = m[q].endQuote + 1 == lastSG->sgEnd;
 		}
+		// extend: lastSG is a quote-only span, OR every temp speaker merged,
+		// OR exactly one new speaker and lastSG was a singleton (the new audience).
 		if (lastSGNotClosable || !speakersNotMergable || (speakersNotMergable == 1 && lastSG->speakers.size() == 1))
 		{
 			if (debugTrace.traceSpeakerResolution)
@@ -1270,6 +1434,11 @@ bool cSource::createSpeakerGroup(int begin, int end, bool endOfSection, int& las
 
 const wchar_t* metaResponse[] = { L"reply",L"response", L"answer", NULL }; // initialized
 
+// Mark POV_OBJECT_ROLE (and push where / owner into povInSpeakerGroups) when
+// the mention is an internal body-part of an owner, the subject of an
+// internal body-part object, or the subject of an internal-state description
+// ("he was conscious").  Returns true if POV was assigned.  Used later by
+// distributePOV to fill sg.povSpeakers.
 bool cSource::setPOVStatus(int where, bool inPrimaryQuote, bool inSecondaryQuote)
 {
 	LFS
@@ -1317,6 +1486,10 @@ bool cSource::setPOVStatus(int where, bool inPrimaryQuote, bool inSecondaryQuote
 	return false;
 }
 
+// True when the mention is "in <letter/appeal/reply/response/answer>" and
+// that prep object is not a place, time, or gendered entity.  Those
+// constructions ("in the letter he pointed out") do not put the subject
+// physically in the scene.
 bool cSource::notPhysicallyPresentByMissive(int where)
 {
 	LFS
@@ -1359,6 +1532,13 @@ bool cSource::notPhysicallyPresentByMissive(int where)
 }
 
 // in secondary quotes, inPrimaryQuote=false
+// True if object o at 'where' is a candidate for speaker-group / narration
+// focus: gendered (or acceptable meta-group), in a subject / object / "to"
+// prep role, FOCUS_EVALUATED, not a question or probability statement, not
+// "each", not an adjectival modifier of a non-body head.  Sets
+// isNotPhysicallyPresent for NOT / NONPAST / NONPRESENT / SENTENCE_IN_REL
+// roles (still accepted if singular).  May also stamp POV.  Returns false
+// for kind-of objects and for o < 0.
 bool cSource::isFocus(int where, bool inPrimaryQuote, bool inSecondaryQuote, int o, bool& isNotPhysicallyPresent, bool subjectAllowPrep)
 {
 	LFS
@@ -1549,6 +1729,12 @@ bool cSource::isFocus(int where, bool inPrimaryQuote, bool inSecondaryQuote, int
 }
 
 // in secondary quotes, inPrimaryQuote=false
+// If o is focus-worthy and not introduced-by-reference, park it on
+// nextISNarrationSubjects (IS_OBJECT already physically manifested) or
+// nextNarrationSubjects (otherwise), and append it to lastSubjects (clearing
+// that vector first if clearBeforeSet).  Place-IS_OBJECT subjects are
+// demoted to neuter and rejected.  Returns whether this mention is a
+// subject (anySubject) - used to pick whereFirstSubjectInParagraph.
 bool cSource::mergeFocus(bool inPrimaryQuote, bool inSecondaryQuote, int o, int where, vector <int>& lastSubjects, bool& clearBeforeSet)
 {
 	LFS
@@ -1598,7 +1784,7 @@ bool cSource::mergeFocus(bool inPrimaryQuote, bool inSecondaryQuote, int o, int 
 						atLeastOnePhysicallyPresent = (lsi != localObjects.end() && lsi->physicallyPresent);
 					}
 				}
-				// They[words] were uttered by Boris and they[words] were : “QS Mr . Brown . ” (Mr. Brown) should not be a narrative subject.
+				// They[words] were uttered by Boris and they[words] were : ï¿½QS Mr . Brown . ï¿½ (Mr. Brown) should not be a narrative subject.
 				if ((isPhysicallyPresent || !atLeastOnePhysicallyPresent) && !(where && (m[where - 1].flags & cWordMatch::flagQuotedString)))
 				{
 					bool inserted = (unMergable(where, o, nextNarrationSubjects, uniquelyMergable, true, false, false, false, vtsi));
@@ -1626,6 +1812,11 @@ bool cSource::mergeFocus(bool inPrimaryQuote, bool inSecondaryQuote, int o, int 
 	return anySubject;
 }
 
+// Add a definitely-identified speaker (said X / X said) to tempSpeakerGroup
+// and to the section's preIdentifiedSpeakerObjects.  Names replace a uniquely
+// mergable pronoun; pronouns that cannot merge by sex with the current or
+// last group are inserted as new speakers; other classes are taken from
+// preIdentifiedSpeakerObjects if already known.
 void cSource::mergeObjectIntoSpeakerGroup(int where, int speakerObject)
 {
 	LFS
@@ -1687,6 +1878,11 @@ void cSource::mergeObjectIntoSpeakerGroup(int where, int speakerObject)
 // if this is punctuation, but it is actually matched by a pattern, then
 //    the punctuation is really not the end of a sentence. (abbreviation)
 // also if there is : followed by an paragraph end or a dash or period followed by a quote.
+// True if position where is a real sentence end: ? ! ; a period that did
+// not match a pattern (so not an abbreviation); a colon before a section
+// word; or a dash/period immediately before a closing quote.  The "--"
+// comparison is marked /*BUG*/ in the source (the token is usually an
+// em-dash form, not the two-char string).
 bool cSource::isEOS(int where)
 {
 	LFS
@@ -1694,9 +1890,12 @@ bool cSource::isEOS(int where)
 	return (im->word->first == L"?" || im->word->first == L"!" || im->word->first == L";" || (im->word->first == L"." && !im->PEMACount) ||
 		(im->word->first == L":" && (im + 1)->word == Words.sectionWord) ||
 		(where + 1 < (signed)m.size() && (im->queryForm(dashForm) >= 0 || im->word->first == L"--"/*BUG*/ || im->word->first == L".") &&
-			(m[where + 1].word->first == L"”" || m[where + 1].word->first == L"’")));
+			(m[where + 1].word->first == L"ï¿½" || m[where + 1].word->first == L"ï¿½")));
 }
 
+// True for dummy/existential subjects "what" / "where" / "there" / "here"
+// that should not be treated as speakers.  "it" and "that" are deliberately
+// excluded (see the commented-out tests).
 bool cSource::isPleonastic(tIWMM w)
 {
 	LFS
@@ -1705,6 +1904,9 @@ bool cSource::isPleonastic(tIWMM w)
 
 // the following has two subchains: (Siebel and his flowers), (Faust and Mephistopheles)
 // Marguerite with her box of jewels, the church scene, Siebel and his flowers, and Faust and Mephistopheles.
+// True if objectPositions is a single syntactic sub-chain of a larger
+// compound ("Siebel and his flowers" inside a longer list).  Used so
+// grouping does not treat the whole list as one speaker set.
 bool cSource::compoundObjectSubChain(vector < int >& objectPositions)
 {
 	LFS
@@ -1717,6 +1919,9 @@ bool cSource::compoundObjectSubChain(vector < int >& objectPositions)
 	return I == objectPositions.size();
 }
 
+// Replace every BODY_OBJECT_CLASS speaker ("Tommy's voice") with its owner
+// object when the owner is a single resolved match.  Ambiguous or empty
+// owner matches are left as the body object.
 void cSource::translateBodyObjects(cSpeakerGroup& sg)
 {
 	LFS
@@ -1747,6 +1952,11 @@ void cSource::translateBodyObjects(cSpeakerGroup& sg)
 }
 
 // if the subject of the only sentence in the paragraph indicates the character of the response, then don't split speakerGroup
+// If the only sentence of the next paragraph is a reply/response/answer
+// attribution ("Boris replied:"), return the source position after that
+// paragraph so the speaker group is not split across it.  Caches the result
+// on m[I].skipResponse.  Returns -1 if this is not a meta-response (or if
+// the verb has a non-"question" object, or the quote already closed).
 int cSource::detectMetaResponse(int I, int element)
 {
 	LFS
@@ -1807,8 +2017,8 @@ int cSource::detectMetaResponse(int I, int element)
 	if (whereVerb < 0 || m[whereVerb].word->second.mainEntry == wNULL) return -1;
 	// Boris asked a question:
 	if (m[whereVerb].getRelObject() >= 0 && m[m[whereVerb].getRelObject()].word->first != L"question") return -1;
-	// “Unresolved I am not sure where she[jane] is at the present moment[moment] , ” she[jane] replied .
-	if (m[whereVerb].relSubject > 1 && m[m[whereVerb].relSubject - 1].word->first == L"”") return -1;
+	// ï¿½Unresolved I am not sure where she[jane] is at the present moment[moment] , ï¿½ she[jane] replied .
+	if (m[whereVerb].relSubject > 1 && m[m[whereVerb].relSubject - 1].word->first == L"ï¿½") return -1;
 	// the Sinn feiner[irish] was speaking . his[irish] rich Irish voice[irish] was unmistakable :
 	// another voice[number] , which Tommy fancied was that[number] of the tall , commanding - looking man[number] whose face[number] had seemed familiar to him[number,tommy] , said :
 	// the Russian[boris] seemed to consider :
@@ -1835,6 +2045,8 @@ int cSource::detectMetaResponse(int I, int element)
 	return -1;
 }
 
+// If m[I].skipResponse was set by detectMetaResponse, jump I there and
+// return true.
 bool cSource::skipMetaResponse(int& I)
 {
 	LFS
@@ -1843,6 +2055,9 @@ bool cSource::skipMetaResponse(int& I)
 	return true;
 }
 
+// If the subject at 'where' has a VerbNet "has" verb and a resolved object,
+// record that object on objects[o].possessions and set flagUsedPossessionRelation.
+// Skipped for ambiguous matches and probability statements.
 void cSource::associatePossessions(int where)
 {
 	LFS
@@ -1867,6 +2082,12 @@ void cSource::associatePossessions(int where)
 	}
 }
 
+// Copy associated adjectives/nouns and generic gender from an IS_OBJECT onto
+// its subject ("Whittington was a big man" / "Whittington was big"), and run
+// ageDetection on age-in-years patterns.  Rejected on number mismatch,
+// neuter-vs-gendered, nymNoMatch contradiction, or the wrong tense (present
+// inside quotes, past outside).  Runs before object resolution, so it uses
+// getObject() not objectMatches.
 void cSource::associateNyms(int where)
 {
 	LFS
@@ -2002,6 +2223,9 @@ void cSource::associateNyms(int where)
 }
 
 // recognize environmentally implicit objects
+// True for environmentally implicit subjects that should not stay neuter:
+// "another knock", "the front door bell rang".  The caller then flips the
+// object to gendered-general so it can later resolve to a person.
 bool cSource::implicitObject(int where)
 {
 	LFS
@@ -2024,6 +2248,10 @@ bool cSource::implicitObject(int where)
 	return false;
 }
 
+// Format povInSpeakerGroups[startPOVI, povi) as a space-separated index
+// list for LOG_RESOLUTION.  If the range is empty it still prints
+// povInSpeakerGroups[startPOVI], which is out of range when startPOVI ==
+// povInSpeakerGroups.size().
 const wchar_t* intString(int startPOVI, int povi, vector <int>& povInSpeakerGroups, wstring& tmpstr)
 {
 	LFS
@@ -2036,6 +2264,10 @@ const wchar_t* intString(int startPOVI, int povi, vector <int>& povInSpeakerGrou
 	return tmpstr.c_str();
 }
 
+// Consume povInSpeakerGroups entries that fall inside speakerGroups[sgi]
+// and insert the matching speaker into sg.povSpeakers.  Ambiguous
+// objectMatches are accepted only when that gender is unique in the group,
+// or remembered from the previous group's single povSpeaker.
 void cSource::dropPOVIntoSpeakerGroup(const int sgi, int &povi, const int maleSpeakers, const int femaleSpeakers)
 {
 	wstring tmpstr, tmpstr2, tmpstr3;
@@ -2134,6 +2366,10 @@ void cSource::dropPOVIntoSpeakerGroup(const int sgi, int &povi, const int maleSp
 	*/
 }
 
+// Consume definitelyIdentifiedAsSpeakerInSpeakerGroups entries inside
+// speakerGroups[sgi] into sg.dnSpeakers.  A brand-new name mentioned only
+// inside quotes may replace the group's single non-name speaker
+// (replaceObjectInSection + flagUnresolvableObjectResolvedThroughSpeakerGroup).
 void cSource::dropDefinitelyIdentifiedSpeakersIntoSpeakerGroup(const int sgi, int &dni, const int maleSpeakers, const int femaleSpeakers)
 {
 	int mi;
@@ -2211,6 +2447,11 @@ void cSource::dropDefinitelyIdentifiedSpeakersIntoSpeakerGroup(const int sgi, in
 	}
 }
 
+// An observer is a POV speaker who is not a definite speaker, was not a
+// speaking member of the previous conversational group, and is not an
+// "uncertain" extra in a 3+ cast (unless they are a chase/follow follower).
+// Sets isAnyObserverSpeakerNew / isAnyNonObserverSpeakerNew vs. the previous
+// group; nonObserver is the last non-observer when conversationRestricted.
 void cSource::determineObserverStatus(const int sgi, int &nonObserver, const bool conversationRestricted, bool &isAnyNonObserverSpeakerNew, bool &isAnyObserverSpeakerNew)
 {
 	wstring tmpstr, tmpstr2;
@@ -2248,6 +2489,9 @@ void cSource::determineObserverStatus(const int sgi, int &nonObserver, const boo
 	}
 }
 
+// True if this group's observers are the same set as the previous group's
+// (and, when conversationRestricted with a single continuing observer, that
+// observer was also present in the last group that contained nonObserver).
 bool cSource::determineObserverContinuing(const int sgi, const int nonObserver, const bool conversationRestricted)
 {
 	bool observerContinuing = sgi && speakerGroups[sgi].observers == speakerGroups[sgi - 1].observers;
@@ -2269,6 +2513,9 @@ bool cSource::determineObserverContinuing(const int sgi, const int nonObserver, 
 
 // also an observer could be the observer of the previous group, who also doesn't speak in the current group, and there are no other povSpeakers of the current group.
 // also a section cannot be crossed with this assumption.
+// If this group has no POV yet, copy previous-group observers who are still
+// speakers here (but not dnSpeakers) into observers and povSpeakers.  Same
+// section only - observers do not cross chapter boundaries.
 void cSource::addPreviousObserver(const int sgi, const bool previousSpeakerGroupInSameSection)
 {
 	if (speakerGroups[sgi].povSpeakers.empty() && sgi && speakerGroups[sgi - 1].observers.size())
@@ -2294,6 +2541,10 @@ void cSource::addPreviousObserver(const int sgi, const bool previousSpeakerGroup
 	}
 }
 
+// If this group has no POV yet and every previous-group povSpeaker is still
+// a speaker here, inherit that POV set.  Those inherited POV speakers who
+// are not dnSpeakers become observers, unless the single observer is also
+// in groupedSpeakers (then observers are cleared).
 void cSource::addPreviousPOV(const int sgi, const bool previousSpeakerGroupInSameSection)
 {
 	// also a pov could be the pov of the previous group, who also doesn't speak in the current group, and there are no other povSpeakers of the current group.
@@ -2333,6 +2584,9 @@ void cSource::addPreviousPOV(const int sgi, const bool previousSpeakerGroupInSam
 	}
 }
 
+// If some but not all observers sit in groupedSpeakers and at least one
+// grouped speaker is a dnSpeaker, drop the observers that are in the
+// speaking subgroup (they were talking, not watching).
 void cSource::removeObserverAssociatedWithSpeakingGroup(const int sgi)
 {
 	// if an observer belongs to a group and that any of the group definitely speaks, then remove the observer. (error check)
@@ -2361,6 +2615,9 @@ void cSource::removeObserverAssociatedWithSpeakingGroup(const int sgi)
 	}
 }
 
+// Count quotes in this group that are not self-addressed (speaker !=
+// audience) by walking the nextQuote chain from currentQuote.  Writes
+// sg.conversationalQuotes and advances currentQuote past sgEnd.
 void cSource::setConversationalQuotes(const int sgi, int &currentQuote)
 {
 	int conversationalQuotes = 0;
@@ -2376,6 +2633,9 @@ void cSource::setConversationalQuotes(const int sgi, int &currentQuote)
 }
 
 // distribute people named as others in conversations (to lessen the risk of named supposedly hailed objects actually being talked about, rather than physically there)
+// Drop every metaNameOthersInSpeakerGroups position into the speaker group
+// whose span contains it.  Those names were talked about, not hailed, and
+// resolveSpeakers must not treat them as physically present addressees.
 void cSource::distributeMetaNameOthers()
 {
 	int sgi = 0, mi;
@@ -2391,6 +2651,12 @@ void cSource::distributeMetaNameOthers()
 
 // distribute povInSpeakerGroups and definitelyIdentifiedAsSpeakerInSpeakerGroups
 // to povSpeakers and dnSpeakers in speakerGroups.
+// Post-pass over every speaker group: fill conversationalQuotes, povSpeakers,
+// dnSpeakers, observers.  A two-speaker conversational group that was split
+// off only because of an observer is merged back with the previous group;
+// otherwise observers are cleared under the conversation-restricted rule.
+// Lonely singleton casts, or casts containing Narrator (object 0), get a
+// default POV if none was found.
 void cSource::distributePOV()
 {
 	LFS
@@ -2479,6 +2745,9 @@ void cSource::distributePOV()
 	}
 }
 
+// True if this object class cannot belong to a speaker subgroup (places,
+// pronouns, verbs, non-gendered general, ...).  The complement is the
+// gendered / name / body / meta-group set used by accumulateGroups.
 bool cSource::invalidGroupObjectClass(int oc)
 {
 	LFS
@@ -2488,6 +2757,11 @@ bool cSource::invalidGroupObjectClass(int oc)
 		oc != META_GROUP_OBJECT_CLASS;
 }
 
+// Collect syntactic speaker subgroups into tempSpeakerGroup.groups:
+// MPLURAL_ROLE chains, "X accompanied by Y" / "with him was Y", plural
+// objectMatches that are all physically-present narration subjects or
+// already speakers, and previously grouped speakers.  Places, pronouns,
+// and neuter-only objects are rejected.
 void cSource::accumulateGroups(int where, vector <int>& groupedObjects, int& lastWhereMPluralGroupedObject)
 {
 	LFS
@@ -2643,6 +2917,10 @@ void cSource::accumulateGroups(int where, vector <int>& groupedObjects, int& las
 	}
 }
 
+// True if the two source positions resolve to overlapping speakers.
+// -1 on either side is treated as "same" (imposed / unknown speaker).
+// When only one side has objectMatches the comparison looks inverted
+// (== end() rather than != end()) - see report.
 bool cSource::sameSpeaker(int sWhere1, int sWhere2)
 {
 	LFS
@@ -2660,6 +2938,13 @@ bool cSource::sameSpeaker(int sWhere1, int sWhere2)
 }
 
 // CMREADME019
+// Detect a character-told story (past-tense-heavy quote, or an inserted
+// continuation quote with no imposed speaker).  Marks the previous quote
+// flagEmbeddedStoryBeginResolveSpeakers / flagEmbeddedStoryResolveSpeakers,
+// records it in subNarratives, stamps IN_EMBEDDED_STORY_OBJECT_ROLE on the
+// span, and distinguishes 1st- vs 2nd-person stories.  A gap of more than
+// one intervening non-story quote, or a 1st/2nd-person flip, starts a new
+// story rather than extending.  Resets the four counters before return.
 void cSource::embeddedStory(int where, int& numPastSinceLastQuote, int& numNonPastSinceLastQuote, int& numSecondInQuote, int& numFirstInQuote,
 	int& lastEmbeddedStory, int& lastEmbeddedImposedSpeakerPosition, int lastSpeakerPosition)
 {
@@ -2751,6 +3036,10 @@ void cSource::embeddedStory(int where, int& numPastSinceLastQuote, int& numNonPa
 	numPastSinceLastQuote = numNonPastSinceLastQuote = numSecondInQuote = numFirstInQuote = 0;
 }
 
+// Correct HAIL_ROLE on the fly: strip it from place-name lists ("Ebury,
+// Yorks") and from self-addressed quotes (audience is reflexive); add it
+// for a definite/physically-present name that is the entire quoted
+// utterance ("Miss Finn,").
 void cSource::adjustHailRoleDuringScan(int where)
 {
 	LFS
@@ -2788,7 +3077,7 @@ void cSource::adjustHailRoleDuringScan(int where)
 	}
 	vector <cObject>::iterator o = objects.begin() + im->getObject();
 	if (im->getObject() >= 0 && !(im->objectRole & HAIL_ROLE) && o->objectClass == NAME_OBJECT_CLASS && (im->objectRole & IN_PRIMARY_QUOTE_ROLE) &&
-		im->beginObjectPosition && m[im->beginObjectPosition - 1].word->first == L"“" && m[im->endObjectPosition].word->first == L"," && m[im->endObjectPosition + 1].word->first == L"”" &&
+		im->beginObjectPosition && m[im->beginObjectPosition - 1].word->first == L"ï¿½" && m[im->endObjectPosition].word->first == L"," && m[im->endObjectPosition + 1].word->first == L"ï¿½" &&
 		(o->PISDefinite || o->PISHail > 1 || (o->name.hon != wNULL && !o->name.justHonorific() && o->numEncountersInSection > 1))) // encounters already at least one because of resolveObject
 	{
 		vector <cLocalFocus>::iterator lsi = in(im->getObject());
@@ -2812,6 +3101,10 @@ void cSource::adjustHailRoleDuringScan(int where)
 	}
 }
 
+// Collapse alias/replaced speakers inside each group.  If that leaves a
+// singleton group that has conversationalQuotes > 1 and whose only speaker
+// is already in the next (larger) group, merge the two spans and rewind
+// previousSubsetSpeakerGroup / firstSpeakerGroup / lastSpeakerGroup indexes.
 void cSource::eraseAliasesAndReplacementsInSpeakerGroups(void)
 {
 	LFS
@@ -2841,21 +3134,25 @@ void cSource::eraseAliasesAndReplacementsInSpeakerGroups(void)
 				sg++;
 }
 
+// True when a new speaker group should NOT be closed at this paragraph
+// boundary: we are mid-conversation (next paragraph opens with a quote),
+// the next paragraph is only a speaker attribution, the previous group
+// would become a quote-only span, or this paragraph ends with a colon.
 bool cSource::blockSpeakerGroupCreation(int endSection, bool quotesSeenSinceLastSentence, int nsAfter)
 {
 	LFS
 		bool block = false;
 	if (quotesSeenSinceLastSentence) // if the previous paragraph was a quote
 	{
-		block = (nsAfter < (int)m.size() && m[nsAfter].word->first == L"“"); // in the middle of a conversation
+		block = (nsAfter < (int)m.size() && m[nsAfter].word->first == L"ï¿½"); // in the middle of a conversation
 		// also block if the present paragraph's only sentence is a speaker attribution
 		if (!block)
 		{
 			// (search for next quote)
 			int beginQuote = nsAfter;
-			for (; beginQuote < (int)m.size() && m[beginQuote].word->first != L"“" &&
+			for (; beginQuote < (int)m.size() && m[beginQuote].word->first != L"ï¿½" &&
 				m[beginQuote].word->first != L"?" && m[beginQuote].word->first != L"!" && (m[beginQuote].word->first != L"." || m[beginQuote].PEMACount); beginQuote++);
-			if (beginQuote < (int)m.size() && m[beginQuote].word->first == L"“")
+			if (beginQuote < (int)m.size() && m[beginQuote].word->first == L"ï¿½")
 			{
 				// (search for the speaker position)
 				bool definitelySpeaker = true, previousParagraph = false, crossedSectionBoundary = false; // checkCataSpeaker=false,
@@ -2870,7 +3167,7 @@ bool cSource::blockSpeakerGroupCreation(int endSection, bool quotesSeenSinceLast
 			if (!block && speakerGroups.size() && lastOpeningPrimaryQuote >= 0 && m[lastOpeningPrimaryQuote].endQuote + 1 == endSection)
 			{
 				int firstQuoteAfter = speakerGroups[speakerGroups.size() - 1].sgBegin + 1;
-				for (; firstQuoteAfter < lastOpeningPrimaryQuote && m[firstQuoteAfter].word->first != L"“"; firstQuoteAfter++);
+				for (; firstQuoteAfter < lastOpeningPrimaryQuote && m[firstQuoteAfter].word->first != L"ï¿½"; firstQuoteAfter++);
 				while (m[firstQuoteAfter].getQuoteForwardLink() >= 0) firstQuoteAfter = m[firstQuoteAfter].getQuoteForwardLink();
 				block |= firstQuoteAfter == lastOpeningPrimaryQuote;
 			}
@@ -2880,6 +3177,11 @@ bool cSource::blockSpeakerGroupCreation(int endSection, bool quotesSeenSinceLast
 	return block | (endSection && m[endSection - 1].word->first == L":");
 }
 
+// Pick a physically-present speaker position to retain across a time /
+// location transition: prefer sr->whereSubject if it is an agent, else the
+// sole PP speaker in localObjects, else sr->whereObject if that is an agent.
+// Returns a source position, or -1 if the subject is unusable and nothing
+// else qualifies.
 int cSource::getSpeakersToKeep(vector<cSyntacticRelationGroup>::iterator sr)
 {
 	LFS
@@ -2905,6 +3207,10 @@ int cSource::getSpeakersToKeep(vector<cSyntacticRelationGroup>::iterator sr)
 	return keepPPSpeakerWhere;
 }
 
+// Chapter / section boundary: age every local-focus entry by 5, drop hail-
+// only preIdentifiedSpeakerObjects, close the current speaker group with
+// endOfSection=true, and reset narration-subject / lastSubjects state for
+// the new section.
 void cSource::beginSection(int& lastSpeakerGroupPositionConsidered, int& lastSpeakerGroupOfPreviousSection, int I, vector <int>& previousLastSubjects, vector <int>& lastSubjects)
 {
 	wstring tmpstr, tmpstr2, tmpstr3, tmpstr4, tmpstr5, tmpstr6;
@@ -2951,6 +3257,11 @@ void cSource::beginSection(int& lastSpeakerGroupPositionConsidered, int& lastSpe
 	clearNextSection(I, section - 1);
 }
 
+// Paragraph-end (sectionWord) handler: skip a following meta-response,
+// optionally block group creation, age last-group speakers (and mark them
+// not-PP if speakerAge > 10), then createSpeakerGroup unless blocked.
+// If the closing paragraph was unquoted, remember previousLastSubjects as
+// subjectsInPreviousUnquotedSection for the next group.
 void cSource::endSection(int& questionSpeakerLastParagraph, int& questionSpeakerLastSentence, int& whereFirstSubjectInParagraph, int& lastSpeakerGroupPositionConsidered, int& lastSpeakerGroupOfPreviousSection, int I,
 	bool& endOfSentence, bool& immediatelyAfterEndOfParagraph, bool& quotesSeenSinceLastSentence, bool inSecondaryQuote, bool inPrimaryQuote, bool& quotesSeen, bool& firstQuotedSentenceOfSpeakerGroupNotSeen,
 	vector <int> previousLastSubjects)
@@ -2992,6 +3303,8 @@ void cSource::endSection(int& questionSpeakerLastParagraph, int& questionSpeaker
 				lsi->physicallyPresent = false; // this prevents speakers from being mentioned later in the dialogue (but not actually appearing) and then not removed from the speakerGroup
 			}
 		}
+	// parsed as (block && flags) & 1 because & binds looser than &&; equivalent
+	// to `block && flags` (any nonzero flags), not `block && (flags & 1)`.
 	if (block && m[I].flags & 1)
 		block = false;
 	if (!block && createSpeakerGroup(lastSpeakerGroupPositionConsidered, I, false, lastSpeakerGroupOfPreviousSection))
@@ -3036,6 +3349,8 @@ void cSource::endSection(int& questionSpeakerLastParagraph, int& questionSpeaker
 	}
 }
 
+// On each __S1 (main-clause) start that is not inside a meta-response,
+// age every local-focus entry by 1 via ageSpeaker and remember lastBeginS1.
 void cSource::ageSpeakersPerSentence(int where, int & endMetaResponse, unsigned int & agingStructuresSeen, int & lastBeginS1, const bool inPrimaryQuote, const bool inSecondaryQuote)
 {
 	int element;
@@ -3054,6 +3369,9 @@ void cSource::ageSpeakersPerSentence(int where, int & endMetaResponse, unsigned 
 	}
 }
 
+// Feed the current mention into mergeFocus (and mergeName for names).
+// Records the first gendered subject of the paragraph on
+// whereFirstSubjectInParagraph for question-subject agreement.
 void cSource::getWhereFirstSubjectInParagraph(int where, const bool inPrimaryQuote, const bool inSecondaryQuote, const bool currentIsQuestion, vector <int> &lastSubjects, int & whereFirstSubjectInParagraph)
 {
 	if (!currentIsQuestion && !(m[where].flags & cWordMatch::flagAdjectivalObject) && !(m[where].flags & cWordMatch::flagRelativeHead) &&
@@ -3083,6 +3401,8 @@ void cSource::getWhereFirstSubjectInParagraph(int where, const bool inPrimaryQuo
 	}
 }
 
+// Replace any eliminated object index in sg.speakers with its followObjectChain
+// survivor so later passes do not hold a dead object number.
 void cSource::updateSpeakerObjects(cSpeakerGroup &sg)
 {
 	// Make sure tempSpeakerGroup has objects up-to-date
@@ -3108,6 +3428,12 @@ void cSource::updateSpeakerObjects(cSpeakerGroup &sg)
 // in the previous series, then extend the previous series to the end of the current one.
 // if the series has the same speakers as the previous, extend the previous one.
 // resolve all objects outside quotes.
+// Single left-to-right scan of m[].  Per position: age local focus, resolve
+// objects outside quotes (and possible hails), associate nyms/possessions,
+// detect POV / hail / groups / embedded stories, and at quote / EOS /
+// paragraph / chapter boundaries call the helpers above.  After the scan,
+// eraseAliasesAndReplacementsInSpeakerGroups and distributePOV finalize the
+// groups.  Does not write speakerPosition / audiencePosition (resolveSpeakers).
 void cSource::identifySpeakerGroups()
 {
 	LFS
@@ -3181,10 +3507,10 @@ void cSource::identifySpeakerGroups()
 		associatePossessions(I);
 		setPOVStatus(I, inPrimaryQuote, inSecondaryQuote);
 		// detect whether the name is possibly a hail candidate, and possibly needs to be resolved with other former names before being detected as a hail
-		// “[st:dr] Miss Finn , ” he said
-		// “[st:julius] Mr . Hersheimmer , ” he[st] said at last , “[st:julius] that is a very large sum . ” 
+		// ï¿½[st:dr] Miss Finn , ï¿½ he said
+		// ï¿½[st:julius] Mr . Hersheimmer , ï¿½ he[st] said at last , ï¿½[st:julius] that is a very large sum . ï¿½ 
 		bool possibleHail = inPrimaryQuote && m[I].getObject() >= 0 && !(m[I].objectRole & HAIL_ROLE) && objects[m[I].getObject()].objectClass == NAME_OBJECT_CLASS &&
-			m[I].beginObjectPosition && m[m[I].beginObjectPosition - 1].word->first == L"“" && m[m[I].endObjectPosition].word->first == L"," && m[m[I].endObjectPosition + 1].word->first == L"”";
+			m[I].beginObjectPosition && m[m[I].beginObjectPosition - 1].word->first == L"ï¿½" && m[m[I].endObjectPosition].word->first == L"," && m[m[I].endObjectPosition + 1].word->first == L"ï¿½";
 		if ((!inPrimaryQuote && !inSecondaryQuote) || (possibleHail && !objects[m[I].getObject()].PISDefinite))
 			resolveObject(I, false, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, false, false, false); // could change object at I!
 		if (m[I].getObject() != cObject::eOBJECTS::UNKNOWN_OBJECT && lastCommand >= 0)
@@ -3225,7 +3551,7 @@ void cSource::identifySpeakerGroups()
 				lplog(LOG_RESOLUTION, L"%06d:cleared local objects (%s)", I, m[I].word->first.c_str());
 		}
 		// CMREADME25
-		if (m[I].word->first == L"‘")
+		if (m[I].word->first == L"ï¿½")
 		{
 			if (lastOpeningSecondaryQuote >= 0)
 			{
@@ -3236,7 +3562,7 @@ void cSource::identifySpeakerGroups()
 			inSecondaryQuote = true;
 			inPrimaryQuote = false;
 		}
-		else if (m[I].word->first == L"’")
+		else if (m[I].word->first == L"ï¿½")
 		{
 			inSecondaryQuote = false;
 			inPrimaryQuote = true;
@@ -3246,7 +3572,7 @@ void cSource::identifySpeakerGroups()
 				setSecondaryQuoteString(I, secondaryQuotesResolutions);
 			}
 		}
-		else if (m[I].word->first == L"“")
+		else if (m[I].word->first == L"ï¿½")
 		{
 			if (immediatelyAfterEndOfParagraph && lastQuote >= 0)
 				embeddedStory(I, numPastSinceLastQuote, numNonPastSinceLastQuote, numSecondInQuote, numFirstInQuote,
@@ -3256,7 +3582,7 @@ void cSource::identifySpeakerGroups()
 			inPrimaryQuote = true;
 			quotesSeen = quotesSeenSinceLastSentence = true;
 		}
-		else if (m[I].word->first == L"”" && lastOpeningPrimaryQuote >= 0)
+		else if (m[I].word->first == L"ï¿½" && lastOpeningPrimaryQuote >= 0)
 		{
 			processEndOfPrimaryQuote(I, lastSentenceEndBeforeAndNotIncludingCurrentQuote,
 				lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, lastSpeakerPosition, lastQuotedString, quotedObjectCounter,

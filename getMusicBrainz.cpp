@@ -1,3 +1,33 @@
+/*
+	getMusicBrainz.cpp - MusicBrainz WS/2 fetch/parse and QA binding
+
+	Overview:
+		Caches WS/2 XML under cacheDir\musicBrainzCache, parses it with tinyxml2 into
+		mbInfo* structs, then cQuestionAnswering::dbSearchMusicBrainz matches
+		artist/label/release roles and verb triggers in a question against those
+		hits and pushes winner names as cSource objects.
+
+	Pipeline position:
+		On-demand during question answering (not novel initialization).
+
+	Key entry points:
+		- getMusicBrainzPage - cache or HTTP GET, write cache
+		- getReleases / getArtists / getRecordings / getLabels - XML -> vectors
+		- absorbReleases - walk <release-list>
+		- filter / pushWhereEntities / pushEntities - bind hits to a source position
+		- dbSearchMusicBrainz / matchOwnershipDbMusicBrainz - QA triggers
+		- createObject overloads - synthesize objects from MusicBrainz names
+
+	Dependencies:
+		tinyxml2, cInternet::readPage, cacheDir, musicBrainzCache on disk.
+
+	Notes / gotchas:
+		Uses plaintext HTTP. Query strings are wsprintf'd with no URL-encoding.
+		Header declares 3-arg getters; definitions take a 4th filterNameDuplicates.
+		FindAttribute("id")->Value() is unchecked in several parsers (NULL crash).
+		getRecordings looks for metadata/release-list instead of the recording's
+		own release-list. getReleaseGroup/getWork are stubs returning 0.
+*/
 #include <stdio.h>
 #include <string.h>
 #include <mbstring.h>
@@ -31,6 +61,9 @@ using namespace std;
 #include "internet.h"
 #include "QuestionAnswering.h"
 
+// Loads WS/2 XML for entitySearchedFor/?query=entityTypeReturned:entity into buffer,
+// preferring the musicBrainzCache file. Returns 0 on cache or successful fetch;
+// GETPAGE_CANNOT_CREATE if the cache file cannot be opened after mkdir attempts.
 int getMusicBrainzPage(wstring entitySearchedFor, wstring entityTypeReturned, wstring entity, wstring& buffer)
 {
 	wchar_t path[4096];
@@ -77,6 +110,7 @@ int getMusicBrainzPage(wstring entitySearchedFor, wstring entityTypeReturned, ws
 }
 
 
+// Debug-prints one XML element and its attributes at indent offset; terminate true emits />.
 void printElement(int offset, tinyxml2::XMLElement* element, bool terminate)
 {
 	LFS
@@ -89,6 +123,8 @@ void printElement(int offset, tinyxml2::XMLElement* element, bool terminate)
 		printf(">\n");
 }
 
+// Recursively debug-prints an XML subtree. childNodeAlreadyPrinted skips reprinting a
+// first child that printElement already emitted (attribute-bearing elements).
 void printNode(tinyxml2::XMLNode* node, int offset, bool childNodeAlreadyPrinted)
 {
 	LFS
@@ -119,6 +155,7 @@ void printNode(tinyxml2::XMLNode* node, int offset, bool childNodeAlreadyPrinted
 		}
 }
 
+// Debug-prints tag names and (after children) attributes; used to dump WS/2 shape.
 void structurePrintNode(tinyxml2::XMLNode* node, int offset)
 {
 	LFS
@@ -132,6 +169,7 @@ void structurePrintNode(tinyxml2::XMLNode* node, int offset)
 		}
 }
 
+// mTW(str, t) if str is non-NULL, else L"". t is the conversion scratch buffer.
 wstring mTWNull(const char* str, wstring& t)
 {
 	LFS
@@ -141,12 +179,15 @@ wstring mTWNull(const char* str, wstring& t)
 			return L"";
 }
 
+// Adjacent-release dedup key: titles are equal.
 bool isDuplicateByName(mbInfoReleaseType& t1, mbInfoReleaseType& t2)
 {
 	LFS
 		return (t1.title == t2.title);
 }
 
+// Walks each <release> under releaseListHandle into mbs. Skips a hit whose title equals
+// the last pushed title when filterNameDuplicates is set. FindAttribute("id") is unchecked.
 void absorbReleases(tinyxml2::XMLHandle& releaseListHandle, vector <mbInfoReleaseType>& mbs, bool filterNameDuplicates)
 {
 	LFS
@@ -185,6 +226,7 @@ void absorbReleases(tinyxml2::XMLHandle& releaseListHandle, vector <mbInfoReleas
 		}
 }
 
+// Fetches /release/?query=byWhatType:what and fills mb. HTTP/parse errors are ignored (returns 0).
 int getReleases(wstring byWhatType, wstring what, vector <mbInfoReleaseType>& mb, bool filterNameDuplicates)
 {
 	LFS
@@ -203,12 +245,14 @@ int getReleases(wstring byWhatType, wstring what, vector <mbInfoReleaseType>& mb
 	return 0;
 }
 
+// Adjacent-artist dedup key: MusicBrainz artist IDs are equal (name of the helper is misleading).
 bool isDuplicateByName(mbInfoArtistType& t1, mbInfoArtistType& t2)
 {
 	LFS
 		return (t1.artistId == t2.artistId);
 }
 
+// Fetches /artist/?query=byWhatType:what. Unchecked FindAttribute/GetText. Parse errors ignored.
 // not currently used
 int getArtists(wstring byWhatType, wstring what, vector <mbInfoArtistType>& mbs, bool filterNameDuplicates)
 {
@@ -235,12 +279,14 @@ int getArtists(wstring byWhatType, wstring what, vector <mbInfoArtistType>& mbs,
 	return 0;
 }
 
+// Stub: release-group lookup was never implemented. Always returns 0.
 int getReleaseGroup(wstring releaseGroup)
 {
 	LFS
 		return 0;
 }
 
+// Adjacent-recording dedup key: titles are equal.
 bool isDuplicateByName(mbInfoRecordingType& t1, mbInfoRecordingType& t2)
 {
 	LFS
@@ -270,6 +316,8 @@ bool isDuplicateByName(mbInfoRecordingType& t1, mbInfoRecordingType& t2)
 		</recording-list>
 </metadata>
 */
+// Fetches /recording/?query=byWhatType:what. Looks for metadata/release-list (not the
+// recording's own release-list), so mb.releases is typically empty.
 // not currently used
 int getRecordings(wstring byWhatType, wstring what, vector <mbInfoRecordingType>& mbs, bool filterNameDuplicates)
 {
@@ -297,6 +345,7 @@ int getRecordings(wstring byWhatType, wstring what, vector <mbInfoRecordingType>
 	return 0;
 }
 
+// Adjacent-label dedup key: labelName strings are equal.
 bool isDuplicateByName(mbInfoLabelType& t1, mbInfoLabelType& t2)
 {
 	LFS
@@ -317,6 +366,7 @@ bool isDuplicateByName(mbInfoLabelType& t1, mbInfoLabelType& t2)
 	 </compactLabel-list>
 </metadata>
 */
+// Fetches /label/?query=byWhatType:what. Unchecked FindAttribute/GetText. Parse errors ignored.
 // not curently used
 int getLabels(wstring byWhatType, wstring what, vector <mbInfoLabelType>& mbs, bool filterNameDuplicates)
 {
@@ -343,12 +393,14 @@ int getLabels(wstring byWhatType, wstring what, vector <mbInfoLabelType>& mbs, b
 	return 0;
 }
 
+// Stub: work lookup was never implemented. Always returns 0.
 int getWork(wstring work)
 {
 	LFS
 		return 0;
 }
 
+// Logs every field of one release hit at LOG_WHERE.
 void printMBInfo(mbInfoReleaseType& mbi)
 {
 	lplog(LOG_WHERE, L"MUSICBRAINZ  releaseId=%s title=%s status=%s artistId=%s artistName=%s releaseGroupId=%s releaseGroupType=%s date=%s country=%s labelName=%s labelId=%s",
@@ -356,6 +408,8 @@ void printMBInfo(mbInfoReleaseType& mbi)
 }
 
 
+// Erases hits whose artistName/labelName/title (per byWhatType) is not exactly 'what'.
+// Returns the surviving count (0 = caller should re-query).
 int filter(wstring byWhatType, wstring what, vector <mbInfoReleaseType>& mbs)
 {
 	for (vector <mbInfoReleaseType>::iterator mbi = mbs.begin(); mbi != mbs.end(); )
@@ -377,6 +431,9 @@ int filter(wstring byWhatType, wstring what, vector <mbInfoReleaseType>& mbs)
 	return mbs.size();
 }
 
+// Binds MusicBrainz hits to m[where]. If whatWhere has no objectMatches, filters/fetches
+// by the surface string and pushEntities. Otherwise votes across each match's hits and
+// creates winner-name objects of the default class for matchEntityType. mbs is by value.
 bool cSource::pushWhereEntities(wchar_t* derivation, int where, wstring matchEntityType, wstring byWhatType, int whatWhere, bool filterNameDuplicates, vector <mbInfoReleaseType> mbs)
 {
 	LFS
@@ -437,6 +494,8 @@ bool cSource::pushWhereEntities(wchar_t* derivation, int where, wstring matchEnt
 	return winners.size() > 0;
 }
 
+// Creates one object per hit (artistName / labelName / title) and appends to m[where].objectMatches.
+// Returns true if any object was added.
 bool cSource::pushEntities(wchar_t* derivation, int where, wstring matchEntityType, vector <mbInfoReleaseType>& mbs)
 {
 	LFS
@@ -472,6 +531,9 @@ set <wstring> labelMatchList = { L"label",L"company",L"studio",L"conglomerate" }
 set <wstring> artistMatchList = { L"artist",L"singer",L"songwriter",L"lyricist",L"composer",L"lyrist",L"musician",L"songsmith" };
 set <wstring> releaseMatchList = { L"release",L"record",L"CD",L"album",L"recording",L"song",L"rap",L"compilation",L"track",L"disc",L"title" };
 
+// If firstWhere/secondWhere match the artist|label|release word lists (or object class)
+// and the verb is in matchVerbsList, pushWhereEntities on whichever side is the question
+// type and record a dbMusicBrainz answer. Returns true if any side produced a match.
 bool cQuestionAnswering::dbSearchMusicBrainzSearchType(cSource* questionSource, wchar_t* derivation, cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs,
 	int firstWhere, wstring firstMatchListType, int secondWhere, wstring secondMatchListType, set <wstring>& matchVerbsList)
 {
@@ -555,6 +617,8 @@ bool cQuestionAnswering::dbSearchMusicBrainzSearchType(cSource* questionSource, 
 //    release: object verbs: owns/distributes/produces
 // no ownership of compactLabel known within this KB
 
+// True if m[where]'s mainEntry is in matchList or its object has objectClass. Logs the test.
+// Returns false if where is out of range.
 bool cSource::matchedList(set <wstring>& matchList, int where, int objectClass, const wchar_t* fromWhere)
 {
 	LFS
@@ -568,6 +632,7 @@ bool cSource::matchedList(set <wstring>& matchList, int where, int objectClass, 
 	return matched;
 }
 
+// Appends a copy of object, clears owner, and points m[object.begin] at the new object index.
 void cSource::createObject(cObject object)
 {
 	objects.push_back(object);
@@ -578,6 +643,8 @@ void cSource::createObject(cObject object)
 	m[object.begin].endObjectPosition = object.end;
 }
 
+// Parses descriptor "w1|w2|...&...&principalWhereOffset" into the token stream via parseBuffer
+// and wraps those tokens in a new cObject. Returns the new object index, or -1 if parseBuffer fails.
 // string separated by |, followed by forms separated by &
 int cSource::createObject(wstring derivation, wstring descriptor)
 {
@@ -609,6 +676,9 @@ int cSource::createObject(wstring derivation, wstring descriptor)
 	return objects.size() - 1;
 }
 
+// Tokenizes wordstr with parseBuffer and builds a NAME/business/title object. For NAME_OBJECT_CLASS
+// fills first/middle/last from the 1/2/3+ tokens. Returns cOM(objectIndex, 0), or cOM(ret, -1)
+// if parseBuffer fails or produced no tokens.
 cOM cSource::createObject(wstring derivation, wstring wordstr, OC objectClass)
 {
 	LFS
@@ -650,6 +720,9 @@ cOM cSource::createObject(wstring derivation, wstring wordstr, OC objectClass)
 	return cOM(objects.size() - 1, 0);
 }
 
+// If whereObject is a gendered-owned "release/album/…" with possessive-determiner owners,
+// queries MusicBrainz by each owner as artist and pushEntities the releases. Returns true
+// if any owner produced a release object.
 // add to objects if ownership of trigger
 bool cQuestionAnswering::matchOwnershipDbMusicBrainzObject(cSource* questionSource, wchar_t* derivation, int whereObject, vector <mbInfoReleaseType>& mbs)
 {
@@ -680,6 +753,7 @@ bool cQuestionAnswering::matchOwnershipDbMusicBrainzObject(cSource* questionSour
 	return ownershipMatched;
 }
 
+// Tries matchOwnershipDbMusicBrainzObject on every SRG role slot (controlling/subject/object/prep/…).
 bool cQuestionAnswering::matchOwnershipDbMusicBrainz(cSource* questionSource, wchar_t* derivation, cSyntacticRelationGroup* parentSRG)
 {
 	LFS
@@ -691,6 +765,8 @@ bool cQuestionAnswering::matchOwnershipDbMusicBrainz(cSource* questionSource, wc
 		matchOwnershipDbMusicBrainzObject(questionSource, derivation, parentSRG->whereNextSecondaryObject, parentSRG->mbs);
 }
 
+// Tries each artist/label/release role+verb pattern (belong/signed, wrote/create, …) via
+// dbSearchMusicBrainzSearchType. Returns true on the first pattern that produces an answer.
 // example:what companies produce his records?
 //   
 bool cQuestionAnswering::dbSearchMusicBrainz(cSource* questionSource, wchar_t* derivation, cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs)

@@ -1,3 +1,9 @@
+"""COM.py - (object id, salience) pair from an LP dump.
+
+Overview:
+    Eight-byte record used in Section speaker/object lists and
+    SpeakerGroup.replacedSpeakers. Mirrors a C++ cOM / similar.
+"""
 import struct
 
 class COM:

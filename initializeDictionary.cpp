@@ -1,4 +1,41 @@
-﻿#include <windows.h>
+/*
+	initializeDictionary.cpp - Closed-class lexicon bootstrap and word-cache I/O
+
+	Overview:
+		Builds the in-memory word/form tables before any source is read: predefines
+		pronouns, determiners, verbs, honorifics, abbreviations, numbers, letters,
+		prepositions, interjections; loads Levin verb classes, gendered nouns,
+		demonyms, place names, nicknames, and multi-word objects from source\\lists;
+		then sets form flags (isCommonForm, isVerbForm, isIgnore) and per-form costs.
+		Also serializes/restores the word cache (.wordCacheFile).
+
+	Pipeline position:
+		Stage 1 (Initialization). cWord::initialize() is the top-level entry, called
+		once before tokenize. readWords() reloads a per-source or global cache.
+
+	Key entry points:
+		- initialize / createWordCategories / findPredefinedForms / initializeCosts
+		- predefineWord / predefineWords / predefineVerbsFromFile
+		- readVerbClasses / readVerbClassNames / addGenderedNouns / addPlaces
+		- readWords / writeWord / readFormsCache / writeFormsCache
+
+	Key data structures / globals:
+		- levinVerbToClassSectionMap / levinClassSectionNames - Levin class IDs packed
+		  as four 8-bit fields in an int (<<24/16/8/0)
+		- WMM / Forms - the global lexicon this file fills
+		- nicknameEquivalenceMap - loaded from male/female nickname lists
+
+	Dependencies:
+		source\\lists\\*.txt (Levin, names, places, nicknames, verb inflection files);
+		readVBNet() from vcXML.cpp; WordNet only indirectly via later getForms.
+
+	Notes / gotchas:
+		predefineWords(Inflections[]) mutates the caller's word buffers (apostrophe and
+		space→dash). readWords leaks the tmalloc buffer on early -1 returns.
+		disqualify() rejects most dotted tokens unless they look like A.B.C. abbreviations.
+		gquery fatal-errors if a required sentinel word is missing.
+*/
+#include <windows.h>
 #include "Winhttp.h"
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
 #include <io.h>
@@ -13,6 +50,7 @@ unordered_map <int, wstring> levinClassSectionToVerbMap; // initialized
 unordered_map <wstring, int> levinVerbToClassSectionMap; // dictionary initialized 
 unordered_map <int, wstring> levinClassSectionNames; // dictionary initialized 
 
+// Finds sWord in WMM or LOG_FATAL_ERROR. Used for required sentinel words (__ppn__, …).
 tIWMM cWord::gquery(wstring sWord)
 {
 	LFS
@@ -22,6 +60,7 @@ tIWMM cWord::gquery(wstring sWord)
 	return iWord;
 }
 
+// Adds 'word' as its own form name (closed-class sentinel). Returns the new/existing iterator.
 tIWMM cWord::predefineWord(const wchar_t* word, int flags)
 {
 	LFS
@@ -31,6 +70,7 @@ tIWMM cWord::predefineWord(const wchar_t* word, int flags)
 	return addNewOrModify(NULL, word, flags, iForm, 0, 0, L"", -1, added);
 }
 
+// Adds each NULL-terminated words[] entry under sForm. Returns the form index.
 int cWord::predefineWords(const wchar_t* words[], wstring sForm, wstring shortForm, int flags, bool properNounSubClass)
 {
 	LFS
@@ -44,6 +84,8 @@ int cWord::predefineWords(const wchar_t* words[], wstring sForm, wstring shortFo
 	return iForm;
 }
 
+// Adds Inflections[] (word + inflection bits). Mutates any apostrophe in the caller's
+// buffers to U+02BC and back so both spellings are stored. Returns 0.
 int cWord::predefineWords(Inflections words[], wstring sForm, wstring shortName, wstring inflectionsClass, int flags, bool properNounSubClass)
 {
 	LFS
@@ -65,6 +107,8 @@ int cWord::predefineWords(Inflections words[], wstring sForm, wstring shortName,
 	return 0;
 }
 
+// Adds InflectionsRoot[] (word + inflection + mainEntry). Permanently changes spaces in
+// the caller's word buffers to dashes so both spellings are stored. Returns 0.
 int cWord::predefineWords(InflectionsRoot words[], wstring sForm, wstring shortName, wstring inflectionsClass, int flags, bool properNounSubClass)
 {
 	LFS
@@ -91,6 +135,8 @@ int cWord::predefineWords(InflectionsRoot words[], wstring sForm, wstring shortN
 	return 0;
 }
 
+// Reads four-column verb rows (1sg past presPart 3sg) from path. BOM-strips 65279.
+// LOG_FATAL_ERROR if the file is missing. Returns 0.
 int cWord::predefineVerbsFromFile(wstring sForm, wstring shortName, const wchar_t* path, int flags)
 {
 	LFS
@@ -124,6 +170,8 @@ int cWord::predefineVerbsFromFile(wstring sForm, wstring shortName, const wchar_
 	return 0;
 }
 
+// Parses source\\lists\\levinVerbClasses.txt ("verb : 2.10, 33") into the Levin maps.
+// Class numbers are packed as four 8-bit fields. Returns false on a malformed line.
 bool cWord::readVerbClasses(void)
 {
 	LFS
@@ -177,6 +225,7 @@ bool cWord::readVerbClasses(void)
 	return true;
 }
 
+// Parses levinVerbCategories.txt into levinClassSectionNames. LOG_FATAL_ERROR if missing.
 bool cWord::readVerbClassNames(void)
 {
 	LFS
@@ -219,6 +268,8 @@ bool cWord::readVerbClassNames(void)
 	return true;
 }
 
+// Reads a SSA-style Rank,Male,Number,Female,Number file and adds the names as proper nouns
+// with MALE/FEMALE_GENDER. Skips three header lines. Returns -1 if path cannot be opened.
 int cWord::addProperNamesFile(wstring path)
 {
 	LFS
@@ -264,6 +315,7 @@ int cWord::addProperNamesFile(wstring path)
 
 #define MAX_BUF 32000
 
+// Serializes iWord's string + cSourceWordInfo into buffer at where. Returns -1 if copy fails.
 int cWord::writeWord(tIWMM iWord, void* buffer, int& where, int limit)
 {
 	LFS
@@ -275,6 +327,8 @@ int cWord::writeWord(tIWMM iWord, void* buffer, int& where, int limit)
 	return 0;
 }
 
+// Reads the form-table prefix of a .wordCacheFile. Creates any form name not already in
+// Forms. Returns the new 'where', or -1 on copy failure.
 int cWord::readFormsCache(char* buffer, int bufferlen, int& numReadForms)
 {
 	LFS
@@ -307,6 +361,7 @@ int cWord::readFormsCache(char* buffer, int bufferlen, int& numReadForms)
 	return where;
 }
 
+// Writes Forms.size() then each cForm to fd. LOG_FATAL_ERROR on write failure. Returns bytes written.
 int cWord::writeFormsCache(int fd)
 {
 	LFS
@@ -329,6 +384,7 @@ int cWord::writeFormsCache(int fd)
 	return len;
 }
 
+// True if sWord is too long, trailing-space, >2 dashes, or a dotted token that is not X.X.X.
 bool disqualify(wstring sWord)
 {
 	LFS
@@ -359,6 +415,8 @@ bool disqualify(wstring sWord)
 	return false;
 }
 
+// Loads oPath+".wordCacheFile" into WMM/Forms and resolves mainEntry links. Returns -1 if
+// the file is missing or a copy fails (tmalloc buffer leaked on those paths).
 int cWord::readWords(wstring oPath, int sourceId, bool disqualifyWords, wstring specialExtension)
 {
 	LFS
@@ -469,6 +527,9 @@ int cWord::readWords(wstring oPath, int sourceId, bool disqualifyWords, wstring 
 	return 0;
 }
 
+// Reads genPath (one noun per line; optional +HYPO/+COORDS and (sense)). Adds each as
+// wordForm with defaultInflectionFlags; optionally expands WordNet hyponyms/coords.
+// Returns -1 if the file is missing.
 int cWord::addGenderedNouns(const wchar_t* genPath, int defaultInflectionFlags, int wordForm)
 {
 	LFS
@@ -539,6 +600,7 @@ int cWord::addGenderedNouns(const wchar_t* genPath, int defaultInflectionFlags, 
 
 // every line is a nation followed by a person associated with that nation (noun,adjective)separated by a comma
 // ; He is from Afghanistan.  He is an Afghan.  He is Afghani.
+// Reads demPath (demonym / place pairs) and marks them as gendered demonym nouns.
 int cWord::addDemonyms(const wchar_t* demPath)
 {
 	LFS
@@ -609,6 +671,8 @@ int cWord::addDemonyms(const wchar_t* demPath)
 
 //     bool added;
 //    words.push_back(addNewOrModify(mwords[I],cSourceWordInfo::queryOnAnyAppearance,PROPER_NOUN_FORM_NUM,0,0,mwords[I],-1,added));
+// Reads a place-name list at pPath into objects and the lexicon (location subtype).
+// Returns false if the file is missing.
 bool cWord::addPlaces(wstring pPath, vector <tmWS >& objects)
 {
 	LFS
@@ -713,6 +777,7 @@ bool cWord::addPlaces(wstring pPath, vector <tmWS >& objects)
 	return true;
 }
 
+// Loads filePath (canonical<TAB>nick…) into nicknameEquivalenceMap.
 void cWord::addNickNames(const wchar_t* filePath)
 {
 	LFS
@@ -744,6 +809,7 @@ void cWord::addNickNames(const wchar_t* filePath)
 	fclose(nf);
 }
 
+// Loads cached multi-word object strings/objects from disk. Returns false if missing.
 bool cWord::readWordsOfMultiWordObjects(vector < vector < tmWS > >& multiWordStrings, vector < vector < vector <tIWMM> > >& multiWordObjects)
 {
 	LFS
@@ -764,6 +830,7 @@ bool cWord::readWordsOfMultiWordObjects(vector < vector < tmWS > >& multiWordStr
 // after each readWithLock (after each book adds more words)
 // the multiWordStrings vector is scanned and any more objects which have all the words defined are moved to the multiWordObjects array,
 //   and the entry is removed from the multiWordStrings array
+// Resolves multiWordStrings into tIWMM sequences in multiWordObjects (and caches them).
 void cWord::addMultiWordObjects(vector < vector < tmWS > >& multiWordStrings, vector < vector < vector <tIWMM> > >& multiWordObjects)
 {
 	LFS
@@ -815,6 +882,7 @@ const wchar_t* roman_numeral[] = {
 	L"lxx",L"lxxi",L"lxxii",L"lxxiii",L"lxxiv",L"lxxv",L"lxxvi",L"lxxvii",L"lxxviii",L"lxxix",
 	NULL };
 
+// Predfines Mr/Mrs/Dr/Sir/… honorific and honorific-abbreviation forms.
 void cWord::createHonorificWordCategories()
 {
 	Inflections honorific[] = { {L"mister",MALE_GENDER},{L"missus",FEMALE_GENDER},{L"miss",FEMALE_GENDER},
@@ -899,6 +967,7 @@ void cWord::createHonorificWordCategories()
 //   word by the parser, and if the period would also stand for the end of the sentence, as well as the
 //   end of the abbreviation, no abbreviations can end with a period, but instead
 //   almost all abbreviations have their own _PATTERNS which add an optional period at the end.
+// Predfines SA abbreviations (etc., i.e., …) and related closed-class abbrev forms.
 void cWord::createAbbreviationWordCategories()
 {
 	Inflections measurement_abbreviation[] = {
@@ -944,6 +1013,7 @@ void cWord::createAbbreviationWordCategories()
 	predefineWords(date_abbreviation, L"date_abbreviation", L"dabb", L"noun");
 }
 
+// Predfines personal/possessive/reflexive/reciprocal/indefinite/relative pronouns and dets.
 void cWord::createPronounCategories()
 {
 	Inflections pronoun[] = { {L"yonder",SINGULAR | PLURAL | NEUTER_GENDER},{L"there",SINGULAR | PLURAL | NEUTER_GENDER},
@@ -1034,6 +1104,7 @@ void cWord::createPronounCategories()
 	predefineWords(interrogative_pronoun, L"interrogative_pronoun", L"inter_pron");
 }
 
+// Predfines be/have/do/does/modals and their negations, plus think-class verbs.
 void cWord::createVerbAssociatedCategories()
 {
 	Inflections negation_verb_contraction[] = { {L"daresn't",VERB_PRESENT_FIRST_SINGULAR},{L"dasn't",VERB_PRESENT_FIRST_SINGULAR},
@@ -1177,6 +1248,7 @@ void cWord::createVerbAssociatedCategories()
 	predefineWords(particles, L"particle", L"pa");
 }
 
+// Predfines closed-class nouns (relativizers used as nouns, letters-as-nouns, etc.).
 void cWord::createNounCategories()
 {
 	// of late, he is not there. // _PP only takes nouns as objects.
@@ -1233,6 +1305,7 @@ void cWord::createNounCategories()
 		addProperNamesFile(nameListPaths[nlp]);
 }
 
+// Predfines closed-class adverbs (not, never, here, …).
 void cWord::createAdverbCategories()
 {
 	InflectionsRoot adverb[] = {
@@ -1257,6 +1330,7 @@ void cWord::createAdverbCategories()
 																													// already included in the patterns as determiners
 }
 
+// Predfines closed-class adjectives / adjectival particles.
 void cWord::createAdjectiveCategories()
 {
 	InflectionsRoot adjective[] = { {L"little",ADJECTIVE_NORMATIVE,L"little"},{L"littler",ADJECTIVE_COMPARATIVE,L"little"},
@@ -1277,6 +1351,7 @@ void cWord::createAdjectiveCategories()
 	predefineWords(adjective, L"adjective", L"adj", L"adjective", cSourceWordInfo::queryOnAnyAppearance);
 }
 
+// Predfines numeral/ordinal/quantifier/money/date/time/telenum/webAddress forms.
 void cWord::createNumberCategories()
 {
 	const wchar_t* numeral_cardinal[] = {
@@ -1301,6 +1376,7 @@ void cWord::createNumberCategories()
 	predefineWords(numeral_ordinal, L"numeral_ordinal", L"ord");
 }
 
+// Predfines the letter form (A, B, …) used for single-letter tokens.
 void cWord::createLetterCategory()
 {
 	const wchar_t* letter[] = { L"a",L"b",L"c",L"d",L"e",L"f",L"g",L"h",L"i",L"j",L"k",L"l",L"m",L"n",L"o",L"p",L"q",L"r",L"s",L"t",
@@ -1326,6 +1402,7 @@ void cWord::createLetterCategory()
 	}
 }
 
+// Predfines punctuation/quote/dash/bracket/period/comma forms.
 void cWord::createNonLetterWordCategories()
 {
 	// add special section word
@@ -1348,6 +1425,7 @@ void cWord::createNonLetterWordCategories()
 	for (const wchar_t** p = punctuation; *p; p++) predefineWord(*p);
 }
 
+// Predfines prepositions, to, and particles.
 void cWord::createPrepositionCategories()
 {
 	const wchar_t* preposition[] = { L"as",L"into",L"against",L"along",L"anigh",L"at",L"atop",L"between",L"betwixt",L"bout",
@@ -1369,6 +1447,7 @@ void cWord::createPrepositionCategories()
 	predefineWords(preposition2, L"preposition", L"prep", 0, false);
 }
 
+// Predfines interjections (oh, ah, …).
 void cWord::createInterjectionCategory()
 {
 	const wchar_t* interjection[] = { L"aha",L"my",L"um",L"er",L"ah",L"eh",L"gosh",L"ouch",L"huh",L"aah",L"phoo",L"gee",L"heh",L"eek",L"ahem",L"whoa",L"lordy",L"begad",L"hmm",L"ssh",L"avast",
@@ -1384,6 +1463,7 @@ void cWord::createInterjectionCategory()
 	predefineWords(interjection, L"interjection", L"inter", cSourceWordInfo::queryOnAnyAppearance, false);
 }
 
+// Predfines that/which/who relativizers.
 void cWord::createRelativizerCategory()
 {
 	// introduces relative clauses
@@ -1405,6 +1485,7 @@ void cWord::createRelativizerCategory()
 	predefineWords(relativizer, L"relativizer", L"rel");
 }
 
+// Registers prefixes that may attach with a dash (self-, un-, …) for tokenize.
 void cWord::defineDashedPrefixes()
 {
 	// a list of words that tend to be prefixes used with dashes.  Dashes are separated out into separate words, so we want these words to stand alone.
@@ -1429,6 +1510,7 @@ void cWord::defineDashedPrefixes()
 // eliminated startquestion - replaced with relativizer 12/14/2006
 //wchar_t *startquestion[] = {L"who",L"which",L"whom",L"whose",L"where",L"when",L"why",L"what",L"how",L"wherein",L"whereof",L"whither",L"whereabouts",NULL};
 //predefineWords(startquestion,L"startquestion",L"sq");
+// Calls every create* category helper and predefineVerbsFromFile. Returns 0.
 int cWord::createWordCategories()
 {
 	LFS
@@ -1506,12 +1588,14 @@ int cWord::createWordCategories()
 	return 0;
 }
 
+// Case-insensitive wstring less-than for sorting unknown-word lists.
 bool string_compare(const wstring& s1, const wstring& s2)
 {
 	LFS
 		return s1 < s2 ? 1 : 0;
 }
 
+// Loads fileName into unknownWords (one token per line).
 void cWord::readUnknownWords(wchar_t* fileName, vector <wstring>& unknownWords)
 {
 	LFS
@@ -1556,6 +1640,7 @@ void cWord::readUnknownWords(wchar_t* fileName, vector <wstring>& unknownWords)
 	//  writeUnknownWords(fileName,unknownWords);
 }
 
+// Writes unknownWords to fileName, sorted via string_compare.
 void cWord::writeUnknownWords(wchar_t* fileName, vector <wstring>& unknownWords)
 {
 	LFS
@@ -1597,6 +1682,7 @@ cWord::cWord(void)
 	disinclinationRecursionCount = 0;
 }
 
+// Sets this word's cost for 'form' to 0 (winner). Returns true if the form existed.
 bool cSourceWordInfo::toLowestCost(int form)
 {
 	LFS
@@ -1611,6 +1697,7 @@ bool cSourceWordInfo::toLowestCost(int form)
 	return false;
 }
 
+// Like toLowestCost(form) but only if preferForm is also present on the word.
 bool cSourceWordInfo::toLowestCostPreferForm(int form, int preferForm)
 {
 	LFS
@@ -1624,6 +1711,7 @@ bool cSourceWordInfo::toLowestCostPreferForm(int form, int preferForm)
 	return toLowestCost(form);
 }
 
+// Sets the cost of 'form' to 'cost'. Returns true if the form existed.
 bool cSourceWordInfo::setCost(int form, int cost)
 {
 	LFS
@@ -1637,6 +1725,7 @@ bool cSourceWordInfo::setCost(int form, int cost)
 	return false;
 }
 
+// Marks a hard-coded list of change-of-state verbs with the CHANGE_STATE usage flag.
 void cWord::initializeChangeStateVerbs()
 {
 	LFS
@@ -1669,6 +1758,7 @@ void cWord::initializeChangeStateVerbs()
 	predefineWords(changeState, L"changeState", L"changeState", L"verb", 0);
 }
 
+// Resolves global verbForm / beForm / haveForm / … indexes after forms have been created.
 void cWord::findPredefinedVerb()
 {
 	if (doesForm < 0) doesForm = cForms::gFindForm(L"does");
@@ -1689,6 +1779,7 @@ void cWord::findPredefinedVerb()
 	if (isNegationForm < 0) isNegationForm = cForms::gFindForm(L"is_negation");
 }
 
+// Resolves global pronoun/determiner form indexes (nomForm, possessiveDeterminerForm, …).
 void cWord::findPredefinedPronoun()
 {
 	if (personalPronounAccusativeForm < 0) personalPronounAccusativeForm = cForms::gFindForm(L"personal_pronoun_accusative");
@@ -1701,6 +1792,7 @@ void cWord::findPredefinedPronoun()
 	if (personalPronounForm < 0) personalPronounForm = cForms::gFindForm(L"personal_pronoun");
 }
 
+// Resolves determinerForm / demonstrativeDeterminerForm / quantifierForm indexes.
 void cWord::findPredefinedDeterminer()
 {
 	if (demonstrativeDeterminerForm < 0) demonstrativeDeterminerForm = cForms::gFindForm(L"demonstrative_determiner");
@@ -1710,6 +1802,7 @@ void cWord::findPredefinedDeterminer()
 	if (predeterminerForm < 0) predeterminerForm = cForms::gFindForm(L"predeterminer");
 }
 
+// Calls findPredefinedVerb/Pronoun/Determiner and caches noun/adjective/adverb/prep forms.
 void cWord::findPredefinedForms()
 {
 	findPredefinedVerb();
@@ -1757,6 +1850,7 @@ void cWord::findPredefinedForms()
 	//if (relativeForm<0)  relativeForm=cForms::gFindForm(L"relative");
 }
 
+// Hand-tuned cost/usage tweaks for high-frequency ambiguous words after the cache load.
 void cWord::adjustUsages()
 {
 	// gquery(L"--")->second.flags &= ~cSourceWordInfo::ignoreFlag; // ignore all dashes EXCEPT the double dash!  Stanford check 33023/5697357 0.580% BEFORE.  
@@ -1796,6 +1890,7 @@ void cWord::adjustUsages()
 	gquery(L"side")->second.usageCosts[cSourceWordInfo::SINGULAR_NOUN_HAS_NO_DETERMINER] = 4;
 }
 
+// Sets default per-form costs (proper noun expensive, closed class cheap, etc.).
 void cWord::initializeCosts()
 {
 	// set usageCosts for 'think' verbs to be equal to the cost of verb usage.
@@ -1820,6 +1915,8 @@ void cWord::initializeCosts()
 	}
 }
 
+// Top-level lexicon bootstrap: nicknames, findPredefinedForms, sentinel words (__ppn__,
+// TABLE, …), form flags, Levin + VerbNet, initializeCosts, adjustUsages, time categories.
 void cWord::initialize()
 {
 	LFS

@@ -1,4 +1,56 @@
-﻿#include <windows.h>
+/*
+	names.cpp - proper-name patterns, honorific / nickname matching, and
+		meta-name equivalence (“X, known as Y”)
+
+	Overview:
+		Registers the __NAME / _NAME / __NAMEOWNER / address / ISBN
+		patterns and the _META_NAME_EQUIVALENCE / _META_SPEAKER /
+		_META_GROUP family that link a primary mention to an alias,
+		occupation, or group. cName stores up to three honorifics, first /
+		middle / last / suffix / any plus a nickname-class id from the
+		US-Census-derived nicknameEquivalenceMap (filled in
+		initializeDictionary.cpp). like() / confidentMatch() / merge()
+		are the coreference predicates used by resolveNameObject() and
+		speaker resolution. Gender is taken from honorific and first-name
+		inflection flags (MALE_GENDER / FEMALE_GENDER, including the
+		capitalized-only variants).
+
+	Pipeline position:
+		Initialization: defineNames() / createMetaNameEquivalencePatterns()
+		with the other pattern builders. Stage 6 (objects & pronouns):
+		identifyName() during object creation; resolveNameObject() during
+		coreference; evaluateMetaNameEquivalence() while walking the
+		source. createLetterIntroPatterns() lives in resolveSpeakers.cpp.
+
+	Key entry points:
+		- defineNames() - name / address / owner patterns
+		- identifyName() / evaluateName() - tag-set -> cName + sex
+		- like() / confidentMatch() / merge() - name compatibility
+		- resolveNameObject() - attach this mention to prior NAME objects
+		- evaluateMetaNameEquivalence() - “called / known as / named”
+		- mapNumeralCardinal() / mapNumeralOrdinal() - also used by
+		  timeRelations.cpp for “the twentieth”
+
+	Key data structures / globals:
+		- nicknameEquivalenceMap - first-name -> nickname class id
+		- abbreviationWordMapList / abbreviationMap - Dr/doc/doctor,
+		  Co/Company, St/Street (ambiguous “st” = saint and street)
+		- relatedObjectsMap - word -> object indexes sharing that word
+
+	Dependencies:
+		Words lexicon (honorific / proper-noun / census gender flags),
+		cPattern, MySQL via insertSQL() (name-part rows).
+
+	Notes / gotchas:
+		- notNull() returns true when every part IS wNULL — the inverse
+		  of the name. Prefer isCompletelyNull() (defined in
+		  resolveObjects.cpp).
+		- merge(tIWMM&, tIWMM) uses first[1] as a “has a second letter”
+		  test, so a single-letter part is never replaced by a longer one.
+		- The wchar_t* print/hn overloads wcscat with no bound.
+		- LFS at every function entry.
+*/
+#include <windows.h>
 #include "Winhttp.h"
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
 #include <io.h>
@@ -7,6 +59,8 @@
 #include "source.h"
 #include "profile.h"
 
+// Register __NAME / _NAME / __NAMEOWNER / address / ISBN / PO-box patterns
+// (Dr. Helen Mirren, D'Artagnan, “the name ‘Rita’”, “23 Beekam St.”).
 void defineNames(void)
 {
 	LFS
@@ -315,6 +369,7 @@ void cName::operator = (const cName& n)
 	any = n.any;
 }
 
+// Exact iterator equality of all parts. Does not compare nickName.
 bool cName::operator == (const cName& n)
 {
 	LFS
@@ -333,6 +388,8 @@ bool cName::getNickName(tIWMM firstName)
 	return true;
 }
 
+// Append one name part to accumulate, capitalizing the first letter.
+// printShort omits the “H1:” / “F:” label.
 void cName::hn(const wchar_t* namePartName, tIWMM namePart, wstring& accumulate, bool printShort, const wchar_t* separator = L" ")
 {
 	LFS
@@ -347,6 +404,7 @@ void cName::hn(const wchar_t* namePartName, tIWMM namePart, wstring& accumulate,
 	accumulate[len] = towupper(accumulate[len]);
 }
 
+// wchar_t* overload of hn. wcscat with no bound — caller must size accumulate.
 void cName::hn(const wchar_t* namePartName, tIWMM namePart, wchar_t* accumulate, bool printShort, const wchar_t* separator = L" ")
 {
 	LFS
@@ -362,6 +420,7 @@ void cName::hn(const wchar_t* namePartName, tIWMM namePart, wchar_t* accumulate,
 	*ch = towupper(*ch);
 }
 
+// Format all parts into message (in/out). Appends “[nickId]” when not short.
 wstring cName::print(wstring& message, bool printShort, const wchar_t* separator = L" ")
 {
 	LFS
@@ -385,6 +444,7 @@ wstring cName::print(wstring& message, bool printShort, const wchar_t* separator
 	return message;
 }
 
+// wchar_t* print. Writes message[0]=0 then unbounded hn/wsprintf.
 // optimized
 wstring cName::print(wchar_t* message, bool printShort, const wchar_t* separator = L" ")
 {
@@ -404,6 +464,8 @@ wstring cName::print(wchar_t* message, bool printShort, const wchar_t* separator
 	return message;
 }
 
+// True when every part is wNULL — the inverse of the name. Prefer
+// isCompletelyNull() in resolveObjects.cpp.
 bool cName::notNull()
 {
 	LFS
@@ -411,6 +473,8 @@ bool cName::notNull()
 		first == wNULL && middle == wNULL && middle2 == wNULL && last == wNULL && suffix == wNULL && any == wNULL;
 }
 
+// Append namePart + separationCharacter, capitalizing the first letter.
+// False if namePart is wNULL.
 bool cName::hn(tIWMM namePart, wchar_t separationCharacter, wstring& accumulate)
 {
 	LFS
@@ -421,6 +485,8 @@ bool cName::hn(tIWMM namePart, wchar_t separationCharacter, wstring& accumulate)
 	return true;
 }
 
+// Space-separated original-order name (honors optional). Strips the trailing
+// separator. justFirstAndLast omits honors / middles / suffix.
 wstring cName::original(wstring& message, wchar_t separationCharacter, bool justFirstAndLast)
 {
 	LFS
@@ -446,6 +512,9 @@ wstring cName::original(wstring& message, wchar_t separationCharacter, bool just
 	return message;
 }
 
+// Name-part equality: identical string, or numeral_cardinal vs Number
+// (“fourteen” / “14”), or first-letter match when either is a single
+// letter. Null parts return returnTrueOnNull (default true).
 bool cName::match(tIWMM sub1, tIWMM sub2, bool returnTrueOnNull)
 {
 	LFS
@@ -468,6 +537,7 @@ bool cName::match(tIWMM sub1, tIWMM sub2, bool returnTrueOnNull)
 	return (sub1->first == sub2->first);
 }
 
+// True if inhon is already in hons (honorific-merge helper).
 bool cName::in(tIWMM inhon, vector <tIWMM>& hons)
 {
 	LFS
@@ -476,12 +546,17 @@ bool cName::in(tIWMM inhon, vector <tIWMM>& hons)
 	return false;
 }
 
+// Copy w2 onto w1 if w1 is null or both have a second character
+// (w1->first[1]). A single-letter w1 is therefore never replaced.
 void cName::merge(tIWMM& w1, tIWMM w2)
 {
 	LFS
+		// first[1] is the second character (0 if length 1), so a letter is never replaced.
 		if (w2 != wNULL && (w1 == wNULL || (w1->first[1] && w2->first[1]))) w1 = w2;
 }
 
+// Union honorifics (up to 3) and fill empty / letter parts from n. Drops
+// `any` once first or last is set. Logs when t.traceObject/SpeakerResolution.
 // merge first, middle, middle2 or last if we only have a letter and n has more.
 void cName::merge(cName& n, sTrace& t)
 {
@@ -586,6 +661,9 @@ if any is NOT NULL in s:
 	if any = firstname or lastname, return true. merge=true
 	if merge, change all s2 to s.
 */
+// Compatible names (same person possible): matching middle/last/suffix,
+// first or shared nickName, honorific-only subset, Mrs ≠ Miss. `any`
+// matches first or last of length > 1. Does not compare plural or sex.
 // does not compare plural or sex
 bool cName::like(cName& n, sTrace& t)
 {
@@ -689,6 +767,7 @@ bool cName::like(cName& n, sTrace& t)
 	return match(n.any, any, false);
 }
 
+// True if only hon is set (no first/last/any) — “Miss” / “Lord”.
 // is this name just an honorific (miss or lord)
 bool cName::justHonorific(void)
 {
@@ -713,6 +792,10 @@ bool cName::justHonorific(void)
 // the aforementioned lieutenant Thomas Beresford - male name
 // the YOUNG ADVENTURERS not a name or ngname
 // the Sinn Feiner
+// True if this looks like a ship/newspaper/place (“The Lusitania”,
+// “St. James Park”): no hon/suffix, last is primarily noun/adjective, first
+// has no census sex. startsWithDeterminer / ownedByName / len relax the
+// first+last requirement.
 bool cName::neuterName(bool startsWithDeterminer, bool ownedByName, int len)
 {
 	LFS
@@ -743,6 +826,8 @@ bool cName::neuterName(bool startsWithDeterminer, bool ownedByName, int len)
 // does the first and last name match?
 // does the sex and last names match, with the first names matching if existing?
 // does the title and any other name match?
+	// Stronger than like(): first+last (or suffix+one of them) with
+	// sexConfidentMatch. False immediately if sex is not confident.
 	// self and n are already like each other (like==true)
 bool cName::confidentMatch(cName& n, bool sexConfidentMatch, sTrace& t)
 {
@@ -772,12 +857,15 @@ bool cName::confidentMatch(cName& n, bool sexConfidentMatch, sTrace& t)
 		(match(n.any, first, false) || match(n.any, last, false) || match(any, n.first, false) || match(any, n.last, false));
 }
 
+// Append “(sourceId,index,wordIndex,ht),” if hp is a real lexicon word.
+// _snwprintf into buffer+buflen; maxbuf-buflen underflows if buflen > maxbuf.
 void cName::insertSubSQL(wchar_t* buffer, int sourceId, int index, int maxbuf, tIWMM hp, int& buflen, enum cName::nameType ht)
 {
 	LFS
 		if (hp != wNULL && hp->second.index >= 0) buflen += _snwprintf(buffer + buflen, maxbuf - buflen, L"(%d,%d,%d,%d),", sourceId, index, hp->second.index, ht);
 }
 
+// VALUES list of all non-null parts for a name-parts table. Returns buflen.
 int cName::insertSQL(wchar_t* buffer, int sourceId, int index, int maxbuf)
 {
 	LFS
@@ -794,6 +882,9 @@ int cName::insertSQL(wchar_t* buffer, int sourceId, int index, int maxbuf)
 	return buflen;
 }
 
+// Fill name + sex/plural/business from a _NAME tag-set (HON/FIRST/MIDDLE/
+// LAST/ANY/SUFFIX/BUS). Single-letter ANY is rejected unless followed by “.”
+// or preceded by a Number (“3 M”).
 bool cSource::evaluateName(vector <cTagLocation>& tagSet, cName& name, bool& isMale, bool& isFemale, bool& isPlural, bool& isBusiness)
 {
 	LFS
@@ -857,6 +948,8 @@ bool cSource::evaluateName(vector <cTagLocation>& tagSet, cName& name, bool& isM
 	return true;
 }
 
+// Possessive name at `where` (__NAMEOWNER or “ProperNoun’s”). Fills name +
+// sex. True if a tag-set (or the single-token owner fallback) matched.
 bool cSource::identifyNameAdjective(int where, cName& name, bool& isMale, bool& isFemale)
 {
 	LFS
@@ -886,6 +979,8 @@ bool cSource::identifyNameAdjective(int where, cName& name, bool& isMale, bool& 
 	return false;
 }
 
+// _NAME at `where` -> evaluateName. Plural if the last token ends in ‘s’
+// and the phrase starts with “the” / a quantifier other than “one”.
 // possible combinations:
 // A
 // H1 or H1 && H2 or H1 && H2 && H3
@@ -911,6 +1006,9 @@ bool cSource::identifyName(int where, int& element, cName& name, bool& isMale, b
 	return false;
 }
 
+// Full object-creation name test: _NAME or __NAMEOWNER, plus honorific-only
+// “the archdeacon”, Nurse+given, neuterName / business / demonym class
+// assignment. Sets comparableName / requestWikiAgreement / objectClass.
 bool cSource::identifyName(int begin, int principalWhere, int end, int& nameElement, cName& name, bool& isMale,
 	bool& isFemale, bool& isNeuter, bool& isPlural, bool& isBusiness, bool& comparableName,
 	bool& comparableNameAdjective, bool& requestWikiAgreement, OC& objectClass)
@@ -1023,6 +1121,9 @@ bool cSource::identifyName(int begin, int principalWhere, int end, int& nameElem
 	return false;
 }
 
+// Read MALE/FEMALE (and capitalized-only) inflection flags at tagSet[where]
+// into isMale/isFemale. If sex is already exclusive and not plural, leave
+// it. where < 0 -> wNULL.
 tIWMM cSource::setSex(vector <cTagLocation>& tagSet, int where, bool& isMale, bool& isFemale, bool isPlural)
 {
 	LFS
@@ -1063,6 +1164,8 @@ tIWMM cSource::setSex(vector <cTagLocation>& tagSet, int where, bool& isMale, bo
 // ignore the next two for now
 // a __NAME of diff 'A' / Al's Shack
 // a __PP where the last element is a PROPER_NOUN with an owner / at old Red's
+// evaluateName for an __NAMEOWNER tag-set (possessive). Same HON/FIRST/…
+// layout; no suffix / business.
 bool cSource::evaluateNameAdjective(vector <cTagLocation>& tagSet, cName& name, bool& isMale, bool& isFemale)
 {
 	LFS
@@ -1115,6 +1218,8 @@ bool cSource::evaluateNameAdjective(vector <cTagLocation>& tagSet, cName& name, 
 	return true;
 }
 
+// _META_NAME_EQUIVALENCE / _META_SPEAKER / _META_GROUP / _ANNOUNCE patterns
+// (“X, known as Y”, “my name is”, “call me”, “X and Y”).
 // These patterns match names to objects.
 // _META_NAME_EQUIVALENCE is usually inQuote, but doesn't have to be.
 // _META_SPEAKER is always inQuote.
@@ -1587,6 +1692,9 @@ void createMetaNameEquivalencePatterns(void)
 		0);
 }
 
+// Copy gender from eFrom onto eTo and, when both are non-pronouns, add
+// each other as aliases. eFrom may be a cObject::eOBJECTS sentinel
+// (UNKNOWN_MALE, …) that only sets flags.
 void cSource::equivocateObjects(int where, int eTo, int eFrom)
 {
 	LFS
@@ -1657,6 +1765,8 @@ struct {
 	{ L"thirty", 30 }, { L"forty", 40 }, { L"fifty", 50 }, { L"sixty", 60 }, { L"seventy", 70 }, { L"eighty", 80 }, { L"ninety", 90 },
 	{ L"hundred", 100 }, { L"thousand", 1000 }, { L"million", 1000000 }, { L"billion", 1000000000 },
 	{ NULL, -1 } };
+// “one”..“billion” / “dozen” / “umpteen” -> int. Unknown -> -1 (sentinel
+// at the end of numeralCardinalMap).
 int mapNumeralCardinal(const wstring& word)
 {
 	LFS
@@ -1671,11 +1781,13 @@ struct {
 } numeralOrdinalMap[] = {
 	{ L"zeroth", 0 },
 	{ L"first", 1 }, { L"second", 2 }, { L"third", 3 }, { L"fourth", 4 }, { L"fifth", 5 }, { L"sixth", 6 }, { L"seventh", 7 }, { L"eighth", 8 }, { L"ninth", 9 }, { L"tenth", 10 },
-	{ L"eleventh", 11 }, { L"twelfth", 12 }, { L"thirteenth", 13 }, { L"fourteenth", 14 }, { L"fifteenth", 15 }, { L"sixteenth", 16 }, { L"seventeenth", 17 }, { L"eighteenth", 18 }, { L"nineteenth", 19 }, { L"twentieth", 0 },
+	{ L"eleventh", 11 }, { L"twelfth", 12 }, { L"thirteenth", 13 }, { L"fourteenth", 14 }, { L"fifteenth", 15 }, { L"sixteenth", 16 }, { L"seventeenth", 17 }, { L"eighteenth", 18 }, { L"nineteenth", 19 }, { L"twentieth", 0 }, // copy-paste: should be 20
 	{ L"umpteenth", 15 },
 	{ L"thirtieth", 30 }, { L"fortieth", 40 }, { L"fiftieth", 50 }, { L"sixtieth", 60 }, { L"seventieth", 70 }, { L"eightieth", 80 }, { L"ninetieth", 90 },
 	{ L"hundredth", 100 }, { L"thousandth", 1000 }, { L"millionth", 1000000 }, { L"billionth", 1000000000 },
 	{ NULL, -1 } };
+// “first”..“billionth”, or a digit string ending in “th”. “twentieth” is
+// stored as 0 in numeralOrdinalMap (copy-paste). Unknown -> -1.
 int mapNumeralOrdinal(const wstring& word)
 {
 	LFS
@@ -1688,6 +1800,8 @@ int mapNumeralOrdinal(const wstring& word)
 	return numeralOrdinalMap[agei].num;
 }
 
+// If secondary is “thirty-five years”, attach young (<40) or old (>=50)
+// to primary. False for “one of the …” / relative-clause “the German was one”.
 // Julius was about thirty-five.
 bool cSource::ageDetection(int where, int primary, int secondary)
 {
@@ -1728,6 +1842,8 @@ bool cSource::ageDetection(int where, int primary, int secondary)
 	return true;
 }
 
+// True if the primary mention is a multi-noun (MNOUN) of tag.len — reject
+// meta-name equivalence against a coordinated NP.
 bool cSource::primaryIsMNoun(int where, int wherePrimary, cTagLocation &tag)
 {
 	if (tag.len > 1)
@@ -1748,6 +1864,8 @@ bool cSource::primaryIsMNoun(int where, int wherePrimary, cTagLocation &tag)
 	return false;
 }
 
+// Scan (where, wherePrimary) for the latest _REL1 / __S1 / _Q2 / verb,
+// writing the four last* outs (used before resolveObject).
 void cSource::findLast(int where, int wherePrimary, int &tmpLastRelativePhrase, int &tmpLastBeginS1, int &tmpLastQ2, int &tmpLastVerb)
 {
 	for (int J = where + 1; J < wherePrimary; J++)
@@ -1763,6 +1881,8 @@ void cSource::findLast(int where, int wherePrimary, int &tmpLastRelativePhrase, 
 	}
 }
 
+// resolveObject the primary mention, then reset last* and findLast toward
+// the secondary so the next resolve sees the right sentence/quote context.
 void cSource::resolvePrimaryMetaNameObject(int where, int wherePrimary, int whereSecondary, int& tmpLastRelativePhrase, int lastRelativePhrase, int& tmpLastBeginS1, int lastBeginS1, int& tmpLastQ2, int lastQ2, int& tmpLastVerb,
 	bool inPrimaryQuote, bool inSecondaryQuote)
 {
@@ -1775,6 +1895,9 @@ void cSource::resolvePrimaryMetaNameObject(int where, int wherePrimary, int wher
 	findLast(where, whereSecondary, tmpLastRelativePhrase, tmpLastBeginS1, tmpLastQ2, tmpLastVerb2);
 }
 
+// Resolve every object in the secondary tag span (stop at a prep unless
+// MPLURAL). Marks RE_OBJECT_ROLE so they do not go live. True if any
+// secondaryNameObjects were collected.
 bool cSource::findAndResolveSecondaryObjects(int& tmpLastRelativePhrase, int& tmpLastBeginS1, int& tmpLastQ2, int& tmpLastVerb, bool inPrimaryQuote, bool inSecondaryQuote, int secondaryTag, vector <cTagLocation>& tagSet, vector <int> &objectsResolved,
  vector <int> &secondaryNameObjects, vector <int> &eraseREObjects)
 {
@@ -1801,6 +1924,8 @@ bool cSource::findAndResolveSecondaryObjects(int& tmpLastRelativePhrase, int& tm
 	return secondaryNameObjects.size() > 0;
 }
 
+// resolveObject the single secondary mention; push its object (preferring
+// the match that is not primaryNameObject) onto secondaryNameObjects.
 void cSource::resolveSecondaryMetaNameObject(int whereSecondary,int primaryNameObject,int& tmpLastRelativePhrase, int& tmpLastBeginS1, int& tmpLastQ2, int& tmpLastVerb, bool inPrimaryQuote, bool inSecondaryQuote, vector <int>& objectsResolved,
 	vector <int>& secondaryNameObjects, vector <int>& eraseREObjects)
 {
@@ -1816,6 +1941,9 @@ void cSource::resolveSecondaryMetaNameObject(int whereSecondary,int primaryNameO
 		secondaryNameObjects.push_back(m[whereSecondary].getObject());
 }
 
+// Quoted “I am X” / “you are X”: mark the secondary name as self-referring
+// speaker or audience and, before speaker groups exist, insert it into
+// tempSpeakerGroup.speakers.
 void cSource::insertSecondaryNameObjectInQuoteIntoSpeakers(int where, int wherePrimary, int whereSecondary, vector <int> &secondaryNameObjects, bool inPrimaryQuote)
 {
 	if (inPrimaryQuote && (m[wherePrimary].word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON)) != 0 && secondaryNameObjects.size() == 1 &&
@@ -1867,6 +1995,9 @@ if (wherePrimary==whereSecondary-1 &&
 }
 */
 
+// True if this primary/secondary pair should not be aliased: same object,
+// already aliases, ageDetection, wrong class, or different plurality.
+// `(objects[secondary].plural != objects[secondary].plural)` is a tautology.
 bool cSource::rejectSecondaryMetaNameEquivalence(int where, int sno, int wherePrimary, int whereSecondary, int primaryNameObject, vector <int>& objectsResolved,vector <int>& secondaryNameObjects, vector <int>& eraseREObjects)
 {
 	wstring tmpstr;
@@ -1888,7 +2019,7 @@ bool cSource::rejectSecondaryMetaNameEquivalence(int where, int sno, int wherePr
 		(primaryClass == BODY_OBJECT_CLASS && secondaryClass == BODY_OBJECT_CLASS) ||
 		primaryClass == PRONOUN_OBJECT_CLASS || primaryClass == NON_GENDERED_GENERAL_OBJECT_CLASS || primaryClass == NON_GENDERED_BUSINESS_OBJECT_CLASS ||
 		secondaryClass == PRONOUN_OBJECT_CLASS || secondaryClass == NON_GENDERED_GENERAL_OBJECT_CLASS || secondaryClass == NON_GENDERED_BUSINESS_OBJECT_CLASS ||
-		(objects[secondaryNameObject].plural != objects[secondaryNameObject].plural))
+		(objects[secondaryNameObject].plural != objects[secondaryNameObject].plural)) // tautology; later check uses primary vs secondary
 	{
 		int inflectionFlags = m[wherePrimary].word->second.inflectionFlags;
 		if ((((inflectionFlags & MALE_GENDER) == MALE_GENDER) ^ ((inflectionFlags & FEMALE_GENDER) == FEMALE_GENDER)) && m[wherePrimary].objectMatches.size() > 1)
@@ -1932,6 +2063,8 @@ bool cSource::rejectSecondaryMetaNameEquivalence(int where, int sno, int wherePr
 	return false;
 }
 
+// Swap so the NAME / META_GROUP side is primary when the other side is a
+// weaker class (occupation, body, demonym, relative, general).
 void cSource::switchToPreferPrimaryNameOrMetaGroup(int &wherePrimary, int &primaryNameObject, int &whereSecondary, int &secondaryNameObject)
 {
 	int primaryClass = objects[primaryNameObject].objectClass, secondaryClass = objects[secondaryNameObject].objectClass;
@@ -1961,6 +2094,8 @@ void cSource::switchToPreferPrimaryNameOrMetaGroup(int &wherePrimary, int &prima
 	}
 }
 
+// Mark the primary span META_NAME_EQUIVALENCE and clear HAIL_ROLE (the
+// “name of Rita” is not a hail).
 void cSource::removeHail(int where, int wherePrimary)
 {
 	for (vector <cWordMatch>::iterator im = m.begin() + m[wherePrimary].beginObjectPosition, imEnd = m.begin() + m[wherePrimary].endObjectPosition; im != imEnd; im++)
@@ -1973,6 +2108,8 @@ void cSource::removeHail(int where, int wherePrimary)
 	}
 }
 
+// Copy associatedNouns / adjectives and exclusive gender from secondary
+// onto primary; log when tracing.
 void cSource::associateSecondaryAdjectivesAndGenderToPrimary(int where, int wherePrimary, int primaryNameObject, int whereSecondary, int secondaryNameObject)
 {
 	wstring tmpstr;
@@ -2008,6 +2145,8 @@ void cSource::associateSecondaryAdjectivesAndGenderToPrimary(int where, int wher
 	}
 }
 
+// True if either side is still an unidentified / unknown-gender pronoun
+// that we should not lock into an alias yet.
 bool cSource::refuseIdentificationIfNotIdentifiedOrNotKnown(int where, int wherePrimary, int primaryNameObject, int whereSecondary, int secondaryNameObject)
 {
 	// The man known as Number One
@@ -2039,6 +2178,8 @@ bool cSource::refuseIdentificationIfNotIdentifiedOrNotKnown(int where, int where
 	return false;
 }
 
+// Drop a mistaken place subtype, copy gender, and replaceObject the
+// primary mention with the secondary name (the usual “X, known as Y” write).
 void cSource::removePlaceSetGenderAndReplacePrimaryWithSecondary(int where, bool inPrimaryQuote, bool inSecondaryQuote, int wherePrimary, int primaryNameObject, int whereSecondary, int secondaryNameObject)
 {
 	wstring tmpstr;
@@ -2092,6 +2233,8 @@ void cSource::removePlaceSetGenderAndReplacePrimaryWithSecondary(int where, bool
 	}
 }
 
+// After aliasing, share gender, adjectives, and relative-clause attachments
+// both ways so later resolution sees one person.
 void cSource::equalizeGenderAdjectivesAndRelativeClauses(int where, int primaryNameObject, int secondaryNameObject)
 {
 	equivocateObjects(where, primaryNameObject, secondaryNameObject);
@@ -2115,6 +2258,8 @@ void cSource::equalizeGenderAdjectivesAndRelativeClauses(int where, int primaryN
 	}
 }
 
+// One secondary of a meta-name hit: reject, maybe swap sides, copy
+// adjectives/gender, replaceObject, strip hail. False if refused.
 bool cSource::evaluateSecondaryMetaNameEquivalence(int where, vector <cTagLocation>& tagSet, bool inPrimaryQuote, bool inSecondaryQuote, int sno, int wherePrimary, int whereSecondary, int primaryNameObject, int secondaryTag,  vector <int>& objectsResolved,
 	vector <int>& secondaryNameObjects, vector <int>& eraseREObjects)
 {
@@ -2195,6 +2340,9 @@ bool cSource::evaluateSecondaryMetaNameEquivalence(int where, vector <cTagLocati
 }
 
 // in secondary quotes, inPrimaryQuote=false
+// “X known as / called / named Y”: resolve both sides, then
+// evaluateSecondaryMetaNameEquivalence for each secondary. True if any pair
+// was accepted.
 bool cSource::evaluateMetaNameEquivalence(int where, vector <cTagLocation>& tagSet, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb)
 {
 	LFS
@@ -2266,6 +2414,8 @@ bool cSource::evaluateMetaNameEquivalence(int where, vector <cTagLocation>& tagS
 }
 
 // in secondary quotes, inPrimaryQuote=false
+// _META_NAME_EQUIVALENCE at `where` -> collect tag-sets and
+// evaluateMetaNameEquivalence. True on the first accepted set.
 bool cSource::identifyMetaNameEquivalence(int where, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb)
 {
 	LFS
@@ -2287,6 +2437,8 @@ bool cSource::identifyMetaNameEquivalence(int where, bool inPrimaryQuote, bool i
 	return false;
 }
 
+// _META_SPEAKER tag-set: the quoted “I / you” is this name. Marks
+// IN_QUOTE_SELF_REFERRING / AUDIENCE and inserts into tempSpeakerGroup.
 bool cSource::evaluateMetaSpeaker(int where, vector <cTagLocation>& tagSet)
 {
 	LFS
@@ -2305,6 +2457,8 @@ bool cSource::evaluateMetaSpeaker(int where, vector <cTagLocation>& tagSet)
 	return true;
 }
 
+// _META_SPEAKER at `where` (always in-quote). True if evaluateMetaSpeaker
+// accepted a tag-set.
 bool cSource::identifyMetaSpeaker(int where, bool inQuote)
 {
 	LFS
@@ -2323,6 +2477,8 @@ bool cSource::identifyMetaSpeaker(int where, bool inQuote)
 	return false;
 }
 
+// “announced himself as X” / similar: treat the name as a speaker
+// identification for the subject.
 bool cSource::evaluateAnnounce(int where, vector <cTagLocation>& tagSet)
 {
 	LFS
@@ -2346,6 +2502,7 @@ bool cSource::evaluateAnnounce(int where, vector <cTagLocation>& tagSet)
 }
 
 // Here is Bob!  / Here is another knock.
+// _ANNOUNCE pattern at `where`. True if evaluateAnnounce accepted a set.
 bool cSource::identifyAnnounce(int where, bool inQuote)
 {
 	LFS
@@ -2364,6 +2521,8 @@ bool cSource::identifyAnnounce(int where, bool inQuote)
 	return false;
 }
 
+// “X and Y” / “X accompanied Y”: resolve both names and record a
+// META_GROUP membership / alias so later pronouns can hit the pair.
 bool cSource::evaluateMetaGroup(int where, vector <cTagLocation>& tagSet, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb)
 {
 	LFS
@@ -2423,6 +2582,7 @@ bool cSource::evaluateMetaGroup(int where, vector <cTagLocation>& tagSet, int la
 }
 
 // Here is Bob!  / Here is another knock.
+// _META_GROUP at `where` -> evaluateMetaGroup on collected tag-sets.
 bool cSource::identifyMetaGroup(int where, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb)
 {
 	LFS
@@ -2500,6 +2660,8 @@ struct wordMapCompare
 };
 
 map <tIWMM, vector <tIWMM>, cSource::wordMapCompare> abbreviationMap;
+// Lazy-fill abbreviationMap from abbreviationWordMapList (Dr/doc, Co/
+// Company, St/street|saint). No-op if already built.
 void cSource::buildMap(void)
 {
 	LFS
@@ -2517,6 +2679,7 @@ void cSource::buildMap(void)
 		}
 }
 
+// Push w and every abbreviation equivalent onto nouns (unique).
 void cSource::addWordAbbreviationMap(tIWMM w, vector <tIWMM>& nouns)
 {
 	LFS
@@ -2528,6 +2691,8 @@ void cSource::addWordAbbreviationMap(tIWMM w, vector <tIWMM>& nouns)
 		if (find(nouns.begin(), nouns.end(), *ami) == nouns.end()) nouns.push_back(*ami);
 }
 
+// For a NAME, add hon/hon2/hon3 equivalents to associatedNouns; for an
+// occupation, add the principal word (“doc” <-> “doctor”).
 // detect any mapping not already there due to title-abbreviations
 void cSource::addAssociatedNounsFromTitle(int o)
 {
@@ -2547,6 +2712,7 @@ void cSource::addAssociatedNounsFromTitle(int o)
 		}
 }
 
+// True if w == w2 or w2 is in abbreviationMap[w] (Dr ~ doctor).
 bool cSource::abbreviationEquivalent(tIWMM w, tIWMM w2)
 {
 	LFS
@@ -2558,6 +2724,8 @@ bool cSource::abbreviationEquivalent(tIWMM w, tIWMM w2)
 	return find(iMap->second.begin(), iMap->second.end(), w2) != iMap->second.end();
 }
 
+// Objects whose span shares a word (or abbreviation equivalent) with
+// `object`. True if relatedObjects is non-empty.
 bool cSource::accumulateRelatedObjects(int object, set <int>& relatedObjects)
 {
 	LFS
@@ -2576,6 +2744,9 @@ bool cSource::accumulateRelatedObjects(int object, set <int>& relatedObjects)
 	return relatedObjects.size() > 0;
 }
 
+// Detect Janet+Rita sharing a last name (firstNameAmbiguous) or the same
+// first with different lasts (lastNameAmbiguous). Also tracks an `any`
+// that matches multiple firsts/lasts.
 // detect a Janet Vandermeyer and a Rita Vandermeyer
 void cSource::accumulateNameLikeStats(vector <cObject>::iterator& object, int o, bool& firstNameAmbiguous, bool& lastNameAmbiguous, tIWMM& ambiguousFirst, int& ambiguousNickName, tIWMM& ambiguousLast)
 {
@@ -2616,6 +2787,9 @@ void cSource::accumulateNameLikeStats(vector <cObject>::iterator& object, int o,
 	}
 }
 
+// Global search: every related NAME / occupation that like()/nameMatch
+// this object. May recursively resolveNameObject an unresolved earlier
+// mention (identifySpeakerGroups phase). Fills matchingObjects.
 void cSource::matchRelatedObjects(const int where, vector <cObject>::iterator &object, const int forwardCallingObject, const int objectToBeReplaced,
 	bool &firstNameAmbiguous, bool &lastNameAmbiguous, tIWMM &ambiguousFirst, tIWMM &ambiguousLast, int &ambiguousNickName,
 	set <int> &matchingObjects)
@@ -2692,6 +2866,8 @@ void cSource::matchRelatedObjects(const int where, vector <cObject>::iterator &o
 	}
 }
 
+// For one matching object: replaceObject (occupation <-> name) or push a
+// cOM, unless globallyAmbiguous (Janet vs Rita) or the honorific is pinr.
 void cSource::pushIntoObjectMatchesOrReplace(const int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches, const set <int>::iterator mo,
 	const bool firstNameAmbiguous, const bool lastNameAmbiguous, const bool qualified, const bool globalSearch)
 {
@@ -2788,6 +2964,8 @@ void cSource::pushIntoObjectMatchesOrReplace(const int where, vector <cObject>::
 	}
 }
 
+// followObjectChain eliminated members; drop them, re-insert the live
+// replacement, and restart the scan if anything was revived.
 void cSource::removeEliminatedObjects(set <int> &matchingObjects)
 {
 	// maxOccurrence = max(maxOccurrence, objects[*mo].numEncounters + objects[*mo].numIdentifiedAsSpeaker);
@@ -2810,6 +2988,8 @@ void cSource::removeEliminatedObjects(set <int> &matchingObjects)
 	}
 }
 
+// If local-focus lsi nameMatch / honorific-equivalent-matches object, add
+// it to matchingObjects; else salienceFactor = -1.
 void cSource::matchLocalObjectWithNameObject(vector <cLocalFocus>::iterator lsi, vector <cObject>::iterator& object, 
 	const int objectToBeReplaced, bool &unambiguousGenderFound,
 	bool &firstNameAmbiguous, bool &lastNameAmbiguous, tIWMM& ambiguousFirst, tIWMM& ambiguousLast, int& ambiguousNickName,
@@ -2836,6 +3016,10 @@ void cSource::matchLocalObjectWithNameObject(vector <cLocalFocus>::iterator lsi,
 		lsi->om.salienceFactor = -1;
 }
 
+// Coreference a NAME mention: skip pinr honorifics, eliminate embedded-dash
+// “Brown -- Julius” parses, then match local focus, then (if empty) hail
+// speakers, then a global related-objects search. Pushes matches or
+// replaceObjects. True if at least one match (or the object was eliminated).
 // merge current object onto matched object.  change all references (m and ls)
 //                       of the current object to the new object.
 //    if a name is not mentioned definitively as a speaker, try to match it to a speaker.

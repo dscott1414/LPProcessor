@@ -1,3 +1,38 @@
+/*
+	DBWordRelations.cpp - load word-relation maps for the words of the current source
+
+	Overview:
+		After the lexicon is in memory, readWordIdsNeedingWordRelations() collects
+		every word (and its resolveToClass main-entry) that appears in this
+		source, plus the synthetic PPN/NUM/DATE/... sentinels.  initializeWordRelationsFromDB
+		then LOCKs wordRelationsMemory and SELECTs every row whose fromWordId
+		(and, if inSourceFlagSet is false, toWordId) is in that set, restricted
+		to even typeIds 0..36.  Each row is installed on both endpoints via
+		allocateMap + addRelation (the complementary type is written on the to-word).
+
+	Pipeline position:
+		Stage 1, after readWordsFromDB and before parse.  Also re-run when a
+		source's word set changes.
+
+	Key entry points:
+		- cSourceWordInfo::allocateMap() - new cRMap for one relationType.
+		- cSource::readWordIdsNeedingWordRelations() - fill the id set.
+		- cWord::initializeWordRelationsFromDB() - the batched SELECT.
+
+	Dependencies:
+		Table wordRelationsMemory (MEMORY engine, see DBCreateSQLSchema.cpp).
+		Words must already contain every id (wordStructureGivenWordIdExists).
+
+	Notes / gotchas:
+		- NULLWORD 187 is unused in this file.
+		- typeId in (0,2,4,...,36) keeps only one direction of each pair; the
+			complement is synthesized in memory by getComplementaryRelationship.
+		- The IN-list is built from integer ids (no injection) but is not
+			escaped as a prepared statement; checkFull is not used - the loop
+			caps each batch at QUERY_BUFFER_LEN wchar_t.
+		- LOCK is released on the query-failure path and at the end; the
+			function returns -1 if the initial LOCK fails (no unlock needed).
+*/
 #include <stdio.h>
 #include <string.h>
 #include <mbstring.h>
@@ -25,6 +60,8 @@
 #define NULLWORD 187
 bool checkFull(MYSQL* mysql, wchar_t* qt, size_t& len, bool flush, wchar_t* qualifier);
 
+// Ensure relationMaps[relationType] is a live cRMap.  No-op if already
+// allocated.  relationType is a relationWOTypes enumerator (0..numRelationWOTypes).
 void cSourceWordInfo::allocateMap(int relationType)
 {
 	LFS
@@ -32,6 +69,11 @@ void cSourceWordInfo::allocateMap(int relationType)
 			relationMaps[relationType] = new cRMap;
 }
 
+// Insert every token's word id and (if resolveToClass is not a 1-char class
+// token) its main-entry id into the set.  Also seeds the PPN/TELENUM/NUM/
+// DATE/TIME/LOCATION/sectionWord sentinels.  Newly inserted words have their
+// relationMaps cleared so the subsequent DB load starts clean.
+// Always returns 0.
 // main entries from all words in source must already exist in memory (Words array)
 // return a set of wordIds for all words including the mainEntries, except for special words that do not already have wordRelations
 int cSource::readWordIdsNeedingWordRelations(set <int>& wordIdsAndMainEntryIdsInSourceNeedingWordRelations)
@@ -59,6 +101,12 @@ int cSource::readWordIdsNeedingWordRelations(set <int>& wordIdsAndMainEntryIdsIn
 	return 0;
 }
 
+// LOCK wordRelationsMemory READ, then SELECT relations for 'wordIds' in
+// QUERY_BUFFER_LEN batches.  inSourceFlagSet==true: only fromWordId IN (...);
+// false: fromWordId OR toWordId (needed when the counterpart is outside the
+// source).  Each row is attached to both endpoints with complementary types.
+// Returns 0, or -1 if LOCK/SELECT fails (UNLOCK is issued on the SELECT miss).
+// mysql is taken by value (a copy of the handle).
 int cWord::initializeWordRelationsFromDB(MYSQL mysql, set <int> wordIds, bool inSourceFlagSet, bool log)
 {
 	int startTime = clock();

@@ -1,3 +1,33 @@
+/*
+	newPatternDetection.cpp - Mine frequent form/pattern n-grams from a source
+
+	Overview:
+		Builds a prefix tree (patternCountTree[length]) of winning PEMA
+		patterns and top-level word forms seen in the current Source, then
+		prints the most frequent 3- to 5-grams with up to 10 example
+		matches. Intended to suggest new hand-written sentence patterns.
+
+	Pipeline position:
+		Would run after parse (needs PEMA winners and Forms). Historical
+		research aid; not on the live parse path.
+
+	Key entry points:
+		- accumulateNewPattern() - recurse from token w at tree node pc
+		- primitiveMatch() - replay a mined element sequence at position w
+		- printPattern() / printPatterns() / printAccumulatedPatterns()
+		- accumulateNewPatterns() - walk all tokens then print
+
+	Key data structures / globals:
+		- patternCountTree[0..5] - nodes {count, element, parent, f[], p[]}
+		- isPattern (1<<31) - high bit marks a PEMA pattern vs a form id
+
+	Notes / gotchas:
+		The for-loop at accumulateNewPattern that walks PEMA does not
+		increment p (missing p = pema[p].nextByPosition) — infinite loop
+		if any PEMA is present. accumulateNewPatterns() clears the trees
+		THEN calls printAccumulatedPatterns(), so printed results are
+		always empty. patternCount destructor/copy use extra qualification.
+*/
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
@@ -22,6 +52,8 @@ public:
 
 	vector <int> f;
 	vector <int> p;
+	// New tree node: form-id or (patternId|isPattern), parent index at the
+	// previous length, initial observation count.
 	patternCount(int inElement,int inParent,int inCount)
 	{
 		element=inElement;
@@ -31,6 +63,7 @@ public:
 	patternCount::~patternCount() 
 	{
 	}
+	// Deep-copy count/element/parent and the child-index vectors f/p.
 	patternCount::patternCount(const patternCount &rhs)
 	{
 			count=rhs.count;
@@ -47,6 +80,10 @@ vector <patternCount> patternCountTree[maximumPatternLengthForAnalysis];
 
 // pc belongs to tree level [patternLength].
 // the elements pc points to belong to the level [patternLength+1]
+// From source position w and tree node pc at `patternLength`, extend the
+// tree by each winning PEMA pattern that begins here and by each top-level
+// form (skipping ! ? .). Recurses to w+span. Ignore-words skip this slot
+// without growing length. No-op at EOF, sectionWord, or max length.
 void Source::accumulateNewPattern(unsigned int w,int pc,int patternLength)
 {
 	if (w>=m.size()) return;
@@ -112,6 +149,9 @@ void Source::accumulateNewPattern(unsigned int w,int pc,int patternLength)
 	}
 }
 
+// Try to match `elements` (form ids or patternId|isPattern) starting at
+// token w, skipping ignore-words. On success writes a human-readable
+// expansion into patternMatch and returns true; false if any element fails.
 bool Source::primitiveMatch(vector<int> elements,int w,wstring &patternMatch)
 {
 	vector <unsigned int> endPoints;
@@ -168,11 +208,15 @@ bool Source::primitiveMatch(vector<int> elements,int w,wstring &patternMatch)
 	return true;
 }
 
+// Descending count order for partial_sort of a tree level.
 bool patternCountCompare(const patternCount &lhs, const patternCount &rhs)
 {
 	return lhs.count>rhs.count;
 }
 
+// Walk parent links from (patternLength, pc) to reconstruct the n-gram,
+// log it, then scan the source for up to 10 primitiveMatch examples
+// (stepping via pma.getNextPosition). Returns true if at least one matched.
 bool Source::printPattern(int patternLength,int pc)
 {
 		wstring pattern;
@@ -209,6 +253,8 @@ bool Source::printPattern(int patternLength,int pc)
 		return match>0;
 }
 
+// partial_sort the given tree level by count and printPattern the top
+// topLimit nodes (clamped to size). Returns false if the level is empty.
 bool Source::printPatterns(int patternLength,unsigned int topLimit)
 {
 	if (patternCountTree[patternLength].size()<topLimit) topLimit=patternCountTree[patternLength].size();
@@ -221,6 +267,7 @@ bool Source::printPatterns(int patternLength,unsigned int topLimit)
 	return true;
 }
 
+// Print top-10 patterns for lengths 5 down to 3. Progress to stdout.
 void Source::printAccumulatedPatterns(void)
 {
 	wprintf(L"PROGRESS: 0%% patterns printed with %d seconds elapsed (%I64d bytes) \r",clock()/CLOCKS_PER_SEC,memoryAllocated);
@@ -232,6 +279,9 @@ void Source::printAccumulatedPatterns(void)
 	}
 }
 
+// Reserve tree levels, seed level 0, walk every token with
+// accumulateNewPattern, log node counts — then clear the trees before
+// printAccumulatedPatterns() (so the print sees empty levels).
 void Source::accumulateNewPatterns(void)
 {
 	for (int I=2; I<maximumPatternLengthForAnalysis; I++) patternCountTree[I].reserve(50000);

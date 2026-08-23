@@ -1,3 +1,48 @@
+/*
+	semanticRelations.cpp - space / motion / tense labelling of syntactic relation groups
+
+	Overview:
+		Turns parsed subject-verb-object-prep links into cSyntacticRelationGroup
+		records whose relationType is an st* motion or state (ENTER, EXIT, MOVE,
+		CONTACT, ESTABLISH, ?) and whose cTimeFlowTense says whether the clause is
+		narration-present, quoted-past, future, story, or a command. VerbNet class
+		flags (move / exit / enter / stay / contact) plus place subtypes and
+		prepMoveType prepositions decide the st*; Reichenbach-style tense on the
+		verb plus quote/story roles decide the tft bits. newSR() inserts or updates
+		the group; correctSRIEntry() rewrites inverted / infinitive / question
+		layouts so the where* fields point at the real controller, subject and verb.
+
+	Pipeline position:
+		Stage 5 (Relations), after syntacticRelations.cpp has filled relSubject /
+		relVerb / relObject / relPrep. detectSyntacticRelationGroup() is driven
+		from processEndOfSentence() (this file) while the speaker-group walk
+		visits each clause. appendTime() (timeRelations.cpp) then attaches
+		cTimeInfo. Later stages (resolveSpeakers, question answering) consume
+		syntacticRelationGroups and tft.
+
+	Key entry points:
+		- detectSyntacticRelationGroup() - per-clause driver: find S/V, then
+		  placeIdentification() / newSR()
+		- placeIdentification() - VerbNet-driven st* assignment for one clause
+		- newSR() / correctSRIEntry() - build and canonicalise one SRG
+		- setTimeFlowTense() / srSetTimeFlowTense() - fill tft from verbSense
+		- processEndOfSentence() / processEndOfPrimaryQuote() - EOS / quote
+		  hooks that also age local focus on time/space transitions
+		- analyzeWordSenses() - WordNet physical-object flags + VerbNet frequency
+
+	Key data structures / globals:
+		- syntacticRelationGroups - ordered by where; mutated by newSR()
+		- vbNetClasses / vbNetVerbToClassMap - VerbNet inventory (word.cpp)
+		- speakerGroups / localObjects - POV / physicallyPresent used to
+		  promote ENTER to MOVE and to age entities on EXIT
+
+	Notes / gotchas:
+		- newSR / correctSRIEntry write m[] (relPrep, principalWherePosition,
+		  hasSyntacticRelationGroup) and so invalidate all m iterators.
+		- relationType == -stLOCATION is a first-class ?location without
+		  action? sentinel, not an arithmetic accident.
+		- LFS is the profile/stack-trace macro used at every function entry.
+*/
 #pragma warning(disable : 4786 ) // disable warning C4786
 #include <windows.h>
 #include <io.h>
@@ -9,6 +54,7 @@
 #include "profile.h"
 #include "QuestionAnswering.h"
 
+// Print name for an st* (or -stLOCATION) relationType. Unknown codes become L"UNKNOWN".
 wstring relationString(int r)
 {
 	LFS
@@ -76,18 +122,23 @@ wstring relationString(int r)
 //   of a banana truck.
 
 
+// Prefix equality of two VerbNet class / verb strings (min length). Used to
+// treat "have-*" / "want-*" as the same family when labelling tft.presType.
 bool cSource::like(wstring str1, wstring str2)
 {
 	LFS
 		return wcsncmp(str1.c_str(), str2.c_str(), min(str1.length(), str2.length())) == 0;
 }
 
+// lower_bound order for syntacticRelationGroups: sort key is where only.
 bool comparesr(const cSyntacticRelationGroup& s1, const cSyntacticRelationGroup& s2)
 {
 	LFS
 		return s1.where < s2.where;
 }
 
+// Span of an SRG in m: min/max of the where* slots that are >= 0.
+// begin is seeded at 1e8 so an all-negative SRG leaves begin huge and end -1.
 void cSource::getMaxWhereSR(vector <cSyntacticRelationGroup>::iterator csr, int& begin, int& end)
 {
 	LFS
@@ -107,6 +158,8 @@ void cSource::getMaxWhereSR(vector <cSyntacticRelationGroup>::iterator csr, int&
 	end = max(end, csr->wherePrepObject);
 }
 
+// First SRG at source position `where`, or end() if none. Relies on the
+// vector staying sorted by comparesr.
 vector <cSyntacticRelationGroup>::iterator cSource::findSyntacticRelationGroup(int where)
 {
 	LFS
@@ -115,6 +168,8 @@ vector <cSyntacticRelationGroup>::iterator cSource::findSyntacticRelationGroup(i
 }
 
 // space relation component
+// Format "[desc where:word]" into tmpstr. Returns tmpstr.c_str(); caller must
+// keep tmpstr alive. where < 0 yields L"".
 const wchar_t* cSource::src(int where, wstring description, wstring& tmpstr)
 {
 	LFS
@@ -126,6 +181,10 @@ const wchar_t* cSource::src(int where, wstring description, wstring& tmpstr)
 	return tmpstr.c_str();
 }
 
+// If quoted present-tense ?chase/follow them? is spoken by a POV speaker
+// about the current speaker group, move that speaker from povSpeakers to
+// observers (?follow them!? is a command, not a POV stay). Returns true if
+// anyone was converted. sg indexes speakerGroups; out of range is a no-op.
 bool cSource::followerPOVToObserverConversion(vector <cSyntacticRelationGroup>::iterator sr, int sg)
 {
 	LFS
@@ -166,6 +225,9 @@ bool cSource::followerPOVToObserverConversion(vector <cSyntacticRelationGroup>::
 	return converted;
 }
 
+// True if the object at `where` is a speaker: identified-as-speaker count,
+// membership in speakerGroups[tempCSG] (or its embedded group esg), 1st/2nd
+// person, or a voice owned by a speaker. esg == -1 skips the embedded test.
 bool cSource::isSpeaker(int where, int esg, int tempCSG)
 {
 	LFS
@@ -185,6 +247,8 @@ bool cSource::isSpeaker(int where, int esg, int tempCSG)
 	return isSpeaker;
 }
 
+// Fill tft for syntacticRelationGroups[spri], convert follower-POV, then
+// appendTime(). No-op if agentLocationRelationSet is already true.
 void cSource::srSetTimeFlowTense(int spri)
 {
 	LFS
@@ -207,7 +271,10 @@ void cSource::srSetTimeFlowTense(int spri)
 	appendTime(sr);
 }
 
-// returns true if VT_NEGATIVE
+// Classify one clause into tft happening / story / command / beyondLocalSpace
+// bits from verbSense, quote/story roles, and a few lexical special cases
+// (?it is time I??, ?when I come out?). Always returns true (the ?VT_NEGATIVE?
+// comment is stale; negation is stored in tft.negation).
 bool cSource::setTimeFlowTense(int where, int whereControllingEntity, int whereSubject, int whereVerb, int whereObject,
 	int wherePrepObject,
 	int prepObjectSubType, int objectSubType, bool establishingLocation, bool futureLocation, bool genderedLocationRelation, cTimeFlowTense& tft)
@@ -440,6 +507,8 @@ bool cSource::setTimeFlowTense(int where, int whereControllingEntity, int whereS
 	}
 }
 
+// True if `word` is a relational place noun (front/end/corner/?) that can
+// borrow the subtype of a following ?of <place>?.
 bool cSource::isRelativeLocation(wstring word)
 {
 	LFS
@@ -450,6 +519,8 @@ bool cSource::isRelativeLocation(wstring word)
 	return location;
 }
 
+// Walk nextCompoundPartObject / relPrep from wo, recording each prep and
+// each object?s endObjectPosition. Caps at 30 steps to break prep cycles.
 void cSource::insertCompoundObjects(int wo, set <int>& relPreps, unordered_map <int, int>& principalObjectEndPoints)
 {
 	LFS
@@ -505,6 +576,10 @@ I want you to spread yourself this evening
 8770: evening:
 
 */
+// Canonicalise whereControllingEntity / whereSubject / whereVerb / whereObject
+// for infinitive complements, ?I felt I??, inverted questions, start/stop +
+// participle, and chained preps. Writes m[].relNextObject and nextQuote on
+// those preps (nextQuote is overloaded as ?head of the prep chain?).
 // will change source.m (invalidate all iterators)
 void cSource::correctSRIEntry(cSyntacticRelationGroup& srg)
 {
@@ -655,6 +730,8 @@ void cSource::correctSRIEntry(cSyntacticRelationGroup& srg)
 	//phraseString(srg.printMin,srg.printMax,tmpstr,true);
 }
 
+// Overwrite relationType on every SRG at `where` that is not already a time
+// relation, then refresh tft. Skips the write if whereSubject is itself a place.
 void cSource::setRelationTypeAndTimeFlow(int where, int whereSubject, vector <cSyntacticRelationGroup>::iterator location, int relationType)
 {
 	for (; location != syntacticRelationGroups.end() && location->where == where; location++)
@@ -672,6 +749,8 @@ void cSource::setRelationTypeAndTimeFlow(int where, int whereSubject, vector <cS
 	}
 }
 
+// True (caller should demote ENTER to MOVE) if the subject is already
+// physicallyPresent in local focus, or is first person. Narration only.
 bool cSource::changeEnterToMoveIfPhysicallyPresent(int where, int relationType, int whereVerb, int whereSubject)
 {
 	if (relationType == stENTER && whereSubject >= 0)
@@ -700,6 +779,9 @@ bool cSource::changeEnterToMoveIfPhysicallyPresent(int where, int relationType, 
 	return false;
 }
 
+// True if the subject (or any objectMatch) is male/female, unless the tokens
+// look like a countdown (?one, two, three?). No subject + quoted present
+// imperative also counts as gendered (implied ?you?).
 bool cSource::determineSubjectGendered(int whereSubject, int whereVerb)
 {
 	bool subjectGendered = false;
@@ -720,6 +802,7 @@ bool cSource::determineSubjectGendered(int whereSubject, int whereVerb)
 	return subjectGendered;
 }
 
+// Same gender test as determineSubjectGendered, for the controlling entity.
 bool cSource::determineControllerGendered(int whereControllingEntity)
 {
 	bool controllerGendered = false;
@@ -733,6 +816,8 @@ bool cSource::determineControllerGendered(int whereControllingEntity)
 	return controllerGendered;
 }
 
+// True if object o is a gendered non-body, a typed place, an ordinal
+// (?arrived first?), ?set foot?, or an adverbial place (there/here/ashore).
 bool cSource::determineObjectIsAcceptable(int whereObject, int relationType, int o, int objectSubType)
 {
 	bool objectIsAcceptable = o >= 0 && (((objects[o].male || objects[o].female) &&
@@ -749,6 +834,9 @@ bool cSource::determineObjectIsAcceptable(int whereObject, int relationType, int
 	return objectIsAcceptable;
 }
 
+// Subtype of prep-object po, or UNKNOWN_PLACE_SUBTYPE if only ?possible?.
+// Cancels the subtype for ?state of confusion?-style of-NPs whose complement
+// is not a place (prepTypeCancelled = true). relPrep / relObject are the of-chain.
 int cSource::setPrepSubType(const int po, const int wherePrepObject, int& relObject, int& relPrep, bool& prepTypeCancelled)
 {
 	int prepObjectSubType = (po >= 0) ? objects[po].getSubType() : -1;
@@ -763,6 +851,11 @@ int cSource::setPrepSubType(const int po, const int wherePrepObject, int& relObj
 	return prepObjectSubType;
 }
 
+// Decide genderedLocationRelation: a gendered (or place-typed) subject/controller
+// interacting with an acceptable object/prep-object, minus idioms (there-are,
+// negation, body-part MOVE_OBJECT, cancelled of-NPs). May fill a missing
+// quoted-past subject by scanning back for a local-focus agent. whereSubject
+// is in/out.
 bool cSource::defineGenderedLocationRelation(const int o, const int po, const int whereControllingEntity, int& whereSubject, const int whereVerb, const int whereObject, const int relationType, const int objectSubType,
 	const bool prepObjectIsAcceptable, const bool objectIsAcceptable, const bool prepTypeCancelled, const bool convertToMove)
 {
@@ -826,6 +919,8 @@ bool cSource::defineGenderedLocationRelation(const int o, const int po, const in
 	return genderedLocationRelation;
 }
 
+// If location has no timeInfo, copy timeInfo / timeTransition from a later
+// SRG at the same `where` (multiple objects share one clause?s time).
 void cSource::lookForwardToUpdateTimeInfo(int where, vector <cSyntacticRelationGroup>::iterator location)
 {
 	if (location->timeInfo.empty())
@@ -846,6 +941,10 @@ void cSource::lookForwardToUpdateTimeInfo(int where, vector <cSyntacticRelationG
 	}
 }
 
+// Insert sr into syntacticRelationGroups (sorted by where), or merge into an
+// existing slot via canUpdate. After speaker groups exist, also records the
+// SRG index on the subject?s objects. convertToMove + non-present tft flips
+// the stored type to stENTER (the flag name is inverted vs the write).
 void cSource::insertOrUpdateNewSpeakerGroup(int where, int whereSubject, cSyntacticRelationGroup& sr, bool convertToMove, const wchar_t* whereType)
 {
 	if (speakerGroupsEstablished)
@@ -909,6 +1008,9 @@ void cSource::insertOrUpdateNewSpeakerGroup(int where, int whereSubject, cSyntac
 	}
 }
 
+// Fill objectIsAcceptable / prepObjectIsAcceptable and refresh o / po /
+// subtypes. ?in front of the hotel? and ?turn the corner of X? promote the
+// relative noun; unused UNKNOWN_PLACE prep-objects increment usedAsLocation.
 void cSource::determineAcceptabilityAndSubTypes(const int whereSubject, const int whereVerb, const int relationType,
 	int& o, int& objectSubType, const int whereObject, bool& objectIsAcceptable,
 	int& po, int& prepObjectSubType, int& wherePrepObject, bool& prepObjectIsAcceptable,
@@ -962,6 +1064,10 @@ void cSource::determineAcceptabilityAndSubTypes(const int whereSubject, const in
 		objectIsAcceptable = true;
 }
 
+// Build one SRG at `where`: reject prep-as-subject, map ?came to a halt? to
+// STAY, demote ENTER if already present, compute subtypes / genderedLocation,
+// correctSRIEntry, then insertOrUpdateNewSpeakerGroup. Sets
+// hasSyntacticRelationGroup on where / verb / prep-object.
 // will change source.m (invalidate all iterators)
 void cSource::newSR(int where, int _o, int whereControllingEntity, int whereSubject, int whereVerb, int wherePrep, int whereObject, int wherePrepObject, int whereMovingRelativeTo, int relationType, const wchar_t* whereType, bool physicalRelation)
 {
@@ -1050,6 +1156,7 @@ void cSource::newSR(int where, int _o, int whereControllingEntity, int whereSubj
 	m[where].hasSyntacticRelationGroup = true;
 }
 
+// LOG_INFO dump of one SRG: type, S/V/O/PO, subtypes, extra preps, controller.
 void cSource::logSyntacticRelationGroup(cSyntacticRelationGroup& sr, const wchar_t* whereType)
 {
 	set <int> relPreps;
@@ -1078,6 +1185,9 @@ void cSource::logSyntacticRelationGroup(cSyntacticRelationGroup& sr, const wchar
 		src(sr.whereMovingRelativeTo, L"moving relative to", tmpstr6));
 }
 
+// newSR once per subject objectMatch (or the POV set if the subject intersects
+// povSpeakers). `hasSyntacticRelationGroup` is actually the st* relationType
+// forwarded to newSR. Always returns true.
 // subject is moving to a destination
 // will change source.m (invalidate all iterators through the use of newSR)
 bool cSource::moveIdentifiedSubject(int where, bool inPrimaryQuote, int whereControllingEntity, int whereSubject, int whereVerb, int wherePrep, int whereObject, int at, int whereMovingRelativeTo, int hasSyntacticRelationGroup, const wchar_t* whereType, bool physicalRelation)
@@ -1145,6 +1255,8 @@ bool cSource::moveIdentifiedSubject(int where, bool inPrimaryQuote, int whereCon
 	return true;
 }
 
+// newSR once per objectMatch of whereObject (MOVE_OBJECT / CONTACT path).
+// hasSyntacticRelationGroup is the st* forwarded to newSR. Always returns true.
 // subject will move the object at whereObject to a destination
 // will change source.m (invalidate all iterators through the use of newSR)
 bool cSource::srMoveObject(int where, int whereControllingEntity, int whereSubject, int whereVerb, int wherePrep, int whereObject, int wherePrepObject, int whereMovingRelativeTo, int hasSyntacticRelationGroup, const wchar_t* whereType, bool physicalRelation)
@@ -1158,6 +1270,9 @@ bool cSource::srMoveObject(int where, int whereControllingEntity, int whereSubje
 	return true;
 }
 
+// Walk the relPrep chain from whereVerb (or from the current wherePrep) for a
+// prepMoveType / ?for? whose object is a place, agent, or time. Sets location
+// / timeUnit. Returns the prep-object position or -1. Caps at 30 preps.
 int cSource::findAnyLocationPrepObject(int whereVerb, int& wherePrep, bool& location, bool& timeUnit)
 {
 	LFS
@@ -1213,6 +1328,8 @@ int cSource::findAnyLocationPrepObject(int whereVerb, int& wherePrep, bool& loca
 	return -1;
 }
 
+// True for frozen PPs that are not locations: ?in the end?, ?at bay?,
+// ?on the other hand?, ?face to face?, ?by hook or by crook?.
 // reject in the end/at the end of three days/on the other hand
 bool cSource::rejectPrepPhrase(int wherePrep)
 {
@@ -1251,6 +1368,7 @@ bool cSource::rejectPrepPhrase(int wherePrep)
 	return false;
 }
 
+// True if m[where] is there/here/ashore/aboard/? or ?up/down there/here?.
 bool cSource::adverbialPlace(int where)
 {
 	LFS
@@ -1261,6 +1379,7 @@ bool cSource::adverbialPlace(int where)
 	return (word == L"down" || word == L"up") && where + 1 < (signed)m.size() && (m[where + 1].word->first == L"there" || m[where + 1].word->first == L"here");
 }
 
+// True if m[where] is gone/dead/absent/? (?she was gone?). ?well off? is not.
 bool cSource::adjectivalExit(int where)
 {
 	LFS
@@ -1271,6 +1390,7 @@ bool cSource::adjectivalExit(int where)
 	return false;
 }
 
+// True if the objects (or objectMatches) at two source positions overlap.
 bool cSource::intersect(int where1, int where2)
 {
 	LFS
@@ -1285,6 +1405,8 @@ bool cSource::intersect(int where1, int where2)
 	return intersect(m[where1].objectMatches, m[where2].objectMatches, allIn, oneIn);
 }
 
+// True if the prep-object is an urban-or-larger place and the clause is
+// ?go to England? / ?take himself to England? ? promote MOVE to EXIT.
 bool cSource::exitConversion(int whereObject, int whereSubject, int wherePrepObject)
 {
 	LFS
@@ -1303,6 +1425,8 @@ bool cSource::exitConversion(int whereObject, int whereSubject, int wherePrepObj
 			whereObject < 0);
 }
 
+// True if the object at `where` (or any match) has a real place subtype
+// other than BY_ACTIVITY / UNKNOWN_PLACE_SUBTYPE.
 bool cSource::whereSubType(int where)
 {
 	LFS
@@ -1316,12 +1440,16 @@ bool cSource::whereSubType(int where)
 	return false;
 }
 
+// First token after the verb that is not a pure adverb; may bind a hanging
+// in/at to a recently mentioned location of the same subject. Returns that
+// source position (often whereVerb+1).
 // he passed inside OR he gave the book inside.
 // NOT: appeared over - eager. / walk up
 // NOT: engaged in wondering whether ...
 int cSource::getAfterVerb(const int where, const int whereVerb, const int whereSubject)
 {
 	int afterVerb = whereVerb + 1;
+	// size check is after m[afterVerb] ? OOB when whereVerb is the last token.
 	while (m[afterVerb].queryWinnerForm(adverbForm) >= 0 && m[afterVerb].queryWinnerForm(prepositionForm) < 0 && afterVerb + 1 < (signed)m.size() && !adverbialPlace(afterVerb)) afterVerb++;
 	if (m[whereVerb].relPrep < 0)
 	{
@@ -1391,6 +1519,9 @@ int cSource::getAfterVerb(const int where, const int whereVerb, const int whereS
 	return afterVerb;
 }
 
+// Place subtype of the verb?s direct object (sets whereObject). ?turn the
+// corner of the street? copies the street?s subtype; bare ?where? is
+// UNKNOWN_PLACE_SUBTYPE. -1 if none.
 int cSource::getSubType(int whereVerb, int& whereObject)
 {
 	int st = -1, o;
@@ -1419,6 +1550,9 @@ int cSource::getSubType(int whereVerb, int& whereObject)
 	return st;
 }
 
+// For VerbNet ?start? + VNOUN (?started walking down??), retarget whereVerb /
+// whereObject / st to the complement verb and its place object. wpd is the
+// complement?s location prep-object.
 void cSource::adjustForStart(bool start, int& whereObject, int& whereVerb, int& wpd, int& st)
 {
 	int pmaOffset, pd;
@@ -1452,6 +1586,8 @@ void cSource::adjustForStart(bool start, int& whereObject, int& whereVerb, int& 
 	}
 }
 
+// False if the (neuter, non-gendered) subject is a WordNet non-physical.
+// Relative-head subjects are redirected to the entity?s firstLocation.
 bool cSource::determineIfPhysicalSubject(int where, int& whereSubject)
 {
 	bool physicalSubject = true;
@@ -1486,9 +1622,12 @@ bool cSource::determineIfPhysicalSubject(int where, int& whereSubject)
 	return physicalSubject;
 }
 
+// EXIT/ENTER/STAY/MOVE/MOVE_OBJECT/CONTACT/NEAR/TRANSFER from VerbNet flags
+// plus a location prep-object. Returns true if newSR / moveIdentifiedSubject
+// fired. pr is physicalRelation.
 bool cSource::detectPlaceTransition(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet& verbClass, wstring id, bool pr, bool inPrimaryQuote, int st, bool proLocation)
 {
-	//  My[tuppence] plan is this , ” Tuppence went on calmly 
+	//  My[tuppence] plan is this , ï¿½ Tuppence went on calmly 
 	// verbs of self movement with direct objects 51.1
 	//	 He scaled the tree  - verbs of movement that don't require prepositions to indicate movement
 	//   He exited the room 
@@ -1529,6 +1668,7 @@ bool cSource::detectPlaceTransition(int where, int whereControllingEntity, int w
 		}
 		// if it has an object, there must be only one object and that object must not be nonphysical.
 		// if it has a prepobject, that object must be physical or a time
+		// && binds tighter than ||, so this is (A && B) || C, not A && (B || C).
 		if ((id != L"escape-51.1-5" || whereObject < 0 || (m[whereObject].word->second.timeFlags & T_UNIT) != 0 || proLocation || m[whereObject].relNextObject >= 0) &&
 			((wherePrepObject < 0 || whereObject >= 0) && woPhysicalObject) ||
 			(wherePrepObject >= 0 && (wpoPhysicalObject || (wpoTimeUnit && id != L"escape-51.1-5"))))
@@ -1610,6 +1750,9 @@ bool cSource::detectPlaceTransition(int where, int whereControllingEntity, int w
 	return false;
 }
 
+// Treat a single direct object as the location (?he scaled the tree?,
+// ?North of the Andes?). Returns true if an SRG was created. wpd is
+// whereMovingRelativeTo.
 bool cSource::identifyObjectAsPlace(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet& verbClass, wstring id, bool pr, bool inPrimaryQuote, int st, int wpd, bool acceptableVerbForm, bool prepLocation, bool prepMustBeLocation)
 {
 	int o = -1;
@@ -1705,6 +1848,10 @@ bool cSource::identifyObjectAsPlace(int where, int whereControllingEntity, int w
 	return false;
 }
 
+// One prep on the verb?s relPrep chain with no usable direct object.
+// -1: SRG created (caller returns true); 0: skip this prep; 1: try
+// detectPlaceTransitionForPrep next. Rejects stacked PPs unless ?in the
+// presence of? / ?out of? / ?en route for?.
 // return values
 // if -1, return true in containing function.
 // if 0, continue in loop in containing function
@@ -1828,6 +1975,8 @@ int cSource::detectPlacePreposition(int where, const int whereControllingEntity,
 	return 1;
 }
 
+// Direct object + location PP (?take the packet to the Embassy?).
+// -1 created an SRG; 0 reject this prep; 1 keep looking.
 // return values
 // if -1, return true in containing function.
 // if 0, continue in loop in containing function
@@ -1927,6 +2076,8 @@ int cSource::detectPlaceTransitionForPrep(int where, int whereControllingEntity,
 	return 1;
 }
 
+// ?go there? / ?take the packet there?: object or its end is an adverbial
+// place. Returns true if newSR fired.
 //  take the packet there
 //  go there
 bool cSource::detectAdverbialWhere(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet& verbClass, wstring id, bool pr, bool physicalObject, bool acceptableVerbForm)
@@ -1973,6 +2124,8 @@ bool cSource::detectAdverbialWhere(int where, int whereControllingEntity, int wh
 	return false;
 }
 
+// ?she was gone/dead? (adjectivalExit) or ?went away?. Returns true if an
+// EXIT (or CONTACT for ?together?) SRG was created.
 // she was gone.  she was dead.
 bool cSource::detectExit(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, int afterVerb, wstring id, bool pr, bool inPrimaryQuote)
 {
@@ -2008,6 +2161,8 @@ bool cSource::detectExit(int where, int whereControllingEntity, int whereSubject
 	return false;
 }
 
+// VerbNet transfer + relNextObject (?gave him the book?) -> stTRANSFER.
+// -1 created; 0 rejected (non-physical next object); 1 no transfer.
 int cSource::detectObjectTransfer(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet& verbClass, wstring id, bool pr)
 {
 	int nwo = -1;
@@ -2031,6 +2186,8 @@ int cSource::detectObjectTransfer(int where, int whereControllingEntity, int whe
 	return 1;
 }
 
+// ?where he obtained the fish? ? relativizer immediately before the subject
+// becomes stLOCATIONRP. wherePrep is stored as -3 (sentinel, not an index).
 bool cSource::detectWhere(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, wstring id, bool pr)
 {
 	if (whereSubject >= 0 && m[whereSubject].getObject() >= 0 && m[whereSubject].beginObjectPosition > 0 && m[m[whereSubject].beginObjectPosition - 1].word->first == L"where")
@@ -2041,6 +2198,8 @@ bool cSource::detectWhere(int where, int whereControllingEntity, int whereSubjec
 	return false;
 }
 
+// Quoted present-tense imperative with no subject (?Come with me.?).
+// tmp1..tmp5 are debug leftovers left in the condition.
 // commands
 // come with me.
 bool cSource::detectMoveCommand(int where, int whereControllingEntity, int whereSubject, int whereObject, int whereVerb, cVerbNet& verbClass, wstring id, bool pr)
@@ -2089,6 +2248,8 @@ bool cSource::detectMoveCommand(int where, int whereControllingEntity, int where
 	return false;
 }
 
+// True if whereObject is not WordNet-non-physical; with objectMatches, any
+// match whose originalLocation is physical (and not a demonstrative) counts.
 bool cSource::detectPhysicalObject(int whereObject)
 {
 	bool physicalObject = whereObject >= 0 && !(m[whereObject].word->second.flags & cSourceWordInfo::notPhysicalObjectByWN);
@@ -2103,6 +2264,9 @@ bool cSource::detectPhysicalObject(int whereObject)
 	return physicalObject;
 }
 
+// Per-VerbNet-class driver: try transition / object-as-place / each prep /
+// adverbial / exit / transfer / command, else emit stOTHER (or the class?s
+// default relation). Returns true if a ?taken? detector fired.
 // The two young people[tommy,tuppence] greeted each other affectionately , and momentarily **blocked the Dover Street Tube exit
 // verbs of looking : (looked)
 //   He looked into the room
@@ -2259,6 +2423,8 @@ bool cSource::placeIdentification(int where, bool inPrimaryQuote, int whereContr
 	return false;
 }
 
+// Demote a gendered NAME object that is used as a movement PP (or exit/enter
+// verb object) to NON_GENDERED_NAME + neuter ? ?Dover Street Tube exit?.
 void cSource::defineObjectAsSpatial(int where)
 {
 	LFS
@@ -2289,6 +2455,8 @@ void cSource::defineObjectAsSpatial(int where)
 	}
 }
 
+// Inside a primary quote, count past vs non-past verbs and I/we/you mentions
+// since the last quote (used to decide embedded-story vs conversation).
 void cSource::detectTenseAndFirstPersonUsage(int where, int lastBeginS1, int lastRelativePhrase, int& numPastSinceLastQuote, int& numNonPastSinceLastQuote, int& numFirstInQuote, int& numSecondInQuote, bool inPrimaryQuote)
 {
 	if (inPrimaryQuote && m[where].getRelVerb() >= 0 && lastBeginS1 > lastRelativePhrase && (m[where].objectRole & (OBJECT_ROLE | SUBJECT_ROLE)) > 0)
@@ -2318,6 +2486,8 @@ void cSource::detectTenseAndFirstPersonUsage(int where, int lastBeginS1, int las
 	}
 }
 
+// Resolve a quoted HAIL / self-referring / audience name (?Tuppence!?) into
+// tempSpeakerGroup and bump PISHail. Skips appositive ?X, Y? false hails.
 void cSource::identifyHailObjects(int where, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool inPrimaryQuote, bool inSecondaryQuote)
 {
 	LFS
@@ -2384,6 +2554,11 @@ void cSource::identifyHailObjects(int where, int lastBeginS1, int lastRelativePh
 	}
 }
 
+// EOS bookkeeping: reset lastBeginS1 / lastRelativePhrase, run
+// detectSyntacticRelationGroup over the just-finished unquoted span, age
+// speakers on the last time-transition SRG, copy lastSubjects ->
+// previousLastSubjects, and set quotesSeenSinceLastSentence if more text
+// follows in the paragraph.
 void cSource::processEndOfSentence(int where, int& lastBeginS1, int& lastRelativePhrase, int& lastCommand, int& lastSentenceEnd, int& uqPreviousToLastSentenceEnd, int& uqLastSentenceEnd,
 	int& questionSpeakerLastSentence, int& questionSpeaker, bool& currentIsQuestion,
 	bool inPrimaryQuote, bool inSecondaryQuote, bool& endOfSentence, bool& transitionSinceEOS,
@@ -2429,7 +2604,7 @@ void cSource::processEndOfSentence(int where, int& lastBeginS1, int& lastRelativ
 		uqPreviousToLastSentenceEnd = uqLastSentenceEnd;
 		uqLastSentenceEnd = where;
 	}
-	if (!inSecondaryQuote || (where + 1 < (signed)m.size() && m[where + 1].word->first == L"’"))
+	if (!inSecondaryQuote || (where + 1 < (signed)m.size() && m[where + 1].word->first == L"ï¿½"))
 		setQuestion(m.begin() + where, inPrimaryQuote, questionSpeakerLastSentence, questionSpeaker, currentIsQuestion);
 	else
 		setSecondaryQuestion(m.begin() + where);
@@ -2459,12 +2634,12 @@ void cSource::processEndOfSentence(int where, int& lastBeginS1, int& lastRelativ
 	// the sentence ends with a period, or a period and a quote.
 	if (where + 3 < (signed)m.size() &&
 		m[where + 1].word != Words.sectionWord && // period
-		!(m[where + 1].word->first == L"”" && m[where + 2].word == Words.sectionWord) && // period and quote
-		!(m[where + 1].word->first == L"’" && m[where + 2].word->first == L"”" && m[where + 3].word == Words.sectionWord)) // period, single quote and double quote
+		!(m[where + 1].word->first == L"ï¿½" && m[where + 2].word == Words.sectionWord) && // period and quote
+		!(m[where + 1].word->first == L"ï¿½" && m[where + 2].word->first == L"ï¿½" && m[where + 3].word == Words.sectionWord)) // period, single quote and double quote
 	{
 		// is the period in the middle of a quote?  if then, set to true.
 		// is the period not in a quote, or at the end of a quote? then set to false.
-		quotesSeenSinceLastSentence = inPrimaryQuote && (m[where + 1].word->first != L"”" || (m[where + 1].word->first != L"’" && m[where + 2].word->first != L"”"));
+		quotesSeenSinceLastSentence = inPrimaryQuote && (m[where + 1].word->first != L"ï¿½" || (m[where + 1].word->first != L"ï¿½" && m[where + 2].word->first != L"ï¿½"));
 		// in the case where a .?! is followed by a quote and a speaker designation,
 		// the speaker designation does not count as a sentence.
 		if (debugTrace.traceSpeakerResolution)
@@ -2472,6 +2647,9 @@ void cSource::processEndOfSentence(int where, int& lastBeginS1, int& lastRelativ
 	}
 }
 
+// Close the current primary quote at `where`: find/impose the speaker,
+// link quote-forward/back, mark quoted-string vs dialogue, eliminate
+// objects whose span is the quote itself, and set previousPrimaryQuote.
 void cSource::processEndOfPrimaryQuote(int where, int lastSentenceEndBeforeAndNotIncludingCurrentQuote,
 	int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, int& lastSpeakerPosition, int& lastQuotedString, int& quotedObjectCounter,
 	bool& inPrimaryQuote, bool& immediatelyAfterEndOfParagraph, bool& firstQuotedSentenceOfSpeakerGroupNotSeen, bool& quotesSeenSinceLastSentence,
@@ -2522,7 +2700,7 @@ void cSource::processEndOfPrimaryQuote(int where, int lastSentenceEndBeforeAndNo
 			else if ((m[where].flags & cWordMatch::flagInsertedQuote) == 0) // definitely not a quoted string if it is completed only by an inserted quote.
 			{
 				// but it is an inserted quote from the speaker before the definite speaker.
-				// “[tuppence:julius] Well , luckily for me[tuppence] , I[tuppence] pitched down into a good soft bed of earth -- but it[bed,earth] put me[tuppence] out of action for the time[time] , sure enough .
+				// ï¿½[tuppence:julius] Well , luckily for me[tuppence] , I[tuppence] pitched down into a good soft bed of earth -- but it[bed,earth] put me[tuppence] out of action for the time[time] , sure enough .
 				// no speaker seen.  Insert last subject into speaker group (to make sure it is included as a possibility in the next stage)
 				quotedStringSeen |= (!noTextBeforeOrAfter);
 				if (firstQuotedSentenceOfSpeakerGroupNotSeen)
@@ -2611,6 +2789,8 @@ void cSource::processEndOfPrimaryQuote(int where, int lastSentenceEndBeforeAndNo
 
 }
 
+// Track a quoted ?where/when ??? (currentMetaWhereQuery) and, when the
+// later narration answers it, insert stMETAWQ / stABSTIME / location SRGs.
 void cSource::evaluateMetaWhereQuery(int where, bool inPrimaryQuote, int& currentMetaWhereQuery)
 {
 	LFS
@@ -2719,6 +2899,8 @@ void cSource::evaluateMetaWhereQuery(int where, bool inPrimaryQuote, int& curren
 	}
 }
 
+// Append spd + the printed object name(s) at `where` onto description
+// (skips a leading honorific). Used by srToText.
 void cSource::srd(int where, wstring spd, wstring& description)
 {
 	LFS
@@ -2772,6 +2954,7 @@ void cSource::srd(int where, wstring spd, wstring& description)
 		}
 }
 
+// srToText for the first SRG at `where`. description is in/out.
 wstring cSource::wsrToText(int where, wstring& description)
 {
 	LFS
@@ -2782,6 +2965,8 @@ wstring cSource::wsrToText(int where, wstring& description)
 	return srToText(spr, description);
 }
 
+// Pretty-print syntacticRelationGroups[spr] into description (S/V/O/P/time).
+// Advances spr past every SRG that shares the same where.
 wstring cSource::srToText(int& spr, wstring& description)
 {
 	LFS
@@ -2863,6 +3048,8 @@ wstring cSource::srToText(int& spr, wstring& description)
 	return description;
 }
 
+// Drop a guessed place subtype when the object only appears as a
+// NON_MOVEMENT prep-object, or is a short non-physical NP with usedAsLocation < 5.
 void cSource::cancelSubType(int object)
 {
 	LFS
@@ -2892,6 +3079,8 @@ void cSource::cancelSubType(int object)
 	}
 }
 
+// VerbNet classes for the lemma at whereVerb, preferring verb+particle
+// (?get_out?). Sets verb to that lemma. end() if unknown.
 unordered_map <wstring, set <int> >::iterator cSource::getVerbClasses(int whereVerb, wstring& verb)
 {
 	LFS
@@ -2914,6 +3103,8 @@ unordered_map <wstring, set <int> >::iterator cSource::getVerbClasses(int whereV
 	return lvtoCi;
 }
 
+// Lemma of the verb at `where` via deriveMainEntry. fromWhere is a call-site
+// id for logging. Writes verb and returns it.
 wstring cSource::getBaseVerb(int where, int fromWhere, wstring& verb)
 {
 	LFS
@@ -2940,6 +3131,8 @@ wstring cSource::getBaseVerb(int where, int fromWhere, wstring& verb)
 	return verb;
 }
 
+// True if any VerbNet class of `where` is a move class (moveOnly) or any
+// whereVerbClass (place-relevant) otherwise.
 bool cSource::isSpecialVerb(int where, bool moveOnly)
 {
 	LFS
@@ -2956,6 +3149,7 @@ bool cSource::isSpecialVerb(int where, bool moveOnly)
 	return false;
 }
 
+// True if any VerbNet class of `where` has noPhysicalAction == false.
 bool cSource::isPhysicalActionVerb(int where)
 {
 	LFS
@@ -2967,6 +3161,8 @@ bool cSource::isPhysicalActionVerb(int where)
 	return false;
 }
 
+// True if the verb is self-move or exit. exitOnly is set when every matching
+// class is exit and none is a generic move.
 bool cSource::isSelfMoveVerb(int where, bool& exitOnly)
 {
 	LFS
@@ -2986,6 +3182,7 @@ bool cSource::isSelfMoveVerb(int where, bool& exitOnly)
 	return moveOrExit;
 }
 
+// True if any VerbNet class of `where` is a control / causation class.
 bool cSource::isControlVerb(int where)
 {
 	LFS
@@ -2997,6 +3194,7 @@ bool cSource::isControlVerb(int where)
 	return false;
 }
 
+// True if whereVerb?s VerbNet set contains verbClass (index into vbNetClasses).
 bool cSource::isVerbClass(int where, int verbClass)
 {
 	LFS
@@ -3025,6 +3223,7 @@ bool cSource::isVerbClass(int where, int verbClass)
 	return false;
 }
 
+// True if any class name of `where` equals verbClass (e.g. L"chase", L"am").
 bool cSource::isVerbClass(int where, wstring verbClass)
 {
 	LFS
@@ -3036,6 +3235,7 @@ bool cSource::isVerbClass(int where, wstring verbClass)
 	return false;
 }
 
+// True if the noun at `where` belongs to WordNet group (e.g. L"liking").
 bool cSource::isNounClass(int where, wstring group)
 {
 	LFS
@@ -3050,6 +3250,7 @@ bool cSource::isNounClass(int where, wstring group)
 }
 
 // does the object, or its matches, designate a location, or a verb clause leading to a location?
+// True if the object at `where` has a place subtype or is an adverbial place.
 bool cSource::locationMatched(int where)
 {
 	LFS
@@ -3070,6 +3271,8 @@ bool cSource::locationMatched(int where)
 
 // corral prepositional references to objects that wouldn't already be picked up by detectSyntacticRelationGroup (which keys off of verbs)
 // will change source.m (invalidate all iterators through the use of newSR)
+// Bare location NPs with no verb (?Behind the station.?) become -stLOCATION.
+// Also hooks the ?preference for the latter? liking idiom.
 void cSource::detectSpaceLocation(int where, int lastBeginS1)
 {
 	LFS
@@ -3114,6 +3317,9 @@ void cSource::detectSpaceLocation(int where, int lastBeginS1)
 		newSR(where, -1, -1, m[m[whereVerb].relPrep].getRelObject(), -1, -1, -1, -1, -1, -stLOCATION, L"locationExtendedPreference", true);
 }
 
+// True if object o is still on stage after `where`: physically present later,
+// or speaking / addressed in a later quote. The three bools report which.
+// lastWherePP is written (the parameter is not read).
 bool cSource::isSpeakerContinued(int where, int o, int lastWherePP, bool& sgOccurredAfter, bool& audienceOccurredAfter, bool& speakerOccurredAfter)
 {
 	LFS
@@ -3132,6 +3338,8 @@ bool cSource::isSpeakerContinued(int where, int o, int lastWherePP, bool& sgOccu
 	return sgOccurredAfter || audienceOccurredAfter || speakerOccurredAfter;
 }
 
+// True if a plural subject ?went in opposite directions? (do not drop all
+// POV speakers on that EXIT).
 // in opposite directions
 // separately
 // their own way
@@ -3154,6 +3362,9 @@ bool cSource::isSpatialSeparation(int whereVerb)
 	return false;
 }
 
+// Resolve whereSubject / whereVerb from the role bits at `where`. Returns
+// false if this token is a duplicate object, a prep-as-subject, or otherwise
+// not the head of a new SRG.
 bool cSource::detectSubjectVerbForSyntacticRelationGroup(const int where, const bool inPrimaryQuote, int &whereSubject, int &whereVerb)
 {
 	if (m[where].objectRole & SUBJECT_ROLE)
@@ -3221,6 +3432,9 @@ bool cSource::detectSubjectVerbForSyntacticRelationGroup(const int where, const 
 	return true;
 }
 
+// If the clause is a self-move / exit verb, set
+// syntacticRelationGroupMovingDetected (later ages local focus). Also emits
+// a MOVE SRG for ?started <prep>? without an object.
 void cSource::createLocationMoveSyntacticRelationGroup(const int where, const int whereSubject, const int whereVerb, bool & syntacticRelationGroupMovingDetected)
 {
 	wstring tmpstr, tmpstr2, tmpstr3, tmpstr4;
@@ -3313,6 +3527,9 @@ void cSource::createLocationMoveSyntacticRelationGroup(const int where, const in
 	}
 }
 
+// Location established only by a PP on a stative / be verb (?We are in
+// Lyon?s.?). Fills whereControllingEntity when the subject is a complement.
+// Returns true if the caller should skip the VerbNet walk.
 bool cSource::createLocationByPrepSyntacticRelationGroup(const int where, const bool inPrimaryQuote, int & whereControllingEntity, int &whereSubject, int &whereVerb)
 {
 	bool acceptableSubject = whereSubject >= 0 && (m[whereSubject].objectRole & SUBJECT_ROLE) && ((m[whereSubject].getObject()) >= 0 || m[whereSubject].word->first == L"who");
@@ -3407,6 +3624,9 @@ bool cSource::createLocationByPrepSyntacticRelationGroup(const int where, const 
 	return false;
 }
 
+// Per-token stage-5 driver: find S/V, optionally a prep-only location, then
+// walk VerbNet classes through placeIdentification. Ages lastSubjects on
+// MOVE and runs processExit on a newly inserted SRG.
 // will change source.m (invalidate all iterators through the use of newSR)
 void cSource::detectSyntacticRelationGroup(int where, int backInitialPosition, vector <int>& lastSubjects)
 {
@@ -3483,6 +3703,8 @@ void cSource::detectSyntacticRelationGroup(int where, int backInitialPosition, v
 	}
 }
 
+// Increment (or decrement if helperVerb) VerbNet class frequencies for the
+// lemma at im. Returns true if the lemma is in vbNetVerbToClassMap.
 bool addVCFrequency(int where, int fromWhere, vector <cWordMatch>::iterator im, bool helperVerb, sTrace& t, wstring& lastNounNotFound, wstring& lastVerbNotFound)
 {
 	LFS
@@ -3515,6 +3737,9 @@ bool addVCFrequency(int where, int fromWhere, vector <cWordMatch>::iterator im, 
 	return false;
 }
 
+// One-pass WordNet / VerbNet sense assignment over m: physicalObjectByWN
+// flags on nouns, VerbNet class + frequency on verbs. Prints a PROGRESS
+// line and a summary to LOG_RESOLUTION.
 extern int numVbNetClassFound, numOneSenseVbNetClassFound, numMultiSenseVbNetClassFound, verbsMappedToVerbNet;
 void cSource::analyzeWordSenses(void)
 {
@@ -3626,6 +3851,7 @@ void cSource::analyzeWordSenses(void)
 	wprintf(L"PROGRESS: 100%% words analyzed with %d seconds elapsed \n", clocksec());
 }
 
+// Dump vbNetClasses frequencies (highest first) when traceSpeakerResolution.
 void cSource::printVerbFrequency()
 {
 	LFS
@@ -3685,6 +3911,9 @@ void cSource::printVerbFrequency()
 	}
 }
 
+// True if this unquoted past-tense EXIT should age speakers (gendered /
+// MOVING subject, not a think-complement, not ?all? / most body parts).
+// ENTER only records lastEntrance and returns false.
 bool cSource::initiallyQualifySyntacticRelationExit(int where, vector <cSyntacticRelationGroup>::iterator srg)
 {
 	bool inPrimaryQuote = (m[where].objectRole & IN_PRIMARY_QUOTE_ROLE) != 0;
@@ -3721,6 +3950,9 @@ bool cSource::initiallyQualifySyntacticRelationExit(int where, vector <cSyntacti
 	return false;
 }
 
+// True if an EXIT should not drop POV: not all POV speakers are in the
+// subject, or the subject is still physically present, or they board a
+// MOVING object. Fills the three out-params.
 bool cSource::cancelExitPOV(const int where, vector <cSyntacticRelationGroup>::iterator srg, bool &allPOVSpeakersInSubject, bool &subjectIsPhysicallyPresent, set <int> &povSpeakers)
 {
 	bool cancel = false;
@@ -3788,6 +4020,8 @@ bool cSource::cancelExitPOV(const int where, vector <cSyntacticRelationGroup>::i
 // attempt to disambiguate a subject which is exiting (21092 with verb 21103)
 // if one is POV, and the other is not POV, then if notPOV is found after exit, then it must not be exiting.
 // also don't erase if numbered metagroup (all three)
+// If the EXIT subject is a multi-match that includes a POV speaker, drop
+// the non-POV matches so aging applies to the right entity.
 void cSource::disambiguateExitingSubject(int where, vector <cSyntacticRelationGroup>::iterator srg, set <int>& povSpeakers)
 {
 	wstring tmpstr;
@@ -3850,6 +4084,9 @@ void cSource::disambiguateExitingSubject(int where, vector <cSyntacticRelationGr
 	}
 }
 
+// After an SRG is inserted: if it qualifies as EXIT, maybe cancel for POV,
+// disambiguate the subject, then ageTransition everyone except speakers
+// who continue (or the spatial-separation case).
 void cSource::processExit(int where, vector <cSyntacticRelationGroup>::iterator srg, int backInitialPosition, vector <int>& lastSubjects)
 {
 	LFS
@@ -3987,6 +4224,8 @@ void cSource::processExit(int where, vector <cSyntacticRelationGroup>::iterator 
 	}
 }
 
+// Walk every SRG, chain timeSPTAnchor to the last progressing clause, and
+// log where + timeInfo when traceWhere / traceTime.
 void cSource::logSpaceCheck(void)
 {
 	LFS

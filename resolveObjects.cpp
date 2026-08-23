@@ -1,3 +1,64 @@
+/*
+	resolveObjects.cpp - entity coreference: bind each mention to a prior
+	cObject (or keep it as a new local-focus entry) using salience, gender,
+	Lappin & Leass filters, and speaker-group context.
+
+	Overview:
+		resolveObject() is the per-mention driver. After skipping already-
+		resolved / pleonastic / relativizer-headed spans it classifies the
+		mention (resolveSpecificClassObject) and either (a) writes a concrete
+		objectMatches list or (b) scores localObjects and calls chooseBest().
+		Third-person pronouns go through Lappin & Leass rules 2?6 plus
+		pleonastic-it / place-it / IS-role special cases. Gendered nouns
+		("the man", "the doctor") use nymMatch against local focus and, if
+		needed, a whole-document occupation scan. Non-gendered nouns match
+		by head word, acronym, or "the X of Name". Body parts resolve to
+		their owner. Recurses for cataphora ("of the German") and for
+		META_GROUP (resolveMetaGroupObject). 1st/2nd-person pronouns are
+		mostly deferred to resolveFirstSecondPersonPronouns.cpp; a thin
+		wrapper here handles them when resolveObject is invoked from
+		speaker resolution.
+
+	Pipeline position:
+		Stage 6/7. Called heavily from identifySpeakerGroups /
+		resolveSpeakers (resolveForSpeaker=true), from
+		identifySpeakerGroups' narration pass, from names.cpp, from
+		semanticRelations, and from this file itself (cataphora, "of",
+		class-change reentry). resolveFirstSecondPersonPronouns may also
+		call resolveObject for word-order meta-groups.
+
+	Key entry points:
+		- resolveObject() - per-position driver
+		- resolveSpecificClassObject() - switch on OC
+		- resolvePronoun() / reflexivePronounCoreference()
+		- resolveGenderedObject() / resolveOccRoleActivityObject()
+		- resolveNonGenderedGeneralObject()
+		- resolveBodyObjectClass()
+		- coreferenceFilterLL2345() / pronounCoreferenceFilterLL6()
+		- resolveAdjectivalObject() - his/her/its as unknown eOBJECTS
+
+	Key data structures / globals:
+		- localObjects (cLocalFocus) - the attention window; salienceFactor
+		  is accumulated then chooseBest() picks winners
+		- objectToBeMatchedInQuote / quoteIndependentAge - set per call via
+		  cLocalFocus::setSalienceAgeMethod
+		- m[].objectMatches - the resolution result at this position
+		- speakerGroups / currentSpeakerGroup / lastOpeningPrimaryQuote
+
+	Dependencies:
+		identifyObjects must have run. WordNet maps and nymMatch from
+		identifyObjects.cpp. Lappin & Leass 1994 for the filter rules.
+
+	Notes / gotchas:
+		- resolveObject may re-enter itself after changing BODY ->
+		  NON_GENDERED (changeClass). flagObjectResolved is cleared first.
+		- containingSpeakerGroup() compares sgBegin/sgEnd to the loop
+		  index, not a source position, so it always returns end().
+		- cOM == vs != and colliding cWordMatch flags are documented in
+		  CODE_REVIEW.md; this file uses salienceFactor numerically and
+		  tests quote flags only on quote positions.
+		- ownerWhere < -1 is a word-order code, not a missing owner.
+*/
 #include <windows.h>
 #include "Winhttp.h"
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
@@ -7,6 +68,10 @@
 #include "source.h"
 #include "profile.h"
 
+// If exactly one high-salience NAME in local focus is gender-ambiguous,
+// narrow it to 'male' or 'female' (the pronoun's gender) and attach default
+// man/woman associated nouns. No-op when both or neither flag is set, or
+// when an already-unambiguous name of that gender exists.
 // for a NAME that is both male and female (uncertain) make this NAME a male if the NAME is the only NAME matching the current object.
 void cSource::resolveNameGender(int where, bool male, bool female)
 {
@@ -45,6 +110,11 @@ void cSource::resolveNameGender(int where, bool male, bool female)
 	}
 }
 
+// Try to map the current non-gendered mention onto prior object o (IBM vs
+// International Business Machines, "the show" vs "Saturday Night Live",
+// "Esthonia Glassware" vs "... Co.", same-head with a determiner). Keeps
+// only the most recent successful lastWhere. Returns true on a match.
+// Time and VERB objects are refused.
 bool cSource::resolveNonGenderedGeneralObjectAgainstOneObject(int where, vector <cObject>::iterator object, vector <cOM>& objectMatches, int o, int sf, int lastWhere, int& mostRecentMatch)
 {
 	LFS
@@ -179,6 +249,11 @@ bool cSource::resolveNonGenderedGeneralObjectAgainstOneObject(int where, vector 
 	return true;
 }
 
+// Walk previousCompoundPartObject / nextCompoundPartObject from 'where'
+// (cap 10). Returns the chain length and writes combinantScore (higher =
+// more likely a real coordinated group: +10000 per member, -10000 mixed
+// number/verb, -500 mixed gender, -spread). Used to match "four pictures"
+// to a four-member compound.
 // try harder to accurately group compound objects.
 // group preferentially by gender, whether the objects are numbers,plural, or 
 // if only 2 objects - if chain is not minimal (the first object endPosition!=coordinator [and]) and the first object is not an object of a preposition)
@@ -301,11 +376,16 @@ unsigned int cSource::getNumCompoundObjects(int where, int& combinantScore, wstr
 	return chainCount;
 }
 
+// Plural non-gendered mention: first try a same-head plural already in
+// localObjects (the loop's skip test uses localObjects[0], not [s]). Then
+// match a cardinal ("four pictures") to a compound of that size in focus
+// or the next sentence. Returns true only on the same-head path.
 bool cSource::resolveNonGenderedGeneralObjectPlural(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches)
 {
 	wstring tmpstr, tmpstr2;
 	for (unsigned int s = 0; s < localObjects.size(); s++)
 	{
+		// Intended: skip narrator/audience. Tests [0] every iteration, not [s].
 		if (localObjects[0].om.object <= 1) continue;
 		//if (localObjects[s].inQuote!=inQuote) continue; GO_NEUTRAL
 		vector <cObject>::iterator lso = objects.begin() + localObjects[s].om.object;
@@ -391,6 +471,9 @@ bool cSource::resolveNonGenderedGeneralObjectPlural(int where, vector <cObject>:
 	return false;
 }
 
+// "No. 27" / address-like __NOUN[Q]: match a local object (or relatedObjectsMap
+// entry) that contains the same numeral. Returns true after the first
+// localObjects candidate with om.object>1, even if nothing matched.
 bool cSource::resolveNonGenderedGeneralObjectNumAddress(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches)
 {
 	wstring tmpstr, tmpstr2;
@@ -431,12 +514,14 @@ bool cSource::resolveNonGenderedGeneralObjectNumAddress(int where, vector <cObje
 			if (debugTrace.traceSpeakerResolution && objectMatches.size())
 				lplog(LOG_RESOLUTION, L"%06d:Unknown resolution mapped %s to (unknown) %s [num/address mapping 2].", where,
 					objectString(object, tmpstr, true).c_str(), objectString(objectMatches, tmpstr2, true).c_str());
-			return true;
+			return true; // after first om.object>1 candidate only
 		}
 	}
 	return false;
 }
 
+// "the pity on Mr. Carter's face": if this is a facial-expression subject
+// whose PP object is face/eye with an owner, resolve to that owner.
 bool cSource::resolveNonGenderedGeneralObjectExpression(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches)
 {
 	int ww;
@@ -457,6 +542,8 @@ bool cSource::resolveNonGenderedGeneralObjectExpression(int where, vector <cObje
 	return false;
 }
 
+// Copular "X is a plumber": if X is non-gendered and the IS_OBJECT is an
+// occupation, promote X to GENDERED_GENERAL (male and female).
 void cSource::narrowClassToGenderedIfIsProfession(int where)
 {
 	// Curveball is an Iraqi defector
@@ -473,6 +560,8 @@ void cSource::narrowClassToGenderedIfIsProfession(int where)
 	}
 }
 
+// Quoted question "a pensionnat?": map the singular onto a same-mainEntry
+// plural already in local focus (the last speaker's "pensionnats").
 void cSource::resolveNonGenderedGeneralObjectSingularToPlural(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches)
 {
 	if (m[object->begin].word->first == L"a" && (m[where].objectRole & IN_PRIMARY_QUOTE_ROLE) != 0 && (m[where].flags & cWordMatch::flagInQuestion))
@@ -493,6 +582,9 @@ void cSource::resolveNonGenderedGeneralObjectSingularToPlural(int where, vector 
 	}
 }
 
+// Apply wordOrderWords[wordOrderSensitiveModifier] to a filled match list:
+// "another" clears it; first/second/former/latter keep one via
+// preferWordOrder (0=first, 1=second, -2=clear).
 void cSource::adjustForWordOrderSensitiveModifier(int where, vector <cOM>& objectMatches, int wordOrderSensitiveModifier)
 {
 	if (wordOrderSensitiveModifier >= 0 && objectMatches.size() > 0)
@@ -515,6 +607,10 @@ void cSource::adjustForWordOrderSensitiveModifier(int where, vector <cOM>& objec
 	}
 }
 
+// Non-gendered / business / non-gendered-name dispatcher: attach an "of
+// Name's" owner, then plural / expression / num-address / determiner-head
+// match against localObjects (and their aliases). "a X" in a quote question
+// uses the singular-to-plural path.
 void cSource::resolveNonGenderedGeneralObject(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches, int wordOrderSensitiveModifier)
 {
 	LFS
@@ -573,18 +669,21 @@ void cSource::resolveNonGenderedGeneralObject(int where, vector <cObject>::itera
 	narrowClassToGenderedIfIsProfession(where);
 }
 
+// True if hon, hon2 or hon3 equals sHon (e.g. "dr").
 bool cName::matchHonorifics(wstring sHon)
 {
 	LFS
 		return (hon != wNULL && hon->first == sHon) || (hon2 != wNULL && hon2->first == sHon) || (hon3 != wNULL && hon3->first == sHon);
 }
 
+// True if first, last and any are all unset (honorifics ignored).
 bool cName::isNull()
 {
 	LFS
 		return first == wNULL && last == wNULL && any == wNULL;
 }
 
+// True if hon, first, last and any are all unset.
 bool cName::isCompletelyNull()
 {
 	LFS
@@ -602,6 +701,8 @@ struct tHonMap
 	{ L"doc",L"doctor" }
 };
 
+// True if this name's honorific (or originalLocation word) is the short or
+// long form of m[where] via honorificMap (dr/doctor/doc).
 // is an object compatible with a certain word?
 bool cObject::hasAttribute(int where, vector <cWordMatch>& m)
 {
@@ -620,10 +721,14 @@ bool cObject::hasAttribute(int where, vector <cWordMatch>& m)
 	return false;
 }
 
+// Intended: the speaker group whose [sgBegin, sgEnd) covers some position.
+// As written, I is the group index and is compared to sgBegin/sgEnd (source
+// positions), so the body almost never succeeds and this returns end().
 vector <cSource::cSpeakerGroup>::iterator cSource::containingSpeakerGroup()
 {
 	LFS
 		for (int I = 0; I < (signed)speakerGroups.size(); I++)
+			// I is the group index, not a source position; this test is effectively never true.
 			if (speakerGroups[I].sgBegin >= I && speakerGroups[I].sgEnd < I)
 				return speakerGroups.begin() + I;
 	return speakerGroups.end();
@@ -640,6 +745,11 @@ vector <cSource::cSpeakerGroup>::iterator cSource::containingSpeakerGroup()
 // "the" may also be demonstrative_determiner, possessive_determiner, quantifier
 // one noun phrase has adjectives and the other does not, otherwise reject.
 // compare the principal - this assumes unknown speakers have determiners.
+// "the doctor" / "the nurse": score localObjects by nymMatch (occupation
+// head + adjectives), preferring physically-present hits. "another" looks
+// ahead two paragraphs for a new same-occupation entity. If still empty,
+// scan all prior NAME / OCC objects (the containingSpeakerGroup overlap
+// filter is currently a no-op). Returns true if chooseBest should run.
 bool cSource::resolveOccRoleActivityObject(int where, vector <cOM>& objectMatches, vector <cObject>::iterator object, int wordOrderSensitiveModifier, bool physicallyPresent)
 {
 	LFS
@@ -731,6 +841,7 @@ bool cSource::resolveOccRoleActivityObject(int where, vector <cOM>& objectMatche
 		for (unsigned int I = 0; I < objectMatches.size(); I++)
 			locations.push_back(locationBefore(objectMatches[I].object, where));
 		int tmp = preferWordOrder(wordOrderSensitiveModifier, locations);
+		// tmp==0 erases [1] with no size>=2 guard (unlike adjustForWordOrderSensitiveModifier).
 		if (tmp == 0)
 			objectMatches.erase(objectMatches.begin() + 1);
 		else if (tmp == 1)
@@ -863,6 +974,9 @@ struct {
 	{ "boss","employee" },
 	{ "grandmother:grandfather","granddaughter:grandson" }
 };
+// GENDERED_RELATIVE ("cousin", "sister"): "another" scans two paragraphs
+// ahead for a new same-relation or attributed NAME; other word-order
+// modifiers trim objectMatches via preferWordOrder (no size guard on erase).
 void cSource::resolveRelativeObject(int where, vector <cOM>& objectMatches, vector <cObject>::iterator object, int wordOrderSensitiveModifier)
 {
 	LFS
@@ -902,6 +1016,10 @@ void cSource::resolveRelativeObject(int where, vector <cOM>& objectMatches, vect
 	}
 }
 
+// "the two men" / "both": collect whereGenderedSubgroupCount (or 2)
+// matching-gender speakers from the current group, excluding POV. Digit
+// forms use first[0]-'0'; spelled cardinals are not parsed here. Returns
+// true if objectMatches was filled (caller then skips local-focus choose).
 // the two men
 bool cSource::tryGenderedSubgroup(int where, vector <cOM>& objectMatches, vector <cObject>::iterator object, int whereGenderedSubgroupCount, bool limitTwo)
 {
@@ -981,6 +1099,9 @@ bool cSource::tryGenderedSubgroup(int where, vector <cOM>& objectMatches, vector
 	return sg >= 0;
 }
 
+// If otherGroupedObjects is a subset of sg.groupedSpeakers or of some
+// sg.groups[i], push the complementary members. Used by "another" in an
+// MPLURAL chain. Returns true if anything was pushed.
 bool cSource::matchOtherObjects(vector <int>& otherGroupedObjects, int speakerGroup, vector <cOM>& objectMatches)
 {
 	LFS
@@ -1014,6 +1135,9 @@ bool cSource::matchOtherObjects(vector <int>& otherGroupedObjects, int speakerGr
 	return objectMatches.size() > 0;
 }
 
+// "another man": first try MPLURAL complements via matchOtherObjects, then
+// scan two paragraphs ahead for the first new same-gender gendered entity
+// that does not nymNoMatch. Returns true on the first hit.
 // look ahead for the next paragraph and compile all new matching objects
 // this is for 'another' 
 // with "another" the matching object must not have appeared before:
@@ -1085,6 +1209,8 @@ bool cSource::scanFutureGenderedMatchingObjects(int where, bool inQuote, vector 
 	return false;
 }
 
+// Boost / penalize localObjects salience so chooseBest prefers first/second/
+// former/latter / "the other" among same-class candidates (by lastWhere).
 void cSource::includeWordOrderPreferences(int where, int wordOrderSensitiveModifier)
 {
 	LFS
@@ -1146,6 +1272,11 @@ void cSource::includeWordOrderPreferences(int where, int wordOrderSensitiveModif
 // definitelySpeaker is from scanForSpeaker.  It is set to true unless the speaker was detected after the
 // quote in an _S1 pattern with a verb with a nonpast tense, or the verb had one or more objects.
 // in secondary quotes, inPrimaryQuote=false
+// Score local focus for a gendered general / occ / body / demonym / relative
+// / honorific-only name / leftover meta-group. Applies LL 2-4-5, parallel-
+// role, miss-vs-mrs, speaker-in-quote penalties, alias boosts, POV, and
+// generic-gender preferences. Returns true if chooseBest should run; false
+// if objectMatches is already final (or the mention is not this class).
 bool cSource::resolveGenderedObject(int where, bool definitelyResolveSpeaker, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2,
 	vector <cOM>& objectMatches,	vector <cObject>::iterator object,	int wordOrderSensitiveModifier,
 	int& subjectCataRestriction, bool& mixedPlurality, bool limitTwo, bool isPhysicallyPresent, bool physicallyEvaluated)
@@ -1236,6 +1367,8 @@ bool cSource::resolveGenderedObject(int where, bool definitelyResolveSpeaker, bo
 	// make sure this does not resolve to a NON_GENDERED_GENERAL_OBJECT_CLASS
 	for (unsigned int I = 0; I < localObjects.size(); I++)
 		if (localObjects[I].includeInSalience(objectToBeMatchedInQuote, quoteIndependentAge) &&
+			// && binds tighter than ||: BUSINESS and VERB are penalized even
+			// when includeInSalience is false.
 			objects[localObjects[I].om.object].objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS ||
 			objects[localObjects[I].om.object].objectClass == NON_GENDERED_BUSINESS_OBJECT_CLASS ||
 			objects[localObjects[I].om.object].objectClass == VERB_OBJECT_CLASS)
@@ -1336,6 +1469,9 @@ bool cSource::resolveGenderedObject(int where, bool definitelyResolveSpeaker, bo
 	return true;
 }
 
+// For "the Russian": if no local demonym of that head is salient, pull the
+// most recent earlier GENDERED_DEMONYM of the same word into localObjects.
+// If some already are, boost them and copy their objectMatches in.
 void cSource::addPreviousDemonyms(int where)
 {
 	LFS
@@ -1449,6 +1585,10 @@ void cSource::addPreviousDemonyms(int where)
 	}
 }
 
+// "two men" / "three men" as an unresolvable subject: if the *next* speaker
+// group introduces exactly that many new speakers of matching gender, bind
+// them and rewrite the current group's cGroup. Indexes
+// speakerGroups[currentSpeakerGroup+1] with no bounds check.
 bool cSource::addNewNumberedSpeakers(int where, vector <cOM>& objectMatches)
 {
 	LFS
@@ -1456,6 +1596,7 @@ bool cSource::addNewNumberedSpeakers(int where, vector <cOM>& objectMatches)
 			(m[where].endObjectPosition - m[where].beginObjectPosition) == 1)
 			return false;
 	wstring tmpstr, tmpstr2;
+	// No bounds check: OOB if currentSpeakerGroup is the last group.
 	set <int> speakers = speakerGroups[currentSpeakerGroup + 1].speakers;
 	// erase all objects in the future that already appear in the present
 	for (set <int>::iterator si = speakerGroups[currentSpeakerGroup].speakers.begin(), siEnd = speakerGroups[currentSpeakerGroup].speakers.end(); si != siEnd; si++)
@@ -1490,6 +1631,10 @@ bool cSource::addNewNumberedSpeakers(int where, vector <cOM>& objectMatches)
 	return true;
 }
 
+// Unresolvable gendered introduction: look at the next speaker group minus
+// current speakers; if one leftover matches gender, bind it (and optionally
+// replaceObjectInSection). Also tries current speakers not yet physically
+// present. Returns true when a unique future speaker was assigned.
 // this object is new, so subtract all the current speakers from the future speakers, and if there is one left, then assign.
 bool cSource::addNewSpeaker(int where, vector <cOM>& objectMatches)
 {
@@ -1644,6 +1789,11 @@ bool cSource::addNewSpeaker(int where, vector <cOM>& objectMatches)
 }
 
 // in secondary quotes, inPrimaryQuote=false
+// Resolve a body-part mention to its owner: "the voice of the German",
+// "the man with the beard", facial-expression subjects, or the possessive
+// determiner's objectMatches. Sets changeClass when the mention should be
+// reclassified NON_GENDERED (internal part, ownerless object, neuter 'of').
+// Returns true if chooseBest should run (falls through to resolveGenderedObject).
 bool cSource::resolveBodyObjectClass(int where, int beginEntirePosition, vector <cObject>::iterator object, bool definitelySpeaker, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool resolveForSpeaker, bool avoidCurrentSpeaker, int wordOrderSensitiveModifier, int subjectCataRestriction, bool& mixedPlurality, bool limitTwo, bool isPhysicallyPresent, bool physicallyEvaluated, bool& changeClass, vector <cOM>& objectMatches)
 {
 	LFS
@@ -1835,6 +1985,8 @@ bool cSource::resolveBodyObjectClass(int where, int beginEntirePosition, vector 
 	return resolveGenderedObject(where, definitelySpeaker | resolveForSpeaker, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, objectMatches, object, wordOrderSensitiveModifier, subjectCataRestriction, mixedPlurality, limitTwo, isPhysicallyPresent, physicallyEvaluated);
 }
 
+// Subtract DISALLOW_SALIENCE from any local-focus POV speaker so "the other"
+// does not resolve to the point-of-view character (unless HAIL or in-quote).
 void cSource::excludePOVSpeakers(int where, const wchar_t* fromWhere)
 {
 	LFS
@@ -1879,6 +2031,9 @@ void cSource::excludePOVSpeakers(int where, const wchar_t* fromWhere)
 	}
 }
 
+// In narration, subtract DISALLOW_SALIENCE from observer entities when the
+// mention is plural, a definite speaker, a word-order meta-group, or an
+// IS_OBJECT whose complement is unresolvable ("He was a big man").
 void cSource::excludeObservers(int where, bool inQuote, bool definitelySpeaker)
 {
 	LFS
@@ -1920,6 +2075,9 @@ void cSource::excludeObservers(int where, bool inQuote, bool definitelySpeaker)
 		}
 }
 
+// Lower POV salience for a narration IS-description when a newly present
+// entity exists, and for "they VERB him" mixed-plurality so the singular
+// object is not the POV group. No-op in quotes or for definite speakers.
 // if this not in a quote, not a speaker and is a descriptive sentence (IS) which does not specifically match the POV
 // and if there is a new entity having been introduced within 2 sentences (newPPAge<2)
 // discourage POV
@@ -1979,6 +2137,9 @@ void cSource::discouragePOV(int where, bool inQuote, bool definitelySpeaker)
 	}
 }
 
+// In a quote that is not a hail / self-reference, penalize local-focus
+// entities who are speakers of the current (or embedded) speaker group so
+// third-person "he" prefers a non-speaker.
 void cSource::excludeSpeakers(int where, bool inPrimaryQuote, bool inSecondaryQuote)
 {
 	LFS
@@ -2033,6 +2194,10 @@ void cSource::excludeSpeakers(int where, bool inPrimaryQuote, bool inSecondaryQu
 
 // wchar_t *wordOrderWords[]={L"other",L"another",L"second",L"first",L"third",L"former",L"latter",L"that",L"this",L"two",L"three",NULL};
 //                            -2       -3         -4        -5       -6       -7        -8        -9      -10     -11    -12
+// "the second of the two men": pick first/second/former/latter/other from
+// m[ofObjectWhere].objectMatches by which member was mentioned most
+// recently before 'where'. wo is a whichOrderWord index (0=other). Returns
+// true when objectMatches was filled.
 bool cSource::resolveWordOrderOfObject(int where, int wo, int ofObjectWhere, vector <cOM>& objectMatches)
 {
 	LFS
@@ -2128,6 +2293,9 @@ bool cSource::resolveWordOrderOfObject(int where, int wo, int ofObjectWhere, vec
 	return false;
 }
 
+// Cataphora / apposition immediately after the mention: "one of the seats",
+// then a comma-appositive RE_OBJECT. Recurses into resolveObject for the
+// "of" complement. Returns the appositive position, false, or -1.
 // check for a phrase immediately after the object that agrees in gender and number and is not a subject
 int cSource::checkSubsequent(int where, bool definitelySpeaker, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool resolveForSpeaker, bool avoidCurrentSpeaker, vector <cOM>& objectMatches)
 {
@@ -2210,6 +2378,8 @@ int cSource::checkSubsequent(int where, bool definitelySpeaker, bool inPrimaryQu
 	return -1;
 }
 
+// True if nextPosition is a same-gender/number appositive of 'where' (not a
+// subject, not a generic "sir" hail, not "him, Ivan"). Used by checkSubsequent.
 bool cSource::matchByAppositivity(int where, int nextPosition)
 {
 	LFS
@@ -2284,6 +2454,9 @@ bool cSource::matchByAppositivity(int where, int nextPosition)
 	return true;
 }
 
+// If this mention is a speaker verb's subject inside a primary quote, set
+// flagQuoteContainsSpeaker on lastOpeningPrimaryQuote (so later "he" in
+// the same quote is not penalized as a speaker-of-the-quote).
 void cSource::setQuoteContainsSpeaker(int where, bool inPrimaryQuote)
 {
 	LFS
@@ -2300,6 +2473,8 @@ void cSource::setQuoteContainsSpeaker(int where, bool inPrimaryQuote)
 	}
 }
 
+// localObjects iterator for the owner of body-object o, or localObjects.end()
+// if o has no owner or the owner is not in focus.
 vector <cLocalFocus>::iterator cSource::ownerObjectInLocal(int o)
 {
 	LFS
@@ -2314,6 +2489,8 @@ vector <cLocalFocus>::iterator cSource::ownerObjectInLocal(int o)
 	return localObjects.end();
 }
 
+// True if any token in [begin,end) equals one of the NULL-terminated
+// modifiers (young/old/little/...).
 bool cObject::hasAgeModifier(vector <cWordMatch>& m, const wchar_t* modifiers[])
 {
 	LFS
@@ -2326,6 +2503,8 @@ bool cObject::hasAgeModifier(vector <cWordMatch>& m, const wchar_t* modifiers[])
 
 const wchar_t* olderAgeModifiers[] = { L"old",L"elderly",L"older",L"aged",NULL };
 const wchar_t* youngerAgeModifiers[] = { L"young",L"teen",L"preteen",L"adolescent",L"miss",NULL };
+// Infer objectGenericAge from associated nouns/adjectives (girl/boy vs
+// woman/man, young/old). Returns the age bucket written (0-3) or 0.
 int cObject::setGenericAge(vector <cWordMatch>& m)
 {
 	LFS
@@ -2363,6 +2542,8 @@ int cObject::setGenericAge(vector <cWordMatch>& m)
 }
 
 // wchar_t *genericGender[]={ L"man", L"fellow", L"gentleman", L"sir", L"woman", L"lady", L"madam", L"girl", L"miss",L"missus",NULL };
+// Record that this entity matched generic noun w (man/woman/girl/...) at
+// fromAge. Updates genericNounMap, mostMatchedGeneric, mostMatchedAge.
 bool cObject::updateGenericGender(int where, tIWMM w, int fromAge, const wchar_t* fromWhere, sTrace& t)
 {
 	LFS
@@ -2389,6 +2570,8 @@ bool cObject::updateGenericGender(int where, tIWMM w, int fromAge, const wchar_t
 	return false;
 }
 
+// Merge another object's genericNounMap / genericAge into this one (used
+// when objects are replaced/aliased).
 void cObject::updateGenericGenders(map <tIWMM, int, cSourceWordInfo::cRMap::wordMapCompare>& replacedGenericNounMap, int* replacedGenericAge)
 {
 	LFS
@@ -2412,6 +2595,8 @@ void cObject::updateGenericGenders(map <tIWMM, int, cSourceWordInfo::cRMap::word
 // for each of these objects, 
 //   if HEAD is not mapped, or if HEAD<MMG/2, AND numHavingSalience==numGenericObjects decrease salience.
 //   if HEAD == MMG, increase salience.
+// Boost local-focus candidates whose mostMatchedGeneric / genericAge agrees
+// with this mention ("the girl" prefers entities previously called girl).
 void cSource::includeGenericGenderPreferences(int where, vector <cObject>::iterator object)
 {
 	LFS
@@ -2593,6 +2778,9 @@ void cSource::includeGenericGenderPreferences(int where, vector <cObject>::itera
 	}
 }
 
+// Resolve an adjectival unknown (his/her/its as eOBJECTS sentinels). Runs
+// LL6 then gender/number salience. Returns -1 for 1st/2nd person (deferred)
+// or an unresolvable owner; otherwise 'where'.
 // in secondary quotes, inPrimaryQuote=false
 int cSource::resolveAdjectivalObject(int where, bool definitelySpeaker, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, bool resolveForSpeaker)
 {
@@ -2689,6 +2877,10 @@ int cSource::resolveAdjectivalObject(int where, bool definitelySpeaker, bool inP
 //   or (ii) Q is in the adjunct domain of N.
 //   John and Mary like each other's portraits.
 // Possible parents: _NOUN_OBJ, _NOUN"C", single element __PP"3"
+// Bind himself/herself/itself/themselves to the clause subject (or "said X
+// to himself" speaker). Scores matching localObjects. Returns 0 on success,
+// -1 if lastBeginS1 is missing or the word is not in the allowed list
+// (clears flagObjectResolved so a later pass can retry).
 int cSource::reflexivePronounCoreference(int where, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool inPrimaryQuote, bool inSecondaryQuote)
 {
 	LFS
@@ -2827,6 +3019,8 @@ int cSource::reflexivePronounCoreference(int where, int lastBeginS1, int lastRel
 	return 0;
 }
 
+// Format the relPrep chain starting at 'where' into tmpstr (space-separated
+// positions). Stops on -1 or a cycle back to where. Returns tmpstr.c_str().
 wchar_t* cSource::loopString(int where, wstring& tmpstr)
 {
 	LFS
@@ -2842,6 +3036,9 @@ wchar_t* cSource::loopString(int where, wstring& tmpstr)
 	return (wchar_t*)tmpstr.c_str();
 }
 
+// Choose the innermost of lastRelativePhrase / lastBeginS1 / lastQ2 and
+// write its [begin, endS1). Returns -1 if the expected pattern is missing,
+// 0 otherwise (including lastBeginS1<0).
 int cSource::coreferenceFilterDetermineBeginAndEndS1(const int lastBeginS1, const int lastRelativePhrase, const int lastQ2, int &begin, int &endS1)
 {
 	int end, element;
@@ -2871,6 +3068,8 @@ int cSource::coreferenceFilterDetermineBeginAndEndS1(const int lastBeginS1, cons
 	return 0;
 }
 
+// True if 'where' is past endS1 and no conjunction/coordinator extends a
+// covering pattern out to where ? i.e. LL filters should not run.
 bool cSource::noCoreferenceFound(const int where, const int endS1)
 {
 	if (endS1 < where)
@@ -2895,6 +3094,8 @@ bool cSource::noCoreferenceFound(const int where, const int endS1)
 	return false;
 }
 
+// Lappin & Leass 5: add every other member of this compound (and their
+// objectMatches) to disallowedReferences. Caps the walk at 10 links.
 void cSource::disallowCompoundReferences(const int where, vector <int>& disallowedReferences)
 {
 	int compoundLoop = 0, wcpo;
@@ -2919,6 +3120,8 @@ void cSource::disallowCompoundReferences(const int where, vector <int>& disallow
 	}
 }
 
+// L&L 2: a subject pronoun cannot corefer with its own direct or indirect
+// object ("He saw him").
 // where is subject
 // Rule 2: add object1 and object2 to disallowedReferences
 void cSource::rule2DisallowObjects(const int where, const int directObject, const int indirectObject, const int indirectObjectPosition, vector <int>& disallowedReferences)
@@ -2932,6 +3135,8 @@ void cSource::rule2DisallowObjects(const int where, const int directObject, cons
 			where, objectString(indirectObject, tmpstr, false).c_str(), indirectObjectPosition);
 }
 
+// L&L 3: subject pronoun vs a PP object of the same verb when there is no
+// direct object ("She sat near her").
 // Rule 3: if there is no directObject, and a PREP is in the sentence not in SUBJECT,
 //         then add the PREPOBJECT to disallowedReferences
 // She sat near her.  NOT She sat him near her.
@@ -2974,6 +3179,9 @@ void cSource::rule3DisallowPrepObject(const int where, const int whereVerb, cons
 // this has an exception: there must not be any more than one PREP after the verb, otherwise the prepositional phrase may
 //   modify the object of the previous prepositional phrase and so this should NOT be excluded:
 //   he had not yet acquired the habit of going about with any considerable sum of money on him. (Agatha Christie)  
+// L&L 2/3 from the object's point of view: an object pronoun cannot
+// corefer with its subject (or the subject's PP). May set
+// subjectCataRestriction so a later cataphoric subject is also banned.
 void cSource::rule23ObjectDisallowSubjectOrPrepObject(const int where, const int whereVerb, const int whereSubject, const int rObject, const int subjectObject, const int directObject, const int directObjectPosition, vector <int>& disallowedReferences, int& subjectCataRestriction)
 {
 	wstring tmpstr;
@@ -3041,6 +3249,8 @@ void cSource::rule23ObjectDisallowSubjectOrPrepObject(const int where, const int
 	}
 }
 
+// L&L 4 / _META_NAME_EQUIVALENCE: "X, a Y" ? Y cannot corefer with X
+// (except the identity exemption written to idExemption).
 void cSource::rule4MetaNameEquivalenceSameNounPattern(const int where, const int rObject, const int lastBeginS1, int & idExemption, vector <int>& disallowedReferences)
 {
 	int maxEnd, nameEnd = -1, element;
@@ -3080,6 +3290,8 @@ void cSource::rule4MetaNameEquivalenceSameNounPattern(const int where, const int
 				where, lastBeginS1, objectString(m[IP].getObject(), tmpstr, false).c_str());
 }
 
+// True if the clause [begin, endS1) contains both a singular and a plural
+// non-neuter object (used to relax some LL filters).
 bool cSource::getMixedPlurality(const int begin, const int endS1)
 {
 	bool singularPronounEncountered = false, pluralPronounEncountered = false;
@@ -3096,6 +3308,8 @@ bool cSource::getMixedPlurality(const int begin, const int endS1)
 	return singularPronounEncountered && pluralPronounEncountered;
 }
 
+// Walk the whole compound containing 'where' and disallow every other
+// member (except idExemption) as a coreferent of rObject.
 void cSource::scanEntireCompoundObject(const int where, const int rObject, const int idExemption, vector <int>& disallowedReferences)
 {
 	int wcpBegin, wcpEnd, maxEnd, compoundLoop = 0;
@@ -3173,6 +3387,10 @@ void cSource::scanEntireCompoundObject(const int where, const int rObject, const
 // lastBeginS1 is the index of the start of the pattern S1 which contains P.
 // rObject is P in LL procedure outlined above.
 // subjectCataRestriction occurs when the subject is singular and has more than one match.
+// Run Lappin & Leass rules 2?5 for the mention at 'where' (rObject is its
+// objects index). Fills disallowedReferences and mixedPlurality /
+// subjectCataRestriction. Returns -1 if the enclosing S1/_REL1/_Q2 cannot
+// be located or noCoreferenceFound; 0 otherwise.
 int cSource::coreferenceFilterLL2345(int where, int rObject, vector <int>& disallowedReferences,
 	int lastBeginS1, int lastRelativePhrase, int lastQ2, bool& mixedPlurality, int& subjectCataRestriction)
 {
@@ -3242,6 +3460,8 @@ int cSource::coreferenceFilterLL2345(int where, int rObject, vector <int>& disal
 // 5. P is in the NP domain of N (included in the same _NOUN pattern)
 //    John's portait of him in interesting.
 // for possessives in a prepositional clause 'her hand in his' OR 'a relative of hers'
+// L&L 5 only (possessive pronouns): disallow other members of the same
+// compound. Used when LL2345 is skipped for adjectival "his".
 void cSource::coreferenceFilterLL5(int where, vector <int>& disallowedReferences)
 {
 	LFS
@@ -3268,6 +3488,9 @@ void cSource::coreferenceFilterLL5(int where, vector <int>& disallowedReferences
 // Additional - based on Lappin and Leass 2.1.1 (2)
 //             (His eyes were fixed on Mr. Carter)
 //             If body object in subject, then this determiner cannot resolve to object, or prep object for the rest of _S1.
+// L&L 6: a pronoun in a PP or non-subject position cannot corefer with
+// intervening objects in the same S1. Special-cases a BODY_OBJECT subject
+// by banning every other object in the clause. Returns 0.
 int cSource::pronounCoreferenceFilterLL6(int P, int lastBeginS1, vector <int>& disallowedReferences)
 {
 	LFS
@@ -3330,6 +3553,9 @@ int cSource::pronounCoreferenceFilterLL6(int P, int lastBeginS1, vector <int>& d
 	return 0;
 }
 
+// Pronoun early-outs: reject IS_OBJECT with a "you" subject; resolve
+// "one/both/all of X" by recursing on X; handle "both". Returns false to
+// abort resolvePronoun (objectMatches already final or mention rejected).
 bool cSource::resolvePronounSpecialCases(const int where, const bool definitelySpeaker, const bool inPrimaryQuote, const bool inSecondaryQuote, 
 	const int lastBeginS1, const int lastRelativePhrase, const int lastQ2, const int lastVerb, 
 	const bool resolveForSpeaker, const bool avoidCurrentSpeaker, const bool limitTwo, vector <cOM>& objectMatches)
@@ -3394,6 +3620,9 @@ bool cSource::resolvePronounSpecialCases(const int where, const bool definitelyS
 	return true;
 }
 
+// Copular "he is the doctor": if the IS_OBJECT is already resolved and
+// agrees in gender/number, copy its matches. Returns false to abort
+// resolvePronoun when that copy is the final answer.
 bool cSource::resolveGenderAndNumberMatchedIsRolePronoun(const int where, const bool definitelySpeaker, const bool inPrimaryQuote, const bool inSecondaryQuote,
 	const int lastBeginS1, const int lastRelativePhrase, const int lastQ2, const int lastVerb,
 	const bool resolveForSpeaker, const bool avoidCurrentSpeaker, vector <cOM>& objectMatches)
@@ -3405,7 +3634,7 @@ bool cSource::resolveGenderAndNumberMatchedIsRolePronoun(const int where, const 
 		// the object cannot be unresolvable - this will not be useful / they were an essentially modern looking couple
 		!unResolvablePosition(m[m[where].getRelObject()].beginObjectPosition) &&
 		object->matchGenderIncludingNeuter(objects[m[m[where].getRelObject()].getObject()]) &&
-		// They[words] were uttered by Boris and they[words] were : “QS Mr . Brown . ”
+		// They[words] were uttered by Boris and they[words] were : ï¿½QS Mr . Brown . ï¿½
 		(!object->plural || objects[m[m[where].getRelObject()].getObject()].plural))
 	{
 		wstring word = (m[where].principalWherePosition >= 0) ? m[m[where].principalWherePosition].word->first : m[where].word->first;
@@ -3458,6 +3687,8 @@ bool cSource::resolveGenderAndNumberMatchedIsRolePronoun(const int where, const 
 	return true;
 }
 
+// If isPleonastic(where), mark flagObjectPleonastic, push
+// OBJECT_UNKNOWN_NEUTER, and return false so resolvePronoun stops.
 bool cSource::identifyPleonasticIt(const int where, vector <cOM>& objectMatches)
 {
 	// pleonastic it
@@ -3491,6 +3722,8 @@ bool cSource::identifyPleonasticIt(const int where, vector <cOM>& objectMatches)
 	return true;
 }
 
+// "it" as a place ("it was opposite the door"): bind to the nearest local
+// object with a place subtype. Returns false when that match is final.
 bool cSource::resolvePronounIsPlace(const int where, vector <cOM>& objectMatches)
 {
 	int wp = m[where].getRelObject();
@@ -3511,6 +3744,9 @@ bool cSource::resolvePronounIsPlace(const int where, vector <cOM>& objectMatches
 	return true;
 }
 
+// Possessive pronoun that is not a subject ("he put her hand in his"):
+// prefer a same-gender object already in this S1. Returns false when a
+// unique match was written.
 bool cSource::resolveAdjectivalNonSubject(int where, int lastBeginS1, vector <cOM>& objectMatches)
 {
 	if ((m[where].flags & cWordMatch::flagAdjectivalObject) == 0 && lastBeginS1 >= 0 && !(m[where].objectRole & SUBJECT_ROLE))
@@ -3535,6 +3771,8 @@ bool cSource::resolveAdjectivalNonSubject(int where, int lastBeginS1, vector <cO
 	return true;
 }
 
+// After a question, penalize the previous question's speaker so the
+// answer's "he" is not that speaker.
 void cSource::disallowSpeakerOfPreviousQuestion(int where)
 {
 	unordered_map <int, int>::iterator sqi;
@@ -3551,6 +3789,8 @@ void cSource::disallowSpeakerOfPreviousQuestion(int where)
 	}
 }
 
+// In narration, subtract DISALLOW_SALIENCE from POV speakers so a
+// third-person pronoun prefers someone else.
 void cSource::disallowPOV(int where, const bool inPrimaryQuote)
 {
 	wstring tmpstr, tmpstr2;
@@ -3576,6 +3816,8 @@ void cSource::disallowPOV(int where, const bool inPrimaryQuote)
 // each prep points to its object by relObject.
 // each object points to its preposition by relPrep.
 // if a preposition directly follows another object, the object of the preposition points to the previous object by relNextObject.
+// If this pronoun is singular, penalize plural local-focus entries (and
+// vice versa) so "he" does not win against "they".
 void cSource::excludeMixedPlurality(int where)
 {
 	int whereSubject = -1;
@@ -3597,6 +3839,10 @@ void cSource::excludeMixedPlurality(int where)
 	}
 }
 
+// Third-person pronoun pipeline: special cases, IS-role, pleonastic-it,
+// place-it, then LL2345 or LL5, gender/number salience, mixed plurality,
+// previous-question speaker, POV, observers, name-gender narrowing, and
+// in-quote speaker exclusion. Returns true if chooseBest should run.
 bool cSource::resolvePronoun(int where, bool definitelySpeaker, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, int beginEntirePosition,
 	bool resolveForSpeaker, bool avoidCurrentSpeaker, bool& mixedPlurality, bool limitTwo, bool isPhysicallyPresent, bool physicallyEvaluated,
 	int& subjectCataRestriction, vector <cOM>& objectMatches)
@@ -3661,6 +3907,9 @@ bool cSource::resolvePronoun(int where, bool definitelySpeaker, bool inPrimaryQu
 	return true;
 }
 
+// Mark lsi as re-encountered at 'where': reset age, update lastWhere /
+// lastRoleSalience, and OR in isPhysicallyPresent (unless a secondary-quote
+// "am" copula, which is not treated as physical presence).
 void cSource::setResolved(int where, vector <cLocalFocus>::iterator lsi, bool isPhysicallyPresent)
 {
 	LFS
@@ -3692,6 +3941,8 @@ void cSource::setResolved(int where, vector <cLocalFocus>::iterator lsi, bool is
 		objects[lsi->om.object].originalLocation = where;
 }
 
+// setResolved() for every objectMatches entry already in local focus, then
+// for m[where].getObject() itself (non-NAME speaker resolutions drop PP).
 void cSource::setMatchesAndLocalResolved(int where,bool resolveForSpeaker,bool isPhysicallyPresent)
 {
 	vector <cLocalFocus>::iterator lsi;
@@ -3705,6 +3956,9 @@ void cSource::setMatchesAndLocalResolved(int where,bool resolveForSpeaker,bool i
 		setResolved(where, lsi, isPhysicallyPresent);
 }
 
+// Re-enter an object that was resolved via speaker-group identity
+// (flagUnresolvableObjectResolvedThroughSpeakerGroup): push it and its
+// matches into local focus and moveNyms from the first match.
 void cSource::pushSpeakerGroupResolvedObjectToLocalFocus(int where, bool inPrimaryQuote, bool inSecondaryQuote)
 {
 	vector <cLocalFocus>::iterator lsi;
@@ -3717,6 +3971,9 @@ void cSource::pushSpeakerGroupResolvedObjectToLocalFocus(int where, bool inPrima
 		moveNyms(where, m[where].objectMatches[0].object, m[where].getObject(), L"UnresolvableObjectResolvedThroughSpeakerGroup");
 }
 
+// True if this in-quote present-tense mention follows an unquoted paragraph
+// in which some local object just became physically present ? so "it"/"he"
+// may refer out of the quote to the current scene.
 bool cSource::getPresentAssertion(int where, bool inPrimaryQuote)
 {
 	bool presentAssertion = false;
@@ -3732,6 +3989,9 @@ bool cSource::getPresentAssertion(int where, bool inPrimaryQuote)
 	return presentAssertion;
 }
 
+// Early-out for resolveObject: already resolved, pleonastic, relativizer-
+// headed, speaker-group-resolved, or a single non-owner adjectival. Sets
+// flagObjectResolved for non-1st/2nd mentions. Returns true to skip the rest.
 bool cSource::unresolvableObject(int where, int beginEntirePosition, bool inPrimaryQuote, bool inSecondaryQuote,bool resolveForSpeaker, bool isPhysicallyPresent)
 {
 	// objects that have already been resolved
@@ -3777,6 +4037,9 @@ bool cSource::unresolvableObject(int where, int beginEntirePosition, bool inPrim
 	return false;
 }
 
+// Bare capitalized occupation in narration ("Carter nodded") becomes
+// NAME_OBJECT_CLASS with name.any = the word. Determinered or quoted
+// mentions are left as occupations.
 void cSource::reclassifyGenderedOccupationalRoleActivityToNameObject(int where,int beginEntirePosition, bool inPrimaryQuote, bool inSecondaryQuote)
 {
 	vector <cObject>::iterator object = objects.begin() + m[where].getObject();
@@ -3794,6 +4057,10 @@ void cSource::reclassifyGenderedOccupationalRoleActivityToNameObject(int where,i
 	}
 }
 
+// Skip never-resolved pronouns (nobody/there/so/this/...) and adjectival
+// both/either/any. Unquoted I/you bind to narrator (0) / audience (1) and
+// return true so resolvePronoun does not run; quoted 1st/2nd also return
+// true after clearing flagObjectResolved (deferred to the FPP pass).
 bool cSource::resolveSpecialPronounObjects(int where, bool inPrimaryQuote,bool inSecondaryQuote)
 {
 	int person = m[where].word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON | THIRD_PERSON);
@@ -3849,6 +4116,9 @@ bool cSource::resolveSpecialPronounObjects(int where, bool inPrimaryQuote,bool i
 	return false;
 }
 
+// Reflexive 1st/2nd person: unquoted myself/yourself bind to narrator/
+// audience; quoted ones clear flagObjectResolved and return true (the FPP
+// pass will finish). Returns false for third-person reflexives.
 bool cSource::resolveFirstPersonSecondPersonPronoun(int where, int person, bool inPrimaryQuote, bool inSecondaryQuote)
 {
 	// FIRST_PERSON:  "myself", "ourselves",
@@ -3887,6 +4157,8 @@ bool cSource::resolveFirstPersonSecondPersonPronoun(int where, int person, bool 
 	return false;
 }
 
+// OCC_ROLE_ACTIVITY path: log, then resolveOccRoleActivityObject. Writes
+// chooseFromLocalFocus / objectMatches.
 void cSource::resolveGenderedOccupationalRoleActivityClass(int where, vector <cObject>::iterator object, vector <cOM> &objectMatches, const int wordOrderSensitiveModifier, 
 		bool & chooseFromLocalFocus, const bool isPhysicallyPresent, const bool physicallyEvaluated)
 {
@@ -3914,6 +4186,9 @@ void cSource::resolveGenderedOccupationalRoleActivityClass(int where, vector <cO
 	}
 }
 
+// "a kind of X" / "a sort of X": resolve the complement and copy its
+// matches (or mark the mention unresolvable). Returns true to skip the
+// rest of resolveSpecificClassObject.
 bool cSource::resolveIsKindOf(int where, bool definitelySpeaker, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb,
 	bool resolveForSpeaker, bool avoidCurrentSpeaker, bool limitTwo, vector <cOM> &objectMatches)
 {
@@ -3965,6 +4240,8 @@ bool cSource::resolveIsKindOf(int where, bool definitelySpeaker, bool inPrimaryQ
 
 // if any speakers are of the highest salience, decrease the salience to the next highest salience (if greater than SALIENCE_THRESHOLD)
 // this avoids third persons being resolved to the speaker, unless there is no alternative
+// avoidCurrentSpeaker: drop the opening-quote speaker from objectMatches
+// and penalize them in local focus (used when resolving audience).
 void cSource::deleteCurrentSpeaker(int where)
 {
 	vector < vector <cLocalFocus>::iterator > psls;
@@ -3995,6 +4272,8 @@ void cSource::deleteCurrentSpeaker(int where)
 }
 
 // the guy Tommy wanted to say hello to.
+// "the guy Tommy wanted to say hello to": if a following relative clause
+// has a subject, do not let that subject win as the head's antecedent.
 void cSource::avoidFollowingRelativeClauseSubject(int where,vector <cObject>::iterator object,bool chooseFromLocalFocus, vector <cOM> &objectMatches)
 {
 	if (object->whereRelSubjectClause >= 0 && m[object->whereRelSubjectClause].getObject() >= 0 && m[object->whereRelSubjectClause].principalWherePosition >= 0)
@@ -4018,6 +4297,9 @@ void cSource::avoidFollowingRelativeClauseSubject(int where,vector <cObject>::it
 // NAME, GENDERED_GENERAL, NON_GENDERED_GENERAL, DET_NAME, PLEONASTIC, DEICTIC, VERB
 // if nongendered object and if there is more than one name, or gendered object already in local speakers,
 // and this is not identified as speaker, don't add to localSpeakers.
+// True if this mention should not be entered as a speaker: already
+// definitelySpeaker, a place/time, a non-agent, or a non-gendered thing
+// while gendered speakers are already in focus.
 bool cSource::definitelyNotSpeaker(int where, vector <cObject>::iterator object, bool definitelySpeaker)
 {
 	bool notSpeaker = false;
@@ -4100,6 +4382,8 @@ bool cSource::definitelyNotSpeaker(int where, vector <cObject>::iterator object,
 	return notSpeaker;
 }
 
+// Document-initial capitalized subject that Wikipedia marked as a person
+// is promoted to NAME_OBJECT_CLASS ("Jay-Z says he will marry...").
 void cSource::reclassifyWikiPersonSubject(int where, vector <cObject>::iterator object)
 {
 	__int64 objectRole = m[where].objectRole;
@@ -4126,6 +4410,9 @@ void cSource::reclassifyWikiPersonSubject(int where, vector <cObject>::iterator 
 	}
 }
 
+// True if this mention should be treated as new (not already in
+// localObjects): unresolvable introduction, first physical manifestation,
+// or no same-head local hit. May set notSpeaker.
 bool cSource::isNotLocallyMatched(int where, vector <cObject>::iterator object, int beginEntirePosition, int lastBeginS1,bool &notSpeaker)
 {
 	if (in(m[where].getObject()) != localObjects.end())
@@ -4182,6 +4469,9 @@ bool cSource::isNotLocallyMatched(int where, vector <cObject>::iterator object, 
 	return noLocalMatch;
 }
 
+// Push objectMatches (or the mention itself) into local focus, record
+// locations, and optionally replaceObjectInSection when there is a unique
+// match. Used when isNotLocallyMatched is true.
 void cSource::pushObjectMatchesToLocalFocus(int where, vector <cObject>::iterator object, bool inPrimaryQuote, bool inSecondaryQuote, bool definitelySpeaker, bool notSpeaker, vector <cOM> &objectMatches)
 {
 	eliminateBodyObjectRedundancy(where, objectMatches);
@@ -4221,6 +4511,9 @@ void cSource::pushObjectMatchesToLocalFocus(int where, vector <cObject>::iterato
 	setQuoteContainsSpeaker(where, inPrimaryQuote);
 }
 
+// Late check: if this is dummy "it" that slipped through, set
+// flagObjectPleonastic and return true so resolveObject does not enter it
+// into local focus.
 bool cSource::pleonasticIt(int where)
 {
 	if ((m[where].objectRole & SUBJECT_ROLE) && m[where].word->first == L"it")
@@ -4236,6 +4529,9 @@ bool cSource::pleonasticIt(int where)
 	return false;
 }
 
+// Final path: copy objectMatches onto m[where], push each into local
+// focus / locations, and if inSpeakerGroup erase this object from the
+// current speaker set (it has been replaced by its matches).
 void cSource::pushObjectMatchesIntoLocalFocusAndLocation(int where, vector <cObject>::iterator object, bool inPrimaryQuote, bool inSecondaryQuote, bool definitelySpeaker, bool notSpeaker, bool inSpeakerGroup, vector <cOM>& objectMatches)
 {
 	for (vector <cOM>::iterator om = objectMatches.begin(), omEnd = objectMatches.end(); om != omEnd; om++)
@@ -4261,6 +4557,8 @@ void cSource::pushObjectMatchesIntoLocalFocusAndLocation(int where, vector <cObj
 	}
 }
 
+// Look forward in this S1 for a later same-gender mention that can serve
+// as a cataphoric antecedent ("When he arrived, John...").
 void cSource::cataphoricallyMatch(int where, int lastBeginS1, vector <cObject>::iterator object)
 {
 	// only cataphorically match if not an adjectival object and not discovering speaker groups
@@ -4287,6 +4585,9 @@ void cSource::cataphoricallyMatch(int where, int lastBeginS1, vector <cObject>::
 }
 
 
+// Switch on objectClass and run the matching resolver. Several cases fall
+// through (NAME -> gendered, OCC -> non-gendered). Returns true if
+// resolveObject should return immediately (already finished or re-entered).
 bool cSource::resolveSpecificClassObject(const int where, const bool definitelySpeaker, const bool inPrimaryQuote, const bool inSecondaryQuote, const int lastBeginS1, const int lastRelativePhrase, const int lastQ2, const int lastVerb, const int beginEntirePosition, int &subjectCataRestriction,
 	const bool resolveForSpeaker, const bool avoidCurrentSpeaker, const bool limitTwo, bool &chooseFromLocalFocus, const bool isPhysicallyPresent, const bool physicallyEvaluated, bool &mixedPlurality, vector <cOM> &objectMatches, vector <cObject>::iterator &object)
 {
@@ -4448,6 +4749,10 @@ bool cSource::resolveSpecificClassObject(const int where, const bool definitelyS
 	return false;
 }
 
+// Per-mention driver. Sets quote-vs-narration salience mode, skips
+// unresolvable/adjectival-unknown mentions, then resolveSpecificClassObject
+// + chooseBest or a new local-focus entry. Recurses on BODY->NON_GENDERED
+// class changes. resolveForSpeaker forces physicallyPresent.
 // subject has not been resolved, but the object has been.
 // Tom was Bob.
 // The man was Bob.

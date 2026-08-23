@@ -1,3 +1,51 @@
+/*
+	word.h - global lexicon (cWord / Words), per-word info (cSourceWordInfo), and form catalog (cForm)
+
+	Overview:
+		The in-memory dictionary.  Words is an unordered_map<wstring,cSourceWordInfo>
+		keyed by the surface form.  Each cSourceWordInfo holds the form-id list
+		(indexes into the global Forms vector, stored in a process-wide formsArray),
+		inflectionFlags (InflectionTypes bits), usagePatterns/usageCosts used by
+		pattern costing, and an optional relationMaps[relationType] of
+		cRMap::cRelation (from/to word co-occurrence counts, filled from
+		wordRelationsMemory by DBWordRelations.cpp).
+
+	Pipeline position:
+		Loaded in stage 1 (cWord::readWordsFromDB / initialize) before tokenize.
+		tokenize.cpp looks up or inserts every token via parseWord / addNewOrModify.
+		Pattern costing reads usageCosts.  Relations and objects store tIWMM
+		iterators into Words; those are serialized as the word string, not as a
+		pointer (see source.h).
+
+	Key entry points:
+		- Words.query / gquery / fullQuery / parseWord / addNewOrModify - lookup/insert.
+		- readWordsFromDB / initializeWordRelationsFromDB - hydrate from MySQL.
+		- cSourceWordInfo::addForm / query / usage-cost helpers - form and cost API.
+		- The predefined Words.PPN / NUM / DATE / TIME / LOCATION / TABLE / ...
+			sentinels used as synthetic tokens.
+
+	Key data structures / globals:
+		- Words / WMM - the map.  tIWMM is its iterator; wNULL is "not found".
+		- Forms - vector<cForm*>, form ids are indexes (UNDEFINED_FORM_NUM=0).
+		- formsArray / allocated / fACount - one big int array of form ids; each
+			word holds (formsOffset, count).  Must not move after init (no SRWLOCK).
+		- DBNAME / LDBNAME - MySQL schema name "lp".
+		- MAX_WORD_LENGTH 32 - matches words.word CHAR(32).
+		- Role bit constants (SUBJECT_ROLE, OBJECT_ROLE, ... SENTENCE_IN_ALT_REL_ROLE)
+			are unsigned __int64 flags stored on objects/relations, not on words.
+		- NET_ERR - negative codes shared by the stemmer, HTTP cache, and tokenizer.
+
+	Notes / gotchas:
+		- Form ids in the DB are 1-based; in memory they are 0-based (formId-1 on
+			read).  patternFormNumOffset (32750) is the fake "form id" used to store
+			usage-pattern counts in the same wordForms rows.
+		- ADJECTIVE_INFLECTIONS_MASK includes ADVERB_SUPERLATIVE, not
+			ADJECTIVE_SUPERLATIVE - almost certainly a copy-paste error.
+		- alreadyTaken = 8192*256 does not collide with deleteWordAfterSourceProcessing
+			(=8192); the *256 is a shift by 8 extra bits.
+		- A tIWMM is invalidated if WMM rehashes; callers that keep iterators across
+			inserts (parse of a whole novel) rely on reserve() during DB load.
+*/
 #pragma warning (disable: 4503)
 #pragma warning (disable: 4996)
 #undef _STLP_USE_EXCEPTIONS // STLPORT 4.6.1
@@ -192,6 +240,9 @@ public:
   bool blockProperNounRecognition;
 	bool formCheck; // used only when checking dictionary entries
   int index; // to DB
+	// Serialize name/shortName/inflectionsClass and the bool flags as shorts.
+	// Returns false if any copy() ran out of buffer.  index is not written
+	// (it is the Forms vector position on the read side).
 	bool write(void *buffer,int &where,int limit)
 	{
     if (!copy(buffer,name,where,limit)) return false;
@@ -270,6 +321,9 @@ public:
 			int rlastWhere;
       // if fromDB is true, then this relation is being read from the database.
       // if not, it is generated from the text.
+			// fromDB==true: frequency is the DB total and deltaFrequency stays 0
+			// (already persisted).  fromDB==false: both frequency and deltaFrequency
+			// start at iFrequency so a later flush can write only the delta.
 			cRelation(short _sourceId,int _lastWhere,int iFrequency,bool fromDB)
       {
         if (fromDB)
@@ -286,6 +340,8 @@ public:
 				sourceId=_sourceId;
 				rlastWhere=_lastWhere;
       };
+			// fromDB: replace frequency with count+deltaFrequency (DB is the new
+			// baseline; in-memory delta is preserved).  Otherwise add count to both.
 			void increaseCount(short _sourceId,int _lastWhere,int count,bool fromDB)
       {
         if (fromDB)
@@ -325,6 +381,8 @@ public:
     //set <tIcRMap,mapSequenceCompare> bySequence; // constantly maintained map of most frequent relations - not currently used
 		tIcRMap addRelation(int sourceId,int lastWhere,tIWMM toWord,bool &isNew,int count,bool fromDB);
 		//tIcRMap addRelation(int sourceId,int lastWhere,tIWMM toWord,bool &isNew,int count,bool fromDB);
+		// Drop every relation in this map.  The cRMap itself is not deleted
+		// (cSourceWordInfo::clearRelationMaps does that).
 		void clear()
 		{
 			r.clear();
@@ -379,6 +437,8 @@ public:
   bool changedSinceLastWordRelationFlush;
   bool operator==(cSourceWordInfo &other) const;
 
+  // Pointer to this word's form-id slice inside the process-wide formsArray.
+  // Valid for formsSize() ints.  Do not retain across a formsArray realloc.
   unsigned int *forms()
   {
     return formsArray+formsOffset;
@@ -386,10 +446,14 @@ public:
   void eraseForms(void);
   cForm *Form(unsigned int offset);
 	int getFormNum(unsigned int offset);
+  // Number of form ids in this word's forms() slice (not including the
+  // extra "imposed proper noun" usageCosts[count] slot).
   unsigned int formsSize()
   {
     return count;
   }
+	// Delete every non-NULL relationMaps[I] and null the slot.  Called before
+	// initializeWordRelationsFromDB reloads the maps for words in this source.
 	void clearRelationMaps()
 	{
 		for (int I=0; I<numRelationWOTypes; I++)
@@ -400,6 +464,8 @@ public:
 				relationMaps[I] = NULL;
 			}
 	}
+	// True (and LOG_ERROR) if this word's DB index or Form(f)->index is out of
+	// range.  Used by the dictionary checker, not the parse hot path.
 	bool illegal(int f,int maxForms,tIWMM word)
 	{
 		if (index<=0 || Form(f)->index<=0 || Form(f)->index>(signed)maxForms)
@@ -465,15 +531,20 @@ public:
 	void resetUsagePatternsAndCosts(wstring sWord);
 	void logReset(wstring sWord);
 	void resetCapitalizationAndProperNounUsageStatistics();
+	// usageCosts[formIndex], or -1 if formIndex is out of 0..MAX_USAGE_PATTERNS.
 	char getUsageCost(int formIndex) { return (formIndex>= MAX_USAGE_PATTERNS || formIndex<0) ? -1 : usageCosts[formIndex]; }
 	char getUsagePattern(int formIndex) { return (formIndex >= MAX_USAGE_PATTERNS || formIndex<0) ? -1 : usagePatterns[formIndex]; }
 	// controlled by the updateWordUsageCostsDynamically flag, currently globally set to false
+	// Bump TRANSFER_COUNT (and its delta) and mark the word dirty for a
+	// wordRelations flush.  Gated by updateWordUsageCostsDynamically (currently off).
 	void incrementTransferCount()
 	{
 		deltaUsagePatterns[cSourceWordInfo::TRANSFER_COUNT]++;
 		usagePatterns[cSourceWordInfo::TRANSFER_COUNT]++;
 		changedSinceLastWordRelationFlush = true;
 	}
+	// True if bit 'form' is set in tmpWinnerForms, or if tmpWinnerForms is 0
+	// (treat every form as a winner).  Forms past the width of an int are never winners.
 	bool isWinner(int form,int tmpWinnerForms)
 	{
 		if (form >= sizeof(tmpWinnerForms) * 8)
@@ -483,6 +554,9 @@ public:
 		return (tmpWinnerForms) ? ((1 << form)&tmpWinnerForms) != 0 : true;
 	}
 	// controlled by the updateWordUsageCostsDynamically flag, currently globally set to false
+	// After a parse, add (count - numWinnerForms) to each winning form's usage
+	// counter (halving first if any would exceed 255).  Same-name and Proper_Noun
+	// forms are skipped.  Every 64 transfers, recomputes usageCosts and returns true.
 	bool updateFormUsagePatterns(int tmpWinnerForms,wstring sWord)
 	{
 		int numWinnerForms = 0, sameNameForm = -1, properNounForm = -1;
@@ -548,6 +622,8 @@ public:
 		return true;
 
 	}
+	// If every slot in usages[start, start+len) is 255, right-shift them all so
+	// the next increment does not wrap a unsigned char.
 	void normalize(unsigned char *usages, int start, int len)
 	{
 		len += start;
@@ -557,7 +633,10 @@ public:
 			for (int J = start; J < len; J++)
 				usages[J] >>= 1;
 	}
+	// Clear the extra "imposed proper noun" cost slot (index == formsSize()).
 	void zeroNewProperNounCostIfUsedAllCaps() { usageCosts[formsSize()] = 0; }
+	// Copy the noun/abbreviation/sa_abb usageCost onto the extra "imposed
+	// proper noun" slot at usageCosts[formsSize()], or 0 if none of those forms exist.
 	void setProperNounUsageCost()
 	{
 		int costingOffset;
@@ -568,6 +647,8 @@ public:
 		else
 			usageCosts[formsSize()] = 0;
 	}
+	// Count one SINGULAR_NOUN_HAS_[NO_]DETERMINER observation and, every 16
+	// observations, fold the pair into usageCosts.
 	void updateNounDeterminerUsageCost(bool hasDeterminer)
 	{
 		normalize(usagePatterns, cSourceWordInfo::SINGULAR_NOUN_HAS_DETERMINER, 2);
@@ -580,6 +661,8 @@ public:
 		if ((transferTotal & 15) == 15)
 			transferUsagePatternsToCosts(cSourceWordInfo::HIGHEST_COST_OF_INCORRECT_NOUN_DET_USAGE, cSourceWordInfo::SINGULAR_NOUN_HAS_DETERMINER, 2);
 	}
+	// Count one VERB_HAS_0/1/2_OBJECTS observation.  numObjects is used as an
+	// index addend - values outside 0..2 write past the three-slot window.
 	void updateVerbObjectsUsageCost(int numObjects)
 	{
 		usagePatterns[cSourceWordInfo::VERB_HAS_0_OBJECTS + numObjects]++;
@@ -590,6 +673,8 @@ public:
 		if ((transferTotal & 15) == 15)
 			transferUsagePatternsToCosts(cSourceWordInfo::HIGHEST_COST_OF_INCORRECT_VERB_USAGE, cSourceWordInfo::VERB_HAS_0_OBJECTS, 3);
 	}
+	// Minimum usageCosts[f] among forms whose cForm::isTopLevel is set, or 10000
+	// if the word has no top-level form.
 	int getLowestTopLevelCost(void)
 	{
 			int lowestCost = 10000;
@@ -599,6 +684,8 @@ public:
 		return lowestCost;
 	}
 
+	// Index of the lowest-cost form, breaking ties by preferring a non-Proper_Noun.
+	// Returns -1 if count==0.
 	int getLowestCost(void)
 	{
 			int lowestCost = 10000, offset = -1;
@@ -672,6 +759,8 @@ public:
   {
     return WMM.begin();
   }
+  // Past-the-end iterator of WMM.  Compare to this, never dereference it.
+  // wNULL is a separate "not found" sentinel, not equal to end().
   static tIWMM end(void)
   {
     return WMM.end();
@@ -719,6 +808,7 @@ public:
   bool acquireLock(MYSQL &mysql,bool persistent);
   void releaseLock(MYSQL &mysql);
 
+  // Current lexicon size (WMM.size()), including sentinels and unknowns.
   size_t numWords(void) { return WMM.size(); }
   // if word is a new word discovered since last flush, the index in cSourceWordInfo will be -1.
 	bool readWordsOfMultiWordObjects(vector < vector < tmWS > > &multiWordStrings,vector < vector < vector <tIWMM> > > &multiWordObjects);
@@ -762,6 +852,9 @@ public:
 
 protected:
   bool appendToUnknownWordsMode;
+  // After an insertion into formsArray at 'formsOffset', bump every word whose
+  // slice starts at or after that index.  O(Words) - only used while building
+  // the dictionary, before parse.
   void moveFormOffsets(int formsOffset)
   {
     for (tIWMM I=WMM.begin(),WMMEnd=WMM.end(); I!=WMMEnd; I++)

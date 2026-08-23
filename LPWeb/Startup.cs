@@ -1,3 +1,23 @@
+/*
+	Startup.cs - ASP.NET Core DI and middleware pipeline for LPWeb
+
+	Overview:
+		Registers Razor Pages and configures the request pipeline:
+		dev exception page vs /Error + HSTS, HTTPS redirect, static
+		files, routing, authorization, MapRazorPages.
+
+	Pipeline position:
+		Web front-end composition root, invoked from Program.CreateHostBuilder.
+
+	Key entry points:
+		- Startup() - stash IConfiguration
+		- ConfigureServices() - AddRazorPages
+		- Configure() - middleware order
+
+	Notes / gotchas:
+		UseAuthorization is present but no authentication is configured,
+		so authorization is a no-op unless later middleware is added.
+*/
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,6 +33,7 @@ namespace LPWeb
 {
     public class Startup
     {
+        // Capture the host-provided configuration (appsettings, env, cmdline).
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;

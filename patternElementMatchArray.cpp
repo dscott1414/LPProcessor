@@ -1,3 +1,42 @@
+/*
+	patternElementMatchArray.cpp - document-wide PEMA storage, chain insert, winner pack
+
+	Overview:
+		Implements the single cSource::pema array.  Each slot is one element of one
+		pattern match, threaded on four intrusive lists (by position, by
+		(pattern,end), by child (pattern,end), and "next element of the same
+		parent match").  push_back_unique inserts into the by-pattern-end chain
+		sorted by descending begin; consolidateWinners builds a wa[] map of
+		winner destinations, rewrites every chain index, and memcpy's survivors
+		down so the array is dense again.
+
+	Pipeline position:
+		Stage 4 write path (fillPattern) and the post-winnow compact
+		(eliminateLoserPatterns -> generateWinnerConsolidationArray /
+		consolidateWinners).  Stages 5+ only walk the chains.
+
+	Key entry points:
+		- push_back() / push_back_unique() - allocate a slot and link it
+		- generateWinnerConsolidationArray() / consolidateWinners() / translate()
+		- getNextValidPosition / skipPastPositions / getNextValidByPosition -
+		  walk past already-consolidated (previous sentence) indexes
+		- ownedByOtherWinningPattern() / queryTag() / generatePEMACount()
+		- tPatternElementMatch::getRole() / toText()
+
+	Key data structures / globals:
+		- content / count / allocated - slot 0 is reserved unused (collectTags
+		  negates PEMA offsets)
+		- wa[] - temporary "old index -> new index or -1" map, freed inside
+		  consolidateWinners
+
+	Notes / gotchas:
+		- First push_back bumps count from 0 to 1 before writing, so the first
+		  real entry is at index 1.
+		- nextByPatternEnd < 0 is a circular-list back-pointer (-offset), not
+		  "end of list" (-1 is the empty-head sentinel).
+		- read(IOHANDLE) format string omits the count argument.
+		- operator= is not self-assignment safe (frees first).
+*/
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
@@ -11,6 +50,7 @@
 #include "source.h"
 #include "profile.h"
 
+// Empty PEMA.  content is NULL until the first push_back.
 cPatternElementMatchArray::cPatternElementMatchArray()
 {
 	LFS
@@ -19,6 +59,7 @@ cPatternElementMatchArray::cPatternElementMatchArray()
 	content = NULL;
 };
 
+// Free the buffer (if any) and NULL content.
 cPatternElementMatchArray::~cPatternElementMatchArray()
 {
 	LFS
@@ -28,6 +69,7 @@ cPatternElementMatchArray::~cPatternElementMatchArray()
 	content = NULL;
 }
 
+// Drop every entry, free the buffer, and NULL content (unlike PMA::clear).
 void cPatternElementMatchArray::clear(void)
 {
 	LFS
@@ -37,6 +79,8 @@ void cPatternElementMatchArray::clear(void)
 	content = NULL;
 }
 
+// Deep copy.  On tmalloc failure logs FATAL and returns with content==NULL
+// but count/allocated still copied from rhs.
 cPatternElementMatchArray::cPatternElementMatchArray(const cPatternElementMatchArray& rhs)
 {
 	LFS
@@ -55,6 +99,8 @@ cPatternElementMatchArray::cPatternElementMatchArray(const cPatternElementMatchA
 	}
 }
 
+// Shrink allocated down to count.  trealloc-over-content leaks the old buffer
+// if the realloc fails.
 void cPatternElementMatchArray::minimize(void)
 {
 	LFS
@@ -63,6 +109,7 @@ void cPatternElementMatchArray::minimize(void)
 	content = (tPatternElementMatch*)trealloc(6, content, oldAllocated * sizeof(*content), allocated * sizeof(*content));
 }
 
+// Write count then raw content bytes to a POSIX fd.  Always returns true.
 bool cPatternElementMatchArray::write(IOHANDLE file)
 {
 	LFS
@@ -71,6 +118,7 @@ bool cPatternElementMatchArray::write(IOHANDLE file)
 	return true;
 }
 
+// Win32 WriteFile of count + content.  Returns false if either write is short.
 bool cPatternElementMatchArray::WriteFile(HANDLE file)
 {
 	LFS
@@ -80,6 +128,9 @@ bool cPatternElementMatchArray::WriteFile(HANDLE file)
 	return true;
 }
 
+// Read count then content from a POSIX fd.  Rejects count>1e6.  The error log
+// "Illegal count of %d ..." is missing the count argument.  A zero-count PEMA
+// still calls tmalloc(0); a NULL return is treated as failure.
 bool cPatternElementMatchArray::read(IOHANDLE file)
 {
 	LFS
@@ -108,6 +159,7 @@ bool cPatternElementMatchArray::read(IOHANDLE file)
 	return true;
 }
 
+// Serialize into a memory image.  Fatals if the payload would exceed limit.
 bool cPatternElementMatchArray::write(void* buffer, int& where, unsigned int limit)
 {
 	LFS
@@ -119,6 +171,8 @@ bool cPatternElementMatchArray::write(void* buffer, int& where, unsigned int lim
 	return true;
 }
 
+// Deserialize from a memory image.  On overflow sets count=0 and returns false
+// (does not free a previous buffer).
 bool cPatternElementMatchArray::read(char* buffer, int& where, unsigned int limit)
 {
 	LFS
@@ -141,6 +195,7 @@ bool cPatternElementMatchArray::read(char* buffer, int& where, unsigned int limi
 	return true;
 }
 
+// Byte-compare content[0..count).  `other` is taken by value (full copy).
 bool cPatternElementMatchArray::operator==(const cPatternElementMatchArray other) const
 {
 	LFS
@@ -148,6 +203,7 @@ bool cPatternElementMatchArray::operator==(const cPatternElementMatchArray other
 	return memcmp(content, other.content, count * sizeof(*content)) == 0;
 }
 
+// Replace this buffer with a deep copy of rhs.  Self-assignment frees first.
 cPatternElementMatchArray& cPatternElementMatchArray::operator=(const cPatternElementMatchArray& rhs)
 {
 	LFS
@@ -168,6 +224,7 @@ cPatternElementMatchArray& cPatternElementMatchArray::operator=(const cPatternEl
 	return *this;
 }
 
+// Inverse of operator==.  Also takes `other` by value.
 bool cPatternElementMatchArray::operator!=(const cPatternElementMatchArray other) const
 {
 	LFS
@@ -175,6 +232,7 @@ bool cPatternElementMatchArray::operator!=(const cPatternElementMatchArray other
 	return memcmp(content, other.content, count * sizeof(*content)) != 0;
 }
 
+// Slot _P0.  INDEX_CHECK fatals on OOB (no dummy insert).
 cPatternElementMatchArray::tPatternElementMatch& cPatternElementMatchArray::operator[](unsigned int _P0)
 {
 	LFS
@@ -187,6 +245,7 @@ cPatternElementMatchArray::tPatternElementMatch& cPatternElementMatchArray::oper
 	return (content[_P0]);
 }
 
+// Const [].  INDEX_CHECK throws if count==0 rather than fataling.
 const cPatternElementMatchArray::tPatternElementMatch& cPatternElementMatchArray::operator[](unsigned int _P0) const
 {
 	LFS
@@ -202,6 +261,10 @@ const cPatternElementMatchArray::tPatternElementMatch& cPatternElementMatchArray
 	return (content[_P0]);
 }
 
+// Append one slot.  The first call skips index 0 (count goes 0->1->2) because
+// collectTags negates PEMA offsets.  Grows by allocationHint*10 (plus *50 extra
+// when the hint is <1000).  Fatals if begin/end/iCost do not fit in a short.
+// Returns the new index (count-1).
 int cPatternElementMatchArray::push_back(int oCost, int iCost, unsigned int p, int begin, int end, int elementMatchedSubIndex,
 	unsigned int cPatternElement, unsigned int patternElementIndex, int allocationHint)
 {
@@ -252,6 +315,14 @@ int cPatternElementMatchArray::push_back(int oCost, int iCost, unsigned int p, i
 //     i. entry match found
 //     ii. entry match not found
 //   c. begin is < than any in list
+// Walk the by-pattern-end chain from *firstPosition looking for an equivalent
+// child (same begin, same element, same child form or same child rootPattern+len).
+// On a hit, cheapen oCost/iCost if this call is cheaper and return that index
+// (newElement=false).  Otherwise insert, splice into the descending-begin
+// chain, and close the circular back-pointer (-PEMAOffset).  firstPosition /
+// saveFirstPosition are raw pointers into content; they are converted to
+// integer offsets across the realloc inside push_back.  Illegal child pattern
+// # logs and returns 0 (which is also the reserved unused slot).
 int cPatternElementMatchArray::push_back_unique(int* firstPosition, unsigned int position, int oCost, int iCost, unsigned int p, int begin, int end, int elementMatchedSubIndex,
 	unsigned int cPatternElement, unsigned int patternElementIndex, int allocationHint, bool& newElement, bool POFlag)
 {
@@ -369,6 +440,9 @@ int cPatternElementMatchArray::push_back_unique(int* firstPosition, unsigned int
 	return PEMAOffset;
 }
 
+// Advance nextPosition along nextByPosition until it is either -1 or a winner
+// at or after lastPEMAConsolidationIndex (wa[i-last]!=-1).  Recurses once if
+// the walk skipped a block of already-consolidated (previous sentence) slots.
 int cPatternElementMatchArray::getNextValidByPosition(int lastPEMAConsolidationIndex, int* wa, int& nextPosition)
 {
 	LFS
@@ -385,6 +459,7 @@ int cPatternElementMatchArray::getNextValidByPosition(int lastPEMAConsolidationI
 	return nextPosition;
 }
 
+// Debug: fatal if any chain index is >= count.
 void cPatternElementMatchArray::check(void)
 {
 	LFS
@@ -393,6 +468,10 @@ void cPatternElementMatchArray::check(void)
 				lplog(LOG_FATAL_ERROR, L"FATAL!");
 }
 
+// If *nextPosition still points into the already-consolidated prefix, walk
+// that chain until it lands on an index >= lastPEMAConsolidationIndex (or
+// goes negative).  nextPosition is a pointer-to-slot-field so the caller can
+// then rewrite that field.
 void cPatternElementMatchArray::skipPastPositions(int lastPEMAConsolidationIndex, int*& nextPosition, enum chainType cType)
 {
 	LFS
@@ -417,6 +496,9 @@ void cPatternElementMatchArray::skipPastPositions(int lastPEMAConsolidationIndex
 		}
 }
 
+// skipPastPositions, then walk the chosen chain while wa[index-last]==-1
+// (eliminated).  Leaves *nextPosition at the next surviving slot or a
+// negative sentinel.
 void cPatternElementMatchArray::getNextValidPosition(int lastPEMAConsolidationIndex, int* wa, int* nextPosition, enum chainType cType)
 {
 	LFS
@@ -432,6 +514,9 @@ void cPatternElementMatchArray::getNextValidPosition(int lastPEMAConsolidationIn
 	}
 }
 
+// Remap *position through wa[] after skipPastPositions.  Negative values other
+// than -1 are circular back-pointers: un-negate, remap, re-negate.  A
+// non-winner that is not a looped pointer is logged as an error and set to -1.
 void cPatternElementMatchArray::translate(int lastPEMAConsolidationIndex, int* wa, int* position, enum chainType cType)
 {
 	LFS
@@ -452,6 +537,10 @@ void cPatternElementMatchArray::translate(int lastPEMAConsolidationIndex, int* w
 		*position = -*position;
 }
 
+// Allocate wa[count-last] and fill it with the destination index of each
+// winner (or -1).  Then rewrite each winner's five chain fields to the next
+// still-valid slot (not yet the final compacted index — translate() does that).
+// No-op if there is nothing past lastPEMAConsolidationIndex.
 void cPatternElementMatchArray::generateWinnerConsolidationArray(int lastPEMAConsolidationIndex, int*& wa, int& numWinners)
 {
 	LFS
@@ -471,6 +560,9 @@ void cPatternElementMatchArray::generateWinnerConsolidationArray(int lastPEMACon
 	}
 }
 
+// memcpy each winner onto wa[i], incrementUse() its pattern alternative,
+// translate() its chain fields, then tfree wa and shrink count to
+// last+numWinners.  Returns true if more than one winner remains.
 bool cPatternElementMatchArray::consolidateWinners(int lastPEMAConsolidationIndex, int* wa, int numWinners, sTrace& t)
 {
 	LFS
@@ -498,6 +590,8 @@ bool cPatternElementMatchArray::consolidateWinners(int lastPEMAConsolidationInde
 	return numWinners > 1;
 }
 
+// Length of the nextByPosition chain starting at nextPosition.  Fatals if any
+// index is > count (note: `>` not `>=`, so index==count is not caught).
 int cPatternElementMatchArray::generatePEMACount(int nextPosition)
 {
 	LFS
@@ -508,6 +602,7 @@ int cPatternElementMatchArray::generatePEMACount(int nextPosition)
 	return I;
 }
 
+// First slot on the nextByPosition chain whose element carries `tag`, or -1.
 int cPatternElementMatchArray::queryTag(int nextPosition, int tag)
 {
 	LFS
@@ -517,6 +612,8 @@ int cPatternElementMatchArray::queryTag(int nextPosition, int tag)
 	return -1;
 }
 
+// True if some winner on the nextByPosition chain other than parentPEMAPosition
+// already claims a child whose rootPattern and childLen equal (p, len).
 bool cPatternElementMatchArray::ownedByOtherWinningPattern(int parentPEMAPosition, int nextPosition, int p, int len)
 {
 	LFS
@@ -533,6 +630,8 @@ bool cPatternElementMatchArray::ownedByOtherWinningPattern(int parentPEMAPositio
 	return false;
 }
 
+// Like ownedByOtherWinningPattern but any owner (winner or not) counts, and
+// there is no parent-slot exclusion.
 bool cPatternElementMatchArray::ownedByOtherPattern(int nextPosition, int p, int len)
 {
 	LFS
@@ -547,6 +646,11 @@ bool cPatternElementMatchArray::ownedByOtherPattern(int nextPosition, int p, int
 	return false;
 }
 
+// Map this element's role tags onto the relation-role bitfield.  tagRole is
+// an out-param for pattern-level MPLURAL / MNOUN / S_IN_REL; the return is
+// the child-tag roles (HAIL/SUBJECT/OBJECT/...).  Walks roleTagSet via
+// elementHasTagInSet.  Role tags are required to live on the child, not on
+// the parent pattern as a whole.
 __int64 cPatternElementMatchArray::tPatternElementMatch::getRole(__int64& tagRole)
 {
 	LFS
@@ -571,6 +675,8 @@ __int64 cPatternElementMatchArray::tPatternElementMatch::getRole(__int64& tagRol
 	return childTagRole;
 }
 
+// Format "PARENT[diff](absBegin,absEnd) child CHILD[*](...)" or "... form NAME"
+// into caller-provided temp.  No bound is passed to wsprintf.
 wchar_t* cPatternElementMatchArray::tPatternElementMatch::toText(unsigned int position, wchar_t* temp, vector <cWordMatch>& m)
 {
 	LFS

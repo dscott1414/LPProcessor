@@ -1,4 +1,58 @@
-﻿#undef _STLP_USE_EXCEPTIONS // STLPORT 4.6.1
+/*
+	questionAnswering.cpp - core of cQuestionAnswering: match a parsed question
+		against child sources, score candidates, run subqueries, and pick winners.
+
+	Overview:
+		This is the TREC-style answer extractor described in README.md "Question
+		Answering". A question is a cSource whose SRGs already carry questionType /
+		whereQuestionType / whereQuestionInformationSourceObjects (filled in
+		questionProcessing.cpp). For each such SRG this TU (1) optionally rewrites
+		the question via questionTransforms.txt, (2) looks the named entities up in
+		DBpedia / Wikipedia (abstracts, info-box birthDate/occupation, HTML tables),
+		(3) scores every child SRG against the question by subject/verb/object/prep
+		alignment plus VerbNet / noun-verb equivalence classes, (4) runs relative-
+		clause subqueries ("prize which originated in Spain") against each surviving
+		candidate, and (5) if too few answers remain, hands off to the web-search
+		fallback in questionAnsweringWebSearch.cpp.
+
+	Pipeline position:
+		Stage 8. answerAllQuestionsInSource() is called from main.cpp after speaker
+		and conversation resolution. Child sources are materialized by processPath()
+		(getWikipedia.cpp) and cached in sourcesMap.
+
+	Key entry points:
+		- answerAllQuestionsInSource() / answerQuestionInSource() - per-document /
+		  per-question drivers (see README "Processing Stages")
+		- analyzeQuestionFromSource() - score one child document's SRGs
+		- determineBestAnswers() - confidence / tense / subquery winnow
+		- transformQuestion() / initializeTransformations() - pattern rewrite
+		- matchSubQueries() - relative-clause constraint
+		- searchTableForAnswer() - Wikipedia infobox / table cells
+
+	Key data structures / globals:
+		- sourcesMap / childCandidateAnswerMap / questionGroupMap / transformationPatternMap
+		  (see QuestionAnswering.h)
+		- questionProgress - percent of SRGs processed; unsynchronized, display only
+		- cProximityMap entries are built here and scored for ownership disambiguation
+
+	Dependencies:
+		CACHEDIR / WEBSEARCH_CACHEDIR (M:\caches) for dbPediaCache and webSearchCache,
+		nounVerbMap (WordNet-derived), vbNetVerbToClassMap, MySQL (isBookTitle,
+		matchOwnershipDbQuery, dbSearchForQuery — defined in other TUs).
+
+	Notes / gotchas:
+		- matchSum >= 14 is the floor for "worth scoring"; >= 24 short-circuits
+		  further Wikipedia / web work. CONFIDENCE_NOMATCH means reject.
+		- cAS::source / srg point into child sources owned by sourcesMap; eraseSourcesMap
+		  invalidates every outstanding cAS.
+		- metaPatternMatch() always returns -1 (processMetanameTagset's whereAnswer
+		  is discarded), so mapPatternAnswer never actually contributes a cAS.
+		- cProximityEntry's 5-arg ctor uses childObject before assigning it from 'co'
+		  (it is still 0 = narrator).
+		- questionTypeCheck writes `qt | typeQTMask` (always 15) instead of replacing
+		  only the type nibble, so remapped what/which questions lose their type.
+*/
+#undef _STLP_USE_EXCEPTIONS // STLPORT 4.6.1
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -34,6 +88,7 @@ using namespace std;
 int questionProgress = -1; // shared but update is not important
 bool isBookTitle(MYSQL& mysql, wstring proposedTitle);
 
+// Write buffer as UTF-16LE (BOM 0xFEFF) to 'path'. Returns -1 if _wopen fails.
 int flushString(wstring& buffer, wchar_t* path)
 {
 	LFS
@@ -51,6 +106,9 @@ int flushString(wstring& buffer, wchar_t* path)
 	return 0;
 }
 
+// Strip <...>, a scheme:// prefix, and the Freebase rdf.freebase.com/ns/ host
+// so a DBpedia/Freebase URI can be used as a cache-file stem. Mutates and
+// returns 'name'. Empty 'name' reads name[0] / name[length-1] (UB).
 // <http://rdf.freebase.com/ns/m.0zcqcv2>
 wstring stripWeb(wstring& name)
 {
@@ -74,6 +132,10 @@ wstring stripWeb(wstring& name)
 //		referencingObjectQTFlag=16,subjectQTFlag=17,objectQTFlag=18,secondaryObjectQTFlag=19,prepObjectQTFlag=20,
 //		referencingObjectQTAFlag=32,subjectQTAFlag=33,objectQTAFlag=34,secondaryObjectQTAFlag=35,prepObjectQTAFlag=36 
 #define MAX_LEN 2048
+// Flush rdfType->abstract into CACHEDIR\dbPediaCache\_<typeObject>.abstract.txt
+// (illegal chars rewritten, then hashed into a two-letter subdirectory) and
+// parse it as WEB_SEARCH_SOURCE_TYPE. Returns processPath's result, or -1 if
+// the write failed. source is an out-param.
 int cQuestionAnswering::processAbstract(cSource* questionSource, cTreeCat* rdfType, cSource*& source, bool parseOnly)
 {
 	LFS
@@ -92,6 +154,10 @@ int cQuestionAnswering::processAbstract(cSource* questionSource, cTreeCat* rdfTy
 	return processPath(questionSource, path, source, cSource::WEB_SEARCH_SOURCE_TYPE, 1, parseOnly);
 }
 
+// Same as processAbstract but for a search snippet: path is
+// WEBSEARCH_CACHEDIR\webSearchCache\_<object>.snippet.txt. Truncates the stem
+// at MAX_PATH-28 before appending the extension. Confidence 50 (snippets are
+// noisier than abstracts).
 int cQuestionAnswering::processSnippet(cSource* questionSource, wstring snippet, wstring object, cSource*& source, bool parseOnly)
 {
 	LFS
@@ -102,6 +168,8 @@ int cQuestionAnswering::processSnippet(cSource* questionSource, wstring snippet,
 	_snwprintf(path, MAX_LEN, L"%s\\webSearchCache\\_%s", WEBSEARCH_CACHEDIR, object.c_str());
 	convertIllegalChars(path + pathlen);
 	distributeToSubDirectories(path, pathlen, true);
+	// MAX_PATH is 260; the buffer is MAX_LEN (2048). This caps the stem so
+	// ".snippet.txt" plus a later SourceCache suffix still fits MAX_PATH.
 	path[MAX_PATH - 28] = 0; // extensions
 	wcscat(path, L".snippet.txt");
 	if (logTraceOpen)
@@ -111,6 +179,10 @@ int cQuestionAnswering::processSnippet(cSource* questionSource, wstring snippet,
 	return processPath(questionSource, path, source, cSource::WEB_SEARCH_SOURCE_TYPE, 50, parseOnly);
 }
 
+// Resolve the Wikipedia cache path for the entity at principalWhere (or for
+// wikipediaLinks when principalWhere==-1), skip paths already in
+// wikipediaLinksAlreadyScanned, and parse as WIKIPEDIA_SOURCE_TYPE (confidence 2).
+// Returns -1 on path failure or a duplicate scan.
 int cQuestionAnswering::processWikipedia(cSource* questionSource, int principalWhere, cSource*& source, vector <wstring>& wikipediaLinks, int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool parseOnly, set <wstring>& wikipediaLinksAlreadyScanned, bool removePrecedingUncapitalizedWordsFromProperNouns)
 {
 	LFS
@@ -124,6 +196,9 @@ int cQuestionAnswering::processWikipedia(cSource* questionSource, int principalW
 	return processPath(questionSource, path, source, cSource::WIKIPEDIA_SOURCE_TYPE, 2, parseOnly);
 }
 
+// Name-class comparison (NAME vs NON_GENDERED_NAME, any combination). Sets
+// namedNoMatch when both sides have a non-null name and they disagreed.
+// Returns false immediately if either object is not a name class.
 bool cQuestionAnswering::matchObjectsByName(cSource* parentSource, vector <cObject>::iterator parentObject, cSource* childSource, vector <cObject>::iterator childObject, bool& namedNoMatch, sTrace debugTrace)
 {
 	LFS
@@ -143,6 +218,8 @@ bool cQuestionAnswering::matchObjectsByName(cSource* parentSource, vector <cObje
 	return match;
 }
 
+// Stricter nameMatchExact variant of matchObjectsByName. namedNoMatch is
+// simply !match (even when a side has a null name).
 bool cQuestionAnswering::matchObjectsExactByName(vector <cObject>::iterator parentObject, vector <cObject>::iterator childObject, bool& namedNoMatch)
 {
 	LFS
@@ -162,6 +239,8 @@ bool cQuestionAnswering::matchObjectsExactByName(vector <cObject>::iterator pare
 	return match;
 }
 
+// matchObjectsByName against the object (or every objectMatches entry) at
+// childWhere. namedNoMatch is true only if every alias disagreed by name.
 bool cQuestionAnswering::matchChildSourcePositionByName(cSource* parentSource, vector <cObject>::iterator parentObject, cSource* childSource, int childWhere, bool& namedNoMatch, sTrace& debugTrace)
 {
 	LFS
@@ -191,6 +270,8 @@ bool cQuestionAnswering::matchChildSourcePositionByName(cSource* parentSource, v
 	return false;
 }
 
+// True if the SRGs covering parentWhere and childWhere share a timeInfo
+// entry with the same timeCapacity (year vs year, day vs day, ...).
 // Curveball defected
 //000009:TSYM PARENT year[9-10][9][nongen][N][TimeObject] is NOT a definite object [byClass].
 //000008:TSYM CHILD 1999[8-9][8][nongen][N][TimeObject] is NOT a definite object [byClass].
@@ -215,6 +296,12 @@ bool cQuestionAnswering::matchTimeObjects(cSource* parentSource, int parentWhere
 	return false;
 }
 
+// Cartesian product of (parent position + its objectMatches originals) x
+// (child position + its objectMatches originals), then matchSourcePositions
+// each pair. Success if any pair overall-matched; adjectivalMatch is the first
+// non-negative pair value. On failure, namedNoMatch / semanticMismatch are
+// OR-reductions (semanticMismatch is 0/1, not the pair's code). The synonym
+// out-param is never written — callers must treat it as unchanged.
 // compare using multiple cases: parent and child may not be an object or may be an object with or without objectMatches.
 // 1. parent is not an object:
 //    a. compare against child not an object.
@@ -223,6 +310,7 @@ bool cQuestionAnswering::matchTimeObjects(cSource* parentSource, int parentWhere
 //   a. compare 
 bool cQuestionAnswering::matchAllSourcePositions(cSource* parentSource, int parentWhere, cSource* childSource, int childWhere, bool& namedNoMatch, bool& synonym, bool parentInQuestionObject, int& semanticMismatch, int& adjectivalMatch, sTrace& debugTrace)
 {
+	// One (parent, child) pair in the objectMatches cartesian product.
 	class cMatchQuality
 	{
 	public:
@@ -311,6 +399,12 @@ bool cQuestionAnswering::matchAllSourcePositions(cSource* parentSource, int pare
 	return true;
 }
 
+// Core entity alignment used by srgMatch. Unresolved pronouns and narrator/
+// audience (object 0/1) never match. Tries name match first, then definite-
+// owner recursion, then one-sided definite ("the Nobel Peace Prize" vs "the
+// prize") via last-word / wiki-class / checkParentGroup / semantic match.
+// Generic "the prize" answers to "which prize" are rejected when
+// parentInQuestionObject. See adjectivalMatch codes below.
 // adjectivalMatch does NOT include owner objects (Paul's car)
 // adjectivalMatch = -1 if the match operation was not performed
 //                   0 if no adjectives to match
@@ -537,6 +631,13 @@ bool cQuestionAnswering::matchSourcePositions(cSource* parentSource, int parentW
 	return false;
 }
 
+// Score alignment of one question slot (subject/object/prep-object) against a
+// child slot. Returns +cost (or a fraction/multiple) on match, -cost on a
+// hard disagreement, 0 if the slot is absent or incomparable. In the WH-span
+// (inQuestionObject) an exact/synonym noun match is inverted unless subQuery
+// (the answer should not be the generic "book"). Book-title answers must be
+// quoted and present in the titles table. totalMatch is true only on a
+// non-synonym hit. cost is typically 8 (primary) or 4 (secondary/prep).
 int cQuestionAnswering::srgMatch(cSource* questionSource, cSource* childSource, int parentWhere, int childWhere, int whereQuestionType, __int64 questionType, bool& totalMatch, wstring& matchInfoDetail, int cost, bool subQuery)
 {
 	LFS
@@ -680,6 +781,10 @@ int cQuestionAnswering::srgMatch(cSource* questionSource, cSource* childSource, 
 	return 0;
 }
 
+// Verb alignment: exact main-entry (cost), synonym either way (3/4 cost),
+// am/T_START (1/2), same VerbNet class or the receive/pursue pair (1/2).
+// Missing either where returns 0. verbTypeMatch is a log label only
+// ("PRIMARY", "SECONDARY TO PRIMARY", ...).
 int cQuestionAnswering::sriVerbMatch(cSource* parentSource, cSource* childSource, int parentWhere, int childWhere, wstring& matchInfoDetailVerb, wstring verbTypeMatch, int cost)
 {
 	LFS
@@ -753,6 +858,8 @@ int cQuestionAnswering::sriVerbMatch(cSource* parentSource, cSource* childSource
 	return 0;
 }
 
+// Prep alignment: same word pointer (not just string) yields 'cost', else 0.
+// Negative where on either side is 0.
 int cQuestionAnswering::sriPrepMatch(cSource* parentSource, cSource* childSource, int parentWhere, int childWhere, int cost)
 {
 	LFS
@@ -767,6 +874,8 @@ int cQuestionAnswering::sriPrepMatch(cSource* parentSource, cSource* childSource
 // equivalence class 1:
 //    if subject matches and verb is a 'to BE' verb AND the object is a profession or an agentive nominalization (a noun derived from a verb [runner])
 //      and the equivalent verb can be identified, match parent against equivalent verb and any prep phrases from child.
+// On success sets equivalenceClass=1 and returns matchSum (typically 8); else 0.
+// Only the first nounVerbMap verb is tried.
 int cQuestionAnswering::equivalenceClassCheck(cSource* questionSource, cSource* childSource, vector <cSyntacticRelationGroup>::iterator childSRG, cSyntacticRelationGroup* parentSRG, int whereChildSpecificObject, int& equivalenceClass, int matchSum)
 {
 	LFS
@@ -829,6 +938,9 @@ int cQuestionAnswering::equivalenceClassCheck(cSource* questionSource, cSource* 
 	return matchSum;
 }
 
+// Same as equivalenceClassCheck but the noun is first expanded through
+// WordNet synonyms ("teacher" -> teach) before nounVerbMap. Sets
+// equivalenceClass=2 on success.
 int cQuestionAnswering::equivalenceClassCheck2(cSource* questionSource, cSource* childSource, vector <cSyntacticRelationGroup>::iterator childSRG, cSyntacticRelationGroup* parentSRG, int whereChildSpecificObject, int& equivalenceClass, int matchSum)
 {
 	LFS
@@ -876,6 +988,8 @@ int cQuestionAnswering::equivalenceClassCheck2(cSource* questionSource, cSource*
 	return 0;
 }
 
+// If sum!=0, overwrite str[0] with '+' or '-' and append "N]" onto matchInfo
+// via itos. Writes through c_str() (const) and assumes str is non-empty.
 void appendSum(int sum, const wchar_t* str, wstring& matchInfo)
 {
 	LFS
@@ -886,6 +1000,11 @@ void appendSum(int sum, const wchar_t* str, wstring& matchInfo)
 	itos((wchar_t*)writableStr.c_str(), sum, matchInfo, L"]");
 }
 
+// Given a _META_NAME_EQUIVALENCE tag set on the child, require every non-'A'
+// variable to string-match the corresponding question-side location. Variable
+// 'A' is the answer. Differentiators 8/9/G further require the answer's verb
+// to be know/call/name, look/appear, or recognize. Returns the answer where,
+// or 0 if rejected. diff[0] is read even when differentiator is empty.
 int cQuestionAnswering::processMetanameTagset(vector <cTagLocation>& tagSet, int whereMNE, int element, cSource* questionSource, cSource* childSource, vector <cSyntacticRelationGroup>::iterator childSRG, cPattern*& mapPatternAnswer, cPattern*& mapPatternQuestion)
 {
 	childSource->printTagSet(LOG_WHERE, L"MNE", 0, tagSet, whereMNE, childSource->m[whereMNE].pma[element & ~cMatchElement::patternFlag].pemaByPatternEnd);
@@ -1010,6 +1129,10 @@ location 10 mapped to variable X.
 3:1-1  adjective|real*0|0|0
 4:1-1  noun|name*0|0|0
 */
+// Scan the child SRG's print span for mapPatternAnswer's first element, collect
+// _META_NAME_EQUIVALENCE tag sets and call processMetanameTagset. The whereAnswer
+// return is discarded, and this function always returns -1, so the caller
+// (analyzeQuestionFromSourceSyntacticRelation) never records a META_PATTERN cAS.
 int cQuestionAnswering::metaPatternMatch(cSource* questionSource, cSource* childSource, vector <cSyntacticRelationGroup>::iterator childSRG, cPattern*& mapPatternAnswer, cPattern*& mapPatternQuestion)
 {
 	LFS
@@ -1310,6 +1433,11 @@ void cQuestionAnswering::accumulateProximityMaps(cSource* questionSource, cSynta
 	}
 }
 
+// Innermost SRG scorer: add prep / prep-object / equivalence-class points to
+// the subject+verb+object sum already computed. A child is kept when
+// matchSum > 14 and (subject matched and a verb matched), or the parent is a
+// subquery with a subject match. Subquery wiki-type agreement can add +8/+4.
+// Enters a cAS via enterAnswerAccumulatingIdenticalAnswers.
 void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerbObjectPrep(cSource* questionSource, const wstring childSourceType, cSource* childSource,
 	cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer,
 	vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const wstring matchInfoDetailSubject, const int matchSumSubject, const int wo, int &po,
@@ -1412,6 +1540,11 @@ void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerbOb
 }
 
 
+// Score the primary object (cost 8) and secondary verb/object, with fallbacks
+// that try the primary slot when the secondary is missing (and negate the
+// primary score on failure). "was a featured X" with 'is' can resurrect a
+// failed verb match (MOVED_VERB_TO_OBJECT). Then walk every prep of the child
+// SRG into the Prep scorer. verbMatch is in/out because those fallbacks mutate it.
 void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerbObject(cSource* questionSource, const wstring childSourceType, cSource* childSource,
 	cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer,
 	vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const int vi, const wstring matchInfoDetailSubject, const int matchSumSubject, const int wo,
@@ -1493,6 +1626,10 @@ void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerbOb
 	}
 }
 
+// Score the primary verb (cost 8). If verb and subject both failed and this
+// is not a WH-subject / subquery, return -1 (break the compound-verb loop)
+// unless both ws and vi have a nextCompoundPartObject (then 0 = continue).
+// Otherwise walk the child's compound-object chain. Always ends with -1.
 // -1 - break
 // 0 - continue
 int cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerb(cSource* questionSource, const wstring childSourceType, cSource* childSource,
@@ -1527,6 +1664,10 @@ int cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerb(cS
 	return -1;
 }
 
+// Score the child subject at ws (identical-word for subqueries, srgMatch
+// otherwise). Information-source subjects that are not an exact match are
+// zeroed. Multi-match child subjects divide the score. Then walk up to 4
+// compound verbs. Returns -1 to stop the compound-subject loop, 0 to continue.
 // -1 - break
 // 0 - continue
 int cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubject(cSource* questionSource, const wstring childSourceType, cSource* childSource,
@@ -1574,6 +1715,9 @@ int cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubject(cSourc
 	return 0;
 }
 
+// One child SRG: skip if it is itself a question or negation disagrees.
+// Optionally try metaPatternMatch (currently never succeeds — see that
+// function). Then walk up to 4 compound subjects.
 void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelation(cSource* questionSource, wstring childSourceType, cSource* childSource, 
 	cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer, 
 	vector <cSyntacticRelationGroup>::iterator childSRG, bool questionTypeSubject, bool questionTypeObject, bool questionTypePrepObject)
@@ -1615,6 +1759,12 @@ void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelation(cSource* que
 	}
 }
 
+// Score every SRG in childSource against parentSRG. First visit also
+// accumulateProximityMaps and, for 'is' SRGs, inserts a subject/object-swapped
+// copy so "X is a professor" can match "who teaches". If eraseIfNoAnswers and
+// this was the first in-memory use and nothing scored, the child is dropped
+// from sourcesMap. Returns childSource->answerContainedInSource (how many
+// cAS this source contributed).
 // parse comment/abstract of rdfType.  
 // For each sentence, 
 //    match preferentially the subject/verb/object/prep?/prepObject, 
@@ -1682,6 +1832,9 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource* questionSource, wchar
 	return childSource->answerContainedInSource;
 }
 
+// process RDFType abstract, then go through the wikipedia source and wikipedia links in the RDF type, also going through any tables in the sources.
+// Stops early if any pass reaches matchSum > 24. wikiTableMap[whereQuestionContextSuggestion]
+// is new'd and never deleted by this function (leaked at end of the question).
 // process RDFType abstract, then go through the wikipedia source and wikipedia links in the RDF type, also going through any tables in the sources.
 void cQuestionAnswering::analyzeQuestionThroughAbstractAndWikipediaFromRDFType(cSource* questionSource, wchar_t* derivation, int whereQuestionContextSuggestion, cSyntacticRelationGroup* parentSRG,
 	cTreeCat* rdfType, bool parseOnly, vector < cAS >& answerSRGs, int& maxAnswer,
@@ -1759,6 +1912,9 @@ void cQuestionAnswering::analyzeQuestionThroughAbstractAndWikipediaFromRDFType(c
 		}
 }
 
+// True if two objects (possibly in different sources) name the same entity:
+// exact name match for NAME / NON_GENDERED_NAME, else identical token-by-token
+// surface span. Pronouns and missing originalLocation / begin/end never match.
 bool cQuestionAnswering::checkObjectIdentical(cSource* source1, cSource* source2, int object1, int object2)
 {
 	LFS
@@ -1810,6 +1966,9 @@ bool cQuestionAnswering::checkObjectIdentical(cSource* source1, cSource* source2
 	return true;
 }
 
+// Identical-entity test at two source positions, expanding objectMatches on
+// either side (any alias pair is enough). Bare words (no object) match only
+// when both sides lack an object and share a word pointer.
 bool cQuestionAnswering::checkParticularPartIdentical(cSource* source1, cSource* source2, int where1, int where2)
 {
 	LFS
@@ -1844,6 +2003,12 @@ bool cQuestionAnswering::checkParticularPartIdentical(cSource* source1, cSource*
 	return false;
 }
 
+// Does childObject belong to the profession / group named at parentWhere
+// ("officials" vs "President George W. Bush")? Walks the child's RDF profession
+// links and honorific through WordNet hypernyms, scoring CONFIDENCE_NOMATCH/4
+// on an exact word hit and /2 on a synonym. Results are cached in
+// questionGroupMap. Returns CONFIDENCE_NOMATCH if parentWhere is not a
+// commonProfession. Always logs (the `if (true)` block is left on).
 // parent=US government officials / child=President George W . Bush
 int cQuestionAnswering::checkParentGroup(cSource* parentSource, int parentWhere, cSource* childSource, int childWhere, int childObject, bool& synonym, int& semanticMismatch)
 {
@@ -2011,6 +2176,11 @@ int cQuestionAnswering::checkParentGroup(cSource* parentSource, int parentWhere,
 	return confidenceMatch;
 }
 
+// Copy one DESTINATION (or LINK) transform SRG from transformSource into the
+// question source, substituting $ / named variables from originalQuestionPattern
+// (or parseVariables["$"] = a previous-answer object index). Builds
+// transformSourceToQuestionSourceMap and rewrites rel* indexes. Variable "A"
+// marks whereQuestionTypeObject (the desired answer slot).
 // transformSource (class variable) is the transformQuestion source.
 // originalQuestionSRI is the source srg that is mapped to the questionSource.
 // destinationQuestionSRI is the transformation srg mapped to the constant question in transformSource.
@@ -2148,6 +2318,10 @@ void cQuestionAnswering::copySource(cSource* questionSource, cSyntacticRelationG
 	lplog(LOG_WHERE | LOG_INFO, L"*** END copying transformation pattern %s:", phrase.c_str());
 }
 
+// For each subquery, splice the child candidate into the question as subject
+// and prefetch (parseOnly=true) every preferred RDF abstract / Wikipedia page.
+// The resulting cSource* values are discarded — this only warms sourcesMap /
+// the disk cache. Always returns 0. Not actually parallel.
 int	cQuestionAnswering::parseSubQueriesParallel(cSource* questionSource, cSource* childSource, vector <cSyntacticRelationGroup>& subQueries, int whereChildCandidateAnswer, set <wstring>& wikipediaLinksAlreadyScanned)
 {
 	LFS
@@ -2224,6 +2398,10 @@ int	cQuestionAnswering::parseSubQueriesParallel(cSource* questionSource, cSource
 	return 0;
 }
 
+// Info-box shortcut for the transformed "When was X born?" (unknownQTFlag +
+// verb "born"). Creates a time object from birthDate, attaches it to the prep
+// object, and pushes a finalAnswer cAS with matchSum 1000. Returns true if the
+// pattern matched (caller should stop).
 bool cQuestionAnswering::analyzeRDFTypeBirthDate(cSource* questionSource, cSyntacticRelationGroup* ssri, wstring derivation, vector < cAS >& answerSRGs, int& maxAnswer, wstring birthDate)
 {
 	// question type must be "when"
@@ -2247,6 +2425,9 @@ bool cQuestionAnswering::analyzeRDFTypeBirthDate(cSource* questionSource, cSynta
 	return false;
 }
 
+// Info-box shortcut for the transformed "What is M's profession?" ("works" +
+// prep-object "profession"). Splits occupation on commas; each becomes a
+// finalAnswer cAS (matchSum 1000) attached to the prep object.
 bool cQuestionAnswering::analyzeRDFTypeOccupation(cSource* questionSource, cSyntacticRelationGroup* ssri, wstring derivation, vector < cAS >& answerSRGs, int& maxAnswer, wstring occupation)
 {
 	// question type must be "what"
@@ -2271,6 +2452,12 @@ bool cQuestionAnswering::analyzeRDFTypeOccupation(cSource* questionSource, cSynt
 	return false;
 }
 
+// For each information-source object, pull DBpedia RDF types (trying 0/1/2
+// attached PPs if empty). BirthDate / occupation info-box hits return true
+// immediately. Otherwise preferred types go through
+// analyzeQuestionThroughAbstractAndWikipediaFromRDFType. Returns true when
+// every information-source object was skipped (null / no preferred type) so
+// the caller can log that web search is the only remaining path.
 bool cQuestionAnswering::analyzeRDFTypes(cSource* questionSource, cSyntacticRelationGroup* srg, cSyntacticRelationGroup* ssri, wstring derivation, vector < cAS >& answerSRGs, int& maxAnswer, unordered_map <int, cWikipediaTableCandidateAnswers* >& wikiTableMap, bool subQueryFlag)
 {
 	wchar_t sqderivation[1024];
@@ -2513,6 +2700,12 @@ int	cQuestionAnswering::matchSubQueries(cSource* questionSource, wstring derivat
 	return childCandidateAnswerMap[childWhereString].confidence = (allSubQueriesMatch) ? semMatchValue : CONFIDENCE_NOMATCH;
 }
 
+// Does childObjectIndex have the right semantic class for questionType
+// (where -> place, whom/whose -> person, when -> time, wikiBusiness, wikiWork)?
+// Pronouns / meta / verb objects always reject (semanticMismatch=1). Returns
+// 1 on a definite yes, CONFIDENCE_NOMATCH on a definite no (with a reason
+// code in semanticMismatch 2-9), or CONFIDENCE_NOMATCH/2 if undecided.
+// questionType here is the *unmasked* type nibble, not the packed qtf word.
 int cQuestionAnswering::checkParticularPartQuestionTypeCheck(cSource* questionSource, __int64 questionType, int childWhere, int childObjectIndex, int& semanticMismatch)
 {
 	LFS
@@ -2632,6 +2825,12 @@ int cQuestionAnswering::checkParticularPartQuestionTypeCheck(cSource* questionSo
 	return CONFIDENCE_NOMATCH / 2;
 }
 
+// Remap what/which+QTA ("what person/place/business/book/time") onto
+// whom/where/wikiBusiness/wikiWork/when, then run
+// checkParticularPartQuestionTypeCheck on the candidate. The assignment
+// `questionType = qt | typeQTMask` clobbers the type nibble to 15 (all bits)
+// instead of replacing it — subsequent type tests then miss. Returns
+// CONFIDENCE_NOMATCH if the type is not one we can check.
 int cQuestionAnswering::questionTypeCheck(cSource* questionSource, wstring derivation, cSyntacticRelationGroup* parentSRG, cAS& childCAS, int& semanticMismatch, bool& unableToDoQuestionTypeCheck)
 {
 	LFS
@@ -2663,6 +2862,7 @@ int cQuestionAnswering::questionTypeCheck(cSource* questionSource, wstring deriv
 			qt = whenQTFlag;
 		else
 			return CONFIDENCE_NOMATCH;
+		// Intended: replace the type nibble. `qt | typeQTMask` is always 15.
 		parentSRG->questionType = qt | typeQTMask;
 	}
 	else if (qt != whereQTFlag && qt != whoseQTFlag && qt != whenQTFlag && qt != whomQTFlag)
@@ -2694,6 +2894,12 @@ int cQuestionAnswering::questionTypeCheck(cSource* questionSource, wstring deriv
 	return confidence;
 }
 
+// Ontology / WordNet check that the candidate fills the same slot as the
+// WH-span (subject/object/prep-object/secondary). META_PATTERN / SEMANTIC_MAP
+// answers always compare against the subject. Identity questions ("X is what")
+// may compare the suggested pattern form instead. Returns the
+// checkParticularPartSemanticMatch value, or CONFIDENCE_NOMATCH if no slot
+// contains the WH-word.
 int cQuestionAnswering::semanticMatch(cSource* questionSource, wstring derivation, cSyntacticRelationGroup* parentSRG, cAS& childCAS, int& semanticMismatch)
 {
 	LFS
@@ -2750,6 +2956,10 @@ int cQuestionAnswering::semanticMatch(cSource* questionSource, wstring derivatio
 	return semMatchValue;
 }
 
+// Lazy-load lastChildSourcePath and test whether this proximity neighbour
+// matches the question subject. synonym -> CONFIDENCE_NOMATCH*3/4; named or
+// semantic disagreement -> CONFIDENCE_NOMATCH; otherwise 0. If confidenceCheck
+// is false the load is skipped and the result is CONFIDENCE_NOMATCH.
 // this is called from the parent
 int cProximityMap::cProximityEntry::semanticCheck(cQuestionAnswering& qa, cSyntacticRelationGroup* parentSRG, cSource* parentSource)
 {
@@ -2786,6 +2996,8 @@ int cProximityMap::cProximityEntry::semanticCheck(cQuestionAnswering& qa, cSynta
 	return confidenceSE = CONFIDENCE_NOMATCH;
 }
 
+// Zero counters. childObject=0 is the narrator sentinel until the 5-arg ctor
+// overwrites it (that ctor currently uses childObject *before* the overwrite).
 cProximityMap::cProximityEntry::cProximityEntry()
 {
 	inSource = 0;
@@ -2805,6 +3017,10 @@ cProximityMap::cProximityEntry::cProximityEntry()
 	childObject = 0;
 }
 
+// Build a proximity neighbour for the object at childSourceIndex. checkParticularPartQuestionTypeCheck
+// and objectString/objects[] are called with childObject still 0 (narrator);
+// 'co' is assigned only at the end. fullDescriptor is then overwritten with
+// just the principal-where offset, so the form-string work is discarded.
 cProximityMap::cProximityEntry::cProximityEntry(cQuestionAnswering& qa, cSource* childSource, unsigned int childSourceIndex, int co, cSyntacticRelationGroup* parentSRG) : cProximityEntry()
 {
 	int qt = parentSRG->questionType & cQuestionAnswering::typeQTMask;
@@ -2826,9 +3042,13 @@ cProximityMap::cProximityEntry::cProximityEntry(cQuestionAnswering& qa, cSource*
 	wstring principalWhereOffset;
 	itos(childWhere2 - childSource->objects[childObject].begin, principalWhereOffset);
 	fullDescriptor = principalWhereOffset;
-	childObject = co;
+	childObject = co; // assigned after objectString / objects[childObject] above
 }
 
+// Compare question vs child verbSense (negation, tense, sourceInPast).
+// Returns 1-5 for an acceptable match reason, 6 if either verb is missing,
+// 0 on mismatch (and appends a rejectAnswer explanation). Constructed
+// relatives only require the child to be past.
 int cQuestionAnswering::verbTenseMatch(cSource* questionSource, cSyntacticRelationGroup* parentSRG, cAS& childCAS)
 {
 	if (parentSRG->whereVerb < 0 || childCAS.srg->whereVerb < 0)
@@ -2870,6 +3090,8 @@ int cQuestionAnswering::verbTenseMatch(cSource* questionSource, cSyntacticRelati
 	return tenseMatchReason;
 }
 
+// Re-parse 'path' and log the SRG (or the raw SUBJ/VERB/OBJECT links) at
+// 'where'. Used only from proximity-map dump helpers.
 void cProximityMap::cProximityEntry::printDirectRelations(cQuestionAnswering& qa, int logType, cSource* parentSource, wstring& path, int where)
 {
 	LFS
@@ -2889,6 +3111,9 @@ void cProximityMap::cProximityEntry::printDirectRelations(cQuestionAnswering& qa
 		}
 }
 
+// semanticMatch against the question subject, then (if subQueries is non-empty)
+// matchSubQueries. Returns the subquery confidence when subqueries exist,
+// otherwise the subject semantic-match value.
 int cQuestionAnswering::semanticMatchSingle(cSource* questionSource, wstring derivation, cSyntacticRelationGroup* parentSRG, cSource* childSource, int whereChild, int childObject, int& semanticMismatch, bool& subQueryNoMatch,
 	vector <cSyntacticRelationGroup>& subQueries, int numConsideredParentAnswer, bool useParallelQuery)
 {
@@ -2908,6 +3133,8 @@ int cQuestionAnswering::semanticMatchSingle(cSource* questionSource, wstring der
 }
 
 // do cas1 and cas2 give the same answer?
+// Compares the child slot that corresponds to the WH-span (subject / object /
+// prep-object / secondary object / secondary prep-object).
 bool cQuestionAnswering::checkIdentical(cSource* questionSource, cSyntacticRelationGroup* srg, cAS& cas1, cAS& cas2)
 {
 	LFS
@@ -2924,6 +3151,10 @@ bool cQuestionAnswering::checkIdentical(cSource* questionSource, cSyntacticRelat
 	return false;
 }
 
+// Point childCAS.whereChildCandidateAnswer at the child token that fills the
+// WH-slot (subject / object / prep-object / secondary). META_PATTERN and
+// SEMANTIC_MAP answers use ws. The last branch (secondary prep) incorrectly
+// writes a *question-source* index into a child-source field.
 void cQuestionAnswering::setWhereChildCandidateAnswer(cSource* questionSource, cAS& childCAS, cSyntacticRelationGroup* parentSRG)
 {
 	int qt = parentSRG->whereQuestionType;
@@ -2963,6 +3194,10 @@ void cQuestionAnswering::setWhereChildCandidateAnswer(cSource* questionSource, c
 	lplog(LOG_WHERE, L"setWhereChildCandidateAnswer: set to %d from whereQuestionType=%d, whereQuestionTypeObject=%d.", childCAS.whereChildCandidateAnswer, parentSRG->whereQuestionType, parentSRG->whereQuestionTypeObject);
 }
 
+// The noun the WH-word modifies ("which prize" -> prize). Cached on
+// srg->whereQuestionTypeObject when already set (including by copySource's "A"
+// variable). Otherwise the slot that contains whereQuestionType. Returns -1
+// and logs if no slot contains it.
 int cQuestionAnswering::getWhereQuestionTypeObject(cSource* questionSource, cSyntacticRelationGroup* srg)
 {
 	LFS
@@ -2999,6 +3234,10 @@ int cQuestionAnswering::getWhereQuestionTypeObject(cSource* questionSource, cSyn
 	return collectionWhere;
 }
 
+// Parse 'path' (questionTransforms.txt) as a PATTERN_TRANSFORM_TYPE source:
+// tokenize through resolveFirstSecondPersonPronouns, then write the binary
+// cache. Shares the question's MySQL handle and multi-word tables. Returns
+// false if the file produced no tokens.
 bool cQuestionAnswering::processPathToPattern(cSource* questionSource, const wchar_t* path, cSource*& source)
 {
 	LFS
@@ -3033,6 +3272,11 @@ bool cQuestionAnswering::processPathToPattern(cSource* questionSource, const wch
 	return !source->m.empty();
 }
 
+// Load source\lists\questionTransforms.txt once. Sentences between embedded
+// meta-commands form a group: SOURCE patterns, optional LINK patterns, and a
+// DESTINATION (traceTransformDestinationQuestion / traceQuestionPatternMap)
+// whose SRG is the map key. parseVariables["$"] is seeded to "noun|answer".
+// Subsequent calls no-op once transformationPatternMap is non-empty.
 // process source\lists\questionTransforms.txt
 // create transformationMatchPatterns
 void cQuestionAnswering::initializeTransformations(cSource* questionSource, unordered_map <wstring, wstring>& parseVariables)
@@ -3097,6 +3341,9 @@ void cQuestionAnswering::initializeTransformations(cSource* questionSource, unor
 	}
 }
 
+// copySource the destination (or link) SRG into the question, wrap it in a
+// new cSyntacticRelationGroup (caller owns lssri — never deleted), and log
+// INPUT / ORIGINAL / OUTPUT. Always returns true.
 bool cQuestionAnswering::processTransformQuestionPattern(cSource* questionSource, wstring patternType, cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& lssri, cPattern* sourcePattern, cPattern* destinationPattern, cSyntacticRelationGroup* destinationSyntacticRelationGroup, unordered_map <wstring, wstring>& parseVariables)
 {
 	unordered_map <int, int> transformSourceToQuestionSourceMap;
@@ -3124,6 +3371,8 @@ bool cQuestionAnswering::processTransformQuestionPattern(cSource* questionSource
 	return true;
 }
 
+// Render each where-position (or each of its objectMatches) as a string set.
+// Unused by the rest of this TU; kept for callers / debugging.
 set <wstring> cQuestionAnswering::createAnswerListAsStrings(cSource* questionSource, set <int>& wherePossibleAnswers)
 {
 	int numWords;
@@ -3146,6 +3395,10 @@ set <wstring> cQuestionAnswering::createAnswerListAsStrings(cSource* questionSou
 	return answers;
 }
 
+// Recurse along LINK patterns: bind parseVariables["$"] to the last hop's
+// object, transform, answerQuestionInSource, and push destination answers
+// onto ancestorAnswers. Returns true when link is past the end (base case)
+// or after exploring. Always returns true.
 bool cQuestionAnswering::followQuestionLink(int link, vector <cPattern*>& linkPatterns, cSource* questionSource, cSyntacticRelationGroup* srg, cPattern* sourcePattern, vector <cSyntacticRelationGroup*>& linkSyntacticRelationGroups, unordered_map <wstring, wstring>& parseVariables, bool parseOnly, bool useParallelQuery, bool disableWebSearch, vector < cTrackDescendantAnswers>& ancestorAnswers)
 {
 	if (link >= linkPatterns.size())
@@ -3173,6 +3426,9 @@ bool cQuestionAnswering::followQuestionLink(int link, vector <cPattern*>& linkPa
 	return true;
 }
 
+// If the question matches a SOURCE pattern whose DESTINATION is a metaPattern
+// (_META_NAME_EQUIVALENCE style), store both patterns on the SRG. Returns 1
+// on the first hit, 0 if none. Does not rewrite the question.
 int cQuestionAnswering::findMetanamePatterns(cSource* questionSource, cSyntacticRelationGroup* srg)
 {
 	// for each destination space relation (When was X born?), there are multiple source patterns that map into it (How old is Darrell Hammond?, etc).
@@ -3194,6 +3450,10 @@ int cQuestionAnswering::findMetanamePatterns(cSource* questionSource, cSyntactic
 	return 0;
 }
 
+// If the question matches a SOURCE pattern, run any LINK chain then answer
+// the DESTINATION SRG (tsrg->questionType = true, i.e. unknownQTFlag).
+// Returns the number of DESTINATION answers, or -1 if no pattern matched
+// (caller then answers the original SRG).
 // origin transformation patterns - does the question look like:
 //   How old is Darrell Hammond?
 //   What is the age of Darrell Hammond?
@@ -3341,6 +3601,11 @@ __NOUNRU[1](56,62)*2 _VERBPASTPART[*](60) __NOUNRU[1](56,62)*2 _PP[*](62)  __NOU
 // What are titles of books written by Krugman? (1)
 // what     [S titles[37-38][37][nongen][N][PL]]  written   [O what]of   [PO books[39-40][39][nongen][N][PL]]?
 // What is the first computer manufactured by Apple? (1)
+// Two rewrites, both allocating a new SRG into ssrg (leaked):
+// (1) _Q2 + _Q1PASSIVE + a 'by' PP -> "Krugman wrote books" from "titles of
+// books written by Krugman". (2) "what are titles of albums featuring Jay-Z"
+// -> "what albums featured Jay-Z". Always returns true; the caller uses the
+// side effect on ssrg (defaults to &(*srg) when neither rewrite fires).
 // What are titles of albums featuring Jay-Z?
 bool cQuestionAnswering::isQuestionPassive(cSource* questionSource, cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& ssrg)
 {
@@ -3463,6 +3728,10 @@ void cQuestionAnswering::detectSubQueries(cSource* questionSource, cSyntacticRel
 	}
 }
 
+// Push candidateAnswer and update maxAnswer. Every already-stored cAS that
+// checkIdentical-matches it (same equivalenceClass) gets numIdenticalAnswers
+// set to the group size; the new one is left at 0 until a later sibling
+// updates it. Increments source->answerContainedInSource. Always returns true.
 bool cQuestionAnswering::enterAnswerAccumulatingIdenticalAnswers(cSource* questionSource, cSyntacticRelationGroup* srg, cAS candidateAnswer, int& maxAnswer, vector < cAS >& answerSRGs)
 {
 	vector <int> identicalAnswers;
@@ -3483,6 +3752,11 @@ Paul Robin Krugman is an American economist, professor of Economics and Internat
 From wikipedia:
 He taught at Yale University, MIT, UC Berkeley, the London School of Economics, and Stanford University before joining Princeton University in 2000 as professor of economics and international affairs.
 */
+// Winnow answerSRGs. Bails if maxAnswer<=14. Each candidate with matchSum>=14
+// gets questionTypeCheck + optional semanticMatch + matchSubQueries +
+// verbTenseMatch. Survivors are those with the top recomputed matchSum, then
+// boosted +4/+6 for most-identical / lowest-confidence. Marks finalAnswer
+// (deduped). Returns the number of unique final answers, or 0 if none survived.
 int cQuestionAnswering::determineBestAnswers(cSource* questionSource, cSyntacticRelationGroup* srg, vector < cAS >& answerSRGs,
 	int maxAnswer, vector <cSyntacticRelationGroup>& subQueries, bool useParallelQuery)
 {
@@ -3634,6 +3908,8 @@ int cQuestionAnswering::determineBestAnswers(cSource* questionSource, cSyntactic
 	return numFinalAnswers;
 }
 
+// True when the candidate is an unmodified "a <noun>" (determiner 'a', no
+// objectMatches) — treated as too generic to keep.
 bool cQuestionAnswering::isModifiedGeneric(cAS& as)
 {
 	if (as.srg != 0 && as.whereChildCandidateAnswer >= 0 && as.source->m[as.whereChildCandidateAnswer].objectMatches.empty() &&
@@ -3642,6 +3918,8 @@ bool cQuestionAnswering::isModifiedGeneric(cAS& as)
 	return false;
 }
 
+// Log final answers (LOG_QCHECK) then rejected ones. Table / info-box rows
+// print coordinates instead of an SRG. Returns the number of final answers.
 int cQuestionAnswering::printAnswers(cSyntacticRelationGroup* srg, vector < cAS >& answerSRGs)
 {
 	LFS
@@ -3695,6 +3973,13 @@ int cQuestionAnswering::printAnswers(cSyntacticRelationGroup* srg, vector < cAS 
 	return numFinalAnswers;
 }
 
+// Walk wikiTableMap tables for each information-source object. Columns with
+// coherencyPercentage<50 are skipped; the header row is skipped. Each cell is
+// scored against whereQuestionTypeObject (title synonym / RDF-type preference
+// / semanticMatch). Subqueries, if any, can add +1000 to reject. Does not
+// call determineBestAnswers — the caller marks lowest-confidence rows final.
+// Returns -1 if no tables, 0 otherwise. The cAS columnIndex is
+// `columnIterator - columns.end()` (always negative / wrong).
 int	cQuestionAnswering::searchTableForAnswer(cSource* questionSource, wchar_t derivation[1024], cSyntacticRelationGroup* srg, unordered_map <int, cWikipediaTableCandidateAnswers* >& wikiTableMap,
 	vector <cSyntacticRelationGroup>& subQueries, vector < cAS >& answerSRGs, int& minConfidence, bool useParallelQuery)
 {
@@ -3881,6 +4166,10 @@ int	cQuestionAnswering::searchTableForAnswer(cSource* questionSource, wchar_t de
 }
 
 
+// For each finalAnswer, copy the winning object(s) into the question source
+// (so linked transforms / follow-up questions can see them) and push a
+// destination TrackDescendantAnswers hop. Dedupes by rendered string.
+// Returns descendantAnswers.size() after the appends.
 int cQuestionAnswering::findConstrainedAnswers(cSource* questionSource, vector < cAS >& answerSRGs, vector < cTrackDescendantAnswers>& descendantAnswers)
 {
 	LFS
@@ -3977,6 +4266,9 @@ int cQuestionAnswering::findConstrainedAnswers(cSource* questionSource, vector <
 	return descendantAnswers.size();
 }
 
+// Attach a previous-question answer object at wherePossibleAnswer onto
+// whereMatch (as objectMatches) if it is a name/demonym/business and not
+// already an information-source. Used by matchAnswersOfPreviousQuestion.
 bool cQuestionAnswering::matchParticularAnswer(cSource* questionSource, cSyntacticRelationGroup* ssri, int whereMatch, int wherePossibleAnswer, set <int>& addWhereQuestionInformationSourceObjects)
 {
 	LFS
@@ -4007,6 +4299,9 @@ bool cQuestionAnswering::matchParticularAnswer(cSource* questionSource, cSyntact
 	return false;
 }
 
+// Same gate as matchParticularAnswer but also requires the two positions to
+// share a main entry (the generic "prize" slot matching the previous answer's
+// head). On success whereMatch is added as an information-source object.
 bool cQuestionAnswering::matchAnswerSourceMatch(cSource* questionSource, cSyntacticRelationGroup* ssri, int whereMatch, int wherePossibleAnswer, set <int>& addWhereQuestionInformationSourceObjects)
 {
 	LFS
@@ -4037,6 +4332,10 @@ bool cQuestionAnswering::matchAnswerSourceMatch(cSource* questionSource, cSyntac
 	return false;
 }
 
+// If the first previous answer's head matches this question's subject /
+// object / prep-object, attach every previous answer as an objectMatch and
+// information-source. Always returns -1. wherePossibleAnswers.begin() is
+// dereferenced with no empty check.
 int cQuestionAnswering::matchAnswersOfPreviousQuestion(cSource* questionSource, cSyntacticRelationGroup* ssri, set <int>& wherePossibleAnswers)
 {
 	LFS
@@ -4063,6 +4362,9 @@ int cQuestionAnswering::matchAnswersOfPreviousQuestion(cSource* questionSource, 
 	return -1;
 }
 
+// One Google or Bing page (trySearchIndex is the API offset/start) followed by
+// determineBestAnswers. lastResultPage is set when fewer than 10 hits returned.
+// Returns the new numFinalAnswers.
 extern int limitProcessingForProfiling;
 int cQuestionAnswering::searchWebSearchQueries(cSource* questionSource, wchar_t derivation[1024], cSyntacticRelationGroup* ssri,
 	vector <cSyntacticRelationGroup>& subQueries, vector < cAS >& answerSRGs,
@@ -4080,6 +4382,9 @@ int cQuestionAnswering::searchWebSearchQueries(cSource* questionSource, wchar_t 
 	return numFinalAnswers;
 }
 
+// Delete every cached child source (same restart-iterator pattern as clear()).
+// Also resets per-source word-usage / capitalization stats. Called at the
+// start of each question so sourcesMap does not grow without bound.
 void cQuestionAnswering::eraseSourcesMap()
 {
 	// memory optimization
@@ -4100,6 +4405,8 @@ void cQuestionAnswering::eraseSourcesMap()
 // When a question information source object owns another object, disambiguate this by seeing what objects matching the same type that are also very close and common to the question information source object, and return all these matching objects.
 // This section is about impressionist Darrell Hammond.
 // His shows appear on which network ?
+// Returns proximityOwnedObjects.size(). The last `&& principalWherePosition > si`
+// binds only to the owner-inflection clause (`&&` tighter than `||`).
 int cQuestionAnswering::getProximateObjectsMatchingOwnedItemType(cSource* questionSource, int si, cSyntacticRelationGroup*& ssrg, set <int>& proximityOwnedObjects)
 {
 	// adjective, possessive determiner or _NAMEOWNER pattern, or SINGULAR_OWNER/PLURAL_OWNER inflection flag?
@@ -4186,6 +4493,9 @@ int cQuestionAnswering::getProximateObjectsMatchingOwnedItemType(cSource* questi
 	return proximityOwnedObjects.size();
 }
 
+// Fallback loop: Google page, Bing page, then (first pass only) Wikipedia
+// tables. trySearchIndex steps 1, 11. Stops once numFinalAnswers is enough
+// for the plurality of the WH-noun. Sets webSearchOrWikipediaTableSuccess.
 void cQuestionAnswering::answerQuestionInSourceWebWikiSearch(cSource* questionSource,
 	const bool parseOnly, const bool useParallelQuery, const bool answerPluralSpecification, bool &webSearchOrWikipediaTableSuccess, const bool disableWebSearch, bool& lastGoogleResultPage,
 	cSyntacticRelationGroup*& ssrg,	vector < cAS >& answerSRGs, wchar_t* sqderivation, vector <cSyntacticRelationGroup> &subQueries, unordered_map <int, cWikipediaTableCandidateAnswers* > &wikiTableMap,
@@ -4244,6 +4554,10 @@ void cQuestionAnswering::answerQuestionInSourceWebWikiSearch(cSource* questionSo
 	}
 }
 
+// "His shows appear on which network?" -> substitute each proximity-owned
+// specific object (Saturday Night Live) for the generic owned noun and
+// recurse into answerQuestionInSource. Hits become ProximityOwnershipQuery
+// cAS entries with matchSum 1000.
 void cQuestionAnswering::answerQuestionInSourceOwnershipRetryQuery(cSource* questionSource,
 	const bool parseOnly, const bool useParallelQuery, bool& webSearchOrWikipediaTableSuccess, const bool disableWebSearch, 
 	cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& ssrg, vector < cTrackDescendantAnswers>& descendantAnswers, 
@@ -4306,6 +4620,9 @@ void cQuestionAnswering::answerQuestionInSourceOwnershipRetryQuery(cSource* ques
 	}
 }
 
+// Enhance the existing web queries with each frequent/proximate neighbour
+// and re-search. The block labelled "BING" still passes useGoogleSearch=true
+// (copy-paste), so both passes hit Google.
 void cQuestionAnswering::answerQuestionInSourceProximityMapWebSearch(cSource* questionSource,
 	const bool parseOnly, const bool useParallelQuery, const bool answerPluralSpecification, bool& webSearchOrWikipediaTableSuccess, bool& lastGoogleResultPage,
 	cSyntacticRelationGroup*& ssrg, vector < cAS >& answerSRGs, wchar_t* sqderivation, vector <cSyntacticRelationGroup>& subQueries, 
@@ -4337,7 +4654,7 @@ void cQuestionAnswering::answerQuestionInSourceProximityMapWebSearch(cSource* qu
 				if (numFinalAnswers > 0 && (!answerPluralSpecification || numFinalAnswers >= 1))
 					break;
 				enhancedWebSearchAnswerSRIs.clear();
-				// BING
+				// labelled BING but useGoogleSearch is true — second Google pass
 				searchWebSearchQueries(questionSource, sqderivation, ssrg, subQueries, enhancedWebSearchAnswerSRIs, enhancedWebSearchQueryStrings,
 					parseOnly, numFinalAnswers, maxAnswer, useParallelQuery, trySearchIndex, true, lastGoogleResultPage);
 				if (webSearchOrWikipediaTableSuccess = numFinalAnswers > 0)
@@ -4353,6 +4670,10 @@ void cQuestionAnswering::answerQuestionInSourceProximityMapWebSearch(cSource* qu
 	}
 }
 
+// Per-question setup: drop the child-source cache, resolve
+// whereQuestionTypeObject, try the passive / title-of rewrite, attach any
+// metaname pattern, and run transformQuestion. Returns 0 if a transform
+// already answered the question (caller should return), 1 to continue.
 int cQuestionAnswering::answerQuestionInSourceInitialize(cSource* questionSource, 
 	const bool parseOnly, const bool useParallelQuery, 
 	cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& ssrg, 
@@ -4386,6 +4707,11 @@ int cQuestionAnswering::answerQuestionInSourceInitialize(cSource* questionSource
 	return 1;
 }
 
+// One-question driver (README "Processing Stages"): DB lookup, RDF/Wikipedia,
+// subqueries, determineBestAnswers, then web / ownership / proximity fallback
+// if too few finals. Returns -1 if the SRG is not a question or
+// whereQuestionTypeObject could not be resolved; 0 otherwise. ssrg may be
+// replaced by a rewritten SRG (see isQuestionPassive / transformQuestion).
 extern int limitProcessingForProfiling;
 int cQuestionAnswering::answerQuestionInSource(cSource* questionSource, bool parseOnly, bool useParallelQuery, cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& ssrg, vector < cTrackDescendantAnswers>& descendantAnswers, bool disableWebSearch)
 {
@@ -4471,6 +4797,9 @@ int cQuestionAnswering::answerQuestionInSource(cSource* questionSource, bool par
 	return 0;
 }
 
+// Walk every SRG in the question source and call answerQuestionInSource.
+// disableWebSearch is hardcoded false. Updates questionProgress for the
+// console PROGRESS line. Always returns 0.
 int cQuestionAnswering::answerAllQuestionsInSource(cSource* questionSource, bool parseOnly, bool useParallelQuery)
 {
 	LFS

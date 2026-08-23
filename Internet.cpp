@@ -1,3 +1,39 @@
+/*
+	Internet.cpp - WinINet HTTP GET, cache-aside web fetch, and Jericho HTML-to-text spawn
+
+	Overview:
+		The only first-party HTTP client.  LPInternetOpen() creates one process-wide
+		HINTERNET (preconfig proxy, 3s connect timeout, 100 conns/server) and
+		installs InternetStatusCallback (which records redirectUrl).  readPage()
+		rate-limits on bandwidthControl, GET-s the URL, and reads the body on a
+		worker thread (InternetReadFile_Wait, 5-minute timeout) so a hung read
+		can be abandoned.  cacheWebPath / getWebPath hash the URL onto
+		CACHEDIR/WEBSEARCH_CACHEDIR and only hit the network on a miss.
+		runJavaJerichoHTML() launches a local Java RenderToText helper via
+		redirected pipes.
+
+	Pipeline position:
+		Stage 8 (QA web search / Wikipedia / SPARQL) and the get*.cpp scrapers.
+
+	Key entry points:
+		- readPage / readBinaryPage / cacheWebPath / getWebPath
+		- LPInternetOpen / closeConnection / InetOption
+		- InternetReadFile_Wait / InternetReadFile_Child
+		- runJavaJerichoHTML / PrepAndLaunchRedirectedChild / ReadAndHandleOutput
+
+	Notes / gotchas:
+		- On timeout InternetReadFile_Wait closes the request handle while the
+			child thread may still be inside InternetReadFile (the Wait INFINITE
+			is commented out) - use-after-free / race.
+		- SPARQL failures recurse into readPage after a 30s sleep with no
+			depth cap (unbounded if Virtuoso stays down).
+		- cacheWebPath writes wchar_t as binary (UTF-16) and reads it back as
+			wchar_t*.  getWebPath in the `clean` path writes UTF-8, then
+			assigns the file bytes to a wstring as wchar_t* - encoding mismatch.
+		- path[MAX_PATH-20]=0 truncates a MAX_LEN (2048) buffer at 240 chars.
+		- Hardcoded LMAINDIR chdir for the Java helper; hINet is process-wide
+			and reset to 0 on some errors without a lock.
+*/
 #pragma warning (disable: 4503)
 #pragma warning (disable: 4996)
 
@@ -39,6 +75,8 @@ bool cInternet::readTimeoutError;
 struct _RTL_SRWLOCK cInternet::totalInternetTimeWaitBandwidthControlSRWLock;
 wstring cInternet::redirectUrl;
 
+// GET 'str' into buffer (headers unused).  Returns 0 or a negative
+// INTERNET_* / GETWEBPATH_* code.
 int cInternet::readPage(const wchar_t* str, wstring& buffer)
 {
 	LFS
@@ -46,6 +84,9 @@ int cInternet::readPage(const wchar_t* str, wstring& buffer)
 	return readPage(str, buffer, headers);
 }
 
+// Query INTERNET_OPTION `option` and, if it is not already `value`, set it.
+// global==true uses NULL (process default); false uses hINet.  Always
+// returns true; failures are only logged.
 bool cInternet::InetOption(bool global, int option, const wchar_t* description, unsigned long value)
 {
 	LFS
@@ -65,6 +106,8 @@ bool cInternet::InetOption(bool global, int option, const wchar_t* description, 
 	return true;
 }
 
+// WinINet status callback.  The only live arm records INTERNET_STATUS_REDIRECT
+// into the process-wide redirectUrl (and optionally logs it).
 void cInternet::InternetStatusCallback(
 	HINTERNET, // hInternet
 	DWORD_PTR, // dwContext
@@ -132,6 +175,11 @@ void cInternet::InternetStatusCallback(
 	}
 }
 
+// Ensure hINet is open (InternetOpen "InetURL/1.0", preconfig, no cache).
+// First call also logs InternetGetConnectedState flags and raises the
+// per-server connection caps to 100.  Every call (re)sets connect timeout
+// to 3s.  On failure, charges (now-timer) to the network profile and
+// returns false.
 bool cInternet::LPInternetOpen(int timer)
 {
 	if (!hINet)
@@ -172,6 +220,10 @@ bool cInternet::LPInternetOpen(int timer)
 }
 
 #define MAX_BUF 200000
+// Rate-limit, then InternetOpenUrl + InternetReadFile_Wait into buffer
+// (decoded via mTW).  Retries internetWebSearchRetryAttempts times.
+// SPARQL failures Sleep(30s) and recurse with no depth cap.  Returns 0,
+// INTERNET_OPEN_FAILED, or INTERNET_OPEN_URL_FAILED.
 int cInternet::readPage(const wchar_t* str, wstring& buffer, wstring& headers)
 {
 	LFS
@@ -258,6 +310,9 @@ int cInternet::readPage(const wchar_t* str, wstring& buffer, wstring& headers)
 	return (errors) ? INTERNET_OPEN_URL_FAILED : 0;
 }
 
+// GET 'str' and write raw bytes to destfile, adding the byte count to
+// 'total'.  The `while (true)` never retries - the failure arm returns -1.
+// FATAL if the write fails.  Returns 0, INTERNET_OPEN_FAILED, or -1.
 int cInternet::readBinaryPage(wchar_t* str, int destfile, int& total)
 {
 	LFS
@@ -314,6 +369,7 @@ int cInternet::readBinaryPage(wchar_t* str, int destfile, int& total)
 	return 0;
 }
 
+// InternetCloseHandle(hINet) and null it.  Always returns true.
 bool cInternet::closeConnection(void)
 {
 	LFS
@@ -322,6 +378,11 @@ bool cInternet::closeConnection(void)
 	return true;
 }
 
+// Cache-aside GET: path is CACHEDIR\\cacheTypePath\\_<sanitized epath>
+// (distributed into two-letter subdirs).  On miss or forceWebReread, readPage
+// and write the wstring as UTF-16 bytes.  On hit, read those bytes back as
+// wchar_t*.  networkAccessed is set true on a fetch.  Returns 0 or a
+// GETPAGE / INTERNET_* code.
 int cInternet::cacheWebPath(wstring webAddress, wstring& buffer, wstring epath, wstring cacheTypePath, bool forceWebReread, bool& networkAccessed, wstring& diskPath)
 {
 	LFS
@@ -366,6 +427,8 @@ int cInternet::cacheWebPath(wstring webAddress, wstring& buffer, wstring epath, 
 }
 
 
+// Worker: InternetReadFile into the tIRFW pointed at by vThreadParm.
+// Returns 0 on success, 1 if InternetReadFile failed (logged).
 DWORD WINAPI cInternet::InternetReadFile_Child(void* vThreadParm)
 {
 	tIRFW* p = (tIRFW*)vThreadParm;
@@ -378,6 +441,10 @@ DWORD WINAPI cInternet::InternetReadFile_Child(void* vThreadParm)
 	return 0;
 }
 
+// Spawn InternetReadFile_Child and wait up to 5 minutes.  On timeout,
+// InternetCloseHandle(RequestHandle) while the child may still be in
+// InternetReadFile, set readTimeoutError, and return false (the Wait
+// INFINITE is commented out).  Returns true only if the child exited 0.
 bool cInternet::InternetReadFile_Wait(HINTERNET RequestHandle, char* buffer, int bufsize, DWORD* dwRead)
 {
 	tIRFW p;
@@ -422,6 +489,11 @@ bool cInternet::InternetReadFile_Wait(HINTERNET RequestHandle, char* buffer, int
 	return dwExitCode == 0;
 }
 
+// Cache-aside GET with optional Jericho HTML-to-text (`clean`) and optional
+// population of `buffer` (`readInfoBuffer`).  Skips .pdf/.php.  Index>1
+// appends .N to the cache name.  Truncates the path at MAX_PATH-20 (240)
+// even though the buffer is MAX_LEN.  `where` is only for log prefixes.
+// Returns 0, -1, or a GETWEBPATH / GETPAGE / INTERNET_* code.
 int cInternet::getWebPath(int where, wstring webAddress, wstring& buffer, wstring epath, wstring cacheTypePath, wstring& filePathOut, wstring& headers, int index, bool clean, bool readInfoBuffer, bool forceWebReread)
 {
 	LFS
@@ -550,6 +622,8 @@ int cInternet::getWebPath(int where, wstring webAddress, wstring& buffer, wstrin
 	return 0;
 }
 
+// Drain hPipeRead into outbuf until ReadFile fails.  ERROR_BROKEN_PIPE is
+// the expected end (child exited); anything else is logged.
 // ReadAndHandleOutput
 // Monitors handle for input. Exits when child exits or pipe breaks.
 void cInternet::ReadAndHandleOutput(HANDLE hPipeRead, string& outbuf)
@@ -567,6 +641,9 @@ void cInternet::ReadAndHandleOutput(HANDLE hPipeRead, string& outbuf)
 		lplog(LOG_ERROR, L"%S:%d:%s", __FUNCTION__, __LINE__, lastErrorMsg().c_str());
 }
 
+// CreateProcess(commandLine) with the three std handles redirected, hidden
+// window, CREATE_NEW_CONSOLE.  Returns the process handle (not checked for
+// NULL if CreateProcess failed - pi is uninitialized on failure).
 // PrepAndLaunchRedirectedChild
 // Sets up STARTUPINFO structure, and launches redirected child.
 HANDLE cInternet::PrepAndLaunchRedirectedChild(wstring commandLine,
@@ -594,6 +671,10 @@ HANDLE cInternet::PrepAndLaunchRedirectedChild(wstring commandLine,
 	return pi.hProcess;
 }
 
+// chdir LMAINDIR, spawn
+// `java -classpath jericho-html-3.4\\... RenderToText <webAddress> <outputPath>`
+// with stdout/stderr piped into outbuf, wait INFINITE, chdir back.
+// Returns 0, or -1 if chdir-back fails (launch failure is FATAL first).
 int cInternet::runJavaJerichoHTML(wstring webAddress, wstring outputPath, string& outbuf)
 {
 	LFS

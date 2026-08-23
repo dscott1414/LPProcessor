@@ -1,4 +1,38 @@
-﻿#include <windows.h>
+/*
+	Source.cpp - Compare scraped thesaurus files against the MySQL thesaurus
+
+	Overview:
+		Despite the project name, this TU walks E:\old thesaurus entries\
+		*.thesaurus.txt.*, scrapes "Synonyms:" lists from each file via
+		scrapeThesaurus, loads matching rows from lp.thesaurus, and prints
+		entries whose reduced word-sets do not match. Used to validate a
+		thesaurus scrape, not to convert PDFs.
+
+	Pipeline position:
+		Offline thesaurus QA; not on the parse path.
+
+	Key entry points:
+		- mTW() / WideCharToMultiByte() - UTF-8 <-> wchar thread-local buffers
+		- myquery() - mysql_real_query + store_result
+		- getSynonymsFromDB() - SELECT accumulatedSynonyms by wordType bit
+		- scrapeThesaurus() - parse "Main Entry:" / "Synonyms:" HTML-ish text
+		- reduce() / compareWordSets() - punctuation-stripped set inclusion
+		- _tmain() - walk files, compare, print mismatches
+
+	Dependencies:
+		MySQL localhost root/byron0 database lp; WordNet headers pulled in
+		but unused here. Hardcoded E:\old thesaurus entries.
+
+	Notes / gotchas:
+		Hardcoded DB password. mTW first call uses mTWbuffer while
+		mTWbufSize==0 (MultiByteToWideChar with dest=NULL-ish). realloc
+		overwrites mTWbuffer/sqlQueryBuffer on failure (leak + later crash).
+		scrapeThesaurus reads match[pos+1]/[pos+2] without a length check.
+		_tmain malloc(fl+2) then _read even if _wsopen_s failed (fd unused
+		for the malloc). mysql_real_connect failure is ignored; queries
+		still run. No mysql_close.
+*/
+#include <windows.h>
 #include <tchar.h>
 #include <stdio.h>
 #include <string.h>
@@ -34,6 +68,9 @@ void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition> &d);
 __declspec(thread) static void *mTWbuffer = NULL;
 __declspec(thread) static unsigned int mTWbufSize = 0;
 // multibyte to wide string
+// UTF-8 inString -> outString via a TLS growable buffer. Returns
+// outString.c_str() (dangling if the caller lets outString die).
+// First call: MultiByteToWideChar is invoked with mTWbufSize==0.
 const wchar_t *mTW(string inString, wstring &outString)
 {
 		int queryLength = MultiByteToWideChar(CP_UTF8, 0, inString.c_str(), -1, (wchar_t *)mTWbuffer, mTWbufSize / 2); // bufSize/2 is # of wide chars allocated
@@ -61,6 +98,10 @@ const wchar_t *mTW(string inString, wstring &outString)
 }
 
 
+// Grow `buffer`/`bufSize` and convert q (UTF-16) to UTF-8. Sets queryLength
+// to the byte count including NUL. Returns buffer, or NULL on convert/OOM
+// (and in the OOM path has already overwritten buffer via realloc).
+// Shadows the Win32 WideCharToMultiByte API name.
 void *WideCharToMultiByte(wchar_t *q, int &queryLength, void *&buffer, unsigned int &bufSize)
 {
 		queryLength = WideCharToMultiByte(CP_UTF8, 0, q, -1, (LPSTR)buffer, bufSize, NULL, NULL);
@@ -101,6 +142,9 @@ void *WideCharToMultiByte(wchar_t *q, int &queryLength, void *&buffer, unsigned 
 
 void *sqlQueryBuffer = NULL; 
 unsigned int sqlQueryBufSize = 0; 
+// Convert q to UTF-8 via sqlQueryBuffer and mysql_real_query + store_result.
+// Returns true with result owned by caller (must mysql_free_result);
+// false on query/store failure (result may be unset).
 bool myquery(MYSQL *mysql, wchar_t *q, MYSQL_RES * &result)
 {
 		int queryLength;
@@ -120,6 +164,11 @@ bool myquery(MYSQL *mysql, wchar_t *q, MYSQL_RES * &result)
 	return true;
 }
 
+// SELECT accumulatedSynonyms FROM thesaurus WHERE mainEntry=word AND
+// wordType matches synonymType (1=n, 2=v, 3=adj, 4=adv after the --).
+// Splits semicolon lists into one set per row; strips a trailing '*'.
+// word is interpolated unescaped. MYSQL is passed by value (copy of the
+// handle struct).
 void getSynonymsFromDB(MYSQL mysql, wstring word, vector <set <wstring> > &synonyms, int synonymType)
 {
 	wstring query = L"select accumulatedSynonyms from thesaurus where mainEntry = '";
@@ -160,6 +209,10 @@ void getSynonymsFromDB(MYSQL mysql, wstring word, vector <set <wstring> > &synon
 	}
 }
 
+// From a thesaurus dump in `buffer`, take the first "Main Entry:" span
+// (until the next heading in endStr[]) and harvest comma-separated
+// Synonyms: tokens into `synonyms` (lowercased). Stops at ads / "www.".
+// `word` is only used for the over-length warning.
 void scrapeThesaurus(wstring word, wstring buffer, set <wstring> &synonyms)
 {
 	wstring match;
@@ -224,6 +277,8 @@ void scrapeThesaurus(wstring word, wstring buffer, set <wstring> &synonyms)
 	//	wprintf(L"%s itself not found in synonyms.\n", word.c_str());
 }
 
+// Strip from the first '/' onward, then drop & . CR LF space ' - ) (,
+// lowercase in place via _wcslwr on c_str(). Used so "well-known" == "wellknown".
 wstring reduce(wstring me1)
 {
 	size_t ws = 0;
@@ -236,6 +291,8 @@ wstring reduce(wstring me1)
 	return me1;
 }
 
+// True iff every reduced member of s1 also occurs in reduced s2
+// (s1 ⊆ s2 after reduce). Empty s1 is a subset.
 bool compareWordSets(set <wstring> &s1, set <wstring> &s2)
 {
 	set <wstring> s11, s21;
@@ -255,6 +312,10 @@ bool compareWordSets(set <wstring> &s1, set <wstring> &s2)
 	return true;
 }
 
+// Connect to lp@localhost, chdir to E:\old thesaurus entries, compare each
+// *.thesaurus.txt.* scrape against DB synonym sets. Prints mismatches.
+// Returns -1 if FindFirstFile fails; otherwise falls off the end (no
+// explicit return 0). argv unused.
 int _tmain(int argc, TCHAR *argv[])
 {
 	WIN32_FIND_DATA ffd;

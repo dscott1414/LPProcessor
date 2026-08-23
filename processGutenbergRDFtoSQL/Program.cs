@@ -1,4 +1,38 @@
-﻿using System;
+/*
+	Program.cs - Ingest Gutenberg RDF catalog into lp.sources and move texts
+
+	Overview:
+		Walks F:\lp\gutenberg\gutenbergMirrorRDFs\*.rdf, keeps English
+		ebooks whose LCC class is in acceptableBookTypes (literature /
+		history / science-ish), INSERTs new rows into lp.sources
+		(sourceType=2, start=**FIND**), and File.Moves the plaintext
+		from the Gutenberg mirror to M:\caches\texts\<author>\<title>.txt.
+
+	Pipeline position:
+		Corpus-acquisition front door: populates the sources table that
+		readSourceBuffer later opens. Offline; not on the parse path.
+
+	Key entry points:
+		- ReadElements() - XmlReader sibling-element enumerator
+		- GetExistingSources() - SELECT etext FROM sources
+		- CheckExistingSources() - repair **FIND** paths that moved
+		- MoveAndRename() - mirror file -> caches\texts\...
+		- Main() - RDF walk, filter, INSERT, move
+
+	Dependencies:
+		MySQL localhost lp / root / byron0; Gutenberg RDF namespaces
+		(pgterms, dcterms, marcrel, dcam). Hardcoded F: and M: paths.
+
+	Notes / gotchas:
+		Hardcoded DB password. INSERT concatenates etext/creator/title/
+		dateIssued without parameters (SQL injection / quote breakage).
+		title is escaped for ' only after filesystem sanitization, then
+		used both in SQL and in the destination path (MoveAndRename gets
+		the already-escaped title). CheckExistingSources is invoked first
+		and updates path via concatenated SQL. test==false performs real
+		moves/inserts.
+*/
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -32,6 +66,8 @@ namespace processGutenbergRDFtoSQL
         /// <param name="elementName">An <see cref="XName"/> representing the name of the desired element.</param>
         /// <returns>A sequence of <see cref="XElement">XElements</see>.</returns>
         /// <remarks>At the end of the sequence, the reader will be positioned on the end tag of the parent element.</remarks>
+        // Yield the current element if it matches, then each following sibling
+        // of that name. Leaves the reader on the parent's end tag.
         public static IEnumerable<XElement> ReadElements(this XmlReader reader, XName elementName)
         {
             if (reader.Name == elementName.LocalName && reader.NamespaceURI == elementName.NamespaceName)
@@ -41,6 +77,8 @@ namespace processGutenbergRDFtoSQL
                 yield return (XElement)XElement.ReadFrom(reader);
         }
 
+        // Open lp.sources and return the set of non-null etext values.
+        // Connection string embeds root/byron0. Caller owns no live reader.
         public static HashSet<string> GetExistingSources()
         {
             MySqlConnection queryConnection = new MySqlConnection(string.Format("Server=localhost; database={0}; UID={1}; password={2}", "lp", "root", "byron0"));
@@ -58,6 +96,9 @@ namespace processGutenbergRDFtoSQL
         }
 
         // not needed anymore, kept in case we need to do something like this again
+        // For sourceType=2 rows with start='**FIND**', if J:\caches\<path>
+        // is missing, rebuild path from author+title and UPDATE if
+        // M:\caches\<newpath> exists. Prints missing-path rows.
         public static void CheckExistingSources()
         {
             int incorrectPaths = 0,correctPaths=0,correctedPaths=0;
@@ -109,6 +150,10 @@ namespace processGutenbergRDFtoSQL
 
         // move F:\lp\gutenberg\gutenbergMirror\1155-0.txt to
         // J:\caches\texts\Christie Agatha\Secret Adversary.txt
+        // Move F:\lp\gutenberg\gutenbergMirror\<path> to
+        // M:\caches\texts\<creator>\<title>.txt (creating the author dir).
+        // Returns 0 on move, 1 if dest already exists, -1 on missing src or
+        // exception. No-op move when test==true.
         static int MoveAndRename(string etextNum, string path, string title, string creator)
         {
             string oldPath = "F:\\lp\\gutenberg\\gutenbergMirror\\" + path;
@@ -176,6 +221,9 @@ namespace processGutenbergRDFtoSQL
         // <dcterms:title>The Secret Adversary</dcterms:title>
         // date - date issued - 1998-01-01 00:00:00
         // <dcterms:issued rdf:datatype="http://www.w3.org/2001/XMLSchema#date">1998-01-01</dcterms:issued>
+        // CheckExistingSources, then scan every RDF: filter LCC+English,
+        // INSERT new sources, MoveAndRename texts, print type histograms.
+        // args unused.
         static void Main(string[] args)
         {
             CheckExistingSources();

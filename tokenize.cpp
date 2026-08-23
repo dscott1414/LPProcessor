@@ -1,3 +1,72 @@
+/*
+	tokenize.cpp - pipeline stage 3: turn a decoded source buffer into the token array cSource::m
+
+	Overview:
+		Two responsibilities live here.  First, readSourceBuffer()/parseBuffer()/tokenize()
+		read a book file off disk, decide its encoding, skip to the real start of the text and
+		then walk the wide-char buffer word by word (the actual lexing of a single token, and
+		the recognition of numbers / dates / times / telephone numbers / money / web addresses,
+		is done by cWordMap::readWord in word.cpp; this file consumes its PARSE_* return codes).
+		Each token becomes one cWordMatch appended to cSource::m, and sentence / paragraph /
+		section boundaries are recorded as token offsets in cSource::sentenceStarts.
+		Second, doQuotesOwnershipAndContractions() makes a post-tokenization pass over the
+		finished token array to decide which quote characters open and which close (primary
+		" versus secondary '), to disambiguate possessive 's from contracted is/has,
+		to expand dialect contractions ('tis, d'ye, gotta, wanna...) and to accumulate the
+		preliminary proper-noun statistics that stage 4 (pattern matching) relies on.
+
+	Pipeline position:
+		Runs after source.cpp has located the text (readSourceBuffer calls findStart/scanUntil)
+		and before pattern.cpp parses anything.  cSource::tokenize() is the entry point called
+		by the per-source driver in main.cpp; doQuotesOwnershipAndContractions() is called
+		separately after tokenize() and before parse().
+
+	Key entry points:
+		- tokenize() - read + parse one source file into m; frees bookBuffer on the way out
+		- readSourceBuffer() - open the file, guess/confirm the code page, find the start
+		- parseBuffer() - the main readWord() loop that fills m and sentenceStarts
+		- doQuotesOwnershipAndContractions() - the post-tokenization sentence-by-sentence pass
+		- adjustWord() / adjustWords() - contraction and slang rewriting (inserts/deletes tokens)
+		- checkProperNoun() - proper-noun flag decisions using global + local capitalization stats
+
+	Key data structures / globals:
+		- m - vector <cWordMatch>, the token array; every index kept anywhere else in cSource
+			(sentenceStarts, metaCommandsEmbeddedInSource, lastPrimaryQuote/lastSecondaryQuote,
+			the caller's loop variables) is invalidated by any insert/erase into it
+		- sentenceStarts - cIntArray of token offsets; sentence s spans
+			[sentenceStarts[s],sentenceStarts[s+1]) and the last entry is the end sentinel
+		- metaCommandsEmbeddedInSource - map token offset -> embedded |...| meta command text,
+			rebuilt (never patched in place) whenever a token is inserted or erased
+		- bookBuffer / bufferLen / bufferScanLocation - the wide-char source buffer, its length
+			and the lexer's read cursor; owned by cSource, allocated by readSourceBuffer and
+			freed by tokenize()
+		- Words / Forms - the process-wide lexicon and form table (word.cpp)
+
+	Dependencies:
+		Win32 (CreateFileW/ReadFile/GetFileSizeEx), MySQL by way of cWord::fullQuery and
+		Words.addNewOrModify (new words are written to the words/wordForms tables as they are
+		discovered), source\lists\* rule files by way of cStemmer, and the source/sourceEncoding
+		DB rows updated through updateSourceStart/updateSourceEncoding.
+
+	Notes / gotchas:
+		- TOKEN INDEX CONTRACT: adjustWord(), convertNoOne(), alterNounOwner(),
+			eraseLastQuote() and manageMissingQuotes() all insert or erase entries in m.
+			Every insertion at index i shifts all tokens >= i up by one, so the caller must
+			(a) bump every sentenceStarts entry after the current sentence, (b) rebuild
+			metaCommandsEmbeddedInSource, and (c) fix up its own end / q loop variables.
+			Not every call site does all three - see the notes on the individual functions.
+		- bufferLen changes units inside readSourceBuffer: it is a byte count when the file is
+			read, a wchar_t count after "bufferLen /= sizeof(bookBuffer[0])", and is doubled
+			again ("bufferLen <<= 1") to cover the re-decoded text.  Read the code before
+			reusing it as a length.
+		- The source file itself is stored in Windows-1252, not UTF-8: the quote literals in
+			rationalizePrimarySecondaryQuotes/doQuotesOwnershipAndContractions are the single
+			bytes 0x93/0x94/0x91/0x92 ("" and '').  Do not "fix" the encoding of this file.
+		- Every #ifdef LOG_QUOTATIONS block in this file dates from before the big function
+			split; several reference identifiers (kind, begin) that are no longer in scope, so
+			defining LOG_QUOTATIONS will not compile as-is.
+		- Windows only: Win32 file APIs, _sys_errlist, wcslwr, __int64 printf sizes.
+*/
 #include <windows.h>
 #include "Winhttp.h"
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
@@ -8,11 +77,26 @@
 #include "profile.h"
 #include "paice.h"
 
+// Rewrite the token at q if it is a contraction, a dialect form or an abbreviation that needs
+// splitting, e.g. "let's"->"let us", "d'ye"->"do you", "gotta"->"have a"/"have to",
+// "Beek St. That"->"Beek St . That".  Only the FIRST matching rule fires (one long if/else-if
+// chain), so at most one token is ever inserted per call.
+// Some rules only overwrite m[q] (word, forms, flags) in place; others insert a new token.
+// Returns true only when the size of m changed (i.e. a token was inserted), which is the
+// signal to the caller that it must renumber sentenceStarts, rebuild
+// metaCommandsEmbeddedInSource and bump its own sentence end - see adjustWords() and
+// doQuotesOwnershipAndContractions().  Returns false for the pure in-place rewrites.
+// Side effects: mutates m (words, forms, flags, size); may add words to the lexicon through
+// Words.gquery.
+// Preconditions / hazards: several rules read m[q+1] (and one reads m[q+2]) without checking
+// them against m.size(), so q must not be within one or two tokens of the end of the array.
 bool cSource::adjustWord(unsigned int q)
 {
 	LFS
 		bool insertedOrDeletedWord = false;
 	// let's have some dinner!
+	// flagNounOwner is set by the lexer when the token ended in 's; here it is re-read as
+	// "let us", so the ownership flag is cleared and the pronoun is materialized at q+1.
 	if ((m[q].flags & cWordMatch::flagNounOwner) && m[q].word->first == L"let")
 	{
 		m[q].flags &= ~cWordMatch::flagNounOwner;
@@ -27,6 +111,9 @@ bool cSource::adjustWord(unsigned int q)
 		m[q].forms.clear();
 		m[q].forms.set(cForms::gFindForm(L"does"));
 		m[q].flags = 0;
+		// NOTE: inserting at q (not q+1) puts "you" BEFORE the rewritten "do" and leaves
+		// m[q+1] pointing at "do", so the pronoun form below is applied to the wrong token.
+		// The other rules in this chain insert at q+1; this one, t'other and more'n do not.
 		m.insert(m.begin() + q, cWordMatch(Words.gquery(L"you"), 0, debugTrace));
 		m[q + 1].forms.set(cForms::gFindForm(L"personal_pronoun"));
 		insertedOrDeletedWord = true;
@@ -38,6 +125,7 @@ bool cSource::adjustWord(unsigned int q)
 		m[q].forms.clear();
 		m[q].forms.set(cForms::gFindForm(L"determiner"));
 		m[q].flags = 0;
+		// same q vs q+1 insertion position issue as d'ye above ("other the" instead of "the other")
 		m.insert(m.begin() + q, cWordMatch(Words.gquery(L"other"), 0, debugTrace));
 		m[q + 1].forms.set(cForms::gFindForm(L"pronoun"));
 		insertedOrDeletedWord = true;
@@ -49,6 +137,7 @@ bool cSource::adjustWord(unsigned int q)
 		m[q].forms.clear();
 		m[q].forms.set(cForms::gFindForm(L"adverb"));
 		m[q].flags = 0;
+		// same q vs q+1 insertion position issue as d'ye above ("than more" instead of "more than")
 		m.insert(m.begin() + q, cWordMatch(Words.gquery(L"than"), 0, debugTrace));
 		m[q + 1].forms.set(cForms::gFindForm(L"conjunction"));
 		m[q + 1].forms.set(cForms::gFindForm(L"preposition"));
@@ -57,6 +146,8 @@ bool cSource::adjustWord(unsigned int q)
 	// What's he want? --> What does he want?
 	// What's for dinner? --> What is for dinner?
 	// What's that got to do with it? --> What has that got to do with it?
+	// "ishasdoes" is a placeholder lexicon entry carrying all three verb forms; the pattern
+	// matcher later picks whichever of is/has/does fits, so tokenization does not have to decide.
 	else if ((m[q].flags & cWordMatch::flagNounOwner) && (m[q].word->first == L"what"))
 	{
 		m[q].flags &= ~cWordMatch::flagNounOwner;
@@ -72,6 +163,8 @@ bool cSource::adjustWord(unsigned int q)
 		insertedOrDeletedWord = true;
 	}
 	// twas -> it was
+	// 'twas/'tis arrive as two tokens (the leading single quote, then the word), so both are
+	// overwritten in place and no insertion is needed - insertedOrDeletedWord stays false.
 	else if (cWord::isSingleQuote(m[q].word->first[0]) && q + 1 < m.size() && m[q + 1].word->first == L"twas")
 	{
 		m[q].word = Words.gquery(L"it");
@@ -127,6 +220,10 @@ bool cSource::adjustWord(unsigned int q)
 		insertedOrDeletedWord = true;
 	}
 	// I lived at 23 Beek St.  That was a nice block.
+	// The next four rules all do the same thing: an abbreviation whose own trailing period was
+	// swallowed into the token ("st.", "a.m.", "b.c.", "no.") is followed by a capitalized word,
+	// so a separate "." token is inserted to end the sentence there.  Each of them reads m[q+1]
+	// without a q+1<m.size() guard (only q>0 is checked, for the m[q-1] accesses).
 	else if (q > 0 && m[q].queryForm(sa_abbForm) >= 0 &&
 		(m[q - 1].flags & cWordMatch::flagFirstLetterCapitalized) &&
 		(m[q + 1].flags & cWordMatch::flagFirstLetterCapitalized))
@@ -155,6 +252,8 @@ bool cSource::adjustWord(unsigned int q)
 		m.insert(m.begin() + q + 1, cWordMatch(Words.gquery(L"."), 0, debugTrace));
 		insertedOrDeletedWord = true;
 	}
+	// "had better <verb>" is rewritten to "have to <verb>" in place (no insertion).
+	// This is the only rule that looks two tokens ahead, again without a bounds check.
 	else if (m[q].word->first == L"had" && m[q + 1].word->first == L"better" && m[q + 2].queryForm(verbForm) >= 0)
 	{
 		// I had better leave now.
@@ -181,6 +280,14 @@ bool cSource::adjustWord(unsigned int q)
 	return insertedOrDeletedWord;
 }
 
+// Classify the primary quote character at q purely by parity: odd occurrences open, even
+// occurrences close.  quoteType is the neutral (undirected) quote lexicon entry; the token is
+// rewritten to quoteOpenType/quoteCloseType (the directional curly-quote entries) so that later
+// stages can tell direction without recounting.
+// quoteCount (running number of primary quotes seen in the whole source) and lastPSQuote (token
+// offset of the most recent primary quote) are updated in place.
+// Returns false and touches nothing if m[q] is not the neutral primary quote, which is how the
+// caller decides to try the secondary (single quote) test instead.
 bool cSource::quoteTest(int q, unsigned int& quoteCount, int& lastPSQuote, tIWMM quoteType, tIWMM quoteOpenType, tIWMM quoteCloseType)
 {
 	LFS
@@ -198,6 +305,18 @@ bool cSource::quoteTest(int q, unsigned int& quoteCount, int& lastPSQuote, tIWMM
 	return true;
 }
 
+// Classify the secondary (single) quote at q as opening or closing.  Much harder than the
+// primary case because ' is also an apostrophe: 'em, drinkin', o'clock.  Three signals are
+// combined - surrounding letters (flagAlphaBeforeHint/flagAlphaAfterHint, recorded by the
+// lexer), parity of secondaryQuotations, and the corpus familiarity of the word that follows
+// this quote versus the word that followed the previous one.
+// The first two branches decide the quote is really an apostrophe in an abbreviated word and
+// either skip it entirely (leaving secondaryQuotations untouched, so parity is preserved) or
+// retroactively demote the previous open quote at lastSecondaryQuote back to a neutral quote.
+// The final branch commits: it rewrites m[q] to the open/close entry, increments
+// secondaryQuotations and records lastSecondaryQuote = q.  When the space evidence and the
+// parity evidence disagree, the space evidence is discarded and parity wins.
+// Both counters are in/out; nothing else is mutated and no tokens are inserted or erased.
 void cSource::secondaryQuoteTest(int q, unsigned int& secondaryQuotations, int& lastSecondaryQuote,
 	tIWMM secondaryQuoteWord, tIWMM secondaryQuoteOpenWord, tIWMM secondaryQuoteCloseWord)
 {
@@ -208,6 +327,9 @@ void cSource::secondaryQuoteTest(int q, unsigned int& secondaryQuotations, int& 
 	bool preferOpenQuoteBySpace = !(m[q].flags & cWordMatch::flagAlphaBeforeHint) && (m[q].flags & cWordMatch::flagAlphaAfterHint);
 	bool preferOpenQuoteByCount = !(secondaryQuotations & 1);
 	bool preferCloseQuoteByCount = (secondaryQuotations & 1);
+	// m[lastSecondaryQuote + 1] below is only reached when preferCloseQuoteByCount is set, which
+	// implies an odd number of secondary quotes have already been seen and therefore that
+	// lastSecondaryQuote is a real token offset rather than its initial -1.
 	if (preferOpenQuoteBySpace && q + 1 < (signed)m.size() &&
 		// is the following word unknown? (suggests an abbreviated word)
 		((m[q + 1].queryForm(UNDEFINED_FORM_NUM) >= 0) ||
@@ -257,6 +379,18 @@ void cSource::secondaryQuoteTest(int q, unsigned int& secondaryQuotations, int& 
 	}
 }
 
+// Repair an unbalanced quotation: an open quote is still outstanding when a section/paragraph
+// boundary is reached, so the most recent CLOSE quote (searched backwards from lastPSQuote) is
+// deleted from m and the token just before the boundary becomes the close quote instead.
+// In/out parameters, all of which must be the caller's live variables:
+//   lastPSQuote - in: where to start searching backwards; out: q-1, the new close quote offset
+//   q           - the caller's current token offset, decremented because a token before it was
+//                 erased.  If the caller passes q by value the loop index is left stale by one.
+// Also renumbers sentenceStarts (entries past the erased offset are decremented, and a sentence
+// that started exactly on the erased token is pushed forward past the section word) and rebuilds
+// metaCommandsEmbeddedInSource.
+// Hazards: if no close quote is found the backwards search stops at 0 and token 0 is erased
+// anyway; and m[q - 1] is written without checking that q is still non-zero.
 void cSource::eraseLastQuote(int& lastPSQuote, tIWMM quoteCloseWord, unsigned int& q)
 {
 	LFS
@@ -271,6 +405,9 @@ void cSource::eraseLastQuote(int& lastPSQuote, tIWMM quoteCloseWord, unsigned in
 		if (sentenceStarts[s2] == lastPSQuote && m[sentenceStarts[s2]].word == Words.sectionWord)
 			sentenceStarts[s2]++;// corrects the setting because of a dangling quotation that has now been erased
 	}
+	// NOTE: the pivot here is q (already decremented) rather than the erased offset
+	// lastPSQuote, so meta commands attached to tokens between lastPSQuote and q keep their old
+	// offsets even though those tokens have shifted down by one.
 	unordered_map <unsigned int, wstring> newMetaCommandsEmbeddedInSource;
 	for (auto const& [where, comment] : metaCommandsEmbeddedInSource)
 		newMetaCommandsEmbeddedInSource[(where < q) ? where : where - 1] = comment;
@@ -278,6 +415,16 @@ void cSource::eraseLastQuote(int& lastPSQuote, tIWMM quoteCloseWord, unsigned in
 	lastPSQuote = q - 1;
 }
 
+// Cheap part-of-speech plausibility test for the token at 'where', used by alterNounOwner()
+// before any pattern matching has happened.  All four results are out parameters:
+//   maybeVerb      - has some verb form, or has verbForm cheaply enough (usage cost < 4);
+//                    forced false for a capitalized non-all-caps word (assumed a name)
+//   maybeNoun      - has nounForm with usage cost < 4
+//   maybeAdjective - has adjectiveForm with usage cost < 4
+//   preferNoun     - noun is more frequent in the corpus than adjective for this word
+// Usage cost is the per-form corpus-derived cost in cSourceWordInfo; 4 is the "too rare to
+// believe at this stage" threshold used throughout this file.
+// The bool return value is always false and carries no meaning.  Logs when traceParseInfo.
 bool cSource::getFormFlags(int where, bool& maybeVerb, bool& maybeNoun, bool& maybeAdjective, bool& preferNoun)
 {
 	int verbFormOffset = m[where].queryForm(verbForm), nounFormOffset, adjectiveFormOffset;
@@ -294,6 +441,15 @@ bool cSource::getFormFlags(int where, bool& maybeVerb, bool& maybeNoun, bool& ma
 	return false;
 }
 
+// True if the token at q starts a sentence: either it is the first token of the sentence
+// (q == begin) or the preceding token is a terminator, a section break, a quote, a dash or a
+// bracket.  ";" and ":" count because of verse and telegraphic prose (see the examples inline).
+// The last two clauses handle a parenthetical that itself follows the sentence end.
+// This duplicates the firstWordInSentence logic in adjustFormsInflections() (which works from
+// m.size()/lastSentenceEnd during tokenization instead of from a sentence range); the two must
+// be kept in step.
+// Note q - 3 / q - 2 are unsigned, so for q < 3 they wrap; they are compared for equality with
+// begin only, so the wrap is harmless but not intentional.
 bool cSource::isFirstWordInSentence(unsigned int q, unsigned int begin)
 {
 	tIWMM w = (q) ? m[q - 1].word : wNULL;
@@ -306,6 +462,24 @@ bool cSource::isFirstWordInSentence(unsigned int q, unsigned int begin)
 		(q - 2 == begin && w->first == L"(");   // The bag dropped.  (If you didn't know).
 }
 
+// Decide, for the token at q inside sentence [begin,end), which proper-noun flags it should
+// carry.  Nothing here is final - the flags only bias the pattern matcher in stage 4 - but they
+// are the main defence against treating every sentence-initial capitalized word as a name.
+// Four independent decisions, in order:
+//   1. clear flagAddProperNoun / set flagRefuseProperNoun when a capitalized word is only
+//      capitalized because it starts a sentence (or is in a title) and the corpus/local
+//      statistics say it is normally lower case.  mightBeName exempts "St." style honorific +
+//      period sequences, afterPossibleAbbreviation exempts a word following an abbreviation.
+//   2. set flagAddProperNoun from the LOCAL statistics of this document (never seen lower case
+//      and seen capitalized > 2 times, or seen capitalized > 20 times).
+//   3. special case "lord" followed by a lower-case word.
+//   4. set flagOnlyConsiderProperNounForms for a capitalized word that the corpus only ever
+//      records as a proper noun, then immediately undo that if the whole sentence looks like a
+//      title (mostly capitalized words, > 4 tokens) where capitalization proves nothing.
+// Side effects: only m[q].flags and logging; no tokens are inserted, erased or renumbered, so
+// this is safe to call from inside the sentence loop.
+// The word-level counters read here (getUsagePattern, numProperNounUsageAsAdjective,
+// localWordIsLowercase/localWordIsCapitalized) are accumulated during tokenization.
 void cSource::checkProperNoun(unsigned int q, unsigned int begin, unsigned int end, bool firstWordInSentence)
 {
 	bool afterPossibleAbbreviation = (q > 1 && m[q - 1].word->first == L"." && (m[q - 2].queryForm(abbreviationForm) >= 0 || m[q - 2].queryForm(honorificAbbreviationForm) >= 0 || m[q - 2].queryForm(letterForm) >= 0));
@@ -405,6 +579,9 @@ void cSource::checkProperNoun(unsigned int q, unsigned int begin, unsigned int e
 		// check if from begin to end there is only capitalized words except for determiners or prepositions
 		// What Do We Need to Know About the International Monetary System? (Paul Krugman)
 		bool allCapitalized = true;
+		// termLength counts the current run of alphabetic tokens (reset by punctuation);
+		// numCommonClassCapitalizedWords counts capitalized words that are common words -
+		// a title-case heading has several, a genuine name sequence normally has none.
 		int longestContinuousTerm = 0, termLength = 0, numCommonClassCapitalizedWords = 0, numCapitalized = 0;
 		for (unsigned int si = begin; si < end; si++)
 		{
@@ -438,6 +615,16 @@ void cSource::checkProperNoun(unsigned int q, unsigned int begin, unsigned int e
 	}
 }
 
+// Called when the token at q is a section word (paragraph/section break) and a quotation is
+// still open (odd count).  Dickens-style continued dialogue does open a quote per paragraph
+// without closing it, so the fix chosen here is to delete the previous close quote via
+// eraseLastQuote() and let this location close the quotation instead; the parity counter is
+// decremented and quotationExceptions (reported at the end of the source) is bumped.
+// Primary (") is tested first, then secondary ('); only one of the two can fire per call.
+// IMPORTANT: eraseLastQuote() erases a token and expects to update the caller's q and
+// lastPrimaryQuote/lastSecondaryQuote through references, but this function receives q,
+// lastPrimaryQuote and lastSecondaryQuote BY VALUE, so those updates are discarded here and
+// never reach doQuotesOwnershipAndContractions().  Only 'end' (a reference) is corrected.
 void cSource::adjustQuotationsIfOpen(unsigned int q, unsigned int &end, unsigned int &quotationExceptions, int lastPrimaryQuote, int lastSecondaryQuote, 
 																			tIWMM primaryQuoteOpenWord, tIWMM primaryQuoteCloseWord,
 																			tIWMM secondaryQuoteOpenWord, tIWMM secondaryQuoteCloseWord,
@@ -707,8 +894,8 @@ void cSource::rationalizePrimarySecondaryQuotes()
 {
 	tIWMM primaryQuoteWord = Words.gquery(primaryQuoteType);
 	tIWMM secondaryQuoteWord = Words.gquery(secondaryQuoteType);
-	tIWMM primaryQuoteOpenWord = Words.gquery(L"“"), primaryQuoteCloseWord = Words.gquery(L"”");
-	tIWMM secondaryQuoteOpenWord = Words.gquery(L"‘"), secondaryQuoteCloseWord = Words.gquery(L"’");
+	tIWMM primaryQuoteOpenWord = Words.gquery(L"ï¿½"), primaryQuoteCloseWord = Words.gquery(L"ï¿½");
+	tIWMM secondaryQuoteOpenWord = Words.gquery(L"ï¿½"), secondaryQuoteCloseWord = Words.gquery(L"ï¿½");
 	vector <cWordMatch>::iterator im = m.begin(), imEnd = m.end();
 	int outerPrimaryQuotes = 0, outerSecondaryQuotes = 0;
 	int innerPrimaryQuotes = 0, innerSecondaryQuotes = 0;
@@ -764,8 +951,8 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int& primaryQuot
 	int lastPrimaryQuote = -1, lastSecondaryQuote = -1;
 	tIWMM primaryQuoteWord = Words.gquery(primaryQuoteType);
 	tIWMM secondaryQuoteWord = Words.gquery(secondaryQuoteType);
-	tIWMM primaryQuoteOpenWord = Words.gquery(L"“"), primaryQuoteCloseWord = Words.gquery(L"”");
-	tIWMM secondaryQuoteOpenWord = Words.gquery(L"‘"), secondaryQuoteCloseWord = Words.gquery(L"’");
+	tIWMM primaryQuoteOpenWord = Words.gquery(L"ï¿½"), primaryQuoteCloseWord = Words.gquery(L"ï¿½");
+	tIWMM secondaryQuoteOpenWord = Words.gquery(L"ï¿½"), secondaryQuoteCloseWord = Words.gquery(L"ï¿½");
 	primaryQuotations = 0;
 	wstring originalWord;
 	// scan for only single quotations - convert if necessary

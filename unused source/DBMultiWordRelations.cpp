@@ -1,3 +1,37 @@
+/*
+	DBMultiWordRelations.cpp - Flush space-relations into MySQL multi-word tables
+
+	Overview:
+		Builds batched INSERT statements for multiWordRelations and
+		prepPhraseMultiWordRelations from Source::spaceRelations after
+		objects/speakers/time have been resolved. Encodes speaker,
+		audience, adjectives, compound subjects/objects, secondary verbs,
+		and prep-phrase bindings as integer word indexes (NULLWORD=187
+		for missing).
+
+	Pipeline position:
+		Would run after relations + objects + speakers (flush stage).
+		Historical; live path no longer dynamically writes word relations.
+
+	Key entry points:
+		- rti() / getVerbIndex() / getMatchedObject() - resolve to word/object ids
+		- testPFlag() - nearest-token winner for prep binding flags
+		- insertPrepPhrase() - one prep (+ compounds) into the prep INSERT
+		- advanceSentenceNum() - skip / assign sentence index for an sri
+		- printCAS() - debug dump of a child cAS
+		- flushMultiWordRelations() - lock tables, batch-insert, unlock
+
+	Dependencies:
+		MySQL tables multiWordRelations, prepPhraseMultiWordRelations;
+		checkFull() flusher; QUERY_BUFFER_LEN / QUERY_BUFFER_LEN_OVERFLOW.
+
+	Notes / gotchas:
+		LOCK TABLES then early-return on checkFull failure leaves tables locked.
+		sri[-1] is used when sri==begin() is not fully guarded on the overwrite
+		path (advanceSentenceNum returns first; overwrite still indexes sri[-1]
+		when print ranges nest). Compound loops can walk nextCompoundPartObject
+		cycles (partially guarded only in insertPrepPhrase).
+*/
 #include <stdio.h>
 #include <string.h>
 #include <mbstring.h>
@@ -22,6 +56,8 @@
 #define NULLWORD 187
 bool checkFull(MYSQL *mysql,wchar_t *qt,size_t &len,bool flush,wchar_t *qualifier);
 
+// Resolve source position `where` to a lexicon word index via
+// fullyResolveToClass. Returns NULLWORD (187) if where<0 or unresolved.
 int Source::rti(int where)
 { LFS
 	if (where<0) return NULLWORD;
@@ -30,6 +66,7 @@ int Source::rti(int where)
 	return w->second.index;
 }
 
+// Main-entry verb index at whereVerb via getVerbME, or NULLWORD if missing.
 int Source::getVerbIndex(int whereVerb)
 { LFS
 	if (whereVerb<0) return NULLWORD;
@@ -37,6 +74,8 @@ int Source::getVerbIndex(int whereVerb)
 	return (v!=wNULL && v->second.index>=0) ? v->second.index : NULLWORD;
 }
 
+// Prefer objectMatches[0] over getObject() at `where`. Inserts a non-negative
+// object id into mwObjects. Returns -1 if where<0 or no object.
 int Source::getMatchedObject(int where,set <int> &mwObjects)
 { LFS
 	if (where<0) return -1;
@@ -48,6 +87,10 @@ int Source::getMatchedObject(int where,set <int> &mwObjects)
 	return object;
 }
 
+// If candidate token `where` sits immediately after prep wp, set
+// prepositionFlags=flag. If where is between 0 and wp and closer than
+// nearestLocation, update nearestLocation. Used to pick the binding
+// (subject/object/verb/…) of a preposition.
 void Source::testPFlag(int where,int wp,int &prepositionFlags,int flag,int &nearestLocation)
 { LFS
 	if (wp==where+1)
@@ -56,6 +99,9 @@ void Source::testPFlag(int where,int wp,int &prepositionFlags,int flag,int &near
 		nearestLocation=where;
 }
 
+// Append one VALUES tuple (and compound-noun follow-ons, up to 10) for the
+// prep at wherePrep onto pnqt, advancing pnlen. Also appends a debug phrase
+// to ps. Binding flags encode which sri role the prep attaches to.
 void Source::insertPrepPhrase(vector <cSpaceRelation>::iterator sri,int where,int wherePrep,int whereSecondaryVerb,int whereSecondaryObject,set <int> &relPreps,wchar_t *pnqt,size_t &pnlen,set <int> &mwObjects,wstring &ps)
 { LFS
 	int wherePrepObject=m[wherePrep].getRelObject();
@@ -128,6 +174,11 @@ void Source::insertPrepPhrase(vector <cSpaceRelation>::iterator sri,int where,in
 	}
 }
 
+// Decide whether this sri is a duplicate/extension of the previous print
+// span (return true => caller should skip). Otherwise bump sentence index
+// `s` to the sentence containing printMin/printMax and store sri->sentenceNum.
+// inQuestion relaxes the increment for LOCATION/NORELATION without a
+// question-type tag.
 bool Source::advanceSentenceNum(vector <cSpaceRelation>::iterator sri,unsigned int &s,int lastMin,int lastMax,bool inQuestion)
 { LFS
 		
@@ -164,6 +215,7 @@ bool Source::advanceSentenceNum(vector <cSpaceRelation>::iterator sri,unsigned i
 		return false;
 }
 
+// Debug: stringify childCAS's prep phrase and printSRI its sri/ws/wo.
 void Source::printCAS(wstring logPrefix,cAS &childCAS)
 { LFS
 		wstring ps;
@@ -171,6 +223,11 @@ void Source::printCAS(wstring logPrefix,cAS &childCAS)
 		printSRI(logPrefix,childCAS.sri,0,childCAS.ws,childCAS.wo,ps,false,-1,L"");
 }
 
+// LOCK multiWordRelations + prepPhraseMultiWordRelations, walk spaceRelations
+// emitting batched INSERTs (checkFull flushes when the query buffer fills),
+// updateSourceStatistics3, UNLOCK. Returns -1 on query/lock failure (and
+// may leave tables locked), 0 on success. mwObjects collects referenced
+// object ids.
 int Source::flushMultiWordRelations(set <int> &mwObjects)
 { LFS
 	if (!myquery(&mysql,L"LOCK TABLES multiWordRelations WRITE, prepPhraseMultiWordRelations WRITE")) return -1;

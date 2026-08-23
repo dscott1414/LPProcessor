@@ -1,4 +1,26 @@
 /*
+	Loebner.cpp - design notes for a Loebner-prize question/answer model (no code)
+
+	Overview:
+		A typed comment dump of the question classes the author wanted to handle
+		for a Loebner contest entry: facts-about-self, environment/time, audience-
+		entered facts, common-object properties, linguistic metafacts, and logic
+		comparisons.  Each class is sketched as a (question pattern) -> (answer
+		pattern) pair using the project's metalanguage (re / tdo / ANS).
+
+	Pipeline position:
+		Not compiled into the parse pipeline.  The intended home for the
+		implementation was question answering (stage 8) plus a
+		localMultiWordRelations store of "self" facts.
+
+	Key entry points:
+		None - this translation unit contains only comments.
+
+	Notes / gotchas:
+		- There is no function, type, or data here.  Treat as a design document
+			that happens to have a .cpp extension.
+*/
+/*
 re=referring entity - the entity which is performing some action
 tdo=topic descriptor object - the entity that is being acted on by the referring entity
 ANS=the entity which gives the answer to the corresponding question

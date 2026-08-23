@@ -1,4 +1,54 @@
-﻿#include <windows.h>
+/*
+	definePatterns.cpp - the 500+ hand-written sentence patterns (stage 4 grammar)
+
+	Overview:
+		This translation unit is almost entirely data: sequences of
+		cPattern::create() calls that register noun phrases, verb groups,
+		infinitives, prepositional phrases, relative clauses, questions,
+		commands, and the multi-clause _MS1/_MS2 wrappers.  Nothing here
+		matches text; initializePatterns() in pattern.cpp runs the create*
+		functions once at startup, then resolves "_FOO" forward references
+		and evaluates tag sets.  Pattern syntax and tag tables are documented
+		in README.md "Parsing Processing Stages" / the _PATTERN TAG and TAG
+		NAME tables.
+
+	Pipeline position:
+		Stage 1 initialization, before any document is read.  Called from
+		initializePatterns() in this order: createBasicPatterns,
+		createVerbPatterns, createSecondaryPatterns1, createInfinitivePhrases,
+		createPrepositionalPhrases, createQuestionPatterns (questionProcessing.cpp),
+		createSecondaryPatterns2, createLetterIntroPatterns (resolveSpeakers.cpp).
+		Name and time patterns (defineNames / defineTimePatterns) live in
+		other TUs and are invoked from createBasicPatterns.
+
+	Key entry points:
+		- createBasicPatterns() - abbreviations, adverbs, adjectives, nouns,
+		  names (via defineNames), time (via defineTimePatterns), interjections
+		- createVerbPatterns() - _IS/_DO/_HAVE/_COND/_VERB* and __ALLOBJECTS
+		- createInfinitivePhrases() / createBareInfinitives() / createThinkBareInfinitives()
+		- createPrepositionalPhrases() - __PP / _PP
+		- createSecondaryPatterns1() - appositives, relative clauses, VERBREL
+		- createSecondaryPatterns2() - dispatcher for __S1 / _MS1 / _COMMAND / _REL / ...
+
+	Key data structures / globals:
+		- None of its own.  Every create() appends to the global `patterns`
+		  vector and may push a cPatternReference for a not-yet-defined child.
+
+	Notes / gotchas:
+		- A later same-name create() is a new variant (differentiator "1","2",
+		  "R", ...), chained via nextRoot.  Referring to __NOUN[*] binds all
+		  of them; referring to __NOUN without [*] binds only those already
+		  created — the [*] is mandatory when a later variant must be included.
+		- Costs (*N / *-N) and {_BLOCK} / {_FINAL*} tags are the only levers
+		  the winnow has; a cheaper non-final pattern that out-spans a _FINAL
+		  one can leave the sentence unmatched (see README).
+		- createQuestionPatterns and createLetterIntroPatterns are not defined
+		  here.  defineNames / defineTimePatterns / createMetaNameEquivalencePatterns
+		  are declared at the top and called from createBasicPatterns.
+		- The Longman Grammar notes above createNouns() are the author's
+		  design record for closed-class words (as/so/such/any/that/...).
+*/
+#include <windows.h>
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -166,6 +216,11 @@ void createMetaNameEquivalencePatterns(void);
 // Longman 112,176,184,276,278,1007,1039,1113,1115
 // 276:some is a moderate/small quantifier, which is a type of determiner
 // 176: some is also a pronoun
+// Register the noun-phrase family: _NOUN_OBJ, __N1, __NOUN[2/3/4/WILL/MTHAN/R*],
+// __PNOUN, __APPNOUN, coordinated / possessive / company-suffix variants.
+// Differentiator "2" is the common-noun shape findAgent() looks for; "C" is
+// pronominal; "R"/"R2"/... are relative-clause-containing nouns that set
+// _EXPLICIT_SUBJECT_VERB_AGREEMENT.  Returns 0.
 int createNouns(void)
 {
 	LFS
@@ -637,6 +692,10 @@ int createNouns(void)
 }
 
 // rules for patterns - any reference to any pattern must reference any occurrence of that pattern except for itself.
+// First (and largest) create batch: abbreviation wrappers, __ADVERB / _ADJECTIVE
+// families, then createNouns(), defineNames(), defineTimePatterns(),
+// createMetaNameEquivalencePatterns(), plus interjection / __INTERPP / __INTERS1.
+// Must run before any pattern that mentions __NOUN or _NAME.  Returns 0.
 int createBasicPatterns(void)
 {
 	LFS
@@ -1261,6 +1320,9 @@ int createBasicPatterns(void)
 // Page 694, Section 9.4.2.1 Grammatical patterns
 // Pattern 4 - verb + bare infinitive clause (dare, help, let, bade)
 // Pattern 5 - verb + NP + bare infinitive clause (have, feel, help)
+// _VERB_BARE_INF variants: "make/have/let/help NP V".  HOBJECT marks the
+// NP; V_HOBJECT marks the matrix verb for object-agreement costing.
+// Returns 0.
 int createBareInfinitives(void)
 {
 	LFS
@@ -1392,6 +1454,9 @@ int createBareInfinitives(void)
 	return 0;
 }
 
+// Parallel to createBareInfinitives but the complement is a "think"/"say"
+// verb that takes a clause (form "SYNTAX:Accepts S as Object").  Same
+// HOBJECT / V_HOBJECT tagging.  Returns 0.
 int createThinkBareInfinitives(void)
 {
 	LFS
@@ -1520,6 +1585,9 @@ Kelvin, an aspiring comic book artist, is taking Anatomy and Physiology this sem
 	 [To understand the interplay of muscle and bone in the human body functions as an adverb because it modifies the verb is taking.]
 
 */
+// to-infinitive family: __INFPSUB / __INFP / __INFPT / _INFP.  ITO marks
+// "to"; IVERB marks the whole phrase; objects go through __ALLOBJECTS_*.
+// Coordinated "not only to V but also to V" is _INFP[1].
 void createInfinitivePhrases(void)
 {
 	LFS
@@ -1779,6 +1847,10 @@ void createInfinitivePhrases(void)
 		2, L"__INFP", L"__INFPT", 0, 1, 1, 0);
 }
 
+// Verb-group family: _IS/_DO/_HAVE/_COND/_BEEN, tense/aspect wrappers
+// (_VERBPAST, _VERBPASSIVE, _VERBONGOING, ...), identity _VERB_ID, and the
+// start of the __ALLOBJECTS_0/1/2 buckets.  Bare-infinitive patterns are
+// registered later from createSecondaryPatterns1.  Returns 0.
 int createVerbPatterns(void)
 {
 	LFS
@@ -2221,6 +2293,12 @@ cPattern::create(L"_VERB_ID",L"8",
 	return 0;
 }
 
+// Mid-level constituents that need nouns and verbs already defined:
+// __APPNOUN / __APPTCNOUN (appositives), __NOUNREL, _REL1 / _RELQ,
+// _VERBREL1/_VERBREL2 (participial / "particularly for NP V-ing"),
+// the rest of __ALLOBJECTS_*, then createBareInfinitives /
+// createThinkBareInfinitives.  Relative-clause patterns are tagged EVAL
+// so agreement costing walks them.
 void createSecondaryPatterns1(void)
 {
 	LFS
@@ -2477,6 +2555,9 @@ void createSecondaryPatterns1(void)
 		0);
 }
 
+// __PP / _PP family: preposition + NP / _REL / _VERBREL, including the
+// "of NP SVO" shape (__PP[R]) that sets _EXPLICIT_SUBJECT_VERB_AGREEMENT.
+// P tags the preposition; PREPOBJECT / PREP tag the phrase for role costing.
 void createPrepositionalPhrases(void)
 {
 	LFS
@@ -2626,6 +2707,10 @@ void createPrepositionalPhrases(void)
 
 }
 
+// Interruptions that sit between subject and verb of __C1__S1: comma-wrapped
+// _VERBREL2, past-participial, restatement, "as NP", _PP, or _ADJECTIVE.
+// Tagged EVAL/_BLOCK so they cost as part of the enclosing S but do not
+// themselves collect descendant tags.  Returns 0.
 int createSecondaryPatterns__C1_IP(void)
 {
 	LFS
@@ -2678,6 +2763,10 @@ int createSecondaryPatterns__C1_IP(void)
 	return 0;
 }
 
+// Subject slot of a simple sentence (__C1__S1): optional __INTRO_NP then one
+// of __NOUN / __MNOUN / _INFP / there / _REL1 / _VERBREL2 / __QSUBJECT / ...
+// SUBJECT / N_AGREE / GNOUN tags drive agreement and object identification.
+// Returns 0.
 int createSecondaryPatterns__C1__S1(void)
 {
 	LFS
@@ -2725,6 +2814,9 @@ int createSecondaryPatterns__C1__S1(void)
 	return 0;
 }
 
+// Optional sentence-final tails: vocative ", sir", leftover infinitive
+// fragment, dangling adverb/adjective/time (FLOATTIME), "not to".
+// _ONLY_END_MATCH so they cannot win in the middle of a clause.  Returns 0.
 int createSecondaryPatterns__CLOSING__S1(void)
 {
 	cPattern::create(L"__CLOSING__S1{_ONLY_END_MATCH}", L"1",
@@ -2803,6 +2895,11 @@ int createSecondaryPatterns__CLOSING__S1(void)
 	return 0;
 }
 
+// Core declarative __S1 family (Quirk SVC/SVA/SV/SVO/SVOC/SVOA/SVOO):
+// __C1__S1 + __ALLVERB/_COND + optional __INTERS1 + __ALLOBJECTS_* +
+// optional _PP/_REL/_INFP + __CLOSING__S1.  _FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN
+// so a lone __S1 can win a sentence but a cheaper non-final wrapper can
+// still absorb it as a child.  Returns 0.
 int createSecondaryPatterns__S1(void)
 {
 	LFS
@@ -2898,6 +2995,9 @@ int createSecondaryPatterns__S1(void)
 	return 0;
 }
 
+// Late noun variants that need __S1 / __ALLVERB already defined: free-relative
+// "whoever V OBJ" (__NOUN[Z]), measure "five dollars a week" ([MO]), and
+// other S-containing noun shapes.  Returns 0.
 int createSecondaryPatterns__NOUN(void)
 {
 	LFS
@@ -2978,6 +3078,10 @@ int createSecondaryPatterns__NOUN(void)
 	return 0;
 }
 
+// Extra verb/clause shapes that depend on __S1 (fronted adjective + be,
+// more _VERBREL, coordinated verbs).  Several historical create() calls
+// are left commented with the reason they were folded into __S1[1].
+// Returns 0.
 int createSecondaryPatterns__VERB(void)
 {
 	LFS
@@ -3124,6 +3228,9 @@ int createSecondaryPatterns__VERB(void)
 	return 0;
 }
 
+// Multi-clause _MS1/_MS wrappers and the "make NP ADJ S" __S1[M4] blend.
+// _MS1 is the usual top-level sentence pattern (_FINAL / _ONLY_BEGIN_MATCH /
+// _STRICT_NO_MIDDLE_MATCH).  Returns 0.
 int createSecondaryPatterns_MS1(void)
 {
 	LFS
@@ -3225,6 +3332,10 @@ int createSecondaryPatterns_MS1(void)
 	return 0;
 }
 
+// Pre-nominal / pre-clausal introducers (__INTRO_N, __INTRO_N_ET, _STEP):
+// time NPs, adverbs, interjections that must not be mistaken for the
+// subject of a following Q1/VERBREL.  FLOATTIME tags feed timeRelations.
+// Returns 0.
 int createSecondaryPatterns__INTRO_N(void)
 {
 	LFS
@@ -3308,6 +3419,10 @@ int createSecondaryPatterns__INTRO_N(void)
 	return 0;
 }
 
+// Sentence introducers and a few extra __S1 vocative/interjection shapes
+// ("Hullo, stranger", "Oh, well"): _INTRO_S1, __INTRO_S1, __AS_AS.
+// Prefer _INTRO_S1 (separator-bounded) over __INTRO_N in Q1/VERBREL
+// wrappers so a hidden subject cannot cheapen a non-S1 parse.  Returns 0.
 int createSecondaryPatterns__INTRO_S1(void)
 {
 	LFS
@@ -3461,6 +3576,9 @@ int createSecondaryPatterns__INTRO_S1(void)
 	return 0;
 }
 
+// Short / fragmentary sentences (__S2): "Please, Tommy.", "I never.", and
+// other _FINAL+_ONLY_BEGIN+_ONLY_END_MATCH shapes that should win only as
+// a whole utterance.  Returns 0.
 int createSecondaryPatterns__S2(void)
 {
 	LFS
@@ -3515,6 +3633,9 @@ int createSecondaryPatterns__S2(void)
 	return 0;
 }
 
+// Imperatives: _INTROCOMMAND1 ("let us"), _COMMAND1, and related
+// verb-first shapes.  _QUESTION is not set (costing treats a missing '?'
+// as a bonus for commands and a penalty for questions).  Returns 0.
 int createSecondaryPatterns_COMMAND(void)
 {
 	LFS
@@ -3613,6 +3734,8 @@ int createSecondaryPatterns_COMMAND(void)
 	return 0;
 }
 
+// Additional relative / comparative patterns (_REL1 variants, "more than S")
+// that had to wait until __S1 and _PP were complete.  Returns 0.
 int createSecondaryPatterns_REL(void)
 {
 	LFS
@@ -3703,6 +3826,8 @@ int createSecondaryPatterns_REL(void)
 	return 0;
 }
 
+// More __PP shapes (prep + _REL1, doubled prepositions) and further _MS1
+// coordinations that need _REL1/_PP finalized.  Returns 0.
 int createSecondaryPatterns_MS1_1(void)
 {
 	LFS
@@ -3782,6 +3907,9 @@ int createSecondaryPatterns_MS1_1(void)
 	return 0;
 }
 
+// _MSTAIL / __MSTAIL: the ", and then S" / "; so S" tail of a multi-clause
+// sentence.  NO_MIDDLE_MATCH+_BLOCK+EVAL so a tail cannot win on its own
+// and its internal S is costed onto the parent _MS1.  Returns 0.
 int createSecondaryPatterns__MSTAIL(void)
 {
 	LFS
@@ -3886,6 +4014,9 @@ int createSecondaryPatterns__MSTAIL(void)
 	return 0;
 }
 
+// Remaining top-level _MS1/_MS2/_MTS1/_HAIL wrappers: comparatives
+// ("the more S the less S"), "not only ... but also", "at the time S, S",
+// vocative _HAIL.  Most are _FINAL_IF_ALONE + _ONLY_BEGIN_MATCH.  Returns 0.
 int createSecondaryPatterns_MS1_2(void)
 {
 	LFS
@@ -4069,6 +4200,10 @@ int createSecondaryPatterns_MS1_2(void)
 		return 0;
 	}
 
+	// Residual top-level fragments: __MODAUX ("He might."), __IMPLIEDIS
+	// ("especially him."), __IMPLIEDVERBCOMMAND, _PLEA ("yes, please"),
+	// _SECTIONHEADER.  All _STRICT_NO_MIDDLE_MATCH so they cannot steal a
+	// span from a real __S1.  Returns 0.
 	int createSecondaryPatterns_OTHER_VERB(void)
 	{
 		LFS
@@ -4141,6 +4276,10 @@ int createSecondaryPatterns_MS1_2(void)
 	return 0;
 }
 
+	// Dispatcher for every createSecondaryPatterns_* above, in dependency
+	// order (C1_IP → C1__S1 → CLOSING → S1 → NOUN → VERB → MS1 → INTRO →
+	// S2 → COMMAND → REL → MSTAIL → OTHER).  Called last from
+	// initializePatterns so _MS1 can mention every subpattern.  Returns 0.
 	int createSecondaryPatterns2(void)
 	{
 		createSecondaryPatterns__C1_IP();

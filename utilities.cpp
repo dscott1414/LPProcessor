@@ -1,3 +1,74 @@
+/*
+	utilities.cpp - leaf-level helpers shared by every stage of the parser: number/string
+	formatting, wide<->multibyte conversion, and the binary (de)serialization primitives
+	used by the word/object/pattern caches.
+
+	Overview:
+		Four unrelated groups of helpers live here:
+		1) itos/dtos - format an int/double into a caller-supplied wstring using a
+		   1024-wchar stack scratch buffer (no bounds checks - see gotchas).
+		2) wTM / mTW / mTWCodePage - wchar_t <-> char conversion around the Win32
+		   WideCharToMultiByte / MultiByteToWideChar APIs.  Each direction owns one
+		   __declspec(thread) scratch buffer that grows monotonically and is never
+		   freed, so conversions are allocation-free in steady state.  mTW also
+		   performs encoding *detection* (UTF-8 -> ISO-8859-1 -> CP1252 -> US-ASCII)
+		   which is what source.cpp/tokenize.cpp rely on to read Gutenberg texts.
+		3) copy(...) - a large overload family implementing a flat, untagged binary
+		   format used to write and re-read the caches (wordCache / object caches /
+		   ontology).  Every overload threads a byte offset `where` and a buffer size
+		   `limit`.  Argument order picks the direction:
+		       copy(buf, value, where, limit)  == SERIALIZE (write value into buf)
+		       copy(value, buf, where, limit)  == DESERIALIZE (read value out of buf)
+		   The two directions must stay exactly symmetric: a writer that emits a
+		   different number of bytes than its reader consumes silently corrupts
+		   everything that follows it in the stream.
+		4) small wstring janitors (escapeSingleQuote/trim/removeExcessSpaces/
+		   splitString) plus the debug-only tag-annotation printer used to dump a
+		   sentence with its matched SUBJECT/VERB/OBJECT tag brackets.
+
+	Pipeline position:
+		Not a stage; called from all of them.  wTM is on the hot path of every MySQL
+		query (DB.cpp/DBUtility.cpp), mTW is used when reading the source document
+		(stage 2), and the copy() family is used whenever a cache is written or read.
+
+	Key entry points:
+		- itos()/dtos() - int/double to wstring
+		- wTM() - wstring -> string (default CP_UTF8)
+		- mTW() - string -> wstring with encoding auto-detection
+		- mTWCodePage() - string -> wstring with a forced code page, returns 0 on error
+		- copy() - serialize/deserialize scalars, strings, sets, vectors, cName, cIntArray
+		- escapeSingleQuote()/removeSingleQuote()/removeExcessSpaces()/trim()
+		- getSentenceWithTags() - debug rendering of a sentence with tag brackets
+
+	Key data structures / globals:
+		- wTMbuffer/wTMbufSize - per-thread wide->multibyte scratch buffer, grow-only,
+		  never freed.  Only valid until the next wTM() call on the same thread.
+		- mTWbuffer/mTWbufSize - per-thread multibyte->wide scratch buffer, shared by
+		  mTW() and mTWCodePage(), grow-only, never freed, minimum 1MB once grown.
+
+	Dependencies:
+		Win32 (WideCharToMultiByte/MultiByteToWideChar/FormatMessage/_heapchk),
+		tmalloc/trealloc from memoryStat.cpp, lplog from logging.cpp, Words (word.h)
+		for copyWString, cSource/pattern tag machinery for getSentenceWithTags.
+
+	Notes / gotchas:
+		- LFS/DLFS at the top of most functions are the profiler macros from profile.h;
+		  they expand to nothing unless PROFILE/PROFILEDETAIL is defined, which is why
+		  the first statement of each body looks over-indented.
+		- Everything returned by wTM/mTW/mTWCodePage points either into the caller's
+		  own out-string or into the per-thread scratch buffer.  Never hold such a
+		  pointer across another conversion call on the same thread.
+		- The serializing copy() overloads for scalars write FIRST and check `limit`
+		  AFTER, so they detect an overrun only once it has already happened; the
+		  deserializing string overloads likewise read the string before validating
+		  `limit`.  Treat `limit` as a diagnostic, not as protection against a
+		  truncated or corrupt cache file.
+		- Most copy() overloads never actually return false: they call
+		  lplog(LOG_FATAL_ERROR,...), and logstring() calls exit(0) for that level.
+		  So a "return false" path in a caller is mostly unreachable.
+		- itos()/dtos() use fixed 1024-wchar stack buffers with unbounded wcscpy/wcscat/
+		  wsprintf; callers must keep prefixes, suffixes and formats short.
+*/
 #include <windows.h>
 #define _WINSOCKAPI_ /* Prevent inclusion of winsock.h in windows.h */
 #include "io.h"
@@ -14,6 +85,9 @@
 #include "profile.h"
 #include <sstream>
 
+// Append "before" + decimal(i) + "after" to concat.
+// concat is appended to, not overwritten - used to build up log/SQL text piecewise.
+// No bounds checking: before+digits+after must stay under 1024 wchar_t.
 void itos(const wchar_t* before, int i, wstring& concat, wchar_t* after)
 {
 	LFS
@@ -24,6 +98,8 @@ void itos(const wchar_t* before, int i, wstring& concat, wchar_t* after)
 	concat += temp;
 }
 
+// As above, but the suffix is a wstring so only "before"+digits go through the
+// fixed 1024-wchar scratch buffer; "after" is concatenated safely.
 void itos(const wchar_t* before, int i, wstring& concat, wstring after)
 {
 	LFS
@@ -33,6 +109,9 @@ void itos(const wchar_t* before, int i, wstring& concat, wstring after)
 	concat += temp + after;
 }
 
+// Decimal-render i into the caller-owned scratch string tmp and return it.
+// tmp exists purely so the result can be used inline (e.g. in a wstring concat or
+// as a %s argument) without a dangling temporary.
 wstring itos(int i, wstring& tmp)
 {
 	LFS
@@ -41,6 +120,9 @@ wstring itos(int i, wstring& tmp)
 	return tmp = temp;
 }
 
+// Render i using a caller-supplied printf format (e.g. L"%03d") into tmp.
+// Uses wsprintf, which has no size limit argument, so a format that expands past
+// 1024 wchar_t overruns the stack buffer.
 wstring itos(int i, const wchar_t* format, wstring& tmp)
 {
 	LFS
@@ -49,6 +131,8 @@ wstring itos(int i, const wchar_t* format, wstring& tmp)
 	return tmp = temp;
 }
 
+// Render a double into tmp with the fixed format L"%4.2g" (2 significant digits).
+// Used for costs/confidences in logs, so precision is deliberately low.
 wstring dtos(double fl, wstring& tmp)
 {
 	LFS
@@ -57,8 +141,21 @@ wstring dtos(double fl, wstring& tmp)
 	return tmp = ctmp;
 }
 
+// Per-thread grow-only scratch buffer for wide->multibyte conversion.  Never freed;
+// its contents are only meaningful until the next wTM() call on the same thread.
 __declspec(thread) static void* wTMbuffer = NULL;
 __declspec(thread) static unsigned int wTMbufSize = 0;
+// Wide -> multibyte conversion (default CP_UTF8).  This is the funnel every wide SQL
+// statement passes through before being handed to libmysql, hence the "sql request"
+// wording in the error messages.
+// The result is copied into outString and the returned pointer aliases outString's
+// own storage, so it stays valid as long as outString does.
+// Sizing protocol: the first WideCharToMultiByte call passes the current buffer size;
+// when the buffer does not exist yet (wTMbufSize==0) that call is a pure size query
+// (cbMultiByte==0) and returns the required byte count, which is then doubled and
+// allocated.  On a later call with an existing but too-small buffer the API instead
+// returns 0/ERROR_INSUFFICIENT_BUFFER, which is the `if (!queryLength)` path below.
+// Any conversion failure is fatal (lplog(LOG_FATAL_ERROR) exits the process).
 char* wTM(wstring inString, string& outString, int codePage)
 {
 	LFS
@@ -87,8 +184,22 @@ char* wTM(wstring inString, string& outString, int codePage)
 	return (char*)outString.c_str();
 }
 
+// Per-thread grow-only scratch buffer for multibyte->wide conversion, shared by
+// mTW() and mTWCodePage().  Never freed; once grown it is at least 1MB.
 __declspec(thread) static void* mTWbuffer = NULL;
 __declspec(thread) static unsigned int mTWbufSize = 0;
+// Multibyte -> wide conversion WITH encoding auto-detection.  This is how a raw
+// Gutenberg byte stream (or any 8-bit DB/web payload) becomes wchar_t text.
+// codepage is an out-parameter: the code page that actually decoded the input, tried
+// in order UTF-8 -> 28591 (ISO-8859-1) -> 1252 (Windows Western) -> 20127 (US-ASCII).
+// MB_ERR_INVALID_CHARS is what makes each attempt fail (ERROR_NO_UNICODE_TRANSLATION)
+// on byte sequences that are illegal in that encoding, which is the whole detection
+// mechanism.
+// iso8859ControlCharactersFound is set true only when the input decoded as 8859-1 but
+// contained bytes 128-159; those are legal-but-control in 8859-1 and printable in
+// 1252, so 1252 is preferred.  NOTE it is never set to false here, so it behaves as an
+// in/out flag - the caller must initialise it (tokenize.cpp does).
+// Returns outString.c_str(); a failure to decode under all four code pages is fatal.
 const wchar_t* mTW(string inString, wstring& outString, int& codepage, bool& iso8859ControlCharactersFound)
 {
 	LFS
@@ -131,6 +242,8 @@ const wchar_t* mTW(string inString, wstring& outString, int& codepage, bool& iso
 	}
 	if (!queryLength)
 		lplog(LOG_FATAL_ERROR, L"Error (2) (%d) in translating buffer: %S", GetLastError(), inString.c_str());
+	// queryLength is a wchar_t count (already including the terminator, because
+	// cbMultiByte was -1); <<1 converts it to bytes, +1 is slack.
 	unsigned int desiredBufferSizeInBytes = (queryLength + 1) << 1;
 	if (mTWbufSize < desiredBufferSizeInBytes)
 	{
@@ -141,18 +254,30 @@ const wchar_t* mTW(string inString, wstring& outString, int& codepage, bool& iso
 		if (!mTWbuffer)
 			lplog(LOG_FATAL_ERROR, L"Out of memory requesting %d bytes from translating buffer %S!", mTWbufSize, inString.c_str());
 	}
+	// second pass actually decodes; mTWbufSize is bytes so /2 gives the wchar_t capacity
 	if (!(queryLength = MultiByteToWideChar(codepage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t*)mTWbuffer, mTWbufSize / 2)))
 		lplog(LOG_FATAL_ERROR, L"Error (3) (%d) in translating buffer: %S", GetLastError(), inString.c_str());
 	outString = (wchar_t*)mTWbuffer;
 	return outString.c_str();
 }
 
+// Convenience overload for callers that want the detected code page but do not care
+// about the 8859-vs-1252 control character disambiguation.
 const wchar_t* mTW(string inString, wstring& outString, int& codepage)
 {
 	bool iso8859ControlCharactersFound;
 	return mTW(inString, outString, codepage, iso8859ControlCharactersFound);
 }
 
+// Multibyte -> wide with a FORCED code page and no detection: used when the document
+// itself declares its encoding and tokenize.cpp decides to re-decode (reDecodeNecessary).
+// Unlike mTW() this is non-fatal.  Returns 0 and sets error to
+//   -1 the input is not valid in `codepage` (size query failed)
+//   -2 the scratch buffer could not be grown
+//   -3 the decode pass failed even though the size query succeeded
+// On success returns outString.c_str() and leaves `error` untouched, so the caller must
+// initialise it.  Shares mTWbuffer with mTW(), so it invalidates any pointer previously
+// returned by mTW() on this thread.
 const wchar_t* mTWCodePage(string inString, wstring& outString, int codepage, int& error)
 {
 	LFS
@@ -187,12 +312,24 @@ const wchar_t* mTWCodePage(string inString, wstring& outString, int codepage, in
 	return outString.c_str();
 }
 
+// Simplest overload: decode with auto-detection and discard which code page won.
 const wchar_t* mTW(string inString, wstring& outString)
 {
 	int codepage;
 	return mTW(inString, outString, codepage);
 }
 
+// ---------------------------------------------------------------------------------
+// SERIALIZERS: copy(buf, value, where, limit) writes `value` into buf at byte offset
+// `where` and advances `where` past it.  `limit` is the total size of buf in bytes.
+// Every one of these has an exact counterpart in the DESERIALIZER block further down;
+// the byte counts must match or the rest of the stream is misinterpreted.
+// ---------------------------------------------------------------------------------
+
+// Write a wstring as raw UTF-16 code units terminated by a wide NUL.
+// This is the only serializer that reports an overrun by returning false instead of
+// killing the process, which is why the container serializers below can meaningfully
+// propagate a false result.
 bool copy(void* buf, wstring str, int& where, int limit)
 {
 	DLFS
@@ -207,6 +344,9 @@ bool copy(void* buf, wstring str, int& where, int limit)
 	return true;
 }
 
+// Write a narrow string plus its NUL.  Not declared in general.h, so it is only
+// reachable from this translation unit (the set/vector<string> serializers below).
+// An overrun here is fatal rather than a false return.
 bool copy(void* buf, string str, int& where, int limit)
 {
 	DLFS
@@ -218,6 +358,10 @@ bool copy(void* buf, string str, int& where, int limit)
 	return true;
 }
 
+// Write a 4-byte int in native byte order and alignment-agnostic fashion (the cast
+// through char* means `where` need not be a multiple of 4).
+// Beware: the limit test happens AFTER the store, so an overrun is reported only once
+// the 4 bytes have already been written past the end of buf.
 bool copy(void* buf, int num, int& where, int limit)
 {
 	DLFS
@@ -228,6 +372,7 @@ bool copy(void* buf, int num, int& where, int limit)
 	return true;
 }
 
+// Write a 2-byte short.  Same store-then-check ordering as the int overload.
 bool copy(void* buf, short num, int& where, int limit)
 {
 	DLFS
@@ -238,6 +383,7 @@ bool copy(void* buf, short num, int& where, int limit)
 	return true;
 }
 
+// Write a 2-byte unsigned short.  Same store-then-check ordering as the int overload.
 bool copy(void* buf, unsigned short num, int& where, int limit)
 {
 	DLFS
@@ -248,6 +394,7 @@ bool copy(void* buf, unsigned short num, int& where, int limit)
 	return true;
 }
 
+// Write a 4-byte unsigned int.  Same store-then-check ordering as the int overload.
 bool copy(void* buf, unsigned int num, int& where, int limit)
 {
 	DLFS
@@ -258,6 +405,7 @@ bool copy(void* buf, unsigned int num, int& where, int limit)
 	return true;
 }
 
+// Write an 8-byte signed integer.  Same store-then-check ordering as the int overload.
 bool copy(void* buf, __int64 num, int& where, int limit)
 {
 	DLFS
@@ -268,6 +416,7 @@ bool copy(void* buf, __int64 num, int& where, int limit)
 	return true;
 }
 
+// Write an 8-byte unsigned integer.  Same store-then-check ordering as above.
 bool copy(void* buf, unsigned __int64 num, int& where, int limit)
 {
 	DLFS
@@ -278,6 +427,8 @@ bool copy(void* buf, unsigned __int64 num, int& where, int limit)
 	return true;
 }
 
+// Write a single byte.  `where` is post-incremented before the limit test, so when
+// where==limit on entry this stores one byte past the end of buf and only then reports.
 bool copy(void* buf, char ch, int& where, int limit)
 {
 	DLFS
@@ -287,6 +438,8 @@ bool copy(void* buf, char ch, int& where, int limit)
 	return true;
 }
 
+// Write a single byte (unsigned flavour, identical layout to the char overload; the
+// duplicated "(13)" tag in the error message makes the two indistinguishable in logs).
 bool copy(void* buf, unsigned char ch, int& where, int limit)
 {
 	DLFS
@@ -296,6 +449,9 @@ bool copy(void* buf, unsigned char ch, int& where, int limit)
 	return true;
 }
 
+// Write a set<int> as [int count][count x int], in the set's sorted order.
+// Returns false as soon as any element write fails, leaving `where` partway through -
+// callers must treat a false return as "the whole buffer is now unusable".
 bool copy(void* buf, set <int>& s, int& where, int limit)
 {
 	DLFS
@@ -306,6 +462,7 @@ bool copy(void* buf, set <int>& s, int& where, int limit)
 	return true;
 }
 
+// Write a vector<int> as [int count][count x int], preserving order.
 bool copy(void* buf, vector <int>& s, int& where, int limit)
 {
 	DLFS
@@ -316,6 +473,7 @@ bool copy(void* buf, vector <int>& s, int& where, int limit)
 	return true;
 }
 
+// Write a vector<wstring> as [int count][count x NUL-terminated UTF-16], in order.
 bool copy(void* buf, vector <wstring>& s, int& where, int limit)
 {
 	DLFS
@@ -326,6 +484,7 @@ bool copy(void* buf, vector <wstring>& s, int& where, int limit)
 	return true;
 }
 
+// Write a vector<string> as [int count][count x NUL-terminated bytes], in order.
 bool copy(void* buf, vector <string>& s, int& where, int limit)
 {
 	DLFS
@@ -336,6 +495,7 @@ bool copy(void* buf, vector <string>& s, int& where, int limit)
 	return true;
 }
 
+// Write a set<string> as [int count][count x NUL-terminated bytes], sorted order.
 bool copy(void* buf, set <string>& s, int& where, int limit)
 {
 	DLFS

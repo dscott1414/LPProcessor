@@ -1,4 +1,51 @@
-﻿#include <windows.h>
+/*
+	specials_main.cpp - specials.vcxproj entry: corpus-maintenance / Stanford-check /
+	HMM tools.  Near-duplicate of main.cpp's globals and process-spawning, but it
+	is not the parser pipeline.
+
+	Overview:
+		Defines the same iterator sentinels, cProfile statics and SRWLOCKs as
+		main.cpp (they cannot be linked in one binary).  wmain() does not parse
+		main.cpp's -Book/-mp/... command line; it dispatches on -step N (and a
+		few switches) to word-frequency harvest, Webster/DBpedia cache sweeps,
+		pattern dumps, Stanford PCFG/Maxent agreement, and multi-source Viterbi.
+
+	Pipeline position:
+		Offline / specials only.  Does not call processSource().  Several helpers
+		take cSource by value (full document + MYSQL copy).
+
+	Drift vs main.cpp (do not treat these as the same program):
+		- No initialize(): no crash filter, ConsoleHandler, createLocks(), or
+		  CACHEDIR existence check.  SRWLOCKs rely on zero-init.
+		- createLPProcess has no threadHandle out-param (main.cpp added one and
+		  still leaks it).  processParameters is const and cast to LPWSTR.
+		- startProcesses is the old inlined waiter (main extracted
+		  waitToSpawnMoreProcesses / sendBreakSignals / a createLPProcess wrapper).
+		  chdir("source") is unchecked.  processKind==0 does not force
+		  REQUEST_TYPE.  Case 2 format string passes CACHEDIR as the first %d.
+		- wmain always builds a GUTENBERG cSource and uses proc2 as the work
+		  queue, not sources.processed.
+		- Includes hmm.h / JNI / thread-future headers that main.cpp does not.
+
+	Key entry points:
+		- wmain() - -step / -stanfordCheck / -executeAgainstDB dispatch
+		- populateWordFrequencyTable*() / writeWordFormsFromCorpusWideAnalysis()
+		- stanfordCheck() / stanfordCheckMP() / stanfordCheckTest()
+		- testViterbiHMMMultiSource()
+		- startProcesses() / createLPProcess() - leftover controller (rarely used
+		  here; stanfordCheckMP spawns CorpusAnalysis.exe)
+
+	Dependencies:
+		MySQL (sources.proc2, wordfrequencymemory, words/wordforms, noRDFTypes,
+		stanfordPCFGParsedSentences), JNI Stanford, caches under M:\ and J:\,
+		Merriam-Webster API (MWCheck daily cap).
+
+	Notes / gotchas:
+		- Many paths LOCK TABLES and return without UNLOCK.
+		- case 71 in wmain falls through into case 100.
+		- SQL is built by interpolating words/filenames throughout.
+*/
+#include <windows.h>
 #define _WINSOCKAPI_ /* Prevent inclusion of winsock.h in windows.h */
 #include "io.h"
 #include "winhttp.h"
@@ -76,6 +123,7 @@ int initializeCounter(void);
 void freeCounter(void);
 bool TSROverride = false, flipTOROverride = false, flipTNROverride = false, logMatchedSentences=false, logUnmatchedSentences=false;
 
+// Dump dbg::stack_trace() via LOG_FATAL_ERROR (does not return).
 void printStackTrace()
 {
 	std::stringstream buff;
@@ -91,11 +139,16 @@ void printStackTrace()
 	::lplog(LOG_FATAL_ERROR, L"%S", buff.str().c_str());
 }
 
+// set_new_handler: log and exit(1).  Unlike main.cpp this is never installed
+// because specials has no initialize().
 void no_memory () {
 	lplog(LOG_FATAL_ERROR,L"Out of memory (new/STL allocation).");
 	exit (1);
 }
 
+// CreateProcess with a new console.  Unlike main.cpp there is no threadHandle
+// out-param, so pi.hThread is leaked.  processParameters is const-cast to LPWSTR.
+// Returns 0 or -1 (outs left as the caller set them).
 int createLPProcess(int numProcess, HANDLE &processHandle, DWORD &processId, const wchar_t *commandPath, const wchar_t *processParameters)
 {
 	STARTUPINFO si;
@@ -133,6 +186,8 @@ int createLPProcess(int numProcess, HANDLE &processHandle, DWORD &processId, con
 	return 0;
 }
 
+// Same query as main.cpp: COUNT/SUM over finished sources of sourceType.
+// SUM() NULL on an empty set is passed to atol/atoi.  Takes a WRITE lock.
 int getNumSourcesProcessed(MYSQL &mysql, int sourceType, int &numSourcesProcessed, __int64 &wordsProcessed, __int64 &sentencesProcessed)
 {
 	MYSQL_RES * result;
@@ -157,6 +212,8 @@ int getNumSourcesProcessed(MYSQL &mysql, int sourceType, int &numSourcesProcesse
 // https://stackoverflow.com/questions/813086/can-i-send-a-ctrl-c-sigint-to-an-application-on-windows/1179124
 // Inspired from http://stackoverflow.com/a/15281070/1529139
 // and http://stackoverflow.com/q/40059902/1529139
+// Attach to dwProcessId's console and GenerateConsoleCtrlEvent (usually CTRL_C).
+// Same implementation as main.cpp.  Returns whether the event was generated.
 bool signalCtrl(DWORD dwProcessId, DWORD dwCtrlEvent)
 {
 	bool success = false;
@@ -192,6 +249,11 @@ bool signalCtrl(DWORD dwProcessId, DWORD dwCtrlEvent)
 bool getNextUnprocessedSource(MYSQL &mysql, int begin, int end, int sourceType, bool setUsed, int &id, wstring &path, wstring &encoding, wstring &start, int &repeatStart, wstring &etext, wstring &author, wstring &title);
 int getNumSources(MYSQL &mysql, int sourceType, bool left);
 bool anymoreUnprocessedForUnknown(MYSQL &mysql, int sourceType, int step);
+// Old inlined controller (main.cpp split this into wait/spawn helpers).
+// processKind 0/1 spawn releasex64\lp.exe; 2 is CorpusAnalysis.exe but the
+// format string is `-step %d -numSourceLimit %d -log %d` with CACHEDIR as the
+// first vararg.  `errorCode = createLPProcess(...) < 0` is a bool assign.
+// chdir("source") is unchecked.  Non-REQUEST_TYPE ends in _exit(0).
 int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int beginSource, int endSource, cSource::sourceTypeEnum processSourceType, int maxProcesses, int numSourcesPerProcess,
 	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool makeCopyBeforeSourceWrite, bool parseOnly, wstring specialExtension)
 {
@@ -333,6 +395,7 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 					break;
 				break;
 			case 2:
+				// Format has three %d but the first arg is CACHEDIR (a pointer).
 				wsprintf(processParameters, L"releasex64\\CorpusAnalysis.exe -step %d -numSourceLimit %d -log %d", CACHEDIR, step, numSourcesPerProcess, nextProcessIndex);
 				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\CorpusAnalysis.exe", processParameters) < 0)
 					break;
@@ -355,6 +418,8 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 	return 0;
 }
 
+// Grow the console buffer/window.  GetConsoleScreenBufferInfo's success is
+// ignored, so a failed call leaves csbi uninitialized.
 void setConsoleWindowSize(int width,int height)
 {
 	HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);      // Get screen handle 
@@ -390,6 +455,8 @@ void setConsoleWindowSize(int width,int height)
 			(int)GetLastError(), LastErrorStr());
 }
 
+// Daily Merriam-Webster cap (2000) stored in ./MWCheck.  Write fopen is not
+// null-checked.  Sets websterQueriedToday.
 bool MWRequestAllowed()
 {
 	time_t rawtime;
@@ -422,6 +489,8 @@ int cacheWebPath(wstring webAddress, wstring &buffer, wstring epath, wstring cac
 string lookForPOS(string originalWord, yajl_val node, bool logEverything,int &inflection, string &referWord);
 int discoverInflections(set <int> posSet, bool plural, wstring word);
 
+// Dictionary.com existence + Webster API forms + discoverInflections.
+// Returns 0 always.  print is unused.  Non-European words skip both lookups.
 int getWordPOS(MYSQL *mysql,wstring word, set <int> &posSet, int &inflections, bool print, bool &isNonEuropean, int &dictionaryComQueried, int &dictionaryComCacheQueried, bool &websterAPIRequestsExhausted,bool logEverything)
 {
 	LFS
@@ -445,6 +514,9 @@ int getWordPOS(MYSQL *mysql,wstring word, set <int> &posSet, int &inflections, b
 	return 0;
 }
 
+// If the token is >95% capitalized, treat as noun and set queryOnLowerCase;
+// else Webster.  The hyphen-split branch ends with `, false` so the condition
+// is always false (comma operator).  Returns 0.
 int testDisInclineAndSplit(MYSQL *mysql, cSource &source, int sourceId, cWordMatch &word, bool capitalized, int totalFrequency, int capitalizedFrequency, int allCapsFrequency, set <int> &posSet,
 	int &inflections, bool &isNonEuropean, bool &queryOnLowerCase, int &dictionaryComQueried, int &dictionaryComCacheQueried, bool &websterAPIRequestsExhausted)
 {
@@ -478,6 +550,8 @@ int testDisInclineAndSplit(MYSQL *mysql, cSource &source, int sourceId, cWordMat
 	return posSet.size();
 }
 
+// SELECT/INSERT words.  MYSQL is passed by value (copies the connection).
+// word is interpolated in quotes.  Returns 0 if existed, 1 if inserted, -1 on error.
 int createWordInDBIfNecessary(MYSQL mysql, int sourceId, int &wordId, wstring word, bool actuallyExecuteAgainstDB, bool logEverything)
 {
 	LFS
@@ -514,6 +588,9 @@ int createWordInDBIfNecessary(MYSQL mysql, int sourceId, int &wordId, wstring wo
 	return 1; // created word
 }
 
+// Diff existing wordforms (DB formId = LP form+1) against posSetDB.  Closed-class
+// forms are kept; open/unknown/combination are replaced.  Also syncs noun/verb
+// usage-pattern formIds.  Out: remove/add/keep and maxcount (transfer count).
 int	analyzeFormsUsageVSNewForms(MYSQL mysql, int wordId, wstring word, bool properNoun, bool existingWord, set <int> posSetDB, set <int> &remove, set<int> &add, set<int> &keep, int &maxcount,bool logEverything)
 {
 	bool properNounFormFound = false;
@@ -615,6 +692,8 @@ int	analyzeFormsUsageVSNewForms(MYSQL mysql, int wordId, wstring word, bool prop
 	return 0;
 }
 
+// DELETE remove-set formIds then INSERT add-set.  formsDeleted is
+// mysql_affected_rows after delete (0 if not actuallyExecuteAgainstDB).
 int overwriteWordFormsInDB(MYSQL mysql, int wordId, wstring word, set <int> &posSetDB, __int64 &formsDeleted,bool properNoun,bool existingWord, bool actuallyExecuteAgainstDB,bool logEverything)
 {
 	LFS
@@ -682,6 +761,7 @@ int overwriteWordFormsInDB(MYSQL mysql, int wordId, wstring word, set <int> &pos
 
 // queryOnLowerCase will query for word forms  the next time the word is encountered in all lower case.
 // queryOnLowerCase = 4
+// OR queryOnLowerCase into words.flags for word (interpolated).
 int overwriteWordFlagsInDB(MYSQL mysql, wstring word, bool actuallyExecuteAgainstDB,bool logEverything)
 {
 	LFS
@@ -696,6 +776,8 @@ int overwriteWordFlagsInDB(MYSQL mysql, wstring word, bool actuallyExecuteAgains
 }
 
 // PLURAL refers to noun plural form.
+// `inflectionFlags = inflectionFlags + inflections` (not |=); a second call
+// corrupts the bitfield.  word is interpolated.
 int overwriteWordInflectionFlagsInDB(MYSQL mysql, wstring word, int inflections, bool actuallyExecuteAgainstDB)
 {
 	LFS
@@ -720,6 +802,7 @@ ERROR:Word baiocco was not found
 ERROR:Suffix rule #369 with word présence (root prés) has no suffix form.
 modified stemmer code and rules using 
 */
+// Empty stub; the stemmer cases in the comment above were one-off tests.
 void testDisinclination()
 {
 
@@ -742,6 +825,8 @@ void testDisinclination()
 	}
 	 end test webster
 	*/
+// Recurse J:\caches\webster (or basepath), yajl-parse each file, collect fl POS
+// strings.  Treats the file bytes as wchar_t* (Webster JSON is UTF-8).
 void scanAllWebsterEntries(wchar_t *basepath, unordered_set<wstring> &pos, int &numFilesProcessed)
 {
 	WIN32_FIND_DATA FindFileData;
@@ -806,10 +891,14 @@ void scanAllWebsterEntries(wchar_t *basepath, unordered_set<wstring> &pos, int &
 	return;
 }
 
+// Empty stub; callers inlined the remove logic into scanAllRDFTypes instead.
 void eraseOldRDFTypeFiles(wstring completePath, int &removeErrors)
 {
 }
 
+// Walk dbPediaCache: empty .rdfTypes/.erdfTypes become noRDFTypes/noERDFTypes
+// rows and are deleted; old version files are removed.  startPath/startHit
+// resume from RDFTypesScanProgress.txt.  MYSQL by value.
 void scanAllRDFTypes(MYSQL mysql, wchar_t *startPath, bool &startHit, const wchar_t *basepath, int &numFilesProcessed, int &numNotOpenable, int &numNewestVersion, 
 	int &numOldVersion, int &removeErrors, int &populatedRDFs,int &numERDFRemoved,
 	unordered_map<wstring,int> &extensions, unordered_map<wstring, __int64> &extensionSpace)
@@ -939,6 +1028,7 @@ void scanAllRDFTypes(MYSQL mysql, wchar_t *startPath, bool &startHit, const wcha
 	return;
 }
 
+// Recursively _wremove files whose names contain a non-ASCII / non-digit / non-_- char.
 void removeIllegalNames(const wchar_t *basepath)
 {
 	WIN32_FIND_DATA FindFileData;
@@ -1033,6 +1123,8 @@ void scanAllERDFTypes(MYSQL mysql, wchar_t *basepath, int &numFilesProcessed, in
 	return;
 }
 */
+// Sweep Dictionary.com cache.  putInTable is `!A || !B` so almost every file
+// is treated as a miss, INSERTed into notwords, and deleted.  Intended `A || B`.
 void scanAllDictionaryDotCom(MYSQL mysql, const wchar_t *basepath, int &numFilesProcessed, int &numNotOpenable, int &filesRemoved,int &removeErrors)
 {
 	WIN32_FIND_DATA FindFileData;
@@ -1115,6 +1207,7 @@ public:
 	bool telephone; // has telephoneNumberForm
 	bool money; // has moneyForm
 	bool webaddress; // has webAddressForm
+	// Per-word frequency / flag bag for wordfrequencymemory inserts.
 	wordInfo()
 	{
 		totalFrequency = 0;
@@ -1136,6 +1229,8 @@ public:
 
 
 
+// Batched INSERT ... ON DUPLICATE KEY UPDATE into wordfrequencymemory.
+// wf is copied.  word is interpolated in double quotes (SQL injection / quote break).
 void writeSourceWordFrequency(MYSQL *mysql,unordered_map<wstring, wordInfo> wf, wstring etext)
 {
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
@@ -1173,6 +1268,8 @@ void writeSourceWordFrequency(MYSQL *mysql,unordered_map<wstring, wordInfo> wf, 
 	}
 }
 
+// Load the parsed source (by value) and scan for Gutenberg end-matter.
+// reprocess is set if the end is before 99% of tokens.  Returns -1 on lock fail.
 int analyzeEnd(cSource source, int sourceId, wstring path, wstring etext, wstring title,bool &reprocess,bool &nosource,wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE")) 
@@ -1201,6 +1298,9 @@ int analyzeEnd(cSource source, int sourceId, wstring path, wstring etext, wstrin
 	return 0;
 }
 
+// Step 2: words in wordfrequencymemory that are >95% unknown get Webster/DB forms.
+// First SUM() result is not freed before the second SELECT.  LOCK TABLES words
+// after the SELECT implicitly unlocks wordfrequencymemory while result is still open.
 int writeWordFormsFromCorpusWideAnalysis(MYSQL mysql,bool actuallyExecuteAgainstDB)
 {
 	int definedUnknownWord = 0, dictionaryComQueried = 0, dictionaryComCacheQueried = 0;
@@ -1286,6 +1386,8 @@ int writeWordFormsFromCorpusWideAnalysis(MYSQL mysql,bool actuallyExecuteAgainst
 	return 0;
 }
 
+// Log unknown / UNDEFINED_FORM tokens.  WRITE lock is never unlocked.
+// Returns 21 on success, 20 if the source cache is missing, -20 on lock fail.
 int printUnknownsFromSource(cSource source, int sourceId, wstring path, wstring etext, wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
@@ -1322,6 +1424,8 @@ int printUnknownsFromSource(cSource source, int sourceId, wstring path, wstring 
 	return 21;
 }
 
+// matchType 0=pattern+diff, 1=winner form, 2=surface word, 3=flagNotMatched, 4=always.
+// PMAOffset is only meaningful for type 0.
 bool matchEntity(cSource &source, int wordIndex, int matchType, wstring patternOrWordName, wstring differentiator, int &PMAOffset)
 {
 	auto &im = source.m[wordIndex];
@@ -1332,6 +1436,8 @@ bool matchEntity(cSource &source, int wordIndex, int matchType, wstring patternO
 		(matchType == 3 && (im.flags&cWordMatch::flagNotMatched) != 0));
 }
 
+// Extra filter for pattern dumps.  Currently always true (the real checks are
+// commented out), so every primary match is logged.
 bool additionalMatchingLogic(cSource &source, int wordIndex, int primaryPMAOffset, int secondaryPMAOffset,wstring &logicResults)
 {
 	return true;
@@ -1423,6 +1529,8 @@ bool additionalMatchingLogic(cSource &source, int wordIndex, int primaryPMAOffse
 // 4: true (do not perform match)
 // if both primaryMatchType AND secondaryMatchType>0, then the secondary match location is the NEXT word.
 // if primaryMatchType == 3, then sentence highlight will encompass all words that have no match, and sentences will not be repeated.
+// Scan one source for primary/secondary matchEntity hits and log the sentence.
+// WRITE lock is never unlocked.  Returns 22, or 21 if the cache is missing.
 int patternOrWordAnalysisFromSource(cSource &source, int sourceId, wstring path, wstring etext, wstring primaryPatternOrWordName, wstring primaryDifferentiator, wstring secondaryPatternOrWordName, wstring secondaryDifferentiator, int primaryMatchType, int secondaryMatchType, wstring specialExtension)
 {	LFS
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
@@ -1522,6 +1630,8 @@ int patternOrWordAnalysisFromSource(cSource &source, int sourceId, wstring path,
 	return 22;
 }
 
+// Log sentences that contain a flagNotMatched token.  cSource by value; WRITE
+// lock never unlocked.  Returns 62, or 61 if the cache is missing.
 int syntaxCheckFromSource(cSource source, int sourceId, wstring path, wstring etext, wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
@@ -1601,6 +1711,9 @@ int syntaxCheckFromSource(cSource source, int sourceId, wstring path, wstring et
 	return 62;
 }
 
+// Count per-word frequencies / unknown / special-form flags and write
+// wordfrequencymemory.  Rejects the source if an unknown token looks "illegal".
+// form==4 (noun?) on a capitalized unknown aborts with -2.  Returns 2 or -(n+10).
 int populateWordFrequencyTableFromSource(cSource source, int sourceId, wstring path, wstring etext, wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
@@ -1697,6 +1810,9 @@ int populateWordFrequencyTableFromSource(cSource source, int sourceId, wstring p
 	return (numIllegalWords == 0) ? 2 : -(numIllegalWords + 10);
 }
 
+// Claim one proc2==1 source at a time (FOR UPDATE SKIP LOCKED) and harvest
+// frequencies.  START TRANSACTION is then broken by LOCK TABLES inside the
+// per-source helper.  Break at empty claim leaves the transaction open.
 int populateWordFrequencyTableMP(cSource source, wstring specialExtension)
 {
 	int step = 1;
@@ -1772,6 +1888,7 @@ int populateWordFrequencyTableMP(cSource source, wstring specialExtension)
 	return 0;
 }
 
+// Serial harvest of every source with proc2==step (used for steps 10..19).
 int populateWordFrequencyTable(cSource source, int step, wstring specialExtension)
 {
 	MYSQL_RES * result;
@@ -1812,6 +1929,7 @@ int populateWordFrequencyTable(cSource source, int step, wstring specialExtensio
 	return 0;
 }
 
+// Walk proc2==step sources and printUnknownsFromSource each.
 int printUnknowns(cSource source, int step, wstring specialExtension)
 {
 	MYSQL_RES * result;
@@ -1852,6 +1970,8 @@ int printUnknowns(cSource source, int step, wstring specialExtension)
 	return 0;
 }
   
+// Batch pattern/word dump over proc2==step.  Redirects logFileExtension to the
+// pattern name.  Gutenberg paths are under CACHEDIR; TEST under LMAINDIR.
 int patternOrWordAnalysis(cSource source, int step, wstring primaryPatternOrWordName, wstring primaryDifferentiator, wstring secondaryPatternOrWordName, wstring secondaryDifferentiator, enum cSource::sourceTypeEnum st, int primaryMatchType, int secondaryMatchType, wstring specialExtension)
 {	LFS
 	MYSQL_RES * result;
@@ -1908,6 +2028,7 @@ int patternOrWordAnalysis(cSource source, int step, wstring primaryPatternOrWord
 	return 0;
 }
 
+// Batch unmatched-sentence dump.  test=true uses TEST_SOURCE_TYPE + LMAINDIR.
 int syntaxCheck(cSource source, int step, wstring specialExtension,bool test)
 {
 	MYSQL_RES * result;
@@ -1955,6 +2076,8 @@ int syntaxCheck(cSource source, int step, wstring specialExtension,bool test)
 // delete files associated with sources that have been marked skipped
 // update sources set proc2 = 0;
 // update sources set proc2 = 6 where start = '**SKIP**';
+// Delete .SourceCache / .WNCache / .WordCacheFile for proc2==6 rows (skipped
+// sources).  Same SKIP LOCKED / implicit-commit caveats as the MP harvester.
 int removeOldCacheFiles(cSource source)
 {
 	int step = 6;
@@ -2018,6 +2141,8 @@ int removeOldCacheFiles(cSource source)
 	return 0;
 }
 
+// One-off: rdfIdentify("clackamas") then getRDFTypes at each "maac" token in
+// a hardcoded Jules of the Great Heart path.  WRITE lock never released.
 void testRDFType(cSource &source, wstring specialExtension)
 {
 	int sourceId = 25291;
@@ -2156,6 +2281,9 @@ unordered_map<wstring, vector <wstring> > maxentAssociationMap =
 
 // checks if the part of speech indicated in parse from the Stanford Maxent POS tagger matches the winner forms at wordSourceIndex.
 // returns yes=0, no=1
+// Compare one Maxent `word_TAG` against LP winners (pennMapToLP +
+// maxentAssociationMap).  Several documented LP-vs-ST implementation diffs
+// are treated as agreement.  Returns 0 match / 1 mismatch.  Consumes parse.
 int checkStanfordMaxentAgainstWinner(cSource &source, int wordSourceIndex, wstring originalParse, wstring &parse, int &numPOSNotFound, unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &wordNoMatchMap, bool inRelativeClause)
 {
 	if (!iswalpha(source.m[wordSourceIndex].word->first[0]))
@@ -2263,6 +2391,8 @@ int checkStanfordMaxentAgainstWinner(cSource &source, int wordSourceIndex, wstri
 	return 1;
 }
 
+// If this token has usage costs (X,Y)==(costX,costY), bump comboCostFrequency
+// and annotate partofspeech with the combo (plus verb tense hints).
 void formMatrixTest(cSource &source, int wordSourceIndex, wstring X, wstring Y, int costX, int costY, unordered_map<wstring,int> &comboCostFrequency, wstring &partofspeech)
 {
 	if (source.m[wordSourceIndex].word->second.getUsageCost(source.m[wordSourceIndex].queryForm(X)) != costX ||
@@ -2298,6 +2428,8 @@ void formMatrixTest(cSource &source, int wordSourceIndex, wstring X, wstring Y, 
 
 // perform tests to make sure that the noun according to LP is not a verb (that ST says).
 // that smells / those smell - these agree by verb
+// True if wordDeterminerSourceIndex is a determiner-like winner that can
+// support treating the next token as a noun (agreement-tested for demonstratives).
 bool isStanfordDeterminerType(cSource &source, int wordNounVerbDisagreementSourceIndex, int wordDeterminerSourceIndex)
 {
 	// test for agreement - the two must agree (that smells / those smell) and not potentially disagree (ambiguousness)
@@ -2348,6 +2480,9 @@ public:
 };
 map <wstring, FormDistribution> formDistribution;
 
+// Normalize originalWord to the token Stanford's PCFG tree would emit
+// ('s / n't / cannot / gimme / ...).  Returns the " word)" search key.
+// originalWord[length-2/3] is unguarded on short words.
 wstring stTokenizeWord(wstring tokenizedWord,wstring &originalWord, unsigned long long flags,wstring parse,int &wspace)
 {
 	// pcfg output:
@@ -2415,6 +2550,9 @@ wstring stTokenizeWord(wstring tokenizedWord,wstring &originalWord, unsigned lon
 //   -2: LP class corrected.  ST prefers correct class, so this entry should simply be removed from the output file.
 //   -3: test whether to change to correct class - set to disagree, and add an arbitrary string to partofspeech to search for whatever string added as a test.
 //    0: unable to determine whether class should be corrected, or the class has been corrected. Normal processing should continue.  
+// Hand-written repairs of LP winners given the Stanford tag.  Returns
+// -1 LP was right (keep, credit ST error), -2 ST already matches after repair
+// (drop), -3 experimental, 0 continue into attributeErrors.
 int ruleCorrectLPClass(wstring primarySTLPMatch, cSource &source, int wordSourceIndex, unordered_map<wstring, int> &errorMap, wstring &partofspeech, int startOfSentence, map<wstring,FormDistribution>::iterator fdi)
 {
 	if (wordSourceIndex + 1 >= source.m.size())
@@ -2773,6 +2911,9 @@ int ruleCorrectLPClass(wstring primarySTLPMatch, cSource &source, int wordSource
 	return 0;
 }
 
+// Classify an ST/LP disagreement into errorMap buckets (implementation diffs,
+// speaking-verb quotes, cost-matrix noun/verb, ...).  Giant heuristic table;
+// return 0 means "accounted for".
 int attributeErrors(wstring primarySTLPMatch, cSource &source, int wordSourceIndex, unordered_map<wstring, int> &errorMap, unordered_map<wstring, int> &comboCostFrequency, wstring &partofspeech, int startOfSentence)
 {
 	wstring word = source.m[wordSourceIndex].word->first;
@@ -5221,6 +5362,8 @@ int attributeErrors(wstring primarySTLPMatch, cSource &source, int wordSourceInd
 
 // checks if the part of speech indicated in parse from the Stanford POS tagger matches the winner forms at wordSourceIndex.
 // returns yes=0, no=1
+// Locate originalWord in the PCFG tree via stTokenizeWord, map the Penn tag,
+// then ruleCorrectLPClass / attributeErrors.  Updates formDistribution.
 int checkStanfordPCFGAgainstWinner(cSource &source, int wordSourceIndex, int numTimesWordOccurred, wstring originalParse, wstring sentence, wstring &parse, int &numTotalDifferenceFromStanford, 
 	unordered_map<wstring, int> &formNoMatchMap, unordered_map<wstring, int> &formMisMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap,
 	bool inRelativeClause, unordered_map<wstring, int> &errorMap, unordered_map<wstring, int> &comboCostFrequency,int startOfSentence,int maxLength)
@@ -5415,6 +5558,8 @@ int checkStanfordPCFGAgainstWinner(cSource &source, int wordSourceIndex, int num
 //map <wstring, int> LPFormDistribution; // total count for each form match in LP
 //map <wstring, int> agreeFormDistribution; // total count for each form match agreed between ST and LP
 //map <wstring, int> disagreeFormDistribution; // total count for each form match disagreed between ST and LP
+// Log one word's ST/LP form-agreement histogram.  Tracks the worst
+// (high-frequency, low-agreement) form in maxWord/maxForm/maxDiff.
 void printFormDistribution(wstring word, double adp, FormDistribution fd, wstring &maxWord, wstring &maxForm, int &maxDiff,int limit)
 {
 	if (fd.unaccountedForDisagreeSTLP == 0)
@@ -5454,6 +5599,9 @@ void printFormDistribution(wstring word, double adp, FormDistribution fd, wstrin
 			lplog(LOG_ERROR, L"  ST %s:%d %d%% %d%%", form.c_str(), count, 100 * count / (fd.agreeSTLP + fd.disagreeSTLP), fd.agreeFormDistribution[form] * 100 / count);
 }
 
+// Read one parsed source, JNI-parse each sentence, and compare ST vs LP winners.
+// lockPerSource takes a WRITE lock on stanfordPCFGParsedSentences for the whole
+// document.  limitToWord / maxLength restrict the scan.  Returns the next proc2.
 int stanfordCheckFromSource(cSource &source, int sourceId, wstring path, JavaVM *vm,JNIEnv *env, int &numNoMatch, int &numPOSNotFound, int &numTotalDifferenceFromStanford,unordered_map<wstring, int> &formNoMatchMap,
 	                          unordered_map<wstring, int> &formMisMatchMap, unordered_map<wstring, int> &wordNoMatchMap, unordered_map<wstring, int> &VFTMap, 
 	                          unordered_map<wstring, int> &errorMap, unordered_map<wstring, int> &comboCostFrequency, bool pcfg,wstring limitToWord,int maxLength, wstring specialExtension,bool lockPerSource)
@@ -5568,6 +5716,7 @@ int stanfordCheckFromSource(cSource &source, int sourceId, wstring path, JavaVM 
 	return 10;
 }
 
+// Re-split noun/verb cost-bucket counts using hand-audited ST-vs-LP fractions.
 void distributeErrorsByCost(unordered_map<wstring, int> &errorMap)
 {
 	int numErrors;
@@ -5649,6 +5798,8 @@ void distributeErrorsByCost(unordered_map<wstring, int> &errorMap)
 	errorMap[L"diff: adjective not adverb"] = numErrors * 16 / 771;
 }
 
+// After distributeErrorsByCost, apply more hand-audited fractions to the
+// remaining "LP correct: ..." buckets so the summary % is not 100% LP.
 void distributeErrors(unordered_map<wstring, int> &errorMap)
 {
 	distributeErrorsByCost(errorMap);
@@ -5775,6 +5926,8 @@ void distributeErrors(unordered_map<wstring, int> &errorMap)
 	
 }
 
+// Batch Stanford check over proc2==step (longest sources first).  Creates one
+// JVM for the run.  Updates proc2 to stanfordCheckFromSource's return.
 int stanfordCheck(cSource source, int step, bool pcfg, wstring specialExtension, bool lockPerSource)
 {
 	MYSQL_RES * result;
@@ -5912,6 +6065,9 @@ int stanfordCheck(cSource source, int step, bool pcfg, wstring specialExtension,
 }
 
 // must run update sources set proc2=100 for each source to multithread
+// Shard proc2==step into MP buckets (proc2 = 101..100+MP) and spawn
+// x64\StanfordParseMT\CorpusAnalysis.exe -step N.  The in-process
+// std::async attempt is commented out.  pcfg is unused.
 int stanfordCheckMP(cSource source, int step, bool pcfg, int MP)
 {
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
@@ -5991,6 +6147,8 @@ int stanfordCheckMP(cSource source, int step, bool pcfg, int MP)
 	return 0;
 }
 
+// Single-path Stanford check (step 70: tests\thatParsing.txt).  Prints the
+// same form/word/error summaries as stanfordCheck.
 int stanfordCheckTest(cSource source, wstring path, int sourceId, bool pcfg,wstring limitToWord,int maxSentenceLimit, wstring specialExtension)
 {
 	if (limitToWord.length() > 0)
@@ -6063,6 +6221,9 @@ int stanfordCheckTest(cSource source, wstring path, int sourceId, bool pcfg,wstr
 }
 
 // this would be easier if you had all the sources in memory at once!
+// Concatenate every finished Gutenberg source with proc2==step into `source`
+// (via copySource), then testViterbiFromSource.  childSource is a second
+// cSource used only as a load buffer.
 int testViterbiHMMMultiSource(cSource &source,const wchar_t *databaseHost,int step, wstring specialExtension)
 {
 	MYSQL_RES * result;
@@ -6146,6 +6307,9 @@ int numSourceLimit = 0;
 // to begin proc2 field in all sources must be set to 1
 // step = 1 - accumulate word frequency statistics - will set to 2 when finished.
 // step = 2 - evaluate statistics and create database statements to decrease the number of unknown words
+// specials entry.  Unlike main.cpp: no initialize()/crash handler, always
+// GUTENBERG, dispatch on -step.  step>100 is stanfordCheck without per-source
+// lock.  case 71 has no break and falls into case 100 (stanfordCheckMP).
 int wmain(int argc,wchar_t *argv[])
 {
 	setConsoleWindowSize(85, 5);
@@ -6292,6 +6456,7 @@ int wmain(int argc,wchar_t *argv[])
 		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"",50,specialExtension);
 		break;
 	case 71:
+	// no break: falls through into case 100 (stanfordCheckMP).
 	{
 		vector <wstring> words = { L"advertising",L"wishing",L"writing",L"yachting",L"yellowing" };
 		if (!myquery(&source.mysql, L"LOCK TABLES words WRITE"))

@@ -1,3 +1,34 @@
+/*
+	getNewsbank.cpp - Scrape NewsBank "America's Newspapers" day by day
+
+	Overview:
+		Logs into infoweb.newsbank.com with a hardcoded Monmouth County
+		library card, POSTs a date-range search, then walks result-link
+		pages via getArticle, writing title/info/text blocks separated
+		by ~|~ into <nbdir>\<year>\<daynum>.txt. Throttles to KB_THROTTLE
+		KB/s. Resumes from a lastYear checkpoint file.
+
+	Pipeline position:
+		Offline news-corpus acquisition; not on the parse path.
+
+	Key entry points:
+		- substNextDocNum() - increment p_docnum= in a results URL
+		- getArticle() - GET one article HTML, parse title/info/text
+		- acquireNewsBankByDay() - login, search one UTC day, page articles
+		- acquireNewsBank() - day loop until year>2004, persist lastYear
+
+	Dependencies:
+		WinINet; Internet::InternetReadFile_Wait; mTW; lplog. Hardcoded
+		library-card credentials and NewsBank product/theme query string.
+
+	Notes / gotchas:
+		Library card number is in source (libcard=80035000052216).
+		HttpSendRequest POST body is wchar_t* treated as bytes (dwOptionalLength
+		is wcslen, not byte length) — the login POST is likely malformed
+		on Unicode builds. Many handles are not closed on error returns.
+		sprintf into 10k totalSearchURL with an unbounded searchURL.
+		text[I+1] is read at I==text.length()-1 in the word-count loop.
+*/
 #include <errno.h>
 #include <windows.h>
 #include "WinInet.h"
@@ -34,6 +65,9 @@ int lostDoc=0,retry=0,noTitle=0;  // not part of source parallel processing
 __int64 originalBytes=0; // not part of source parallel processing
 bool readTimeoutError=false; // not part of source parallel processing
 
+// Find p_docnum= in URL, increment the integer, write the new URL to
+// nextURL. Returns 0, or -1 if p_docnum= is absent. endDocNum may be
+// npos if there is no trailing '&'.
 int substNextDocNum(wstring URL,wstring &nextURL)
 {
 	wstring pDocNum=L"p_docnum=";
@@ -51,6 +85,10 @@ int substNextDocNum(wstring URL,wstring &nextURL)
 	return 0;
 }
 
+// HTTP GET URL (referer=refer) on session hFile, parse Next-link / title /
+// info / text divs, HTML-strip paragraphs, fwprintf a ~|~ record to nb.
+// last=true when no Next link or too many missing docs/titles.
+// Returns 0 ok, -1 parse error, -2 give-up, -3 retry (timeout/send fail).
 int getArticle(	HINTERNET hFile,wstring refer,wstring URL,bool &last,wstring &nextURL,FILE *nb,int docNum,__int64 &totalBytes,int &numWords)
 {
 	HINTERNET RequestHandle;
@@ -294,6 +332,9 @@ int getArticle(	HINTERNET hFile,wstring refer,wstring URL,bool &last,wstring &ne
 	return 0;
 }
 
+// WinINet session: POST library-card login, follow America's Newspapers,
+// POST a one-day search for `day`, then getArticle each resultsLink.
+// Returns 0 (including "no articles"), -1 hard error, -3 timeout.
 int acquireNewsBankByDay(struct tm *day,FILE *nb,time_t startTime,__int64 &totalBytes,int &numWords)
 {
 	HINTERNET hFile;
@@ -511,6 +552,9 @@ int acquireNewsBankByDay(struct tm *day,FILE *nb,time_t startTime,__int64 &total
 	return error;
 }
 
+// Resume from lastYear if present (else startTimer days since epoch).
+// For each UTC day, write nbdir\YYYY\<daynum>.txt via acquireNewsBankByDay
+// until tm_year>2004. Sleeps 2 minutes and retries on -1/-3. Returns 0.
 int acquireNewsBank(char *nbdir,int startTimer)
 {
 	//The time is represented as seconds elapsed since midnight (00:00:00), January 1, 1970, coordinated universal time (UTC). 

@@ -1,6 +1,34 @@
 #pragma once
+/*
+	vcXML.h - VerbNet XML tree model and per-class semantic flags
+
+	Overview:
+		Holds the in-memory VerbNet class after vcXML.cpp's hand-rolled XML walk:
+		nested cXMLClass trees (ID / members / thematic roles / frames) plus a large
+		set of boolean "incorporated" semantic flags (move, think, metaBelief, …)
+		that map onto semanticRelations.h st* codes.
+
+	Pipeline position:
+		Loaded once at initialization (readVBNet). Later stages look up a verb in
+		vbNetVerbToClassMap and read flags / getRelationType() to assign semantic
+		relations and location/motion constraints.
+
+	Key data structures / globals:
+		- cXMLAttribute - name/value pair from an XML attribute (a / as)
+		- cXMLClass - one element: XClass name, attributes, nested children
+		- cXMLFrame - one VerbNet FRAME (description, examples, syntax, semantics)
+		- cVerbNet - one VNCLASS/VNSUBCLASS plus semantic flags and member frequencies
+		- vbNetVerbToClassMap - lemma -> set of indexes into vbNetClasses
+		- vbNetClasses - all loaded classes; index is what the map stores
+
+	Notes / gotchas:
+		name() indexes id[0].av[0] with no empty check. getRelationType() returns the
+		first flag that is set (priority = declaration order), or -1 if none.
+		_near is named that way because 'near' is a predefined token.
+*/
 #include "semanticRelations.h"
 
+// One XML attribute as wide strings: a is the name, as is the quoted value.
 class cXMLAttribute 
 {
 public:
@@ -13,6 +41,7 @@ public:
 	}
 };
 
+// One XML element: tag name XClass, attributes av, nested elements vxc.
 class cXMLClass {
 public:
 	wstring XClass;
@@ -20,6 +49,7 @@ public:
 	vector <cXMLClass> vxc;
 };
 
+// One VerbNet <FRAME>: description/examples plus the SYNTAX and SEMANTICS subtrees.
 class cXMLFrame
 {
 public:
@@ -29,6 +59,7 @@ public:
 	vector <cXMLClass> semantics;
 };
 
+// One VerbNet class: XML pieces plus the boolean semantic tags LP overlays on the class.
 class cVerbNet {
 public:
 	vector <cXMLClass> id;
@@ -121,10 +152,12 @@ public:
 		am=false;
 		totalFrequency=0;
 	}
+	// True if this class is a location/motion/"be" verb (used by where-resolution).
 	bool whereVerbClass(void)
 	{
 		return move || moveInPlace || moveObject || exit || enter || contiguous || start || stay || transfer || contact || _near || am;
 	}
+	// True if any of the LP-overlaid semantic flags is set (class has been tagged).
 	bool incorporatedVerbClass(void)
 	{
 		return move || moveInPlace || moveObject || exit || enter || contiguous || start || stay || has || establish ||
@@ -133,6 +166,7 @@ public:
 					 metaProfession ||	metaFutureHave ||	metaFutureContact || metaInfo ||	metaIfThen ||	
 					 metaContains || metaDesire || metaBelief || metaRole || spatialOrientation || ignore || am;
 	}
+	// Appends a space-separated list of set flag names onto tmpstr and returns it.
 	wstring incorporatedVerbClassString(wstring &tmpstr)
 	{
 		if (establish) tmpstr+=L"establish "; 
@@ -172,6 +206,7 @@ public:
 		return tmpstr;
 	}
 
+	// First set flag mapped to its st* semantic-relation code; -1 if none are set.
 	int getRelationType(void)
 	{
 		if (establish) return stESTAB;
@@ -211,10 +246,12 @@ public:
 		return -1;
 	}
 
+	// True for motion that changes location of subject or object (excludes moveInPlace).
 	bool moveVerbClass(void)
 	{
 		return move || moveObject || exit || enter || transfer;
 	}
+	// VerbNet class ID string (id[0].av[0].as); crashes if id/av is empty.
 	wstring name(void)
 	{
 		return id[0].av[0].as;

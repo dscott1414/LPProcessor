@@ -1,3 +1,36 @@
+/*
+	names.h - cName / cNickName and the name-pattern / nickname-map entry points
+
+	Overview:
+		Declares the proper-name value type used by every cObject of class
+		NAME_OBJECT_CLASS: honorifics HON/HON2/HON3, first / middle /
+		middle2 / last / suffix / any, and a nickname class id. Also
+		declares the pattern builders (defineNames,
+		createMetaNameEquivalencePatterns, createLetterIntroPatterns) and
+		the process-wide nicknameEquivalenceMap (US Census + lexicon,
+		populated in initializeDictionary.cpp).
+
+	Pipeline position:
+		Included from source.h. cName is embedded in cObject; matching
+		happens in names.cpp (like / confidentMatch / resolveNameObject)
+		during stage 6.
+
+	Key data structures / globals:
+		- cNickName::equivalences - one nickname cluster (rarely used
+		  directly; the map stores an int class id instead)
+		- nicknameEquivalenceMap - wstring first-name -> class id
+		- cName parts are tIWMM iterators into Words; wNULL is unset.
+		  nickName == -1 means “no nickname class”
+
+	Notes / gotchas:
+		- operator== / like() do not compare nickName except on the
+		  first-name mismatch path. Sex and plurality live on cObject,
+		  not cName.
+		- notNull() is implemented in names.cpp as “all parts are null”.
+		- isNull / isCompletelyNull / matchHonorifics are defined in
+		  resolveObjects.cpp, not here.
+		- createLetterIntroPatterns() is defined in resolveSpeakers.cpp.
+*/
 #pragma once
 void defineNames(void);
 void createMetaNameEquivalencePatterns(void);
@@ -7,15 +40,19 @@ class cNickName
 {
 public:
 	vector <wstring> equivalences;
+	// Empty equivalence list; filled by the census nickname loader.
 	cNickName() 
 	{ 
 	}
+	// True if `name` is in equivalences (linear scan). Takes the string by value.
 	bool operator == (wstring name)  
 	{
 		unsigned int I;
 		for (I=0; I<equivalences.size() && name!=equivalences[I]; I++);
 		return I<equivalences.size(); 
 	}
+	// Inverse of ==, but also lplog’s every comparison (expensive; not a
+	// pure inverse in side effects).
 	bool operator != (wstring name)  
 	{
 		unsigned int I;
@@ -38,6 +75,7 @@ public:
 	tIWMM last;
 	tIWMM suffix;
 	tIWMM any;
+	// All parts wNULL, nickName -1 (no census class).
 	cName(void) { hon=hon2=hon3=first=middle=middle2=last=suffix=any=wNULL; nickName=-1; }
 	//void operator = (const cName& n);
 	bool operator==(const cName& n) const = default;

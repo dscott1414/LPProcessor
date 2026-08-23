@@ -1,3 +1,28 @@
+/*
+	getBNC.cpp - Ingest BNC-World SGML into a cSource as a pre-tagged text
+
+	Overview:
+		Translates BNC SGML entities (bncChars[]), maps CLAWS tags
+		(tagList[] / ambTagList[]) onto LP forms+inflections, and walks
+		<s> / <w TAG> tokens to processWord each into the live Source
+		(preTaggedSource=true). Ambiguity tags (AJ0-AV0) deposit both
+		preferences.
+
+	Pipeline position:
+		Offline BNC corpus ingest for pattern-cost statistics (the
+		"originally British National Corpus" note in the README).
+		Would run instead of readSourceBuffer+tokenize for BNC files.
+
+	Key entry points:
+		- translateBuffer() - in-place SGML entity fold
+		- findMultiplePreferredForm / findPreferredForm - tag -> form
+		- processWord / processSentence / process - file walk
+
+	Notes / gotchas:
+		tagList[].form stays 0 unless something else fills it; form==-3
+		is the multi-form path. wcscpy of substitute over afterXMLIndex
+		can overlap. preTaggedSource is an extern bool.
+*/
 #include <windows.h>
 #include <stdio.h>
 #include "string.h"
@@ -42,7 +67,7 @@ struct
 { L"&auml;",L"a"},// small a, dieresis or umlaut mark  967
 { L"&Bgr;",L"B"},// capital Beta, Greek  186
 { L"&bgr;",L"b"},// small beta, Greek  1122
-{ L"&bquo;",L"“"},// normalized begin quote mark  771009
+{ L"&bquo;",L"ï¿½"},// normalized begin quote mark  771009
 { L"&bsol;",L" "},// reverse solidus  226
 { L"&bull;",L"*"},// round bullet, filled  2150
 { L"&cacute;",L"c"},// small c, acute accent  186
@@ -79,7 +104,7 @@ struct
 { L"&emacr;",L"e"},// small e, macron  4
 { L"&eogon;",L"e"},// small e, ogonek  6
 { L"&equals;",L"="},// equals sign  3
-{ L"&equo;",L"”"},// normalized end quote mark  752621
+{ L"&equo;",L"ï¿½"},// normalized end quote mark  752621
 { L"&eth;",L"e"},// small eth, Icelandic  4
 { L"&Euml;",L"E"},// capital E, dieresis or umlaut mark  15
 { L"&euml;",L"e"},// small e, dieresis or umlaut mark  482
@@ -257,6 +282,9 @@ struct
 { NULL,NULL }
 };
 
+// In-place replace &entity; using bncChars[]. Unknown entities are
+// logged and kept as a literal '&'. Skips &' inside a quote. location
+// is only for the error log.
 void translateBuffer(wchar_t* buffer, wstring location)
 {
 	size_t afterXMLIndex = 0;
@@ -410,6 +438,9 @@ struct
 	{L"VVZ",L"NN2"}
 };
 
+// Split tagList[tag].sForm on // and set each matching form on im.
+// If the word is unknown, addForm the first alternative. Writes the
+// last/fallback form id into f. Returns true if any form applied.
 bool bncc::findMultiplePreferredForm(vector <cWordMatch>::iterator im, int tag, const wchar_t* location, int sentence, int& f, bool reportNotFound)
 {
 	f = -1;
@@ -465,6 +496,9 @@ bool bncc::findMultiplePreferredForm(vector <cWordMatch>::iterator im, int tag, 
 	}
 }
 
+// Resolve a single CLAWS tag to an LP form id. TAG_NOT_SET sets
+// flagBNCFormNotCertain and returns -1. form==-3 delegates to
+// findMultiplePreferredForm. -31 means optional/no-deposit miss.
 int bncc::findPreferredForm(vector <cWordMatch>::iterator im, int tag, bool optional, const wchar_t* location, int sentence, bool depositPreferences, bool reportNotFound)
 {
 	if (tag == TAG_NOT_SET)
@@ -602,6 +636,8 @@ int bncc::findPreferredForm(vector <cWordMatch>::iterator im, int tag, bool opti
 	return f;
 }
 
+// Debug-print iWord (capitalized if firstWordInSentence). Advances
+// printLocation as a column counter.
 void printWord(tIWMM iWord, int flags, int& printLocation, bool firstWordInSentence)
 {
 	wchar_t temp[100];
@@ -626,6 +662,9 @@ void printWord(tIWMM iWord, int flags, int& printLocation, bool firstWordInSente
 }
 
 
+// Tokenize buffer as one BNC <w> word, findPreferredForm for tag and
+// optional secondTag (ambiguity), deposit BNC preference flags, append
+// to source.m. Returns 0 or a parse error.
 int bncc::processWord(cSource& source, int sourceId, wchar_t* buffer, int tag, int secondTag, int& lastSentenceEnd, int& printLocation, int sentence)
 {
 	bool anotherWord = false;
@@ -938,6 +977,8 @@ int bncc::processWord(cSource& source, int sourceId, wchar_t* buffer, int tag, i
 	return 0;
 }
 
+// Walk one <s>ï¿½</s> body, extract <w TAG> tokens (and ambiguity
+// TAG-TAG2), processWord each. Returns 0 or first word error.
 int bncc::processSentence(cSource& source, int sourceId, wchar_t* s, int& lastSentenceEnd, int& printLocation, int sentence)
 {
 	//unsigned int where=0;
@@ -1053,6 +1094,8 @@ int bncc::processSentence(cSource& source, int sourceId, wchar_t* s, int& lastSe
 	}
 }
 
+// Open BNC text `id`, translateBuffer, processSentence each <s>.
+// Sets preTaggedSource. Returns 0 or open/parse error.
 int bncc::process(cSource& source, int sourceId, wstring id)
 {
 	preTaggedSource = true;

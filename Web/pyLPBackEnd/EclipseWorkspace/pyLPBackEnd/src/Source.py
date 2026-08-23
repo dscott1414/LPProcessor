@@ -1,3 +1,36 @@
+"""Source.py - Python view of a fully parsed novel (C++ cSource dump).
+
+Overview:
+    Deserializes m[] (tokens), sentenceStarts, sections, speakerGroups,
+    pema, objects, relations, timelineSegments. Then builds an HTML
+    'batchDoc' of styled elements (words, quotes, speakers, space
+    relations, headers) for the Angular/LPWeb viewer, plus info-panel,
+    timeline, and object-search helpers.
+
+Pipeline position:
+    Web backend after the C++ parser has written .SourceCache.
+    Consumes the output of every parse stage (tokenize through speakers
+    and timeRelations).
+
+Key entry points:
+    - __init__(words, rs) - deserialize the cache
+    - initialize_source_elements / generate_per_element_state /
+      generate_source_element / print_html — render the source view
+    - get_info_panel / get_word_info / get_timeline_segments
+    - get_matching_objects / get_surrounding_objects
+
+Key data structures:
+    - m[] - WordMatch tokens
+    - batchDoc[where] - list of (text, attrs, indexes, SourceMapType)
+    - objects[] / relations[] / speakerGroups[] / timelineSegments[]
+
+Dependencies:
+    VerbNet XML at F:\\lp\\source\\lists\\VerbNet (via VerbNet()).
+
+Notes / gotchas:
+    VerbNet() chdirs as a side effect. generate_per_element_state in
+    pyLP.test() is called with extra args this method does not take.
+"""
 from enum import Enum
 from CObject import CObject
 from Form import Form
@@ -60,14 +93,16 @@ class Source:
         SPACEBEFORE = 5
         SPACEAFTER = 6
         
+        # Empty dict; chainable setters fill style slots.
         def __init__(self):
             pass
 
+        # Chainable: set UNDERLINE and return self.
         def set_underline(self, att):
             self.__setitem__(self.UNDERLINE, att)
             return self
 
-        def set_font_size(self, att):
+        def set_font_size(self, att):  # FONTSIZE slot; returns self.
             self.__setitem__(self.FONTSIZE, att)
             return self
 
@@ -75,24 +110,25 @@ class Source:
             self.__setitem__(self.BACKGROUND, att)
             return self
     
+        # Drop BACKGROUND if present; returns self.
         def remove_background(self):
             if self.BACKGROUND in self:
                 self.__delitem__(self.BACKGROUND)
             return self
     
-        def set_foreground(self, att):
+        def set_foreground(self, att):  # FOREGROUND slot; returns self.
             self.__setitem__(self.FOREGROUND, att)
             return self
     
-        def set_bold(self, att):
+        def set_bold(self, att):  # BOLD slot; returns self.
             self.__setitem__(self.BOLD, att)
             return self
             
-        def set_space_before(self, att):
+        def set_space_before(self, att):  # SPACEBEFORE slot; returns self.
             self.__setitem__(self.SPACEBEFORE, att)
             return self
             
-        def set_space_after(self, att):
+        def set_space_after(self, att):  # SPACEAFTER slot; returns self.
             self.__setitem__(self.SPACEAFTER, att)
             return self
             
@@ -100,12 +136,14 @@ class Source:
 
     class WhereSource:
 
+        # Triple index into batchDoc / HTMLElementIdToSource plus flags.
         def __init__(self, inIndex, inIndex2, inIndex3, inFlags):
             self.index = inIndex
             self.index2 = inIndex2;
             self.index3 = inIndex3;
             self.flags = inFlags;
 
+    # Fill objectClassStrings from SourceEnums object-class ids.
     def initialize_class_strings(self):
         self.objectClassStrings = {}
         self.objectClassStrings[SourceEnums.PRONOUN_OBJECT_CLASS] = "pron"
@@ -124,6 +162,9 @@ class Source:
         self.objectClassStrings[SourceEnums.PLEONASTIC_OBJECT_CLASS] =  "pleona"
         self.objectClassStrings[SourceEnums.META_GROUP_OBJECT_CLASS] =  "mg"
 
+    # Deserialize version, location, m[], sentenceStarts, sections,
+    # speakerGroups, pema, objects (and masterSpeakerList), relations,
+    # timelineSegments. Instantiates VerbNet() as a side effect.
     def __init__(self, words, rs):
         t_start = perf_counter()
         self.initialize_class_strings()
@@ -234,12 +275,13 @@ class Source:
         print("Source(9) Seconds = " + "{:.2f}".format(perf_counter() - t_start))
         rs.close()
 
-
+    # Append one styled fragment to batchDoc[where].
     def add_element(self, s, attrs, where, index2, index3, sourceMapType):
         if where not in self.batchDoc:
             self.batchDoc[where] = []
         self.batchDoc[where].append((s, copy.copy(attrs), where, index2, index3, sourceMapType))
 
+    # Recapitalize / add 's / ALLCAPS from wm.flags for display.
     def get_original_word(self, wm):
         originalWord = wm.word;
         if (wm.query_form(SourceEnums.PROPER_NOUN_FORM_NUM) >= 0 or (wm.flags & WordMatch.flagFirstLetterCapitalized) != 0):
@@ -250,6 +292,7 @@ class Source:
             originalWord = originalWord.upper();
         return originalWord;
 
+    # Concatenate get_original_word for tokens [begin, end).
     def phrase_string(self, begin, end, shortFormat):
         tmp = ""
         for K in range(begin, end):
@@ -258,21 +301,25 @@ class Source:
             tmp += "[" + str(begin) + "-" + str(end) + "]"
         return tmp
 
+    # Display name for a COM / object-match `om`.
     def object_string(self, om, shortNameFormat, objectOwnerRecursionFlag):
         tmp = self.object_num_string(om.object, shortNameFormat, objectOwnerRecursionFlag)
         if (shortNameFormat):
             return tmp
         return tmp + str(om.salienceFactor)
 
+    # Join object_string for each match in oms.
     def objects_string(self, oms, shortNameFormat, objectOwnerRecursionFlag):
         tmp = "";
         for s in oms:
             tmp += self.object_string(s, shortNameFormat, objectOwnerRecursionFlag)
         return tmp
 
+    # Short class label from objectClassStrings, or "".
     def get_class(self, objectClass):
         return self.objectClassStrings[objectClass]
 
+    # Human-readable name for objects[obj], walking replacedBy / name parts.
     def object_known_string(self, obj, shortFormat, objectOwnerRecursionFlag):
         if (obj == 0):
             return "Narrator";
@@ -338,6 +385,7 @@ class Source:
                     tmpstr += self.objects[obj].associatedNouns[I] + " "
         return tmpstr;
 
+    # object_known_string plus the numeric object id.
     def object_num_string(self, obj, shortNameFormat, objectOwnerRecursionFlag):
         if obj < 0:
             if obj == SourceEnums.UNKNOWN_OBJECT: return "";
@@ -349,6 +397,7 @@ class Source:
             if obj == SourceEnums.OBJECT_UNKNOWN_ALL: return "ALL";
         return self.object_known_string(obj, shortNameFormat, objectOwnerRecursionFlag)
 
+    # Decode VT_* bits into a tense/voice label.
     def get_verb_sense_string(self, verbSense):
         verbSenseStr = ""
         if verbSense != 0:
@@ -376,6 +425,7 @@ class Source:
                 verbSenseStr += "IMPERATIVE "
         return verbSenseStr;
 
+    # Multi-line dump of space-relation r (roles, time, description).
     def relation_string(self, r):
         relStrings = [ "", "EXIT", "ENTER", "STAY", "ESTAB", "MOVE", "MOVE_OBJECT", "MOVE_IN_PLACE", "METAWQ",
                 "CONTACT", "NEAR", "TRANSFER", "LOCATION", "PREP TIME", "PREP DATE", "SUBJDAY TIME", "ABS TIME",
@@ -497,6 +547,7 @@ class Source:
             (0xFF, 0xFF, 0x00)  # "Yellow"
             ]
     
+    # Style attrs for a space-relation kind (exit/enter/move/…).
     def set_attributes(self, spaceRelations):
         keyWord = self.HTMLStyles()
         if (spaceRelations[self.spr].agentLocationRelationSet):
@@ -527,6 +578,7 @@ class Source:
                 keyWord.set_background((200, 200, 200))
         return keyWord;
 
+    # True if the relation at token `where` is enabled in preferences.
     def should_print_relation(self, where, preferences):
         printAll = True
         printNone = True
@@ -566,6 +618,7 @@ class Source:
         if where<20: print(str(where) + " 9: False")
         return False
 
+    # add_element the relation text at `where` if should_print_relation.
     def print_relation(self, where, preferences):
         if (self.spr < len(self.relations) and self.relations[self.spr].where == where):
             if where<20: print(str(where) + ": print_relation 2")
@@ -576,10 +629,12 @@ class Source:
         while (self.spr < len(self.relations) and self.relations[self.spr].where < where):
             self.spr = self.relations[self.spr].nextSPR;
 
+    # Next space-relation index after token `where`.
     def advance_spr(self, where):
         while (self.spr < len(self.relations) and self.relations[self.spr].where < where):
             self.spr = self.relations[self.spr].nextSPR;
 
+    # Format the full relation chain from originalSPRI until the speaker group ends.
     def print_full_relation_string(self, originalSPRI, endSpeakerGroup):
         presType = "";
         r = self.relations[originalSPRI];
@@ -595,6 +650,7 @@ class Source:
         w = r.where + ":" + Q + ("story " if (r.story) else "") + r.description + r.presType + presType + Q
         return w
 
+    # Emit space-relation HTML at `where` if preferences allow.
     def evaluate_space_relation(self, where, endSpeakerGroup, spr, preferences):
         if (self.relations[spr].agentLocationRelationSet):
             originalSPRI = spr;
@@ -611,6 +667,7 @@ class Source:
             spr += 1
         return spr
 
+    # HTML snippet for masterSpeakerList[ms] (agent sidebar).
     def master_speaker_html(self, ms):
         html = {}
         html['style'] = "font-weight: bold; "
@@ -627,6 +684,7 @@ class Source:
         self.agentToPosition[masterSpeakerObject] = ms
         return html
 
+    # add_element speaker-group annotations around token I.
     def print_speaker_group(self, I, preferences):
         while (self.currentSpeakerGroup < len(self.speakerGroups) and I == self.speakerGroups[self.currentSpeakerGroup].begin):
             if (self.speakerGroups[self.currentSpeakerGroup].tlTransition):
@@ -719,6 +777,7 @@ class Source:
                     self.SourceMapType.speakerGroupType);
             self.currentEmbeddedSpeakerGroup = -1;
 
+    # Advance currentEmbeddedSpeakerGroup when token I enters a new group.
     def advance_current_speaker_group(self, I):
         while (self.currentSpeakerGroup < len(self.speakerGroups) and I == self.speakerGroups[self.currentSpeakerGroup].begin):
             self.currentSpeakerGroup += 1
@@ -737,6 +796,7 @@ class Source:
                 and I == self.speakerGroups[self.currentSpeakerGroup - 1].embeddedSpeakerGroups[self.currentEmbeddedSpeakerGroup].end):
             self.currentEmbeddedSpeakerGroup = -1;
 
+    # Colour a time word from timeColor (past/present/future/…).
     def set_time_color_attributes(self, timeColor, keyWord):
         if (timeColor > 0):
             keyWord.set_background((255, 255, 0));
@@ -786,6 +846,7 @@ class Source:
                 keyWord.set_underline(True);
                 keyWord.set_foreground((152, 152, 204));
 
+    # Colour a verb from VT_* tense/voice bits.
     def set_verb_sense_attributes(self, verbSense, keyWord):
         if (verbSense != 0):
             if ((verbSense & SourceEnums.VT_TENSE_MASK) == SourceEnums.VT_PRESENT):
@@ -811,6 +872,7 @@ class Source:
                 if ((verbSense & SourceEnums.VT_EXTENDED) == SourceEnums.VT_EXTENDED):
                     keyWord.set_foreground((90, 90, 90));
 
+    # VerbNet class list for the verb at whereVerb (baseVerb / phrasal).
     def get_verb_classes(self, whereVerb):
         baseVerb = self.m[whereVerb].baseVerb;
         # map <wstring, set <int> >::iterator lvtoCi;
@@ -839,6 +901,7 @@ class Source:
     8. generate only what is left.
     9. save the sum as the new interval set.
     """
+    # Walk tokens building per-position state (speaker group, spr, quote).
     def generate_per_element_state(self):
         self.chapters = []
         self.section = 0;
@@ -911,6 +974,7 @@ class Source:
     key is the source index
     value is the HTML elements tied to that source
     """
+    # Allocate batchDoc / HTMLElementIdToSource / chapters scaffolding.
     def initialize_source_elements(self):
         self.positionToAgent = {}
         self.agentToPosition = {}
@@ -919,6 +983,7 @@ class Source:
         self.section = 0;
         self.spr = 0;
         
+    # Emit styled fragments for token I (word, quote, speaker, relation).
     def generate_source_element(self, preferences, I, states):
         if I in self.batchDoc:
             return self.batchDoc[I]
@@ -1074,6 +1139,7 @@ class Source:
             self.add_element("\n", None, I, self.section, -1, self.SourceMapType.headerType)
         return self.batchDoc[I]
 
+    # CSS snippet for one HTMLStyles dict.
     def get_style(self, attr):
         htmlStyle = ""
         if attr is None:
@@ -1094,6 +1160,7 @@ class Source:
             htmlStyle += "margin-bottom: " + str(attr[self.HTMLStyles.SPACEAFTER]) + "px; "
         return htmlStyle
             
+    # Render one batchDoc tuple `e` as an HTML element record.
     def print_html_per_element(self, e, htmlElementPosition):
         #e(s, attrs, where, index2, index3, sourceMapType)
         html = {}
@@ -1107,6 +1174,7 @@ class Source:
             html['text'] = e[0]
         return html
 
+    # Wrap currentWidth/Height by letterWidth/lineHeight of htmlElement.
     def advance_screen_position(self, htmlElement, maxWidth, currentWidth, currentHeight):        
         length = 0 if 'text' not in htmlElement else len(htmlElement['text']) * self.letterWidth
         if length + currentWidth > maxWidth:
@@ -1126,6 +1194,9 @@ class Source:
             currentHeight += self.lineHeight + 10
         return currentWidth, currentHeight
         
+    # Page of HTML elements starting at fromSourcePosition until the
+    # viewport (maxWidth x maxHeight) is filled. Generates missing
+    # batchDoc entries on demand.
     def print_html(self, preferences, fromSourcePosition, currentWidth, currentHeight, maxWidth, maxHeight):
         where = fromSourcePosition
         htmlElements = []
@@ -1141,6 +1212,7 @@ class Source:
         return htmlElements    
     
     # for determining whether CSS Classes can be enumerated separately
+    # CSS class table for the source view (quote/speaker/time colours).
     def generate_css_classes(self):
         global attrsList
         css_output = ""
@@ -1165,6 +1237,7 @@ class Source:
             css_output += "}\n"
         return css_output
     
+    # wordInfo / roleInfo / relationsInfo / toolTip for HTML element infoId.
     def get_info_panel(self, infoId):
         idSplit = infoId.split('.')
         where = int(idSplit[0])
@@ -1257,6 +1330,7 @@ class Source:
                     roleInfo += I;
         return wordInfo, roleInfo, relationsInfo, toolTip 
 
+    # Paged token dump between fromIndex and toIndex.
     def get_word_info(self,fromIndex, toIndex, pageNumber, pageSize):
         fromIndex = int(fromIndex)
         toIndex = int(toIndex)
@@ -1276,6 +1350,7 @@ class Source:
             wordInfo.append({ 'word': word, 'roleVerbClass':roleVerbClass, 'relations': relations, 'objectInfo':objectInfo, 'matchingObjects':matchingObjects, 'flags':flags})
         return wordInfo
 
+    # Paged timelineSegments as JSON-ish dicts.
     def get_timeline_segments(self, pageNumber, pageSize):
         segments = []
         lastParent = None
@@ -1325,6 +1400,7 @@ class Source:
             timelineIndex += 1
         return segments
     
+    # Relation ids belonging to timelineSegments[timelineIndex].
     def get_relations_in_timeline(self, timelineIndex):
         relations = []
         for tl in self.timelineSegment[timelineIndex].timeTransitions:
@@ -1339,6 +1415,7 @@ class Source:
             relations.append((s,color))
         return relations
 
+    # Tokens neighbouring the object at masterIndex (for the agent view).
     def add_surrounding_words(self, masterIndex):
         stringLengthLimit = 100
         # gather 10 previous words and 10 following words
@@ -1383,6 +1460,7 @@ class Source:
         return resultStr[: beginWord], resultStr[beginWord: endWord], resultStr[endWord:]
           
     
+    # Source indexes where m[].word matches searchString.
     def get_instances_of_word(self, searchString):
         if len(searchString)<3:
             return {}
@@ -1398,6 +1476,7 @@ class Source:
             I += 1
         return search_results
                 
+    # Walk backward from somewhereInParagraph to the paragraph start token.
     def find_paragraph_start(self, somewhereInParagraph):
         print("searching for beginning of:" + somewhereInParagraph)
         idSplit = somewhereInParagraph.split('.')
@@ -1408,6 +1487,7 @@ class Source:
         return "0.0"
                 
             
+    # SourceMapType name for HTML element elementId.
     def get_element_type(self, elementId):
         print("getting type for element id:" + elementId)
         idSplit = elementId.split('.')
@@ -1416,6 +1496,7 @@ class Source:
         print(self.batchDoc[where][whichHtmlElement][5]);
         return self.batchDoc[where][whichHtmlElement][5]
                 
+    # Display name for objects[mObject] (name or first associated noun).
     def get_object_name(self, mObject):
         objectWhere = self.objects[mObject].originalLocation;
         # skip honorific
@@ -1434,6 +1515,7 @@ class Source:
         return w
 
 
+    # Objects of matchingType tied to HTML element elementId.
     def get_matching_objects(self, elementId, matchingType):
         print("getting matching objects element id:" + elementId + "matchingType = " + matchingType)
         idSplit = elementId.split('.')
@@ -1448,7 +1530,8 @@ class Source:
             ret_objects.append({ 'type': self.SourceMapType.audienceMatchingType, 'id':om.object, 'name':self.get_object_name(om.object)})
         return ret_objects
                 
-    def save_matching_objects(self, preferences, elementId, objects):
+    # Persist a matching-object set on the HTML element (session memory).
+    def save_matching_objects(self, elementId, objects):
         idSplit = elementId.split('.')
         where = int(idSplit[0])
         objectMatches = []
@@ -1475,6 +1558,7 @@ class Source:
                objectClass != SourceEnums.REFLEXIVE_PRONOUN_OBJECT_CLASS and \
                objectClass != SourceEnums.VERB_OBJECT_CLASS;
                 
+    # Nearby objects of matchingType around elementId's source position.
     def get_surrounding_objects(self, elementId, matchingType):
         idSplit = elementId.split('.')
         where = int(idSplit[0])

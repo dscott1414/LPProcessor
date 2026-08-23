@@ -1,3 +1,14 @@
+"""VerbMember.py - One VerbNet class: name, member verbs, LP kind tags.
+
+Overview:
+    Built by VerbNet.parse_xml_file. Collects MEMBER@name into members
+    and indexes each in vbNetVerbToClassMap. Child XML tags that match
+    vbClassTypes (MOVE, THINK, COMMUNICATE, …) become kinds — the LP
+    semantic labels overlaid on VerbNet classes.
+
+Pipeline position:
+    Initialization of the Python VerbNet; queried via VerbNet.get_*.
+"""
 class VerbMember:
     # String name;
     # Vector <String> members,kinds;
@@ -8,6 +19,8 @@ class VerbMember:
         "META_FUTURE_CONTACT","META_INFO","META_IF_THEN","META_CONTAINS","META_DESIRE","META_BELIEF","META_ROLE",
         "SPATIAL_ORIENTATION","IGNORE" ])
     
+    # n=class id, nl=MEMBER elements, childNodes=all children (kinds).
+    # Mutates vbNetVerbToClassMap: each member name appends `self`.
     def __init__(self, n, nl, childNodes, vbNetVerbToClassMap):
         self.name = n
         self.members = []
@@ -29,9 +42,11 @@ class VerbMember:
                 # else:
                     # print("Did not add kind " + member + " to VerbMember " + self.name);
 
+    # VerbNet class id (e.g. "hit-18.1").
     def get_name(self): 
         return self.name;
     
+    # "name [KIND KIND ] " when kinds is non-empty.
     def get_name_with_kinds(self):
         names = self.name + " "
         if len(self.kinds) > 0:

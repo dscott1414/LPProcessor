@@ -1,3 +1,34 @@
+/*
+	conversationContext.cpp - unfinished conversation-span detector (cSource::identifyConversations)
+
+	Overview:
+		Intended to walk the quote chain (firstQuote / nextQuote) and group quotes
+		that share a speaker-group and at least two participants into
+		"conversations", then build a three-level coherence map (exact word,
+		WordNet/VerbNet synonym, word-relation).  Only the grouping predicates are
+		sketched; the maps are allocated and never filled, and nothing is stored
+		on cSource.
+
+	Pipeline position:
+		Would run after resolveSpeakers (stage 7).  Not called from the current
+		main loop (the adjacency-pair comments are a design note, not code).
+
+	Key entry points:
+		- identifyConversations() - walk quotes; currently a stub that only
+			counts conversations locally.
+
+	Key data structures / globals:
+		- cCohereInfo - intended (lastLocation, age, occurrence) value type for
+			the coherence maps; members are private (class default) and unused.
+
+	Notes / gotchas:
+		- The "share at least two people" test copy-pastes the same
+			intersect(...) condition twice, so the second clause is dead.  The
+			obvious intent was to also compare against previousQuote's audience.
+		- Embedded-story quotes (flagEmbeddedStoryResolveSpeakers without Begin)
+			are skipped.
+		- currentSpeakerGroup is a cSource member; this mutates it as a cursor.
+*/
 #include <windows.h>
 #include "Winhttp.h"
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
@@ -9,6 +40,8 @@
 #include "math.h"
 #include "profile.h"
 
+// Per-word coherence accumulator (unused).  Members are private and there is
+// no constructor, so a default-constructed instance has uninitialized ints.
 class cCohereInfo
 {
 	int lastLocation;
@@ -16,6 +49,11 @@ class cCohereInfo
 	int occurrence;
 };
 
+// Walk the quote chain and count multi-party conversations (quotes whose
+// speaker and audience object-match lists are not equal, and that do not
+// share two participants with the previous quote / speaker group).
+// The coherence maps below are never populated; the function has no
+// observable effect besides advancing currentSpeakerGroup.
 // this is to identify all conversations in the source and to trace all nouns/verbs/adjectives/adverbs through exact match, synonyms, and relations.
 // a conversation is currently defined as being between more than one person.
 void cSource::identifyConversations()

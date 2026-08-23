@@ -1,4 +1,131 @@
-﻿#include <windows.h>
+/*
+	main.cpp - process entry point: command line parsing, one-time initialization, multi-process orchestration and the top-level per-document loop.
+
+	Overview:
+		This translation unit owns everything that happens around the parser proper.  It
+		(a) installs the crash / Ctrl-C / out-of-memory handlers, (b) parses the command
+		line into the handful of booleans and the source type that drive a run,
+		(c) constructs the single cSource object (which connects to MySQL and loads the
+		lexicon), (d) either spawns and supervises N child lp.exe processes (controller
+		mode, -mp) or itself loops over the sources claimed from the `sources` table, and
+		(e) for each source calls the pipeline in order: readSource/tokenize -> print
+		(match) sentences -> WordNet extensions -> identifyObjects -> analyzeWordSenses ->
+		syntacticRelations -> identifySpeakerGroups -> resolveSpeakers ->
+		resolveFirstSecondPersonPronouns -> identifyConversations -> (optionally)
+		question answering.  It also holds the definitions of a number of program-wide
+		globals (the "unreachable but stable" iterator sentinels, the cProfile statics,
+		and the SRWLOCKs) that must exist in exactly one translation unit.
+
+	Pipeline position:
+		Stage 0 - runs before and around every other stage.  wmain() is the only caller of
+		processSource(), which is the linear script of the whole pipeline described in
+		README.md "Parsing Processing Stages".
+
+	Command line (as actually implemented by processCommandArguments(); note that
+	README.md "Command Line" is stale in places - see the notes below):
+		Mode selectors (must appear before any switch, and are matched case-insensitively
+		as a substring of the internal table
+		"1-test 2-book 3-newsbank 4-bnc 5-script 6-websearch 7-wikipedia 8-interactive :-parserequest",
+		the leading digit being the cSource::sourceTypeEnum value):
+			-Test   [name|#begin] [#end|+|~start]  tests\<name>.txt, or a numeric range of TEST_SOURCE_TYPE rows
+			-Book   [#begin] [#end|+]              Project Gutenberg novels (GUTENBERG_SOURCE_TYPE)
+			-Newsbank [#begin] [#end|+]            NewsBank articles
+			-BNC    [#begin] [#end|+]              British National Corpus (pre-tagged; processing itself now lives in getBNC.cpp)
+			-Script [#begin] [#end|+]              movie scripts
+			-WebSearch [#begin] [#end|+]           web search fragments collected for question answering
+			-Wikipedia [#begin] [#end|+]           Wikipedia articles
+			-Interactive [#begin] [#end|+]         interactive question answering session
+			-ParseRequest [#begin] [#end|+]        REQUEST_TYPE - the mode child processes are spawned with by createLPProcess(processKind==0)
+		A '+' in the second position means "to the end of the table"; a number means
+		"up to but not including it"; anything else means "just this one source".
+		Switches (all optional, order independent, all must follow the mode selector):
+			-server <host>            MySQL host (default localhost)
+			-log <suffix>            suffix for every *.lplog file; also redirects them into "multiprocessor logs\"
+			-mp <n>                  controller mode: run n child lp.exe processes instead of parsing here
+			-numSourcesPerProcess <n> how many sources each child should take before exiting (default 5)
+			-numSourceLimit <n>      stop after n sources (0 = no limit)
+			-cacheDir <path>         root of the text/websearch/wikipedia/wordnet caches
+			-resetAllSource          mark every source unprocessed and not in processing
+			-resetProcessingFlags    clear only the 'processing' flags
+			-generateFormStatistics  log word form statistics while reading the lexicon
+			-retry                   reset the selected source range before processing it
+			-parseOnly               stop after syntacticRelations (no speakers/conversations)
+			-LC | -logCache <n>      seconds of log buffering before flush
+			-BC <n>                  internet bandwidth control: minimum seconds between requests
+			-logMatchedSentences     log sentences that got a fully enclosing parse
+			-logUnmatchedSentences   log sentences that did not
+			-TSRO                    force speaker resolution tracing (currently only read by unused source\relations.cpp)
+			-fTOR                    flip object resolution tracing (identifyObjects.cpp)
+			-fTNR                    flip name resolution tracing (currently unreferenced)
+			-forceSourceReread       ignore the parsed-source cache file and retokenize/reparse
+			-SW                      write the parsed source cache file
+			-MCSW                    keep a copy of the previous cache file before overwriting it
+			-SWNR / -SWNW            read / write the WordNet map cache file
+			-specialExtension <ext>  extra suffix for the source/word cache files (also used as the child -log suffix)
+		Documented in README.md but NOT implemented here: -tg, -acquireNewsBank,
+		-acquireMovieList, -acquireInterviewTranscript, -acquireTwitter,
+		-flipTMSOverride, -flipTUMSOverride, -sourceRead, -sourceWrite, -C.  The
+		corresponding code is either commented out below or lives in "unused source\".
+
+	Key entry points:
+		- wmain() - top level: initialize, parse arguments, build cSource, then either startProcesses() or loop over sources
+		- processCommandArguments() - fills the run configuration and the source type from argv
+		- initialize() - crash handler, console, locks, memory counter, working directory, cache directory check
+		- processSource() - the whole per-document pipeline for one already-claimed source
+		- startProcesses() / createLPProcess() / waitToSpawnMoreProcesses() / waitForSpawnedProcesses() - controller mode
+		- WRMemoryCheck() - copies the wordRelations table into its MEMORY-engine mirror
+		- createMinidump() / printStackTrace() / unhandled_handler() - crash diagnostics
+
+	Key data structures / globals:
+		- static_wordMap / wNULL, static_tIcMap / tNULL, static_cLocalFocus / cNULL,
+		  static_cSpeakerGroup / sgNULL, static_wm / wmNULL, static_setInt / sNULL -
+		  the "never dereferenced but always comparable" iterator sentinels.  They exist
+		  because _STLP_DEBUG rejects default-constructed iterators; the containers must
+		  stay empty and must never be mutated.
+		- cProfile:: statics - the profiling accumulators used by the LFS macro.
+		- exitNow / exitEventually - set by ConsoleHandler (a different thread) and polled
+		  by the source loop and by processSource(); one Ctrl-C finishes the current
+		  source, a second one abandons it.
+		- rdfTypeMapSRWLock, mySQLTotalTimeSRWLock, totalInternetTimeWaitBandwidthControlSRWLock,
+		  mySQLQueryBufferSRWLock, orderedHyperNymsMapSRWLock - the process-wide locks
+		  declared extern in general.h; defined here, initialized by createLocks().
+		- TSROverride / flipTOROverride / flipTNROverride / logMatchedSentences /
+		  logUnmatchedSentences / preTaggedSource / numSourceLimit - command line flags
+		  read by other translation units (general.h).
+
+	Dependencies:
+		MySQL (the `sources` table drives the work queue; wordRelations /
+		wordRelationsMemory for the in-memory word relation mirror), the on-disk caches
+		under CACHEDIR, the source texts under TEXTDIR, dbghelp.dll (minidumps),
+		WinHTTP / cInternet (acquisition), yajl and MusicBrainz headers, and the sibling
+		build outputs QuestionAnsweringx64\lp.exe, ParseAllSourcesx64\lp.exe and
+		x64\StanfordAllSources\CorpusAnalysis.exe which controller mode spawns.
+
+	Notes / gotchas:
+		- Windows only: CreateProcess, WaitForMultipleObjectsEx, SRWLOCK, console API,
+		  minidumps, wsprintf (which is the Win32 unbounded wsprintfW, not swprintf).
+		- LMAINDIR / CACHEDIR / TEXTDIR are compile-time absolute paths ("F:\lp",
+		  "M:\caches") from general.h; initialize() fails fatally if CACHEDIR is absent
+		  even when -cacheDir names a valid directory.
+		- Working directory dance: initialize() does chdir(".."), startProcesses() does
+		  chdir("source") and restores it on return; every relative path below (tests\,
+		  the child .exe paths, the .lplog files) depends on this.
+		- Initialization order is load bearing: cSource's constructor connects to MySQL
+		  and reads the lexicon, initializePatterns() fills desiredTagSets, and
+		  initializePemaMap() must run after it.  initializePatterns() is skipped in
+		  controller mode (-mp), so desiredTagSets is empty there.
+		- lplog(LOG_FATAL_ERROR,...) does not return: logging.cpp blocks on getchar()
+		  and then exit(0).  Any "fatal" path here therefore both hangs an unattended
+		  run and reports success to the parent process.
+		- wmain() and startProcesses() end with _exit(0), so no destructor runs: the
+		  cSource destructor, the MySQL close and any unflushed buffered log are skipped
+		  deliberately ("fast exit") because tearing down the lexicon takes minutes.
+		- multiProcess and logFileExtension are __declspec(thread) (logging.h); they are
+		  set on the main thread only, so worker threads see multiProcess==0.
+		- This file is largely duplicated by specials_main.cpp (the specials.vcxproj
+		  entry point), including getNumSourcesProcessed() and the lock definitions.
+*/
+#include <windows.h>
 #define _WINSOCKAPI_ /* Prevent inclusion of winsock.h in windows.h */
 #include "io.h"
 #include "winhttp.h"
@@ -66,6 +193,15 @@ typedef long long (FAR WINAPI* MINIDUMPWRITEDUMP)(HANDLE hProcess, DWORD dwPid, 
 bool unlockTables(MYSQL& mysql);
 bool preTaggedSource = false; // BNC
 
+// Write a minidump of this process to LMAINDIR\core.dmp ("F:\lp\core.dmp") describing the
+// exception in apExceptionInfo.  Called from the unhandled exception filter, so it runs on
+// the faulting thread with the stack still intact.
+// Side effects: loads dbghelp.dll, creates/truncates core.dmp (FILE_SHARE_WRITE so a
+// concurrent lp.exe can also be writing it - the dumps of sibling processes overwrite
+// each other because the name is fixed).
+// Note: none of LoadLibrary / GetProcAddress / CreateFile is checked, so a missing
+// dbghelp.dll turns the original crash into a null call through pDump; mhLib is never
+// freed (harmless, the process is dying).
 void createMinidump(struct _EXCEPTION_POINTERS* apExceptionInfo)
 {
 	HMODULE mhLib = ::LoadLibrary(L"dbghelp.dll");
@@ -83,6 +219,10 @@ void createMinidump(struct _EXCEPTION_POINTERS* apExceptionInfo)
 	::CloseHandle(hFile);
 }
 
+// Format the current call stack (via dbg::stack_trace() from stacktrace.h) as
+// "0xADDRESS: name(line) in module" per frame and write it to the log at LOG_FATAL_ERROR.
+// Because LOG_FATAL_ERROR is fatal in logging.cpp, this call does not return: it flushes,
+// waits for a keypress on stdin and exits.  Used only from the unhandled exception filter.
 void printStackTrace()
 {
 	std::stringstream buff;
@@ -98,6 +238,10 @@ void printStackTrace()
 	::lplog(LOG_FATAL_ERROR, L"%S", buff.str().c_str());
 }
 
+// Process-wide last chance exception filter, installed by initialize() through
+// SetUnhandledExceptionFilter.  Dumps core and logs the stack, then returns
+// EXCEPTION_CONTINUE_SEARCH so the default handler still runs (WER / debugger attach).
+// In practice printStackTrace() exits first, so the return value rarely matters.
 LONG WINAPI unhandled_handler(struct _EXCEPTION_POINTERS* apExceptionInfo)
 {
 	createMinidump(apExceptionInfo);
@@ -105,6 +249,16 @@ LONG WINAPI unhandled_handler(struct _EXCEPTION_POINTERS* apExceptionInfo)
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
+// Bulk downloader for a hand-made list file: every line is "<url>|<destination path>",
+// UTF-16 encoded (hence the "rb" + fgetws).  The extension of the URL is appended to the
+// destination path, the page is fetched with cInternet::readBinaryPage and written to that
+// path, then the loop sleeps 5s to stay polite.
+// Returns 0 always - including when the list file cannot be opened.
+// Side effects: creates/overwrites every destination file, network traffic, logging.
+// NOTE: this function is currently dead code - nothing in the project calls it, and it has
+// never been hardened: a line without '|' null-derefs, _wopen failure (-1) is treated as
+// success by "if (destfile)", and both the BOM strip and the wcscat below can corrupt or
+// overrun url[].
 int acquireList(wchar_t* filename)
 {
 	LFS
@@ -115,6 +269,9 @@ int acquireList(wchar_t* filename)
 		int total = 0;
 		while (fgetws(url, 2047, listfile))
 		{
+			// shift the string down one wchar_t to drop a leading byte order mark - note
+			// the length is in characters but memcpy wants bytes, and the terminating null
+			// is not copied
 			if (url[0] == 0xFEFF) // detect BOM
 				memcpy(url, url + 1, wcslen(url + 1));
 			if (url[wcslen(url) - 1] == L'\n') url[wcslen(url) - 1] = 0;
@@ -122,6 +279,8 @@ int acquireList(wchar_t* filename)
 			wchar_t* ch = wcschr(url, L'|');
 			*ch = 0;
 			path = ch + 1;
+			// path points into url[] just past the '|', so appending the URL's extension
+			// here writes past the end of the line inside the same 2048 wchar_t buffer
 			wchar_t* period = wcsrchr(url, L'.');
 			if (period) wcscat(path, period);
 			wstring buffer;
@@ -168,6 +327,15 @@ return 0;
 
 bool exitNow = false, exitEventually = false;
 
+// Console control handler (installed by initialize()) implementing the two stage
+// interrupt: the first Ctrl-C/Break/Close sets exitEventually, which makes the source loop
+// stop after the current document; a second one also sets exitNow, which abandons the
+// current document and skips signalFinishedProcessingSource().  A system shutdown goes
+// straight to exitNow.
+// Returns TRUE ("handled") in every case, including CTRL_CLOSE_EVENT, where Windows still
+// kills the process a few seconds later - so a console close usually loses the document.
+// Runs on a handler thread injected by the OS: exitNow/exitEventually are plain bools
+// shared with the main thread without any synchronization.
 BOOL WINAPI ConsoleHandler(DWORD CEvent)
 {
 	LFS
@@ -709,11 +877,20 @@ int getInterviewTranscript();
 int getTwitterEntries(wchar_t* filter);
 bool TSROverride = false, flipTOROverride = false, flipTNROverride = false, logMatchedSentences = false, logUnmatchedSentences = false;
 
+// new_handler installed by initialize(): logs the allocation failure and terminates.
+// The exit(1) is unreachable because lplog(LOG_FATAL_ERROR,...) exits (with status 0)
+// first, so an out-of-memory run still looks successful to whoever spawned it.
 void no_memory() {
 	lplog(LOG_FATAL_ERROR, L"Out of memory (new/STL allocation).");
 	exit(1);
 }
 
+// Give this console a large scrollback (at least 200 columns x 6000 rows, so that the
+// per-sentence parse dumps can be scrolled back through) and resize the visible window to
+// width x height characters.  Failures are printed but otherwise ignored - they are
+// expected when stdout is redirected or the process has no console.
+// Note the buffer is always at least 200x6000 regardless of the arguments; only the window
+// rectangle actually honours width/height.
 void setConsoleWindowSize(int width, int height)
 {
 	HANDLE Handle = GetStdHandle(STD_OUTPUT_HANDLE);      // Get Handle 
@@ -753,6 +930,17 @@ void setConsoleWindowSize(int width, int height)
 			(int)GetLastError(), LastErrorStr());
 }
 
+// Spawn one child worker in its own console window, tiled vertically by numProcess
+// (x=60, y=180*numProcess) and shown without stealing focus, so a controller run with -mp
+// leaves a readable stack of child windows.
+// commandPath is the executable, processParameters the full command line (CreateProcess
+// may modify it in place, hence the non-const pointer).
+// Out: processHandle / threadHandle / processId of the new child.
+// Returns 0 on success, -1 if CreateProcess failed (in which case the out parameters are
+// left as the caller initialized them and the failure is printed with the current
+// directory, since a wrong working directory is the usual cause).
+// Ownership: the caller inherits both handles; threadHandle is never closed by any caller,
+// which leaks one thread handle per child.
 int createLPProcess(int numProcess, HANDLE& processHandle, HANDLE& threadHandle, DWORD& processId, const wchar_t* commandPath, wchar_t* processParameters)
 {
 	STARTUPINFO si;
@@ -792,6 +980,18 @@ int createLPProcess(int numProcess, HANDLE& processHandle, HANDLE& threadHandle,
 }
 
 
+// Read the completed-work totals for one sourceType from the `sources` table: rows that
+// are processed, not currently being processed, and not marked '**SKIP**' or
+// '**START NOT FOUND**'.  Used by the controller to compute the sources/hour and words/hour
+// figures shown in its console title.
+// Out: numSourcesProcessed / wordsProcessed / sentencesProcessed - left untouched if the
+// query returns no row.
+// Returns 0 on success, -1 if the table could not be locked or unlocked (the callers all
+// ignore this).  Side effects: takes and releases a WRITE lock on `sources`; frees the
+// result set.
+// NOTE: SUM() yields SQL NULL when no row matches, so on an empty/fresh corpus
+// sqlrow[1]/sqlrow[2] are NULL and atol/atoi are called on a null pointer.  atol/atoi also
+// truncate to 32 bits even though the out parameters are __int64.
 int getNumSourcesProcessed(MYSQL& mysql, int sourceType, int& numSourcesProcessed, __int64& wordsProcessed, __int64& sentencesProcessed)
 {
 	MYSQL_RES* result;
@@ -816,6 +1016,13 @@ int getNumSourcesProcessed(MYSQL& mysql, int sourceType, int& numSourcesProcesse
 // https://stackoverflow.com/questions/813086/can-i-send-a-ctrl-c-sigint-to-an-application-on-windows/1179124
 // Inspired from http://stackoverflow.com/a/15281070/1529139
 // and http://stackoverflow.com/q/40059902/1529139
+// Deliver a console control event (used with CTRL_C_EVENT) to another process, so that a
+// Ctrl-C in the controller makes each child stop at the end of its current document
+// instead of being killed.  Windows offers no direct API for this: the controller must
+// leave its own console, attach to the child's, disable its own Ctrl-C handling (which is
+// deliberately never restored - restoring it would kill the controller too), raise the
+// event for the whole attached console group, then reattach or allocate a fresh console.
+// Returns true only if GenerateConsoleCtrlEvent succeeded.
 bool signalCtrl(DWORD dwProcessId, DWORD dwCtrlEvent)
 {
 	bool success = false;
@@ -848,6 +1055,18 @@ bool signalCtrl(DWORD dwProcessId, DWORD dwCtrlEvent)
 	return success;
 }
 
+// Drain phase of controller mode: no more sources are left to hand out, so wait for the
+// numProcesses children still in handles[] to exit, closing each handle and compacting the
+// array as they do, and refreshing the throughput line in the console title every three
+// minutes (the wait timeout) so a long tail is visible.
+// In/out: numProcesses (decremented to 0), handles[] (compacted), nextProcessIndex (left
+// holding the last slot that was retired).  startTime is a clock() value; the
+// *Originally counters are the totals sampled before this run started, so that the title
+// shows only this run's progress.
+// NOTE: processingSeconds is integer seconds and is used as a divisor, so a child that
+// exits in the first second of the run divides by zero; and if WaitForMultipleObjectsEx
+// returns WAIT_FAILED the memmove below would run with nextProcessIndex == 0xFFFFFFFF
+// (only survivable because the LOG_FATAL_ERROR above terminates the process).
 void waitForSpawnedProcesses(MYSQL& mysql, const int sourceType, int &numProcesses, HANDLE* handles, unsigned int &nextProcessIndex, const int startTime,
 	const int numSourcesProcessedOriginally, const int wordsProcessedOriginally, const int sentencesProcessedOriginally, const int maxProcesses)
 {
@@ -892,6 +1111,22 @@ void waitForSpawnedProcesses(MYSQL& mysql, const int sourceType, int &numProcess
 	}
 }
 
+// Build the command line for one child worker from this run's flags and start it.
+// processKind selects both the executable and the mode:
+//   0 - QuestionAnsweringx64\lp.exe -ParseRequest 0 +   (answer the queued requests)
+//   1 - ParseAllSourcesx64\lp.exe   -book 0 + -BC 0     (parse Gutenberg books)
+//   2 - x64\StanfordAllSources\CorpusAnalysis.exe -step <step>  (external corpus analysis)
+// The boolean flags are passed straight through as the -forceSourceReread/-SW/-SWNR/-SWNW/
+// -parseOnly/-MCSW/-logMatchedSentences/-logUnmatchedSentences switches; nextProcessIndex
+// is used both to tile the child's window and to suffix its log files.
+// Returns the child process handle, or 0 if the process could not be created or
+// processKind is unknown - callers store that 0 in handles[] regardless, which later makes
+// WaitForMultipleObjectsEx fail with the misleading "WaitForMultipleObjectsEx failed".
+// NOTE: the paths are relative to the "source" directory startProcesses() chdir'd into, so
+// controller mode only works from a full build tree.  Every command line is formatted with
+// the unbounded Win32 wsprintf into a 1024 wchar_t buffer, and case 1 then wcscat's
+// specialExtension onto it.  specialExtension - not logFileExtension - is what is passed
+// to the child's -log, so the parent's -log suffix is not propagated.
 HANDLE createLPProcess(const int processKind, const bool forceSourceReread, const bool sourceWrite, const bool sourceWordNetRead, const bool sourceWordNetWrite, const bool parseOnly, const bool makeCopyBeforeSourceWrite,
 	const int numSourcesPerProcess, wstring specialExtension, const int nextProcessIndex, const int step)
 {
@@ -914,6 +1149,9 @@ HANDLE createLPProcess(const int processKind, const bool forceSourceReread, cons
 				numSourcesPerProcess,
 				specialExtension.c_str(),
 				nextProcessIndex);
+			// note the precedence here (and in the two cases below): '<' binds tighter than
+			// '=', so errorCode receives the comparison result, not the return code, and
+			// the break only leaves the switch - failure is not propagated to the caller
 			if (errorCode = createLPProcess(nextProcessIndex, processHandle, threadHandle, processId, L"QuestionAnsweringx64\\lp.exe", processParameters) < 0)
 				break;
 			break;
@@ -949,6 +1187,17 @@ HANDLE createLPProcess(const int processKind, const bool forceSourceReread, cons
 	return processHandle;
 }
 
+// Throttle for controller mode: if the pool is already full (numProcesses == maxProcesses)
+// block until one child exits, close its handle and report its slot in nextProcessIndex so
+// the caller can start a replacement there; also refresh the throughput console title.
+// Returns 0 when a slot is free (or the pool was not full to begin with), 1 when the five
+// minute wait expired or was interrupted by an APC and the caller should just loop again,
+// and -1 when there is nothing to wait for (an empty pool) and the caller should stop.
+// In/out: nextProcessIndex - the slot to reuse; numSourcesLeft is zeroed here because once
+// the pool is full the pre-counted estimate is no longer used.
+// NOTE: numProcesses is by value, so the pool size is deliberately not decremented - the
+// freed slot is immediately overwritten by the caller.  Same integer-division-by-zero
+// hazard on processingSeconds as waitForSpawnedProcesses().
 int waitToSpawnMoreProcesses(MYSQL& mysql, const int sourceType, const int numProcesses, HANDLE* handles, unsigned int &nextProcessIndex, const int startTime,
 	const int numSourcesProcessedOriginally, const int wordsProcessedOriginally, const int sentencesProcessedOriginally, const int maxProcesses, int &numSourcesLeft)
 {
@@ -993,6 +1242,12 @@ int waitToSpawnMoreProcesses(MYSQL& mysql, const int sourceType, const int numPr
 	return 0;
 }
 
+// Forward this controller's interrupt to every live child exactly once, so each finishes
+// (or abandons) its current document and exits cleanly rather than being killed.
+// In/out: sentBreakSignals - latch making the broadcast idempotent even though the source
+// loop calls this on every iteration once exitEventually is set.
+// Note the "Sending break signals" message is printed even on the repeat calls that do
+// nothing.
 void sendBreakSignals(bool & sentBreakSignals, const int numProcesses, HANDLE* handles)
 {
 	printf("\nSending break signals to children...\n");
@@ -1010,6 +1265,25 @@ void sendBreakSignals(bool & sentBreakSignals, const int numProcesses, HANDLE* h
 bool getNextUnprocessedSource(MYSQL& mysql, int begin, int end, int sourceType, bool setUsed, int& id, wstring& path, wstring& encoding, wstring& start, int& repeatStart, wstring& etext, wstring& author, wstring& title);
 int getNumSources(MYSQL& mysql, int sourceType, bool left);
 bool anymoreUnprocessedForUnknown(MYSQL& mysql, int sourceType, int step);
+// Controller mode (-mp): keep up to maxProcesses child workers busy until the `sources`
+// table has nothing left to hand out, then wait for the stragglers.
+// The controller itself never parses; it only decides whether more work exists.  How that
+// is decided depends on processKind: kind 1 (book parsing) simply counts down the
+// pre-computed numSourcesLeft and lets each child claim its own rows, kind 0 peeks at the
+// next unprocessed request row (setUsed=false, so it does not claim it), kind 2 asks
+// whether any source still needs the given analysis `step`.
+// beginSource/endSource bound the id range; numSourcesPerProcess is passed to each child
+// as -numSourceLimit; the source*/parse* flags are forwarded verbatim.
+// processSourceType is the sourceType of this (parent) run, and is only used to decide
+// whether to _exit(0) at the end - anything other than REQUEST_TYPE never returns.
+// Returns chdir("..")'s result (0 on success) or -1 if the initial chdir("source") failed.
+// Side effects: changes the working directory to "source" for its whole duration, spawns
+// and reaps processes, sets the console title, allocates handles[].
+// NOTE: errorCode is never assigned inside the loop, so the loop only ends through one of
+// the break paths; the calloc is unchecked; and because of the _exit(0) the free(handles)
+// and the chdir("..") are unreachable in every mode except REQUEST_TYPE.
+// NOTE: maxProcesses is not clamped to MAXIMUM_WAIT_OBJECTS (64); a larger -mp makes
+// WaitForMultipleObjectsEx fail immediately and the run dies with an unrelated message.
 int startProcesses(MYSQL& mysql, int sourceType, int processKind, int step, int beginSource, int endSource, cSource::sourceTypeEnum processSourceType, int maxProcesses, int numSourcesPerProcess,
 	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool makeCopyBeforeSourceWrite, bool parseOnly, wstring specialExtension)
 {
@@ -1081,6 +1355,11 @@ int startProcesses(MYSQL& mysql, int sourceType, int processKind, int step, int 
 }
 
 SRWLOCK rdfTypeMapSRWLock, mySQLTotalTimeSRWLock, totalInternetTimeWaitBandwidthControlSRWLock, mySQLQueryBufferSRWLock, orderedHyperNymsMapSRWLock;
+// Initialize the process-wide reader/writer locks declared extern in general.h, before any
+// worker thread can run.  Called once from initialize().
+// NOTE: orderedHyperNymsMapSRWLock is declared above but not initialized here even though
+// getWordNet.cpp acquires it; it only works because a zero-initialized global happens to
+// match what InitializeSRWLock produces.
 void createLocks(void)
 {
 	LFS
@@ -1090,6 +1369,17 @@ void createLocks(void)
 	InitializeSRWLock(&mySQLQueryBufferSRWLock);
 }
 
+// Make sure the MEMORY-engine mirror `wordRelationsMemory` is populated from the on-disk
+// `wordRelations` table, so that the parser's word-relation lookups stay in RAM.  MySQL
+// empties MEMORY tables on restart, so this runs once per controller / standalone process.
+// Returns 0 if the mirror was already populated or was refilled with exactly as many rows
+// as the disk table has, -1 on any query failure or on a row count mismatch (the single
+// caller in wmain() ignores the result).
+// Side effects: LOCKs both tables, inserts up to the whole word relation corpus, prints
+// progress.
+// NOTE: mysql is taken by value - a copy of the MYSQL connection object - unlike every
+// other function here, which takes MYSQL&.  None of the early -1 returns unlocks the
+// tables, and none of the three result sets is ever freed.
 int WRMemoryCheck(MYSQL mysql)
 {
 	int numRowsOnDisk = 0, numRowsInMemory = 0;
