@@ -40,6 +40,7 @@
 #include "io.h"
 #include "word.h"
 #include "profile.h"
+#include <climits>
 
 // Empty PMA.  content is NULL until the first push_back.
 cPatternMatchArray::cPatternMatchArray()
@@ -68,6 +69,7 @@ void cPatternMatchArray::clear(void)
 		if (allocated) tfree(allocated * sizeof(*content), content);
 	count = 0;
 	allocated = 0;
+	content = NULL;
 }
 
 // Deep copy.  On tmalloc failure logs FATAL and returns with content==NULL but
@@ -116,7 +118,7 @@ bool cPatternMatchArray::write(IOHANDLE file)
 bool cPatternMatchArray::read(char* buffer, int& where, unsigned int limit)
 {
 	LFS
-		if (where + sizeof(count) + count * sizeof(*content) > limit) return false;
+	if (where + sizeof(count) > limit) return false;
 	if (!copy(count, buffer, where, limit)) return false;
 	allocated = count;
 	content = (tPatternMatch*)tmalloc(count * sizeof(*content));
@@ -158,7 +160,8 @@ bool cPatternMatchArray::operator==(const cPatternMatchArray other) const
 cPatternMatchArray& cPatternMatchArray::operator=(const cPatternMatchArray& rhs)
 {
 	LFS
-		if (allocated) tfree(allocated * sizeof(*content), content);
+	if (this == &rhs) return *this;
+	if (allocated) tfree(allocated * sizeof(*content), content);
 	count = rhs.count;
 	allocated = rhs.allocated;
 	content = NULL;
@@ -596,11 +599,11 @@ int cPatternMatchArray::queryQuestionFlagPattern()
 int cPatternMatchArray::getNextPosition(int w)
 {
 	LFS
-		int minPatternMatch = 1 << 31;
+		int minPatternMatch = INT_MIN;
 	for (unsigned int I = 0; I < count; I++)
 		if (content[I].len < minPatternMatch)
 			minPatternMatch = content[I].len;
-	if (minPatternMatch != (1 << 31) && minPatternMatch > w)
+	if (minPatternMatch != (INT_MIN) && minPatternMatch > w)
 		return minPatternMatch;
 	return w + 1;
 }
