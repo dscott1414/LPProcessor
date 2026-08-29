@@ -13,6 +13,10 @@ so every claim below is justified by reading the code. Where a claim could be
 checked mechanically, the logic was extracted into a standalone harness and
 run; those cases are marked **verified by execution** and include the output.
 
+Line numbers were re-derived against `master` after the annotation PR merged
+(that merge also re-encoded some high-bit comment characters and restored a
+block comment in `pattern.h`, which shifted a few lines).
+
 ## How to read this
 
 Each entry carries a verdict and a risk label.
@@ -41,7 +45,7 @@ correctness wins with the least risk.
 soon as [the function] runs", reasoning from MSVC's 1 MB default. That default
 does not apply here. Both project files set an explicit stack:
 
-```1:1:lp.vcxproj
+```313:314:lp.vcxproj
       <StackReserveSize>21097152</StackReserveSize>
       <StackCommitSize>21097152</StackCommitSize>
 ```
@@ -178,7 +182,7 @@ never stored a fourth field.
 
 `reserve` sets capacity, not `size()`, so all four vectors stay `size() == 0`.
 They are then indexed on the hot path — `cPattern::incrementUse`
-(`pattern.h:500`/`502`, called from `PEMA::consolidateWinners`) and
+(`pattern.h:501`/`503`, called from `PEMA::consolidateWinners`) and
 `fillPattern` (`pattern.cpp:829`/`831`) both do `v[index]++`.
 
 I searched every reader and writer of the four vectors. Nothing ever resizes
@@ -219,8 +223,8 @@ Call ordering is already correct: `cPattern::initializeUsage`
 (`pattern.cpp:2297`) is driven from `pattern.cpp:2385`, after `create()` has
 resolved `patternReferences`, so `patternIndexes.size()` is final.
 
-Also update the two comments added by the annotation pass that document the
-old behaviour (`pattern.h:177-180`, `pattern.h:494-496`, `pattern.cpp:46`,
+Also update the comments added by the annotation pass that document the old
+behaviour (`pattern.h:166`, `pattern.h:178`, `pattern.h:497`, `pattern.cpp:46`,
 `pattern.cpp:1680`).
 
 **After this fix `.patternUsage` files change size and layout.** There is no
@@ -353,9 +357,1511 @@ temporal ordering for those documents changes.
 
 ---
 
-## Remaining areas
+## Pattern engine
 
-Verification and patches for the rest of categories 2 and 3 — the pattern
-engine and agreement costing, object and speaker resolution, names and
-temporal/syntactic relations, the infra headers and ontology/HMM, and the
-QA/acquisition paths — are being prepared and will be appended here.
+### 5. `pattern.cpp:1807` `setMandatoryAncestorPatterns` ORs the wrong bitset
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
+
+The already-computed branch of `setAncestorPatterns` ORs into `ancestorPatterns`.
+The mandatory walk copies the same structure but writes the *other* bitset:
+
+```1806:1808:pattern.cpp
+				if (patterns[p]->mandatoryAncestorsSet)
+					ancestorPatterns |= patterns[p]->mandatoryAncestorPatterns;
+				else
+```
+
+The only later test is `mandatoryAncestorPatterns.isSet(p)` (`pattern.cpp:2289`).
+Grandparents of a mandatory parent are therefore never visible, and
+mandatory-ancestor queries silently drop coverage. Init order at
+`pattern.cpp:2366-2369` computes ancestors first, then mandatory, so this is
+not rescued by the other walk.
+
+```
+--- a/pattern.cpp
+ 				if (patterns[p]->mandatoryAncestorsSet)
+-					ancestorPatterns |= patterns[p]->mandatoryAncestorPatterns;
++					mandatoryAncestorPatterns |= patterns[p]->mandatoryAncestorPatterns;
+ 				else
+```
+
+Watch `mandatoryAncestorPatterns` traces after applying. Update the annotation
+at `pattern.cpp:1797-1798` once the source is patched.
+
+### 6. `definePatterns.cpp:2824` `{HAIL|OBJECT}` is one unused tag
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
+
+`processForm` (`pattern.cpp:971-990`) splits `{...}` tags on `:` and `}`. The
+alternative `_HAIL_OBJECT{HAIL|OBJECT}` therefore interns one unused tag
+`"HAIL|OBJECT"` and never attaches `OBJECT`. Siblings in the same call use
+`{HON:HAIL}`. `"HAIL|OBJECT"` has no other in-tree mention.
+
+```
+--- a/definePatterns.cpp
+-		7, L"_NAME{HAIL}", ..., L"_HAIL_OBJECT{HAIL|OBJECT}", ...
++		7, L"_NAME{HAIL}", ..., L"_HAIL_OBJECT{HAIL:OBJECT}", ...
+```
+
+Hail closing patterns (`__CLOSING__S1` alternative 1) start seeing the `OBJECT`
+tag. Watch hail / vocative traces.
+
+### 7. `patternMatchArray.h:152` `queryTag` breaks on the first hit
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing if a caller uses the
+returned slot rather than existence. **Order:** NORMAL.
+
+The loop tracks `maxLen` then `break`s on the first `hasTag` match, so the
+length walk is dead. Most in-tree callers only test `>= 0`
+(`identifyObjects.cpp:157`). `timeRelations.cpp:1104` / `:1839` and
+`getWikipedia.cpp:1333` use the returned PMA slot.
+
+```
+--- a/patternMatchArray.h   (queryTag)
+ 				gElement=PMAElement;
+ 				maxLen=content[PMAElement].len;
+-				break;
+ 			}
+```
+
+If the author intended “first” rather than “longest”, delete `maxLen` instead
+and keep the `break`. The header comment already documents the mismatch.
+
+### 8. `pattern.cpp:945` `processForm` writes through `form.c_str()`
+
+**Verdict:** CONFIRMED. **Risk:** Safe (create-time only; still UB). **Order:** NORMAL.
+
+```944:947:pattern.cpp
+		wchar_t saveEnd = *ch;
+		*((wchar_t*)ch) = 0;
+		specificWord = sword;
+		*((wchar_t*)ch) = saveEnd;
+```
+
+`ch` is `form.c_str()`. C++ does not allow writing through that pointer.
+
+```
+--- a/pattern.cpp
+-		wchar_t saveEnd = *ch;
+-		*((wchar_t*)ch) = 0;
+-		specificWord = sword;
+-		*((wchar_t*)ch) = saveEnd;
++		specificWord.assign(sword, ch - sword);
+```
+
+### 9. `patternMatchArray.cpp:65` `clear()` does not NULL `content`
+
+**Verdict:** CONFIRMED-LATENT. **Risk:** Safe. **Order:** NORMAL.
+
+`tfree` then `allocated = 0`, but `content` is left dangling. The destructor
+and PEMA `clear` both NULL it. The only in-tree caller is
+`cSource::clearSource`, which then overwrites `m`. A later `push_back` would
+`trealloc` the freed pointer.
+
+```
+--- a/patternMatchArray.cpp
+ 	allocated = 0;
++	content = NULL;
+```
+
+### 10. `patternMatchArray.cpp:116` `read()` bounds-checks the stale `count`
+
+**Verdict:** CONFIRMED. **Risk:** Safe. **Order:** NORMAL.
+
+The first check uses the *pre-read* `count` (usually 0) before
+`copy(count, ...)`. A corrupt image therefore passes the guard and is only
+caught by FATAL after the memcpy size is known.
+
+```
+--- a/patternMatchArray.cpp
+-	if (where + sizeof(count) + count * sizeof(*content) > limit) return false;
+-	if (!copy(count, buffer, where, limit)) return false;
+-	allocated = count;
++	unsigned int newCount = 0;
++	int peek = where;
++	if (!copy(newCount, buffer, peek, limit)) return false;
++	if (peek + newCount * sizeof(*content) > limit) return false;
++	where = peek;
++	count = newCount;
++	allocated = count;
+```
+
+(Keep the existing FATAL as a belt-and-braces check after the assign, or drop
+it once the pre-check is real.)
+
+### 11. PMA / PEMA `operator=` self-assignment
+
+**Verdict:** CONFIRMED. **Risk:** Safe (UAF only on `x = x`). **Order:** NORMAL.
+
+Both `patternMatchArray.cpp:158` and `patternElementMatchArray.cpp:207` free
+`content` then copy from `rhs`. `pma = pma` is use-after-free.
+
+```
+--- a/patternMatchArray.cpp   (same in patternElementMatchArray.cpp)
+ cPatternMatchArray& cPatternMatchArray::operator=(const cPatternMatchArray& rhs)
+ {
+ 	LFS
++	if (this == &rhs) return *this;
+ 	if (allocated) tfree(allocated * sizeof(*content), content);
+```
+
+### 12. `patternMatchArray.cpp:599` `1 << 31` signed overflow
+
+**Verdict:** CONFIRMED. **Risk:** Safe on MSVC (the shift is well-known there)
+but undefined in the language. **Order:** NORMAL.
+
+```
+--- a/patternMatchArray.cpp
+-	int minPatternMatch = 1 << 31;
++	int minPatternMatch = INT_MIN;
+```
+
+Use the same sentinel in the comparison at `:603`. Include `<climits>` if the
+TU does not already.
+
+### 13. `patternMatchArray.cpp:414` `queryPattern(int, int& len)` does not init `len`
+
+**Verdict:** CONFIRMED-LATENT. **Risk:** Safe for current callers. **Order:** NORMAL.
+
+The wstring overload starts `maxLen = -1`. The int overload compares against
+the caller’s `len`. No in-tree caller uses this overload (live sites go through
+the wstring form). Still initialize, because leftover `len` would drop matches.
+
+```
+--- a/patternMatchArray.cpp
+ int cPatternMatchArray::queryPattern(int pattern, int& len)
+ {
+ 	LFS
++	len = -1;
+ 	int element = -1;
+```
+
+### 14. `patternMatchArray.cpp:440` `queryTagSet` can index `patternTagStrings[-1]`
+
+**Verdict:** CONFIRMED. **Risk:** Safe if `hasTagInSet` never returns −1 when
+`tagSetMemberInclusion` is set; otherwise UB. **Order:** NORMAL.
+
+`tag` starts at −1. A later equal-length candidate does
+`patternTagStrings[tag] == L"NAME"` before updating `tag`.
+
+```
+--- a/patternMatchArray.cpp
+-			if (content[I].len == maxLen && patternTagStrings[tag] == L"NAME") continue;
++			if (content[I].len == maxLen && tag >= 0 && patternTagStrings[tag] == L"NAME") continue;
+```
+
+### 15. `patternElementMatchArray.cpp:600` `generatePEMACount` off-by-one
+
+**Verdict:** CONFIRMED. **Risk:** Safe (turns a later OOB into FATAL). **Order:** NORMAL.
+
+```
+--- a/patternElementMatchArray.cpp
+-		if (nextPosition > (signed)count)
++		if (nextPosition < 0 || nextPosition >= (signed)count)
+```
+
+(`nextPosition == -1` already ends the loop, so the `< 0` is optional.)
+
+### 16. `patternElementMatchArray.cpp:145` format string missing `count`
+
+**Verdict:** CONFIRMED. **Risk:** Safe (logging UB on a corrupt cache). **Order:** NORMAL.
+
+```
+--- a/patternElementMatchArray.cpp
+-		lplog(LOG_ERROR, L"Illegal count of %d (>1000000) encountered!");
++		lplog(LOG_ERROR, L"Illegal count of %d (>1000000) encountered!", count);
+```
+
+---
+
+## Agreement costing
+
+### 17. `agreement.cpp:1376` `reduceCostIfRestate` takes `relationCost` by value
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
+
+The helper divides `relationCost` by subject length when the subject is a
+restated object (`RE_OBJECT`). The caller at `:1478` then uses the original.
+RE_OBJECT subjects therefore keep the full S/V cost.
+
+```
+--- a/agreement.cpp
+-void cSource::reduceCostIfRestate(bool restateSet, int relationCost, int subjectTag, vector<cTagLocation>& tagSet)
++void cSource::reduceCostIfRestate(bool restateSet, int& relationCost, int subjectTag, vector<cTagLocation>& tagSet)
+```
+
+Update the declaration in `source.h` to match. Watch subject-verb traces for
+restated objects.
+
+### 18. `agreement.cpp:651` `markChildren` skips `allLocations[0]` after reassess
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
+
+On `localReassessParentCosts` the code resets `lc = 0`, then the `for`
+increment does `lc++`, so slot 0 is never re-examined. A child that became a
+winner only after the cost drop can stay rejected.
+
+```
+--- a/agreement.cpp
+-						lc = 0; // for-loop then does lc++, so allLocations[0] is skipped
++						lc = (unsigned)-1; // for-loop increments to 0
+```
+
+A `while` loop that sets `lc = 0` and `continue`s is equivalent and easier to
+read. Watch `tracePatternElimination` for the “WINNER REVERSED” path.
+
+### 19. `agreement.cpp:1114` `substitutePrepObjectSomeOf` skips N_AGREE at index 0
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
+
+The sibling NOUN find uses `>= 0`. N_AGREE uses `> 0`, so a tag at index 0 is
+ignored. “some/any/none/all/most of NP” then fails to pick up the noun’s
+number when N_AGREE is the first tag in the set.
+
+```
+--- a/agreement.cpp
+-								if ((nounTag = findTag(ndTagSets[K], L"NOUN", nextNounTag)) >= 0 && (nAgreeTag = findTagConstrained(ndTagSets[K], L"N_AGREE", nextNAgreeTag, ndTagSets[K][nounTag])) > 0)
++								if ((nounTag = findTag(ndTagSets[K], L"NOUN", nextNounTag)) >= 0 && (nAgreeTag = findTagConstrained(ndTagSets[K], L"N_AGREE", nextNAgreeTag, ndTagSets[K][nounTag])) >= 0)
+```
+
+### 20. `agreement.cpp:2911` last-noun frequency bias is dead
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
+
+```2909:2912:agreement.cpp
+	if (numBeginRelations > 0 && numBeginFrequency > 0 && numLastFrequency / numBeginFrequency > 1)
+		numBeginRelations = (numBeginRelations * numLastFrequency) / numBeginFrequency;
+	else if (numLastRelations > 0 && numLastFrequency > 0 && numBeginFrequency / numLastFrequency < 1)
+		numLastRelations = (numLastRelations * numBeginFrequency) / numLastFrequency;
+```
+
+Both tests are integer division. `a / b < 1` is never true when both are `> 0`
+and the first branch already covers `numLastFrequency / numBeginFrequency > 1`
+(the exact complement). The last-noun frequency bias never runs.
+
+```
+--- a/agreement.cpp
+-	else if (numLastRelations > 0 && numLastFrequency > 0 && numBeginFrequency / numLastFrequency < 1)
++	else if (numLastRelations > 0 && numLastFrequency > 0 && numBeginFrequency < numLastFrequency)
+```
+
+(Equivalently, compare in `double`.) Watch `longSubjectBindingMismatch` for
+subjects whose last noun is more frequent than the first.
+
+### 21. `agreement.cpp:1618` / `:3949` BNC helpers bound-check PEMA, then index `m[]`
+
+**Verdict:** CONFIRMED. **Risk:** Safe. **Order:** NORMAL.
+
+`BNCPatternViolation` and `evaluateBNCPreferences` guard
+`begin+position` / `end+position` against `pema.count`, then walk `m[I]`.
+
+```
+--- a/agreement.cpp   (both sites)
+-		pema[PEMAPosition].begin + position >= (int)pema.count ||
+-		pema[PEMAPosition].end + position >= (int)pema.count)
++		pema[PEMAPosition].begin + position >= (int)m.size() ||
++		pema[PEMAPosition].end + position > (int)m.size())
+```
+
+(`end` is exclusive in the `for`, so `>` not `>=` on the end test.)
+
+### 22. `agreement.cpp:2093` / `:2151` / `:2354` unbound `m[where+1]`
+
+**Verdict:** CONFIRMED. **Risk:** Safe. **Order:** NORMAL.
+
+Sentence-final `her own` / `her best`, `his`/`her` as a prep object, and
+verb-object adverb checks all read `m[n+1]` with no size test.
+
+```
+--- a/agreement.cpp:2093
+-					if (numTagSets==0 && pema[nPEMAPosition].end == 1 && m[nPosition].word->first == L"her" && (m[nPosition + 1].word->first == L"own" || m[nPosition + 1].word->first == L"best"))
++					if (numTagSets==0 && pema[nPEMAPosition].end == 1 && m[nPosition].word->first == L"her" && nPosition + 1 < (int)m.size() && (m[nPosition + 1].word->first == L"own" || m[nPosition + 1].word->first == L"best"))
+
+--- a/agreement.cpp:2150
++					nPosition already: prepObjectPosition + 1 < (int)m.size() &&
+ 					(nfindex = m[prepObjectPosition + 1].word->second.query(nounForm)) >= 0 &&
+
+--- a/agreement.cpp:2354
++		if (whereVerb + 1 < (int)m.size()) before reading m[whereVerb + 1]
+```
+
+The `:2354` block also reads `m[whereVerb + 2]` — require `+ 2 < m.size()`
+there as well.
+
+### 23. `agreement.cpp:2136` `pma.find` can be nullptr; `setSecondaryCosts` dereferences it
+
+**Verdict:** CONFIRMED. **Risk:** Safe. **Order:** NORMAL.
+
+`evaluatePrepObjects` does not test `pm`. `setSecondaryCosts` then calls
+`cascadeUpToAllParents(..., pm, ...)`. The noun-determiner path at `:2103`
+already skips on nullptr.
+
+```
+--- a/agreement.cpp:2164
+ 		if (costs.size())
+ 		{
++			if (!pm) continue;
+ 			lowerPreviousElementCosts(...);
+ 			setSecondaryCosts(secondaryPEMAPositions, pm, position, false, L"prepObjects");
+```
+
+(Or return before the cost loop when `!pm`.)
+
+### 24. `agreement.cpp:1367` `disagreementWithAmbiguousTense` indexes `tagSet[-1]`
+
+**Verdict:** CONFIRMED. **Risk:** Safe. **Order:** NORMAL.
+
+`verbAgreeTag` is checked `>= 0`. `mainVerbTag` is not. The question path via
+`agreeVerbNotFoundOrQuestion` can leave it −1.
+
+```
+--- a/agreement.cpp
+-	if (!agree && ambiguousTense && verbAgreeTag >= 0 && conditionalTag < 0 &&
++	if (!agree && ambiguousTense && verbAgreeTag >= 0 && mainVerbTag >= 0 && conditionalTag < 0 &&
+```
+
+### 25. `agreement.cpp:465` `compareCost` multiplies three `int`s
+
+**Verdict:** CONFIRMED. **Risk:** Safe for typical spans; UB on a long
+document. **Order:** NORMAL.
+
+`AC2 * LEN2 * LEN2 >= AC1 * LEN1 * LEN1` overflows signed 32-bit when a span
+is more than a few thousand tokens.
+
+```
+--- a/agreement.cpp
+-		if (setInternal = (AC2 * LEN2 * LEN2 >= AC1 * LEN1 * LEN1))
++		if (setInternal = ((int64_t)AC2 * LEN2 * LEN2 >= (int64_t)AC1 * LEN1 * LEN1))
+```
+
+### 26. `agreement.cpp:735` `getAllLocations` returns `minCost` as `unsigned int`
+
+**Verdict:** CONFIRMED as a type error; **latent on MSVC**. **Risk:** Safe on
+the target compiler. **Order:** DEFER.
+
+The only caller assigns the result to `int lowestCost` (`:610`). A commented
+check at `:612` acknowledges that PMA costs can be negative. On MSVC two’s
+complement the wrap-and-assign-back recovers the bit pattern, so winners do
+not currently change. Still change the signature (and the declaration in
+`source.h`) to `int` so a different compiler cannot promote a negative cost
+into a huge unsigned comparison.
+
+---
+
+## Objects and speakers
+
+### 27. `resolveObjects.cpp:732` `containingSpeakerGroup` compares the span to the loop index
+
+**Verdict:** CONFIRMED. **Risk:** Needs author decision. **Order:** DEFER
+until the occupation-scan filter is intentionally armed.
+
+```727:735:resolveObjects.cpp
+vector <cSource::cSpeakerGroup>::iterator cSource::containingSpeakerGroup()
+{
+	LFS
+		for (int I = 0; I < (signed)speakerGroups.size(); I++)
+			if (speakerGroups[I].sgBegin >= I && speakerGroups[I].sgEnd < I)
+				return speakerGroups.begin() + I;
+	return speakerGroups.end();
+}
+```
+
+Two independent defects:
+
+1. `I` is the group index, not a source position. `sgBegin`/`sgEnd` are
+   source positions, so the body never succeeds and this always returns
+   `end()`. The declaration in `source.h:3072` takes no `where`.
+2. Even if `I` were a position, `sgBegin >= I && sgEnd < I` is an empty
+   interval whenever `begin < end`. The intended test is
+   `sgBegin <= where && where < sgEnd`.
+
+The only caller is the occupation-scan filter in
+`resolveOccRoleActivityObject` (`:884`) plus the log at `:892`. **Fixing this
+arms a filter that has never run.** Distant “the doctor” / “the nurse”
+matches that currently succeed would start being rejected when the two
+speaker groups do not share a speaker.
+
+Recommended shape, only after the author confirms the filter should exist:
+
+```
+vector <cSpeakerGroup>::iterator cSource::containingSpeakerGroup(int where)
+{
+	LFS
+		for (int I = 0; I < (signed)speakerGroups.size(); I++)
+			if (speakerGroups[I].sgBegin <= where && where < speakerGroups[I].sgEnd)
+				return speakerGroups.begin() + I;
+	return speakerGroups.end();
+}
+```
+
+Pass `where` (and, at the log site, `oi->originalLocation` or `where` —
+decide which position the overlap is supposed to test) from both call sites.
+Update `source.h:3072`.
+
+### 28. `identifySpeakerGroups.cpp:2934` `sameSpeaker` one-sided tests are inverted
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
+
+```2931:2934:identifySpeakerGroups.cpp
+	if (m[sWhere1].objectMatches.empty())
+		return in(m[sWhere1].getObject(), m[sWhere2].objectMatches) == m[sWhere2].objectMatches.end();
+	if (m[sWhere2].objectMatches.empty())
+		return in(m[sWhere2].getObject(), m[sWhere1].objectMatches) == m[sWhere1].objectMatches.end();
+```
+
+Both-empty and both-nonempty treat overlap as “same”. The one-sided arms
+return true when the object is *not* in the other list. Used by
+`embeddedStory` to decide whether a continuation quote belongs to the same
+teller.
+
+```
+--- a/identifySpeakerGroups.cpp
+-		return in(m[sWhere1].getObject(), m[sWhere2].objectMatches) == m[sWhere2].objectMatches.end();
++		return in(m[sWhere1].getObject(), m[sWhere2].objectMatches) != m[sWhere2].objectMatches.end();
+-		return in(m[sWhere2].getObject(), m[sWhere1].objectMatches) == m[sWhere1].objectMatches.end();
++		return in(m[sWhere2].getObject(), m[sWhere1].objectMatches) != m[sWhere1].objectMatches.end();
+```
+
+Watch embedded-story continuation (a 1st/2nd-person story told across several
+quotes). Quotes that were previously treated as the same speaker when they
+were *not* will now split; quotes that were split when they *were* the same
+will now continue.
+
+### 29. `timeRelations.cpp:2832` `speakerGroupTransition` walks `I++` instead of `I--`
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
+
+```2832:2834:timeRelations.cpp
+		for (int I = sg - 1; I >= 0 && lastSG < 0; I++)
+			if (speakerGroups[I].speakers.find(*si) != speakerGroups[I].speakers.end())
+				lastSG = I;
+```
+
+The loop is supposed to walk *prior* groups. `I++` steps into the current
+group (`I == sg`) on the second iteration. `*si` is taken from
+`speakerGroups[sg].speakers`, so that lookup always succeeds, `lastSG`
+becomes `sg`, and `allNew` is **never** true. The “entirely new cast”
+transition can fire only via `allNotPhysicallyPresent`.
+
+```
+--- a/timeRelations.cpp
+-		for (int I = sg - 1; I >= 0 && lastSG < 0; I++)
++		for (int I = sg - 1; I >= 0 && lastSG < 0; I--)
+```
+
+Watch `SGT` / `tlTransition` logs. Groups that are actually a new cast of
+characters will start being marked as time/location transitions.
+
+### 30. `timeRelations.cpp:1181` `twsCapacity` inserts `morrow` and drops `NamedHoliday`
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
+
+`eCapacity` (`timeRelations.h:39-46`) is:
+
+```
+cTonight, cToday, cTomorrow, cYesterday,
+cNamedMonth, cNamedDay, cNamedSeason, cNamedHoliday,
+cUnspecified
+```
+
+`twsCapacity` inserts `morrow` after `tomorrow` and never lists
+`NamedHoliday`. `whichCapacity` returns the table index and callers cast it
+to `eCapacity`. Current mapping:
+
+| word          | index | enum it hits      |
+| ---           | ---   | ---               |
+| tomorrow      | 24    | cTomorrow (ok)    |
+| morrow        | 25    | cYesterday        |
+| yesterday     | 26    | cNamedMonth       |
+| NamedMonth    | 27    | cNamedDay         |
+| NamedDay      | 28    | cNamedSeason      |
+| NamedSeason   | 29    | cNamedHoliday     |
+| unspecified   | 30    | cUnspecified (ok) |
+
+`capacityString` prints the same shifted names. “yesterday” is therefore
+stored and logged as a named month.
+
+Do **not** add `cMorrow` to the enum — `morrow` is a synonym for tomorrow
+(the pattern at `timeRelations.cpp:261` already tags `noun|morrow` as
+`TIMECAPACITY`). Keep the enum, make the table index-parallel, and alias
+`morrow` in the lookup:
+
+```
+--- a/timeRelations.cpp
+-	 L"tonight",L"today",L"tomorrow",L"morrow",L"yesterday",
+-	 L"NamedMonth",L"NamedDay",L"NamedSeason",
++	 L"tonight",L"today",L"tomorrow",L"yesterday",
++	 L"NamedMonth",L"NamedDay",L"NamedSeason",L"NamedHoliday",
+ 	 L"unspecified",NULL };
+
+ int whichCapacity(wstring w)
+ {
+ 	LFS
++		if (w == L"morrow") return cTomorrow;
+ 		for (int I = 0; twsCapacity[I]; I++)
+```
+
+This is the same shape as the `months_abb_index` fix above: lexicon
+unchanged, mapping corrected. Watch any log that prints `timeCapacity` for
+texts using “yesterday” or “morrow”.
+
+### 31. `names.cpp:1784` “twentieth” maps to 0
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
+
+```1784:1784:names.cpp
+	{ L"twentieth", 0 }, // copy-paste: should be 20
+```
+
+`mapNumeralOrdinal` returns that value for age / date ordinals. “twentieth”
+is treated as zeroth.
+
+```
+--- a/names.cpp
+-	{ L"twentieth", 0 },
++	{ L"twentieth", 20 },
+```
+
+### 32. `names.cpp:471` `cName::notNull()` is inverted — do not flip it
+
+**Verdict:** CONFIRMED as a name/implementation mismatch. **Risk:** Needs
+author decision. **Order:** DEFER (rename, do not invert).
+
+`notNull()` returns true when **every** part is `wNULL` — i.e. it implements
+`isCompletelyNull` (and is slightly stricter than the existing
+`isCompletelyNull()` in `resolveObjects.cpp:687`, which ignores `hon2` /
+`hon3` / `middle` / `middle2` / `suffix`). The only caller is
+`resolveSpeakers.cpp:185`:
+
+```
+if (object->objectClass==NAME_OBJECT_CLASS && !object->name.notNull() && (object->end-object->begin)>1)
+    object->name.print(...)
+```
+
+`!notNull()` currently means “has some name part”, which is what the print
+path wants. Flipping the body without flipping the caller would print
+multi-word *empty* names and skip real ones.
+
+Recommended: delete `notNull()` and use `!isCompletelyNull()` (or
+`!isNull()` if honorifics-only names should also take the `print` path) at
+the one call site. Do not invert the body in place.
+
+### 33. `resolveFirstSecondPersonPronouns.cpp:196` erase-then-read
+
+**Verdict:** CONFIRMED. **Risk:** Safe (the `break` limits the damage to one
+invalid iterator deref). **Order:** NORMAL.
+
+```195:200:resolveFirstSecondPersonPronouns.cpp
+				m[where].objectMatches.erase(oi);
+				objectClass = PRONOUN_OBJECT_CLASS;
+				inflectionFlags = m[objects[oi->object].originalLocation].word->second.inflectionFlags;
+				m[where].flags &= ~cWordMatch::flagObjectResolved;
+				break;
+```
+
+Save `oi->object` before the erase.
+
+```
+--- a/resolveFirstSecondPersonPronouns.cpp
++				int erased = oi->object;
+ 				m[where].objectMatches.erase(oi);
+ 				objectClass = PRONOUN_OBJECT_CLASS;
+-				inflectionFlags = m[objects[oi->object].originalLocation].word->second.inflectionFlags;
++				inflectionFlags = m[objects[erased].originalLocation].word->second.inflectionFlags;
+```
+
+### 34. `resolveSpeakers.cpp:286` `oStr[0]=0` on an empty `wstring`
+
+**Verdict:** CONFIRMED. **Risk:** Safe. **Order:** NORMAL.
+
+`wstring oStr;` then `oStr[0]=0` is `operator[]` on `size()==0`.
+
+```
+--- a/resolveSpeakers.cpp
+ 	wstring oStr;
+-	oStr[0]=0;
+ 	if (notFirst)
+```
+
+### 35. `identifySpeakerGroups.cpp:1617` `isFocus` indexes `m[I]` before the bound
+
+**Verdict:** CONFIRMED. **Risk:** Safe. **Order:** NORMAL.
+
+```
+for (I = where + 1; (m[I].beginObjectPosition < 0 || (m[I].flags & cWordMatch::flagAdjectivalObject)) && I < (signed)m.size(); I++);
+```
+
+When `I == m.size()` the `m[I]` conjunct is evaluated first.
+
+```
+--- a/identifySpeakerGroups.cpp
+-			for (I = where + 1; (m[I].beginObjectPosition < 0 || (m[I].flags & cWordMatch::flagAdjectivalObject)) && I < (signed)m.size(); I++);
++			for (I = where + 1; I < (signed)m.size() && (m[I].beginObjectPosition < 0 || (m[I].flags & cWordMatch::flagAdjectivalObject)); I++);
+```
+
+### 36. `identifySpeakerGroups.cpp:938` hail-delete log dereferences `localObjects.end()`
+
+**Verdict:** CONFIRMED. **Risk:** Safe (log-only; the delete still happens).
+**Order:** NORMAL.
+
+`lsi = in(*s)` can be `end()`. The delete condition can still be true via the
+other `||` arms (`justHonorific`, `numEncountersInSection==0`, …). The log
+then reads `lsi->lastWhere`.
+
+```
+--- a/identifySpeakerGroups.cpp
+ 			if (debugTrace.traceSpeakerResolution)
+-				lplog(LOG_SG, L"... [LW=%d,PW=%d,%s,...]", ...,
+-					lsi->lastWhere, lsi->previousWhere, (lsi->physicallyPresent) ? L"PP" : L"not PP", ...);
++				lplog(LOG_SG, L"... [LW=%d,PW=%d,%s,...]", ...,
++					(lsi != localObjects.end()) ? lsi->lastWhere : -1,
++					(lsi != localObjects.end()) ? lsi->previousWhere : -1,
++					(lsi != localObjects.end() && lsi->physicallyPresent) ? L"PP" : L"not PP", ...);
+```
+
+### 37. `identifySpeakerGroups.cpp:1289` `&speakerGroups[-1]` when empty
+
+**Verdict:** CONFIRMED. **Risk:** Safe (empty-group path). **Order:** NORMAL.
+
+```1289:1289:identifySpeakerGroups.cpp
+	determinePreviousSubgroup(end, speakerGroups.size() - 1, &speakerGroups[speakerGroups.size() - 1]);
+```
+
+When `speakerGroups` is empty this is `size_t(-1)` and `&speakerGroups[-1]`.
+The function already computes `lastSG = end()` in that case but does not use
+it here.
+
+```
+--- a/identifySpeakerGroups.cpp
+-	determinePreviousSubgroup(end, speakerGroups.size() - 1, &speakerGroups[speakerGroups.size() - 1]);
++	if (!speakerGroups.empty())
++		determinePreviousSubgroup(end, (int)speakerGroups.size() - 1, &speakerGroups.back());
+```
+
+Confirm `determinePreviousSubgroup` is optional on the first group (it should
+be — there is no previous subgroup).
+
+### 38. `identifySpeakerGroups.cpp:66` unbounded `copy(cOM&)`
+
+**Verdict:** CONFIRMED. **Risk:** Safe (corrupt SourceCache). **Order:** NORMAL.
+
+The counted `vector<cOM>` deserializer checks `limit` for the count, then
+each element goes through the no-limit `copy(cOM&)`.
+
+```
+--- a/identifySpeakerGroups.cpp
+ bool copy(cOM& num, char* buf, int& where)
++bool copy(cOM& num, char* buf, int& where, int limit)
+ {
+ 	DLFS
++		if (where + (int)sizeof(cOM) > limit) return false;
+ 		num = *((cOM*)(buf + where));
+```
+
+Update the vector overload and every other `copy(cOM&)` caller to pass
+`limit`. The write-then-check serialize overload in the same file has the
+same “check after write” shape as `utilities.cpp copy()` (already in
+`CODE_REVIEW.md`); fix that the same way as the scalar `copy()` overloads
+when those are applied.
+
+### 39. `resolveObjects.cpp:846` `preferWordOrder` erase without a size guard
+
+**Verdict:** CONFIRMED. **Risk:** Safe if `preferWordOrder` never returns 0
+on a 1-element list; otherwise UB. **Order:** NORMAL.
+
+`tmp == 0` does `objectMatches.erase(objectMatches.begin() + 1)` with no
+`size() >= 2` check. `adjustForWordOrderSensitiveModifier` does guard.
+
+```
+--- a/resolveObjects.cpp
+ 		if (tmp == 0)
++		{
++			if (objectMatches.size() < 2) return chooseFromLocalFocus;
+ 			objectMatches.erase(objectMatches.begin() + 1);
++		}
+ 		else if (tmp == 1)
++		{
++			if (objectMatches.empty()) return chooseFromLocalFocus;
+ 			objectMatches.erase(objectMatches.begin());
++		}
+```
+
+### 40. `resolveObjects.cpp:1600` `speakerGroups[currentSpeakerGroup + 1]` unchecked
+
+**Verdict:** CONFIRMED. **Risk:** Safe (OOB when the current group is last).
+**Order:** NORMAL.
+
+```
+--- a/resolveObjects.cpp
++	if (currentSpeakerGroup + 1 >= (int)speakerGroups.size()) return false;
+ 	set <int> speakers = speakerGroups[currentSpeakerGroup + 1].speakers;
+```
+
+### 41. `identifySpeakerGroups.cpp:960` empty-group early-out returns `false` (Narrator)
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing if the first document
+ever hits this path. **Order:** NORMAL.
+
+`detectUnresolvableObjectsResolvableThroughSpeakerGroup` is `int` and uses
+`-1` as the no-match sentinel. `return false` is `0`, i.e. object 0
+(Narrator).
+
+```
+--- a/identifySpeakerGroups.cpp
+-		if (speakerGroups.empty()) return false;
++		if (speakerGroups.empty()) return -1;
+```
+
+### 42. `identifySpeakerGroups.cpp:2262` `intString` OOB on an empty POV range
+
+**Verdict:** CONFIRMED. **Risk:** Safe (log-only). **Order:** NORMAL.
+
+When `startPOVI >= povi` the loop writes nothing, then
+`itos(povInSpeakerGroups[startPOVI], ...)` reads off the end of the vector.
+
+```
+--- a/identifySpeakerGroups.cpp
+ 	if (tmpstr.empty())
+-		tmpstr = itos(povInSpeakerGroups[startPOVI], tmp);
++		return L"";
+```
+
+### 43. `identifySpeakerGroups.cpp:3308` `block && flags & 1` precedence
+
+**Verdict:** CONFIRMED as a precedence bug. **Risk:** Needs author decision.
+**Order:** DEFER.
+
+`block && m[I].flags & 1` parses as `(block && m[I].flags) & 1`. `&&` yields
+`bool`, so this is `block && flags != 0` — unblock whenever *any* flag is
+set. Bit 0 is `flagFirstEmbeddedStory` (quotes) / `flagIgnoreAsSpeaker`
+(non-quotes). Almost every token has some flag, so
+`blockSpeakerGroupCreation` is nearly a no-op.
+
+Minimal patch matching the written `& 1`:
+
+```
+-	if (block && m[I].flags & 1)
++	if (block && (m[I].flags & 1))
+```
+
+Ask whether the intended bit is `flagIgnoreAsSpeaker` or
+`flagFirstEmbeddedStory` and write that named flag instead of `1`.
+
+### 44. `resolveSpeakers.cpp:5289` `_VERBPAST` audience scan compares a position to a length
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
+
+The `_VERBREL1` branch converts `end` to an absolute position. The
+`_VERBPAST` branch leaves `end` as a pattern *length*, then:
+
+```
+speakerObjectPosition = end + where + 1;
+for (...; audienceObjectPosition < end; ...)
+```
+
+`audienceObjectPosition` starts at `speakerObjectPosition + 1` which is
+already `> end` for any realistic length, so the “said X to Y” scan never
+iterates.
+
+```
+--- a/resolveSpeakers.cpp   (inside the _VERBPAST branch, after speakerObjectPosition is set)
++    int audienceLimit = end + where + 1;
++    if (extendedSayVerb) audienceLimit++;
+     for (audienceObjectPosition=speakerObjectPosition+1,im++; audienceObjectPosition<audienceLimit; im++,audienceObjectPosition++)
+     {
+-        if (im->word->first==L"to" && audienceObjectPosition+1<end && ...
++        if (im->word->first==L"to" && audienceObjectPosition+1<audienceLimit && ...
+```
+
+Mirror the `_VERBREL1` conversion (`end += where + 1`) if that branch is the
+intended template. Watch “said X to Y” after a simple past-tense verb.
+
+### 45. `resolveObjects.cpp:389` plural non-gendered loop tests `localObjects[0]`
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
+
+```
+for (unsigned int s = 0; s < localObjects.size(); s++)
+{
+    if (localObjects[0].om.object <= 1) continue;
+```
+
+Intended: skip narrator/audience at slot `s`. As written, if `[0]` is
+narrator the whole loop is a no-op; if not, narrator/audience later in the
+list are never skipped.
+
+```
+--- a/resolveObjects.cpp
+-		if (localObjects[0].om.object <= 1) continue;
++		if (localObjects[s].om.object <= 1) continue;
+```
+
+Watch plural non-gendered resolution (“the pictures” → a prior same-head
+plural).
+
+### 46. `resolveObjects.cpp:517` Num/address matcher returns after the first local object
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
+
+The `om.object > 1` candidate loop `return true`s inside the first matching
+`localObjects` slot, so later slots never contribute. Move `return true` to
+after the `localObjects` loop (it already logs when `objectMatches.size()`).
+
+### 47. `identifyObjects.cpp:1536` `getPrincipalWhereAndEndAndNameInfo` args swapped
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
+
+Declaration / definition take `(..., bool& plural, bool& embeddedName, ...)`.
+The call passes `(..., embeddedName, plural, ...)`. Plurality is written into
+`embeddedName` and an embedded-name detection is written into `plural`. That
+feeds `identifyName` and the ALL-CAPS title walk.
+
+```
+--- a/identifyObjects.cpp
+-		getPrincipalWhereAndEndAndNameInfo(tagName, where, element, principalWhere, embeddedName, plural, end, nameElement);
++		getPrincipalWhereAndEndAndNameInfo(tagName, where, element, principalWhere, plural, embeddedName, end, nameElement);
+```
+
+Watch NAME / NOUN object classification, especially ALL-CAPS titles and
+embedded names inside a larger noun.
+
+### 48. `identifyObjects.cpp:240` `isPleonastic` MEANS branch is off-by-one
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
+
+The sibling “makes/finds it MA” test uses `m[where + 1]` / `m[where - 1]`, so
+`where` is the pleonastic “it”. The MEANS comment says “It MEANS (that) S”
+but the verb is read at `where + 2`. “it seems that S” therefore never
+matches.
+
+```
+--- a/identifyObjects.cpp
+-	for (I = 0; MEANS[I] && m[where + 2].word->first != MEANS[I]; I++);
+-	if (MEANS[I] && (m[where + 3].pma.queryPattern(L"__S1") != -1 || m[where + 3].pma.queryPattern(L"_REL1") != -1)) return true;
++	for (I = 0; MEANS[I] && m[where + 1].word->first != MEANS[I]; I++);
++	if (MEANS[I] && where + 2 < (int)m.size() &&
++		(m[where + 2].pma.queryPattern(L"__S1") != -1 || m[where + 2].pma.queryPattern(L"_REL1") != -1 ||
++		 (m[where + 2].word->first == L"that" && where + 3 < (int)m.size() &&
++		  (m[where + 3].pma.queryPattern(L"__S1") != -1 || m[where + 3].pma.queryPattern(L"_REL1") != -1))))
++		return true;
+```
+
+The optional-`that` arm is an author decision; the `where + 1` verb lookup is
+not.
+
+### 49. `identifyObjects.cpp:1261` missing parens around `|| flagNounOwner`
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
+
+```
+if (identifyObject(...) >= 0 && m[I].getObject() >= 0 &&
+    (m[I].word->second.inflectionFlags & (PLURAL_OWNER | SINGULAR_OWNER)) || (m[I].flags & cWordMatch::flagNounOwner))
+    ownerWhere = I;
+```
+
+This is `(A && B && C) || D`. A `flagNounOwner` word sets `ownerWhere` even
+when `identifyObject` failed or `getObject() < 0`.
+
+```
+--- a/identifyObjects.cpp
+-				(m[I].word->second.inflectionFlags & (PLURAL_OWNER | SINGULAR_OWNER)) || (m[I].flags & cWordMatch::flagNounOwner))
++				((m[I].word->second.inflectionFlags & (PLURAL_OWNER | SINGULAR_OWNER)) || (m[I].flags & cWordMatch::flagNounOwner)))
+```
+
+### 50. `identifyObjects.cpp:267` `searchExactMatch` tests the new object’s `eliminated`
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
+
+```
+if (!object.eliminated && object.equals(objects[*s], m))
+```
+
+`object` is the newly built candidate (never eliminated). The test should
+skip *already-merged* hits in `relatedObjects`.
+
+```
+--- a/identifyObjects.cpp
+-		if (!object.eliminated && object.equals(objects[*s], m))
++		if (!objects[*s].eliminated && object.equals(objects[*s], m))
+```
+
+### 51. `names.cpp:555` `merge()` never replaces a single-letter name part
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
+
+```
+if (w2 != wNULL && (w1 == wNULL || (w1->first[1] && w2->first[1]))) w1 = w2;
+```
+
+`first[1]` is the second character (0 when `length()==1`). A letter (`"J"`)
+is therefore never replaced by a full first name. The function comment says
+the opposite of what the code does (“merge … if we only have a letter and n
+has more”).
+
+```
+--- a/names.cpp
+-		if (w2 != wNULL && (w1 == wNULL || (w1->first[1] && w2->first[1]))) w1 = w2;
++		if (w2 != wNULL && (w1 == wNULL || ((w1->first.size() <= 1) && w2->first.size() > 1) || (w1->first.size() > 1 && w2->first.size() > 1)))
++			w1 = w2;
+```
+
+Ask whether a longer `w1` should ever be overwritten by a longer `w2` (the
+current `w1->first[1] && w2->first[1]` branch). If the only intended upgrade
+is letter → word, drop the last `||`.
+
+---
+
+## Syntactic and semantic relations
+
+### 52. `syntacticRelations.cpp:615` `checkAmbiguousVerbTense` `&&`/`||` mix
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
+
+```
+if ((sense == VT_PRESENT || sense == VT_PAST) &&
+    (masterVerbWord != wNULL && ambiguous(master)) ||
+    (masterVerbWord == wNULL && ambiguous(m[whereVerb])))
+```
+
+This is `(A && B) || C`. When `masterVerbWord` is NULL and the token is
+beat/put-ambiguous, the body runs even if `sense` is future or perfect, and
+can rewrite it from `lastSense`.
+
+```
+--- a/syntacticRelations.cpp
+-		if ((sense == VT_PRESENT || sense == VT_PAST) &&
+-			(masterVerbWord != wNULL && (masterVerbWord->second.inflectionFlags & (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) == (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) ||
+-			(masterVerbWord == wNULL && (m[whereVerb].word->second.inflectionFlags & (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) == (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)))
++		if ((sense == VT_PRESENT || sense == VT_PAST) &&
++			((masterVerbWord != wNULL && (masterVerbWord->second.inflectionFlags & (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) == (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) ||
++			 (masterVerbWord == wNULL && (m[whereVerb].word->second.inflectionFlags & (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) == (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST))))
+```
+
+Watch tense histograms / `lastSense` for beat/put with a NULL master verb.
+
+### 53. `syntacticRelations.cpp:1607` `evaluateSubjects` forward scan not gated on empty
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
+
+```
+if (whereSubjects.empty() &&
+    (queryPattern(_INTRO_S1) && ... m[where+maxLen] ...) ||
+    (inQuestion && queryPattern(__INTRO_S1) && m[where+maxLen].word==L"did" && m[where+maxLen+1].getObject()>=0))
+```
+
+`(empty && A) || B` — the “did he?” scan (`B`) runs even when a subject was
+already found. `m[where+maxLen]` / `+1` are also unbound.
+
+```
+--- a/syntacticRelations.cpp
+-		if (whereSubjects.empty() &&
+-			(m[where].pma.queryPattern(L"_INTRO_S1", maxLen) != -1 && pema.queryTag(m[where + maxLen].beginPEMAPosition, SUBJECT_TAG) != -1 && !(m[where].flags & cWordMatch::flagInQuestion)) ||
+-			((m[where].flags & cWordMatch::flagInQuestion) && m[where].pma.queryPattern(L"__INTRO_S1", maxLen) != -1 && m[where + maxLen].word->first == L"did" && m[where + maxLen + 1].getObject() >= 0))
++		if (whereSubjects.empty() &&
++			((m[where].pma.queryPattern(L"_INTRO_S1", maxLen) != -1 && where + maxLen < (int)m.size() && pema.queryTag(m[where + maxLen].beginPEMAPosition, SUBJECT_TAG) != -1 && !(m[where].flags & cWordMatch::flagInQuestion)) ||
++			 ((m[where].flags & cWordMatch::flagInQuestion) && m[where].pma.queryPattern(L"__INTRO_S1", maxLen) != -1 && where + maxLen + 1 < (int)m.size() && m[where + maxLen].word->first == L"did" && m[where + maxLen + 1].getObject() >= 0)))
+```
+
+Watch “Brought a telephone message … did he?” vs verbs that already have a
+backward subject.
+
+### 54. `syntacticRelations.cpp:3325` `testSyntacticRelations` reads `m[end]` when `end == m.size()`
+
+**Verdict:** CONFIRMED. **Risk:** Safe (debug helper; still UB). **Order:** NORMAL.
+
+```
+unsigned int end = (s + 1 == sentenceStarts.size()) ? m.size() : sentenceStarts[s + 1];
+...
+if (m[end].word == primaryQuoteCloseWord || m[end].word == secondaryQuoteCloseWord)
+    end++;
+```
+
+```
+--- a/syntacticRelations.cpp
+-		if (m[end].word == primaryQuoteCloseWord || m[end].word == secondaryQuoteCloseWord)
++		if (end < m.size() && (m[end].word == primaryQuoteCloseWord || m[end].word == secondaryQuoteCloseWord))
+```
+
+### 55. `syntacticRelationGroups.cpp:701` cache ctor wipes `skip` / `changeStateAdverb`
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (source-cache
+round-trip). **Cache format:** no change — `write()` already packs the bits
+via `convertFlags`; the reader unpacks them and then overwrites. **Order:** NORMAL.
+
+```
+--- a/syntacticRelationGroups.cpp   (cache ctor, after convertToFlags)
+-	skip = false;
+-	changeStateAdverb = false;
+```
+
+Leave the other resets (`nonSemantic*`, `transformedPrep`, …) — those are
+not persisted. After this, old caches start honoring skip / change-state
+adverb. Watch adverb attachment and skipped SRGs on a re-read source.
+
+### 56. `syntacticRelationGroups.cpp:380` `getWSAdverb` has no time-flag filter
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
+
+`getMSAdverb` (`:360-365`) accepts a pre-verbal time word only when it is
+`T_START` / `T_STOP` / `T_FINISH` / `T_RESUME`. `getWSAdverb`’s
+`changeStateAdverb` arm returns `m[whereVerb-1]` unconditionally (and only
+when that token is *not* already an adverb, so it is some other word).
+
+```
+--- a/syntacticRelationGroups.cpp
+ 	if (whereVerb > 0 && changeStateAdverb)
+-		return m[whereVerb - 1].word->first.c_str();
++	{
++		int timeFlag = (m[whereVerb - 1].word->second.timeFlags & 31);
++		if (timeFlag == T_START || timeFlag == T_STOP || timeFlag == T_FINISH || timeFlag == T_RESUME)
++			return m[whereVerb - 1].word->first.c_str();
++	}
+```
+
+### 57. `syntacticRelations.cpp:1476` `findPrepRole` does not honor its −1 contract
+
+**Verdict:** CONFIRMED-LATENT. **Risk:** Safe. **Order:** NORMAL.
+
+The comment says return −1 when `whereLastPrep == -1`. The body does
+`m[whereLastPrep].relPrep` first. Live callers pass `whereVerb` (always a
+valid index). Still add the guard so the contract is real.
+
+```
+--- a/syntacticRelations.cpp
+ int cSource::findPrepRole(int whereLastPrep, int role, int rejectRole)
+ {
+ 	LFS
++		if (whereLastPrep < 0) return -1;
+```
+
+### 58. `semanticRelations.cpp:1452` `getAfterVerb` indexes `m[afterVerb]` before the size check
+
+**Verdict:** CONFIRMED. **Risk:** Safe. **Order:** NORMAL.
+
+```
+while (m[afterVerb].queryWinnerForm(adverbForm) >= 0 && ... && afterVerb + 1 < (signed)m.size() && !adverbialPlace(afterVerb)) afterVerb++;
+```
+
+and `:1456` reads `m[whereVerb + 1]` before `whereVerb + 1 < m.size()`.
+
+```
+--- a/semanticRelations.cpp
+-	while (m[afterVerb].queryWinnerForm(adverbForm) >= 0 && m[afterVerb].queryWinnerForm(prepositionForm) < 0 && afterVerb + 1 < (signed)m.size() && !adverbialPlace(afterVerb)) afterVerb++;
++	while (afterVerb < (signed)m.size() && m[afterVerb].queryWinnerForm(adverbForm) >= 0 && m[afterVerb].queryWinnerForm(prepositionForm) < 0 && afterVerb + 1 < (signed)m.size() && !adverbialPlace(afterVerb)) afterVerb++;
+```
+
+Swap the conjuncts at `:1456` the same way (`size` check first).
+
+### 59. `semanticRelations.cpp:1672` `detectPlaceTransition` `&&`/`||` mix
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
+
+```
+if ((id != escape || ... object-ok ...) &&
+    ((wherePrepObject < 0 || whereObject >= 0) && woPhysicalObject) ||
+    (wherePrepObject >= 0 && (wpoPhysicalObject || (wpoTimeUnit && id != escape))))
+```
+
+`(A && B) || C` — a physical/time prep-object (`C`) accepts the transition
+even when the verb-id / object-side test (`A`) failed. The comment says
+“if it has a prepobject, that object must be physical or a time” *in
+addition to* the object-side constraint.
+
+```
+--- a/semanticRelations.cpp
+-		if ((id != L"escape-51.1-5" || whereObject < 0 || (m[whereObject].word->second.timeFlags & T_UNIT) != 0 || proLocation || m[whereObject].relNextObject >= 0) &&
+-			((wherePrepObject < 0 || whereObject >= 0) && woPhysicalObject) ||
+-			(wherePrepObject >= 0 && (wpoPhysicalObject || (wpoTimeUnit && id != L"escape-51.1-5"))))
++		if ((id != L"escape-51.1-5" || whereObject < 0 || (m[whereObject].word->second.timeFlags & T_UNIT) != 0 || proLocation || m[whereObject].relNextObject >= 0) &&
++			(((wherePrepObject < 0 || whereObject >= 0) && woPhysicalObject) ||
++			 (wherePrepObject >= 0 && (wpoPhysicalObject || (wpoTimeUnit && id != L"escape-51.1-5")))))
+```
+
+Watch PLACE / MOVE / EXIT traces.
+
+### 60. `conversationContext.cpp:85` identical `||` arms
+
+**Verdict:** CONFIRMED as copy-paste. **Risk:** Needs author decision.
+**Order:** DEFER.
+
+```
+if (previousQuote >= 0 &&
+    (!(intersect(curr.speakers, prev.speakers) || intersect(curr.audience, prev.speakers)) ||
+     !(intersect(curr.speakers, prev.speakers) || intersect(curr.audience, prev.speakers))))
+```
+
+The two inner expressions are the same, so this is just
+`!(speakers∩prev.speakers || audience∩prev.speakers)`. Previous-quote
+*audience* is never consulted. The comment says “share at least two people”.
+
+Likely intended second arm (symmetric in previous audience):
+
+```
+!(intersect(m[I].objectMatches, m[previousQuote].audienceObjectMatches, allIn, oneIn) ||
+  intersect(m[I].audienceObjectMatches, m[previousQuote].audienceObjectMatches, allIn, oneIn))
+```
+
+Do not apply until the author confirms the “two people” rule. Current
+behaviour: a conversation continues if the new quote shares a speaker with
+the previous *speakers* list, ignoring who was being addressed.
+
+### 61. `word.h:153` `ADJECTIVE_INFLECTIONS_MASK` contains `ADVERB_SUPERLATIVE`
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
+
+```
+#define ADJECTIVE_INFLECTIONS_MASK (ADJECTIVE_NORMATIVE|ADJECTIVE_COMPARATIVE|ADVERB_SUPERLATIVE)
+```
+
+`ADJECTIVE_SUPERLATIVE` is 32768; `ADVERB_SUPERLATIVE` is 262144
+(`general.h:67-68`). Superlative adjectives (“biggest”) are invisible to
+every `ADJECTIVE_INFLECTIONS_MASK` test; superlative adverbs spuriously
+match.
+
+```
+--- a/word.h
+-#define ADJECTIVE_INFLECTIONS_MASK (ADJECTIVE_NORMATIVE|ADJECTIVE_COMPARATIVE|ADVERB_SUPERLATIVE)
++#define ADJECTIVE_INFLECTIONS_MASK (ADJECTIVE_NORMATIVE|ADJECTIVE_COMPARATIVE|ADJECTIVE_SUPERLATIVE)
+```
+
+Watch adjective form costing / `getInflectionName` for “best” / “biggest”.
+`ADVERB_INFLECTIONS_MASK` is already correct.
+
+---
+
+## Time leftovers
+
+### 62. `timeRelations.h:324` `cTimeInfo::clear()` leaves deictic / named-day fields
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (cache and reuse).
+**Cache format:** `write()` already serializes `absNamed*` / `absToday` /
+`absTomorrow` / `absTonight` / `absUnspecified` / `absYesterday`. `clear()`
+then `write()` currently persists stale values. **Order:** NORMAL.
+
+```
+--- a/timeRelations.h   (inside clear(), with the other abs* = -1)
++		absMoment = -1;
++		absNamedHoliday = -1;
++		absNamedMonth = -1;
++		absNamedSeason = -1;
++		absToday = -1;
++		absTomorrow = -1;
++		absTonight = -1;
++		absUnspecified = -1;
++		absYesterday = -1;
+```
+
+Confirm the member names against the `write()` list at `:310-317`.
+
+### 63. `timeRelations.cpp:1526` `ageTransition` forms `objects.begin() + (-1)`
+
+**Verdict:** CONFIRMED. **Risk:** Safe (iterator formed, deref is gated).
+**Order:** NORMAL.
+
+```
+int so = (m[where].objectMatches.size() > 0) ? m[where].objectMatches[0].object : m[where].getObject();
+vector <cObject>::iterator object = objects.begin() + so;
+cLocalFocus::setSalienceAgeMethod(..., (so >= 0) ? (object->neuter && ...) : false, ...);
+```
+
+`getObject()` can be −1. Forming the iterator is already UB.
+
+```
+--- a/timeRelations.cpp
+-	vector <cObject>::iterator object = objects.begin() + so;
+-	cLocalFocus::setSalienceAgeMethod(..., (so >= 0) ? (object->neuter && !(object->male || object->female)) : false, ...);
++	bool neuterOnly = false;
++	if (so >= 0)
++	{
++		vector <cObject>::iterator object = objects.begin() + so;
++		neuterOnly = object->neuter && !(object->male || object->female);
++	}
++	cLocalFocus::setSalienceAgeMethod(..., neuterOnly, ...);
+```
+
+---
+
+## Infra
+
+### 64. `utilities.cpp` serialize `copy()` writes, then checks `limit`
+
+**Verdict:** CONFIRMED. **Risk:** Safe (corrupt/short cache). **Order:** NORMAL.
+
+Every scalar serialize overload (`int`/`short`/`__int64`/`char`/…) stores
+into `buf+where`, advances `where`, then FATALS if `where > limit`. A tight
+or corrupt `limit` is detected only after the overrun.
+
+```
+--- a/utilities.cpp   (each serialize overload)
+-	*((int*)(((char*)buf) + where)) = num;
+-	where += sizeof(num);
+-	if (where > limit)
+-		lplog(LOG_FATAL_ERROR, ...);
++	if (where + (int)sizeof(num) > limit)
++	{
++		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (7)", limit);
++		return false;
++	}
++	*((int*)(((char*)buf) + where)) = num;
++	where += sizeof(num);
+```
+
+Apply the same shape to `bitObject.h:177` (`memcpy` then check) and the
+`copy(cOM&)` serialize in `identifySpeakerGroups.cpp`.
+
+### 65. `createOntology.cpp:2050` `properties.find` argument order is inverted
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended) + UB
+(treats a `size_t` as a `const char*`). **Order:** DO-FIRST.
+
+```
+size_t nextBracket = properties.find(whereName + 1, '{');
+```
+
+`string::find(const char*, size_t)` wins: `whereName+1` is the needle
+pointer and `'{'` (123) is the start offset. It searches random memory
+starting at position 123.
+
+```
+--- a/createOntology.cpp
+-			size_t nextBracket = properties.find(whereName + 1, '{');
++			size_t nextBracket = properties.find('{', whereName + 1);
+```
+
+Watch Freebase/DBpedia name extraction.
+
+### 66. `createOntology.cpp:514` `decodeURL` reads past `%`
+
+**Verdict:** CONFIRMED. **Risk:** Safe (malformed URL). **Order:** NORMAL.
+
+After `'%'` the loop reads `input[I+1]` and `input[I+2]` with no length
+check. Hex letters are assumed uppercase.
+
+```
+--- a/createOntology.cpp
+-		if (input[I] == L'%')
++		if (input[I] == L'%' && input[I + 1] && input[I + 2])
+ 		{
+ 			int ch = 0;
+-			ch += input[I + 1] - ((iswalpha(input[I + 1])) ? 'A' - 10 : '0');
++			wchar_t h1 = towupper(input[I + 1]), h2 = towupper(input[I + 2]);
++			ch += h1 - ((iswalpha(h1)) ? L'A' - 10 : L'0');
+ 			ch <<= 4;
+-			ch += input[I + 2] - ((iswalpha(input[I + 2])) ? 'A' - 10 : '0');
++			ch += h2 - ((iswalpha(h2)) ? L'A' - 10 : L'0');
+```
+
+A trailing `%` should be copied through or skipped; do not read off the end.
+
+### 67. `paice.cpp:176` overlapping `memcpy` of the wrong size for a UTF-16 BOM
+
+**Verdict:** CONFIRMED. **Risk:** Safe (suffix-file load). **Order:** NORMAL.
+
+```
+if (s[0] == 0xFEFF)
+    memcpy(s, s + 1, wcslen(s + 1));
+```
+
+`memcpy` on overlap is UB, the count is in *bytes* not `wchar_t`s, and the
+NUL is not moved.
+
+```
+--- a/paice.cpp
+-			memcpy(s, s + 1, wcslen(s + 1));
++			wmemmove(s, s + 1, wcslen(s + 1) + 1);
+```
+
+### 68. `hmm.cpp:785` NaN test is never true
+
+**Verdict:** CONFIRMED. **Risk:** Safe (the FATAL never fires). **Order:** NORMAL.
+
+```
+if (probMult == nan(NULL))
+```
+
+NaN compare is never equal. Use `std::isnan(probMult)`.
+
+### 69. `hmm.cpp:311` `findLPPOSEquivalents` indexes `[length-2]` unguarded
+
+**Verdict:** CONFIRMED. **Risk:** Safe (short words). **Order:** NORMAL.
+
+```
+--- a/hmm.cpp
+-		if (originalWord[originalWord.length() - 2] == L'\'' && originalWord[originalWord.length() - 1] == L's')
++		if (originalWord.length() >= 2 && originalWord[originalWord.length() - 2] == L'\'' && originalWord[originalWord.length() - 1] == L's')
+```
+
+### 70. `hmm.cpp:479` / `:511` `_wfopen` unchecked; empty line writes before the buffer
+
+**Verdict:** CONFIRMED. **Risk:** Safe (missing model file / empty line).
+**Order:** NORMAL.
+
+`writeModelFile` / `readModelFile` dereference a possibly-NULL `FILE*`.
+`readModelFile` then does `line[wcslen(line)-1]=0` on an empty `fgetws`
+result (writes `line[-1]`).
+
+```
+--- a/hmm.cpp   (both functions)
++	if (!out_fp) return model;          // writeModelFile
++	if (!model_fp) return model;        // readModelFile
+
+--- a/hmm.cpp:516
+-		line[wcslen(line) - 1] = 0;
++		size_t n = wcslen(line);
++		if (n) line[n - 1] = 0;
+```
+
+### 71. `DIYDiskArray.h:189` destructor never closes the fd
+
+**Verdict:** CONFIRMED. **Risk:** Safe (fd leak per array). **Order:** NORMAL.
+
+`~DIYDiskArray()` is empty. Close (and flush) the disk fd if the object is
+in disk mode. Also: the ctor stores `path = tpath` by pointer, so a
+temporary `wstring::c_str()` dangles — copy the path into an owned
+`wstring` while touching this class.
+
+### 72. `profile.h:346` `accumulateNetworkTime` writes through `const wchar_t*`
+
+**Verdict:** CONFIRMED. **Risk:** Safe if callers pass a mutable buffer;
+UB if they pass a string literal / `c_str()`. **Order:** NORMAL.
+
+```
+wchar_t *pos=(wchar_t *)wcschr(str,L'/');
+...
+*pos=0;
+```
+
+Copy `str` into a local `wstring` and mutate that. Do not write through the
+caller pointer.
+
+### 73. `DBCreateSQLSchema.cpp:419` `generateBNCSources` allocates bytes, indexes `wchar_t`s
+
+**Verdict:** CONFIRMED. **Risk:** Safe to apply (the function currently
+overruns on every file). **Order:** DO-FIRST.
+
+```
+wchar_t* buffer = (wchar_t*)tmalloc(actualLen + 1);
+ReadFile(hFile, buffer, actualLen, ...);
+buffer[actualLen] = 0;
+```
+
+`actualLen` is the byte length. The NUL write is at `wchar_t` index
+`actualLen` (byte offset `2*actualLen`). `wcsstr` then treats the byte
+image as UTF-16.
+
+```
+--- a/DBCreateSQLSchema.cpp
++	if (actualLen < 0 || (actualLen % sizeof(wchar_t)) != 0) { CloseHandle(hFile); return -18; }
+-	wchar_t* buffer = (wchar_t*)tmalloc(actualLen + 1);
++	wchar_t* buffer = (wchar_t*)tmalloc(actualLen + sizeof(wchar_t));
+ 	...
+-	buffer[actualLen] = 0;
++	buffer[actualLen / sizeof(wchar_t)] = 0;
+```
+
+If the BNC index is actually a narrow-char file, the `wcsstr` walk is the
+wrong API and this function needs a `char*` rewrite — confirm against a
+known file before applying. The allocation/index mismatch is a defect
+either way.
+
+---
+
+## QA
+
+### 74. `questionAnswering.cpp:115` `stripWeb` on an empty URI is UB
+
+**Verdict:** CONFIRMED. **Risk:** Safe. **Order:** NORMAL.
+
+```
+--- a/questionAnswering.cpp
+ wstring stripWeb(wstring& name)
+ {
++	if (name.empty()) return name;
+ 	if (name[0] == '<')
+```
+
+### 75. `questionAnswering.cpp:2866` remapped question type is always 15
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
+
+`typeQTMask` is `(1<<4)-1` = 15 (`QuestionAnswering.h:154`). `qt` is a value
+in 1..11, so `qt | typeQTMask` is always 15. Every remapped what-is-X
+question is stored as type 15, which is not a member of the enum.
+Later tests of `questionType & typeQTMask` therefore miss
+`wikiBusinessQTFlag` / `whenQTFlag` / etc.
+
+```
+--- a/questionAnswering.cpp
+-		parentSRG->questionType = qt | typeQTMask;
++		parentSRG->questionType = (parentSRG->questionType & ~typeQTMask) | qt;
+```
+
+Watch wiki-business / wiki-work / when questions after a “what is X”
+remap.
+
+### 76. `questionAnswering.cpp:3028` `cProximityEntry` uses object 0 before assigning `co`
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
+
+The default ctor leaves `childObject = 0` (Narrator).
+`checkParticularPartQuestionTypeCheck` and `objectString` / `objects[]` run
+against that, then `childObject = co` at the end. `fullDescriptor` is
+afterwards overwritten with just the principal-where offset, so the
+form-string work is discarded — but the type-check used Narrator.
+
+```
+--- a/questionAnswering.cpp
+ cProximityMap::cProximityEntry::cProximityEntry(...) : cProximityEntry()
+ {
++	childObject = co;
+ 	int qt = parentSRG->questionType & cQuestionAnswering::typeQTMask;
+```
+
+Delete the trailing `childObject = co`.
+
+### 77. `questionAnswering.cpp:1158` `metaPatternMatch` discards `whereAnswer`
+
+**Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
+
+`processMetanameTagset` already returns the answer position (or 0 on
+reject). `metaPatternMatch` ignores that and always `return -1`. The caller
+at `:1749` therefore never records a meta-pattern answer.
+
+Two linked fixes:
+
+1. In `metaPatternMatch`, keep the first non-negative return:
+
+```
+--- a/questionAnswering.cpp
+-				processMetanameTagset(...);
++				int whereAnswer = processMetanameTagset(...);
++				if (whereAnswer > 0) return whereAnswer;
+```
+
+2. In `processMetanameTagset`, the reject path `return 0` is a valid source
+   position (the first token / Narrator). Change that reject to `-1` so the
+   caller’s `>= 0` test is coherent. `diff[0]` on an empty differentiator is
+   also UB — require `!diff.empty()` before the `switch`.
+
+Watch `_META_NAME_EQUIVALENCE` answers (patterns 8/9/G and the unmarked
+ones). This path has never succeeded in-tree.
+
+---
+
+## Still to append
+
+A smaller set of category-2/3 items from `CODE_REVIEW.md` is not yet written
+up here. Next batch, same format:
+
+- `DB.cpp` `readMultiSourceObjects` column map / `objectId` as index
+- `createOntology.cpp` `readOntologyList` (`if` not `while`)
+- hmm `trainModelFromSource` leak
+- QA yajl leak, `jsonBuffer[0]`, `speakerGroups[sgAt]`, Wikipedia `source`
+  NULL, `vcXML` `aH` NULL write, specials Dictionary.com `!A || !B`
+- unused `newPatternDetection.cpp` infinite PEMA loop (only if compiled)
+- `resolveMetaGroupObjects.cpp` `previousPrimaryQuote` / empty `povSpeakers`
+- remaining `m[where+1]` sites in syntacticRelations
+- `cWordGroup` uninit / header vs `.cpp` type mismatch
+
+Nothing in this document has been applied.

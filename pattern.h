@@ -180,10 +180,10 @@ public:
 	// finished resolving patternReferences so patternIndexes is final.
 		void initializeUsage()
 		{
-			usageFormFinalMatch.reserve(formIndexes.size());
-			usageFormEverMatched.reserve(formIndexes.size());
-			usagePatternFinalMatch.reserve(patternIndexes.size());
-			usagePatternEverMatched.reserve(patternIndexes.size());
+      usageFormFinalMatch.assign(formIndexes.size(), 0);
+      usageFormEverMatched.assign(formIndexes.size(), 0);
+      usagePatternFinalMatch.assign(patternIndexes.size(), 0);
+      usagePatternEverMatched.assign(patternIndexes.size(), 0);
 		}
     //patternElement(string patternName,string differentiator,int elementNum,set <unsigned int> &descendantTags,char *&buf);
     int matchOne(cSource &source,unsigned int sourcePosition,unsigned int lastElement,vector <cMatchElement> &whatMatched, sTrace &t);
