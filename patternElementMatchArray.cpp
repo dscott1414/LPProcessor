@@ -207,7 +207,8 @@ bool cPatternElementMatchArray::operator==(const cPatternElementMatchArray other
 cPatternElementMatchArray& cPatternElementMatchArray::operator=(const cPatternElementMatchArray& rhs)
 {
 	LFS
-		if (allocated) tfree(allocated * sizeof(*content), content);
+	if (this == &rhs) return *this;
+	if (allocated) tfree(allocated * sizeof(*content), content);
 	count = rhs.count;
 	allocated = rhs.allocated;
 	content = NULL;

@@ -141,6 +141,7 @@ public:
 	int queryTagSet(unsigned int &element,int desiredTagSetNum,int &maxLen);
 	// First PMA slot whose pattern carries `tag`, or -1.  maxLen is updated but the
 	// loop `break`s on the first hit, so this is not actually "longest with tag".
+	// corrected to return the longest pattern with the tag, not the first
 	int queryTag(int tag)
 	{
 		int gElement=-1,maxLen=-1;
@@ -149,7 +150,6 @@ public:
 			{
 				gElement=PMAElement;
 				maxLen=content[PMAElement].len;
-				break;
 			}
 		return gElement;
 	}

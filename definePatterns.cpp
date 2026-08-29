@@ -2821,7 +2821,7 @@ int createSecondaryPatterns__CLOSING__S1(void)
 {
 	cPattern::create(L"__CLOSING__S1{_ONLY_END_MATCH}", L"1",
 		1, L",", 0, 1, 1, // , ma'am // if this is made optional, _NOUN of C4 and _ALLOBJECT of C3 are identical
-		7, L"_NAME{HAIL}", L"honorific{HON:HAIL}", L"_HON_ABB{HON:HAIL}", L"_META_GROUP{HAIL}", L"noun{HAIL}", L"_HAIL_OBJECT{HAIL|OBJECT}", L"politeness_discourse_marker", MALE_GENDER | FEMALE_GENDER, 1, 1, // , sir / , freak! noun includes _NAME, L"honorific",
+		7, L"_NAME{HAIL}", L"honorific{HON:HAIL}", L"_HON_ABB{HON:HAIL}", L"_META_GROUP{HAIL}", L"noun{HAIL}", L"_HAIL_OBJECT{HAIL:OBJECT}", L"politeness_discourse_marker", MALE_GENDER | FEMALE_GENDER, 1, 1, // , sir / , freak! noun includes _NAME, L"honorific",
 		0);
 	cPattern::create(L"__CLOSING__S1{_ONLY_END_MATCH}", L"2",
 		1, L",", 0, 0, 1,

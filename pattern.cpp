@@ -941,10 +941,7 @@ void cPattern::processForm(wstring& form, wstring& specificWord, int& cost, set 
 	{
 		const wchar_t* sword = ch + 1;
 		for (; *ch && *ch != L'[' && *ch != L'*' && *ch != L'{'; ch++);
-		wchar_t saveEnd = *ch;
-		*((wchar_t*)ch) = 0;
-		specificWord = sword;
-		*((wchar_t*)ch) = saveEnd;
+		specificWord.assign(sword, ch - sword);
 	}
 	if (*ch == L'[')
 	{
@@ -1804,7 +1801,7 @@ void cPattern::setMandatoryAncestorPatterns(int childPattern)
 			{
 				mandatoryAncestorPatterns.set(p);
 				if (patterns[p]->mandatoryAncestorsSet)
-					ancestorPatterns |= patterns[p]->mandatoryAncestorPatterns;
+					mandatoryAncestorPatterns |= patterns[p]->mandatoryAncestorPatterns;
 				else
 					setMandatoryAncestorPatterns(p);
 			}

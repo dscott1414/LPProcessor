@@ -4339,7 +4339,7 @@ int cSource::eliminateLoserPatterns(unsigned int begin, unsigned int end)
 		unordered_map <int, cCostPatternElementByTagSet> tertiaryPEMAPositions;
 	vector <int> minSeparatorCost;
 	vector < vector <unsigned int> > winners; // each winner is a PMAOffset
-	minSeparatorCost.reserve(end - begin + 1); // reserve does not grow size; [I] is out-of-range
+	minSeparatorCost.resize(end - begin + 1); // reserve does not grow size; [I] is out-of-range
 	for (unsigned int I = 0; I < end - begin + 1 && I < m.size() - begin; I++)
 		minSeparatorCost[I] = m[begin + I].word->second.lowestSeparatorCost();
 	eliminateLoserPatternsPhase1(begin, end, minSeparatorCost, winners, tertiaryPEMAPositions);
