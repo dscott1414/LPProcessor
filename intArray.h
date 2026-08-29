@@ -345,7 +345,7 @@ public:
 	void decode(unsigned int val)
 	{
 		int lastNonZero = 0;
-		for (int tc = 0, bitFieldCount = TOTAL_BITS; bitFieldCount >= 0; bitFieldCount -= BITS_PER_RULE, tc++)
+		for (int tc = 0, bitFieldCount = TOTAL_BITS; bitFieldCount >= BITS_PER_RULE; bitFieldCount -= BITS_PER_RULE, tc++)
 		{
 			assign(tc, (val >> (bitFieldCount - BITS_PER_RULE)) & ((1 << BITS_PER_RULE) - 1));
 			if (content[tc])

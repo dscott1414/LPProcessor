@@ -2245,7 +2245,9 @@ Inflections months[] = { {L"january",SINGULAR},{L"february",SINGULAR},{L"march",
 {L"june",SINGULAR},{L"july",SINGULAR},{L"august",SINGULAR},{L"september",SINGULAR},{L"october",SINGULAR},
 {L"november",SINGULAR},{L"december",SINGULAR},{NULL,0} };
 // may/jun/jul omitted, so aug..dec return 4..8 (May?September slots).
-const wchar_t* months_abb[] = { L"jan",L"feb",L"mar",L"apr",L"aug",L"sept",L"oct",L"nov",L"dec",NULL };
+const wchar_t* months_abb[] = { L"jan",L"feb",L"mar",L"apr",L"apr",L"jun",L"jul",L"sept",L"oct",L"nov",L"dec",NULL };
+// months[] index for each months_abb[] entry; may/jun/jul have no abbreviation here.
+static const int months_abb_index[] = { 0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11 };
 // 0-based month index, or -1. months_abb skips may/jun/jul, so ?aug?
 // returns 4 (May?s slot) ? do not treat that index as eCapacity-aligned.
 int whichMonth(wstring w)
@@ -2256,7 +2258,7 @@ int whichMonth(wstring w)
 				return I;
 	for (int I = 0; months_abb[I]; I++)
 		if (w == months_abb[I])
-			return I;
+			return months_abb_index[I];
 	return -1;
 }
 
