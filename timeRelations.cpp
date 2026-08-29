@@ -45,8 +45,9 @@
 		- eCapacity and twsCapacity drift after ?tomorrow?: twsCapacity
 		  inserts ?morrow?, so whichCapacity("yesterday") is not
 		  cYesterday. See the review report.
-		- months_abb omits may/jun/jul, so whichMonth("aug") returns 4
-		  (May?s slot).
+		- months_abb omits may/jun/jul as lexicon entries; whichMonth maps
+		  each abbreviation through months_abb_index onto months[]
+		  (aug->7, not 4). Do not add L"may" here (modal verb).
 		- cTimeInfo::clear() does not zero the absNamed* / absToday family.
 		- LFS at every function entry.
 */
@@ -2244,12 +2245,12 @@ any plural time category is also considered T_RECURRING
 Inflections months[] = { {L"january",SINGULAR},{L"february",SINGULAR},{L"march",SINGULAR},{L"april",SINGULAR},{L"may",SINGULAR},
 {L"june",SINGULAR},{L"july",SINGULAR},{L"august",SINGULAR},{L"september",SINGULAR},{L"october",SINGULAR},
 {L"november",SINGULAR},{L"december",SINGULAR},{NULL,0} };
-// may/jun/jul omitted, so aug..dec return 4..8 (May?September slots).
-const wchar_t* months_abb[] = { L"jan",L"feb",L"mar",L"apr",L"apr",L"jun",L"jul",L"sept",L"oct",L"nov",L"dec",NULL };
-// months[] index for each months_abb[] entry; may/jun/jul have no abbreviation here.
-static const int months_abb_index[] = { 0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11 };
-// 0-based month index, or -1. months_abb skips may/jun/jul, so ?aug?
-// returns 4 (May?s slot) ? do not treat that index as eCapacity-aligned.
+// Lexicon abbreviations. Leave may/jun/jul out of this list: predefineWords
+// registers every entry, and "may" is a common modal. whichMonth maps through
+// months_abb_index onto months[] (must stay the same length, excluding NULL).
+const wchar_t* months_abb[] = { L"jan",L"feb",L"mar",L"apr",L"aug",L"sept",L"oct",L"nov",L"dec",NULL };
+static const int months_abb_index[] = { 0, 1, 2, 3, 7, 8, 9, 10, 11 };
+// 0-based month index, or -1. Abbreviation "aug" returns 7 (August), not 4.
 int whichMonth(wstring w)
 {
 	LFS
