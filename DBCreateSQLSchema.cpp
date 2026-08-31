@@ -36,8 +36,6 @@
 			buffer[actualLen]=0, which is 2*actualLen bytes past the allocation.
 		- writeThesaurusEntry interpolates unescaped narrow strings with %S
 			into a 1024-wchar_t _snwprintf (the stack buffer is 4096).
-		- 2*QUERY_BUFFER_LEN_OVERFLOW is 2*QUERY_BUFFER_LEN+1024, not
-			2*(QUERY_BUFFER_LEN+1024), because the macro is unparenthesized.
 */
 #include <stdio.h>
 #include <string.h>
@@ -95,12 +93,22 @@ vector <string> rest;
 } sDefinition;
 
 */
+// Append each narrow string as "value;" into a wide SQL literal, escaped.
+static void appendEscapedList(wstring& qt, const vector <string>& values)
+{
+	wstring wide;
+	for (unsigned int I = 0; I < values.size(); I++)
+	{
+		mTW(values[I], wide);
+		qt += escaped(wide) + L";";
+	}
+}
+
 // INSERT one thesaurus row.  wordType is packed as bits from the wt[]
 // tokens found in d.wordType (pron/conj/interj suppress n; adv suppresses v).
-// Values are interpolated with %S and no escape.  Returns myquery's result.
+// Returns myquery's result.
 int cSource::writeThesaurusEntry(sDefinition& d)
 {
-	wchar_t qt[4096];
 	const char* wt[] = { "adj", "adv", "prep", "pron", "conj", "det", "interj", "n", "v", NULL };
 	int w, wtTotal = 0;
 	for (int I = 0; wt[I]; I++)
@@ -110,21 +118,21 @@ int cSource::writeThesaurusEntry(sDefinition& d)
 		wtTotal &= ~(1 << 7);
 	if (wtTotal & (1 << 1))
 		wtTotal &= ~(1 << 8);
-	_snwprintf(qt, 1024, L"INSERT INTO thesaurus VALUES (\"%S\",%d,\"",
-		d.mainEntry.c_str(), wtTotal);
-	for (int I = 0; I < d.primarySynonyms.size(); I++)
-		_snwprintf(qt + wcslen(qt), 1024, L"%S;", d.primarySynonyms[I].c_str());
-	wcscat(qt, L"\",\"");
-	for (int I = 0; I < d.accumulatedSynonyms.size(); I++)
-		_snwprintf(qt + wcslen(qt), 1024, L"%S;", d.accumulatedSynonyms[I].c_str());
-	wcscat(qt, L"\",\"");
-	for (int I = 0; I < d.accumulatedAntonyms.size(); I++)
-		_snwprintf(qt + wcslen(qt), 1024, L"%S;", d.accumulatedAntonyms[I].c_str());
-	wcscat(qt, L"\",\"");
-	for (int I = 0; I < d.concepts.size(); I++)
-		_snwprintf(qt + wcslen(qt), 1024, L"%d;", d.concepts[I]);
-	wcscat(qt, L"\")");
-	return myquery(&mysql, qt);
+	// Built in a wstring: the synonym/antonym lists are unbounded and used to be
+	// wcscat'd into a 4096 wchar_t stack buffer.
+	wstring qt, mainEntry, tmp;
+	mTW(d.mainEntry, mainEntry);
+	qt = L"INSERT INTO thesaurus VALUES (\"" + escaped(mainEntry) + L"\"," + itos(wtTotal, tmp) + L",\"";
+	appendEscapedList(qt, d.primarySynonyms);
+	qt += L"\",\"";
+	appendEscapedList(qt, d.accumulatedSynonyms);
+	qt += L"\",\"";
+	appendEscapedList(qt, d.accumulatedAntonyms);
+	qt += L"\",\"";
+	for (unsigned int I = 0; I < d.concepts.size(); I++)
+		qt += itos(d.concepts[I], tmp) + L";";
+	qt += L"\")";
+	return myquery(&mysql, qt.c_str());
 }
 
 // CREATE groups / groupMapTo / subGroups.  Unused; subGroups FKs
@@ -410,13 +418,13 @@ int generateBNCSources(MYSQL& mysql, wstring indexFile) // note this is slightly
 		return -17;
 	}
 	unsigned int actualLen = GetFileSize(hFile, NULL);
-	if (actualLen <= 0)
+	if (actualLen <= 0 || (actualLen % sizeof(wchar_t)) != 0)
 	{
 		lplog(LOG_ERROR, L"ERROR:filelength of file %s yields an invalid filelength (%d).", indexFile.c_str(), actualLen);
 		CloseHandle(hFile);
 		return -18;
 	}
-	wchar_t* buffer = (wchar_t*)tmalloc(actualLen + 1);
+	wchar_t* buffer = (wchar_t*)tmalloc(actualLen + sizeof(wchar_t));
 	DWORD lenRead = 0;
 	if (!ReadFile(hFile, buffer, actualLen, &lenRead, NULL) || actualLen != lenRead)
 	{
@@ -424,7 +432,7 @@ int generateBNCSources(MYSQL& mysql, wstring indexFile) // note this is slightly
 		CloseHandle(hFile);
 		return -19;
 	}
-	buffer[actualLen] = 0;
+	buffer[actualLen / sizeof(wchar_t)] = 0;
 	CloseHandle(hFile);
 	int where = 0, returnCode = -20;// , numWords = 0;
 	while (true)

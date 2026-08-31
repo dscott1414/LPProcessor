@@ -365,10 +365,10 @@ bool copy(void* buf, string str, int& where, int limit)
 bool copy(void* buf, int num, int& where, int limit)
 {
 	DLFS
-		* ((int*)(((char*)buf) + where)) = num;
-	where += sizeof(num);
-	if (where > limit)
+	if (where +sizeof(num) > limit)
 		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (7)", limit);
+	* ((int*)(((char*)buf) + where)) = num;
+	where += sizeof(num);
 	return true;
 }
 
@@ -376,10 +376,10 @@ bool copy(void* buf, int num, int& where, int limit)
 bool copy(void* buf, short num, int& where, int limit)
 {
 	DLFS
-		* ((short*)(((char*)buf) + where)) = num;
+	if (where +sizeof(num) > limit)
+		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (7)", limit);
+	* ((short*)(((char*)buf) + where)) = num;
 	where += sizeof(num);
-	if (where > limit)
-		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (8)", limit);
 	return true;
 }
 
@@ -387,10 +387,10 @@ bool copy(void* buf, short num, int& where, int limit)
 bool copy(void* buf, unsigned short num, int& where, int limit)
 {
 	DLFS
-		* ((unsigned short*)(((char*)buf) + where)) = num;
-	where += sizeof(num);
-	if (where > limit)
+	if (where +sizeof(num) > limit)
 		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (9)", limit);
+	* ((unsigned short*)(((char*)buf) + where)) = num;
+	where += sizeof(num);
 	return true;
 }
 
@@ -398,10 +398,10 @@ bool copy(void* buf, unsigned short num, int& where, int limit)
 bool copy(void* buf, unsigned int num, int& where, int limit)
 {
 	DLFS
-		* ((unsigned int*)(((char*)buf) + where)) = num;
-	where += sizeof(num);
-	if (where > limit)
+	if (where +sizeof(num) > limit)
 		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (10)", limit);
+	* ((unsigned int*)(((char*)buf) + where)) = num;
+	where += sizeof(num);
 	return true;
 }
 
@@ -409,10 +409,10 @@ bool copy(void* buf, unsigned int num, int& where, int limit)
 bool copy(void* buf, __int64 num, int& where, int limit)
 {
 	DLFS
-		* ((__int64*)(((char*)buf) + where)) = num;
-	where += sizeof(num);
-	if (where > limit)
+	if (where +sizeof(num) > limit)
 		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (11)", limit);
+	* ((__int64*)(((char*)buf) + where)) = num;
+	where += sizeof(num);
 	return true;
 }
 
@@ -420,10 +420,10 @@ bool copy(void* buf, __int64 num, int& where, int limit)
 bool copy(void* buf, unsigned __int64 num, int& where, int limit)
 {
 	DLFS
-		* ((unsigned __int64*)(((char*)buf) + where)) = num;
-	where += sizeof(num);
-	if (where > limit)
+	if (where +sizeof(num) > limit)
 		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (12)", limit);
+	* ((unsigned __int64*)(((char*)buf) + where)) = num;
+	where += sizeof(num);
 	return true;
 }
 
@@ -432,9 +432,9 @@ bool copy(void* buf, unsigned __int64 num, int& where, int limit)
 bool copy(void* buf, char ch, int& where, int limit)
 {
 	DLFS
-	((char*)buf)[where++] = ch;
-	if (where > limit)
+	if (where +sizeof(ch) > limit)
 		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (13)", limit);
+	((char*)buf)[where++] = ch;
 	return true;
 }
 
@@ -443,9 +443,9 @@ bool copy(void* buf, char ch, int& where, int limit)
 bool copy(void* buf, unsigned char ch, int& where, int limit)
 {
 	DLFS
+	if (where +sizeof(ch) > limit)
+		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (14)", limit);
 	((char*)buf)[where++] = ch;
-	if (where > limit)
-		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (13)", limit);
 	return true;
 }
 
@@ -455,7 +455,7 @@ bool copy(void* buf, unsigned char ch, int& where, int limit)
 bool copy(void* buf, set <int>& s, int& where, int limit)
 {
 	DLFS
-		int count = s.size();
+	int count = s.size();
 	if (!copy(buf, count, where, limit)) return false;
 	for (set<int>::iterator is = s.begin(), isEnd = s.end(); is != isEnd; is++)
 		if (!copy(buf, *is, where, limit)) return false;

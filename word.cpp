@@ -69,7 +69,8 @@
 		- Everything is wchar_t (UTF-16 on MSVC); source buffers are NUL terminated, and
 		  most of the readWord helpers freely look ahead (buffer[cp+3]) or behind
 		  (buffer[cp-1]) relying on that terminator - not on bufferLen.
-		- lplog(LOG_FATAL_ERROR,...) does not return: it waits for a keypress and exits.
+		- lplog(LOG_FATAL_ERROR,...) does not return: it exits EXIT_FAILURE (and waits
+			for a keypress only when interactive).
 		  Many "validation" branches here are therefore aborts, not recoverable errors.
 		- usagePatterns / usageCosts / deltaUsagePatterns are 16 bytes each and are indexed
 		  both by form offset (0..MAX_FORM_USAGE_PATTERNS-1) and by eUsagePatterns slot

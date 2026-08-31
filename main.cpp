@@ -114,9 +114,9 @@
 		  and reads the lexicon, initializePatterns() fills desiredTagSets, and
 		  initializePemaMap() must run after it.  initializePatterns() is skipped in
 		  controller mode (-mp), so desiredTagSets is empty there.
-		- lplog(LOG_FATAL_ERROR,...) does not return: logging.cpp blocks on getchar()
-		  and then exit(0).  Any "fatal" path here therefore both hangs an unattended
-		  run and reports success to the parent process.
+		- lplog(LOG_FATAL_ERROR,...) does not return: logging.cpp exits EXIT_FAILURE,
+		  waiting for a keypress only when interactive.  Child exit codes are reported
+		  by reportChildExitCode() as each worker is reaped.
 		- wmain() and startProcesses() end with _exit(0), so no destructor runs: the
 		  cSource destructor, the MySQL close and any unflushed buffered log are skipped
 		  deliberately ("fast exit") because tearing down the lexicon takes minutes.
@@ -171,7 +171,6 @@ unordered_map <string, __int64 > cProfile::counterMap;
 unordered_map <string, int > cProfile::counterNumMap;
 unordered_map <string, cProfile::CP> cProfile::timeMapTotal;
 __int64 cProfile::totalCount = 0;
-bool cProfile::lockInitialized = false;
 string cProfile::functionPath;
 set <unordered_map <string, cProfile::CP>::iterator, cProfile::timeSetCompare> cProfile::timeSort; // sort map by time taken by function
 set <unordered_map <string, cProfile::CP>::iterator, cProfile::memorySetCompare> cProfile::memorySort; // sort map by memory allocated by function
@@ -1055,6 +1054,20 @@ bool signalCtrl(DWORD dwProcessId, DWORD dwCtrlEvent)
 	return success;
 }
 
+// Log a child's exit status.  A worker that hit LOG_FATAL_ERROR exits non-zero; without
+// this the controller could not distinguish a crashed child from a completed one.
+static void reportChildExitCode(HANDLE hProcess, unsigned int slot)
+{
+	DWORD exitCode = 0;
+	if (!GetExitCodeProcess(hProcess, &exitCode))
+	{
+		wstring tmpstr;
+		lplog(LOG_INFO | LOG_ERROR, L"ERROR:process %u: GetExitCodeProcess failed - %s", slot, getLastErrorMessage(tmpstr));
+	}
+	else if (exitCode != 0)
+		lplog(LOG_INFO | LOG_ERROR, L"ERROR:process %u exited with code %u - its sources may be incomplete.", slot, exitCode);
+}
+
 // Drain phase of controller mode: no more sources are left to hand out, so wait for the
 // numProcesses children still in handles[] to exit, closing each handle and compacting the
 // array as they do, and refreshing the throughput line in the console title every three
@@ -1096,6 +1109,7 @@ void waitForSpawnedProcesses(MYSQL& mysql, const int sourceType, int &numProcess
 			if (nextProcessIndex < WAIT_OBJECT_0 + numProcesses) // nextProcessIndex >= WAIT_OBJECT_0 && 
 			{
 				nextProcessIndex -= WAIT_OBJECT_0;
+				reportChildExitCode(handles[nextProcessIndex], nextProcessIndex);
 				CloseHandle(handles[nextProcessIndex]);
 				printf("\nClosing process %u", nextProcessIndex);
 			}
@@ -1103,6 +1117,7 @@ void waitForSpawnedProcesses(MYSQL& mysql, const int sourceType, int &numProcess
 			{
 				nextProcessIndex -= WAIT_ABANDONED_0;
 				printf("\nClosing process %u [abandoned]", nextProcessIndex);
+				reportChildExitCode(handles[nextProcessIndex], nextProcessIndex);
 				CloseHandle(handles[nextProcessIndex]);
 			}
 			memmove(handles + nextProcessIndex, handles + nextProcessIndex + 1, (maxProcesses - nextProcessIndex - 1) * sizeof(handles[0]));
@@ -1229,6 +1244,7 @@ int waitToSpawnMoreProcesses(MYSQL& mysql, const int sourceType, const int numPr
 		if (nextProcessIndex < WAIT_OBJECT_0 + numProcesses) // nextProcessIndex >= WAIT_OBJECT_0 && 
 		{
 			nextProcessIndex -= WAIT_OBJECT_0;
+			reportChildExitCode(handles[nextProcessIndex], nextProcessIndex);
 			CloseHandle(handles[nextProcessIndex]);
 			printf("\nClosing process %u", nextProcessIndex);
 		}
@@ -1236,6 +1252,7 @@ int waitToSpawnMoreProcesses(MYSQL& mysql, const int sourceType, const int numPr
 		{
 			nextProcessIndex -= WAIT_ABANDONED_0;
 			printf("\nClosing process %u [abandoned]", nextProcessIndex);
+			reportChildExitCode(handles[nextProcessIndex], nextProcessIndex);
 			CloseHandle(handles[nextProcessIndex]);
 		}
 	}

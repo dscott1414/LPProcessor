@@ -385,8 +385,8 @@ bool cSource::resolveNonGenderedGeneralObjectPlural(int where, vector <cObject>:
 	wstring tmpstr, tmpstr2;
 	for (unsigned int s = 0; s < localObjects.size(); s++)
 	{
-		// Intended: skip narrator/audience. Tests [0] every iteration, not [s].
-		if (localObjects[0].om.object <= 1) continue;
+		// Intended: skip narrator/audience. 
+		if (localObjects[s].om.object <= 1) continue;
 		//if (localObjects[s].inQuote!=inQuote) continue; GO_NEUTRAL
 		vector <cObject>::iterator lso = objects.begin() + localObjects[s].om.object;
 		if (lso != object && (lso->originalLocation - lso->begin <= 1 || object->originalLocation - object->begin <= 1) && m[lso->originalLocation].word == m[object->originalLocation].word && lso->plural)
@@ -473,7 +473,6 @@ bool cSource::resolveNonGenderedGeneralObjectPlural(int where, vector <cObject>:
 
 // "No. 27" / address-like __NOUN[Q]: match a local object (or relatedObjectsMap
 // entry) that contains the same numeral. Returns true after the first
-// localObjects candidate with om.object>1, even if nothing matched.
 bool cSource::resolveNonGenderedGeneralObjectNumAddress(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches)
 {
 	wstring tmpstr, tmpstr2;
@@ -514,7 +513,8 @@ bool cSource::resolveNonGenderedGeneralObjectNumAddress(int where, vector <cObje
 			if (debugTrace.traceSpeakerResolution && objectMatches.size())
 				lplog(LOG_RESOLUTION, L"%06d:Unknown resolution mapped %s to (unknown) %s [num/address mapping 2].", where,
 					objectString(object, tmpstr, true).c_str(), objectString(objectMatches, tmpstr2, true).c_str());
-			return true; // after first om.object>1 candidate only
+			if (objectMatches.size() > 0)
+				return true; // after first om.object>1 candidate only
 		}
 	}
 	return false;
@@ -721,15 +721,14 @@ bool cObject::hasAttribute(int where, vector <cWordMatch>& m)
 	return false;
 }
 
-// Intended: the speaker group whose [sgBegin, sgEnd) covers some position.
-// As written, I is the group index and is compared to sgBegin/sgEnd (source
-// positions), so the body almost never succeeds and this returns end().
-vector <cSource::cSpeakerGroup>::iterator cSource::containingSpeakerGroup()
+// The speaker group whose [sgBegin, sgEnd) covers 'where', or end() if none does.
+// Only top-level groups are scanned, so sgEnd is always a real position here
+// (the -2/-3 open-span markers are used on embeddedSpeakerGroups).
+vector <cSource::cSpeakerGroup>::iterator cSource::containingSpeakerGroup(int where)
 {
 	LFS
 		for (int I = 0; I < (signed)speakerGroups.size(); I++)
-			// I is the group index, not a source position; this test is effectively never true.
-			if (speakerGroups[I].sgBegin >= I && speakerGroups[I].sgEnd < I)
+			if (speakerGroups[I].sgBegin <= where && where < speakerGroups[I].sgEnd)
 				return speakerGroups.begin() + I;
 	return speakerGroups.end();
 }
@@ -748,8 +747,8 @@ vector <cSource::cSpeakerGroup>::iterator cSource::containingSpeakerGroup()
 // "the doctor" / "the nurse": score localObjects by nymMatch (occupation
 // head + adjectives), preferring physically-present hits. "another" looks
 // ahead two paragraphs for a new same-occupation entity. If still empty,
-// scan all prior NAME / OCC objects (the containingSpeakerGroup overlap
-// filter is currently a no-op). Returns true if chooseBest should run.
+// scan all prior NAME / OCC objects, requiring a speaker overlap with the
+// containing speaker group. Returns true if chooseBest should run.
 bool cSource::resolveOccRoleActivityObject(int where, vector <cOM>& objectMatches, vector <cObject>::iterator object, int wordOrderSensitiveModifier, bool physicallyPresent)
 {
 	LFS
@@ -841,11 +840,16 @@ bool cSource::resolveOccRoleActivityObject(int where, vector <cOM>& objectMatche
 		for (unsigned int I = 0; I < objectMatches.size(); I++)
 			locations.push_back(locationBefore(objectMatches[I].object, where));
 		int tmp = preferWordOrder(wordOrderSensitiveModifier, locations);
-		// tmp==0 erases [1] with no size>=2 guard (unlike adjustForWordOrderSensitiveModifier).
 		if (tmp == 0)
+		{
+			if (objectMatches.size() < 2) return chooseFromLocalFocus;
 			objectMatches.erase(objectMatches.begin() + 1);
+		}
 		else if (tmp == 1)
+		{
+			if (objectMatches.empty()) return chooseFromLocalFocus;
 			objectMatches.erase(objectMatches.begin());
+		}
 		else if (tmp == -2)
 			objectMatches.clear();
 	}
@@ -881,7 +885,7 @@ bool cSource::resolveOccRoleActivityObject(int where, vector <cOM>& objectMatche
 				// if gendered occupation, then since it is not in local salience any more,
 				// then there must be an overlap in speakerGroups.
 				bool allIn, oneIn;
-				vector <cSpeakerGroup>::iterator moSG = containingSpeakerGroup();
+				vector <cSpeakerGroup>::iterator moSG = containingSpeakerGroup(oi->originalLocation);
 				if (oi->objectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS && moSG != speakerGroups.end() &&
 					!intersect(moSG->speakers, speakerGroups[currentSpeakerGroup].speakers, allIn, oneIn))
 				{
@@ -889,7 +893,7 @@ bool cSource::resolveOccRoleActivityObject(int where, vector <cOM>& objectMatche
 					if (debugTrace.traceSpeakerResolution)
 						lplog(LOG_RESOLUTION, L"%06d:%s rejected speakerGroup=%d:%s currentSpeakerGroup=%d:%s", where,
 							objectString(mo, tmpstr, true).c_str(),
-							locationBefore(mo, where), toText(*containingSpeakerGroup(), tmpstr2),
+							locationBefore(mo, where), toText(*moSG, tmpstr2),
 							where, toText(speakerGroups[currentSpeakerGroup], tmpstr3));
 					continue;
 				}
@@ -1596,7 +1600,8 @@ bool cSource::addNewNumberedSpeakers(int where, vector <cOM>& objectMatches)
 			(m[where].endObjectPosition - m[where].beginObjectPosition) == 1)
 			return false;
 	wstring tmpstr, tmpstr2;
-	// No bounds check: OOB if currentSpeakerGroup is the last group.
+	if (currentSpeakerGroup + 1 >= (int)speakerGroups.size()) 
+		return false;
 	set <int> speakers = speakerGroups[currentSpeakerGroup + 1].speakers;
 	// erase all objects in the future that already appear in the present
 	for (set <int>::iterator si = speakerGroups[currentSpeakerGroup].speakers.begin(), siEnd = speakerGroups[currentSpeakerGroup].speakers.end(); si != siEnd; si++)

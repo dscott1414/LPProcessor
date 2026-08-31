@@ -274,15 +274,14 @@ bool anymoreUnprocessedForUnknown(MYSQL& mysql, int sourceType, int step)
 }
 
 // Write path/start/repeatStart/sizeInBytes for the sources row whose etext
-// matches.  path and start are escapeStr'd in place (mutated); etext is not
-// escaped (etext values are Gutenberg ids, but this is still a hole).
+// matches.  path and start are escapeStr'd in place (mutated).
 bool cSource::updateSource(wstring& path, wstring& start, int repeatStart, wstring& etext, int actualLenInBytes)
 {
 	LFS
 		wstring tmp, tmp2, sqlStatement;
 	escapeStr(path);
 	escapeStr(start);
-	sqlStatement = L"update sources set path='" + path + L"', start='" + start + L"', repeatStart=" + itos(repeatStart, tmp) + L", sizeInBytes=" + itos(actualLenInBytes, tmp2) + L" where etext='" + etext + L"'";
+	sqlStatement = L"update sources set path='" + path + L"', start='" + start + L"', repeatStart=" + itos(repeatStart, tmp) + L", sizeInBytes=" + itos(actualLenInBytes, tmp2) + L" where etext='" + escaped(etext) + L"'";
 	return myquery(&mysql, (wchar_t*)sqlStatement.c_str());
 }
 
@@ -295,19 +294,19 @@ bool cSource::updateSourceStart(wstring& start, int repeatStart, wstring& etext,
 	escapeStr(start);
 	if (start.length() > 255)
 		start = start.substr(start.length() - 255, 255); // start column has a limit of 256 characters
-	sqlStatement = L"update sources set start='" + start + L"', repeatStart=" + itos(repeatStart, tmp) + L", sizeInBytes=" + itos((int)actualLenInBytes, tmp2) + L" where etext='" + etext + L"'";
+	sqlStatement = L"update sources set start='" + start + L"', repeatStart=" + itos(repeatStart, tmp) + L", sizeInBytes=" + itos((int)actualLenInBytes, tmp2) + L" where etext='" + escaped(etext) + L"'";
 	return myquery(&mysql, (wchar_t*)sqlStatement.c_str());
 }
 
 // Write encoding and readBufferFlags for etext.  sourceEncoding is truncated
-// to 54 chars but is not escaped (comment about "start column" is stale).
+// to 54 chars (the encoding column is VARCHAR(55)).
 bool cSource::updateSourceEncoding(int readBufferType, wstring sourceEncoding, wstring etext)
 {
 	LFS
 		wstring tmp, sqlStatement;
 	if (sourceEncoding.length() > 55)
-		sourceEncoding = sourceEncoding.substr(0, 54); // start column has a limit of 256 characters
-	sqlStatement = L"update sources set encoding='" + sourceEncoding + L"', readBufferFlags=" + itos(readBufferType, tmp) + L" where etext='" + etext + L"'";
+		sourceEncoding = sourceEncoding.substr(0, 54);
+	sqlStatement = L"update sources set encoding='" + escaped(sourceEncoding) + L"', readBufferFlags=" + itos(readBufferType, tmp) + L" where etext='" + escaped(etext) + L"'";
 	return myquery(&mysql, (wchar_t*)sqlStatement.c_str());
 }
 

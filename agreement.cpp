@@ -45,8 +45,6 @@
 		  SubjectWithObject mutates that copy only.
 		- reduceCostIfRestate takes relationCost by value, so the divide-by-
 		  length it performs never reaches the caller.
-		- eliminateLoserPatterns fills minSeparatorCost via reserve()+[]
-		  rather than resize(); that is out-of-range on a size-0 vector.
 		- Costs are "till max" (addOCostTillMax): they clamp rather than
 		  grow without bound.  Negative costs exist and are legal.
 		- preTaggedSource (BNC) skips live N/D and V/O costing and uses
@@ -462,7 +460,7 @@ bool cWordMatch::compareCost(int AC1, int LEN1, int lowestSeparatorCost, int pma
 	}
 	else
 	{
-		if (setInternal = (AC2 * LEN2 * LEN2 >= AC1 * LEN1 * LEN1))
+		if (setInternal = ((int64_t)AC2 * LEN2 * LEN2 >= (int64_t)AC1 * LEN1 * LEN1))
 			reason = 5;
 	}
 	if (setInternal && alsoSet)
@@ -648,7 +646,7 @@ int cSource::markChildren(cPatternElementMatchArray::tPatternElementMatch* pem, 
 						for (unsigned int clc = 0; clc < allLocations.size(); clc++)
 							lowestCost = min(lowestCost, m[position].pma.content[allLocations[clc]].getCost());
 						// go back to beginning and see whether there are other patterns that could become winners.
-						lc = 0; // for-loop then does lc++, so allLocations[0] is skipped
+						lc = (unsigned) -1; // for-loop then does lc++
 						// the lowest cost could have changed, or the cost of the winners could have changed, so re-evaluate the winners already set
 						vector <int> keptWinners;
 						for (int alreadySet : setAsWinners)
@@ -732,7 +730,7 @@ int cSource::markChildren(cPatternElementMatchArray::tPatternElementMatch* pem, 
 // whose length is childLen.  fillIfAlone non-top-level matches are
 // re-assessCost'd (sets reassessParentCosts).  Returns the min PMA cost
 // as unsigned ? a negative cost wraps to a huge value.
-unsigned int cSource::getAllLocations(unsigned int position, int parentPattern, int rootPattern, int childLen, int parentLen, vector <unsigned int>& allLocations, int recursionLevel, unordered_map <int, cCostPatternElementByTagSet>& tertiaryPEMAPositions, bool& reassessParentCosts)
+int cSource::getAllLocations(unsigned int position, int parentPattern, int rootPattern, int childLen, int parentLen, vector <unsigned int>& allLocations, int recursionLevel, unordered_map <int, cCostPatternElementByTagSet>& tertiaryPEMAPositions, bool& reassessParentCosts)
 {
 	LFS
 		int minCost = MAX_COST;
@@ -1111,7 +1109,7 @@ void cSource::substitutePrepObjectSomeOf(int &nounPosition, bool &singularSet,bo
 							for (unsigned int K = 0; K < ndTagSets.size(); K++)
 							{
 								int nounTag = -1, nextNounTag = -1, nAgreeTag = -1, nextNAgreeTag = -1;
-								if ((nounTag = findTag(ndTagSets[K], L"NOUN", nextNounTag)) >= 0 && (nAgreeTag = findTagConstrained(ndTagSets[K], L"N_AGREE", nextNAgreeTag, ndTagSets[K][nounTag])) > 0)
+								if ((nounTag = findTag(ndTagSets[K], L"NOUN", nextNounTag)) >= 0 && (nAgreeTag = findTagConstrained(ndTagSets[K], L"N_AGREE", nextNAgreeTag, ndTagSets[K][nounTag])) >= 0)
 								{
 									if (debugTrace.traceSubjectVerbAgreement)
 										lplog(L"%d:SANAM detection: N_AGREE within prepobject %d-%d located at %d.", nounPosition, prepTagSets[J][tag].sourcePosition, prepTagSets[J][tag].sourcePosition + prepTagSets[J][tag].len, ndTagSets[K][nAgreeTag].sourcePosition);
@@ -1358,7 +1356,7 @@ bool cSource::agreeInPersonPluralityAndTense(int inflectionFlags, int verbPositi
 // mainVerbTag >= 0 check ? the question path can leave it -1.
 void cSource::disagreementWithAmbiguousTense(bool agree,bool ambiguousTense, int verbAgreeTag, int conditionalTag, int mainVerbTag, int verbPosition, int position, vector<cTagLocation>& tagSet)
 {
-	if (!agree && ambiguousTense && verbAgreeTag >= 0 && conditionalTag < 0 &&
+	if (!agree && ambiguousTense && verbAgreeTag >= 0 && mainVerbTag >= 0 && conditionalTag < 0 &&
 		// avoid stomping on part of another pattern 'my millionaire would probably run for his life!'
 		(m[verbPosition].word->second.query(modalAuxiliaryForm) < 0 && m[verbPosition].word->second.query(futureModalAuxiliaryForm) < 0 &&
 			m[verbPosition].word->second.query(negationModalAuxiliaryForm) < 0 && m[verbPosition].word->second.query(negationFutureModalAuxiliaryForm) < 0))
@@ -1373,7 +1371,7 @@ void cSource::disagreementWithAmbiguousTense(bool agree,bool ambiguousTense, int
 // Intended to divide relationCost by subject length when the subject is
 // a restated object (RE_OBJECT).  relationCost is passed by value, so the
 // divide never reaches evaluateSubjectVerbAgreement.
-void cSource::reduceCostIfRestate(bool restateSet, int relationCost, int subjectTag, vector<cTagLocation>& tagSet)
+void cSource::reduceCostIfRestate(bool restateSet, int &relationCost, int subjectTag, vector<cTagLocation>& tagSet)
 {
 	if (restateSet && relationCost)
 	{
@@ -1616,8 +1614,8 @@ int cSource::BNCPatternViolation(int position, int PEMAPosition, vector < vector
 	LFS
 		int lowestCost = 30;
 	if (PEMAPosition < 0 || PEMAPosition >= (int)pema.count ||
-		pema[PEMAPosition].begin + position < 0 || pema[PEMAPosition].begin + position >= (int)pema.count ||
-		pema[PEMAPosition].end + position < 0 || pema[PEMAPosition].end + position >= (int)pema.count)
+		pema[PEMAPosition].begin + position < 0 || pema[PEMAPosition].begin + position >= (int)m.size() ||
+		pema[PEMAPosition].end + position < 0 || pema[PEMAPosition].end + position >= (int)m.size())
 		lplog(LOG_FATAL_ERROR, L"evaluateBNCPreferences - bad data!");
 	for (int I = pema[PEMAPosition].begin + position; I < pema[PEMAPosition].end + position; I++)
 		if (m[I].flags & (cWordMatch::flagBNCPreferAdjectivePatternMatch |
@@ -2090,7 +2088,9 @@ void cSource::evaluateNounDeterminers(int PEMAPosition, int position, vector < v
 					}
 					pema[nPEMAPosition].setFlag(cPatternElementMatchArray::COST_ND);
 					int numTagSets = collectAndProcessNounDeterminerTags(nLen, nPEMAPosition, nPosition, p, traceSource, pma, purpose);
-					if (numTagSets==0 && pema[nPEMAPosition].end == 1 && m[nPosition].word->first == L"her" && (m[nPosition + 1].word->first == L"own" || m[nPosition + 1].word->first == L"best"))
+					if (numTagSets==0 && pema[nPEMAPosition].end == 1 && m[nPosition].word->first == L"her" && 
+						nPosition + 1 < (int)m.size() &&
+						(m[nPosition + 1].word->first == L"own" || m[nPosition + 1].word->first == L"best"))
 						collectAndProcessHerNonSeparableTags(nLen, nPEMAPosition, nPosition, p, traceSource, pma);
 				} // for each iteration of each object
 			}
@@ -2147,7 +2147,7 @@ void cSource::evaluatePrepObjects(int PEMAPosition, int position, vector < vecto
 				if (word == L"he" || word == L"she" || word == L"they")
 					cost = 10;
 				// leaving a noun hanging but including its possessive
-				else if ((word == L"his" || word == L"her") &&
+				else if ((word == L"his" || word == L"her") && prepObjectPosition + 1 < (int)m.size() &&
 					(nfindex = m[prepObjectPosition + 1].word->second.query(nounForm)) >= 0 && // no +1 < m.size()
 					m[prepObjectPosition + 1].word->second.getUsageCost(nfindex) == 0)
 					cost = 4;
@@ -2164,7 +2164,8 @@ void cSource::evaluatePrepObjects(int PEMAPosition, int position, vector < vecto
 		if (costs.size())
 		{
 			lowerPreviousElementCosts(secondaryPEMAPositions, costs, traceSources, L"prepObjects");
-			setSecondaryCosts(secondaryPEMAPositions, pm, position, false, L"prepObjects");
+			if (pm)
+				setSecondaryCosts(secondaryPEMAPositions, pm, position, false, L"prepObjects");
 		}
 	}
 }
@@ -2351,12 +2352,12 @@ int cSource::getVerbObjectCost(cPatternMatchArray::tPatternMatch* pm, vector <cT
 	// if one object, and object follows directly after verb, and object consists of adverb, adverb, acc, then add cost.
 	if (numObjects == 1 && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len < whereVerb + 5)
 	{
-		bool isAdverb = m[whereVerb + 1].forms.isSet(adverbForm) && m[whereVerb + 1].word->second.getUsageCost(m[whereVerb + 1].queryForm(adverbForm)) < 4; // is it possibly an adverb?  no +1 < m.size()
+		bool isAdverb = whereVerb + 1 < (int)m.size() && m[whereVerb + 1].forms.isSet(adverbForm) && m[whereVerb + 1].word->second.getUsageCost(m[whereVerb + 1].queryForm(adverbForm)) < 4; // is it possibly an adverb?  no +1 < m.size()
 		if (isAdverb && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len == whereVerb + 3)
 		{
-			bool isPreposition = m[whereVerb + 1].forms.isSet(prepositionForm);
-			bool objectDoesntTakeAdjectives = (m[whereVerb + 2].queryForm(personalPronounAccusativeForm) != -1 || m[whereVerb + 2].queryForm(personalPronounForm) != -1) &&
-				m[whereVerb + 2].word->first != L"he" && m[whereVerb + 2].word->first != L"she";
+			bool isPreposition = whereVerb + 1 < (int)m.size() && m[whereVerb + 1].forms.isSet(prepositionForm);
+			bool objectDoesntTakeAdjectives = (whereVerb + 2 < (int)m.size() && (m[whereVerb + 2].queryForm(personalPronounAccusativeForm) != -1 || m[whereVerb + 2].queryForm(personalPronounForm) != -1)) &&
+				(whereVerb + 2 < (int)m.size() && m[whereVerb + 2].word->first != L"he" && m[whereVerb + 2].word->first != L"she");
 			if (isPreposition && objectDoesntTakeAdjectives)
 			{
 				verbObjectCost += 6;
@@ -2366,10 +2367,10 @@ int cSource::getVerbObjectCost(cPatternMatchArray::tPatternMatch* pm, vector <cT
 		}
 		else if (isAdverb && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len == whereVerb + 4)
 		{
-			isAdverb = m[whereVerb + 2].forms.isSet(adverbForm) && m[whereVerb + 2].word->second.getUsageCost(m[whereVerb + 2].queryForm(adverbForm)) < 4; // is it possibly an adverb?
-			bool isPreposition = m[whereVerb + 2].forms.isSet(prepositionForm);
-			bool objectDoesntTakeAdjectives = (m[whereVerb + 3].queryForm(personalPronounAccusativeForm) != -1 || m[whereVerb + 3].queryForm(personalPronounForm) != -1) &&
-				m[whereVerb + 3].word->first != L"he" && m[whereVerb + 3].word->first != L"she";
+			isAdverb = whereVerb + 2 < (int)m.size() && m[whereVerb + 2].forms.isSet(adverbForm) && m[whereVerb + 2].word->second.getUsageCost(m[whereVerb + 2].queryForm(adverbForm)) < 4; // is it possibly an adverb?
+			bool isPreposition = whereVerb + 2 < (int)m.size() && m[whereVerb + 2].forms.isSet(prepositionForm);
+			bool objectDoesntTakeAdjectives = (whereVerb + 3 < (int)m.size() && (m[whereVerb + 3].queryForm(personalPronounAccusativeForm) != -1 || m[whereVerb + 3].queryForm(personalPronounForm) != -1)) &&
+				(whereVerb + 3 < (int)m.size() && m[whereVerb + 3].word->first != L"he" && m[whereVerb + 3].word->first != L"she");
 			if (isAdverb && isPreposition && objectDoesntTakeAdjectives)
 			{
 				verbObjectCost += 6;
@@ -2908,7 +2909,7 @@ bool cSource::longSubjectBindingMismatch(int wordIndex, int beginObjectPosition,
 	// bias using word frequency but only for ruling out 
 	if (numBeginRelations > 0 && numBeginFrequency > 0 && numLastFrequency / numBeginFrequency > 1)
 		numBeginRelations = (numBeginRelations * numLastFrequency) / numBeginFrequency;
-	else if (numLastRelations > 0 && numLastFrequency > 0 && numBeginFrequency / numLastFrequency < 1) // int / never < 1 when both > 0 and first branch missed
+	else if (numLastRelations > 0 && numLastFrequency > 0 && numBeginFrequency < numLastFrequency) 
 		numLastRelations = (numLastRelations * numBeginFrequency) / numLastFrequency;
 	if ((numBeginRelations > 0 && numLastRelations > 0) &&
 		((numBeginRelations > numLastRelations) || // BEGIN_IS_CORRECT
@@ -3947,8 +3948,8 @@ int cSource::evaluateBNCPreferences(int position, int PEMAPosition, vector <cTag
 	lplog(L"Erasing positions %d-%d to ignore.", pema[PEMAPosition].begin + position, pema[PEMAPosition].end + position);
 #endif
 	if (PEMAPosition < 0 || PEMAPosition >= (int)pema.count ||
-		pema[PEMAPosition].begin + position < 0 || pema[PEMAPosition].begin + position >= (int)pema.count || // should be m.size(); then m[I]
-		pema[PEMAPosition].end + position < 0 || pema[PEMAPosition].end + position >= (int)pema.count)
+		pema[PEMAPosition].begin + position < 0 || pema[PEMAPosition].begin + position >= (int)m.size() || // should be m.size(); then m[I]
+		pema[PEMAPosition].end + position < 0 || pema[PEMAPosition].end + position >= (int)m.size())
 		lplog(LOG_FATAL_ERROR, L"evaluateBNCPreferences - bad data!");
 	for (int I = pema[PEMAPosition].begin + position; I < pema[PEMAPosition].end + position; I++)
 		m[I].flags &= ~cWordMatch::flagBNCPreferIgnore;

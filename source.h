@@ -80,9 +80,8 @@
 		  cache silently misparses.
 		- The (char*,int&,...) deserializing constructors use the "if (error=!copy(...))"
 		  assignment-in-condition idiom throughout; that is intentional, not a == typo.
-		- lplog(LOG_FATAL_ERROR,...) only logs - it does NOT abort (only lplogNR does).
-		  Every "FATAL ERROR" check in this file therefore continues into the operation it
-		  was guarding.
+		- lplog(LOG_FATAL_ERROR,...) does NOT return: logstring() terminates the process
+		  (see logging.cpp fatalExit).  Code after such a check is unreachable.
 		- Several classes have more than one constructor that initialize different subsets of
 		  members (cWordMatch and cObject in particular); see the comments there before
 		  relying on a default-constructed instance.
@@ -128,6 +127,7 @@ typedef struct {
 #define IS_SALIENCE_BOOST 2000
 
 void escapeStr(wstring &str);
+wstring escaped(const wstring &str);
 unsigned long encodeEscape(MYSQL &mysql, wstring &to, wstring from);
 
 // "Object Match": an entity plus the confidence/preference score with which it was matched at
@@ -542,8 +542,8 @@ public:
 	{
 		return relVerb;
 	}
-	// Set the verb link.  Only -1 (unset) or a real source position is legal; anything below -1
-	// is logged as a fatal error but, because lplog does not abort, is still stored.
+	// Set the verb link.  Only -1 (unset) or a real source position is legal; anything
+	// below -1 is fatal.
 	void setRelVerb(int rv)
 	{
 		if (rv < -1)
@@ -597,15 +597,14 @@ public:
 	vector <int> PMAWinners;   // pma offsets that won at this position
 	
 	// Mark form offset 'form' (relative to this word's form list) as a surviving winner.
-	// Out-of-range form numbers are logged as fatal, but since lplog does not abort the shift
-	// still executes with an out-of-range shift count.
+	// An out-of-range form number is fatal (lplog(LOG_FATAL_ERROR) terminates).
 	void setWinner(int form)
 	{
 		if (form >= sizeof(tmpWinnerForms) * 8)
 			lplog(LOG_FATAL_ERROR, L"overFlow on tmpWinnerForms (1)!");
 		tmpWinnerForms |= (1 << form);
 	}
-	// Clear the winner bit for form offset 'form'.  Same missing-abort caveat as setWinner.
+	// Clear the winner bit for form offset 'form'.
 	void unsetWinner(int form)
 	{
 		if (form >= sizeof(tmpWinnerForms) * 8)
@@ -3069,7 +3068,7 @@ private:
 													bool definitelySpeaker,bool resolveForSpeaker,bool avoidCurrentSpeaker,bool &mixedPlurality,bool limitTwo,vector <cOM> &objectMatches,bool &chooseFromLocalFocus);
 
 	int preferWordOrder(int wordOrderSensitiveModifier,vector <int> &locations);
-	vector <cSpeakerGroup>::iterator containingSpeakerGroup();
+	vector <cSpeakerGroup>::iterator containingSpeakerGroup(int where);
 	bool resolveOccRoleActivityObject(int where,vector <cOM> &objectMatches,vector <cObject>::iterator object,int wordOrderSensitiveModifier,bool physicallyPresent);
 	void resolveRelativeObject(int where,vector <cOM> &objectMatches,vector <cObject>::iterator object,int wordOrderSensitiveModifier);
 	bool tryGenderedSubgroup(int where,vector <cOM> &objectMatches,vector <cObject>::iterator object,int whereGenderedSubgroupCount,bool limitTwo);
@@ -3176,7 +3175,7 @@ private:
 	bool matchAlias(int where,int object, int aliasObject);
 
 	// agreement
-	unsigned int getAllLocations(unsigned int position,int parentPattern,int rootp,int childLen,int parentLen,vector <unsigned int> &allLocations, int recursionLevel,unordered_map <int, cCostPatternElementByTagSet> &tertiaryPEMAPositions,bool &reassessParentCosts);
+	int getAllLocations(unsigned int position,int parentPattern,int rootp,int childLen,int parentLen,vector <unsigned int> &allLocations, int recursionLevel,unordered_map <int, cCostPatternElementByTagSet> &tertiaryPEMAPositions,bool &reassessParentCosts);
 	int markChildren(cPatternElementMatchArray::tPatternElementMatch *pem,int position,int recursionLevel,int allRootsLowestCost, unordered_map <int, cCostPatternElementByTagSet> &tertiaryPEMAPositions,bool &reassessParentCosts);
 	bool findLowCostTag(vector<cTagLocation> &tagSet,int &cost, const wchar_t * tagName,cTagLocation &lowestCostTag,int parentCost,int &nextTag);
 	void switchSpecialSubjectWithObject(unsigned int position, cPatternMatchArray::tPatternMatch* pm, vector<cTagLocation>& tagSet, int subjectTag, int mainVerbTag);
@@ -3194,7 +3193,7 @@ private:
 	bool isSubjunctiveMood(int subjectTag, int position, int verbPosition, int person, vector<cTagLocation>& tagSet);
 	bool agreeInPersonPluralityAndTense(int inflectionFlags, int verbPosition, int person, bool singularSet, bool pluralSet);
 	void disagreementWithAmbiguousTense(bool agree, bool ambiguousTense, int verbAgreeTag, int conditionalTag, int mainVerbTag, int verbPosition, int position, vector<cTagLocation>& tagSet);
-	void reduceCostIfRestate(bool restateSet, int relationCost, int subjectTag, vector<cTagLocation>& tagSet);
+	void reduceCostIfRestate(bool restateSet, int &relationCost, int subjectTag, vector<cTagLocation>& tagSet);
 	int evaluateSubjectVerbAgreement(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, unsigned int parentPosition, unsigned int position, vector<cTagLocation> tagSet, int& traceSource);
 	// agreement section end
 

@@ -1380,8 +1380,7 @@ int cSource::printSentence(unsigned int rowsize, unsigned int begin, unsigned in
 		wchar_t printLine[LINE_BUFFER_LEN];
 	wchar_t bufferZone[2048];
 	unsigned int totalSize, I = begin, maxLines, startword = begin, maxPhraseMatches, linepos = 0;
-	printMaxSize.reserve(end - begin);
-	for (unsigned int fi = 0; fi < end - begin; fi++) printMaxSize[fi] = 0;
+	printMaxSize.assign(end - begin, 0); // reserve() does not set size(); [fi] was out of range
 	bufferZone[0] = 0xFEFE;
 	bufferZone[1] = 0xCECE;
 	int printStart = begin;

@@ -39,7 +39,7 @@
 		Win32 WideCharToMultiByte, the tmalloc/trealloc tracked allocator, lplog.
 
 	Notes / gotchas:
-		- lplog(LOG_FATAL_ERROR,...) does not return: logstring() calls exit(0).  So a
+		- lplog(LOG_FATAL_ERROR,...) does not return: logstring() exits EXIT_FAILURE.  So a
 			failed statement with allowFailure==false terminates the process, and code
 			written after such a call is effectively unreachable.
 		- The SRWLOCK is released before mysql_real_query() runs, while the pointer
@@ -316,23 +316,43 @@ unsigned long encodeEscape(MYSQL& mysql, wstring& to, wstring from)
 	LFS
 		string sFrom;
 	wTM(from, sFrom);
-	char tmp[1024];
-	mysql_real_escape_string(&mysql, tmp, sFrom.c_str(), sFrom.length());
-	mTW(tmp, to);
-	return 0;
+	// mysql_real_escape_string can write up to 2*len+1 bytes; the old fixed 1024 buffer overran.
+	vector <char> tmp(sFrom.length() * 2 + 1);
+	unsigned long len = mysql_real_escape_string(&mysql, tmp.data(), sFrom.c_str(), sFrom.length());
+	mTW(tmp.data(), to);
+	return len;
 }
 
+// Escape everything MySQL treats specially inside a quoted literal, so the result is
+// safe in both '...' and "..." contexts.  NUL is escaped as \0 rather than dropped.
 void escapeStr(wstring& str)
 {
 	LFS
 		wstring ess;
+	ess.reserve(str.length());
 	for (unsigned int I = 0; I < str.length(); I++)
 	{
-		if (str[I] == '\'') ess += '\\';
-		ess += str[I];
-		if (str[I] == '\\') ess += '\\';
+		switch (str[I])
+		{
+		case L'\'': ess += L"\\'"; break;
+		case L'"': ess += L"\\\""; break;
+		case L'\\': ess += L"\\\\"; break;
+		case L'\n': ess += L"\\n"; break;
+		case L'\r': ess += L"\\r"; break;
+		case L'\032': ess += L"\\Z"; break;
+		case L'\0': ess += L"\\0"; break;
+		default: ess += str[I]; break;
+		}
 	}
 	str = ess;
+}
+
+// escapeStr for a value used inline: returns the escaped copy and leaves the input alone.
+wstring escaped(const wstring& str)
+{
+	wstring copy(str);
+	escapeStr(copy);
+	return copy;
 }
 
 void cWord::generateFormStatistics(void)

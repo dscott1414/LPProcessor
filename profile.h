@@ -29,14 +29,18 @@
 		- logQuestionProfileTime - master enable; constructor returns immediately if 0.
 
 	Notes / gotchas:
-		- accumulateNetworkTime() takes const wchar_t* but writes a NUL over the second
-			'/' of the URL and restores it - that is UB on a string literal and will
-			fault if the page is in read-only memory.
-		- lfprint(char*,int) passes timeMapTotal[f] (a CP struct) to a %I64d format;
-			varargs + class type is undefined.  It happens to print CP::t on MSVC.
 		- Nested LFS in a recursive function (paice stem()) will grow functionPath
 			without bound for that thread.
+		- logQuestionProfileTime is latched into cProfile::active at construction, so
+			toggling it mid-run cannot leave the functionPath stack unbalanced.
 */
+#pragma once
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <string>
+#include <set>
+#include <unordered_map>
 #include "time.h"
 #include "Psapi.h"
 extern int logQuestionProfileTime;
@@ -47,30 +51,35 @@ class cProfile
 	class CP
 	{
 	public:
-		__int64 t; // time
-		__int64 c; // count
-		__int64 m; // memory
-		__int64 mwc; // memory without children
+		__int64 t = 0; // time
+		__int64 c = 0; // count
+		__int64 m = 0; // memory
+		__int64 mwc = 0; // memory without children
 	};
+	// Each comparator breaks ties on the key: without it a set of iterators drops
+	// every function whose value equals one already inserted.
 	struct timeSetCompare
 	{
 		bool operator()(const unordered_map <string,CP>::iterator &lhs, const unordered_map <string,CP>::iterator &rhs) const
 		{
-			return lhs->second.t<rhs->second.t;
+			if (lhs->second.t!=rhs->second.t) return lhs->second.t<rhs->second.t;
+			return lhs->first<rhs->first;
 		}
 	};
 	struct memorySetCompare
 	{
 		bool operator()(const unordered_map <string,CP>::iterator &lhs, const unordered_map <string,CP>::iterator &rhs) const
 		{
-			return lhs->second.mwc<rhs->second.mwc;
+			if (lhs->second.mwc!=rhs->second.mwc) return lhs->second.mwc<rhs->second.mwc;
+			return lhs->first<rhs->first;
 		}
 	};
 	struct countSetCompare
 	{
 		bool operator()(const unordered_map <string,CP>::iterator &lhs, const unordered_map <string,CP>::iterator &rhs) const
 		{
-			return lhs->second.c>rhs->second.c;
+			if (lhs->second.c!=rhs->second.c) return lhs->second.c>rhs->second.c;
+			return lhs->first<rhs->first;
 		}
 	};
 	static unordered_map <string,CP> timeMapTotal; // profiler is not threadsafe
@@ -81,7 +90,6 @@ class cProfile
 	static __int64 accumulatedOverheadTime; // profiler is not threadsafe
 	static __int64 totalCount; // profiler is not threadsafe
 	static unordered_map < wstring, __int64 > netAndSleepTimes,onlyNetTimes,numTimesPerURL;   // protect by networkTimeSRWLock
-	static bool lockInitialized;
 public:
 	static __int64 accumulationNetworkProfileTimer,accumulateOnlyNetTimer,lastNetworkTimePrinted,accumulateNetworkTimeCount;  // protect by networkTimeSRWLock
 	static int totalInternetTimeWaitBandwidthControl;  // protect by totalInternetTimeWaitBandwidthControlSRWLock
@@ -90,6 +98,7 @@ public:
 	static __int64 mySQLTotalTime; // protect by mySQLTotalTimeSRWLock
 	string saveFunctionPath;
 	__int64 startTime,startPrivateBytes;
+	bool active; // latched from logQuestionProfileTime so ctor and dtor always agree
 	// Push 'function' (or a decimal 'num') onto functionPath and snapshot QPC +
 	// PrivateUsage.  Empty function resets the network accumulators.  No-op when
 	// logQuestionProfileTime is 0.  Not re-entrant across threads (functionPath is static).
@@ -97,7 +106,8 @@ public:
 	{
 		startPrivateBytes = 0;
 		startTime = 0;
-		if (function[0]==0)
+		active = false;
+		if (function==NULL || function[0]==0)
 		{
 			accumulationNetworkProfileTimer=0;
 			accumulateOnlyNetTimer=0;
@@ -105,56 +115,51 @@ public:
 			accumulateNetworkTimeCount=0;  
 		}
 		if (!logQuestionProfileTime) return;
+		active = true;
 		saveFunctionPath=functionPath;
 		if (functionPath.length()>0)
 			functionPath+=string(":");
 		if (num>0)
 		{
 			char f[50];
-			itoa(num,f,10);
+			snprintf(f,sizeof(f),"%d",num);
 			functionPath+=f;
 		}
-		else
+		else if (function!=NULL)
 		{
-			const char *wc=strchr(function,L':');
-			if (wc)
+			const char *wc=strchr(function,':');
+			// __FUNCTION__ is class::method; skip past "::" only if both colons are there
+			if (wc && wc[1]==':' && wc[2])
 				functionPath+=wc+2;
 			else
 				functionPath+=function;
 		}
-		PROCESS_MEMORY_COUNTERS_EX memCounter;
+		PROCESS_MEMORY_COUNTERS_EX memCounter={0};
 		BOOL ret=GetProcessMemoryInfo(GetCurrentProcess(),(PROCESS_MEMORY_COUNTERS *)&memCounter,sizeof(memCounter));
-		startPrivateBytes=(ret) ? memCounter.PrivateUsage : -1;
+		startPrivateBytes=(ret) ? (__int64)memCounter.PrivateUsage : -1;
 		QueryPerformanceCounter((LARGE_INTEGER *)&startTime);
 	}
 	// Add elapsed QPC ticks and private-byte delta to timeMapTotal[functionPath],
 	// restore the caller's path, and charge the destructor itself to accumulatedOverheadTime.
 	~cProfile()
 	{
-		if (!logQuestionProfileTime) return;
+		if (!active) return;
 		__int64 endTime,overheadTime;
 		QueryPerformanceCounter((LARGE_INTEGER *)&endTime);
-		unordered_map <string,CP>::iterator tmi;
-		if ((tmi=timeMapTotal.find(functionPath.c_str()))==timeMapTotal.end())
-		{
-			timeMapTotal[functionPath.c_str()].t=0;
-			tmi=timeMapTotal.find(functionPath.c_str());
-			tmi->second.c=0;
-			tmi->second.m=0;
-			tmi->second.mwc=0;
-		}
-		tmi->second.t+=(endTime-startTime);
-		tmi->second.c++;
-		PROCESS_MEMORY_COUNTERS_EX memCounter;
+		CP &cp=timeMapTotal[functionPath];
+		cp.t+=(endTime-startTime);
+		cp.c++;
+		PROCESS_MEMORY_COUNTERS_EX memCounter={0};
 		BOOL ret=GetProcessMemoryInfo(GetCurrentProcess(),(PROCESS_MEMORY_COUNTERS *)&memCounter,sizeof(memCounter));
 		if (ret && startPrivateBytes>0)
-			tmi->second.m+=memCounter.PrivateUsage - startPrivateBytes;
-		//lplog(LOG_INFO,L"lfe %S %I64d %I64d",functionPath.c_str(),endTime,timeMapTotal[functionPath.c_str()]);
+			cp.m+=(__int64)memCounter.PrivateUsage - startPrivateBytes;
 		QueryPerformanceCounter((LARGE_INTEGER *)&overheadTime);
 		accumulatedOverheadTime+=overheadTime-endTime;
 		totalCount++;
 		functionPath=saveFunctionPath;
 	}
+	cProfile(const cProfile &) = delete;
+	cProfile &operator=(const cProfile &) = delete;
 	static __int64 cb;
 	static unordered_map <string ,__int64 > counterMap;
 	static unordered_map <string ,int > counterNumMap;
@@ -185,39 +190,54 @@ public:
 		counterBegin();
 	}
 
-	// printf each counterMap bucket as ticks and percent of the sum.  Divides by
-	// total without a zero check - do not call if no counterEnd has run.
+	// printf each counterMap bucket as ticks and percent of the sum.
 	static void printCounters()
 	{
 		__int64 total=0;
 		for (unordered_map <string ,__int64 >::iterator cmi=counterMap.begin(),cmiEnd=counterMap.end(); cmi!=cmiEnd; cmi++)
 			total+=cmi->second;
+		if (total<=0) return;
 		for (unordered_map <string ,__int64 >::iterator cmi=counterMap.begin(),cmiEnd=counterMap.end(); cmi!=cmiEnd; cmi++)
 		{
 			unordered_map <string ,int >::iterator cmci=counterNumMap.find(cmi->first);
-			printf("%s:%07I64d %02I64d%% [COUNT:%d]\n",cmi->first.c_str(),cmi->second,cmi->second*100/total,cmci->second);
+			printf("%s:%07I64d %02I64d%% [COUNT:%d]\n",cmi->first.c_str(),cmi->second,cmi->second*100/total,(cmci==counterNumMap.end()) ? 0 : cmci->second);
 		}
 	}
 
 	// Log one timeMapTotal entry.  Empty 'function' also dumps SQL wait and
-	// flushes accumulateNetworkTime.  timeMapTotal[f] is a CP, not an __int64;
-	// the %I64d happens to print CP::t on MSVC.
-	static void lfprint(char *function,int num)
+	// flushes accumulateNetworkTime.
+	static void lfprint(const char *function,int num)
 	{
+		if (function==NULL) return;
+		string key(function);
 		if (num>0)
 		{
-			char f[1024];
-			strcpy(f,function);
-			sprintf(f+strlen(f)," line:%d",num);
-			lplog(LOG_INFO,L"TIME %S:%I64d",f,timeMapTotal[f]);
+			char f[64];
+			snprintf(f,sizeof(f)," line:%d",num);
+			key+=f;
 		}
-		else
-			lplog(LOG_INFO,L"TIME %S:%I64d",function,timeMapTotal[function]);
-		if (strlen(function)==0)
+		lplog(LOG_INFO,L"TIME %S:%I64d",key.c_str(),timeMapTotal[key].t);
+		if (function[0]==0)
 		{
-			lplog(LOG_INFO,L"SQL: %08I64d ms waitTime=%0I64d",mySQLTotalTime,totalInternetTimeWaitBandwidthControl);
+			lplog(LOG_INFO,L"SQL: %08I64d ms waitTime=%d",mySQLTotalTime,totalInternetTimeWaitBandwidthControl);
 			accumulateNetworkTime(L"",0,0);
 		}
+	}
+
+	// True if 'child' is 'parent' plus exactly one more ':' segment; 'rest' gets that segment.
+	static bool directChild(const string &parent,const string &child,string &rest)
+	{
+		size_t offset=parent.length();
+		if (offset>=child.length()) return false;
+		if (child.compare(0,offset,parent)!=0) return false;
+		if (offset>0)
+		{
+			if (child[offset]!=':') return false;
+			offset++;
+			if (offset>=child.length()) return false;
+		}
+		rest=child.substr(offset);
+		return rest.find(':')==string::npos;
 	}
 
 	// Close out 'profile', then dump TIME / MEMORY / COUNT reports for every
@@ -225,33 +245,39 @@ public:
 	// more ':' segment).  No-op when logQuestionProfileTime is 0.
 	static void lfprint(cProfile &profile)
 	{
-		if (!logQuestionProfileTime) return;
+		// profile.active, not logQuestionProfileTime: if the flag was turned on after
+		// 'profile' was constructed its startTime is 0 and the elapsed time is garbage.
+		if (!profile.active) return;
 		__int64 endTime,total,memoryTotal=0;
 		QueryPerformanceCounter((LARGE_INTEGER *)&endTime);
-		unordered_map <string,CP>::iterator tmi;
-		if (functionPath.length()==0)
-			functionPath=profile.functionPath;
-		if ((tmi=timeMapTotal.find(functionPath.c_str()))==timeMapTotal.end())
-			total=timeMapTotal[functionPath.c_str()].t=(endTime-profile.startTime);
-		else
-			total=tmi->second.t+=(endTime-profile.startTime);
-		PROCESS_MEMORY_COUNTERS_EX memCounter;
+		total=(timeMapTotal[functionPath].t+=(endTime-profile.startTime));
+		PROCESS_MEMORY_COUNTERS_EX memCounter={0};
 		BOOL ret=GetProcessMemoryInfo(GetCurrentProcess(),(PROCESS_MEMORY_COUNTERS *)&memCounter,sizeof(memCounter));
-		if (ret>0)
-			memoryTotal=memCounter.PrivateUsage;
+		if (ret)
+			memoryTotal=(__int64)memCounter.PrivateUsage;
 		LARGE_INTEGER frequency;
-		QueryPerformanceFrequency(&frequency);
+		if (!QueryPerformanceFrequency(&frequency) || frequency.QuadPart<=0)
+			return;
+		if (total<=0)
+		{
+			lplog(LOG_INFO,L"TIME TOTALS: no elapsed time recorded");
+			return;
+		}
+		// static sorts persist across calls; a second lfprint would otherwise hold stale iterators
+		timeSort.clear();
+		memorySort.clear();
+		countSort.clear();
 		lplog(LOG_INFO,L"TIME TOTALS:%I64d ms %I64d s (%I64d minutes)",total*1000/frequency.QuadPart,total/frequency.QuadPart,total/frequency.QuadPart/60);
 		lplog(LOG_INFO,L"TIME PROFILE OVERHEAD:%I64d ms %I64d%%",accumulatedOverheadTime*1000/frequency.QuadPart,accumulatedOverheadTime*100/total);
 		for (unordered_map<string,CP>::iterator ti=timeMapTotal.begin(),tiEnd=timeMapTotal.end(); ti!=tiEnd; ti++)
 			timeSort.insert(ti);
-		for (set<unordered_map<string,CP>::iterator>::iterator si=timeSort.begin(),siEnd=timeSort.end(); si!=siEnd; si++)
+		for (set<unordered_map<string,CP>::iterator,timeSetCompare>::iterator si=timeSort.begin(),siEnd=timeSort.end(); si!=siEnd; si++)
 		{
 			__int64 directChildrenMemory=0;
 			__int64 directChildrenTime=0;
-			for (set<unordered_map<string,CP>::iterator>::iterator ssi=timeSort.begin(),ssiEnd=timeSort.end(); ssi!=ssiEnd; ssi++)
-				if ((*si)->first.length()<(*ssi)->first.length() && (*ssi)->first.substr(0,(*si)->first.length())==(*si)->first &&
-						(*ssi)->first.find(':',(*si)->first.length()+1)==string::npos)
+			string theRest;
+			for (set<unordered_map<string,CP>::iterator,timeSetCompare>::iterator ssi=timeSort.begin(),ssiEnd=timeSort.end(); ssi!=ssiEnd; ssi++)
+				if (directChild((*si)->first,(*ssi)->first,theRest))
 				{
 					directChildrenMemory+=(*ssi)->second.m;
 					directChildrenTime+=(*ssi)->second.t;
@@ -266,17 +292,15 @@ public:
 				if (withoutChildrenPercentage>0 || percentage>20 || (*si)->second.c>1000000)
 				{
 					lplog(LOG_INFO,L"TIME %S:%I64d ms %I64d%% [without children %I64d ms %I64d%%] count=%I64d",(*si)->first.c_str(),ms,percentage,withoutChildrenMS,withoutChildrenPercentage,(*si)->second.c);
-					for (set<unordered_map<string,CP>::iterator>::iterator ssi=timeSort.begin(),ssiEnd=timeSort.end(); ssi!=ssiEnd; ssi++)
+					if ((*si)->second.t<=0) continue;
+					for (set<unordered_map<string,CP>::iterator,timeSetCompare>::iterator ssi=timeSort.begin(),ssiEnd=timeSort.end(); ssi!=ssiEnd; ssi++)
 					{
+						if (!directChild((*si)->first,(*ssi)->first,theRest)) continue;
 						__int64 msts=(*ssi)->second.t*1000/frequency.QuadPart;
 						__int64 percentage2=(*ssi)->second.t*100/(*si)->second.t;
 						__int64 percentageOfTotal=(*ssi)->second.t*100/total;
-						if (percentage2>0 && (*si)->first.length()<(*ssi)->first.length() && (*ssi)->first.substr(0,(*si)->first.length())==(*si)->first)
-						{
-							string theRest=(*ssi)->first.c_str()+(*si)->first.length()+(((*si)->first.length()) ? 1 : 0);
-							if (theRest.find(':')==string::npos)
-								lplog(LOG_INFO,L"  %S:%I64d ms [%I64d%% parent] [%I64d%% total]",theRest.c_str(), msts,percentage2,percentageOfTotal);
-						}
+						if (percentage2>0)
+							lplog(LOG_INFO,L"  %S:%I64d ms [%I64d%% parent] [%I64d%% total]",theRest.c_str(), msts,percentage2,percentageOfTotal);
 					}
 				}
 			}
@@ -284,9 +308,9 @@ public:
 		for (unordered_map<string,CP>::iterator ti=timeMapTotal.begin(),tiEnd=timeMapTotal.end(); ti!=tiEnd; ti++)
 		{
 			memorySort.insert(ti);
-		  countSort.insert(ti);
+			countSort.insert(ti);
 		}
-		for (set<unordered_map<string,CP>::iterator>::iterator si=memorySort.begin(),siEnd=memorySort.end(); si!=siEnd; si++)
+		for (set<unordered_map<string,CP>::iterator,memorySetCompare>::iterator si=memorySort.begin(),siEnd=memorySort.end(); memoryTotal>0 && si!=siEnd; si++)
 		{
 			__int64 percentage=(*si)->second.m*100/memoryTotal;
 			if (percentage>0)
@@ -298,27 +322,26 @@ public:
 				{
 					lplog(LOG_INFO,L"MEMORY %S:%I64d KB %I64d%% [without children %I64d KB %I64d%%] count=%I64d",
 						(*si)->first.c_str(),KB,percentage,withoutChildrenKB,withoutChildrenPercentage,(*si)->second.c);
-					for (set<unordered_map<string,CP>::iterator>::iterator ssi=memorySort.begin(),ssiEnd=memorySort.end(); ssi!=ssiEnd; ssi++)
+					if ((*si)->second.m<=0) continue;
+					string theRest;
+					for (set<unordered_map<string,CP>::iterator,memorySetCompare>::iterator ssi=memorySort.begin(),ssiEnd=memorySort.end(); ssi!=ssiEnd; ssi++)
 					{
+						if (!directChild((*si)->first,(*ssi)->first,theRest)) continue;
 						__int64 msKB=(*ssi)->second.m/1000;
 						__int64 msPercentage=(*ssi)->second.m*100/(*si)->second.m;
 						__int64 msPercentageOfTotal=(*ssi)->second.m*100/memoryTotal;
-						if (msPercentage>0 && (*si)->first.length()<(*ssi)->first.length() && (*ssi)->first.substr(0,(*si)->first.length())==(*si)->first)
-						{
-							string theRest=(*ssi)->first.c_str()+(*si)->first.length()+1;
-							if (theRest.find(':')==string::npos)
-								lplog(LOG_INFO,L"  %S:%I64d KB [%I64d%% parent] [%I64d%% total]",theRest.c_str(),msKB,msPercentage,msPercentageOfTotal);
-						}
+						if (msPercentage>0)
+							lplog(LOG_INFO,L"  %S:%I64d KB [%I64d%% parent] [%I64d%% total]",theRest.c_str(),msKB,msPercentage,msPercentageOfTotal);
 					}
 				}
 			}
 		}
 		int countListMax=0;
-		for (set<unordered_map<string,CP>::iterator>::iterator si=countSort.begin(),siEnd=countSort.end(); si!=siEnd && countListMax<40; si++,countListMax++)
+		for (set<unordered_map<string,CP>::iterator,countSetCompare>::iterator si=countSort.begin(),siEnd=countSort.end(); si!=siEnd && countListMax<40; si++,countListMax++)
 		{
 			string func=(*si)->first;
 			size_t lastColon=func.rfind(':');
-			if (lastColon!=wstring::npos) 
+			if (lastColon!=string::npos) 
 				func.erase(0,lastColon+1);
 			lplog(LOG_INFO,L"COUNT %30S:%I64d",func.c_str(),(*si)->second.c);
 			lplog(LOG_INFO,L"      %30S",(*si)->first.c_str());
@@ -327,11 +350,10 @@ public:
 	// Add one HTTP wait: (now-timer) to the sleep+net total and (now-lNC) to
 	// net-only, keyed by the host carved out of 'str' (scheme://host/...).
 	// timer==0 still takes the lock (used as a flush from FATAL and lfprint).
-	// Casts away const and writes a temporary NUL into str - UB on a literal.
+	// networkTimeSRWLock is a zero-initialized static, which is SRWLOCK_INIT; the old
+	// lazy InitializeSRWLock here re-zeroed the lock while other threads held it.
 	static void accumulateNetworkTime(const wchar_t *str,int timer,int lNC)
 	{ 
-		if (!lockInitialized)
-			InitializeSRWLock(&networkTimeSRWLock);
  		AcquireSRWLockExclusive(&networkTimeSRWLock);
 		int c=clock();
 		accumulateNetworkTimeCount++;
@@ -340,24 +362,25 @@ public:
 			int t=c-timer,ont=c- lNC;
 			accumulationNetworkProfileTimer+=t;
 			accumulateOnlyNetTimer+=ont;
-			wchar_t *pos=(wchar_t *)wcschr(str,L'/');
-			if (pos!=0 && (pos=wcschr(pos+2,L'/'))!=0)
+			wstring url((str) ? str : L"");
+			size_t scheme=url.find(L'/');
+			size_t endHost=(scheme==wstring::npos || scheme+2>url.length()) ? wstring::npos : url.find(L'/',scheme+2);
+			if (endHost!=wstring::npos)
 			{
-				*pos=0;
-				unordered_map <wstring,__int64>::iterator nt=onlyNetTimes.find(str);
+				url.erase(endHost);
+				unordered_map <wstring,__int64>::iterator nt=onlyNetTimes.find(url);
 				if (nt==onlyNetTimes.end())
 				{
-					netAndSleepTimes[str]=t;
-					onlyNetTimes[str]=ont;
-					numTimesPerURL[str]=1;
+					netAndSleepTimes[url]=t;
+					onlyNetTimes[url]=ont;
+					numTimesPerURL[url]=1;
 				}
 				else
 				{
-					netAndSleepTimes[str]+=t;
+					netAndSleepTimes[url]+=t;
 					nt->second+=ont;
-					numTimesPerURL[str]++;
+					numTimesPerURL[url]++;
 				}
-				*pos=L'/';
 			}
 		}
 		//if (accumulationNetworkProfileTimer>0 && (c-lastNetworkTimePrinted>120000 || timer==0))
@@ -375,19 +398,20 @@ public:
 	}
 };
 
-#ifdef PROFILEDETAIL
+//#define PROFILE
+// PROFILEDETAIL implies PROFILE.  Previously both blocks defined DLFS/LFSL, so
+// defining PROFILEDETAIL produced a macro redefinition and silently lost the detail forms.
+#if defined(PROFILEDETAIL)
+	#define LFS cProfile profile(__FUNCTION__);
 	#define DLFS cProfile profile(__FUNCTION__);
 	#define LFSL cProfile profile(__FUNCTION__,__LINE__);
-#endif
-
-//#define PROFILE
-#ifdef PROFILE
-	#define DLFS 
+#elif defined(PROFILE)
 	#define LFS cProfile profile(__FUNCTION__);
-	#define LFSL 
+	#define DLFS
+	#define LFSL
 #else
-	#define DLFS 
-	#define LFS 
-	#define LFSL 
+	#define LFS
+	#define DLFS
+	#define LFSL
 #endif
 

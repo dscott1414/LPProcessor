@@ -9,6 +9,52 @@ Vendored third-party trees (`lloyd-yajl-66cb08c/`, `tinyxml2-master/`,
 `HMM/KenLM/`, `packages/`) are out of scope. This is a comments-only change;
 no executable logic was intended to change.
 
+## Status — read this before acting on any finding below
+
+This document records the state of the code at the time of the original review.
+**Fixes have since been applied in two waves, and the entries below were not
+updated.** Verify against the current source before acting on any of them.
+
+Wave 1 — commit `8e1bd47` "Apply first-pass UB and logic-inversion source fixes":
+`minSeparatorCost` (`resize`), `pattern.h initializeUsage` (`assign`),
+`intArray decode()` negative shift, `processForm` writing through `c_str()`,
+`setMandatoryAncestorPatterns` wrong bitset, `HAIL:OBJECT` tag split,
+PMA `clear()` leaving a dangling `content`, PMA/PEMA self-assignment,
+`getNextPosition` `INT_MIN`, `queryTag` longest-match, and `months_abb_index`.
+
+Wave 2 — working-tree changes (see `git diff`): `cName::notNull` deleted in favour
+of `isCompletelyNull`, `sameSpeaker` one-sided arms, `speakerGroupTransition`
+`I--`, `questionTypeCheck` type-nibble replacement, `bitObject::write` bounds
+check, `conversationContext` intersect test, `paice` empty-line guard,
+`DIYDiskArray` fd ownership, `profile.h` (comparators, `const` write, macros,
+divide-by-zero, SRWLOCK init), `processMetanameTagset` reject value.
+
+Wave 3 — this pass. Fixed: `source.cpp printSentence` (`printMaxSize`
+`reserve`→`assign`, the one live `reserve`-then-index bug), `months_abb`
+duplicate `"apr"`/missing `"may"` introduced by the wave-1 fix,
+`QUERY_BUFFER_LEN_*` parenthesisation, `lplogNR` format-string vulnerability,
+`encodeEscape` fixed-buffer overrun, `twsCapacity` missing `NamedHoliday`,
+`capacityString` unsigned bound, `cIntArray::operator=` self-assignment,
+`InternetReadFile_Wait` thread use-after-free, FATAL exit status and stdin wait,
+child exit-code reporting, `containingSpeakerGroup` interval test, `escapeStr`
+double-quote/control-character escaping, `writeThesaurusEntry` injection and
+unbounded `wcscat`, and `compare_large_files.py` operator precedence.
+
+**Correction to the cross-cutting summary below:** the claim that the 4–20MB
+stack buffers "will overflow a 1MB MSVC stack" is **wrong**. Both `lp.vcxproj`
+and `specials.vcxproj` set `StackReserveSize` to ~21MB in every configuration,
+so these buffers fit on the main thread. They remain a real latent risk — they
+would overflow a default-stack worker thread and leave no headroom for the
+recursive pattern matcher — but they are not an immediate overflow.
+
+**Build note:** the x64 configurations now compile with `EnableAllWarnings` and
+a minimal suppression list (previously `/Wall` was negated by a 25-entry
+`DisableSpecificWarnings` list that hid every narrowing and signed/unsigned
+conversion, assignment-in-conditional, and — in `QuestionAnswering|x64` — the
+null-dereference and buffer-overrun analysis warnings). `TreatWarningAsError` is
+temporarily `false` so the newly surfaced warnings can be triaged; re-enable it
+once they are cleared.
+
 ## Cross-cutting conclusions
 
 The parser is a single large Windows/MSVC/MySQL research codebase with a
@@ -435,8 +481,8 @@ inverted speaker/name/month predicates.
   `InternetCloseHandle` while `InternetReadFile_Child` may still be in
   `InternetReadFile`. Wait for the thread after cancel.
 
-- **[HIGH] profile.h:346 — `accumulateNetworkTime` writes through a `const wchar_t*`** —
-  mutates the URL to isolate the host. Copy into a local `wstring` first.
+- **[FIXED] profile.h:346 — `accumulateNetworkTime` writes through a `const wchar_t*`** —
+  mutates the URL to isolate the host. Now copies into a local `wstring` first.
 
 - **[HIGH] intArray.h:350 — `decode()` right-shifts by a negative count** —
   last iteration is `val >> (0-10)`. Stop at `bitFieldCount >= BITS_PER_RULE`.

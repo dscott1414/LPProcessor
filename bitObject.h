@@ -176,10 +176,10 @@ public:
 	// by the time FATAL fires.
 	bool write(void *buffer, int &where, int limit)
 	{
+		if (where + sizeof(bits) > limit)
+			lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached (2)!", limit);
 		memcpy(((char *)buffer) + where, bits, sizeof(bits));
 		where += sizeof(bits);
-		if (where > limit)
-			lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached (1)!", limit);
 		return true;
 	}
 private:

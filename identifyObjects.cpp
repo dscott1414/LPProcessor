@@ -237,8 +237,8 @@ bool cSource::isPleonastic(unsigned int where)
 	int I;
 	// Off-by-one vs the comment "It MEANS (that) S": indexes where+2, so
 	// "it seems that S" never matches (would need where+1).
-	for (I = 0; MEANS[I] && m[where + 2].word->first != MEANS[I]; I++);
-	if (MEANS[I] && (m[where + 3].pma.queryPattern(L"__S1") != -1 || m[where + 3].pma.queryPattern(L"_REL1") != -1)) return true;
+	for (I = 0; MEANS[I] && m[where + 1].word->first != MEANS[I]; I++);
+	if (MEANS[I] && (m[where + 2].pma.queryPattern(L"__S1") != -1 || m[where + 2].pma.queryPattern(L"_REL1") != -1)) return true;
 	// NP makes/finds it MA (for NP) to VP
 	for (I = 0; MA[I] && m[where + 1].word->first != MA[I]; I++);
 	if (!MA[I] || where < 1 || (m[where - 1].word->first != L"makes" && m[where - 1].word->first != L"finds")) return false;
@@ -264,7 +264,7 @@ bool cSource::searchExactMatch(cObject& object, int position)
 
 	set<int>::iterator s, sEnd = relatedObjects.end();
 	for (s = relatedObjects.begin(); s != sEnd; s++)
-		if (!object.eliminated && object.equals(objects[*s], m))
+		if (!objects[*s].eliminated && object.equals(objects[*s], m))
 		{
 			m[position].setObject(*s);
 			objects[*s].locations.push_back(cObject::cLocation(object.originalLocation));
@@ -1258,7 +1258,7 @@ bool cSource::identifyAdjectivalObjects(const int where, wstring tagName, const 
 			// to 'his' which is not correct.  It is not 'his' check, it is 'his' banker's check.
 			// so this has to be either a pronoun to own or it has an OWNER flag on it.
 			if (identifyObject(NOUN_TAG, I, nelement, true, ownerWhere, where) >= 0 && m[I].getObject() >= 0 &&
-				(m[I].word->second.inflectionFlags & (PLURAL_OWNER | SINGULAR_OWNER)) || (m[I].flags & cWordMatch::flagNounOwner))
+				((m[I].word->second.inflectionFlags & (PLURAL_OWNER | SINGULAR_OWNER)) || (m[I].flags & cWordMatch::flagNounOwner)))
 				ownerWhere = I;
 		}
 		else if (debugTrace.traceSpeakerResolution)
@@ -1533,7 +1533,7 @@ int cSource::determineNonOwnershipObjectInfo(int &where, int &element, const int
 	{
 		int nameElement = -1;
 		// 5th/6th args are declared (plural, embeddedName) but passed swapped.
-		getPrincipalWhereAndEndAndNameInfo(tagName, where, element, principalWhere, embeddedName, plural, end, nameElement);
+		getPrincipalWhereAndEndAndNameInfo(tagName, where, element, principalWhere, plural, embeddedName, end, nameElement);
 		// you are English, aren't you?
 		if (m[begin].queryForm(demonymForm) >= 0 && end - begin == 1 && (m[begin].word->second.inflectionFlags & PLURAL) == PLURAL &&
 			(m[begin].objectRole & (SUBJECT_ROLE | OBJECT_ROLE)) == OBJECT_ROLE)

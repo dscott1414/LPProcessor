@@ -174,10 +174,9 @@ public:
       consolidateEndPositions=false;
         endPosition = 0;
     };
-	// Reserve the four usage counters to match the form/pattern alternative counts.
-	// Does not size() them — copyUsage/incrementUse assume the vectors were later
-	// grown (zeroUsage / the first incrementUse path); call only after create() has
-	// finished resolving patternReferences so patternIndexes is final.
+	// Size and zero the four usage counters to match the form/pattern alternative
+	// counts.  Call only after create() has finished resolving patternReferences,
+	// so patternIndexes is final.
 		void initializeUsage()
 		{
       usageFormFinalMatch.assign(formIndexes.size(), 0);
@@ -493,8 +492,7 @@ public:
     //    whatMatched.clear();
     //}
 	// Count a winning use of alternative indexNum of elementNum.  Called from
-	// PEMA::consolidateWinners.  Indexes the usage* vectors; those are only
-	// reserve()'d by initializeUsage(), not resize()'d.
+	// PEMA::consolidateWinners.  initializeUsage() must have run first.
     void incrementUse(unsigned int elementNum,unsigned int indexNum,bool isPattern)
     {
 			if (isPattern)

@@ -42,11 +42,9 @@
 		indirectly (via cSource). Holiday names are compiled in.
 
 	Notes / gotchas:
-		- eCapacity and twsCapacity drift after ?tomorrow?: twsCapacity
-		  inserts ?morrow?, so whichCapacity("yesterday") is not
-		  cYesterday. See the review report.
-		- months_abb omits may/jun/jul, so whichMonth("aug") returns 4
-		  (May?s slot).
+		- twsCapacity is index-aligned with eCapacity; adding to one requires adding
+		  to the other (it was previously missing NamedHoliday).
+		- months_abb has no entry for august; months_abb_index maps the rest onto months[].
 		- cTimeInfo::clear() does not zero the absNamed* / absToday family.
 		- LFS at every function entry.
 */
@@ -1174,22 +1172,23 @@ bool cSource::identifyDateTime(int where, vector <cSyntacticRelationGroup>::iter
 	return true;
 }
 
+// Index-aligned with eCapacity; keep the two in step.  "morrow" is a synonym of
+// "tomorrow" and is mapped by whichCapacity() rather than given its own slot.
 const wchar_t* twsCapacity[] = { L"millenium",L"century",L"decade",L"year",L"semester",L"season",L"quarter",L"month",L"week",L"day",
 	 L"hour",L"minute",L"second",L"moment",
 	 L"morning",L"noon",L"afternoon",L"evening",L"dusk",L"night",L"midnight",L"dawn",
-	 // ?morrow? is extra vs eCapacity, so yesterday+ are shifted.
-	 L"tonight",L"today",L"tomorrow",L"morrow",L"yesterday",
-	 L"NamedMonth",L"NamedDay",L"NamedSeason",
+	 L"tonight",L"today",L"tomorrow",L"yesterday",
+	 L"NamedMonth",L"NamedDay",L"NamedSeason",L"NamedHoliday",
 	 L"unspecified",NULL };
 
-// Index of `w` in twsCapacity, or -1. That table inserts ?morrow? before
-// ?yesterday?, so it is not aligned with eCapacity after cTomorrow.
+// Index of `w` in twsCapacity, or -1.
 int whichCapacity(wstring w)
 {
 	LFS
-		for (int I = 0; twsCapacity[I]; I++)
-			if (twsCapacity[I] == w)
-				return I;
+	if (w == L"morrow") return cTomorrow;
+	for (int I = 0; twsCapacity[I]; I++)
+		if (twsCapacity[I] == w)
+			return I;
 	return -1;
 }
 
@@ -1199,7 +1198,8 @@ int whichCapacity(wstring w)
 wstring capacityString(int capacityFlags)
 {
 	LFS
-		if (capacityFlags < sizeof(twsCapacity) / sizeof(wchar_t*) && twsCapacity[capacityFlags] != NULL)
+		// the comparison was unsigned, so -1 wrapped and indexed out of range
+		if (capacityFlags >= 0 && capacityFlags < (int)(sizeof(twsCapacity) / sizeof(wchar_t*)) && twsCapacity[capacityFlags] != NULL)
 			return twsCapacity[capacityFlags];
 	return L"illegal";
 }
@@ -1523,8 +1523,9 @@ bool cSource::ageTransition(int where, bool timeTransition, bool& transitionSinc
 			(timeTransition) ? L"time" : L"space",
 			whereString((exceptWhere >= 0) ? exceptWhere : where, tmpstr, false).c_str(), m[(exceptWhere >= 0) ? exceptWhere : where].roleString(sRole).c_str());
 	int so = (m[where].objectMatches.size() > 0) ? m[where].objectMatches[0].object : m[where].getObject();
-	vector <cObject>::iterator object = objects.begin() + so;
-	cLocalFocus::setSalienceAgeMethod(inSecondaryQuote || (inPrimaryQuote && !(m[where].objectRole & (HAIL_ROLE | IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE))), (so >= 0) ? (object->neuter && !(object->male || object->female)) : false, objectToBeMatchedInQuote, quoteIndependentAge);
+	cLocalFocus::setSalienceAgeMethod(inSecondaryQuote || (inPrimaryQuote && !(m[where].objectRole & (HAIL_ROLE | IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE))), 
+									  (so >= 0) ? (objects[so].neuter && !(objects[so].male || objects[so].female)) : false, 
+									  objectToBeMatchedInQuote, quoteIndependentAge);
 	for (vector <cLocalFocus>::iterator lsi = localObjects.begin(); lsi != localObjects.end(); )
 		if (((!inPrimaryQuote && !inSecondaryQuote) || lsi->includeInSalience(objectToBeMatchedInQuote, quoteIndependentAge)) && (exceptWhere < 0 || !in(lsi->om.object, exceptWhere)))
 		{
@@ -2244,12 +2245,10 @@ any plural time category is also considered T_RECURRING
 Inflections months[] = { {L"january",SINGULAR},{L"february",SINGULAR},{L"march",SINGULAR},{L"april",SINGULAR},{L"may",SINGULAR},
 {L"june",SINGULAR},{L"july",SINGULAR},{L"august",SINGULAR},{L"september",SINGULAR},{L"october",SINGULAR},
 {L"november",SINGULAR},{L"december",SINGULAR},{NULL,0} };
-// may/jun/jul omitted, so aug..dec return 4..8 (May?September slots).
-const wchar_t* months_abb[] = { L"jan",L"feb",L"mar",L"apr",L"apr",L"jun",L"jul",L"sept",L"oct",L"nov",L"dec",NULL };
-// months[] index for each months_abb[] entry; may/jun/jul have no abbreviation here.
-static const int months_abb_index[] = { 0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11 };
-// 0-based month index, or -1. months_abb skips may/jun/jul, so ?aug?
-// returns 4 (May?s slot) ? do not treat that index as eCapacity-aligned.
+const wchar_t* months_abb[] = { L"jan",L"feb",L"mar",L"apr",L"may",L"jun",L"jul",L"sept",L"oct",L"nov",L"dec",NULL };
+// months[] index for each months_abb[] entry; august has no abbreviation here.
+static const int months_abb_index[] = { 0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11 };
+// 0-based index into months[], or -1.
 int whichMonth(wstring w)
 {
 	LFS
@@ -2810,9 +2809,7 @@ bool cSource::determineTimelineSegmentLink()
 }
 
 // Set speakerGroups[sg].tlTransition if the new group is a new cast and/or
-// none of them are still physicallyPresent. The scan for a prior group
-// increments I (I++) from sg-1, so it walks forward into the current group
-// and will mark lastSG = sg for any speaker not in sg-1.
+// none of them are still physicallyPresent.
 // determine whether this speaker group is really a change in perspective from one group of 
 // people to another separate group in another location/time.
 // executed before marking any speaker non-physical (as part of the transition aging to any new speaker group).
@@ -2830,8 +2827,7 @@ bool cSource::speakerGroupTransition(int where, int sg, bool forwardTransition)
 	{
 		// has this speaker been in any previous speaker group?
 		int lastSG = -1;
-		// I++ walks forward (into the current group), not back through prior SGs.
-		for (int I = sg - 1; I >= 0 && lastSG < 0; I++)
+		for (int I = sg - 1; I >= 0 && lastSG < 0; I--)
 			if (speakerGroups[I].speakers.find(*si) != speakerGroups[I].speakers.end())
 				lastSG = I;
 		speakerGroups[sg].lastSGSpeakerMap[*si] = lastSG;

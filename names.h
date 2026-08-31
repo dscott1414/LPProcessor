@@ -26,7 +26,6 @@
 		- operator== / like() do not compare nickName except on the
 		  first-name mismatch path. Sex and plurality live on cObject,
 		  not cName.
-		- notNull() is implemented in names.cpp as “all parts are null”.
 		- isNull / isCompletelyNull / matchHonorifics are defined in
 		  resolveObjects.cpp, not here.
 		- createLetterIntroPatterns() is defined in resolveSpeakers.cpp.
@@ -86,7 +85,6 @@ public:
 	void hn(const wchar_t * namePartName,tIWMM namePart, wchar_t * accumulate,bool printShort, const wchar_t * separator);
 	bool hn(tIWMM namePart,wchar_t separationCharacter,wstring &accumulate);
 	wstring print(wstring &message,bool printShort, const wchar_t * separator);
-	bool notNull();
 	wstring print(wchar_t *message,bool printShort, const wchar_t * separator);
 	wstring original(wstring &message,wchar_t separationCharacter,bool justFirstAndLast);
 	bool match(tIWMM sub1,tIWMM sub2,bool returnTrueOnNull=true);
@@ -100,7 +98,6 @@ public:
 	int insertSQL(wchar_t *buffer,int sourceId,int index,int maxbuf);
 	bool neuterName(bool startsWithDeterminer,bool ownedByName,int len);
 	bool matchHonorifics(wstring sHon);
-	bool isNull();
 	bool isCompletelyNull();
 };
 

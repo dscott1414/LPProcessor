@@ -23,16 +23,16 @@
 	Key data structures / globals:
 		- hINet - one shared HINTERNET; reset to 0 on some failures and re-opened.
 		- bandwidthControl - minimum milliseconds between requests (lastNetClock).
-		- redirectUrl - last INTERNET_STATUS_REDIRECT target (written from the callback).
-		- readTimeoutError - set by InternetReadFile_Wait on a 5-minute timeout.
+		- redirectUrl - last INTERNET_STATUS_REDIRECT target (written from the callback),
+			and hINet itself are process-wide and unsynchronized across reader threads.
 		- internetWebSearchRetryAttempts - retry cap for readPage.
 
 	Notes / gotchas:
 		- MAX_LEN is #defined here AND in source.h (both 2048).  Include order matters
 			if anyone ever changes one of them.
 		- getWebPath return codes overlap NET_ERR in word.h (GETWEBPATH_CANNOT_OPEN_PATH = -7).
-		- The worker-thread timeout path closes the request handle while the child
-			may still be inside InternetReadFile (see Internet.cpp).
+		- InternetReadFile_Wait reports a timeout through its 'timedOut' out-parameter;
+			on that path it has already closed the request handle, so the caller must not.
 */
 #pragma once
 class cInternet
@@ -56,11 +56,10 @@ public:
 	static bool closeConnection(void);
 	static int cacheWebPath(wstring webAddress, wstring &buffer, wstring epath, wstring cacheTypePath, bool forceWebReread, bool &networkAccessed, wstring &diskPath);
 	static DWORD WINAPI InternetReadFile_Child(void *vThreadParm);
-	static bool InternetReadFile_Wait(HINTERNET RequestHandle, char *buffer, int bufsize, DWORD *dwRead);
+	static bool InternetReadFile_Wait(HINTERNET RequestHandle, char *buffer, int bufsize, DWORD *dwRead, bool &timedOut);
 	static HINTERNET hINet;
 	static int bandwidthControl;
 	static wstring redirectUrl;
-	static bool readTimeoutError;
 	static SRWLOCK totalInternetTimeWaitBandwidthControlSRWLock;
 	static int getWebPath(int where, wstring webAddress, wstring &buffer, wstring epath, wstring cacheTypePath, wstring &filePathOut, wstring &headers, int index, bool clean, bool readInfoBuffer, bool forceWebReread=false);
 	static void ReadAndHandleOutput(HANDLE hPipeRead, string &outbuf);

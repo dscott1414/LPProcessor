@@ -42,9 +42,6 @@
 		cPattern, MySQL via insertSQL() (name-part rows).
 
 	Notes / gotchas:
-		- notNull() returns true when every part IS wNULL — the inverse
-		  of the name. Prefer isCompletelyNull() (defined in
-		  resolveObjects.cpp).
 		- merge(tIWMM&, tIWMM) uses first[1] as a “has a second letter”
 		  test, so a single-letter part is never replaced by a longer one.
 		- The wchar_t* print/hn overloads wcscat with no bound.
@@ -464,15 +461,6 @@ wstring cName::print(wchar_t* message, bool printShort, const wchar_t* separator
 	return message;
 }
 
-// True when every part is wNULL — the inverse of the name. Prefer
-// isCompletelyNull() in resolveObjects.cpp.
-bool cName::notNull()
-{
-	LFS
-		return hon == wNULL && hon2 == wNULL && hon3 == wNULL &&
-		first == wNULL && middle == wNULL && middle2 == wNULL && last == wNULL && suffix == wNULL && any == wNULL;
-}
-
 // Append namePart + separationCharacter, capitalizing the first letter.
 // False if namePart is wNULL.
 bool cName::hn(tIWMM namePart, wchar_t separationCharacter, wstring& accumulate)
@@ -546,13 +534,11 @@ bool cName::in(tIWMM inhon, vector <tIWMM>& hons)
 	return false;
 }
 
-// Copy w2 onto w1 if w1 is null or both have a second character
-// (w1->first[1]). A single-letter w1 is therefore never replaced.
 void cName::merge(tIWMM& w1, tIWMM w2)
 {
 	LFS
-		// first[1] is the second character (0 if length 1), so a letter is never replaced.
-		if (w2 != wNULL && (w1 == wNULL || (w1->first[1] && w2->first[1]))) w1 = w2;
+	if (w2 != wNULL && (w1 == wNULL || ((w1->first.size() <= 1) && w2->first.size() > 1) || (w1->first.size() > 1 && w2->first.size() > 1)))
+		w1 = w2;
 }
 
 // Union honorifics (up to 3) and fill empty / letter parts from n. Drops
@@ -1780,8 +1766,10 @@ struct {
 	int num;
 } numeralOrdinalMap[] = {
 	{ L"zeroth", 0 },
-	{ L"first", 1 }, { L"second", 2 }, { L"third", 3 }, { L"fourth", 4 }, { L"fifth", 5 }, { L"sixth", 6 }, { L"seventh", 7 }, { L"eighth", 8 }, { L"ninth", 9 }, { L"tenth", 10 },
-	{ L"eleventh", 11 }, { L"twelfth", 12 }, { L"thirteenth", 13 }, { L"fourteenth", 14 }, { L"fifteenth", 15 }, { L"sixteenth", 16 }, { L"seventeenth", 17 }, { L"eighteenth", 18 }, { L"nineteenth", 19 }, { L"twentieth", 0 }, // copy-paste: should be 20
+	{ L"first", 1 }, { L"second", 2 }, { L"third", 3 }, { L"fourth", 4 }, { L"fifth", 5 }, 
+	{ L"sixth", 6 }, { L"seventh", 7 }, { L"eighth", 8 }, { L"ninth", 9 }, { L"tenth", 10 },
+	{ L"eleventh", 11 }, { L"twelfth", 12 }, { L"thirteenth", 13 }, { L"fourteenth", 14 }, { L"fifteenth", 15 }, 
+	{ L"sixteenth", 16 }, { L"seventeenth", 17 }, { L"eighteenth", 18 }, { L"nineteenth", 19 }, { L"twentieth", 20 }, 
 	{ L"umpteenth", 15 },
 	{ L"thirtieth", 30 }, { L"fortieth", 40 }, { L"fiftieth", 50 }, { L"sixtieth", 60 }, { L"seventieth", 70 }, { L"eightieth", 80 }, { L"ninetieth", 90 },
 	{ L"hundredth", 100 }, { L"thousandth", 1000 }, { L"millionth", 1000000 }, { L"billionth", 1000000000 },

@@ -16,8 +16,6 @@
 			The doubling starts at 5.  trealloc result is assigned over 'content'; a
 			failure is fatal (trealloc exits) so the leak-on-failure pattern is latent.
 		- operator== / != take the rhs by value (full copy).
-		- decode() shifts by (bitFieldCount - 10) with bitFieldCount running 30,20,10,0;
-			the last iteration is `val >> -10`, which is undefined.
 		- erase(unsigned) still tests `at < 0`, which is impossible.
 		- write(buffer,...) FATAL-exits if the payload will not fit, then memcpy's
 			anyway (dead after FATAL).
@@ -166,10 +164,10 @@ public:
 		if (count != other.count) return false;
 		return memcmp(content, other.content, count * sizeof(*content)) == 0;
 	}
-	// Replace contents with a deep copy of rhs.  Not self-assignment safe
-	// (frees content first).  FATAL on OOM.
+	// Replace contents with a deep copy of rhs.  FATAL on OOM.
 	cIntArray& operator=(const cIntArray& rhs)
 	{
+		if (this == &rhs) return *this; // the free below would destroy the source
 		if (allocated) tfree(allocated * sizeof(*content), content);
 		count = rhs.count;
 		allocated = rhs.allocated;
@@ -339,9 +337,8 @@ public:
 		}
 		return val;
 	}
-	// Inverse of encode(): peel four 10-bit fields (the last shift is `>> -10`,
-	// which is undefined) and sign-extend if the high bit of the 10-bit field is set.
-	// count becomes (lastNonZero+1).
+	// Inverse of encode(): peel the 10-bit fields, sign-extending each one whose
+	// high bit is set.  count becomes (lastNonZero+1).
 	void decode(unsigned int val)
 	{
 		int lastNonZero = 0;

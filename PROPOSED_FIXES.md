@@ -4,8 +4,34 @@ Concrete remediation for categories 2 (undefined behaviour / memory safety) and
 3 (logic inversions) of `CODE_REVIEW.md`. Categories 1 (secrets), 4 (SQL/HTTP
 concatenation) and 5 (process control) are out of scope here.
 
-**Nothing in this document has been applied.** The branch remains
-comments-only. Each entry gives the verified current code and a minimal patch,
+## Status — many of these are already applied
+
+The original text of this document said "Nothing in this document has been
+applied." **That is no longer true.** Verify every entry against the current
+source before applying it: re-applying an applied patch can reintroduce a bug.
+
+Applied in commit `8e1bd47`: #4 `months_abb` (via `months_abb_index`),
+`minSeparatorCost` `resize`, `pattern.h initializeUsage` `assign`, `intArray`
+`decode()` negative shift, `processForm` `c_str()` write,
+`setMandatoryAncestorPatterns`, `HAIL:OBJECT`, PMA `clear()`, PMA/PEMA
+self-assignment, `getNextPosition` `INT_MIN`, `queryTag` longest match.
+
+Applied in the working tree: #28 `sameSpeaker`, #29 `speakerGroupTransition`,
+#32 `cName::notNull`, #72 `accumulateNetworkTime`, `questionTypeCheck`,
+`bitObject::write`, `conversationContext` intersect, `paice` empty line.
+
+Applied in the most recent pass: `source.cpp printMaxSize`, the `months_abb`
+`"apr"`/`"may"` regression introduced by the #4 fix, `QUERY_BUFFER_LEN_*`
+parenthesisation, `lplogNR` format string, `encodeEscape` overrun,
+`twsCapacity`/`capacityString`, `cIntArray::operator=` self-assignment,
+`InternetReadFile_Wait`, the FATAL exit path, `containingSpeakerGroup`,
+`escapeStr`, and `writeThesaurusEntry`.
+
+Note also that in-source comments were **not** updated alongside the earlier
+waves, so several described bugs that no longer existed. Those have now been
+corrected; treat the code, not this document, as authoritative.
+
+Each entry gives the code as it stood at the time of writing and a minimal patch,
 so a maintainer with a build can apply them in the stated order.
 
 The project cannot be compiled in this environment (MSVC, `windows.h`, MySQL),
@@ -361,6 +387,8 @@ temporal ordering for those documents changes.
 
 ### 5. `pattern.cpp:1807` `setMandatoryAncestorPatterns` ORs the wrong bitset
 
+> **APPLIED (8e1bd47).** Verify against the current source; do not re-apply.
+
 **Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
 
 The already-computed branch of `setAncestorPatterns` ORs into `ancestorPatterns`.
@@ -391,6 +419,8 @@ at `pattern.cpp:1797-1798` once the source is patched.
 
 ### 6. `definePatterns.cpp:2824` `{HAIL|OBJECT}` is one unused tag
 
+> **APPLIED (8e1bd47).** Verify against the current source; do not re-apply.
+
 **Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
 
 `processForm` (`pattern.cpp:971-990`) splits `{...}` tags on `:` and `}`. The
@@ -408,6 +438,8 @@ Hail closing patterns (`__CLOSING__S1` alternative 1) start seeing the `OBJECT`
 tag. Watch hail / vocative traces.
 
 ### 7. `patternMatchArray.h:152` `queryTag` breaks on the first hit
+
+> **APPLIED (8e1bd47).** Verify against the current source; do not re-apply.
 
 **Verdict:** CONFIRMED. **Risk:** Behaviour-changing if a caller uses the
 returned slot rather than existence. **Order:** NORMAL.
@@ -430,6 +462,8 @@ and keep the `break`. The header comment already documents the mismatch.
 
 ### 8. `pattern.cpp:945` `processForm` writes through `form.c_str()`
 
+> **APPLIED (8e1bd47).** Verify against the current source; do not re-apply.
+
 **Verdict:** CONFIRMED. **Risk:** Safe (create-time only; still UB). **Order:** NORMAL.
 
 ```944:947:pattern.cpp
@@ -451,6 +485,8 @@ and keep the `break`. The header comment already documents the mismatch.
 ```
 
 ### 9. `patternMatchArray.cpp:65` `clear()` does not NULL `content`
+
+> **APPLIED (8e1bd47).** Verify against the current source; do not re-apply.
 
 **Verdict:** CONFIRMED-LATENT. **Risk:** Safe. **Order:** NORMAL.
 
@@ -492,6 +528,8 @@ it once the pre-check is real.)
 
 ### 11. PMA / PEMA `operator=` self-assignment
 
+> **APPLIED (8e1bd47).** Verify against the current source; do not re-apply.
+
 **Verdict:** CONFIRMED. **Risk:** Safe (UAF only on `x = x`). **Order:** NORMAL.
 
 Both `patternMatchArray.cpp:158` and `patternElementMatchArray.cpp:207` free
@@ -507,6 +545,8 @@ Both `patternMatchArray.cpp:158` and `patternElementMatchArray.cpp:207` free
 ```
 
 ### 12. `patternMatchArray.cpp:599` `1 << 31` signed overflow
+
+> **APPLIED (8e1bd47).** Verify against the current source; do not re-apply.
 
 **Verdict:** CONFIRMED. **Risk:** Safe on MSVC (the shift is well-known there)
 but undefined in the language. **Order:** NORMAL.
@@ -753,6 +793,8 @@ into a huge unsigned comparison.
 
 ### 27. `resolveObjects.cpp:732` `containingSpeakerGroup` compares the span to the loop index
 
+> **APPLIED (this pass).** Verify against the current source; do not re-apply.
+
 **Verdict:** CONFIRMED. **Risk:** Needs author decision. **Order:** DEFER
 until the occupation-scan filter is intentionally armed.
 
@@ -801,6 +843,8 @@ Update `source.h:3072`.
 
 ### 28. `identifySpeakerGroups.cpp:2934` `sameSpeaker` one-sided tests are inverted
 
+> **APPLIED (working tree).** Verify against the current source; do not re-apply.
+
 **Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
 
 ```2931:2934:identifySpeakerGroups.cpp
@@ -830,6 +874,8 @@ will now continue.
 
 ### 29. `timeRelations.cpp:2832` `speakerGroupTransition` walks `I++` instead of `I--`
 
+> **APPLIED (working tree).** Verify against the current source; do not re-apply.
+
 **Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
 
 ```2832:2834:timeRelations.cpp
@@ -854,6 +900,8 @@ Watch `SGT` / `tlTransition` logs. Groups that are actually a new cast of
 characters will start being marked as time/location transitions.
 
 ### 30. `timeRelations.cpp:1181` `twsCapacity` inserts `morrow` and drops `NamedHoliday`
+
+> **APPLIED (this pass).** Verify against the current source; do not re-apply.
 
 **Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
 
@@ -924,6 +972,8 @@ is treated as zeroth.
 ```
 
 ### 32. `names.cpp:471` `cName::notNull()` is inverted — do not flip it
+
+> **APPLIED (working tree).** Verify against the current source; do not re-apply.
 
 **Verdict:** CONFIRMED as a name/implementation mismatch. **Risk:** Needs
 author decision. **Order:** DEFER (rename, do not invert).
@@ -1482,6 +1532,8 @@ Watch PLACE / MOVE / EXIT traces.
 
 ### 60. `conversationContext.cpp:85` identical `||` arms
 
+> **APPLIED (working tree).** Verify against the current source; do not re-apply.
+
 **Verdict:** CONFIRMED as copy-paste. **Risk:** Needs author decision.
 **Order:** DEFER.
 
@@ -1656,6 +1708,8 @@ A trailing `%` should be copied through or skipped; do not read off the end.
 
 ### 67. `paice.cpp:176` overlapping `memcpy` of the wrong size for a UTF-16 BOM
 
+> **APPLIED (working tree).** Verify against the current source; do not re-apply.
+
 **Verdict:** CONFIRMED. **Risk:** Safe (suffix-file load). **Order:** NORMAL.
 
 ```
@@ -1694,6 +1748,8 @@ NaN compare is never equal. Use `std::isnan(probMult)`.
 
 ### 70. `hmm.cpp:479` / `:511` `_wfopen` unchecked; empty line writes before the buffer
 
+> **APPLIED (working tree).** Verify against the current source; do not re-apply.
+
 **Verdict:** CONFIRMED. **Risk:** Safe (missing model file / empty line).
 **Order:** NORMAL.
 
@@ -1714,6 +1770,8 @@ result (writes `line[-1]`).
 
 ### 71. `DIYDiskArray.h:189` destructor never closes the fd
 
+> **APPLIED (working tree).** Verify against the current source; do not re-apply.
+
 **Verdict:** CONFIRMED. **Risk:** Safe (fd leak per array). **Order:** NORMAL.
 
 `~DIYDiskArray()` is empty. Close (and flush) the disk fd if the object is
@@ -1723,7 +1781,9 @@ temporary `wstring::c_str()` dangles — copy the path into an owned
 
 ### 72. `profile.h:346` `accumulateNetworkTime` writes through `const wchar_t*`
 
-**Verdict:** CONFIRMED. **Risk:** Safe if callers pass a mutable buffer;
+> **APPLIED (working tree).** Verify against the current source; do not re-apply.
+
+**Verdict:** FIXED. **Risk:** Safe if callers pass a mutable buffer;
 UB if they pass a string literal / `c_str()`. **Order:** NORMAL.
 
 ```
@@ -1732,8 +1792,8 @@ wchar_t *pos=(wchar_t *)wcschr(str,L'/');
 *pos=0;
 ```
 
-Copy `str` into a local `wstring` and mutate that. Do not write through the
-caller pointer.
+`str` is now copied into a local `wstring` and truncated there; the caller
+pointer is never written through.
 
 ### 73. `DBCreateSQLSchema.cpp:419` `generateBNCSources` allocates bytes, indexes `wchar_t`s
 
@@ -1783,6 +1843,8 @@ either way.
 
 ### 75. `questionAnswering.cpp:2866` remapped question type is always 15
 
+> **APPLIED (working tree).** Verify against the current source; do not re-apply.
+
 **Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** DO-FIRST.
 
 `typeQTMask` is `(1<<4)-1` = 15 (`QuestionAnswering.h:154`). `qt` is a value
@@ -1821,6 +1883,8 @@ form-string work is discarded — but the type-check used Narrator.
 Delete the trailing `childObject = co`.
 
 ### 77. `questionAnswering.cpp:1158` `metaPatternMatch` discards `whereAnswer`
+
+> **APPLIED (this pass).** Verify against the current source; do not re-apply.
 
 **Verdict:** CONFIRMED. **Risk:** Behaviour-changing (intended). **Order:** NORMAL.
 

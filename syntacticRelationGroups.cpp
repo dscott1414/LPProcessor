@@ -378,7 +378,11 @@ const wchar_t *cSource::getWSAdverb(int whereVerb, bool changeStateAdverb)
 		return m[whereVerb + 1].word->first.c_str();
 	// Unlike getMSAdverb, no T_START/STOP/FINISH/RESUME filter here.
 	if (whereVerb > 0 && changeStateAdverb)
-		return m[whereVerb - 1].word->first.c_str();
+	{
+		int timeFlag = (m[whereVerb - 1].word->second.timeFlags & 31);
+		if (timeFlag == T_START || timeFlag == T_STOP || timeFlag == T_FINISH || timeFlag == T_RESUME)
+			return m[whereVerb - 1].word->first.c_str();
+	}
 	return L"";
 }
 
@@ -697,9 +701,6 @@ cSyntacticRelationGroup::cSyntacticRelationGroup(char *buffer, int &w, unsigned 
 	timeInfo.reserve(count);
 	while (count-- && !error && w < (signed)total)
 		timeInfo.emplace_back(buffer, w, total, error);
-	// Wipes the skip / changeStateAdverb bits just unpacked by convertToFlags.
-	skip = false;
-	changeStateAdverb = false;
 	nonSemanticObjectTotalMatch = false;
 	nonSemanticPrepositionObjectTotalMatch = false;
 	nonSemanticSecondaryObjectTotalMatch = false;

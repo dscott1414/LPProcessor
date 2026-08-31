@@ -35,7 +35,6 @@
 		- nextByPatternEnd < 0 is a circular-list back-pointer (-offset), not
 		  "end of list" (-1 is the empty-head sentinel).
 		- read(IOHANDLE) format string omits the count argument.
-		- operator= is not self-assignment safe (frees first).
 */
 #include <stdio.h>
 #include <string.h>
@@ -142,7 +141,7 @@ bool cPatternElementMatchArray::read(IOHANDLE file)
 	allocated = count;
 	if (count > 1000000)
 	{
-		lplog(LOG_ERROR, L"Illegal count of %d (>1000000) encountered!");
+		lplog(LOG_ERROR, L"Illegal count of %d (>1000000) encountered!", count);
 		return false; // extremely unlikely to have more than this # of matches
 	}
 	content = (tPatternElementMatch*)tmalloc(count * sizeof(*content));
@@ -203,7 +202,7 @@ bool cPatternElementMatchArray::operator==(const cPatternElementMatchArray other
 	return memcmp(content, other.content, count * sizeof(*content)) == 0;
 }
 
-// Replace this buffer with a deep copy of rhs.  Self-assignment frees first.
+// Replace this buffer with a deep copy of rhs.
 cPatternElementMatchArray& cPatternElementMatchArray::operator=(const cPatternElementMatchArray& rhs)
 {
 	LFS
@@ -591,14 +590,13 @@ bool cPatternElementMatchArray::consolidateWinners(int lastPEMAConsolidationInde
 	return numWinners > 1;
 }
 
-// Length of the nextByPosition chain starting at nextPosition.  Fatals if any
-// index is > count (note: `>` not `>=`, so index==count is not caught).
+// Length of the nextByPosition chain starting at nextPosition.  
 int cPatternElementMatchArray::generatePEMACount(int nextPosition)
 {
 	LFS
 		int I = 0;
 	for (; nextPosition != -1; I++, nextPosition = content[nextPosition].nextByPosition)
-		if (nextPosition > (signed)count)
+		if (nextPosition < 0 || nextPosition >= (signed)count)
 			lplog(LOG_FATAL_ERROR, L"Incorrect PEMA Position %d", nextPosition);
 	return I;
 }

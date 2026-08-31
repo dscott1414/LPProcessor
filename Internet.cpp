@@ -22,9 +22,9 @@
 		- runJavaJerichoHTML / PrepAndLaunchRedirectedChild / ReadAndHandleOutput
 
 	Notes / gotchas:
-		- On timeout InternetReadFile_Wait closes the request handle while the
-			child thread may still be inside InternetReadFile (the Wait INFINITE
-			is commented out) - use-after-free / race.
+		- On timeout InternetReadFile_Wait closes the request handle to unblock the
+			child, then waits for it to exit before returning; the child writes into
+			the caller's stack, so it must not outlive the call.
 		- SPARQL failures recurse into readPage after a 30s sleep with no
 			depth cap (unbounded if Virtuoso stays down).
 		- cacheWebPath writes wchar_t as binary (UTF-16) and reads it back as
@@ -71,7 +71,6 @@ using namespace std;
 const wchar_t* getLastErrorMessage(wstring& out);
 void* cInternet::hINet;
 int cInternet::bandwidthControl;
-bool cInternet::readTimeoutError;
 struct _RTL_SRWLOCK cInternet::totalInternetTimeWaitBandwidthControlSRWLock;
 wstring cInternet::redirectUrl;
 
@@ -257,9 +256,9 @@ int cInternet::readPage(const wchar_t* str, wstring& buffer, wstring& headers)
 		{
 			if (log_net) lplog(L"Successfully opened URL %s.", str);
 			DWORD dwRead;
-			readTimeoutError = false;
-			// does InternetReadFile in a child process to prevent lock
-			while (InternetReadFile_Wait(hFile, cBuffer, MAX_BUF, &dwRead))
+			bool timedOut = false;
+			// does InternetReadFile on a worker thread so a hung read can be timed out
+			while (InternetReadFile_Wait(hFile, cBuffer, MAX_BUF, &dwRead, timedOut))
 			{
 				if (dwRead == 0)
 					break;
@@ -267,8 +266,9 @@ int cInternet::readPage(const wchar_t* str, wstring& buffer, wstring& headers)
 				wstring wb;
 				buffer += mTW(cBuffer, wb);
 			}
-			InternetCloseHandle(hFile);
-			if (!readTimeoutError)
+			if (!timedOut) // the timeout path already closed hFile to unblock the worker
+				InternetCloseHandle(hFile);
+			if (!timedOut)
 			{
 				cProfile::accumulateNetworkTime(str, timer, cProfile::lastNetClock);
 				return 0;
@@ -442,13 +442,14 @@ DWORD WINAPI cInternet::InternetReadFile_Child(void* vThreadParm)
 }
 
 // Spawn InternetReadFile_Child and wait up to 5 minutes.  On timeout,
-// InternetCloseHandle(RequestHandle) while the child may still be in
-// InternetReadFile, set readTimeoutError, and return false (the Wait
-// INFINITE is commented out).  Returns true only if the child exited 0.
-bool cInternet::InternetReadFile_Wait(HINTERNET RequestHandle, char* buffer, int bufsize, DWORD* dwRead)
+// InternetCloseHandle unblocks the child and we then wait for it to exit before
+// returning: 'p', 'buffer' and 'dwRead' are caller stack objects the child writes
+// through, so returning while it still runs would corrupt the caller's frame.
+// timedOut is per-call; a shared flag would race between concurrent reader threads.
+bool cInternet::InternetReadFile_Wait(HINTERNET RequestHandle, char* buffer, int bufsize, DWORD* dwRead, bool& timedOut)
 {
 	tIRFW p;
-	readTimeoutError = false;
+	timedOut = false;
 	p.buffer = buffer;
 	p.bufsize = bufsize;
 	p.RequestHandle = RequestHandle;
@@ -470,12 +471,14 @@ bool cInternet::InternetReadFile_Wait(HINTERNET RequestHandle, char* buffer, int
 	DWORD dwTimeout = 5 * 60 * 1000; // in milliseconds
 	if (WaitForSingleObject(hThread, dwTimeout) == WAIT_TIMEOUT)
 	{
+		timedOut = true;
+		// Closing the handle makes the pending InternetReadFile fail and return.
 		InternetCloseHandle(RequestHandle);
-		CloseHandle(hThread);
 		wprintf(L"\nRetry on document (InternetReadFile failure).\n");
-		readTimeoutError = true;
-		// Wait until the worker thread exits
-		// WaitForSingleObject ( hThread, INFINITE );
+		if (WaitForSingleObject(hThread, 60 * 1000) != WAIT_OBJECT_0)
+			// The child still holds pointers into this frame; unwinding now corrupts it.
+			lplog(LOG_FATAL_ERROR, L"InternetReadFile worker did not exit after the request handle was closed.");
+		CloseHandle(hThread);
 		return false;
 	}
 	// The state of the specified object (thread) is signaled

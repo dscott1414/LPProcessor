@@ -155,8 +155,7 @@ bool cPatternMatchArray::operator==(const cPatternMatchArray other) const
 	return memcmp(content, other.content, count * sizeof(*content)) == 0;
 }
 
-// Replace this buffer with a deep copy of rhs.  Self-assignment frees content
-// first and then copies from the freed rhs (this==rhs is unsafe).
+// Replace this buffer with a deep copy of rhs.
 cPatternMatchArray& cPatternMatchArray::operator=(const cPatternMatchArray& rhs)
 {
 	LFS
@@ -417,7 +416,8 @@ int cPatternMatchArray::queryMaximumLowestCostPattern(wstring pattern, int& len)
 int cPatternMatchArray::queryPattern(int pattern, int& len)
 {
 	LFS
-		int element = -1;
+	len = -1;
+	int element = -1;
 	for (unsigned int I = 0; I < count; I++)
 		if (content[I].getPattern() == pattern && content[I].len > len)
 		{
@@ -440,7 +440,7 @@ int cPatternMatchArray::queryTagSet(unsigned int& element, int desiredTagSetNum,
 	for (unsigned int I = 0; I < count; I++)
 		if (content[I].len >= maxLen && patterns[content[I].getPattern()]->tagSetMemberInclusion[desiredTagSetNum])
 		{
-			if (content[I].len == maxLen && patternTagStrings[tag] == L"NAME") continue; // NAME tags have precedence over NOUN tags
+			if (content[I].len == maxLen && tag >= 0 && patternTagStrings[tag] == L"NAME") continue; // NAME tags have precedence over NOUN tags
 			tagInSet = 0;
 			tag = patterns[content[I].getPattern()]->hasTagInSet(desiredTagSetNum, tagInSet);
 			maxLen = content[I].len;

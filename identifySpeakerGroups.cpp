@@ -43,7 +43,6 @@
 		- sgEnd of -2 / -3 is legal on embedded groups (CURRENT_SUBSET_SG / open span).
 		- unMergable() returns true when the candidate is NOT already in the set
 		  (and optionally inserts it).  The name is easy to read backwards.
-		- sameSpeaker() looks inverted when only one side has objectMatches - see report.
 		- copy(cOM&) has no buffer-limit argument; the vector reader trusts the count.
 */
 #include <windows.h>
@@ -61,12 +60,13 @@
 extern set<int>::iterator sNULL;
 
 // Deserialize one cOM (object index + salience) from buf at 'where' and advance
-// where by sizeof(cOM).  Unlike the other copy() overloads this has NO limit
-// argument - callers that have a remaining-buffer bound must check it themselves.
-bool copy(cOM& num, char* buf, int& where)
+// where by sizeof(cOM).  
+bool copy(cOM& num, char* buf, int& where, int limit)
 {
 	DLFS
-		num = *((cOM*)(buf + where));
+	if (where + (int)sizeof(cOM) > limit) 
+		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached (3)!", limit);
+	num = *((cOM*)(buf + where));
 	where += sizeof(num);
 	return true;
 }
@@ -77,12 +77,12 @@ bool copy(cOM& num, char* buf, int& where)
 bool copy(vector <cOM>& s, char* buf, int& where, int limit)
 {
 	DLFS
-		int count;
+	int count;
 	if (!copy(count, buf, where, limit)) return false;
 	for (int I = 0; I < count; I++)
 	{
 		cOM i;
-		if (!copy(i, buf, where))
+		if (!copy(i, buf, where, limit))
 			return false;
 		s.push_back(i);
 	}
@@ -95,10 +95,10 @@ bool copy(vector <cOM>& s, char* buf, int& where, int limit)
 bool copy(void* buf, cOM num, int& where, int limit)
 {
 	DLFS
-		* ((cOM*)(((char*)buf) + where)) = num;
-	where += sizeof(num);
-	if (where > limit)
+	if (where + sizeof(num) > limit)
 		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached (3)!", limit);
+	* ((cOM*)(((char*)buf) + where)) = num;
+	where += sizeof(num);
 	return true;
 }
 
@@ -931,11 +931,16 @@ void cSource::eliminateSpuriousHailSpeakers(int begin, int end, cSpeakerGroup& s
 			(objects[*s].objectClass != NAME_OBJECT_CLASS || objects[*s].name.hon == wNULL || objects[*s].name.justHonorific() || objects[*s].numEncountersInSection == 0 || (lsi != localObjects.end() && lsi->previousWhere < 0)))
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"%06d-%06d:%02d   hail deleted: %s (HAIL=%d,%d,%d,%d:%d,%d,%d,%d) [LW=%d,PW=%d,%s,physicallyPresentSpeakers=%d] (%s)", begin, end, section,
+			{
+				lplog(LOG_SG, L"%06d-%06d:%02d   hail deleted: %s (HAIL=%d,%d,%d,%d:%d,%d,%d,%d) [physicallyPresentSpeakers=%d] (%s)", begin, end, section,
 					objectString(*s, tmpstr, true).c_str(), objects[*s].PISHail,
 					objects[*s].numEncounters, objects[*s].numIdentifiedAsSpeaker, objects[*s].numDefinitelyIdentifiedAsSpeaker,
 					objects[*s].numEncountersInSection, objects[*s].numSpokenAboutInSection, objects[*s].numIdentifiedAsSpeakerInSection, objects[*s].numDefinitelyIdentifiedAsSpeakerInSection,
-					lsi->lastWhere, lsi->previousWhere, (lsi->physicallyPresent) ? L"PP" : L"not PP", physicallyPresentSpeakers, (speakerGroupCrossesSectionBoundary) ? L"speakerGroupCrossesSectionBoundary" : L"");
+					physicallyPresentSpeakers, (speakerGroupCrossesSectionBoundary) ? L"speakerGroupCrossesSectionBoundary" : L"");
+				if (lsi != localObjects.end())
+					lplog(LOG_SG, L"%06d-%06d:%02d   LW=%d,PW=%d,%s", begin, end, section,
+					lsi->lastWhere, lsi->previousWhere, (lsi->physicallyPresent) ? L"PP" : L"not PP");
+			}
 			sg.groupedSpeakers.erase(*s);
 			sg.singularSpeakers.erase(*s);
 			sg.povSpeakers.erase(*s);
@@ -953,11 +958,10 @@ void cSource::eliminateSpuriousHailSpeakers(int begin, int end, cSpeakerGroup& s
 // exactly one new, gender-matching, non-body speaker, return that future
 // object index so mergeTempSpeakerGroupWithLastSG can treat it as the
 // resolution of "a voice" / "the man".  Returns -1 if no such pair.
-// (The empty-speakerGroups early-out returns false/0, i.e. Narrator - see report.)
 int cSource::detectUnresolvableObjectsResolvableThroughSpeakerGroup(void)
 {
 	LFS
-		if (speakerGroups.empty()) return false;
+		if (speakerGroups.empty()) return -1;
 	set <int> futureSpeakers = tempSpeakerGroup.speakers, currentSpeakers = speakerGroups[speakerGroups.size() - 1].speakers;
 	for (set <int>::iterator si = currentSpeakers.begin(); si != currentSpeakers.end(); )
 		if (futureSpeakers.erase(*si))
@@ -1273,8 +1277,7 @@ void cSource::extendLastSGToEndOfSection(int begin, int end, vector <cSpeakerGro
 // Close the last group (hail cleanup, speaker-removal split, subgrouping),
 // push tempSpeakerGroup onto speakerGroups, stamp each speaker's
 // first/lastSpeakerGroup, reset speakerAges / speakerSections, and start a
-// fresh temp at 'end'.  If speakerGroups is empty, determinePreviousSubgroup
-// is still called with &speakerGroups[-1] - see report.
+// fresh temp at 'end'.
 void cSource::pushTemporarySpeakerGroupAndErase(int begin, int end, bool endOfSection, int& lastSpeakerGroupOfPreviousSection)
 {
 	wstring tmpstr;
@@ -1286,7 +1289,8 @@ void cSource::pushTemporarySpeakerGroupAndErase(int begin, int end, bool endOfSe
 	determineSpeakerRemoval(begin);
 	tempSpeakerGroup.section = section;
 	lastSG = (speakerGroups.size()) ? speakerGroups.begin() + speakerGroups.size() - 1 : speakerGroups.end();
-	determinePreviousSubgroup(end, speakerGroups.size() - 1, &speakerGroups[speakerGroups.size() - 1]);
+	if (speakerGroups.size())
+		determinePreviousSubgroup(end, speakerGroups.size() - 1, &speakerGroups[speakerGroups.size() - 1]);
 	if (debugTrace.traceSpeakerResolution)
 	{
 		if (speakerGroups.size())
@@ -1614,7 +1618,7 @@ bool cSource::isFocus(int where, bool inPrimaryQuote, bool inSecondaryQuote, int
 		if (m[where].flags & cWordMatch::flagAdjectivalObject)
 		{
 			int I;
-			for (I = where + 1; (m[I].beginObjectPosition < 0 || (m[I].flags & cWordMatch::flagAdjectivalObject)) && I < (signed)m.size(); I++);
+			for (I = where + 1;  I < (signed)m.size() && (m[I].beginObjectPosition < 0 || (m[I].flags & cWordMatch::flagAdjectivalObject)); I++);
 			if (I == m.size() || !(m[I].objectRole & SUBJECT_ROLE) || m[I].getObject() < 0 || objects[m[I].getObject()].objectClass != BODY_OBJECT_CLASS)
 			{
 				if (debugTrace.traceSpeakerResolution)
@@ -2250,8 +2254,7 @@ bool cSource::implicitObject(int where)
 
 // Format povInSpeakerGroups[startPOVI, povi) as a space-separated index
 // list for LOG_RESOLUTION.  If the range is empty it still prints
-// povInSpeakerGroups[startPOVI], which is out of range when startPOVI ==
-// povInSpeakerGroups.size().
+// povInSpeakerGroups[startPOVI]
 const wchar_t* intString(int startPOVI, int povi, vector <int>& povInSpeakerGroups, wstring& tmpstr)
 {
 	LFS
@@ -2259,7 +2262,7 @@ const wchar_t* intString(int startPOVI, int povi, vector <int>& povInSpeakerGrou
 	wstring tmp;
 	for (int I = startPOVI; I < povi; I++)
 		tmpstr += itos(povInSpeakerGroups[I], tmp) + L" ";
-	if (tmpstr.empty())
+	if (tmpstr.empty() && startPOVI < (signed)povInSpeakerGroups.size())
 		tmpstr = itos(povInSpeakerGroups[startPOVI], tmp);
 	return tmpstr.c_str();
 }
@@ -2919,8 +2922,6 @@ void cSource::accumulateGroups(int where, vector <int>& groupedObjects, int& las
 
 // True if the two source positions resolve to overlapping speakers.
 // -1 on either side is treated as "same" (imposed / unknown speaker).
-// When only one side has objectMatches the comparison looks inverted
-// (== end() rather than != end()) - see report.
 bool cSource::sameSpeaker(int sWhere1, int sWhere2)
 {
 	LFS
@@ -2929,9 +2930,9 @@ bool cSource::sameSpeaker(int sWhere1, int sWhere2)
 	if (m[sWhere1].objectMatches.empty() && m[sWhere2].objectMatches.empty())
 		return m[sWhere1].getObject() == m[sWhere2].getObject();
 	if (m[sWhere1].objectMatches.empty())
-		return in(m[sWhere1].getObject(), m[sWhere2].objectMatches) == m[sWhere2].objectMatches.end();
+		return in(m[sWhere1].getObject(), m[sWhere2].objectMatches) != m[sWhere2].objectMatches.end();
 	if (m[sWhere2].objectMatches.empty())
-		return in(m[sWhere2].getObject(), m[sWhere1].objectMatches) == m[sWhere1].objectMatches.end();
+		return in(m[sWhere2].getObject(), m[sWhere1].objectMatches) != m[sWhere1].objectMatches.end();
 	bool allIn, oneIn;
 	intersect(m[sWhere1].objectMatches, m[sWhere2].objectMatches, allIn, oneIn);
 	return oneIn;
@@ -3303,9 +3304,7 @@ void cSource::endSection(int& questionSpeakerLastParagraph, int& questionSpeaker
 				lsi->physicallyPresent = false; // this prevents speakers from being mentioned later in the dialogue (but not actually appearing) and then not removed from the speakerGroup
 			}
 		}
-	// parsed as (block && flags) & 1 because & binds looser than &&; equivalent
-	// to `block && flags` (any nonzero flags), not `block && (flags & 1)`.
-	if (block && m[I].flags & 1)
+	if (block && (m[I].flags & 1))
 		block = false;
 	if (!block && createSpeakerGroup(lastSpeakerGroupPositionConsidered, I, false, lastSpeakerGroupOfPreviousSection))
 	{

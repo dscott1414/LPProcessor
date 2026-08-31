@@ -329,9 +329,10 @@
       </PrecompiledHeader>
       <ObjectFileName>$(IntDir)$(TargetName)\</ObjectFileName>
       <ProgramDataBaseFileName>$(TargetDir)$(TargetName).pdb</ProgramDataBaseFileName>
-      <WarningLevel>Level3</WarningLevel>
+      <WarningLevel>EnableAllWarnings</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <DisableSpecificWarnings>4389;4242;4388;4820;4365;4710;4668;4626;4625;4571;4245;4244;5039;5027;5026;4514;4774;4623;4706;4711;5045;4834;4574;5219;26451;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <!-- Only warnings that fire inside system/STL headers and carry no bug signal are suppressed. -->
+      <DisableSpecificWarnings>4820;4710;4711;4668;4514;4571;5039;5045;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
@@ -574,8 +575,10 @@
       <ProgramDataBaseFileName>$(TargetDir)$(TargetName).pdb</ProgramDataBaseFileName>
       <WarningLevel>EnableAllWarnings</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <TreatWarningAsError>true</TreatWarningAsError>
-      <DisableSpecificWarnings>4389;4242;4388;4820;4365;4710;4668;4626;4625;4571;4245;4244;5039;5027;5026;4514;4774;4623;4706;4711;5045;4834;4574;5219;26451;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <!-- Re-enable after the new warnings are triaged; /WX + /Wall would otherwise block the build. -->
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <!-- Only warnings that fire inside system/STL headers and carry no bug signal are suppressed. -->
+      <DisableSpecificWarnings>4820;4710;4711;4668;4514;4571;5039;5045;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -621,8 +624,10 @@
       <ProgramDataBaseFileName>$(TargetDir)$(TargetName).pdb</ProgramDataBaseFileName>
       <WarningLevel>EnableAllWarnings</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <TreatWarningAsError>true</TreatWarningAsError>
-      <DisableSpecificWarnings>4389;4242;4388;4820;4365;4710;4668;4626;4625;4571;4245;4244;5039;5027;5026;4514;4774;4623;4706;4711;5045;4834;4574;5219;26451;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <!-- Re-enable after the new warnings are triaged; /WX + /Wall would otherwise block the build. -->
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <!-- Only warnings that fire inside system/STL headers and carry no bug signal are suppressed. -->
+      <DisableSpecificWarnings>4820;4710;4711;4668;4514;4571;5039;5045;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -667,8 +672,10 @@
       <ProgramDataBaseFileName>$(TargetDir)$(TargetName).pdb</ProgramDataBaseFileName>
       <WarningLevel>EnableAllWarnings</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <TreatWarningAsError>true</TreatWarningAsError>
-      <DisableSpecificWarnings>4389;4242;4388;4820;4365;4710;4668;4626;4625;4571;4245;4244;5039;5027;5026;4514;4774;4623;4706;4711;5045;4834;4574;5219;26451;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <!-- Re-enable after the new warnings are triaged; /WX + /Wall would otherwise block the build. -->
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <!-- Only warnings that fire inside system/STL headers and carry no bug signal are suppressed. -->
+      <DisableSpecificWarnings>4820;4710;4711;4668;4514;4571;5039;5045;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -713,8 +720,10 @@
       <ProgramDataBaseFileName>$(TargetDir)$(TargetName).pdb</ProgramDataBaseFileName>
       <WarningLevel>EnableAllWarnings</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <TreatWarningAsError>true</TreatWarningAsError>
-      <DisableSpecificWarnings>4389;4242;4388;4820;4365;4710;4668;4626;4625;4571;4245;4244;5039;5027;5026;4514;4774;4623;4706;4711;5045;4834;4574;5219;26451;6011;6262;6053;6385;28199;28182;28241;28285;6387;6001;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <!-- Re-enable after the new warnings are triaged; /WX + /Wall would otherwise block the build. -->
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <!-- This config previously also hid 6011/6387 (null deref), 6385 (overrun) and 6001 (uninitialized read). -->
+      <DisableSpecificWarnings>4820;4710;4711;4668;4514;4571;5039;5045;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -762,8 +771,10 @@
       <ProgramDataBaseFileName>$(TargetDir)$(TargetName).pdb</ProgramDataBaseFileName>
       <WarningLevel>EnableAllWarnings</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <TreatWarningAsError>true</TreatWarningAsError>
-      <DisableSpecificWarnings>4389;4242;4388;4820;4365;4710;4668;4626;4625;4571;4245;4244;5039;5027;5026;4514;4774;4623;4706;4711;5045;4834;4574;5219;26451;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <!-- Re-enable after the new warnings are triaged; /WX + /Wall would otherwise block the build. -->
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <!-- Only warnings that fire inside system/STL headers and carry no bug signal are suppressed. -->
+      <DisableSpecificWarnings>4820;4710;4711;4668;4514;4571;5039;5045;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>

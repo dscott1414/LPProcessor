@@ -1449,8 +1449,7 @@ bool cSource::whereSubType(int where)
 int cSource::getAfterVerb(const int where, const int whereVerb, const int whereSubject)
 {
 	int afterVerb = whereVerb + 1;
-	// size check is after m[afterVerb] ? OOB when whereVerb is the last token.
-	while (m[afterVerb].queryWinnerForm(adverbForm) >= 0 && m[afterVerb].queryWinnerForm(prepositionForm) < 0 && afterVerb + 1 < (signed)m.size() && !adverbialPlace(afterVerb)) afterVerb++;
+	while (afterVerb < (signed)m.size() && m[afterVerb].queryWinnerForm(adverbForm) >= 0 && m[afterVerb].queryWinnerForm(prepositionForm) < 0 && afterVerb + 1 < (signed)m.size() && !adverbialPlace(afterVerb)) afterVerb++;
 	if (m[whereVerb].relPrep < 0)
 	{
 		if (m[whereVerb].getRelObject() < 0 && m[whereVerb + 1].pma.queryPattern(L"_PP") == -1 && whereVerb + 1 < (signed)m.size())
@@ -1670,8 +1669,8 @@ bool cSource::detectPlaceTransition(int where, int whereControllingEntity, int w
 		// if it has a prepobject, that object must be physical or a time
 		// && binds tighter than ||, so this is (A && B) || C, not A && (B || C).
 		if ((id != L"escape-51.1-5" || whereObject < 0 || (m[whereObject].word->second.timeFlags & T_UNIT) != 0 || proLocation || m[whereObject].relNextObject >= 0) &&
-			((wherePrepObject < 0 || whereObject >= 0) && woPhysicalObject) ||
-			(wherePrepObject >= 0 && (wpoPhysicalObject || (wpoTimeUnit && id != L"escape-51.1-5"))))
+			(((wherePrepObject < 0 || whereObject >= 0) && woPhysicalObject) ||
+			 (wherePrepObject >= 0 && (wpoPhysicalObject || (wpoTimeUnit && id != L"escape-51.1-5")))))
 		{
 			if (wpoTimeUnit) wherePrepObject = -1;
 			if (debugTrace.traceSpeakerResolution)

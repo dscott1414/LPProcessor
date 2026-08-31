@@ -192,10 +192,10 @@ void cSource::resolveFirstSecondPersonPronoun(int where, unsigned __int64 flags,
 			if (objects[oi->object].objectClass == PRONOUN_OBJECT_CLASS &&
 				(m[objects[oi->object].originalLocation].word->second.inflectionFlags & SECOND_PERSON) != 0)
 			{
-				// erase(oi) invalidates oi; the next two lines still read it.
+				int erased = oi->object;
 				m[where].objectMatches.erase(oi);
 				objectClass = PRONOUN_OBJECT_CLASS;
-				inflectionFlags = m[objects[oi->object].originalLocation].word->second.inflectionFlags;
+				inflectionFlags = m[objects[erased].originalLocation].word->second.inflectionFlags;
 				m[where].flags &= ~cWordMatch::flagObjectResolved;
 				break;
 			}

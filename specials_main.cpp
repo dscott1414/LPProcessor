@@ -101,7 +101,6 @@ unordered_map <string ,__int64 > cProfile::counterMap;
 unordered_map <string ,int > cProfile::counterNumMap;
 unordered_map <string,cProfile::CP> cProfile::timeMapTotal;
 __int64 cProfile::totalCount=0;
-bool cProfile::lockInitialized=false;
 string cProfile::functionPath;
 set <unordered_map <string,cProfile::CP>::iterator ,cProfile::timeSetCompare> cProfile::timeSort; // sort map by time taken by function
 set <unordered_map <string,cProfile::CP>::iterator ,cProfile::memorySetCompare> cProfile::memorySort; // sort map by memory allocated by function

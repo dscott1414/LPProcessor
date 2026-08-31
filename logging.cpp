@@ -28,11 +28,10 @@
 	Notes / gotchas:
 		- LOG_FATAL_ERROR is routed first as LOG_INFO (main.lplog).  lplog() also
 			ORs LOG_ERROR, but logstring() sees FATAL after the info write and
-			exit(0)s, so error.lplog never gets the fatal line.
-		- The FATAL path prints the message, fclose, getchar(), fgets(), exit(0).
-			Unattended runs hang on stdin; the process then exits 0, not 1.
-		- source.h currently claims lplog(FATAL) does not abort.  That is wrong;
-			this file and main.cpp are the authority.
+			terminates, so error.lplog never gets the fatal line.
+		- The FATAL path goes through fatalExit(): exits EXIT_FAILURE, and waits for
+			a keypress only when interactive (multiProcess==0 and stdin is a tty).
+
 		- With LOG_BUFFER, FILE*s are shared across threads that have different
 			logFileExtension values - a race, and one thread can fclose another's file.
 		- sprintf into logFilename[1024] is unbounded in logFileExtension length.
@@ -76,10 +75,24 @@ int logProximityMap = 0;
 bool logTraceOpen = false;
 bool log_net = false;
 
+// Terminate on a fatal error.  Exits non-zero so a parent (or a shell) can tell a
+// crashed run from a clean one, and only waits for a keypress when a human is
+// actually watching: a child under -mp has no console input and would hang forever.
+static void fatalExit(void)
+{
+	if (multiProcess == 0 && _isatty(_fileno(stdin)))
+	{
+		wprintf(L"\nPress Enter to close.\n");
+		char buf[16];
+		if (!fgets(buf, sizeof(buf), stdin))
+			clearerr(stdin);
+	}
+	exit(EXIT_FAILURE);
+}
 
 // Write 's' to every log file whose bit is set in logLevel.  s==NULL closes
-// those files (used as a flush).  LOG_FATAL_ERROR writes main.lplog, then
-// blocks on getchar()/fgets() and exit(0) - this function does not return.
+// those files (used as a flush).  LOG_FATAL_ERROR writes main.lplog then calls
+// fatalExit(), so this function does not return for a fatal level.
 // Returns 0, or -1 if fopen/fputws failed (FATAL still exits first).
 int logstring(int logLevel, const wchar_t* s)
 {
@@ -238,13 +251,7 @@ int logstring(int logLevel, const wchar_t* s)
 				if (*logFile != NULL)
 					fclose(*logFile);
 				*logFile = NULL;
-				// wait so we can see the error
-				if (getchar() == EOF)
-					printf("ERROR");
-				char buf[11];
-				fgets(buf, 10, stdin); // make sure we wait so we can see the error
-
-				exit(0);
+				fatalExit();
 			}
 #else
 			if (*logFile < 0)
@@ -270,10 +277,7 @@ int logstring(int logLevel, const wchar_t* s)
 				if (*logFile != -1)
 					close(*logFile);
 				*logFile = -1;
-				getchar(); // wait so we can see the error
-				char buf[11];
-				fgets(buf, 10, stdin); // make sure we wait so we can see the error
-				exit(0);
+				fatalExit();
 			}
 #endif
 		}
@@ -337,9 +341,8 @@ int lplog(int logLevel, const wchar_t* format, ...)
 }
 
 // Like lplog(logLevel,...) but does not append a newline ("NR" = no return-
-// character, not "no return").  The extra exit(0) after logstring is dead for
-// FATAL because logstring already exited; it is the only reason the name is
-// sometimes read as "no return".
+// character, not "no return").  The FATAL block after logstring is unreachable
+// because logstring() already called fatalExit().
 int lplogNR(int logLevel, const wchar_t* format, ...)
 {
 	LFS
@@ -356,13 +359,8 @@ int lplogNR(int logLevel, const wchar_t* format, ...)
 	if (logLevel & LOG_FATAL_ERROR)
 	{
 		logstring(LOG_MASK, NULL);
-		wprintf(buf);
-		// wait so we can see the error
-		if (getchar() == EOF)
-			printf("ERROR");
-		char cbuf[11];
-		fgets(cbuf, 10, stdin); // make sure we wait so we can see the error
-		exit(0);
+		wprintf(L"%s", buf); // buf is runtime data, never a format string
+		fatalExit();
 	}
 	return 0;
 }

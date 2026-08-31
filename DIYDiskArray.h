@@ -17,9 +17,6 @@
 		- errstr() - _wcserror_s of the last errno into errbuffer.
 
 	Notes / gotchas:
-		- path is stored as a borrowed pointer; a temporary wstring.c_str() dangles.
-		- Destructor is empty: the fd is never closed (leak, and the file is not
-			flushed).
 		- initialize() writes sizeof(buf) even when fewer bytes remain, so the file
 			is longer than (first+1)*(second+1)*sizeof(T).
 		- Disk index is (first*saveSecond + second).  Dimensions are saveFirst+1 by
@@ -31,6 +28,7 @@
 */
 #include <sstream>
 #include <iostream>
+#include <string>
 #include <vector>
 #include <iterator>
 #include <io.h>
@@ -46,7 +44,8 @@ class DIYDiskArray
 {
 	vector<vector <T>> matrix;
 	vector<vector <T>> checkMatrix;
-	const wchar_t *path;
+	wstring path;
+	bool useDisk;
 	int matrixfp;
 	errno_t error;
 	bool anyErrorFatal;
@@ -63,11 +62,11 @@ public:
 	{
 		saveFirst = first;
 		saveSecond = second;
-		if (path != NULL)
+		if (useDisk)
 		{
-			error = _wsopen_s(&matrixfp, path, _O_BINARY | _O_RDWR | _O_RANDOM | _O_CREAT, _SH_DENYNO, _S_IREAD | _S_IWRITE);
+			error = _wsopen_s(&matrixfp, path.c_str(), _O_BINARY | _O_RDWR | _O_RANDOM | _O_CREAT, _SH_DENYNO, _S_IREAD | _S_IWRITE);
 			if (error && anyErrorFatal)
-				lplog(LOG_FATAL_ERROR, L"DIYDiskArray:initialization _wsopen failure = %d[%s] with path %s", error, errstr(), path);
+				lplog(LOG_FATAL_ERROR, L"DIYDiskArray:initialization _wsopen failure = %d[%s] with path %s", error, errstr(), path.c_str());
 			if (!error)
 			{
 				__int64 totalBytes = (first + 1) * (second + 1) * sizeof(T);
@@ -79,7 +78,7 @@ public:
 					{
 						error = errno;
 						if (error && anyErrorFatal)
-							lplog(LOG_FATAL_ERROR, L"DIYDiskArray:initialization _write [%I64d] failure = %d[%s] with path %s", bytes, error, errstr(), path);
+							lplog(LOG_FATAL_ERROR, L"DIYDiskArray:initialization _write [%I64d] failure = %d[%s] with path %s", bytes, error, errstr(), path.c_str());
 					}
 			}
 			if (check)
@@ -108,7 +107,7 @@ public:
 			lplog(LOG_ERROR, L"DIYDiskArray:put [%I64d,%I64d] %f", first, second, value);
 		if (first > saveFirst || second > saveSecond || first < 0 || second < 0)
 			lplog(LOG_FATAL_ERROR, L"DIYDiskArray:illegal parameters put [%I64d,%I64d]", first, second);
-		if (path == NULL)
+		if (!useDisk)
 			matrix[first][second] = value;
 		else
 		{
@@ -118,14 +117,14 @@ public:
 			{
 				error = errno;
 				if (error && anyErrorFatal)
-					lplog(LOG_FATAL_ERROR, L"DIYDiskArray:put _lseeki64 [%I64d,%I64d] failure = %d[%s] with path %s", first, second, error, errstr(), path);
+					lplog(LOG_FATAL_ERROR, L"DIYDiskArray:put _lseeki64 [%I64d,%I64d] failure = %d[%s] with path %s", first, second, error, errstr(), path.c_str());
 				return -1;
 			}
 			if (_write(matrixfp, &value, sizeof(value)) < 0)
 			{
 				error = errno;
 				if (error && anyErrorFatal)
-					lplog(LOG_FATAL_ERROR, L"DIYDiskArray:_write failure = %d[%s] with path %s", error, errstr(), path);
+					lplog(LOG_FATAL_ERROR, L"DIYDiskArray:_write failure = %d[%s] with path %s", error, errstr(), path.c_str());
 				return -1;
 			}
 			if (check)
@@ -146,7 +145,7 @@ public:
 			lplog(LOG_ERROR, L"DIYDiskArray:get [%I64d,%I64d]", first, second);
 		if (first > saveFirst || second > saveSecond || first < 0 || second < 0)
 			lplog(LOG_FATAL_ERROR, L"DIYDiskArray:illegal parameters get [%I64d,%I64d]", first, second);
-		if (path == NULL)
+		if (!useDisk)
 			return matrix[first][second];
 		else
 		{
@@ -157,14 +156,14 @@ public:
 			{
 				error = errno;
 				if (error && anyErrorFatal)
-					lplog(LOG_FATAL_ERROR, L"DIYDiskArray:put _lseeki64 [%I64d,%I64d] failure = %d[%s] with path %s", first, second, error, errstr(), path);
+					lplog(LOG_FATAL_ERROR, L"DIYDiskArray:put _lseeki64 [%I64d,%I64d] failure = %d[%s] with path %s", first, second, error, errstr(), path.c_str());
 				return 0;
 			}
 			if (_read(matrixfp, &value, sizeof(value)) < 0)
 			{
 				error = errno;
 				if (error && anyErrorFatal)
-					lplog(LOG_FATAL_ERROR, L"DIYDiskArray:_read failure = %d[%s] with path %s", error, errstr(), path);
+					lplog(LOG_FATAL_ERROR, L"DIYDiskArray:_read failure = %d[%s] with path %s", error, errstr(), path.c_str());
 				return 0;
 			}
 			if (check)
@@ -176,19 +175,32 @@ public:
 		}
 	}
 
-	// Borrow tpath (not copied - a temporary dangles).  NULL path = RAM mode.
-	// anyErrorFatal defaults true so I/O errors abort.
+	// tpath is copied into an owned wstring, so a temporary c_str() is safe.
+	// NULL path = RAM mode.  anyErrorFatal defaults true so I/O errors abort.
 	DIYDiskArray(const wchar_t *tpath)
 	{
-		path = tpath;
+		useDisk = tpath != NULL;
+		if (useDisk)
+			path = tpath;
+		matrixfp = -1;
+		error = 0;
 		anyErrorFatal = true;
 	}
 
 
-	// Intentionally empty: the disk fd is never closed or flushed.
+	// Flush and close the disk fd if one was opened.
 	~DIYDiskArray()
 	{
+		if (matrixfp != -1)
+		{
+			_commit(matrixfp);
+			_close(matrixfp);
+			matrixfp = -1;
+		}
 	}
+
+	DIYDiskArray(const DIYDiskArray &) = delete;
+	DIYDiskArray &operator=(const DIYDiskArray &) = delete;
 };
 
 

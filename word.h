@@ -39,8 +39,6 @@
 		- Form ids in the DB are 1-based; in memory they are 0-based (formId-1 on
 			read).  patternFormNumOffset (32750) is the fake "form id" used to store
 			usage-pattern counts in the same wordForms rows.
-		- ADJECTIVE_INFLECTIONS_MASK includes ADVERB_SUPERLATIVE, not
-			ADJECTIVE_SUPERLATIVE - almost certainly a copy-paste error.
 		- alreadyTaken = 8192*256 does not collide with deleteWordAfterSourceProcessing
 			(=8192); the *256 is a shift by 8 extra bits.
 		- A tIWMM is invalidated if WMM rehashes; callers that keep iterators across
@@ -150,7 +148,7 @@ extern bool exitNow;
 #define VERB_INFLECTIONS_MASK (VERB_PAST|VERB_PAST_PARTICIPLE|VERB_PRESENT_PARTICIPLE|VERB_PRESENT_THIRD_SINGULAR|\
                                VERB_PRESENT_FIRST_SINGULAR|VERB_PAST_THIRD_SINGULAR|VERB_PAST_PLURAL|VERB_PRESENT_PLURAL|\
                                VERB_PRESENT_SECOND_SINGULAR)
-#define ADJECTIVE_INFLECTIONS_MASK (ADJECTIVE_NORMATIVE|ADJECTIVE_COMPARATIVE|ADVERB_SUPERLATIVE)
+#define ADJECTIVE_INFLECTIONS_MASK (ADJECTIVE_NORMATIVE|ADJECTIVE_COMPARATIVE|ADJECTIVE_SUPERLATIVE)
 #define ADVERB_INFLECTIONS_MASK (ADVERB_NORMATIVE|ADVERB_COMPARATIVE|ADVERB_SUPERLATIVE)
 #define INFLECTIONS_MASK (OPEN_INFLECTION|CLOSE_INFLECTION)
 

@@ -45,12 +45,10 @@
 		  further Wikipedia / web work. CONFIDENCE_NOMATCH means reject.
 		- cAS::source / srg point into child sources owned by sourcesMap; eraseSourcesMap
 		  invalidates every outstanding cAS.
-		- metaPatternMatch() always returns -1 (processMetanameTagset's whereAnswer
-		  is discarded), so mapPatternAnswer never actually contributes a cAS.
+		- metaPatternMatch() returns -1 when no tag set yields an answer; 0 is a
+		  valid where, so callers must test >= 0, not > 0.
 		- cProximityEntry's 5-arg ctor uses childObject before assigning it from 'co'
 		  (it is still 0 = narrator).
-		- questionTypeCheck writes `qt | typeQTMask` (always 15) instead of replacing
-		  only the type nibble, so remapped what/which questions lose their type.
 */
 #undef _STLP_USE_EXCEPTIONS // STLPORT 4.6.1
 #include <algorithm>
@@ -112,6 +110,7 @@ int flushString(wstring& buffer, wchar_t* path)
 // <http://rdf.freebase.com/ns/m.0zcqcv2>
 wstring stripWeb(wstring& name)
 {
+	if (name.empty()) return name;
 	if (name[0] == '<')
 		name = name.substr(1, name.length() - 1);
 	if (name[name.length() - 1] == '>')
@@ -1004,7 +1003,7 @@ void appendSum(int sum, const wchar_t* str, wstring& matchInfo)
 // variable to string-match the corresponding question-side location. Variable
 // 'A' is the answer. Differentiators 8/9/G further require the answer's verb
 // to be know/call/name, look/appear, or recognize. Returns the answer where,
-// or 0 if rejected. diff[0] is read even when differentiator is empty.
+// or -1 if rejected (0 is a valid where - the first token / Narrator).
 int cQuestionAnswering::processMetanameTagset(vector <cTagLocation>& tagSet, int whereMNE, int element, cSource* questionSource, cSource* childSource, vector <cSyntacticRelationGroup>::iterator childSRG, cPattern*& mapPatternAnswer, cPattern*& mapPatternQuestion)
 {
 	childSource->printTagSet(LOG_WHERE, L"MNE", 0, tagSet, whereMNE, childSource->m[whereMNE].pma[element & ~cMatchElement::patternFlag].pemaByPatternEnd);
@@ -1054,17 +1053,18 @@ int cQuestionAnswering::processMetanameTagset(vector <cTagLocation>& tagSet, int
 		for (vector <wstring>::iterator pi = parameters.begin(), piEnd = parameters.end(); pi != piEnd && !parameterMatchesAnswer; pi++)
 			parameterMatchesAnswer = *pi == childVarNameValue;
 		if (parameterMatchesAnswer)
-			return 0;
+			return -1;
 		// test only for patterns diff 8,9,G
 		wstring diff = patterns[childSource->m[whereMNE].pma[element & ~cMatchElement::patternFlag].getPattern()]->differentiator;
 		lplog(LOG_WHERE, L"%d:meta matched pattern %s[%s]", whereMNE, patterns[childSource->m[whereMNE].pma[element & ~cMatchElement::patternFlag].getPattern()]->name.c_str(), patterns[childSource->m[whereMNE].pma[element & ~cMatchElement::patternFlag].getPattern()]->differentiator.c_str());
 		set <wstring> checkVerbs;
-		switch (diff[0])
-		{
-		case '8':checkVerbs = { L"know",L"call",L"name" }; break;
-		case '9':checkVerbs = { L"look",L"appear" }; break;
-		case 'G':checkVerbs = { L"recognize" }; break;
-		}
+		if (!diff.empty())
+			switch (diff[0])
+			{
+			case '8':checkVerbs = { L"know",L"call",L"name" }; break;
+			case '9':checkVerbs = { L"look",L"appear" }; break;
+			case 'G':checkVerbs = { L"recognize" }; break;
+			}
 		wstring tmpstr;
 		bool foundMatch = checkVerbs.empty();
 		if (checkVerbs.size() && childSource->m[whereAnswer].getRelVerb() >= 0)
@@ -1098,7 +1098,7 @@ int cQuestionAnswering::processMetanameTagset(vector <cTagLocation>& tagSet, int
 				childSource->phraseString(childSRG->printMin, childSRG->printMax, tmpstr2, false).c_str());
 		}
 	}
-	return 0;
+	return -1;
 }
 
 /*
@@ -1130,9 +1130,8 @@ location 10 mapped to variable X.
 4:1-1  noun|name*0|0|0
 */
 // Scan the child SRG's print span for mapPatternAnswer's first element, collect
-// _META_NAME_EQUIVALENCE tag sets and call processMetanameTagset. The whereAnswer
-// return is discarded, and this function always returns -1, so the caller
-// (analyzeQuestionFromSourceSyntacticRelation) never records a META_PATTERN cAS.
+// _META_NAME_EQUIVALENCE tag sets and call processMetanameTagset.  Returns the
+// first accepted answer where, or -1 if no tag set produced one.
 int cQuestionAnswering::metaPatternMatch(cSource* questionSource, cSource* childSource, vector <cSyntacticRelationGroup>::iterator childSRG, cPattern*& mapPatternAnswer, cPattern*& mapPatternQuestion)
 {
 	LFS
@@ -1155,7 +1154,22 @@ int cQuestionAnswering::metaPatternMatch(cSource* questionSource, cSource* child
 		if (childSource->startCollectTags(true, metaNameEquivalenceTagSet, whereMNE, childSource->m[whereMNE].pma[element & ~cMatchElement::patternFlag].pemaByPatternEnd, tagSets, false, true, L"meta pattern match") > 0)
 			for (auto& tagSet : tagSets)
 			{
-				processMetanameTagset(tagSet, whereMNE, element, questionSource, childSource, childSRG, mapPatternAnswer, mapPatternQuestion);
+				int whereAnswer = processMetanameTagset(tagSet, whereMNE, element, questionSource, childSource, childSRG, mapPatternAnswer, mapPatternQuestion);
+				if (whereAnswer >= 0)
+				{
+					wstring tmpstr;
+					lplog(LOG_WHERE, L"%d:meta pattern match found answer=%s.\n%s",
+						whereMNE, childSource->whereString(whereAnswer, tmpstr, false).c_str(),
+						childSource->phraseString(childSRG->printMin, childSRG->printMax, tmpstr, false).c_str());
+					return whereAnswer;
+				}
+				else
+				{
+					wstring tmpstr;
+					lplog(LOG_WHERE, L"%d:meta pattern match rejected answer.\n%s",
+						whereMNE,
+						childSource->phraseString(childSRG->printMin, childSRG->printMax, tmpstr, false).c_str());
+				}
 			}
 	}
 	return -1;
@@ -1716,8 +1730,7 @@ int cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubject(cSourc
 }
 
 // One child SRG: skip if it is itself a question or negation disagrees.
-// Optionally try metaPatternMatch (currently never succeeds — see that
-// function). Then walk up to 4 compound subjects.
+// Optionally try metaPatternMatch.  Then walk up to 4 compound subjects.
 void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelation(cSource* questionSource, wstring childSourceType, cSource* childSource, 
 	cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer, 
 	vector <cSyntacticRelationGroup>::iterator childSRG, bool questionTypeSubject, bool questionTypeObject, bool questionTypePrepObject)
@@ -2827,9 +2840,7 @@ int cQuestionAnswering::checkParticularPartQuestionTypeCheck(cSource* questionSo
 
 // Remap what/which+QTA ("what person/place/business/book/time") onto
 // whom/where/wikiBusiness/wikiWork/when, then run
-// checkParticularPartQuestionTypeCheck on the candidate. The assignment
-// `questionType = qt | typeQTMask` clobbers the type nibble to 15 (all bits)
-// instead of replacing it — subsequent type tests then miss. Returns
+// checkParticularPartQuestionTypeCheck on the candidate. Returns
 // CONFIDENCE_NOMATCH if the type is not one we can check.
 int cQuestionAnswering::questionTypeCheck(cSource* questionSource, wstring derivation, cSyntacticRelationGroup* parentSRG, cAS& childCAS, int& semanticMismatch, bool& unableToDoQuestionTypeCheck)
 {
@@ -2862,8 +2873,7 @@ int cQuestionAnswering::questionTypeCheck(cSource* questionSource, wstring deriv
 			qt = whenQTFlag;
 		else
 			return CONFIDENCE_NOMATCH;
-		// Intended: replace the type nibble. `qt | typeQTMask` is always 15.
-		parentSRG->questionType = qt | typeQTMask;
+		parentSRG->questionType = (parentSRG->questionType & ~typeQTMask) | qt;
 	}
 	else if (qt != whereQTFlag && qt != whoseQTFlag && qt != whenQTFlag && qt != whomQTFlag)
 		return CONFIDENCE_NOMATCH;
@@ -3017,12 +3027,10 @@ cProximityMap::cProximityEntry::cProximityEntry()
 	childObject = 0;
 }
 
-// Build a proximity neighbour for the object at childSourceIndex. checkParticularPartQuestionTypeCheck
-// and objectString/objects[] are called with childObject still 0 (narrator);
-// 'co' is assigned only at the end. fullDescriptor is then overwritten with
-// just the principal-where offset, so the form-string work is discarded.
+// Build a proximity neighbour for the object at childSourceIndex. 
 cProximityMap::cProximityEntry::cProximityEntry(cQuestionAnswering& qa, cSource* childSource, unsigned int childSourceIndex, int co, cSyntacticRelationGroup* parentSRG) : cProximityEntry()
 {
+	childObject = co;
 	int qt = parentSRG->questionType & cQuestionAnswering::typeQTMask;
 	bool parentQuestionTypeValid = ((parentSRG->questionType & cQuestionAnswering::QTAFlag) || (qt != cQuestionAnswering::whereQTFlag && qt != cQuestionAnswering::whoseQTFlag && qt != cQuestionAnswering::whenQTFlag && qt != cQuestionAnswering::whomQTFlag));
 	bool questionTypeCheck = parentQuestionTypeValid && qa.checkParticularPartQuestionTypeCheck(childSource, qt, childSourceIndex, childObject, semanticMismatch);
@@ -3042,7 +3050,6 @@ cProximityMap::cProximityEntry::cProximityEntry(cQuestionAnswering& qa, cSource*
 	wstring principalWhereOffset;
 	itos(childWhere2 - childSource->objects[childObject].begin, principalWhereOffset);
 	fullDescriptor = principalWhereOffset;
-	childObject = co; // assigned after objectString / objects[childObject] above
 }
 
 // Compare question vs child verbSense (negation, tense, sourceInPast).

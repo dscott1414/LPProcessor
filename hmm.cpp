@@ -35,8 +35,8 @@
 		- hmm.h declarations for tagFromSource / initViterbiStartProbabilities /
 		  forwardFromSource / findLPPOSEquivalents do not match these definitions.
 		- Emission matrix stays 0 for unseen (tag,word) unless USE_ALPHA_FOR_WORDTAG.
-		- Forward uses product + a renormalizing probMult instead of log-sum; NaN
-		  is tested with `== nan(NULL)`, which is never true.
+		- Forward uses product + a renormalizing probMult instead of log-sum, so it
+		  relies on the isnan() guard to catch underflow to NaN.
 		- Lookup of cached parses is by sentencehash only (collision risk).
 		- setParsedSentence interpolates parse/sentence into SQL with only
 		  quote-character rewriting, not escaping.
@@ -308,7 +308,7 @@ int findLPPOSEquivalents(wstring sentence, wstring& parse, wstring originalWord,
 	// parse=(ROOT (PRN (: ;) (S (NP (NP (NP (QP (CC and) (CD Bunny))) (, ,) (CC and) (NP (NNP Bobtail)) (, ,)) (CC and) (NP (NNP Billy))) (VP (VBD were) (ADVP (RB always)) (VP (VBG doing) (NP (JJ *) (NN something)))))))
 	if (pcfg)
 	{
-		if (originalWord[originalWord.length() - 2] == L'\'' && originalWord[originalWord.length() - 1] == L's')
+		if (originalWord.length() >= 2 && originalWord[originalWord.length() - 2] == L'\'' && originalWord[originalWord.length() - 1] == L's')
 			originalWord.erase(originalWord.length() - 2);
 		originalWord = L" " + originalWord + L")";
 		size_t wow = parse.find(originalWord);
@@ -477,6 +477,7 @@ vector <wstring> writeModelFile(wstring modelPath, unordered_map <wstring, int>&
 	vector <wstring> model;
 
 	FILE* out_fp = _wfopen(modelPath.c_str(), L"w, ccs=UNICODE");
+	if (!out_fp) return model;
 
 	// Write transition counts
 	for (auto const& [tags, count] : tagTransitionCountsMap)
@@ -509,11 +510,13 @@ vector <wstring> readModelFile(wstring modelPath)
 {
 	vector <wstring> model;
 	FILE* model_fp = _wfopen(modelPath.c_str(), L"r, ccs=UNICODE");
+	if (!model_fp) return model; 
 	// Start state
 	wchar_t line[100 + 1];
 	while (fgetws(line, 100, model_fp) != NULL)
 	{
-		line[wcslen(line) - 1] = 0;
+		size_t n = wcslen(line);
+		if (n) line[n - 1] = 0;
 		model.push_back(line);
 	}
 	fclose(model_fp);
@@ -701,7 +704,7 @@ wstring getContext(cSource& source, int wordSourceIndex, bool star, int& duplica
 // Viterbi forward: for each word, only consider forms present on that token.
 // Uses product * probMult (not log-add).  OOV words index vocab via operator[]
 // (default 0 = first vocab word).  Low-prob + flagOnlyConsiderProperNounForms
-// clears the flag and retries the same index.  `probMult == nan(NULL)` is never true.
+// clears the flag and retries the same index.
 void forwardFromSource(cSource& source, vector<vector<double>>& tagTransitionProbabilityMatrix, vector<vector<double>>& wordTagProbabilityMatrix, DIYDiskArray<double>& probabilityMatrix, DIYDiskArray<int>& pathMatrix,
 	vector <wstring>& tags, unordered_map <wstring, int>& wordSourceIndexLookup, unordered_map <wstring, int>& tagLookup)
 {
@@ -781,8 +784,7 @@ void forwardFromSource(cSource& source, vector<vector<double>>& tagTransitionPro
 		}
 		if (maximumProbabilityPerWordIndex != (double)-std::numeric_limits<double>::infinity())
 			probMult = ((double)numWordsInSource * numWordsInSource) / maximumProbabilityPerWordIndex; // CHANGE from log add to multiplication
-	// NaN != NaN, so this comparison never fires; isnan(probMult) was intended.
-	if (probMult == nan(NULL))
+	if (isnan(probMult))
 	{
 			lplog(LOG_FATAL_ERROR, L"Viterbi: forward probability multiplier is not a number: %f", maximumProbabilityPerWordIndex);
 			return;

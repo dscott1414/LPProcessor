@@ -173,7 +173,7 @@ int cStemmer::readStemRules(void)
 	for (line = 1; fgetws(s, maxlinelength, fp); line++)
 	{
 		if (s[0] == 0xFEFF) // detect BOM
-			memcpy(s, s + 1, wcslen(s + 1));
+			wmemmove(s, s + 1, wcslen(s + 1) + 1);
 		if ((s[0] == L';') || (s[0] == L'\r') || (s[0] == L'\n') || (s[0] == L' '))
 			continue;
 		wchar_t savecopy[maxlinelength];

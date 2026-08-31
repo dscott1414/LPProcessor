@@ -613,8 +613,8 @@ bool cSource::checkAmbiguousVerbTense(int whereVerb, int& sense, bool inQuote, t
 		// make the tense = the last tense by past or present.
 		// Parsed as (A && B) || C ? C can fire when sense is neither PRESENT nor PAST.
 		if ((sense == VT_PRESENT || sense == VT_PAST) &&
-			(masterVerbWord != wNULL && (masterVerbWord->second.inflectionFlags & (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) == (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) ||
-			(masterVerbWord == wNULL && (m[whereVerb].word->second.inflectionFlags & (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) == (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)))
+			((masterVerbWord != wNULL && (masterVerbWord->second.inflectionFlags & (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) == (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) ||
+			 (masterVerbWord == wNULL && (m[whereVerb].word->second.inflectionFlags & (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) == (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST))))		
 		{
 			int tmpLastSense = lastSense & ~(VT_POSSIBLE | VT_PASSIVE | VT_NEGATION | VT_EXTENDED | VT_VERB_CLAUSE);
 			// if narrator, and currently ambiguous and sense is present, then set sense to past
@@ -1468,11 +1468,11 @@ int cSource::processInternalInfinitivePhrase(int where, int whereVerb, int where
 //   if no prep that contains the role, return a prep that does not contain the rejectRole
 // Walk relPrep from whereLastPrep.  Return the first prep whose objectRole
 // has `role`, else the last prep that does not have rejectRole, else -1.
-// Does not guard whereLastPrep < 0 ? m[-1] if the caller passes -1.
 int cSource::findPrepRole(int whereLastPrep, int role, int rejectRole)
 {
 	LFS
-		int save = -1, prepLoop = 0;
+	int save = -1, prepLoop = 0;
+	if (whereLastPrep < 0) return -1;
 	while ((whereLastPrep = m[whereLastPrep].relPrep) >= 0)
 	{
 		if (m[whereLastPrep].objectRole & role) return whereLastPrep;
@@ -1605,8 +1605,8 @@ void cSource::evaluateSubjects(int where, vector <cTagLocation>& tagSet,
 		// but accept forwards in these questions: Brought a telephone message to the man Whittington , did he[brown,whittington] ?
 		// (empty && A) || B ? B (the "did he?" scan) is not gated on empty.
 		if (whereSubjects.empty() &&
-			(m[where].pma.queryPattern(L"_INTRO_S1", maxLen) != -1 && pema.queryTag(m[where + maxLen].beginPEMAPosition, SUBJECT_TAG) != -1 && !(m[where].flags & cWordMatch::flagInQuestion)) ||
-			((m[where].flags & cWordMatch::flagInQuestion) && m[where].pma.queryPattern(L"__INTRO_S1", maxLen) != -1 && m[where + maxLen].word->first == L"did" && m[where + maxLen + 1].getObject() >= 0))
+			((m[where].pma.queryPattern(L"_INTRO_S1", maxLen) != -1 && where + maxLen < (int)m.size() && pema.queryTag(m[where + maxLen].beginPEMAPosition, SUBJECT_TAG) != -1 && !(m[where].flags & cWordMatch::flagInQuestion)) ||
+			 ((m[where].flags & cWordMatch::flagInQuestion) && m[where].pma.queryPattern(L"__INTRO_S1", maxLen) != -1 && where + maxLen + 1 < (int)m.size() && m[where + maxLen].word->first == L"did" && m[where + maxLen + 1].getObject() >= 0)))
 		{
 			int whereSubject = where + maxLen;
 			if (m[where].flags & cWordMatch::flagInQuestion)
@@ -3322,7 +3322,7 @@ void cSource::testSyntacticRelations()
 		while (end && m[end - 1].word == Words.sectionWord)
 			end--; // cut off end of paragraphs
 		// end may equal m.size() here ? one past the last token.
-		if (m[end].word == primaryQuoteCloseWord || m[end].word == secondaryQuoteCloseWord)
+		if (end < m.size() && (m[end].word == primaryQuoteCloseWord || m[end].word == secondaryQuoteCloseWord))
 			end++;
 		debugTrace = m[begin].t;
 		if (debugTrace.traceTestSyntacticRelations)

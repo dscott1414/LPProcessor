@@ -182,7 +182,7 @@ wstring cSource::objectString(cOM om,wstring &logres,bool shortNameFormat,bool o
 // so self-owning / cyclic owners cannot recurse).
 wstring cSource::objectString(vector <cObject>::iterator object,wstring &logres,bool shortFormat,bool objectOwnerRecursionFlag, const wchar_t * separator)
 { LFS
-  if (object->objectClass==NAME_OBJECT_CLASS && !object->name.notNull() && (object->end-object->begin)>1) // (added object length consideration because otherwise this will print US as Us - correct printing of acronyms that are names)
+  if (object->objectClass==NAME_OBJECT_CLASS && !object->name.isCompletelyNull() && (object->end-object->begin)>1) // (added object length consideration because otherwise this will print US as Us - correct printing of acronyms that are names)
     object->name.print(logres,true, separator);
   else
     phraseString(object->begin,object->end,logres,shortFormat, separator);
@@ -279,11 +279,10 @@ const wchar_t *cSource::getOriginalWord(int I, wstring &out, bool concat, bool m
 
 // Expand the object at 'where' into one or more +joined surface strings in
 // wsoStrs (used by question answering / web search).  Adjectival objects
-// fan out over objectMatches.  oStr[0]=0 on a default-empty wstring is UB.
+// fan out over objectMatches.  
 void cSource::getOriginalWords(int where,vector <wstring> &wsoStrs,bool notFirst)
 { LFS
 	wstring oStr;
-	oStr[0]=0;
 	if (notFirst)
 		oStr+=L"+";
 	if (m[where].flags&cWordMatch::flagAdjectivalObject)
@@ -5275,8 +5274,8 @@ int cSource::scanForSpeaker(int where,bool &definitelySpeaker,bool &crossedSecti
 		speakerSet=true;
     if (end<0) end=1;
     speakerObjectPosition=end+where+1;
-		if (extendedSayVerb)
-			speakerObjectPosition++;
+	if (extendedSayVerb)
+		speakerObjectPosition++;
     if (m[speakerObjectPosition].principalWherePosition>=0 && (thinkSayVerb ||
       objects[m[m[speakerObjectPosition].principalWherePosition].getObject()].isAgent(true) ||
       isVoice(m[speakerObjectPosition].principalWherePosition)))
@@ -5286,9 +5285,11 @@ int cSource::scanForSpeaker(int where,bool &definitelySpeaker,bool &crossedSecti
       // which does end+=where+1).  speakerObjectPosition is already end+where+1,
       // so audienceObjectPosition<end never holds ? this loop is dead.
       int saveAudienceObjectPosition=audienceObjectPosition,ao; // audienceObjectPosition may have been previously set by hailed speakers
+	  int audienceLimit = end + where + 1;
+	  if (extendedSayVerb) audienceLimit++;
       for (audienceObjectPosition=speakerObjectPosition+1,im++; audienceObjectPosition<end; im++,audienceObjectPosition++)
       {
-        if (im->word->first==L"to" && audienceObjectPosition+1<end && (ao=m[m[audienceObjectPosition+1].principalWherePosition].getObject())!=cObject::eOBJECTS::UNKNOWN_OBJECT && 
+        if (im->word->first==L"to" && audienceObjectPosition+1<audienceLimit && (ao=m[m[audienceObjectPosition+1].principalWherePosition].getObject())!=cObject::eOBJECTS::UNKNOWN_OBJECT && 
 					  (ao<0 || objects[ao].isAgent(true)))
         {
           audienceObjectPosition++;

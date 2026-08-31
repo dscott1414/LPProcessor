@@ -82,8 +82,7 @@ void cSource::identifyConversations()
 		// did the last quote and current quote share at least two people? if not, this is a different conversation.
 		int previousQuote = m[I].previousQuote;
 		if (previousQuote >= 0 &&
-			(!(intersect(m[I].objectMatches, m[previousQuote].objectMatches, allIn, oneIn) || intersect(m[I].audienceObjectMatches, m[previousQuote].objectMatches, allIn, oneIn)) ||
-				!(intersect(m[I].objectMatches, m[previousQuote].objectMatches, allIn, oneIn) || intersect(m[I].audienceObjectMatches, m[previousQuote].objectMatches, allIn, oneIn))))
+			!(intersect(m[I].objectMatches, m[previousQuote].objectMatches, allIn, oneIn) || intersect(m[I].audienceObjectMatches, m[previousQuote].audienceObjectMatches, allIn, oneIn)))
 		{
 			numConversations++;
 			continue;

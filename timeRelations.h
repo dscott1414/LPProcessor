@@ -328,6 +328,15 @@ public:
 		timeSPTAnchor = -1; // speech time
 		timeETAnchor = -1; // event time
 		timeRTAnchor = -1; // reference time
+		absMoment = -1;
+		absNamedHoliday = -1;
+		absNamedMonth = -1;
+		absNamedSeason = -1;
+		absToday = -1;
+		absTomorrow = -1;
+		absTonight = -1;
+		absUnspecified = -1;
+		absYesterday = -1;
 		/*
 			 IT[p.m.] was 2 p.m. on the afternoon of May 7 , 1915
 				 T_AT CHAIN modifier = 14 capacity=cHour, modifier = 1915 capacity=cYear, modifier = 5 capacity=cMonth, modifier = 7 capacity=cDay

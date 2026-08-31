@@ -39,12 +39,6 @@
 		- PREP_TAG / OBJECT_TAG / ... - interned tag ids for hot paths
 
 	Notes / gotchas:
-		- processForm writes through form.c_str() to split off |word *cost {tags}.
-		  That mutates the wstring via a const wchar_t* (UB on modern C++).
-		- setMandatoryAncestorPatterns ORs into ancestorPatterns, not
-		  mandatoryAncestorPatterns (copy-paste from setAncestorPatterns).
-		- initializeUsage only reserve()s the usage counters; incrementUse
-		  indexes them as if they had been resize()'d.
 		- findPattern(name, starting) returns patterns.size() on miss, never
 		  -1; findPattern(name, diff) returns (unsigned)-1.  Callers mix the
 		  two conventions.
@@ -1673,8 +1667,7 @@ void cPattern::lplogShort(wstring patternType, int logTypes)
 	::lplog(logTypes, L"%s:%s", patternType.c_str(), logstr);
 }
 
-// Log ever-matched / final-match counts for every form and child-pattern
-// alternative.  Indexes usage* vectors that initializeUsage only reserve()'d.
+// Log ever-matched / final-match counts for every form and child-pattern alternative.
 void cPattern::reportUsage(void)
 {
 	LFS
@@ -2289,8 +2282,7 @@ void cPattern::evaluateTagSets(unsigned int start, unsigned int end)
 		}
 }
 
-// Reserve (not resize) each element's usage counters now that patternIndexes
-// is final.  See cPatternElement::initializeUsage.
+// Size and zero each element's usage counters now that patternIndexes is final.
 void cPattern::initializeUsage()
 {
 	for (auto element : elements)

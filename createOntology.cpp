@@ -39,7 +39,9 @@
 
 	Notes / gotchas:
 		- Several parsers put 2–20 MB arrays on the stack (MAX_BUF, MAXYAGOBUF,
-		  writeRDFTypes' MAX_BUF*10).
+		  writeRDFTypes' MAX_BUF*10).  These fit only because lp.vcxproj reserves a
+		  ~21MB stack; they would overflow a default 1MB thread and leave no room for
+		  recursion.  Prefer heap allocation if any of these ever runs off the main thread.
 		- getRDFTypesMaster mutates rdfTypeNumMap under a shared SRWLOCK.
 		- SQL for noRDFTypes / Freebase concatenates the object/id unescaped.
 		- decodeURL reads I+1/I+2 after '%' with no length check.
@@ -501,19 +503,19 @@ void cOntology::cutFinalDigits(wstring& cat)
 DBPEDIA START
 */
 // decode dbpedia URL for calling HTTP API into virtuoso
-// Percent-decode into decodedURL (+ -> space).  After '%' reads I+1 and I+2
-// with no length check.  Hex letters are assumed uppercase ('A'-10).
+// Percent-decode into decodedURL (+ -> space).  
 wstring cOntology::decodeURL(wstring input, wstring& decodedURL)
 {
 	LFS
-		decodedURL.clear();
+	decodedURL.clear();
 	for (int I = 0; input[I]; I++)
-		if (input[I] == L'%')
+		if (input[I] == L'%' && input[I + 1] && input[I + 2])
 		{
 			int ch = 0;
-			ch += input[I + 1] - ((iswalpha(input[I + 1])) ? 'A' - 10 : '0');
+			wchar_t h1 = towupper(input[I + 1]), h2 = towupper(input[I + 2]);
+			ch += h1 - ((iswalpha(h1)) ? L'A' - 10 : L'0');
 			ch <<= 4;
-			ch += input[I + 2] - ((iswalpha(input[I + 2])) ? 'A' - 10 : '0');
+			ch += h2 - ((iswalpha(h2)) ? L'A' - 10 : L'0');
 			decodedURL += ch;
 			I += 2;
 		}
@@ -2047,7 +2049,7 @@ int cOntology::lookupInFreebaseQuery(wstring& object, string& slobject, wstring&
 		if (whereName != string::npos)
 		{
 			// Intended find('{', whereName+1); this calls find(const char*, pos) with a size_t-as-pointer.
-			size_t nextBracket = properties.find(whereName + 1, '{');
+			size_t nextBracket = properties.find('{', whereName + 1);
 			if (nextBracket != string::npos)
 				name = properties.substr(whereName + 3, nextBracket);
 			else
@@ -2222,7 +2224,8 @@ int cOntology::readRDFTypes(wchar_t path[4096], vector <cTreeCat*>& rdfTypes)
 	return 0;
 }
 
-// Write .rdfTypes.  `char buffer[MAX_BUF * 10]` is a ~20MB stack array.
+// Write .rdfTypes.  `char buffer[MAX_BUF * 10]` is a ~20MB stack array; it fits only
+// because of the ~21MB StackReserveSize set in lp.vcxproj.
 int cOntology::writeRDFTypes(wchar_t path[4096], vector <cTreeCat*>& rdfTypes)
 {
 	LFS
