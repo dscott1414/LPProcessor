@@ -23,11 +23,17 @@
 		- MAX_TAGSETS 500 - cap referenced by tag-set collectors elsewhere
 
 	Notes / gotchas:
-		- Header incorporateMapping takes wstring, but the ACCUMULATE_GROUPS
-		  body in the .cpp takes tIWMM; enabling that ifdef will not compile
-		  against this header without a signature change.
-		- Only the default cWordGroup() ctor sets index; the other ctors
-		  leave index and otherFlag uninitialized.
+		- fromWords/toWords and the ctors below were retyped from wstring to
+		  tIWMM (word-map iterators) to match how summary() / incorporateMapping()
+		  / cSourceWordInfo::addRelation() actually use them under
+		  ACCUMULATE_GROUPS (they call ->second on group members). Even with
+		  that fixed, cSourceWordInfo::addRelation()'s
+		  `cWordGroup(this, fromWord, word, toWord)` call still does not match
+		  any constructor here (`this` is a cSourceWordInfo*, not a tIWMM) --
+		  ACCUMULATE_GROUPS is an unfinished feature (see the TODO block above
+		  intersect() in the .cpp) and was never made to compile end-to-end;
+		  that call needs a real constructor design from whoever finishes it.
+		- Every ctor now initializes index and otherFlag.
 */
 #pragma once
 #define MAX_TAGSETS 500
@@ -41,14 +47,14 @@ public:
   bool otherFlag; // used with intersect - must always be set to false outside this routine
   bool addedFromWords,addedToWords,addedSubGroups;
   vector <int> subGroups;
-  vector <wstring> fromWords;
-	set <wstring> toWords;
+  vector <tIWMM> fromWords;
+	set <tIWMM, cSourceWordInfo::wordSetCompare> toWords;
 	// Add word to toWords if every fromWord already maps to it; else fill subGroup
 	// with the fromWords that do.  Returns true iff the whole group now contains word.
-	bool incorporateMapping(relationWOTypes relationType, wstring word,vector <wstring> &subGroup);
-	cWordGroup(vector <wstring> &subGroup,set <wstring> &toWords, wstring word);
-  cWordGroup(wstring fromWord1, wstring fromWord2, wstring toWord1, wstring toWord2);
-	cWordGroup(wstring self,cSourceWordInfo::cRMap::tcRMap *toWords);
+	bool incorporateMapping(relationWOTypes relationType, tIWMM word,vector <tIWMM> &subGroup);
+	cWordGroup(vector <tIWMM> &subGroup,set <tIWMM, cSourceWordInfo::wordSetCompare> &toWords, tIWMM word);
+  cWordGroup(tIWMM fromWord1, tIWMM fromWord2, tIWMM toWord1, tIWMM toWord2);
+	cWordGroup(tIWMM self,cSourceWordInfo::cRMap::tcRMap *toWords);
 	cWordGroup(void);
 	// "from1 from2 -> to1 to2" debug line; used only under ACCUMULATE_GROUPS.
 	wstring summary(void);

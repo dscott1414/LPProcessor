@@ -18,9 +18,10 @@
 		cInternet::readPage, WinInet, Windows console title.
 
 	Notes / gotchas:
-		Hardcoded account/password appear in comments above. Uses plaintext HTTP.
-		'filter' is appended to the URL with no encoding. lastId is the last tweet
-		seen on the last page, not the max ID. while(true) only exits on HTTP error.
+		'filter' is percent-encoded (via encodeURL, defined in createOntology.cpp) before
+		being appended to the URL. lastId tracks the maximum tweet id seen (used as
+		since_id on the next cycle), not just whichever entry was processed last.
+		while(true) only exits on HTTP error.
 */
 #include <errno.h>
 #include <windows.h>
@@ -46,14 +47,14 @@ using namespace std;
 #include "source.h"
 #include "internet.h"
 
+void encodeURL(wstring winput, wstring& wencodedURL); // defined in createOntology.cpp
+
 // ethereal parameters to track packets
 // host 64.15.203.18
 // TCP PORT 80
 
 #define MAX_BUF 120000 // try to read file in one gulp
-// e-mail: dscott1414@yahoo.com
 // Twitter@DavidScott17
-// password: builder!12
 
 /*
 <entry>
@@ -109,14 +110,21 @@ void logCurrentTime(void)
 
 extern wstring logFileExtension;
 // Scrapes search.twitter.com Atom for 'filter' forever. Returns only on readPage error.
+// not currently called from anywhere in the tree (see file header).
 int getTwitterEntries(wchar_t* filter)
 {
 	// happy
-	wstring baseURL = L"http://search.twitter.com/search.atom?lang=en&rpp=100&q="; // ORq=%3A-)ORq=%3D) - removed - actually decreases results!
+	wstring baseURL = L"https://search.twitter.com/search.atom?lang=en&rpp=100&q="; // ORq=%3A-)ORq=%3D) - removed - actually decreases results!
 
 	// %3A) happy
 	// %3A( sad
-	baseURL += filter;
+	// escape filter before interpolating it into the query string (spaces/'&'/etc would otherwise
+	// corrupt or truncate the request); if a caller ever needs to pass pre-built query syntax
+	// (raw "q="/"OR" clauses, already-percent-escaped emoticons) that caller will need its own
+	// query-construction path instead of a single opaque 'filter' string.
+	wstring uFilter;
+	encodeURL(filter, uFilter);
+	baseURL += uFilter;
 	cInternet::bandwidthControl = 0;
 	__int64 lastId = -1;
 	int numTotalPerQueryCollected = 0;
@@ -148,13 +156,15 @@ int getTwitterEntries(wchar_t* filter)
 				pos = takeLastMatch(entry, L"<id>", L"</id>", sid, false);
 				if ((wch = wcschr(sid.c_str(), L':')) != NULL && (wch = wcschr(wch + 1, L':')) != NULL)
 				{
-					lastId = _wtoi64(wch + 1);
+					__int64 thisId = _wtoi64(wch + 1);
+					if (thisId > lastId)
+						lastId = thisId; // track the maximum id seen (used as since_id next cycle), not just whichever entry was processed last
 					pos = takeLastMatch(entry, L"<title>", L"</title>", title, false);
-					if (tweets.find(lastId) == tweets.end())
+					if (tweets.find(thisId) == tweets.end())
 					{
-						printf("%010I64d:%lS\n", lastId, title.c_str());
-						lplog(L"%010I64d:%s", lastId, title.c_str());
-						tweets.insert(lastId);
+						printf("%010I64d:%lS\n", thisId, title.c_str());
+						lplog(L"%010I64d:%s", thisId, title.c_str());
+						tweets.insert(thisId);
 						numTotalPerQueryCollected++;
 					}
 				}

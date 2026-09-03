@@ -18,11 +18,11 @@
 		- No initialize(): no crash filter, ConsoleHandler, createLocks(), or
 		  CACHEDIR existence check.  SRWLOCKs rely on zero-init.
 		- createLPProcess has no threadHandle out-param (main.cpp added one and
-		  still leaks it).  processParameters is const and cast to LPWSTR.
+		  still leaks it); this copy just closes pi.hThread itself instead.
+		  processParameters is const and cast to LPWSTR.
 		- startProcesses is the old inlined waiter (main extracted
 		  waitToSpawnMoreProcesses / sendBreakSignals / a createLPProcess wrapper).
-		  chdir("source") is unchecked.  processKind==0 does not force
-		  REQUEST_TYPE.  Case 2 format string passes CACHEDIR as the first %d.
+		  processKind==0 does not force REQUEST_TYPE (unlike main.cpp's version).
 		- wmain always builds a GUTENBERG cSource and uses proc2 as the work
 		  queue, not sources.processed.
 		- Includes hmm.h / JNI / thread-future headers that main.cpp does not.
@@ -42,7 +42,6 @@
 
 	Notes / gotchas:
 		- Many paths LOCK TABLES and return without UNLOCK.
-		- case 71 in wmain falls through into case 100.
 		- SQL is built by interpolating words/filenames throughout.
 */
 #include <windows.h>
@@ -146,8 +145,9 @@ void no_memory () {
 }
 
 // CreateProcess with a new console.  Unlike main.cpp there is no threadHandle
-// out-param, so pi.hThread is leaked.  processParameters is const-cast to LPWSTR.
-// Returns 0 or -1 (outs left as the caller set them).
+// out-param, so pi.hThread is closed here rather than handed back or leaked.
+// processParameters is const-cast to LPWSTR.  Returns 0 or -1 (outs left as the
+// caller set them).
 int createLPProcess(int numProcess, HANDLE &processHandle, DWORD &processId, const wchar_t *commandPath, const wchar_t *processParameters)
 {
 	STARTUPINFO si;
@@ -182,11 +182,13 @@ int createLPProcess(int numProcess, HANDLE &processHandle, DWORD &processId, con
 	}
 	processHandle = pi.hProcess;
 	processId = pi.dwProcessId;
+	CloseHandle(pi.hThread);
 	return 0;
 }
 
 // Same query as main.cpp: COUNT/SUM over finished sources of sourceType.
-// SUM() NULL on an empty set is passed to atol/atoi.  Takes a WRITE lock.
+// SUM() yields SQL NULL on an empty/fresh corpus, so sqlrow[1]/sqlrow[2] are
+// guarded before use rather than passed straight to _atoi64.  Takes a WRITE lock.
 int getNumSourcesProcessed(MYSQL &mysql, int sourceType, int &numSourcesProcessed, __int64 &wordsProcessed, __int64 &sentencesProcessed)
 {
 	MYSQL_RES * result;
@@ -198,9 +200,9 @@ int getNumSourcesProcessed(MYSQL &mysql, int sourceType, int &numSourcesProcesse
 		MYSQL_ROW sqlrow = NULL;
 		if (sqlrow = mysql_fetch_row(result))
 		{
-			numSourcesProcessed = atoi(sqlrow[0]);
-			wordsProcessed = atol(sqlrow[1]);
-			sentencesProcessed = atoi(sqlrow[2]);
+			numSourcesProcessed = sqlrow[0] ? atoi(sqlrow[0]) : 0;
+			wordsProcessed = sqlrow[1] ? _atoi64(sqlrow[1]) : 0;
+			sentencesProcessed = sqlrow[2] ? _atoi64(sqlrow[2]) : 0;
 		}
 		mysql_free_result(result);
 	}
@@ -249,15 +251,14 @@ bool getNextUnprocessedSource(MYSQL &mysql, int begin, int end, int sourceType, 
 int getNumSources(MYSQL &mysql, int sourceType, bool left);
 bool anymoreUnprocessedForUnknown(MYSQL &mysql, int sourceType, int step);
 // Old inlined controller (main.cpp split this into wait/spawn helpers).
-// processKind 0/1 spawn releasex64\lp.exe; 2 is CorpusAnalysis.exe but the
-// format string is `-step %d -numSourceLimit %d -log %d` with CACHEDIR as the
-// first vararg.  `errorCode = createLPProcess(...) < 0` is a bool assign.
-// chdir("source") is unchecked.  Non-REQUEST_TYPE ends in _exit(0).
+// processKind 0/1 spawn releasex64\lp.exe; 2 spawns releasex64\CorpusAnalysis.exe.
+// Returns -1 immediately if chdir("source") fails.  Non-REQUEST_TYPE ends in _exit(0).
 int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int beginSource, int endSource, cSource::sourceTypeEnum processSourceType, int maxProcesses, int numSourcesPerProcess,
 	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool makeCopyBeforeSourceWrite, bool parseOnly, wstring specialExtension)
 {
 	LFS
-		chdir("source");
+		if (chdir("source") < 0)
+			return -1;
 	bool sentBreakSignals = false;
 	int startTime = clock();
 	HANDLE *handles = (HANDLE *)calloc(maxProcesses, sizeof(HANDLE));
@@ -372,7 +373,7 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 					(parseOnly) ? L"-parseOnly " : L"",
 					(makeCopyBeforeSourceWrite) ? L"-MCSW " : L"",
 					nextProcessIndex);
-				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\lp.exe", processParameters) < 0)
+				if ((errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\lp.exe", processParameters)) < 0)
 					break;
 				break;
 			case 1:
@@ -390,13 +391,12 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 					wcscat(processParameters, L" -specialExtension ");
 					wcscat(processParameters, specialExtension.c_str());
 				}
-				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\lp.exe", processParameters) < 0)
+				if ((errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\lp.exe", processParameters)) < 0)
 					break;
 				break;
 			case 2:
-				// Format has three %d but the first arg is CACHEDIR (a pointer).
-				wsprintf(processParameters, L"releasex64\\CorpusAnalysis.exe -step %d -numSourceLimit %d -log %d", CACHEDIR, step, numSourcesPerProcess, nextProcessIndex);
-				if (errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\CorpusAnalysis.exe", processParameters) < 0)
+				wsprintf(processParameters, L"releasex64\\CorpusAnalysis.exe -cacheDir %s -step %d -numSourceLimit %d -log %d", CACHEDIR, step, numSourcesPerProcess, nextProcessIndex);
+				if ((errorCode = createLPProcess(nextProcessIndex, processHandle, processId, L"releasex64\\CorpusAnalysis.exe", processParameters)) < 0)
 					break;
 				break;
 			default: break;
@@ -454,8 +454,7 @@ void setConsoleWindowSize(int width,int height)
 			(int)GetLastError(), LastErrorStr());
 }
 
-// Daily Merriam-Webster cap (2000) stored in ./MWCheck.  Write fopen is not
-// null-checked.  Sets websterQueriedToday.
+// Daily Merriam-Webster cap (2000) stored in ./MWCheck.  Sets websterQueriedToday.
 bool MWRequestAllowed()
 {
 	time_t rawtime;
@@ -474,8 +473,13 @@ bool MWRequestAllowed()
 	}
 	numRequests++;
 	MWRequestToday = _wfopen(L"MWCheck", L"w");
-	fwprintf(MWRequestToday, L"%d %d", day, numRequests);
-	fclose(MWRequestToday);
+	if (MWRequestToday)
+	{
+		fwprintf(MWRequestToday, L"%d %d", day, numRequests);
+		fclose(MWRequestToday);
+	}
+	else
+		lplog(LOG_ERROR, L"MWRequestAllowed: cannot open MWCheck for write.");
 	websterQueriedToday= numRequests;
 	return numRequests < 2000;
 }
@@ -514,8 +518,8 @@ int getWordPOS(MYSQL *mysql,wstring word, set <int> &posSet, int &inflections, b
 }
 
 // If the token is >95% capitalized, treat as noun and set queryOnLowerCase;
-// else Webster.  The hyphen-split branch ends with `, false` so the condition
-// is always false (comma operator).  Returns 0.
+// else Webster.  If disinclination/splitting failed and the word contains a
+// hyphen, retry disinclination on the hyphen-stripped form.  Returns posSet.size().
 int testDisInclineAndSplit(MYSQL *mysql, cSource &source, int sourceId, cWordMatch &word, bool capitalized, int totalFrequency, int capitalizedFrequency, int allCapsFrequency, set <int> &posSet,
 	int &inflections, bool &isNonEuropean, bool &queryOnLowerCase, int &dictionaryComQueried, int &dictionaryComCacheQueried, bool &websterAPIRequestsExhausted)
 {
@@ -530,7 +534,7 @@ int testDisInclineAndSplit(MYSQL *mysql, cSource &source, int sourceId, cWordMat
 		int ret;
 		if (capitalized || (ret = Words.attemptDisInclination(mysql, iWord, word.word->first, sourceId,false)))
 		{
-			if ((ret = Words.splitWord(mysql, iWord, word.word->first, sourceId,false)) && word.word->first.find(L'-')!=wstring::npos,false)
+			if ((ret = Words.splitWord(mysql, iWord, word.word->first, sourceId,false)) && word.word->first.find(L'-')!=wstring::npos)
 			{
 				wstring sWord= word.word->first;
 				sWord.erase(std::remove(sWord.begin(), sWord.end(), L'-') , sWord.end());
@@ -774,15 +778,15 @@ int overwriteWordFlagsInDB(MYSQL mysql, wstring word, bool actuallyExecuteAgains
 	return 0;
 }
 
-// PLURAL refers to noun plural form.
-// `inflectionFlags = inflectionFlags + inflections` (not |=); a second call
-// corrupts the bitfield.  word is interpolated.
+// PLURAL refers to noun plural form.  inflectionFlags is a bitfield, so it is
+// ORed (not added) with inflections, matching overwriteWordFlagsInDB above.
+// word is interpolated.
 int overwriteWordInflectionFlagsInDB(MYSQL mysql, wstring word, int inflections, bool actuallyExecuteAgainstDB)
 {
 	LFS
 	// erase all wordforms associated with wordId in wordforms
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"update words set inflectionFlags=inflectionFlags+%d where word=\"%s\"", inflections,word.c_str());
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"update words set inflectionFlags=inflectionFlags|%d where word=\"%s\"", inflections,word.c_str());
 	if (actuallyExecuteAgainstDB && !myquery(&mysql, qt))
 		return -1;
 	else
@@ -1061,69 +1065,9 @@ void removeIllegalNames(const wchar_t *basepath)
 	FindClose(hFind);
 }
 
-/*
-void scanAllERDFTypes(MYSQL mysql, wchar_t *basepath, int &numFilesProcessed, int &numNotOpenable, int &numNewestVersion, int &numOldVersion, int &removeErrors, int &populatedRDFs)
-		wchar_t qt[2048];
-		if ((FindFileData.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY)
-			scanAllERDFTypes(mysql, completePath, numFilesProcessed, numNotOpenable, numNewestVersion, numOldVersion, removeErrors, populatedRDFs);
-		else
-		{
-			if ((numFilesProcessed & 31) == 0)
-				printf("%08d:unopenable=%02d newest=%08d old=%08d cannot remove=%08d populated=%07d [%s]\r", numFilesProcessed, numNotOpenable, numNewestVersion, numOldVersion, removeErrors, populatedRDFs, (startHit) ? "HIT" : "NOT HIT");
-			ULARGE_INTEGER ul;
-			ul.LowPart = FindFileData.nFileSizeLow;
-			ul.HighPart = FindFileData.nFileSizeHigh;
-			if (((ULONGLONG)ul.QuadPart) != 10)
-			{
-				populatedRDFs++;
-				continue;
-			}
-			int fd;
-			if ((fd = _wopen(completePath, O_RDWR | O_BINARY)) < 0)
-			{
-				numNotOpenable++;
-				printf("\nscanAllERDFTypes:Cannot read path %S - %s.\n", completePath, sys_errlist[errno]);
-			}
-			else
-			{
-				char buffer[12];
-				int bufferlen = filelength(fd);
-				::read(fd, buffer, bufferlen);
-				_close(fd);
-				if (*((wchar_t *)buffer) != EXTENDED_RDFTYPE_VERSION) // version
-				{
-					numOldVersion++;
-					if (_wremove(completePath))
-					{
-						wprintf(L"\nremove failed on path %s (%d)\n", completePath, (int)GetLastError());
-						removeErrors++;
-					}
-				}
-				int rdfTypeCount=*((int *)(buffer+sizeof(wchar_t)));
-				int topHierarchyClassIndexesCount= *((int *)(buffer + sizeof(wchar_t)+sizeof(rdfTypeCount)));
-				if (!rdfTypeCount || !topHierarchyClassIndexesCount)
-				{
-					numNewestVersion++;
-					FindFileData.cFileName[wcslen(FindFileData.cFileName) - 9] = 0;
-					wsprintf(qt, L"INSERT INTO noERDFTypes VALUES ('%s')", FindFileData.cFileName);
-					if (wcslen(FindFileData.cFileName) > 127 || myquery(&mysql, qt, true) || mysql_errno(&mysql) == ER_DUP_ENTRY)
-					{
-						if (_wremove(completePath))
-						{
-							wprintf(L"\nremove failed on path %s (%d)\n", completePath, (int)GetLastError());
-							removeErrors++;
-						}
-					}
-				}
-			}
-		}
-	} while (FindNextFile(hFind, &FindFileData) != 0);
-	FindClose(hFind);
-	return;
-}
-*/
-// Sweep Dictionary.com cache.  putInTable is `!A || !B` so almost every file
-// is treated as a miss, INSERTed into notwords, and deleted.  Intended `A || B`.
+// Sweep Dictionary.com cache.  putInTable is true (word does not exist, so
+// record it in notwords and delete the now-redundant cache file) when either
+// "no results" marker is present in the cached page.
 void scanAllDictionaryDotCom(MYSQL mysql, const wchar_t *basepath, int &numFilesProcessed, int &numNotOpenable, int &filesRemoved,int &removeErrors)
 {
 	WIN32_FIND_DATA FindFileData;
@@ -1161,7 +1105,7 @@ void scanAllDictionaryDotCom(MYSQL mysql, const wchar_t *basepath, int &numFiles
 				wchar_t *tbuffer = (wchar_t *)tcalloc(bufferlen + 10, 1);
 				_read(fd, tbuffer, bufferlen);
 				_close(fd);
-				bool putInTable = !wcsstr(tbuffer, L"No results found") || !wcsstr(tbuffer, L"dcom-no-result");
+				bool putInTable = wcsstr(tbuffer, L"No results found") || wcsstr(tbuffer, L"dcom-no-result");
 				tfree(bufferlen + 10, tbuffer);
 				if (putInTable)
 				{
@@ -1385,9 +1329,10 @@ int writeWordFormsFromCorpusWideAnalysis(MYSQL mysql,bool actuallyExecuteAgainst
 	return 0;
 }
 
-// Log unknown / UNDEFINED_FORM tokens.  WRITE lock is never unlocked.
+// Log unknown / UNDEFINED_FORM tokens.  Takes source by reference (avoids
+// copying the live MYSQL connection) and UNLOCKs on every return path.
 // Returns 21 on success, 20 if the source cache is missing, -20 on lock fail.
-int printUnknownsFromSource(cSource source, int sourceId, wstring path, wstring etext, wstring specialExtension)
+int printUnknownsFromSource(cSource &source, int sourceId, wstring path, wstring etext, wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
@@ -1418,8 +1363,10 @@ int printUnknownsFromSource(cSource source, int sourceId, wstring path, wstring 
 	else
 	{
 		wprintf(L"Unable to read source %d:%s\n", sourceId, path.c_str());
+		myquery(&source.mysql, L"UNLOCK TABLES");
 		return 20;
 	}
+	myquery(&source.mysql, L"UNLOCK TABLES");
 	return 21;
 }
 
@@ -1529,7 +1476,7 @@ bool additionalMatchingLogic(cSource &source, int wordIndex, int primaryPMAOffse
 // if both primaryMatchType AND secondaryMatchType>0, then the secondary match location is the NEXT word.
 // if primaryMatchType == 3, then sentence highlight will encompass all words that have no match, and sentences will not be repeated.
 // Scan one source for primary/secondary matchEntity hits and log the sentence.
-// WRITE lock is never unlocked.  Returns 22, or 21 if the cache is missing.
+// UNLOCKs on every return path.  Returns 22, or 21 if the cache is missing.
 int patternOrWordAnalysisFromSource(cSource &source, int sourceId, wstring path, wstring etext, wstring primaryPatternOrWordName, wstring primaryDifferentiator, wstring secondaryPatternOrWordName, wstring secondaryDifferentiator, int primaryMatchType, int secondaryMatchType, wstring specialExtension)
 {	LFS
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
@@ -1624,14 +1571,17 @@ int patternOrWordAnalysisFromSource(cSource &source, int sourceId, wstring path,
 	else
 	{
 		wprintf(L"Unable to read source %d:%s\n", sourceId, path.c_str());
+		myquery(&source.mysql, L"UNLOCK TABLES");
 		return 21;
 	}
+	myquery(&source.mysql, L"UNLOCK TABLES");
 	return 22;
 }
 
-// Log sentences that contain a flagNotMatched token.  cSource by value; WRITE
-// lock never unlocked.  Returns 62, or 61 if the cache is missing.
-int syntaxCheckFromSource(cSource source, int sourceId, wstring path, wstring etext, wstring specialExtension)
+// Log sentences that contain a flagNotMatched token.  Takes source by reference
+// (avoids copying the live MYSQL connection) and UNLOCKs on every return path.
+// Returns 62, or 61 if the cache is missing.
+int syntaxCheckFromSource(cSource &source, int sourceId, wstring path, wstring etext, wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
@@ -1705,15 +1655,19 @@ int syntaxCheckFromSource(cSource source, int sourceId, wstring path, wstring et
 	else
 	{
 		wprintf(L"Unable to read source %d:%s\n", sourceId, path.c_str());
+		myquery(&source.mysql, L"UNLOCK TABLES");
 		return 61;
 	}
+	myquery(&source.mysql, L"UNLOCK TABLES");
 	return 62;
 }
 
 // Count per-word frequencies / unknown / special-form flags and write
 // wordfrequencymemory.  Rejects the source if an unknown token looks "illegal".
 // form==4 (noun?) on a capitalized unknown aborts with -2.  Returns 2 or -(n+10).
-int populateWordFrequencyTableFromSource(cSource source, int sourceId, wstring path, wstring etext, wstring specialExtension)
+// Takes source by reference (avoids copying the live MYSQL connection), matching
+// the sibling *FromSource helpers above.
+int populateWordFrequencyTableFromSource(cSource &source, int sourceId, wstring path, wstring etext, wstring specialExtension)
 {
 	if (!myquery(&source.mysql, L"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE"))
 		return -20;
@@ -1804,6 +1758,7 @@ int populateWordFrequencyTableFromSource(cSource source, int sourceId, wstring p
 	else
 	{
 		wprintf(L"Unable to read source %d:%s\n", sourceId, path.c_str());
+		unlockTables(source.mysql);
 		return 0;
 	}
 	return (numIllegalWords == 0) ? 2 : -(numIllegalWords + 10);
@@ -2141,7 +2096,7 @@ int removeOldCacheFiles(cSource source)
 }
 
 // One-off: rdfIdentify("clackamas") then getRDFTypes at each "maac" token in
-// a hardcoded Jules of the Great Heart path.  WRITE lock never released.
+// a hardcoded Jules of the Great Heart path.
 void testRDFType(cSource &source, wstring specialExtension)
 {
 	int sourceId = 25291;
@@ -2164,6 +2119,7 @@ void testRDFType(cSource &source, wstring specialExtension)
 			where++;
 		}
 	}
+	myquery(&source.mysql, L"UNLOCK TABLES");
 }
 
 struct {
@@ -2481,16 +2437,15 @@ map <wstring, FormDistribution> formDistribution;
 
 // Normalize originalWord to the token Stanford's PCFG tree would emit
 // ('s / n't / cannot / gimme / ...).  Returns the " word)" search key.
-// originalWord[length-2/3] is unguarded on short words.
 wstring stTokenizeWord(wstring tokenizedWord,wstring &originalWord, unsigned long long flags,wstring parse,int &wspace)
 {
 	// pcfg output:
 	// parse=(ROOT (PRN (: ;) (S (NP (NP (NP (QP (CC and) (CD Bunny))) (, ,) (CC and) (NP (NNP Bobtail)) (, ,)) (CC and) (NP (NNP Billy))) (VP (VBD were) (ADVP (RB always)) (VP (VBG doing) (NP (JJ *) (NN something)))))))
 	// ben's
-	if (originalWord[originalWord.length() - 2] == L'\'' && towlower(originalWord[originalWord.length() - 1]) == L's')
+	if (originalWord.length() >= 2 && originalWord[originalWord.length() - 2] == L'\'' && towlower(originalWord[originalWord.length() - 1]) == L's')
 		originalWord.erase(originalWord.length() - 2);
 	// don't
-	if (towlower(originalWord[originalWord.length() - 3]) == L'n' && originalWord[originalWord.length() - 2] == L'\'' && towlower(originalWord[originalWord.length() - 1]) == L't')
+	if (originalWord.length() >= 3 && towlower(originalWord[originalWord.length() - 3]) == L'n' && originalWord[originalWord.length() - 2] == L'\'' && towlower(originalWord[originalWord.length() - 1]) == L't')
 		originalWord.erase(originalWord.length() - 3);
 	// cannot, dunno
 	if (tokenizedWord == L"cannot" || tokenizedWord == L"dunno")
@@ -6074,7 +6029,10 @@ int stanfordCheckMP(cSource source, int step, bool pcfg, int MP)
 		return -1;
 	_snwprintf(qt, QUERY_BUFFER_LEN, L"update sources,(select id,ROW_NUMBER() over w rn from sources rs2 where proc2=%d WINDOW w AS (ORDER BY id)) rs set proc2=(rs.rn%%%d)+101 where sources.id=rs.id", step,MP);
 	if (!myquery(&source.mysql, qt))
+	{
+		unlockTables(source.mysql);
 		return -1;
+	}
 	/*
 	vector <std::future<int>> threadResults;
 	for (int I = 0; I < MP; I++)
@@ -6102,8 +6060,9 @@ int stanfordCheckMP(cSource source, int step, bool pcfg, int MP)
 		}
 	} 
 	*/
-	unlockTables(source.mysql);;
-	chdir("source");
+	unlockTables(source.mysql);
+	if (chdir("source") < 0)
+		return -1;
 	wchar_t processParameters[1024];
 	int numProcesses = MP;
 	HANDLE *handles = (HANDLE *)calloc(numProcesses, sizeof(HANDLE));
@@ -6113,7 +6072,7 @@ int stanfordCheckMP(cSource source, int step, bool pcfg, int MP)
 		HANDLE processHandle = 0;
 		DWORD processId = 0;
 		int errorCode;
-		if (errorCode = createLPProcess(I, processHandle, processId, L"x64\\StanfordParseMT\\CorpusAnalysis.exe", processParameters) < 0)
+		if ((errorCode = createLPProcess(I, processHandle, processId, L"x64\\StanfordParseMT\\CorpusAnalysis.exe", processParameters)) < 0)
 			break;
 		handles[I] = processHandle;
 	}
@@ -6308,7 +6267,7 @@ int numSourceLimit = 0;
 // step = 2 - evaluate statistics and create database statements to decrease the number of unknown words
 // specials entry.  Unlike main.cpp: no initialize()/crash handler, always
 // GUTENBERG, dispatch on -step.  step>100 is stanfordCheck without per-source
-// lock.  case 71 has no break and falls into case 100 (stanfordCheckMP).
+// lock.
 int wmain(int argc,wchar_t *argv[])
 {
 	setConsoleWindowSize(85, 5);
@@ -6455,7 +6414,7 @@ int wmain(int argc,wchar_t *argv[])
 		stanfordCheckTest(source, L"F:\\lp\\tests\\thatParsing.txt", 27568, true,L"",50,specialExtension);
 		break;
 	case 71:
-	// no break: falls through into case 100 (stanfordCheckMP).
+	// Webster plural-word probe (advertising/wishing/writing/yachting/yellowing).
 	{
 		vector <wstring> words = { L"advertising",L"wishing",L"writing",L"yachting",L"yellowing" };
 		if (!myquery(&source.mysql, L"LOCK TABLES words WRITE"))
@@ -6493,6 +6452,7 @@ int wmain(int argc,wchar_t *argv[])
 			if (wordId < 0)
 				lplog(LOG_INFO, L"***%s: plural %s not found.", sWord.c_str(), pluralWord.c_str());
 		}
+		break;
 	}
 	case 100:
 		stanfordCheckMP(source, step, true,12);

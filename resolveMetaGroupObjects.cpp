@@ -614,7 +614,7 @@ bool cSource::resolveMetaGroupGenericOther(int where, int latestOwnerWhere, bool
 		}
 	// if physically present subject of first sentence after quote
 	if (!inQuote && physicallyPresent && (m[where].objectRole & SUBJECT_ROLE) && numEOS == 0 && numSectionWord == 1 && lastOpeningPrimaryQuote >= 0 &&
-		(m[lastOpeningPrimaryQuote].audienceObjectMatches.size() == 1 || in(*csg->povSpeakers.begin(), m[lastOpeningPrimaryQuote].audienceObjectMatches) != m[lastOpeningPrimaryQuote].audienceObjectMatches.end()))
+		(m[lastOpeningPrimaryQuote].audienceObjectMatches.size() == 1 || (!csg->povSpeakers.empty() && in(*csg->povSpeakers.begin(), m[lastOpeningPrimaryQuote].audienceObjectMatches) != m[lastOpeningPrimaryQuote].audienceObjectMatches.end())))
 	{
 		objectMatches = m[lastOpeningPrimaryQuote].audienceObjectMatches;
 		if (objectMatches.size() > 1 && csg->povSpeakers.size())
@@ -1303,8 +1303,8 @@ bool cSource::resolveMetaGroupSpecificObject(int where, bool inPrimaryQuote, boo
 		if (latestOwnerWhere >= 0)
 		{
 			bool allIn = false, oneIn = false;
-			// min(1, size)+1 is 1 or 2, not "one more than the owner set".
-			unsigned int minimumSize = min(1, m[latestOwnerWhere].objectMatches.size()) + 1;  // group must have at least one more member than the owner
+			// group must have at least one more member than the owner set
+			unsigned int minimumSize = (unsigned int)m[latestOwnerWhere].objectMatches.size() + 1;
 			for (vector < cSpeakerGroup::cGroup >::iterator gi = tempSpeakerGroup.groups.begin(), giEnd = tempSpeakerGroup.groups.end(); gi != giEnd; gi++)
 				if (intersect(latestOwnerWhere, gi->objects, allIn, oneIn) && allIn && minimumSize <= gi->objects.size())
 				{
@@ -1689,7 +1689,7 @@ bool cSource::resolveMetaGroupByAssociation(int where, bool inPrimaryQuote, vect
 				objectString(m[latestOwnerWhere].objectMatches, tmpstr, true).c_str(), toText(speakerGroups[sg], tmpstr2), objectString(objectMatches, tmpstr3, true).c_str());
 		if (objectMatches.size() > 1 && inPrimaryQuote && (m[where].objectRole & HAIL_ROLE))
 		{
-			bool inSecondaryLink = m[previousPrimaryQuote].getQuoteForwardLink() != -1;
+			bool inSecondaryLink = previousPrimaryQuote >= 0 && m[previousPrimaryQuote].getQuoteForwardLink() != -1;
 			if (!inSecondaryLink && intersect(objectMatches, previousSpeakers, oneIn, allIn))
 			{
 				objectMatches.clear();

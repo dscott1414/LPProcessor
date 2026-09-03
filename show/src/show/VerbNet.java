@@ -65,8 +65,15 @@ public class VerbNet {
 		};
 		vbNetVerbToClassMap = new HashMap<String, Vector<VerbMember>>();
 		vms = new Vector<VerbMember>();
-		for (String vnXMLFile : vnDir.list(onlyXMLFiles))
-			parseXmlFile(vnDir.getAbsolutePath() + "\\" + vnXMLFile);
+		// File.list() returns null (not an empty array) if vnDir isn't a
+		// valid/readable directory, which would otherwise NullPointerException
+		// on the for-each below the moment this hardcoded path is missing.
+		String[] xmlFiles = vnDir.list(onlyXMLFiles);
+		if (xmlFiles != null)
+			for (String vnXMLFile : xmlFiles)
+				parseXmlFile(vnDir.getAbsolutePath() + "\\" + vnXMLFile);
+		else
+			System.out.println("VerbNet directory not found or not readable: " + vnDir.getAbsolutePath());
 	}
 	
 	private  Vector<VerbMember> getVerbClasses(String baseVerb, String phrasalVerb) {

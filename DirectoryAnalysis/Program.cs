@@ -15,9 +15,12 @@
 		- Main() - start walk at J:\caches\dbpediacache
 
 	Notes / gotchas:
-		fileCount is Directory.GetFiles(path) — the *parent* of `folder`,
-		not the child being printed. Totals therefore over-count the
-		parent's files once per sibling. Hardcoded drive letter.
+		(fixed) fileCount used to be Directory.GetFiles(path) — the
+		*parent* of `folder`, not the child being printed — so totals
+		over-counted the parent's files once per sibling and the printed
+		count for each folder was actually its parent's file count. Now
+		Directory.GetFiles(folder, ...), matching the folder that's
+		printed and recursed into. Hardcoded drive letter.
 */
 using System;
 using System.Collections.Generic;
@@ -44,7 +47,7 @@ namespace DirectoryAnalysis
                 {
                     foreach (string folder in Directory.GetDirectories(path))
                     {
-                        int fileCount = Directory.GetFiles(path, "*.*", SearchOption.TopDirectoryOnly).Length;
+                        int fileCount = Directory.GetFiles(folder, "*.*", SearchOption.TopDirectoryOnly).Length;
                         Console.WriteLine("{0}{1}({2})", new string(' ', indent), Path.GetFileName(folder),fileCount);
                         totalFolders++;
                         totalFiles += fileCount;

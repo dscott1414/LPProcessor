@@ -43,7 +43,6 @@
 		- sgEnd of -2 / -3 is legal on embedded groups (CURRENT_SUBSET_SG / open span).
 		- unMergable() returns true when the candidate is NOT already in the set
 		  (and optionally inserts it).  The name is easy to read backwards.
-		- copy(cOM&) has no buffer-limit argument; the vector reader trusts the count.
 */
 #include <windows.h>
 #include "Winhttp.h"
@@ -60,11 +59,12 @@
 extern set<int>::iterator sNULL;
 
 // Deserialize one cOM (object index + salience) from buf at 'where' and advance
-// where by sizeof(cOM).  
+// where by sizeof(cOM).  Refuses (FATALs, which exits the process) rather than
+// reading past 'limit'.
 bool copy(cOM& num, char* buf, int& where, int limit)
 {
 	DLFS
-	if (where + (int)sizeof(cOM) > limit) 
+	if (where + (int)sizeof(cOM) > limit)
 		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached (3)!", limit);
 	num = *((cOM*)(buf + where));
 	where += sizeof(num);
@@ -72,8 +72,8 @@ bool copy(cOM& num, char* buf, int& where, int limit)
 }
 
 // Deserialize a counted vector<cOM> from buf.  Returns false if the count itself
-// cannot be read inside 'limit'.  Each element is then read via the unbounded
-// copy(cOM&) above, so a corrupted count can walk past the buffer.
+// cannot be read inside 'limit'.  Each element is then read via the bounds-checked
+// copy(cOM&) above, so a corrupted count still cannot walk past the buffer.
 bool copy(vector <cOM>& s, char* buf, int& where, int limit)
 {
 	DLFS
@@ -90,8 +90,8 @@ bool copy(vector <cOM>& s, char* buf, int& where, int limit)
 }
 
 // Serialize one cOM into buf at 'where'.  The overflow check (where > limit)
-// runs AFTER the write, so a tight buffer can already have been overrun when
-// LOG_FATAL_ERROR fires.  Returns true on success.
+// runs BEFORE the write, so LOG_FATAL_ERROR (which exits the process) fires
+// before any out-of-bounds store.  Returns true on success.
 bool copy(void* buf, cOM num, int& where, int limit)
 {
 	DLFS
@@ -508,7 +508,7 @@ void cSource::determineSpeakerRemoval(int where)
 	if (oldSpeakers.empty())
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG, L"%d:Ages of %s are all < 2.", where, objectString(tempSpeakerGroup.speakers, tmpstr).c_str(), speakerSections.size());
+			lplog(LOG_SG, L"%d:Ages of %s are all < 2.", where, objectString(tempSpeakerGroup.speakers, tmpstr).c_str());
 		return;
 	}
 	while (oldSpeakers.size())
@@ -658,8 +658,12 @@ int cSource::getLastSpeakerGroup(int o, int lastSG)
 {
 	LFS
 		lastSG--;
-	for (vector <cSpeakerGroup>::iterator sg = speakerGroups.begin() + lastSG; lastSG >= 0; sg--, lastSG--)
-		if (sg->speakers.find(o) != sg->speakers.end())
+	// indexed rather than begin()+lastSG: when the caller passes lastSG==0 (a legal
+	// "no prior groups" case) that would form an out-of-range iterator (begin()-1)
+	// before the loop condition is ever checked - UB, and an assert under MSVC's
+	// debug-mode checked iterators.
+	for (; lastSG >= 0; lastSG--)
+		if (speakerGroups[lastSG].speakers.find(o) != speakerGroups[lastSG].speakers.end())
 			return lastSG;
 	return -1;
 }
@@ -2049,16 +2053,6 @@ int cSource::detectMetaResponse(int I, int element)
 	return -1;
 }
 
-// If m[I].skipResponse was set by detectMetaResponse, jump I there and
-// return true.
-bool cSource::skipMetaResponse(int& I)
-{
-	LFS
-		if (m[I].skipResponse < 0) return false;
-	I = m[I].skipResponse;
-	return true;
-}
-
 // If the subject at 'where' has a VerbNet "has" verb and a resolved object,
 // record that object on objects[o].possessions and set flagUsedPossessionRelation.
 // Skipped for ambiguous matches and probability statements.
@@ -2191,7 +2185,7 @@ void cSource::associateNyms(int where)
 	if (o >= 0 && (objectRole & (SUBJECT_ROLE | IS_OBJECT_ROLE | SUBJECT_PLEONASTIC_ROLE)) == (SUBJECT_ROLE | IS_OBJECT_ROLE) && m[where].getRelObject() < 0 && nymIsUseful)
 	{
 		m[where].flags |= cWordMatch::flagUsedBeRelation;
-		for (unsigned int aow = m[where].getRelVerb() + 1; (m[aow].objectRole & IS_ADJ_OBJECT_ROLE) && aow < m.size(); aow++)
+		for (unsigned int aow = m[where].getRelVerb() + 1; aow < m.size() && (m[aow].objectRole & IS_ADJ_OBJECT_ROLE); aow++)
 			if (m[aow].queryWinnerForm(adjectiveForm) >= 0 && find(objects[o].associatedAdjectives.begin(), objects[o].associatedAdjectives.end(), m[aow].word) == objects[o].associatedAdjectives.end() &&
 				!nymNoMatch(objects.begin() + o, m[aow].word))
 			{
@@ -3076,7 +3070,10 @@ void cSource::adjustHailRoleDuringScan(int where)
 				lplog(LOG_ROLE, L"%06d:Removed HAIL role (PLACE).", im->endObjectPosition + 1);
 		}
 	}
-	vector <cObject>::iterator o = objects.begin() + im->getObject();
+	// guarded like 'oc' above: getObject()==-1 must not form an out-of-range iterator
+	// (UB, and an assert under MSVC's debug-mode checked iterators) - o is only
+	// dereferenced below once im->getObject()>=0 is confirmed.
+	vector <cObject>::iterator o = objects.begin() + ((im->getObject() >= 0) ? im->getObject() : 0);
 	if (im->getObject() >= 0 && !(im->objectRole & HAIL_ROLE) && o->objectClass == NAME_OBJECT_CLASS && (im->objectRole & IN_PRIMARY_QUOTE_ROLE) &&
 		im->beginObjectPosition && m[im->beginObjectPosition - 1].word->first == L"�" && m[im->endObjectPosition].word->first == L"," && m[im->endObjectPosition + 1].word->first == L"�" &&
 		(o->PISDefinite || o->PISHail > 1 || (o->name.hon != wNULL && !o->name.justHonorific() && o->numEncountersInSection > 1))) // encounters already at least one because of resolveObject

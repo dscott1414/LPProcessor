@@ -23,10 +23,14 @@
 		MySQL 'lp.thesaurus'; LMAINDIR\\old thesaurus entries; wn.h POS constants.
 
 	Notes / gotchas:
-		testThesaurus hardcodes mysql_real_connect(..., "root", "byron0", "lp", ...).
-		getSynonymsFromDB concatenates the word into SQL with no escaping.
-		splitPrimarySynonyms logs then exit(0). Many helpers assume a global token
-		buffer set by processIntoTokens.
+		testThesaurus connects via getDBHost()/getDBUser()/getDBPassword() (envConfig.h).
+		getSynonymsFromDB escapes the word (escaped(), source.h) before concatenating into SQL.
+		splitPrimarySynonyms guards totalRows==0 before the percentage divide, then logs and
+		exit(0)s by design (one-shot diagnostic). testThesaurus/processIntoTokens/stripTags/
+		resolveTables all validate fd before calling _filelength/malloc'ing (three of the four
+		declared fl as size_t, so a failed open's _filelength()==-1 would previously wrap to a
+		huge unsigned length) and free() their malloc'd scratch buffer on every path. Many
+		helpers assume a global token buffer set by processIntoTokens.
 */
 #include <stdio.h>
 #include <string.h>
@@ -64,13 +68,13 @@ using namespace std;
 bool myquery(MYSQL* mysql, const wchar_t* q, MYSQL_RES*& result, bool allowFailure = false);
 void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition>& d);
 
-// SELECT primary/accumulated synonyms for mainEntry=word (wordType bitmask). Concatenates
-// word into SQL unescaped. Also builds alternatives from the last token of primarySynonyms
-// plus the first accumulated synonym. Does not LOCK.
+// SELECT primary/accumulated synonyms for mainEntry=word (wordType bitmask). word is escaped
+// (escaped(), source.h) before being concatenated into SQL. Also builds alternatives from the
+// last token of primarySynonyms plus the first accumulated synonym. Does not LOCK.
 void getSynonymsFromDB(MYSQL mysql, wstring word, vector <unordered_set <wstring> >& synonyms, vector <wstring >& alternatives, int synonymType)
 {
 	wstring query = L"select primarySynonyms, accumulatedSynonyms from thesaurus where mainEntry = '";
-	query += word + L"'";
+	query += escaped(word) + L"'";
 	// thesaurus mappings
 	// "adj"=1, "adv"=2, "prep"=4, "pron"=8, "conj"=16, "det"=32, "interj"=64, "n"=128, "v"=256, NULL };
 	if (synonymType == 1) // NOUN
@@ -187,7 +191,10 @@ void splitPrimarySynonyms(MYSQL mysql)
 			else
 				rowsNotProcessed++;
 		}
-		lplog(LOG_WHERE, L"%d out of %d processed (%d%%).", totalRows - rowsNotProcessed, totalRows, (totalRows - rowsNotProcessed) * 100 / totalRows);
+		if (totalRows > 0)
+			lplog(LOG_WHERE, L"%d out of %d processed (%d%%).", totalRows - rowsNotProcessed, totalRows, (totalRows - rowsNotProcessed) * 100 / totalRows);
+		else
+			lplog(LOG_WHERE, L"0 rows matched '%% or %%'.");
 	}
 	logCache = 0;
 	lplog(LOG_WHERE, L"STOP");
@@ -353,8 +360,9 @@ bool compareWordSets(vector <string>& s1, unordered_set <wstring>& synonymsFromD
 }
 
 // Walks LMAINDIR\\old thesaurus entries\\*.thesaurus.txt.*, scrapes each, and compares
-// against the DB. Hardcodes mysql root/byron0. Prints mismatch counts; does not return
-// a status (FindFirstFile handle is not closed on all paths).
+// against the DB, using getDBHost()/getDBUser()/getDBPassword() (envConfig.h).
+// Prints mismatch counts; does not return a status (FindFirstFile handle is not
+// closed on all paths).
 void testThesaurus()
 {
 	WIN32_FIND_DATA ffd;
@@ -365,7 +373,7 @@ void testThesaurus()
 	bool keep_connect = true;
 	mysql_options(&mysql, MYSQL_OPT_RECONNECT, &keep_connect);
 	string sqlStr;
-	if ((mysql_real_connect(&mysql, "localhost", "root", "byron0", "lp", 0, NULL, 0) != NULL))
+	if ((mysql_real_connect(&mysql, getDBHost().c_str(), getDBUser().c_str(), getDBPassword().c_str(), "lp", 0, NULL, 0) != NULL))
 	{
 		mysql_options(&mysql, MYSQL_OPT_RECONNECT, &keep_connect);
 		if (mysql_set_character_set(&mysql, "utf8"))
@@ -401,16 +409,20 @@ void testThesaurus()
 				if (synonymType < 0)
 					continue;
 				int fd;
-				_wsopen_s(&fd, ffd.cFileName, _O_RDWR | _O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE); // error = 
+				_wsopen_s(&fd, ffd.cFileName, _O_RDWR | _O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE); // error =
 				total++;
+				if (fd < 0)
+				{
+					// fl is a size_t: _filelength(-1) would wrap to a huge unsigned value, so bail
+					// before computing it / malloc'ing off an invalid fd.
+					lplog(LOG_ERROR, L"ERROR:testThesaurus cannot open %s.", ffd.cFileName);
+					continue;
+				}
 				size_t fl = _filelength(fd);
 				wchar_t* buffer = (wchar_t*)malloc(fl + 2);
-				if (fd >= 0)
-				{
-					if (_read(fd, buffer, (unsigned int)fl) < 0)
-						lplog(LOG_FATAL_ERROR, L"Error reading thesaurus file.");
-					_close(fd);
-				}
+				if (_read(fd, buffer, (unsigned int)fl) < 0)
+					lplog(LOG_FATAL_ERROR, L"Error reading thesaurus file.");
+				_close(fd);
 				unordered_set <wstring> scrapedSynonyms;
 				wstring word = ffd.cFileName;
 				int where = word.find('.');
@@ -665,17 +677,20 @@ string trim(int I, string& tmp)
 }
 
 // Reads MAINDIR\\...\\Koptimized_tags_noTables.html into global tokens (tags vs. text).
-// Calls _filelength(fd) before checking fd>=0 ? undefined if open fails. malloc is not freed.
 void processIntoTokens()
 {
 	int fd;
 	string tablesPath = string(MAINDIR) + "\\Linguistics information\\thesaurus\\Koptimized_tags_noTables.html";
 	_sopen_s(&fd, tablesPath.c_str(), _O_RDWR | _O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE);
+	if (fd < 0)
+	{
+		lplog(LOG_ERROR, L"ERROR:processIntoTokens cannot open %S.", tablesPath.c_str());
+		return;
+	}
 	int fl = _filelength(fd);
 	char* buffer = (char*)malloc(fl + 4);
 	string buf;
 	//int numTable = 0;
-	if (fd >= 0)
 	{
 		if (_read(fd, buffer, fl) < 0)
 			lplog(LOG_FATAL_ERROR, L"Error reading thesaurus HTML file.");
@@ -723,6 +738,7 @@ void processIntoTokens()
 	int t = 0;
 	for (set <string>::iterator ti = tags.begin(), tiEnd = tags.end(); ti != tiEnd; ti++)
 		printf("%d:%s\n", t++, ti->c_str());
+	free(buffer);
 }
 
 // Moves leftover "rest" tokens on d into accumulated synonyms / antonyms / concepts
@@ -1206,16 +1222,23 @@ int getThesaurus(MYSQL mysql)
 // Koptimized.html produced from Koptimized.pdf using Adobe Acrobat Pro (save as other HTML Web Page)
 // remove tags except for <i> and <span class s5, tr,th,td and <table
 // Reads Koptimized.html and writes a copy keeping only <i>, selected <span class=s*>, and
-// table tags. _filelength(fd) runs before the fd>=0 check. Returns 0.
+// table tags. Returns 0, or -1 if the file cannot be opened.
 int stripTags()
 {
 	string tablesPath = string(MAINDIR) + "\\Linguistics information\\thesaurus\\Koptimized.html";
 	int fd, error = _sopen_s(&fd, tablesPath.c_str(), _O_RDWR, _SH_DENYNO, _S_IREAD | _S_IWRITE);
+	if (fd < 0)
+	{
+		// fl is a size_t: _filelength(-1) returning -1 would wrap to a huge unsigned value and
+		// malloc()/the index loops below would run off a NULL or undersized buffer, so bail here
+		// instead of falling through with an invalid fd.
+		lplog(LOG_ERROR, L"ERROR:stripTags cannot open %S.", tablesPath.c_str());
+		return -1;
+	}
 	size_t fl = _filelength(fd);
 	char* buffer = (char*)malloc(fl + 100);
 	string buf;
 	//int numTable = 0;
-	if (fd >= 0)
 	{
 		if (_read(fd, buffer, (unsigned int)fl) < 0)
 			lplog(LOG_FATAL_ERROR, L"Error reading thesaurus HTML file.");
@@ -1377,6 +1400,7 @@ int stripTags()
 	error = _write(fd, buf.c_str(), (unsigned int)buf.length());
 	printf("%d\n", errno);
 	_close(fd);
+	free(buffer);
 	return 0;
 }
 
@@ -1442,16 +1466,24 @@ void processTable(string& tableToken)
 
 // remove top and bottom text not belonging to definitions from Koptimized_tags.html
 //resolve tables
-// Walks extracted tables and turns each cell into thesaurus tokens. Returns 0.
+// Walks extracted tables and turns each cell into thesaurus tokens. Returns 0, or -1 if the
+// file cannot be opened.
 int resolveTables()
 {
 	string tablesPath = string(MAINDIR) + "\\Linguistics information\\thesaurus\\Koptimized_tags.html";
 	int fd, error = _sopen_s(&fd, tablesPath.c_str(), _O_RDWR | _O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE);
+	if (fd < 0)
+	{
+		// fl is a size_t: _filelength(-1) returning -1 would wrap to a huge unsigned value and
+		// malloc()/the index loops below would run off a NULL or undersized buffer, so bail here
+		// instead of falling through with an invalid fd.
+		lplog(LOG_ERROR, L"ERROR:resolveTables cannot open %S.", tablesPath.c_str());
+		return -1;
+	}
 	size_t fl = _filelength(fd);
 	char* buffer = (char*)malloc(fl + 2);
 	string buf;
 	//int numTable = 0;
-	if (fd >= 0)
 	{
 		if (_read(fd, buffer, (unsigned int)fl) < 0)
 			lplog(LOG_FATAL_ERROR, L"Error reading thesaurus file.");
@@ -1491,6 +1523,7 @@ int resolveTables()
 	error = _write(fd, buf.c_str(), (unsigned int)buf.length());
 	printf("%d\n", errno);
 	_close(fd);
+	free(buffer);
 	return 0;
 }
 

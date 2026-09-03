@@ -70,6 +70,10 @@ package show;
 		public static final int possibleStateVerb=stateVerb<<1;
 		public static final int lastWordFlag=possibleStateVerb<<1;
 
+		// Mirrors general.h enum InflectionTypes - keep in sync with the C++ source.
+		// (fixed) NOUN_ONLY_UNCOUNTABLE and NOUN_ALSO_UNCOUNTABLE were missing here
+		// (this mirror had gone stale vs. general.h); added below in their correct
+		// enum positions.
 		// enum InflectionTypes {
 		public static final int _MIL=1024*1024;
 
@@ -93,6 +97,7 @@ package show;
 		public static final int ADVERB_NORMATIVE=65536;
 		public static final int ADVERB_COMPARATIVE=131072;
 		public static final int ADVERB_SUPERLATIVE=262144;
+		public static final int NOUN_ONLY_UNCOUNTABLE=524288;
 		public static final int MALE_GENDER=_MIL*1;
 		public static final int FEMALE_GENDER=_MIL*2;
 		public static final int NEUTER_GENDER=_MIL*4;
@@ -108,6 +113,7 @@ package show;
 		public static final int MALE_GENDER_ONLY_CAPITALIZED=_MIL*512;
 		public static final int FEMALE_GENDER_ONLY_CAPITALIZED=_MIL*1024;
 		public static final int ONLY_CAPITALIZED=(MALE_GENDER_ONLY_CAPITALIZED|FEMALE_GENDER_ONLY_CAPITALIZED);
+		public static final int NOUN_ALSO_UNCOUNTABLE=_MIL*2048;
 		
 
 	}

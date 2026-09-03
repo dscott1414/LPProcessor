@@ -37,16 +37,23 @@
 		- wrti() returns tmpstr.c_str(); the caller must keep tmpstr alive
 		  for the duration of the use (printSRG does this with a stack of
 		  named wstrings).
-		- The cache ctor calls convertToFlags then immediately overwrites
-		  skip and changeStateAdverb with false, so those bits never survive
-		  a round-trip.
-		- write() always persists convertFlags(false,false,false,0); quote /
-		  question bits are recovered from cWordMatch::flagInQuestion, not
-		  from the SRG flags.
+		- write() always calls convertFlags(false,false,false,0): isQuestion /
+		  inPrimaryQuote / inSecondaryQuote / questionFlags are convertFlags
+		  parameters only, not cSyntacticRelationGroup member fields, so there
+		  is no real per-SRG value being discarded here — quote/question
+		  status is recovered from cWordMatch::flagInQuestion on the word
+		  instead. skip and changeStateAdverb (the two bits packed right after
+		  those three) are real member fields and both round-trip correctly:
+		  write() packs the live values and the cache ctor's convertToFlags
+		  unpacks them without being overwritten afterward.
 		- The remapping ctor sets o = -1 and does not copy timeInfo,
-		  description, changeStateAdverb, or the nonSemantic* match flags.
-		- getWSAdverb(changeStateAdverb=true) returns m[whereVerb-1] without
-		  the time-flag check that getMSAdverb applies on the same path.
+		  description or tft.presType from the source SRG (those are
+		  wstring/vector and default to empty, which is intentional --
+		  positions were remapped into a different source, so old
+		  presType/description text would not apply). changeStateAdverb,
+		  speakerContinuation, printMin/printMax and the nonSemantic* match
+		  flags are plain bool/int, not copied either, and are now explicitly
+		  reset (previously left indeterminate).
 */
 #include <stdio.h>
 #include <string.h>
@@ -164,7 +171,11 @@ void cSource::prepPhraseToString(int wherePrep, wstring &ps)
 // 0 to continue.
 int cSource::checkInsertPrep(set <int> &relPreps, int wp, int wo)
 {
-	if (wp >= m.size() || relPreps.find(wp) != relPreps.end())
+	// wp is signed; every current caller already guards wp>=0 in its loop
+	// condition, but compare against a same-signedness bound here so this
+	// stays correct (rather than relying on unsigned wraparound) if that
+	// ever changes.
+	if (wp < 0 || wp >= (int)m.size() || relPreps.find(wp) != relPreps.end())
 		return -1;
 	if (wo < 0 || m[wp].nextQuote < 0 || m[wp].nextQuote == wo) // get only the prepositions attached to the wo
 		relPreps.insert(wp);
@@ -367,8 +378,8 @@ int cSource::getMSAdverb(int whereVerb, bool changeStateAdverb)
 }
 
 // Word string of an adverb next to whereVerb (prefers before, then after).
-// changeStateAdverb=true returns m[whereVerb-1] with no time-flag check —
-// unlike getMSAdverb, which requires T_START/STOP/FINISH/RESUME.
+// changeStateAdverb=true also accepts a T_START/STOP/FINISH/RESUME time
+// word immediately before the verb, same filter as getMSAdverb.
 const wchar_t *cSource::getWSAdverb(int whereVerb, bool changeStateAdverb)
 {
 	LFS
@@ -376,7 +387,6 @@ const wchar_t *cSource::getWSAdverb(int whereVerb, bool changeStateAdverb)
 			return m[whereVerb - 1].word->first.c_str();
 	if (whereVerb >= 0 && whereVerb + 1 < (signed)m.size() && m[whereVerb + 1].queryWinnerForm(adverbForm) >= 0)
 		return m[whereVerb + 1].word->first.c_str();
-	// Unlike getMSAdverb, no T_START/STOP/FINISH/RESUME filter here.
 	if (whereVerb > 0 && changeStateAdverb)
 	{
 		int timeFlag = (m[whereVerb - 1].word->second.timeFlags & 31);
@@ -475,8 +485,8 @@ void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* srg, int s, i
 
 // One-line LOG dump of an SRG: relationType, controller, S/V/O adjectives,
 // secondary object, next objects and the prep string.  matchSum >= 0 stamps
-// SRIDebugCounter into the line (QCHECK omits the counter).  Format string
-// has one more %s than arguments — the last specifier reads off the stack.
+// SRIDebugCounter into the line (QCHECK omits the counter).  The format
+// string's 34 specifiers match the 34 arguments below one-for-one.
 void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* srg, int s, int ws, int wo, wstring ps, bool overWrote, int matchSum, wstring matchInfo, int logDestination)
 {
 	LFS
@@ -545,7 +555,8 @@ void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* srg, int s, i
 }
 
 // Live constructor: fill the SVO / location slots from the caller, zero the
-// tense-flow / QA / print fields.  tft.presType is left uninitialized.
+// tense-flow / QA / print fields.  tft.presType (a wstring) is left at its
+// default empty value; semanticRelations.cpp builds it up with += later.
 cSyntacticRelationGroup::cSyntacticRelationGroup(int _where, int _o, int _whereControllingEntity, int _whereSubject, int _whereVerb, int _wherePrep, int _whereObject,
 	int _wherePrepObject, int _movingRelativeTo, int _relationType,
 	bool _genderedEntityMove, bool _genderedLocationRelation, int _objectSubType, int _prepObjectSubType, bool _physicalRelation)
@@ -661,9 +672,9 @@ bool cSyntacticRelationGroup::canUpdate(cSyntacticRelationGroup &z)
 }
 
 // Deserialize from the source-cache buffer at offset w (advanced on
-// success).  error is set on a short read.  After convertToFlags, skip and
-// changeStateAdverb are forced false, so those bits never survive a
-// round-trip.  QA / print / nonSemantic* fields are reset, not read.
+// success).  error is set on a short read.  convertToFlags restores skip
+// and changeStateAdverb from the packed word (they are not overwritten
+// afterward).  QA / print / nonSemantic* fields are reset, not read.
 cSyntacticRelationGroup::cSyntacticRelationGroup(char *buffer, int &w, unsigned int total, bool &error)
 {
 	if (error = !copy(where, buffer, w, total)) return;
@@ -943,5 +954,16 @@ cSyntacticRelationGroup::cSyntacticRelationGroup(cSyntacticRelationGroup *srg, u
 	associatedPattern = srg->associatedPattern; // used only with question answering, particularly with verifying transformed questions
 	mapPatternAnswer = srg->mapPatternAnswer;
 	mapPatternQuestion = srg->mapPatternQuestion;
-
+	// Not copied from srg (see the comment above): description, tft.presType
+	// and timeInfo are wstring/vector and safely default to empty/empty, but
+	// these six were plain bool/int and were left truly indeterminate --
+	// initialize them explicitly instead of inheriting stack garbage.
+	printMin = -1;
+	printMax = -1;
+	speakerContinuation = false;
+	changeStateAdverb = false;
+	nonSemanticSubjectTotalMatch = false;
+	nonSemanticObjectTotalMatch = false;
+	nonSemanticSecondaryObjectTotalMatch = false;
+	nonSemanticPrepositionObjectTotalMatch = false;
 }

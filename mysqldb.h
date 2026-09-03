@@ -12,7 +12,8 @@
 		- myquery(mysql,q,result,allowFailure) - execute and mysql_store_result() into
 			result; caller owns result and must mysql_free_result() it.
 			allowFailure==false makes a failing statement fatal (lplog LOG_FATAL_ERROR
-			calls exit(0)); allowFailure==true only logs an error and returns false.
+			exits the process with EXIT_FAILURE via logging.cpp's fatalExit());
+			allowFailure==true only logs an error and returns false.
 
 	Notes / gotchas:
 		- Buffer convention: declare wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW] but format

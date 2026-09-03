@@ -45,8 +45,6 @@
 		  and the match becomes too expensive to win.
 		- transformQuestionRelation() push_back()s a synthetic "in" onto questionSource->m,
 		  so it must not run while an iterator into m is live.
-		- setQuestion() / setSecondaryQuestion() dereference (imEOS+1) when the token is
-		  ':'; that is UB if the colon is the last token in m.
 */
 #undef _STLP_USE_EXCEPTIONS // STLPORT 4.6.1
 #include <algorithm>
@@ -669,10 +667,9 @@ void cSource::setQuestion(vector <cWordMatch>::iterator im, bool inQuote, int& q
 			forwardInQuote = true;
 		}
 		// checking for the sectionWord makes it more likely ':' is not in the middle of a sentence.
-		// The purpose is to detect the end of a sentence, not an utterance, because this section only 
+		// The purpose is to detect the end of a sentence, not an utterance, because this section only
 		// starts on an EOS, which means if we stopped before the end of a sentence, we might miss a '?'.
-		// (imEOS+1) is UB if this token is the last in m.
-		if (imEOS->word->first == L"?" || (imEOS->word->first == L":" && (imEOS + 1)->word == Words.sectionWord) ||
+		if (imEOS->word->first == L"?" || (imEOS->word->first == L":" && imEOS + 1 != m.end() && (imEOS + 1)->word == Words.sectionWord) ||
 			imEOS->word->first == L"!" || (imEOS->word->first == L"." && !imEOS->PEMACount))
 		{
 			if (forwardInQuote)
@@ -708,9 +705,9 @@ void cSource::setSecondaryQuestion(vector <cWordMatch>::iterator im)
 		for (vector <cWordMatch>::iterator imEOS = ++im; imEOS != m.end() && (imEOS->word->first != L"�"); imEOS++)
 		{
 			// checking for the sectionWord makes it more likely ':' is not in the middle of a sentence.
-			// The purpose is to detect the end of a sentence, not an utterance, because this section only 
+			// The purpose is to detect the end of a sentence, not an utterance, because this section only
 			// starts on an EOS, which means if we stopped before the end of a sentence, we might miss a '?'.
-			if (imEOS->word->first == L"?" || (imEOS->word->first == L":" && (imEOS + 1)->word == Words.sectionWord) ||
+			if (imEOS->word->first == L"?" || (imEOS->word->first == L":" && imEOS + 1 != m.end() && (imEOS + 1)->word == Words.sectionWord) ||
 				imEOS->word->first == L"!" || (imEOS->word->first == L"." && !imEOS->PEMACount))
 			{
 				if (imEOS->word->first == L"?")
@@ -766,8 +763,8 @@ bool cSource::questionAgreement(int where, int whereFirstSubjectInParagraph, int
 // (unresolvedSpeakers.size() is odd) XOR questionAgrees, replace that section's
 // subjects with the complement of the current speaker group. Plural leftovers
 // are treated as a possible rhetorical question and the inversion is cancelled.
-// speakerGroups[sgAt] is used without a bounds check if every group ends before
-// whereSubjectsInPreviousUnquotedSection.
+// Guards against speakerGroups[sgAt] when every group ends before
+// whereSubjectsInPreviousUnquotedSection (sgAt would otherwise be speakerGroups.size()).
 // if a question is rhetorical, this inversion should be cancelled (future - how to tell whether a question is rhetorical)
 void cSource::correctBySpeakerInversionIfQuestion(int where, int whereFirstSubjectInParagraph)
 {
@@ -804,33 +801,39 @@ void cSource::correctBySpeakerInversionIfQuestion(int where, int whereFirstSubje
 			}
 			int sgAt;
 			for (sgAt = 0; sgAt < (signed)speakerGroups.size() && speakerGroups[sgAt].sgEnd < whereSubjectsInPreviousUnquotedSection; sgAt++);
-			vector<int> invertedSubjects;
-			for (set <int>::iterator si = speakerGroups[sgAt].speakers.begin(); si != speakerGroups[sgAt].speakers.end(); si++)
-				if (find(subjectsInPreviousUnquotedSection.begin(), subjectsInPreviousUnquotedSection.end(), *si) == subjectsInPreviousUnquotedSection.end())
-					invertedSubjects.push_back(*si);
-			if (invertedSubjects.size() == 1 || unresolvedSpeakers.empty())
+			// every group can end before whereSubjectsInPreviousUnquotedSection, leaving
+			// sgAt == speakerGroups.size(); there is then no speaker group to invert
+			// against, so skip the inversion rather than indexing past the end.
+			if (sgAt < (signed)speakerGroups.size())
 			{
-				subjectsInPreviousUnquotedSection = invertedSubjects;
-				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d: ZXZ questionInversion set subjectsInPreviousUnquotedSection=%s.", where, objectString(subjectsInPreviousUnquotedSection, tmpstr).c_str());
-			}
-			else
-			{
-				int saveSubject = (subjectsInPreviousUnquotedSection.size() == 1) ? subjectsInPreviousUnquotedSection[0] : -1;
-				subjectsInPreviousUnquotedSection.clear();
-				for (unsigned int is = 0; is < invertedSubjects.size(); is++)
-					if (in(invertedSubjects[is], m[abs(unresolvedSpeakers[0])].objectMatches) != m[abs(unresolvedSpeakers[0])].objectMatches.end())
-						subjectsInPreviousUnquotedSection.push_back(invertedSubjects[is]);
-				// if this is plural, the question may be rhetorical, so cancel
-				if (subjectsInPreviousUnquotedSection.size() != 1 && saveSubject >= 0)
+				vector<int> invertedSubjects;
+				for (set <int>::iterator si = speakerGroups[sgAt].speakers.begin(); si != speakerGroups[sgAt].speakers.end(); si++)
+					if (find(subjectsInPreviousUnquotedSection.begin(), subjectsInPreviousUnquotedSection.end(), *si) == subjectsInPreviousUnquotedSection.end())
+						invertedSubjects.push_back(*si);
+				if (invertedSubjects.size() == 1 || unresolvedSpeakers.empty())
 				{
+					subjectsInPreviousUnquotedSection = invertedSubjects;
 					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d: ZXZ questionInversion [2] cancelled rhetorical question? (invertedSubjects>1 - %s).", where, objectString(subjectsInPreviousUnquotedSection, tmpstr).c_str());
-					subjectsInPreviousUnquotedSection.clear();
-					subjectsInPreviousUnquotedSection.push_back(saveSubject);
+						lplog(LOG_RESOLUTION, L"%06d: ZXZ questionInversion set subjectsInPreviousUnquotedSection=%s.", where, objectString(subjectsInPreviousUnquotedSection, tmpstr).c_str());
 				}
-				else if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d: ZXZ questionInversion [2] set subjectsInPreviousUnquotedSection=%s.", where, objectString(subjectsInPreviousUnquotedSection, tmpstr).c_str());
+				else
+				{
+					int saveSubject = (subjectsInPreviousUnquotedSection.size() == 1) ? subjectsInPreviousUnquotedSection[0] : -1;
+					subjectsInPreviousUnquotedSection.clear();
+					for (unsigned int is = 0; is < invertedSubjects.size(); is++)
+						if (in(invertedSubjects[is], m[abs(unresolvedSpeakers[0])].objectMatches) != m[abs(unresolvedSpeakers[0])].objectMatches.end())
+							subjectsInPreviousUnquotedSection.push_back(invertedSubjects[is]);
+					// if this is plural, the question may be rhetorical, so cancel
+					if (subjectsInPreviousUnquotedSection.size() != 1 && saveSubject >= 0)
+					{
+						if (debugTrace.traceSpeakerResolution)
+							lplog(LOG_RESOLUTION, L"%06d: ZXZ questionInversion [2] cancelled rhetorical question? (invertedSubjects>1 - %s).", where, objectString(subjectsInPreviousUnquotedSection, tmpstr).c_str());
+						subjectsInPreviousUnquotedSection.clear();
+						subjectsInPreviousUnquotedSection.push_back(saveSubject);
+					}
+					else if (debugTrace.traceSpeakerResolution)
+						lplog(LOG_RESOLUTION, L"%06d: ZXZ questionInversion [2] set subjectsInPreviousUnquotedSection=%s.", where, objectString(subjectsInPreviousUnquotedSection, tmpstr).c_str());
+				}
 			}
 		}
 	}

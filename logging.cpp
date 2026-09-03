@@ -20,8 +20,8 @@
 
 	Key data structures / globals:
 		- last*Clock - TLS, last time that level's FILE* was opened.
-		- log*File - process-wide FILE* when LOG_BUFFER is defined (the default);
-			TLS int fds in the #else path.
+		- log*File - TLS FILE* (LOG_BUFFER, the default) or TLS int fd (#else);
+			each thread that logs opens/closes/reopens only its own handles.
 		- logFileExtension / multiProcess - TLS, set by child workers.
 		- logCache - seconds a FILE* is kept (40).
 
@@ -31,10 +31,16 @@
 			terminates, so error.lplog never gets the fatal line.
 		- The FATAL path goes through fatalExit(): exits EXIT_FAILURE, and waits for
 			a keypress only when interactive (multiProcess==0 and stdin is a tty).
-
-		- With LOG_BUFFER, FILE*s are shared across threads that have different
-			logFileExtension values - a race, and one thread can fclose another's file.
-		- sprintf into logFilename[1024] is unbounded in logFileExtension length.
+		- log*File used to be process-wide statics while logFileExtension/lastClock
+			were already TLS, so two threads sharing a level (even with identical
+			logFileExtension) could race on open/fputws/fclose of the same FILE*.
+			log*File is now TLS too; the main use of parallelism (-mp) is separate
+			OS processes anyway (no shared memory), so the only in-process case this
+			ever mattered for is a worker thread (e.g. the WinINet reader thread in
+			Internet.cpp) logging concurrently with the main thread.
+		- sprintf into logFilename[1024] is unbounded in logFileExtension length;
+			in practice logFileExtension is built from a handful of short command-line
+			/ pattern-name tokens, but this is not enforced.
 */
 #include <windows.h>
 #define _WINSOCKAPI_ /* Prevent inclusion of winsock.h in windows.h */
@@ -51,8 +57,13 @@
 
 __declspec(thread) static int lastInfoClock = 0, lastErrorClock = 0, lastNomatchClock = 0, lastResolutionClock = 0, lastWhereClock = 0, lastResCheckClock = 0, lastSGClock = 0, lastWNClock = 0, lastWPClock = 0, lastWSClock = 0, lastRoleClock = 0, lastWCClock = 0, lastTimeClock = 0, lastDictionaryClock = 0, lastQCClock = 0; 		// per thread
 #ifdef LOG_BUFFER
-static FILE* logInfoFile, * logErrorFile, * logNomatchFile, * logResolutionFile, * logResCheckFile, * logSGFile, * logWNFile, * logWPFile;
-static FILE* logWSFile, * logWhereFile, * logRoleFile, * logWCFile, * logTimeFile, * logDictionaryFile, * logQCFile;
+// TLS, matching logFileExtension/lastClock above: previously process-wide, so any two
+// threads sharing a level (even with the same logFileExtension) could race on the same
+// FILE* - one thread's logCache-driven fclose()/reopen could run while another thread
+// was still fputws'ing into it.  Each thread now owns its own handles; the CRT closes
+// (and flushes) all of them at process exit regardless of which thread opened them.
+__declspec(thread) static FILE* logInfoFile, * logErrorFile, * logNomatchFile, * logResolutionFile, * logResCheckFile, * logSGFile, * logWNFile, * logWPFile;
+__declspec(thread) static FILE* logWSFile, * logWhereFile, * logRoleFile, * logWCFile, * logTimeFile, * logDictionaryFile, * logQCFile;
 #else
 __declspec(thread) static int logInfoFile = -1, logErrorFile = -1, logNomatchFile = -1, logResolutionFile = -1, logResCheckFile = -1, logSGFile = -1, logWNFile = -1, logWPFile = -1, logWSFile = -1, logWhereFile = -1, logRoleFile = -1, logWCFile = -1, logTimeFile = -1, logDictionaryFile = -1, logQCFile = -1; // per thread
 #endif

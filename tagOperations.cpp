@@ -29,8 +29,6 @@
 		  later cost code can attribute a tagSet to an element
 
 	Notes / gotchas:
-		bool found in the child-pattern loop is never set true, so that continue
-		path is dead. isPPN uses `flags && queryWinnerForm` (logical, not bitwise).
 		compareTagSets copies both vectors by value then sort()s them.
 */
 #include <windows.h>
@@ -192,6 +190,7 @@ int cSource::collectTags(int recursionLevel, int PEMAPosition, int position, vec
 					bool found = false;
 					while ((tag = patterns[p]->hasTagInSet(desiredTagSetNum, beginTag)) >= 0)
 					{
+						found = true;
 						if (debugTrace.traceTags)
 							lplog(L"%*s%d:TAG %s FOUND (pattern) %s[%s](%d,%d)", recursionLevel * 2, " ", position, patternTagStrings[tag].c_str(),
 								patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), position, position + childEnd);
@@ -600,7 +599,7 @@ size_t cSource::startCollectTags(bool inTrace, int tagSet, int position, int PEM
 }
 
 // True if this token is a gendered personal/indefinite/reciprocal pronoun or a
-// single-gender proper name (flagOnlyConsiderProperNounForms, or flags && winner PN).
+// single-gender proper name (flagOnlyConsiderProperNounForms, or flagAddProperNoun + winner PN).
 bool cWordMatch::isPPN(void)
 {
 	LFS
@@ -610,7 +609,7 @@ bool cWordMatch::isPPN(void)
 			queryWinnerForm(indefinitePronounForm) >= 0 || queryWinnerForm(reciprocalPronounForm) >= 0 ||
 			queryWinnerForm(personalPronounAccusativeForm) >= 0 || queryWinnerForm(nomForm) >= 0) ||
 		((((word->second.inflectionFlags & MALE_GENDER) == MALE_GENDER) ^ ((word->second.inflectionFlags & FEMALE_GENDER) == FEMALE_GENDER)) &&
-			((flags & flagOnlyConsiderProperNounForms) || (flags && queryWinnerForm(PROPER_NOUN_FORM_NUM) >= 0)));
+			((flags & flagOnlyConsiderProperNounForms) || ((flags & flagAddProperNoun) && queryWinnerForm(PROPER_NOUN_FORM_NUM) >= 0)));
 }
 
 // Maps this token to a class word: PPN, NUM, DATE, TIME, TELENUM, else mainEntry, else self.

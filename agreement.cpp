@@ -43,8 +43,6 @@
 	Notes / gotchas:
 		- evaluateSubjectVerbAgreement takes tagSet by value; switchSpecial-
 		  SubjectWithObject mutates that copy only.
-		- reduceCostIfRestate takes relationCost by value, so the divide-by-
-		  length it performs never reaches the caller.
 		- Costs are "till max" (addOCostTillMax): they clamp rather than
 		  grow without bound.  Negative costs exist and are legal.
 		- preTaggedSource (BNC) skips live N/D and V/O costing and uses
@@ -196,8 +194,8 @@ void cSource::assessVerbObjectCost(cPatternMatchArray::tPatternMatch* parentpm, 
 // Full costing for one PMA match: EVAL children, then S/V, then (unless
 // preTaggedSource) V/O + N/D + first-level PREP N/D.  BNC sources instead
 // add BNCPatternViolation.  Returns pm->getCost() after the adds.
-// originPurpose is a 1024-wchar wsprintf buffer ? long pattern names can
-// overflow it.
+// originPurpose is a 1024-wchar buffer; _snwprintf is bounded so an
+// unusually long pattern name/differentiator truncates instead of overflowing.
 int cSource::assessCost(cPatternMatchArray::tPatternMatch* parentpm, cPatternMatchArray::tPatternMatch* pm, int parentPosition, int position, vector < vector <cTagLocation> >& tagSets, unordered_map <int, cCostPatternElementByTagSet>& tertiaryPEMAPositions, bool alternateNounDeterminerShortTry, wstring purpose)
 {
 	LFS
@@ -205,11 +203,12 @@ int cSource::assessCost(cPatternMatchArray::tPatternMatch* parentpm, cPatternMat
 		{
 			wchar_t originPurpose[1024];
 			if (parentpm == nullptr)
-				wsprintf(originPurpose, L"position %d:pma %I64d:pattern %s[%s](%d,%d) ASSESS COST.", position, pm - m[position].pma.content, patterns[pm->getPattern()]->name.c_str(), patterns[pm->getPattern()]->differentiator.c_str(), position, pm->len + position);
+				_snwprintf(originPurpose, 1024, L"position %d:pma %I64d:pattern %s[%s](%d,%d) ASSESS COST.", position, pm - m[position].pma.content, patterns[pm->getPattern()]->name.c_str(), patterns[pm->getPattern()]->differentiator.c_str(), position, pm->len + position);
 			else
-				wsprintf(originPurpose, L"position %d:pma %I64d:%s[%s](%d,%d) ASSESS COST ( from %s[%s](%d,%d) ).",
+				_snwprintf(originPurpose, 1024, L"position %d:pma %I64d:%s[%s](%d,%d) ASSESS COST ( from %s[%s](%d,%d) ).",
 					position, pm - m[position].pma.content, patterns[pm->getPattern()]->name.c_str(), patterns[pm->getPattern()]->differentiator.c_str(), position, pm->len + position,
 					patterns[parentpm->getPattern()]->name.c_str(), patterns[parentpm->getPattern()]->differentiator.c_str(), parentPosition, parentpm->len + parentPosition);
+			originPurpose[1023] = 0; // _snwprintf does not guarantee NUL-termination on truncation
 			purpose += L"| ";
 			purpose += originPurpose;
 			lplog(L"%s", originPurpose);
@@ -729,7 +728,7 @@ int cSource::markChildren(cPatternElementMatchArray::tPatternElementMatch* pem, 
 // Collect PMA offsets at `position` whose pattern shares rootPattern and
 // whose length is childLen.  fillIfAlone non-top-level matches are
 // re-assessCost'd (sets reassessParentCosts).  Returns the min PMA cost
-// as unsigned ? a negative cost wraps to a huge value.
+// (a signed int; PMA costs can be negative).
 int cSource::getAllLocations(unsigned int position, int parentPattern, int rootPattern, int childLen, int parentLen, vector <unsigned int>& allLocations, int recursionLevel, unordered_map <int, cCostPatternElementByTagSet>& tertiaryPEMAPositions, bool& reassessParentCosts)
 {
 	LFS
@@ -1063,9 +1062,13 @@ void cSource::decreaseSubjectVerbCostIfRelated(cPatternMatchArray::tPatternMatch
 				relationCost -= COST_PER_RELATION;
 		if (debugTrace.traceSubjectVerbAgreement)
 		{
+			// Same unbounded-pattern-name overflow risk as assessCost's
+			// originPurpose; bounded with _snwprintf (see agreement.cpp:210).
 			wchar_t temp[1024];
-			int len = (parentpm) ? wsprintf(temp, L"%s[%s](%u,%u) ", patterns[parentpm->getPattern()]->name.c_str(), patterns[parentpm->getPattern()]->differentiator.c_str(), parentPosition, parentPosition + parentpm->len) : 0;
-			wsprintf(temp + len, L"%s[%s](%u,%u) ", patterns[pm->getPattern()]->name.c_str(), patterns[pm->getPattern()]->differentiator.c_str(), position, position + pm->len);
+			int len = (parentpm) ? _snwprintf(temp, 1024, L"%s[%s](%u,%u) ", patterns[parentpm->getPattern()]->name.c_str(), patterns[parentpm->getPattern()]->differentiator.c_str(), parentPosition, parentPosition + parentpm->len) : 0;
+			if (len < 0 || len > 1023) len = 1023; // truncated: write the second piece at the very end
+			_snwprintf(temp + len, 1024 - len, L"%s[%s](%u,%u) ", patterns[pm->getPattern()]->name.c_str(), patterns[pm->getPattern()]->differentiator.c_str(), position, position + pm->len);
+			temp[1023] = 0; // _snwprintf does not guarantee NUL-termination on truncation
 			if (!rm || tr == rm->r.end())
 				lplog(L"%s %d:Subject '%s' has NO SubjectWordWithVerb relationship with '%s'.",
 					temp, nounPosition, nounWord->first.c_str(), verbWord->first.c_str());
@@ -1368,9 +1371,9 @@ void cSource::disagreementWithAmbiguousTense(bool agree,bool ambiguousTense, int
 	}
 }
 
-// Intended to divide relationCost by subject length when the subject is
-// a restated object (RE_OBJECT).  relationCost is passed by value, so the
-// divide never reaches evaluateSubjectVerbAgreement.
+// Divides relationCost by subject length when the subject is a restated
+// object (RE_OBJECT).  relationCost is taken by reference so the divide
+// reaches the caller (evaluateSubjectVerbAgreement).
 void cSource::reduceCostIfRestate(bool restateSet, int &relationCost, int subjectTag, vector<cTagLocation>& tagSet)
 {
 	if (restateSet && relationCost)
@@ -1606,9 +1609,7 @@ bool cSource::preferVerbRel(int position, unsigned int J, cPattern* p)
 // The bounds check compares begin+position against pema.count, not m.size().
 // Pre-tagged BNC path: collect ADV/ADJ/NOUN/VERB tags only at tokens
 // that already have a BNC prefer-* flag, then return the cheapest
-// evaluateBNCPreferences cost (or 0 if no flagged tokens).  The bounds
-// check uses pema.count for begin+position / end+position, then indexes
-// m[I] ? should be m.size().
+// evaluateBNCPreferences cost (or 0 if no flagged tokens).
 int cSource::BNCPatternViolation(int position, int PEMAPosition, vector < vector <cTagLocation> >& tagSets)
 {
 	LFS
@@ -1696,11 +1697,14 @@ void cSource::lowerPreviousElementCosts(vector <cCostPatternElementByTagSet>& PE
 			wchar_t PP[1024];
 			memset(PP, L' ', sizeof(PP));
 			if (PEMAPositions[ip].getElement() > 100 || PEMAPositions[ip].getElement() < 0)
-				wsprintf(PP, L"Illegal Element %d!", PEMAPositions[ip].getElement());
+				_snwprintf(PP, 1024, L"Illegal Element %d!", PEMAPositions[ip].getElement());
 			else
 			{
-				wsprintf(PP, L"%s[%s](%d,%u)", patterns[pema[PEMAPositions[ip].getPEMAPosition()].getParentPattern()]->name.c_str(), patterns[pema[PEMAPositions[ip].getPEMAPosition()].getParentPattern()]->differentiator.c_str(), PEMAPositions[ip].getSourcePosition(), PEMAPositions[ip].getSourcePosition() + pema[PEMAPositions[ip].getPEMAPosition()].getChildLen()); //  + PEMAPositions[ip].getElement() * 16
+				// Same unbounded-pattern-name overflow risk as assessCost's
+				// originPurpose; bounded with _snwprintf (see agreement.cpp:210).
+				_snwprintf(PP, 1024, L"%s[%s](%d,%u)", patterns[pema[PEMAPositions[ip].getPEMAPosition()].getParentPattern()]->name.c_str(), patterns[pema[PEMAPositions[ip].getPEMAPosition()].getParentPattern()]->differentiator.c_str(), PEMAPositions[ip].getSourcePosition(), PEMAPositions[ip].getSourcePosition() + pema[PEMAPositions[ip].getPEMAPosition()].getChildLen()); //  + PEMAPositions[ip].getElement() * 16
 			}
+			PP[1023] = 0; // _snwprintf does not guarantee NUL-termination on truncation
 			lplog(L"%03d:%06d-%06d: %06d %02d %02d  %03d   %03d     %03d:%s", ip,
 				PEMAPositions[ip].getSourcePosition(), PEMAPositions[ip].getSourcePosition() + getEndRelativeSourcePosition(PEMAPositions[ip].getPEMAPosition()),
 				PEMAPositions[ip].getPEMAPosition(), PEMAPositions[ip].getTagSet(), PEMAPositions[ip].getElement(), costsPerTagSet[PEMAPositions[ip].getTagSet()], PEMAPositions[ip].getCost(), PEMAPositions[ip].getTraceSource(),
@@ -1746,8 +1750,9 @@ P:  TS#  E
 // set the costs of the next to top tier of the pattern (secondary)
 // Walk each distinct PEMA origin, findAllChains + recalculateOCosts, then
 // cascadeUpToAllParents so the tagSet cost looks as if it had been paid
-// when the child was first matched.  Always returns 0.  pm == nullptr
-// (evaluatePrepObjects when pma.find fails) will dereference in the cascade.
+// when the child was first matched.  Always returns 0.  pm may be nullptr
+// (e.g. evaluatePrepObjects when pma.find fails); callers guard for that
+// before calling, so cascadeUpToAllParents never sees a null pm here.
 int cSource::setSecondaryCosts(vector <cCostPatternElementByTagSet>& PEMAPositions, cPatternMatchArray::tPatternMatch* pm, int basePosition, bool stopCascadeWhenNDAlreadySet, const wchar_t* fromWhere)
 {
 	LFS
@@ -2148,7 +2153,7 @@ void cSource::evaluatePrepObjects(int PEMAPosition, int position, vector < vecto
 					cost = 10;
 				// leaving a noun hanging but including its possessive
 				else if ((word == L"his" || word == L"her") && prepObjectPosition + 1 < (int)m.size() &&
-					(nfindex = m[prepObjectPosition + 1].word->second.query(nounForm)) >= 0 && // no +1 < m.size()
+					(nfindex = m[prepObjectPosition + 1].word->second.query(nounForm)) >= 0 &&
 					m[prepObjectPosition + 1].word->second.getUsageCost(nfindex) == 0)
 					cost = 4;
 				if (debugTrace.tracePreposition)
@@ -2352,7 +2357,7 @@ int cSource::getVerbObjectCost(cPatternMatchArray::tPatternMatch* pm, vector <cT
 	// if one object, and object follows directly after verb, and object consists of adverb, adverb, acc, then add cost.
 	if (numObjects == 1 && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len < whereVerb + 5)
 	{
-		bool isAdverb = whereVerb + 1 < (int)m.size() && m[whereVerb + 1].forms.isSet(adverbForm) && m[whereVerb + 1].word->second.getUsageCost(m[whereVerb + 1].queryForm(adverbForm)) < 4; // is it possibly an adverb?  no +1 < m.size()
+		bool isAdverb = whereVerb + 1 < (int)m.size() && m[whereVerb + 1].forms.isSet(adverbForm) && m[whereVerb + 1].word->second.getUsageCost(m[whereVerb + 1].queryForm(adverbForm)) < 4; // is it possibly an adverb?
 		if (isAdverb && tagSet[whereObjectTag].sourcePosition + tagSet[whereObjectTag].len == whereVerb + 3)
 		{
 			bool isPreposition = whereVerb + 1 < (int)m.size() && m[whereVerb + 1].forms.isSet(prepositionForm);
@@ -2397,7 +2402,7 @@ int cSource::getVerbObjectCost(cPatternMatchArray::tPatternMatch* pm, vector <cT
 	{
 		if (debugTrace.traceVerbObjects)
 			lplog(L"          %d:decreased verbObjectCost=%d to %d for verb %s because object is 'here' or 'there' or 'home' (standing in for a PP which may not be considered an object)",
-				tagSet[verbTagIndex].sourcePosition, verbObjectCost, verbWord->second.getUsageCost(cSourceWordInfo::VERB_HAS_0_OBJECTS), verbWord->first.c_str(), m[whereVerb + 1].word->first.c_str());
+				tagSet[verbTagIndex].sourcePosition, verbObjectCost, verbWord->second.getUsageCost(cSourceWordInfo::VERB_HAS_0_OBJECTS), verbWord->first.c_str());
 		verbObjectCost = verbWord->second.getUsageCost(cSourceWordInfo::VERB_HAS_0_OBJECTS);
 	}
 	// modal auxiliaries really should not have objects!
@@ -2874,10 +2879,9 @@ int cSource::getSubjectInfo(cTagLocation subjectTag, int subjectTagIndex, int& n
 
 // True (illegal-subject, cost 20) if a >=15-token subject ends in a noun
 // that the following past-participle verb prefers over the head noun
-// (relation-count vs wordFrequency).  The else-if
-// `numBeginFrequency / numLastFrequency < 1` never fires: integer
-// division is 0 only when numBeginFrequency < numLastFrequency, which
-// the first branch already covers.
+// (relation-count vs wordFrequency), each side biased by the ratio of
+// begin/last word frequency (whichever noun is rarer relative to the
+// other gets its relation count scaled up).
 // for long subjects, check to see if the verb is preferentially bound to a word closer to the verb, thus making this an incorrect subject.
 bool cSource::longSubjectBindingMismatch(int wordIndex, int beginObjectPosition, int primaryPatternEnd, int whereVerb)
 {
@@ -3030,8 +3034,8 @@ void cSource::evaluateNounDeterminerAdjectiveVerbPresentParticiple(int begin, in
 }
 
 // First-noun half of "from X to X" / "elbow to elbow": subtract 4 from
-// PNC.  The debug log reads m[begin-1] even when begin==0 and only the
-// "noun to same noun" arm matched.
+// PNC.  The debug log guards m[begin-1] for begin==0 (reachable when only
+// the "noun to same noun" arm matched, which does not require begin>=1).
 void cSource::evaluateNounDeterminerFromToOrToSame(int begin, int end, int fromPEMAPosition, int& PNC)
 {
 	// when they got through he kept walking abreast , *elbow to elbow* almost .
@@ -3045,7 +3049,7 @@ void cSource::evaluateNounDeterminerFromToOrToSame(int begin, int end, int fromP
 		if (debugTrace.traceDeterminer)
 		{
 			wstring phrase;
-			lplog(L"%d:%s[%s]:(%s)%s: Noun (%d,%d) has 'from' 'to' construction OR 'noun' to 'same noun' cost-=4", begin, (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->differentiator.c_str(), m[begin - 1].word->first.c_str(), phraseString(begin, end, phrase, true).c_str(), begin, end); // m[begin-1] when begin==0
+			lplog(L"%d:%s[%s]:(%s)%s: Noun (%d,%d) has 'from' 'to' construction OR 'noun' to 'same noun' cost-=4", begin, (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->differentiator.c_str(), (begin > 0) ? m[begin - 1].word->first.c_str() : L"", phraseString(begin, end, phrase, true).c_str(), begin, end);
 		}
 		PNC -= 4;
 	}
@@ -3077,7 +3081,9 @@ void cSource::evaluateNounDeterminerPreferVerbAfterTo(int begin, int end, int fr
 
 // Compound noun whose last token is a verb and the next word is also a
 // verb: add COST_OF_INCORRECT_VERBAL_NOUN.  nAgreeTag < end-1 is the
-// "compound" hint.  The log reads m[end] with no size check.
+// "compound" hint.  The log's m[end] is only reached when
+// calculateVerbAfterVerbUsage returned non-zero, which requires
+// end<m.size() internally; still guarded directly here for robustness.
 void cSource::evaluateNounDeterminerIncorrectVerbalNoun(int& traceSource, int begin, int end, int fromPEMAPosition, int nAgreeTag, int& PNC)
 {
 	if (nAgreeTag >= 0 && nAgreeTag < end - 1 && calculateVerbAfterVerbUsage(end - 1, end, false)) // if nAgreeTag<end-1, it is more likely a compound noun
@@ -3086,9 +3092,9 @@ void cSource::evaluateNounDeterminerIncorrectVerbalNoun(int& traceSource, int be
 		{
 			//printTagSet(LOG_INFO, L"_ND2", -1, tagSet, begin, fromPEMAPosition);
 			wstring phrase;
-			lplog(L"%d:%s[%s]:%s(%s):Noun (%d,%d) is compound, has a verb at end and a verb after the end (cost=%d). [SOURCE=%06d].", 
-				begin, (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->differentiator.c_str(), phraseString(begin, end, phrase, true).c_str(), 
-				m[end].word->first.c_str(), begin, end, cSourceWordInfo::COST_OF_INCORRECT_VERBAL_NOUN, traceSource = gTraceSource);
+			lplog(L"%d:%s[%s]:%s(%s):Noun (%d,%d) is compound, has a verb at end and a verb after the end (cost=%d). [SOURCE=%06d].",
+				begin, (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->name.c_str(), (fromPEMAPosition < 0) ? L"" : patterns[pema[fromPEMAPosition].getParentPattern()]->differentiator.c_str(), phraseString(begin, end, phrase, true).c_str(),
+				(end < (int)m.size()) ? m[end].word->first.c_str() : L"", begin, end, cSourceWordInfo::COST_OF_INCORRECT_VERBAL_NOUN, traceSource = gTraceSource);
 		}
 		PNC += cSourceWordInfo::COST_OF_INCORRECT_VERBAL_NOUN;
 	}
@@ -3887,10 +3893,18 @@ void cSource::setChain(vector <cPatternElementMatchArray::tPatternElementMatch*>
 	else
 		if (debugTrace.traceSecondaryPEMACosting)
 		{
+			// This loop accumulates one entry per chain element into a fixed
+			// buffer -- unlike the single-shot wsprintf sites elsewhere in
+			// this file, a long chain alone (not just a long pattern name)
+			// could overflow it, so truncate with _snwprintf and stop once full.
 			wchar_t temp[1024];
 			int len = 0;
-			for (vector <cPatternElementMatchArray::tPatternElementMatch*>::iterator cPI = chainPEMAPositions.begin(), cPIEnd = chainPEMAPositions.end(); cPI != cPIEnd; cPI++)
-				len += wsprintf(temp + len, L"%06I64d (oCost=%d cumulativeDeltaCost=%d) %s | ", *cPI - pema.begin(), (*cPI)->getOCost(), (*cPI)->cumulativeDeltaCost, (*cPI)->flagsStr(flags));
+			for (vector <cPatternElementMatchArray::tPatternElementMatch*>::iterator cPI = chainPEMAPositions.begin(), cPIEnd = chainPEMAPositions.end(); cPI != cPIEnd && len < 1023; cPI++)
+			{
+				int n = _snwprintf(temp + len, 1024 - len, L"%06I64d (oCost=%d cumulativeDeltaCost=%d) %s | ", *cPI - pema.begin(), (*cPI)->getOCost(), (*cPI)->cumulativeDeltaCost, (*cPI)->flagsStr(flags));
+				len = (n < 0) ? 1023 : len + n; // truncated: stop appending, keep what fit
+			}
+			temp[(len < 0 || len > 1023) ? 1023 : len] = 0; // _snwprintf does not guarantee NUL-termination on truncation
 			lplog(L"TS#%03d set chain %s with %d=maxOCost %d + maxDeltaCost %d [SOURCE=%06d].",
 				PEMAPositions[lastWinningPEMAPosition].getTagSet(), temp, maxOCost + maxDeltaCost, maxOCost, maxDeltaCost, PEMAPositions[lastWinningPEMAPosition].getTraceSource());
 		}
@@ -3948,7 +3962,7 @@ int cSource::evaluateBNCPreferences(int position, int PEMAPosition, vector <cTag
 	lplog(L"Erasing positions %d-%d to ignore.", pema[PEMAPosition].begin + position, pema[PEMAPosition].end + position);
 #endif
 	if (PEMAPosition < 0 || PEMAPosition >= (int)pema.count ||
-		pema[PEMAPosition].begin + position < 0 || pema[PEMAPosition].begin + position >= (int)m.size() || // should be m.size(); then m[I]
+		pema[PEMAPosition].begin + position < 0 || pema[PEMAPosition].begin + position >= (int)m.size() ||
 		pema[PEMAPosition].end + position < 0 || pema[PEMAPosition].end + position >= (int)m.size())
 		lplog(LOG_FATAL_ERROR, L"evaluateBNCPreferences - bad data!");
 	for (int I = pema[PEMAPosition].begin + position; I < pema[PEMAPosition].end + position; I++)
@@ -4340,7 +4354,7 @@ int cSource::eliminateLoserPatterns(unsigned int begin, unsigned int end)
 		unordered_map <int, cCostPatternElementByTagSet> tertiaryPEMAPositions;
 	vector <int> minSeparatorCost;
 	vector < vector <unsigned int> > winners; // each winner is a PMAOffset
-	minSeparatorCost.resize(end - begin + 1); // reserve does not grow size; [I] is out-of-range
+	minSeparatorCost.resize(end - begin + 1);
 	for (unsigned int I = 0; I < end - begin + 1 && I < m.size() - begin; I++)
 		minSeparatorCost[I] = m[begin + I].word->second.lowestSeparatorCost();
 	eliminateLoserPatternsPhase1(begin, end, minSeparatorCost, winners, tertiaryPEMAPositions);

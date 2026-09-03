@@ -27,8 +27,8 @@
 		- stBE has no explicit enumerator value; it continues from
 		  stCHANGE_STATE=22. Do not renumber without a cache bump.
 		- -1 is “unset” on every where* / o field.
-		- cProximityEntry::score is only written when a distance sum is
-		  non-zero; otherwise it is left at whatever the constructor stored.
+		- cProximityEntry::score is set to occurrence^2/distance when the
+		  distance sum is non-zero, else explicitly 0.
 */
 #pragma once
 #include "timeRelations.h"
@@ -76,9 +76,8 @@ public:
 				objectStr.c_str(), score, inSource, totalDistanceFromObject, directRelation, confidentInSource, confidentTotalDistanceFromObject, confidentDirectRelation, confidenceSE,
 				semanticMismatch, (subQueryNoMatch) ? L"true" : L"false", (tenseMismatch) ? L"true" : L"false", (confidenceCheck) ? L"true" : L"false", childSourcePaths.size());
 		}
-		// occurrence^2 / (totalDistance + confidentTotalDistance). Unchanged
-		// when both distances are 0 (score stays at its constructor value).
-		// A single child source halves occurrence.
+		// occurrence^2 / (totalDistance + confidentTotalDistance), or 0 when
+		// both distances are 0. A single child source halves occurrence.
 		void calculateScore()
 		{
 			int occurrence = (inSource + confidentInSource * 2 + directRelation * 2 + confidentDirectRelation * 4);
@@ -86,6 +85,8 @@ public:
 				occurrence >>= 1;
 			if (totalDistanceFromObject + confidentTotalDistanceFromObject)
 				score = (float)((occurrence*occurrence)*1.0 / (totalDistanceFromObject + confidentTotalDistanceFromObject));
+			else
+				score = 0;
 		}
 	};
 	// Frequency order: more (confidentInSource + inSource) first; name tie-break.

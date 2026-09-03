@@ -318,9 +318,15 @@ public class WordMatch {
 		return (tmpWinnerForms > 0) ? ((1 << form) & tmpWinnerForms) != 0 : true;
 	}
 
+	// (fixed) same null-pointer risk as the Python sibling WordMatch.py's
+	// has_winner_verb_form(): getWordtFI() returns null when `word` isn't
+	// in WordClass.Words, which used to NPE here instead of returning False.
 	boolean hasWinnerVerbForm()
 	{
-		return getWordtFI().hasWinnerVerbForm(tmpWinnerForms);
+		tFI tfi = getWordtFI();
+		if (tfi == null)
+			return false;
+		return tfi.hasWinnerVerbForm(tmpWinnerForms);
 	}
 
 	public int queryWinnerForm(int form) {
@@ -345,6 +351,18 @@ public class WordMatch {
 		return -1;
 	}
 
+	// (fixed) roleString()'s lookup used to be missing 5 of word.h's role
+	// bits entirely (PP_OBJECT_ROLE, IN_QUOTE_REFERRING_AUDIENCE_ROLE,
+	// NO_PP_PREP_ROLE, IN_COMMAND_OBJECT_ROLE, SENTENCE_IN_ALT_REL_ROLE -
+	// added below), so an object with one of those roles set would just
+	// silently print nothing for it. Same staleness as the Python sibling
+	// WordMatch.py's `roles`/`r_c` (out of scope for that file in this
+	// pass; documented in the batch report). NOTE: CObject.ID_SENTENCE_TYPE
+	// still appears twice below (index 12 and index 29) in both this array
+	// and its Python counterpart - almost certainly a copy/paste typo
+	// where one of the two was meant to be a different role, but which
+	// role was intended isn't recoverable from context, so it's left as
+	// a documented risk rather than guessed at.
 	long roles[] = { CObject.SUBOBJECT_ROLE, CObject.SUBJECT_ROLE, CObject.OBJECT_ROLE, CObject.META_NAME_EQUIVALENCE, CObject.MPLURAL_ROLE,
 			CObject.HAIL_ROLE, CObject.IOBJECT_ROLE, CObject.PREP_OBJECT_ROLE, CObject.RE_OBJECT_ROLE, CObject.IS_OBJECT_ROLE,
 			CObject.NOT_OBJECT_ROLE, CObject.NONPAST_OBJECT_ROLE, CObject.ID_SENTENCE_TYPE, CObject.NO_ALT_RES_SPEAKER_ROLE,
@@ -354,11 +372,13 @@ public class WordMatch {
 			CObject.MNOUN_ROLE, CObject.PRIMARY_SPEAKER_ROLE, CObject.SECONDARY_SPEAKER_ROLE, CObject.FOCUS_EVALUATED, CObject.ID_SENTENCE_TYPE,
 			CObject.DELAYED_RECEIVER_ROLE, CObject.IN_PRIMARY_QUOTE_ROLE, CObject.IN_SECONDARY_QUOTE_ROLE, CObject.IN_EMBEDDED_STORY_OBJECT_ROLE,
 			CObject.EXTENDED_OBJECT_ROLE, CObject.NOT_ENCLOSING_ROLE, CObject.EXTENDED_ENCLOSING_ROLE, CObject.NONPAST_ENCLOSING_ROLE,
-			CObject.NONPRESENT_ENCLOSING_ROLE, CObject.POSSIBLE_ENCLOSING_ROLE, CObject.THINK_ENCLOSING_ROLE };
+			CObject.NONPRESENT_ENCLOSING_ROLE, CObject.POSSIBLE_ENCLOSING_ROLE, CObject.THINK_ENCLOSING_ROLE,
+			CObject.PP_OBJECT_ROLE, CObject.IN_QUOTE_REFERRING_AUDIENCE_ROLE, CObject.NO_PP_PREP_ROLE, CObject.IN_COMMAND_OBJECT_ROLE, CObject.SENTENCE_IN_ALT_REL_ROLE };
 	String r_c[] = { "SUBOBJ", "SUBJ", "OBJ", "META_EQUIV", "MP", "H", "IOBJECT", "PREP", "RE", "IS", "NOT", "NONPAST", "ID",
 			"NO_ALT_RES_SPEAKER", "IS_ADJ", "NONPRESENT", "PL", "MOVE", "NON_MOVE", "PLEO", "INQ_SELF_REF_SPEAKER", "UNRES_FROM_IMPLICIT",
 			"S_IN_REL", "PASS_SUBJ", "POV", "MNOUN", "SP", "SECONDARY_SP", "EVAL", "ID", "DELAY", "PRIM", "SECOND", "EMBED", "EXT", "NOT_ENC",
-			"EXT_ENC", "NPAST_ENC", "NPRES_ENC", "POSS_ENC", "THINK_ENC" };
+			"EXT_ENC", "NPAST_ENC", "NPRES_ENC", "POSS_ENC", "THINK_ENC",
+			"PP_OBJ", "INQ_REF_AUDIENCE", "NO_PP_PREP", "IN_COMMAND_OBJ", "SENTENCE_IN_ALT_REL" };
 
 	public String roleString() {
 		String role = "";

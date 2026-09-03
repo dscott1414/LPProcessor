@@ -16,9 +16,8 @@
 		- Default parameters: sizeOfInteger=32, bitsPerInteger=5 (i.e. >>5 is /32),
 			T=unsigned int, storeSize=16.  Changing one without the others breaks set().
 		- `1 << (bit & 31)` is a signed shift; bit 31 is undefined for signed 1.
-		- write() memcpy's BEFORE checking 'limit', so a short cache buffer is already
-			overrun by the time LOG_FATAL_ERROR runs (and FATAL exits, so the
-			return-false is dead).
+		- write() checks 'limit' before the memcpy (LOG_FATAL_ERROR exits, so the
+			memcpy is unreachable on overflow).
 		- first()/next() keep cursor state in byteIndex/bitIndex; they are not
 			re-entrant and are not serialized (reset to -1 on read).
 */
@@ -172,8 +171,8 @@ public:
 		return true;
 	}
 	// Serialize sizeof(bits) bytes to buffer[where] and advance where.
-	// memcpy happens BEFORE the limit check - a short buffer is already overrun
-	// by the time FATAL fires.
+	// The limit check runs before the memcpy; LOG_FATAL_ERROR exits, so the
+	// memcpy (and the return true after it) never runs on overflow.
 	bool write(void *buffer, int &where, int limit)
 	{
 		if (where + sizeof(bits) > limit)

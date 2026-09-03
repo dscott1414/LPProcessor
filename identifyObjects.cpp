@@ -56,10 +56,8 @@
 		  (his, Bill's, _NAMEOWNER) inside a larger span.
 		- getPrincipalWhereAndEndAndNameInfo's 5th/6th parameters are
 		  (pluralNounOverride, embeddedName); the call site in
-		  determineNonOwnershipObjectInfo currently passes them swapped.
+		  determineNonOwnershipObjectInfo passes them in that order.
 		- objects[0]/[1] are narrator/audience; later loops skip object<=1.
-		- SearchExactMatch tests object.eliminated (the newly built object,
-		  always false) rather than objects[*s].eliminated.
 */
 #include <windows.h>
 #include "Winhttp.h"
@@ -179,9 +177,9 @@ bool cSource::findSpecificAnaphor(wstring tagName, int where, int element, int& 
 }
 
 // True if m[where] is dummy "it" (It is likely that S / It seems that S /
-// NP makes it MA to VP). Requires where+4 < m.size(), so short sentences
-// near EOS are never treated as pleonastic. The MEANS branch indexes
-// m[where+2] rather than the verb after "it" (where+1).
+// NP makes it MA to VP). Each arm bounds-checks only the tokens it actually
+// reads, so a pleonastic "it" near the end of the token array can still
+// match a short arm (e.g. "It is time to VP") without a full 5-token span.
 // Lappin and Leass 2.1.2
 // A quick glance shows these clearly do not cover many cases of pleonastic it
 // MA ModalAdj:
@@ -201,44 +199,48 @@ bool cSource::findSpecificAnaphor(wstring tagName, int where, int element, int& 
 bool cSource::isPleonastic(unsigned int where)
 {
 	LFS
-		if (m[where].word->first != L"it" || where + 4 > m.size()) return false;
+		if (m[where].word->first != L"it") return false;
 	const wchar_t* MA[] = { L"necessary",L"possible",L"certain",L"likely",L"important",L"good",L"useful",L"advisable",L"convenient",
 		L"sufficient",L"economical",L"easy",L"desirable",L"difficult",L"legal",L"surprising",NULL };
-	if (m[where + 1].word->first == L"is")
+	if (where + 1 < m.size() && m[where + 1].word->first == L"is")
 	{
+		if (where + 2 >= m.size()) return false;
 		int I;
 		for (I = 0; MA[I] && m[where + 2].word->first != MA[I]; I++);
 		if (MA[I])
 		{
-			if (m[where + 3].word->first == L"that" && m[where + 4].pma.queryPattern(L"__S1") != -1) return true;
+			if (where + 3 >= m.size()) return false;
+			if (m[where + 3].word->first == L"that" && where + 4 < m.size() && m[where + 4].pma.queryPattern(L"__S1") != -1) return true;
 			if (m[where + 3].word->first == L"for")
 			{
+				if (where + 4 >= m.size()) return false;
 				if (m[where + 4].pma.queryPattern(L"_INFP") != -1) return true;
 				int tmpPP;
 				if ((tmpPP = m[where + 4].pma.queryPattern(L"_PP")) == -1) return false;
-				return m[where + 4 + m[where + 4].pma[tmpPP & ~cMatchElement::patternFlag].len].pma.queryPattern(L"_INFP") != -1;
+				unsigned int afterPP = where + 4 + m[where + 4].pma[tmpPP & ~cMatchElement::patternFlag].len;
+				return afterPP < m.size() && m[afterPP].pma.queryPattern(L"_INFP") != -1;
 			}
 			return false;
 		}
 		const wchar_t* COG[] = { L"recommended",L"thought",L"believed",L"known",L"anticipated",L"assumed",L"expected",NULL };
 		for (I = 0; COG[I] && m[where + 2].word->first != COG[I]; I++);
-		if (COG[I] && m[where + 3].pma.queryPattern(L"_REL1") != -1) return true;
+		if (COG[I] && where + 3 < m.size() && m[where + 3].pma.queryPattern(L"_REL1") != -1) return true;
 		if (m[where + 2].word->first == L"time") return true;
-		if (m[where + 2].word->first == L"thanks" && m[where + 3].word->first == L"to")
+		if (m[where + 2].word->first == L"thanks" && where + 3 < m.size() && m[where + 3].word->first == L"to")
 		{
 			int tmpPP;
 			if ((tmpPP = m[where + 3].pma.queryPattern(L"_PP")) == -1) return false;
-			return m[where + 3 + m[where + 3].pma[tmpPP & ~cMatchElement::patternFlag].len].pma.queryPattern(L"_REL1") != -1;
+			unsigned int afterPP = where + 3 + m[where + 3].pma[tmpPP & ~cMatchElement::patternFlag].len;
+			return afterPP < m.size() && m[afterPP].pma.queryPattern(L"_REL1") != -1;
 		}
 		return false;
 	}
 	// It MEANS (that) S [ It MEANS S1 or REL1]
 	const wchar_t* MEANS[] = { L"seems",L"appears",L"means",L"follows",NULL };
 	int I;
-	// Off-by-one vs the comment "It MEANS (that) S": indexes where+2, so
-	// "it seems that S" never matches (would need where+1).
+	if (where + 1 >= m.size()) return false;
 	for (I = 0; MEANS[I] && m[where + 1].word->first != MEANS[I]; I++);
-	if (MEANS[I] && (m[where + 2].pma.queryPattern(L"__S1") != -1 || m[where + 2].pma.queryPattern(L"_REL1") != -1)) return true;
+	if (MEANS[I] && where + 2 < m.size() && (m[where + 2].pma.queryPattern(L"__S1") != -1 || m[where + 2].pma.queryPattern(L"_REL1") != -1)) return true;
 	// NP makes/finds it MA (for NP) to VP
 	for (I = 0; MA[I] && m[where + 1].word->first != MA[I]; I++);
 	if (!MA[I] || where < 1 || (m[where - 1].word->first != L"makes" && m[where - 1].word->first != L"finds")) return false;
@@ -248,8 +250,7 @@ bool cSource::isPleonastic(unsigned int where)
 // For NAME / NON_GENDERED_NAME / REFLEXIVE / RECIPROCAL classes, look up every
 // word of 'object' in relatedObjectsMap and reuse the first non-eliminated
 // equals() hit: setObject, push a location, updateFirstLocation. Returns true
-// if a prior object was reused (identifyObject then skips the push). The
-// eliminated test is on the newly built 'object' (always false), not objects[*s].
+// if a prior object was reused (identifyObject then skips the push).
 bool cSource::searchExactMatch(cObject& object, int position)
 {
 	LFS
@@ -1156,9 +1157,8 @@ bool cSource::assignRelativeClause(int where)
 
 // Resolve the head position, exclusive end, plurality, and whether the span
 // embeds a _NAME. 'plural' is the findSpecificAnaphor pluralNounOverride out
-// param; 'embeddedName' is the other. Callers must pass them in that order
-// (determineNonOwnershipObjectInfo currently swaps them). Also walks ALL-CAPS
-// titles to decide whether a NOUN should be treated as a name.
+// param; 'embeddedName' is the other. Callers must pass them in that order.
+// Also walks ALL-CAPS titles to decide whether a NOUN should be treated as a name.
 void cSource::getPrincipalWhereAndEndAndNameInfo(wstring tagName, int where, int element, int& principalWhere, bool& plural, bool& embeddedName, unsigned int &end, int &nameElement)
 {
 	// "NOUN","PNOUN","NAME","NAMEOWNER"
@@ -1212,9 +1212,6 @@ void cSource::getPrincipalWhereAndEndAndNameInfo(wstring tagName, int where, int
 // name / proper noun / possessive / word-order owner, identify it as an
 // adjectival object and update ownerWhere / hasDeterminer / owner gender.
 // Returns false only to stop the caller loop (I is itself the full NAME span).
-// The PROPER_NOUN/noun branch's ownerWhere assignment is
-// (identify && getObject>=0 && inflectionOwner) || flagNounOwner ? a missing
-// set of parens around the last ||, so flagNounOwner alone sets ownerWhere.
 /*
 * identifies all objects that modify current main object
 * and gets ownership information (gender, plural and determiner)
@@ -1532,7 +1529,6 @@ int cSource::determineNonOwnershipObjectInfo(int &where, int &element, const int
 	if (tagName != L"VNOUN" && tagName != L"GNOUN")
 	{
 		int nameElement = -1;
-		// 5th/6th args are declared (plural, embeddedName) but passed swapped.
 		getPrincipalWhereAndEndAndNameInfo(tagName, where, element, principalWhere, plural, embeddedName, end, nameElement);
 		// you are English, aren't you?
 		if (m[begin].queryForm(demonymForm) >= 0 && end - begin == 1 && (m[begin].word->second.inflectionFlags & PLURAL) == PLURAL &&
@@ -1830,7 +1826,7 @@ void cSource::printObjects(void)
 		}
 	}
 	if (numSuspectObjects || numVerySuspectObjects || numAmbiguousObjects)
-		lplog(LOG_RESOLUTION, L"%d suspect objects (%d%), %d verySuspect objects (%d%), %d ambiguous objects (%d%), %d total objects",
+		lplog(LOG_RESOLUTION, L"%d suspect objects (%d%%), %d verySuspect objects (%d%%), %d ambiguous objects (%d%%), %d total objects",
 			numSuspectObjects, numSuspectObjects * 100 / objects.size(),
 			numVerySuspectObjects, numVerySuspectObjects * 100 / objects.size(),
 			numAmbiguousObjects, numAmbiguousObjects * 100 / objects.size(), objects.size());

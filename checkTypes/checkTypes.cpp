@@ -23,8 +23,15 @@
 		- tagList[] - BNC CLAWS tags -> LP form names (or NULL)
 
 	Notes / gotchas:
-		path is strcat'd without a size; long trees overflow 1024.
-		getPath return is ignored — failed reads still scan leftover buffer.
+		(fixed) path used to be strcat'd/strcpy'd without a bound, so a
+		long enough BNC-World tree would overflow the 1024-byte stack
+		buffer in main(); findAllTypesMatchingWord/findAllWordsMatchingType
+		now take the buffer's capacity and check remaining space before
+		every strcat/strcpy, skipping (with a printed warning) any path
+		that would overflow instead of recursing into it.
+		(fixed) getPath's return value is now checked at both call sites;
+		a failed read skips the file instead of rescanning whatever was
+		left in `buffer` from the previous successful call.
 		strlwr(buffer) is not standard C; MSVC-only. gets_s at the end
 		is a "press enter" pause. Hardcoded F:\lp\BNC-World\texts.
 */
@@ -110,30 +117,43 @@ typedef pair <string, int> tWFIMap;
 map<string,int> alltypes,lptypes;
 
 // Recurse from `path` (mutated in place: appends \*. then each name).
+// `pathCapacity` is the total size of the `path` buffer; every
+// strcat/strcpy is bounds-checked against it so a deep enough BNC-World
+// tree is skipped (with a warning) instead of overflowing the caller's
+// fixed-size buffer.
 // For each file, lowercase the contents and for every occurrence of
 // `pattern` walk back to the previous '<' and insert the tag text
 // (buffer+tmp+3, i.e. skip "<w ") into alltypes. No return.
-void findAllTypesMatchingWord(char *path,char *pattern)
+void findAllTypesMatchingWord(char *path,size_t pathCapacity,char *pattern)
 {
   struct _finddata_t bnc_file;
   intptr_t hFile;
+  if (strlen(path)+2>=pathCapacity) { printf("ERROR: path too long, skipping: %s\n",path); return; }
   strcat(path,"\\");
   size_t olen=strlen(path);
+  if (olen+3>=pathCapacity) { printf("ERROR: path too long, skipping: %s\n",path); return; }
   strcat(path,"*.");
   if( (hFile = _findfirst( path, &bnc_file )) != -1L )
    {
-      do 
+      do
       {
         if (bnc_file.name[0]!='.')
         {
+          if (olen+strlen(bnc_file.name)+1>pathCapacity)
+          {
+            printf("ERROR: path too long, skipping %s%s\n",path,bnc_file.name);
+          }
+          else
+          {
           strcpy(path+olen,bnc_file.name);
           if (bnc_file.attrib&_A_SUBDIR)
-            findAllTypesMatchingWord(path,pattern);
+            findAllTypesMatchingWord(path,pathCapacity,pattern);
           else
           {
             printf("%s\r",path);
             int actualLen;
-            getPath(path,buffer,MAX_BUF_LEN,actualLen);
+            if (getPath(path,buffer,MAX_BUF_LEN,actualLen)==0)
+            {
             int where=0;
             strlwr(buffer);
             while (where<actualLen-(signed)strlen(pattern))
@@ -149,6 +169,8 @@ void findAllTypesMatchingWord(char *path,char *pattern)
               }
               where++;
             }
+            }
+          }
           }
         }
       } while( _findnext( hFile, &bnc_file ) == 0 );
@@ -156,30 +178,39 @@ void findAllTypesMatchingWord(char *path,char *pattern)
   }
 }
 
-// Recurse like findAllTypesMatchingWord, but collect the token after
-// `pattern` (up to space or '<') into alltypes. Used when FIND_TYPE is
-// enabled instead of FIND_WORD.
-void findAllWordsMatchingType(char *path,char *pattern)
+// Recurse like findAllTypesMatchingWord (same pathCapacity bounds-checking),
+// but collect the token after `pattern` (up to space or '<') into alltypes.
+// Used when FIND_TYPE is enabled instead of FIND_WORD.
+void findAllWordsMatchingType(char *path,size_t pathCapacity,char *pattern)
 {
   struct _finddata_t bnc_file;
   intptr_t hFile;
+  if (strlen(path)+2>=pathCapacity) { printf("ERROR: path too long, skipping: %s\n",path); return; }
   strcat(path,"\\");
   size_t olen=strlen(path);
+  if (olen+3>=pathCapacity) { printf("ERROR: path too long, skipping: %s\n",path); return; }
   strcat(path,"*.");
   if( (hFile = _findfirst( path, &bnc_file )) != -1L )
    {
-      do 
+      do
       {
         if (bnc_file.name[0]!='.')
         {
+          if (olen+strlen(bnc_file.name)+1>pathCapacity)
+          {
+            printf("ERROR: path too long, skipping %s%s\n",path,bnc_file.name);
+          }
+          else
+          {
           strcpy(path+olen,bnc_file.name);
           if (bnc_file.attrib&_A_SUBDIR)
-            findAllWordsMatchingType(path,pattern);
+            findAllWordsMatchingType(path,pathCapacity,pattern);
           else
           {
             printf("%s\r",path);
             int actualLen;
-            getPath(path,buffer,MAX_BUF_LEN,actualLen);
+            if (getPath(path,buffer,MAX_BUF_LEN,actualLen)==0)
+            {
             int where=0;
             strlwr(buffer);
             while (where<actualLen-(signed)strlen(pattern))
@@ -195,6 +226,8 @@ void findAllWordsMatchingType(char *path,char *pattern)
               }
               where++;
             }
+            }
+          }
           }
         }
       } while( _findnext( hFile, &bnc_file ) == 0 );
@@ -313,8 +346,8 @@ int main( int argc, char *argv[] )
 {
   char path[1024];
   strcpy(path,"F:\\lp\\BNC-World\\texts");
-  findAllTypesMatchingWord(path,FIND_WORD);
-  //findAllWordsMatchingType(path,FIND_TYPE);
+  findAllTypesMatchingWord(path,sizeof(path),FIND_WORD);
+  //findAllWordsMatchingType(path,sizeof(path),FIND_TYPE);
   printf("\n");
   __int64 total=0;
   for (tIBNC b=alltypes.begin(),e=alltypes.end(); b!=e; b++)

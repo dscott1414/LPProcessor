@@ -42,9 +42,6 @@
 		cPattern, MySQL via insertSQL() (name-part rows).
 
 	Notes / gotchas:
-		- merge(tIWMM&, tIWMM) uses first[1] as a “has a second letter”
-		  test, so a single-letter part is never replaced by a longer one.
-		- The wchar_t* print/hn overloads wcscat with no bound.
 		- LFS at every function entry.
 */
 #include <windows.h>
@@ -401,22 +398,6 @@ void cName::hn(const wchar_t* namePartName, tIWMM namePart, wstring& accumulate,
 	accumulate[len] = towupper(accumulate[len]);
 }
 
-// wchar_t* overload of hn. wcscat with no bound — caller must size accumulate.
-void cName::hn(const wchar_t* namePartName, tIWMM namePart, wchar_t* accumulate, bool printShort, const wchar_t* separator = L" ")
-{
-	LFS
-		if (namePart == wNULL) return;
-	if (!printShort)
-	{
-		wcscat(accumulate, namePartName);
-		wcscat(accumulate, L":");
-	}
-	wchar_t* ch = accumulate + wcslen(accumulate);
-	wcscat(accumulate, namePart->first.c_str());
-	wcscat(accumulate, separator);
-	*ch = towupper(*ch);
-}
-
 // Format all parts into message (in/out). Appends “[nickId]” when not short.
 wstring cName::print(wstring& message, bool printShort, const wchar_t* separator = L" ")
 {
@@ -438,26 +419,6 @@ wstring cName::print(wstring& message, bool printShort, const wchar_t* separator
 	}
 	if (message.length() > 0 && message[message.length() - 1] == L' ')
 		message.erase(message.length() - 1);
-	return message;
-}
-
-// wchar_t* print. Writes message[0]=0 then unbounded hn/wsprintf.
-// optimized
-wstring cName::print(wchar_t* message, bool printShort, const wchar_t* separator = L" ")
-{
-	LFS
-		message[0] = 0;
-	hn(L"H1", hon, message, printShort, separator);
-	hn(L"H2", hon2, message, printShort, separator);
-	hn(L"H3", hon3, message, printShort, separator);
-	hn(L"F", first, message, printShort, separator);
-	hn(L"M1", middle, message, printShort, separator);
-	hn(L"M2", middle2, message, printShort, separator);
-	hn(L"L", last, message, printShort, separator);
-	hn(L"S", suffix, message, printShort, separator);
-	hn(L"A", any, message, printShort, separator);
-	if (nickName >= 0 && !printShort)
-		wsprintf(message + wcslen(message), L"[%d]", nickName);
 	return message;
 }
 
@@ -534,10 +495,12 @@ bool cName::in(tIWMM inhon, vector <tIWMM>& hons)
 	return false;
 }
 
+// Copy w2 onto w1 if w1 is empty/a bare initial (length <= 1) and w2 is longer.
+// A w1 that already holds a full part is left untouched.
 void cName::merge(tIWMM& w1, tIWMM w2)
 {
 	LFS
-	if (w2 != wNULL && (w1 == wNULL || ((w1->first.size() <= 1) && w2->first.size() > 1) || (w1->first.size() > 1 && w2->first.size() > 1)))
+	if (w2 != wNULL && (w1 == wNULL || (w1->first.size() <= 1 && w2->first.size() > 1)))
 		w1 = w2;
 }
 
@@ -844,11 +807,18 @@ bool cName::confidentMatch(cName& n, bool sexConfidentMatch, sTrace& t)
 }
 
 // Append “(sourceId,index,wordIndex,ht),” if hp is a real lexicon word.
-// _snwprintf into buffer+buflen; maxbuf-buflen underflows if buflen > maxbuf.
+// _snwprintf into buffer+buflen, clamping the remaining capacity to 0 so
+// maxbuf-buflen can never underflow into a huge unsigned size.
 void cName::insertSubSQL(wchar_t* buffer, int sourceId, int index, int maxbuf, tIWMM hp, int& buflen, enum cName::nameType ht)
 {
 	LFS
-		if (hp != wNULL && hp->second.index >= 0) buflen += _snwprintf(buffer + buflen, maxbuf - buflen, L"(%d,%d,%d,%d),", sourceId, index, hp->second.index, ht);
+		if (hp != wNULL && hp->second.index >= 0)
+		{
+			int remaining = maxbuf - buflen;
+			if (remaining < 0) remaining = 0;
+			int written = _snwprintf(buffer + buflen, remaining, L"(%d,%d,%d,%d),", sourceId, index, hp->second.index, ht);
+			if (written > 0) buflen += written;
+		}
 }
 
 // VALUES list of all non-null parts for a name-parts table. Returns buflen.
@@ -906,7 +876,7 @@ bool cSource::evaluateName(vector <cTagLocation>& tagSet, cName& name, bool& isM
 		{
 			if ((name.any = setSex(tagSet, whereAny, isMale, isFemale, isPlural)) != wNULL)
 				name.getNickName(name.any);
-			return (name.any->first.length() > 1) || m[tagSet[whereAny].sourcePosition + 1].word->first == L"." || // a person cannot be referred to by a single letter (with no period after it)
+			return (name.any->first.length() > 1) || (tagSet[whereAny].sourcePosition + 1 < (int)m.size() && m[tagSet[whereAny].sourcePosition + 1].word->first == L".") || // a person cannot be referred to by a single letter (with no period after it)
 				(tagSet[whereAny].sourcePosition > 0 && !isPlural && m[tagSet[whereAny].sourcePosition - 1].queryWinnerForm(NUMBER_FORM_NUM) >= 0); // 3 M / 3 D / 4 G
 		}
 	}
@@ -1181,7 +1151,7 @@ bool cSource::evaluateNameAdjective(vector <cTagLocation>& tagSet, cName& name, 
 		{
 			if ((name.any = setSex(tagSet, whereAny, isMale, isFemale, isPlural)) != wNULL)
 				name.getNickName(name.any);
-			return (name.any->first.length() > 1) || m[tagSet[whereAny].sourcePosition + 1].word->first == L"."; // a person cannot be referred to by a single letter (with no period after it)
+			return (name.any->first.length() > 1) || (tagSet[whereAny].sourcePosition + 1 < (int)m.size() && m[tagSet[whereAny].sourcePosition + 1].word->first == L"."); // a person cannot be referred to by a single letter (with no period after it)
 		}
 	}
 	name.hon = setSex(tagSet, whereHon1, isMale, isFemale, isPlural);
@@ -1774,8 +1744,7 @@ struct {
 	{ L"thirtieth", 30 }, { L"fortieth", 40 }, { L"fiftieth", 50 }, { L"sixtieth", 60 }, { L"seventieth", 70 }, { L"eightieth", 80 }, { L"ninetieth", 90 },
 	{ L"hundredth", 100 }, { L"thousandth", 1000 }, { L"millionth", 1000000 }, { L"billionth", 1000000000 },
 	{ NULL, -1 } };
-// “first”..“billionth”, or a digit string ending in “th”. “twentieth” is
-// stored as 0 in numeralOrdinalMap (copy-paste). Unknown -> -1.
+// “first”..“billionth”, or a digit string ending in “th”. Unknown -> -1.
 int mapNumeralOrdinal(const wstring& word)
 {
 	LFS
@@ -1985,7 +1954,6 @@ if (wherePrimary==whereSecondary-1 &&
 
 // True if this primary/secondary pair should not be aliased: same object,
 // already aliases, ageDetection, wrong class, or different plurality.
-// `(objects[secondary].plural != objects[secondary].plural)` is a tautology.
 bool cSource::rejectSecondaryMetaNameEquivalence(int where, int sno, int wherePrimary, int whereSecondary, int primaryNameObject, vector <int>& objectsResolved,vector <int>& secondaryNameObjects, vector <int>& eraseREObjects)
 {
 	wstring tmpstr;
@@ -2007,7 +1975,7 @@ bool cSource::rejectSecondaryMetaNameEquivalence(int where, int sno, int wherePr
 		(primaryClass == BODY_OBJECT_CLASS && secondaryClass == BODY_OBJECT_CLASS) ||
 		primaryClass == PRONOUN_OBJECT_CLASS || primaryClass == NON_GENDERED_GENERAL_OBJECT_CLASS || primaryClass == NON_GENDERED_BUSINESS_OBJECT_CLASS ||
 		secondaryClass == PRONOUN_OBJECT_CLASS || secondaryClass == NON_GENDERED_GENERAL_OBJECT_CLASS || secondaryClass == NON_GENDERED_BUSINESS_OBJECT_CLASS ||
-		(objects[secondaryNameObject].plural != objects[secondaryNameObject].plural)) // tautology; later check uses primary vs secondary
+		(objects[primaryNameObject].plural != objects[secondaryNameObject].plural))
 	{
 		int inflectionFlags = m[wherePrimary].word->second.inflectionFlags;
 		if ((((inflectionFlags & MALE_GENDER) == MALE_GENDER) ^ ((inflectionFlags & FEMALE_GENDER) == FEMALE_GENDER)) && m[wherePrimary].objectMatches.size() > 1)
@@ -2029,15 +1997,10 @@ bool cSource::rejectSecondaryMetaNameEquivalence(int where, int sno, int wherePr
 			return true;
 		}
 	}
-	if (objects[primaryNameObject].plural != objects[secondaryNameObject].plural)
-	{
-		if (debugTrace.traceNameResolution || debugTrace.traceObjectResolution)
-		{
-			wstring tmpstr2;
-			lplog(LOG_RESOLUTION, L"%06d:Metaname equivalence rejected (different plurality) for secondary %d:[%s] to primary %d:[%s]", where, whereSecondary, objectString(secondaryNameObject, tmpstr, false).c_str(), wherePrimary, objectString(primaryNameObject, tmpstr2, false).c_str());
-		}
-		return true;
-	}
+	// Note: a primary/secondary plurality mismatch is now caught by the
+	// plurality clause in the class-check above (it used to compare
+	// objects[secondaryNameObject].plural to itself, a tautology, so this
+	// used to be the only place a plurality mismatch was actually rejected).
 	// somebody named Jane Finn should be equivocated to Jane Finn
 	//if (overlaps(objects.begin()+primaryNameObject,objects.begin()+secondaryNameObject))
 	//{

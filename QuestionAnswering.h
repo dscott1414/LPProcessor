@@ -39,7 +39,7 @@
 
 	Dependencies:
 		cSource / cSyntacticRelationGroup / cPattern / cColumn (tables), MySQL,
-		CACHEDIR / WEBSEARCH_CACHEDIR (M:\caches), Bing and Google Custom Search.
+		getCacheDir() / getWebSearchCacheDir() (envConfig.h), Bing and Google Custom Search.
 
 	Notes / gotchas:
 		- "where" integers are indexes into a cSource::m token array; object ints
@@ -48,7 +48,8 @@
 		  the unordered_map iterator after each erase rather than incrementing it.
 		- Several methods (processPath, addTables, dbSearch*) are defined in other
 		  TUs (getWikipedia.cpp, tableColumn.cpp, dbQuerySearch.cpp, getMusicBrainz.cpp).
-		- Web-search API keys live as globals in questionAnsweringWebSearch.cpp.
+		- Web-search API keys are read from the environment via envConfig.h
+		  (getGoogleCSEKey() / getGoogleCSEContext() / getBingSubscriptionKey()).
 */
 #pragma once
 class cQuestionAnswering
@@ -210,7 +211,6 @@ public:
 		void eraseSourcesMap();
 	bool isQuestionPassive(cSource *questionSource, cSyntacticRelationGroup *srg, cSyntacticRelationGroup * &ssri);
 	bool processTransformQuestionPattern(cSource* questionSource, wstring patternType, cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& lssri, cPattern* sourcePattern, cPattern* linkPattern, cSyntacticRelationGroup* linkSyntacticRelationGroup, unordered_map <wstring, wstring>& parseVariables);
-	set <wstring> createAnswerListAsStrings(cSource* questionSource, set <int>& wherePossibleAnswers);
 	bool followQuestionLink(int startLinkOffset, vector <cPattern*>& linkPatterns, cSource* questionSource, cSyntacticRelationGroup* srg, cPattern* sourcePattern, vector <cSyntacticRelationGroup*>& linkSyntacticRelationGroups, unordered_map <wstring, wstring>& parseVariables, bool parseOnly, bool useParallelQuery, bool disableWebSearch, vector < cTrackDescendantAnswers>& ancestorAnswers);
 	int findMetanamePatterns(cSource* questionSource, cSyntacticRelationGroup* srg);
 	int transformQuestion(cSource* questionSource, cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& ssri, vector < cTrackDescendantAnswers>& descendantAnswers, bool parseOnly, bool useParallelQuery, bool disableWebSearch);
@@ -295,7 +295,6 @@ public:
 	void recordDistanceIntoProximityMap(cSource *childSource, unsigned int childSourceIndex, set <cObject::cLocation> &questionObjectMatchInChildSourceLocations,
 		set <cObject::cLocation>::iterator &questionObjectMatchIndex, bool confidence, unordered_map <wstring, cProximityMap::cProximityEntry>::iterator closestObjectIterator);
 	void accumulateProximityEntry(cSource *questionSource, unsigned int where, set <cObject::cLocation> &principalObjectLocations, set <cObject::cLocation>::iterator &polIndex, bool confidence, cSyntacticRelationGroup* parentSRG, cProximityMap *semanticMap, unordered_set <wstring> & whereQuestionInformationSourceObjectsStrings);
-	int	parseSubQueriesParallel(cSource *questionSource,cSource *childSource, vector <cSyntacticRelationGroup> &subQueries, int whereChildCandidateAnswer, set <wstring> &wikipediaLinksAlreadyScanned);
 	bool analyzeRDFTypeBirthDate(cSource* questionSource, cSyntacticRelationGroup* ssri, wstring derivation, vector < cAS >& answerSRGs, int& maxAnswer, wstring birthDate);
 	bool analyzeRDFTypeOccupation(cSource* questionSource, cSyntacticRelationGroup* ssri, wstring derivation, vector < cAS >& answerSRGs, int& maxAnswer, wstring occupation);
 	bool analyzeRDFTypes(cSource* questionSource, cSyntacticRelationGroup *sqi, cSyntacticRelationGroup* ssri, wstring derivation, vector < cAS >& answerSRGs, int& maxAnswer, unordered_map <int, cWikipediaTableCandidateAnswers* >& wikiTableMap, bool rejectEmptyObjects);
@@ -321,7 +320,6 @@ public:
 	int processSnippet(cSource *questionSource, wstring snippet, wstring object, cSource *&source, bool parseOnly);
 	int processAbstract(cSource *questionSource, cTreeCat *rdfType, cSource *&source, bool parseOnly);
 	int processWikipedia(cSource *questionSource, int principalWhere, cSource *&source, vector <wstring> &wikipediaLinks, int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool parseOnly, set <wstring> &wikipediaLinksAlreadyScanned, bool removePrecedingUncapitalizedWordsFromProperNouns);
-	bool matchObjectsExactByName(vector <cObject>::iterator parentObject, vector <cObject>::iterator childObject, bool &namedNoMatch);
 	static bool matchObjectsByName(cSource *parentSource, vector <cObject>::iterator parentObject, cSource *childSource, vector <cObject>::iterator childObject, bool &namedNoMatch, sTrace debugTrace);
 	static bool matchChildSourcePositionByName(cSource *parentSource, vector <cObject>::iterator parentObject, cSource *childSource, int childWhere, bool &namedNoMatch, sTrace &debugTrace);
 	static bool matchTimeObjects(cSource *parentSource, int parentWhere, cSource *childSource, int childWhere);

@@ -19,8 +19,9 @@ Key entry points:
 Notes / gotchas:
     Many flag bits reuse the same shift (e.g. <<23 is both
     flagFirstLetterCapitalized and flagFromPreviousHailResolveSpeakers)
-    — quote vs non-quote interpretation. has_winner_verb_form does not
-    null-check get_word_tfi().
+    — quote vs non-quote interpretation. has_winner_verb_form now
+    null-checks get_word_tfi() and returns False instead of raising
+    AttributeError when the word isn't in the lexicon.
 """
 from WordClass import WordClass
 from Form import Form 
@@ -238,9 +239,13 @@ class WordMatch:
     def is_winner(self, form):
         return ((1 << form) & self.tmpWinnerForms) != 0 if (self.tmpWinnerForms > 0) else True
 
-    # Delegate to TFI.has_winner_verb_form. Crashes if get_word_tfi() is None.
+    # Delegate to TFI.has_winner_verb_form. False (not a crash) if the
+    # word isn't found in the lexicon (get_word_tfi() returns None).
     def has_winner_verb_form(self):
-        return self.get_word_tfi().has_winner_verb_form(self.tmpWinnerForms)
+        tfi = self.get_word_tfi()
+        if tfi is None:
+            return False
+        return tfi.has_winner_verb_form(self.tmpWinnerForms)
 
     # Index of `form` if it is a winner under the proper-noun flags, else -1.
     def query_winner_form(self, form):

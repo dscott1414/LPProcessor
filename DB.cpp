@@ -23,23 +23,33 @@
 
 	Dependencies:
 		MySQL schema `lp` (see DBCreateSQLSchema.cpp).  wordFormCache next to cwd
-		when USE_TEST_CACHE is on.  Hardcoded DSN user/password (root/byron0).
+		when USE_TEST_CACHE is on.  DSN user/password from envConfig.h's
+		getDBUser()/getDBPassword() (LP_DB_USER/LP_DB_PASSWORD).
 
 	Notes / gotchas:
-		- initializeDatabaseHandle embeds "root"/"byron0".  Same credentials are
-			repeated in createDatabase().
-		- updateSourceStatistics / 2 / 3 LOCK TABLES sources WRITE and never
-			UNLOCK - every stats write leaves the table locked.
-		- getNumSources LOCKs then returns -1 on query failure without UNLOCK.
-		- isBookTitle interpolates proposedTitle in double quotes, unescaped.
-		- readWikiNominalizations never mysql_free_result.
-		- isWordFormCacheValid overwrites `result` with a second SELECT without
-			freeing the first MYSQL_RES.
+		- initializeDatabaseHandle connects via getDBUser()/getDBPassword(). Same
+			call is repeated in createDatabase().
+		- updateSourceStatistics / 2 / 3 now UNLOCK TABLES after the UPDATE (both
+			the lock-failure early return and the normal path are covered).
+		- getNumSources now UNLOCKs on the query-failure path too, not just on
+			success.
+		- isBookTitle escapes proposedTitle with escaped()/escapeStr() before
+			interpolating it into the double-quoted literal.
+		- readWikiNominalizations frees its MYSQL_RES before returning.
+		- isWordFormCacheValid frees the first SELECT's MYSQL_RES before issuing
+			the second SELECT that reuses the same local.
+		- readMultiSourceObjects builds a dbId->objects[] index map instead of
+			using the DB's `objects.id` directly as a vector subscript (ids are not
+			dense), fixes the column shift that mapped firstSpeakerGroup/male/
+			female/neuter onto the male/female/neuter/plural constructor args
+			(plural was previously never read), and now advances `previousId` so
+			multi-word common objects accumulate begin..end instead of resetting
+			on every word.
 		- Form ids in the DB are 1-based; wordForms.formId-1 is the in-memory
 			offset.  patternFormNumOffset (32750) stores usage-pattern counts in
 			the same table.
-		- lplog(LOG_FATAL_ERROR) exits (see logging.cpp); comments in source.h
-			that claim otherwise are wrong.
+		- lplog(LOG_FATAL_ERROR) exits (see logging.cpp); source.h documents this
+			correctly.
 */
 #include <stdio.h>
 #include <string.h>
@@ -322,7 +332,7 @@ int getNumSources(MYSQL& mysql, int sourceType, bool left)
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	if (!myquery(&mysql, L"LOCK TABLES sources READ")) return -1;
 	_snwprintf(qt, QUERY_BUFFER_LEN, L"select COUNT(*) FROM sources where sourceType=%d and start!='**START NOT FOUND**' and start!='**SKIP**'%s", sourceType, (left) ? L" and processed is null" : L"");
-	if (!myquery(&mysql, qt, result)) return -1;
+	if (!myquery(&mysql, qt, result)) { unlockTables(mysql); return -1; }
 	unlockTables(mysql);
 	int numSources = 0;
 	if ((sqlrow = mysql_fetch_row(result)))
@@ -349,10 +359,11 @@ int getNumSources(MYSQL& mysql, int sourceType, bool left)
 	return numSources;
 }
 
-// mysql_init + mysql_real_connect to host 'where', schema DBNAME, user
-// root / password byron0.  Sets utf8mb4 / utf8mb4_bin and MYSQL_OPT_RECONNECT.
+// mysql_init + mysql_real_connect to host 'where', schema DBNAME, user/password
+// from getDBUser()/getDBPassword() (envConfig.h - LP_DB_USER/LP_DB_PASSWORD).
+// Sets utf8mb4 / utf8mb4_bin and MYSQL_OPT_RECONNECT.
 // alreadyConnected is in/out: true on entry skips the connect; set true on
-// success.  Returns 0 or -1.  Credentials are hardcoded.
+// success.  Returns 0 or -1.
 int initializeDatabaseHandle(MYSQL& mysql, const wchar_t* where, bool& alreadyConnected)
 {
 	LFS
@@ -362,7 +373,7 @@ int initializeDatabaseHandle(MYSQL& mysql, const wchar_t* where, bool& alreadyCo
 	bool keep_connect = true;
 	mysql_options(&mysql, MYSQL_OPT_RECONNECT, &keep_connect);
 	string sqlStr;
-	if (alreadyConnected = (mysql_real_connect(&mysql, wTM(where, sqlStr), "root", "byron0", DBNAME, 0, NULL, 0) != NULL))
+	if (alreadyConnected = (mysql_real_connect(&mysql, wTM(where, sqlStr), getDBUser().c_str(), getDBPassword().c_str(), DBNAME, 0, NULL, 0) != NULL))
 	{
 		myquery(&mysql, L"SET NAMES 'utf8mb4' COLLATE 'utf8mb4_bin'");
 		mysql_options(&mysql, MYSQL_OPT_RECONNECT, &keep_connect);
@@ -386,6 +397,7 @@ void cSource::updateSourceStatistics(int numSentences, int matchedSentences, int
 		numSentences, matchedSentences, numWords, numUnknown, numUnmatched, numOvermatched, numQuotations, quotationExceptions,
 		numTicks, numPatternMatches, sourceId);
 	myquery(&mysql, qt);
+	unlockTables(mysql);
 }
 
 // Write sizeInBytes / numWordRelations.  Same missing-UNLOCK as above.
@@ -396,6 +408,7 @@ void cSource::updateSourceStatistics2(int sizeInBytes, int numWordRelations)
 	if (!myquery(&mysql, L"LOCK TABLES sources WRITE")) return;
 	_snwprintf(qt, QUERY_BUFFER_LEN, L"UPDATE sources SET sizeInBytes=%d, numWordRelations=%d where id=%d", sizeInBytes, numWordRelations, sourceId);
 	myquery(&mysql, qt);
+	unlockTables(mysql);
 }
 
 // Write numMultiWordRelations.  Same missing-UNLOCK as above.
@@ -406,14 +419,16 @@ void cSource::updateSourceStatistics3(int numMultiWordRelations)
 	if (!myquery(&mysql, L"LOCK TABLES sources WRITE")) return;
 	_snwprintf(qt, QUERY_BUFFER_LEN, L"UPDATE sources SET numMultiWordRelations=%d where id=%d", numMultiWordRelations, sourceId);
 	myquery(&mysql, qt);
+	unlockTables(mysql);
 }
 
 // Load objects.common=1 (multi-source / location-like) and their
 // objectWordMap rows, appending cObject / cWordMatch entries and filling
 // relatedObjectsMap.  wordMap[wordId] must be valid for every mapped word.
 // BIT columns are tested as sqlrow[n][0]==1 (the binary 1 MySQL returns for
-// BIT, not '1').  objects[currentId] treats the DB objectId as a vector
-// index - non-dense ids are out-of-range.  Returns 0 or -1.
+// BIT, not '1').  objects.id is not dense/vector-shaped, so a local
+// dbIdToIndex map translates each objectWordMap.objectId to its offset in
+// objects[] instead of indexing objects[] with the raw DB id.  Returns 0 or -1.
 int cSource::readMultiSourceObjects(tIWMM* wordMap, int numWords)
 {
 	LFS
@@ -421,13 +436,19 @@ int cSource::readMultiSourceObjects(tIWMM* wordMap, int numWords)
 	MYSQL_RES* result = NULL;
 	if (!myquery(&mysql, L"select id, objectClass, nickName, ownerObject, firstSpeakerGroup, male, female, neuter, plural FROM objects where common=1", result)) return -1;
 	MYSQL_ROW sqlrow;
+	unordered_map <int, int> dbIdToIndex; // objects.id -> offset into objects[]
 	while ((sqlrow = mysql_fetch_row(result)) != NULL)
 	{
 		cName nm;
 		nm.nickName = atoi(sqlrow[2]);
-		cObject o((OC)atoi(sqlrow[1]), nm, -1, -1, -1, -1, atoi(sqlrow[3]), sqlrow[4][0] == 1, sqlrow[5][0] == 1, sqlrow[6][0] == 1, sqlrow[7][0] == 1, false);
+		// column order is id[0],objectClass[1],nickName[2],ownerObject[3],firstSpeakerGroup[4],male[5],female[6],neuter[7],plural[8];
+		// the four trailing BIT columns (male/female/neuter/plural) map onto the constructor's m/f/n/pl args, and
+		// firstSpeakerGroup (not a bool) is set separately via setFirstSpeakerGroup - it is not one of the four BITs.
+		cObject o((OC)atoi(sqlrow[1]), nm, -1, -1, -1, -1, atoi(sqlrow[3]), sqlrow[5][0] == 1, sqlrow[6][0] == 1, sqlrow[7][0] == 1, sqlrow[8][0] == 1, false);
+		o.setFirstSpeakerGroup(atoi(sqlrow[4]));
 		o.dbIndex = atoi(sqlrow[0]);
 		o.multiSource = true;
+		dbIdToIndex[o.dbIndex] = (int)objects.size();
 		objects.push_back(o);
 	}
 	mysql_free_result(result);
@@ -435,8 +456,12 @@ int cSource::readMultiSourceObjects(tIWMM* wordMap, int numWords)
 	int previousId = -1;
 	while ((sqlrow = mysql_fetch_row(result)) != NULL)
 	{
-		int currentId = atoi(sqlrow[0]);
-		if (previousId == (int)currentId)
+		int dbObjectId = atoi(sqlrow[0]);
+		unordered_map <int, int>::iterator dbi = dbIdToIndex.find(dbObjectId);
+		if (dbi == dbIdToIndex.end())
+			lplog(LOG_FATAL_ERROR, L"objectWordMap references common object id %d not present in objects.", dbObjectId);
+		int currentId = dbi->second;
+		if (previousId == currentId)
 		{
 			objects[previousId].end++;
 			objects[previousId].originalLocation++;
@@ -462,6 +487,9 @@ int cSource::readMultiSourceObjects(tIWMM* wordMap, int numWords)
 			case cName::ANY: objects[currentId].name.any = wordMap[atoi(sqlrow[1])]; break;
 			}
 		}
+		previousId = currentId; // was never advanced before this fix, so every row after the first for a
+			// multi-word object took the "else" branch above and reset begin/end/originalLocation/
+			// firstLocation instead of extending the span.
 	}
 	mysql_free_result(result);
 	if (logDatabaseDetails)
@@ -804,8 +832,8 @@ void cWord::readForms(MYSQL& mysql, wchar_t* qt)
 }
 
 // True if the cwd wordFormCache file is newer than MAX(ts) of words and
-// wordForms.  The first SELECT's MYSQL_RES is overwritten by the second
-// without a free (leak).  Returns false if the file is missing or older.
+// wordForms.  The first SELECT's MYSQL_RES is freed before the second SELECT
+// reuses the same local.  Returns false if the file is missing or older.
 bool cWord::isWordFormCacheValid(MYSQL& mysql)
 {
 	HANDLE hFile = CreateFile(L"wordFormCache", GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
@@ -842,6 +870,8 @@ bool cWord::isWordFormCacheValid(MYSQL& mysql)
 		if (tableTimestamp > wordFormCacheLastWriteTime)
 			wordCacheValid = false;
 	}
+	mysql_free_result(result); // free the first SELECT's result before result is overwritten by the second
+	result = NULL;
 	if (!myquery(&mysql, L"SELECT UNIX_TIMESTAMP(MAX(TS)) FROM wordforms", result))
 		return false;
 	if ((sqlrow = mysql_fetch_row(result)) != NULL)
@@ -1113,7 +1143,8 @@ int cWord::readWordsFromDB(MYSQL& mysql, bool generateFormStatisticsFlag, bool p
 }
 
 // True if openlibraryinternetarchivebooksdump has a row whose title equals
-// proposedTitle.  Title is interpolated in double quotes with no escape.
+// proposedTitle.  Title is escaped (escaped()/escapeStr()) before being
+// interpolated into the double-quoted literal.
 bool isBookTitle(MYSQL& mysql, wstring proposedTitle)
 {
 	if (!myquery(&mysql, L"LOCK TABLES openlibraryinternetarchivebooksdump READ"))
@@ -1121,7 +1152,7 @@ bool isBookTitle(MYSQL& mysql, wstring proposedTitle)
 	MYSQL_RES* result;
 	_int64 numResults = 0;
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"select 1 from openlibraryinternetarchivebooksdump where title = \"%s\"", proposedTitle.c_str());
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select 1 from openlibraryinternetarchivebooksdump where title = \"%s\"", escaped(proposedTitle).c_str());
 	if (myquery(&mysql, qt, result))
 	{
 		numResults = mysql_num_rows(result);
@@ -1135,7 +1166,7 @@ bool isBookTitle(MYSQL& mysql, wstring proposedTitle)
 
 // Scan wiktionarynouns definitions containing "gent noun of" or "one who "
 // and fill agentiveNominalizations[noun] with the extracted verb.
-// Does not mysql_free_result (leak).  Returns 0 or -1.
+// Returns 0 or -1.
 int readWikiNominalizations(MYSQL& mysql, unordered_map <wstring, set < wstring > >& agentiveNominalizations)
 {
 	LFS
@@ -1173,6 +1204,7 @@ int readWikiNominalizations(MYSQL& mysql, unordered_map <wstring, set < wstring 
 			lplog(LOG_WHERE, L"WK %s %s", noun.c_str(), verb.c_str());
 		}
 	}
+	mysql_free_result(result);
 	return 0;
 }
 

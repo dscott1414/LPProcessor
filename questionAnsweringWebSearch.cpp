@@ -6,7 +6,7 @@
 		When the novel / DBpedia / Wikipedia pass finds no (or too few) answers,
 		cQuestionAnswering asks this TU to (1) assemble query strings from the
 		question's subject + verb + object + prep, (2) hit Google Custom Search or
-		Bing Web Search v7 (results cached under WEBSEARCH_CACHEDIR\webSearchCache),
+		Bing Web Search v7 (results cached under getWebSearchCacheDir()\webSearchCache),
 		(3) parse the JSON with yajl, (4) write snippets to disk and optionally
 		download the full page, then (5) parse those texts as WEB_SEARCH_SOURCE_TYPE
 		child sources and score them with analyzeQuestionFromSource(). Parallel mode
@@ -27,22 +27,17 @@
 		- cSource::appendObject/appendVerb/appendWord() - combinatorial query builder
 
 	Key data structures / globals:
-		- webSearchKey / BINGAccountKey / cseContext - hardcoded API credentials
+		- getGoogleCSEKey() / getGoogleCSEContext() / getBingSubscriptionKey()
+			(envConfig.h) - API credentials, read from the environment
 		- googleBaseWebSearchAddress / BINGBaseWebSearchAddress - REST endpoints
 		- cQuestionAnswering::cSearchSource - one snippet or full-page parse request
 
 	Dependencies:
 		cInternet::getWebPath (internet.h), yajl_tree, MySQL (generateParseRequestSources
-		in another TU), WEBSEARCH_CACHEDIR (M:\caches), WinHTTP.
+		in another TU), getWebSearchCacheDir() (envConfig.h; LP_WEBSEARCH_CACHE_DIR env
+		var, falling back to the general.h WEBSEARCH_CACHEDIR compile-time default), WinHTTP.
 
 	Notes / gotchas:
-		- API keys are committed in the clear (Google CSE + Bing subscription).
-		- extract*WebSites never call yajl_tree_free; every successful parse leaks.
-		- jsonBuffer[0] is read before the empty-string check.
-		- scrapeWebSite() is unfinished (category-3 tags do nothing; buffer is never
-		  written back) and has no callers.
-		- Parallel Bing pass in answerQuestionInSourceProximityMapWebSearch()
-		  currently passes useGoogleSearch=true (copy-paste).
 		- Snippet paths truncate at MAX_PATH-28 on a MAX_LEN (2048) buffer.
 */
 #include <windows.h>
@@ -162,17 +157,14 @@ std::string base64_encode(unsigned char const* bytes_to_encode, unsigned int in_
 // https://code.google.com/apis/console-help/#UnderstandingTrafficControls
 
 // example REST API using custom search engine:
-// this uses the key assigned to dscott's account
-// using the custom search engine (cx) name created which ignores all information coming from wikipedia (since we already have freebase and dbPedia to reference directly)
+// the custom search engine (cx) ignores all information coming from wikipedia
+// (since we already have freebase and dbPedia to reference directly)
 // with the words WITH QUOTES "Paul Krugman writes for"
-// https://www.googleapis.com/customsearch/v1?key=AIzaSyDOCHy1bm-46kJkgV2hqPjFJ6Ce8FfR_AE&cx=006746333365901280215:2cxb1obqj6u&q=%22Paul+Krugman+writes+for%22
-// Live credentials, not placeholders � Google CSE key + Bing v7 subscription
-// plus the cx of a CSE that excludes Wikipedia (already searched via DBpedia).
+// https://www.googleapis.com/customsearch/v1?key=<LP_GOOGLE_CSE_KEY>&cx=<LP_GOOGLE_CSE_CX>&q=%22Paul+Krugman+writes+for%22
+// Credentials are read from the environment (envConfig.h getGoogleCSEKey() /
+// getGoogleCSEContext() / getBingSubscriptionKey()), not stored here.
 wstring googleBaseWebSearchAddress = L"https://www.googleapis.com/customsearch/v1";
 wstring BINGBaseWebSearchAddress = L"https://api.cognitive.microsoft.com/bing/v7.0/search";
-wstring webSearchKey = L"AIzaSyDOCHy1bm-46kJkgV2hqPjFJ6Ce8FfR_AE";
-wstring BINGAccountKey = L"345820954c834fa08a227260862bbfe5";
-wstring cseContext = L"006746333365901280215:2cxb1obqj6u";
 
 void encodeURL(wstring winput, wstring& wencodedURL);
 int flushString(wstring& buffer, wchar_t* path);
@@ -188,7 +180,6 @@ $skip	Specifies the offset requested for the starting point of results returned.
 // the query is wrapped in single quotes). index>1 becomes &offset=. Results are
 // cached by cInternet::getWebPath under webSearchCache. Returns getWebPath's
 // errCode, or -1 if Bing replies with the "Query is not of type String" body.
-// numWebSitesAskedFor is ignored except to append a constant &answerCount=10.
 int getBINGSearchJSON(int where, wstring object, wstring& buffer, wstring& filePathOut, int numWebSitesAskedFor, int index)
 {
 	LFS
@@ -214,9 +205,9 @@ int getBINGSearchJSON(int where, wstring object, wstring& buffer, wstring& fileP
 	}
 	if (numWebSitesAskedFor >= 0)
 	{
-		webAddress += L"&answerCount=10";
+		webAddress += L"&answerCount=" + itos(numWebSitesAskedFor, numWebSitesAskedForStr);
 	}
-	wstring headers = L"Ocp-Apim-Subscription-Key:" + BINGAccountKey;
+	wstring headers = L"Ocp-Apim-Subscription-Key:" + getBingSubscriptionKey();
 	int errCode = cInternet::getWebPath(where, webAddress, buffer, object + L"_BING", L"webSearchCache", filePathOut, headers, index, false, true);
 	lplog(LOG_WEBSEARCH | LOG_WHERE | LOG_ERROR, L"searching BING: %s [%s] searchIndex=%d [%s]", object.c_str(), filePathOut.c_str(), index, webAddress.c_str());
 	if (buffer == L"Parameter: Query is not of type String")
@@ -228,7 +219,7 @@ int getBINGSearchJSON(int where, wstring object, wstring& buffer, wstring& fileP
 }
 
 // GET Google Custom Search for 'object' (spaces first turned into '+', then URL-
-// encoded). index>1 becomes &start=. The key and cx are the globals above.
+// encoded). index>1 becomes &start=. The key and cx come from envConfig.h.
 // Cached under webSearchCache. Returns getWebPath's errCode.
 // cache google searches since this is faster and we are paying for them
 // input object is not encoded, but should include quotes when needed.
@@ -238,14 +229,14 @@ int getGoogleSearchJSON(int where, wstring object, wstring& buffer, wstring& fil
 		wstring uobject, numWebSitesAskedForStr;
 	replace(object.begin(), object.end(), L' ', L'+');
 	encodeURL(object, uobject);
-	// https://www.googleapis.com/customsearch/v1?key=AIzaSyDOCHy1bm-46kJkgV2hqPjFJ6Ce8FfR_AE&cx=006746333365901280215:2cxb1obqj6u&q=%22Paul+Krugman+writes+for%22
+	// https://www.googleapis.com/customsearch/v1?key=<LP_GOOGLE_CSE_KEY>&cx=<LP_GOOGLE_CSE_CX>&q=%22Paul+Krugman+writes+for%22
 	wstring start;
 	if (index > 1)
 	{
 		itos(index, start);
 		start = L"&start=" + start;
 	}
-	wstring webAddress = googleBaseWebSearchAddress + L"?key=" + webSearchKey + start + L"&cx=" + cseContext + L"&q=" + uobject + L"&num=" + itos(numWebSitesAskedFor, numWebSitesAskedForStr);
+	wstring webAddress = googleBaseWebSearchAddress + L"?key=" + getGoogleCSEKey() + start + L"&cx=" + getGoogleCSEContext() + L"&q=" + uobject + L"&num=" + itos(numWebSitesAskedFor, numWebSitesAskedForStr);
 	wstring headers;
 	int errCode = cInternet::getWebPath(where, webAddress, buffer, object, L"webSearchCache", filePathOut, headers, index, false, true);
 	lplog(LOG_WEBSEARCH | LOG_WHERE | LOG_ERROR, L"searching Google: %s [%s] searchIndex=%d [%s]", object.c_str(), filePathOut.c_str(), index, webAddress.c_str());
@@ -540,7 +531,7 @@ wstring cSource::getTense(int where, wstring candidate, int preferredVerb)
 // Passive (and not "by") becomes was/will+be/is+being + verb. Future becomes
 // will+bare. A following object-less prep/adverb is glued on. Infinitive
 // complements duplicate the current strings with a "to+V" / past-tense variant.
-// Reads m[where+1] with no bounds check. Always returns 0.
+// Always returns 0.
 // possibly adjust tense
 int cSource::appendVerb(vector <wstring>& objectStrings, int where)
 {
@@ -588,8 +579,7 @@ int cSource::appendVerb(vector <wstring>& objectStrings, int where)
 			candidate = getTense(where, candidate, preferredVerb);
 		}
 	}
-	wstring zcandidate = m[where + 1].word->first;
-	if (m[where + 1].queryForm(prepositionForm) >= 0 &&
+	if (where + 1 < (int)m.size() && m[where + 1].queryForm(prepositionForm) >= 0 &&
 		(m[where + 1].queryWinnerForm(prepositionForm) >= 0 || m[where + 1].queryWinnerForm(adverbForm) >= 0) &&
 		m[where + 1].getRelObject() < 0)
 		candidate += L"+" + m[where + 1].word->first;
@@ -635,12 +625,14 @@ int cSource::appendWord(vector <wstring>& objectStrings, int where)
 }
 
 // Fold a URL into a cache-file stem: strip http(s):// and www., map '/' to '_',
-// and hex-escape any other non-alnum except '.'. Empty webSiteURL dereferences
-// begin()==end() (UB). Output is appended onto epath (caller must start empty).
+// and hex-escape any other non-alnum except '.'. Output is appended onto epath
+// (caller must start empty).
 void hashWebSiteURL(wstring webSiteURL, wstring& epath)
 {
 	LFS
-		wchar_t tmp[8];
+		if (webSiteURL.empty())
+			return;
+	wchar_t tmp[8];
 	wstring::iterator wsi = webSiteURL.begin();
 	const wchar_t* ba = L"http://";
 	if (!wcsncmp(ba, &(*wsi), wcslen(ba)))
@@ -662,88 +654,6 @@ void hashWebSiteURL(wstring webSiteURL, wstring& epath)
 		}
 		else
 			epath += *wsi;
-	}
-}
-
-const wchar_t* StructureOfHtmlDocument[] = { L"html",L"head",L"body",L"div",L"span",NULL };
-const wchar_t* CreatingMetaTags[] = { L"DOCTYPE",L"title",L"link",L"meta",L"style",NULL };
-const wchar_t* TextLinkInHtml[] = { L"p",L"h1-h6",L"strong",L"em",L"abbr",L"acronym",L"address",L"bdo",L"blockquote",L"cite",L"q",L"code",L"ins",L"del",L"dfn",L"kbd",L"pre",L"samp",L"var",L"br",NULL };
-const wchar_t* ImagesAndObjects[] = { L"img",L"area",L"map",L"object",L"param",NULL };
-const wchar_t* CreatingWebForms[] = { L"form",L"input",L"textarea",L"select",L"option",L"optgroup",L"button",L"label",L"fieldset",L"legend",NULL };
-const wchar_t* TablesTagInHtml[] = { L"table",L"tr",L"td",L"th",L"tbody",L"thead",L"tfoot",L"col",L"colgroup",L"caption",NULL };
-const wchar_t* OrderedUnorderedLists[] = { L"ul",L"ol",L"li",L"dl",L"dt",L"dd",NULL };
-const wchar_t* Scripting[] = { L"script",L"noscript",NULL };
-
-// Linear scan of a NULL-terminated tag-name table. Used only by scrapeWebSite.
-bool inCategory(const wchar_t* tagList[], wstring tag)
-{
-	LFS
-		for (int tli = 0; tagList[tli]; tli++)
-			if (tag == tagList[tli])
-				return true;
-	return false;
-}
-
-// Intended HTML-to-text reduction for downloaded pages (category 1 = break
-// blob, 2 = strip tag, 3 = drop element). Category 3 is an empty stub, the
-// accumulated textBlobs are never written back, and nothing calls this.
-void scrapeWebSite(wstring& webSiteBuffer)
-{
-	LFS
-		// category 1. remove all things between '<...>' and then treat everything between instance of these as separate texts.
-		// category 2. remove all things between '<...>' and skip it as though it wasn't there.
-		// category 3. remove all things between '<...>' and if it isn't closed by />, seek the next tag <...> and if it matches the closing tag, remove everything between the start and the closing tag.
-		// remove all separate texts without at least one period.
-
-		// Structure Of Html Document - treat as category 1
-		//     html | head | body | div | span
-		// Creating Meta Tags - treat as category 1
-		//     DOCTYPE | title | link | meta | style 
-		// Text Link In Html - treat as category 2
-		//     p | h1-h6 | strong | em | abbr | acronym | address | bdo |
-		//     blockquote | cite | q | code | ins | del | dfn | kbd | pre | samp | var | br
-		// Images and Objects - category 1
-		//     img | area | map | object | param
-		// Creating Web Forms - treat as category 1
-		//     form | input | textarea | select | option | optgroup | button | compactLabel | fieldset | legend	
-		// Tables Tag In Html - treat as category 3
-		//     table | tr | td | th | tbody | thead | tfoot | col | colgroup | caption
-		// Ordered Unordered Lists - treat as category 2
-		//     ul | ol | li | dl | dt | dd
-		// Scripting - treat as category 3
-		//     script | noscript
-		wstring currentTextBlob;
-	vector <wstring> textBlobs;
-	for (unsigned int I = 0; I < webSiteBuffer.size(); I++)
-	{
-		if (webSiteBuffer[I] == L'<')
-		{
-			wstring tag;
-			if (webSiteBuffer[I + 1] == L'/') I++; // skip closing
-			for (unsigned int J = I + 1; J < webSiteBuffer.size() && webSiteBuffer[J] != L' '; J++)
-				tag += webSiteBuffer[J];
-			// category 1
-			if (inCategory(StructureOfHtmlDocument, tag) || inCategory(CreatingMetaTags, tag) || inCategory(ImagesAndObjects, tag) || inCategory(CreatingWebForms, tag))
-			{
-				if (currentTextBlob.length() > 0)
-					textBlobs.push_back(currentTextBlob);
-				currentTextBlob.clear();
-				for (; I < webSiteBuffer.size() && webSiteBuffer[I] != L'>'; I++);
-				continue;
-			}
-			// category 2
-			else if (inCategory(TextLinkInHtml, tag) || inCategory(OrderedUnorderedLists, tag))
-			{
-				for (; I < webSiteBuffer.size() && webSiteBuffer[I] != L'>'; I++);
-				continue;
-			}
-			// category 3
-			else if (inCategory(TablesTagInHtml, tag) || inCategory(Scripting, tag))
-			{
-			}
-		}
-		else
-			currentTextBlob += webSiteBuffer[I];
 	}
 }
 
@@ -876,13 +786,14 @@ extern "C"
 */
 // Walk a Google Custom Search JSON document (yajl) and push items[].link /
 // items[].snippet pairs. Returns -1 on empty / parse failure, 0 otherwise.
-// Reads jsonBuffer[0] before the empty check. The yajl tree is never freed.
 int extractGoogleWebSites(wstring jsonBuffer, vector <wstring>& webSites, vector <wstring>& snippets)
 {
 	LFS
 		/* null plug buffers */
 		char errbuf[1024];
 	errbuf[0] = 0;
+	if (jsonBuffer.empty())
+		return -1;
 	if (iswspace(jsonBuffer[0])) jsonBuffer.erase(jsonBuffer.begin());
 	if (!jsonBuffer.length())
 		return -1;
@@ -891,7 +802,7 @@ int extractGoogleWebSites(wstring jsonBuffer, vector <wstring>& webSites, vector
 	yajl_val node = yajl_tree_parse((const char*)fileData.c_str(), errbuf, sizeof(errbuf));
 	/* parse error handling */
 	if (node == NULL) {
-		lplog(LOG_ERROR, L"FreeBase parse error (1):%s\n %S", jsonBuffer.c_str(), errbuf);
+		lplog(LOG_ERROR, L"Google Custom Search parse error (1):%s\n %S", jsonBuffer.c_str(), errbuf);
 		return -1;
 	}
 	/* ... and extract a nested value from the config file */
@@ -925,6 +836,7 @@ int extractGoogleWebSites(wstring jsonBuffer, vector <wstring>& webSites, vector
 			}
 		}
 	}
+	yajl_tree_free(node);
 	return 0;
 }
 
@@ -958,13 +870,14 @@ int extractGoogleWebSites(wstring jsonBuffer, vector <wstring>& webSites, vector
 		return 0;
 */
 // Walk a Bing v7 JSON document and push webPages.value[].url / .snippet pairs.
-// Same empty-buffer and yajl_tree_free issues as extractGoogleWebSites.
 int extractBINGWebSites(wstring jsonBuffer, vector <wstring>& webSites, vector <wstring>& snippets)
 {
 	LFS
 		/* null plug buffers */
 		char errbuf[1024];
 	errbuf[0] = 0;
+	if (jsonBuffer.empty())
+		return -1;
 	if (iswspace(jsonBuffer[0])) jsonBuffer.erase(jsonBuffer.begin());
 	if (!jsonBuffer.length())
 		return -1;
@@ -1007,6 +920,7 @@ int extractBINGWebSites(wstring jsonBuffer, vector <wstring>& webSites, vector <
 			}
 		}
 	}
+	yajl_tree_free(node);
 	return 0;
 }
 
@@ -1186,10 +1100,10 @@ int cQuestionAnswering::accumulateParseRequests(cSyntacticRelationGroup* parentS
 			if (!ssi->empty())
 			{
 				wchar_t path[1024];
-				int pathlen = _snwprintf(path, MAX_LEN, L"%s\\webSearchCache", WEBSEARCH_CACHEDIR) + 1;
+				int pathlen = _snwprintf(path, _countof(path), L"%s\\webSearchCache", getWebSearchCacheDir().c_str()) + 1;
 				if (_wmkdir(path) < 0 && errno == ENOENT)
 					lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
-				_snwprintf(path, MAX_LEN, L"%s\\webSearchCache\\_%s", WEBSEARCH_CACHEDIR, epath.c_str());
+				_snwprintf(path, _countof(path), L"%s\\webSearchCache\\_%s", getWebSearchCacheDir().c_str(), epath.c_str());
 				convertIllegalChars(path + pathlen);
 				distributeToSubDirectories(path, pathlen, true);
 				path[MAX_PATH - 28] = 0; // extensions

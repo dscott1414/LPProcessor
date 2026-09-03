@@ -34,7 +34,6 @@
 		  real entry is at index 1.
 		- nextByPatternEnd < 0 is a circular-list back-pointer (-offset), not
 		  "end of list" (-1 is the empty-head sentinel).
-		- read(IOHANDLE) format string omits the count argument.
 */
 #include <stdio.h>
 #include <string.h>
@@ -127,9 +126,8 @@ bool cPatternElementMatchArray::WriteFile(HANDLE file)
 	return true;
 }
 
-// Read count then content from a POSIX fd.  Rejects count>1e6.  The error log
-// "Illegal count of %d ..." is missing the count argument.  A zero-count PEMA
-// still calls tmalloc(0); a NULL return is treated as failure.
+// Read count then content from a POSIX fd.  Rejects count>1e6.  A zero-count
+// PEMA still calls tmalloc(0); a NULL return is treated as failure.
 bool cPatternElementMatchArray::read(IOHANDLE file)
 {
 	LFS
@@ -194,8 +192,8 @@ bool cPatternElementMatchArray::read(char* buffer, int& where, unsigned int limi
 	return true;
 }
 
-// Byte-compare content[0..count).  `other` is taken by value (full copy).
-bool cPatternElementMatchArray::operator==(const cPatternElementMatchArray other) const
+// Byte-compare content[0..count).
+bool cPatternElementMatchArray::operator==(const cPatternElementMatchArray &other) const
 {
 	LFS
 		if (count != other.count) return false;
@@ -224,8 +222,8 @@ cPatternElementMatchArray& cPatternElementMatchArray::operator=(const cPatternEl
 	return *this;
 }
 
-// Inverse of operator==.  Also takes `other` by value.
-bool cPatternElementMatchArray::operator!=(const cPatternElementMatchArray other) const
+// Inverse of operator==.
+bool cPatternElementMatchArray::operator!=(const cPatternElementMatchArray &other) const
 {
 	LFS
 		if (count != other.count) return true;

@@ -24,7 +24,6 @@
 		- checkFull() - flush an accumulating INSERT/IN list when it nears full.
 		- escapeStr() / encodeEscape() - SQL literal escaping.
 		- cWord::acquireLock() / releaseLock() - cross-process advisory DB lock.
-		- getTimeStamp() - local time as a wide string (static buffer).
 		- cWord::generateFormStatistics() - log per-form word counts.
 
 	Key data structures / globals:
@@ -42,9 +41,10 @@
 		- lplog(LOG_FATAL_ERROR,...) does not return: logstring() exits EXIT_FAILURE.  So a
 			failed statement with allowFailure==false terminates the process, and code
 			written after such a call is effectively unreachable.
-		- The SRWLOCK is released before mysql_real_query() runs, while the pointer
-			into the shared buffer is still in use - see the report; single-threaded
-			today, but the lock discipline is not actually complete.
+		- mySQLQueryBufferSRWLock is held across mysql_real_query() itself (not just the
+			wide->UTF-8 conversion), because the query pointer is into the shared
+			process-wide sqlQueryBuffer: releasing before the query runs would let a
+			concurrent caller grow/realloc that buffer out from under it.
 		- Escaping here is hand-rolled and single-quote oriented; callers that quote
 			values with double quotes are not covered by escapeStr().
 		- LFS is the profiling macro from profile.h and expands to nothing unless
@@ -91,11 +91,15 @@ bool myquery(MYSQL* mysql, const wchar_t* q, bool allowFailure)
 		int seconds = clock(), queryLength;
 	AcquireSRWLockExclusive(&mySQLQueryBufferSRWLock);
 	// this is the 4-argument overload below, not the Win32 API of the same name; it may
-	// grow/replace sqlQueryBuffer, which is why the lock is held here.  Note that the
-	// returned pointer is still used (below) after the lock has been released.
+	// grow/replace sqlQueryBuffer.  The lock is held across mysql_real_query() itself (not
+	// released right after the conversion) because buffer points into that same
+	// process-wide sqlQueryBuffer: releasing early would let a concurrent caller
+	// grow/realloc it out from under this pointer while mysql_real_query() is still
+	// reading it.
 	void* buffer = WideCharToMultiByte(q, queryLength, sqlQueryBuffer, sqlQueryBufSize);
+	int queryFailed = mysql_real_query(mysql, (char*)buffer, queryLength) != 0;
 	ReleaseSRWLockExclusive(&mySQLQueryBufferSRWLock);
-	if (mysql_real_query(mysql, (char*)buffer, queryLength) != 0)
+	if (queryFailed)
 	{
 		//if (wcslen(q)>QUERY_BUFFER_LEN) q[QUERY_BUFFER_LEN]=0;
 		lplog(LOG_ERROR, L"mysql_real_query failed - %S (len=%d): ", mysql_error(mysql), queryLength);
@@ -188,27 +192,6 @@ void* WideCharToMultiByte(const wchar_t* q, int& queryLength, void*& buffer, uns
 		}
 	}
 	return buffer;
-}
-
-wchar_t* getTimeStamp(void)
-{
-	LFS
-		static wchar_t ts[32]; // not used
-	struct tm* newtime;
-	time_t aclock;
-	time(&aclock);   // Get time in seconds
-	newtime = localtime(&aclock);   // Convert time to struct tm form
-	if (newtime)
-	{
-		wchar_t* lt = _wasctime(newtime);
-		if (lt)
-		{
-			/* Print local time as a wstring */
-			wcscpy(ts, lt);
-			ts[wcslen(ts) - 1] = 0;
-		}
-	}
-	return ts;
 }
 
 /*

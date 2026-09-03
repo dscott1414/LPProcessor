@@ -5,10 +5,8 @@ import java.util.Map;
 import java.util.Vector;
 
 import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
-
-import com.sun.org.apache.xerces.internal.dom.DeferredCommentImpl;
-import com.sun.org.apache.xerces.internal.dom.DeferredTextImpl;
 
 public class VerbMember {
 	private String name;
@@ -42,9 +40,18 @@ public class VerbMember {
 			}
 		}
 		if (childNodes != null && childNodes.getLength() > 0) {
+			// (fixed) used to exclude text/comment nodes by checking
+			// `instanceof` against internal JDK impl classes
+			// (com.sun.org.apache.xerces.internal.dom.Deferred{Text,Comment}Impl),
+			// which are not part of the public API and are inaccessible
+			// under the JDK 9+ module system (this file fails to compile
+			// at all on a modern JDK as a result). Checking
+			// getNodeType()==ELEMENT_NODE is the portable, standard DOM
+			// way to ask "is this actually an Element", and is strictly
+			// more correct too (it also excludes CDATA/PI/etc. nodes that
+			// the old instanceof pair didn't account for).
 			for (int i = 0; i < childNodes.getLength(); i++) {
-				if (!(childNodes.item(i) instanceof DeferredTextImpl)
-						&& !(childNodes.item(i) instanceof DeferredCommentImpl)) {
+				if (childNodes.item(i).getNodeType() == Node.ELEMENT_NODE) {
 					member = ((Element) childNodes.item(i)).getNodeName();
 					if (Arrays.binarySearch(vbClassTypesArray, member) >= 0)
 						kinds.add(member);

@@ -20,17 +20,19 @@
 		- Main() - RDF walk, filter, INSERT, move
 
 	Dependencies:
-		MySQL localhost lp / root / byron0; Gutenberg RDF namespaces
-		(pgterms, dcterms, marcrel, dcam). Hardcoded F: and M: paths.
+		MySQL lp @ LP_DB_HOST (default localhost) / LP_DB_USER (default
+		root) / LP_DB_PASSWORD (required, no default - see
+		GetConnectionString()); Gutenberg RDF namespaces (pgterms,
+		dcterms, marcrel, dcam). Hardcoded F: and M: paths.
 
 	Notes / gotchas:
-		Hardcoded DB password. INSERT concatenates etext/creator/title/
-		dateIssued without parameters (SQL injection / quote breakage).
-		title is escaped for ' only after filesystem sanitization, then
-		used both in SQL and in the destination path (MoveAndRename gets
-		the already-escaped title). CheckExistingSources is invoked first
-		and updates path via concatenated SQL. test==false performs real
-		moves/inserts.
+		DB credentials come from LP_DB_HOST/LP_DB_USER/LP_DB_PASSWORD
+		environment variables (same names as the core C++ engine's
+		envConfig.h); LP_DB_PASSWORD has no safe default and throws if
+		unset. INSERT and UPDATE statements use MySqlParameter binding
+		rather than string concatenation. CheckExistingSources is invoked
+		first and updates path via a parameterized UPDATE. test==false
+		performs real moves/inserts.
 */
 using System;
 using System.Collections.Generic;
@@ -58,6 +60,23 @@ namespace processGutenbergRDFtoSQL
         static readonly XNamespace pgterms = "http://www.gutenberg.org/2009/pgterms/";
         static readonly XNamespace dcam = "http://purl.org/dc/dcam/";
         static readonly XNamespace marcrel = "http://id.loc.gov/vocabulary/relators/";
+
+        // Builds the MySQL connection string from environment variables so no
+        // credentials are hardcoded in source. LP_DB_HOST defaults to
+        // "localhost" and LP_DB_USER defaults to "root" (safe defaults for a
+        // local dev DB); LP_DB_PASSWORD has no safe default and must be set,
+        // matching the core C++ engine's envConfig.h fatal-on-missing-credential
+        // behavior.
+        static string GetConnectionString()
+        {
+            string host = Environment.GetEnvironmentVariable("LP_DB_HOST") ?? "localhost";
+            string user = Environment.GetEnvironmentVariable("LP_DB_USER") ?? "root";
+            string password = Environment.GetEnvironmentVariable("LP_DB_PASSWORD");
+            if (string.IsNullOrEmpty(password))
+                throw new InvalidOperationException("LP_DB_PASSWORD environment variable must be set (no default password is used).");
+            return string.Format("Server={0}; database={1}; UID={2}; password={3}", host, "lp", user, password);
+        }
+
         /// <summary>
         /// Returns a sequence of <see cref="XElement">XElements</see> corresponding to the currently
         /// positioned element and all following sibling elements which match the specified name.
@@ -78,10 +97,10 @@ namespace processGutenbergRDFtoSQL
         }
 
         // Open lp.sources and return the set of non-null etext values.
-        // Connection string embeds root/byron0. Caller owns no live reader.
+        // Connection string built from LP_DB_* env vars. Caller owns no live reader.
         public static HashSet<string> GetExistingSources()
         {
-            MySqlConnection queryConnection = new MySqlConnection(string.Format("Server=localhost; database={0}; UID={1}; password={2}", "lp", "root", "byron0"));
+            MySqlConnection queryConnection = new MySqlConnection(GetConnectionString());
             queryConnection.Open();
             var querycmd = new MySqlCommand("select etext from sources", queryConnection);
             var etextReader = querycmd.ExecuteReader();
@@ -103,7 +122,7 @@ namespace processGutenbergRDFtoSQL
         {
             int incorrectPaths = 0,correctPaths=0,correctedPaths=0;
             List<string> etexts=new List<string>(), authors= new List<string>(), titles= new List<string>(), paths= new List<string>();
-            MySqlConnection queryConnection = new MySqlConnection(string.Format("Server=localhost; database={0}; UID={1}; password={2}", "lp", "root", "byron0"));
+            MySqlConnection queryConnection = new MySqlConnection(GetConnectionString());
             queryConnection.Open();
             var querycmd = new MySqlCommand("select etext,author,title,path from sources where sourceType=2 and start='**FIND**'", queryConnection);
             var etextReader = querycmd.ExecuteReader();
@@ -126,7 +145,7 @@ namespace processGutenbergRDFtoSQL
                     }
             etextReader.Close();
             queryConnection.Close();
-            MySqlConnection updateConnection = new MySqlConnection(string.Format("Server=localhost; database={0}; UID={1}; password={2}", "lp", "root", "byron0"));
+            MySqlConnection updateConnection = new MySqlConnection(GetConnectionString());
             updateConnection.Open();
             for (int I=0; I<etexts.Count; I++)
             {
@@ -140,7 +159,9 @@ namespace processGutenbergRDFtoSQL
                 string path = "texts\\\\" + author + "\\\\" + title + ".txt";
                 if (File.Exists("M:\\caches\\" + path))
                 {
-                    var updatecmd = new MySqlCommand("update sources set path=\"" + path + "\" where etext=\"" + etext + "\"", updateConnection);
+                    var updatecmd = new MySqlCommand("update sources set path=@path where etext=@etext", updateConnection);
+                    updatecmd.Parameters.AddWithValue("@path", path);
+                    updatecmd.Parameters.AddWithValue("@etext", etext);
                     updatecmd.ExecuteNonQuery();
                 }
             }
@@ -227,7 +248,7 @@ namespace processGutenbergRDFtoSQL
         static void Main(string[] args)
         {
             CheckExistingSources();
-            MySqlConnection insertConnection = new MySqlConnection(string.Format("Server=localhost; database={0}; UID={1}; password={2}", "lp", "root", "byron0"));
+            MySqlConnection insertConnection = new MySqlConnection(GetConnectionString());
             insertConnection.Open();
             var bookTypes =new SortedDictionary<string, int>();
             int numInsertableBooks = 0, numBooksAlreadyExist = 0, numBooksWrongType = 0, filesNotFound=0, numBooksAuthorsNotFound=0,rdfFilesProcessed=0, numBooksTitleNotFound=0;
@@ -369,19 +390,22 @@ namespace processGutenbergRDFtoSQL
                              (language == null || language == "en"))
                         {
                             numAcceptableBookTypes++;
-                            title = title.Replace("'", "\\'");
                             if (!alreadyExists)
                             {
-                                string insert = "INSERT INTO sources (sourceType,etext,path,start,repeatStart,author,title,date) VALUES (2,";
-                                insert += "\""+etextNum + "\",";
-                                // 'texts\Alfred Gatty\Aunt Judy''s Tales.txt'
-                                insert += "\"texts\\"+creator+"\\"+title + ".txt\",";
-                                insert += "\"**FIND**\",";
-                                insert += "1,";
-                                insert += "\""+ creator + "\",";
-                                insert += "\"" + title + "\",";
-                                insert += "\"" + dateIssued + "\")";
+                                // Parameterized to avoid SQL injection / quote breakage from
+                                // untrusted RDF-derived title/creator text; no manual '
+                                // escaping is needed (or wanted - MySqlParameter binds the
+                                // raw value) since MoveAndRename below needs the same
+                                // un-escaped title for the destination filename.
+                                string insert = "INSERT INTO sources (sourceType,etext,path,start,repeatStart,author,title,date) VALUES (2,@etext,@path,@start,1,@author,@title,@date)";
                                 var cmd = new MySqlCommand(insert, insertConnection);
+                                cmd.Parameters.AddWithValue("@etext", etextNum);
+                                // 'texts\Alfred Gatty\Aunt Judy's Tales.txt'
+                                cmd.Parameters.AddWithValue("@path", "texts\\" + creator + "\\" + title + ".txt");
+                                cmd.Parameters.AddWithValue("@start", "**FIND**");
+                                cmd.Parameters.AddWithValue("@author", creator);
+                                cmd.Parameters.AddWithValue("@title", title);
+                                cmd.Parameters.AddWithValue("@date", dateIssued);
                                 var numRows = 0;
                                 if (!test)
                                 {

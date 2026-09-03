@@ -44,8 +44,6 @@
 	Notes / gotchas:
 		- handleQuotes treats �/� as primary and �/� as secondary; these are
 		  the tokenizer's quote characters, not ASCII " / '.
-		- resolveFirstSecondPersonPronoun erases an iterator then immediately
-		  reads oi->object (use-after-invalidation).
 		- flagObjectResolved is set at the start of matchObjectToSpeakers,
 		  so a later pass will skip the position even if no speaker matched.
 		- In-quote vs narration is mutually exclusive here: entering a

@@ -66,6 +66,13 @@ namespace LPWeb
 
             app.UseRouting();
 
+            // NOTE: UseAuthorization() is a no-op without an authentication
+            // scheme registered (no services.AddAuthentication(...)/
+            // UseAuthentication() call above, and no [Authorize] attributes
+            // on any page). This is a real gap - there is currently no login
+            // and no access control on this site - but wiring up an actual
+            // auth scheme (cookie/OIDC/etc.) is a feature decision, not a
+            // bug fix, so it's left undone here and just documented.
             app.UseAuthorization();
 
             app.UseEndpoints(endpoints =>

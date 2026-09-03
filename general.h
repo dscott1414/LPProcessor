@@ -16,15 +16,22 @@
 		by source.cpp read()/write().
 
 	Key data structures / globals:
-		- MAINDIR / LMAINDIR / CACHEDIR / WEBSEARCH_CACHEDIR / TEXTDIR - hardcoded
-			absolute paths (F:\\lp and M:\\caches).  Every disk cache and the Jericho
-			launcher assume these exist.
+		- MAINDIR / LMAINDIR / CACHEDIR / WEBSEARCH_CACHEDIR / TEXTDIR - compile-time
+			fallback paths (F:\\lp and M:\\caches), used only by envConfig.cpp when the
+			corresponding LP_MAIN_DIR / LP_CACHE_DIR / LP_WEBSEARCH_CACHE_DIR /
+			LP_TEXT_DIR environment variable is not set. Call getMainDir() /
+			getCacheDir() / getWebSearchCacheDir() / getTextDir() (envConfig.h)
+			instead of referencing these macros directly.
 		- InflectionTypes - unsigned bit flags.  When this enum changes, net.cpp
 			inflection calculations must change in lockstep (author note on the enum).
 		- NO_OWNER and VERB_NO_PAST share the same bit (_MIL*64) by design.
 		- memoryAllocated - process-wide counter mutated by tmalloc/tfree; comment
 			in memoryStat.cpp says "protect with mutex" but there is no lock.
-		- webSearchKey - Google Custom Search API key, set from the command line.
+		- Google/Bing/Merriam-Webster credentials - read from the environment via
+			envConfig.h's getGoogleCSEKey() / getGoogleCSEContext() /
+			getBingSubscriptionKey() / getMerriamWebsterKey(), not stored as globals
+			here (there used to be a hardcoded webSearchKey/BINGAccountKey/cseContext
+			set of globals in questionAnsweringWebSearch.cpp; removed).
 		- mySQLQueryBufferSRWLock / mySQLTotalTimeSRWLock / rdfTypeMapSRWLock /
 			orderedHyperNymsMapSRWLock - the four process-wide locks used by DB and RDF.
 
@@ -40,6 +47,7 @@
 */
 #pragma warning (disable: 4996)
 #pragma warning(disable: 4267)
+#include "envConfig.h"
 #define COST_PER_RELATION 1
 #define NON_AGREEMENT_COST 10
 #define MIN_SIGNED_SHORT -32768
@@ -224,7 +232,6 @@ public:
 	}
 };
 
-//void getSynonyms(wstring word,set <wstring> &synonyms, int synonymType,sTrace &t);
 void getAntonyms(wstring word,unordered_set <wstring> &synonyms,sTrace &t);
 int getFamiliarity(wstring word,bool isAdjective);
 int getHighestFamiliarity(wstring word);
@@ -255,16 +262,12 @@ wstring vectorString(vector <wstring> &vstr,wstring &tmpstr,wstring separator);
 wstring vectorString(vector < vector <wstring> > &vstr,wstring &tmpstr,wstring separator);
 wstring setString(set <wstring> &sstr,wstring &tmpstr,const wchar_t *separator);
 wstring setString(unordered_set <wstring>& sstr, wstring& tmpstr, const wchar_t* separator);
-wstring setString(set <wstring>& sstr, wstring& tmpstr, const wchar_t* separator);
 string setString(set <string> &sstr,string &tmpstr,const char *separator);
 const wchar_t *ontologyTypeString(int ontologyType,int resourceType, wstring &Btmpstr);
 #define SEPARATOR L"SEPARATOR|||"
 int initializeDatabaseHandle(MYSQL &mysql,const wchar_t *where,bool &alreadyConnected);
 wstring lastErrorMsg();
 
-// google API used for custom search and freebase
-extern wstring webSearchKey;
 const char * LastErrorStr(void);
 extern SRWLOCK rdfTypeMapSRWLock,mySQLTotalTimeSRWLock,mySQLQueryBufferSRWLock,orderedHyperNymsMapSRWLock;
-void positionConsole(bool controller);
 

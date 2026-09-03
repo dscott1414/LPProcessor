@@ -33,10 +33,8 @@
 		- On pass>=1 a newly inserted match is given cost MAX_SIGNED_SHORT so
 		  reduceParents will rewrite it; the caller must treat reduced==true as
 		  "parents need an update", not "this slot already holds the new cost".
-		- querySingleNoun / findObjectElement are declared here but have no
-		  definition in this translation unit.
-		- clear() frees content but does not NULL it (unlike the destructor and
-		  PEMA::clear); a later push_back then trealloc's a freed pointer.
+		- clear() NULLs content after freeing it (matching the destructor and
+		  PEMA::clear), so a later push_back trealloc's from a clean NULL.
 */
 #define IOHANDLE int
 int lplog(const wchar_t *format,...);
@@ -109,9 +107,9 @@ public:
 	bool write(IOHANDLE file);
 	bool read(char *buffer,int &where,unsigned int limit);
 	bool write(void *buffer,int &where,unsigned int limit);
-	bool operator==(const cPatternMatchArray other) const;
+	bool operator==(const cPatternMatchArray &other) const;
 	cPatternMatchArray& operator=(const cPatternMatchArray &rhs);
-	bool operator!=(const cPatternMatchArray other) const;
+	bool operator!=(const cPatternMatchArray &other) const;
 	tPatternMatch &operator[](unsigned int _P0);
 	const tPatternMatch &operator[](unsigned int _P0) const;
 	//bool push_back(tPatternMatch &pm);
@@ -137,11 +135,8 @@ public:
 	int queryPatternWithLen(int pattern,int len);
 	int queryMaximumLowestCostPattern(wstring pattern,int &len);
 	int queryQuestionFlagPattern();
-	int querySingleNoun(int &end);
 	int queryTagSet(unsigned int &element,int desiredTagSetNum,int &maxLen);
-	// First PMA slot whose pattern carries `tag`, or -1.  maxLen is updated but the
-	// loop `break`s on the first hit, so this is not actually "longest with tag".
-	// corrected to return the longest pattern with the tag, not the first
+	// Longest PMA slot whose pattern carries `tag`, or -1 if none does.
 	int queryTag(int tag)
 	{
 		int gElement=-1,maxLen=-1;
@@ -153,7 +148,6 @@ public:
 			}
 		return gElement;
 	}
-	int findObjectElement(int &lastTag);
 
 private:
 	int push_back(unsigned int insertionPoint,int pass,short cost,unsigned short p,short end);

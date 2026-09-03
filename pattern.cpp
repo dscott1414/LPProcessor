@@ -39,9 +39,9 @@
 		- PREP_TAG / OBJECT_TAG / ... - interned tag ids for hot paths
 
 	Notes / gotchas:
-		- findPattern(name, starting) returns patterns.size() on miss, never
-		  -1; findPattern(name, diff) returns (unsigned)-1.  Callers mix the
-		  two conventions.
+		- findPattern(name, starting) is the sole surviving overload; it returns
+		  patterns.size() on miss, never -1 (the unused wstring-only and
+		  (name,diff)/-1-sentinel overloads had zero callers and were removed).
 		- The #ifdef ABNF read/write path does not compile against current
 		  members and is not on the live init path.
 */
@@ -880,27 +880,11 @@ bool cPattern::fillPattern(cSource& source, int sourcePosition, vector <cMatchEl
 	return additionalMatch;
 }
 
-// First pattern whose name equals form, scanning from 0.  Returns
-// patterns.size() (not -1) if none.
-unsigned int findPattern(wstring form)
-{
-	LFS
-		unsigned int startingPattern = 0;
-	return findPattern(form, startingPattern);
-}
-
-// Set every bit in patternsFound for a pattern named `form` (all differentiators).
-void findPatterns(wstring form, cBitObject<>& patternsFound)
-{
-	LFS
-		unsigned int startingPattern = 0;
-	int p;
-	while ((p = findPattern(form, startingPattern)) >= 0)
-		patternsFound.set(p);
-}
-
 // First pattern named `form` at or after startingPattern.  Advances
-// startingPattern to the hit (or to patterns.size() on miss).  Never returns -1.
+// startingPattern to the hit (or to patterns.size() on miss).  Never returns -1;
+// patterns.size() is the sole not-found sentinel for findPattern (the
+// unused wstring-only and (name,diff) overloads, which used a -1 convention
+// and had zero callers anywhere in the tree, were removed).
 unsigned int findPattern(wstring form, unsigned int& startingPattern)
 {
 	LFS
@@ -908,21 +892,11 @@ unsigned int findPattern(wstring form, unsigned int& startingPattern)
 	return startingPattern;
 }
 
-// Pattern whose name AND differentiator both match.  Returns (unsigned)-1 if none
-// (unlike the name-only overloads, which return patterns.size()).
-unsigned int findPattern(wstring name, wstring diff)
-{
-	LFS
-		unsigned int p;
-	for (p = 0; p < patterns.size() && (patterns[p]->name != name || patterns[p]->differentiator != diff); p++);
-	return (p == patterns.size()) ? -1 : p;
-}
-
 // _VERB|wrapping[*]*2{VERB:pM:V_OBJECT} is a verb with future reference and a cost of 2.
 // Split a create() token into the bare form/pattern name plus optional
 // |specificWord, [R] future-ref / recursive-match, *cost, and {TAG:TAG}.
-// Mutates `form` in place (erases the suffix) AND writes through form.c_str()
-// to temporarily NUL-terminate the specific word — that is a const-cast store.
+// Mutates `form` in place (erases the suffix); specificWord is copied out via
+// assign(sword, len) rather than by writing through form.c_str().
 void cPattern::processForm(wstring& form, wstring& specificWord, int& cost, set <unsigned int>& tags, bool& explicitFutureReference, bool& blockDescendants, bool& allowRecursiveMatch)
 {
 	LFS
@@ -1131,8 +1105,10 @@ __NAME#3  = 0*1(honorific[SINGULAR]/__NAMEINTRO)
 letter{FIRST}
 *"."
 */
-// Write this pattern as one ABNF rule.  References onlyAfterQuote, which is
-// not a member (the live flag is afterQuote) — this path does not compile.
+// Write this pattern as one ABNF rule.  This path does not compile as-is
+// (wtoi / narrow fgets elsewhere in this #ifdef ABNF block); the afterQuote
+// reference below has been kept in sync with the live member name so it does
+// not add a further mismatch if the block is ever revived.
 void cPattern::writeABNF(FILE* fh, unsigned int lastTag)
 {
 	LFS
@@ -1150,7 +1126,7 @@ void cPattern::writeABNF(FILE* fh, unsigned int lastTag)
 	if (fillFlag) len += _snwprintf(buf + len, 1024 - len, L"_FINAL:");
 	if (onlyAloneExceptInSubPatternsFlag) len += _snwprintf(buf + len, 1024 - len, L"_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN:");
 	if (onlyBeginMatch) len += _snwprintf(buf + len, 1024 - len, L"_ONLY_BEGIN_MATCH:");
-	if (onlyAfterQuote) len += _snwprintf(buf + len, 1024 - len, L"_AFTER_QUOTE:");
+	if (afterQuote) len += _snwprintf(buf + len, 1024 - len, L"_AFTER_QUOTE:");
 	if (strictNoMiddleMatch) len += _snwprintf(buf + len, 1024 - len, L"_STRICT_NO_MIDDLE_MATCH:");
 	if (onlyEndMatch) len += _snwprintf(buf + len, 1024 - len, L"_ONLY_END_MATCH:");
 	if (noRepeat) len += _snwprintf(buf + len, 1024 - len, L"_NO_REPEAT:");
@@ -1390,8 +1366,11 @@ bool cPattern::create(wstring patternName, wstring differentiator, int numForms,
 	}
 	if (p->elements.size() > 255)
 		::lplog(LOG_FATAL_ERROR, L"Pattern %s[%s] has too many elements >255 (%d) - see patternElementNum member of cPatternElementMatchArray class", p->name.c_str(), p->differentiator.c_str(), p->elements.size());
-	if (((int)findPattern(patternName, p->rootPattern)) < 0)
-		p->rootPattern = p->num;
+	// findPattern leaves p->rootPattern at the first existing same-named pattern,
+	// or at patterns.size() (== p->num, since p is not pushed onto `patterns`
+	// until below) if none exists yet - so p->rootPattern is already correct
+	// either way once this call returns.
+	findPattern(patternName, p->rootPattern);
 	if (p->rootPattern != p->num)
 	{
 		p->nextRoot = p->rootPattern;
@@ -1784,8 +1763,6 @@ void cPattern::setAncestorPatterns(int childPattern)
 }
 
 // Same walk as setAncestorPatterns but for the mandatory-parent bitset.
-// The already-computed branch ORs into ancestorPatterns instead of
-// mandatoryAncestorPatterns (copy-paste).
 void cPattern::setMandatoryAncestorPatterns(int childPattern)
 {
 	LFS
@@ -2012,7 +1989,7 @@ void initializeTagSets(int& startSuperTagSets)
 		for (unsigned I = 0; I < desiredTagSets[dts].tags.size(); I++)
 			tagUsed[desiredTagSets[dts].tags[I]] = true;
 	for (unsigned I = 0; I < patternTagStrings.size(); I++)
-		if (!tagUsed[I] && patternTagStrings[I][0] != L'_' && patternTagStrings[I] != "_BLOCK")
+		if (!tagUsed[I] && patternTagStrings[I][0] != L'_' && patternTagStrings[I] != L"_BLOCK")
 			lplog(L"TAG %s not used in tagSet.", patternTagStrings[I].c_str());
 #endif
 	desiredTagSets[iverbTagSet].addTagSet(verbSenseTagSet);
@@ -2666,8 +2643,11 @@ void cPattern::lastNonMandatoryForm(void)
 }
 
 // Log per-pattern match/push/compare/winner counters and every element's
-// usage line, then delete every cPatternReference and every cPattern.
-// After this the global `patterns` vector holds dangling pointers.
+// usage line.  Read-only: `patterns` / `patternReferences` are process-wide
+// globals other code assumes stay alive, so this must not delete them
+// (it used to; that left both vectors full of dangling pointers for the rest
+// of the process, since main.cpp calls this under #ifdef LOG_PATTERNS well
+// before final shutdown, not as the last thing the process does).
 void cPattern::printPatternStatistics(void)
 {
 	LFS
@@ -2678,7 +2658,7 @@ void cPattern::printPatternStatistics(void)
 		for (unsigned int p = 0; p < patterns.size(); p++)
 		{
 			if ((p & 31) == 0)
-				::lplog(L"\n%24s[  ]: %8s %7s %10s %11s %10s %7s %%", L"pattern", L"matches", L"ET", L"emi", L"pushes", L"compares", L"hits", L"winners", L"name");
+				::lplog(L"\n%24s[  ]: %8s %7s %10s %11s %10s %7s %7s %%", L"pattern", L"matches", L"ET", L"emi", L"pushes", L"compares", L"hits", L"winners");
 			::lplog(L"%c%23s[%2s]: %08u %07u %010u %010u %011u %010u %07u %5.2f%%",
 				(patterns[p]->numWinners == 0 && patterns[p]->numChildrenWinners == 0) ? '*' : (patterns[p]->fillFlag || patterns[p]->fillIfAloneFlag) ? '!' : ' ',
 				patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(),
@@ -2688,9 +2668,5 @@ void cPattern::printPatternStatistics(void)
 	::lplog(L"%40s %40s  %5s  %5s", L"PATTERN", L"PATTERN ELEMENT", L"#EVER", L"#FINAL");
 	for (unsigned int p = 0; p < patterns.size(); p++)
 		patterns[p]->reportUsage();
-	for (unsigned int r = 0; r < patternReferences.size(); r++)
-		delete patternReferences[r];
-	for (unsigned int p = 0; p < patterns.size(); p++)
-		delete patterns[p];
 }
 

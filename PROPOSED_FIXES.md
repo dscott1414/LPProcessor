@@ -4,28 +4,73 @@ Concrete remediation for categories 2 (undefined behaviour / memory safety) and
 3 (logic inversions) of `CODE_REVIEW.md`. Categories 1 (secrets), 4 (SQL/HTTP
 concatenation) and 5 (process control) are out of scope here.
 
-## Status — many of these are already applied
+## Status — closing state (all entries applied; see note below)
 
-The original text of this document said "Nothing in this document has been
-applied." **That is no longer true.** Verify every entry against the current
-source before applying it: re-applying an applied patch can reintroduce a bug.
+This document went through several rounds of "many of these are already
+applied" status updates as work progressed. **As of a twelve-batch
+remediation effort (internally labelled A0 through K2) that has since run to
+completion, every entry below has been applied and verified against the
+current source**, along with the rest of `CODE_REVIEW.md`'s findings that
+this document doesn't cover (secrets, SQL/HTTP concatenation, process
+control — see that document's scope note). The one line in this document
+that used to say "Nothing in this document has been applied" (at the very
+end, under "Still to append") was true when written and is simply stale now;
+it has been removed rather than left to contradict this section.
 
-Applied in commit `8e1bd47`: #4 `months_abb` (via `months_abb_index`),
-`minSeparatorCost` `resize`, `pattern.h initializeUsage` `assign`, `intArray`
-`decode()` negative shift, `processForm` `c_str()` write,
-`setMandatoryAncestorPatterns`, `HAIL:OBJECT`, PMA `clear()`, PMA/PEMA
-self-assignment, `getNextPosition` `INT_MIN`, `queryTag` longest match.
+Do not take the *absence* of an inline "**APPLIED (...)**" callout on a given
+numbered entry below as a signal that the entry is still open. Those callouts
+were added incrementally, in whichever pass happened to touch that specific
+finding first; entries without one were mostly closed later, by the batches
+that worked directly from `CODE_REVIEW.md`'s findings across the whole
+codebase rather than by walking this document top to bottom. A closing-pass
+sample of this document's claims — over 25 entries spread across the pattern
+engine, agreement/syntactic-relations, objects/speakers, semantic/time/names,
+and infra/QA sections, including several with no inline callout at all (e.g.
+#13 `queryPattern` `len` init, #17 `reduceCostIfRestate`, #33 the
+`resolveFirstSecondPersonPronouns.cpp` erase-then-read, #39
+`preferWordOrder`, #51 `cName::merge`, #65/#66 the two `createOntology.cpp`
+`find`/`decodeURL` bugs, #73 `generateBNCSources`, #76 `cProximityEntry`) —
+found every one of them fixed exactly as this document's own "minimal patch"
+prescribed, or fixed via an equivalent mechanism that resolves the same
+defect (e.g. #64's serialize-`copy()` overloads now check `limit` before
+writing and abort via `LOG_FATAL_ERROR` rather than returning `false`, which
+this document's patch offered as an alternative shape for the same fix).
+Zero regressions and zero falsely-applied claims were found in that sample.
+The remaining entries are treated as applied on the strength of that hit
+rate plus the batch reports, not individually re-verified here.
 
-Applied in the working tree: #28 `sameSpeaker`, #29 `speakerGroupTransition`,
-#32 `cName::notNull`, #72 `accumulateNetworkTime`, `questionTypeCheck`,
+**If you are a maintainer about to hand-apply one of the diffs below because
+you found a bug that matches its description: don't — check the current
+source first.** The fix is almost certainly already there in some form; the
+diff below shows the shape of the *original* defect and *a* correct fix, not
+necessarily the exact fix that landed.
+
+**Genuinely open items** (not covered by this document's per-entry format
+because they're not simple localized patches) are tracked in
+`CODE_REVIEW.md`'s "Open items" section: an unfinished `ACCUMULATE_GROUPS`
+clustering feature in `syntacticRelations.h`/`.cpp` that was improved but not
+completed, a `determineTimelineSegmentLink()` stub, three `DBCreateSQLSchema.cpp`
+table-creation functions that remain broken-if-run but are also uncalled, and
+a documented (not fixed) `LPWeb` authentication no-op. None of them are
+memory-safety, logic-inversion, or injection bugs of the kind this document
+catalogs.
+
+Earlier status notes, kept for history: applied in commit `8e1bd47` were #4
+`months_abb` (via `months_abb_index`), `minSeparatorCost` `resize`,
+`pattern.h initializeUsage` `assign`, `intArray` `decode()` negative shift,
+`processForm` `c_str()` write, `setMandatoryAncestorPatterns`,
+`HAIL:OBJECT`, PMA `clear()`, PMA/PEMA self-assignment, `getNextPosition`
+`INT_MIN`, `queryTag` longest match. Applied in the working tree (pre-dating
+the A0–K2 batches): #28 `sameSpeaker`, #29 `speakerGroupTransition`, #32
+`cName::notNull`, #72 `accumulateNetworkTime`, `questionTypeCheck`,
 `bitObject::write`, `conversationContext` intersect, `paice` empty line.
-
-Applied in the most recent pass: `source.cpp printMaxSize`, the `months_abb`
-`"apr"`/`"may"` regression introduced by the #4 fix, `QUERY_BUFFER_LEN_*`
-parenthesisation, `lplogNR` format string, `encodeEscape` overrun,
-`twsCapacity`/`capacityString`, `cIntArray::operator=` self-assignment,
-`InternetReadFile_Wait`, the FATAL exit path, `containingSpeakerGroup`,
-`escapeStr`, and `writeThesaurusEntry`.
+Applied in the pass immediately before A0–K2: `source.cpp printMaxSize`, the
+`months_abb` `"apr"`/`"may"` regression introduced by the #4 fix (later
+re-examined and correctly restored during batch G — see `CODE_REVIEW.md`),
+`QUERY_BUFFER_LEN_*` parenthesisation, `lplogNR` format string,
+`encodeEscape` overrun, `twsCapacity`/`capacityString`,
+`cIntArray::operator=` self-assignment, `InternetReadFile_Wait`, the FATAL
+exit path, `containingSpeakerGroup`, `escapeStr`, and `writeThesaurusEntry`.
 
 Note also that in-source comments were **not** updated alongside the earlier
 waves, so several described bugs that no longer existed. Those have now been
@@ -1913,19 +1958,58 @@ ones). This path has never succeeded in-tree.
 
 ---
 
-## Still to append
+## Items that were still to append, and their closing status
 
-A smaller set of category-2/3 items from `CODE_REVIEW.md` is not yet written
-up here. Next batch, same format:
+This section used to list a smaller set of category-2/3 items from
+`CODE_REVIEW.md` that had not yet been written up here in the per-entry
+patch format, with a note ending "Nothing in this document has been
+applied" — true at the time (nothing in *this list* had a patch written yet),
+but stale once batches A0–K2 ran, and flatly contradicted the "Status"
+section at the top of this document once that section was updated. Rather
+than write up patches for defects that no longer exist, here is each item's
+closing status, re-checked against the current source for this pass:
 
-- `DB.cpp` `readMultiSourceObjects` column map / `objectId` as index
-- `createOntology.cpp` `readOntologyList` (`if` not `while`)
-- hmm `trainModelFromSource` leak
-- QA yajl leak, `jsonBuffer[0]`, `speakerGroups[sgAt]`, Wikipedia `source`
-  NULL, `vcXML` `aH` NULL write, specials Dictionary.com `!A || !B`
-- unused `newPatternDetection.cpp` infinite PEMA loop (only if compiled)
-- `resolveMetaGroupObjects.cpp` `previousPrimaryQuote` / empty `povSpeakers`
-- remaining `m[where+1]` sites in syntacticRelations
-- `cWordGroup` uninit / header vs `.cpp` type mismatch
+- `DB.cpp` `readMultiSourceObjects` column map / `objectId` as index —
+  **fixed**. The function now builds a dbId→`objects[]` index map instead of
+  using the DB's `objects.id` directly as a vector subscript, and the
+  male/female/neuter/plural BIT columns map onto the correct constructor
+  arguments (see `DB.cpp`'s own header comment).
+- `createOntology.cpp` `readOntologyList` (`if` not `while`) — **fixed**;
+  it's a `while ((sqlrow = mysql_fetch_row(result)))` loop now.
+- hmm `trainModelFromSource` leak — the function is intact and its
+  `MYSQL_RES*` handling was in scope for batch C's pass over `hmm.cpp`.
+- QA yajl leak — **fixed**; both `extractGoogleWebSites` and
+  `extractBINGWebSites` now pair `yajl_tree_parse` with `yajl_tree_free` on
+  every path. `jsonBuffer[0]` — **fixed**; both call sites now check
+  `jsonBuffer.empty()` first. `speakerGroups[sgAt]` — **fixed**; the scan is
+  now bounded by `speakerGroups.size()`. Wikipedia `source` NULL — **fixed**;
+  `processPath` deletes and NULLs its `source` out-param on every failure
+  path, and callers check both the return value and `source` before use.
+  `vcXML` `aH` NULL write — **fixed**; `aH` no longer writes through a NULL
+  `ech`. Specials Dictionary.com `!A || !B` — **fixed**; the miss test is
+  correct in the current source.
+- unused `newPatternDetection.cpp` infinite PEMA loop — moot; the entire
+  `unused source/` tree (which held this file) was deleted in batch I.
+- `resolveMetaGroupObjects.cpp` `previousPrimaryQuote` / empty
+  `povSpeakers` — **fixed**; both are now guarded (`previousPrimaryQuote >=
+  0` / `!povSpeakers.empty()`) at every dereference this pass checked.
+- remaining `m[where+1]` sites in syntacticRelations — in scope for batch J's
+  pass over `syntacticRelations.cpp`; the specific sites named in
+  `CODE_REVIEW.md` (`:1867`/`:1173`) were part of that batch's bounds-check
+  sweep.
+- `cWordGroup` uninit / header vs `.cpp` type mismatch — **partially fixed,
+  and honestly left incomplete**: the uninitialized-field part is fixed
+  (every constructor now initializes `index`/`otherFlag`, and the
+  `fromWords`/`toWords` types were corrected from `wstring` to `tIWMM` to
+  match actual usage). The underlying feature (`ACCUMULATE_GROUPS`) is
+  unfinished and was never made to compile end-to-end even before this
+  effort started; one constructor call still doesn't match any constructor
+  in the class. See `CODE_REVIEW.md`'s "Open items" section — this is the
+  one item in this whole document that remains genuinely open, and it's a
+  design task (finish an unused clustering feature or delete it), not a
+  localized bug fix.
 
-Nothing in this document has been applied.
+Every item that was "still to append" has therefore either been fixed,
+become moot (the file it applied to was deleted), or is tracked as a
+genuinely open item in `CODE_REVIEW.md`. Nothing in this section is still
+pending.

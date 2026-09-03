@@ -25,10 +25,15 @@
 		MySQL no-ERDF-types table; Words.TABLE / END_COLUMN sentinels.
 
 	Notes / gotchas:
-		Wikipedia URLs are plaintext HTTP and the search term is not URL-encoded.
-		writeExtendedRDFTypes allocates a 20MB stack buffer (EMAX_BUF). firstMatchTableDeleteNested
-		updates beginPos only on the <li value= fallback, so a successful <li> find is ignored.
-		convertFromWikilinkEscape / eliminateHTML read past end on short tails.
+		Wikipedia URLs use https:// and the search/object term is percent-encoded via encodeURL
+		(defined in createOntology.cpp) before being interpolated into the query string; the
+		nextWikiAddress link taken verbatim from a MediaWiki href is already percent-encoded and
+		is not re-encoded. writeExtendedRDFTypes, getWikipediaPath's cBuffer, and readAttribs/
+		writeAttribs now heap-allocate their scratch buffers (tmalloc/tfree) instead of putting
+		multi-MiB arrays on the stack. processPath deletes and NULLs its 'source' out-param on
+		every failure path after allocating it, and its callers check the return value before
+		dereferencing source. firstMatchTableDeleteNested updates beginPos on both the primary
+		<li> match and the <li value= fallback.
 		readPageWinHTTP is compiled only under TEST_CODE and leaks WinHTTP handles on error.
 */
 #include <windows.h>
@@ -52,6 +57,7 @@
 extern int logQuestionDetail; // not protected - too intensive to protect and doesn't matter
 extern int logProximityMap; // not protected - too intensive to protect and doesn't matter
 bool unlockTables(MYSQL& mysql);
+void encodeURL(wstring winput, wstring& wencodedURL); // defined in createOntology.cpp
 #define MAX_PATH_LEN 2048
 #define MAX_BUF 2000000
 //extern wstring basehttpquery; // initialized
@@ -276,8 +282,9 @@ void interpretHTMLTable(wstring& buffer, size_t& whereHeadingEnd, wstring& match
 
 void eliminateHTMLCharacterEntities(wstring& buffer);
 // Strips tags and [N] footnotes after expanding character entities. Inserts a space when
-// two tagged spans abut so "ISBN""123" does not glue. Footnote scan reads I+1..I+3 unsafely
-// at end-of-string.
+// two tagged spans abut so "ISBN""123" does not glue. The footnote scan's [I+1..I+3] lookahead
+// is bounds-safe: each index is only read after the previous one was confirmed to be a real
+// (non-terminator) character, and std::wstring guarantees buffer[buffer.size()] reads as L'\0'.
 void eliminateHTML(wstring& buffer)
 {
 	LFS
@@ -291,7 +298,8 @@ void eliminateHTML(wstring& buffer)
 		else if (buffer[I] == L'>')
 		{
 			// make sure there is space between entities that have both been linked like "ISBN" and the ISBN number.
-			if (!iswspace(buffer[buffer.size() - 1]))
+			// (this must check the output accumulated so far, not the tail of the raw input buffer)
+			if (!noHTML.empty() && !iswspace(noHTML[noHTML.size() - 1]))
 				noHTML += L" ";
 			inHTML = false;
 		}
@@ -310,8 +318,7 @@ void eliminateHTML(wstring& buffer)
 }
 
 // Extracts the next <li>…</li> (or <li value=) from buffer into match, deleting one level
-// of nested <li> from the parent. Returns the start index, or npos. beginPos is only
-// updated on the <li value= fallback — a successful <li> find leaves beginPos unchanged.
+// of nested <li> from the parent. Returns the start index, or npos.
 // this is to skip nested tables, instead of turning nested tables into another entry in the parent table (what firstMatch would do)
 // this only works for one level of nesting!  The nested table can have any number of entries
 // beginString can be <li value= OR <li>
@@ -322,6 +329,8 @@ int firstMatchTableDeleteNested(wstring& buffer, size_t& beginPos, wstring& matc
 		int tempBeginPos = buffer.find(beginString, (beginPos == wstring::npos) ? 0 : beginPos);
 	if (tempBeginPos == wstring::npos)
 		beginPos = buffer.find(L"<li value=", (beginPos == wstring::npos) ? 0 : beginPos);
+	else
+		beginPos = tempBeginPos;
 	int findEndOfBegin = buffer.find(L">", beginPos);
 	if (findEndOfBegin == wstring::npos)
 		return -1;
@@ -510,9 +519,11 @@ int reduceWikipediaPage(wstring& buffer)
 			if (_waccess(path, 0) < 0)
 			{
 				wchar_t webAddress[MAX_LEN];
-				// http://en.wikipedia.org/w/index.php?title=Localized_versions_of_the_Monopoly_game&printable=yes
-				// http://en.wikipedia.org/w/index.php?title=List_of_French_phrases_used_by_English_speakers&printable=yes
-				_snwprintf(webAddress, MAX_LEN, L"http://en.wikipedia.org/w/index.php?title=%s&printable=yes", nextWikiAddress.c_str());
+				// https://en.wikipedia.org/w/index.php?title=Localized_versions_of_the_Monopoly_game&printable=yes
+				// https://en.wikipedia.org/w/index.php?title=List_of_French_phrases_used_by_English_speakers&printable=yes
+				// nextWikiAddress comes verbatim from a MediaWiki-generated href, which is already
+				// percent-encoded, so it is not re-encoded here (that would double-encode it).
+				_snwprintf(webAddress, MAX_LEN, L"https://en.wikipedia.org/w/index.php?title=%s&printable=yes", nextWikiAddress.c_str());
 				lplog(LOG_WIKIPEDIA, L"%s", webAddress);
 				int ret;
 				wstring secondaryBuffer;
@@ -532,14 +543,19 @@ int reduceWikipediaPage(wstring& buffer)
 			}
 			else
 			{
-				wchar_t cBuffer[MAX_BUF];
-				int actualLenInBytes;
-				if (!getPath(path, cBuffer, MAX_BUF, actualLenInBytes))
+				// heap-allocated (tmalloc/tfree) rather than a ~3.81 MiB stack array
+				wchar_t* cBuffer = (wchar_t*)tmalloc(MAX_BUF * sizeof(wchar_t));
+				if (cBuffer)
 				{
-					cBuffer[actualLenInBytes / sizeof(buffer[0])] = 0;
-					convertUnderlines(nextWikiAddress);
-					final += nextWikiAddress + L"\n\n";
-					final += cBuffer + wstring(L"\n\n\n");
+					int actualLenInBytes;
+					if (!getPath(path, cBuffer, MAX_BUF, actualLenInBytes))
+					{
+						cBuffer[actualLenInBytes / sizeof(buffer[0])] = 0;
+						convertUnderlines(nextWikiAddress);
+						final += nextWikiAddress + L"\n\n";
+						final += cBuffer + wstring(L"\n\n\n");
+					}
+					tfree(MAX_BUF * sizeof(wchar_t), cBuffer);
 				}
 			}
 		}
@@ -780,7 +796,8 @@ int cSource::readExtendedRDFTypes(wchar_t path[4096], vector <cTreeCat*>& rdfTyp
 }
 
 #define EMAX_BUF MAX_BUF*10
-// Writes .eRdfTypes via a 20MB stack buffer, flushing every ~8KB. Returns -1 if create fails.
+// Writes .eRdfTypes via a 20MB heap buffer (tmalloc/tfree), flushing every ~8KB. Returns -1 if
+// create (or the allocation) fails.
 int cSource::writeExtendedRDFTypes(wchar_t path[4096], vector <cTreeCat*>& rdfTypes, unordered_map <wstring, int >& topHierarchyClassIndexes)
 {
 	LFS
@@ -790,7 +807,13 @@ int cSource::writeExtendedRDFTypes(wchar_t path[4096], vector <cTreeCat*>& rdfTy
 		lplog(LOG_ERROR, L"Cannot write extended rdfTypes (%s) - %S (%d).", path, _sys_errlist[errno], errno);
 		return -1;
 	}
-	char buffer[EMAX_BUF];
+	char* buffer = (char*)tmalloc(EMAX_BUF);
+	if (!buffer)
+	{
+		lplog(LOG_ERROR, L"Cannot allocate %d bytes to write extended rdfTypes (%s).", EMAX_BUF, path);
+		_close(fd);
+		return -1;
+	}
 	int where = 0;
 	*((wchar_t*)buffer) = EXTENDED_RDFTYPE_VERSION;
 	where += 2;
@@ -820,6 +843,7 @@ int cSource::writeExtendedRDFTypes(wchar_t path[4096], vector <cTreeCat*>& rdfTy
 	}
 	if (where > 0)
 		_write(fd, buffer, where);
+	tfree(EMAX_BUF, buffer);
 	_close(fd);
 	return 0;
 }
@@ -1196,10 +1220,12 @@ void cSource::getObjectString(int where, wstring& object, vector <wstring>& look
 	}
 }
 
-// Decodes $XXXX hex escapes in a DBpedia/Wikipedia link (e.g. $0028 → '('). Reads I+1..I+4
-// without a length check, so a trailing '$' can walk off the string.
-// Curveball_$0028informant$0029$002FArchive1 
-// Curveball_$0028informant$0029 
+// Decodes $XXXX hex escapes in a DBpedia/Wikipedia link (e.g. $0028 → '('). The I+1..I+4
+// lookahead is bounds-safe: each hex-digit check short-circuits the && chain before a later
+// index is read unless the earlier one was confirmed to be a real character, and
+// std::wstring guarantees a read (or a write of L'\0') at wikilink[wikilink.size()] is defined.
+// Curveball_$0028informant$0029$002FArchive1
+// Curveball_$0028informant$0029
 void convertFromWikilinkEscape(wstring& wikilink)
 {
 	LFS
@@ -1257,7 +1283,9 @@ int cSource::getWikipediaPath(int principalWhere, vector <wstring>& wikipediaLin
 	if (_waccess(path, 0) < 0)
 	{
 		wchar_t webAddress[MAX_LEN];
-		_snwprintf(webAddress, MAX_LEN, L"http://en.wikipedia.org/wiki/Special:Search?search=%s&printable=yes&redirect=no", object.c_str());
+		wstring uobject;
+		encodeURL(object, uobject); // object is built from parsed words and may contain '&', apostrophes, etc; escape before interpolating into the query string
+		_snwprintf(webAddress, MAX_LEN, L"https://en.wikipedia.org/wiki/Special:Search?search=%s&printable=yes&redirect=no", uobject.c_str());
 		lplog(LOG_WIKIPEDIA, L"PRIMARY:  %s", webAddress);
 		int ret;
 		wstring buffer;
@@ -1394,29 +1422,39 @@ bool cSource::getISARelations(int parentSourceWhere, int where, vector < vector 
 bool readAttribs(wstring path, vector <int>& OCTypes)
 {
 	LFS
-		char buffer[MAX_BUF];
+		// heap-allocated (tmalloc/tfree) rather than a ~1.91 MiB stack array
+		char* buffer = (char*)tmalloc(MAX_BUF);
+	if (!buffer) return false;
 	wstring attribsPath = wstring(path) + L".attribs";
 	int where = 0, len;
-	if (getPath(attribsPath.c_str(), buffer, MAX_BUF, len) != 0) return false;
-	if (!copy(OCTypes, buffer, where, len)) return false;
-	return true;
+	bool ok = (getPath(attribsPath.c_str(), buffer, MAX_BUF, len) == 0) && copy(OCTypes, buffer, where, len);
+	tfree(MAX_BUF, buffer);
+	return ok;
 }
 
 // Writes OCTypes to path+".attribs". Returns false if copy or _wopen fails.
 bool writeAttribs(wstring path, vector <int>& OCTypes)
 {
 	LFS
-		char buffer[MAX_BUF];
+		// heap-allocated (tmalloc/tfree) rather than a ~1.91 MiB stack array
+		char* buffer = (char*)tmalloc(MAX_BUF);
+	if (!buffer) return false;
 	int len = 0, fd;
-	if (!copy(buffer, OCTypes, len, MAX_BUF)) return false;
+	if (!copy(buffer, OCTypes, len, MAX_BUF))
+	{
+		tfree(MAX_BUF, buffer);
+		return false;
+	}
 	wstring attribsPath = wstring(path) + L".attribs";
 	if ((fd = _wopen(attribsPath.c_str(), O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE)) < 0)
 	{
 		lplog(LOG_ERROR, L"ERROR:Cannot create path %s - %S (7).", attribsPath.c_str(), sys_errlist[errno]);
+		tfree(MAX_BUF, buffer);
 		return false;
 	}
 	_write(fd, buffer, len);
 	_close(fd);
+	tfree(MAX_BUF, buffer);
 	return true;
 }
 
@@ -1529,7 +1567,9 @@ bool cQuestionAnswering::rejectPath(const wchar_t* path)
 
 // Parses (or reuses from sourcesMap) the Wikipedia/web page at path as a child cSource.
 // Returns 0 if source is usable, -1 if rejectPath or tokenize produced an empty stream
-// (writes an empty .SourceCache marker). On tokenize-empty after new, leaks source.
+// (writes an empty .SourceCache marker). On any -1 return after 'source' was allocated
+// here, it is deleted and set to NULL before returning, so callers must check the return
+// value before dereferencing source (rejectPath's -1 leaves source untouched).
 int limitProcessingForProfiling = 0;
 int cQuestionAnswering::processPath(cSource* parentSource, const wchar_t* path, cSource*& source, cSource::sourceTypeEnum st, int pathSourceConfidence, bool parseOnly)
 {
@@ -1587,9 +1627,11 @@ int cQuestionAnswering::processPath(cSource* parentSource, const wchar_t* path, 
 				wstring failurePath = path;
 				failurePath += L".SourceCache";
 				int fd;
-				_wsopen_s(&fd, failurePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE); // , errorCode = 
+				_wsopen_s(&fd, failurePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE); // , errorCode =
 				if (fd >= 0)
 					close(fd);
+				delete source;
+				source = NULL;
 				return -1;
 			}
 			bool s1 = logMatchedSentences, s2 = logUnmatchedSentences;
@@ -1622,6 +1664,8 @@ int cQuestionAnswering::processPath(cSource* parentSource, const wchar_t* path, 
 			int fd = _wopen(failurePath.c_str(), O_CREAT);
 			if (fd >= 0)
 				close(fd);
+			delete source;
+			source = NULL;
 			return -1;
 		}
 		if (!parseOnly)
@@ -1643,7 +1687,8 @@ int cQuestionAnswering::processPath(cSource* parentSource, const wchar_t* path, 
 
 // Fetches/parses the Wikipedia page for principalWhere, mines ISA relations, and assigns
 // place subtype or isNotAPlace. Returns -1 if rejectISARelation, 0 after applying OCTypes.
-// Null-dereferences source if processPath fails (source stays NULL).
+// processPath's return value (and source for NULL) are checked before use: a failed fetch
+// simply yields no relations rather than dereferencing a NULL/freed source.
 int cSource::identifyISARelationTextAnalysis(cQuestionAnswering& qa, int principalWhere, bool parseOnly)
 {
 	LFS
@@ -1658,11 +1703,13 @@ int cSource::identifyISARelationTextAnalysis(cQuestionAnswering& qa, int princip
 	if (!readAttribs(path, OCTypes))
 	{
 		cSource* source = NULL;
-		qa.processPath(this, path, source, cSource::WIKIPEDIA_SOURCE_TYPE, 2, parseOnly);
-		vector <cWordMatch>::iterator im = source->m.begin(), imEnd = source->m.end();
-		vector < vector <cTagLocation> > tagSets;
-		for (int I = 0; im != imEnd; im++, I++)
-			source->getISARelations(principalWhere, I, tagSets, OCTypes, lookForSubject);
+		if (qa.processPath(this, path, source, cSource::WIKIPEDIA_SOURCE_TYPE, 2, parseOnly) >= 0 && source)
+		{
+			vector <cWordMatch>::iterator im = source->m.begin(), imEnd = source->m.end();
+			vector < vector <cTagLocation> > tagSets;
+			for (int I = 0; im != imEnd; im++, I++)
+				source->getISARelations(principalWhere, I, tagSets, OCTypes, lookForSubject);
+		}
 		writeAttribs(path, OCTypes);
 	}
 	else

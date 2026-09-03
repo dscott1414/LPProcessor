@@ -32,14 +32,14 @@
 		spilling to M:\caches when the source is huge.
 
 	Notes / gotchas:
-		- hmm.h declarations for tagFromSource / initViterbiStartProbabilities /
-		  forwardFromSource / findLPPOSEquivalents do not match these definitions.
 		- Emission matrix stays 0 for unseen (tag,word) unless USE_ALPHA_FOR_WORDTAG.
 		- Forward uses product + a renormalizing probMult instead of log-sum, so it
-		  relies on the isnan() guard to catch underflow to NaN.
-		- Lookup of cached parses is by sentencehash only (collision risk).
-		- setParsedSentence interpolates parse/sentence into SQL with only
-		  quote-character rewriting, not escaping.
+		  relies on the isnan() guard (std::isnan) to catch underflow to NaN.
+		- Lookup of cached parses is by sentencehash, confirmed against the actual
+		  (escaped) sentence text so a hash collision cannot return the wrong parse.
+		- setParsedSentence quote-normalizes parse/sentence (so the hash matches
+		  foundParsedSentence's) and then escapes both (escaped()/escapeStr) before
+		  interpolating into SQL.
 */
 #include <windows.h>
 #include "Winhttp.h"
@@ -75,15 +75,14 @@ double alpha = 0.001;
 bool unlockTables(MYSQL& mysql);
 
 // Create a JNI 1.8 VM with a hardcoded F:\lp Stanford ParserDemo classpath.
-// options[1]/[2] comments say 1MB/1GB but the strings are -Xms10m / -Xmx3g.
 // Returns JNI_CreateJavaVM's jint (0 = JNI_OK).
 int createJavaVM(JavaVM*& vm, JNIEnv*& env)
 {
 	JavaVMOption options[5];
 	memset(&options, 0, sizeof(options));
 	options[0].optionString = (char *)"-Djava.class.path=.;F:\\lp\\Stanford\\workspace\\StanfordParser\\target\\StanfordParser-0.0.1-SNAPSHOT.jar";
-	options[1].optionString = (char*)"-Xms10m"; // 1MB
-	options[2].optionString = (char*)"-Xmx3g"; // 1GB
+	options[1].optionString = (char*)"-Xms10m"; // 10MB initial heap
+	options[2].optionString = (char*)"-Xmx3g"; // 3GB max heap
 	options[3].optionString = (char*)"-mx2400m"; // 2.4GB
 	options[4].optionString = (char*)"-server"; // Selects server application runtime optimizations. The directory server will take longer to start and �warm up� but will be more aggressively optimized to produce higher throughput.
 
@@ -159,10 +158,12 @@ wstring replaceQuotes(wstring ws)
 	return replacement;
 }
 
-// Look up a Stanford PCFG parse by hash of the (truncated, quote-normalized) sentence.
-// Truncates to 2999 chars.  Lookup is hash-only: collisions return the wrong parse.
-// Out: parse, with " rewritten to ' and a trailing space.  Returns true if non-empty.
-// lockTable: take/release a READ lock around the select (callers may lock higher up).
+// Look up a Stanford PCFG parse by hash of the (truncated, quote-normalized) sentence,
+// confirmed against the actual sentence text so a hash collision cannot return the
+// wrong parse (sentencehash narrows the index scan; sentence is the correctness check).
+// Truncates to 2999 chars.  Out: parse, with " rewritten to ' and a trailing space.
+// Returns true if non-empty.  lockTable: take/release a READ lock around the select
+// (callers may lock higher up).
 bool foundParsedSentence(cSource& source, wstring sentence, wstring& parse, bool lockTable)
 {
 	if (lockTable)
@@ -176,7 +177,7 @@ bool foundParsedSentence(cSource& source, wstring sentence, wstring& parse, bool
 		sentence = sentence.substr(0, 2999);
 	sentence = replaceQuotes(sentence);
 	size_t sentencehash = std::hash<std::wstring>{}(sentence);
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"select parse from stanfordPCFGParsedSentences where sentencehash = %I64d", (__int64)sentencehash); // must be %I64d because of BIGINT signed considerations
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select parse from stanfordPCFGParsedSentences where sentencehash = %I64d and sentence = '%s'", (__int64)sentencehash, escaped(sentence).c_str()); // must be %I64d because of BIGINT signed considerations
 	MYSQL_RES* result = NULL;
 	MYSQL_ROW sqlrow = NULL;
 	parse.erase();
@@ -197,9 +198,11 @@ bool foundParsedSentence(cSource& source, wstring sentence, wstring& parse, bool
 	return parse.length() > 0;
 }
 
-// INSERT the PCFG parse.  Sentence/parse are quote-normalized then interpolated
-// into VALUES('%s') with no further escaping.  Returns 0, or -1 on lock/query fail.
-// On query fail the WRITE lock is released even if this call did not take it.
+// INSERT the PCFG parse.  Sentence/parse are quote-normalized (so the hash and any
+// later lookup agree with foundParsedSentence) and then escaped (escapeStr, via
+// escaped()) before being interpolated into VALUES('%s','%s').  Returns 0, or -1
+// on lock/query fail.  On query fail the WRITE lock is released even if this call
+// did not take it.
 int setParsedSentence(cSource& source, wstring sentence, wstring parse, bool lockTable)
 {
 	if (lockTable)
@@ -215,7 +218,7 @@ int setParsedSentence(cSource& source, wstring sentence, wstring parse, bool loc
 	sentence = replaceQuotes(sentence);
 	parse = replaceQuotes(parse);
 	size_t sentencehash = std::hash<std::wstring>{}(sentence);
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"insert stanfordPCFGParsedSentences (parse,sentence,sentencehash) VALUES('%s','%s',%I64d)", parse.c_str(), sentence.c_str(), (__int64)sentencehash);
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"insert stanfordPCFGParsedSentences (parse,sentence,sentencehash) VALUES('%s','%s',%I64d)", escaped(parse).c_str(), escaped(sentence).c_str(), (__int64)sentencehash);
 	if (!myquery(&source.mysql, qt, true))
 	{
 		unlockTables(source.mysql);
@@ -399,8 +402,9 @@ vector <wstring> generateVocabFromSource(cSource& source, int min_cnt = 2)
 wstring startTag = L"--s--";
 // Count winner-form transitions and emissions.  Spaces in tag/word names become '*'.
 // Words that never had a winner form are back-filled from words/wordforms/forms
-// (one count each) so the emission matrix is not all zeros.  The SELECT result
-// is never mysql_free_result'd.  wordsToAdd is interpolated into IN(...) unescaped.
+// (one count each) so the emission matrix is not all zeros.  Each word is escaped
+// (escaped()) before being quoted into the IN(...) list, and the SELECT result is
+// mysql_free_result'd once the row loop finishes.
 void trainModelFromSource(cSource& source, unordered_map <wstring, int>& wordTagCountsMap, unordered_map <wstring, int>& tagTransitionCountsMap, unordered_map <wstring, int>& tagCountsMap)
 {
 	// Train part-of-speech (POS) tagger model
@@ -451,7 +455,7 @@ void trainModelFromSource(cSource& source, unordered_map <wstring, int>& wordTag
 	{
 		wstring wordsToAdd;
 		for (wstring utw : untaggedWords)
-			wordsToAdd += L"\"" + utw + L"\",";
+			wordsToAdd += L"\"" + escaped(utw) + L"\",";
 		MYSQL_RES* result;
 		MYSQL_ROW sqlrow;
 		wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
@@ -467,11 +471,13 @@ void trainModelFromSource(cSource& source, unordered_map <wstring, int>& wordTag
 			mTW(sqlrow[1], tag);
 			wordTagCountsMap[tag + L" " + word] = 1;
 		}
+		mysql_free_result(result);
 	}
 }
 
-// Write T/E/C lines (transition / emission / tag-count) as UNICODE.  _wfopen result
-// is not checked.  Returns the same lines in a vector for in-memory load.
+// Write T/E/C lines (transition / emission / tag-count) as UNICODE.  Returns an
+// empty vector (and writes nothing) if _wfopen fails.  Returns the same lines in
+// a vector for in-memory load.
 vector <wstring> writeModelFile(wstring modelPath, unordered_map <wstring, int>& wordTagCountsMap, unordered_map <wstring, int>& tagTransitionCountsMap, unordered_map <wstring, int>& tagCountsMap)
 {
 	vector <wstring> model;
@@ -504,8 +510,8 @@ vector <wstring> writeModelFile(wstring modelPath, unordered_map <wstring, int>&
 	return model;
 }
 
-// Read the T/E/C model file.  _wfopen is unchecked; empty lines do
-// `line[wcslen(line)-1]=0` (writes before the buffer).  Lines are capped at 100 chars.
+// Read the T/E/C model file.  Returns an empty vector if _wfopen fails.  An empty
+// line is left as-is rather than underflowing line[-1].  Lines are capped at 100 chars.
 vector <wstring> readModelFile(wstring modelPath)
 {
 	vector <wstring> model;
@@ -1188,10 +1194,14 @@ void compareViterbiAgainstStructuredTagging(cSource& source,
 // Decode sequences
 // wordCountLimit - use words that occur across the corpus no less than this number
 // Load model, build matrices, run Viterbi.  wordCountLimit is the vocab min count.
-// Huge sources spill probability/path matrices to M:\caches.  source.m[0] is
-// assumed non-empty.  Header omits wordCountLimit and env.
+// Huge sources spill probability/path matrices to M:\caches.
 void tagFromSource(cSource& source, vector <wstring>& model, int wordCountLimit, JNIEnv* env, bool compare)
 {
+	if (source.m.empty())
+	{
+		lplog(LOG_ERROR, L"tagFromSource: empty source, nothing to tag.");
+		return;
+	}
 	unordered_map <wstring, int> wordTagCountsMap, tagTransitionCountsMap, tagCountsMap;
 	loadModel(model, wordTagCountsMap, tagTransitionCountsMap, tagCountsMap);
 	printf("constructing transition and emission matrices                                              \r");

@@ -20,13 +20,25 @@
 		- _tmain() - walk files, compare, print mismatches
 
 	Dependencies:
-		MySQL localhost root/byron0 database lp; WordNet headers pulled in
-		but unused here. Hardcoded E:\old thesaurus entries.
+		MySQL @ LP_DB_HOST (default localhost) / LP_DB_USER (default root) /
+		LP_DB_PASSWORD (required, no default) database lp; WordNet headers
+		pulled in but unused here. Hardcoded E:\old thesaurus entries.
 
 	Notes / gotchas:
-		Hardcoded DB password. mTW first call uses mTWbuffer while
-		mTWbufSize==0 (MultiByteToWideChar with dest=NULL-ish). realloc
-		overwrites mTWbuffer/sqlQueryBuffer on failure (leak + later crash).
+		(fixed) DB credentials come from LP_DB_HOST/LP_DB_USER/LP_DB_PASSWORD
+		environment variables (same names as the core engine's envConfig.h;
+		read locally via getenv() here rather than linking envConfig.cpp,
+		since this is a standalone single-TU project and envConfig.cpp pulls
+		in the logging.cpp/general.h dependency chain - see getDBHostLocal/
+		getDBUserLocal/getDBPasswordLocal below). getSynonymsFromDB's SQL now
+		escapes `word` via mysql_real_escape_string before interpolating it
+		into the query (was: `mainEntry = '" + word + "'"` unescaped).
+		(fixed) realloc's result used to overwrite mTWbuffer/sqlQueryBuffer
+		directly, so a failed realloc both leaked the original allocation
+		and left the pointer NULL for the next call (later NULL deref);
+		both mTW and the local WideCharToMultiByte now realloc into a
+		temporary and only commit it on success, leaving the original
+		(still valid) buffer in place otherwise.
 		scrapeThesaurus reads match[pos+1]/[pos+2] without a length check.
 		_tmain malloc(fl+2) then _read even if _wsopen_s failed (fd unused
 		for the malloc). mysql_real_connect failure is ignored; queries
@@ -63,7 +75,6 @@ using namespace std;
 #include "..\..\word.h"
 #include "..\..\ontology.h"
 #include "..\..\source.h"
-void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition> &d);
 
 __declspec(thread) static void *mTWbuffer = NULL;
 __declspec(thread) static unsigned int mTWbufSize = 0;
@@ -88,8 +99,17 @@ const wchar_t *mTW(string inString, wstring &outString)
 		queryLength = MultiByteToWideChar(CP_UTF8, 0, inString.c_str(), -1, NULL, 0);
 		unsigned int previousBufSize = mTWbufSize;
 		mTWbufSize = queryLength * 4; // queryLength is # of wide chars returned, bufSize is the # of bytes
-		if (!(mTWbuffer = realloc(mTWbuffer, mTWbufSize)))
+		void *newMTWbuffer = realloc(mTWbuffer, mTWbufSize);
+		if (!newMTWbuffer)
+		{
+			// realloc leaves the original block untouched on failure - keep
+			// using it (with its still-accurate previous size) instead of
+			// losing the pointer (leak) and dereferencing NULL below.
 			wprintf(L"Out of memory requesting %d bytes from sql query %S!", mTWbufSize, inString.c_str());
+			mTWbufSize = previousBufSize;
+		}
+		else
+			mTWbuffer = newMTWbuffer;
 		if (!MultiByteToWideChar(CP_UTF8, 0, inString.c_str(), -1, (wchar_t *)mTWbuffer, mTWbufSize / 2))
 			wprintf(L"Error in translating sql request: %S", inString.c_str());
 	}
@@ -125,11 +145,18 @@ void *WideCharToMultiByte(wchar_t *q, int &queryLength, void *&buffer, unsigned 
 		queryLength = WideCharToMultiByte(CP_UTF8, 0, q, -1, NULL, 0, NULL, NULL);
 		unsigned int previousBufSize = bufSize;
 		bufSize = queryLength * 2;
-		if (!(buffer = realloc(buffer, bufSize)))
+		void *newBuffer = realloc(buffer, bufSize);
+		if (!newBuffer)
 		{
+			// realloc leaves `buffer` untouched on failure - restore bufSize
+			// to match it so the caller's (still valid, still owned) buffer
+			// and size stay consistent instead of leaking the block and
+			// leaving a stale bufSize paired with a since-freed pointer.
 			wprintf(L"Out of memory requesting %d bytes from sql query %s!", bufSize, q);
+			bufSize = previousBufSize;
 			return NULL;
 		}
+		buffer = newBuffer;
 		if (!WideCharToMultiByte(CP_UTF8, 0, q, -1, (LPSTR)buffer, bufSize, NULL, NULL))
 		{
 			wprintf(L"Error in translating sql request: %s", q);
@@ -164,15 +191,71 @@ bool myquery(MYSQL *mysql, wchar_t *q, MYSQL_RES * &result)
 	return true;
 }
 
+// DB credentials via environment variables (same LP_DB_USER/LP_DB_PASSWORD/
+// LP_DB_HOST names as the core engine's envConfig.h getDBUser/getDBPassword/
+// getDBHost). This tool is a standalone single-TU project (its own
+// convertPDFTextToDatabase.vcxproj, not part of lp.vcxproj/specials.vcxproj)
+// and linking envConfig.cpp would drag in logging.cpp/general.h's lplog
+// dependency chain, so credentials are read locally via getenv() instead.
+static const char *getDBUserLocal()
+{
+	const char *env = getenv("LP_DB_USER");
+	return (env && *env) ? env : "root";
+}
+
+static const char *getDBHostLocal()
+{
+	const char *env = getenv("LP_DB_HOST");
+	return (env && *env) ? env : "localhost";
+}
+
+// No safe default - fatal if unset, matching envConfig.cpp's
+// requiredNarrowEnv/getDBPassword behavior.
+static const char *getDBPasswordLocal()
+{
+	const char *env = getenv("LP_DB_PASSWORD");
+	if (!env || !*env)
+	{
+		fwprintf(stderr, L"Fatal: LP_DB_PASSWORD environment variable is not set (no default password is used). Set it before running convertPDFTextToDatabase.\n");
+		exit(1);
+	}
+	return env;
+}
+
+// Escape `from` for safe interpolation into a single-quoted SQL string
+// literal via mysql_real_escape_string (same approach as the core engine's
+// DBUtility.cpp::encodeEscape), converting wstring -> UTF-8 -> escaped
+// UTF-8 -> wstring. Falls back to returning `from` unescaped only if the
+// UTF-8 conversion itself fails (already-logged by WideCharToMultiByte).
+wstring escapeForSQL(MYSQL *mysql, const wstring &from)
+{
+	void *utf8Buffer = NULL;
+	unsigned int utf8BufSize = 0;
+	int utf8Length = 0;
+	void *converted = WideCharToMultiByte((wchar_t *)from.c_str(), utf8Length, utf8Buffer, utf8BufSize);
+	if (!converted || utf8Length <= 0)
+	{
+		free(utf8Buffer);
+		return from;
+	}
+	string sFrom((char *)utf8Buffer, utf8Length - 1); // drop the trailing NUL WideCharToMultiByte counted
+	free(utf8Buffer);
+	vector<char> escaped(sFrom.length() * 2 + 1);
+	unsigned long len = mysql_real_escape_string(mysql, escaped.data(), sFrom.c_str(), sFrom.length());
+	wstring result;
+	mTW(string(escaped.data(), len), result);
+	return result;
+}
+
 // SELECT accumulatedSynonyms FROM thesaurus WHERE mainEntry=word AND
 // wordType matches synonymType (1=n, 2=v, 3=adj, 4=adv after the --).
 // Splits semicolon lists into one set per row; strips a trailing '*'.
-// word is interpolated unescaped. MYSQL is passed by value (copy of the
-// handle struct).
+// word is escaped via mysql_real_escape_string before interpolation.
+// MYSQL is passed by value (copy of the handle struct).
 void getSynonymsFromDB(MYSQL mysql, wstring word, vector <set <wstring> > &synonyms, int synonymType)
 {
 	wstring query = L"select accumulatedSynonyms from thesaurus where mainEntry = '";
-	query += word + L"'";
+	query += escapeForSQL(&mysql, word) + L"'";
 	// thesaurus mappings
 	// "adj"=1, "adv"=2, "prep"=4, "pron"=8, "conj"=16, "det"=32, "interj"=64, "n"=128, "v"=256, NULL };
 	synonymType--; // increased by one in previous code that put the file 
@@ -326,7 +409,7 @@ int _tmain(int argc, TCHAR *argv[])
 	bool keep_connect = true;
 	mysql_options(&mysql, MYSQL_OPT_RECONNECT, &keep_connect);
 	string sqlStr;
-	if ((mysql_real_connect(&mysql, "localhost", "root", "byron0", "lp", 0, NULL, 0) != NULL))
+	if ((mysql_real_connect(&mysql, getDBHostLocal(), getDBUserLocal(), getDBPasswordLocal(), "lp", 0, NULL, 0) != NULL))
 	{
 		mysql_options(&mysql, MYSQL_OPT_RECONNECT, &keep_connect);
 		if (mysql_set_character_set(&mysql, "utf8"))
@@ -369,7 +452,6 @@ int _tmain(int argc, TCHAR *argv[])
 				while ((space = (int)word.find('+')) != wstring::npos)
 					word[space] = ' ';
 				scrapeThesaurus(word, buffer, scrapedSynonyms);
-				//scrapeNewThesaurus();
 				vector < set <wstring> > dbSynonyms;
 				int synonymType = -1;
 				if (isdigit(ffd.cFileName[wcslen(ffd.cFileName) - 1]))

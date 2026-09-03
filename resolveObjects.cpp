@@ -52,8 +52,6 @@
 	Notes / gotchas:
 		- resolveObject may re-enter itself after changing BODY ->
 		  NON_GENDERED (changeClass). flagObjectResolved is cleared first.
-		- containingSpeakerGroup() compares sgBegin/sgEnd to the loop
-		  index, not a source position, so it always returns end().
 		- cOM == vs != and colliding cWordMatch flags are documented in
 		  CODE_REVIEW.md; this file uses salienceFactor numerically and
 		  tests quote flags only on quote positions.
@@ -377,9 +375,9 @@ unsigned int cSource::getNumCompoundObjects(int where, int& combinantScore, wstr
 }
 
 // Plural non-gendered mention: first try a same-head plural already in
-// localObjects (the loop's skip test uses localObjects[0], not [s]). Then
-// match a cardinal ("four pictures") to a compound of that size in focus
-// or the next sentence. Returns true only on the same-head path.
+// localObjects (skipping narrator/audience at each slot). Then match a
+// cardinal ("four pictures") to a compound of that size in focus or the
+// next sentence. Returns true only on the same-head path.
 bool cSource::resolveNonGenderedGeneralObjectPlural(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches)
 {
 	wstring tmpstr, tmpstr2;
@@ -472,7 +470,9 @@ bool cSource::resolveNonGenderedGeneralObjectPlural(int where, vector <cObject>:
 }
 
 // "No. 27" / address-like __NOUN[Q]: match a local object (or relatedObjectsMap
-// entry) that contains the same numeral. Returns true after the first
+// entry) that contains the same numeral. Scans localObjects in order and
+// returns true on the first candidate that actually yields a match (a
+// candidate that yields nothing falls through to the next localObjects slot).
 bool cSource::resolveNonGenderedGeneralObjectNumAddress(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches)
 {
 	wstring tmpstr, tmpstr2;
@@ -980,7 +980,8 @@ struct {
 };
 // GENDERED_RELATIVE ("cousin", "sister"): "another" scans two paragraphs
 // ahead for a new same-relation or attributed NAME; other word-order
-// modifiers trim objectMatches via preferWordOrder (no size guard on erase).
+// modifiers trim objectMatches via preferWordOrder (size-guarded before erase,
+// matching resolveOccRoleActivityObject's guard on the same pattern).
 void cSource::resolveRelativeObject(int where, vector <cOM>& objectMatches, vector <cObject>::iterator object, int wordOrderSensitiveModifier)
 {
 	LFS
@@ -1012,9 +1013,15 @@ void cSource::resolveRelativeObject(int where, vector <cOM>& objectMatches, vect
 			locations.push_back(locationBefore(objectMatches[I].object, where));
 		int tmp = preferWordOrder(wordOrderSensitiveModifier, locations);
 		if (tmp == 0)
+		{
+			if (objectMatches.size() < 2) return;
 			objectMatches.erase(objectMatches.begin() + 1);
+		}
 		else if (tmp == 1)
+		{
+			if (objectMatches.empty()) return;
 			objectMatches.erase(objectMatches.begin());
+		}
 		else if (tmp == -2)
 			objectMatches.clear();
 	}
@@ -1371,11 +1378,9 @@ bool cSource::resolveGenderedObject(int where, bool definitelyResolveSpeaker, bo
 	// make sure this does not resolve to a NON_GENDERED_GENERAL_OBJECT_CLASS
 	for (unsigned int I = 0; I < localObjects.size(); I++)
 		if (localObjects[I].includeInSalience(objectToBeMatchedInQuote, quoteIndependentAge) &&
-			// && binds tighter than ||: BUSINESS and VERB are penalized even
-			// when includeInSalience is false.
-			objects[localObjects[I].om.object].objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS ||
+			(objects[localObjects[I].om.object].objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS ||
 			objects[localObjects[I].om.object].objectClass == NON_GENDERED_BUSINESS_OBJECT_CLASS ||
-			objects[localObjects[I].om.object].objectClass == VERB_OBJECT_CLASS)
+			objects[localObjects[I].om.object].objectClass == VERB_OBJECT_CLASS))
 		{
 			if (debugTrace.traceObjectResolution || debugTrace.traceSpeakerResolution)
 				localObjects[I].res += L"-DOWNCLASS[" + itos(-10000, tmpstr) + L"]";
@@ -1591,8 +1596,8 @@ void cSource::addPreviousDemonyms(int where)
 
 // "two men" / "three men" as an unresolvable subject: if the *next* speaker
 // group introduces exactly that many new speakers of matching gender, bind
-// them and rewrite the current group's cGroup. Indexes
-// speakerGroups[currentSpeakerGroup+1] with no bounds check.
+// them and rewrite the current group's cGroup. Returns false (rather than
+// indexing off the end) when the current group is the last one.
 bool cSource::addNewNumberedSpeakers(int where, vector <cOM>& objectMatches)
 {
 	LFS

@@ -16,7 +16,8 @@
 		- lplog() / lplog(format,...) / lplog(logLevel,format,...) - format and write.
 		- lplogNR() - same as lplog(logLevel,...) but does not append a newline.
 		- logstring() - the sink: opens/buffers the per-level FILE*, writes, and on
-			LOG_FATAL_ERROR blocks on getchar() then exit(0).
+			LOG_FATAL_ERROR calls fatalExit() (exits EXIT_FAILURE; waits for a
+			keypress only when interactive).
 
 	Key data structures / globals:
 		- sTrace - per-document bag of bools that gate expensive resolution/pattern traces.
@@ -25,17 +26,17 @@
 		- logCache - seconds a FILE* is kept open (40 by default); 0 means close after every write.
 
 	Notes / gotchas:
-		- lplog(LOG_FATAL_ERROR,...) DOES abort: logstring() calls exit(0) after a getchar()
-			wait.  source.h currently claims it only logs; that is wrong.  main.cpp and
-			DBUtility.cpp document the real behaviour.  Unattended runs hang at the prompt
-			and then exit with status 0 (not 1).
+		- lplog(LOG_FATAL_ERROR,...) aborts: logstring() calls fatalExit(), which exits
+			EXIT_FAILURE and only waits for a keypress when interactive (multiProcess==0
+			and stdin is a tty).  source.h, main.cpp, and DBUtility.cpp all document this
+			correctly.  Unattended runs (a -mp child) exit immediately with a non-zero
+			status; they do not hang waiting on stdin.
 		- LOG_FATAL_ERROR is also treated as LOG_INFO for file routing (writes main.lplog)
 			and lplog() ORs in LOG_ERROR, but logstring() exits before the error-file pass.
 		- lplogNR is "no newline" (it skips the wcscat L"\\n"), not "no return" - both
 			lplog and lplogNR abort on FATAL via logstring().
-		- When LOG_BUFFER is defined (it is), the FILE* handles are process-wide, not TLS,
-			while logFileExtension is TLS - concurrent threads sharing a level race on the
-			same FILE*.
+		- When LOG_BUFFER is defined (it is), the FILE* handles are TLS, same as
+			logFileExtension, so two threads never share the same handle.
 */
 //#define LOG_RELATIVE_LOCATION
 //#define LOG_OLD_MATCH

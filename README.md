@@ -1042,21 +1042,19 @@ Emphasis has been placed on finding a root which is a word, instead of a linguis
 
 Tier: F1
 
-Azure control URL: [https://portal.azure.com/#@dscott1414yahoo.onmicrosoft.com/resource/subscriptions/9ad86dd3-3e4f-4829-8baa-adca97034e05/resourcegroups/LPBingSearchResourceGroup/providers/Microsoft.CognitiveServices/accounts/LPBingSearch/overview](https://portal.azure.com/#@dscott1414yahoo.onmicrosoft.com/resource/subscriptions/9ad86dd3-3e4f-4829-8baa-adca97034e05/resourcegroups/LPBingSearchResourceGroup/providers/Microsoft.CognitiveServices/accounts/LPBingSearch/overview)
-
-Username: [dscott1414@yahoo.com](mailto:dscott1414@yahoo.com)
-
-Password: Jsdu4783Jdsh4$\*
-
-Access Key 1: 345820954c834fa08a227260862bbfe5
-
-Access Key 2: c4ad499d9cda4c67b5c9046bdda989c4
+Azure control URL: the Azure Portal resource page for the LPBingSearch Cognitive
+Services account, resource group LPBingSearchResourceGroup (see your own Azure
+account - the account owner, subscription ID, resource group, portal URL,
+password, and both access keys that used to be pasted here in plaintext have
+been removed; they were live credentials, not placeholders, and should be
+treated as compromised - rotate the Azure account password and regenerate both
+Bing access keys).
 
 Endpoint: [https://lpbingsearch.cognitiveservices.azure.com/bing/v7.0](https://lpbingsearch.cognitiveservices.azure.com/bing/v7.0)
 
-Subscription ID: 9ad86dd3-3e4f-4829-8baa-adca97034e05
-
-Resource Group: LPBingSearchResourceGroup
+The Bing key the code actually uses is read from the LP_BING_KEY environment
+variable (see envConfig.h) - set it to Access Key 1 or 2 from the Azure portal
+after rotating them.
 
 ## WordNet 2.1
 
@@ -1468,7 +1466,7 @@ F:\lp\solr-8.0.0\> bin\solr.cmd start
 
 \<dataConfig\>
 
-\<dataSource type="JdbcDataSource" driver="com.mysql.cj.jdbc.Driver" url="jdbc:mysql://localhost:3306/lp" user="root" password="byron0"/\>
+\<dataSource type="JdbcDataSource" driver="com.mysql.cj.jdbc.Driver" url="jdbc:mysql://localhost:3306/lp" user="root" password="\<your MySQL password\>"/\>
 
 \<document\>
 

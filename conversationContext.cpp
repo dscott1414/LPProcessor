@@ -2,29 +2,30 @@
 	conversationContext.cpp - unfinished conversation-span detector (cSource::identifyConversations)
 
 	Overview:
-		Intended to walk the quote chain (firstQuote / nextQuote) and group quotes
-		that share a speaker-group and at least two participants into
-		"conversations", then build a three-level coherence map (exact word,
-		WordNet/VerbNet synonym, word-relation).  Only the grouping predicates are
-		sketched; the maps are allocated and never filled, and nothing is stored
-		on cSource.
+		Walks the quote chain (firstQuote / nextQuote) and counts quotes that
+		share a speaker-group and at least two participants as
+		"conversations".  The three-level coherence map (exact word,
+		WordNet/VerbNet synonym, word-relation) and the adjacency-pair
+		classification described in the comments below were never
+		implemented - only the grouping predicates are; nothing is stored on
+		cSource and the counts are local to the function (see the trailing
+		commented-out lplog).
 
 	Pipeline position:
-		Would run after resolveSpeakers (stage 7).  Not called from the current
-		main loop (the adjacency-pair comments are a design note, not code).
+		Runs after resolveSpeakers (stage 7): main.cpp calls
+		source.identifyConversations() once per source, right after
+		resolveFirstSecondPersonPronouns/resolveSpeakers.
 
 	Key entry points:
 		- identifyConversations() - walk quotes; currently a stub that only
 			counts conversations locally.
 
-	Key data structures / globals:
-		- cCohereInfo - intended (lastLocation, age, occurrence) value type for
-			the coherence maps; members are private (class default) and unused.
-
 	Notes / gotchas:
-		- The "share at least two people" test copy-pastes the same
-			intersect(...) condition twice, so the second clause is dead.  The
-			obvious intent was to also compare against previousQuote's audience.
+		- The "share at least two people" test compares current vs previous
+			quote's objectMatches (speakers) in one clause and current vs
+			previous quote's audienceObjectMatches in the other (previously both
+			clauses copy-pasted the objectMatches comparison, so the audience
+			was never consulted; fixed).
 		- Embedded-story quotes (flagEmbeddedStoryResolveSpeakers without Begin)
 			are skipped.
 		- currentSpeakerGroup is a cSource member; this mutates it as a cursor.
@@ -40,20 +41,11 @@
 #include "math.h"
 #include "profile.h"
 
-// Per-word coherence accumulator (unused).  Members are private and there is
-// no constructor, so a default-constructed instance has uninitialized ints.
-class cCohereInfo
-{
-	int lastLocation;
-	int age;
-	int occurrence;
-};
-
 // Walk the quote chain and count multi-party conversations (quotes whose
 // speaker and audience object-match lists are not equal, and that do not
-// share two participants with the previous quote / speaker group).
-// The coherence maps below are never populated; the function has no
-// observable effect besides advancing currentSpeakerGroup.
+// share two participants with the previous quote / speaker group).  The
+// counts are local; the function has no observable effect besides
+// advancing currentSpeakerGroup.
 // this is to identify all conversations in the source and to trace all nouns/verbs/adjectives/adverbs through exact match, synonyms, and relations.
 // a conversation is currently defined as being between more than one person.
 void cSource::identifyConversations()
@@ -100,15 +92,13 @@ void cSource::identifyConversations()
 		// a. noun/verb/adj/adv - exact match?
 		// b. synonyms through verbnet/wordnet
 		// c. relations
-
-		// first level map word 
-		map<tIWMM, cCohereInfo> coherenceWords;
-		// second level map noun/adjective/adverb synonyms and verb verbNet classes
-		map<tIWMM, cCohereInfo> coherenceSecondary;
-		// third level map 
-		// this maps verb/noun/adj/adv relations
-		// rich - millionaire/ rich - money
-
+		//
+		// intended: a first-level map of word -> (lastLocation, age, occurrence) for
+		// exact matches, a second-level map for noun/adjective/adverb synonyms and verb
+		// verbNet classes, and a third-level map for verb/noun/adj/adv relations
+		// (rich - millionaire / rich - money).  None of the three maps were ever
+		// implemented, so the never-populated cCohereInfo-keyed locals that used to
+		// sit here were removed as dead code; this comment records the design intent.
 	}
 	//lplog(L"numQuotes=%d. numQuotesInConversations=%d. numConversations=%d.",numQuotes,numQuotesInConversations,numConversations);
 }

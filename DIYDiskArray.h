@@ -18,12 +18,21 @@
 
 	Notes / gotchas:
 		- initialize() writes sizeof(buf) even when fewer bytes remain, so the file
-			is longer than (first+1)*(second+1)*sizeof(T).
-		- Disk index is (first*saveSecond + second).  Dimensions are saveFirst+1 by
-			saveSecond+1, so the stride should be (saveSecond+1).  The last column of
-			each row aliases the first cell of the next row.
-		- checkMatrix is sized (first) x (second), one short of the inclusive max
-			index, so a put of (saveFirst, saveSecond) is OOB when check==true.
+			is longer than (first+1)*(second+1)*sizeof(T) (harmless slack).
+		- Disk index is (first*(saveSecond+1) + second), matching the (saveFirst+1)
+			by (saveSecond+1) allocation - put/get allow first==saveFirst and
+			second==saveSecond (an inclusive range).  Previously the stride was
+			saveSecond (missing +1), so the last column of each row aliased the
+			first cell of the next row; fixed.  The current sole caller (hmm.cpp's
+			Viterbi matrices) never actually indexes the last row/column, so this
+			was latent, not observably wrong, but a future caller that does use
+			the full inclusive range would have silently corrupted data.
+		- RAM mode's `matrix` and `checkMatrix` are now sized (first+1) by
+			(second+1) too, for the same reason (they were previously sized
+			exactly (first,second), one short of the inclusive max index, so
+			put/get(saveFirst,saveSecond) was an out-of-bounds vector access).
+		- check/checkMatrix are private with no setter, so `check` is always
+			false and that self-verification path is unreachable today.
 		- get() on a failed fd returns -1, which is not a valid T for every T.
 */
 #include <sstream>
@@ -54,10 +63,11 @@ class DIYDiskArray
 	bool check=false;
 
 public:
-	// Allocate a (first+1) by (second+1) matrix filled with 'value'.  Disk mode
-	// creates/opens 'path' and writes the fill in 4096-T chunks (the last write
-	// is a full chunk even if fewer bytes remain).  RAM mode is vector(first) x
-	// vector(second) - one short of the inclusive max index.
+	// Allocate a (first+1) by (second+1) matrix filled with 'value', in both
+	// disk and RAM mode (matching put/get's inclusive first<=saveFirst,
+	// second<=saveSecond range check).  Disk mode creates/opens 'path' and
+	// writes the fill in 4096-T chunks (the last write is a full chunk even
+	// if fewer bytes remain).
 	errno_t initialize(__int64 first, __int64 second, T value)
 	{
 		saveFirst = first;
@@ -82,11 +92,11 @@ public:
 					}
 			}
 			if (check)
-				checkMatrix = vector(first, vector(second, value));
+				checkMatrix = vector(first + 1, vector(second + 1, value));
 			return error;
 		}
 		else
-			matrix = vector(first, vector(second, value));
+			matrix = vector(first + 1, vector(second + 1, value));
 		return 0;
 	}
 
@@ -99,7 +109,7 @@ public:
 	}
 
 	// Store value at [first][second].  Out of range is FATAL.  Disk seek uses
-	// (first*saveSecond + second) - stride is saveSecond, not saveSecond+1.
+	// stride (saveSecond+1), matching the (saveFirst+1)x(saveSecond+1) allocation.
 	// Returns 0, or -1 if the fd is already in error.
 	int put(__int64 first, __int64 second, T value)
 	{
@@ -113,7 +123,7 @@ public:
 		{
 			if (matrixfp == -1 || error != 0)
 				return -1;
-			if (_lseeki64(matrixfp, (first*saveSecond + second) * sizeof(value), SEEK_SET) < 0)
+			if (_lseeki64(matrixfp, (first*(saveSecond + 1) + second) * sizeof(value), SEEK_SET) < 0)
 			{
 				error = errno;
 				if (error && anyErrorFatal)
@@ -152,7 +162,7 @@ public:
 			if (matrixfp == -1 || error != 0)
 				return -1;
 			T value;
-			if (_lseeki64(matrixfp, (first*saveSecond + second) * sizeof(value), SEEK_SET) < 0)
+			if (_lseeki64(matrixfp, (first*(saveSecond + 1) + second) * sizeof(value), SEEK_SET) < 0)
 			{
 				error = errno;
 				if (error && anyErrorFatal)

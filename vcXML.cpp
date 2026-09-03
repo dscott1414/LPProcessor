@@ -25,9 +25,8 @@
 
 	Notes / gotchas:
 		Parser assumes well-formed VerbNet XML and mutates the wide buffer in place
-		(temporarily zeros delimiters). aH can dereference NULL when '>' is missing
-		but a space is found. readVBNet leaks the FindFirstFile handle if _wopen
-		fails. Error wprintf cites VBNet but the path is VerbNet.
+		(temporarily zeros delimiters). readVBNet closes the FindFirstFile handle on
+		every return path, including a mid-scan _wopen failure.
 */
 #pragma warning(disable : 4786 ) // disable warning C4786
 #include <windows.h>
@@ -63,14 +62,17 @@ bool tX(wchar_t* buf, __int64& offset, wstring& s, wchar_t endChar)
 
 // Reads a tag name from buf[offset] up to endChar or '>'. Advances offset to the delimiter
 // (and past it if it was endChar). Returns false only if both delimiters are missing.
-// <VNCLASS 
+// <VNCLASS
 bool aH(wchar_t* buf, __int64& offset, wstring& s, wchar_t endChar)
 {
 	LFS
 		wchar_t* ch = wcschr(buf + offset, endChar);
 	wchar_t* ech = wcschr(buf + offset, L'>');
 	if (ch == NULL && ech == NULL) return false;
-	if ((ch == NULL && ech != NULL) || ech < ch)
+	// ech may be NULL (no '>' left in the buffer) even when ch was found; only compare the two
+	// pointers when both are non-NULL, otherwise a NULL ech would compare as "less than" any
+	// valid ch and *ch=0 below would write through a NULL ch.
+	if (ch == NULL || (ech != NULL && ech < ch))
 		ch = ech;
 	wchar_t savech = *ch;
 	*ch = 0;
@@ -450,8 +452,8 @@ bool aVNCLASS(wchar_t* buf, __int64& offset)
 vector < cVerbNet > vbNetClasses;
 
 // Loads every *.xml under source\lists\VerbNet\ via aVNCLASS, then appends a synthetic
-// am/become/be class (prepMustBeLocation, noPrepTo). Returns immediately (leaking hFind)
-// if the first file cannot be opened.
+// am/become/be class (prepMustBeLocation, noPrepTo). FindClose(hFind) runs on every
+// return path, including when a file fails to open partway through the directory scan.
 void readVBNet(void)
 {
 	LFS
@@ -459,7 +461,7 @@ void readVBNet(void)
 	HANDLE hFind;
 	if ((hFind = FindFirstFile(L"source\\lists\\VerbNet\\*.xml", &FindFileData)) == INVALID_HANDLE_VALUE)
 	{
-		wprintf(L"FindFirstFile failed on directory %s (%d)\r", L"source\\lists\\VBNet\\", (int)GetLastError());
+		wprintf(L"FindFirstFile failed on directory %s (%d)\r", L"source\\lists\\VerbNet\\", (int)GetLastError());
 		return;
 	}
 	vbNetClasses.reserve(550);
@@ -470,7 +472,10 @@ void readVBNet(void)
 		_snwprintf(original, 4096, L"source\\lists\\VerbNet\\%s", FindFileData.cFileName);
 		int fd = _wopen(original, O_RDONLY | O_BINARY);
 		if (fd < 0)
+		{
+			FindClose(hFind);
 			return;
+		}
 		int bufferlen = filelength(fd);
 		char* buffer = (char*)tmalloc(bufferlen + 10);
 		::read(fd, buffer, bufferlen);
@@ -478,7 +483,7 @@ void readVBNet(void)
 		buffer[bufferlen] = 0;
 		wstring wide;
 		mTW(buffer, wide);
-		free(buffer);
+		tfree(bufferlen + 10, buffer);
 		__int64 offset = 0;
 		if (!aVNCLASS((wchar_t*)wide.c_str(), offset))
 			wprintf(L"Error reading %s at offset %I64d:%lS..->\n%lS...\n",

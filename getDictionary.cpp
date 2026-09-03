@@ -20,14 +20,14 @@
 		- distributeToSubDirectories / getPath / eliminateHTMLCharacterEntities
 
 	Dependencies:
-		dictionaryapi.com (hardcoded key); dictionary.com; WordNet; yajl; cache
-		dirs Webster / webSearchCache; MySQL for illegal-word checks.
+		dictionaryapi.com (key from envConfig.h getMerriamWebsterKey()); dictionary.com;
+		WordNet; yajl; cache dirs Webster / webSearchCache; MySQL for illegal-word checks.
 
 	Notes / gotchas:
-		Merriam-Webster API key is embedded in the URL. sWord is concatenated into
-		the URL with no encoding. firstMatch(wchar_t*/char*) NUL-terminates the
-		endString in the caller's buffer. getPath return polarity is inverted at
-		several call sites (0 = success).
+		sWord is percent-encoded (encodeURL) before being concatenated into the
+		dictionaryapi.com URL. firstMatch(wchar_t*/char*) NUL-terminates the endString in
+		the caller's buffer. getPath return polarity is inverted at several call sites
+		(0 = success).
 */
 #include <errno.h>
 #include <windows.h>
@@ -54,6 +54,8 @@ extern "C" {
 }
 #define MAX_LEN 2048
 #include "internet.h"
+
+void encodeURL(wstring winput, wstring& wencodedURL); // defined in createOntology.cpp
 
 int bandwidthControl = 1; // minimum seconds between requests   // initialized before threads
 
@@ -360,7 +362,10 @@ SYMBOLS
 
 */
 // Replaces &Name; with the first letter of Name, drops &#NNN; and &sym; entirely.
-// Reads buffer[pos+1] without a length check after find('&').
+// buffer[pos+1] (and the other lookaheads below) are read without an explicit length check,
+// but this is bounds-safe: std::wstring guarantees buffer[buffer.size()] reads as L'\0', and
+// every lookahead beyond pos+1 is only reached after the previous character was confirmed
+// to be real (not the terminator), so the index never exceeds buffer.size().
 void eliminateHTMLCharacterEntities(wstring& buffer)
 {
 	LFS
@@ -1201,12 +1206,16 @@ bool detectNonEuropeanWord(wstring word)
 	//return true;
 }
 
-// GET dictionaryapi.com Collegiate JSON for sWord (hardcoded key, no URL-encoding) and
-// fill posSet/plural. Follows referWord recursively. Returns posSet.size() > 0.
+// GET dictionaryapi.com Collegiate JSON for sWord (key from envConfig.h's
+// getMerriamWebsterKey(); sWord is percent-encoded via encodeURL, defined in
+// createOntology.cpp) and fill posSet/plural. Follows referWord recursively.
+// Returns posSet.size() > 0.
 bool getMerriamWebsterDictionaryAPIForms(wstring sWord, set <int>& posSet, bool& plural, bool& networkAccessed, bool logEverything)
 {
 	wstring pageURL = L"https://www.dictionaryapi.com/api/v3/references/collegiate/json/";
-	pageURL += sWord + L"?key=ba4ac476-dac1-4b38-ad6b-fe36e8416e07";
+	wstring uWord;
+	encodeURL(sWord, uWord); // sWord is a path segment here, not just a query value; escape any '/','?','&' etc it might contain
+	pageURL += uWord + L"?key=" + getMerriamWebsterKey();
 	wstring jsonWideBuffer, diskPath;
 	if (!cInternet::cacheWebPath(pageURL, jsonWideBuffer, sWord, L"Webster", false, networkAccessed, diskPath))
 	{

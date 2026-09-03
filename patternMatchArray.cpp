@@ -23,12 +23,13 @@
 		- compare() - qsort/bsearch comparator on (pattern, len)
 
 	Notes / gotchas:
-		- clear() tfree's content but leaves the dangling pointer (destructor and
-		  PEMA::clear null it).  The next push_back then trealloc's freed memory.
-		- read() bounds-checks with the *old* count before copy() overwrites it.
-		- queryPattern(int, int& len) uses the caller's len as the running max
-		  without initializing it; the other overloads start from -1.
-		- getNextPosition seeds minPatternMatch with `1<<31` (signed-shift UB).
+		- clear() tfree's content and NULLs it, matching the destructor and
+		  PEMA::clear.
+		- read() parses count via copy() (which bounds-checks the read itself)
+		  before using it for allocation or the payload bounds check.
+		- queryPattern(int, int& len) initializes len=-1 on entry, same as the
+		  other overloads.
+		- getNextPosition seeds minPatternMatch with INT_MIN.
 */
 #include <stdio.h>
 #include <string.h>
@@ -61,8 +62,7 @@ cPatternMatchArray::~cPatternMatchArray()
 	content = NULL;
 }
 
-// Drop every entry and free the buffer.  Unlike the destructor this does not
-// NULL content, so a subsequent push_back trealloc's a freed pointer.
+// Drop every entry and free the buffer, NULLing content like the destructor.
 void cPatternMatchArray::clear(void)
 {
 	LFS
@@ -112,9 +112,10 @@ bool cPatternMatchArray::write(IOHANDLE file)
 	return true;
 }
 
-// Deserialize from a memory image.  The first bounds check uses the *pre-read*
-// count (usually 0), so it does not actually protect the memcpy.  Returns false
-// on a short buffer or tmalloc failure; fatals if the memcpy would exceed limit.
+// Deserialize from a memory image.  copy() parses the real count (bounds-checked
+// against limit internally) before it is used for allocation or the payload
+// bounds check below.  Returns false on a short buffer or tmalloc failure;
+// fatals if the memcpy would exceed limit.
 bool cPatternMatchArray::read(char* buffer, int& where, unsigned int limit)
 {
 	LFS
@@ -147,8 +148,8 @@ bool cPatternMatchArray::write(void* buffer, int& where, unsigned int limit)
 	return true;
 }
 
-// Byte-compare content[0..count).  `other` is taken by value (full copy).
-bool cPatternMatchArray::operator==(const cPatternMatchArray other) const
+// Byte-compare content[0..count).
+bool cPatternMatchArray::operator==(const cPatternMatchArray &other) const
 {
 	LFS
 		if (count != other.count) return false;
@@ -177,8 +178,8 @@ cPatternMatchArray& cPatternMatchArray::operator=(const cPatternMatchArray& rhs)
 	return *this;
 }
 
-// Inverse of operator==.  Also takes `other` by value.
-bool cPatternMatchArray::operator!=(const cPatternMatchArray other) const
+// Inverse of operator==.
+bool cPatternMatchArray::operator!=(const cPatternMatchArray &other) const
 {
 	LFS
 		if (count != other.count) return true;
@@ -410,9 +411,8 @@ int cPatternMatchArray::queryMaximumLowestCostPattern(wstring pattern, int& len)
 	return element;
 }
 
-// Longest match of pattern *number* `pattern` whose len is already > `len`.
-// Unlike the wstring overload, `len` is not reset to -1 — the caller must
-// initialize it or the first comparison is against garbage.
+// Longest match of pattern *number* `pattern`.  len is initialized to -1 on
+// entry, same as the wstring overload.
 int cPatternMatchArray::queryPattern(int pattern, int& len)
 {
 	LFS
@@ -428,9 +428,10 @@ int cPatternMatchArray::queryPattern(int pattern, int& len)
 }
 
 // Longest match whose pattern belongs to desiredTagSetNum.  On a length tie,
-// a NAME tag already chosen wins over a later NOUN.  Returns the tag id (or
-// -1); element is the PMA index | patternFlag.  If hasTagInSet returns -1,
-// a later equal-length hit reads patternTagStrings[-1].
+// a NAME tag already chosen wins over a later NOUN (guarded by tag>=0 so an
+// unset `tag` from a prior no-op hasTagInSet is never used to index
+// patternTagStrings).  Returns the tag id (or -1); element is the PMA index
+// | patternFlag.
 int cPatternMatchArray::queryTagSet(unsigned int& element, int desiredTagSetNum, int& maxLen)
 {
 	LFS
@@ -595,7 +596,7 @@ int cPatternMatchArray::queryQuestionFlagPattern()
 
 // Smallest match length in this PMA, if it is > w; otherwise w+1.  Used to
 // skip forward when no match covering more than `w` tokens starts here.
-// Seeds the scan with `1<<31` (signed left-shift into the sign bit).
+// Seeds the scan with INT_MIN.
 int cPatternMatchArray::getNextPosition(int w)
 {
 	LFS

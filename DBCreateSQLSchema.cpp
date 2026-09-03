@@ -23,19 +23,26 @@
 		- insertWordRelationTypes.
 
 	Dependencies:
-		MySQL as root/byron0.  source\\lists\\bookSources.sql is slurped into
-		the sources table.  BNC index at LMAINDIR\\BNC-world\\doc\\Source\\bncIndex.xml.
+		MySQL via envConfig.h's getDBUser()/getDBPassword().  source\\lists\\bookSources.sql
+		is slurped into the sources table.  BNC index at
+		LMAINDIR\\BNC-world\\doc\\Source\\bncIndex.xml.
 
 	Notes / gotchas:
-		- createDatabase repeats the hardcoded root/byron0 credentials.
-		- Several CREATE TABLE strings are syntactically invalid (trailing
-			commas; FK column names that do not match the column; duplicate
-			index names).  createTimeRelationTables and parts of
-			createRelationTables will fail if ever executed.
-		- generateBNCSources treats a byte-sized file as wchar_t* and writes
-			buffer[actualLen]=0, which is 2*actualLen bytes past the allocation.
-		- writeThesaurusEntry interpolates unescaped narrow strings with %S
-			into a 1024-wchar_t _snwprintf (the stack buffer is 4096).
+		- createDatabase connects with the same getDBUser()/getDBPassword() call
+			initializeDatabaseHandle() uses.
+		- Several CREATE TABLE strings were syntactically invalid (trailing
+			commas; FK column names that did not match the column; duplicate
+			index names; FKs to tables that were created later, or never
+			created at all).  createTimeRelationTables, createObjectTables, and
+			createRelationTables have all been fixed; see the comments on each.
+			createGroupTables/createLocationTables/createThesaurusTables remain
+			broken-if-run, but are never called from anywhere in the tree
+			(author note: "these do not exist within the database"), so they
+			were left alone.
+		- generateBNCSources allocates actualLen+sizeof(wchar_t) bytes and
+			NUL-terminates at buffer[actualLen/sizeof(wchar_t)] - in range.
+		- writeThesaurusEntry builds the statement in a wstring (no fixed-size
+			stack buffer), escaping each list entry before appending it.
 */
 #include <stdio.h>
 #include <string.h>
@@ -184,7 +191,11 @@ int cSource::createLocationTables(void)
 }
 
 // CREATE objects / objectLocations / objectWordMap.  objects has no `id`
-// column, but objectLocations FKs objects(id) - that CREATE will fail.
+// column (rows are keyed by (sourceId,objectNum) - see cSource::flushObjects,
+// which REPLACE INTOs it positionally with no id value), so objectLocations
+// cannot FK a single-column objects.id; the FK is dropped, keeping the plain
+// index.  objectLocations itself is never populated anywhere in the tree
+// (flushObjects's comment: "objectLocations is not written").
 // objectWordMap.orderOrType is a name-part enum when objects.name is set.
 int cSource::createObjectTables(void)
 {
@@ -205,7 +216,7 @@ int cSource::createObjectTables(void)
 			L"identified BIT NOT NULL, plural BIT NOT NULL, male BIT NOT NULL, female BIT NOT NULL, neuter BIT NOT NULL, "
 			L"common BIT NOT NULL, name BIT NOT NULL)")) return -1;
 	if (!myquery(&mysql, L"CREATE TABLE objectLocations ("
-		L"objectId INT UNSIGNED NOT NULL, INDEX oi_ind (objectId), FOREIGN KEY (objectId) REFERENCES objects(id), "
+		L"objectId INT UNSIGNED NOT NULL, INDEX oi_ind (objectId), "
 		L"sourceId INT UNSIGNED NOT NULL, INDEX s_ind (sourceId), FOREIGN KEY (sourceId) REFERENCES sources(id), "
 		L"at INT)")) return -1;
 	if (!myquery(&mysql, L"CREATE TABLE objectWordMap ("
@@ -216,30 +227,34 @@ int cSource::createObjectTables(void)
 	return 0;
 }
 
-// CREATE timeGroupMembers / timeGroups / timeRelationTypes / timeGroupRelations.
-// timeGroupMembers indexes/FKs `relationId` but the column is wordRelationId;
-// timeGroupRelations has a trailing comma before `)`.  Both CREATEs fail.
+// CREATE timeGroups / timeGroupMembers / timeRelationTypes / timeGroupRelations
+// (in that order - timeGroupMembers and timeGroupRelations FK timeGroups(id),
+// so timeGroups must exist first: InnoDB rejects a FOREIGN KEY to a table
+// that has not been created yet).  Never called anywhere in the tree today,
+// but kept buildable rather than left broken.
+// Fixed: timeGroupMembers indexed/FKed `relationId`, but the column is
+// wordRelationId; timeGroupRelations had a trailing comma before `)`.
 int cSource::createTimeRelationTables(void)
 {
 	LFS
-		// timeGroupMembers: timeRelationId foreign key to timeRelations, objectId, wordRelationId
-		if (!myquery(&mysql, L"CREATE TABLE timeGroupMembers ("
-			L"timeGroupId INT UNSIGNED NOT NULL, INDEX tgi_ind (timeGroupId), FOREIGN KEY (timeGroupId) REFERENCES timeGroups(id), "
-			L"objectId INT UNSIGNED NOT NULL, INDEX oi_ind (objectId), FOREIGN KEY (objectId) REFERENCES objects(id), "
-			L"wordRelationId INT UNSIGNED NOT NULL, INDEX r_ind (relationId), FOREIGN KEY (relationId) REFERENCES wordRelations(id))")) return -1;
-	// timeGroups:
-	if (!myquery(&mysql, L"CREATE TABLE timeGroups (id int(11) unsigned NOT NULL auto_increment unique, "
-		L"speakerId INT UNSIGNED NOT NULL, INDEX si_ind (speakerId), FOREIGN KEY (speakerId) REFERENCES objects(id), "
-		L"sourceId INT UNSIGNED NOT NULL, INDEX s_ind (sourceId), FOREIGN KEY (sourceId) REFERENCES sources(id))")) return -1;
-	// timeRelationTypes: �BEFORE�|�AFTER�|�ON_OR_BEFORE�|�ON_OR_AFTER�|�LESS_THAN�|�MORE_THAN�|
-	//                    �EQUAL_OR_LESS�|�EQUAL_OR_MORE�|�START�|�MID�|�END�|�APPROX�
+		// timeGroups:
+		if (!myquery(&mysql, L"CREATE TABLE timeGroups (id int(11) unsigned NOT NULL auto_increment unique, "
+			L"speakerId INT UNSIGNED NOT NULL, INDEX si_ind (speakerId), FOREIGN KEY (speakerId) REFERENCES objects(id), "
+			L"sourceId INT UNSIGNED NOT NULL, INDEX s_ind (sourceId), FOREIGN KEY (sourceId) REFERENCES sources(id))")) return -1;
+	// timeGroupMembers: timeGroupId foreign key to timeGroups, objectId, wordRelationId
+	if (!myquery(&mysql, L"CREATE TABLE timeGroupMembers ("
+		L"timeGroupId INT UNSIGNED NOT NULL, INDEX tgi_ind (timeGroupId), FOREIGN KEY (timeGroupId) REFERENCES timeGroups(id), "
+		L"objectId INT UNSIGNED NOT NULL, INDEX oi_ind (objectId), FOREIGN KEY (objectId) REFERENCES objects(id), "
+		L"wordRelationId INT UNSIGNED NOT NULL, INDEX r_ind (wordRelationId), FOREIGN KEY (wordRelationId) REFERENCES wordRelations(id))")) return -1;
+	// timeRelationTypes: {BEFORE|AFTER|ON_OR_BEFORE|ON_OR_AFTER|LESS_THAN|MORE_THAN|
+	//                    EQUAL_OR_LESS|EQUAL_OR_MORE|START|MID|END|APPROX}
 	if (!myquery(&mysql, L"CREATE TABLE timeRelationTypes (id int(11) unsigned NOT NULL auto_increment unique, "
 		L"type VARCHAR(256) CHARACTER SET utf8mb4 NOT NULL)")) return -1;
 	// timeGroupRelations:
 	if (!myquery(&mysql, L"CREATE TABLE timeGroupRelations (id int(11) unsigned NOT NULL auto_increment unique, "
 		L"timeRelationTypeId INT UNSIGNED NOT NULL, INDEX tri_ind (timeRelationTypeId), FOREIGN KEY (timeRelationTypeId) REFERENCES timeRelationTypes(id), "
 		L"timeGroupId INT UNSIGNED NOT NULL, INDEX tgi_ind (timeGroupId), FOREIGN KEY (timeGroupId) REFERENCES timeGroups(id), "
-		L"timeGroup2Id INT UNSIGNED NOT NULL, INDEX tgi2_ind (timeGroup2Id), FOREIGN KEY (timeGroup2Id) REFERENCES timeGroups(id), "
+		L"timeGroup2Id INT UNSIGNED NOT NULL, INDEX tgi2_ind (timeGroup2Id), FOREIGN KEY (timeGroup2Id) REFERENCES timeGroups(id)"
 		L")")) return -1;
 	return 0;
 }
@@ -292,8 +307,14 @@ int cSource::createTimeRelationTables(void)
 
 // CREATE objectRelations, wordRelations, wordrelationsmemory (MEMORY),
 // multiWordRelations, prepPhraseMultiWordRelations, relationsFlow.
-// wordrelationsmemory and multiWordRelations have trailing-comma / duplicate
-// index-name SQL that will fail if executed on a strict server.
+// Fixed: wordrelationsmemory had a trailing comma before `)` and a unique key
+// missing toWordId; multiWordRelations redeclared secondaryObjectLocal_ind
+// (and the secondaryVerb FK) instead of covering nextSecondaryObjectLocal /
+// secondaryVerb; relationsFlow FKed a relationsTributary table that does not
+// exist anywhere in the schema, and its sourceId column FKed relationsFlow
+// itself instead of sources(id).  This function is called from
+// createDatabase(), so these bugs previously made a from-scratch schema
+// bootstrap abort here every time.
 int cSource::createRelationTables(void)
 {
 	LFS
@@ -322,9 +343,14 @@ int cSource::createRelationTables(void)
 		L"typeId smallint(5) unsigned NOT NULL DEFAULT '0',"
 		L"totalCount int(11) NOT NULL DEFAULT '0',"
 		L"UNIQUE KEY id (id),"
-		L"UNIQUE KEY uw_ind (fromWordId,typeId),"
+		// must match wordRelations' own (fromWordId,toWordId,typeId) unique key: main.cpp's
+		// WRMemoryCheck bulk-inserts every row of wordRelations into this table with a plain
+		// INSERT (no IGNORE/ON DUPLICATE), so a narrower key here (fromWordId,typeId) would
+		// collide on the first fromWordId that has more than one toWordId of the same type
+		// and abort the insert.
+		L"UNIQUE KEY uw_ind (fromWordId,toWordId,typeId),"
 		L"KEY fw_ind (fromWordId),"
-		L"KEY tw_ind (toWordId),"
+		L"KEY tw_ind (toWordId)"
 		L") ENGINE = MEMORY AUTO_INCREMENT = 36258188 DEFAULT CHARSET = latin1 DELAY_KEY_WRITE = 1;")) return -1;
 	if (!myquery(&mysql, L"CREATE TABLE multiWordRelations ("
 		L"id int(11) unsigned NOT NULL auto_increment unique, "
@@ -352,13 +378,13 @@ int cSource::createRelationTables(void)
 		L"objectMatched INT SIGNED NOT NULL DEFAULT -1, "
 		L"nextObjectLocal INT SIGNED NOT NULL DEFAULT -1, INDEX nextObjectLocal_ind (nextObjectLocal), FOREIGN KEY (nextObjectLocal) REFERENCES words(id), "
 		L"nextObjectMatched INT SIGNED NOT NULL DEFAULT -1, "
-		L"secondaryVerb INT SIGNED NOT NULL DEFAULT -1,FOREIGN KEY (verb) REFERENCES words(id), "
+		L"secondaryVerb INT SIGNED NOT NULL DEFAULT -1,FOREIGN KEY (secondaryVerb) REFERENCES words(id), "
 		L"secondaryObjectAdjectiveMatchedOwner INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (secondaryObjectAdjectiveMatchedOwner) REFERENCES objects(id), "
 		L"secondaryObjectAdjective INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (secondaryObjectAdjective) REFERENCES words(id), "
 		L"secondaryObjectAdjective2 INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (secondaryObjectAdjective2) REFERENCES words(id), "
 		L"secondaryObjectLocal INT SIGNED NOT NULL DEFAULT -1, INDEX secondaryObjectLocal_ind (secondaryObjectLocal), FOREIGN KEY (secondaryObjectLocal) REFERENCES words(id), "
 		L"secondaryObjectMatched INT SIGNED NOT NULL DEFAULT -1, "
-		L"nextSecondaryObjectLocal INT SIGNED NOT NULL DEFAULT -1, INDEX secondaryObjectLocal_ind (secondaryObjectLocal), FOREIGN KEY (secondaryObjectLocal) REFERENCES words(id), "
+		L"nextSecondaryObjectLocal INT SIGNED NOT NULL DEFAULT -1, INDEX nextSecondaryObjectLocal_ind (nextSecondaryObjectLocal), FOREIGN KEY (nextSecondaryObjectLocal) REFERENCES words(id), "
 		L"nextSecondaryObjectMatched INT SIGNED NOT NULL DEFAULT -1, "
 		L"relationType INT SIGNED NOT NULL DEFAULT -1, "
 		L"objectSubType INT SIGNED NOT NULL DEFAULT -1, "
@@ -389,19 +415,20 @@ int cSource::createRelationTables(void)
 		L"capacity SMALLINT UNSIGNED NOT NULL, "
 		// reference time
 		L"timeExpressionId INT UNSIGNED NOT NULL, FOREIGN KEY (timeExpressionId) REFERENCES relationsFlow(id), "
-		// other generic relations in the same expression
-		L"relationsTributaryId INT UNSIGNED NOT NULL, FOREIGN KEY (relationsTributaryId) REFERENCES relationsTributary(id), "
+		// other generic relations in the same expression - no relationsTributary table exists anywhere
+		// in the schema, so this can only be a plain column (dropping the dangling FK) until one is added
+		L"relationsTributaryId INT UNSIGNED NOT NULL, "
 		L"sequenceId INT UNSIGNED," // # - after timeExpression (increases by 10 to allow for insertions, or none if simultaneous
-		L"sourceId INT UNSIGNED NOT NULL, FOREIGN KEY (timeExpressionId) REFERENCES relationsFlow(id), "
+		L"sourceId INT UNSIGNED NOT NULL, FOREIGN KEY (sourceId) REFERENCES sources(id), "
 		L"ts TIMESTAMP)")) return -1;
 	return 0;
 }
 
 // Parse a BNC-world bncIndex.xml-like file and INSERT one sources row per
-// <doc> whose <genre> starts with 'W'.  Reads the file as bytes into a
-// wchar_t* of actualLen+1 bytes, then writes buffer[actualLen]=0 (a wchar_t
-// at byte 2*actualLen - buffer overrun).  Returns 0 on success, negative
-// NET_ERR-like codes on I/O or parse failure.
+// <doc> whose <genre> starts with 'W'.  Reads the file as raw wchar_t data
+// (actualLen bytes) into a buffer of actualLen+sizeof(wchar_t) bytes and
+// NUL-terminates at the wchar_t offset, in range.  Returns 0 on success,
+// negative NET_ERR-like codes on I/O or parse failure.
 int generateBNCSources(MYSQL& mysql, wstring indexFile) // note this is slightly modified from the original
 {
 	LFS
@@ -464,7 +491,7 @@ int generateBNCSources(MYSQL& mysql, wstring indexFile) // note this is slightly
 	if (!checkFull(&mysql, qt, len, true, NULL)) return -21;
 	if (logDatabaseDetails)
 		lplog(L"Inserting BNC sources took %d seconds.", (clock() - startTime) / CLOCKS_PER_SEC);
-	tfree(actualLen + 1, buffer);
+	tfree(actualLen + sizeof(wchar_t), buffer); // match the tmalloc(actualLen + sizeof(wchar_t)) above
 	return returnCode;
 }
 
@@ -554,9 +581,9 @@ int cSource::insertWordRelationTypes(void)
 
 // If initializeDatabaseHandle succeeds the schema already exists: close and
 // return 0.  Otherwise, if the error was ER_BAD_DB_ERROR, reconnect without
-// a schema (root/byron0 again), CREATE DATABASE lp, then CREATE the core
-// tables and seed sources from bookSources.sql + BNC/NewsBank/tests.
-// Returns 0 or -1; most CREATE failures are FATAL first.
+// a schema (same getDBUser()/getDBPassword() credentials), CREATE DATABASE lp,
+// then CREATE the core tables and seed sources from bookSources.sql + BNC/
+// NewsBank/tests. Returns 0 or -1; most CREATE failures are FATAL first.
 int cSource::createDatabase(const wchar_t* server)
 {
 	LFS
@@ -566,7 +593,7 @@ int cSource::createDatabase(const wchar_t* server)
 			return 0;
 		}
 	string sqlStr;
-	if (mysql_errno(&mysql) != ER_BAD_DB_ERROR || mysql_real_connect(&mysql, wTM(server, sqlStr), "root", "byron0", NULL, 0, NULL, 0) == NULL)
+	if (mysql_errno(&mysql) != ER_BAD_DB_ERROR || mysql_real_connect(&mysql, wTM(server, sqlStr), getDBUser().c_str(), getDBPassword().c_str(), NULL, 0, NULL, 0) == NULL)
 	{
 		lplog(LOG_FATAL_ERROR, L"Failed to connect to MySQL - %S", mysql_error(&mysql));
 		//int err=mysql_errno(&mysql);

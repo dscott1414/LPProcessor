@@ -4,7 +4,7 @@
 
 	Overview:
 		Thin data model for MusicBrainz XML search hits (release / recording / artist /
-		label). The corresponding .cpp fetches http://www.musicbrainz.org/ws/2/... and
+		label). The corresponding .cpp fetches https://www.musicbrainz.org/ws/2/... and
 		walks tinyxml2 trees into these structs, then question-answering binds them to
 		in-source objects.
 
@@ -17,11 +17,12 @@
 		  a "byWhatType=what" query (e.g. artist=Jay-Z)
 
 	Notes / gotchas:
-		The .cpp implementations take an extra bool filterNameDuplicates that this header
-		does not declare, so callers that include only the header see a different
-		signature than the definition.
+		filterNameDuplicates defaults to false (keep every hit) so the handful of existing
+		3-arg call sites (main.cpp) keep compiling and keep their original unfiltered
+		behavior; pass true explicitly to drop adjacent same-name hits (see absorbReleases
+		in the .cpp).
 */
-// http://www.musicbrainz.org/ws/2/release/?query=artist:Jay-Z
+// https://www.musicbrainz.org/ws/2/release/?query=artist:Jay-Z
 // One MusicBrainz release (album) hit plus its artist/label/group metadata.
 typedef struct 
 {
@@ -67,10 +68,10 @@ typedef struct
 } mbInfoLabelType;
 
 // Query WS/2 for releases matching byWhatType:what; appends into mbTypes. Returns 0.
-int getReleases(wstring byWhatType,wstring what,vector <mbInfoReleaseType> &mbTypes);
+int getReleases(wstring byWhatType,wstring what,vector <mbInfoReleaseType> &mbTypes, bool filterNameDuplicates = false);
 // Query WS/2 for recordings matching byWhatType:what; appends into mbTypes. Returns 0.
-int getRecordings(wstring byWhatType,wstring what,vector <mbInfoRecordingType> &mbTypes);
+int getRecordings(wstring byWhatType,wstring what,vector <mbInfoRecordingType> &mbTypes, bool filterNameDuplicates = false);
 // Query WS/2 for artists matching byWhatType:what; appends into mbTypes. Returns 0.
-int getArtists(wstring byWhatType,wstring what,vector <mbInfoArtistType> &mbTypes);
+int getArtists(wstring byWhatType,wstring what,vector <mbInfoArtistType> &mbTypes, bool filterNameDuplicates = false);
 // Query WS/2 for labels matching byWhatType:what; appends into mbTypes. Returns 0.
-int getLabels(wstring byWhatType,wstring what,vector <mbInfoLabelType> &mbTypes);
+int getLabels(wstring byWhatType,wstring what,vector <mbInfoLabelType> &mbTypes, bool filterNameDuplicates = false);

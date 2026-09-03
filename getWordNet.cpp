@@ -31,9 +31,13 @@
 		source\\lists VerbNet already loaded for analyzeVerbNetClass.
 
 	Notes / gotchas:
-		getSynonymsFromDB concatenates 'word' into SQL with no escaping. scrapeNewThesaurus
-		uses plaintext HTTP. Big Huge Thesaurus API key is in a comment. wordCheck always
-		ends in LOG_FATAL_ERROR. WordNet SynsetPtrs from findtheinfo_ds are not freed.
+		getSynonymsFromDB escapes 'word' (escaped(), source.h) before concatenating into SQL.
+		scrapeOldThesaurus/scrapeNewThesaurus build thesaurus.com URLs by concatenating word
+		with only a manual space->'+' pass (no general percent-encoding for '&'/'#'/etc in the
+		headword); left as-is since changing the wire format for these scrapers without a live
+		endpoint to verify against is riskier than the gap it closes. wordCheck always ends in
+		LOG_FATAL_ERROR by design (it is a diagnostic report-then-exit utility). WordNet
+		SynsetPtrs from findtheinfo_ds are not freed.
 */
 #pragma warning(disable : 4786 ) // disable warning C4786
 #include <windows.h>
@@ -236,7 +240,7 @@ int setWordNetCategoryBits(void)
 // the old entries (which we parse) are:
 // http://thesaurus.com/t2opt/out?desturl=browse/columnist&posFilter=noun
 // also better than www.synonyms.net: http://www.synonyms.net/synonym/columnist or 
-// Big Huge Thesaurus: key 78c2b0a82a3c06236622bb4f8158ead9 (http://words.bighugelabs.com/api/2/78c2b0a82a3c06236622bb4f8158ead9/'word'/json)
+// Big Huge Thesaurus: http://words.bighugelabs.com/api/2/<api-key>/'word'/json
 // Fetches the old thesaurus.com t2opt page for word/POS and scrapes the Synonyms: comma list
 // into synonyms. Spaces become '+'. Stops at ads / www. prefixes.
 void scrapeOldThesaurus(wstring word, unordered_set <wstring>& synonyms, int synonymType, bool forceWebReread)
@@ -477,13 +481,14 @@ void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition>& vd)
 
 void split(string str, vector <string>& words, const char* splitch);
 
-// SELECT accumulated/primary synonyms for mainEntry=word and wordType bitmask. Concatenates
-// word into SQL unescaped. LOCKs thesaurus READ. Returns true if any sense was pushed.
+// SELECT accumulated/primary synonyms for mainEntry=word and wordType bitmask. word is
+// escaped (escaped(), source.h) before being concatenated into SQL. LOCKs thesaurus READ.
+// Returns true if any sense was pushed.
 bool getSynonymsFromDB(MYSQL mysql, wstring word, vector < unordered_set <wstring> >& synonyms, int synonymType)
 {
 	bool entriesAdded = false;
 	wstring query = L"select primarySynonyms, accumulatedSynonyms from thesaurus where mainEntry = '";
-	query += word + L"' and ";
+	query += escaped(word) + L"' and ";
 	// thesaurus mappings
 	// "adj"=1, "adv"=2, "prep"=4, "pron"=8, "conj"=16, "det"=32, "interj"=64, "n"=128, "v"=256, NULL };
 	if (synonymType == 1) // NOUN
@@ -510,7 +515,7 @@ bool getSynonymsFromDB(MYSQL mysql, wstring word, vector < unordered_set <wstrin
 				{
 					wstring wtmp;
 					mTW(properties.substr(lastBegin, s - lastBegin), wtmp);
-					if (wtmp[wtmp.length() - 1] == L'*')
+					if (!wtmp.empty() && wtmp[wtmp.length() - 1] == L'*')
 						wtmp.erase(wtmp.length() - 1);
 					sense.insert(wtmp);
 					lastBegin = s + 1;
@@ -1748,7 +1753,7 @@ void analyzeVerbNetClass(int where, wstring in, wstring& proposedSubstitute, int
 
 // Loads source\\lists\\nounVerbMapping (binary cache of agentive nominalizations) into
 // nounVerbMap, or rebuilds it from WordNet DERIVATION links and writes the cache.
-// Returns -1 if the on-disk copy is corrupt (leaks the tmalloc buffer).
+// Returns -1 if the on-disk copy is corrupt; the tmalloc buffer is tfree'd on every path.
 int cSource::initializeNounVerbMapping(void)
 {
 	LFS
@@ -1762,16 +1767,16 @@ int cSource::initializeNounVerbMapping(void)
 		::read(nvfd, buffer, bufferlen);
 		close(nvfd);
 		int numMappings;
-		if (!copy(numMappings, buffer, where, bufferlen)) return -1;
+		if (!copy(numMappings, buffer, where, bufferlen)) { tfree(bufferlen + 10, buffer); return -1; }
 		for (int I = 0; I < numMappings; I++)
 		{
 			wstring noun;
 			set <wstring> verbs;
-			if (!copy(noun, buffer, where, bufferlen)) return -1;
-			if (!copy(verbs, buffer, where, bufferlen)) return -1;
+			if (!copy(noun, buffer, where, bufferlen)) { tfree(bufferlen + 10, buffer); return -1; }
+			if (!copy(verbs, buffer, where, bufferlen)) { tfree(bufferlen + 10, buffer); return -1; }
 			nounVerbMap[noun] = verbs;
 		}
-		tfree(bufferlen, buffer);
+		tfree(bufferlen + 10, buffer);
 		return 0;
 	}
 	int readWikiNominalizations(MYSQL & mysql, unordered_map <wstring, set < wstring > > &agentiveNominalizations);

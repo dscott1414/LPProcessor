@@ -26,14 +26,17 @@
 		words / wordForms tables (isWordDBUnknown).
 
 	Notes / gotchas:
-		- `if (state = applyStemRule(...) == s_continue)` is `=` plus `==`
-			precedence: state becomes 0/1 (the comparison), not the enum.  The
-			`if` still does the right thing because it tests the comparison.
-		- BOM stripping uses memcpy(s, s+1, wcslen(s+1)) - overlapping, and the
-			count is bytes not wchar_t, so the remainder of a UTF-16 line is
-			corrupted.  Should be memmove of (wcslen+1)*sizeof(wchar_t).
-		- isWordDBUnknown interpolates `word` into a double-quoted SQL literal
-			with no escape (injection / truncation on quotes).
+		- stem()'s loop tests `applyStemRule(...) == s_continue` directly now; it used
+			to read `if (state = applyStemRule(...) == s_continue)`, an `=`/`==`
+			precedence trap that stored a 0/1 bool into an otherwise-unread `state`
+			local.  The `if` always evaluated correctly either way (removing the dead
+			assignment does not change behaviour) - only the dead store is gone.
+		- BOM stripping uses wmemmove(s, s+1, wcslen(s+1)+1) in both readStemRules
+			and readPrefixRules (readPrefixRules used to use an overlapping
+			byte-count memcpy that corrupted the rest of the line; fixed to match
+			readStemRules).
+		- isWordDBUnknown escapes `word` (escaped()/escapeStr()) before
+			interpolating it into the double-quoted literal.
 		- LOG_DICTIONARY in applyStemRule calls trail.concatToString() with no
 			argument; that path does not compile if the #define is on.
 		- findLastFormInflection copies rulesUsed by value.
@@ -152,7 +155,7 @@ int cStemmer::getInflectionNum(wchar_t const* inflection)
 
 // Parse source\\lists\\suffixRules.txt into stemRules.  Line format:
 // keystr,repstr,form,inflection,flags  with optional ;comment.  BOM (U+FEFF)
-// is stripped with an overlapping memcpy (see file header).  Returns 0, or
+// is stripped with wmemmove (see file header).  Returns 0, or
 // NO_SUFFIX_RULES_FILE / SUFFIX_RULES_PARSE_ERROR (both FATAL first).
 int cStemmer::readStemRules(void)
 {
@@ -242,7 +245,7 @@ int cStemmer::readPrefixRules(void)
 	for (line = 1; fgetws(s, maxlinelength, fp); line++)
 	{
 		if (s[0] == 0xFEFF) // detect BOM
-			memcpy(s, s + 1, wcslen(s + 1));
+			wmemmove(s, s + 1, wcslen(s + 1) + 1);
 		if ((s[0] == ';') || (s[0] == '\r') || (s[0] == '\n') || (s[0] == ' '))
 			continue;
 		wchar_t* ch = wcschr(s, L',');
@@ -279,12 +282,11 @@ bool sortRuleGreater(cStemmer::cSuffixRule a, cStemmer::cSuffixRule b)
 size_t cStemmer::stem(MYSQL mysql, wstring word, vector<cSuffixRule>& rulesUsed, cIntArray& trail, int addRule)
 {
 	LFS
-		int state = s_continue;
-	int ret;
+		int ret;
 	if (!stemRules.size() && (ret = readStemRules()) < 0) return ret;
 	if (addRule >= 0) trail.push_back(addRule);
 	for (unsigned int r = 0; r < stemRules.size(); r++)
-		if (state = applyStemRule(word, stemRules[r], rulesUsed, trail) == s_continue)
+		if (applyStemRule(word, stemRules[r], rulesUsed, trail) == s_continue)
 			stem(mysql, rulesUsed[rulesUsed.size() - 1].text, rulesUsed, trail, stemRules[r].rulenum);
 	if (addRule >= 0) return rulesUsed.size();
 	if (ret = stripPrefix(mysql, word, rulesUsed))
@@ -296,7 +298,8 @@ size_t cStemmer::stem(MYSQL mysql, wstring word, vector<cSuffixRule>& rulesUsed,
 // True if 'word' is already in Words with UNDEFINED_FORM, or if the DB has
 // a words/wordForms row for it with formId UNDEFINED_FORM_NUM+1 (DB is
 // 1-based).  Also returns true on LOCK/query failure (conservative: treat
-// as unknown so the prefix is rejected).  Interpolates word unescaped.
+// as unknown so the prefix is rejected).  word is escaped before being
+// interpolated into the double-quoted literal.
 bool cStemmer::isWordDBUnknown(MYSQL mysql, wstring word)
 {
 	tIWMM iWord = Words.query(word);
@@ -304,7 +307,7 @@ bool cStemmer::isWordDBUnknown(MYSQL mysql, wstring word)
 		return true;
 	if (!myquery(&mysql, L"LOCK TABLES words w READ,wordForms wf READ")) return true;
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"select COUNT(*) from words w,wordForms wf where w.id=wf.wordId and word=\"%s\" and wf.formId=%d", word.c_str(), UNDEFINED_FORM_NUM + 1); // always add one when referring to DB formId
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select COUNT(*) from words w,wordForms wf where w.id=wf.wordId and word=\"%s\" and wf.formId=%d", escaped(word).c_str(), UNDEFINED_FORM_NUM + 1); // always add one when referring to DB formId
 	MYSQL_RES* result = NULL;
 	MYSQL_ROW sqlrow;
 	if (!myquery(&mysql, qt, result))

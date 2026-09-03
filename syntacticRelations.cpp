@@ -38,6 +38,10 @@
 		- markMultipleObjects() - coordinated-noun next/prevCompound links
 		- setRole() - pattern-tag objectRole bits (CMREADME018)
 		- cSourceWordInfo::addRelation() - increment a word-pair count
+		  (declared word.h:525; verified: no caller anywhere in the repo, so
+		  the current source's own relations are never recorded live -- the
+		  relationMaps counts agreement.cpp reads to cheapen parses come
+		  entirely from whatever DBWordRelations.cpp loaded from the DB)
 
 	Key data structures / globals:
 		- m[i].relSubject / relVerb / relObject / relPrep / relNextObject /
@@ -55,11 +59,6 @@
 		- relPrep is a singly-linked list; every walker has a prepLoop>20
 		  guard against cycles.
 		- Fancy quotes (� � � �) are the quote tokens, not ASCII " '.
-		- checkAmbiguousVerbTense's && / || mix lets a NULL masterVerbWord
-		  with ambiguous inflection rewrite sense even when the incoming
-		  sense is not PRESENT/PAST.
-		- evaluateSubjects' forward-scan condition is (empty && A) || B
-		  because && binds tighter than ||; B can run when subjects exist.
 		- First pass of syntacticRelations() zeroes every objectRole after
 		  markMultipleObjects, so compound-noun links must be written to
 		  next/prevCompoundPartObject, not to objectRole.
@@ -75,21 +74,22 @@
 #include "vcXML.h"
 #include "profile.h"
 
-// Default: not in the DB yet.  otherFlag is left uninitialized (callers
-// of intersect() must set it false themselves).
+// Default: not in the DB yet.
 cWordGroup::cWordGroup(void)
 {
 	LFS
 		index = -1;
+	otherFlag = false;
 	addedFromWords = addedToWords = addedSubGroups = false;
 }
 
-// Cluster fromWords -> toWords, then add `word` to toWords.  index /
-// otherFlag are not initialized.
-cWordGroup::cWordGroup(vector <wstring>& inFromWords, set <wstring>& inToWords, wstring word)
+// Cluster fromWords -> toWords, then add `word` to toWords.
+cWordGroup::cWordGroup(vector <tIWMM>& inFromWords, set <tIWMM, cSourceWordInfo::wordSetCompare>& inToWords, tIWMM word)
 {
 	LFS
-		fromWords = inFromWords;
+		index = -1;
+	otherFlag = false;
+	fromWords = inFromWords;
 	toWords = inToWords;
 	toWords.insert(word);
 #ifdef LOG_RELATION_GROUPING
@@ -98,22 +98,28 @@ cWordGroup::cWordGroup(vector <wstring>& inFromWords, set <wstring>& inToWords, 
 }
 
 // Two-from / two-to cluster used by ACCUMULATE_GROUPS intersect().
-cWordGroup::cWordGroup(wstring fromWord1, wstring fromWord2, wstring toWord1, wstring toWord2)
+cWordGroup::cWordGroup(tIWMM fromWord1, tIWMM fromWord2, tIWMM toWord1, tIWMM toWord2)
 {
 	LFS
-		fromWords.push_back(fromWord1);
+		index = -1;
+	otherFlag = false;
+	fromWords.push_back(fromWord1);
 	fromWords.push_back(fromWord2);
 	toWords.insert(toWord1);
 	toWords.insert(toWord2);
 }
 
-// Singleton fromWord `self` whose toWords are the keys of inToWords.
-cWordGroup::cWordGroup(wstring self, cSourceWordInfo::cRMap::tcRMap* inToWords)
+// Singleton fromWord `self` whose toWords are the keys of inToWords (a
+// wstring-keyed relation map; look each key back up in the global lexicon
+// to get the tIWMM that fromWords/toWords now store).
+cWordGroup::cWordGroup(tIWMM self, cSourceWordInfo::cRMap::tcRMap* inToWords)
 {
 	LFS
-		fromWords.push_back(self);
+		index = -1;
+	otherFlag = false;
+	fromWords.push_back(self);
 	for (cSourceWordInfo::cRMap::tIcRMap twi = inToWords->begin(), twiEnd = inToWords->end(); twi != twiEnd; twi++)
-		toWords.insert(twi->first);
+		toWords.insert(Words.gquery(twi->first));
 }
 
 const wchar_t* relationWOTypeStrings[] = {
@@ -140,22 +146,39 @@ const wchar_t* relationExtWOTypeStrings[] = {
 	L"*1*VerbWithNextMainVerb",L"*1*NextMainVerbWithVerb"  // verbs are same tense and close to one another
 };
 
-// Debug name for a relationWOTypes value.  Values past the base table are
-// reduced modulo VERB_HISTORY (4) into relationExtWOTypeStrings ? so a
-// far-out type still prints, but as the wrong *1* label.
+// Debug name for a relationWOTypes value past the base table (see
+// relationTypes.h). Each "next verb" family (VerbWithNext1MainVerbSameSubject
+// and VerbWithNext1MainVerb) reserves VERB_HISTORY*2 slots for its generation
+// history, but only ever names the two generation-0 members; this recovers
+// the family/type/generation from the offset and patches the "*1*" digit in
+// relationExtWOTypeStrings[] to match. WordWithPrepObjectWord /
+// PrepObjectWordWithWord were declared right after VerbWithNext1MainVerb's
+// first two (generation-0) members, so they land inside what would otherwise
+// be that family's generation-1 slots -- special-cased below so they get
+// their own real name instead of a bogus "*2*VerbWithNextMainVerb" label.
+// NextRelation (the one-past-the-end sentinel) falls out of range and gets
+// a safe placeholder rather than an OOB relationExtWOTypeStrings read.
 const wchar_t* getRelStr(int relationType)
 {
 	LFS
 		if (relationType < sizeof(relationWOTypeStrings) / sizeof(*relationWOTypeStrings))
 			return relationWOTypeStrings[relationType];
-	relationType -= sizeof(relationWOTypeStrings) / sizeof(*relationWOTypeStrings);
-	int numExt = (relationType & (VERB_HISTORY - 1));
-	return relationExtWOTypeStrings[numExt];
-	//static wchar_t temp[1024];
-	//int numNext=(relationType&~(VERB_HISTORY-1))/VERB_HISTORY;
-	//wcscpy(temp,relationExtWOTypeStrings[numExt]);
-	//temp[1]='0'+numNext;
-	//return temp;
+	int ext = relationType - sizeof(relationWOTypeStrings) / sizeof(*relationWOTypeStrings);
+	if (ext == VERB_HISTORY * 2 + 2) return L"WordWithPrepObjectWord";
+	if (ext == VERB_HISTORY * 2 + 3) return L"PrepObjectWordWithWord";
+	int family = ext / (VERB_HISTORY * 2), withinFamily = ext % (VERB_HISTORY * 2);
+	int numExt = family * 2 + (withinFamily & 1);
+	int numGeneration = withinFamily / 2; // 0-based; relationExtWOTypeStrings[] is already labelled generation 1
+	if (numExt < 0 || numExt >= (int)(sizeof(relationExtWOTypeStrings) / sizeof(*relationExtWOTypeStrings)))
+		return L"UnknownRelationType";
+	if (numGeneration <= 0)
+		return relationExtWOTypeStrings[numExt];
+	static wchar_t temp[64];
+	wcsncpy(temp, relationExtWOTypeStrings[numExt], 63);
+	temp[63] = 0;
+	if (numGeneration < 8)
+		temp[1] = L'0' + (numGeneration + 1); // *1* -> *2*, *3*, ...
+	return temp;
 }
 
 // Flip the even/odd pair: SubjectWordWithVerb <-> VerbWithSubjectWord, etc.
@@ -307,9 +330,7 @@ for each object member in group having GROUP verb and secondary object
 COMP for each object member and deposit into extended group
 
 */
-// "from1 from2 -> to1 to2" debug line.  Iterates fromWords as tIWMM, but
-// the header declares vector<wstring> ? this body only compiles if
-// ACCUMULATE_GROUPS also changes the member types.
+// "from1 from2 -> to1 to2" debug line.
 wstring cWordGroup::summary(void)
 {
 	LFS
@@ -538,6 +559,11 @@ cSourceWordInfo::cRMap::tIcRMap cSourceWordInfo::addRelation(int where, int rela
 	if (intersect(relationType, word, this, fromWord, toWord))
 	{
 		int groupNum = groups[relationType].size();
+		// NOTE: still does not match any cWordGroup ctor -- `this` is a
+		// cSourceWordInfo*, not a tIWMM, and no 4-tIWMM ctor takes a self
+		// pointer plus 3 words. ACCUMULATE_GROUPS is unfinished (see the
+		// TODO block above intersect()); this call needs a real ctor
+		// designed by whoever completes the feature.
 		groups[relationType].push_back(cWordGroup(this, fromWord, word, toWord));
 #ifdef LOG_RELATION_GROUPING
 		::lplog(L"Created %s group #%d:%s", getRelStr(relationType), groupNum, groups[relationType][groupNum].summary().c_str());
@@ -611,7 +637,6 @@ bool cSource::checkAmbiguousVerbTense(int whereVerb, int& sense, bool inQuote, t
 		// tense statistics
 		// if the tense is ambiguous between past and present (due to verb form being identical between present and past forms)
 		// make the tense = the last tense by past or present.
-		// Parsed as (A && B) || C ? C can fire when sense is neither PRESENT nor PAST.
 		if ((sense == VT_PRESENT || sense == VT_PAST) &&
 			((masterVerbWord != wNULL && (masterVerbWord->second.inflectionFlags & (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) == (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) ||
 			 (masterVerbWord == wNULL && (m[whereVerb].word->second.inflectionFlags & (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST)) == (VERB_PRESENT_FIRST_SINGULAR | VERB_PAST))))		
@@ -1170,7 +1195,7 @@ void cSource::markPrepositionalObjects(int where, int whereVerb, bool flagInInfi
 				bool isRelativeClauseObject = false;
 				int subobject = -1, poTag = findOneTag(tagSets[K], L"PREPOBJECT", -1), pTag = findOneTag(tagSets[K], L"P", -1), wpo = -1, wp = (pTag >= 0) ? tagSets[K][pTag].sourcePosition : -1;
 				if ((poTag >= 0 && resolveTag(tagSets[K], poTag, subobject, wpo, subObjectWord) && m[wpo].endObjectPosition >= 0) ||
-					(isRelativeClauseObject = findOneTag(tagSets[K], L"REL", -1) >= 0 && m[wpo = wp + 1].queryWinnerForm(relativizerForm) >= 0) ||
+					(wp >= 0 && wp + 1 < (int)m.size() && (isRelativeClauseObject = findOneTag(tagSets[K], L"REL", -1) >= 0) && m[wpo = wp + 1].queryWinnerForm(relativizerForm) >= 0) ||
 					// with additional info as prep object, force object to exist
 					(poTag >= 0 && forcePrepObject(tagSets[K], poTag, subobject, wpo, subObjectWord) && (wpo = m[tagSets[K][poTag].sourcePosition].principalWherePosition) >= 0))
 				{
@@ -1603,7 +1628,6 @@ void cSource::evaluateSubjects(int where, vector <cTagLocation>& tagSet,
 		// scan forwards
 		// don't scan forwards in questions [MOVE_OBJECTBrought a message from Mrs . Vandemeyer , I[master] suppose ? ]
 		// but accept forwards in these questions: Brought a telephone message to the man Whittington , did he[brown,whittington] ?
-		// (empty && A) || B ? B (the "did he?" scan) is not gated on empty.
 		if (whereSubjects.empty() &&
 			((m[where].pma.queryPattern(L"_INTRO_S1", maxLen) != -1 && where + maxLen < (int)m.size() && pema.queryTag(m[where + maxLen].beginPEMAPosition, SUBJECT_TAG) != -1 && !(m[where].flags & cWordMatch::flagInQuestion)) ||
 			 ((m[where].flags & cWordMatch::flagInQuestion) && m[where].pma.queryPattern(L"__INTRO_S1", maxLen) != -1 && where + maxLen + 1 < (int)m.size() && m[where + maxLen].word->first == L"did" && m[where + maxLen + 1].getObject() >= 0)))
@@ -1864,7 +1888,7 @@ void cSource::processObjects(int where, vector <cTagLocation>& tagSet, int first
 			int sourcePosition = tagSet[objectTag].sourcePosition;
 			if ((whereObject = m[sourcePosition].principalWherePosition) < 0)
 			{
-				if (m[sourcePosition].queryForm(quoteForm) < 0 || (whereObject = m[sourcePosition + 1].principalWherePosition) < 0)
+				if (m[sourcePosition].queryForm(quoteForm) < 0 || sourcePosition + 1 >= (int)m.size() || (whereObject = m[sourcePosition + 1].principalWherePosition) < 0)
 				{
 					if (numObjects == 1)
 					{
@@ -2496,7 +2520,7 @@ void cSource::adjustToHailRole(int where)
 	}
 	// Elementary, my dear Watson
 	if ((where >= 4 && m[where].word->first == L"watson" && m[where - 1].word->first == L"dear" && m[where - 2].word->first == L"my" &&
-		m[where - 3].word->first == L"," && m[where - 4].word->first == L"elementary") && !objects[im->getObject()].numIdentifiedAsSpeaker)
+		m[where - 3].word->first == L"," && m[where - 4].word->first == L"elementary") && (im->getObject() < 0 || !objects[im->getObject()].numIdentifiedAsSpeaker))
 	{
 		objectRole &= ~HAIL_ROLE;
 		im->objectRole &= ~HAIL_ROLE;
@@ -2942,8 +2966,10 @@ void cSource::setRole(int position, cPatternElementMatchArray::tPatternElementMa
 	// all re_objects come immediately after their primary object.
 	if ((childRole & RE_OBJECT_ROLE) && m[position].principalWherePosition >= 0 && m[m[position].principalWherePosition].getObject() >= 0)
 	{
-		// Walks the whole document left if no EOS is found: (I >= pos-10 || !isEOS).
-		for (int I = position - 1; (I >= position - 10 || !isEOS(I)) && I >= 0; I--)
+		// Scan back at most 10 tokens, stopping early at a sentence boundary.
+		// I>=0 must short-circuit before isEOS(I) is called (isEOS indexes
+		// m.begin()+where with no bounds check).
+		for (int I = position - 1; I >= 0 && I >= position - 10 && !isEOS(I); I--)
 			if (m[I].getObject() >= 0 && !(m[I].flags & cWordMatch::flagAdjectivalObject))
 			{
 				int originalObject = m[I].getObject(), secondaryObject = m[m[position].principalWherePosition].getObject();
@@ -3306,8 +3332,8 @@ void cSource::syntacticRelations()
 
 // Debug dump (traceTestSyntacticRelations): per sentence print each token's
 // relSubject/relVerb/relObject/relPrep/... and any SRG whose `where` falls
-// in the sentence.  m[end] is read when end == m.size() ? one past the
-// last token ? before the quote-close adjustment.
+// in the sentence.  end may equal m.size() (one past the last token); the
+// quote-close adjustment below guards that before reading m[end].
 void cSource::testSyntacticRelations()
 {
 	tIWMM primaryQuoteCloseWord = Words.gquery(L"�");

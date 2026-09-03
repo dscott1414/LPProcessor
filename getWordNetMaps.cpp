@@ -21,10 +21,11 @@
 		Words lexicon (query by string); tmalloc/tfree; POSIX-style _wopen/write.
 
 	Notes / gotchas:
-		writeWNMaps allocates a 10MB stack buffer (MAX_BUF). Early false returns after
-		_wopen leak the fd. readWNMaps tmallocs the whole file then returns without
-		tfree on any read* failure. Words not already in the lexicon are dropped on
-		read, so the cache is only useful after the word table is loaded.
+		writeWNMaps heap-allocates its 10MB scratch buffer (tmalloc/tfree) rather than
+		putting it on the stack, and closes fd / frees the buffer on every return path.
+		readWNMaps tfrees its tmalloc'd file buffer on every failure path too. Words not
+		already in the lexicon are dropped on read, so the cache is only useful after the
+		word table is loaded.
 */
 #include <windows.h>
 #include "Winhttp.h"
@@ -140,7 +141,8 @@ int cSource::readGWNMap(map <tIWMM, int, cSourceWordInfo::cRMap::wordMapCompare 
 }
 
 // Writes all six WN maps plus physicalObjectByWN flags to path+".WNCache".
-// Returns false if the file cannot be created or any write fails (fd is not closed then).
+// Returns false if the file cannot be created or any write fails; fd is closed and the
+// scratch buffer freed on every path.
 bool cSource::writeWNMaps(wstring path)
 {
 	LFS
@@ -148,7 +150,8 @@ bool cSource::writeWNMaps(wstring path)
 	int fd = _wopen(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, _S_IREAD | _S_IWRITE);
 	if (fd < 0) return false;
 
-	char buffer[MAX_BUF];
+	char* buffer = (char*)tmalloc(MAX_BUF);
+	if (!buffer) { close(fd); return false; }
 	int where = 0;
 	writeWNMap(wnSynonymsNounMap, buffer, where, fd, MAX_BUF);
 	writeWNMap(wnSynonymsAdjectiveMap, buffer, where, fd, MAX_BUF);
@@ -160,16 +163,25 @@ bool cSource::writeWNMaps(wstring path)
 	{
 		if (w->second.flags & (cSourceWordInfo::physicalObjectByWN | cSourceWordInfo::notPhysicalObjectByWN))
 		{
-			if (!copy(buffer, w->first, where, MAX_BUF)) return false;
-			if (!copy(buffer, w->second.flags, where, MAX_BUF)) return false;
-			if (!flush(fd, buffer, where)) return false;
+			if (!copy(buffer, w->first, where, MAX_BUF)) { tfree(MAX_BUF, buffer); close(fd); return false; }
+			if (!copy(buffer, w->second.flags, where, MAX_BUF)) { tfree(MAX_BUF, buffer); close(fd); return false; }
+			if (!flush(fd, buffer, where)) { tfree(MAX_BUF, buffer); close(fd); return false; }
 		}
 	}
 	wstring empty;
 	if (!copy(buffer, empty, where, MAX_BUF))
+	{
+		tfree(MAX_BUF, buffer);
+		close(fd);
 		return false;
+	}
 	if (::write(fd, buffer, where) < 0)
+	{
+		tfree(MAX_BUF, buffer);
+		close(fd);
 		return false;
+	}
+	tfree(MAX_BUF, buffer);
 	close(fd);
 	return true;
 }
@@ -186,7 +198,8 @@ void cSource::clearWNMaps()
 }
 
 // Loads path+".WNCache" into the six maps and ORs physical-object flags onto Words.
-// Returns false if the file is missing or any section is corrupt; leaks buffer on those paths.
+// Returns false if the file is missing or any section is corrupt; the tmalloc'd file
+// buffer is tfree'd on every path.
 bool cSource::readWNMaps(wstring path)
 {
 	LFS
@@ -199,24 +212,25 @@ bool cSource::readWNMaps(wstring path)
 	::read(fd, buffer, bufferlen);
 	close(fd);
 	int where = 0;
-	if (readWNMap(wnSynonymsNounMap, buffer, where, bufferlen) < 0) return false;
-	if (readWNMap(wnSynonymsAdjectiveMap, buffer, where, bufferlen) < 0) return false;
-	if (readWNMap(wnAntonymsNounMap, buffer, where, bufferlen) < 0) return false;
-	if (readWNMap(wnAntonymsAdjectiveMap, buffer, where, bufferlen) < 0) return false;
-	if (readGWNMap(wnGenderAdjectiveMap, buffer, where, bufferlen) < 0) return false;
-	if (readGWNMap(wnGenderNounMap, buffer, where, bufferlen) < 0) return false;
+	if (readWNMap(wnSynonymsNounMap, buffer, where, bufferlen) < 0) { tfree(bufferlen + 10, buffer); return false; }
+	if (readWNMap(wnSynonymsAdjectiveMap, buffer, where, bufferlen) < 0) { tfree(bufferlen + 10, buffer); return false; }
+	if (readWNMap(wnAntonymsNounMap, buffer, where, bufferlen) < 0) { tfree(bufferlen + 10, buffer); return false; }
+	if (readWNMap(wnAntonymsAdjectiveMap, buffer, where, bufferlen) < 0) { tfree(bufferlen + 10, buffer); return false; }
+	if (readGWNMap(wnGenderAdjectiveMap, buffer, where, bufferlen) < 0) { tfree(bufferlen + 10, buffer); return false; }
+	if (readGWNMap(wnGenderNounMap, buffer, where, bufferlen) < 0) { tfree(bufferlen + 10, buffer); return false; }
 	wstring word;
 	int flags;
 	while (where < bufferlen)
 	{
-		if (!copy(word, buffer, where, bufferlen)) return false;
+		if (!copy(word, buffer, where, bufferlen)) { tfree(bufferlen + 10, buffer); return false; }
 		if (word.empty()) break;
-		if (!copy(flags, buffer, where, bufferlen)) return false;
+		if (!copy(flags, buffer, where, bufferlen)) { tfree(bufferlen + 10, buffer); return false; }
 		tIWMM w = Words.query(word);
 		if (w != Words.end())
 			w->second.flags |= (flags & (cSourceWordInfo::physicalObjectByWN | cSourceWordInfo::notPhysicalObjectByWN));
 	}
-	tfree(bufferlen, buffer);
-	return where <= bufferlen;
+	bool ok = (where <= bufferlen);
+	tfree(bufferlen + 10, buffer);
+	return ok;
 }
 

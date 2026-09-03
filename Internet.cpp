@@ -25,14 +25,30 @@
 		- On timeout InternetReadFile_Wait closes the request handle to unblock the
 			child, then waits for it to exit before returning; the child writes into
 			the caller's stack, so it must not outlive the call.
-		- SPARQL failures recurse into readPage after a 30s sleep with no
-			depth cap (unbounded if Virtuoso stays down).
+		- SPARQL failures now `continue` the existing errors<internetWebSearchRetryAttempts
+			loop after a 30s sleep instead of recursing into readPage with no depth
+			cap; a Virtuoso outage now gives up after the normal retry budget instead
+			of retrying forever / risking a stack overflow.
 		- cacheWebPath writes wchar_t as binary (UTF-16) and reads it back as
 			wchar_t*.  getWebPath in the `clean` path writes UTF-8, then
 			assigns the file bytes to a wstring as wchar_t* - encoding mismatch.
-		- path[MAX_PATH-20]=0 truncates a MAX_LEN (2048) buffer at 240 chars.
+		- getWebPath now truncates path (a MAX_LEN==2048 wchar_t buffer) at
+			MAX_LEN-20, matching cacheWebPath; it used to truncate at MAX_PATH-20
+			(240), so two distinct long URLs whose first 240 chars matched
+			collided on the same cache file.  The #ifdef TEST_CODE testWebPath
+			twin had the same bug; fixed there too.
 		- Hardcoded LMAINDIR chdir for the Java helper; hINet is process-wide
 			and reset to 0 on some errors without a lock.
+		- getWebPath used to `return 0` unconditionally after a fresh fetch,
+			in both the !clean and (ret && clean) paths, discarding readPage's
+			result.  Several callers check the return value for ==0 / <0 to
+			detect a failed fetch (createOntology.cpp, questionAnsweringWebSearch.cpp),
+			so a network failure was being reported as success and could leave
+			an empty file permanently cached (a later call sees the path exists
+			and never re-fetches).  Now returns `ret`, matching cacheWebPath's
+			`if (ret = readPage(...)) return ret;`.  Behaviour-changing: callers
+			that previously always saw 0 from getWebPath on a fresh-fetch path
+			now see the real readPage failure code.
 */
 #pragma warning (disable: 4503)
 #pragma warning (disable: 4996)
@@ -220,8 +236,8 @@ bool cInternet::LPInternetOpen(int timer)
 
 #define MAX_BUF 200000
 // Rate-limit, then InternetOpenUrl + InternetReadFile_Wait into buffer
-// (decoded via mTW).  Retries internetWebSearchRetryAttempts times.
-// SPARQL failures Sleep(30s) and recurse with no depth cap.  Returns 0,
+// (decoded via mTW).  Retries internetWebSearchRetryAttempts times; a SPARQL
+// failure additionally Sleep(30s)s before that retry.  Returns 0,
 // INTERNET_OPEN_FAILED, or INTERNET_OPEN_URL_FAILED.
 int cInternet::readPage(const wchar_t* str, wstring& buffer, wstring& headers)
 {
@@ -288,7 +304,7 @@ int cInternet::readPage(const wchar_t* str, wstring& buffer, wstring& headers)
 			{
 				wprintf(L"\n\nrestart virtuoso\n");
 				Sleep(30000);
-				return readPage(str, buffer, headers);
+				continue; // retry within this loop's errors<internetWebSearchRetryAttempts cap instead of recursing with no depth limit
 			}
 			if (lastError == ERROR_NO_UNICODE_TRANSLATION)
 				break;
@@ -494,8 +510,8 @@ bool cInternet::InternetReadFile_Wait(HINTERNET RequestHandle, char* buffer, int
 
 // Cache-aside GET with optional Jericho HTML-to-text (`clean`) and optional
 // population of `buffer` (`readInfoBuffer`).  Skips .pdf/.php.  Index>1
-// appends .N to the cache name.  Truncates the path at MAX_PATH-20 (240)
-// even though the buffer is MAX_LEN.  `where` is only for log prefixes.
+// appends .N to the cache name.  Truncates the path at MAX_LEN-20, matching
+// cacheWebPath.  `where` is only for log prefixes.
 // Returns 0, -1, or a GETWEBPATH / GETPAGE / INTERNET_* code.
 int cInternet::getWebPath(int where, wstring webAddress, wstring& buffer, wstring epath, wstring cacheTypePath, wstring& filePathOut, wstring& headers, int index, bool clean, bool readInfoBuffer, bool forceWebReread)
 {
@@ -514,7 +530,7 @@ int cInternet::getWebPath(int where, wstring webAddress, wstring& buffer, wstrin
 		_snwprintf(path + pathlen, MAX_LEN - pathlen, L"\\_%s.%d", epath.c_str(), index);
 	else
 		_snwprintf(path + pathlen, MAX_LEN - pathlen, L"\\_%s", epath.c_str());
-	path[MAX_PATH - 20] = 0; // make space for subdirectories and for file extensions
+	path[MAX_LEN - 20] = 0; // make space for subdirectories and for file extensions
 	convertIllegalChars(path + pathlen + 1);
 	distributeToSubDirectories(path, pathlen + 1, true);
 	filePathOut = path;
@@ -552,12 +568,12 @@ int cInternet::getWebPath(int where, wstring webAddress, wstring& buffer, wstrin
 			_close(fd);
 			if (logRDFDetail)
 				lplog(LOG_WIKIPEDIA, L"getWebPath:nonJava wrote page %s", path);
-			return 0;
+			return ret; // propagate a readPage failure instead of reporting success (matches cacheWebPath)
 		}
 		if (ret && clean)
 		{
 			_close(fd);
-			return 0;
+			return ret; // propagate a readPage failure instead of reporting success (matches cacheWebPath)
 		}
 		string utf8Buffer;
 		wTM(buffer, utf8Buffer);
@@ -788,7 +804,7 @@ int testWebPath(int where, wstring webAddress, wstring epath, wstring cacheTypeP
 	if (_wmkdir(path) < 0 && errno == ENOENT)
 		lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
 	_snwprintf(path + pathlen, MAX_LEN - pathlen, L"\\_%s", epath.c_str());
-	path[MAX_PATH - 20] = 0; // make space for subdirectories and for file extensions
+	path[MAX_LEN - 20] = 0; // make space for subdirectories and for file extensions
 	convertIllegalChars(path + pathlen + 1);
 	distributeToSubDirectories(path, pathlen + 1, true);
 	filePathOut = path;

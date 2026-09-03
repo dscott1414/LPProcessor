@@ -43,16 +43,16 @@ public:
 	cNickName() 
 	{ 
 	}
-	// True if `name` is in equivalences (linear scan). Takes the string by value.
-	bool operator == (wstring name)  
+	// True if `name` is in equivalences (linear scan).
+	bool operator == (const wstring& name)
 	{
 		unsigned int I;
 		for (I=0; I<equivalences.size() && name!=equivalences[I]; I++);
-		return I<equivalences.size(); 
+		return I<equivalences.size();
 	}
 	// Inverse of ==, but also lplog’s every comparison (expensive; not a
 	// pure inverse in side effects).
-	bool operator != (wstring name)  
+	bool operator != (const wstring& name)
 	{
 		unsigned int I;
 		for (I=0; I<equivalences.size() && name!=equivalences[I]; I++)
@@ -82,10 +82,8 @@ public:
 	bool justHonorific(void);
 	bool getNickName(tIWMM firstName);
 	void hn(const wchar_t * namePartName,tIWMM namePart,wstring &accumulate,bool printShort, const wchar_t * separator);
-	void hn(const wchar_t * namePartName,tIWMM namePart, wchar_t * accumulate,bool printShort, const wchar_t * separator);
 	bool hn(tIWMM namePart,wchar_t separationCharacter,wstring &accumulate);
 	wstring print(wstring &message,bool printShort, const wchar_t * separator);
-	wstring print(wchar_t *message,bool printShort, const wchar_t * separator);
 	wstring original(wstring &message,wchar_t separationCharacter,bool justFirstAndLast);
 	bool match(tIWMM sub1,tIWMM sub2,bool returnTrueOnNull=true);
 	void merge(tIWMM &w1,tIWMM w2);

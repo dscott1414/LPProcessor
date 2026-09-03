@@ -33,9 +33,11 @@
 		  already charged this element (COST_EVAL / ND / AGREE / NVO / ROLE / PREP)
 
 	Notes / gotchas:
-		- CHILDPATBITS is 15 and is used as a shift, but it also sits in eFlags next
-		  to WINNER_FLAG=1, so flagsStr's `flagSet(CHILDPATBITS)` tests bits 0-3
-		  rather than "is a child pattern".
+		- CHILDPATBITS is 15, the shift width used to pack/unpack the child
+		  pattern #/len halves of PEMAElementMatchedSubIndex.  It is a plain class
+		  constant, not an eFlags enumerator (it used to alias eFlags by value,
+		  which made flagsStr's `flagSet(CHILDPATBITS)` test bits 0-3 of `flags`
+		  instead of anything meaningful; that spurious flag check was removed).
 		- nextByPatternEnd is negative when it points back to the start of a
 		  circular chain (-PEMAOffset).  translate() un-negates, remaps, re-negates.
 		- begin/end are shorts relative to the parent match start; they must fit in
@@ -53,7 +55,11 @@ public:
   unsigned int count;
   unsigned int allocated;
   enum chainType { BY_PATTERN_END=0, BY_POSITION=1, BY_CHILD_PATTERN_END=2 };
-	enum eFlags { WINNER_FLAG = 1, CHILDPATBITS = 15, COST_EVAL = 2, COST_ND = 4, COST_AGREE = 8, COST_NVO = 16, COST_DONE = 32, IN_CHAIN = 64, ELIMINATED = 128, COST_TERTIARY = 256, COST_ROLE = 512, COST_PREP = 1024 };
+	enum eFlags { WINNER_FLAG = 1, COST_EVAL = 2, COST_ND = 4, COST_AGREE = 8, COST_NVO = 16, COST_DONE = 32, IN_CHAIN = 64, ELIMINATED = 128, COST_TERTIARY = 256, COST_ROLE = 512, COST_PREP = 1024 };
+	// Shift width for the child pattern#/len packing in PEMAElementMatchedSubIndex
+	// (see class notes above).  Unrelated to eFlags; kept as a separate constant
+	// so it can never again collide with a flag value.
+	static const unsigned int CHILDPATBITS = 15;
   typedef struct _tPatternElementMatch 
   {
     short begin;
@@ -130,13 +136,11 @@ public:
       else if (iCost+addedCost<MIN_SIGNED_SHORT) iCost=MIN_SIGNED_SHORT;
       else iCost+=addedCost;
     }
-	// Append the set COST_*/WINNER flag names onto temp (debug).  CHILDPATBITS is
-	// tested as flags&15, which is not "is a child pattern".
+	// Append the set COST_*/WINNER flag names onto temp (debug).
 		const wchar_t *flagsStr(wstring &temp)
 		{
 			temp.clear();
 			if (flagSet(WINNER_FLAG)) temp+=L" WINNER";
-			if (flagSet(CHILDPATBITS)) temp += L" CHILDPATBITS";
 			if (flagSet(COST_EVAL)) temp += L" COST_EVAL";
 			if (flagSet(COST_ND)) temp += L" COST_ND";
 			if (flagSet(COST_AGREE)) temp += L" COST_AGREE";
@@ -200,9 +204,9 @@ public:
   bool read(IOHANDLE file);
   bool write(void *buffer,int &where,unsigned int limit);
   bool read(char *buffer,int &where,unsigned int limit);
-  bool operator==(const cPatternElementMatchArray other) const;
+  bool operator==(const cPatternElementMatchArray &other) const;
   cPatternElementMatchArray& operator=(const cPatternElementMatchArray &rhs);
-  bool operator!=(const cPatternElementMatchArray other) const;
+  bool operator!=(const cPatternElementMatchArray &other) const;
   tPatternElementMatch& operator[](unsigned int _P0);
   const tPatternElementMatch& operator[](unsigned int _P0) const;
   int push_back_unique(int *firstPosition,unsigned int position,int oCost,int iCost,unsigned int p,int begin,int end,int elementMatchedSubIndex,

@@ -18,10 +18,18 @@
 		Hardcoded path G:\virtuoso_server_dumpfolder\...; MSVC _tmain / __int64.
 
 	Notes / gotchas:
-		buf is 16348 (not 16384) — likely a typo. Lines after the first
-		overlong triple are written; earlier lines are silently dropped
-		(pastFirstError gate). fopen failures only perror; later code
-		guards on both FILE* being non-NULL.
+		(fixed) buf was 16348 (not 16384) — a typo vs. the intended 16 KiB
+		buffer; now 16384, with the matching fgets() size argument updated
+		to match.
+		(fixed) valid (non-overlong) triples used to be written to .clean
+		only once pastFirstError was already true, i.e. only after the
+		first overlong triple had been seen - so every good triple before
+		the first bad one was silently dropped from the output, the
+		opposite of what the Overview above (and the rest of this tool)
+		describes. pastFirstError has been removed; every triple that is
+		not overlong is written to .clean regardless of file position.
+		fopen failures only perror; later code guards on both FILE* being
+		non-NULL.
 */
 // correctRDF.cpp : Defines the entry point for the console application.
 //
@@ -52,9 +60,8 @@ int _tmain(int argc, _TCHAR* argv[])
 	if (fp && fpclean)
 	{
 		int linesRead=0,linesSkipped=0;
-		bool pastFirstError=false;
-		char buf[16348]; // 16348 not 16384 — likely off-by-36 typo vs. a 16 KiB buffer
-		while (fgets(buf,16348,fp))
+		char buf[16384];
+		while (fgets(buf,16384,fp))
 		{
 			linesRead++;
 			// just determine whether it has three elements
@@ -79,9 +86,8 @@ int _tmain(int argc, _TCHAR* argv[])
 							{
 								printf("%d:%d %d %d\n",linesRead,len1,len2,len3);
 								linesSkipped++;
-								pastFirstError=true;
 							}
-							else if (pastFirstError)
+							else
 								fputs(buf,fpclean);
 							continue;
 						}

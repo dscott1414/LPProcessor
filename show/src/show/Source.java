@@ -58,7 +58,20 @@ public class Source {
 	public static final int T_RESUME = MTM * 13;
 	public static final int T_FINISH = MTM * 14;
 	public static final int T_RANGE = MTM * 15;
-	public static final int T_UNIT = MTM * 16;
+	// (fixed) timeRelations.h's enum eTimeWordFlags is T_RANGE=15,
+	// T_META_RELATION=16, T_UNIT=17, T_MODIFIER=18 (then T_TIME=32...).
+	// T_UNIT here used to be MTM*16, colliding with T_META_RELATION's real
+	// value and leaving T_UNIT one bit position too low; T_META_RELATION
+	// and T_MODIFIER were missing from this mirror entirely. This mattered
+	// beyond just being an unused constant: setTimeColorAttributes() below
+	// tests `(timeColor & T_UNIT) > 0` as its first (and highest-priority)
+	// check, so with the old wrong value it would fire for an actual
+	// T_META_RELATION timeColor too, and would have missed part of a real
+	// T_UNIT(17) timeColor if it were ever checked with exact-match `==`
+	// instead of `>0`.
+	public static final int T_META_RELATION = MTM * 16;
+	public static final int T_UNIT = MTM * 17;
+	public static final int T_MODIFIER = MTM * 18;
 	// on the following lines, flags can be combined
 	public static final int T_TIME = MTM * 32;
 	public static final int T_DATE = MTM * 64;
@@ -1096,8 +1109,8 @@ public class Source {
 					}
 					addElement(getOriginalWord(wm), keyWord, I, section, -1, smt);
 				}
-				if ((wm.word.equals("“") || wm.word.equals("‘"))) {
-					// if (wm.word.equals("“"))
+				if ((wm.word.equals("ï¿½") || wm.word.equals("ï¿½"))) {
+					// if (wm.word.equals("ï¿½"))
 					// lastOpeningPrimaryQuote = I;
 					if ((wm.flags & WordMatch.flagQuotedString) != 0) {
 						SimpleAttributeSet keyWordQS = new SimpleAttributeSet();

@@ -17,8 +17,9 @@ Key entry points:
     - at_eof() / close() / back(offset)
 
 Notes / gotchas:
-    read_string indexes ch[0]/ch[1] without checking that read(2)
-    returned two bytes — EOF mid-string raises IndexError.
+    read_string/write_string check that read(2) actually returned two
+    bytes before indexing ch[0]/ch[1] — a short read at EOF mid-string
+    is treated as an implicit terminator instead of raising IndexError.
     back() uses SEEK_CUR; a negative seek past 0 is undefined.
     The whole file is held in RAM.
 """
@@ -38,13 +39,15 @@ class LPIO:
         self.offset += 4
         return struct.unpack('i', self.f.read(4))[0]
     
-    # Read UTF-16 code units until a 0x0000 terminator. Does not handle
-    # a short read at EOF (ch[0] will IndexError).
+    # Read UTF-16 code units until a 0x0000 terminator. A short read at
+    # EOF (0 or 1 bytes left) is treated as an implicit terminator.
     def read_string(self):
         str_in = bytearray(b'')
         while True:
             self.offset += 2
             ch = self.f.read(2)
+            if len(ch) < 2:
+                break
             if ch[0]==0 and ch[1] == 0:
                 break
             str_in.extend(ch)
@@ -80,6 +83,8 @@ class LPIO:
         while True:
             self.offset += 2
             ch = self.f.read(2)
+            if len(ch) < 2:
+                break
             if ch[0]==0 and ch[1] == 0:
                 break
             str_in.extend(ch)

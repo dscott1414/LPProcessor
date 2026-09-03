@@ -13,13 +13,19 @@ Key entry points:
     - parse_xml_file(pathName) - one XML class file
     - __init__() - glob all XML under the hardcoded path
     - get_verb_classes / get_class_names / get_class_names_2 / is_verb_class
-    - like(str1,str2) - intended prefix compare (currently broken)
+    - like(str1,str2) - prefix-equal-of-shorter-length compare
 
 Notes / gotchas:
     Hardcoded F:\\lp\\source\\lists\\VerbNet and os.chdir.
-    phrasalVerb.length() is a Java-ism (AttributeError on str).
-    like() calls str1.len() (should be len) and compares to
-    str2[0:min] where `min` is the builtin, not the local m.
+    (fixed) get_verb_classes used phrasalVerb.length(), a Java-ism that
+    raised AttributeError on a Python str; now len(phrasalVerb).
+    (fixed) like() used str1.len()/str2.len() (AttributeError on str)
+    and sliced with the `min` builtin instead of the local `m`; now
+    uses len(str1)/len(str2) and str2[0:m]. Neither get_verb_classes nor
+    like()/is_verb_class() on this class is currently called anywhere
+    in pyLPBackEnd (Source.py only calls get_class_names/
+    get_class_names_2 on a VerbNet instance), so this was latent
+    dead-code-until-called rather than an active bug.
 """
 from VerbMember import VerbMember
 import glob, os
@@ -55,20 +61,19 @@ class VerbNet:
             self.parse_xml_file(file);
             
     # Return the VerbMember list for baseVerb, or for phrasalVerb if
-    # that key is present. phrasalVerb.length() will raise on a str.
+    # that key is present.
     def get_verb_classes(self, baseVerb, phrasalVerb):
         vms = self.vbNetVerbToClassMap.get(baseVerb)
-        if phrasalVerb.length() > 0:
+        if len(phrasalVerb) > 0:
             vmsParticiple = self.vbNetVerbToClassMap.get(phrasalVerb)
-            if vmsParticiple is not None: 
+            if vmsParticiple is not None:
                 vms = vmsParticiple
         return vms
 
-    # Intended: prefix-equal of the shorter length. Currently calls
-    # .len() (AttributeError) and slices with the builtin `min`.
+    # Prefix-equal of the shorter length.
     def like(self, str1,str2):
-        m = min(str1.len(),str2.len());
-        return str1[0:m] == str2[0:min]
+        m = min(len(str1),len(str2));
+        return str1[0:m] == str2[0:m]
     
     # Space-joined vm.get_name() for every class of baseVerb, or "".
     def get_class_names(self, baseVerb):

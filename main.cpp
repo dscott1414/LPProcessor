@@ -68,9 +68,10 @@
 		corresponding code is either commented out below or lives in "unused source\".
 
 	Key entry points:
-		- wmain() - top level: initialize, parse arguments, build cSource, then either startProcesses() or loop over sources
+		- wmain() - top level: initialize, parse arguments, validateCacheDir(), build cSource, then either startProcesses() or loop over sources
 		- processCommandArguments() - fills the run configuration and the source type from argv
-		- initialize() - crash handler, console, locks, memory counter, working directory, cache directory check
+		- initialize() - crash handler, console, locks, memory counter, working directory, default cache directory
+		- validateCacheDir() - fatal existence check on whichever cacheDir ended up in effect (default, LP_CACHE_DIR, or -cacheDir); runs after processCommandArguments() so a CLI override is actually what gets checked
 		- processSource() - the whole per-document pipeline for one already-claimed source
 		- startProcesses() / createLPProcess() / waitToSpawnMoreProcesses() / waitForSpawnedProcesses() - controller mode
 		- WRMemoryCheck() - copies the wordRelations table into its MEMORY-engine mirror
@@ -104,9 +105,13 @@
 	Notes / gotchas:
 		- Windows only: CreateProcess, WaitForMultipleObjectsEx, SRWLOCK, console API,
 		  minidumps, wsprintf (which is the Win32 unbounded wsprintfW, not swprintf).
-		- LMAINDIR / CACHEDIR / TEXTDIR are compile-time absolute paths ("F:\lp",
-		  "M:\caches") from general.h; initialize() fails fatally if CACHEDIR is absent
-		  even when -cacheDir names a valid directory.
+		- LMAINDIR / CACHEDIR / TEXTDIR (general.h) are only the fallback values used
+		  by envConfig.h's getMainDir()/getCacheDir()/getTextDir() when LP_MAIN_DIR /
+		  LP_CACHE_DIR / LP_TEXT_DIR are unset. cacheDir defaults to getCacheDir() in
+		  initialize(), -cacheDir can still override it in processCommandArguments(),
+		  and validateCacheDir() (called after argument parsing) is what actually does
+		  the fatal existence check - it used to run inside initialize(), before argv
+		  was parsed, so a valid -cacheDir was never the value being checked.
 		- Working directory dance: initialize() does chdir(".."), startProcesses() does
 		  chdir("source") and restores it on return; every relative path below (tests\,
 		  the child .exe paths, the .lplog files) depends on this.
@@ -118,8 +123,11 @@
 		  waiting for a keypress only when interactive.  Child exit codes are reported
 		  by reportChildExitCode() as each worker is reaped.
 		- wmain() and startProcesses() end with _exit(0), so no destructor runs: the
-		  cSource destructor, the MySQL close and any unflushed buffered log are skipped
-		  deliberately ("fast exit") because tearing down the lexicon takes minutes.
+		  cSource destructor (which would tear down the in-memory lexicon, taking
+		  minutes) is skipped deliberately ("fast exit").  Both call sites explicitly
+		  lplog() (flush) and mysql_close() immediately before the _exit(0), though,
+		  since those are cheap and _exit() - unlike exit() - does not flush stdio
+		  buffers or close the DB socket on its own.
 		- multiProcess and logFileExtension are __declspec(thread) (logging.h); they are
 		  set on the main thread only, so worker threads see multiProcess==0.
 		- This file is largely duplicated by specials_main.cpp (the specials.vcxproj
@@ -192,9 +200,10 @@ typedef long long (FAR WINAPI* MINIDUMPWRITEDUMP)(HANDLE hProcess, DWORD dwPid, 
 bool unlockTables(MYSQL& mysql);
 bool preTaggedSource = false; // BNC
 
-// Write a minidump of this process to LMAINDIR\core.dmp ("F:\lp\core.dmp") describing the
-// exception in apExceptionInfo.  Called from the unhandled exception filter, so it runs on
-// the faulting thread with the stack still intact.
+// Write a minidump of this process to getMainDir()\core.dmp (LP_MAIN_DIR env var,
+// default "F:\lp\core.dmp") describing the exception in apExceptionInfo.  Called
+// from the unhandled exception filter, so it runs on the faulting thread with the
+// stack still intact.
 // Side effects: loads dbghelp.dll, creates/truncates core.dmp (FILE_SHARE_WRITE so a
 // concurrent lp.exe can also be writing it - the dumps of sibling processes overwrite
 // each other because the name is fixed).
@@ -206,7 +215,7 @@ void createMinidump(struct _EXCEPTION_POINTERS* apExceptionInfo)
 	HMODULE mhLib = ::LoadLibrary(L"dbghelp.dll");
 	MINIDUMPWRITEDUMP pDump = (MINIDUMPWRITEDUMP)::GetProcAddress(mhLib, "MiniDumpWriteDump");
 	wchar_t corePath[1024];
-	wsprintf(corePath, L"%s\\core.dmp", LMAINDIR);
+	wsprintf(corePath, L"%s\\core.dmp", getMainDir().c_str());
 	HANDLE  hFile = ::CreateFile(corePath, GENERIC_WRITE, FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
 	_MINIDUMP_EXCEPTION_INFORMATION ExInfo;
@@ -246,58 +255,6 @@ LONG WINAPI unhandled_handler(struct _EXCEPTION_POINTERS* apExceptionInfo)
 	createMinidump(apExceptionInfo);
 	printStackTrace();
 	return EXCEPTION_CONTINUE_SEARCH;
-}
-
-// Bulk downloader for a hand-made list file: every line is "<url>|<destination path>",
-// UTF-16 encoded (hence the "rb" + fgetws).  The extension of the URL is appended to the
-// destination path, the page is fetched with cInternet::readBinaryPage and written to that
-// path, then the loop sleeps 5s to stay polite.
-// Returns 0 always - including when the list file cannot be opened.
-// Side effects: creates/overwrites every destination file, network traffic, logging.
-// NOTE: this function is currently dead code - nothing in the project calls it, and it has
-// never been hardened: a line without '|' null-derefs, _wopen failure (-1) is treated as
-// success by "if (destfile)", and both the BOM strip and the wcscat below can corrupt or
-// overrun url[].
-int acquireList(wchar_t* filename)
-{
-	LFS
-		FILE* listfile = _wfopen(filename, L"rb"); // binary mode reads unicode
-	if (listfile)
-	{
-		wchar_t url[2048], * path;
-		int total = 0;
-		while (fgetws(url, 2047, listfile))
-		{
-			// shift the string down one wchar_t to drop a leading byte order mark - note
-			// the length is in characters but memcpy wants bytes, and the terminating null
-			// is not copied
-			if (url[0] == 0xFEFF) // detect BOM
-				memcpy(url, url + 1, wcslen(url + 1));
-			if (url[wcslen(url) - 1] == L'\n') url[wcslen(url) - 1] = 0;
-			if (url[wcslen(url) - 1] == L'\r') url[wcslen(url) - 1] = 0;
-			wchar_t* ch = wcschr(url, L'|');
-			*ch = 0;
-			path = ch + 1;
-			// path points into url[] just past the '|', so appending the URL's extension
-			// here writes past the end of the line inside the same 2048 wchar_t buffer
-			wchar_t* period = wcsrchr(url, L'.');
-			if (period) wcscat(path, period);
-			wstring buffer;
-			int destfile = _wopen(path, O_RDWR | O_BINARY | O_CREAT);
-			if (destfile)
-			{
-				if (cInternet::readBinaryPage(url, destfile, total))
-					lplog(LOG_ERROR, L"error retrieving %s.", url);
-				close(destfile);
-			}
-			else
-				lplog(LOG_ERROR, L"error opening %s.", path);
-			wprintf(L"%s - total bytes = %dMB.\n", path, total / 1024 / 1024);
-			Sleep(5000);
-		}
-		fclose(listfile);
-	}
-	return 0;
 }
 
 /*
@@ -872,13 +829,11 @@ use this sympath:
 int initializeCounter(void);
 void freeCounter(void);
 void reportMemoryUsage(void);
-int getInterviewTranscript();
-int getTwitterEntries(wchar_t* filter);
 bool TSROverride = false, flipTOROverride = false, flipTNROverride = false, logMatchedSentences = false, logUnmatchedSentences = false;
 
 // new_handler installed by initialize(): logs the allocation failure and terminates.
-// The exit(1) is unreachable because lplog(LOG_FATAL_ERROR,...) exits (with status 0)
-// first, so an out-of-memory run still looks successful to whoever spawned it.
+// The exit(1) below is unreachable because lplog(LOG_FATAL_ERROR,...) already exits
+// the process first (via logging.cpp's fatalExit(), status EXIT_FAILURE).
 void no_memory() {
 	lplog(LOG_FATAL_ERROR, L"Out of memory (new/STL allocation).");
 	exit(1);
@@ -1152,7 +1107,7 @@ HANDLE createLPProcess(const int processKind, const bool forceSourceReread, cons
 	switch (processKind)
 	{
 		case 0:
-			wsprintf(processParameters, L"QuestionAnsweringx64\\lp.exe -ParseRequest 0 + -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %s.%u", CACHEDIR,
+			wsprintf(processParameters, L"QuestionAnsweringx64\\lp.exe -ParseRequest 0 + -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %s.%u", cacheDir,
 				(forceSourceReread) ? L"-forceSourceReread " : L"",
 				(sourceWrite) ? L"-SW " : L"",
 				(sourceWordNetRead) ? L"-SWNR " : L"",
@@ -1171,7 +1126,7 @@ HANDLE createLPProcess(const int processKind, const bool forceSourceReread, cons
 				break;
 			break;
 		case 1:
-			wsprintf(processParameters, L"ParseAllSourcesx64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %s.%u", CACHEDIR,
+			wsprintf(processParameters, L"ParseAllSourcesx64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %s.%u", cacheDir,
 				(forceSourceReread) ? L"-forceSourceReread " : L"",
 				(sourceWrite) ? L"-SW " : L"",
 				(sourceWordNetRead) ? L"-SWNR " : L"",
@@ -1365,6 +1320,15 @@ int startProcesses(MYSQL& mysql, int sourceType, int processKind, int step, int 
 	if (processSourceType != cSource::REQUEST_TYPE)
 	{
 		freeCounter();
+		// Flush the buffered log FILE*s and close the MySQL connection before the fast
+		// exit below: _exit() (unlike exit()) does not flush stdio buffers or run atexit
+		// handlers, so without this the last few KB written to *.lplog since the last
+		// logCache-driven flush would be silently lost, and the MySQL socket would be
+		// dropped by the OS rather than closed cleanly.  This does not reintroduce the
+		// "tearing down the lexicon takes minutes" cost the _exit() is here to avoid -
+		// both calls are cheap.
+		lplog();
+		mysql_close(&mysql);
 		_exit(0); // fast exit
 	}
 	free(handles);
@@ -1688,7 +1652,16 @@ void initialize()
 	GetCurrentDirectoryW(1024, dir);
 	if (chdir(".."))
 		exit(-1);
-	cacheDir = CACHEDIR;
+	cacheDir = getCacheDir().c_str();
+}
+
+// Fatally checks whichever cacheDir is actually in effect once command-line
+// parsing has had a chance to apply -cacheDir. Must run after
+// processCommandArguments(), not from initialize(): initialize() runs before
+// argv is parsed, so checking there tested the default/env value even when
+// -cacheDir named a valid directory.
+void validateCacheDir()
+{
 	if (_waccess(cacheDir, 0) < 0)
 		lplog(LOG_FATAL_ERROR, L"Cache directory %s does not exist!", cacheDir);
 }
@@ -1785,9 +1758,10 @@ int wmain(int argc, wchar_t* argv[])
 	int sourceArgs = -1, numSourcesPerProcess = 5;
 	enum cSource::sourceTypeEnum sourceType;
 	wstring specialExtension;
-	processCommandArguments(argc, argv, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite, 
+	processCommandArguments(argc, argv, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite,
 		resetAllSource, resetProcessingFlags, generateFormStatistics, retry,
 		parseOnly, makeCopyBeforeSourceWrite,	sourceArgs, numSourcesPerProcess, sourceType, specialExtension,	sourceHost);
+	validateCacheDir();
 	cSource source(sourceHost, sourceType, generateFormStatistics, multiProcess > 0, true);
 	if (multiProcess > 0 || numSourceLimit == 0) // controller or a single process not under control
 		WRMemoryCheck(source.mysql);
@@ -1829,7 +1803,7 @@ int wmain(int argc, wchar_t* argv[])
 			if (!getNextUnprocessedSource(source.mysql, beginSource, endSource, source.sourceType, true, source.sourceId, path, encoding, start, repeatStart, etext, author, title))
 				break;
 			path.insert(0, L"\\");
-			path = path.insert(0, TEXTDIR);
+			path = path.insert(0, getTextDir());
 			wchar_t consoleTitle[1500];
 			wsprintf(consoleTitle, L"[%03d:%03d-%03d:%03d%%]PID%05d %s '%s'...", source.sourceId, beginSource, numSources, (numSources - numSourcesLeft) * 100 / numSources, pid, (start == L"**SKIP**" || start == L"**START NOT FOUND**") ? L"Skipping" : L"", title.c_str());
 			_putws(consoleTitle);
@@ -1861,5 +1835,10 @@ int wmain(int argc, wchar_t* argv[])
 	}
 	freeCounter();
 	cProfile::lfprint(profile);
+	// See the matching comment in startProcesses(): flush the logs and close MySQL
+	// before the fast exit so _exit() does not silently drop buffered log output or
+	// leave the DB socket to be torn down by the OS instead of closed cleanly.
+	lplog();
+	mysql_close(&source.mysql);
 	_exit(0); // fast exit
 }

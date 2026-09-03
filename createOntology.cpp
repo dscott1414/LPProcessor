@@ -38,14 +38,19 @@
 		WinHTTP / cInternet, hardcoded M:\ol_dump_works_... for Open Library.
 
 	Notes / gotchas:
-		- Several parsers put 2–20 MB arrays on the stack (MAX_BUF, MAXYAGOBUF,
-		  writeRDFTypes' MAX_BUF*10).  These fit only because lp.vcxproj reserves a
-		  ~21MB stack; they would overflow a default 1MB thread and leave no room for
-		  recursion.  Prefer heap allocation if any of these ever runs off the main thread.
-		- getRDFTypesMaster mutates rdfTypeNumMap under a shared SRWLOCK.
-		- SQL for noRDFTypes / Freebase concatenates the object/id unescaped.
-		- decodeURL reads I+1/I+2 after '%' with no length check.
-		- readOntologyList fetches only the first SQL row.
+		- writeRDFTypes / readYAGOOntology(filepath,...) / readN3FileIntoTripletMap used to
+		  put 4-20MB parse buffers on the stack (MAX_BUF*10, MAXYAGOBUF, MAX_BUF); they now
+		  tmalloc/tfree them on the heap instead, since these only ever fit because of the
+		  ~21MB StackReserveSize in the .vcxproj (see the smaller MAX_BUF-sized buffers
+		  still on the stack elsewhere in this file, e.g. fillOntologyList's local
+		  buffer[MAX_BUF] - those are ~2MB and left alone).
+		- getRDFTypesMaster mutates rdfTypeNumMap under an exclusive SRWLOCK (both the
+		  cache-hit counter bump and the cache-miss insert are writes).
+		- SQL for noRDFTypes / noERDFTypes / Freebase escapes single quotes
+		  (escapeSingleQuote) before concatenation; still not a bound parameter, so this
+		  is defense against accidental quotes in scraped text, not a hardened query.
+		- decodeURL guards I+1/I+2 after '%' before reading them.
+		- readOntologyList loops over every SQL row (mysql_fetch_row in a while).
 */
 #include <windows.h>
 #include <io.h>
@@ -318,7 +323,7 @@ int readN3TwoPropertyLine(wchar_t* path, wstring mapFrom, unordered_map < wstrin
 									 rdfs:isDefinedBy : .
 */
 // Parse one UMBEL .n3 file into triplets[predicate][subject] = {objects}.
-// Uses a MAX_BUF (2e6 wchar_t) stack buffer.  LOG_FATAL if the file is missing.
+// Uses a MAX_BUF (2e6 wchar_t) heap buffer (tmalloc/tfree).  LOG_FATAL if the file is missing.
 int readN3FileIntoTripletMap(wchar_t* path, unordered_map < wstring, unordered_map <wstring, set< wstring > > >& triplets)
 {
 	FILE* fp = _wfopen(path, L"r");
@@ -327,7 +332,13 @@ int readN3FileIntoTripletMap(wchar_t* path, unordered_map < wstring, unordered_m
 		lplog(LOG_FATAL_ERROR, L"%s file not found.", path);
 		return -1;
 	}
-	wchar_t buffer[MAX_BUF];
+	wchar_t* buffer = (wchar_t*)tmalloc(MAX_BUF * sizeof(wchar_t));
+	if (!buffer)
+	{
+		lplog(LOG_FATAL_ERROR, L"readN3FileIntoTripletMap: out of memory allocating %d bytes for %s.", MAX_BUF * sizeof(wchar_t), path);
+		fclose(fp);
+		return -1;
+	}
 	int line;
 	int nonConformingLines = 0;
 	for (line = 1; fgetws(buffer, MAX_BUF, fp); line++)
@@ -404,6 +415,8 @@ int readN3FileIntoTripletMap(wchar_t* path, unordered_map < wstring, unordered_m
 	lplog(LOG_WIKIPEDIA, L"relations in %s LIST: Nonconforming lines %d: total lines %d %d%%", path, nonConformingLines, line, nonConformingLines * 100 / line);
 	for (unordered_map < wstring, unordered_map <wstring, set<wstring>> >::iterator tbegin = triplets.begin(); tbegin != triplets.end(); tbegin++)
 		lplog(LOG_WIKIPEDIA, L"%d:FINAL UMBEL %s:%d", __LINE__, tbegin->first.c_str(), tbegin->second.size());
+	tfree(MAX_BUF * sizeof(wchar_t), buffer);
+	fclose(fp);
 	return 0;
 }
 
@@ -430,7 +443,7 @@ void cOntology::importUMBELN3Files(const wchar_t* basepath, const wchar_t* exten
 		else
 		{
 			wchar_t* ext = wcsrchr(completePath, '.');
-			if (!wcscmp(ext, extension))
+			if (ext && !wcscmp(ext, extension))
 				readN3FileIntoTripletMap(completePath, triplets);
 		}
 	} while (FindNextFile(hFind, &FindFileData) != 0);
@@ -439,7 +452,8 @@ void cOntology::importUMBELN3Files(const wchar_t* basepath, const wchar_t* exten
 
 // Import "umbel downloads" *.n3, invert umbel:superClassOf into rdfs:subClassOf,
 // and insert UMBEL entries into dbPediaOntologyCategoryList.  fillRanks is
-// invoked once per triplets[L""] entry.  Always returns 0 (false as bool).
+// invoked once per triplets[L""] entry.  Returns true on completion; the sole
+// caller (fillOntologyList) does not currently check the result either way.
 bool cOntology::readUMBELSuperClasses()
 {
 	unordered_map < wstring, unordered_map <wstring, set<wstring>> > triplets;
@@ -478,7 +492,7 @@ bool cOntology::readUMBELSuperClasses()
 	}
 	for (auto ti : triplets[L""])
 		fillRanks(UMBEL_Ontology_Type);
-	return 0;
+	return true;
 }
 
 /***
@@ -1028,8 +1042,7 @@ int cOntology::readYAGOOntology()
 
 #define MAXYAGOBUF 5000000 // in char
 // Stream one YAGO TTL: equivalentClass lines set compactLabel; subClassOf lines
-// insert a super.  5MB char fileBuffer on the stack.  GetFileSizeEx failure
-// returns -1 without CloseHandle.
+// insert a super.  5MB char fileBuffer is heap-allocated (tmalloc/tfree).
 int cOntology::readYAGOOntology(const wchar_t* filepath, int& numYAGOEntries, int& numSuperClasses)
 {
 	LFS
@@ -1043,8 +1056,17 @@ int cOntology::readYAGOOntology(const wchar_t* filepath, int& numYAGOEntries, in
 	int line, bufferOffset = 0, bufferLength = 0; // fileOffset=0,
 	__int64 totalFileLength, totalFileOffset = 0;
 	if (!GetFileSizeEx(fd, (PLARGE_INTEGER)&totalFileLength))
+	{
+		CloseHandle(fd);
 		return -1;
-	char fileBuffer[MAXYAGOBUF + 1];
+	}
+	char* fileBuffer = (char*)tmalloc(MAXYAGOBUF + 1);
+	if (!fileBuffer)
+	{
+		lplog(LOG_FATAL_ERROR, L"readYAGOOntology: out of memory allocating %d bytes for %s.", MAXYAGOBUF + 1, filepath);
+		CloseHandle(fd);
+		return -1;
+	}
 	/* Read a line at a time until eof */
 	// <http://dbpedia.org/class/yago/Aa114931472> <http://www.w3.org/2000/01/rdf-schema#compactLabel> "Aa"@en .  obsolete! yago_links.nt deprecated in dbpedia 3.7
 	// <http://dbpedia.org/class/yago/Canal102947212> <http://www.w3.org/2002/07/owl#equivalentClass> <http://yago-knowledge.org/resource/wordnet_canal_102947212> . in yago_type_links.ttl
@@ -1123,6 +1145,7 @@ int cOntology::readYAGOOntology(const wchar_t* filepath, int& numYAGOEntries, in
 		}
 		//lplog(LOG_ERROR,L"Error parsing (2) dbPediaOntology category [compactLabel and subclass not found] on line %d: %s",line,s);
 	}
+	tfree(MAXYAGOBUF + 1, fileBuffer);
 	CloseHandle(fd);
 	return 0;
 }
@@ -1517,8 +1540,8 @@ bool cOntology::writeOntologyList()
 	return true;
 }
 
-// Load `ontology` into the map.  Only mysql_fetch_row is called once — a single
-// row is imported.  Superclasses are '|' split.
+// Load `ontology` into the map.  Loops over every row with mysql_fetch_row.
+// Superclasses are '|' split.
 bool cOntology::readOntologyList()
 {
 	if (!myquery(&mysql, L"LOCK TABLES ontology READ"))
@@ -1529,7 +1552,7 @@ bool cOntology::readOntologyList()
 	MYSQL_ROW sqlrow = NULL;
 	if (myquery(&mysql, qt, result))
 	{
-		if ((sqlrow = mysql_fetch_row(result)))
+		while ((sqlrow = mysql_fetch_row(result)))
 		{
 			cOntologyEntry ontologyEntry;
 			wstring onkey, superClassesToSplit, s;
@@ -1828,7 +1851,8 @@ int cOntology::getAcronymRDFTypes(wstring& object, vector <cTreeCat*>& rdfTypes)
 freebase begin
 ***********************************************************/
 // Walk {L}id markers in a Freebase properties blob, SELECT that id, and return
-// the {D} description text.  The id is concatenated into SQL unescaped.
+// the {D} description text.  The extracted id is escaped (escapeSingleQuote)
+// before being concatenated into SQL.
 wstring cOntology::extractLinkedFreebaseDescription(string& properties, wstring& wDescription)
 {
 	int linkDescription = -1;
@@ -1837,11 +1861,9 @@ wstring cOntology::extractLinkedFreebaseDescription(string& properties, wstring&
 		int nextLink = properties.find("{", linkDescription + 1);
 		wstring wproperties;
 		mTW(properties, wproperties);
-		wstring q = L"select properties from freebaseProperties where id='";
-		if (nextLink < 0)
-			q += wproperties.substr(linkDescription + 3) + L"'";
-		else
-			q += wproperties.substr(linkDescription + 3, nextLink - linkDescription - 3) + L"'";
+		wstring linkedId = (nextLink < 0) ? wproperties.substr(linkDescription + 3) : wproperties.substr(linkDescription + 3, nextLink - linkDescription - 3);
+		escapeSingleQuote(linkedId);
+		wstring q = L"select properties from freebaseProperties where id='" + linkedId + L"'";
 		MYSQL_RES* result = NULL;
 		MYSQL_ROW sqlrow;
 		if (!myquery(&mysql, (wchar_t*)q.c_str(), result)) return L"";
@@ -1870,7 +1892,7 @@ void replaceAll(std::wstring& str, const std::wstring& from, const std::wstring&
 }
 
 // prefer an entry where key=id or labelWithSpace, if it exists
-// Look up freebaseProperties by id or name (name quotes escaped).  Falls back
+// Look up freebaseProperties by id or name (both quotes escaped).  Falls back
 // through k= and id+k= queries.  Returns the {D} description or empty.
 wstring cOntology::getFBDescription(wstring id, wstring name)
 {
@@ -1879,6 +1901,7 @@ wstring cOntology::getFBDescription(wstring id, wstring name)
 	wstring q = L"select properties from freebaseProperties where ", q2 = q, q3 = q;
 	if (name.empty())
 	{
+		escapeSingleQuote(id);
 		q += L"id='" + id + L"'";
 		q2 += L"k='" + id + L"'";
 		q3 = q + L"and k='" + id + L"'";
@@ -2008,8 +2031,7 @@ int cOntology::lookupLinks(vector <wstring>& links)
 
 // Parse freebaseProperties rows: {T} types (simplified to song/band/musician),
 // {W}/{P} links, {D}/{N} text.  Empty-properties rows become alias ids that are
-// re-queried once.  `properties.find(whereName + 1, '{')` passes a size_t as the
-// needle (meant find('{', whereName+1)).
+// re-queried once.
 int cOntology::lookupInFreebaseQuery(wstring& object, string& slobject, wstring& q, vector <cTreeCat*>& rdfTypes, bool accumulateAliases)
 {
 	LFS
@@ -2048,10 +2070,10 @@ int cOntology::lookupInFreebaseQuery(wstring& object, string& slobject, wstring&
 		}
 		if (whereName != string::npos)
 		{
-			// Intended find('{', whereName+1); this calls find(const char*, pos) with a size_t-as-pointer.
 			size_t nextBracket = properties.find('{', whereName + 1);
 			if (nextBracket != string::npos)
-				name = properties.substr(whereName + 3, nextBracket);
+				// substr's 2nd argument is a length, not an end position: subtract the start.
+				name = properties.substr(whereName + 3, nextBracket - (whereName + 3));
 			else
 				name = properties.substr(whereName + 3);
 			transform(name.begin(), name.end(), name.begin(), (int(*)(int)) tolower);
@@ -2224,8 +2246,8 @@ int cOntology::readRDFTypes(wchar_t path[4096], vector <cTreeCat*>& rdfTypes)
 	return 0;
 }
 
-// Write .rdfTypes.  `char buffer[MAX_BUF * 10]` is a ~20MB stack array; it fits only
-// because of the ~21MB StackReserveSize set in lp.vcxproj.
+// Write .rdfTypes.  Uses a ~20MB heap buffer (tmalloc/tfree, tracked in
+// memoryAllocated) rather than putting it on the stack.
 int cOntology::writeRDFTypes(wchar_t path[4096], vector <cTreeCat*>& rdfTypes)
 {
 	LFS
@@ -2235,7 +2257,13 @@ int cOntology::writeRDFTypes(wchar_t path[4096], vector <cTreeCat*>& rdfTypes)
 		lplog(LOG_ERROR, L"Cannot write %s - %S.", path, _sys_errlist[errno]);
 		return -1;
 	}
-	char buffer[MAX_BUF * 10];
+	char* buffer = (char*)tmalloc(MAX_BUF * 10);
+	if (!buffer)
+	{
+		lplog(LOG_FATAL_ERROR, L"writeRDFTypes: out of memory allocating %d bytes for %s.", MAX_BUF * 10, path);
+		_close(fd);
+		return -1;
+	}
 	int where = 0;
 	*((wchar_t*)buffer) = RDFTYPE_VERSION;
 	where += 2;
@@ -2244,6 +2272,8 @@ int cOntology::writeRDFTypes(wchar_t path[4096], vector <cTreeCat*>& rdfTypes)
 		if (!(*ri)->copy(buffer, where, MAX_BUF * 10))
 		{
 			lplog(LOG_FATAL_ERROR, L"Cannot write %s - %S.", path, _sys_errlist[errno]);
+			tfree(MAX_BUF * 10, buffer);
+			_close(fd);
 			return -1;
 		}
 		if (where > (MAX_BUF * 10) - 8192)
@@ -2254,6 +2284,7 @@ int cOntology::writeRDFTypes(wchar_t path[4096], vector <cTreeCat*>& rdfTypes)
 	}
 	if (where > 0)
 		_write(fd, buffer, where);
+	tfree(MAX_BUF * 10, buffer);
 	_close(fd);
 	return 0;
 }
@@ -2275,7 +2306,8 @@ void cOntology::compressPath(wchar_t* path)
 	}
 }
 
-// True if `noRDFTypes` has this word.  object is interpolated into SQL unescaped.
+// True if `noRDFTypes` has this word.  object is escaped (escapeSingleQuote) before
+// being interpolated into SQL, consistent with lookupInFreebase elsewhere in this file.
 bool cOntology::inRDFTypeNotFoundTable(wchar_t* object)
 {
 	initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
@@ -2283,8 +2315,10 @@ bool cOntology::inRDFTypeNotFoundTable(wchar_t* object)
 		return false;
 	MYSQL_RES* result;
 	_int64 numResults = 0;
+	wstring eobject = object;
+	escapeSingleQuote(eobject);
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"select 1 from noRDFTypes where word = '%s'", object);
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select 1 from noRDFTypes where word = '%s'", eobject.c_str());
 	if (myquery(&mysql, qt, result))
 	{
 		numResults = mysql_num_rows(result);
@@ -2296,21 +2330,24 @@ bool cOntology::inRDFTypeNotFoundTable(wchar_t* object)
 	return numResults > 0;
 }
 
-// INSERT into noRDFTypes.  object is interpolated unescaped (wsprintf).
+// INSERT into noRDFTypes.  object is escaped (escapeSingleQuote) before being interpolated.
 bool cOntology::insertRDFTypeNotFoundTable(wchar_t* object)
 {
 	initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
 	if (!myquery(&mysql, L"LOCK TABLES noRDFTypes WRITE"))
 		return false;
+	wstring eobject = object;
+	escapeSingleQuote(eobject);
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	wsprintf(qt, L"INSERT INTO noRDFTypes VALUES ('%s')", object);
+	wsprintf(qt, L"INSERT INTO noRDFTypes VALUES ('%s')", eobject.c_str());
 	bool success = (myquery(&mysql, qt, true) || mysql_errno(&mysql) == ER_DUP_ENTRY);
 	if (!myquery(&mysql, L"UNLOCK TABLES"))
 		return false;
 	return success;
 }
 
-// True if noERDFTypes has '_' + convertIllegalChars(name).  Same unescaped SQL.
+// True if noERDFTypes has '_' + convertIllegalChars(name).  convertIllegalChars already
+// maps a stray ' to '_' as a side effect, but newPath is escaped too for defense in depth.
 bool cOntology::inNoERDFTypesDBTable(wstring newObjectName)
 {
 	initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
@@ -2321,8 +2358,10 @@ bool cOntology::inNoERDFTypesDBTable(wstring newObjectName)
 		return false;
 	MYSQL_RES* result;
 	_int64 numResults = 0;
+	wstring enewPath = newPath;
+	escapeSingleQuote(enewPath);
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"select 1 from noERDFTypes where word = '_%s'", newPath);
+	_snwprintf(qt, QUERY_BUFFER_LEN, L"select 1 from noERDFTypes where word = '_%s'", enewPath.c_str());
 	if (myquery(&mysql, qt, result))
 	{
 		numResults = mysql_num_rows(result);
@@ -2334,7 +2373,8 @@ bool cOntology::inNoERDFTypesDBTable(wstring newObjectName)
 	return numResults > 0;
 }
 
-// INSERT into noERDFTypes.  Same sanitizing/escaping caveats as the reader.
+// INSERT into noERDFTypes.  Same sanitizing (convertIllegalChars) plus an
+// escapeSingleQuote belt-and-suspenders pass, matching the reader above.
 bool cOntology::insertNoERDFTypesDBTable(wstring newObjectName)
 {
 	initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
@@ -2343,21 +2383,23 @@ bool cOntology::insertNoERDFTypesDBTable(wstring newObjectName)
 	convertIllegalChars(newPath);
 	if (!myquery(&mysql, L"LOCK TABLES noERDFTypes WRITE"))
 		return false;
+	wstring enewPath = newPath;
+	escapeSingleQuote(enewPath);
 	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	wsprintf(qt, L"INSERT INTO noERDFTypes VALUES ('_%s')", newPath);
+	wsprintf(qt, L"INSERT INTO noERDFTypes VALUES ('_%s')", enewPath.c_str());
 	bool success = (myquery(&mysql, qt, true) || mysql_errno(&mysql) == ER_DUP_ENTRY);
 	if (!myquery(&mysql, L"UNLOCK TABLES"))
 		return false;
 	return success;
 }
 
-// Dump rdfTypes to LOG_WIKIPEDIA.  The END format string has two %d but one argument.
+// Dump rdfTypes to LOG_WIKIPEDIA.
 int cOntology::printRDFTypes(const wchar_t* kind, vector <cTreeCat*>& rdfTypes)
 {
 	lplog(LOG_WIKIPEDIA, L"BEGIN %s:%d", kind, rdfTypes.size());
 	for (int I = 0; I < rdfTypes.size(); I++)
 		rdfTypes[I]->lplogTC(LOG_WIKIPEDIA, L"");
-	lplog(LOG_WIKIPEDIA, L"END %s:%d %d", kind, rdfTypes.size());
+	lplog(LOG_WIKIPEDIA, L"END %s:%d", kind, rdfTypes.size());
 	return 0;
 }
 
@@ -2374,15 +2416,16 @@ int cOntology::printExtendedRDFTypes(wchar_t* kind, vector <cTreeCat*>& rdfTypes
 }
 
 // Resolve object: in-memory rdfTypeMap, else .rdfTypes file, else SPARQL+acronyms.
-// Mutates rdfTypeNumMap under a *shared* SRWLOCK (data race).  Empty results go
-// into noRDFTypes.  Path offset path+pathlen+5 assumes a 4-char subdirectory.
+// Mutates rdfTypeNumMap under an exclusive SRWLOCK (both the miss-path insert and
+// the hit-path counter increment are writes).  Empty results go into noRDFTypes.
+// Path offset path+pathlen+5 assumes a 4-char subdirectory.
 int cOntology::getRDFTypesMaster(wstring object, vector <cTreeCat*>& rdfTypes, wstring fromWhere, bool fileCaching)
 {
 	LFS
 		if (cacheRdfTypes)
 		{
-			// Shared lock, but the miss path writes rdfTypeNumMap (should be exclusive).
-			AcquireSRWLockShared(&rdfTypeMapSRWLock);
+			// Exclusive: both branches below write rdfTypeNumMap (insert or increment).
+			AcquireSRWLockExclusive(&rdfTypeMapSRWLock);
 			unordered_map<wstring, int >::iterator rdfni;
 			if ((rdfni = rdfTypeNumMap.find(object)) == rdfTypeNumMap.end())
 				rdfTypeNumMap[object] = 1;
@@ -2391,10 +2434,10 @@ int cOntology::getRDFTypesMaster(wstring object, vector <cTreeCat*>& rdfTypes, w
 				(*rdfni).second++;
 				rdfTypes = rdfTypeMap[object];
 				//		lplog(LOG_WHERE,L"rdfCache %s %d",object.c_str(),(*rdfni).second);
-				ReleaseSRWLockShared(&rdfTypeMapSRWLock);
+				ReleaseSRWLockExclusive(&rdfTypeMapSRWLock);
 				return 0;
 			}
-			ReleaseSRWLockShared(&rdfTypeMapSRWLock);
+			ReleaseSRWLockExclusive(&rdfTypeMapSRWLock);
 		}
 	if (object.length() > 512)
 		return -1;
@@ -2786,8 +2829,10 @@ void convertCodePoints(wchar_t* buffer)
 
 // this just reads the titles of books and feeds them into the books table.
 // Stream M:\\ol_dump_works_2020-06-30.txt and INSERT IGNORE titles into
-// openLibraryInternetArchiveBooksDump.  Titles are concatenated into SQL;
-// a failed batch `return` leaves the WRITE lock held.
+// openLibraryInternetArchiveBooksDump.  Titles are concatenated into SQL
+// unescaped (M: is a trusted local dump, not user input).  A failed batch
+// insert breaks out of the read loop so the WRITE lock and file handle are
+// still released below, rather than leaking them.
 void cOntology::readOpenLibraryInternetArchiveWorksDump()
 {
 	initializeDatabaseHandle(mysql, L"localhost", alreadyConnected);
@@ -2829,7 +2874,7 @@ void cOntology::readOpenLibraryInternetArchiveWorksDump()
 					{
 						qt[qt.length() - 1] = 0;
 						if (!myquery(&mysql, (wchar_t*)qt.c_str(), false))
-							return;
+							break;
 						qt = L"INSERT IGNORE INTO openLibraryInternetArchiveBooksDump(title) VALUES";
 						numValuesToInsert = 0;
 					}

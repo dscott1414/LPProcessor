@@ -20,7 +20,7 @@
 		- initializePatterns() - build all 500+ patterns, resolve forward refs, evaluate tag sets
 		- cPattern::create() - parse one pattern definition (va_list of form/pattern steps)
 		- cPattern::matchPatternPosition() / fillPattern() - try this pattern at one source position
-		- findPattern() / findTag() / findTagConstrained() - lookup helpers used everywhere downstream
+		- findPattern(name,startingPattern) / findTag() / findTagConstrained() - lookup helpers used everywhere downstream
 		- cPatternElement::matchOne/matchFirst/matchRange() - one-element matching
 
 	Key data structures / globals:
@@ -38,11 +38,13 @@
 		  layout (CHILDPATBITS=15).  Changing either constant without the other
 		  silently corrupts every match.
 		- nextRoot chains every cPattern that shares a name (all __NOUN variants);
-		  rootPattern is the first of that name.  findPattern(name) returns the first
-		  and the caller walks nextRoot or uses [*] at create time to bind all of them.
+		  rootPattern is the first of that name.  findPattern(name,startingPattern)
+		  returns the first at or after startingPattern (patterns.size() if none);
+		  the caller walks nextRoot or uses [*] at create time to bind all of them.
 		- ABNF read/write is #ifdef ABNF and does not compile against the current
-		  members (onlyAfterQuote vs afterQuote, wtoi, wchar fgets).  The live path
-		  is always the va_list create().
+		  members (wtoi is not a real function - it should be _wtoi -, and fgets is
+		  called with a wchar_t buffer where _fgetws-style input is needed).  The
+		  live path is always the va_list create().
 		- SOURCE_VERSION must be bumped on any pattern or cache-format change; the
 		  parsed-source cache is keyed on it.
 */
@@ -321,9 +323,10 @@ void printTagSet(int logType, const wchar_t * descriptor,int ts,vector <cTagLoca
 bool tagSetSame(vector <cTagLocation> &tagSet,vector <cTagLocation> &tagSetNew);
 void minimizeTagSet(vector  <cTagLocation> &tagSet);
 
-unsigned int findPattern(wstring form);
+// Sole findPattern overload; patterns.size() is the not-found sentinel (see
+// pattern.cpp header notes - the unused wstring-only and (name,diff)/-1-sentinel
+// overloads had zero callers anywhere in the tree and were removed).
 unsigned int findPattern(wstring form,unsigned int &startingPattern);
-unsigned int findPattern(wstring name,wstring diff);
 
 class cPattern {
 public:
@@ -376,7 +379,8 @@ public:
     bool resolveDescendants(bool circular);
     cPattern(cPattern *p);
 	// Deletes owned cPatternElement pointers.  The global `patterns` vector holds
-	// the cPattern* themselves; printPatternStatistics() deletes those.
+	// the cPattern* themselves and is never torn down (process-lifetime global);
+	// nothing in this codebase deletes those.
     ~cPattern(void)
     {
         for (unsigned int e=0; e<elements.size(); e++)

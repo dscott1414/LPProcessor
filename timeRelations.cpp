@@ -44,8 +44,9 @@
 	Notes / gotchas:
 		- twsCapacity is index-aligned with eCapacity; adding to one requires adding
 		  to the other (it was previously missing NamedHoliday).
-		- months_abb has no entry for august; months_abb_index maps the rest onto months[].
-		- cTimeInfo::clear() does not zero the absNamed* / absToday family.
+		- months_abb deliberately excludes may/jun/jul as lexicon entries (see the
+		  comment above its definition); months_abb_index maps each remaining
+		  abbreviation onto months[] (aug->7, not 4).
 		- LFS at every function entry.
 */
 #include <stdio.h>
@@ -955,8 +956,9 @@ bool cSource:: processModifierTime(const int where, cTimeInfo& t)
 }
 
 // Bare Number / cardinal / ordinal as year (1200?2100), hour (1?12), or
-// day-of-month (ordinal 1?31 as a prep object). inMultiObject==2 copies
-// the previous timeInfo via copyTimeInfoNum (ti is only initialized then).
+// day-of-month (ordinal 1?31 as a prep object). inMultiObject==2 copies the
+// previous timeInfo via copyTimeInfoNum when csr->timeInfo is non-empty
+// (haveTi); otherwise it falls back to the normal single-value heuristics.
 void cSource::interpretNumberAsDateTime(const int where, vector <cSyntacticRelationGroup>::iterator csr, cTimeInfo& t, const int beginObjectPosition, const int inMultiObject)
 {
 	// must not be used as an adjective, and must be an object of a preposition
@@ -965,12 +967,16 @@ void cSource::interpretNumberAsDateTime(const int where, vector <cSyntacticRelat
 		m[beginObjectPosition].pma.queryPatternDiff(L"__NOUN", L"Q") == -1)
 	{
 		vector <cTimeInfo>::iterator ti;
-		if (inMultiObject == 2)
+		// only form the iterator (and only treat inMultiObject==2 as "copy the
+		// previous time") when csr->timeInfo actually has a previous entry;
+		// csr->timeInfo.size()-1 on an empty vector would underflow (size_t).
+		bool haveTi = inMultiObject == 2 && !csr->timeInfo.empty();
+		if (haveTi)
 			ti = csr->timeInfo.begin() + csr->timeInfo.size() - 1;
 		if (m[where].forms.isSet(NUMBER_FORM_NUM))
 		{
 			int num = _wtoi(m[where].word->first.c_str());
-			if (inMultiObject == 2)
+			if (haveTi)
 				copyTimeInfoNum(ti, t, num); // only copy previous time
 			else if (num > 1200 && num < 2100)
 			{
@@ -986,7 +992,7 @@ void cSource::interpretNumberAsDateTime(const int where, vector <cSyntacticRelat
 		if (m[where].forms.isSet(numeralOrdinalForm))
 		{
 			int num = mapNumeralOrdinal(m[where].word->first.c_str());
-			if (inMultiObject == 2)
+			if (haveTi)
 				copyTimeInfoNum(ti, t, num); // only copy previous time
 			// don't make 'the first' be a time if it is not an object of a preposition
 			else if (num >= 1 && num <= 31 && m[where].relPrep >= 0 && m[where].endObjectPosition - m[where].beginObjectPosition > 1)
@@ -1019,7 +1025,7 @@ void cSource::interpretNumberAsDateTime(const int where, vector <cSyntacticRelat
 				m[m[m[m[where].relPrep].relPrep].getRelObject()].forms.isSet(numeralCardinalForm)))
 		{
 			int num = mapNumeralCardinal(m[where].word->first.c_str());
-			if (inMultiObject == 2)
+			if (haveTi)
 				copyTimeInfoNum(ti, t, num); // only copy previous time
 			else if (num >= 1 && num <= 12)
 			{
@@ -2245,10 +2251,14 @@ any plural time category is also considered T_RECURRING
 Inflections months[] = { {L"january",SINGULAR},{L"february",SINGULAR},{L"march",SINGULAR},{L"april",SINGULAR},{L"may",SINGULAR},
 {L"june",SINGULAR},{L"july",SINGULAR},{L"august",SINGULAR},{L"september",SINGULAR},{L"october",SINGULAR},
 {L"november",SINGULAR},{L"december",SINGULAR},{NULL,0} };
-const wchar_t* months_abb[] = { L"jan",L"feb",L"mar",L"apr",L"may",L"jun",L"jul",L"sept",L"oct",L"nov",L"dec",NULL };
-// months[] index for each months_abb[] entry; august has no abbreviation here.
-static const int months_abb_index[] = { 0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11 };
-// 0-based index into months[], or -1.
+// Lexicon abbreviations only - do not add L"may"/L"jun"/L"jul" here: predefineWords
+// registers every entry in this array as a lexicon word via the unguarded
+// const-wchar_t*[] overload (no properNounSubClass/inflectionsClass safeguards), and
+// "may" is a common modal verb elsewhere in the grammar. months_abb_index maps each
+// entry onto months[] (must stay the same length as months_abb, excluding NULL).
+const wchar_t* months_abb[] = { L"jan",L"feb",L"mar",L"apr",L"aug",L"sept",L"oct",L"nov",L"dec",NULL };
+static const int months_abb_index[] = { 0, 1, 2, 3, 7, 8, 9, 10, 11 };
+// 0-based index into months[], or -1. Abbreviation "aug" correctly returns 7 (August).
 int whichMonth(wstring w)
 {
 	LFS
@@ -2799,9 +2809,19 @@ wstring timeString(int timeWordFlags, wstring& s)
 	return s;
 }
 
-// Stub: always false. Intended to link a new timeline segment to the last
-// segment that shared these speakers.
-// look up last timeline segment belonging to speakers
+// Deliberately unimplemented stub: always false. Intended to search
+// timelineSegments for the most recent prior segment that shares speakers
+// with the one createTimelineSegment() is about to open, so that segment's
+// linkage can point back to it. Doing that for real needs the new segment's
+// speaker set (available in createTimelineSegment()'s caller-side context,
+// e.g. speakerGroups[currentSpeakerGroup]) threaded into this function, which
+// takes no parameters today - a signature change that also touches the
+// declaration in source.h, out of scope for this pass. ts.linkage (the sole
+// caller of this function, in createTimelineSegment()) is serialized to the
+// source cache and read back by the pyLPBackEnd Python port, but nothing in
+// this C++ pipeline currently reads it back, so leaving this stubbed does not
+// silently corrupt any in-process decision - only the persisted field stays
+// a placeholder (always 0/false) until this is implemented.
 bool cSource::determineTimelineSegmentLink()
 {
 	LFS

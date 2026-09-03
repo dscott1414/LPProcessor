@@ -58,16 +58,20 @@
 		- Everything returned by wTM/mTW/mTWCodePage points either into the caller's
 		  own out-string or into the per-thread scratch buffer.  Never hold such a
 		  pointer across another conversion call on the same thread.
-		- The serializing copy() overloads for scalars write FIRST and check `limit`
-		  AFTER, so they detect an overrun only once it has already happened; the
-		  deserializing string overloads likewise read the string before validating
-		  `limit`.  Treat `limit` as a diagnostic, not as protection against a
-		  truncated or corrupt cache file.
-		- Most copy() overloads never actually return false: they call
-		  lplog(LOG_FATAL_ERROR,...), and logstring() calls exit(0) for that level.
-		  So a "return false" path in a caller is mostly unreachable.
-		- itos()/dtos() use fixed 1024-wchar stack buffers with unbounded wcscpy/wcscat/
-		  wsprintf; callers must keep prefixes, suffixes and formats short.
+		- The serializing copy() overloads for scalars check `limit` BEFORE writing, and
+		  the deserializing string/wstring overloads bound their NUL-terminator scan to
+		  `limit - where` before touching `str`, so a truncated or corrupt cache file is
+		  caught before any out-of-bounds read or write happens rather than after.
+		- Most copy() overloads never actually return false on the FATAL path: they call
+		  lplog(LOG_FATAL_ERROR,...), which exits the process (EXIT_FAILURE) and does not
+		  return.  So a "return false" written after such a call is mostly unreachable;
+		  it is still correct defensive style for the few overloads (the wstring
+		  serializer, and the bounded string/wstring deserializers) that log at
+		  LOG_ERROR/LOG_FATAL_ERROR and return false instead.
+		- itos()/dtos() build into small fixed-size scratch buffers (a handful of wchar_t
+		  for decimal digits, or an explicit-length swprintf), not into unbounded
+		  1024-wchar wcscpy/wcscat/wsprintf targets, so a long prefix/suffix/format
+		  cannot overrun the stack.
 */
 #include <windows.h>
 #define _WINSOCKAPI_ /* Prevent inclusion of winsock.h in windows.h */
@@ -87,26 +91,29 @@
 
 // Append "before" + decimal(i) + "after" to concat.
 // concat is appended to, not overwritten - used to build up log/SQL text piecewise.
-// No bounds checking: before+digits+after must stay under 1024 wchar_t.
+// Builds directly into concat (via a small fixed buffer only for the digits, which
+// can never exceed 11 wchar_t for a 32-bit int) instead of the previous wcscpy/wcscat
+// into a fixed 1024-wchar stack buffer, which overran the stack for any before/after
+// combination longer than that.
 void itos(const wchar_t* before, int i, wstring& concat, wchar_t* after)
 {
 	LFS
-		wchar_t temp[1024];
-	wcscpy(temp, before);
-	_itow(i, temp + wcslen(temp), 10);
-	wcscat(temp, after);
-	concat += temp;
+		wchar_t digits[16];
+	_itow(i, digits, 10);
+	concat += before;
+	concat += digits;
+	concat += after;
 }
 
-// As above, but the suffix is a wstring so only "before"+digits go through the
-// fixed 1024-wchar scratch buffer; "after" is concatenated safely.
+// As above, but the suffix is already a wstring.
 void itos(const wchar_t* before, int i, wstring& concat, wstring after)
 {
 	LFS
-		wchar_t temp[1024];
-	wcscpy(temp, before);
-	_itow(i, temp + wcslen(temp), 10);
-	concat += temp + after;
+		wchar_t digits[16];
+	_itow(i, digits, 10);
+	concat += before;
+	concat += digits;
+	concat += after;
 }
 
 // Decimal-render i into the caller-owned scratch string tmp and return it.
@@ -121,13 +128,13 @@ wstring itos(int i, wstring& tmp)
 }
 
 // Render i using a caller-supplied printf format (e.g. L"%03d") into tmp.
-// Uses wsprintf, which has no size limit argument, so a format that expands past
-// 1024 wchar_t overruns the stack buffer.
+// Uses swprintf with an explicit length instead of the previous unbounded wsprintf,
+// so a pathological format/width cannot overrun the stack buffer.
 wstring itos(int i, const wchar_t* format, wstring& tmp)
 {
 	LFS
 		wchar_t temp[1024];
-	wsprintf(temp, format, i);
+	swprintf(temp, 1024, format, i);
 	return tmp = temp;
 }
 
@@ -360,8 +367,8 @@ bool copy(void* buf, string str, int& where, int limit)
 
 // Write a 4-byte int in native byte order and alignment-agnostic fashion (the cast
 // through char* means `where` need not be a multiple of 4).
-// Beware: the limit test happens AFTER the store, so an overrun is reported only once
-// the 4 bytes have already been written past the end of buf.
+// The limit test happens BEFORE the store and calls LOG_FATAL_ERROR (which aborts the
+// process via fatalExit()), so an overrun is caught before any bytes are written past buf.
 bool copy(void* buf, int num, int& where, int limit)
 {
 	DLFS
@@ -372,7 +379,7 @@ bool copy(void* buf, int num, int& where, int limit)
 	return true;
 }
 
-// Write a 2-byte short.  Same store-then-check ordering as the int overload.
+// Write a 2-byte short.  Same check-before-store ordering as the int overload.
 bool copy(void* buf, short num, int& where, int limit)
 {
 	DLFS
@@ -383,7 +390,7 @@ bool copy(void* buf, short num, int& where, int limit)
 	return true;
 }
 
-// Write a 2-byte unsigned short.  Same store-then-check ordering as the int overload.
+// Write a 2-byte unsigned short.  Same check-before-store ordering as the int overload.
 bool copy(void* buf, unsigned short num, int& where, int limit)
 {
 	DLFS
@@ -394,7 +401,7 @@ bool copy(void* buf, unsigned short num, int& where, int limit)
 	return true;
 }
 
-// Write a 4-byte unsigned int.  Same store-then-check ordering as the int overload.
+// Write a 4-byte unsigned int.  Same check-before-store ordering as the int overload.
 bool copy(void* buf, unsigned int num, int& where, int limit)
 {
 	DLFS
@@ -405,7 +412,7 @@ bool copy(void* buf, unsigned int num, int& where, int limit)
 	return true;
 }
 
-// Write an 8-byte signed integer.  Same store-then-check ordering as the int overload.
+// Write an 8-byte signed integer.  Same check-before-store ordering as the int overload.
 bool copy(void* buf, __int64 num, int& where, int limit)
 {
 	DLFS
@@ -416,7 +423,7 @@ bool copy(void* buf, __int64 num, int& where, int limit)
 	return true;
 }
 
-// Write an 8-byte unsigned integer.  Same store-then-check ordering as above.
+// Write an 8-byte unsigned integer.  Same check-before-store ordering as above.
 bool copy(void* buf, unsigned __int64 num, int& where, int limit)
 {
 	DLFS
@@ -427,8 +434,8 @@ bool copy(void* buf, unsigned __int64 num, int& where, int limit)
 	return true;
 }
 
-// Write a single byte.  `where` is post-incremented before the limit test, so when
-// where==limit on entry this stores one byte past the end of buf and only then reports.
+// Write a single byte.  The limit test runs before the post-incrementing store, and
+// LOG_FATAL_ERROR aborts the process, so where==limit on entry is caught, not overrun.
 bool copy(void* buf, char ch, int& where, int limit)
 {
 	DLFS
@@ -578,23 +585,48 @@ bool copy(void* buf, cName& a, int& where, int limit)
 	return true;
 }
 
+// Bounded read: unlike the old "str = buf+where; then check limit" shape, this never
+// scans past `limit` looking for the terminating NUL, so a truncated/corrupt cache
+// file cannot walk this off the end of buf before the overrun is detected.
 bool copy(string& str, void* buf, int& where, int limit)
 {
 	DLFS
-		str = (((char*)buf) + where);
-	if (where + (str.length() + 1) * sizeof(str[0]) > (unsigned)limit)
+		if (where >= limit)
+		{
+			lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (14)", limit);
+			return false;
+		}
+	const char* start = ((char*)buf) + where;
+	size_t maxLen = (size_t)(limit - where);
+	size_t len = strnlen(start, maxLen);
+	if (len >= maxLen) // no NUL terminator within the remaining buffer
+	{
 		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (14)", limit);
-	where += (str.length() + 1) * sizeof(str[0]);
+		return false;
+	}
+	str.assign(start, len);
+	where += (int)(len + 1) * sizeof(str[0]);
 	return true;
 }
 
 bool copy(wstring& str, void* buf, int& where, int limit)
 {
 	DLFS
-		str = (wchar_t*)((char*)buf + where);
-	if (where + (str.length() + 1) * sizeof(str[0]) > (unsigned)limit)
+		if (where >= limit)
+		{
+			lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (15)", limit);
+			return false;
+		}
+	const wchar_t* start = (wchar_t*)((char*)buf + where);
+	size_t maxChars = (size_t)(limit - where) / sizeof(wchar_t);
+	size_t len = wcsnlen(start, maxChars);
+	if (len >= maxChars) // no NUL terminator within the remaining buffer
+	{
 		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (15)", limit);
-	where += (str.length() + 1) * sizeof(str[0]);
+		return false;
+	}
+	str.assign(start, len);
+	where += (int)(len + 1) * sizeof(wchar_t);
 	return true;
 }
 

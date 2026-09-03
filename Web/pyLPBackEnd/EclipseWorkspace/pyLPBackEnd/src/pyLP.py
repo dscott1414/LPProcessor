@@ -19,13 +19,18 @@ Key entry points:
     - get_mode_switch / set_mode_switch (SSE)
 
 Dependencies:
-    MySQL localhost root/byron0; hardcoded F:\\lp\\wordFormCache and
-    M:\\caches\\<path>.{wordCacheFile,SourceCache}.
+    MySQL @ LP_DB_HOST (default localhost) / LP_DB_USER (default root) /
+    LP_DB_PASSWORD (required, no default - see connect()); hardcoded
+    F:\\lp\\wordFormCache and M:\\caches\\<path>.{wordCacheFile,SourceCache}.
 
 Notes / gotchas:
-    Hardcoded DB password and flask secret_key. SQL is concatenated
-    LIKE '%'+user+'%' with no escaping. login always sets uid=1
-    (comment says change to uuid for multi-user). CORS is wide open.
+    DB password comes from LP_DB_PASSWORD (fatal if unset); flask
+    secret_key comes from LP_FLASK_SECRET_KEY if set, else a random key
+    generated at process start (sessions won't survive a restart unless
+    the env var is set - fine for single-user local dev, should be set
+    in any shared deployment). LIKE-search SQL uses pymysql %s parameter
+    binding instead of string concatenation. login() mints a per-browser
+    uuid4 uid instead of a shared hardcoded uid=1. CORS is wide open.
 """
 '''
 Created on May 29, 2022
@@ -43,11 +48,21 @@ from Source import Source
 from time import perf_counter
 import uuid
 import time
+import os
+import secrets
 from os.path import exists
 
 app = Flask(__name__)
 CORS(app)
-app.secret_key = "kjhasd@#$#@"
+# LP_FLASK_SECRET_KEY: signs the Flask session cookie. If unset, a random
+# key is generated for this process so the app still runs standalone, but
+# sessions won't survive a restart; set the env var for any shared/
+# persistent deployment.
+_flask_secret_key = os.environ.get("LP_FLASK_SECRET_KEY")
+if not _flask_secret_key:
+    _flask_secret_key = secrets.token_hex(32)
+    print("Warning: LP_FLASK_SECRET_KEY not set; using a random per-process secret key (sessions will not survive a restart).")
+app.secret_key = _flask_secret_key
 
 global sessions
 sessions = {}
@@ -66,22 +81,30 @@ def hello():
     return '<h1>Hello, World!</h1>'
 
 
-# Open a new pymysql connection to lp@localhost as root/byron0.
+# Open a new pymysql connection to lp using LP_DB_HOST/LP_DB_USER/
+# LP_DB_PASSWORD (same env var names as the core C++ engine's envConfig.h).
+# LP_DB_HOST defaults to "localhost" and LP_DB_USER defaults to "root";
+# LP_DB_PASSWORD has no safe default and raises if unset.
 # Caller must close. DictCursor so rows are dicts.
 def connect():
-    return pymysql.connect(host='localhost',
+    host = os.environ.get('LP_DB_HOST', 'localhost')
+    user = os.environ.get('LP_DB_USER', 'root')
+    password = os.environ.get('LP_DB_PASSWORD')
+    if not password:
+        raise RuntimeError("LP_DB_PASSWORD environment variable must be set (no default password is used).")
+    return pymysql.connect(host=host,
                                  port=3306,
-                             user='root',
-                             password='byron0',
+                             user=user,
+                             password=password,
                              database='lp',
                              cursorclass=pymysql.cursors.DictCursor)
 
 
 @app.route('/api/login', methods=["GET"])
-# GET /api/login — stamp flask session uid=1 and allocate an LPSession.
-# Not actually multi-user (uid is hardcoded).
+# GET /api/login — stamp flask session uid=<uuid4> and allocate an LPSession.
+# Each browser session gets its own uid so sessions no longer collide.
 def login():
-    session['uid'] = 1  # change to uuid.uuid4() when multi user! 
+    session['uid'] = str(uuid.uuid4())
     sessions[session['uid']] = LPSession()
     print("login session established.", session)
     return { 'response': str(session['uid']) }
@@ -104,15 +127,18 @@ def search_source():
     with connection.cursor() as cursor:
         # Read a single record
         sql = "SELECT id, title, author FROM sources WHERE "
+        params = []
         if author is not None:
-            sql += "LOWER(author) like LOWER('%" + author + "%') ";
+            sql += "LOWER(author) like LOWER(%s) ";
+            params.append("%" + author + "%")
         if author is not None and title is not None:
             sql += "and "
         if title is not None:
-            sql += "LOWER(title) like LOWER('%" + title + "%') ";
+            sql += "LOWER(title) like LOWER(%s) ";
+            params.append("%" + title + "%")
         sql += "LIMIT 10"
         # print(sql)
-        cursor.execute(sql)
+        cursor.execute(sql, params)
         result = cursor.fetchall()
         return_result = []
         for row in result:
@@ -138,15 +164,18 @@ def search_author():
     with connection.cursor() as cursor:
         # Read a single record
         sql = "SELECT DISTINCT author FROM sources WHERE "
+        params = []
         if author is not None:
-            sql += "LOWER(author) like LOWER('%" + author + "%') ";
+            sql += "LOWER(author) like LOWER(%s) ";
+            params.append("%" + author + "%")
         if author is not None and title is not None:
             sql += "and "
         if title is not None:
-            sql += "LOWER(title) like LOWER('%" + title + "%') ";
+            sql += "LOWER(title) like LOWER(%s) ";
+            params.append("%" + title + "%")
         sql += "LIMIT 10"
         # print(sql)
-        cursor.execute(sql)
+        cursor.execute(sql, params)
         result = cursor.fetchall()
         return_result = []
         for row in result:
@@ -170,15 +199,18 @@ def get_path(author, title):
     with connection.cursor() as cursor:
         # Read a single record
         sql = "SELECT path FROM sources WHERE "
+        params = []
         if author is not None:
-            sql += "LOWER(author) like LOWER('%" + author + "%') ";
+            sql += "LOWER(author) like LOWER(%s) ";
+            params.append("%" + author + "%")
         if author is not None and title is not None:
             sql += "and "
         if title is not None:
-            sql += "LOWER(title) like LOWER('%" + title + "%') ";
+            sql += "LOWER(title) like LOWER(%s) ";
+            params.append("%" + title + "%")
         sql += "LIMIT 1"
         # print(sql)
-        cursor.execute(sql)
+        cursor.execute(sql, params)
         result = cursor.fetchall()
         for row in result:
             sourcePath = row['path']
@@ -442,7 +474,9 @@ def get_element_type():
 def get_mode_switch():
     global sessions
     mode = request.args.get('mode')
-    suid = int(request.args.get('suid'))
+    # suid is now a uuid4 string (see login()), not an int - keep it a
+    # string to match the sessions dict keys and set_mode_switch() below.
+    suid = request.args.get('suid')
     # Infinite generator; sleeps 1s between polls.
     def event_stream():
         last_mode_info = None

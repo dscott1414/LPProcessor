@@ -29,8 +29,9 @@
 		- lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms is overloaded as the
 			"preferred cell in this row" flag even when the title did not match
 			(setRowPreference writes it).
-		- determineColumnRDFTypeCoherency currently returns true on both the
-			<90% and >=90% paths (the reject is commented as TEMP DEBUG).
+		- determineColumnRDFTypeCoherency returns false for a >3 entries/row
+			average or a <90% coherence score (both reject paths were
+			previously disabled as TEMP DEBUG).
 */
 #pragma once
 class cSource;
@@ -146,7 +147,6 @@ public:
 	int numDefinite;
 	int numNumerical;
 	int numPunctuation;
-	int numMaxEntries;
 	int gMaxFrequency;
 	int mostCommonRatio;
 	bool matchedHeader;

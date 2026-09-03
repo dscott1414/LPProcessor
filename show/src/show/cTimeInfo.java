@@ -105,12 +105,19 @@ import java.util.Vector;
 			return s;
 		}
 
+		// (fixed) this array used to have a stray extra "morrow" entry
+		// right after "Tomorrow", which shifted every later index out of
+		// alignment with the cTonight..cUnspecified constants above (e.g.
+		// cNamedHoliday=29 would have resolved to "NamedMonth", and
+		// cUnspecified=30 was unreachable) - removed to restore 1:1
+		// alignment. Same bug (and same fix) as the Python sibling
+		// TimeInfo.py's capacity_string().
 		String capacityString(int capacityFlags)
 		{
 		 String ws[]={ "Millenium","Century","Decade","Year","Semester","Season","Quarter","Month","Week","Day",
 				 "Hour","Minute","Second","Moment",
 				 "Morning","Noon","Afternoon","Evening","Dusk","Night","Midnight","Dawn",
-				 "Tonight","Today","Tomorrow","morrow","Yesterday",
+				 "Tonight","Today","Tomorrow","Yesterday",
 				 "NamedMonth","NamedDay","NamedSeason","NamedHoliday",
 				 "Unspecified" };
 		 if (capacityFlags>=ws.length || capacityFlags<=-1)

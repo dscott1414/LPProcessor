@@ -113,6 +113,7 @@ import java.util.Map;
 	  public boolean isWikiPlace;
 	  public boolean isWikiPerson;
 	  public boolean isWikiBusiness;
+	  public boolean isWikiWork;
 	  public class cLastVerbTenses
 	  {
 		  int lastVerb; // book position of main verb
@@ -195,6 +196,12 @@ import java.util.Map;
 			mostMatchedAge = rs.readInteger();
 			long flags = rs.readLong();
 
+			// (fixed) this bitfield mirror was missing isWikiWork, which
+			// source.h's cSourceWordInfo::readFlags() reads as bit 0
+			// (before isWikiBusiness) - every flag below used to be read
+			// one bit position too early as a result, silently
+			// misattributing every wiki flag through `identified`.
+			isWikiWork = (flags & 1) == 1; flags >>= 1;
 			isWikiBusiness = (flags & 1) == 1; flags >>= 1;
 			isWikiPerson = (flags & 1) == 1; flags >>= 1;
 			isWikiPlace = (flags & 1) == 1; flags >>= 1;

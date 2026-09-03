@@ -48,7 +48,10 @@
 		  negative.  followObjectChain must be used on any object that may have
 		  been replaced.
 		- replacedSpeakers stores toObject in cOM.salienceFactor, not .object.
-		- preferPreviousSpeaker() is a stub that always returns false.
+		- preferPreviousSpeaker() (below chooseBetweenMatches) is dead code, fully
+		  commented out with no remaining call sites; chooseBetweenMatches's own
+		  documented tie-break chain (non-audience, last subject, matching
+		  subject, hail, group-joiner, PP, adjectives, POV) does not include it.
 		- Several intersect() overloads; allIn/oneIn are out-params.
 */
 #include <windows.h>
@@ -679,14 +682,14 @@ bool writeStringVector(wchar_t *path,set <wstring> &v)
 	return true;
 }
 
-// Read a UTF-16LE word list into v, stripping BOM and CR/LF.  fgetws(...,100)
-// into a 1024 buffer.  Returns false if fopen fails.
+// Read a UTF-16LE word list into v, stripping BOM and CR/LF.  Returns false
+// if fopen fails.
 bool readStringVector(wchar_t *path,set <wstring> &v)
 { LFS
 	FILE *fp=_wfopen(path,L"rb"); // binary mode reads unicode
 	if (!fp) return false;
 	wchar_t buf[1024];
-	while (fgetws(buf,100,fp))
+	while (fgetws(buf,sizeof(buf)/sizeof(*buf),fp))
 	{
 		if (buf[0]==0xFEFF) // detect BOM
 			memcpy(buf,buf+1,(wcslen(buf+1)+1)*sizeof(buf[0]));
@@ -1053,11 +1056,17 @@ void cLocalFocus::decreaseAge(bool objectToBeMatchedInQuote,bool quoteIndependen
 
 // Add 'amount' to totalAge and to the quoted or unquoted counter matching
 // this sentence.  Ages of -1 (never seen in that context) stay -1.
-// Secondary-quote sentences return immediately (nested quotes do not age).
+// Secondary-quote sentences count as quoted, same as primary-quote
+// sentences: this matches the OR convention used everywhere else this
+// class combines inPrimaryQuote/inSecondaryQuote (the constructor below,
+// the occurredInPrimaryQuote=inPrimaryQuote||inSecondaryQuote assignments,
+// and every setSalienceAgeMethod caller).  Previously this function
+// returned immediately for secondary-quote sentences instead, so local
+// focus never aged at all while inside a nested quote - inconsistent with
+// that convention.
 void cLocalFocus::increaseAge(bool sentenceInPrimaryQuote,bool sentenceInSecondaryQuote,int amount)
 { LFS
-	if (sentenceInSecondaryQuote) return;
-  if (sentenceInPrimaryQuote)
+  if (sentenceInPrimaryQuote || sentenceInSecondaryQuote)
   {
     quotedAge+=amount;
     if (quotedPreviousAge>=0) quotedPreviousAge+=amount;
@@ -1509,7 +1518,9 @@ void cSource::setColocation(int where, vector <cObject>::iterator &oColocate,boo
 {
 	int beginPosition = where;
 	while (beginPosition > 0 && m[beginPosition].principalWherePosition < 0) beginPosition--;
-	if (m[beginPosition].principalWherePosition)
+	if (m[beginPosition].principalWherePosition>=0) // was truthiness-tested (`if (...principalWherePosition)`): -1 (unset, the common case when the
+	                                                 // walk-back above reaches position 0 without finding a set value) is nonzero and so was taken as
+	                                                 // "set", indexing m[-1] below (UB) - and a legitimate value of exactly 0 was skipped as "unset".
 	{
 		oColocate = objects.begin() + m[m[beginPosition].principalWherePosition].getObject();
 		if (oColocate->objectClass != BODY_OBJECT_CLASS)
@@ -2944,7 +2955,7 @@ bool cObject::cataphoricMatch(cObject *obj)
 bool cSource::recentExit(vector <cLocalFocus>::iterator lsi)
 { LFS
 	return lsi->lastExit>=0 && lsi->lastExit>lsi->lastEntrance &&
-		((speakerGroupsEstablished && lsi->lastExit>speakerGroups[currentSpeakerGroup].sgBegin) ||
+		((speakerGroupsEstablished && currentSpeakerGroup<speakerGroups.size() && lsi->lastExit>speakerGroups[currentSpeakerGroup].sgBegin) ||
 		((!speakerGroupsEstablished && currentSpeakerGroup>0 && lsi->lastExit>speakerGroups[currentSpeakerGroup-1].sgBegin)));
 }
 
@@ -3415,7 +3426,10 @@ void cSource::matchAdditionalObjectsIfPlural(int where,bool isPlural,bool atLeas
 				if (highestNextSF==0) highestNextSF=highest[I]->om.salienceFactor;
       }
     }
-    vector <cSpeakerGroup>::iterator lastSG=speakerGroups.begin()+currentSpeakerGroup-1;
+    // guarded (rather than begin()+currentSpeakerGroup-1 unconditionally): forming that iterator
+    // when currentSpeakerGroup==0 is UB, even though it is only dereferenced below under
+    // "currentSpeakerGroup &&" (i.e. currentSpeakerGroup>0)
+    vector <cSpeakerGroup>::iterator lastSG=(currentSpeakerGroup>0) ? speakerGroups.begin()+currentSpeakerGroup-1 : speakerGroups.end();
     // If in identifySpeakerGroups, so speaker groups are BEING established
     // If there is still only one speaker found, and that speaker is in the last speaker group,
     // add other members of that speaker group that are also in localObjects. REF:SUBGROUPS
@@ -3717,8 +3731,18 @@ bool cSource::preferMatchingSubject(int where, vector <cLocalFocus>::iterator* h
 }
 
 /*
-// Stub: always returns false.  A previous-speaker preference used to live
-// here and the call sites remain.
+// Dead code: fully commented out, no remaining call sites anywhere in the
+// repo (grepped), and not part of chooseBetweenMatches's documented
+// tie-break chain above.  Left here, uncompiled, as a record of the rule -
+// prefer the previous quote's speaker when choosing between two candidates,
+// if the current quote and the previous quote are both embedded-story
+// quotes and the previous quote had exactly one resolved speaker.  Reviving
+// this would need: wiring a call into chooseBetweenMatches at the right
+// priority relative to preferNonAudience/preferLastSubject/
+// preferMatchingSubject, and confirming previousPrimaryQuote/
+// lastOpeningPrimaryQuote/resolveForSpeaker below are the right bindings for
+// what were originally enclosing-scope locals - none of which is evident
+// from context, so left disabled rather than guessed at.
 bool preferPreviousSpeaker()
 {
 	// if choosing between two speakers, and quote has embeddedStory and the quote before also has embedded story, then prefer the previous speaker
@@ -3781,7 +3805,8 @@ void cSource::resolveHailUsingSpeakers(int where, vector <cLocalFocus>::iterator
 				lplog(LOG_RESOLUTION, L"%06d:Prefer previous audience %s in forwardLink.", where, objectString(m[previousPrimaryQuote].audienceObjectMatches, tmpstr, true).c_str());
 			if (highest[0]->om.object == m[previousPrimaryQuote].audienceObjectMatches[0].object)
 				highest[1] = localObjects.end();
-			if (highest[1]->om.object == m[previousPrimaryQuote].audienceObjectMatches[0].object)
+			else if (highest[1]->om.object == m[previousPrimaryQuote].audienceObjectMatches[0].object) // was a plain `if`: after the branch above
+				// reassigns highest[1] to localObjects.end(), this unconditionally dereferenced it (UB) when the first branch had just fired
 			{
 				highest[0] = highest[1];
 				highest[1] = localObjects.end();
@@ -5066,7 +5091,7 @@ void cSource::processSubjectCataRestriction(int where,int subjectCataRestriction
 		// subjectCataRestriction is for the first position in a possible multiple subject.
 		if (m[subjectCataRestriction].objectRole&MPLURAL_ROLE)
 		{
-			for (unsigned int I=subjectCataRestriction+1; (m[I].objectRole&(MPLURAL_ROLE|SUBJECT_ROLE)); I++)
+			for (unsigned int I=subjectCataRestriction+1; I<m.size() && (m[I].objectRole&(MPLURAL_ROLE|SUBJECT_ROLE)); I++)
 			  if (m[I].getObject()!=-1)
 				{
 					processSubjectCataRestriction(where,I);
@@ -5280,14 +5305,17 @@ int cSource::scanForSpeaker(int where,bool &definitelySpeaker,bool &crossedSecti
       objects[m[m[speakerObjectPosition].principalWherePosition].getObject()].isAgent(true) ||
       isVoice(m[speakerObjectPosition].principalWherePosition)))
     {
-      // scan for audience "to"
-      // 'end' is still a pattern *length* here (unlike the _VERBREL1 branch,
-      // which does end+=where+1).  speakerObjectPosition is already end+where+1,
-      // so audienceObjectPosition<end never holds ? this loop is dead.
+      // scan for audience "to".  Unlike the _VERBREL1 branch, the 'end' here
+      // is just the _VERBPAST verb's own match length (always 1 token per
+      // definePatterns.cpp's "_VERBPAST{VERB}" alternatives), so end+where+1
+      // is exactly speakerObjectPosition and carries no room for a following
+      // "to Y" - bounding the scan by 'end' (or by that formula under a new
+      // name) leaves it dead.  Bound by end-of-sentence instead, the same
+      // forward-scan idiom used elsewhere in this file (isEOS loops above).
       int saveAudienceObjectPosition=audienceObjectPosition,ao; // audienceObjectPosition may have been previously set by hailed speakers
-	  int audienceLimit = end + where + 1;
-	  if (extendedSayVerb) audienceLimit++;
-      for (audienceObjectPosition=speakerObjectPosition+1,im++; audienceObjectPosition<end; im++,audienceObjectPosition++)
+	  int audienceLimit;
+	  for (audienceLimit=speakerObjectPosition; audienceLimit<(signed)m.size() && !isEOS(audienceLimit); audienceLimit++);
+      for (audienceObjectPosition=speakerObjectPosition+1,im++; audienceObjectPosition<audienceLimit; im++,audienceObjectPosition++)
       {
         if (im->word->first==L"to" && audienceObjectPosition+1<audienceLimit && (ao=m[m[audienceObjectPosition+1].principalWherePosition].getObject())!=cObject::eOBJECTS::UNKNOWN_OBJECT && 
 					  (ao<0 || objects[ao].isAgent(true)))
@@ -5516,7 +5544,11 @@ void cSource::resolveSpeakersUsingPreviousSubject(int where)
   if (sg<0) return;
   vector <int> speakersFound;
   for (unsigned int I=0; I<subjectsInPreviousUnquotedSection.size(); I++)
-    if (speakerGroups[sg].speakers.find(subjectsInPreviousUnquotedSection[I])!=speakerGroups[currentSpeakerGroup].speakers.end())
+    if (speakerGroups[sg].speakers.find(subjectsInPreviousUnquotedSection[I])!=speakerGroups[sg].speakers.end()) // was compared against
+      // speakerGroups[currentSpeakerGroup]'s end() - a different set's end() iterator than the one find() was called on.  Compare
+      // with the fallback two lines below, which correctly compares speakerGroups[sg-1] against its own end().  When sg!=currentSpeakerGroup
+      // (the case this whole backward search over sg exists for) that cross-container comparison is true on essentially every real
+      // std::set implementation regardless of membership, so every subject was pushed into speakersFound, not just ones in speakerGroups[sg].speakers.
       speakersFound.push_back(subjectsInPreviousUnquotedSection[I]);
 	// in case speakerGroups is slightly inaccurate
   if (speakersFound.empty() && sg>0) 
@@ -7797,14 +7829,18 @@ void cSource::printSectionStatistics(void)
       if (m[is].word!=Words.sectionWord)
         sectionHeader+=m[is].word->first+L" ";
     if (s->counterSpeakersMatched+s->counterSpeakersNotMatched)
+      // speakersMatched+speakersNotMatched is guarded separately from counterSpeakersMatched+counterSpeakersNotMatched
+      // (the only thing the enclosing if tests) - it can be zero while the counter sum is not, which divided-by-zero here.
       lplog(LOG_RESOLUTION,L"%-30.30s: %04d/%04d out of %04d %03d%%/%03d%%",sectionHeader.c_str(),
 						s->speakersMatched,s->counterSpeakersMatched,s->speakersMatched+s->speakersNotMatched,
-						s->speakersMatched*100/(s->speakersMatched+s->speakersNotMatched),s->counterSpeakersMatched*100/(s->counterSpeakersMatched+s->counterSpeakersNotMatched));
+						(s->speakersMatched+s->speakersNotMatched) ? s->speakersMatched*100/(s->speakersMatched+s->speakersNotMatched) : 0,
+						s->counterSpeakersMatched*100/(s->counterSpeakersMatched+s->counterSpeakersNotMatched));
   }
   if (counterSpeakersMatched+counterSpeakersNotMatched)
+    // same mismatched-guard issue as above, for the whole-document totals.
     lplog(LOG_RESOLUTION,L"%04d/%04d out of %04d %03d%%/%03d%% speakersMatched/counterSpeakersMatched",
 					speakersMatched,counterSpeakersMatched,speakersMatched+speakersNotMatched,
-					speakersMatched*100/(speakersMatched+speakersNotMatched),counterSpeakersMatched*100/(counterSpeakersMatched+counterSpeakersNotMatched));
+					(speakersMatched+speakersNotMatched) ? speakersMatched*100/(speakersMatched+speakersNotMatched) : 0,counterSpeakersMatched*100/(counterSpeakersMatched+counterSpeakersNotMatched));
 }
 
 // resolveSpeakers-side mergeFocus: if o is a focus-worthy subject, append

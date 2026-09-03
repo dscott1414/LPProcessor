@@ -24,8 +24,8 @@
 		- cOntology - all static; see createOntology.cpp for the maps and MySQL handle.
 
 	Notes / gotchas:
-		- operator== on cOntologyEntry skips resourceType and superClassResourceTypes.
-		- Default cTreeCat() leaves cli uninitialized; equals() / operator== dereference it.
+		- Default cTreeCat() explicitly value-initializes cli (a singular iterator);
+		  both call sites resolve it via copy() before any dereference.
 		- copy() serializers omit resourceType / superClassResourceTypes / key / derivation.
 		- Ontology type constants match README Structure members item 7.
 */
@@ -84,7 +84,10 @@ public:
 			tmpstr += L":ontologyHierarchicalRank " + itos(ontologyHierarchicalRank, tmpstr3);
 		return tmpstr;
 	}
-	// Field-wise equality.  Does not compare resourceType or superClassResourceTypes.
+	// Field-wise equality, including resourceType and superClassResourceTypes.
+	// Not currently called anywhere in the tree (verified repo-wide); the fields
+	// were added here so a future caller gets full identity rather than a
+	// silent partial compare.
 	bool operator == (const cOntologyEntry& o)
 	{
 		if (compactLabel != o.compactLabel) return false;
@@ -97,8 +100,10 @@ public:
 		if (numLine != o.numLine) return false;
 		if (ontologyHierarchicalRank != o.ontologyHierarchicalRank) return false;
 		if (ontologyType != o.ontologyType) return false;
+		if (resourceType != o.resourceType) return false;
 		if (descriptionFilled != o.descriptionFilled) return false;
 		if (superClasses != o.superClasses) return false;
+		if (superClassResourceTypes != o.superClassResourceTypes) return false;
 		return true;
 	}
 	bool operator != (const cOntologyEntry& o)
@@ -175,10 +180,14 @@ public:
 		preferredUnknownClass = false;
 		confidence = 0;
 	}
-	// Used by readRDFTypes before copy() fills fields.  cli is left uninitialized.
-	cTreeCat()
+	// Used by readRDFTypes before copy() fills fields.  cli is explicitly
+	// value-initialized to a singular (non-dereferenceable) iterator rather than
+	// left to whatever the implicit member-init happened to produce; both current
+	// call sites (createOntology.cpp, getWikipedia.cpp) invoke copy() immediately
+	// afterward, which resolves cli against dbPediaOntologyCategoryList before it
+	// is ever dereferenced.
+	cTreeCat() : cli()
 	{
-		//this->cli=(unordered_map <wstring, cOntologyEntry>::iterator)((void *) 0);
 		preferred = false;
 		exactMatch = false;
 		preferredUnknownClass = false;
@@ -398,10 +407,7 @@ private:
 	//static int getDescription(vector <wstring> labels,wstring objectName,wstring &abstract,wstring &comment,wstring &infoPage, wstring& occupation);
 	static int writeRDFTypes(wchar_t path[4096],vector <cTreeCat *> &rdfTypes);
 	//test
-	static void testGetRDFTypesFromDbPedia(wstring object,vector <cTreeCat *> &rdfTypes,wstring parentObject,wstring fromWhere);
 	static int testDBPediaPath(int where,wstring webAddress,wstring &buffer,wstring epath);
-	static void compareFreebaseWebToFreebaseRDL();
-	static void compareFreebaseWebToFreebaseDescriptionRDL();
 	static void testWikipedia();
 	static void printIdentities(wchar_t *objects[]);
 	static void printIdentity(wstring object);

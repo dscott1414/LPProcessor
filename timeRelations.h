@@ -28,11 +28,9 @@
 		  timeRelations.cpp
 
 	Notes / gotchas:
-		- clear() does not initialize absMoment / absNamed* / absToday /
-		  absTomorrow / absTonight / absUnspecified / absYesterday, but
-		  write() / the buffer ctor persist them. Default-constructed
-		  then written cTimeInfo emits uninitialized bytes.
-		- empty() likewise ignores those same fields.
+		- empty() only tests the classic calendar fields; it does not look at
+		  absMoment / absNamed* / absToday / absTomorrow / absTonight /
+		  absUnspecified / absYesterday even though clear() initializes them.
 		- Assignment in `if (error = !copy(...))` is intentional.
 */
 #pragma once
@@ -219,7 +217,7 @@ public:
 	short absHoliday;
 	bool metaDescriptive;  // she described the events of last Tuesday.
 
-	// Default: clear(). Named-day / today / moment fields are not cleared.
+	// Default: clear().
 	cTimeInfo()
 	{
 		clear();
@@ -318,9 +316,8 @@ public:
 		return true;
 	}
 
-	// Reset anchors / relation / the classic abs* fields to -1. Does not
-	// touch absMoment, absNamed*, absToday, absTomorrow, absTonight,
-	// absUnspecified, or absYesterday.
+	// Reset anchors / relation / all abs* fields to -1 (or the matching
+	// sentinel: T_ASSUME_SEQUENTIAL / cUnspecified / false).
 	void clear()
 	{
 		tWhere = -1;
@@ -329,6 +326,7 @@ public:
 		timeETAnchor = -1; // event time
 		timeRTAnchor = -1; // reference time
 		absMoment = -1;
+		absNamedDay = -1;
 		absNamedHoliday = -1;
 		absNamedMonth = -1;
 		absNamedSeason = -1;

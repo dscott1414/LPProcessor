@@ -3562,13 +3562,6 @@ void cSource::writeWords(wstring oPath, wstring specialExtension)
 		tIWMM iSave = im.word;
 		if (iSave->second.isNonCachedWord() && !iSave->second.isUnknown())
 		{
-			//if (iSave->first == L"fewer" || iSave->first == L"afore" || iSave->first == L"thyself")
-			//{
-			//	wstring forms;
-			//	for (unsigned int f = 0; f < iSave->second.formsSize(); f++)
-			//		forms += iSave->second.Form(f)->name + L" ";
-			//	lplog(LOG_INFO, L"%s:TEMP WRITE %s@%d is a not a cached word [%s].", oPath.c_str(), iSave->first.c_str(), numWordInSource, forms.c_str());
-			//}
 			continue;
 		}
 		if (sourceWords.find(iSave->first) != sourceWords.end())
@@ -3907,14 +3900,6 @@ int cSource::checkParticularPartSemanticMatch(int logType, int parentWhere, cSou
 	}
 	for (unordered_map <wstring, int >::iterator ami = associationMap.begin(), amiEnd = associationMap.end(); ami != amiEnd && lowestConfidence > 1; ami++)
 		checkParticularPartSemanticMatchWord(logType, parentWhere, synonym, parentSynonyms, pw, pwme, lowestConfidence, ami);
-	//if (childWhere==886)
-	//{
-	//	logQuestionDetail=0;
-	//	if (saveConfidence>lowestConfidence)
-	//		lplog(LOG_WHERE,L"Comparing [%d, %d] %s and %s(%s)\nassociationMap for %s: %s\nparentSynonyms for %s: %s.",
-	//				parentWhere,childWhere,whereString(parentWhere,tmp1,false).c_str(),childSource->whereString(childWhere,tmp2,false).c_str(),childSource->whereString(childSource->objects[childObject].originalLocation,tmp3,false).c_str(),
-	//				tmp2.c_str(),tmpstr.c_str(),pw.c_str(),tmpstr2.c_str());
-	//}
 	if (lowestConfidence == CONFIDENCE_NOMATCH)
 	{
 		int lastChildWhere = childSource->objects[childObject].originalLocation;
@@ -4099,11 +4084,6 @@ void cWordMatch::adjustReferences(int index, bool keepObjects, unordered_map <in
 	beginPEMAPosition = -1;
 	endPEMAPosition = -1;
 	keepObjects = false;
-	//if (!keepObjects)
-	//{
-	//	setObject(-1);
-	//	objectMatches.clear();
-	//}
 	if (logQuestionDetail)
 		lplog(LOG_WHERE, L"%d:COPY CHILD->PARENT %s beginObjectPosition=%d endObjectPosition=%d relSubject=%d relVerb=%d relPrep=%d relObject=%d nextQuote=%d principalWherePosition=%d",
 			index, word->first.c_str(), beginObjectPosition, endObjectPosition, relSubject, relVerb, relPrep, getRelObject(), nextQuote, principalWherePosition);

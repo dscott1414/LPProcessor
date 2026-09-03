@@ -15,8 +15,9 @@ Key entry points:
     - __init__(rs) - read one tFI
 
 Notes / gotchas:
-    has_winner_verb_form's `return False` is indented inside the for
-    loop, so only the first form is ever tested.
+    (fixed) has_winner_verb_form's `return False` used to sit inside the
+    for loop, so only the first form was ever tested; it now only
+    returns False after all forms have been checked.
 """
 from Form import Form
 import struct
@@ -25,12 +26,11 @@ class TFI:
     MAX_USAGE_PATTERNS=16
 
     # True if some form i is a verbForm and (winnerForms==0 or bit i is set).
-    # BUG: return False sits inside the loop — only form 0 is examined.
     def has_winner_verb_form(self, winnerForms):
         for I in range(self.count):
             if (Form.forms[self.forms[I]].verbForm and (winnerForms==0 or ((1<<I)&winnerForms)!=0)):
                 return True
-            return False
+        return False
 
 
     # Read count, forms[count], 5 ints, mainEntry, usagePatterns[16],
@@ -91,6 +91,7 @@ class TFI:
     ADVERB_NORMATIVE=65536
     ADVERB_COMPARATIVE=131072
     ADVERB_SUPERLATIVE=262144
+    NOUN_ONLY_UNCOUNTABLE=524288
     MALE_GENDER=_MIL*1
     FEMALE_GENDER=_MIL*2
     NEUTER_GENDER=_MIL*4
@@ -106,3 +107,4 @@ class TFI:
     MALE_GENDER_ONLY_CAPITALIZED=_MIL*512
     FEMALE_GENDER_ONLY_CAPITALIZED=_MIL*1024
     ONLY_CAPITALIZED=(MALE_GENDER_ONLY_CAPITALIZED|FEMALE_GENDER_ONLY_CAPITALIZED)
+    NOUN_ALSO_UNCOUNTABLE=_MIL*2048

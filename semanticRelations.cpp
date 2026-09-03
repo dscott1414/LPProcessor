@@ -1352,7 +1352,8 @@ bool cSource::rejectPrepPhrase(int wherePrep)
 	if (m[wherePrep].word->first == L"at" && (po == L"all" || po == L"bay"))
 		return true;
 	// by hook or by crook
-	if (m[wherePrep].word->first == L"by" &&
+	if (wherePrep + 4 < (int)m.size() &&
+		m[wherePrep].word->first == L"by" &&
 		m[wherePrep + 1].word->first == L"hook" &&
 		m[wherePrep + 2].word->first == L"or" &&
 		m[wherePrep + 3].word->first == L"by" &&
@@ -1452,11 +1453,11 @@ int cSource::getAfterVerb(const int where, const int whereVerb, const int whereS
 	while (afterVerb < (signed)m.size() && m[afterVerb].queryWinnerForm(adverbForm) >= 0 && m[afterVerb].queryWinnerForm(prepositionForm) < 0 && afterVerb + 1 < (signed)m.size() && !adverbialPlace(afterVerb)) afterVerb++;
 	if (m[whereVerb].relPrep < 0)
 	{
-		if (m[whereVerb].getRelObject() < 0 && m[whereVerb + 1].pma.queryPattern(L"_PP") == -1 && whereVerb + 1 < (signed)m.size())
+		if (m[whereVerb].getRelObject() < 0 && whereVerb + 1 < (signed)m.size() && m[whereVerb + 1].pma.queryPattern(L"_PP") == -1)
 			afterVerb = whereVerb + 1;
 		else if (m[whereVerb].getRelObject() >= 0 && m[m[whereVerb].getRelObject()].endObjectPosition >= 0 && m[m[m[whereVerb].getRelObject()].endObjectPosition].pma.queryPattern(L"_PP") == -1)
 			afterVerb = m[m[whereVerb].getRelObject()].endObjectPosition;
-		while (afterVerb >= 0 && (m[afterVerb].queryWinnerForm(adverbForm) >= 0 || m[afterVerb].queryWinnerForm(prepositionForm) >= 0) &&
+		while (afterVerb >= 0 && afterVerb < (signed)m.size() && (m[afterVerb].queryWinnerForm(adverbForm) >= 0 || m[afterVerb].queryWinnerForm(prepositionForm) >= 0) &&
 			afterVerb + 1 < (signed)m.size() && afterVerb < whereVerb + 3 && !(m[afterVerb].word->second.flags & cSourceWordInfo::prepMoveType)) afterVerb++;
 		// is there a recent location associated with the subject?
 		if (afterVerb >= 0 && (prepTypesMap[m[afterVerb].word->first] == tprIN || (adverbialPlace(afterVerb) && m[afterVerb].queryForm(prepositionForm) != -1)) &&
@@ -1667,7 +1668,8 @@ bool cSource::detectPlaceTransition(int where, int whereControllingEntity, int w
 		}
 		// if it has an object, there must be only one object and that object must not be nonphysical.
 		// if it has a prepobject, that object must be physical or a time
-		// && binds tighter than ||, so this is (A && B) || C, not A && (B || C).
+		// Parenthesized as A && (B || C): a physical/time prep-object is enough
+		// on its own even when the object-side conjunct (B) fails.
 		if ((id != L"escape-51.1-5" || whereObject < 0 || (m[whereObject].word->second.timeFlags & T_UNIT) != 0 || proLocation || m[whereObject].relNextObject >= 0) &&
 			(((wherePrepObject < 0 || whereObject >= 0) && woPhysicalObject) ||
 			 (wherePrepObject >= 0 && (wpoPhysicalObject || (wpoTimeUnit && id != L"escape-51.1-5")))))

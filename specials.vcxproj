@@ -414,9 +414,8 @@
     <ClCompile Include="dbQuerySearch.cpp" />
     <ClCompile Include="DBUtility.cpp" />
     <ClCompile Include="DBWordRelations.cpp" />
+    <ClCompile Include="envConfig.cpp" />
     <ClCompile Include="definePatterns.cpp" />
-    <ClCompile Include="evaluateTagSetCombinatorials.cpp" />
-    <ClCompile Include="getBNC.cpp" />
     <ClCompile Include="getDictionary.cpp" />
     <ClCompile Include="getMusicBrainz.cpp" />
     <ClCompile Include="getThesaurus.cpp" />
@@ -429,7 +428,6 @@
     <ClCompile Include="identifySpeakerGroups.cpp" />
     <ClCompile Include="initializeDictionary.cpp" />
     <ClCompile Include="Internet.cpp" />
-    <ClCompile Include="Loebner.cpp" />
     <ClCompile Include="logging.cpp" />
     <ClCompile Include="memoryStat.cpp" />
     <ClCompile Include="names.cpp" />
@@ -461,6 +459,7 @@
   <ItemGroup>
     <ClInclude Include="bncc.h" />
     <ClInclude Include="DIYDiskArray.h" />
+    <ClInclude Include="envConfig.h" />
     <ClInclude Include="general.h" />
     <ClInclude Include="getMusicBrainz.h" />
     <ClInclude Include="hmm.h" />

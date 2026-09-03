@@ -22,11 +22,14 @@
 		- addTables() - driver.
 
 	Notes / gotchas:
-		- determineColumnRDFTypeCoherency returns true on both the <90% and
-			>=90% paths (the reject is commented TEMP DEBUG), so rows.clear() in
-			the constructor never fires for incoherence.
-		- cEntry::sprint formats synonymMatchedQuestionObject.size() with the
-			matchedQuestionObjectStr variable (copy-paste).
+		- determineColumnRDFTypeCoherency now returns false for a >3
+			entries/row average or a <90% coherence score (both reject paths
+			were previously disabled - "TEMP DEBUG" - so the caller never
+			dropped a column for incoherence).  Behaviour-changing: incoherent
+			Wikipedia table columns are rejected as QA answers again.
+		- cEntry::sprint now formats synonymMatchedQuestionObject.size() with
+			its own synonymMatchedQuestionObjectStr (previously copy-pasted
+			matchedQuestionObjectStr, so the synonym count was never shown).
 		- testTitlePreference uses `=` in `if (x = (titleSynonyms.find(...)))`
 			intentionally (assignment-in-condition, same idiom as source.h).
 		- getTableFromSource always returns true; invalid tables are marked via
@@ -347,8 +350,11 @@ void cColumn::setRowPreference(cSource* wikipediaSource, wstring tableName, bool
 
 // Two-pass coherence: accumulate all cells, prefer title-matching (or
 // frequency-matching) cells, re-accumulate only those, compute
-// coherencyPercentage.  Always returns true (the `< 90 return false` is
-// commented TEMP DEBUG), so the caller never drops a column for incoherence.
+// coherencyPercentage.  Rejects (returns false) a column that averages more
+// than 3 entries/row (too many combinations to trust as a valid list) or
+// whose final coherence score is under 90%.  Both reject paths used to be
+// disabled ("TEMP DEBUG"), so every Wikipedia table column was kept as a QA
+// answer regardless of coherence; re-enabled here.
 bool cColumn::determineColumnRDFTypeCoherency(cSource* wikipediaSource, cColumn::cEntry titleEntry, unordered_set <wstring>& titleSynonyms, wstring tableName, bool keepMusicDomain, bool keepFilmDomain, bool fileCaching)
 {
 	int sumMaxEntries = 0;
@@ -358,7 +364,7 @@ bool cColumn::determineColumnRDFTypeCoherency(cSource* wikipediaSource, cColumn:
 	{
 		if (logQuestionDetail)
 			lplog(LOG_WHERE, L"Processing table %s: table coherency averageEntrySize=%d", tableName.c_str(), sumMaxEntries / rows.size());
-		//return false; // TEMP DEBUG
+		return false;
 	}
 	// accumulate all the types of all the entries in the column together into accumulatedRDFTypesMap
 	vector <int> noPreferences;
@@ -372,7 +378,7 @@ bool cColumn::determineColumnRDFTypeCoherency(cSource* wikipediaSource, cColumn:
 	accumulateColumnRDFTypes(wikipediaSource, tableName, titleSynonyms, keepMusicDomain, keepFilmDomain, true, fileCaching);
 	getMostCommonRDFTypes(L"AFTER", tableName);
 	if (calculateColumnRDFTypeCoherence(wikipediaSource, titleEntry, tableName, fileCaching) < 90)
-		return true;
+		return false;
 	return true;
 }
 
@@ -422,8 +428,7 @@ void cColumn::cEntry::logEntry(int logType, const wchar_t* tableName, int row, i
 }
 
 // Format "adaptiveWhere:phrase [# matched ... # synonym matched ...]" into
-// buffer.  The synonym count is accidentally printed with
-// matchedQuestionObjectStr (copy-paste of the matched-object size).
+// buffer.
 wstring cColumn::cEntry::sprint(cSource* source, wstring& buffer)
 {
 	wstring phrase, whereStr, matchedQuestionObjectStr, synonymMatchedQuestionObjectStr;
@@ -431,7 +436,7 @@ wstring cColumn::cEntry::sprint(cSource* source, wstring& buffer)
 	itos(adaptiveWhere, whereStr);
 	itos(matchedQuestionObject.size(), matchedQuestionObjectStr);
 	itos(synonymMatchedQuestionObject.size(), synonymMatchedQuestionObjectStr);
-	return buffer = whereStr + L":" + phrase + L" [# matched question object=" + matchedQuestionObjectStr + L" # synonym matched question object=" + matchedQuestionObjectStr + L"]";
+	return buffer = whereStr + L":" + phrase + L" [# matched question object=" + matchedQuestionObjectStr + L" # synonym matched question object=" + synonymMatchedQuestionObjectStr + L"]";
 }
 
 const wchar_t* wikiInvalidTableEntries[] = {
@@ -698,7 +703,8 @@ bool coherentTitle(int begin, int end, cSource* wikipediaSource)
 
 // Parse the table whose TABLE token is at I (I is advanced past the table).
 // Fills columns / tableTitleEntry / num.  On a coherent title, runs
-// determineColumnRDFTypeCoherency per column (which currently never rejects).
+// determineColumnRDFTypeCoherency per column, clearing the rows of any
+// column it rejects.
 //   for each table with a table header, does the table header match the questionTypeObject or its synonyms?
 //     if not, and the table has column headers, does any column header match the questionTypeObject or its synonyms?
 //    if matched, feed the table or only the selected column into propertyValues.

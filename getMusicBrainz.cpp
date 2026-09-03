@@ -22,11 +22,15 @@
 		tinyxml2, cInternet::readPage, cacheDir, musicBrainzCache on disk.
 
 	Notes / gotchas:
-		Uses plaintext HTTP. Query strings are wsprintf'd with no URL-encoding.
-		Header declares 3-arg getters; definitions take a 4th filterNameDuplicates.
-		FindAttribute("id")->Value() is unchecked in several parsers (NULL crash).
-		getRecordings looks for metadata/release-list instead of the recording's
-		own release-list. getReleaseGroup/getWork are stubs returning 0.
+		Uses https:// and encodeURL (defined in createOntology.cpp) escapes the free-text
+		search value before it is interpolated into the query string; the fixed field-name
+		parameters (byWhatType etc.) are not encoded since callers only ever pass literals.
+		pushWhereEntities still takes mbs by value (not a reference) on purpose: it mutates
+		its local copy via filter()/getReleases() as scratch state without writing back into
+		the caller's (parentSRG->mbs); switching to a reference would start persisting
+		fetched/filtered results back into the caller across calls, which is a behavior
+		change that needs author intent, not a mechanical fix - see the function comment.
+		getReleaseGroup/getWork are stubs returning 0.
 */
 #include <stdio.h>
 #include <string.h>
@@ -48,8 +52,9 @@
 #include "tinyxml2.h"
 #include <typeinfo>
 extern const wchar_t* cacheDir; // initialized and then not changed
+void encodeURL(wstring winput, wstring& wencodedURL); // defined in createOntology.cpp
 #define MAX_BUF 1024*1024
-#define MB_BASE L"http://www.musicbrainz.org/ws/2/%s/?query=%s:%s"
+#define MB_BASE L"https://www.musicbrainz.org/ws/2/%s/?query=%s:%s"
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -71,18 +76,28 @@ int getMusicBrainzPage(wstring entitySearchedFor, wstring entityTypeReturned, ws
 	convertIllegalChars(path + wcslen(cacheDir) + wcslen(L"\\musicBrainzCache\\"));
 	distributeToSubDirectories(path, wcslen(cacheDir) + wcslen(L"\\musicBrainzCache\\"), false);
 	buffer.clear();
-	wchar_t cBuffer[MAX_BUF];
+	// heap-allocated (tmalloc/tfree) rather than a ~2 MiB stack array
+	wchar_t* cBuffer = (wchar_t*)tmalloc(MAX_BUF * sizeof(wchar_t));
+	if (!cBuffer)
+		return cInternet::GETPAGE_CANNOT_CREATE;
 	int actualLenInBytes;
-	if (!getPath(path, cBuffer, MAX_BUF, actualLenInBytes))
+	bool cacheHit = !getPath(path, cBuffer, MAX_BUF, actualLenInBytes);
+	if (cacheHit)
 	{
 		cBuffer[actualLenInBytes / sizeof(cBuffer[0])] = 0;
 		buffer = cBuffer;
+	}
+	tfree(MAX_BUF * sizeof(wchar_t), cBuffer);
+	if (cacheHit)
+	{
 		lplog(LOG_WHERE, L"MUSICBRAINZ:searchEntity=%s returnEntityType=%s entity=%s:\n%.600s", entitySearchedFor.c_str(), entityTypeReturned.c_str(), entity.c_str(), buffer.c_str());
 		return 0;
 	}
 	wchar_t str[1024];
-	// http://www.musicbrainz.org/ws/2/release/?query=artist:Jay-Z
-	wsprintf(str, MB_BASE, entitySearchedFor.c_str(), entityTypeReturned.c_str(), entity.c_str());
+	wstring uentity;
+	encodeURL(entity, uentity); // entity is a free-text search value (may contain spaces/'&'/etc); entitySearchedFor/entityTypeReturned are always fixed literal field names
+	// https://www.musicbrainz.org/ws/2/release/?query=artist:Jay-Z
+	wsprintf(str, MB_BASE, entitySearchedFor.c_str(), entityTypeReturned.c_str(), uentity.c_str());
 	int ret;
 	if (ret = cInternet::readPage(str, buffer)) return ret;
 	//lplog(LOG_WHERE, L"TRACEOPEN %s %s", path, __FUNCTIONW__);
@@ -187,7 +202,7 @@ bool isDuplicateByName(mbInfoReleaseType& t1, mbInfoReleaseType& t2)
 }
 
 // Walks each <release> under releaseListHandle into mbs. Skips a hit whose title equals
-// the last pushed title when filterNameDuplicates is set. FindAttribute("id") is unchecked.
+// the last pushed title when filterNameDuplicates is set.
 void absorbReleases(tinyxml2::XMLHandle& releaseListHandle, vector <mbInfoReleaseType>& mbs, bool filterNameDuplicates)
 {
 	LFS
@@ -195,7 +210,8 @@ void absorbReleases(tinyxml2::XMLHandle& releaseListHandle, vector <mbInfoReleas
 		{
 			mbInfoReleaseType mb;
 			wstring t;
-			mb.releaseId = mTWNull(node.ToElement()->FindAttribute("id")->Value(), t);
+			if (node.ToElement()->FindAttribute("id"))
+				mb.releaseId = mTWNull(node.ToElement()->FindAttribute("id")->Value(), t);
 			if (node.FirstChildElement("title").ToElement())
 				mb.title = mTWNull(node.FirstChildElement("title").ToElement()->GetText(), t);
 			if (node.FirstChildElement("status").ToElement())
@@ -252,7 +268,7 @@ bool isDuplicateByName(mbInfoArtistType& t1, mbInfoArtistType& t2)
 		return (t1.artistId == t2.artistId);
 }
 
-// Fetches /artist/?query=byWhatType:what. Unchecked FindAttribute/GetText. Parse errors ignored.
+// Fetches /artist/?query=byWhatType:what. Parse errors ignored.
 // not currently used
 int getArtists(wstring byWhatType, wstring what, vector <mbInfoArtistType>& mbs, bool filterNameDuplicates)
 {
@@ -268,9 +284,12 @@ int getArtists(wstring byWhatType, wstring what, vector <mbInfoArtistType>& mbs,
 	{
 		wstring t;
 		mbInfoArtistType mb;
-		mb.artistType = mTWNull(node.ToElement()->FindAttribute("type")->Value(), t);
-		mb.artistId = mTWNull(node.ToElement()->FindAttribute("id")->Value(), t);
-		mb.artistName = mTWNull(node.FirstChildElement("name").ToElement()->GetText(), t);
+		if (node.ToElement()->FindAttribute("type"))
+			mb.artistType = mTWNull(node.ToElement()->FindAttribute("type")->Value(), t);
+		if (node.ToElement()->FindAttribute("id"))
+			mb.artistId = mTWNull(node.ToElement()->FindAttribute("id")->Value(), t);
+		if (node.FirstChildElement("name").ToElement())
+			mb.artistName = mTWNull(node.FirstChildElement("name").ToElement()->GetText(), t);
 		for (tinyxml2::XMLHandle anode = node.FirstChildElement("alias-list").FirstChildElement("alias"); anode.ToNode() != NULL; anode = anode.NextSiblingElement("alias"))
 			mb.aliases.push_back(mTWNull(anode.ToElement()->GetText(), t));
 		if (mbs.empty() || !filterNameDuplicates || !isDuplicateByName(mbs[mbs.size() - 1], mb))
@@ -316,8 +335,8 @@ bool isDuplicateByName(mbInfoRecordingType& t1, mbInfoRecordingType& t2)
 		</recording-list>
 </metadata>
 */
-// Fetches /recording/?query=byWhatType:what. Looks for metadata/release-list (not the
-// recording's own release-list), so mb.releases is typically empty.
+// Fetches /recording/?query=byWhatType:what. Reads each <recording>'s own nested
+// <release-list> (not the top-level metadata one, which does not hold per-recording releases).
 // not currently used
 int getRecordings(wstring byWhatType, wstring what, vector <mbInfoRecordingType>& mbs, bool filterNameDuplicates)
 {
@@ -333,12 +352,17 @@ int getRecordings(wstring byWhatType, wstring what, vector <mbInfoRecordingType>
 	{
 		mbInfoRecordingType mb;
 		wstring t;
-		mb.recordingId = mTWNull(node.ToElement()->FindAttribute("id")->Value(), t);
-		mb.title = mTWNull(node.FirstChildElement("title").ToElement()->GetText(), t);
-		mb.artistId = mTWNull(node.FirstChildElement("artist-credit").FirstChildElement("name-credit").FirstChildElement("artist").ToElement()->FindAttribute("id")->Value(), t);
-		mb.artistName = mTWNull(node.FirstChildElement("artist-credit").FirstChildElement("name-credit").FirstChildElement("artist").FirstChildElement("name").ToElement()->GetText(), t);
-		tinyxml2::XMLHandle firstChildElement = docHandle.FirstChildElement("metadata").FirstChildElement("release-list");
-		absorbReleases(firstChildElement, mb.releases, filterNameDuplicates);
+		if (node.ToElement()->FindAttribute("id"))
+			mb.recordingId = mTWNull(node.ToElement()->FindAttribute("id")->Value(), t);
+		if (node.FirstChildElement("title").ToElement())
+			mb.title = mTWNull(node.FirstChildElement("title").ToElement()->GetText(), t);
+		if (node.FirstChildElement("artist-credit").FirstChildElement("name-credit").FirstChildElement("artist").ToElement() &&
+			node.FirstChildElement("artist-credit").FirstChildElement("name-credit").FirstChildElement("artist").ToElement()->FindAttribute("id"))
+			mb.artistId = mTWNull(node.FirstChildElement("artist-credit").FirstChildElement("name-credit").FirstChildElement("artist").ToElement()->FindAttribute("id")->Value(), t);
+		if (node.FirstChildElement("artist-credit").FirstChildElement("name-credit").FirstChildElement("artist").FirstChildElement("name").ToElement())
+			mb.artistName = mTWNull(node.FirstChildElement("artist-credit").FirstChildElement("name-credit").FirstChildElement("artist").FirstChildElement("name").ToElement()->GetText(), t);
+		tinyxml2::XMLHandle recordingReleaseList = node.FirstChildElement("release-list");
+		absorbReleases(recordingReleaseList, mb.releases, filterNameDuplicates);
 		if (mbs.empty() || !filterNameDuplicates || !isDuplicateByName(mbs[mbs.size() - 1], mb))
 			mbs.push_back(mb);
 	}
@@ -366,7 +390,7 @@ bool isDuplicateByName(mbInfoLabelType& t1, mbInfoLabelType& t2)
 	 </compactLabel-list>
 </metadata>
 */
-// Fetches /label/?query=byWhatType:what. Unchecked FindAttribute/GetText. Parse errors ignored.
+// Fetches /label/?query=byWhatType:what. Parse errors ignored.
 // not curently used
 int getLabels(wstring byWhatType, wstring what, vector <mbInfoLabelType>& mbs, bool filterNameDuplicates)
 {
@@ -382,9 +406,12 @@ int getLabels(wstring byWhatType, wstring what, vector <mbInfoLabelType>& mbs, b
 	{
 		mbInfoLabelType mb;
 		wstring t;
-		mb.labelType = mTWNull(node.ToElement()->FindAttribute("type")->Value(), t);
-		mb.labelId = mTWNull(node.ToElement()->FindAttribute("id")->Value(), t);
-		mb.labelName = mTWNull(node.FirstChildElement("name").ToElement()->GetText(), t);
+		if (node.ToElement()->FindAttribute("type"))
+			mb.labelType = mTWNull(node.ToElement()->FindAttribute("type")->Value(), t);
+		if (node.ToElement()->FindAttribute("id"))
+			mb.labelId = mTWNull(node.ToElement()->FindAttribute("id")->Value(), t);
+		if (node.FirstChildElement("name").ToElement())
+			mb.labelName = mTWNull(node.FirstChildElement("name").ToElement()->GetText(), t);
 		for (tinyxml2::XMLHandle anode = node.FirstChildElement("alias-list").FirstChildElement("alias"); anode.ToNode() != NULL; anode = anode.NextSiblingElement("alias"))
 			mb.aliases.push_back(mTWNull(anode.ToElement()->GetText(), t));
 		if (mbs.empty() || !filterNameDuplicates || !isDuplicateByName(mbs[mbs.size() - 1], mb))
@@ -433,7 +460,14 @@ int filter(wstring byWhatType, wstring what, vector <mbInfoReleaseType>& mbs)
 
 // Binds MusicBrainz hits to m[where]. If whatWhere has no objectMatches, filters/fetches
 // by the surface string and pushEntities. Otherwise votes across each match's hits and
-// creates winner-name objects of the default class for matchEntityType. mbs is by value.
+// creates winner-name objects of the default class for matchEntityType.
+// mbs is intentionally taken by value, not const&: filter()/getReleases() mutate this local
+// copy in place as scratch state (erase non-matches, append fresh fetches), and that is not
+// meant to write back into the caller's vector (parentSRG->mbs). Passing by value costs a
+// copy per call, but switching to a plain reference would start persisting per-call
+// filtering/fetches back into parentSRG->mbs across the multiple calls in
+// dbSearchMusicBrainzSearchType, which is a behavior change - needs author intent, not a
+// blind "pass by reference" mechanical fix.
 bool cSource::pushWhereEntities(wchar_t* derivation, int where, wstring matchEntityType, wstring byWhatType, int whatWhere, bool filterNameDuplicates, vector <mbInfoReleaseType> mbs)
 {
 	LFS

@@ -30,8 +30,15 @@
 		readVBNet() from vcXML.cpp; WordNet only indirectly via later getForms.
 
 	Notes / gotchas:
-		predefineWords(Inflections[]) mutates the caller's word buffers (apostrophe and
-		space→dash). readWords leaks the tmalloc buffer on early -1 returns.
+		predefineWords(Inflections[]) temporarily swaps an apostrophe to U+02BC and restores it
+		(self-reverting, no lasting effect on the caller's array). predefineWords(InflectionsRoot[])
+		permanently rewrites spaces to dashes in words[].word with no restore - a real mutation of
+		the caller's storage, but every current call site passes a freshly-constructed local array
+		consumed by exactly one predefineWords() call and never read again, so it has no observable
+		effect today. It would matter if a future caller reused/shared an InflectionsRoot[] array
+		across multiple calls or kept reading it afterward; flagged here rather than restructured,
+		since there is nothing to fix without a caller that is actually affected.
+		readWords tfrees its tmalloc buffer on every early-return path now.
 		disqualify() rejects most dotted tokens unless they look like A.B.C. abbreviations.
 		gquery fatal-errors if a required sentinel word is missing.
 */
@@ -108,7 +115,8 @@ int cWord::predefineWords(Inflections words[], wstring sForm, wstring shortName,
 }
 
 // Adds InflectionsRoot[] (word + inflection + mainEntry). Permanently changes spaces in
-// the caller's word buffers to dashes so both spellings are stored. Returns 0.
+// the caller's word buffers to dashes (not restored) so both spellings are stored; safe with
+// every current caller (a freshly-built, single-use local array) but see the file header note.
 int cWord::predefineWords(InflectionsRoot words[], wstring sForm, wstring shortName, wstring inflectionsClass, int flags, bool properNounSubClass)
 {
 	LFS
@@ -430,7 +438,7 @@ int cWord::readWords(wstring oPath, int sourceId, bool disqualifyWords, wstring 
 	close(fd);
 	int where = 0, numReadForms;
 	where = readFormsCache(buffer, bufferlen, numReadForms);
-	if (where < 0) return -1;
+	if (where < 0) { tfree(bufferlen + 10, buffer); return -1; }
 	// for preferVerbPresentParticiple contained in the cSourceWordInfo constructor
 	if (nounForm == -1) nounForm = cForms::gFindForm(L"noun");
 	if (adjectiveForm < 0) adjectiveForm = cForms::gFindForm(L"adjective");
@@ -446,7 +454,7 @@ int cWord::readWords(wstring oPath, int sourceId, bool disqualifyWords, wstring 
 	while (where < bufferlen)
 	{
 		//int saveWhere=where;
-		if (!copy(sWord, buffer, where, bufferlen)) return -1;
+		if (!copy(sWord, buffer, where, bufferlen)) { tfree(bufferlen + 10, buffer); return -1; }
 		wstring sME;
 		if (disqualifyWords && disqualify(sWord))
 		{

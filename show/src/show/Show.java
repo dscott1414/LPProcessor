@@ -328,24 +328,34 @@ public class Show implements ActionListener, ItemListener {
 				initializeTimelineDisplay();
 			}
 
+			// (fixed) close() used to be unconditional at the end of the method
+			// body, so an IOException from any writeUTF/writeInt call above it
+			// (e.g. disk full) would propagate out of this throws-IOException
+			// method without ever closing sourceWriter, leaking the file handle.
+			// try-with-resources guarantees the close either way.
 			void writeState(JMenuItem book, DynamicMenu author, int sourceOffset) throws IOException {
-				DataOutputStream sourceWriter = new DataOutputStream(
-						new BufferedOutputStream(new FileOutputStream("lpGUIState")));
-				sourceWriter.writeUTF(author.getText());
-				sourceWriter.writeUTF(book.getText());
-				sourceWriter.writeInt(sourceOffset);
-				sourceWriter.writeInt(MS.getFirstIndex());
-				sourceWriter.close();
+				try (DataOutputStream sourceWriter = new DataOutputStream(
+						new BufferedOutputStream(new FileOutputStream("lpGUIState")))) {
+					sourceWriter.writeUTF(author.getText());
+					sourceWriter.writeUTF(book.getText());
+					sourceWriter.writeInt(sourceOffset);
+					sourceWriter.writeInt(MS.getFirstIndex());
+				}
 			}
 
+			// (fixed) same unconditional-close-at-the-end leak as writeState()
+			// above, on the read side (readUTF/readInt throwing on a
+			// corrupt/short "lpGUIState" file used to skip the close()).
 			void readState() throws IOException {
-				DataInputStream sourceReader = new DataInputStream(
-						new BufferedInputStream(new FileInputStream("lpGUIState")));
-				String author = sourceReader.readUTF();
-				String book = sourceReader.readUTF();
-				// int sourceOffset=sourceReader.readInt();
-				int firstIndex = sourceReader.readInt();
-				sourceReader.close();
+				String author, book;
+				int firstIndex;
+				try (DataInputStream sourceReader = new DataInputStream(
+						new BufferedInputStream(new FileInputStream("lpGUIState")))) {
+					author = sourceReader.readUTF();
+					book = sourceReader.readUTF();
+					// int sourceOffset=sourceReader.readInt();
+					firstIndex = sourceReader.readInt();
+				}
 				sourcePath = sourceDir.getAbsolutePath() + "\\" + author + "\\" + book + ".txt";
 				frame.setTitle(author + ": " + book);
 				MS.setFirstIndex(firstIndex);
@@ -364,14 +374,19 @@ public class Show implements ActionListener, ItemListener {
 				}
 			};
 			this.removeAll();
-			for (String book : authorDir.list(onlySCFiles)) {
-				int li;
-				if ((li = book.lastIndexOf(".txt.SourceCache")) >= 0) {
-					JMenuItem ji = new JMenuItem(book.substring(0, li));
-					ji.addActionListener(this);
-					add(ji);
+			// File.list() returns null (not an empty array) if authorDir isn't
+			// a valid/readable directory, which used to NullPointerException
+			// the for-each below instead of just showing no sources.
+			String[] books = authorDir.list(onlySCFiles);
+			if (books != null)
+				for (String book : books) {
+					int li;
+					if ((li = book.lastIndexOf(".txt.SourceCache")) >= 0) {
+						JMenuItem ji = new JMenuItem(book.substring(0, li));
+						ji.addActionListener(this);
+						add(ji);
+					}
 				}
-			}
 		}
 
 		public DynamicMenu(String author) {
@@ -694,8 +709,14 @@ public class Show implements ActionListener, ItemListener {
 								println("Data is an InputStream:");
 								br = new BufferedReader((Reader) transferable.getTransferData(readerFlavor));
 								line = br.readLine();
+								// (fixed) this loop never re-read br, so once `line`
+								// was non-null it stayed non-null forever - an
+								// infinite loop (flooding println / hanging the
+								// caller, likely the Swing EDT for a drag-and-drop
+								// callback) instead of printing each line once.
 								while (line != null) {
 									println(line);
+									line = br.readLine();
 								}
 								br.close();
 							} else {

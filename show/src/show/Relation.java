@@ -72,6 +72,16 @@ package show;
 			sentenceNum = rs.readInteger();
 			// flags
 			long flags = rs.readLong();
+			// (fixed) cSyntacticRelationGroup::write() (syntacticRelationGroups.cpp)
+			// always serializes convertFlags(false,false,false,0), which packs 3
+			// leading bits - inSecondaryQuote, inPrimaryQuote, isQuestion, always 0
+			// on disk here - below changeStateAdverb (see convertToFlags() in the
+			// same file). This constructor used to start reading changeStateAdverb
+			// at bit 0 instead of bit 3, so changeStateAdverb/skip/physicalRelation
+			// always came back false and every flag from timeInfoSet onward
+			// silently read the PREVIOUS flag's bit. Discard the 3 always-zero
+			// bits first so the rest lines up with the C++ field order again.
+			flags >>= 3;
 			changeStateAdverb=(flags & 1) == 1; flags>>=1;
 			skip=(flags & 1) == 1; flags>>=1;
 			physicalRelation=(flags & 1) == 1; flags>>=1;

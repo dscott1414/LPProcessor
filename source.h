@@ -76,8 +76,12 @@
 		  word missing from the lexicon deserializes to wNULL - callers must check).
 		- The binary cache format is defined implicitly by the matched pairs of write() and
 		  the (char *buffer,int &where,...) constructors in this file. Any field added to one
-		  side must be added to the other in the same order, or every previously written
-		  cache silently misparses.
+		  side must be added to the other in the same order.  cSource::write()/read()
+		  (source.cpp) do write and check a leading SOURCE_VERSION int (pattern.h) that is
+		  rejected as "old, reparse" on mismatch, so a version bump makes an incompatible
+		  cache fail safely instead of misparsing - but that safety net only works if
+		  SOURCE_VERSION is actually bumped alongside the field-order change; forgetting to
+		  bump it still silently misparses every previously written cache.
 		- The (char*,int&,...) deserializing constructors use the "if (error=!copy(...))"
 		  assignment-in-condition idiom throughout; that is intentional, not a == typo.
 		- lplog(LOG_FATAL_ERROR,...) does NOT return: logstring() terminates the process
@@ -2357,7 +2361,6 @@ public:
 	bool isEOS(int where);
 	void translateBodyObjects(cSpeakerGroup &sg);
 	int detectMetaResponse(int I,int element);
-	bool skipMetaResponse(int &I);
 	void associateNyms(int where);
 	void associatePossessions(int where);
 	void moveNyms(int where,int toObject,int fromObject, const wchar_t * fromWhere);
